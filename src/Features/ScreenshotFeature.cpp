@@ -362,12 +362,9 @@ namespace
 
 
 		if (IsFlatHdrScreenshotCapture()) {
-			// CS menu open blurs the HDR scene in place; recompose from the clean scene
-			// with no UI buffer so the capture/preview drops both the menu and its blur.
+			// Recompose from the clean scene with no UI buffer.
 			auto& hdr = globals::features::hdrDisplay;
 			if (Menu::GetSingleton()->IsEnabled && hdr.outputTexture && hdr.outputTexture->srv) {
-				// Capture uses the snapshot only when fresh; otherwise hdrTexture is
-				// unblurred. Preview always reads live hdrTexture.
 				ID3D11ShaderResourceView* sceneSRV =
 					(forCapture && hdr.IsCleanSceneCaptureFresh()) ? hdr.cleanSceneCapture->srv.get() :
 																	 (hdr.hdrTexture ? hdr.hdrTexture->srv.get() : nullptr);
@@ -407,12 +404,7 @@ namespace
 		       combo[0].GetKey() == VK_SNAPSHOT;
 	}
 
-	// Blend state around the preview's ImGui::Image draw. Two regression risks:
-	//   1. BlendEnable must stay FALSE - the source carries non-1 alpha where
-	//      Skyrim composited UI plates; SRC_ALPHA blend leaks the host window bg.
-	//   2. SDR path writes RGB only, leaving the plate's pre-cleared alpha=1.
-	// HDR writes alpha too: the preview is opaque (alpha=1) so the menu blur can't
-	// bleed through it when ApplyHDR composites the UI buffer over the blurred scene.
+	// Forces BlendEnable=FALSE and opaque alpha for the preview Image draw.
 	// Paired with ImDrawCallback_ResetRenderState queued by Subrect::DrawEditor.
 	void OpaquePreviewBlendCallback(const ImDrawList*, const ImDrawCmd*)
 	{

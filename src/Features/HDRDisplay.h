@@ -97,9 +97,7 @@ public:
 	// True when the snapshot was refreshed this frame; stale means hdrTexture wasn't blurred.
 	bool IsCleanSceneCaptureFresh() const;
 
-	// HDR output transform on a clean scene with no UI buffer, into outputTexture
-	// (no vanilla UI, ImGui menu, or blur). sdrPreview emits sRGB for the crop
-	// preview; otherwise HDR10 PQ for screenshots. Null if HDR output unavailable.
+	// HDR output transform on a clean scene with no UI buffer, into outputTexture.
 	ID3D11Texture2D* ComposeCleanCapture(ID3D11ShaderResourceView* sceneSRV, bool sdrPreview);
 
 	ID3D11BlendState* GetPatchedAlphaBlendState(ID3D11BlendState* original);
