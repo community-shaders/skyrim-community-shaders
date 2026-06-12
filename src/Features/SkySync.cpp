@@ -265,7 +265,21 @@ void SkySync::Update(const RE::Sky* sky)
 	ProcessMoon(sky, Caster::Masser, directions, intensities);
 	ProcessMoon(sky, Caster::Secunda, directions, intensities);
 
-	shadowFader.Update(sky, directions, intensities, settings.ShadowTransitionDuration);
+	// Advance the shadow fade by elapsed game time so the transition stays smooth during
+	// normal play but snaps when time jumps (scrubbing, waiting, fast travel).
+	const float gameHour = sky->currentGameHour;
+	float fadeAdvance = settings.ShadowTransitionDuration;  // first frame: snap
+	if (lastGameHour >= 0.0f) {
+		float hourDelta = gameHour - lastGameHour;
+		if (hourDelta > 12.0f)
+			hourDelta -= 24.0f;
+		else if (hourDelta < -12.0f)
+			hourDelta += 24.0f;
+		fadeAdvance = std::abs(hourDelta) * SecondsPerGameHour;
+	}
+	lastGameHour = gameHour;
+
+	shadowFader.Update(sky, directions, intensities, settings.ShadowTransitionDuration, fadeAdvance);
 }
 void SkySync::SetSunAngle()
 {
@@ -415,7 +429,7 @@ void SkySync::ShadowFader::Reset()
 	transitioning = false;
 }
 
-void SkySync::ShadowFader::Update(const RE::Sky* sky, RE::NiPoint3 dirs[], float intensities[], float fadeDuration)
+void SkySync::ShadowFader::Update(const RE::Sky* sky, RE::NiPoint3 dirs[], float intensities[], float fadeDuration, float fadeAdvance)
 {
 	auto isValidDir = [](const RE::NiPoint3& d) { return d.x != 0.0f || d.y != 0.0f || d.z != 0.0f; };
 
@@ -467,10 +481,7 @@ void SkySync::ShadowFader::Update(const RE::Sky* sky, RE::NiPoint3 dirs[], float
 		return;
 	}
 
-	float timeScale = 20.0f;
-	if (const auto calendar = globals::game::calendar)
-		timeScale = calendar->GetTimescale();
-	fadeTimer = std::min(fadeTimer + *globals::game::deltaTime * 20.0f / timeScale, fadeDuration);
+	fadeTimer = std::min(fadeTimer + fadeAdvance, fadeDuration);
 	const float t = fadeDuration > 0.0f ? fadeTimer / fadeDuration : 1.0f;
 
 	RE::NiPoint3 targetDir = dirs[static_cast<int>(target)];

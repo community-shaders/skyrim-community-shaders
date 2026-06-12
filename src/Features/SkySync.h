@@ -106,7 +106,7 @@ private:
 		float fadeTimer = 0.0f;
 		bool transitioning = false;
 
-		void Update(const RE::Sky* sky, RE::NiPoint3 dirs[], float intensities[], float fadeDuration);
+		void Update(const RE::Sky* sky, RE::NiPoint3 dirs[], float intensities[], float fadeDuration, float fadeAdvance);
 		static void SetLighting(const RE::Sky* sky, RE::NiPoint3 dir);
 		static void ClampDirection(RE::NiPoint3& dir);
 		void Reset();
@@ -117,6 +117,7 @@ private:
 	static constexpr float SouthernSunAngle = 90.0f - 35.0f;
 	static constexpr float NorthernSunAngle = 90.0f + 35.0f;
 	static constexpr float VanillaSunAngle = 90.0f + 5.0f;
+	static constexpr float SecondsPerGameHour = 3600.0f;
 
 	inline static RE::NiPoint3* gSunPosition = nullptr;
 
@@ -124,6 +125,7 @@ private:
 	RE::TESObjectCELL* currentCell = nullptr;
 	float sunAngle = 90.0f;
 	float currentSkyRotation = D3D11_FLOAT32_MAX;
+	float lastGameHour = -1.0f;
 
 	float4 colors[3] = {};
 	float currentDim = 1.0f;
