@@ -16,7 +16,6 @@
 #include "ShaderCache.h"
 #include "State.h"
 #include "ThemeManager.h"
-#include "Util.h"
 
 using json = nlohmann::json;
 
@@ -976,7 +975,7 @@ void SettingsTabRenderer::RenderFontsTab()
 		SeparatorTextWithFont(T("menu.settings.font_roles", "Font Roles"), Menu::FontRole::Subheading);
 
 		if (fontCatalog.families.empty()) {
-			ImGui::TextColored(ImVec4(0.9f, 0.6f, 0.2f, 1.0f), "%s", T("menu.settings.no_fonts_found", "No fonts found. Place .ttf files in Interface/CommunityShaders/Fonts/"));
+			Util::Text::Warning("%s", T("menu.settings.no_fonts_found", "No fonts found. Place .ttf files in Interface/CommunityShaders/Fonts/"));
 		}
 
 		for (size_t roleIndex = 0; roleIndex < Menu::FontRoleDescriptors.size(); ++roleIndex) {
