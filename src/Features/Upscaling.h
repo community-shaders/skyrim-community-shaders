@@ -26,7 +26,6 @@ public:
 	virtual std::string GetDisplayName() override { return T("feature.upscaling.name", "Upscaling"); }
 	virtual inline std::string GetShortName() override { return "Upscaling"; }
 	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
-	virtual inline bool SupportsVR() override { return true; }
 	virtual inline bool IsCore() const override { return false; }
 	virtual inline std::string_view GetCategory() const override { return FeatureCategories::kDisplay; }
 
@@ -80,9 +79,8 @@ public:
 
 	struct UpscalingDataCB
 	{
-		float2 trueSamplingDim;  // per-eye render dim in VR, full render dim otherwise
-		uint eyeOffsetX;         // X offset into stereo source buffers; 0 for non-VR / left eye
-		uint pad0;
+		float2 trueSamplingDim;
+		float2 pad0;
 	};
 
 	ConstantBuffer* jitterCB = nullptr;
@@ -128,8 +126,7 @@ public:
 	void CreateUpscalingTextureResources(UpscaleMethod a_upscalemethod);
 	void DestroyUpscalingTextureResources(UpscaleMethod a_upscalemethod);
 
-	winrt::com_ptr<ID3D11ComputeShader> encodeTexturesCS[5];          // One for each UpscaleMethod
-	winrt::com_ptr<ID3D11ComputeShader> encodeTexturesCSDepthOutput;  // FSR + VR: converts R24G8_TYPELESS depth to R32_FLOAT
+	winrt::com_ptr<ID3D11ComputeShader> encodeTexturesCS[4];  // One for each UpscaleMethod (kNONE, kTAA, kFSR, kDLSS)
 	ID3D11ComputeShader* GetEncodeTexturesCS();
 
 	winrt::com_ptr<ID3D11PixelShader> depthRefractionUpscalePS;
@@ -145,42 +142,9 @@ public:
 	winrt::com_ptr<ID3D11BlendState> upscaleBlendState;
 	winrt::com_ptr<ID3D11RasterizerState> upscaleRasterizerState;
 
-	// Shared VR HMD Mask Clearing
-	winrt::com_ptr<ID3D11ComputeShader> vrClearHMDMaskCS;
-	winrt::com_ptr<ID3D11Buffer> vrClearHMDMaskCB;
-	// Helper to dispatch mask clearing for a single eye region
-	void ClearHMDMask(ID3D11UnorderedAccessView* colorUAV, ID3D11ShaderResourceView* depthSRV,
-		uint32_t eyeWidth, uint32_t eyeHeight, uint32_t depthOffsetX, uint32_t colorOffsetX);
-
-	// Shared VR Per-Eye Intermediate Buffers
-	// Owned here so both Streamline (DLSS) and FidelityFX (FSR) can use them.
-	eastl::unique_ptr<Texture2D> vrIntermediateColorIn[2];           // per-eye render resolution
-	eastl::unique_ptr<Texture2D> vrIntermediateColorOut[2];          // per-eye output resolution
-	eastl::unique_ptr<Texture2D> vrIntermediateDepth;                // right-eye render resolution (R24G8_TYPELESS, DLSS only)
-	eastl::unique_ptr<Texture2D> vrIntermediateLinearDepth[2];       // per-eye render resolution (R32_FLOAT, for FSR)
-	eastl::unique_ptr<Texture2D> vrIntermediateMotionVectors[2];     // per-eye render resolution
-	eastl::unique_ptr<Texture2D> vrIntermediateReactiveMask[2];      // per-eye render resolution
-	eastl::unique_ptr<Texture2D> vrIntermediateTransparencyMask[2];  // per-eye render resolution
-
-	// Helper to create/resize per-eye buffers matching source formats
-	void CreateVRIntermediateTextures(uint32_t inWidth, uint32_t inHeight, uint32_t outWidth, uint32_t outHeight,
-		ID3D11Resource* colorSrc, ID3D11Resource* mvecSrc, ID3D11Resource* reactiveSrc, ID3D11Resource* transparencySrc);
-
 	// Helper: Create a Texture2D matching source format at a given size
 	static eastl::unique_ptr<Texture2D> CreateTextureFromSource(ID3D11Resource* src, uint32_t width, uint32_t height,
 		bool copyBindFlags = false, bool createSRV = false, bool createUAV = false, const char* name = nullptr);
-
-	// Shared Pipeline Steps
-
-	/// Ensures VR per-eye intermediate textures exist at the correct resolution.
-	/// Must be called before any per-eye EncodeTexturesCS dispatch or PreparePerEyeInputs.
-	void EnsureVRIntermediateTextures();
-
-	/// Splits the combined stereo color buffer into per-eye intermediates, copies raw
-	/// motion vectors, and clears the HMD hidden area. FSR-only.
-	/// Reactive/transparency masks are written by EncodeTexturesCS.
-	void PreparePerEyeInputs(ID3D11Resource* colorSrc);
-	void FinalizePerEyeOutputs(ID3D11Resource* colorDst);
 
 	void ConfigureTAA();
 	void ConfigureUpscaling(RE::BSGraphics::State* a_state);
@@ -213,9 +177,7 @@ public:
 
 	/// Set by MenuOpenCloseEventHandler when LoadingMenu closes (cell/worldspace transitions,
 	/// initial load). Consumed at the start of Upscale() to force a one-frame DLSS feature
-	/// rebuild — works around a VR-only persistent ~2-3ms GPU regression after worldspace
-	/// loads that otherwise only clears when the user manually toggles DLSS/preset. VR+DLSS
-	/// only; flat has no repro and per-eye extent asymmetry doesn't apply.
+	/// rebuild.
 	std::atomic<bool> pendingDLSSReset{ false };
 
 	void CopySharedD3D12Resources();

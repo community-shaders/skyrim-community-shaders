@@ -62,7 +62,6 @@ public:
 				T("feature.render_doc.key_feature_2", "Open captures folder"),
 				T("feature.render_doc.key_feature_3", "Capture file management") } };
 	}
-	bool SupportsVR() override { return true; }
 	std::string_view GetShaderDefineName() override { return ""; }
 	bool HasShaderDefine(RE::BSShader::Type) override { return false; };
 

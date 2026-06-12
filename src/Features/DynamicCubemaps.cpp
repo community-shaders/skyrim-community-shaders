@@ -33,13 +33,6 @@ void DynamicCubemaps::DrawSettings()
 		recompileFlag |= ImGui::Checkbox(T(TKEY("enable_ssr"), "Enable Screen Space Reflections"), reinterpret_cast<bool*>(&settings.EnabledSSR));
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text("%s", T(TKEY("enable_ssr_tooltip"), "Enable Screen Space Reflections on Water"));
-			if (REL::Module::IsVR() && !enabledAtBoot) {
-				ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.0f, 0.0f, 1.0f));
-				ImGui::Text("%s", T(TKEY("vr_restart_required"),
-									  "A restart is required to enable in VR. "
-									  "Save Settings after enabling and restart the game."));
-				ImGui::PopStyleColor();
-			}
 		}
 		ImGui::TreePop();
 	}
@@ -122,69 +115,32 @@ void DynamicCubemaps::DrawSettings()
 		}
 		ImGui::TreePop();
 	}
-	if (REL::Module::IsVR()) {
-		if (ImGui::TreeNodeEx(T(TKEY("advanced_vr_settings"), "Advanced VR Settings"), ImGuiTreeNodeFlags_DefaultOpen)) {
-			Util::RenderImGuiSettingsTree(iniVRCubeMapSettings, "VR");
-			Util::RenderImGuiSettingsTree(hiddenVRCubeMapSettings, "hiddenVR");
-			ImGui::TreePop();
-		}
-	}
 }
 
 void DynamicCubemaps::LoadSettings(json& o_json)
 {
 	settings = o_json;
-	if (REL::Module::IsVR()) {
-		Util::LoadGameSettings(iniVRCubeMapSettings);
-	}
 	recompileFlag = true;
 }
 
 void DynamicCubemaps::SaveSettings(json& o_json)
 {
 	o_json = settings;
-	if (REL::Module::IsVR()) {
-		Util::SaveGameSettings(iniVRCubeMapSettings);
-	}
 }
 
 void DynamicCubemaps::RestoreDefaultSettings()
 {
 	settings = {};
-	if (REL::Module::IsVR()) {
-		Util::ResetGameSettingsToDefaults(iniVRCubeMapSettings);
-		Util::ResetGameSettingsToDefaults(hiddenVRCubeMapSettings);
-	}
 	recompileFlag = true;
 }
 
 void DynamicCubemaps::DataLoaded()
 {
-	if (REL::Module::IsVR()) {
-		// enable cubemap settings in VR
-		Util::EnableBooleanSettings(iniVRCubeMapSettings, GetName());
-		Util::EnableBooleanSettings(hiddenVRCubeMapSettings, GetName());
-	}
 	MenuOpenCloseEventHandler::Register();
 }
 
 void DynamicCubemaps::PostPostLoad()
 {
-	if (REL::Module::IsVR() && settings.EnabledSSR) {
-		std::map<std::string, uintptr_t> earlyhiddenVRCubeMapSettings{
-			{ "bScreenSpaceReflectionEnabled:Display", 0x1ED5BC0 },
-		};
-		for (const auto& settingPair : earlyhiddenVRCubeMapSettings) {
-			const auto& settingName = settingPair.first;
-			const auto address = REL::Offset{ settingPair.second }.address();
-			bool* setting = reinterpret_cast<bool*>(address);
-			if (!*setting) {
-				logger::info("[PostPostLoad] Changing {} from {} to {} to support Dynamic Cubemaps", settingName, *setting, true);
-				*setting = true;
-			}
-		}
-		enabledAtBoot = true;
-	}
 }
 
 RE::BSEventNotifyControl MenuOpenCloseEventHandler::ProcessEvent(const RE::MenuOpenCloseEvent* a_event, RE::BSTEventSource<RE::MenuOpenCloseEvent>*)
@@ -364,7 +320,7 @@ void DynamicCubemaps::UpdateCubemapCapture(bool a_reflections)
 	static float3 cameraPreviousPosAdjust[2] = { { 0, 0, 0 }, { 0, 0, 0 } };
 	updateData.CameraPreviousPosAdjust = cameraPreviousPosAdjust[index];
 
-	auto eyePosition = Util::GetEyePosition(0);
+	auto eyePosition = Util::GetEyePosition();
 
 	cameraPreviousPosAdjust[index] = { eyePosition.x, eyePosition.y, eyePosition.z };
 

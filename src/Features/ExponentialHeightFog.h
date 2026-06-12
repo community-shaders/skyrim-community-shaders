@@ -8,7 +8,6 @@ private:
 	static constexpr std::string_view MOD_ID = "180146";
 
 public:
-	virtual bool SupportsVR() override { return true; };
 	virtual inline std::string GetName() override { return "Exponential Height Fog"; }
 	virtual std::string GetDisplayName() override { return T("feature.exponential_height_fog.name", "Exponential Height Fog"); }
 	virtual inline std::string GetShortName() override { return "ExponentialHeightFog"; }
@@ -84,7 +83,7 @@ private:
 		DirectX::XMUINT4 gridSizeAndFlags = {};
 		float4 invGridSizeAndNearFade = {};
 		float4 gridZParams = {};
-		float4x4 clipToWorld[2] = {};
+		float4x4 clipToWorld = {};
 		float4 frameJitterOffsets[16] = {};
 		float4 historyParameters = {};
 		float4 jitterParameters = {};  // x = LightScatteringSampleJitterMultiplier, y = StateFrameIndexMod8, zw = unused

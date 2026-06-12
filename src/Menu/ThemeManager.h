@@ -38,6 +38,14 @@ using json = nlohmann::json;
  *
  *     "TooltipHoverDelay": 0.5,            // Seconds before tooltip appears
  *     "ShowActionIcons": true,             // Show icons on action buttons
+ *     "UseCustomCursor": false,
+ *     "Cursor": {
+ *       "Scale": 1.0,
+ *       "Types": {
+ *         "Arrow": { "File": "cursor.png", "HotspotX": 0, "HotspotY": 0 },
+ *         "TextInput": { "File": "cursor_text.png", "HotspotX": 8, "HotspotY": 12 }
+ *       }
+ *     },
  *
  *     // Simple color palette (6 key colors)
  *     "Palette": {

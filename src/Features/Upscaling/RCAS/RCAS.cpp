@@ -48,8 +48,8 @@ void RCAS::ApplySharpen(ID3D11ShaderResourceView* inputSRV, ID3D11UnorderedAcces
 	globals::profiler->BeginPass("Upscaling::RCAS");
 	state->BeginPerfEvent("RCAS Sharpening");
 
-	uint32_t screenWidth = (uint32_t)state->screenSize.x;
-	uint32_t screenHeight = (uint32_t)state->screenSize.y;
+	uint32_t screenWidth = globals::game::graphicsState->screenWidth;
+	uint32_t screenHeight = globals::game::graphicsState->screenHeight;
 
 	RCASConfig config{};
 	config.sharpness = sharpness;

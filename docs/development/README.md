@@ -36,7 +36,7 @@ Use `tools/new-worktree.ps1` when creating a new worktree for development. The s
 Examples:
 
 -   `pwsh ./tools/new-worktree.ps1 -Name reproj_fixes`
--   `pwsh ./tools/new-worktree.ps1 -Name vr-debug -StartPoint dev`
+-   `pwsh ./tools/new-worktree.ps1 -Name shader-debug -StartPoint dev`
 -   `pwsh ./tools/new-worktree.ps1 -Name clean-build -NoSubmodules`
 
 If you want a Git-native command, install the optional repo-local alias:

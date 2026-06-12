@@ -146,39 +146,14 @@ void VolumetricLighting::SaveSettings(json& o_json)
 void VolumetricLighting::RestoreDefaultSettings()
 {
 	settings = {};
-	if (globals::game::isVR)
-		Util::ResetGameSettingsToDefaults(hiddenVRSettings);
 }
 
 void VolumetricLighting::DataLoaded()
 {
-	auto shaderCache = globals::shaderCache;
-	const static auto address = REL::Offset{ 0x1ec6b88 }.address();
-	bool& bDepthBufferCulling = *reinterpret_cast<bool*>(address);
-
-	if (REL::Module::IsVR() && bDepthBufferCulling && shaderCache->IsDiskCache()) {
-		// clear cache to fix bug caused by bDepthBufferCulling
-		logger::info("Force clearing cache due to bDepthBufferCulling");
-		shaderCache->Clear();
-	}
 }
 
 void VolumetricLighting::PostPostLoad()
 {
-	if (REL::Module::IsVR()) {
-		if (settings.ExteriorEnabled || settings.InteriorEnabled)
-			EnableBooleanSettings(hiddenVRSettings, GetName());
-		auto address = REL::RelocationID(100475, 0).address() + 0x45b;  // AE not needed, VR only hook
-		logger::info("[{}] Hooking CopyResource at {:x}", GetName(), address);
-		REL::safe_fill(address, REL::NOP, 7);
-		stl::write_thunk_call<CopyResource>(address);
-
-		// Skip volumetric lighting rendering
-		REL::safe_write(REL::RelocationID(35560, 0).address() + REL::Relocate(0x254, 0), &REL::JMP8, 1);
-		// Move it to render after depth to ensure camera matches rest of scene
-		stl::write_thunk_call<RenderDepth>(REL::RelocationID(35560, 0).address() + REL::Relocate(0x2EE, 0));
-	}
-
 	bEnableVolumetricLighting = reinterpret_cast<bool*>(REL::RelocationID(527940, 414913).address());
 	gVolumetricLightingSizeLow = reinterpret_cast<TextureSize*>(REL::RelocationID(527970, 414916).address());
 	gVolumetricLightingSizeMedium = reinterpret_cast<TextureSize*>(REL::RelocationID(527973, 414919).address());
@@ -200,10 +175,8 @@ void VolumetricLighting::SetupResources()
 
 void VolumetricLighting::EarlyPrepass()
 {
-	auto renderSize = Util::ConvertToDynamic(globals::state->screenSize);
-
-	int32_t width = static_cast<int32_t>(renderSize.x);
-	int32_t height = static_cast<int32_t>(renderSize.y);
+	int32_t width = static_cast<int32_t>((float)globals::game::graphicsState->screenWidth);
+	int32_t height = static_cast<int32_t>((float)globals::game::graphicsState->screenHeight);
 
 	if (width != vlData.screenX || height != vlData.screenY) {
 		blurHCS = nullptr;
@@ -231,17 +204,11 @@ void VolumetricLighting::EarlyPrepass()
 void VolumetricLighting::SetupVL()
 {
 	if (inInterior) {
-		if (globals::game::isVR)
-			SetBooleanSettings(hiddenVRSettings, GetName(), settings.InteriorEnabled && inInteriorWithSun);
-		else
-			*bEnableVolumetricLighting = settings.InteriorEnabled && inInteriorWithSun;
+		*bEnableVolumetricLighting = settings.InteriorEnabled && inInteriorWithSun;
 		*gVolumetricLightingSizeHigh = static_cast<Quality>(settings.InteriorQuality) == Quality::Custom ? settings.InteriorCustomSize : defaultSizeHigh;
 		SetVLQuality(GetVLDescriptor(), settings.InteriorQuality);
 	} else {
-		if (globals::game::isVR)
-			SetBooleanSettings(hiddenVRSettings, GetName(), settings.ExteriorEnabled);
-		else
-			*bEnableVolumetricLighting = settings.ExteriorEnabled;
+		*bEnableVolumetricLighting = settings.ExteriorEnabled;
 		*gVolumetricLightingSizeHigh = static_cast<Quality>(settings.ExteriorQuality) == Quality::Custom ? settings.ExteriorCustomSize : defaultSizeHigh;
 		SetVLQuality(GetVLDescriptor(), settings.ExteriorQuality);
 	}
@@ -259,20 +226,6 @@ void VolumetricLighting::SetVLQuality(VolumetricLightingDescriptor& descriptor, 
 	using func_t = decltype(&VolumetricLighting::SetVLQuality);
 	static REL::Relocation<func_t> func{ REL::RelocationID(100299, 107016).address() };
 	func(descriptor, std::clamp<uint32_t>(quality, 0, 2));
-}
-
-void VolumetricLighting::RenderVolumetricLighting(VolumetricLightingDescriptor* descriptor, RE::NiCamera* camera, bool flag)
-{
-	using func_t = decltype(&VolumetricLighting::RenderVolumetricLighting);
-	static REL::Relocation<func_t> func{ REL::RelocationID(100306, 0) };
-	func(descriptor, camera, flag);
-}
-
-void VolumetricLighting::RenderDepth::thunk()
-{
-	func();
-	if (globals::features::volumetricLighting.bEnableVolumetricLighting)
-		RenderVolumetricLighting(&GetVLDescriptor(), RE::Main::WorldRootCamera(), false);
 }
 
 RE::BSImagespaceShader* VolumetricLighting::CreateShader(const std::string_view& name, const std::string_view& fileName, RE::BSComputeShader* computeShader)
@@ -329,23 +282,6 @@ void VolumetricLighting::SetGroupCountsHCS(uint32_t& threadGroupCountX) const
 void VolumetricLighting::SetGroupCountsVCS(uint32_t& threadGroupCountY) const
 {
 	threadGroupCountY = (vlData.screenY + BlurThreadGroupSizeY - BlurWindow * 2u - 1u) / (BlurThreadGroupSizeY - BlurWindow * 2u);
-}
-
-void VolumetricLighting::CopyResource::thunk(ID3D11DeviceContext* a_this, ID3D11Resource* a_renderTarget, ID3D11Resource* a_renderTargetSource)
-{
-	// In VR with dynamic resolution enabled, there's a bug with the depth stencil.
-	// The depth stencil passed to IsFullScreenVR is scaled down incorrectly.
-	// The fix is to stop a CopyResource from replacing kMAIN_COPY with kMAIN after
-	// ISApplyVolumetricLighting because it clobbers a properly scaled kMAIN_COPY.
-	// The kMAIN_COPY does not appear to be used in the remaining frame after
-	// ISApplyVolumetricLighting except for IsFullScreenVR.
-	// But, the copy might have to be done manually later after IsFullScreenVR if
-	// used in the next frame.
-
-	auto& singleton = globals::features::volumetricLighting;
-	if (!(Util::IsDynamicResolution() && singleton.bEnableVolumetricLighting)) {
-		a_this->CopyResource(a_renderTarget, a_renderTargetSource);
-	}
 }
 
 #undef I18N_KEY_PREFIX

@@ -77,9 +77,7 @@ LightLimitFix::PerFrame LightLimitFix::GetCommonBufferData()
 
 void LightLimitFix::SetupResources()
 {
-	auto screenSize = globals::state->screenSize;
-	if (REL::Module::IsVR())
-		screenSize.x *= .5;
+	float2 screenSize{ (float)globals::game::graphicsState->screenWidth, (float)globals::game::graphicsState->screenHeight };
 	clusterSize[0] = ((uint)screenSize.x + 63) / 64;
 	clusterSize[1] = ((uint)screenSize.y + 63) / 64;
 	clusterSize[2] = 32;
@@ -87,8 +85,6 @@ void LightLimitFix::SetupResources()
 
 	{
 		std::vector<std::pair<const char*, const char*>> clusterDefines;
-		if (REL::Module::IsVR())
-			clusterDefines = { { "VR", "" } };
 		clusterBuildingCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\LightLimitFix\\ClusterBuildingCS.hlsl", clusterDefines, "cs_5_0");
 		clusterCullingCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\LightLimitFix\\ClusterCullingCS.hlsl", clusterDefines, "cs_5_0");
 
@@ -255,7 +251,7 @@ void LightLimitFix::BSLightingShader_SetupGeometry_GeometrySetupConstantPointLig
 
 		if (i < a_pass->numShadowLights) {
 			auto* shadowLight = static_cast<RE::BSShadowLight*>(bsLight);
-			GET_INSTANCE_MEMBER(maskIndex, shadowLight);
+			auto& maskIndex = shadowLight->GetRuntimeData().maskIndex;
 			light.shadowMaskIndex = maskIndex;
 			light.lightFlags.set(LightFlags::Shadow);
 		}
@@ -269,7 +265,7 @@ void LightLimitFix::BSLightingShader_SetupGeometry_GeometrySetupConstantPointLig
 		if (!bsLight)
 			continue;
 		auto* shadowLight = static_cast<RE::BSShadowLight*>(bsLight);
-		GET_INSTANCE_MEMBER(maskIndex, shadowLight);
+		auto& maskIndex = shadowLight->GetRuntimeData().maskIndex;
 		strictLightDataTemp.ShadowBitMask |= (1u << maskIndex);
 	}
 }
@@ -308,20 +304,18 @@ void LightLimitFix::BSLightingShader_SetupGeometry_After(RE::BSRenderPass*)
 
 void LightLimitFix::SetLightPosition(LightLimitFix::LightData& a_light, RE::NiPoint3 a_initialPosition, bool a_cached)
 {
-	for (int eyeIndex = 0; eyeIndex < eyeCount; eyeIndex++) {
-		RE::NiPoint3 eyePosition;
+	RE::NiPoint3 eyePosition;
 
-		if (a_cached) {
-			eyePosition = eyePositionCached[eyeIndex];
-		} else {
-			eyePosition = Util::GetEyePosition(eyeIndex);
-		}
-
-		auto worldPos = a_initialPosition - eyePosition;
-		a_light.positionWS[eyeIndex].data.x = worldPos.x;
-		a_light.positionWS[eyeIndex].data.y = worldPos.y;
-		a_light.positionWS[eyeIndex].data.z = worldPos.z;
+	if (a_cached) {
+		eyePosition = eyePositionCached;
+	} else {
+		eyePosition = Util::GetEyePosition();
 	}
+
+	auto worldPos = a_initialPosition - eyePosition;
+	a_light.positionWS.data.x = worldPos.x;
+	a_light.positionWS.data.y = worldPos.y;
+	a_light.positionWS.data.z = worldPos.z;
 }
 
 void LightLimitFix::Prepass()
@@ -377,8 +371,6 @@ void LightLimitFix::ClearShaderCache()
 		clusterCullingCS = nullptr;
 	}
 	std::vector<std::pair<const char*, const char*>> clusterDefines;
-	if (REL::Module::IsVR())
-		clusterDefines = { { "VR", "" } };
 	clusterBuildingCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\LightLimitFix\\ClusterBuildingCS.hlsl", clusterDefines, "cs_5_0");
 	clusterCullingCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\LightLimitFix\\ClusterCullingCS.hlsl", clusterDefines, "cs_5_0");
 }
@@ -390,11 +382,11 @@ void LightLimitFix::UpdateLights()
 
 	auto shadowSceneNode = smState->shadowSceneNode[0];
 
-	// Cache data since cameraData can become invalid in first-person
+	// Cache camera position from the FrameBuffer snapshot; shadowState::posAdjust can be stale in first-person
 
-	for (int eyeIndex = 0; eyeIndex < eyeCount; eyeIndex++) {
-		auto eyePosition = globals::game::frameBufferCached.GetCameraPosAdjust(eyeIndex);
-		eyePositionCached[eyeIndex] = { eyePosition.x, eyePosition.y, eyePosition.z };
+	{
+		auto eyePosition = globals::game::frameBufferCached.GetCameraPosAdjust();
+		eyePositionCached = { eyePosition.x, eyePosition.y, eyePosition.z };
 	}
 
 	eastl::vector<LightData> lightsData{};
@@ -449,7 +441,7 @@ void LightLimitFix::UpdateLights()
 
 					if (bsLight->IsShadowLight()) {
 						auto* shadowLight = static_cast<RE::BSShadowLight*>(bsLight);
-						GET_INSTANCE_MEMBER(maskIndex, shadowLight);
+						auto& maskIndex = shadowLight->GetRuntimeData().maskIndex;
 						light.shadowMaskIndex = maskIndex;
 						light.lightFlags.set(LightFlags::Shadow);
 					}
@@ -494,9 +486,7 @@ void LightLimitFix::UpdateStructure()
 	lightsNear = *globals::game::cameraNear;
 	lightsFar = *globals::game::cameraFar;
 
-	auto renderSize = Util::ConvertToDynamic(globals::state->screenSize);
-	if (REL::Module::IsVR())
-		renderSize.x *= .5;
+	auto renderSize = Util::ConvertToDynamic(float2{ (float)globals::game::graphicsState->screenWidth, (float)globals::game::graphicsState->screenHeight });
 	clusterSize[0] = ((uint)renderSize.x + 63) / 64;
 	clusterSize[1] = ((uint)renderSize.y + 63) / 64;
 	clusterSize[2] = 32;

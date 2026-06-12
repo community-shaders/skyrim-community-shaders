@@ -9,7 +9,7 @@ Write-Host "Starting build..."
 
 if (-Not (Test-Path -Path "CMakeUserPresets.json")) {
     Copy-Item -Path "CMakeUserPresets.json.template" -Destination "CMakeUserPresets.json"
-    (Get-Content -Path "CMakeUserPresets.json") -replace 'F:/MySkyrimModpack/mods/CommunityShaders;F:/SteamLibrary/steamapps/common/SkyrimVR/Data;F:/SteamLibrary/steamapps/common/Skyrim Special Edition/Data', 'C:/skyrim-community-shaders/build' | Set-Content -Path "CMakeUserPresets.json"
+    (Get-Content -Path "CMakeUserPresets.json") -replace 'F:/MySkyrimModpack/mods/CommunityShaders;F:/SteamLibrary/steamapps/common/Skyrim Special Edition/Data', 'C:/skyrim-community-shaders/build' | Set-Content -Path "CMakeUserPresets.json"
     Write-Host "CMakeUserPresets.json created and modified."
 } else {
     Write-Host "CMakeUserPresets.json already exists. No action taken."

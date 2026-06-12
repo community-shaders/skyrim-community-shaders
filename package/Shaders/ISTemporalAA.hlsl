@@ -513,11 +513,7 @@ PS_OUTPUT main(PS_INPUT input)
 #	else
 	feedbackOut.x = saturate(sampleUV.x * motionReject.z);
 #	endif
-#	if defined(VR)
-	colorOut.w = motionReject.x ? 1 : 0;
-#	else
 	colorOut.w = 1;
-#	endif
 	feedbackOut.w = 1;
 
 #	ifdef HDR_OUTPUT

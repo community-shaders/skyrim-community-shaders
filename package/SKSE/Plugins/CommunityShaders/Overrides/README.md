@@ -111,7 +111,6 @@ To create feature-specific overrides, you need to use the correct feature short 
 -   `TerrainHelper` - Terrain Helper
 -   `TerrainShadows` - Terrain Shadows
 -   `VolumetricLighting` - Volumetric Lighting
--   `VR` - VR
 -   `WaterEffects` - Water Effects
 -   `PerformanceOverlay` - Performance Overlay
 -   `WetnessEffects` - Wetness Effects

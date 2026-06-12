@@ -36,11 +36,14 @@ namespace Triplanar
 		float3 dPdy = 0.0;
 		ComputeGradients(worldPos, scale, dPdx, dPdy);
 
+		float4 result = 0;
 		if (noise < weights.x)
-			return tex.SampleGrad(samp, worldPos.yz * scale, dPdx.yz, dPdy.yz);
-		if (noise < weights.x + weights.y)
-			return tex.SampleGrad(samp, worldPos.xz * scale, dPdx.xz, dPdy.xz);
-		return tex.SampleGrad(samp, worldPos.xy * scale, dPdx.xy, dPdy.xy);
+			result = tex.SampleGrad(samp, worldPos.yz * scale, dPdx.yz, dPdy.yz);
+		else if (noise < weights.x + weights.y)
+			result = tex.SampleGrad(samp, worldPos.xz * scale, dPdx.xz, dPdy.xz);
+		else
+			result = tex.SampleGrad(samp, worldPos.xy * scale, dPdx.xy, dPdy.xy);
+		return result;
 	}
 
 	/// Stochastic triplanar with mip bias via gradient scaling.
@@ -53,11 +56,14 @@ namespace Triplanar
 		dPdx *= biasScale;
 		dPdy *= biasScale;
 
+		float4 result = 0;
 		if (noise < weights.x)
-			return tex.SampleGrad(samp, worldPos.yz * scale, dPdx.yz, dPdy.yz);
-		if (noise < weights.x + weights.y)
-			return tex.SampleGrad(samp, worldPos.xz * scale, dPdx.xz, dPdy.xz);
-		return tex.SampleGrad(samp, worldPos.xy * scale, dPdx.xy, dPdy.xy);
+			result = tex.SampleGrad(samp, worldPos.yz * scale, dPdx.yz, dPdy.yz);
+		else if (noise < weights.x + weights.y)
+			result = tex.SampleGrad(samp, worldPos.xz * scale, dPdx.xz, dPdy.xz);
+		else
+			result = tex.SampleGrad(samp, worldPos.xy * scale, dPdx.xy, dPdy.xy);
+		return result;
 	}
 }
 

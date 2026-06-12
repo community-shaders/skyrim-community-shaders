@@ -7,8 +7,6 @@
 #include "Common/Random.hlsli"
 #include "Common/SharedData.hlsli"
 #include "Common/Skinned.hlsli"
-#include "Common/VR.hlsli"
-
 #define EFFECT
 
 #if !defined(DYNAMIC_CUBEMAPS) && defined(IBL)
@@ -39,9 +37,6 @@ struct VS_INPUT
 	float4 BoneWeights: BLENDWEIGHT0;
 	float4 BoneIndices: BLENDINDICES0;
 #endif
-#if defined(VR)
-	uint InstanceID: SV_INSTANCEID;
-#endif  // VR
 };
 
 struct VS_OUTPUT
@@ -87,35 +82,19 @@ struct VS_OUTPUT
 	float3 ScreenSpaceNormal: TEXCOORD7;
 #	endif
 #endif
-#if defined(VR)
-	float ClipDistance: SV_ClipDistance0;  // o11
-	float CullDistance: SV_CullDistance0;  // p11
-	uint EyeIndex: EYEIDX0;
-#endif  // VR
 };
 
 #ifdef VSHADER
 cbuffer VS_PerFrame : register(b12)
 {
-#	if !defined(VR)
-	row_major float4x4 ScreenProj[1] : packoffset(c0);
-	row_major float4x4 ViewProj[1] : packoffset(c8);
-#		if defined(SKINNED)
-	float3 BonesPivot[1] : packoffset(c40);
-#			if defined(MOTIONVECTORS_NORMALS)
-	float3 PreviousBonesPivot[1] : packoffset(c41);
-#			endif  // MOTIONVECTORS_NORMALS
-#		endif      // SKINNED
-#	else
-	row_major float4x4 ScreenProj[2] : packoffset(c0);
-	row_major float4x4 ViewProj[2] : packoffset(c16);
-#		if defined(SKINNED)
-	float3 BonesPivot[2] : packoffset(c80);
-#			if defined(MOTIONVECTORS_NORMALS)
-	float3 PreviousBonesPivot[2] : packoffset(c82);
-#			endif  // MOTIONVECTORS_NORMALS
-#		endif      // SKINNED
-#	endif          // VR
+	row_major float4x4 ScreenProj : packoffset(c0);
+	row_major float4x4 ViewProj : packoffset(c8);
+#	if defined(SKINNED)
+	float3 BonesPivot : packoffset(c40);
+#		if defined(MOTIONVECTORS_NORMALS)
+	float3 PreviousBonesPivot : packoffset(c41);
+#		endif  // MOTIONVECTORS_NORMALS
+#	endif      // SKINNED
 };
 
 cbuffer PerTechnique : register(b0)
@@ -134,21 +113,12 @@ cbuffer PerMaterial : register(b1)
 
 cbuffer PerGeometry : register(b2)
 {
-#	if !defined(VR)
-	row_major float3x4 World[1] : packoffset(c0);
-	row_major float3x4 PreviousWorld[1] : packoffset(c3);
+	row_major float3x4 World : packoffset(c0);
+	row_major float3x4 PreviousWorld : packoffset(c3);
 	float4 MatProj[3] : packoffset(c6);
-	float4 EyePosition[1] : packoffset(c12);
-	float4 PosAdjust[1] : packoffset(c13);
+	float4 EyePosition : packoffset(c12);
+	float4 PosAdjust : packoffset(c13);
 	float4 TexcoordOffsetMembrane : packoffset(c14);
-#	else
-	row_major float3x4 World[2] : packoffset(c0);
-	row_major float3x4 PreviousWorld[2] : packoffset(c6);
-	float4 MatProj[3] : packoffset(c12);
-	float4 EyePosition[2] : packoffset(c21);
-	float4 PosAdjust[2] : packoffset(c23);
-	float4 TexcoordOffsetMembrane : packoffset(c25);
-#	endif  // VR
 }
 
 cbuffer IndexedTexcoordBuffer : register(b11)
@@ -190,47 +160,42 @@ float GetProjectedU(float3 worldPosition, float4 texCoordOffset)
 	return abs(0.318309158 * projUvTmp4) * texCoordOffset.w + texCoordOffset.y;
 }
 
-float GetProjectedV(float3 worldPosition, uint a_eyeIndex = 0)
+float GetProjectedV(float3 worldPosition)
 {
-	return (-PosAdjust[a_eyeIndex].x + (PosAdjust[a_eyeIndex].z + worldPosition.z)) / PosAdjust[a_eyeIndex].y;
+	return (-PosAdjust.x + (PosAdjust.z + worldPosition.z)) / PosAdjust.y;
 }
 #	endif
 
 VS_OUTPUT main(VS_INPUT input)
 {
 	VS_OUTPUT vsout;
-	uint eyeIndex = Stereo::GetEyeIndexVS(
-#	if defined(VR)
-		input.InstanceID
-#	endif  // VR
-	);
 	precise float4 inputPosition = float4(input.Position.xyz, 1.0);
 
-	precise row_major float4x4 world4x4 = float4x4(World[eyeIndex][0], World[eyeIndex][1], World[eyeIndex][2], float4(0, 0, 0, 1));
+	precise row_major float4x4 world4x4 = float4x4(World[0], World[1], World[2], float4(0, 0, 0, 1));
 	precise float3x3 world3x3 =
-		transpose(float3x3(transpose(World[eyeIndex])[0], transpose(World[eyeIndex])[1], transpose(World[eyeIndex])[2]));
+		transpose(float3x3(transpose(World)[0], transpose(World)[1], transpose(World)[2]));
 
 #	if defined(SKY_OBJECT)
-	float4x4 viewProj = float4x4(ViewProj[eyeIndex][0], ViewProj[eyeIndex][1], ViewProj[eyeIndex][3], ViewProj[eyeIndex][3]);
+	float4x4 viewProj = float4x4(ViewProj[0], ViewProj[1], ViewProj[3], ViewProj[3]);
 #	else
-	row_major float4x4 viewProj = ViewProj[eyeIndex];
+	row_major float4x4 viewProj = ViewProj;
 #	endif
 
 #	if defined(SKINNED)
 	precise int4 actualIndices = 765.01.xxxx * input.BoneIndices.xyzw;
 #		if defined(MOTIONVECTORS_NORMALS)
 	float3x4 previousBoneTransformMatrix =
-		Skinned::GetBoneTransformMatrix(PreviousBones, actualIndices, PreviousBonesPivot[eyeIndex], input.BoneWeights);
+		Skinned::GetBoneTransformMatrix(PreviousBones, actualIndices, PreviousBonesPivot, input.BoneWeights);
 	precise float4 previousWorldPosition =
 		float4(mul(inputPosition, transpose(previousBoneTransformMatrix)), 1);
 #		endif
 	float3x4 boneTransformMatrix =
-		Skinned::GetBoneTransformMatrix(Bones, actualIndices, BonesPivot[eyeIndex], input.BoneWeights);
+		Skinned::GetBoneTransformMatrix(Bones, actualIndices, BonesPivot, input.BoneWeights);
 	precise float4 worldPosition = float4(mul(inputPosition, transpose(boneTransformMatrix)), 1);
 	float4 viewPos = mul(viewProj, worldPosition);
 #	else
-	precise float4 worldPosition = float4(mul(World[eyeIndex], inputPosition), 1);
-	precise float4 previousWorldPosition = float4(mul(PreviousWorld[eyeIndex], inputPosition), 1);
+	precise float4 worldPosition = float4(mul(World, inputPosition), 1);
+	precise float4 previousWorldPosition = float4(mul(PreviousWorld, inputPosition), 1);
 	precise row_major float4x4 modelView = mul(viewProj, world4x4);
 	float4 viewPos = mul(modelView, inputPosition);
 #	endif
@@ -299,7 +264,7 @@ VS_OUTPUT main(VS_INPUT input)
 #		if defined(NORMALS) && !defined(MEMBRANE)
 	texCoord.y = dot(MatProj[1].xyz, inputPosition.xyz);
 #		else
-	texCoord.y = GetProjectedV(worldPosition.xyz, eyeIndex);
+	texCoord.y = GetProjectedV(worldPosition.xyz);
 #		endif
 #	else
 #		if defined(TEXTURE)
@@ -332,7 +297,7 @@ VS_OUTPUT main(VS_INPUT input)
 
 	float3 eyePosition = 0.0.xxx;
 #	if defined(MEMBRANE) && defined(TEXTURE) && !defined(SKINNED)
-	eyePosition = EyePosition[eyeIndex].xyz;
+	eyePosition = EyePosition.xyz;
 #	endif
 
 	float3 viewPosition = inputPosition.xyz;
@@ -375,7 +340,7 @@ VS_OUTPUT main(VS_INPUT input)
 #		elif defined(FALLOFF) || (defined(SKINNED) && defined(MEMBRANE))
 	float3 screenSpaceNormal = worldNormal;
 #		else
-	float4x4 modelScreen = mul(ScreenProj[eyeIndex], world4x4);
+	float4x4 modelScreen = mul(ScreenProj, world4x4);
 	float3 screenSpaceNormal = normalize(mul(modelScreen, float4(normal, 0))).xyz;
 #		endif
 
@@ -397,13 +362,6 @@ VS_OUTPUT main(VS_INPUT input)
 	vsout.PreviousWorldPosition = previousWorldPosition;
 #	endif
 
-#	ifdef VR
-	vsout.EyeIndex = eyeIndex;
-	Stereo::VR_OUTPUT VRout = Stereo::GetVRVSOutput(vsout.Position, eyeIndex);
-	vsout.Position = VRout.VRPosition;
-	vsout.ClipDistance.x = VRout.ClipDistance;
-	vsout.CullDistance.x = VRout.CullDistance;
-#	endif  // VR
 	return vsout;
 }
 #endif
@@ -451,12 +409,10 @@ struct PS_OUTPUT
 
 #ifdef PSHADER
 
-#	if !defined(VR)
 cbuffer AlphaTestRefCB : register(b11)
 {
 	float AlphaTestRefRS : packoffset(c0);
 }
-#	endif  // !VR
 
 cbuffer PerTechnique : register(b0)
 {
@@ -474,7 +430,6 @@ cbuffer PerMaterial : register(b1)
 
 cbuffer PerGeometry : register(b2)
 {
-#	if !defined(VR)
 	float4 PLightPositionX[1] : packoffset(c0);
 	float4 PLightPositionY[1] : packoffset(c1);
 	float4 PLightPositionZ[1] : packoffset(c2);
@@ -487,20 +442,6 @@ cbuffer PerGeometry : register(b2)
 	float4 AlphaTestRef : packoffset(c9);
 	float4 MembraneRimColor : packoffset(c10);
 	float4 MembraneVars : packoffset(c11);
-#	else
-	float4 PLightPositionX[2] : packoffset(c0);
-	float4 PLightPositionY[2] : packoffset(c2);
-	float4 PLightPositionZ[2] : packoffset(c4);
-	float4 PLightingRadiusInverseSquared : packoffset(c6);
-	float4 PLightColorR : packoffset(c7);
-	float4 PLightColorG : packoffset(c8);
-	float4 PLightColorB : packoffset(c9);
-	float4 DLightColor : packoffset(c10);
-	float4 PropertyColor : packoffset(c11);  // VR should be 11; this could start earlier though
-	float4 AlphaTestRef : packoffset(c12);
-	float4 MembraneRimColor : packoffset(c13);
-	float4 MembraneVars : packoffset(c14);
-#	endif
 };
 
 #	if defined(LIGHT_LIMIT_FIX)
@@ -566,7 +507,7 @@ void ExtractEffectLighting(float3 inputColor, out float3 dirColor, out float3 am
 }
 
 #	if defined(LIGHTING)
-float3 GetLightingColor(float3 msPosition, float3 worldPosition, float2 screenPosition, uint eyeIndex, inout float shadowVariance)
+float3 GetLightingColor(float3 msPosition, float3 worldPosition, float2 screenPosition, inout float shadowVariance)
 {
 	float3 color = DLightColor.xyz * Color::EffectLightingMult();
 	bool suppressExternalEmittance = SharedData::InInterior && (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::SuppressExternalEmittance);
@@ -577,11 +518,7 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float2 screenPo
 #		if defined(SKYLIGHTING)
 	float skylightingDiffuse = 1.0;
 	if (!SharedData::InInterior) {
-#			if defined(VR)
-		float3 positionMSSkylight = worldPosition + FrameBuffer::CameraPosAdjust[eyeIndex].xyz - FrameBuffer::CameraPosAdjust[0].xyz;
-#			else
 		float3 positionMSSkylight = worldPosition;
-#			endif
 
 		sh2 skylightingSH = Skylighting::SampleNoBias(positionMSSkylight);
 		skylightingDiffuse = Skylighting::EvaluateDiffuse(skylightingSH, float3(0, 0, 1), Skylighting::GetFadeOutFactor(positionMSSkylight));
@@ -604,7 +541,7 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float2 screenPo
 	const bool inWorld = (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InWorld);
 
 	if (inWorld && ShadowSampling::HasDirectionalShadows())
-		dirShadow = ShadowSampling::Get3DFilteredShadow(worldPosition.xyz, viewDirection, screenPosition, eyeIndex, unusedSurfaceShadow);
+		dirShadow = ShadowSampling::Get3DFilteredShadow(worldPosition.xyz, viewDirection, screenPosition, unusedSurfaceShadow);
 
 	shadowVariance = 1.0 - sqrt(saturate(fwidth(dirShadow)));
 
@@ -612,7 +549,7 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float2 screenPo
 
 #		if defined(EXP_HEIGHT_FOG)
 	if (SharedData::exponentialHeightFogSettings.enabled) {
-		dirColor *= ExponentialHeightFog::GetSunlightFogAttenuation(worldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz);
+		dirColor *= ExponentialHeightFog::GetSunlightFogAttenuation(worldPosition.xyz, FrameBuffer::CameraPosAdjust.xyz);
 	}
 #		endif
 
@@ -633,7 +570,7 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float2 screenPo
 	if (!(Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InWorld))
 #		endif
 	{
-		float4 lightDistanceSquared = (PLightPositionX[eyeIndex] - msPosition.xxxx) * (PLightPositionX[eyeIndex] - msPosition.xxxx) + (PLightPositionY[eyeIndex] - msPosition.yyyy) * (PLightPositionY[eyeIndex] - msPosition.yyyy) + (PLightPositionZ[eyeIndex] - msPosition.zzzz) * (PLightPositionZ[eyeIndex] - msPosition.zzzz);
+		float4 lightDistanceSquared = (PLightPositionX[0] - msPosition.xxxx) * (PLightPositionX[0] - msPosition.xxxx) + (PLightPositionY[0] - msPosition.yyyy) * (PLightPositionY[0] - msPosition.yyyy) + (PLightPositionZ[0] - msPosition.zzzz) * (PLightPositionZ[0] - msPosition.zzzz);
 		float4 lightFadeMul = 1.0.xxxx - saturate(PLightingRadiusInverseSquared * lightDistanceSquared);
 		color.x += dot(Color::PointLight(PLightColorR.xxx).x * lightFadeMul * Color::EffectLightingMult(), 1.0.xxxx);
 		color.y += dot(Color::PointLight(PLightColorG.xxx).x * lightFadeMul * Color::EffectLightingMult(), 1.0.xxxx);
@@ -643,7 +580,7 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float2 screenPo
 	return color;
 }
 #	else
-float3 GetLightingShadow(float3 color, float3 worldPosition, float2 screenPosition, float depth, uint eyeIndex, inout float shadowVariance)
+float3 GetLightingShadow(float3 color, float3 worldPosition, float2 screenPosition, float depth, inout float shadowVariance)
 {
 	float3 dirColor;
 	float3 ambientColor;
@@ -679,7 +616,7 @@ float3 GetLightingShadow(float3 color, float3 worldPosition, float2 screenPositi
 		for (uint i = 0; i < sampleCount; i++) {
 			float t = (float(i) + noise) * rcpSampleCount;
 			float3 samplePositionWS = lerp(startPosition, endPosition, t);
-			shadow += ShadowSampling::GetWorldShadow(samplePositionWS, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
+			shadow += ShadowSampling::GetWorldShadow(samplePositionWS, FrameBuffer::CameraPosAdjust.xyz);
 		}
 		shadow *= rcpSampleCount;
 	}
@@ -690,7 +627,7 @@ float3 GetLightingShadow(float3 color, float3 worldPosition, float2 screenPositi
 
 #		if defined(EXP_HEIGHT_FOG)
 	if (SharedData::exponentialHeightFogSettings.enabled) {
-		dirColor *= ExponentialHeightFog::GetSunlightFogAttenuation(worldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz);
+		dirColor *= ExponentialHeightFog::GetSunlightFogAttenuation(worldPosition.xyz, FrameBuffer::CameraPosAdjust.xyz);
 	}
 #		endif
 
@@ -701,12 +638,6 @@ float3 GetLightingShadow(float3 color, float3 worldPosition, float2 screenPositi
 PS_OUTPUT main(PS_INPUT input)
 {
 	PS_OUTPUT psout = (PS_OUTPUT)0;
-
-#	if !defined(VR)
-	uint eyeIndex = 0;
-#	else
-	uint eyeIndex = input.EyeIndex;
-#	endif  // !VR
 
 	float4 fogMul = 1;
 #	if !defined(MULTBLEND)
@@ -757,13 +688,13 @@ PS_OUTPUT main(PS_INPUT input)
 	float shadowVariance = 1.0;
 
 #	if defined(LIGHTING)
-	propertyColor = GetLightingColor(input.MSPosition.xyz, input.WorldPosition.xyz, input.Position.xy, eyeIndex, shadowVariance);
+	propertyColor = GetLightingColor(input.MSPosition.xyz, input.WorldPosition.xyz, input.Position.xy, shadowVariance);
 
 #		if defined(LIGHT_LIMIT_FIX)
 	uint lightCount = 0;
 
-	float3 viewPosition = mul(FrameBuffer::CameraView[eyeIndex], float4(input.WorldPosition.xyz, 1)).xyz;
-	float2 screenUV = FrameBuffer::ViewToUV(viewPosition, true, eyeIndex);
+	float3 viewPosition = mul(FrameBuffer::CameraView, float4(input.WorldPosition.xyz, 1)).xyz;
+	float2 screenUV = FrameBuffer::ViewToUV(viewPosition);
 	bool inWorld = Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InWorld;
 
 	uint clusterIndex = 0;
@@ -777,7 +708,7 @@ PS_OUTPUT main(PS_INPUT input)
 			if (LightLimitFix::IsLightIgnored(light) || light.lightFlags & LightLimitFix::LightFlags::Shadow) {
 				continue;
 			}
-			float3 lightDirection = light.positionWS[eyeIndex].xyz - input.WorldPosition.xyz;
+			float3 lightDirection = light.positionWS.xyz - input.WorldPosition.xyz;
 			float lightDist = length(lightDirection);
 
 #			if defined(ISL)
@@ -885,7 +816,7 @@ PS_OUTPUT main(PS_INPUT input)
 
 #	if !defined(LIGHTING) && defined(VC) && defined(TEXCOORD) && defined(NORMALS) && defined(TEXTURE) && defined(FALLOFF) && defined(SOFT)
 	if (Permutation::PixelShaderDescriptor & Permutation::EffectFlags::GrayscaleToAlpha && lightingInfluence == 1.0)
-		lightColor = GetLightingShadow(lightColor, input.WorldPosition.xyz, input.Position.xy, depth, eyeIndex, shadowVariance);
+		lightColor = GetLightingShadow(lightColor, input.WorldPosition.xyz, input.Position.xy, depth, shadowVariance);
 #	endif
 
 	lightColor = Color::EffectMult(lightColor);
@@ -903,7 +834,7 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 vanillaFogColor = fogColor;
 	float expFogFactor = 0;
 	if (SharedData::exponentialHeightFogSettings.enabled) {
-		float4 exponentialHeightFog = ExponentialHeightFog::GetExponentialHeightFog(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, fogColor, float4(input.Position.xy * FrameBuffer::DynamicResolutionParams2.xy, input.Position.z, 1));
+		float4 exponentialHeightFog = ExponentialHeightFog::GetExponentialHeightFog(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust.xyz, fogColor, float4(input.Position.xy * FrameBuffer::DynamicResolutionParams2.xy, input.Position.z, 1));
 		expFogFactor = exponentialHeightFog.w;
 #			if defined(ADDBLEND) || defined(MULTBLEND) || defined(MULTBLEND_DECAL)
 		fogColor = exponentialHeightFog.xyz;
@@ -974,7 +905,7 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 screenSpaceNormal = normalize(input.ScreenSpaceNormal);
 #			endif
 	psout.NormalGlossiness = float4(GBuffer::EncodeNormal(screenSpaceNormal), 0.0, psout.Diffuse.w);
-	float2 screenMotionVector = MotionBlur::GetSSMotionVector(input.WorldPosition, input.PreviousWorldPosition, eyeIndex);
+	float2 screenMotionVector = MotionBlur::GetSSMotionVector(input.WorldPosition, input.PreviousWorldPosition);
 	psout.MotionVectors = float4(screenMotionVector, 0.0, psout.Diffuse.w);
 #		endif
 
@@ -991,7 +922,7 @@ PS_OUTPUT main(PS_INPUT input)
 #		endif
 
 #	elif defined(MOTIONVECTORS_NORMALS)
-	float2 screenMotionVector = MotionBlur::GetSSMotionVector(input.WorldPosition, input.PreviousWorldPosition, eyeIndex);
+	float2 screenMotionVector = MotionBlur::GetSSMotionVector(input.WorldPosition, input.PreviousWorldPosition);
 	psout.MotionVectors = screenMotionVector;
 
 #		if (defined(MEMBRANE) && defined(SKINNED) && defined(NORMALS))

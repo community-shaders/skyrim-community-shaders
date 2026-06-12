@@ -10,14 +10,14 @@ cbuffer PerFrame : register(b0)
 	uint4 ClusterSize;
 }
 
-float3 GetPositionVS(float2 texcoord, float depth, int eyeIndex = 0)
+float3 GetPositionVS(float2 texcoord, float depth)
 {
 	float4 clipSpaceLocation;
 	clipSpaceLocation.xy = texcoord * 2.0f - 1.0f;  // convert from [0,1] to [-1,1]
 	clipSpaceLocation.y *= -1;
 	clipSpaceLocation.z = depth;
 	clipSpaceLocation.w = 1.0f;
-	float4 homogenousLocation = mul(FrameBuffer::CameraProjInverse[eyeIndex], clipSpaceLocation);
+	float4 homogenousLocation = mul(FrameBuffer::CameraProjInverse, clipSpaceLocation);
 	return homogenousLocation.xyz / homogenousLocation.w;
 }
 
@@ -52,13 +52,8 @@ float3 IntersectionZPlane(float3 B, float z_dist)
 
 	float2 texcoordMax = (groupId.xy + 1) * clusterSize;
 	float2 texcoordMin = groupId.xy * clusterSize;
-#if !defined(VR)
 	float3 maxPointVS = GetPositionVS(texcoordMax, 1.0f);
 	float3 minPointVS = GetPositionVS(texcoordMin, 1.0f);
-#else
-	float3 maxPointVS = max(GetPositionVS(texcoordMax, 1.0f, 0), GetPositionVS(texcoordMax, 1.0f, 1));
-	float3 minPointVS = min(GetPositionVS(texcoordMin, 1.0f, 0), GetPositionVS(texcoordMin, 1.0f, 1));
-#endif  // !VR
 
 	float clusterNear = LightsNear * pow(abs(LightsFar / LightsNear), groupId.z / float(ClusterSize.z));
 	float clusterFar = LightsNear * pow(abs(LightsFar / LightsNear), (groupId.z + 1) / float(ClusterSize.z));

@@ -31,7 +31,6 @@
 #include "Common/GBuffer.hlsli"
 #include "Common/Math.hlsli"
 #include "Common/Spherical Harmonics/SphericalHarmonics.hlsli"
-#include "Common/VR.hlsli"
 #include "ScreenSpaceGI/common.hlsli"
 
 Texture2D<float> srcWorkingDepth : register(t0);
@@ -89,8 +88,7 @@ void CalculateGI(
 {
 	const float2 frameScale = FrameDim * RcpTexDim;
 
-	uint eyeIndex = Stereo::GetEyeIndexFromTexCoord(uv);
-	float2 normalizedScreenPos = Stereo::ConvertFromStereoUV(uv, eyeIndex);
+	float2 normalizedScreenPos = uv;
 
 	const float rcpNumSlices = rcp((float)NumSlices);
 	const float rcpNumSteps = rcp((float)NumSteps);
@@ -98,7 +96,7 @@ void CalculateGI(
 	// if the offset is under approx pixel size (pixelTooCloseThreshold), push it out to the minimum distance
 	const float pixelTooCloseThreshold = 1.3;
 	// approx viewspace pixel size at pixCoord; approximation of NDCToViewspace( uv.xy + ViewportSize.xy, pixCenterPos.z ).xy - pixCenterPos.xy;
-	const float2 pixelDirRBViewspaceSizeAtCenterZ = viewspaceZ.xx * (eyeIndex == 0 ? NDCToViewMul.xy : NDCToViewMul.zw) * RCP_OUT_FRAME_DIM;
+	const float2 pixelDirRBViewspaceSizeAtCenterZ = viewspaceZ.xx * NDCToViewMul.xy * RCP_OUT_FRAME_DIM;
 
 	float screenspaceRadius = EffectRadius / pixelDirRBViewspaceSizeAtCenterZ.x;
 	screenspaceRadius = max(MinScreenRadius, screenspaceRadius);
@@ -107,8 +105,7 @@ void CalculateGI(
 
 	//////////////////////////////////////////////////////////////////
 
-	// Use mono screen-space position for noise indexing so both eyes
-	// sample the same noise for corresponding world positions.
+	// Use screen-space position for noise indexing.
 	uint2 noiseCoord = uint2(normalizedScreenPos * OUT_FRAME_DIM);
 	const float2 localNoise = SpatioTemporalNoise(noiseCoord, FrameIndex);
 	const float noiseSlice = localNoise.x;
@@ -116,7 +113,7 @@ void CalculateGI(
 
 	//////////////////////////////////////////////////////////////////
 
-	const float3 pixCenterPos = ScreenToViewPosition(normalizedScreenPos, viewspaceZ, eyeIndex);
+	const float3 pixCenterPos = ScreenToViewPosition(normalizedScreenPos, viewspaceZ);
 	const float3 viewVec = normalize(-pixCenterPos);
 #ifdef GI_SPECULAR
 	const float NoV = clamp(dot(viewVec, viewspaceNormal), 1e-5, 1);
@@ -186,11 +183,7 @@ void CalculateGI(
 				float2 samplePxCoord = dtid + .5 + sampleOffset * sideSign;
 				float2 sampleUV = samplePxCoord * RCP_OUT_FRAME_DIM;
 
-				// Resolve which eye owns this sample. In VR, radial steps can cross the
-				// eye boundary in the side-by-side buffer; re-decode with the correct eye.
-				// Shi, Billeter, Eisemann 2022, "Stereo-consistent screen-space ambient occlusion"
-				uint sampleEyeIndex = Stereo::GetEyeIndexFromTexCoord(sampleUV);
-				float2 sampleScreenPos = Stereo::ConvertFromStereoUV(sampleUV, sampleEyeIndex);
+				float2 sampleScreenPos = sampleUV;
 				[branch] if (any(sampleScreenPos > 1.0) || any(sampleScreenPos < 0.0)) continue;
 
 				// Mip level grows with pixel-space distance from the centre.
@@ -209,17 +202,9 @@ void CalculateGI(
 
 				float SZ = srcWorkingDepth.SampleLevel(samplerPointClamp, sampleUV * frameScale, mipLevel);
 
-				// Reconstruct sample in current eye's viewspace for correct horizon angles.
-				float3 samplePos = ScreenToViewPosition(sampleScreenPos, SZ, sampleEyeIndex);
-				// For cross-eye samples, reject if the depth differs too much from the
-				// center pixel -- the other eye may see a different surface due to occlusion.
-#if defined(VR)
-				if (sampleEyeIndex != eyeIndex) {
-					if (abs(SZ - viewspaceZ) > viewspaceZ * 0.1)
-						continue;
-					samplePos = FrameBuffer::WorldToView(FrameBuffer::ViewToWorld(samplePos, true, sampleEyeIndex), true, eyeIndex);
-				}
-#endif
+				// Reconstruct sample viewspace position for correct horizon angles.
+				float3 samplePos = ScreenToViewPosition(sampleScreenPos, SZ);
+				// Reject if the depth differs too much from the center pixel.
 				float3 sampleDelta = samplePos - pixCenterPos;
 				float3 sampleHorizonVec = normalize(sampleDelta);
 
@@ -276,7 +261,7 @@ void CalculateGI(
 					frontBackMult = frontBackMult < 0 ? 0.0 : frontBackMult;  // backface
 
 					if (frontBackMult > 0.f) {
-						float3 sampleHorizonVecWS = normalize(mul(FrameBuffer::CameraViewInverse[eyeIndex], half4(sampleHorizonVec, 0)).xyz);
+						float3 sampleHorizonVecWS = normalize(mul(FrameBuffer::CameraViewInverse, half4(sampleHorizonVec, 0)).xyz);
 
 						float3 sampleRadiance = srcRadiance.SampleLevel(samplerPointClamp, sampleUV * OUT_FRAME_SCALE, mipLevelRadiance).rgb * frontBackMult * giBoost * countbits(validBits) * 0.03125;
 						sampleRadiance = max(sampleRadiance, 0);
@@ -347,14 +332,13 @@ void CalculateGI(
 	uint2 pxCoord = dtid;
 
 	float2 uv = (pxCoord + .5) * RCP_OUT_FRAME_DIM;
-	uint eyeIndex = Stereo::GetEyeIndexFromTexCoord(uv);
 
 	float viewspaceZ = READ_DEPTH(srcWorkingDepth, pxCoord);
 
 	float2 normalSample = FULLRES_LOAD(srcNormal, pxCoord, uv * OUT_FRAME_SCALE, samplerLinearClamp);
 	float3 viewspaceNormal = GBuffer::DecodeNormal(normalSample);
 
-	half2 encodedWorldNormal = GBuffer::EncodeNormal(ViewToWorldVector(viewspaceNormal, FrameBuffer::CameraViewInverse[eyeIndex]));
+	half2 encodedWorldNormal = GBuffer::EncodeNormal(ViewToWorldVector(viewspaceNormal, FrameBuffer::CameraViewInverse));
 	outPrevGeo[pxCoord] = half3(viewspaceZ, encodedWorldNormal);
 
 	// Move center pixel slightly towards camera to avoid imprecision artifacts due to depth buffer imprecision; offset depends on depth texture format used

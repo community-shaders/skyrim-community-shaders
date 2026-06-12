@@ -7,17 +7,15 @@
 
 /**
  * @brief Identifies the type of input device for input mapping
- *
- * Used to distinguish between VR controllers, keyboard, mouse, and gamepads.
  */
 enum class InputDeviceType
 {
-	Primary = 0,    ///< VR: The dominant hand controller (right for right-handed, left for left-handed)
-	Secondary = 1,  ///< VR: The non-dominant hand controller
-	Both = 2,       ///< VR: Both controllers simultaneously
+	Primary = 0,
+	Secondary = 1,
+	Both = 2,
 	Keyboard = 3,   ///< Keyboard input
 	Mouse = 4,      ///< Mouse input
-	Gamepad = 5     ///< Gamepad/Controller input (non-VR)
+	Gamepad = 5     ///< Gamepad/Controller input
 };
 
 /**
@@ -63,9 +61,9 @@ constexpr bool IsValidDevice(InputDeviceType device)
  * The upper 16 bits store the device type, lower 16 bits store the key code.
  *
  * Can represent:
- * - VR Controller button presses
  * - Keyboard key presses
  * - Mouse button clicks
+ * - Gamepad button presses
  */
 struct InputCombo
 {
@@ -83,12 +81,7 @@ public:
 	{
 	}
 
-	// VR helper methods
-	static InputCombo Primary(uint32_t key) { return InputCombo(InputDeviceType::Primary, key); }
-	static InputCombo Secondary(uint32_t key) { return InputCombo(InputDeviceType::Secondary, key); }
-	static InputCombo Both(uint32_t key) { return InputCombo(InputDeviceType::Both, key); }
-
-	// Desktop helper methods
+	// Helper methods
 	static InputCombo Keyboard(uint32_t key) { return InputCombo(InputDeviceType::Keyboard, key); }
 	static InputCombo Mouse(uint32_t key) { return InputCombo(InputDeviceType::Mouse, key); }
 	static InputCombo Gamepad(uint32_t key) { return InputCombo(InputDeviceType::Gamepad, key); }
@@ -193,83 +186,11 @@ public:
 	 */
 
 	/**
-	 * @brief Static helper to get a formatted string for a VR combo
-	 */
-	static std::string GetVRString(const std::vector<InputCombo>& combo)
-	{
-		std::string result;
-		for (size_t i = 0; i < combo.size(); ++i) {
-			if (i > 0)
-				result += " + ";
-			const auto& input = combo[i];
-
-			if (input.GetDevice() == InputDeviceType::Keyboard) {
-				result += std::format("Key:{:X}", input.GetKey());
-			} else {
-				// VR Button mapping
-				// Based on BSOpenVRControllerDevice::Keys enum values
-				// 2 = Grip, 7 = Trigger, 32 = Touchpad, 33 = Stick, 1 = BY, 31 = XA
-				// These are standard OpenVR / SkyrimVR constants
-				switch (input.GetKey()) {
-				case 2:
-					result += "Grip";
-					break;
-				case 7:
-					result += "Trigger";
-					break;
-				case 32:
-					result += "Touchpad";
-					break;
-				case 33:
-					result += "Stick";
-					break;
-				case 1:
-					result += "B/Y";
-					break;
-				case 31:
-					result += "A/X";
-					break;
-				case 9:
-					result += "Menu";
-					break;
-				case 34:
-					result += "Shoulder";
-					break;
-				default:
-					result += std::format("Btn:{:d}", input.GetKey());
-					break;
-				}
-
-				// Append device info if mixed or specific
-				switch (input.GetDevice()) {
-				case InputDeviceType::Primary:
-					result += "(Pri)";
-					break;
-				case InputDeviceType::Secondary:
-					result += "(Sec)";
-					break;
-				case InputDeviceType::Both:
-					result += "(Both)";
-					break;
-				default:
-					break;
-				}
-			}
-		}
-
-		if (result.empty()) {
-			return "None";
-		}
-
-		return result;
-	}
-
-	/**
 	 * @brief Wrapper for std::vector<InputCombo> to provide custom JSON serialization.
 	 *
 	 * Serialization rules for backward compatibility:
 	 * - Single keyboard key (no modifiers): saves as plain uint32_t key code
-	 * - Single VR/controller input: saves as plain uint32_t packed value
+	 * - Single controller input: saves as plain uint32_t packed value
 	 * - Multiple keys (combo): saves as array of uint32_t values
 	 * - Empty: saves as 0 (unbound)
 	 *
@@ -292,7 +213,7 @@ public:
 					// Single keyboard key - save as plain key code
 					j = combos[0].GetKey();
 				} else {
-					// Single VR/controller input - save as packed value
+					// Single controller input - save as packed value
 					j = combos[0].deviceAndKey;
 				}
 				return;
@@ -320,7 +241,7 @@ public:
 				}
 				j = keyCodes;
 			} else {
-				// For VR or mixed inputs, use the packed format
+				// For mixed inputs, use the packed format
 				std::vector<uint32_t> packedValues;
 				packedValues.reserve(combos.size());
 				for (const auto& c : combos) {

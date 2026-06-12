@@ -5,8 +5,6 @@
 #include "Common/Permutation.hlsli"
 #include "Common/Random.hlsli"
 #include "Common/SharedData.hlsli"
-#include "Common/VR.hlsli"
-
 #if !defined(DYNAMIC_CUBEMAPS) && defined(IBL)
 #	undef IBL
 #endif
@@ -19,9 +17,6 @@ struct VS_INPUT
 	float4 InstanceData2: TEXCOORD5;
 	float4 InstanceData3: TEXCOORD6;
 	float4 InstanceData4: TEXCOORD7;
-#if defined(VR)
-	uint InstanceID: SV_INSTANCEID;
-#endif  // VR
 };
 
 struct VS_OUTPUT
@@ -37,11 +32,6 @@ struct VS_OUTPUT
 #endif  // RENDER_DEPTH
 	float4 ViewPosition: POSITION3;
 
-#if defined(VR)
-	float ClipDistance: SV_ClipDistance0;  // o11
-	float CullDistance: SV_CullDistance0;  // p11
-	uint EyeIndex: EYEIDX0;
-#endif  // VR
 };
 
 #ifdef VSHADER
@@ -52,25 +42,14 @@ cbuffer PerTechnique : register(b0)
 
 cbuffer PerGeometry : register(b2)
 {
-#	if !defined(VR)
-	row_major float4x4 WorldViewProj[1] : packoffset(c0);
-	row_major float4x4 World[1] : packoffset(c4);
-	row_major float4x4 PreviousWorld[1] : packoffset(c8);
-#	else
-	row_major float4x4 WorldViewProj[2] : packoffset(c0);
-	row_major float4x4 World[2] : packoffset(c8);
-	row_major float4x4 PreviousWorld[2] : packoffset(c16);
-#	endif  // !VR
+	row_major float4x4 WorldViewProj : packoffset(c0);
+	row_major float4x4 World : packoffset(c4);
+	row_major float4x4 PreviousWorld : packoffset(c8);
 };
 
 VS_OUTPUT main(VS_INPUT input)
 {
 	VS_OUTPUT vsout = (VS_OUTPUT)0;
-	uint eyeIndex = Stereo::GetEyeIndexVS(
-#	if defined(VR)
-		input.InstanceID
-#	endif  // VR
-	);
 
 	float3 scaledModelPosition = input.InstanceData1.www * input.Position.xyz;
 	float3 adjustedModelPosition = 0.0.xxx;
@@ -78,27 +57,19 @@ VS_OUTPUT main(VS_INPUT input)
 	adjustedModelPosition.y = dot(input.InstanceData2.yx, scaledModelPosition.xy);
 	adjustedModelPosition.z = scaledModelPosition.z;
 	float4 finalModelPosition = float4(input.InstanceData1.xyz + adjustedModelPosition.xyz, 1.0);
-	float4 viewPosition = mul(WorldViewProj[eyeIndex], finalModelPosition);
+	float4 viewPosition = mul(WorldViewProj, finalModelPosition);
 
 #	ifdef RENDER_DEPTH
 	vsout.Depth.xy = viewPosition.zw;
 	vsout.Depth.zw = input.InstanceData2.zw;
 #	else
-	vsout.WorldPosition = mul(World[eyeIndex], finalModelPosition);
-	vsout.PreviousWorldPosition = mul(PreviousWorld[eyeIndex], finalModelPosition);
+	vsout.WorldPosition = mul(World, finalModelPosition);
+	vsout.PreviousWorldPosition = mul(PreviousWorld, finalModelPosition);
 	vsout.ViewPosition = viewPosition;
 #	endif  // RENDER_DEPTH
 
 	vsout.Position = viewPosition;
 	vsout.TexCoord = float3(input.TexCoord0.xy, FogParam.z);
-
-#	ifdef VR
-	vsout.EyeIndex = eyeIndex;
-	Stereo::VR_OUTPUT VRout = Stereo::GetVRVSOutput(vsout.Position, eyeIndex);
-	vsout.Position = VRout.VRPosition;
-	vsout.ClipDistance.x = VRout.ClipDistance;
-	vsout.CullDistance.x = VRout.CullDistance;
-#	endif  // VR
 
 	return vsout;
 }
@@ -125,12 +96,10 @@ SamplerState SampDiffuse : register(s0);
 
 Texture2D<float4> TexDiffuse : register(t0);
 
-#	if !defined(VR)
 cbuffer AlphaTestRefCB : register(b11)
 {
 	float AlphaTestRefRS : packoffset(c0);
 }
-#	endif  // !VR
 
 cbuffer PerFrame : register(b12)
 {
@@ -182,10 +151,10 @@ const static float DepthOffsets[16] = {
 #	include "Common/ShadowSampling.hlsli"
 
 #	if defined(EXP_HEIGHT_FOG)
-void ApplyReflectionExponentialHeightFog(inout float3 color, float3 positionWS, float4 screenPosition, uint eyeIndex)
+void ApplyReflectionExponentialHeightFog(inout float3 color, float3 positionWS, float4 screenPosition)
 {
 	float3 fogColor = Color::Fog(AmbientColor.xyz);
-	float4 exponentialHeightFog = ExponentialHeightFog::GetExponentialHeightFogNoVolumetric(positionWS, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, fogColor, float4(screenPosition.xy * FrameBuffer::DynamicResolutionParams2.xy, screenPosition.z, 1));
+	float4 exponentialHeightFog = ExponentialHeightFog::GetExponentialHeightFogNoVolumetric(positionWS, FrameBuffer::CameraPosAdjust.xyz, fogColor, float4(screenPosition.xy * FrameBuffer::DynamicResolutionParams2.xy, screenPosition.z, 1));
 	color = lerp(color, exponentialHeightFog.xyz, exponentialHeightFog.w);
 }
 #	endif
@@ -194,11 +163,6 @@ PS_OUTPUT main(PS_INPUT input)
 {
 	PS_OUTPUT psout;
 
-#	if !defined(VR)
-	uint eyeIndex = 0;
-#	else
-	uint eyeIndex = input.EyeIndex;
-#	endif  // !VR
 #	if defined(EXP_HEIGHT_FOG)
 	const bool inReflection = (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InReflection) != 0;
 #	endif
@@ -231,25 +195,25 @@ PS_OUTPUT main(PS_INPUT input)
 	}
 
 #		if defined(DEFERRED)
-	float3 viewPosition = mul(FrameBuffer::CameraView[eyeIndex], float4(input.WorldPosition.xyz, 1)).xyz;
-	float2 screenUV = FrameBuffer::ViewToUV(viewPosition, true, eyeIndex);
+	float3 viewPosition = mul(FrameBuffer::CameraView, float4(input.WorldPosition.xyz, 1)).xyz;
+	float2 screenUV = FrameBuffer::ViewToUV(viewPosition);
 	float screenNoise = Random::InterleavedGradientNoise(input.Position.xy, SharedData::FrameCount);
 
 	float dirShadow = 1;
 
 #			if defined(SCREEN_SPACE_SHADOWS)
-	dirShadow = lerp(1.0, ScreenSpaceShadows::GetScreenSpaceShadow(input.Position.xyz, screenUV, screenNoise, eyeIndex), 0.8);
+	dirShadow = lerp(1.0, ScreenSpaceShadows::GetScreenSpaceShadow(input.Position.xyz, screenUV, screenNoise), 0.8);
 #			endif
 
 	if (dirShadow != 0.0)
-		dirShadow *= ShadowSampling::GetWorldShadow(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
+		dirShadow *= ShadowSampling::GetWorldShadow(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust.xyz);
 
 	float llDirLightMult = (SharedData::linearLightingSettings.enableLinearLighting && !SharedData::linearLightingSettings.isDirLightLinear) ? SharedData::linearLightingSettings.dirLightMult : 1.0f;
 	float3 diffuseColor = Color::DirectionalLight(SharedData::DirLightColor.xyz / max(llDirLightMult, 1e-5), SharedData::linearLightingSettings.isDirLightLinear) * dirShadow * 0.5 * llDirLightMult * Color::VanillaNormalization();
 
 #			if defined(EXP_HEIGHT_FOG)
 	if (SharedData::exponentialHeightFogSettings.enabled) {
-		diffuseColor *= ExponentialHeightFog::GetSunlightFogAttenuation(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz);
+		diffuseColor *= ExponentialHeightFog::GetSunlightFogAttenuation(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust.xyz);
 	}
 #			endif
 
@@ -270,26 +234,26 @@ PS_OUTPUT main(PS_INPUT input)
 
 #			if defined(EXP_HEIGHT_FOG)
 	if (inReflection && SharedData::exponentialHeightFogSettings.enabled) {
-		ApplyReflectionExponentialHeightFog(psout.Diffuse.xyz, input.WorldPosition.xyz, input.Position, eyeIndex);
+		ApplyReflectionExponentialHeightFog(psout.Diffuse.xyz, input.WorldPosition.xyz, input.Position);
 	}
 #			endif
 
-	psout.MotionVector = MotionBlur::GetSSMotionVector(input.WorldPosition, input.PreviousWorldPosition, eyeIndex);
+	psout.MotionVector = MotionBlur::GetSSMotionVector(input.WorldPosition, input.PreviousWorldPosition);
 
-	psout.Normal.xy = GBuffer::EncodeNormal(FrameBuffer::WorldToView(normal, false, eyeIndex));
+	psout.Normal.xy = GBuffer::EncodeNormal(FrameBuffer::WorldToView(normal, false));
 	psout.Normal.zw = 0;
 
 	psout.Albedo = float4(baseColor.xyz, 1);
 	psout.Masks = float4(0, 0, 1, 0);
 #		else
-	float dirShadow = ShadowSampling::GetWorldShadow(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
+	float dirShadow = ShadowSampling::GetWorldShadow(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust.xyz);
 
 	float llDirLightMult = (SharedData::linearLightingSettings.enableLinearLighting && !SharedData::linearLightingSettings.isDirLightLinear) ? SharedData::linearLightingSettings.dirLightMult : 1.0f;
 	float3 diffuseColor = Color::DirectionalLight(SharedData::DirLightColor.xyz / max(llDirLightMult, 1e-5), SharedData::linearLightingSettings.isDirLightLinear) * dirShadow * 0.5 * llDirLightMult * Color::VanillaNormalization();
 
 #			if defined(EXP_HEIGHT_FOG)
 	if (SharedData::exponentialHeightFogSettings.enabled) {
-		diffuseColor *= ExponentialHeightFog::GetSunlightFogAttenuation(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz);
+		diffuseColor *= ExponentialHeightFog::GetSunlightFogAttenuation(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust.xyz);
 	}
 #			endif
 
@@ -308,7 +272,7 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 color = diffuseColor * baseColor.xyz;
 #			if defined(EXP_HEIGHT_FOG)
 	if (inReflection && SharedData::exponentialHeightFogSettings.enabled) {
-		ApplyReflectionExponentialHeightFog(color, input.WorldPosition.xyz, input.Position, eyeIndex);
+		ApplyReflectionExponentialHeightFog(color, input.WorldPosition.xyz, input.Position);
 	}
 #			endif
 	psout.Diffuse = float4(color, 1.0);

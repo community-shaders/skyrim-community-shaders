@@ -124,18 +124,10 @@ jobs:
 
     shader-validation:
         if: inputs.run-shader-validation
-        name: Validate shader compilation (${{ matrix.config.name }})
+        name: Validate shader compilation
         runs-on: windows-2025
         permissions:
             contents: read
-        strategy:
-            matrix:
-                config:
-                    - name: "Flatrim"
-                      file: ".github/configs/shader-validation.yaml"
-                    - name: "VR"
-                      file: ".github/configs/shader-validation-vr.yaml"
-            fail-fast: false
         steps:
             - name: Checkout code
               uses: actions/checkout@v6
@@ -154,7 +146,7 @@ jobs:
               if: steps.check-hlsl.outputs.skip != 'true'
               uses: ./.github/actions/setup-build-environment
               with:
-                  cache-key-suffix: "validation-${{ matrix.config.name }}${{ inputs.cache-key-suffix }}"
+                  cache-key-suffix: "validation${{ inputs.cache-key-suffix }}"
             - name: Prepare shaders
               if: steps.check-hlsl.outputs.skip != 'true'
               uses: ./.github/actions/prepare-shaders
@@ -187,7 +179,7 @@ jobs:
                     }
                   }
 
-            - name: Validate shader compilation (${{ matrix.config.name }})
+            - name: Validate shader compilation
               if: steps.check-hlsl.outputs.skip != 'true'
               shell: bash
               run: |
@@ -195,13 +187,13 @@ jobs:
                     echo "fxc.exe not found - shader validation requires fxc.exe. Set --fxc to a valid path or ensure fxc.exe is in PATH." >&2
                     exit 1
                   fi
-                  hlslkit-compile --fxc "${{ steps.find_fxc.outputs.fxc_path }}" --shader-dir build/ALL/aio/Shaders --output-dir build/ShaderCache --config ${{ matrix.config.file }} --max-warnings 0 --suppress-warnings X1519
+                  hlslkit-compile --fxc "${{ steps.find_fxc.outputs.fxc_path }}" --shader-dir build/ALL/aio/Shaders --output-dir build/ShaderCache --config .github/configs/shader-validation.yaml --max-warnings 0 --suppress-warnings X1519
 
             - name: Upload shader validation logs
               if: failure() && steps.check-hlsl.outputs.skip != 'true'
               uses: actions/upload-artifact@v7
               with:
-                  name: shader-validation-logs-${{ matrix.config.name }}
+                  name: shader-validation-logs
                   path: |
                       build/ShaderCache/new_issues.log
                       build/ShaderCache/*.log

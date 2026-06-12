@@ -1182,7 +1182,7 @@ bool TruePBR::TESObjectLAND_SetupMaterial(RE::TESObjectLAND* land)
 	if (land->loadedData != nullptr && land->loadedData->mesh[0] != nullptr) {
 		land->data.flags.set(static_cast<RE::OBJ_LAND::Flag>(8));
 		for (uint32_t quadIndex = 0; quadIndex < 4; ++quadIndex) {
-			auto shaderProperty = static_cast<RE::BSLightingShaderProperty*>(memoryManager->Allocate(REL::Module::IsVR() ? 0x178 : sizeof(RE::BSLightingShaderProperty), 0, false));
+			auto shaderProperty = static_cast<RE::BSLightingShaderProperty*>(memoryManager->Allocate(sizeof(RE::BSLightingShaderProperty), 0, false));
 			shaderProperty->Ctor();
 
 			{

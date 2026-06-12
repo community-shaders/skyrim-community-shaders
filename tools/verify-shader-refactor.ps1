@@ -17,7 +17,7 @@
     (e.g. register reorder) can be eyeballed.
 
     A refactor that is Tier-1 IDENTICAL on the swept permutations needs no further proof.
-    Note: the default sweep (VR x HDR_OUTPUT) is strong evidence, not the full build
+    Note: the default sweep (HDR_OUTPUT x stage) is strong evidence, not the full build
     matrix from shader-validation.yaml. Pass -Permutations for exotic define combos.
 
 .PARAMETER Shader
@@ -31,7 +31,7 @@
 
 .PARAMETER Permutations
     Optional explicit permutation list; each entry is a space-separated define set,
-    e.g. -Permutations "PSHADER","PSHADER VR". Overrides the auto sweep.
+    e.g. -Permutations "PSHADER","PSHADER HDR_OUTPUT". Overrides the auto sweep.
 
 .PARAMETER Entry
     Shader entry point. Default: main.
@@ -111,9 +111,7 @@ try {
     if (-not $Permutations -or $Permutations.Count -eq 0) {
         $Permutations = @(
             "$stageDefine",
-            "$stageDefine VR",
-            "$stageDefine HDR_OUTPUT",
-            "$stageDefine VR HDR_OUTPUT"
+            "$stageDefine HDR_OUTPUT"
         )
     }
 

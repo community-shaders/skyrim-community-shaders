@@ -15,8 +15,8 @@
 #include "Features/ScreenshotFeature.h"
 #include "Features/LightLimitFix.h"
 #include "Features/Skin.h"
+#include "Features/SkySync.h"
 #include "Features/Upscaling.h"
-#include "Features/VR.h"
 #include "Features/VolumetricLighting.h"
 
 #include "ShaderTools/BSShaderHooks.h"
@@ -238,7 +238,7 @@ namespace WaterBlendHistory
 	{
 		static void thunk(void* imageSpaceShader, RE::BSTriShape* shape, RE::ImageSpaceEffectParam* param)
 		{
-			GET_INSTANCE_MEMBER(renderTargets, globals::game::shadowState)
+			auto& renderTargets = globals::game::shadowState->GetRuntimeData().renderTargets;
 
 			// Clear stale coverage left by discarded non-water pixels
 			const float clearColor[4] = { 0.f, 0.f, 0.f, 0.f };
@@ -390,7 +390,7 @@ struct BSShaderRenderTargets_Create
 	 */
 	static inline Util::GameSetting iNumFocusShadow{ "Number of Focus Shadows (INI)",
 		"Controls the number of focus shadows.",
-		REL::Relocate<uintptr_t>(0, 0, 0x1ed6368), 4, 0, 4 };
+		static_cast<uintptr_t>(0), 4, 0, 4 };
 
 	static void thunk()
 	{
@@ -419,33 +419,8 @@ struct BSInputDeviceManager_PollInputDevices
 
 			if (*a_events) {
 				if (auto device = (*a_events)->GetDevice()) {
-					if (globals::game::isVR) {
-						// In VR, block mouse/keyboard input when menu is open (like Flatrim)
-						// Allow gamepad input to pass through
-						// Also handle VR controller devices based on OpenVR compatibility
-						bool isVRController = ((device == RE::INPUT_DEVICES::INPUT_DEVICE::kVivePrimary) ||
-											   (device == RE::INPUT_DEVICES::INPUT_DEVICE::kViveSecondary) ||
-											   (device == RE::INPUT_DEVICES::INPUT_DEVICE::kOculusPrimary) ||
-											   (device == RE::INPUT_DEVICES::INPUT_DEVICE::kOculusSecondary) ||
-											   (device == RE::INPUT_DEVICES::INPUT_DEVICE::kWMRPrimary) ||
-											   (device == RE::INPUT_DEVICES::INPUT_DEVICE::kWMRSecondary));
-
-						// Allow gamepad input to pass through always
-						if (device == RE::INPUT_DEVICES::INPUT_DEVICE::kGamepad) {
-							blockedDevice = false;
-						}
-						// For VR controllers, only block if OpenVR is compatible
-						else if (isVRController) {
-							blockedDevice = globals::features::vr.IsOpenVRCompatible();
-						}
-						// For mouse/keyboard and other devices, block them (like Flatrim)
-						else {
-							blockedDevice = true;
-						}
-					} else {
 						// Block all devices except gamepad when menu is open
 						blockedDevice = (device != RE::INPUT_DEVICES::INPUT_DEVICE::kGamepad);
-					}
 				}
 			}
 		}
@@ -528,12 +503,26 @@ namespace Hooks
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
+	// Disable scene TAA for the duration of the menu interface render, then restore it.
+	struct MenuManagerDrawInterfaceStart
+	{
+		static void thunk(int64_t a1)
+		{
+			const bool temporal = Util::GetTemporal();
+			Util::SetTemporal(false);
+			func(a1);
+			Util::SetTemporal(temporal);
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
 	struct CreateRenderTarget_Main
 	{
 		static void thunk(RE::BSGraphics::Renderer* This, RE::RENDER_TARGETS::RENDER_TARGET a_target, RE::BSGraphics::RenderTargetProperties* a_properties)
 		{
-			globals::state->ModifyRenderTarget(a_target, a_properties);
-			func(This, a_target, a_properties);
+			auto properties = *a_properties;
+			globals::state->ModifyRenderTarget(a_target, properties);
+			func(This, a_target, &properties);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
@@ -545,8 +534,9 @@ namespace Hooks
 	{
 		static void thunk(RE::BSGraphics::Renderer* This, RE::RENDER_TARGETS::RENDER_TARGET a_target, RE::BSGraphics::RenderTargetProperties* a_properties)
 		{
-			a_properties->format.set(RE::BSGraphics::Format::kR16G16B16A16_FLOAT);
-			func(This, a_target, a_properties);
+			auto properties = *a_properties;
+			properties.format.set(RE::BSGraphics::Format::kR16G16B16A16_FLOAT);
+			func(This, a_target, &properties);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
@@ -555,8 +545,9 @@ namespace Hooks
 	{
 		static void thunk(RE::BSGraphics::Renderer* This, RE::RENDER_TARGETS::RENDER_TARGET a_target, RE::BSGraphics::RenderTargetProperties* a_properties)
 		{
-			a_properties->format.set(RE::BSGraphics::Format::kR16G16B16A16_FLOAT);
-			func(This, a_target, a_properties);
+			auto properties = *a_properties;
+			properties.format.set(RE::BSGraphics::Format::kR16G16B16A16_FLOAT);
+			func(This, a_target, &properties);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
@@ -570,8 +561,9 @@ namespace Hooks
 	{
 		static void thunk(RE::BSGraphics::Renderer* This, RE::RENDER_TARGETS::RENDER_TARGET a_target, RE::BSGraphics::RenderTargetProperties* a_properties)
 		{
-			globals::state->ModifyRenderTarget(a_target, a_properties);
-			func(This, a_target, a_properties);
+			auto properties = *a_properties;
+			globals::state->ModifyRenderTarget(a_target, properties);
+			func(This, a_target, &properties);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
@@ -580,8 +572,9 @@ namespace Hooks
 	{
 		static void thunk(RE::BSGraphics::Renderer* This, RE::RENDER_TARGETS::RENDER_TARGET a_target, RE::BSGraphics::RenderTargetProperties* a_properties)
 		{
-			globals::state->ModifyRenderTarget(a_target, a_properties);
-			func(This, a_target, a_properties);
+			auto properties = *a_properties;
+			globals::state->ModifyRenderTarget(a_target, properties);
+			func(This, a_target, &properties);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
@@ -590,8 +583,9 @@ namespace Hooks
 	{
 		static void thunk(RE::BSGraphics::Renderer* This, RE::RENDER_TARGETS::RENDER_TARGET a_target, RE::BSGraphics::RenderTargetProperties* a_properties)
 		{
-			globals::state->ModifyRenderTarget(a_target, a_properties);
-			func(This, a_target, a_properties);
+			auto properties = *a_properties;
+			globals::state->ModifyRenderTarget(a_target, properties);
+			func(This, a_target, &properties);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
@@ -866,6 +860,12 @@ namespace Hooks
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
+	void Sky_UpdateColors::thunk(RE::Sky* sky, float a_delta)
+	{
+		func(sky, a_delta);
+		globals::features::skySync.OnSkyUpdateColors(sky);
+	}
+
 	/**
 	 * @brief Installs hooks, detours, and memory patches for graphics, input, and rendering subsystems.
 	 *
@@ -873,14 +873,12 @@ namespace Hooks
 	 */
 	void Install()
 	{
-		if (!REL::Module::IsVR()) {
-			logger::info("Hooking BSImageSpace::Init::IBLF");
-			stl::detour_thunk<BSImageSpace_Init_IBLF>(REL::RelocationID(100480, 107198));
-		}
+		logger::info("Hooking BSImageSpace::Init::IBLF");
+		stl::detour_thunk<BSImageSpace_Init_IBLF>(REL::RelocationID(100480, 107198));
 
 		// This input hook also drives per-frame Reflex update (see BSInputDeviceManager_PollInputDevices::thunk).
 		logger::info("Hooking BSInputDeviceManager::PollInputDevices");
-		stl::write_thunk_call<BSInputDeviceManager_PollInputDevices>(REL::RelocationID(67315, 68617).address() + REL::Relocate(0x7B, 0x7B, 0x81));
+		stl::write_thunk_call<BSInputDeviceManager_PollInputDevices>(REL::RelocationID(67315, 68617).address() + REL::Relocate(0x7B, 0x7B));
 
 		logger::info("Hooking BSShader::LoadShaders");
 		stl::detour_thunk<BSShader_LoadShaders>(REL::RelocationID(101339, 108326));
@@ -904,19 +902,19 @@ namespace Hooks
 		stl::detour_thunk<BSShaderRenderTargets_Create>(REL::RelocationID(100458, 107175));
 
 		logger::info("Hooking BSShaderRenderTargets::Create::CreateRenderTarget(s)");
-		stl::write_thunk_call<CreateRenderTarget_Main>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x3F0, 0x3F3, 0x548));
-		stl::write_thunk_call<CreateRenderTarget_Snow>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x406, 0x409, 0x55E));
-		stl::write_thunk_call<CreateRenderTarget_SnowSwap>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x41C, 0x41F, 0x574));
-		stl::write_thunk_call<CreateRenderTarget_Normals>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x458, 0x45B, 0x5B0));
-		stl::write_thunk_call<CreateRenderTarget_NormalsSwap>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x46B, 0x46E, 0x5C3));
-		stl::write_thunk_call<CreateRenderTarget_MotionVectors>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x4F0, 0x4EF, 0x64E));
+		stl::write_thunk_call<CreateRenderTarget_Main>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x3F0, 0x3F3));
+		stl::write_thunk_call<CreateRenderTarget_Snow>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x406, 0x409));
+		stl::write_thunk_call<CreateRenderTarget_SnowSwap>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x41C, 0x41F));
+		stl::write_thunk_call<CreateRenderTarget_Normals>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x458, 0x45B));
+		stl::write_thunk_call<CreateRenderTarget_NormalsSwap>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x46B, 0x46E));
+		stl::write_thunk_call<CreateRenderTarget_MotionVectors>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x4F0, 0x4EF));
 
-		stl::write_thunk_call<CreateRenderTarget_RefractionNormals>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x503, 0x502, 0x661));
-		stl::write_thunk_call<CreateRenderTarget_UnderwaterMask>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0xB19, 0xB19, 0xE06));
+		stl::write_thunk_call<CreateRenderTarget_RefractionNormals>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x503, 0x502));
+		stl::write_thunk_call<CreateRenderTarget_UnderwaterMask>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0xB19, 0xB19));
 
-		stl::write_thunk_call<CreateDepthStencil_PrecipitationMask>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x1245, 0x123B, 0x1917));
-		stl::write_thunk_call<CreateCubemapRenderTarget_Reflections>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0xA25, 0xA25, 0xCD2));
-		stl::write_thunk_call<CreateDepthStencil_Reflections>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0xA59, 0xA59, 0xD13));
+		stl::write_thunk_call<CreateDepthStencil_PrecipitationMask>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x1245, 0x123B));
+		stl::write_thunk_call<CreateCubemapRenderTarget_Reflections>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0xA25, 0xA25));
+		stl::write_thunk_call<CreateDepthStencil_Reflections>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0xA59, 0xA59));
 
 #ifdef TRACY_ENABLE
 		stl::write_thunk_call<Main_Update>(REL::RelocationID(35551, 36544).address() + REL::Relocate(0x11F, 0x160));
@@ -933,7 +931,13 @@ namespace Hooks
 		stl::detour_thunk<CSShadersSupport::Renderer_DispatchCSShader>(REL::RelocationID(75532, 77329));
 
 		logger::info("Hooking TESWaterReflections::Update_Actor::GetLOSPosition for Sky Reflection Fix");
-		stl::write_thunk_call<TESWaterReflections_Update_Actor_GetLOSPosition>(REL::RelocationID(31373, 32160).address() + REL::Relocate(0x1AD, 0x1CA, 0x1ed));
+		stl::write_thunk_call<TESWaterReflections_Update_Actor_GetLOSPosition>(REL::RelocationID(31373, 32160).address() + REL::Relocate(0x1AD, 0x1CA));
+
+		logger::info("Hooking Sky::UpdateColors");
+		stl::detour_thunk<Sky_UpdateColors>(REL::RelocationID(25686, 26233));
+
+		logger::info("Hooking MenuManager::DrawInterfaceStart for menu TAA");
+		stl::detour_thunk<MenuManagerDrawInterfaceStart>(REL::RelocationID(79947, 82084));
 
 		logger::info("Installing SetupGeometry hooks");
 		stl::write_vfunc<0x6, EffectExtensions::BSEffectShader_SetupGeometry>(RE::VTABLE_BSEffectShader[0]);
@@ -951,9 +955,6 @@ namespace Hooks
 			if (REL::Module::IsAE()) {
 				std::uint8_t patch[] = { 0x41, 0x83, 0xE7, 0x00 };  // and r15d, 0
 				REL::safe_write(setupGeometryUpdateRenderSpace + 0x71, patch, sizeof(patch));
-			} else if (REL::Module::IsVR()) {
-				std::uint8_t patch[] = { 0x41, 0x83, 0xE4, 0x00 };  // and r12d, 0
-				REL::safe_write(setupGeometryUpdateRenderSpace + 0x65, patch, sizeof(patch));
 			} else {
 				std::uint8_t patch1[] = { 0xB8, 0x00, 0x00 };  // mov eax, 0
 				REL::safe_write(setupGeometryUpdateRenderSpace + 0x73, patch1, sizeof(patch1));
@@ -966,7 +967,7 @@ namespace Hooks
 			}
 		}
 
-		stl::write_thunk_call<BSLightingShader_SetupGeometry_GeometrySetupConstantPointLights>(REL::RelocationID(100565, 107300).address() + REL::Relocate(0x523, 0xB0E, 0x5FE));
+		stl::write_thunk_call<BSLightingShader_SetupGeometry_GeometrySetupConstantPointLights>(REL::RelocationID(100565, 107300).address() + REL::Relocate(0x523, 0xB0E));
 	}
 
 	void InstallEarlyHooks()
@@ -977,6 +978,6 @@ namespace Hooks
 		}
 
 		logger::info("Hooking CreateDXGIFactory");
-		*(uintptr_t*)&ptrCreateDXGIFactory = SKSE::PatchIAT(hk_CreateDXGIFactory, "dxgi.dll", !REL::Module::IsVR() ? "CreateDXGIFactory" : "CreateDXGIFactory1");
+		*(uintptr_t*)&ptrCreateDXGIFactory = SKSE::PatchIAT(hk_CreateDXGIFactory, "dxgi.dll", "CreateDXGIFactory");
 	}
 }

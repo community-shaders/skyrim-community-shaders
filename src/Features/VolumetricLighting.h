@@ -22,8 +22,6 @@ public:
 
 	Settings settings;
 
-	bool enabledAtBoot = false;
-
 	virtual inline std::string GetName() override { return "Volumetric Lighting"; }
 	virtual std::string GetDisplayName() override { return T("feature.volumetric_lighting.name", "Volumetric Lighting"); }
 	virtual inline std::string GetShortName() override { return "VolumetricLighting"; }
@@ -48,24 +46,6 @@ public:
 	virtual void SetupResources() override;
 	virtual void EarlyPrepass() override;
 
-	std::map<std::string, Util::GameSetting> hiddenVRSettings{
-		{ "bEnableVolumetricLighting:Display", { "Enable VL Shaders (INI) ",
-												   "Enables volumetric lighting effects by creating shaders. "
-												   "Needed at startup. ",
-												   0x1ed63d8, true, false, true } },
-		{ "bVolumetricLightingEnable:Display", { "Enable VL (INI))", "Enables volumetric lighting. ", 0x3485360, true, false, true } },
-		{ "bVolumetricLightingUpdateWeather:Display", { "Enable Volumetric Lighting (Weather) (INI) ",
-														  "Enables volumetric lighting for weather. "
-														  "Only used during startup and used to set bVLWeatherUpdate.",
-														  0x3485361, true, false, true } },
-		{ "bVLWeatherUpdate", { "Enable VL (Weather)", "Enables volumetric lighting for weather.", 0x3485363, true, false, true } },
-		{ "bVolumetricLightingEnabled_143232EF0", { "Enable VL (Papyrus) ",
-													  "Enables volumetric lighting. "
-													  "This is the Papyrus command. ",
-													  REL::Relocate<uintptr_t>(0x3232ef0, 0, 0x3485362), true, false, true } },
-	};
-
-	virtual bool SupportsVR() override { return true; };
 	virtual bool IsCore() const override { return true; };
 
 	static RE::BSImagespaceShader* CreateShader(const std::string_view& name, const std::string_view& fileName, RE::BSComputeShader* computeShader);
@@ -77,20 +57,6 @@ public:
 	void SetGroupCountsHCS(uint32_t& threadGroupCountX) const;
 	void SetGroupCountsVCS(uint32_t& threadGroupCountY) const;
 
-	// hooks
-
-	struct CopyResource
-	{
-		static void thunk(ID3D11DeviceContext* a_this, ID3D11Resource* a_renderTarget, ID3D11Resource* a_renderTargetSource);
-		static inline REL::Relocation<decltype(thunk)> func;
-	};
-
-	struct RenderDepth
-	{
-		static void thunk();
-		static inline REL::Relocation<decltype(thunk)> func;
-	};
-
 private:
 	struct VolumetricLightingDescriptor
 	{};
@@ -98,8 +64,6 @@ private:
 	static const char* FromUnits(int32_t value, int32_t unitScale);
 	static VolumetricLightingDescriptor& GetVLDescriptor();
 	static void SetVLQuality(VolumetricLightingDescriptor& descriptor, std::uint32_t quality);
-	static void RenderVolumetricLighting(VolumetricLightingDescriptor* descriptor, RE::NiCamera* camera, bool flag);
-
 	void DrawVolumetricLightingSettings(int32_t& quality, TextureSize& customSize, bool isInterior, bool inLocationType);
 	TextureSize& FetchCurrentSizeInUnits(bool interior);
 	void SetupVL();

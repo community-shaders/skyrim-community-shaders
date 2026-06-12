@@ -51,9 +51,9 @@ void InteriorSun::PostPostLoad()
 	stl::write_thunk_call<BSBatchRenderer_RenderPassImmediately>(REL::RelocationID(100852, 107642).address() + REL::Relocate(0x29E, 0x28F));
 
 	// Hooks and patch to enable directional lighting for interiors
-	stl::write_thunk_call<GetWorldSpace>(REL::RelocationID(35562, 36561).address() + REL::Relocate(0x399, 0x37D, 0x639));
-	stl::write_thunk_call<GetWorldSpace>(REL::RelocationID(35562, 36561).address() + REL::Relocate(0x3AE, 0x392, 0x64E));
-	REL::safe_fill(REL::RelocationID(35562, 36561).address() + REL::Relocate(0x397, 0x37B, 0x637), REL::NOP, 2);
+	stl::write_thunk_call<GetWorldSpace>(REL::RelocationID(35562, 36561).address() + REL::Relocate(0x399, 0x37D));
+	stl::write_thunk_call<GetWorldSpace>(REL::RelocationID(35562, 36561).address() + REL::Relocate(0x3AE, 0x392));
+	REL::safe_fill(REL::RelocationID(35562, 36561).address() + REL::Relocate(0x397, 0x37B), REL::NOP, 2);
 
 	// Hook for overriding the rooms and portals passed to the directional light culling step to fix light leaking through unrendered geometry
 	stl::detour_thunk<DirShadowLightCulling>(REL::RelocationID(101498, 108492));
@@ -67,11 +67,11 @@ void InteriorSun::PostPostLoad()
 	gInteriorShadowDistance = reinterpret_cast<float*>(REL::RelocationID(513755, 391724).address());
 
 	// Patches BSShadowDirectionalLight::SetFrameCamera to read the correct shadow distance value in interior cells
-	const std::uintptr_t address = REL::RelocationID(101499, 108496).address() + REL::Relocate(0xD62, 0xE6C, 0xE72);
+	const std::uintptr_t address = REL::RelocationID(101499, 108496).address() + REL::Relocate(0xD62, 0xE6C);
 	const std::int32_t displacement = static_cast<std::int32_t>(reinterpret_cast<std::uintptr_t>(gShadowDistance) - (address + 8));
 	REL::safe_write(address + 4, &displacement, sizeof(displacement));
 
-	rasterStateCullMode = globals::game::isVR ? &globals::game::shadowState->GetVRRuntimeData().rasterStateCullMode : &globals::game::shadowState->GetRuntimeData().rasterStateCullMode;
+	rasterStateCullMode = &globals::game::shadowState->GetRuntimeData().rasterStateCullMode;
 
 	logger::info("[Interior Sun] Installed hooks");
 }

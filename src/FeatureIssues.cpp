@@ -846,12 +846,6 @@ namespace FeatureIssues
 						continue;
 					}
 
-					// Skip VR feature when not in VR mode (it's a core feature)
-					if (featureName == "VR" && !REL::Module::IsVR()) {
-						logger::info("Ignoring VR.ini in non-VR mode");
-						continue;
-					}
-
 					// This is an orphaned INI file - check if it's a known obsolete feature
 					if (IsObsoleteFeature(featureName)) {
 						// Read version from INI file

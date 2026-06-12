@@ -253,35 +253,8 @@ void WriteScreenSpaceShadow(DispatchParameters inParameters, int3 inGroupID, int
 		half2 coord = read_xy * inParameters.InvDepthTextureSize * inParameters.DynamicRes;
 		half2 coord_with_offset = (read_xy + offset_xy) * inParameters.InvDepthTextureSize * inParameters.DynamicRes;
 
-#if defined(VR)
-		// VR side-by-side: halve x to map stereo pixel coords to texture UV.
-		coord *= half2(0.5, 1.0);
-		coord_with_offset *= half2(0.5, 1.0);
-
-#	if defined(RIGHT)
-		// Right eye: valid UV range is [0.5*DynRes.x, DynRes.x]
-		bool coord_out_of_eye = coord.x < 0.5 * inParameters.DynamicRes.x;
-		bool coord_offset_out_of_eye = coord_with_offset.x < 0.5 * inParameters.DynamicRes.x;
-#	else
-		// Left eye: valid UV range is [0.0, 0.5*DynRes.x)
-		bool coord_out_of_eye = coord.x >= 0.5 * inParameters.DynamicRes.x;
-		bool coord_offset_out_of_eye = coord_with_offset.x >= 0.5 * inParameters.DynamicRes.x;
-#	endif
-
-		// Clamp cross-eye depth reads to FarDepthValue (1.0) so rays near the SBS center
-		// seam see no occluder at the boundary. Shadow weakens by ~1 pixel at the seam but
-		// stays temporally stable across camera movement.
-		depths.x = coord_out_of_eye ? 1.0 : inParameters.DepthTexture.SampleLevel(inParameters.PointBorderSampler, coord, 0);
-		depths.y = coord_offset_out_of_eye ? 1.0 : inParameters.DepthTexture.SampleLevel(inParameters.PointBorderSampler, coord_with_offset, 0);
-
-		// HMD mask: depth==0 is outside the visible lens area. Remap to FarDepthValue so
-		// mask pixels do not cast false shadows.
-		depths.x = lerp(depths.x, 1.0, (float)(depths.x == 0));  // Stencil area
-		depths.y = lerp(depths.y, 1.0, (float)(depths.y == 0));  // Stencil area
-#else
 		depths.x = inParameters.DepthTexture.SampleLevel(inParameters.PointBorderSampler, coord, 0);
 		depths.y = inParameters.DepthTexture.SampleLevel(inParameters.PointBorderSampler, coord_with_offset, 0);
-#endif
 
 		// Depth thresholds (bilinear/shadow thickness) are based on a fractional ratio of the difference between sampled depth and the far clip depth
 		static const half kDepthThicknessFloor = 1e-4h;  // Prevents division by zero in depth_scale when depth is at the far clip plane
@@ -331,19 +304,6 @@ void WriteScreenSpaceShadow(DispatchParameters inParameters, int3 inGroupID, int
 
 	// Sync wavefronts now groupshared DepthData is written
 	GroupMemoryBarrierWithGroupSync();
-
-#if defined(VR)
-	// Check if the pixel we're writing to is on the correct eye side
-	half writeX = write_xy.x * inParameters.InvDepthTextureSize.x;
-
-#	if defined(RIGHT)
-	if (writeX < 0.0)
-		return;
-#	else
-	if (writeX > 1.0)
-		return;
-#	endif
-#endif
 
 	half start_depth = sampling_depth[0];
 

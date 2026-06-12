@@ -99,7 +99,7 @@ void CloudShadows::ModifySky(RE::BSRenderPass* Pass)
 {
 	auto shadowState = globals::game::shadowState;
 
-	GET_INSTANCE_MEMBER(cubeMapRenderTarget, shadowState);
+	auto& cubeMapRenderTarget = shadowState->GetRuntimeData().cubeMapRenderTarget;
 
 	if (cubeMapRenderTarget != RE::RENDER_TARGETS_CUBEMAP::kREFLECTIONS)
 		return;

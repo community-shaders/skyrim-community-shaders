@@ -12,7 +12,7 @@ reviews:
                  Length: 50 characters limit for title, 72 for body
                  Style: lowercase description, no ending period
                  Examples:
-                 - feat(vr): add cross-eye sampling
+                 - feat(ssgi): add temporal denoising
                  - fix(water): resolve flowmap bug
                  - docs: update shader documentation
 

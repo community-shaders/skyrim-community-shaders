@@ -54,6 +54,6 @@ struct ShadowmapRasterizerFix : EngineFix
 									"Controls the number of shadow map cascades used for directional lighting. "
 									"Higher values provide better shadow quality but use more GPU resources. "
 									"Maximum of 3 cascades supported. ",
-									REL::Relocate<uintptr_t>(0, 0, 0x1ed6350), 2, 1, 3 } },
+									static_cast<uintptr_t>(0), 2, 1, 3 } },
 	};
 };

@@ -13,7 +13,7 @@ This file provides Copilot-specific guidance while avoiding duplication of the c
 
 ## Project Overview
 
-SKSE64 plugin providing modular DirectX 11 graphics enhancements for Skyrim SE/AE/VR. Features runtime shader compilation, 25+ graphics features, and cross-platform Skyrim variant support.
+SKSE64 plugin providing modular DirectX 11 graphics enhancements for Skyrim SE/AE. Features runtime shader compilation, 25+ graphics features, and cross-platform Skyrim variant support.
 
 ## Environment and Build Essentials
 
@@ -31,7 +31,7 @@ SKSE64 plugin providing modular DirectX 11 graphics enhancements for Skyrim SE/A
 ### Primary Build Command (Windows)
 
 ```powershell
-# ALL preset is primary - other presets (SE, AE, VR) are legacy
+# ALL preset is primary - other presets (SE, AE) are legacy
 ./BuildRelease.bat ALL    # Universal binary (recommended)
 ./BuildRelease.bat        # Same as ALL (default)
 ```
@@ -60,7 +60,7 @@ git submodule update --init --recursive  # If not cloned with --recursive
 **Flag potential problems before they occur:**
 
 -   **Performance Impact**: Graphics features affect rendering performance - suggest user toggles
--   **Runtime Compatibility**: Warn about SE/AE/VR compatibility issues, suggest `REL::RelocateMember()` patterns
+-   **Runtime Compatibility**: Warn about SE/AE compatibility issues, suggest `REL::RelocateMember()` patterns
 -   **Buffer Conflicts**: Highlight GPU register conflicts, recommend hlslkit buffer scanning
 -   **Security Risks**: Validate user input, prevent DirectX crashes from malformed configurations
 
@@ -68,7 +68,7 @@ git submodule update --init --recursive  # If not cloned with --recursive
 
 -   **Complete Solutions**: No TODO/FIXME placeholders - provide fully functional code
 -   **Performance Conscious**: Always consider GPU workload and user experience
--   **Cross-Platform**: Ensure changes work across SE/AE/VR variants using runtime detection
+-   **Cross-Platform**: Ensure changes work across SE/AE variants using runtime detection
 -   **Error Handling**: Include proper resource management and graceful degradation
 
 ## Architecture Quick Reference

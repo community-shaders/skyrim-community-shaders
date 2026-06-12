@@ -3,7 +3,6 @@
 
 #include "Common/FrameBuffer.hlsli"
 #include "Common/Spherical Harmonics/SphericalHarmonics.hlsli"
-#include "Common/VR.hlsli"
 
 namespace SharedData
 {
@@ -15,6 +14,12 @@ namespace SharedData
 		row_major float3x4 DirectionalAmbient;
 		float4 DirLightDirection;
 		float4 DirLightColor;
+		float4 SunDirection;
+		float4 SunColor;
+		float4 MasserDirection;
+		float4 MasserColor;
+		float4 SecundaDirection;
+		float4 SecundaColor;
 		float4 CameraData;
 		float4 BufferDim;
 		float Timer;
@@ -25,7 +30,7 @@ namespace SharedData
 		bool InMapMenu;           // If the world/local map is open (note that the renderer is still deferred here)
 		bool HideSky;             // HideSky flag in WorldSpace, e.g. Blackreach
 		float MipBias;            // Offset to mip level for TAA sharpness
-		float WaterSystemHeight;  // TES::GetWaterHeight at eye-0 in camera-relative Z; -FLT_MAX when no water body found (VR only)
+		float WaterSystemHeight;  // TES::GetWaterHeight in camera-relative Z; -FLT_MAX when no water body found
 		float3 pad0;
 		float4 AmbientSHR;
 		float4 AmbientSHG;
@@ -330,17 +335,16 @@ namespace SharedData
 	Texture2D<float4> DepthTexture : register(t17);
 
 	// Get a int3 to be used as texture sample coord. [0,1] in uv space
-	int3 ConvertUVToSampleCoord(float2 uv, uint a_eyeIndex)
+	int3 ConvertUVToSampleCoord(float2 uv)
 	{
-		uv = Stereo::ConvertToStereoUV(uv, a_eyeIndex);
 		uv = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(uv);
 		return int3(uv * BufferDim.xy, 0);
 	}
 
 	// Get a raw depth from the depth buffer. [0,1] in uv space
-	float GetDepth(float2 uv, uint a_eyeIndex = 0)
+	float GetDepth(float2 uv)
 	{
-		return DepthTexture.Load(ConvertUVToSampleCoord(uv, a_eyeIndex)).x;
+		return DepthTexture.Load(ConvertUVToSampleCoord(uv)).x;
 	}
 
 	float GetScreenDepth(float depth)
@@ -353,19 +357,16 @@ namespace SharedData
 		return (CameraData.w / (-depths * CameraData.z + CameraData.x));
 	}
 
-	float GetScreenDepth(float2 uv, uint a_eyeIndex = 0)
+	float GetScreenDepth(float2 uv)
 	{
-		float depth = GetDepth(uv, a_eyeIndex);
+		float depth = GetDepth(uv);
 		return GetScreenDepth(depth);
 	}
 
 	// Returns water data for the tile containing worldPosition (camera-relative XY).
-	// The .w component (water surface height) is stored in C++ as camera-relative Z of
-	// eye 0 (left eye).  Pass eyeIndex to have .w corrected into the current eye's
-	// camera-relative frame; defaults to 0 (no correction, backwards-compatible).
-	float4 GetWaterData(float3 worldPosition, uint eyeIndex = 0)
+	float4 GetWaterData(float3 worldPosition)
 	{
-		float2 cellF = (((worldPosition.xy + FrameBuffer::CameraPosAdjust[0].xy)) / 4096.0) + 64.0;  // always positive
+		float2 cellF = (((worldPosition.xy + FrameBuffer::CameraPosAdjust.xy)) / 4096.0) + 64.0;  // always positive
 		int2 cellInt;
 		float2 cellFrac = modf(cellF, cellInt);
 
@@ -380,12 +381,6 @@ namespace SharedData
 
 		[flatten] if (cellInt.x < 5 && cellInt.x >= 0 && cellInt.y < 5 && cellInt.y >= 0)
 			waterData = WaterData[waterTile];
-
-#	if defined(VR)
-		// Correct .w from eye-0 camera-relative Z to the current eye's camera-relative Z.
-		// No-op when eyeIndex == 0 (both terms are identical).
-		waterData.w += FrameBuffer::CameraPosAdjust[0].z - FrameBuffer::CameraPosAdjust[eyeIndex].z;
-#	endif
 
 		return waterData;
 	}

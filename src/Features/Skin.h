@@ -30,7 +30,6 @@ struct Skin : Feature
 		return t == RE::BSShader::Type::Lighting;
 	};
 
-	virtual inline bool SupportsVR() { return true; }
 
 	virtual void RestoreDefaultSettings() override;
 	virtual void DrawSettings() override;

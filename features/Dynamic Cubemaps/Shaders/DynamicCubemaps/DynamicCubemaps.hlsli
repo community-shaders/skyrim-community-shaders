@@ -41,13 +41,12 @@ namespace DynamicCubemaps
 #		if defined(IBL) && defined(LIGHTING)
 		const bool inWorld = (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InWorld);
 		const bool inReflection = (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InReflection);
-		if (SharedData::iblSettings.EnableIBL && SharedData::iblSettings.UseStaticIBL && !inWorld && !inReflection) {
-			float3 specularIrradiance = ImageBasedLighting::StaticSpecularIBLTexture.SampleLevel(SampColorSampler, R.xzy, level).xyz;
-			finalIrradiance = specularIrradiance;
-			return finalIrradiance;
-		}
+		const bool useStaticIBL = SharedData::iblSettings.EnableIBL && SharedData::iblSettings.UseStaticIBL && !inWorld && !inReflection;
+#		else
+		const bool useStaticIBL = false;
 #		endif
 
+		if (!useStaticIBL) {
 #		if defined(SKYLIGHTING)
 		float skylightingSpecular = 0.0;
 		if (!SharedData::InInterior) {
@@ -59,7 +58,8 @@ namespace DynamicCubemaps
 		if (SharedData::iblSettings.EnableIBL) {
 			float3 envSample = EnvTexture.SampleLevel(SampColorSampler, R, level);
 			float3 fullSample = EnvReflectionsTexture.SampleLevel(SampColorSampler, R, level);
-			float3 envSpecular, skySpecular;
+			float3 envSpecular = 0.0;
+			float3 skySpecular = 0.0;
 
 			if (SharedData::iblSettings.DALCMode == 2) {
 				// Mode 2: DALC-normalized env scaled by DALCAmount + sky overlay
@@ -118,6 +118,12 @@ namespace DynamicCubemaps
 			finalIrradiance = Color::IrradianceToLinear(specularIrradiance);
 #		endif
 		}
+		} else {
+#		if defined(IBL) && defined(LIGHTING)
+			float3 specularIrradiance = ImageBasedLighting::StaticSpecularIBLTexture.SampleLevel(SampColorSampler, R.xzy, level).xyz;
+			finalIrradiance = specularIrradiance;
+#		endif
+		}
 
 		return finalIrradiance;
 #	endif
@@ -147,8 +153,7 @@ namespace DynamicCubemaps
 		const bool inReflection = (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InReflection);
 		if (SharedData::iblSettings.EnableIBL && SharedData::iblSettings.UseStaticIBL && !inWorld && !inReflection) {
 			float3 specularIrradiance = ImageBasedLighting::StaticSpecularIBLTexture.SampleLevel(SampColorSampler, R.xzy, level).xyz;
-			finalIrradiance += specularIrradiance;
-			return (F0 * specularBRDF.x + specularBRDF.y) * finalIrradiance;
+			return (F0 * specularBRDF.x + specularBRDF.y) * specularIrradiance;
 		}
 #		endif
 
@@ -163,7 +168,8 @@ namespace DynamicCubemaps
 		if (SharedData::iblSettings.EnableIBL) {
 			float3 envSample = EnvTexture.SampleLevel(SampColorSampler, R, level);
 			float3 fullSample = EnvReflectionsTexture.SampleLevel(SampColorSampler, R, level);
-			float3 envSpecular, skySpecular;
+			float3 envSpecular = 0.0;
+			float3 skySpecular = 0.0;
 
 			if (SharedData::iblSettings.DALCMode == 2) {
 				// Mode 2: DALC-normalized env scaled by DALCAmount + sky overlay

@@ -1,5 +1,6 @@
 #include "Game.h"
 
+#include "Globals.h"
 #include "State.h"
 
 namespace Util
@@ -32,7 +33,7 @@ namespace Util
 	{
 		if (globals::game::shadowState) {
 			if (auto tes = RE::TES::GetSingleton()) {
-				auto position = GetEyePosition(0);
+				auto position = GetEyePosition();
 				position.x += offsetX;
 				position.y += offsetY;
 				if (auto cell = tes->GetCell(position)) {
@@ -93,29 +94,10 @@ namespace Util
 		return float4(1.0f, 1.0f, 1.0f, -FLT_MAX);
 	}
 
-	RE::NiPoint3 GetAverageEyePosition()
+	RE::NiPoint3 GetEyePosition()
 	{
 		auto shadowState = globals::game::shadowState;
-		if (!REL::Module::IsVR())
-			return shadowState->GetRuntimeData().posAdjust.getEye();
-		return (shadowState->GetVRRuntimeData().posAdjust.getEye(0) + shadowState->GetVRRuntimeData().posAdjust.getEye(1)) * 0.5f;
-	}
-
-	RE::NiPoint3 GetEyePosition(int eyeIndex)
-	{
-		auto shadowState = globals::game::shadowState;
-		if (!REL::Module::IsVR())
-			return shadowState->GetRuntimeData().posAdjust.getEye();
-		return shadowState->GetVRRuntimeData().posAdjust.getEye(eyeIndex);
-	}
-
-	RE::BSGraphics::ViewData GetCameraData(int eyeIndex)
-	{
-		auto shadowState = globals::game::shadowState;
-		if (!REL::Module::IsVR()) {
-			return shadowState->GetRuntimeData().cameraData.getEye();
-		}
-		return shadowState->GetVRRuntimeData().cameraData.getEye(eyeIndex);
+		return shadowState->GetRuntimeData().posAdjust.getEye();
 	}
 
 	float4 GetCameraData()
@@ -134,8 +116,26 @@ namespace Util
 
 	bool GetTemporal()
 	{
-		auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
-		return (!REL::Module::IsVR() ? imageSpaceManager->GetRuntimeData().BSImagespaceShaderISTemporalAA->taaEnabled : imageSpaceManager->GetVRRuntimeData().BSImagespaceShaderISTemporalAA->taaEnabled);
+		auto* imageSpaceManager = globals::game::imageSpaceManager;
+		if (!imageSpaceManager)
+			return false;
+		auto& taaShader = imageSpaceManager->GetRuntimeData().BSImagespaceShaderISTemporalAA;
+		return taaShader && taaShader->taaEnabled;
+	}
+
+	void SetTemporal(bool enabled)
+	{
+		auto* imageSpaceManager = globals::game::imageSpaceManager;
+		if (!imageSpaceManager)
+			return;
+		if (auto& taaShader = imageSpaceManager->GetRuntimeData().BSImagespaceShaderISTemporalAA)
+			taaShader->taaEnabled = enabled;
+	}
+
+	void DisableVanillaTAA()
+	{
+		if (auto* setting = RE::GetINISetting("bUseTAA:Display"))
+			setting->data.b = false;
 	}
 
 	float GetVerticalFOVRad()
@@ -143,7 +143,7 @@ namespace Util
 		static float& cameraFOVDeg = (*(float*)(REL::RelocationID(513786, 388785).address()));  // FOV degrees
 		float hFOVRad = cameraFOVDeg * (3.14159265359f / 180.0f);
 		float unitHalfWidth = tan(hFOVRad / 2);                                                                // This is same as camera frustum RL
-		float unitHalfHeight = unitHalfWidth / (globals::state->screenSize.x / globals::state->screenSize.y);  // frustum TB
+		float unitHalfHeight = unitHalfWidth / ((float)globals::game::graphicsState->screenWidth / (float)globals::game::graphicsState->screenHeight);  // frustum TB
 		float vFOVRad = 2.0f * atan(unitHalfHeight);
 		return vFOVRad;
 	}
@@ -163,7 +163,7 @@ namespace Util
 
 	DispatchCount GetScreenDispatchCount(bool a_dynamic)
 	{
-		float2 resolution = globals::state->screenSize;
+		float2 resolution{ (float)globals::game::graphicsState->screenWidth, (float)globals::game::graphicsState->screenHeight };
 
 		if (a_dynamic)
 			ConvertToDynamic(resolution);

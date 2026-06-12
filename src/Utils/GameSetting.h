@@ -107,7 +107,7 @@ namespace Util
 	 * @brief Gets the value of a game setting, transparently handling INI-based and offset-based settings.
 	 *
 	 * For INI-based settings (offset == 0), tries INISettingCollection, INIPrefSettingCollection,
-	 * then GameSettingCollection. For offset-based settings (e.g., VR where INI entries don't exist),
+	 * then GameSettingCollection. For offset-based settings,
 	 * reads directly from the memory address.
 	 *
 	 * @tparam T The expected value type (bool, float, std::int32_t, or std::uint32_t).
@@ -152,7 +152,7 @@ namespace Util
 	 * @brief Sets the value of a game setting, transparently handling INI-based and offset-based settings.
 	 *
 	 * For INI-based settings (offset == 0), tries INISettingCollection, INIPrefSettingCollection,
-	 * then GameSettingCollection. For offset-based settings (e.g., VR where INI entries don't exist),
+	 * then GameSettingCollection. For offset-based settings,
 	 * writes directly to the memory address.
 	 *
 	 * @tparam T The value type (bool, float, std::int32_t, or std::uint32_t).

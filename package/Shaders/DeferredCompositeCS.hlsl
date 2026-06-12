@@ -7,12 +7,11 @@
 #include "Common/Shading.hlsli"
 #include "Common/SharedData.hlsli"
 #include "Common/Spherical Harmonics/SphericalHarmonics.hlsli"
-#include "Common/VR.hlsli"
-
 Texture2D<float3> SpecularTexture : register(t0);
 Texture2D<unorm float3> AlbedoTexture : register(t1);
 Texture2D<unorm float3> NormalRoughnessTexture : register(t2);
 Texture2D<float3> MasksTexture : register(t3);
+Texture2D<unorm float> Masks2Texture : register(t9);
 
 RWTexture2D<float4> MainRW : register(u0);
 RWTexture2D<float4> NormalTAAMaskSpecularMaskRW : register(u1);
@@ -24,11 +23,6 @@ RWTexture2D<float2> MotionVectorsRW : register(u2);
 Texture2D<float> DepthTexture : register(t4);
 #else
 Texture2D<unorm float> DepthTexture : register(t4);
-#endif
-
-#if defined(VR_STEREO_OPT)
-#	include "VRStereoOptimizations/modes.hlsli"
-Texture2D<uint> StereoOptModeTexture : register(t16);
 #endif
 
 #if defined(DYNAMIC_CUBEMAPS)
@@ -100,19 +94,6 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, inout float ao, out float3 il,
 	float2 uv = float2(dispatchID.xy + 0.5) * SharedData::BufferDim.zw;
 	uv *= FrameBuffer::DynamicResolutionParams2.xy;  // adjust for dynamic res
 
-	uint eyeIndex = Stereo::GetEyeIndexFromTexCoord(uv);
-
-#if defined(VR_STEREO_OPT)
-	if (eyeIndex == 1) {
-		uint mode = StereoOptModeTexture[uint2(dispatchID.xy)] & 0x0F;
-		if (mode == MODE_MAIN) {  // stencil-culled in Eye 1, filled by ReprojectionCS
-			return;
-		}
-	}
-#endif
-
-	uv = Stereo::ConvertFromStereoUV(uv, eyeIndex);
-
 	float3 normalGlossiness = NormalRoughnessTexture[dispatchID.xy];
 	float3 normalVS = GBuffer::DecodeNormal(normalGlossiness.xy);
 
@@ -122,22 +103,27 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, inout float ao, out float3 il,
 
 	float depth = DepthTexture[dispatchID.xy];
 	float4 positionWS = float4(2 * float2(uv.x, -uv.y + 1) - 1, depth, 1);
-	positionWS = mul(FrameBuffer::CameraViewProjInverse[eyeIndex], positionWS);
+	positionWS = mul(FrameBuffer::CameraViewProjInverse, positionWS);
 	positionWS.xyz = positionWS.xyz / positionWS.w;
 
 	if (depth == 1.0)
-		MotionVectorsRW[dispatchID.xy] = MotionBlur::GetSSMotionVector(positionWS, positionWS, eyeIndex);  // Apply sky motion vectors
+		MotionVectorsRW[dispatchID.xy] = MotionBlur::GetSSMotionVector(positionWS, positionWS);  // Apply sky motion vectors
 
 	float glossiness = normalGlossiness.z;
 
 	float3 linDiffuseColor = Color::IrradianceToLinear(diffuseColor);
-	float3 normalWS = normalize(mul(FrameBuffer::CameraViewInverse[eyeIndex], float4(normalVS, 0)).xyz);
+	float3 normalWS = normalize(mul(FrameBuffer::CameraViewInverse, float4(normalVS, 0)).xyz);
 
 #if defined(SSGI)
 
 	float ssgiAo;
 	float3 ssgiIl;
 	SampleSSGI(dispatchID.xy, normalWS, ssgiAo, ssgiIl);
+
+	// Masks2.x stores 1 - vertexAO (Lighting.hlsl only); cleared to 0 for
+	// pixels with no vertex AO contribution, so vertexAO defaults to 1.
+	float vertexAO = 1.0 - Masks2Texture[dispatchID.xy].x;
+	ssgiAo = saturate(ssgiAo / max(vertexAO, EPSILON_DIVISION));
 
 	float3 linAlbedo = Color::IrradianceToLinear(albedo / Color::PBRLightingScale);
 	float3 multiBounceSSGIAo = MultiBounceAO(linAlbedo, ssgiAo);
@@ -149,11 +135,7 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, inout float ao, out float3 il,
 		float3 vanillaDALC = Color::Ambient(max(0, SharedData::GetAmbient(normalWS)));
 
 #		if defined(SKYLIGHTING)
-#			if defined(VR)
-		float3 positionMS = positionWS.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz - FrameBuffer::CameraPosAdjust[0].xyz;
-#			else
 		float3 positionMS = positionWS.xyz;
-#			endif
 		sh2 skylightingSH = Skylighting::Sample(positionMS.xyz, normalWS);
 		float skylightingDiffuse = Skylighting::EvaluateDiffuse(skylightingSH, normalWS);
 		directionalAmbientColor = ImageBasedLighting::GetDiffuseIBLOccluded(vanillaDALC, -normalWS, skylightingDiffuse) * albedo;
@@ -218,11 +200,7 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, inout float ao, out float3 il,
 		float directionalAmbientColorSpecular = Color::RGBToLuminance(Color::Ambient(max(0, SharedData::GetAmbient(R)))) * Color::ReflectionNormalisationScale;
 
 #	if defined(SKYLIGHTING)
-#		if defined(VR)
-		float3 positionMS = positionWS.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz - FrameBuffer::CameraPosAdjust[0].xyz;
-#		else
 		float3 positionMS = positionWS.xyz;
-#		endif
 
 		sh2 skylightingSH = Skylighting::Sample(positionMS.xyz, R);
 		float skylightingSpecular = Skylighting::EvaluateSpecular(skylightingSH, specularLobe);
@@ -315,10 +293,6 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, inout float ao, out float3 il,
 	color = Color::IrradianceToGamma(color);
 
 #if defined(DEBUG)
-
-#	if defined(VR)
-	uv.x += (eyeIndex ? 0.1 : -0.1);
-#	endif  // VR
 
 	if (uv.x < 0.5 && uv.y < 0.5) {
 		color = color;

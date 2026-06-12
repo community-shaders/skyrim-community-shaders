@@ -86,7 +86,6 @@ public:
 
 	virtual void PostPostLoad() override;
 
-	virtual bool SupportsVR() override { return true; };
 
 	struct Hooks
 	{
@@ -105,7 +104,7 @@ public:
 		static void Install()
 		{
 			stl::write_vfunc<0x6, BSGrassShader_SetupGeometry>(RE::VTABLE_BSGrassShader[0]);
-			stl::write_thunk_call<MainUpdate_QueueCollisions>(REL::RelocationID(35565, 36564).address() + REL::Relocate(0x748, 0xC26, 0x7EE));
+			stl::write_thunk_call<MainUpdate_QueueCollisions>(REL::RelocationID(35565, 36564).address() + REL::Relocate(0x748, 0xC26));
 			logger::info("[GRASS COLLISION] Installed hooks");
 		}
 	};

@@ -119,7 +119,6 @@ public:
 	};
 
 	Settings settings;
-	bool enabledAtBoot = false;
 	void UpdateCubemap();
 
 	void PostDeferred();
@@ -135,8 +134,7 @@ public:
 			{ T("feature.dynamic_cubemaps.key_feature_1", "Real-time environment capture for realistic reflections"),
 				T("feature.dynamic_cubemaps.key_feature_2", "Dynamic cube map generation based on camera position"),
 				T("feature.dynamic_cubemaps.key_feature_3", "Enhanced water reflections with environmental details"),
-				T("feature.dynamic_cubemaps.key_feature_4", "Support for both standard and VR rendering modes"),
-				T("feature.dynamic_cubemaps.key_feature_5", "Optimized cubemap inference and irradiance calculation") } };
+				T("feature.dynamic_cubemaps.key_feature_4", "Optimized cubemap inference and irradiance calculation") } };
 	};
 
 	virtual std::vector<std::pair<std::string_view, std::string_view>> GetShaderDefineOptions() override;
@@ -152,20 +150,6 @@ public:
 	virtual void DrawSettings() override;
 	virtual void DataLoaded() override;
 	virtual void PostPostLoad() override;
-
-	std::map<std::string, Util::GameSetting> iniVRCubeMapSettings{
-		{ "bAutoWaterSilhouetteReflections:Water", { "Auto Water Silhouette Reflections", "Automatically reflects silhouettes on water surfaces.", 0, true, false, true } },
-		{ "bForceHighDetailReflections:Water", { "Force High Detail Reflections", "Forces the use of high-detail reflections on water surfaces.", 0, true, false, true } }
-	};
-
-	std::map<std::string, Util::GameSetting> hiddenVRCubeMapSettings{
-		{ "bReflectExplosions:Water", { "Reflect Explosions", "Enables reflection of explosions on water surfaces.", 0x1eaa000, true, false, true } },
-		{ "bReflectLODLand:Water", { "Reflect LOD Land", "Enables reflection of low-detail (LOD) terrain on water surfaces.", 0x1eaa060, true, false, true } },
-		{ "bReflectLODObjects:Water", { "Reflect LOD Objects", "Enables reflection of low-detail (LOD) objects on water surfaces.", 0x1eaa078, true, false, true } },
-		{ "bReflectLODTrees:Water", { "Reflect LOD Trees", "Enables reflection of low-detail (LOD) trees on water surfaces.", 0x1eaa090, true, false, true } },
-		{ "bReflectSky:Water", { "Reflect Sky", "Enables reflection of the sky on water surfaces.", 0x1eaa0a8, true, false, true } },
-		{ "bUseWaterRefractions:Water", { "Use Water Refractions", "Enables refractions for water surfaces, affecting how light bends through water.", 0x1eaa0c0, true, false, true } }
-	};
 
 	virtual void ClearShaderCache() override;
 	ID3D11ComputeShader* GetComputeShaderUpdate();
@@ -188,6 +172,5 @@ public:
 
 	ID3D11ComputeShader* GetComputeShaderBC6HEncode();
 
-	virtual bool SupportsVR() override { return true; };
 	virtual bool IsCore() const override { return true; };
 };

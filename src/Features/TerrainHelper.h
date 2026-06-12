@@ -39,7 +39,6 @@ public:
 	virtual void Load() override;
 	virtual void DataLoaded() override;
 	virtual void PostPostLoad() override;
-	virtual bool SupportsVR() override { return true; };
 	virtual std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
 
 	void SetShaderResources(ID3D11DeviceContext* a_context);

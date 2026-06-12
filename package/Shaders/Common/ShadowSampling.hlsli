@@ -49,7 +49,7 @@ namespace ShadowSampling
 		return SharedData::HasDirectionalShadows;
 	}
 
-	float GetWorldShadow(float3 positionWS, float3 offset, uint eyeIndex)
+	float GetWorldShadow(float3 positionWS, float3 offset)
 	{
 		if (SharedData::InInterior || SharedData::HideSky || SharedData::InMapMenu)
 			return 1.0;
@@ -66,7 +66,7 @@ namespace ShadowSampling
 		return worldShadow;
 	}
 
-	float Get3DFilteredShadow(float3 positionWS, float3 viewDirection, float2 screenPosition, uint eyeIndex, out float surfaceShadow)
+	float Get3DFilteredShadow(float3 positionWS, float3 viewDirection, float2 screenPosition, out float surfaceShadow)
 	{
 #if defined(EFFECT)
 		float viewRayLength = min(Permutation::EffectRadius * 0.2, 256);
@@ -95,7 +95,7 @@ namespace ShadowSampling
 		for (uint i = 0; i < sampleCount; i++) {
 			float t = (float(i) + noise) * rcpSampleCount;
 			float3 sampledPositionWS = lerp(endPosition, startPosition, t);
-			float worldShadowSample = ShadowSampling::GetWorldShadow(sampledPositionWS, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
+			float worldShadowSample = ShadowSampling::GetWorldShadow(sampledPositionWS, FrameBuffer::CameraPosAdjust.xyz);
 			surfaceShadow = worldShadowSample;
 			worldShadow += worldShadowSample;
 		}
@@ -108,7 +108,7 @@ namespace ShadowSampling
 #if defined(VOLUMETRIC_SHADOWS)
 		if (HasDirectionalShadows()) {
 			float vsmSurfaceShadow;
-			float shadow = VolumetricShadows::GetVSMShadow3D(startPosition, endPosition, noise, sampleCount, eyeIndex, vsmSurfaceShadow);
+			float shadow = VolumetricShadows::GetVSMShadow3D(startPosition, endPosition, noise, sampleCount, vsmSurfaceShadow);
 			surfaceShadow *= vsmSurfaceShadow;
 			return worldShadow * shadow;
 		}
@@ -119,7 +119,7 @@ namespace ShadowSampling
 		return worldShadow;
 	}
 
-	float GetLightingShadow(float3 worldPosition, uint eyeIndex, out float detailedShadow)
+	float GetLightingShadow(float3 worldPosition, out float detailedShadow)
 	{
 		if (!HasDirectionalShadows()) {
 			detailedShadow = 1.0;
@@ -127,7 +127,7 @@ namespace ShadowSampling
 		}
 
 #if defined(VOLUMETRIC_SHADOWS)
-		float shadow = VolumetricShadows::GetVSMShadow2D(worldPosition, eyeIndex, detailedShadow);
+		float shadow = VolumetricShadows::GetVSMShadow2D(worldPosition, detailedShadow);
 		return shadow;
 #else
 		detailedShadow = 1.0;

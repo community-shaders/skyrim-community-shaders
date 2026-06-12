@@ -8,7 +8,7 @@ This file provides guidance for AI assistants working with the Skyrim Community 
 
 -   Build commands and development setup
 -   Architecture overview and critical dependencies (CommonLibSSE-NG)
--   Runtime targeting system for SE/AE/VR compatibility
+-   Runtime targeting system for SE/AE compatibility
 -   Core architecture including Globals system and feature registry
 -   Shader architecture (base shaders in `package/Shaders/`, feature shaders, compute shader patterns)
 -   Development workflows and best practices
@@ -18,7 +18,7 @@ This file provides guidance for AI assistants working with the Skyrim Community 
 
 ### Project Type
 
-SKSE plugin providing advanced DirectX 11 graphics modifications for Skyrim SE/AE/VR.
+SKSE plugin providing advanced DirectX 11 graphics modifications for Skyrim SE/AE.
 
 ### Essential Commands
 
@@ -28,7 +28,7 @@ SKSE plugin providing advanced DirectX 11 graphics modifications for Skyrim SE/A
 
 ### Build Options
 
-**Runtime Presets**: `ALL` (universal), `SE`, `AE`, `VR`, `PRE-AE`, `FLATRIM`, `ALL-TRACY`
+**Runtime Presets**: `ALL` (universal), `SE`, `AE`, `ALL-TRACY`
 
 **CMake Options** (set in user preset):
 
@@ -50,6 +50,6 @@ For full details about manual packaging targets (Package-Core, Package-AIO-Manua
 
 **Act as an experienced graphics programming and Skyrim modding expert.**
 
-**Key Focus**: Performance impact awareness, runtime compatibility (SE/AE/VR), complete working solutions, DirectX/HLSL best practices.
+**Key Focus**: Performance impact awareness, runtime compatibility (SE/AE), complete working solutions, DirectX/HLSL best practices.
 
 For detailed explanations, examples, and comprehensive guidance, refer to `.claude/CLAUDE.md`.

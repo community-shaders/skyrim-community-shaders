@@ -11,18 +11,16 @@ RWTexture3D<float4> IntegratedLightScattering : register(u0);
 	float accumulatedTransmittance = 1.0f;
 	float accumulatedDepth = 0.0f;
 
-	uint eyeIndex;
 	float previousDepth;
-	float3 previousPositionWS = ExponentialHeightFog::ComputeCellWorldPosition(uint3(dispatchID.xy, 0), float3(0.5f, 0.5f, 0.0f), eyeIndex, previousDepth);
+	float3 previousPositionWS = ExponentialHeightFog::ComputeCellWorldPosition(uint3(dispatchID.xy, 0), float3(0.5f, 0.5f, 0.0f), previousDepth);
 
 	[loop] for (uint layerIndex = 0; layerIndex < VolumetricFogGridSize.z; layerIndex++)
 	{
 		uint3 layerCoordinate = uint3(dispatchID.xy, layerIndex);
 		float4 scatteringAndExtinction = LightScattering[layerCoordinate];
 
-		uint layerEyeIndex;
 		float layerDepth;
-		float3 layerPositionWS = ExponentialHeightFog::ComputeCellWorldPosition(layerCoordinate, 0.5f.xxx, layerEyeIndex, layerDepth);
+		float3 layerPositionWS = ExponentialHeightFog::ComputeCellWorldPosition(layerCoordinate, 0.5f.xxx, layerDepth);
 		float stepLength = length(layerPositionWS - previousPositionWS);
 		previousPositionWS = layerPositionWS;
 

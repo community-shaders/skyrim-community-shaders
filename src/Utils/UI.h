@@ -1074,7 +1074,7 @@ namespace Util
 		 * @brief Converts a key combo (vector of InputCombo) to a human-readable string
 		 *
 		 * For keyboard-only combos, produces strings like "Ctrl + Shift + A".
-		 * For VR inputs, delegates to InputCombo::GetVRString for proper formatting.
+		 * For non-keyboard inputs, formats using the packed device+key representation.
 		 *
 		 * @param combo Vector of InputCombo representing the key combination
 		 * @return Human-readable string representation of the combo, or "None" if empty
@@ -1516,9 +1516,9 @@ namespace Util
 	}
 
 	/**
-	 * @brief Unified input recording widget for both VR and Desktop
+	 * @brief Unified input recording widget
 	 *
-	 * Handles recording of multi-key sequences for keyboard, mouse, and VR controllers.
+	 * Handles recording of multi-key sequences for keyboard and mouse.
 	 * Supports modifiers, combo sequences, and device-specific rendering.
 	 *
 	 * @param label The label for the input setting

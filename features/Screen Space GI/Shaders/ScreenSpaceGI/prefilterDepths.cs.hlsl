@@ -27,10 +27,6 @@ RWTexture2D<float> outDepth4 : register(u4);
 // is required to be non-linear (i.e. very large outdoors environments).
 float ClampDepth(float depth)
 {
-#ifdef VR
-	if (depth == 0.0)  // VR 0 indicates a mask
-		return 0.0;
-#endif
 	depth = ScreenToViewDepth(depth);
 	return clamp(depth, 0.0, 3.402823466e+38);
 }

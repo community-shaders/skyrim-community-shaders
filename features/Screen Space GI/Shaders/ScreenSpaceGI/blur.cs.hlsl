@@ -6,7 +6,6 @@
 #include "Common/GBuffer.hlsli"
 #include "Common/Math.hlsli"
 #include "Common/Random.hlsli"
-#include "Common/VR.hlsli"
 #include "ScreenSpaceGI/common.hlsli"
 
 Texture2D<half> srcDepth : register(t0);
@@ -98,14 +97,13 @@ float2x2 getRotationMatrix(float noise)
 	const uint numSamples = 8;
 
 	const float2 uv = (dtid + .5) * RCP_OUT_FRAME_DIM;
-	uint eyeIndex = Stereo::GetEyeIndexFromTexCoord(uv);
-	const float2 screenPos = Stereo::ConvertFromStereoUV(uv, eyeIndex);
+	const float2 screenPos = uv;
 
 	float depth = READ_DEPTH(srcDepth, dtid);
-	float3 pos = ScreenToViewPosition(screenPos, depth, eyeIndex);
+	float3 pos = ScreenToViewPosition(screenPos, depth);
 	float3 normal = GBuffer::DecodeNormal(FULLRES_LOAD(srcNormalRoughness, dtid, uv, samplerLinearClamp).xy);
 
-	const float2 pixelDirRBViewspaceSizeAtCenterZ = depth.xx * (eyeIndex == 0 ? NDCToViewMul.xy : NDCToViewMul.zw) * RCP_OUT_FRAME_DIM;
+	const float2 pixelDirRBViewspaceSizeAtCenterZ = depth.xx * NDCToViewMul.xy * RCP_OUT_FRAME_DIM;
 	const float worldRadius = radius * pixelDirRBViewspaceSizeAtCenterZ.x;
 	float2x3 TvBv = getKernelBasis(normal, normal);  // D = N
 	float halfAngle = Math::HALF_PI;
@@ -130,30 +128,18 @@ float2x2 getRotationMatrix(float noise)
 
 		float2 poissonOffset = g_Poisson8[i].xy;
 
-		// Project viewspace blur offset to screen. In VR, if the sample leaves the
-		// current eye, try the other eye for cross-eye consistency at the seam.
-		// Shi, Billeter, Eisemann 2022, "Stereo-consistent screen-space ambient occlusion"
 		float3 viewSamplePos = pos + TvBv[0] * poissonOffset.x + TvBv[1] * poissonOffset.y;
-		float2 screenPosSample = FrameBuffer::ViewToUV(viewSamplePos, true, eyeIndex);
-		uint sampleEyeIndex = eyeIndex;
+		float2 screenPosSample = FrameBuffer::ViewToUV(viewSamplePos);
 
 		if (any(screenPosSample < 0) || any(screenPosSample > 1)) {
-#ifdef VR
-			float3 worldSamplePos = FrameBuffer::ViewToWorld(viewSamplePos, true, eyeIndex);
-			screenPosSample = FrameBuffer::ViewToUV(FrameBuffer::WorldToView(worldSamplePos, true, 1 - eyeIndex), true, 1 - eyeIndex);
-			sampleEyeIndex = 1 - eyeIndex;
-			if (any(screenPosSample < 0) || any(screenPosSample > 1))
-#endif
 				continue;
 		}
 
-		float2 uvSample = Stereo::ConvertToStereoUV(screenPosSample, sampleEyeIndex);
+		float2 uvSample = screenPosSample;
 		uvSample = (floor(uvSample * OUT_FRAME_DIM) + 0.5) * RCP_OUT_FRAME_DIM;  // Snap to the pixel centre
 
 		float depthSample = srcDepth.SampleLevel(samplerPointClamp, uvSample * frameScale, RES_MIP);
-		float3 posSample = ScreenToViewPosition(screenPosSample, depthSample, sampleEyeIndex);
-		if (sampleEyeIndex != eyeIndex)
-			posSample = FrameBuffer::WorldToView(FrameBuffer::ViewToWorld(posSample, true, sampleEyeIndex), true, eyeIndex);
+		float3 posSample = ScreenToViewPosition(screenPosSample, depthSample);
 
 		float4 normalRoughnessSample = srcNormalRoughness.SampleLevel(samplerPointClamp, uvSample * frameScale, 0);
 		float3 normalSample = GBuffer::DecodeNormal(normalRoughnessSample.xy);

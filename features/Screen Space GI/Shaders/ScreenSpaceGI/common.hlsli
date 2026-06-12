@@ -25,7 +25,7 @@
 
 cbuffer SSGICB : register(b1)
 {
-	float4x4 PrevInvViewMat[2];
+	float4x4 PrevInvViewMat;
 	float4 NDCToViewMul;
 	float4 NDCToViewAdd;
 
@@ -86,8 +86,8 @@ float2 filterInf(float2 v) { return float2(filterInf(v.x), filterInf(v.y)); }
 float3 filterInf(float3 v) { return float3(filterInf(v.x), filterInf(v.y), filterInf(v.z)); }
 float4 filterInf(float4 v) { return float4(filterInf(v.x), filterInf(v.y), filterInf(v.z), filterInf(v.w)); }
 
-// screenPos - normalised position in FrameDim, one eye only
-// uv - normalised position in FrameDim, both eye
+// screenPos - normalised position in FrameDim
+// uv - normalised position in FrameDim
 // texCoord - texture coordinate
 
 #ifdef HALF_RES
@@ -116,13 +116,10 @@ float4 filterInf(float4 v) { return float4(filterInf(v.x), filterInf(v.y), filte
 ///////////////////////////////////////////////////////////////////////////////
 
 // Inputs are screen XY and viewspace depth, output is viewspace position
-float3 ScreenToViewPosition(const float2 screenPos, const float viewspaceDepth, const uint eyeIndex)
+float3 ScreenToViewPosition(const float2 screenPos, const float viewspaceDepth)
 {
-	const float2 _mul = eyeIndex == 0 ? NDCToViewMul.xy : NDCToViewMul.zw;
-	const float2 _add = eyeIndex == 0 ? NDCToViewAdd.xy : NDCToViewAdd.zw;
-
 	float3 ret;
-	ret.xy = (_mul * screenPos.xy + _add) * viewspaceDepth;
+	ret.xy = (NDCToViewMul.xy * screenPos.xy + NDCToViewAdd.xy) * viewspaceDepth;
 	ret.z = viewspaceDepth;
 	return ret;
 }

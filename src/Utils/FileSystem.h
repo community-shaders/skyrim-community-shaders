@@ -62,6 +62,12 @@ namespace Util
 		std::filesystem::path GetIconsPath();
 
 		/**
+		 * Gets the CommunityShaders Cursors directory path
+		 * @return Interface / "Cursors"
+		 */
+		std::filesystem::path GetCursorsPath();
+
+		/**
 		 * Gets the SettingsUser.json file path
 		 * @return CommunityShaderPath / "SettingsUser.json"
 		 */

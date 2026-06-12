@@ -49,12 +49,6 @@ protected:
 
 public:
 	virtual bool HasShaderDefine(RE::BSShader::Type) { return false; }
-	/**
-	 * Whether the feature supports VR.
-	 *
-	 * \return true if VR supported; else false
-	 */
-	virtual bool SupportsVR() { return false; }
 
 	/**
 	 * Whether the feature is a CORE feature

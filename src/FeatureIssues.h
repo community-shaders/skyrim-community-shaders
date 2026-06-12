@@ -165,7 +165,7 @@ namespace FeatureIssues
 	 *
 	 * This function scans the Data/Shaders/Features/ directory for INI files that
 	 * correspond to features not currently in the active feature list (e.g., obsolete
-	 * features, VR features in non-VR mode, unknown features). It identifies whether
+	 * features, unknown features). It identifies whether
 	 * these orphaned INI files are known obsolete features or completely unknown features
 	 * and adds them to the feature issues tracking system.
 	 *

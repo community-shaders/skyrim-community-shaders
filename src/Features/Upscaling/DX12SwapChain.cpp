@@ -37,18 +37,15 @@ void DX12SwapChain::CreateSwapChain(IDXGIAdapter* adapter, DXGI_SWAP_CHAIN_DESC 
 	// Runtime format negotiation for swap chain
 	DXGI_FORMAT attemptedFormat = DXGI_FORMAT_R10G10B10A2_UNORM;
 	DXGI_FORMAT negotiatedFormat = DXGI_FORMAT_R10G10B10A2_UNORM;
-	bool isVR = REL::Module::IsVR();
 	bool fallbackUsed = false;
 
-	// Test R10G10B10A2 support (applies to both VR and non-VR for HDR capability)
+	// Test R10G10B10A2 support for HDR capability
 	D3D12_FEATURE_DATA_FORMAT_SUPPORT formatSupport = { DXGI_FORMAT_R10G10B10A2_UNORM, D3D12_FORMAT_SUPPORT1_RENDER_TARGET, D3D12_FORMAT_SUPPORT2_NONE };
 	if (SUCCEEDED(d3d12Device->CheckFeatureSupport(D3D12_FEATURE_FORMAT_SUPPORT, &formatSupport, sizeof(formatSupport)))) {
 		if ((formatSupport.Support1 & D3D12_FORMAT_SUPPORT1_RENDER_TARGET) == 0) {
 			logger::warn("[DX12SwapChain] R10G10B10A2_UNORM not supported as render target, falling back to R8G8B8A8_UNORM");
 			negotiatedFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
 			fallbackUsed = true;
-		} else if (isVR) {
-			logger::info("[DX12SwapChain] VR detected with R10G10B10A2_UNORM support, attempting HDR");
 		}
 	} else {
 		logger::warn("[DX12SwapChain] CheckFeatureSupport failed for R10G10B10A2_UNORM, falling back to R8G8B8A8_UNORM");
@@ -56,10 +53,9 @@ void DX12SwapChain::CreateSwapChain(IDXGIAdapter* adapter, DXGI_SWAP_CHAIN_DESC 
 		fallbackUsed = true;
 	}
 
-	logger::info("[DX12SwapChain] Swap chain format negotiation: attempted={}, negotiated={}, VR={}, fallback={}",
+	logger::info("[DX12SwapChain] Swap chain format negotiation: attempted={}, negotiated={}, fallback={}",
 		static_cast<uint32_t>(attemptedFormat),
 		static_cast<uint32_t>(negotiatedFormat),
-		isVR ? "true" : "false",
 		fallbackUsed ? "true" : "false");
 
 	swapChainDesc = {};
