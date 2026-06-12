@@ -94,6 +94,9 @@ public:
 	// Snapshot hdrTexture before the menu blur dirties it in place.
 	void SnapshotCleanScene();
 
+	// True when the snapshot was refreshed this frame; stale means hdrTexture wasn't blurred.
+	bool IsCleanSceneCaptureFresh() const;
+
 	// HDR output transform on a clean scene with no UI buffer, into outputTexture
 	// (no vanilla UI, ImGui menu, or blur). sdrPreview emits sRGB for the crop
 	// preview; otherwise HDR10 PQ for screenshots. Null if HDR output unavailable.
@@ -143,6 +146,7 @@ public:
 	Texture2D* outputTexture = nullptr;
 	Texture2D* uiTexture = nullptr;          // Separate UI render target for proper compositing
 	Texture2D* cleanSceneCapture = nullptr;  // Pre-blur copy of hdrTexture for clean captures
+	uint cleanSceneCaptureFrame = UINT32_MAX;  // frameCount when cleanSceneCapture was last refreshed
 
 	ID3D11ComputeShader* hdrOutputCS = nullptr;
 	ID3D11ComputeShader* GetHDROutputCS();

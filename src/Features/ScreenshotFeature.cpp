@@ -366,9 +366,11 @@ namespace
 			// with no UI buffer so the capture/preview drops both the menu and its blur.
 			auto& hdr = globals::features::hdrDisplay;
 			if (Menu::GetSingleton()->IsEnabled && hdr.outputTexture && hdr.outputTexture->srv) {
+				// Capture uses the snapshot only when fresh; otherwise hdrTexture is
+				// unblurred. Preview always reads live hdrTexture.
 				ID3D11ShaderResourceView* sceneSRV =
-					forCapture ? (hdr.cleanSceneCapture ? hdr.cleanSceneCapture->srv.get() : nullptr) :
-								 (hdr.hdrTexture ? hdr.hdrTexture->srv.get() : nullptr);
+					(forCapture && hdr.IsCleanSceneCaptureFresh()) ? hdr.cleanSceneCapture->srv.get() :
+																	 (hdr.hdrTexture ? hdr.hdrTexture->srv.get() : nullptr);
 				if (sceneSRV) {
 					if (ID3D11Texture2D* clean = hdr.ComposeCleanCapture(sceneSRV, /*sdrPreview=*/!forCapture)) {
 						src.texture = clean;
