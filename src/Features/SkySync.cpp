@@ -419,6 +419,14 @@ void SkySync::ShadowFader::Update(const RE::Sky* sky, RE::NiPoint3 dirs[], float
 {
 	auto isValidDir = [](const RE::NiPoint3& d) { return d.x != 0.0f || d.y != 0.0f || d.z != 0.0f; };
 
+	bool* const vlEnabled = globals::game::bEnableVolumetricLighting;
+	static bool vlSuppressed = false;
+	static bool vlSavedEnabled = true;
+	if (vlSuppressed && vlEnabled) {
+		*vlEnabled = vlSavedEnabled;
+		vlSuppressed = false;
+	}
+
 	Caster best;
 
 	if (globals::features::skySync.currentDim <= 0.0f) {
@@ -429,6 +437,11 @@ void SkySync::ShadowFader::Update(const RE::Sky* sky, RE::NiPoint3 dirs[], float
 			// No valid night caster — default to directly above (shadows point down)
 			currentDir = { 0.0f, 0.0f, 1.0f };
 			SetLighting(sky, currentDir);
+			if (vlEnabled && !vlSuppressed) {
+				vlSavedEnabled = *vlEnabled;
+				*vlEnabled = false;
+				vlSuppressed = true;
+			}
 			return;
 		}
 

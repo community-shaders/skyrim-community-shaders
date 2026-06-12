@@ -83,7 +83,6 @@ private:
 	TextureSize interiorSizeInUnits;
 	TextureSize defaultSizeHigh;
 
-	bool* bEnableVolumetricLighting = nullptr;
 	TextureSize* gVolumetricLightingSizeHigh = nullptr;
 	TextureSize* gVolumetricLightingSizeMedium = nullptr;
 	TextureSize* gVolumetricLightingSizeLow = nullptr;
