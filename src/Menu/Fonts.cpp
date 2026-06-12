@@ -202,11 +202,20 @@ namespace MenuFonts
 			0x0020, 0x00FF,  // Basic Latin + Latin-1 Supplement
 			0,
 		};
+
+		// Cap preview fonts to avoid atlas overflow during io.Fonts->Build().
+		constexpr size_t MAX_PREVIEW_FONTS = 64;
+		constexpr size_t MAX_PREVIEW_FONT_FAILURES = 3;
 	}  // namespace
+
+	void InvalidatePreviewFonts()
+	{
+		g_previewFontsByFile.clear();
+	}
 
 	void AddPreviewFontsToAtlas(float previewFontSize)
 	{
-		g_previewFontsByFile.clear();
+		InvalidatePreviewFonts();
 
 		const float clampedSize = std::clamp(
 			std::round(previewFontSize),
@@ -221,6 +230,7 @@ namespace MenuFonts
 		ThemeManager::InitDefaultFontConfig(cfg);
 
 		std::unordered_set<std::string> seenFiles;
+		size_t consecutiveFailures = 0;
 		for (const auto& family : catalog.families) {
 			for (const auto& style : family.styles) {
 				if (!seenFiles.insert(style.file).second) {
@@ -235,13 +245,21 @@ namespace MenuFonts
 					continue;
 				}
 
+				if (g_previewFontsByFile.size() >= MAX_PREVIEW_FONTS) {
+					goto done_loading;
+				}
+
 				ImFont* font = io.Fonts->AddFontFromFileTTF(
 					fontPath.string().c_str(), clampedSize, &cfg, g_previewGlyphRanges);
 				if (font) {
 					g_previewFontsByFile.emplace(style.file, font);
+					consecutiveFailures = 0;
+				} else if (++consecutiveFailures >= MAX_PREVIEW_FONT_FAILURES) {
+					goto done_loading;
 				}
 			}
 		}
+	done_loading:;
 	}
 
 	ImFont* GetPreviewFont(const std::string& file)
@@ -662,49 +680,44 @@ namespace Util
 			return DiscoverFontCatalog(false);
 		}
 
-		const StyleInfo* FindRegularStyle(const FamilyInfo& family)
+		template <typename T, typename GetNameFn>
+		int FindNameIndex(const std::vector<T>& items, const std::string& name, GetNameFn getName)
 		{
-			for (const auto& style : family.styles) {
-				if (Util::IEquals(style.style, "Regular") || Util::IEquals(style.style, "Normal") || Util::IEquals(style.style, "Book")) {
-					return &style;
+			if (items.empty()) {
+				return 0;
+			}
+			for (size_t i = 0; i < items.size(); ++i) {
+				if (Util::IEquals(getName(items[i]), name)) {
+					return static_cast<int>(i);
 				}
 			}
-
-			if (family.styles.empty()) {
-				return nullptr;
-			}
-
-			return &family.styles[family.styles.size() / 2];
+			return 0;
 		}
 
 		int FindFamilyIndex(const Catalog& catalog, const std::string& familyName)
 		{
-			if (catalog.families.empty()) {
-				return 0;
-			}
-
-			for (size_t i = 0; i < catalog.families.size(); ++i) {
-				if (Util::IEquals(catalog.families[i].name, familyName)) {
-					return static_cast<int>(i);
-				}
-			}
-
-			return 0;
+			return FindNameIndex(catalog.families, familyName, [](const FamilyInfo& family) { return family.name; });
 		}
 
 		int FindStyleIndex(const FamilyInfo& family, const std::string& styleName)
 		{
+			return FindNameIndex(family.styles, styleName, [](const StyleInfo& style) { return style.style; });
+		}
+
+		const StyleInfo* FindRegularStyle(const FamilyInfo& family)
+		{
 			if (family.styles.empty()) {
-				return 0;
+				return nullptr;
 			}
 
-			for (size_t i = 0; i < family.styles.size(); ++i) {
-				if (Util::IEquals(family.styles[i].style, styleName)) {
-					return static_cast<int>(i);
+			for (const char* candidate : {"Regular", "Normal", "Book"}) {
+				const int idx = FindStyleIndex(family, candidate);
+				if (Util::IEquals(family.styles[idx].style, candidate)) {
+					return &family.styles[idx];
 				}
 			}
 
-			return 0;
+			return &family.styles[family.styles.size() / 2];
 		}
 	}  // namespace Fonts
 

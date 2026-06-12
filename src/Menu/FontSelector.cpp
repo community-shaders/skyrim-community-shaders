@@ -3,7 +3,6 @@
 #include "Globals.h"
 #include "I18n/I18n.h"
 #include "ThemeManager.h"
-#include "Util.h"
 
 #include <format>
 
@@ -78,10 +77,7 @@ namespace MenuFonts::Selector
 			}
 
 			if (catalog.families.empty()) {
-				ImGui::TextColored(
-					ImVec4(0.7f, 0.7f, 0.7f, 1.0f),
-					"%s",
-					T("menu.settings.no_font_families_available", "No font families available"));
+				Util::Text::Disabled("%s", T("menu.settings.no_font_families_available", "No font families available"));
 			} else {
 				for (int i = 0; i < static_cast<int>(catalog.families.size()); ++i) {
 					const bool isSelected = (i == familyIndex);
@@ -177,10 +173,7 @@ namespace MenuFonts::Selector
 			catalog.families.empty() ? nullptr : &catalog.families[familyIndex];
 
 		if (selectedFamily && selectedFamily->styles.empty()) {
-			ImGui::TextColored(
-				ImVec4(0.9f, 0.6f, 0.2f, 1.0f),
-				"%s",
-				T("menu.settings.no_style_variants", "No style variants found for this family."));
+			Util::Text::Warning("%s", T("menu.settings.no_style_variants", "No style variants found for this family."));
 		} else if (selectedFamily) {
 			int styleIndex = Util::Fonts::FindStyleIndex(*selectedFamily, roleSettings.Style);
 			RenderStyleCombo(menu, themeSettings, roleSettings, *selectedFamily, role, roleIndex, descriptor.displayName, styleIndex);

@@ -336,6 +336,7 @@ bool ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 
 	// Clear existing fonts from the atlas
 	io.Fonts->Clear();
+	MenuFonts::InvalidatePreviewFonts();
 	io.Fonts->TexGlyphPadding = 1;
 
 	ImFontConfig font_config;
@@ -501,6 +502,7 @@ bool ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 				logger::warn("[I18n] CJK locale '{}' active but no CJK font path candidates were available.", locale);
 			} else {
 				io.Fonts->Clear();
+				MenuFonts::InvalidatePreviewFonts();
 
 				std::unordered_map<std::string, ImFont*> cjkAtlasCache;
 				bool mergedAnyCJKFont = false;
@@ -595,6 +597,7 @@ bool ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 
 		// Emergency fallback: try to restore with default font before giving up
 		io.Fonts->Clear();
+		MenuFonts::InvalidatePreviewFonts();
 		ImFont* fallbackFont = io.Fonts->AddFontDefault();
 		if (fallbackFont && io.Fonts->Build()) {
 			menu.loadedFontRoles.fill(fallbackFont);
@@ -628,6 +631,7 @@ bool ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 
 		// Emergency fallback: restore with default font and retry device objects
 		io.Fonts->Clear();
+		MenuFonts::InvalidatePreviewFonts();
 		ImFont* fallbackFont = io.Fonts->AddFontDefault();
 
 		bool recoverySucceeded = false;

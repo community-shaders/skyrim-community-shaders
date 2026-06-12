@@ -113,6 +113,9 @@ namespace MenuFonts
 	 */
 	void AddPreviewFontsToAtlas(float previewFontSize);
 
+	/** @brief Drops cached preview font pointers after io.Fonts->Clear(). */
+	void InvalidatePreviewFonts();
+
 	/**
 	 * @brief Returns a preview font for a catalog file path, or nullptr if unavailable.
 	 */
