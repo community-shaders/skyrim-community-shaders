@@ -47,6 +47,7 @@ PS_OUTPUT main(PS_INPUT input)
 #	include "Common/MotionBlur.hlsli"
 #	include "Common/Permutation.hlsli"
 #	include "Common/Random.hlsli"
+#	include "Common/Shading.hlsli"
 #	include "Common/Color.hlsli"
 
 #	define WATER
@@ -321,8 +322,8 @@ Texture2D<float4> RawSSRReflectionTex : register(t11);
 
 cbuffer PerTechnique : register(b0)
 {
-	float4 VPOSOffset : packoffset(c0);    // inverse main render target width and height in xy, 0 in zw
-	float4 PosAdjust : packoffset(c1);  // inverse framebuffer range in w
+	float4 VPOSOffset : packoffset(c0);  // inverse main render target width and height in xy, 0 in zw
+	float4 PosAdjust : packoffset(c1);   // inverse framebuffer range in w
 	float4 CameraDataWater : packoffset(c2);
 	float4 SunDir : packoffset(c3);
 	float4 SunColor : packoffset(c4);
@@ -767,7 +768,7 @@ WaterNormalData GetWaterNormal(PS_INPUT input, float distanceFactor, float norma
 		result.rippleInfo.w = splashIntensity;
 	}
 	float3 rippleNormal = normalize(raindropInfo.xyz);
-	finalNormal = WetnessEffects::ReorientNormal(rippleNormal, finalNormal);
+	finalNormal = ReorientNormal(rippleNormal, finalNormal);
 #			endif
 
 	result.normal = finalNormal;
