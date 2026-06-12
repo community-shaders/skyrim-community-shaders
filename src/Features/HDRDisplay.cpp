@@ -228,7 +228,6 @@ namespace
 			hdr->RedirectFramebuffer();
 			func(a_this, a3, a_target, a_4, a_5);
 			hdr->RestoreFramebuffer();
-
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};

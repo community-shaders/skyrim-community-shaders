@@ -14,6 +14,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 #include <winrt/base.h>
 
@@ -511,6 +512,11 @@ private:
 	// Input event handling
 	std::vector<KeyEvent> _keyEventQueue;
 	mutable std::shared_mutex _inputEventMutex;
+
+	// Keys whose key-down already fired a combo hotkey. Their matching key-up is
+	// suppressed so a shared single-key binding (e.g. End) doesn't also fire once
+	// the modifier is released first.
+	std::unordered_set<uint32_t> _comboFiredKeys;
 
 	Menu() = default;
 
