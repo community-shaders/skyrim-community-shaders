@@ -422,10 +422,6 @@ void SkySync::ShadowFader::Update(const RE::Sky* sky, RE::NiPoint3 dirs[], float
 	bool* const vlEnabled = globals::game::bEnableVolumetricLighting;
 	static bool vlSuppressed = false;
 	static bool vlSavedEnabled = true;
-	if (vlSuppressed && vlEnabled) {
-		*vlEnabled = vlSavedEnabled;
-		vlSuppressed = false;
-	}
 
 	Caster best;
 
@@ -453,6 +449,11 @@ void SkySync::ShadowFader::Update(const RE::Sky* sky, RE::NiPoint3 dirs[], float
 			best = Caster::Secunda;
 	} else {
 		best = Caster::Sun;
+	}
+
+	if (vlSuppressed && vlEnabled) {
+		*vlEnabled = vlSavedEnabled;
+		vlSuppressed = false;
 	}
 
 	// If best source changed, begin a new transition
