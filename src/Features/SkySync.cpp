@@ -224,6 +224,7 @@ void SkySync::Update(const RE::Sky* sky)
 			SetSkyRotation(sky, cell);
 		if (cell && prevCell && (cell->IsInteriorCell() != prevCell->IsInteriorCell() || cell->GetRuntimeData().worldSpace != prevCell->GetRuntimeData().worldSpace))
 			shadowFader.Reset();
+			lastGameHour = -1.0f;
 	}
 
 	// Exterior worldspaces always run; interior cells require the sunlight-shadows flag.
