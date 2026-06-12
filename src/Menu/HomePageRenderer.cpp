@@ -322,9 +322,9 @@ void HomePageRenderer::RenderActiveConstraintsSection()
 
 		// Cell render -- column 2 ("Constrained By") is clickable to navigate
 		// to the first source feature's settings page.
-		auto cellRender = [warningColor](int rowIdx, int colIdx, const ConstraintRow& row) {
+		auto cellRender = [](int rowIdx, int colIdx, const ConstraintRow& row) {
 			if (colIdx == 0) {
-				Util::RenderTableCell(row.setting, "", "", nullptr, ImVec4(1, 1, 1, 1), true, warningColor);
+				Util::RenderTableCell(row.setting, "", "", nullptr, ImVec4(1, 1, 1, 1), true, Util::Colors::GetWarning());
 			} else if (colIdx == 1) {
 				Util::RenderTableCell(row.forcedTo, "", "", nullptr, ImVec4(1, 1, 1, 1), true);
 			} else if (colIdx == 2) {

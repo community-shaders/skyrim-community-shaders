@@ -1008,7 +1008,7 @@ void SettingsTabRenderer::RenderFontsTab()
 				FontRoleGuard familyComboFont(Menu::FontRole::Body);
 				if (ImGui::BeginCombo(familyLabel.c_str(), familyPreview)) {
 					if (fontCatalog.families.empty()) {
-						ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "%s", T("menu.settings.no_font_families_available", "No font families available"));
+						Util::Text::Disabled("%s", T("menu.settings.no_font_families_available", "No font families available"));
 					} else {
 						for (int i = 0; i < static_cast<int>(fontCatalog.families.size()); ++i) {
 							bool isSelected = (i == familyIndex);
@@ -1042,7 +1042,7 @@ void SettingsTabRenderer::RenderFontsTab()
 
 			const Util::Fonts::FamilyInfo* selectedFamily = (fontCatalog.families.empty()) ? nullptr : &fontCatalog.families[familyIndex];
 			if (selectedFamily && selectedFamily->styles.empty()) {
-				ImGui::TextColored(ImVec4(0.9f, 0.6f, 0.2f, 1.0f), "%s", T("menu.settings.no_style_variants", "No style variants found for this family."));
+				Util::Text::Warning("%s", T("menu.settings.no_style_variants", "No style variants found for this family."));
 			} else if (selectedFamily) {
 				int styleIndex = 0;
 				for (size_t s = 0; s < selectedFamily->styles.size(); ++s) {
