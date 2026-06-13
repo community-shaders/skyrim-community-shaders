@@ -310,6 +310,8 @@ void HDRDisplay::DrawSettings()
 		currentEnableHDR = settings.enableHDR;
 	}
 
+	// Disable the checkbox only when no HDR monitor is detected AND HDR is not already on
+	// (allow disabling HDR even on SDR if it was enabled from saved settings).
 	if (!isHDRMonitor && !currentEnableHDR) {
 		ImGui::BeginDisabled();
 	}

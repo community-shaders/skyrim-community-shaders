@@ -266,7 +266,7 @@ namespace Util
 		}
 
 		// Non-copyable, non-movable for simplicity
-			ScopedD3DMap(const ScopedD3DMap&) = delete;
+		ScopedD3DMap(const ScopedD3DMap&) = delete;
 		ScopedD3DMap& operator=(const ScopedD3DMap&) = delete;
 
 		bool IsValid() const { return mapped_; }
