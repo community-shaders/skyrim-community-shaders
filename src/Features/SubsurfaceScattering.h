@@ -26,7 +26,7 @@ public:
 	{
 		uint EnableCharacterLighting = false;
 		float CharacterLightingStrength = 1.0f;
-		int SSMode = 0;
+		int SSMode = 1;
 		int ScatterMode = kPreAndPostScatter;
 		DiffusionProfile BaseProfile{ 1.0f, 1.0f, { 0.48f, 0.41f, 0.28f }, { 0.56f, 0.56f, 0.56f } };
 		DiffusionProfile HumanProfile{ 1.0f, 1.0f, { 0.48f, 0.41f, 0.28f }, { 1.0f, 0.37f, 0.3f } };
