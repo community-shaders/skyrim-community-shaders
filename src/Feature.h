@@ -68,11 +68,42 @@ public:
 	virtual std::string_view GetCategory() const { return FeatureCategories::kOther; }
 
 	/**
-	 * Whether the feature is disabled at boot by default (before any user override).
-	 * Features that override this to return true will start disabled on first install;
-	 * users can still enable them via the "Disable at Boot" menu.
+	 * Release maturity stage, declared via the feature .ini (Alpha/Beta flags) and
+	 * baked into FeatureVersions.h at build time. Alpha takes precedence over Beta.
 	 */
-	virtual bool IsDisabledByDefault() const { return false; }
+	enum class ReleaseStage
+	{
+		Release,
+		Beta,
+		Alpha
+	};
+
+	virtual ReleaseStage GetReleaseStage() const
+	{
+		const auto name = const_cast<Feature*>(this)->GetShortName();
+		if (FeatureVersions::FEATURE_ALPHA_NAMES.contains(name))
+			return ReleaseStage::Alpha;
+		if (FeatureVersions::FEATURE_BETA_NAMES.contains(name))
+			return ReleaseStage::Beta;
+		return ReleaseStage::Release;
+	}
+
+	bool IsAlpha() const { return GetReleaseStage() == ReleaseStage::Alpha; }
+	bool IsBeta() const { return GetReleaseStage() == ReleaseStage::Beta; }
+
+	/**
+	 * Localized stage marker shown after the feature name ("[ALPHA]", "[BETA]"),
+	 * empty for release features. Takes the stage so callers that already resolved
+	 * it (see GetReleaseStage) avoid a redundant lookup.
+	 */
+	static std::string GetReleaseStageTag(ReleaseStage stage);
+
+	/**
+	 * Whether the feature is disabled at boot by default (before any user override).
+	 * Alpha and Beta features start disabled on first install; users can still enable
+	 * them via the "Disable at Boot" menu.
+	 */
+	virtual bool IsDisabledByDefault() const { return GetReleaseStage() != ReleaseStage::Release; }
 
 	/**
 	 * Whether the feature will show up in the GUI menu
