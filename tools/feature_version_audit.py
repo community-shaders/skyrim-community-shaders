@@ -1348,7 +1348,7 @@ def main():
             if fa.get('needs_flag_removal') and fa['ini_path']:
                 if remove_stage_flag(fa['ini_path']):
                     print(f"Removed Alpha/Beta flag from {fa['name']} (promoted to release)", file=sys.stderr)
-                fa['needs_flag_removal'] = False
+                    fa['needs_flag_removal'] = False
 
         print(f"\nSuccessfully applied {applied_count} version bumps." if applied_count > 0 else "\nNo version bumps applied.", file=sys.stderr)
 
