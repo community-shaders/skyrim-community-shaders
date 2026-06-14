@@ -60,14 +60,7 @@ namespace
 	ImVec4 StageTagColor(Feature::ReleaseStage stage)
 	{
 		const auto& statusPalette = globals::menu->GetTheme().StatusPalette;
-		switch (stage) {
-		case Feature::ReleaseStage::Alpha:
-			return statusPalette.Error;
-		case Feature::ReleaseStage::Beta:
-		case Feature::ReleaseStage::Release:
-			return statusPalette.Warning;
-		}
-		return statusPalette.Warning;
+		return stage == Feature::ReleaseStage::Alpha ? statusPalette.Error : statusPalette.Warning;
 	}
 
 	/**
