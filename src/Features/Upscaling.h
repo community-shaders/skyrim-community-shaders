@@ -40,18 +40,19 @@ public:
 
 	float2 jitter = { 0, 0 };
 
-	enum class UpscaleMethod
+	enum UpscaleMethod : uint32_t
 	{
 		kNONE,
 		kTAA,
 		kFSR,
-		kDLSS
+		kDLSS,
+		kDLSS_RR,
+		kNumMethods
 	};
 
 	struct Settings
 	{
-		uint upscaleMethod = (uint)UpscaleMethod::kDLSS;
-		uint upscaleMethodNoDLSS = (uint)UpscaleMethod::kFSR;
+		UpscaleMethod upscaleMethod = UpscaleMethod::kDLSS;
 		uint qualityMode = 1;  // Default to Quality (1=Quality, 2=Balanced, 3=Performance, 4=Ultra Performance, 0=Native AA)
 		uint frameLimitMode = 1;
 		uint frameGenerationMode = 1;
@@ -60,7 +61,8 @@ public:
 		uint streamlineLogLevel = 0;  // 0=Off, 1=Default, 2=Verbose
 		float sharpnessFSR = 0.0f;
 		float sharpnessDLSS = 0.0f;
-		uint presetDLSS = 0;  // 0=Default, 1=J, 2=K, 3=L, 4=M
+		uint presetDLSS = 0;    // 0=Default, 1=J, 2=K, 3=L, 4=M
+		uint presetDLSSRR = 0;  // 0=Default, 1=D, 2=E
 		bool reflexLowLatencyMode = false;
 		bool reflexLowLatencyBoost = false;
 		bool reflexUseMarkersToOptimize = false;
@@ -97,6 +99,8 @@ public:
 	float2 resolutionScale = { 1.0f, 1.0f };
 	LARGE_INTEGER qpf;
 
+	eastl::unique_ptr<InteropContext> interopContext;
+
 	// FG FPS Measurement for Overlay
 	bool IsFrameGenerationDx12PathActive() const;
 	bool IsFrameGenerationActive() const;
@@ -126,8 +130,12 @@ public:
 	void CreateUpscalingTextureResources(UpscaleMethod a_upscalemethod);
 	void DestroyUpscalingTextureResources(UpscaleMethod a_upscalemethod);
 
-	winrt::com_ptr<ID3D11ComputeShader> encodeTexturesCS[4];  // One for each UpscaleMethod (kNONE, kTAA, kFSR, kDLSS)
-	ID3D11ComputeShader* GetEncodeTexturesCS();
+	eastl::array<winrt::com_ptr<ID3D11ComputeShader>, 2> colorSpaceCS;
+	ID3D11ComputeShader* GetColorSpaceCS(bool toLinear);
+
+	eastl::unordered_map<UpscaleMethod, winrt::com_ptr<ID3D11ComputeShader>> encodeTexturesCS;
+	eastl::unordered_map<UpscaleMethod, winrt::com_ptr<ID3D11ComputeShader>> encodeTexturesPTCS;
+	ID3D11ComputeShader* GetEncodeTexturesCS(bool pathTracing = false);
 
 	winrt::com_ptr<ID3D11PixelShader> depthRefractionUpscalePS;
 	ID3D11PixelShader* GetDepthRefractionUpscalePS();
@@ -175,15 +183,19 @@ public:
 	bool previousUpscalingWasActive = false;
 	bool depthUpscaleUseWideKernel = false;
 
+	bool d3d12Mode = false;
+
 	/// Set by MenuOpenCloseEventHandler when LoadingMenu closes (cell/worldspace transitions,
 	/// initial load). Consumed at the start of Upscale() to force a one-frame DLSS feature
 	/// rebuild.
 	std::atomic<bool> pendingDLSSReset{ false };
 
-	void CopySharedD3D12Resources();
+	void CopySharedD3D12Resources(bool preserveMotionVector = false);
 	void PostDisplay();
 	void PerformUpscaling();
 	void UpscaleDepth();
+	void EncodeTextures();
+	void ConvertColorSpace(bool toLinear);
 
 	/**
 	 * @brief Applies RCAS sharpening to the main render target after DLSS upscaling.
@@ -207,15 +219,14 @@ public:
 	bool IsBackendInitialized() const;
 	void CheckBackendFeatures(IDXGIAdapter* adapter);
 	void UpgradeBackendInterface(void** ppInterface);
-	void SetBackendD3DDevice(ID3D11Device* device);
+	void SetBackendD3D11Device(ID3D11Device* device);
+	void SetBackendD3D12Device(ID3D12Device5* device);
 	void PostBackendDevice();
 
 	// Module availability methods
 	bool HasFrameGenModule() const;
 
 	// Proxy interface methods
-	void SetProxyD3D11Device(ID3D11Device* device);
-	void SetProxyD3D11DeviceContext(ID3D11DeviceContext* context);
 	void CreateProxySwapChain(IDXGIAdapter* adapter, DXGI_SWAP_CHAIN_DESC swapChainDesc);
 	void CreateProxyInterop();
 	IDXGISwapChain* GetProxySwapChain();

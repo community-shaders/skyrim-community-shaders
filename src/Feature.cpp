@@ -19,7 +19,9 @@
 #include "Features/LightLimitFix.h"
 #include "Features/LinearLighting.h"
 #include "Features/PerformanceOverlay.h"
+#include "Features/Raytracing.h"
 #include "Features/RenderDoc.h"
+#include "Features/SceneGraphExplorer.h"
 #include "Features/ScreenSpaceGI.h"
 #include "Features/ScreenSpaceShadows.h"
 #include "Features/ScreenshotFeature.h"
@@ -241,6 +243,8 @@ const std::vector<Feature*>& Feature::GetFeatureList()
 		&globals::features::extendedTranslucency,
 		&globals::features::upscaling,
 		&globals::features::renderDoc,
+		&globals::features::raytracing,
+		&globals::features::sceneGraphExplorer,
 		&globals::features::csEditor,
 		&globals::features::screenshotFeature,
 		&globals::features::linearLighting,

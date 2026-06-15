@@ -11,6 +11,7 @@ public:
 		float Opacity = 0.8f;
 		float pad[3];
 	};
+	STATIC_ASSERT_ALIGNAS_16(Settings);
 
 	Settings settings;
 

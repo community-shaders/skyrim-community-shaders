@@ -10,12 +10,15 @@
 #include "State.h"
 #include "Util.h"
 
+#include "DX12Interop.h"
 #include "Features/HDRDisplay.h"
 #include "Features/InteriorSun.h"
-#include "Features/ScreenshotFeature.h"
 #include "Features/LightLimitFix.h"
+#include "Features/Raytracing.h"
+#include "Features/ScreenshotFeature.h"
 #include "Features/Skin.h"
 #include "Features/SkySync.h"
+#include "Features/TerrainHelper.h"
 #include "Features/Upscaling.h"
 #include "Features/VolumetricLighting.h"
 
@@ -304,6 +307,9 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 	pAdapter->GetDesc(&adapterDesc);
 	globals::state->SetAdapterDescription(adapterDesc.Description);
 
+	if (globals::state->debugDevice)
+		Flags |= D3D11_CREATE_DEVICE_DEBUG;
+
 	const D3D_FEATURE_LEVEL featureLevel = D3D_FEATURE_LEVEL_11_1;
 
 	DXGI_SWAP_CHAIN_DESC modifiedDesc = *pSwapChainDesc;
@@ -331,6 +337,8 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 		ppDevice,
 		pFeatureLevel,
 		ppImmediateContext);
+
+	globals::dx12Interop->Init(*ppDevice, *ppImmediateContext, pAdapter);
 
 	return ret;
 }
@@ -419,8 +427,8 @@ struct BSInputDeviceManager_PollInputDevices
 
 			if (*a_events) {
 				if (auto device = (*a_events)->GetDevice()) {
-						// Block all devices except gamepad when menu is open
-						blockedDevice = (device != RE::INPUT_DEVICES::INPUT_DEVICE::kGamepad);
+					// Block all devices except gamepad when menu is open
+					blockedDevice = (device != RE::INPUT_DEVICES::INPUT_DEVICE::kGamepad);
 				}
 			}
 		}
@@ -692,8 +700,8 @@ namespace Hooks
 	{
 		static void thunk(RE::BSGraphics::Renderer* This, uint32_t a_target, RE::BSGraphics::CubeMapRenderTargetProperties* a_properties)
 		{
-			a_properties->height = 128;
-			a_properties->width = 128;
+			a_properties->height = CubemapResolution();
+			a_properties->width = CubemapResolution();
 			func(This, a_target, a_properties);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
@@ -703,8 +711,8 @@ namespace Hooks
 	{
 		static void thunk(RE::BSGraphics::Renderer* This, uint32_t a_target, RE::BSGraphics::DepthStencilTargetProperties* a_properties)
 		{
-			a_properties->height = 128;
-			a_properties->width = 128;
+			a_properties->height = CubemapResolution();
+			a_properties->width = CubemapResolution();
 			func(This, a_target, a_properties);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
@@ -979,5 +987,16 @@ namespace Hooks
 
 		logger::info("Hooking CreateDXGIFactory");
 		*(uintptr_t*)&ptrCreateDXGIFactory = SKSE::PatchIAT(hk_CreateDXGIFactory, "dxgi.dll", "CreateDXGIFactory");
+	}
+
+	uint CubemapResolution()
+	{
+		auto& rt = globals::features::raytracing;
+
+		if (rt.loaded) {
+			return Raytracing::SKY_CUBEMAP_SIZE;
+		} else {
+			return 128;
+		}
 	}
 }

@@ -18,7 +18,7 @@
 
 #include <DirectXTex.h>
 #pragma warning(push)
-#pragma warning(disable : 4244)  // double->float conversion in third-party header
+#pragma warning(disable: 4244)  // double->float conversion in third-party header
 #include <sk_hdr_png.hpp>
 #pragma warning(pop)
 
@@ -359,7 +359,6 @@ namespace
 		if (!renderer) {
 			return src;
 		}
-
 
 		if (IsFlatHdrScreenshotCapture()) {
 			// Recompose from the clean scene with no UI buffer.

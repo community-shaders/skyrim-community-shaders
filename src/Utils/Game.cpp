@@ -142,10 +142,21 @@ namespace Util
 	{
 		static float& cameraFOVDeg = (*(float*)(REL::RelocationID(513786, 388785).address()));  // FOV degrees
 		float hFOVRad = cameraFOVDeg * (3.14159265359f / 180.0f);
-		float unitHalfWidth = tan(hFOVRad / 2);                                                                // This is same as camera frustum RL
+		float unitHalfWidth = tan(hFOVRad / 2);                                                                                                         // This is same as camera frustum RL
 		float unitHalfHeight = unitHalfWidth / ((float)globals::game::graphicsState->screenWidth / (float)globals::game::graphicsState->screenHeight);  // frustum TB
 		float vFOVRad = 2.0f * atan(unitHalfHeight);
 		return vFOVRad;
+	}
+
+	float2 GetDynamicResolutionRatio(bool a_ignoreLock)
+	{
+		auto viewport = globals::game::graphicsState;
+		auto& runtimeData = viewport->GetRuntimeData();
+
+		if (runtimeData.dynamicResolutionLock && !a_ignoreLock)
+			return { 1.0f, 1.0f };
+
+		return { runtimeData.dynamicResolutionWidthRatio, runtimeData.dynamicResolutionHeightRatio };
 	}
 
 	float2 ConvertToDynamic(float2 a_size, bool a_ignoreLock)
@@ -166,7 +177,7 @@ namespace Util
 		float2 resolution{ (float)globals::game::graphicsState->screenWidth, (float)globals::game::graphicsState->screenHeight };
 
 		if (a_dynamic)
-			ConvertToDynamic(resolution);
+			resolution = ConvertToDynamic(resolution);
 
 		uint dispatchX = (uint)std::ceil(resolution.x / 8.0f);
 		uint dispatchY = (uint)std::ceil(resolution.y / 8.0f);

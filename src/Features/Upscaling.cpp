@@ -1,8 +1,10 @@
 #include "Upscaling.h"
 
 #include "../I18n/I18n.h"
+#include "DX12Interop.h"
 #include "Deferred.h"
-#include "HDRDisplay.h"
+#include "Features/HDRDisplay.h"
+#include "Features/Raytracing.h"
 #include "Hooks.h"
 #include "State.h"
 #include "Utils/Game.h"
@@ -22,7 +24,6 @@
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Upscaling::Settings,
 	upscaleMethod,
-	upscaleMethodNoDLSS,
 	qualityMode,
 	frameLimitMode,
 	frameGenerationMode,
@@ -32,6 +33,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	sharpnessFSR,
 	sharpnessDLSS,
 	presetDLSS,
+	presetDLSSRR,
 	reflexLowLatencyMode,
 	reflexLowLatencyBoost,
 	reflexUseMarkersToOptimize,
@@ -64,6 +66,8 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChainUpscaling(
 	DXGI_ADAPTER_DESC adapterDesc;
 	pAdapter->GetDesc(&adapterDesc);
 	globals::state->SetAdapterDescription(adapterDesc.Description);
+
+	auto dx12Interop = globals::dx12Interop;
 
 	auto& upscaling = globals::features::upscaling;
 	upscaling.LoadUpscalingSDKs();
@@ -108,6 +112,9 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChainUpscaling(
 	upscaling.lowRefreshRate = refreshRate < 120;
 	upscaling.isWindowed = pSwapChainDesc->Windowed;
 
+	if (globals::state->debugDevice)
+		Flags |= D3D11_CREATE_DEVICE_DEBUG;
+
 	const D3D_FEATURE_LEVEL featureLevel = D3D_FEATURE_LEVEL_11_1;
 
 	if (shouldProxy) {
@@ -126,8 +133,8 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChainUpscaling(
 				pFeatureLevel,
 				ppImmediateContext));
 
-			upscaling.SetProxyD3D11Device(*ppDevice);
-			upscaling.SetProxyD3D11DeviceContext(*ppImmediateContext);
+			dx12Interop->Init(*ppDevice, *ppImmediateContext, pAdapter);
+
 			upscaling.CreateProxySwapChain(pAdapter, *pSwapChainDesc);
 			upscaling.CreateProxyInterop();
 
@@ -143,7 +150,10 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChainUpscaling(
 				// rely on.  Streamline's wrapper would bypass this override and
 				// forward to the underlying D3D12 swap chain, causing
 				// E_NOINTERFACE.  The proxy must remain the outermost layer.
-				upscaling.SetBackendD3DDevice(*ppDevice);
+				if (upscaling.d3d12Mode)
+					upscaling.SetBackendD3D12Device(dx12Interop->d3d12Device.get());
+				else
+					upscaling.SetBackendD3D11Device(*ppDevice);
 				// Some features (notably Reflex/PCL) may report availability only after device bind.
 				upscaling.CheckBackendFeatures(pAdapter);
 				upscaling.PostBackendDevice();
@@ -169,10 +179,17 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChainUpscaling(
 		pFeatureLevel,
 		ppImmediateContext);
 
+	dx12Interop->Init(*ppDevice, *ppImmediateContext, pAdapter);
+
 	if (upscaling.IsBackendInitialized()) {
-		upscaling.UpgradeBackendInterface((void**)&(*ppDevice));
-		upscaling.UpgradeBackendInterface((void**)&(*ppSwapChain));
-		upscaling.SetBackendD3DDevice(*ppDevice);
+		if (upscaling.d3d12Mode) {
+			upscaling.SetBackendD3D12Device(dx12Interop->d3d12Device.get());
+		} else {
+			upscaling.UpgradeBackendInterface((void**)&(*ppDevice));
+			upscaling.UpgradeBackendInterface((void**)&(*ppSwapChain));
+			upscaling.SetBackendD3D11Device(*ppDevice);
+		}
+
 		// Re-check after device bind to ensure feature availability is accurate.
 		upscaling.CheckBackendFeatures(pAdapter);
 		upscaling.PostBackendDevice();
@@ -183,44 +200,52 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChainUpscaling(
 
 void Upscaling::DrawSettings()
 {
-	// Display upscaling options in the UI
-	std::vector<std::string> upscaleModes = {
+	const bool dlssAvailable = (streamline.loadedFeatures & Streamline::Features::kDLSS) != 0;
+	const UpscaleMethod selectableMethods[] = {
+		UpscaleMethod::kNONE,
+		UpscaleMethod::kTAA,
+		UpscaleMethod::kFSR,
+		UpscaleMethod::kDLSS
+	};
+	const char* selectableMethodLabels[] = {
 		T(TKEY("method_none"), "None"),
-		T(TKEY("method_taa"), "TAA")
+		T(TKEY("method_taa"), "TAA"),
+		"AMD FSR 3.1",
+		"NVIDIA DLSS"
 	};
 
-	std::string fsrLabel = "AMD FSR 3.1";
-	upscaleModes.push_back(fsrLabel);
+	if (settings.upscaleMethod >= UpscaleMethod::kNumMethods ||
+		settings.upscaleMethod == UpscaleMethod::kDLSS_RR ||
+		(settings.upscaleMethod == UpscaleMethod::kDLSS && !dlssAvailable)) {
+		settings.upscaleMethod = UpscaleMethod::kFSR;
+	}
 
-	std::string dlssLabel = "NVIDIA DLSS";
-	upscaleModes.push_back(dlssLabel);
+	std::vector<UpscaleMethod> availableMethods;
+	std::vector<const char*> availableLabels;
+	int selectedMethodIndex = 0;
 
-	// Determine available modes
-	bool featureDLSS = streamline.featureDLSS;
-	bool featureFSR = true;  // FSR is always available
+	for (uint32_t i = 0; i < _countof(selectableMethods); ++i) {
+		auto method = selectableMethods[i];
+		if (method == UpscaleMethod::kDLSS && !dlssAvailable)
+			continue;
 
-	uint32_t* currentUpscaleMode = &settings.upscaleMethod;
-	uint32_t availableModes = 1;  // Start with TAA
-	if (featureFSR)
-		availableModes = 2;  // Add FSR
-	if (featureDLSS)
-		availableModes = 3;  // Add DLSS if available
-	else
-		currentUpscaleMode = &settings.upscaleMethodNoDLSS;
+		if (method == settings.upscaleMethod)
+			selectedMethodIndex = static_cast<int>(availableMethods.size());
 
-	// Dropdown for method selection
-	std::vector<const char*> modeLabels;
-	for (uint32_t i = 0; i <= availableModes; ++i)
-		modeLabels.push_back(upscaleModes[i].c_str());
-	ImGui::Combo(T(TKEY("method"), "Method"), (int*)currentUpscaleMode, modeLabels.data(), (int)modeLabels.size());
+		availableMethods.push_back(method);
+		availableLabels.push_back(selectableMethodLabels[i]);
+	}
 
-	*currentUpscaleMode = std::min(availableModes, *currentUpscaleMode);
+	ImGui::Combo(T(TKEY("method"), "Method"), &selectedMethodIndex, availableLabels.data(), static_cast<int>(availableLabels.size()));
+	settings.upscaleMethod = availableMethods[selectedMethodIndex];
 
-	// Check the current upscale method
-	auto upscaleMethod = GetUpscaleMethod();
+	// Show effective method when DLSS is auto-upgraded to DLSS RR by Raytracing Denoiser
+	if (settings.upscaleMethod == UpscaleMethod::kDLSS && GetUpscaleMethod() == UpscaleMethod::kDLSS_RR) {
+		ImGui::Text("%s", T(TKEY("dlss_rr_active"), "DLSS Ray Reconstruction is active (controlled by Raytracing Denoiser)."));
+	}
 
 	// Display warning for DLSS resolution limits
-	if (upscaleMethod == UpscaleMethod::kDLSS) {
+	if (settings.upscaleMethod == UpscaleMethod::kDLSS) {
 		float2 screenSize{ (float)globals::game::graphicsState->screenWidth, (float)globals::game::graphicsState->screenHeight };
 		if (screenSize.x > streamline.MAX_RESOLUTION || screenSize.y > streamline.MAX_RESOLUTION) {
 			Util::Text::Warning("Warning: Requested resolution %.0f x %.0f exceeds maximum supported resolution %d x %d for DLSS.",
@@ -230,7 +255,7 @@ void Upscaling::DrawSettings()
 	}
 
 	// Display upscaling settings if applicable
-	if (upscaleMethod != UpscaleMethod::kNONE && upscaleMethod != UpscaleMethod::kTAA) {
+	if (settings.upscaleMethod != UpscaleMethod::kNONE && settings.upscaleMethod != UpscaleMethod::kTAA) {
 		const char* upscalePresetsDLSS[] = {
 			T(TKEY("preset_ultra_performance"), "Ultra Performance"),
 			T(TKEY("preset_performance"), "Performance"),
@@ -256,9 +281,9 @@ void Upscaling::DrawSettings()
 		// single SliderInt to avoid duplicated calls.
 		const char* baseLabel = nullptr;
 
-		if (upscaleMethod == UpscaleMethod::kFSR) {
+		if (settings.upscaleMethod == UpscaleMethod::kFSR) {
 			baseLabel = upscalePresets[presetIndex];
-		} else if (upscaleMethod == UpscaleMethod::kDLSS) {
+		} else if (settings.upscaleMethod == UpscaleMethod::kDLSS) {
 			baseLabel = upscalePresetsDLSS[presetIndex];
 		}
 
@@ -269,19 +294,30 @@ void Upscaling::DrawSettings()
 			ImGui::SliderInt(T(TKEY("upscale_preset"), "Upscale Preset"), (int*)&settings.qualityMode, 0, 4, labelWithScale.c_str());
 		}
 
-		if (upscaleMethod == UpscaleMethod::kFSR) {
+		if (settings.upscaleMethod == UpscaleMethod::kFSR) {
 			ImGui::SliderFloat(T(TKEY("sharpness"), "Sharpness"), &settings.sharpnessFSR, 0.0f, 1.0f, "%.1f");
-		} else if (upscaleMethod == UpscaleMethod::kDLSS) {
+		} else if (settings.upscaleMethod == UpscaleMethod::kDLSS) {
 			ImGui::SliderFloat(T(TKEY("sharpness"), "Sharpness"), &settings.sharpnessDLSS, 0.0f, 1.0f, "%.1f");
 
-			const char* presets[] = {
+			const char* dlssModelPresets[] = {
 				T(TKEY("dlss_model_preset_default"), "Default"),
 				T(TKEY("dlss_model_preset_j"), "Preset J"),
 				T(TKEY("dlss_model_preset_k"), "Preset K"),
 				T(TKEY("dlss_model_preset_l"), "Preset L"),
 				T(TKEY("dlss_model_preset_m"), "Preset M")
 			};
-			ImGui::Combo(T(TKEY("dlss_model_preset"), "DLSS Model Preset"), (int*)&settings.presetDLSS, presets, 5);
+			const char* dlssRRModelPresets[] = {
+				T(TKEY("dlss_rr_model_preset_default"), "Default"),
+				T(TKEY("dlss_rr_model_preset_d"), "Preset D"),
+				T(TKEY("dlss_rr_model_preset_e"), "Preset E")
+			};
+
+			auto effectiveMethod = GetUpscaleMethod();
+			if (effectiveMethod == UpscaleMethod::kDLSS)
+				ImGui::Combo(T(TKEY("dlss_model_preset"), "DLSS Model Preset"), (int*)&settings.presetDLSS, dlssModelPresets, _countof(dlssModelPresets));
+			else
+				ImGui::Combo(T(TKEY("dlss_rr_model_preset"), "DLSS RR Model Preset"), (int*)&settings.presetDLSSRR, dlssRRModelPresets, _countof(dlssRRModelPresets));
+
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::Text("%s", T(TKEY("dlss_model_preset_tooltip"),
 									  "Choose which DLSS AI model preset to use.\n"
@@ -474,15 +510,6 @@ void Upscaling::LoadSettings(json& o_json)
 	settings = o_json;
 
 	// Sanitize loaded settings to ensure enum indices are valid
-	constexpr auto enumCount = 4;  // UpscaleMethod has 4 values: kNONE, kTAA, kFSR, kDLSS
-	if (settings.upscaleMethod >= static_cast<uint>(enumCount)) {
-		logger::warn("[Upscaling] Loaded upscaleMethod {} out of range, clamping to {}", settings.upscaleMethod, enumCount ? enumCount - 1 : 0);
-		settings.upscaleMethod = enumCount ? enumCount - 1 : 0;
-	}
-	if (settings.upscaleMethodNoDLSS >= static_cast<uint>(enumCount)) {
-		logger::warn("[Upscaling] Loaded upscaleMethodNoDLSS {} out of range, clamping to {}", settings.upscaleMethodNoDLSS, enumCount ? enumCount - 1 : 0);
-		settings.upscaleMethodNoDLSS = enumCount ? enumCount - 1 : 0;
-	}
 	if (settings.presetDLSS > 4) {
 		logger::warn("[Upscaling] Loaded presetDLSS {} out of range, resetting to 0 (Default)", settings.presetDLSS);
 		settings.presetDLSS = 0;
@@ -503,6 +530,11 @@ void Upscaling::LoadSettings(json& o_json)
 			clampedReflexFPSLimit);
 	}
 	settings.reflexFPSLimit = clampedReflexFPSLimit;
+	// DLSS RR is no longer user-selectable; migrate saved setting to standard DLSS
+	if (settings.upscaleMethod == UpscaleMethod::kDLSS_RR) {
+		logger::info("[Upscaling] Migrating saved DLSS_RR setting to DLSS (now auto-managed by Raytracing Denoiser)");
+		settings.upscaleMethod = UpscaleMethod::kDLSS;
+	}
 	auto iniSettingCollection = globals::game::iniPrefSettingCollection;
 	if (iniSettingCollection) {
 		auto setting = iniSettingCollection->GetSetting("bUseTAA:Display");
@@ -525,7 +557,6 @@ void Upscaling::DataLoaded()
 	// The game defaults this to a non-zero value
 	static auto fDRClampOffset = RE::GetINISetting("fDRClampOffset:Display");
 	fDRClampOffset->data.f = 0.0f;
-
 }
 
 void Upscaling::Load()
@@ -578,9 +609,18 @@ void Upscaling::PostPostLoad()
 
 Upscaling::UpscaleMethod Upscaling::GetUpscaleMethod() const
 {
-	if (streamline.featureDLSS)
-		return (UpscaleMethod)settings.upscaleMethod;
-	return (UpscaleMethod)settings.upscaleMethodNoDLSS;
+	// DLSS Ray Reconstruction is not user-selectable; it is automatically activated
+	// when the user selects DLSS and the Raytracing Denoiser is set to DLSS_RR.
+	if (settings.upscaleMethod == UpscaleMethod::kDLSS) {
+		auto& rt = globals::features::raytracing;
+		if (rt.Available() &&
+			rt.settings.CreationEngineRaytracingSettings.GeneralSettings.Denoiser == CreationEngineRaytracing::Denoiser::DLSS_RR &&
+			(streamline.loadedFeatures & Streamline::Features::kDLSS_RR)) {
+			return UpscaleMethod::kDLSS_RR;
+		}
+	}
+
+	return settings.upscaleMethod;
 }
 
 void Upscaling::CreateUpscalingTextureResources(UpscaleMethod a_upscalemethod)
@@ -593,23 +633,29 @@ void Upscaling::CreateUpscalingTextureResources(UpscaleMethod a_upscalemethod)
 	D3D11_TEXTURE2D_DESC texDesc{};
 	D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 	D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
+	D3D11_RENDER_TARGET_VIEW_DESC rtvDesc = {};
+
 	main.texture->GetDesc(&texDesc);
 	main.SRV->GetDesc(&srvDesc);
 	main.UAV->GetDesc(&uavDesc);
+	main.RTV->GetDesc(&rtvDesc);
 
-	texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
+	texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS | D3D11_BIND_RENDER_TARGET;
 
 	if (a_upscalemethod == UpscaleMethod::kDLSS || a_upscalemethod == UpscaleMethod::kFSR) {
 		texDesc.Format = DXGI_FORMAT_R8_UNORM;
 		srvDesc.Format = texDesc.Format;
 		uavDesc.Format = texDesc.Format;
+		rtvDesc.Format = texDesc.Format;
 
 		if (!reactiveMaskTexture) {
 			reactiveMaskTexture = new Texture2D(texDesc);
 			reactiveMaskTexture->CreateSRV(srvDesc);
 			reactiveMaskTexture->CreateUAV(uavDesc);
+			reactiveMaskTexture->CreateRTV(rtvDesc);
 		}
 
+		// EncodeTexturesCS writes u1 for all upscale methods, even though DLSS RR does not consume it later.
 		if (!transparencyCompositionMaskTexture) {
 			transparencyCompositionMaskTexture = new Texture2D(texDesc);
 			transparencyCompositionMaskTexture->CreateSRV(srvDesc);
@@ -618,7 +664,7 @@ void Upscaling::CreateUpscalingTextureResources(UpscaleMethod a_upscalemethod)
 	}
 
 	// Motion vector copy texture is only needed for DLSS
-	if (a_upscalemethod == UpscaleMethod::kDLSS) {
+	if (a_upscalemethod == UpscaleMethod::kDLSS || a_upscalemethod == UpscaleMethod::kFSR && globals::features::raytracing.IsPathTracing()) {
 		if (!motionVectorCopyTexture) {
 			auto& motionVector = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
 
@@ -633,7 +679,9 @@ void Upscaling::CreateUpscalingTextureResources(UpscaleMethod a_upscalemethod)
 			motionVectorCopyTexture->CreateSRV(srvDesc);
 			motionVectorCopyTexture->CreateUAV(uavDesc);
 		}
+	}
 
+	if (a_upscalemethod == UpscaleMethod::kDLSS) {
 		// RCAS sharpener texture - matches kMAIN format for HDR sharpening
 		if (!sharpenerTexture) {
 			main.texture->GetDesc(&texDesc);
@@ -667,6 +715,7 @@ void Upscaling::DestroyUpscalingTextureResources(UpscaleMethod a_upscalemethod)
 		if (reactiveMaskTexture) {
 			reactiveMaskTexture->srv = nullptr;
 			reactiveMaskTexture->uav = nullptr;
+			reactiveMaskTexture->rtv = nullptr;
 			reactiveMaskTexture->resource = nullptr;
 
 			delete reactiveMaskTexture;
@@ -684,7 +733,7 @@ void Upscaling::DestroyUpscalingTextureResources(UpscaleMethod a_upscalemethod)
 	}
 
 	// Motion vector copy texture is only needed for DLSS - destroy when switching away from DLSS
-	if (a_upscalemethod != UpscaleMethod::kDLSS) {
+	if (a_upscalemethod != UpscaleMethod::kDLSS && !(a_upscalemethod == UpscaleMethod::kFSR && globals::features::raytracing.IsPathTracing())) {
 		if (motionVectorCopyTexture) {
 			motionVectorCopyTexture->srv = nullptr;
 			motionVectorCopyTexture->uav = nullptr;
@@ -693,6 +742,9 @@ void Upscaling::DestroyUpscalingTextureResources(UpscaleMethod a_upscalemethod)
 			delete motionVectorCopyTexture;
 			motionVectorCopyTexture = nullptr;
 		}
+	}
+
+	if (a_upscalemethod != UpscaleMethod::kDLSS) {
 		if (sharpenerTexture) {
 			sharpenerTexture->srv = nullptr;
 			sharpenerTexture->uav = nullptr;
@@ -744,32 +796,54 @@ void Upscaling::CheckResources(UpscaleMethod a_upscalemethod)
 	}
 }
 
-ID3D11ComputeShader* Upscaling::GetEncodeTexturesCS()
+ID3D11ComputeShader* Upscaling::GetColorSpaceCS(bool toLinear)
+{
+	auto index = toLinear ? 0 : 1;
+
+	auto& shader = colorSpaceCS[index];
+
+	if (!shader)
+		shader.attach((ID3D11ComputeShader*)Util::CompileShader(L"Data/Shaders/Upscaling/ColorSpaceCS.hlsl", { { toLinear ? "TO_LINEAR" : "TO_GAMMA", "" } }, "cs_5_0"));
+
+	return shader.get();
+}
+
+ID3D11ComputeShader* Upscaling::GetEncodeTexturesCS(bool pathTracing)
 {
 	auto upscaleMethod = GetUpscaleMethod();
-	uint methodIndex = (uint)upscaleMethod;
 
-	if (!encodeTexturesCS[methodIndex]) {
-		logger::debug("Compiling EncodeTexturesCS.hlsl for upscale method {}", methodIndex);
+	auto& cache = pathTracing ? encodeTexturesPTCS : encodeTexturesCS;
+	auto it = cache.find(upscaleMethod);
 
-		std::vector<std::pair<const char*, const char*>> defines;
+	if (it != cache.end())
+		return it->second.get();
 
-		// Add upscale method define
-		switch (upscaleMethod) {
-		case UpscaleMethod::kDLSS:
-			defines.push_back({ "DLSS", "" });
-			break;
-		case UpscaleMethod::kFSR:
-			defines.push_back({ "FSR", "" });
-			break;
-		default:
-			// No define for NONE or TAA
-			break;
-		}
+	logger::debug("Compiling EncodeTexturesCS.hlsl for upscale method {} (PT={})", magic_enum::enum_name(upscaleMethod), pathTracing);
 
-		encodeTexturesCS[methodIndex].attach((ID3D11ComputeShader*)Util::CompileShader(L"Data/Shaders/Upscaling/EncodeTexturesCS.hlsl", defines, "cs_5_0"));
+	std::vector<std::pair<const char*, const char*>> defines;
+
+	// Add upscale method define
+	switch (upscaleMethod) {
+	case UpscaleMethod::kDLSS:
+		defines.push_back({ "DLSS", "" });
+		break;
+	case UpscaleMethod::kDLSS_RR:
+		defines.push_back({ "DLSS_RR", "" });
+		break;
+	case UpscaleMethod::kFSR:
+		defines.push_back({ "FSR", "" });
+		break;
+	default:
+		// No define for NONE or TAA
+		break;
 	}
-	return encodeTexturesCS[methodIndex].get();
+
+	if (pathTracing)
+		defines.push_back({ "PATH_TRACING", "" });
+
+	auto [emplacedIt, emplaced] = cache.emplace(upscaleMethod, nullptr);
+	emplacedIt->second.attach((ID3D11ComputeShader*)Util::CompileShader(L"Data/Shaders/Upscaling/EncodeTexturesCS.hlsl", defines, "cs_5_0"));
+	return emplacedIt->second.get();
 }
 
 ID3D11PixelShader* Upscaling::GetDepthRefractionUpscalePS()
@@ -844,6 +918,59 @@ eastl::unique_ptr<Texture2D> Upscaling::CreateTextureFromSource(ID3D11Resource* 
 	return tex;
 }
 
+void Upscaling::ConvertColorSpace(bool toLinear)
+{
+	ZoneScoped;
+	const bool linearLightingEnabled = globals::features::linearLighting.settings.enableLinearLighting;
+
+	if (linearLightingEnabled)
+		return;
+
+	auto state = globals::state;
+	auto context = globals::d3d::context;
+	auto renderer = globals::game::renderer;
+
+	context->OMSetRenderTargets(0, nullptr, nullptr);  // Unbind all bound render targets
+
+	auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
+
+	ID3D11UnorderedAccessView* texture = (!d3d12Mode && toLinear && settings.sharpnessDLSS > 0.0f && sharpenerTexture) ? sharpenerTexture->uav.get() : main.UAV;
+
+	{
+		state->BeginPerfEvent("Color Space Convertion");
+		TracyD3D11Zone(globals::state->tracyCtx, "Color Space Convertion");
+
+		float2 screenSize{ (float)globals::game::graphicsState->screenWidth, (float)globals::game::graphicsState->screenHeight };
+		float2 renderSize = Util::ConvertToDynamic(screenSize);
+		uint32_t renderWidth = (uint32_t)renderSize.x;
+		uint32_t renderHeight = (uint32_t)renderSize.y;
+
+		context->CSSetShader(GetColorSpaceCS(toLinear), nullptr, 0);
+
+		UpscalingDataCB upscalingData;
+		upscalingData.trueSamplingDim = renderSize;
+		upscalingDataCB->Update(upscalingData);
+
+		auto upscalingBuffer = upscalingDataCB->CB();
+		context->CSSetConstantBuffers(0, 1, &upscalingBuffer);
+
+		ID3D11UnorderedAccessView* uavs[] = { texture };
+		context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
+
+		context->Dispatch((renderWidth + 7) / 8, (renderHeight + 7) / 8, 1);
+
+		uavs[0] = nullptr;
+		context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
+
+		ID3D11Buffer* nullBuffer = nullptr;
+		context->CSSetConstantBuffers(0, 1, &nullBuffer);
+
+		context->CSSetShader(nullptr, nullptr, 0);
+
+		state->EndPerfEvent();
+	}
+}
+
 int32_t GetJitterPhaseCount(int32_t renderWidth, int32_t displayWidth)
 {
 	const float basePhaseCount = 8.0f;
@@ -884,7 +1011,7 @@ void Upscaling::ConfigureTAA()
 
 void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 {
-	auto upscaleMethod = GetUpscaleMethod();
+	const auto upscaleMethod = settings.upscaleMethod;
 
 	// Delete or create resources as necessary
 	CheckResources(upscaleMethod);
@@ -923,6 +1050,10 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 
 		jitter.y = a_viewport->projectionPosScaleY * screenHeight / 2.0f;
 	}
+
+	auto& rt = globals::features::raytracing;
+	if (rt.Available())
+		rt.UpdateJitter(jitter);
 
 	auto& runtimeData = a_viewport->GetRuntimeData();
 
@@ -1000,29 +1131,28 @@ void Upscaling::SetupResources()
 
 	rcas.Initialize();
 
-	if (d3d12SwapChainActive)
-		dx12SwapChain.CreateSharedResources();
-
 	copyDepthToSharedBufferPS.attach((ID3D11PixelShader*)Util::CompileShader(L"Data\\Shaders\\Upscaling\\CopyDepthToSharedBufferPS.hlsl", { { "PSHADER", "" } }, "ps_5_0"));
 
 	// Setup HDR resources only when the HDR Display feature is loaded
 	if (globals::features::hdrDisplay.loaded) {
 		globals::features::hdrDisplay.SetupResources();
 	}
+
+	if (d3d12Mode)
+		interopContext = eastl::unique_ptr<InteropContext>(InteropContext::Make());
 }
 
 void Upscaling::ClearShaderCache()
 {
-	for (int i = 0; i < 4; ++i) {
-		encodeTexturesCS[i] = nullptr;  // com_ptr automatically releases
-	}
+	encodeTexturesCS.clear();
+	encodeTexturesPTCS.clear();
 
 	depthRefractionUpscalePS = nullptr;  // com_ptr automatically releases
 	underwaterMaskUpscalePS = nullptr;   // com_ptr automatically releases
 	upscaleVS = nullptr;                 // com_ptr automatically releases
 }
 
-void Upscaling::CopySharedD3D12Resources()
+void Upscaling::CopySharedD3D12Resources(bool preserveMotionVector)
 {
 	ZoneScoped;
 	TracyD3D11Zone(globals::state->tracyCtx, "Upscaling - Copy Shared D3D12 Resources");
@@ -1031,13 +1161,16 @@ void Upscaling::CopySharedD3D12Resources()
 	auto renderer = globals::game::renderer;
 	auto context = globals::d3d::context;
 
+	auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
+	context->CopyResource(globals::dx12Interop->sharedResources.main->resource11, main.texture);
+
 	auto& motionVector = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
-	context->CopyResource(dx12SwapChain.motionVectorBufferShared12->resource11, motionVector.texture);
+	if (!preserveMotionVector)
+		context->CopyResource(globals::dx12Interop->sharedResources.motionVector->resource11, motionVector.texture);
 
 	auto& depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
 
 	{
-		// Set up viewport for fullscreen rendering
 		float2 screenSize{ (float)globals::game::graphicsState->screenWidth, (float)globals::game::graphicsState->screenHeight };
 
 		D3D11_VIEWPORT viewport = {};
@@ -1049,25 +1182,19 @@ void Upscaling::CopySharedD3D12Resources()
 		viewport.MaxDepth = 1.0f;
 		context->RSSetViewports(1, &viewport);
 
-		// Set up Input Assembler for fullscreen triangle
 		context->IASetInputLayout(nullptr);
 		context->IASetVertexBuffers(0, 0, nullptr, nullptr, nullptr);
 		context->IASetIndexBuffer(nullptr, DXGI_FORMAT_UNKNOWN, 0);
 		context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-		// Set up vertex shader
 		context->VSSetShader(GetUpscaleVS(), nullptr, 0);
-
-		// Set up rasterizer and blend states
 		context->RSSetState(upscaleRasterizerState.get());
 		context->OMSetBlendState(upscaleBlendState.get(), nullptr, 0xffffffff);
 
-		// Set up pixel shader resources
 		ID3D11ShaderResourceView* views[1] = { depth.depthSRV };
 		context->PSSetShaderResources(0, ARRAYSIZE(views), views);
 
-		// Set render target view for pixel shader output
-		ID3D11RenderTargetView* rtvs[1] = { dx12SwapChain.depthBufferShared12->rtv };
+		ID3D11RenderTargetView* rtvs[1] = { globals::dx12Interop->sharedResources.depth->rtv };
 		context->OMSetRenderTargets(ARRAYSIZE(rtvs), rtvs, nullptr);
 
 		context->PSSetShader(copyDepthToSharedBufferPS.get(), nullptr, 0);
@@ -1077,7 +1204,6 @@ void Upscaling::CopySharedD3D12Resources()
 		globals::profiler->EndPass();
 	}
 
-	// Clean up
 	ID3D11ShaderResourceView* views[1] = { nullptr };
 	context->PSSetShaderResources(0, ARRAYSIZE(views), views);
 
@@ -1237,10 +1363,10 @@ bool Upscaling::IsUpscalingActive() const
 {
 	auto method = GetUpscaleMethod();
 
-	// Only consider vendor upscalers (FSR/DLSS) as "active" when the
+	// Only consider vendor upscalers (FSR/DLSS/DLSS_RR) as "active" when the
 	// selected method actually produces a downscale. If the renderer is
 	// currently running at 1:1 (no downscale), treat upscaling as inactive.
-	if (!(method == UpscaleMethod::kFSR || method == UpscaleMethod::kDLSS)) {
+	if (!(method == UpscaleMethod::kFSR || method == UpscaleMethod::kDLSS || method == UpscaleMethod::kDLSS_RR)) {
 		return false;
 	}
 
@@ -1272,9 +1398,12 @@ float Upscaling::GetFrameGenerationFrameTime() const
 // Unified interface methods
 void Upscaling::LoadUpscalingSDKs()
 {
+	auto& rt = globals::features::raytracing;
+	d3d12Mode = DX12Interop::D3D12Mode() && rt.Available(false);
+
 	// Initialize upscaling SDK components during plugin startup
 	// This ensures all SDKs are available before any D3D device creation
-	streamline.LoadInterposer();
+	streamline.LoadInterposer(d3d12Mode);
 	fidelityFX.LoadFFX();  // Only for frame generation now
 }
 
@@ -1304,8 +1433,23 @@ void Upscaling::UpgradeBackendInterface(void** ppInterface)
 	streamline.slUpgradeInterface(ppInterface);
 }
 
-void Upscaling::SetBackendD3DDevice(ID3D11Device* device)
+void Upscaling::SetBackendD3D11Device(ID3D11Device* device)
 {
+	if (d3d12Mode) {
+		logger::critical("[Upscaling] D3D11 Device set while in D3D12 mode.");
+		return;
+	}
+
+	streamline.slSetD3DDevice(device);
+}
+
+void Upscaling::SetBackendD3D12Device(ID3D12Device5* device)
+{
+	if (!d3d12Mode) {
+		logger::critical("[Upscaling] D3D12 Device set while in D3D11 mode.");
+		return;
+	}
+
 	streamline.slSetD3DDevice(device);
 }
 
@@ -1318,17 +1462,6 @@ void Upscaling::PostBackendDevice()
 bool Upscaling::HasFrameGenModule() const
 {
 	return fidelityFX.featureFSR3FG;
-}
-
-// Proxy interface methods
-void Upscaling::SetProxyD3D11Device(ID3D11Device* device)
-{
-	dx12SwapChain.SetD3D11Device(device);
-}
-
-void Upscaling::SetProxyD3D11DeviceContext(ID3D11DeviceContext* context)
-{
-	dx12SwapChain.SetD3D11DeviceContext(context);
 }
 
 void Upscaling::CreateProxySwapChain(IDXGIAdapter* adapter, DXGI_SWAP_CHAIN_DESC swapChainDesc)
@@ -1354,18 +1487,16 @@ Upscaling::BlurResources Upscaling::GetBlurResources() const
 	return {};
 }
 
-void Upscaling::Upscale()
+void Upscaling::EncodeTextures()
 {
 	ZoneScoped;
 	auto upscaleMethod = GetUpscaleMethod();
-
 	auto state = globals::state;
 	auto context = globals::d3d::context;
 	auto renderer = globals::game::renderer;
 
 	context->OMSetRenderTargets(0, nullptr, nullptr);  // Unbind all bound render targets
 
-	auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 	auto& motionVector = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
 
 	{
@@ -1383,7 +1514,8 @@ void Upscaling::Upscale()
 
 		ID3D11ShaderResourceView* views[4] = { temporalAAMask.SRV, normals.SRV, motionVector.SRV, depth.depthSRV };
 		context->CSSetShaderResources(0, ARRAYSIZE(views), views);
-		context->CSSetShader(GetEncodeTexturesCS(), nullptr, 0);
+
+		context->CSSetShader(GetEncodeTexturesCS(false), nullptr, 0);
 
 		UpscalingDataCB upscalingData;
 		upscalingData.trueSamplingDim = float2((float)renderWidth, (float)renderHeight);
@@ -1391,18 +1523,22 @@ void Upscaling::Upscale()
 		auto upscalingBuffer = upscalingDataCB->CB();
 		context->CSSetConstantBuffers(0, 1, &upscalingBuffer);
 
-		// u2 (MotionVectorOutput): DLSS only — 5x5 dilated MVec for ghosting reduction.
+		// u2 (MotionVectorOutput): DLSS/DLSS RR/FSR — 5x5 dilated MVec for ghosting reduction.
 		ID3D11UnorderedAccessView* uavs[4] = {
 			reactiveMaskTexture->uav.get(),
 			transparencyCompositionMaskTexture->uav.get(),
 			(upscaleMethod == UpscaleMethod::kDLSS) ? motionVectorCopyTexture->uav.get() : nullptr,
 			nullptr
 		};
+
+		if (upscaleMethod == UpscaleMethod::kDLSS_RR)
+			uavs[2] = globals::dx12Interop->sharedResources.motionVector->uav;
+
 		context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
 
 		context->Dispatch((renderWidth + 7) / 8, (renderHeight + 7) / 8, 1);
 
-		ID3D11ShaderResourceView* nullViews[4] = { nullptr, nullptr, nullptr, nullptr };
+		ID3D11ShaderResourceView* nullViews[7] = { nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
 		context->CSSetShaderResources(0, ARRAYSIZE(nullViews), nullViews);
 
 		ID3D11UnorderedAccessView* nullUAVs[4] = { nullptr, nullptr, nullptr, nullptr };
@@ -1417,27 +1553,69 @@ void Upscaling::Upscale()
 		state->EndPerfEvent();
 		globals::profiler->EndPass();
 	}
+}
 
-	{
-		globals::profiler->BeginPass("Upscaling::Upscale");
-		state->BeginPerfEvent("Upscaling");
-		TracyD3D11Zone(globals::state->tracyCtx, "Upscaling Dispatch");
+void Upscaling::Upscale()
+{
+	auto renderer = globals::game::renderer;
+	auto state = globals::state;
 
-		if (upscaleMethod == UpscaleMethod::kDLSS) {
-			streamline.Upscale(main.texture, reactiveMaskTexture->resource.get(), transparencyCompositionMaskTexture->resource.get(), motionVectorCopyTexture->resource.get());
+	auto upscaleMethod = GetUpscaleMethod();
+
+	auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
+	auto& motionVector = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
+
+	state->BeginPerfEvent("Upscaling");
+	TracyD3D11Zone(globals::state->tracyCtx, "Upscaling Dispatch");
+	globals::profiler->BeginPass("Upscaling::Upscale");
+
+	const auto dlss = upscaleMethod == UpscaleMethod::kDLSS;
+
+	if (d3d12Mode) {
+		auto& sharedResources = globals::dx12Interop->sharedResources;
+		auto context = globals::d3d::context;
+
+		const auto dlssrr = upscaleMethod == UpscaleMethod::kDLSS_RR;
+
+		if (dlss || dlssrr) {
+			auto* upscaleOutput = sharedResources.upscaleOutput ? sharedResources.upscaleOutput : sharedResources.main;
+
+			interopContext->Execute([&](ID3D12GraphicsCommandList4* commandList) {
+				if (dlss) {
+					streamline.Upscale(commandList,
+						sharedResources.main->GetResource(), upscaleOutput->GetResource(),
+						sharedResources.depth->GetResource(), sharedResources.motionVector->GetResource(), sharedResources.reactiveMask->GetResource());
+				} else if (dlssrr) {
+					streamline.DenoiseUpscale(commandList,
+						sharedResources.main->GetResource(), upscaleOutput->GetResource(), sharedResources.depth->GetResource(),
+						sharedResources.motionVector->GetResource(), sharedResources.reactiveMask->GetResource());
+				}
+			});
+
+			context->CopyResource(main.texture, upscaleOutput->resource11);
 		} else if (upscaleMethod == UpscaleMethod::kFSR) {
 			fidelityFX.Upscale(main.texture, reactiveMaskTexture->resource.get(), transparencyCompositionMaskTexture->resource.get(), motionVector.texture, settings.sharpnessFSR);
 		}
+	} else {
+		if (dlss) {
+			ID3D11Resource* colorOut = (settings.sharpnessDLSS > 0.0f && sharpenerTexture) ? sharpenerTexture->resource.get() : main.texture;
 
-		state->EndPerfEvent();
-		globals::profiler->EndPass();
+			streamline.Upscale(main.texture, colorOut, reactiveMaskTexture->resource.get(), transparencyCompositionMaskTexture->resource.get(), motionVectorCopyTexture->resource.get());
+
+		} else if (upscaleMethod == UpscaleMethod::kFSR) {
+			fidelityFX.Upscale(main.texture, reactiveMaskTexture->resource.get(), transparencyCompositionMaskTexture->resource.get(), motionVector.texture, settings.sharpnessFSR);
+		}
 	}
+
+	state->EndPerfEvent();
+	globals::profiler->EndPass();
 }
 
 void Upscaling::PerformUpscaling()
 {
 	ZoneScoped;
 	TracyD3D11Zone(globals::state->tracyCtx, "Upscaling");
+
 	Upscale();
 	UpscaleDepth();
 
@@ -1635,6 +1813,10 @@ void Upscaling::ApplySharpening()
 
 	context->OMSetRenderTargets(0, nullptr, nullptr);
 
+	// DX12 mode does not write to sharpenerTexture
+	if (d3d12Mode)
+		context->CopyResource(sharpenerTexture->resource.get(), main.texture);
+
 	// Zero-copy path: DLSS has already written to sharpenerTexture; sharpen directly into kMAIN.UAV.
 	rcas.ApplySharpen(sharpenerTexture->srv.get(), main.UAV, currentSharpness);
 
@@ -1668,13 +1850,24 @@ void Upscaling::Main_PostProcessing::thunk(RE::ImageSpaceManager* a_this, uint32
 	auto& upscaling = globals::features::upscaling;
 	auto upscaleMethod = upscaling.GetUpscaleMethod();
 
-	if (upscaling.ShouldUseFrameGenerationThisFrame())
-		upscaling.CopySharedD3D12Resources();
+	if (upscaleMethod != UpscaleMethod::kNONE && upscaleMethod != UpscaleMethod::kTAA) {
+		upscaling.EncodeTextures();
 
-	if (upscaleMethod != UpscaleMethod::kNONE && upscaleMethod != UpscaleMethod::kTAA)
+		// Gamma to linear
+		upscaling.ConvertColorSpace(true);
+
+		if (upscaling.d3d12Mode)
+			upscaling.CopySharedD3D12Resources(upscaleMethod == UpscaleMethod::kDLSS_RR);
+
 		upscaling.PerformUpscaling();
 
-	if (upscaleMethod == UpscaleMethod::kDLSS)
+		// Linear to gamma
+		upscaling.ConvertColorSpace(false);
+	} else if (upscaling.ShouldUseFrameGenerationThisFrame()) {
+		upscaling.CopySharedD3D12Resources();
+	}
+
+	if (upscaleMethod == UpscaleMethod::kDLSS || upscaleMethod == UpscaleMethod::kDLSS_RR)
 		upscaling.ApplySharpening();
 
 	Util::SetTemporal(upscaleMethod == UpscaleMethod::kTAA);

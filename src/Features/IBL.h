@@ -54,6 +54,7 @@ public:
 		uint DisableInInteriors = 1;
 		float pad1 = 0.0f;
 	} settings;
+	STATIC_ASSERT_ALIGNAS_16(Settings);
 
 	eastl::unique_ptr<Texture2D> staticDiffuseIBLTexture = nullptr;
 	eastl::unique_ptr<Texture2D> staticSpecularIBLTexture = nullptr;

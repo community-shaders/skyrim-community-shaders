@@ -6,14 +6,15 @@
 #include "State.h"
 #include "Utils/D3D.h"
 
+#include "Features/CSEditor.h"
 #include "Features/DynamicCubemaps.h"
 #include "Features/IBL.h"
+#include "Features/Raytracing.h"
 #include "Features/ScreenSpaceGI.h"
 #include "Features/Skylighting.h"
 #include "Features/SubsurfaceScattering.h"
 #include "Features/TerrainBlending.h"
 #include "Features/Upscaling.h"
-#include "Features/CSEditor.h"
 
 #include "Hooks.h"
 
@@ -33,12 +34,13 @@ struct BlendStates
 	}
 };
 
-void SetupRenderTarget(RE::RENDER_TARGET target, D3D11_TEXTURE2D_DESC texDesc, D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc, D3D11_RENDER_TARGET_VIEW_DESC rtvDesc, D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc, DXGI_FORMAT format, uint bindFlags)
+void SetupRenderTarget(RE::RENDER_TARGET target, D3D11_TEXTURE2D_DESC texDesc, D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc, D3D11_RENDER_TARGET_VIEW_DESC rtvDesc, D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc, DXGI_FORMAT format, uint bindFlags, UINT miscFlags = 0)
 {
 	auto renderer = globals::game::renderer;
 	auto device = globals::d3d::device;
 
 	texDesc.BindFlags = bindFlags;
+	texDesc.MiscFlags |= miscFlags;
 	texDesc.Format = format;
 	srvDesc.Format = format;
 	rtvDesc.Format = format;
@@ -86,6 +88,7 @@ void SetupRenderTarget(RE::RENDER_TARGET target, D3D11_TEXTURE2D_DESC texDesc, D
 void Deferred::SetupResources()
 {
 	auto renderer = globals::game::renderer;
+	auto& rt = globals::features::raytracing;
 
 	{
 		auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
@@ -124,8 +127,10 @@ void Deferred::SetupResources()
 		// TEMPORAL_AA_WATER_1
 		// TEMPORAL_AA_WATER_2
 
+		UINT miscFlags = rt.loaded ? D3D11_RESOURCE_MISC_SHARED : 0;
+
 		// Albedo
-		SetupRenderTarget(ALBEDO, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R10G10B10A2_UNORM, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
+		SetupRenderTarget(ALBEDO, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R10G10B10A2_UNORM, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE, miscFlags);
 		// Specular
 		SetupRenderTarget(SPECULAR, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R11G11B10_FLOAT, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
 		// Reflectance
@@ -134,8 +139,8 @@ void Deferred::SetupResources()
 		SetupRenderTarget(NORMALROUGHNESS, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R10G10B10A2_UNORM, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
 		// Masks
 		SetupRenderTarget(MASKS, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R11G11B10_FLOAT, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
-		// Masks2 (vertexAO; fp16 to allow blending)
-		SetupRenderTarget(MASKS2, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R16_UNORM, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
+		// Masks2
+		SetupRenderTarget(MASKS2, texDesc, srvDesc, rtvDesc, uavDesc, rt.loaded ? DXGI_FORMAT_R11G11B10_FLOAT : DXGI_FORMAT_R16_UNORM, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE, miscFlags);
 
 		// TAA water history buffers need RGBA16: alpha stores premultiplied coverage for ISWaterBlend
 		SetupRenderTarget(RE::RENDER_TARGETS::kWATER_1, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R16G16B16A16_FLOAT, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
@@ -341,28 +346,35 @@ void Deferred::DeferredPasses()
 		dynamicCubemaps.UpdateCubemap();
 
 	auto& ibl = globals::features::ibl;
+	bool skipDeferredComposite = false;
+
+	if (auto& rt = globals::features::raytracing; rt.Available()) {
+		rt.DeferredPasses();
+		skipDeferredComposite = rt.settings.CreationEngineRaytracingSettings.Enabled &&
+		                        rt.Mode() == CreationEngineRaytracing::Mode::PathTracing;
+	}
 
 	// Deferred Composite
-	{
+	if (!skipDeferredComposite) {
 		TracyD3D11Zone(globals::state->tracyCtx, "Deferred Composite");
 
 		ID3D11ShaderResourceView* srvs[16]{
-			specular.SRV,                                                                                    // t0  SpecularTexture
-			albedo.SRV,                                                                                      // t1  AlbedoTexture
-			normalRoughness.SRV,                                                                             // t2  NormalRoughnessTexture
-			masks.SRV,                                                                                       // t3  MasksTexture
-			dynamicCubemaps.loaded ? Util::GetCurrentSceneDepthSRV(false) : nullptr,                         // t4  DepthTexture (24/32-bit; HLSL type baked at compile via TERRAIN_BLENDING)
-			dynamicCubemaps.loaded ? reflectance.SRV : nullptr,                                              // t5  ReflectanceTexture
-			dynamicCubemaps.loaded ? dynamicCubemaps.envTexture->srv.get() : nullptr,                        // t6  EnvTexture
-			dynamicCubemaps.loaded ? dynamicCubemaps.envReflectionsTexture->srv.get() : nullptr,             // t7  EnvReflectionsTexture
-			dynamicCubemaps.loaded && skylighting.loaded ? skylighting.texProbeArray->srv.get() : nullptr,   // t8  SkylightingProbeArray
-			masks2.SRV,                                                                                      // t9  Masks2Texture (vertexAO in .x)
-			ssgi_ao,                                                                                         // t10 SsgiAoTexture
-			ssgi_hq_spec ? nullptr : ssgi_y,                                                                 // t11 SsgiYTexture
-			ssgi_hq_spec ? nullptr : ssgi_cocg,                                                              // t12 SsgiCoCgTexture
-			ssgi_hq_spec ? ssgi_gi_spec : nullptr,                                                           // t13 SsgiSpecularTexture
-			ibl.loaded ? ibl.envIBLTexture->srv.get() : nullptr,                                             // t14 EnvIBLTexture
-			ibl.loaded ? ibl.skyIBLTexture->srv.get() : nullptr,                                             // t15 SkyIBLTexture
+			specular.SRV,                                                                                   // t0  SpecularTexture
+			albedo.SRV,                                                                                     // t1  AlbedoTexture
+			normalRoughness.SRV,                                                                            // t2  NormalRoughnessTexture
+			masks.SRV,                                                                                      // t3  MasksTexture
+			dynamicCubemaps.loaded ? Util::GetCurrentSceneDepthSRV(false) : nullptr,                        // t4  DepthTexture (24/32-bit; HLSL type baked at compile via TERRAIN_BLENDING)
+			dynamicCubemaps.loaded ? reflectance.SRV : nullptr,                                             // t5  ReflectanceTexture
+			dynamicCubemaps.loaded ? dynamicCubemaps.envTexture->srv.get() : nullptr,                       // t6  EnvTexture
+			dynamicCubemaps.loaded ? dynamicCubemaps.envReflectionsTexture->srv.get() : nullptr,            // t7  EnvReflectionsTexture
+			dynamicCubemaps.loaded && skylighting.loaded ? skylighting.texProbeArray->srv.get() : nullptr,  // t8  SkylightingProbeArray
+			masks2.SRV,                                                                                     // t9  Masks2Texture
+			ssgi_ao,                                                                                        // t10 SsgiAoTexture
+			ssgi_hq_spec ? nullptr : ssgi_y,                                                                // t11 SsgiYTexture
+			ssgi_hq_spec ? nullptr : ssgi_cocg,                                                             // t12 SsgiCoCgTexture
+			ssgi_hq_spec ? ssgi_gi_spec : nullptr,                                                          // t13 SsgiSpecularTexture
+			ibl.loaded ? ibl.envIBLTexture->srv.get() : nullptr,                                            // t14 EnvIBLTexture
+			ibl.loaded ? ibl.skyIBLTexture->srv.get() : nullptr,                                            // t15 SkyIBLTexture
 		};
 
 		if (dynamicCubemaps.loaded)
@@ -595,6 +607,9 @@ ID3D11ComputeShader* Deferred::GetComputeMainComposite()
 		if (globals::features::screenSpaceGI.loaded)
 			defines.push_back({ "SSGI", nullptr });
 
+		if (globals::features::raytracing.loaded)
+			defines.push_back({ "RAYTRACING", nullptr });
+
 		if (globals::features::ibl.loaded)
 			defines.push_back({ "IBL", nullptr });
 
@@ -621,6 +636,9 @@ ID3D11ComputeShader* Deferred::GetComputeMainCompositeInterior()
 
 		if (globals::features::screenSpaceGI.loaded)
 			defines.push_back({ "SSGI", nullptr });
+
+		if (globals::features::raytracing.loaded)
+			defines.push_back({ "RAYTRACING", nullptr });
 
 		if (globals::features::ibl.loaded)
 			defines.push_back({ "IBL", nullptr });

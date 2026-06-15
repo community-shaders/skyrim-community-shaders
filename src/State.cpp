@@ -4,6 +4,7 @@
 
 #include <pystring/pystring.h>
 
+#include "DX12Interop.h"
 #include "Deferred.h"
 #include "FeatureIssues.h"
 #include "Features/CSEditor.h"
@@ -227,8 +228,9 @@ void State::Setup()
 	// gating logic that wants to read the log can run during feature SetupResources.
 	CheckTypedUAVLoadSupport();
 
-	Feature::ForEachLoadedFeature("SetupResources", [](Feature* feature) { feature->SetupResources(); });
 	globals::deferred->SetupResources();
+	globals::dx12Interop->SetupResources();
+	Feature::ForEachLoadedFeature("SetupResources", [](Feature* feature) { feature->SetupResources(); });
 
 	// Load per-weather settings after features are setup
 	WeatherManager::GetSingleton()->LoadPerWeatherSettingsFromDisk();
@@ -457,6 +459,10 @@ void State::SaveToJson(nlohmann::json& settings)
 	advanced["Use FileWatcher"] = shaderCache->UseFileWatcher();
 	advanced["Frame Annotations"] = frameAnnotations;
 	advanced["Partial Precision"] = enablePartialPrecision.load(std::memory_order_relaxed);
+	advanced["Debug Device"] = debugDevice;
+	advanced["Interop Debug Device"] = interopDebugDevice;
+	advanced["Interop Load PIX"] = interopLoadPIX;
+	
 	settings["Advanced"] = advanced;
 
 	json general;
@@ -534,6 +540,12 @@ void State::LoadFromJson(nlohmann::json& settings)
 			frameAnnotations = advanced["Frame Annotations"];
 		if (advanced.contains("Partial Precision") && advanced["Partial Precision"].is_boolean())
 			enablePartialPrecision.store(advanced["Partial Precision"].get<bool>(), std::memory_order_relaxed);
+		if (advanced.contains("Debug Device") && advanced["Debug Device"].is_boolean())
+			debugDevice = advanced["Debug Device"];
+		if (advanced.contains("Interop Debug Device") && advanced["Interop Debug Device"].is_boolean())
+			interopDebugDevice = advanced["Interop Debug Device"];
+		if (advanced.contains("Interop Load PIX") && advanced["Interop Load PIX"].is_boolean())
+			interopLoadPIX = advanced["Interop Load PIX"];
 	}
 
 	if (settings.contains("General") && settings["General"].is_object()) {

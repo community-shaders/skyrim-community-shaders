@@ -30,6 +30,7 @@ struct LODBlending : Feature
 		float LODObjectSnowGamma = 1;
 		float pad;
 	};
+	STATIC_ASSERT_ALIGNAS_16(Settings);
 
 	Settings settings;
 

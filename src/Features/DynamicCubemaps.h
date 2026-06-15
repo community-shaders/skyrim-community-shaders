@@ -117,6 +117,7 @@ public:
 		uint pad0[2];
 		float4 CubemapColor{ 1.0f, 1.0f, 1.0f, 0.0f };
 	};
+	STATIC_ASSERT_ALIGNAS_16(Settings);
 
 	Settings settings;
 	void UpdateCubemap();

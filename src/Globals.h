@@ -3,6 +3,7 @@
 #include <atomic>
 
 struct CloudShadows;
+struct DX12Interop;
 struct DynamicCubemaps;
 struct VolumetricShadows;
 struct ExtendedMaterials;
@@ -33,6 +34,8 @@ struct ExtendedTranslucency;
 struct Upscaling;
 class Profiler;
 struct CSEditor;
+struct Raytracing;
+struct SceneGraphExplorer;
 struct ExponentialHeightFog;
 struct HDRDisplay;
 struct ScreenshotFeature;
@@ -95,6 +98,8 @@ namespace globals
 		extern ScreenshotFeature screenshotFeature;
 		extern CSEditor csEditor;
 		extern ExponentialHeightFog exponentialHeightFog;
+		extern Raytracing raytracing;
+		extern SceneGraphExplorer sceneGraphExplorer;
 		extern TruePBR truePBR;
 		extern Skin skin;
 
@@ -193,6 +198,7 @@ namespace globals
 	extern Deferred* deferred;
 	extern Menu* menu;
 	extern SIE::ShaderCache* shaderCache;
+	extern DX12Interop* dx12Interop;
 	extern Profiler* profiler;
 
 	void OnInit();

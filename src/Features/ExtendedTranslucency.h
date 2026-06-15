@@ -53,6 +53,7 @@ struct ExtendedTranslucency final : Feature
 		float AlphaSoftness = 0.f;
 		float AlphaStrength = 0.f;
 	};
+	STATIC_ASSERT_ALIGNAS_16(PerFrame);
 
 	// Settings only in CPU
 	struct Settings : PerFrame

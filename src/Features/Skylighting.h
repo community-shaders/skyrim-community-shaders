@@ -63,7 +63,7 @@ public:
 		float MinSpecularVisibility;
 		uint _pad2[2];
 	};
-	static_assert(sizeof(SkylightingCB) % 16 == 0);
+	STATIC_ASSERT_ALIGNAS_16(SkylightingCB);
 
 	SkylightingCB GetCommonBufferData(bool a_inWorld);
 

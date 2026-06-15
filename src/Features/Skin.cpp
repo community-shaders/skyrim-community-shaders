@@ -7,6 +7,7 @@
 #include "Menu.h"
 #include "ShaderCache.h"
 #include "State.h"
+#include "Features/Raytracing.h"
 
 #include "DynamicWetness_PublicAPI.h"
 #include "I18n/I18n.h"
@@ -195,6 +196,7 @@ void Skin::DrawSettings()
 void Skin::LoadSkinDetailTexture()
 {
 	auto device = globals::d3d::device;
+	auto& rt = globals::features::raytracing;
 
 	DirectX::ScratchImage image;
 	try {
@@ -207,9 +209,11 @@ void Skin::LoadSkinDetailTexture()
 
 	ID3D11Resource* pResource = nullptr;
 	try {
-		DX::ThrowIfFailed(CreateTexture(device,
-			image.GetImages(), image.GetImageCount(),
-			image.GetMetadata(), &pResource));
+		auto miscFlags = rt.loaded ? D3D11_RESOURCE_MISC_SHARED : 0;
+
+		DX::ThrowIfFailed(CreateTextureEx(device,
+			image.GetImages(), image.GetImageCount(), image.GetMetadata(), 
+			D3D11_USAGE_DEFAULT, D3D11_BIND_SHADER_RESOURCE, 0, miscFlags, DirectX::CREATETEX_DEFAULT, &pResource));
 	} catch (const DX::com_exception& e) {
 		logger::error("{}", e.what());
 		return;
@@ -225,6 +229,9 @@ void Skin::LoadSkinDetailTexture()
 			.MipLevels = static_cast<UINT>(image.GetMetadata().mipLevels) }
 	};
 	texSkinDetail->CreateSRV(srvDesc);
+
+	if (rt.loaded)
+		rt.UpdateSkinDetailNormal(texSkinDetail->resource.get());
 }
 
 void Skin::SetupResources()

@@ -27,4 +27,5 @@ namespace Hooks
 
 	void Install();
 	void InstallEarlyHooks();
+	uint CubemapResolution();
 }

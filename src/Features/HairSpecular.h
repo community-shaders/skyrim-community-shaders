@@ -49,6 +49,7 @@ public:
 		uint HairMode = 1;  // 0: Kajiya-Kay, 1: Marschner
 		uint pad[3];
 	} settings;
+	STATIC_ASSERT_ALIGNAS_16(Settings);
 
 	eastl::unique_ptr<Texture2D> texTangentShift = nullptr;
 

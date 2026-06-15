@@ -33,6 +33,7 @@ public:
 		uint enableLODTerrainTilingFix = true;
 		float pad0[2];
 	} settings;
+	STATIC_ASSERT_ALIGNAS_16(Settings);
 
 	virtual void DrawSettings() override;
 	virtual bool DrawFailLoadMessage() const override;

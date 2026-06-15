@@ -1,6 +1,8 @@
 #include "Globals.h"
 
+#include "DX12Interop.h"
 #include "Deferred.h"
+#include "Features/CSEditor.h"
 #include "Features/CloudShadows.h"
 #include "Features/DynamicCubemaps.h"
 #include "Features/ExponentialHeightFog.h"
@@ -17,7 +19,9 @@
 #include "Features/LightLimitFix.h"
 #include "Features/LinearLighting.h"
 #include "Features/PerformanceOverlay.h"
+#include "Features/Raytracing.h"
 #include "Features/RenderDoc.h"
+#include "Features/SceneGraphExplorer.h"
 #include "Features/ScreenSpaceGI.h"
 #include "Features/ScreenSpaceShadows.h"
 #include "Features/ScreenshotFeature.h"
@@ -34,7 +38,6 @@
 #include "Features/VolumetricLighting.h"
 #include "Features/VolumetricShadows.h"
 #include "Features/WaterEffects.h"
-#include "Features/CSEditor.h"
 #include "Features/WetnessEffects.h"
 #include "Menu.h"
 #include "ShaderCache.h"
@@ -87,6 +90,8 @@ namespace globals
 		ScreenshotFeature screenshotFeature{};
 		CSEditor csEditor{};
 		ExponentialHeightFog exponentialHeightFog{};
+		Raytracing raytracing{};
+		SceneGraphExplorer sceneGraphExplorer{};
 		TruePBR truePBR{};
 		Skin skin{};
 
@@ -155,6 +160,7 @@ namespace globals
 	Deferred* deferred = nullptr;
 	Menu* menu = nullptr;
 	SIE::ShaderCache* shaderCache = nullptr;
+	DX12Interop* dx12Interop = nullptr;
 
 	static Profiler profilerInstance;
 	Profiler* profiler = &profilerInstance;
@@ -165,6 +171,7 @@ namespace globals
 		state = State::GetSingleton();
 		menu = Menu::GetSingleton();
 		deferred = Deferred::GetSingleton();
+		dx12Interop = DX12Interop::GetSingleton();
 	}
 
 	void ReInit()

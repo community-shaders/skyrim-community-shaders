@@ -293,6 +293,16 @@ namespace SharedData
 		float2 pad0;
 	};
 
+	struct RaytracingSettings
+	{
+		float InteriorDirectional;
+		float Ambient;
+		float Reflection;
+		uint Albedo;
+		uint PathTracing;
+		uint3 _padding;
+	};
+
 	struct TruePBRSettings
 	{
 		float VertexAOStrength;
@@ -328,6 +338,7 @@ namespace SharedData
 		LinearLightingSettings linearLightingSettings;
 		TerrainBlendingSettings terrainBlendingSettings;
 		ExponentialHeightFogSettings exponentialHeightFogSettings;
+		RaytracingSettings raytracingSettings;
 		TruePBRSettings truePBRSettings;
 		SkinData skinData;
 	};

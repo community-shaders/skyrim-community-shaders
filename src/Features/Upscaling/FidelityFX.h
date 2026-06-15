@@ -49,7 +49,7 @@ public:
 
 	void LoadFFX();
 	void SetupFrameGeneration();
-	void Present(bool a_useFrameGeneration, bool a_isHDR = false);
+	void Present(ID3D12GraphicsCommandList4* commandList, bool a_useFrameGeneration, bool a_isHDR = false);
 
 	void CreateFSRResources();
 

@@ -283,8 +283,12 @@ struct PS_OUTPUT
 	float4 Reflectance: SV_Target5;
 #		endif  // TRUE_PBR
 	float4 Masks: SV_Target6;
+#		if defined(RAYTRACING)
+	float4 MetallicAO: SV_Target7;
+#		else
 	float4 Masks2: SV_Target7;
-#	endif      // RENDER_DEPTH
+#		endif
+#	endif  // RENDER_DEPTH
 };
 #else
 struct PS_OUTPUT
@@ -297,7 +301,11 @@ struct PS_OUTPUT
 	float4 Normal: SV_Target2;
 	float4 Albedo: SV_Target3;
 	float4 Masks: SV_Target6;
+#		if defined(RAYTRACING)
+	float4 MetallicAO: SV_Target7;
+#		else
 	float4 Masks2: SV_Target7;
+#		endif
 #	endif
 };
 #endif
@@ -437,6 +445,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		else
 	if (SharedData::lodBlendingSettings.DisableTerrainVertexColors)
 		input.Color.xyz = 1;
+
+#			if defined(TRUE_PBR)
+	float truePBRVertexAO = Color::ColorToLinear(max(max(input.Color.r, input.Color.g), input.Color.b).xxx).x;
+	truePBRVertexAO = lerp(1, truePBRVertexAO, SharedData::truePBRSettings.VertexAOStrength);
+#			endif
 
 #			if !defined(TRUE_PBR)
 	float4 specColor = complex ? TexBaseSampler.SampleBias(SampBaseSampler, float2(input.TexCoord.x, 0.5 + input.TexCoord.y * 0.5), SharedData::MipBias) : 1;
@@ -711,7 +724,17 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	psout.Specular = float4(specularColor, 1);
 	psout.Masks = float4(0, 0, Color::RGBToYCoCg(directionalAmbientColor).x, 0);
+#			if defined(RAYTRACING)
+#				if defined(TRUE_PBR)
+	psout.MetallicAO = float4(pbrSurfaceProperties.Metallic, pbrSurfaceProperties.AO, 1.0 - truePBRVertexAO, 1);
+#				else
+	psout.MetallicAO = float4(0, 1, 1.0 - vertexAO, 1);
+#				endif
+#			elif defined(TRUE_PBR)
+	psout.Masks2 = float4(1.0 - truePBRVertexAO, 0, 0, 0);
+#			else
 	psout.Masks2 = float4(1.0 - vertexAO, 0, 0, 0);
+#			endif
 #		endif
 	return psout;
 }
@@ -861,7 +884,11 @@ PS_OUTPUT main(PS_INPUT input)
 
 	psout.Albedo = float4(albedo, 1);
 	psout.Masks = float4(0, 0, Color::RGBToYCoCg(directionalAmbientColor).x, 0);
+#			if defined(RAYTRACING)
+	psout.MetallicAO = float4(0, 1, 1.0 - vertexAO, 1);
+#			else
 	psout.Masks2 = float4(1.0 - vertexAO, 0, 0, 0);
+#			endif
 #		endif
 
 	return psout;

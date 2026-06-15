@@ -144,7 +144,7 @@ float4 SSSSBlurCS(
 
 		float2 sampleCoord = texcoord + offset;
 
-		// Clamp to the DR-rendered region (per-eye in VR) to avoid sampling outside it.
+		// Clamp to the DR-rendered region to avoid sampling outside it.
 		sampleCoord = FrameBuffer::ClampDynamicResolutionAdjustedScreenPosition(sampleCoord, texcoordNonDR);
 
 		float3 color = ColorTexture.SampleLevel(PointSampler, sampleCoord, 0).rgb;
