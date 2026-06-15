@@ -1715,6 +1715,8 @@
     "menu.features.setting_change_warning_title": "Setting Change Warning",
     "menu.features.settings_adjusted_warning": "Some of your settings have been automatically adjusted due to feature incompatibilities.",
     "menu.features.settings_hidden_disabled": "Feature settings are hidden because this feature is disabled at boot.",
+    "menu.features.tag_alpha": "[ALPHA]",
+    "menu.features.tag_beta": "[BETA]",
     "menu.features.unloaded_features": "Unloaded Features",
     "menu.footer.d3d12_swap_chain": "D3D12 Swap Chain: {status}",
     "menu.footer.game_version": "Game Version: {runtime} {version}",

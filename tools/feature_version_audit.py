@@ -36,6 +36,14 @@ RE_IS_CORE = re.compile(r"IsCore\s*\(.*\)\s*const\s*override\s*\{\s*return true;
 RE_VERSION = re.compile(r"(?i)version\s*=\s*([0-9]+)-([0-9]+)-([0-9]+)")
 RE_BUMP_SUGGESTION = re.compile(r"- \*\*(.+?)\.ini\*\*: bump to `([\d-]+)`.*\[link\]\([^)]+\) ?(?:\(([^)]+)\))?")
 
+# Release-stage flags (parsed from the feature .ini [Info] section). Alpha wins over Beta.
+RE_STAGE_ALPHA = re.compile(r"(?im)^[ \t]*alpha[ \t]*=[ \t]*(\w+)")
+RE_STAGE_BETA = re.compile(r"(?im)^[ \t]*beta[ \t]*=[ \t]*(\w+)")
+STAGE_TRUTHY = {"true", "1", "yes", "on"}
+STAGE_RELEASE = "release"
+STAGE_BETA = "beta"
+STAGE_ALPHA = "alpha"
+
 # Commit type regexes
 RE_COMMIT_FEAT = re.compile(r"^feat(\(|:|\s)", re.IGNORECASE)
 RE_COMMIT_FIX = re.compile(r"^fix(\(|:|\s)", re.IGNORECASE)
@@ -257,6 +265,58 @@ def get_prior_version(ini_path, base_ref):
         return get_version_from_ini(ini_path, content)
     except Exception:
         return None
+
+def stage_from_content(content):
+    """Resolve the release stage (alpha/beta/release) from .ini text. Alpha wins."""
+    m = RE_STAGE_ALPHA.search(content)
+    if m and m.group(1).strip().lower() in STAGE_TRUTHY:
+        return STAGE_ALPHA
+    m = RE_STAGE_BETA.search(content)
+    if m and m.group(1).strip().lower() in STAGE_TRUTHY:
+        return STAGE_BETA
+    return STAGE_RELEASE
+
+def get_stage_from_ini(ini_path, content=None):
+    if content is None:
+        if HEAD_REF != "HEAD":
+            rel_path = os.path.relpath(ini_path, PROJECT_ROOT).replace("\\", "/")
+            try:
+                content = subprocess.check_output(
+                    ["git", "show", f"{HEAD_REF}:{rel_path}"], stderr=subprocess.DEVNULL
+                ).decode("utf-8")
+            except Exception:
+                return STAGE_RELEASE
+        else:
+            try:
+                with open(ini_path, "r", encoding="utf-8") as f:
+                    content = f.read()
+            except Exception:
+                return STAGE_RELEASE
+    return stage_from_content(content)
+
+def get_prior_stage(ini_path, base_ref):
+    rel_path = os.path.relpath(ini_path, PROJECT_ROOT).replace("\\", "/")
+    try:
+        content = subprocess.check_output(
+            ["git", "show", f"{base_ref}:{rel_path}"], stderr=subprocess.DEVNULL
+        ).decode("utf-8")
+        return stage_from_content(content)
+    except Exception:
+        return STAGE_RELEASE
+
+def remove_stage_flag(ini_path):
+    """Strip the Alpha/Beta flag line(s) from an .ini (used on release promotion)."""
+    try:
+        with open(ini_path, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+        new_lines = [ln for ln in lines if not (RE_STAGE_ALPHA.match(ln) or RE_STAGE_BETA.match(ln))]
+        if new_lines != lines:
+            with open(ini_path, "w", encoding="utf-8") as f:
+                f.writelines(new_lines)
+            return True
+    except Exception as e:
+        print(f"Error removing stage flag from {ini_path}: {e}", file=sys.stderr)
+    return False
 
 def get_changed_files(feature_path, base_ref, file_types=None):
     if file_types is None:
@@ -560,10 +620,30 @@ def detect_pr_base():
     print(f"Falling back to {DEFAULT_PR_BASE_REF} for PR base.", file=sys.stderr)
     return DEFAULT_PR_BASE_REF
 
-def propose_new_version(prior_version, commits):
+def propose_new_version(prior_version, commits, prior_stage=STAGE_RELEASE, current_stage=STAGE_RELEASE):
     if not prior_version:
         return None
     major, minor, patch = prior_version
+
+    has_breaking = any(RE_COMMIT_BREAKING.search(c) for c in commits) if commits else False
+
+    # Promotion to release: either the flag was removed (prior pre-release, now
+    # release) or a breaking commit auto-promotes a still-pre-release feature.
+    promoted_by_flag = prior_stage in (STAGE_ALPHA, STAGE_BETA) and current_stage == STAGE_RELEASE
+    promoted_by_breaking = current_stage in (STAGE_ALPHA, STAGE_BETA) and has_breaking
+    if promoted_by_flag or promoted_by_breaking:
+        return (1, 0, 0)
+
+    # Pre-release stage transitions take precedence over commit-based bumps.
+    if current_stage in (STAGE_ALPHA, STAGE_BETA):
+        if prior_stage == STAGE_RELEASE:
+            # Entering pre-release from release/fresh: fixed baselines.
+            return (0, 1, 0) if current_stage == STAGE_ALPHA else (0, 2, 0)
+        if prior_stage == STAGE_ALPHA and current_stage == STAGE_BETA:
+            # alpha -> beta: extra minor bump, patch reset.
+            return (0, minor + 1, 0)
+        # Same stage (alpha->alpha / beta->beta): fall through to normal semver within 0.x.
+
     if not commits:
         return None
 
@@ -680,12 +760,29 @@ def analyze_features(FEATURES_DIR, feature_meta_map, base_ref, only_changed=Fals
                 bump_commit = any_commit
                 bump_author = get_commit_author(any_commit)
 
-        proposed_ver = propose_new_version(prior_ver, all_commits) if ini_path else None
+        # Release stage at the version baseline vs. at HEAD; drives stage-aware proposals.
+        prior_stage = get_prior_stage(ini_path, version_ref) if ini_path else STAGE_RELEASE
+        current_stage = get_stage_from_ini(ini_path) if ini_path else STAGE_RELEASE
+        has_breaking = any(RE_COMMIT_BREAKING.search(c) for c in all_commits)
+        # A transition is a change of stage between the baseline and HEAD.
+        stage_transition = prior_stage != current_stage
+        # A breaking commit on a still-pre-release feature must also strip the flag.
+        needs_flag_removal = current_stage != STAGE_RELEASE and has_breaking
+
+        proposed_ver = propose_new_version(prior_ver, all_commits, prior_stage, current_stage) if ini_path else None
         # Use max(new_ver, pr_prior_ver) as the effective current version so that a version
         # bump already on base_ref (e.g. from a parallel PR) satisfies the check even when
         # the PR branch has not been rebased.
         effective_new_ver = max(new_ver, pr_prior_ver) if (new_ver and pr_prior_ver) else (new_ver or pr_prior_ver)
-        needs_bump = (proposed_ver is not None and effective_new_ver is not None and proposed_ver > effective_new_ver)
+        if stage_transition:
+            # Transitions are exact-match enforced because they may legitimately lower the
+            # version (e.g. release 1.x -> beta 0.2.0), which the lenient '>' check below
+            # would never apply. Compare against the HEAD ini directly.
+            needs_bump = (proposed_ver is not None and new_ver is not None and proposed_ver != new_ver)
+        else:
+            # Within-stage (release OR pre-release) mirrors existing release handling:
+            # lenient, so --apply-bumps at release time never downgrades a feature.
+            needs_bump = (proposed_ver is not None and effective_new_ver is not None and proposed_ver > effective_new_ver)
         proposed_ver_str = "-".join(map(str, proposed_ver)) if proposed_ver else "-"
         prior_ver_str = "-".join(map(str, prior_ver)) if prior_ver else "-"
         new_ver_str = "-".join(map(str, new_ver)) if new_ver else "-"
@@ -736,7 +833,7 @@ def analyze_features(FEATURES_DIR, feature_meta_map, base_ref, only_changed=Fals
                     except Exception:
                         pass
 
-        if needs_bump:
+        if needs_bump or needs_flag_removal:
             is_attention = True
         if is_attention:
             actionable = True
@@ -759,6 +856,7 @@ def analyze_features(FEATURES_DIR, feature_meta_map, base_ref, only_changed=Fals
             'commit_link': commit_link,
             'is_attention': is_attention,
             'ini_path': str(ini_path) if ini_path else None,
+            'needs_flag_removal': needs_flag_removal,
             'author': bump_author
         })
         if needs_bump:
@@ -769,6 +867,8 @@ def analyze_features(FEATURES_DIR, feature_meta_map, base_ref, only_changed=Fals
                 feat_act["actions"].append(note)
             if needs_bump:
                 feat_act["actions"].append(f"Needs version bump to {proposed_ver_str}")
+            if needs_flag_removal:
+                feat_act["actions"].append("Breaking change: promote to release (set 1-0-0, remove Alpha/Beta flag)")
 
     return feature_analysis, bump_suggestions, new_features, new_code_features, actionable, feature_actions
 
@@ -1244,12 +1344,18 @@ def main():
 
                     fa['needs_bump'] = False
 
+            # Breaking-change auto-promotion: strip the Alpha/Beta flag from the ini.
+            if fa.get('needs_flag_removal') and fa['ini_path']:
+                if remove_stage_flag(fa['ini_path']):
+                    print(f"Removed Alpha/Beta flag from {fa['name']} (promoted to release)", file=sys.stderr)
+                    fa['needs_flag_removal'] = False
+
         print(f"\nSuccessfully applied {applied_count} version bumps." if applied_count > 0 else "\nNo version bumps applied.", file=sys.stderr)
 
         # Remove stale bump actions from feature_actions
         for fname in list(feature_actions.keys()):
             info = feature_actions[fname]
-            info["actions"] = [a for a in info["actions"] if not a.startswith("Needs version bump")]
+            info["actions"] = [a for a in info["actions"] if not a.startswith("Needs version bump") and not a.startswith("Breaking change: promote")]
             if not info["actions"]:
                 del feature_actions[fname]
 
@@ -1265,7 +1371,7 @@ def main():
         ]
 
         # Recompute actionable after applying bumps
-        actionable = any(fa.get('needs_bump') or "missing" in fa.get('note', '').lower() for fa in feature_analysis)
+        actionable = any(fa.get('needs_bump') or fa.get('needs_flag_removal') or "missing" in fa.get('note', '').lower() for fa in feature_analysis)
         if new_features:
             actionable = True
 

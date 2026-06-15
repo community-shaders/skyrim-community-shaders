@@ -15,4 +15,14 @@ namespace FeatureVersions
 	{
 @FEATURE_CORE_NAMES@
 	};
+
+	static const std::unordered_set<std::string_view> FEATURE_ALPHA_NAMES
+	{
+@FEATURE_ALPHA_NAMES@
+	};
+
+	static const std::unordered_set<std::string_view> FEATURE_BETA_NAMES
+	{
+@FEATURE_BETA_NAMES@
+	};
 }

@@ -124,8 +124,6 @@ struct UnifiedWater : OverlayFeature
 	virtual void RestoreDefaultSettings() override;
 
 	virtual bool IsCore() const override { return true; }
-	/** @brief Indicates this feature is disabled by default and must be opted into. */
-	virtual bool IsDisabledByDefault() const override { return true; }
 
 	/** @brief Installs engine hooks for water mesh replacement and worldspace handling. */
 	virtual void PostPostLoad() override;
