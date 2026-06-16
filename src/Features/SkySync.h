@@ -133,7 +133,7 @@ private:
 	static constexpr float VLFadeEndAngle = 10.0f;
 
 	inline static RE::NiPoint3* gSunPosition = nullptr;
-	RE::BSVolumetricLightingRenderData* gVolumetricLighting = nullptr;
+	inline static RE::BSVolumetricLightingRenderData* gVolumetricLighting = nullptr;
 
 	bool moonAndStarsLoaded = false;
 	RE::TESObjectCELL* currentCell = nullptr;
