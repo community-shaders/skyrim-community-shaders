@@ -3,6 +3,13 @@
 #include <cstdint>
 #include <string>
 
+/**
+ * @brief Renders the Home page of the in-game menu with welcome info, FAQ, and first-time setup.
+ *
+ * Displays a welcome banner, quick links (Discord, etc.), active constraint
+ * warnings, and a FAQ section. Also manages the first-time setup dialog
+ * shown on initial launch.
+ */
 class HomePageRenderer
 {
 public:
@@ -28,13 +35,26 @@ public:
 	static constexpr float DISCORD_BANNER_MAX_WIDTH = 1200.0f;
 	static constexpr float DISCORD_BANNER_PADDING_MARGIN = 40.0f;
 
+	/** @brief Renders the full Home page including welcome, quick links, constraints, and FAQ sections. */
 	static void RenderHomePage();
 
 	// First-time setup management
+	/** @brief Returns true if the first-time setup dialog should be displayed to the user. */
 	static bool ShouldShowFirstTimeSetup();
+
+	/** @brief Renders the modal first-time setup dialog overlay with initial configuration options. */
 	static void RenderFirstTimeSetupDialog();
 
-	// Returns true and clears state if key release should be skipped (was used to close dialog)
+	/**
+	 * @brief Checks whether a key release event should be suppressed.
+	 *
+	 * Returns true and clears internal state if the given key was the one
+	 * used to close the first-time setup dialog, preventing the release
+	 * from triggering the menu toggle.
+	 *
+	 * @param key The virtual key code of the released key.
+	 * @return true if the key release should be consumed, false otherwise.
+	 */
 	static bool ShouldSkipKeyRelease(uint32_t key);
 
 private:

@@ -15,6 +15,7 @@
 class Deferred
 {
 public:
+	/** @brief Gets the singleton instance. */
 	static Deferred* GetSingleton()
 	{
 		static Deferred singleton;
@@ -30,27 +31,54 @@ public:
 	};
 	STATIC_ASSERT_ALIGNAS_16(DirectionalShadowLightData);
 
+	/** @brief Creates render targets, samplers, and the directional shadow structured buffer. */
 	void SetupResources();
+
+	/** @brief Runs feature reflection prepasses with render targets unbound. */
 	void ReflectionsPrepasses();
+
+	/** @brief Runs early feature prepasses and uploads shadow light data after shadow map rendering. */
 	void EarlyPrepasses();
+
+	/** @brief Begins deferred rendering by binding GBuffer targets and overriding blend states. */
 	void StartDeferred();
+
+	/** @brief Replaces engine blend states with deferred-compatible variants for GBuffer output. */
 	void OverrideBlendStates();
+
+	/** @brief Restores original forward blend states after deferred pass completes. */
 	void ResetBlendStates();
+
+	/** @brief Dispatches the deferred composite compute shader and post-deferred feature passes. */
 	void DeferredPasses();
+
+	/** @brief Ends deferred rendering, restores forward targets, and triggers DeferredPasses. */
 	void EndDeferred();
 
+	/** @brief Runs feature prepasses between StartDeferred and geometry rendering. */
 	void PrepassPasses();
 
+	/** @brief Releases cached composite compute shaders, forcing recompilation on next use. */
 	void ClearShaderCache();
 
+	/**
+	 * @brief Gets or compiles the exterior deferred composite compute shader.
+	 * @return Cached or freshly compiled compute shader with feature-dependent defines.
+	 */
 	ID3D11ComputeShader* GetComputeMainComposite();
+
+	/**
+	 * @brief Gets or compiles the interior deferred composite compute shader.
+	 * @return Cached or freshly compiled compute shader with INTERIOR and feature-dependent defines.
+	 */
 	ID3D11ComputeShader* GetComputeMainCompositeInterior();
 
-	// Reads directional shadow parameters from BSShadowDirectionalLight and uploads
-	// to the structured buffer at t98 (DirectionalShadowLightData — cascade splits +
-	// world-to-shadow projections). Called during EarlyPrepasses once shadow maps
-	// have been rendered. Replaces the previous compute-shader dispatch that copied
-	// constant-buffer fields into a UAV.
+	/**
+	 * @brief Uploads directional shadow parameters from BSShadowDirectionalLight to the t98 structured buffer.
+	 *
+	 * Reads cascade splits and world-to-shadow projections. Called during EarlyPrepasses
+	 * once shadow maps have been rendered.
+	 */
 	void CopyShadowLightData();
 
 	ID3D11BlendState* deferredBlendStates[7][2][13][2];
@@ -118,6 +146,7 @@ public:
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
+		/** @brief Installs all deferred rendering hooks into the game's vtables and call sites. */
 		static void Install()
 		{
 			stl::write_vfunc<0x35, BSCubeMapCamera_RenderCubemap>(RE::VTABLE_BSCubeMapCamera[0]);

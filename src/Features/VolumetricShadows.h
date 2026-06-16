@@ -2,19 +2,23 @@
 
 #include "Buffer.h"
 
+/** @brief Provides downsampled VSM shadow maps for use by effects like particles and decals. */
 struct VolumetricShadows : Feature
 {
 public:
 	virtual inline std::string GetName() override { return "Volumetric Shadows"; }
 	virtual std::string GetDisplayName() override { return T("feature.volumetric_shadows.name", "Volumetric Shadows"); }
+	/** @brief Returns the short identifier used for file paths and logging. */
 	virtual inline std::string GetShortName() override { return "VolumetricShadows"; }
 	virtual inline std::string_view GetShaderDefineName() override { return "VOLUMETRIC_SHADOWS"; }
 	virtual std::string_view GetCategory() const override { return FeatureCategories::kLighting; }
 	virtual bool IsCore() const override { return true; }
+	/** @brief Indicates this feature appears in the settings menu. */
 	virtual bool IsInMenu() const override { return true; }
 
 	static constexpr uint32_t kSharedShadowMapShaderSlot = 18;
 
+	/** @brief Returns a summary description and list of key features for the UI. */
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
 		return { T("feature.volumetric_shadows.description", "Volumetric Shadows provides downsampled VSM shadow maps for use by effects like particles and decals.\nThis improves shadow quality on transparent objects with minimal performance impact."),
@@ -54,17 +58,21 @@ public:
 	// Samplers
 	ID3D11SamplerState* linearSampler = nullptr;
 
+	/** @brief Draws the ImGui settings panel for volumetric shadows. */
 	virtual void DrawSettings() override;
+	/** @brief Creates GPU resources including samplers, compute shaders, and shadow textures. */
 	virtual void SetupResources() override;
+	/** @brief Releases and recompiles all compute shaders. */
 	virtual void ClearShaderCache() override;
 
+	/** @brief Copies and downsamples the directional shadow map, then applies Gaussian blur filtering. */
 	void CopyShadowLightData();
 
 	virtual void LoadSettings(json& o_json) override;
 	virtual void SaveSettings(json& o_json) override;
 	virtual void RestoreDefaultSettings() override;
 
-
+	/** @brief Installs the engine hook for binding the shared shadow map SRV. */
 	virtual void PostPostLoad() override;
 
 private:

@@ -55,6 +55,14 @@ namespace
 		return std::find(CORE_MENU_NAMES.begin(), CORE_MENU_NAMES.end(), menuName) != CORE_MENU_NAMES.end();
 	}
 
+	// Color for the [ALPHA]/[BETA] stage marker. Alpha (less stable) reads as an error,
+	// Beta as a warning.
+	ImVec4 StageTagColor(Feature::ReleaseStage stage)
+	{
+		const auto& statusPalette = globals::menu->GetTheme().StatusPalette;
+		return stage == Feature::ReleaseStage::Alpha ? statusPalette.Error : statusPalette.Warning;
+	}
+
 	/**
 	 * @brief Determines if the left feature panel should be visible based on auto-hide settings and mouse position
 	 * @return true if panel should be visible, false if it should be hidden
@@ -166,7 +174,7 @@ namespace
 	 * @param description Short description shown below the title (single line, truncated if too long)
 	 * @return The height of just the title line (for button alignment)
 	 */
-	float DrawFeatureHeader(const std::string& featureName, const std::string& version, const std::string& description = "")
+	float DrawFeatureHeader(const std::string& featureName, const std::string& version, const std::string& description = "", const std::string& stageTag = "", ImVec4 stageColor = {})
 	{
 		auto& themeSettings = globals::menu->GetTheme();
 		auto& palette = themeSettings.Palette;
@@ -197,6 +205,31 @@ namespace
 		// Store the title-only height for return value
 		float titleOnlyHeight = titleSize.y;
 
+		// Running x for bottom-aligned annotations (stage tag, then version) to the right of the title
+		float annotationX = startPos.x + titleSize.x + ImGui::GetStyle().ItemSpacing.x;
+
+		// Draw stage marker ([ALPHA]/[BETA]) on same line, bottom-aligned
+		if (!stageTag.empty()) {
+			ImVec2 tagSize;
+			{
+				MenuFonts::FontRoleGuard bodyGuard(Menu::FontRole::Body);
+				tagSize = ImGui::CalcTextSize(stageTag.c_str());
+				tagSize.x *= titleScale;
+				tagSize.y *= titleScale;
+			}
+
+			ImGui::SetCursorScreenPos(ImVec2(annotationX, startPos.y + titleSize.y - tagSize.y));
+			{
+				MenuFonts::FontRoleGuard bodyGuard(Menu::FontRole::Body);
+				ImGui::SetWindowFontScale(titleScale);
+				ImGui::TextColored(stageColor, "%s", stageTag.c_str());
+				ImGui::SetWindowFontScale(1.0f);
+			}
+
+			annotationX += tagSize.x + ImGui::GetStyle().ItemSpacing.x;
+			ImGui::SetCursorScreenPos(ImVec2(startPos.x, startPos.y + titleSize.y + ImGui::GetStyle().ItemSpacing.y * 0.25f));
+		}
+
 		// Draw version on same line with Body font, bottom-aligned if version exists
 		if (!version.empty()) {
 			// Format version: replace dashes with dots for consistency
@@ -212,8 +245,8 @@ namespace
 				versionSize.y *= titleScale;
 			}
 
-			// Position version text: right of title, bottom-aligned
-			float versionX = startPos.x + titleSize.x + ImGui::GetStyle().ItemSpacing.x;
+			// Position version text: right of the stage tag (or title), bottom-aligned
+			float versionX = annotationX;
 			float versionY = startPos.y + titleSize.y - versionSize.y;
 
 			ImGui::SetCursorScreenPos(ImVec2(versionX, versionY));
@@ -582,6 +615,12 @@ void FeatureListRenderer::ListMenuVisitor::operator()(Feature* feat)
 	}
 	ImGui::PopStyleColor();
 
+	// Display the stage marker behind the name, regardless of loaded state
+	if (const auto stage = feat->GetReleaseStage(); stage != Feature::ReleaseStage::Release) {
+		ImGui::SameLine();
+		ImGui::TextColored(StageTagColor(stage), "%s", Feature::GetReleaseStageTag(stage).c_str());
+	}
+
 	// Display version if loaded
 	if (isLoaded) {
 		ImGui::SameLine();
@@ -682,7 +721,9 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureHeader(Feature* feat, bo
 
 	// Draw feature title, version, and description on the left
 	// Returns title-only height for button alignment
-	float titleOnlyHeight = DrawFeatureHeader(feat->GetDisplayName(), isLoaded ? feat->version : "", description);
+	const auto stage = feat->GetReleaseStage();
+	const std::string stageTag = Feature::GetReleaseStageTag(stage);  // empty for Release; color unused when tag is empty
+	float titleOnlyHeight = DrawFeatureHeader(feat->GetDisplayName(), isLoaded ? feat->version : "", description, stageTag, StageTagColor(stage));
 
 	// Save cursor position after header (for restoring after buttons are drawn)
 	ImVec2 cursorPosAfterHeader = ImGui::GetCursorScreenPos();

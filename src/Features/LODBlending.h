@@ -7,6 +7,7 @@ struct LODBlending : Feature
 	virtual inline std::string GetShortName() override { return "LODBlending"; }
 	virtual inline std::string_view GetShaderDefineName() override { return "LOD_BLENDING"; }
 	virtual std::string_view GetCategory() const override { return FeatureCategories::kLandscapeAndTextures; }
+	/** @brief Returns a localized description and list of key features for the UI summary panel. */
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
 		return { T("feature.lod_blending.description", "Provides seamless visual transitions between Level of Detail (LOD) objects and full-detail objects, eliminating harsh transitions and creating smooth visual continuity."),
@@ -33,6 +34,7 @@ struct LODBlending : Feature
 
 	Settings settings;
 
+	/** @brief Draws the ImGui settings UI for LOD brightness, gamma, and vertex color configuration. */
 	virtual void DrawSettings() override;
 
 	virtual void LoadSettings(json& o_json) override;

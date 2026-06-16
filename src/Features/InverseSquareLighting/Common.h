@@ -21,6 +21,11 @@ struct ISLCommon
 		float fade;
 		std::uint32_t unk138;
 
+		/**
+		 * @brief Retrieves the ISL extension data from a NiLight's runtime data region.
+		 * @param niLight The NiLight whose runtime data to reinterpret.
+		 * @return Pointer to the RuntimeLightDataExt overlay.
+		 */
 		static RuntimeLightDataExt* Get(RE::NiLight* niLight)
 		{
 			return reinterpret_cast<RuntimeLightDataExt*>(&niLight->GetLightRuntimeData());

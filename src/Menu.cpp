@@ -1058,6 +1058,61 @@ void Menu::ProcessInputEventQueue()
 			const bool wasCapturingHotkey = IsCapturingHotkeyInput();
 			const bool allowSetupCloseKey = wasCapturingHotkey && HomePageRenderer::ShouldShowFirstTimeSetup() &&
 			                                (key == VK_RETURN || key == VK_ESCAPE);
+
+			// Dispatch bound hotkey actions for `key`. Combo bindings (modifier + key)
+			// fire on key-down for responsiveness; single-key bindings fire on key-up.
+			auto dispatchHotkeyActions = [this, key](bool combosOnly) {
+				struct KeyAction
+				{
+					std::vector<InputCombo>& settingKey;
+					std::function<void()> action;
+				};
+				auto shaderCache = globals::shaderCache;
+				KeyAction keyActions[] = {
+					{ settings.ToggleKey, [this]() {
+						 if (!HomePageRenderer::ShouldShowFirstTimeSetup()) {
+							 IsEnabled = !IsEnabled;
+							 if (IsEnabled)
+								 ImGui::GetIO().ClearInputKeys();  // Prevent toggle key from remaining "held" in ImGui after open.
+						 }
+					 } },
+					{ settings.SkipCompilationKey, [this, shaderCache]() { if (!ShouldSwallowInput() && shaderCache->IsCompiling()) shaderCache->backgroundCompilation = true; } },
+					{ settings.EffectToggleKey, [shaderCache]() { shaderCache->SetEnabled(!shaderCache->IsEnabled()); } },
+					{ settings.ShaderBlockPrevKey, [this, shaderCache]() { if (settings.EnableShaderBlocking) shaderCache->IterateShaderBlock(); } },
+					{ settings.ShaderBlockNextKey, [this, shaderCache]() { if (settings.EnableShaderBlocking) shaderCache->IterateShaderBlock(false); } },
+					{ settings.OverlayToggleKey, []() { Menu::GetSingleton()->overlayVisible = !Menu::GetSingleton()->overlayVisible; } },
+					{ settings.CSEditorToggleKey, []() {
+						 auto* ew = EditorWindow::GetSingleton();
+						 if (!ew)
+							 return;
+						 if (ew->GetPreviewMode() == EditorWindow::PreviewMode::FreeCamera) {
+							 // Flying → lock camera position for editing
+							 ew->ToggleFreeCameraLock();
+						 } else if (ew->IsInPreviewMode()) {
+							 // Locked or PlayMode → fully exit preview
+							 ew->ExitPreviewMode();
+						 } else {
+							 CSEditor::ToggleEditorWindow();
+						 }
+					 } },
+					{ settings.ScreenshotKey, []() {
+						 if (globals::features::screenshotFeature.loaded)
+							 globals::features::screenshotFeature.captureRequested = true;
+					 } },
+				};
+				// RenderDoc's capture key is a single, unmodified key; only consider it on key-up.
+				if (!combosOnly && globals::features::renderDoc.HandleCaptureHotkey(key))
+					return true;
+				for (const auto& ka : keyActions) {
+					const bool isCombo = ka.settingKey.size() > 1;
+					if (isCombo == combosOnly && InputCombo::MatchesKeyboardCombo(ka.settingKey, key)) {
+						ka.action();
+						return true;
+					}
+				}
+				return false;
+			};
+
 			if (!event.IsPressed()) {
 				// Skip key release if it was used to close the first-time setup dialog
 				if (HomePageRenderer::ShouldSkipKeyRelease(key)) {
@@ -1071,7 +1126,6 @@ void Menu::ProcessInputEventQueue()
 					bool* settingFlag;
 					std::function<void(std::vector<InputCombo>)> action;
 				};
-				auto shaderCache = globals::shaderCache;
 				HotkeyAction hotkeyActions[] = {
 					{ &settings.ToggleKey, &settingToggleKey, [this](std::vector<InputCombo> keys) {
 						 settings.ToggleKey = keys;
@@ -1132,51 +1186,11 @@ void Menu::ProcessInputEventQueue()
 					}
 				}
 				if (!handled) {
-					struct KeyAction
-					{
-						std::vector<InputCombo>& settingKey;
-						std::function<void()> action;
-					};
-					KeyAction keyActions[] = {
-						{ settings.ToggleKey, [this]() {
-							 if (!HomePageRenderer::ShouldShowFirstTimeSetup()) {
-								 IsEnabled = !IsEnabled;
-								 if (IsEnabled)
-									 ImGui::GetIO().ClearInputKeys();  // Prevent toggle key from remaining "held" in ImGui after open.
-							 }
-						 } },
-						{ settings.SkipCompilationKey, [this, shaderCache]() { if (!ShouldSwallowInput() && shaderCache->IsCompiling()) shaderCache->backgroundCompilation = true; } },
-						{ settings.EffectToggleKey, [shaderCache]() { shaderCache->SetEnabled(!shaderCache->IsEnabled()); } },
-						{ settings.ShaderBlockPrevKey, [this, shaderCache]() { if (settings.EnableShaderBlocking) shaderCache->IterateShaderBlock(); } },
-						{ settings.ShaderBlockNextKey, [this, shaderCache]() { if (settings.EnableShaderBlocking) shaderCache->IterateShaderBlock(false); } },
-						{ settings.OverlayToggleKey, []() { Menu::GetSingleton()->overlayVisible = !Menu::GetSingleton()->overlayVisible; } },
-						{ settings.CSEditorToggleKey, []() {
-							 auto* ew = EditorWindow::GetSingleton();
-							 if (!ew)
-								 return;
-							 if (ew->GetPreviewMode() == EditorWindow::PreviewMode::FreeCamera) {
-								 // Flying → lock camera position for editing
-								 ew->ToggleFreeCameraLock();
-							 } else if (ew->IsInPreviewMode()) {
-								 // Locked or PlayMode → fully exit preview
-								 ew->ExitPreviewMode();
-							 } else {
-								 CSEditor::ToggleEditorWindow();
-							 }
-						 } },
-						{ settings.ScreenshotKey, []() {
-							 if (globals::features::screenshotFeature.loaded)
-								 globals::features::screenshotFeature.captureRequested = true;
-						 } },
-					};
-					if (!globals::features::renderDoc.HandleCaptureHotkey(key)) {
-						for (const auto& ka : keyActions) {
-							if (InputCombo::MatchesKeyboardCombo(ka.settingKey, key)) {
-								ka.action();
-								break;
-							}
-						}
-					}
+					// Single-key hotkeys fire on key-up; combos already fired on key-down.
+					// If this key's key-down already fired a combo, suppress the single-key
+					// binding so releasing the modifier first doesn't trigger it as well.
+					if (_comboFiredKeys.erase(key) == 0)
+						dispatchHotkeyActions(false);
 				}
 
 				// Handle ESC key for menu and editor window
@@ -1190,6 +1204,12 @@ void Menu::ProcessInputEventQueue()
 						IsEnabled = false;
 					}
 				}
+			} else if (event.IsDown() && !wasCapturingHotkey) {
+				// Fire combo hotkeys on the key-down transition so they respond on
+				// press rather than release. IsDown() (not IsPressed()) ensures we
+				// trigger only once instead of every frame the key is held.
+				if (dispatchHotkeyActions(true))
+					_comboFiredKeys.insert(key);
 			}
 
 			// Don't forward hotkey events to ImGui when input is captured (prevents e.g. End key scrolling the feature list)

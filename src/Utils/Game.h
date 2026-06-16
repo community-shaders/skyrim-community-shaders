@@ -9,6 +9,10 @@ namespace Util
 	float4 TryGetWaterData(float offsetX, float offsetY);
 	float4 GetCameraData();
 	bool GetTemporal();
+	// Toggle the ISTemporalAA scene-resolve flag (companion to GetTemporal).
+	void SetTemporal(bool enabled);
+	// Disable vanilla TAA (bUseTAA:Display). CS drives TAA itself.
+	void DisableVanillaTAA();
 	float GetVerticalFOVRad();
 
 	RE::NiPoint3 GetEyePosition();

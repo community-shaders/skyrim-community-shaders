@@ -60,6 +60,7 @@ class Widget
 public:
 	RE::TESForm* form = nullptr;
 
+	/** @brief Virtual destructor. */
 	virtual ~Widget() {};
 
 	static constexpr std::string_view kWeatherFolderName = "Weathers";
@@ -82,6 +83,7 @@ public:
 		kOtherEditorWidgetsFolderName
 	};
 
+	/** @brief Get the cached editor ID for this widget's form, retrying if using a fallback. */
 	virtual std::string GetEditorID() const
 	{
 		// If using a fallback ID, retry getting the real EditorID
@@ -96,15 +98,16 @@ public:
 		return cachedEditorID;
 	}
 
-	/// SPID-based key for file save/load operations (load-order-portable).
+	/** @brief SPID-based key for file save/load operations (load-order-portable). */
 	std::string GetSaveKey() const
 	{
 		return cachedSaveKey;
 	}
 
-	/// Full path to this widget's save file.
+	/** @brief Full path to this widget's save file. */
 	std::string GetSaveFilePath() const;
 
+	/** @brief Get the form ID as an 8-character hex string. */
 	virtual std::string GetFormID() const
 	{
 		if (!form)
@@ -112,6 +115,7 @@ public:
 		return std::format("{:08X}", form->GetFormID());
 	}
 
+	/** @brief Get the plugin filename that owns this form. */
 	virtual std::string GetFilename() const
 	{
 		if (!form)
@@ -121,6 +125,7 @@ public:
 		return "Generated";
 	}
 
+	/** @brief Cache the editor ID and save key from the form for fast subsequent lookups. */
 	void CacheFormData()
 	{
 		if (!form) {
@@ -162,55 +167,91 @@ public:
 		isFallbackEditorID = true;
 	}
 
+	/** @brief Draw this widget's ImGui editing interface. Must be implemented by subclasses. */
 	virtual void DrawWidget() = 0;
 
-	/// Type name for widget-type-level state sharing (window size, etc.).
+	/** @brief Type name for widget-type-level state sharing (window size, etc.). */
 	virtual const char* GetWidgetTypeName() const = 0;
 
-	/// Call instead of SetupWidgetWindowDefaults + ImGui::Begin. Tracks per-type window size.
+	/** @brief Call instead of SetupWidgetWindowDefaults + ImGui::Begin. Tracks per-type window size. */
 	bool BeginWidgetWindow();
 
-	/// Queue focus for the next BeginWidgetWindow call (use instead of SetWindowFocus on a not-yet-drawn window).
+	/** @brief Queue focus for the next BeginWidgetWindow call (use instead of SetWindowFocus on a not-yet-drawn window). */
 	void RequestFocus() { m_pendingFocus = true; }
 
 	bool open = false;
 
+	/** @brief Returns true if this widget's window is currently open. */
 	bool IsOpen() const
 	{
 		return open;
 	}
 
+	/**
+	 * @brief Set the open/closed state of this widget's window.
+	 * @param state True to open, false to close.
+	 */
 	void SetOpen(bool state = true)
 	{
 		open = state;
 	}
 
-	/// Returns a window title with unique ImGui ID: "EditorID###FormID"
+	/** @brief Returns a window title with unique ImGui ID: "EditorID###FormID". */
 	std::string GetWindowTitle() const
 	{
 		return std::format("{}###{}", GetEditorID(), GetFormID());
 	}
 
+	/** @brief Save the widget's current settings to its JSON file on disk. */
 	void Save();
+
+	/**
+	 * @brief Load this widget's settings from its JSON file on disk.
+	 * @param showNotification If true, display a notification on successful load.
+	 */
 	void Load(bool showNotification = true);
+
+	/** @brief Returns true if a saved JSON file exists on disk for this widget. */
 	bool HasSavedFile() const;
 
+	/** @brief Delete this widget's saved JSON file from disk. */
 	virtual void Delete();
+
+	/** @brief Load widget-specific settings from the internal JSON object. Must be implemented by subclasses. */
 	virtual void LoadSettings() = 0;
+
+	/** @brief Save widget-specific settings to the internal JSON object. Must be implemented by subclasses. */
 	virtual void SaveSettings() = 0;
+
+	/** @brief Apply the current widget settings to the live game form. Must be implemented by subclasses. */
 	virtual void ApplyChanges() = 0;
+
+	/** @brief Revert widget settings to the last loaded state. Default implementation calls LoadSettings. */
 	virtual void RevertChanges() { LoadSettings(); }
+
+	/** @brief Returns true if the widget has unsaved modifications relative to its saved file. */
 	virtual bool HasUnsavedChanges() const { return false; }
 
-	// Reinitialize weather to apply form refs that are only read at load time.
+	/**
+	 * @brief Reinitialize a weather form to apply form references that are only read at load time.
+	 * @param weather The weather form to reinitialize.
+	 */
 	static void ForceWeatherReinit(RE::TESWeather* weather);
-	// Reinitialize the current sky weather (use when the specific weather is unknown).
+
+	/** @brief Reinitialize the current sky weather (use when the specific weather is unknown). */
 	static void ForceCurrentWeatherReinit();
 
-	// Override to suppress per-frame auto-apply and show a manual-apply warning in the header.
+	/** @brief Override to suppress per-frame auto-apply and show a manual-apply warning in the header. */
 	virtual bool RequiresManualApply() const { return false; }
 
-	// Draw common header with search bar and action buttons
+	/**
+	 * @brief Draw the common widget header with search bar and action buttons.
+	 * @param searchId         ImGui ID for the search input.
+	 * @param showApply        If true, show the Apply button.
+	 * @param showSaveLoadRevert If true, show Save/Load/Revert buttons.
+	 * @param showForceWeather If true, show the Force Weather lock button.
+	 * @param weather          The weather form for the Force Weather button (required when showForceWeather is true).
+	 */
 	void DrawWidgetHeader(const char* searchId, bool showApply = true, bool showSaveLoadRevert = false, bool showForceWeather = false, RE::TESWeather* weather = nullptr);
 
 	// Search functionality
@@ -226,33 +267,65 @@ public:
 		std::string tabName;    // empty if widget has no tabs
 		std::string settingId;  // id used for highlight matching
 	};
+	/** @brief Collect all searchable settings for the search dropdown. Override to provide entries. */
 	virtual std::vector<SearchResult> CollectSearchableSettings() const { return {}; }
 
-	// Call immediately after DrawWidgetHeader() to render the search dropdown.
+	/** @brief Render the search dropdown. Call immediately after DrawWidgetHeader(). */
 	void DrawSearchDropdown();
 
-	// Returns ImGuiTabItemFlags_SetSelected if the given tab matches the pending
-	// navigation request, otherwise 0. Clears the override after the first tab is set.
+	/**
+	 * @brief Get tab flags for search-driven tab navigation.
+	 *
+	 * Returns ImGuiTabItemFlags_SetSelected if the given tab matches the pending
+	 * navigation request, otherwise 0. Clears the override after the first tab is set.
+	 * @param tabName The tab name to check against the pending navigation.
+	 * @return ImGuiTabItemFlags_SetSelected or 0.
+	 */
 	int GetTabFlagsForOverride(const std::string& tabName);
 
-	// True if the setting matches the current search query or no search is active.
-	// Returns true when no search is active, or when settingId appears in the
-	// current filtered results. Use DrawIfMatchesSearch() for simple controls.
+	/**
+	 * @brief Check if a setting matches the current search query.
+	 *
+	 * Returns true when no search is active, or when settingId appears in the
+	 * current filtered results. Use DrawIfMatchesSearch() for simple controls.
+	 * @param settingId The setting identifier to check.
+	 * @return True if the setting should be visible.
+	 */
 	bool MatchesSearch(const std::string& settingId) const;
+
+	/**
+	 * @brief Check if any of the given setting IDs match the current search query.
+	 * @param settingIds List of setting identifiers to check.
+	 * @return True if any setting matches or no search is active.
+	 */
 	bool MatchesAnySearch(std::initializer_list<const char*> settingIds) const;
 
+	/**
+	 * @brief Draw a control only if its setting ID matches the current search.
+	 * @tparam DrawFn Callable taking const char* settingId, returning bool.
+	 * @param  settingId The setting identifier for search filtering.
+	 * @param  draw      Drawing callback invoked with the setting ID.
+	 * @return True if the control was drawn and returned true.
+	 */
 	template <class DrawFn>
 	bool DrawIfMatchesSearch(const char* settingId, DrawFn draw)
 	{
 		return MatchesSearch(settingId) && draw(settingId);
 	}
 
+	/** @copydoc DrawIfMatchesSearch(const char*, DrawFn) */
 	template <class DrawFn>
 	bool DrawIfMatchesSearch(const std::string& settingId, DrawFn draw)
 	{
 		return MatchesSearch(settingId) && draw(settingId.c_str());
 	}
 
+	/**
+	 * @brief Draw a section only if its setting ID matches the current search.
+	 * @tparam DrawFn Callable taking const char* settingId, returning void.
+	 * @param  settingId The setting identifier for search filtering.
+	 * @param  draw      Drawing callback invoked with the setting ID.
+	 */
 	template <class DrawFn>
 	void DrawSearchSectionIfMatches(const char* settingId, DrawFn draw)
 	{
@@ -260,6 +333,7 @@ public:
 			draw(settingId);
 	}
 
+	/** @copydoc DrawSearchSectionIfMatches(const char*, DrawFn) */
 	template <class DrawFn>
 	void DrawSearchSectionIfMatches(const std::string& settingId, DrawFn draw)
 	{
@@ -267,16 +341,33 @@ public:
 			draw(settingId.c_str());
 	}
 
+	/** @brief Returns true if a search is active or the user navigated from search, indicating sections should be expanded. */
 	bool ShouldOpenSearchSection() const { return searchBuffer[0] != '\0' || navigatedFromSearch; }
 
-	// True if the given id matches the currently highlighted setting within the
-	// animated highlight window.
+	/**
+	 * @brief Check if the given setting is currently highlighted by search navigation.
+	 * @param settingId The setting identifier to check.
+	 * @return True if this setting is within the animated highlight window.
+	 */
 	bool IsHighlighted(const std::string& settingId) const;
 
-	// Pushes a pulsing highlight style for the next widget; call PopHighlightStyle() after.
+	/**
+	 * @brief Push a pulsing highlight style for the next ImGui widget. Call PopHighlightStyle after.
+	 * @param settingId The setting identifier being highlighted.
+	 */
 	void PushHighlightStyle(const std::string& settingId);
+
+	/**
+	 * @brief Pop the highlight style pushed by PushHighlightStyle.
+	 * @param settingId The setting identifier that was highlighted.
+	 */
 	void PopHighlightStyle(const std::string& settingId);
 
+	/**
+	 * @brief Push highlight style only if the setting is currently highlighted.
+	 * @param settingId The setting identifier to check and potentially highlight.
+	 * @return True if highlight was pushed (caller must call PopHighlightIfNeeded).
+	 */
 	bool PushHighlightIfNeeded(const std::string& settingId)
 	{
 		if (!IsHighlighted(settingId))
@@ -285,12 +376,24 @@ public:
 		return true;
 	}
 
+	/**
+	 * @brief Pop highlight style if it was previously pushed.
+	 * @param settingId The setting identifier.
+	 * @param pushed    The return value from the corresponding PushHighlightIfNeeded call.
+	 */
 	void PopHighlightIfNeeded(const std::string& settingId, bool pushed)
 	{
 		if (pushed)
 			PopHighlightStyle(settingId);
 	}
 
+	/**
+	 * @brief Draw a control wrapped with automatic highlight push/pop.
+	 * @tparam DrawFn Callable returning void or a value.
+	 * @param  settingId The setting identifier for highlight matching.
+	 * @param  draw      Drawing callback to invoke between push and pop.
+	 * @return The return value of draw, if non-void.
+	 */
 	template <class DrawFn>
 	auto DrawWithHighlight(const std::string& settingId, DrawFn draw)
 	{
@@ -305,6 +408,10 @@ public:
 		}
 	}
 
+	/**
+	 * @brief Draw a modal confirmation dialog for deleting this widget's saved data.
+	 * @param popupId ImGui popup ID for the modal.
+	 */
 	void DrawDeleteConfirmationModal(const char* popupId = "DeleteConfirmation");
 
 	json js = json();
@@ -342,7 +449,7 @@ protected:
 	void NavigateToSearchResult(const SearchResult& result);
 };
 
-// Simple widget for caching form data without full widget functionality
+/** @brief Lightweight widget for caching form data without full editing functionality. */
 class SimpleFormWidget : public Widget
 {
 public:

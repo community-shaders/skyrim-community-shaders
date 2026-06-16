@@ -34,10 +34,12 @@ struct Feature
 	std::string GetDisplayCategory() const;
 	virtual std::string GetFeatureModLink() { return ""; }
 	virtual std::string_view GetShaderDefineName() { return ""; }
+
+	/** @brief Gets additional shader define key-value pairs for this feature. */
 	virtual std::vector<std::pair<std::string_view, std::string_view>> GetShaderDefineOptions() { return {}; }
 
 protected:
-	// Helper method to construct Nexus Mods URL from mod ID
+	/** @brief Builds a full Nexus Mods URL from a numeric mod ID. */
 	static std::string MakeNexusModURL(std::string_view modId) noexcept
 	{
 		std::string url;
@@ -51,10 +53,11 @@ public:
 	virtual bool HasShaderDefine(RE::BSShader::Type) { return false; }
 
 	/**
-	 * Whether the feature is a CORE feature
-	 * This will place it under "Core Features" in UI
-	 * If "CORE" file is present in the root of the feature folder,
-	 * it will be merged into main cs zip file and automatically considered core
+	 * @brief Whether the feature is a CORE feature.
+	 *
+	 * Core features appear under "Core Features" in the UI. If a "CORE" file
+	 * is present in the feature folder root, the feature is bundled into the
+	 * main CS zip and automatically considered core.
 	 */
 	virtual bool IsCore() const
 	{
@@ -62,17 +65,49 @@ public:
 	}
 
 	/**
-	 * Get the category for UI grouping (e.g., "Terrain", "Lighting", "Characters", etc.)
-	 * Core features will be distributed to their respective categories
+	 * @brief Gets the category for UI grouping (e.g., "Terrain", "Lighting", "Characters").
+	 *
+	 * Core features are distributed to their respective categories.
 	 */
 	virtual std::string_view GetCategory() const { return FeatureCategories::kOther; }
 
 	/**
-	 * Whether the feature is disabled at boot by default (before any user override).
-	 * Features that override this to return true will start disabled on first install;
-	 * users can still enable them via the "Disable at Boot" menu.
+	 * Release maturity stage, declared via the feature .ini (Alpha/Beta flags) and
+	 * baked into FeatureVersions.h at build time. Alpha takes precedence over Beta.
 	 */
-	virtual bool IsDisabledByDefault() const { return false; }
+	enum class ReleaseStage
+	{
+		Release,
+		Beta,
+		Alpha
+	};
+
+	virtual ReleaseStage GetReleaseStage() const
+	{
+		const auto name = const_cast<Feature*>(this)->GetShortName();
+		if (FeatureVersions::FEATURE_ALPHA_NAMES.contains(name))
+			return ReleaseStage::Alpha;
+		if (FeatureVersions::FEATURE_BETA_NAMES.contains(name))
+			return ReleaseStage::Beta;
+		return ReleaseStage::Release;
+	}
+
+	bool IsAlpha() const { return GetReleaseStage() == ReleaseStage::Alpha; }
+	bool IsBeta() const { return GetReleaseStage() == ReleaseStage::Beta; }
+
+	/**
+	 * Localized stage marker shown after the feature name ("[ALPHA]", "[BETA]"),
+	 * empty for release features. Takes the stage so callers that already resolved
+	 * it (see GetReleaseStage) avoid a redundant lookup.
+	 */
+	static std::string GetReleaseStageTag(ReleaseStage stage);
+
+	/**
+	 * Whether the feature is disabled at boot by default (before any user override).
+	 * Alpha and Beta features start disabled on first install; users can still enable
+	 * them via the "Disable at Boot" menu.
+	 */
+	virtual bool IsDisabledByDefault() const { return GetReleaseStage() != ReleaseStage::Release; }
 
 	/**
 	 * Whether the feature will show up in the GUI menu
@@ -85,18 +120,29 @@ public:
 	virtual bool DrawFailLoadMessage() const { return true; }
 
 	/**
-	 * Get feature summary and key features for hover tooltip and unloaded UI
-	 *
-	 * \return Pair containing feature summary description and vector of key feature bullet points
+	 * @brief Gets the feature summary and key features for hover tooltip and unloaded UI.
+	 * @return Pair of {description, key feature bullet points}.
 	 */
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() { return {}; }
+
+	/** @brief Allocates GPU resources (textures, buffers) needed by this feature. */
 	virtual void SetupResources() {}
+
+	/** @brief Releases and recreates transient state (e.g. on resolution change). */
 	virtual void Reset() {}
+
 	virtual void DrawSettings() {}
+
+	/** @brief Draws the UI shown when this feature failed to load. */
 	virtual void DrawUnloadedUI();
 
+	/** @brief Per-frame work executed before the reflections pass. */
 	virtual void ReflectionsPrepass() {};
+
+	/** @brief Per-frame work executed before the main rendering pass. */
 	virtual void Prepass() {}
+
+	/** @brief Per-frame work executed before Prepass, earliest per-frame hook. */
 	virtual void EarlyPrepass() {}
 
 	/**
@@ -111,17 +157,33 @@ public:
 	 */
 	virtual void GenerateShaderPermutations(RE::BSShader*) {}
 
-	virtual void Load() {}  // Called during SKSE Load - earliest hook point only for critical hooks like d3d
+	/** @brief Called during SKSE Load -- earliest hook point, only for critical hooks like D3D. */
+	virtual void Load() {}
+
+	/** @brief Called after all game data files have been loaded. */
 	virtual void DataLoaded() {}
+
+	/** @brief Called after all SKSE plugins have finished PostLoad. */
 	virtual void PostPostLoad() {}
 
+	/**
+	 * @brief Loads the feature from its INI file and JSON settings.
+	 *
+	 * Validates the INI version against FeatureVersions, sets the loaded flag,
+	 * and delegates to LoadSettings on success.
+	 * @param o_json Root JSON object containing per-feature settings sections.
+	 */
 	void Load(json& o_json);
-	void Save(json& o_json);
 
+	void Save(json& o_json);
 	virtual void SaveSettings(json&) {}
 	virtual void LoadSettings(json&) {}
-
 	virtual void RestoreDefaultSettings() {}
+
+	/**
+	 * @brief Toggles the "disabled at boot" state for this feature.
+	 * @return The new disabled state (true = disabled at boot).
+	 */
 	virtual bool ToggleAtBootSetting();
 
 	/**
@@ -173,8 +235,20 @@ public:
 	 */
 	virtual std::vector<FeatureConstraints::Constraint> GetActiveConstraints() const { return {}; }
 
+	/**
+	 * @brief Validates this feature's disk-cache entry against current install state.
+	 * @param a_ini The cache INI to read from.
+	 * @return True if the cache entry matches the current feature version and load state.
+	 */
 	virtual bool ValidateCache(CSimpleIniA& a_ini);
+
+	/**
+	 * @brief Writes this feature's version and enabled state into the disk-cache INI.
+	 * @param a_ini The cache INI to write to.
+	 */
 	virtual void WriteDiskCacheInfo(CSimpleIniA& a_ini);
+
+	/** @brief Invalidates any cached compiled shaders owned by this feature. */
 	virtual void ClearShaderCache() {}
 
 	static const std::vector<Feature*>& GetFeatureList();
@@ -196,50 +270,35 @@ public:
 
 	// Feature utility functions
 	/**
-	 * @brief Gets the minimum required version for a feature.
-	 *
-	 * This function looks up the minimum required version for a feature
-	 * from FeatureVersions::FEATURE_MINIMAL_VERSIONS and returns it as a
-	 * formatted string. Returns "unknown" if the feature is not found.
-	 *
+	 * @brief Gets the minimum required version for a feature as a formatted string.
 	 * @param shortName The short name of the feature.
-	 * @return The formatted minimum required version string, or "unknown" if not found.
+	 * @return Formatted version string, or "unknown" if the feature is not in FEATURE_MINIMAL_VERSIONS.
 	 */
 	static std::string GetFeatureRequiredVersion(const std::string& shortName);
 
 	/**
 	 * @brief Checks if a feature has a minimum required version defined.
-	 *
-	 * This function checks if a feature exists in the FeatureVersions::FEATURE_MINIMAL_VERSIONS
-	 * map and optionally returns the version.
-	 *
 	 * @param shortName The short name of the feature.
-	 * @param outVersion Pointer to REL::Version to store the version if found (optional).
-	 * @return True if the feature is found, false otherwise.
+	 * @param outVersion If non-null, receives the minimum version when found.
+	 * @return True if the feature exists in FEATURE_MINIMAL_VERSIONS.
 	 */
 	static bool IsFeatureKnown(const std::string& shortName, REL::Version* outVersion = nullptr);
 
-	/**
-	 * @brief Execute a callable for each loaded feature with optional Tracy CPU profiling
-	 *
-	 * Iterates through all loaded features and calls the provided function with automatic
-	 * CPU profiling zones (ZoneScoped/ZoneName via Tracy) when TRACY_ENABLE is defined.
-	 * Thread-local string formatting is used to minimize per-call overhead.
-	 *
-	 * Usage:
-	 *   Feature::ForEachLoadedFeature("Reset", [](Feature* feature) { feature->Reset(); });
-	 *   Feature::ForEachLoadedFeature("Prepass", [](Feature* feature) { feature->Prepass(); });
-	 *
-	 * @param methodName Name of the method being called (used for Tracy zone naming)
-	 * @param callback Callable that receives (Feature*) and performs the operation
-	 */
-	// Called once from State after TracyD3D11Context is created so ForEachLoadedFeature
+	// Injected once from State after TracyD3D11Context is created so ForEachLoadedFeature
 	// can emit GPU timer zones without pulling in State headers here.
 #ifdef TRACY_ENABLE
 	inline static TracyD3D11Ctx s_tracyCtx = nullptr;
+
+	/** @brief Sets the Tracy GPU context used by ForEachLoadedFeature for GPU profiling zones. */
 	static void SetTracyCtx(TracyD3D11Ctx ctx) noexcept { s_tracyCtx = ctx; }
 #endif
 
+	/**
+	 * @brief Invokes a callback on every loaded feature with optional Tracy profiling.
+	 * @param methodName Label for the Tracy zone (e.g. "Reset", "Prepass").
+	 * @param callback Callable receiving a Feature* for each loaded feature.
+	 * @param emitGpuZone When true and Tracy is enabled, also emits a GPU timer zone.
+	 */
 	template <typename Func>
 	static inline void ForEachLoadedFeature(std::string_view methodName, Func&& callback, bool emitGpuZone = false)
 	{

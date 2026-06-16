@@ -5,6 +5,7 @@
 #include "HDRDisplay.h"
 #include "Hooks.h"
 #include "State.h"
+#include "Utils/Game.h"
 #include "Upscaling/DX12SwapChain.h"
 #include "Upscaling/FidelityFX.h"
 #include "Upscaling/Streamline.h"
@@ -519,7 +520,7 @@ void Upscaling::RestoreDefaultSettings()
 void Upscaling::DataLoaded()
 {
 	// Fix screenshots fix from Engine Fixes
-	RE::GetINISetting("bUseTAA:Display")->data.b = false;
+	Util::DisableVanillaTAA();
 
 	// The game defaults this to a non-zero value
 	static auto fDRClampOffset = RE::GetINISetting("fDRClampOffset:Display");
@@ -877,11 +878,8 @@ void Upscaling::ConfigureTAA()
 {
 	auto upscaleMethod = GetUpscaleMethod();
 
-	auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
-	auto& BSImagespaceShaderISTemporalAA = imageSpaceManager->GetRuntimeData().BSImagespaceShaderISTemporalAA;
-
 	// Force enable TAA if needed
-	BSImagespaceShaderISTemporalAA->taaEnabled = upscaleMethod != UpscaleMethod::kNONE;
+	Util::SetTemporal(upscaleMethod != UpscaleMethod::kNONE);
 }
 
 void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
@@ -1679,10 +1677,7 @@ void Upscaling::Main_PostProcessing::thunk(RE::ImageSpaceManager* a_this, uint32
 	if (upscaleMethod == UpscaleMethod::kDLSS)
 		upscaling.ApplySharpening();
 
-	auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
-	auto& BSImagespaceShaderISTemporalAA = imageSpaceManager->GetRuntimeData().BSImagespaceShaderISTemporalAA;
-
-	BSImagespaceShaderISTemporalAA->taaEnabled = upscaleMethod == UpscaleMethod::kTAA;
+	Util::SetTemporal(upscaleMethod == UpscaleMethod::kTAA);
 
 	// Redirect kFRAMEBUFFER to float texture before ISHDR runs so HDR values >1.0 survive
 	// When HDR Display is not loaded, ISHDR writes to vanilla kFRAMEBUFFER (SDR path)
@@ -1696,7 +1691,7 @@ void Upscaling::Main_PostProcessing::thunk(RE::ImageSpaceManager* a_this, uint32
 	if (hdrLoaded)
 		globals::features::hdrDisplay.RestoreFramebuffer();
 
-	BSImagespaceShaderISTemporalAA->taaEnabled = false;
+	Util::SetTemporal(false);
 }
 
 void Upscaling::SetScissorRect::thunk(RE::BSGraphics::Renderer* This, int a_left, int a_top, int a_right, int a_bottom)

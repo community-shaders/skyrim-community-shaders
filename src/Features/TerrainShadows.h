@@ -3,14 +3,17 @@
 #include "Buffer.h"
 #include <filesystem>
 
+/** @brief Adds heightmap-based terrain shadow casting that updates dynamically with sun position. */
 struct TerrainShadows : public Feature
 {
 public:
 	virtual inline std::string GetName() override { return "Terrain Shadows"; }
 	virtual std::string GetDisplayName() override { return T("feature.terrain_shadows.name", "Terrain Shadows"); }
+	/** @brief Returns the short identifier name. */
 	virtual inline std::string GetShortName() override { return "TerrainShadows"; }
 	virtual inline std::string_view GetShaderDefineName() override { return "TERRAIN_SHADOWS"; }
 	virtual std::string_view GetCategory() const override { return FeatureCategories::kLandscapeAndTextures; }
+	/** @brief Returns a description and list of key features for the UI summary. */
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
 		return { T("feature.terrain_shadows.description", "Adds realistic shadow casting from terrain features using heightmap data to create accurate terrain shadows that enhance depth perception and visual realism."),
@@ -64,6 +67,7 @@ public:
 	};
 	STATIC_ASSERT_ALIGNAS_16(PerFrame);
 
+	/** @brief Builds the per-frame constant buffer data with terrain shadow scale, offset, and z-range. */
 	PerFrame GetCommonBufferData();
 
 	winrt::com_ptr<ID3D11ComputeShader> shadowUpdateProgram = nullptr;
@@ -71,25 +75,42 @@ public:
 	std::unique_ptr<Texture2D> texHeightMap = nullptr;
 	std::unique_ptr<Texture2D> texShadowHeight = nullptr;
 
+	/** @brief Checks whether a valid heightmap is loaded for the current worldspace. */
 	bool IsHeightMapReady();
 
+	/** @brief Scans for heightmap DDS files and creates constant buffers and compute shaders. */
 	virtual void SetupResources() override;
+
+	/**
+	 * @brief Parses a heightmap DDS filename to extract worldspace metadata.
+	 * @param p The filesystem path to the DDS file.
+	 * @param xlodgen_style Whether the filename follows xLODGen naming conventions.
+	 */
 	void ParseHeightmapPath(std::filesystem::path p, bool xlodgen_style);
+
+	/** @brief Compiles the shadow update compute shader from HLSL source. */
 	void CompileComputeShaders();
 
+	/** @brief Draws the ImGui settings panel for Terrain Shadows configuration. */
 	virtual void DrawSettings() override;
 
+	/** @brief Loads heightmaps, precomputes shadow textures, and updates shadows in the early prepass. */
 	virtual void EarlyPrepass() override;
+	/** @brief Loads the heightmap DDS for the current worldspace if not already cached. */
 	void LoadHeightmap();
+	/** @brief Creates the shadow height texture after a new heightmap is loaded. */
 	void Precompute();
+	/** @brief Dispatches the shadow update compute shader using the current sun direction. */
 	void UpdateShadow();
 
+	/** @brief Binds the shadow height texture to shader resource slots for reflection rendering. */
 	virtual void ReflectionsPrepass() override;
 
 	virtual void LoadSettings(json& o_json) override;
 	virtual void SaveSettings(json& o_json) override;
 
 	virtual inline void RestoreDefaultSettings() override { settings = {}; }
+	/** @brief Releases the cached shadow update compute shader and recompiles it. */
 	virtual void ClearShaderCache() override;
 	virtual bool IsCore() const override { return true; };
 };

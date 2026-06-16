@@ -207,6 +207,7 @@ void ThemeManager::SetupImGuiStyle(const Menu& menu)
 	styleCopy.TabBarBorderSize = scaleSize(themeSettings.Style.TabBarBorderSize);
 	styleCopy.SeparatorTextBorderSize = scaleSize(themeSettings.Style.SeparatorTextBorderSize);
 	styleCopy.DockingSeparatorSize = scaleSize(themeSettings.Style.DockingSeparatorSize);
+	styleCopy.MouseCursorScale = ImMax(1.0f, themeSettings.Style.MouseCursorScale);
 
 	style = styleCopy;
 	style.HoverDelayNormal = themeSettings.TooltipHoverDelay;

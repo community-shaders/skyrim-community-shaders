@@ -1,0 +1,83 @@
+# Posts releases (full body) and dev commits (titles) to Discord.
+# Long content is split across multiple embeds so nothing is truncated.
+name: "Maint: Discord Notifications"
+on:
+    release:
+        types: [published]
+    push:
+        # Commit notifications are limited to dev to avoid spam.
+        branches:
+            - dev
+
+# Only reads the event payload and posts to Discord; no repo access needed.
+permissions:
+    contents: read
+
+jobs:
+    notify:
+        if: github.event_name == 'release' || (github.event_name == 'push' && github.event.commits[0])
+        runs-on: "ubuntu-latest"
+        steps:
+            - name: "Post to Discord"
+              env:
+                  WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+                  EVENT: ${{ github.event_name }}
+                  RELEASE_TITLE: ${{ github.event.release.name }}
+                  RELEASE_TAG: ${{ github.event.release.tag_name }}
+                  RELEASE_URL: ${{ github.event.release.html_url }}
+                  RELEASE_BODY: ${{ github.event.release.body }}
+                  COMMITS: ${{ toJSON(github.event.commits) }}
+                  REF: ${{ github.ref_name }}
+                  COMPARE: ${{ github.event.compare }}
+              run: |
+                  set -euo pipefail
+
+                  # Discord embed description hard limit is 4096; stay under it.
+                  LIMIT=4000
+
+                  if [[ "$EVENT" == "release" ]]; then
+                      TITLE="${RELEASE_TITLE:-$RELEASE_TAG}"
+                      URL="$RELEASE_URL"
+                      COLOR=3066993  # 0x2ecc71 green
+                      description="$RELEASE_BODY"
+                  else
+                      TITLE="New commits on $REF"
+                      URL="$COMPARE"
+                      COLOR=3447003  # 0x3498db blue
+                      # Skip the release bot's own chore(release) commits.
+                      description="$(jq -r '.[] | select((.message | split("\n")[0] | startswith("chore(release):")) | not) | "- [`\(.id[0:7])`](\(.url)) \(.message | split("\n")[0])"' <<< "$COMMITS")"
+                  fi
+
+                  # Continuation embeds carry no title/url so only the first links out.
+                  send_embed() {
+                      local desc="$1" title="$2" payload
+                      payload=$(jq -n --arg desc "$desc" --arg title "$title" --arg url "$URL" --argjson color "$COLOR" \
+                          '{username: "Community Shaders", embeds: [ ({description: $desc, color: $color}
+                              + (if $title != "" then {title: $title} else {} end)
+                              + (if $title != "" and $url != "" then {url: $url} else {} end)) ]}')
+                      curl -sf -X POST -H "Content-Type: application/json" -d "$payload" "$WEBHOOK" >/dev/null
+                      sleep 1  # courtesy gap to avoid Discord rate limits
+                  }
+
+                  # Empty release body still announces; a push with nothing left to show is silent.
+                  if [[ -z "$description" ]]; then
+                      [[ "$EVENT" == "release" ]] && send_embed "" "$TITLE"
+                      exit 0
+                  fi
+
+                  # Wrap over-long single lines at spaces so no line exceeds LIMIT.
+                  description="$(fold -s -w "$LIMIT" <<< "$description")"
+
+                  chunk=""
+                  first=1
+                  flush() {
+                      [[ -z "$chunk" ]] && return
+                      if (( first )); then send_embed "$chunk" "$TITLE"; first=0; else send_embed "$chunk" ""; fi
+                      chunk=""
+                  }
+
+                  while IFS= read -r line || [[ -n "$line" ]]; do
+                      if (( ${#chunk} + ${#line} + 1 > LIMIT )); then flush; fi
+                      if [[ -n "$chunk" ]]; then chunk="$chunk"$'\n'"$line"; else chunk="$line"; fi
+                  done <<< "$description"
+                  flush

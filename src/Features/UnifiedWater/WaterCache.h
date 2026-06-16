@@ -1,9 +1,11 @@
 ﻿#pragma once
 #include <BS_thread_pool.hpp>
 
+/** @brief Manages cached water placement instructions for all worldspaces and LOD levels. */
 class WaterCache
 {
 public:
+	/** @brief Describes a single water tile placement with position, size, and water form data. */
 	struct Instruction
 	{
 		union Form
@@ -20,6 +22,7 @@ public:
 		float waterHeight{};
 	};
 
+	/** @brief Thread-safe snapshot of asynchronous cache build progress. */
 	struct BuildProgressSnapshot
 	{
 		uint32_t total{};
@@ -30,16 +33,36 @@ public:
 		int64_t elapsedMs{};
 	};
 
+	/**
+	 * @brief Sets the active worldspace and loads its runtime cache.
+	 * @param worldSpace The worldspace to activate, or nullptr to clear.
+	 * @return True if the worldspace cache was successfully activated.
+	 */
 	bool SetCurrentWorldSpace(const RE::TESWorldSpace* worldSpace);
+	/**
+	 * @brief Retrieves water placement instructions for a specific LOD chunk.
+	 * @param worldSpace The worldspace to query.
+	 * @param lodLevel The LOD level (0 = closest).
+	 * @param x The chunk X coordinate.
+	 * @param y The chunk Y coordinate.
+	 * @return Pointer to the instruction list, or nullptr if unavailable.
+	 */
 	std::vector<Instruction>* GetInstructions(const RE::TESWorldSpace* worldSpace, uint32_t lodLevel, uint32_t x, uint32_t y);
 
+	/** @brief Generates precache height data for Tamriel using extended data sets. */
 	static void GenerateTamrielPrecache();
+	/** @brief Loads caches from disk, or generates them if not found. */
 	bool LoadOrGenerateCaches();
+	/** @brief Deletes existing caches, regenerates, and reloads them. */
 	bool RegenerateCaches();
+	/** @brief Generates disk caches for all valid worldspaces asynchronously. */
 	bool GenerateCaches();
 
+	/** @brief Returns whether an asynchronous cache build is currently running. */
 	bool IsBuildRunning() const { return async.running.load(); }
+	/** @brief Returns whether the last asynchronous cache build failed. */
 	bool HasBuildFailed() const { return async.failed.load(); }
+	/** @brief Returns a thread-safe snapshot of the current build progress. */
 	BuildProgressSnapshot GetBuildProgressSnapshot() const { return buildProgress.Snapshot(); }
 
 private:

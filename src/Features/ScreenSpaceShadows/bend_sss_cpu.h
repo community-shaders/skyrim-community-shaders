@@ -35,12 +35,14 @@ namespace Bend
 
 	// These structures and function are used to generate the number of dispatches, the wave count of each dispatch (X/Y/Z) and shader parameters for each dispatch
 
+	/** @brief Per-dispatch data containing wave counts and shader wave offsets for a single compute dispatch. */
 	struct DispatchData
 	{
 		int WaveCount[3];          // Compute Shader Dispatch(X,Y,Z) wave counts X/Y/Z
 		int WaveOffset_Shader[2];  // This value is passed in to shader. It will be different for each dispatch
 	};
 
+	/** @brief Contains the list of compute dispatches and shared light coordinate data for a screen-space shadow pass. */
 	struct DispatchList
 	{
 		float LightCoordinate_Shader[4];  // This value is passed in to shader, this will be the same value for all dispatches for this light
@@ -53,21 +55,20 @@ namespace Bend
 	inline int bend_min(const int a, const int b) { return a > b ? b : a; }
 	inline int bend_max(const int a, const int b) { return a > b ? a : b; }
 
-	// Call this function on the CPU to get a list of Compute Shader dispatches required to generate a screen-space shadow for a given light
-	// Syncing the GPU between individual dispatches is not required
-	//
-	// inLightProjection:		Homogeneous coordinate of the light, result of {light} * {ViewProjectionMatrix}, (without W divide)
-	//							For infinite directional lights, use {light} = float4(normalized light direction, 0) and for point/spot lights use {light} = float4(light world position, 1)
-	//
-	// inViewportSize:			width/height of the render target
-	//
-	// inRenderBounds:			2D Screen Bounds of the light within the viewport, inclusive. [0,0], [width,height] for full-screen.
-	//							Note; the shader will still read/write outside of these bounds (by a maximum of 2 * WAVE_SIZE pixels), due to how the wavefront projection works.
-	//
-	// inExpandedDepthRange:	Set to true if the rendering API expects z/w coordinate output from a vertex shader to be a [-1,+1] expanded range, and becomes [0,1] range in the depth buffer. Typically this is false.
-	//
-	// inWaveSize:				Wavefront size of the compiled compute shader (currently only tested with 64)
-	//
+	/**
+	 * @brief Builds a list of compute shader dispatches required to generate a screen-space shadow for a given light.
+	 *
+	 * Syncing the GPU between individual dispatches is not required.
+	 *
+	 * @param inLightProjection Homogeneous coordinate of the light, result of {light} * {ViewProjectionMatrix} (without W divide).
+	 *                          For directional lights use float4(direction, 0); for point/spot use float4(position, 1).
+	 * @param inViewportSize Width/height of the render target.
+	 * @param inMinRenderBounds Minimum 2D screen bounds of the light within the viewport, inclusive.
+	 * @param inMaxRenderBounds Maximum 2D screen bounds of the light within the viewport, inclusive.
+	 * @param inExpandedZRange Set to true if the API expects [-1,+1] z/w output that maps to [0,1] in the depth buffer.
+	 * @param inWaveSize Wavefront size of the compiled compute shader (currently only tested with 64).
+	 * @return A DispatchList containing the light coordinate and up to 8 dispatches.
+	 */
 	DispatchList BuildDispatchList(float inLightProjection[4], int inViewportSize[2], int inMinRenderBounds[2], int inMaxRenderBounds[2], bool inExpandedZRange = false, int inWaveSize = 64)
 	{
 		DispatchList result = {};

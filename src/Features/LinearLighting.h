@@ -12,6 +12,7 @@ struct LinearLighting : Feature
 	virtual std::string GetDisplayName() override { return T("feature.linear_lighting.name", "Linear Lighting"); }
 	virtual inline std::string GetShortName() override { return "LinearLighting"; }
 	virtual std::string_view GetCategory() const override { return FeatureCategories::kLighting; }
+	/** @brief Returns a localized description and list of key features for the UI summary panel. */
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
 		return { T("feature.linear_lighting.description", "Linear Lighting does internal color space conversion to improve lighting calculation accuracy."),
@@ -99,6 +100,7 @@ struct LinearLighting : Feature
 	uint isDirLightLinear = false;
 	float dirLightMult = 1.0f;
 
+	/** @brief Draws the ImGui settings UI for gamma correction and lighting multiplier configuration. */
 	virtual void DrawSettings() override;
 
 	virtual void LoadSettings(json& o_json) override;
@@ -106,16 +108,31 @@ struct LinearLighting : Feature
 
 	virtual void RestoreDefaultSettings() override;
 
+	/** @brief Reads the directional light multiplier from ImageSpaceManager during the prepass. */
 	virtual void Prepass() override;
+	/** @brief Installs the BSLightingShader geometry setup hook. */
 	virtual void PostPostLoad() override;
 
+	/** @brief Creates the per-geometry constant buffer for emissive multiplier data. */
 	virtual void SetupResources() override;
 
+	/** @brief Populates and returns the per-frame constant buffer data with gamma and multiplier settings. */
 	PerFrameData GetCommonBufferData();
 
+	/**
+	 * @brief Converts an NiColor from gamma space to linear space using the specified gamma value.
+	 * @param inColor The input color in gamma space.
+	 * @param gamma The gamma exponent to apply.
+	 * @return The color converted to linear space.
+	 */
 	RE::NiColor ColorToLinear(RE::NiColor inColor, float gamma);
 
+	/**
+	 * @brief Uploads emissive multiplier data to the per-geometry constant buffer during shader setup.
+	 * @param a_pass The render pass whose lighting properties to read.
+	 */
 	void BSLightingShader_SetupGeometry(RE::BSRenderPass* a_pass);
 
+	/** @brief Contains the BSLightingShader geometry setup hook implementation. */
 	struct Hooks;
 };
