@@ -114,10 +114,12 @@ private:
 		Caster previousTarget = Caster::Sun;
 		float fadeTimer = 0.0f;
 		bool transitioning = false;
+		float vlIntensityFactor = 1.0f;
 
 		void Update(const RE::Sky* sky, RE::NiPoint3 dirs[], float intensities[], float fadeDuration, float fadeAdvance);
 		static void SetLighting(const RE::Sky* sky, RE::NiPoint3 dir);
 		static void ClampDirection(RE::NiPoint3& dir);
+		static float ComputeVLFactor(const RE::NiPoint3& current, const RE::NiPoint3& target);
 		void Reset();
 	};
 
@@ -127,8 +129,11 @@ private:
 	static constexpr float NorthernSunAngle = 90.0f + 35.0f;
 	static constexpr float VanillaSunAngle = 90.0f + 5.0f;
 	static constexpr float SecondsPerGameHour = 3600.0f;
+	static constexpr float VLFadeStartAngle = 2.0f;
+	static constexpr float VLFadeEndAngle = 10.0f;
 
 	inline static RE::NiPoint3* gSunPosition = nullptr;
+	RE::BSVolumetricLightingRenderData* gVolumetricLighting = nullptr;
 
 	bool moonAndStarsLoaded = false;
 	RE::TESObjectCELL* currentCell = nullptr;
