@@ -294,7 +294,6 @@ void Widget::ForceWeatherReinit(RE::TESWeather* weather)
 	auto* sky = globals::game::sky;
 	if (weather && sky && sky->currentWeather == weather) {
 		sky->ForceWeather(weather, true);
-		// Release the engine override so edits apply without halting natural transitions.
 		sky->ReleaseWeatherOverride();
 	}
 }
@@ -304,7 +303,6 @@ void Widget::ForceCurrentWeatherReinit()
 	auto* sky = globals::game::sky;
 	if (sky && sky->currentWeather) {
 		sky->ForceWeather(sky->currentWeather, true);
-		// Release the engine override so edits apply without halting natural transitions.
 		sky->ReleaseWeatherOverride();
 	}
 }
