@@ -1,5 +1,6 @@
 #include "SkySync.h"
 #include "../I18n/I18n.h"
+#include "RE/B/BSVolumetricLightingRenderData.h"
 
 #define I18N_KEY_PREFIX "feature.sky_sync."
 
@@ -115,6 +116,7 @@ void SkySync::DrawSettings()
 
 		ImGui::Text("Shadow target: %s", CasterNames[static_cast<int>(shadowFader.target)]);
 		ImGui::Text("Shadow dir:    (%.2f, %.2f, %.2f)", shadowFader.currentDir.x, shadowFader.currentDir.y, shadowFader.currentDir.z);
+		ImGui::Text("VL intensity factor: %.3f", shadowFader.vlIntensityFactor);
 		if (shadowFader.transitioning) {
 			const float t = settings.ShadowTransitionDuration > 0.0f ? shadowFader.fadeTimer / settings.ShadowTransitionDuration : 1.0f;
 			ImGui::ProgressBar(t, { -1.0f, 0.0f }, "");
@@ -164,6 +166,9 @@ void SkySync::PostPostLoad()
 
 	gSunPosition = reinterpret_cast<RE::NiPoint3*>(REL::RelocationID(527924, 414871).address());
 
+	gVolumetricLighting = reinterpret_cast<RE::BSVolumetricLightingRenderData*>(
+		REL::RelocationID(527719, 414629).address() - offsetof(RE::BSVolumetricLightingRenderData, red));
+
 	logger::info("[Sky Sync] Installed hooks");
 }
 
@@ -184,15 +189,18 @@ void SkySync::DisableOnConflict(std::string_view conflictName)
 
 void SkySync::OnSkyUpdateColors(RE::Sky* sky)
 {
-	if (!settings.Enabled || !sky || !settings.DimSunlightUnderHorizon)
+	if (!settings.Enabled || !sky)
 		return;
 
-	if (currentDim > 0.0f && currentDim < 1.0f) {
+	if (settings.DimSunlightUnderHorizon && currentDim > 0.0f && currentDim < 1.0f) {
 		auto& dirLight = sky->skyColor[static_cast<uint>(RE::TESWeather::ColorTypes::kSunlight)];
 		dirLight.red *= currentDim;
 		dirLight.green *= currentDim;
 		dirLight.blue *= currentDim;
 	}
+
+	if (gVolumetricLighting)
+		gVolumetricLighting->intensity *= shadowFader.vlIntensityFactor;
 }
 
 void SkySync::Sky_Update::thunk(RE::Sky* sky)
@@ -424,10 +432,6 @@ void SkySync::ShadowFader::Update(const RE::Sky* sky, RE::NiPoint3 dirs[], float
 {
 	auto isValidDir = [](const RE::NiPoint3& d) { return d.x != 0.0f || d.y != 0.0f || d.z != 0.0f; };
 
-	bool* const vlEnabled = globals::game::bEnableVolumetricLighting;
-	static bool vlSuppressed = false;
-	static bool vlSavedEnabled = true;
-
 	Caster best;
 
 	if (globals::features::skySync.currentDim <= 0.0f) {
@@ -437,12 +441,8 @@ void SkySync::ShadowFader::Update(const RE::Sky* sky, RE::NiPoint3 dirs[], float
 		if (!masserValid && !secundaValid) {
 			// No valid night caster — default to directly above (shadows point down)
 			currentDir = { 0.0f, 0.0f, 1.0f };
+			vlIntensityFactor = 0.0f;
 			SetLighting(sky, currentDir);
-			if (vlEnabled && !vlSuppressed) {
-				vlSavedEnabled = *vlEnabled;
-				*vlEnabled = false;
-				vlSuppressed = true;
-			}
 			return;
 		}
 
@@ -456,12 +456,8 @@ void SkySync::ShadowFader::Update(const RE::Sky* sky, RE::NiPoint3 dirs[], float
 		best = Caster::Sun;
 	}
 
-	if (vlSuppressed && vlEnabled) {
-		*vlEnabled = vlSavedEnabled;
-		vlSuppressed = false;
-	}
-
 	LockSunElevation(dirs);
+
 
 	// If best source changed, begin a new transition
 	if (best != target) {
@@ -474,6 +470,7 @@ void SkySync::ShadowFader::Update(const RE::Sky* sky, RE::NiPoint3 dirs[], float
 
 	if (!transitioning) {
 		currentDir = dirs[static_cast<int>(target)];
+		vlIntensityFactor = 1.0f;
 		SetLighting(sky, currentDir);
 		return;
 	}
@@ -494,6 +491,7 @@ void SkySync::ShadowFader::Update(const RE::Sky* sky, RE::NiPoint3 dirs[], float
 		transitioning = false;
 	}
 
+	vlIntensityFactor = ComputeVLFactor(currentDir, targetDir);
 	SetLighting(sky, currentDir);
 }
 
@@ -555,6 +553,14 @@ inline void SkySync::ShadowFader::SetDirection(RE::NiPoint3& dir, float headingR
 inline void SkySync::ShadowFader::SetElevation(RE::NiPoint3& dir, float elevRadians)
 {
 	SetDirection(dir, std::atan2(dir.y, dir.x), elevRadians);
+}
+
+float SkySync::ShadowFader::ComputeVLFactor(const RE::NiPoint3& current, const RE::NiPoint3& target)
+{
+	const float dot = std::clamp(current.Dot(target), -1.0f, 1.0f);
+	const float angle = DirectX::XMConvertToDegrees(DirectX::XMScalarACosEst(dot));
+
+	return std::clamp((VLFadeEndAngle - angle) / (VLFadeEndAngle - VLFadeStartAngle), 0.0f, 1.0f);
 }
 
 inline void SkySync::ShadowFader::ClampDirection(RE::NiPoint3& dir)
