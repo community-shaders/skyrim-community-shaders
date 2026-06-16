@@ -242,6 +242,9 @@ void SkySync::Update(const RE::Sky* sky)
 		const float sunsetMiddle = (timing.sunset.begin + timing.sunset.end) / 12.0f;
 		const float sunsetEnd = timing.sunset.end / 6.0f;
 
+		sunSetting = hour >= sunsetMiddle && hour < sunsetEnd;
+		sunRising = hour >= sunriseBegin && hour < sunriseMiddle;
+
 		if (hour >= sunsetMiddle && hour < sunsetEnd) {
 			float range = sunsetEnd - sunsetMiddle;
 			float t = range > 0.0f ? (hour - sunsetMiddle) / range : 1.0f;
@@ -257,6 +260,8 @@ void SkySync::Update(const RE::Sky* sky)
 		}
 	} else {
 		currentDim = 1.0f;
+		sunSetting = false;
+		sunRising = false;
 	}
 
 	RE::NiPoint3 directions[3] = {};
@@ -368,24 +373,6 @@ void SkySync::ProcessMoon(const RE::Sky* sky, const Caster type, RE::NiPoint3 di
 	intensities[idx] = color.w;
 }
 
-bool SkySync::IsNight(const RE::Sky* sky)
-{
-	if (!sky || !sky->currentClimate)
-		return false;
-	const auto& timing = sky->currentClimate->timing;
-	const float hour = sky->currentGameHour;
-	return hour >= timing.sunset.end / 6.0f || hour < timing.sunrise.begin / 6.0f;
-}
-
-bool SkySync::IsDaytime(const RE::Sky* sky)
-{
-	if (!sky || !sky->currentClimate)
-		return false;
-	const auto& timing = sky->currentClimate->timing;
-	const float hour = sky->currentGameHour;
-	return hour >= timing.sunrise.end / 6.0f && hour < timing.sunset.begin / 6.0f;
-}
-
 inline void SkySync::CalculateSunDirectionAndDistance(const RE::Sun* sun, RE::NiPoint3& outDir, float& outDistance)
 {
 	outDir = sun->root->local.translate;
@@ -471,6 +458,8 @@ void SkySync::ShadowFader::Update(const RE::Sky* sky, RE::NiPoint3 dirs[], float
 		vlSuppressed = false;
 	}
 
+	LockSunElevation(dirs);
+
 	// If best source changed, begin a new transition
 	if (best != target) {
 		previousTarget = target;
@@ -478,16 +467,6 @@ void SkySync::ShadowFader::Update(const RE::Sky* sky, RE::NiPoint3 dirs[], float
 		startDir = currentDir;
 		fadeTimer = 0.0f;
 		transitioning = true;
-
-		// Snap instantly if transitioning to sun during daytime or to moon during full night
-		bool snap = (best == Caster::Sun && IsDaytime(sky)) ||
-		            ((best == Caster::Masser || best == Caster::Secunda) && IsNight(sky));
-		if (snap) {
-			transitioning = false;
-			currentDir = dirs[static_cast<int>(best)];
-			SetLighting(sky, currentDir);
-			return;
-		}
 	}
 
 	if (!transitioning) {
@@ -515,6 +494,37 @@ void SkySync::ShadowFader::Update(const RE::Sky* sky, RE::NiPoint3 dirs[], float
 	SetLighting(sky, currentDir);
 }
 
+void SkySync::ShadowFader::LockSunElevation(RE::NiPoint3 dirs[])
+{
+	// Dusk: lock elevation to the minimum so the shadow can't tilt back up as the sun goes under,
+	// and once dimming passes the threshold lock heading too so it stops sweeping while the VL fades.
+	// Dawn: lock at the minimum until the sun naturally rises above it, then follow it.
+	const auto& skySync = globals::features::skySync;
+	const int sunIdx = static_cast<int>(Caster::Sun);
+	const float minElev = DirectX::XMConvertToRadians(skySync.settings.MinShadowElevation);
+	if (skySync.sunSetting) {
+		if (skySync.currentDim <= SunsetHeadingLockThreshold) {
+			if (!sunsetHeadingLocked) {
+				frozenHeading = std::atan2(dirs[sunIdx].y, dirs[sunIdx].x);
+				sunsetHeadingLocked = true;
+			}
+			SetDirection(dirs[sunIdx], frozenHeading, minElev);
+		} else {
+			SetElevation(dirs[sunIdx], minElev);
+		}
+	} else if (skySync.sunRising) {
+		if (!sunriseReleased) {
+			if (DirectX::XMScalarASinEst(dirs[sunIdx].z) >= minElev)
+				sunriseReleased = true;
+			else
+				SetElevation(dirs[sunIdx], minElev);
+		}
+	} else {
+		sunriseReleased = false;
+		sunsetHeadingLocked = false;
+	}
+}
+
 void SkySync::ShadowFader::SetLighting(const RE::Sky* sky, RE::NiPoint3 dir)
 {
 	ClampDirection(dir);
@@ -528,6 +538,22 @@ void SkySync::ShadowFader::SetLighting(const RE::Sky* sky, RE::NiPoint3 dir)
 	sky->sun->light->Update(updateData);
 }
 
+inline void SkySync::ShadowFader::SetDirection(RE::NiPoint3& dir, float headingRadians, float elevRadians)
+{
+	float sinElev, cosElev, sinHeading, cosHeading;
+	DirectX::XMScalarSinCosEst(&sinElev, &cosElev, elevRadians);
+	DirectX::XMScalarSinCosEst(&sinHeading, &cosHeading, headingRadians);
+
+	dir.x = cosElev * cosHeading;
+	dir.y = cosElev * sinHeading;
+	dir.z = sinElev;
+}
+
+inline void SkySync::ShadowFader::SetElevation(RE::NiPoint3& dir, float elevRadians)
+{
+	SetDirection(dir, std::atan2(dir.y, dir.x), elevRadians);
+}
+
 inline void SkySync::ShadowFader::ClampDirection(RE::NiPoint3& dir)
 {
 	const float minDegrees = globals::features::skySync.settings.MinShadowElevation;
@@ -536,14 +562,7 @@ inline void SkySync::ShadowFader::ClampDirection(RE::NiPoint3& dir)
 	if (elev >= minElev)
 		return;
 
-	const float heading = std::atan2(dir.y, dir.x);
-	float sinElev, cosElev, sinHeading, cosHeading;
-	DirectX::XMScalarSinCosEst(&sinElev, &cosElev, minElev);
-	DirectX::XMScalarSinCosEst(&sinHeading, &cosHeading, heading);
-
-	dir.x = cosElev * cosHeading;
-	dir.y = cosElev * sinHeading;
-	dir.z = sinElev;
+	SetElevation(dir, minElev);
 }
 
 
