@@ -415,6 +415,9 @@ void SkySync::ShadowFader::Reset()
 	previousTarget = Caster::Sun;
 	fadeTimer = 0.0f;
 	transitioning = false;
+	sunriseReleased = false;
+	frozenHeading = 0.0f;
+	sunsetHeadingLocked = false;
 }
 
 void SkySync::ShadowFader::Update(const RE::Sky* sky, RE::NiPoint3 dirs[], float intensities[], float fadeDuration, float fadeAdvance)
