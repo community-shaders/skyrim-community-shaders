@@ -42,7 +42,7 @@ struct ScreenshotFeature : public Feature
 	// HDR PNG quantization (7-16); used when HDR Display captures the back buffer.
 	unsigned int hdrPngBitDepth = 11;
 	// SDR output (HDR captures always use PNG).
-	bool sdrUsePng = false;
+	bool sdrUsePng = true;
 	// After save, put the file path on the clipboard (CF_HDROP).
 	bool copyToClipboard = false;
 
