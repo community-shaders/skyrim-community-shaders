@@ -458,7 +458,6 @@ void SkySync::ShadowFader::Update(const RE::Sky* sky, RE::NiPoint3 dirs[], float
 
 	LockSunElevation(dirs);
 
-
 	// If best source changed, begin a new transition
 	if (best != target) {
 		previousTarget = target;
