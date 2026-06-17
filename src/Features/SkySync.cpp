@@ -14,6 +14,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	MinShadowElevation,
 	ShadowTransitionDuration,
 	DimSunlightUnderHorizon,
+	DimVolumetricLighting,
+	HorizonFadeHours,
 	NewMoonIntensity,
 	CrescentMoonIntensity,
 	FullMoonIntensity)
@@ -68,19 +70,31 @@ void SkySync::DrawSettings()
 		ImGui::Text("%s", T(TKEY("min_shadow_elevation_tooltip"), "The minimum angle sunlight will set to. Caps shadow length. Higher = shorter shadows at sunset/sunrise."));
 	}
 
-	ImGui::SliderFloat("Shadow Transition Duration", &settings.ShadowTransitionDuration, 0.0f, 500.0f, "%.0f", ImGuiSliderFlags_AlwaysClamp);
+	ImGui::SliderFloat(T(TKEY("shadow_transition_duration"), "Shadow Transition Duration"), &settings.ShadowTransitionDuration, 0.0f, 500.0f, "%.0f", ImGuiSliderFlags_AlwaysClamp);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("How long (in game-time units) the shadow direction takes to fade between sources. 100 = ~5 seconds at timescale 20.");
+		ImGui::Text("%s", T(TKEY("shadow_transition_duration_tooltip"), "How long (in game-time units) the shadow direction takes to fade between sources. 100 = ~5 seconds at timescale 20."));
 	}
 
-	ImGui::Checkbox("Dim Sunlight Under Horizon", &settings.DimSunlightUnderHorizon);
+	ImGui::Checkbox(T(TKEY("dim_sunlight_under_horizon"), "Dim Sunlight Under Horizon"), &settings.DimSunlightUnderHorizon);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::TextUnformatted("Fade directional light to zero as the sun goes below the horizon.");
+		ImGui::TextUnformatted(T(TKEY("dim_sunlight_under_horizon_tooltip"), "Fade directional light to zero as the sun goes below the horizon."));
 	}
 
-	ImGui::SliderFloat("New Moon Intensity", &settings.NewMoonIntensity, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-	ImGui::SliderFloat("Crescent Intensity", &settings.CrescentMoonIntensity, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-	ImGui::SliderFloat("Full Moon Intensity", &settings.FullMoonIntensity, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+	ImGui::Checkbox(T(TKEY("fade_volumetric_lighting"), "Fade Volumetric Lighting"), &settings.DimVolumetricLighting);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::TextUnformatted(T(TKEY("fade_volumetric_lighting_tooltip"), "Also fade volumetric lighting with the directional dim around dawn and dusk."));
+	}
+
+	if (settings.DimSunlightUnderHorizon || settings.DimVolumetricLighting) {
+		ImGui::SliderFloat(T(TKEY("horizon_fade_duration"), "Horizon Fade Duration"), &settings.HorizonFadeHours, 0.0f, 1.5f, "%.1f h", ImGuiSliderFlags_AlwaysClamp);
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::TextUnformatted(T(TKEY("horizon_fade_duration_tooltip"), "How long (in game hours) the dim eases out after sunset and back in before sunrise."));
+		}
+	}
+
+	ImGui::SliderFloat(T(TKEY("new_moon_intensity"), "New Moon Intensity"), &settings.NewMoonIntensity, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+	ImGui::SliderFloat(T(TKEY("crescent_intensity"), "Crescent Intensity"), &settings.CrescentMoonIntensity, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+	ImGui::SliderFloat(T(TKEY("full_moon_intensity"), "Full Moon Intensity"), &settings.FullMoonIntensity, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
 
 	if (ImGui::TreeNodeEx("Debug", ImGuiTreeNodeFlags_None)) {
 		static constexpr const char* CasterNames[] = { "Sun", "Masser", "Secunda", "None" };
@@ -137,6 +151,7 @@ void SkySync::LoadSettings(json& o_json)
 	settings.SunPath = std::clamp(settings.SunPath, static_cast<int32_t>(SunPath::Southern), static_cast<int32_t>(SunPath::Custom));
 	settings.CustomAngle = std::clamp(settings.CustomAngle, -90.0f, 90.0f);
 	settings.MinShadowElevation = std::clamp(settings.MinShadowElevation, 0.0f, 45.0f);
+	settings.HorizonFadeHours = std::clamp(settings.HorizonFadeHours, 0.0f, 4.0f);
 	SetSunAngle();
 }
 
@@ -199,8 +214,12 @@ void SkySync::OnSkyUpdateColors(RE::Sky* sky)
 		dirLight.blue *= currentDim;
 	}
 
-	if (gVolumetricLighting)
-		gVolumetricLighting->intensity *= shadowFader.vlIntensityFactor;
+	if (gVolumetricLighting) {
+		float vlFactor = shadowFader.vlIntensityFactor;
+		if (settings.DimVolumetricLighting)
+			vlFactor *= currentDim;
+		gVolumetricLighting->intensity *= vlFactor;
+	}
 }
 
 void SkySync::Sky_Update::thunk(RE::Sky* sky)
@@ -249,17 +268,30 @@ void SkySync::Update(const RE::Sky* sky)
 		const float sunriseMiddle = (timing.sunrise.begin + timing.sunrise.end) / 12.0f;
 		const float sunsetMiddle = (timing.sunset.begin + timing.sunset.end) / 12.0f;
 		const float sunsetEnd = timing.sunset.end / 6.0f;
+		const float duskGapEnd = sunsetEnd + settings.HorizonFadeHours;
+		const float dawnGapStart = sunriseBegin - settings.HorizonFadeHours;
 
 		sunSetting = hour >= sunsetMiddle && hour < sunsetEnd;
 		sunRising = hour >= sunriseBegin && hour < sunriseMiddle;
+		sunBelowHorizon = hour >= sunsetEnd || hour < sunriseBegin;
 
 		if (hour >= sunsetMiddle && hour < sunsetEnd) {
+			// Dusk: sun dipping under the horizon, fade the directional light out.
 			float range = sunsetEnd - sunsetMiddle;
 			float t = range > 0.0f ? (hour - sunsetMiddle) / range : 1.0f;
 			currentDim = std::sqrt(1.0f - t);
-		} else if (hour >= sunsetEnd || hour < sunriseBegin) {
-			currentDim = 0.0f;
+		} else if (hour >= sunsetEnd && hour < duskGapEnd) {
+			// Caster has swapped to the moon but the colour is still dusk-bright; ease the dim back out.
+			float range = duskGapEnd - sunsetEnd;
+			float t = range > 0.0f ? (hour - sunsetEnd) / range : 1.0f;
+			currentDim = t;
+		} else if (hour >= dawnGapStart && hour < sunriseBegin) {
+			// Still on the moon but the colour is brightening toward dawn; ease the dim back in.
+			float range = sunriseBegin - dawnGapStart;
+			float t = range > 0.0f ? (hour - dawnGapStart) / range : 1.0f;
+			currentDim = 1.0f - t;
 		} else if (hour >= sunriseBegin && hour < sunriseMiddle) {
+			// Dawn: sun rising above the horizon, fade the directional light in.
 			float range = sunriseMiddle - sunriseBegin;
 			float t = range > 0.0f ? (hour - sunriseBegin) / range : 1.0f;
 			currentDim = std::sqrt(t);
@@ -270,6 +302,7 @@ void SkySync::Update(const RE::Sky* sky)
 		currentDim = 1.0f;
 		sunSetting = false;
 		sunRising = false;
+		sunBelowHorizon = false;
 	}
 
 	RE::NiPoint3 directions[3] = {};
@@ -434,7 +467,7 @@ void SkySync::ShadowFader::Update(const RE::Sky* sky, RE::NiPoint3 dirs[], float
 
 	Caster best;
 
-	if (globals::features::skySync.currentDim <= 0.0f) {
+	if (globals::features::skySync.sunBelowHorizon) {
 		bool masserValid = isValidDir(dirs[static_cast<int>(Caster::Masser)]);
 		bool secundaValid = isValidDir(dirs[static_cast<int>(Caster::Secunda)]);
 
