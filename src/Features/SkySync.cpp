@@ -471,15 +471,9 @@ void SkySync::ShadowFader::Update(const RE::Sky* sky, RE::NiPoint3 dirs[], float
 		bool masserValid = isValidDir(dirs[static_cast<int>(Caster::Masser)]);
 		bool secundaValid = isValidDir(dirs[static_cast<int>(Caster::Secunda)]);
 
-		if (!masserValid && !secundaValid) {
-			// No valid night caster — default to directly above (shadows point down)
-			currentDir = { 0.0f, 0.0f, 1.0f };
-			vlIntensityFactor = 0.0f;
-			SetLighting(sky, currentDir);
-			return;
-		}
-
-		if (!masserValid)
+		if (!masserValid && !secundaValid)
+			best = Caster::None;
+		else if (!masserValid)
 			best = Caster::Secunda;
 		else if (!secundaValid || intensities[static_cast<int>(Caster::Secunda)] <= intensities[static_cast<int>(Caster::Masser)])
 			best = Caster::Masser;
@@ -491,6 +485,11 @@ void SkySync::ShadowFader::Update(const RE::Sky* sky, RE::NiPoint3 dirs[], float
 
 	LockSunElevation(dirs);
 
+	// No valid caster points straight up so shadows fall directly down.
+	auto casterDir = [&](Caster c) {
+		return c == Caster::None ? RE::NiPoint3{ 0.0f, 0.0f, 1.0f } : dirs[static_cast<int>(c)];
+	};
+
 	// If best source changed, begin a new transition
 	if (best != target) {
 		previousTarget = target;
@@ -500,9 +499,11 @@ void SkySync::ShadowFader::Update(const RE::Sky* sky, RE::NiPoint3 dirs[], float
 		transitioning = true;
 	}
 
+	const RE::NiPoint3 targetDir = casterDir(target);
+
 	if (!transitioning) {
-		currentDir = dirs[static_cast<int>(target)];
-		vlIntensityFactor = 1.0f;
+		currentDir = targetDir;
+		vlIntensityFactor = target == Caster::None ? 0.0f : 1.0f;
 		SetLighting(sky, currentDir);
 		return;
 	}
@@ -510,7 +511,6 @@ void SkySync::ShadowFader::Update(const RE::Sky* sky, RE::NiPoint3 dirs[], float
 	fadeTimer = std::min(fadeTimer + fadeAdvance, fadeDuration);
 	const float t = fadeDuration > 0.0f ? fadeTimer / fadeDuration : 1.0f;
 
-	RE::NiPoint3 targetDir = dirs[static_cast<int>(target)];
 	currentDir = {
 		std::lerp(startDir.x, targetDir.x, t),
 		std::lerp(startDir.y, targetDir.y, t),
@@ -523,7 +523,8 @@ void SkySync::ShadowFader::Update(const RE::Sky* sky, RE::NiPoint3 dirs[], float
 		transitioning = false;
 	}
 
-	vlIntensityFactor = ComputeVLFactor(currentDir, targetDir);
+	// Fade VL out as it settles into the no-caster fallback, otherwise fade with shadow alignment.
+	vlIntensityFactor = target == Caster::None ? 1.0f - t : ComputeVLFactor(currentDir, targetDir);
 	SetLighting(sky, currentDir);
 }
 
