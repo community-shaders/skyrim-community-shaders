@@ -86,7 +86,7 @@ void SkySync::DrawSettings()
 	}
 
 	if (settings.DimSunlightUnderHorizon || settings.DimVolumetricLighting) {
-		ImGui::SliderFloat(T(TKEY("horizon_fade_duration"), "Horizon Fade Duration"), &settings.HorizonFadeHours, 0.0f, 1.5f, "%.1f h", ImGuiSliderFlags_AlwaysClamp);
+		ImGui::SliderFloat(T(TKEY("horizon_fade_duration"), "Horizon Fade Duration"), &settings.HorizonFadeHours, 0.0f, MaxHorizonFadeHours, "%.1f h", ImGuiSliderFlags_AlwaysClamp);
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::TextUnformatted(T(TKEY("horizon_fade_duration_tooltip"), "How long (in game hours) the dim eases out after sunset and back in before sunrise."));
 		}
@@ -151,7 +151,7 @@ void SkySync::LoadSettings(json& o_json)
 	settings.SunPath = std::clamp(settings.SunPath, static_cast<int32_t>(SunPath::Southern), static_cast<int32_t>(SunPath::Custom));
 	settings.CustomAngle = std::clamp(settings.CustomAngle, -90.0f, 90.0f);
 	settings.MinShadowElevation = std::clamp(settings.MinShadowElevation, 0.0f, 45.0f);
-	settings.HorizonFadeHours = std::clamp(settings.HorizonFadeHours, 0.0f, 4.0f);
+	settings.HorizonFadeHours = std::clamp(settings.HorizonFadeHours, 0.0f, MaxHorizonFadeHours);
 	SetSunAngle();
 }
 
@@ -268,8 +268,13 @@ void SkySync::Update(const RE::Sky* sky)
 		const float sunriseMiddle = (timing.sunrise.begin + timing.sunrise.end) / 12.0f;
 		const float sunsetMiddle = (timing.sunset.begin + timing.sunset.end) / 12.0f;
 		const float sunsetEnd = timing.sunset.end / 6.0f;
-		const float duskGapEnd = sunsetEnd + settings.HorizonFadeHours;
-		const float dawnGapStart = sunriseBegin - settings.HorizonFadeHours;
+		const float fadeHours = settings.HorizonFadeHours;
+
+		// Hours elapsed from a to b, wrapping across midnight so gap windows survive past 24h.
+		auto hoursBetween = [](float from, float to) {
+			float d = to - from;
+			return d < 0.0f ? d + 24.0f : d;
+		};
 
 		sunSetting = hour >= sunsetMiddle && hour < sunsetEnd;
 		sunRising = hour >= sunriseBegin && hour < sunriseMiddle;
@@ -280,16 +285,12 @@ void SkySync::Update(const RE::Sky* sky)
 			float range = sunsetEnd - sunsetMiddle;
 			float t = range > 0.0f ? (hour - sunsetMiddle) / range : 1.0f;
 			currentDim = std::sqrt(1.0f - t);
-		} else if (hour >= sunsetEnd && hour < duskGapEnd) {
+		} else if (fadeHours > 0.0f && hoursBetween(sunsetEnd, hour) < fadeHours) {
 			// Caster has swapped to the moon but the colour is still dusk-bright; ease the dim back out.
-			float range = duskGapEnd - sunsetEnd;
-			float t = range > 0.0f ? (hour - sunsetEnd) / range : 1.0f;
-			currentDim = t;
-		} else if (hour >= dawnGapStart && hour < sunriseBegin) {
+			currentDim = hoursBetween(sunsetEnd, hour) / fadeHours;
+		} else if (fadeHours > 0.0f && hoursBetween(hour, sunriseBegin) > 0.0f && hoursBetween(hour, sunriseBegin) <= fadeHours) {
 			// Still on the moon but the colour is brightening toward dawn; ease the dim back in.
-			float range = sunriseBegin - dawnGapStart;
-			float t = range > 0.0f ? (hour - dawnGapStart) / range : 1.0f;
-			currentDim = 1.0f - t;
+			currentDim = hoursBetween(hour, sunriseBegin) / fadeHours;
 		} else if (hour >= sunriseBegin && hour < sunriseMiddle) {
 			// Dawn: sun rising above the horizon, fade the directional light in.
 			float range = sunriseMiddle - sunriseBegin;
