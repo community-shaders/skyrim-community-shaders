@@ -587,6 +587,12 @@ void UnifiedWater::BGSTerrainBlock_Attach::thunk(RE::BGSTerrainBlock* block)
 		return;
 	}
 
+	// Reserve up front so AddWater can't reallocate waterObjects mid-loop and free a buffer other threads may be iterating.
+	{
+		RE::BSSpinLockGuard guard(waterSystem->lock);
+		waterSystem->waterObjects.reserve(waterSystem->waterObjects.size() + static_cast<std::uint32_t>(built.size()));
+	}
+
 	for (auto& [shape, instruction] : built) {
 		waterSystem->AddWater(shape, instruction->form.ptr, instruction->waterHeight, nullptr, true, false);
 
@@ -602,9 +608,12 @@ void UnifiedWater::BGSTerrainBlock_Attach::thunk(RE::BGSTerrainBlock* block)
 			waterShaderProp->waterFlags = waterFlags;
 		}
 
-		// Remove from WaterSystem, will manage it ourselves
-		if (!waterSystem->waterObjects.empty()) {
-			waterSystem->waterObjects.pop_back();
+		// Remove from WaterSystem, will manage it ourselves. Lock: our only direct edit to the shared list.
+		{
+			RE::BSSpinLockGuard guard(waterSystem->lock);
+			if (!waterSystem->waterObjects.empty()) {
+				waterSystem->waterObjects.pop_back();
+			}
 		}
 	}
 

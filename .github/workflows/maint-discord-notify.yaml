@@ -1,4 +1,4 @@
-# Posts releases (full body) and dev commits (titles) to Discord.
+# Posts releases (body up to the first --- rule) and dev commits (titles) to Discord.
 # Long content is split across multiple embeds so nothing is truncated.
 name: "Maint: Discord Notifications"
 on:
@@ -39,7 +39,8 @@ jobs:
                       TITLE="${RELEASE_TITLE:-$RELEASE_TAG}"
                       URL="$RELEASE_URL"
                       COLOR=3066993  # 0x2ecc71 green
-                      description="$RELEASE_BODY"
+                      # Drop everything from the first horizontal rule on (feature audit, not feed-worthy).
+                      description="$(awk '/^-{3,}[[:space:]]*$/{exit} {print}' <<< "$RELEASE_BODY")"
                   else
                       TITLE="New commits on $REF"
                       URL="$COMPARE"
