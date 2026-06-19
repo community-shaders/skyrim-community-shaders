@@ -80,6 +80,7 @@ private:
 	bool lpMatchFound = false;
 	bool lpInWhitelist = false;
 	bool lpInBlacklist = false;
+	bool deleteConfirmPopupRequested = false;
 	std::set<std::string> lpFlagSet;
 	std::set<std::string> originalLpFlagSet;
 	std::string externalEmittanceEdid;
@@ -208,6 +209,9 @@ private:
 	// reference (capturing the current editor edits) and blacklists that reference in the
 	// original entry, so the edits apply solely to this reference. Returns false on no match.
 	bool SaveAsSeparateEntry(bool includeColor = false);
+	// Deletes the bulb's matching light entry from the LP config. If it is the only light in its
+	// top-level entry, the whole models/formIDs entry is removed too. Returns false on no match.
+	bool DeleteFromLightPlacer();
 	// Builds a fresh "data" object from the current editor state, carrying over any unmanaged
 	// keys from existingData. Shared by SaveToLightPlacer and SaveAsSeparateEntry.
 	nlohmann::ordered_json BuildEditedData(const nlohmann::ordered_json& existingData, bool includeColor) const;
@@ -238,6 +242,17 @@ private:
 	// True if a top-level config entry's models/formIDs identify the context's owner ref.
 	static bool EntryMatchesContext(const nlohmann::ordered_json& entry, const MatchContext& ctx);
 	nlohmann::ordered_json* FindMatchingLightEntry(nlohmann::ordered_json& configArray, const MatchContext& ctx, bool applyFilters = true) const;
+	// Where a matched light entry lives within the config: its containing top-level (models/formIDs)
+	// entry, that entry's index, the "lights" array, and the light's index within it.
+	struct LightEntryLocation
+	{
+		nlohmann::ordered_json* topEntry = nullptr;
+		size_t topIdx = 0;
+		nlohmann::ordered_json* lightsArr = nullptr;
+		size_t lightIdx = 0;
+	};
+	// Locates the light entry governing ctx (LP filters applied). Returns false when none matches.
+	bool LocateLightEntry(nlohmann::ordered_json& configArray, const MatchContext& ctx, LightEntryLocation& out) const;
 	bool ModifyLPFilterList(bool isWhiteList, bool add);
 	void RefreshLPJsonState();
 	void SyncLPFlagsToRuntime();
@@ -326,6 +341,8 @@ private:
 
 	void DrawAddLightButton();
 	void DrawAddLightPopup();
+	// Draws the modal confirming deletion of the selected LP light entry. Opened by the Delete button.
+	void DrawDeleteConfirmation();
 	// Opens a persistent-buffer searchable combo (the Add-Light popup style: HeightLarge, auto-focused
 	// search input, separator). Returns true while open, writing the current filter text to filterOut;
 	// the caller renders the items and calls ImGui::EndCombo(). openNow opens the dropdown one-shot.

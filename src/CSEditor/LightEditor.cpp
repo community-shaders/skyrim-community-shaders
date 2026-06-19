@@ -670,6 +670,14 @@ void LightEditor::DrawSettings()
 			else
 				ImGui::Text(T(TKEY("save_to_lp_no_match_tooltip"), "No matching entry found in %s.\nSaving will fail."), lpInfo.configPath.c_str());
 		}
+
+		ImGui::SameLine();
+		if (Util::ErrorButton(T(TKEY("delete_entry"), "Delete")))
+			deleteConfirmPopupRequested = true;
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("%s", T(TKEY("delete_entry_tooltip"), "Delete this light entry from the Light Placer JSON.\nIf it is the only light in its entry, the whole models/formIDs entry is removed too."));
+		}
+		DrawDeleteConfirmation();
 	}
 	ImGui::SameLine();
 	ImGui::Checkbox(T(TKEY("log_mode"), "Log Mode"), &extendedLogMode);
@@ -1963,8 +1971,6 @@ void LightEditor::ScanFilterListEntries(RE::TESObjectREFR* refr)
 	logger::info("[LightEditor] ScanFilterListEntries: found {} entries", filterListEntries.size());
 }
 
-#undef I18N_KEY_PREFIX
-
 void LightEditor::ResetOverrides()
 {
 	if (selected.isSelected)
@@ -2354,6 +2360,33 @@ nlohmann::ordered_json* LightEditor::FindMatchingLightEntry(nlohmann::ordered_js
 	return nullptr;
 }
 
+bool LightEditor::LocateLightEntry(nlohmann::ordered_json& configArray, const MatchContext& ctx, LightEntryLocation& out) const
+{
+	for (size_t t = 0; t < configArray.size(); ++t) {
+		auto& topEntry = configArray[t];
+		auto lightsIt = topEntry.find("lights");
+		if (lightsIt == topEntry.end() || !lightsIt->is_array())
+			continue;
+		if (!EntryMatchesContext(topEntry, ctx))
+			continue;
+		for (size_t i = 0; i < lightsIt->size(); ++i) {
+			auto& le = (*lightsIt)[i];
+			if (!le.contains("data") || !le["data"].contains("light") || !le["data"]["light"].is_string())
+				continue;
+			if (le["data"]["light"].get<std::string>() != ctx.lightEDID)
+				continue;
+			if (!MatchesLPFilters(le, ctx.refr))
+				continue;
+			out.topEntry = &topEntry;
+			out.topIdx = t;
+			out.lightsArr = &*lightsIt;
+			out.lightIdx = i;
+			return true;
+		}
+	}
+	return false;
+}
+
 bool LightEditor::SaveToLightPlacer(bool includeColor, bool dryRun)
 {
 	if (!lpInfo.isLPLight)
@@ -2499,36 +2532,15 @@ bool LightEditor::SaveAsSeparateEntry(bool includeColor)
 
 	// Locate the light entry currently governing this reference along with its parent "lights"
 	// array and index, so the forked copy can be inserted as the next sibling.
-	nlohmann::ordered_json* lightsArr = nullptr;
-	size_t lightIdx = 0;
-	for (auto& topEntry : configArray) {
-		auto lightsIt = topEntry.find("lights");
-		if (lightsIt == topEntry.end() || !lightsIt->is_array())
-			continue;
-		if (!EntryMatchesContext(topEntry, ctx))
-			continue;
-		for (size_t i = 0; i < lightsIt->size(); ++i) {
-			auto& le = (*lightsIt)[i];
-			if (!le.contains("data") || !le["data"].contains("light") || !le["data"]["light"].is_string())
-				continue;
-			if (le["data"]["light"].get<std::string>() != ctx.lightEDID)
-				continue;
-			if (!MatchesLPFilters(le, ctx.refr))
-				continue;
-			lightsArr = &*lightsIt;
-			lightIdx = i;
-			break;
-		}
-		if (lightsArr)
-			break;
-	}
-
-	if (!lightsArr) {
+	LightEntryLocation loc;
+	if (!LocateLightEntry(configArray, ctx, loc)) {
 		logger::warn("[LightEditor] SaveAsSeparateEntry: no matching entry for model '{}' with light EDID '{}' in {}.json",
 			lpInfo.ownerModelPath, lpInfo.lightEDID, lpInfo.configPath);
 		return false;
 	}
 
+	nlohmann::ordered_json* lightsArr = loc.lightsArr;
+	const size_t lightIdx = loc.lightIdx;
 	auto& sourceEntry = (*lightsArr)[lightIdx];
 
 	// Already forked into a dedicated whitelisted entry for this reference — nothing to do.
@@ -2561,6 +2573,70 @@ bool LightEditor::SaveAsSeparateEntry(bool includeColor)
 
 	logger::info("[LightEditor] SaveAsSeparateEntry: forked {} into its own whitelisted entry in {}", ownerEntry, filePath.string());
 	return true;
+}
+
+bool LightEditor::DeleteFromLightPlacer()
+{
+	if (!lpInfo.isLPLight)
+		return false;
+
+	nlohmann::ordered_json configArray;
+	if (!LoadLPConfig(configArray))
+		return false;
+
+	LightEntryLocation loc;
+	if (!LocateLightEntry(configArray, MakeSelectedContext(), loc)) {
+		logger::warn("[LightEditor] DeleteFromLightPlacer: no matching entry for model '{}' with light EDID '{}' in {}.json",
+			lpInfo.ownerModelPath, lpInfo.lightEDID, lpInfo.configPath);
+		return false;
+	}
+
+	// Removing the only light would leave a dangling models/formIDs block, so drop the whole
+	// top-level entry; otherwise remove just this light from the shared "lights" array.
+	if (loc.lightsArr->size() <= 1)
+		configArray.erase(configArray.begin() + loc.topIdx);
+	else
+		loc.lightsArr->erase(loc.lightsArr->begin() + loc.lightIdx);
+
+	const auto filePath = LPConfigFilePath(lpInfo.configPath);
+	if (!WriteLPConfig(filePath, configArray))
+		return false;
+
+	logger::info("[LightEditor] Deleted light entry (model '{}', light '{}') from {}", lpInfo.ownerModelPath, lpInfo.lightEDID, filePath.string());
+	return true;
+}
+
+void LightEditor::DrawDeleteConfirmation()
+{
+	if (deleteConfirmPopupRequested) {
+		ImGui::OpenPopup(T(TKEY("delete_entry"), "Delete"));
+		deleteConfirmPopupRequested = false;
+	}
+
+	if (auto popup = Util::CenteredPopupModal(T(TKEY("delete_entry"), "Delete"))) {
+		ImGui::Text("%s", T(TKEY("confirm_delete_entry"), "Delete this light entry from the Light Placer JSON?"));
+		ImGui::Spacing();
+		ImGui::Separator();
+		ImGui::Spacing();
+
+		if (Util::ErrorButton(T(TKEY("yes_delete"), "Yes, Delete"))) {
+			const bool ok = DeleteFromLightPlacer();
+			if (ok) {
+				RestoreOriginal();
+				selected = {};
+				previous = {};
+				waitFrames = 3;
+				ScheduleConsoleCommand("reloadlp");
+			}
+			NotifyResult(ok,
+				T(TKEY("deleted_entry"), "Deleted entry"),
+				T(TKEY("delete_failed"), "Delete failed \xe2\x80\x94 see log"));
+			ImGui::CloseCurrentPopup();
+		}
+		ImGui::SameLine();
+		if (ImGui::Button(T(TKEY("cancel"), "Cancel")))
+			ImGui::CloseCurrentPopup();
+	}
 }
 
 void LightEditor::SortLights()
