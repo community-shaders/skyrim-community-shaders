@@ -151,7 +151,7 @@
         },
         {
             "name": "ALL",
-            "description": "(Deprecated), kept for for CI, use Package instead",
+            "description": "(Deprecated), kept for CI, use Package instead",
             "configurePreset": "ALL",
             "configuration": "Release",
             "targets": ["Package-AIO-Manual"]
