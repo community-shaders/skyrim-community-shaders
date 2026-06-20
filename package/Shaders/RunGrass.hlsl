@@ -358,7 +358,6 @@ cbuffer AlphaTestRefCB : register(b11)
 #	include "Common/ShadowSampling.hlsli"
 #	ifdef GRASS_LIGHTING
 #		include "GrassLighting/GrassLighting.hlsli"
-#	endif
 
 float GetSoftLightMultiplier(float angle, float rolloff)
 {
