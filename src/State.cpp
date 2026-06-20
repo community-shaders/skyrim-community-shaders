@@ -172,6 +172,14 @@ void State::Debug()
 	}
 }
 
+/**
+ * @brief Resets per-frame state and publishes frame counter to off-thread readers.
+ *
+ * Ends the current profiler frame, resets all loaded features, updates the
+ * timer if the game is not paused, caches current menu open states, clears
+ * shader descriptor tracking, increments and atomically publishes the frame
+ * count, and disables reflection and improved snow shaders.
+ */
 void State::Reset()
 {
 	globals::profiler->EndFrame();

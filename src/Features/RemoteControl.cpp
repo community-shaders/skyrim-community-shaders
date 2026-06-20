@@ -30,7 +30,10 @@ namespace
 	// display; the bridge itself talks to devbench in-process via the C-ABI, not the port.
 	constexpr const char* kRuntimeJsonPath = "Data/SKSE/Plugins/devbench/runtime.json";
 
-	// Returns the bound port from devbench's runtime.json, or 0 if absent/unreadable.
+	/**
+	 * @brief Retrieves the bound port from devbench's runtime configuration.
+	 * @return The port number from runtime.json, or 0 if the file is missing, unreadable, or malformed.
+	 */
 	int ReadDevBenchPort()
 	{
 		std::error_code ec;
@@ -50,11 +53,20 @@ namespace
 	}
 }
 
+/**
+ * @brief Obtains the singleton instance.
+ * @return RemoteControl* The global singleton instance.
+ */
 RemoteControl* RemoteControl::GetSingleton()
 {
 	return &globals::features::remoteControl;
 }
 
+/**
+ * @brief Registers the plugin's tools into the devbench host.
+ *
+ * Idempotent and inert when the host is absent or the devbench bridge is disabled.
+ */
 void RemoteControl::DataLoaded()
 {
 	// Register the plugin's tools into the devbench host. This feature owns the install; it runs at
@@ -64,6 +76,14 @@ void RemoteControl::DataLoaded()
 	DevBenchBridge::Install();
 }
 
+/**
+ * @brief Renders the devbench integration status panel and tool list.
+ *
+ * Displays connection status, host build number, bound port, and the set of devbench-exposed tools
+ * (feature management, engine inspection, shader cache control, capture, and settings). Shows a
+ * warning if the devbench host is not detected or if the build was compiled without the devbench
+ * bridge.
+ */
 void RemoteControl::DrawSettings()
 {
 	const auto& theme = Menu::GetSingleton()->GetTheme().StatusPalette;

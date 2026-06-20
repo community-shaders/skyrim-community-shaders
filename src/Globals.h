@@ -51,6 +51,31 @@ namespace SIE
 	class ShaderFileDependencyTracker;
 }
 
+/**
+ * @brief Initializes core singletons (ShaderCache, State, Menu, Deferred).
+ */
+void OnInit();
+
+/**
+ * @brief Resolves runtime game pointers, RTTI relocations, and D3D device references.
+ */
+void ReInit();
+
+/**
+ * @brief Caches late-binding game singletons (player, sky, INI settings).
+ */
+void OnDataLoaded();
+
+/**
+ * @brief Signals shader compilation to stop.
+ */
+void OnGameWindowClose();
+
+/**
+ * @brief Installs Detours hooks on the device context's Map/Unmap vtable slots to capture per-frame constant buffer data.
+ * @param a_context The D3D11 device context to hook.
+ */
+void InstallD3DHooks(ID3D11DeviceContext* a_context);
 namespace globals
 {
 	namespace d3d

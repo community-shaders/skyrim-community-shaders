@@ -1326,6 +1326,19 @@ namespace SIE
 			return type;
 		}
 
+		/**
+		 * @brief Compiles or retrieves a cached shader.
+		 *
+		 * Checks the in-memory shader cache, then the disk cache (if enabled and valid),
+		 * and compiles from HLSL source if necessary. Records include dependencies for
+		 * hot-reload invalidation.
+		 *
+		 * @param useDiskCache Whether to use disk cache for reading and writing compiled shaders.
+		 * @param dependencyTracker Optional tracker for include dependency registration;
+		 *                          enables cache invalidation when dependencies change.
+		 *
+		 * @return Compiled shader blob, or nullptr if compilation failed or source file not found.
+		 */
 		static ID3DBlob* CompileShader(ShaderClass shaderClass, const RE::BSShader& shader, uint32_t descriptor, bool useDiskCache, ShaderFileDependencyTracker* dependencyTracker)
 		{
 			if (!SShaderCache::ResolveImageSpaceDescriptor(shader, descriptor)) {
@@ -3226,6 +3239,15 @@ namespace SIE
 		}
 	}
 
+	/**
+	 * @brief Marks a shader compilation task as complete and updates compilation state.
+	 *
+	 * Updates task completion counters, tracks compilation timing and cache behavior,
+	 * detects batch-level completion, and emits notifications and events when the
+	 * entire compilation session finishes.
+	 *
+	 * @param task The compilation task that has completed.
+	 */
 	void CompilationSet::Complete(const ShaderCompilationTask& task)
 	{
 		auto& cache = ShaderCache::Instance();

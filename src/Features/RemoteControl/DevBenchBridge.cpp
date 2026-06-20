@@ -39,7 +39,13 @@ namespace
 
 	// Current render frame, used as a coarse "enqueued at" stamp so callers can poll
 	// inspect(kind=state) until frame_count advances past it (i.e. a queued main-thread
-	// task has had at least one tick to run). Safe from any thread (atomic load).
+	/**
+	 * @brief Retrieves the current render frame count.
+	 *
+	 * Safe to call from any thread.
+	 *
+	 * @return uint The current frame count, or 0 if global state is unavailable.
+	 */
 	uint EnqueuedFrame()
 	{
 		return globals::state ? globals::state->frameCountAtomic.load(std::memory_order_relaxed) : 0u;
@@ -48,7 +54,20 @@ namespace
 	// Shared C-ABI handler body. The whole request — parse, dispatch, dump — is wrapped
 	// so NO exception ever crosses the DLL boundary, and a_write is called exactly once.
 	// `a_build` is a plain function pointer (no captures) so this composes with the
-	// captureless-handler contract devbench requires. JSON strings only across the ABI.
+	/**
+	 * @brief Wraps a DevBench tool handler to safely marshal exceptions into JSON error responses.
+	 *
+	 * Parses JSON arguments from the input string, invokes the builder function, and writes
+	 * the resulting JSON response to the sink via the provided callback. All exceptions are
+	 * caught and converted to standardized JSON error objects to prevent C++ exceptions from
+	 * crossing the DLL boundary.
+	 *
+	 * @param a_build Function that builds a JSON response from parsed request arguments.
+	 * @param a_argsJson JSON-formatted request arguments as a string; null or empty string
+	 *                   defaults to an empty JSON object.
+	 * @param a_sink Opaque destination handle passed to the write callback.
+	 * @param a_write Callback function invoked exactly once to write the serialized JSON response.
+	 */
 	void RunHandler(json (*a_build)(const json&), const char* a_argsJson, void* a_sink, DevBenchAPI::WriteFn a_write)
 	{
 		json out;
@@ -77,7 +96,16 @@ namespace
 	// `cancelled` flag is checked at task entry: if we already gave up waiting, the task skips
 	// the body rather than mutating state after we reported a timeout. shared_ptr state so a
 	// task that runs after we return doesn't dangle. (Best-effort: a task that starts exactly at
-	// the timeout boundary can still run — the flag eliminates the common stalled-thread case.)
+	/**
+	 * @brief Executes a callable on the main thread and waits for its result.
+	 *
+	 * Schedules the callable to run on the main thread via SKSE's task interface with a 5-second
+	 * timeout. If the timeout elapses, sets an internal flag to prevent delayed side effects.
+	 *
+	 * @param a_run Callable that returns a JSON result.
+	 * @return The JSON result from `a_run()`, or an error JSON object if the task interface is
+	 * unavailable, execution times out, or an exception is thrown.
+	 */
 	json RunOnMainThread(std::function<json()> a_run)
 	{
 		auto* task = SKSE::GetTaskInterface();
@@ -107,7 +135,15 @@ namespace
 	// ---- feature: list / get / set / reset / toggle -----------------------------------
 
 	// Build one feature entry, including restart-gated metadata so `list` answers
-	// "what exists", "which fields need a restart", and "is anything pending" in one read.
+	/**
+	 * @brief Constructs a JSON object describing a feature's state and any pending restart-required changes.
+	 *
+	 * Includes feature metadata (name, version, category, load state, etc.) and, if the feature 
+	 * has restart-required fields, an array of those fields with their pending status determined 
+	 * by comparing boot values against current live settings.
+	 *
+	 * @return json Feature entry with metadata and optional restart fields array.
+	 */
 	json FeatureEntry(Feature* f)
 	{
 		json entry{
@@ -146,6 +182,15 @@ namespace
 		return entry;
 	}
 
+	/**
+	 * @brief Dispatches feature management operations (list, get, set, reset, toggle).
+	 * 
+	 * Validates parameters and executes the requested feature operation, returning
+	 * success or error details in JSON format.
+	 * 
+	 * @param a_args JSON object specifying the action and operation parameters.
+	 * @return JSON object containing the operation result or error information.
+	 */
 	json BuildFeatureResult(const json& a_args)
 	{
 		const std::string action = a_args.value("action", std::string("list"));
@@ -264,12 +309,28 @@ namespace
 		return json{ { "error", "unknown action (list|get|set|reset|toggle)" }, { "action", action } };
 	}
 
+	/**
+	 * @brief Handles feature-related DevBench tool requests.
+	 *
+	 * Routes feature operations (list, get, set, reset, toggle) through the standard
+	 * handler wrapper to ensure exceptions do not cross the DLL boundary and exactly
+	 * one response is written to the output sink.
+	 */
 	void FeatureToolHandler(void*, const char* a_argsJson, void* a_sink, DevBenchAPI::WriteFn a_write)
 	{
 		RunHandler(&BuildFeatureResult, a_argsJson, a_sink, a_write);
 	}
 
-	// ---- inspect: engine state / shader-cache status ----------------------------------
+	/**
+	 * @brief Builds inspection data for the specified kind query (state, profiler, or shader cache).
+	 *
+	 * @param a_args JSON object containing the inspection query; must include a required `kind` field.
+	 *               Optional `filter` parameter narrows profiler results to entries whose name contains the filter string.
+	 * @return JSON object with the requested inspection data, or an error object if `kind` is missing or unsupported.
+	 *         For `kind="state"`, includes plugin name and frame count.
+	 *         For `kind="profiler"`, includes GPU/CPU timing statistics and per-pass history samples.
+	 *         For `kind="shadercache"`, includes compilation status and task/failure counts.
+	 */
 
 	json BuildInspectResult(const json& a_args)
 	{
@@ -337,12 +398,26 @@ namespace
 		return json{ { "error", "unknown kind" }, { "kind", kind }, { "supported", json::array({ "state", "shadercache", "profiler" }) } };
 	}
 
+	/**
+	 * @brief Handles DevBench inspection requests for plugin state, profiler metrics, and shader cache status.
+	 */
 	void InspectToolHandler(void*, const char* a_argsJson, void* a_sink, DevBenchAPI::WriteFn a_write)
 	{
 		RunHandler(&BuildInspectResult, a_argsJson, a_sink, a_write);
 	}
 
-	// ---- shadercache: clear / delete the compiled cache -------------------------------
+	/**
+	 * @brief Dispatches shader cache operations (clear or deleteDisk) to the main thread.
+	 *
+	 * Validates that the shader cache and task interface are available, then enqueues
+	 * the requested operation on the main thread. Returns immediately with a queued status
+	 * or an error if preconditions are not met.
+	 *
+	 * @param a_args JSON object containing an optional "action" field ("clear" or "deleteDisk").
+	 * @return JSON object with `{ action, queued, enqueued_at_frame, note }` on success,
+	 *         or `{ error, ... }` if the shader cache is unavailable, task interface is unavailable,
+	 *         or action is unrecognized.
+	 */
 
 	json BuildShadercacheResult(const json& a_args)
 	{
@@ -377,12 +452,23 @@ namespace
 		return json{ { "error", "unknown action (clear|deleteDisk)" }, { "action", action } };
 	}
 
+	/**
+	 * @brief Processes DevBench requests for shader cache operations.
+	 */
 	void ShadercacheToolHandler(void*, const char* a_argsJson, void* a_sink, DevBenchAPI::WriteFn a_write)
 	{
 		RunHandler(&BuildShadercacheResult, a_argsJson, a_sink, a_write);
 	}
 
-	// ---- capture: renderdoc / screenshot ----------------------------------------------
+	/**
+	 * @brief Builds a JSON response for a capture request.
+	 *
+	 * Processes RenderDoc or screenshot capture operations based on the `kind` parameter.
+	 * Validates feature availability and queues the capture on the main thread.
+	 *
+	 * @param a_args JSON object containing `kind` (required) and optional `frames` for RenderDoc.
+	 * @return JSON response indicating queued state or error details.
+	 */
 
 	json BuildCaptureResult(const json& a_args)
 	{
@@ -426,12 +512,27 @@ namespace
 		return json{ { "error", "unknown kind" }, { "kind", kind }, { "supported", json::array({ "renderdoc", "screenshot" }) } };
 	}
 
+	/**
+	 * @brief Processes capture requests for RenderDoc and screenshot operations.
+	 *
+	 * DevBench tool handler that triggers RenderDoc frame captures or screenshot
+	 * captures based on the provided `kind` parameter.
+	 */
 	void CaptureToolHandler(void*, const char* a_argsJson, void* a_sink, DevBenchAPI::WriteFn a_write)
 	{
 		RunHandler(&BuildCaptureResult, a_argsJson, a_sink, a_write);
 	}
 
-	// ---- settings: save / load / reset the GLOBAL CS config ---------------------------
+	/**
+	 * @brief Builds a JSON response for global settings operations.
+	 *
+	 * Enqueues a main-thread task to perform the specified action on the global Community Shaders
+	 * configuration. Returns immediately with queuing status and frame information.
+	 *
+	 * @param a_args JSON object containing an "action" field: `save`, `load`, or `reset`.
+	 * @return JSON object with `action`, `queued`, and `enqueued_at_frame` on success;
+	 *         `error` and optionally `action` on validation failure.
+	 */
 
 	json BuildSettingsResult(const json& a_args)
 	{
@@ -504,6 +605,9 @@ namespace
 		return json{ { "error", "unknown action (save|load|reset)" }, { "action", action } };
 	}
 
+	/**
+	 * @brief Processes DevBench settings tool requests (save, load, reset).
+	 */
 	void SettingsToolHandler(void*, const char* a_argsJson, void* a_sink, DevBenchAPI::WriteFn a_write)
 	{
 		RunHandler(&BuildSettingsResult, a_argsJson, a_sink, a_write);
@@ -512,6 +616,12 @@ namespace
 
 namespace DevBenchBridge
 {
+	/**
+	 * @brief Registers Community Shaders tools with the DevBench API if available.
+	 *
+	 * Registers tools for feature management, engine state inspection, shader cache control,
+	 * frame capture, and settings persistence, provided the DevBench interface is available.
+	 */
 	void Install()
 	{
 		auto* dvb = DevBenchAPI::GetDevBenchInterface001();
@@ -552,7 +662,14 @@ namespace DevBenchBridge
 
 namespace DevBenchBridge
 {
-	void Install() {}  // inert until built with DEVBENCH_BRIDGE_ENABLED
+	/**
+ * @brief Registers Community Shaders tools with the DevBench bridge if available.
+ *
+ * When the DevBench interface is present, registers tool handlers for feature management,
+ * inspection, shader caching, capture operations, and settings persistence.
+ * If DevBench is unavailable, no action is taken.
+ */
+void Install() {}  // inert until built with DEVBENCH_BRIDGE_ENABLED
 }
 
 #endif

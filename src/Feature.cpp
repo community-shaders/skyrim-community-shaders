@@ -210,6 +210,10 @@ void Feature::WriteDiskCacheInfo(CSimpleIniA& a_ini)
 	a_ini.SetValue(ini_name.c_str(), "Version", version.c_str());
 }
 
+/**
+ * @brief Provides access to the registry of all known features.
+ * @return A constant reference to the vector of all known feature instances.
+ */
 const std::vector<Feature*>& Feature::GetFeatureList()
 {
 	static std::vector<Feature*> features = {

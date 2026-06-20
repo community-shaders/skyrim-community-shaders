@@ -6,7 +6,30 @@
 
 // Status panel for the devbench bridge. The plugin's tools are registered into the external
 // devbench host via DevBenchBridge (see src/Features/RemoteControl/DevBenchBridge.cpp); this feature surfaces, in the
-// in-game menu, whether devbench is present, what was registered, and which port the host bound.
+/**
+ * @brief Feature class for integrating Community Shaders with an external devbench host.
+ * 
+ * Exposes shader tools (feature, inspect, shadercache, capture, settings) to AI assistants
+ * through a shared devbench bench, accessible via MCP and REST protocols. Uses a singleton
+ * pattern to ensure a single instance. Initialization is deferred to DataLoaded to allow
+ * devbench's cross-plugin interface to be ready before the bridge is installed.
+ */
+
+/**
+ * Retrieves the singleton instance of RemoteControl.
+ * @return Pointer to the RemoteControl singleton instance.
+ */
+
+/**
+ * Initializes the devbench bridge.
+ * 
+ * Called at DataLoaded rather than Load to ensure devbench's kPostLoad initialization
+ * has completed and its cross-plugin interface is available.
+ */
+
+/**
+ * Renders the feature's status and configuration panel in the in-game menu.
+ */
 class RemoteControl : public Feature
 {
 public:

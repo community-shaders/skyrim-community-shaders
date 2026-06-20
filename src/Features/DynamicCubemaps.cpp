@@ -355,6 +355,11 @@ void DynamicCubemaps::UpdateCubemapCapture(bool a_reflections)
 	context->CSSetSamplers(0, 1, &nullSampler);
 }
 
+/**
+ * @brief Infers local reflection information from captured cubemap data.
+ *
+ * @param a_reflections If true, infers from the reflections capture; otherwise from the base capture.
+ */
 void DynamicCubemaps::Inferrence(bool a_reflections)
 {
 	auto renderer = globals::game::renderer;
@@ -395,6 +400,16 @@ void DynamicCubemaps::Inferrence(bool a_reflections)
 	context->CSSetSamplers(0, 1, &sampler);
 }
 
+/**
+ * @brief Computes pre-filtered specular environment maps for a specified mip range.
+ *
+ * When `a_doSetup` is true, copies inferred cubemap faces and regenerates mipmaps before filtering.
+ *
+ * @param a_reflections If true, processes reflections texture; otherwise, base texture.
+ * @param a_startLevel Starting mip level for filtering (inclusive).
+ * @param a_endLevel Ending mip level for filtering (exclusive).
+ * @param a_doSetup If true, performs face copying and mipmap generation before filtering.
+ */
 void DynamicCubemaps::Irradiance(bool a_reflections, uint32_t a_startLevel, uint32_t a_endLevel, bool a_doSetup)
 {
 	auto context = globals::d3d::context;
@@ -521,6 +536,14 @@ void DynamicCubemaps::CompressToBC6H(bool a_reflections)
 	context->CopyResource(dst->resource.get(), bc6hScratchTexture->resource.get());
 }
 
+/**
+ * @brief Advances the cubemap update pipeline state machine by one task.
+ *
+ * Executes the next step in a multi-frame sequence that captures, infers, filters, 
+ * and compresses environment cubemaps. Resets capture when game time jumps 
+ * significantly and recompiles shaders if needed. Processes either the base or 
+ * reflection variant depending on the current task.
+ */
 void DynamicCubemaps::UpdateCubemap()
 {
 	ZoneScoped;
