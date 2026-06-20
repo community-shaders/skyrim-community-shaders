@@ -2543,13 +2543,20 @@ bool LightEditor::SaveAsSeparateEntry(bool includeColor)
 	const size_t lightIdx = loc.lightIdx;
 	auto& sourceEntry = (*lightsArr)[lightIdx];
 
-	// Already forked into a dedicated whitelisted entry for this reference — nothing to do.
-	if (auto* wl = GetArrayMember(sourceEntry, "whiteList"))
+	// Whitelisted here, and whether the whiteList is dedicated to this reference alone (a prior fork).
+	// A shared whiteList listing several references is not a fork and may still be split off.
+	bool ownerWhitelisted = false;
+	if (auto* wl = GetArrayMember(sourceEntry, "whiteList")) {
 		for (const auto& elem : *wl)
 			if (elem.is_string() && elem.get<std::string>() == ownerEntry) {
-				logger::info("[LightEditor] SaveAsSeparateEntry: {} already has its own whitelisted entry", ownerEntry);
-				return false;
+				ownerWhitelisted = true;
+				break;
 			}
+		if (ownerWhitelisted && wl->size() == 1) {
+			logger::info("[LightEditor] SaveAsSeparateEntry: {} already has its own whitelisted entry", ownerEntry);
+			return false;
+		}
+	}
 
 	// Fork: deep copy, apply the current editor edits, whitelist only this reference.
 	nlohmann::ordered_json forkedEntry = sourceEntry;
@@ -2560,8 +2567,12 @@ bool LightEditor::SaveAsSeparateEntry(bool includeColor)
 	forkedEntry.erase("blackList");
 	forkedEntry["whiteList"] = nlohmann::ordered_json::array({ ownerEntry });
 
-	// Blacklist this reference in the source so it now resolves solely to the forked entry.
-	MutateFilterList(sourceEntry, "blackList", ownerEntry, true);
+	// Exclude this reference from the source so it resolves solely to the forked entry: drop it from a
+	// shared whiteList, otherwise blacklist it.
+	if (ownerWhitelisted)
+		MutateFilterList(sourceEntry, "whiteList", ownerEntry, false);
+	else
+		MutateFilterList(sourceEntry, "blackList", ownerEntry, true);
 
 	lightsArr->insert(lightsArr->begin() + lightIdx + 1, std::move(forkedEntry));
 
