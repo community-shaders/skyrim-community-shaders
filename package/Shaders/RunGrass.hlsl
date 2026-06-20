@@ -466,11 +466,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		dirDetailedShadow *= ScreenSpaceShadows::GetScreenSpaceShadow(input.HPosition.xyz, screenUV, screenNoise);
 #			endif  // SCREEN_SPACE_SHADOWS
 
-	float dirSoftShadow = dirDetailedShadow;
-#			if defined(SKYLIGHTING_SHADOW_VIS)
-	dirSoftShadow = skylightingShadowVisibility;
-#			endif
-
 	float3 diffuseColor = 0;
 	float3 specularColor = 0;
 
@@ -498,6 +493,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #				endif  // SKYLIGHTING
 
 	float3 albedo = baseColor.xyz * vertexColor;
+
+	float dirSoftShadow = dirDetailedShadow;
+#				if defined(SKYLIGHTING_SHADOW_VIS)
+	dirSoftShadow = skylightingShadowVisibility;
+#				endif
 
 	float3 subsurfaceColor = dirLightColor * dirSoftShadow * (GetSoftLightMultiplier(dirLightAngle, softLightRolloff)) * Color::VanillaNormalization();
 

@@ -896,16 +896,7 @@ void State::ModifyShaderLookup(const RE::BSShader& a_shader, uint& a_vertexDescr
 					a_pixelDescriptor |= 256;
 			}
 			break;
-		case RE::BSShader::Type::Grass:
-			{
-				auto technique = a_vertexDescriptor & 0xF;
-				auto flags = a_vertexDescriptor & ~0xF;
-				if (technique == static_cast<uint32_t>(SIE::ShaderCache::GrassShaderTechniques::TruePbr)) {
-					technique = 0;
-				}
-				a_vertexDescriptor = flags | technique;
-			}
-			break;
+		}
 		}
 	}
 }
