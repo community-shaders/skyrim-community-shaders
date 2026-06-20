@@ -1,9 +1,20 @@
 ﻿#pragma once
 
+/**
+ * @brief Fixes shadow gaps caused by incorrect cascade camera culling plane overlap.
+ *
+ * The vanilla engine sets the near face of each successive cascade camera equal to
+ * the previous cascade's far face, which already includes +fSplitOverlap. This
+ * effectively doubles the overlap offset and pushes culling planes outward, causing
+ * visible shadow gaps. This fix pulls far-face corners back by 2x fSplitOverlap to
+ * produce the correct effective overlap of 1x fSplitOverlap in each direction.
+ */
 struct ShadowmapCascadeCullingFix : EngineFix
 {
+	/** @brief Returns the human-readable name of this fix. */
 	std::string GetName() override { return "Shadowmap Cascade Culling Fix"; }
 
+	/** @brief Installs the culling plane correction hook into the shadow cascade setup. */
 	void Install() override;
 
 private:

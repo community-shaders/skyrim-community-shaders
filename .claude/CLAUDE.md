@@ -334,6 +334,41 @@ Modular ImGui-based configuration interface with specialized renderers for diffe
 
 Feature versions are automatically extracted from `.ini` files and compiled into `FeatureVersions.h` at build time for backward compatibility checking.
 
+### Release Stages (Alpha / Beta)
+
+Features can declare a release-maturity stage in their `.ini` `[Info]` section. This drives the default-enabled state, a UI marker, and the version-audit policy.
+
+**Declaring a stage** (in `features/<Feature>/Shaders/Features/<Feature>.ini`):
+
+```ini
+[Info]
+Version = 0-2-0
+Beta = True
+```
+
+-   Flags: `Alpha` or `Beta`. Truthy values are `true`, `1`, `yes`, `on` (case-insensitive). Absent or non-truthy means full **Release**.
+-   `Alpha` takes precedence over `Beta` when both are set.
+-   The flag line must start the line (after optional whitespace). The CMake parser in `CMakeLists.txt` and the Python parser in `tools/feature_version_audit.py` are both line-anchored; **keep these two regexes in sync** so build-time classification and audit enforcement agree.
+
+**Build-time baking**: `CMakeLists.txt` collects flagged features into `FEATURE_ALPHA_NAMES` / `FEATURE_BETA_NAMES` in the generated `FeatureVersions.h` (same mechanism as `FEATURE_CORE_NAMES`).
+
+**Runtime API** (`src/Feature.h`):
+
+-   `Feature::GetReleaseStage()` returns `ReleaseStage::{Release, Beta, Alpha}` by looking the short name up in the baked sets. Resolve it once and pass it around; it is not cached.
+-   `IsAlpha()` / `IsBeta()` convenience predicates.
+-   `static GetReleaseStageTag(ReleaseStage)` returns the localized `[ALPHA]` / `[BETA]` marker (empty for Release). It takes the stage so callers that already resolved it avoid a redundant lookup.
+-   `IsDisabledByDefault()` returns `true` for any non-Release stage, so **Alpha/Beta features start disabled on first install**. Users can still enable them via the "Disable at Boot" menu. Do not add a redundant `IsDisabledByDefault` override on a feature that already carries a stage flag.
+
+**UI**: `FeatureListRenderer` draws the stage tag next to the feature name. Alpha uses the theme `StatusPalette.Error` color, Beta uses `StatusPalette.Warning`.
+
+**Versioning convention** (enforced by `tools/feature_version_audit.py`):
+
+-   Pre-release features use `0.x` versions. Entering pre-release from a release/fresh baseline: Beta starts at `0-2-0`, Alpha at `0-1-0`.
+-   `alpha -> beta` bumps the minor and resets the patch.
+-   Within the same pre-release stage, normal semver applies inside `0.x`.
+-   A breaking change (`feat!:` / `BREAKING CHANGE:`) on a pre-release feature **promotes it to release `1-0-0` and strips the Alpha/Beta flag**. `--apply-bumps` performs both the version bump and the flag removal automatically.
+-   Stage transitions are exact-match enforced (they may legitimately lower the version, e.g. release `1.x` -> beta `0-2-0`), unlike the lenient `>` check used within a stage.
+
 ## Key Development Patterns
 
 ### Memory Management

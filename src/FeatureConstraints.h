@@ -14,6 +14,7 @@ namespace FeatureConstraints
 		std::string featureShortName;
 		std::string settingPath;       // e.g., "EnableDepthBufferCullingExterior"
 
+		/** @brief Value equality by feature short name and setting path. */
 		bool operator==(const SettingId& other) const
 		{
 			return featureShortName == other.featureShortName && settingPath == other.settingPath;

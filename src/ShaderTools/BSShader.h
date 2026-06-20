@@ -94,14 +94,35 @@ namespace REX
 		~BSShader() override;  // 00
 
 		// add
-		virtual bool SetupTechnique(TechniqueID Technique) = 0;                                   // 02
-		virtual void RestoreTechnique(TechniqueID Technique) = 0;                                 // 03
-		virtual void SetupMaterial(RE::BSShaderMaterial const* Material);                         // 04
-		virtual void RestoreMaterial(RE::BSShaderMaterial const* Material);                       // 05
-		virtual void SetupGeometry(BSRenderPass* Pass, uint32_t Flags) = 0;                       // 06
-		virtual void RestoreGeometry(BSRenderPass* Pass, uint32_t RenderFlags) = 0;               // 07
+
+		/** @brief Configures render state for the given technique. */
+		virtual bool SetupTechnique(TechniqueID Technique) = 0;  // 02
+
+		/** @brief Tears down render state established by SetupTechnique. */
+		virtual void RestoreTechnique(TechniqueID Technique) = 0;  // 03
+
+		/** @brief Binds material-level constant buffers and textures. */
+		virtual void SetupMaterial(RE::BSShaderMaterial const* Material);  // 04
+
+		/** @brief Unbinds material-level resources set by SetupMaterial. */
+		virtual void RestoreMaterial(RE::BSShaderMaterial const* Material);  // 05
+
+		/** @brief Binds per-geometry constant buffers and transforms for a render pass. */
+		virtual void SetupGeometry(BSRenderPass* Pass, uint32_t Flags) = 0;  // 06
+
+		/** @brief Unbinds per-geometry resources set by SetupGeometry. */
+		virtual void RestoreGeometry(BSRenderPass* Pass, uint32_t RenderFlags) = 0;  // 07
+
+		/**
+		 * @brief Writes a human-readable name for a technique ID into the buffer.
+		 * @param Technique Packed technique bit flags.
+		 * @param Buffer    Output character buffer.
+		 * @param BufferSize Size of Buffer in bytes.
+		 */
 		virtual void GetTechniqueName(TechniqueID Technique, char* Buffer, uint32_t BufferSize);  // 08
-		virtual void ReloadShaders(bool Unknown);                                                 // 09
+
+		/** @brief Reloads and recompiles all shaders owned by this instance. */
+		virtual void ReloadShaders(bool Unknown);  // 09
 
 		std::uint32_t m_Type;
 		TechniqueIDMap<VertexShader*> m_VertexShaderTable;

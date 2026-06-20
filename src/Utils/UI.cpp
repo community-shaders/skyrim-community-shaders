@@ -2183,11 +2183,11 @@ namespace Util
 					auto* weatherManager = WeatherManager::GetSingleton();
 					auto currentWeathers = weatherManager->GetCurrentWeathers();
 					ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
-					ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Weather Override Active");
+					Util::Text::Warning("Weather Override Active");
 					ImGui::TextWrapped("This setting is controlled by the current weather (%s).",
 						currentWeathers.currentWeather ? currentWeathers.currentWeather->GetFormEditorID() : "Unknown");
 					ImGui::Separator();
-					ImGui::TextColored(ImVec4(0.6f, 0.9f, 0.6f, 1.0f), "Click to open CS Editor");
+					Util::Text::Success("Click to open CS Editor");
 					ImGui::PopTextWrapPos();
 					ImGui::EndTooltip();
 				}
@@ -2237,11 +2237,11 @@ namespace Util
 					auto* weatherManager = WeatherManager::GetSingleton();
 					auto currentWeathers = weatherManager->GetCurrentWeathers();
 					ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
-					ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Weather Override Active");
+					Util::Text::Warning("Weather Override Active");
 					ImGui::TextWrapped("This setting is controlled by the current weather (%s).",
 						currentWeathers.currentWeather ? currentWeathers.currentWeather->GetFormEditorID() : "Unknown");
 					ImGui::Separator();
-					ImGui::TextColored(ImVec4(0.6f, 0.9f, 0.6f, 1.0f), "Click to open CS Editor");
+					Util::Text::Success("Click to open CS Editor");
 					ImGui::PopTextWrapPos();
 					ImGui::EndTooltip();
 				}
@@ -2288,11 +2288,11 @@ namespace Util
 					auto* weatherManager = WeatherManager::GetSingleton();
 					auto currentWeathers = weatherManager->GetCurrentWeathers();
 					ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
-					ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Weather Override Active");
+					Util::Text::Warning("Weather Override Active");
 					ImGui::TextWrapped("This setting is controlled by the current weather (%s).",
 						currentWeathers.currentWeather ? currentWeathers.currentWeather->GetFormEditorID() : "Unknown");
 					ImGui::Separator();
-					ImGui::TextColored(ImVec4(0.6f, 0.9f, 0.6f, 1.0f), "Click to open CS Editor");
+					Util::Text::Success("Click to open CS Editor");
 					ImGui::PopTextWrapPos();
 					ImGui::EndTooltip();
 				}
@@ -2339,11 +2339,11 @@ namespace Util
 					auto* weatherManager = WeatherManager::GetSingleton();
 					auto currentWeathers = weatherManager->GetCurrentWeathers();
 					ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
-					ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Weather Override Active");
+					Util::Text::Warning("Weather Override Active");
 					ImGui::TextWrapped("This setting is controlled by the current weather (%s).",
 						currentWeathers.currentWeather ? currentWeathers.currentWeather->GetFormEditorID() : "Unknown");
 					ImGui::Separator();
-					ImGui::TextColored(ImVec4(0.6f, 0.9f, 0.6f, 1.0f), "Click to open CS Editor");
+					Util::Text::Success("Click to open CS Editor");
 					ImGui::PopTextWrapPos();
 					ImGui::EndTooltip();
 				}
@@ -2432,7 +2432,7 @@ namespace Util
 
 				ImGui::BeginTooltip();
 				ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
-				ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Setting Constrained");
+				Util::Text::Warning("Setting Constrained");
 				ImGui::Text("This setting is constrained by:");
 				ImGui::Spacing();
 				for (const auto& src : constraint.sources) {
@@ -2440,8 +2440,7 @@ namespace Util
 					ImGui::Indent();
 					ImGui::TextWrapped("%s", src.reason.c_str());
 					if (src.recommendDisableAtBoot) {
-						ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.5f, 1.0f),
-							"Consider disabling this feature at boot for best compatibility.");
+						Util::Text::WrappedError("Consider disabling this feature at boot for best compatibility.");
 					}
 					ImGui::Unindent();
 				}

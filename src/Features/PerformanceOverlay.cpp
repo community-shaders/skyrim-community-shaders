@@ -30,7 +30,6 @@
 #include "Utils/FileSystem.h"
 #include "Utils/Format.h"
 #include "Utils/Game.h"
-#include "Utils/UI.h"
 
 #define I18N_KEY_PREFIX "feature.perf_overlay."
 
@@ -484,7 +483,7 @@ void PerformanceOverlay::DrawFPS()
 
 		if (isFrameGenActive) {
 			// Show note that FSR uses calculated data
-			ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "%s", T(TKEY("post_fg_calculated"), "Post-FG: Calculated timing (2x Pre-FG)"));
+			Util::Text::Warning("%s", T(TKEY("post_fg_calculated"), "Post-FG: Calculated timing (2x Pre-FG)"));
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::Text("AMD FSR Frame Generation uses calculated timing data (2x Pre-FG).\nNVIDIA DLSS Frame Generation provides measured timing data.");
 			}

@@ -654,6 +654,11 @@ namespace BackgroundBlur
 			CreateBlurTextures(texDesc.Width, texDesc.Height, texDesc.Format);
 		}
 
+		// Snapshot the clean scene before the in-place HDR blur, for clean captures.
+		if (hdrActive) {
+			hdr->SnapshotCleanScene();
+		}
+
 		// CS editor mode: single fullscreen blur pass (better perf than per-window)
 		if (csEditorActive) {
 			ImVec2 screenMin = { 0, 0 };

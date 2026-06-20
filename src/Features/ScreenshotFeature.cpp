@@ -348,9 +348,11 @@ namespace
 	}
 
 	// Picks the capture source:
-	//   HDR enabled     -> swap-chain back buffer after ApplyHDR (PQ HDR10 / PQ float).
-	//   otherwise       -> kFRAMEBUFFER (tonemapped UNORM).
-	CaptureSource SelectCaptureSource(winrt::com_ptr<ID3D11Texture2D>& holder)
+	//   HDR + CS menu open -> clean HDR composite (no UI, no menu blur).
+	//   HDR enabled        -> swap-chain back buffer after ApplyHDR (PQ HDR10 / PQ float).
+	//   otherwise          -> kFRAMEBUFFER (tonemapped UNORM).
+	// forCapture: post-blur screenshot uses the snapshot; pre-blur preview uses hdrTexture.
+	CaptureSource SelectCaptureSource(winrt::com_ptr<ID3D11Texture2D>& holder, bool forCapture)
 	{
 		CaptureSource src;
 		auto* renderer = globals::game::renderer;
@@ -360,6 +362,23 @@ namespace
 
 
 		if (IsFlatHdrScreenshotCapture()) {
+			// Recompose from the clean scene with no UI buffer.
+			auto& hdr = globals::features::hdrDisplay;
+			if (Menu::GetSingleton()->IsEnabled && hdr.outputTexture && hdr.outputTexture->srv) {
+				ID3D11ShaderResourceView* sceneSRV =
+					(forCapture && hdr.IsCleanSceneCaptureFresh()) ? hdr.cleanSceneCapture->srv.get() :
+																	 (hdr.hdrTexture ? hdr.hdrTexture->srv.get() : nullptr);
+				if (sceneSRV) {
+					if (ID3D11Texture2D* clean = hdr.ComposeCleanCapture(sceneSRV, /*sdrPreview=*/!forCapture)) {
+						src.texture = clean;
+						src.srv = hdr.outputTexture->srv.get();
+						src.needsPreviewCache = false;
+						src.description = "HDR clean composite (no UI, no menu blur)";
+						return src;
+					}
+				}
+			}
+
 			src.texture = ResolveDisplayedBackBuffer(holder);
 			src.needsPreviewCache = true;
 			src.description = "Swap chain back buffer (HDR display composite)";
@@ -385,30 +404,27 @@ namespace
 		       combo[0].GetKey() == VK_SNAPSHOT;
 	}
 
-	// Blend state used around the preview's ImGui::Image draw. Two regression
-	// risks if this is changed:
-	//   1. BlendEnable must stay FALSE - the source texture carries non-1 alpha
-	//      where Skyrim composited UI plates; default SRC_ALPHA blend lets the
-	//      host window background show through (visible on the desktop mirror).
-	//   2. WriteMask must exclude alpha (RGB only) to avoid compositing
-	//      artifacts. RGB-only writes leave the plate's pre-cleared alpha=1
-	//      in place.
-	// Paired with ImDrawCallback_ResetRenderState queued by Subrect::DrawEditor
-	// immediately after the image draw.
+	// Forces BlendEnable=FALSE and opaque alpha for the preview Image draw.
+	// Paired with ImDrawCallback_ResetRenderState queued by Subrect::DrawEditor.
 	void OpaquePreviewBlendCallback(const ImDrawList*, const ImDrawCmd*)
 	{
-		static winrt::com_ptr<ID3D11BlendState> opaqueBlend;
-		if (!opaqueBlend) {
+		const bool writeAlpha = IsFlatHdrScreenshotCapture() && Menu::GetSingleton()->IsEnabled;
+
+		static winrt::com_ptr<ID3D11BlendState> rgbBlend;
+		static winrt::com_ptr<ID3D11BlendState> rgbaBlend;
+		auto& blend = writeAlpha ? rgbaBlend : rgbBlend;
+		if (!blend) {
 			D3D11_BLEND_DESC desc{};
 			desc.RenderTarget[0].BlendEnable = FALSE;
 			desc.RenderTarget[0].RenderTargetWriteMask =
 				D3D11_COLOR_WRITE_ENABLE_RED |
 				D3D11_COLOR_WRITE_ENABLE_GREEN |
-				D3D11_COLOR_WRITE_ENABLE_BLUE;
-			globals::d3d::device->CreateBlendState(&desc, opaqueBlend.put());
+				D3D11_COLOR_WRITE_ENABLE_BLUE |
+				(writeAlpha ? D3D11_COLOR_WRITE_ENABLE_ALPHA : 0);
+			globals::d3d::device->CreateBlendState(&desc, blend.put());
 		}
-		if (opaqueBlend) {
-			globals::d3d::context->OMSetBlendState(opaqueBlend.get(), nullptr, 0xFFFFFFFF);
+		if (blend) {
+			globals::d3d::context->OMSetBlendState(blend.get(), nullptr, 0xFFFFFFFF);
 		}
 	}
 
@@ -683,7 +699,7 @@ void ScreenshotFeature::DrawSettings()
 
 	// Preview reflects what Capture() would save.
 	winrt::com_ptr<ID3D11Texture2D> previewTextureKeepAlive;
-	const auto src = SelectCaptureSource(previewTextureKeepAlive);
+	const auto src = SelectCaptureSource(previewTextureKeepAlive, /*forCapture=*/false);
 
 	ID3D11ShaderResourceView* previewView = src.srv;
 	if (src.texture && (src.needsPreviewCache || !previewView)) {
@@ -863,7 +879,7 @@ void ScreenshotFeature::Capture()
 		return;
 
 	winrt::com_ptr<ID3D11Texture2D> sourceTextureKeepAlive;
-	const auto src = SelectCaptureSource(sourceTextureKeepAlive);
+	const auto src = SelectCaptureSource(sourceTextureKeepAlive, /*forCapture=*/true);
 	logger::debug("Capturing from {}", src.description);
 
 	if (!src.texture) {

@@ -81,7 +81,7 @@ namespace VolumetricShadows
 		uint sampleCount = max(1, ceil(float(baseSampleCount) * (1.0 - fade)));
 		float rcpSampleCount = rcp(sampleCount);
 
-		// Compute cascade blend factor with smoothstep
+		// Compute cascade blend factor
 		float cascadeSelect = saturate((shadowMapDepth - directionalShadowLightData.StartSplitDistances.y) / (directionalShadowLightData.EndSplitDistances.x - directionalShadowLightData.StartSplitDistances.y));
 
 		// Determine which cascade(s) to sample
@@ -113,8 +113,9 @@ namespace VolumetricShadows
 
 			float secondaryFirstSample;
 			float shadowBlend = SampleVSMCascade3D(secondaryCascade, noise, sampleCount, rcpSampleCount, startLS, endLS, secondaryFirstSample);
-			shadow = lerp(shadow, shadowBlend, cascadeSelect);
-			surfaceShadow = lerp(surfaceShadow, secondaryFirstSample, cascadeSelect);
+			float blendFactor = smoothstep(0, 1, cascadeSelect);
+			shadow = lerp(shadow, shadowBlend, blendFactor);
+			surfaceShadow = lerp(surfaceShadow, secondaryFirstSample, blendFactor);
 		}
 
 		// Apply distance fade
@@ -148,7 +149,7 @@ namespace VolumetricShadows
 		// Cascade projections are world-space; position comes in camera-relative.
 		float3 positionWS = position + FrameBuffer::CameraPosAdjust.xyz;
 
-		// Compute cascade blend factor with smoothstep
+		// Compute cascade blend factor
 		float cascadeSelect = saturate((shadowMapDepth - directionalShadowLightData.StartSplitDistances.y) / (directionalShadowLightData.EndSplitDistances.x - directionalShadowLightData.StartSplitDistances.y));
 
 		// Determine which cascade(s) to sample
@@ -171,7 +172,7 @@ namespace VolumetricShadows
 			positionLS.xy = saturate(positionLS.xy);
 
 			float shadowBlend = SampleVSMCascade2D(secondaryCascade, positionLS);
-			shadow = lerp(shadow, shadowBlend, cascadeSelect);
+			shadow = lerp(shadow, shadowBlend, smoothstep(0, 1, cascadeSelect));
 		}
 
 		// Apply distance fade

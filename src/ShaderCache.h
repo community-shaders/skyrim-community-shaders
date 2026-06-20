@@ -145,16 +145,24 @@ namespace SIE
 		};
 		ShaderCompilationTask(ShaderClass shaderClass, const RE::BSShader& shader,
 			uint32_t descriptor);
+		/** @brief Compiles the shader, writing the result to the ShaderCache. */
 		void Perform() const;
 
+		/** @brief Returns a unique hash identifying this shader class, type, and descriptor combo. */
 		size_t GetId() const;
+		/** @brief Returns a human-readable string describing this task (shader file, class, defines). */
 		std::string GetString() const;
 
-		/// LPT scheduling score: higher = more expensive = should be dispatched first.
-		/// Based on shader type, class, descriptor complexity, and known heavy defines.
-		/// Computed once at construction and cached.
+		/**
+		 * LPT scheduling score: higher = more expensive = should be dispatched first.
+		 * Based on shader type, class, descriptor complexity, and known heavy defines.
+		 * Computed once at construction and cached.
+		 */
+		/** Gets the cached LPT scheduling priority. */
 		int GetPriority() const { return cachedPriority; }
+		/** @brief Records the QPC timestamp when this task was enqueued. */
 		void SetEnqueuedQpc(int64_t qpc) { enqueuedQpc = qpc; }
+		/** @brief Gets the QPC timestamp when this task was enqueued. */
 		int64_t GetEnqueuedQpc() const { return enqueuedQpc; }
 
 		bool operator==(const ShaderCompilationTask& other) const;
@@ -193,9 +201,11 @@ struct TaskPriorityLess
 
 namespace SIE
 {
-	/// Threshold above which a shader task is considered "heavy" and benefits
-	/// from P-core placement on hybrid CPUs. Used for thread-priority hints,
-	/// telemetry, and developer-facing diagnostics.
+	/**
+	 * Threshold above which a shader task is considered "heavy" and benefits
+	 * from P-core placement on hybrid CPUs. Used for thread-priority hints,
+	 * telemetry, and developer-facing diagnostics.
+	 */
 	constexpr int kHeavyPriorityThreshold = 500;
 
 	class CompilationSet
@@ -215,12 +225,19 @@ namespace SIE
 			completionTime.store(0, std::memory_order_relaxed);
 		}
 
+		/** @brief Blocks until a task is available or the stop token is signalled. */
 		std::optional<ShaderCompilationTask> WaitTake(std::stop_token stoken);
+		/** @brief Enqueues a task for compilation. */
 		void Add(const ShaderCompilationTask& task);
+		/** @brief Marks a task as finished and records its timing metrics. */
 		void Complete(const ShaderCompilationTask& task);
+		/** @brief Resets all task queues and counters for a fresh compilation pass. */
 		void Clear();
+		/** @brief Formats a millisecond duration into a human-readable time string. */
 		static std::string GetHumanTime(double a_totalMs);
+		/** @brief Estimates remaining compilation time based on completed task throughput. */
 		double GetEta();
+		/** @brief Returns a formatted summary of compilation progress and timing. */
 		std::string GetStatsString(bool a_timeOnly = false, bool a_elapsedOnly = false);
 		std::atomic<uint64_t> completedTasks = 0;
 		std::atomic<uint64_t> totalTasks = 0;
@@ -237,7 +254,7 @@ namespace SIE
 		std::atomic<uint32_t> heavyTasksInFlight = 0;       // number of dispatched heavy (>= kHeavyPriorityThreshold) tasks still running
 		std::mutex compilationMutex;
 
-		/// Per-task timing record stored for post-mortem analysis and developer UI.
+		/** Per-task timing record stored for post-mortem analysis and developer UI. */
 		struct SlowTaskRecord
 		{
 			std::string key;  // ShaderCompilationTask::GetString() — "fxpFile:Class:defines"
@@ -248,7 +265,7 @@ namespace SIE
 			uintmax_t sourceSizeBytes = 0;  // HLSL source file size at compile time
 		};
 
-		/// On-demand parallelism metrics derived from task timings.
+		/** On-demand parallelism metrics derived from task timings. */
 		struct ParallelismStats
 		{
 			double workMs = 0.0;                  // W = sum of all task times
@@ -262,19 +279,21 @@ namespace SIE
 			size_t sampleCount = 0;
 		};
 
-		/// All per-task timing records for this build (appended from multiple threads).
-		/// Protected by slowTasksMutex.
+		/**
+		 * All per-task timing records for this build (appended from multiple threads).
+		 * Protected by slowTasksMutex.
+		 */
 		std::vector<SlowTaskRecord> slowTaskRecords;
 		mutable std::mutex slowTasksMutex;
 
-		/// Returns a copy of the N records with the highest elapsedMs, sorted descending.
+		/** @brief Returns a copy of the N records with the highest elapsedMs, sorted descending. */
 		std::vector<SlowTaskRecord> GetTopSlowTasks(size_t n = 3) const;
 
-		/// Computes parallelism metrics on demand from collected task timings.
+		/** @brief Computes parallelism metrics on demand from collected task timings. */
 		std::optional<ParallelismStats> GetParallelismStats() const;
 
 	private:
-		/// Tasks awaiting dispatch, ordered by cached priority and task id.
+		/** Tasks awaiting dispatch, ordered by cached priority and task id. */
 		std::set<ShaderCompilationTask, TaskPriorityLess> availableTasks;
 		std::set<ShaderCompilationTask, TaskPriorityLess> tasksInProgress;
 		std::set<ShaderCompilationTask, TaskPriorityLess> processedTasks;  // completed or failed
@@ -286,7 +305,7 @@ namespace SIE
 		ID3DBlob* blob;
 		ShaderCompilationTask::Status status;
 		system_clock::time_point compileTime = system_clock::now();
-		bool loadedFromDisk = false;  ///< true when the shader blob was read from the disk cache rather than compiled
+		bool loadedFromDisk = false;  /**< true when the shader blob was read from the disk cache rather than compiled */
 	};
 
 	class UpdateListener;
@@ -300,6 +319,7 @@ namespace SIE
 			return instance;
 		}
 
+		/** @brief Returns true if the shader type is one Community Shaders can replace. */
 		inline static bool IsSupportedShader(const RE::BSShader::Type type)
 		{
 			return type == RE::BSShader::Type::Lighting ||
@@ -314,33 +334,54 @@ namespace SIE
 			       type == RE::BSShader::Type::ImageSpace;
 		}
 
+		/** @brief Returns true if the shader type is one Community Shaders can replace. */
 		inline static bool IsSupportedShader(const RE::BSShader& shader)
 		{
 			return IsSupportedShader(shader.shaderType.get());
 		}
 
+		/** @brief Returns true if the HLSL source file exists on disk for this shader. */
 		inline static bool IsShaderSourceAvailable(const RE::BSShader& shader);
 
+		/** @brief Returns true if any shader compilation tasks are in progress. */
 		bool IsCompiling();
+		/** Gets whether the shader cache is enabled. */
 		bool IsEnabled() const;
+		/** Sets whether the shader cache is enabled. */
 		void SetEnabled(bool value);
+		/** Gets whether shader compilation is asynchronous. */
 		bool IsAsync() const;
+		/** Sets whether shader compilation is asynchronous. */
 		void SetAsync(bool value);
+		/** Gets whether compiled shaders are dumped to disk as raw blobs. */
 		bool IsDump() const;
+		/** Sets whether compiled shaders are dumped to disk as raw blobs. */
 		void SetDump(bool value);
+		/** @brief Signals all compilation threads to stop and clears pending tasks. */
 		void StopCompilation();
 
+		/** Gets whether the persistent disk cache is enabled. */
 		bool IsDiskCache() const;
+		/** Sets whether the persistent disk cache is enabled. */
 		void SetDiskCache(bool value);
+		/** @brief Deletes the entire on-disk shader cache directory. */
 		void DeleteDiskCache();
+		/** @brief Validates disk cache integrity against current shader sources and feature set. */
 		void ValidateDiskCache();
+		/** @brief Writes cache metadata (version, feature list) to the disk cache directory. */
 		void WriteDiskCacheInfo();
+		/** Gets whether unchanged shaders are skipped during recompilation. */
 		bool IsSkipUnchangedShaders() const;
+		/** Sets whether unchanged shaders are skipped during recompilation. */
 		void SetSkipUnchangedShaders(bool value);
+		/** Gets whether the filesystem watcher for hot-reload is active. */
 		bool UseFileWatcher() const;
+		/** Sets whether the filesystem watcher for hot-reload is active. */
 		void SetFileWatcher(bool value);
 
+		/** @brief Starts the efsw filesystem watcher for shader hot-reload. */
 		void StartFileWatcher();
+		/** @brief Stops the filesystem watcher and releases its resources. */
 		void StopFileWatcher();
 
 		/**
@@ -446,7 +487,7 @@ namespace SIE
 		uint64_t GetSlowTasks();
 		uint64_t GetVerySlowTasks();
 
-		/// Returns a copy of the top-N slowest task records from the last build, sorted descending.
+		/** @brief Returns a copy of the top-N slowest task records from the last build, sorted descending. */
 		std::vector<CompilationSet::SlowTaskRecord> GetTopSlowTasks(size_t n = 3);
 		std::optional<CompilationSet::ParallelismStats> GetParallelismStats();
 

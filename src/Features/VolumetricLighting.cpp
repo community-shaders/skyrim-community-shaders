@@ -154,7 +154,6 @@ void VolumetricLighting::DataLoaded()
 
 void VolumetricLighting::PostPostLoad()
 {
-	bEnableVolumetricLighting = reinterpret_cast<bool*>(REL::RelocationID(527940, 414913).address());
 	gVolumetricLightingSizeLow = reinterpret_cast<TextureSize*>(REL::RelocationID(527970, 414916).address());
 	gVolumetricLightingSizeMedium = reinterpret_cast<TextureSize*>(REL::RelocationID(527973, 414919).address());
 	gVolumetricLightingSizeHigh = reinterpret_cast<TextureSize*>(REL::RelocationID(527976, 414922).address());
@@ -204,11 +203,11 @@ void VolumetricLighting::EarlyPrepass()
 void VolumetricLighting::SetupVL()
 {
 	if (inInterior) {
-		*bEnableVolumetricLighting = settings.InteriorEnabled && inInteriorWithSun;
+		*globals::game::bEnableVolumetricLighting = settings.InteriorEnabled && inInteriorWithSun;
 		*gVolumetricLightingSizeHigh = static_cast<Quality>(settings.InteriorQuality) == Quality::Custom ? settings.InteriorCustomSize : defaultSizeHigh;
 		SetVLQuality(GetVLDescriptor(), settings.InteriorQuality);
 	} else {
-		*bEnableVolumetricLighting = settings.ExteriorEnabled;
+		*globals::game::bEnableVolumetricLighting = settings.ExteriorEnabled;
 		*gVolumetricLightingSizeHigh = static_cast<Quality>(settings.ExteriorQuality) == Quality::Custom ? settings.ExteriorCustomSize : defaultSizeHigh;
 		SetVLQuality(GetVLDescriptor(), settings.ExteriorQuality);
 	}

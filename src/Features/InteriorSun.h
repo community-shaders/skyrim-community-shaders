@@ -17,13 +17,17 @@ public:
 				T("feature.interior_sun.key_feature_4", "Fixes geometry culling issues that cause light leakage") } };
 	};
 
+	/** @brief Draws the ImGui settings UI for Interior Sun configuration. */
 	virtual void DrawSettings() override;
 	virtual void LoadSettings(json& o_json) override;
 	virtual void SaveSettings(json& o_json) override;
 	virtual void RestoreDefaultSettings() override;
+	/** @brief Installs rendering hooks and patches for interior sun/shadow support. */
 	virtual void PostPostLoad() override;
+	/** @brief Updates the interior sun state based on the current cell during the early prepass. */
 	virtual void EarlyPrepass() override;
 
+	/** @brief Registers the menu open/close event handler for tracking main menu state. */
 	virtual void DataLoaded() override
 	{
 		MenuOpenCloseEventHandler::Register();
@@ -39,24 +43,32 @@ public:
 
 	std::atomic<bool> isInteriorWithSun = false;
 
+	/** @brief Hook that intercepts world space queries to enable/disable interior sun based on cell flags. */
 	struct GetWorldSpace
 	{
 		static RE::TESWorldSpace* thunk(RE::TES* tes);
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
+	/** @brief Hook that overrides directional shadow light culling to include rooms visible from the sun direction. */
 	struct DirShadowLightCulling
 	{
 		static void thunk(RE::BSShadowDirectionalLight* dirLight, RE::BSTArray<RE::BSTArray<RE::NiPointer<RE::NiAVObject>>>& jobArrays, RE::BSTArray<RE::NiPointer<RE::NiAVObject>>& nodes);
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
+	/** @brief Hook that updates the raster cull mode before each render pass to support double-sided rendering. */
 	struct BSBatchRenderer_RenderPassImmediately
 	{
 		static void thunk(RE::BSRenderPass* a_pass, uint32_t a_technique, bool a_alphaTest, uint32_t a_renderFlags);
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
+	/**
+	 * @brief Conditionally disables backface culling for shadow rendering in interior sun cells.
+	 * @param pass The current render pass being processed.
+	 * @param technique The shader technique flags for the pass.
+	 */
 	void UpdateRasterStateCullMode(const RE::BSRenderPass* pass, const uint32_t technique) const
 	{
 		if (isInteriorWithSun && settings.ForceDoubleSidedRendering && technique & static_cast<uint32_t>(SIE::ShaderCache::UtilityShaderFlags::RenderShadowmap)) {
@@ -72,11 +84,14 @@ public:
 		}
 	}
 
+	/** @brief Event handler that resets interior sun state when the main menu opens. */
 	class MenuOpenCloseEventHandler : public RE::BSTEventSink<RE::MenuOpenCloseEvent>
 	{
 	public:
+		/** @brief Processes menu open/close events to reset interior sun state on main menu. */
 		virtual RE::BSEventNotifyControl ProcessEvent(const RE::MenuOpenCloseEvent* a_event, RE::BSTEventSource<RE::MenuOpenCloseEvent>*);
 
+		/** @brief Registers the singleton event handler with the UI event source. */
 		static bool Register()
 		{
 			static MenuOpenCloseEventHandler singleton;
@@ -92,7 +107,13 @@ public:
 		}
 	};
 
+	/**
+	 * @brief Checks whether a cell is an interior with sunlight shadow flags enabled.
+	 * @param cell The cell to check.
+	 * @return True if the cell is an interior configured for sun and sky lighting with sunlight shadows.
+	 */
 	static bool IsInteriorWithSun(const RE::TESObjectCELL* cell);
+	/** @brief Returns whether this feature is loaded and the current cell has interior sun enabled. */
 	bool IsActiveInteriorSun() const { return loaded && isInteriorWithSun.load(); }
 	virtual bool IsCore() const override { return true; };
 

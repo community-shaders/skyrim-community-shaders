@@ -29,30 +29,84 @@ using json = nlohmann::json;
 //       });
 namespace WeatherVariables
 {
-	// Base class for weather-controllable variables
+	/** @brief Abstract interface for a weather-controllable variable that can be interpolated, serialized, and reset. */
 	class IWeatherVariable
 	{
 	public:
 		virtual ~IWeatherVariable() = default;
+
+		/**
+		 * @brief Interpolates this variable between two weather override values.
+		 * @param from JSON value for the outgoing weather (null if no override).
+		 * @param to JSON value for the incoming weather (null if no override).
+		 * @param factor Interpolation factor in [0, 1].
+		 */
 		virtual void Lerp(const json& from, const json& to, float factor) = 0;
+
+		/**
+		 * @brief Serializes the current value into a JSON object.
+		 * @param j JSON object to write this variable's value into, keyed by name.
+		 */
 		virtual void SaveToJson(json& j) const = 0;
+
+		/**
+		 * @brief Deserializes this variable's value from a JSON object.
+		 * @param j JSON object to read from (key must match this variable's name).
+		 */
 		virtual void LoadFromJson(const json& j) = 0;
+
+		/** @brief Resets this variable to its compile-time default value. */
 		virtual void SetToDefault() = 0;
+
+		/** @brief Returns the internal key name used for JSON serialization. */
 		virtual std::string GetName() const = 0;
+
+		/** @brief Returns the human-readable label shown in the weather editor UI. */
 		virtual std::string GetDisplayName() const = 0;
+
+		/** @brief Returns the tooltip text describing this variable. */
 		virtual std::string GetTooltip() const = 0;
+
+		/** @brief Snapshots the current in-memory value as the baseline user setting. */
 		virtual void CaptureUserSettingsValue() = 0;
+
+		/** @brief Restores this variable to the previously captured user setting value. */
 		virtual void SetToUserSettings() = 0;
+
+		/**
+		 * @brief Begins a weather transition, caching the starting value for smooth interpolation.
+		 * @param fromOverride JSON value for the outgoing weather override (null to use current value).
+		 */
 		virtual void BeginTransition(const json& fromOverride) = 0;
+
+		/** @brief Ends the current weather transition, clearing the cached start value. */
 		virtual void EndTransition() = 0;
+
+		/** @brief Returns true if this variable is currently mid-transition between two weather states. */
 		virtual bool IsInTransition() const = 0;
 	};
 
-	// Templated weather variable for type safety
+	/**
+	 * @brief Type-safe weather variable that wraps a pointer to a live setting value.
+	 *
+	 * Manages interpolation between weather overrides, JSON serialization,
+	 * user-settings capture/restore, and transition state for a single typed value.
+	 *
+	 * @tparam T The value type (float, float3, float4, std::array, std::vector, etc.).
+	 */
 	template <typename T>
 	class WeatherVariable : public IWeatherVariable
 	{
 	public:
+		/**
+		 * @brief Constructs a weather variable bound to a live value pointer.
+		 * @param name Internal key name for JSON serialization.
+		 * @param displayName Human-readable label for the weather editor UI.
+		 * @param tooltip Descriptive text shown on hover.
+		 * @param valuePtr Pointer to the live setting value that will be modified during interpolation.
+		 * @param defaultValue Compile-time default used by SetToDefault().
+		 * @param lerpFunc Optional custom interpolation function; defaults to std::lerp for floating-point types.
+		 */
 		WeatherVariable(const std::string& name, const std::string& displayName, const std::string& tooltip,
 			T* valuePtr, T defaultValue,
 			std::function<T(const T&, const T&, float)> lerpFunc = nullptr) :
@@ -71,6 +125,7 @@ namespace WeatherVariables
 			}
 		}
 
+		/** @brief Interpolates between two weather JSON overrides, falling back to user settings when an override is absent. */
 		void Lerp(const json& from, const json& to, float factor) override
 		{
 			if (!valuePtr || !lerpFunc)
@@ -116,6 +171,7 @@ namespace WeatherVariables
 			*valuePtr = lerpFunc(fromVal, toVal, factor);
 		}
 
+		/** @brief Caches the starting value for a new weather transition from the given override. */
 		void BeginTransition(const json& fromOverride) override
 		{
 			if (!valuePtr)
@@ -135,13 +191,16 @@ namespace WeatherVariables
 			inTransition = true;
 		}
 
+		/** @brief Ends the current weather transition. */
 		void EndTransition() override
 		{
 			inTransition = false;
 		}
 
+		/** @brief Returns true if a weather transition is in progress. */
 		bool IsInTransition() const override { return inTransition; }
 
+		/** @brief Serializes the current value to JSON keyed by this variable's name. */
 		void SaveToJson(json& j) const override
 		{
 			if (valuePtr) {
@@ -149,6 +208,7 @@ namespace WeatherVariables
 			}
 		}
 
+		/** @brief Loads this variable's value from JSON, falling back to default on type errors. */
 		void LoadFromJson(const json& j) override
 		{
 			if (valuePtr && j.contains(name)) {
@@ -161,6 +221,7 @@ namespace WeatherVariables
 			}
 		}
 
+		/** @brief Resets the live value to the compile-time default. */
 		void SetToDefault() override
 		{
 			if (valuePtr) {
@@ -168,6 +229,7 @@ namespace WeatherVariables
 			}
 		}
 
+		/** @brief Snapshots the current live value as the user's baseline setting. */
 		void CaptureUserSettingsValue() override
 		{
 			if (valuePtr) {
@@ -175,6 +237,7 @@ namespace WeatherVariables
 			}
 		}
 
+		/** @brief Restores the live value to the previously captured user setting. */
 		void SetToUserSettings() override
 		{
 			if (valuePtr) {
@@ -182,8 +245,11 @@ namespace WeatherVariables
 			}
 		}
 
+		/** @brief Returns the internal key name for JSON serialization. */
 		std::string GetName() const override { return name; }
+		/** @brief Returns the human-readable display label. */
 		std::string GetDisplayName() const override { return displayName; }
+		/** @brief Returns the tooltip description. */
 		std::string GetTooltip() const override { return tooltip; }
 
 	private:
@@ -200,10 +266,20 @@ namespace WeatherVariables
 		T transitionStartValue;
 	};
 
-	// Specialized weather variables for common types
+	/** @brief Weather variable specialization for scalar floats with min/max bounds for UI sliders. */
 	class FloatVariable : public WeatherVariable<float>
 	{
 	public:
+		/**
+		 * @brief Constructs a bounded float weather variable.
+		 * @param name Internal key name for JSON serialization.
+		 * @param displayName Human-readable label for the weather editor UI.
+		 * @param tooltip Descriptive text shown on hover.
+		 * @param valuePtr Pointer to the live float value.
+		 * @param defaultValue Compile-time default.
+		 * @param minValue Minimum allowed value for UI sliders.
+		 * @param maxValue Maximum allowed value for UI sliders.
+		 */
 		FloatVariable(const std::string& name, const std::string& displayName, const std::string& tooltip,
 			float* valuePtr, float defaultValue, float minValue = 0.0f, float maxValue = 1.0f) :
 			WeatherVariable<float>(name, displayName, tooltip, valuePtr, defaultValue),
@@ -211,7 +287,9 @@ namespace WeatherVariables
 		{
 		}
 
+		/** @brief Returns the minimum allowed value. */
 		float GetMin() const { return minValue; }
+		/** @brief Returns the maximum allowed value. */
 		float GetMax() const { return maxValue; }
 
 	private:
@@ -219,9 +297,18 @@ namespace WeatherVariables
 		float maxValue;
 	};
 
+	/** @brief Weather variable specialization for float3 vectors with per-component linear interpolation. */
 	class Float3Variable : public WeatherVariable<float3>
 	{
 	public:
+		/**
+		 * @brief Constructs a float3 weather variable with built-in per-component lerp.
+		 * @param name Internal key name for JSON serialization.
+		 * @param displayName Human-readable label for the weather editor UI.
+		 * @param tooltip Descriptive text shown on hover.
+		 * @param valuePtr Pointer to the live float3 value.
+		 * @param defaultValue Compile-time default.
+		 */
 		Float3Variable(const std::string& name, const std::string& displayName, const std::string& tooltip,
 			float3* valuePtr, float3 defaultValue) :
 			WeatherVariable<float3>(name, displayName, tooltip, valuePtr, defaultValue,
@@ -236,9 +323,18 @@ namespace WeatherVariables
 		}
 	};
 
+	/** @brief Weather variable specialization for float4 vectors with per-component linear interpolation. */
 	class Float4Variable : public WeatherVariable<float4>
 	{
 	public:
+		/**
+		 * @brief Constructs a float4 weather variable with built-in per-component lerp.
+		 * @param name Internal key name for JSON serialization.
+		 * @param displayName Human-readable label for the weather editor UI.
+		 * @param tooltip Descriptive text shown on hover.
+		 * @param valuePtr Pointer to the live float4 value.
+		 * @param defaultValue Compile-time default.
+		 */
 		Float4Variable(const std::string& name, const std::string& displayName, const std::string& tooltip,
 			float4* valuePtr, float4 defaultValue) :
 			WeatherVariable<float4>(name, displayName, tooltip, valuePtr, defaultValue,
@@ -254,11 +350,27 @@ namespace WeatherVariables
 		}
 	};
 
-	// Specialized weather variable for std::array types
+	/**
+	 * @brief Weather variable specialization for fixed-size std::array types.
+	 *
+	 * Interpolation is performed element-wise using a caller-supplied per-element lerp function.
+	 *
+	 * @tparam T Element type.
+	 * @tparam N Array size.
+	 */
 	template <typename T, size_t N>
 	class ArrayVariable : public WeatherVariable<std::array<T, N>>
 	{
 	public:
+		/**
+		 * @brief Constructs an array weather variable with a custom per-element interpolation function.
+		 * @param name Internal key name for JSON serialization.
+		 * @param displayName Human-readable label for the weather editor UI.
+		 * @param tooltip Descriptive text shown on hover.
+		 * @param valuePtr Pointer to the live std::array value.
+		 * @param defaultValue Compile-time default array.
+		 * @param elementLerpFunc Function that interpolates a single element from/to by factor.
+		 */
 		ArrayVariable(const std::string& name, const std::string& displayName, const std::string& tooltip,
 			std::array<T, N>* valuePtr, std::array<T, N> defaultValue,
 			std::function<T(const T&, const T&, float)> elementLerpFunc) :
@@ -273,7 +385,7 @@ namespace WeatherVariables
 		{
 		}
 
-		// Helper constructor for float element types with default lerp
+		/** @brief Helper constructor for floating-point element types that uses std::lerp as the default interpolation. */
 		template <typename U = T, typename = std::enable_if_t<std::is_floating_point_v<U>>>
 		ArrayVariable(const std::string& name, const std::string& displayName, const std::string& tooltip,
 			std::array<T, N>* valuePtr, std::array<T, N> defaultValue) :
@@ -285,11 +397,27 @@ namespace WeatherVariables
 		}
 	};
 
-	// Specialized weather variable for std::vector types
+	/**
+	 * @brief Weather variable specialization for dynamic std::vector types.
+	 *
+	 * Interpolation is performed element-wise up to the maximum size of the two vectors.
+	 * Missing elements are treated as default-constructed values.
+	 *
+	 * @tparam T Element type.
+	 */
 	template <typename T>
 	class VectorVariable : public WeatherVariable<std::vector<T>>
 	{
 	public:
+		/**
+		 * @brief Constructs a vector weather variable with a custom per-element interpolation function.
+		 * @param name Internal key name for JSON serialization.
+		 * @param displayName Human-readable label for the weather editor UI.
+		 * @param tooltip Descriptive text shown on hover.
+		 * @param valuePtr Pointer to the live std::vector value.
+		 * @param defaultValue Compile-time default vector.
+		 * @param elementLerpFunc Function that interpolates a single element from/to by factor.
+		 */
 		VectorVariable(const std::string& name, const std::string& displayName, const std::string& tooltip,
 			std::vector<T>* valuePtr, std::vector<T> defaultValue,
 			std::function<T(const T&, const T&, float)> elementLerpFunc) :
@@ -309,7 +437,7 @@ namespace WeatherVariables
 		{
 		}
 
-		// Helper constructor for float element types with default lerp
+		/** @brief Helper constructor for floating-point element types that uses std::lerp as the default interpolation. */
 		template <typename U = T, typename = std::enable_if_t<std::is_floating_point_v<U>>>
 		VectorVariable(const std::string& name, const std::string& displayName, const std::string& tooltip,
 			std::vector<T>* valuePtr, std::vector<T> defaultValue) :
@@ -321,21 +449,33 @@ namespace WeatherVariables
 		}
 	};
 
-	// Registry for a feature's weather variables
+	/** @brief Per-feature collection of weather variables with batch operations for interpolation, serialization, and transitions. */
 	class FeatureWeatherRegistry
 	{
 	public:
+		/**
+		 * @brief Registers a weather variable with this feature's registry.
+		 * @tparam VarType Concrete type deriving from IWeatherVariable.
+		 * @param var Shared pointer to the variable to register.
+		 */
 		template <typename VarType, typename = std::enable_if_t<std::is_base_of_v<IWeatherVariable, VarType>>>
 		void RegisterVariable(std::shared_ptr<VarType> var)
 		{
 			variables.push_back(std::static_pointer_cast<IWeatherVariable>(var));
 		}
 
+		/** @brief Removes all registered variables from this feature's registry. */
 		void ClearVariables()
 		{
 			variables.clear();
 		}
 
+		/**
+		 * @brief Interpolates all registered variables between two weather JSON objects.
+		 * @param from JSON settings for the outgoing weather.
+		 * @param to JSON settings for the incoming weather.
+		 * @param factor Interpolation factor in [0, 1].
+		 */
 		void LerpAllVariables(const json& from, const json& to, float factor)
 		{
 			for (auto& var : variables) {
@@ -344,6 +484,10 @@ namespace WeatherVariables
 			}
 		}
 
+		/**
+		 * @brief Serializes all registered variables into a single JSON object.
+		 * @param j JSON object to populate with variable key/value pairs.
+		 */
 		void SaveAllToJson(json& j) const
 		{
 			for (const auto& var : variables) {
@@ -351,6 +495,10 @@ namespace WeatherVariables
 			}
 		}
 
+		/**
+		 * @brief Deserializes all registered variables from a JSON object.
+		 * @param j JSON object containing variable key/value pairs.
+		 */
 		void LoadAllFromJson(const json& j)
 		{
 			for (auto& var : variables) {
@@ -358,6 +506,7 @@ namespace WeatherVariables
 			}
 		}
 
+		/** @brief Resets all registered variables to their compile-time defaults. */
 		void SetAllToDefaults()
 		{
 			for (auto& var : variables) {
@@ -365,6 +514,7 @@ namespace WeatherVariables
 			}
 		}
 
+		/** @brief Snapshots the current live values of all variables as user-settings baselines. */
 		void CaptureAllUserSettingsValues()
 		{
 			for (auto& var : variables) {
@@ -372,6 +522,10 @@ namespace WeatherVariables
 			}
 		}
 
+		/**
+		 * @brief Begins a weather transition for all variables, caching starting values.
+		 * @param fromWeatherSettings JSON settings for the outgoing weather.
+		 */
 		void BeginTransition(const json& fromWeatherSettings)
 		{
 			for (auto& var : variables) {
@@ -380,6 +534,7 @@ namespace WeatherVariables
 			}
 		}
 
+		/** @brief Ends the weather transition for all variables. */
 		void EndTransition()
 		{
 			for (auto& var : variables) {
@@ -387,6 +542,11 @@ namespace WeatherVariables
 			}
 		}
 
+		/**
+		 * @brief Checks whether a specific variable is currently mid-transition.
+		 * @param settingName Internal key name of the variable to query.
+		 * @return True if the named variable is in transition; false if not found or not transitioning.
+		 */
 		bool IsVariableInTransition(const std::string& settingName) const
 		{
 			for (const auto& var : variables) {
@@ -396,6 +556,7 @@ namespace WeatherVariables
 			return false;
 		}
 
+		/** @brief Returns a read-only reference to all registered weather variables. */
 		const std::vector<std::shared_ptr<IWeatherVariable>>& GetVariables() const { return variables; }
 
 	private:
@@ -410,16 +571,30 @@ namespace WeatherVariables
 		std::vector<std::shared_ptr<IWeatherVariable>> variables;
 	};
 
-	// Global registry mapping feature names to their weather variables
+	/**
+	 * @brief Global singleton mapping feature names to their per-feature weather variable registries.
+	 *
+	 * Coordinates weather-driven variable updates across all features, managing
+	 * transitions, pausing, and per-feature JSON serialization.
+	 */
 	class GlobalWeatherRegistry
 	{
 	public:
+		/** @brief Returns the global singleton instance. */
 		static GlobalWeatherRegistry* GetSingleton()
 		{
 			static GlobalWeatherRegistry singleton;
 			return &singleton;
 		}
 
+		/**
+		 * @brief Returns the weather registry for a feature, creating it if it does not exist.
+		 *
+		 * If the registry already exists, its variables are cleared to support settings reload.
+		 *
+		 * @param featureName Short name of the feature.
+		 * @return Pointer to the feature's weather registry.
+		 */
 		FeatureWeatherRegistry* GetOrCreateFeatureRegistry(const std::string& featureName)
 		{
 			auto it = featureRegistries.find(featureName);
@@ -432,17 +607,37 @@ namespace WeatherVariables
 			return featureRegistries[featureName].get();
 		}
 
+		/**
+		 * @brief Returns the weather registry for a feature, or nullptr if none exists.
+		 * @param featureName Short name of the feature.
+		 * @return Pointer to the feature's registry, or nullptr.
+		 */
 		FeatureWeatherRegistry* GetFeatureRegistry(const std::string& featureName)
 		{
 			auto it = featureRegistries.find(featureName);
 			return it != featureRegistries.end() ? it->second.get() : nullptr;
 		}
 
+		/**
+		 * @brief Checks whether a feature has registered any weather variables.
+		 * @param featureName Short name of the feature.
+		 * @return True if the feature has a weather registry.
+		 */
 		bool HasWeatherSupport(const std::string& featureName) const
 		{
 			return featureRegistries.find(featureName) != featureRegistries.end();
 		}
 
+		/**
+		 * @brief Interpolates a feature's weather variables between two weather states.
+		 *
+		 * No-op if the feature is paused or has no registered weather variables.
+		 *
+		 * @param featureName Short name of the feature.
+		 * @param currWeather JSON settings for the outgoing weather.
+		 * @param nextWeather JSON settings for the incoming weather.
+		 * @param lerpFactor Interpolation factor in [0, 1].
+		 */
 		void UpdateFeatureFromWeathers(const std::string& featureName, const json& currWeather, const json& nextWeather, float lerpFactor)
 		{
 			if (IsFeaturePaused(featureName)) {
@@ -455,6 +650,11 @@ namespace WeatherVariables
 			}
 		}
 
+		/**
+		 * @brief Checks whether weather updates are paused for a feature.
+		 * @param featureName Short name of the feature.
+		 * @return True if the feature's weather updates are paused.
+		 */
 		bool IsFeaturePaused(const std::string& featureName)
 		{
 			auto it = pausedFeatures.find(featureName);
@@ -464,11 +664,21 @@ namespace WeatherVariables
 			return false;
 		}
 
+		/**
+		 * @brief Pauses or resumes weather-driven updates for a feature.
+		 * @param featureName Short name of the feature.
+		 * @param paused True to pause, false to resume.
+		 */
 		void SetFeaturePaused(const std::string& featureName, bool paused)
 		{
 			pausedFeatures[featureName] = paused;
 		}
 
+		/**
+		 * @brief Serializes a feature's weather variables to JSON.
+		 * @param featureName Short name of the feature.
+		 * @param j JSON object to populate.
+		 */
 		void SaveFeatureToJson(const std::string& featureName, json& j) const
 		{
 			auto it = featureRegistries.find(featureName);
@@ -477,6 +687,11 @@ namespace WeatherVariables
 			}
 		}
 
+		/**
+		 * @brief Deserializes a feature's weather variables from JSON.
+		 * @param featureName Short name of the feature.
+		 * @param j JSON object containing variable key/value pairs.
+		 */
 		void LoadFeatureFromJson(const std::string& featureName, const json& j)
 		{
 			auto* registry = GetFeatureRegistry(featureName);
@@ -485,6 +700,10 @@ namespace WeatherVariables
 			}
 		}
 
+		/**
+		 * @brief Snapshots a feature's current variable values as user-settings baselines.
+		 * @param featureName Short name of the feature.
+		 */
 		void CaptureFeatureUserSettings(const std::string& featureName)
 		{
 			auto* registry = GetFeatureRegistry(featureName);
@@ -493,6 +712,11 @@ namespace WeatherVariables
 			}
 		}
 
+		/**
+		 * @brief Begins a weather transition for a feature, caching starting values.
+		 * @param featureName Short name of the feature.
+		 * @param fromWeatherSettings JSON settings for the outgoing weather.
+		 */
 		void BeginFeatureTransition(const std::string& featureName, const json& fromWeatherSettings)
 		{
 			auto* registry = GetFeatureRegistry(featureName);
@@ -501,6 +725,10 @@ namespace WeatherVariables
 			}
 		}
 
+		/**
+		 * @brief Ends the weather transition for a feature.
+		 * @param featureName Short name of the feature.
+		 */
 		void EndFeatureTransition(const std::string& featureName)
 		{
 			auto* registry = GetFeatureRegistry(featureName);
@@ -509,6 +737,12 @@ namespace WeatherVariables
 			}
 		}
 
+		/**
+		 * @brief Checks whether a specific variable in a feature is currently mid-transition.
+		 * @param featureName Short name of the feature.
+		 * @param settingName Internal key name of the variable.
+		 * @return True if the variable is in transition.
+		 */
 		bool IsFeatureVariableInTransition(const std::string& featureName, const std::string& settingName)
 		{
 			auto* registry = GetFeatureRegistry(featureName);

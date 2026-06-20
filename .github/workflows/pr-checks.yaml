@@ -189,6 +189,13 @@ jobs:
               with:
                   name: "Community Shaders ${{ needs.build.outputs.version }} PR #${{ github.event.pull_request.number }}"
                   tag: v${{ needs.build.outputs.version }}-pr${{ github.event.pull_request.number }}
+                  # Anchor the preview tag to the PR head, not the base tip.
+                  # Without this, pull_request_target makes GITHUB_SHA the base
+                  # (dev) commit, so the tag lands in dev's history. A PR that
+                  # bumped CMake VERSION (e.g. a breaking change to 2.0.0) would
+                  # then expose a higher reachable version tag and poison
+                  # semantic-release's floor for every RC cut from dev.
+                  commit: ${{ github.event.pull_request.head.sha }}
                   prerelease: true
                   artifacts: "${{ github.workspace }}/dist/CommunityShaders_AIO-*.7z"
                   bodyFile: release-notes.md
@@ -202,6 +209,9 @@ jobs:
               with:
                   name: "Community Shaders ${{ needs.build.outputs.version }} PR #${{ github.event.pull_request.number }}"
                   tag: v${{ needs.build.outputs.version }}-pr${{ github.event.pull_request.number }}
+                  # Anchor to the PR head, not the base tip — see the custom-notes
+                  # step above for why dev-reachable preview tags break releases.
+                  commit: ${{ github.event.pull_request.head.sha }}
                   prerelease: true
                   artifacts: "${{ github.workspace }}/dist/CommunityShaders_AIO-*.7z"
                   generateReleaseNotes: true

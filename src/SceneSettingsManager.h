@@ -13,12 +13,18 @@ using json = nlohmann::json;
 
 struct Feature;
 
-/// Manages scene-specific setting overrides (Interior Only, TimeOfDay, WeatherSpecific).
-/// Zero coupling to individual features — operates via JSON round-trip through Feature::SaveSettings/LoadSettings.
-/// Event-driven: cell transitions detected via MenuOpenCloseEvent, mutations applied immediately.
+/**
+ * @brief Manages scene-specific setting overrides (Interior Only, TimeOfDay, WeatherSpecific).
+ *
+ * Zero coupling to individual features -- operates via JSON round-trip through
+ * Feature::SaveSettings/LoadSettings.
+ * Event-driven: cell transitions detected via MenuOpenCloseEvent; settings mutations are applied
+ * on the next frame once cell data is available (deferred by SceneSettingsManager::Update()).
+ */
 class SceneSettingsManager
 {
 public:
+	/** @brief Gets the singleton instance. */
 	static SceneSettingsManager* GetSingleton()
 	{
 		static SceneSettingsManager singleton;
@@ -35,13 +41,18 @@ public:
 
 	// --- Event Handler ---
 
-	/// Listens for LoadingMenu close to detect cell transitions.
-	/// Same pattern as Skylighting::MenuOpenCloseEventHandler.
+	/**
+	 * @brief Listens for LoadingMenu close to detect cell transitions.
+	 *
+	 * Same pattern as Skylighting::MenuOpenCloseEventHandler.
+	 */
 	class MenuOpenCloseEventHandler : public RE::BSTEventSink<RE::MenuOpenCloseEvent>
 	{
 	public:
+		/** @brief Handles menu open/close events, queuing cell transitions on loading screen close. */
 		virtual RE::BSEventNotifyControl ProcessEvent(const RE::MenuOpenCloseEvent* a_event, RE::BSTEventSource<RE::MenuOpenCloseEvent>*) override;
 
+		/** @brief Registers this handler with the UI event source. */
 		static bool Register()
 		{
 			static MenuOpenCloseEventHandler singleton;
@@ -81,71 +92,119 @@ public:
 
 	// --- Generic Entry Management (scene-type agnostic) ---
 
+	/** @brief Gets the read-only entry list for the given scene type. */
 	const std::vector<SettingEntry>& GetEntries(SceneType type) const;
+
+	/** @brief Checks whether an entry with the given source already exists for a feature+setting pair. */
 	bool HasEntryFromSource(SceneType type, const std::string& featureShortName, const std::string& settingKey, EntrySource source) const;
+
+	/** @brief Checks whether an active (non-paused) overwrite entry exists for a feature+setting pair. */
 	bool HasActiveOverwrite(SceneType type, const std::string& featureShortName, const std::string& settingKey) const;
 
+	/**
+	 * @brief Adds a user setting override, persists it, and reapplies if scene is active.
+	 * @param type Scene type to add the setting to.
+	 * @param featureShortName Target feature's short name.
+	 * @param settingKey JSON key within the feature's settings.
+	 * @param value Override value.
+	 */
 	void AddSetting(SceneType type, const std::string& featureShortName, const std::string& settingKey, const json& value);
+
+	/** @brief Removes an entry by index, deleting its overwrite file if applicable. */
 	void RemoveSetting(SceneType type, size_t index);
+
+	/** @brief Toggles the paused state of an entry by index. */
 	void TogglePauseEntry(SceneType type, size_t index);
+
+	/**
+	 * @brief Updates an entry's override value.
+	 * @param deferSave If true, skips persisting to disk (for batched UI edits like sliders).
+	 */
 	void UpdateEntryValue(SceneType type, size_t index, const json& newValue, bool deferSave = false);
 
+	/** @brief Pauses or unpauses all overwrite-sourced entries for a scene type. */
 	void SetAllOverwritesPaused(SceneType type, bool paused);
+
+	/** @brief Checks whether all overwrites are currently paused for a scene type. */
 	bool AreAllOverwritesPaused(SceneType type) const;
+
+	/** @brief Checks whether any overwrite-sourced entries exist for a scene type. */
 	bool HasOverwriteEntries(SceneType type) const;
+
+	/** @brief Deletes all overwrite entries and their backing files for a scene type. */
 	void DeleteAllOverwrites(SceneType type);
 
+	/** @brief Pauses or unpauses all user-sourced entries for a scene type. */
 	void SetAllUserPaused(SceneType type, bool paused);
+
+	/** @brief Checks whether all user entries are currently paused for a scene type. */
 	bool AreAllUserPaused(SceneType type) const;
+
+	/** @brief Deletes all user-sourced entries for a scene type and persists the change. */
 	void DeleteAllUserSettings(SceneType type);
 
 	// --- Scene Application ---
 
-	/// Called each frame from State::Draw() to process deferred cell transitions.
-	/// Cell data is not yet available when the LoadingMenu close event fires,
-	/// so we defer the actual transition check to the next rendered frame.
+	/**
+	 * @brief Called each frame from State::Draw() to process deferred cell transitions.
+	 *
+	 * Cell data is not yet available when the LoadingMenu close event fires,
+	 * so the actual transition check is deferred to the next rendered frame.
+	 */
 	void Update();
 
-	/// Called by Update() when a deferred cell transition is pending.
+	/** @brief Processes a deferred cell transition, applying or reverting interior overrides. */
 	void OnCellTransition();
 
-	/// Check if a specific feature+setting is currently being overridden by any active scene setting
+	/** @brief Checks if a specific feature+setting is currently being overridden by any active scene setting. */
 	bool IsSettingControlled(const std::string& featureShortName, const std::string& settingKey) const;
 
-	/// Check if any scene settings are active for a given feature
+	/** @brief Checks if any scene settings are active for a given feature. */
 	bool HasActiveSettingsForFeature(const std::string& featureShortName) const;
 
-	/// Per-feature pause: temporarily disable all scene-specific settings for a feature
+	/** @brief Checks whether all scene-specific settings are temporarily disabled for a feature. */
 	bool IsFeaturePaused(const std::string& featureShortName) const;
+
+	/** @brief Temporarily disables or re-enables all scene-specific settings for a feature. */
 	void SetFeaturePaused(const std::string& featureShortName, bool paused);
 
 	// --- Persistence ---
 
+	/** @brief Persists all user-sourced entries for a scene type to disk as JSON. */
 	void SaveUserSettings(SceneType type);
+
+	/** @brief Loads user-sourced entries from the JSON file for a scene type. */
 	void LoadUserSettings(SceneType type);
+
+	/** @brief Scans the overwrites directory for JSON overwrite files and loads them. */
 	void DiscoverOverwrites(SceneType type);
 
-	/// Convenience: load all scene types
+	/** @brief Loads overwrites and user settings for all scene types. */
 	void LoadAll();
 
 	// --- Path Resolution ---
 
+	/** @brief Returns the human-readable name for a scene type (e.g. "InteriorOnly"). */
 	static std::string GetSceneTypeName(SceneType type);
+
+	/** @brief Returns the JSON file path for user settings of a scene type. */
 	static std::filesystem::path GetSettingsFilePath(SceneType type);
+
+	/** @brief Returns the directory path where overwrite files are discovered for a scene type. */
 	static std::filesystem::path GetOverwritesPath(SceneType type);
 
 	// --- Feature Metadata ---
 
-	/// Get loaded feature short names filtered to only interior-relevant features
+	/** @brief Gets loaded feature short names filtered to only interior-relevant features. */
 	static std::vector<std::string> GetInteriorRelevantFeatureNames();
 
-	/// Get setting keys for a feature by JSON round-tripping its current settings
+	/** @brief Gets setting keys for a feature via JSON round-trip through SaveSettings. */
 	static std::vector<std::string> GetFeatureSettingKeys(const std::string& featureShortName);
 
-	/// Get current value of a specific setting from a feature
+	/** @brief Gets the current value of a specific setting from a feature via JSON round-trip. */
 	static json GetFeatureSettingValue(const std::string& featureShortName, const std::string& settingKey);
 
-	/// Detect the JSON type of a setting value for UI rendering
+	/** @brief Classifies JSON value types for scene settings UI rendering. */
 	enum class SettingType
 	{
 		Boolean,
@@ -154,6 +213,8 @@ public:
 		String,
 		Unknown
 	};
+
+	/** @brief Detects the JSON type of a setting value for UI rendering. */
 	static SettingType DetectSettingType(const json& value);
 
 private:

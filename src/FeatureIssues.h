@@ -62,11 +62,17 @@ namespace FeatureIssues
 		IssueType issueType{ IssueType::UNKNOWN };
 
 		// Helper methods
+		/** @brief Checks if issue type is OBSOLETE. */
 		bool IsObsolete() const { return issueType == IssueType::OBSOLETE; }
+		/** @brief Checks if issue type is VERSION_MISMATCH. */
 		bool IsVersionMismatch() const { return issueType == IssueType::VERSION_MISMATCH; }
+		/** @brief Checks if issue type is OVERRIDE_FAILED. */
 		bool IsOverrideFailed() const { return issueType == IssueType::OVERRIDE_FAILED; }
+		/** @brief Checks if issue type is UNKNOWN. */
 		bool IsUnknown() const { return issueType == IssueType::UNKNOWN; }
+		/** @brief Checks whether a replacement feature is specified. */
 		bool HasReplacement() const { return !replacementFeature.empty(); }
+		/** @brief Checks whether this feature modified the core shader directory. */
 		bool ModifiedShaderDirectory() const { return modifiedShaderDirectory; }
 	};
 
@@ -244,9 +250,7 @@ namespace FeatureIssues
 		bool SavePersistentTestState();
 
 		/**
-		 * @brief
-		 *
-		 * Get detailed status of all test INIs for tooltip display
+		 * @brief Get detailed status of all test INIs for tooltip display.
 		 * @return String describing current test state and any issues
 		 */
 		std::string GetTestStateDescription();

@@ -233,6 +233,31 @@ foreach(FEATURE_PATH ${FEATURE_CONFIG_FILES})
         )
     endif()
 
+    # Detect release stage from Alpha/Beta flags. Alpha takes precedence when
+    # both are set. A truthy value is required; absent or non-truthy means the
+    # feature is a full Release.
+    # Anchor to a line start ((^|[\r\n]); CMake regex has no multiline mode) so a
+    # settings key ending in "alpha"/"beta" (e.g. WaterAlpha = 1) is not mistaken
+    # for a stage flag. Keep in sync with the line-anchored match in
+    # tools/feature_version_audit.py.
+    # NOTE: guard on the match-result variable because CMAKE_MATCH_2 (the value)
+    # retains its prior value (the version major, above) when a REGEX MATCH misses.
+    set(_STAGE_ALPHA "")
+    set(_STAGE_BETA "")
+    string(REGEX MATCH "(^|[\r\n])[ \t]*[Aa]lpha[ \t]*=[ \t]*([A-Za-z0-9]+)" _STAGE_ALPHA_MATCH "${CONFIG_VALUE}")
+    if(_STAGE_ALPHA_MATCH)
+        string(TOLOWER "${CMAKE_MATCH_2}" _STAGE_ALPHA)
+    endif()
+    string(REGEX MATCH "(^|[\r\n])[ \t]*[Bb]eta[ \t]*=[ \t]*([A-Za-z0-9]+)" _STAGE_BETA_MATCH "${CONFIG_VALUE}")
+    if(_STAGE_BETA_MATCH)
+        string(TOLOWER "${CMAKE_MATCH_2}" _STAGE_BETA)
+    endif()
+    if(_STAGE_ALPHA MATCHES "^(true|1|yes|on)$")
+        list(APPEND FEATURE_ALPHA_NAMES "\t\t\"${FEATURE}\"sv")
+    elseif(_STAGE_BETA MATCHES "^(true|1|yes|on)$")
+        list(APPEND FEATURE_BETA_NAMES "\t\t\"${FEATURE}\"sv")
+    endif()
+
     # Detect core features by checking for the CORE marker file in the
     # feature root (features/<Folder>/CORE). FEATURE_PATH is
     # features/<Folder>/Shaders/Features/<ShortName>.ini, so the feature
@@ -253,6 +278,8 @@ set_property(
 
 string(REPLACE ";" ",\n" FEATURE_VERSIONS "${FEATURE_VERSIONS}")
 string(REPLACE ";" ",\n" FEATURE_CORE_NAMES "${FEATURE_CORE_NAMES}")
+string(REPLACE ";" ",\n" FEATURE_ALPHA_NAMES "${FEATURE_ALPHA_NAMES}")
+string(REPLACE ";" ",\n" FEATURE_BETA_NAMES "${FEATURE_BETA_NAMES}")
 
 configure_file(
     ${CMAKE_CURRENT_SOURCE_DIR}/cmake/FeatureVersions.h.in

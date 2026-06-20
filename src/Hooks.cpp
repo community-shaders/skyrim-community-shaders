@@ -503,13 +503,28 @@ namespace Hooks
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
+	// Disable scene TAA for the duration of the menu interface render, then restore it.
+	struct MenuManagerDrawInterfaceStart
+	{
+		static void thunk(int64_t a1)
+		{
+			const bool temporal = Util::GetTemporal();
+			Util::SetTemporal(false);
+			func(a1);
+			Util::SetTemporal(temporal);
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
 	struct CreateRenderTarget_Main
 	{
 		static void thunk(RE::BSGraphics::Renderer* This, RE::RENDER_TARGETS::RENDER_TARGET a_target, RE::BSGraphics::RenderTargetProperties* a_properties)
 		{
-			auto properties = *a_properties;
-			globals::state->ModifyRenderTarget(a_target, properties);
-			func(This, a_target, &properties);
+			// Modify in place and restore so chained hooks keep a stable pointer.
+			const auto saved = *a_properties;
+			globals::state->ModifyRenderTarget(a_target, *a_properties);
+			func(This, a_target, a_properties);
+			*a_properties = saved;
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
@@ -521,9 +536,10 @@ namespace Hooks
 	{
 		static void thunk(RE::BSGraphics::Renderer* This, RE::RENDER_TARGETS::RENDER_TARGET a_target, RE::BSGraphics::RenderTargetProperties* a_properties)
 		{
-			auto properties = *a_properties;
-			properties.format.set(RE::BSGraphics::Format::kR16G16B16A16_FLOAT);
-			func(This, a_target, &properties);
+			const auto saved = *a_properties;
+			a_properties->format.set(RE::BSGraphics::Format::kR16G16B16A16_FLOAT);
+			func(This, a_target, a_properties);
+			*a_properties = saved;
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
@@ -532,9 +548,10 @@ namespace Hooks
 	{
 		static void thunk(RE::BSGraphics::Renderer* This, RE::RENDER_TARGETS::RENDER_TARGET a_target, RE::BSGraphics::RenderTargetProperties* a_properties)
 		{
-			auto properties = *a_properties;
-			properties.format.set(RE::BSGraphics::Format::kR16G16B16A16_FLOAT);
-			func(This, a_target, &properties);
+			const auto saved = *a_properties;
+			a_properties->format.set(RE::BSGraphics::Format::kR16G16B16A16_FLOAT);
+			func(This, a_target, a_properties);
+			*a_properties = saved;
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
@@ -548,9 +565,10 @@ namespace Hooks
 	{
 		static void thunk(RE::BSGraphics::Renderer* This, RE::RENDER_TARGETS::RENDER_TARGET a_target, RE::BSGraphics::RenderTargetProperties* a_properties)
 		{
-			auto properties = *a_properties;
-			globals::state->ModifyRenderTarget(a_target, properties);
-			func(This, a_target, &properties);
+			const auto saved = *a_properties;
+			globals::state->ModifyRenderTarget(a_target, *a_properties);
+			func(This, a_target, a_properties);
+			*a_properties = saved;
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
@@ -559,9 +577,10 @@ namespace Hooks
 	{
 		static void thunk(RE::BSGraphics::Renderer* This, RE::RENDER_TARGETS::RENDER_TARGET a_target, RE::BSGraphics::RenderTargetProperties* a_properties)
 		{
-			auto properties = *a_properties;
-			globals::state->ModifyRenderTarget(a_target, properties);
-			func(This, a_target, &properties);
+			const auto saved = *a_properties;
+			globals::state->ModifyRenderTarget(a_target, *a_properties);
+			func(This, a_target, a_properties);
+			*a_properties = saved;
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
@@ -570,9 +589,10 @@ namespace Hooks
 	{
 		static void thunk(RE::BSGraphics::Renderer* This, RE::RENDER_TARGETS::RENDER_TARGET a_target, RE::BSGraphics::RenderTargetProperties* a_properties)
 		{
-			auto properties = *a_properties;
-			globals::state->ModifyRenderTarget(a_target, properties);
-			func(This, a_target, &properties);
+			const auto saved = *a_properties;
+			globals::state->ModifyRenderTarget(a_target, *a_properties);
+			func(This, a_target, a_properties);
+			*a_properties = saved;
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
@@ -581,9 +601,10 @@ namespace Hooks
 	{
 		static void thunk(RE::BSGraphics::Renderer* This, RE::RENDER_TARGETS::RENDER_TARGET a_target, RE::BSGraphics::RenderTargetProperties* a_properties)
 		{
-			auto properties = *a_properties;
-			properties.copyable = true;
-			func(This, a_target, &properties);
+			const auto saved = *a_properties;
+			a_properties->copyable = true;
+			func(This, a_target, a_properties);
+			*a_properties = saved;
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
@@ -592,9 +613,10 @@ namespace Hooks
 	{
 		static void thunk(RE::BSGraphics::Renderer* This, RE::RENDER_TARGETS::RENDER_TARGET a_target, RE::BSGraphics::RenderTargetProperties* a_properties)
 		{
-			auto properties = *a_properties;
-			properties.copyable = true;
-			func(This, a_target, &properties);
+			const auto saved = *a_properties;
+			a_properties->copyable = true;
+			func(This, a_target, a_properties);
+			*a_properties = saved;
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
@@ -922,6 +944,9 @@ namespace Hooks
 
 		logger::info("Hooking Sky::UpdateColors");
 		stl::detour_thunk<Sky_UpdateColors>(REL::RelocationID(25686, 26233));
+
+		logger::info("Hooking MenuManager::DrawInterfaceStart for menu TAA");
+		stl::detour_thunk<MenuManagerDrawInterfaceStart>(REL::RelocationID(79947, 82084));
 
 		logger::info("Installing SetupGeometry hooks");
 		stl::write_vfunc<0x6, EffectExtensions::BSEffectShader_SetupGeometry>(RE::VTABLE_BSEffectShader[0]);

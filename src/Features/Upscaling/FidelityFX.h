@@ -18,6 +18,7 @@
 #include "../../Buffer.h"
 #include "../../State.h"
 
+/** @brief Manages AMD FidelityFX Super Resolution 3 upscaling and frame generation. */
 class FidelityFX
 {
 public:
@@ -47,14 +48,31 @@ public:
 	// Cached DLL version info for FidelityFX plugin directory
 	static std::vector<std::pair<std::string, std::string>> dllVersions;
 
+	/** @brief Loads the FidelityFX loader and frame generation DLLs from the plugin directory. */
 	void LoadFFX();
+	/** @brief Creates the FidelityFX frame generation context for the current swap chain. */
 	void SetupFrameGeneration();
+	/**
+	 * @brief Presents the current frame, optionally performing FidelityFX frame generation.
+	 * @param a_useFrameGeneration Whether to enable frame generation for this present call.
+	 * @param a_isHDR Whether HDR output is active, affecting color space configuration.
+	 */
 	void Present(bool a_useFrameGeneration, bool a_isHDR = false);
 
+	/** @brief Creates FSR3 upscaling resources including scratch buffers and context. */
 	void CreateFSRResources();
 
+	/** @brief Destroys FSR3 upscaling resources and frees the scratch buffer. */
 	void DestroyFSRResources();
 
+	/**
+	 * @brief Dispatches FSR3 upscaling for the current frame.
+	 * @param a_upscalingTexture The input color texture to upscale.
+	 * @param a_reactiveMask Reactive mask identifying areas needing temporal stability.
+	 * @param a_transparencyCompositionMask Mask for transparency and composition handling.
+	 * @param a_motionVectors Per-pixel motion vectors for temporal reprojection.
+	 * @param a_sharpness RCAS sharpening strength applied after upscaling.
+	 */
 	void Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_reactiveMask, ID3D11Resource* a_transparencyCompositionMask, ID3D11Resource* a_motionVectors, float a_sharpness);
 
 private:
