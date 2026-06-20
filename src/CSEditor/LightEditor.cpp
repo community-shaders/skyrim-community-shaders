@@ -118,14 +118,19 @@ static bool WriteLPConfig(const std::filesystem::path& filePath, nlohmann::order
 	output = std::regex_replace(output, vec3Pattern, "[$1, $2, $3]");
 
 	{
-		static const std::regex floatPattern(R"(-?\d+\.\d+)");
+		// The leading boundary group restricts rounding to genuine JSON number tokens (always preceded by
+		// ':', '[', ',', or whitespace in the multiline dump) so digits inside a string value, e.g. a model
+		// path like "..._x1.4.nif", are left untouched. std::regex has no lookbehind to express this otherwise.
+		static const std::regex floatPattern(R"(([:\[,\s])(-?\d+\.\d+))");
 		std::string rounded;
 		rounded.reserve(output.size());
 		std::sregex_iterator it(output.begin(), output.end(), floatPattern), end;
 		size_t pos = 0;
 		for (; it != end; ++it) {
-			rounded += output.substr(pos, it->position() - pos);
-			double v = std::round(std::stod(it->str()) * 10000.0) / 10000.0;
+			const auto& match = *it;
+			rounded += output.substr(pos, match.position() - pos);
+			rounded += match[1].str();
+			double v = std::round(std::stod(match[2].str()) * 10000.0) / 10000.0;
 			char buf[32];
 			std::snprintf(buf, sizeof(buf), "%.4f", v);
 			std::string s(buf);
@@ -133,7 +138,7 @@ static bool WriteLPConfig(const std::filesystem::path& filePath, nlohmann::order
 			if (s.back() == '.')
 				s.pop_back();
 			rounded += s;
-			pos = it->position() + it->length();
+			pos = match.position() + match.length();
 		}
 		rounded += output.substr(pos);
 		output = std::move(rounded);
@@ -2865,8 +2870,12 @@ bool LightEditor::ModifyLPFilterListFor(const std::string& configPath, const Mat
 
 	nlohmann::ordered_json* lightEntry = nullptr;
 	if (add) {
-		// Adding writes into the first model/light match (the shared base entry).
-		lightEntry = FindMatchingLightEntry(configArray, ctx, false);
+		// Prefer the entry that actually governs this reference; several entries can share a model/formID
+		// and light EDID (peer forks with disjoint whiteLists). Fall back to the first model/light match
+		// when the reference isn't covered yet (e.g. a brand-new whitelist add).
+		lightEntry = FindMatchingLightEntry(configArray, ctx, true);
+		if (!lightEntry)
+			lightEntry = FindMatchingLightEntry(configArray, ctx, false);
 	} else {
 		// Removing must target the entry that actually holds entryStr in listKey. A model/formID can
 		// have several entries for the same light (e.g. one blacklisting this ref while a sibling
