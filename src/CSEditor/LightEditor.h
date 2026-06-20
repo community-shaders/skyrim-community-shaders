@@ -141,23 +141,14 @@ private:
 	RE::TESObjectLIGH* activeLigh = nullptr;
 	bool activeIsRef = false;
 
-	// External-emittance color preview (CS-driven, selected bulb only). The game only drives emittance
-	// color for references registered in the cell's emittance maps (e.g. LP bulbs); a reference we
-	// patch an ExtraEmittanceSource onto isn't, so its color never follows the source. While such a
-	// bulb is selected we apply the source region's live emittanceColor ourselves, replacing the base
-	// color. No smoothing: the game already varies emittanceColor smoothly with time/weather, so we
-	// just track it directly (smoothing only adds lag when scrubbing the time slider). Reverts on deselect.
+	// External-emittance color preview (CS-driven, selected bulb only): the game only drives emittance
+	// color for refs in the cell's emittance maps, so we track the source region's live color ourselves.
 	RE::TESForm* activeEmittanceSource = nullptr;
 	bool emittanceColorActive = false;  // gates ApplyOverrides to the emittance color below
 	RE::NiColor emittanceColor{};
 
-	// Deferred 3D rebuild after a light-flag edit. The engine's despawn (Disable -> unload 3D)
-	// and respawn (Enable -> load 3D) are async tasks; issued back-to-back in the same frame they
-	// can complete out of order (unload after load), leaving the reference's 3D unloaded and the
-	// mesh stuck disabled. We Disable now and Enable a few frames later, coalescing repeated edits
-	// on the same reference into one pending rebuild (mirrors the spaced disable/enable the attach
-	// sequence already uses). A pending refresh on a different reference is flushed first so we
-	// never strand a previously-disabled reference.
+	// Deferred 3D rebuild after a light-flag edit: the engine's async despawn/respawn can complete out of
+	// order if issued back-to-back, so Disable now and Enable a few frames later (coalescing repeat edits).
 	RE::ObjectRefHandle pendingRefreshRefr;
 	int32_t pendingRefreshFrames = 0;
 	static constexpr int32_t kRefreshEnableDelay = 3;
@@ -166,61 +157,61 @@ private:
 	float originalShadowDepthBias = 0.0f;
 	float cachedFadeBeforeToggle = 0.0f;
 
+	/** @brief Sorts the gathered light list by the active sort option. */
 	void SortLights();
+	/** @brief Restores the active light to its snapshotted original state. */
 	void RestoreOriginal();
+	/** @brief Writes shadowDepthBias to the active shadow light's runtime data. */
 	void ApplyShadowDepthBias();
-	// Disables refr now and schedules its Enable kRefreshEnableDelay frames later (see members
-	// above). Use instead of a same-frame Disable()/Enable() pair to force a light-flag rebuild.
+	/** @brief Disables refr now and schedules its Enable kRefreshEnableDelay frames later to force a light-flag rebuild. */
 	void RequestRefRefresh(RE::TESObjectREFR* refr);
-	// Counts down a pending refresh and fires the deferred Enable. Call once per frame, before any
-	// early-out, so the Enable still runs while resampling is paused or menu focus is lost.
+	/** @brief Counts down a pending refresh and fires the deferred Enable; call once per frame before any early-out. */
 	void UpdateRefRefresh();
 
+	/** @brief Builds the cached LIGH form list on first use. */
 	static void EnsureLighFormListBuilt();
 	static std::vector<std::pair<std::string, RE::TESObjectLIGH*>> s_lighFormList;
+	/** @brief Loads a LIGH form's data (color, flags, size, radius) into the current settings. */
 	void ApplyLighFormData(const RE::TESObjectLIGH* ligh);
 
+	/** @brief Builds the cached emittance-source form list on first use. */
 	static void EnsureEmittanceFormListBuilt();
 	static std::vector<std::pair<std::string, RE::TESForm*>> s_emittanceFormList;
-	// Draws the shared External Emittance combo for the active reference (any bulb type) and applies
-	// the selection live. Self-gates: does nothing when the selection has no backing reference.
+	/** @brief Draws the shared External Emittance combo and applies the selection live (no-op without a backing ref). */
 	void DrawExternalEmittanceCombo();
-	// Sets the emittance source that drives the selected bulb's color preview (pass nullptr to clear).
-	// Does not modify the reference; persistence for LP is handled by Save to Light Placer.
+	/** @brief Sets the emittance source driving the selected bulb's color preview (nullptr clears it; does not modify the ref). */
 	void ApplyExternalEmittance(RE::TESForm* source);
-	// Clears the external-emittance editor state (combo shows None; the source line is dropped on save).
+	/** @brief Clears the external-emittance editor state (combo shows None; source dropped on save). */
 	void ClearExternalEmittance();
-	// Advances the per-frame lerp of the selected bulb's color toward its emittance source's live
-	// color. No-op (and clears the active flag) when there is no emittance source.
+	/** @brief Tracks the selected bulb's color toward its emittance source's live color (no-op without a source). */
 	void UpdateEmittanceColor();
-	// Queues an identity-based re-selection of the current LP bulb so it survives a reloadlp (which
-	// recreates the bulbs and invalidates the index-based selection match). No-op for non-LP.
+	/** @brief Queues an identity-based re-selection of the current LP bulb so it survives a reloadlp. */
 	void QueueReselectCurrentLP();
 
+	/** @brief Resolves a "0xID~Plugin.esp" or "0xID" entry string to a FormID, or 0 on failure. */
 	static RE::FormID ResolveFormEntry(const std::string& entry);
+	/** @brief True if the flag set contains any shadow-casting flag. */
 	static bool HasShadowFlags(uint32_t tesFlags);
+	/** @brief Builds the combo display name for a light (FormID/index/pointer + name). */
 	static std::string GetLightName(const LightInfo& lightInfo);
-	// EditorID for a LIGH FormID from the cached form list, or "" if not found.
+	/** @brief EditorID for a LIGH FormID from the cached form list, or "" if not found. */
 	static std::string LighEdidForFormId(RE::FormID formId);
+	/** @brief Parses an "LP_Light[config|EDID]" NiLight name into its parts (rejects path traversal). */
 	static LPLightInfo ParseLPLightName(const std::string& name);
+	/** @brief True if the light entry's whiteList/blackList resolve to include the given reference. */
 	static bool MatchesLPFilters(const nlohmann::ordered_json& lightEntry, RE::TESObjectREFR* refr);
+	/** @brief Saves the current editor state to the matching LP JSON entry (dryRun only checks for a match). */
 	bool SaveToLightPlacer(bool includeColor = false, bool dryRun = false);
-	// Forks the bulb's matching light entry into a new whitelist-only entry for the selected
-	// reference (capturing the current editor edits) and blacklists that reference in the
-	// original entry, so the edits apply solely to this reference. Returns false on no match.
+	/** @brief Forks the bulb into a whitelist-only entry for the selected ref and blacklists it in the original; false on no match. */
 	bool SaveAsSeparateEntry(bool includeColor = false);
-	// Deletes the bulb's matching light entry from the LP config. If it is the only light in its
-	// top-level entry, the whole models/formIDs entry is removed too. Returns false on no match.
+	/** @brief Deletes the bulb's matching light entry (and its top-level entry if it was the only light); false on no match. */
 	bool DeleteFromLightPlacer();
-	// Builds a fresh "data" object from the current editor state, carrying over any unmanaged
-	// keys from existingData. Shared by SaveToLightPlacer and SaveAsSeparateEntry.
+	/** @brief Builds a fresh "data" object from editor state, carrying over unmanaged keys from existingData. */
 	nlohmann::ordered_json BuildEditedData(const nlohmann::ordered_json& existingData, bool includeColor) const;
-	// Re-orders the data/light-entry keys of every light in the config into the canonical layout.
+	/** @brief Re-orders every light's data/entry keys into the canonical layout. */
 	static void NormalizeConfig(nlohmann::ordered_json& configArray);
 
-	// Context used to match an LP config entry. Defaults (via MakeSelectedContext) reproduce
-	// the historical member-driven behavior; the Select-Mesh popup builds one from the picked
-	// mesh + a chosen attached bulb instead.
+	/** @brief Identifies an LP config entry to match: from the selected bulb or the Add-Light picked mesh. */
 	struct MatchContext
 	{
 		std::string ownerModelPath;
@@ -230,20 +221,26 @@ private:
 		RE::TESObjectREFR* refr = nullptr;
 	};
 
+	/** @brief Builds a MatchContext from the currently selected LP bulb. */
 	MatchContext MakeSelectedContext() const;
-	// MatchContext for the Add-Light workflow's picked mesh, paired with the given light EDID.
+	/** @brief Builds a MatchContext from the Add-Light popup's picked mesh + the given light EDID. */
 	MatchContext MakePickedContext(const std::string& lightEDID) const;
+	/** @brief Adds or removes ownerEntry in a light entry's whiteList/blackList array. */
 	static void MutateFilterList(nlohmann::ordered_json& lightEntry, const char* listKey, const std::string& ownerEntry, bool add);
+	/** @brief Adds/removes the context's owner reference in the matching entry's filter list. */
 	bool ModifyLPFilterListFor(const std::string& configPath, const MatchContext& ctx, bool isWhiteList, bool add);
+	/** @brief Adds/removes an explicit entry string in the matching entry's filter list. */
 	bool ModifyLPFilterListFor(const std::string& configPath, const MatchContext& ctx, const std::string& entryStr, bool isWhiteList, bool add);
 
+	/** @brief Formats a reference's identity as an LP "0xID~Plugin.esp" entry string. */
 	static std::string FormatOwnerFormEntry(RE::TESObjectREFR* refr);
+	/** @brief Loads the selected bulb's LP config array into out. */
 	bool LoadLPConfig(nlohmann::ordered_json& out) const;
-	// True if a top-level config entry's models/formIDs identify the context's owner ref.
+	/** @brief True if a top-level config entry's models/formIDs identify the context's owner ref. */
 	static bool EntryMatchesContext(const nlohmann::ordered_json& entry, const MatchContext& ctx);
+	/** @brief Finds the light entry matching ctx (optionally applying LP filters), or nullptr. */
 	nlohmann::ordered_json* FindMatchingLightEntry(nlohmann::ordered_json& configArray, const MatchContext& ctx, bool applyFilters = true) const;
-	// Where a matched light entry lives within the config: its containing top-level (models/formIDs)
-	// entry, that entry's index, the "lights" array, and the light's index within it.
+	/** @brief Where a matched light entry lives: its top-level entry + index and "lights" array + index. */
 	struct LightEntryLocation
 	{
 		nlohmann::ordered_json* topEntry = nullptr;
@@ -251,14 +248,18 @@ private:
 		nlohmann::ordered_json* lightsArr = nullptr;
 		size_t lightIdx = 0;
 	};
-	// Locates the light entry governing ctx (LP filters applied). Returns false when none matches.
+	/** @brief Locates the light entry governing ctx (LP filters applied); false when none matches. */
 	bool LocateLightEntry(nlohmann::ordered_json& configArray, const MatchContext& ctx, LightEntryLocation& out) const;
+	/** @brief Adds/removes the selected reference in the current bulb's filter list. */
 	bool ModifyLPFilterList(bool isWhiteList, bool add);
+	/** @brief Reloads the selected bulb's filter/flag/emittance state from its LP JSON entry. */
 	void RefreshLPJsonState();
+	/** @brief Applies the LP flag set to the current runtime light flags. */
 	void SyncLPFlagsToRuntime();
-	// Mirrors the InverseSquare/Linear falloff bits of an LP flag set onto a runtime light's flags.
+	/** @brief Mirrors the InverseSquare/Linear falloff bits of an LP flag set onto a runtime light's flags. */
 	static void ApplyLPFalloffFlags(ISLCommon::RuntimeLightDataExt& data, const std::set<std::string>& lpFlagSet);
 
+	/** @brief Snapshots and tracks the selected light each frame, applying editor edits and LP state. */
 	void UpdateSelectedLight(RE::TESObjectREFR* refr, RE::TESObjectLIGH* ligh, RE::NiLight* niLight, RE::BSLight* bsLight);
 
 	// Add-Light-to-Mesh workflow state.
@@ -339,38 +340,47 @@ private:
 	std::string pendingSelectConfigPath;
 	std::string pendingSelectLighEdid;
 
+	/** @brief Draws the "Select Mesh" button that starts the light picker. */
 	void DrawAddLightButton();
+	/** @brief Draws the Add-Light modal (add/edit/whitelist/blacklist a bulb on the picked mesh). */
 	void DrawAddLightPopup();
-	// Draws the modal confirming deletion of the selected LP light entry. Opened by the Delete button.
+	/** @brief Draws the modal confirming deletion of the selected LP light entry. */
 	void DrawDeleteConfirmation();
-	// Opens a persistent-buffer searchable combo (the Add-Light popup style: HeightLarge, auto-focused
-	// search input, separator). Returns true while open, writing the current filter text to filterOut;
-	// the caller renders the items and calls ImGui::EndCombo(). openNow opens the dropdown one-shot.
+	/** @brief Opens a persistent-buffer searchable combo (Add-Light style); true while open, with the filter in filterOut. */
 	static bool BeginSearchableCombo(const char* label, const char* preview, const char* searchId,
 		char* searchBuf, size_t searchBufSize, std::string_view& filterOut, bool openNow);
-	// True when text should be shown for the given combo filter (empty filter matches everything).
+	/** @brief True when an item should be shown for the given combo filter (empty matches everything). */
 	static bool MatchesComboFilter(std::string_view filter, const std::string& text);
-	// Shows a success- or error-styled notification for an operation result.
+	/** @brief Shows a success- or error-styled notification for an operation result. */
 	static void NotifyResult(bool ok, const char* okMsg, const char* failMsg);
-	// Re-selects the current LP bulb by identity and reloads the LP configs so the selection survives
-	// the despawn/respawn. Used by the in-place save buttons.
+	/** @brief Re-selects the current LP bulb by identity and reloads the LP configs so the selection survives. */
 	void ReloadLPAndReselect();
-	// Searchable "Attached bulb" combo over attachedBulbs. Returns the index clicked this
-	// frame (or -1); sets addSelectedBulb on click. openNow opens the dropdown this frame (one-shot).
+	/** @brief Searchable "Attached bulb" combo; returns the index clicked this frame (or -1) and sets addSelectedBulb. */
 	int DrawAttachedBulbCombo(const char* searchId, bool openNow);
-	// Searchable "Light record" combo over the cached LIGH list; writes addSelectedLighFormId.
+	/** @brief Searchable "Light record" combo over the cached LIGH list; writes addSelectedLighFormId. */
 	void DrawLightRecordCombo(const char* searchId);
-	// Kicks off the timed reload/disable/enable/respawn sequence for the picked mesh.
+	/** @brief Kicks off the timed reload/disable/enable/respawn sequence for the picked mesh. */
 	void BeginAttachSequence(const std::string& configPath);
+	/** @brief Scans Data\LightPlacer for config files, returning their extension-less relative paths. */
 	std::vector<std::string> ScanLPConfigPaths() const;
+	/** @brief Collects the LP bulbs live-attached to refr into attachedBulbs. */
 	void GatherAttachedBulbs(RE::TESObjectREFR* refr);
+	/** @brief Collects the whitelist/blacklist entries where refr appears into filterListEntries. */
 	void ScanFilterListEntries(RE::TESObjectREFR* refr);
+	/** @brief Validates the Add-Light selections; false with a reason when a bulb can't be added. */
 	bool CanAddBulb(std::string& reasonOut) const;
+	/** @brief The target string (model/formID/EditorID) for a new entry per the chosen attach mode. */
 	std::string AddEntryTargetString() const;
+	/** @brief Adds a new top-level entry with one bulb to the selected config. */
 	bool AddBulbToConfig();
+	/** @brief Adds an extra point to an existing bulb's entry. */
 	bool AddPointToConfig(const AttachedBulb& bulb);
+	/** @brief True if the bulb's matching entry already contains the given light EDID. */
 	bool LightAlreadyInEntry(const AttachedBulb& bulb, const std::string& lighEdid) const;
+	/** @brief Adds a light to an existing top-level entry matching the bulb. */
 	bool AddLightToExistingEntry(const AttachedBulb& bulb, const std::string& lighEdid);
+	/** @brief Persists the Add-Light popup preferences to disk. */
 	void SavePopupPrefs() const;
+	/** @brief Loads the Add-Light popup preferences from disk. */
 	void LoadPopupPrefs();
 };

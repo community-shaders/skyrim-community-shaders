@@ -31,29 +31,26 @@ static constexpr std::array kManagedDataKeys = {
 };
 static constexpr std::array kManagedEntryKeys = { "data", "points", "nodes", "whiteList", "blackList" };
 
-// Returns the named array member of a JSON object, or nullptr if missing / not an array.
+/** @brief Returns the named array member of a JSON object, or nullptr if missing or not an array. */
 static const nlohmann::ordered_json* GetArrayMember(const nlohmann::ordered_json& obj, const char* key)
 {
 	const auto it = obj.find(key);
 	return (it != obj.end() && it->is_array()) ? &*it : nullptr;
 }
 
-// Downcast a BSLight to BSShadowLight only when it actually is one. Returns nullptr otherwise.
+/** @brief Downcasts a BSLight to BSShadowLight only when it actually is one, else nullptr. */
 static RE::BSShadowLight* AsShadowLight(RE::BSLight* light)
 {
 	return (light && light->IsShadowLight()) ? static_cast<RE::BSShadowLight*>(light) : nullptr;
 }
 
+/** @brief Schedules a console command on the task thread, optionally against a selected reference. */
 static void ScheduleConsoleCommand(std::string cmd, RE::TESObjectREFR* refr = nullptr)
 {
 	if (auto* taskInterface = SKSE::GetTaskInterface()) {
 		taskInterface->AddTask([cmd = std::move(cmd), refr]() {
-			// Write the console selected-ref global directly (same RELOCATION_ID as
-			// CommonLibSSE-NG/src/RE/C/Console.cpp:32 Console::GetSelectedRefHandle).
-			// Console::SetSelectedRef requires a Console instance that only exists
-			// while the console UI is open, so we write the global directly.
-			// We also pass refr to CompileAndRun as thisObj to cover command handlers
-			// that read from the script parameter rather than the console global.
+			// Console::SetSelectedRef needs a live Console (UI open only), so write the selected-ref global
+			// directly (RELOCATION_ID = Console::GetSelectedRefHandle); refr is passed as thisObj for handlers.
 			static REL::Relocation<RE::ObjectRefHandle*> selectedRef{
 				RELOCATION_ID(519394, AE_CHECK(SKSE::RUNTIME_SSE_1_6_1130, 405935, 504099))
 			};
@@ -77,9 +74,8 @@ static void ScheduleConsoleCommand(std::string cmd, RE::TESObjectREFR* refr = nu
 	}
 }
 
-// Light Placer's JSON parser rejects null values (e.g. a stray "whiteList": null), so recursively
-// strip every null object member and null array element before persisting. This makes WriteLPConfig
-// the single guarantee that we never write an invalid null, regardless of how one crept in.
+// Light Placer's JSON parser rejects nulls (e.g. a stray "whiteList": null), so strip every null
+// member/element before persisting; WriteLPConfig is the single guarantee we never write one.
 static void StripNullValues(nlohmann::ordered_json& node)
 {
 	if (node.is_object()) {
@@ -103,6 +99,7 @@ static void StripNullValues(nlohmann::ordered_json& node)
 	}
 }
 
+/** @brief Writes an LP config to disk, stripping nulls and compacting vec3/float formatting. */
 static bool WriteLPConfig(const std::filesystem::path& filePath, nlohmann::ordered_json& config)
 {
 	StripNullValues(config);
@@ -118,9 +115,8 @@ static bool WriteLPConfig(const std::filesystem::path& filePath, nlohmann::order
 	output = std::regex_replace(output, vec3Pattern, "[$1, $2, $3]");
 
 	{
-		// The leading boundary group restricts rounding to genuine JSON number tokens (always preceded by
-		// ':', '[', ',', or whitespace in the multiline dump) so digits inside a string value, e.g. a model
-		// path like "..._x1.4.nif", are left untouched. std::regex has no lookbehind to express this otherwise.
+		// Leading boundary group restricts rounding to genuine number tokens (preceded by ':', '[', ',', ws)
+		// so digits inside strings (e.g. "..._x1.4.nif") are untouched; std::regex has no lookbehind for this.
 		static const std::regex floatPattern(R"(([:\[,\s])(-?\d+\.\d+))");
 		std::string rounded;
 		rounded.reserve(output.size());
@@ -145,7 +141,6 @@ static bool WriteLPConfig(const std::filesystem::path& filePath, nlohmann::order
 	}
 
 	// Collapse whiteList / blackList string arrays onto a single line each.
-	// e.g.  "whiteList": [\n\t"0xABC~Mod.esp"\n\t]  →  "whiteList": ["0xABC~Mod.esp"]
 	{
 		static const std::regex filterListPattern(R"("(?:white|black)List":\s*\[[\s\S]*?\])");
 		static const std::regex quotedStr(R"("[^"]*")");
@@ -184,14 +179,16 @@ static bool WriteLPConfig(const std::filesystem::path& filePath, nlohmann::order
 	return true;
 }
 
-// Absolute-relative path to a Light Placer config from its extension-less relative path.
+/** @brief Builds the Light Placer config path from its extension-less relative path. */
 static std::filesystem::path LPConfigFilePath(const std::string& configPath)
 {
 	return std::filesystem::path("Data\\LightPlacer") / (configPath + ".json");
 }
 
-// Loads a Light Placer config into `out`. Returns false if the file is missing, fails to
-// parse, or is not a JSON array. Logs parse errors.
+/**
+ * @brief Loads a Light Placer config array into `out`.
+ * @return False if the file is missing, fails to parse, or is not a JSON array.
+ */
 static bool LoadConfigArray(const std::string& configPath, nlohmann::ordered_json& out)
 {
 	const auto filePath = LPConfigFilePath(configPath);
@@ -207,7 +204,7 @@ static bool LoadConfigArray(const std::string& configPath, nlohmann::ordered_jso
 	return out.is_array();
 }
 
-// Lower-cases and forward-slashes a model path so casing/separator variants compare equal.
+/** @brief Lower-cases and forward-slashes a model path so casing/separator variants compare equal. */
 static std::string NormalizeModelPath(std::string path)
 {
 	std::transform(path.begin(), path.end(), path.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
@@ -215,7 +212,7 @@ static std::string NormalizeModelPath(std::string path)
 	return path;
 }
 
-// Builds the default LP light object for a freshly added bulb.
+/** @brief Builds the default LP light object for a freshly added bulb. */
 static nlohmann::ordered_json MakeLightObject(const std::string& lighEdid)
 {
 	nlohmann::ordered_json data;
@@ -230,8 +227,7 @@ static nlohmann::ordered_json MakeLightObject(const std::string& lighEdid)
 	return light;
 }
 
-// Overwrites a light entry's first point/node with the integer-rounded position. No-op when the
-// entry has neither a "points" nor "nodes" array whose first element is a vec3.
+/** @brief Overwrites a light entry's first point/node with the integer-rounded position (no-op if absent). */
 static void SetFirstPointFromPos(nlohmann::ordered_json& lightEntry, const RE::NiPoint3& pos)
 {
 	const char* pointsKey = lightEntry.contains("points") ? "points" : (lightEntry.contains("nodes") ? "nodes" : nullptr);
@@ -242,7 +238,7 @@ static void SetFirstPointFromPos(nlohmann::ordered_json& lightEntry, const RE::N
 		pts[0] = nlohmann::ordered_json::array({ static_cast<int>(pos.x), static_cast<int>(pos.y), static_cast<int>(pos.z) });
 }
 
-// True if the entry's "lights" array already contains a light with the given EDID.
+/** @brief True if the entry's "lights" array already contains a light with the given EDID. */
 static bool EntryContainsLight(const nlohmann::ordered_json& entry, const std::string& lighEdid)
 {
 	if (auto* lights = GetArrayMember(entry, "lights"))
@@ -285,15 +281,12 @@ void LightEditor::EnsureEmittanceFormListBuilt()
 
 void LightEditor::ApplyExternalEmittance(RE::TESForm* source)
 {
-	// Selected-bulb-only: the lerp (UpdateEmittanceColor) drives the color via this member and
-	// ApplyOverrides applies it to the active bulb alone. We deliberately do NOT write the
-	// reference's ExtraEmittanceSource — doing so makes the engine partially drive (brightness)
-	// every bulb we ever touched, even when unselected. Persistence is via Save to Light Placer
-	// (which writes the JSON and lets reloadlp recreate the source); ref/other bulbs are preview-only.
+	// Selected-bulb-only preview; deliberately does NOT write the ref's ExtraEmittanceSource (that makes
+	// the engine drive every touched bulb even when unselected). Persistence is via Save to Light Placer.
 	activeEmittanceSource = source;
 
-	// For LP bulbs an explicit source is incompatible with the NoExternalEmittance flag, so drop it
-	// from the flag set; otherwise the saved entry (and reloadlp) would suppress the source.
+	// An explicit source is incompatible with NoExternalEmittance, so drop the flag (else the saved
+	// entry and reloadlp would suppress the source).
 	if (lpInfo.isLPLight && source)
 		lpFlagSet.erase("NoExternalEmittance");
 }
@@ -308,9 +301,8 @@ void LightEditor::ClearExternalEmittance()
 
 void LightEditor::QueueReselectCurrentLP()
 {
-	// reloadlp despawns and recreates LP bulbs, so the selection's per-iteration index can shift and
-	// the (id, index) match fails. Re-acquire by stable identity (owner ref + config + light EDID)
-	// via the same pendingAutoSelect path the attach flow uses.
+	// reloadlp recreates LP bulbs, shifting per-iteration indices so the (id, index) match fails.
+	// Re-acquire by stable identity (owner ref + config + light EDID) via the pendingAutoSelect path.
 	if (!lpInfo.isLPLight)
 		return;
 	pendingSelectRefrId = selected.id;
@@ -322,23 +314,22 @@ void LightEditor::QueueReselectCurrentLP()
 
 void LightEditor::UpdateEmittanceColor()
 {
-	// Only regions carry a live, time/weather-driven emittanceColor (the editor's emittance list is
-	// region-only). Anything else leaves the lerp inactive so ApplyOverrides uses the base color.
+	// Only regions carry a live time/weather-driven emittanceColor; anything else leaves the lerp
+	// inactive so ApplyOverrides uses the base color.
 	auto* region = activeEmittanceSource ? activeEmittanceSource->As<RE::TESRegion>() : nullptr;
 	if (!region) {
 		emittanceColorActive = false;
 		return;
 	}
 
-	// The region's emittanceColor is already varied smoothly by the game with time/weather, so track
-	// it directly. No smoothing — it would only add lag (e.g. when scrubbing the time slider).
+	// The game already varies emittanceColor smoothly with time/weather, so track it directly;
+	// smoothing would only add lag when scrubbing the time slider.
 	emittanceColor = region->emittanceColor;
 	emittanceColorActive = true;
 }
 
-// Searchable "External Emittance" combo shared by every bulb type backed by a reference. Picking a
-// form sets the reference's runtime emittance source live (adding the extra data if missing); "(None)"
-// removes it. LP bulbs additionally persist the choice via Save to Light Placer.
+// Picking a form sets the reference's runtime emittance source live; "(None)" removes it. LP bulbs
+// additionally persist the choice via Save to Light Placer.
 void LightEditor::DrawExternalEmittanceCombo()
 {
 	if (!activeRefr)
@@ -451,7 +442,6 @@ std::string LightEditor::LighEdidForFormId(RE::FormID formId)
 
 void LightEditor::DrawSettings()
 {
-	// Header
 	ImGui::Text("%s", T(TKEY("header"), "Light Editor"));
 	ImGui::Separator();
 
@@ -562,11 +552,8 @@ void LightEditor::DrawSettings()
 				selected = light;
 				Util::ClearComboSearch(kLightsComboId);
 			}
-			// The flash target is the hovered entry only when it's flashable: a ref/attached light
-			// (id != 0) that isn't the already-selected one (the selected light is the active light,
-			// whose fade ApplyOverrides drives directly). Hovering the selected or an Other light
-			// leaves thisFrameHovered empty so the block below clears any existing flash; anyItemHovered
-			// distinguishes that from the mouse resting in dead space between entries.
+			// Flash only a flashable target: a ref/attached light (id != 0) other than the selected one
+			// (whose fade ApplyOverrides drives). Selected/Other hover leaves thisFrameHovered empty, clearing it.
 			if (ImGui::IsItemHovered()) {
 				anyItemHovered = true;
 				if (!isSelected && light.id != 0)
@@ -580,9 +567,8 @@ void LightEditor::DrawSettings()
 		Util::ClearComboSearch(kLightsComboId);
 	}
 
-	// Hover flash: re-evaluate whenever the mouse is over a combo entry, or the combo closed. Moving
-	// onto the selected/Other light (a non-flashable target → empty thisFrameHovered) thus stops the
-	// previously hovered light's blink; only resting in dead space between entries keeps it going.
+	// Re-evaluate the hover flash whenever the mouse is over an entry or the combo closed. Moving onto
+	// a non-flashable target (empty thisFrameHovered) stops the blink; dead-space hover keeps it going.
 	if (anyItemHovered || !lightsComboOpen) {
 		if (!(thisFrameHovered == comboHoveredLight)) {
 			if (hoverFlashNiLight) {
@@ -769,6 +755,7 @@ void LightEditor::DrawSettings()
 					continue;
 				const bool isCurrent = ligh->GetFormID() == current.data.lighFormId;
 				if (ImGui::Selectable(edid.c_str(), isCurrent)) {
+					// Swap the LIGH form but keep the user's edited fade/radius/size/cutoff.
 					const float savedFade = current.data.fade;
 					const float savedRadius = current.data.radius;
 					const float savedSize = current.data.size;
@@ -789,8 +776,7 @@ void LightEditor::DrawSettings()
 		}
 	}
 
-	// External emittance applies to any bulb backed by a reference (LP, ref, or other), so it
-	// lives outside the attached-only block above.
+	// External emittance applies to any reference-backed bulb, so it lives outside the attached-only block.
 	DrawExternalEmittanceCombo();
 
 	ImGui::Spacing();
@@ -805,8 +791,8 @@ void LightEditor::DrawSettings()
 		}
 	}
 
-	// Dispatches to logarithmic+extended or normal slider based on extendedLogMode.
-	// Log scale requires min > 0, so extended mins are nudged above zero where needed.
+	// Logarithmic+extended or normal slider per extendedLogMode. Log scale requires min > 0, so
+	// extended mins are nudged above zero where needed.
 	auto drawSlider = [&](const char* label, float& value,
 						  float normalMin, float normalMax,
 						  float extMin, float extMax,
@@ -979,11 +965,8 @@ void LightEditor::DrawAddLightButton()
 std::vector<std::string> LightEditor::ScanLPConfigPaths() const
 {
 	std::vector<std::string> paths;
-	// Mirrors LightPlacer's own scanning approach exactly:
-	//   - relative path (not absolute via GetDataPath) so USVFS intercepts correctly
-	//   - no error_code on the iterator (throwing version uses cached WIN32_FIND_DATA)
-	//   - is_directory() / extension() only (no is_regular_file(ec) which triggers an
-	//     unhookable GetFileAttributesW call that makes virtual files disappear)
+	// Mirrors LightPlacer's USVFS-safe scanning: relative path (not GetDataPath), throwing iterator (no
+	// error_code), is_directory()/extension() only (is_regular_file(ec) hits an unhookable API, hiding virtual files).
 	const std::filesystem::path root(R"(Data\LightPlacer)");
 	std::error_code existsEc;
 	if (!std::filesystem::exists(root, existsEc)) {
@@ -994,9 +977,8 @@ std::vector<std::string> LightEditor::ScanLPConfigPaths() const
 		for (const auto& entry : std::filesystem::recursive_directory_iterator(root)) {
 			if (entry.is_directory() || entry.path().extension() != L".json")
 				continue;
-			// Use path operations rather than character-count stripping — lexically_relative
-			// handles prefix removal by component so any prefix casing/format variation from
-			// USVFS doesn't corrupt the relative path, and stem() strips the extension cleanly.
+			// Use path ops, not character-count stripping: lexically_relative removes the prefix by
+			// component (robust to USVFS casing/format variation) and stem() strips the extension cleanly.
 			const auto relPath = entry.path().lexically_relative(root);
 			std::string rel = (relPath.parent_path() / relPath.stem()).generic_string();
 			if (!rel.empty() && rel.find("..") == std::string::npos)
@@ -1019,9 +1001,8 @@ bool LightEditor::BeginSearchableCombo(const char* label, const char* preview, c
 	char* searchBuf, size_t searchBufSize, std::string_view& filterOut, bool openNow)
 {
 	filterOut = {};
-	// SetNextItemOpen is ignored for combos; a combo opens only via its derived popup id. Open it
-	// directly so the list is visible without an extra click (one-shot: openNow is true only the
-	// frame the mode is entered, so the user can still close it).
+	// SetNextItemOpen is ignored for combos (they open via the derived popup id), so open it directly to
+	// show the list without an extra click. One-shot: openNow is true only the frame the mode is entered.
 	if (openNow)
 		ImGui::OpenPopup(ImHashStr("##ComboPopup", 0, ImGui::GetID(label)));
 	if (!ImGui::BeginCombo(label, preview, ImGuiComboFlags_HeightLarge))
@@ -1140,10 +1121,8 @@ void LightEditor::DrawAddLightPopup()
 				Util::Colors::GetError());
 		};
 
-		// Renders a "selectable button": disabled with a tooltip when unavailable, info-styled when
-		// active, clickable otherwise. Returns true when clicked this frame. Unavailability is checked
-		// first so a remembered-active option invalidated by a state change renders disabled rather
-		// than as a highlighted button the user can't actually press.
+		// "Selectable button": disabled+tooltip when unavailable, info-styled when active, else clickable.
+		// Unavailability is checked first so a stale remembered-active option renders disabled, not clickable.
 		auto selectableButton = [&](const char* label, bool active, bool available, const char* unavailTip) -> bool {
 			if (!available) {
 				{
@@ -1162,7 +1141,6 @@ void LightEditor::DrawAddLightPopup()
 			return ImGui::Button(label);
 		};
 
-		// --- Mode selector ---
 		const bool hasBulbs = !attachedBulbs.empty();
 		auto drawModeBtn = [&](const char* label, int mode, bool available, const char* unavailTip) {
 			if (selectableButton(label, addPopupMode == mode, available, unavailTip)) {
@@ -1218,7 +1196,6 @@ void LightEditor::DrawAddLightPopup()
 			}
 
 			if (!hasBulbs || addLightSubMode == SubModeNewEntry) {
-				// --- Target JSON ---
 				const char* configPreview = (addSelectedConfig >= 0 && addSelectedConfig < (int)lpConfigPaths.size()) ? lpConfigPaths[addSelectedConfig].c_str() : T(TKEY("select_a_config"), "Select a config");
 				std::string_view cfgFilter;
 				if (BeginSearchableCombo(T(TKEY("target_json"), "Target JSON"), configPreview, "##cfg_search", addConfigSearch, sizeof(addConfigSearch), cfgFilter, false)) {
@@ -1236,7 +1213,6 @@ void LightEditor::DrawAddLightPopup()
 					ImGui::EndCombo();
 				}
 
-				// --- Attach by (only after a config is chosen) ---
 				if (addSelectedConfig >= 0) {
 					ImGui::Text("%s", T(TKEY("attach_by"), "Attach by:"));
 					ImGui::SameLine();
@@ -1253,7 +1229,6 @@ void LightEditor::DrawAddLightPopup()
 					drawAttachBtn(T(TKEY("attach_editor_id"), "EditorID"), 2, !pickedMesh.editorId.empty(), T(TKEY("no_editor_id_on_object"), "No EditorID on this object."));
 				}
 
-				// --- Light record (only after attach mode is chosen) ---
 				if (addSelectedConfig >= 0 && addAttachMode >= 0)
 					DrawLightRecordCombo("##ligh_search");
 
@@ -1303,7 +1278,7 @@ void LightEditor::DrawAddLightPopup()
 			}
 
 			if (hasBulbs && addLightSubMode == SubModeToEntry) {
-				// Bulb picker — identifies the parent top-level entry
+				// Bulb picker: identifies the parent top-level entry
 				DrawAttachedBulbCombo("##bulb_search_te", false);
 				DrawLightRecordCombo("##ligh_search_te");
 
@@ -1338,12 +1313,11 @@ void LightEditor::DrawAddLightPopup()
 					}
 				}
 			}
-		}  // end ModeAddLight
+		}
 
 		if (addPopupMode == ModeEditBulb) {
-			// Multi-bulb: combo fires immediately on selection (no confirm button). The combo
-			// returns the clicked index so the modal is closed after the combo, not inside it
-			// (closing inside the combo body would close the combo popup, not the modal).
+			// Multi-bulb: combo fires immediately on selection. It returns the clicked index so the modal
+			// is closed after the combo, not inside it (closing inside would close the combo, not the modal).
 			const bool openNow = editBulbComboPendingOpen;
 			editBulbComboPendingOpen = false;
 			const int clickedBulb = DrawAttachedBulbCombo("##bulb_search", openNow);
@@ -1359,7 +1333,6 @@ void LightEditor::DrawAddLightPopup()
 				ImGui::CloseCurrentPopup();
 			}
 		} else if (addPopupMode == ModeWhitelist || addPopupMode == ModeBlacklist) {
-			// Whitelist / Blacklist: bulb combo + entry-type selector + confirm button.
 			DrawAttachedBulbCombo("##bulb_search", false);
 
 			// Entry type: what string to write into the filter list.
@@ -1396,8 +1369,7 @@ void LightEditor::DrawAddLightPopup()
 				const auto& bulb = attachedBulbs[addSelectedBulb];
 				auto* refr = PickedRefr();
 
-				// Build the entry string from the chosen type.
-				std::string entryStr;
+				std::string entryStr;  // built from the chosen entry type
 				if (addFilterEntryType == 1) {
 					if (refr)
 						if (auto* cell = refr->GetParentCell())
@@ -1664,9 +1636,8 @@ std::string LightEditor::GetLightName(const LightInfo& lightInfo)
 
 void LightEditor::GatherLights()
 {
-	// Attach-to-mesh timed flow: runs unconditionally every frame so the timer is not
-	// gated behind ShouldSwallowInput (menu focus can be lost when the popup closes).
-	// Each step waits kAttachStepDelay (500ms): disable, then enable, then finalize.
+	// Attach-to-mesh timed flow: runs every frame so the timer isn't gated behind ShouldSwallowInput
+	// (menu focus can drop when the popup closes). Each step waits kAttachStepDelay: disable, enable, finalize.
 	if (attachPhase != AttachPhase::Idle) {
 		const auto now = std::chrono::steady_clock::now();
 		if (now - attachPhaseStart >= kAttachStepDelay) {
@@ -1725,10 +1696,9 @@ void LightEditor::GatherLights()
 		addPopupMode = -1;
 		addLightSubMode = -1;
 		editBulbComboPendingOpen = false;
-		// Filter-flow selections are mesh-specific too: a remembered "Cell" entry type or filter-list
-		// index from the previous pick would otherwise stay highlighted/selected even when the newly
-		// picked mesh can't offer it (e.g. its cell has no EditorID), so reset them to safe defaults.
-		addFilterEntryType = 0;  // Reference — always available
+		// Filter-flow selections are mesh-specific: reset them so a remembered "Cell" type or filter
+		// index from the previous pick can't persist for a mesh that can't offer it.
+		addFilterEntryType = 0;  // Reference, always available
 		addSelectedFilterEntry = -1;
 		addLightPopupOpen = true;
 	}
@@ -1787,6 +1757,7 @@ void LightEditor::GatherLights()
 		}
 
 		info.isAttached = !info.isRef && refr != nullptr;
+		// Spotlights are always grouped under "Other" (their falloff isn't editable here).
 		info.isOther = (!info.isRef && !info.isAttached) || (info.isSpotlight);
 
 		const bool isRefMatch = (info.isRef && !info.isSpotlight) && filterOption == FilterOption::RefLights;
@@ -1810,6 +1781,7 @@ void LightEditor::GatherLights()
 			info.index = 0;
 		}
 
+		// Match a queued re-selection by stable identity so it survives reloadlp's index changes.
 		if (pendingAutoSelect && info.isAttached && info.id == pendingSelectRefrId) {
 			const auto parsedName = ParseLPLightName(niLight->name.c_str());
 			if (parsedName.isLPLight && parsedName.configPath == pendingSelectConfigPath && parsedName.lightEDID == pendingSelectLighEdid) {
@@ -1889,10 +1861,8 @@ void LightEditor::GatherAttachedBulbs(RE::TESObjectREFR* refr)
 		auto* owner = niLight->GetUserData();
 		if (owner != refr)
 			return;
-		// Count every light owned by this ref, not just LP bulbs, so the index matches the
-		// one shown in the main Lights combo (GatherLights increments per owner over all its
-		// lights). Otherwise an LP bulb sitting after a non-LP owner light would be numbered
-		// differently in the two UIs.
+		// Count every light owned by this ref (not just LP bulbs) so the index matches the main Lights
+		// combo, which increments per owner over all its lights.
 		const uint32_t ownerIndex = running[owner]++;
 		const auto parsed = ParseLPLightName(niLight->name.c_str());
 		if (!parsed.isLPLight)
@@ -2009,10 +1979,8 @@ void LightEditor::UpdateSelectedLight(RE::TESObjectREFR* refr, RE::TESObjectLIGH
 
 		original.tesFlags = tesFlags ? static_cast<ISLCommon::TES_LIGHT_FLAGS_EXT>(tesFlags->underlying()) : static_cast<ISLCommon::TES_LIGHT_FLAGS_EXT>(0);
 		original.data = *runtimeData;
-		// The hover-flash blinks the to-be-selected light's runtime fade to 0 (see ApplyOverrides);
-		// snapshotting mid-blink would freeze that 0 as the base. Recover the stable pre-flash value
-		// the flash machinery stashed. LP lights get this for free via the JSON read in RefreshLPJsonState;
-		// this covers non-LP refs (e.g. spotlights, vanilla lights) that have no JSON fallback.
+		// The hover-flash may have blinked fade to 0; snapshotting mid-blink would freeze 0 as the base, so
+		// recover the stashed pre-flash value. Covers non-LP refs; LP lights get this from RefreshLPJsonState.
 		if (hoverFlashNiLight && niLight == hoverFlashNiLight.get())
 			original.data.fade = hoverFlashOriginalFade;
 		original.pos = selected.isRef ? refr->GetPosition() : (niLight->parent ? niLight->parent->local.translate : RE::NiPoint3{});
@@ -2043,8 +2011,8 @@ void LightEditor::UpdateSelectedLight(RE::TESObjectREFR* refr, RE::TESObjectLIGH
 		useExternalEmittance = false;
 		activeEmittanceSource = nullptr;
 		emittanceColorActive = false;  // recomputed by UpdateEmittanceColor for the new bulb
-		// LP bulbs author their emittance in the JSON (LightPlacer doesn't reliably expose it as a
-		// runtime extra), so RefreshLPJsonState reads it below. Non-LP bulbs carry it as extra data.
+		// LP bulbs author emittance in the JSON (no reliable runtime extra), read below by
+		// RefreshLPJsonState; non-LP bulbs carry it as extra data.
 		if (!lpInfo.isLPLight && refr) {
 			if (const auto* extra = refr->extraList.GetByType<RE::ExtraEmittanceSource>())
 				if (extra->source) {
@@ -2096,12 +2064,8 @@ void LightEditor::UpdateSelectedLight(RE::TESObjectREFR* refr, RE::TESObjectLIGH
 		}
 	}
 
-	// Only non-LP lights apply TES-flag edits by mutating the base LIGH form and rebuilding the
-	// reference. For LP lights the TES-flag checkboxes are disabled (flags are edited via lpFlagSet
-	// -> JSON -> reloadlp); SyncLPFlagsToRuntime additionally rewrites current.tesFlags from the LP
-	// flag subset, which can legitimately differ from the shared base form (e.g. the form has flicker
-	// but the LP entry doesn't). Running this branch for LP lights would mutate the shared form and
-	// disable/enable the reference every frame, making the mesh vanish.
+	// Only non-LP lights apply TES-flag edits (mutating the base LIGH form + rebuilding the ref); LP flags
+	// go via JSON/reloadlp. Running this for LP lights would mutate the shared form and vanish the mesh.
 	if (!selected.isOther && !lpInfo.isLPLight && refr && tesFlags && current.tesFlags.underlying() != tesFlags->underlying()) {
 		*tesFlags = static_cast<RE::TES_LIGHT_FLAGS>(current.tesFlags.underlying());
 		RequestRefRefresh(refr);
@@ -2120,6 +2084,7 @@ void LightEditor::UpdateSelectedLight(RE::TESObjectREFR* refr, RE::TESObjectLIGH
 
 bool LightEditor::ApplyOverrides(RE::NiLight* niLight, ISLCommon::RuntimeLightDataExt* runtimeData) const
 {
+	// Hovered (not selected) light: blink its fade so it flashes in the combo list.
 	if (hoverFlashNiLight && niLight == hoverFlashNiLight.get() && niLight != activeNiLight.get()) {
 		runtimeData->fade = hoverFlashVisible ? hoverFlashOriginalFade : 0.f;
 		return true;
@@ -2129,8 +2094,7 @@ bool LightEditor::ApplyOverrides(RE::NiLight* niLight, ISLCommon::RuntimeLightDa
 		return false;
 
 	runtimeData->lighFormId = current.data.lighFormId;
-	// While an emittance source drives this bulb, replace the base color with the source's emittance
-	// color (see UpdateEmittanceColor); otherwise use the editor's color.
+	// Use the emittance source's live color while one drives this bulb (see UpdateEmittanceColor), else the editor color.
 	runtimeData->diffuse = emittanceColorActive ? emittanceColor : current.data.diffuse;
 	runtimeData->fade = current.data.fade;
 	runtimeData->cutoffOverride = current.data.cutoffOverride;
@@ -2140,10 +2104,8 @@ bool LightEditor::ApplyOverrides(RE::NiLight* niLight, ISLCommon::RuntimeLightDa
 		runtimeData->flags.set(LightLimitFix::LightFlags::InverseSquare);
 	} else {
 		runtimeData->flags.reset(LightLimitFix::LightFlags::InverseSquare);
-		// Restore the authoritative radius. ProcessLight's inverse-square branch writes the computed
-		// radius into the shared runtimeData->radius field; once a light is no longer inverse-square
-		// the non-IS branch only reads that field, so a previously-computed (inflated) value would
-		// stick forever. Re-asserting current.data.radius here heals it.
+		// Restore the authoritative radius: ProcessLight's IS branch writes a computed value into the shared
+		// runtimeData->radius that the non-IS branch only reads, so a stale inflated value would stick forever.
 		runtimeData->radius = current.data.radius;
 	}
 
@@ -2438,8 +2400,7 @@ nlohmann::ordered_json LightEditor::BuildEditedData(const nlohmann::ordered_json
 	}
 
 	nlohmann::ordered_json newData;
-	// Only mutate color when the user opts in via the Save checkbox; otherwise leave any existing color
-	// untouched (don't overwrite the user's saved value, and don't drop it).
+	// Only mutate color when the user opts in via the Save checkbox; otherwise leave the existing color untouched.
 	if (includeColor) {
 		// Light Placer stores color as 0-255 integers; current.data.diffuse is normalized 0-1.
 		auto toByte = [](float c) { return static_cast<int>(std::lround(std::clamp(c, 0.0f, 1.0f) * 255.0f)); };
@@ -2447,8 +2408,7 @@ nlohmann::ordered_json LightEditor::BuildEditedData(const nlohmann::ordered_json
 	} else if (existingData.contains("color")) {
 		newData["color"] = existingData["color"];
 	}
-	// Persist the edited bulb type (LIGH form); fall back to the existing entry value
-	// when the edited form has no resolvable EditorID.
+	// Persist the edited bulb type (LIGH form); fall back to the existing value if it has no EditorID.
 	const std::string editedLighEdid = LighEdidForFormId(current.data.lighFormId);
 	newData["light"] = editedLighEdid.empty() ? existingData.at("light") : nlohmann::ordered_json(editedLighEdid);
 	newData["fade"] = current.data.fade;
@@ -2460,9 +2420,8 @@ nlohmann::ordered_json LightEditor::BuildEditedData(const nlohmann::ordered_json
 	}
 	if (existingData.contains("shadowDepthBias"))
 		newData["shadowDepthBias"] = shadowDepthBias;
-	// Write the source only when one is set; otherwise omit it so the line is removed from the entry
-	// (selecting None or enabling NoExternalEmittance both clear it). The editor reads the current
-	// source from the JSON on selection, so external state is always reflected here.
+	// Write the source only when set; otherwise omit it so the line is removed (None or
+	// NoExternalEmittance both clear it). The editor re-reads it from the JSON on selection.
 	if (useExternalEmittance && !externalEmittanceEdid.empty())
 		newData["externalEmittance"] = externalEmittanceEdid;
 	if (!newFlags.empty())
@@ -2535,8 +2494,7 @@ bool LightEditor::SaveAsSeparateEntry(bool includeColor)
 
 	const MatchContext ctx = MakeSelectedContext();
 
-	// Locate the light entry currently governing this reference along with its parent "lights"
-	// array and index, so the forked copy can be inserted as the next sibling.
+	// Locate the governing light entry (+ parent array/index) so the fork can be inserted as the next sibling.
 	LightEntryLocation loc;
 	if (!LocateLightEntry(configArray, ctx, loc)) {
 		logger::warn("[LightEditor] SaveAsSeparateEntry: no matching entry for model '{}' with light EDID '{}' in {}.json",
@@ -2548,8 +2506,8 @@ bool LightEditor::SaveAsSeparateEntry(bool includeColor)
 	const size_t lightIdx = loc.lightIdx;
 	auto& sourceEntry = (*lightsArr)[lightIdx];
 
-	// Whitelisted here, and whether the whiteList is dedicated to this reference alone (a prior fork).
-	// A shared whiteList listing several references is not a fork and may still be split off.
+	// Track whether this ref is whitelisted, and whether the whiteList is its alone (a prior fork);
+	// a shared whiteList is not a fork and may still be split off.
 	bool ownerWhitelisted = false;
 	if (auto* wl = GetArrayMember(sourceEntry, "whiteList")) {
 		for (const auto& elem : *wl)
@@ -2572,8 +2530,7 @@ bool LightEditor::SaveAsSeparateEntry(bool includeColor)
 	forkedEntry.erase("blackList");
 	forkedEntry["whiteList"] = nlohmann::ordered_json::array({ ownerEntry });
 
-	// Exclude this reference from the source so it resolves solely to the forked entry: drop it from a
-	// shared whiteList, otherwise blacklist it.
+	// Exclude this ref from the source so it resolves to the fork: drop from a shared whiteList, else blacklist.
 	if (ownerWhitelisted)
 		MutateFilterList(sourceEntry, "whiteList", ownerEntry, false);
 	else
@@ -2607,8 +2564,8 @@ bool LightEditor::DeleteFromLightPlacer()
 		return false;
 	}
 
-	// Removing the only light would leave a dangling models/formIDs block, so drop the whole
-	// top-level entry; otherwise remove just this light from the shared "lights" array.
+	// Removing the only light would leave a dangling models/formIDs block, so drop the whole top-level
+	// entry; otherwise remove just this light.
 	if (loc.lightsArr->size() <= 1)
 		configArray.erase(configArray.begin() + loc.topIdx);
 	else
@@ -2657,6 +2614,7 @@ void LightEditor::DrawDeleteConfirmation()
 
 void LightEditor::SortLights()
 {
+	// Other lights have no FormID/EditorID, so those sort modes fall back to None.
 	if (filterOption == FilterOption::OtherLights && (sortOption == SortOption::FormID || sortOption == SortOption::EditorID))
 		sortOption = SortOption::None;
 
@@ -2707,15 +2665,12 @@ void LightEditor::RefreshLPJsonState()
 	if (!LoadLPConfig(configArray))
 		return;
 
-	// Apply white/black-list filters so we resolve the entry that actually governs this
-	// reference. Without filtering, a model/formID with two entries for the same light
-	// (one blacklisting and one whitelisting this refr) would resolve to whichever entry
-	// appears first in the array, loading the wrong JSON fade/flags into the editor.
+	// Apply WL/BL filters to resolve the entry that actually governs this reference; without them a
+	// model/formID with two entries for the same light resolves to whichever appears first (wrong fade/flags).
 	const auto* lightEntry = FindMatchingLightEntry(configArray, MakeSelectedContext(), true);
 	if (!lightEntry)
 		return;
 
-	// Filter state
 	if (!ownerEntry.empty()) {
 		auto containsEntry = [&](const char* listKey) {
 			const auto it = lightEntry->find(listKey);
@@ -2732,30 +2687,22 @@ void LightEditor::RefreshLPJsonState()
 
 	const auto dataIt = lightEntry->find("data");
 	if (dataIt != lightEntry->end() && dataIt->is_object()) {
-		// Base intensity comes from the LP JSON, not the runtime snapshot taken in
-		// UpdateSelectedLight. The live runtime fade is continuously modulated by the
-		// Flicker flag's animation, so snapshotting it freezes a random oscillation
-		// point; the JSON value is the stable authored base the user expects to edit.
-		// Applied to both original (so Reset/RestoreOriginal use the base) and current
-		// (so the Intensity slider reflects it).
+		// Base intensity from the LP JSON, not the runtime snapshot: the live fade is Flicker-modulated, so a
+		// snapshot freezes a random point. Applied to original (Reset) and current (the Intensity slider).
 		if (const auto fadeIt = dataIt->find("fade"); fadeIt != dataIt->end() && fadeIt->is_number()) {
 			const float jsonFade = fadeIt->get<float>();
 			original.data.fade = jsonFade;
 			current.data.fade = jsonFade;
 		}
 
-		// Likewise take the radius from the JSON, not the runtime snapshot. For inverse-square bulbs
-		// ProcessLight overwrites runtimeData->radius with a computed value; if such a bulb is later
-		// (or erroneously) treated as non-inverse-square, that inflated radius would otherwise be the
-		// snapshotted base. The JSON "radius" is the authored value for non-IS bulbs (IS bulbs persist
-		// size/cutoff instead, so this key is simply absent and the IS recompute drives the radius).
+		// Likewise radius from JSON, not the snapshot (ProcessLight inflates runtimeData->radius for IS bulbs).
+		// JSON "radius" is the authored non-IS value; IS bulbs omit it and persist size/cutoff instead.
 		if (const auto radiusIt = dataIt->find("radius"); radiusIt != dataIt->end() && radiusIt->is_number()) {
 			const float jsonRadius = radiusIt->get<float>();
 			original.data.radius = jsonRadius;
 			current.data.radius = jsonRadius;
 		}
 
-		// LP flags
 		const auto flagsIt = dataIt->find("flags");
 		if (flagsIt != dataIt->end() && flagsIt->is_string()) {
 			std::istringstream ss(flagsIt->get<std::string>());
@@ -2766,10 +2713,8 @@ void LightEditor::RefreshLPJsonState()
 			}
 		}
 
-		// External emittance source: authored in the JSON, so read it here (LightPlacer doesn't reliably
-		// expose it as runtime extra data). Resolving it to a form lets the color tracking follow the
-		// source's live, time/weather-driven emittanceColor, and re-derives the EDID so the combo matches
-		// the list. NoExternalEmittance suppresses the source in LP, so honor that here (show None).
+		// Emittance source is authored in the JSON (no reliable runtime extra); resolving it to a form lets
+		// color tracking follow its live emittanceColor. NoExternalEmittance suppresses it (show None).
 		if (const auto emitIt = dataIt->find("externalEmittance");
 			!lpFlagSet.contains("NoExternalEmittance") && emitIt != dataIt->end() && emitIt->is_string()) {
 			if (const std::string entry = emitIt->get<std::string>(); !entry.empty()) {
@@ -2792,10 +2737,8 @@ void LightEditor::RefreshLPJsonState()
 
 	SyncLPFlagsToRuntime();
 
-	// SyncLPFlagsToRuntime only updates `current`. Apply the authoritative JSON InverseSquare/Linear
-	// state to `original` too, so RestoreOriginal (on deselect) can't re-assert a stale/spurious
-	// inverse-square bit that the snapshot picked up from the runtime overlay — which would make
-	// ProcessLight recompute and re-inflate the radius.
+	// SyncLPFlagsToRuntime only updates `current`; apply the JSON InverseSquare/Linear state to `original`
+	// too, so RestoreOriginal can't re-assert a stale IS bit (which makes ProcessLight re-inflate the radius).
 	ApplyLPFalloffFlags(original.data, lpFlagSet);
 }
 
@@ -2870,17 +2813,14 @@ bool LightEditor::ModifyLPFilterListFor(const std::string& configPath, const Mat
 
 	nlohmann::ordered_json* lightEntry = nullptr;
 	if (add) {
-		// Prefer the entry that actually governs this reference; several entries can share a model/formID
-		// and light EDID (peer forks with disjoint whiteLists). Fall back to the first model/light match
-		// when the reference isn't covered yet (e.g. a brand-new whitelist add).
+		// Prefer the entry that governs this ref (peer forks can share a model/formID + light EDID with
+		// disjoint whiteLists); fall back to the first match when the ref isn't covered yet.
 		lightEntry = FindMatchingLightEntry(configArray, ctx, true);
 		if (!lightEntry)
 			lightEntry = FindMatchingLightEntry(configArray, ctx, false);
 	} else {
-		// Removing must target the entry that actually holds entryStr in listKey. A model/formID can
-		// have several entries for the same light (e.g. one blacklisting this ref while a sibling
-		// whitelists it); the first match is often the wrong one — mutating it removes nothing and
-		// only leaves a stray empty list behind, while the real entry keeps the value.
+		// Removal must target the entry that actually holds entryStr in listKey. Several entries can exist
+		// for the same light, so the first match often removes nothing and leaves a stray empty list.
 		for (auto& entry : configArray) {
 			auto lightsIt = entry.find("lights");
 			if (lightsIt == entry.end() || !lightsIt->is_array())
