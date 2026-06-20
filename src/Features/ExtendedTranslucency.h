@@ -19,13 +19,23 @@ struct ExtendedTranslucency final : Feature
 				T("feature.extended_translucency.key_feature_4", "Configurable transparency and softness controls"),
 				T("feature.extended_translucency.key_feature_5", "Performance-optimized translucency calculations") } };
 	}
+	/** @brief Returns true only for Lighting shader type. */
 	virtual bool HasShaderDefine(RE::BSShader::Type shaderType) override { return RE::BSShader::Type::Lighting == shaderType; };
+	/** @brief Installs the BSLightingShader geometry setup hooks after all plugins have loaded. */
 	virtual void PostPostLoad() override;
+	/** @brief Draws the ImGui settings UI for translucency material model and blend options. */
 	virtual void DrawSettings() override;
 	virtual void LoadSettings(json& o_json) override;
 	virtual void SaveSettings(json& o_json) override;
 	virtual void RestoreDefaultSettings() override;
 
+	/**
+	 * @brief Sets the ExtraFeatureDescriptor for translucency on the current render pass.
+	 *
+	 * Reads per-geometry NiExtraData to determine the material model, falling back
+	 * to the global default when no override is present.
+	 * @param pass The BSRenderPass being set up for rendering.
+	 */
 	static void BSLightingShader_SetupGeometry(RE::BSRenderPass* pass);
 
 	struct Hooks;
@@ -62,6 +72,7 @@ struct ExtendedTranslucency final : Feature
 
 	Settings settings;
 
+	/** @brief Returns the per-frame settings data for upload to the GPU constant buffer. */
 	const PerFrame& GetCommonBufferData() { return settings; }
 
 	static const RE::BSFixedString NiExtraDataName_AnisotropicAlphaMaterial;

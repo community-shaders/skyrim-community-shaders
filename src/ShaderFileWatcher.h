@@ -10,17 +10,19 @@
 namespace SIE
 {
 
-	// Dependency tracking: .hlsl/.hlsli relationships
+	/** @brief Tracks include dependencies between .hlsl and .hlsli files for hot-reload invalidation. */
 	class ShaderFileDependencyTracker
 	{
 	public:
-		// Called after compiling a .hlsl file, with the set of includes used
+		/**
+		 * @brief Records which includes a compiled .hlsl file depends on.
+		 * @param hlslFile Path to the compiled .hlsl file.
+		 * @param includes Paths to all files included during compilation.
+		 */
 		void RegisterDependencies(const std::string& hlslFile, const std::vector<std::string>& includes)
 		{
 			std::lock_guard lock(mutex);
-			// Normalize paths
 			std::string normalizedHlsl = Util::FixFilePath(hlslFile);
-			// Remove any previous dependencies for this hlslFile
 			auto it = hlslToIncludes.find(normalizedHlsl);
 			if (it != hlslToIncludes.end()) {
 				for (const auto& oldInc : it->second) {
@@ -37,7 +39,10 @@ namespace SIE
 			}
 		}
 
-		// Called when a .hlsl file is deleted or recompiled (to clean up)
+		/**
+		 * @brief Removes all dependency records for a .hlsl file.
+		 * @param hlslFile Path to the .hlsl file being removed or recompiled.
+		 */
 		void UnregisterDependencies(const std::string& hlslFile)
 		{
 			std::lock_guard lock(mutex);
@@ -53,7 +58,11 @@ namespace SIE
 			}
 		}
 
-		// Get all .hlsl files that depend on a given .hlsli
+		/**
+		 * @brief Returns all .hlsl files that directly include the given file.
+		 * @param hlsliFile Path to the include file.
+		 * @return Paths of .hlsl files that depend on hlsliFile.
+		 */
 		std::vector<std::string> GetDependents(const std::string& hlsliFile)
 		{
 			std::lock_guard lock(mutex);
@@ -66,6 +75,7 @@ namespace SIE
 			return result;
 		}
 
+		/** @brief Removes all tracked dependencies. */
 		void Clear()
 		{
 			std::lock_guard lock(mutex);

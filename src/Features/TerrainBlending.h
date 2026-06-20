@@ -1,5 +1,6 @@
 #pragma once
 
+/** @brief Provides seamless depth-based blending between terrain and objects to eliminate harsh transitions. */
 struct TerrainBlending : Feature
 {
 private:
@@ -8,10 +9,12 @@ private:
 public:
 	virtual inline std::string GetName() override { return "Terrain Blending"; }
 	virtual std::string GetDisplayName() override { return T("feature.terrain_blending.name", "Terrain Blending"); }
+	/** @brief Returns the short identifier name. */
 	virtual inline std::string GetShortName() override { return "TerrainBlending"; }
 	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
 	virtual inline std::string_view GetShaderDefineName() override { return "TERRAIN_BLENDING"; }
 	virtual std::string_view GetCategory() const override { return FeatureCategories::kLandscapeAndTextures; }
+	/** @brief Returns a description and list of key features for the UI summary. */
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
 		return { T("feature.terrain_blending.description", "Provides seamless blending between terrain and objects, eliminating harsh transitions where objects meet the ground for more natural-looking landscapes."),
@@ -33,21 +36,28 @@ public:
 
 	Settings settings;
 
+	/** @brief Draws the ImGui settings panel for Terrain Blending configuration. */
 	virtual void DrawSettings() override;
 	virtual void LoadSettings(json& o_json) override;
 	virtual void SaveSettings(json& o_json) override;
 
+	/** @brief Creates GPU resources including depth textures, blended depth buffers, and stencil states. */
 	virtual void SetupResources() override;
 
+	/** @brief Returns the terrain depth vertex shader, compiling on first use. */
 	ID3D11VertexShader* GetTerrainVertexShader();
+	/** @brief Returns the terrain depth-offset vertex shader, compiling on first use. */
 	ID3D11VertexShader* GetTerrainOffsetVertexShader();
 
 	ID3D11VertexShader* terrainVertexShader = nullptr;
 	ID3D11VertexShader* terrainOffsetVertexShader = nullptr;
 
+	/** @brief Returns the depth blend compute shader, compiling on first use. */
 	ID3D11ComputeShader* GetDepthBlendShader();
 
+	/** @brief Installs rendering hooks for depth and batch rendering after plugin load. */
 	virtual void PostPostLoad() override;
+	/** @brief Disables the vanilla land fade INI setting after game data is loaded. */
 	virtual void DataLoaded() override;
 
 	bool renderDepth = false;
@@ -67,10 +77,14 @@ public:
 	std::vector<RenderPass> renderPasses;
 	std::vector<RenderPass> terrainRenderPasses;
 
+	/** @brief Applies terrain-specific vertex shader overrides and render target swaps during depth rendering. */
 	void TerrainShaderHacks();
 
+	/** @brief Clears the terrain depth stencil buffer to prepare for a new depth pass. */
 	void ResetDepth();
+	/** @brief Restores the original vertex shader and marks render targets dirty after terrain depth rendering. */
 	void ResetTerrainDepth();
+	/** @brief Blends the main and terrain depth buffers using a compute shader dispatch. */
 	void BlendPrepassDepths();
 
 	Texture2D* blendedDepthTexture = nullptr;
@@ -85,8 +99,10 @@ public:
 
 	ID3D11ComputeShader* depthBlendShader = nullptr;
 
+	/** @brief Releases all cached vertex and compute shaders for recompilation. */
 	virtual void ClearShaderCache() override;
 
+	/** @brief Executes deferred terrain and no-blend render passes with appropriate depth and alpha blending states. */
 	void RenderTerrainBlendingPasses();
 
 	struct Hooks

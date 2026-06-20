@@ -100,6 +100,7 @@ namespace globals
 
 	}
 
+	/** @brief GPU constant buffer layout matching Skyrim's per-frame camera data. */
 	struct FrameBuffer
 	{
 		Matrix CameraView;
@@ -119,24 +120,40 @@ namespace globals
 		float4 DynamicResolutionParams2;
 	};
 
+	/** @brief Cached snapshot of per-frame camera data, captured between Map/Unmap of the per-frame constant buffer. */
 	struct FrameBufferCache
 	{
 		FrameBuffer data;
 
+		/** Gets the camera view matrix. */
 		const Matrix& GetCameraView() const { return data.CameraView; }
+		/** Gets the camera projection matrix. */
 		const Matrix& GetCameraProj() const { return data.CameraProj; }
+		/** Gets the combined camera view-projection matrix. */
 		const Matrix& GetCameraViewProj() const { return data.CameraViewProj; }
+		/** Gets the unjittered camera view-projection matrix. */
 		const Matrix& GetCameraViewProjUnjittered() const { return data.CameraViewProjUnjittered; }
+		/** Gets the previous frame's unjittered view-projection matrix. */
 		const Matrix& GetCameraPreviousViewProjUnjittered() const { return data.CameraPreviousViewProjUnjittered; }
+		/** Gets the unjittered camera projection matrix. */
 		const Matrix& GetCameraProjUnjittered() const { return data.CameraProjUnjittered; }
+		/** Gets the inverse of the unjittered camera projection matrix. */
 		const Matrix& GetCameraProjUnjitteredInverse() const { return data.CameraProjUnjitteredInverse; }
+		/** Gets the inverse camera view matrix. */
 		const Matrix& GetCameraViewInverse() const { return data.CameraViewInverse; }
+		/** Gets the inverse camera view-projection matrix. */
 		const Matrix& GetCameraViewProjInverse() const { return data.CameraViewProjInverse; }
+		/** Gets the inverse camera projection matrix. */
 		const Matrix& GetCameraProjInverse() const { return data.CameraProjInverse; }
+		/** Gets the camera position adjustment vector. */
 		const float4& GetCameraPosAdjust() const { return data.CameraPosAdjust; }
+		/** Gets the previous frame's camera position adjustment vector. */
 		const float4& GetCameraPreviousPosAdjust() const { return data.CameraPreviousPosAdjust; }
+		/** Gets the frame parameters (timer, frame count, etc.). */
 		const float4& GetFrameParams() const { return data.FrameParams; }
+		/** Gets the first set of dynamic resolution parameters. */
 		const float4& GetDynamicResolutionParams1() const { return data.DynamicResolutionParams1; }
+		/** Gets the second set of dynamic resolution parameters. */
 		const float4& GetDynamicResolutionParams2() const { return data.DynamicResolutionParams2; }
 	};
 
@@ -160,6 +177,7 @@ namespace globals
 		extern RE::UI* ui;
 		extern RE::Calendar* calendar;
 		extern RE::ImageSpaceManager* imageSpaceManager;
+		extern bool* bEnableVolumetricLighting;
 		extern std::atomic<bool> quitGame;
 
 		extern RE::BSGraphics::PixelShader** currentPixelShader;
@@ -194,9 +212,17 @@ namespace globals
 	extern SIE::ShaderCache* shaderCache;
 	extern Profiler* profiler;
 
+	/** @brief Initializes core singletons (ShaderCache, State, Menu, Deferred). Called once at plugin load. */
 	void OnInit();
+	/** @brief Resolves runtime game pointers, RTTI relocations, and D3D device references. Called when the renderer is ready. */
 	void ReInit();
+	/** @brief Caches late-binding game singletons (player, sky, INI settings) after Skyrim's data files are loaded. */
 	void OnDataLoaded();
+	/** @brief Signals shader compilation to stop when the game window is closing. */
 	void OnGameWindowClose();
+	/**
+	 * @brief Installs Detours hooks on the device context's Map/Unmap vtable slots to capture per-frame constant buffer data.
+	 * @param a_context The D3D11 device context to hook.
+	 */
 	void InstallD3DHooks(ID3D11DeviceContext* a_context);
 }

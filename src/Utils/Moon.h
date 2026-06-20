@@ -3,16 +3,19 @@
 
 namespace Util::Moon
 {
-	// Moon phase intensity constants
+	/** @brief Intensity factor for a new (invisible) moon. */
 	static constexpr float NewMoonIntensityFactor = 0.05f;
+	/** @brief Intensity factor for crescent moon phases. */
 	static constexpr float CrescentMoonIntensityFactor = 0.25f;
+	/** @brief Intensity factor for a full moon. */
 	static constexpr float FullMoonIntensityFactor = 1.0f;
 
-	// Moon base colors (RGB/255)
+	/** @brief Base colour of Masser (the larger, reddish moon). */
 	static constexpr float4 MasserBaseColor = { 142.0f / 255.0f, 96.0f / 255.0f, 90.0f / 255.0f, 1.0f };
+	/** @brief Base colour of Secunda (the smaller, greyish moon). */
 	static constexpr float4 SecundaBaseColor = { 117.0f / 255.0f, 115.0f / 255.0f, 109.0f / 255.0f, 1.0f };
 
-	// Phase lookup table for determining moon phase from texture name
+	/** @brief Lookup table mapping texture name substrings to moon phase enums. */
 	static constexpr std::array<std::pair<std::string_view, RE::Moon::Phases::Phase>, 8> PhaseLookup{
 		{ { "full", RE::Moon::Phases::Phase::kFull },
 			{ "three_wan", RE::Moon::Phases::Phase::kWaningGibbous },
@@ -24,6 +27,18 @@ namespace Util::Moon
 			{ "three_wax", RE::Moon::Phases::Phase::kWaxingGibbous } }
 	};
 
+	/**
+	 * @brief Compute a brightness intensity factor for the given moon phase.
+	 *
+	 * Linearly interpolates between crescent and full intensity based on how far
+	 * the phase is from new moon.
+	 *
+	 * @param phase The moon phase to evaluate.
+	 * @param newMoon Intensity returned for a new moon.
+	 * @param crescent Intensity for the nearest crescent phase.
+	 * @param full Intensity for a full moon.
+	 * @return The interpolated intensity factor.
+	 */
 	inline float GetPhaseIntensityFactor(RE::Moon::Phases::Phase phase, float newMoon = NewMoonIntensityFactor, float crescent = CrescentMoonIntensityFactor, float full = FullMoonIntensityFactor)
 	{
 		if (phase == RE::Moon::Phases::Phase::kNewMoon) {
@@ -34,6 +49,15 @@ namespace Util::Moon
 		}
 	}
 
+	/**
+	 * @brief Determine the moon phase from a texture filename.
+	 *
+	 * Searches the texture name (case-insensitive) for phase substrings
+	 * such as "full", "new", "half_wan", etc.
+	 *
+	 * @param textureName The texture filename to parse.
+	 * @return The detected moon phase, defaulting to kFull if unrecognised or null.
+	 */
 	inline RE::Moon::Phases::Phase GetPhaseFromTexture(const char* textureName)
 	{
 		if (!textureName)
@@ -55,6 +79,12 @@ namespace Util::Moon
 		return RE::Moon::Phases::Phase::kFull;
 	}
 
+	/**
+	 * @brief Get the normalised world-space direction vector towards a moon.
+	 * @param moon The moon object to query.
+	 * @param applyMoonAndStarsCompat When true, applies axis swapping for Moon and Stars mod compatibility.
+	 * @return The unit direction vector, or straight up (0,0,1) if the moon is invalid.
+	 */
 	inline RE::NiPoint3 GetDirection(const RE::Moon* moon, bool applyMoonAndStarsCompat = false)
 	{
 		if (!moon || !moon->root)
@@ -71,6 +101,19 @@ namespace Util::Moon
 		return dir;
 	}
 
+	/**
+	 * @brief Compute the final blended colour contribution of a moon.
+	 *
+	 * Combines the moon's shader blend colour, base colour, phase intensity,
+	 * and alpha to produce a premultiplied RGBA colour.
+	 *
+	 * @param moon The moon object to evaluate.
+	 * @param baseColor The reference base colour for this moon (e.g. MasserBaseColor).
+	 * @param newMoon Intensity factor for the new moon phase.
+	 * @param crescent Intensity factor for crescent phases.
+	 * @param full Intensity factor for the full moon phase.
+	 * @return The premultiplied RGBA blend colour, or zero if the moon is invalid.
+	 */
 	inline float4 GetBlendColor(const RE::Moon* moon, const float4& baseColor, float newMoon = NewMoonIntensityFactor, float crescent = CrescentMoonIntensityFactor, float full = FullMoonIntensityFactor)
 	{
 		if (!moon || !moon->moonMesh)

@@ -7,10 +7,21 @@ struct LightEditor
 	bool disableRegularLights = false;
 	bool shadowsOnly = false;
 
+	/** @brief Draw the light editor ImGui settings panel. */
 	void DrawSettings();
+
+	/** @brief Gather all active scene lights into the internal list for display and editing. */
 	void GatherLights();
+
+	/** @brief Reset all light overrides to their original values. */
 	void ResetOverrides();
 
+	/**
+	 * @brief Apply editor overrides to a specific light during rendering.
+	 * @param niLight     The NiLight scene node to potentially override.
+	 * @param runtimeData The runtime light data extension to modify.
+	 * @return True if the light should be rendered, false if it should be suppressed.
+	 */
 	bool ApplyOverrides(RE::NiLight* niLight, ISLCommon::RuntimeLightDataExt* runtimeData) const;
 
 private:

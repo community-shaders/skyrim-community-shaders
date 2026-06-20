@@ -5,6 +5,7 @@
 class PaletteWindow
 {
 public:
+	/** @brief Returns the global PaletteWindow singleton instance. */
 	static PaletteWindow* GetSingleton()
 	{
 		static PaletteWindow singleton;
@@ -30,10 +31,26 @@ public:
 		bool isFavorite = false;
 	};
 
+	/** @brief Draw the palette window with colour and value tabs. */
 	void Draw();
+
+	/**
+	 * @brief Record usage of a colour for frequency and recency tracking.
+	 * @param color The RGB colour that was used.
+	 */
 	void TrackColorUsage(const float3& color);
+
+	/**
+	 * @brief Record usage of a named value for frequency and recency tracking.
+	 * @param name  Display name of the value (e.g. slider label).
+	 * @param value The float value that was committed.
+	 */
 	void TrackValueUsage(const std::string& name, float value);
+
+	/** @brief Persist palette entries (colours, values, favorites) to the editor settings. */
 	void Save();
+
+	/** @brief Load palette entries from the editor settings. */
 	void Load();
 
 private:

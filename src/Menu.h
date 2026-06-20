@@ -79,27 +79,36 @@ public:
 		FontRoleDescriptor{ "Subtext", "Subtext", 0.9f }
 	};
 
+	/** @brief Gets the serialization key for a font role */
 	static constexpr std::string_view GetFontRoleKey(FontRole role)
 	{
 		return FontRoleDescriptors[static_cast<size_t>(role)].key;
 	}
 
+	/** @brief Gets the human-readable display name for a font role */
 	static constexpr std::string_view GetFontRoleDisplayName(FontRole role)
 	{
 		return FontRoleDescriptors[static_cast<size_t>(role)].displayName;
 	}
 
+	/** @brief Gets the default size scale multiplier for a font role */
 	static constexpr float GetFontRoleDefaultScale(FontRole role)
 	{
 		return FontRoleDescriptors[static_cast<size_t>(role)].defaultScale;
 	}
 
+	/**
+	 * @brief Resolves a serialization key string to a FontRole enum value.
+	 * @param key The key string to look up (e.g. "Body", "Heading").
+	 * @return The matching FontRole, or std::nullopt if not found.
+	 */
 	static std::optional<FontRole> ResolveFontRole(std::string_view key);
 
 	~Menu();
 	Menu(const Menu&) = delete;
 	Menu& operator=(const Menu&) = delete;
 
+	/** @brief Gets the singleton Menu instance */
 	static Menu* GetSingleton()
 	{
 		static Menu menu;
@@ -109,28 +118,50 @@ public:
 	bool initialized = false;
 	bool IsEnabled = false;
 
+	/** @brief Loads menu settings from JSON, including legacy migration */
 	void Load(json& o_json);
+	/** @brief Saves menu settings to JSON */
 	void Save(json& o_json);
 
+	/** @brief Loads theme settings from a JSON object */
 	void LoadTheme(json& o_json);
+	/** @brief Saves current theme settings to a JSON object */
 	void SaveTheme(json& o_json);
 
 	// Multi-theme support
 	std::vector<std::string> DiscoverThemes();
+	/**
+	 * @brief Loads a theme preset by name from the themes directory.
+	 * @param themeName Name of the theme file (without extension).
+	 * @return True if the theme was loaded successfully.
+	 */
 	bool LoadThemePreset(const std::string& themeName);
+	/** @brief Creates built-in default theme files if they don't exist */
 	void CreateDefaultThemes();
 
+	/** @brief Initializes ImGui, loads fonts/icons, and sets up the rendering backend */
 	void Init();
+	/** @brief Draws the main settings window with all tabs and feature panels */
 	void DrawSettings();
 
 	// Search bar state
 	std::string featureSearch;  // For left pane feature search
+	/** @brief Draws the in-game performance/debug overlay */
 	void DrawOverlay();
+	/** @brief Draws the detached weather details editor window */
 	void DrawWeatherDetailsWindow();
 
+	/** @brief Translates raw Skyrim input events into the internal key event queue */
 	void ProcessInputEvents(RE::InputEvent* const* a_events);
+	/** @brief Returns true if the menu should consume all input (menu open or capturing hotkey) */
 	bool ShouldSwallowInput();
+	/** @brief Returns true if the free camera preview is in flying mode */
 	bool IsPreviewFlying();
+	/**
+	 * @brief Builds a deterministic string signature from current font configuration.
+	 * @param baseFontSize The base pixel size before per-role scaling.
+	 * @return A signature string used to detect when fonts need reloading.
+	 */
 	std::string BuildFontSignature(float baseFontSize) const;
 
 public:
@@ -175,6 +206,7 @@ public:
 
 	// Used for resetting input keys to solve alt-tab stuck issue
 	std::atomic<bool> focusChanged = false;
+	/** @brief Called on window focus change to reset stuck modifier key state */
 	void OnFocusChanged();
 
 	struct Constants
@@ -408,13 +440,17 @@ public:
 		};
 	};
 
+	/** @brief Gets the built-in default font role settings for the given role */
 	static const ThemeSettings::FontRoleSettings& GetDefaultFontRole(FontRole role);
 
 	// Named-map palette serialization (resilient to ImGui enum changes)
 	static void PaletteToJson(json& themeJson, const std::array<ImVec4, ImGuiCol_COUNT>& palette);
+	/** @brief Deserializes palette from named color map or legacy positional array */
 	static void PaletteFromJson(const json& themeJson, std::array<ImVec4, ImGuiCol_COUNT>& palette);
 
+	/** @brief Serializes cursor settings to JSON using named cursor type keys */
 	static void CursorToJson(json& cursorJson, const ThemeSettings::CursorSettings& cursorSettings);
+	/** @brief Deserializes cursor settings from named-key or legacy sparse-array format */
 	static void CursorFromJson(const json& cursorJson, ThemeSettings::CursorSettings& cursor);
 
 	struct Settings
@@ -437,14 +473,22 @@ public:
 		ThemeSettings Theme;
 		std::string SelectedThemePreset = "";  // Currently selected theme preset (empty = custom/user theme)
 	};
-	const ThemeSettings& GetTheme() const { return settings.Theme; }  // Provide read-only access to the Theme.
-	Settings& GetSettings() { return settings; }                      // Provide access to settings for other components
+	/** @brief Gets the current theme settings */
+	const ThemeSettings& GetTheme() const { return settings.Theme; }
+	/** @brief Gets the mutable menu settings */
+	Settings& GetSettings() { return settings; }
+	/** @brief Gets the menu settings */
 	const Settings& GetSettings() const { return settings; }
-	winrt::com_ptr<IDXGIAdapter3> GetDXGIAdapter3() const { return dxgiAdapter3; }  // Provide access to dxgiAdapter3
+	/** @brief Gets the DXGI adapter for GPU memory queries */
+	winrt::com_ptr<IDXGIAdapter3> GetDXGIAdapter3() const { return dxgiAdapter3; }
+	/** @brief Gets the mutable font role settings for the given role */
 	ThemeSettings::FontRoleSettings& GetFontRoleSettings(FontRole role) { return settings.Theme.FontRoles[static_cast<size_t>(role)]; }
+	/** @brief Gets the font role settings for the given role */
 	const ThemeSettings::FontRoleSettings& GetFontRoleSettings(FontRole role) const { return settings.Theme.FontRoles[static_cast<size_t>(role)]; }
+	/** @brief Gets the loaded ImFont pointer for the given role */
 	ImFont* GetFont(FontRole role) const { return loadedFontRoles[static_cast<size_t>(role)]; }
 
+	/** @brief Queues a feature to be selected in the left panel on the next frame */
 	void SelectFeatureMenu(const std::string& featureName);
 	static std::unordered_map<std::string, int> categoryCounts;  // Number of features in each feature category
 

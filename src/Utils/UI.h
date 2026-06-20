@@ -71,10 +71,10 @@ namespace Util
 
 	inline float GetUIScaleForBaseline(float baselineFontSize) { return ImGui::GetFontSize() / baselineFontSize; }
 
-	/// Returns a scale factor relative to the 1080p baseline font size.
+	/** @brief Returns a scale factor relative to the 1080p baseline font size. */
 	inline float GetUIScale() { return GetUIScaleForBaseline(kBaselineFontSize); }
 
-	/// Returns a scale factor for search controls authored against the 2K baseline.
+	/** @brief Returns a scale factor for search controls authored against the 2K baseline. */
 	inline float GetSearchUIScale() { return GetUIScaleForBaseline(ThemeManager::Constants::SEARCH_BASELINE_SCREEN_HEIGHT * ThemeManager::Constants::DEFAULT_FONT_RATIO); }
 
 	/**
@@ -325,15 +325,15 @@ namespace Util
 	/** Returns theme text color if monochrome icons enabled, otherwise white. */
 	ImVec4 GetIconTint();
 
-	/// Draws a theme-rounded hover/active fill over a button rect.
+	/** @brief Draws a theme-rounded hover/active fill over a button rect. */
 	bool DrawRoundedButtonHighlight(const ImRect& rect, bool hovered, bool active, ImDrawList* drawList = nullptr);
 	bool DrawRoundedButtonHighlight(const ImVec2& min, const ImVec2& max, bool hovered, bool active, ImDrawList* drawList = nullptr);
 	bool DrawRoundedButtonHighlight(const ImVec2& min, const ImVec2& max, bool hovered, bool active, float rounding, ImDrawList* drawList);
 
-	/// Draws the rounded hover/active fill for the last submitted item.
+	/** @brief Draws the rounded hover/active fill for the last submitted item. */
 	bool DrawCurrentItemRoundedButtonHighlight(ImDrawList* drawList = nullptr);
 
-	/// ImGui::Begin() wrappers that replace native title-bar button highlights with rounded ones.
+	/** @brief ImGui::Begin() wrappers that replace native title-bar button highlights with rounded ones. */
 	bool BeginWithRoundedClose(const char* name, bool* p_open, ImGuiWindowFlags flags = 0);
 	bool BeginPopupModalWithRoundedClose(const char* name, bool* p_open = nullptr, ImGuiWindowFlags flags = 0);
 

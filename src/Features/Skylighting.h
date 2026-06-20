@@ -1,5 +1,6 @@
 #pragma once
 
+/** @brief Simulates realistic ambient lighting by calculating sky occlusion via a 3D probe array. */
 struct Skylighting : Feature
 {
 private:
@@ -13,6 +14,7 @@ public:
 	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
 	virtual inline std::string_view GetShaderDefineName() override { return "SKYLIGHTING"; }
 	virtual std::string_view GetCategory() const override { return FeatureCategories::kLighting; }
+	/** @brief Returns a description and list of key features for the UI summary. */
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
 		return { T("feature.skylighting.description", "Simulates realistic ambient lighting by calculating sky occlusion and directional lighting, providing more accurate and natural illumination in outdoor environments."),
@@ -26,17 +28,23 @@ public:
 	virtual bool HasShaderDefine(RE::BSShader::Type) override { return true; };
 
 	virtual void RestoreDefaultSettings() override;
+	/** @brief Draws the ImGui settings panel for Skylighting configuration. */
 	virtual void DrawSettings() override;
 
 	virtual void LoadSettings(json& o_json) override;
 	virtual void SaveSettings(json& o_json) override;
 
+	/** @brief Creates GPU resources including occlusion textures, probe arrays, and samplers. */
 	virtual void SetupResources() override;
+	/** @brief Releases cached compute shaders and recompiles them. */
 	virtual void ClearShaderCache() override;
+	/** @brief Compiles the probe update compute shader from HLSL source. */
 	void CompileComputeShaders();
 
+	/** @brief Dispatches the probe update compute shader during the prepass stage. */
 	virtual void Prepass() override;
 
+	/** @brief Installs rendering hooks and registers event handlers after plugin load. */
 	virtual void PostPostLoad() override;
 
 	//////////////////////////////////////////////////////////////////////////////////
@@ -65,6 +73,11 @@ public:
 	};
 	static_assert(sizeof(SkylightingCB) % 16 == 0);
 
+	/**
+	 * @brief Builds the skylighting constant buffer data from current probe array state.
+	 * @param a_inWorld Whether the player is currently in an exterior worldspace.
+	 * @return Populated SkylightingCB structure, or zeroed if not in world or map menu is open.
+	 */
 	SkylightingCB GetCommonBufferData(bool a_inWorld);
 
 	winrt::com_ptr<ID3D11SamplerState> comparisonSampler = nullptr;
@@ -86,6 +99,7 @@ public:
 	float4 OcclusionDir;
 	uint frameCount = 0;
 
+	/** @brief Clears the accumulation frames array to force a full rebuild of skylighting probes. */
 	void ResetSkylighting();
 
 	std::chrono::time_point<std::chrono::system_clock> lastUpdateTimer = std::chrono::system_clock::now();
@@ -99,6 +113,7 @@ public:
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
+	/** @brief Renders the skylighting occlusion map using the precipitation rendering system. */
 	void RenderOcclusion();
 
 	struct Main_Precipitation_RenderOcclusion

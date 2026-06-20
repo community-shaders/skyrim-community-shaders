@@ -23,11 +23,13 @@ public:
 	virtual inline bool IsCore() const override { return false; }
 
 	virtual inline std::string_view GetShaderDefineName() override { return "HDR_OUTPUT"; }
+	/** @brief Returns true for ImageSpace and Sky shader types. */
 	virtual inline bool HasShaderDefine(RE::BSShader::Type shaderType) override
 	{
 		return shaderType == RE::BSShader::Type::ImageSpace || shaderType == RE::BSShader::Type::Sky;
 	}
 
+	/** @brief Returns a localized description and key feature bullet points for the UI. */
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
 		return { T("feature.hdr_display.description", "Real High Dynamic Range output for HDR displays."),
@@ -54,57 +56,108 @@ public:
 	Settings settings;
 	std::mutex settingsMutex;
 
+	/** @brief Resets HDR settings to defaults, auto-detecting HDR monitor status. */
 	virtual void RestoreDefaultSettings() override;
+	/** @brief Loads HDR settings from JSON and schedules auto-detection if needed. */
 	virtual void LoadSettings(json& o_json) override;
+	/** @brief Saves HDR settings to JSON (thread-safe). */
 	virtual void SaveSettings(json& o_json) override;
+	/** @brief Draws the ImGui settings UI for HDR enable, paper white, peak brightness, and UI brightness. */
 	virtual void DrawSettings() override;
 
+	/** @brief Enables the bUse64bitsHDRRenderTarget INI setting for float16 render targets. */
 	virtual void DataLoaded() override;
+	/** @brief Creates HDR, output, and UI textures, constant buffer, and upgrades LDR render targets. */
 	virtual void SetupResources() override;
+	/** @brief Releases cached HDR output and UI brightness compute shaders. */
 	virtual void ClearShaderCache() override;
+	/** @brief Installs HDR pipeline hooks when the Upscaling feature is not loaded. */
 	virtual void PostPostLoad() override;
 
+	/** @brief Returns the HDR shared data (enable flag, paper white, peak nits, menu scene encoding). */
 	float4 GetSharedDataHDR() const;
+	/** @brief Updates the HDR constant buffer with current settings and menu state. */
 	void UpdateHDRData() const;
+	/** @brief Sets the swap chain color space to HDR10 (PQ/BT.2020) or SDR (sRGB) based on settings. */
 	void UpdateSwapChainColorSpace() const;
 
-	// UI rendering - redirects UI to separate target for proper compositing
+	/** @brief Redirects UI rendering to the separate UI texture for HDR compositing. */
 	void BeginUIRendering();
+	/** @brief Restores the original render target after UI rendering. */
 	void EndUIRendering();
+	/** @brief Returns true while UI is being rendered to the separate UI texture. */
 	bool IsRenderingUI() const { return renderingUI; }
 
-	// Redirect kFRAMEBUFFER to hdrTexture (float16) so ISHDR writes HDR values >1.0
+	/** @brief Redirects kFRAMEBUFFER to the float16 HDR texture so ISHDR can write values above 1.0. */
 	void RedirectFramebuffer();
+	/** @brief Restores the original kFRAMEBUFFER texture, SRV, and RTV after HDR rendering. */
 	void RestoreFramebuffer();
 
-	// Frame Gen style UI buffer - redirects kFRAMEBUFFER.RTV for vanilla UI capture
+	/** @brief Redirects kFRAMEBUFFER.RTV to the UI texture for vanilla UI capture. */
 	void SetUIBuffer();
+	/** @brief Clears the UI texture and restores the original kFRAMEBUFFER.RTV. */
 	void ClearUIBuffer();
-	// Non-FG HDR: composite after Present-hook mods, then call DXGI Present once.
+	/** @brief Returns true when non-FG HDR deferred compositing is active (composite after Present-hook mods). */
 	bool UsesDeferredPresentComposite() const;
-	// Align kFRAMEBUFFER.RTV with uiTexture for engine paths (ImGui already bound OM).
+	/** @brief Aligns kFRAMEBUFFER.RTV with uiTexture for engine paths when ImGui has already bound the OM. */
 	void SyncFramebufferUIRedirect();
 
-	// Scale UI brightness in uiBufferWrapped for Frame Gen.
+	/** @brief Scales UI brightness in the Frame Gen UI buffer using the UI brightness compute shader. */
 	void ScaleUIBrightnessForFG();
+	/** @brief Returns true when the D3D12 UI buffer path should be used for frame generation. */
 	bool ShouldUseD3D12UIBuffer();
 
+	/** @brief Runs the HDR output compute shader to composite scene and UI, then copies to the back buffer. */
 	void ApplyHDR();
 
+	/** @brief Snapshots hdrTexture before the menu blur dirties it in place. */
+	void SnapshotCleanScene();
+
+	/** @brief Returns true when the snapshot was refreshed this frame; stale means hdrTexture wasn't blurred. */
+	bool IsCleanSceneCaptureFresh() const;
+
+	/** @brief Runs the HDR output transform on a clean scene (no UI buffer) and writes into outputTexture.
+	 *  @param sceneSRV The clean HDR scene SRV.
+	 *  @param sdrPreview If true, applies SDR preview transform instead of HDR output.
+	 *  @return The composed output texture.
+	 */
+	ID3D11Texture2D* ComposeCleanCapture(ID3D11ShaderResourceView* sceneSRV, bool sdrPreview);
+
+	/**
+	 * @brief Returns a patched blend state with corrected alpha blending for HDR UI compositing.
+	 * @param original The original blend state to potentially patch.
+	 * @return The patched blend state, or the original if no patch is needed.
+	 */
 	ID3D11BlendState* GetPatchedAlphaBlendState(ID3D11BlendState* original);
 
-	// Swap-chain Present hook (installed from Hooks::InitD3D).
+	/**
+	 * @brief Installs swap chain Present vtable hooks and OMSetBlendState detour for HDR pipeline.
+	 * @param swapChain The DXGI swap chain to hook.
+	 */
 	static void InstallSwapChainPresentHooks(IDXGISwapChain* swapChain);
+	/**
+	 * @brief Handles the swap chain Present call, drawing ImGui overlay and running HDR compositing.
+	 * @param swapChain The DXGI swap chain.
+	 * @param syncInterval VSync interval.
+	 * @param flags Present flags.
+	 * @param presentChain The original Present call chain to invoke.
+	 * @return The HRESULT from the final Present call.
+	 */
 	HRESULT HandleSwapChainPresent(
 		IDXGISwapChain* swapChain,
 		UINT syncInterval,
 		UINT flags,
 		const std::function<HRESULT(IDXGISwapChain*, UINT, UINT)>& presentChain);
 
-	// Used by the swap-chain Present bottom hook while deferred compositing runs.
+	/** @brief Returns true while the Present bottom hook is suppressed during deferred compositing. */
 	bool IsPresentSuppressed() const { return presentSuppressed; }
+	/**
+	 * @brief Sets whether the Present bottom hook should be suppressed.
+	 * @param value True to suppress, false to allow.
+	 */
 	void SetPresentSuppressed(bool value) { presentSuppressed = value; }
 
+	/** @brief Releases all HDR textures, constant buffers, and restores LDR render targets. */
 	void DestroyResources();
 
 	XM_ALIGNED_STRUCT(16)
@@ -118,28 +171,41 @@ public:
 		float isSceneLinear;             ///< 1.0 = Linear Lighting active, scene already linear
 		float pad0;                      ///< 1.0 = main menu/loading screen active
 		float fgTweenMenuMidAlphaBoost;  ///< 1.0 = TweenMenu (pause) open — FG UIBrightnessCS mid-alpha boost only
+		float previewSDR;                ///< 1.0 = emit sRGB SDR (crop preview) instead of PQ HDR10
+		float pad1;
+		float pad2;
+		float pad3;
 	};
 
 	static_assert((sizeof(HDRDataCB) % 16) == 0, "CB size not padded correctly");
+
+	// HDR data CB contents from current settings/game state (previewSDR=0).
+	HDRDataCB BuildHDRData() const;
 
 	ConstantBuffer* hdrDataCB = nullptr;
 
 	Texture2D* hdrTexture = nullptr;
 	Texture2D* outputTexture = nullptr;
-	Texture2D* uiTexture = nullptr;  // Separate UI render target for proper compositing
+	Texture2D* uiTexture = nullptr;          // Separate UI render target for proper compositing
+	Texture2D* cleanSceneCapture = nullptr;  // Pre-blur copy of hdrTexture for clean captures
+	uint cleanSceneCaptureFrame = UINT32_MAX;  // frameCount when cleanSceneCapture was last refreshed
 
 	ID3D11ComputeShader* hdrOutputCS = nullptr;
+	/** @brief Returns the HDR output compute shader, compiling it on first use. */
 	ID3D11ComputeShader* GetHDROutputCS();
 
 	ID3D11ComputeShader* uiBrightnessCS = nullptr;
+	/** @brief Returns the UI brightness scaling compute shader, compiling it on first use. */
 	ID3D11ComputeShader* GetUIBrightnessCS();
 
-	static bool DetectHDR();             // Returns true if Windows HDR is currently active (enabled in OS settings)
+	/** @brief Detects whether Windows HDR is currently active on the swap chain's monitor. */
+	static bool DetectHDR();
 	static bool isHDRMonitor;            // Windows HDR is active (enabled in OS settings)
 	static bool isHDRCapableMonitor;     // Monitor supports HDR but Windows HDR may be off
 	static bool wasExclusiveFullscreen;  // EFS detected at swapchain creation; incompatible with HDR
 	bool pendingAutoDetect = false;
 
+	/** @brief Queries the DXGI output for the display's maximum luminance in nits. */
 	float GetDisplayMaxLuminance() const;
 	mutable float cachedDisplayMaxLuminance = 1000.0f;
 
@@ -154,8 +220,9 @@ public:
 	ID3D11ShaderResourceView* savedFramebufferSRV = nullptr;
 	bool framebufferRedirected = false;
 
-	// Upgraded LDR render targets (post-tonemapping targets need float16 for HDR values)
+	/** @brief Upgrades post-tonemapping LDR render targets to R16G16B16A16_FLOAT for HDR values. */
 	void UpgradeLDRRenderTargets();
+	/** @brief Restores all upgraded render targets to their original format and releases upgraded resources. */
 	void RestoreLDRRenderTargets();
 
 	struct SavedRenderTarget
@@ -192,6 +259,9 @@ private:
 	};
 
 	D3D12UIBufferMode GetD3D12UIBufferMode();
+
+	// Bind scene (t0), UI (t1, may be null), UAV (u0), CB (b0); dispatch the output CS; unbind.
+	void DispatchHDROutput(ID3D11ShaderResourceView* sceneSRV, ID3D11ShaderResourceView* uiSRV, ID3D11UnorderedAccessView* uav);
 
 	// True when FFX frame generation is actively compositing UI this frame.
 	bool IsFGCompositingThisFrame() const;

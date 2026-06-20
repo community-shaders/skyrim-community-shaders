@@ -32,6 +32,7 @@ public:
 		frameTimingFrequency.QuadPart = 0;
 		frameStartTime.QuadPart = 0;
 	}
+	/** @brief Acquires the stats mutex and returns a scoped lock guard. */
 	std::lock_guard<std::mutex> Lock() { return std::lock_guard<std::mutex>(statsMutex); }
 
 	static State* GetSingleton()
@@ -61,8 +62,8 @@ public:
 	int drawCalls[RE::BSShader::Type::Total + 1];
 
 	// Frame time tracking per shader type (in milliseconds)
-	float frameTimePerType[RE::BSShader::Type::Total + 1];
-	float smoothFrameTimePerType[RE::BSShader::Type::Total + 1];
+	float frameTimePerType[RE::BSShader::Type::Total + 1];      ///< Per-type frame time in milliseconds.
+	float smoothFrameTimePerType[RE::BSShader::Type::Total + 1]; ///< EMA-smoothed per-type frame time in milliseconds.
 
 	// Timing state for per-type frame time tracking using QueryPerformanceCounter
 	LARGE_INTEGER frameTimingFrequency;
@@ -77,74 +78,127 @@ public:
 		THEME
 	};
 
+	/** @brief Per-draw-call hook: updates feature state, constant buffers, and overlay. */
 	void Draw();
+	/** @brief Accumulates per-shader-type draw call counts and frame timing for the performance overlay. */
 	void Debug();
+	/** @brief Per-frame reset: advances timer, caches menu state, resets descriptors and frame counters. */
 	void Reset();
+	/** @brief One-time post-D3D setup: creates resources, probes GPU caps, initializes features. */
 	void Setup();
 
+	/**
+	 * @brief Loads settings from disk (default, then user, then overrides).
+	 * @param a_configMode Which config file to load.
+	 * @param a_allowReload If true, retries once after a parse error.
+	 */
 	void Load(ConfigMode a_configMode = ConfigMode::USER, bool a_allowReload = true);
+	/**
+	 * @brief Persists current settings to the config file for the given mode.
+	 * @param a_configMode Which config file to write.
+	 */
 	void Save(ConfigMode a_configMode = ConfigMode::USER);
 
-	// In-memory serialization for A/B testing (avoids disk I/O during swaps)
+	/**
+	 * @brief Serializes all settings to a JSON object (in-memory, no disk I/O).
+	 * @param o_json Output JSON object to populate.
+	 */
 	void SaveToJson(nlohmann::json& o_json);
+	/**
+	 * @brief Restores settings from a JSON object (in-memory, no disk I/O).
+	 * @param i_json Input JSON object to read from.
+	 */
 	void LoadFromJson(nlohmann::json& i_json);
 
+	/** @brief Loads the active theme preset from the menu settings. */
 	void LoadTheme();
+	/** @brief No-op kept for backward compatibility; theme is now saved with user settings. */
 	void SaveTheme();
 
+	/**
+	 * @brief Validates the disk shader cache against all loaded features.
+	 * @param a_ini The cache INI to validate against.
+	 * @return True if all feature cache entries are still valid.
+	 */
 	bool ValidateCache(CSimpleIniA& a_ini);
+	/**
+	 * @brief Writes each feature's cache metadata into the disk cache INI.
+	 * @param a_ini The cache INI to write into.
+	 */
 	void WriteDiskCacheInfo(CSimpleIniA& a_ini);
 
+	/**
+	 * @brief Sets the global log level and flushes on that level.
+	 * @param a_level The spdlog severity level to apply.
+	 */
 	void SetLogLevel(spdlog::level::level_enum a_level = spdlog::level::info);
 	spdlog::level::level_enum GetLogLevel();
 
+	/**
+	 * @brief Parses a semicolon-delimited "NAME=VALUE" string into shader defines.
+	 * @param defines Semicolon-separated define string (e.g. "FOO=1;BAR=2").
+	 */
 	void SetDefines(std::string defines);
 	std::vector<std::pair<std::string, std::string>>* GetDefines();
 
-	/*
-     * Whether a_type is currently enabled in Community Shaders
-     *
-     * @param a_type The type of shader to check
-     * @return Whether the shader has been enabled.
-     */
+	/**
+	 * @brief Checks whether the given shader type is enabled.
+	 * @param a_type The type of shader to check.
+	 * @return True if the shader type is enabled.
+	 */
 	bool ShaderEnabled(const RE::BSShader::Type a_type);
 
-	/*
-     * Whether a_shader is currently enabled in Community Shaders
-     *
-     * @param a_shader The shader to check
-     * @return Whether the shader has been enabled.
-     */
+	/**
+	 * @brief Checks whether the given shader is enabled.
+	 * @param a_shader The shader to check.
+	 * @return True if the shader is enabled.
+	 */
 	bool IsShaderEnabled(const RE::BSShader& a_shader);
 
-	/*
-     * Whether developer mode is enabled allowing advanced options.
-	 * Use at your own risk! No support provided.
-     *
-	 * <p>
-	 * Developer mode is active when the log level is trace or debug.
-	 * </p>
+	/**
+	 * @brief Checks whether developer mode is active (log level is trace or debug).
 	 *
-     * @return Whether in developer mode.
-     */
+	 * Developer mode enables advanced options. Use at your own risk.
+	 * @return True if in developer mode.
+	 */
 	bool IsDeveloperMode();
 
+	/**
+	 * @brief Adds UAV access support to a render target.
+	 * @param a_targetIndex The render target to modify.
+	 * @param a_properties The target's properties (modified in place).
+	 */
 	void ModifyRenderTarget(RE::RENDER_TARGETS::RENDER_TARGET a_targetIndex, RE::BSGraphics::RenderTargetProperties& a_properties);
 
+	/** @brief Allocates constant buffers, Tracy context, and profiler resources. */
 	void SetupResources();
 
-	/// @brief Log per-format support for D3D11_FORMAT_SUPPORT2_UAV_TYPED_LOAD.
-	///        We perform typed UAV loads on a number of non-guaranteed formats; on GPUs
-	///        that lack TypedUAVLoadAdditionalFormats those reads return undefined data.
-	///        Called once at startup; emits one info line per supported format and one
-	///        warn line per unsupported format with the feature that needs it.
+	/**
+	 * @brief Logs per-format support for D3D11_FORMAT_SUPPORT2_UAV_TYPED_LOAD.
+	 *
+	 * We perform typed UAV loads on a number of non-guaranteed formats; on GPUs
+	 * that lack TypedUAVLoadAdditionalFormats those reads return undefined data.
+	 * Called once at startup; emits one info line per supported format and one
+	 * warn line per unsupported format with the feature that needs it.
+	 */
 	void CheckTypedUAVLoadSupport();
+	/**
+	 * @brief Strips and rewrites shader descriptor bits for Community Shaders' pipeline.
+	 * @param a_shader The shader being compiled.
+	 * @param a_vertexDescriptor Vertex descriptor flags (modified in place).
+	 * @param a_pixelDescriptor Pixel descriptor flags (modified in place).
+	 * @param a_forceDeferred If true, forces the Deferred flag regardless of current pass.
+	 */
 	void ModifyShaderLookup(const RE::BSShader& a_shader, uint& a_vertexDescriptor, uint& a_pixelDescriptor, bool a_forceDeferred = false);
 
+	/** @brief Opens a named GPU performance event (D3D annotation + Tracy zone). */
 	void BeginPerfEvent(std::string_view title);
+	/** @brief Closes the most recent GPU performance event. */
 	void EndPerfEvent();
+	/** @brief Inserts a single-point GPU performance marker. */
 	void SetPerfMarker(std::string_view title);
 
+	/** @brief Converts and stores the GPU adapter description from wide string. */
 	void SetAdapterDescription(const std::wstring& description);
 
 	bool frameAnnotations = false;
@@ -203,7 +257,9 @@ public:
 	bool isMainMenuOpen = false;
 	bool isLoadingMenuOpen = false;
 	bool isMapMenuOpen = false;
+	/** @brief Returns true if the cached main-menu or loading-menu state is open. */
 	bool IsMainOrLoadingMenuOpen() const { return isMainMenuOpen || isLoadingMenuOpen; }
+	/** @brief Returns true if main/loading menu is open, with a live fallback query via the UI pointer. */
 	bool IsMainOrLoadingMenuOpen(RE::UI* ui) const
 	{
 		return IsMainOrLoadingMenuOpen() ||

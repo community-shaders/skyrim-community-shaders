@@ -27,7 +27,7 @@ namespace BackgroundBlur
 
 	void SetEnabled(bool enable);
 
-	/// When true, a single fullscreen blur replaces per-window blur (CS editor mode)
+	/** @brief When true, a single fullscreen blur replaces per-window blur (CS editor mode). */
 	void SetCSEditorActive(bool active);
 	bool IsCSEditorActive();
 

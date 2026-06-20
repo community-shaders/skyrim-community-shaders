@@ -7,6 +7,12 @@
 #include <vector>
 #include <winrt/base.h>
 
+/**
+ * @brief GPU and CPU profiler using D3D11 timestamp queries.
+ *
+ * Maintains a ring buffer of frames with paired begin/end timestamp queries
+ * and rolling statistics (average, p95, p99) per named pass.
+ */
 class Profiler
 {
 public:
@@ -16,6 +22,7 @@ public:
 
 	using PerfEventCallback = std::function<void(std::string_view)>;
 
+	/** @brief Circular buffer tracking per-timer timing samples with statistics. */
 	struct RollingHistory
 	{
 		float history[kHistorySize]{};
@@ -23,6 +30,7 @@ public:
 		uint32_t count = 0;
 		float lastMs = 0.0f;
 
+		/** @brief Appends a timing sample, overwriting the oldest if full. */
 		void PushSample(float ms)
 		{
 			history[head] = ms;
@@ -32,10 +40,17 @@ public:
 			lastMs = ms;
 		}
 
+		/** @brief Gets the arithmetic mean of all buffered samples. */
 		float GetAverage() const;
+
+		/**
+		 * @brief Gets an interpolated percentile from the buffered samples.
+		 * @param p Percentile in [0, 100].
+		 */
 		float GetPercentile(float p) const;
 	};
 
+	/** @brief Snapshot of GPU/CPU timing data for a single named pass. */
 	struct TimerResult
 	{
 		std::string name;
@@ -53,6 +68,10 @@ public:
 		uint32_t historyHead = 0;
 		uint32_t historyCount = 0;
 
+		/**
+		 * @brief Gets a history sample by age-ordered index (0 = oldest).
+		 * @param index Zero-based index into the history ring buffer.
+		 */
 		float GetHistorySample(uint32_t index) const
 		{
 			if (!historyBuffer || index >= historyCount)
@@ -61,24 +80,52 @@ public:
 		}
 	};
 
+	/**
+	 * @brief Creates timestamp query objects and prepares the frame ring buffer.
+	 * @param device D3D11 device used to create query objects.
+	 * @param context Device context used for issuing and collecting queries.
+	 */
 	void Initialize(ID3D11Device* device, ID3D11DeviceContext* context);
+
+	/** @brief Releases all D3D11 query objects and resets state. */
 	void Release();
 
+	/**
+	 * @brief Registers optional callbacks invoked at pass begin/end (e.g. for RenderDoc markers).
+	 * @param beginCb Called with the pass name when a pass begins.
+	 * @param endCb Called when a pass ends.
+	 */
 	void SetPerfEventCallbacks(PerfEventCallback beginCb, PerfEventCallback endCb)
 	{
 		beginPerfEvent = std::move(beginCb);
 		endPerfEvent = std::move(endCb);
 	}
 
+	/** @brief Begins a new profiling frame; collects results from the oldest in-flight frame. */
 	void BeginFrame();
+
+	/**
+	 * @brief Begins a named GPU/CPU timing pass within the current frame.
+	 * @param name Pass identifier (e.g. "Feature::PassName"). Implicitly calls BeginFrame if needed.
+	 */
 	void BeginPass(const std::string& name);
+
+	/** @brief Ends the current timing pass and records the CPU/GPU timestamps. */
 	void EndPass();
+
+	/** @brief Ends the current profiling frame and advances the ring buffer write cursor. */
 	void EndFrame();
 
+	/** @brief Gets the per-pass timing results from the last collected frame. */
 	const std::vector<TimerResult>& GetResults() const { return results; }
+
+	/** @brief Gets the total GPU time in milliseconds for the last collected frame. */
 	float GetTotalTimeMs() const { return totalTimeMs; }
+
+	/** @brief Gets the total CPU time in milliseconds for the last collected frame. */
 	float GetCpuTotalTimeMs() const { return cpuTotalTimeMs; }
 
+	/** @brief Resets all timer history and results. */
 	void ClearTimers()
 	{
 		results.clear();
@@ -88,6 +135,10 @@ public:
 		cpuTotalTimeMs = 0.0f;
 	}
 
+	/**
+	 * @brief Removes all timers whose names start with the given feature prefix.
+	 * @param featureName Feature name; timers matching "featureName::*" are removed.
+	 */
 	void ClearTimersForFeature(const std::string& featureName)
 	{
 		std::string prefix = featureName + "::";

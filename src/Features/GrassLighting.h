@@ -9,6 +9,7 @@ public:
 	virtual std::string GetDisplayName() override { return T("feature.grass_lighting.name", "Grass Lighting"); }
 	virtual inline std::string GetShortName() override { return "GrassLighting"; }
 	virtual inline std::string_view GetShaderDefineName() override { return "GRASS_LIGHTING"; }
+	/** @brief Returns true only for Grass shader type. */
 	virtual bool HasShaderDefine(RE::BSShader::Type shaderType) override { return shaderType == RE::BSShader::Type::Grass; };
 	virtual std::string_view GetCategory() const override { return FeatureCategories::kGrass; }
 
@@ -36,11 +37,11 @@ public:
 
 	Settings settings;
 
+	/** @brief Draws the ImGui settings UI for grass specular, SSS, and lighting options. */
 	virtual void DrawSettings() override;
 
 	virtual void LoadSettings(json& o_json) override;
 	virtual void SaveSettings(json& o_json) override;
-
 	virtual void RestoreDefaultSettings() override;
 
 };

@@ -20,12 +20,15 @@ public:
 				T("feature.hair_specular.key_feature_4", "Tangent shift texture support for varied hair highlights") } };
 	};
 
+	/** @brief Returns true only for Lighting shader type. */
 	virtual bool HasShaderDefine(RE::BSShader::Type shaderType) override { return shaderType == RE::BSShader::Type::Lighting; };
 
 	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
 
+	/** @brief Binds the tangent shift texture as a pixel shader resource. */
 	virtual void Prepass() override;
 
+	/** @brief Loads the tangent shift DDS texture from disk and creates its SRV. */
 	virtual void SetupResources() override;
 
 	struct alignas(16) Settings
@@ -52,11 +55,11 @@ public:
 
 	eastl::unique_ptr<Texture2D> texTangentShift = nullptr;
 
+	/** @brief Draws the ImGui settings UI for hair shading model, specular, and self-shadow options. */
 	virtual void DrawSettings() override;
 
 	virtual void LoadSettings(json& o_json) override;
 	virtual void SaveSettings(json& o_json) override;
-
 	virtual void RestoreDefaultSettings() override;
 
 };

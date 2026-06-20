@@ -175,9 +175,11 @@ public:
 	bool previousUpscalingWasActive = false;
 	bool depthUpscaleUseWideKernel = false;
 
-	/// Set by MenuOpenCloseEventHandler when LoadingMenu closes (cell/worldspace transitions,
-	/// initial load). Consumed at the start of Upscale() to force a one-frame DLSS feature
-	/// rebuild.
+	/**
+	 * Set by MenuOpenCloseEventHandler when LoadingMenu closes (cell/worldspace transitions,
+	 * initial load). Consumed at the start of Upscale() to force a one-frame DLSS feature
+	 * rebuild.
+	 */
 	std::atomic<bool> pendingDLSSReset{ false };
 
 	void CopySharedD3D12Resources();

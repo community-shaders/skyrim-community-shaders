@@ -38,18 +38,27 @@ namespace legit
 #undef RGBA_LE
 	}
 
+	/** @brief A single profiling task with timing, name, and display colour. */
 	struct ProfilerTask
 	{
 		double startTime;
 		double endTime;
 		std::string name;
 		uint32_t color;
+
+		/** @brief Get the duration of this task in seconds. */
 		double GetLength() { return endTime - startTime; }
 	};
 }
 
 namespace ImGuiUtils
 {
+	/**
+	 * @brief ImGui widget that renders a scrolling profiler graph with per-frame task bars and a legend.
+	 *
+	 * Maintains a ring buffer of frame data and renders a stacked bar chart showing per-task
+	 * timing alongside a sorted legend of the most significant tasks.
+	 */
 	class ProfilerGraph
 	{
 	public:
@@ -57,6 +66,10 @@ namespace ImGuiUtils
 		int frameSpacing;
 		bool useColoredLegendText;
 
+		/**
+		 * @brief Construct a profiler graph with a fixed ring buffer size.
+		 * @param framesCount Number of frames to keep in the ring buffer.
+		 */
 		ProfilerGraph(size_t framesCount)
 		{
 			frames.resize(framesCount);
@@ -67,6 +80,15 @@ namespace ImGuiUtils
 			useColoredLegendText = false;
 		}
 
+		/**
+		 * @brief Load task data for the current frame into the ring buffer.
+		 *
+		 * Adjacent tasks with the same name and colour are merged. Statistics
+		 * are rebuilt after insertion.
+		 *
+		 * @param tasks Array of profiler tasks for this frame.
+		 * @param count Number of tasks in the array.
+		 */
 		void LoadFrameData(const legit::ProfilerTask* tasks, size_t count)
 		{
 			auto& currFrame = frames[currFrameIndex];
@@ -114,13 +136,28 @@ namespace ImGuiUtils
 			RebuildTaskStats(currFrameIndex, 300);
 		}
 
+		/**
+		 * @brief Get the total task time for a frame at the given offset from the current frame.
+		 * @param frameIndexOffset Offset backwards from the current frame index.
+		 * @return Total accumulated task time for that frame.
+		 */
 		float GetTotalTaskTime(int frameIndexOffset)
 		{
 			return frames[GetCurrFrameIndex(frameIndexOffset)].totalTime;
 		}
 
+		/** @brief Get the smoothed peak frame time across recent frames. */
 		float GetPeakFrameTime() const { return peakFrameTime; }
 
+		/**
+		 * @brief Render the profiler graph and optional legend into the current ImGui window.
+		 * @param graphWidth Width of the graph area in pixels.
+		 * @param legendWidth Width of the legend area (0 to hide legend).
+		 * @param height Height of the entire widget in pixels.
+		 * @param frameIndexOffset Offset backwards from the current frame to display.
+		 * @param maxFrameTime Time value corresponding to the full graph height.
+		 * @param uiScale DPI scale factor for rendering.
+		 */
 		void RenderTimings(float graphWidth, float legendWidth, float height, int frameIndexOffset, float maxFrameTime, float uiScale = 1.0f)
 		{
 			ImDrawList* drawList = ImGui::GetWindowDrawList();

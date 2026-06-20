@@ -292,15 +292,19 @@ bool Widget::BeginWidgetWindow()
 void Widget::ForceWeatherReinit(RE::TESWeather* weather)
 {
 	auto* sky = globals::game::sky;
-	if (weather && sky && sky->currentWeather == weather)
+	if (weather && sky && sky->currentWeather == weather) {
 		sky->ForceWeather(weather, true);
+		sky->ReleaseWeatherOverride();
+	}
 }
 
 void Widget::ForceCurrentWeatherReinit()
 {
 	auto* sky = globals::game::sky;
-	if (sky && sky->currentWeather)
+	if (sky && sky->currentWeather) {
 		sky->ForceWeather(sky->currentWeather, true);
+		sky->ReleaseWeatherOverride();
+	}
 }
 
 void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSaveLoadRevert, bool showForceWeather, RE::TESWeather* weather)
