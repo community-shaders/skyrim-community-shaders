@@ -421,10 +421,7 @@ void DynamicCubemaps::Irradiance(bool a_reflections, uint32_t a_startLevel, uint
 			context->CopySubresourceRegion(a_reflections ? envReflectionsTexture->resource.get() : envTexture->resource.get(), D3D11CalcSubresource(0, face, MIPLEVELS), 0, 0, 0, envInferredTexture->resource.get(), srcSubresourceIndex, nullptr);
 		}
 
-		// GenerateMips uses the graphics pipeline internally (hardware bilinear blit),
-		// causing a compute->graphics->compute pipeline switch. Keeping it in the same
-		// sub-pass as the level-1 dispatch (the mip it feeds) avoids a GPU stall on the
-		// following frame where the SRV would otherwise appear stale.
+
 		auto srv = envInferredTexture->srv.get();
 		context->GenerateMips(srv);
 	}
@@ -529,9 +526,7 @@ void DynamicCubemaps::CompressToBC6H(bool a_reflections)
 		context->CSSetShader(nullptr, nullptr, 0);
 	}
 
-	// BC formats are bitwise-compatible with matching block-equivalent uncompressed
-	// formats for CopyResource: an R32G32B32A32_UINT (W/4 × H/4) resource maps 1:1
-	// to a BC6H_UF16 (W × H) resource because each block is 16 bytes either way.
+
 	auto dst = a_reflections ? envReflectionsTextureBC6H : envTextureBC6H;
 	context->CopyResource(dst->resource.get(), bc6hScratchTexture->resource.get());
 }
@@ -570,14 +565,8 @@ void DynamicCubemaps::UpdateCubemap()
 		recompileFlag = false;
 	}
 
-	// IrradianceB (6 dispatches, levels 2-7) averages ~45us total, dominated by per-dispatch
-	// driver overhead (~7.4us/dispatch). Splitting off the last level (1 dispatch, ~7us) and
-	// pairing it with BC6H(~32us) gives three near-equal frames per chain:
-	//   kCaptureInferAndIrradianceA:  C(14) + I(15) + IA(13) = ~42us
-	//   kIrradianceBA:                levels 2-6 (5 dispatches) = ~37us
-	//   kIrradianceBBAndBC6H:         level 7 (1 dispatch, ~7us) + BC6H(~32us) = ~39us
-	static constexpr uint32_t kIrradianceSplit  = 2;             // IA: [1, kIrradianceSplit)
-	static constexpr uint32_t kIrradianceSplitB = MIPLEVELS - 1; // BA: [kIrradianceSplit, kIrradianceSplitB), BB: [kIrradianceSplitB, MIPLEVELS)
+	static constexpr uint32_t kIrradianceSplit  = 2;
+	static constexpr uint32_t kIrradianceSplitB = MIPLEVELS - 1;
 
 	switch (nextTask) {
 	case NextTask::kCaptureInferAndIrradianceA:

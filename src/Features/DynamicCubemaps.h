@@ -93,17 +93,10 @@ public:
 
 	enum class NextTask
 	{
-		// IrradianceB (levels 2-7) costs ~45us total from 6 small dispatches.
-		// Per-dispatch overhead is ~7.4us each, with the compute work shrinking rapidly.
-		// Splitting off the last level (level 7, ~7us) and combining it with BC6H(~32us)
-		// gives three near-equal frames per chain:
-		//   kCaptureInferAndIrradianceA:  C+I+IA          ~39us
-		//   kIrradianceBA:                levels 2-6       ~37us
-		//   kIrradianceBBAndBC6H:         level 7 + BC6H   ~7+32 = 39us
-		kCaptureInferAndIrradianceA,   // Capture + Inferrence + IrradianceA (chain 1): ~39us
-		kIrradianceBA,                 // mip levels 2-6 (5 dispatches, chain 1): ~37us
-		kIrradianceBBAndBC6H,          // mip level 7 + BC6H compress (chain 1): ~39us
-		kCaptureInferAndIrradianceA2,  // chain 2 equivalents (reflections only):
+		kCaptureInferAndIrradianceA,
+		kIrradianceBA,
+		kIrradianceBBAndBC6H,
+		kCaptureInferAndIrradianceA2,
 		kIrradianceBA2,
 		kIrradianceBBAndBC6H2,
 	};
