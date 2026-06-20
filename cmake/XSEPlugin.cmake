@@ -47,6 +47,13 @@ if(NOT DEFINED CACHE{CMAKE_INTERPROCEDURAL_OPTIMIZATION})
 endif()
 set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_DEBUG OFF)
 
+if(NOT DEFINED COMMONLIB_PREBUILT)
+	set(COMMONLIB_PREBUILT ON CACHE BOOL "Use prebuilt CommonLibSSE" FORCE)
+endif()
+if(NOT DEFINED COMMONLIB_PREBUILT_MULTICONFIG)
+	set(COMMONLIB_PREBUILT_MULTICONFIG ON CACHE BOOL "Use prebuilt CommonLibSSE in multi-config generators" FORCE)
+endif()
+
 set(Boost_USE_STATIC_LIBS ON)
 set(Boost_USE_STATIC_RUNTIME ON)
 
@@ -55,6 +62,13 @@ set(BUILD_TESTS OFF)
 # Define _WINDOWS for all Windows builds (required by FidelityFX API loader)
 if(WIN32)
 	add_compile_definitions(_WINDOWS)
+endif()
+
+if(MSVC)
+	add_compile_definitions(
+		$<$<CONFIG:DEBUG>:_ITERATOR_DEBUG_LEVEL=0>
+		$<$<CONFIG:DEBUG>:_HAS_ITERATOR_DEBUGGING=0>
+	)
 endif()
 
 # Build flavors (Release config), selected by presets:
@@ -166,6 +180,20 @@ endif()
 
 add_subdirectory(${CommonLibPath} ${CommonLibName} EXCLUDE_FROM_ALL)
 
+# Map Debug to Release imported location for the prebuilt CommonLibSSE target.
+# This ensures that Debug builds of the plugin link against the prebuilt Release
+# CommonLibSSE.lib instead of compiling it from source.
+if(TARGET CommonLibSSE)
+	get_target_property(_imported CommonLibSSE IMPORTED)
+	if(_imported)
+		get_target_property(_loc_release CommonLibSSE IMPORTED_LOCATION_RELEASE)
+		set_target_properties(
+			CommonLibSSE PROPERTIES
+			IMPORTED_LOCATION_DEBUG "${_loc_release}"
+		)
+	endif()
+endif()
+
 # CommonLibSSE-NG forces IPO ON internally, so its lib carries /GL objects.
 # A single /GL object drags LTCG into the plugin link, which is incompatible
 # with the incremental linker (LNK4075, fatal under /WX) — so on the no-LTO
@@ -179,6 +207,7 @@ if(MSVC AND NOT CMAKE_INTERPROCEDURAL_OPTIMIZATION)
 	)
 endif()
 
+set(CMAKE_MAP_IMPORTED_CONFIG_DEBUG Release)
 find_package(spdlog CONFIG REQUIRED)
 
 target_include_directories(

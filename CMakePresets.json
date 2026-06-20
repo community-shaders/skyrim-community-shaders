@@ -24,7 +24,9 @@
             "cacheVariables": {
                 "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
                 "VCPKG_OVERLAY_PORTS": "${sourceDir}/cmake/ports/",
-                "VCPKG_TARGET_TRIPLET": "x64-windows-static-md"
+                "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/cmake/triplets/",
+                "VCPKG_TARGET_TRIPLET": "x64-windows-static-md-release",
+                "VCPKG_BUILD_TYPE": "release"
             }
         },
         {
@@ -32,7 +34,7 @@
             "hidden": true,
             "architecture": "x64",
             "cacheVariables": {
-                "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL"
+                "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreadedDLL"
             }
         },
         {
@@ -81,7 +83,7 @@
             "cacheVariables": {
                 "ENABLE_SKYRIM_AE": "ON",
                 "ENABLE_SKYRIM_SE": "ON",
-                "ENABLE_SKYRIM_VR": "OFF",
+                "ENABLE_SKYRIM_VR": "ON",
                 "AUTO_PLUGIN_DEPLOYMENT": "OFF",
                 "COMMONLIB_PREBUILT_MULTICONFIG": "ON",
                 "VCPKG_APPLOCAL_DEPS": "OFF"
@@ -94,7 +96,7 @@
             "cacheVariables": {
                 "ENABLE_SKYRIM_AE": "ON",
                 "ENABLE_SKYRIM_SE": "ON",
-                "ENABLE_SKYRIM_VR": "OFF",
+                "ENABLE_SKYRIM_VR": "ON",
                 "AUTO_PLUGIN_DEPLOYMENT": "OFF",
                 "COMMONLIB_PREBUILT_MULTICONFIG": "ON",
                 "VCPKG_APPLOCAL_DEPS": "OFF"
@@ -106,7 +108,7 @@
             "description": "Like ALL but builds CommonLib from source. The prebuilt package is Release-only (Debug maps to no imported location), so a Debug build off ALL fails to link — this preset keeps Debug-from-source working in its own build/ALL-DEBUG dir.",
             "inherits": "ALL",
             "cacheVariables": {
-                "COMMONLIB_PREBUILT_MULTICONFIG": "OFF"
+                "COMMONLIB_PREBUILT_MULTICONFIG": "ON"
             }
         },
         {
@@ -115,7 +117,7 @@
             "cacheVariables": {
                 "ENABLE_SKYRIM_AE": "ON",
                 "ENABLE_SKYRIM_SE": "ON",
-                "ENABLE_SKYRIM_VR": "OFF",
+                "ENABLE_SKYRIM_VR": "ON",
                 "AUTO_PLUGIN_DEPLOYMENT": "OFF",
                 "ZIP_TO_DIST": "OFF",
                 "AIO_ZIP_TO_DIST": "OFF",
@@ -145,28 +147,28 @@
             "description": "Default build preset for developers, generate an AIO folder thats ready to copy",
             "configurePreset": "ALL",
             "configuration": "Release",
-            "targets": ["CommunityShaders", "AIO"]
+            "targets": ["AIO"]
         },
         {
             "name": "ALL",
             "description": "(Deprecated), kept for for CI, use Package instead",
             "configurePreset": "ALL",
             "configuration": "Release",
-            "targets": ["CommunityShaders", "Package-AIO-Manual"]
+            "targets": ["Package-AIO-Manual"]
         },
         {
             "name": "ALL-VS2022",
             "description": "Same as ALL but using Visual Studio 17 2022 toolchain",
             "configurePreset": "ALL-VS2022",
             "configuration": "Release",
-            "targets": ["CommunityShaders", "Package-AIO-Manual"]
+            "targets": ["Package-AIO-Manual"]
         },
         {
             "name": "Package",
             "description": "Build preset to generate a AIO zip package in <SRC>/dist folder, mostly for CI",
             "configurePreset": "ALL",
             "configuration": "Release",
-            "targets": ["CommunityShaders", "Package-AIO-Manual"]
+            "targets": ["Package-AIO-Manual"]
         },
         {
             "name": "Shaders",
@@ -180,7 +182,7 @@
             "description": "Debug build for CS SKSE plugin, generate an AIO folder thats ready to copy",
             "configurePreset": "ALL-DEBUG",
             "configuration": "Debug",
-            "targets": ["CommunityShaders", "AIO"]
+            "targets": ["AIO"]
         },
         {
             "name": "Dev-Fast",
@@ -193,7 +195,7 @@
             "description": "CI build for pull requests: mildly optimized package without LTCG or full debug info",
             "configurePreset": "PR",
             "configuration": "Release",
-            "targets": ["CommunityShaders", "Package-AIO-Manual"]
+            "targets": ["Package-AIO-Manual"]
         }
     ]
 }
