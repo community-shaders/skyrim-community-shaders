@@ -147,6 +147,11 @@ private:
 	bool emittanceColorActive = false;  // gates ApplyOverrides to the emittance color below
 	RE::NiColor emittanceColor{};
 
+	// Emittance state at selection time, so Reset reverts a changed source (it lives outside LightSettings).
+	RE::TESForm* originalEmittanceSource = nullptr;
+	std::string originalExternalEmittanceEdid;
+	bool originalUseExternalEmittance = false;
+
 	// Deferred 3D rebuild after a light-flag edit: the engine's async despawn/respawn can complete out of
 	// order if issued back-to-back, so Disable now and Enable a few frames later (coalescing repeat edits).
 	RE::ObjectRefHandle pendingRefreshRefr;
@@ -365,8 +370,8 @@ private:
 	std::vector<std::string> ScanLPConfigPaths() const;
 	/** @brief Collects the LP bulbs live-attached to refr into attachedBulbs. */
 	void GatherAttachedBulbs(RE::TESObjectREFR* refr);
-	/** @brief Collects the whitelist/blacklist entries where refr appears into filterListEntries. */
-	void ScanFilterListEntries(RE::TESObjectREFR* refr);
+	/** @brief Collects the whitelist/blacklist entries where refr appears into filterListEntries, scanning the given configs. */
+	void ScanFilterListEntries(RE::TESObjectREFR* refr, const std::vector<std::string>& configPaths);
 	/** @brief Validates the Add-Light selections; false with a reason when a bulb can't be added. */
 	bool CanAddBulb(std::string& reasonOut) const;
 	/** @brief The target string (model/formID/EditorID) for a new entry per the chosen attach mode. */

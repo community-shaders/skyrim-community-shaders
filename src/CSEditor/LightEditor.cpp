@@ -618,6 +618,9 @@ void LightEditor::DrawSettings()
 			lpFlagSet = originalLpFlagSet;
 			SyncLPFlagsToRuntime();
 		}
+		activeEmittanceSource = originalEmittanceSource;
+		externalEmittanceEdid = originalExternalEmittanceEdid;
+		useExternalEmittance = originalUseExternalEmittance;
 		shadowDepthBias = originalShadowDepthBias;
 		ApplyShadowDepthBias();
 		waitFrames = 1;
@@ -927,12 +930,14 @@ void LightEditor::LoadPopupPrefs()
 	if (auto it = j.find("addConfigSearch"); it != j.end() && it->is_string()) {
 		auto s = it->get<std::string>();
 		std::strncpy(addConfigSearch, s.c_str(), sizeof(addConfigSearch) - 1);
+		addConfigSearch[sizeof(addConfigSearch) - 1] = '\0';  // strncpy won't terminate an oversized source
 	}
 	if (auto it = j.find("addAttachMode"); it != j.end() && it->is_number_integer())
 		addAttachMode = it->get<int>();
 	if (auto it = j.find("addLighSearch"); it != j.end() && it->is_string()) {
 		auto s = it->get<std::string>();
 		std::strncpy(addLighSearch, s.c_str(), sizeof(addLighSearch) - 1);
+		addLighSearch[sizeof(addLighSearch) - 1] = '\0';
 	}
 	if (auto it = j.find("addPopupMode"); it != j.end() && it->is_number_integer())
 		addPopupMode = it->get<int>();
@@ -1687,9 +1692,9 @@ void LightEditor::GatherLights()
 	picker.Update();
 	if (auto hit = picker.TakeResult(); hit.valid) {
 		pickedMesh = hit;
-		GatherAttachedBulbs(PickedRefr());
-		ScanFilterListEntries(PickedRefr());
 		lpConfigPaths = ScanLPConfigPaths();
+		GatherAttachedBulbs(PickedRefr());
+		ScanFilterListEntries(PickedRefr(), lpConfigPaths);
 		addSelectedConfig = -1;
 		addAttachMode = -1;
 		addSelectedLighFormId = 0;
@@ -1881,7 +1886,7 @@ void LightEditor::GatherAttachedBulbs(RE::TESObjectREFR* refr)
 		collect(light);
 }
 
-void LightEditor::ScanFilterListEntries(RE::TESObjectREFR* refr)
+void LightEditor::ScanFilterListEntries(RE::TESObjectREFR* refr, const std::vector<std::string>& configPaths)
 {
 	filterListEntries.clear();
 	addSelectedFilterEntry = -1;
@@ -1905,7 +1910,7 @@ void LightEditor::ScanFilterListEntries(RE::TESObjectREFR* refr)
 	if (entriesToScan.empty())
 		return;
 
-	for (const auto& configPath : ScanLPConfigPaths()) {
+	for (const auto& configPath : configPaths) {
 		nlohmann::ordered_json configArray;
 		if (!LoadConfigArray(configPath, configArray))
 			continue;
@@ -2027,6 +2032,10 @@ void LightEditor::UpdateSelectedLight(RE::TESObjectREFR* refr, RE::TESObjectLIGH
 			RefreshLPJsonState();
 			originalLpFlagSet = lpFlagSet;
 		}
+
+		originalEmittanceSource = activeEmittanceSource;
+		originalExternalEmittanceEdid = externalEmittanceEdid;
+		originalUseExternalEmittance = useExternalEmittance;
 
 		previous = selected;
 	}
@@ -2458,7 +2467,7 @@ void LightEditor::NormalizeConfig(nlohmann::ordered_json& configArray)
 			newEntry["data"] = le["data"];
 		if (le.contains("points"))
 			newEntry["points"] = le["points"];
-		else if (le.contains("nodes"))
+		if (le.contains("nodes"))
 			newEntry["nodes"] = le["nodes"];
 		if (le.contains("whiteList"))
 			newEntry["whiteList"] = le["whiteList"];
