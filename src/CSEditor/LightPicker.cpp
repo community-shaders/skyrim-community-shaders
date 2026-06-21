@@ -41,6 +41,12 @@ void LightPicker::PopulateFromRef(PickedMesh& out, RE::TESObjectREFR* refr, RE::
 	out.valid = true;
 }
 
+std::string LightPicker::FormatFormEntry(RE::FormID formId, std::string_view ownerPlugin)
+{
+	constexpr RE::FormID kRelativeFormIdMask = 0x00FFFFFF;  // strips the load-order mod index
+	return fmt::format("0x{:X}~{}", formId & kRelativeFormIdMask, ownerPlugin);
+}
+
 std::string LightPicker::FormatRefFormEntry(RE::TESObjectREFR* refr)
 {
 	if (!refr)
@@ -48,8 +54,7 @@ std::string LightPicker::FormatRefFormEntry(RE::TESObjectREFR* refr)
 	const auto* ownerFile = refr->GetDescriptionOwnerFile();
 	if (!ownerFile || !ownerFile->fileName)
 		return {};
-	const RE::FormID relativeId = refr->formID & 0x00FFFFFF;
-	return fmt::format("0x{:X}~{}", relativeId, ownerFile->fileName);
+	return FormatFormEntry(refr->formID, ownerFile->fileName);
 }
 
 RE::NiCamera* LightPicker::GetPlayerNiCamera()

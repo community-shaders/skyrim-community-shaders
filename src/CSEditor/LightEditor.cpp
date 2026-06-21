@@ -38,6 +38,33 @@ static const nlohmann::ordered_json* GetArrayMember(const nlohmann::ordered_json
 	return (it != obj.end() && it->is_array()) ? &*it : nullptr;
 }
 
+/** @brief Returns a light entry's "data"/"light" EDID string, or nullptr if absent or not a string. */
+static const std::string* GetLightEntryEdid(const nlohmann::ordered_json& lightEntry)
+{
+	const auto dataIt = lightEntry.find("data");
+	if (dataIt == lightEntry.end() || !dataIt->is_object())
+		return nullptr;
+	const auto lightIt = dataIt->find("light");
+	if (lightIt == dataIt->end() || !lightIt->is_string())
+		return nullptr;
+	return &lightIt->get_ref<const std::string&>();
+}
+
+/** @brief True if the JSON array holds the given string value. */
+static bool ArrayContainsString(const nlohmann::ordered_json& arr, std::string_view value)
+{
+	for (const auto& elem : arr)
+		if (elem.is_string() && std::string_view(elem.get_ref<const std::string&>()) == value)
+			return true;
+	return false;
+}
+
+/** @brief True if a string carries a "0x"/"0X" hex prefix. */
+static bool HasHexPrefix(std::string_view s)
+{
+	return s.starts_with("0x") || s.starts_with("0X");
+}
+
 /** @brief Downcasts a BSLight to BSShadowLight only when it actually is one, else nullptr. */
 static RE::BSShadowLight* AsShadowLight(RE::BSLight* light)
 {
@@ -243,9 +270,7 @@ static bool EntryContainsLight(const nlohmann::ordered_json& entry, const std::s
 {
 	if (auto* lights = GetArrayMember(entry, "lights"))
 		for (const auto& le : *lights)
-			if (le.contains("data") && le["data"].contains("light") &&
-				le["data"]["light"].is_string() &&
-				le["data"]["light"].get<std::string>() == lighEdid)
+			if (const auto* edid = GetLightEntryEdid(le); edid && *edid == lighEdid)
 				return true;
 	return false;
 }
@@ -373,7 +398,7 @@ void LightEditor::DrawExternalEmittanceCombo()
 RE::FormID LightEditor::ResolveFormEntry(const std::string& entry)
 {
 	const auto tildePos = entry.find('~');
-	const bool hasPrefix = entry.starts_with("0x") || entry.starts_with("0X");
+	const bool hasPrefix = HasHexPrefix(entry);
 	if (tildePos == std::string::npos) {
 		if (!hasPrefix)
 			return 0;
@@ -432,12 +457,18 @@ void LightEditor::EnsureLighFormListBuilt()
 	}
 }
 
-std::string LightEditor::LighEdidForFormId(RE::FormID formId)
+const std::string* LightEditor::LighEdidPtrForFormId(RE::FormID formId)
 {
 	for (auto& [edid, ligh] : s_lighFormList)
 		if (ligh->GetFormID() == formId)
-			return edid;
-	return {};
+			return &edid;
+	return nullptr;
+}
+
+std::string LightEditor::LighEdidForFormId(RE::FormID formId)
+{
+	const auto* edid = LighEdidPtrForFormId(formId);
+	return edid ? *edid : std::string{};
 }
 
 void LightEditor::DrawSettings()
@@ -735,11 +766,8 @@ void LightEditor::DrawSettings()
 		EnsureLighFormListBuilt();
 		const char* kOriginalLabel = T(TKEY("original"), "(Original)");
 		const char* previewEdid = kOriginalLabel;
-		for (auto& [edid, ligh] : s_lighFormList)
-			if (ligh->GetFormID() == current.data.lighFormId) {
-				previewEdid = edid.c_str();
-				break;
-			}
+		if (const auto* edid = LighEdidPtrForFormId(current.data.lighFormId))
+			previewEdid = edid->c_str();
 
 		static constexpr const char* kLighOverrideId = "LighFormOverride";
 		const auto bulbTypeLabel = fmt::format("{}##combo", T(TKEY("bulb_type"), "Bulb type"));
@@ -1063,11 +1091,8 @@ void LightEditor::DrawLightRecordCombo(const char* searchId)
 {
 	EnsureLighFormListBuilt();
 	const char* preview = T(TKEY("select_a_light"), "Select a light");
-	for (auto& [edid, ligh] : s_lighFormList)
-		if (ligh->GetFormID() == addSelectedLighFormId) {
-			preview = edid.c_str();
-			break;
-		}
+	if (const auto* edid = LighEdidPtrForFormId(addSelectedLighFormId))
+		preview = edid->c_str();
 	std::string_view filter;
 	if (BeginSearchableCombo(T(TKEY("light_record"), "Light record"), preview, searchId, addLighSearch, sizeof(addLighSearch), filter, false)) {
 		for (auto& [edid, ligh] : s_lighFormList) {
@@ -1454,7 +1479,7 @@ std::string LightEditor::AddEntryTargetString() const
 		return pickedMesh.modelPath;
 	case 1:
 		if (!pickedMesh.sourcePlugin.empty())
-			return fmt::format("0x{:X}~{}", pickedMesh.baseFormId & 0x00FFFFFF, pickedMesh.sourcePlugin);
+			return LightPicker::FormatFormEntry(pickedMesh.baseFormId, pickedMesh.sourcePlugin);
 		return {};
 	case 2:
 		return pickedMesh.editorId;
@@ -1920,12 +1945,10 @@ void LightEditor::ScanFilterListEntries(RE::TESObjectREFR* refr, const std::vect
 			if (lightsIt == entry.end() || !lightsIt->is_array())
 				continue;
 			for (const auto& le : *lightsIt) {
-				if (!le.contains("data") || !le["data"].contains("light"))
+				const auto* edidPtr = GetLightEntryEdid(le);
+				if (!edidPtr)
 					continue;
-				const auto& data = le["data"];
-				if (!data["light"].is_string())
-					continue;
-				const std::string lightEDID = data["light"].get<std::string>();
+				const std::string& lightEDID = *edidPtr;
 
 				auto checkList = [&](bool isWhiteList) {
 					const char* key = isWhiteList ? "whiteList" : "blackList";
@@ -2245,8 +2268,7 @@ bool LightEditor::MatchesLPFilters(const nlohmann::ordered_json& lightEntry, RE:
 		return true;
 
 	auto matchesEntry = [&](const std::string& entry) -> bool {
-		const bool hasPrefix = entry.starts_with("0x") || entry.starts_with("0X");
-		if (entry.find('~') != std::string::npos || hasPrefix) {
+		if (entry.find('~') != std::string::npos || HasHexPrefix(entry)) {
 			const RE::FormID resolvedId = ResolveFormEntry(entry);
 			return resolvedId != 0 && resolvedId == refr->GetFormID();
 		}
@@ -2297,8 +2319,7 @@ bool LightEditor::EntryMatchesContext(const nlohmann::ordered_json& entry, const
 			if (!v.is_string())
 				continue;
 			const std::string s = v.get<std::string>();
-			const bool hasPrefix = s.starts_with("0x") || s.starts_with("0X");
-			if (s.find('~') == std::string::npos && !hasPrefix) {
+			if (s.find('~') == std::string::npos && !HasHexPrefix(s)) {
 				if (!ctx.ownerEditorId.empty() && s == ctx.ownerEditorId)
 					return true;
 			} else if (ctx.baseFormId != 0) {
@@ -2321,12 +2342,8 @@ nlohmann::ordered_json* LightEditor::FindMatchingLightEntry(nlohmann::ordered_js
 			continue;
 
 		for (auto& lightEntry : *lightsIt) {
-			if (!lightEntry.contains("data"))
-				continue;
-			auto& data = lightEntry["data"];
-			if (!data.contains("light") || !data["light"].is_string())
-				continue;
-			if (data["light"].get<std::string>() != ctx.lightEDID)
+			const auto* edid = GetLightEntryEdid(lightEntry);
+			if (!edid || *edid != ctx.lightEDID)
 				continue;
 			if (applyFilters && !MatchesLPFilters(lightEntry, ctx.refr))
 				continue;
@@ -2347,9 +2364,8 @@ bool LightEditor::LocateLightEntry(nlohmann::ordered_json& configArray, const Ma
 			continue;
 		for (size_t i = 0; i < lightsIt->size(); ++i) {
 			auto& le = (*lightsIt)[i];
-			if (!le.contains("data") || !le["data"].contains("light") || !le["data"]["light"].is_string())
-				continue;
-			if (le["data"]["light"].get<std::string>() != ctx.lightEDID)
+			const auto* edid = GetLightEntryEdid(le);
+			if (!edid || *edid != ctx.lightEDID)
 				continue;
 			if (!MatchesLPFilters(le, ctx.refr))
 				continue;
@@ -2519,11 +2535,7 @@ bool LightEditor::SaveAsSeparateEntry(bool includeColor)
 	// a shared whiteList is not a fork and may still be split off.
 	bool ownerWhitelisted = false;
 	if (auto* wl = GetArrayMember(sourceEntry, "whiteList")) {
-		for (const auto& elem : *wl)
-			if (elem.is_string() && elem.get<std::string>() == ownerEntry) {
-				ownerWhitelisted = true;
-				break;
-			}
+		ownerWhitelisted = ArrayContainsString(*wl, ownerEntry);
 		if (ownerWhitelisted && wl->size() == 1) {
 			logger::info("[LightEditor] SaveAsSeparateEntry: {} already has its own whitelisted entry", ownerEntry);
 			return false;
@@ -2682,13 +2694,8 @@ void LightEditor::RefreshLPJsonState()
 
 	if (!ownerEntry.empty()) {
 		auto containsEntry = [&](const char* listKey) {
-			const auto it = lightEntry->find(listKey);
-			if (it == lightEntry->end() || !it->is_array())
-				return false;
-			for (const auto& elem : *it)
-				if (elem.is_string() && elem.get<std::string>() == ownerEntry)
-					return true;
-			return false;
+			const auto* list = GetArrayMember(*lightEntry, listKey);
+			return list && ArrayContainsString(*list, ownerEntry);
 		};
 		lpInWhitelist = containsEntry("whiteList");
 		lpInBlacklist = containsEntry("blackList");
@@ -2789,9 +2796,8 @@ void LightEditor::MutateFilterList(nlohmann::ordered_json& lightEntry, const cha
 		auto& list = lightEntry[listKey];
 		if (!list.is_array())
 			list = nlohmann::ordered_json::array();
-		for (const auto& elem : list)
-			if (elem.is_string() && elem.get<std::string>() == ownerEntry)
-				return;
+		if (ArrayContainsString(list, ownerEntry))
+			return;
 		list.push_back(ownerEntry);
 	} else {
 		// Use find, not operator[]: indexing a missing key would materialize a stray "listKey": null
@@ -2837,18 +2843,11 @@ bool LightEditor::ModifyLPFilterListFor(const std::string& configPath, const Mat
 			if (!EntryMatchesContext(entry, ctx))
 				continue;
 			for (auto& le : *lightsIt) {
-				const auto dataIt = le.find("data");
-				if (dataIt == le.end() || !dataIt->contains("light") || !(*dataIt)["light"].is_string())
-					continue;
-				if ((*dataIt)["light"].get<std::string>() != ctx.lightEDID)
+				const auto* edid = GetLightEntryEdid(le);
+				if (!edid || *edid != ctx.lightEDID)
 					continue;
 				const auto* list = GetArrayMember(le, listKey);
-				if (!list)
-					continue;
-				const bool holdsEntry = std::ranges::any_of(*list, [&](const auto& elem) {
-					return elem.is_string() && elem.template get<std::string>() == entryStr;
-				});
-				if (holdsEntry) {
+				if (list && ArrayContainsString(*list, entryStr)) {
 					lightEntry = &le;
 					break;
 				}

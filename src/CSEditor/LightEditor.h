@@ -199,6 +199,8 @@ private:
 	static bool HasShadowFlags(uint32_t tesFlags);
 	/** @brief Builds the combo display name for a light (FormID/index/pointer + name). */
 	static std::string GetLightName(const LightInfo& lightInfo);
+	/** @brief Pointer to the cached EditorID for a LIGH FormID (valid for process lifetime), or nullptr if not found. */
+	static const std::string* LighEdidPtrForFormId(RE::FormID formId);
 	/** @brief EditorID for a LIGH FormID from the cached form list, or "" if not found. */
 	static std::string LighEdidForFormId(RE::FormID formId);
 	/** @brief Parses an "LP_Light[config|EDID]" NiLight name into its parts (rejects path traversal). */

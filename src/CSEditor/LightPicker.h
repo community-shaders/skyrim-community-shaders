@@ -4,6 +4,7 @@
 #include "RE/B/BSPointerHandle.h"  // RE::ObjectRefHandle
 
 #include <string>
+#include <string_view>
 
 namespace RE
 {
@@ -52,6 +53,9 @@ struct LightPicker
 
 	/** @brief Formats a reference into the LP filter-list entry string ("0x{relativeID}~Plugin.esp"), or "" if it has no owner file. */
 	static std::string FormatRefFormEntry(RE::TESObjectREFR* refr);
+
+	/** @brief Formats a FormID + owner plugin into an LP filter-list entry string ("0x{relativeID}~Plugin.esp"). */
+	static std::string FormatFormEntry(RE::FormID formId, std::string_view ownerPlugin);
 
 private:
 	/** @brief Finds the world NiCamera among the player camera root's children, or nullptr. */
