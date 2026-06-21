@@ -18,8 +18,7 @@ namespace
 	// Ray length in Skyrim units; long enough to reach any visible mesh.
 	constexpr float kRayLengthSkyrim = 100000.0f;
 
-	// Editor markers (collision/heading/animation markers, etc.) are STAT records flagged "Is Marker".
-	// They have no in-game-visible mesh, so they only clutter effect-mesh picks.
+	/** @brief True if the object is an editor marker (a STAT flagged "Is Marker"), which has no visible mesh and only clutters picks. */
 	bool IsEditorMarker(const RE::TESBoundObject* baseObj)
 	{
 		const auto* stat = baseObj ? baseObj->As<RE::TESObjectSTAT>() : nullptr;
@@ -178,8 +177,8 @@ LightPicker::PickedMesh LightPicker::ResolveNearestToCursor()
 	if (!baseObj)
 		return out;
 
-	// Discard if the collision raycast also resolves this same ref — it has Havok geometry
-	// and is reachable in normal collision mode.
+	// Discard if the collision raycast also resolves this same ref: it has Havok geometry and is
+	// reachable in normal collision mode.
 	{
 		PickedMesh collisionHit = ResolveUnderCursor(false);
 		if (collisionHit.valid && collisionHit.refrHandle == bestRef->GetHandle())
@@ -242,7 +241,6 @@ void LightPicker::Update()
 		hoverMesh = (pickMode == PickMode::kEffect) ? ResolveNearestToCursor() : ResolveUnderCursor(false);
 	}
 
-	// Hover tooltip.
 	if (hoverMesh.valid) {
 		ImGui::BeginTooltip();
 		if (!hoverMesh.editorId.empty())

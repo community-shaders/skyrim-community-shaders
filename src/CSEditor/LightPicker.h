@@ -12,10 +12,10 @@ namespace RE
 	class TESBoundObject;
 }
 
-// Resolves the mesh/reference under the cursor via a camera-through-cursor havok raycast.
-// Isolated from LightEditor so the picking logic can be reasoned about and tested on its own.
+/** @brief Resolves the mesh/reference under the cursor via a camera-through-cursor Havok raycast; isolated from LightEditor for testability. */
 struct LightPicker
 {
+	/** @brief Identity of a picked mesh's reference and base object (valid==false until populated). */
 	struct PickedMesh
 	{
 		RE::ObjectRefHandle refrHandle;  // safe across cell changes
@@ -27,6 +27,7 @@ struct LightPicker
 		bool valid = false;
 	};
 
+	/** @brief Which mesh the picker targets: solid collision geometry, or the nearest on-screen effect mesh. */
 	enum class PickMode
 	{
 		kCollision = 0,
@@ -34,32 +35,32 @@ struct LightPicker
 	};
 	PickMode pickMode = PickMode::kCollision;  // persists across picks
 
-	// Enters pick mode. While active, Update() watches for a world click.
+	/** @brief Enters pick mode; while active, Update() watches for a world click. */
 	void BeginPick();
-	// Leaves pick mode without producing a result.
+	/** @brief Leaves pick mode without producing a result. */
 	void Cancel();
 	[[nodiscard]] bool IsPicking() const { return picking; }
 
-	// Clears the cached hover hit so Update() recomputes on the next frame even if the
-	// cursor is stationary. Call when pick mode changes to avoid showing a stale hit.
+	/** @brief Clears the cached hover hit so Update() recomputes next frame; call when pick mode changes to avoid a stale hit. */
 	void InvalidateHover();
 
-	// Called once per frame while the editor is active. Performs the raycast on a
-	// qualifying left-click and stores a result; handles right-click / ESC cancel.
+	/** @brief Runs once per frame: raycasts on a qualifying left-click and stores a result; handles right-click/ESC cancel. */
 	void Update();
 
-	// Returns and clears the last successful pick (valid==true at most once per pick).
+	/** @brief Returns and clears the last successful pick (valid==true at most once per pick). */
 	[[nodiscard]] PickedMesh TakeResult();
 
-	// Formats a reference into the Light Placer filter-list entry string ("0x{relativeID}~Plugin.esp"),
-	// matching exactly what white/black-list operations use. Returns "" if the ref has no owner file.
+	/** @brief Formats a reference into the LP filter-list entry string ("0x{relativeID}~Plugin.esp"), or "" if it has no owner file. */
 	static std::string FormatRefFormEntry(RE::TESObjectREFR* refr);
 
 private:
+	/** @brief Finds the world NiCamera among the player camera root's children, or nullptr. */
 	static RE::NiCamera* GetPlayerNiCamera();
+	/** @brief Raycasts through the cursor and resolves the collision mesh/ref under it. */
 	static PickedMesh ResolveUnderCursor(bool logResult = true);
+	/** @brief Resolves the on-screen ref nearest the cursor (effect-mesh pick), skipping collision-reachable ones. */
 	static PickedMesh ResolveNearestToCursor();
-	// Fills the identifying fields of `out` (handle, FormID, EditorID, model, plugin) from a ref.
+	/** @brief Fills out's identifying fields (handle, FormID, EditorID, model, plugin) from a ref. */
 	static void PopulateFromRef(PickedMesh& out, RE::TESObjectREFR* refr, RE::TESBoundObject* baseObj);
 
 	bool picking = false;
