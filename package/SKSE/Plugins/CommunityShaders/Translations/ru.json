@@ -829,8 +829,6 @@
     "feature.light_editor.shadows_only": "Только тени",
     "feature.light_editor.shadows_only_tooltip": "Показывать только источники света с флагами HemiShadow или OmniShadow.",
     "feature.light_editor.size": "Размер",
-    "feature.light_editor.sort_by": "Сортировать по",
-    "feature.light_editor.spotlight_not_applicable": "Прожектор: флаги типа ISL неприменимы",
     "feature.light_editor.total_lights": "Всего источников света: %u",
     "feature.light_limit_fix.debug": "Отладка",
     "feature.light_limit_fix.debug_feature_enabled": "ОТЛАДОЧНАЯ ФУНКЦИЯ — ВИЗУАЛИЗАЦИЯ ЛИМИТА ИСТОЧНИКОВ СВЕТА ВКЛЮЧЕНА",
