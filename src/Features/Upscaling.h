@@ -182,25 +182,6 @@ public:
 	 */
 	std::atomic<bool> pendingDLSSReset{ false };
 
-	// VR per-eye intermediate textures
-	eastl::unique_ptr<Texture2D> vrIntermediateDepth;
-	eastl::unique_ptr<Texture2D> vrIntermediateColorIn[2];
-	eastl::unique_ptr<Texture2D> vrIntermediateColorOut[2];
-	eastl::unique_ptr<Texture2D> vrIntermediateLinearDepth[2];
-	eastl::unique_ptr<Texture2D> vrIntermediateMotionVectors[2];
-	eastl::unique_ptr<Texture2D> vrIntermediateReactiveMask[2];
-	eastl::unique_ptr<Texture2D> vrIntermediateTransparencyMask[2];
-	winrt::com_ptr<ID3D11ComputeShader> vrClearHMDMaskCS;
-	winrt::com_ptr<ID3D11Buffer> vrClearHMDMaskCB;
-
-	void CreateVRIntermediateTextures(uint32_t inWidth, uint32_t inHeight, uint32_t outWidth, uint32_t outHeight,
-		ID3D11Resource* colorSrc, ID3D11Resource* mvecSrc, ID3D11Resource* reactiveSrc, ID3D11Resource* transparencySrc);
-	void EnsureVRIntermediateTextures();
-	void PreparePerEyeInputs(ID3D11Resource* colorSrc);
-	void FinalizePerEyeOutputs(ID3D11Resource* colorDst);
-	void ClearHMDMask(ID3D11UnorderedAccessView* colorUAV, ID3D11ShaderResourceView* depthSRV,
-		uint32_t eyeWidth, uint32_t eyeHeight, uint32_t depthOffsetX, uint32_t colorOffsetX);
-
 	void CopySharedD3D12Resources();
 	void PostDisplay();
 	void PerformUpscaling();

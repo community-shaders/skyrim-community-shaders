@@ -449,12 +449,6 @@ namespace SharedData
 		[flatten] if (cellInt.x < 5 && cellInt.x >= 0 && cellInt.y < 5 && cellInt.y >= 0)
 			waterData = WaterData[waterTile];
 
-#if defined(VR)
-		// Correct .w from eye-0 camera-relative Z to the current eye's camera-relative Z.
-		// No-op when eyeIndex == 0 (both terms are identical).
-		waterData.w += FrameBuffer::CameraPosAdjust[0].z - FrameBuffer::CameraPosAdjust[eyeIndex].z;
-#endif
-
 		return waterData;
 	}
 

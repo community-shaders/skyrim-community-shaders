@@ -16,13 +16,12 @@ struct VS_OUTPUT_POST
 float4 main(VS_OUTPUT_POST input) : SV_Target0
 {
 	float2 uv = input.txcoord0;
-	uint eyeIndex = 0;
 
 	float volumetricShadow = BlurredShadowTexture.Load(int3(input.pos.xy, 0));
 
 	float depth = SharedData::GetDepth(uv);
 	float4 positionCS = float4(2 * float2(uv.x, -uv.y + 1) - 1, depth, 1);
-	float4 positionMS = mul(FrameBuffer::CameraViewProjInverse[eyeIndex], positionCS);
+	float4 positionMS = mul(FrameBuffer::CameraViewProjInverse, positionCS);
 	positionMS.xyz /= positionMS.w;
 
 	float3 viewDirection = normalize(positionMS.xyz);

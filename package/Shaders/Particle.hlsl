@@ -32,11 +32,6 @@ struct VS_OUTPUT
 #if defined(ENVCUBE) && defined(RAIN)
 	float2 RaindropData: TEXCOORD2;
 #endif
-#if defined(VR)
-	float ClipDistance: SV_ClipDistance0;  // o11
-	float CullDistance: SV_CullDistance0;  // p11
-	uint EyeIndex: EYEIDX0;
-#endif  // VR
 };
 
 #ifdef VSHADER
@@ -191,14 +186,6 @@ VS_OUTPUT main(VS_INPUT input)
 	vsout.Color.xyz = color.xyz;
 #	endif
 
-#	ifdef VR
-	vsout.EyeIndex = eyeIndex;
-	Stereo::VR_OUTPUT VRout = Stereo::GetVRVSOutput(vsout.Position, eyeIndex);
-	vsout.Position = VRout.VRPosition;
-	vsout.ClipDistance.x = VRout.ClipDistance;
-	vsout.CullDistance.x = VRout.CullDistance;
-#	endif  // VR
-
 #		if defined(RAIN)
 	float2 uv = input.TexCoord1.xy;
     uv.y *= 1.25; // UV fix
@@ -290,14 +277,8 @@ if (SharedData::enbSettings.EnableRain) {
 
     // Reconstruct camera-relative worldspace position (camera at origin).
     float2 uv = input.Position.xy * SharedData::BufferDim.zw;
-#	ifdef VR
-    uv = Stereo::ConvertFromStereoUV(uv, eyeIndex);
-    float4 posCS = float4(2.0 * float2(uv.x, 1.0 - uv.y) - 1.0, input.Position.z, 1.0);
-    float4 posWS = mul(FrameBuffer::CameraViewProjInverse[eyeIndex], posCS);
-#	else
     float4 posCS = float4(2.0 * float2(uv.x, 1.0 - uv.y) - 1.0, input.Position.z, 1.0);
     float4 posWS = mul(FrameBuffer::CameraViewProjInverse, posCS);
-#	endif
     posWS.xyz /= posWS.w;
 
     // Build worldspace TBN from screen-space derivatives. The billboard is camera-aligned,

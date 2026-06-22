@@ -16,11 +16,10 @@ struct VS_OUTPUT_POST
 float main(VS_OUTPUT_POST input) : SV_Target0
 {
 	float2 uv = input.txcoord0;
-	uint eyeIndex = 0;
 
 	float depth = SharedData::GetDepth(uv);
 	float4 positionCS = float4(2 * float2(uv.x, -uv.y + 1) - 1, depth, 1);
-	float4 positionMS = mul(FrameBuffer::CameraViewProjInverse[eyeIndex], positionCS);
+	float4 positionMS = mul(FrameBuffer::CameraViewProjInverse, positionCS);
 	positionMS.xyz /= positionMS.w;
 
 	float extinction = SharedData::enbSettings.VolumetricRaysExtinction;
@@ -29,7 +28,7 @@ float main(VS_OUTPUT_POST input) : SV_Target0
 	const uint sampleCount = 16;
 	const float rcpSampleCount = 1.0 / float(sampleCount);
 	float noise = Random::InterleavedGradientNoise(input.pos.xy, SharedData::FrameCount);
-	float3 cameraOffset = FrameBuffer::CameraPosAdjust[eyeIndex].xyz;
+	float3 cameraOffset = FrameBuffer::CameraPosAdjust.xyz;
 	float negExtTimesRayLen = -extinction * totalRayLength;
 
 	float scattering = 0.0;

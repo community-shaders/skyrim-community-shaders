@@ -3353,13 +3353,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	psout.Reflectance = float4(indirectLobeWeights.specular, psout.Diffuse.w);
 	psout.NormalGlossiness = float4(GBuffer::EncodeNormal(screenSpaceNormal), saturate(1.0 - material.Roughness), psout.Diffuse.w);
 
-#		if defined(VR_STEREO_OPT) && !defined(SNOW)
-	// VR stereo reprojection: write POM depth offset to dedicated texture (u7) for StereoBlendCS.
-	// hasPOM disambiguates "POM ran at geometry plane (pixelOffset=0.5)" from "POM did not run".
-	// -1.0 is the explicit no-POM sentinel (R16_FLOAT supports negatives); StereoBlendCS checks >= 0.
-	PomOffsetTex[uint2(input.Position.xy)] = hasPOM ? pixelOffset : Stereo::POM_NO_DATA;
-#		endif
-
 #		if defined(SNOW)
 #			if defined(TRUE_PBR)
 	psout.Parameters.x = Color::RGBToLuminanceAlternative(specularColor);

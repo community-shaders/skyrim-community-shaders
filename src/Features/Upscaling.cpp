@@ -844,220 +844,6 @@ eastl::unique_ptr<Texture2D> Upscaling::CreateTextureFromSource(ID3D11Resource* 
 	return tex;
 }
 
-void Upscaling::CreateVRIntermediateTextures(uint32_t inWidth, uint32_t inHeight, uint32_t outWidth, uint32_t outHeight,
-	ID3D11Resource* colorSrc, ID3D11Resource* mvecSrc, ID3D11Resource* reactiveSrc, ID3D11Resource* transparencySrc)
-{
-	// Right-eye-only depth intermediate for DLSS. Streamline.Upscale copies the right-eye depth
-	// slice here before evaluating DLSS eye 1; eye 0 reads the combined stereo depth directly at
-	// zero offset. R24G8_TYPELESS matches the game's D24S8_TYPELESS cast group — R32_TYPELESS is
-	// a different cast group and produces silent zero-copy failures.
-	{
-		D3D11_TEXTURE2D_DESC depthDesc = {};
-		depthDesc.Width = inWidth;
-		depthDesc.Height = inHeight;
-		depthDesc.MipLevels = 1;
-		depthDesc.ArraySize = 1;
-		depthDesc.Format = DXGI_FORMAT_R24G8_TYPELESS;
-		depthDesc.SampleDesc.Count = 1;
-		depthDesc.Usage = D3D11_USAGE_DEFAULT;
-		depthDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
-		vrIntermediateDepth = eastl::make_unique<Texture2D>(depthDesc);
-
-		Util::SetResourceName(vrIntermediateDepth->resource.get(), "Upscale_Depth_Right");
-
-		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-		srvDesc.Format = DXGI_FORMAT_R24_UNORM_X8_TYPELESS;
-		srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
-		srvDesc.Texture2D.MipLevels = 1;
-		vrIntermediateDepth->CreateSRV(srvDesc);
-	}
-
-	// All buffers are per-eye: Streamline validates all extents against the input color texture
-	// dimensions, so every tagged resource must be isolated per-eye at {0,0}.
-	for (int i = 0; i < 2; i++) {
-		std::string suffix = (i == 0) ? "Left" : "Right";
-
-		vrIntermediateColorIn[i] = CreateTextureFromSource(colorSrc, inWidth, inHeight, false, true, true, ("Upscale_ColorIn_" + suffix).c_str());
-		vrIntermediateColorOut[i] = CreateTextureFromSource(colorSrc, outWidth, outHeight, false, true, false, ("Upscale_ColorOut_" + suffix).c_str());
-
-		// Linear depth: R32_FLOAT so FSR's GetFfxResourceDescriptionDX11() returns a valid format.
-		// EncodeTexturesCS writes the non-linear depth as R32_FLOAT for FSR. Kept separate from
-		// vrIntermediateDepth (R24G8_TYPELESS) which Streamline copies into for DLSS right eye.
-		{
-			D3D11_TEXTURE2D_DESC ldDesc = {};
-			ldDesc.Width = inWidth;
-			ldDesc.Height = inHeight;
-			ldDesc.MipLevels = 1;
-			ldDesc.ArraySize = 1;
-			ldDesc.Format = DXGI_FORMAT_R32_FLOAT;
-			ldDesc.SampleDesc.Count = 1;
-			ldDesc.Usage = D3D11_USAGE_DEFAULT;
-			ldDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
-			vrIntermediateLinearDepth[i] = eastl::make_unique<Texture2D>(ldDesc);
-
-			Util::SetResourceName(vrIntermediateLinearDepth[i]->resource.get(), ("Upscale_LinearDepth_" + suffix).c_str());
-
-			D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc2 = {};
-			srvDesc2.Format = DXGI_FORMAT_R32_FLOAT;
-			srvDesc2.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
-			srvDesc2.Texture2D.MipLevels = 1;
-			vrIntermediateLinearDepth[i]->CreateSRV(srvDesc2);
-
-			D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc2 = {};
-			uavDesc2.Format = DXGI_FORMAT_R32_FLOAT;
-			uavDesc2.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D;
-			uavDesc2.Texture2D.MipSlice = 0;
-			vrIntermediateLinearDepth[i]->CreateUAV(uavDesc2);
-		}
-
-		// UAV required: EncodeTexturesCS writes directly into these per-eye buffers
-		vrIntermediateMotionVectors[i] = CreateTextureFromSource(mvecSrc, inWidth, inHeight, false, true, true, ("Upscale_MVec_" + suffix).c_str());
-		vrIntermediateReactiveMask[i] = CreateTextureFromSource(reactiveSrc, inWidth, inHeight, false, true, true, ("Upscale_Reactive_" + suffix).c_str());
-		vrIntermediateTransparencyMask[i] = CreateTextureFromSource(transparencySrc, inWidth, inHeight, false, true, true, ("Upscale_Transparency_" + suffix).c_str());
-	}
-
-	logger::info("[Upscaling] Created VR intermediate textures: per-eye in {}x{}, out {}x{}",
-		inWidth, inHeight, outWidth, outHeight);
-}
-
-void Upscaling::EnsureVRIntermediateTextures()
-{
-	auto renderer = globals::game::renderer;
-	auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
-	auto& motionVectorRT = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
-
-	auto screenSize = float2{ (float)globals::game::graphicsState->screenWidth, (float)globals::game::graphicsState->screenHeight };
-	auto renderSize = Util::ConvertToDynamic(screenSize);
-
-	uint32_t eyeWidthOut = (uint32_t)(screenSize.x / 2);
-	uint32_t eyeHeightOut = (uint32_t)screenSize.y;
-	uint32_t eyeWidthIn = (uint32_t)(renderSize.x / 2);
-	uint32_t eyeHeightIn = (uint32_t)renderSize.y;
-
-	bool needsRecreate = !vrIntermediateColorIn[0] || !vrIntermediateColorOut[0] || !vrIntermediateLinearDepth[0];
-	if (!needsRecreate) {
-		needsRecreate = (vrIntermediateColorIn[0]->desc.Width != eyeWidthIn ||
-						 vrIntermediateColorIn[0]->desc.Height != eyeHeightIn ||
-						 vrIntermediateColorOut[0]->desc.Width != eyeWidthOut ||
-						 vrIntermediateColorOut[0]->desc.Height != eyeHeightOut);
-	}
-	if (needsRecreate) {
-		logger::info("[Upscaling] (Re)creating VR intermediates: per-eye in {}x{}, out {}x{}",
-			eyeWidthIn, eyeHeightIn, eyeWidthOut, eyeHeightOut);
-		CreateVRIntermediateTextures(eyeWidthIn, eyeHeightIn, eyeWidthOut, eyeHeightOut,
-			main.texture, motionVectorRT.texture,
-			reactiveMaskTexture->resource.get(), transparencyCompositionMaskTexture->resource.get());
-	}
-}
-
-void Upscaling::PreparePerEyeInputs(ID3D11Resource* colorSrc)
-{
-	if (!REL::Module::IsVR())
-		return;
-
-	auto context = globals::d3d::context;
-
-	auto renderSize = Util::ConvertToDynamic(float2{ (float)globals::game::graphicsState->screenWidth, (float)globals::game::graphicsState->screenHeight });
-
-	uint32_t eyeWidthIn = (uint32_t)(renderSize.x / 2);
-	uint32_t eyeHeightIn = (uint32_t)renderSize.y;
-
-	auto& depthTexture = globals::game::renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
-	auto& motionVectorRT = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
-
-	for (uint32_t i = 0; i < 2; ++i) {
-		uint32_t offsetXIn = (i == 1) ? eyeWidthIn : 0;
-		D3D11_BOX srcBox = { offsetXIn, 0, 0, offsetXIn + eyeWidthIn, eyeHeightIn, 1 };
-
-		context->CopySubresourceRegion(vrIntermediateColorIn[i]->resource.get(), 0, 0, 0, 0, colorSrc, 0, &srcBox);
-		context->CopySubresourceRegion(vrIntermediateMotionVectors[i]->resource.get(), 0, 0, 0, 0, motionVectorRT.texture, 0, &srcBox);
-
-		uint32_t depthOffset = (i == 1) ? eyeWidthIn : 0;
-		ClearHMDMask(vrIntermediateColorIn[i]->uav.get(), depthTexture.depthSRV,
-			eyeWidthIn, eyeHeightIn, depthOffset, 0);
-	}
-}
-
-void Upscaling::FinalizePerEyeOutputs(ID3D11Resource* colorDst)
-{
-	ZoneScoped;
-	TracyD3D11Zone(globals::state->tracyCtx, "VR Upscaling - Finalize Per Eye");
-
-	if (!REL::Module::IsVR())
-		return;
-
-	auto context = globals::d3d::context;
-
-	auto screenSize = float2{ (float)globals::game::graphicsState->screenWidth, (float)globals::game::graphicsState->screenHeight };
-
-	uint32_t eyeWidthOut = (uint32_t)(screenSize.x / 2);
-	uint32_t eyeHeightOut = (uint32_t)screenSize.y;
-
-	// Write upscaled outputs back
-	for (uint32_t i = 0; i < 2; ++i) {
-		uint32_t offsetXOut = (i == 1) ? eyeWidthOut : 0;
-		D3D11_BOX outBox = { 0, 0, 0, eyeWidthOut, eyeHeightOut, 1 };
-		context->CopySubresourceRegion(colorDst, 0, offsetXOut, 0, 0, vrIntermediateColorOut[i]->resource.get(), 0, &outBox);
-	}
-}
-
-void Upscaling::ClearHMDMask(ID3D11UnorderedAccessView* colorUAV, ID3D11ShaderResourceView* depthSRV,
-	uint32_t eyeWidth, uint32_t eyeHeight, uint32_t depthOffsetX, uint32_t colorOffsetX)
-{
-	if (!REL::Module::IsVR())
-		return;
-
-	auto context = globals::d3d::context;
-
-	if (!vrClearHMDMaskCS) {
-		vrClearHMDMaskCS.attach((ID3D11ComputeShader*)Util::CompileShader(L"Data/Shaders/Upscaling/ClearHMDMaskCS.hlsl", {}, "cs_5_0"));
-
-		D3D11_BUFFER_DESC cbDesc = {};
-		cbDesc.ByteWidth = 16;  // 4 uints
-		cbDesc.Usage = D3D11_USAGE_DYNAMIC;
-		cbDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
-		cbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
-		DX::ThrowIfFailed(globals::d3d::device->CreateBuffer(&cbDesc, nullptr, vrClearHMDMaskCB.put()));
-	}
-
-	if (vrClearHMDMaskCS) {
-		auto dispatchX = (eyeWidth + 7) / 8;
-		auto dispatchY = (eyeHeight + 7) / 8;
-
-		context->CSSetShader(vrClearHMDMaskCS.get(), nullptr, 0);
-
-		ID3D11ShaderResourceView* srvs[1] = { depthSRV };
-		context->CSSetShaderResources(0, 1, srvs);
-
-		ID3D11UnorderedAccessView* uavs[1] = { colorUAV };
-		context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
-
-		D3D11_MAPPED_SUBRESOURCE mapped{};
-		context->Map(vrClearHMDMaskCB.get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
-
-		uint32_t offsets[4] = { depthOffsetX, colorOffsetX, 0, 0 };
-
-		memcpy(mapped.pData, offsets, sizeof(offsets));
-		context->Unmap(vrClearHMDMaskCB.get(), 0);
-
-		ID3D11Buffer* cbs[1] = { vrClearHMDMaskCB.get() };
-		context->CSSetConstantBuffers(0, 1, cbs);
-
-		globals::profiler->BeginPass("Upscaling::ClearHMDMask");
-		context->Dispatch(dispatchX, dispatchY, 1);
-		globals::profiler->EndPass();
-
-		// Unbind
-		ID3D11ShaderResourceView* nullSRV[1] = { nullptr };
-		ID3D11UnorderedAccessView* nullUAV[1] = { nullptr };
-		ID3D11Buffer* nullCB[1] = { nullptr };
-		context->CSSetShaderResources(0, 1, nullSRV);
-		context->CSSetUnorderedAccessViews(0, 1, nullUAV, nullptr);
-		context->CSSetConstantBuffers(0, 1, nullCB);
-		context->CSSetShader(nullptr, nullptr, 0);
-	}
-}
-
 int32_t GetJitterPhaseCount(int32_t renderWidth, int32_t displayWidth)
 {
 	const float basePhaseCount = 8.0f;
@@ -1240,6 +1026,8 @@ void Upscaling::CopySharedD3D12Resources()
 {
 	ZoneScoped;
 	TracyD3D11Zone(globals::state->tracyCtx, "Upscaling - Copy Shared D3D12 Resources");
+	globals::state->BeginPerfEvent("Copy Shared D3D12 Resources");
+
 	auto renderer = globals::game::renderer;
 	auto context = globals::d3d::context;
 
@@ -1296,6 +1084,8 @@ void Upscaling::CopySharedD3D12Resources()
 	context->OMSetRenderTargets(0, nullptr, nullptr);
 	context->PSSetShader(nullptr, nullptr, 0);
 	context->VSSetShader(nullptr, nullptr, 0);
+
+	globals::state->EndPerfEvent();
 }
 
 void UpdateCameraData()
@@ -1569,9 +1359,9 @@ void Upscaling::Upscale()
 	ZoneScoped;
 	auto upscaleMethod = GetUpscaleMethod();
 
+	auto state = globals::state;
 	auto context = globals::d3d::context;
 	auto renderer = globals::game::renderer;
-	auto* state = globals::state;
 
 	context->OMSetRenderTargets(0, nullptr, nullptr);  // Unbind all bound render targets
 
@@ -1634,10 +1424,6 @@ void Upscaling::Upscale()
 		TracyD3D11Zone(globals::state->tracyCtx, "Upscaling Dispatch");
 
 		if (upscaleMethod == UpscaleMethod::kDLSS) {
-			if (REL::Module::IsVR() && pendingDLSSReset.exchange(false, std::memory_order_relaxed)) {
-				logger::debug("[Upscaling] LoadingMenu close detected — rebuilding DLSS feature");
-				streamline.DestroyDLSSResources();
-			}
 			streamline.Upscale(main.texture, reactiveMaskTexture->resource.get(), transparencyCompositionMaskTexture->resource.get(), motionVectorCopyTexture->resource.get());
 		} else if (upscaleMethod == UpscaleMethod::kFSR) {
 			fidelityFX.Upscale(main.texture, reactiveMaskTexture->resource.get(), transparencyCompositionMaskTexture->resource.get(), motionVector.texture, settings.sharpnessFSR);
@@ -1708,6 +1494,8 @@ void Upscaling::UpscaleDepth()
 	if (!fullscreenVS || !depthUpscalePS || !underwaterMaskPS) {
 		return;
 	}
+
+	state->BeginPerfEvent("Render Target Upscaling");
 
 	// Set up Input Assembler for fullscreen triangle (no vertex/index buffers needed)
 	context->IASetInputLayout(nullptr);
@@ -1820,6 +1608,8 @@ void Upscaling::UpscaleDepth()
 
 	ID3D11ShaderResourceView* nullPSResources[3] = { nullptr, nullptr, nullptr };
 	context->PSSetShaderResources(0, ARRAYSIZE(nullPSResources), nullPSResources);
+
+	state->EndPerfEvent();
 }
 
 void Upscaling::ApplySharpening()

@@ -651,8 +651,6 @@ void Effect11::DrawVolumetricRays()
 			defines.push_back({ "CLOUD_SHADOWS", nullptr });
 		if (globals::features::terrainShadows.loaded)
 			defines.push_back({ "TERRAIN_SHADOWS", nullptr });
-		if (REL::Module::IsVR())
-			defines.push_back({ "FRAMEBUFFER", nullptr });
 
 		raymarchVolumetricRaysPS = static_cast<ID3D11PixelShader*>(Util::CompileShader(L"Data\\Shaders\\Effect11\\RaymarchVolumetricRaysPS.hlsl", defines, "ps_5_0"));
 		if (!raymarchVolumetricRaysPS)
@@ -663,8 +661,6 @@ void Effect11::DrawVolumetricRays()
 		std::vector<std::pair<const char*, const char*>> defines;
 		if (globals::features::ibl.loaded)
 			defines.push_back({ "IBL", nullptr });
-		if (REL::Module::IsVR())
-			defines.push_back({ "FRAMEBUFFER", nullptr });
 
 		applyVolumetricRaysPS = static_cast<ID3D11PixelShader*>(Util::CompileShader(L"Data\\Shaders\\Effect11\\ApplyVolumetricRaysPS.hlsl", defines, "ps_5_0"));
 		if (!applyVolumetricRaysPS)
@@ -707,7 +703,7 @@ void Effect11::DrawVolumetricRays()
 	uint32_t dynWidth = static_cast<uint32_t>(resolution.x);
 	uint32_t dynHeight = static_cast<uint32_t>(resolution.y);
 
-	if (!vrTexA || vrTexA->desc.Width != mainTexDesc.Width || vrTexA->desc.Height != mainTexDesc.Height) {
+	if (!vlTexA || vlTexA->desc.Width != mainTexDesc.Width || vlTexA->desc.Height != mainTexDesc.Height) {
 		D3D11_TEXTURE2D_DESC desc{};
 		desc.Width = mainTexDesc.Width;
 		desc.Height = mainTexDesc.Height;
@@ -731,18 +727,18 @@ void Effect11::DrawVolumetricRays()
 		uavDesc.Format = DXGI_FORMAT_R16_FLOAT;
 		uavDesc.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D;
 
-		vrTexA = std::make_unique<Texture2D>(desc, "Effect11::VRTexA");
-		vrTexA->CreateSRV(srvDesc);
-		vrTexA->CreateRTV(rtvDesc);
-		vrTexA->CreateUAV(uavDesc);
+		vlTexA = std::make_unique<Texture2D>(desc, "Effect11::VLTexA");
+		vlTexA->CreateSRV(srvDesc);
+		vlTexA->CreateRTV(rtvDesc);
+		vlTexA->CreateUAV(uavDesc);
 
-		vrTexB = std::make_unique<Texture2D>(desc, "Effect11::VRTexB");
-		vrTexB->CreateSRV(srvDesc);
-		vrTexB->CreateUAV(uavDesc);
+		vlTexB = std::make_unique<Texture2D>(desc, "Effect11::VLTexB");
+		vlTexB->CreateSRV(srvDesc);
+		vlTexB->CreateUAV(uavDesc);
 	}
 
-	if (!vrBlurCB)
-		vrBlurCB = std::make_unique<ConstantBuffer>(ConstantBufferDesc(16), "Effect11::VRBlurCB");
+	if (!vlBlurCB)
+		vlBlurCB = std::make_unique<ConstantBuffer>(ConstantBufferDesc(16), "Effect11::VLBlurCB");
 
 	Effect11Util::D3D11FullStateBackup stateBackup;
 	stateBackup.Save(context);
@@ -756,7 +752,7 @@ void Effect11::DrawVolumetricRays()
 	{
 		profiler->BeginPass("Effect11::VolumetricRays Pass 0");
 
-		ID3D11RenderTargetView* rtv = vrTexA->rtv.get();
+		ID3D11RenderTargetView* rtv = vlTexA->rtv.get();
 		context->OMSetRenderTargets(1, &rtv, nullptr);
 		context->RSSetViewports(1, &viewport);
 
@@ -791,7 +787,7 @@ void Effect11::DrawVolumetricRays()
 		int32_t screenX, screenY, screenXMin1, screenYMin1;
 	};
 	VLData vlData = { static_cast<int32_t>(dynWidth), static_cast<int32_t>(dynHeight), static_cast<int32_t>(dynWidth) - 1, static_cast<int32_t>(dynHeight) - 1 };
-	vrBlurCB->Update(vlData);
+	vlBlurCB->Update(vlData);
 
 	static constexpr uint32_t tgDim = 256;
 	static constexpr uint32_t blurWindow = 12;
@@ -802,13 +798,13 @@ void Effect11::DrawVolumetricRays()
 		profiler->BeginPass("Effect11::VolumetricRays Pass 1");
 		context->CSSetShader(blurHCS, nullptr, 0);
 
-		ID3D11ShaderResourceView* csSRVs[2] = { vrTexA->srv.get(), depthSRV };
+		ID3D11ShaderResourceView* csSRVs[2] = { vlTexA->srv.get(), depthSRV };
 		context->CSSetShaderResources(0, 2, csSRVs);
 
-		ID3D11UnorderedAccessView* csUAVs[1] = { vrTexB->uav.get() };
+		ID3D11UnorderedAccessView* csUAVs[1] = { vlTexB->uav.get() };
 		context->CSSetUnorderedAccessViews(0, 1, csUAVs, nullptr);
 
-		ID3D11Buffer* csCBs[2] = { nullptr, vrBlurCB->CB() };
+		ID3D11Buffer* csCBs[2] = { nullptr, vlBlurCB->CB() };
 		context->CSSetConstantBuffers(0, 2, csCBs);
 
 		uint32_t groupsX = (dynWidth + effectiveGroupSize - 1) / effectiveGroupSize;
@@ -826,10 +822,10 @@ void Effect11::DrawVolumetricRays()
 		profiler->BeginPass("Effect11::VolumetricRays Pass 2");
 		context->CSSetShader(blurVCS, nullptr, 0);
 
-		ID3D11ShaderResourceView* csSRVs[2] = { vrTexB->srv.get(), depthSRV };
+		ID3D11ShaderResourceView* csSRVs[2] = { vlTexB->srv.get(), depthSRV };
 		context->CSSetShaderResources(0, 2, csSRVs);
 
-		ID3D11UnorderedAccessView* csUAVs[1] = { vrTexA->uav.get() };
+		ID3D11UnorderedAccessView* csUAVs[1] = { vlTexA->uav.get() };
 		context->CSSetUnorderedAccessViews(0, 1, csUAVs, nullptr);
 
 		uint32_t groupsY = (dynHeight + effectiveGroupSize - 1) / effectiveGroupSize;
@@ -866,7 +862,7 @@ void Effect11::DrawVolumetricRays()
 
 		auto& ibl = globals::features::ibl;
 		ID3D11ShaderResourceView* srvs[16]{};
-		srvs[0] = vrTexA->srv.get();
+		srvs[0] = vlTexA->srv.get();
 		if (ibl.loaded) {
 			srvs[14] = ibl.envIBLTexture->srv.get();
 			srvs[15] = ibl.skyIBLTexture->srv.get();

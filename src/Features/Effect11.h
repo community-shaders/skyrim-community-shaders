@@ -103,9 +103,9 @@ public:
 	ID3D11BlendState* additiveBlendState = nullptr;
 	ID3D11BlendState* alphaBlendState = nullptr;
 
-	std::unique_ptr<Texture2D> vrTexA;
-	std::unique_ptr<Texture2D> vrTexB;
-	std::unique_ptr<ConstantBuffer> vrBlurCB;
+	std::unique_ptr<Texture2D> vlTexA;
+	std::unique_ptr<Texture2D> vlTexB;
+	std::unique_ptr<ConstantBuffer> vlBlurCB;
 
 	winrt::com_ptr<ID3D11Texture2D> raindropTexture;
 	winrt::com_ptr<ID3D11ShaderResourceView> raindropSRV;
