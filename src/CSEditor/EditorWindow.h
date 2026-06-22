@@ -196,8 +196,11 @@ public:
 	/** @brief Draw the full time controls panel (pause, game time, timescale). */
 	void DrawTimeControls();
 
-	/** @brief Returns true if the ESC key should close the editor (no popups are open). */
-	bool ShouldHandleEscapeKey() const;
+	/** @brief Returns true if ESC should close the editor (no popup open and none just consumed ESC this frame). */
+	bool ShouldHandleEscapeKey();
+
+	/** @brief Set by popup close-on-ESC to suppress the same key-up from also closing the editor. */
+	bool suppressNextEditorEscape = false;
 
 	/** @brief Returns true if the editor can be opened (game is loaded and not in main menu). */
 	static bool CanBeOpen();
@@ -275,8 +278,8 @@ public:
 		std::vector<std::string> favoriteWidgets;
 		std::map<std::string, std::vector<std::string>> recentWidgets;
 		int maxRecentWidgets = 10;
-
 		bool showViewport = true;
+		std::string selectedCategory = "Weather";
 
 		// Per-widget-type window sizes (serialized as JSON for persistence)
 		json widgetTypeSizes;

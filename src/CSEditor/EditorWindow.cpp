@@ -18,8 +18,9 @@
 #define I18N_KEY_PREFIX "cs_editor."
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(EditorWindow::Settings::PaletteColorEntry, r, g, b, useCount, lastUsedTime, isFavorite)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(EditorWindow::Settings::PaletteValueEntry, name, value, useCount, lastUsedTime, isFavorite)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(EditorWindow::Settings::PaletteFavoriteColor, hasValue, r, g, b)
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(EditorWindow::Settings, recordMarkers, markedRecords, autoApplyChanges, useTextButtons, enableInheritFromParent, editorUIScale, favoriteWidgets, recentWidgets, maxRecentWidgets, showViewport, widgetTypeSizes, paletteColors, paletteFavorites)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(EditorWindow::Settings, recordMarkers, markedRecords, autoApplyChanges, useTextButtons, enableInheritFromParent, editorUIScale, favoriteWidgets, recentWidgets, maxRecentWidgets, showViewport, selectedCategory, widgetTypeSizes, paletteColors, paletteValues, paletteFavorites)
 
 void DrawIconStar(ImVec2 center, float radius, ImU32 color, bool filled)
 {
@@ -1558,6 +1559,7 @@ void EditorWindow::SaveAll()
 
 void EditorWindow::SaveSettings()
 {
+	settings.selectedCategory = m_selectedCategory;
 	settings.widgetTypeSizes = GetWidgetTypeSizesJson();
 	j = settings;
 }
@@ -1566,6 +1568,7 @@ void EditorWindow::LoadSettings()
 {
 	if (!j.empty())
 		settings = j;
+	m_selectedCategory = settings.selectedCategory;
 	SetWidgetTypeSizesFromJson(settings.widgetTypeSizes);
 }
 
@@ -2107,8 +2110,12 @@ void EditorWindow::AdjustFlySpeed(float scrollDelta)
 	RE::Console::ExecuteCommand(std::format("sucsm {:.0f}", flySpeed).c_str());
 }
 
-bool EditorWindow::ShouldHandleEscapeKey() const
+bool EditorWindow::ShouldHandleEscapeKey()
 {
+	if (suppressNextEditorEscape) {
+		suppressNextEditorEscape = false;
+		return false;
+	}
 	return !ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
 }
 
