@@ -5,6 +5,7 @@
 #include <cstring>
 #include <filesystem>
 #include <imgui.h>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -17,6 +18,22 @@ namespace MenuFonts
 	void NormalizeFontRoles(Menu::ThemeSettings& theme, bool themeProvidedFontRoles);
 	const FontRoleSettings& GetDefaultRole(FontRole role);
 	std::string BuildFontSignature(const Menu::ThemeSettings& theme, float baseFontSize);
+
+	/**
+	 * @brief RAII guard for pushing/popping an arbitrary ImGui font.
+	 */
+	class ImFontGuard
+	{
+	public:
+		explicit ImFontGuard(ImFont* font);
+		~ImFontGuard();
+
+		ImFontGuard(const ImFontGuard&) = delete;
+		ImFontGuard& operator=(const ImFontGuard&) = delete;
+
+	private:
+		bool pushed_ = false;
+	};
 
 	/**
 	 * @brief RAII guard for pushing/popping ImGui fonts based on font roles
@@ -43,6 +60,7 @@ namespace MenuFonts
 
 	private:
 		ImFont* font_ = nullptr;
+		std::optional<ImFontGuard> guard_;
 	};
 
 	/**
@@ -86,6 +104,22 @@ namespace MenuFonts
 	 * @return true if the tab is selected and visible, false otherwise
 	 */
 	bool BeginTabItemWithFont(const char* label, FontRole role, ImGuiTabItemFlags flags = ImGuiTabItemFlags_None);
+
+	/**
+	 * @brief Loads catalog fonts into the current ImGui atlas for selector previews.
+	 *
+	 * Must be called after role fonts are added and before io.Fonts->Build().
+	 * Preview fonts are baked at the given pixel size (typically matching body text) with a limited Latin glyph range.
+	 */
+	void AddPreviewFontsToAtlas(float previewFontSize);
+
+	/** @brief Drops cached preview font pointers after io.Fonts->Clear(). */
+	void InvalidatePreviewFonts();
+
+	/**
+	 * @brief Returns a preview font for a catalog file path, or nullptr if unavailable.
+	 */
+	[[nodiscard]] ImFont* GetPreviewFont(const std::string& file);
 }
 
 namespace Util
@@ -118,6 +152,10 @@ namespace Util
 		Catalog DiscoverFontCatalog();
 		Catalog DiscoverFontCatalog(bool forceRefresh);  // Explicit refresh control
 		std::string FormatFontDisplayName(const std::string& filename);
+
+		[[nodiscard]] const StyleInfo* FindRegularStyle(const FamilyInfo& family);
+		[[nodiscard]] int FindFamilyIndex(const Catalog& catalog, const std::string& familyName);
+		[[nodiscard]] int FindStyleIndex(const FamilyInfo& family, const std::string& styleName);
 	}
 
 	std::vector<std::string> DiscoverFonts();

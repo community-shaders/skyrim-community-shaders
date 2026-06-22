@@ -6,6 +6,10 @@
         "commonlibsse-ng": {
             "description": "Dependencies of clib-ng",
             "dependencies": ["catch2", "fmt", "directxtk", "rapidcsv", "spdlog"]
+        },
+        "devbench-bridge": {
+            "description": "Register the plugin's tools into the devbench test bench (selected by the DEVBENCH_BRIDGE CMake option).",
+            "dependencies": ["devbench-api"]
         }
     },
     "default-features": ["commonlibsse-ng"],

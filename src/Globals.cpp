@@ -18,6 +18,7 @@
 #include "Features/LightLimitFix.h"
 #include "Features/LinearLighting.h"
 #include "Features/PerformanceOverlay.h"
+#include "Features/RemoteControl.h"
 #include "Features/RenderDoc.h"
 #include "Features/ScreenSpaceGI.h"
 #include "Features/ScreenSpaceShadows.h"
@@ -87,6 +88,7 @@ namespace globals
 		HDRDisplay hdrDisplay{};
 		Effect11 effect11{};
 		RenderDoc renderDoc{};
+		RemoteControl remoteControl{};
 		ScreenshotFeature screenshotFeature{};
 		CSEditor csEditor{};
 		ExponentialHeightFog exponentialHeightFog{};

@@ -1,0 +1,7 @@
+{
+    "name": "devbench-api",
+    "version": "1.0.0",
+    "description": "devbench cross-plugin API header for SKSE plugin developers. Register MCP/REST tools and emit events into the devbench host. MIT-licensed glue; the devbench plugin itself is GPL-3.0.",
+    "homepage": "https://github.com/alandtse/devbench",
+    "license": "MIT"
+}

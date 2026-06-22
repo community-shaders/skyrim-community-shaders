@@ -202,6 +202,14 @@ bool State::HandlePostProcessing(RE::RENDER_TARGET a_input, RE::RENDER_TARGET a_
 	return true;
 }
 
+/**
+ * @brief Resets per-frame state and publishes frame counter to off-thread readers.
+ *
+ * Ends the current profiler frame, resets all loaded features, updates the
+ * timer if the game is not paused, caches current menu open states, clears
+ * shader descriptor tracking, increments and atomically publishes the frame
+ * count, and disables reflection and improved snow shaders.
+ */
 void State::Reset()
 {
 	globals::profiler->EndFrame();
@@ -228,6 +236,8 @@ void State::Reset()
 	lastVertexDescriptor = 0;
 	std::memset(&permutationDataPrevious, 0xFF, sizeof(PermutationCB));
 	frameCount++;
+	// Publish for off-thread readers (e.g. the MCP listener thread).
+	frameCountAtomic.store(frameCount, std::memory_order_relaxed);
 
 	if (auto* imageSpaceManager = RE::ImageSpaceManager::GetSingleton()) {
 		auto& BSImagespaceShaderApplyReflections = imageSpaceManager->GetRuntimeData().BSImagespaceShaderApplyReflections;
