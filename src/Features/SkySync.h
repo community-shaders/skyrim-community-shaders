@@ -35,9 +35,11 @@ public:
 		int32_t MoonLightSource = 0;
 		int32_t SunPath = 0;
 		float CustomAngle = -35.0f;
-		float MinShadowElevation = 18.0f;
+		float MinShadowElevation = 10.0f;
 		float ShadowTransitionDuration = 100.0f;
 		bool DimSunlightUnderHorizon = true;
+		bool DimVolumetricLighting = true;
+		float HorizonFadeHours = 0.7f;
 		float NewMoonIntensity = 0.05f;
 		float CrescentMoonIntensity = 0.25f;
 		float FullMoonIntensity = 1.0f;
@@ -117,6 +119,7 @@ private:
 		bool sunriseReleased = false;
 		float frozenHeading = 0.0f;
 		bool sunsetHeadingLocked = false;
+		float vlIntensityFactor = 1.0f;
 
 		void Update(const RE::Sky* sky, RE::NiPoint3 dirs[], float intensities[], float fadeDuration, float fadeAdvance);
 		void LockSunElevation(RE::NiPoint3 dirs[]);
@@ -124,6 +127,7 @@ private:
 		static void SetDirection(RE::NiPoint3& dir, float headingRadians, float elevRadians);
 		static void SetElevation(RE::NiPoint3& dir, float elevRadians);
 		static void ClampDirection(RE::NiPoint3& dir);
+		static float ComputeVLFactor(const RE::NiPoint3& current, const RE::NiPoint3& target);
 		void Reset();
 	};
 
@@ -134,8 +138,12 @@ private:
 	static constexpr float VanillaSunAngle = 90.0f + 5.0f;
 	static constexpr float SecondsPerGameHour = 3600.0f;
 	static constexpr float SunsetHeadingLockThreshold = 0.5f;
+	static constexpr float VLFadeStartAngle = 2.0f;
+	static constexpr float VLFadeEndAngle = 10.0f;
+	static constexpr float MaxHorizonFadeHours = 1.5f;
 
 	inline static RE::NiPoint3* gSunPosition = nullptr;
+	inline static RE::BSVolumetricLightingRenderData* gVolumetricLighting = nullptr;
 
 	bool moonAndStarsLoaded = false;
 	RE::TESObjectCELL* currentCell = nullptr;
@@ -147,6 +155,7 @@ private:
 	float currentDim = 1.0f;
 	bool sunSetting = false;
 	bool sunRising = false;
+	bool sunBelowHorizon = false;
 	ShadowFader shadowFader;
 
 	void DisableOnConflict(std::string_view conflictName);

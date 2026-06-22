@@ -4,6 +4,10 @@
 #include "FeatureConstraints.h"
 #include "FeatureVersions.h"
 #include "I18n/I18n.h"
+#include "Utils/RestartSettings.h"
+
+#include <span>
+#include <string_view>
 #ifdef TRACY_ENABLE
 #	include <Tracy/Tracy.hpp>
 #	include <Tracy/TracyD3D11.hpp>
@@ -21,6 +25,23 @@ struct Feature
 	};
 	// Override in features to expose settings for search
 	virtual std::vector<SettingSearchEntry> GetSettingsSearchEntries() { return {}; }
+
+	// Restart-required settings introspection. Default: none.
+	// Features with restart-gated fields override these to expose them to UI
+	// helpers and MCP/RemoteControl without per-feature glue.
+	virtual std::span<const Util::Settings::RestartFieldInfo> GetRestartRequiredFields() const { return {}; }
+	/**
+ * Retrieves the boot configuration value for a given JSON key.
+ * @param jsonKey The JSON key identifying which boot value to retrieve.
+ * @returns A pointer to the boot configuration value, or nullptr if not defined.
+ */
+virtual const void* GetBootValue(std::string_view /*jsonKey*/) const { return nullptr; }
+	/**
+ * Retrieves the raw settings data blob.
+ * @return Pointer to the settings blob data, or nullptr if unavailable.
+ */
+virtual const void* GetSettingsBlob() const { return nullptr; }
+	virtual size_t GetSettingsBlobSize() const { return 0; }
 
 	// Nexus Mods base URL for Skyrim Special Edition
 	static constexpr std::string_view NEXUS_BASE_URL = "https://www.nexusmods.com/skyrimspecialedition/mods/";

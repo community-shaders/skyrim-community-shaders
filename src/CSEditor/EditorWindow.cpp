@@ -1887,18 +1887,18 @@ void EditorWindow::UpdateTimeState()
 	if (!calendar || !calendar->timeScale)
 		return;
 
-	bool sleepWaitOpen = ui && ui->IsMenuOpen(RE::SleepWaitMenu::MENU_NAME);
+	bool needsTimeRestored = ui && (ui->IsMenuOpen(RE::SleepWaitMenu::MENU_NAME) || ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME));
 
-	// External state sync (skip during sleep/wait)
-	if (!sleepWaitOpen) {
+	// External state sync (skip while a time-sensitive menu is open)
+	if (!needsTimeRestored) {
 		if (calendar->timeScale->value == 0.0f && !timePaused)
 			savedTimeScale = kVanillaTimeScale;
 		else if (calendar->timeScale->value > 0.0f && timePaused)
 			timePaused = false;
 	}
 
-	// Sleep/wait handling — temporarily restore time so the wait can proceed
-	if (sleepWaitOpen && calendar->timeScale->value == 0.0f) {
+	// Temporarily restore time during sleep/wait, fast travel, and loading screens
+	if (needsTimeRestored && calendar->timeScale->value == 0.0f) {
 		if (!wasRestoredForWait) {
 			wasPausedBeforeWait = true;
 			if (timePaused)
@@ -1907,7 +1907,7 @@ void EditorWindow::UpdateTimeState()
 				calendar->timeScale->value = std::max(savedTimeScale, kVanillaTimeScale);
 			wasRestoredForWait = true;
 		}
-	} else if (!sleepWaitOpen && wasRestoredForWait) {
+	} else if (!needsTimeRestored && wasRestoredForWait) {
 		if (wasPausedBeforeWait && !timePaused)
 			PauseTime();
 		wasRestoredForWait = false;

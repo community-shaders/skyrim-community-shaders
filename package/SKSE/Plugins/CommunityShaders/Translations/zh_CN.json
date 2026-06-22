@@ -1818,7 +1818,7 @@
     "menu.profiling.no_timing_data_world": "无可用计时数据（请进入游戏世界）",
     "menu.profiling.p95": "P95",
     "menu.profiling.p99": "P99",
-    "menu.profiling.pass": "通道",
+    "menu.profiling.pass": "渲染通道",
     "menu.profiling.percent": "%",
     "menu.profiling.total": "总计",
     "menu.restore_settings": "恢复已保存的设置",

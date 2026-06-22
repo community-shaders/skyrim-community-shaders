@@ -2,6 +2,19 @@ cmake_minimum_required(VERSION 4.2)
 cmake_policy(SET CMP0116 NEW)
 set(CMAKE_POLICY_WARNING_CMP0116 OFF)
 
+# devbench bridge — declared before project() so the vcpkg toolchain (loaded at project())
+# sees the manifest-feature selection. The devbench-api dependency lives behind the
+# `devbench-bridge` vcpkg feature, so -DDEVBENCH_BRIDGE=OFF actually drops it (not just the
+# find_package/link/define below).
+option(
+    DEVBENCH_BRIDGE
+    "Register the plugin's tools into the devbench test bench (requires the devbench-api port; runtime no-op when no devbench host is present)"
+    ON
+)
+if(DEVBENCH_BRIDGE)
+    list(APPEND VCPKG_MANIFEST_FEATURES "devbench-bridge")
+endif()
+
 project(
     # gersemi: ignore
     CommunityShaders
@@ -90,6 +103,9 @@ find_package(unordered_dense CONFIG REQUIRED)
 find_package(efsw CONFIG REQUIRED)
 find_package(Tracy CONFIG REQUIRED)
 find_package(directx-headers CONFIG REQUIRED)
+if(DEVBENCH_BRIDGE)
+    find_package(devbench-api CONFIG REQUIRED)
+endif()
 add_subdirectory(${CMAKE_SOURCE_DIR}/cmake/Streamline)
 
 find_path(DETOURS_INCLUDE_DIRS "detours/detours.h")
@@ -150,6 +166,13 @@ target_link_libraries(
         ${DETOURS_LIBRARY}
         windowscodecs
 )
+
+# devbench bridge: opt-out via -DDEVBENCH_BRIDGE=OFF. When off, the port isn't required
+# and DevBenchBridge.cpp compiles to an empty Install().
+if(DEVBENCH_BRIDGE)
+    target_link_libraries(${PROJECT_NAME} PRIVATE DevBench::API)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE DEVBENCH_BRIDGE_ENABLED)
+endif()
 
 # Some third-party libs (e.g. FFX backend) are built with /GL.
 # In RelWithDebInfo, align linker options to avoid LNK4075/LNK1218 when warnings are treated as errors.
