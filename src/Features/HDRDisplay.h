@@ -169,7 +169,7 @@ public:
 		float skipUIComposite;           ///< 1.0 = FG handles UI, skip our compositing
 		float uiBrightness;              ///< UI brightness multiplier (Frame Gen compositing)
 		float isSceneLinear;             ///< 1.0 = Linear Lighting active, scene already linear
-		float isMainOrLoadingMenu;       ///< 1.0 = main menu/loading screen active
+		float pad0;                      ///< 1.0 = main menu/loading screen active
 		float fgTweenMenuMidAlphaBoost;  ///< 1.0 = TweenMenu (pause) open — FG UIBrightnessCS mid-alpha boost only
 		float previewSDR;                ///< 1.0 = emit sRGB SDR (crop preview) instead of PQ HDR10
 		float pad1;
