@@ -17,7 +17,7 @@ on:
             artifact_pattern:
                 description: "Artifact glob pattern to select the package to upload"
                 required: false
-                default: "CommunityShaders-*.7z"
+                default: "CommunityShaders-*.zip"
             mod_filename:
                 description: "Filename used for the Nexus mod upload"
                 required: false
@@ -54,7 +54,7 @@ on:
             artifact_pattern:
                 required: false
                 type: string
-                default: "CommunityShaders-*.7z"
+                default: "CommunityShaders-*.zip"
             mod_filename:
                 required: false
                 type: string
@@ -257,7 +257,7 @@ jobs:
                                 'These features are marked `autoupload = true` in their '
                                 '`.ini` but no release asset matched their derived '
                                 'artifact pattern. They will be skipped from this Nexus '
-                                'upload. Add `nexusartifactpattern = <Folder.Name-*.7z>` '
+                                'upload. Add `nexusartifactpattern = <Folder.Name-*.zip>` '
                                 'to the feature .ini to override the default derivation.']
                       if summary_path:
                           with open(summary_path, 'a') as f:
@@ -299,7 +299,7 @@ jobs:
             - name: Download GitHub release assets
               run: |
                   mkdir -p release-assets
-                  gh release download "${{ needs.prepare-nexus-matrix.outputs.tag }}" --repo "$GITHUB_REPOSITORY" --pattern "*.7z" --dir release-assets
+                  gh release download "${{ needs.prepare-nexus-matrix.outputs.tag }}" --repo "$GITHUB_REPOSITORY" --pattern "*.zip" --dir release-assets
                   ls -lah release-assets
               env:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -490,9 +490,9 @@ jobs:
                   RELEASE_TAG: ${{ needs.prepare-nexus-matrix.outputs.tag }}
                   REPO: ${{ github.repository }}
               run: |
-                  FILE=$(find upload/ -maxdepth 1 -name "*.7z" | sort | head -n 1)
+                  FILE=$(find upload/ -maxdepth 1 -name "*.zip" | sort | head -n 1)
                   if [ -z "$FILE" ]; then
-                    echo "ERROR: No .7z file found in upload/ directory" >&2
+                    echo "ERROR: No .zip file found in upload/ directory" >&2
                     exit 1
                   fi
                   echo "file=$FILE" >> $GITHUB_OUTPUT

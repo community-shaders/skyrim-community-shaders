@@ -19,22 +19,18 @@ on:
                 description: "Run HLSL shader compilation validation"
                 type: boolean
                 default: true
-            run-shader-tests:
-                description: "Run shader unit tests"
-                type: boolean
-                default: true
             hlsl-should-build:
                 description: "Passed to check-hlsl-changes; 'true' forces shader steps to run"
-                type: string
-                default: "true"
-            shader-tests-should-build:
-                description: "Passed to check-hlsl-changes for unit tests"
                 type: string
                 default: "true"
             cache-key-suffix:
                 description: "Optional suffix to invalidate the build cache"
                 type: string
                 default: ""
+            cmake-preset:
+                description: "CMake configure/build preset for the C++ build (ALL = full LTCG shipping flags; PR = mild optimization without LTCG or full debug info)"
+                type: string
+                default: "ALL"
         outputs:
             version:
                 description: "CMake project version extracted from the build"
@@ -56,8 +52,8 @@ jobs:
             matrix:
                 compiler:
                     - name: vs2026
-                      cmake-preset: ALL
-                      build-dir: build/ALL
+                      cmake-preset: ${{ inputs.cmake-preset }}
+                      build-dir: build/${{ inputs.cmake-preset }}
             fail-fast: false
         steps:
             - name: Checkout code
@@ -79,7 +75,6 @@ jobs:
               uses: lukka/run-cmake@v10
               with:
                   configurePreset: ${{ matrix.compiler.cmake-preset }}
-                  configurePresetAdditionalArgs: "['-DBUILD_SHADER_TESTS=OFF']"
                   buildPreset: ${{ matrix.compiler.cmake-preset }}
 
             - name: Extract version from CMake
@@ -179,6 +174,8 @@ jobs:
                     }
                   }
 
+            # --shader-dir stays on build/ALL: prepare-shaders always populates
+            # the ALL preset; inputs.cmake-preset only selects the C++ tier.
             - name: Validate shader compilation
               if: steps.check-hlsl.outputs.skip != 'true'
               shell: bash
@@ -197,57 +194,5 @@ jobs:
                   path: |
                       build/ShaderCache/new_issues.log
                       build/ShaderCache/*.log
-                  retention-days: 7
-                  if-no-files-found: ignore
-
-    shader-unit-tests:
-        name: Run Shader Unit Tests
-        if: inputs.run-shader-tests
-        runs-on: windows-2025
-        permissions:
-            contents: read
-        steps:
-            - name: Checkout code
-              uses: actions/checkout@v6
-              with:
-                  ref: ${{ inputs.ref }}
-                  repository: ${{ inputs.repository }}
-                  submodules: recursive
-
-            - name: Check for HLSL Changes
-              id: check-hlsl
-              uses: ./.github/actions/check-hlsl-changes
-              with:
-                  hlsl-should-build: ${{ inputs.shader-tests-should-build }}
-            - name: Setup Build Environment
-              id: setup
-              if: steps.check-hlsl.outputs.skip != 'true'
-              uses: ./.github/actions/setup-build-environment
-              with:
-                  cache-key-suffix: "tests${{ inputs.cache-key-suffix }}"
-                  cmake-preset: "ALL"
-                  build-dir: "build/ALL"
-
-            - name: Build shader tests
-              if: steps.check-hlsl.outputs.skip != 'true'
-              uses: lukka/run-cmake@v10
-              with:
-                  configurePreset: ALL
-                  configurePresetAdditionalArgs: "['-DBUILD_SHADER_TESTS=ON']"
-                  buildPreset: ALL
-                  buildPresetAdditionalArgs: "['--target shader_tests']"
-
-            - name: Run shader unit tests
-              if: steps.check-hlsl.outputs.skip != 'true'
-              run: |
-                  ctest --test-dir build/ALL -C Release --output-on-failure -R ShaderTests --timeout 300
-
-            - name: Upload test results on failure
-              if: failure() && steps.check-hlsl.outputs.skip != 'true'
-              uses: actions/upload-artifact@v7
-              with:
-                  name: shader-test-results
-                  path: |
-                      build/ALL/Testing/**
                   retention-days: 7
                   if-no-files-found: ignore

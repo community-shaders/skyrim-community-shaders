@@ -13,11 +13,22 @@ This is a Windows-specific project requiring Visual Studio and Windows SDK. If w
 powershell.exe -Command "./BuildRelease.bat [PRESET_NAME]"
 ```
 
-### Primary Build Command
+### Primary Build Commands
+
+One-click wrappers — each configures CMake automatically on first run (no
+manual `cmake` step ever needed) and bootstraps the VS x64 environment when
+required:
 
 ```bash
-./BuildRelease.bat [PRESET_NAME]
+./BuildRelease.bat   # Shipping build: ALL preset, /O2 /GL /LTCG, full PDB, all packages
+./BuildDev.bat       # Developer build: optimized DLL + AIO folder in build/ALL/aio
+./BuildDevFast.bat   # Fastest iteration: Ninja, /Od, incremental link, DLL only
+./BuildPR.bat        # CI parity: /O2 no-LTO, public-symbols PDB, AIO zip
+./BuildDebug.bat     # Debug config (ALL-DEBUG preset, CommonLib from source)
 ```
+
+`BuildRelease.bat` is also the generic engine: `./BuildRelease.bat [BUILD_PRESET] [CONFIGURE_PRESET]`
+(configure preset defaults to the build preset name).
 
 **Available Presets** (from CMakePresets.json):
 
@@ -108,11 +119,11 @@ cmake --build ./build/ALL --target PREPARE_AIO
 # Prepare shaders only (useful for CI shader validation)
 cmake --build ./build/ALL --target prepare_shaders
 
-# Fast shader-only deployment (no DLL build, no tests - for dev iteration)
+# Fast shader-only deployment (no DLL build - for dev iteration)
 # See docs/development/shader-workflow.md for details
 cmake --build ./build/ALL --target COPY_SHADERS
 
-# Full deployment with DLL build and tests
+# Full deployment with DLL build
 cmake --build ./build/ALL --target DEPLOY_ALL
 
 # Create AIO zip package (when AIO_ZIP_TO_DIST=ON)
