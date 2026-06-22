@@ -196,11 +196,10 @@ public:
 	/** @brief Draw the full time controls panel (pause, game time, timescale). */
 	void DrawTimeControls();
 
-	// Check if ESC key should close the editor (no popups open, and no popup just
-	// consumed ESC this frame via suppressNextEditorEscape).
+	/** @brief Returns true if ESC should close the editor (no popup open and none just consumed ESC this frame). */
 	bool ShouldHandleEscapeKey();
 
-	// Set by popup close-on-ESC to prevent the same key-up from also closing the editor.
+	/** @brief Set by popup close-on-ESC to suppress the same key-up from also closing the editor. */
 	bool suppressNextEditorEscape = false;
 
 	/** @brief Returns true if the editor can be opened (game is loaded and not in main menu). */
