@@ -4,12 +4,6 @@
 #include "State.h"
 #include "Utils/D3D.h"
 
-#include "RE/B/BSShadowDirectionalLight.h"
-
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
-	VolumetricShadows::Settings,
-	BlurRadius)
-
 void VolumetricShadows::SetupResources()
 {
 	auto device = globals::d3d::device;
@@ -26,28 +20,6 @@ void VolumetricShadows::SetupResources()
 		samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
 		DX::ThrowIfFailed(device->CreateSamplerState(&samplerDesc, &linearSampler));
 		Util::SetResourceName(linearSampler, "VolumetricShadows::LinearSampler");
-	}
-
-	// Create linearization cbuffer
-	{
-		D3D11_BUFFER_DESC cbDesc{};
-		cbDesc.ByteWidth = sizeof(VSMLinearizeCB);
-		cbDesc.Usage = D3D11_USAGE_DYNAMIC;
-		cbDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
-		cbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
-		DX::ThrowIfFailed(device->CreateBuffer(&cbDesc, nullptr, &linearizeCB));
-		Util::SetResourceName(linearizeCB, "VolumetricShadows::LinearizeCB");
-	}
-
-	// Create blur cbuffer
-	{
-		D3D11_BUFFER_DESC cbDesc{};
-		cbDesc.ByteWidth = sizeof(BlurCB);
-		cbDesc.Usage = D3D11_USAGE_DYNAMIC;
-		cbDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
-		cbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
-		DX::ThrowIfFailed(device->CreateBuffer(&cbDesc, nullptr, &blurCB));
-		Util::SetResourceName(blurCB, "VolumetricShadows::BlurCB");
 	}
 
 	// Compile compute shaders
@@ -100,50 +72,6 @@ void VolumetricShadows::ClearShaderCache()
 	blurShadowVerticalCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\VolumetricShadows\\BlurShadowCS.hlsl", defines, "cs_5_0"));
 }
 
-void VolumetricShadows::ExtractCascadeNearFar()
-{
-	auto* shadowSceneNode = globals::game::smState->shadowSceneNode[0];
-	if (!shadowSceneNode)
-		return;
-
-	auto* sunShadowLight = shadowSceneNode->GetRuntimeData().sunShadowDirLight;
-	if (!sunShadowLight)
-		return;
-
-	auto extractCascade = [&](RE::NiCamera* camera, const REX::W32::XMFLOAT4X4& transform, uint32_t cascadeIdx) {
-		if (camera) {
-			auto& frustum = camera->GetRuntimeData2().viewFrustum;
-			cascadeNear[cascadeIdx] = frustum.fNear;
-			cascadeFar[cascadeIdx] = frustum.fFar;
-		}
-		// Extract world-to-UV scale from shadow projection matrix
-		// Column 0 of the effective HLSL matrix = row 0 cross rows of C++ row-major storage
-		// The UV-per-world-unit scale is the length of the first output component's gradient
-		float sx = transform.m[0][0];
-		float sy = transform.m[1][0];
-		float sz = transform.m[2][0];
-		cascadeScale[cascadeIdx] = std::sqrt(sx * sx + sy * sy + sz * sz);
-	};
-
-	if (REL::Module::IsVR()) {
-		auto& lightData = sunShadowLight->GetVRRuntimeData();
-		const auto count = std::min(lightData.shadowmapDescriptors.size(), 2u);
-		for (uint32_t i = 0; i < count; i++)
-			extractCascade(lightData.shadowmapDescriptors[i].camera[0].get(), lightData.shadowmapDescriptors[i].lightTransform, i);
-	} else {
-		auto& lightData = sunShadowLight->GetRuntimeData();
-		const auto count = std::min(lightData.shadowmapDescriptors.size(), 2u);
-		for (uint32_t i = 0; i < count; i++)
-			extractCascade(lightData.shadowmapDescriptors[i].camera.get(), lightData.shadowmapDescriptors[i].lightTransform, i);
-	}
-}
-
-float4 VolumetricShadows::GetCascadeDepthParams()
-{
-	ExtractCascadeNearFar();
-	return { cascadeNear[0], cascadeFar[0], cascadeNear[1], cascadeFar[1] };
-}
-
 void VolumetricShadows::CopyShadowLightData()
 {
 	ZoneScoped;
@@ -159,7 +87,7 @@ void VolumetricShadows::CopyShadowLightData()
 
 		context->PSGetShaderResources(4, 1, &shadowView);
 
-		// Downsample shadow texture array to fixed size
+		// Downsample shadow texture array to fixed 512x512 (mip1: 256x256)
 		if (shadowView) {
 			constexpr uint32_t SHADOW_COPY_SIZE = 512;
 
@@ -173,7 +101,7 @@ void VolumetricShadows::CopyShadowLightData()
 				copyDesc.Height = SHADOW_COPY_SIZE;
 				copyDesc.MipLevels = 2;
 				copyDesc.ArraySize = 1;
-				copyDesc.Format = DXGI_FORMAT_R16G16B16A16_UNORM;
+				copyDesc.Format = DXGI_FORMAT_R16G16_UNORM;
 				copyDesc.SampleDesc.Count = 1;
 				copyDesc.SampleDesc.Quality = 0;
 				copyDesc.Usage = D3D11_USAGE_DEFAULT;
@@ -238,17 +166,6 @@ void VolumetricShadows::CopyShadowLightData()
 				Util::SetResourceName(shadowBlurTempMip1UAV, "VolumetricShadows::ShadowBlurTemp UAV mip1");
 			}
 
-			// Extract cascade near/far and projection scale
-			ExtractCascadeNearFar();
-
-			// Compute per-cascade blur radii for consistent world-space softness
-			// Mip 0 (512x512) = cascade 1, Mip 1 (256x256) = cascade 0
-			// pixelRadius = worldRadius * cascadeScale * textureSize
-			uint32_t blurRadiusMip0 = std::max(1u, std::min(32u,
-				static_cast<uint32_t>(std::round(settings.BlurRadius * cascadeScale[1] * float(SHADOW_COPY_SIZE)))));
-			uint32_t blurRadiusMip1 = std::max(1u, std::min(32u,
-				static_cast<uint32_t>(std::round(settings.BlurRadius * cascadeScale[0] * float(SHADOW_COPY_SIZE / 2)))));
-
 			// Get input dimensions for dispatch sizing
 			ID3D11Resource* shadowResource = nullptr;
 			shadowView->GetResource(&shadowResource);
@@ -273,17 +190,7 @@ void VolumetricShadows::CopyShadowLightData()
 					// Dispatch covers full input: each thread gathers 2x2, 8 threads per group
 					auto dispatchSize = srcDesc.Width / 16;
 
-					// Mip 0 (cascade 1) - update cbuffer with cascade 1 near/far
-					{
-						D3D11_MAPPED_SUBRESOURCE mapped{};
-						DX::ThrowIfFailed(context->Map(linearizeCB, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped));
-						auto* cb = static_cast<VSMLinearizeCB*>(mapped.pData);
-						cb->CascadeNear = cascadeNear[1];
-						cb->CascadeFar = cascadeFar[1];
-						context->Unmap(linearizeCB, 0);
-						context->CSSetConstantBuffers(0, 1, &linearizeCB);
-					}
-
+					// Mip 0 (cascade 1)
 					ID3D11UnorderedAccessView* csUavs[1]{ shadowCopyMip0UAV };
 					context->CSSetUnorderedAccessViews(0, 1, csUavs, nullptr);
 					context->CSSetShader(downsampleShadowMip0CS, nullptr, 0);
@@ -291,16 +198,7 @@ void VolumetricShadows::CopyShadowLightData()
 					context->Dispatch(dispatchSize, dispatchSize, 1);
 					globals::profiler->EndPass();
 
-					// Mip 1 (cascade 0) - update cbuffer with cascade 0 near/far
-					{
-						D3D11_MAPPED_SUBRESOURCE mapped{};
-						DX::ThrowIfFailed(context->Map(linearizeCB, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped));
-						auto* cb = static_cast<VSMLinearizeCB*>(mapped.pData);
-						cb->CascadeNear = cascadeNear[0];
-						cb->CascadeFar = cascadeFar[0];
-						context->Unmap(linearizeCB, 0);
-					}
-
+					// Mip 1 (cascade 0)
 					csUavs[0] = shadowCopyMip1UAV;
 					context->CSSetUnorderedAccessViews(0, 1, csUavs, nullptr);
 					context->CSSetShader(downsampleShadowMip1CS, nullptr, 0);
@@ -314,25 +212,13 @@ void VolumetricShadows::CopyShadowLightData()
 					context->CSSetShaderResources(0, 2, csSrvs);
 					csUavs[0] = nullptr;
 					context->CSSetUnorderedAccessViews(0, 1, csUavs, nullptr);
-					ID3D11Buffer* nullCB = nullptr;
-					context->CSSetConstantBuffers(0, 1, &nullCB);
 
 					constexpr uint32_t mip0Size = SHADOW_COPY_SIZE;
 					constexpr uint32_t mip1Size = SHADOW_COPY_SIZE / 2;
 
-					// Separable blur for Mip 0
+					// 11x11 separable blur for Mip 0
 					{
 						const uint32_t GROUP_SIZE = 128;
-
-						// Update blur cbuffer for mip 0
-						{
-							D3D11_MAPPED_SUBRESOURCE mapped{};
-							DX::ThrowIfFailed(context->Map(blurCB, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped));
-							auto* cb = static_cast<BlurCB*>(mapped.pData);
-							cb->BlurRadius = blurRadiusMip0;
-							context->Unmap(blurCB, 0);
-							context->CSSetConstantBuffers(0, 1, &blurCB);
-						}
 
 						// Horizontal pass: shadowCopy mip0 -> shadowBlurTemp mip0
 						ID3D11ShaderResourceView* blurSrvs[1]{ shadowCopyMip0SRV };
@@ -367,18 +253,9 @@ void VolumetricShadows::CopyShadowLightData()
 						context->CSSetUnorderedAccessViews(0, 1, csUavs, nullptr);
 					}
 
-					// Separable blur for Mip 1
+					// 11x11 separable blur for Mip 1
 					{
 						const uint32_t GROUP_SIZE = 128;
-
-						// Update blur cbuffer for mip 1
-						{
-							D3D11_MAPPED_SUBRESOURCE mapped{};
-							DX::ThrowIfFailed(context->Map(blurCB, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped));
-							auto* cb = static_cast<BlurCB*>(mapped.pData);
-							cb->BlurRadius = blurRadiusMip1;
-							context->Unmap(blurCB, 0);
-						}
 
 						// Horizontal pass: shadowCopy mip1 -> shadowBlurTemp mip1
 						ID3D11ShaderResourceView* blurSrvs[1]{ shadowCopyMip1SRV };
@@ -416,8 +293,6 @@ void VolumetricShadows::CopyShadowLightData()
 					// Cleanup CS state
 					ID3D11SamplerState* nullSampler = nullptr;
 					context->CSSetSamplers(0, 1, &nullSampler);
-					ID3D11Buffer* nullCB2 = nullptr;
-					context->CSSetConstantBuffers(0, 1, &nullCB2);
 					context->CSSetShader(nullptr, nullptr, 0);
 
 					shadowTexture->Release();
@@ -442,23 +317,7 @@ void VolumetricShadows::SetSharedShadowMapSRV(ID3D11DeviceContext* a_context, ID
 
 void VolumetricShadows::DrawSettings()
 {
-	ImGui::SliderFloat("Blur Radius", &settings.BlurRadius, 0.0f, 500.0f, "%.0f");
-	if (ImGui::IsItemHovered())
-		ImGui::SetTooltip("Blur radius in world units. Both cascades are scaled to match this world-space softness.");
-
 	ImGui::SeparatorText("Debug");
-
-	if (ImGui::TreeNode("Info")) {
-		ImGui::Text("Cascade 0: scale=%.6f near=%.1f far=%.1f", cascadeScale[0], cascadeNear[0], cascadeFar[0]);
-		ImGui::Text("Cascade 1: scale=%.6f near=%.1f far=%.1f", cascadeScale[1], cascadeNear[1], cascadeFar[1]);
-
-		uint32_t blurMip0 = std::max(1u, std::min(32u,
-			static_cast<uint32_t>(std::round(settings.BlurRadius * cascadeScale[1] * float(shadowCopyWidth)))));
-		uint32_t blurMip1 = std::max(1u, std::min(32u,
-			static_cast<uint32_t>(std::round(settings.BlurRadius * cascadeScale[0] * float(shadowCopyWidth / 2)))));
-		ImGui::Text("Blur pixels: mip0=%u mip1=%u", blurMip0, blurMip1);
-		ImGui::TreePop();
-	}
 
 	if (ImGui::TreeNode("Buffer Viewer")) {
 		static float debugRescale = .3f;
@@ -477,26 +336,26 @@ void VolumetricShadows::DrawSettings()
 			}
 		};
 
-		DisplayRT("MSM Cascade 0", shadowCopyTexture, shadowCopyMip0SRV);
-		DisplayRT("MSM Cascade 1", shadowCopyTexture, shadowCopyMip1SRV);
+		DisplayRT("VSM Cascade 0", shadowCopyTexture, shadowCopyMip0SRV);
+		DisplayRT("VSM Cascade 1", shadowCopyTexture, shadowCopyMip1SRV);
 
 		ImGui::TreePop();
 	}
 }
 
-void VolumetricShadows::LoadSettings(json& o_json)
+void VolumetricShadows::LoadSettings(json&)
 {
-	settings = o_json;
+	// No settings currently
 }
 
-void VolumetricShadows::SaveSettings(json& o_json)
+void VolumetricShadows::SaveSettings(json&)
 {
-	o_json = settings;
+	// No settings currently
 }
 
 void VolumetricShadows::RestoreDefaultSettings()
 {
-	settings = {};
+	// No settings currently
 }
 
 struct CreateDepthStencil_VolumetricLighting
@@ -504,8 +363,8 @@ struct CreateDepthStencil_VolumetricLighting
 	static void thunk(RE::BSGraphics::Renderer* This, uint32_t a_target, RE::BSGraphics::DepthStencilTargetProperties* a_properties)
 	{
 		RE::BSGraphics::DepthStencilTargetProperties properties = *a_properties;
-		properties.height = 1024;
-		properties.width = 1024;
+		a_properties->height = 1024;
+		a_properties->width = 1024;
 		func(This, a_target, &properties);
 	}
 	static inline REL::Relocation<decltype(thunk)> func;

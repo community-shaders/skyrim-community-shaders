@@ -1,43 +1,19 @@
 Texture2DArray<float> InputTexture : register(t0);
 Texture2DArray<float> ESRAMShadow : register(t1);
-RWTexture2D<float4> OutputTexture : register(u0);
+RWTexture2D<float2> OutputTexture : register(u0);
 SamplerState LinearSampler : register(s0);
 
-cbuffer VSMLinearizeCB : register(b0)
+float2 GetVSMMoments(in float depth)
 {
-	float CascadeNear;
-	float CascadeFar;
-	float2 _pad;
-};
-
-float LinearizeDepth(float depth)
-{
-	float linZ = CascadeNear * CascadeFar / (CascadeFar - depth * (CascadeFar - CascadeNear));
-	return (linZ - CascadeNear) / (CascadeFar - CascadeNear);
+	return float2(depth, depth * depth);
 }
 
-// Compute 4 power moments with RGBA16 quantization optimization
-// Reference: Peters, "Moment Shadow Mapping" (I3D 2015)
-float4 GetOptimizedMoments(in float depth)
-{
-	float d = LinearizeDepth(depth);
-	float d2 = d * d;
-	float4 moments = float4(d, d2, d * d2, d2 * d2);
-	float4 optimized = mul(moments, float4x4(
-		-2.07224649,     13.7948857237,   0.105877704,    9.7924062118,
-		 32.23703778,   -59.4683975703,  -1.9077466311,  -33.7652110555,
-		-68.571074599,   82.0359750338,   9.3496555107,   47.9456096605,
-		 39.3703274134, -35.364903257,   -6.6543490743,  -23.9728048165));
-	optimized[0] += 0.035955884801;
-	return optimized;
-}
-
-float4 ReduceMoments(float4 a, float4 b, float4 c, float4 d)
+float2 ReduceMoments(float2 a, float2 b, float2 c, float2 d)
 {
 	return (a + b + c + d) * 0.25;
 }
 
-groupshared float4 g_scratchDepths[8][8];
+groupshared float2 g_scratchDepths[8][8];
 
 #if defined(DOWNSAMPLE_SHADOW_MIP0)
 static const uint CASCADE = 1;
@@ -71,12 +47,12 @@ static const uint CASCADE = 0;
 	float4 esramDepths = ESRAMShadow.GatherRed(LinearSampler, float3(uv, CASCADE));
 	depths = min(depths, esramDepths);
 
-	float4 msmMoments = 0;
+	float2 vsmDepth = 0;
 	for (uint i = 0; i < 4; i++)
-		msmMoments += GetOptimizedMoments(depths[i]);
-	msmMoments *= 0.25;
+		vsmDepth += GetVSMMoments(depths[i]);
+	vsmDepth *= 0.25;
 
-	g_scratchDepths[groupThreadID.x][groupThreadID.y] = msmMoments;
+	g_scratchDepths[groupThreadID.x][groupThreadID.y] = vsmDepth;
 
 	GroupMemoryBarrierWithGroupSync();
 
