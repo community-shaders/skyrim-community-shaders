@@ -5,7 +5,7 @@
 #include <sstream>
 #include <unordered_set>
 
-#include "Utils/ShaderPatches.h"
+#include "Features/Effect11/ShaderPatches.h"
 
 namespace ENBExtender
 {

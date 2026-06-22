@@ -38,7 +38,6 @@
 #include "Features/WaterEffects.h"
 #include "Features/CSEditor.h"
 #include "Features/WetnessEffects.h"
-#include "Profiler.h"
 #include "Menu.h"
 #include "ShaderCache.h"
 #include "State.h"

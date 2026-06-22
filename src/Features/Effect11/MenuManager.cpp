@@ -3,7 +3,7 @@
 #include "EffectManager.h"
 #include "SettingManager.h"
 #include "TextureManager.h"
-#include "Utils/ShaderPatches.h"
+#include "Features/Effect11/ShaderPatches.h"
 
 static const char* const timeOfDayNames[] = { "Dawn", "Sunrise", "Day", "Sunset", "Dusk", "Night", "InteriorDay", "InteriorNight" };
 

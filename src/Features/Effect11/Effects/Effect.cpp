@@ -10,8 +10,8 @@
 #include "../TextureManager.h"
 #include "Globals.h"
 #include "State.h"
-#include "Utils/SettingsPatches.h"
-#include "Utils/ShaderPatches.h"
+#include "Features/Effect11/SettingsPatches.h"
+#include "Features/Effect11/ShaderPatches.h"
 
 bool Effect::Load()
 {

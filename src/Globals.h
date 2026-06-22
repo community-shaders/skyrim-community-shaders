@@ -31,6 +31,7 @@ struct PerformanceOverlay;
 struct WetnessEffects;
 struct ExtendedTranslucency;
 struct Upscaling;
+class Profiler;
 struct CSEditor;
 struct Effect11;
 struct ExponentialHeightFog;
@@ -44,7 +45,6 @@ struct TruePBR;
 class RenderDoc;
 class RemoteControl;
 class Menu;
-class Profiler;
 
 namespace SIE
 {

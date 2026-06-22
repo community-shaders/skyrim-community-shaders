@@ -6,17 +6,14 @@
 #include "State.h"
 #include "Utils/D3D.h"
 
-#include "Features/CloudShadows.h"
 #include "Features/DynamicCubemaps.h"
 #include "Features/Effect11.h"
 #include "Features/IBL.h"
 #include "Features/ScreenSpaceGI.h"
-#include "Features/TerrainShadows.h"
 #include "Features/Skylighting.h"
 #include "Features/SubsurfaceScattering.h"
 #include "Features/TerrainBlending.h"
 #include "Features/Upscaling.h"
-#include "Features/VolumetricShadows.h"
 #include "Features/CSEditor.h"
 
 #include "Hooks.h"
@@ -208,9 +205,7 @@ void Deferred::ReflectionsPrepasses()
 
 	globals::game::stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_RENDERTARGET);  // Run OMSetRenderTargets again
 
-	Feature::ForEachLoadedFeature("ReflectionsPrepass", [](Feature* feature) {
-		feature->ReflectionsPrepass();
-	}, true);
+	Feature::ForEachLoadedFeature("ReflectionsPrepass", [](Feature* feature) { feature->ReflectionsPrepass(); }, true);
 }
 
 void Deferred::EarlyPrepasses()
@@ -233,9 +228,7 @@ void Deferred::EarlyPrepasses()
 	// Shadow maps have just been rendered — upload BSShadowDirectionalLight data to t98.
 	CopyShadowLightData();
 
-	Feature::ForEachLoadedFeature("EarlyPrepass", [](Feature* feature) {
-		feature->EarlyPrepass();
-	}, true);
+	Feature::ForEachLoadedFeature("EarlyPrepass", [](Feature* feature) { feature->EarlyPrepass(); }, true);
 }
 
 void Deferred::PrepassPasses()
@@ -251,9 +244,7 @@ void Deferred::PrepassPasses()
 	auto context = globals::d3d::context;
 	context->OMSetRenderTargets(0, nullptr, nullptr);  // Unbind all bound render targets
 
-	Feature::ForEachLoadedFeature("Prepass", [](Feature* feature) {
-		feature->Prepass();
-	}, true);
+	Feature::ForEachLoadedFeature("Prepass", [](Feature* feature) { feature->Prepass(); }, true);
 }
 
 void Deferred::StartDeferred()
@@ -570,8 +561,6 @@ void Deferred::CopyShadowLightData()
 
 	SetShadowCascadeParameters(sunShadowLight->GetRuntimeData(), dd);
 
-	dd.CascadeDepthParams = globals::features::volumetricShadows.GetCascadeDepthParams();
-
 	D3D11_MAPPED_SUBRESOURCE mapped{};
 	DX::ThrowIfFailed(context->Map(directionalShadowLights->resource.get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped));
 	memcpy(mapped.pData, &dd, sizeof(DirectionalShadowLightData));
@@ -648,7 +637,6 @@ ID3D11ComputeShader* Deferred::GetComputeMainCompositeInterior()
 	}
 	return mainCompositeInteriorCS;
 }
-
 
 void Deferred::Hooks::Main_RenderShadowMaps::thunk()
 {
