@@ -12,7 +12,11 @@
             "cacheVariables": {
                 "SKSE_SUPPORT_XBYAK": "ON"
             },
-            "binaryDir": "${sourceDir}/build/${presetName}"
+            "binaryDir": "${sourceDir}/build/${presetName}",
+            "warnings": {
+                "dev": false,
+                "deprecated": false
+            }
         },
         {
             "name": "vcpkg",
@@ -20,7 +24,9 @@
             "cacheVariables": {
                 "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
                 "VCPKG_OVERLAY_PORTS": "${sourceDir}/cmake/ports/",
-                "VCPKG_TARGET_TRIPLET": "x64-windows-static-md"
+                "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/cmake/triplets/",
+                "VCPKG_TARGET_TRIPLET": "x64-windows-static-md-release",
+                "VCPKG_BUILD_TYPE": "release"
             }
         },
         {
@@ -28,14 +34,15 @@
             "hidden": true,
             "architecture": "x64",
             "cacheVariables": {
-                "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL"
+                "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreadedDLL"
             }
         },
         {
             "name": "msvc",
             "hidden": true,
             "cacheVariables": {
-                "CMAKE_CXX_FLAGS": "/EHsc /MP /W4 /WX $penv{CXXFLAGS}"
+                "CMAKE_CXX_FLAGS": "/EHsc /MP $penv{CXXFLAGS}",
+                "CMAKE_CXX_FLAGS_RELEASE": "/O2 /Ob3 /DNDEBUG"
             },
             "generator": "Visual Studio 18 2026",
             "vendor": {
@@ -47,18 +54,39 @@
             }
         },
         {
+            "name": "ninja",
+            "hidden": true,
+            "generator": "Ninja",
+            "architecture": {
+                "value": "x64",
+                "strategy": "external"
+            },
+            "cacheVariables": {
+                "CMAKE_CXX_FLAGS": "/EHsc $penv{CXXFLAGS}",
+                "CMAKE_BUILD_TYPE": "Release",
+                "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreadedDLL",
+                "CMAKE_EXE_LINKER_FLAGS": "/machine:x64"
+            }
+        },
+        {
             "name": "skyrim",
             "hidden": true,
             "inherits": ["common", "vcpkg", "win64", "msvc"]
+        },
+        {
+            "name": "skyrim-ninja",
+            "hidden": true,
+            "inherits": ["common", "vcpkg", "ninja"]
         },
         {
             "name": "ALL",
             "cacheVariables": {
                 "ENABLE_SKYRIM_AE": "ON",
                 "ENABLE_SKYRIM_SE": "ON",
-                "ENABLE_SKYRIM_VR": "OFF",
+                "ENABLE_SKYRIM_VR": "ON",
                 "AUTO_PLUGIN_DEPLOYMENT": "OFF",
-                "COMMONLIB_PREBUILT_MULTICONFIG": "ON"
+                "COMMONLIB_PREBUILT_MULTICONFIG": "ON",
+                "VCPKG_APPLOCAL_DEPS": "OFF"
             },
             "inherits": "skyrim"
         },
@@ -68,18 +96,49 @@
             "cacheVariables": {
                 "ENABLE_SKYRIM_AE": "ON",
                 "ENABLE_SKYRIM_SE": "ON",
-                "ENABLE_SKYRIM_VR": "OFF",
+                "ENABLE_SKYRIM_VR": "ON",
                 "AUTO_PLUGIN_DEPLOYMENT": "OFF",
-                "COMMONLIB_PREBUILT_MULTICONFIG": "ON"
+                "COMMONLIB_PREBUILT_MULTICONFIG": "ON",
+                "VCPKG_APPLOCAL_DEPS": "OFF"
             },
             "inherits": "skyrim"
         },
         {
             "name": "ALL-DEBUG",
-            "description": "Like ALL but builds CommonLib from source. The prebuilt package is Release-only (Debug maps to no imported location), so a Debug build off ALL fails to link — this preset keeps Debug-from-source working in its own build/ALL-DEBUG dir.",
+            "description": "Debug build for CS SKSE plugin. CommonLibSSE is linked against the prebuilt Release package via fallback location properties.",
             "inherits": "ALL",
             "cacheVariables": {
-                "COMMONLIB_PREBUILT_MULTICONFIG": "OFF"
+                "COMMONLIB_PREBUILT_MULTICONFIG": "ON"
+            }
+        },
+        {
+            "name": "Dev-Fast",
+            "description": "Fast dev iteration: Ninja, no LTO, /Od, /Z7, incremental link, full PDB. Never ship these binaries.",
+            "cacheVariables": {
+                "ENABLE_SKYRIM_AE": "ON",
+                "ENABLE_SKYRIM_SE": "ON",
+                "ENABLE_SKYRIM_VR": "ON",
+                "AUTO_PLUGIN_DEPLOYMENT": "OFF",
+                "ZIP_TO_DIST": "OFF",
+                "AIO_ZIP_TO_DIST": "OFF",
+                "VCPKG_APPLOCAL_DEPS": "OFF",
+                "COMMONLIB_PREBUILT_MULTICONFIG": "ON",
+                "CMAKE_INTERPROCEDURAL_OPTIMIZATION": "OFF",
+                "SC_DEVFAST_OPTS": "ON",
+                "CMAKE_CXX_FLAGS_RELEASE": "/Od /Ob1 /DNDEBUG",
+                "CMAKE_SHARED_LINKER_FLAGS_RELEASE": ""
+            },
+            "inherits": "skyrim-ninja"
+        },
+        {
+            "name": "PR",
+            "description": "CI builds for pull requests: mild optimization (/O2, no LTO), no compile-time debug info (public-symbols PDB only). Roughly halves CI build time vs the LTCG shipping path.",
+            "inherits": "ALL",
+            "cacheVariables": {
+                "CMAKE_INTERPROCEDURAL_OPTIMIZATION": "OFF",
+                "SC_COMPILE_PDB": "OFF",
+                "ZIP_TO_DIST": "OFF",
+                "AIO_ZIP_TO_DIST": "OFF"
             }
         }
     ],
@@ -89,28 +148,28 @@
             "description": "Default build preset for developers, generate an AIO folder thats ready to copy",
             "configurePreset": "ALL",
             "configuration": "Release",
-            "targets": ["CommunityShaders", "AIO"]
+            "targets": ["AIO"]
         },
         {
             "name": "ALL",
-            "description": "(Deprecated), kept for for CI, use Package instead",
+            "description": "(Deprecated), kept for CI, use Package instead",
             "configurePreset": "ALL",
             "configuration": "Release",
-            "targets": ["CommunityShaders", "Package-AIO-Manual"]
+            "targets": ["Package-AIO-Manual"]
         },
         {
             "name": "ALL-VS2022",
             "description": "Same as ALL but using Visual Studio 17 2022 toolchain",
             "configurePreset": "ALL-VS2022",
             "configuration": "Release",
-            "targets": ["CommunityShaders", "Package-AIO-Manual"]
+            "targets": ["Package-AIO-Manual"]
         },
         {
             "name": "Package",
             "description": "Build preset to generate a AIO zip package in <SRC>/dist folder, mostly for CI",
             "configurePreset": "ALL",
             "configuration": "Release",
-            "targets": ["CommunityShaders", "Package-AIO-Manual"]
+            "targets": ["Package-AIO-Manual"]
         },
         {
             "name": "Shaders",
@@ -124,7 +183,20 @@
             "description": "Debug build for CS SKSE plugin, generate an AIO folder thats ready to copy",
             "configurePreset": "ALL-DEBUG",
             "configuration": "Debug",
-            "targets": ["CommunityShaders", "AIO"]
+            "targets": ["AIO"]
+        },
+        {
+            "name": "Dev-Fast",
+            "description": "Fastest iteration build: Ninja + no LTO + DLL only",
+            "configurePreset": "Dev-Fast",
+            "targets": ["CommunityShaders"]
+        },
+        {
+            "name": "PR",
+            "description": "CI build for pull requests: mildly optimized package without LTCG or full debug info",
+            "configurePreset": "PR",
+            "configuration": "Release",
+            "targets": ["Package-AIO-Manual"]
         }
     ]
 }

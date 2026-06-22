@@ -45,7 +45,6 @@ jobs:
             repository: ${{ github.repository }}
             run-cpp: ${{ github.event_name != 'workflow_dispatch' || inputs.build-cpp == true }}
             run-shader-validation: ${{ github.event_name != 'workflow_dispatch' || inputs.validate-shaders == true }}
-            run-shader-tests: ${{ github.event_name != 'workflow_dispatch' || inputs.validate-shaders == true }}
             cache-key-suffix: ${{ inputs.cache-key-suffix || '' }}
 
     feature-audit:
@@ -184,7 +183,7 @@ jobs:
                   draft: true
                   omitDraftDuringUpdate: true
                   tag: ${{ steps.combined_notes.outputs.release_tag }}
-                  artifacts: "${{ github.workspace }}/dist/*.7z"
+                  artifacts: "${{ github.workspace }}/dist/*.zip"
                   bodyFile: ${{ steps.combined_notes.outputs.body_file }}
                   generateReleaseNotes: false
                   replacesArtifacts: true
@@ -205,7 +204,7 @@ jobs:
         uses: ./.github/workflows/nexus-upload.yaml
         with:
             tag: ${{ github.event.release.tag_name }}
-            artifact_pattern: "CommunityShaders-*.7z"
+            artifact_pattern: "CommunityShaders-*.zip"
             dry_run: "true"
         secrets:
             UNEX_APIKEY: ${{ secrets.UNEX_APIKEY }}

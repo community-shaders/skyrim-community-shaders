@@ -1069,15 +1069,15 @@ def build_nexus_upload_matrix(feature_metadata, core_mod_id, core_filename, core
 
         # artifact_pattern: explicit INI value takes precedence; fallback derives the
         # pattern from the display name using the cmake convention of replacing spaces
-        # with dots — e.g. "Cloud Shadows" → "Cloud.Shadows-*.7z".
+        # with dots — e.g. "Cloud Shadows" → "Cloud.Shadows-*.zip".
         artifact_pattern = (ini_metadata.get('artifact_pattern')
                             or info.get('artifact_pattern')
-                            or f"{mod_filename.replace(' ', '.')}-*.7z")
+                            or f"{mod_filename.replace(' ', '.')}-*.zip")
 
         # Auto-upload is opt-in; missing metadata should not enable uploads.
         auto_upload = ini_metadata.get('auto_upload', False)
 
-        # Per-feature file_description anchors this .7z to the CS release
+        # Per-feature file_description anchors this .zip to the CS release
         # it shipped with. We don't know forward compatibility (the next CS
         # may or may not re-bundle this version), so the description is a
         # single-CS-version stamp and never gets revised — Nexus uploads
@@ -1250,7 +1250,7 @@ def main():
     parser.add_argument('--all-features', action='store_true', help='Include all Nexus-capable features in export, not just version-changed ones')
     parser.add_argument('--core-mod-id', type=str, default='86492', help='Core Nexus mod ID for the generated upload matrix')
     parser.add_argument('--core-filename', type=str, default='Community Shaders', help='Core Nexus filename for the generated upload matrix')
-    parser.add_argument('--core-artifact-pattern', type=str, default='CommunityShaders-*.7z', help='Core artifact pattern for the generated upload matrix')
+    parser.add_argument('--core-artifact-pattern', type=str, default='CommunityShaders-*.zip', help='Core artifact pattern for the generated upload matrix')
     parser.add_argument('--release-version', type=str, default=None, help='Community Shaders release version (e.g. "1.5.2") used to anchor file_description on each upload row. When omitted, file_description is empty and the upstream Nexus action default ("See mod description for details.") is preserved.')
     args = parser.parse_args()
 

@@ -11,7 +11,7 @@
 
 -   **Fast shader deployment:** `cmake --build build/ALL --target COPY_SHADERS`
 -   **Full build with deployment:** `.\BuildRelease.bat ALL-WITH-AUTO-DEPLOYMENT`
--   **Run tests:** `cmake --build build/ALL --target run_shader_tests`
+-   **Validate shader permutations:** `hlslkit-compile` (see `.claude/CLAUDE.md` "Shader Development and Testing")
 -   **Create a worktree with submodules + local preset:** `pwsh ./tools/new-worktree.ps1 -Name my-branch`
 -   **Install optional git alias:** `pwsh ./tools/install-worktree-alias.ps1`
 
@@ -48,12 +48,11 @@ The alias is installed into local Git config by default, so it does not affect o
 
 ## Build Targets
 
-| Target             | Builds DLL | Runs Tests | Copies Shaders | Use Case               |
-| ------------------ | ---------- | ---------- | -------------- | ---------------------- |
-| `COPY_SHADERS`     | ❌         | ❌         | ✅             | Fast shader iteration  |
-| `DEPLOY_ALL`       | ✅         | ✅         | ✅             | Full deployment (auto) |
-| `prepare_shaders`  | ❌         | ✅         | ✅ (AIO only)  | CI shader validation   |
-| `run_shader_tests` | ❌         | ✅         | ❌             | Test shaders only      |
+| Target            | Builds DLL | Copies Shaders | Use Case               |
+| ----------------- | ---------- | -------------- | ---------------------- |
+| `COPY_SHADERS`    | ❌         | ✅             | Fast shader iteration  |
+| `DEPLOY_ALL`      | ✅         | ✅             | Full deployment (auto) |
+| `prepare_shaders` | ❌         | ✅ (AIO only)  | CI shader validation   |
 
 ## Contributing
 

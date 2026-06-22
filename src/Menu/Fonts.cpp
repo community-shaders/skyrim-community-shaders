@@ -14,6 +14,7 @@
 #include <mutex>
 #include <optional>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace MenuFonts
 {
@@ -130,14 +131,24 @@ namespace MenuFonts
 		if (menuInstance) {
 			font_ = menuInstance->GetFont(role);
 			if (font_) {
-				ImGui::PushFont(font_, font_->LegacySize);
+				guard_.emplace(font_);
 			}
 		}
 	}
 
-	FontRoleGuard::~FontRoleGuard()
+	FontRoleGuard::~FontRoleGuard() = default;
+
+	ImFontGuard::ImFontGuard(ImFont* font)
 	{
-		if (font_) {
+		if (font) {
+			ImGui::PushFont(font, font->LegacySize);
+			pushed_ = true;
+		}
+	}
+
+	ImFontGuard::~ImFontGuard()
+	{
+		if (pushed_) {
 			ImGui::PopFont();
 		}
 	}
@@ -181,6 +192,83 @@ namespace MenuFonts
 		// Simply begin the tab item - padding adjustments should be handled
 		// by the tab bar wrapper, not individual tab items
 		return ImGui::BeginTabItem(label, nullptr, flags);
+	}
+
+	namespace
+	{
+		std::unordered_map<std::string, ImFont*> g_previewFontsByFile;
+
+		const ImWchar g_previewGlyphRanges[] = {
+			0x0020, 0x00FF,  // Basic Latin + Latin-1 Supplement
+			0,
+		};
+
+		// Cap preview fonts to avoid atlas overflow during io.Fonts->Build().
+		constexpr size_t MAX_PREVIEW_FONTS = 64;
+		constexpr size_t MAX_PREVIEW_FONT_FAILURES = 3;
+	}  // namespace
+
+	void InvalidatePreviewFonts()
+	{
+		g_previewFontsByFile.clear();
+	}
+
+	void AddPreviewFontsToAtlas(float previewFontSize)
+	{
+		InvalidatePreviewFonts();
+
+		const float clampedSize = std::clamp(
+			std::round(previewFontSize),
+			ThemeManager::Constants::MIN_FONT_SIZE,
+			ThemeManager::Constants::MAX_FONT_SIZE);
+
+		const auto catalog = Util::Fonts::DiscoverFontCatalog();
+		const auto fontsRoot = Util::PathHelpers::GetFontsPath();
+		ImGuiIO& io = ImGui::GetIO();
+
+		ImFontConfig cfg{};
+		ThemeManager::InitDefaultFontConfig(cfg);
+
+		std::unordered_set<std::string> seenFiles;
+		size_t consecutiveFailures = 0;
+		for (const auto& family : catalog.families) {
+			for (const auto& style : family.styles) {
+				if (!seenFiles.insert(style.file).second) {
+					continue;
+				}
+
+				const auto fontPath = fontsRoot / style.file;
+				if (!Util::IsPathWithinDirectory(fontsRoot, fontPath)) {
+					continue;
+				}
+				if (!std::filesystem::exists(fontPath)) {
+					continue;
+				}
+
+				if (g_previewFontsByFile.size() >= MAX_PREVIEW_FONTS) {
+					goto done_loading;
+				}
+
+				ImFont* font = io.Fonts->AddFontFromFileTTF(
+					fontPath.string().c_str(), clampedSize, &cfg, g_previewGlyphRanges);
+				if (font) {
+					g_previewFontsByFile.emplace(style.file, font);
+					consecutiveFailures = 0;
+				} else if (++consecutiveFailures >= MAX_PREVIEW_FONT_FAILURES) {
+					goto done_loading;
+				}
+			}
+		}
+	done_loading:;
+	}
+
+	ImFont* GetPreviewFont(const std::string& file)
+	{
+		if (file.empty()) {
+			return nullptr;
+		}
+		const auto it = g_previewFontsByFile.find(file);
+		return it != g_previewFontsByFile.end() ? it->second : nullptr;
 	}
 
 	std::string BuildFontSignature(const Menu::ThemeSettings& theme, float baseFontSize)
@@ -590,6 +678,46 @@ namespace Util
 		Catalog DiscoverFontCatalog()
 		{
 			return DiscoverFontCatalog(false);
+		}
+
+		template <typename T, typename GetNameFn>
+		int FindNameIndex(const std::vector<T>& items, const std::string& name, GetNameFn getName)
+		{
+			if (items.empty()) {
+				return 0;
+			}
+			for (size_t i = 0; i < items.size(); ++i) {
+				if (Util::IEquals(getName(items[i]), name)) {
+					return static_cast<int>(i);
+				}
+			}
+			return 0;
+		}
+
+		int FindFamilyIndex(const Catalog& catalog, const std::string& familyName)
+		{
+			return FindNameIndex(catalog.families, familyName, [](const FamilyInfo& family) { return family.name; });
+		}
+
+		int FindStyleIndex(const FamilyInfo& family, const std::string& styleName)
+		{
+			return FindNameIndex(family.styles, styleName, [](const StyleInfo& style) { return style.style; });
+		}
+
+		const StyleInfo* FindRegularStyle(const FamilyInfo& family)
+		{
+			if (family.styles.empty()) {
+				return nullptr;
+			}
+
+			for (const char* candidate : {"Regular", "Normal", "Book"}) {
+				const int idx = FindStyleIndex(family, candidate);
+				if (Util::IEquals(family.styles[idx].style, candidate)) {
+					return &family.styles[idx];
+				}
+			}
+
+			return &family.styles[family.styles.size() / 2];
 		}
 	}  // namespace Fonts
 

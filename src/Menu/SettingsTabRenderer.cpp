@@ -7,6 +7,7 @@
 
 #include "BackgroundBlur.h"
 #include "Features/ScreenshotFeature.h"
+#include "FontSelector.h"
 #include "Fonts.h"
 #include "Globals.h"
 #include "I18n/I18n.h"
@@ -962,12 +963,17 @@ void SettingsTabRenderer::RenderFontsTab()
 
 		static Util::Fonts::Catalog fontCatalog;
 		static bool catalogInitialized = false;
-		auto refreshFontCatalog = [&]() {
-			fontCatalog = Util::Fonts::DiscoverFontCatalog();
+		auto refreshFontCatalog = [&](bool forceRescan = false) {
+			fontCatalog = Util::Fonts::DiscoverFontCatalog(forceRescan);
 		};
 
+		if (!menuInstance->wantsFontPreviewAtlas) {
+			menuInstance->wantsFontPreviewAtlas = true;
+			menuInstance->pendingFontReload = true;
+		}
+
 		if (!catalogInitialized) {
-			refreshFontCatalog();
+			refreshFontCatalog(false);
 			catalogInitialized = true;
 		}
 
@@ -981,7 +987,6 @@ void SettingsTabRenderer::RenderFontsTab()
 		for (size_t roleIndex = 0; roleIndex < Menu::FontRoleDescriptors.size(); ++roleIndex) {
 			auto role = static_cast<Menu::FontRole>(roleIndex);
 			auto descriptor = Menu::FontRoleDescriptors[roleIndex];
-			auto& roleSettings = themeSettings.FontRoles[roleIndex];
 
 			ImGui::PushID(static_cast<int>(roleIndex));
 			{
@@ -989,133 +994,15 @@ void SettingsTabRenderer::RenderFontsTab()
 				ImGui::TextUnformatted(descriptor.displayName.data());
 			}
 
-			int familyIndex = 0;
-			if (!fontCatalog.families.empty()) {
-				for (size_t i = 0; i < fontCatalog.families.size(); ++i) {
-					if (Util::IEquals(fontCatalog.families[i].name, roleSettings.Family)) {
-						familyIndex = static_cast<int>(i);
-						break;
-					}
-				}
-				if (familyIndex >= static_cast<int>(fontCatalog.families.size())) {
-					familyIndex = 0;
-				}
-			}
-
-			const char* familyPreview = fontCatalog.families.empty() ? T("menu.settings.no_families", "No families") : fontCatalog.families[familyIndex].displayName.c_str();
-			std::string familyLabel = std::format("{} Family##{}", descriptor.displayName, roleIndex);
-			{
-				FontRoleGuard familyComboFont(Menu::FontRole::Body);
-				if (ImGui::BeginCombo(familyLabel.c_str(), familyPreview)) {
-					if (fontCatalog.families.empty()) {
-						Util::Text::Disabled("%s", T("menu.settings.no_font_families_available", "No font families available"));
-					} else {
-						for (int i = 0; i < static_cast<int>(fontCatalog.families.size()); ++i) {
-							bool isSelected = (i == familyIndex);
-							if (ImGui::Selectable(fontCatalog.families[i].displayName.c_str(), isSelected)) {
-								familyIndex = i;
-								if (!isSelected) {
-									const auto& newFamily = fontCatalog.families[i];
-									roleSettings.Family = newFamily.name;
-									if (!newFamily.styles.empty()) {
-										const auto& firstStyle = newFamily.styles.front();
-										roleSettings.Style = firstStyle.style;
-										roleSettings.File = firstStyle.file;
-									} else {
-										roleSettings.Style.clear();
-										roleSettings.File.clear();
-									}
-									if (role == Menu::FontRole::Body) {
-										themeSettings.FontName = roleSettings.File;
-									}
-									menuInstance->pendingFontReload = true;
-								}
-							}
-							if (isSelected) {
-								ImGui::SetItemDefaultFocus();
-							}
-						}
-					}
-					ImGui::EndCombo();
-				}
-			}
-
-			const Util::Fonts::FamilyInfo* selectedFamily = (fontCatalog.families.empty()) ? nullptr : &fontCatalog.families[familyIndex];
-			if (selectedFamily && selectedFamily->styles.empty()) {
-				Util::Text::Warning("%s", T("menu.settings.no_style_variants", "No style variants found for this family."));
-			} else if (selectedFamily) {
-				int styleIndex = 0;
-				for (size_t s = 0; s < selectedFamily->styles.size(); ++s) {
-					if (Util::IEquals(selectedFamily->styles[s].style, roleSettings.Style)) {
-						styleIndex = static_cast<int>(s);
-						break;
-					}
-				}
-				if (styleIndex >= static_cast<int>(selectedFamily->styles.size())) {
-					styleIndex = 0;
-				}
-				const char* stylePreview = selectedFamily->styles.empty() ? T("menu.settings.no_styles", "No styles") : selectedFamily->styles[styleIndex].displayName.c_str();
-				std::string styleLabel = std::format("{} Style##{}", descriptor.displayName, roleIndex);
-				{
-					FontRoleGuard styleComboFont(Menu::FontRole::Body);
-					if (ImGui::BeginCombo(styleLabel.c_str(), stylePreview)) {
-						for (int s = 0; s < static_cast<int>(selectedFamily->styles.size()); ++s) {
-							bool isSelected = (s == styleIndex);
-							if (ImGui::Selectable(selectedFamily->styles[s].displayName.c_str(), isSelected)) {
-								if (!isSelected) {
-									const auto& chosen = selectedFamily->styles[s];
-									roleSettings.Style = chosen.style;
-									roleSettings.File = chosen.file;
-									roleSettings.Family = selectedFamily->name;
-									if (role == Menu::FontRole::Body) {
-										themeSettings.FontName = roleSettings.File;
-									}
-									menuInstance->pendingFontReload = true;
-								}
-							}
-							if (isSelected) {
-								ImGui::SetItemDefaultFocus();
-							}
-						}
-						ImGui::EndCombo();
-					}
-				}
-			}
-
-			ImGui::TextDisabled(T("menu.settings.file_label", "File: %s"), roleSettings.File.c_str());
-
-			std::string scaleLabel = std::format("{} Scale##{}", descriptor.displayName, roleIndex);
-			if (ImGui::SliderFloat(scaleLabel.c_str(), &roleSettings.SizeScale, 0.5f, 2.5f, "%.2fx", ImGuiSliderFlags_AlwaysClamp)) {
-				menuInstance->pendingFontReload = true;
-			}
-			ImGui::SameLine();
-			std::string resetLabel = std::format("Reset##Scale{}", roleIndex);
-			if (ImGui::Button(resetLabel.c_str())) {
-				roleSettings.SizeScale = Menu::GetFontRoleDefaultScale(role);
-				menuInstance->pendingFontReload = true;
-			}
-
-			// Add Feature Title Scale slider under Title font role
-			if (role == Menu::FontRole::Title) {
-				ImGui::SliderFloat(T("menu.settings.feature_header_scale", "Feature Header Scale"), &themeSettings.FeatureHeading.FeatureTitleScale, 1.0f, 3.0f, "%.1fx", ImGuiSliderFlags_AlwaysClamp);
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("%s", T("menu.settings.feature_header_scale_tooltip", "Scale multiplier for feature title text in the Settings tab."));
-				}
-				ImGui::SameLine();
-				{
-					std::string resetBtnLabel = std::string(T("menu.settings.reset", "Reset")) + "##FeatureHeaderScale";
-					if (ImGui::Button(resetBtnLabel.c_str())) {
-						themeSettings.FeatureHeading.FeatureTitleScale = ThemeManager::Constants::DEFAULT_FEATURE_TITLE_SCALE;
-					}
-				}
-			}
+			MenuFonts::Selector::RenderRolePickers(*menuInstance, themeSettings, fontCatalog, role, roleIndex);
 
 			ImGui::Separator();
 			ImGui::PopID();
 		}
 
 		if (ImGui::Button(T("menu.settings.refresh_font_families", "Refresh Font Families"))) {
-			refreshFontCatalog();
+			refreshFontCatalog(true);
+			menuInstance->pendingFontReload = true;
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::TextUnformatted(T("menu.settings.refresh_font_families_tooltip", "Rescan the Fonts directory after adding or removing font files."));
