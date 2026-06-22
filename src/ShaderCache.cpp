@@ -3,6 +3,10 @@
 #include "ShaderFileWatcher.h"
 #include "Util.h"
 
+#ifdef DEVBENCH_BRIDGE_ENABLED
+#	include <DevBenchAPI.h>
+#endif
+
 #include <d3dcompiler.h>
 
 #include "Deferred.h"
@@ -14,7 +18,6 @@
 
 namespace SIE
 {
-
 	// Custom include handler to track all includes during shader compilation
 	class TrackingIncludeHandler : public ID3DInclude
 	{
@@ -1323,6 +1326,19 @@ namespace SIE
 			return type;
 		}
 
+		/**
+		 * @brief Compiles or retrieves a cached shader.
+		 *
+		 * Checks the in-memory shader cache, then the disk cache (if enabled and valid),
+		 * and compiles from HLSL source if necessary. Records include dependencies for
+		 * hot-reload invalidation.
+		 *
+		 * @param useDiskCache Whether to use disk cache for reading and writing compiled shaders.
+		 * @param dependencyTracker Optional tracker for include dependency registration;
+		 *                          enables cache invalidation when dependencies change.
+		 *
+		 * @return Compiled shader blob, or nullptr if compilation failed or source file not found.
+		 */
 		static ID3DBlob* CompileShader(ShaderClass shaderClass, const RE::BSShader& shader, uint32_t descriptor, bool useDiskCache, ShaderFileDependencyTracker* dependencyTracker)
 		{
 			if (!SShaderCache::ResolveImageSpaceDescriptor(shader, descriptor)) {
@@ -1468,12 +1484,34 @@ namespace SIE
 					shaderBlob->Release();
 				}
 
+#ifdef TRACY_ENABLE
+				{
+					// Timeline annotation: a (re)compile failed. Pairs with the
+					// MCP shadercache status (failedTasks) for build-agnostic
+					// detection; this gives the exact frame for perf correlation.
+					const auto tracyMsg = std::format("Shader compile FAILED: {} {} {:X}",
+						magic_enum::enum_name(type), magic_enum::enum_name(shaderClass), descriptor);
+					TracyMessageC(tracyMsg.c_str(), tracyMsg.size(), 0xFF4444);
+				}
+#endif
+
 				cache.AddCompletedShader(shaderClass, shader, descriptor, nullptr);
 				return nullptr;
 			}
 			if (errorBlob)
 				logger::debug("Shader logs:\n{}", static_cast<char*>(errorBlob->GetBufferPointer()));
 			logger::debug("Compiled shader {}:{}:{:X}", magic_enum::enum_name(type), magic_enum::enum_name(shaderClass), descriptor);
+
+#ifdef TRACY_ENABLE
+			{
+				// Timeline annotation: a shader (re)compiled successfully. During
+				// a hot-reload this marks the exact frame the new shader went
+				// live, so A/B perf windows split precisely on it.
+				const auto tracyMsg = std::format("Shader compiled: {} {} {:X}",
+					magic_enum::enum_name(type), magic_enum::enum_name(shaderClass), descriptor);
+				TracyMessage(tracyMsg.c_str(), tracyMsg.size());
+			}
+#endif
 
 			// strip debug info
 			if (!globals::state->IsDeveloperMode()) {
@@ -3201,6 +3239,15 @@ namespace SIE
 		}
 	}
 
+	/**
+	 * @brief Marks a shader compilation task as complete and updates compilation state.
+	 *
+	 * Updates task completion counters, tracks compilation timing and cache behavior,
+	 * detects batch-level completion, and emits notifications and events when the
+	 * entire compilation session finishes.
+	 *
+	 * @param task The compilation task that has completed.
+	 */
 	void CompilationSet::Complete(const ShaderCompilationTask& task)
 	{
 		auto& cache = ShaderCache::Instance();
@@ -3209,6 +3256,14 @@ namespace SIE
 
 		bool shouldLogCompletion = false;
 		double completionTimeMs = 0.0;
+#ifdef DEVBENCH_BRIDGE_ENABLED
+		// Snapshot of the counters latched under the lock at the moment completion is
+		// detected, so the emitted event reflects that exact state — not whatever a
+		// concurrent Complete()/Clear() may have changed it to after we release the lock.
+		uint64_t completedSnapshot = 0;
+		uint64_t failedSnapshot = 0;
+		uint64_t totalSnapshot = 0;
+#endif
 
 		// Determine whether this task was resolved from the disk cache or actually compiled.
 		bool wasDiskHit = cache.IsShaderLoadedFromDisk(key);
@@ -3259,6 +3314,11 @@ namespace SIE
 				completionTime.store(now.QuadPart, std::memory_order_relaxed);
 				completionTimeMs = static_cast<double>(now.QuadPart - lastReset.QuadPart) * 1000.0 / frequency.QuadPart;
 				shouldLogCompletion = true;
+#ifdef DEVBENCH_BRIDGE_ENABLED
+				completedSnapshot = completedTasks.load(std::memory_order_relaxed);
+				failedSnapshot = failedTasks.load(std::memory_order_relaxed);
+				totalSnapshot = totalTasks.load(std::memory_order_relaxed);
+#endif
 			}
 
 			// Update task tracking
@@ -3269,6 +3329,23 @@ namespace SIE
 		// Log completion outside the lock
 		if (shouldLogCompletion) {
 			logger::debug("Compilation completed in {} ms", GetHumanTime(completionTimeMs));
+
+#ifdef DEVBENCH_BRIDGE_ENABLED
+			// A compilation batch finished (initial build OR a hot-reload recompile).
+			// Emit one summary event so a benchmark scenario can split its A/B window
+			// precisely on the moment a recompiled shader went live, and detect failures
+			// without polling. Guarded on the devbench host being present.
+			if (auto* dvb = DevBenchAPI::GetDevBenchInterface001()) {
+				const nlohmann::json payload{
+					{ "completedTasks", completedSnapshot },
+					{ "failedTasks", failedSnapshot },
+					{ "totalTasks", totalSnapshot },
+					{ "durationMs", completionTimeMs },
+				};
+				const std::string dumped = payload.dump();
+				dvb->EmitEvent("communityshaders.shaderRecompiled", dumped.c_str());
+			}
+#endif
 		}
 
 		conditionVariable.notify_one();

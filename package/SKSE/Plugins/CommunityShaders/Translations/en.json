@@ -1960,6 +1960,7 @@
     "menu.settings.file_label": "File: %s",
     "menu.settings.filter_colors": "Filter colors",
     "menu.settings.font": "Font",
+    "menu.settings.font_preview_sample": "The quick brown fox jumps over the lazy dog.",
     "menu.settings.font_roles": "Font Roles",
     "menu.settings.frame_border_size": "Frame Border Size",
     "menu.settings.frame_padding": "Frame Padding",

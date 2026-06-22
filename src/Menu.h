@@ -198,6 +198,7 @@ public:
 	// Deferred reload systems (public for SettingsTabRenderer access)
 	bool pendingFontReload = false;
 	bool pendingIconReload = false;
+	bool wantsFontPreviewAtlas = false;  // Set when Fonts tab is opened; gates catalog preview font loading
 	bool pendingCursorReload = false;
 
 	// Display size tracking for cross-session resolution change detection

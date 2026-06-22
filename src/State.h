@@ -227,6 +227,40 @@ public:
 	uint lastExtraDescriptor = 0;
 	uint lastExtraFeatureDescriptor = 0;
 
+	/**
+	 * Bitflags describing extra shader-specific properties.
+	 */
+	
+	/**
+	 * Bitflags describing extra feature-specific properties related to terrain displacement and material models.
+	 */
+	
+	/**
+	 * Checks whether the main menu or loading menu is cached as open.
+	 * @returns true if either the main menu or loading menu is open, false otherwise.
+	 */
+	
+	/**
+	 * Checks whether the main menu or loading menu is open, querying the UI if provided.
+	 * @param ui Pointer to the UI manager; if non-null, performs live menu checks as a fallback.
+	 * @returns true if the main menu or loading menu is open, false otherwise.
+	 */
+	
+	/**
+	 * Updates the shared constant buffer data based on world state and rendering pass.
+	 * @param a_inWorld Whether the camera is in world space.
+	 * @param a_prepass Whether this is a prepass rendering phase.
+	 */
+	
+	/**
+	 * Updates sky shader permutation based on the current render pass.
+	 * @param a_pass The render pass to inspect.
+	 */
+	
+	/**
+	 * Checks whether directional shadows are available for the current scene.
+	 * @returns true if directional shadows are present, false otherwise.
+	 */
 	enum class ExtraShaderDescriptors : uint32_t
 	{
 		InWorld = 1 << 0,
@@ -330,6 +364,10 @@ public:
 
 	Util::FrameChecker frameChecker;
 	uint frameCount = 0;
+	// Thread-safe mirror of frameCount maintained by the render thread.
+	// Off-thread readers (MCP listener, future telemetry) must read this
+	// instead of touching frameCount directly to avoid a data race.
+	std::atomic<uint32_t> frameCountAtomic{ 0 };
 
 	// Skyrim constants
 	D3D_FEATURE_LEVEL featureLevel;

@@ -2,6 +2,19 @@ cmake_minimum_required(VERSION 4.2)
 
 set(VCPKG_BUILD_TYPE release CACHE STRING "")
 
+# devbench bridge — declared before project() so the vcpkg toolchain (loaded at project())
+# sees the manifest-feature selection. The devbench-api dependency lives behind the
+# `devbench-bridge` vcpkg feature, so -DDEVBENCH_BRIDGE=OFF actually drops it (not just the
+# find_package/link/define below).
+option(
+    DEVBENCH_BRIDGE
+    "Register the plugin's tools into the devbench test bench (requires the devbench-api port; runtime no-op when no devbench host is present)"
+    ON
+)
+if(DEVBENCH_BRIDGE)
+    list(APPEND VCPKG_MANIFEST_FEATURES "devbench-bridge")
+endif()
+
 project(
     # gersemi: ignore
     CommunityShaders
@@ -84,6 +97,9 @@ find_package(unordered_dense CONFIG REQUIRED)
 find_package(efsw CONFIG REQUIRED)
 find_package(Tracy CONFIG REQUIRED)
 find_package(directx-headers CONFIG REQUIRED)
+if(DEVBENCH_BRIDGE)
+    find_package(devbench-api CONFIG REQUIRED)
+endif()
 add_subdirectory(${CMAKE_SOURCE_DIR}/cmake/Streamline)
 
 find_path(DETOURS_INCLUDE_DIRS "detours/detours.h")
@@ -145,6 +161,12 @@ target_link_libraries(
         windowscodecs
 )
 
+# devbench bridge: opt-out via -DDEVBENCH_BRIDGE=OFF. When off, the port isn't required
+# and DevBenchBridge.cpp compiles to an empty Install().
+if(DEVBENCH_BRIDGE)
+    target_link_libraries(${PROJECT_NAME} PRIVATE DevBench::API)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE DEVBENCH_BRIDGE_ENABLED)
+endif()
 # https://gitlab.kitware.com/cmake/cmake/-/issues/24922#note_1371990
 if(MSVC_VERSION GREATER_EQUAL 1936 AND MSVC_IDE) # 17.6+
     # When using /std:c++latest, "Build ISO C++23 Standard Library Modules" defaults to "Yes".
