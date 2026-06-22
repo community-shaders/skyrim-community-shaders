@@ -1,0 +1,18 @@
+{
+    "_meta": {
+        "auto_generated": true,
+        "generator": "tools/extract-i18n.py",
+        "note": "PAS DIT NIET HANDMATIG AAN. Run: python tools/extract-i18n.py --write",
+        "language": "Nederlands",
+        "locale": "nl"
+    },
+    "common.active": "Actief",
+    "common.inactive": "Inactief",
+    "cs_editor.actions": "Acties",
+    "cs_editor.active": "Actief:",
+    "cs_editor.active_click_pause": "Actief - klik om te pauzeren",
+    "cs_editor.add": "Toevoegen",
+    "cs_editor.add_new_marker": "Voeg een nieuwe marker toe",
+    "cs_editor.apply": "Toepassen",
+    "cs_editor.apply_changes": "Pas veranderingen toe op het spel"
+}

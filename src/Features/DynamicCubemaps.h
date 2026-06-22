@@ -2,10 +2,18 @@
 
 #include "Buffer.h"
 
+/** @brief Event handler that resets cubemap capture state when the loading menu closes. */
 class MenuOpenCloseEventHandler : public RE::BSTEventSink<RE::MenuOpenCloseEvent>
 {
 public:
+	/**
+	 * @brief Handles menu open/close events; resets cubemap capture on loading screen exit.
+	 * @param a_event The menu open/close event data.
+	 * @param a_eventSource The event source dispatcher.
+	 * @return Event processing control (always kContinue).
+	 */
 	virtual RE::BSEventNotifyControl ProcessEvent(const RE::MenuOpenCloseEvent* a_event, RE::BSTEventSource<RE::MenuOpenCloseEvent>* a_eventSource);
+	/** @brief Registers the singleton event handler with the UI event source. */
 	static bool Register();
 };
 
@@ -119,8 +127,15 @@ public:
 	};
 
 	Settings settings;
+	/**
+	 * @brief Advances the cubemap pipeline by one task each frame.
+	 *
+	 * Cycles through capture, inference, irradiance, and BC6H compression
+	 * stages for both primary and reflection cubemaps.
+	 */
 	void UpdateCubemap();
 
+	/** @brief Binds the BC6H-compressed cubemap textures as pixel shader resources after deferred rendering. */
 	void PostDeferred();
 
 	virtual inline std::string GetName() override { return "Dynamic Cubemaps"; }
@@ -137,39 +152,72 @@ public:
 				T("feature.dynamic_cubemaps.key_feature_4", "Optimized cubemap inference and irradiance calculation") } };
 	};
 
+	/** @brief Returns additional shader define options based on current settings (e.g., ENABLESSR). */
 	virtual std::vector<std::pair<std::string_view, std::string_view>> GetShaderDefineOptions() override;
 
 	bool HasShaderDefine(RE::BSShader::Type) override { return true; };
 
+	/** @brief Creates all GPU resources: textures, UAVs, constant buffers, samplers, and BC6H scratch buffers. */
 	virtual void SetupResources() override;
+	/** @brief Resets reflection state each frame based on sky visibility and interior status. */
 	virtual void Reset() override;
 
 	virtual void SaveSettings(json&) override;
+	/** @brief Loads dynamic cubemap settings from JSON and flags shaders for recompilation. */
 	virtual void LoadSettings(json&) override;
+	/** @brief Resets all settings to their default values and flags shaders for recompilation. */
 	virtual void RestoreDefaultSettings() override;
+	/** @brief Draws the ImGui settings UI for screen-space reflections and cubemap creator. */
 	virtual void DrawSettings() override;
+	/** @brief Registers the menu open/close event handler after game data is loaded. */
 	virtual void DataLoaded() override;
+	/** @brief Called after all plugins have loaded. */
 	virtual void PostPostLoad() override;
 
+	/** @brief Releases all cached compute shaders so they can be recompiled on next use. */
 	virtual void ClearShaderCache() override;
+	/** @brief Returns the cubemap update compute shader, compiling it on first use. */
 	ID3D11ComputeShader* GetComputeShaderUpdate();
+	/** @brief Returns the reflections cubemap update compute shader, compiling it on first use. */
 	ID3D11ComputeShader* GetComputeShaderUpdateReflections();
+	/** @brief Returns the fake reflections cubemap update compute shader, compiling it on first use. */
 	ID3D11ComputeShader* GetComputeShaderUpdateFakeReflections();
 
+	/** @brief Returns the cubemap inference compute shader, compiling it on first use. */
 	ID3D11ComputeShader* GetComputeShaderInferrence();
+	/** @brief Returns the reflections cubemap inference compute shader, compiling it on first use. */
 	ID3D11ComputeShader* GetComputeShaderInferrenceReflections();
+	/** @brief Returns the fake reflections cubemap inference compute shader, compiling it on first use. */
 	ID3D11ComputeShader* GetComputeShaderInferrenceFakeReflections();
 
+	/** @brief Returns the specular irradiance compute shader, compiling it on first use. */
 	ID3D11ComputeShader* GetComputeShaderSpecularIrradiance();
 
+	/**
+	 * @brief Captures the current scene into the environment cubemap using depth and color data.
+	 * @param a_reflections If true, captures into the reflections cubemap; otherwise the primary cubemap.
+	 */
 	void UpdateCubemapCapture(bool a_reflections);
 
+	/**
+	 * @brief Infers a complete cubemap from captured data using the default cubemap as a fallback.
+	 * @param a_reflections If true, processes the reflections cubemap; otherwise the primary cubemap.
+	 */
 	void Inferrence(bool a_reflections);
 
+	/**
+	 * @brief Computes pre-filtered specular irradiance mip levels for the cubemap.
+	 * @param a_reflections If true, processes the reflections cubemap; otherwise the primary cubemap.
+	 */
 	void Irradiance(bool a_reflections);
 
+	/**
+	 * @brief Compresses the irradiance cubemap to BC6H format via a compute shader encoder.
+	 * @param a_reflections If true, compresses the reflections cubemap; otherwise the primary cubemap.
+	 */
 	void CompressToBC6H(bool a_reflections);
 
+	/** @brief Returns the BC6H block encoder compute shader, compiling it on first use. */
 	ID3D11ComputeShader* GetComputeShaderBC6HEncode();
 
 	virtual bool IsCore() const override { return true; };

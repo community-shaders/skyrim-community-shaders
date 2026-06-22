@@ -1,6 +1,7 @@
 #pragma once
 #include <string_view>
 
+/** @brief Canonical category labels used to group features in the menu UI. */
 namespace FeatureCategories
 {
 	inline constexpr std::string_view kCharacters = "Characters";

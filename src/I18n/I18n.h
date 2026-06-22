@@ -45,6 +45,7 @@
 class I18n
 {
 public:
+	/** @brief Gets the singleton instance of the i18n engine. */
 	static I18n* GetSingleton()
 	{
 		static I18n singleton;

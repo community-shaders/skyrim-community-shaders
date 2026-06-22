@@ -38,6 +38,7 @@ public:
 		std::string fileHash;
 	};
 
+	/** @brief Gets the singleton instance */
 	static SettingsOverrideManager* GetSingleton()
 	{
 		static SettingsOverrideManager instance;

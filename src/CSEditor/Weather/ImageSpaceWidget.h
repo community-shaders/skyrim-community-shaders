@@ -2,11 +2,21 @@
 
 #include "../Widget.h"
 
+/**
+ * @brief Widget for editing TESImageSpace HDR, cinematic, tint, and depth-of-field settings.
+ *
+ * Each weather record references up to four ImageSpace forms (one per time of day).
+ * This widget exposes the full ImageSpace data struct for live editing.
+ */
 class ImageSpaceWidget : public Widget
 {
 public:
 	RE::TESImageSpace* imageSpace = nullptr;
 
+	/**
+	 * @brief Constructs an ImageSpace widget for the given form.
+	 * @param a_imageSpace The ImageSpace form to edit. Must not be null.
+	 */
 	ImageSpaceWidget(RE::TESImageSpace* a_imageSpace)
 	{
 		if (!a_imageSpace) {
@@ -54,16 +64,36 @@ public:
 
 	~ImageSpaceWidget();
 
+	/** @brief Renders the ImageSpace editor UI with HDR, cinematic, tint, and DOF controls. */
 	void DrawWidget() override;
+
+	/** @brief Returns the human-readable widget type name for window sizing. */
 	const char* GetWidgetTypeName() const override { return "ImageSpace"; }
+
+	/** @brief Deserializes ImageSpace settings from the stored JSON blob. */
 	void LoadSettings() override;
+
+	/** @brief Serializes current ImageSpace settings to the JSON blob. */
 	void SaveSettings() override;
+
+	/** @brief Returns true if the current settings differ from the last saved state. */
 	bool HasUnsavedChanges() const override;
+
+	/** @brief Collects all searchable ImageSpace settings for the search dropdown. */
 	std::vector<SearchResult> CollectSearchableSettings() const override;
 
+	/** @brief Writes the current widget settings into the game's TESImageSpace data struct. */
 	void SetImageSpaceValues();
+
+	/** @brief Reads the game's TESImageSpace data struct into the widget settings. */
 	void LoadImageSpaceValues();
+
+	/** @brief Initializes widget settings from the current game ImageSpace data. */
 	void LoadFromGameSettings();
+
+	/** @brief Applies the current settings to the game's ImageSpace form. */
 	void ApplyChanges() override;
+
+	/** @brief Reverts settings to vanilla values and re-applies them to the game data. */
 	void RevertChanges() override;
 };

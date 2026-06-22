@@ -338,6 +338,18 @@ std::string Feature::GetDisplayCategory() const
 	return std::string(category);
 }
 
+std::string Feature::GetReleaseStageTag(ReleaseStage stage)
+{
+	switch (stage) {
+	case ReleaseStage::Alpha:
+		return T("menu.features.tag_alpha", "[ALPHA]");
+	case ReleaseStage::Beta:
+		return T("menu.features.tag_beta", "[BETA]");
+	default:
+		return {};
+	}
+}
+
 void Feature::DrawUnloadedUI()
 {
 	// Prioritize detailed failure message if available

@@ -21,8 +21,10 @@ public:
 				T("feature.grass_collision.key_feature_5", "Seamless integration with existing grass rendering") } };
 	};
 
+	/** @brief Returns true only for Grass shader type. */
 	bool HasShaderDefine(RE::BSShader::Type shaderType) override;
 
+	/** @brief Dispatches the collision update compute shader to write actor collision data into the collision texture. */
 	void UpdateCollisionTexture();
 
 	struct Settings
@@ -66,24 +68,39 @@ public:
 	eastl::vector<BoundingBoxPacked> queuedBoundingBoxes;
 	eastl::vector<float4> queuedCollisions;
 
+	/** @brief Releases the cached collision update compute shader so it can be recompiled. */
 	virtual void ClearShaderCache() override;
 
+	/** @brief Returns the collision update compute shader, compiling it on first use. */
 	ID3D11ComputeShader* GetCollisionUpdateCS();
 	ID3D11ComputeShader* collisionUpdateCS;
 
 	Texture2D* collisionTexture = nullptr;
 
+	/** @brief Creates the collision texture, structured buffers for bounding boxes and collision instances. */
 	virtual void SetupResources() override;
 
+	/** @brief Draws the ImGui settings UI for grass collision options. */
 	virtual void DrawSettings() override;
+	/**
+	 * @brief Gathers collision shapes from nearby actors and queues them for GPU upload.
+	 *
+	 * Sorted by distance, limited to MAX_BOUNDING_BOXES actors with up to
+	 * MAX_COLLISIONS_PER_BOUNDING_BOX shapes each.
+	 */
 	void QueueCollisions();
+	/**
+	 * @brief Uploads queued collision data to GPU buffers and dispatches the collision texture update.
+	 *
+	 * Called once per frame from the grass shader setup geometry hook.
+	 */
 	void Update();
 
 	virtual void LoadSettings(json& o_json) override;
 	virtual void SaveSettings(json& o_json) override;
-
 	virtual void RestoreDefaultSettings() override;
 
+	/** @brief Installs the BSGrassShader and main update hooks after all plugins have loaded. */
 	virtual void PostPostLoad() override;
 
 

@@ -2,9 +2,19 @@
 
 #include "../Widget.h"
 
+/**
+ * @brief Widget for editing interior cell lighting properties.
+ *
+ * Exposes INTERIOR_DATA fields (ambient, directional, fog, DALC) and
+ * lighting-template inheritance flags for a single interior cell.
+ */
 class CellLightingWidget : public Widget
 {
 public:
+	/**
+	 * @brief Constructs a cell lighting widget for the given cell.
+	 * @param a_cell The interior cell whose lighting data will be edited.
+	 */
 	CellLightingWidget(RE::TESObjectCELL* a_cell) :
 		cell(a_cell)
 	{
@@ -18,13 +28,28 @@ public:
 
 	~CellLightingWidget() override = default;
 
+	/** @brief Renders the cell lighting editor UI with Basic, Fog, DALC, and Inheritance tabs. */
 	void DrawWidget() override;
+
+	/** @brief Returns the human-readable widget type name for window sizing. */
 	const char* GetWidgetTypeName() const override { return "Cell Lighting"; }
+
+	/** @brief Deserializes cell lighting settings from the stored JSON blob. */
 	void LoadSettings() override;
+
+	/** @brief Serializes current cell lighting settings to the JSON blob. */
 	void SaveSettings() override;
+
+	/** @brief Writes the current settings into the game's cell lighting data. */
 	void ApplyChanges() override;
+
+	/** @brief Reverts settings to vanilla values and re-applies them to the game data. */
 	void RevertChanges() override;
+
+	/** @brief Returns true if the current settings differ from the last saved state. */
 	bool HasUnsavedChanges() const override;
+
+	/** @brief Collects all searchable cell lighting settings for the search dropdown. */
 	std::vector<SearchResult> CollectSearchableSettings() const override;
 
 	RE::TESObjectCELL* cell = nullptr;

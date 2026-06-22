@@ -25,3 +25,8 @@ reviews:
               Otherwise, use your standard review approach focusing on code quality.
     path_filters:
         - "**/*.hlsl"
+    auto_review:
+        ignore_title_keywords:
+            - "Hosted Weblate"
+        ignore_usernames:
+            - "weblate"

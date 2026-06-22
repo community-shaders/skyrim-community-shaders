@@ -393,7 +393,7 @@ void RenderDoc::DrawSettings()
 
 							// Push red color for failed deletions
 							if (file.deletionFailed) {
-								ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(255, 100, 100, 255));  // Red text for failed deletions
+								ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetError());
 							}
 
 							if (ImGui::Selectable(file.filename.c_str(), isSelected, ImGuiSelectableFlags_AllowDoubleClick)) {
