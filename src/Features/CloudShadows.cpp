@@ -134,6 +134,7 @@ void CloudShadows::SkyShaderHacks()
 
 		auto reflections = renderer->GetRendererData().cubemapRenderTargets[RE::RENDER_TARGET_CUBEMAP::kREFLECTIONS];
 
+		// render targets
 		ID3D11RenderTargetView* rtvs[4];
 		ID3D11DepthStencilView* dsv;
 		context->OMGetRenderTargets(3, rtvs, &dsv);
@@ -180,6 +181,7 @@ void CloudShadows::SkyShaderHacks()
 		auto cubemapDepth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kCUBEMAP_REFLECTIONS];
 		context->PSSetShaderResources(17, 1, &cubemapDepth.depthSRV);
 
+		// Release COM objects to prevent memory leaks
 		for (int i = 0; i < 3; ++i) {
 			if (rtvs[i])
 				rtvs[i]->Release();

@@ -269,7 +269,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	endif
 
 #	if defined(RAIN) && defined(DYNAMIC_CUBEMAPS)
-if (SharedData::enbSettings.EnableRain) {	
+if (SharedData::enbSettings.EnableRain) {
 	float4 raindropNormal = TexRaindropNormals.Sample(SampSourceTexture, input.RaindropData.xy);
     float alpha = saturate(raindropNormal.w * (1.0 - SharedData::enbSettings.RainMotionTransparency));
    	clip(alpha - (4.0 / 255.0));

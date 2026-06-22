@@ -137,8 +137,6 @@ namespace Skylighting
 		return saturate(skylightingDiffuse / max(vertexAO, EPSILON_DIVISION));
 	}
 
-
-
 	sh2 SampleNoBias(float3 positionMS)
 	{
 		sh2 scaledUnitSH = UNIT_SH / 1e-10;

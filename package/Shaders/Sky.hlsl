@@ -300,7 +300,7 @@ PS_OUTPUT main(PS_INPUT input)
 				{
 					for (uint i = 0; i < sampleCount; i++) {
 						float t = (float(i) + screenNoise) * rcpSampleCount;
-						float3 samplePosition = normalize(lerp(viewDirection, SharedData::MasserDirection.xyz, t * 0.1));	
+						float3 samplePosition = normalize(lerp(viewDirection, SharedData::MasserDirection.xyz, t * 0.1));
 						masserShadow += CloudShadows::CloudShadowsTexture.SampleLevel(SampBaseSampler, samplePosition, 0);
 					}
 					masserShadow = 1.0 - masserShadow * rcpSampleCount;

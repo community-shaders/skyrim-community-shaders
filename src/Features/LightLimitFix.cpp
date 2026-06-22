@@ -53,7 +53,6 @@ void LightLimitFix::DrawSettings()
 
 		ImGui::TreePop();
 	}
-
 }
 
 void LightLimitFix::DrawOverlay()

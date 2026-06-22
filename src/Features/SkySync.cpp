@@ -142,7 +142,6 @@ void SkySync::DrawSettings()
 
 		ImGui::TreePop();
 	}
-
 }
 
 void SkySync::LoadSettings(json& o_json)

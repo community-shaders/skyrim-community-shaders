@@ -40,7 +40,6 @@
 #include "Features/WaterEffects.h"
 #include "Features/WetnessEffects.h"
 #include "I18n/I18n.h"
-
 #include "Menu.h"
 #include "SettingsOverrideManager.h"
 #include "Utils/Format.h"

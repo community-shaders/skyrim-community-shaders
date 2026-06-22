@@ -283,6 +283,7 @@ void IBL::Prepass()
 		context->Dispatch(1, 1, 1);
 		globals::profiler->EndPass();
 	} else {
+		// Still need to set sampler and shader for sky IBL dispatch below
 		context->CSSetSamplers(0, (uint)samplers.size(), samplers.data());
 		context->CSSetShader(GetDiffuseIBLCS(), nullptr, 0);
 	}

@@ -23,6 +23,7 @@ namespace Hooks
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
+	/** @brief Installs all hooks, detours, and memory patches for the rendering pipeline, input handling, and shader management. */
 	void Install();
 
 	/** @brief Installs early IAT hooks for D3D11 device/swapchain creation and DXGI factory, before the game initializes Direct3D. */
