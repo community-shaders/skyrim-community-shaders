@@ -17,6 +17,7 @@
 #if defined(IBL)
 #	include "IBL/IBL.hlsli"
 #elif defined(SKYLIGHTING)
+// sh2 type is needed for the ExtractLighting overload that accepts a visibility SH
 #	include "Common/Spherical Harmonics/SphericalHarmonics.hlsli"
 #endif
 
@@ -29,7 +30,6 @@ struct DirectionalShadowLightData
 	column_major float4x4 InvShadowProj[2];
 	float2 EndSplitDistances;
 	float2 StartSplitDistances;
-	float4 CascadeDepthParams;
 };
 
 StructuredBuffer<DirectionalShadowLightData> DirectionalShadowLights : register(t98);
@@ -135,14 +135,14 @@ namespace ShadowSampling
 #endif
 	}
 
-	float3 GetRawAmbientLighting()
+	float3 GetRawAmbientLighting(float3 normal)
 	{
-		return max(0, SharedData::GetAmbient(LightingSampleNormal));
+		return max(0, SharedData::GetAmbient(normal));
 	}
 
-	float3 GetAmbientLighting()
+	float3 GetAmbientLighting(float3 normal)
 	{
-		float3 ambientColor = GetRawAmbientLighting();
+		float3 ambientColor = GetRawAmbientLighting(normal);
 
 #if defined(IBL)
 		if (SharedData::iblSettings.EnableIBL) {
@@ -153,6 +153,21 @@ namespace ShadowSampling
 		return ambientColor;
 	}
 
+#if defined(SKYLIGHTING) && !defined(INTERIOR)
+	float3 GetAmbientLighting(float3 normal, float skylightingDiffuse)
+	{
+		float3 ambientColor = GetRawAmbientLighting(normal);
+
+#	if defined(IBL)
+		if (SharedData::iblSettings.EnableIBL) {
+			ambientColor = ImageBasedLighting::GetDiffuseIBLOccluded(ambientColor, ImageBasedLightingNormal, skylightingDiffuse);
+		}
+#	endif
+
+		return ambientColor;
+	}
+#endif
+
 	float3 GetDirectionalLighting()
 	{
 		float llDirLightMult = (SharedData::linearLightingSettings.enableLinearLighting && !SharedData::linearLightingSettings.isDirLightLinear) ? SharedData::linearLightingSettings.dirLightMult : 1.0f;
@@ -161,12 +176,21 @@ namespace ShadowSampling
 
 	float3 GetSceneLightingColor()
 	{
-		return GetAmbientLighting() + GetDirectionalLighting();
+		return GetAmbientLighting(LightingSampleNormal) + GetDirectionalLighting();
 	}
 
+#if defined(SKYLIGHTING) && !defined(INTERIOR)
+	void ExtractLighting(float3 inputColor, out float3 dirColor, out float3 ambientColor, float skylightingDiffuse)
+#else
 	void ExtractLighting(float3 inputColor, out float3 dirColor, out float3 ambientColor)
+#endif
 	{
-		float3 ambientColorAmb = GetAmbientLighting();
+#if defined(SKYLIGHTING) && !defined(INTERIOR)
+		float3 ambientColorAmb = GetAmbientLighting(LightingSampleNormal, skylightingDiffuse);
+#else
+		float3 ambientColorAmb = GetAmbientLighting(LightingSampleNormal);
+#endif
+
 		float3 dirLightColorDir = GetDirectionalLighting();
 
 		float inputLuma = Color::RGBToLuminance(inputColor);
@@ -175,6 +199,7 @@ namespace ShadowSampling
 
 		float totalLuma = ambientLuma + dirLightLuma;
 
+		// Scale ambientColorAmb so total luma matches input luma
 		if (totalLuma > 0.0 && ambientLuma > 0.0)
 			ambientColorAmb *= inputLuma / totalLuma;
 
