@@ -66,6 +66,7 @@ public:
 
 	/** @brief Returns settings data for the GPU constant buffer, with IBL disabled in interiors if configured. */
 	Settings GetCommonBufferData() const;
+	bool IsDisabledForCurrentScene() const;
 	/** @brief Returns the diffuse IBL spherical harmonics compute shader, compiling it on first use. */
 	ID3D11ComputeShader* GetDiffuseIBLCS();
 };

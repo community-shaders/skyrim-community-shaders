@@ -182,9 +182,16 @@ void IBL::RegisterWeatherVariables()
 IBL::Settings IBL::GetCommonBufferData() const
 {
 	Settings data = settings;
-	if (settings.DisableInInteriors && Util::IsInterior())
+	if (IsDisabledForCurrentScene())
 		data.EnableIBL = 0;
 	return data;
+}
+
+bool IBL::IsDisabledForCurrentScene() const
+{
+	const auto state = globals::state;
+	const bool menuDisabled = state && (state->IsMainOrLoadingMenuOpen() || state->isMapMenuOpen);
+	return menuDisabled || (settings.DisableInInteriors && Util::IsInterior());
 }
 
 void IBL::ReflectionsPrepass()
@@ -192,13 +199,13 @@ void IBL::ReflectionsPrepass()
 	if (loaded) {
 		auto context = globals::d3d::context;
 
-		bool interiorDisabled = settings.DisableInInteriors && Util::IsInterior();
+		bool sceneDisabled = IsDisabledForCurrentScene();
 
 		// Set PS shader resource
 		{
 			std::array<ID3D11ShaderResourceView*, 4> srvs = {
-				interiorDisabled ? nullptr : envIBLTexture->srv.get(),
-				interiorDisabled ? nullptr : skyIBLTexture->srv.get(),
+				sceneDisabled ? nullptr : envIBLTexture->srv.get(),
+				sceneDisabled ? nullptr : skyIBLTexture->srv.get(),
 				staticDiffuseIBLTexture->srv.get(),
 				staticSpecularIBLTexture->srv.get()
 			};
@@ -209,7 +216,7 @@ void IBL::ReflectionsPrepass()
 
 void IBL::Prepass()
 {
-	if (settings.DisableInInteriors && Util::IsInterior())
+	if (IsDisabledForCurrentScene())
 		return;
 
 	auto context = globals::d3d::context;
