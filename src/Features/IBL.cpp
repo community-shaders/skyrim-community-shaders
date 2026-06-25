@@ -215,7 +215,6 @@ void IBL::RegisterWeatherVariables()
 
 IBL::PerFrame IBL::GetCommonBufferData() const
 {
-<<<<<<< HEAD
 	Settings data = settings;
 
 	if (globals::features::effect11.loaded) {
@@ -235,22 +234,9 @@ IBL::PerFrame IBL::GetCommonBufferData() const
 		}
 	}
 
-	if (settings.DisableInInteriors && Util::IsInterior())
+	if (IsDisabledForCurrentScene())
 		data.EnableIBL = 0;
 	return data;
-=======
-	return {
-		.EnableIBL = IsDisabledForCurrentScene() ? 0u : settings.EnableIBL,
-		.PreserveFogLuminance = settings.PreserveFogLuminance,
-		.UseStaticIBL = settings.UseStaticIBL,
-		.DALCAmount = settings.DALCAmount,
-		.EnvIBLScale = settings.EnvIBLScale,
-		.SkyIBLScale = settings.SkyIBLScale,
-		.EnvIBLSaturation = settings.EnvIBLSaturation,
-		.SkyIBLSaturation = settings.SkyIBLSaturation,
-		.FogAmount = settings.FogAmount,
-		.DALCMode = settings.DALCMode
-	};
 }
 
 bool IBL::IsDisabledForCurrentScene() const
@@ -263,7 +249,6 @@ bool IBL::IsDisabledForCurrentScene() const
 	const bool inWorldMap = settings.DisableInWorldMap && state->isMapMenuOpen;
 	const bool inInterior = settings.DisableInInteriors && Util::IsInterior();
 	return inLoadingScreen || inWorldMap || inInterior;
->>>>>>> origin/dev
 }
 
 void IBL::ReflectionsPrepass()
