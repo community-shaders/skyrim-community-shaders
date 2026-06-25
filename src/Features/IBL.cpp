@@ -215,14 +215,25 @@ void IBL::RegisterWeatherVariables()
 
 IBL::PerFrame IBL::GetCommonBufferData() const
 {
-	Settings data = settings;
+	PerFrame data = {
+		.EnableIBL = IsDisabledForCurrentScene() ? 0u : settings.EnableIBL,
+		.PreserveFogLuminance = settings.PreserveFogLuminance,
+		.UseStaticIBL = settings.UseStaticIBL,
+		.DALCAmount = settings.DALCAmount,
+		.EnvIBLScale = settings.EnvIBLScale,
+		.SkyIBLScale = settings.SkyIBLScale,
+		.EnvIBLSaturation = settings.EnvIBLSaturation,
+		.SkyIBLSaturation = settings.SkyIBLSaturation,
+		.FogAmount = settings.FogAmount,
+		.DALCMode = settings.DALCMode
+	};
 
 	if (globals::features::effect11.loaded) {
 		auto& enb = globals::features::effect11;
 		if (enb.enableEffect) {
 			auto& settingManager = SettingManager::GetSingleton();
 			if (settingManager.GetValue<bool>("EnableImageBasedLighting", "EFFECT")) {
-				data.EnableIBL = !Util::IsInterior();
+				data.EnableIBL = Util::IsInterior() ? 0u : 1u;
 				data.EnvIBLScale = 0.0f;
 				data.SkyIBLScale = settingManager.GetInterpolatedTimeOfDayValue("MultiplicativeAmount", "IMAGEBASEDLIGHTING");
 				data.DALCAmount = 1.0f;
@@ -234,8 +245,6 @@ IBL::PerFrame IBL::GetCommonBufferData() const
 		}
 	}
 
-	if (IsDisabledForCurrentScene())
-		data.EnableIBL = 0;
 	return data;
 }
 
