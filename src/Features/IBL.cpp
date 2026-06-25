@@ -27,7 +27,9 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	SkyIBLSaturation,
 	FogAmount,
 	DALCMode,
-	DisableInInteriors)
+	DisableInInteriors,
+	DisableInWorldMap,
+	DisableInLoadingScreen)
 
 void IBL::DrawSettings()
 {
@@ -100,11 +102,18 @@ void IBL::DrawSettings()
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("%s", T(TKEY("preserve_fog_luminance_tooltip"), "When Fog Mix is active, rescales the IBL-tinted fog to keep the original fog brightness.\nPrevents fog from becoming too bright or too dark."));
 	}
-	ImGui::Checkbox(T(TKEY("disable_in_interiors"), "Disable in interiors"), (bool*)&settings.DisableInInteriors);
+	ImGui::Checkbox(T(TKEY("disable_in_interiors"), "Disable in interiors"), &settings.DisableInInteriors);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("%s", T(TKEY("disable_in_interiors_tooltip"), "Disables IBL in interior cells."));
 	}
-
+	ImGui::Checkbox(T(TKEY("disable_in_world_map"), "Disable in world map"), &settings.DisableInWorldMap);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("%s", T(TKEY("disable_in_world_map_tooltip"), "Disables IBL while the world map is open."));
+	}
+	ImGui::Checkbox(T(TKEY("disable_in_loading_screen"), "Disable in loading screens"), &settings.DisableInLoadingScreen);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("%s", T(TKEY("disable_in_loading_screen_tooltip"), "Disables IBL during loading screens and the main menu."));
+	}
 }
 
 #undef I18N_KEY_PREFIX
@@ -204,8 +213,9 @@ void IBL::RegisterWeatherVariables()
 		0.0f, 1.0f));
 }
 
-IBL::Settings IBL::GetCommonBufferData() const
+IBL::PerFrame IBL::GetCommonBufferData() const
 {
+<<<<<<< HEAD
 	Settings data = settings;
 
 	if (globals::features::effect11.loaded) {
@@ -228,6 +238,32 @@ IBL::Settings IBL::GetCommonBufferData() const
 	if (settings.DisableInInteriors && Util::IsInterior())
 		data.EnableIBL = 0;
 	return data;
+=======
+	return {
+		.EnableIBL = IsDisabledForCurrentScene() ? 0u : settings.EnableIBL,
+		.PreserveFogLuminance = settings.PreserveFogLuminance,
+		.UseStaticIBL = settings.UseStaticIBL,
+		.DALCAmount = settings.DALCAmount,
+		.EnvIBLScale = settings.EnvIBLScale,
+		.SkyIBLScale = settings.SkyIBLScale,
+		.EnvIBLSaturation = settings.EnvIBLSaturation,
+		.SkyIBLSaturation = settings.SkyIBLSaturation,
+		.FogAmount = settings.FogAmount,
+		.DALCMode = settings.DALCMode
+	};
+}
+
+bool IBL::IsDisabledForCurrentScene() const
+{
+	const auto state = globals::state;
+	if (!state)
+		return false;
+
+	const bool inLoadingScreen = settings.DisableInLoadingScreen && state->IsMainOrLoadingMenuOpen();
+	const bool inWorldMap = settings.DisableInWorldMap && state->isMapMenuOpen;
+	const bool inInterior = settings.DisableInInteriors && Util::IsInterior();
+	return inLoadingScreen || inWorldMap || inInterior;
+>>>>>>> origin/dev
 }
 
 void IBL::ReflectionsPrepass()
@@ -235,13 +271,13 @@ void IBL::ReflectionsPrepass()
 	if (loaded) {
 		auto context = globals::d3d::context;
 
-		bool interiorDisabled = settings.DisableInInteriors && Util::IsInterior();
+		bool sceneDisabled = IsDisabledForCurrentScene();
 
 		// Set PS shader resource
 		{
 			std::array<ID3D11ShaderResourceView*, 4> srvs = {
-				interiorDisabled ? nullptr : envIBLTexture->srv.get(),
-				interiorDisabled ? nullptr : skyIBLTexture->srv.get(),
+				sceneDisabled ? nullptr : envIBLTexture->srv.get(),
+				sceneDisabled ? nullptr : skyIBLTexture->srv.get(),
 				staticDiffuseIBLTexture->srv.get(),
 				staticSpecularIBLTexture->srv.get()
 			};
@@ -252,7 +288,7 @@ void IBL::ReflectionsPrepass()
 
 void IBL::Prepass()
 {
-	if (settings.DisableInInteriors && Util::IsInterior())
+	if (IsDisabledForCurrentScene())
 		return;
 
 	auto context = globals::d3d::context;
