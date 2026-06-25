@@ -24,7 +24,9 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	SkyIBLSaturation,
 	FogAmount,
 	DALCMode,
-	DisableInInteriors)
+	DisableInInteriors,
+	DisableInWorldMap,
+	DisableInLoadingScreen)
 
 void IBL::DrawSettings()
 {
@@ -89,6 +91,14 @@ void IBL::DrawSettings()
 	ImGui::Checkbox(T(TKEY("disable_in_interiors"), "Disable in interiors"), (bool*)&settings.DisableInInteriors);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("%s", T(TKEY("disable_in_interiors_tooltip"), "Disables IBL in interior cells."));
+	}
+	ImGui::Checkbox(T(TKEY("disable_in_world_map"), "Disable in world map"), (bool*)&settings.DisableInWorldMap);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("%s", T(TKEY("disable_in_world_map_tooltip"), "Disables IBL while the world map is open."));
+	}
+	ImGui::Checkbox(T(TKEY("disable_in_loading_screen"), "Disable in loading screens"), (bool*)&settings.DisableInLoadingScreen);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("%s", T(TKEY("disable_in_loading_screen_tooltip"), "Disables IBL during loading screens and the main menu."));
 	}
 }
 
@@ -179,19 +189,32 @@ void IBL::RegisterWeatherVariables()
 		0.0f, 1.0f));
 }
 
-IBL::Settings IBL::GetCommonBufferData() const
+IBL::PerFrame IBL::GetCommonBufferData() const
 {
-	Settings data = settings;
-	if (IsDisabledForCurrentScene())
-		data.EnableIBL = 0;
-	return data;
+	return {
+		.EnableIBL = IsDisabledForCurrentScene() ? 0u : settings.EnableIBL,
+		.PreserveFogLuminance = settings.PreserveFogLuminance,
+		.UseStaticIBL = settings.UseStaticIBL,
+		.DALCAmount = settings.DALCAmount,
+		.EnvIBLScale = settings.EnvIBLScale,
+		.SkyIBLScale = settings.SkyIBLScale,
+		.EnvIBLSaturation = settings.EnvIBLSaturation,
+		.SkyIBLSaturation = settings.SkyIBLSaturation,
+		.FogAmount = settings.FogAmount,
+		.DALCMode = settings.DALCMode
+	};
 }
 
 bool IBL::IsDisabledForCurrentScene() const
 {
 	const auto state = globals::state;
-	const bool menuDisabled = state && (state->IsMainOrLoadingMenuOpen() || state->isMapMenuOpen);
-	return menuDisabled || (settings.DisableInInteriors && Util::IsInterior());
+	if (!state)
+		return false;
+
+	const bool inLoadingScreen = settings.DisableInLoadingScreen && state->IsMainOrLoadingMenuOpen();
+	const bool inWorldMap = settings.DisableInWorldMap && state->isMapMenuOpen;
+	const bool inInterior = settings.DisableInInteriors && Util::IsInterior();
+	return inLoadingScreen || inWorldMap || inInterior;
 }
 
 void IBL::ReflectionsPrepass()
