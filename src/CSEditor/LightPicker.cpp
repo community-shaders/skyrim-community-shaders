@@ -218,6 +218,7 @@ void LightPicker::InvalidateHover()
 	hoverMesh = {};
 	lastMouseX = -1.f;
 	lastMouseY = -1.f;
+	hoverDirty = false;
 }
 
 void LightPicker::Update()
@@ -247,8 +248,10 @@ void LightPicker::Update()
 	const bool moved = mouse.x != lastMouseX || mouse.y != lastMouseY;
 	lastMouseX = mouse.x;
 	lastMouseY = mouse.y;
-	if (moved && now - lastHoverTime >= kHoverRefreshSeconds) {
+	hoverDirty |= moved;
+	if (hoverDirty && now - lastHoverTime >= kHoverRefreshSeconds) {
 		lastHoverTime = now;
+		hoverDirty = false;
 		hoverMesh = (pickMode == PickMode::kEffect) ? ResolveNearestToCursor(false) : ResolveUnderCursor(false);
 	}
 

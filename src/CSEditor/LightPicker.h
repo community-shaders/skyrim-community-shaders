@@ -73,4 +73,5 @@ private:
 	float lastMouseX = -1.f;
 	float lastMouseY = -1.f;
 	double lastHoverTime = 0.0;  // throttles the hover raycast/cell-scan during cursor movement
+	bool hoverDirty = false;     // set on movement, cleared once hoverMesh is recomputed; survives a throttled frame
 };
