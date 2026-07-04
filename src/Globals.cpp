@@ -38,10 +38,12 @@
 #include "Features/CSEditor.h"
 #include "Features/WetnessEffects.h"
 #include "Menu.h"
+#include "SceneSettingsManager.h"
 #include "ShaderCache.h"
 #include "State.h"
 #include "TruePBR.h"
 #include "Utils/Game.h"
+#include "WeatherManager.h"
 
 namespace globals
 {
@@ -157,6 +159,8 @@ namespace globals
 	Deferred* deferred = nullptr;
 	Menu* menu = nullptr;
 	SIE::ShaderCache* shaderCache = nullptr;
+	WeatherManager* weatherManager = nullptr;
+	SceneSettingsManager* sceneSettingsManager = nullptr;
 
 	static Profiler profilerInstance;
 	Profiler* profiler = &profilerInstance;
@@ -167,6 +171,8 @@ namespace globals
 		state = State::GetSingleton();
 		menu = Menu::GetSingleton();
 		deferred = Deferred::GetSingleton();
+		weatherManager = WeatherManager::GetSingleton();
+		sceneSettingsManager = SceneSettingsManager::GetSingleton();
 	}
 
 	void ReInit()
