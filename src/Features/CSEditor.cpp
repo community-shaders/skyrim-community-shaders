@@ -320,7 +320,7 @@ void CSEditor::DrawWeatherStatusPanel()
 {
 	ImGui::Spacing();
 
-	auto weatherManager = WeatherManager::GetSingleton();
+	auto weatherManager = globals::weatherManager;
 	auto currentWeathers = weatherManager->GetCurrentWeathers();
 	const auto& theme = Menu::GetSingleton()->GetTheme();
 
