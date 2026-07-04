@@ -64,9 +64,7 @@ void State::Draw()
 
 	if (shaderCache->IsEnabled()) {
 		// Process deferred cell transitions (interior detection)
-		if (sceneSettingsManager) {
-			sceneSettingsManager->Update();
-		}
+		sceneSettingsManager->Update();
 
 		if (csEditor.loaded) {
 			ZoneScopedN("WeatherManager::UpdateFeatures");
@@ -248,9 +246,7 @@ void State::Setup()
 	globals::weatherManager->LoadPerWeatherSettingsFromDisk();
 
 	// Load scene-specific settings (Interior Only, etc.)
-	if (globals::sceneSettingsManager) {
-		globals::sceneSettingsManager->LoadAll();
-	}
+	globals::sceneSettingsManager->LoadAll();
 }
 
 static std::string GetConfigPath(State::ConfigMode a_configMode)
