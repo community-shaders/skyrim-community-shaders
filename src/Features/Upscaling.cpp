@@ -440,6 +440,17 @@ void Upscaling::DataLoaded()
 
 void Upscaling::Load()
 {
+	// Synchronous present (matches the Streamline sample's present model). DXVK's default present is
+	// ASYNCHRONOUS: the D3D11 Present hook only QUEUES a present onto DXVK's submit thread, which runs it
+	// later. That is why CS's "return S_OK while the window is occluded" cannot stop the DLSS-G present
+	// that hangs on the composited surface — the present is already queued on the submit thread, below the
+	// D3D11 layer. With DXVK_SYNC_PRESENT the render thread waits for the real vkQueuePresentKHR to execute
+	// before returning (like the sample, which presents on its render thread), so a present is never
+	// in-flight past the D3D11 hook: when CS skips an occluded frame there is genuinely no present to
+	// stall. Must be set BEFORE the swapchain is created (D3D11SwapChain reads it in its ctor); Load runs
+	// before the game's first D3D11CreateDeviceAndSwapChain, so this is that window.
+	SetEnvironmentVariableA("DXVK_SYNC_PRESENT", "1");
+
 	if (DxvkLoader::IsLoaded()) {
 		// Map sl.interposer.dll NOW so DXVK's Vulkan loader (which tries sl.interposer.dll first) aliases
 		// it at its imminent first-DXGI VkInstance creation — routing DXVK's whole Vulkan surface through
