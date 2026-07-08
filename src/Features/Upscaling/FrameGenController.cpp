@@ -70,12 +70,19 @@ namespace FrameGen
 			!Streamline::GetSingleton()->IsFeatureSupportResolved())
 			return;
 
-		// Match the Streamline sample: while the window is not visible/focused, do no FG management
-		// (the sample skips the whole frame when not visible). DLSS-G/FSR-FG are left engaged but the
-		// present hook skips presenting, so their pacer never presents to the occluded surface. On
-		// refocus this resumes exactly where it left off — no eOff, no swapchain recreate, no settle.
-		if (Upscaling::IsWindowUnusable())
+		// Guide §12: DLSS-G MUST be turned OFF while the window/surface is in transition — occluded /
+		// minimized / unfocused / resized (IsWindowUnusable) OR mid render-res/preset change
+		// (IsUpscalerReconfiguring). Leaving it eOn and merely withholding presents does NOT prevent the
+		// freeze: when DLSS-G's present resumes at the transitioning surface it hangs in the driver
+		// (nvoglv64!DrvPresentBuffers) and EvaluateDLSS's forced CS-thread sync then deadlocks behind it —
+		// reproduced on BOTH alt-tab and a simple quality-slider (qualityMode) change. So actually pause
+		// it: PauseDLSSGForWindowGap is idempotent (one eOff via SetDLSSGMode, then no-ops through
+		// SetDLSSGMode's cache) and clears dlssgModeOn so the per-frame EngageDLSSG path re-engages once
+		// the surface has settled (window usable AND no reconfiguration in flight), at the new render size.
+		if (Upscaling::IsWindowUnusable() || Upscaling::IsUpscalerReconfiguring()) {
+			Streamline::GetSingleton()->PauseDLSSGForWindowGap();
 			return;
+		}
 
 		const Method target = DesiredMethod();
 
