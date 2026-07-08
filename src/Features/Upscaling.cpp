@@ -1182,15 +1182,38 @@ bool Upscaling::IsWindowGapActive()
 
 void Upscaling::NotifyWindowFocus(bool a_focused)
 {
-	// WndProc thread. Atomic store only — the present hook reads it (same thread) to skip presenting
-	// while the window is not focused, matching the Streamline sample's not-visible frame skip.
+	// WndProc thread. Set the atomic, then immediately push the occlusion state to DXVK — on focus LOSS
+	// this must reach DXVK's submit thread before it presents the in-flight (still-enqueued) frame, or
+	// that present stalls forever on the now-occluded surface (the alt-tab freeze). The per-present push
+	// is too late for that already-queued present.
 	s_windowUnfocused.store(!a_focused, std::memory_order_relaxed);
+	PushPresentSuspendToDxvk();
 }
 
 void Upscaling::NotifyWindowModifying(bool a_modifying)
 {
-	// WndProc thread (WM_ENTERSIZEMOVE/WM_EXITSIZEMOVE). Atomic store only.
+	// WndProc thread (WM_ENTERSIZEMOVE/WM_EXITSIZEMOVE). Set the atomic + push to DXVK immediately.
 	s_windowModifying.store(a_modifying, std::memory_order_relaxed);
+	PushPresentSuspendToDxvk();
+}
+
+void Upscaling::PushPresentSuspendToDxvk()
+{
+	// Resolve dxvkSetPresentSuspended (@109) once and push IsWindowUnusable() to it. DXVK then skips
+	// acquiring + presenting to an occluded/off-flip surface so the DLSS-G present can't stall the
+	// driver. Callable from the WndProc thread (focus/resize) and the render/present thread — it is a
+	// bare GetModuleHandle/GetProcAddress + one atomic store in DXVK, thread-safe from either.
+	static void (*s_setSuspended)(uint32_t) = nullptr;
+	static bool s_resolved = false;
+	if (!s_resolved) {
+		s_resolved = true;
+		if (HMODULE m = GetModuleHandleW(L"dxvk_d3d11.dll"))
+			s_setSuspended = reinterpret_cast<void (*)(uint32_t)>(GetProcAddress(m, "dxvkSetPresentSuspended"));
+		if (!s_setSuspended)
+			logger::warn("[Upscaling] dxvkSetPresentSuspended not found - occluded-present freeze guard inactive");
+	}
+	if (s_setSuspended)
+		s_setSuspended(IsWindowUnusable() ? 1u : 0u);
 }
 
 bool Upscaling::IsWindowUnusable()

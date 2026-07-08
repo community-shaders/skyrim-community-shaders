@@ -132,6 +132,14 @@ public:
 	[[nodiscard]] static bool IsUpscalerReconfiguring();
 	static inline std::atomic<uint32_t> s_reconfigUntilFrame{ 0 };
 
+	// Push IsWindowUnusable() to DXVK's present-suspend flag (dxvkSetPresentSuspended @109). While set,
+	// DXVK skips acquiring + presenting to the occluded/off-flip surface, so a DLSS-G frame-generation
+	// present can never stall in the driver and wedge DXVK's serial submit thread (the alt-tab freeze
+	// that CS's D3D11-level present-hook skip can't reach — an already-enqueued present is below it).
+	// Called from the WndProc notifiers (immediate on focus/resize, to catch an in-flight present) and
+	// once per present (covers minimize + steady state). Resolves the export once from dxvk_d3d11.dll.
+	static void PushPresentSuspendToDxvk();
+
 
 	// Timing and scaling
 	double refreshRate = 0.0f;

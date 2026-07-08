@@ -285,6 +285,13 @@ struct IDXGISwapChain_Present
 			// nvoglv64 lock DXVK's CS copy then blocks on). No eOff, no settle — the sample's model.
 			// IsUpscalerReconfiguring(): a CS-initiated resolution/preset change (guide §12) — skip the
 			// present the same way so no DLSS-G present runs through the render-size transition.
+			//
+			// Per-frame backstop for the DXVK present-suspend flag (also pushed immediately from the
+			// WndProc notifiers): covers minimize (polled, no window message) + steady state, and CLEARS
+			// the flag on the first refocused frame so presents resume. This is what stops an occluded
+			// DLSS-G present from stalling DXVK's submit thread — the freeze this D3D11-level skip alone
+			// cannot prevent, because an already-enqueued present lives below this hook.
+			Upscaling::PushPresentSuspendToDxvk();
 			if (Upscaling::IsWindowUnusable() || Upscaling::IsUpscalerReconfiguring())
 				return S_OK;
 		}
