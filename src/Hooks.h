@@ -16,7 +16,7 @@ namespace Hooks
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
-	/** @brief Hook for BSBatchRenderer::RenderPassImmediately that intercepts individual render pass dispatch. */
+	/** @brief Hook for BSBatchRenderer::RenderPassImmediately that prefetches the next pass in the group chain one iteration ahead (pass-arena nodes are scattered by freelist churn; hides the cold-line load the render thread otherwise stalls on). Disable via CS_NO_PASS_PREFETCH=1. */
 	struct BSBatchRenderer_RenderPassImmediately1
 	{
 		static void thunk(RE::BSRenderPass* pass, uint32_t technique, bool alphaTest, uint32_t renderFlags);

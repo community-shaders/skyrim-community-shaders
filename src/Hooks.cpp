@@ -25,6 +25,8 @@
 
 #include "ShaderTools/BSShaderHooks.h"
 
+#include <xmmintrin.h>
+
 std::unordered_map<void*, std::pair<std::unique_ptr<uint8_t[]>, size_t>> ShaderBytecodeMap;
 
 void RegisterShaderBytecode(void* Shader, const void* Bytecode, size_t BytecodeLength)
@@ -417,6 +419,23 @@ void Hooks::BSGraphics_SetDirtyStates::thunk(bool isCompute)
 {
 	func(isCompute);
 	globals::state->Draw();
+}
+
+void Hooks::BSBatchRenderer_RenderPassImmediately1::thunk(RE::BSRenderPass* pass, uint32_t technique, bool alphaTest, uint32_t renderFlags)
+{
+	// Software-pipeline the batch walk: BSBatchRenderer iterates pass->passGroupNext chains
+	// whose nodes live scattered across the engine's contiguous 4.7 MB render-pass arena
+	// (65535 x 72 B slots; the pool's lock-free LIFO freelist scrambles with alloc/free
+	// churn), so nearly every iteration begins with a cold-line load of the next node.
+	// Live IP-sampling of the render thread showed these loads as its single hottest
+	// cluster (RenderPassImmediately+0x1f/+0x64/+0x8d). Prefetching the next pass one
+	// iteration ahead lets its lines arrive while the current pass renders. A pass is
+	// 72 bytes at a 72-byte stride, so a node can straddle two cache lines.
+	if (auto* next = pass->passGroupNext) {
+		_mm_prefetch(reinterpret_cast<const char*>(next), _MM_HINT_T0);
+		_mm_prefetch(reinterpret_cast<const char*>(next) + 64, _MM_HINT_T0);
+	}
+	func(pass, technique, alphaTest, renderFlags);
 }
 
 struct ID3D11Device_CreateVertexShader
@@ -1029,6 +1048,15 @@ namespace Hooks
 
 		logger::info("Hooking BSGraphics::SetDirtyStates");
 		stl::detour_thunk<BSGraphics_SetDirtyStates>(REL::RelocationID(75580, 77386));
+
+		// CS_NO_PASS_PREFETCH=1: A/B escape hatch to run without the next-pass prefetch detour.
+		char noPassPrefetch[2] = {};
+		if (!(GetEnvironmentVariableA("CS_NO_PASS_PREFETCH", noPassPrefetch, sizeof(noPassPrefetch)) && noPassPrefetch[0] == '1')) {
+			logger::info("Hooking BSBatchRenderer::RenderPassImmediately (next-pass prefetch)");
+			stl::detour_thunk<BSBatchRenderer_RenderPassImmediately1>(REL::RelocationID(100854, 107644));
+		} else {
+			logger::info("BSBatchRenderer::RenderPassImmediately prefetch disabled via CS_NO_PASS_PREFETCH");
+		}
 
 		logger::info("Hooking BSGraphics::Renderer::InitD3D");
 		stl::write_thunk_call<BSGraphics_Renderer_Init_InitD3D>(REL::RelocationID(75595, 77226).address() + REL::Relocate(0x50, 0x2BC));
