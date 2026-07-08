@@ -512,6 +512,7 @@ void Upscaling::Load()
 		char forceSL[2] = {};
 		const bool needsSL = settings.frameGeneration ||
 		                     (savedMethod != UpscaleMethod::kNONE && savedMethod != UpscaleMethod::kTAA) ||
+		                     settings.reflexEnabled ||  // Reflex is an SL feature: a TAA+Reflex user needs SL loaded
 		                     (GetEnvironmentVariableA("CS_FORCE_SL_LOAD", forceSL, sizeof(forceSL)) && forceSL[0] == '1');
 		if (needsSL) {
 			Streamline::GetSingleton()->PreloadInterposer();
