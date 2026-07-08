@@ -218,6 +218,7 @@ void Upscaling::DrawSettings()
 	const bool xessAvailable = streamline->IsXeSSSupported();
 
 	const bool dlssgAvailable = streamline->IsDLSSGSupported();
+	const bool fsrfgAvailable = streamline->IsFSRFGSupported();
 	const bool reflexAvailable = streamline->IsReflexSupported();
 
 	// Selecting any upscaler sets the single upscaleMethod (so the others read off). Remember the last
@@ -321,40 +322,62 @@ void Upscaling::DrawSettings()
 	// ---- Frame Generation ----
 	ImGui::SeparatorText(T(TKEY("fg_header"), "Frame Generation"));
 	{
-		// ONE method per system, hardware-derived (GetFrameGenMethod): DLSS-G on hardware that
-		// supports it, FSR-FG everywhere else. The user only toggles frame generation on/off
-		// (plus the multiplier on DLSS-G hardware).
+		// Frame-generation METHOD selector: None / FSR FG / DLSS FG. DLSS-G (sl.dlss_g) and FSR-FG (sl.fsr_g)
+		// are separate, interchangeable Streamline features the FrameGen controller load-toggles so exactly
+		// one owns present (None unloads both). The single stepper picks BOTH on/off and which method — the
+		// user switches at runtime and the controller unloads one feature and loads the other. Only methods
+		// the GPU supports are offered.
+		std::vector<const char*>    fgLabels = { T(TKEY("fg_method_none"), "None") };
+		std::vector<FrameGenMethod> fgMethods = { FrameGenMethod::kFSR };  // [0] None: method value unused
+		if (fsrfgAvailable) {
+			fgLabels.push_back(T(TKEY("fg_method_fsr"), "FSR FG"));
+			fgMethods.push_back(FrameGenMethod::kFSR);
+		}
 		if (dlssgAvailable) {
-			// DLSS Frame Generation: Off / Dynamic (or Auto) / 2x … up to the hardware max.
+			fgLabels.push_back(T(TKEY("fg_method_dlssg"), "DLSS FG"));
+			fgMethods.push_back(FrameGenMethod::kDLSSG);
+		}
+
+		// Reflect the ACTIVE method (GetFrameGenMethod validates/falls back) so the stepper never shows a
+		// selection the GPU can't run.
+		int fgSel = 0;  // None
+		if (settings.frameGeneration) {
+			const FrameGenMethod active = GetFrameGenMethod();
+			for (int i = 1; i < static_cast<int>(fgMethods.size()); ++i)
+				if (fgMethods[i] == active)
+					fgSel = i;
+		}
+		if (DrawStepper(T(TKEY("fg_method"), "Frame Generation Method"), &fgSel, fgLabels)) {
+			settings.frameGeneration = (fgSel != 0);
+			if (fgSel != 0)
+				settings.frameGenMethod = (uint)fgMethods[std::clamp(fgSel, 0, static_cast<int>(fgMethods.size()) - 1)];
+		}
+
+		// DLSS FG has a multiplier sub-control (no 'Off' entry — None on the stepper above is the off state).
+		// FSR FG has NO additional settings.
+		if (settings.frameGeneration && GetFrameGenMethod() == FrameGenMethod::kDLSSG && dlssgAvailable) {
 			const uint32_t maxFrames = streamline->GetDLSSGMaxFramesToGenerate();
 			const uint     maxMultiplier = std::clamp<uint>(maxFrames > 0u ? maxFrames + 1u : 2u, 2u, 6u);
-			// The adaptive slot is "Dynamic" only when the hardware supports Dynamic
-			// MFG (RTX 50+); otherwise DLSS-G runs its automatic single-frame mode,
-			// so label it "Auto" (e.g. RTX 40 reports DynamicMFG=false).
-			std::vector<std::string> fgStrings = { "Off",
+			// The adaptive slot is "Dynamic" only when the hardware supports Dynamic MFG (RTX 50+); otherwise
+			// DLSS-G runs its automatic single-frame mode, so label it "Auto" (e.g. RTX 40 = DynamicMFG false).
+			std::vector<std::string> multStrings = {
 				streamline->IsDLSSGDynamicSupported()
 					? std::string(T(TKEY("fg_dynamic"), "Dynamic"))
 					: std::string(T(TKEY("fg_auto"), "Auto")) };
 			for (uint m = 2; m <= maxMultiplier; ++m)
-				fgStrings.push_back(std::format("{}x", m));
-			std::vector<const char*> fgStates;
-			for (auto& s : fgStrings)
-				fgStates.push_back(s.c_str());
+				multStrings.push_back(std::format("{}x", m));
+			std::vector<const char*> multStates;
+			for (auto& s : multStrings)
+				multStates.push_back(s.c_str());
 
-			int fgIdx = !settings.frameGeneration ? 0 :
-			            settings.dlssgDynamic ? 1 :
-			            std::clamp((int)settings.frameGenMultiplier, 2, (int)maxMultiplier);
-			if (DrawStepper(T(TKEY("nv_frame_generation"), "DLSS Frame Generation"), &fgIdx, fgStates)) {
-				settings.frameGeneration = fgIdx != 0;
-				if (fgIdx != 0) {
-					settings.dlssgDynamic = (fgIdx == 1);
-					if (fgIdx >= 2)
-						settings.frameGenMultiplier = (uint)fgIdx;  // 2x..maxMultiplier
-				}
+			// index 0 = Dynamic/Auto; index k = (k+1)x  (2x -> 1, 3x -> 2, …).
+			int multIdx = settings.dlssgDynamic ? 0 :
+			              std::clamp((int)settings.frameGenMultiplier - 1, 1, (int)maxMultiplier - 1);
+			if (DrawStepper(T(TKEY("fg_multiplier"), "Frame Generation Multiplier"), &multIdx, multStates)) {
+				settings.dlssgDynamic = (multIdx == 0);
+				if (multIdx >= 1)
+					settings.frameGenMultiplier = (uint)(multIdx + 1);  // 2x..maxMultiplier
 			}
-		} else {
-			// FSR Frame Generation: Off / On.
-			DrawToggleStepper(T(TKEY("amd_fsr_fg"), "FSR Frame Generation"), &settings.frameGeneration);
 		}
 	}
 
@@ -408,7 +431,7 @@ void Upscaling::LoadSettings(json& o_json)
 
 	constexpr auto fgMethodCount = 2;  // kFSR, kDLSSG
 	if (settings.frameGenMethod >= static_cast<uint>(fgMethodCount))
-		settings.frameGenMethod = static_cast<uint>(FrameGenMethod::kFSR);
+		settings.frameGenMethod = static_cast<uint>(FrameGenMethod::kDLSSG);
 
 	// Migrate legacy Reflex settings to new reflexEnabled bool.
 	if (settings.reflexLowLatencyMode && !settings.reflexEnabled) {
@@ -579,13 +602,20 @@ void Upscaling::ApplyHardwareDefaults()
 
 Upscaling::FrameGenMethod Upscaling::GetFrameGenMethod() const
 {
-	// ONE frame-generation method per system, hardware-derived and fixed for the session:
-	// DLSS-G on hardware that supports it, FSR-FG everywhere else. Not user-selectable — the
-	// two methods need opposite present paths (DLSS-G's pacer requires hardware flips; the FFX
-	// present worker requires the copy path on NVIDIA), which the driver locks per window, so
-	// a single hardware-matched method keeps everything switch-free and boot-independent.
-	// settings.frameGenMethod is legacy-ignored.
-	return Streamline::GetSingleton()->IsDLSSGSupported() ? FrameGenMethod::kDLSSG : FrameGenMethod::kFSR;
+	// USER-SELECTABLE frame-generation method. DLSS-G (sl.dlss_g) and FSR-FG (sl.fsr_g) are now separate,
+	// interchangeable Streamline features that the FrameGen controller load-toggles so exactly one owns
+	// present. Honor the saved selection, but validate it against actual feature support so a choice the
+	// current GPU can't run falls back to one it can. The default (kDLSSG) resolves to DLSS-G on capable
+	// hardware and falls back to FSR-FG everywhere else — i.e. the old hardware-optimal default, now
+	// overridable in the menu (full runtime switch on all capable hardware).
+	auto* sl = Streamline::GetSingleton();
+	const auto selected = static_cast<FrameGenMethod>(settings.frameGenMethod);
+	if (selected == FrameGenMethod::kDLSSG)
+		return sl->IsDLSSGSupported() ? FrameGenMethod::kDLSSG : FrameGenMethod::kFSR;
+	// kFSR selected: use it when FSR-FG is supported, else fall back to DLSS-G if that is available.
+	return sl->IsFSRFGSupported() ? FrameGenMethod::kFSR :
+	       sl->IsDLSSGSupported() ? FrameGenMethod::kDLSSG :
+	                                FrameGenMethod::kFSR;
 }
 
 bool Upscaling::IsFrameGenerationActive() const
@@ -595,10 +625,10 @@ bool Upscaling::IsFrameGenerationActive() const
 	auto fgMethod = GetFrameGenMethod();
 	if (fgMethod == FrameGenMethod::kDLSSG)
 		return Streamline::GetSingleton()->IsDLSSGSupported();
-	// kFSR: the sl.fsr plugin owns frame generation via its FFX FrameInterpolationSwapChain.
-	// "Active" means FSR is supported and we've delivered the enable (settings.frameGeneration
-	// already checked above).
-	return Streamline::GetSingleton()->IsFSRSupported();
+	// kFSR: the sl.fsr_g plugin owns frame generation via its FFX FrameInterpolationSwapChain.
+	// "Active" means FSR frame generation is supported and we've delivered the enable
+	// (settings.frameGeneration already checked above).
+	return Streamline::GetSingleton()->IsFSRFGSupported();
 }
 
 bool Upscaling::GetEffectiveReflex() const

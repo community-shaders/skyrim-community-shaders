@@ -44,11 +44,11 @@ $Artifacts = Join-Path $SlSrc '_artifacts'
 $ProjDir   = Join-Path $SlSrc '_project\vs2022'
 $Sln       = Join-Path $ProjDir 'streamline.sln'
 
-# Plugins CS stages — MUST match the CMake install() filter sl.(fsr|xess|interposer). These three
+# Plugins CS stages — MUST match the CMake install() filter sl.(fsr|fsr_g|xess|interposer). These
 # have no inter-project dependencies (each compiles the core sl.* sources it needs and LoadLibrary's
 # the runtime DLLs), so we build the individual .vcxproj files directly. Passing project targets to
 # the .sln (msbuild /t:sl_fsr) is rejected as MSB4057 by this premake-generated solution.
-$plugins = @('sl.interposer', 'sl.fsr', 'sl.xess')
+$plugins = @('sl.interposer', 'sl.fsr', 'sl.fsr_g', 'sl.xess')
 
 function Get-PluginDll([string]$name) { Join-Path $Artifacts "$name\${Config}_x64\$name.dll" }
 

@@ -478,7 +478,7 @@ endif()
 # slInit (strlen(NULL) in its embedded JSON), and the others are never requested by
 # featuresToLoad (src/Features/Upscaling/Streamline.cpp).
 file(GLOB _SL_FORK_DLLS "${CMAKE_SOURCE_DIR}/extern/Streamline/_artifacts/sl.*/Develop_x64/sl.*.dll")
-list(FILTER _SL_FORK_DLLS INCLUDE REGEX "sl\\.(fsr|xess|interposer)\\.dll$")
+list(FILTER _SL_FORK_DLLS INCLUDE REGEX "sl\\.(fsr|fsr_g|xess|interposer)\\.dll$")
 if(_SL_FORK_DLLS)
     message(STATUS "Staging Streamline fork plugins: ${_SL_FORK_DLLS}")
     install(

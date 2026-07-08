@@ -12,32 +12,40 @@
 // frame-generation mutations and all FG-related swapchain recreates are issued
 // from here, serialized as an explicit state machine.
 //
+// DLSS-G (sl.dlss_g / kFeatureDLSS_G) and FSR-FG (sl.fsr_g / kFeatureFSR_G) are
+// TWIN load-toggled Streamline features: each is loaded only while it is the
+// selected method, and at most one is loaded at a time. Both start LOADED at
+// slInit, so the controller's first reconcile unloads the non-selected one.
+// A method switch (DLSS-G <-> FSR-FG, or either <-> off) unloads the outgoing
+// feature and loads the incoming one inside a SINGLE DXVK swapchain-recreate
+// window: the torn-down callback applies BOTH desired load states while no
+// swapchain exists, so one recreate performs both transitions at once.
+//
 // The transition rules encode constraints that were each established
 // empirically (see git history / the Streamline DLSS-G programming guide):
 //
-//  * sl.dlss_g is LOADED only while DLSS-G is the selected method. A dormant
-//    loaded plugin costs ~3% FPS uncapped (its pass-through present proxy
-//    taxes every present) plus 18 MB of VRAM, so unloading when off is a real
-//    win. Loading/unloading may only happen inside DXVK's swapchain-recreate
-//    window (guide section 18), so each load-state change requests exactly one
-//    recreate and waits for it to land.
-//  * DLSS-G interpolation must be turned OFF and the device drained BEFORE any
-//    swapchain manipulation (guide ordering requirement).
+//  * Each FG feature is LOADED only while it is the selected method. A dormant
+//    loaded plugin costs FPS (its pass-through present proxy taxes every
+//    present) plus VRAM, so unloading when off is a real win. Loading/unloading
+//    may only happen inside DXVK's swapchain-recreate window (guide section
+//    18), so a method switch requests exactly one recreate and waits for BOTH
+//    features' load states to settle before declaring the transition done.
+//  * The OUTGOING engaged method is disengaged BEFORE the load change so the
+//    unload is clean: DLSS-G interpolation is turned OFF and the device drained
+//    (guide ordering requirement); FSR-FG's FFX FrameInterpolationSwapChain is
+//    unwrapped from the plugin's present hook.
 //  * The first slDLSSGSetOptions(on) is deferred until the load recreate has
 //    landed, so a toggle engages FG exactly once on the FINAL swapchain
 //    instead of engage -> teardown -> re-engage (a visible bounce).
-//  * DLSS-G's present proxy is sticky: it bypasses the Vulkan present hooks,
-//    so FSR-FG can never cooperatively reclaim presentation from it. FSR-FG
-//    enablement is therefore gated on sl.dlss_g being fully unloaded — the
-//    unload recreate doubles as the proxy eviction.
-//  * FSR-FG enablement can take several frames to deliver (the sl.fsr entry
+//  * FSR-FG enablement can take several frames to deliver (the sl.fsr_g entry
 //    points come up after the first frames), so the desired state is re-pushed
 //    until the plugin accepts it. Each delivered off->on edge then requests one
 //    swapchain recreate: the FFX FrameInterpolationSwapChain installs only
 //    inside the plugin's vkCreateSwapchainKHR hook, and nothing else recreates
 //    the swapchain organically anymore (DXVK switches present modes without a
-//    recreate via VK_EXT_swapchain_maintenance1). Disable needs no recreate -
-//    the plugin unwraps from its own present hook.
+//    recreate via VK_EXT_swapchain_maintenance1). Disable is handled in the
+//    method-teardown step (it unwraps from the plugin's own present hook ahead
+//    of the unload recreate).
 //
 // Threading: all methods run on the render thread (the immediate-context
 // cadence of Upscaling's hooks), like the code they replaced.
@@ -75,15 +83,15 @@ namespace FrameGen
 
 		enum class Phase : uint8_t
 		{
-			kIdle,            // load state matches the target; nothing in flight
-			kLoadingDLSSG,    // load recreate requested; waiting for it to land
-			kUnloadingDLSSG,  // mode off + drained; unload recreate requested
+			kIdle,          // load state matches the target; nothing in flight
+			kTransitioning  // a load/unload swapchain recreate is outstanding for
+			                // either FG feature; waiting for both to settle
 		};
 
 		// Sub-steps of Reconcile, in the order they run.
 		void StepPhaseCompletion();
-		void StepDLSSGModeTeardown(Method a_target);
-		void StepDLSSGLoadState(Method a_target);
+		void StepModeTeardown(Method a_target);
+		void StepLoadState(Method a_target);
 		void StepFSRDelivery(Method a_target);
 
 		static const char* Name(Method a_method);
@@ -96,7 +104,7 @@ namespace FrameGen
 		bool dlssgModeOn = false;
 
 
-		// Last FSR-FG enable state actually accepted by the sl.fsr plugin
+		// Last FSR-FG enable state actually accepted by the sl.fsr_g plugin
 		// (-1 = nothing delivered yet), and the debug-flag signature it was
 		// delivered with. Re-pushed until they match the desired state.
 		int fsrDelivered = -1;

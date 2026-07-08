@@ -81,107 +81,151 @@ namespace FrameGen
 		const Method target = DesiredMethod();
 
 		StepPhaseCompletion();
-		StepDLSSGModeTeardown(target);
-		StepDLSSGLoadState(target);
+		StepModeTeardown(target);
+		StepLoadState(target);
 		StepFSRDelivery(target);
 	}
 
-	// Completes an in-flight DLSS-G load/unload once its swapchain recreate has
-	// landed (DxvkSwapchainTornDownCallback applied the desired state in the
-	// no-swapchain window).
+	// Completes an in-flight FG method switch once its swapchain recreate has
+	// landed (DxvkSwapchainTornDownCallback applied BOTH features' desired load
+	// states in the no-swapchain window). Both features route through the SAME
+	// single recreate, so the transition is done only when both have settled.
 	void Controller::StepPhaseCompletion()
 	{
-		if (phase == Phase::kIdle)
+		if (phase != Phase::kTransitioning)
 			return;
 
 		auto* sl = Streamline::GetSingleton();
-		if (!sl->IsDLSSGLoadSettled())
+		if (!sl->IsDLSSGLoadSettled() || !sl->IsFSRFGLoadSettled())
 			return;
 
-		if (phase == Phase::kLoadingDLSSG && sl->IsDLSSGLoaded()) {
+		// After a settle exactly one FG feature is loaded (or none, when FG was
+		// turned off). Adopt whichever is now loaded as the present owner.
+		if (sl->IsDLSSGLoaded()) {
 			// Register the DLSS-G viewport against the NEW swapchain with the
 			// interpolation mode off; the gameplay path turns it on from here.
 			const auto dims = CurrentDims(false);
 			sl->SetDLSSGMode(false, dims.displayWidth, dims.displayHeight);
 			owner = Method::kDLSSG;
-			logger::info("[FrameGen] DLSS-G load landed - present owner: {}", Name(owner));
-		} else if (phase == Phase::kUnloadingDLSSG && !sl->IsDLSSGLoaded()) {
-			owner = Method::kNone;
-			logger::info("[FrameGen] DLSS-G unload landed - present owner: {}", Name(owner));
+		} else if (sl->IsFSRFGLoaded()) {
+			// FSR-FG's per-present enable is delivered by StepFSRDelivery below.
+			owner = Method::kFSR;
 		} else {
-			// Settled, but not to the state this phase was waiting for (e.g. the
-			// target flipped mid-transition). Fall back to idle; the load-state
-			// step below issues the next transition.
-			logger::info("[FrameGen] load reconcile settled to loaded={} - re-evaluating", sl->IsDLSSGLoaded());
+			owner = Method::kNone;
 		}
 
 		phase = Phase::kIdle;
+		logger::info("[FrameGen] FG method switch settled - present owner: {}", Name(owner));
 	}
 
-	// Per the Streamline DLSS-G guide, interpolation must be OFF and the device
-	// drained BEFORE any swapchain manipulation. Runs on the edge where DLSS-G
-	// stops being the desired method, ahead of the unload recreate below.
-	void Controller::StepDLSSGModeTeardown(Method a_target)
+	// Disengages the OUTGOING engaged method BEFORE the load change so the unload
+	// is clean. Runs on the edge where a method stops being the desired one,
+	// ahead of the unload recreate in StepLoadState.
+	void Controller::StepModeTeardown(Method a_target)
 	{
-		if (!dlssgModeOn || a_target == Method::kDLSSG)
-			return;
+		auto* sl = Streamline::GetSingleton();
 
-		const auto dims = CurrentDims(false);
-		Streamline::GetSingleton()->SetDLSSGMode(false, dims.displayWidth, dims.displayHeight);
-		if (auto* dxvk = DxvkInterop::GetSingleton())
-			dxvk->WaitDeviceIdle();
+		// Leaving DLSS-G while its interpolation was engaged: per the guide,
+		// interpolation must be OFF and the device drained BEFORE any swapchain
+		// manipulation.
+		if (dlssgModeOn && a_target != Method::kDLSSG) {
+			const auto dims = CurrentDims(false);
+			sl->SetDLSSGMode(false, dims.displayWidth, dims.displayHeight);
+			if (auto* dxvk = DxvkInterop::GetSingleton())
+				dxvk->WaitDeviceIdle();
 
-		dlssgModeOn = false;
-		logger::info("[FrameGen] DLSS-G interpolation off + device drained (leaving DLSS-G)");
+			dlssgModeOn = false;
+			logger::info("[FrameGen] DLSS-G interpolation off + device drained (leaving DLSS-G)");
+		}
+
+		// Leaving FSR-FG while it was delivered: unwrap the FFX
+		// FrameInterpolationSwapChain from the sl.fsr_g plugin's present hook
+		// before the unload recreate, so no live wrap sits over a torn-down
+		// swapchain. sl.fsr_g is still loaded at this point (the unload recreate
+		// has not run yet), so the disable is delivered.
+		if (fsrDelivered == 1 && a_target != Method::kFSR) {
+			const bool hdr = globals::features::hdrDisplay.loaded &&
+			                 globals::features::hdrDisplay.settings.enableHDR;
+			const auto dims = CurrentDims(false);
+			const auto& s = globals::features::upscaling.settings;
+			// Disable-delivery result is intentionally ignored: the unload recreate that follows tears the
+			// plugin down regardless, so a missed disable this frame is harmless.
+			(void)sl->SetFSRFrameGen(false, dims.renderWidth, dims.renderHeight,
+				dims.displayWidth, dims.displayHeight, hdr,
+				s.fgDebugView, s.fgDebugTearLines, s.fgDebugPacingLines, s.fgShowOnlyGenerated);
+			fsrDelivered = 0;
+			fsrVsyncRebakePending = false;
+			if (owner == Method::kFSR)
+				owner = Method::kNone;
+			logger::info("[FrameGen] FSR-FG unwrapped (leaving FSR-FG)");
+		}
 	}
 
-	// Keeps sl.dlss_g loaded exactly while DLSS-G is the desired method. A
-	// dormant loaded plugin costs ~3% FPS (its pass-through present proxy) so
-	// this is a real win, not hygiene. The (un)load itself happens inside
-	// DXVK's swapchain recreate (guide section 18); exactly one recreate is
-	// requested per state change.
-	void Controller::StepDLSSGLoadState(Method a_target)
+	// Keeps exactly the selected FG feature loaded: DLSS-G loaded iff DLSS-G is
+	// the target, FSR-FG loaded iff FSR-FG is the target, the other unloaded. A
+	// dormant loaded plugin costs FPS (its pass-through present proxy) so this is
+	// a real win, not hygiene. Both (un)loads happen inside a SINGLE DXVK
+	// swapchain recreate (guide section 18): SetDLSSGDesiredLoaded +
+	// SetFSRFGDesiredLoaded are staged, then one recreate's torn-down callback
+	// applies both in the no-swapchain window. Only acted on from kIdle so
+	// recreates never stack.
+	void Controller::StepLoadState(Method a_target)
 	{
 		if (phase != Phase::kIdle)
 			return;
 
 		auto* sl = Streamline::GetSingleton();
-		const bool wantLoaded = a_target == Method::kDLSSG;
-		if (sl->IsDLSSGLoaded() == wantLoaded) {
-			if (wantLoaded && owner != Method::kDLSSG) {
-				// Already loaded (boot default) - adopt without a recreate, but
-				// still register the viewport with interpolation OFF exactly like
-				// the load-landed path: engaging straight to mode-on without the
-				// registered-off -> on edge leaves the present proxy passive
-				// (loaded, stable, but never doubling).
+		const bool wantDLSSG = a_target == Method::kDLSSG;
+		const bool wantFSRFG = a_target == Method::kFSR;
+
+		if (sl->IsDLSSGLoaded() == wantDLSSG && sl->IsFSRFGLoaded() == wantFSRFG) {
+			// Load state already matches the target (steady state). Adopt the
+			// selected FG feature as owner without a recreate. For DLSS-G, still
+			// register the viewport with interpolation OFF exactly like the
+			// load-landed path: engaging straight to mode-on without the
+			// registered-off -> on edge leaves the present proxy passive (loaded,
+			// stable, but never doubling).
+			if (wantDLSSG && owner != Method::kDLSSG) {
 				const auto dims = CurrentDims(false);
 				sl->SetDLSSGMode(false, dims.displayWidth, dims.displayHeight);
 				owner = Method::kDLSSG;
 				logger::info("[FrameGen] DLSS-G already loaded - registered + adopted as present owner");
+			} else if (wantFSRFG && owner != Method::kFSR) {
+				owner = Method::kFSR;
+				logger::info("[FrameGen] FSR-FG already loaded - adopted as present owner");
 			}
 			return;
 		}
 
-		sl->SetDLSSGDesiredLoaded(wantLoaded);
-		Streamline::RequestDxvkSwapchainRecreate(wantLoaded ? "DLSS-G load" : "DLSS-G unload");
-		phase = wantLoaded ? Phase::kLoadingDLSSG : Phase::kUnloadingDLSSG;
-		if (!wantLoaded && owner == Method::kDLSSG)
+		// A method switch: unload the outgoing feature and load the incoming one.
+		// Both desired states are applied in the SAME no-swapchain window, so ONE
+		// recreate performs both transitions at once.
+		sl->SetDLSSGDesiredLoaded(wantDLSSG);
+		sl->SetFSRFGDesiredLoaded(wantFSRFG);
+		Streamline::RequestDxvkSwapchainRecreate("FG method switch");
+		phase = Phase::kTransitioning;
+		// Clear the outgoing owner; StepPhaseCompletion re-adopts on settle.
+		if (owner == Method::kDLSSG && !wantDLSSG)
 			owner = Method::kNone;
-		logger::info("[FrameGen] DLSS-G {} requested (swapchain recreate, guide section 18)",
-			wantLoaded ? "load" : "unload");
+		if (owner == Method::kFSR && !wantFSRFG)
+			owner = Method::kNone;
+		logger::info("[FrameGen] FG method switch requested: DLSS-G load={} FSR-FG load={} (swapchain recreate, guide section 18)",
+			wantDLSSG, wantFSRFG);
 	}
 
-	// Pushes the desired FSR-FG state to the sl.fsr plugin until it sticks (its
-	// entry points come up a few frames after boot), and requests the swapchain
-	// recreates the FFX wrap depends on (see the comments below). Enabling is
-	// gated on sl.dlss_g being fully unloaded: DLSS-G's present proxy is
-	// sticky, and the unload recreate is what evicts it.
+	// Pushes the desired FSR-FG enable to the sl.fsr_g plugin until it sticks
+	// (its entry points come up a few frames after a load), and requests the
+	// swapchain recreates the FFX wrap depends on (see the comments below).
+	// Gated on sl.fsr_g being loaded and no transition outstanding; disabling is
+	// handled by StepModeTeardown (it unwraps ahead of the unload recreate), so
+	// this step only DELIVERS the enable while loaded.
 	void Controller::StepFSRDelivery(Method a_target)
 	{
 		auto& upscaling = globals::features::upscaling;
+		auto* sl = Streamline::GetSingleton();
 		const bool wantFSR = a_target == Method::kFSR;
 
-		if (wantFSR && (phase != Phase::kIdle || Streamline::GetSingleton()->IsDLSSGLoaded()))
+		if (!wantFSR || phase != Phase::kIdle || !sl->IsFSRFGLoaded())
 			return;
 
 		// While FSR-FG owns present, a vsync change needs a recreate of its own:
@@ -192,7 +236,7 @@ namespace FrameGen
 		// bakes the mode from the last-PRESENTED sync interval, and requesting
 		// the recreate on the same frame the setting flips races that present
 		// (a lost race bakes the old mode - observed in testing).
-		if (wantFSR && fsrDelivered == 1 && upscaling.settings.vsync != fsrWrapVsync) {
+		if (fsrDelivered == 1 && upscaling.settings.vsync != fsrWrapVsync) {
 			if (!fsrVsyncRebakePending) {
 				fsrVsyncRebakePending = true;
 			} else {
@@ -205,38 +249,34 @@ namespace FrameGen
 		}
 
 		const uint32_t debugSig = FSRDebugSignature(upscaling.settings);
-		if ((wantFSR ? 1 : 0) == fsrDelivered && (!wantFSR || debugSig == fsrDebugSigDelivered))
+		if (fsrDelivered == 1 && debugSig == fsrDebugSigDelivered)
 			return;
 
 		// A debug-flag re-push while already enabled applies per-present and must
 		// not recreate; only an off->on edge needs the wrap recreate below.
-		const bool enableEdge = wantFSR && fsrDelivered != 1;
+		const bool enableEdge = fsrDelivered != 1;
 
 		const bool hdr = globals::features::hdrDisplay.loaded &&
 		                 globals::features::hdrDisplay.settings.enableHDR;
 		const auto dims = CurrentDims(false);
 		const auto& s = upscaling.settings;
-		if (Streamline::GetSingleton()->SetFSRFrameGen(wantFSR,
+		if (sl->SetFSRFrameGen(true,
 				dims.renderWidth, dims.renderHeight, dims.displayWidth, dims.displayHeight, hdr,
 				s.fgDebugView, s.fgDebugTearLines, s.fgDebugPacingLines, s.fgShowOnlyGenerated)) {
-			fsrDelivered = wantFSR ? 1 : 0;
+			fsrDelivered = 1;
 			fsrDebugSigDelivered = debugSig;
-			if (wantFSR) {
-				owner = Method::kFSR;
-				fsrWrapVsync = s.vsync;
-			} else if (owner == Method::kFSR) {
-				owner = Method::kNone;
-			}
-			logger::info("[FrameGen] FSR-FG {} delivered - present owner: {}",
-				wantFSR ? "enable" : "disable", Name(owner));
+			owner = Method::kFSR;
+			fsrWrapVsync = s.vsync;
+			logger::info("[FrameGen] FSR-FG enable delivered - present owner: {}", Name(owner));
 
-			// The FFX FrameInterpolationSwapChain installs only inside the sl.fsr
+			// The FFX FrameInterpolationSwapChain installs only inside the sl.fsr_g
 			// plugin's vkCreateSwapchainKHR hook, so a mid-session enable needs one
 			// swapchain recreate to take effect. (The plugin's cooperative
 			// present-hook bootstrap can no longer drive this: DXVK switches
 			// present modes via VK_EXT_swapchain_maintenance1 without recreating,
-			// so nothing recreates the swapchain organically anymore.) Disable
-			// needs no recreate - the plugin unwraps from its own present hook.
+			// so nothing recreates the swapchain organically anymore.) Disable is
+			// handled by StepModeTeardown, which unwraps from the plugin's own
+			// present hook ahead of the unload recreate.
 			if (enableEdge)
 				Streamline::RequestDxvkSwapchainRecreate("FSR-FG wrap");
 		}

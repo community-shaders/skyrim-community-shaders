@@ -40,6 +40,8 @@ public:
 	[[nodiscard]] bool IsDLSSGSupported() const { return featureDLSSG; }
 	[[nodiscard]] bool IsXeSSSupported() const { return featureXeSS; }
 	[[nodiscard]] bool IsFSRSupported() const { return featureFSR; }
+	//! FSR3 frame generation (sl.fsr_g / kFeatureFSR_G) — the FSR twin of IsDLSSGSupported().
+	[[nodiscard]] bool IsFSRFGSupported() const { return featureFSRFG; }
 
 	void EvaluateDLSS(ID3D11Resource* a_colorIn, ID3D11Resource* a_colorOut,
 		ID3D11Resource* a_depth, ID3D11Resource* a_motionVectors,
@@ -148,6 +150,12 @@ public:
 	// Desired load state has been applied (no load/unload recreate outstanding).
 	[[nodiscard]] bool IsDLSSGLoadSettled() const;
 
+	// FSR3 frame generation (sl.fsr_g / kFeatureFSR_G) load-state — twins of the DLSS-G accessors above.
+	// The FrameGen controller keeps exactly one FG feature loaded at a time.
+	void SetFSRFGDesiredLoaded(bool a_loaded);
+	[[nodiscard]] bool IsFSRFGLoaded() const;
+	[[nodiscard]] bool IsFSRFGLoadSettled() const;
+
 	void LogReflexStatus();
 
 	void TagDLSSGResources(ID3D11Resource* a_depth, ID3D11Resource* a_motionVectors,
@@ -177,6 +185,7 @@ private:
 	bool featureDLSSG = false;
 	bool featureXeSS = false;
 	bool featureFSR = false;
+	bool featureFSRFG = false;
 
 	// Pre-slInit hardware capability (VK_NV_optical_flow on the system loader): decides
 	// whether sl.dlss_g is loaded at all — and with it, the session's frame-generation

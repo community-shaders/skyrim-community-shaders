@@ -56,7 +56,7 @@ public:
 		bool reflexLowLatencyMode = false;
 		bool reflexLowLatencyBoost = false;
 		bool frameGeneration = false;
-		uint frameGenMethod = (uint)FrameGenMethod::kFSR;
+		uint frameGenMethod = (uint)FrameGenMethod::kDLSSG;  // default resolves to DLSS-G on capable HW, else FSR-FG
 		// DLSS-G fixed frame multiplier (2 = 2x single-frame … up to 6x). numFramesToGenerate = multiplier - 1.
 		// Capped at runtime to the hardware max (numFramesToGenerateMax+1): 40-series caps at 2x, 50-series up to 6x.
 		uint frameGenMultiplier = 2;

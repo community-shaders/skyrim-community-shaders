@@ -26,6 +26,7 @@
 #include <sl_dlss.h>
 #include <sl_dlss_g.h>
 #include <sl_fsr.h>
+#include <sl_fsr_g.h>
 #include <sl_xess.h>
 #include <sl_helpers_vk.h>
 #include <sl_matrix_helpers.h>
@@ -168,16 +169,52 @@ namespace
 	// copy overhead the guide warns about.
 	std::atomic<bool> g_dlssgDesiredLoaded{ false };
 	bool g_dlssgCurrentlyLoaded = false;
+	// FSR3 frame generation (sl.fsr_g / kFeatureFSR_G) is now a load-toggled feature EXACTLY like DLSS-G:
+	// loading it activates its WSI hooks (which install the FFX FrameInterpolationSwapChain), unloading
+	// removes them. Only ONE FG feature is ever desired-loaded at a time (the FrameGen controller enforces
+	// it), so a method switch unloads the outgoing feature and loads the incoming one in the SAME
+	// swapchain-recreate window. Both start loaded at slInit (both in featuresToLoad); the controller
+	// unloads the non-selected one on its first reconcile.
+	std::atomic<bool> g_fsrfgDesiredLoaded{ false };
+	bool g_fsrfgCurrentlyLoaded = false;
+
+	// Apply one FG feature's desired loaded-state via slSetFeatureLoaded, re-resolving its entry points on
+	// load. Free function (not a lambda) so the SEH __try has no C++ object unwinding in scope. Called from
+	// DxvkSwapchainTornDownCallback for BOTH FG features in the no-swapchain window the guide requires.
+	void ReconcileFgFeatureLoad(sl::Feature a_feature, std::atomic<bool>& a_desired, bool& a_current)
+	{
+		const bool want = a_desired.load(std::memory_order_acquire);
+		if (want == a_current || !g_sl.slSetFeatureLoaded || g_sl.dispatchFaulted)
+			return;
+		__try {
+			if (g_sl.slSetFeatureLoaded(a_feature, want) != sl::Result::eOk)
+				return;
+			a_current = want;
+			// A reloaded plugin may sit at a new base — re-resolve its entry points (plugin option state is
+			// gone after an unload).
+			if (want) {
+				if (a_feature == sl::kFeatureDLSS_G) {
+					g_sl.slGetFeatureFunction(sl::kFeatureDLSS_G, "slDLSSGSetOptions", reinterpret_cast<void*&>(g_sl.slDLSSGSetOptions));
+					g_sl.slGetFeatureFunction(sl::kFeatureDLSS_G, "slDLSSGGetState", reinterpret_cast<void*&>(g_sl.slDLSSGGetState));
+				} else if (a_feature == sl::kFeatureFSR_G) {
+					g_sl.slGetFeatureFunction(sl::kFeatureFSR_G, "slFSRFrameGenerationSetOptions", reinterpret_cast<void*&>(g_sl.slFSRFrameGenerationSetOptions));
+					g_sl.slGetFeatureFunction(sl::kFeatureFSR_G, "slFSRGetFrameGenState", reinterpret_cast<void*&>(g_sl.slFSRGetFrameGenState));
+				}
+			}
+		} __except (EXCEPTION_EXECUTE_HANDLER) {
+			g_sl.dispatchFaulted = true;
+		}
+	}
 
 	// Invoked by DXVK inside recreateSwapChain() between destroy and create (registered via
-	// dxvkSetSwapchainTornDownCallback). Toggles DLSS-G's loaded state to match `desired` in exactly the
-	// window the guide requires. Runs on DXVK's present/acquire thread under its surface lock.
+	// dxvkSetSwapchainTornDownCallback). Toggles each FG feature's loaded state to match `desired` in
+	// exactly the window the guide requires. Runs on DXVK's present/acquire thread under its surface lock.
 	void DxvkSwapchainTornDownCallback()
 	{
 		// ANY swapchain teardown (load/unload OR a plain resize/fullscreen recreate) invalidates DLSS-G's
 		// per-swapchain option state, so force the next SetDLSSGMode to re-issue slDLSSGSetOptions against the
-		// new swapchain dimensions. Without this, a plain recreate (desired==current, early-returns below) would
-		// leave the mode cached and the first post-resize SetDLSSGMode suppressed.
+		// new swapchain dimensions. Without this, a plain recreate (desired==current) would leave the mode
+		// cached and the first post-resize SetDLSSGMode suppressed.
 		g_sl.dlssgModeCached = false;
 		g_sl.dlssgModeOn = false;
 
@@ -188,22 +225,10 @@ namespace
 		g_sl.dlssgInputFenceValue.store(0, std::memory_order_release);
 		g_sl.dlssgInputFenceWaited.store(0, std::memory_order_release);
 
-		const bool desired = g_dlssgDesiredLoaded.load(std::memory_order_acquire);
-		if (desired == g_dlssgCurrentlyLoaded || !g_sl.slSetFeatureLoaded || g_sl.dispatchFaulted)
-			return;
-		__try {
-			if (g_sl.slSetFeatureLoaded(sl::kFeatureDLSS_G, desired) != sl::Result::eOk)
-				return;
-			g_dlssgCurrentlyLoaded = desired;
-			// A reloaded plugin may sit at a new base — re-resolve its entry points (plugin option state is gone
-			// after an unload; the mode cache was already reset above).
-			if (desired) {
-				g_sl.slGetFeatureFunction(sl::kFeatureDLSS_G, "slDLSSGSetOptions", reinterpret_cast<void*&>(g_sl.slDLSSGSetOptions));
-				g_sl.slGetFeatureFunction(sl::kFeatureDLSS_G, "slDLSSGGetState", reinterpret_cast<void*&>(g_sl.slDLSSGGetState));
-			}
-		} __except (EXCEPTION_EXECUTE_HANDLER) {
-			g_sl.dispatchFaulted = true;
-		}
+		// Reconcile BOTH FG features. On a method switch the controller has set one desired=true and the
+		// other desired=false, so this unloads the outgoing feature and loads the incoming one here.
+		ReconcileFgFeatureLoad(sl::kFeatureDLSS_G, g_dlssgDesiredLoaded, g_dlssgCurrentlyLoaded);
+		ReconcileFgFeatureLoad(sl::kFeatureFSR_G, g_fsrfgDesiredLoaded, g_fsrfgCurrentlyLoaded);
 	}
 
 	// Streamline emits a handful of WARN-level diagnostics that are benign for Community Shaders' DXVK
@@ -458,7 +483,7 @@ bool Streamline::Initialize()
 	dlssgHardware = ProbeDLSSGHardware();
 
 	std::vector<sl::Feature> featuresToLoad = { sl::kFeatureDLSS, sl::kFeatureReflex, sl::kFeaturePCL,
-		sl::kFeatureFSR, sl::kFeatureXeSS };
+		sl::kFeatureFSR, sl::kFeatureFSR_G, sl::kFeatureXeSS };
 	if (dlssgHardware) {
 		featuresToLoad.push_back(sl::kFeatureDLSS_G);
 		// slInit loads the plugin, so the §18 load-state tracking starts "loaded" here (and
@@ -466,6 +491,11 @@ bool Streamline::Initialize()
 		g_dlssgDesiredLoaded.store(true, std::memory_order_release);
 		g_dlssgCurrentlyLoaded = true;
 	}
+	// kFeatureFSR_G (sl.fsr_g frame gen) is ALWAYS in featuresToLoad, so slInit loads it on every GPU —
+	// start its load-state "loaded" too. The FrameGen controller unloads whichever FG feature is not the
+	// selected method on its first reconcile, converging to exactly one loaded.
+	g_fsrfgDesiredLoaded.store(true, std::memory_order_release);
+	g_fsrfgCurrentlyLoaded = true;
 
 	sl::Preferences pref{};
 	pref.renderAPI = sl::RenderAPI::eVulkan;
@@ -540,7 +570,8 @@ void Streamline::SetVulkanDevice()
 	featureReflex = supported(sl::kFeatureReflex);
 	featureDLSSG = supported(sl::kFeatureDLSS_G);
 	featureXeSS = supported(sl::kFeatureXeSS);  // Community Shaders sl.xess plugin (any GPU)
-	featureFSR = supported(sl::kFeatureFSR);    // Community Shaders sl.fsr plugin (any GPU)
+	featureFSR = supported(sl::kFeatureFSR);    // Community Shaders sl.fsr plugin — UPSCALE (any GPU)
+	featureFSRFG = supported(sl::kFeatureFSR_G);  // Community Shaders sl.fsr_g plugin — FRAME GEN (any GPU)
 
 	// Bind the feature-specific functions (valid only after the device is set).
 	if (featureDLSS) {
@@ -564,10 +595,17 @@ void Streamline::SetVulkanDevice()
 		featureDLSSG = g_sl.slDLSSGSetOptions != nullptr && g_sl.slDLSSGGetState != nullptr;
 	}
 	if (featureFSR) {
+		// sl.fsr is now UPSCALE ONLY (kFeatureFSR).
 		g_sl.slGetFeatureFunction(sl::kFeatureFSR, "slFSRSetOptions", reinterpret_cast<void*&>(g_sl.slFSRSetOptions));
-		g_sl.slGetFeatureFunction(sl::kFeatureFSR, "slFSRFrameGenerationSetOptions", reinterpret_cast<void*&>(g_sl.slFSRFrameGenerationSetOptions));
-		g_sl.slGetFeatureFunction(sl::kFeatureFSR, "slFSRGetFrameGenState", reinterpret_cast<void*&>(g_sl.slFSRGetFrameGenState));
 		featureFSR = g_sl.slFSRSetOptions != nullptr;
+	}
+	if (featureFSRFG) {
+		// FSR3 frame generation is its own feature/plugin (kFeatureFSR_G / sl.fsr_g), a twin of sl.dlss_g,
+		// so its entry points resolve from that feature — NOT kFeatureFSR. Only one FG feature is loaded
+		// at a time (see the FrameGen controller), exactly like DLSS-G.
+		g_sl.slGetFeatureFunction(sl::kFeatureFSR_G, "slFSRFrameGenerationSetOptions", reinterpret_cast<void*&>(g_sl.slFSRFrameGenerationSetOptions));
+		g_sl.slGetFeatureFunction(sl::kFeatureFSR_G, "slFSRGetFrameGenState", reinterpret_cast<void*&>(g_sl.slFSRGetFrameGenState));
+		featureFSRFG = g_sl.slFSRFrameGenerationSetOptions != nullptr;
 	}
 	if (featureXeSS) {
 		g_sl.slGetFeatureFunction(sl::kFeatureXeSS, "slXeSSSetOptions", reinterpret_cast<void*&>(g_sl.slXeSSSetOptions));
@@ -579,8 +617,8 @@ void Streamline::SetVulkanDevice()
 	// explicit (CS_FORCE_FSR_FG also lands here via the pre-slInit hardware probe).
 	featureDLSSG = featureDLSSG && dlssgHardware;
 
-	logger::info("[Streamline] feature support: DLSS={} Reflex={} DLSS-G={} FSR={} XeSS={} (FSR-FG fns {})",
-		featureDLSS, featureReflex, featureDLSSG, featureFSR, featureXeSS,
+	logger::info("[Streamline] feature support: DLSS={} Reflex={} DLSS-G={} FSR={} FSR-G={} XeSS={} (FSR-FG fns {})",
+		featureDLSS, featureReflex, featureDLSSG, featureFSR, featureFSRFG, featureXeSS,
 		g_sl.slFSRFrameGenerationSetOptions ? "ok" : "missing");
 
 	// Present path: hardware flips for everyone (the dxvk default — FSE pNext not chained).
@@ -631,7 +669,7 @@ void Streamline::Shutdown()
 	}
 	initialized = false;
 	vulkanDeviceSet = false;
-	featureDLSS = featureReflex = featureDLSSG = featureXeSS = featureFSR = false;
+	featureDLSS = featureReflex = featureDLSSG = featureXeSS = featureFSR = featureFSRFG = false;
 }
 
 // Fetch the SL frame token for an EXPLICIT frame ID — the Streamline_Sample pattern (its every
@@ -1384,7 +1422,7 @@ void Streamline::EvaluateFSRFrameGen(ID3D11Resource* a_depth, ID3D11Resource* a_
 	// FG-prepare. dlss_g also reads viewport-0 constants at present, so an isolated viewport keeps all
 	// three apart. The plugin's FG-prepare uses GLOBAL ctx (fgContext/fgWrappedSwapchain/fgEnabled), not
 	// per-viewport options, so viewport 1 is safe; it only needs its own constants + depth/MV tags.
-	if (!initialized || !featureFSR || g_sl.dispatchFaulted)
+	if (!initialized || !featureFSRFG || g_sl.dispatchFaulted)
 		return;
 	if (!a_depth || !a_motionVectors)
 		return;
@@ -1396,9 +1434,9 @@ void Streamline::EvaluateFSRFrameGen(ID3D11Resource* a_depth, ID3D11Resource* a_
 
 	__try {
 		const sl::ViewportHandle fgViewport{ 1 };
-		// Tag depth + MV (FG-prepare inputs) AND the hudless scene (present-time UI extraction). No color, so
-		// the plugin's shared kFeatureFSR evaluate runs FG-prepare, not an upscale.
-		const sl::Result evalRes = cs_EvaluateFeatureCore(sl::kFeatureFSR, fgViewport,
+		// Tag depth + MV (FG-prepare inputs) AND the hudless scene (present-time UI extraction). This drives
+		// the dedicated FSR FRAME-GEN feature (sl.fsr_g / kFeatureFSR_G) — its evaluate runs FG-prepare.
+		const sl::Result evalRes = cs_EvaluateFeatureCore(sl::kFeatureFSR_G, fgViewport,
 			nullptr, nullptr, a_depth, a_motionVectors,
 			a_renderWidth, a_renderHeight, a_outputWidth, a_outputHeight, a_jitterX, a_jitterY, a_hudlessColor);
 
@@ -1526,9 +1564,13 @@ bool Streamline::SetFSRFrameGen(bool a_enable, uint32_t a_renderWidth, uint32_t 
 	bool a_debugView, bool a_debugTearLines, bool a_debugPacingLines, bool a_onlyPresentGenerated)
 {
 	// Returns true only when the option was actually delivered to the plugin. The caller retries until
-	// it does, because featureFSR (and the FG entry points) come up a few frames AFTER the first
+	// it does, because featureFSRFG (and the FG entry points) come up a few frames AFTER the first
 	// CheckResources — a one-shot transition would silently miss that window.
-	if (!initialized || !featureFSR || !g_sl.slFSRFrameGenerationSetOptions || g_sl.dispatchFaulted)
+	if (!initialized || !featureFSRFG || !g_sl.slFSRFrameGenerationSetOptions || g_sl.dispatchFaulted)
+		return false;
+	// sl.fsr_g may be runtime-unloaded when DLSS-G is the selected method (twin of SetDLSSGMode's guard):
+	// don't call its options entry point while unloaded.
+	if (!g_fsrfgCurrentlyLoaded)
 		return false;
 
 	bool ok = false;
@@ -1566,7 +1608,7 @@ void Streamline::LogFSRFrameGenStats()
 	// FFX swapchain is absent or passing through. The one reliable runtime signal for
 	// whether FSR-FG is actually generating frames (screen captures can't see it - the
 	// FFX overlay/present happens after CS's capture point and DWM may not composite it).
-	if (!initialized || !featureFSR || !g_sl.slFSRGetFrameGenState || g_sl.dispatchFaulted)
+	if (!initialized || !featureFSRFG || !g_sl.slFSRGetFrameGenState || g_sl.dispatchFaulted)
 		return;
 	static uint32_t s_n = 0;
 	if ((s_n++ % 120) != 0)
@@ -1916,6 +1958,24 @@ bool Streamline::IsDLSSGLoadSettled() const
 	// exists, so a toggle engages FG exactly once instead of engage -> teardown ->
 	// re-engage (the visible debug-overlay bounce).
 	return g_dlssgDesiredLoaded.load(std::memory_order_acquire) == g_dlssgCurrentlyLoaded;
+}
+
+void Streamline::SetFSRFGDesiredLoaded(bool a_loaded)
+{
+	// Request sl.fsr_g to be (un)loaded on the next swapchain recreate (applied by
+	// DxvkSwapchainTornDownCallback in the no-swapchain window). Twin of SetDLSSGDesiredLoaded — the
+	// caller must follow this with RequestDxvkSwapchainRecreate().
+	g_fsrfgDesiredLoaded.store(a_loaded, std::memory_order_release);
+}
+
+bool Streamline::IsFSRFGLoaded() const
+{
+	return g_fsrfgCurrentlyLoaded;
+}
+
+bool Streamline::IsFSRFGLoadSettled() const
+{
+	return g_fsrfgDesiredLoaded.load(std::memory_order_acquire) == g_fsrfgCurrentlyLoaded;
 }
 
 void Streamline::RequestDxvkSwapchainRecreate(const char* a_reason)
