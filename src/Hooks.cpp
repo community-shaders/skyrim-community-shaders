@@ -283,16 +283,10 @@ struct IDXGISwapChain_Present
 			// the occluded (GDI-copy) surface, which is the exact wedge eBlockPresentingClientQueue can
 			// only avoid on the flip-model path (pacer stuck in NtDxgkSubmitPresentToHwQueue holding an
 			// nvoglv64 lock DXVK's CS copy then blocks on). No eOff, no settle — the sample's model.
-			// IsUpscalerReconfiguring(): a CS-initiated resolution/preset change (guide §12) — skip the
-			// present the same way so no DLSS-G present runs through the render-size transition.
-			//
-			// Per-frame backstop for the DXVK present-suspend flag (also pushed immediately from the
-			// WndProc notifiers): covers minimize (polled, no window message) + steady state, and CLEARS
-			// the flag on the first refocused frame so presents resume. This is what stops an occluded
-			// DLSS-G present from stalling DXVK's submit thread — the freeze this D3D11-level skip alone
-			// cannot prevent, because an already-enqueued present lives below this hook.
-			Upscaling::PushPresentSuspendToDxvk();
-			if (Upscaling::IsWindowUnusable() || Upscaling::IsUpscalerReconfiguring())
+			// NOTE (sample parity): an upscaler reconfiguration (method/preset change) does NOT skip the
+			// present — the sample changes DLSS mode with zero present-path ceremony. Only the window
+			// gate above applies.
+			if (Upscaling::IsWindowUnusable())
 				return S_OK;
 		}
 

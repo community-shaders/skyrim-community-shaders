@@ -120,39 +120,10 @@ public:
 	static inline std::atomic<bool> s_windowUnfocused{ false };
 	static inline std::atomic<bool> s_windowModifying{ false };
 
-	// Focus-change settle deadline (GetTickCount64 ms). A focus change (either direction) starts a
-	// transition where the swapchain moves between flip-model and DWM-composited; a DLSS-G present
-	// issued DURING that transition stalls in the driver even though the window reports focused (the
-	// residual freeze after synchronous present). So IsWindowUnusable() stays true for a short settle
-	// after ANY focus change: aggressive alt-tab keeps re-arming it (no presents through the churn),
-	// and it expires once focus is stable so presents resume on a settled flip surface.
-	static inline std::atomic<uint64_t> s_focusSettleUntilTick{ 0 };
-
-	// A CS-initiated upscaler reconfiguration (upscale method or quality/preset change) changes the
-	// render resolution. Per DLSS-G guide §12, DLSS-G must be OFF while the host modifies resolution
-	// or the DLSS-G present stalls in the driver (and EvaluateDLSS's forced CS-thread sync then
-	// deadlocks — the in-game "changed the upscale preset and it froze" wedge). CS owns this change,
-	// so it brackets it: NotifyUpscalerReconfig() marks the next few frames, during which CS skips ALL
-	// its per-frame Streamline work + the present (exactly like a window gap) so no DLSS-G present runs
-	// through the transition; it re-engages once the new size settles. Frame-count based so it is
-	// immune to Main_PostProcessing running more than once per frame.
-	static void NotifyUpscalerReconfig();
-	[[nodiscard]] static bool IsUpscalerReconfiguring();
-	// Wall-clock deadline (GetTickCount64 ms), NOT a frame count. While reconfiguring, the present hook
-	// returns early (skips the present) BEFORE State::Reset increments frameCount — so frameCount is
-	// frozen for the whole bracket. A frame-count deadline would therefore never be reached and the
-	// present would be skipped FOREVER (permanent freeze — the reproduced "changed preset and it froze").
-	// Wall clock always advances, so the bracket always expires.
-	static inline std::atomic<uint64_t> s_reconfigUntilTick{ 0 };
-
-	// Push IsWindowUnusable() to DXVK's present-suspend flag (dxvkSetPresentSuspended @109). While set,
-	// DXVK skips acquiring + presenting to the occluded/off-flip surface, so a DLSS-G frame-generation
-	// present can never stall in the driver and wedge DXVK's serial submit thread (the alt-tab freeze
-	// that CS's D3D11-level present-hook skip can't reach — an already-enqueued present is below it).
-	// Called from the WndProc notifiers (immediate on focus/resize, to catch an in-flight present) and
-	// once per present (covers minimize + steady state). Resolves the export once from dxvk_d3d11.dll.
-	static void PushPresentSuspendToDxvk();
-
+	// NOTE (Streamline-sample parity): an upscaler reconfiguration (method or quality/preset change) needs
+	// NO special DLSS-G handling — the sample changes DLSS mode with zero SL-lifecycle ceremony (no eOff,
+	// no swapchain recreate, no present skip); its DLSS-G options carry no render dims in fixed-resolution
+	// mode, so the change is invisible to DLSS-G (tag extents describe the render sub-rect per frame).
 
 	// Timing and scaling
 	double refreshRate = 0.0f;

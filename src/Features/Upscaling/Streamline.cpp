@@ -115,7 +115,7 @@ namespace
 		// DRS upscaler stops doubling).
 		bool dlssgModeCached = false;
 		bool dlssgModeOn = false;
-		uint32_t dlssgCachedRenderW = 0, dlssgCachedRenderH = 0, dlssgCachedDisplayW = 0, dlssgCachedDisplayH = 0;
+		uint32_t dlssgCachedDisplayW = 0, dlssgCachedDisplayH = 0;
 		// Multi Frame Generation: cached numFramesToGenerate + auto-mode are part of the options key, so a
 		// multiplier/mode change re-issues slDLSSGSetOptions. dlssgMaxFramesToGenerate is the hardware cap
 		// (numFramesToGenerateMax), queried once on the present thread via QueryDLSSGCapabilities (0 = unknown).
@@ -675,23 +675,6 @@ static void CS_DxvkPresentMarkerBridge(uint64_t a_appFrameId, uint32_t a_phase)
 	} __except (EXCEPTION_EXECUTE_HANDLER) {
 		g_sl.dispatchFaulted = true;
 	}
-}
-
-void Streamline::PauseDLSSGForWindowGap()
-{
-	// Present hook, first skipped frame of a minimize: switch interpolation off (light,
-	// resources retained) BEFORE the present gap begins — a gap with the mode still eOn
-	// desyncs DLSS-G's frame pairing and the first resumed present wedges its pacer (§17).
-	// Runs on the render thread like every other SL call. The regular EngageDLSSG path
-	// re-enables on the first gameplay frame after restore (SetDLSSGMode caches, so the
-	// steady minimized state costs nothing).
-	if (!initialized || !g_sl.dlssgModeOn)
-		return;
-	SetDLSSGMode(false,
-		g_sl.dlssgCachedRenderW, g_sl.dlssgCachedRenderH,
-		g_sl.dlssgCachedDisplayW, g_sl.dlssgCachedDisplayH);
-	FrameGen::Controller::GetSingleton()->NotifyDLSSGPaused();
-	logger::info("[Streamline] DLSS-G interpolation paused (window minimized)");
 }
 
 void Streamline::BeginRenderFrame()
@@ -1430,9 +1413,8 @@ void Streamline::EvaluateFSRFrameGen(ID3D11Resource* a_depth, ID3D11Resource* a_
 	}
 }
 
-void Streamline::SetDLSSGMode(bool a_enable, uint32_t a_renderWidth, uint32_t a_renderHeight,
-	uint32_t a_displayWidth, uint32_t a_displayHeight, uint32_t a_numFramesToGenerate, bool a_autoMode,
-	bool a_dynamic, float a_dynamicTargetFps)
+void Streamline::SetDLSSGMode(bool a_enable, uint32_t a_displayWidth, uint32_t a_displayHeight,
+	uint32_t a_numFramesToGenerate, bool a_autoMode, bool a_dynamic, float a_dynamicTargetFps)
 {
 	if (!initialized || !featureDLSSG || g_sl.dispatchFaulted)
 		return;
@@ -1451,11 +1433,12 @@ void Streamline::SetDLSSGMode(bool a_enable, uint32_t a_renderWidth, uint32_t a_
 
 	// Sample-matched cadence: slDLSSGSetOptions is (re)issued EVERY frame (the Streamline_Sample
 	// calls SetDLSSGOptions unconditionally in its render loop; SL treats redundant sets as
-	// cheap no-ops). The cached fields below are kept only to log on real changes.
+	// cheap no-ops). The cached fields below are kept only to log on real changes. Render dims are
+	// deliberately NOT part of the options or this key (see the extent note below), so an upscaler
+	// quality/preset change produces bit-identical options — invisible to DLSS-G, like the sample.
 	const bool changed = !(g_sl.dlssgModeCached && g_sl.dlssgModeOn == a_enable &&
 		g_sl.dlssgCachedNumFrames == numFrames && g_sl.dlssgCachedAuto == a_autoMode &&
 		g_sl.dlssgCachedDynamic == a_dynamic && g_sl.dlssgCachedDynamicFps == a_dynamicTargetFps &&
-		g_sl.dlssgCachedRenderW == a_renderWidth && g_sl.dlssgCachedRenderH == a_renderHeight &&
 		g_sl.dlssgCachedDisplayW == a_displayWidth && g_sl.dlssgCachedDisplayH == a_displayHeight);
 
 	// DXVK blocking-mode support (eBlockPresentingClientQueue): while DLSS-G runs, SL blocks
@@ -1491,17 +1474,14 @@ void Streamline::SetDLSSGMode(bool a_enable, uint32_t a_renderWidth, uint32_t a_
 		// eRetainResourcesWhenOff: DLSS-G is toggled off every loading screen / menu and back on for
 		// gameplay; retaining its resources across those off periods avoids realloc stutter on re-enable.
 		options.flags = sl::DLSSGFlags::eRetainResourcesWhenOff;
-		// eDynamicResolutionEnabled ONLY when an upscaler actually downscales (render < display): the depth/MV
-		// inputs are then a render-res sub-rect of the full-size targets and DLSS-G must be told the optimal
-		// render res. With TAA / native (render == display) this is FIXED-ratio — the guide says DO NOT set the
-		// DRS flag (it mis-configures DLSS-G; setting it with dynamicRes == color device-loses during interpolation).
-		// Leave dynamicResWidth/Height 0 in that case so DLSS-G treats the inputs as full color-res.
-		const bool drsActive = (a_renderWidth < a_displayWidth) || (a_renderHeight < a_displayHeight);
-		if (drsActive) {
-			options.flags |= sl::DLSSGFlags::eDynamicResolutionEnabled;
-			options.dynamicResWidth = a_renderWidth;
-			options.dynamicResHeight = a_renderHeight;
-		}
+		// NO eDynamicResolutionEnabled and NO dynamicResWidth/Height — sample-exact. The Streamline_Sample
+		// sets that flag ONLY in its true dynamic-resolution mode (per-frame varying render size); for fixed
+		// quality presets — even with the upscaler rendering below display res — its DLSSGOptions carry no
+		// render dims at all, and the per-frame sl::Extent on the mvec/depth tags describes the render
+		// sub-rect. CS has no dynamic-res mode (a quality change is a discrete re-init, not DRS), so the
+		// options must never vary with render size: keying/reissuing options on render dims made a simple
+		// quality-slider change reset DLSS-G's pacer mid-present — the "changed the preset and it froze"
+		// wedge. (Setting the DRS flag with dynamicRes == color also device-loses during interpolation.)
 		options.mvecDepthWidth = a_displayWidth;  // texture dims, not render size (extent gives the sub-rect)
 		options.mvecDepthHeight = a_displayHeight;  // texture dims, not render size (extent gives the sub-rect)
 		options.colorWidth = a_displayWidth;
@@ -1528,14 +1508,12 @@ void Streamline::SetDLSSGMode(bool a_enable, uint32_t a_renderWidth, uint32_t a_
 			g_sl.dlssgCachedAuto = a_autoMode;
 			g_sl.dlssgCachedDynamic = a_dynamic;
 			g_sl.dlssgCachedDynamicFps = a_dynamicTargetFps;
-			g_sl.dlssgCachedRenderW = a_renderWidth;
-			g_sl.dlssgCachedRenderH = a_renderHeight;
 			g_sl.dlssgCachedDisplayW = a_displayWidth;
 			g_sl.dlssgCachedDisplayH = a_displayHeight;
 			if (changed)
-				logger::info("[Streamline] DLSS-G mode={} ({}) numFrames={} targetFps={} (max {}) render={}x{} display={}x{} drs={}", a_enable,
+				logger::info("[Streamline] DLSS-G mode={} ({}) numFrames={} targetFps={} (max {}) display={}x{}", a_enable,
 					!a_enable ? "off" : a_dynamic ? "dynamic" : a_autoMode ? "auto" : "on", numFrames, a_dynamicTargetFps, maxFrames,
-					a_renderWidth, a_renderHeight, a_displayWidth, a_displayHeight, drsActive);
+					a_displayWidth, a_displayHeight);
 		}
 	} __except (EXCEPTION_EXECUTE_HANDLER) {
 		g_sl.dispatchFaulted = true;

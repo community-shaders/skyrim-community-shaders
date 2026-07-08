@@ -70,10 +70,6 @@ namespace FrameGen
 		// on the final swapchain, so a toggle engages exactly once.
 		void EngageDLSSG();
 
-		// Bookkeeping sync for the present-hook minimize pause (Streamline::
-		// PauseDLSSGForWindowGap): interpolation was switched off outside the controller.
-		void NotifyDLSSGPaused() { dlssgModeOn = false; }
-
 	private:
 		Controller() = default;
 

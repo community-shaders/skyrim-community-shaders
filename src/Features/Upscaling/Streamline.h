@@ -102,18 +102,17 @@ public:
 	// a_autoMode: DLSS-G eAuto (fixed multiplier, but the driver auto-disables FG when it would lower FPS).
 	// a_dynamic: DLSS-G eDynamic (Dynamic Multi Frame Generation) — overrides a_autoMode; a_dynamicTargetFps
 	//   is the desired output fps (0 => auto-detect the monitor refresh). Use only when IsDLSSGDynamicSupported().
-	void SetDLSSGMode(bool a_enable, uint32_t a_renderWidth, uint32_t a_renderHeight,
-		uint32_t a_displayWidth, uint32_t a_displayHeight, uint32_t a_numFramesToGenerate = 1,
-		bool a_autoMode = false, bool a_dynamic = false, float a_dynamicTargetFps = 0.0f);
+	// Takes display dims only — DLSS-G options never carry render dims (Streamline_Sample fixed-res
+	// behavior; the per-frame tag extents describe the render sub-rect), so upscaler quality changes
+	// are invisible to DLSS-G.
+	void SetDLSSGMode(bool a_enable, uint32_t a_displayWidth, uint32_t a_displayHeight,
+		uint32_t a_numFramesToGenerate = 1, bool a_autoMode = false, bool a_dynamic = false,
+		float a_dynamicTargetFps = 0.0f);
 
 	// Render thread, once per frame at frame start (Main_UpdateJitter hook): establishes the
 	// explicit SL frame ID all render-thread SL calls this frame fetch their token with — the
 	// Streamline_Sample's engine-frame-counter pattern (no shared token, no cross-thread latch).
 	void BeginRenderFrame();
-
-	// Present hook, first skipped frame of a minimize: light eOff before the present gap
-	// (§17 — a gap with interpolation on wedges the pacer at resume).
-	void PauseDLSSGForWindowGap();
 
 	// Whether the DXVK present-marker bridge is active (PresentStart/End fire on DXVK's submit
 	// thread around the real vkQueuePresentKHR). When true, the present hook must call

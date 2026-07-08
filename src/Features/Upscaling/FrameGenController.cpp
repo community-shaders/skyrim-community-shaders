@@ -70,19 +70,13 @@ namespace FrameGen
 			!Streamline::GetSingleton()->IsFeatureSupportResolved())
 			return;
 
-		// Guide §12: DLSS-G MUST be turned OFF while the window/surface is in transition — occluded /
-		// minimized / unfocused / resized (IsWindowUnusable) OR mid render-res/preset change
-		// (IsUpscalerReconfiguring). Leaving it eOn and merely withholding presents does NOT prevent the
-		// freeze: when DLSS-G's present resumes at the transitioning surface it hangs in the driver
-		// (nvoglv64!DrvPresentBuffers) and EvaluateDLSS's forced CS-thread sync then deadlocks behind it —
-		// reproduced on BOTH alt-tab and a simple quality-slider (qualityMode) change. So actually pause
-		// it: PauseDLSSGForWindowGap is idempotent (one eOff via SetDLSSGMode, then no-ops through
-		// SetDLSSGMode's cache) and clears dlssgModeOn so the per-frame EngageDLSSG path re-engages once
-		// the surface has settled (window usable AND no reconfiguration in flight), at the new render size.
-		if (Upscaling::IsWindowUnusable() || Upscaling::IsUpscalerReconfiguring()) {
-			Streamline::GetSingleton()->PauseDLSSGForWindowGap();
+		// Sample-exact window gap (donut DeviceManager::AnimateRenderPresent): while the window is not
+		// visible/focused, the sample runs NOTHING — no SL calls, no DLSS-G mode change, no lifecycle
+		// work; DLSS-G simply stays in its last mode with no presents flowing. So during the gap the
+		// controller only idles (no phase transitions, no recreates initiated against a surface that
+		// cannot present). It resumes reconciling on the first usable frame.
+		if (Upscaling::IsWindowUnusable())
 			return;
-		}
 
 		const Method target = DesiredMethod();
 
@@ -108,7 +102,7 @@ namespace FrameGen
 			// Register the DLSS-G viewport against the NEW swapchain with the
 			// interpolation mode off; the gameplay path turns it on from here.
 			const auto dims = CurrentDims(false);
-			sl->SetDLSSGMode(false, dims.renderWidth, dims.renderHeight, dims.displayWidth, dims.displayHeight);
+			sl->SetDLSSGMode(false, dims.displayWidth, dims.displayHeight);
 			owner = Method::kDLSSG;
 			logger::info("[FrameGen] DLSS-G load landed - present owner: {}", Name(owner));
 		} else if (phase == Phase::kUnloadingDLSSG && !sl->IsDLSSGLoaded()) {
@@ -133,8 +127,7 @@ namespace FrameGen
 			return;
 
 		const auto dims = CurrentDims(false);
-		Streamline::GetSingleton()->SetDLSSGMode(false,
-			dims.renderWidth, dims.renderHeight, dims.displayWidth, dims.displayHeight);
+		Streamline::GetSingleton()->SetDLSSGMode(false, dims.displayWidth, dims.displayHeight);
 		if (auto* dxvk = DxvkInterop::GetSingleton())
 			dxvk->WaitDeviceIdle();
 
@@ -162,8 +155,7 @@ namespace FrameGen
 				// registered-off -> on edge leaves the present proxy passive
 				// (loaded, stable, but never doubling).
 				const auto dims = CurrentDims(false);
-				sl->SetDLSSGMode(false, dims.renderWidth, dims.renderHeight,
-					dims.displayWidth, dims.displayHeight);
+				sl->SetDLSSGMode(false, dims.displayWidth, dims.displayHeight);
 				owner = Method::kDLSSG;
 				logger::info("[FrameGen] DLSS-G already loaded - registered + adopted as present owner");
 			}
@@ -250,10 +242,11 @@ namespace FrameGen
 		}
 	}
 
-	// Turns DLSS-G interpolation on for the current dynamic-resolution render
-	// size. Gated on the load reconcile having settled so a toggle engages
-	// exactly once, on the final swapchain (never on one about to be torn
-	// down). SetDLSSGMode caches, so steady-state calls are no-ops.
+	// Turns DLSS-G interpolation on for the current display size. Gated on the
+	// load reconcile having settled so a toggle engages exactly once, on the
+	// final swapchain (never on one about to be torn down). SetDLSSGMode caches,
+	// so steady-state calls are no-ops. Options carry no render dims (sample
+	// fixed-res behavior) — the per-frame tag extents describe the render sub-rect.
 	void Controller::EngageDLSSG()
 	{
 		auto* sl = Streamline::GetSingleton();
@@ -263,8 +256,6 @@ namespace FrameGen
 		auto& upscaling = globals::features::upscaling;
 		const auto& s = upscaling.settings;
 
-		// renderSize MUST be the actual DRS render size (the sub-rect where
-		// depth/MV are valid), not the lock-inflated full size.
 		const auto dims = CurrentDims(true);
 
 		// "Dynamic" maps to eDynamic on hardware with Dynamic MFG (RTX 50+),
@@ -276,8 +267,7 @@ namespace FrameGen
 		const uint32_t numFramesToGenerate = s.frameGenMultiplier > 1 ? s.frameGenMultiplier - 1 : 1;
 		const float dynTargetFps = dynamic ? static_cast<float>(upscaling.GetTargetFrameRate()) : 0.0f;
 
-		sl->SetDLSSGMode(true,
-			dims.renderWidth, dims.renderHeight, dims.displayWidth, dims.displayHeight,
+		sl->SetDLSSGMode(true, dims.displayWidth, dims.displayHeight,
 			numFramesToGenerate, useAuto, useDynamic, dynTargetFps);
 		dlssgModeOn = true;
 	}

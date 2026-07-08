@@ -1201,49 +1201,21 @@ bool Upscaling::IsWindowGapActive()
 
 void Upscaling::NotifyWindowFocus(bool a_focused)
 {
-	// WndProc thread. Set the atomic, then immediately push the occlusion state to DXVK — on focus LOSS
-	// this must reach DXVK's submit thread before it presents the in-flight (still-enqueued) frame, or
-	// that present stalls forever on the now-occluded surface (the alt-tab freeze). The per-present push
-	// is too late for that already-queued present.
+	// WndProc thread. Sample-exact (donut DeviceManager::UpdateWindowSize + AnimateRenderPresent): a focus
+	// change only flips the visibility/focus state that gates the whole frame — no swapchain recreate, no
+	// DLSS-G mode change, no debounce. While unfocused, CS runs NONE of its per-frame SL work and skips the
+	// present (see the windowUsable gate + the present hook), exactly like the sample's
+	// `m_windowVisible && (m_windowIsInFocus || ShouldRenderUnfocused())` gate idling the loop. On refocus,
+	// presents resume; if the surface went stale while away, DXVK's acquire returns OUT_OF_DATE and its
+	// presenter recreates the swapchain — the sample's BeginFrame OUT_OF_DATE -> ResizeSwapChain path.
 	s_windowUnfocused.store(!a_focused, std::memory_order_relaxed);
-	// Start a settle window on EVERY focus transition (out AND back): the surface is moving between
-	// flip and DWM-composited, and a DLSS-G present during that window stalls even while "focused".
-	// 350 ms covers the transition; aggressive alt-tab keeps re-arming it so no present goes through.
-	s_focusSettleUntilTick.store(GetTickCount64() + 350ull, std::memory_order_relaxed);
-	PushPresentSuspendToDxvk();
-	// Recreate the swapchain on the focus transition (Streamline guide §18 / the sample recreates the
-	// swapchain when the DLSS-G present state changes). A focus change moves the surface between flip and
-	// DWM-composited; recreating rebuilds a clean swapchain (and, with DLSS-G paused, tears down its stale
-	// present proxy) so the DLSS-G present never resumes on the wedged old surface — the alt-tab freeze.
-	// The request is an idempotent flag; DXVK defers the actual recreate to the acquire path, so it lands
-	// when the surface is presentable again (on refocus) rather than on the occluded surface.
-	Streamline::RequestDxvkSwapchainRecreate("window focus change");
 }
 
 void Upscaling::NotifyWindowModifying(bool a_modifying)
 {
-	// WndProc thread (WM_ENTERSIZEMOVE/WM_EXITSIZEMOVE). Set the atomic + push to DXVK immediately.
+	// WndProc thread (WM_ENTERSIZEMOVE/WM_EXITSIZEMOVE). Set the atomic; IsWindowUnusable() then gates
+	// SL work/present for the resize; DXVK's OUT_OF_DATE acquire path rebuilds the surface after.
 	s_windowModifying.store(a_modifying, std::memory_order_relaxed);
-	PushPresentSuspendToDxvk();
-}
-
-void Upscaling::PushPresentSuspendToDxvk()
-{
-	// Resolve dxvkSetPresentSuspended (@109) once and push IsWindowUnusable() to it. DXVK then skips
-	// acquiring + presenting to an occluded/off-flip surface so the DLSS-G present can't stall the
-	// driver. Callable from the WndProc thread (focus/resize) and the render/present thread — it is a
-	// bare GetModuleHandle/GetProcAddress + one atomic store in DXVK, thread-safe from either.
-	static void (*s_setSuspended)(uint32_t) = nullptr;
-	static bool s_resolved = false;
-	if (!s_resolved) {
-		s_resolved = true;
-		if (HMODULE m = GetModuleHandleW(L"dxvk_d3d11.dll"))
-			s_setSuspended = reinterpret_cast<void (*)(uint32_t)>(GetProcAddress(m, "dxvkSetPresentSuspended"));
-		if (!s_setSuspended)
-			logger::warn("[Upscaling] dxvkSetPresentSuspended not found - occluded-present freeze guard inactive");
-	}
-	if (s_setSuspended)
-		s_setSuspended(IsWindowUnusable() ? 1u : 0u);
 }
 
 bool Upscaling::IsWindowUnusable()
@@ -1253,24 +1225,9 @@ bool Upscaling::IsWindowUnusable()
 	// recreates the swapchain on occlusion and an FG-wrapped swapchain freezes the GPU.
 	return IsWindowGapActive() ||
 	       s_windowUnfocused.load(std::memory_order_relaxed) ||
-	       s_windowModifying.load(std::memory_order_relaxed) ||
-	       GetTickCount64() < s_focusSettleUntilTick.load(std::memory_order_relaxed);
+	       s_windowModifying.load(std::memory_order_relaxed);
 }
 
-void Upscaling::NotifyUpscalerReconfig()
-{
-	// Bracket ~200 ms as a resolution transition (guide §12): CS skips its per-frame SL work + present
-	// so no DLSS-G present runs through the render-size change. WALL-CLOCK based (see the header): the
-	// present is skipped during the bracket and frameCount does not advance while it is, so a
-	// frame-count deadline would never expire and the skip would be permanent (freeze). 200 ms is ample
-	// for the DLSS feature to re-init at the new size and any in-flight present to drain.
-	s_reconfigUntilTick.store(GetTickCount64() + 200ull, std::memory_order_relaxed);
-}
-
-bool Upscaling::IsUpscalerReconfiguring()
-{
-	return GetTickCount64() < s_reconfigUntilTick.load(std::memory_order_relaxed);
-}
 
 void Upscaling::Upscale()
 {
@@ -1552,23 +1509,6 @@ void Upscaling::Main_PostProcessing::thunk(RE::ImageSpaceManager* a_this, uint32
 	auto& upscaling = globals::features::upscaling;
 	auto upscaleMethod = upscaling.GetUpscaleMethod();
 
-	// Detect a CS-initiated upscaler reconfiguration (upscale method or quality/preset change): it
-	// changes the render resolution, and per DLSS-G guide §12 the DLSS-G present must not run through a
-	// resolution change or it stalls in the driver — the reproduced "changed the upscale preset in-game
-	// and it froze" wedge (a stalled DLSS-G present + EvaluateDLSS's forced CS-thread sync deadlock).
-	// Bracket the transition (NotifyUpscalerReconfig marks the next few frames) so the windowUsable gate
-	// below + the present hook skip CS's SL work and present until the new size settles. static locals
-	// init to the current values, so no false trigger on the first frame.
-	{
-		static UpscaleMethod s_lastMethod = upscaleMethod;
-		static uint s_lastQuality = upscaling.settings.qualityMode;
-		if (upscaleMethod != s_lastMethod || upscaling.settings.qualityMode != s_lastQuality) {
-			s_lastMethod = upscaleMethod;
-			s_lastQuality = upscaling.settings.qualityMode;
-			Upscaling::NotifyUpscalerReconfig();
-		}
-	}
-
 	// Reflex/PCL: the game simulation has finished and post-process/upscale render submission
 	// happens here — mark the simulation-end / render-submit-start boundary.
 	// Main_PostProcessing runs MORE THAN ONCE per rendered frame (same reason the constants/evaluate
@@ -1589,9 +1529,8 @@ void Upscaling::Main_PostProcessing::thunk(RE::ImageSpaceManager* a_this, uint32
 	// DEADLOCKS behind the DLSS-G present stalled in the driver whenever the surface can't present
 	// (alt-tab occlusion, or loading while alt-tabbed away). So gate the entire block below on a
 	// usable window; the present hook already skips Present() for the same condition, so together CS
-	// skips the whole frame's SL work as a unit, exactly like the sample. IsUpscalerReconfiguring()
-	// extends the same skip across a CS-initiated resolution/preset change (guide §12, see above).
-	const bool windowUsable = !Upscaling::IsWindowUnusable() && !Upscaling::IsUpscalerReconfiguring();
+	// skips the whole frame's SL work as a unit, exactly like the sample.
+	const bool windowUsable = !Upscaling::IsWindowUnusable();
 
 	auto* streamline = Streamline::GetSingleton();
 	if (windowUsable && upscaling.GetEffectiveReflex()) {
