@@ -1203,6 +1203,19 @@ bool Upscaling::IsWindowUnusable()
 	       s_windowModifying.load(std::memory_order_relaxed);
 }
 
+void Upscaling::NotifyUpscalerReconfig()
+{
+	// Render thread. Bracket the next few frames as a resolution transition (guide §12): CS skips its
+	// per-frame SL work + present so no DLSS-G present runs through the render-size change. 8 frames is
+	// ample for the DLSS feature to re-init at the new size and any in-flight present to drain.
+	s_reconfigUntilFrame.store(globals::state->frameCount + 8u, std::memory_order_relaxed);
+}
+
+bool Upscaling::IsUpscalerReconfiguring()
+{
+	return globals::state->frameCount < s_reconfigUntilFrame.load(std::memory_order_relaxed);
+}
+
 void Upscaling::Upscale()
 {
 	ZoneScoped;
@@ -1483,6 +1496,23 @@ void Upscaling::Main_PostProcessing::thunk(RE::ImageSpaceManager* a_this, uint32
 	auto& upscaling = globals::features::upscaling;
 	auto upscaleMethod = upscaling.GetUpscaleMethod();
 
+	// Detect a CS-initiated upscaler reconfiguration (upscale method or quality/preset change): it
+	// changes the render resolution, and per DLSS-G guide §12 the DLSS-G present must not run through a
+	// resolution change or it stalls in the driver — the reproduced "changed the upscale preset in-game
+	// and it froze" wedge (a stalled DLSS-G present + EvaluateDLSS's forced CS-thread sync deadlock).
+	// Bracket the transition (NotifyUpscalerReconfig marks the next few frames) so the windowUsable gate
+	// below + the present hook skip CS's SL work and present until the new size settles. static locals
+	// init to the current values, so no false trigger on the first frame.
+	{
+		static UpscaleMethod s_lastMethod = upscaleMethod;
+		static uint s_lastQuality = upscaling.settings.qualityMode;
+		if (upscaleMethod != s_lastMethod || upscaling.settings.qualityMode != s_lastQuality) {
+			s_lastMethod = upscaleMethod;
+			s_lastQuality = upscaling.settings.qualityMode;
+			Upscaling::NotifyUpscalerReconfig();
+		}
+	}
+
 	// Reflex/PCL: the game simulation has finished and post-process/upscale render submission
 	// happens here — mark the simulation-end / render-submit-start boundary.
 	// Main_PostProcessing runs MORE THAN ONCE per rendered frame (same reason the constants/evaluate
@@ -1503,8 +1533,9 @@ void Upscaling::Main_PostProcessing::thunk(RE::ImageSpaceManager* a_this, uint32
 	// DEADLOCKS behind the DLSS-G present stalled in the driver whenever the surface can't present
 	// (alt-tab occlusion, or loading while alt-tabbed away). So gate the entire block below on a
 	// usable window; the present hook already skips Present() for the same condition, so together CS
-	// skips the whole frame's SL work as a unit, exactly like the sample.
-	const bool windowUsable = !Upscaling::IsWindowUnusable();
+	// skips the whole frame's SL work as a unit, exactly like the sample. IsUpscalerReconfiguring()
+	// extends the same skip across a CS-initiated resolution/preset change (guide §12, see above).
+	const bool windowUsable = !Upscaling::IsWindowUnusable() && !Upscaling::IsUpscalerReconfiguring();
 
 	auto* streamline = Streamline::GetSingleton();
 	if (windowUsable && upscaling.GetEffectiveReflex()) {

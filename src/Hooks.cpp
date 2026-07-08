@@ -283,7 +283,9 @@ struct IDXGISwapChain_Present
 			// the occluded (GDI-copy) surface, which is the exact wedge eBlockPresentingClientQueue can
 			// only avoid on the flip-model path (pacer stuck in NtDxgkSubmitPresentToHwQueue holding an
 			// nvoglv64 lock DXVK's CS copy then blocks on). No eOff, no settle — the sample's model.
-			if (Upscaling::IsWindowUnusable())
+			// IsUpscalerReconfiguring(): a CS-initiated resolution/preset change (guide §12) — skip the
+			// present the same way so no DLSS-G present runs through the render-size transition.
+			if (Upscaling::IsWindowUnusable() || Upscaling::IsUpscalerReconfiguring())
 				return S_OK;
 		}
 

@@ -120,6 +120,18 @@ public:
 	static inline std::atomic<bool> s_windowUnfocused{ false };
 	static inline std::atomic<bool> s_windowModifying{ false };
 
+	// A CS-initiated upscaler reconfiguration (upscale method or quality/preset change) changes the
+	// render resolution. Per DLSS-G guide §12, DLSS-G must be OFF while the host modifies resolution
+	// or the DLSS-G present stalls in the driver (and EvaluateDLSS's forced CS-thread sync then
+	// deadlocks — the in-game "changed the upscale preset and it froze" wedge). CS owns this change,
+	// so it brackets it: NotifyUpscalerReconfig() marks the next few frames, during which CS skips ALL
+	// its per-frame Streamline work + the present (exactly like a window gap) so no DLSS-G present runs
+	// through the transition; it re-engages once the new size settles. Frame-count based so it is
+	// immune to Main_PostProcessing running more than once per frame.
+	static void NotifyUpscalerReconfig();
+	[[nodiscard]] static bool IsUpscalerReconfiguring();
+	static inline std::atomic<uint32_t> s_reconfigUntilFrame{ 0 };
+
 
 	// Timing and scaling
 	double refreshRate = 0.0f;
