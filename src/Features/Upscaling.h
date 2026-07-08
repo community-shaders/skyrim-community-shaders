@@ -120,6 +120,14 @@ public:
 	static inline std::atomic<bool> s_windowUnfocused{ false };
 	static inline std::atomic<bool> s_windowModifying{ false };
 
+	// Focus-change settle deadline (GetTickCount64 ms). A focus change (either direction) starts a
+	// transition where the swapchain moves between flip-model and DWM-composited; a DLSS-G present
+	// issued DURING that transition stalls in the driver even though the window reports focused (the
+	// residual freeze after synchronous present). So IsWindowUnusable() stays true for a short settle
+	// after ANY focus change: aggressive alt-tab keeps re-arming it (no presents through the churn),
+	// and it expires once focus is stable so presents resume on a settled flip surface.
+	static inline std::atomic<uint64_t> s_focusSettleUntilTick{ 0 };
+
 	// A CS-initiated upscaler reconfiguration (upscale method or quality/preset change) changes the
 	// render resolution. Per DLSS-G guide §12, DLSS-G must be OFF while the host modifies resolution
 	// or the DLSS-G present stalls in the driver (and EvaluateDLSS's forced CS-thread sync then

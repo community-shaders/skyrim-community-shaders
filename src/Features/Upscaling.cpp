@@ -444,12 +444,20 @@ void Upscaling::Load()
 	// ASYNCHRONOUS: the D3D11 Present hook only QUEUES a present onto DXVK's submit thread, which runs it
 	// later. That is why CS's "return S_OK while the window is occluded" cannot stop the DLSS-G present
 	// that hangs on the composited surface — the present is already queued on the submit thread, below the
-	// D3D11 layer. With DXVK_SYNC_PRESENT the render thread waits for the real vkQueuePresentKHR to execute
-	// before returning (like the sample, which presents on its render thread), so a present is never
-	// in-flight past the D3D11 hook: when CS skips an occluded frame there is genuinely no present to
-	// stall. Must be set BEFORE the swapchain is created (D3D11SwapChain reads it in its ctor); Load runs
-	// before the game's first D3D11CreateDeviceAndSwapChain, so this is that window.
-	SetEnvironmentVariableA("DXVK_SYNC_PRESENT", "1");
+	// D3D11 layer. With synchronous present the render thread WAITS for the real vkQueuePresentKHR to
+	// execute (like the sample, which presents on its render thread), so a present is never in-flight past
+	// the D3D11 hook: when CS skips an occluded frame there is genuinely no present to stall. Use the DXVK
+	// export, NOT SetEnvironmentVariableA — DXVK is a separate DLL with its own CRT and its std::getenv
+	// does not see Win32 SetEnvironmentVariable. Must be set BEFORE the swapchain is created (D3D11SwapChain
+	// reads the flag in its ctor); Load runs before the game's first D3D11CreateDeviceAndSwapChain.
+	if (DxvkLoader::IsLoaded()) {
+		if (HMODULE m = GetModuleHandleW(L"dxvk_d3d11.dll")) {
+			if (auto setSync = reinterpret_cast<void (*)(uint32_t)>(GetProcAddress(m, "dxvkSetSyncPresent")))
+				setSync(1u);
+			else
+				logger::warn("[Upscaling] dxvkSetSyncPresent not found - synchronous present inactive");
+		}
+	}
 
 	if (DxvkLoader::IsLoaded()) {
 		// Map sl.interposer.dll NOW so DXVK's Vulkan loader (which tries sl.interposer.dll first) aliases
@@ -1198,6 +1206,10 @@ void Upscaling::NotifyWindowFocus(bool a_focused)
 	// that present stalls forever on the now-occluded surface (the alt-tab freeze). The per-present push
 	// is too late for that already-queued present.
 	s_windowUnfocused.store(!a_focused, std::memory_order_relaxed);
+	// Start a settle window on EVERY focus transition (out AND back): the surface is moving between
+	// flip and DWM-composited, and a DLSS-G present during that window stalls even while "focused".
+	// 350 ms covers the transition; aggressive alt-tab keeps re-arming it so no present goes through.
+	s_focusSettleUntilTick.store(GetTickCount64() + 350ull, std::memory_order_relaxed);
 	PushPresentSuspendToDxvk();
 }
 
@@ -1234,7 +1246,8 @@ bool Upscaling::IsWindowUnusable()
 	// recreates the swapchain on occlusion and an FG-wrapped swapchain freezes the GPU.
 	return IsWindowGapActive() ||
 	       s_windowUnfocused.load(std::memory_order_relaxed) ||
-	       s_windowModifying.load(std::memory_order_relaxed);
+	       s_windowModifying.load(std::memory_order_relaxed) ||
+	       GetTickCount64() < s_focusSettleUntilTick.load(std::memory_order_relaxed);
 }
 
 void Upscaling::NotifyUpscalerReconfig()
