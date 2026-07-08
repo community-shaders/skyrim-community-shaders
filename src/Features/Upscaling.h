@@ -130,7 +130,12 @@ public:
 	// immune to Main_PostProcessing running more than once per frame.
 	static void NotifyUpscalerReconfig();
 	[[nodiscard]] static bool IsUpscalerReconfiguring();
-	static inline std::atomic<uint32_t> s_reconfigUntilFrame{ 0 };
+	// Wall-clock deadline (GetTickCount64 ms), NOT a frame count. While reconfiguring, the present hook
+	// returns early (skips the present) BEFORE State::Reset increments frameCount — so frameCount is
+	// frozen for the whole bracket. A frame-count deadline would therefore never be reached and the
+	// present would be skipped FOREVER (permanent freeze — the reproduced "changed preset and it froze").
+	// Wall clock always advances, so the bracket always expires.
+	static inline std::atomic<uint64_t> s_reconfigUntilTick{ 0 };
 
 	// Push IsWindowUnusable() to DXVK's present-suspend flag (dxvkSetPresentSuspended @109). While set,
 	// DXVK skips acquiring + presenting to the occluded/off-flip surface, so a DLSS-G frame-generation

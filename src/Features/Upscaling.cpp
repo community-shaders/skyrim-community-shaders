@@ -1228,15 +1228,17 @@ bool Upscaling::IsWindowUnusable()
 
 void Upscaling::NotifyUpscalerReconfig()
 {
-	// Render thread. Bracket the next few frames as a resolution transition (guide §12): CS skips its
-	// per-frame SL work + present so no DLSS-G present runs through the render-size change. 8 frames is
-	// ample for the DLSS feature to re-init at the new size and any in-flight present to drain.
-	s_reconfigUntilFrame.store(globals::state->frameCount + 8u, std::memory_order_relaxed);
+	// Bracket ~200 ms as a resolution transition (guide §12): CS skips its per-frame SL work + present
+	// so no DLSS-G present runs through the render-size change. WALL-CLOCK based (see the header): the
+	// present is skipped during the bracket and frameCount does not advance while it is, so a
+	// frame-count deadline would never expire and the skip would be permanent (freeze). 200 ms is ample
+	// for the DLSS feature to re-init at the new size and any in-flight present to drain.
+	s_reconfigUntilTick.store(GetTickCount64() + 200ull, std::memory_order_relaxed);
 }
 
 bool Upscaling::IsUpscalerReconfiguring()
 {
-	return globals::state->frameCount < s_reconfigUntilFrame.load(std::memory_order_relaxed);
+	return GetTickCount64() < s_reconfigUntilTick.load(std::memory_order_relaxed);
 }
 
 void Upscaling::Upscale()
