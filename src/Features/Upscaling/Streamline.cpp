@@ -328,7 +328,7 @@ void Streamline::PreloadInterposer()
 	// runtime LoadLibraryA from inside dxvk_d3d11.dll does NOT search the CS dxvk/ subfolder, so without
 	// this preload DXVK falls through to the real vulkan-1.dll and SL never sees the device/present.
 	// LOAD_WITH_ALTERED_SEARCH_PATH lets the interposer resolve its sibling sl.*.dll from the CS folder.
-	if (g_sl.interposer)
+	if (disabledByConfig || g_sl.interposer)
 		return;
 	const auto slDir = GetStreamlineDir();
 	if (slDir.empty())
@@ -414,6 +414,10 @@ static bool ProbeDLSSGHardware()
 
 bool Streamline::Initialize()
 {
+	// Config-disabled (kNONE/kTAA + FG off): never map the interposer or slInit — DXVK runs on the
+	// real Vulkan driver with no SL device baggage. See SetDisabledByConfig.
+	if (disabledByConfig)
+		return false;
 	if (triedInit)
 		return initialized;
 	triedInit = true;
@@ -1996,5 +2000,29 @@ void Streamline::RequestDxvkSwapchainRecreate(const char* a_reason)
 		logger::info("[Streamline] requested DXVK swapchain recreate ({})", a_reason);
 	} else {
 		logger::warn("[Streamline] dxvkRequestSwapchainRecreate not found — {} cannot take effect", a_reason);
+	}
+}
+
+void Streamline::PushDxvkSyncPresent(bool a_sync)
+{
+	// DXVK reads dxvkSetSyncPresent's flag LIVE per-present: ON = the render thread waits for the real
+	// vkQueuePresentKHR (required while a frame-generation present proxy is active — a DLSS-G/FFX present
+	// must never be in flight past the D3D11 hook); OFF = stock async present (safe AND faster with no
+	// FG). The FrameGen controller keeps this in lockstep with the FG load state; Upscaling::Load seeds
+	// the boot value from the saved setting. Idempotent (one atomic store in DXVK).
+	static auto setSync = []() -> void (*)(uint32_t) {
+		HMODULE dxvkModule = GetModuleHandleW(L"dxvk_d3d11.dll");
+		if (!dxvkModule)
+			return nullptr;
+		return reinterpret_cast<void (*)(uint32_t)>(GetProcAddress(dxvkModule, "dxvkSetSyncPresent"));
+	}();
+	if (setSync) {
+		setSync(a_sync ? 1u : 0u);
+	} else {
+		static bool s_warned = false;
+		if (!s_warned) {
+			s_warned = true;
+			logger::warn("[Streamline] dxvkSetSyncPresent not found - synchronous present control inactive");
+		}
 	}
 }

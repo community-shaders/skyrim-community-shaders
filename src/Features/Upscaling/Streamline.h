@@ -34,7 +34,17 @@ public:
 	// The per-adapter feature probe has run (SetVulkanDevice). Until then the
 	// Is*Supported() flags read false, so method fallbacks (e.g. DLSS-G -> FSR
 	// when unsupported) give transient wrong answers during early boot.
-	[[nodiscard]] bool IsFeatureSupportResolved() const { return vulkanDeviceSet; }
+	// True once feature support is settled — either the per-adapter probe ran (vulkanDeviceSet) or
+	// Streamline is config-disabled (nothing supported, resolution is trivially final).
+	[[nodiscard]] bool IsFeatureSupportResolved() const { return vulkanDeviceSet || disabledByConfig; }
+
+	// Config gate (kNONE/kTAA + frame generation off): the whole Streamline stack is skipped — the
+	// interposer is never mapped, so DXVK talks to the real Vulkan driver directly. Loading SL costs
+	// measurable per-call driver overhead even when idle (its device is created with SL's extra
+	// extensions/features), so a no-SL config shouldn't pay it. Enabling an SL upscaler or frame
+	// generation then requires a RESTART (the interposer must be mapped before DXVK's VkInstance).
+	void SetDisabledByConfig() { disabledByConfig = true; }
+	[[nodiscard]] bool IsDisabledByConfig() const { return disabledByConfig; }
 	[[nodiscard]] bool IsDLSSSupported() const { return featureDLSS; }
 	[[nodiscard]] bool IsReflexSupported() const { return featureReflex; }
 	[[nodiscard]] bool IsDLSSGSupported() const { return featureDLSSG; }
@@ -173,12 +183,18 @@ public:
 	// sl.dlss_g gets (un)loaded and how its sticky present proxy is evicted; a_reason is logged.
 	static void RequestDxvkSwapchainRecreate(const char* a_reason = "FG method switch");
 
+	// Drive DXVK's live per-present sync-present flag (dxvkSetSyncPresent @110): ON while a
+	// frame-generation present proxy is active (alt-tab safety), OFF otherwise (async = stock DXVK,
+	// faster). Kept in lockstep with the FG load state by the FrameGen controller.
+	static void PushDxvkSyncPresent(bool a_sync);
+
 private:
 	Streamline() = default;
 
 	bool triedInit = false;
 	bool initialized = false;
 	bool vulkanDeviceSet = false;
+	bool disabledByConfig = false;
 
 	bool featureDLSS = false;
 	bool featureReflex = false;

@@ -298,6 +298,11 @@ void Upscaling::DrawSettings()
 		if (DrawStepper(T(TKEY("upscaling_technique"), "Upscaling Technique"), &techIdx, techLabels))
 			selectUpscaler(techMethods[std::clamp(techIdx, 0, static_cast<int>(techMethods.size()) - 1)]);
 
+		// Streamline was skipped at boot for this no-SL config (kNONE/kTAA + FG off, a real perf win) —
+		// activating an SL upscaler (FSR/XeSS/DLSS) takes effect on the next launch.
+		if (streamline->IsDisabledByConfig())
+			ImGui::TextDisabled("%s", T(TKEY("sl_restart_note"), "Upscalers and frame generation activate after a restart"));
+
 		// Upscale Preset (only for upscalers that resolve a quality level). Native = qualityMode 0 (DLAA for
 		// DLSS, native-res AA for FSR/XeSS), then Quality/Balanced/Performance/Ultra Performance.
 		const UpscaleMethod cur = (UpscaleMethod)settings.upscaleMethod;
@@ -351,6 +356,11 @@ void Upscaling::DrawSettings()
 			settings.frameGeneration = (fgSel != 0);
 			if (fgSel != 0)
 				settings.frameGenMethod = (uint)fgMethods[std::clamp(fgSel, 0, static_cast<int>(fgMethods.size()) - 1)];
+		}
+		// With Streamline config-disabled (no-SL boot) both FG features are unavailable this session;
+		// the toggle saves and activates on the next launch (see the note in the Upscaling section).
+		if (streamline->IsDisabledByConfig() && fgLabels.size() == 1) {
+			DrawToggleStepper(T(TKEY("fg_enable_restart"), "Frame Generation (after restart)"), &settings.frameGeneration);
 		}
 
 		// DLSS FG has a multiplier sub-control (no 'Off' entry — None on the stepper above is the off state).
@@ -469,28 +479,48 @@ void Upscaling::Load()
 	// that hangs on the composited surface — the present is already queued on the submit thread, below the
 	// D3D11 layer. With synchronous present the render thread WAITS for the real vkQueuePresentKHR to
 	// execute (like the sample, which presents on its render thread), so a present is never in-flight past
-	// the D3D11 hook: when CS skips an occluded frame there is genuinely no present to stall. Use the DXVK
-	// export, NOT SetEnvironmentVariableA — DXVK is a separate DLL with its own CRT and its std::getenv
-	// does not see Win32 SetEnvironmentVariable. Must be set BEFORE the swapchain is created (D3D11SwapChain
-	// reads the flag in its ctor); Load runs before the game's first D3D11CreateDeviceAndSwapChain.
-	if (DxvkLoader::IsLoaded()) {
-		if (HMODULE m = GetModuleHandleW(L"dxvk_d3d11.dll")) {
-			if (auto setSync = reinterpret_cast<void (*)(uint32_t)>(GetProcAddress(m, "dxvkSetSyncPresent")))
-				setSync(1u);
-			else
-				logger::warn("[Upscaling] dxvkSetSyncPresent not found - synchronous present inactive");
-		}
-	}
+	// the D3D11 hook: when CS skips an occluded frame there is genuinely no present to stall.
+	//
+	// Sync present exists FOR the frame-generation present proxies, and its render-thread wait is pure
+	// overhead without one (measurably slower at kNONE/FG-off — async is stock DXVK behavior and safe with
+	// no FG). DXVK reads the flag LIVE per-present, so it is driven by the FG state: the FrameGen
+	// controller keeps it ON exactly while an FG feature is loaded (Streamline::PushDxvkSyncPresent from
+	// StepLoadState/StepPhaseCompletion). Seed the boot value from the raw saved setting here — FG
+	// configured on => sync from the very first present (the controller confirms it once probes resolve);
+	// FG off => async from boot. Use the DXVK export, NOT SetEnvironmentVariableA — DXVK is a separate DLL
+	// with its own CRT and its std::getenv does not see Win32 SetEnvironmentVariable.
+	if (DxvkLoader::IsLoaded())
+		Streamline::PushDxvkSyncPresent(settings.frameGeneration);
 
 	if (DxvkLoader::IsLoaded()) {
 		// Map sl.interposer.dll NOW so DXVK's Vulkan loader (which tries sl.interposer.dll first) aliases
 		// it at its imminent first-DXGI VkInstance creation — routing DXVK's whole Vulkan surface through
 		// Streamline (full interposition). Must precede DXVK's instance creation; this is that window.
 		//
-		// ALWAYS preloaded (do not gate on the configured upscale method): DLSS must be available
-		// on capable hardware at all times, and FSR/XeSS run as sl.* plugins too, so every runtime
-		// upscaler/frame-gen switch needs the interposition established at boot.
-		Streamline::GetSingleton()->PreloadInterposer();
+		// Gated on the SAVED config actually needing Streamline: every SL upscaler (FSR/XeSS/DLSS are all
+		// sl.* plugins) and both frame-generation methods require the interposition established at boot,
+		// BUT a kNONE/kTAA + FG-off config pays real per-call NVIDIA-driver overhead just for having SL's
+		// device configuration loaded (measured ~6% in the draw-bound interior; the cost is the device
+		// extensions/features SL requests, NOT its proxy code — hook trimming was proven useless). RAW
+		// saved settings, not GetUpscaleMethod(): the resolved getter consults feature-support probes that
+		// have not run yet at this pre-device point (and would clamp an FSR selection to kTAA here).
+		// Consequence: switching INTO an SL upscaler or enabling FG from a no-SL boot needs a restart
+		// (the interposer must be mapped before DXVK's VkInstance); the menu communicates it.
+		const auto savedMethod = static_cast<UpscaleMethod>(settings.upscaleMethod);
+		// CS_FORCE_SL_LOAD=1: A/B escape hatch — load Streamline regardless of config (the pre-gate
+		// behavior) so the gate's cost can be measured with ONE binary.
+		char forceSL[2] = {};
+		const bool needsSL = settings.frameGeneration ||
+		                     (savedMethod != UpscaleMethod::kNONE && savedMethod != UpscaleMethod::kTAA) ||
+		                     (GetEnvironmentVariableA("CS_FORCE_SL_LOAD", forceSL, sizeof(forceSL)) && forceSL[0] == '1');
+		if (needsSL) {
+			Streamline::GetSingleton()->PreloadInterposer();
+		} else {
+			Streamline::GetSingleton()->SetDisabledByConfig();
+			logger::info("[Upscaling] Streamline disabled by config (upscaleMethod={}, frameGeneration=off) - "
+			             "DXVK runs on the real Vulkan driver; enabling an SL upscaler or frame generation requires a restart",
+				settings.upscaleMethod);
+		}
 	}
 
 	// Route the game's device creation to DXVK's subfolder-loaded export (set up by

@@ -112,6 +112,11 @@ namespace FrameGen
 			owner = Method::kFSR;
 		} else {
 			owner = Method::kNone;
+			// No FG feature loaded anymore: drop to stock async present (faster; sync present's
+			// render-thread wait exists only for the FG present proxies). The ON edge is in
+			// StepLoadState, so sync stays on through the whole transition and only releases here,
+			// after the unload recreate has fully settled.
+			Streamline::PushDxvkSyncPresent(false);
 		}
 
 		phase = Phase::kIdle;
@@ -177,6 +182,13 @@ namespace FrameGen
 		auto* sl = Streamline::GetSingleton();
 		const bool wantDLSSG = a_target == Method::kDLSSG;
 		const bool wantFSRFG = a_target == Method::kFSR;
+
+		// Sync present must be ON before any FG present proxy can be live (alt-tab safety), and it is
+		// pure render-thread overhead without one. Turn it ON here the moment an FG method is targeted
+		// (BEFORE the load lands — conservative through the whole transition); the OFF edge is in
+		// StepPhaseCompletion once the unload has settled to no FG. Idempotent per-frame push.
+		if (wantDLSSG || wantFSRFG)
+			Streamline::PushDxvkSyncPresent(true);
 
 		if (sl->IsDLSSGLoaded() == wantDLSSG && sl->IsFSRFGLoaded() == wantFSRFG) {
 			// Load state already matches the target (steady state). Adopt the
