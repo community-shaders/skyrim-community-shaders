@@ -74,16 +74,6 @@ namespace FrameGen
 		// PauseDLSSGForWindowGap): interpolation was switched off outside the controller.
 		void NotifyDLSSGPaused() { dlssgModeOn = false; }
 
-		// Present hook, while the window is unusable (minimized / unfocused / being
-		// resized — Upscaling::IsWindowUnusable). Lightly suspends whichever FG method
-		// owns present: DLSS-G interpolation off, FSR-FG unwrapped — NO swapchain
-		// teardown/recreate, resources retained. One-shot via an internal paused latch so
-		// it fires once on the transition into the gap, never per-present (per-frame
-		// SetDLSSGMode churn = device loss). Reconcile clears the latch and the normal
-		// per-frame path (EngageDLSSG / StepFSRDelivery) re-engages on the first usable
-		// frame. Render/present thread only.
-		void SuspendForWindowGap();
-
 	private:
 		Controller() = default;
 
@@ -122,10 +112,5 @@ namespace FrameGen
 		// One-frame defer latch for that recreate (a present must carry the new
 		// sync interval before the recreate bakes the mode from it).
 		bool fsrVsyncRebakePending = false;
-
-		// Set by SuspendForWindowGap once on the transition into a window-unusable state so
-		// the lightweight FG stop fires exactly once; cleared by Reconcile on the first
-		// usable frame (where the normal steps re-engage). Prevents per-present churn.
-		bool windowGapPaused = false;
 	};
 }

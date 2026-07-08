@@ -125,6 +125,17 @@ public:
 	// Query DLSS-G capabilities (numFramesToGenerateMax, Dynamic MFG support) and cache them. MUST run on the
 	// present thread (slDLSSGGetState requirement); CS calls this from its present hook. Idempotent once cached.
 	void QueryDLSSGCapabilities();
+
+	// eBlockNoClientQueues input synchronization (DLSS-G guide §15.1). Under eBlockNoClientQueues the DLSS-G
+	// plugin consumes the eValidUntilPresent inputs (motion vectors, HUDless) on a non-presenting queue AFTER
+	// present, so the client must not overwrite those live engine targets until the plugin signals it is done.
+	//   * CaptureDLSSGInputFence() — present thread, after the present: reads the plugin-internal completion
+	//     fence (a Vulkan timeline semaphore) + its last-present value via slDLSSGGetState and stores them.
+	//   * WaitDLSSGInputFence()   — render thread, frame start (before the frame overwrites those inputs):
+	//     host-waits (vkWaitSemaphores) for the stored value. Bounded timeout; never hangs the render thread.
+	// Depth is eOnlyValidNow (SL snapshots it at tag time) and needs no wait.
+	void CaptureDLSSGInputFence();
+	void WaitDLSSGInputFence();
 	// Max numFramesToGenerate the hardware supports (0 = not yet queried). Max multiplier = this + 1.
 	[[nodiscard]] uint32_t GetDLSSGMaxFramesToGenerate() const;
 	// Whether DLSS-G Dynamic Multi Frame Generation (eDynamic) is supported (50-series + driver + D3D12).

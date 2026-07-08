@@ -126,6 +126,18 @@ namespace
 		std::atomic<uint32_t> dlssgMaxFramesToGenerate = 0;
 		std::atomic<bool> dlssgDynamicSupported = false;
 
+		// eBlockNoClientQueues input-completion fence (DLSS-G guide §15.1). inputsProcessingCompletionFence is a
+		// Vulkan timeline semaphore the plugin signals once it has finished consuming a present's eValidUntilPresent
+		// inputs (motion vectors, HUDless). Captured after present (present thread) and host-waited at the next
+		// frame start (render thread) before the engine overwrites those live targets. Atomics because the capture
+		// (present thread), the wait (render thread), and the reset (DXVK torn-down thread) all touch them; in the
+		// single-renderer Skyrim pipeline capture+wait are actually the same thread, so the wait sees the value the
+		// preceding present stored. dlssgInputFenceWaited is the last value already waited (skip redundant waits).
+		std::atomic<void*> dlssgInputFence{ nullptr };
+		std::atomic<uint64_t> dlssgInputFenceValue{ 0 };
+		std::atomic<uint64_t> dlssgInputFenceWaited{ 0 };
+		PFN_vkWaitSemaphores vkWaitSemaphores = nullptr;
+
 		// Whether a VALID DLSS-G input tag was set this frame (in the render pass). Reset on the render thread
 		// at frame start (BeginRenderFrame); set by TagDLSSGResources. If still false at present,
 		// the present path sets a null/passthrough tag — SL's present hook requires a tag every present or it stalls.
@@ -168,6 +180,13 @@ namespace
 		// leave the mode cached and the first post-resize SetDLSSGMode suppressed.
 		g_sl.dlssgModeCached = false;
 		g_sl.dlssgModeOn = false;
+
+		// The DLSS-G plugin's input-completion timeline semaphore is per-swapchain: any teardown invalidates it,
+		// so drop the captured handle/value and the waited watermark. The next capture re-reads a fresh semaphore
+		// and WaitDLSSGInputFence starts clean (a stale watermark could otherwise skip a needed wait on reload).
+		g_sl.dlssgInputFence.store(nullptr, std::memory_order_release);
+		g_sl.dlssgInputFenceValue.store(0, std::memory_order_release);
+		g_sl.dlssgInputFenceWaited.store(0, std::memory_order_release);
 
 		const bool desired = g_dlssgDesiredLoaded.load(std::memory_order_acquire);
 		if (desired == g_dlssgCurrentlyLoaded || !g_sl.slSetFeatureLoaded || g_sl.dispatchFaulted)
@@ -683,6 +702,81 @@ void Streamline::BeginRenderFrame()
 	// every reader strictly after every writer on this one thread.
 	g_sl.renderFrameId = globals::state->frameCount;
 	g_sl.dlssgTaggedThisFrame = false;
+
+	// Before this frame renders new motion vectors / HUDless over the live engine targets, wait for the
+	// DLSS-G plugin to finish consuming the previous present's inputs (eBlockNoClientQueues contract).
+	WaitDLSSGInputFence();
+}
+
+void Streamline::CaptureDLSSGInputFence()
+{
+	// Present thread, after the present. Read the plugin-internal input-completion timeline semaphore + the
+	// value for the inputs consumed by the just-presented frame (DLSS-G guide §15.1). Only meaningful while
+	// DLSS-G is actually interpolating; slDLSSGGetState must run on the present thread (it does here).
+	if (!initialized || !featureDLSSG || g_sl.dispatchFaulted || !g_dlssgCurrentlyLoaded || !g_sl.dlssgModeOn)
+		return;
+	__try {
+		sl::DLSSGState state{};
+		if (g_sl.slDLSSGGetState(g_sl.viewport, state, nullptr) == sl::Result::eOk) {
+			// A different semaphore handle means the plugin re-created it (reload/resize) — reset the waited
+			// watermark so the fresh, possibly-lower value is not mistaken for already-waited.
+			if (g_sl.dlssgInputFence.exchange(state.inputsProcessingCompletionFence, std::memory_order_acq_rel) !=
+				state.inputsProcessingCompletionFence)
+				g_sl.dlssgInputFenceWaited.store(0, std::memory_order_release);
+			g_sl.dlssgInputFenceValue.store(state.lastPresentInputsProcessingCompletionFenceValue, std::memory_order_release);
+		}
+	} __except (EXCEPTION_EXECUTE_HANDLER) {
+		g_sl.dispatchFaulted = true;
+	}
+}
+
+void Streamline::WaitDLSSGInputFence()
+{
+	// Render thread, frame start. Host-wait the input-completion timeline semaphore for the value captured
+	// after the last present, so the plugin's non-presenting-queue read of the eValidUntilPresent inputs
+	// (motion vectors, HUDless) has completed before this frame overwrites those live targets. No-op unless
+	// DLSS-G is interpolating and a newer value than we already waited on was captured.
+	if (!initialized || g_sl.dispatchFaulted || !g_sl.dlssgModeOn)
+		return;
+	void* fence = g_sl.dlssgInputFence.load(std::memory_order_acquire);
+	const uint64_t value = g_sl.dlssgInputFenceValue.load(std::memory_order_acquire);
+	if (!fence || value == 0 || value <= g_sl.dlssgInputFenceWaited.load(std::memory_order_acquire))
+		return;
+
+	auto* dxvk = DxvkInterop::GetSingleton();
+	VkDevice device = dxvk->GetDevice();
+	if (device == VK_NULL_HANDLE)
+		return;
+	if (!g_sl.vkWaitSemaphores) {
+		g_sl.vkWaitSemaphores = reinterpret_cast<PFN_vkWaitSemaphores>(
+			dxvk->GetDeviceProcAddr()(device, "vkWaitSemaphores"));
+		if (!g_sl.vkWaitSemaphores)
+			return;  // no host timeline-semaphore wait (should never happen on a DXVK 1.3 device) — skip
+	}
+
+	__try {
+		VkSemaphore sem = reinterpret_cast<VkSemaphore>(fence);
+		uint64_t waitValue = value;
+		VkSemaphoreWaitInfo wi{ VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO };
+		wi.semaphoreCount = 1;
+		wi.pSemaphores = &sem;
+		wi.pValues = &waitValue;
+		// Bounded 8 ms timeout: this waits on the PREVIOUS present's consumption, which is almost always
+		// already done, so the steady-state cost is ~0. A timeout must never wedge the render thread — if it
+		// ever fires we proceed (the fence being late implies DLSS-G is stalled elsewhere) and log once.
+		const VkResult wr = g_sl.vkWaitSemaphores(device, &wi, 8ull * 1000ull * 1000ull);
+		if (wr == VK_SUCCESS)
+			g_sl.dlssgInputFenceWaited.store(value, std::memory_order_release);
+		else if (wr == VK_TIMEOUT) {
+			static bool s_warned = false;
+			if (!s_warned) {
+				s_warned = true;
+				logger::warn("[Streamline] DLSS-G input fence wait timed out (value {}) — proceeding", value);
+			}
+		}
+	} __except (EXCEPTION_EXECUTE_HANDLER) {
+		g_sl.dispatchFaulted = true;
+	}
 }
 
 void Streamline::UpdateReflex(bool a_enable, bool a_boost, uint32_t a_frameLimitUs)
@@ -1412,16 +1506,17 @@ void Streamline::SetDLSSGMode(bool a_enable, uint32_t a_renderWidth, uint32_t a_
 		options.mvecDepthHeight = a_displayHeight;  // texture dims, not render size (extent gives the sub-rect)
 		options.colorWidth = a_displayWidth;
 		options.colorHeight = a_displayHeight;
-		// eBlockPresentingClientQueue (the SL default) — DLSS-G's one and only queue mode here.
-		// SL blocks the presenting queue itself. The mode REQUIRES flip-model presents: on the
-		// GDI-copy path the pacer's hardware present never completes ("Pacer flush has timed
-		// out", wedged in NtDxgkSubmitPresentToHwQueue). The boot present path is per-window
-		// and sticky (Upscaling::bootPresentPathFlip), so DLSS-G is only engaged on flip-path
-		// boots — FrameGenController gates method availability on the boot path, and switching
-		// FG methods requires a restart. NOTE: the present-hook ordering bound that kept our
-		// interop-timeline evaluate/tag submissions ahead of the present was removed, so
-		// generated frames may flash without an external ordering bound.
-		options.queueParallelismMode = sl::DLSSGQueueParallelismMode::eBlockPresentingClientQueue;
+		// eBlockNoClientQueues (Vulkan-only; DLSS-G guide §17). SL does NOT block the presenting queue —
+		// it runs the frame-gen workload on a non-presenting queue in parallel. Unlike eBlockPresentingClientQueue
+		// (which does a blocking hardware present that REQUIRES flip-model and wedges its pacer in
+		// NtDxgkSubmitPresentToHwQueue once alt-tab occludes the window onto the GDI-copy path — the aggressive
+		// alt-tab freeze), this mode survives the occluded transition. The contract (§15.1): the client must wait
+		// on the plugin's inputsProcessingCompletionFence before overwriting the eValidUntilPresent inputs (motion
+		// vectors, HUDless) — handled by CaptureDLSSGInputFence (present) + WaitDLSSGInputFence (frame start).
+		// Depth is eOnlyValidNow (snapshotted) so it needs no wait. The present hook also skips presenting entirely
+		// while the window is occluded/minimized (Streamline-sample parity), so the pacer never touches the
+		// occluded surface at all.
+		options.queueParallelismMode = sl::DLSSGQueueParallelismMode::eBlockNoClientQueues;
 		const sl::Result res = g_sl.slDLSSGSetOptions(g_sl.viewport, options);
 		if (res != sl::Result::eOk) {
 			if (changed)

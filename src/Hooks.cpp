@@ -262,20 +262,12 @@ struct IDXGISwapChain_Present
 {
 	static HRESULT WINAPI thunk(IDXGISwapChain* This, UINT SyncInterval, UINT Flags)
 	{
-		// Frame generation must be OFF whenever the window is not in a normal focused state —
-		// minimized, unfocused (alt-tabbed / occluded), or being resized/moved. On DXVK, an
-		// FG-wrapped swapchain that gets recreated on occlusion freezes the GPU, and DLSS-G's
-		// pacer wedges across a present gap with interpolation still eOn (guide §17). So suspend
-		// BOTH FG methods here (lightweight, resources retained — the controller's one-shot
-		// SuspendForWindowGap): DLSS-G interpolation off, FSR-FG unwrapped. This runs on the
-		// present/render thread — the only thread SL/FFX calls are safe on; the WndProc hook just
-		// sets the focus/resize atoms IsWindowUnusable reads. The normal per-frame engage path
-		// re-enables both on the first usable frame after restore.
-		//
-		// Minimized is special: the present itself is a complete no-op (nothing reaches DXVK's
-		// present chain), so short-circuit with S_OK. For focus-loss/occlusion WITHOUT minimize
-		// the present MUST still be issued (DXVK has to process the occlusion), so fall through
-		// with frame generation already suspended.
+		// Frame-generation present safety: the window must not be presented while it is not in a
+		// normal focused/visible state (minimized, alt-tabbed/occluded, resized). Driving DLSS-G's
+		// blocking pacer present against an occluded window that has fallen off the flip-model path
+		// onto GDI-copy wedges the pacer (NtDxgkSubmitPresentToHwQueue never completes) while it holds
+		// an nvoglv64 lock DXVK's CS copy then blocks on — the alt-tab freeze. Matching the Streamline
+		// sample, we simply STOP presenting while unfocused (return S_OK) — no eOff, no settle.
 		{
 			static HWND s_window = nullptr;
 			if (!s_window) {
@@ -283,11 +275,16 @@ struct IDXGISwapChain_Present
 				if (This && SUCCEEDED(This->GetDesc(&desc)))
 					s_window = desc.OutputWindow;
 			}
-			if (Upscaling::IsWindowUnusable()) {
-				FrameGen::Controller::GetSingleton()->SuspendForWindowGap();
-				if (s_window && IsIconic(s_window))
-					return S_OK;
-			}
+			// Match the Streamline sample exactly: when the window is not visible/focused, STOP
+			// presenting (skip the whole frame) rather than toggling DLSS-G or debouncing. The WndProc
+			// and this D3D11 Present hook run on the same thread (verified via log thread IDs), so the
+			// WM_ACTIVATEAPP/WM_ACTIVATE focus state IsWindowUnusable() reads is current here — no lag.
+			// Skipping the present while unfocused keeps DLSS-G's blocking pacer from ever presenting to
+			// the occluded (GDI-copy) surface, which is the exact wedge eBlockPresentingClientQueue can
+			// only avoid on the flip-model path (pacer stuck in NtDxgkSubmitPresentToHwQueue holding an
+			// nvoglv64 lock DXVK's CS copy then blocks on). No eOff, no settle — the sample's model.
+			if (Upscaling::IsWindowUnusable())
+				return S_OK;
 		}
 
 		globals::state->Reset();
@@ -340,6 +337,11 @@ struct IDXGISwapChain_Present
 
 		if (!bridgedMarkers)
 			streamline->SetPCLMarker(Streamline::PclMarker::PresentEnd);
+
+		// eBlockNoClientQueues: capture the DLSS-G input-completion fence for the frame just presented, so the
+		// next BeginRenderFrame can wait on it before overwriting the eValidUntilPresent inputs (guide §15.1).
+		// Internally a no-op unless DLSS-G is interpolating; must run on the present thread (it does here).
+		streamline->CaptureDLSSGInputFence();
 
 		globals::features::screenshotFeature.ProcessCaptureRequest();
 
@@ -584,10 +586,10 @@ namespace Hooks
 			if ((a_msg == WM_KILLFOCUS || a_msg == WM_SETFOCUS) && menu->initialized) {
 				menu->focusChanged = true;
 			}
-			// Track the window's focus/modification state so the present hook can suspend frame
-			// generation while the window is not normally focused (see IDXGISwapChain_Present /
-			// Upscaling::IsWindowUnusable). This runs on the game's window/message thread — set
-			// atomic flags ONLY here; every SL/FFX call is made on the render/present thread.
+			// Track the window's focus state so the present hook can skip presenting while the window
+			// is not focused/visible (see IDXGISwapChain_Present / Upscaling::IsWindowUnusable), matching
+			// the Streamline sample which stops presenting when the window is not visible. Atomic flags
+			// only here.
 			switch (a_msg) {
 			case WM_ACTIVATEAPP:
 				// Whole-application activation: wParam FALSE => another app took focus (alt-tab).

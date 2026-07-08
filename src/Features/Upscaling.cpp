@@ -1182,7 +1182,8 @@ bool Upscaling::IsWindowGapActive()
 
 void Upscaling::NotifyWindowFocus(bool a_focused)
 {
-	// WndProc thread. Atomic store only — the render/present thread acts on it.
+	// WndProc thread. Atomic store only — the present hook reads it (same thread) to skip presenting
+	// while the window is not focused, matching the Streamline sample's not-visible frame skip.
 	s_windowUnfocused.store(!a_focused, std::memory_order_relaxed);
 }
 
