@@ -1493,8 +1493,21 @@ void Upscaling::Main_PostProcessing::thunk(RE::ImageSpaceManager* a_this, uint32
 	// systematically biases the generated frame's camera-reprojection phase — the whole static world
 	// gets flagged dynamic and reprojected wrong, worsening with camera rotation speed (real frames,
 	// rendered by the engine, are unaffected). Matches the once-per-frame SimulationStart rule.
+	// Match the Streamline sample (DeviceManager::AnimateRenderPresent): when the window is not
+	// visible/focused it runs NONE of the per-frame Streamline work — the Reflex/PCL markers, the
+	// upscale evaluate, the frame-gen tag AND Present() all live inside one `m_windowVisible &&
+	// (m_windowIsInFocus || ShouldRenderUnfocused())` gate. Running only PART of that sequence (the
+	// old behaviour: evaluate + tag + markers, but skip Present) leaves SL's per-frame contract
+	// incoherent — the "Out of order frame" / "Unable to find 'common' constants" desync — and worse,
+	// EvaluateDLSS's forced full CS-thread sync (FlushRenderingCommands -> SynchronizeCsThread)
+	// DEADLOCKS behind the DLSS-G present stalled in the driver whenever the surface can't present
+	// (alt-tab occlusion, or loading while alt-tabbed away). So gate the entire block below on a
+	// usable window; the present hook already skips Present() for the same condition, so together CS
+	// skips the whole frame's SL work as a unit, exactly like the sample.
+	const bool windowUsable = !Upscaling::IsWindowUnusable();
+
 	auto* streamline = Streamline::GetSingleton();
-	if (upscaling.GetEffectiveReflex()) {
+	if (windowUsable && upscaling.GetEffectiveReflex()) {
 		static uint32_t s_lastSimEndFrame = UINT32_MAX;
 		const uint32_t gameFrame = globals::state->frameCount;
 		if (s_lastSimEndFrame != gameFrame) {
@@ -1504,7 +1517,7 @@ void Upscaling::Main_PostProcessing::thunk(RE::ImageSpaceManager* a_this, uint32
 		}
 	}
 
-	if (upscaleMethod == UpscaleMethod::kFSR || upscaleMethod == UpscaleMethod::kXeSS || upscaleMethod == UpscaleMethod::kDLSS)
+	if (windowUsable && (upscaleMethod == UpscaleMethod::kFSR || upscaleMethod == UpscaleMethod::kXeSS || upscaleMethod == UpscaleMethod::kDLSS))
 		upscaling.PerformUpscaling();
 
 	// (HUDLessColor is captured later, in MenuManagerDrawInterfaceStartHook just before the UI draws, from
@@ -1512,7 +1525,7 @@ void Upscaling::Main_PostProcessing::thunk(RE::ImageSpaceManager* a_this, uint32
 
 	// Frame-gen resource tagging is independent of which upscaler ran (an upscaler + frame
 	// generation can be active together), so this is its own `if`, not an `else if`.
-	if (upscaling.IsFrameGenerationActive() && !Upscaling::IsWindowUnusable()) {
+	if (windowUsable && upscaling.IsFrameGenerationActive()) {
 		auto fgMethod = upscaling.GetFrameGenMethod();
 		auto renderer = globals::game::renderer;
 		auto& motionVector = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
