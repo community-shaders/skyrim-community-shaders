@@ -1211,6 +1211,13 @@ void Upscaling::NotifyWindowFocus(bool a_focused)
 	// 350 ms covers the transition; aggressive alt-tab keeps re-arming it so no present goes through.
 	s_focusSettleUntilTick.store(GetTickCount64() + 350ull, std::memory_order_relaxed);
 	PushPresentSuspendToDxvk();
+	// Recreate the swapchain on the focus transition (Streamline guide §18 / the sample recreates the
+	// swapchain when the DLSS-G present state changes). A focus change moves the surface between flip and
+	// DWM-composited; recreating rebuilds a clean swapchain (and, with DLSS-G paused, tears down its stale
+	// present proxy) so the DLSS-G present never resumes on the wedged old surface — the alt-tab freeze.
+	// The request is an idempotent flag; DXVK defers the actual recreate to the acquire path, so it lands
+	// when the surface is presentable again (on refocus) rather than on the occluded surface.
+	Streamline::RequestDxvkSwapchainRecreate("window focus change");
 }
 
 void Upscaling::NotifyWindowModifying(bool a_modifying)
