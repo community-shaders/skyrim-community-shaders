@@ -3,6 +3,7 @@
 #include "ShaderTools/BSShaderHooks.h"
 #include "Utils/ExternalEmittance.h"
 
+#include "D3DX9MathUpgrade.h"
 #include "DxvkLoader.h"
 #include "Feature.h"
 #include "Globals.h"
@@ -1030,6 +1031,8 @@ namespace Hooks
 	 */
 	void Install()
 	{
+		D3DX9MathUpgrade::Install();
+
 		logger::info("Hooking BSImageSpace::Init::IBLF");
 		stl::detour_thunk<BSImageSpace_Init_IBLF>(REL::RelocationID(100480, 107198));
 

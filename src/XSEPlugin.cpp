@@ -1,3 +1,4 @@
+#include "D3DX9MathUpgrade.h"
 #include "Deferred.h"
 #include "Features/Upscaling.h"
 #include "FrameAnnotations.h"
@@ -120,6 +121,8 @@ void MessageHandler(SKSE::MessagingInterface::Message* message)
 			}
 
 			if (errors.empty()) {
+				// Catch d3dx9 math importers that loaded after our plugin-load sweep.
+				D3DX9MathUpgrade::Sweep("data loaded");
 				globals::OnDataLoaded();
 				EngineFix::InstallOnDataLoadedFixes();
 				FrameAnnotations::OnDataLoaded();
