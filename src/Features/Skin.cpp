@@ -346,8 +346,13 @@ float Skin::GetWaterHeight(const RE::TESObjectREFR* a_ref, const RE::NiPoint3& a
 float4 Skin::GetWetness(RE::BSGeometry* geometry)
 {
 	float4 wetness = float4(0.0f, 0.0f, 0.0f, 0.0f);
-	if (auto userData = geometry->GetUserData())
-		if (auto actor = userData->As<RE::Character>()) {
+	auto userData = geometry->GetUserData();
+	// This runs for every BSLightingShader pass (~thousands per frame), and almost all
+	// geometry has no actor behind it. As<RE::Character>() walks the runtime-type chain
+	// through several virtual calls; the formType byte identifies a Character exactly
+	// (FormType::ActorCharacter == Character), so compare that and cast directly.
+	if (userData && userData->formType == RE::FormType::ActorCharacter) {
+		auto actor = static_cast<RE::Character*>(userData);
 			const float positionZ = actor->GetPositionZ();
 			wetness.z = positionZ;
 			if (settings.UseDynamicWetness && isDynamicWetnessAvailable) {
