@@ -104,7 +104,7 @@ Write-Host "[build-dxvk] building DXVK d3d11+dxgi ($short, $BuildType)..."
 # (-Denable_d3d8/9/10=false); that is DXVK's cold-build floor.
 if (-not (Test-Path (Join-Path $BuildDir 'build.ninja'))) {
     & $meson setup $BuildDir $DxvkSrc --vsenv --buildtype $BuildType `
-        -Db_ndebug=true -Dcpp_args="/arch:AVX" `
+        -Db_ndebug=true -Dcpp_args="/arch:AVX2" `
         -Denable_d3d8=false -Denable_d3d9=false -Denable_d3d10=false
     if ($LASTEXITCODE -ne 0) { Write-Error "[build-dxvk] meson setup failed"; exit 1 }
 }
@@ -117,14 +117,12 @@ if (-not (Test-Path (Join-Path $BuildDir 'build.ninja'))) {
 # debugging (DXVK's asserts have caught real integration bugs), reconfigure manually:
 #   meson configure <builddir> -Db_ndebug=false
 #
-# /arch:AVX (standard AVX, NOT AVX2): MSVC's x64 default is SSE2; standard AVX gives VEX
-# encoding everywhere (3-operand forms, no AVX<->SSE transition penalties) at a hardware floor
-# of Intel Sandy Bridge / AMD Bulldozer (2011) — comfortably below any machine that can run
-# Community Shaders. AVX2 was deliberately NOT enabled (2013+ floor, hard illegal-instruction
-# crash on anything older, and DXVK's hot paths are memory/atomic-bound so its measured upside
-# was negligible).
-& $meson configure $BuildDir -Db_ndebug=true -Dcpp_args="/arch:AVX"
-if ($LASTEXITCODE -ne 0) { Write-Error "[build-dxvk] meson configure (ndebug + /arch:AVX) failed"; exit 1 }
+# /arch:AVX2: MSVC's x64 default is SSE2; AVX2 gives VEX encoding everywhere (3-operand
+# forms, no AVX<->SSE transition penalties) plus FMA and 256-bit integer SIMD. Hardware floor
+# is Intel Haswell / AMD Excavator (2013+) — an illegal-instruction crash on anything older —
+# matching the CS DLL, which compiles with the same /arch:AVX2 flag.
+& $meson configure $BuildDir -Db_ndebug=true -Dcpp_args="/arch:AVX2"
+if ($LASTEXITCODE -ne 0) { Write-Error "[build-dxvk] meson configure (ndebug + /arch:AVX2) failed"; exit 1 }
 
 & $meson compile -C $BuildDir
 if ($LASTEXITCODE -ne 0) { Write-Error "[build-dxvk] meson compile failed"; exit 1 }

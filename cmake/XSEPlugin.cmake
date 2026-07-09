@@ -108,6 +108,10 @@ if(MSVC)
 	target_compile_options(
 		"${PROJECT_NAME}"
 		PRIVATE
+		# AVX2 (2013 Haswell hardware floor — matches the bundled DXVK, which ships the same
+		# flag). Gives DirectXMath VEX encoding, FMA, and 256-bit integer SIMD across all
+		# feature CPU math.
+		/arch:AVX2
 		/W4
 		/WX
 		/permissive-
