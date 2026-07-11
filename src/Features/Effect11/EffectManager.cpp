@@ -352,7 +352,22 @@ void EffectManager::ExecuteEffects(RE::BSGraphics::RenderTargetData& a_input, [[
 	D3D11FullStateBackup stateBackup;
 	stateBackup.Save(context);
 
-	auto& textureOriginal = a_input;
+	// Effects sample kMAIN as TextureOriginal, so mirror any other input into it
+	auto& textureOriginal = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
+	if (&a_input != &textureOriginal && a_input.SRV && textureOriginal.RTV) {
+		D3D11_TEXTURE2D_DESC srcDesc{}, dstDesc{};
+		if (a_input.texture && textureOriginal.texture) {
+			a_input.texture->GetDesc(&srcDesc);
+			textureOriginal.texture->GetDesc(&dstDesc);
+		}
+		if (a_input.texture && textureOriginal.texture && srcDesc.Format == dstDesc.Format && srcDesc.Width == dstDesc.Width && srcDesc.Height == dstDesc.Height && srcDesc.SampleDesc.Count == dstDesc.SampleDesc.Count) {
+			context->CopyResource(textureOriginal.texture, a_input.texture);
+		} else {
+			CopyTexture(a_input.SRV, textureOriginal.RTV);
+			ID3D11RenderTargetView* nullRTV = nullptr;
+			context->OMSetRenderTargets(1, &nullRTV, nullptr);
+		}
+	}
 
 	// Set our render state
 	context->RSSetState(rasterizerState.get());

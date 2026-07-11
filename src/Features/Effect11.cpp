@@ -552,7 +552,9 @@ bool Effect11::HandleTonemapRender(RE::RENDER_TARGET a_input, RE::RENDER_TARGET 
 	if (enableEffect && !settingManager.GetValue<bool>("UseOriginalPostProcessing", "EFFECT")) {
 		auto renderer = globals::game::renderer;
 		auto& renderTargets = renderer->GetRuntimeData().renderTargets;
-		effectManager.ExecuteEffects(renderTargets[a_input], renderTargets[a_output]);
+		bool validInput = a_input > RE::RENDER_TARGETS::kNONE && a_input < RE::RENDER_TARGETS::kTOTAL && renderTargets[a_input].SRV;
+		auto& input = validInput ? renderTargets[a_input] : renderTargets[RE::RENDER_TARGETS::kMAIN];
+		effectManager.ExecuteEffects(input, renderTargets[a_output]);
 		return true;
 	}
 	return false;
