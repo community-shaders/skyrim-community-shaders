@@ -6,10 +6,9 @@
 #endif
 
 Texture2D<float> BlurredShadowTexture : register(t0);
-// Half-res depth written by the raymarch pass (the depth each texel actually marched with).
 Texture2D<float> RaymarchDepthTexture : register(t1);
 
-// Same layout the blur passes use; carries the half-res target dimensions.
+// Half-res target dimensions; same layout the blur passes use.
 cbuffer VLData : register(b1)
 {
 	int2 ScreenSize;
@@ -22,17 +21,15 @@ struct VS_OUTPUT_POST
 	float2 txcoord0 : TEXCOORD0;
 };
 
-// Joint bilateral upsample of the half-res scattering to full resolution: four bilinear taps
-// weighted by depth similarity (linearized), renormalized. Where all taps lie on the same
-// surface this degrades to plain bilinear; across depth discontinuities the nearest-depth
-// tap dominates, preventing halos around geometry edges.
+// Joint bilateral upsample of the half-res scattering: four bilinear taps weighted by
+// depth similarity, so depth discontinuities snap to the nearest-depth tap.
 float UpsampleScattering(float2 fullResPixel, float fullResDepth)
 {
 	float2 halfPixel = fullResPixel * 0.5 - 0.5;
 	int2 basePixel = int2(floor(halfPixel));
 	float2 fraction = halfPixel - basePixel;
 
-	const float2 offsets[4] = { float2(0, 0), float2(1, 0), float2(0, 1), float2(1, 1) };
+	const int2 offsets[4] = { int2(0, 0), int2(1, 0), int2(0, 1), int2(1, 1) };
 	float4 bilinearWeights = float4(
 		(1.0 - fraction.x) * (1.0 - fraction.y),
 		fraction.x * (1.0 - fraction.y),
@@ -45,7 +42,7 @@ float UpsampleScattering(float2 fullResPixel, float fullResDepth)
 	float weightSum = 0.0;
 	[unroll]
 	for (uint i = 0; i < 4; i++) {
-		int2 tap = clamp(basePixel + int2(offsets[i]), int2(0, 0), ScreenSizeMin1);
+		int2 tap = clamp(basePixel + offsets[i], int2(0, 0), ScreenSizeMin1);
 		float tapDepth = SharedData::GetScreenDepth(RaymarchDepthTexture[tap]);
 		float relativeDelta = abs(referenceDepth - tapDepth) / max(referenceDepth, 1e-4);
 		float weight = bilinearWeights[i] * rcp(0.01 + relativeDelta);

@@ -28,12 +28,8 @@ namespace Effect11Util
 			SafeRelease(arr[i]);
 	}
 
-	// Saves/restores the D3D11 pipeline state around a post-processing chain so the game's own
-	// bindings survive it. Post-processing only ever uses VS/PS/CS full-screen passes, so the
-	// tessellation (HS/DS), geometry (GS) and stream-out (SO) stages are deliberately NOT captured:
-	// nothing here binds them, so there is nothing to restore, and skipping them removes ~half of
-	// the per-frame Get*/Set* + COM AddRef/Release traffic. (kMaxSRVs is 128 per stage — capturing
-	// every stage was the dominant CPU cost of this feature.)
+	// Saves/restores the D3D11 pipeline state around the post-processing chain. Post-processing
+	// only uses VS/PS/CS full-screen passes, so the HS/DS/GS/SO stages are not captured.
 	struct D3D11FullStateBackup
 	{
 		// Input Assembler
@@ -178,19 +174,16 @@ namespace Effect11Util
 		}
 	};
 
-	// Scoped backup for the volumetric-rays passes. Those four passes overwrite only a small, fixed
-	// slice of pipeline state, so we save/restore exactly that slice instead of the whole pipeline.
-	// A full D3D11FullStateBackup captures 128 SRVs per stage (~hundreds of COM AddRef/Release per
-	// frame); this captures ~20 slots — the reason enabling volumetric rays no longer craters CPU
-	// frame time. Keep the captured ranges in sync with DrawVolumetricRays if its bindings change.
+	// Saves/restores only the pipeline state DrawVolumetricRays binds. Keep the captured
+	// ranges in sync with its bindings.
 	struct D3D11ScopedPostFxBackup
 	{
-		static constexpr UINT kPSSRVs = 16;  // DrawVolumetricRays: PSSetShaderResources(0, 16, ...)
-		static constexpr UINT kPSCBs = 2;    // PSSetConstantBuffers(1, 1, ...) — slots 0-1 covered
-		static constexpr UINT kCSSRVs = 2;   // CSSetShaderResources(0, 2, ...)
-		static constexpr UINT kCSCBs = 2;    // CSSetConstantBuffers(0, 2, ...)
+		static constexpr UINT kPSSRVs = 16;
+		static constexpr UINT kPSCBs = 2;
+		static constexpr UINT kCSSRVs = 2;
+		static constexpr UINT kCSCBs = 2;
 
-		// Input Assembler (only vertex buffer slot 0 + layout/topology are touched)
+		// Input Assembler (vertex buffer slot 0 only)
 		ID3D11InputLayout* iaInputLayout = nullptr;
 		D3D11_PRIMITIVE_TOPOLOGY iaTopology = D3D11_PRIMITIVE_TOPOLOGY_UNDEFINED;
 		ID3D11Buffer* iaVB0 = nullptr;
@@ -200,7 +193,7 @@ namespace Effect11Util
 		// Vertex Shader (shader only)
 		ID3D11VertexShader* vs = nullptr;
 
-		// Rasterizer (state + viewports; scissors are untouched)
+		// Rasterizer (state + viewports)
 		ID3D11RasterizerState* rs = nullptr;
 		UINT rsNumViewports = kMaxViewports;
 		D3D11_VIEWPORT rsViewports[kMaxViewports] = {};
