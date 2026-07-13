@@ -13,7 +13,16 @@ struct VS_OUTPUT_POST
 	float2 txcoord0 : TEXCOORD0;
 };
 
-float main(VS_OUTPUT_POST input) : SV_Target0
+struct PS_OUTPUT
+{
+	float Scattering : SV_Target0;
+	// The depth this texel actually raymarched with. The half-res bilateral blur and the
+	// joint bilateral upsample in the apply pass weight against THIS value, so their depth
+	// tests are consistent with the scattering signal by construction.
+	float Depth : SV_Target1;
+};
+
+PS_OUTPUT main(VS_OUTPUT_POST input)
 {
 	float2 uv = input.txcoord0;
 
@@ -60,5 +69,8 @@ float main(VS_OUTPUT_POST input) : SV_Target0
 		transmittance *= stepTransmittance;
 	}
 
-	return scattering;
+	PS_OUTPUT output;
+	output.Scattering = scattering;
+	output.Depth = depth;
+	return output;
 }

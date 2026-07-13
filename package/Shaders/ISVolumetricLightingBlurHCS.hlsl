@@ -36,13 +36,7 @@ groupshared float depth[TG_DIM];
 	int2 pix = min(int2(x, y), screenSizeMin1.xy);
 	float vlValue = InVLTexture[pix];
 	vl[idx] = vlValue;
-#if defined(DEPTH_SCALE)
-	// The VL texture is at reduced resolution but the depth buffer is full-res (e.g.
-	// Effect11's half-res volumetric rays): scale to the matching full-res depth texel.
-	float depthValue = DepthTexture[pix * DEPTH_SCALE];
-#else
 	float depthValue = DepthTexture[pix];
-#endif
 	depth[idx] = depthValue;
 
 	GroupMemoryBarrierWithGroupSync();

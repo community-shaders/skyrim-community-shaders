@@ -186,6 +186,7 @@ namespace Effect11Util
 	struct D3D11ScopedPostFxBackup
 	{
 		static constexpr UINT kPSSRVs = 16;  // DrawVolumetricRays: PSSetShaderResources(0, 16, ...)
+		static constexpr UINT kPSCBs = 2;    // PSSetConstantBuffers(1, 1, ...) — slots 0-1 covered
 		static constexpr UINT kCSSRVs = 2;   // CSSetShaderResources(0, 2, ...)
 		static constexpr UINT kCSCBs = 2;    // CSSetConstantBuffers(0, 2, ...)
 
@@ -204,10 +205,11 @@ namespace Effect11Util
 		UINT rsNumViewports = kMaxViewports;
 		D3D11_VIEWPORT rsViewports[kMaxViewports] = {};
 
-		// Pixel Shader (shader + SRVs 0..15 + sampler 0)
+		// Pixel Shader (shader + SRVs 0..15 + sampler 0 + CBs 0..1)
 		ID3D11PixelShader* ps = nullptr;
 		ID3D11ShaderResourceView* psSRVs[kPSSRVs] = {};
 		ID3D11SamplerState* psSampler0 = nullptr;
+		ID3D11Buffer* psCBs[kPSCBs] = {};
 
 		// Output Merger (render targets + blend + depth-stencil)
 		ID3D11RenderTargetView* omRTVs[kMaxRTVs] = {};
@@ -239,6 +241,7 @@ namespace Effect11Util
 			ctx->PSGetShader(&ps, nullptr, nullptr);
 			ctx->PSGetShaderResources(0, kPSSRVs, psSRVs);
 			ctx->PSGetSamplers(0, 1, &psSampler0);
+			ctx->PSGetConstantBuffers(0, kPSCBs, psCBs);
 
 			ctx->OMGetRenderTargets(kMaxRTVs, omRTVs, &omDSV);
 			ctx->OMGetBlendState(&omBlendState, omBlendFactor, &omSampleMask);
@@ -264,6 +267,7 @@ namespace Effect11Util
 			ctx->PSSetShader(ps, nullptr, 0);
 			ctx->PSSetShaderResources(0, kPSSRVs, psSRVs);
 			ctx->PSSetSamplers(0, 1, &psSampler0);
+			ctx->PSSetConstantBuffers(0, kPSCBs, psCBs);
 
 			ctx->OMSetRenderTargets(kMaxRTVs, omRTVs, omDSV);
 			ctx->OMSetBlendState(omBlendState, omBlendFactor, omSampleMask);
@@ -284,6 +288,7 @@ namespace Effect11Util
 			SafeRelease(ps);
 			SafeReleaseArray(psSRVs);
 			SafeRelease(psSampler0);
+			SafeReleaseArray(psCBs);
 			SafeReleaseArray(omRTVs);
 			SafeRelease(omDSV);
 			SafeRelease(omBlendState);
