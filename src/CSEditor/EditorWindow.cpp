@@ -1566,8 +1566,15 @@ void EditorWindow::SaveSettings()
 
 void EditorWindow::LoadSettings()
 {
-	if (!j.empty())
-		settings = j;
+	if (!j.empty()) {
+		// A hand-edited or older-format file can hold values that fail conversion
+		// (e.g. a recordMarkers color that isn't a 4-float array); keep defaults instead of crashing.
+		try {
+			settings = j;
+		} catch (const nlohmann::json::exception& e) {
+			logger::warn("Failed to deserialize editor settings, using defaults: {}", e.what());
+		}
+	}
 	m_selectedCategory = settings.selectedCategory;
 	SetWidgetTypeSizesFromJson(settings.widgetTypeSizes);
 }
