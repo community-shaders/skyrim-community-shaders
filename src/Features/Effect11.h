@@ -105,8 +105,7 @@ public:
 
 	std::unique_ptr<Texture2D> vlTexA;
 	std::unique_ptr<Texture2D> vlTexB;
-	// Half-res depth written by the raymarch (second MRT): the depth each texel actually
-	// marched with. The bilateral blur and the joint bilateral upsample weight against it.
+	// Depth each half-res texel raymarched with; the bilateral blur + upsample weight against it.
 	std::unique_ptr<Texture2D> vlDepthHalf;
 	std::unique_ptr<ConstantBuffer> vlBlurCB;
 

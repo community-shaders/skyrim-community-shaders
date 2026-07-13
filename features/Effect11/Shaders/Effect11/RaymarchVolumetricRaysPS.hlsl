@@ -16,9 +16,7 @@ struct VS_OUTPUT_POST
 struct PS_OUTPUT
 {
 	float Scattering : SV_Target0;
-	// The depth this texel actually raymarched with. The half-res bilateral blur and the
-	// joint bilateral upsample in the apply pass weight against THIS value, so their depth
-	// tests are consistent with the scattering signal by construction.
+	// Depth this texel raymarched with; the bilateral blur + upsample weight against it.
 	float Depth : SV_Target1;
 };
 

@@ -669,8 +669,6 @@ void Effect11::DrawVolumetricRays()
 			return;
 	}
 
-	// The blurs run unmodified on the half-res VL texture against the matching half-res
-	// raymarch depth, exactly as the game runs them at native resolution.
 	if (!blurHCS) {
 		blurHCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\ISVolumetricLightingBlurHCS.hlsl", {}, "cs_5_0"));
 		if (!blurHCS)
@@ -707,9 +705,7 @@ void Effect11::DrawVolumetricRays()
 	uint32_t dynWidth = static_cast<uint32_t>(resolution.x);
 	uint32_t dynHeight = static_cast<uint32_t>(resolution.y);
 
-	// The raymarch + blurs run at HALF resolution: the noise-jittered raymarch output is blurred
-	// anyway, so half res is visually equivalent while cutting the dominant GPU cost ~4x (the
-	// full-res raymarch was the heaviest Effect11 pass). The apply pass upsamples (HALF_RES).
+	// Raymarch + blurs run at half resolution; the apply pass upsamples bilaterally.
 	const uint32_t halfTexWidth = (mainTexDesc.Width + 1) / 2;
 	const uint32_t halfTexHeight = (mainTexDesc.Height + 1) / 2;
 	const uint32_t halfDynWidth = (dynWidth + 1) / 2;
@@ -748,8 +744,7 @@ void Effect11::DrawVolumetricRays()
 		vlTexB->CreateSRV(srvDesc);
 		vlTexB->CreateUAV(uavDesc);
 
-		// Raymarch representative depth (second MRT of pass 1). R32F to preserve the raw
-		// non-linear depth precision the bilateral weights compare against.
+		// R32F to preserve the raw depth precision the bilateral weights compare against.
 		D3D11_TEXTURE2D_DESC depthDesc = desc;
 		depthDesc.Format = DXGI_FORMAT_R32_FLOAT;
 		depthDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
@@ -768,10 +763,6 @@ void Effect11::DrawVolumetricRays()
 	if (!vlBlurCB)
 		vlBlurCB = std::make_unique<ConstantBuffer>(ConstantBufferDesc(16), "Effect11::VLBlurCB");
 
-	// Scoped backup: these passes overwrite only a small, fixed slice of pipeline state (PS SRVs
-	// 0-15 + sampler 0 + CBs 0-1, CS SRVs 0-1 + UAV 0 + CBs 0-1, the two shaders, IA/RS/OM), so we
-	// save/restore exactly that rather than the whole 128-SRV-per-stage pipeline. This is what stops
-	// enabling volumetric rays from cratering CPU frame time.
 	Effect11Util::D3D11ScopedPostFxBackup stateBackup;
 	stateBackup.Save(context);
 
@@ -781,7 +772,7 @@ void Effect11::DrawVolumetricRays()
 
 	auto* profiler = globals::profiler;
 
-	// Pass 1: Raymarch shadow → R16F texture + representative depth (half res, MRT)
+	// Pass 1: Raymarch shadow + depth → half-res textures (MRT)
 	{
 		profiler->BeginPass("Effect11::VolumetricRays Pass 0");
 
@@ -902,7 +893,7 @@ void Effect11::DrawVolumetricRays()
 		context->PSSetShaderResources(0, 16, srvs);
 		context->PSSetSamplers(0, 1, &sampler);
 
-		// The joint bilateral upsample needs the half-res dimensions (same VLData the blurs use).
+		// Half-res dimensions for the bilateral upsample.
 		ID3D11Buffer* psCB = vlBlurCB->CB();
 		context->PSSetConstantBuffers(1, 1, &psCB);
 
