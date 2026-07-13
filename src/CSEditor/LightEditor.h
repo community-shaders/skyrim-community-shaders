@@ -261,6 +261,8 @@ private:
 	bool ModifyLPFilterList(bool isWhiteList, bool add);
 	/** @brief Reloads the selected bulb's filter/flag/emittance state from its LP JSON entry. */
 	void RefreshLPJsonState();
+	/** @brief Owner-reference scale Light Placer bakes into fade/radius/size for the active LP bulb (1.0 if non-LP or IgnoreScale). */
+	float GetLPRefScale() const;
 	/** @brief Applies the LP flag set to the current runtime light flags. */
 	void SyncLPFlagsToRuntime();
 	/** @brief Mirrors the InverseSquare/Linear falloff bits of an LP flag set onto a runtime light's flags. */
