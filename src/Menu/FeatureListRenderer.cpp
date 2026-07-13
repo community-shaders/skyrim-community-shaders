@@ -663,7 +663,7 @@ void FeatureListRenderer::DrawMenuVisitor::operator()(Feature* feat)
 
 	if (ImGui::BeginChild("##FeatureConfigFrame", { 0, 0 }, true)) {
 		// Compute scene-controlled state once for both header and settings
-		auto* sceneManager = SceneSettingsManager::GetSingleton();
+		auto* sceneManager = globals::sceneSettingsManager;
 		bool sceneControlled = sceneManager->HasActiveSettingsForFeature(featureName) && !sceneManager->IsFeaturePaused(featureName);
 
 		// Render feature header with integrated action buttons
@@ -830,7 +830,7 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureSettings(Feature* feat, 
 			// Show toggle whenever scene entries exist for this feature, even if feature-paused
 			{
 				const auto& featureShortName = feat->GetShortName();
-				auto* sceneMgr = SceneSettingsManager::GetSingleton();
+				auto* sceneMgr = globals::sceneSettingsManager;
 				bool scenePaused = sceneMgr->IsFeaturePaused(featureShortName);
 				if (sceneControlled || scenePaused) {
 					bool active = !scenePaused;

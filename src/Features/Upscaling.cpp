@@ -30,6 +30,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	frameGenerationAllowInMenus,
 	streamlineLogLevel,
 	sharpnessFSR,
+	sharpnessEnabledDLSS,
 	sharpnessDLSS,
 	presetDLSS,
 	reflexLowLatencyMode,
@@ -272,7 +273,15 @@ void Upscaling::DrawSettings()
 		if (upscaleMethod == UpscaleMethod::kFSR) {
 			ImGui::SliderFloat(T(TKEY("sharpness"), "Sharpness"), &settings.sharpnessFSR, 0.0f, 1.0f, "%.1f");
 		} else if (upscaleMethod == UpscaleMethod::kDLSS) {
-			ImGui::SliderFloat(T(TKEY("sharpness"), "Sharpness"), &settings.sharpnessDLSS, 0.0f, 1.0f, "%.1f");
+			ImGui::Checkbox(T(TKEY("enable_sharpening"), "Enable Sharpening"), &settings.sharpnessEnabledDLSS);
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text("%s", T(TKEY("enable_sharpening_tooltip"),
+									  "Applies RCAS sharpening to the DLSS output.\n"
+									  "Off by default; DLSS already resolves a sharp image."));
+			}
+
+			if (settings.sharpnessEnabledDLSS)
+				ImGui::SliderFloat(T(TKEY("sharpness"), "Sharpness"), &settings.sharpnessDLSS, 0.0f, 1.0f, "%.1f");
 
 			const char* presets[] = {
 				T(TKEY("dlss_model_preset_default"), "Default"),
@@ -1617,12 +1626,18 @@ void Upscaling::ApplySharpening()
 	ZoneScoped;
 	TracyD3D11Zone(globals::state->tracyCtx, "Upscaling - Sharpening");
 
+	if (!settings.sharpnessEnabledDLSS)
+		return;
+
 	if (settings.sharpnessDLSS <= 0.0f)
 		return;
 
 	if (!sharpenerTexture)
 		return;
 
+	// Match FSR3's slider->RCAS conversion exactly (ffx_fsr3upscaler.cpp + FsrRcasCon):
+	//   sharpenessRemapped = -2*slider + 2   (sharpness in stops)
+	//   rcasAttenuation    = exp2(-sharpenessRemapped) = exp2(2*slider - 2)
 	float currentSharpness = (-2.0f * settings.sharpnessDLSS) + 2.0f;
 	currentSharpness = exp2(-currentSharpness);
 
