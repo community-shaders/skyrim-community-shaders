@@ -114,6 +114,34 @@ namespace ImageBasedLighting
 		return linEnv + linSky;
 	}
 
+	/// Compute diffuse IBL ambient with a skylighting visibility factor applied per DALCMode
+	/// (mode 3 dims both DALC and sky; modes 0-2 dim only the sky contribution). Called by
+	/// DeferredCompositeCS when SKYLIGHTING is active.
+	float3 GetDiffuseIBLOccluded(float3 vanillaDALC, float3 rayDir, float visibility)
+	{
+		float3 linEnv, linSky;
+		if (SharedData::iblSettings.DALCMode == 3) {
+			linEnv = vanillaDALC * SharedData::iblSettings.DALCAmount * visibility;
+			linSky = GetSkyIBLColor(rayDir) * visibility;
+		} else if (SharedData::iblSettings.DALCMode == 2) {
+			linEnv = vanillaDALC * SharedData::iblSettings.DALCAmount;
+			linSky = GetSkyIBLColor(rayDir) * visibility;
+		} else {
+			linEnv = GetEnvIBLColor(rayDir);
+			linSky = GetSkyIBLColor(rayDir) * visibility;
+		}
+		if (SharedData::enbSettings.Enable)
+			linSky *= saturate(-rayDir.z * 0.65 + 0.35);
+		return linEnv + linSky;
+	}
+
+	/// Combined env + sky IBL color with a visibility factor applied to the sky term.
+	/// Called by the volumetric-fog light scattering when IBL is active.
+	float3 GetIBLColorOccluded(float3 rayDir, float visibility)
+	{
+		return GetEnvIBLColor(rayDir) + GetSkyIBLColor(rayDir) * visibility;
+	}
+
 #if defined(LIGHTING)
 	float3 GetStaticDiffuseIBL(float3 N, SamplerState samp)
 	{

@@ -11,7 +11,6 @@ namespace Effect11Util
 	static constexpr UINT kMaxVBs = D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT;
 	static constexpr UINT kMaxRTVs = D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT;
 	static constexpr UINT kMaxViewports = D3D11_VIEWPORT_AND_SCISSORRECT_OBJECT_COUNT_PER_PIPELINE;
-	static constexpr UINT kMaxSOTargets = 4;
 
 	template <typename T>
 	inline void SafeRelease(T*& ptr)
@@ -29,6 +28,12 @@ namespace Effect11Util
 			SafeRelease(arr[i]);
 	}
 
+	// Saves/restores the D3D11 pipeline state around a post-processing chain so the game's own
+	// bindings survive it. Post-processing only ever uses VS/PS/CS full-screen passes, so the
+	// tessellation (HS/DS), geometry (GS) and stream-out (SO) stages are deliberately NOT captured:
+	// nothing here binds them, so there is nothing to restore, and skipping them removes ~half of
+	// the per-frame Get*/Set* + COM AddRef/Release traffic. (kMaxSRVs is 128 per stage — capturing
+	// every stage was the dominant CPU cost of this feature.)
 	struct D3D11FullStateBackup
 	{
 		// Input Assembler
@@ -46,27 +51,6 @@ namespace Effect11Util
 		ID3D11Buffer* vsCBs[kMaxCBs] = {};
 		ID3D11ShaderResourceView* vsSRVs[kMaxSRVs] = {};
 		ID3D11SamplerState* vsSamplers[kMaxSamplers] = {};
-
-		// Hull Shader
-		ID3D11HullShader* hs = nullptr;
-		ID3D11Buffer* hsCBs[kMaxCBs] = {};
-		ID3D11ShaderResourceView* hsSRVs[kMaxSRVs] = {};
-		ID3D11SamplerState* hsSamplers[kMaxSamplers] = {};
-
-		// Domain Shader
-		ID3D11DomainShader* ds = nullptr;
-		ID3D11Buffer* dsCBs[kMaxCBs] = {};
-		ID3D11ShaderResourceView* dsSRVs[kMaxSRVs] = {};
-		ID3D11SamplerState* dsSamplers[kMaxSamplers] = {};
-
-		// Geometry Shader
-		ID3D11GeometryShader* gs = nullptr;
-		ID3D11Buffer* gsCBs[kMaxCBs] = {};
-		ID3D11ShaderResourceView* gsSRVs[kMaxSRVs] = {};
-		ID3D11SamplerState* gsSamplers[kMaxSamplers] = {};
-
-		// Stream Output
-		ID3D11Buffer* soTargets[kMaxSOTargets] = {};
 
 		// Rasterizer
 		ID3D11RasterizerState* rs = nullptr;
@@ -109,23 +93,6 @@ namespace Effect11Util
 			ctx->VSGetShaderResources(0, kMaxSRVs, vsSRVs);
 			ctx->VSGetSamplers(0, kMaxSamplers, vsSamplers);
 
-			ctx->HSGetShader(&hs, nullptr, nullptr);
-			ctx->HSGetConstantBuffers(0, kMaxCBs, hsCBs);
-			ctx->HSGetShaderResources(0, kMaxSRVs, hsSRVs);
-			ctx->HSGetSamplers(0, kMaxSamplers, hsSamplers);
-
-			ctx->DSGetShader(&ds, nullptr, nullptr);
-			ctx->DSGetConstantBuffers(0, kMaxCBs, dsCBs);
-			ctx->DSGetShaderResources(0, kMaxSRVs, dsSRVs);
-			ctx->DSGetSamplers(0, kMaxSamplers, dsSamplers);
-
-			ctx->GSGetShader(&gs, nullptr, nullptr);
-			ctx->GSGetConstantBuffers(0, kMaxCBs, gsCBs);
-			ctx->GSGetShaderResources(0, kMaxSRVs, gsSRVs);
-			ctx->GSGetSamplers(0, kMaxSamplers, gsSamplers);
-
-			ctx->SOGetTargets(kMaxSOTargets, soTargets);
-
 			ctx->RSGetState(&rs);
 			rsNumViewports = kMaxViewports;
 			ctx->RSGetViewports(&rsNumViewports, rsViewports);
@@ -160,24 +127,6 @@ namespace Effect11Util
 			ctx->VSSetShaderResources(0, kMaxSRVs, vsSRVs);
 			ctx->VSSetSamplers(0, kMaxSamplers, vsSamplers);
 
-			ctx->HSSetShader(hs, nullptr, 0);
-			ctx->HSSetConstantBuffers(0, kMaxCBs, hsCBs);
-			ctx->HSSetShaderResources(0, kMaxSRVs, hsSRVs);
-			ctx->HSSetSamplers(0, kMaxSamplers, hsSamplers);
-
-			ctx->DSSetShader(ds, nullptr, 0);
-			ctx->DSSetConstantBuffers(0, kMaxCBs, dsCBs);
-			ctx->DSSetShaderResources(0, kMaxSRVs, dsSRVs);
-			ctx->DSSetSamplers(0, kMaxSamplers, dsSamplers);
-
-			ctx->GSSetShader(gs, nullptr, 0);
-			ctx->GSSetConstantBuffers(0, kMaxCBs, gsCBs);
-			ctx->GSSetShaderResources(0, kMaxSRVs, gsSRVs);
-			ctx->GSSetSamplers(0, kMaxSamplers, gsSamplers);
-
-			UINT soOffsets[kMaxSOTargets] = {};
-			ctx->SOSetTargets(kMaxSOTargets, soTargets, soOffsets);
-
 			ctx->RSSetState(rs);
 			ctx->RSSetViewports(rsNumViewports, rsViewports);
 			ctx->RSSetScissorRects(rsNumScissorRects, rsScissorRects);
@@ -209,23 +158,6 @@ namespace Effect11Util
 			SafeReleaseArray(vsSRVs);
 			SafeReleaseArray(vsSamplers);
 
-			SafeRelease(hs);
-			SafeReleaseArray(hsCBs);
-			SafeReleaseArray(hsSRVs);
-			SafeReleaseArray(hsSamplers);
-
-			SafeRelease(ds);
-			SafeReleaseArray(dsCBs);
-			SafeReleaseArray(dsSRVs);
-			SafeReleaseArray(dsSamplers);
-
-			SafeRelease(gs);
-			SafeReleaseArray(gsCBs);
-			SafeReleaseArray(gsSRVs);
-			SafeReleaseArray(gsSamplers);
-
-			SafeReleaseArray(soTargets);
-
 			SafeRelease(rs);
 
 			SafeRelease(ps);
@@ -243,6 +175,128 @@ namespace Effect11Util
 			SafeReleaseArray(csSRVs);
 			SafeReleaseArray(csSamplers);
 			SafeReleaseArray(csUAVs);
+		}
+	};
+
+	// Scoped backup for the volumetric-rays passes. Those four passes overwrite only a small, fixed
+	// slice of pipeline state, so we save/restore exactly that slice instead of the whole pipeline.
+	// A full D3D11FullStateBackup captures 128 SRVs per stage (~hundreds of COM AddRef/Release per
+	// frame); this captures ~20 slots — the reason enabling volumetric rays no longer craters CPU
+	// frame time. Keep the captured ranges in sync with DrawVolumetricRays if its bindings change.
+	struct D3D11ScopedPostFxBackup
+	{
+		static constexpr UINT kPSSRVs = 16;  // DrawVolumetricRays: PSSetShaderResources(0, 16, ...)
+		static constexpr UINT kPSCBs = 2;    // PSSetConstantBuffers(1, 1, ...) — slots 0-1 covered
+		static constexpr UINT kCSSRVs = 2;   // CSSetShaderResources(0, 2, ...)
+		static constexpr UINT kCSCBs = 2;    // CSSetConstantBuffers(0, 2, ...)
+
+		// Input Assembler (only vertex buffer slot 0 + layout/topology are touched)
+		ID3D11InputLayout* iaInputLayout = nullptr;
+		D3D11_PRIMITIVE_TOPOLOGY iaTopology = D3D11_PRIMITIVE_TOPOLOGY_UNDEFINED;
+		ID3D11Buffer* iaVB0 = nullptr;
+		UINT iaVB0Stride = 0;
+		UINT iaVB0Offset = 0;
+
+		// Vertex Shader (shader only)
+		ID3D11VertexShader* vs = nullptr;
+
+		// Rasterizer (state + viewports; scissors are untouched)
+		ID3D11RasterizerState* rs = nullptr;
+		UINT rsNumViewports = kMaxViewports;
+		D3D11_VIEWPORT rsViewports[kMaxViewports] = {};
+
+		// Pixel Shader (shader + SRVs 0..15 + sampler 0 + CBs 0..1)
+		ID3D11PixelShader* ps = nullptr;
+		ID3D11ShaderResourceView* psSRVs[kPSSRVs] = {};
+		ID3D11SamplerState* psSampler0 = nullptr;
+		ID3D11Buffer* psCBs[kPSCBs] = {};
+
+		// Output Merger (render targets + blend + depth-stencil)
+		ID3D11RenderTargetView* omRTVs[kMaxRTVs] = {};
+		ID3D11DepthStencilView* omDSV = nullptr;
+		ID3D11BlendState* omBlendState = nullptr;
+		FLOAT omBlendFactor[4] = {};
+		UINT omSampleMask = 0;
+		ID3D11DepthStencilState* omDepthStencilState = nullptr;
+		UINT omStencilRef = 0;
+
+		// Compute Shader (shader + SRVs 0..1 + UAV 0 + CBs 0..1)
+		ID3D11ComputeShader* cs = nullptr;
+		ID3D11ShaderResourceView* csSRVs[kCSSRVs] = {};
+		ID3D11UnorderedAccessView* csUAV0 = nullptr;
+		ID3D11Buffer* csCBs[kCSCBs] = {};
+
+		void Save(ID3D11DeviceContext* ctx)
+		{
+			ctx->IAGetInputLayout(&iaInputLayout);
+			ctx->IAGetPrimitiveTopology(&iaTopology);
+			ctx->IAGetVertexBuffers(0, 1, &iaVB0, &iaVB0Stride, &iaVB0Offset);
+
+			ctx->VSGetShader(&vs, nullptr, nullptr);
+
+			ctx->RSGetState(&rs);
+			rsNumViewports = kMaxViewports;
+			ctx->RSGetViewports(&rsNumViewports, rsViewports);
+
+			ctx->PSGetShader(&ps, nullptr, nullptr);
+			ctx->PSGetShaderResources(0, kPSSRVs, psSRVs);
+			ctx->PSGetSamplers(0, 1, &psSampler0);
+			ctx->PSGetConstantBuffers(0, kPSCBs, psCBs);
+
+			ctx->OMGetRenderTargets(kMaxRTVs, omRTVs, &omDSV);
+			ctx->OMGetBlendState(&omBlendState, omBlendFactor, &omSampleMask);
+			ctx->OMGetDepthStencilState(&omDepthStencilState, &omStencilRef);
+
+			ctx->CSGetShader(&cs, nullptr, nullptr);
+			ctx->CSGetShaderResources(0, kCSSRVs, csSRVs);
+			ctx->CSGetUnorderedAccessViews(0, 1, &csUAV0);
+			ctx->CSGetConstantBuffers(0, kCSCBs, csCBs);
+		}
+
+		void Restore(ID3D11DeviceContext* ctx)
+		{
+			ctx->IASetInputLayout(iaInputLayout);
+			ctx->IASetPrimitiveTopology(iaTopology);
+			ctx->IASetVertexBuffers(0, 1, &iaVB0, &iaVB0Stride, &iaVB0Offset);
+
+			ctx->VSSetShader(vs, nullptr, 0);
+
+			ctx->RSSetState(rs);
+			ctx->RSSetViewports(rsNumViewports, rsViewports);
+
+			ctx->PSSetShader(ps, nullptr, 0);
+			ctx->PSSetShaderResources(0, kPSSRVs, psSRVs);
+			ctx->PSSetSamplers(0, 1, &psSampler0);
+			ctx->PSSetConstantBuffers(0, kPSCBs, psCBs);
+
+			ctx->OMSetRenderTargets(kMaxRTVs, omRTVs, omDSV);
+			ctx->OMSetBlendState(omBlendState, omBlendFactor, omSampleMask);
+			ctx->OMSetDepthStencilState(omDepthStencilState, omStencilRef);
+
+			ctx->CSSetShader(cs, nullptr, 0);
+			ctx->CSSetShaderResources(0, kCSSRVs, csSRVs);
+			ctx->CSSetUnorderedAccessViews(0, 1, &csUAV0, nullptr);
+			ctx->CSSetConstantBuffers(0, kCSCBs, csCBs);
+		}
+
+		void Release()
+		{
+			SafeRelease(iaInputLayout);
+			SafeRelease(iaVB0);
+			SafeRelease(vs);
+			SafeRelease(rs);
+			SafeRelease(ps);
+			SafeReleaseArray(psSRVs);
+			SafeRelease(psSampler0);
+			SafeReleaseArray(psCBs);
+			SafeReleaseArray(omRTVs);
+			SafeRelease(omDSV);
+			SafeRelease(omBlendState);
+			SafeRelease(omDepthStencilState);
+			SafeRelease(cs);
+			SafeReleaseArray(csSRVs);
+			SafeRelease(csUAV0);
+			SafeReleaseArray(csCBs);
 		}
 	};
 }

@@ -552,7 +552,9 @@ bool Effect11::HandleTonemapRender(RE::RENDER_TARGET a_input, RE::RENDER_TARGET 
 	if (enableEffect && !settingManager.GetValue<bool>("UseOriginalPostProcessing", "EFFECT")) {
 		auto renderer = globals::game::renderer;
 		auto& renderTargets = renderer->GetRuntimeData().renderTargets;
-		effectManager.ExecuteEffects(renderTargets[a_input], renderTargets[a_output]);
+		bool validInput = a_input > RE::RENDER_TARGETS::kNONE && a_input < RE::RENDER_TARGETS::kTOTAL && renderTargets[a_input].SRV;
+		auto& input = validInput ? renderTargets[a_input] : renderTargets[RE::RENDER_TARGETS::kMAIN];
+		effectManager.ExecuteEffects(input, renderTargets[a_output]);
 		return true;
 	}
 	return false;
@@ -667,6 +669,8 @@ void Effect11::DrawVolumetricRays()
 			return;
 	}
 
+	// The blurs run unmodified on the half-res VL texture against the matching half-res
+	// raymarch depth, exactly as the game runs them at native resolution.
 	if (!blurHCS) {
 		blurHCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\ISVolumetricLightingBlurHCS.hlsl", {}, "cs_5_0"));
 		if (!blurHCS)
@@ -703,10 +707,18 @@ void Effect11::DrawVolumetricRays()
 	uint32_t dynWidth = static_cast<uint32_t>(resolution.x);
 	uint32_t dynHeight = static_cast<uint32_t>(resolution.y);
 
-	if (!vlTexA || vlTexA->desc.Width != mainTexDesc.Width || vlTexA->desc.Height != mainTexDesc.Height) {
+	// The raymarch + blurs run at HALF resolution: the noise-jittered raymarch output is blurred
+	// anyway, so half res is visually equivalent while cutting the dominant GPU cost ~4x (the
+	// full-res raymarch was the heaviest Effect11 pass). The apply pass upsamples (HALF_RES).
+	const uint32_t halfTexWidth = (mainTexDesc.Width + 1) / 2;
+	const uint32_t halfTexHeight = (mainTexDesc.Height + 1) / 2;
+	const uint32_t halfDynWidth = (dynWidth + 1) / 2;
+	const uint32_t halfDynHeight = (dynHeight + 1) / 2;
+
+	if (!vlTexA || vlTexA->desc.Width != halfTexWidth || vlTexA->desc.Height != halfTexHeight) {
 		D3D11_TEXTURE2D_DESC desc{};
-		desc.Width = mainTexDesc.Width;
-		desc.Height = mainTexDesc.Height;
+		desc.Width = halfTexWidth;
+		desc.Height = halfTexHeight;
 		desc.MipLevels = 1;
 		desc.ArraySize = 1;
 		desc.Format = DXGI_FORMAT_R16_FLOAT;
@@ -735,26 +747,47 @@ void Effect11::DrawVolumetricRays()
 		vlTexB = std::make_unique<Texture2D>(desc, "Effect11::VLTexB");
 		vlTexB->CreateSRV(srvDesc);
 		vlTexB->CreateUAV(uavDesc);
+
+		// Raymarch representative depth (second MRT of pass 1). R32F to preserve the raw
+		// non-linear depth precision the bilateral weights compare against.
+		D3D11_TEXTURE2D_DESC depthDesc = desc;
+		depthDesc.Format = DXGI_FORMAT_R32_FLOAT;
+		depthDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+
+		D3D11_SHADER_RESOURCE_VIEW_DESC depthSrvDesc = srvDesc;
+		depthSrvDesc.Format = DXGI_FORMAT_R32_FLOAT;
+
+		D3D11_RENDER_TARGET_VIEW_DESC depthRtvDesc = rtvDesc;
+		depthRtvDesc.Format = DXGI_FORMAT_R32_FLOAT;
+
+		vlDepthHalf = std::make_unique<Texture2D>(depthDesc, "Effect11::VLDepthHalf");
+		vlDepthHalf->CreateSRV(depthSrvDesc);
+		vlDepthHalf->CreateRTV(depthRtvDesc);
 	}
 
 	if (!vlBlurCB)
 		vlBlurCB = std::make_unique<ConstantBuffer>(ConstantBufferDesc(16), "Effect11::VLBlurCB");
 
-	Effect11Util::D3D11FullStateBackup stateBackup;
+	// Scoped backup: these passes overwrite only a small, fixed slice of pipeline state (PS SRVs
+	// 0-15 + sampler 0 + CBs 0-1, CS SRVs 0-1 + UAV 0 + CBs 0-1, the two shaders, IA/RS/OM), so we
+	// save/restore exactly that rather than the whole 128-SRV-per-stage pipeline. This is what stops
+	// enabling volumetric rays from cratering CPU frame time.
+	Effect11Util::D3D11ScopedPostFxBackup stateBackup;
 	stateBackup.Save(context);
 
 	ID3D11SamplerState* sampler = Deferred::GetSingleton()->linearSampler;
 	D3D11_VIEWPORT viewport{ 0, 0, resolution.x, resolution.y, 0, 1 };
+	D3D11_VIEWPORT halfViewport{ 0, 0, static_cast<float>(halfDynWidth), static_cast<float>(halfDynHeight), 0, 1 };
 
 	auto* profiler = globals::profiler;
 
-	// Pass 1: Raymarch shadow → R16F texture
+	// Pass 1: Raymarch shadow → R16F texture + representative depth (half res, MRT)
 	{
 		profiler->BeginPass("Effect11::VolumetricRays Pass 0");
 
-		ID3D11RenderTargetView* rtv = vlTexA->rtv.get();
-		context->OMSetRenderTargets(1, &rtv, nullptr);
-		context->RSSetViewports(1, &viewport);
+		ID3D11RenderTargetView* rtvs[2] = { vlTexA->rtv.get(), vlDepthHalf->rtv.get() };
+		context->OMSetRenderTargets(2, rtvs, nullptr);
+		context->RSSetViewports(1, &halfViewport);
 
 		context->OMSetBlendState(nullptr, nullptr, 0xFFFFFFFF);
 		context->RSSetState(effectManager.rasterizerState.get());
@@ -773,20 +806,18 @@ void Effect11::DrawVolumetricRays()
 
 		context->Draw(4, 0);
 
-		ID3D11RenderTargetView* nullRTV = nullptr;
-		context->OMSetRenderTargets(1, &nullRTV, nullptr);
+		ID3D11RenderTargetView* nullRTVs[2] = { nullptr, nullptr };
+		context->OMSetRenderTargets(2, nullRTVs, nullptr);
 
 		profiler->EndPass();
 	}
 
 	// Blur setup
-	auto depthSRV = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN].depthSRV;
-
 	struct VLData
 	{
 		int32_t screenX, screenY, screenXMin1, screenYMin1;
 	};
-	VLData vlData = { static_cast<int32_t>(dynWidth), static_cast<int32_t>(dynHeight), static_cast<int32_t>(dynWidth) - 1, static_cast<int32_t>(dynHeight) - 1 };
+	VLData vlData = { static_cast<int32_t>(halfDynWidth), static_cast<int32_t>(halfDynHeight), static_cast<int32_t>(halfDynWidth) - 1, static_cast<int32_t>(halfDynHeight) - 1 };
 	vlBlurCB->Update(vlData);
 
 	static constexpr uint32_t tgDim = 256;
@@ -798,7 +829,7 @@ void Effect11::DrawVolumetricRays()
 		profiler->BeginPass("Effect11::VolumetricRays Pass 1");
 		context->CSSetShader(blurHCS, nullptr, 0);
 
-		ID3D11ShaderResourceView* csSRVs[2] = { vlTexA->srv.get(), depthSRV };
+		ID3D11ShaderResourceView* csSRVs[2] = { vlTexA->srv.get(), vlDepthHalf->srv.get() };
 		context->CSSetShaderResources(0, 2, csSRVs);
 
 		ID3D11UnorderedAccessView* csUAVs[1] = { vlTexB->uav.get() };
@@ -807,8 +838,8 @@ void Effect11::DrawVolumetricRays()
 		ID3D11Buffer* csCBs[2] = { nullptr, vlBlurCB->CB() };
 		context->CSSetConstantBuffers(0, 2, csCBs);
 
-		uint32_t groupsX = (dynWidth + effectiveGroupSize - 1) / effectiveGroupSize;
-		context->Dispatch(groupsX, dynHeight, 1);
+		uint32_t groupsX = (halfDynWidth + effectiveGroupSize - 1) / effectiveGroupSize;
+		context->Dispatch(groupsX, halfDynHeight, 1);
 
 		ID3D11ShaderResourceView* nullSRVs[2] = { nullptr, nullptr };
 		context->CSSetShaderResources(0, 2, nullSRVs);
@@ -822,14 +853,14 @@ void Effect11::DrawVolumetricRays()
 		profiler->BeginPass("Effect11::VolumetricRays Pass 2");
 		context->CSSetShader(blurVCS, nullptr, 0);
 
-		ID3D11ShaderResourceView* csSRVs[2] = { vlTexB->srv.get(), depthSRV };
+		ID3D11ShaderResourceView* csSRVs[2] = { vlTexB->srv.get(), vlDepthHalf->srv.get() };
 		context->CSSetShaderResources(0, 2, csSRVs);
 
 		ID3D11UnorderedAccessView* csUAVs[1] = { vlTexA->uav.get() };
 		context->CSSetUnorderedAccessViews(0, 1, csUAVs, nullptr);
 
-		uint32_t groupsY = (dynHeight + effectiveGroupSize - 1) / effectiveGroupSize;
-		context->Dispatch(dynWidth, groupsY, 1);
+		uint32_t groupsY = (halfDynHeight + effectiveGroupSize - 1) / effectiveGroupSize;
+		context->Dispatch(halfDynWidth, groupsY, 1);
 
 		ID3D11ShaderResourceView* nullSRVs[2] = { nullptr, nullptr };
 		context->CSSetShaderResources(0, 2, nullSRVs);
@@ -863,12 +894,17 @@ void Effect11::DrawVolumetricRays()
 		auto& ibl = globals::features::ibl;
 		ID3D11ShaderResourceView* srvs[16]{};
 		srvs[0] = vlTexA->srv.get();
+		srvs[1] = vlDepthHalf->srv.get();
 		if (ibl.loaded) {
 			srvs[14] = ibl.envIBLTexture->srv.get();
 			srvs[15] = ibl.skyIBLTexture->srv.get();
 		}
 		context->PSSetShaderResources(0, 16, srvs);
 		context->PSSetSamplers(0, 1, &sampler);
+
+		// The joint bilateral upsample needs the half-res dimensions (same VLData the blurs use).
+		ID3D11Buffer* psCB = vlBlurCB->CB();
+		context->PSSetConstantBuffers(1, 1, &psCB);
 
 		context->Draw(4, 0);
 		profiler->EndPass();
