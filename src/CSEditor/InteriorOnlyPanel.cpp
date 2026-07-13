@@ -47,7 +47,7 @@ namespace InteriorOnlyPanel
 
 	void DrawAddSettingUI()
 	{
-		auto* manager = SceneSettingsManager::GetSingleton();
+		auto* manager = globals::sceneSettingsManager;
 
 		ImGui::Spacing();
 
@@ -122,7 +122,7 @@ namespace InteriorOnlyPanel
 
 	void DrawSettingEntry(size_t index)
 	{
-		auto* manager = SceneSettingsManager::GetSingleton();
+		auto* manager = globals::sceneSettingsManager;
 		const auto& entries = manager->GetEntries(kSceneType);
 		if (index >= entries.size())
 			return;
@@ -222,7 +222,7 @@ namespace InteriorOnlyPanel
 
 	void Draw()
 	{
-		auto* manager = SceneSettingsManager::GetSingleton();
+		auto* manager = globals::sceneSettingsManager;
 		const auto& entries = manager->GetEntries(kSceneType);
 		auto& theme = globals::menu->GetSettings().Theme;
 

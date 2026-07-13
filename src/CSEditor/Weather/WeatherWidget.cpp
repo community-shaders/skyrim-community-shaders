@@ -647,7 +647,7 @@ void WeatherWidget::SetWeatherValues()
 	weather->referenceEffect = settings.referenceEffect;
 
 	// If this weather is currently active, immediately apply feature settings to game memory
-	auto* weatherManager = WeatherManager::GetSingleton();
+	auto* weatherManager = globals::weatherManager;
 	if (weatherManager->GetCurrentWeathers().currentWeather == weather) {
 		auto* globalRegistry = WeatherVariables::GlobalWeatherRegistry::GetSingleton();
 		json emptyWeather;
@@ -1620,7 +1620,7 @@ void WeatherWidget::InheritAllFromParent()
 
 void WeatherWidget::SaveFeatureSettings()
 {
-	auto* weatherManager = WeatherManager::GetSingleton();
+	auto* weatherManager = globals::weatherManager;
 
 	// Collect all feature names from both current and original settings to detect deletions
 	std::set<std::string> allFeatureNames;
@@ -1643,7 +1643,7 @@ void WeatherWidget::SaveFeatureSettings()
 
 void WeatherWidget::LoadFeatureSettings()
 {
-	auto* weatherManager = WeatherManager::GetSingleton();
+	auto* weatherManager = globals::weatherManager;
 	auto* globalRegistry = WeatherVariables::GlobalWeatherRegistry::GetSingleton();
 
 	// First, validate that all feature settings in the JSON exist as loaded features.
@@ -1738,7 +1738,7 @@ void WeatherWidget::ApplyChanges()
 
 void WeatherWidget::RevertChanges()
 {
-	auto* weatherManager = WeatherManager::GetSingleton();
+	auto* weatherManager = globals::weatherManager;
 
 	// If this weather is currently active, reset enabled feature overrides to user defaults
 	if (weather == weatherManager->GetCurrentWeathers().currentWeather) {
@@ -1768,7 +1768,7 @@ void WeatherWidget::RevertChanges()
 void WeatherWidget::Delete()
 {
 	// Clear cache and local settings before base Delete() to prevent reloading stale data
-	auto* weatherManager = WeatherManager::GetSingleton();
+	auto* weatherManager = globals::weatherManager;
 	weatherManager->ClearAllFeatureSettingsForWeather(weather);
 	settings.featureSettings.clear();
 

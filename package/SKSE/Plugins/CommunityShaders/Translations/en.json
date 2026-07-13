@@ -1442,6 +1442,8 @@
     "feature.upscaling.dlss_model_preset_l": "Preset L",
     "feature.upscaling.dlss_model_preset_m": "Preset M",
     "feature.upscaling.dlss_model_preset_tooltip": "Choose which DLSS AI model preset to use.\nEach model offers different visual quality, performance, and motion stability.\nSet to 'Default' for automatic selection based on your Upscale Preset and hardware.\nChanging this setting requires a restart to take effect.",
+    "feature.upscaling.enable_sharpening": "Enable Sharpening",
+    "feature.upscaling.enable_sharpening_tooltip": "Applies RCAS sharpening to the DLSS output.\nOff by default; DLSS already resolves a sharp image.",
     "feature.upscaling.force_enable_frame_generation": "Force Enable Frame Generation",
     "feature.upscaling.fps_limit": "FPS Limit",
     "feature.upscaling.fps_limit_tooltip_1": "Set your frame cap target.",
