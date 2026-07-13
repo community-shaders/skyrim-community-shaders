@@ -663,20 +663,22 @@ void Effect11::DrawVolumetricRays()
 		std::vector<std::pair<const char*, const char*>> defines;
 		if (globals::features::ibl.loaded)
 			defines.push_back({ "IBL", nullptr });
+		defines.push_back({ "HALF_RES", nullptr });
 
 		applyVolumetricRaysPS = static_cast<ID3D11PixelShader*>(Util::CompileShader(L"Data\\Shaders\\Effect11\\ApplyVolumetricRaysPS.hlsl", defines, "ps_5_0"));
 		if (!applyVolumetricRaysPS)
 			return;
 	}
 
+	// The blurs run on the half-res VL texture against the full-res depth buffer (DEPTH_SCALE).
 	if (!blurHCS) {
-		blurHCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\ISVolumetricLightingBlurHCS.hlsl", {}, "cs_5_0"));
+		blurHCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\ISVolumetricLightingBlurHCS.hlsl", { { "DEPTH_SCALE", "2" } }, "cs_5_0"));
 		if (!blurHCS)
 			return;
 	}
 
 	if (!blurVCS) {
-		blurVCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\ISVolumetricLightingBlurVCS.hlsl", {}, "cs_5_0"));
+		blurVCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\ISVolumetricLightingBlurVCS.hlsl", { { "DEPTH_SCALE", "2" } }, "cs_5_0"));
 		if (!blurVCS)
 			return;
 	}
@@ -705,10 +707,18 @@ void Effect11::DrawVolumetricRays()
 	uint32_t dynWidth = static_cast<uint32_t>(resolution.x);
 	uint32_t dynHeight = static_cast<uint32_t>(resolution.y);
 
-	if (!vlTexA || vlTexA->desc.Width != mainTexDesc.Width || vlTexA->desc.Height != mainTexDesc.Height) {
+	// The raymarch + blurs run at HALF resolution: the noise-jittered raymarch output is blurred
+	// anyway, so half res is visually equivalent while cutting the dominant GPU cost ~4x (the
+	// full-res raymarch was the heaviest Effect11 pass). The apply pass upsamples (HALF_RES).
+	const uint32_t halfTexWidth = (mainTexDesc.Width + 1) / 2;
+	const uint32_t halfTexHeight = (mainTexDesc.Height + 1) / 2;
+	const uint32_t halfDynWidth = (dynWidth + 1) / 2;
+	const uint32_t halfDynHeight = (dynHeight + 1) / 2;
+
+	if (!vlTexA || vlTexA->desc.Width != halfTexWidth || vlTexA->desc.Height != halfTexHeight) {
 		D3D11_TEXTURE2D_DESC desc{};
-		desc.Width = mainTexDesc.Width;
-		desc.Height = mainTexDesc.Height;
+		desc.Width = halfTexWidth;
+		desc.Height = halfTexHeight;
 		desc.MipLevels = 1;
 		desc.ArraySize = 1;
 		desc.Format = DXGI_FORMAT_R16_FLOAT;
@@ -742,21 +752,26 @@ void Effect11::DrawVolumetricRays()
 	if (!vlBlurCB)
 		vlBlurCB = std::make_unique<ConstantBuffer>(ConstantBufferDesc(16), "Effect11::VLBlurCB");
 
-	Effect11Util::D3D11FullStateBackup stateBackup;
+	// Scoped backup: these passes overwrite only a small, fixed slice of pipeline state (PS SRVs
+	// 0-15 + sampler 0, CS SRVs 0-1 + UAV 0 + CBs 0-1, the two shaders, IA/RS/OM), so we save/restore
+	// exactly that rather than the whole 128-SRV-per-stage pipeline. This is what stops enabling
+	// volumetric rays from cratering CPU frame time.
+	Effect11Util::D3D11ScopedPostFxBackup stateBackup;
 	stateBackup.Save(context);
 
 	ID3D11SamplerState* sampler = Deferred::GetSingleton()->linearSampler;
 	D3D11_VIEWPORT viewport{ 0, 0, resolution.x, resolution.y, 0, 1 };
+	D3D11_VIEWPORT halfViewport{ 0, 0, static_cast<float>(halfDynWidth), static_cast<float>(halfDynHeight), 0, 1 };
 
 	auto* profiler = globals::profiler;
 
-	// Pass 1: Raymarch shadow → R16F texture
+	// Pass 1: Raymarch shadow → R16F texture (half res)
 	{
 		profiler->BeginPass("Effect11::VolumetricRays Pass 0");
 
 		ID3D11RenderTargetView* rtv = vlTexA->rtv.get();
 		context->OMSetRenderTargets(1, &rtv, nullptr);
-		context->RSSetViewports(1, &viewport);
+		context->RSSetViewports(1, &halfViewport);
 
 		context->OMSetBlendState(nullptr, nullptr, 0xFFFFFFFF);
 		context->RSSetState(effectManager.rasterizerState.get());
@@ -788,7 +803,7 @@ void Effect11::DrawVolumetricRays()
 	{
 		int32_t screenX, screenY, screenXMin1, screenYMin1;
 	};
-	VLData vlData = { static_cast<int32_t>(dynWidth), static_cast<int32_t>(dynHeight), static_cast<int32_t>(dynWidth) - 1, static_cast<int32_t>(dynHeight) - 1 };
+	VLData vlData = { static_cast<int32_t>(halfDynWidth), static_cast<int32_t>(halfDynHeight), static_cast<int32_t>(halfDynWidth) - 1, static_cast<int32_t>(halfDynHeight) - 1 };
 	vlBlurCB->Update(vlData);
 
 	static constexpr uint32_t tgDim = 256;
@@ -809,8 +824,8 @@ void Effect11::DrawVolumetricRays()
 		ID3D11Buffer* csCBs[2] = { nullptr, vlBlurCB->CB() };
 		context->CSSetConstantBuffers(0, 2, csCBs);
 
-		uint32_t groupsX = (dynWidth + effectiveGroupSize - 1) / effectiveGroupSize;
-		context->Dispatch(groupsX, dynHeight, 1);
+		uint32_t groupsX = (halfDynWidth + effectiveGroupSize - 1) / effectiveGroupSize;
+		context->Dispatch(groupsX, halfDynHeight, 1);
 
 		ID3D11ShaderResourceView* nullSRVs[2] = { nullptr, nullptr };
 		context->CSSetShaderResources(0, 2, nullSRVs);
@@ -830,8 +845,8 @@ void Effect11::DrawVolumetricRays()
 		ID3D11UnorderedAccessView* csUAVs[1] = { vlTexA->uav.get() };
 		context->CSSetUnorderedAccessViews(0, 1, csUAVs, nullptr);
 
-		uint32_t groupsY = (dynHeight + effectiveGroupSize - 1) / effectiveGroupSize;
-		context->Dispatch(dynWidth, groupsY, 1);
+		uint32_t groupsY = (halfDynHeight + effectiveGroupSize - 1) / effectiveGroupSize;
+		context->Dispatch(halfDynWidth, groupsY, 1);
 
 		ID3D11ShaderResourceView* nullSRVs[2] = { nullptr, nullptr };
 		context->CSSetShaderResources(0, 2, nullSRVs);

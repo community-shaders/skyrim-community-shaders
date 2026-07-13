@@ -17,7 +17,13 @@ float4 main(VS_OUTPUT_POST input) : SV_Target0
 {
 	float2 uv = input.txcoord0;
 
+#if defined(HALF_RES)
+	// The raymarch + blur run at half resolution; the field is post-blur smooth, so a
+	// nearest upsample is visually lossless and needs no extra bindings.
+	float volumetricShadow = BlurredShadowTexture.Load(int3(int2(input.pos.xy) >> 1, 0));
+#else
 	float volumetricShadow = BlurredShadowTexture.Load(int3(input.pos.xy, 0));
+#endif
 
 	float depth = SharedData::GetDepth(uv);
 	float4 positionCS = float4(2 * float2(uv.x, -uv.y + 1) - 1, depth, 1);
