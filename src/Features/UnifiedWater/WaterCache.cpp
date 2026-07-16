@@ -149,7 +149,7 @@ bool WaterCache::RegenerateCaches()
 	logger::info("[Unified Water] [Cache] Clearing and regenerating caches...");
 
 	namespace fs = std::filesystem;
-	const fs::path dir = Util::PathHelpers::GetDataPath() / "UnifiedWaterCache";
+	const fs::path dir = Util::PathHelpers::GetUnifiedWaterCachePath();
 
 	std::error_code ec;
 	fs::create_directories(dir, ec);
@@ -251,7 +251,7 @@ bool WaterCache::GenerateCaches()
 	{
 		namespace fs = std::filesystem;
 		std::error_code ec;
-		fs::create_directories(Util::PathHelpers::GetDataPath() / "UnifiedWaterCache", ec);
+		fs::create_directories(Util::PathHelpers::GetUnifiedWaterCachePath(), ec);
 		if (ec) {
 			logger::error("[Unified Water] [Cache] Failed to ensure output directory: {}", ec.message());
 			return false;
@@ -857,7 +857,7 @@ template <typename T>
 bool WaterCache::TryWriteCacheToFile(const std::string& name, const WorldSpaceHeader& header, const std::vector<T>& vec)
 {
 	namespace fs = std::filesystem;
-	const fs::path path = Util::PathHelpers::GetDataPath() / "UnifiedWaterCache" / name;
+	const fs::path path = Util::PathHelpers::GetUnifiedWaterCachePath() / name;
 
 	std::ofstream ofs(path, std::ios::binary | std::ios::trunc);
 	if (!ofs) {
@@ -879,7 +879,7 @@ template <typename T>
 bool WaterCache::TryReadCacheFromFile(const std::string& name, WorldSpaceHeader& header, std::vector<T>& vec)
 {
 	namespace fs = std::filesystem;
-	const fs::path path = Util::PathHelpers::GetDataPath() / "UnifiedWaterCache" / name;
+	const fs::path path = Util::PathHelpers::GetUnifiedWaterCachePath() / name;
 	if (!fs::exists(path))
 		return false;
 
