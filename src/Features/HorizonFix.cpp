@@ -17,7 +17,9 @@ void HorizonFix::PostPostLoad()
 	// regular feature validation.
 	if (loaded && GetModuleHandleW(L"HorizonFix.dll") == nullptr) {
 		loaded = false;
-		failedLoadedMessage = "HorizonFix is not installed; water keeps vanilla far clip behavior";
+		failedLoadedMessage = "HorizonFix is not installed, compatibility is disabled.";
 		logger::info("[Horizon Fix] HorizonFix plugin not detected, compatibility disabled");
+	} else {
+		logger::info("[Horizon Fix] HorizonFix plugin detected, compatibility enabled");
 	}
 }
