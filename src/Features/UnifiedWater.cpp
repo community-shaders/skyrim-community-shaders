@@ -209,7 +209,7 @@ void UnifiedWater::DataLoaded()
 	waterCache = new WaterCache();
 
 	if (LoadOrderChanged()) {
-		logger::info("[Unified Water] Load order changed, regenerating flowmap and caches");
+		logger::info("[Unified Water] Load order or plugin version changed, regenerating flowmap and caches");
 
 		if (flowmap->RegenerateAndLoadFlowmap())
 			SetFlowmapTex();
@@ -285,13 +285,17 @@ bool UnifiedWater::LoadOrderChanged()
 
 	uint64_t hash = 14695981039346656037ull;
 
-	auto addToHash = [&](const RE::TESFile* file) {
-		if (!file || !file->fileName)
-			return;
-		for (auto p = reinterpret_cast<const unsigned char*>(file->fileName); *p; ++p) {
+	auto addBytes = [&](const unsigned char* p) {
+		for (; *p; ++p) {
 			hash ^= *p;
 			hash *= 1099511628211ull;
 		}
+	};
+
+	auto addToHash = [&](const RE::TESFile* file) {
+		if (!file || !file->fileName)
+			return;
+		addBytes(reinterpret_cast<const unsigned char*>(file->fileName));
 	};
 
 	if (const auto mods = dataHandler->GetLoadedMods()) {
@@ -305,6 +309,8 @@ bool UnifiedWater::LoadOrderChanged()
 		for (uint32_t i = 0, n = count; i < n; ++i)
 			addToHash(lightMods[i]);
 	}
+
+	addBytes(reinterpret_cast<const unsigned char*>(Plugin::VERSION.string().c_str()));
 
 	namespace fs = std::filesystem;
 	const fs::path path = Util::PathHelpers::GetDataPath() / "UWLoadOrder.hash";

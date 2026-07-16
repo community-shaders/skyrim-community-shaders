@@ -2068,10 +2068,12 @@ void LightEditor::UpdateSelectedLight(RE::TESObjectREFR* refr, RE::TESObjectLIGH
 
 	if (current.data.flags.any(LightLimitFix::LightFlags::InverseSquare)) {
 		const bool isShadow = ligh && ligh->data.flags.any(RE::TES_LIGHT_FLAGS::kHemiShadow, RE::TES_LIGHT_FLAGS::kOmniShadow);
+		// Match ProcessLight, which runs on the LP-scaled runtime data (fade/size), so the readout tracks the game.
+		const float scale = GetLPRefScale();
 		current.data.radius = InverseSquareLighting::CalculateRadius(
-			current.data.fade * 4.f, isShadow,
+			current.data.fade * scale * 4.f, isShadow,
 			std::clamp(current.data.cutoffOverride, 0.01f, 1.0f),
-			std::clamp(current.data.size, 0.1f, 50.0f));
+			std::clamp(current.data.size * scale, 0.1f, 50.0f));
 	}
 
 	if (selected.isRef) {
@@ -2114,6 +2116,11 @@ void LightEditor::UpdateSelectedLight(RE::TESObjectREFR* refr, RE::TESObjectLIGH
 	displayInfo.lighEditorId = ligh ? clib_util::editorID::get_editorID(ligh) : "Unknown";
 }
 
+float LightEditor::GetLPRefScale() const
+{
+	return (lpInfo.isLPLight && activeRefr && !lpFlagSet.contains("IgnoreScale")) ? activeRefr->GetScale() : 1.0f;
+}
+
 bool LightEditor::ApplyOverrides(RE::NiLight* niLight, ISLCommon::RuntimeLightDataExt* runtimeData) const
 {
 	// Hovered (not selected) light: blink its fade so it flashes in the combo list.
@@ -2125,12 +2132,17 @@ bool LightEditor::ApplyOverrides(RE::NiLight* niLight, ISLCommon::RuntimeLightDa
 	if (niLight != activeNiLight.get())
 		return false;
 
+	// current.data holds the raw authored (JSON) values. Light Placer bakes the owner-reference scale into
+	// fade/radius/size when it packs a bulb (GetScaledFade/Radius/Size), so mirror that here or the selected
+	// bulb's preview diverges from the unselected/in-game render. Cutoff is never scaled.
+	const float scale = GetLPRefScale();
+
 	runtimeData->lighFormId = current.data.lighFormId;
 	// Use the emittance source's live color while one drives this bulb (see UpdateEmittanceColor), else the editor color.
 	runtimeData->diffuse = emittanceColorActive ? emittanceColor : current.data.diffuse;
-	runtimeData->fade = current.data.fade;
+	runtimeData->fade = current.data.fade * scale;
 	runtimeData->cutoffOverride = current.data.cutoffOverride;
-	runtimeData->size = current.data.size;
+	runtimeData->size = current.data.size * scale;
 
 	if (current.data.flags.any(LightLimitFix::LightFlags::InverseSquare)) {
 		runtimeData->flags.set(LightLimitFix::LightFlags::InverseSquare);
@@ -2138,7 +2150,7 @@ bool LightEditor::ApplyOverrides(RE::NiLight* niLight, ISLCommon::RuntimeLightDa
 		runtimeData->flags.reset(LightLimitFix::LightFlags::InverseSquare);
 		// Restore the authoritative radius: ProcessLight's IS branch writes a computed value into the shared
 		// runtimeData->radius that the non-IS branch only reads, so a stale inflated value would stick forever.
-		runtimeData->radius = current.data.radius;
+		runtimeData->radius = current.data.radius * scale;
 	}
 
 	if (current.data.flags.any(LightLimitFix::LightFlags::Linear))
@@ -2156,6 +2168,12 @@ void LightEditor::RestoreOriginal()
 
 	auto* runtimeData = ISLCommon::RuntimeLightDataExt::Get(activeNiLight.get());
 	*runtimeData = original.data;
+	// original.data is raw for LP bulbs (see RefreshLPJsonState); re-bake the owner-ref scale that Light Placer
+	// applies, symmetric with ApplyOverrides, so deselecting restores the live scaled state rather than the raw one.
+	const float scale = GetLPRefScale();
+	runtimeData->fade = original.data.fade * scale;
+	runtimeData->size = original.data.size * scale;
+	runtimeData->radius = original.data.radius * scale;
 
 	if (activeIsRef && activeRefr) {
 		activeRefr->SetPosition(original.pos);
@@ -2703,21 +2721,20 @@ void LightEditor::RefreshLPJsonState()
 
 	const auto dataIt = lightEntry->find("data");
 	if (dataIt != lightEntry->end() && dataIt->is_object()) {
-		// Base intensity from the LP JSON, not the runtime snapshot: the live fade is Flicker-modulated, so a
-		// snapshot freezes a random point. Applied to original (Reset) and current (the Intensity slider).
-		if (const auto fadeIt = dataIt->find("fade"); fadeIt != dataIt->end() && fadeIt->is_number()) {
-			const float jsonFade = fadeIt->get<float>();
-			original.data.fade = jsonFade;
-			current.data.fade = jsonFade;
-		}
+		// Read raw authored values from the JSON, not the runtime snapshot: the snapshot's size/radius are already
+		// LP-scaled by the owner ref, so reusing it would double the scale once ApplyOverrides re-applies it. Falls
+		// back to the LIGH form (like LP's GetFade/GetRadius/GetSize/GetCutoff) so original/current stay raw.
+		auto readData = [&](const char* key, float fallback) {
+			const auto it = dataIt->find(key);
+			return (it != dataIt->end() && it->is_number()) ? it->get<float>() : fallback;
+		};
 
-		// Likewise radius from JSON, not the snapshot (ProcessLight inflates runtimeData->radius for IS bulbs).
-		// JSON "radius" is the authored non-IS value; IS bulbs omit it and persist size/cutoff instead.
-		if (const auto radiusIt = dataIt->find("radius"); radiusIt != dataIt->end() && radiusIt->is_number()) {
-			const float jsonRadius = radiusIt->get<float>();
-			original.data.radius = jsonRadius;
-			current.data.radius = jsonRadius;
-		}
+		original.data.fade = current.data.fade = readData("fade", activeLigh ? activeLigh->fade : current.data.fade);
+		original.data.radius = current.data.radius = readData("radius", activeLigh ? static_cast<float>(activeLigh->data.radius) : current.data.radius);
+
+		const float fovSize = activeLigh ? (activeLigh->data.fov >= 50.f ? std::numbers::sqrt2_v<float> : activeLigh->data.fov) : current.data.size;
+		original.data.size = current.data.size = std::clamp(readData("size", fovSize), 0.01f, 50.f);
+		original.data.cutoffOverride = current.data.cutoffOverride = std::clamp(readData("cutoff", activeLigh ? activeLigh->data.fallofExponent : current.data.cutoffOverride), 0.01f, 1.f);
 
 		const auto flagsIt = dataIt->find("flags");
 		if (flagsIt != dataIt->end() && flagsIt->is_string()) {

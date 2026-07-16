@@ -1566,8 +1566,13 @@ void EditorWindow::SaveSettings()
 
 void EditorWindow::LoadSettings()
 {
-	if (!j.empty())
-		settings = j;
+	if (!j.empty()) {
+		try {
+			settings = j;
+		} catch (const nlohmann::json::exception& e) {
+			logger::warn("Failed to deserialize editor settings, using defaults: {}", e.what());
+		}
+	}
 	m_selectedCategory = settings.selectedCategory;
 	SetWidgetTypeSizesFromJson(settings.widgetTypeSizes);
 }
