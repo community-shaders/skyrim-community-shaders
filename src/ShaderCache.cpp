@@ -18,6 +18,27 @@
 
 namespace SIE
 {
+	namespace
+	{
+		// Extended far water: set when an installed plugin known to render water geometry
+		// beyond the far clip plane (a horizon-filling water skirt) is detected. When set,
+		// water shaders are compiled with the FAR_WATER define, which folds beyond-far-plane
+		// water back onto the far plane and shades it as bottomless where nothing rendered
+		// behind it. Without a detected provider the water pipeline keeps exact vanilla
+		// far-clip behavior: water clips at the far plane and terminates against the sky.
+		// Detection happens once, in ShaderCache::ValidateDiskCache, after every SKSE plugin
+		// has loaded and before any water shader is compiled.
+		std::atomic_bool extendedFarWater{ false };
+
+		// Plugins whose presence means water geometry will exist beyond the far clip plane
+		constexpr const wchar_t* farWaterProviderDlls[] = { L"HorizonFix.dll" };
+	}
+
+	bool IsExtendedFarWaterEnabled()
+	{
+		return extendedFarWater.load(std::memory_order_acquire);
+	}
+
 	// Custom include handler to track all includes during shader compilation
 	class TrackingIncludeHandler : public ID3DInclude
 	{
@@ -495,6 +516,10 @@ namespace SIE
 					"5", "6", "7" } };
 				defines[lastIndex++] = { "SPECULAR", nullptr };
 				defines[lastIndex++] = { "NUM_SPECULAR_LIGHTS", numLightDefines[technique] };
+			}
+
+			if (SIE::IsExtendedFarWaterEnabled()) {
+				defines[lastIndex++] = { "FAR_WATER", nullptr };
 			}
 
 			for (auto* feature : Feature::GetFeatureList()) {
@@ -2418,6 +2443,29 @@ namespace SIE
 			valid = false;
 		}
 
+		// Detect installed providers of water geometry beyond the far clip plane. This runs
+		// at kPostPostLoad - every SKSE plugin is loaded, no water shader is compiled yet.
+		// The result changes the water shader defines, so a provider appearing or
+		// disappearing between sessions must invalidate the disk cache below.
+		{
+			bool farWaterDetected = false;
+			for (const auto* provider : farWaterProviderDlls) {
+				if (GetModuleHandleW(provider) != nullptr) {
+					logger::info("Extended far water provider detected ({}); water shaders will support geometry beyond the far clip plane",
+						Util::WStringToString(provider));
+					farWaterDetected = true;
+				}
+			}
+			extendedFarWater.store(farWaterDetected, std::memory_order_release);
+
+			const bool cachedFarWater = ini.GetBoolValue("Cache", "ExtendedFarWater", false);
+			if (cachedFarWater != farWaterDetected) {
+				logger::info("Disk cache outdated: extended far water changed (current: {}, cached: {})",
+					farWaterDetected, cachedFarWater);
+				valid = false;
+			}
+		}
+
 		if (valid) {
 			logger::info("Using disk cache");
 		} else {
@@ -2430,6 +2478,7 @@ namespace SIE
 		CSimpleIniA ini;
 		ini.SetUnicode();
 		ini.SetValue("Cache", "PluginVersion", Plugin::VERSION.string().c_str());
+		ini.SetBoolValue("Cache", "ExtendedFarWater", IsExtendedFarWaterEnabled());
 		globals::state->WriteDiskCacheInfo(ini);
 		ini.SaveFile(L"Data\\ShaderCache\\Info.ini");
 		logger::info("Saved disk cache info (plugin version: {})", Plugin::VERSION.string());
