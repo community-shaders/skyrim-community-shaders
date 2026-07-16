@@ -1,5 +1,5 @@
-#if defined(FAR_WATER)
-namespace FarWater
+#if defined(HORIZON_FIX)
+namespace HorizonFix
 {
 	// Depth (z/w) that water folded back from beyond the far clip plane lands at: eight
 	// depth quanta inside the far plane, exactly representable in both D24 and D32F
@@ -178,8 +178,8 @@ VS_OUTPUT main(VS_INPUT input)
 	vsout.HPosition.z = heightMult * 0.5 + worldViewPos.z;
 	vsout.HPosition.w = worldViewPos.w;
 
-#	if defined(FAR_WATER)
-	vsout.HPosition.z = min(vsout.HPosition.z, vsout.HPosition.w * FarWater::FoldedDepth);
+#	if defined(HORIZON_FIX)
+	vsout.HPosition.z = min(vsout.HPosition.z, vsout.HPosition.w * HorizonFix::FoldedDepth);
 #	endif
 
 #		if defined(STENCIL)
@@ -912,8 +912,8 @@ DiffuseOutput GetWaterDiffuseColor(PS_INPUT input, float3 normal, float3 viewDir
 		refractionWorldPosition.xyz /= refractionWorldPosition.w;
 	}
 
-#					if defined(FAR_WATER)
-	if (DepthTex.Load(float3(refractionScreenPosition, 0)).x >= FarWater::EmptyDepthThreshold)
+#					if defined(HORIZON_FIX)
+	if (DepthTex.Load(float3(refractionScreenPosition, 0)).x >= HorizonFix::EmptyDepthThreshold)
 		distanceMul = 1.0.xxxx;
 #					endif
 #				endif
@@ -1021,8 +1021,8 @@ PS_OUTPUT main(PS_INPUT input)
 		planeMul * float4(length(depthAdjustedViewDirection).xx, abs(viewSurfaceAngle).xx) /
 		FogParam.z);
 
-#					if defined(FAR_WATER)
-	if (DepthTex.Load(float3(screenPosition, 0)).x >= FarWater::EmptyDepthThreshold)
+#					if defined(HORIZON_FIX)
+	if (DepthTex.Load(float3(screenPosition, 0)).x >= HorizonFix::EmptyDepthThreshold)
 		distanceMul = 1.0.xxxx;
 #					endif
 #				endif
