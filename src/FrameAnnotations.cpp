@@ -24,44 +24,6 @@ namespace FrameAnnotations
 		}
 	}
 
-	template <RE::BSShader::Type ShaderType>
-	struct BSShader_SetupGeometry
-	{
-		static void thunk(RE::BSShader* shader, RE::BSRenderPass* pass, uint32_t renderFlags)
-		{
-			if (globals::state->frameAnnotations) {
-				uint32_t descriptor = 0;
-				if (globals::game::currentPixelShader && *globals::game::currentPixelShader) {
-					descriptor = (*globals::game::currentPixelShader)->id;
-				}
-				const std::string definesSuffix = Util::GetShaderDefinesSuffix(globals::state->shaderDefinesString);
-				std::string diskPath = std::format("Data/ShaderCache/{}/{:X}{}.pso", shader->fxpFilename, descriptor, definesSuffix);
-				const std::string passName = std::format("[{}:{:X}] ({:X}) <{}> {} -> {}", magic_enum::enum_name(ShaderType), descriptor, pass->passEnum,
-					pass->accumulationHint, pass->geometry->name.c_str(), diskPath);
-				globals::state->BeginPerfEvent(passName);
-			}
-
-			func(shader, pass, renderFlags);
-		}
-
-		static inline REL::Relocation<decltype(thunk)> func;
-	};
-
-	template <RE::BSShader::Type ShaderType>
-	struct BSShader_RestoreGeometry
-	{
-		static void thunk(RE::BSShader* shader, RE::BSRenderPass* pass, uint32_t renderFlags)
-		{
-			func(shader, pass, renderFlags);
-
-			if (globals::state->frameAnnotations) {
-				globals::state->EndPerfEvent();
-			}
-		}
-
-		static inline REL::Relocation<decltype(thunk)> func;
-	};
-
 	template <RE::ImageSpaceManager::ImageSpaceEffectEnum EffectType>
 	struct BSImagespaceShader_Render
 	{
@@ -275,7 +237,7 @@ namespace FrameAnnotations
 	{
 		static void thunk(void* accumulator, uint32_t renderFlags)
 		{
-			globals::state->BeginPerfEvent("Effects");
+			globals::state->BeginPerfEvent("Transparency");
 
 			func(accumulator, renderFlags);
 
@@ -340,44 +302,6 @@ namespace FrameAnnotations
 			return;
 
 		stl::detour_thunk<Main_RenderShadowmasks>(REL::RelocationID(100422, 107140));
-
-		stl::write_vfunc<0x6, BSShader_SetupGeometry<RE::BSShader::Type::Lighting>>(
-			RE::VTABLE_BSLightingShader[0]);
-		stl::write_vfunc<0x6, BSShader_SetupGeometry<RE::BSShader::Type::Effect>>(
-			RE::VTABLE_BSEffectShader[0]);
-		stl::write_vfunc<0x6, BSShader_SetupGeometry<RE::BSShader::Type::Water>>(
-			RE::VTABLE_BSWaterShader[0]);
-		stl::write_vfunc<0x6, BSShader_SetupGeometry<RE::BSShader::Type::Utility>>(
-			RE::VTABLE_BSUtilityShader[0]);
-		stl::write_vfunc<0x6, BSShader_SetupGeometry<RE::BSShader::Type::Particle>>(
-			RE::VTABLE_BSParticleShader[0]);
-		stl::write_vfunc<0x6, BSShader_SetupGeometry<RE::BSShader::Type::Grass>>(
-			RE::VTABLE_BSGrassShader[0]);
-		stl::write_vfunc<0x6, BSShader_SetupGeometry<RE::BSShader::Type::DistantTree>>(
-			RE::VTABLE_BSDistantTreeShader[0]);
-		stl::write_vfunc<0x6, BSShader_SetupGeometry<RE::BSShader::Type::BloodSplatter>>(
-			RE::VTABLE_BSBloodSplatterShader[0]);
-		stl::write_vfunc<0x6, BSShader_SetupGeometry<RE::BSShader::Type::Sky>>(
-			RE::VTABLE_BSSkyShader[0]);
-
-		stl::write_vfunc<0x7, BSShader_RestoreGeometry<RE::BSShader::Type::Lighting>>(
-			RE::VTABLE_BSLightingShader[0]);
-		stl::write_vfunc<0x7, BSShader_RestoreGeometry<RE::BSShader::Type::Effect>>(
-			RE::VTABLE_BSEffectShader[0]);
-		stl::write_vfunc<0x7, BSShader_RestoreGeometry<RE::BSShader::Type::Water>>(
-			RE::VTABLE_BSWaterShader[0]);
-		stl::write_vfunc<0x7, BSShader_RestoreGeometry<RE::BSShader::Type::Utility>>(
-			RE::VTABLE_BSUtilityShader[0]);
-		stl::write_vfunc<0x7, BSShader_RestoreGeometry<RE::BSShader::Type::Particle>>(
-			RE::VTABLE_BSParticleShader[0]);
-		stl::write_vfunc<0x7, BSShader_RestoreGeometry<RE::BSShader::Type::Grass>>(
-			RE::VTABLE_BSGrassShader[0]);
-		stl::write_vfunc<0x7, BSShader_RestoreGeometry<RE::BSShader::Type::DistantTree>>(
-			RE::VTABLE_BSDistantTreeShader[0]);
-		stl::write_vfunc<0x7, BSShader_RestoreGeometry<RE::BSShader::Type::BloodSplatter>>(
-			RE::VTABLE_BSBloodSplatterShader[0]);
-		stl::write_vfunc<0x7, BSShader_RestoreGeometry<RE::BSShader::Type::Sky>>(
-			RE::VTABLE_BSSkyShader[0]);
 
 		stl::write_vfunc<0x1, BSImagespaceShader_Render<RE::ImageSpaceManager::ISFXAA>>(
 			RE::VTABLE_BSImagespaceShaderFXAA[3]);

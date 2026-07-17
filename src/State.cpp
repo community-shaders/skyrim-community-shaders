@@ -16,6 +16,7 @@
 #include "Features/SkySync.h"
 #include "Features/TerrainBlending.h"
 #include "Features/TerrainHelper.h"
+#include "Features/OrderIndependentTransparency.h"
 #include "Features/Upscaling.h"
 #include "Features/VolumetricShadows.h"
 #include "Menu.h"
@@ -57,6 +58,7 @@ void State::Draw()
 	auto& terrainHelper = globals::features::terrainHelper;
 	auto& cloudShadows = globals::features::cloudShadows;
 	auto& csEditor = globals::features::csEditor;
+	auto& oit = globals::features::orderIndependentTransparency;
 	auto& skin = globals::features::skin;
 	auto& truePBR = globals::features::truePBR;
 	auto context = globals::d3d::context;
@@ -95,6 +97,9 @@ void State::Draw()
 			ZoneScopedN("TruePBR::SetShaderResources");
 			truePBR.SetShaderResources(context);
 		}
+
+		if (oit.loaded)
+			oit.PreDrawHack();
 
 		if (permutationData != permutationDataPrevious) {
 			permutationCB->Update(permutationData);
@@ -816,6 +821,7 @@ void State::SetupResources()
 void State::ModifyShaderLookup(const RE::BSShader& a_shader, uint& a_vertexDescriptor, uint& a_pixelDescriptor, bool a_forceDeferred)
 {
 	auto deferred = globals::deferred;
+	const auto& oit = globals::features::orderIndependentTransparency;
 
 	if (a_shader.shaderType.get() != RE::BSShader::Type::Utility && a_shader.shaderType.get() != RE::BSShader::Type::ImageSpace) {
 		switch (a_shader.shaderType.get()) {
@@ -850,6 +856,9 @@ void State::ModifyShaderLookup(const RE::BSShader& a_shader, uint& a_vertexDescr
 
 				if (deferred->deferredPass || a_forceDeferred)
 					a_pixelDescriptor |= (uint32_t)SIE::ShaderCache::LightingShaderFlags::Deferred;
+
+				if (inWorld && oit.ShouldCapture())
+					a_pixelDescriptor |= (uint32_t)SIE::ShaderCache::LightingShaderFlags::OIT;
 
 				{
 					uint32_t technique = 0x3F & (a_vertexDescriptor >> 24);
@@ -890,6 +899,9 @@ void State::ModifyShaderLookup(const RE::BSShader& a_shader, uint& a_vertexDescr
 
 				if (deferred->deferredPass || a_forceDeferred)
 					a_pixelDescriptor |= (uint32_t)SIE::ShaderCache::EffectShaderFlags::Deferred;
+
+				if (inWorld && oit.ShouldCapture())
+					a_pixelDescriptor |= (uint32_t)SIE::ShaderCache::EffectShaderFlags::OIT;
 			}
 			break;
 		case RE::BSShader::Type::DistantTree:
@@ -914,6 +926,16 @@ void State::ModifyShaderLookup(const RE::BSShader& a_shader, uint& a_vertexDescr
 				a_vertexDescriptor = flags | technique;
 			}
 			break;
+		case RE::BSShader::Type::Particle:
+			{
+				if (a_pixelDescriptor & (uint32_t)SIE::ShaderCache::ParticleShaderFlags::OIT)
+				{
+					logger::error("Particle flag {:x}", a_pixelDescriptor);
+				}
+				if (inWorld && oit.ShouldCapture())
+					a_pixelDescriptor |= (uint32_t)SIE::ShaderCache::ParticleShaderFlags::OIT;
+			}
+			break;
 		}
 	}
 }
@@ -935,6 +957,11 @@ void State::BeginPerfEvent(std::string_view title)
 	pPerf->BeginEvent(std::wstring(title.begin(), title.end()).c_str());
 }
 
+void State::BeginPerfEvent(const wchar_t* title)
+{
+	pPerf->BeginEvent(title);
+}
+
 void State::EndPerfEvent()
 {
 #ifdef TRACY_ENABLE
@@ -948,9 +975,26 @@ void State::EndPerfEvent()
 	pPerf->EndEvent();
 }
 
+State::PerfEvent::PerfEvent(const wchar_t* title)
+{
+	if (globals::state->frameAnnotations)
+		globals::state->BeginPerfEvent(title);
+}
+
+State::PerfEvent::~PerfEvent()
+{
+	if (globals::state->frameAnnotations)
+		globals::state->EndPerfEvent();
+}
+
 void State::SetPerfMarker(std::string_view title)
 {
 	pPerf->SetMarker(std::wstring(title.begin(), title.end()).c_str());
+}
+
+void State::SetPerfMarker(const wchar_t* title)
+{
+	pPerf->SetMarker(title);
 }
 
 void State::SetAdapterDescription(const std::wstring& description)

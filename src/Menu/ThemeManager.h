@@ -59,7 +59,7 @@ using json = nlohmann::json;
  *
  *     // Status indicator colors
  *     "StatusPalette": {
- *       "Disable": [0.5, 0.5, 0.5, 1.0],         // Disabled elements
+ *       "Disable": [0.5, 0.5, 0.5, 1.0],         // OIT_DISABLED elements
  *       "Error": [1.0, 0.4, 0.4, 1.0],           // Error messages
  *       "Warning": [1.0, 0.6, 0.2, 1.0],         // Warning messages
  *       "RestartNeeded": [0.4, 1.0, 0.4, 1.0],   // Restart required indicator

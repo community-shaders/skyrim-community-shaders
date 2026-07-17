@@ -49,6 +49,7 @@ PS_OUTPUT main(PS_INPUT input)
 #	include "Common/Random.hlsli"
 #	include "Common/Shading.hlsli"
 #	include "Common/Color.hlsli"
+#	include "Common/MotionBlur.hlsli"
 
 #	define WATER
 
@@ -314,11 +315,13 @@ TextureCube<float4> CubeMapTex : register(t3);
 Texture2D<float4> Normals01Tex : register(t4);
 Texture2D<float4> Normals02Tex : register(t5);
 Texture2D<float4> Normals03Tex : register(t6);
-Texture2D<float4> DepthTex : register(t7);
+Texture2D<unorm float> DepthTex : register(t7);
 Texture2D<float4> FlowMapTex : register(t8);
 Texture2D<float4> FlowMapNormalsTex : register(t9);
 Texture2D<float4> SSRReflectionTex : register(t10);
 Texture2D<float4> RawSSRReflectionTex : register(t11);
+
+Texture2D<float4> AlphaOnlyTex : register(t66);
 
 cbuffer PerTechnique : register(b0)
 {
@@ -887,14 +890,22 @@ DiffuseOutput GetWaterDiffuseColor(PS_INPUT input, float3 normal, float3 viewDir
 		refractionUvRaw = FrameBuffer::DynamicResolutionParams2.xy * input.HPosition.xy * VPOSOffset.xy + VPOSOffset.zw;
 	} else {
 		distanceMul = saturate(refractionPlaneMul * float4(length(refractionDepthAdjustedViewDirection).xx, abs(refractionViewSurfaceAngle).xx) / FogParam.z);
+	}
 
 		refractionWorldPosition = mul(FrameBuffer::CameraViewProjInverse, float4((refractionUvRaw * 2 - 1) * float2(1, -1), DepthTex.Load(float3(refractionScreenPosition, 0)).x, 1));
 		refractionWorldPosition.xyz /= refractionWorldPosition.w;
-	}
+
+	// Blend in alpha texture from last frame
+	float2 cameraMotionVector = -MotionBlur::GetSSMotionVector2(refractionWorldPosition);
+#else
+	float2 cameraMotionVector = 0;
 #				endif
 
 	float2 refractionUV = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(refractionUvRaw);
+	float2 refractionAlphaUV = FrameBuffer::GetPreviousDynamicResolutionAdjustedScreenPosition(refractionUvRaw - cameraMotionVector);
 	float3 refractionColor = RefractionTex.Sample(RefractionSampler, refractionUV).xyz;
+	float4 refractionAlphaColor = AlphaOnlyTex.Sample(RefractionSampler, refractionAlphaUV);
+	refractionColor = (1.0 - refractionAlphaColor.w) * refractionColor + refractionAlphaColor.xyz * refractionAlphaColor.w;
 	float3 refractionDiffuseColor = lerp(Color::Water(ShallowColor.xyz), Color::Water(DeepColor.xyz), distanceMul.y);
 
 #				if defined(UNDERWATER)

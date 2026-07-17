@@ -303,6 +303,11 @@ struct PS_OUTPUT
 {
 	float4 Diffuse: SV_Target0;
 	float4 MotionVectors: SV_Target1;
+#	if defined(OIT) && OIT == 3
+	float4 OITFrontAccumalation: SV_Target3;
+	float4 OITAccumalation: SV_Target4;
+	float4 OITRevealage: SV_Target5;
+#	endif
 };
 #endif
 
@@ -878,9 +883,19 @@ float GetSnowParameterY(float texProjTmp, float alpha)
 #		include "ExponentialHeightFog/ExponentialHeightFog.hlsli"
 #	endif
 
+#	if defined(OIT)
+#		define OIT_WRITE_DEPTH 1
+#		include "OIT/OITCapture.hlsli"
+#	endif
+
 #	include "Common/LightingEval.hlsli"
 
+#	if defined(OIT)
+[earlydepthstencil]
 PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
+#else
+PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
+#endif
 {
 	PS_OUTPUT psout;
 
@@ -890,7 +905,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float2 screenUV = FrameBuffer::ViewToUV(viewPosition);
 	float screenNoise = Random::InterleavedGradientNoise(input.Position.xy, SharedData::FrameCount);
 
-#	if defined(DEFERRED)
+#if defined(DEFERRED)
 	const bool inWorld = true;
 #	else
 	const bool inWorld = (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InWorld);
@@ -3393,6 +3408,16 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	}
 #	endif
 
+#if defined(OIT)
+#if OIT == 3 && !defined(DEFERRED)
+	WBOITResult oit = OIT_CaptureWBOIT(int2(input.Position.xy), psout.Diffuse, input.Position.z);
+	psout.OITFrontAccumalation = oit.accumFront;
+	psout.OITAccumalation = oit.accumAll;
+	psout.OITRevealage = oit.revealage;
+#else
+	psout.Diffuse = OIT_Capture(int2(input.Position.xy), psout.Diffuse, input.Position.z);
+#endif
+#endif
 	return psout;
 }
 #endif  // PSHADER
