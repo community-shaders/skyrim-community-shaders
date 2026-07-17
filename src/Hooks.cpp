@@ -15,6 +15,7 @@
 #include "Features/InteriorSun.h"
 #include "Features/ScreenshotFeature.h"
 #include "Features/LightLimitFix.h"
+#include "Features/OrderIndependentTransparency.h"
 #include "Features/Skin.h"
 #include "Features/SkySync.h"
 #include "Features/Upscaling.h"
@@ -394,6 +395,7 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 
 void Hooks::BSGraphics_SetDirtyStates::thunk(bool isCompute)
 {
+	globals::features::orderIndependentTransparency.PreSetStateDirty();
 	func(isCompute);
 	globals::state->Draw();
 }

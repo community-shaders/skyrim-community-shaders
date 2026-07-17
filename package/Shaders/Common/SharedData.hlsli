@@ -212,6 +212,22 @@ namespace SharedData
 		float Softness;      // [0, 2.0] The soft remap upper limit [0,2]
 		float Strength;      // [0, 1.0] The inverse blend weight of the effect
 	};
+	
+	struct OrderIndependentTransparencySettings
+	{
+		uint  MaxListNodes;
+		uint  Flags;
+		float AlphaThreshold;
+		float DepthThreshold;
+		float WBOITAdditiveAlphaScale;
+		float WBOITMinProjectedDistance;
+		float WBOITWeightMin;
+		float WBOITWeightMax;
+		float SSRAlphaScale;
+		float Pad0;
+		float Pad1;
+		float Pad2;
+	};
 
 	struct LinearLightingSettings
 	{
@@ -362,6 +378,7 @@ namespace SharedData
 		TerrainVariationSettings terrainVariationSettings;
 		IBLSettings iblSettings;
 		ExtendedTranslucencySettings extendedTranslucencySettings;
+		OrderIndependentTransparencySettings orderIndependentTransparencySettings;
 		LinearLightingSettings linearLightingSettings;
 		ENBSettings enbSettings;
 		TerrainBlendingSettings terrainBlendingSettings;

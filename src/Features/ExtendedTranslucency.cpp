@@ -31,12 +31,18 @@ void ExtendedTranslucency::BSLightingShader_SetupGeometry(RE::BSRenderPass* pass
 
 	auto& property0 = pass->geometry->GetGeometryRuntimeData().alphaProperty;
 	auto& property1 = pass->geometry->GetGeometryRuntimeData().shaderProperty;
+	auto* property2 = pass->shaderProperty;
 	auto alphaProperty = property0 && property0->GetRTTI() == globals::rtti::NiAlphaPropertyRTTI.get() ? static_cast<RE::NiAlphaProperty*>(property0.get()) : nullptr;
 	auto lightProperty = property1 && property1->GetRTTI() == globals::rtti::BSLightingShaderPropertyRTTI.get() ? static_cast<RE::BSLightingShaderProperty*>(property1.get()) : nullptr;
+	auto passProperty  = property2 && property2->GetRTTI() == globals::rtti::BSLightingShaderPropertyRTTI.get() ? static_cast<RE::BSLightingShaderProperty*>(property2) : nullptr;
+
+	bool hasAlpha = passProperty && passProperty->alpha < 0.999f || 
+					lightProperty && lightProperty->alpha < 0.99 ||
+					alphaProperty && alphaProperty->GetAlphaBlending();
 
 	// This effect only matters when alpha property exists and blending is enabled
 	// Geometries with alpha < 1 have an implicit alpha blend property
-	if (!(lightProperty && lightProperty->alpha < 0.999f) && (!alphaProperty || !alphaProperty->GetAlphaBlending())) {
+	if (!hasAlpha) {
 		return;
 	}
 

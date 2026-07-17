@@ -16,6 +16,7 @@
 #include <dxgi1_4.h>
 #include <dxgi1_6.h>
 #include <imgui.h>
+#include "OrderIndependentTransparency.h"
 
 #define I18N_KEY_PREFIX "feature.hdr_display."
 
@@ -933,8 +934,10 @@ namespace
 	{
 		static void WINAPI thunk(ID3D11DeviceContext* This, ID3D11BlendState* pBlendState, const FLOAT BlendFactor[4], UINT SampleMask)
 		{
-			if (pBlendState) {
-				auto& hdr = globals::features::hdrDisplay;
+			// TODO(hdr): only enable this hook on the UI composition pass, OIT needs custom blend in alpha pass
+			// Also suspicious if this break additive or multiplicative layers (when OIT not enable)
+			auto& hdr = globals::features::hdrDisplay;
+			if (pBlendState && hdr.forceStandardAlphaBlending) {
 				const bool d3d11HdrCapture = hdr.loaded && hdr.settings.enableHDR && hdr.uiTexture;
 				const bool fgCapture = globals::features::upscaling.d3d12SwapChainActive;
 				if (d3d11HdrCapture || fgCapture)
