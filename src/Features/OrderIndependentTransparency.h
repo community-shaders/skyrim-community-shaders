@@ -1,7 +1,7 @@
 #pragma once
 #include "Feature.h"
 
-struct OrderIndependentTransparency : Feature
+struct OrderIndependentTransparency final : Feature
 {
 	virtual inline std::string GetName() override { return "Order Independent Transparency"; }
 	virtual std::string GetDisplayName() override { return T("feature.order_independent_transparency.name", "Order Independent Transparency"); }

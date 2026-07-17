@@ -8,7 +8,6 @@
 
 #define I18N_KEY_PREFIX "feature.order_independent_transparency."
 
-#pragma optimize("", off)
 NLOHMANN_JSON_SERIALIZE_ENUM(OrderIndependentTransparency::Method,
 	{ 
 		{ OrderIndependentTransparency::Method::OIT_DISABLED, "Disabled" },
@@ -83,21 +82,28 @@ bool OrderIndependentTransparency::UpdateShaderDefines()
 	return false;
 }
 
-bool OrderIndependentTransparency::HasShaderDefine(RE::BSShader::Type shaderType)
+bool OrderIndependentTransparency::HasShaderDefine(RE::BSShader::Type /*shaderType*/)
 {
-	return shaderType != shaderType;
-	// return shaderType == RE::BSShader::Type::Lighting
-		//|| shaderType == RE::BSShader::Type::Water
-		//|| shaderType == RE::BSShader::Type::Grass
-		;
+	return false;
 }
 
 struct Main_RenderWorld_RenderTransparency
 {
-	// static void* __fastcall thunk(RE::NiCamera*, RE::BSShaderAccumulator*, std::int64_t);
 	static void thunk(RE::BSShaderAccumulator* accumulator, uint32_t renderFlags);
 	static inline REL::Relocation<decltype(thunk)> func;
 };
+
+inline consteval bool ShaderTypeHasOIT(RE::BSShader::Type shaderType)
+{
+	switch (shaderType) {
+	case RE::BSShader::Type::Lighting:
+	case RE::BSShader::Type::Effect:
+	case RE::BSShader::Type::Particle:
+		return true;
+	default:
+		return false;
+	}
+}
 
 template <RE::BSShader::Type ShaderType>
 struct BSShader_SetupGeometry
@@ -116,7 +122,10 @@ struct BSShader_SetupGeometry
 			globals::state->BeginPerfEvent(passName);
 		}
 
-		globals::features::orderIndependentTransparency.SetupGeometry(shader, pass, renderFlags);
+		if constexpr (ShaderTypeHasOIT(ShaderType))
+		{
+			globals::features::orderIndependentTransparency.SetupGeometry(shader, pass, renderFlags);
+		}
 
 		func(shader, pass, renderFlags);
 	}
@@ -131,7 +140,10 @@ struct BSShader_RestoreGeometry
 	{
 		func(shader, pass, renderFlags);
 
-		globals::features::orderIndependentTransparency.RestoreGeometry(shader, pass, renderFlags);
+		if constexpr (ShaderTypeHasOIT(ShaderType))
+		{
+			globals::features::orderIndependentTransparency.RestoreGeometry(shader, pass, renderFlags);
+		}
 
 		if (globals::state->frameAnnotations) {
 			globals::state->EndPerfEvent();
@@ -162,64 +174,48 @@ struct Renderer_Flush
 		// So we have to hook in this level
 		auto& oit = globals::features::orderIndependentTransparency;
 		oit.PreSetStateDirty();
-		//if (oit.inAlphaPass)
-		//{
-		//	globals::game::stateUpdateFlags->set(false, RE::BSGraphics::ShaderFlags::DIRTY_RENDERTARGET);
-		//	globals::game::stateUpdateFlags->set(false, RE::BSGraphics::ShaderFlags::DIRTY_DEPTH_MODE);
-
-		//	// Force depth to test only (not write)
-		//	auto shadowState = globals::game::shadowState;
-		//	GET_INSTANCE_MEMBER(depthStencil, shadowState);
-		//	GET_INSTANCE_MEMBER(depthStencilDepthMode, shadowState);
-		//	depthStencil = 0;
-		//	depthStencilDepthMode = RE::BSGraphics::DepthStencilDepthMode::kTest;
-		//}
 		func(renderer, flags);
 	}
 	static inline REL::Relocation<decltype(thunk)> func;
 };
 
+template <RE::BSShader::Type ShaderType> constexpr REL::VariantID VTABLE_BSShader;
+template<> constexpr REL::VariantID VTABLE_BSShader<RE::BSShader::Type::Lighting> = RE::VTABLE_BSLightingShader[0];
+template<> constexpr REL::VariantID VTABLE_BSShader<RE::BSShader::Type::Effect> = RE::VTABLE_BSEffectShader[0];
+template<> constexpr REL::VariantID VTABLE_BSShader<RE::BSShader::Type::Water> = RE::VTABLE_BSWaterShader[0];
+template<> constexpr REL::VariantID VTABLE_BSShader<RE::BSShader::Type::Utility> = RE::VTABLE_BSUtilityShader[0];
+template<> constexpr REL::VariantID VTABLE_BSShader<RE::BSShader::Type::Particle> = RE::VTABLE_BSParticleShader[0];
+template<> constexpr REL::VariantID VTABLE_BSShader<RE::BSShader::Type::Grass> = RE::VTABLE_BSGrassShader[0];
+template<> constexpr REL::VariantID VTABLE_BSShader<RE::BSShader::Type::DistantTree> = RE::VTABLE_BSDistantTreeShader[0];
+template<> constexpr REL::VariantID VTABLE_BSShader<RE::BSShader::Type::BloodSplatter> = RE::VTABLE_BSBloodSplatterShader[0];
+template<> constexpr REL::VariantID VTABLE_BSShader<RE::BSShader::Type::Sky> = RE::VTABLE_BSSkyShader[0];
+template <RE::BSShader::Type ShaderType>
+void HookSetupGeometry()
+{
+	stl::write_vfunc<0x6, BSShader_SetupGeometry<ShaderType>>(VTABLE_BSShader<ShaderType>);
+	stl::write_vfunc<0x7, BSShader_RestoreGeometry<ShaderType>>(VTABLE_BSShader<ShaderType>);
+}
+
 void OrderIndependentTransparency::PostPostLoad()
 {
-	stl::write_vfunc<0x6, BSShader_SetupGeometry<RE::BSShader::Type::Lighting>>(
-		RE::VTABLE_BSLightingShader[0]);
-	stl::write_vfunc<0x6, BSShader_SetupGeometry<RE::BSShader::Type::Effect>>(
-		RE::VTABLE_BSEffectShader[0]);
-	stl::write_vfunc<0x6, BSShader_SetupGeometry<RE::BSShader::Type::Water>>(
-		RE::VTABLE_BSWaterShader[0]);
-	stl::write_vfunc<0x6, BSShader_SetupGeometry<RE::BSShader::Type::Utility>>(
-		RE::VTABLE_BSUtilityShader[0]);
-	stl::write_vfunc<0x6, BSShader_SetupGeometry<RE::BSShader::Type::Particle>>(
-		RE::VTABLE_BSParticleShader[0]);
-	stl::write_vfunc<0x6, BSShader_SetupGeometry<RE::BSShader::Type::Grass>>(
-		RE::VTABLE_BSGrassShader[0]);
-	stl::write_vfunc<0x6, BSShader_SetupGeometry<RE::BSShader::Type::DistantTree>>(
-		RE::VTABLE_BSDistantTreeShader[0]);
-	stl::write_vfunc<0x6, BSShader_SetupGeometry<RE::BSShader::Type::BloodSplatter>>(
-		RE::VTABLE_BSBloodSplatterShader[0]);
-	stl::write_vfunc<0x6, BSShader_SetupGeometry<RE::BSShader::Type::Sky>>(
-		RE::VTABLE_BSSkyShader[0]);
+	logger::info("[OIT] Hooking BSShader_SetupGeometry");
+	// For gathering object view distance, seems conflicting with frame annotation hooks
+	HookSetupGeometry<RE::BSShader::Type::Lighting>();
+	HookSetupGeometry<RE::BSShader::Type::Effect>();
+	HookSetupGeometry<RE::BSShader::Type::Particle>();
 
-	stl::write_vfunc<0x7, BSShader_RestoreGeometry<RE::BSShader::Type::Lighting>>(
-		RE::VTABLE_BSLightingShader[0]);
-	stl::write_vfunc<0x7, BSShader_RestoreGeometry<RE::BSShader::Type::Effect>>(
-		RE::VTABLE_BSEffectShader[0]);
-	stl::write_vfunc<0x7, BSShader_RestoreGeometry<RE::BSShader::Type::Water>>(
-		RE::VTABLE_BSWaterShader[0]);
-	stl::write_vfunc<0x7, BSShader_RestoreGeometry<RE::BSShader::Type::Utility>>(
-		RE::VTABLE_BSUtilityShader[0]);
-	stl::write_vfunc<0x7, BSShader_RestoreGeometry<RE::BSShader::Type::Particle>>(
-		RE::VTABLE_BSParticleShader[0]);
-	stl::write_vfunc<0x7, BSShader_RestoreGeometry<RE::BSShader::Type::Grass>>(
-		RE::VTABLE_BSGrassShader[0]);
-	stl::write_vfunc<0x7, BSShader_RestoreGeometry<RE::BSShader::Type::DistantTree>>(
-		RE::VTABLE_BSDistantTreeShader[0]);
-	stl::write_vfunc<0x7, BSShader_RestoreGeometry<RE::BSShader::Type::BloodSplatter>>(
-		RE::VTABLE_BSBloodSplatterShader[0]);
-	stl::write_vfunc<0x7, BSShader_RestoreGeometry<RE::BSShader::Type::Sky>>(
-		RE::VTABLE_BSSkyShader[0]);
+	if (globals::state->frameAnnotations)
+	{
+		// Pure frame annotation hooks
+		HookSetupGeometry<RE::BSShader::Type::Water>();
+		HookSetupGeometry<RE::BSShader::Type::Utility>();
+		HookSetupGeometry<RE::BSShader::Type::Grass>();
+		HookSetupGeometry<RE::BSShader::Type::DistantTree>();
+		HookSetupGeometry<RE::BSShader::Type::BloodSplatter>();
+		HookSetupGeometry<RE::BSShader::Type::Sky>();
+	}
 
-	logger::info("[OIT] Hooking OrderIndependentTransparency::Main_RenderWorld_RenderTransparency");
+	logger::info("[OIT] Hooking Main_RenderWorld_RenderTransparency");
 
 	// std::uintptr_t address = REL::RelocationID(100424, 107142).address() + REL::Relocate(0x3E4, 0x3FE);
 	// REL::RelocationID(99938, 106583)
@@ -234,9 +230,6 @@ void OrderIndependentTransparency::PostPostLoad()
 		//_target.write_call<6>(OMSetRenderTargets_Hook);
 		//stl::write_thunk_call<Renderer_Flush_OMSetRenderTargets, 6>(REL::ID(77247).address() + 0x1A8);
 		stl::detour_thunk<Renderer_Flush>(REL::RelocationID(77247, 77247));
-		REL::IDDatabase::Offset2ID offset2id;
-		auto id = offset2id(0x14EA1B0);
-		logger::info("[OIT] Effect shader something id {}", id);
 	}
 }
 
@@ -324,12 +317,14 @@ void OrderIndependentTransparency::DrawSettings()
 				"Fast, but may flicker or show artifacts beyond the layer limit.\n"
 				"Typically uses about 10% more GPU time and is memory-bound."));
 		}
-		dirtied.ShaderDefines |= ImGui::RadioButton(T(TKEY("method_quality"), "Quality"), (int*)&settings.Method, Method::OIT_RVO);
+		dirtied.ShaderDefines |= ImGui::RadioButton(T(TKEY("method_quality"), "Quality (Slow)"), (int*)&settings.Method, Method::OIT_RVO);
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text("%s", T(TKEY("method_quality_tooltip"),
-				"Uses Intel Adaptive Order-Independent Transparency (AOIT); requires DirectX 11.3 or newer.\n"
+				"Uses MLAB (Multi-Layer Alpha Blend), Intel's Adaptive Order-Independent Transparency (AOIT); requires DirectX 11.3 or newer.\n"
+				"Unreal Engine's default OIT method for its predictability.\n"
 				"Uses Rasterizer Ordered Views to avoid flickering with bounded memory.\n"
-				"Has a major performance cost compared with the other methods."));
+				"Has a major performance cost compared with the other methods.\n"
+				"Very expensive when Max Layers is greater than 4."));
 		}
 		ImGui::TreePop();
 	}
@@ -446,12 +441,6 @@ void OrderIndependentTransparency::OnSettingLoaded()
 	featureCB.AlphaThreshold = settings.AlphaThreshold;
 	featureCB.DepthThreshold = settings.DepthThreshold;
 	featureCB.Flags = settings.CaptureMultiplicativeLayer ? 1 : 0;
-	//if (UpdateShaderDefines()) {
-	//	logger::info("[OIT] Shader defines changed, clearing shader cache.");
-	//	globals::shaderCache->Clear();
-	//}
-	//SetupPixelBuffers();
-	//ClearShaderCache();
 }
 
 void OrderIndependentTransparency::LoadSettings(json& o_json)
@@ -469,6 +458,12 @@ void OrderIndependentTransparency::RestoreDefaultSettings()
 {
 	settings = {};
 	OnSettingLoaded();
+	if (UpdateShaderDefines()) {
+		logger::info("[OIT] Shader defines changed, clearing shader cache.");
+		globals::shaderCache->Clear();
+	}
+	SetupPixelBuffers();
+	ClearShaderCache();
 }
 
 void SetupRenderTarget(RE::RENDER_TARGET target, D3D11_TEXTURE2D_DESC texDesc, D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc, D3D11_RENDER_TARGET_VIEW_DESC rtvDesc, D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc, DXGI_FORMAT format, uint bindFlags);
@@ -686,31 +681,6 @@ void OrderIndependentTransparency::CompileShaders()
 
 	logger::info("[OIT] Compiling Order Independent Transparency shaders, OIT_NODE_COUNT={}, OIT_WRITE_DEPTH={}...", nodesStr, writeDepthDefine);
 
-	//if (!csAT)
-	//{
-	//	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\OIT\\OITResolve.cs.hlsl", { { "OIT_NODE_COUNT", nodesStr } }, "cs_5_0"))) {
-	//		csAT.attach(rawPtr);
-	//	} else {
-	//		logger::error("Failed to compile Order Independent Transparency resolve compute shader.");
-	//		return;
-	//	}
-	//}
-	//if (!csVisualize) {
-	//	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\OIT\\OITResolve.cs.hlsl", { { "OIT_DEBUG", "1" } }, "cs_5_0"))) {
-	//		csVisualize.attach(rawPtr);
-	//	} else {
-	//		logger::error("Failed to compile Order Independent Transparency visualize compute shader.");
-	//		return;
-	//	}
-	//}
-	//if (!csBlend) {
-	//	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\OIT\\OITResolve.cs.hlsl", { { "OIT_BLENDED", "1" } }, "cs_5_0"))) {
-	//		csBlend.attach(rawPtr);
-	//	} else {
-	//		logger::error("Failed to compile Order Independent Transparency weighted blend compute shader.");
-	//		return;
-	//	}
-	//}
 	if (/*settings.Method == OIT_VISUALIZE && */!psVisualize) {
 		if (auto rawPtr = reinterpret_cast<ID3D11PixelShader*>(Util::CompileShader(L"Data\\Shaders\\OIT\\OITResolve.ps.hlsl", { { "OIT_DEBUG", "1" } }, "ps_5_0"))) {
 			psVisualize.attach(rawPtr);
@@ -803,12 +773,7 @@ static bool CreateStructBuffer(std::optional<Buffer>& buffer, std::string_view n
 		D3D11_SRV_DIMENSION_BUFFER,
 		DXGI_FORMAT_UNKNOWN,
 		0, elements);
-	// D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc{};
-	// srvDesc.Format = DXGI_FORMAT_UNKNOWN;
-	// srvDesc.ViewDimension = D3D11_SRV_DIMENSION_BUFFEREX;
-	// srvDesc.BufferEx.FirstElement = 0;
-	// srvDesc.BufferEx.NumElements = elements;
-	// srvDesc.BufferEx.Flags = 0;
+
 	try {
 		buffer->CreateSRV(srvDesc);
 	} catch (const DX::com_exception& e) {
@@ -967,7 +932,6 @@ void OrderIndependentTransparency::PreDrawHack()
 	if (depthStencilDepthMode == kWrite || depthStencilDepthMode == kTestWrite || drawWriteDepth)
 	{
 		descriptor |= OITDepthWriteDescriptor;
-		// logger::info("Write depth @ descriptor {}.", descriptor);
 	}
 
 	if (settings.Method == Method::OIT_BLENDED)
@@ -1003,11 +967,13 @@ void OrderIndependentTransparency::SetupGeometry(RE::BSShader*, RE::BSRenderPass
 		return;
 	}
 
+	// This is how the engine sort the objects, projected distance in view direction
 	const RE::NiBound& geometryBound = pass->geometry->worldBound;
 	auto position = geometryBound.center;
 	auto viewPos = cameraWorldInverse * position;
 
-	// logger::debug("distance = {}, view position = {}", distance, viewPos);
+	// using bounding box extent can be good idea for regular objects
+	// but large volumetric fog can have a very large bounding box and break this hard
 	// float rdistance = distance - geometryBound.radius;
 	if (viewPos.y < settings.DistanceThreshold) {
 		closeEnough = true;
@@ -1029,6 +995,7 @@ void OrderIndependentTransparency::BeginAlphaGroup()
 	cameraWorldInverse = cameraWorld.Invert();
 	inAlphaPass = true;
 	calls = 0;
+	// don't need distance gating for blended OIT, whos cost does not scale with layers in the pixel
 	closeEnough = settings.Method == Method::OIT_BLENDED ||
 	              settings.DistanceThreshold + 1.f >= Settings::InfDistanceThreshold;
 
