@@ -114,9 +114,10 @@ float4 GetReflectionColor(
 
 				// Check that the reprojected data is within the frame
 				if (!FrameBuffer::IsOutsideFrame(reprojectedRaySample.xy))
-					alpha = float4(AlphaTex.SampleLevel(AlphaSampler, ConvertRaySamplePrevious(reprojectedRaySample.xy), 0).xyz, 1.0);
+					alpha = AlphaTex.SampleLevel(AlphaSampler, ConvertRaySamplePrevious(reprojectedRaySample.xy), 0);
 
-				float3 reflectionColor = color * (1 - alpha.w * SSRParams.z) + SSRParams.z * alpha.xyz * alpha.w;
+				// rgb channel in alpha texture is pre-multiplied
+				float3 reflectionColor = color * (1 - alpha.w * SSRParams.z) + SSRParams.z * alpha.xyz /* * alpha.w */;
 				return float4(reflectionColor, fadeFactor);
 			}
 
