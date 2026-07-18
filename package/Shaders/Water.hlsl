@@ -830,7 +830,7 @@ float3 GetWaterSpecularColor(PS_INPUT input, float3 normal, float3 viewDirection
 
 float GetScreenDepthWater(float2 screenPosition)
 {
-	float depth = DepthTex.Load(float3(screenPosition, 0)).x;
+	float depth = DepthTex.Load(float3(screenPosition, 0));
 	return (CameraDataWater.w / (-depth * CameraDataWater.z + CameraDataWater.x));
 }
 
@@ -892,7 +892,7 @@ DiffuseOutput GetWaterDiffuseColor(PS_INPUT input, float3 normal, float3 viewDir
 		distanceMul = saturate(refractionPlaneMul * float4(length(refractionDepthAdjustedViewDirection).xx, abs(refractionViewSurfaceAngle).xx) / FogParam.z);
 	}
 
-		refractionWorldPosition = mul(FrameBuffer::CameraViewProjInverse, float4((refractionUvRaw * 2 - 1) * float2(1, -1), DepthTex.Load(float3(refractionScreenPosition, 0)).x, 1));
+		refractionWorldPosition = mul(FrameBuffer::CameraViewProjInverse, float4((refractionUvRaw * 2 - 1) * float2(1, -1), DepthTex.Load(float3(refractionScreenPosition, 0)), 1));
 		refractionWorldPosition.xyz /= refractionWorldPosition.w;
 
 	// Blend in alpha texture from last frame
