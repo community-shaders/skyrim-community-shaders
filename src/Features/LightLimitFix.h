@@ -32,7 +32,7 @@ public:
 		Simple = (1 << 2),
 
 		Initialised = (1 << 8),
-		OIT_DISABLED = (1 << 9),
+		Disabled = (1 << 9),
 		InverseSquare = (1 << 10),
 		Linear = (1 << 11),
 	};

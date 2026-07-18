@@ -37,7 +37,7 @@ namespace
 
 	// Text Contrast and Opacity
 	// -------------------------
-	// OIT_DISABLED text alpha: Makes inactive UI elements visually distinct but still readable
+	// Disabled text alpha: Makes inactive UI elements visually distinct but still readable
 	// Value calibrated for accessibility - too low = invisible, too high = looks enabled
 	constexpr float DISABLED_TEXT_ALPHA = 0.3f;  // 30% opacity for disabled elements
 

@@ -59,7 +59,7 @@ void ExtendedTranslucency::BSLightingShader_SetupGeometry(RE::BSRenderPass* pass
 		if (data->GetRTTI() == globals::rtti::NiIntegerExtraDataRTTI.get()) {
 			uint32_t material = static_cast<uint32_t>(static_cast<const RE::NiIntegerExtraData*>(data)->value) & ExtraFeatureDescriptorMask;
 			// Promote `Disabled` in settings to `DescriptorDisabled` in shader
-			material = material == MaterialModel::OIT_DISABLED ? MaterialModel::DescriptorDisabled : material;
+			material = material == MaterialModel::Disabled ? MaterialModel::DescriptorDisabled : material;
 			SetFeatureDescriptor(material);
 		} else {
 			// logging is too expensive here, treat type error as disable, should only happen for modders

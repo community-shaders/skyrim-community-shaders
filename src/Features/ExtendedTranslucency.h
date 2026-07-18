@@ -43,13 +43,13 @@ struct ExtendedTranslucency final : Feature
 	// TODO: Support more material model like glasses or arcylic
 	enum MaterialModel : uint32_t
 	{
-		OIT_DISABLED = 0,           // In user settings, 0 means 'OIT_DISABLED'
+		Disabled = 0,           // In user settings, 0 means 'Disabled'
 		RimLight = 1,           // Similar effect like rim light
 		IsotropicFabric = 2,    // 1D fabric model, respect normal map
 		AnisotropicFabric = 3,  // 2D fabric model alone tangent and binormal, ignores normal map
 
-		DescriptorUseDefault = 0,  // In ExtraFeatureDescriptor, 0 means 'UseDefault' instead of 'OIT_DISABLED'
-		DescriptorDisabled = 7,    // In ExtraFeatureDescriptor, value >= 5 means 'OIT_DISABLED'
+		DescriptorUseDefault = 0,  // In ExtraFeatureDescriptor, 0 means 'UseDefault' instead of 'Disabled'
+		DescriptorDisabled = 7,    // In ExtraFeatureDescriptor, value >= 5 means 'Disabled'
 	};
 
 	static constexpr uint32_t ExtraFeatureDescriptorShift = 6;
