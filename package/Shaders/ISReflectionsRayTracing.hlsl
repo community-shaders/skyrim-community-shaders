@@ -132,7 +132,7 @@ PS_OUTPUT main(PS_INPUT input)
 	PS_OUTPUT psout;
 	psout.Color = 0;
 
-#ifndef ENABLESSR
+#	ifndef ENABLESSR
 	// Disable SSR raymarch
 	return psout;
 #	endif
