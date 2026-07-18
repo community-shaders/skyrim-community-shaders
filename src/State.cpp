@@ -928,10 +928,6 @@ void State::ModifyShaderLookup(const RE::BSShader& a_shader, uint& a_vertexDescr
 			break;
 		case RE::BSShader::Type::Particle:
 			{
-				if (a_pixelDescriptor & (uint32_t)SIE::ShaderCache::ParticleShaderFlags::OIT)
-				{
-					logger::error("Particle flag {:x}", a_pixelDescriptor);
-				}
 				if (inWorld && oit.ShouldCapture())
 					a_pixelDescriptor |= (uint32_t)SIE::ShaderCache::ParticleShaderFlags::OIT;
 			}
