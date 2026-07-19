@@ -953,11 +953,6 @@ void State::BeginPerfEvent(std::string_view title)
 	pPerf->BeginEvent(std::wstring(title.begin(), title.end()).c_str());
 }
 
-void State::BeginPerfEvent(const wchar_t* title)
-{
-	pPerf->BeginEvent(title);
-}
-
 void State::EndPerfEvent()
 {
 #ifdef TRACY_ENABLE
@@ -971,26 +966,9 @@ void State::EndPerfEvent()
 	pPerf->EndEvent();
 }
 
-State::PerfEvent::PerfEvent(const wchar_t* title)
-{
-	if (globals::state->frameAnnotations)
-		globals::state->BeginPerfEvent(title);
-}
-
-State::PerfEvent::~PerfEvent()
-{
-	if (globals::state->frameAnnotations)
-		globals::state->EndPerfEvent();
-}
-
 void State::SetPerfMarker(std::string_view title)
 {
 	pPerf->SetMarker(std::wstring(title.begin(), title.end()).c_str());
-}
-
-void State::SetPerfMarker(const wchar_t* title)
-{
-	pPerf->SetMarker(title);
 }
 
 void State::SetAdapterDescription(const std::wstring& description)
