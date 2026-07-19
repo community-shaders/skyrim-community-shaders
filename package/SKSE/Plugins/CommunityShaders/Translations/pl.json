@@ -134,11 +134,15 @@
     "feature.order_independent_transparency.pixel_buffer_size": "Rozmiar bufora pikseli",
     "feature.order_independent_transparency.pixel_buffer_size_tooltip": "Mnożnik rozmiaru tylnego bufora zarezerwowanego dla przezroczystych warstw.\nPrzepełnienie bufora może powodować migotanie.\nDostosuj go do dostępnej wydajności i pamięci systemu.",
     "feature.order_independent_transparency.wboit_additive_alpha_scale": "Skala alfa addytywnego",
+    "feature.order_independent_transparency.wboit_additive_alpha_scale_tooltip": "Dostosuj tę wartość, gdy addytywne efekty Lighting lub Particle mają wyraźnie widoczne krawędzie.",
+    "feature.order_independent_transparency.wboit_advanced_tuning": "Aby przeprowadzić zaawansowane dostrajanie, edytuj bezpośrednio WBOITWeight.hlsli.",
+    "feature.order_independent_transparency.wboit_final_weight_tooltip": "Steruje końcowym zakresem wag WBOIT.\nSzerszy zakres poprawia dokładność bliskich warstw i sprzyja odzieży.\nWęższy zakres ogranicza prześwietlone odległe warstwy i sprzyja mgle.",
     "feature.order_independent_transparency.wboit_max_final_weight": "Maksymalna waga końcowa",
     "feature.order_independent_transparency.wboit_min_final_weight": "Minimalna waga końcowa",
     "feature.order_independent_transparency.wboit_min_pre_alpha_weight": "Minimalna waga przed alfą",
     "feature.order_independent_transparency.wboit_min_projected_distance": "Minimalna odległość rzutowana",
-    "feature.order_independent_transparency.wboit_parameters": "Parametry szybkiego przybliżenia",
+    "feature.order_independent_transparency.wboit_min_projected_distance_tooltip": "Zwiększ tę wartość, jeśli cząsteczki deszczu lub śniegu wyglądają na prześwietlone.",
+    "feature.order_independent_transparency.wboit_parameters": "Dostrajanie",
     "feature.order_independent_transparency.write_depth": "Zapisz głębię",
     "feature.order_independent_transparency.write_depth_tooltip": "Pozwala kompozycji OIT zapisywać głębię dla siatek z flagą Zapisz głębię.\nWymaga rozwiązania przez shader pikseli.\nDotyczy wszystkich materiałów shadera Lighting z wyjątkiem shaderów Effect."
 }

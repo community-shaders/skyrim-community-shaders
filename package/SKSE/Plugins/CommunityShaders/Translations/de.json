@@ -48,11 +48,15 @@
     "feature.order_independent_transparency.pixel_buffer_size": "Pixelpuffergröße",
     "feature.order_independent_transparency.pixel_buffer_size_tooltip": "Multiplikator der Backbuffer-Größe, der für transparente Ebenen reserviert ist.\nEin Pufferüberlauf kann Flackern verursachen.\nPasse ihn an die verfügbare Leistung und den verfügbaren Speicher deines Systems an.",
     "feature.order_independent_transparency.wboit_additive_alpha_scale": "Additiver Alphafaktor",
+    "feature.order_independent_transparency.wboit_additive_alpha_scale_tooltip": "Passe diesen Wert an, wenn additive Lighting- oder Particle-Effekte scharf sichtbare Ränder haben.",
+    "feature.order_independent_transparency.wboit_advanced_tuning": "Für erweiterte Anpassungen bearbeite WBOITWeight.hlsli direkt.",
+    "feature.order_independent_transparency.wboit_final_weight_tooltip": "Steuert den finalen WBOIT-Gewichtsbereich.\nEin breiterer Bereich verbessert die Genauigkeit naher Ebenen und begünstigt Kleidung.\nEin engerer Bereich reduziert überhelle entfernte Ebenen und begünstigt Nebel.",
     "feature.order_independent_transparency.wboit_max_final_weight": "Maximales Endgewicht",
     "feature.order_independent_transparency.wboit_min_final_weight": "Minimales Endgewicht",
     "feature.order_independent_transparency.wboit_min_pre_alpha_weight": "Minimales Gewicht vor Alpha",
     "feature.order_independent_transparency.wboit_min_projected_distance": "Minimaler projizierter Abstand",
-    "feature.order_independent_transparency.wboit_parameters": "Schnelle Approximationsparameter",
+    "feature.order_independent_transparency.wboit_min_projected_distance_tooltip": "Erhöhe diesen Wert, wenn Regen- oder Schneepartikel überhell erscheinen.",
+    "feature.order_independent_transparency.wboit_parameters": "Abstimmung",
     "feature.order_independent_transparency.write_depth": "Tiefe schreiben",
     "feature.order_independent_transparency.write_depth_tooltip": "Ermöglicht der OIT-Komposition, die Tiefe für Meshes mit dem Flag „Tiefe schreiben“ zu schreiben.\nErfordert die Auflösung per Pixelshader.\nGilt für alle Materialien des Lighting-Shaders, außer für Effect-Shader."
 }

@@ -50,11 +50,15 @@
     "feature.order_independent_transparency.pixel_buffer_size": "Pixelbuffergrootte",
     "feature.order_independent_transparency.pixel_buffer_size_tooltip": "Vermenigvuldiger van de grootte van de backbuffer die is gereserveerd voor transparante lagen.\nBufferoverschrijding kan flikkeren veroorzaken.\nPas dit aan op de beschikbare prestaties en het geheugen van je systeem.",
     "feature.order_independent_transparency.wboit_additive_alpha_scale": "Additieve alfaschaal",
+    "feature.order_independent_transparency.wboit_additive_alpha_scale_tooltip": "Pas dit aan wanneer additieve Lighting- of Particle-effecten scherpe zichtbare randen hebben.",
+    "feature.order_independent_transparency.wboit_advanced_tuning": "Bewerk WBOITWeight.hlsli rechtstreeks voor geavanceerde afstemming.",
+    "feature.order_independent_transparency.wboit_final_weight_tooltip": "Bepaalt het uiteindelijke WBOIT-gewichtsbereik.\nEen breder bereik verbetert de nauwkeurigheid van nabije lagen en is gunstiger voor kleding.\nEen smaller bereik vermindert overbelichte lagen op afstand en is gunstiger voor mist.",
     "feature.order_independent_transparency.wboit_max_final_weight": "Maximaal eindgewicht",
     "feature.order_independent_transparency.wboit_min_final_weight": "Minimaal eindgewicht",
     "feature.order_independent_transparency.wboit_min_pre_alpha_weight": "Minimaal gewicht vóór alfa",
     "feature.order_independent_transparency.wboit_min_projected_distance": "Minimale geprojecteerde afstand",
-    "feature.order_independent_transparency.wboit_parameters": "Parameters voor snelle benadering",
+    "feature.order_independent_transparency.wboit_min_projected_distance_tooltip": "Verhoog dit wanneer regen- of sneeuwdeeltjes overbelicht lijken.",
+    "feature.order_independent_transparency.wboit_parameters": "Afstemming",
     "feature.order_independent_transparency.write_depth": "Diepte schrijven",
     "feature.order_independent_transparency.write_depth_tooltip": "Staat OIT-compositie toe diepte te schrijven voor meshes met de vlag Diepte schrijven.\nVereist oplossing met een pixelshader.\nGeldt voor alle Lighting-shadermaterialen, met uitzondering van Effect-shaders."
 }

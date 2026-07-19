@@ -47,7 +47,7 @@ static constexpr const char OIT_METHOD_DEFINES[][2] = { "0", "1", "1", "3", "2" 
 
 static void NormalizeSettings(OrderIndependentTransparency::Settings& settings)
 {
-	settings.WBOITAdditiveAlphaScale = std::clamp(settings.WBOITAdditiveAlphaScale, 0.f, 0.1f);
+	settings.WBOITAdditiveAlphaScale = std::clamp(settings.WBOITAdditiveAlphaScale, 0.f, 1.f);
 	settings.WBOITMinProjectedDistance = std::clamp(settings.WBOITMinProjectedDistance, 0.f, 1.f);
 	settings.WBOITMinPreAlphaWeight = std::clamp(settings.WBOITMinPreAlphaWeight, 0.f, 1.f);
 	settings.WBOITWeightMin = std::clamp(settings.WBOITWeightMin, 0.f, 10.f);
@@ -285,16 +285,34 @@ void OrderIndependentTransparency::DrawSettings()
 				"Has a major performance cost compared with the other methods.\n"
 				"Very expensive when Max Layers is greater than 4."));
 		}
-		{
-			EnableScope _(settings.Method == Method::OIT_BLENDED);
-			if (ImGui::TreeNodeEx(T(TKEY("wboit_parameters"), "Fast Approximation Parameters"))) {
-				dirtied.ConstantBuffer |= ImGui::SliderFloat(T(TKEY("wboit_additive_alpha_scale"), "Additive Alpha Scale"), &settings.WBOITAdditiveAlphaScale, 0.f, 0.1f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-				dirtied.ConstantBuffer |= ImGui::SliderFloat(T(TKEY("wboit_min_projected_distance"), "Minimum Projected Distance"), &settings.WBOITMinProjectedDistance, 0.f, 1.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-				dirtied.ConstantBuffer |= ImGui::SliderFloat(T(TKEY("wboit_min_pre_alpha_weight"), "Minimum Pre-Alpha Weight"), &settings.WBOITMinPreAlphaWeight, 0.f, 1.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-				dirtied.ConstantBuffer |= ImGui::SliderFloat(T(TKEY("wboit_min_final_weight"), "Minimum Final Weight"), &settings.WBOITWeightMin, 0.f, settings.WBOITWeightMax, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-				dirtied.ConstantBuffer |= ImGui::SliderFloat(T(TKEY("wboit_max_final_weight"), "Maximum Final Weight"), &settings.WBOITWeightMax, settings.WBOITWeightMin, 10.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-				ImGui::TreePop();
-			}
+		ImGui::TreePop();
+	}
+	ImGui::Spacing();
+	if (ImGui::TreeNodeEx(T(TKEY("wboit_parameters"), "Tuning"), ImGuiTreeNodeFlags_DefaultOpen)) {
+		ImGui::TextWrapped("%s", T(TKEY("wboit_advanced_tuning"), "For advanced tuning, edit WBOITWeight.hlsli directly."));
+		EnableScope _(settings.Method == Method::OIT_BLENDED);
+		dirtied.ConstantBuffer |= ImGui::SliderFloat(T(TKEY("wboit_additive_alpha_scale"), "Additive Alpha Scale"), &settings.WBOITAdditiveAlphaScale, 0.f, 1.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("%s", T(TKEY("wboit_additive_alpha_scale_tooltip"), "Adjust this when additive Lighting or Particle effects have sharp visible boundaries."));
+		}
+		dirtied.ConstantBuffer |= ImGui::SliderFloat(T(TKEY("wboit_min_projected_distance"), "Minimum Projected Distance"), &settings.WBOITMinProjectedDistance, 0.f, 1.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("%s", T(TKEY("wboit_min_projected_distance_tooltip"), "Increase this when rain or snow particles appear overbright."));
+		}
+		dirtied.ConstantBuffer |= ImGui::SliderFloat(T(TKEY("wboit_min_pre_alpha_weight"), "Minimum Pre-Alpha Weight"), &settings.WBOITMinPreAlphaWeight, 0.f, 1.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+		dirtied.ConstantBuffer |= ImGui::SliderFloat(T(TKEY("wboit_min_final_weight"), "Minimum Final Weight"), &settings.WBOITWeightMin, 0.f, settings.WBOITWeightMax, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("%s", T(TKEY("wboit_final_weight_tooltip"),
+				"Controls the final WBOIT weight range.\n"
+				"A wider range improves close-layer accuracy, favoring clothing.\n"
+				"A narrower range reduces overbright distant layers, favoring fog."));
+		}
+		dirtied.ConstantBuffer |= ImGui::SliderFloat(T(TKEY("wboit_max_final_weight"), "Maximum Final Weight"), &settings.WBOITWeightMax, settings.WBOITWeightMin, 10.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("%s", T(TKEY("wboit_final_weight_tooltip"),
+				"Controls the final WBOIT weight range.\n"
+				"A wider range improves close-layer accuracy, favoring clothing.\n"
+				"A narrower range reduces overbright distant layers, favoring fog."));
 		}
 		ImGui::TreePop();
 	}
