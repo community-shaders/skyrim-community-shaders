@@ -2,6 +2,11 @@
 #include "Common/FrameBuffer.hlsli"
 #include "Common/SharedData.hlsli"
 
+#if defined(OIT)
+#define OIT_CAPTURE_IGNORE_ALPHA_THRESHOULD 1
+#include "OIT/OITCapture.hlsli"
+#endif
+
 struct VS_INPUT
 {
 	float4 Position: POSITION0;
@@ -184,6 +189,11 @@ struct PS_OUTPUT
 {
 	float4 Color: SV_Target0;
 	float4 Normal: SV_Target1;
+#if defined(OIT) && OIT == 3
+	float4 OITFrontAccumalation: SV_Target3;
+	float4 OITAccumalation: SV_Target4;
+	float4 OITRevealage: SV_Target5;
+#endif
 };
 
 #ifdef PSHADER
@@ -223,6 +233,9 @@ cbuffer PerGeometry : register(b2)
 #	define LinearSampler SampSourceTexture
 #	include "Common/ShadowSampling.hlsli"
 
+#ifdef OIT
+[earlydepthstencil]
+#endif
 PS_OUTPUT main(PS_INPUT input)
 {
 	PS_OUTPUT psout;
@@ -305,6 +318,16 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.Normal.w = baseColor.w;
 	psout.Normal.xyz = float3(0, 1, 0);
 
+#if defined(OIT)
+#if OIT == 3
+	WBOITResult oit = OIT_CaptureWBOIT(int2(input.Position.xy), psout.Color, input.Position.z);
+	psout.OITFrontAccumalation = oit.accumFront;
+	psout.OITAccumalation = oit.accumAll;
+	psout.OITRevealage = oit.revealage;
+#else
+	psout.Color = OIT_Capture(int2(input.Position.xy), psout.Color, input.Position.z);
+#endif
+#endif
 	return psout;
 }
 #endif

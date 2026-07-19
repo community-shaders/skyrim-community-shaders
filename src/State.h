@@ -280,7 +280,11 @@ public:
 		THLand4HasDisplacement = 1 << 4,
 		THLand5HasDisplacement = 1 << 5,
 		ETMaterialModel = 0b111 << 6,
-		THLandHasDisplacement = 1 << 9
+		THLandHasDisplacement = 1 << 9,
+		OITAdditive            = 1 << 10,
+		OITMultiplicative      = 1 << 11,
+		OITDepthWrite          = 1 << 12,
+		OITDisabled            = 1 << 13,
 	};
 
 	bool inWorld = false;

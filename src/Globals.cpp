@@ -16,6 +16,7 @@
 #include "Features/LODBlending.h"
 #include "Features/LightLimitFix.h"
 #include "Features/LinearLighting.h"
+#include "Features/OrderIndependentTransparency.h"
 #include "Features/PerformanceOverlay.h"
 #include "Features/RemoteControl.h"
 #include "Features/RenderDoc.h"
@@ -92,6 +93,7 @@ namespace globals
 		CSEditor csEditor{};
 		ExponentialHeightFog exponentialHeightFog{};
 		TruePBR truePBR{};
+		OrderIndependentTransparency orderIndependentTransparency{};
 		Skin skin{};
 
 		namespace llf
