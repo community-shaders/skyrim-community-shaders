@@ -2,8 +2,8 @@
 #define __WBOIT__
 
 #include "OIT/OITCommon.hlsli"
-#include "OIT/WBOITWeight.hlsli"
 #include "Common/SharedData.hlsli"
+#include "OIT/WBOITWeight.hlsli"
 
 Texture2D<float> OITWaterDepthTexture : register(t120);
 
@@ -53,7 +53,7 @@ WBOITResult WBOITCapture(float4 color, int2 screenAddress, float depth, uint fla
 
 	// For additive blend, we use its RGB color to emulate a transparency
 	// We don't need to be accurate, just need a smooth curve to blend in the truely transparent part of the sprite
-	float a = color.w == 0.f ? 0.01 * sqrt(sqrt(length(color.xyz / sqrt(3)))) : color.w;
+	float a = color.w == 0.f ? SharedData::orderIndependentTransparencySettings.WBOITAdditiveAlphaScale * sqrt(sqrt(length(color.xyz / sqrt(3)))) : color.w;
 	color.w = a;
 	// Get the weight for this fragment, it should have larger weight on fragments closer to the camera
 	float weight = WBOITComputeWeight(a, depth);

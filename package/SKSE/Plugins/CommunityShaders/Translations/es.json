@@ -151,6 +151,12 @@
     "feature.order_independent_transparency.performance": "Rendimiento",
     "feature.order_independent_transparency.pixel_buffer_size": "Tamaño del búfer de píxeles",
     "feature.order_independent_transparency.pixel_buffer_size_tooltip": "Multiplicador del tamaño del búfer trasero reservado para capas transparentes.\nEl desbordamiento del búfer puede causar parpadeos.\nAjústalo al rendimiento y la memoria disponibles en tu sistema.",
+    "feature.order_independent_transparency.wboit_additive_alpha_scale": "Escala alfa aditiva",
+    "feature.order_independent_transparency.wboit_max_final_weight": "Peso final máximo",
+    "feature.order_independent_transparency.wboit_min_final_weight": "Peso final mínimo",
+    "feature.order_independent_transparency.wboit_min_pre_alpha_weight": "Peso mínimo previo al alfa",
+    "feature.order_independent_transparency.wboit_min_projected_distance": "Distancia proyectada mínima",
+    "feature.order_independent_transparency.wboit_parameters": "Parámetros de aproximación rápida",
     "feature.order_independent_transparency.write_depth": "Escribir profundidad",
     "feature.order_independent_transparency.write_depth_tooltip": "Permite que la composición de OIT escriba profundidad para mallas con la marca Escribir profundidad.\nRequiere resolución mediante sombreador de píxeles.\nSe aplica a todos los materiales del sombreador Lighting, excepto los sombreadores Effect."
 }

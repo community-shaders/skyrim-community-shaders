@@ -49,6 +49,11 @@ struct OrderIndependentTransparency final : Feature
 		bool	OverrideRenderTargets = false; // Force override render target in alpha pass, only use you having issue
 		bool	WriteDepth = true; // Allow the OIT composition to write depth for closest mesh with 'Write Depth' flag
 		float	WriteDepthThreshold = 0.f; // Don't write depth if the layer's alpha is below this threshold
+		float	WBOITAdditiveAlphaScale = 0.01f;
+		float	WBOITMinProjectedDistance = 0.2f;
+		float	WBOITMinPreAlphaWeight = 0.01f;
+		float	WBOITWeightMin = 0.1f;
+		float	WBOITWeightMax = 1.f;
 	};
 
 	struct alignas(16) FeatureCB
@@ -57,7 +62,16 @@ struct OrderIndependentTransparency final : Feature
 		uint	Flags = 0;
 		float	AlphaThreshold = 0.f;
 		float	DepthThreshold = 1.f;
+		float	WBOITAdditiveAlphaScale = 0.01f;
+		float	WBOITMinProjectedDistance = 0.2f;
+		float	WBOITMinPreAlphaWeight = 0.01f;
+		float	WBOITWeightMin = 0.1f;
+		float	WBOITWeightMax = 1.f;
+		float	Pad0 = 0.f;
+		float	Pad1 = 0.f;
+		float	Pad2 = 0.f;
 	};
+	static_assert(sizeof(FeatureCB) == 48);
 
 	FeatureCB featureCB;
 

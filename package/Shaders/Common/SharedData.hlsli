@@ -222,6 +222,14 @@ namespace SharedData
 		uint  Flags;
 		float AlphaThreshold;
 		float DepthThreshold;
+		float WBOITAdditiveAlphaScale;
+		float WBOITMinProjectedDistance;
+		float WBOITMinPreAlphaWeight;
+		float WBOITWeightMin;
+		float WBOITWeightMax;
+		float Pad0;
+		float Pad1;
+		float Pad2;
 	};
 
 	struct LinearLightingSettings
