@@ -22,20 +22,22 @@ cbuffer PerFrameSSS : register(b1)
 	float4 MeanFreePathHuman;
 };
 
-float3 SSSRemoveAlbedo(float3 color, float3 albedo, uint mode, float sssAmount)
+float3 SSSRemoveAlbedo(float3 color, float3 albedo, uint mode)
 {
 	if (mode == SSS_SCATTER_MODE_PRE)
 		return color;
+	albedo /= Color::PBRLightingScale;
 	float3 divisor = (mode == SSS_SCATTER_MODE_PRE_POST) ? sqrt(albedo) : albedo;
-	return color / lerp(1.0, max(divisor, EPSILON_SSS_ALBEDO), saturate(sssAmount * 10.0));
+	return lerp(color, color / max(divisor, EPSILON_SSS_ALBEDO), albedo > EPSILON_SSS_ALBEDO);
 }
 
-float3 SSSApplyAlbedo(float3 irradiance, float3 albedo, uint mode, float sssAmount)
+float3 SSSApplyAlbedo(float3 irradiance, float3 albedo, uint mode)
 {
 	if (mode == SSS_SCATTER_MODE_PRE)
 		return irradiance;
+	albedo /= Color::PBRLightingScale;
 	float3 multiplier = (mode == SSS_SCATTER_MODE_PRE_POST) ? sqrt(albedo) : albedo;
-	return irradiance * lerp(1.0, multiplier, saturate(sssAmount * 10.0));
+	return lerp(irradiance, irradiance * multiplier, albedo > EPSILON_SSS_ALBEDO);
 }
 
 #endif
