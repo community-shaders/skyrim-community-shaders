@@ -167,8 +167,6 @@
     "feature.order_independent_transparency.performance": "Performances",
     "feature.order_independent_transparency.pixel_buffer_size": "Taille du tampon de pixels",
     "feature.order_independent_transparency.pixel_buffer_size_tooltip": "Multiplicateur de la taille du tampon arrière réservé aux couches transparentes.\nUn dépassement du tampon peut provoquer du scintillement.\nAjustez-le aux performances et à la mémoire disponibles de votre système.",
-    "feature.order_independent_transparency.use_pixel_shader": "Utiliser le shader de pixels",
-    "feature.order_independent_transparency.use_pixel_shader_tooltip": "Utilise un shader de pixels au lieu d'un shader de calcul pour résoudre l'OIT.\nL'OIT pondérée et mélangée utilise toujours le chemin du shader de pixels.",
     "feature.order_independent_transparency.write_depth": "Écrire la profondeur",
     "feature.order_independent_transparency.write_depth_tooltip": "Permet à la composition OIT d'écrire la profondeur pour les maillages avec l'indicateur Écrire la profondeur.\nNécessite une résolution par shader de pixels.\nS'applique à tous les matériaux du shader Lighting, à l'exception des shaders Effect."
 }

@@ -64,8 +64,6 @@
     "feature.order_independent_transparency.performance": "パフォーマンス",
     "feature.order_independent_transparency.pixel_buffer_size": "ピクセルバッファサイズ",
     "feature.order_independent_transparency.pixel_buffer_size_tooltip": "透明レイヤー用に予約するバックバッファサイズの倍率です。\nバッファオーバーフローはちらつきの原因になることがあります。\nシステムで利用可能なパフォーマンスとメモリに合わせて調整してください。",
-    "feature.order_independent_transparency.use_pixel_shader": "ピクセルシェーダーを使用",
-    "feature.order_independent_transparency.use_pixel_shader_tooltip": "OIT の解決にコンピュートシェーダーではなくピクセルシェーダーを使用します。\n重み付きブレンド OIT は常にピクセルシェーダーのパスを使用します。",
     "feature.order_independent_transparency.write_depth": "深度を書き込む",
     "feature.order_independent_transparency.write_depth_tooltip": "「深度を書き込む」フラグを持つメッシュに対して、OIT 合成が深度を書き込めるようにします。\nピクセルシェーダーによる解決が必要です。\nEffect シェーダーを除く、すべての Lighting シェーダーマテリアルに適用されます。",
     "menu.settings.toggle_key": "トグルキー:",

@@ -47,8 +47,6 @@
     "feature.order_independent_transparency.performance": "Leistung",
     "feature.order_independent_transparency.pixel_buffer_size": "Pixelpuffergröße",
     "feature.order_independent_transparency.pixel_buffer_size_tooltip": "Multiplikator der Backbuffer-Größe, der für transparente Ebenen reserviert ist.\nEin Pufferüberlauf kann Flackern verursachen.\nPasse ihn an die verfügbare Leistung und den verfügbaren Speicher deines Systems an.",
-    "feature.order_independent_transparency.use_pixel_shader": "Pixelshader verwenden",
-    "feature.order_independent_transparency.use_pixel_shader_tooltip": "Verwendet zum Auflösen von OIT einen Pixelshader statt eines Computeshaders.\nGewichtete, gemischte OIT verwendet immer den Pixelshader-Pfad.",
     "feature.order_independent_transparency.write_depth": "Tiefe schreiben",
     "feature.order_independent_transparency.write_depth_tooltip": "Ermöglicht der OIT-Komposition, die Tiefe für Meshes mit dem Flag „Tiefe schreiben“ zu schreiben.\nErfordert die Auflösung per Pixelshader.\nGilt für alle Materialien des Lighting-Shaders, außer für Effect-Shader."
 }

@@ -937,8 +937,6 @@
     "feature.order_independent_transparency.performance": "性能",
     "feature.order_independent_transparency.pixel_buffer_size": "像素缓冲区大小",
     "feature.order_independent_transparency.pixel_buffer_size_tooltip": "为透明层保留的后备缓冲区大小倍数。\n缓冲区溢出可能导致闪烁。\n请根据系统可用的性能和内存进行调整。",
-    "feature.order_independent_transparency.use_pixel_shader": "使用像素着色器",
-    "feature.order_independent_transparency.use_pixel_shader_tooltip": "使用像素着色器而非计算着色器来解析 OIT。\n加权混合 OIT 始终使用像素着色器路径。",
     "feature.order_independent_transparency.write_depth": "写入深度",
     "feature.order_independent_transparency.write_depth_tooltip": "允许 OIT 合成为带有“写入深度”标志的网格写入深度。\n需要像素着色器解析。\n适用于所有 Lighting 着色器材质，但 Effect 着色器除外。",
     "feature.perf_overlay.appearance": "外观",

@@ -133,8 +133,6 @@
     "feature.order_independent_transparency.performance": "Wydajność",
     "feature.order_independent_transparency.pixel_buffer_size": "Rozmiar bufora pikseli",
     "feature.order_independent_transparency.pixel_buffer_size_tooltip": "Mnożnik rozmiaru tylnego bufora zarezerwowanego dla przezroczystych warstw.\nPrzepełnienie bufora może powodować migotanie.\nDostosuj go do dostępnej wydajności i pamięci systemu.",
-    "feature.order_independent_transparency.use_pixel_shader": "Użyj shadera pikseli",
-    "feature.order_independent_transparency.use_pixel_shader_tooltip": "Używa shadera pikseli zamiast shadera obliczeniowego do rozwiązania OIT.\nWażona, mieszana OIT zawsze używa ścieżki shadera pikseli.",
     "feature.order_independent_transparency.write_depth": "Zapisz głębię",
     "feature.order_independent_transparency.write_depth_tooltip": "Pozwala kompozycji OIT zapisywać głębię dla siatek z flagą Zapisz głębię.\nWymaga rozwiązania przez shader pikseli.\nDotyczy wszystkich materiałów shadera Lighting z wyjątkiem shaderów Effect."
 }

@@ -928,8 +928,6 @@
     "feature.order_independent_transparency.performance": "Производительность",
     "feature.order_independent_transparency.pixel_buffer_size": "Размер пиксельного буфера",
     "feature.order_independent_transparency.pixel_buffer_size_tooltip": "Множитель размера заднего буфера, зарезервированного для прозрачных слоёв.\nПереполнение буфера может вызывать мерцание.\nНастройте его в соответствии с доступной производительностью и памятью вашей системы.",
-    "feature.order_independent_transparency.use_pixel_shader": "Использовать пиксельный шейдер",
-    "feature.order_independent_transparency.use_pixel_shader_tooltip": "Использует пиксельный шейдер вместо вычислительного для обработки OIT.\nВзвешенная смешанная OIT всегда использует путь пиксельного шейдера.",
     "feature.order_independent_transparency.write_depth": "Записывать глубину",
     "feature.order_independent_transparency.write_depth_tooltip": "Позволяет композиции OIT записывать глубину для мешей с флагом «Записывать глубину».\nТребует обработки пиксельным шейдером.\nПрименяется ко всем материалам шейдера Lighting, кроме шейдеров Effect.",
     "feature.perf_overlay.appearance": "Внешний вид",

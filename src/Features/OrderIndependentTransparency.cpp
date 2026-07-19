@@ -27,15 +27,9 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(OrderIndependentTransparency::Se
 	DistanceThreshold,
 	CaptureMultiplicativeLayer,
 	OverrideRenderTargets,
-	UsePixelShader,
 	WriteDepth,
 	WriteDepthThreshold
 )
-
-static void NormalizeSettings(OrderIndependentTransparency::Settings& settings)
-{
-	settings.UsePixelShader = true;
-}
 
 std::span<const D3D_SHADER_MACRO> OrderIndependentTransparency::GetShaderDefines() const
 {
@@ -181,7 +175,6 @@ void OrderIndependentTransparency::PostPostLoad()
 
 void OrderIndependentTransparency::DataLoaded()
 {
-	NormalizeSettings(settings);
 	UpdateShaderDefines();
 }
 
@@ -274,7 +267,6 @@ void OrderIndependentTransparency::DrawSettings()
 		}
 		ImGui::TreePop();
 	}
-	NormalizeSettings(settings);
 	ImGui::Spacing();
 	if (ImGui::TreeNodeEx(T(TKEY("compatibility"), "Compatibility"), ImGuiTreeNodeFlags_DefaultOpen)) {
 		if (ImGui::Checkbox(T(TKEY("multiplicative_blend_support"), "Multiplicative Blend Support"), &settings.CaptureMultiplicativeLayer))
@@ -293,16 +285,6 @@ void OrderIndependentTransparency::DrawSettings()
 				"Has a CPU cost; enable only if transparent meshes disappear.\n"
 				"Currently affects AE only."));
 		}
-		{
-			EnableScope blendedModeScope(false);
-			ImGui::Checkbox(T(TKEY("use_pixel_shader"), "Use Pixel Shader"), &settings.UsePixelShader);
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("%s", T(TKEY("use_pixel_shader_tooltip"),
-					"Uses a pixel shader instead of a compute shader to resolve OIT.\n"
-					"Weighted, blended OIT always uses the pixel shader path."));
-			}
-		}
-		if (!settings.UsePixelShader) ImGui::BeginDisabled();
 		dirtied.CompositionShader |= ImGui::Checkbox(T(TKEY("write_depth"), "Write Depth"), &settings.WriteDepth);
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text("%s", T(TKEY("write_depth_tooltip"),
@@ -310,7 +292,6 @@ void OrderIndependentTransparency::DrawSettings()
 				"Requires pixel shader resolve.\n"
 				"Applies to all Lighting shader materials, excluding Effect shaders."));
 		}
-		if (!settings.UsePixelShader) ImGui::EndDisabled();
 		ImGui::TreePop();
 	}
 	ImGui::Spacing();
@@ -383,7 +364,6 @@ void OrderIndependentTransparency::DrawSettings()
 
 void OrderIndependentTransparency::OnSettingLoaded()
 {
-	NormalizeSettings(settings);
 	featureCB.AlphaThreshold = settings.AlphaThreshold;
 	featureCB.DepthThreshold = settings.DepthThreshold;
 	featureCB.Flags = settings.CaptureMultiplicativeLayer ? 1 : 0;
@@ -601,9 +581,6 @@ void OrderIndependentTransparency::SetupResources()
 
 void OrderIndependentTransparency::ClearShaderCache()
 {
-	csAT.detach();
-	csVisualize.detach();
-	csBlend.detach();
 	psAT.detach();
 	psVisualize.detach();
 	psBlend.detach();
@@ -666,9 +643,6 @@ void OrderIndependentTransparency::DisableForResourceFailure()
 	revealageBuffer.reset();
 	colorBuffer.reset();
 	depthBuffer.reset();
-	csVisualize = nullptr;
-	csAT = nullptr;
-	csBlend = nullptr;
 	psVisualize = nullptr;
 	psAT = nullptr;
 	psBlend = nullptr;
@@ -962,7 +936,7 @@ void OrderIndependentTransparency::BeginAlphaGroup()
 		0x0UL
 	};
 
-	if (settings.WriteDepth && settings.UsePixelShader)
+	if (settings.WriteDepth)
 	{
 		// We need main depth (depth after water) in composition
 		// Copying it so that we can read from MainCopy and write write to Main (depth cannot be UAV)
@@ -1034,17 +1008,6 @@ struct ScopedShaderResource
 				globals::d3d::context->OMSetRenderTargets(N, _views, _args...);
 			}
 		}
-		else if constexpr (std::is_same_v<ShaderType, ID3D11ComputeShader>)
-		{
-			if constexpr (std::is_same_v<ViewType, ID3D11ShaderResourceView>)
-			{
-				globals::d3d::context->CSSetShaderResources(_args..., N, _views);
-			}
-			else if constexpr (std::is_same_v<ViewType, ID3D11UnorderedAccessView>)
-			{
-				globals::d3d::context->CSSetUnorderedAccessViews(_args..., N, _views, nullptr);
-			}
-		}
 	}
 
 	~ScopedShaderResource()
@@ -1055,12 +1018,6 @@ struct ScopedShaderResource
 				globals::d3d::context->PSSetShaderResources(0, N, views);
 			} else if constexpr (std::is_same_v<ViewType, ID3D11RenderTargetView>) {
 				globals::d3d::context->OMSetRenderTargets(N, views, nullptr);
-			}
-		} else if constexpr (std::is_same_v<ShaderType, ID3D11ComputeShader>) {
-			if constexpr (std::is_same_v<ViewType, ID3D11ShaderResourceView>) {
-				globals::d3d::context->CSSetShaderResources(0, N, views);
-			} else if constexpr (std::is_same_v<ViewType, ID3D11UnorderedAccessView>) {
-				globals::d3d::context->CSSetUnorderedAccessViews(0, N, views, nullptr);
 			}
 		}
 	}
@@ -1104,128 +1061,93 @@ void OrderIndependentTransparency::EndAlphaGroup()
 	using globals::features::terrainBlending;
 	ID3D11ShaderResourceView* waterDepthSrv = mainDepth.depthSRV;
 	// If we need to write depth in composition pass, we need to use the copied depth
-	if (settings.WriteDepth && settings.UsePixelShader) waterDepthSrv =  mainDepthCopy.depthSRV;
+	if (settings.WriteDepth) waterDepthSrv =  mainDepthCopy.depthSRV;
 	// Water depth is rendered at kMain after water pass
 	// But mainDepth.depthSRV was REDIRECTED by terrain blending to its own copy (for UAV access)
 	// At this point, we need to access the actual main depth as SRV
 	else if (terrainBlending.loaded) waterDepthSrv = terrainBlending.depthSRVBackup;
 
-	const bool usePixelShader = settings.UsePixelShader;
-	if (usePixelShader)
+	ID3D11PixelShader* shader = nullptr;
+	switch (settings.Method) {
+	case Method::OIT_AT:
+		shader = psAT.get();
+		break;
+	case Method::OIT_BLENDED:
+		shader = psBlend.get();
+		break;
+	case Method::OIT_VISUALIZE:
+		shader = psVisualize.get();
+		break;
+	case Method::OIT_RVO:
+		shader = psROV.get();
+		break;
+	}
+
+	// Set up viewport for fullscreen rendering
+	float2 screenSize{ (float)globals::game::graphicsState->screenWidth, (float)globals::game::graphicsState->screenHeight };
+
+	D3D11_VIEWPORT viewport = {};
+	viewport.TopLeftX = 0.0f;
+	viewport.TopLeftY = 0.0f;
+	viewport.Width = screenSize.x;
+	viewport.Height = screenSize.y;
+	viewport.MinDepth = 0.0f;
+	viewport.MaxDepth = 1.0f;
+	context->RSSetViewports(1, &viewport);
+
+	// Set up Input Assembler for fullscreen triangle
+	context->IASetInputLayout(nullptr);
+	context->IASetVertexBuffers(0, 0, nullptr, nullptr, nullptr);
+	context->IASetIndexBuffer(nullptr, DXGI_FORMAT_UNKNOWN, 0);
+	context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+	// Set up vertex shader
+	context->VSSetShader(globals::features::upscaling.GetUpscaleVS(), nullptr, 0);
+
+	// Set up rasterizer and blend states
+	context->RSSetState(globals::features::upscaling.upscaleRasterizerState.get());
+	context->OMSetBlendState(resolveBlendState.get(), nullptr, 0xffffffff);
+	context->OMSetDepthStencilState(resolveDepthStencilState.get(), 1);
+
+	// Set up pixel shader resources
+	ID3D11RenderTargetView* _rtvs[2] = { main.RTV, alpha.RTV };
+	ID3D11DepthStencilView* _dsv = nullptr;
+	if (settings.WriteDepth) {
+		_dsv = mainDepth.views[0];
+	}
+	ScopedShaderResource rtvGuard(shader, _rtvs, _dsv);
+
+	context->PSSetShader(shader, nullptr, 0);
+
+	if (settings.Method == Method::OIT_BLENDED)
 	{
-		ID3D11PixelShader* shader = nullptr;
-		switch (settings.Method) {
-		case Method::OIT_AT:
-			shader = psAT.get();
-			break;
-		case Method::OIT_BLENDED:
-			shader = psBlend.get();
-			break;
-		case Method::OIT_VISUALIZE:
-			shader = psVisualize.get();
-			break;
-		case Method::OIT_RVO:
-			shader = psROV.get();
-			break;
-		}
-
-		// Set up viewport for fullscreen rendering
-		float2 screenSize{ (float)globals::game::graphicsState->screenWidth, (float)globals::game::graphicsState->screenHeight };
-
-		D3D11_VIEWPORT viewport = {};
-		viewport.TopLeftX = 0.0f;
-		viewport.TopLeftY = 0.0f;
-		viewport.Width = screenSize.x;
-		viewport.Height = screenSize.y;
-		viewport.MinDepth = 0.0f;
-		viewport.MaxDepth = 1.0f;
-		context->RSSetViewports(1, &viewport);
-
-		// Set up Input Assembler for fullscreen triangle
-		context->IASetInputLayout(nullptr);
-		context->IASetVertexBuffers(0, 0, nullptr, nullptr, nullptr);
-		context->IASetIndexBuffer(nullptr, DXGI_FORMAT_UNKNOWN, 0);
-		context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-
-		// Set up vertex shader
-		context->VSSetShader(globals::features::upscaling.GetUpscaleVS(), nullptr, 0);
-
-		// Set up rasterizer and blend states
-		context->RSSetState(globals::features::upscaling.upscaleRasterizerState.get());
-		context->OMSetBlendState(resolveBlendState.get(), nullptr, 0xffffffff);
-		context->OMSetDepthStencilState(resolveDepthStencilState.get(), 1);
-
-		// Set up pixel shader resources
-		ID3D11RenderTargetView* _rtvs[2] = { main.RTV, alpha.RTV };
-		ID3D11DepthStencilView* _dsv = nullptr;
-		if (settings.WriteDepth && usePixelShader) {
-			_dsv = mainDepth.views[0];
-		}
-		ScopedShaderResource rtvGuard(shader, _rtvs, _dsv);
-
-		context->PSSetShader(shader, nullptr, 0);
-
-		if (settings.Method == Method::OIT_BLENDED)
-		{
-			ID3D11ShaderResourceView* srvs[4] = {
-				accumalationBuffer->srv.get(),
-				accumalationWaterBuffer->srv.get(),
-				revealageBuffer->srv.get(),
-				waterDepthSrv
-			};
-			ScopedShaderResource srvGuard(shader, srvs, 0);
-			context->Draw(3, 0);
-		}
-		else
-		{
-			ID3D11ShaderResourceView* srvs[4] = { waterDepthSrv, headerBuffer->srv.get(), nullptr, nullptr };
-			if (settings.Method == OIT_RVO)
-			{
-				srvs[2] = colorBuffer->srv.get();
-				srvs[3] = depthBuffer->srv.get();
-			}
-			else
-			{
-				srvs[2] = nodesBuffer->srv.get();
-			}
-			ScopedShaderResource srvGuard(shader, srvs, 0);
-			context->Draw(3, 0);
-		}
-
-		context->PSSetShader(nullptr, nullptr, 0);
-		context->VSSetShader(nullptr, nullptr, 0);
+		ID3D11ShaderResourceView* srvs[4] = {
+			accumalationBuffer->srv.get(),
+			accumalationWaterBuffer->srv.get(),
+			revealageBuffer->srv.get(),
+			waterDepthSrv
+		};
+		ScopedShaderResource srvGuard(shader, srvs, 0);
+		context->Draw(3, 0);
 	}
 	else
 	{
-		ID3D11ComputeShader* shader = nullptr;
-		switch (settings.Method) {
-			case Method::OIT_AT:
-				shader = csAT.get();
-				break;
-			case Method::OIT_BLENDED:
-				shader = csBlend.get();
-				break;
-			case Method::OIT_VISUALIZE:
-				shader = csVisualize.get();
-				break;
-		}
-		context->CSSetShader(shader, NULL, 0);
-
 		ID3D11ShaderResourceView* srvs[4] = { waterDepthSrv, headerBuffer->srv.get(), nullptr, nullptr };
-		if (settings.Method == OIT_RVO) {
+		if (settings.Method == OIT_RVO)
+		{
 			srvs[2] = colorBuffer->srv.get();
 			srvs[3] = depthBuffer->srv.get();
-		} else {
+		}
+		else
+		{
 			srvs[2] = nodesBuffer->srv.get();
 		}
-		ID3D11UnorderedAccessView* _uavs[2] = { main.UAV, alpha.UAV };
 		ScopedShaderResource srvGuard(shader, srvs, 0);
-		ScopedShaderResource uavGuard(shader, _uavs, 0);
-		auto dispatchCount = Util::GetScreenDispatchCount();
-		context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
+		context->Draw(3, 0);
+	}
 
-		context->CSSetShader(nullptr, nullptr, 0);
-	}	
+	context->PSSetShader(nullptr, nullptr, 0);
+	context->VSSetShader(nullptr, nullptr, 0);
 
 	globals::game::stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_RENDERTARGET);
 	globals::game::stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_DEPTH_MODE);

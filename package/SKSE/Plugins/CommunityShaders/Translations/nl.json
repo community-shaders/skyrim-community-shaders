@@ -49,8 +49,6 @@
     "feature.order_independent_transparency.performance": "Prestaties",
     "feature.order_independent_transparency.pixel_buffer_size": "Pixelbuffergrootte",
     "feature.order_independent_transparency.pixel_buffer_size_tooltip": "Vermenigvuldiger van de grootte van de backbuffer die is gereserveerd voor transparante lagen.\nBufferoverschrijding kan flikkeren veroorzaken.\nPas dit aan op de beschikbare prestaties en het geheugen van je systeem.",
-    "feature.order_independent_transparency.use_pixel_shader": "Pixelshader gebruiken",
-    "feature.order_independent_transparency.use_pixel_shader_tooltip": "Gebruikt een pixelshader in plaats van een computeshader om OIT op te lossen.\nGewogen, gemengde OIT gebruikt altijd het pixelshaderpad.",
     "feature.order_independent_transparency.write_depth": "Diepte schrijven",
     "feature.order_independent_transparency.write_depth_tooltip": "Staat OIT-compositie toe diepte te schrijven voor meshes met de vlag Diepte schrijven.\nVereist oplossing met een pixelshader.\nGeldt voor alle Lighting-shadermaterialen, met uitzondering van Effect-shaders."
 }

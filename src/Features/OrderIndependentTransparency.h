@@ -47,7 +47,6 @@ struct OrderIndependentTransparency final : Feature
 		float	DistanceThreshold = InfDistanceThreshold; // Distance to camera before enabling OIT, to exclude large & complex distant volumetric fogs
 		bool	CaptureMultiplicativeLayer = true; // Whether to support multiplicative blend mode
 		bool	OverrideRenderTargets = false; // Force override render target in alpha pass, only use you having issue
-		bool	UsePixelShader = true; // Whether to use pixel shader or compute shader for OIT resolve
 		bool	WriteDepth = true; // Allow the OIT composition to write depth for closest mesh with 'Write Depth' flag
 		float	WriteDepthThreshold = 0.f; // Don't write depth if the layer's alpha is below this threshold
 	};
@@ -124,10 +123,6 @@ struct OrderIndependentTransparency final : Feature
 	// OIT_RVO
 	std::optional<Buffer>						colorBuffer; // RWStructuredBuffer<uint2[OIT_NODE_COUNTS]>
 	std::optional<Buffer>						depthBuffer; // RWStructuredBuffer<float4[OIT_NODE_COUNTS]>
-
-	winrt::com_ptr<ID3D11ComputeShader>			csVisualize;   // For visualizing the fragment count
-	winrt::com_ptr<ID3D11ComputeShader>			csAT; // For adaptive transparency
-	winrt::com_ptr<ID3D11ComputeShader>			csBlend;   // For weighted blended OIT
 
 	winrt::com_ptr<ID3D11PixelShader>			psVisualize;   // For adaptive transparency
 	winrt::com_ptr<ID3D11PixelShader>			psAT; // For adaptive transparency
