@@ -288,9 +288,8 @@ void OrderIndependentTransparency::DrawSettings()
 		ImGui::TreePop();
 	}
 	ImGui::Spacing();
-	if (ImGui::TreeNodeEx(T(TKEY("wboit_parameters"), "Tuning"), ImGuiTreeNodeFlags_DefaultOpen)) {
+	if (settings.Method == Method::OIT_BLENDED && ImGui::TreeNodeEx(T(TKEY("wboit_parameters"), "Tuning"), ImGuiTreeNodeFlags_DefaultOpen)) {
 		ImGui::TextWrapped("%s", T(TKEY("wboit_advanced_tuning"), "For advanced tuning, edit WBOITWeight.hlsli directly."));
-		EnableScope _(settings.Method == Method::OIT_BLENDED);
 		dirtied.ConstantBuffer |= ImGui::SliderFloat(T(TKEY("wboit_additive_alpha_scale"), "Additive Alpha Scale"), &settings.WBOITAdditiveAlphaScale, 0.f, 1.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text("%s", T(TKEY("wboit_additive_alpha_scale_tooltip"), "Adjust this when additive Lighting or Particle effects have sharp visible boundaries."));
