@@ -562,17 +562,23 @@ void OrderIndependentTransparency::SetupResources()
 		auto& mainDepth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
 		auto& postWaterCopy = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_WATER_COPY];
 
-		D3D11_TEXTURE2D_DESC texDesc;
-		mainDepth.texture->GetDesc(&texDesc);
-		DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, NULL, &postWaterCopy.texture));
+		try {
+			D3D11_TEXTURE2D_DESC texDesc;
+			mainDepth.texture->GetDesc(&texDesc);
+			DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, NULL, &postWaterCopy.texture));
 
-		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc;
-		mainDepth.depthSRV->GetDesc(&srvDesc);
-		DX::ThrowIfFailed(device->CreateShaderResourceView(postWaterCopy.texture, &srvDesc, &postWaterCopy.depthSRV));
+			D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc;
+			mainDepth.depthSRV->GetDesc(&srvDesc);
+			DX::ThrowIfFailed(device->CreateShaderResourceView(postWaterCopy.texture, &srvDesc, &postWaterCopy.depthSRV));
 
-		D3D11_DEPTH_STENCIL_VIEW_DESC dsvDesc;
-		mainDepth.views[0]->GetDesc(&dsvDesc);
-		DX::ThrowIfFailed(device->CreateDepthStencilView(postWaterCopy.texture, &dsvDesc, &postWaterCopy.views[0]));
+			D3D11_DEPTH_STENCIL_VIEW_DESC dsvDesc;
+			mainDepth.views[0]->GetDesc(&dsvDesc);
+			DX::ThrowIfFailed(device->CreateDepthStencilView(postWaterCopy.texture, &dsvDesc, &postWaterCopy.views[0]));
+		} catch (const DX::com_exception& e) {
+			logger::error("Failed to create post-water depth copy: {}", e.what());
+			disable();
+			return;
+		}
 	}
 
 	CompileShaders();
