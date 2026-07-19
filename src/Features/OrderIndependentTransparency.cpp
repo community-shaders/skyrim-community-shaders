@@ -93,40 +93,12 @@ struct Main_RenderWorld_RenderTransparency
 	static inline REL::Relocation<decltype(thunk)> func;
 };
 
-inline consteval bool ShaderTypeHasOIT(RE::BSShader::Type shaderType)
-{
-	switch (shaderType) {
-	case RE::BSShader::Type::Lighting:
-	case RE::BSShader::Type::Effect:
-	case RE::BSShader::Type::Particle:
-		return true;
-	default:
-		return false;
-	}
-}
-
 template <RE::BSShader::Type ShaderType>
 struct BSShader_SetupGeometry
 {
 	static void thunk(RE::BSShader* shader, RE::BSRenderPass* pass, uint32_t renderFlags)
 	{
-		if (globals::state->frameAnnotations) {
-			uint32_t descriptor = 0;
-			if (globals::game::currentPixelShader && *globals::game::currentPixelShader) {
-				descriptor = (*globals::game::currentPixelShader)->id;
-			}
-			const std::string definesSuffix = Util::GetShaderDefinesSuffix(globals::state->shaderDefinesString);
-			std::string diskPath = std::format("Data/ShaderCache/{}/{:X}{}.pso", shader->fxpFilename, descriptor, definesSuffix);
-			const std::string passName = std::format("[{}:{:X}] ({:X}) <{}> {} -> {}", magic_enum::enum_name(ShaderType), descriptor, pass->passEnum,
-				pass->accumulationHint, pass->geometry->name.c_str(), diskPath);
-			globals::state->BeginPerfEvent(passName);
-		}
-
-		if constexpr (ShaderTypeHasOIT(ShaderType))
-		{
-			globals::features::orderIndependentTransparency.SetupGeometry(shader, pass, renderFlags);
-		}
-
+		globals::features::orderIndependentTransparency.SetupGeometry(shader, pass, renderFlags);
 		func(shader, pass, renderFlags);
 	}
 
@@ -139,15 +111,7 @@ struct BSShader_RestoreGeometry
 	static void thunk(RE::BSShader* shader, RE::BSRenderPass* pass, uint32_t renderFlags)
 	{
 		func(shader, pass, renderFlags);
-
-		if constexpr (ShaderTypeHasOIT(ShaderType))
-		{
-			globals::features::orderIndependentTransparency.RestoreGeometry(shader, pass, renderFlags);
-		}
-
-		if (globals::state->frameAnnotations) {
-			globals::state->EndPerfEvent();
-		}
+		globals::features::orderIndependentTransparency.RestoreGeometry(shader, pass, renderFlags);
 	}
 
 	static inline REL::Relocation<decltype(thunk)> func;
@@ -182,13 +146,7 @@ struct Renderer_Flush
 template <RE::BSShader::Type ShaderType> constexpr REL::VariantID VTABLE_BSShader;
 template<> constexpr REL::VariantID VTABLE_BSShader<RE::BSShader::Type::Lighting> = RE::VTABLE_BSLightingShader[0];
 template<> constexpr REL::VariantID VTABLE_BSShader<RE::BSShader::Type::Effect> = RE::VTABLE_BSEffectShader[0];
-template<> constexpr REL::VariantID VTABLE_BSShader<RE::BSShader::Type::Water> = RE::VTABLE_BSWaterShader[0];
-template<> constexpr REL::VariantID VTABLE_BSShader<RE::BSShader::Type::Utility> = RE::VTABLE_BSUtilityShader[0];
 template<> constexpr REL::VariantID VTABLE_BSShader<RE::BSShader::Type::Particle> = RE::VTABLE_BSParticleShader[0];
-template<> constexpr REL::VariantID VTABLE_BSShader<RE::BSShader::Type::Grass> = RE::VTABLE_BSGrassShader[0];
-template<> constexpr REL::VariantID VTABLE_BSShader<RE::BSShader::Type::DistantTree> = RE::VTABLE_BSDistantTreeShader[0];
-template<> constexpr REL::VariantID VTABLE_BSShader<RE::BSShader::Type::BloodSplatter> = RE::VTABLE_BSBloodSplatterShader[0];
-template<> constexpr REL::VariantID VTABLE_BSShader<RE::BSShader::Type::Sky> = RE::VTABLE_BSSkyShader[0];
 template <RE::BSShader::Type ShaderType>
 void HookSetupGeometry()
 {
@@ -199,21 +157,9 @@ void HookSetupGeometry()
 void OrderIndependentTransparency::PostPostLoad()
 {
 	logger::info("[OIT] Hooking BSShader_SetupGeometry");
-	// For gathering object view distance, seems conflicting with frame annotation hooks
 	HookSetupGeometry<RE::BSShader::Type::Lighting>();
 	HookSetupGeometry<RE::BSShader::Type::Effect>();
 	HookSetupGeometry<RE::BSShader::Type::Particle>();
-
-	if (globals::state->frameAnnotations)
-	{
-		// Pure frame annotation hooks
-		HookSetupGeometry<RE::BSShader::Type::Water>();
-		HookSetupGeometry<RE::BSShader::Type::Utility>();
-		HookSetupGeometry<RE::BSShader::Type::Grass>();
-		HookSetupGeometry<RE::BSShader::Type::DistantTree>();
-		HookSetupGeometry<RE::BSShader::Type::BloodSplatter>();
-		HookSetupGeometry<RE::BSShader::Type::Sky>();
-	}
 
 	logger::info("[OIT] Hooking Main_RenderWorld_RenderTransparency");
 
