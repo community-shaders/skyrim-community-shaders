@@ -68,7 +68,6 @@ Effect11::PerFrame Effect11::GetCommonBufferData()
 	data.SkyScatteringSunGlowRange = settingManager.GetInterpolatedTimeOfDayValue("SunGlowRange", "SKYSCATTERING");
 	data.SkyScatteringMoonGlowAmount = settingManager.GetInterpolatedTimeOfDayValue("MoonGlowAmount", "SKYSCATTERING");
 	data.SkyScatteringMoonGlowRange = settingManager.GetInterpolatedTimeOfDayValue("MoonGlowRange", "SKYSCATTERING");
-	data.SkyScatteringCloudsLightingSunMinIntensity = settingManager.GetInterpolatedTimeOfDayValue("CloudsLightingSunMinIntensity", "SKYSCATTERING");
 	data.SkyScatteringCloudsLightingSunMultiplier = settingManager.GetInterpolatedTimeOfDayValue("CloudsLightingSunMultiplier", "SKYSCATTERING");
 	data.SkyScatteringCloudsLightingMoonIntensity = settingManager.GetInterpolatedTimeOfDayValue("CloudsLightingMoonIntensity", "SKYSCATTERING");
 

@@ -79,7 +79,6 @@ public:
 		float SkyScatteringMoonGlowAmount;
 
 		float SkyScatteringMoonGlowRange;
-		float SkyScatteringCloudsLightingSunMinIntensity;
 		float SkyScatteringCloudsLightingSunMultiplier;
 		float SkyScatteringCloudsLightingMoonIntensity;
 
@@ -92,6 +91,7 @@ public:
 		float RainMotionStretch;
 		float RainMotionTransparency;
 		uint pad0;
+		uint pad1;
 	};
 
 	bool enableEffect = false;

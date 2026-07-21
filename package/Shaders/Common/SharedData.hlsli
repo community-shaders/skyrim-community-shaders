@@ -300,7 +300,6 @@ namespace SharedData
 		float SkyScatteringMoonGlowAmount;
 
 		float SkyScatteringMoonGlowRange;
-		float SkyScatteringCloudsLightingSunMinIntensity;
 		float SkyScatteringCloudsLightingSunMultiplier;
 		float SkyScatteringCloudsLightingMoonIntensity;
 
@@ -313,6 +312,7 @@ namespace SharedData
 		float RainMotionStretch;
 		float RainMotionTransparency;
 		uint pad0;
+		uint pad1;
 	};
 	struct TerrainBlendingSettings
 	{
