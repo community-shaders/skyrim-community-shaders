@@ -915,6 +915,11 @@ void EditorWindow::ShowViewportWindow()
 	}
 
 	if (tempTexture && tempTexture->srv) {
+		// tempTexture is a raw copy of the framebuffer RT; its alpha is not guaranteed to be 1,
+		// so a plain ImGui::Image can show the dimmed backdrop through as a transparency cutout.
+		const ImVec2 imageMin = ImGui::GetCursorScreenPos();
+		const ImVec2 imageMax(imageMin.x + imageSize.x, imageMin.y + imageSize.y);
+		ImGui::GetWindowDrawList()->AddRectFilled(imageMin, imageMax, IM_COL32_BLACK);
 		ImGui::Image((void*)tempTexture->srv.get(), imageSize);
 	} else {
 		ImGui::TextDisabled("%s", T(TKEY("viewport_unavailable"), "Viewport unavailable"));
@@ -953,7 +958,11 @@ void EditorWindow::RenderUI()
 	ImGui::GetStyle().FontScaleMain = settings.editorUIScale;
 
 	if (IsViewportActive()) {
-		ImGui::GetBackgroundDrawList()->AddRectFilled({ 0, 0 }, io.DisplaySize, ImGui::GetColorU32(ImGuiCol_ModalWindowDimBg));
+		auto* backgroundDrawList = ImGui::GetBackgroundDrawList();
+		backgroundDrawList->AddRectFilled({ 0, 0 }, io.DisplaySize, ImGui::GetColorU32(ImGuiCol_ModalWindowDimBg));
+		backgroundDrawList->AddRectFilled(
+			{ 0, 0 }, io.DisplaySize,
+			ImGui::GetColorU32(ImVec4(0.0f, 0.0f, 0.0f, ThemeManager::Constants::EDITOR_VIEWPORT_BACKGROUND_DIM_ALPHA)));
 	}
 
 	// Check for Ctrl+Z to undo
@@ -1566,8 +1575,13 @@ void EditorWindow::SaveSettings()
 
 void EditorWindow::LoadSettings()
 {
-	if (!j.empty())
-		settings = j;
+	if (!j.empty()) {
+		try {
+			settings = j;
+		} catch (const nlohmann::json::exception& e) {
+			logger::warn("Failed to deserialize editor settings, using defaults: {}", e.what());
+		}
+	}
 	m_selectedCategory = settings.selectedCategory;
 	SetWidgetTypeSizesFromJson(settings.widgetTypeSizes);
 }

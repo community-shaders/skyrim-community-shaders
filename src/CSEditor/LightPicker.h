@@ -63,7 +63,7 @@ private:
 	/** @brief Raycasts through the cursor and resolves the collision mesh/ref under it. */
 	static PickedMesh ResolveUnderCursor(bool logResult = true);
 	/** @brief Resolves the on-screen ref nearest the cursor (effect-mesh pick), skipping collision-reachable ones. */
-	static PickedMesh ResolveNearestToCursor();
+	static PickedMesh ResolveNearestToCursor(bool logResult = true);
 	/** @brief Fills out's identifying fields (handle, FormID, EditorID, model, plugin) from a ref. */
 	static void PopulateFromRef(PickedMesh& out, RE::TESObjectREFR* refr, RE::TESBoundObject* baseObj);
 
@@ -72,4 +72,6 @@ private:
 	PickedMesh hoverMesh;  // last raycast hit under the cursor (updated per frame)
 	float lastMouseX = -1.f;
 	float lastMouseY = -1.f;
+	double lastHoverTime = 0.0;  // throttles the hover raycast/cell-scan during cursor movement
+	bool hoverDirty = false;     // set on movement, cleared once hoverMesh is recomputed; survives a throttled frame
 };

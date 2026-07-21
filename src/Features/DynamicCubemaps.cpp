@@ -450,7 +450,7 @@ void DynamicCubemaps::Irradiance(bool a_reflections, uint32_t a_startLevel, uint
 			: std::format("DynamicCubemaps::Irradiance{}", suffix);
 		globals::profiler->BeginPass(passName);
 		for (std::uint32_t level = a_startLevel; level < a_endLevel; level++, size /= 2) {
-			const UINT numGroups = (UINT)std::max(1u, size / 8);
+			const UINT numGroups = (UINT)std::max(1u, (size + 7u) / 8u);
 
 			const SpecularMapFilterSettingsCB spmapConstants = { level * delta_roughness };
 			spmapCB->Update(spmapConstants);
@@ -553,6 +553,9 @@ void DynamicCubemaps::UpdateCubemap()
 		if (hoursPassedDiff >= 0.01f) {  // ~36 seconds game time
 			resetCapture[0] = true;
 			resetCapture[1] = true;
+			// Restart the split pipeline so the stale mid/last irradiance mips
+			// from the pre-jump capture aren't compressed before the recapture.
+			nextTask = NextTask::kCaptureInferAndIrradianceA;
 		}
 	}
 
