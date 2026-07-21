@@ -828,11 +828,17 @@ PS_OUTPUT main(PS_INPUT input)
 #		if defined(ADDBLEND)
 #			if defined(EXP_HEIGHT_FOG)
 	float3 blendedColor = lightColor * (1 - vanillaFogFactor) * (1 - expFogFactor);
-	if (SharedData::enbSettings.Enable)
-		blendedColor *= SharedData::enbSettings.LightSpriteIntensity;
 #			else
 	float3 blendedColor = lightColor * (1 - fogFactor);
 #			endif
+	if (SharedData::enbSettings.Enable) {
+		// ENB classifies by object properties: additive draws are FIRE; additive soft-particle (Soft_Effect) glows are LIGHTSPRITE.
+#			if defined(SOFT) && !defined(GRAYSCALE_TO_COLOR)
+		blendedColor *= SharedData::enbSettings.LightSpriteIntensity;
+#			else
+		blendedColor = pow(max(blendedColor, 0.0), SharedData::enbSettings.FireCurve) * SharedData::enbSettings.FireIntensity;
+#			endif
+	}
 #		elif defined(MULTBLEND) || defined(MULTBLEND_DECAL)
 #			if defined(EXP_HEIGHT_FOG)
 	float3 blendedColor = lerp(lightColor, 1.0.xxx, saturate(1.5 * vanillaFogFactor).xxx);
