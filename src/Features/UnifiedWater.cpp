@@ -209,7 +209,7 @@ void UnifiedWater::DataLoaded()
 	waterCache = new WaterCache();
 
 	if (LoadOrderChanged()) {
-		logger::info("[Unified Water] Load order changed, regenerating flowmap and caches");
+		logger::info("[Unified Water] Load order or plugin version changed, regenerating flowmap and caches");
 
 		if (flowmap->RegenerateAndLoadFlowmap())
 			SetFlowmapTex();
@@ -277,6 +277,68 @@ bool UnifiedWater::MenuOpenCloseEventHandler::Register()
 	return true;
 }
 
+namespace
+{
+	// Permissive sharing so a lingering handle on UWLoadOrder.hash never blocks a
+	// later attempt with ERROR_SHARING_VIOLATION - reproduced directly: writes to
+	// Data/ root failed while the game was running. The retry only helps a
+	// transient locker (AV/indexer), not a persistent one.
+	constexpr int kShareRetries = 3;
+	constexpr DWORD kShareRetryDelayMs = 50;
+
+	bool ReadHashFile(const std::filesystem::path& path, uint64_t& outHash)
+	{
+		for (int attempt = 0; attempt < kShareRetries; ++attempt) {
+			winrt::file_handle handle{ CreateFileW(path.c_str(), GENERIC_READ,
+				FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+				OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr) };
+			if (handle) {
+				DWORD bytesRead = 0;
+				const bool ok = ReadFile(handle.get(), &outHash, sizeof(outHash), &bytesRead, nullptr) &&
+				                bytesRead == sizeof(outHash);
+				if (!ok)
+					logger::warn("[Unified Water] '{}' exists but could not be fully read; treating as no persisted hash", path.string());
+				return ok;
+			}
+			const DWORD err = GetLastError();
+			if (err == ERROR_FILE_NOT_FOUND || err == ERROR_PATH_NOT_FOUND)
+				return false;
+			if ((err == ERROR_SHARING_VIOLATION || err == ERROR_LOCK_VIOLATION) && attempt + 1 < kShareRetries) {
+				Sleep(kShareRetryDelayMs);
+				continue;
+			}
+			logger::warn("[Unified Water] Failed to open '{}' for reading (error {})", path.string(), err);
+			return false;
+		}
+		return false;
+	}
+
+	bool WriteHashFile(const std::filesystem::path& path, uint64_t hash)
+	{
+		for (int attempt = 0; attempt < kShareRetries; ++attempt) {
+			winrt::file_handle handle{ CreateFileW(path.c_str(), GENERIC_WRITE,
+				FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+				CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr) };
+			if (handle) {
+				DWORD bytesWritten = 0;
+				const bool ok = WriteFile(handle.get(), &hash, sizeof(hash), &bytesWritten, nullptr) &&
+				                bytesWritten == sizeof(hash);
+				if (!ok)
+					logger::error("[Unified Water] Failed to persist load-order hash to '{}'; cache will regenerate again next launch", path.string());
+				return ok;
+			}
+			const DWORD err = GetLastError();
+			if ((err == ERROR_SHARING_VIOLATION || err == ERROR_LOCK_VIOLATION) && attempt + 1 < kShareRetries) {
+				Sleep(kShareRetryDelayMs);
+				continue;
+			}
+			logger::error("[Unified Water] Failed to open '{}' for writing (error {}); cache will regenerate again next launch", path.string(), err);
+			return false;
+		}
+		return false;
+	}
+}
+
 bool UnifiedWater::LoadOrderChanged()
 {
 	auto* dataHandler = RE::TESDataHandler::GetSingleton();
@@ -285,13 +347,17 @@ bool UnifiedWater::LoadOrderChanged()
 
 	uint64_t hash = 14695981039346656037ull;
 
-	auto addToHash = [&](const RE::TESFile* file) {
-		if (!file || !file->fileName)
-			return;
-		for (auto p = reinterpret_cast<const unsigned char*>(file->fileName); *p; ++p) {
+	auto addBytes = [&](const unsigned char* p) {
+		for (; *p; ++p) {
 			hash ^= *p;
 			hash *= 1099511628211ull;
 		}
+	};
+
+	auto addToHash = [&](const RE::TESFile* file) {
+		if (!file || !file->fileName)
+			return;
+		addBytes(reinterpret_cast<const unsigned char*>(file->fileName));
 	};
 
 	if (const auto mods = dataHandler->GetLoadedMods()) {
@@ -306,26 +372,27 @@ bool UnifiedWater::LoadOrderChanged()
 			addToHash(lightMods[i]);
 	}
 
-	namespace fs = std::filesystem;
-	const fs::path path = Util::PathHelpers::GetDataPath() / "UWLoadOrder.hash";
+	addBytes(reinterpret_cast<const unsigned char*>(Plugin::VERSION.string().c_str()));
+
+	// Data/ root is subject to a persistent external lock while the game runs (writes
+	// fail with ERROR_SHARING_VIOLATION for the whole session). Our plugin's own
+	// subfolder isn't - SettingsUser.json writes there every session without issue -
+	// so the hash lives there instead of directly under Data/.
+	const std::filesystem::path path = Util::PathHelpers::GetCommunityShaderPath() / "UWLoadOrder.hash";
 
 	uint64_t existingHash = 0;
-	if (fs::exists(path)) {
-		std::ifstream file(path, std::ios::binary);
-		if (file.is_open()) {
-			file.read(reinterpret_cast<char*>(&existingHash), sizeof(existingHash));
-			file.close();
-		}
+	ReadHashFile(path, existingHash);
+
+	const bool changed = hash != existingHash;
+	logger::debug("[Unified Water] Load order hash: computed={:#x} persisted={:#x} changed={}", hash, existingHash, changed);
+
+	if (changed) {
+		std::error_code ec;
+		std::filesystem::create_directories(path.parent_path(), ec);
+		WriteHashFile(path, hash);
 	}
 
-	if (hash != existingHash) {
-		std::ofstream file(path, std::ios::binary | std::ios::trunc);
-		if (file.is_open()) {
-			file.write(reinterpret_cast<const char*>(&hash), sizeof(hash));
-		}
-	}
-
-	return hash != existingHash;
+	return changed;
 }
 
 void UnifiedWater::SetFlowmapTex() const
@@ -502,6 +569,8 @@ void UnifiedWater::BGSTerrainBlock_Attach::thunk(RE::BGSTerrainBlock* block)
 	std::vector<std::pair<RE::BSTriShape*, const WaterCache::Instruction*>> built;
 	bool attaching = false;
 	RE::NiPointer<RE::BSMultiBoundNode> water;
+	// Keeps the backing RuntimeCache alive for as long as `built` holds pointers into it.
+	WaterCache::InstructionResult instructionResult;
 
 	if (block && block->loaded && !block->attached && block->chunk && block->water) {
 		// Keep terrain water alive while moving it out of its owning node
@@ -516,7 +585,8 @@ void UnifiedWater::BGSTerrainBlock_Attach::thunk(RE::BGSTerrainBlock* block)
 		const auto lodLevel = node->GetLODLevel();
 		const auto worldSpace = block->node->manager->worldSpace;
 
-		const auto instructions = singleton.waterCache->GetInstructions(worldSpace, lodLevel, node->baseCellX, node->baseCellY);
+		instructionResult = singleton.waterCache->GetInstructions(worldSpace, lodLevel, node->baseCellX, node->baseCellY);
+		const auto instructions = instructionResult.instructions;
 		if (!instructions) {
 			logger::warn("[Unified Water] No instructions found for {} chunk at {}, {}", worldSpace->GetFormEditorID(), node->baseCellX, node->baseCellY);
 			// Reattach the saved node before falling back to vanilla

@@ -1,3 +1,19 @@
+#if defined(HORIZON_FIX)
+namespace HorizonFix
+{
+	// Depth (z/w) that water folded back from beyond the far clip plane lands at: eight
+	// depth quanta inside the far plane, exactly representable in both D24 and D32F
+	// buffers - behind everything the scene rendered, in front of the depth clear.
+	static const float FoldedDepth = 1.0 - 8.0 / 16777216.0;
+
+	// Scene depth at or beyond this counts as "nothing rendered behind the water": the
+	// clear value, folded far water (FoldedDepth), or an external plugin's depth-clamped
+	// far-water backdrop a few quanta inside that. The margin is a few world units at the
+	// far plane, where no real surface can render.
+	static const float EmptyDepthThreshold = 1.0 - 64.0 / 16777216.0;
+}
+#endif
+
 #if defined(UNDERWATERMASK)
 
 struct VS_INPUT
@@ -161,6 +177,10 @@ VS_OUTPUT main(VS_INPUT input)
 	vsout.HPosition.xy = worldViewPos.xy;
 	vsout.HPosition.z = heightMult * 0.5 + worldViewPos.z;
 	vsout.HPosition.w = worldViewPos.w;
+
+#	if defined(HORIZON_FIX)
+	vsout.HPosition.z = min(vsout.HPosition.z, vsout.HPosition.w * HorizonFix::FoldedDepth);
+#	endif
 
 #		if defined(STENCIL)
 	vsout.WorldPosition = worldPos;
@@ -891,6 +911,11 @@ DiffuseOutput GetWaterDiffuseColor(PS_INPUT input, float3 normal, float3 viewDir
 		refractionWorldPosition = mul(FrameBuffer::CameraViewProjInverse, float4((refractionUvRaw * 2 - 1) * float2(1, -1), DepthTex.Load(float3(refractionScreenPosition, 0)).x, 1));
 		refractionWorldPosition.xyz /= refractionWorldPosition.w;
 	}
+
+#					if defined(HORIZON_FIX)
+	if (DepthTex.Load(float3(refractionScreenPosition, 0)).x >= HorizonFix::EmptyDepthThreshold)
+		distanceMul = 1.0.xxxx;
+#					endif
 #				endif
 
 	float2 refractionUV = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(refractionUvRaw);
@@ -995,6 +1020,11 @@ PS_OUTPUT main(PS_INPUT input)
 	distanceMul = saturate(
 		planeMul * float4(length(depthAdjustedViewDirection).xx, abs(viewSurfaceAngle).xx) /
 		FogParam.z);
+
+#					if defined(HORIZON_FIX)
+	if (DepthTex.Load(float3(screenPosition, 0)).x >= HorizonFix::EmptyDepthThreshold)
+		distanceMul = 1.0.xxxx;
+#					endif
 #				endif
 #			endif
 

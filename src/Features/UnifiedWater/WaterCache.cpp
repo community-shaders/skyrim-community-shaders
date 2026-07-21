@@ -34,6 +34,12 @@ namespace
 
 bool WaterCache::SetCurrentWorldSpace(const RE::TESWorldSpace* worldSpace)
 {
+	std::scoped_lock lock(currentCacheMutex);
+	return SetCurrentWorldSpaceLocked(worldSpace);
+}
+
+bool WaterCache::SetCurrentWorldSpaceLocked(const RE::TESWorldSpace* worldSpace)
+{
 	if (!worldSpace) {
 		currentCache.reset();
 		currentWorldSpace.clear();
@@ -72,14 +78,20 @@ bool WaterCache::SetCurrentWorldSpace(const RE::TESWorldSpace* worldSpace)
 	return true;
 }
 
-std::vector<WaterCache::Instruction>* WaterCache::GetInstructions(const RE::TESWorldSpace* worldSpace, const uint32_t lodLevel, const uint32_t x, const uint32_t y)
+WaterCache::InstructionResult WaterCache::GetInstructions(const RE::TESWorldSpace* worldSpace, const uint32_t lodLevel, const uint32_t x, const uint32_t y)
 {
-	if (!SetCurrentWorldSpace(worldSpace)) {
+	std::scoped_lock lock(currentCacheMutex);
+
+	if (!SetCurrentWorldSpaceLocked(worldSpace)) {
 		logger::error("[Unified Water] [Cache] Failed to set current cache to {} while getting instructions", worldSpace->GetFormEditorID());
-		return nullptr;
+		return {};
 	}
 
-	return currentCache->GetInstructions(lodLevel, x, y);
+	// Held alongside the pointer so a concurrent LoadCaches can't free it mid-use.
+	InstructionResult result;
+	result.cache = currentCache;
+	result.instructions = currentCache->GetInstructions(lodLevel, x, y);
+	return result;
 }
 
 std::vector<WaterCache::Instruction>* WaterCache::RuntimeCache::GetInstructions(const int32_t lodLevel, const int32_t x, const int32_t y)
@@ -149,7 +161,7 @@ bool WaterCache::RegenerateCaches()
 	logger::info("[Unified Water] [Cache] Clearing and regenerating caches...");
 
 	namespace fs = std::filesystem;
-	const fs::path dir = Util::PathHelpers::GetDataPath() / "UnifiedWaterCache";
+	const fs::path dir = Util::PathHelpers::GetUnifiedWaterCachePath();
 
 	std::error_code ec;
 	fs::create_directories(dir, ec);
@@ -224,10 +236,17 @@ bool WaterCache::LoadCaches()
 
 	std::atomic_store_explicit(&cacheMap, std::const_pointer_cast<const CacheMap>(newCacheMap), std::memory_order_release);
 
-	if (!currentWorldSpace.empty()) {
-		if (const auto snap = std::atomic_load_explicit(&cacheMap, std::memory_order_acquire)) {
-			if (const auto it = snap->find(currentWorldSpace); it != snap->end()) {
-				currentCache = it->second;
+	{
+		std::scoped_lock lock(currentCacheMutex);
+		if (!currentWorldSpace.empty()) {
+			if (const auto snap = std::atomic_load_explicit(&cacheMap, std::memory_order_acquire)) {
+				if (const auto it = snap->find(currentWorldSpace); it != snap->end()) {
+					currentCache = it->second;
+				} else {
+					// Dropped from the reloaded map - clear so a name match can't fast-return stale.
+					currentCache.reset();
+					currentWorldSpace.clear();
+				}
 			}
 		}
 	}
@@ -251,7 +270,7 @@ bool WaterCache::GenerateCaches()
 	{
 		namespace fs = std::filesystem;
 		std::error_code ec;
-		fs::create_directories(Util::PathHelpers::GetDataPath() / "UnifiedWaterCache", ec);
+		fs::create_directories(Util::PathHelpers::GetUnifiedWaterCachePath(), ec);
 		if (ec) {
 			logger::error("[Unified Water] [Cache] Failed to ensure output directory: {}", ec.message());
 			return false;
@@ -857,7 +876,7 @@ template <typename T>
 bool WaterCache::TryWriteCacheToFile(const std::string& name, const WorldSpaceHeader& header, const std::vector<T>& vec)
 {
 	namespace fs = std::filesystem;
-	const fs::path path = Util::PathHelpers::GetDataPath() / "UnifiedWaterCache" / name;
+	const fs::path path = Util::PathHelpers::GetUnifiedWaterCachePath() / name;
 
 	std::ofstream ofs(path, std::ios::binary | std::ios::trunc);
 	if (!ofs) {
@@ -879,7 +898,7 @@ template <typename T>
 bool WaterCache::TryReadCacheFromFile(const std::string& name, WorldSpaceHeader& header, std::vector<T>& vec)
 {
 	namespace fs = std::filesystem;
-	const fs::path path = Util::PathHelpers::GetDataPath() / "UnifiedWaterCache" / name;
+	const fs::path path = Util::PathHelpers::GetUnifiedWaterCachePath() / name;
 	if (!fs::exists(path))
 		return false;
 

@@ -123,7 +123,7 @@ LightPicker::PickedMesh LightPicker::ResolveUnderCursor(bool logResult)
 	return out;
 }
 
-LightPicker::PickedMesh LightPicker::ResolveNearestToCursor()
+LightPicker::PickedMesh LightPicker::ResolveNearestToCursor(bool logResult)
 {
 	PickedMesh out;
 
@@ -192,8 +192,9 @@ LightPicker::PickedMesh LightPicker::ResolveNearestToCursor()
 
 	PopulateFromRef(out, bestRef, baseObj);
 
-	logger::info("[LightPicker] Effect-pick ref 0x{:08X} '{}' model '{}' plugin '{}'",
-		bestRef->GetFormID(), out.editorId, out.modelPath, out.sourcePlugin);
+	if (logResult)
+		logger::info("[LightPicker] Effect-pick ref 0x{:08X} '{}' model '{}' plugin '{}'",
+			bestRef->GetFormID(), out.editorId, out.modelPath, out.sourcePlugin);
 	return out;
 }
 
@@ -217,6 +218,7 @@ void LightPicker::InvalidateHover()
 	hoverMesh = {};
 	lastMouseX = -1.f;
 	lastMouseY = -1.f;
+	hoverDirty = false;
 }
 
 void LightPicker::Update()
@@ -238,12 +240,19 @@ void LightPicker::Update()
 		return;
 	}
 
-	// Update hover mesh when the cursor moves.
+	// Refresh the hover mesh when the cursor moves, throttled so a fast drag doesn't run a raycast
+	// (or, in effect mode, a full cell scan) every frame.
+	static constexpr double kHoverRefreshSeconds = 0.05;
 	const ImVec2 mouse = ImGui::GetMousePos();
-	if (mouse.x != lastMouseX || mouse.y != lastMouseY) {
-		lastMouseX = mouse.x;
-		lastMouseY = mouse.y;
-		hoverMesh = (pickMode == PickMode::kEffect) ? ResolveNearestToCursor() : ResolveUnderCursor(false);
+	const double now = ImGui::GetTime();
+	const bool moved = mouse.x != lastMouseX || mouse.y != lastMouseY;
+	lastMouseX = mouse.x;
+	lastMouseY = mouse.y;
+	hoverDirty |= moved;
+	if (hoverDirty && now - lastHoverTime >= kHoverRefreshSeconds) {
+		lastHoverTime = now;
+		hoverDirty = false;
+		hoverMesh = (pickMode == PickMode::kEffect) ? ResolveNearestToCursor(false) : ResolveUnderCursor(false);
 	}
 
 	if (hoverMesh.valid) {
@@ -261,10 +270,12 @@ void LightPicker::Update()
 	}
 
 	if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
-		// Reuse the hover result if the mouse didn't move between the last hover update and click.
-		PickedMesh hit = hoverMesh.valid ? hoverMesh :
-		                                   (pickMode == PickMode::kEffect ? ResolveNearestToCursor() : ResolveUnderCursor());
+		// Resolve fresh at the click position; the throttled hover hit may lag the cursor.
+		PickedMesh hit = (pickMode == PickMode::kEffect) ? ResolveNearestToCursor(false) : ResolveUnderCursor(false);
 		if (hit.valid) {
+			// Log only the committed pick (hover resolves run silently to keep the log quiet).
+			logger::info("[LightPicker] Picked base 0x{:08X} '{}' model '{}' ref '{}' plugin '{}'",
+				hit.baseFormId, hit.editorId, hit.modelPath, hit.refFormEntry, hit.sourcePlugin);
 			result = hit;
 			picking = false;
 			hoverMesh = {};
