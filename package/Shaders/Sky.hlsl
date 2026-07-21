@@ -328,7 +328,7 @@ PS_OUTPUT main(PS_INPUT input)
 				float secundaLighting = saturate(dot(viewDirection, SharedData::SecundaDirection.xyz));
 
 				moonDirectLit = masserScatterColor * masserLighting * masserShadow + secundaScatterColor * secundaLighting * secundaShadow;
-				moonDirectLit *= SharedData::enbSettings.SkyScatteringCloudsLightingMoonIntensity;
+				moonDirectLit *= SharedData::enbSettings.SkyScatteringCloudsLightingMoonIntensity * 0.5;
 			}
 
 			float3 directLit = sunDirectLit + moonDirectLit;
@@ -342,8 +342,8 @@ PS_OUTPUT main(PS_INPUT input)
 			float cloudsEdgeAlpha = saturate(1.0 - baseColor.w);
 
 			float3 sunPhase = pow(abs(saturate(dot(viewDirection, SharedData::SunDirection.xyz))), 10.0) * SharedData::SunColor.xyz * max(cloudsEdgeAlpha, sunShadow);
-			float3 masserPhase = pow(abs(saturate(dot(viewDirection, SharedData::MasserDirection.xyz))), 10.0) * SharedData::MasserColor.xyz * SharedData::enbSettings.CloudsEdgeMoonMultiplier * max(cloudsEdgeAlpha, masserShadow);
-			float3 secundaPhase = pow(abs(saturate(dot(viewDirection, SharedData::SecundaDirection.xyz))), 10.0) * SharedData::SecundaColor.xyz * SharedData::enbSettings.CloudsEdgeMoonMultiplier * max(cloudsEdgeAlpha, secundaShadow);
+			float3 masserPhase = pow(abs(saturate(dot(viewDirection, SharedData::MasserDirection.xyz))), 10.0) * SharedData::MasserColor.xyz * SharedData::enbSettings.CloudsEdgeMoonMultiplier * max(cloudsEdgeAlpha, masserShadow) * 0.5;
+			float3 secundaPhase = pow(abs(saturate(dot(viewDirection, SharedData::SecundaDirection.xyz))), 10.0) * SharedData::SecundaColor.xyz * SharedData::enbSettings.CloudsEdgeMoonMultiplier * max(cloudsEdgeAlpha, secundaShadow) * 0.5;
 
 			float3 cloudsScatter = (sunPhase + masserPhase + secundaPhase) * SharedData::enbSettings.CloudsEdgeIntensity;
 
