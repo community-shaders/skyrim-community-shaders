@@ -73,7 +73,6 @@ namespace Permutation
 		static const uint InWorld = (1 << 0);
 		static const uint InReflection = (1 << 1);
 		static const uint IsBeastRace = (1 << 2);
-		static const uint GrassSphereNormal = (1 << 3);
 		static const uint IsSun = (1 << 4);
 		static const uint SuppressExternalEmittance = (1 << 5);
 	}
@@ -97,6 +96,9 @@ namespace Permutation
 		uint ExtraFeatureDescriptor;
 
 		float EffectRadius;
+		float3 GrassBoundCenter;
+
+		float3 GrassBoundExtents;
 	};
 
 }

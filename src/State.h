@@ -268,7 +268,6 @@ public:
 		InWorld = 1 << 0,
 		IsReflections = 1 << 1,
 		IsBeastRace = 1 << 2,
-		GrassSphereNormal = 1 << 3,
 		IsSun = 1 << 4,
 		SuppressExternalEmittance = 1 << 5
 	};
@@ -314,13 +313,23 @@ public:
 		uint ExtraFeatureDescriptor;
 
 		float EffectRadius;
-		float3 pad0;
+		float3 GrassBoundCenter;
+
+		float3 GrassBoundExtents;
+		float pad0;
 
 		bool operator==(const PermutationCB& other) const
 		{
 			return PixelShaderDescriptor == other.PixelShaderDescriptor &&
 			       ExtraShaderDescriptor == other.ExtraShaderDescriptor &&
-			       ExtraFeatureDescriptor == other.ExtraFeatureDescriptor && EffectRadius == other.EffectRadius;
+			       ExtraFeatureDescriptor == other.ExtraFeatureDescriptor &&
+			       EffectRadius == other.EffectRadius &&
+			       GrassBoundCenter.x == other.GrassBoundCenter.x &&
+			       GrassBoundCenter.y == other.GrassBoundCenter.y &&
+			       GrassBoundCenter.z == other.GrassBoundCenter.z &&
+			       GrassBoundExtents.x == other.GrassBoundExtents.x &&
+			       GrassBoundExtents.y == other.GrassBoundExtents.y &&
+			       GrassBoundExtents.z == other.GrassBoundExtents.z;
 		}
 	};
 	STATIC_ASSERT_ALIGNAS_16(PermutationCB);
