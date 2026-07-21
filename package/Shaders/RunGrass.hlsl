@@ -42,8 +42,7 @@ struct VS_OUTPUT
 #	endif  // RENDER_DEPTH
 	float4 WorldPosition: POSITION1;
 	float4 PreviousWorldPosition: POSITION2;
-	float4 VertexNormal: POSITION3;
-	float4 SphereNormal: POSITION4;
+	float4 VertexNormal: POSITION4;
 };
 #else
 struct VS_OUTPUT
@@ -198,14 +197,9 @@ VS_OUTPUT main(VS_INPUT input)
 
 	vsout.PreviousWorldPosition = mul(PreviousWorld, previousMsPosition);
 
+	// Vertex normal needs to be transformed to world-space for lighting calculations.
 	vsout.VertexNormal.xyz = mul(world3x3, input.Normal.xyz * 2.0 - 1.0);
 	vsout.VertexNormal.w = input.Color.w;
-
-	float3 boundExtents = max(Permutation::GrassBoundExtents, EPSILON_DIVISION.xxx);
-	float3 sphereNormalMS = normalize((input.Position.xyz - Permutation::GrassBoundCenter) / boundExtents);
-	vsout.SphereNormal.xyz = mul((float3x3)World, sphereNormalMS);
-
-	vsout.SphereNormal.w = input.Color.w;
 
 	return vsout;
 }
@@ -459,10 +453,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float2 screenUV = FrameBuffer::ViewToUV(viewPosition);
 	float screenNoise = Random::InterleavedGradientNoise(input.HPosition.xy, SharedData::FrameCount);
 
-	if (!frontFace)
-		normal = -normal;
-
-	normal = normalize(lerp(normal, normalize(input.SphereNormal.xyz), saturate(input.SphereNormal.w * 10)));
+	// Swaps direction of the backfaces otherwise they seem to get lit from the wrong direction.
+	if (!(Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::GrassSphereNormal))
+		if (!frontFace)
+			normal = -normal;
 
 	float3x3 tbn = 0;
 
