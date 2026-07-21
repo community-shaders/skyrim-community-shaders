@@ -188,7 +188,7 @@ VS_OUTPUT main(VS_INPUT input)
 
 #		if defined(RAIN)
 	float2 uv = input.TexCoord1.xy;
-    uv.y *= 1.25; // UV fix
+    uv.xy *= 2.0; // UV fix
 	uv.xy *= 0.5; // UV unfix
 	vsout.RaindropData.xy = uv * 0.5 + 0.5;
 #		endif
@@ -303,10 +303,10 @@ if (SharedData::enbSettings.EnableRain) {
     if (dot(refractDir, refractDir) < 1e-4)
         refractDir = -V;
 
-    float3 reflectColor = DynamicCubemaps::EnvReflectionsTexture.SampleLevel(SampSourceTexture, reflectDir, 0).xyz;
-    float3 refractColor = DynamicCubemaps::EnvReflectionsTexture.SampleLevel(SampSourceTexture, refractDir, 0).xyz;
+    float3 reflectColor = Color::IrradianceToLinear(DynamicCubemaps::EnvReflectionsTexture.SampleLevel(SampSourceTexture, reflectDir, 0).xyz);
+    float3 refractColor = Color::IrradianceToLinear(DynamicCubemaps::EnvReflectionsTexture.SampleLevel(SampSourceTexture, refractDir, 0).xyz);
 
-    psout.Color.xyz = lerp(refractColor, reflectColor, fresnel);
+    psout.Color.xyz = Color::IrradianceToGamma(lerp(refractColor, reflectColor, fresnel));
     psout.Color.w = alpha;
     psout.Normal = float4(0, 1, 0, alpha);
     return psout;
