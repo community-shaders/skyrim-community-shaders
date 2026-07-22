@@ -163,6 +163,9 @@ void EffectManager::RegisterSettings()
 	settingManager.RegisterFloatSetting("AdaptationMin", "ADAPTATION", 0.1f, 0.0f, 65536.0f, 0.01f, false);
 	settingManager.RegisterFloatSetting("AdaptationMax", "ADAPTATION", 10.0f, 0.0f, 65536.0f, 0.01f, false);
 
+	settingManager.RegisterFloatSetting("FireIntensity", "FIRE", 1.0f, 0.0f, 30000.0f, 0.01f, false);
+	settingManager.RegisterFloatSetting("FireCurve", "FIRE", 1.0f, 0.1f, 8.0f, 0.01f, false);
+
 	settingManager.RegisterTimeOfDaySetting("Amount", "BLOOM", 0.1f, 0.0f, 10.0f, 0.01f, true);
 
 	settingManager.RegisterTimeOfDaySetting("Amount", "LENS", 1.0f, 0.0f, 10.0f, 0.01f, true);
@@ -254,9 +257,6 @@ void EffectManager::RegisterSettings()
 	settingManager.RegisterTimeOfDaySetting("PointLightingInfluence", "PARTICLE", 1.0f, 0.0f, 10.0f, 0.01f, true);
 
 	settingManager.RegisterTimeOfDaySetting("Intensity", "LIGHTSPRITE", 1.0f, 0.0f, 30000.0f, 0.01f, true);
-
-	settingManager.RegisterFloatSetting("FireIntensity", "MAIN", 1.0f, 0.0f, 30000.0f, 0.01f, false);
-	settingManager.RegisterFloatSetting("FireCurve", "MAIN", 1.0f, 0.1f, 8.0f, 0.01f, false);
 
 	settingManager.RegisterBoolSetting("Enable", "RAIN", true);
 	settingManager.RegisterTimeOfDaySetting("MotionStretch", "RAIN", 0.28f, 0.0f, 1.0f, 0.01f, true);

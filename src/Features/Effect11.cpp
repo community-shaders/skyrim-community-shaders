@@ -85,8 +85,8 @@ Effect11::PerFrame Effect11::GetCommonBufferData()
 	data.RainMotionStretch = settingManager.GetInterpolatedTimeOfDayValue("MotionStretch", "RAIN");
 	data.RainMotionTransparency = settingManager.GetInterpolatedTimeOfDayValue("MotionTransparency", "RAIN");
 
-	data.FireIntensity = settingManager.GetValue<float>("FireIntensity", "MAIN");
-	data.FireCurve = settingManager.GetValue<float>("FireCurve", "MAIN");
+	data.FireIntensity = settingManager.GetValue<float>("FireIntensity", "FIRE");
+	data.FireCurve = settingManager.GetValue<float>("FireCurve", "FIRE");
 
 	data.EnableProceduralSun = enableEffect && settingManager.GetValue<bool>("EnableProceduralSun", "EFFECT");
 
