@@ -28,7 +28,7 @@ Effect11::PerFrame Effect11::GetCommonBufferData()
 
 	data.Enable = enableEffect;
 	data.EnableSky = enableEffect && settingManager.GetValue<bool>("Enable", "SKY");
-	data.ColorPow = settingManager.GetInterpolatedTimeOfDayValue("ColorPow", "ENVIRONMENT");
+	data.ColorPow = settingManager.GetValue<float>("ColorPow", "ENVIRONMENT");
 
 	data.CloudsCurve = settingManager.GetInterpolatedTimeOfDayValue("CloudsCurve", "SKY");
 	data.CloudsDesaturation = settingManager.GetInterpolatedTimeOfDayValue("CloudsDesaturation", "SKY");
@@ -42,7 +42,7 @@ Effect11::PerFrame Effect11::GetCommonBufferData()
 	data.UseProceduralGradientWeights = enableEffect && settingManager.GetValue<bool>("UseProceduralGradientWeights", "SKY");
 	data.ProceduralGradientWeightCurve = settingManager.GetInterpolatedTimeOfDayValue("ProceduralGradientWeightCurve", "SKY");
 
-	data.LightSpriteIntensity = settingManager.GetInterpolatedTimeOfDayValue("Intensity", "LIGHTSPRITE");
+	data.LightSpriteIntensity = settingManager.GetValue<float>("Intensity", "LIGHTSPRITE");
 
 	data.ParticleIntensity = settingManager.GetInterpolatedTimeOfDayValue("Intensity", "PARTICLE");
 	data.ParticleLightingInfluence = settingManager.GetInterpolatedTimeOfDayValue("LightingInfluence", "PARTICLE");
@@ -498,9 +498,9 @@ void Effect11::OverridePointLightColor(float3& a_color)
 {
 	auto& settingManager = SettingManager::GetSingleton();
 
-	a_color = Curve(a_color, settingManager.GetInterpolatedTimeOfDayValue("PointLightingCurve", "ENVIRONMENT"));
-	a_color = Desaturation(a_color, settingManager.GetInterpolatedTimeOfDayValue("PointLightingDesaturation", "ENVIRONMENT"));
-	a_color = Intensity(a_color, settingManager.GetInterpolatedTimeOfDayValue("PointLightingIntensity", "ENVIRONMENT"));
+	a_color = Curve(a_color, settingManager.GetValue<float>("PointLightingCurve", "ENVIRONMENT"));
+	a_color = Desaturation(a_color, settingManager.GetValue<float>("PointLightingDesaturation", "ENVIRONMENT"));
+	a_color = Intensity(a_color, settingManager.GetValue<float>("PointLightingIntensity", "ENVIRONMENT"));
 }
 
 void Effect11::OverrideAmbientLighting(DirectionalAmbientColors& DirectionalAmbientColors)

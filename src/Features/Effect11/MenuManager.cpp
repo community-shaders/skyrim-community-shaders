@@ -282,8 +282,8 @@ void MenuManager::RenderAllSettings()
 							ImGui::TableSetupColumn("Parameter", ImGuiTableColumnFlags_WidthFixed);
 							ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
 
-							// Add weather ignore controls for categories with weather support
-							if (settingManager.CategoryHasWeatherSupport(category)) {
+							// Add weather ignore controls for categories with weather support (Weather tab only)
+							if (tabName == "Weather" && settingManager.CategoryHasWeatherSupport(category)) {
 								auto& effectManager = EffectManager::GetSingleton();
 								bool isInterior = effectManager.commonData.eInteriorFactor > 0.5f;
 
@@ -326,6 +326,12 @@ void MenuManager::RenderAllSettings()
 							for (const auto& settingKey : settings) {
 								auto settingInfo = settingManager.GetSettingInfo(settingKey, category);
 								if (!settingInfo)
+									continue;
+
+								bool isTod = (settingInfo->type == SettingType::TimeOfDay || settingInfo->type == SettingType::ColorTimeOfDay);
+								if (tabName == "Main" && isTod)
+									continue;
+								if (tabName == "Weather" && !isTod)
 									continue;
 
 								uint32_t settingID = settingInfo->id;

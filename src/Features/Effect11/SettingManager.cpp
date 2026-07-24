@@ -445,7 +445,26 @@ std::map<std::string, std::vector<std::string>> SettingManager::GetCategorizedSe
 		auto it = categories.find(catName);
 		if (it == categories.end())
 			continue;
-		result[it->second.tab].push_back(catName);
+
+		if (it->second.tab == "Debug") {
+			result["Debug"].push_back(catName);
+			continue;
+		}
+
+		bool hasNonTod = false;
+		bool hasTod = false;
+		for (const auto& [key, id] : it->second.settings) {
+			auto type = allSettings[id].type;
+			if (type == SettingType::TimeOfDay || type == SettingType::ColorTimeOfDay)
+				hasTod = true;
+			else
+				hasNonTod = true;
+		}
+
+		if (hasNonTod)
+			result["Main"].push_back(catName);
+		if (hasTod)
+			result["Weather"].push_back(catName);
 	}
 
 	return result;
