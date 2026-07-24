@@ -259,9 +259,9 @@ float3 Desaturation(float3 color, float desaturation)
 {
 	float luminance = color.Dot({ 1.0f / 3.0f, 1.0f / 3.0f, 1.0f / 3.0f });
 
-	color.x = std::lerp(color.x, luminance, desaturation);
-	color.y = std::lerp(color.y, luminance, desaturation);
-	color.z = std::lerp(color.z, luminance, desaturation);
+	color.x = std::max(std::lerp(color.x, luminance, desaturation), 0.0f);
+	color.y = std::max(std::lerp(color.y, luminance, desaturation), 0.0f);
+	color.z = std::max(std::lerp(color.z, luminance, desaturation), 0.0f);
 
 	return color;
 }
