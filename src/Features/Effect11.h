@@ -57,28 +57,12 @@ public:
 
 		uint EnableCloudsScattering;
 		uint EnableCloudsLightingFromMoon;
-		uint ScatteringColorHDRWeighting;
-		float SkyScatteringAtmosphereThickness;
-
-		float SkyScatteringHorizonRange;
 		float SkyScatteringIntensity;
 		float SkyScatteringAmount;
-		float SkyScatteringDustVolume;
-
-		float SkyScatteringDustDensity;
-		float SkyScatteringDustDarkening;
-		float SkyScatteringShadowAmount;
-		float SkyScatteringColorFromSun;
 
 		float3 SkyScatteringColor;
-		float SkyScatteringAirGlowIntensity;
+		float SkyScatteringColorFromSun;
 
-		float SkyScatteringAirGlowRange;
-		float SkyScatteringSunGlowIntensity;
-		float SkyScatteringSunGlowRange;
-		float SkyScatteringMoonGlowAmount;
-
-		float SkyScatteringMoonGlowRange;
 		float SkyScatteringCloudsLightingSunMultiplier;
 		float SkyScatteringCloudsLightingMoonIntensity;
 
@@ -92,6 +76,7 @@ public:
 		float RainMotionTransparency;
 		float FireIntensity;
 		float FireCurve;
+		uint pad0;
 	};
 
 	bool enableEffect = false;
@@ -111,6 +96,7 @@ public:
 
 	winrt::com_ptr<ID3D11Texture2D> raindropTexture;
 	winrt::com_ptr<ID3D11ShaderResourceView> raindropSRV;
+	std::string raindropStatus;
 	void LoadRaindropTexture();
 
 	PerFrame GetCommonBufferData();

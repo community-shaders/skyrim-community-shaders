@@ -3,7 +3,9 @@
 #include "EffectManager.h"
 #include "SettingManager.h"
 #include "TextureManager.h"
+#include "Features/Effect11.h"
 #include "Features/Effect11/ShaderPatches.h"
+#include "Globals.h"
 
 static const char* const timeOfDayNames[] = { "Dawn", "Sunrise", "Day", "Sunset", "Dusk", "Night", "InteriorDay", "InteriorNight" };
 
@@ -273,17 +275,30 @@ void MenuManager::RenderAllSettings()
 				}
 
 				for (const auto& category : categories) {
+					if (!settingManager.IsCategoryEnabled(category))
+						continue;
+
 					ImGuiTreeNodeFlags flags = (tabName == "Weather") ? ImGuiTreeNodeFlags_None : ImGuiTreeNodeFlags_DefaultOpen;
 
 					if (ImGui::TreeNodeEx(category.c_str(), flags)) {
+						bool categoryDisabled = false;
+						if (category == "RAIN") {
+							if (!globals::features::effect11.raindropStatus.empty()) {
+								categoryDisabled = true;
+								ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.6f, 0.2f, 1.0f));
+								ImGui::TextWrapped("Rain disabled: %s", globals::features::effect11.raindropStatus.c_str());
+								ImGui::PopStyleColor();
+							}
+						}
+
 						auto settings = settingManager.GetSettingsByCategory(category);
 
-						if (ImGui::BeginTable((category + "_table").c_str(), 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp)) {
+						if (!categoryDisabled && ImGui::BeginTable((category + "_table").c_str(), 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp)) {
 							ImGui::TableSetupColumn("Parameter", ImGuiTableColumnFlags_WidthFixed);
 							ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
 
-							// Add weather ignore controls for categories with weather support
-							if (settingManager.CategoryHasWeatherSupport(category)) {
+							// Add weather ignore controls for categories with weather support (Weather tab only)
+							if (tabName == "Weather" && settingManager.CategoryHasWeatherSupport(category)) {
 								auto& effectManager = EffectManager::GetSingleton();
 								bool isInterior = effectManager.commonData.eInteriorFactor > 0.5f;
 
@@ -326,6 +341,15 @@ void MenuManager::RenderAllSettings()
 							for (const auto& settingKey : settings) {
 								auto settingInfo = settingManager.GetSettingInfo(settingKey, category);
 								if (!settingInfo)
+									continue;
+
+								bool isTod = (settingInfo->type == SettingType::TimeOfDay || settingInfo->type == SettingType::ColorTimeOfDay);
+								if (tabName == "Main" && isTod)
+									continue;
+								if (tabName == "Weather" && !isTod)
+									continue;
+
+								if (!settingManager.IsSettingEnabled(settingKey, category))
 									continue;
 
 								uint32_t settingID = settingInfo->id;

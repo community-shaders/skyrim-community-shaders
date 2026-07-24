@@ -445,10 +445,81 @@ std::map<std::string, std::vector<std::string>> SettingManager::GetCategorizedSe
 		auto it = categories.find(catName);
 		if (it == categories.end())
 			continue;
-		result[it->second.tab].push_back(catName);
+
+		if (it->second.tab == "Debug") {
+			result["Debug"].push_back(catName);
+			continue;
+		}
+
+		bool hasNonTod = false;
+		bool hasTod = false;
+		for (const auto& [key, id] : it->second.settings) {
+			auto type = allSettings[id].type;
+			if (type == SettingType::TimeOfDay || type == SettingType::ColorTimeOfDay)
+				hasTod = true;
+			else
+				hasNonTod = true;
+		}
+
+		if (hasNonTod)
+			result["Main"].push_back(catName);
+		if (hasTod)
+			result["Weather"].push_back(catName);
 	}
 
 	return result;
+}
+
+void SettingManager::SetCategoryDependency(const std::string& category, const std::string& dependsOnKey, const std::string& dependsOnCategory)
+{
+	std::unique_lock lock(mutex);
+	auto it = categories.find(category);
+	if (it != categories.end()) {
+		it->second.dependsOnKey = dependsOnKey;
+		it->second.dependsOnCategory = dependsOnCategory;
+	}
+}
+
+void SettingManager::SetSettingDependency(const std::string& key, const std::string& category, const std::string& dependsOnKey, const std::string& dependsOnCategory)
+{
+	std::unique_lock lock(mutex);
+	uint32_t id = GetSettingIDInternal(key, category);
+	if (id != 0xFFFFFFFF) {
+		allSettings[id].dependsOnKey = dependsOnKey;
+		allSettings[id].dependsOnCategory = dependsOnCategory;
+	}
+}
+
+bool SettingManager::IsCategoryEnabled(const std::string& category)
+{
+	std::string depKey, depCategory;
+	{
+		std::shared_lock lock(mutex);
+		auto it = categories.find(category);
+		if (it == categories.end())
+			return true;
+		depKey = it->second.dependsOnKey;
+		depCategory = it->second.dependsOnCategory;
+	}
+	if (depKey.empty())
+		return true;
+	return GetValue<bool>(depKey, depCategory);
+}
+
+bool SettingManager::IsSettingEnabled(const std::string& key, const std::string& category)
+{
+	std::string depKey, depCategory;
+	{
+		std::shared_lock lock(mutex);
+		uint32_t id = GetSettingIDInternal(key, category);
+		if (id == 0xFFFFFFFF)
+			return true;
+		depKey = allSettings[id].dependsOnKey;
+		depCategory = allSettings[id].dependsOnCategory;
+	}
+	if (depKey.empty())
+		return true;
+	return GetValue<bool>(depKey, depCategory);
 }
 
 void SettingManager::SetWeatherBlendFactors(uint32_t newCurrentWeatherID, uint32_t newLastWeatherID, float blendFactor)

@@ -205,46 +205,8 @@ void TextureManager::CreateDownsampleResources()
 		nullptr,
 		downsamplePS.put()));
 
-	// Create Kawase blur pixel shader
-	auto blurPixelShaderSource = EffectManager::LoadShaderFile("Data\\Shaders\\Effect11\\KawaseBlurPS.hlsl");
-	if (blurPixelShaderSource.empty())
-		return;
-
-	winrt::com_ptr<ID3DBlob> blurShaderBlob;
-	winrt::com_ptr<ID3DBlob> blurErrorBlob;
-
-	HRESULT blurResult = D3DCompile(
-		blurPixelShaderSource.data(),
-		blurPixelShaderSource.size(),
-		"KawaseBlurPS.hlsl",
-		nullptr,
-		nullptr,
-		"main",
-		"ps_5_0",
-		0,
-		0,
-		blurShaderBlob.put(),
-		blurErrorBlob.put());
-
-	if (FAILED(blurResult)) {
-		if (blurErrorBlob) {
-			logger::error("[TextureManager] Blur shader compilation failed: {}",
-				static_cast<const char*>(blurErrorBlob->GetBufferPointer()));
-		}
-		return;
-	}
-
-	DX::ThrowIfFailed(device->CreatePixelShader(
-		blurShaderBlob->GetBufferPointer(),
-		blurShaderBlob->GetBufferSize(),
-		nullptr,
-		blurPS.put()));
-
 	// Create shared downsample texture
 	sharedDownsampleTexture = CreateDownsampleTexture(DXGI_FORMAT_R11G11B10_FLOAT);
-
-	// Create temp texture for pre-blur downsample
-	downsampleTempTexture = CreateTexture(1024, 1024, DXGI_FORMAT_R11G11B10_FLOAT, "TextureManager::DownsampleTemp");
 }
 
 TextureManager::DownsampleTexture TextureManager::CreateDownsampleTexture(DXGI_FORMAT format)
@@ -302,7 +264,7 @@ TextureManager::DownsampleTexture TextureManager::CreateDownsampleTexture(DXGI_F
 
 void TextureManager::DownsampleToFixed(ID3D11ShaderResourceView* source, DownsampleTexture& texture)
 {
-	if (!source || !texture.rtv || !downsampleVS || !downsamplePS || !blurPS || !linearSampler || !texture.srvChain || !downsampleTempTexture.rtv) {
+	if (!source || !texture.rtv || !downsampleVS || !downsamplePS || !linearSampler || !texture.srvChain) {
 		return;
 	}
 
@@ -320,26 +282,11 @@ void TextureManager::DownsampleToFixed(ID3D11ShaderResourceView* source, Downsam
 	ID3D11SamplerState* samplerArray[] = { linearSampler.get() };
 	context->PSSetSamplers(0, 1, samplerArray);
 
-	// Pass 1: Downsample source into temp texture
-	ID3D11RenderTargetView* tempRTV[] = { downsampleTempTexture.rtv.get() };
-	context->OMSetRenderTargets(1, tempRTV, nullptr);
+	ID3D11RenderTargetView* rtvArray[] = { texture.rtv.get() };
+	context->OMSetRenderTargets(1, rtvArray, nullptr);
 	context->PSSetShaderResources(0, 1, &source);
 	context->PSSetShader(downsamplePS.get(), nullptr, 0);
 	globals::profiler->BeginPass("Effect11::Downsample");
-	context->Draw(4, 0);
-	globals::profiler->EndPass();
-
-	// Pass 2: Kawase blur from temp into final texture
-	ID3D11ShaderResourceView* nullSRV[] = { nullptr };
-	context->PSSetShaderResources(0, 1, nullSRV);
-
-	ID3D11RenderTargetView* finalRTV[] = { texture.rtv.get() };
-	context->OMSetRenderTargets(1, finalRTV, nullptr);
-
-	ID3D11ShaderResourceView* tempSRV[] = { downsampleTempTexture.srv.get() };
-	context->PSSetShaderResources(0, 1, tempSRV);
-	context->PSSetShader(blurPS.get(), nullptr, 0);
-	globals::profiler->BeginPass("Effect11::DownsampleBlur");
 	context->Draw(4, 0);
 	globals::profiler->EndPass();
 

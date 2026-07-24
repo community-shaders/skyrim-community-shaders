@@ -27,8 +27,8 @@ Effect11::PerFrame Effect11::GetCommonBufferData()
 	PerFrame data{};
 
 	data.Enable = enableEffect;
-	data.EnableSky = enableEffect && settingManager.GetValue<bool>("Enable", "SKY");
-	data.ColorPow = settingManager.GetInterpolatedTimeOfDayValue("ColorPow", "ENVIRONMENT");
+	data.EnableSky = enableEffect;
+	data.ColorPow = settingManager.GetValue<float>("ColorPow", "ENVIRONMENT");
 
 	data.CloudsCurve = settingManager.GetInterpolatedTimeOfDayValue("CloudsCurve", "SKY");
 	data.CloudsDesaturation = settingManager.GetInterpolatedTimeOfDayValue("CloudsDesaturation", "SKY");
@@ -42,7 +42,7 @@ Effect11::PerFrame Effect11::GetCommonBufferData()
 	data.UseProceduralGradientWeights = enableEffect && settingManager.GetValue<bool>("UseProceduralGradientWeights", "SKY");
 	data.ProceduralGradientWeightCurve = settingManager.GetInterpolatedTimeOfDayValue("ProceduralGradientWeightCurve", "SKY");
 
-	data.LightSpriteIntensity = settingManager.GetInterpolatedTimeOfDayValue("Intensity", "LIGHTSPRITE");
+	data.LightSpriteIntensity = settingManager.GetValue<float>("Intensity", "LIGHTSPRITE");
 
 	data.ParticleIntensity = settingManager.GetInterpolatedTimeOfDayValue("Intensity", "PARTICLE");
 	data.ParticleLightingInfluence = settingManager.GetInterpolatedTimeOfDayValue("LightingInfluence", "PARTICLE");
@@ -50,24 +50,11 @@ Effect11::PerFrame Effect11::GetCommonBufferData()
 	data.ParticlePointLightingInfluence = settingManager.GetInterpolatedTimeOfDayValue("PointLightingInfluence", "PARTICLE");
 
 	data.EnableCloudsLightingFromMoon = settingManager.GetValue<bool>("EnableCloudsLightingFromMoon", "SKYSCATTERING");
-	data.ScatteringColorHDRWeighting = settingManager.GetValue<bool>("ScatteringColorHDRWeighting", "SKYSCATTERING");
-	data.SkyScatteringAtmosphereThickness = settingManager.GetInterpolatedTimeOfDayValue("AtmosphereThickness", "SKYSCATTERING");
-	data.SkyScatteringHorizonRange = settingManager.GetInterpolatedTimeOfDayValue("HorizonRange", "SKYSCATTERING");
 	data.SkyScatteringIntensity = settingManager.GetInterpolatedTimeOfDayValue("Intensity", "SKYSCATTERING");
 	data.SkyScatteringAmount = settingManager.GetInterpolatedTimeOfDayValue("Amount", "SKYSCATTERING");
-	data.SkyScatteringDustVolume = settingManager.GetInterpolatedTimeOfDayValue("DustVolume", "SKYSCATTERING");
-	data.SkyScatteringDustDensity = settingManager.GetInterpolatedTimeOfDayValue("DustDensity", "SKYSCATTERING");
-	data.SkyScatteringDustDarkening = settingManager.GetInterpolatedTimeOfDayValue("DustDarkening", "SKYSCATTERING");
-	data.SkyScatteringShadowAmount = settingManager.GetInterpolatedTimeOfDayValue("ShadowAmount", "SKYSCATTERING");
 	data.SkyScatteringColorFromSun = settingManager.GetInterpolatedTimeOfDayValue("ColorFromSun", "SKYSCATTERING");
 	auto scatteringColor = settingManager.GetInterpolatedColorTimeOfDayValue("ScatteringColor", "SKYSCATTERING");
 	data.SkyScatteringColor = { scatteringColor.x, scatteringColor.y, scatteringColor.z };
-	data.SkyScatteringAirGlowIntensity = settingManager.GetInterpolatedTimeOfDayValue("AirGlowIntensity", "SKYSCATTERING");
-	data.SkyScatteringAirGlowRange = settingManager.GetInterpolatedTimeOfDayValue("AirGlowRange", "SKYSCATTERING");
-	data.SkyScatteringSunGlowIntensity = settingManager.GetInterpolatedTimeOfDayValue("SunGlowIntensity", "SKYSCATTERING");
-	data.SkyScatteringSunGlowRange = settingManager.GetInterpolatedTimeOfDayValue("SunGlowRange", "SKYSCATTERING");
-	data.SkyScatteringMoonGlowAmount = settingManager.GetInterpolatedTimeOfDayValue("MoonGlowAmount", "SKYSCATTERING");
-	data.SkyScatteringMoonGlowRange = settingManager.GetInterpolatedTimeOfDayValue("MoonGlowRange", "SKYSCATTERING");
 	data.SkyScatteringCloudsLightingSunMultiplier = settingManager.GetInterpolatedTimeOfDayValue("CloudsLightingSunMultiplier", "SKYSCATTERING");
 	data.SkyScatteringCloudsLightingMoonIntensity = settingManager.GetInterpolatedTimeOfDayValue("CloudsLightingMoonIntensity", "SKYSCATTERING");
 
@@ -81,7 +68,7 @@ Effect11::PerFrame Effect11::GetCommonBufferData()
 	}
 	data.VolumetricRaysSkyColorAmount = settingManager.GetInterpolatedTimeOfDayValue("SkyColorAmount", "VOLUMETRICRAYS");
 
-	data.EnableRain = enableEffect && raindropSRV && settingManager.GetValue<bool>("Enable", "RAIN");
+	data.EnableRain = enableEffect && raindropSRV;
 	data.RainMotionStretch = settingManager.GetInterpolatedTimeOfDayValue("MotionStretch", "RAIN");
 	data.RainMotionTransparency = settingManager.GetInterpolatedTimeOfDayValue("MotionTransparency", "RAIN");
 
@@ -120,12 +107,14 @@ void Effect11::LoadRaindropTexture()
 {
 	raindropTexture = nullptr;
 	raindropSRV = nullptr;
+	raindropStatus.clear();
 
 	auto& presetManager = PresetManager::GetSingleton();
 	auto enbPath = presetManager.GetENBSeriesPath();
 	auto raindropPath = enbPath / "enbraindrops.png";
 
 	if (!std::filesystem::exists(raindropPath)) {
+		raindropStatus = "Texture not found: enbraindrops.png";
 		logger::debug("[Effect11] Raindrop texture not found: {}", raindropPath.string());
 		return;
 	}
@@ -135,6 +124,7 @@ void Effect11::LoadRaindropTexture()
 	DirectX::ScratchImage image;
 	HRESULT hr = DirectX::LoadFromWICFile(widePath.c_str(), DirectX::WIC_FLAGS_IGNORE_SRGB, nullptr, image);
 	if (FAILED(hr)) {
+		raindropStatus = std::format("Failed to load texture (invalid image, HRESULT 0x{:08X})", static_cast<uint32_t>(hr));
 		logger::error("[Effect11] Failed to load raindrop texture: {}", raindropPath.string());
 		return;
 	}
@@ -143,6 +133,7 @@ void Effect11::LoadRaindropTexture()
 	hr = DirectX::GenerateMipMaps(image.GetImages(), image.GetImageCount(), image.GetMetadata(),
 		DirectX::TEX_FILTER_DEFAULT, 0, mipImage);
 	if (FAILED(hr)) {
+		raindropStatus = std::format("Failed to generate mipmaps (HRESULT 0x{:08X})", static_cast<uint32_t>(hr));
 		logger::error("[Effect11] Failed to generate mipmaps for raindrop texture");
 		return;
 	}
@@ -151,6 +142,7 @@ void Effect11::LoadRaindropTexture()
 	hr = DirectX::Compress(mipImage.GetImages(), mipImage.GetImageCount(), mipImage.GetMetadata(),
 		DXGI_FORMAT_BC7_UNORM, DirectX::TEX_COMPRESS_BC7_QUICK, 1.0f, bc7Image);
 	if (FAILED(hr)) {
+		raindropStatus = std::format("Failed to compress texture (HRESULT 0x{:08X})", static_cast<uint32_t>(hr));
 		logger::error("[Effect11] Failed to compress raindrop texture to BC7");
 		return;
 	}
@@ -160,6 +152,7 @@ void Effect11::LoadRaindropTexture()
 		bc7Image.GetImages(), bc7Image.GetImageCount(), bc7Image.GetMetadata(),
 		reinterpret_cast<ID3D11Resource**>(raindropTexture.put()));
 	if (FAILED(hr)) {
+		raindropStatus = std::format("Failed to create GPU texture (HRESULT 0x{:08X})", static_cast<uint32_t>(hr));
 		logger::error("[Effect11] Failed to create raindrop GPU texture");
 		return;
 	}
@@ -174,6 +167,7 @@ void Effect11::LoadRaindropTexture()
 
 	hr = device->CreateShaderResourceView(raindropTexture.get(), &srvDesc, raindropSRV.put());
 	if (FAILED(hr)) {
+		raindropStatus = std::format("Failed to create shader resource view (HRESULT 0x{:08X})", static_cast<uint32_t>(hr));
 		logger::error("[Effect11] Failed to create raindrop SRV");
 		raindropTexture = nullptr;
 		return;
@@ -228,10 +222,6 @@ void Effect11::Prepass()
 	}
 
 	auto& settingManager = SettingManager::GetSingleton();
-
-	if (!settingManager.GetValue<bool>("Enable", "SKY")) {
-		return;
-	}
 
 	auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
 	if (!imageSpaceManager) {
@@ -364,9 +354,7 @@ void Effect11::OverrideWeather(RE::Sky* a_sky)
 		a_sky->fogFar /= fogAmountMultiplier;
 	}
 
-	const bool enableSky = enableEffect && settingManager.GetValue<bool>("Enable", "SKY");
-
-	if (enableSky) {
+	if (enableEffect) {
 		{
 			auto& sunColor = colors[(uint)RE::TESWeather::ColorTypes::kSun];
 
@@ -511,9 +499,9 @@ void Effect11::OverridePointLightColor(float3& a_color)
 {
 	auto& settingManager = SettingManager::GetSingleton();
 
-	a_color = Curve(a_color, settingManager.GetInterpolatedTimeOfDayValue("PointLightingCurve", "ENVIRONMENT"));
-	a_color = Desaturation(a_color, settingManager.GetInterpolatedTimeOfDayValue("PointLightingDesaturation", "ENVIRONMENT"));
-	a_color = Intensity(a_color, settingManager.GetInterpolatedTimeOfDayValue("PointLightingIntensity", "ENVIRONMENT"));
+	a_color = Curve(a_color, settingManager.GetValue<float>("PointLightingCurve", "ENVIRONMENT"));
+	a_color = Desaturation(a_color, settingManager.GetValue<float>("PointLightingDesaturation", "ENVIRONMENT"));
+	a_color = Intensity(a_color, settingManager.GetValue<float>("PointLightingIntensity", "ENVIRONMENT"));
 }
 
 void Effect11::OverrideAmbientLighting(DirectionalAmbientColors& DirectionalAmbientColors)
@@ -552,11 +540,8 @@ bool Effect11::HandleTonemapRender(RE::RENDER_TARGET a_input, RE::RENDER_TARGET 
 	auto& effectManager = EffectManager::GetSingleton();
 
 	if (enableEffect && !settingManager.GetValue<bool>("UseOriginalPostProcessing", "EFFECT")) {
-		auto renderer = globals::game::renderer;
-		auto& renderTargets = renderer->GetRuntimeData().renderTargets;
-		bool validInput = a_input > RE::RENDER_TARGETS::kNONE && a_input < RE::RENDER_TARGETS::kTOTAL && renderTargets[a_input].SRV;
-		auto& input = validInput ? renderTargets[a_input] : renderTargets[RE::RENDER_TARGETS::kMAIN];
-		effectManager.ExecuteEffects(input, renderTargets[a_output]);
+		auto& renderTargets = globals::game::renderer->GetRuntimeData().renderTargets;
+		effectManager.ExecuteEffects(renderTargets[a_input], renderTargets[a_output]);
 		return true;
 	}
 	return false;

@@ -115,6 +115,8 @@ struct Setting
 	float minValue = 0.0f;
 	float maxValue = 10.0f;
 	float step = 0.01f;
+	std::string dependsOnKey;
+	std::string dependsOnCategory;
 };
 
 class SettingManager
@@ -164,6 +166,11 @@ public:
 	std::string GetCategoryTab(const std::string& category) const;
 	std::map<std::string, std::vector<std::string>> GetCategorizedSettings() const;
 
+	void SetCategoryDependency(const std::string& category, const std::string& dependsOnKey, const std::string& dependsOnCategory);
+	void SetSettingDependency(const std::string& key, const std::string& category, const std::string& dependsOnKey, const std::string& dependsOnCategory);
+	bool IsCategoryEnabled(const std::string& category);
+	bool IsSettingEnabled(const std::string& key, const std::string& category);
+
 	// Weather integration
 	void SetWeatherBlendFactors(uint32_t currentWeatherID, uint32_t lastWeatherID, float blendFactor);
 	void LoadWeatherSettings(const std::vector<uint32_t>& weatherIDs, const std::string& filePath);
@@ -200,6 +207,8 @@ private:
 		bool lastSavedIgnoreWeatherSystem = false;
 		bool lastSavedIgnoreWeatherSystemInterior = true;
 		bool exteriorOnly = false;
+		std::string dependsOnKey;
+		std::string dependsOnCategory;
 	};
 
 	std::vector<Setting> allSettings;
