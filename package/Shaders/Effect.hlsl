@@ -832,8 +832,8 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 blendedColor = lightColor * (1 - fogFactor);
 #			endif
 	if (SharedData::enbSettings.Enable) {
-		// ENB classifies by object properties: additive draws are FIRE; additive soft-particle (Soft_Effect) glows are LIGHTSPRITE.
-#			if defined(SOFT) && !defined(GRAYSCALE_TO_COLOR)
+		// ENB classifies by object properties: additive draws with GRAYSCALE_TO_COLOR are FIRE; anything else is LIGHTSPRITE.
+#			if !defined(GRAYSCALE_TO_COLOR)
 		blendedColor *= SharedData::enbSettings.LightSpriteIntensity;
 #			else
 		blendedColor = pow(max(blendedColor, 0.0), SharedData::enbSettings.FireCurve) * SharedData::enbSettings.FireIntensity;

@@ -270,11 +270,6 @@ void EffectManager::RegisterSettings()
 	settingManager.SetSettingDependency("ProceduralGradientWeightCurve", "SKY", "UseProceduralGradientWeights", "SKY");
 	settingManager.SetSettingDependency("AdaptationMin", "ADAPTATION", "ForceMinMaxValues", "ADAPTATION");
 	settingManager.SetSettingDependency("AdaptationMax", "ADAPTATION", "ForceMinMaxValues", "ADAPTATION");
-	settingManager.SetSettingDependency("Intensity", "SKYSCATTERING", "EnableCloudsLightingFromMoon", "SKYSCATTERING");
-	settingManager.SetSettingDependency("Amount", "SKYSCATTERING", "EnableCloudsLightingFromMoon", "SKYSCATTERING");
-	settingManager.SetSettingDependency("ColorFromSun", "SKYSCATTERING", "EnableCloudsLightingFromMoon", "SKYSCATTERING");
-	settingManager.SetSettingDependency("ScatteringColor", "SKYSCATTERING", "EnableCloudsLightingFromMoon", "SKYSCATTERING");
-	settingManager.SetSettingDependency("CloudsLightingSunMultiplier", "SKYSCATTERING", "EnableCloudsLightingFromMoon", "SKYSCATTERING");
 	settingManager.SetSettingDependency("CloudsLightingMoonIntensity", "SKYSCATTERING", "EnableCloudsLightingFromMoon", "SKYSCATTERING");
 
 	settingManager.SetCategoryExteriorOnly("RAIN", true);
