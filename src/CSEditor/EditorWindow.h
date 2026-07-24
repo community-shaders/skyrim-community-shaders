@@ -182,8 +182,22 @@ public:
 	/** @brief Returns true if in-game time is currently paused. */
 	bool IsTimePaused() const { return timePaused; }
 
-	/** @brief Call once per frame to handle sleep/wait menu and external time state sync. */
-	void UpdateTimeState();
+	/**
+	 * @brief Restores time around menus the engine cannot complete with a zero timescale, and
+	 * re-pauses once they close. Sleep/wait never finishes and fast travel hangs otherwise.
+	 * @param a_needsRunningTime True while any such menu is open.
+	 */
+	void SetTimeRunningForMenu(bool a_needsRunningTime);
+
+	/** @brief Drives the time guard off menu transitions, since the world render stops during them. */
+	class MenuOpenCloseEventHandler : public RE::BSTEventSink<RE::MenuOpenCloseEvent>
+	{
+	public:
+		virtual RE::BSEventNotifyControl ProcessEvent(const RE::MenuOpenCloseEvent* a_event, RE::BSTEventSource<RE::MenuOpenCloseEvent>*) override;
+
+		/** @brief Subscribes the singleton handler to the UI menu event source. */
+		static bool Register();
+	};
 
 	/**
 	 * @brief Draw a game-hour slider.
@@ -365,8 +379,8 @@ private:
 	bool timePaused = false;
 	float savedTimeScale = kVanillaTimeScale;
 	float timeScaleSlider = kVanillaTimeScale;
-	bool wasRestoredForWait = false;
-	bool wasPausedBeforeWait = false;
+	bool timeRestoredForMenu = false;
+	bool wasPausedBeforeMenu = false;
 
 	// Sorting state
 	enum class SortColumn

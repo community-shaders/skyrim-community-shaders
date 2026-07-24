@@ -33,6 +33,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 void CSEditor::DataLoaded()
 {
 	s_dataAvailable = true;
+	EditorWindow::MenuOpenCloseEventHandler::Register();
 }
 
 bool CSEditor::HasWidgetJsonFiles()
@@ -220,9 +221,6 @@ void CSEditor::Prepass()
 			sky->ForceWeather(lockedWeather, false);
 		}
 	}
-
-	// Update time controls (handles sleep/wait and external state sync)
-	editorWindow->UpdateTimeState();
 }
 
 void CSEditor::DrawWeatherPickerSection()
