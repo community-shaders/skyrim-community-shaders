@@ -219,9 +219,6 @@ void CSEditor::Prepass()
 	}
 
 	EditorWindow::MaintainWeatherLock();
-
-	// Update time controls (handles sleep/wait and external state sync)
-	EditorWindow::GetSingleton()->UpdateTimeState();
 }
 
 void CSEditor::DrawWeatherPickerSection()

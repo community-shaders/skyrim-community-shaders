@@ -2049,17 +2049,14 @@ namespace
 	/** @brief Returns true if any menu that must not run with a zero timescale is still open. */
 	bool IsAnyTimeSensitiveMenuOpen()
 	{
-		auto ui = globals::game::ui ? globals::game::ui : RE::UI::GetSingleton();
+		auto ui = GetUI();
 		return ui && std::ranges::any_of(kTimeSensitiveMenus, [&](std::string_view name) { return ui->IsMenuOpen(name); });
 	}
 }
 
 void EditorWindow::SetTimeRunningForMenu(bool a_needsRunningTime)
 {
-
 	auto calendar = GetCalendar();
-	auto ui = GetUI();
-
 	if (!calendar || !calendar->timeScale)
 		return;
 
@@ -2098,7 +2095,7 @@ RE::BSEventNotifyControl EditorWindow::MenuOpenCloseEventHandler::ProcessEvent(c
 bool EditorWindow::MenuOpenCloseEventHandler::Register()
 {
 	static MenuOpenCloseEventHandler singleton;
-	auto ui = globals::game::ui ? globals::game::ui : RE::UI::GetSingleton();
+	auto ui = GetUI();
 
 	if (!ui) {
 		logger::error("[CSEditor] UI event source not found");
