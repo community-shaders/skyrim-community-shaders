@@ -107,12 +107,14 @@ void Effect11::LoadRaindropTexture()
 {
 	raindropTexture = nullptr;
 	raindropSRV = nullptr;
+	raindropStatus.clear();
 
 	auto& presetManager = PresetManager::GetSingleton();
 	auto enbPath = presetManager.GetENBSeriesPath();
 	auto raindropPath = enbPath / "enbraindrops.png";
 
 	if (!std::filesystem::exists(raindropPath)) {
+		raindropStatus = "Texture not found: enbraindrops.png";
 		logger::debug("[Effect11] Raindrop texture not found: {}", raindropPath.string());
 		return;
 	}
@@ -122,6 +124,7 @@ void Effect11::LoadRaindropTexture()
 	DirectX::ScratchImage image;
 	HRESULT hr = DirectX::LoadFromWICFile(widePath.c_str(), DirectX::WIC_FLAGS_IGNORE_SRGB, nullptr, image);
 	if (FAILED(hr)) {
+		raindropStatus = std::format("Failed to load texture (invalid image, HRESULT 0x{:08X})", static_cast<uint32_t>(hr));
 		logger::error("[Effect11] Failed to load raindrop texture: {}", raindropPath.string());
 		return;
 	}
@@ -130,6 +133,7 @@ void Effect11::LoadRaindropTexture()
 	hr = DirectX::GenerateMipMaps(image.GetImages(), image.GetImageCount(), image.GetMetadata(),
 		DirectX::TEX_FILTER_DEFAULT, 0, mipImage);
 	if (FAILED(hr)) {
+		raindropStatus = std::format("Failed to generate mipmaps (HRESULT 0x{:08X})", static_cast<uint32_t>(hr));
 		logger::error("[Effect11] Failed to generate mipmaps for raindrop texture");
 		return;
 	}
@@ -138,6 +142,7 @@ void Effect11::LoadRaindropTexture()
 	hr = DirectX::Compress(mipImage.GetImages(), mipImage.GetImageCount(), mipImage.GetMetadata(),
 		DXGI_FORMAT_BC7_UNORM, DirectX::TEX_COMPRESS_BC7_QUICK, 1.0f, bc7Image);
 	if (FAILED(hr)) {
+		raindropStatus = std::format("Failed to compress texture (HRESULT 0x{:08X})", static_cast<uint32_t>(hr));
 		logger::error("[Effect11] Failed to compress raindrop texture to BC7");
 		return;
 	}
@@ -147,6 +152,7 @@ void Effect11::LoadRaindropTexture()
 		bc7Image.GetImages(), bc7Image.GetImageCount(), bc7Image.GetMetadata(),
 		reinterpret_cast<ID3D11Resource**>(raindropTexture.put()));
 	if (FAILED(hr)) {
+		raindropStatus = std::format("Failed to create GPU texture (HRESULT 0x{:08X})", static_cast<uint32_t>(hr));
 		logger::error("[Effect11] Failed to create raindrop GPU texture");
 		return;
 	}
@@ -161,6 +167,7 @@ void Effect11::LoadRaindropTexture()
 
 	hr = device->CreateShaderResourceView(raindropTexture.get(), &srvDesc, raindropSRV.put());
 	if (FAILED(hr)) {
+		raindropStatus = std::format("Failed to create shader resource view (HRESULT 0x{:08X})", static_cast<uint32_t>(hr));
 		logger::error("[Effect11] Failed to create raindrop SRV");
 		raindropTexture = nullptr;
 		return;
@@ -533,11 +540,8 @@ bool Effect11::HandleTonemapRender(RE::RENDER_TARGET a_input, RE::RENDER_TARGET 
 	auto& effectManager = EffectManager::GetSingleton();
 
 	if (enableEffect && !settingManager.GetValue<bool>("UseOriginalPostProcessing", "EFFECT")) {
-		auto renderer = globals::game::renderer;
-		auto& renderTargets = renderer->GetRuntimeData().renderTargets;
-		bool validInput = a_input > RE::RENDER_TARGETS::kNONE && a_input < RE::RENDER_TARGETS::kTOTAL && renderTargets[a_input].SRV;
-		auto& input = validInput ? renderTargets[a_input] : renderTargets[RE::RENDER_TARGETS::kMAIN];
-		effectManager.ExecuteEffects(input, renderTargets[a_output]);
+		auto& renderTargets = globals::game::renderer->GetRuntimeData().renderTargets;
+		effectManager.ExecuteEffects(renderTargets[a_input], renderTargets[a_output]);
 		return true;
 	}
 	return false;
