@@ -311,8 +311,8 @@ namespace SharedData
 		uint EnableRain;
 		float RainMotionStretch;
 		float RainMotionTransparency;
-		uint pad0;
-		uint pad1;
+		float FireIntensity;
+		float FireCurve;
 	};
 	struct TerrainBlendingSettings
 	{
