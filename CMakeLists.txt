@@ -984,6 +984,7 @@ if(AIO_ZIP_TO_DIST)
         add_custom_command(
             OUTPUT ${AIO_ZIP_STAMP}
             COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_SOURCE_DIR}/dist"
+            COMMAND ${CMAKE_COMMAND} -E rm -f "${AIO_ARCHIVE}"
             COMMAND "${SEVENZ_EXECUTABLE}" a -t7z -mx1 -mmt=on "${AIO_ARCHIVE}" *
             COMMAND ${CMAKE_COMMAND} -E touch ${AIO_ZIP_STAMP}
             WORKING_DIRECTORY ${AIO_DIR}
@@ -1119,6 +1120,7 @@ if(TARGET PREPARE_AIO)
         add_custom_command(
             OUTPUT ${AIO_PACKAGE}
             COMMAND ${CMAKE_COMMAND} -E make_directory "${DIST_PATH}"
+            COMMAND ${CMAKE_COMMAND} -E rm -f "${AIO_PACKAGE}"
             COMMAND "${SEVENZ_EXECUTABLE}" a -t7z -mx1 -mmt=on "${AIO_PACKAGE}" *
             WORKING_DIRECTORY ${AIO_DIR}
             DEPENDS
