@@ -27,7 +27,7 @@ Effect11::PerFrame Effect11::GetCommonBufferData()
 	PerFrame data{};
 
 	data.Enable = enableEffect;
-	data.EnableSky = enableEffect && settingManager.GetValue<bool>("Enable", "SKY");
+	data.EnableSky = enableEffect;
 	data.ColorPow = settingManager.GetValue<float>("ColorPow", "ENVIRONMENT");
 
 	data.CloudsCurve = settingManager.GetInterpolatedTimeOfDayValue("CloudsCurve", "SKY");
@@ -68,7 +68,7 @@ Effect11::PerFrame Effect11::GetCommonBufferData()
 	}
 	data.VolumetricRaysSkyColorAmount = settingManager.GetInterpolatedTimeOfDayValue("SkyColorAmount", "VOLUMETRICRAYS");
 
-	data.EnableRain = enableEffect && raindropSRV && settingManager.GetValue<bool>("Enable", "RAIN");
+	data.EnableRain = enableEffect && raindropSRV;
 	data.RainMotionStretch = settingManager.GetInterpolatedTimeOfDayValue("MotionStretch", "RAIN");
 	data.RainMotionTransparency = settingManager.GetInterpolatedTimeOfDayValue("MotionTransparency", "RAIN");
 
@@ -216,10 +216,6 @@ void Effect11::Prepass()
 
 	auto& settingManager = SettingManager::GetSingleton();
 
-	if (!settingManager.GetValue<bool>("Enable", "SKY")) {
-		return;
-	}
-
 	auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
 	if (!imageSpaceManager) {
 		return;
@@ -351,9 +347,7 @@ void Effect11::OverrideWeather(RE::Sky* a_sky)
 		a_sky->fogFar /= fogAmountMultiplier;
 	}
 
-	const bool enableSky = enableEffect && settingManager.GetValue<bool>("Enable", "SKY");
-
-	if (enableSky) {
+	if (enableEffect) {
 		{
 			auto& sunColor = colors[(uint)RE::TESWeather::ColorTypes::kSun];
 

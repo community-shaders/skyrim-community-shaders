@@ -273,6 +273,9 @@ void MenuManager::RenderAllSettings()
 				}
 
 				for (const auto& category : categories) {
+					if (!settingManager.IsCategoryEnabled(category))
+						continue;
+
 					ImGuiTreeNodeFlags flags = (tabName == "Weather") ? ImGuiTreeNodeFlags_None : ImGuiTreeNodeFlags_DefaultOpen;
 
 					if (ImGui::TreeNodeEx(category.c_str(), flags)) {
@@ -332,6 +335,9 @@ void MenuManager::RenderAllSettings()
 								if (tabName == "Main" && isTod)
 									continue;
 								if (tabName == "Weather" && !isTod)
+									continue;
+
+								if (!settingManager.IsSettingEnabled(settingKey, category))
 									continue;
 
 								uint32_t settingID = settingInfo->id;

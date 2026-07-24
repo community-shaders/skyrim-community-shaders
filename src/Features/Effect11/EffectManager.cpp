@@ -188,7 +188,6 @@ void EffectManager::RegisterSettings()
 	settingManager.RegisterTimeOfDaySetting("FogColorFilterAmount", "ENVIRONMENT", 0.0f, 0.0f, 1.0f, 0.01f, true);
 	settingManager.RegisterFloatSetting("ColorPow", "ENVIRONMENT", 1.0f, 1.0f, 2.2f, 0.01f, false);
 
-	settingManager.RegisterBoolSetting("Enable", "SKY", true, false);
 	settingManager.RegisterBoolSetting("DisableWrongSkyMath", "SKY", false, false);
 	settingManager.RegisterTimeOfDaySetting("GradientIntensity", "SKY", 1.0f, 0.0f, 30000.0f, 0.01f, true);
 	settingManager.RegisterTimeOfDaySetting("GradientDesaturation", "SKY", 0.0f, -1.0f, 1.0f, 0.01f, true);
@@ -245,7 +244,6 @@ void EffectManager::RegisterSettings()
 
 	settingManager.RegisterFloatSetting("Intensity", "LIGHTSPRITE", 1.0f, 0.0f, 30000.0f, 0.01f, false);
 
-	settingManager.RegisterBoolSetting("Enable", "RAIN", true);
 	settingManager.RegisterTimeOfDaySetting("MotionStretch", "RAIN", 0.28f, 0.0f, 1.0f, 0.01f, true);
 	settingManager.RegisterTimeOfDaySetting("MotionTransparency", "RAIN", 0.1f, 0.0f, 1.0f, 0.01f, true);
 
@@ -260,6 +258,24 @@ void EffectManager::RegisterSettings()
 	settingManager.RegisterTimeOfDaySetting("Density", "VOLUMETRICRAYS", 1.0f, 0.1f, 100.0f, 0.01f, true);
 	settingManager.RegisterTimeOfDaySetting("SkyColorAmount", "VOLUMETRICRAYS", 0.5f, 0.0f, 10.0f, 0.01f, true);
 
+	settingManager.SetCategoryDependency("BLOOM", "EnableBloom", "EFFECT");
+	settingManager.SetCategoryDependency("LENS", "EnableLens", "EFFECT");
+	settingManager.SetCategoryDependency("ADAPTATION", "EnableAdaptation", "EFFECT");
+	settingManager.SetCategoryDependency("PROCEDURALSUN", "EnableProceduralSun", "EFFECT");
+	settingManager.SetCategoryDependency("CLOUDSHADOWS", "EnableCloudShadows", "EFFECT");
+	settingManager.SetCategoryDependency("SKYSCATTERING", "EnableCloudsScattering", "EFFECT");
+	settingManager.SetCategoryDependency("IMAGEBASEDLIGHTING", "EnableImageBasedLighting", "EFFECT");
+	settingManager.SetCategoryDependency("VOLUMETRICRAYS", "EnableVolumetricRays", "EFFECT");
+
+	settingManager.SetSettingDependency("ProceduralGradientWeightCurve", "SKY", "UseProceduralGradientWeights", "SKY");
+	settingManager.SetSettingDependency("AdaptationMin", "ADAPTATION", "ForceMinMaxValues", "ADAPTATION");
+	settingManager.SetSettingDependency("AdaptationMax", "ADAPTATION", "ForceMinMaxValues", "ADAPTATION");
+	settingManager.SetSettingDependency("Intensity", "SKYSCATTERING", "EnableCloudsLightingFromMoon", "SKYSCATTERING");
+	settingManager.SetSettingDependency("Amount", "SKYSCATTERING", "EnableCloudsLightingFromMoon", "SKYSCATTERING");
+	settingManager.SetSettingDependency("ColorFromSun", "SKYSCATTERING", "EnableCloudsLightingFromMoon", "SKYSCATTERING");
+	settingManager.SetSettingDependency("ScatteringColor", "SKYSCATTERING", "EnableCloudsLightingFromMoon", "SKYSCATTERING");
+	settingManager.SetSettingDependency("CloudsLightingSunMultiplier", "SKYSCATTERING", "EnableCloudsLightingFromMoon", "SKYSCATTERING");
+	settingManager.SetSettingDependency("CloudsLightingMoonIntensity", "SKYSCATTERING", "EnableCloudsLightingFromMoon", "SKYSCATTERING");
 
 	settingManager.SetCategoryExteriorOnly("RAIN", true);
 	settingManager.SetCategoryExteriorOnly("SKYLIGHTING", true);
