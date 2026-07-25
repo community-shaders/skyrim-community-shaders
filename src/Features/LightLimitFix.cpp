@@ -473,7 +473,7 @@ void LightLimitFix::UpdateLights()
 		addLight(e);
 	}
 
-	AddParticleLightsToBuffer(lightsData, eyePositionCached);
+	AddParticleLightsToBuffer(lightsData);
 
 	auto context = globals::d3d::context;
 
@@ -847,7 +847,7 @@ bool LightLimitFix::CheckParticleLights(RE::BSRenderPass* a_pass, uint32_t)
 	return true;
 }
 
-void LightLimitFix::AddParticleLightsToBuffer(eastl::vector<LightData>& a_lightsData, RE::NiPoint3 a_eyePosition)
+void LightLimitFix::AddParticleLightsToBuffer(eastl::vector<LightData>& a_lightsData)
 {
 	if (!particleLightSettings.EnableParticleLights)
 		return;

@@ -51,7 +51,6 @@ struct LightLimitFix : OverlayFeature
 	std::mutex particleLightsMutex;
 
 	bool CheckParticleLights(RE::BSRenderPass* a_pass, uint32_t a_technique);
-	void AddParticleLightsToBuffer(eastl::vector<LightData>& a_lightsData, RE::NiPoint3 a_eyePosition);
 
 public:
 	virtual inline std::string GetName() override { return "Light Limit Fix"; }
@@ -108,6 +107,8 @@ public:
 		uint pad1;
 	};
 	STATIC_ASSERT_ALIGNAS_16(LightData);
+
+	void AddParticleLightsToBuffer(eastl::vector<LightData>& a_lightsData);
 
 	struct ClusterAABB
 	{
