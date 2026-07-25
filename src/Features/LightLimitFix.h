@@ -15,7 +15,6 @@ struct LightLimitFix : OverlayFeature
 	struct ParticleLightConfigStore
 	{
 		ankerl::unordered_dense::map<std::string, ParticleLightConfig> configs;
-		std::uint64_t configVersion = 0;
 
 		void Load();
 	};
@@ -33,13 +32,11 @@ struct LightLimitFix : OverlayFeature
 		bool applyEffectMaterialTint = true;
 		ParticleLightConfig config{};
 		RE::NiColorA baseColor{ 1.0f, 1.0f, 1.0f, 1.0f };
-		std::uint64_t configVersion = 0;
 	};
 
 	struct ParticleLightSettings
 	{
 		bool EnableParticleLights = true;
-		bool EnableParticleLightsCulling = true;
 	};
 
 	ParticleLightSettings particleLightSettings;
@@ -48,7 +45,7 @@ struct LightLimitFix : OverlayFeature
 	eastl::hash_map<RE::BSGeometry*, VertexColorCacheEntry> vertexColorCache;
 	eastl::vector<ResolvedParticleLight> queuedParticleLights;
 	eastl::vector<ResolvedParticleLight> currentParticleLights;
-	std::mutex particleLightsMutex;
+	std::shared_mutex particleLightsMutex;
 
 	bool CheckParticleLights(RE::BSRenderPass* a_pass, uint32_t a_technique);
 
@@ -82,7 +79,6 @@ public:
 		Disabled = (1 << 9),
 		InverseSquare = (1 << 10),
 		Linear = (1 << 11),
-		Particle = (1 << 12),
 	};
 
 	struct PositionOpt

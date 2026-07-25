@@ -188,10 +188,6 @@ void Effect11::SetupResources()
 	LoadRaindropTexture();
 }
 
-void Effect11::Reset()
-{
-}
-
 void Effect11::ClearShaderCache()
 {
 	if (raymarchVolumetricRaysPS) {
@@ -730,7 +726,6 @@ void Effect11::DrawVolumetricRays()
 		vlTexB->CreateSRV(srvDesc);
 		vlTexB->CreateUAV(uavDesc);
 
-		// R32F to preserve the raw depth precision the bilateral weights compare against.
 		D3D11_TEXTURE2D_DESC depthDesc = desc;
 		depthDesc.Format = DXGI_FORMAT_R32_FLOAT;
 		depthDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
@@ -891,6 +886,3 @@ void Effect11::DrawVolumetricRays()
 	stateBackup.Release();
 }
 
-void Effect11::PostPostLoad()
-{
-}
