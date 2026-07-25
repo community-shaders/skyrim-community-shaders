@@ -474,6 +474,10 @@ void LightLimitFix::UpdateLights()
 		addLight(e);
 	}
 
+	auto& enbpp = globals::features::effect11;
+	if (enbpp.loaded)
+		enbpp.AddParticleLightsToBuffer(lightsData, eyePositionCached);
+
 	auto context = globals::d3d::context;
 
 	lightCount = std::min((uint)lightsData.size(), MAX_LIGHTS);
