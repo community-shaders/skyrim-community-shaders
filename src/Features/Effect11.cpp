@@ -916,25 +916,15 @@ namespace
 		bool found = false;
 		VertexColor bestColor{};
 
-#if defined(_MSC_VER)
-		__try
-#endif
-		{
-			for (std::uint32_t v = 0; v < a_vertexCount; ++v) {
-				const auto byteOffset = static_cast<std::size_t>(a_vertexSize) * v + a_colorOffset;
-				const auto* vertex = reinterpret_cast<const VertexColor*>(a_rawVertexData + byteOffset);
-				if (vertex->data[3] > maxAlpha) {
-					maxAlpha = vertex->data[3];
-					bestColor = *vertex;
-					found = true;
-				}
+		for (std::uint32_t v = 0; v < a_vertexCount; ++v) {
+			const auto byteOffset = static_cast<std::size_t>(a_vertexSize) * v + a_colorOffset;
+			const auto* vertex = reinterpret_cast<const VertexColor*>(a_rawVertexData + byteOffset);
+			if (vertex->data[3] > maxAlpha) {
+				maxAlpha = vertex->data[3];
+				bestColor = *vertex;
+				found = true;
 			}
 		}
-#if defined(_MSC_VER)
-		__except (1) {
-			return false;
-		}
-#endif
 
 		if (found)
 			a_outVertexColor = bestColor;
