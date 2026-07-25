@@ -1,5 +1,6 @@
 #include "WeatherManager.h"
 
+#include "Globals.h"
 #include "State.h"
 #include "Utils/Form.h"
 
@@ -27,7 +28,7 @@ WeatherManager::CurrentWeathers WeatherManager::GetCurrentWeathers()
 {
 	CurrentWeathers result;
 
-	auto sky = RE::Sky::GetSingleton();
+	auto sky = globals::game::sky;
 	if (!sky) {
 		return result;
 	}

@@ -30,6 +30,12 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Position,
 	PositionSet)
 
+void CSEditor::PostPostLoad()
+{
+	// Before the game loop starts, so no call site can be executing while it is rewritten.
+	EditorWindow::InstallWeatherLockHooks();
+}
+
 void CSEditor::DataLoaded()
 {
 	s_dataAvailable = true;
@@ -212,15 +218,7 @@ void CSEditor::Prepass()
 		EnsureDataLoaded();
 	}
 
-	// Re-enforce weather lock if active (handles time changes)
-	auto editorWindow = EditorWindow::GetSingleton();
-	if (editorWindow->IsWeatherLocked()) {
-		auto lockedWeather = editorWindow->GetLockedWeather();
-		auto sky = globals::game::sky;
-		if (sky && lockedWeather && sky->currentWeather != lockedWeather) {
-			sky->ForceWeather(lockedWeather, false);
-		}
-	}
+	EditorWindow::MaintainWeatherLock();
 }
 
 void CSEditor::DrawWeatherPickerSection()
