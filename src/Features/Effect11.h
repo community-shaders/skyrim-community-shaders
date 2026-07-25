@@ -153,10 +153,6 @@ public:
 	{
 		bool EnableParticleLights = true;
 		bool EnableParticleLightsCulling = true;
-		float ParticleLightsSaturation = 1.0f;
-		float BillboardBrightness = 1.0f;
-		float BillboardRadius = 1.0f;
-		float MaxParticleDistance = 6000.0f;
 	};
 
 	ParticleLightSettings particleLightSettings;

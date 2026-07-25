@@ -941,15 +941,6 @@ namespace
 		return found;
 	}
 
-	bool IsNearWhiteTint(const RE::NiColorA& a_color)
-	{
-		const float avg = (a_color.red + a_color.green + a_color.blue) / 3.0f;
-		return std::abs(a_color.red - avg) < 0.02f &&
-		       std::abs(a_color.green - avg) < 0.02f &&
-		       std::abs(a_color.blue - avg) < 0.02f &&
-		       avg > 0.92f;
-	}
-
 	RE::NiColorA BuildEffectMaterialEmissiveTint(RE::BSEffectShaderMaterial* a_material, RE::BSEffectShaderProperty* a_shaderProperty)
 	{
 		RE::NiColorA tint{
@@ -976,14 +967,6 @@ namespace
 		return stem;
 	}
 
-	float3 Saturation(float3 color, float saturation)
-	{
-		float grey = color.Dot(float3(0.3f, 0.59f, 0.11f));
-		color.x = std::max(std::lerp(grey, color.x, saturation), 0.0f);
-		color.y = std::max(std::lerp(grey, color.y, saturation), 0.0f);
-		color.z = std::max(std::lerp(grey, color.z, saturation), 0.0f);
-		return color;
-	}
 }
 
 void Effect11::PostPostLoad()
@@ -1094,14 +1077,11 @@ Effect11::VertexColorCacheEntry Effect11::GetParticleLightConfig(RE::BSRenderPas
 		}
 	}
 
-	const bool vertexTintLooksWhite = hasVertexTint && IsNearWhiteTint(entry.baseColor);
-	if (!hasVertexTint || vertexTintLooksWhite) {
+	if (!hasVertexTint) {
 		const RE::NiColorA materialTint = BuildEffectMaterialEmissiveTint(material, shaderProperty);
 		const float materialLuma = std::max(materialTint.red, 0.0f) + std::max(materialTint.green, 0.0f) + std::max(materialTint.blue, 0.0f);
-		const bool hasMaterialTint = materialLuma > 1e-4f;
-		const bool materialIsNonWhite = hasMaterialTint && !IsNearWhiteTint(materialTint);
 
-		if (materialIsNonWhite || hasMaterialTint) {
+		if (materialLuma > 1e-4f) {
 			entry.baseColor = materialTint;
 			entry.applyEffectMaterialTint = false;
 		} else {
@@ -1168,18 +1148,13 @@ bool Effect11::QueueParticleLight(RE::BSRenderPass* a_pass, VertexColorCacheEntr
 		color.blue *= config.colorMult.blue;
 	}
 
-	color.alpha = std::max(config.radiusMult, 0.0f);
-
-	constexpr std::size_t kMaxQueuedParticleLights = 16384;
-
 	ResolvedParticleLight resolved;
 	resolved.position = a_pass->geometry->world.translate;
 	resolved.color = color;
-	resolved.radius = a_pass->geometry->worldBound.radius * config.radiusMult;
+	resolved.radius = a_pass->geometry->worldBound.radius;
 
 	std::lock_guard<std::mutex> lock{ particleLightsMutex };
-	if (queuedParticleLights.size() < kMaxQueuedParticleLights)
-		queuedParticleLights.push_back(resolved);
+	queuedParticleLights.push_back(resolved);
 
 	return true;
 }
@@ -1219,19 +1194,12 @@ void Effect11::AddParticleLightsToBuffer(eastl::vector<LightLimitFix::LightData>
 			pl.position.z - a_eyePosition.z
 		};
 
-		if (particleLightSettings.MaxParticleDistance > 0.0f) {
-			float distSq = (posWS.x * posWS.x) + (posWS.y * posWS.y) + (posWS.z * posWS.z);
-			if (distSq > particleLightSettings.MaxParticleDistance * particleLightSettings.MaxParticleDistance)
-				continue;
-		}
-
 		LightLimitFix::LightData light{};
 		light.color.x = pl.color.red;
 		light.color.y = pl.color.green;
 		light.color.z = pl.color.blue;
-		light.color = Saturation(light.color, particleLightSettings.ParticleLightsSaturation);
-		light.color *= pl.color.alpha * particleLightSettings.BillboardBrightness;
-		light.radius = pl.radius * particleLightSettings.BillboardRadius * 0.5f;
+		light.color *= pl.color.alpha;
+		light.radius = pl.radius * 0.5f;
 		light.positionWS.data = { posWS.x, posWS.y, posWS.z };
 
 		light.lightFlags.set(LightLimitFix::LightFlags::Simple);
