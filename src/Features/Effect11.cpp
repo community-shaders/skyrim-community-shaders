@@ -1078,26 +1078,8 @@ Effect11::VertexColorCacheEntry Effect11::GetParticleLightConfig(RE::BSRenderPas
 	}
 
 	if (!hasVertexTint) {
-		const RE::NiColorA materialTint = BuildEffectMaterialEmissiveTint(material, shaderProperty);
-		const float materialLuma = std::max(materialTint.red, 0.0f) + std::max(materialTint.green, 0.0f) + std::max(materialTint.blue, 0.0f);
-
-		if (materialLuma > 1e-4f) {
-			entry.baseColor = materialTint;
-			entry.applyEffectMaterialTint = false;
-		} else {
-			RE::NiColorA fallback{ 1.0f, 1.0f, 1.0f, 1.0f };
-			if (hasGradientConfig) {
-				fallback.red = gradientConfig.color.red;
-				fallback.green = gradientConfig.color.green;
-				fallback.blue = gradientConfig.color.blue;
-			} else {
-				fallback.red = config.colorMult.red;
-				fallback.green = config.colorMult.green;
-				fallback.blue = config.colorMult.blue;
-			}
-			entry.baseColor = fallback;
-			entry.applyEffectMaterialTint = true;
-		}
+		entry.baseColor = BuildEffectMaterialEmissiveTint(material, shaderProperty);
+		entry.applyEffectMaterialTint = false;
 	}
 
 	{
