@@ -594,30 +594,37 @@ namespace
 		std::uint8_t data[4];
 	};
 
-	bool TryGetMaxAlphaVertexColor(const std::uint8_t* a_rawVertexData, std::uint32_t a_vertexSize, std::uint32_t a_colorOffset, std::uint32_t a_vertexCount, VertexColor& a_outVertexColor)
+	bool TryGetAlphaWeightedVertexColor(const std::uint8_t* a_rawVertexData, std::uint32_t a_vertexSize, std::uint32_t a_colorOffset, std::uint32_t a_vertexCount, VertexColor& a_outVertexColor)
 	{
 		if (!a_rawVertexData || a_vertexSize < sizeof(VertexColor) || a_vertexCount == 0)
 			return false;
 		if (a_colorOffset > (a_vertexSize - sizeof(VertexColor)))
 			return false;
 
+		float weightedR = 0.f, weightedG = 0.f, weightedB = 0.f;
+		float totalAlpha = 0.f;
 		std::uint8_t maxAlpha = 0;
-		bool found = false;
-		VertexColor bestColor{};
 
 		for (std::uint32_t v = 0; v < a_vertexCount; ++v) {
 			const auto byteOffset = static_cast<std::size_t>(a_vertexSize) * v + a_colorOffset;
 			const auto* vertex = reinterpret_cast<const VertexColor*>(a_rawVertexData + byteOffset);
-			if (vertex->data[3] > maxAlpha) {
+			float alpha = vertex->data[3];
+			weightedR += vertex->data[0] * alpha;
+			weightedG += vertex->data[1] * alpha;
+			weightedB += vertex->data[2] * alpha;
+			totalAlpha += alpha;
+			if (vertex->data[3] > maxAlpha)
 				maxAlpha = vertex->data[3];
-				bestColor = *vertex;
-				found = true;
-			}
 		}
 
-		if (found)
-			a_outVertexColor = bestColor;
-		return found;
+		if (totalAlpha == 0.f)
+			return false;
+
+		a_outVertexColor.data[0] = static_cast<std::uint8_t>(std::min(weightedR / totalAlpha, 255.f));
+		a_outVertexColor.data[1] = static_cast<std::uint8_t>(std::min(weightedG / totalAlpha, 255.f));
+		a_outVertexColor.data[2] = static_cast<std::uint8_t>(std::min(weightedB / totalAlpha, 255.f));
+		a_outVertexColor.data[3] = maxAlpha;
+		return true;
 	}
 
 	RE::NiColorA BuildEffectMaterialEmissiveTint(RE::BSEffectShaderMaterial* a_material, RE::BSEffectShaderProperty* a_shaderProperty)
@@ -771,7 +778,7 @@ LightLimitFix::VertexColorCacheEntry LightLimitFix::GetParticleLightConfig(RE::B
 				const std::uint32_t vertexCount = static_cast<std::uint32_t>(triShape->GetTrishapeRuntimeData().vertexCount);
 
 				VertexColor maxAlphaVC{};
-				if (TryGetMaxAlphaVertexColor(rendererData->rawVertexData, vertexSize, offset, vertexCount, maxAlphaVC)) {
+				if (TryGetAlphaWeightedVertexColor(rendererData->rawVertexData, vertexSize, offset, vertexCount, maxAlphaVC)) {
 					entry.baseColor.red *= maxAlphaVC.data[0] / 255.f;
 					entry.baseColor.green *= maxAlphaVC.data[1] / 255.f;
 					entry.baseColor.blue *= maxAlphaVC.data[2] / 255.f;
@@ -875,9 +882,10 @@ void LightLimitFix::AddParticleLightsToBuffer(eastl::vector<LightData>& a_lights
 			break;
 
 		LightData light{};
-		light.color.x = pl.color.red;
-		light.color.y = pl.color.green;
-		light.color.z = pl.color.blue;
+		constexpr float invPI = 1.f / 3.14159265358979323846f;
+		light.color.x = pl.color.red * invPI;
+		light.color.y = pl.color.green * invPI;
+		light.color.z = pl.color.blue * invPI;
 		light.color *= pl.color.alpha;
 
 		if (effect11.enableEffect)
