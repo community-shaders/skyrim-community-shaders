@@ -1,11 +1,8 @@
 #pragma once
 
 #include "Buffer.h"
-#include "Effect11/ParticleLights.h"
-#include "LightLimitFix.h"
 
 #include <memory>
-#include <mutex>
 #include <winrt/base.h>
 
 struct Effect11 : Feature
@@ -24,8 +21,7 @@ public:
 				"DirectX 11 Effect file loading",
 				"Advanced post-processing pipeline",
 				"Custom technique execution",
-				"Dynamic UI variable system",
-				"Support for particle lights" }
+				"Dynamic UI variable system" }
 		};
 	}
 
@@ -128,68 +124,4 @@ public:
 	__declspec(noinline) void ModifyParticle(RE::BSRenderPass* Pass);
 	void ParticleShaderHacks();
 	bool HandleTonemapRender(RE::RENDER_TARGET a_input, RE::RENDER_TARGET a_output);
-
-	// --- Particle Lights ---
-
-	struct ResolvedParticleLight
-	{
-		RE::NiPoint3 position;
-		RE::NiColorA color;
-		float radius;
-	};
-
-	struct VertexColorCacheEntry
-	{
-		bool valid = false;
-		bool applyEffectMaterialTint = true;
-		Effect11PL::Config config{};
-		bool hasGradientConfig = false;
-		Effect11PL::GradientConfig gradientConfig{};
-		RE::NiColorA baseColor{ 1.0f, 1.0f, 1.0f, 1.0f };
-		std::uint64_t configVersion = 0;
-	};
-
-	struct ParticleLightSettings
-	{
-		bool EnableParticleLights = true;
-		bool EnableParticleLightsCulling = true;
-	};
-
-	ParticleLightSettings particleLightSettings;
-	Effect11PL::ConfigStore particleLightConfigs;
-
-	eastl::hash_map<RE::BSGeometry*, VertexColorCacheEntry> vertexColorCache;
-	eastl::vector<ResolvedParticleLight> queuedParticleLights;
-	eastl::vector<ResolvedParticleLight> currentParticleLights;
-	std::mutex particleLightsMutex;
-
-	bool CheckParticleLights(RE::BSRenderPass* a_pass, uint32_t a_technique);
-	void AddParticleLightsToBuffer(eastl::vector<LightLimitFix::LightData>& a_lightsData, RE::NiPoint3 a_eyePosition);
-	void CleanupVertexColorCache(RE::NiNode* a_node);
-
-private:
-	VertexColorCacheEntry GetParticleLightConfig(RE::BSRenderPass* a_pass);
-	bool QueueParticleLight(RE::BSRenderPass* a_pass, VertexColorCacheEntry& a_reference);
-
-	struct Hooks
-	{
-		template <int N>
-		struct BSBatchRenderer_RenderPassImmediately
-		{
-			static void thunk(RE::BSRenderPass* a_pass, uint32_t a_technique, bool a_alphaTest, uint32_t a_renderFlags);
-			static inline REL::Relocation<decltype(thunk)> func;
-		};
-
-		using RenderPass1 = BSBatchRenderer_RenderPassImmediately<1>;
-		using RenderPass2 = BSBatchRenderer_RenderPassImmediately<2>;
-		using RenderPass3 = BSBatchRenderer_RenderPassImmediately<3>;
-
-		struct NiNode_Destroy
-		{
-			static void thunk(RE::NiNode* This);
-			static inline REL::Relocation<decltype(thunk)> func;
-		};
-
-		static void Install();
-	};
 };
