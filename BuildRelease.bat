@@ -49,12 +49,16 @@ if %ERRORLEVEL% NEQ 0 (
 rem Parallelize across projects too (MSBuild /m); Ninja is parallel by default.
 if not defined CMAKE_BUILD_PARALLEL_LEVEL set "CMAKE_BUILD_PARALLEL_LEVEL=%NUMBER_OF_PROCESSORS%"
 
-rem 'if errorlevel 1' is evaluated at run time; %ERRORLEVEL% inside a
-rem parenthesized block expands at parse time and misses failures.
+rem Dev wrappers set SKIP_CONFIGURE=1 to avoid re-running cmake on warm builds.
+rem Shipping and CI builds always reconfigure so file globs (shader lists,
+rem feature paths) are never stale -- without this, new or deleted files are
+rem missed and the AIO zip is incomplete.
+if NOT "%SKIP_CONFIGURE%" == "1" goto :configure
 if exist "build\%configpreset%\CMakeCache.txt" (
     echo Build folder warm, skipping configure
     goto :build
 )
+:configure
 cmake -S . --preset=%configpreset%
 if errorlevel 1 exit /b 1
 
