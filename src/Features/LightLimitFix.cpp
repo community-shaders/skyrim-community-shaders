@@ -839,6 +839,14 @@ bool LightLimitFix::CheckParticleLights(RE::BSRenderPass* a_pass, uint32_t)
 	if (!a_pass || !a_pass->geometry || !a_pass->shaderProperty)
 		return true;
 
+	using Flag = RE::BSShaderProperty::EShaderPropertyFlag;
+	if (!a_pass->shaderProperty->flags.any(Flag::kSoftEffect, Flag::kZBufferTest))
+		return true;
+
+	auto* alphaProperty = static_cast<RE::NiAlphaProperty*>(a_pass->geometry->GetGeometryRuntimeData().alphaProperty.get());
+	if (!alphaProperty || !alphaProperty->GetAlphaBlending() || alphaProperty->GetDestBlendMode() != RE::NiAlphaProperty::AlphaFunction::kOne)
+		return true;
+
 	auto reference = GetParticleLightConfig(a_pass);
 	if (reference.valid) {
 		if (QueueParticleLight(a_pass, reference))
@@ -927,9 +935,10 @@ void LightLimitFix::Hooks::Install()
 	stl::write_thunk_call<ValidLight2>(REL::RelocationID(100997, 107784).address() + REL::Relocate(0x139, 0x12A));
 	stl::write_thunk_call<ValidLight3>(REL::RelocationID(101296, 108283).address() + REL::Relocate(0xB7, 0x7E));
 
-	stl::write_thunk_call<RenderPass1>(REL::RelocationID(100877, 107667).address() + REL::Relocate(0x1EE, 0x1D7));
+	stl::write_thunk_call<RenderPass1>(REL::RelocationID(100877, 107667).address() + REL::Relocate(0x1E5, 0xED));
 	stl::write_thunk_call<RenderPass2>(REL::RelocationID(100852, 107642).address() + REL::Relocate(0x29E, 0x28F));
-	stl::write_thunk_call<RenderPass3>(REL::RelocationID(100871, 107661).address() + REL::Relocate(0x2A2, 0x293));
+	if (REL::Module::IsSE())
+		stl::write_thunk_call<RenderPass3>(REL::RelocationID(100871, 107661).address() + 0xEE);
 	stl::detour_thunk<BSGeometry_Destroy>(REL::RelocationID(69535, 70936));
 
 	logger::info("[LLF] Installed hooks");
