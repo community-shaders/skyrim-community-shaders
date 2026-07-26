@@ -1072,7 +1072,7 @@ namespace ENBExtender
 						for (auto& dir : includeDirs) {
 							auto candidate = std::filesystem::weakly_canonical(dir / includeName);
 							auto dirCanonical = std::filesystem::weakly_canonical(dir);
-							auto [dirEnd, _] = std::mismatch(dirCanonical.begin(), dirCanonical.end(), candidate.begin());
+							auto [dirEnd, _] = std::mismatch(dirCanonical.begin(), dirCanonical.end(), candidate.begin(), candidate.end());
 							if (dirEnd != dirCanonical.end())
 								continue;
 							if (std::filesystem::exists(candidate)) {
@@ -1084,7 +1084,7 @@ namespace ENBExtender
 						if (!found) {
 							auto candidate = std::filesystem::weakly_canonical(basePath / includeName);
 							auto baseCanonical = std::filesystem::weakly_canonical(basePath);
-							auto [baseEnd, _] = std::mismatch(baseCanonical.begin(), baseCanonical.end(), candidate.begin());
+							auto [baseEnd, _] = std::mismatch(baseCanonical.begin(), baseCanonical.end(), candidate.begin(), candidate.end());
 							if (baseEnd != baseCanonical.end()) {
 								result += "\n";
 								continue;
@@ -1164,7 +1164,7 @@ namespace ENBExtender
 		for (auto& dir : includeDirs) {
 			auto candidate = std::filesystem::weakly_canonical(dir / name);
 			auto dirCanonical = std::filesystem::weakly_canonical(dir);
-			auto [dirEnd, _] = std::mismatch(dirCanonical.begin(), dirCanonical.end(), candidate.begin());
+			auto [dirEnd, _] = std::mismatch(dirCanonical.begin(), dirCanonical.end(), candidate.begin(), candidate.end());
 			if (dirEnd != dirCanonical.end())
 				continue;
 			if (std::filesystem::exists(candidate)) {
@@ -1177,7 +1177,7 @@ namespace ENBExtender
 		if (!found) {
 			auto candidate = std::filesystem::weakly_canonical(basePath / name);
 			auto baseCanonical = std::filesystem::weakly_canonical(basePath);
-			auto [baseEnd, _] = std::mismatch(baseCanonical.begin(), baseCanonical.end(), candidate.begin());
+			auto [baseEnd, _] = std::mismatch(baseCanonical.begin(), baseCanonical.end(), candidate.begin(), candidate.end());
 			if (baseEnd != baseCanonical.end()) {
 				logger::warn("[ENBEXTENDER] Include path escapes base directory: '{}'", std::string(name));
 				auto* buf = new char[1];

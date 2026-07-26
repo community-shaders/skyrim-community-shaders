@@ -11,6 +11,8 @@ public:
 	virtual inline std::string GetName() override { return "Effect11"; }
 	virtual inline std::string GetShortName() override { return "Effect11"; }
 	virtual std::string_view GetCategory() const override { return "Post-Processing"; }
+	virtual inline std::string_view GetShaderDefineName() override { return "EFFECT11"; }
+	virtual inline bool HasShaderDefine(RE::BSShader::Type) override { return true; }
 
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{

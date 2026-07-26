@@ -91,6 +91,7 @@ VS_OUTPUT main(VS_INPUT input)
 	float4 viewPosition = mul(WorldViewProj, msPosition);
 #		if defined(RAIN)
 	float3 rainVelocity = Velocity.xyz;
+#		if defined(EFFECT11)
 	if (SharedData::enbSettings.EnableRain) {
 		float velLen = length(rainVelocity);
 		if (velLen > 0) {
@@ -98,6 +99,7 @@ VS_OUTPUT main(VS_INPUT input)
 			rainVelocity = lerp(normVel, rainVelocity, SharedData::enbSettings.RainMotionStretch);
 		}
 	}
+#		endif
 	float4 adjustedMsPosition = msPosition - float4(rainVelocity, 0);
 	float positionBlendParam = 0.5 * (1 + input.TexCoord1.y);
 	float4 adjustedViewPosition = mul(WorldViewProj, adjustedMsPosition);
@@ -189,7 +191,7 @@ VS_OUTPUT main(VS_INPUT input)
 	vsout.Color.xyz = color.xyz;
 #	endif
 
-#		if defined(ENVCUBE) && defined(RAIN)
+#		if defined(ENVCUBE) && defined(RAIN) && defined(EFFECT11)
 	vsout.RaindropData.xy = input.TexCoord1.xy * 0.5 + 0.5;
 #		endif
 
@@ -268,7 +270,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	}
 #	endif
 
-#	if defined(RAIN) && defined(DYNAMIC_CUBEMAPS)
+#	if defined(RAIN) && defined(DYNAMIC_CUBEMAPS) && defined(EFFECT11)
 if (SharedData::enbSettings.EnableRain) {
 	float4 raindropNormal = TexRaindropNormals.Sample(SampSourceTexture, input.RaindropData.xy);
     float alpha = saturate(raindropNormal.w * (1.0 - SharedData::enbSettings.RainMotionTransparency));

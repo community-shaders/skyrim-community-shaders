@@ -500,12 +500,14 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float2 screenPo
 	float3 ambientColor;
 	ShadowSampling::ExtractLighting(color, dirColor, ambientColor);
 
+#		if defined(EFFECT11)
 	if (SharedData::enbSettings.Enable) {
 		dirColor = ShadowSampling::GetDirectionalLighting();
 		ambientColor = ShadowSampling::GetAmbientLighting();
 		dirColor *= SharedData::enbSettings.ParticleLightingInfluence;
 		ambientColor *= SharedData::enbSettings.ParticleAmbientInfluence;
 	}
+#		endif
 
 	float3 viewDirection = normalize(worldPosition.xyz);
 
@@ -546,7 +548,11 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float2 screenPo
 	{
 		float4 lightDistanceSquared = (PLightPositionX[0] - msPosition.xxxx) * (PLightPositionX[0] - msPosition.xxxx) + (PLightPositionY[0] - msPosition.yyyy) * (PLightPositionY[0] - msPosition.yyyy) + (PLightPositionZ[0] - msPosition.zzzz) * (PLightPositionZ[0] - msPosition.zzzz);
 		float4 lightFadeMul = 1.0.xxxx - saturate(PLightingRadiusInverseSquared * lightDistanceSquared);
+#		if defined(EFFECT11)
 		float pointScale = SharedData::enbSettings.Enable ? SharedData::enbSettings.ParticlePointLightingInfluence : 1.0;
+#		else
+		float pointScale = 1.0;
+#		endif
 		color.x += dot(Color::PointLight(PLightColorR.xxx).x * lightFadeMul * Color::EffectLightingMult(), 1.0.xxxx) * pointScale;
 		color.y += dot(Color::PointLight(PLightColorG.xxx).x * lightFadeMul * Color::EffectLightingMult(), 1.0.xxxx) * pointScale;
 		color.z += dot(Color::PointLight(PLightColorB.xxx).x * lightFadeMul * Color::EffectLightingMult(), 1.0.xxxx) * pointScale;
@@ -657,15 +663,17 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 propertyColor = Color::Effect(PropertyColor.xyz);
 	float shadowVariance = 1.0;
 
+#	if defined(EFFECT11)
 	bool isFire = false;
-#	if defined(ADDBLEND) && defined(SOFT)
+#		if defined(ADDBLEND) && defined(SOFT)
         if (Permutation::PixelShaderDescriptor & Permutation::EffectFlags::GrayscaleToColor && Permutation::PixelShaderDescriptor & Permutation::EffectFlags::GrayscaleToAlpha)
 			isFire = true;
-#	endif
+#		endif
 
-#	if !defined(IS_VOLUMETRIC_FOG)
+#		if !defined(IS_VOLUMETRIC_FOG)
 	if (SharedData::enbSettings.Enable && !(Permutation::VertexShaderDescriptor & Permutation::EffectFlags::SkyObject) && !isFire)
 		propertyColor *= SharedData::enbSettings.ParticleIntensity;
+#		endif
 #	endif
 
 #	if defined(LIGHTING)
@@ -837,10 +845,12 @@ PS_OUTPUT main(PS_INPUT input)
 #            else
     float3 blendedColor = lightColor * (1 - fogFactor);
 #            endif
+#	if defined(EFFECT11)
 	if (isFire)
 		blendedColor = pow(abs(blendedColor), SharedData::enbSettings.FireCurve) * SharedData::enbSettings.FireIntensity;
 	else
-		blendedColor *= SharedData::enbSettings.LightSpriteIntensity;                 
+		blendedColor *= SharedData::enbSettings.LightSpriteIntensity;
+#	endif
 #		elif defined(MULTBLEND) || defined(MULTBLEND_DECAL)
 #			if defined(EXP_HEIGHT_FOG)
 	float3 blendedColor = lerp(lightColor, 1.0.xxx, saturate(1.5 * vanillaFogFactor).xxx);
