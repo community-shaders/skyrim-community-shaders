@@ -606,8 +606,6 @@ void LightLimitFix::Hooks::BSWaterShader_SetupGeometry::thunk(RE::BSShader* This
 	singleton.BSLightingShader_SetupGeometry_After(Pass);
 };
 
-// --- Particle Lights ---
-
 namespace
 {
 	struct VertexColor
@@ -615,30 +613,37 @@ namespace
 		std::uint8_t data[4];
 	};
 
-	bool TryGetMaxAlphaVertexColor(const std::uint8_t* a_rawVertexData, std::uint32_t a_vertexSize, std::uint32_t a_colorOffset, std::uint32_t a_vertexCount, VertexColor& a_outVertexColor)
+	bool TryGetAlphaWeightedVertexColor(const std::uint8_t* a_rawVertexData, std::uint32_t a_vertexSize, std::uint32_t a_colorOffset, std::uint32_t a_vertexCount, VertexColor& a_outVertexColor)
 	{
 		if (!a_rawVertexData || a_vertexSize < sizeof(VertexColor) || a_vertexCount == 0)
 			return false;
 		if (a_colorOffset > (a_vertexSize - sizeof(VertexColor)))
 			return false;
 
+		float weightedR = 0.f, weightedG = 0.f, weightedB = 0.f;
+		float totalAlpha = 0.f;
 		std::uint8_t maxAlpha = 0;
-		bool found = false;
-		VertexColor bestColor{};
 
 		for (std::uint32_t v = 0; v < a_vertexCount; ++v) {
 			const auto byteOffset = static_cast<std::size_t>(a_vertexSize) * v + a_colorOffset;
 			const auto* vertex = reinterpret_cast<const VertexColor*>(a_rawVertexData + byteOffset);
-			if (vertex->data[3] > maxAlpha) {
+			float alpha = vertex->data[3];
+			weightedR += vertex->data[0] * alpha;
+			weightedG += vertex->data[1] * alpha;
+			weightedB += vertex->data[2] * alpha;
+			totalAlpha += alpha;
+			if (vertex->data[3] > maxAlpha)
 				maxAlpha = vertex->data[3];
-				bestColor = *vertex;
-				found = true;
-			}
 		}
 
-		if (found)
-			a_outVertexColor = bestColor;
-		return found;
+		if (totalAlpha == 0.f)
+			return false;
+
+		a_outVertexColor.data[0] = static_cast<std::uint8_t>(std::min(weightedR / totalAlpha, 255.f));
+		a_outVertexColor.data[1] = static_cast<std::uint8_t>(std::min(weightedG / totalAlpha, 255.f));
+		a_outVertexColor.data[2] = static_cast<std::uint8_t>(std::min(weightedB / totalAlpha, 255.f));
+		a_outVertexColor.data[3] = maxAlpha;
+		return true;
 	}
 
 	RE::NiColorA BuildEffectMaterialEmissiveTint(RE::BSEffectShaderMaterial* a_material, RE::BSEffectShaderProperty* a_shaderProperty)
@@ -670,7 +675,6 @@ namespace
 
 void LightLimitFix::ParticleLightConfigStore::Load()
 {
-	++configVersion;
 	configs.clear();
 
 	configs["default"] = ParticleLightConfig{};
@@ -744,20 +748,17 @@ LightLimitFix::VertexColorCacheEntry LightLimitFix::GetParticleLightConfig(RE::B
 	auto* node = a_pass->geometry;
 
 	{
-		std::lock_guard<std::mutex> lock{ particleLightsMutex };
+		std::shared_lock lock{ particleLightsMutex };
 		auto it = vertexColorCache.find(node);
 		if (it != vertexColorCache.end()) {
-			if (it->second.configVersion == particleLightConfigs.configVersion)
-				return it->second;
-			vertexColorCache.erase(it);
+			return it->second;
 		}
 	}
 
 	auto cacheInvalid = [&](RE::BSGeometry* a_node) {
 		VertexColorCacheEntry invalid{};
 		invalid.valid = false;
-		invalid.configVersion = particleLightConfigs.configVersion;
-		std::lock_guard<std::mutex> lock{ particleLightsMutex };
+		std::unique_lock lock{ particleLightsMutex };
 		vertexColorCache[a_node] = invalid;
 		return invalid;
 	};
@@ -781,8 +782,6 @@ LightLimitFix::VertexColorCacheEntry LightLimitFix::GetParticleLightConfig(RE::B
 	entry.applyEffectMaterialTint = true;
 	entry.config = config;
 	entry.baseColor = { 1, 1, 1, 1 };
-	entry.configVersion = particleLightConfigs.configVersion;
-
 	bool hasVertexTint = false;
 	if (auto rendererData = a_pass->geometry->GetGeometryRuntimeData().rendererData) {
 		if (auto triShape = a_pass->geometry->AsTriShape()) {
@@ -791,14 +790,14 @@ LightLimitFix::VertexColorCacheEntry LightLimitFix::GetParticleLightConfig(RE::B
 				const std::uint32_t offset = rendererData->vertexDesc.GetAttributeOffset(RE::BSGraphics::Vertex::Attribute::VA_COLOR);
 				const std::uint32_t vertexCount = static_cast<std::uint32_t>(triShape->GetTrishapeRuntimeData().vertexCount);
 
-				VertexColor maxAlphaVC{};
-				if (TryGetMaxAlphaVertexColor(rendererData->rawVertexData, vertexSize, offset, vertexCount, maxAlphaVC)) {
-					entry.baseColor.red *= maxAlphaVC.data[0] / 255.f;
-					entry.baseColor.green *= maxAlphaVC.data[1] / 255.f;
-					entry.baseColor.blue *= maxAlphaVC.data[2] / 255.f;
+				VertexColor weightedVC{};
+				if (TryGetAlphaWeightedVertexColor(rendererData->rawVertexData, vertexSize, offset, vertexCount, weightedVC)) {
+					entry.baseColor.red *= weightedVC.data[0] / 255.f;
+					entry.baseColor.green *= weightedVC.data[1] / 255.f;
+					entry.baseColor.blue *= weightedVC.data[2] / 255.f;
 					hasVertexTint = true;
 					if (shaderProperty->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kVertexAlpha))
-						entry.baseColor.alpha *= maxAlphaVC.data[3] / 255.f;
+						entry.baseColor.alpha *= weightedVC.data[3] / 255.f;
 				}
 			}
 		}
@@ -810,7 +809,7 @@ LightLimitFix::VertexColorCacheEntry LightLimitFix::GetParticleLightConfig(RE::B
 	}
 
 	{
-		std::lock_guard<std::mutex> lock{ particleLightsMutex };
+		std::unique_lock lock{ particleLightsMutex };
 		vertexColorCache[node] = entry;
 	}
 	return entry;
@@ -849,7 +848,7 @@ bool LightLimitFix::QueueParticleLight(RE::BSRenderPass* a_pass, VertexColorCach
 	resolved.color = color;
 	resolved.radius = a_pass->geometry->worldBound.radius;
 
-	std::lock_guard<std::mutex> lock{ particleLightsMutex };
+	std::unique_lock lock{ particleLightsMutex };
 	queuedParticleLights.push_back(resolved);
 
 	return true;
@@ -858,6 +857,14 @@ bool LightLimitFix::QueueParticleLight(RE::BSRenderPass* a_pass, VertexColorCach
 bool LightLimitFix::CheckParticleLights(RE::BSRenderPass* a_pass, uint32_t)
 {
 	if (!a_pass || !a_pass->geometry || !a_pass->shaderProperty)
+		return true;
+
+	using Flag = RE::BSShaderProperty::EShaderPropertyFlag;
+	if (!a_pass->shaderProperty->flags.any(Flag::kSoftEffect, Flag::kZBufferTest))
+		return true;
+
+	auto* alphaProperty = static_cast<RE::NiAlphaProperty*>(a_pass->geometry->GetGeometryRuntimeData().alphaProperty.get());
+	if (!alphaProperty || !alphaProperty->GetAlphaBlending() || alphaProperty->GetDestBlendMode() != RE::NiAlphaProperty::AlphaFunction::kOne)
 		return true;
 
 	auto reference = GetParticleLightConfig(a_pass);
@@ -876,7 +883,7 @@ void LightLimitFix::AddParticleLightsToBuffer(eastl::vector<LightData>& a_lights
 	static float& lightFadeStart = *reinterpret_cast<float*>(REL::RelocationID(527668, 414582).address());
 	static float& lightFadeEnd = *reinterpret_cast<float*>(REL::RelocationID(527669, 414583).address());
 
-	std::lock_guard<std::mutex> lock{ particleLightsMutex };
+	std::unique_lock lock{ particleLightsMutex };
 
 	currentParticleLights.clear();
 	std::swap(currentParticleLights, queuedParticleLights);
@@ -888,9 +895,10 @@ void LightLimitFix::AddParticleLightsToBuffer(eastl::vector<LightData>& a_lights
 			break;
 
 		LightData light{};
-		light.color.x = pl.color.red;
-		light.color.y = pl.color.green;
-		light.color.z = pl.color.blue;
+		constexpr float invPI = 1.f / 3.14159265358979323846f;
+		light.color.x = pl.color.red * invPI;
+		light.color.y = pl.color.green * invPI;
+		light.color.z = pl.color.blue * invPI;
 		light.color *= pl.color.alpha;
 
 		if (effect11.enableEffect)
@@ -899,8 +907,6 @@ void LightLimitFix::AddParticleLightsToBuffer(eastl::vector<LightData>& a_lights
 		light.radius = pl.radius * 0.5f;
 
 		light.lightFlags.set(LightFlags::Simple);
-		light.lightFlags.set(LightFlags::Particle);
-
 		SetLightPosition(light, pl.position);
 
 		float distance = (light.positionWS.data.x * light.positionWS.data.x) +
@@ -932,7 +938,7 @@ void LightLimitFix::Hooks::BSBatchRenderer_RenderPassImmediately<N>::thunk(RE::B
 void LightLimitFix::Hooks::BSGeometry_Destroy::thunk(RE::BSGeometry* This)
 {
 	{
-		std::lock_guard<std::mutex> lock{ globals::features::lightLimitFix.particleLightsMutex };
+		std::unique_lock lock{ globals::features::lightLimitFix.particleLightsMutex };
 		globals::features::lightLimitFix.vertexColorCache.erase(This);
 	}
 	func(This);

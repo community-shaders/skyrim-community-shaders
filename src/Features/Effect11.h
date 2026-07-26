@@ -102,10 +102,8 @@ public:
 
 	virtual void DrawSettings() override;
 	virtual void SetupResources() override;
-	virtual void Reset() override;
 	virtual void Prepass() override;
 	virtual void ClearShaderCache() override;
-	virtual void PostPostLoad() override;
 
 	void DrawVolumetricRays();
 
