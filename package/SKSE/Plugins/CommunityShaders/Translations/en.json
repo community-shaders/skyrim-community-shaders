@@ -959,6 +959,7 @@
     "feature.light_limit_fix.description": "Light Limit Fix removes the vanilla game's 4-light limit, allowing unlimited dynamic lights in scenes.\nThis dramatically improves lighting quality and enables more realistic illumination scenarios.",
     "feature.light_limit_fix.enable_lights_vis": "Enable Lights Visualisation",
     "feature.light_limit_fix.enable_lights_vis_tooltip": "Enables visualization of the light limit\n",
+    "feature.light_limit_fix.enable_particle_lights": "Enable Particle Lights",
     "feature.light_limit_fix.key_feature_1": "Removes 4-light limit",
     "feature.light_limit_fix.key_feature_2": "Unlimited dynamic lights",
     "feature.light_limit_fix.key_feature_3": "Improved lighting quality",

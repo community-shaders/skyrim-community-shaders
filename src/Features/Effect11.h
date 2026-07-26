@@ -37,46 +37,46 @@ public:
 		float CloudsEdgeIntensity;
 		float CloudsEdgeMoonMultiplier;
 
-		float VolumetricRaysDesaturation;
-		float3 VolumetricRaysColorFilter;
-
-		uint UseProceduralGradientWeights;
-		float ProceduralGradientWeightCurve;
 		uint EnableProceduralSun;
 		float ProceduralSunDiskRadiusSq;
-
 		float ProceduralSunDiskEdgeScale;
 		float ProceduralSunGlowIntensity;
+
 		float ProceduralSunCoronaFalloff;
 		float ProceduralSunCoronaScale;
+		uint UseProceduralGradientWeights;
+		float ProceduralGradientWeightCurve;
 
 		float ParticleIntensity;
 		float ParticleLightingInfluence;
 		float ParticleAmbientInfluence;
 		float ParticlePointLightingInfluence;
 
-		uint EnableCloudsScattering;
-		uint EnableCloudsLightingFromMoon;
-		float SkyScatteringIntensity;
-		float SkyScatteringAmount;
-
-		float3 SkyScatteringColor;
-		float SkyScatteringColorFromSun;
-
-		float SkyScatteringCloudsLightingSunMultiplier;
-		float SkyScatteringCloudsLightingMoonIntensity;
-
 		uint EnableVolumetricRays;
 		float VolumetricRaysIntensity;
 		float VolumetricRaysExtinction;
 		float VolumetricRaysSkyColorAmount;
 
+		float VolumetricRaysDesaturation;
+		float3 VolumetricRaysColorFilter;
+
+		uint EnableCloudsScattering;
+		float SkyScatteringIntensity;
+		float SkyScatteringAmount;
+		float SkyScatteringColorFromSun;
+
+		float3 SkyScatteringColor;
+		float SkyScatteringCloudsLightingSunMultiplier;
+
+		float SkyScatteringCloudsLightingMoonIntensity;
 		uint EnableRain;
 		float RainMotionStretch;
 		float RainMotionTransparency;
+
 		float FireIntensity;
 		float FireCurve;
 		uint pad0;
+		uint pad1;
 	};
 
 	bool enableEffect = false;
