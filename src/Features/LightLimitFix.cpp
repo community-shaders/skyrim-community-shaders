@@ -11,11 +11,22 @@
 
 #define I18N_KEY_PREFIX "feature.light_limit_fix."
 
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
+	LightLimitFix::Settings,
+	EnableParticleLights,
+	EnableParticleLightsCulling,
+	EnableLightsVisualisation,
+	LightsVisualisationMode)
+
 static constexpr uint CLUSTER_MAX_LIGHTS = 128;
 
 void LightLimitFix::DrawSettings()
 {
 	auto shaderCache = globals::shaderCache;
+
+	ImGui::Checkbox(T(TKEY("enable_particle_lights"), "Enable Particle Lights"), &settings.EnableParticleLights);
+
+	ImGui::Spacing();
 
 	if (ImGui::TreeNodeEx(T(TKEY("statistics"), "Statistics"), ImGuiTreeNodeFlags_DefaultOpen)) {
 		ImGui::Text(std::format("Clustered Light Count : {}", lightCount).c_str());
@@ -167,6 +178,16 @@ void LightLimitFix::SetupResources()
 	{
 		strictLightDataCB = new ConstantBuffer(ConstantBufferDesc<StrictLightDataCB>());
 	}
+}
+
+void LightLimitFix::SaveSettings(json& o_json)
+{
+	o_json = settings;
+}
+
+void LightLimitFix::LoadSettings(json& o_json)
+{
+	settings = o_json;
 }
 
 void LightLimitFix::RestoreDefaultSettings()
@@ -703,7 +724,7 @@ LightLimitFix::VertexColorCacheEntry LightLimitFix::GetParticleLightConfig(RE::B
 	if (!a_pass || !a_pass->geometry || !a_pass->shaderProperty)
 		return {};
 
-	if (!particleLightSettings.EnableParticleLights)
+	if (!settings.EnableParticleLights)
 		return {};
 
 	auto shaderProperty = a_pass->shaderProperty->GetRTTI() == globals::rtti::BSEffectShaderPropertyRTTI.get() ?
@@ -842,14 +863,14 @@ bool LightLimitFix::CheckParticleLights(RE::BSRenderPass* a_pass, uint32_t)
 	auto reference = GetParticleLightConfig(a_pass);
 	if (reference.valid) {
 		if (QueueParticleLight(a_pass, reference))
-			return !(particleLightSettings.EnableParticleLightsCulling && reference.config.cull);
+			return !(settings.EnableParticleLightsCulling && reference.config.cull);
 	}
 	return true;
 }
 
 void LightLimitFix::AddParticleLightsToBuffer(eastl::vector<LightData>& a_lightsData)
 {
-	if (!particleLightSettings.EnableParticleLights)
+	if (!settings.EnableParticleLights)
 		return;
 
 	static float& lightFadeStart = *reinterpret_cast<float*>(REL::RelocationID(527668, 414582).address());
@@ -927,9 +948,10 @@ void LightLimitFix::Hooks::Install()
 	stl::write_thunk_call<ValidLight2>(REL::RelocationID(100997, 107784).address() + REL::Relocate(0x139, 0x12A));
 	stl::write_thunk_call<ValidLight3>(REL::RelocationID(101296, 108283).address() + REL::Relocate(0xB7, 0x7E));
 
-	stl::write_thunk_call<RenderPass1>(REL::RelocationID(100877, 107667).address() + REL::Relocate(0x1EE, 0x1D7));
+	stl::write_thunk_call<RenderPass1>(REL::RelocationID(100877, 107667).address() + REL::Relocate(0x1E5, 0xED));
 	stl::write_thunk_call<RenderPass2>(REL::RelocationID(100852, 107642).address() + REL::Relocate(0x29E, 0x28F));
-	stl::write_thunk_call<RenderPass3>(REL::RelocationID(100871, 107661).address() + REL::Relocate(0x2A2, 0x293));
+	if (REL::Module::IsSE())
+		stl::write_thunk_call<RenderPass3>(REL::RelocationID(100871, 107661).address() + 0xEE);
 	stl::detour_thunk<BSGeometry_Destroy>(REL::RelocationID(69535, 70936));
 
 	logger::info("[LLF] Installed hooks");
