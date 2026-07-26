@@ -67,10 +67,6 @@ public:
 
 	LightEditor lightEditor;
 
-	// Weather locking for editing
-	RE::TESWeather* lockedWeather = nullptr;
-	bool weatherLockActive = false;
-
 	/** @brief When true, resets all window positions/sizes on next frame (auto-cleared). */
 	bool resetLayout = false;
 
@@ -153,18 +149,24 @@ public:
 
 	/**
 	 * @brief Lock the game to a specific weather for editing.
-	 * @param weather The weather form to force active via Sky::ForceWeather.
+	 * @param weather The weather form to force active and guard against engine weather changes.
 	 */
 	void LockWeather(RE::TESWeather* weather);
 
-	/** @brief Unlock the weather, allowing natural weather progression to resume. */
+	/** @brief Unlock the weather, releasing the override so natural progression resumes. */
 	void UnlockWeather();
 
 	/** @brief Returns true if a weather is currently locked for editing. */
-	bool IsWeatherLocked() const { return weatherLockActive; }
+	bool IsWeatherLocked() const;
 
 	/** @brief Returns the currently locked weather form, or nullptr if none. */
-	RE::TESWeather* GetLockedWeather() const { return lockedWeather; }
+	RE::TESWeather* GetLockedWeather() const;
+
+	/** @brief Redirect the engine's weather-change call sites to the locked weather. Call once during plugin init. */
+	static void InstallWeatherLockHooks();
+
+	/** @brief Repair the locked weather if the engine changed it or queued an override release. Call once per frame. */
+	static void MaintainWeatherLock();
 
 	// Time controls
 	/** @brief Pause in-game time by setting the timescale to zero. */
@@ -182,8 +184,22 @@ public:
 	/** @brief Returns true if in-game time is currently paused. */
 	bool IsTimePaused() const { return timePaused; }
 
-	/** @brief Call once per frame to handle sleep/wait menu and external time state sync. */
-	void UpdateTimeState();
+	/**
+	 * @brief Restores time around menus the engine cannot complete with a zero timescale, and
+	 * re-pauses once they close. Sleep/wait never finishes and fast travel hangs otherwise.
+	 * @param a_needsRunningTime True while any such menu is open.
+	 */
+	void SetTimeRunningForMenu(bool a_needsRunningTime);
+
+	/** @brief Drives the time guard off menu transitions, since the world render stops during them. */
+	class MenuOpenCloseEventHandler : public RE::BSTEventSink<RE::MenuOpenCloseEvent>
+	{
+	public:
+		virtual RE::BSEventNotifyControl ProcessEvent(const RE::MenuOpenCloseEvent* a_event, RE::BSTEventSource<RE::MenuOpenCloseEvent>*) override;
+
+		/** @brief Subscribes the singleton handler to the UI menu event source. */
+		static bool Register();
+	};
 
 	/**
 	 * @brief Draw a game-hour slider.
@@ -365,8 +381,8 @@ private:
 	bool timePaused = false;
 	float savedTimeScale = kVanillaTimeScale;
 	float timeScaleSlider = kVanillaTimeScale;
-	bool wasRestoredForWait = false;
-	bool wasPausedBeforeWait = false;
+	bool timeRestoredForMenu = false;
+	bool wasPausedBeforeMenu = false;
 
 	// Sorting state
 	enum class SortColumn

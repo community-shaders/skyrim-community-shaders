@@ -37,6 +37,7 @@ public:
 	}
 
 	virtual void DrawSettings() override;
+	virtual void PostPostLoad() override;
 	virtual void DataLoaded() override;
 	virtual void Prepass() override;
 

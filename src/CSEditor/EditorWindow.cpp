@@ -15,7 +15,12 @@
 #include "WeatherUtils.h"
 #include "imgui_internal.h"
 
+#include <atomic>
+#include <cstring>
+
 #define I18N_KEY_PREFIX "cs_editor."
+
+#include <algorithm>
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(EditorWindow::Settings::PaletteColorEntry, r, g, b, useCount, lastUsedTime, isFavorite)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(EditorWindow::Settings::PaletteValueEntry, name, value, useCount, lastUsedTime, isFavorite)
@@ -136,6 +141,17 @@ namespace
 	}
 
 	constexpr int kFilterColumnCount = 5;
+
+	// The editor can draw before globals are cached, so both fall back to the singleton.
+	RE::Calendar* GetCalendar()
+	{
+		return globals::game::calendar ? globals::game::calendar : RE::Calendar::GetSingleton();
+	}
+
+	RE::UI* GetUI()
+	{
+		return globals::game::ui ? globals::game::ui : RE::UI::GetSingleton();
+	}
 }  // namespace
 
 void EditorWindow::ResetObjectsFilter()
@@ -915,6 +931,11 @@ void EditorWindow::ShowViewportWindow()
 	}
 
 	if (tempTexture && tempTexture->srv) {
+		// tempTexture is a raw copy of the framebuffer RT; its alpha is not guaranteed to be 1,
+		// so a plain ImGui::Image can show the dimmed backdrop through as a transparency cutout.
+		const ImVec2 imageMin = ImGui::GetCursorScreenPos();
+		const ImVec2 imageMax(imageMin.x + imageSize.x, imageMin.y + imageSize.y);
+		ImGui::GetWindowDrawList()->AddRectFilled(imageMin, imageMax, IM_COL32_BLACK);
 		ImGui::Image((void*)tempTexture->srv.get(), imageSize);
 	} else {
 		ImGui::TextDisabled("%s", T(TKEY("viewport_unavailable"), "Viewport unavailable"));
@@ -953,7 +974,11 @@ void EditorWindow::RenderUI()
 	ImGui::GetStyle().FontScaleMain = settings.editorUIScale;
 
 	if (IsViewportActive()) {
-		ImGui::GetBackgroundDrawList()->AddRectFilled({ 0, 0 }, io.DisplaySize, ImGui::GetColorU32(ImGuiCol_ModalWindowDimBg));
+		auto* backgroundDrawList = ImGui::GetBackgroundDrawList();
+		backgroundDrawList->AddRectFilled({ 0, 0 }, io.DisplaySize, ImGui::GetColorU32(ImGuiCol_ModalWindowDimBg));
+		backgroundDrawList->AddRectFilled(
+			{ 0, 0 }, io.DisplaySize,
+			ImGui::GetColorU32(ImVec4(0.0f, 0.0f, 0.0f, ThemeManager::Constants::EDITOR_VIEWPORT_BACKGROUND_DIM_ALPHA)));
 	}
 
 	// Check for Ctrl+Z to undo
@@ -1224,7 +1249,8 @@ void EditorWindow::RenderUI()
 		// Weather lock text
 		float weatherLockX = 0;
 		char weatherLockBuf[128] = {};
-		bool showWeatherLock = weatherLockActive && lockedWeather;
+		auto* lockedWeather = GetLockedWeather();
+		bool showWeatherLock = IsWeatherLocked() && lockedWeather;
 		if (showWeatherLock) {
 			const char* weatherName = lockedWeather->GetFormEditorID();
 			std::snprintf(weatherLockBuf, sizeof(weatherLockBuf), T(TKEY("locked_weather_status"), " [LOCKED: %s]"), weatherName ? weatherName : T(TKEY("unknown"), "Unknown"));
@@ -1300,7 +1326,7 @@ void EditorWindow::RenderUI()
 		}
 
 		// Period text and time slider
-		auto calendar = globals::game::calendar ? globals::game::calendar : RE::Calendar::GetSingleton();
+		auto calendar = GetCalendar();
 		if (calendar && calendar->gameHour) {
 			ImGui::SetCursorScreenPos(ImVec2(periodX, cursorY));
 			ImGui::TextUnformatted(periodBuf);
@@ -1487,19 +1513,11 @@ void EditorWindow::Draw()
 		}
 	}
 
-	// Re-enforce weather lock if active (handles time changes)
-	if (weatherLockActive && lockedWeather) {
-		auto sky = RE::Sky::GetSingleton();
-		if (sky && sky->currentWeather != lockedWeather) {
-			sky->ForceWeather(lockedWeather, false);
-		}
-	}
-
 	if (!IsViewportActive()) {
 		delete tempTexture;
 		tempTexture = nullptr;
 	} else {
-		auto renderer = RE::BSGraphics::Renderer::GetSingleton();
+		auto renderer = globals::game::renderer;
 		if (renderer) {
 			auto& framebuffer = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kFRAMEBUFFER];
 			if (framebuffer.SRV) {
@@ -1816,46 +1834,174 @@ void EditorWindow::Load()
 	LoadSettings();
 }
 
+// Weather lock guard. A plain ForceWeather does not hold: scripts, climate timers and cell
+// transitions keep driving the weather, so the engine's own call sites are redirected instead.
+//
+// Credits: Isoprovophlex
+namespace
+{
+	// Toggled from the render thread, read by the hooked engine calls.
+	std::atomic<RE::TESWeather*> g_lockedWeather{ nullptr };
+	std::atomic_bool g_weatherLockActive{ false };
+
+	constexpr std::uint8_t kCallOpcode = 0xE8;           // CALL rel32
+	constexpr std::uint8_t kJumpOpcode = 0xE9;           // JMP rel32 (tail call)
+	constexpr std::size_t kRelativeInstructionSize = 5;  // opcode + int32 displacement
+
+	/** @brief A direct E8/E9 reference to a game function. */
+	struct WeatherCallSite
+	{
+		std::uintptr_t address = 0;
+		bool isCall = false;
+	};
+
+	RE::TESWeather* GetActiveLock()
+	{
+		return g_weatherLockActive.load(std::memory_order_acquire) ? g_lockedWeather.load(std::memory_order_acquire) : nullptr;
+	}
+
+	/** @brief Forces the sky onto the locked weather, claiming the override slot so nothing lerps away from it. */
+	void ReapplyLock(RE::Sky* sky, RE::TESWeather* weather)
+	{
+		if (sky && weather)
+			sky->ForceWeather(weather, true);
+	}
+
+	void SetWeatherThunk(RE::Sky* sky, RE::TESWeather* weather, bool isOverride, bool accelerate)
+	{
+		if (!sky)
+			return;
+
+		auto* locked = GetActiveLock();
+		if (!locked)
+			sky->SetWeather(weather, isOverride, accelerate);
+		else if (weather == locked)
+			sky->SetWeather(locked, true, accelerate);
+		else if (sky->currentWeather != locked || sky->overrideWeather != locked)
+			ReapplyLock(sky, locked);
+	}
+
+	void ForceWeatherThunk(RE::Sky* sky, RE::TESWeather* weather, bool isOverride)
+	{
+		if (!sky)
+			return;
+
+		if (auto* locked = GetActiveLock())
+			ReapplyLock(sky, locked);
+		else
+			sky->ForceWeather(weather, isOverride);
+	}
+
+	/** @brief Scans the game's executable segment for direct call/jump references to a function. */
+	std::vector<WeatherCallSite> FindDirectReferences(std::uintptr_t target)
+	{
+		std::vector<WeatherCallSite> sites;
+		const auto text = REL::Module::get().segment(REL::Segment::textx);
+		const auto begin = text.address();
+		const auto end = begin + text.size();
+
+		for (auto address = begin; address + kRelativeInstructionSize <= end; ++address) {
+			const auto opcode = *reinterpret_cast<const std::uint8_t*>(address);
+			if (opcode != kCallOpcode && opcode != kJumpOpcode)
+				continue;
+
+			std::int32_t displacement = 0;
+			std::memcpy(&displacement, reinterpret_cast<const void*>(address + 1), sizeof(displacement));
+			if (address + kRelativeInstructionSize + displacement == target)
+				sites.push_back({ address, opcode == kCallOpcode });
+		}
+		return sites;
+	}
+
+	/** @brief Redirects every call site to the thunk, preserving call vs tail-jump semantics. */
+	template <class Thunk>
+	void InstallCallSiteHooks(const std::vector<WeatherCallSite>& sites, Thunk thunk)
+	{
+		auto& trampoline = SKSE::GetTrampoline();
+		for (const auto& site : sites) {
+			if (site.isCall)
+				trampoline.write_call<kRelativeInstructionSize>(site.address, thunk);
+			else
+				trampoline.write_branch<kRelativeInstructionSize>(site.address, thunk);
+		}
+	}
+}
+
+void EditorWindow::InstallWeatherLockHooks()
+{
+	// Not exported by CommonLib, which keeps them in function-local statics (RE/S/Sky.cpp).
+	const REL::Relocation<std::uintptr_t> setWeather{ REL::RelocationID(25694, 26241) };
+	const REL::Relocation<std::uintptr_t> forceWeather{ REL::RelocationID(25696, 26243) };
+
+	const auto setWeatherSites = FindDirectReferences(setWeather.address());
+	const auto forceWeatherSites = FindDirectReferences(forceWeather.address());
+
+	// No AllocTrampoline: it would free the block other hooks branch through, and each thunk only
+	// needs the one 14-byte stub its call sites share.
+	InstallCallSiteHooks(setWeatherSites, SetWeatherThunk);
+	InstallCallSiteHooks(forceWeatherSites, ForceWeatherThunk);
+
+	logger::info("[CSEditor] Weather lock hooked {} SetWeather and {} ForceWeather call sites", setWeatherSites.size(), forceWeatherSites.size());
+}
+
+void EditorWindow::MaintainWeatherLock()
+{
+	auto* locked = GetActiveLock();
+	auto* sky = globals::game::sky;
+	if (!locked || !sky)
+		return;
+
+	// The engine applies the release on its next sky update, so clear the flag before it lands.
+	const bool releasePending = sky->flags.any(RE::Sky::Flags::kReleaseWeatherOverride);
+	if (!releasePending && sky->currentWeather == locked && sky->overrideWeather == locked)
+		return;
+
+	sky->flags.reset(RE::Sky::Flags::kReleaseWeatherOverride);
+	ReapplyLock(sky, locked);
+}
+
+bool EditorWindow::IsWeatherLocked() const
+{
+	return g_weatherLockActive.load(std::memory_order_acquire);
+}
+
+RE::TESWeather* EditorWindow::GetLockedWeather() const
+{
+	return g_lockedWeather.load(std::memory_order_acquire);
+}
+
 void EditorWindow::LockWeather(RE::TESWeather* weather)
 {
 	if (!weather)
 		return;
 
-	auto sky = RE::Sky::GetSingleton();
-	if (!sky)
-		return;
-
-	// Force the weather to be active
-	sky->ForceWeather(weather, false);
-
-	lockedWeather = weather;
-	weatherLockActive = true;
+	g_lockedWeather.store(weather, std::memory_order_release);
+	g_weatherLockActive.store(true, std::memory_order_release);
+	MaintainWeatherLock();
 
 	logger::info("Weather locked: {}", weather->GetFormEditorID() ? weather->GetFormEditorID() : "Unknown");
 }
 
 void EditorWindow::UnlockWeather()
 {
-	if (!weatherLockActive)
+	auto* locked = GetActiveLock();
+	if (!locked)
 		return;
 
-	auto sky = RE::Sky::GetSingleton();
-	if (sky) {
-		// Release weather override to allow natural progression
+	g_weatherLockActive.store(false, std::memory_order_release);
+	g_lockedWeather.store(nullptr, std::memory_order_release);
+
+	if (auto* sky = globals::game::sky)
 		sky->ReleaseWeatherOverride();
-	}
 
-	logger::info("Weather unlocked: {}", lockedWeather && lockedWeather->GetFormEditorID() ? lockedWeather->GetFormEditorID() : "Unknown");
-
-	lockedWeather = nullptr;
-	weatherLockActive = false;
+	logger::info("Weather unlocked: {}", locked->GetFormEditorID() ? locked->GetFormEditorID() : "Unknown");
 }
 
 void EditorWindow::PauseTime()
 {
 	if (timePaused)
 		return;
-	auto calendar = globals::game::calendar ? globals::game::calendar : RE::Calendar::GetSingleton();
+	auto calendar = GetCalendar();
 	if (calendar && calendar->timeScale) {
 		savedTimeScale = calendar->timeScale->value;
 		calendar->timeScale->value = 0.0f;
@@ -1868,7 +2014,7 @@ void EditorWindow::ResumeTime()
 {
 	if (!timePaused)
 		return;
-	auto calendar = globals::game::calendar ? globals::game::calendar : RE::Calendar::GetSingleton();
+	auto calendar = GetCalendar();
 	if (calendar && calendar->timeScale) {
 		calendar->timeScale->value = savedTimeScale;
 		timePaused = false;
@@ -1878,7 +2024,7 @@ void EditorWindow::ResumeTime()
 
 void EditorWindow::ResetTimeScale()
 {
-	auto calendar = globals::game::calendar ? globals::game::calendar : RE::Calendar::GetSingleton();
+	auto calendar = GetCalendar();
 	if (!calendar || !calendar->timeScale)
 		return;
 	if (timePaused)
@@ -1888,44 +2034,83 @@ void EditorWindow::ResetTimeScale()
 	timeScaleSlider = kVanillaTimeScale;
 }
 
-void EditorWindow::UpdateTimeState()
+namespace
 {
-	auto calendar = globals::game::calendar ? globals::game::calendar : RE::Calendar::GetSingleton();
-	auto ui = globals::game::ui ? globals::game::ui : RE::UI::GetSingleton();
+	// Time must keep running while these are up: the engine hangs on fast travel and sleep/wait
+	// never completes when game time cannot advance. MapMenu covers the fast travel launch point.
+	constexpr std::array kTimeSensitiveMenus{ RE::LoadingMenu::MENU_NAME, RE::SleepWaitMenu::MENU_NAME, RE::MapMenu::MENU_NAME };
+
+	/** @brief Returns true if the menu is one that must not run with a zero timescale. */
+	bool IsTimeSensitiveMenu(const RE::BSFixedString& a_menuName)
+	{
+		return std::ranges::any_of(kTimeSensitiveMenus, [&](std::string_view name) { return a_menuName == name; });
+	}
+
+	/** @brief Returns true if any menu that must not run with a zero timescale is still open. */
+	bool IsAnyTimeSensitiveMenuOpen()
+	{
+		auto ui = GetUI();
+		return ui && std::ranges::any_of(kTimeSensitiveMenus, [&](std::string_view name) { return ui->IsMenuOpen(name); });
+	}
+}
+
+void EditorWindow::SetTimeRunningForMenu(bool a_needsRunningTime)
+{
+	auto calendar = GetCalendar();
 	if (!calendar || !calendar->timeScale)
 		return;
 
-	bool needsTimeRestored = ui && (ui->IsMenuOpen(RE::SleepWaitMenu::MENU_NAME) || ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME));
-
-	// External state sync (skip while a time-sensitive menu is open)
-	if (!needsTimeRestored) {
-		if (calendar->timeScale->value == 0.0f && !timePaused)
+	if (a_needsRunningTime) {
+		if (timeRestoredForMenu || calendar->timeScale->value != 0.0f)
+			return;
+		// Only re-pause afterwards if the pause is ours; a zero timescale we did not set (stale
+		// save, console, other mod) stays restored so it cannot freeze the game again.
+		wasPausedBeforeMenu = timePaused;
+		// A non-positive snapshot would restore straight back to frozen time.
+		if (savedTimeScale <= 0.0f)
 			savedTimeScale = kVanillaTimeScale;
-		else if (calendar->timeScale->value > 0.0f && timePaused)
-			timePaused = false;
+		if (timePaused)
+			ResumeTime();
+		else
+			calendar->timeScale->value = std::max(savedTimeScale, kVanillaTimeScale);
+		timeRestoredForMenu = true;
+	} else if (timeRestoredForMenu) {
+		if (wasPausedBeforeMenu)
+			PauseTime();
+		timeRestoredForMenu = false;
+		wasPausedBeforeMenu = false;
+	}
+}
+
+RE::BSEventNotifyControl EditorWindow::MenuOpenCloseEventHandler::ProcessEvent(const RE::MenuOpenCloseEvent* a_event, RE::BSTEventSource<RE::MenuOpenCloseEvent>*)
+{
+	// Fast travel overlaps these menus (map then loading), so a close only ends the guard once
+	// the whole set is closed.
+	if (a_event && IsTimeSensitiveMenu(a_event->menuName))
+		GetSingleton()->SetTimeRunningForMenu(a_event->opening || IsAnyTimeSensitiveMenuOpen());
+
+	return RE::BSEventNotifyControl::kContinue;
+}
+
+bool EditorWindow::MenuOpenCloseEventHandler::Register()
+{
+	static MenuOpenCloseEventHandler singleton;
+	auto ui = GetUI();
+
+	if (!ui) {
+		logger::error("[CSEditor] UI event source not found");
+		return false;
 	}
 
-	// Temporarily restore time during sleep/wait, fast travel, and loading screens
-	if (needsTimeRestored && calendar->timeScale->value == 0.0f) {
-		if (!wasRestoredForWait) {
-			wasPausedBeforeWait = true;
-			if (timePaused)
-				ResumeTime();
-			else
-				calendar->timeScale->value = std::max(savedTimeScale, kVanillaTimeScale);
-			wasRestoredForWait = true;
-		}
-	} else if (!needsTimeRestored && wasRestoredForWait) {
-		if (wasPausedBeforeWait && !timePaused)
-			PauseTime();
-		wasRestoredForWait = false;
-		wasPausedBeforeWait = false;
-	}
+	ui->GetEventSource<RE::MenuOpenCloseEvent>()->AddEventSink(&singleton);
+	logger::info("[CSEditor] Registered MenuOpenCloseEventHandler");
+
+	return true;
 }
 
 bool EditorWindow::DrawGameHourSlider(const char* label, const char* format)
 {
-	auto calendar = globals::game::calendar ? globals::game::calendar : RE::Calendar::GetSingleton();
+	auto calendar = GetCalendar();
 	if (!calendar || !calendar->gameHour)
 		return false;
 	ImGui::SliderFloat(label, &calendar->gameHour->value, 0.0f, kGameHourMax, format);
@@ -1934,9 +2119,13 @@ bool EditorWindow::DrawGameHourSlider(const char* label, const char* format)
 
 void EditorWindow::DrawTimeControls()
 {
-	auto calendar = globals::game::calendar ? globals::game::calendar : RE::Calendar::GetSingleton();
+	auto calendar = GetCalendar();
 	if (!calendar || !calendar->gameHour || !calendar->timeScale)
 		return;
+
+	// An external timescale change (console, other mods, the menu guard) overrides our pause
+	if (timePaused && calendar->timeScale->value > 0.0f)
+		timePaused = false;
 
 	const float framePadX = ImGui::GetStyle().FramePadding.x * 2.0f;
 	const char* resumeTimeText = T(TKEY("resume_time"), "Resume Time");
