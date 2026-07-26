@@ -979,6 +979,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float cachedDirectionalTerrainParallaxShadow = 1.0;
 	bool hasCachedDirectionalTerrainParallaxShadow = false;
 	bool hasCachedTerrainShadowBaseHeight = false;
+	/** Pixel-invariant terrain POM soft-shadow eligibility for the point-light loop. */
+	bool hasTerrainParallaxShadow = false;
 #		endif
 #	else
 	float mipLevel = 0;
@@ -1227,6 +1229,14 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 			input.LandBlendWeights2.x = weights[4];
 			input.LandBlendWeights2.y = weights[5];
 		}
+		/**
+		 * After optional height-blend weight rewrite: distance / displacement / weighted
+		 * height gates for the point-light loop (pixel-invariant; not rechecked per light).
+		 */
+		hasTerrainParallaxShadow =
+			viewPosition.z < ExtendedMaterials::ParallaxCheapDistance &&
+			ExtendedMaterials::TerrainHasAnyDisplacement() &&
+			ExtendedMaterials::TerrainMaxWeightedHeightScale(input, displacementParams) > 0.01;
 		if (doTerrainPom && SharedData::extendedMaterialSettings.EnableShadows && terrainDirectionalShadowQuality > 0.0) {
 			float3 dirLightDirectionTS = mul(DirLightDirection, tbn).xyz;
 			hasCachedTerrainShadowBaseHeight = COMPUTE_TERRAIN_SHADOW_BASE(sh0);
@@ -2335,15 +2345,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 			[branch] if (SharedData::extendedMaterialSettings.EnableParallax)
 				parallaxShadow = ExtendedMaterials::GetParallaxSoftShadowMultiplier(uv, mipLevel, lightDirectionTS, sh0, TexParallaxSampler, SampParallaxSampler, 0, parallaxShadowQuality, screenNoise, displacementParams);
 #				elif defined(LANDSCAPE)
-			if (LANDSCAPE_PARALLAX_ENABLED && viewPosition.z < ExtendedMaterials::ParallaxCheapDistance) {
-				if (ExtendedMaterials::TerrainHasSignificantBlend(input.LandBlendWeights1, input.LandBlendWeights2.xy) && ExtendedMaterials::TerrainHasAnyDisplacement()) {
-					float terrainHeightScale = ExtendedMaterials::TerrainMaxWeightedHeightScale(input, displacementParams);
-					if (terrainHeightScale > 0.01) {
-						float3 lightDirectionTS = normalize(mul(refractedLightDirection, tbn).xyz);
-						parallaxShadow = ExtendedMaterials::GetParallaxSoftShadowMultiplierTerrain(input, uv, terrainShadowMipLevels, lightDirectionTS, sh0, terrainDirectionalShadowQuality, screenNoise, displacementParams, sharedOffset);
-					}
-				}
-			}
+			[branch] if (hasTerrainParallaxShadow)
+				parallaxShadow = ExtendedMaterials::GetParallaxSoftShadowMultiplierTerrain(input, uv, terrainShadowMipLevels, lightDirectionTS, sh0, terrainDirectionalShadowQuality, screenNoise, displacementParams, sharedOffset);
 #				elif defined(EMAT_ENVMAP)
 			[branch] if (complexMaterialParallax)
 				parallaxShadow = ExtendedMaterials::GetParallaxSoftShadowMultiplier(uv, mipLevel, lightDirectionTS, sh0, TexEnvMaskSampler, SampEnvMaskSampler, 3, parallaxShadowQuality, screenNoise, displacementParams);

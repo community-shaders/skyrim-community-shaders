@@ -312,12 +312,6 @@
 #	define TERRAIN_HEIGHT_AT(COORDS, MIP, QUALITY, WEIGHTS) \
 		GetTerrainHeight(noise, input, COORDS, MIP, params, 0.0, input.LandBlendWeights1, input.LandBlendWeights2.xy, sharedOffset, WEIGHTS)
 
-	/** @brief True when any landscape blend weight is significant. */
-	inline bool TerrainHasSignificantBlend(float4 w1, float2 w2)
-	{
-		return (w1.x + w1.y + w1.z + w1.w + w2.x + w2.y) > 0.01;
-	}
-
 	/** @brief True when any landscape layer has displacement available. */
 	inline bool TerrainHasAnyDisplacement()
 	{
@@ -346,13 +340,11 @@
 
 	/**
 	 * @brief Base height for terrain parallax shadows.
-	 * @return false when the surface has no significant blend or displacement.
+	 * @return false when the surface has no displacement.
 	 */
 	bool ComputeTerrainParallaxShadowBaseHeight(PS_INPUT input, float2 coords, float mipLevels[6], float quality, float noise, DisplacementParams params[6], StochasticOffsets sharedOffset, out float sh0)
 	{
 		sh0 = 0.0;
-		if (!TerrainHasSignificantBlend(input.LandBlendWeights1, input.LandBlendWeights2.xy))
-			return false;
 		if (!TerrainHasAnyDisplacement())
 			return false;
 
@@ -384,8 +376,6 @@
 		if (TerrainDirectionalShadowTapCount(quality) == 0)
 			return 1.0;
 		float shadowStrength = ShadowIntensity * 2.0;
-		if (!TerrainHasSignificantBlend(input.LandBlendWeights1, input.LandBlendWeights2.xy))
-			return 1.0;
 
 		float heights[6] = { 0, 0, 0, 0, 0, 0 };
 		float2 rayDir = lightDirection.xy * 0.1;
