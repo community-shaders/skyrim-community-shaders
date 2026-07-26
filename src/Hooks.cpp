@@ -292,7 +292,8 @@ namespace PostProcessingExtensions
 	{
 		static void thunk(RE::ImageSpaceManager* a1, RE::ImageSpaceEffect* a2, uint32_t a3, uint32_t a4, RE::ImageSpaceShaderParam* a5)
 		{
-			if (globals::state->HandlePostProcessing(
+			if (!globals::state->IsMainOrLoadingMenuOpen() &&
+				globals::state->HandlePostProcessing(
 					static_cast<RE::RENDER_TARGET>(a3),
 					static_cast<RE::RENDER_TARGET>(a4)))
 				return;
