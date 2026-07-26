@@ -257,6 +257,7 @@ void CloudShadows::EarlyPrepass()
 		PropagateToCompletion(previouslyRenderedSide);
 		previouslyRenderedSide = -1;
 	}
+	globalRenderedMask = 0;
 }
 
 void CloudShadows::SetupResources()
