@@ -277,16 +277,18 @@ PS_OUTPUT main(PS_INPUT input)
 
 		float cloudLuminance = dot(cloudColor.xyz, 1.0 / 3.0);
 
-		float sunShadow = 0.0;
-		float masserShadow = 0.0;
-		float secundaShadow = 0.0;
-		
+		float sunShadow = 1.0;
+		float masserShadow = 1.0;
+		float secundaShadow = 1.0;
+
 		if (SharedData::enbSettings.EnableCloudsScattering){
+#			if defined(CLOUD_SHADOWS)
 			float screenNoise = Random::InterleavedGradientNoise(input.Position.xy, SharedData::FrameCount);
 
 			const uint sampleCount = 8;
 			const float rcpSampleCount = 1.0 / float(sampleCount);
 
+			sunShadow = 0.0;
 			if (SharedData::SunColor.w > 0.0){
 				for (uint i = 0; i < sampleCount; i++) {
 					float t = (float(i) + screenNoise) * rcpSampleCount;
@@ -296,6 +298,7 @@ PS_OUTPUT main(PS_INPUT input)
 				sunShadow = 1.0 - sunShadow * rcpSampleCount;
 			}
 
+			masserShadow = 0.0;
 			if (SharedData::MasserColor.w > 0.0){
 				for (uint i = 0; i < sampleCount; i++) {
 					float t = (float(i) + screenNoise) * rcpSampleCount;
@@ -304,6 +307,8 @@ PS_OUTPUT main(PS_INPUT input)
 				}
 				masserShadow = 1.0 - masserShadow * rcpSampleCount;
 			}
+
+			secundaShadow = 0.0;
 			if (SharedData::SecundaColor.w > 0.0){
 				for (uint i = 0; i < sampleCount; i++) {
 					float t = (float(i) + screenNoise) * rcpSampleCount;
@@ -312,6 +317,7 @@ PS_OUTPUT main(PS_INPUT input)
 				}
 				secundaShadow = 1.0 - secundaShadow * rcpSampleCount;
 			}
+#			endif
 
 			float3 sunScatterColor = SharedData::enbSettings.SkyScatteringColor * SharedData::enbSettings.SkyScatteringIntensity * lerp(1.0, SharedData::SunColor.xyz, SharedData::enbSettings.SkyScatteringColorFromSun);
 			float sunLighting = saturate(dot(viewDirection, SharedData::SunDirection.xyz));
