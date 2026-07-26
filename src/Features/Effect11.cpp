@@ -289,13 +289,11 @@ void Effect11::OverrideWeather(RE::Sky* a_sky)
 
 		auto dirLightColorF3 = NiToF3(dirLightColor);
 
+		float sunlightScale = FLT_MIN;
 		auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
-		if (!imageSpaceManager) {
-			return;
+		if (imageSpaceManager) {
+			sunlightScale = std::max(imageSpaceManager->GetRuntimeData().data.baseData.hdr.sunlightScale, FLT_MIN);
 		}
-
-		auto& data = imageSpaceManager->GetRuntimeData().data;
-		float sunlightScale = std::max(data.baseData.hdr.sunlightScale, FLT_MIN);
 		dirLightColorF3 *= sunlightScale;
 
 		dirLightColorF3 = Curve(dirLightColorF3, settingManager.GetInterpolatedTimeOfDayValue("DirectLightingCurve", "ENVIRONMENT"));

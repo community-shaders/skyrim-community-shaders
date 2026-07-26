@@ -806,7 +806,11 @@ void EffectManager::UpdateCommonVariablesForEffect(Effect& effect)
 void EffectManager::CopyTexture(ID3D11ShaderResourceView* a_source, ID3D11RenderTargetView* a_dest)
 {
 	if (!a_source || !a_dest || !copyPixelShader || !copyVertexShader) {
-		logger::critical("[EFFECT11] Invalid parameters or shaders not initialized for texture copy");
+		static bool logged = false;
+		if (!logged) {
+			logger::warn("[EFFECT11] Invalid parameters or shaders not initialized for texture copy");
+			logged = true;
+		}
 		return;
 	}
 

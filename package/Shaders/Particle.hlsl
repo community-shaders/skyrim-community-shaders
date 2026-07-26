@@ -92,8 +92,11 @@ VS_OUTPUT main(VS_INPUT input)
 #		if defined(RAIN)
 	float3 rainVelocity = Velocity.xyz;
 	if (SharedData::enbSettings.EnableRain) {
-		float3 normVel = normalize(rainVelocity);
-		rainVelocity = lerp(normVel, rainVelocity, SharedData::enbSettings.RainMotionStretch);
+		float velLen = length(rainVelocity);
+		if (velLen > 0) {
+			float3 normVel = rainVelocity / velLen;
+			rainVelocity = lerp(normVel, rainVelocity, SharedData::enbSettings.RainMotionStretch);
+		}
 	}
 	float4 adjustedMsPosition = msPosition - float4(rainVelocity, 0);
 	float positionBlendParam = 0.5 * (1 + input.TexCoord1.y);
@@ -186,11 +189,8 @@ VS_OUTPUT main(VS_INPUT input)
 	vsout.Color.xyz = color.xyz;
 #	endif
 
-#		if defined(RAIN)
-	float2 uv = input.TexCoord1.xy;
-    uv.xy *= 2.0; // UV fix
-	uv.xy *= 0.5; // UV unfix
-	vsout.RaindropData.xy = uv * 0.5 + 0.5;
+#		if defined(ENVCUBE) && defined(RAIN)
+	vsout.RaindropData.xy = input.TexCoord1.xy * 0.5 + 0.5;
 #		endif
 
 	return vsout;
