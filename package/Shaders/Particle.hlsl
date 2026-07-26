@@ -29,7 +29,7 @@ struct VS_OUTPUT
 #if defined(ENVCUBE)
 	float4 PrecipitationOcclusionTexCoord: TEXCOORD1;
 #endif
-#if defined(ENVCUBE) && defined(RAIN)
+#if defined(ENVCUBE) && defined(RAIN) && defined(EFFECT11)
 	float2 RaindropData: TEXCOORD2;
 #endif
 };
