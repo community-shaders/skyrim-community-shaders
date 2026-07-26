@@ -11,12 +11,22 @@
 
 #define I18N_KEY_PREFIX "feature.light_limit_fix."
 
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
+	LightLimitFix::Settings,
+	EnableParticleLights,
+	EnableParticleLightsCulling,
+	EnableLightsVisualisation,
+	LightsVisualisationMode)
+
 static constexpr uint CLUSTER_MAX_LIGHTS = 128;
-static constexpr uint MAX_LIGHTS = 1024;
 
 void LightLimitFix::DrawSettings()
 {
 	auto shaderCache = globals::shaderCache;
+
+	ImGui::Checkbox(T(TKEY("enable_particle_lights"), "Enable Particle Lights"), &settings.EnableParticleLights);
+
+	ImGui::Spacing();
 
 	if (ImGui::TreeNodeEx(T(TKEY("statistics"), "Statistics"), ImGuiTreeNodeFlags_DefaultOpen)) {
 		ImGui::Text(std::format("Clustered Light Count : {}", lightCount).c_str());
@@ -24,7 +34,6 @@ void LightLimitFix::DrawSettings()
 		ImGui::TreePop();
 	}
 
-	///////////////////////////////
 	ImGui::SeparatorText(T(TKEY("debug"), "Debug"));
 
 	if (ImGui::TreeNode(T(TKEY("light_limit_vis"), "Light Limit Visualization"))) {
@@ -171,6 +180,16 @@ void LightLimitFix::SetupResources()
 	}
 }
 
+void LightLimitFix::SaveSettings(json& o_json)
+{
+	o_json = settings;
+}
+
+void LightLimitFix::LoadSettings(json& o_json)
+{
+	settings = o_json;
+}
+
 void LightLimitFix::RestoreDefaultSettings()
 {
 	settings = {};
@@ -247,9 +266,9 @@ void LightLimitFix::BSLightingShader_SetupGeometry_GeometrySetupConstantPointLig
 
 		light.fade *= bsLight->lodDimmer;
 
-		auto& enbpp = globals::features::effect11;
-		if (inWorld && enbpp.enableEffect)
-			enbpp.OverridePointLightColor(light.color);
+		auto& effect11 = globals::features::effect11;
+		if (inWorld && effect11.enableEffect)
+			effect11.OverridePointLightColor(light.color);
 
 		SetLightPosition(light, niLight->world.translate, inWorld);
 
@@ -354,6 +373,7 @@ bool LightLimitFix::IsGlobalLight(RE::BSLight* a_light)
 
 void LightLimitFix::PostPostLoad()
 {
+	particleLightConfigs.Load();
 	Hooks::Install();
 }
 
@@ -431,9 +451,9 @@ void LightLimitFix::UpdateLights()
 
 					light.fade *= bsLight->lodDimmer;
 
-					auto& enbpp = globals::features::effect11;
-					if (enbpp.enableEffect)
-						enbpp.OverridePointLightColor(light.color);
+					auto& effect11 = globals::features::effect11;
+					if (effect11.enableEffect)
+						effect11.OverridePointLightColor(light.color);
 
 					if (!IsGlobalLight(bsLight)) {
 						// List of BSMultiBoundRooms affected by a light
@@ -473,6 +493,8 @@ void LightLimitFix::UpdateLights()
 	for (auto& e : shadowSceneNode->GetRuntimeData().activeShadowLights) {
 		addLight(e);
 	}
+
+	AddParticleLightsToBuffer(lightsData);
 
 	auto context = globals::d3d::context;
 
@@ -583,4 +605,356 @@ void LightLimitFix::Hooks::BSWaterShader_SetupGeometry::thunk(RE::BSShader* This
 	singleton.BSLightingShader_SetupGeometry_Before(Pass);
 	singleton.BSLightingShader_SetupGeometry_After(Pass);
 };
+
+// --- Particle Lights ---
+
+namespace
+{
+	struct VertexColor
+	{
+		std::uint8_t data[4];
+	};
+
+	bool TryGetMaxAlphaVertexColor(const std::uint8_t* a_rawVertexData, std::uint32_t a_vertexSize, std::uint32_t a_colorOffset, std::uint32_t a_vertexCount, VertexColor& a_outVertexColor)
+	{
+		if (!a_rawVertexData || a_vertexSize < sizeof(VertexColor) || a_vertexCount == 0)
+			return false;
+		if (a_colorOffset > (a_vertexSize - sizeof(VertexColor)))
+			return false;
+
+		std::uint8_t maxAlpha = 0;
+		bool found = false;
+		VertexColor bestColor{};
+
+		for (std::uint32_t v = 0; v < a_vertexCount; ++v) {
+			const auto byteOffset = static_cast<std::size_t>(a_vertexSize) * v + a_colorOffset;
+			const auto* vertex = reinterpret_cast<const VertexColor*>(a_rawVertexData + byteOffset);
+			if (vertex->data[3] > maxAlpha) {
+				maxAlpha = vertex->data[3];
+				bestColor = *vertex;
+				found = true;
+			}
+		}
+
+		if (found)
+			a_outVertexColor = bestColor;
+		return found;
+	}
+
+	RE::NiColorA BuildEffectMaterialEmissiveTint(RE::BSEffectShaderMaterial* a_material, RE::BSEffectShaderProperty* a_shaderProperty)
+	{
+		RE::NiColorA tint{
+			a_material->baseColor.red * a_material->baseColorScale,
+			a_material->baseColor.green * a_material->baseColorScale,
+			a_material->baseColor.blue * a_material->baseColorScale,
+			1.0f
+		};
+		if (auto emittance = a_shaderProperty->emittanceColor) {
+			tint.red *= emittance->red;
+			tint.green *= emittance->green;
+			tint.blue *= emittance->blue;
+		}
+		return tint;
+	}
+
+	std::optional<std::string> GetLowercaseStem(const char* a_path)
+	{
+		std::filesystem::path p(a_path);
+		auto stem = p.stem().string();
+		if (stem.empty())
+			return std::nullopt;
+		std::transform(stem.begin(), stem.end(), stem.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+		return stem;
+	}
+}
+
+void LightLimitFix::ParticleLightConfigStore::Load()
+{
+	++configVersion;
+	configs.clear();
+
+	configs["default"] = ParticleLightConfig{};
+	logger::info("[LLF] Particle lights config conflict policy: first-win");
+
+	if (std::filesystem::exists("Data\\ParticleLights")) {
+		logger::info("[LLF] Loading particle lights configs");
+
+		auto iniFiles = clib_util::distribution::get_configs("Data\\ParticleLights", "", ".ini");
+		std::sort(iniFiles.begin(), iniFiles.end());
+
+		if (iniFiles.empty()) {
+			logger::warn("[LLF] No .ini files in Data\\ParticleLights");
+			return;
+		}
+
+		logger::info("[LLF] {} matching inis found", iniFiles.size());
+
+		for (auto& path : iniFiles) {
+			logger::info("[LLF] loading ini: {}", path);
+
+			CSimpleIniA ini;
+			ini.SetUnicode();
+			ini.SetMultiKey();
+
+			if (const auto rc = ini.LoadFile(path.c_str()); rc < 0) {
+				logger::error("\t\t[LLF] couldn't read INI");
+				continue;
+			}
+
+			ParticleLightConfig data{};
+			data.cull = ini.GetBoolValue("Light", "Cull", false);
+
+			const auto filename = GetLowercaseStem(path.c_str());
+			if (!filename)
+				continue;
+
+			if (configs.contains(*filename)) {
+				logger::warn("[LLF] Duplicate config '{}'; keeping first, ignoring {}", *filename, path);
+				continue;
+			}
+
+			logger::debug("[LLF] Inserting {}", *filename);
+			configs.emplace(*filename, data);
+		}
+	}
+}
+
+LightLimitFix::VertexColorCacheEntry LightLimitFix::GetParticleLightConfig(RE::BSRenderPass* a_pass)
+{
+	if (!a_pass || !a_pass->geometry || !a_pass->shaderProperty)
+		return {};
+
+	if (!settings.EnableParticleLights)
+		return {};
+
+	auto shaderProperty = a_pass->shaderProperty->GetRTTI() == globals::rtti::BSEffectShaderPropertyRTTI.get() ?
+	                          static_cast<RE::BSEffectShaderProperty*>(a_pass->shaderProperty) :
+	                          nullptr;
+	if (!shaderProperty || shaderProperty->lightData)
+		return {};
+
+	auto material = static_cast<RE::BSEffectShaderMaterial*>(shaderProperty->GetMaterial());
+	if (!material)
+		return {};
+
+	auto parent = a_pass->geometry->parent;
+	if (!parent || parent->GetRTTI() != globals::rtti::NiBillboardNodeRTTI.get())
+		return {};
+
+	auto* node = a_pass->geometry;
+
+	{
+		std::lock_guard<std::mutex> lock{ particleLightsMutex };
+		auto it = vertexColorCache.find(node);
+		if (it != vertexColorCache.end()) {
+			if (it->second.configVersion == particleLightConfigs.configVersion)
+				return it->second;
+			vertexColorCache.erase(it);
+		}
+	}
+
+	auto cacheInvalid = [&](RE::BSGeometry* a_node) {
+		VertexColorCacheEntry invalid{};
+		invalid.valid = false;
+		invalid.configVersion = particleLightConfigs.configVersion;
+		std::lock_guard<std::mutex> lock{ particleLightsMutex };
+		vertexColorCache[a_node] = invalid;
+		return invalid;
+	};
+
+	if (material->sourceTexturePath.empty())
+		return cacheInvalid(node);
+
+	auto textureName = GetLowercaseStem(material->sourceTexturePath.c_str());
+	if (!textureName)
+		return cacheInvalid(node);
+
+	auto& configs = particleLightConfigs.configs;
+	auto configIt = configs.find(*textureName);
+	if (configIt == configs.end())
+		return cacheInvalid(node);
+
+	ParticleLightConfig config = configIt->second;
+
+	VertexColorCacheEntry entry{};
+	entry.valid = true;
+	entry.applyEffectMaterialTint = true;
+	entry.config = config;
+	entry.baseColor = { 1, 1, 1, 1 };
+	entry.configVersion = particleLightConfigs.configVersion;
+
+	bool hasVertexTint = false;
+	if (auto rendererData = a_pass->geometry->GetGeometryRuntimeData().rendererData) {
+		if (auto triShape = a_pass->geometry->AsTriShape()) {
+			const std::uint32_t vertexSize = rendererData->vertexDesc.GetSize();
+			if (rendererData->vertexDesc.HasFlag(RE::BSGraphics::Vertex::Flags::VF_COLORS) && rendererData->rawVertexData && vertexSize > 0u) {
+				const std::uint32_t offset = rendererData->vertexDesc.GetAttributeOffset(RE::BSGraphics::Vertex::Attribute::VA_COLOR);
+				const std::uint32_t vertexCount = static_cast<std::uint32_t>(triShape->GetTrishapeRuntimeData().vertexCount);
+
+				VertexColor maxAlphaVC{};
+				if (TryGetMaxAlphaVertexColor(rendererData->rawVertexData, vertexSize, offset, vertexCount, maxAlphaVC)) {
+					entry.baseColor.red *= maxAlphaVC.data[0] / 255.f;
+					entry.baseColor.green *= maxAlphaVC.data[1] / 255.f;
+					entry.baseColor.blue *= maxAlphaVC.data[2] / 255.f;
+					hasVertexTint = true;
+					if (shaderProperty->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kVertexAlpha))
+						entry.baseColor.alpha *= maxAlphaVC.data[3] / 255.f;
+				}
+			}
+		}
+	}
+
+	if (!hasVertexTint) {
+		entry.baseColor = BuildEffectMaterialEmissiveTint(material, shaderProperty);
+		entry.applyEffectMaterialTint = false;
+	}
+
+	{
+		std::lock_guard<std::mutex> lock{ particleLightsMutex };
+		vertexColorCache[node] = entry;
+	}
+	return entry;
+}
+
+bool LightLimitFix::QueueParticleLight(RE::BSRenderPass* a_pass, VertexColorCacheEntry& a_reference)
+{
+	if (!a_pass || !a_pass->geometry || !a_pass->shaderProperty)
+		return false;
+
+	auto shaderProperty = a_pass->shaderProperty->GetRTTI() == globals::rtti::BSEffectShaderPropertyRTTI.get() ?
+	                          static_cast<RE::BSEffectShaderProperty*>(a_pass->shaderProperty) :
+	                          nullptr;
+	if (!shaderProperty)
+		return false;
+
+	auto material = static_cast<RE::BSEffectShaderMaterial*>(shaderProperty->GetMaterial());
+	if (!material)
+		return false;
+
+	RE::NiColorA color = a_reference.baseColor;
+	if (a_reference.applyEffectMaterialTint) {
+		color.red *= material->baseColor.red * material->baseColorScale;
+		color.green *= material->baseColor.green * material->baseColorScale;
+		color.blue *= material->baseColor.blue * material->baseColorScale;
+
+		if (auto emittance = shaderProperty->emittanceColor) {
+			color.red *= emittance->red;
+			color.green *= emittance->green;
+			color.blue *= emittance->blue;
+		}
+	}
+
+	ResolvedParticleLight resolved;
+	resolved.position = a_pass->geometry->world.translate;
+	resolved.color = color;
+	resolved.radius = a_pass->geometry->worldBound.radius;
+
+	std::lock_guard<std::mutex> lock{ particleLightsMutex };
+	queuedParticleLights.push_back(resolved);
+
+	return true;
+}
+
+bool LightLimitFix::CheckParticleLights(RE::BSRenderPass* a_pass, uint32_t)
+{
+	if (!a_pass || !a_pass->geometry || !a_pass->shaderProperty)
+		return true;
+
+	auto reference = GetParticleLightConfig(a_pass);
+	if (reference.valid) {
+		if (QueueParticleLight(a_pass, reference))
+			return !(settings.EnableParticleLightsCulling && reference.config.cull);
+	}
+	return true;
+}
+
+void LightLimitFix::AddParticleLightsToBuffer(eastl::vector<LightData>& a_lightsData)
+{
+	if (!settings.EnableParticleLights)
+		return;
+
+	static float& lightFadeStart = *reinterpret_cast<float*>(REL::RelocationID(527668, 414582).address());
+	static float& lightFadeEnd = *reinterpret_cast<float*>(REL::RelocationID(527669, 414583).address());
+
+	std::lock_guard<std::mutex> lock{ particleLightsMutex };
+
+	currentParticleLights.clear();
+	std::swap(currentParticleLights, queuedParticleLights);
+
+	auto& effect11 = globals::features::effect11;
+
+	for (const auto& pl : currentParticleLights) {
+		if (a_lightsData.size() >= MAX_LIGHTS)
+			break;
+
+		LightData light{};
+		light.color.x = pl.color.red;
+		light.color.y = pl.color.green;
+		light.color.z = pl.color.blue;
+		light.color *= pl.color.alpha;
+
+		if (effect11.enableEffect)
+			effect11.OverridePointLightColor(light.color);
+
+		light.radius = pl.radius * 0.5f;
+
+		light.lightFlags.set(LightFlags::Simple);
+		light.lightFlags.set(LightFlags::Particle);
+
+		SetLightPosition(light, pl.position);
+
+		float distance = (light.positionWS.data.x * light.positionWS.data.x) +
+		                 (light.positionWS.data.y * light.positionWS.data.y) +
+		                 (light.positionWS.data.z * light.positionWS.data.z) -
+		                 (light.radius * light.radius);
+
+		float dimmer = 0.0f;
+		if (distance < lightFadeStart || lightFadeEnd == 0.0f || lightFadeEnd <= lightFadeStart)
+			dimmer = 1.0f;
+		else if (distance <= lightFadeEnd)
+			dimmer = 1.0f - ((distance - lightFadeStart) / (lightFadeEnd - lightFadeStart));
+
+		light.fade = dimmer;
+		if ((light.color.x + light.color.y + light.color.z) * light.fade > 1e-4 && light.radius > 1e-4) {
+			light.invRadius = 1.f / light.radius;
+			a_lightsData.push_back(light);
+		}
+	}
+}
+
+template <int N>
+void LightLimitFix::Hooks::BSBatchRenderer_RenderPassImmediately<N>::thunk(RE::BSRenderPass* a_pass, uint32_t a_technique, bool a_alphaTest, uint32_t a_renderFlags)
+{
+	if (globals::features::lightLimitFix.CheckParticleLights(a_pass, a_technique))
+		func(a_pass, a_technique, a_alphaTest, a_renderFlags);
+}
+
+void LightLimitFix::Hooks::BSGeometry_Destroy::thunk(RE::BSGeometry* This)
+{
+	{
+		std::lock_guard<std::mutex> lock{ globals::features::lightLimitFix.particleLightsMutex };
+		globals::features::lightLimitFix.vertexColorCache.erase(This);
+	}
+	func(This);
+}
+
+void LightLimitFix::Hooks::Install()
+{
+	stl::write_vfunc<0x6, BSLightingShader_SetupGeometry>(RE::VTABLE_BSLightingShader[0]);
+	stl::write_vfunc<0x6, BSEffectShader_SetupGeometry>(RE::VTABLE_BSEffectShader[0]);
+	stl::write_vfunc<0x6, BSWaterShader_SetupGeometry>(RE::VTABLE_BSWaterShader[0]);
+
+	stl::write_thunk_call<ValidLight1>(REL::RelocationID(100994, 107781).address() + 0x92);
+	stl::write_thunk_call<ValidLight2>(REL::RelocationID(100997, 107784).address() + REL::Relocate(0x139, 0x12A));
+	stl::write_thunk_call<ValidLight3>(REL::RelocationID(101296, 108283).address() + REL::Relocate(0xB7, 0x7E));
+
+	stl::write_thunk_call<RenderPass1>(REL::RelocationID(100877, 107667).address() + REL::Relocate(0x1E5, 0xED));
+	stl::write_thunk_call<RenderPass2>(REL::RelocationID(100852, 107642).address() + REL::Relocate(0x29E, 0x28F));
+	if (REL::Module::IsSE())
+		stl::write_thunk_call<RenderPass3>(REL::RelocationID(100871, 107661).address() + 0xEE);
+	stl::detour_thunk<BSGeometry_Destroy>(REL::RelocationID(69535, 70936));
+
+	logger::info("[LLF] Installed hooks");
+}
+
 #undef I18N_KEY_PREFIX

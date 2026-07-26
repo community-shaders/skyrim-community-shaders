@@ -90,7 +90,6 @@ public:
 
 	std::unique_ptr<Texture2D> vlTexA;
 	std::unique_ptr<Texture2D> vlTexB;
-	// Depth each half-res texel raymarched with; the bilateral blur + upsample weight against it.
 	std::unique_ptr<Texture2D> vlDepthHalf;
 	std::unique_ptr<ConstantBuffer> vlBlurCB;
 
@@ -106,6 +105,7 @@ public:
 	virtual void Reset() override;
 	virtual void Prepass() override;
 	virtual void ClearShaderCache() override;
+	virtual void PostPostLoad() override;
 
 	void DrawVolumetricRays();
 

@@ -190,7 +190,6 @@ void Effect11::SetupResources()
 
 void Effect11::Reset()
 {
-	// Reset effect state if needed
 }
 
 void Effect11::ClearShaderCache()
@@ -890,4 +889,8 @@ void Effect11::DrawVolumetricRays()
 
 	stateBackup.Restore(context);
 	stateBackup.Release();
+}
+
+void Effect11::PostPostLoad()
+{
 }
