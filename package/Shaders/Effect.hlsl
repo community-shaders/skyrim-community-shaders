@@ -657,8 +657,14 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 propertyColor = Color::Effect(PropertyColor.xyz);
 	float shadowVariance = 1.0;
 
+	bool isFire = false;
+#	if defined(ADDBLEND) && defined(SOFT)
+        if (Permutation::PixelShaderDescriptor & Permutation::EffectFlags::GrayscaleToColor && Permutation::PixelShaderDescriptor & Permutation::EffectFlags::GrayscaleToAlpha)
+			isFire = true;
+#	endif
+
 #	if !defined(IS_VOLUMETRIC_FOG)
-	if (SharedData::enbSettings.Enable && !(Permutation::VertexShaderDescriptor & Permutation::EffectFlags::SkyObject))
+	if (SharedData::enbSettings.Enable && !(Permutation::VertexShaderDescriptor & Permutation::EffectFlags::SkyObject) && !isFire)
 		propertyColor *= SharedData::enbSettings.ParticleIntensity;
 #	endif
 
@@ -825,20 +831,16 @@ PS_OUTPUT main(PS_INPUT input)
 		}
 	}
 #		endif
-#		if defined(ADDBLEND)
-#			if defined(EXP_HEIGHT_FOG)
-	float3 blendedColor = lightColor * (1 - vanillaFogFactor) * (1 - expFogFactor);
-#			else
-	float3 blendedColor = lightColor * (1 - fogFactor);
-#			endif
-	if (SharedData::enbSettings.Enable) {
-		// ENB classifies by object properties: additive draws with GRAYSCALE_TO_COLOR are FIRE; anything else is LIGHTSPRITE.
-#			if !defined(GRAYSCALE_TO_COLOR)
-		blendedColor *= SharedData::enbSettings.LightSpriteIntensity;
-#			else
-		blendedColor = pow(max(blendedColor, 0.0), SharedData::enbSettings.FireCurve) * SharedData::enbSettings.FireIntensity;
-#			endif
-	}
+#        if defined(ADDBLEND)
+#            if defined(EXP_HEIGHT_FOG)
+    float3 blendedColor = lightColor * (1 - vanillaFogFactor) * (1 - expFogFactor);
+#            else
+    float3 blendedColor = lightColor * (1 - fogFactor);
+#            endif
+	if (isFire)
+		blendedColor = pow(abs(blendedColor), SharedData::enbSettings.FireCurve) * SharedData::enbSettings.FireIntensity;
+	else
+		blendedColor *= SharedData::enbSettings.LightSpriteIntensity;                 
 #		elif defined(MULTBLEND) || defined(MULTBLEND_DECAL)
 #			if defined(EXP_HEIGHT_FOG)
 	float3 blendedColor = lerp(lightColor, 1.0.xxx, saturate(1.5 * vanillaFogFactor).xxx);
