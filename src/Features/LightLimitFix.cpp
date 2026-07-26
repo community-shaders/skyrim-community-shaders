@@ -11,14 +11,21 @@
 
 #define I18N_KEY_PREFIX "feature.light_limit_fix."
 
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
+	LightLimitFix::Settings,
+	EnableParticleLights,
+	EnableParticleLightsCulling,
+	EnableLightsVisualisation,
+	LightsVisualisationMode)
+
 static constexpr uint CLUSTER_MAX_LIGHTS = 128;
 
 void LightLimitFix::DrawSettings()
 {
 	auto shaderCache = globals::shaderCache;
 
-	ImGui::Checkbox(T(TKEY("enable_particle_lights"), "Enable Particle Lights"), &particleLightSettings.EnableParticleLights);
-	
+	ImGui::Checkbox(T(TKEY("enable_particle_lights"), "Enable Particle Lights"), &settings.EnableParticleLights);
+
 	ImGui::Spacing();
 
 	if (ImGui::TreeNodeEx(T(TKEY("statistics"), "Statistics"), ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -171,6 +178,16 @@ void LightLimitFix::SetupResources()
 	{
 		strictLightDataCB = new ConstantBuffer(ConstantBufferDesc<StrictLightDataCB>());
 	}
+}
+
+void LightLimitFix::SaveSettings(json& o_json)
+{
+	o_json = settings;
+}
+
+void LightLimitFix::LoadSettings(json& o_json)
+{
+	settings = o_json;
 }
 
 void LightLimitFix::RestoreDefaultSettings()
@@ -711,7 +728,7 @@ LightLimitFix::VertexColorCacheEntry LightLimitFix::GetParticleLightConfig(RE::B
 	if (!a_pass || !a_pass->geometry || !a_pass->shaderProperty)
 		return {};
 
-	if (!particleLightSettings.EnableParticleLights)
+	if (!settings.EnableParticleLights)
 		return {};
 
 	auto shaderProperty = a_pass->shaderProperty->GetRTTI() == globals::rtti::BSEffectShaderPropertyRTTI.get() ?
@@ -853,14 +870,14 @@ bool LightLimitFix::CheckParticleLights(RE::BSRenderPass* a_pass, uint32_t)
 	auto reference = GetParticleLightConfig(a_pass);
 	if (reference.valid) {
 		if (QueueParticleLight(a_pass, reference))
-			return !reference.config.cull;
+			return !(settings.EnableParticleLightsCulling && reference.config.cull);
 	}
 	return true;
 }
 
 void LightLimitFix::AddParticleLightsToBuffer(eastl::vector<LightData>& a_lightsData)
 {
-	if (!particleLightSettings.EnableParticleLights)
+	if (!settings.EnableParticleLights)
 		return;
 
 	static float& lightFadeStart = *reinterpret_cast<float*>(REL::RelocationID(527668, 414582).address());

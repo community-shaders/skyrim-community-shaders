@@ -1114,7 +1114,7 @@ void Menu::ProcessInputEventQueue()
 			};
 
 			// Hardcoded Shift+Enter toggle for the CS menu (always available)
-			if (event.IsPressed() && key == VK_RETURN && (GetAsyncKeyState(VK_SHIFT) & 0x8000)) {
+			if (event.IsDown() && key == VK_RETURN && (GetAsyncKeyState(VK_SHIFT) & 0x8000)) {
 				if (!HomePageRenderer::ShouldShowFirstTimeSetup()) {
 					IsEnabled = !IsEnabled;
 					if (IsEnabled)

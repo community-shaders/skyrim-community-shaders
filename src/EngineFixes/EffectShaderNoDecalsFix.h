@@ -6,8 +6,11 @@
  * Particle-like geometry using BSEffectShaderProperty with kSoftEffect should
  * never receive decals (blood spatters, impact marks, etc.). The vanilla engine
  * does not set kNoDecals on these nodes, so decals can incorrectly attach to
- * billboard particles and other soft effects. This fix sets the kNoDecals flag
- * on any BSGeometry whose BSEffectShaderProperty carries kSoftEffect.
+ * billboard particles and other soft effects.
+ *
+ * Hooks BSTriShape::LinkObject (vtable 0x19) to set kNoDecals at NIF load
+ * time, before the geometry enters the scene. Clones inherit the flag from
+ * the template, so the write is a one-time creation-time patch.
  */
 struct EffectShaderNoDecalsFix : EngineFix
 {
@@ -16,9 +19,9 @@ struct EffectShaderNoDecalsFix : EngineFix
 	void Install() override;
 
 private:
-	struct BSEffectShaderProperty_SetupGeometry
+	struct BSTriShape_LinkObject
 	{
-		static bool thunk(RE::BSEffectShaderProperty* a_property, RE::BSGeometry* a_geometry);
+		static void thunk(RE::BSTriShape* a_this, RE::NiStream& a_stream);
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 };

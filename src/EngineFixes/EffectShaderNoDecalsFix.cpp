@@ -2,16 +2,16 @@
 
 void EffectShaderNoDecalsFix::Install()
 {
-	stl::write_vfunc<0x27, BSEffectShaderProperty_SetupGeometry>(RE::VTABLE_BSEffectShaderProperty[0]);
+	stl::write_vfunc<0x19, BSTriShape_LinkObject>(RE::VTABLE_BSTriShape[0]);
 }
 
-bool EffectShaderNoDecalsFix::BSEffectShaderProperty_SetupGeometry::thunk(RE::BSEffectShaderProperty* a_property, RE::BSGeometry* a_geometry)
+void EffectShaderNoDecalsFix::BSTriShape_LinkObject::thunk(RE::BSTriShape* a_this, RE::NiStream& a_stream)
 {
-	auto result = func(a_property, a_geometry);
+	func(a_this, a_stream);
 
-	if (a_property && a_geometry && a_property->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kSoftEffect)) {
-		a_geometry->GetFlags().set(RE::NiAVObject::Flag::kNoDecals);
+	if (auto* prop = a_this->GetGeometryRuntimeData().shaderProperty.get()) {
+		if (prop->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kSoftEffect)) {
+			a_this->GetFlags().set(RE::NiAVObject::Flag::kNoDecals);
+		}
 	}
-
-	return result;
 }

@@ -34,12 +34,6 @@ struct LightLimitFix : OverlayFeature
 		RE::NiColorA baseColor{ 1.0f, 1.0f, 1.0f, 1.0f };
 	};
 
-	struct ParticleLightSettings
-	{
-		bool EnableParticleLights = true;
-	};
-
-	ParticleLightSettings particleLightSettings;
 	ParticleLightConfigStore particleLightConfigs;
 
 	eastl::hash_map<RE::BSGeometry*, VertexColorCacheEntry> vertexColorCache;
@@ -193,6 +187,8 @@ public:
 	/** @brief Creates GPU buffers, compute shaders, and constant buffers for clustered lighting. */
 	virtual void SetupResources() override;
 
+	virtual void SaveSettings(json& o_json) override;
+	virtual void LoadSettings(json& o_json) override;
 	virtual void RestoreDefaultSettings() override;
 
 	/** @brief Draws the ImGui settings UI for light limit fix configuration and debug visualization. */
@@ -247,6 +243,8 @@ public:
 
 	struct Settings
 	{
+		bool EnableParticleLights = true;
+		bool EnableParticleLightsCulling = true;
 		bool EnableLightsVisualisation = false;
 		uint LightsVisualisationMode = 0;
 	};
