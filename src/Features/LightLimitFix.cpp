@@ -9,6 +9,8 @@
 #include "State.h"
 #include "Utils/ExternalEmittance.h"
 
+#include <numbers>
+
 #define I18N_KEY_PREFIX "feature.light_limit_fix."
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
@@ -895,7 +897,7 @@ void LightLimitFix::AddParticleLightsToBuffer(eastl::vector<LightData>& a_lights
 			break;
 
 		LightData light{};
-		constexpr float invPI = 1.f / 3.14159265358979323846f;
+		constexpr float invPI = 1.f / std::numbers::pi_v<float>;
 		light.color.x = pl.color.red * invPI;
 		light.color.y = pl.color.green * invPI;
 		light.color.z = pl.color.blue * invPI;

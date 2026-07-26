@@ -71,8 +71,8 @@ Effect11::PerFrame Effect11::GetCommonBufferData()
 	data.RainMotionStretch = settingManager.GetInterpolatedTimeOfDayValue("MotionStretch", "RAIN");
 	data.RainMotionTransparency = settingManager.GetInterpolatedTimeOfDayValue("MotionTransparency", "RAIN");
 
-	data.FireIntensity = settingManager.GetValue<float>("FireIntensity", "FIRE");
-	data.FireCurve = settingManager.GetValue<float>("FireCurve", "FIRE");
+	data.FireIntensity = settingManager.GetInterpolatedTimeOfDayValue("FireIntensity", "FIRE");
+	data.FireCurve = settingManager.GetInterpolatedTimeOfDayValue("FireCurve", "FIRE");
 
 	data.EnableProceduralSun = enableEffect && settingManager.GetValue<bool>("EnableProceduralSun", "EFFECT");
 
@@ -473,7 +473,7 @@ void Effect11::CheckCommonData()
 		auto& settingManager = SettingManager::GetSingleton();
 		auto ui = globals::game::ui;
 		bool isMenuOpen = ui->IsMenuOpen(RE::MapMenu::MENU_NAME);
-		enableEffect = !isMenuOpen && settingManager.GetValue<bool>("UseEffect", "GLOBAL");
+		enableEffect = !isMenuOpen && globals::shaderCache->IsEnabled() && settingManager.GetValue<bool>("UseEffect", "GLOBAL");
 
 		auto& effectManager = EffectManager::GetSingleton();
 		auto& weatherManager = WeatherManager::GetSingleton();
