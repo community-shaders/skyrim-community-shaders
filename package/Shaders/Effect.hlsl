@@ -909,13 +909,13 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.Albedo = float4(psout.Diffuse.xyz, finalColor.w);
 	psout.Reflectance = float4(psout.Diffuse.xyz, finalColor.w);
 	psout.Masks = float4(Color::RGBToLuminance(psout.Diffuse.xyz).xxx, finalColor.w);
-	psout.Masks2 = float4(1, 0, 0, finalColor.w);
+	psout.Masks2 = float4(0, 0, 0, finalColor.w);
 #		else
 	psout.Albedo = float4(psout.Diffuse.xyz * !(Permutation::VertexShaderDescriptor & Permutation::EffectFlags::SkyObject), finalColor.w);
 	psout.Specular = float4(0, 0, 0, finalColor.w);
 	psout.Reflectance = float4(0, 0, 0, finalColor.w);
 	psout.Masks = float4(0, 0, 0, finalColor.w);
-	psout.Masks2 = float4(1, 0, 0, finalColor.w);
+	psout.Masks2 = float4(0, 0, 0, finalColor.w);
 #		endif
 
 #	elif defined(MOTIONVECTORS_NORMALS)

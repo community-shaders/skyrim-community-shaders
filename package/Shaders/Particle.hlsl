@@ -234,7 +234,7 @@ Texture2D<float4> TexGrayscaleTexture : register(t1);
 Texture2D<float4> TexPrecipitationOcclusionTexture : register(t2);
 Texture2D<float4> TexUnderwaterMask : register(t3);
 #	endif
-#	if defined(ENVCUBE) && defined(RAIN)
+#	if defined(ENVCUBE) && defined(RAIN) && defined(EFFECT11)
 Texture2D<float4> TexRaindropNormals : register(t80);
 #	endif
 
@@ -270,7 +270,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	}
 #	endif
 
-#	if defined(RAIN) && defined(DYNAMIC_CUBEMAPS) && defined(EFFECT11)
+#	if defined(ENVCUBE) && defined(RAIN) && defined(DYNAMIC_CUBEMAPS) && defined(EFFECT11)
 if (SharedData::enbSettings.EnableRain) {
 	float4 raindropNormal = TexRaindropNormals.Sample(SampSourceTexture, input.RaindropData.xy);
     float alpha = saturate(raindropNormal.w * (1.0 - SharedData::enbSettings.RainMotionTransparency));

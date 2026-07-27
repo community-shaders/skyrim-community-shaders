@@ -21,6 +21,9 @@
 
 Effect11::PerFrame Effect11::GetCommonBufferData()
 {
+	if (!loaded)
+		return {};
+
 	CheckCommonData();
 
 	auto& settingManager = SettingManager::GetSingleton();
@@ -565,6 +568,10 @@ void Effect11::ModifyParticle(RE::BSRenderPass* Pass)
 	if (!Pass)
 		return;
 
+	auto state = globals::state;
+	if (state->currentPixelDescriptor != static_cast<uint32_t>(SIE::ShaderCache::ParticleShaderTechniques::EnvCubeRain))
+		return;
+
 	auto context = globals::d3d::context;
 	ID3D11ShaderResourceView* srv = raindropSRV.get();
 	context->PSSetShaderResources(80, 1, &srv);
@@ -579,7 +586,7 @@ void Effect11::ParticleShaderHacks()
 	if (!enableEffect || !raindropSRV)
 		return;
 
-	auto state = State::GetSingleton();
+	auto state = globals::state;
 	if (!state->currentShader || state->currentShader->shaderType.get() != RE::BSShader::Type::Particle)
 		return;
 	if (state->currentPixelDescriptor != static_cast<uint32_t>(SIE::ShaderCache::ParticleShaderTechniques::EnvCubeRain))
@@ -597,11 +604,11 @@ void Effect11::ParticleShaderHacks()
 		blendDesc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_INV_SRC_ALPHA;
 		blendDesc.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
 		blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
-		globals::d3d::device->CreateBlendState(&blendDesc, &alphaBlendState);
+		globals::d3d::device->CreateBlendState(&blendDesc, alphaBlendState.put());
 	}
 
 	float blendFactor[4] = { 0, 0, 0, 0 };
-	context->OMSetBlendState(alphaBlendState, blendFactor, 0xFFFFFFFF);
+	context->OMSetBlendState(alphaBlendState.get(), blendFactor, 0xFFFFFFFF);
 }
 
 void Effect11::DrawVolumetricRays()
@@ -670,7 +677,7 @@ void Effect11::DrawVolumetricRays()
 		blendDesc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_ONE;
 		blendDesc.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
 		blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_RED | D3D11_COLOR_WRITE_ENABLE_GREEN | D3D11_COLOR_WRITE_ENABLE_BLUE;
-		globals::d3d::device->CreateBlendState(&blendDesc, &additiveBlendState);
+		globals::d3d::device->CreateBlendState(&blendDesc, additiveBlendState.put());
 	}
 
 	auto context = globals::d3d::context;
@@ -846,7 +853,7 @@ void Effect11::DrawVolumetricRays()
 		context->OMSetRenderTargets(1, &rtv, nullptr);
 		context->RSSetViewports(1, &viewport);
 
-		context->OMSetBlendState(additiveBlendState, nullptr, 0xFFFFFFFF);
+		context->OMSetBlendState(additiveBlendState.get(), nullptr, 0xFFFFFFFF);
 		context->RSSetState(effectManager.rasterizerState.get());
 		context->OMSetDepthStencilState(nullptr, 0);
 

@@ -87,8 +87,8 @@ public:
 	ID3D11PixelShader* applyVolumetricRaysPS = nullptr;
 	ID3D11ComputeShader* blurHCS = nullptr;
 	ID3D11ComputeShader* blurVCS = nullptr;
-	ID3D11BlendState* additiveBlendState = nullptr;
-	ID3D11BlendState* alphaBlendState = nullptr;
+	winrt::com_ptr<ID3D11BlendState> additiveBlendState;
+	winrt::com_ptr<ID3D11BlendState> alphaBlendState;
 
 	std::unique_ptr<Texture2D> vlTexA;
 	std::unique_ptr<Texture2D> vlTexB;

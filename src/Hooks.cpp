@@ -15,13 +15,10 @@
 #include "Features/InteriorSun.h"
 #include "Features/ScreenshotFeature.h"
 #include "Features/LightLimitFix.h"
-#include "Features/SkySync.h"
 #include "Features/Skin.h"
 #include "Features/SkySync.h"
 #include "Features/Upscaling.h"
 #include "Features/VolumetricLighting.h"
-
-#include "ShaderTools/BSShaderHooks.h"
 
 std::unordered_map<void*, std::pair<std::unique_ptr<uint8_t[]>, size_t>> ShaderBytecodeMap;
 
