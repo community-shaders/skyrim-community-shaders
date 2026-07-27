@@ -7,6 +7,7 @@
 #include "../EffectManager.h"
 #include "../PresetManager.h"
 #include "../WeatherManager.h"
+#include "Globals.h"
 
 bool ExtendedEffect::IsVariableWeatherControlled(const std::string& iniKey) const
 {
@@ -470,7 +471,7 @@ namespace
 		ImGui::TableNextRow();
 		ImGui::TableSetColumnIndex(0);
 		if (readOnly)
-			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.6f, 0.6f, 0.6f, 1.0f));
+			ImGui::PushStyleColor(ImGuiCol_Text, globals::menu->GetSettings().Theme.StatusPalette.Disable);
 		ImGui::Text("%s", label.c_str());
 
 		ImGui::TableSetColumnIndex(1);
@@ -567,7 +568,7 @@ namespace
 		if (uiVar.isLabel) {
 			if (inTable) { ImGui::EndTable(); inTable = false; }
 			if (uiVar.isReadOnly)
-				ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.6f, 0.6f, 0.6f, 1.0f));
+				ImGui::PushStyleColor(ImGuiCol_Text, globals::menu->GetSettings().Theme.StatusPalette.Disable);
 			ImGui::TextWrapped("%s", uiVar.displayName.c_str());
 			if (uiVar.isReadOnly)
 				ImGui::PopStyleColor();

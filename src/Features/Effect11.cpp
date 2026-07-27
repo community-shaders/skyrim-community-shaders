@@ -220,7 +220,7 @@ void Effect11::Prepass()
 
 	auto& settingManager = SettingManager::GetSingleton();
 
-	auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
+	auto imageSpaceManager = globals::game::imageSpaceManager;
 	if (!imageSpaceManager) {
 		return;
 	}
@@ -293,7 +293,7 @@ void Effect11::OverrideWeather(RE::Sky* a_sky)
 		auto dirLightColorF3 = NiToF3(dirLightColor);
 
 		float sunlightScale = FLT_MIN;
-		auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
+		auto imageSpaceManager = globals::game::imageSpaceManager;
 		if (imageSpaceManager) {
 			sunlightScale = std::max(imageSpaceManager->GetRuntimeData().data.baseData.hdr.sunlightScale, FLT_MIN);
 		}

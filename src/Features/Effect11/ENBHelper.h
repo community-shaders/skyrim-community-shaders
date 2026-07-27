@@ -31,12 +31,6 @@ namespace ENBHelper
 		uint32_t skyMode = 0;
 	};
 
-	struct CameraInfo
-	{
-		RE::NiPoint3 position = { 0.0f, 0.0f, 0.0f };
-		RE::NiMatrix3 rotation;
-	};
-
 	// Update all cached values - call once per frame
 	void Update();
 
@@ -44,16 +38,4 @@ namespace ENBHelper
 	const WeatherInfo& GetWeatherInfo();
 	const LocationInfo& GetLocationInfo();
 	const TimeInfo& GetTimeInfo();
-	const CameraInfo& GetCameraInfo();
-
-	// Individual getters (for compatibility with ENBHelperSE API)
-	bool GetCurrentWeather(uint32_t& formID);
-	bool GetOutgoingWeather(uint32_t& formID);
-	bool GetWeatherTransition(float& transition);
-	bool GetCurrentWeatherClassification(int32_t& classification);
-	bool GetOutgoingWeatherClassification(int32_t& classification);
-	bool GetCurrentLocationID(uint32_t& formID);
-	bool GetWorldSpaceID(uint32_t& formID);
-	bool GetTime(float& hour);
-	bool GetSkyMode(uint32_t& mode);
 }

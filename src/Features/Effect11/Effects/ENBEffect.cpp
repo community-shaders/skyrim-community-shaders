@@ -2,6 +2,7 @@
 
 #include "../SettingManager.h"
 #include "../TextureManager.h"
+#include "Globals.h"
 #include "Utils/Game.h"
 
 void ENBEffect::Execute()
@@ -35,7 +36,7 @@ void ENBEffect::UpdateEffectVariables()
 {
 	float4 params01[7]{};
 
-	auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
+	auto imageSpaceManager = globals::game::imageSpaceManager;
 	if (!imageSpaceManager) {
 		return;
 	}

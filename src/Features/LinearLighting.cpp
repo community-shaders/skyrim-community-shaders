@@ -125,7 +125,7 @@ void LinearLighting::Prepass()
 	if (!settings.enableLinearLighting || isMainLoadingMenu)
 		return;
 
-	auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
+	auto imageSpaceManager = globals::game::imageSpaceManager;
 	if (!imageSpaceManager)
 		return;
 
