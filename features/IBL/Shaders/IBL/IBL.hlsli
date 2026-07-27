@@ -109,7 +109,7 @@ namespace ImageBasedLighting
 			linEnv = GetEnvIBLColor(rayDir);
 			linSky = GetSkyIBLColor(rayDir);
 		}
-#if defined(EFFECT11)
+#if defined(EFFECTS11)
 		if (SharedData::enbSettings.Enable)
 			linSky *= saturate(-rayDir.z * 0.65 + 0.35);
 #endif

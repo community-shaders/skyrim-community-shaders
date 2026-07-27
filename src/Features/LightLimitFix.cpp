@@ -1,5 +1,5 @@
 #include "LightLimitFix.h"
-#include "Effect11.h"
+#include "Effects11.h"
 #include "InverseSquareLighting.h"
 #include "LinearLighting.h"
 
@@ -268,9 +268,9 @@ void LightLimitFix::BSLightingShader_SetupGeometry_GeometrySetupConstantPointLig
 
 		light.fade *= bsLight->lodDimmer;
 
-		auto& effect11 = globals::features::effect11;
-		if (inWorld && effect11.enableEffect)
-			effect11.OverridePointLightColor(light.color);
+		auto& effects11 = globals::features::effects11;
+		if (inWorld && effects11.enableEffect)
+			effects11.OverridePointLightColor(light.color);
 
 		SetLightPosition(light, niLight->world.translate, inWorld);
 
@@ -453,9 +453,9 @@ void LightLimitFix::UpdateLights()
 
 					light.fade *= bsLight->lodDimmer;
 
-					auto& effect11 = globals::features::effect11;
-					if (effect11.enableEffect)
-						effect11.OverridePointLightColor(light.color);
+					auto& effects11 = globals::features::effects11;
+					if (effects11.enableEffect)
+						effects11.OverridePointLightColor(light.color);
 
 					if (!IsGlobalLight(bsLight)) {
 						// List of BSMultiBoundRooms affected by a light
@@ -890,7 +890,7 @@ void LightLimitFix::AddParticleLightsToBuffer(eastl::vector<LightData>& a_lights
 	currentParticleLights.clear();
 	std::swap(currentParticleLights, queuedParticleLights);
 
-	auto& effect11 = globals::features::effect11;
+	auto& effects11 = globals::features::effects11;
 
 	for (const auto& pl : currentParticleLights) {
 		if (a_lightsData.size() >= MAX_LIGHTS)
@@ -903,8 +903,8 @@ void LightLimitFix::AddParticleLightsToBuffer(eastl::vector<LightData>& a_lights
 		light.color.z = pl.color.blue * invPI;
 		light.color *= pl.color.alpha;
 
-		if (effect11.enableEffect)
-			effect11.OverridePointLightColor(light.color);
+		if (effects11.enableEffect)
+			effects11.OverridePointLightColor(light.color);
 
 		light.radius = pl.radius * 0.5f;
 

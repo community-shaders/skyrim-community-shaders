@@ -136,7 +136,7 @@ void TextureManager::CreateDownsampleResources()
 	DX::ThrowIfFailed(device->CreateSamplerState(&samplerDesc, linearSampler.put()));
 
 	// Create downsample vertex shader
-	auto vertexShaderSource = EffectManager::LoadShaderFile("Data\\Shaders\\Effect11\\QuadVS.hlsl");
+	auto vertexShaderSource = EffectManager::LoadShaderFile("Data\\Shaders\\Effects11\\QuadVS.hlsl");
 	if (vertexShaderSource.empty())
 		return;
 
@@ -171,7 +171,7 @@ void TextureManager::CreateDownsampleResources()
 		downsampleVS.put()));
 
 	// Create downsample pixel shader
-	auto pixelShaderSource = EffectManager::LoadShaderFile("Data\\Shaders\\Effect11\\DownsamplePS.hlsl");
+	auto pixelShaderSource = EffectManager::LoadShaderFile("Data\\Shaders\\Effects11\\DownsamplePS.hlsl");
 	if (pixelShaderSource.empty())
 		return;
 
@@ -286,7 +286,7 @@ void TextureManager::DownsampleToFixed(ID3D11ShaderResourceView* source, Downsam
 	context->OMSetRenderTargets(1, rtvArray, nullptr);
 	context->PSSetShaderResources(0, 1, &source);
 	context->PSSetShader(downsamplePS.get(), nullptr, 0);
-	globals::profiler->BeginPass("Effect11::Downsample");
+	globals::profiler->BeginPass("Effects11::Downsample");
 	context->Draw(4, 0);
 	globals::profiler->EndPass();
 

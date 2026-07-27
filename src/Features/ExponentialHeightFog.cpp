@@ -1,8 +1,8 @@
 #include "ExponentialHeightFog.h"
 
 #include "Deferred.h"
-#include "Effect11.h"
-#include "Effect11/SettingManager.h"
+#include "Effects11.h"
+#include "Effects11/SettingManager.h"
 #include "Features/CloudShadows.h"
 #include "Features/IBL.h"
 #include "Features/LightLimitFix.h"
@@ -88,8 +88,8 @@ ExponentialHeightFog::Settings ExponentialHeightFog::GetCommonBufferData() const
 {
 	Settings data = settings;
 
-	if (globals::features::effect11.loaded) {
-		auto& enb = globals::features::effect11;
+	if (globals::features::effects11.loaded) {
+		auto& enb = globals::features::effects11;
 		if (enb.enableEffect) {
 			data.enabled = 0;
 		}
@@ -100,8 +100,8 @@ ExponentialHeightFog::Settings ExponentialHeightFog::GetCommonBufferData() const
 
 void ExponentialHeightFog::DrawSettings()
 {
-	if (globals::features::effect11.loaded) {
-		auto& enb = globals::features::effect11;
+	if (globals::features::effects11.loaded) {
+		auto& enb = globals::features::effects11;
 		if (enb.enableEffect) {
 			ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "Settings are currently managed by ENB.");
 			return;
@@ -603,8 +603,8 @@ void ExponentialHeightFog::Prepass()
 
 void ExponentialHeightFog::RegisterWeatherVariables()
 {
-	if (globals::features::effect11.loaded) {
-		auto& enb = globals::features::effect11;
+	if (globals::features::effects11.loaded) {
+		auto& enb = globals::features::effects11;
 		if (enb.enableEffect) {
 			return;
 		}

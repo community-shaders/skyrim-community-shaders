@@ -2,7 +2,7 @@
 
 #include <d3d11.h>
 
-namespace Effect11Util
+namespace Effects11Util
 {
 	static constexpr UINT kMaxSRVs = D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT;
 	static constexpr UINT kMaxSamplers = D3D11_COMMONSHADER_SAMPLER_SLOT_COUNT;

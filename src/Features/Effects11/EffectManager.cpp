@@ -1,7 +1,7 @@
 #include "EffectManager.h"
 
 #include "D3D11StateBackup.h"
-#include "Features/Effect11.h"
+#include "Features/Effects11.h"
 #include "State.h"
 
 #include "SettingManager.h"
@@ -15,7 +15,7 @@
 
 namespace
 {
-	using namespace Effect11Util;
+	using namespace Effects11Util;
 }
 
 EffectManager& EffectManager::GetSingleton()
@@ -91,7 +91,7 @@ void EffectManager::Initialize()
 
 void EffectManager::Apply()
 {
-	globals::features::effect11.LoadRaindropTexture();
+	globals::features::effects11.LoadRaindropTexture();
 
 	enbBloom.Apply();
 	enbLens.Apply();
@@ -365,7 +365,7 @@ void EffectManager::ExecuteEffects(RE::BSGraphics::RenderTargetData& a_input, [[
 	context->IASetInputLayout(inputLayout.get());
 	context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
 
-	globals::profiler->BeginPass("Effect11::ColorCorrection");
+	globals::profiler->BeginPass("Effects11::ColorCorrection");
 	ApplyColorCorrection(textureOriginal.UAV);
 	globals::profiler->EndPass();
 
@@ -383,7 +383,7 @@ void EffectManager::ExecuteEffects(RE::BSGraphics::RenderTargetData& a_input, [[
 
 	auto* textureSDRTemp = textureManager.GetCommonTexture("TextureSDRTemp");
 	if (textureSDRTemp && a_output.RTV) {
-		globals::profiler->BeginPass("Effect11::CopyToOutput");
+		globals::profiler->BeginPass("Effects11::CopyToOutput");
 		CopyTexture(textureSDRTemp->srv.get(), a_output.RTV);
 		globals::profiler->EndPass();
 	}
@@ -396,7 +396,7 @@ std::string EffectManager::LoadShaderFile(const char* path)
 {
 	std::ifstream ifs(path, std::ios::binary);
 	if (!ifs.is_open()) {
-		logger::error("[EFFECT11] Failed to open shader file: {}", path);
+		logger::error("[EFFECTS11] Failed to open shader file: {}", path);
 		return {};
 	}
 	return { std::istreambuf_iterator<char>(ifs), std::istreambuf_iterator<char>() };
@@ -443,7 +443,7 @@ void EffectManager::CreateQuadGeometry()
 		{ "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 }
 	};
 
-	auto vertexShaderSource = LoadShaderFile("Data\\Shaders\\Effect11\\QuadVS.hlsl");
+	auto vertexShaderSource = LoadShaderFile("Data\\Shaders\\Effects11\\QuadVS.hlsl");
 	if (vertexShaderSource.empty())
 		return;
 
@@ -454,7 +454,7 @@ void EffectManager::CreateQuadGeometry()
 
 	if (FAILED(hr)) {
 		if (errorBlob) {
-			logger::error("[EFFECT11] Failed to compile input layout vertex shader: {}", static_cast<char*>(errorBlob->GetBufferPointer()));
+			logger::error("[EFFECTS11] Failed to compile input layout vertex shader: {}", static_cast<char*>(errorBlob->GetBufferPointer()));
 		}
 		return;
 	}
@@ -464,7 +464,7 @@ void EffectManager::CreateQuadGeometry()
 		vertexShaderBlob->GetBufferSize(),
 		inputLayout.put());
 	if (FAILED(hr)) {
-		logger::error("[EFFECT11] Failed to create shared input layout for ENB effects");
+		logger::error("[EFFECTS11] Failed to create shared input layout for ENB effects");
 	}
 }
 
@@ -497,7 +497,7 @@ void EffectManager::CreateRenderStates()
 
 void EffectManager::CreateCopyShaders()
 {
-	auto vertexShaderSource = LoadShaderFile("Data\\Shaders\\Effect11\\QuadVS.hlsl");
+	auto vertexShaderSource = LoadShaderFile("Data\\Shaders\\Effects11\\QuadVS.hlsl");
 	if (vertexShaderSource.empty())
 		return;
 
@@ -507,18 +507,18 @@ void EffectManager::CreateCopyShaders()
 
 	if (FAILED(hr)) {
 		if (errorBlob) {
-			logger::error("[EFFECT11] Failed to compile copy vertex shader: {}", static_cast<char*>(errorBlob->GetBufferPointer()));
+			logger::error("[EFFECTS11] Failed to compile copy vertex shader: {}", static_cast<char*>(errorBlob->GetBufferPointer()));
 		}
 		return;
 	}
 
 	hr = globals::d3d::device->CreateVertexShader(vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), nullptr, copyVertexShader.put());
 	if (FAILED(hr)) {
-		logger::error("[EFFECT11] Failed to create copy vertex shader");
+		logger::error("[EFFECTS11] Failed to create copy vertex shader");
 		return;
 	}
 
-	auto pixelShaderSource = LoadShaderFile("Data\\Shaders\\Effect11\\CopyPS.hlsl");
+	auto pixelShaderSource = LoadShaderFile("Data\\Shaders\\Effects11\\CopyPS.hlsl");
 	if (pixelShaderSource.empty())
 		return;
 
@@ -528,14 +528,14 @@ void EffectManager::CreateCopyShaders()
 
 	if (FAILED(hr)) {
 		if (errorBlob) {
-			logger::error("[EFFECT11] Failed to compile copy pixel shader: {}", static_cast<char*>(errorBlob->GetBufferPointer()));
+			logger::error("[EFFECTS11] Failed to compile copy pixel shader: {}", static_cast<char*>(errorBlob->GetBufferPointer()));
 		}
 		return;
 	}
 
 	hr = globals::d3d::device->CreatePixelShader(psBlob->GetBufferPointer(), psBlob->GetBufferSize(), nullptr, copyPixelShader.put());
 	if (FAILED(hr)) {
-		logger::error("[EFFECT11] Failed to create copy pixel shader");
+		logger::error("[EFFECTS11] Failed to create copy pixel shader");
 		return;
 	}
 
@@ -546,12 +546,12 @@ void EffectManager::CreateCopyShaders()
 	cbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
 	globals::d3d::device->CreateBuffer(&cbDesc, nullptr, ditherConstantBuffer.put());
 
-	logger::info("[EFFECT11] Created texture copy shaders successfully");
+	logger::info("[EFFECTS11] Created texture copy shaders successfully");
 }
 
 void EffectManager::CreateColorCorrectionShader()
 {
-	auto computeShaderSource = LoadShaderFile("Data\\Shaders\\Effect11\\ColorCorrectionCS.hlsl");
+	auto computeShaderSource = LoadShaderFile("Data\\Shaders\\Effects11\\ColorCorrectionCS.hlsl");
 	if (computeShaderSource.empty())
 		return;
 
@@ -561,14 +561,14 @@ void EffectManager::CreateColorCorrectionShader()
 
 	if (FAILED(hr)) {
 		if (errorBlob) {
-			logger::error("[EFFECT11] Failed to compile color correction compute shader: {}", static_cast<char*>(errorBlob->GetBufferPointer()));
+			logger::error("[EFFECTS11] Failed to compile color correction compute shader: {}", static_cast<char*>(errorBlob->GetBufferPointer()));
 		}
 		return;
 	}
 
 	hr = globals::d3d::device->CreateComputeShader(csBlob->GetBufferPointer(), csBlob->GetBufferSize(), nullptr, colorCorrectionComputeShader.put());
 	if (FAILED(hr)) {
-		logger::error("[EFFECT11] Failed to create color correction compute shader");
+		logger::error("[EFFECTS11] Failed to create color correction compute shader");
 		return;
 	}
 
@@ -581,11 +581,11 @@ void EffectManager::CreateColorCorrectionShader()
 
 	hr = globals::d3d::device->CreateBuffer(&cbDesc, nullptr, colorCorrectionConstantBuffer.put());
 	if (FAILED(hr)) {
-		logger::error("[EFFECT11] Failed to create color correction constant buffer");
+		logger::error("[EFFECTS11] Failed to create color correction constant buffer");
 		return;
 	}
 
-	logger::info("[EFFECT11] Created color correction compute shader successfully");
+	logger::info("[EFFECTS11] Created color correction compute shader successfully");
 }
 
 void EffectManager::UpdateCommonData()
@@ -808,7 +808,7 @@ void EffectManager::CopyTexture(ID3D11ShaderResourceView* a_source, ID3D11Render
 	if (!a_source || !a_dest || !copyPixelShader || !copyVertexShader) {
 		static bool logged = false;
 		if (!logged) {
-			logger::warn("[EFFECT11] Invalid parameters or shaders not initialized for texture copy");
+			logger::warn("[EFFECTS11] Invalid parameters or shaders not initialized for texture copy");
 			logged = true;
 		}
 		return;
@@ -821,7 +821,7 @@ void EffectManager::CopyTexture(ID3D11ShaderResourceView* a_source, ID3D11Render
 	a_dest->GetResource(resource.put());
 	winrt::com_ptr<ID3D11Texture2D> texture;
 	if (!resource || !resource.try_as(texture) || !texture) {
-		logger::error("[EFFECT11] Failed to get Texture2D from destination render target");
+		logger::error("[EFFECTS11] Failed to get Texture2D from destination render target");
 		return;
 	}
 	D3D11_TEXTURE2D_DESC texDesc;
@@ -879,7 +879,7 @@ void EffectManager::CopyTexture(ID3D11ShaderResourceView* a_source, ID3D11Render
 void EffectManager::ApplyColorCorrection(ID3D11UnorderedAccessView* textureUAV)
 {
 	if (!textureUAV || !colorCorrectionComputeShader || !colorCorrectionConstantBuffer) {
-		logger::warn("[EFFECT11] Invalid parameters or shaders not initialized for color correction");
+		logger::warn("[EFFECTS11] Invalid parameters or shaders not initialized for color correction");
 		return;
 	}
 
@@ -894,7 +894,7 @@ void EffectManager::ApplyColorCorrection(ID3D11UnorderedAccessView* textureUAV)
 	D3D11_MAPPED_SUBRESOURCE mapped;
 	HRESULT hr = context->Map(colorCorrectionConstantBuffer.get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
 	if (FAILED(hr)) {
-		logger::warn("[EFFECT11] Failed to map color correction constant buffer");
+		logger::warn("[EFFECTS11] Failed to map color correction constant buffer");
 		return;
 	}
 	{
@@ -923,7 +923,7 @@ void EffectManager::ApplyColorCorrection(ID3D11UnorderedAccessView* textureUAV)
 	textureUAV->GetResource(resource.put());
 	winrt::com_ptr<ID3D11Texture2D> texture;
 	if (!resource || !resource.try_as(texture) || !texture) {
-		logger::error("[EFFECT11] Failed to get Texture2D from UAV in ApplyColorCorrection");
+		logger::error("[EFFECTS11] Failed to get Texture2D from UAV in ApplyColorCorrection");
 	} else {
 		D3D11_TEXTURE2D_DESC texDesc;
 		texture->GetDesc(&texDesc);

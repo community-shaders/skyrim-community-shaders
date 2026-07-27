@@ -32,7 +32,7 @@ PS_OUTPUT main(PS_INPUT input)
 	float2 screenPosition = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(input.TexCoord);
 	float volumetricLightingPower = VLSourceTex.Sample(VLSourceSampler, screenPosition).x;
 	float3 volumetricLightingColor = VolumetricLightingColor.xyz;
-#	if defined(EFFECT11)
+#	if defined(EFFECTS11)
 	if (SharedData::enbSettings.Enable) {
 		volumetricLightingColor = lerp(volumetricLightingColor, dot(volumetricLightingColor, 1.0 / 3.0), SharedData::enbSettings.VolumetricRaysDesaturation);
 		volumetricLightingColor *= SharedData::enbSettings.VolumetricRaysColorFilter;

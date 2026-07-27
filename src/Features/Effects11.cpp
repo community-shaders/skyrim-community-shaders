@@ -1,14 +1,14 @@
-#include "Effect11.h"
+#include "Effects11.h"
 
 #include <DirectXTex.h>
 
-#include "Effect11/D3D11StateBackup.h"
-#include "Effect11/ENBHelper.h"
-#include "Effect11/EffectManager.h"
-#include "Effect11/MenuManager.h"
-#include "Effect11/PresetManager.h"
-#include "Effect11/SettingManager.h"
-#include "Effect11/WeatherManager.h"
+#include "Effects11/D3D11StateBackup.h"
+#include "Effects11/ENBHelper.h"
+#include "Effects11/EffectManager.h"
+#include "Effects11/MenuManager.h"
+#include "Effects11/PresetManager.h"
+#include "Effects11/SettingManager.h"
+#include "Effects11/WeatherManager.h"
 
 #include "CloudShadows.h"
 #include "Deferred.h"
@@ -19,7 +19,7 @@
 #include "Utils/D3D.h"
 #include "Utils/Game.h"
 
-Effect11::PerFrame Effect11::GetCommonBufferData()
+Effects11::PerFrame Effects11::GetCommonBufferData()
 {
 	if (!loaded)
 		return {};
@@ -100,12 +100,12 @@ Effect11::PerFrame Effect11::GetCommonBufferData()
 	return data;
 }
 
-void Effect11::DrawSettings()
+void Effects11::DrawSettings()
 {
 	MenuManager::GetSingleton().RenderImGui();
 }
 
-void Effect11::LoadRaindropTexture()
+void Effects11::LoadRaindropTexture()
 {
 	raindropTexture = nullptr;
 	raindropSRV = nullptr;
@@ -117,7 +117,7 @@ void Effect11::LoadRaindropTexture()
 
 	if (!std::filesystem::exists(raindropPath)) {
 		raindropStatus = "Texture not found: enbraindrops.png";
-		logger::debug("[Effect11] Raindrop texture not found: {}", raindropPath.string());
+		logger::debug("[Effects11] Raindrop texture not found: {}", raindropPath.string());
 		return;
 	}
 
@@ -127,7 +127,7 @@ void Effect11::LoadRaindropTexture()
 	HRESULT hr = DirectX::LoadFromWICFile(widePath.c_str(), DirectX::WIC_FLAGS_IGNORE_SRGB, nullptr, image);
 	if (FAILED(hr)) {
 		raindropStatus = std::format("Failed to load texture (invalid image, HRESULT 0x{:08X})", static_cast<uint32_t>(hr));
-		logger::error("[Effect11] Failed to load raindrop texture: {}", raindropPath.string());
+		logger::error("[Effects11] Failed to load raindrop texture: {}", raindropPath.string());
 		return;
 	}
 
@@ -136,7 +136,7 @@ void Effect11::LoadRaindropTexture()
 		DirectX::TEX_FILTER_DEFAULT, 0, mipImage);
 	if (FAILED(hr)) {
 		raindropStatus = std::format("Failed to generate mipmaps (HRESULT 0x{:08X})", static_cast<uint32_t>(hr));
-		logger::error("[Effect11] Failed to generate mipmaps for raindrop texture");
+		logger::error("[Effects11] Failed to generate mipmaps for raindrop texture");
 		return;
 	}
 
@@ -145,7 +145,7 @@ void Effect11::LoadRaindropTexture()
 		DXGI_FORMAT_BC7_UNORM, DirectX::TEX_COMPRESS_BC7_QUICK, 1.0f, bc7Image);
 	if (FAILED(hr)) {
 		raindropStatus = std::format("Failed to compress texture (HRESULT 0x{:08X})", static_cast<uint32_t>(hr));
-		logger::error("[Effect11] Failed to compress raindrop texture to BC7");
+		logger::error("[Effects11] Failed to compress raindrop texture to BC7");
 		return;
 	}
 
@@ -155,11 +155,11 @@ void Effect11::LoadRaindropTexture()
 		reinterpret_cast<ID3D11Resource**>(raindropTexture.put()));
 	if (FAILED(hr)) {
 		raindropStatus = std::format("Failed to create GPU texture (HRESULT 0x{:08X})", static_cast<uint32_t>(hr));
-		logger::error("[Effect11] Failed to create raindrop GPU texture");
+		logger::error("[Effects11] Failed to create raindrop GPU texture");
 		return;
 	}
 
-	Util::SetResourceName(raindropTexture.get(), "Effect11::RaindropTexture");
+	Util::SetResourceName(raindropTexture.get(), "Effects11::RaindropTexture");
 
 	D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc{};
 	srvDesc.Format = DXGI_FORMAT_BC7_UNORM;
@@ -170,27 +170,27 @@ void Effect11::LoadRaindropTexture()
 	hr = device->CreateShaderResourceView(raindropTexture.get(), &srvDesc, raindropSRV.put());
 	if (FAILED(hr)) {
 		raindropStatus = std::format("Failed to create shader resource view (HRESULT 0x{:08X})", static_cast<uint32_t>(hr));
-		logger::error("[Effect11] Failed to create raindrop SRV");
+		logger::error("[Effects11] Failed to create raindrop SRV");
 		raindropTexture = nullptr;
 		return;
 	}
 
-	Util::SetResourceName(raindropSRV.get(), "Effect11::RaindropTexture SRV");
+	Util::SetResourceName(raindropSRV.get(), "Effects11::RaindropTexture SRV");
 
-	logger::info("[Effect11] Loaded raindrop texture: {} ({}x{}, BC7, {} mips)",
+	logger::info("[Effects11] Loaded raindrop texture: {} ({}x{}, BC7, {} mips)",
 		raindropPath.string(),
 		bc7Image.GetMetadata().width,
 		bc7Image.GetMetadata().height,
 		bc7Image.GetMetadata().mipLevels);
 }
 
-void Effect11::SetupResources()
+void Effects11::SetupResources()
 {
 	EffectManager::GetSingleton().Initialize();
 	LoadRaindropTexture();
 }
 
-void Effect11::ClearShaderCache()
+void Effects11::ClearShaderCache()
 {
 	if (raymarchVolumetricRaysPS) {
 		raymarchVolumetricRaysPS->Release();
@@ -212,7 +212,7 @@ void Effect11::ClearShaderCache()
 	EffectManager::GetSingleton().ReloadShaders();
 }
 
-void Effect11::Prepass()
+void Effects11::Prepass()
 {
 	if (!enableEffect) {
 		return;
@@ -277,7 +277,7 @@ RE::NiColor F3ToNi(float3 color)
 	return { color.x, color.y, color.z };
 }
 
-void Effect11::OverrideWeather(RE::Sky* a_sky)
+void Effects11::OverrideWeather(RE::Sky* a_sky)
 {
 	if (!a_sky) {
 		return;
@@ -465,7 +465,7 @@ void Effect11::OverrideWeather(RE::Sky* a_sky)
 	}
 }
 
-void Effect11::CheckCommonData()
+void Effects11::CheckCommonData()
 {
 	static Util::FrameChecker checker;
 	if (checker.IsNewFrame()) {
@@ -490,7 +490,7 @@ void Effect11::CheckCommonData()
 	}
 }
 
-void Effect11::OverridePointLightColor(float3& a_color)
+void Effects11::OverridePointLightColor(float3& a_color)
 {
 	auto& settingManager = SettingManager::GetSingleton();
 
@@ -499,7 +499,7 @@ void Effect11::OverridePointLightColor(float3& a_color)
 	a_color = Intensity(a_color, settingManager.GetInterpolatedTimeOfDayValue("PointLightingIntensity", "ENVIRONMENT"));
 }
 
-void Effect11::OverrideAmbientLighting(DirectionalAmbientColors& DirectionalAmbientColors)
+void Effects11::OverrideAmbientLighting(DirectionalAmbientColors& DirectionalAmbientColors)
 {
 	auto& settingManager = SettingManager::GetSingleton();
 
@@ -520,14 +520,14 @@ void Effect11::OverrideAmbientLighting(DirectionalAmbientColors& DirectionalAmbi
 	}
 }
 
-void Effect11::OnSkyUpdateColors(RE::Sky* a_sky)
+void Effects11::OnSkyUpdateColors(RE::Sky* a_sky)
 {
 	CheckCommonData();
 	if (enableEffect)
 		OverrideWeather(a_sky);
 }
 
-bool Effect11::HandleTonemapRender(RE::RENDER_TARGET a_input, RE::RENDER_TARGET a_output)
+bool Effects11::HandleTonemapRender(RE::RENDER_TARGET a_input, RE::RENDER_TARGET a_output)
 {
 	CheckCommonData();
 
@@ -542,7 +542,7 @@ bool Effect11::HandleTonemapRender(RE::RENDER_TARGET a_input, RE::RENDER_TARGET 
 	return false;
 }
 
-void Effect11::ModifySky(RE::BSRenderPass* Pass)
+void Effects11::ModifySky(RE::BSRenderPass* Pass)
 {
 	if (!Pass || !Pass->shaderProperty) {
 		return;
@@ -560,7 +560,7 @@ void Effect11::ModifySky(RE::BSRenderPass* Pass)
 }
 
 
-void Effect11::ModifyParticle(RE::BSRenderPass* Pass)
+void Effects11::ModifyParticle(RE::BSRenderPass* Pass)
 {
 	if (!enableEffect || !raindropSRV)
 		return;
@@ -581,7 +581,7 @@ void Effect11::ModifyParticle(RE::BSRenderPass* Pass)
 }
 
 
-void Effect11::ParticleShaderHacks()
+void Effects11::ParticleShaderHacks()
 {
 	if (!enableEffect || !raindropSRV)
 		return;
@@ -611,7 +611,7 @@ void Effect11::ParticleShaderHacks()
 	context->OMSetBlendState(alphaBlendState.get(), blendFactor, 0xFFFFFFFF);
 }
 
-void Effect11::DrawVolumetricRays()
+void Effects11::DrawVolumetricRays()
 {
 	if (!enableEffect)
 		return;
@@ -640,7 +640,7 @@ void Effect11::DrawVolumetricRays()
 		if (globals::features::terrainShadows.loaded)
 			defines.push_back({ "TERRAIN_SHADOWS", nullptr });
 
-		raymarchVolumetricRaysPS = static_cast<ID3D11PixelShader*>(Util::CompileShader(L"Data\\Shaders\\Effect11\\RaymarchVolumetricRaysPS.hlsl", defines, "ps_5_0"));
+		raymarchVolumetricRaysPS = static_cast<ID3D11PixelShader*>(Util::CompileShader(L"Data\\Shaders\\Effects11\\RaymarchVolumetricRaysPS.hlsl", defines, "ps_5_0"));
 		if (!raymarchVolumetricRaysPS)
 			return;
 	}
@@ -650,7 +650,7 @@ void Effect11::DrawVolumetricRays()
 		if (globals::features::ibl.loaded)
 			defines.push_back({ "IBL", nullptr });
 
-		applyVolumetricRaysPS = static_cast<ID3D11PixelShader*>(Util::CompileShader(L"Data\\Shaders\\Effect11\\ApplyVolumetricRaysPS.hlsl", defines, "ps_5_0"));
+		applyVolumetricRaysPS = static_cast<ID3D11PixelShader*>(Util::CompileShader(L"Data\\Shaders\\Effects11\\ApplyVolumetricRaysPS.hlsl", defines, "ps_5_0"));
 		if (!applyVolumetricRaysPS)
 			return;
 	}
@@ -721,12 +721,12 @@ void Effect11::DrawVolumetricRays()
 		uavDesc.Format = DXGI_FORMAT_R16_FLOAT;
 		uavDesc.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D;
 
-		vlTexA = std::make_unique<Texture2D>(desc, "Effect11::VLTexA");
+		vlTexA = std::make_unique<Texture2D>(desc, "Effects11::VLTexA");
 		vlTexA->CreateSRV(srvDesc);
 		vlTexA->CreateRTV(rtvDesc);
 		vlTexA->CreateUAV(uavDesc);
 
-		vlTexB = std::make_unique<Texture2D>(desc, "Effect11::VLTexB");
+		vlTexB = std::make_unique<Texture2D>(desc, "Effects11::VLTexB");
 		vlTexB->CreateSRV(srvDesc);
 		vlTexB->CreateUAV(uavDesc);
 
@@ -740,15 +740,15 @@ void Effect11::DrawVolumetricRays()
 		D3D11_RENDER_TARGET_VIEW_DESC depthRtvDesc = rtvDesc;
 		depthRtvDesc.Format = DXGI_FORMAT_R32_FLOAT;
 
-		vlDepthHalf = std::make_unique<Texture2D>(depthDesc, "Effect11::VLDepthHalf");
+		vlDepthHalf = std::make_unique<Texture2D>(depthDesc, "Effects11::VLDepthHalf");
 		vlDepthHalf->CreateSRV(depthSrvDesc);
 		vlDepthHalf->CreateRTV(depthRtvDesc);
 	}
 
 	if (!vlBlurCB)
-		vlBlurCB = std::make_unique<ConstantBuffer>(ConstantBufferDesc(16), "Effect11::VLBlurCB");
+		vlBlurCB = std::make_unique<ConstantBuffer>(ConstantBufferDesc(16), "Effects11::VLBlurCB");
 
-	Effect11Util::D3D11ScopedPostFxBackup stateBackup;
+	Effects11Util::D3D11ScopedPostFxBackup stateBackup;
 	stateBackup.Save(context);
 
 	ID3D11SamplerState* sampler = Deferred::GetSingleton()->linearSampler;
@@ -759,7 +759,7 @@ void Effect11::DrawVolumetricRays()
 
 	// Pass 1: Raymarch shadow + depth → half-res textures (MRT)
 	{
-		profiler->BeginPass("Effect11::VolumetricRays Pass 0");
+		profiler->BeginPass("Effects11::VolumetricRays Pass 0");
 
 		ID3D11RenderTargetView* rtvs[2] = { vlTexA->rtv.get(), vlDepthHalf->rtv.get() };
 		context->OMSetRenderTargets(2, rtvs, nullptr);
@@ -802,7 +802,7 @@ void Effect11::DrawVolumetricRays()
 
 	// Pass 2: Blur horizontal (texA → texB)
 	{
-		profiler->BeginPass("Effect11::VolumetricRays Pass 1");
+		profiler->BeginPass("Effects11::VolumetricRays Pass 1");
 		context->CSSetShader(blurHCS, nullptr, 0);
 
 		ID3D11ShaderResourceView* csSRVs[2] = { vlTexA->srv.get(), vlDepthHalf->srv.get() };
@@ -826,7 +826,7 @@ void Effect11::DrawVolumetricRays()
 
 	// Pass 3: Blur vertical (texB → texA)
 	{
-		profiler->BeginPass("Effect11::VolumetricRays Pass 2");
+		profiler->BeginPass("Effects11::VolumetricRays Pass 2");
 		context->CSSetShader(blurVCS, nullptr, 0);
 
 		ID3D11ShaderResourceView* csSRVs[2] = { vlTexB->srv.get(), vlDepthHalf->srv.get() };
@@ -848,7 +848,7 @@ void Effect11::DrawVolumetricRays()
 
 	// Pass 4: Apply blurred shadow with color → main RT (additive)
 	{
-		profiler->BeginPass("Effect11::VolumetricRays Pass 3");
+		profiler->BeginPass("Effects11::VolumetricRays Pass 3");
 		ID3D11RenderTargetView* rtv = main.RTV;
 		context->OMSetRenderTargets(1, &rtv, nullptr);
 		context->RSSetViewports(1, &viewport);

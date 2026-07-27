@@ -8,7 +8,7 @@
 #include "FeatureIssues.h"
 #include "Features/CSEditor.h"
 #include "Features/CloudShadows.h"
-#include "Features/Effect11.h"
+#include "Features/Effects11.h"
 #include "Features/ExponentialHeightFog.h"
 #include "Features/SkySync.h"
 #include "Features/HDRDisplay.h"
@@ -86,8 +86,8 @@ void State::Draw()
 		}
 
 		{
-			ZoneScopedN("Effect11::ParticleShaderHacks");
-			globals::features::effect11.ParticleShaderHacks();
+			ZoneScopedN("Effects11::ParticleShaderHacks");
+			globals::features::effects11.ParticleShaderHacks();
 		}
 
 		if (terrainHelper.loaded) {
@@ -187,8 +187,8 @@ void State::Debug()
 
 bool State::HandlePostProcessing(RE::RENDER_TARGET a_input, RE::RENDER_TARGET a_output)
 {
-	auto& effect11 = globals::features::effect11;
-	if (!effect11.loaded || !effect11.HandleTonemapRender(a_input, a_output))
+	auto& effects11 = globals::features::effects11;
+	if (!effects11.loaded || !effects11.HandleTonemapRender(a_input, a_output))
 		return false;
 
 	auto renderer = globals::game::renderer;
@@ -1000,7 +1000,8 @@ void State::UpdateSharedData([[maybe_unused]] bool a_inWorld, [[maybe_unused]] b
 		data.DirLightColor = { lightRuntimeData.diffuse.red, lightRuntimeData.diffuse.green, lightRuntimeData.diffuse.blue, 1.0f };
 		data.DirLightColor *= lightRuntimeData.fade;
 
-		data.DirLightColor *= globals::game::imageSpaceManager->GetRuntimeData().data.baseData.hdr.sunlightScale;
+		if (auto imageSpaceManager = globals::game::imageSpaceManager)
+			data.DirLightColor *= imageSpaceManager->GetRuntimeData().data.baseData.hdr.sunlightScale;
 
 		const auto& direction = dirLight->GetWorldDirection();
 		data.DirLightDirection = { -direction.x, -direction.y, -direction.z, 0.0f };

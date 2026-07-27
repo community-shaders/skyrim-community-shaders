@@ -29,7 +29,7 @@ struct VS_OUTPUT
 #if defined(ENVCUBE)
 	float4 PrecipitationOcclusionTexCoord: TEXCOORD1;
 #endif
-#if defined(ENVCUBE) && defined(RAIN) && defined(EFFECT11)
+#if defined(ENVCUBE) && defined(RAIN) && defined(EFFECTS11)
 	float2 RaindropData: TEXCOORD2;
 #endif
 };
@@ -91,7 +91,7 @@ VS_OUTPUT main(VS_INPUT input)
 	float4 viewPosition = mul(WorldViewProj, msPosition);
 #		if defined(RAIN)
 	float3 rainVelocity = Velocity.xyz;
-#		if defined(EFFECT11)
+#		if defined(EFFECTS11)
 	if (SharedData::enbSettings.EnableRain) {
 		float velLen = length(rainVelocity);
 		if (velLen > 0) {
@@ -191,7 +191,7 @@ VS_OUTPUT main(VS_INPUT input)
 	vsout.Color.xyz = color.xyz;
 #	endif
 
-#		if defined(ENVCUBE) && defined(RAIN) && defined(EFFECT11)
+#		if defined(ENVCUBE) && defined(RAIN) && defined(EFFECTS11)
 	vsout.RaindropData.xy = input.TexCoord1.xy * 0.5 + 0.5;
 #		endif
 
@@ -234,7 +234,7 @@ Texture2D<float4> TexGrayscaleTexture : register(t1);
 Texture2D<float4> TexPrecipitationOcclusionTexture : register(t2);
 Texture2D<float4> TexUnderwaterMask : register(t3);
 #	endif
-#	if defined(ENVCUBE) && defined(RAIN) && defined(EFFECT11)
+#	if defined(ENVCUBE) && defined(RAIN) && defined(EFFECTS11)
 Texture2D<float4> TexRaindropNormals : register(t80);
 #	endif
 
@@ -270,7 +270,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	}
 #	endif
 
-#	if defined(ENVCUBE) && defined(RAIN) && defined(DYNAMIC_CUBEMAPS) && defined(EFFECT11)
+#	if defined(ENVCUBE) && defined(RAIN) && defined(DYNAMIC_CUBEMAPS) && defined(EFFECTS11)
 if (SharedData::enbSettings.EnableRain) {
 	float4 raindropNormal = TexRaindropNormals.Sample(SampSourceTexture, input.RaindropData.xy);
     float alpha = saturate(raindropNormal.w * (1.0 - SharedData::enbSettings.RainMotionTransparency));

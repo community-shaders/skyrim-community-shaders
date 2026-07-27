@@ -10,7 +10,7 @@
 #include "State.h"
 #include "Util.h"
 
-#include "Features/Effect11.h"
+#include "Features/Effects11.h"
 #include "Features/HDRDisplay.h"
 #include "Features/InteriorSun.h"
 #include "Features/ScreenshotFeature.h"
@@ -184,8 +184,8 @@ namespace SkyExtensions
 		static void thunk(RE::BSShader* shader, RE::BSRenderPass* pass, uint32_t renderFlags)
 		{
 			globals::state->UpdateSkyShaderPermutation(pass);
-			if (globals::features::effect11.loaded)
-				globals::features::effect11.ModifySky(pass);
+			if (globals::features::effects11.loaded)
+				globals::features::effects11.ModifySky(pass);
 			func(shader, pass, renderFlags);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
@@ -262,7 +262,7 @@ namespace WeatherExtensions
 		static void thunk(RE::Sky* sky, float a_delta)
 		{
 			func(sky, a_delta);
-			globals::features::effect11.OnSkyUpdateColors(sky);
+			globals::features::effects11.OnSkyUpdateColors(sky);
 			globals::features::skySync.OnSkyUpdateColors(sky);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
@@ -270,12 +270,12 @@ namespace WeatherExtensions
 
 	struct Sky_SetDirectionalAmbientColors
 	{
-		static void thunk(Effect11::DirectionalAmbientColors& DirectionalAmbientColors, RE::NiColor* AmbientSpecularTint, float AmbientSpecularFresnel)
+		static void thunk(Effects11::DirectionalAmbientColors& DirectionalAmbientColors, RE::NiColor* AmbientSpecularTint, float AmbientSpecularFresnel)
 		{
-			if (globals::features::effect11.loaded) {
-				globals::features::effect11.CheckCommonData();
-				if (globals::features::effect11.enableEffect)
-					globals::features::effect11.OverrideAmbientLighting(DirectionalAmbientColors);
+			if (globals::features::effects11.loaded) {
+				globals::features::effects11.CheckCommonData();
+				if (globals::features::effects11.enableEffect)
+					globals::features::effects11.OverrideAmbientLighting(DirectionalAmbientColors);
 			}
 			func(DirectionalAmbientColors, AmbientSpecularTint, AmbientSpecularFresnel);
 		}
@@ -304,8 +304,8 @@ namespace PostProcessingExtensions
 		static void thunk(RE::BSShader* This, RE::BSRenderPass* Pass, uint32_t RenderFlags)
 		{
 			func(This, Pass, RenderFlags);
-			if (globals::features::effect11.loaded)
-				globals::features::effect11.ModifyParticle(Pass);
+			if (globals::features::effects11.loaded)
+				globals::features::effects11.ModifyParticle(Pass);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};

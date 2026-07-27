@@ -34,7 +34,7 @@ struct ExtendedTranslucency;
 struct Upscaling;
 class Profiler;
 struct CSEditor;
-struct Effect11;
+struct Effects11;
 struct ExponentialHeightFog;
 struct HDRDisplay;
 struct ScreenshotFeature;
@@ -122,7 +122,7 @@ namespace globals
 		extern ExtendedTranslucency extendedTranslucency;
 		extern Upscaling upscaling;
 		extern HDRDisplay hdrDisplay;
-		extern Effect11 effect11;
+		extern Effects11 effects11;
 		extern RenderDoc renderDoc;
 		extern RemoteControl remoteControl;
 		extern ScreenshotFeature screenshotFeature;

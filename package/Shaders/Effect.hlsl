@@ -500,7 +500,7 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float2 screenPo
 	float3 ambientColor;
 	ShadowSampling::ExtractLighting(color, dirColor, ambientColor);
 
-#		if defined(EFFECT11)
+#		if defined(EFFECTS11)
 	if (SharedData::enbSettings.Enable) {
 		dirColor = ShadowSampling::GetDirectionalLighting();
 		ambientColor = ShadowSampling::GetAmbientLighting();
@@ -548,7 +548,7 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float2 screenPo
 	{
 		float4 lightDistanceSquared = (PLightPositionX[0] - msPosition.xxxx) * (PLightPositionX[0] - msPosition.xxxx) + (PLightPositionY[0] - msPosition.yyyy) * (PLightPositionY[0] - msPosition.yyyy) + (PLightPositionZ[0] - msPosition.zzzz) * (PLightPositionZ[0] - msPosition.zzzz);
 		float4 lightFadeMul = 1.0.xxxx - saturate(PLightingRadiusInverseSquared * lightDistanceSquared);
-#		if defined(EFFECT11)
+#		if defined(EFFECTS11)
 		float pointScale = SharedData::enbSettings.Enable ? SharedData::enbSettings.ParticlePointLightingInfluence : 1.0;
 #		else
 		float pointScale = 1.0;
@@ -663,7 +663,7 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 propertyColor = Color::Effect(PropertyColor.xyz);
 	float shadowVariance = 1.0;
 
-#	if defined(EFFECT11)
+#	if defined(EFFECTS11)
 	bool isFire = false;
 #		if defined(ADDBLEND) && defined(SOFT)
         if (Permutation::PixelShaderDescriptor & Permutation::EffectFlags::GrayscaleToColor && Permutation::PixelShaderDescriptor & Permutation::EffectFlags::GrayscaleToAlpha)
@@ -845,7 +845,7 @@ PS_OUTPUT main(PS_INPUT input)
 #            else
     float3 blendedColor = lightColor * (1 - fogFactor);
 #            endif
-#	if defined(EFFECT11)
+#	if defined(EFFECTS11)
 	if (isFire)
 		blendedColor = pow(abs(blendedColor), SharedData::enbSettings.FireCurve) * SharedData::enbSettings.FireIntensity;
 	else

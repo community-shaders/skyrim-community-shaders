@@ -1,7 +1,7 @@
 #include "CloudShadows.h"
 
-#include "Effect11.h"
-#include "Effect11/SettingManager.h"
+#include "Effects11.h"
+#include "Effects11/SettingManager.h"
 #include "../I18n/I18n.h"
 #include "State.h"
 #include "Utils/D3D.h"
@@ -14,8 +14,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 
 void CloudShadows::DrawSettings()
 {
-	if (globals::features::effect11.loaded) {
-		auto& enb = globals::features::effect11;
+	if (globals::features::effects11.loaded) {
+		auto& enb = globals::features::effects11;
 		if (enb.enableEffect) {
 			ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "Settings are currently managed by ENB.");
 			return;
@@ -53,8 +53,8 @@ CloudShadows::Settings CloudShadows::GetCommonBufferData()
 
 	auto data = settings;
 
-	if (globals::features::effect11.loaded) {
-		auto& enb = globals::features::effect11;
+	if (globals::features::effects11.loaded) {
+		auto& enb = globals::features::effects11;
 		if (enb.enableEffect) {
 			auto& settingManager = SettingManager::GetSingleton();
 			if (settingManager.GetValue<bool>("EnableCloudShadows", "EFFECT")) {

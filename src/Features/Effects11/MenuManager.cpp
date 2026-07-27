@@ -3,8 +3,8 @@
 #include "EffectManager.h"
 #include "SettingManager.h"
 #include "TextureManager.h"
-#include "Features/Effect11.h"
-#include "Features/Effect11/ShaderPatches.h"
+#include "Features/Effects11.h"
+#include "Features/Effects11/ShaderPatches.h"
 #include "Globals.h"
 
 static const char* const timeOfDayNames[] = { "Dawn", "Sunrise", "Day", "Sunset", "Dusk", "Night", "InteriorDay", "InteriorNight" };
@@ -17,7 +17,7 @@ MenuManager& MenuManager::GetSingleton()
 
 void MenuManager::RenderImGui()
 {
-	if (!ImGui::BeginTable("Effect11", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_BordersOuter | ImGuiTableFlags_BordersV, ImVec2(0, 0))) {
+	if (!ImGui::BeginTable("Effects11", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_BordersOuter | ImGuiTableFlags_BordersV, ImVec2(0, 0))) {
 		return;
 	}
 
@@ -283,10 +283,10 @@ void MenuManager::RenderAllSettings()
 					if (ImGui::TreeNodeEx(category.c_str(), flags)) {
 						bool categoryDisabled = false;
 						if (category == "RAIN") {
-							if (!globals::features::effect11.raindropStatus.empty()) {
+							if (!globals::features::effects11.raindropStatus.empty()) {
 								categoryDisabled = true;
 								ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.6f, 0.2f, 1.0f));
-								ImGui::TextWrapped("Rain disabled: %s", globals::features::effect11.raindropStatus.c_str());
+								ImGui::TextWrapped("Rain disabled: %s", globals::features::effects11.raindropStatus.c_str());
 								ImGui::PopStyleColor();
 							}
 						}

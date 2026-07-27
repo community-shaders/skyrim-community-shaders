@@ -5,20 +5,20 @@
 #include <memory>
 #include <winrt/base.h>
 
-struct Effect11 : Feature
+struct Effects11 : Feature
 {
 public:
-	virtual inline std::string GetName() override { return "Effect11"; }
-	virtual inline std::string GetShortName() override { return "Effect11"; }
-	virtual inline std::string GetDisplayName() override { return "Effect 11"; }
+	virtual inline std::string GetName() override { return "Effects11"; }
+	virtual inline std::string GetShortName() override { return "Effects11"; }
+	virtual inline std::string GetDisplayName() override { return "Effects 11"; }
 	virtual std::string_view GetCategory() const override { return "Post-Processing"; }
-	virtual inline std::string_view GetShaderDefineName() override { return "EFFECT11"; }
+	virtual inline std::string_view GetShaderDefineName() override { return "EFFECTS11"; }
 	virtual inline bool HasShaderDefine(RE::BSShader::Type) override { return true; }
 
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
 		return {
-			"Effect11 provides a framework for loading and executing ENBSeries-compatible FX effect files.\n"
+			"Effects11 provides a framework for loading and executing ENBSeries-compatible FX effect files.\n"
 			"This allows for advanced post-processing effects and visual enhancements using DirectX 11 Effect (.fx) files.",
 			{ "ENBSeries-compatible FX support",
 				"DirectX 11 Effect file loading",

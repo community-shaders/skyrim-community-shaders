@@ -5,7 +5,7 @@
 #include "Features/CSEditor.h"
 #include "Features/CloudShadows.h"
 #include "Features/DynamicCubemaps.h"
-#include "Features/Effect11.h"
+#include "Features/Effects11.h"
 #include "Features/ExponentialHeightFog.h"
 #include "Features/ExtendedMaterials.h"
 #include "Features/ExtendedTranslucency.h"
@@ -252,7 +252,7 @@ const std::vector<Feature*>& Feature::GetFeatureList()
 		&globals::features::csEditor,
 		&globals::features::screenshotFeature,
 		&globals::features::linearLighting,
-		&globals::features::effect11,
+		&globals::features::effects11,
 		&globals::features::unifiedWater,
 		&globals::features::horizonFix,
 		&globals::features::exponentialHeightFog,

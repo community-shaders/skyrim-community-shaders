@@ -13,7 +13,7 @@
 #include "CSEditor/EditorWindow.h"
 #include "Feature.h"
 #include "FeatureIssues.h"
-#include "Features/Effect11/EffectManager.h"
+#include "Features/Effects11/EffectManager.h"
 #include "Features/RenderDoc.h"
 #include "Globals.h"
 #include "I18n/I18n.h"
@@ -47,7 +47,7 @@ namespace
 		}
 	}
 
-	void DrawEffect11Errors(const Menu::ThemeSettings& themeSettings)
+	void DrawEffects11Errors(const Menu::ThemeSettings& themeSettings)
 	{
 		auto& effectManager = EffectManager::GetSingleton();
 		if (!effectManager.IsInitialized())
@@ -317,7 +317,7 @@ void OverlayRenderer::RenderShaderCompilationStatus(const std::function<const ch
 		}
 		if (failed && !hide)
 			DrawShaderCompilationFailures(failed, themeSettings);
-		DrawEffect11Errors(themeSettings);
+		DrawEffects11Errors(themeSettings);
 
 		if (renderDocAvailable)
 			ImGui::TextColored(themeSettings.StatusPalette.Warning, renderDocInformation.c_str());
@@ -334,7 +334,7 @@ void OverlayRenderer::RenderShaderCompilationStatus(const std::function<const ch
 		}
 
 		DrawShaderCompilationFailures(failed, themeSettings);
-		DrawEffect11Errors(themeSettings);
+		DrawEffects11Errors(themeSettings);
 
 		if (renderDocAvailable)
 			ImGui::TextColored(themeSettings.StatusPalette.Warning, renderDocInformation.c_str());

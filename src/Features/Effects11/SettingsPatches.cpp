@@ -5,7 +5,7 @@
 
 #include <nlohmann/json.hpp>
 
-#include "Features/Effect11/Effects/Effect.h"
+#include "Features/Effects11/Effects/Effect.h"
 
 namespace Util::SettingsPatches
 {
@@ -17,7 +17,7 @@ namespace Util::SettingsPatches
 		entries.clear();
 		loaded = true;
 
-		std::filesystem::path path = "Data\\Shaders\\Effect11\\SettingsPatches.json";
+		std::filesystem::path path = "Data\\Shaders\\Effects11\\SettingsPatches.json";
 		std::ifstream ifs(path);
 		if (!ifs.is_open())
 			return;
