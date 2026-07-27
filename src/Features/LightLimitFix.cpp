@@ -862,11 +862,11 @@ bool LightLimitFix::CheckParticleLights(RE::BSRenderPass* a_pass, uint32_t)
 		return true;
 
 	using Flag = RE::BSShaderProperty::EShaderPropertyFlag;
-	if (!a_pass->shaderProperty->flags.any(Flag::kSoftEffect, Flag::kZBufferTest))
+	if (!a_pass->shaderProperty->flags.all(Flag::kSoftEffect, Flag::kZBufferTest))
 		return true;
 
 	auto* alphaProperty = static_cast<RE::NiAlphaProperty*>(a_pass->geometry->GetGeometryRuntimeData().alphaProperty.get());
-	if (!alphaProperty || !alphaProperty->GetAlphaBlending() || alphaProperty->GetDestBlendMode() != RE::NiAlphaProperty::AlphaFunction::kOne)
+	if (!alphaProperty || alphaProperty->alphaFlags != 4109)
 		return true;
 
 	auto reference = GetParticleLightConfig(a_pass);
