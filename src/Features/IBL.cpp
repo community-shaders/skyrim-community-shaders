@@ -8,6 +8,7 @@
 
 #include "Effects11.h"
 #include "Effects11/SettingManager.h"
+#include "Globals.h"
 
 #include "../I18n/I18n.h"
 #include <DDSTextureLoader.h>
@@ -38,7 +39,7 @@ void IBL::DrawSettings()
 		if (enb.enableEffect) {
 			auto& settingManager = SettingManager::GetSingleton();
 			if (settingManager.GetValue<bool>("EnableImageBasedLighting", "EFFECT")) {
-				ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "Settings are currently managed by ENB.");
+				ImGui::TextColored(globals::menu->GetSettings().Theme.StatusPalette.Warning, "Settings are currently managed by ENB.");
 				return;
 			}
 		}

@@ -18,13 +18,12 @@ public:
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
 		return {
-			"Effects11 provides a framework for loading and executing ENBSeries-compatible FX effect files.\n"
-			"This allows for advanced post-processing effects and visual enhancements using DirectX 11 Effect (.fx) files.",
-			{ "ENBSeries-compatible FX support",
-				"DirectX 11 Effect file loading",
-				"Advanced post-processing pipeline",
-				"Custom technique execution",
-				"Dynamic UI variable system" }
+			T("feature.effects11.description", "Effects 11 provides a framework for loading and executing ENBSeries-compatible FX effect files.\nThis allows for advanced post-processing effects and visual enhancements using DirectX 11 Effect (.fx) files."),
+			{ T("feature.effects11.key_feature_1", "ENBSeries-compatible FX support"),
+				T("feature.effects11.key_feature_2", "DirectX 11 Effect file loading"),
+				T("feature.effects11.key_feature_3", "Advanced post-processing pipeline"),
+				T("feature.effects11.key_feature_4", "Custom technique execution"),
+				T("feature.effects11.key_feature_5", "Dynamic UI variable system") }
 		};
 	}
 

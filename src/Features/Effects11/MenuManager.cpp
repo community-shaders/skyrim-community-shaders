@@ -285,7 +285,7 @@ void MenuManager::RenderAllSettings()
 						if (category == "RAIN") {
 							if (!globals::features::effects11.raindropStatus.empty()) {
 								categoryDisabled = true;
-								ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.6f, 0.2f, 1.0f));
+								ImGui::PushStyleColor(ImGuiCol_Text, globals::menu->GetSettings().Theme.StatusPalette.Warning);
 								ImGui::TextWrapped("Rain disabled: %s", globals::features::effects11.raindropStatus.c_str());
 								ImGui::PopStyleColor();
 							}

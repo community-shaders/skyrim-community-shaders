@@ -2,6 +2,7 @@
 
 #include "D3D11StateBackup.h"
 #include "Features/Effects11.h"
+#include "Globals.h"
 #include "State.h"
 
 #include "SettingManager.h"
@@ -981,7 +982,7 @@ void EffectManager::RenderEffectsList()
 		if (!effect->IsFilePresent())
 			continue;
 		if (!effect->GetErrors().empty()) {
-			ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1), "%s:", effect->GetName().c_str());
+			ImGui::TextColored(globals::menu->GetSettings().Theme.StatusPalette.Error, "%s:", effect->GetName().c_str());
 			for (const auto& err : effect->GetErrors())
 				ImGui::TextWrapped("%s", err.c_str());
 		}

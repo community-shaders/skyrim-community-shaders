@@ -727,7 +727,7 @@ void ExtendedEffect::RenderMergedUI(std::span<Effect*> effects, UITree::FilterMo
 
 	for (auto* effect : effects) {
 		if (!effect->GetErrors().empty()) {
-			ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1), "%s:", effect->GetName().c_str());
+			ImGui::TextColored(globals::menu->GetSettings().Theme.StatusPalette.Error, "%s:", effect->GetName().c_str());
 			for (const auto& err : effect->GetErrors())
 				ImGui::TextWrapped("%s", err.c_str());
 		}
