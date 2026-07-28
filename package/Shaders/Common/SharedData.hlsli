@@ -30,7 +30,7 @@ namespace SharedData
 		bool HideSky;             // HideSky flag in WorldSpace, e.g. Blackreach
 		float MipBias;            // Offset to mip level for TAA sharpness
 		float WaterSystemHeight;  // TES::GetWaterHeight in camera-relative Z; -FLT_MAX when no water body found
-		bool InMainOrLoadingMenu; // Main menu or loading screen
+		bool InMainOrLoadingMenu;
 		float2 pad0;
 		float4 AmbientSHR;
 		float4 AmbientSHG;
