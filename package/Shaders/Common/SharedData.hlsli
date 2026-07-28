@@ -387,10 +387,6 @@ namespace SharedData
 
 	float3 GetAmbient(float3 normal)
 	{
-		// The game's global DALC is a flat white placeholder until a cell's lighting is applied.
-		if (InMainOrLoadingMenu)
-			return 0.0;
-
 		return SphericalHarmonics::Unproject(AmbientSHR, AmbientSHG, AmbientSHB, normal);
 	}
 
