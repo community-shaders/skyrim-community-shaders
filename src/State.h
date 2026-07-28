@@ -328,7 +328,6 @@ public:
 	struct alignas(16) SharedDataCB
 	{
 		float4 WaterData[25];
-		DirectX::XMFLOAT3X4 DirectionalAmbient;
 		float4 DirLightDirection;
 		float4 DirLightColor;
 		float4 SunDirection;
@@ -348,7 +347,8 @@ public:
 		uint HideSky;
 		float MipBias;
 		float WaterSystemHeight;  // TES::GetWaterHeight in camera-relative Z; -NI_INFINITY when no water body found
-		float3 pad0;
+		uint InMainOrLoadingMenu;
+		float2 pad0;
 		float4 AmbientSHR;
 		float4 AmbientSHG;
 		float4 AmbientSHB;

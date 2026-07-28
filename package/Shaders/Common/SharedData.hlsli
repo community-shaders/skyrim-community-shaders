@@ -11,7 +11,6 @@ namespace SharedData
 	cbuffer SharedData : register(b5)
 	{
 		float4 WaterData[25];
-		row_major float3x4 DirectionalAmbient;
 		float4 DirLightDirection;
 		float4 DirLightColor;
 		float4 SunDirection;
@@ -31,7 +30,8 @@ namespace SharedData
 		bool HideSky;             // HideSky flag in WorldSpace, e.g. Blackreach
 		float MipBias;            // Offset to mip level for TAA sharpness
 		float WaterSystemHeight;  // TES::GetWaterHeight in camera-relative Z; -FLT_MAX when no water body found
-		float3 pad0;
+		bool InMainOrLoadingMenu; // Main menu or loading screen
+		float2 pad0;
 		float4 AmbientSHR;
 		float4 AmbientSHG;
 		float4 AmbientSHB;
@@ -387,6 +387,10 @@ namespace SharedData
 
 	float3 GetAmbient(float3 normal)
 	{
+		// The game's global DALC is a flat white placeholder until a cell's lighting is applied.
+		if (InMainOrLoadingMenu)
+			return 0.0;
+
 		return SphericalHarmonics::Unproject(AmbientSHR, AmbientSHG, AmbientSHB, normal);
 	}
 
