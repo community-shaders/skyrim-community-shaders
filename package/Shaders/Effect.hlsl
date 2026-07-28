@@ -665,9 +665,13 @@ PS_OUTPUT main(PS_INPUT input)
 
 #	if defined(EFFECTS11)
 	bool isFire = false;
-#		if defined(ADDBLEND) && defined(SOFT)
-        if (Permutation::PixelShaderDescriptor & Permutation::EffectFlags::GrayscaleToColor && Permutation::PixelShaderDescriptor & Permutation::EffectFlags::GrayscaleToAlpha)
-			isFire = true;
+#		if defined(ADDBLEND)
+#			if defined(SOFT)
+    if (Permutation::PixelShaderDescriptor & Permutation::EffectFlags::GrayscaleToColor && Permutation::PixelShaderDescriptor & Permutation::EffectFlags::GrayscaleToAlpha)
+		isFire = true;
+#			elif defined(PARTICLES) && defined(TEXCOORD_INDEX) && defined(INDEXED_TEXTURE)
+	isFire = true;
+#			endif
 #		endif
 
 #		if !defined(IS_VOLUMETRIC_FOG)
