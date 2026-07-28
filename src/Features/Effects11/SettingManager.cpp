@@ -282,9 +282,9 @@ void SettingManager::SetValueInternal(uint32_t id, const T& value)
 			for (uint32_t linkedID : entry->weatherIDs) {
 				auto& data = weatherData[linkedID];
 				if (data.size() < allSettings.size()) {
+					auto oldSize = data.size();
 					data.resize(allSettings.size());
-					// Initialize with current values from allSettings
-					for (size_t i = 0; i < allSettings.size(); ++i) {
+					for (size_t i = oldSize; i < allSettings.size(); ++i) {
 						data[i] = allSettings[i].currentValue;
 					}
 				}
@@ -294,8 +294,9 @@ void SettingManager::SetValueInternal(uint32_t id, const T& value)
 			// Fallback: update target ID only
 			auto& data = weatherData[targetWeatherID];
 			if (data.size() < allSettings.size()) {
+				auto oldSize = data.size();
 				data.resize(allSettings.size());
-				for (size_t i = 0; i < allSettings.size(); ++i) {
+				for (size_t i = oldSize; i < allSettings.size(); ++i) {
 					data[i] = allSettings[i].currentValue;
 				}
 			}

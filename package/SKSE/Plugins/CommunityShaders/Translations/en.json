@@ -8,6 +8,7 @@
     },
     "common.active": "Active",
     "common.inactive": "Inactive",
+    "common.settings_managed_by_enb": "Settings are currently managed by ENB.",
     "cs_editor.actions": "Actions",
     "cs_editor.active": "Active:",
     "cs_editor.active_click_pause": "Active - click to pause",
