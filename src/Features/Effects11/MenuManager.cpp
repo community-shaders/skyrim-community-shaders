@@ -192,34 +192,6 @@ void MenuManager::RenderDebugControl()
 	}
 }
 
-std::vector<int> MenuManager::GetActiveTimeOfDayIndices() const
-{
-	auto& effectManager = EffectManager::GetSingleton();
-	std::vector<int> activeIndices;
-
-	// Access time of day data from EffectManager (this data is updated every frame)
-	const auto& commonData = effectManager.commonData;
-
-	// Check if we're in interior (> 0.5) or exterior
-	bool isInterior = commonData.eInteriorFactor > 0.5f;
-
-	if (isInterior) {
-		// For interiors, show both interior time periods
-		activeIndices.push_back(6);  // InteriorDay
-		activeIndices.push_back(7);  // InteriorNight
-	} else {
-		// For exteriors, show all exterior time periods
-		activeIndices.push_back(0);  // Dawn
-		activeIndices.push_back(1);  // Sunrise
-		activeIndices.push_back(2);  // Day
-		activeIndices.push_back(3);  // Sunset
-		activeIndices.push_back(4);  // Dusk
-		activeIndices.push_back(5);  // Night
-	}
-
-	return activeIndices;
-}
-
 float MenuManager::GetTimeOfDayBlendFactor(int timeIndex) const
 {
 	auto& effectManager = EffectManager::GetSingleton();

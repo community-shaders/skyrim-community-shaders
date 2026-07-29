@@ -28,7 +28,6 @@ public:
 
 	void Initialize();
 	Texture* GetCommonTexture(const std::string& name);
-	const std::unordered_map<std::string, Texture>& GetAllCommonTextures() const { return commonTextureCache; }
 
 	void SwapTextures(const std::string& name1, const std::string& name2);
 

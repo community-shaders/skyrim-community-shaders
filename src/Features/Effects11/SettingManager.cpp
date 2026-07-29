@@ -241,16 +241,6 @@ T SettingManager::GetValueInternal(uint32_t id, bool rawValue) const
 }
 
 template <typename T>
-void SettingManager::SetValue(const std::string& key, const std::string& category, const T& value)
-{
-	std::unique_lock lock(mutex);
-	uint32_t id = GetSettingIDInternal(key, category);
-	if (id != 0xFFFFFFFF) {
-		SetValueInternal<T>(id, value);
-	}
-}
-
-template <typename T>
 void SettingManager::SetValue(uint32_t id, const T& value)
 {
 	std::unique_lock lock(mutex);
@@ -352,28 +342,12 @@ float3 SettingManager::GetInterpolatedColorTimeOfDayValue(const std::string& key
 	return ComputeColorTimeOfDayInterpolation(colorTimeOfDayValue);
 }
 
-bool SettingManager::HasSetting(const std::string& key, const std::string& category) const
-{
-	std::shared_lock lock(mutex);
-	auto categoryIt = categories.find(category);
-	return categoryIt != categories.end() && categoryIt->second.settings.find(key) != categoryIt->second.settings.end();
-}
-
 const Setting* SettingManager::GetSettingInfo(const std::string& key, const std::string& category) const
 {
 	std::shared_lock lock(mutex);
 	uint32_t id = GetSettingIDInternal(key, category);
 	if (id < allSettings.size())
 		return &allSettings[id];
-	return nullptr;
-}
-
-const Setting* SettingManager::GetSettingInfo(uint32_t id) const
-{
-	std::shared_lock lock(mutex);
-	if (id < allSettings.size()) {
-		return &allSettings[id];
-	}
 	return nullptr;
 }
 
@@ -385,12 +359,6 @@ std::vector<std::string> SettingManager::GetSettingsByCategory(const std::string
 		return categoryIt->second.settingOrder;
 	}
 	return {};
-}
-
-std::vector<std::string> SettingManager::GetAllCategories() const
-{
-	std::shared_lock lock(mutex);
-	return categoryOrder;
 }
 
 bool SettingManager::CategoryHasWeatherSupport(const std::string& category) const
@@ -423,21 +391,6 @@ bool SettingManager::IsCategoryExteriorOnly(const std::string& category) const
 	if (it == categories.end())
 		return false;
 	return it->second.exteriorOnly;
-}
-
-void SettingManager::SetCategoryTab(const std::string& category, const std::string& tab)
-{
-	std::unique_lock lock(mutex);
-	categories[category].tab = tab;
-}
-
-std::string SettingManager::GetCategoryTab(const std::string& category) const
-{
-	std::shared_lock lock(mutex);
-	auto it = categories.find(category);
-	if (it == categories.end())
-		return "Main";
-	return it->second.tab;
 }
 
 std::map<std::string, std::vector<std::string>> SettingManager::GetCategorizedSettings() const
@@ -1111,11 +1064,6 @@ template bool SettingManager::GetValue<bool>(const std::string& key, const std::
 template float SettingManager::GetValue<float>(const std::string& key, const std::string& category, bool rawValue);
 template TimeOfDayValue SettingManager::GetValue<TimeOfDayValue>(const std::string& key, const std::string& category, bool rawValue);
 template ColorTimeOfDayValue SettingManager::GetValue<ColorTimeOfDayValue>(const std::string& key, const std::string& category, bool rawValue);
-
-template void SettingManager::SetValue<bool>(const std::string& key, const std::string& category, const bool& value);
-template void SettingManager::SetValue<float>(const std::string& key, const std::string& category, const float& value);
-template void SettingManager::SetValue<TimeOfDayValue>(const std::string& key, const std::string& category, const TimeOfDayValue& value);
-template void SettingManager::SetValue<ColorTimeOfDayValue>(const std::string& key, const std::string& category, const ColorTimeOfDayValue& value);
 
 template bool SettingManager::GetValue<bool>(uint32_t id, bool rawValue);
 template float SettingManager::GetValue<float>(uint32_t id, bool rawValue);

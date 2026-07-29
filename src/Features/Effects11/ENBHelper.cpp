@@ -102,18 +102,4 @@ namespace ENBHelper
 		}
 	}
 
-	const WeatherInfo& GetWeatherInfo()
-	{
-		return cachedWeather;
-	}
-
-	const LocationInfo& GetLocationInfo()
-	{
-		return cachedLocation;
-	}
-
-	const TimeInfo& GetTimeInfo()
-	{
-		return cachedTime;
-	}
 }

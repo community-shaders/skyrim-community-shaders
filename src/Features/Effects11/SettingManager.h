@@ -53,11 +53,6 @@ struct TimeOfDayValue
 		return std::equal(std::begin(values), std::end(values), std::begin(other.values));
 	}
 
-	float& GetByName(const std::string& name)
-	{
-		auto idx = TimeOfDayIndexFromName(name);
-		return values[idx.value_or(0)];
-	}
 };
 
 struct ColorTimeOfDayValue
@@ -93,11 +88,6 @@ struct ColorTimeOfDayValue
 		return true;
 	}
 
-	float3& GetByName(const std::string& name)
-	{
-		auto idx = TimeOfDayIndexFromName(name);
-		return values[idx.value_or(0)];
-	}
 };
 
 using SettingValue = std::variant<bool, float, TimeOfDayValue, ColorTimeOfDayValue>;
@@ -143,9 +133,6 @@ public:
 	T GetValue(uint32_t id, bool rawValue = false);
 
 	template <typename T>
-	void SetValue(const std::string& key, const std::string& category, const T& value);
-
-	template <typename T>
 	void SetValue(uint32_t id, const T& value);
 
 	uint32_t GetSettingID(const std::string& key, const std::string& category) const;
@@ -153,17 +140,12 @@ public:
 	float GetInterpolatedTimeOfDayValue(const std::string& key, const std::string& category);
 	float3 GetInterpolatedColorTimeOfDayValue(const std::string& key, const std::string& category);
 
-	bool HasSetting(const std::string& key, const std::string& category) const;
 	const Setting* GetSettingInfo(const std::string& key, const std::string& category) const;
-	const Setting* GetSettingInfo(uint32_t id) const;
 	std::vector<std::string> GetSettingsByCategory(const std::string& category) const;
-	std::vector<std::string> GetAllCategories() const;
 	bool CategoryHasWeatherSupport(const std::string& category) const;
 	void SetCategoryExteriorOnly(const std::string& category, bool exteriorOnly);
 	bool IsCategoryExteriorOnly(const std::string& category) const;
 
-	void SetCategoryTab(const std::string& category, const std::string& tab);
-	std::string GetCategoryTab(const std::string& category) const;
 	std::map<std::string, std::vector<std::string>> GetCategorizedSettings() const;
 
 	void SetCategoryDependency(const std::string& category, const std::string& dependsOnKey, const std::string& dependsOnCategory);

@@ -22,9 +22,6 @@ public:
 	void RenderImGui() override;
 	static void RenderMergedUI(std::span<Effect*> effects, UITree::FilterMode filter = UITree::FilterMode::All);
 
-	bool HasWeatherData() const { return !weatherData.empty(); }
-	bool IsVariableWeatherControlled(const std::string& iniKey) const;
-
 private:
 	using WeatherValues = std::unordered_map<std::string, std::string>;
 	std::unordered_map<uint32_t, WeatherValues> weatherData;

@@ -33,9 +33,4 @@ namespace ENBHelper
 
 	// Update all cached values - call once per frame
 	void Update();
-
-	// Accessors for cached data
-	const WeatherInfo& GetWeatherInfo();
-	const LocationInfo& GetLocationInfo();
-	const TimeInfo& GetTimeInfo();
 }
