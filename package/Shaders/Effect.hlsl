@@ -850,10 +850,12 @@ PS_OUTPUT main(PS_INPUT input)
     float3 blendedColor = lightColor * (1 - fogFactor);
 #            endif
 #	if defined(EFFECTS11)
-	if (isFire)
-		blendedColor = pow(abs(blendedColor), SharedData::enbSettings.FireCurve) * SharedData::enbSettings.FireIntensity;
-	else
-		blendedColor *= SharedData::enbSettings.LightSpriteIntensity;
+	if (SharedData::enbSettings.Enable) {
+		if (isFire)
+			blendedColor = pow(abs(blendedColor), SharedData::enbSettings.FireCurve) * SharedData::enbSettings.FireIntensity;
+		else
+			blendedColor *= SharedData::enbSettings.LightSpriteIntensity;
+	}
 #	endif
 #		elif defined(MULTBLEND) || defined(MULTBLEND_DECAL)
 #			if defined(EXP_HEIGHT_FOG)

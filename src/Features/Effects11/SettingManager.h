@@ -187,7 +187,6 @@ public:
 	void Save();
 
 	// Weather ignore settings management
-	void LoadWeatherIgnoreSettings(const std::string& filePath);
 	bool GetIgnoreWeatherSystem(const std::string& category) const;
 	bool GetIgnoreWeatherSystemInterior(const std::string& category) const;
 	void SetIgnoreWeatherSystem(const std::string& category, bool ignore);
@@ -231,6 +230,7 @@ private:
 	mutable std::shared_mutex mutex;
 
 	void RegisterSettingInternal(Setting& setting);
+	void LoadWeatherIgnoreSettings(const std::string& filePath);
 
 	template <typename T>
 	T GetValueInternal(uint32_t id, bool rawValue = false) const;

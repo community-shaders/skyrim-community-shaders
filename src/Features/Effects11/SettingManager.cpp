@@ -197,6 +197,12 @@ T SettingManager::GetValueInternal(uint32_t id, bool rawValue) const
 	const auto& setting = allSettings[id];
 	const auto& categorySettings = categories.at(setting.category);
 
+	auto safeGet = [](const SettingValue& v) -> T {
+		if (auto* p = std::get_if<T>(&v))
+			return *p;
+		return T{};
+	};
+
 	if (setting.hasWeatherSupport) {
 		bool isInterior = (timeOfDay2[2] + timeOfDay2[3]) > 0.5f;
 		bool shouldIgnoreWeather = isInterior ?
@@ -204,7 +210,7 @@ T SettingManager::GetValueInternal(uint32_t id, bool rawValue) const
 		                               categorySettings.ignoreWeatherSystem;
 
 		if (shouldIgnoreWeather) {
-			return std::get<T>(setting.currentValue);
+			return safeGet(setting.currentValue);
 		}
 
 		auto currentIt = weatherData.find(currentWeatherID);
@@ -223,15 +229,15 @@ T SettingManager::GetValueInternal(uint32_t id, bool rawValue) const
 			}
 
 			if (rawValue) {
-				return std::get<T>(weatherBlendFactor > 0.5f ? currentValue : lastValue);
+				return safeGet(weatherBlendFactor > 0.5f ? currentValue : lastValue);
 			}
 
 			SettingValue blendedValue = InterpolateValues(lastValue, currentValue, weatherBlendFactor);
-			return std::get<T>(blendedValue);
+			return safeGet(blendedValue);
 		}
 	}
 
-	return std::get<T>(setting.currentValue);
+	return safeGet(setting.currentValue);
 }
 
 template <typename T>
@@ -1028,7 +1034,7 @@ void SettingManager::SaveSettingToFile(const std::string& filePath, const std::s
 
 void SettingManager::LoadWeatherIgnoreSettings(const std::string& filePath)
 {
-	// Internal helper, called from methods already holding a unique lock
+	// Caller must hold unique lock on mutex
 	for (auto& [category, categoryData] : categories) {
 		bool hasWeatherSupport = false;
 		for (const auto& [key, settingID] : categoryData.settings) {

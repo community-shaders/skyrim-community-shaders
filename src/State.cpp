@@ -85,7 +85,7 @@ void State::Draw()
 			cloudShadows.SkyShaderHacks();
 		}
 
-		{
+		if (globals::features::effects11.loaded) {
 			ZoneScopedN("Effects11::ParticleShaderHacks");
 			globals::features::effects11.ParticleShaderHacks();
 		}

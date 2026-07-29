@@ -8,7 +8,7 @@ PresetManager& PresetManager::GetSingleton()
 
 bool PresetManager::UseDataFolder() const
 {
-	return std::filesystem::exists("Data\\enbseries.ini") && std::filesystem::exists("Data\\enbseries\\enbeffect.fx");
+	return std::filesystem::exists("Data\\enbseries.ini") && std::filesystem::is_directory("Data\\enbseries");
 }
 
 std::filesystem::path PresetManager::GetENBSeriesPath() const
