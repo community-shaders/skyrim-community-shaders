@@ -347,8 +347,7 @@ public:
 		uint HideSky;
 		float MipBias;
 		float WaterSystemHeight;  // TES::GetWaterHeight in camera-relative Z; -NI_INFINITY when no water body found
-		uint InMainOrLoadingMenu;
-		float2 pad0;
+		float3 pad0;
 		float4 AmbientSHR;
 		float4 AmbientSHG;
 		float4 AmbientSHB;

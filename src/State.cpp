@@ -1004,7 +1004,6 @@ void State::UpdateSharedData([[maybe_unused]] bool a_inWorld, [[maybe_unused]] b
 			data.HideSky = false;
 
 		data.InMapMenu = isMapMenuOpen;
-		data.InMainOrLoadingMenu = IsMainOrLoadingMenuOpen();
 
 		auto& upscaling = globals::features::upscaling;
 

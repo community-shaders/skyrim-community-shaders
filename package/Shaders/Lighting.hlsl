@@ -2966,8 +2966,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	}
 #	endif
 
-	// The global DALC is a white placeholder in menus; vanilla lights these draws from the per-geometry DALC.
-	float3 ambient = SharedData::InMainOrLoadingMenu ? mul(DirectionalAmbient, float4(ambientNormal, 1.0)) : SharedData::GetAmbient(ambientNormal);
+	float3 ambient = any(DirectionalAmbient) ? SharedData::GetAmbient(ambientNormal) : 0.0;
 	float3 directionalAmbientColor = Color::Ambient(max(0, ambient));
 
 #	if defined(IBL)
