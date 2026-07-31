@@ -251,7 +251,7 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.Color.xyz = Color::Sky(skyGradientColor) + skyScale;
 
 #if defined(EFFECTS11)
-	if (SharedData::enbSettings.EnableSky) {
+	if (SharedData::enbSettings.Enable) {
 		float sunLighting = dot(viewDirection, SharedData::SunDirection.xyz) * 0.5 + 0.5;
 		float sunGlow = pow(saturate(sunLighting), 32.0) * 0.25;
 		float3 sunScatterColor = sunGlow * SharedData::enbSettings.SkyScatteringColor * SharedData::enbSettings.SkyScatteringIntensity * lerp(1.0, SharedData::SunColor.xyz, SharedData::enbSettings.SkyScatteringColorFromSun);
@@ -276,7 +276,7 @@ PS_OUTPUT main(PS_INPUT input)
 #		else
 
 #		if defined(CLOUDS) && defined(EFFECTS11)
-	if (SharedData::enbSettings.EnableSky)
+	if (SharedData::enbSettings.Enable)
 		baseColor.xyz = pow(abs(baseColor.xyz), SharedData::enbSettings.CloudsCurve);
 #		endif
 
@@ -284,7 +284,7 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.Color.xyz = Color::Sky(input.Color.xyz) * baseColor.xyz + skyScale;
 
 #			if defined(CLOUDS) && defined(EFFECTS11)
-	if (SharedData::enbSettings.EnableSky) {
+	if (SharedData::enbSettings.Enable) {
 		float3 cloudColor = psout.Color.xyz;
 		float3 viewDirection = normalize(input.WorldPosition.xyz);
 

@@ -249,9 +249,14 @@ namespace SharedData
 	struct ENBSettings
 	{
 		uint Enable;
-		uint EnableSky;
 		float ColorPow;
 		float LightSpriteIntensity;
+		float FireIntensity;
+
+		float FireCurve;
+		uint EnableRain;
+		float RainMotionStretch;
+		float RainMotionTransparency;
 
 		float CloudsCurve;
 		float CloudsDesaturation;
@@ -290,14 +295,9 @@ namespace SharedData
 		float SkyScatteringCloudsLightingSunMultiplier;
 
 		float SkyScatteringCloudsLightingMoonIntensity;
-		uint EnableRain;
-		float RainMotionStretch;
-		float RainMotionTransparency;
-
-		float FireIntensity;
-		float FireCurve;
 		uint pad0;
 		uint pad1;
+		uint pad2;
 	};
 	struct TerrainBlendingSettings
 	{

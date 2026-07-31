@@ -30,9 +30,14 @@ public:
 	struct alignas(16) PerFrame
 	{
 		uint Enable;
-		uint EnableSky;
 		float ColorPow;
 		float LightSpriteIntensity;
+		float FireIntensity;
+
+		float FireCurve;
+		uint EnableRain;
+		float RainMotionStretch;
+		float RainMotionTransparency;
 
 		float CloudsCurve;
 		float CloudsDesaturation;
@@ -71,14 +76,9 @@ public:
 		float SkyScatteringCloudsLightingSunMultiplier;
 
 		float SkyScatteringCloudsLightingMoonIntensity;
-		uint EnableRain;
-		float RainMotionStretch;
-		float RainMotionTransparency;
-
-		float FireIntensity;
-		float FireCurve;
 		uint pad0;
 		uint pad1;
+		uint pad2;
 	};
 
 	bool enableEffect = false;

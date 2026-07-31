@@ -30,7 +30,6 @@ Effects11::PerFrame Effects11::GetCommonBufferData()
 	PerFrame data{};
 
 	data.Enable = enableEffect;
-	data.EnableSky = enableEffect;
 	data.ColorPow = settingManager.GetInterpolatedTimeOfDayValue("ColorPow", "ENVIRONMENT");
 
 	data.CloudsCurve = settingManager.GetInterpolatedTimeOfDayValue("CloudsCurve", "SKY");
