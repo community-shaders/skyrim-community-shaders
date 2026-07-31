@@ -102,7 +102,7 @@ static const float3 noise3D[32] = {
 		float shadowSample = 1.0;
 		DirectionalShadowLightData shadowData = DirectionalShadowLights[0];
 
-		uint bitIndex = SharedData::FrameCount % 32;
+		uint bitIndex = SharedData::FrameCountAlwaysActive % 32;
 		float3 jitteredMS = cellCentreMS + noise3D[bitIndex] * 128;
 
 		float ndcDepth = FrameBuffer::GetShadowDepth(jitteredMS);
