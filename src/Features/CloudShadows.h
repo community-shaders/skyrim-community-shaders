@@ -10,7 +10,7 @@ public:
 
 	struct alignas(16) Settings
 	{
-		float Opacity = 0.8f;
+		float Opacity = 0.5f;
 		float pad[3];
 	};
 
