@@ -66,19 +66,6 @@ public:
 
 		float VolumetricRaysDesaturation;
 		float3 VolumetricRaysColorFilter;
-
-		uint EnableCloudsScattering;
-		float SkyScatteringIntensity;
-		float SkyScatteringAmount;
-		float SkyScatteringColorFromSun;
-
-		float3 SkyScatteringColor;
-		float SkyScatteringCloudsLightingSunMultiplier;
-
-		float SkyScatteringCloudsLightingMoonIntensity;
-		uint pad0;
-		uint pad1;
-		uint pad2;
 	};
 
 	bool enableEffect = false;

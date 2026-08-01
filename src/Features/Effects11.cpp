@@ -51,16 +51,6 @@ Effects11::PerFrame Effects11::GetCommonBufferData()
 	data.ParticleAmbientInfluence = settingManager.GetInterpolatedTimeOfDayValue("AmbientInfluence", "PARTICLE");
 	data.ParticlePointLightingInfluence = settingManager.GetInterpolatedTimeOfDayValue("PointLightingInfluence", "PARTICLE");
 
-	data.SkyScatteringIntensity = settingManager.GetInterpolatedTimeOfDayValue("Intensity", "SKYSCATTERING");
-	data.SkyScatteringAmount = settingManager.GetInterpolatedTimeOfDayValue("Amount", "SKYSCATTERING");
-	data.SkyScatteringColorFromSun = settingManager.GetInterpolatedTimeOfDayValue("ColorFromSun", "SKYSCATTERING");
-	auto scatteringColor = settingManager.GetInterpolatedColorTimeOfDayValue("ScatteringColor", "SKYSCATTERING");
-	data.SkyScatteringColor = { scatteringColor.x, scatteringColor.y, scatteringColor.z };
-	data.SkyScatteringCloudsLightingSunMultiplier = settingManager.GetInterpolatedTimeOfDayValue("CloudsLightingSunMultiplier", "SKYSCATTERING");
-	data.SkyScatteringCloudsLightingMoonIntensity = settingManager.GetInterpolatedTimeOfDayValue("CloudsLightingMoonIntensity", "SKYSCATTERING");
-
-	data.EnableCloudsScattering = enableEffect && settingManager.GetValue<bool>("EnableCloudsScattering", "EFFECT");
-
 	data.EnableVolumetricRays = enableEffect && settingManager.GetValue<bool>("EnableVolumetricRays", "EFFECT");
 	data.VolumetricRaysIntensity = settingManager.GetInterpolatedTimeOfDayValue("Intensity", "VOLUMETRICRAYS");
 	{
@@ -888,4 +878,3 @@ void Effects11::DrawVolumetricRays()
 	stateBackup.Restore(context);
 	stateBackup.Release();
 }
-
