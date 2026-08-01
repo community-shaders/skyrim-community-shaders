@@ -55,12 +55,15 @@ PS_OUTPUT main(VS_OUTPUT_POST input)
 		float3 samplePos = positionMS.xyz * t;
 
 		float shadow = 1.0;
+		
 #if defined(TERRAIN_SHADOWS)
 		shadow = TerrainShadows::GetTerrainShadow(samplePos + cameraOffset, LinearSampler);
 #endif
+
 #if defined(CLOUD_SHADOWS)
 		shadow *= CloudShadows::GetCloudShadowMult(samplePos, LinearSampler);
 #endif
+		shadow *= shadow;
 
 		float stepTransmittance = exp(negExtTimesRayLen * stepDelta);
 		scattering += shadow * (1.0 - stepTransmittance) * transmittance;
