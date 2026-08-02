@@ -2966,8 +2966,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	}
 #	endif
 
-	float3 ambient = any(DirectionalAmbient) ? SharedData::GetAmbient(ambientNormal) : 0.0;
-	float3 directionalAmbientColor = Color::Ambient(max(0, ambient));
+	float3 directionalAmbientColor = Color::Ambient(max(0, mul(DirectionalAmbient, float4(ambientNormal, 1.0))));
 
 #	if defined(IBL)
 	if (SharedData::iblSettings.EnableIBL) {
