@@ -23,13 +23,6 @@ namespace Hooks
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
-	/** @brief Hook for Sky::UpdateColors that forwards sky color updates to SkySync after the engine computes them. */
-	struct Sky_UpdateColors
-	{
-		static void thunk(RE::Sky* sky, float a_delta);
-		static inline REL::Relocation<decltype(thunk)> func;
-	};
-
 	/** @brief Installs all hooks, detours, and memory patches for the rendering pipeline, input handling, and shader management. */
 	void Install();
 

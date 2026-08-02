@@ -87,6 +87,8 @@ public:
 	/** @brief One-time post-D3D setup: creates resources, probes GPU caps, initializes features. */
 	void Setup();
 
+	bool HandlePostProcessing(RE::RENDER_TARGET a_input, RE::RENDER_TARGET a_output);
+
 	/**
 	 * @brief Loads settings from disk (default, then user, then overrides).
 	 * @param a_configMode Which config file to load.

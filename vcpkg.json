@@ -19,6 +19,7 @@
         "cppwinrt",
         "directx-headers",
         "directxtex",
+        "effects11",
         "eastl",
         "efsw",
         {

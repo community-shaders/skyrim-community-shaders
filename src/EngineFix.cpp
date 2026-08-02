@@ -1,14 +1,17 @@
 ﻿#include "EngineFix.h"
 
+#include "EngineFixes/EffectShaderNoDecalsFix.h"
 #include "EngineFixes/ShadowmapCascadeCullingFix.h"
 #include "EngineFixes/ShadowmapCascadeRasterizerFix.h"
 
 const std::vector<EngineFix*>& EngineFix::GetOnPostPostLoadFixesList()
 {
+	static EffectShaderNoDecalsFix effectShaderNoDecalsFix;
 	static ShadowmapCascadeCullingFix shadowmapCascadeCullingFix;
 	static ShadowmapRasterizerFix shadowmapRasterizerFix;
 
 	static std::vector<EngineFix*> fixes = {
+		&effectShaderNoDecalsFix,
 		&shadowmapCascadeCullingFix,
 		&shadowmapRasterizerFix
 	};

@@ -9,6 +9,13 @@
 #include "Common/Skinned.hlsli"
 #define EFFECT
 
+#if defined(SOFT) && defined(NORMALS) && defined(TEXTURE) && defined(FALLOFF) && defined(VC) && \
+    !defined(LIGHTING) && !defined(PARTICLES) && !defined(STRIP_PARTICLES) &&                    \
+    !defined(BLOOD) && !defined(MEMBRANE) && !defined(ADDBLEND) && !defined(MULTBLEND) &&        \
+    !defined(MULTBLEND_DECAL) && !defined(ALPHA_TEST) && !defined(DEFERRED) && !defined(SKINNED)
+#	define IS_VOLUMETRIC_FOG
+#endif
+
 #if !defined(DYNAMIC_CUBEMAPS) && defined(IBL)
 #	undef IBL
 #endif
@@ -393,6 +400,7 @@ struct PS_OUTPUT
 	float4 Specular: SV_Target4;
 	float4 Reflectance: SV_Target5;
 	float4 Masks: SV_Target6;
+	float4 Masks2: SV_Target7;
 };
 #else
 struct PS_OUTPUT
@@ -469,50 +477,13 @@ cbuffer PerGeometry : register(b2)
 
 #	include "Common/ShadowSampling.hlsli"
 
-float3 GetEffectAmbientLighting(float skylightingDiffuse)
-{
-	float3 ambientColor = ShadowSampling::GetRawAmbientLighting(ShadowSampling::LightingSampleNormal);
-
-#	if defined(IBL)
-	if (SharedData::iblSettings.EnableIBL) {
-#		if defined(SKYLIGHTING)
-		ambientColor = ImageBasedLighting::GetDiffuseIBLOccluded(ambientColor, ShadowSampling::ImageBasedLightingNormal, skylightingDiffuse);
-#		else
-		ambientColor = ImageBasedLighting::GetDiffuseIBL(ambientColor, ShadowSampling::ImageBasedLightingNormal);
-#		endif
-	}
-#	endif
-
-	return ambientColor;
-}
-
-void ExtractEffectLighting(float3 inputColor, out float3 dirColor, out float3 ambientColor, float skylightingDiffuse)
-{
-	float3 ambientColorAmb = GetEffectAmbientLighting(skylightingDiffuse);
-	float3 dirLightColorDir = ShadowSampling::GetDirectionalLighting();
-
-	float inputLuma = Color::RGBToLuminance(inputColor);
-	float ambientLuma = Color::RGBToLuminance(ambientColorAmb);
-	float dirLightLuma = Color::RGBToLuminance(dirLightColorDir);
-
-	float totalLuma = ambientLuma + dirLightLuma;
-
-	if (totalLuma > 0.0 && ambientLuma > 0.0)
-		ambientColorAmb *= inputLuma / totalLuma;
-
-	float3 dirLightColorAmb = max(0.0, inputColor - ambientColorAmb);
-
-	dirColor = dirLightColorAmb;
-	ambientColor = ambientColorAmb;
-}
-
 #	if defined(LIGHTING)
 float3 GetLightingColor(float3 msPosition, float3 worldPosition, float2 screenPosition, inout float shadowVariance)
 {
 	float3 color = DLightColor.xyz * Color::EffectLightingMult();
 	bool suppressExternalEmittance = SharedData::InInterior && (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::SuppressExternalEmittance);
 	if (suppressExternalEmittance) {
-		color = GetEffectAmbientLighting(1.0) + ShadowSampling::GetDirectionalLighting();
+		color = ShadowSampling::GetAmbientLighting() + ShadowSampling::GetDirectionalLighting();
 	}
 
 #		if defined(SKYLIGHTING)
@@ -527,10 +498,15 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float2 screenPo
 
 	float3 dirColor;
 	float3 ambientColor;
-#		if defined(SKYLIGHTING)
-	ExtractEffectLighting(color, dirColor, ambientColor, skylightingDiffuse);
-#		else
-	ExtractEffectLighting(color, dirColor, ambientColor, 1.0);
+	ShadowSampling::ExtractLighting(color, dirColor, ambientColor);
+
+#		if defined(EFFECTS11)
+	if (SharedData::enbSettings.Enable) {
+		dirColor = ShadowSampling::GetDirectionalLighting();
+		ambientColor = ShadowSampling::GetAmbientLighting();
+		dirColor *= SharedData::enbSettings.ParticleLightingInfluence;
+		ambientColor *= SharedData::enbSettings.ParticleAmbientInfluence;
+	}
 #		endif
 
 	float3 viewDirection = normalize(worldPosition.xyz);
@@ -572,9 +548,14 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float2 screenPo
 	{
 		float4 lightDistanceSquared = (PLightPositionX[0] - msPosition.xxxx) * (PLightPositionX[0] - msPosition.xxxx) + (PLightPositionY[0] - msPosition.yyyy) * (PLightPositionY[0] - msPosition.yyyy) + (PLightPositionZ[0] - msPosition.zzzz) * (PLightPositionZ[0] - msPosition.zzzz);
 		float4 lightFadeMul = 1.0.xxxx - saturate(PLightingRadiusInverseSquared * lightDistanceSquared);
-		color.x += dot(Color::PointLight(PLightColorR.xxx).x * lightFadeMul * Color::EffectLightingMult(), 1.0.xxxx);
-		color.y += dot(Color::PointLight(PLightColorG.xxx).x * lightFadeMul * Color::EffectLightingMult(), 1.0.xxxx);
-		color.z += dot(Color::PointLight(PLightColorB.xxx).x * lightFadeMul * Color::EffectLightingMult(), 1.0.xxxx);
+#		if defined(EFFECTS11)
+		float pointScale = SharedData::enbSettings.Enable ? SharedData::enbSettings.ParticlePointLightingInfluence : 1.0;
+#		else
+		float pointScale = 1.0;
+#		endif
+		color.x += dot(Color::PointLight(PLightColorR.xxx).x * lightFadeMul * Color::EffectLightingMult(), 1.0.xxxx) * pointScale;
+		color.y += dot(Color::PointLight(PLightColorG.xxx).x * lightFadeMul * Color::EffectLightingMult(), 1.0.xxxx) * pointScale;
+		color.z += dot(Color::PointLight(PLightColorB.xxx).x * lightFadeMul * Color::EffectLightingMult(), 1.0.xxxx) * pointScale;
 	}
 
 	return color;
@@ -584,12 +565,7 @@ float3 GetLightingShadow(float3 color, float3 worldPosition, float2 screenPositi
 {
 	float3 dirColor;
 	float3 ambientColor;
-	float skylightingDiffuse = 1.0;
-#		if defined(SKYLIGHTING)
-	ExtractEffectLighting(color, dirColor, ambientColor, skylightingDiffuse);
-#		else
-	ExtractEffectLighting(color, dirColor, ambientColor, 1.0);
-#		endif
+	ShadowSampling::ExtractLighting(color, dirColor, ambientColor);
 
 	static const uint sampleCount = 8;
 	static const float rcpSampleCount = 1.0 / float(sampleCount);
@@ -686,6 +662,23 @@ PS_OUTPUT main(PS_INPUT input)
 	float lightingInfluence = LightingInfluence.x;
 	float3 propertyColor = Color::Effect(PropertyColor.xyz);
 	float shadowVariance = 1.0;
+
+#	if defined(EFFECTS11)
+	bool isFire = false;
+#		if defined(ADDBLEND)
+#			if defined(SOFT)
+    if (Permutation::PixelShaderDescriptor & Permutation::EffectFlags::GrayscaleToColor && Permutation::PixelShaderDescriptor & Permutation::EffectFlags::GrayscaleToAlpha)
+		isFire = true;
+#			elif defined(PARTICLES) && defined(TEXCOORD_INDEX) && defined(INDEXED_TEXTURE)
+	isFire = true;
+#			endif
+#		endif
+
+#		if !defined(IS_VOLUMETRIC_FOG)
+	if (SharedData::enbSettings.Enable && !(Permutation::VertexShaderDescriptor & Permutation::EffectFlags::SkyObject) && !isFire)
+		propertyColor *= SharedData::enbSettings.ParticleIntensity;
+#		endif
+#	endif
 
 #	if defined(LIGHTING)
 	propertyColor = GetLightingColor(input.MSPosition.xyz, input.WorldPosition.xyz, input.Position.xy, shadowVariance);
@@ -850,12 +843,20 @@ PS_OUTPUT main(PS_INPUT input)
 		}
 	}
 #		endif
-#		if defined(ADDBLEND)
-#			if defined(EXP_HEIGHT_FOG)
-	float3 blendedColor = lightColor * (1 - vanillaFogFactor) * (1 - expFogFactor);
-#			else
-	float3 blendedColor = lightColor * (1 - fogFactor);
-#			endif
+#        if defined(ADDBLEND)
+#            if defined(EXP_HEIGHT_FOG)
+    float3 blendedColor = lightColor * (1 - vanillaFogFactor) * (1 - expFogFactor);
+#            else
+    float3 blendedColor = lightColor * (1 - fogFactor);
+#            endif
+#	if defined(EFFECTS11)
+	if (SharedData::enbSettings.Enable) {
+		if (isFire)
+			blendedColor = pow(abs(blendedColor), SharedData::enbSettings.FireCurve) * SharedData::enbSettings.FireIntensity;
+		else
+			blendedColor *= SharedData::enbSettings.LightSpriteIntensity;
+	}
+#	endif
 #		elif defined(MULTBLEND) || defined(MULTBLEND_DECAL)
 #			if defined(EXP_HEIGHT_FOG)
 	float3 blendedColor = lerp(lightColor, 1.0.xxx, saturate(1.5 * vanillaFogFactor).xxx);
@@ -914,11 +915,13 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.Albedo = float4(psout.Diffuse.xyz, finalColor.w);
 	psout.Reflectance = float4(psout.Diffuse.xyz, finalColor.w);
 	psout.Masks = float4(Color::RGBToLuminance(psout.Diffuse.xyz).xxx, finalColor.w);
+	psout.Masks2 = float4(0, 0, 0, finalColor.w);
 #		else
-	psout.Albedo = float4(0, 0, 0, finalColor.w);
+	psout.Albedo = float4(psout.Diffuse.xyz * !(Permutation::VertexShaderDescriptor & Permutation::EffectFlags::SkyObject), finalColor.w);
 	psout.Specular = float4(0, 0, 0, finalColor.w);
 	psout.Reflectance = float4(0, 0, 0, finalColor.w);
 	psout.Masks = float4(0, 0, 0, finalColor.w);
+	psout.Masks2 = float4(0, 0, 0, finalColor.w);
 #		endif
 
 #	elif defined(MOTIONVECTORS_NORMALS)

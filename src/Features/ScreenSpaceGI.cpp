@@ -695,7 +695,7 @@ void ScreenSpaceGI::DrawSSGI()
 {
 	auto context = globals::d3d::context;
 
-	auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
+	auto imageSpaceManager = globals::game::imageSpaceManager;
 	auto& BSImagespaceShaderISSAOBlurH = imageSpaceManager->GetRuntimeData().BSImagespaceShaderISSAOBlurH;
 
 	// Toggle vanilla SSAO

@@ -11,9 +11,9 @@ namespace Util::Moon
 	static constexpr float FullMoonIntensityFactor = 1.0f;
 
 	/** @brief Base colour of Masser (the larger, reddish moon). */
-	static constexpr float4 MasserBaseColor = { 142.0f / 255.0f, 96.0f / 255.0f, 90.0f / 255.0f, 1.0f };
+	static constexpr float4 MasserBaseColor = { 142.0f / 255.0f * 0.5f, 96.0f / 255.0f * 0.5f, 90.0f / 255.0f * 0.5f, 1.0f };
 	/** @brief Base colour of Secunda (the smaller, greyish moon). */
-	static constexpr float4 SecundaBaseColor = { 117.0f / 255.0f, 115.0f / 255.0f, 109.0f / 255.0f, 1.0f };
+	static constexpr float4 SecundaBaseColor = { 117.0f / 255.0f * 0.25f, 115.0f / 255.0f * 0.25f, 109.0f / 255.0f * 0.25f, 1.0f };
 
 	/** @brief Lookup table mapping texture name substrings to moon phase enums. */
 	static constexpr std::array<std::pair<std::string_view, RE::Moon::Phases::Phase>, 8> PhaseLookup{

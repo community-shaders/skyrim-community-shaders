@@ -801,6 +801,9 @@ float GetSnowParameterY(float texProjTmp, float alpha)
 
 #	if defined(EYE)
 #		undef WETNESS_EFFECTS
+#		undef SOFT_LIGHTING
+#		undef BACK_LIGHTING
+#		undef RIM_LIGHTING
 #	endif
 
 #	if defined(EXTENDED_MATERIALS) && !defined(LOD) && (defined(PARALLAX) || defined(LANDSCAPE) || defined(ENVMAP) || defined(TRUE_PBR))
@@ -2976,15 +2979,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	}
 #	endif
 
-#	if defined(SKYLIGHTING)
-	float skylightingDiffuse = 1;
-	float skylightingFadeOutFactor = 1.0;
-	if (!SharedData::InInterior) {
-		skylightingFadeOutFactor = Skylighting::GetFadeOutFactor(input.WorldPosition.xyz);
-		skylightingDiffuse = Skylighting::EvaluateDiffuse(skylightingSH, ambientNormal, skylightingFadeOutFactor);
-	}
-#	endif
-
 #	if defined(LANDSCAPE)
 	if (SharedData::lodBlendingSettings.DisableTerrainVertexColors)
 		input.Color.xyz = 1;
@@ -2999,32 +2993,38 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	if (SharedData::hairSpecularSettings.Enabled)
 		vertexColor = 1;
 #		endif
+#		if defined(SKYLIGHTING)
+	float skylightingDiffuse = Skylighting::GetSkylightingDiffuse(skylightingSH, input.WorldPosition.xyz, ambientNormal);
+#		endif
 #	elif defined(SKYLIGHTING)
 	float3 vertexColor = input.Color.xyz;
+#		if defined(FACEGEN) || defined(FACEGEN_RGB_TINT) || defined(EYE)
+	float vertexAO = 1;
+#		else
 	float vertexAO = Color::ColorToLinear(max(max(vertexColor.r, vertexColor.g), vertexColor.b).xxx).x;
+#		endif
 #		if defined(TRUE_PBR)
 	vertexAO = lerp(1, vertexAO, SharedData::truePBRSettings.VertexAOStrength);
 	vertexColor = 1;
 #		endif
-	// Modify skylightingDiffuse such that skylightingDiffuse * vertexAO = min(skylightingDiffuse, vertexAO)
-	skylightingDiffuse = saturate(skylightingDiffuse / max(vertexAO, 1e-5));
+	float skylightingDiffuse = Skylighting::GetSkylightingDiffuse(skylightingSH, input.WorldPosition.xyz, ambientNormal, vertexAO);
 #	else
 #		if defined(TRUE_PBR)
 	float3 vertexColor = 1;
 #		else
 	float3 vertexColor = input.Color.xyz;
 #		endif
+#		if defined(FACEGEN) || defined(FACEGEN_RGB_TINT) || defined(EYE)
+	float vertexAO = 1;
+#		else
 	float vertexAO = Color::ColorToLinear(max(max(vertexColor.r, vertexColor.g), vertexColor.b).xxx).x;
+#		endif
 #	endif  // defined (HAIR)
 
 #	if defined(IBL)
 	if (SharedData::iblSettings.EnableIBL) {
 		if (!(SharedData::iblSettings.UseStaticIBL && !inWorld && !inReflection)) {
-#		if defined(SKYLIGHTING)
-			directionalAmbientColor = ImageBasedLighting::GetDiffuseIBLOccluded(directionalAmbientColor, -ambientNormal, skylightingDiffuse);
-#		else
 			directionalAmbientColor = ImageBasedLighting::GetDiffuseIBL(directionalAmbientColor, -ambientNormal);
-#		endif
 		}
 	}
 #	endif
@@ -3145,12 +3145,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	directionalAmbientColor *= outputAlbedo;
 
 #	if defined(SKYLIGHTING)
-#		if defined(IBL)
-	if (!SharedData::iblSettings.EnableIBL)
-#		endif
-	{
-		Skylighting::ApplySkylighting(color.xyz, directionalAmbientColor, outputAlbedo, skylightingDiffuse);
-	}
+	Skylighting::ApplySkylighting(color.xyz, directionalAmbientColor, outputAlbedo, skylightingDiffuse);
 #	endif
 
 #	if !defined(DEFERRED)
