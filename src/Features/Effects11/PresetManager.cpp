@@ -48,9 +48,8 @@ std::filesystem::path PresetManager::GetPresetsRoot() const
 
 std::filesystem::path PresetManager::GetPresetsRealPath() const
 {
-	auto realPath = Util::PathHelpers::GetEffects11PresetsRealPath();
-	if (!realPath.empty())
-		return realPath;
+	if (!Util::PathHelpers::GetRootRealPath().empty())
+		return Util::PathHelpers::GetEffects11PresetsRealPath();
 	return GetPresetsRoot();
 }
 
@@ -157,11 +156,15 @@ void PresetManager::DiscoverPresets()
 		legacy.rootPath = GetLegacyENBSeriesIniPath().parent_path();
 	presets.push_back(std::move(legacy));
 
-	const auto root = GetPresetsRoot();
+	// Scan the real on-disk library (same path Open Folder uses). Under MO2, newly
+	// added folders may not appear via the Data VFS path until a full refresh.
+	const auto root = GetPresetsRealPath();
 	std::error_code ec;
 	if (std::filesystem::is_directory(root, ec)) {
 		for (const auto& entry : std::filesystem::directory_iterator(root, ec)) {
-			if (ec || !entry.is_directory())
+			if (ec)
+				break;
+			if (!entry.is_directory())
 				continue;
 
 			PresetInfo info;
