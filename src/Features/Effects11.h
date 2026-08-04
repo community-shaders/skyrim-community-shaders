@@ -18,14 +18,28 @@ public:
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
 		return {
-			T("feature.effects11.description", "Effects 11 provides a framework for loading and executing ENBSeries-compatible FX effect files.\nThis allows for advanced post-processing effects and visual enhancements using DirectX 11 Effect (.fx) files."),
+			T("feature.effects11.description", "Effects 11 loads ENBSeries-compatible FX post-processing. Install multiple presets under Data/SKSE/Plugins/CommunityShaders/Effects11/Presets/<Name>/ (each with enbseries.ini + enbseries/), or use a classic root/Data enbseries install as Legacy. Hotswap does not modify root files."),
 			{ T("feature.effects11.key_feature_1", "ENBSeries-compatible FX support"),
-				T("feature.effects11.key_feature_2", "DirectX 11 Effect file loading"),
-				T("feature.effects11.key_feature_3", "Advanced post-processing pipeline"),
-				T("feature.effects11.key_feature_4", "Custom technique execution"),
+				T("feature.effects11.key_feature_2", "Multi-preset library with in-game hotswap"),
+				T("feature.effects11.key_feature_3", "Legacy root/Data enbseries support"),
+				T("feature.effects11.key_feature_4", "Advanced post-processing pipeline"),
 				T("feature.effects11.key_feature_5", "Dynamic UI variable system") }
 		};
 	}
+
+	struct Settings
+	{
+		std::string ActivePreset;  ///< Empty = Legacy (PresetManager::kLegacyPresetId)
+	};
+
+	Settings settings;
+
+	/** Discover presets and apply settings.ActivePreset, repairing the id if needed. */
+	void SyncActivePresetFromSettings();
+
+	virtual void LoadSettings(json& o_json) override;
+	virtual void SaveSettings(json& o_json) override;
+	virtual void RestoreDefaultSettings() override;
 
 	struct alignas(16) PerFrame
 	{

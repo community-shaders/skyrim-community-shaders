@@ -112,7 +112,8 @@ namespace ENBExtender
 	// KIEFX
 
 	static constexpr char kiefxMagic[] = "KIEFX\x00\x01";
-	static constexpr size_t kiefxMagicSize = sizeof(kiefxMagic) - 1;
+	static_assert(sizeof(kiefxMagic) - 1 == kKIEFXMagicSize, "KIEFX magic size mismatch");
+	static constexpr size_t kiefxMagicSize = kKIEFXMagicSize;
 	static constexpr size_t kiefxKeySize = 8;
 	static uint8_t kiefxKey[kiefxKeySize] = {};
 	static bool kiefxKeyInitialized = false;
@@ -181,6 +182,18 @@ namespace ENBExtender
 		for (size_t i = kiefxMagicSize; i < content.size(); ++i)
 			decoded += static_cast<char>(static_cast<uint8_t>(content[i]) ^ kiefxKey[(i - kiefxMagicSize) % kiefxKeySize]);
 		return decoded;
+	}
+
+	const std::string& GetKIEFXKeyError()
+	{
+		InitializeKIEFXKey();
+		return kiefxKeyError;
+	}
+
+	bool IsKIEFXKeyAvailable()
+	{
+		InitializeKIEFXKey();
+		return kiefxKeyError.empty();
 	}
 
 	static std::string ExtractAnnotation(const std::string& annotations, const std::string& name)

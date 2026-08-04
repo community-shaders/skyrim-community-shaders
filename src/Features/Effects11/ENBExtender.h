@@ -16,8 +16,14 @@ namespace ENBExtender
 	float SafeStof(const std::string& s, float fallback = 0.0f);
 
 	// KIEFX encoding
+	/** Byte length of the KIEFX file header magic (see IsKIEFX). */
+	inline constexpr size_t kKIEFXMagicSize = 7;
+
 	bool IsKIEFX(const std::string& content);
 	std::string DecodeKIEFX(const std::string& content);
+	/// Empty if KiENBExtender key was extracted successfully; otherwise human-readable error.
+	const std::string& GetKIEFXKeyError();
+	bool IsKIEFXKeyAvailable();
 
 	// Source preprocessing
 	void ConvertExtenderSyntax(std::string& content, const std::filesystem::path& enbseriesPath, std::vector<Effect::UIDefineInfo>& uiDefines, const std::string& iniPath = "", const std::string& iniSection = "");

@@ -1,11 +1,15 @@
 ﻿#include "MenuManager.h"
 
 #include "EffectManager.h"
+#include "ENBExtender.h"
+#include "PresetManager.h"
 #include "SettingManager.h"
 #include "TextureManager.h"
 #include "Features/Effects11.h"
 #include "Features/Effects11/ShaderPatches.h"
 #include "Globals.h"
+
+#include <format>
 
 static const char* const timeOfDayNames[] = { "Dawn", "Sunrise", "Day", "Sunset", "Dusk", "Night", "InteriorDay", "InteriorNight" };
 
@@ -43,10 +47,113 @@ void MenuManager::RenderImGui()
 	ImGui::EndTable();
 }
 
+void MenuManager::RenderPresetSelector()
+{
+	constexpr float kPresetComboButtonReserve = 160.0f;
+
+	auto& presetManager = PresetManager::GetSingleton();
+	auto& effects11 = globals::features::effects11;
+	const auto& theme = globals::menu->GetSettings().Theme.StatusPalette;
+
+	if (presetManager.GetPresets().empty())
+		presetManager.DiscoverPresets();
+
+	const auto& presets = presetManager.GetPresets();
+
+	int currentItem = 0;
+	for (size_t i = 0; i < presets.size(); ++i) {
+		if (presets[i].id == presetManager.GetActivePresetId()) {
+			currentItem = static_cast<int>(i);
+			break;
+		}
+	}
+
+	ImGui::Text("Preset");
+	ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - kPresetComboButtonReserve);
+	const char* preview = presets.empty() ? "None" : presets[currentItem].displayName.c_str();
+	if (ImGui::BeginCombo("##Effects11Preset", preview)) {
+		for (size_t i = 0; i < presets.size(); ++i) {
+			const auto& preset = presets[i];
+			ImGui::BeginDisabled(!preset.valid);
+			const bool selected = static_cast<int>(i) == currentItem;
+			std::string label = preset.displayName;
+			if (!preset.valid)
+				label += std::format(" ({})", preset.invalidReason);
+
+			if (ImGui::Selectable(label.c_str(), selected) && preset.valid) {
+				if (presetManager.SwitchPreset(preset.id, true)) {
+					effects11.settings.ActivePreset = presetManager.GetActivePresetId();
+					currentItem = static_cast<int>(i);
+				}
+			}
+			if (selected)
+				ImGui::SetItemDefaultFocus();
+			ImGui::EndDisabled();
+		}
+		ImGui::EndCombo();
+	}
+	if (ImGui::IsItemHovered()) {
+		ImGui::SetTooltip("Switch ENB FX presets. Recompiles Effects11 shaders only (not Community Shaders).");
+	}
+
+	ImGui::SameLine();
+	if (ImGui::Button("Refresh")) {
+		const auto previous = presetManager.GetActivePresetId();
+		presetManager.DiscoverPresets();
+		if (!presetManager.SetActivePreset(previous)) {
+			effects11.settings.ActivePreset = presetManager.GetActivePresetId();
+			presetManager.ReloadActive();
+		} else {
+			effects11.settings.ActivePreset = previous;
+		}
+	}
+	if (ImGui::IsItemHovered()) {
+		ImGui::SetTooltip("Rescan %s for installed presets", PresetManager::kPresetsRootRelative);
+	}
+
+	ImGui::SameLine();
+	if (ImGui::Button("Open Folder")) {
+		presetManager.OpenPresetsFolder();
+	}
+	if (ImGui::IsItemHovered()) {
+		ImGui::SetTooltip("Open %s in Explorer. Each subfolder needs %s + %s/.",
+			PresetManager::kPresetsRootRelative,
+			PresetManager::kEnbSeriesIniName,
+			PresetManager::kEnbSeriesDirName);
+	}
+
+	ImGui::TextWrapped("%s", presetManager.GetActivePresetStatusSummary().c_str());
+
+	if (presetManager.IsLegacyActive() && presetManager.GetValidLibraryPresetCount() > 0) {
+		ImGui::TextColored(theme.Warning,
+			"Tip: select a folder preset above for one-click hotswap. Legacy root/Data files are left untouched.");
+	}
+
+	if (presetManager.ActivePresetUsesKIEFX()) {
+		if (ENBExtender::IsKIEFXKeyAvailable()) {
+			ImGui::TextColored(theme.InfoColor, "KIEFX: KiENBExtender key available");
+		} else {
+			ImGui::TextColored(theme.Error, "KIEFX: %s", ENBExtender::GetKIEFXKeyError().c_str());
+		}
+	}
+
+	const uint32_t failed = EffectManager::GetSingleton().GetFailedEffectCount();
+	if (failed > 0) {
+		ImGui::TextColored(theme.Error, "%u effect(s) failed to compile", failed);
+	}
+
+	if (!effects11.raindropStatus.empty()) {
+		ImGui::TextColored(theme.Warning, "Rain: %s", effects11.raindropStatus.c_str());
+	}
+}
+
 void MenuManager::RenderSettingsPanel()
 {
 	auto& settingManager = SettingManager::GetSingleton();
 	auto& effectManager = EffectManager::GetSingleton();
+
+	RenderPresetSelector();
+	ImGui::Separator();
 
 	if (ImGui::Button("Save & Apply")) {
 		settingManager.Save();
@@ -56,7 +163,7 @@ void MenuManager::RenderSettingsPanel()
 		effectManager.Apply();
 	}
 	if (ImGui::IsItemHovered()) {
-		ImGui::SetTooltip("Save all settings, then reload and recompile shaders");
+		ImGui::SetTooltip("Save all settings, then reload and recompile ENB FX shaders");
 	}
 
 	ImGui::SameLine();
@@ -67,7 +174,7 @@ void MenuManager::RenderSettingsPanel()
 		effectManager.Apply();
 	}
 	if (ImGui::IsItemHovered()) {
-		ImGui::SetTooltip("Load all settings from enbseries.ini, weather files, and effect configurations, reload shaders");
+		ImGui::SetTooltip("Load all settings from enbseries.ini, weather files, and effect configurations, reload ENB FX shaders");
 	}
 
 	ImGui::SameLine();
