@@ -63,23 +63,38 @@ namespace
 		logger::error("[Unified Water] Skipping {} patch at {:X}: unexpected branch bytes {:02X} {:02X}", label, address, bytes[0], bytes[1]);
 	}
 
-	/** @brief Disables the vanilla LOD water and flow map paths that Unified Water supersedes. Irreversible, so it must only run once Unified Water is fully initialized. */
-	void DisableVanillaWaterLOD()
+	bool CanPatchBranch(const std::uintptr_t address)
+	{
+		const auto bytes = reinterpret_cast<const std::uint8_t*>(address);
+		return IsShortBranch(bytes[0]) || IsNearConditionalBranch(bytes[0], bytes[1]);
+	}
+
+	/** @brief Disables the vanilla LOD water and flow map paths that Unified Water supersedes. Irreversible, so it must only run once the meshes are validated. */
+	bool DisableVanillaWaterLOD()
 	{
 		// DataLoaded can run more than once, and re-patching a patched branch no longer matches either encoding
 		static bool patched = false;
 		if (patched)
-			return;
-		patched = true;
+			return true;
 
 		// Skip iterating attached meshes and calling TESWaterSystem::AddLODWater, this is handled in Attach now
-		PatchBranchToUnconditional(REL::RelocationID(30934, 31737).address() + REL::Relocate(0x109, 0x109), "attached mesh add loop");
-		PatchBranchToUnconditional(REL::RelocationID(30978, 31751).address() + REL::Relocate(0x54, 0xEA), "LOD water add loop");
+		const auto attachedMeshAddLoop = REL::RelocationID(30934, 31737).address() + REL::Relocate(0x109, 0x109);
+		const auto lodWaterAddLoop = REL::RelocationID(30978, 31751).address() + REL::Relocate(0x54, 0xEA);
+
+		if (!CanPatchBranch(attachedMeshAddLoop) || !CanPatchBranch(lodWaterAddLoop)) {
+			logger::error("[Unified Water] Unexpected branch bytes at {:X} or {:X}; another mod may patch the same code", attachedMeshAddLoop, lodWaterAddLoop);
+			return false;
+		}
+		patched = true;
+
+		PatchBranchToUnconditional(attachedMeshAddLoop, "attached mesh add loop");
+		PatchBranchToUnconditional(lodWaterAddLoop, "LOD water add loop");
 
 		// Patch out the compute shader calls that write to the flow map in Main::RenderWaterEffects
 		REL::safe_fill(REL::RelocationID(35561, 36560).address() + REL::Relocate(0x1B7, 0x1F7), REL::NOP, 5);
 		REL::safe_fill(REL::RelocationID(35561, 36560).address() + REL::Relocate(0x1EA, 0x22A), REL::NOP, 5);
 		REL::safe_fill(REL::RelocationID(35561, 36560).address() + REL::Relocate(0x202, 0x242), REL::NOP, 5);
+		return true;
 	}
 
 }
@@ -228,11 +243,13 @@ void UnifiedWater::DataLoaded()
 	}
 	optimisedWaterMesh = RE::NiPointer(optimisedWaterShape);
 	logger::debug("[Unified Water] Optimised water mesh loaded");
+	if (!DisableVanillaWaterLOD()) {
+		fail("Could not disable vanilla water LOD");
+		return;
+	}
 
 	flowmap = new Flowmap();
 	waterCache = new WaterCache();
-
-	DisableVanillaWaterLOD();
 
 	if (LoadOrderChanged()) {
 		logger::info("[Unified Water] Load order or plugin version changed, regenerating flowmap and caches");
