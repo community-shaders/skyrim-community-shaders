@@ -207,13 +207,13 @@ void UnifiedWater::DataLoaded()
 	args.postProcess = false;
 	RE::NiPointer<RE::NiNode> nif;
 
-	const auto fail = [this](const char* reason) {
+	const auto fail = [this](std::string reason) {
 		logger::error("[Unified Water] {}; distant water falls back to vanilla LOD", reason);
-		failedLoadedMessage = reason;
+		failedLoadedMessage = std::move(reason);
 	};
 
 	if (const auto error = RE::BSModelDB::Demand("meshes\\water\\watermesh.nif", nif, args); error != RE::BSResource::ErrorCode::kNone) {
-		fail("Failed to load water mesh");
+		fail(std::format("Failed to load water mesh ({})", magic_enum::enum_name(error)));
 		return;
 	}
 	if (!nif || nif->GetChildren().empty() || !nif->GetChildren().front()->AsNode() || nif->GetChildren().front()->AsNode()->GetChildren().empty()) {
@@ -229,7 +229,7 @@ void UnifiedWater::DataLoaded()
 	logger::debug("[Unified Water] Water mesh loaded");
 
 	if (const auto error = RE::BSModelDB::Demand("meshes\\water\\optimisedwatermesh.nif", nif, args); error != RE::BSResource::ErrorCode::kNone) {
-		fail("Failed to load optimised water mesh");
+		fail(std::format("Failed to load optimised water mesh ({})", magic_enum::enum_name(error)));
 		return;
 	}
 	if (!nif || nif->GetChildren().empty() || !nif->GetChildren().front()->AsNode() || nif->GetChildren().front()->AsNode()->GetChildren().empty()) {
@@ -562,6 +562,11 @@ void UnifiedWater::TES_DestroySkyCell::thunk(RE::TES* tes)
 
 void UnifiedWater::BGSTerrainNode_UpdateWaterMeshSubVisibility::thunk(const RE::BGSTerrainNode* node, RE::BSMultiBoundNode* waterParent)
 {
+	if (!globals::features::unifiedWater.IsWaterDataReady()) {
+		func(node, waterParent);
+		return;
+	}
+
 	if (!node || !waterParent)
 		return;
 
