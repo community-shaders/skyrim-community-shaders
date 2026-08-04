@@ -985,7 +985,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float cachedDirectionalTerrainParallaxShadow = 1.0;
 	bool hasCachedDirectionalTerrainParallaxShadow = false;
 	bool hasCachedTerrainShadowBaseHeight = false;
-	/** Pixel-invariant terrain POM soft-shadow eligibility for the point-light loop. */
 	bool hasTerrainParallaxShadow = false;
 #		endif
 #	else
@@ -1036,11 +1035,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		displacementParams[0].HeightScale = saturate(1.0 - curvature);
 		displacementParams[0].FlattenAmount = (normalSmoothness + curvature);
 #			else
-		/**
-		 * Objects: do not crush HeightScale (that flattens convex faces you are looking at).
-		 * Only add FlattenAmount past the facing hemisphere (grazing > facing) and only if bent.
-		 * Flat walls stay at bend ≈ 0. Flatten tracks UV stretch (÷ facing).
-		 */
+		// Objects: do not crush HeightScale (that flattens convex faces you are looking at).
+		// Only add FlattenAmount past the facing hemisphere (grazing > facing) and only if bent.
+		// Flat walls stay at bend ≈ 0. Flatten tracks UV stretch (÷ facing).
 		curvature = normalDelta;
 		float facing = saturate(dot(vertexNormal, viewDirection));
 		float grazing = 1.0 - facing;
@@ -1235,10 +1232,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 			input.LandBlendWeights2.x = weights[4];
 			input.LandBlendWeights2.y = weights[5];
 		}
-		/**
-		 * After optional height-blend weight rewrite: distance / displacement / weighted
-		 * height gates for the point-light loop (pixel-invariant; not rechecked per light).
-		 */
 		hasTerrainParallaxShadow =
 			viewPosition.z < ExtendedMaterials::ParallaxCheapDistance &&
 			ExtendedMaterials::TerrainHasAnyDisplacement() &&
@@ -1289,12 +1282,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	endif
 
 #	if defined(LANDSCAPE)
-	float landDistanceTexMipBias = 0.0;
 #		if defined(TERRAIN_VARIATION)
-	g_terrainStochasticGrad = ComputeTerrainGradients(uv);
-#			define SampleTerrain(TEX, SAMP, UV, OFFSET, EXTRA_BIAS) StochasticEffect(TEX, SAMP, UV, OFFSET)
+	g_terrainStochasticLodBase = ComputeTerrainStochasticLodBase(uv);
+#			define SampleTerrain(TEX, SAMP, UV, OFFSET) StochasticEffect(TEX, SAMP, UV, OFFSET)
 #		else
-#			define SampleTerrain(TEX, SAMP, UV, OFFSET, EXTRA_BIAS) TEX.SampleBias(SAMP, UV, SharedData::MipBias + EXTRA_BIAS)
+#			define SampleTerrain(TEX, SAMP, UV, OFFSET) TEX.SampleBias(SAMP, UV, SharedData::MipBias)
 #		endif
 #		if defined(TRUE_PBR)
 	LIGHTING_LANDSCAPE_BLEND_ONE_LAYER_PBR(0, TexColorSampler, SampColorSampler, TexNormalSampler, SampNormalSampler, TexRMAOSSampler, SampRMAOSSampler, PBRParams1, LandscapeTexture1GlintParameters, input.LandBlendWeights1.x)

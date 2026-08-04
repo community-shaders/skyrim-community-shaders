@@ -1,9 +1,6 @@
-/**
- * @file LightingLandscape.hlsli
- * @brief Landscape layer helpers and six-way blend macros for Lighting.hlsl.
- * @details PBR tile bits must match @c PBR::TerrainFlags in PBRMath.hlsli.
- *          Texture registers cannot be indexed by loop variable; hence one macro expansion per layer.
- */
+// Landscape layer helpers and six-way blend macros for Lighting.hlsl.
+// PBR tile bits must match PBR::TerrainFlags in PBRMath.hlsli.
+// Texture registers cannot be indexed by loop variable; hence one macro expansion per layer.
 
 #ifndef __LIGHTING_LANDSCAPE_HLSLI__
 #define __LIGHTING_LANDSCAPE_HLSLI__
@@ -17,12 +14,10 @@
 #	if defined(TRUE_PBR)
 namespace LandscapeLayers
 {
-	/** @brief True if tile uses full PBR material. */
 	inline bool PbrTileUsesFullPBR(uint tileIndex)
 	{
 		return (PBRFlags & (1u << tileIndex)) != 0;
 	}
-	/** @brief True if tile has glint. */
 	inline bool PbrTileHasGlint(uint tileIndex)
 	{
 		return (PBRFlags & (1u << (tileIndex + 12u))) != 0;
@@ -30,26 +25,25 @@ namespace LandscapeLayers
 }
 #	endif
 
-/** @brief Per-layer landscape diffuse/normal(/RMAOS) blend body used by Lighting.hlsl. */
 #	if defined(TRUE_PBR)
 #		define LIGHTING_LANDSCAPE_BLEND_ONE_LAYER_PBR(TILE, COLOR_TEX, COLOR_SAMP, NORM_TEX, NORM_SAMP, RMAOS_TEX, RMAOS_SAMP, PBR_PARAMS3, GLINT_PARAMS, WEIGHT) \
 			[branch] if ((WEIGHT) > 0.01)                                                                                                                          \
 			{                                                                                                                                                      \
 				float weight = WEIGHT;                                                                                                                             \
-				float4 landColor = SampleTerrain(COLOR_TEX, COLOR_SAMP, uv, sharedOffset, landDistanceTexMipBias);                                                \
+				float4 landColor = SampleTerrain(COLOR_TEX, COLOR_SAMP, uv, sharedOffset);                                                                          \
 				float3 landColorRGB = landColor.rgb;                                                                                                               \
 				[branch] if (!LandscapeLayers::PbrTileUsesFullPBR(TILE))                                                                                           \
 				{                                                                                                                                                  \
 					landColorRGB = Color::SrgbToLinear(landColorRGB / Color::PBRLightingScale);                                                                    \
 				}                                                                                                                                                  \
 				float landAlpha = landColor.a;                                                                                                                     \
-				float4 landNormal = SampleTerrain(NORM_TEX, NORM_SAMP, uv, sharedOffset, landDistanceTexMipBias);                                                 \
+				float4 landNormal = SampleTerrain(NORM_TEX, NORM_SAMP, uv, sharedOffset);                                                                           \
 				float3 landNormalRGB = landNormal.rgb;                                                                                                             \
 				float landNormalAlpha = landNormal.a;                                                                                                              \
 				float4 landRMAOS;                                                                                                                                  \
 				[branch] if (LandscapeLayers::PbrTileUsesFullPBR(TILE))                                                                                            \
 				{                                                                                                                                                  \
-					landRMAOS = SampleTerrain(RMAOS_TEX, RMAOS_SAMP, uv, sharedOffset, landDistanceTexMipBias) * float4((PBR_PARAMS3).x, 1, 1, (PBR_PARAMS3).z); \
+					landRMAOS = SampleTerrain(RMAOS_TEX, RMAOS_SAMP, uv, sharedOffset) * float4((PBR_PARAMS3).x, 1, 1, (PBR_PARAMS3).z);                           \
 					[branch] if (LandscapeLayers::PbrTileHasGlint(TILE))                                                                                           \
 					{                                                                                                                                              \
 						glintParameters += weight * (GLINT_PARAMS);                                                                                                \
@@ -57,7 +51,7 @@ namespace LandscapeLayers
 				}                                                                                                                                                  \
 				else                                                                                                                                               \
 				{                                                                                                                                                  \
-					landRMAOS = float4(1 - glossiness.x, 0, 1, 0);                                                                                                   \
+					landRMAOS = float4(1 - glossiness.x, 0, 1, 0);                                                                                                 \
 				}                                                                                                                                                  \
 				blendedRMAOS += landRMAOS * weight;                                                                                                                \
 				blendedRGB += landColorRGB * weight;                                                                                                               \
@@ -76,10 +70,10 @@ namespace LandscapeLayers
 			[branch] if ((WEIGHT) > 0.01)                                                                              \
 			{                                                                                                          \
 				float weight = WEIGHT;                                                                                 \
-				float4 landColor = SampleTerrain(COLOR_TEX, COLOR_SAMP, uv, sharedOffset, landDistanceTexMipBias);     \
+				float4 landColor = SampleTerrain(COLOR_TEX, COLOR_SAMP, uv, sharedOffset);                             \
 				float3 landColorRGB = landColor.rgb;                                                                   \
 				float landAlpha = landColor.a;                                                                         \
-				float4 landNormal = SampleTerrain(NORM_TEX, NORM_SAMP, uv, sharedOffset, landDistanceTexMipBias);      \
+				float4 landNormal = SampleTerrain(NORM_TEX, NORM_SAMP, uv, sharedOffset);                              \
 				float3 landNormalRGB = landNormal.rgb;                                                                 \
 				float landNormalAlpha = landNormal.a;                                                                  \
 				blendedRGB += landColorRGB * weight;                                                                   \
