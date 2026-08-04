@@ -31,6 +31,14 @@ namespace
 		return cell && cell->IsInteriorCell();
 	}
 
+	/** @brief Logs the resource error alongside whether the process can see the loose file; the path stays relative so USVFS-virtualised files resolve. */
+	void LogMeshLoadFailure(RE::BSResource::ErrorCode error, const char* dataRelativePath)
+	{
+		std::error_code ec;
+		logger::error("[Unified Water] {} load failed: {}, loose file present: {}", dataRelativePath, magic_enum::enum_name(error),
+			std::filesystem::exists(std::filesystem::path("Data") / dataRelativePath, ec));
+	}
+
 	bool IsShortBranch(const std::uint8_t opcode)
 	{
 		return opcode == 0xEB || (opcode >= 0x70 && opcode <= 0x7F);
@@ -213,7 +221,8 @@ void UnifiedWater::DataLoaded()
 	};
 
 	if (const auto error = RE::BSModelDB::Demand("meshes\\water\\watermesh.nif", nif, args); error != RE::BSResource::ErrorCode::kNone) {
-		fail(std::format("Failed to load water mesh ({})", magic_enum::enum_name(error)));
+		LogMeshLoadFailure(error, "meshes\\water\\WaterMesh.nif");
+		fail("Failed to load water mesh");
 		return;
 	}
 	if (!nif || nif->GetChildren().empty() || !nif->GetChildren().front()->AsNode() || nif->GetChildren().front()->AsNode()->GetChildren().empty()) {
@@ -229,7 +238,8 @@ void UnifiedWater::DataLoaded()
 	logger::debug("[Unified Water] Water mesh loaded");
 
 	if (const auto error = RE::BSModelDB::Demand("meshes\\water\\optimisedwatermesh.nif", nif, args); error != RE::BSResource::ErrorCode::kNone) {
-		fail(std::format("Failed to load optimised water mesh ({})", magic_enum::enum_name(error)));
+		LogMeshLoadFailure(error, "meshes\\water\\OptimisedWaterMesh.nif");
+		fail("Failed to load optimised water mesh");
 		return;
 	}
 	if (!nif || nif->GetChildren().empty() || !nif->GetChildren().front()->AsNode() || nif->GetChildren().front()->AsNode()->GetChildren().empty()) {
