@@ -46,6 +46,9 @@ virtual const void* GetSettingsBlob() const { return nullptr; }
 	// Nexus Mods base URL for Skyrim Special Edition
 	static constexpr std::string_view NEXUS_BASE_URL = "https://www.nexusmods.com/skyrimspecialedition/mods/";
 	bool loaded = false;
+	// Whether the feature .ini is present on disk. Unlike `loaded` this stays true for
+	// features disabled at boot, so they remain reachable in the UI.
+	bool installed = false;
 	std::string version;
 	std::string failedLoadedMessage;
 
@@ -117,6 +120,20 @@ public:
 	bool IsBeta() const { return GetReleaseStage() == ReleaseStage::Beta; }
 
 	/**
+	 * Whether the feature has yet to ship, declared via `Unreleased = True` in the
+	 * feature .ini and baked into FeatureVersions.h at build time. Orthogonal to
+	 * ReleaseStage: it gates UI visibility only, and carries no marker of its own.
+	 */
+	bool IsUnreleased() const { return FeatureVersions::FEATURE_UNRELEASED_NAMES.contains(const_cast<Feature*>(this)->GetShortName()); }
+
+	/**
+	 * Whether an unreleased feature must stay out of the UI entirely. Unreleased
+	 * features only surface once their .ini is installed, so a shipped build never
+	 * advertises work in progress; once installed they render like any other feature.
+	 */
+	bool IsHiddenUnreleased() const { return !installed && IsUnreleased(); }
+
+	/**
 	 * Localized stage marker shown after the feature name ("[ALPHA]", "[BETA]"),
 	 * empty for release features. Takes the stage so callers that already resolved
 	 * it (see GetReleaseStage) avoid a redundant lookup.
@@ -125,10 +142,11 @@ public:
 
 	/**
 	 * Whether the feature is disabled at boot by default (before any user override).
-	 * Alpha and Beta features start disabled on first install; users can still enable
-	 * them via the "Disable at Boot" menu.
+	 * Only pre-release CORE features start disabled, since they ship with the base mod
+	 * without the user asking for them. A pre-release addon is installed deliberately,
+	 * so it starts enabled. Users can flip either via the "Disable at Boot" menu.
 	 */
-	virtual bool IsDisabledByDefault() const { return GetReleaseStage() != ReleaseStage::Release; }
+	virtual bool IsDisabledByDefault() const { return IsCore() && GetReleaseStage() != ReleaseStage::Release; }
 
 	/**
 	 * Whether the feature will show up in the GUI menu

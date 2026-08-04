@@ -269,6 +269,17 @@ foreach(FEATURE_PATH ${FEATURE_CONFIG_FILES})
         list(APPEND FEATURE_BETA_NAMES "\t\t\"${FEATURE}\"sv")
     endif()
 
+    # Detect the Unreleased flag, which gates UI visibility independently of the
+    # release stage above. Same line anchoring and CMAKE_MATCH_2 guard.
+    set(_STAGE_UNRELEASED "")
+    string(REGEX MATCH "(^|[\r\n])[ \t]*[Uu]nreleased[ \t]*=[ \t]*([A-Za-z0-9]+)" _STAGE_UNRELEASED_MATCH "${CONFIG_VALUE}")
+    if(_STAGE_UNRELEASED_MATCH)
+        string(TOLOWER "${CMAKE_MATCH_2}" _STAGE_UNRELEASED)
+    endif()
+    if(_STAGE_UNRELEASED MATCHES "^(true|1|yes|on)$")
+        list(APPEND FEATURE_UNRELEASED_NAMES "\t\t\"${FEATURE}\"sv")
+    endif()
+
     # Detect core features by checking for the CORE marker file in the
     # feature root (features/<Folder>/CORE). FEATURE_PATH is
     # features/<Folder>/Shaders/Features/<ShortName>.ini, so the feature
@@ -291,6 +302,7 @@ string(REPLACE ";" ",\n" FEATURE_VERSIONS "${FEATURE_VERSIONS}")
 string(REPLACE ";" ",\n" FEATURE_CORE_NAMES "${FEATURE_CORE_NAMES}")
 string(REPLACE ";" ",\n" FEATURE_ALPHA_NAMES "${FEATURE_ALPHA_NAMES}")
 string(REPLACE ";" ",\n" FEATURE_BETA_NAMES "${FEATURE_BETA_NAMES}")
+string(REPLACE ";" ",\n" FEATURE_UNRELEASED_NAMES "${FEATURE_UNRELEASED_NAMES}")
 
 configure_file(
     ${CMAKE_CURRENT_SOURCE_DIR}/cmake/FeatureVersions.h.in

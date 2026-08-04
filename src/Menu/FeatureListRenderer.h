@@ -85,7 +85,6 @@ private:
 		std::string& pendingFeatureSelection;
 
 		// Helper methods for Feature rendering
-		static bool IsFeatureInstalled(const std::string& featureName);
 		void RenderFeatureHeader(Feature* feat, bool isDisabled, bool isLoaded, bool sceneControlled);
 		void RenderFeatureSettings(Feature* feat, bool isDisabled, bool isLoaded, bool hasFailedMessage, bool sceneControlled);
 		static void RenderRestoreDefaultsButton(Feature* feat, bool isDisabled, bool isLoaded);

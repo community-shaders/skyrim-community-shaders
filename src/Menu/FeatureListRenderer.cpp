@@ -2,11 +2,9 @@
 
 #include <algorithm>
 #include <cmath>
-#include <filesystem>
 #include <format>
 #include <imgui.h>
 #include <ranges>
-#include <system_error>
 #include <unordered_set>
 
 #include "Feature.h"
@@ -424,7 +422,7 @@ std::vector<FeatureListRenderer::MenuFuncInfo> FeatureListRenderer::BuildMenuLis
 	}
 
 	auto unloadedFeatures = sortedFeatureList | std::ranges::views::filter([](Feature* feat) {
-		return !feat->loaded && feat->IsInMenu() && (!FeatureIssues::IsObsoleteFeature(feat->GetShortName()) || globals::state->IsDeveloperMode());
+		return !feat->loaded && feat->IsInMenu() && !feat->IsHiddenUnreleased() && (!FeatureIssues::IsObsoleteFeature(feat->GetShortName()) || globals::state->IsDeveloperMode());
 	});
 	if (std::ranges::distance(unloadedFeatures) != 0) {
 		menuList.push_back(T("menu.features.unloaded_features", "Unloaded Features"));
@@ -598,14 +596,9 @@ void FeatureListRenderer::ListMenuVisitor::operator()(Feature* feat)
 	} else if (hasFailedMessage) {
 		textColor = feat->version.empty() ? themeSettings.StatusPalette.Disable : themeSettings.StatusPalette.Error;
 	} else {
-		// No failed message but not loaded - check if INI file exists
-		if (!std::filesystem::exists(Util::PathHelpers::GetFeatureIniPath(feat->GetShortName()))) {
-			// INI file missing - treat as missing feature (grey)
-			textColor = themeSettings.StatusPalette.Disable;
-		} else {
-			// INI file exists but feature not loaded - truly pending restart (green)
-			textColor = themeSettings.StatusPalette.RestartNeeded;
-		}
+		// Installed but not loaded means the feature is only pending a restart (green),
+		// otherwise it is simply missing (grey).
+		textColor = feat->installed ? themeSettings.StatusPalette.RestartNeeded : themeSettings.StatusPalette.Disable;
 	}
 
 	// Create selectable item with semantic color
@@ -678,13 +671,6 @@ void FeatureListRenderer::DrawMenuVisitor::operator()(Feature* feat)
 	ImGui::EndChild();
 	// Render reactive constraint warning outside the child window so it can appear as a top-level popup
 	RenderReactiveConstraintWarningDialog();
-}
-
-bool FeatureListRenderer::DrawMenuVisitor::IsFeatureInstalled(const std::string& featureName)
-{
-	const auto path = Util::PathHelpers::GetFeatureIniPath(featureName);
-	std::error_code ec;
-	return std::filesystem::exists(path, ec);
 }
 
 void FeatureListRenderer::DrawMenuVisitor::RenderFeatureHeader(Feature* feat, bool isDisabled, bool isLoaded, bool sceneControlled)
@@ -914,7 +900,7 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureSettings(Feature* feat, 
 		} else {
 			if (FeatureIssues::IsObsoleteFeature(feat->GetShortName())) {
 				feat->DrawUnloadedUI();
-			} else if (IsFeatureInstalled(feat->GetShortName())) {
+			} else if (feat->installed) {
 				ImGui::Text("%s", T("menu.features.available_after_restart", "This feature will be available after restart."));
 			} else {
 				feat->DrawUnloadedUI();

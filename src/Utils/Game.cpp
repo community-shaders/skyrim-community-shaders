@@ -141,8 +141,9 @@ namespace Util
 	{
 		float2 resolution{ (float)globals::game::graphicsState->screenWidth, (float)globals::game::graphicsState->screenHeight };
 
+		// Feature passes use the scaled render area even when the vanilla dynamic-resolution lock is set.
 		if (a_dynamic)
-			ConvertToDynamic(resolution);
+			resolution = ConvertToDynamic(resolution, true);
 
 		uint dispatchX = (uint)std::ceil(resolution.x / 8.0f);
 		uint dispatchY = (uint)std::ceil(resolution.y / 8.0f);

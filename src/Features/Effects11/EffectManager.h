@@ -40,7 +40,9 @@ public:
 	static EffectManager& GetSingleton();
 
 	// Effect execution
-	void ExecuteEffects(RE::BSGraphics::RenderTargetData& a_input, RE::BSGraphics::RenderTargetData& a_output);
+	/** @brief Runs the effect chain from a_input into a_output.
+		@return true only if a_output was written; false means the caller must fall back to the stock pass. */
+	bool ExecuteEffects(RE::BSGraphics::RenderTargetData& a_input, RE::BSGraphics::RenderTargetData& a_output);
 
 	// Lifecycle
 	void Initialize();
@@ -125,6 +127,10 @@ public:
 	const CommonVariableData& GetCommonData() const { return commonData; }
 
 	bool IsInitialized() const { return initialized; }
+
+	/** @brief True when a usable preset is present; enbeffect.fx is required, so its absence means no preset.
+		Effects11 must stay fully inert in that case, leaving the image untouched. */
+	bool IsPresetLoaded() const { return enbEffect.IsCompiled(); }
 
 	bool performanceMode = false;
 

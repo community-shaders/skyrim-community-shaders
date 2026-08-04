@@ -25,4 +25,9 @@ namespace FeatureVersions
 	{
 @FEATURE_BETA_NAMES@
 	};
+
+	static const std::unordered_set<std::string_view> FEATURE_UNRELEASED_NAMES
+	{
+@FEATURE_UNRELEASED_NAMES@
+	};
 }

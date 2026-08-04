@@ -313,16 +313,21 @@ void EffectManager::ExecuteEffect(EffectBase& a_effect, uint32_t enableSettingID
 	a_effect.profiler = nullptr;
 }
 
-void EffectManager::ExecuteEffects(RE::BSGraphics::RenderTargetData& a_input, [[maybe_unused]] RE::BSGraphics::RenderTargetData& a_output)
+bool EffectManager::ExecuteEffects(RE::BSGraphics::RenderTargetData& a_input, RE::BSGraphics::RenderTargetData& a_output)
 {
 	if (!initialized)
-		return;
+		return false;
 
 	auto context = globals::d3d::context;
 	auto renderer = globals::game::renderer;
 
 	if (!rasterizerState || !blendState || !quadVertexBuffer || !inputLayout || !renderer)
-		return;
+		return false;
+
+	// Without a preset nothing writes TextureSDRTemp, so the output RT would be copied from a
+	// never-written texture, i.e. a black screen
+	if (!IsPresetLoaded())
+		return false;
 
 	D3D11FullStateBackup stateBackup;
 	stateBackup.Save(context);
@@ -373,7 +378,8 @@ void EffectManager::ExecuteEffects(RE::BSGraphics::RenderTargetData& a_input, [[
 	textureManager.IncrementTextureSwap();
 
 	auto* textureSDRTemp = textureManager.GetCommonTexture("TextureSDRTemp");
-	if (textureSDRTemp && a_output.RTV) {
+	const bool wroteOutput = textureSDRTemp && a_output.RTV;
+	if (wroteOutput) {
 		globals::profiler->BeginPass("Effects11::CopyToOutput");
 		CopyTexture(textureSDRTemp->srv.get(), a_output.RTV);
 		globals::profiler->EndPass();
@@ -381,6 +387,8 @@ void EffectManager::ExecuteEffects(RE::BSGraphics::RenderTargetData& a_input, [[
 
 	stateBackup.Restore(context);
 	stateBackup.Release();
+
+	return wroteOutput;
 }
 
 std::string EffectManager::LoadShaderFile(const char* path)

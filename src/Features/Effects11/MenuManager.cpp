@@ -6,6 +6,7 @@
 #include "Features/Effects11.h"
 #include "Features/Effects11/ShaderPatches.h"
 #include "Globals.h"
+#include "I18n/I18n.h"
 
 static const char* const timeOfDayNames[] = { "Dawn", "Sunrise", "Day", "Sunset", "Dusk", "Night", "InteriorDay", "InteriorNight" };
 
@@ -334,9 +335,20 @@ void MenuManager::RenderAllSettings()
 								switch (settingInfo->type) {
 								case SettingType::Bool:
 									{
-										bool v = settingManager.GetValue<bool>(settingID, true);
+										const bool noPreset = category == "GLOBAL" && settingKey == "UseEffect" && !EffectManager::GetSingleton().IsPresetLoaded();
+
+										bool v = !noPreset && settingManager.GetValue<bool>(settingID, true);
+										ImGui::BeginDisabled(noPreset);
 										if (ImGui::Checkbox(("##" + settingKey).c_str(), &v)) {
 											settingManager.SetValue<bool>(settingID, v);
+										}
+										ImGui::EndDisabled();
+
+										if (noPreset) {
+											ImGui::SameLine();
+											ImGui::PushStyleColor(ImGuiCol_Text, globals::menu->GetSettings().Theme.StatusPalette.Warning);
+											ImGui::TextUnformatted(T("feature.effects11.no_preset_detected", "No preset detected"));
+											ImGui::PopStyleColor();
 										}
 										break;
 									}

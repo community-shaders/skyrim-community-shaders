@@ -22,6 +22,7 @@ cbuffer PerFrame : register(b0)
 	float isMainOrLoadingMenu : packoffset(c1.z);
 	float fgTweenMenuMidAlphaBoost : packoffset(c1.w);  ///< TweenMenu: soften AA band when compositing here (UIBrightnessCS skips while paused)
 	float previewSDR : packoffset(c2.x);                ///< 1.0 = emit sRGB SDR (crop preview) instead of PQ HDR10
+	float applyAutoHDR : packoffset(c2.y);              ///< 1.0 = Effects11 replaced ISHDR, so expand its SDR result into HDR
 }
 
 [numthreads(8, 8, 1)] void main(uint3 dispatchID : SV_DispatchThreadID) {
@@ -41,9 +42,11 @@ cbuffer PerFrame : register(b0)
 	if (hdrEnabled) {
 		bool sceneIsLinear = isSceneLinear > 0.5;
 
-		float3 outputColor = sceneIsLinear ? scene.xyz : Color::GammaToLinearSafe(scene.xyz);
-		outputColor = DisplayMapping::PumboAutoHDR(outputColor, SharedData::HDRData.z, SharedData::HDRData.y, 2.75, 1.0);
-		scene.xyz = sceneIsLinear ? outputColor : Color::LinearToGammaSafe(outputColor);
+		if (applyAutoHDR > 0.5) {
+			float3 outputColor = sceneIsLinear ? scene.xyz : Color::GammaToLinearSafe(scene.xyz);
+			outputColor = DisplayMapping::PumboAutoHDR(outputColor, SharedData::HDRData.z, SharedData::HDRData.y, 2.75, 1.0);
+			scene.xyz = sceneIsLinear ? outputColor : Color::LinearToGammaSafe(outputColor);
+		}
 
 		float3 compositedColorLinear;
 

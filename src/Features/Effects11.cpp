@@ -463,9 +463,10 @@ void Effects11::CheckCommonData()
 		auto& settingManager = SettingManager::GetSingleton();
 		auto ui = globals::game::ui;
 		bool isMenuOpen = ui->IsMenuOpen(RE::MapMenu::MENU_NAME);
-		enableEffect = !isMenuOpen && globals::shaderCache->IsEnabled() && settingManager.GetValue<bool>("UseEffect", "GLOBAL");
-
 		auto& effectManager = EffectManager::GetSingleton();
+
+		enableEffect = !isMenuOpen && globals::shaderCache->IsEnabled() && settingManager.GetValue<bool>("UseEffect", "GLOBAL") && effectManager.IsPresetLoaded();
+
 		auto& weatherManager = WeatherManager::GetSingleton();
 
 		effectManager.UpdateCommonData();
@@ -516,6 +517,11 @@ void Effects11::OnSkyUpdateColors(RE::Sky* a_sky)
 		OverrideWeather(a_sky);
 }
 
+bool Effects11::ReplacedTonemapperThisFrame() const
+{
+	return tonemapReplacedFrame == globals::state->frameCount;
+}
+
 bool Effects11::HandleTonemapRender(RE::RENDER_TARGET a_input, RE::RENDER_TARGET a_output)
 {
 	CheckCommonData();
@@ -525,14 +531,22 @@ bool Effects11::HandleTonemapRender(RE::RENDER_TARGET a_input, RE::RENDER_TARGET
 
 	if (enableEffect && !settingManager.GetValue<bool>("UseOriginalPostProcessing", "EFFECT")) {
 		auto& renderTargets = globals::game::renderer->GetRuntimeData().renderTargets;
-		effectManager.ExecuteEffects(renderTargets[a_input], renderTargets[a_output]);
-		return true;
+		// Only claim the tonemap pass if the effect chain actually wrote the output
+		if (effectManager.ExecuteEffects(renderTargets[a_input], renderTargets[a_output])) {
+			tonemapReplacedFrame = globals::state->frameCount;
+			return true;
+		}
 	}
 	return false;
 }
 
 void Effects11::ModifySky(RE::BSRenderPass* Pass)
 {
+	// State::UpdateSkyShaderPermutation ran first and already flagged both the sun disc and its
+	// glare; only narrow that to the disc when a preset is actually driving the procedural sun
+	if (!enableEffect)
+		return;
+
 	if (!Pass || !Pass->shaderProperty) {
 		return;
 	}
