@@ -4,8 +4,6 @@
 
 namespace Util
 {
-	void StoreTransform3x4NoScale(DirectX::XMFLOAT3X4& Dest, const RE::NiTransform& Source);
-
 	float4 TryGetWaterData(float offsetX, float offsetY);
 	float4 GetCameraData();
 	bool GetTemporal();

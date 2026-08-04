@@ -7,6 +7,7 @@
 #include "Utils/D3D.h"
 
 #include "Features/DynamicCubemaps.h"
+#include "Features/Effects11.h"
 #include "Features/IBL.h"
 #include "Features/ScreenSpaceGI.h"
 #include "Features/Skylighting.h"
@@ -400,6 +401,9 @@ void Deferred::DeferredPasses()
 
 	if (dynamicCubemaps.loaded)
 		dynamicCubemaps.PostDeferred();
+
+	if (globals::features::effects11.loaded)
+		globals::features::effects11.DrawVolumetricRays();
 }
 
 void Deferred::EndDeferred()

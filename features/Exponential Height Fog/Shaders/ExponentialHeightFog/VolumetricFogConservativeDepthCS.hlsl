@@ -12,11 +12,17 @@ RWTexture2D<float> ConservativeDepthTexture : register(u0);
 	float2 eyeUVMin = saturate(volumeUVMin);
 	float2 eyeUVMax = saturate(volumeUVMax);
 
-	int2 minCoord = SharedData::ConvertUVToSampleCoord(min(eyeUVMin, eyeUVMax)).xy;
-	int2 maxCoord = SharedData::ConvertUVToSampleCoord(max(eyeUVMin, eyeUVMax)).xy - 1;
+	// The volume spans the whole view, while the depth buffer occupies the active
+	// dynamic-resolution region. Include every depth pixel touched by this froxel.
+	float2 renderSize = SharedData::BufferDim.xy * FrameBuffer::DynamicResolutionParams1.xy;
+	float2 sampleCoordMin = min(eyeUVMin, eyeUVMax) * renderSize;
+	float2 sampleCoordMax = max(eyeUVMin, eyeUVMax) * renderSize;
+
+	int2 minCoord = int2(floor(sampleCoordMin));
+	int2 maxCoord = int2(ceil(sampleCoordMax)) - 1;
 	maxCoord = max(maxCoord, minCoord);
 
-	int2 bufferMax = int2(SharedData::BufferDim.xy) - 1;
+	int2 bufferMax = max(int2(ceil(renderSize)) - 1, int2(0, 0));
 	minCoord = clamp(minCoord, int2(0, 0), bufferMax);
 	maxCoord = clamp(maxCoord, int2(0, 0), bufferMax);
 

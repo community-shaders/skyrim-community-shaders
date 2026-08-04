@@ -197,6 +197,10 @@ namespace Color
 
 	float3 Diffuse(float3 color)
 	{
+#	if defined(EFFECTS11)
+		if (SharedData::enbSettings.Enable)
+			color = pow(abs(color), SharedData::enbSettings.ColorPow);
+#	endif
 #	if defined(TRUE_PBR)
 		return ENABLE_LL ? color : LinearToSrgb(color);
 #	else

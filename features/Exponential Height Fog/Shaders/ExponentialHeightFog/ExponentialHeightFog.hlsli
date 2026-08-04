@@ -80,13 +80,6 @@ namespace ExponentialHeightFog
 		return lerp(float4(0.0f, 0.0f, 0.0f, 1.0f), volumetricFog, saturate((sceneDepth - GetVolumetricStartDistance()) * 100000000.0f));
 	}
 
-	float2 GetVolumetricFogUVMax(float2 volumeSize, float gridPixelSize)
-	{
-		float2 physicalSize = max(volumeSize * gridPixelSize, 1.0f.xx);
-		float2 viewSizeSafe = ceil(SharedData::BufferDim.xy / gridPixelSize) * gridPixelSize - (gridPixelSize * 0.5f + 1.0f);
-		return saturate(viewSizeSafe / physicalSize);
-	}
-
 	float4 SampleVolumetricFog(float4 screenPosition)
 	{
 		if (!ShouldApplyVolumetricFog())
@@ -103,56 +96,30 @@ namespace ExponentialHeightFog
 		float volumeZ = saturate(ComputeVolumetricNormalizedSlice(sceneDepth, float(volumeDepth)));
 
 		float2 volumeSize = float2(volumeWidth, volumeHeight);
-		float2 inferredGridPixelSize = ceil(SharedData::BufferDim.xy / max(volumeSize, 1.0f.xx));
-		float gridPixelSize = max(max(inferredGridPixelSize.x, inferredGridPixelSize.y), 1.0f);
-		float2 jitter = 0.0f.xx;
+		// Callers provide full-resolution pixel coordinates by undoing dynamic-resolution
+		// scaling. Normalize by the full buffer so this matches the UV space used to build
+		// the froxel volume and its conservative depth.
+		float2 volumeUV = screenPosition.xy * SharedData::BufferDim.zw;
 		[branch] if (SharedData::exponentialHeightFogSettings.volumetricUpsampleJitterMultiplier > 0.0f)
 		{
 			float2 noise = float2(
 				Random::InterleavedGradientNoise(screenPosition.xy, SharedData::FrameCount),
 				Random::InterleavedGradientNoise(screenPosition.yx + 19.19f, SharedData::FrameCount));
-			jitter = (noise * 2.0f - 1.0f) * SharedData::exponentialHeightFogSettings.volumetricUpsampleJitterMultiplier * gridPixelSize;
+			volumeUV += (noise * 2.0f - 1.0f) *
+			            SharedData::exponentialHeightFogSettings.volumetricUpsampleJitterMultiplier / volumeSize;
 		}
 
-		float2 volumeUV = (screenPosition.xy + jitter) / (volumeSize * gridPixelSize);
 		float3 volumeTexelCenter = 0.5f / float3(volumeWidth, volumeHeight, volumeDepth);
 		float2 volumeUVMin = volumeTexelCenter.xy;
-		float2 volumeUVMax = max(GetVolumetricFogUVMax(volumeSize, gridPixelSize), volumeUVMin);
+		float2 volumeUVMax = 1.0f.xx - volumeTexelCenter.xy;
 		float3 volumeUVW = float3(clamp(volumeUV, volumeUVMin, volumeUVMax), clamp(volumeZ, volumeTexelCenter.z, 1.0f - volumeTexelCenter.z));
 		float4 volumetricFog = ExponentialHeightFogIntegratedLightScattering.SampleLevel(SampColorSampler, volumeUVW, 0);
 		return lerp(float4(0.0f, 0.0f, 0.0f, 1.0f), volumetricFog, saturate((sceneDepth - GetVolumetricStartDistance()) * 100000000.0f));
 	}
 
-	// Apply per-pixel directional light phase correction to volumetric fog.
-	// The volumetric compute stores directional scattering with isotropic phase (1/4PI) to
-	// avoid angular aliasing at coarse froxel XY resolution. Here we restore the correct
-	// per-pixel HG phase, weighted by the estimated directional light fraction.
-	float4 ApplyDirectionalPhaseCorrection(float4 volumetricFog, float3 viewDirection)
-	{
-		if (volumetricFog.r + volumetricFog.g + volumetricFog.b < 1e-7f)
-			return volumetricFog;
-
-		float g = SharedData::exponentialHeightFogSettings.volumetricFogScatteringDistribution;
-		float cosTheta = dot(normalize(SharedData::DirLightDirection.xyz), viewDirection);
-		float perPixelPhase = HenyeyGreenstein(cosTheta, g);
-		float isotropicPhase = 1.0f / (4.0f * Math::PI);
-
-		// Estimate directional light's fraction of total volumetric inscattering
-		float dirStrength = dot(SharedData::DirLightColor.xyz, float3(0.2126f, 0.7152f, 0.0722f)) *
-		                    SharedData::exponentialHeightFogSettings.volumetricDirectionalScatteringIntensity;
-		float skyStrength = SharedData::exponentialHeightFogSettings.volumetricSkyLightingIntensity;
-		float dirFraction = saturate(dirStrength / max(dirStrength + skyStrength, 1e-5f));
-
-		// Apply phase correction only to the estimated directional portion
-		float correction = lerp(1.0f, perPixelPhase / isotropicPhase, dirFraction);
-		volumetricFog.rgb *= correction;
-		return volumetricFog;
-	}
-
-	float4 CombineVolumetricFog(float4 analyticalFog, float3 positionWS, float3 viewDirection)
+	float4 CombineVolumetricFog(float4 analyticalFog, float3 positionWS)
 	{
 		float4 volumetricFog = SampleVolumetricFog(positionWS);
-		volumetricFog = ApplyDirectionalPhaseCorrection(volumetricFog, viewDirection);
 		float analyticalTransmittance = 1.0f - analyticalFog.w;
 		float combinedTransmittance = volumetricFog.a * analyticalTransmittance;
 		float combinedOpacity = saturate(1.0f - combinedTransmittance);
@@ -161,10 +128,9 @@ namespace ExponentialHeightFog
 		return float4(combinedOpacity > 1e-4f ? combinedPremultiplied / combinedOpacity : float3(0.0f, 0.0f, 0.0f), combinedOpacity);
 	}
 
-	float4 CombineVolumetricFog(float4 analyticalFog, float4 screenPosition, float3 viewDirection)
+	float4 CombineVolumetricFog(float4 analyticalFog, float4 screenPosition)
 	{
 		float4 volumetricFog = SampleVolumetricFog(screenPosition);
-		volumetricFog = ApplyDirectionalPhaseCorrection(volumetricFog, viewDirection);
 		float analyticalTransmittance = 1.0f - analyticalFog.w;
 		float combinedTransmittance = volumetricFog.a * analyticalTransmittance;
 		float combinedOpacity = saturate(1.0f - combinedTransmittance);
@@ -252,7 +218,7 @@ namespace ExponentialHeightFog
 		if (!applyVolumetricFog) {
 			return analyticalFog;
 		}
-		return useScreenPosition ? CombineVolumetricFog(analyticalFog, screenPosition, viewDirection) : CombineVolumetricFog(analyticalFog, positionWS, viewDirection);
+		return useScreenPosition ? CombineVolumetricFog(analyticalFog, screenPosition) : CombineVolumetricFog(analyticalFog, positionWS);
 	}
 
 	float4 GetExponentialHeightFog(float3 positionWS, float3 cameraWS, float3 fogColor)

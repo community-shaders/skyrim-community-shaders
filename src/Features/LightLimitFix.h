@@ -5,6 +5,44 @@
 
 struct LightLimitFix : OverlayFeature
 {
+	static constexpr uint MAX_LIGHTS = 1024;
+
+	struct ParticleLightConfig
+	{
+		bool cull = false;
+	};
+
+	struct ParticleLightConfigStore
+	{
+		ankerl::unordered_dense::map<std::string, ParticleLightConfig> configs;
+
+		void Load();
+	};
+
+	struct ResolvedParticleLight
+	{
+		RE::NiPoint3 position;
+		RE::NiColorA color;
+		float radius;
+	};
+
+	struct VertexColorCacheEntry
+	{
+		bool valid = false;
+		bool applyEffectMaterialTint = true;
+		ParticleLightConfig config{};
+		RE::NiColorA baseColor{ 1.0f, 1.0f, 1.0f, 1.0f };
+	};
+
+	ParticleLightConfigStore particleLightConfigs;
+
+	eastl::hash_map<RE::BSGeometry*, VertexColorCacheEntry> vertexColorCache;
+	eastl::vector<ResolvedParticleLight> queuedParticleLights;
+	eastl::vector<ResolvedParticleLight> currentParticleLights;
+	std::shared_mutex particleLightsMutex;
+
+	bool CheckParticleLights(RE::BSRenderPass* a_pass, uint32_t a_technique);
+
 public:
 	virtual inline std::string GetName() override { return "Light Limit Fix"; }
 	virtual std::string GetDisplayName() override { return T("feature.light_limit_fix.name", "Light Limit Fix"); }
@@ -59,6 +97,8 @@ public:
 		uint pad1;
 	};
 	STATIC_ASSERT_ALIGNAS_16(LightData);
+
+	void AddParticleLightsToBuffer(eastl::vector<LightData>& a_lightsData);
 
 	struct ClusterAABB
 	{
@@ -147,6 +187,8 @@ public:
 	/** @brief Creates GPU buffers, compute shaders, and constant buffers for clustered lighting. */
 	virtual void SetupResources() override;
 
+	virtual void SaveSettings(json& o_json) override;
+	virtual void LoadSettings(json& o_json) override;
 	virtual void RestoreDefaultSettings() override;
 
 	/** @brief Draws the ImGui settings UI for light limit fix configuration and debug visualization. */
@@ -201,6 +243,8 @@ public:
 
 	struct Settings
 	{
+		bool EnableParticleLights = true;
+		bool EnableParticleLightsCulling = true;
 		bool EnableLightsVisualisation = false;
 		uint LightsVisualisationMode = 0;
 	};
@@ -255,21 +299,31 @@ public:
 		using ValidLight2 = ValidLight<2>;
 		using ValidLight3 = ValidLight<3>;
 
-		static void Install()
+		template <int N>
+		struct BSBatchRenderer_RenderPassImmediately
 		{
-			stl::write_vfunc<0x6, BSLightingShader_SetupGeometry>(RE::VTABLE_BSLightingShader[0]);
-			stl::write_vfunc<0x6, BSEffectShader_SetupGeometry>(RE::VTABLE_BSEffectShader[0]);
-			stl::write_vfunc<0x6, BSWaterShader_SetupGeometry>(RE::VTABLE_BSWaterShader[0]);
+			static void thunk(RE::BSRenderPass* a_pass, uint32_t a_technique, bool a_alphaTest, uint32_t a_renderFlags);
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
 
-			stl::write_thunk_call<ValidLight1>(REL::RelocationID(100994, 107781).address() + 0x92);
-			stl::write_thunk_call<ValidLight2>(REL::RelocationID(100997, 107784).address() + REL::Relocate(0x139, 0x12A));
-			stl::write_thunk_call<ValidLight3>(REL::RelocationID(101296, 108283).address() + REL::Relocate(0xB7, 0x7E));
+		using RenderPass1 = BSBatchRenderer_RenderPassImmediately<1>;
+		using RenderPass2 = BSBatchRenderer_RenderPassImmediately<2>;
+		using RenderPass3 = BSBatchRenderer_RenderPassImmediately<3>;
 
-			logger::info("[LLF] Installed hooks");
-		}
+		struct BSGeometry_Destroy
+		{
+			static void thunk(RE::BSGeometry* This);
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
+		static void Install();
 	};
 
 	virtual bool IsCore() const override { return true; }
+
+private:
+	VertexColorCacheEntry GetParticleLightConfig(RE::BSRenderPass* a_pass);
+	bool QueueParticleLight(RE::BSRenderPass* a_pass, VertexColorCacheEntry& a_reference);
 };
 
 template <>
