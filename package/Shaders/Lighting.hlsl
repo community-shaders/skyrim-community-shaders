@@ -1043,7 +1043,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float grazing = 1.0 - facing;
 		float bend = saturate(normalSmoothness + curvature);
 		float silhouette = saturate(grazing - facing);
-		displacementParams.FlattenAmount = silhouette * bend * rcp(max(facing, 0.0625));
+		// Cap FlattenAmount: ÷facing tracks UV stretch but can explode at grazing (~14× at the 0.0625 floor).
+		displacementParams.FlattenAmount = saturate(silhouette * bend * rcp(max(facing, 0.0625)));
 #			endif
 	}
 #		endif
@@ -1236,12 +1237,14 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 			viewPosition.z < ExtendedMaterials::ParallaxCheapDistance &&
 			ExtendedMaterials::TerrainHasAnyDisplacement() &&
 			ExtendedMaterials::TerrainMaxWeightedHeightScale(input, displacementParams) > 0.01;
-		if (doTerrainPom && SharedData::extendedMaterialSettings.EnableShadows && terrainDirectionalShadowQuality > 0.0) {
-			float3 dirLightDirectionTS = mul(DirLightDirection, tbn).xyz;
+		// sh0 feeds point-light terrain shadows (hasTerrainParallaxShadow), not only POM.
+		if ((doTerrainPom || hasTerrainParallaxShadow) && SharedData::extendedMaterialSettings.EnableShadows && terrainDirectionalShadowQuality > 0.0) {
 			hasCachedTerrainShadowBaseHeight = COMPUTE_TERRAIN_SHADOW_BASE(sh0);
-			if (hasCachedTerrainShadowBaseHeight)
+			if (doTerrainPom && hasCachedTerrainShadowBaseHeight) {
+				float3 dirLightDirectionTS = mul(DirLightDirection, tbn).xyz;
 				cachedDirectionalTerrainParallaxShadow = EVAL_TERRAIN_DIR_SHADOW(sh0, dirLightDirectionTS);
-			hasCachedDirectionalTerrainParallaxShadow = hasCachedTerrainShadowBaseHeight;
+				hasCachedDirectionalTerrainParallaxShadow = true;
+			}
 		}
 	}
 #		endif  // EMAT

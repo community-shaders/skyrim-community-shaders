@@ -14,8 +14,8 @@ void TerrainVariation::DrawSettings()
 {
 	{
 		MenuFonts::FontRoleGuard bodyGuard(Menu::FontRole::Body);
-		ImGui::TextWrapped(
-			"Terrain variation is always enabled when installed. Use disable at boot to turn off.");
+		ImGui::TextWrapped("%s", T(TKEY("always_enabled_note"),
+			"Terrain Variation is always enabled when installed. To turn it off, use Disable at Boot."));
 	}
 
 	ImGui::Spacing();

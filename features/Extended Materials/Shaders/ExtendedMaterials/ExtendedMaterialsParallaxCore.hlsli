@@ -42,6 +42,8 @@
 #endif
 		float minHeight = maxHeight * 0.5;
 
+		float2 resultCoords = coords;
+
 #if defined(LANDSCAPE)
 		if (nearBlendToFar < 1.0) {
 #else
@@ -163,20 +165,20 @@
 				nearBlendToFar *= nearBlendToFar;
 			float offset = (1.0 - parallaxAmount) * -maxHeight + minHeight;
 			pixelOffset = saturate(lerp(parallaxAmount, 0.5, nearBlendToFar));
-			return lerp(viewDirTS.xy * offset + coords.xy, coords, nearBlendToFar);
+			resultCoords = lerp(viewDirTS.xy * offset + coords.xy, coords, nearBlendToFar);
+		} else {
+#if defined(LANDSCAPE)
+			weights[0] = input.LandBlendWeights1.x;
+			weights[1] = input.LandBlendWeights1.y;
+			weights[2] = input.LandBlendWeights1.z;
+			weights[3] = input.LandBlendWeights1.w;
+			weights[4] = input.LandBlendWeights2.x;
+			weights[5] = input.LandBlendWeights2.y;
+#endif
+			pixelOffset = 0.0;
 		}
 
-#if defined(LANDSCAPE)
-		weights[0] = input.LandBlendWeights1.x;
-		weights[1] = input.LandBlendWeights1.y;
-		weights[2] = input.LandBlendWeights1.z;
-		weights[3] = input.LandBlendWeights1.w;
-		weights[4] = input.LandBlendWeights2.x;
-		weights[5] = input.LandBlendWeights2.y;
-#endif
-
-		pixelOffset = 0.0;
-		return coords;
+		return resultCoords;
 	}
 
 #	if !defined(LANDSCAPE)

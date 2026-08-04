@@ -1,6 +1,6 @@
 #pragma once
 
-/** @brief Reduces terrain texture tiling artifacts by adding distance-based variation to texture sampling. */
+/** @brief Reduces terrain texture tiling artifacts by adding stochastic variation to texture sampling. */
 struct TerrainVariation : Feature
 {
 private:
@@ -29,7 +29,7 @@ public:
 	{
 		return { T("feature.terrain_variation.description", "Terrain Variation reduces the repeating pattern effect on terrain textures.\nThis technique creates more natural-looking terrain by adding variation to texture sampling."),
 			{ T("feature.terrain_variation.key_feature_1", "Reduces terrain texture tiling"),
-				T("feature.terrain_variation.key_feature_2", "Adjustable distance-based blending"),
+				T("feature.terrain_variation.key_feature_2", "Stochastic texture sampling"),
 				T("feature.terrain_variation.key_feature_3", "Improved terrain visual quality"),
 				T("feature.terrain_variation.key_feature_4", "Compatible with Extended Materials parallax") } };
 	};

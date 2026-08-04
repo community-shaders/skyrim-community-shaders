@@ -1230,7 +1230,7 @@
     "feature.terrain_variation.apply_to_lod_terrain_tooltip": "Применяет исправление тайлинга к LOD-объектам рельефа.\nПомогает уменьшить видимый эффект тайлинга на дальнем рельефе.",
     "feature.terrain_variation.description": "Terrain Variation уменьшает эффект повторяющегося паттерна на текстурах рельефа.\nЭта техника создаёт более естественный вид рельефа, добавляя вариативность при дискретизации текстур.",
     "feature.terrain_variation.key_feature_1": "Снижает тайлинг текстур рельефа",
-    "feature.terrain_variation.key_feature_2": "Настраиваемое смешивание на основе расстояния",
+    "feature.terrain_variation.key_feature_2": "Стохастическая дискретизация текстур",
     "feature.terrain_variation.key_feature_3": "Улучшенное визуальное качество рельефа",
     "feature.terrain_variation.key_feature_4": "Совместимость с параллаксом Extended Materials",
     "feature.terrain_variation.name": "Вариативность рельефа",
