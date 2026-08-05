@@ -396,12 +396,6 @@ struct PS_OUTPUT
 #	elif defined(NORMALS)
 	float4 NormalGlossiness: SV_Target2;
 #	endif
-#	if defined(OIT) && OIT == 3 && !defined(MOTIONVECTORS_NORMALS)
-	float4 OITRevealage: SV_Target1;
-#	endif
-#	if defined(OIT) && OIT == 3 && !defined(MOTIONVECTORS_NORMALS) && !defined(NORMALS)
-	float4 OITFrontAccum: SV_Target2;
-#	endif
 	float4 Albedo: SV_Target3;
 	float4 Specular: SV_Target4;
 	float4 Reflectance: SV_Target5;
@@ -488,6 +482,9 @@ cbuffer PerGeometry : register(b2)
 
 #	include "Common/ShadowSampling.hlsli"
 
+#	if defined(DEFERRED)
+#		undef OIT
+#	endif
 #	if defined(OIT)
 #		include "OIT/OITCapture.hlsli"
 #	endif
@@ -966,7 +963,7 @@ PS_OUTPUT main(PS_INPUT input)
 	}
 #	endif
 #if defined(OIT)
-#if OIT == 3 && !defined(DEFERRED)
+#if OIT == 3
 	WBOITResult oit = OIT_CaptureWBOIT(int2(input.Position.xy), psout.Diffuse, input.Position.z);
 	psout.OITFrontAccumalation = oit.accumFront;
 	psout.OITAccumalation = oit.accumAll;

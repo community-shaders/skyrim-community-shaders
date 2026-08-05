@@ -3,9 +3,12 @@
 
 struct OrderIndependentTransparency final : Feature
 {
+	static constexpr std::string_view MOD_ID = "187431";
+
 	virtual inline std::string GetName() override { return "Order Independent Transparency"; }
 	virtual std::string GetDisplayName() override { return T("feature.order_independent_transparency.name", "Order Independent Transparency"); }
 	virtual inline std::string GetShortName() override { return "OrderIndependentTransparency"; }
+	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
 	virtual inline std::string_view GetShaderDefineName() override { return "OIT"; }
 	virtual std::string_view GetCategory() const override { return FeatureCategories::kTransparency; }
 
