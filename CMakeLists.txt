@@ -404,6 +404,23 @@ endif()
 # # Automatic deployment
 # #######################################################################################################################
 file(GLOB FEATURE_PATHS LIST_DIRECTORIES true ${CMAKE_SOURCE_DIR}/features/*)
+# Drop empty leftover feature dirs (e.g. after a rename) so they do not create
+# Package-* targets or get copied into AIO / install trees as empty folders.
+set(_valid_feature_paths "")
+foreach(_fpath IN LISTS FEATURE_PATHS)
+    if(IS_DIRECTORY "${_fpath}")
+        file(GLOB_RECURSE _feat_files LIST_DIRECTORIES FALSE "${_fpath}/*")
+        if(_feat_files)
+            list(APPEND _valid_feature_paths "${_fpath}")
+        else()
+            get_filename_component(_feat_name "${_fpath}" NAME)
+            message(STATUS "Skipping empty feature directory: ${_feat_name}")
+        endif()
+    endif()
+endforeach()
+set(FEATURE_PATHS ${_valid_feature_paths})
+unset(_valid_feature_paths)
+unset(_feat_files)
 string(TIMESTAMP UTC_NOW "%Y-%m-%dT%H-%MZ" UTC)
 
 # Set AIO directory path used by multiple targets below
