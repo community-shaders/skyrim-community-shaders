@@ -87,6 +87,11 @@ namespace Util
 			return GetCommunityShaderPath() / "Themes";
 		}
 
+		std::filesystem::path GetEffects11PresetsPath()
+		{
+			return GetCommunityShaderPath() / "Effects11" / "Presets";
+		}
+
 		std::filesystem::path GetTranslationsPath()
 		{
 			return GetCommunityShaderPath() / "Translations";
@@ -168,6 +173,11 @@ namespace Util
 		std::filesystem::path GetThemesRealPath()
 		{
 			return GetRootRealPath() / "SKSE" / "Plugins" / "CommunityShaders" / "Themes";
+		}
+
+		std::filesystem::path GetEffects11PresetsRealPath()
+		{
+			return GetRootRealPath() / "SKSE" / "Plugins" / "CommunityShaders" / "Effects11" / "Presets";
 		}
 
 		std::filesystem::path GetFeaturesRealPath()

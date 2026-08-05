@@ -98,6 +98,12 @@ namespace Util
 		std::filesystem::path GetThemesPath();
 
 		/**
+		 * Gets the Effects11 presets library path (VFS / in-game Data path).
+		 * @return CommunityShaderPath / "Effects11" / "Presets"
+		 */
+		std::filesystem::path GetEffects11PresetsPath();
+
+		/**
 		 * Gets the Translations directory path for i18n locale files
 		 * @return CommunityShaderPath / "Translations"
 		 */
@@ -188,6 +194,12 @@ namespace Util
 		 * @return  <mod_root> / "SKSE" / "Plugins" / "CommunityShaders" / "Themes"
 		 */
 		std::filesystem::path GetThemesRealPath();
+
+		/**
+		 * Returns the real path to the Effects11 presets library (for Explorer / create_directories).
+		 * @return  <mod_root> / "SKSE" / "Plugins" / "CommunityShaders" / "Effects11" / "Presets"
+		 */
+		std::filesystem::path GetEffects11PresetsRealPath();
 
 		/**
 		 * Returns the real path to the Features directory containing feature INI files.

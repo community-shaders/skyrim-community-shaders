@@ -14,6 +14,7 @@ public:
 private:
 	// UI section rendering methods
 	void RenderSettingsPanel();
+	void RenderPresetSelector();
 	void RenderWeatherControl();
 	void RenderDebugControl();
 

@@ -19,6 +19,10 @@
 #include "Utils/D3D.h"
 #include "Utils/Game.h"
 
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
+	Effects11::Settings,
+	ActivePreset)
+
 Effects11::PerFrame Effects11::GetCommonBufferData()
 {
 	if (!loaded)
@@ -92,6 +96,37 @@ Effects11::PerFrame Effects11::GetCommonBufferData()
 void Effects11::DrawSettings()
 {
 	MenuManager::GetSingleton().RenderImGui();
+}
+
+void Effects11::SyncActivePresetFromSettings()
+{
+	auto& presetManager = PresetManager::GetSingleton();
+	presetManager.DiscoverPresets();
+	if (!presetManager.SetActivePreset(settings.ActivePreset))
+		settings.ActivePreset = presetManager.GetActivePresetId();
+}
+
+void Effects11::LoadSettings(json& o_json)
+{
+	settings = o_json;
+	SyncActivePresetFromSettings();
+}
+
+void Effects11::SaveSettings(json& o_json)
+{
+	settings.ActivePreset = PresetManager::GetSingleton().GetActivePresetId();
+	o_json = settings;
+}
+
+void Effects11::RestoreDefaultSettings()
+{
+	settings = {};
+	auto& presetManager = PresetManager::GetSingleton();
+	presetManager.DiscoverPresets();
+	if (!presetManager.SetActivePreset(PresetManager::kLegacyPresetId))
+		settings.ActivePreset = presetManager.GetActivePresetId();
+	else
+		settings.ActivePreset = PresetManager::kLegacyPresetId;
 }
 
 void Effects11::LoadRaindropTexture()
@@ -175,6 +210,7 @@ void Effects11::LoadRaindropTexture()
 
 void Effects11::SetupResources()
 {
+	SyncActivePresetFromSettings();
 	EffectManager::GetSingleton().Initialize();
 	LoadRaindropTexture();
 }
