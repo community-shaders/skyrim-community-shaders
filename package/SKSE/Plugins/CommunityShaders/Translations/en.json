@@ -569,6 +569,7 @@
     "feature.effects11.key_feature_4": "Custom technique execution",
     "feature.effects11.key_feature_5": "Dynamic UI variable system",
     "feature.effects11.no_preset_detected": "No preset detected",
+    "feature.effects11.toggle_key": "Toggle Key:",
     "feature.exp_height_fog.apply_vanilla_fade": "Apply Vanilla Fade",
     "feature.exp_height_fog.apply_vanilla_fade_tooltip": "Applies vanilla fade brightness to exponential height fog.",
     "feature.exp_height_fog.cubemap_mip_level": "Cubemap Mip Level",

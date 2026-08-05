@@ -94,6 +94,9 @@ public:
 	virtual void Prepass() override;
 	virtual void ClearShaderCache() override;
 
+	/** @brief Flips the "UseEffect" GLOBAL setting; bound to the Effects 11 toggle hotkey. */
+	void ToggleEnabled();
+
 	void DrawVolumetricRays();
 
 	void OnSkyUpdateColors(RE::Sky* a_sky);

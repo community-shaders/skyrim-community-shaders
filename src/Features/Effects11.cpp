@@ -13,10 +13,12 @@
 #include "CloudShadows.h"
 #include "Deferred.h"
 #include "IBL.h"
+#include "Menu.h"
 #include "ShaderCache.h"
 #include "State.h"
 #include "TerrainShadows.h"
 #include "Utils/D3D.h"
+#include "Utils/UI.h"
 #include "Utils/Game.h"
 
 Effects11::PerFrame Effects11::GetCommonBufferData()
@@ -91,7 +93,23 @@ Effects11::PerFrame Effects11::GetCommonBufferData()
 
 void Effects11::DrawSettings()
 {
+	auto* menu = globals::menu;
+	Util::InputComboWidget(
+		T("feature.effects11.toggle_key", "Toggle Key:"),
+		menu->GetSettings().Effects11ToggleKey,
+		menu->settingEffects11ToggleKey,
+		"Change##Effects11Toggle");
+
 	MenuManager::GetSingleton().RenderImGui();
+}
+
+void Effects11::ToggleEnabled()
+{
+	auto& settingManager = SettingManager::GetSingleton();
+	const uint32_t id = settingManager.GetSettingID("UseEffect", "GLOBAL");
+	if (id == 0xFFFFFFFFu)
+		return;
+	settingManager.SetValue<bool>(id, !settingManager.GetValue<bool>(id));
 }
 
 void Effects11::LoadRaindropTexture()
