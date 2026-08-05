@@ -163,6 +163,8 @@ namespace
 			return T("feature.category.utility", "Utility");
 		if (category == FeatureCategories::kWater)
 			return T("feature.category.water", "Water");
+		if (category == FeatureCategories::kTransparency)
+			return T("feature.category.transparency", "Transparency");
 
 		return std::string(category);
 	}
