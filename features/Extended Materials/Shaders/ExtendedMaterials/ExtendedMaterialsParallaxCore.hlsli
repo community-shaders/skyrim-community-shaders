@@ -23,7 +23,6 @@
 #endif
 
 #if defined(LANDSCAPE)
-		float viewDist = length(input.WorldPosition.xyz);
 		float4 w1 = input.LandBlendWeights1;
 		float2 w2 = input.LandBlendWeights2.xy;
 		const float marchHeightBlendFactor = 0.0;
@@ -72,25 +71,23 @@
 			grazing *= grazing;
 
 #if defined(LANDSCAPE)
-			float marchMip = ComputeParallaxMarchMip(mipLevel, viewDist);
-#else
-			float marchMipLevel = ComputeParallaxMarchMip(mipLevel, 0.0);
-#endif
-			float distStepScale = lerp(0.25, 1.0, saturate((3.0 - mipLevel) * (1.0 / 3.0)));
-
-#if defined(LANDSCAPE)
 			// Step count from UV travel in texels (and a grazing angle floor), so grazing rays do not skip height features between samples.
+			// Texels are counted at the mip being sampled, so the march thins out with distance
+			// because the heightfield genuinely holds fewer texels there.
+			float mipTexDim = maxTexDim * exp2(-mipLevel);
 			float uvMarchSpan = dot(abs(parallaxDir), maxHeight + minHeight);
 			float texelsPerStep = lerp(3.5, 1.75, grazing);
-			uint uvSteps = (uint)(uvMarchSpan * maxTexDim * rcp(texelsPerStep) * distStepScale + 0.5);
-			uint angleSteps = (uint)(lerp((float)minSteps, (float)maxStepsCap, grazing) * distStepScale + 0.5);
-			uint numSteps = max(minSteps, max(uvSteps, angleSteps));
-			numSteps = min(numSteps, maxStepsCap);
+			float marchTexels = uvMarchSpan * mipTexDim;
+			uint uvSteps = (uint)(marchTexels * rcp(texelsPerStep) + 0.5);
+			uint angleSteps = (uint)(lerp((float)minSteps, (float)maxStepsCap, grazing) + 0.5);
+			// Past one step per texel the extra taps land in a texel already read.
+			uint numSteps = min(max(uvSteps, angleSteps), (uint)(marchTexels + 0.5));
+			numSteps = clamp(numSteps, minSteps, maxStepsCap);
 			numSteps = (numSteps + 2) & ~3;
 #else
 			float grazingStepBoost = lerp(1.0, 1.65, grazing);
 			float angleStepMul = clamp(0.5 * rcp(max(ndotv, 0.0625)), 0.5, 2.5);
-			uint numSteps = max(minSteps, (uint)(scale * baseMaxSteps * angleStepMul * distStepScale * grazingStepBoost));
+			uint numSteps = max(minSteps, (uint)(scale * baseMaxSteps * angleStepMul * grazingStepBoost));
 			numSteps = min(numSteps, maxStepsCap);
 			numSteps = (numSteps + 2) & ~3;
 #endif
@@ -125,12 +122,12 @@
 
 				float4 currHeight;
 #if defined(LANDSCAPE)
-				currHeight = GetTerrainHeightQuadRayMarch(currentOffset[0].xy, currentOffset[0].zw, currentOffset[1].xy, currentOffset[1].zw, marchMip, params, marchHeightBlendFactor, w1, w2, sharedOffset, weights) * terrainHeightNormMul + 0.5;
+				currHeight = GetTerrainHeightQuadRayMarch(currentOffset[0].xy, currentOffset[0].zw, currentOffset[1].xy, currentOffset[1].zw, mipLevel, params, marchHeightBlendFactor, w1, w2, sharedOffset, weights) * terrainHeightNormMul + 0.5;
 #else
-				currHeight.x = tex.SampleLevel(texSampler, currentOffset[0].xy, marchMipLevel)[channel];
-				currHeight.y = tex.SampleLevel(texSampler, currentOffset[0].zw, marchMipLevel)[channel];
-				currHeight.z = tex.SampleLevel(texSampler, currentOffset[1].xy, marchMipLevel)[channel];
-				currHeight.w = tex.SampleLevel(texSampler, currentOffset[1].zw, marchMipLevel)[channel];
+				currHeight.x = tex.SampleLevel(texSampler, currentOffset[0].xy, mipLevel)[channel];
+				currHeight.y = tex.SampleLevel(texSampler, currentOffset[0].zw, mipLevel)[channel];
+				currHeight.z = tex.SampleLevel(texSampler, currentOffset[1].xy, mipLevel)[channel];
+				currHeight.w = tex.SampleLevel(texSampler, currentOffset[1].zw, mipLevel)[channel];
 
 				currHeight = AdjustDisplacementNormalized(currHeight, params);
 #endif
@@ -183,9 +180,9 @@
 					float2 midCoords = coords.xy + parallaxDir * (((1.0 - tMid) * -maxHeight) + minHeight);
 					float hMid;
 #if defined(LANDSCAPE)
-					hMid = GetTerrainHeight(midCoords, marchMip, params, marchHeightBlendFactor, w1, w2, sharedOffset, weights) * terrainHeightNormMul + 0.5;
+					hMid = GetTerrainHeight(midCoords, mipLevel, params, marchHeightBlendFactor, w1, w2, sharedOffset, weights) * terrainHeightNormMul + 0.5;
 #else
-					hMid = tex.SampleLevel(texSampler, midCoords, marchMipLevel)[channel];
+					hMid = tex.SampleLevel(texSampler, midCoords, mipLevel)[channel];
 					hMid = AdjustDisplacementNormalized(hMid, params);
 #endif
 					float fMid = hMid - tMid;
@@ -211,9 +208,9 @@
 
 					float hSecant;
 #if defined(LANDSCAPE)
-					hSecant = GetTerrainHeight(secantCoords, marchMip, params, marchHeightBlendFactor, w1, w2, sharedOffset, weights) * terrainHeightNormMul + 0.5;
+					hSecant = GetTerrainHeight(secantCoords, mipLevel, params, marchHeightBlendFactor, w1, w2, sharedOffset, weights) * terrainHeightNormMul + 0.5;
 #else
-					hSecant = tex.SampleLevel(texSampler, secantCoords, marchMipLevel)[channel];
+					hSecant = tex.SampleLevel(texSampler, secantCoords, mipLevel)[channel];
 					hSecant = AdjustDisplacementNormalized(hSecant, params);
 #endif
 

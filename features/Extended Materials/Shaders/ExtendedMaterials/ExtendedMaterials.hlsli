@@ -40,19 +40,6 @@ namespace ExtendedMaterials
 	static const float ParallaxFarShadowQuality = 0.5;
 	static const float TerrainParallaxShadowMaxMipLevel = 2.0;
 
-	// Coarse height-map mip for POM march. Distance bias is applied and floored.
-	// Grazing bias is omitted — it creates discontinuous hits.
-	inline float ComputeParallaxMarchMip(float baseMip, float viewDist)
-	{
-		float m = baseMip + 1.0;
-		m += min(2.0, baseMip * 0.5);
-		float farFloor = viewDist > 0.0
-			? lerp(0.0, 3.0, saturate((viewDist - 512.0) * rcp(1536.0)))
-			: saturate(baseMip - 1.0);
-		m = max(m, farFloor);
-		return floor(m);
-	}
-
 	inline uint ParallaxShadowTapCount(float quality)
 	{
 		uint taps = 1;
@@ -80,6 +67,9 @@ namespace ExtendedMaterials
 		return float4(AdjustDisplacementNormalized(displacement.x, params), AdjustDisplacementNormalized(displacement.y, params), AdjustDisplacementNormalized(displacement.z, params), AdjustDisplacementNormalized(displacement.w, params));
 	}
 
+	// Left unfloored so height taps filter between levels the way every other texture in the frame
+	// already does. Quantising it here makes the heightfield change resolution along one screen
+	// line, which the parallax reads back as a visible seam.
 	float GetMipLevelFromDims(float2 coords, float2 textureDims)
 	{
 #	if !defined(PARALLAX) && !defined(TRUE_PBR)
@@ -102,7 +92,7 @@ namespace ExtendedMaterials
 		mipLevel++;
 #	endif
 
-		return floor(max(mipLevel + SharedData::MipBias, 0));
+		return max(mipLevel + SharedData::MipBias, 0);
 	}
 
 	float GetMipLevel(float2 coords, Texture2D<float4> tex)
