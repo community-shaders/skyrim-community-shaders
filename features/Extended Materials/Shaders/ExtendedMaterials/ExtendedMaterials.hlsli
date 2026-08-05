@@ -66,10 +66,7 @@ namespace ExtendedMaterials
 	{
 		return float4(AdjustDisplacementNormalized(displacement.x, params), AdjustDisplacementNormalized(displacement.y, params), AdjustDisplacementNormalized(displacement.z, params), AdjustDisplacementNormalized(displacement.w, params));
 	}
-
-	// Left unfloored so height taps filter between levels the way every other texture in the frame
-	// already does. Quantising it here makes the heightfield change resolution along one screen
-	// line, which the parallax reads back as a visible seam.
+	
 	float GetMipLevelFromDims(float2 coords, float2 textureDims)
 	{
 #	if !defined(PARALLAX) && !defined(TRUE_PBR)
