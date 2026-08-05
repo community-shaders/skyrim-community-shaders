@@ -2,15 +2,13 @@
 #define EXTENDED_MATERIALS_PARALLAX_CORE_HLSLI
 
 #if defined(LANDSCAPE)
-	float2 GetParallaxCoords(PS_INPUT input, float2 coords, float mipLevels[6], float maxTexDim, float3 viewDir, float3x3 tbn, float noise, DisplacementParams params[6],
+	float2 GetParallaxCoords(PS_INPUT input, float2 coords, float mipLevel, float maxTexDim, float3 viewDir, float3x3 tbn, float noise, DisplacementParams params[6],
 		StochasticOffsets sharedOffset,
-		out float pixelOffset,
 		out float weights[6])
 #else
-	float2 GetParallaxCoords(float2 coords, float mipLevel, float3 viewDir, float3x3 tbn, float noise, Texture2D<float4> tex, SamplerState texSampler, uint channel, DisplacementParams params, out float pixelOffset)
+	float2 GetParallaxCoords(float2 coords, float mipLevel, float3 viewDir, float3x3 tbn, Texture2D<float4> tex, SamplerState texSampler, uint channel, DisplacementParams params)
 #endif
 	{
-		pixelOffset = 0.0;
 		float3 viewDirTS = normalize(mul(tbn, viewDir));
 		float ndotv = saturate(viewDirTS.z);
 	
@@ -26,7 +24,6 @@
 
 #if defined(LANDSCAPE)
 		float viewDist = length(input.WorldPosition.xyz);
-		float blendFactor = SharedData::extendedMaterialSettings.EnableHeightBlending ? 1.0 : 0.0;
 		float4 w1 = input.LandBlendWeights1;
 		float2 w2 = input.LandBlendWeights2.xy;
 		const float marchHeightBlendFactor = 0.0;
@@ -56,22 +53,17 @@
 
 #if defined(LANDSCAPE) && defined(TRUE_PBR)
 		[branch] if (scale <= 0.001) {
-			pixelOffset = 0.0;
 			if (SharedData::extendedMaterialSettings.EnableHeightBlending) {
-				float unusedHeight = GetTerrainHeight(noise, input, coords, mipLevels, params, blendFactor, w1, w2, sharedOffset, weights);
+				float unusedHeight = GetTerrainHeight(coords, mipLevel, params, 1.0, w1, w2, sharedOffset, weights);
 			}
 		} else
 #elif !defined(LANDSCAPE)
-		[branch] if (scale <= 0.001) {
-			pixelOffset = 0.0;
-		} else
+		[branch] if (scale > 0.001)
 #endif
 		{
 			const uint minSteps = 4;
-#if defined(LANDSCAPE)
 			const uint maxStepsCap = 32;
-#else
-			const uint maxStepsCap = 32;
+#if !defined(LANDSCAPE)
 			const float baseMaxSteps = 8;
 #endif
 
@@ -80,21 +72,16 @@
 			grazing *= grazing;
 
 #if defined(LANDSCAPE)
-			float marchMip = ComputeParallaxMarchMip(mipLevels[0], viewDist);
-			float marchMipLevels[6];
-			float parallaxLODMip = mipLevels[0];
-			[unroll] for (uint mi = 0; mi < 6; mi++)
-				marchMipLevels[mi] = marchMip;
+			float marchMip = ComputeParallaxMarchMip(mipLevel, viewDist);
 #else
-			float parallaxLODMip = mipLevel;
 			float marchMipLevel = ComputeParallaxMarchMip(mipLevel, 0.0);
 #endif
-			float distStepScale = lerp(0.25, 1.0, saturate((3.0 - parallaxLODMip) * (1.0 / 3.0)));
+			float distStepScale = lerp(0.25, 1.0, saturate((3.0 - mipLevel) * (1.0 / 3.0)));
 
 #if defined(LANDSCAPE)
 			// Step count from UV travel in texels (and a grazing angle floor), so grazing rays do not skip height features between samples.
 			float uvMarchSpan = dot(abs(parallaxDir), maxHeight + minHeight);
-			float texelsPerStep = lerp(3.5, 1.75, saturate(grazing));
+			float texelsPerStep = lerp(3.5, 1.75, grazing);
 			uint uvSteps = (uint)(uvMarchSpan * maxTexDim * rcp(texelsPerStep) * distStepScale + 0.5);
 			uint angleSteps = (uint)(lerp((float)minSteps, (float)maxStepsCap, grazing) * distStepScale + 0.5);
 			uint numSteps = max(minSteps, max(uvSteps, angleSteps));
@@ -138,7 +125,7 @@
 
 				float4 currHeight;
 #if defined(LANDSCAPE)
-				currHeight = GetTerrainHeightQuadRayMarch(noise, input, currentOffset[0].xy, currentOffset[0].zw, currentOffset[1].xy, currentOffset[1].zw, marchMipLevels, params, marchHeightBlendFactor, w1, w2, sharedOffset, weights) * terrainHeightNormMul + 0.5;
+				currHeight = GetTerrainHeightQuadRayMarch(currentOffset[0].xy, currentOffset[0].zw, currentOffset[1].xy, currentOffset[1].zw, marchMip, params, marchHeightBlendFactor, w1, w2, sharedOffset, weights) * terrainHeightNormMul + 0.5;
 #else
 				currHeight.x = tex.SampleLevel(texSampler, currentOffset[0].xy, marchMipLevel)[channel];
 				currHeight.y = tex.SampleLevel(texSampler, currentOffset[0].zw, marchMipLevel)[channel];
@@ -152,32 +139,26 @@
 				[branch] if (any(testResult))
 				{
 					intersectionFound = true;
-					float2 outOffset;
 					[branch] if (testResult.x)
 					{
-						outOffset = prevOffset;
 						pt1 = float2(currentBound.x, currHeight.x);
 						pt2 = float2(prevBound, prevHeight);
 					}
 					else if (testResult.y)
 					{
-						outOffset = currentOffset[0].xy;
 						pt1 = float2(currentBound.y, currHeight.y);
 						pt2 = float2(currentBound.x, currHeight.x);
 					}
 					else if (testResult.z)
 					{
-						outOffset = currentOffset[0].zw;
 						pt1 = float2(currentBound.z, currHeight.z);
 						pt2 = float2(currentBound.y, currHeight.y);
 					}
 					else
 					{
-						outOffset = currentOffset[1].xy;
 						pt1 = float2(currentBound.w, currHeight.w);
 						pt2 = float2(currentBound.z, currHeight.z);
 					}
-					prevOffset = outOffset;
 					break;
 				}
 
@@ -191,20 +172,18 @@
 			[branch] if (intersectionFound)
 			{
 				float tNear = pt1.x;
-				float hNear = pt1.y;
-				float fNear = hNear - tNear;
+				float fNear = pt1.y - tNear;
 				float tFar = pt2.x;
-				float hFar = pt2.y;
-				float fFar = hFar - tFar;
+				float fFar = pt2.y - tFar;
 
 				// Binary search on f(t) = h(t) - t before secant.
 				[loop] for (uint c = 0; c < contactIters; c++)
 				{
 					float tMid = 0.5 * (tNear + tFar);
 					float2 midCoords = coords.xy + parallaxDir * (((1.0 - tMid) * -maxHeight) + minHeight);
-					float hMid = 0.0;
+					float hMid;
 #if defined(LANDSCAPE)
-					hMid = GetTerrainHeight(noise, input, midCoords, marchMipLevels, params, marchHeightBlendFactor, w1, w2, sharedOffset, weights) * terrainHeightNormMul + 0.5;
+					hMid = GetTerrainHeight(midCoords, marchMip, params, marchHeightBlendFactor, w1, w2, sharedOffset, weights) * terrainHeightNormMul + 0.5;
 #else
 					hMid = tex.SampleLevel(texSampler, midCoords, marchMipLevel)[channel];
 					hMid = AdjustDisplacementNormalized(hMid, params);
@@ -213,13 +192,11 @@
 					[branch] if (fMid >= 0.0)
 					{
 						tNear = tMid;
-						hNear = hMid;
 						fNear = fMid;
 					}
 					else
 					{
 						tFar = tMid;
-						hFar = hMid;
 						fFar = fMid;
 					}
 				}
@@ -232,9 +209,9 @@
 					float tSecant = lerp(tNear, tFar, r);
 					float2 secantCoords = coords.xy + parallaxDir * (((1.0 - tSecant) * -maxHeight) + minHeight);
 
-					float hSecant = 0.0;
+					float hSecant;
 #if defined(LANDSCAPE)
-					hSecant = GetTerrainHeight(noise, input, secantCoords, marchMipLevels, params, marchHeightBlendFactor, w1, w2, sharedOffset, weights) * terrainHeightNormMul + 0.5;
+					hSecant = GetTerrainHeight(secantCoords, marchMip, params, marchHeightBlendFactor, w1, w2, sharedOffset, weights) * terrainHeightNormMul + 0.5;
 #else
 					hSecant = tex.SampleLevel(texSampler, secantCoords, marchMipLevel)[channel];
 					hSecant = AdjustDisplacementNormalized(hSecant, params);
@@ -244,13 +221,11 @@
 					[branch] if (fSecant >= 0.0)
 					{
 						tNear = tSecant;
-						hNear = hSecant;
 						fNear = fSecant;
 					}
 					else
 					{
 						tFar = tSecant;
-						hFar = hSecant;
 						fFar = fSecant;
 					}
 				}
@@ -261,11 +236,10 @@
 			}
 
 			float offset = (1.0 - parallaxAmount) * -maxHeight + minHeight;
-			pixelOffset = saturate(parallaxAmount);
 			float2 finalCoords = parallaxDir * offset + coords.xy;
 #if defined(LANDSCAPE)
 			if (SharedData::extendedMaterialSettings.EnableHeightBlending) {
-				float unusedHeight = GetTerrainHeight(noise, input, finalCoords, mipLevels, params, blendFactor, w1, w2, sharedOffset, weights);
+				float unusedHeight = GetTerrainHeight(finalCoords, mipLevel, params, 1.0, w1, w2, sharedOffset, weights);
 			}
 #endif
 			resultCoords = finalCoords;

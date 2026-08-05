@@ -32,6 +32,9 @@ struct DisplacementParams
 namespace ExtendedMaterials
 {
 	static const float ShadowIntensity = 2.0;
+	// Terrain shadow strengths: point lights match the 4/tapCount object scale, directional uses half.
+	static const float TerrainPointShadowStrength = 4.0;
+	static const float TerrainDirectionalShadowStrength = 2.0;
 	static const float ParallaxCheapDistance = 1024.0;
 	static const float ParallaxNearShadowQuality = 1.0;
 	static const float ParallaxFarShadowQuality = 0.5;
