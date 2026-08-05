@@ -9,7 +9,7 @@ struct ExtendedTranslucency final : Feature
 	virtual std::string GetDisplayName() override { return T("feature.extended_translucency.name", "Extended Translucency"); }
 	virtual inline std::string GetShortName() override { return "ExtendedTranslucency"; }
 	virtual inline std::string_view GetShaderDefineName() override { return "EXTENDED_TRANSLUCENCY"sv; }
-	virtual inline std::string_view GetCategory() const override { return FeatureCategories::kMaterials; }
+	virtual inline std::string_view GetCategory() const override { return FeatureCategories::kTransparency; }
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
 		return { T("feature.extended_translucency.description", "Extended Translucency provides realistic rendering of thin fabric and other translucent materials.\nThis feature supports multiple material models for different types of translucent surfaces."),

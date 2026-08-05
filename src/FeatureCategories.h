@@ -14,4 +14,5 @@ namespace FeatureCategories
 	inline constexpr std::string_view kSky = "Sky";
 	inline constexpr std::string_view kUtility = "Utility";
 	inline constexpr std::string_view kWater = "Water";
+	inline constexpr std::string_view kTransparency = "Transparency";
 }

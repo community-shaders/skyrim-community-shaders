@@ -855,6 +855,8 @@ namespace Util
 			categoryIcon = menu.materials.texture;
 		} else if (strcmp(categoryKey, "Post-Processing") == 0) {
 			categoryIcon = menu.postProcessing.texture;
+		} else if (strcmp(categoryKey, "Transparency") == 0) {
+			categoryIcon = menu.transparency.texture;
 		}
 
 		// Keep icon lookup on the stable category key and render the translated label separately.

@@ -118,6 +118,7 @@ namespace Util::IconLoader
 			{ "Categories\\water.png", &menu->uiIcons.water.texture, &menu->uiIcons.water.size },
 			{ "Categories\\debug.png", &menu->uiIcons.debug.texture, &menu->uiIcons.debug.size },
 			{ "Categories\\materials.png", &menu->uiIcons.materials.texture, &menu->uiIcons.materials.size },
+			{ "Categories\\transparency.png", &menu->uiIcons.transparency.texture, &menu->uiIcons.transparency.size },
 			{ "Categories\\post-processing.png", &menu->uiIcons.postProcessing.texture, &menu->uiIcons.postProcessing.size }
 		};
 	}

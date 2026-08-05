@@ -257,6 +257,7 @@ public:
 		UIIcon water;
 		UIIcon debug;
 		UIIcon materials;
+		UIIcon transparency;
 		UIIcon postProcessing;
 	} uiIcons;
 

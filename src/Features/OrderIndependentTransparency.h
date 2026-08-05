@@ -7,7 +7,7 @@ struct OrderIndependentTransparency final : Feature
 	virtual std::string GetDisplayName() override { return T("feature.order_independent_transparency.name", "Order Independent Transparency"); }
 	virtual inline std::string GetShortName() override { return "OrderIndependentTransparency"; }
 	virtual inline std::string_view GetShaderDefineName() override { return "OIT"; }
-	virtual std::string_view GetCategory() const override { return "Materials"; }
+	virtual std::string_view GetCategory() const override { return FeatureCategories::kTransparency; }
 
 	// Get the shader define for material shader compilation, needs to invalidate shader cache when setting changes
 	std::span<const D3D_SHADER_MACRO> GetShaderDefines() const;
