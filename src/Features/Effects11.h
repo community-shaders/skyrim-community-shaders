@@ -37,6 +37,9 @@ public:
 	/** Discover presets and apply settings.ActivePreset, repairing the id if needed. */
 	void SyncActivePresetFromSettings();
 
+	/** Sync ActivePreset from the manager and write SettingsUser.json via State::Save(). */
+	void PersistActivePreset();
+
 	virtual void LoadSettings(json& o_json) override;
 	virtual void SaveSettings(json& o_json) override;
 	virtual void RestoreDefaultSettings() override;
@@ -125,4 +128,8 @@ public:
 	__declspec(noinline) void ModifyParticle(RE::BSRenderPass* Pass);
 	void ParticleShaderHacks();
 	bool HandleTonemapRender(RE::RENDER_TARGET a_input, RE::RENDER_TARGET a_output);
+
+private:
+	/** Set when Sync repairs ActivePreset during load; flushed in SetupResources. */
+	bool activePresetNeedsPersist = false;
 };

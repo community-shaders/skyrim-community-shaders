@@ -82,7 +82,7 @@ void MenuManager::RenderPresetSelector()
 
 			if (ImGui::Selectable(label.c_str(), selected) && preset.valid) {
 				if (presetManager.SwitchPreset(preset.id, true)) {
-					effects11.settings.ActivePreset = presetManager.GetActivePresetId();
+					effects11.PersistActivePreset();
 					currentItem = static_cast<int>(i);
 				}
 			}
@@ -93,7 +93,7 @@ void MenuManager::RenderPresetSelector()
 		ImGui::EndCombo();
 	}
 	if (ImGui::IsItemHovered()) {
-		ImGui::SetTooltip("Switch ENB FX presets. Recompiles Effects11 shaders only (not Community Shaders).");
+		ImGui::SetTooltip("Switch ENB FX presets. Selection is saved to Community Shaders settings immediately. Recompiles Effects11 shaders only (not Community Shaders).");
 	}
 
 	ImGui::SameLine();
@@ -101,8 +101,8 @@ void MenuManager::RenderPresetSelector()
 		const auto previous = presetManager.GetActivePresetId();
 		presetManager.DiscoverPresets();
 		if (!presetManager.SetActivePreset(previous)) {
-			effects11.settings.ActivePreset = presetManager.GetActivePresetId();
 			presetManager.ReloadActive();
+			effects11.PersistActivePreset();
 		} else {
 			effects11.settings.ActivePreset = previous;
 		}

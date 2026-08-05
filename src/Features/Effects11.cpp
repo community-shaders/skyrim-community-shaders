@@ -12,6 +12,7 @@
 
 #include "CloudShadows.h"
 #include "Deferred.h"
+#include "Globals.h"
 #include "IBL.h"
 #include "ShaderCache.h"
 #include "State.h"
@@ -102,8 +103,22 @@ void Effects11::SyncActivePresetFromSettings()
 {
 	auto& presetManager = PresetManager::GetSingleton();
 	presetManager.DiscoverPresets();
-	if (!presetManager.SetActivePreset(settings.ActivePreset))
-		settings.ActivePreset = presetManager.GetActivePresetId();
+	if (!presetManager.SetActivePreset(settings.ActivePreset)) {
+		const auto repaired = presetManager.GetActivePresetId();
+		if (settings.ActivePreset != repaired) {
+			settings.ActivePreset = repaired;
+			// Defer disk write: LoadSettings runs mid State::Load; Save then would be unsafe.
+			activePresetNeedsPersist = true;
+		}
+	}
+}
+
+void Effects11::PersistActivePreset()
+{
+	settings.ActivePreset = PresetManager::GetSingleton().GetActivePresetId();
+	activePresetNeedsPersist = false;
+	if (globals::state)
+		globals::state->Save();
 }
 
 void Effects11::LoadSettings(json& o_json)
@@ -127,6 +142,7 @@ void Effects11::RestoreDefaultSettings()
 		settings.ActivePreset = presetManager.GetActivePresetId();
 	else
 		settings.ActivePreset = PresetManager::kLegacyPresetId;
+	PersistActivePreset();
 }
 
 void Effects11::LoadRaindropTexture()
@@ -211,6 +227,8 @@ void Effects11::LoadRaindropTexture()
 void Effects11::SetupResources()
 {
 	SyncActivePresetFromSettings();
+	if (activePresetNeedsPersist)
+		PersistActivePreset();
 	EffectManager::GetSingleton().Initialize();
 	LoadRaindropTexture();
 }
