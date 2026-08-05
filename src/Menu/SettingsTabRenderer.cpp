@@ -397,6 +397,12 @@ void SettingsTabRenderer::RenderKeybindingsTab(
 			state.settingScreenshotKey,
 			"Change##Screenshot");
 
+		Util::InputComboWidget(
+			T("menu.settings.effects11_toggle_key", "Effects 11 Toggle Key:"),
+			settings.Effects11ToggleKey,
+			state.settingEffects11ToggleKey,
+			"Change##Effects11Toggle");
+
 		ImGui::EndTabItem();
 	}
 }

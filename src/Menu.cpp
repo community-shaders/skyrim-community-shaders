@@ -860,7 +860,8 @@ void Menu::DrawGeneralSettings()
 		.settingShaderBlockPrevKey = settingShaderBlockPrevKey,
 		.settingShaderBlockNextKey = settingShaderBlockNextKey,
 		.settingCSEditorToggleKey = settingCSEditorToggleKey,
-		.settingScreenshotKey = settingScreenshotKey
+		.settingScreenshotKey = settingScreenshotKey,
+		.settingEffects11ToggleKey = settingEffects11ToggleKey
 	};
 
 	// Render settings using extracted component

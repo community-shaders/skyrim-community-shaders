@@ -465,7 +465,7 @@ public:
 		std::vector<InputCombo> ShaderBlockNextKey = { InputCombo::Keyboard(VK_NEXT) };     // Debug: cycle forward through shaders (PageDown)
 		std::vector<InputCombo> CSEditorToggleKey = { InputCombo::Keyboard(VK_SHIFT), InputCombo::Keyboard(VK_END) };  // CS Editor toggle key
 		std::vector<InputCombo> ScreenshotKey = { InputCombo::Keyboard(VK_SNAPSHOT) };                                    // Screenshot capture key
-		std::vector<InputCombo> Effects11ToggleKey = { InputCombo::Keyboard(VK_SUBTRACT) };                                // Effects 11 toggle key
+		std::vector<InputCombo> Effects11ToggleKey = { InputCombo::Keyboard(VK_SHIFT), InputCombo::Keyboard(VK_MULTIPLY) };  // Effects 11 toggle key
 		bool EnableShaderBlocking = false;                                                  // Enable shader blocking hotkeys for debugging
 		bool FirstTimeSetupCompleted = false;                                               // Track if first-time setup has been completed
 		bool SkipClearCacheConfirmation = false;                                            // Skip confirmation dialog when clearing shader cache
