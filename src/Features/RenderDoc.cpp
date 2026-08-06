@@ -125,12 +125,15 @@ void RenderDoc::Load()
 	renderDocApi->SetCaptureKeys(nullptr, 0);
 
 	// RenderDoc disables vendor extensions (NvAPI) by default: nvapi_QueryInterface returns
-	// NULL for every function. Skyrim relies on NvAPI for D3D11, and on hybrid graphics
-	// systems this makes the driver remove the device at the first Present, crashing the
-	// game shortly after startup. 0x10DE is the NVIDIA vendor id, enabling NvAPI passthrough.
+	// NULL for unsupported NvAPI interfaces (known or whitelisted ones still pass through).
+	// Skyrim relies on NvAPI for D3D11, and on hybrid graphics systems this makes the
+	// driver remove the device at the first Present, crashing the game shortly after
+	// startup. 0x10DE is the NVIDIA vendor id, enabling NvAPI passthrough.
 	// Available since RenderDoc 1.3.0.
-	// 0x10DE = NVIDIA
-	renderDocApi->SetCaptureOptionU32(eRENDERDOC_Option_AllowUnsupportedVendorExtensions, 0x10DE);
+	const int result = renderDocApi->SetCaptureOptionU32(eRENDERDOC_Option_AllowUnsupportedVendorExtensions, 0x10DE);
+	if (result != 1) {
+		logger::warn("[RenderDoc] Failed to enable NvAPI passthrough (renderdoc.dll rejected vendor extensions, result {})", result);
+	}
 
 	// Initialize capture count tracking
 	lastCaptureCount = renderDocApi->GetNumCaptures();
