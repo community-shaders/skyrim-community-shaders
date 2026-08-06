@@ -96,10 +96,10 @@ void Effects11::DrawSettings()
 
 void Effects11::ToggleEnabled()
 {
+	if (!EffectManager::GetSingleton().IsPresetLoaded())
+		return;
 	auto& settingManager = SettingManager::GetSingleton();
 	const uint32_t id = settingManager.GetSettingID("UseEffect", "GLOBAL");
-	if (id == 0xFFFFFFFFu)
-		return;
 	settingManager.SetValue<bool>(id, !settingManager.GetValue<bool>(id));
 }
 

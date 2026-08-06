@@ -43,10 +43,10 @@
 
 #include "CSEditor/EditorWindow.h"
 #include "Features/CSEditor.h"
+#include "Features/Effects11.h"
 #include "Features/PerformanceOverlay.h"
 #include "Features/PerformanceOverlay/ABTesting/ABTestAggregator.h"
 #include "Features/PerformanceOverlay/ABTesting/ABTesting.h"
-#include "Features/Effects11.h"
 #include "Features/ScreenshotFeature.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
