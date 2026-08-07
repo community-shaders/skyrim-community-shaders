@@ -7,7 +7,7 @@
 #include "Features/HDRDisplay.h"
 #include "Deferred.h"
 
-#define I18N_KEY_PREFIX "feature.order_independent_transparency."
+#define I18N_KEY_PREFIX "feature.oit."
 
 NLOHMANN_JSON_SERIALIZE_ENUM(OrderIndependentTransparency::Method,
 	{ 
@@ -49,20 +49,27 @@ bool OrderIndependentTransparency::UpdateShaderDefines()
 	D3D_SHADER_MACRO defines[2] = { 0 };
 	defines[0].Name = "OIT";
 	defines[0].Definition = OIT_METHOD_DEFINES[(int)settings.Method];
+	std::array<char, 4> definesBuffer;
+	definesBuffer.fill(0);
 	if (settings.Method == Method::OIT_RVO)
 	{
 		defines[1].Name = "OIT_NODE_COUNT";
-		defines[1].Definition = shaderDefineBuffer;
+		defines[1].Definition = definesBuffer.data();
 
 		// convert MaxLayers to string in shaderDefineBuffer
-		for (char& c : shaderDefineBuffer) c = 0;
-		std::to_chars(shaderDefineBuffer, shaderDefineBuffer + sizeof(shaderDefineBuffer), GetNodeCount());
+		for (char& c : definesBuffer) c = 0;
+		std::to_chars(definesBuffer.data(), definesBuffer.data() + definesBuffer.size(), GetNodeCount());
+	} else {
+		defines[1] = shaderDefines[1];  // keep the previous value, so we can detect change
 	}
 
 	auto SV = [](const char* str) { return str ? std::string_view(str) : std::string_view{}; };
 
 	if (SV(shaderDefines[0].Definition) != SV(defines[0].Definition) || SV(shaderDefines[1].Definition) != SV(defines[1].Definition))
 	{
+		shaderDefineBuffer = definesBuffer;
+		if (defines[1].Definition == definesBuffer.data())
+			defines[1].Definition = shaderDefineBuffer.data();
 		shaderDefines[0] = defines[0];
 		shaderDefines[1] = defines[1];
 
@@ -77,6 +84,10 @@ bool OrderIndependentTransparency::UpdateShaderDefines()
 		}) | std::views::join_with(',') | std::ranges::to<std::string>();
 		logger::info("[OIT] Shader defines updated [{}]: {}", new_defines.size(), define_str);
 		return true;
+	}
+	else
+	{
+		logger::info("[OIT] Shader defines unchanged: OIT={}->{} OIT_NODE_COUNT={}->{}", SV(shaderDefines[0].Definition), SV(defines[0].Definition), SV(shaderDefines[1].Definition), SV(defines[1].Definition));
 	}
 	return false;
 }
@@ -253,9 +264,9 @@ void OrderIndependentTransparency::DrawSettings()
 				"Fast, but may flicker or show artifacts beyond the layer limit.\n"
 				"Typically uses about 10% more GPU time and is memory-bound."));
 		}
-		dirtied.ShaderDefines |= ImGui::RadioButton(T(TKEY("method_quality"), "Quality (Slow)"), (int*)&settings.Method, Method::OIT_RVO);
+		dirtied.ShaderDefines |= ImGui::RadioButton(T(TKEY("method_stable"), "Stable (Slow)"), (int*)&settings.Method, Method::OIT_RVO);
 		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("%s", T(TKEY("method_quality_tooltip"),
+			ImGui::Text("%s", T(TKEY("method_stable_tooltip"),
 				"Uses MLAB (Multi-Layer Alpha Blend), Intel's Adaptive Order-Independent Transparency (AOIT); requires DirectX 11.3 or newer.\n"
 				"Unreal Engine's default OIT method for its predictability.\n"
 				"Uses Rasterizer Ordered Views to avoid flickering with bounded memory.\n"
@@ -316,11 +327,12 @@ void OrderIndependentTransparency::DrawSettings()
 				"Requires pixel shader resolve.\n"
 				"Applies to all Lighting shader materials, excluding Effect shaders."));
 		}
-		dirtied.ConstantBuffer |= ImGui::SliderFloat(T(TKEY("ssr_alpha_scale"), "SSR Alpha Scale"), &settings.SSRAlphaScale, 0.f, 10.f, "%.3f");
+		dirtied.ConstantBuffer |= ImGui::SliderFloat(T(TKEY("ssr_alpha_scale"), "SSR Alpha Scale"), &settings.SSRAlphaScale, 0.f, 1.f, "%.3f");
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text("%s", T(TKEY("ssr_alpha_scale_tooltip"),
 				"Scales the alpha value used for screen space reflections (SSR).\n"
-				"Adjusting this can affect the visibility and intensity of reflections."));
+				"Adjusting this can affect the visibility and intensity of reflections.\n"
+				"Use Ctrl+Click to input value beyond 1.0\n"));
 		}
 		ImGui::TreePop();
 	}

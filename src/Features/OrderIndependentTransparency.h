@@ -6,11 +6,12 @@ struct OrderIndependentTransparency final : Feature
 	static constexpr std::string_view MOD_ID = "187431";
 
 	virtual inline std::string GetName() override { return "Order Independent Transparency"; }
-	virtual std::string GetDisplayName() override { return T("feature.order_independent_transparency.name", "Order Independent Transparency"); }
+	virtual std::string GetDisplayName() override { return T("feature.oit.name", "Order Independent Transparency"); }
 	virtual inline std::string GetShortName() override { return "OrderIndependentTransparency"; }
 	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
 	virtual inline std::string_view GetShaderDefineName() override { return "OIT"; }
 	virtual std::string_view GetCategory() const override { return FeatureCategories::kTransparency; }
+	virtual bool IsDisabledByDefault() const override { return false; } // Enable by default even in BETA for test build
 
 	// Get the shader define for material shader compilation, needs to invalidate shader cache when setting changes
 	std::span<const D3D_SHADER_MACRO> GetShaderDefines() const;
@@ -19,9 +20,9 @@ struct OrderIndependentTransparency final : Feature
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
 		return {
-			T("feature.order_independent_transparency.description",
+			T("feature.oit.description",
 				"Order Independent Transparency (OIT) correctly blends overlapping transparent surfaces, such as water, hair, glass, foliage, and smoke."),
-			{ T("feature.order_independent_transparency.key_feature_1", "Corrects water reflections and refraction") }
+			{ T("feature.oit.key_feature_1", "Corrects water reflections and refraction") }
 		};
 	}
 
@@ -81,7 +82,7 @@ struct OrderIndependentTransparency final : Feature
 	Settings settings;
 
 	D3D_SHADER_MACRO shaderDefines[2] = { { nullptr, nullptr }, { nullptr, nullptr } };
-	char shaderDefineBuffer[4]; // For holding string of MaxLayers
+	std::array<char,4> shaderDefineBuffer; // For holding string of MaxLayers
 
 	float passTime; // API Time spend in the transparency (material) pass
 	float compositeTime; // API Time spend in the composite pass
