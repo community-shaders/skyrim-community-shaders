@@ -118,49 +118,78 @@ namespace ENBExtender
 	static bool kiefxKeyInitialized = false;
 	static std::string kiefxKeyError;
 
-	static void InitializeKIEFXKey()
+	static size_t ScoreKIEFXKey(const std::string& content, const uint8_t* candidate)
+	{
+		const size_t sampleSize = std::min<size_t>(content.size() - kiefxMagicSize, 4096);
+		size_t textBytes = 0;
+		for (size_t i = 0; i < sampleSize; ++i) {
+			const auto decoded = static_cast<uint8_t>(content[kiefxMagicSize + i]) ^ candidate[i % kiefxKeySize];
+			if ((decoded >= 0x20 && decoded <= 0x7E) || decoded == '\t' || decoded == '\n' || decoded == '\r')
+				++textBytes;
+		}
+		return textBytes;
+	}
+
+	static bool InitializeKIEFXKey(const std::string& content)
 	{
 		if (kiefxKeyInitialized)
-			return;
-		kiefxKeyInitialized = true;
+			return true;
 
-		std::filesystem::path dllPath = "Data\\KiLoader\\Plugins\\KiENBExtender.dll";
-		if (!std::filesystem::exists(dllPath)) {
-			kiefxKeyError = "KiENBExtender.dll not found at " + dllPath.string();
-			logger::warn("[ENBExtender] {}", kiefxKeyError);
-			return;
-		}
-
+		const std::filesystem::path dllPath = "Data\\KiLoader\\Plugins\\KiENBExtender.dll";
 		std::ifstream file(dllPath, std::ios::binary | std::ios::ate);
 		if (!file.is_open()) {
-			kiefxKeyError = "Failed to open " + dllPath.string();
+			kiefxKeyError = "KiENBExtender.dll not found at " + dllPath.string();
 			logger::warn("[ENBExtender] {}", kiefxKeyError);
-			return;
+			return false;
 		}
+
 		auto size = file.tellg();
 		if (size <= 0) {
 			kiefxKeyError = "Empty or unreadable: " + dllPath.string();
 			logger::warn("[ENBExtender] {}", kiefxKeyError);
-			return;
+			return false;
 		}
 		file.seekg(0, std::ios::beg);
 		std::vector<uint8_t> data(static_cast<size_t>(size));
 		if (!file.read(reinterpret_cast<char*>(data.data()), size)) {
 			kiefxKeyError = "Failed to read " + dllPath.string();
 			logger::warn("[ENBExtender] {}", kiefxKeyError);
-			return;
+			return false;
 		}
 
-		for (size_t i = 0; i + kiefxMagicSize + 1 + kiefxKeySize <= data.size(); ++i) {
-			if (memcmp(&data[i], kiefxMagic, kiefxMagicSize) == 0) {
-				memcpy(kiefxKey, &data[i + kiefxMagicSize + 1], kiefxKeySize);
-				logger::info("[ENBExtender] Extracted KIEFX key from {}", dllPath.string());
+		const uint8_t* bestCandidate = nullptr;
+		size_t bestScore = 0;
+		auto considerCandidate = [&](size_t offset) {
+			if (offset + kiefxKeySize > data.size())
 				return;
+			const auto score = ScoreKIEFXKey(content, data.data() + offset);
+			if (score > bestScore) {
+				bestCandidate = data.data() + offset;
+				bestScore = score;
 			}
+		};
+
+		for (size_t i = 0; i + kiefxMagicSize <= data.size(); ++i) {
+			if (memcmp(data.data() + i, kiefxMagic, kiefxMagicSize) != 0)
+				continue;
+
+			if (i >= kiefxKeySize)
+				considerCandidate(i - kiefxKeySize);
+			considerCandidate(i + kiefxMagicSize + 1);
 		}
 
-		kiefxKeyError = "Could not extract KIEFX key from " + dllPath.string();
-		logger::warn("[ENBExtender] {}", kiefxKeyError);
+		const size_t sampleSize = std::min<size_t>(content.size() - kiefxMagicSize, 4096);
+		if (!bestCandidate || sampleSize == 0 || bestScore * 10 < sampleSize * 9) {
+			kiefxKeyError = "Could not extract a valid KIEFX key from " + dllPath.string();
+			logger::warn("[ENBExtender] {}", kiefxKeyError);
+			return false;
+		}
+
+		memcpy(kiefxKey, bestCandidate, kiefxKeySize);
+		kiefxKeyInitialized = true;
+		kiefxKeyError.clear();
+		logger::info("[ENBExtender] Extracted and validated KIEFX key from {}", dllPath.string());
+		return true;
 	}
 
 	bool IsKIEFX(const std::string& content)
@@ -173,8 +202,7 @@ namespace ENBExtender
 	{
 		if (!IsKIEFX(content))
 			return content;
-		InitializeKIEFXKey();
-		if (!kiefxKeyError.empty())
+		if (!InitializeKIEFXKey(content))
 			return "#error KIEFX decoding failed: " + kiefxKeyError + "\n";
 		std::string decoded;
 		decoded.reserve(content.size() - kiefxMagicSize);
