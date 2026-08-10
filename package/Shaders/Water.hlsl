@@ -434,7 +434,26 @@ struct FlowmapData
 FlowmapData GetFlowmapDataTextureSpace(PS_INPUT input, float2 uvShift)
 {
 	FlowmapData data;
-	data.color = FlowMapTex.SampleLevel(FlowMapSampler, input.TexCoord2.zw + uvShift, 0);
+	float2 uv = input.TexCoord2.zw + uvShift;
+
+	// One mip sharper than hardware LOD, and never the last level — coarsest atlas
+	// mips average flow directions to neutral and make distant water look flat.
+	uint width, height, mipCount;
+	FlowMapTex.GetDimensions(0, width, height, mipCount);
+	float rawMipLevel = FlowMapTex.CalculateLevelOfDetail(FlowMapSampler, uv);
+
+	// Extra mid-distance blur hump: reduces high-frequency flow noise in the
+	// middle distance without affecting the near field or the far-field floor
+	// established by the -6 clamp below.
+	float midDistCenter = 2.5;
+	float midDistWidth = 1.5;
+	float midDistBoost = 1.2;
+	float midDistFactor = saturate(1.0 - abs(rawMipLevel - midDistCenter) / midDistWidth);
+	midDistFactor = midDistFactor * midDistFactor * (3.0 - 2.0 * midDistFactor);
+
+	float mipLevel = clamp(rawMipLevel + SharedData::MipBias - 1.0 + midDistFactor * midDistBoost, 0, max((float)mipCount - 6, 0));
+
+	data.color = FlowMapTex.SampleLevel(FlowMapSampler, uv, mipLevel);
 	data.flowVector = (64 * input.TexCoord3.xy) * sqrt(1.01 - data.color.z);
 	// NOTE: flowVector is NOT transformed yet - this is the raw vector before rotation matrix
 	return data;
@@ -544,24 +563,30 @@ float GetFlowmapMipLevel(float2 flowmapUV)
  */
 
 /**
- * Generates flowmap-based normal (no parallax - flowmap normals are not parallax-shifted)
- * Uses mip clamping to preserve detail at distance and prevent over-blurring
+ * Generates flowmap-based normal (no parallax - flowmap normals are not parallax-shifted).
+ * Matches FlowMapTex LOD: hardware level minus 6.
  */
 float3 GetFlowmapNormal(PS_INPUT input, float2 uvShift, float multiplier, float offset)
 {
 	FlowmapData flowData = GetFlowmapDataUV(input, uvShift);
 	float2 uv = offset + (flowData.flowVector - float2(multiplier * ((0.001 * ReflectionColor.w) * flowData.color.w), 0));
 
-	float2 dx = ddx(uv);
-	float2 dy = ddy(uv);
-	float mipLevel = 0.5 * log2(max(dot(dx, dx), dot(dy, dy)));
-	mipLevel = clamp(mipLevel + SharedData::MipBias, 0, 5);
+	uint width, height, mipCount;
+	FlowMapNormalsTex.GetDimensions(0, width, height, mipCount);
+	float rawMipLevel = FlowMapNormalsTex.CalculateLevelOfDetail(FlowMapNormalsSampler, uv);
 
-	float mipScale = exp2(-mipLevel);
-	float2 scaledFlowVector = flowData.flowVector * mipScale;
-	float2 scaledUv = offset + (scaledFlowVector - float2(multiplier * ((0.001 * ReflectionColor.w) * flowData.color.w), 0));
+	// Extra mid-distance blur hump: reduces high-frequency micro-wave noise in
+	// the middle distance without affecting the near field or the far-field
+	// floor established by the -6 clamp below.
+	float midDistCenter = 2.5;
+	float midDistWidth = 1.5;
+	float midDistBoost = 1.2;
+	float midDistFactor = saturate(1.0 - abs(rawMipLevel - midDistCenter) / midDistWidth);
+	midDistFactor = midDistFactor * midDistFactor * (3.0 - 2.0 * midDistFactor);
 
-	return float3(FlowMapNormalsTex.SampleLevel(FlowMapNormalsSampler, scaledUv, mipLevel).xy, flowData.color.z);
+	float mipLevel = clamp(rawMipLevel + SharedData::MipBias - 1.0 + midDistFactor * midDistBoost, 0, max((float)mipCount - 6, 0));
+
+	return float3(FlowMapNormalsTex.SampleLevel(FlowMapNormalsSampler, uv, mipLevel).xy, flowData.color.z);
 }
 
 /**
