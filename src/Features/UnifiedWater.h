@@ -21,17 +21,10 @@ struct UnifiedWater : OverlayFeature
 			{ T("feature.unified_water.key_feature_1", "Unifies distant and close water appearance, streamlining all lighting visuals."),
 				T("feature.unified_water.key_feature_2", "Completely and fundamentally resolves water LOD mismatch issues."),
 				T("feature.unified_water.key_feature_3", "Provides background systems for water geometry rendering, allowing more advanced water effects."),
-				T("feature.unified_water.key_feature_4", "Improves vanilla performance by using optimized water meshes for distant water.") } };
+				T("feature.unified_water.key_feature_4", "Improves vanilla performance by using efficient water meshes for distant water.") } };
 	};
 
 	virtual inline bool HasShaderDefine(RE::BSShader::Type) override { return true; }
-
-	struct Settings
-	{
-		bool UseOptimisedMeshes = true;
-	};
-
-	Settings settings;
 
 	/** @brief Hook that overrides water shader material parameters during water initialization. */
 	struct TESWaterSystem_InitializeWater_SetWaterShaderMaterialParams
@@ -118,11 +111,6 @@ struct UnifiedWater : OverlayFeature
 	/** @brief Handles post-data-load initialization including flowmap and cache setup. */
 	virtual void DataLoaded() override;
 
-	virtual void LoadSettings(json& o_json) override;
-	virtual void SaveSettings(json& o_json) override;
-
-	virtual void RestoreDefaultSettings() override;
-
 	virtual bool IsCore() const override { return true; }
 
 	/** @brief Installs engine hooks for water mesh replacement and worldspace handling. */
@@ -130,7 +118,6 @@ struct UnifiedWater : OverlayFeature
 
 private:
 	RE::NiPointer<RE::BSTriShape> waterMesh;
-	RE::NiPointer<RE::BSTriShape> optimisedWaterMesh;
 	Flowmap* flowmap = nullptr;
 	WaterCache* waterCache = nullptr;
 
@@ -145,7 +132,7 @@ private:
 	std::atomic_bool mapMenuOpen{ false };
 
 	void SetFlowmapTex() const;
-	/** @brief Returns whether the meshes and water cache built in DataLoaded are available; hooks installed in PostPostLoad run before it and survive its failure paths. */
+	/** @brief Returns whether the water mesh and cache built in DataLoaded are available; hooks installed in PostPostLoad run before it and survive its failure paths. */
 	bool IsWaterDataReady() const;
 	bool IsExteriorWorldspaceActive() const;
 	void UpdateWaterLODCull() const;
