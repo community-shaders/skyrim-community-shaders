@@ -146,6 +146,8 @@ private:
 
 	void SetFlowmapTex() const;
 	/** @brief Returns whether the meshes and water cache built in DataLoaded are available; hooks installed in PostPostLoad run before it and survive its failure paths. */
+	void SetFlowmapTex();
+	/** @brief Returns whether the water mesh and cache built in DataLoaded are available; hooks installed in PostPostLoad run before it and survive its failure paths. */
 	bool IsWaterDataReady() const;
 	bool IsExteriorWorldspaceActive() const;
 	void UpdateWaterLODCull() const;
