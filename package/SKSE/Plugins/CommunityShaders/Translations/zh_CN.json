@@ -1302,8 +1302,6 @@
     "feature.unified_water.name": "统一水面",
     "feature.unified_water.regenerate_caches": "重新生成缓存",
     "feature.unified_water.regenerate_flowmap": "重新生成流图",
-    "feature.unified_water.use_optimised_meshes": "使用优化网格",
-    "feature.unified_water.use_optimised_meshes_tooltip": "使用三角面数显著更低的网格以提升性能，视觉质量无损。\n仅影响新创建的水体 - 需要切换位置或重启游戏才能生效。",
     "feature.upscaling.backend_diagnostics": "后端诊断",
     "feature.upscaling.description": "先进的超分辨率和帧生成技术，提升游戏性能。",
     "feature.upscaling.dlss_model_preset": "DLSS模型预设",

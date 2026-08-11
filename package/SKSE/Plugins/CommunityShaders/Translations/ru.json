@@ -1285,8 +1285,6 @@
     "feature.unified_water.name": "Unified Water",
     "feature.unified_water.regenerate_caches": "Перегенерировать кэши",
     "feature.unified_water.regenerate_flowmap": "Перегенерировать карту потока",
-    "feature.unified_water.use_optimised_meshes": "Использовать оптимизированные меши",
-    "feature.unified_water.use_optimised_meshes_tooltip": "Использует меши со значительно меньшим количеством полигонов для улучшения производительности без потери визуального качества.\nВлияет только на вновь созданную воду — требуется смена локации или перезапуск игры.",
     "feature.upscaling.backend_diagnostics": "Диагностика бэкенда",
     "feature.upscaling.description": "Продвинутые технологии апскейлинга и генерации кадров для улучшения производительности",
     "feature.upscaling.dlss_model_preset": "Пресет модели DLSS",
