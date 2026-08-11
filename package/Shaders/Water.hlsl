@@ -436,14 +436,16 @@ FlowmapData GetFlowmapDataTextureSpace(PS_INPUT input, float2 uvShift)
 	FlowmapData data;
 	float2 uv = input.TexCoord2.zw + uvShift;
 
-	// One mip sharper than hardware LOD, and never the last level — coarsest atlas
-	// mips average flow directions to neutral and make distant water look flat.
+	// Mipmapping math here is weird but prevents water from going totally flat at distance and still 
+	// retaining the most blurred texture that maintains the visible small waves but hides the shimmering
+	// and high frequency noise we had with mip = 0 at all distance.
 	uint width, height, mipCount;
 	FlowMapTex.GetDimensions(0, width, height, mipCount);
 	float rawMipLevel = FlowMapTex.CalculateLevelOfDetail(FlowMapSampler, uv);
 
 	// Extra mid-distance blur hump: reduces high-frequency flow noise in the
-	// middle distance without affecting the near field or the far-field floor
+	// middle distance without affecting the near field or the far-field floor.
+	// This is done to blur the flowmap water sooner towards the -6 clamp ceiling.
 	// established by the -6 clamp below.
 	float midDistCenter = 2.5;
 	float midDistWidth = 1.5;
@@ -451,6 +453,7 @@ FlowmapData GetFlowmapDataTextureSpace(PS_INPUT input, float2 uvShift)
 	float midDistFactor = saturate(1.0 - abs(rawMipLevel - midDistCenter) / midDistWidth);
 	midDistFactor = midDistFactor * midDistFactor * (3.0 - 2.0 * midDistFactor);
 
+	// - 6 found to be sweet spot, any lower had too much noise, any higher and the most distant mips went entirely flat and looked very bad.
 	float mipLevel = clamp(rawMipLevel + SharedData::MipBias - 1.0 + midDistFactor * midDistBoost, 0, max((float)mipCount - 6, 0));
 
 	data.color = FlowMapTex.SampleLevel(FlowMapSampler, uv, mipLevel);
