@@ -184,8 +184,8 @@ void Effects11::LoadRaindropTexture()
 
 void Effects11::SetupResources()
 {
+	// Initialize() -> Apply() already loads the raindrop texture; do not load it again here.
 	EffectManager::GetSingleton().Initialize();
-	LoadRaindropTexture();
 }
 
 void Effects11::ClearShaderCache()
