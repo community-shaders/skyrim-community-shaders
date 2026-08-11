@@ -509,6 +509,7 @@ void State::SaveToJson(nlohmann::json& settings)
 	json advanced;
 	advanced["Dump Shaders"] = shaderCache->IsDump();
 	advanced["Log Level"] = logLevel;
+	advanced["Developer Mode"] = enableDeveloperMode;
 	advanced["Shader Defines"] = shaderDefinesString;
 	advanced["Compiler Threads"] = shaderCache->compilationThreadCount;
 	advanced["Background Compiler Threads"] = shaderCache->backgroundCompilationThreadCount;
@@ -580,6 +581,8 @@ void State::LoadFromJson(nlohmann::json& settings)
 			shaderCache->SetDump(advanced["Dump Shaders"]);
 		if (advanced.contains("Log Level") && advanced["Log Level"].is_number_integer())
 			logLevel = magic_enum::enum_cast<spdlog::level::level_enum>(advanced["Log Level"].get<int>()).value_or(spdlog::level::info);
+		if (advanced.contains("Developer Mode") && advanced["Developer Mode"].is_boolean())
+			enableDeveloperMode = advanced["Developer Mode"];
 		if (advanced.contains("Shader Defines") && advanced["Shader Defines"].is_string())
 			SetDefines(advanced["Shader Defines"]);
 		if (advanced.contains("Compiler Threads") && advanced["Compiler Threads"].is_number_integer())
@@ -747,7 +750,7 @@ bool State::IsShaderEnabled(const RE::BSShader& a_shader)
 
 bool State::IsDeveloperMode()
 {
-	return GetLogLevel() <= spdlog::level::debug;
+	return enableDeveloperMode || GetLogLevel() <= spdlog::level::debug;
 }
 
 void State::ModifyRenderTarget(RE::RENDER_TARGETS::RENDER_TARGET a_target, RE::BSGraphics::RenderTargetProperties& a_properties)
