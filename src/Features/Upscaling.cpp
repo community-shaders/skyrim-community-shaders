@@ -69,9 +69,6 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChainUpscaling(
 	auto& upscaling = globals::features::upscaling;
 	upscaling.LoadUpscalingSDKs();
 
-	if (upscaling.IsBackendInitialized())
-		upscaling.CheckBackendFeatures(pAdapter);
-
 	// FLIP_DISCARD requires BufferCount >= 2 and a flip-model-compatible (non-sRGB) format.
 	pSwapChainDesc->SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
 	if (pSwapChainDesc->BufferCount < 2)
@@ -145,7 +142,7 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChainUpscaling(
 				// forward to the underlying D3D12 swap chain, causing
 				// E_NOINTERFACE.  The proxy must remain the outermost layer.
 				upscaling.SetBackendD3DDevice(*ppDevice);
-				// Some features (notably Reflex/PCL) may report availability only after device bind.
+				// Feature availability (notably Reflex/PCL) is only reliable after device bind.
 				upscaling.CheckBackendFeatures(pAdapter);
 				upscaling.PostBackendDevice();
 			}
@@ -174,7 +171,7 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChainUpscaling(
 		upscaling.UpgradeBackendInterface((void**)&(*ppDevice));
 		upscaling.UpgradeBackendInterface((void**)&(*ppSwapChain));
 		upscaling.SetBackendD3DDevice(*ppDevice);
-		// Re-check after device bind to ensure feature availability is accurate.
+		// Feature availability (notably Reflex/PCL) is only reliable after device bind.
 		upscaling.CheckBackendFeatures(pAdapter);
 		upscaling.PostBackendDevice();
 	}
@@ -1013,10 +1010,6 @@ void Upscaling::SetupResources()
 
 	copyDepthToSharedBufferPS.attach((ID3D11PixelShader*)Util::CompileShader(L"Data\\Shaders\\Upscaling\\CopyDepthToSharedBufferPS.hlsl", { { "PSHADER", "" } }, "ps_5_0"));
 
-	// Setup HDR resources only when the HDR Display feature is loaded
-	if (globals::features::hdrDisplay.loaded) {
-		globals::features::hdrDisplay.SetupResources();
-	}
 }
 
 void Upscaling::ClearShaderCache()

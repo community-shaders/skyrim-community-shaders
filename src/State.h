@@ -54,6 +54,7 @@ public:
 	uint32_t currentVertexDescriptor = 0;
 	uint32_t currentPixelDescriptor = 0;
 	spdlog::level::level_enum logLevel = spdlog::level::info;
+	bool enableDeveloperMode = false;  ///< Explicit developer mode toggle; also enabled when log level is debug/trace.
 	std::string shaderDefinesString = "";
 	std::vector<std::pair<std::string, std::string>> shaderDefines{};  // data structure to parse string into; needed to avoid dangling pointers
 
@@ -158,8 +159,9 @@ public:
 	bool IsShaderEnabled(const RE::BSShader& a_shader);
 
 	/**
-	 * @brief Checks whether developer mode is active (log level is trace or debug).
+	 * @brief Checks whether developer mode is active.
 	 *
+	 * Active when Enable Developer Mode is on, or when log level is debug/trace.
 	 * Developer mode enables advanced options. Use at your own risk.
 	 * @return True if in developer mode.
 	 */

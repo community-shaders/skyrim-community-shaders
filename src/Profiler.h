@@ -19,6 +19,9 @@ public:
 	static constexpr uint32_t kMaxTimers = 128;
 	static constexpr uint32_t kFrameLatency = 3;
 	static constexpr uint32_t kHistorySize = 300;
+	// Must exceed the longest legitimate gap between samples of a still-running pass;
+	// the DynamicCubemaps state machine spreads its passes over 6 frames.
+	static constexpr uint64_t kTimerRetireFrames = 60;
 
 	using PerfEventCallback = std::function<void(std::string_view)>;
 
@@ -131,6 +134,7 @@ public:
 		results.clear();
 		knownTimers.clear();
 		knownTimerIndex.clear();
+		collectedFrames = 0;
 		totalTimeMs = 0.0f;
 		cpuTotalTimeMs = 0.0f;
 	}
@@ -145,9 +149,7 @@ public:
 		std::erase_if(knownTimers, [&prefix](const KnownTimer& kt) {
 			return kt.name.starts_with(prefix);
 		});
-		knownTimerIndex.clear();
-		for (size_t i = 0; i < knownTimers.size(); i++)
-			knownTimerIndex[knownTimers[i].name] = i;
+		RebuildTimerIndex();
 	}
 
 private:
@@ -187,11 +189,19 @@ private:
 		std::string name;
 		RollingHistory gpu;
 		RollingHistory cpu;
+		uint64_t lastSampleFrame = 0;
 	};
 	std::vector<KnownTimer> knownTimers;
 	std::unordered_map<std::string, size_t> knownTimerIndex;
+	uint64_t collectedFrames = 0;
 	float totalTimeMs = 0.0f;
 	float cpuTotalTimeMs = 0.0f;
 
 	void CollectResults();
+
+	/** @brief Drops timers that have not been sampled for kTimerRetireFrames, so disabled passes stop reporting stale values. */
+	void RetireStaleTimers();
+
+	/** @brief Repoints knownTimerIndex at the current knownTimers positions after an erase. */
+	void RebuildTimerIndex();
 };

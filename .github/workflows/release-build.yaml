@@ -183,7 +183,8 @@ jobs:
                   draft: true
                   omitDraftDuringUpdate: true
                   tag: ${{ steps.combined_notes.outputs.release_tag }}
-                  artifacts: "${{ github.workspace }}/dist/*.zip"
+                  # AIO is .7z when 7-Zip is found at configure time, .zip otherwise.
+                  artifacts: "${{ github.workspace }}/dist/*.zip,${{ github.workspace }}/dist/*.7z"
                   bodyFile: ${{ steps.combined_notes.outputs.body_file }}
                   generateReleaseNotes: false
                   replacesArtifacts: true

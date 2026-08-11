@@ -13,10 +13,6 @@
 
 #include <imgui_internal.h>
 
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
-	UnifiedWater::Settings,
-	UseOptimisedMeshes)
-
 namespace
 {
 	bool IsInteriorCellActive()
@@ -77,7 +73,7 @@ namespace
 		return IsShortBranch(bytes[0]) || IsNearConditionalBranch(bytes[0], bytes[1]);
 	}
 
-	/** @brief Disables the vanilla LOD water and flow map paths that Unified Water supersedes. Irreversible, so it must only run once the meshes are validated. */
+	/** @brief Disables the vanilla LOD water and flow map paths that Unified Water supersedes. Irreversible, so it must only run once the mesh is validated. */
 	bool DisableVanillaWaterLOD()
 	{
 		// DataLoaded can run more than once, and re-patching a patched branch no longer matches either encoding
@@ -107,32 +103,8 @@ namespace
 
 }
 
-void UnifiedWater::LoadSettings(json& o_json)
-{
-	settings = o_json;
-}
-
-void UnifiedWater::SaveSettings(json& o_json)
-{
-	o_json = settings;
-}
-
-void UnifiedWater::RestoreDefaultSettings()
-{
-	settings = {};
-}
-
 void UnifiedWater::DrawSettings()
 {
-	ImGui::Checkbox(T(TKEY("use_optimised_meshes"), "Use Optimised Meshes"), &settings.UseOptimisedMeshes);
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("%s", T(TKEY("use_optimised_meshes_tooltip"),
-							  "Uses meshes with significantly lower tri-count for improved performance with no visual quality loss.\n"
-							  "Will only affect newly created water - requires a change of location or game restart to take effect."));
-	}
-
-	ImGui::Spacing();
-
 	if (ImGui::TreeNodeEx(T(TKEY("debug"), "Debug"), ImGuiTreeNodeFlags_DefaultOpen)) {
 		if (ImGui::Button(T(TKEY("regenerate_flowmap"), "Regenerate Flowmap")) && flowmap) {
 			if (flowmap->RegenerateAndLoadFlowmap())
@@ -236,23 +208,6 @@ void UnifiedWater::DataLoaded()
 	}
 	waterMesh = RE::NiPointer(waterShape);
 	logger::debug("[Unified Water] Water mesh loaded");
-
-	if (const auto error = RE::BSModelDB::Demand("meshes\\water\\optimisedwatermesh.nif", nif, args); error != RE::BSResource::ErrorCode::kNone) {
-		LogMeshLoadFailure(error, "meshes\\water\\OptimisedWaterMesh.nif");
-		fail("Failed to load optimised water mesh");
-		return;
-	}
-	if (!nif || nif->GetChildren().empty() || !nif->GetChildren().front()->AsNode() || nif->GetChildren().front()->AsNode()->GetChildren().empty()) {
-		fail("Invalid optimised water mesh hierarchy");
-		return;
-	}
-	const auto optimisedWaterShape = nif->GetChildren().front()->AsNode()->GetChildren().front()->AsTriShape();
-	if (!optimisedWaterShape) {
-		fail("Optimised water mesh does not contain valid TriShape");
-		return;
-	}
-	optimisedWaterMesh = RE::NiPointer(optimisedWaterShape);
-	logger::debug("[Unified Water] Optimised water mesh loaded");
 	if (!DisableVanillaWaterLOD()) {
 		fail("Could not disable vanilla water LOD");
 		return;
@@ -537,7 +492,7 @@ int32_t UnifiedWater::BSWaterShaderMaterial_ComputeCRC32::thunk(RE::BSWaterShade
 
 bool UnifiedWater::IsWaterDataReady() const
 {
-	return waterCache && waterMesh && optimisedWaterMesh;
+	return waterCache && waterMesh;
 }
 
 bool UnifiedWater::IsExteriorWorldspaceActive() const
@@ -691,8 +646,7 @@ void UnifiedWater::BGSTerrainBlock_Attach::thunk(RE::BGSTerrainBlock* block)
 
 			RE::NiCloningProcess cloningProcess;
 
-			const auto targetShape = lodLevel > 4 || singleton.settings.UseOptimisedMeshes ? singleton.optimisedWaterMesh : singleton.waterMesh;
-			RE::BSTriShape* shape = targetShape->CreateClone(cloningProcess)->AsTriShape();
+			RE::BSTriShape* shape = singleton.waterMesh->CreateClone(cloningProcess)->AsTriShape();
 
 			const auto posX = (instruction.x - node->baseCellX) * 4096.0f + instruction.size * 2048.0f;
 			const auto posY = (instruction.y - node->baseCellY) * 4096.0f + instruction.size * 2048.0f;
