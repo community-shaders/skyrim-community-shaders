@@ -29,7 +29,7 @@ namespace DynamicCubemaps
 #	else
 		float3 R = reflect(-V, N);
 
-		float level = roughness * 7.0;
+		float level = roughness * 8.0;
 
 		float3 finalIrradiance = 0;
 

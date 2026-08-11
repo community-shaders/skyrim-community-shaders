@@ -50,8 +50,8 @@ public:
 	ConstantBuffer* spmapCB = nullptr;
 	Texture2D* envTexture = nullptr;
 	Texture2D* envReflectionsTexture = nullptr;
-	ID3D11UnorderedAccessView* uavArray[7];
-	ID3D11UnorderedAccessView* uavReflectionsArray[7];
+	ID3D11UnorderedAccessView* uavArray[8];
+	ID3D11UnorderedAccessView* uavReflectionsArray[8];
 
 	// Reflection capture
 
@@ -125,7 +125,7 @@ public:
 
 	uint32_t bc6hMipLevels = 0;
 
-	ID3D11UnorderedAccessView* bc6hScratchUAVs[8] = {};
+	ID3D11UnorderedAccessView* bc6hScratchUAVs[9] = {};
 
 	// Editor window
 

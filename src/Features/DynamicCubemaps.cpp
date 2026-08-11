@@ -10,7 +10,7 @@
 
 #define I18N_KEY_PREFIX "feature.dynamic_cubemaps."
 
-constexpr auto MIPLEVELS = 8;
+constexpr auto MIPLEVELS = 9;
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	DynamicCubemaps::Settings,
@@ -735,7 +735,7 @@ void DynamicCubemaps::SetupResources()
 				++bc6hMipLevels;
 			// Clamp: must not exceed envTexture's mip count (source reads) or the UAV array size.
 			bc6hMipLevels = std::min<std::uint32_t>(bc6hMipLevels, MIPLEVELS);
-			bc6hMipLevels = std::min<std::uint32_t>(bc6hMipLevels, 8u);
+			bc6hMipLevels = std::min<std::uint32_t>(bc6hMipLevels, 9u);
 
 			D3D11_TEXTURE2D_DESC scratchDesc = {};
 			scratchDesc.Width = scratchBase;
