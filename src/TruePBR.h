@@ -84,6 +84,10 @@ public:
 	STATIC_ASSERT_ALIGNAS_16(Settings);
 
 	Settings settings;
+
+	/** @brief When true, logs each PBR JSON file path during load. Off by default. */
+	bool enableVerboseJsonLogging = false;
+
 	/**
 	 * @brief Sets up PBR landscape materials for all quads of a land cell.
 	 *
