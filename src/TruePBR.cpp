@@ -55,7 +55,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 
 namespace PNState
 {
-	void ReadPBRRecordConfigs(const std::string& rootPath, std::function<void(const std::string&, const json&)> recordReader, bool enableVerboseJsonLogging)
+	void ReadPBRRecordConfigs(const std::string& rootPath, std::function<bool(const std::string&, const json&)> recordReader, bool enableVerboseJsonLogging)
 	{
 		if (std::filesystem::exists(rootPath)) {
 			auto configs = clib_util::distribution::get_configs(rootPath, "", ".json");
@@ -92,7 +92,9 @@ namespace PNState
 				}
 
 				const auto editorId = std::filesystem::path(path).stem().string();
-				recordReader(editorId, config);
+				if (!recordReader(editorId, config)) {
+					anyFailed = true;
+				}
 			}
 
 			if (!enableVerboseJsonLogging && !anyFailed) {
@@ -455,8 +457,10 @@ void TruePBR::SetupTextureSetData()
 	PNState::ReadPBRRecordConfigs("Data\\PBRTextureSets", [this](const std::string& editorId, const json& config) {
 		try {
 			pbrTextureSets.insert_or_assign(editorId, config);
+			return true;
 		} catch (const std::exception& e) {
 			logger::error("Failed to deserialize config for {}: {}.", editorId, e.what());
+			return false;
 		}
 	}, enableVerboseJsonLogging);
 }
@@ -472,8 +476,10 @@ void TruePBR::ReloadTextureSetData()
 			if (auto it = pbrTextureSets.find(editorId); it != pbrTextureSets.cend()) {
 				it->second = config;
 			}
+			return true;
 		} catch (const std::exception& e) {
 			logger::error("Failed to deserialize config for {}: {}.", editorId, e.what());
+			return false;
 		}
 	}, enableVerboseJsonLogging);
 
@@ -513,8 +519,10 @@ void TruePBR::SetupMaterialObjectData()
 	PNState::ReadPBRRecordConfigs("Data\\PBRMaterialObjects", [this](const std::string& editorId, const json& config) {
 		try {
 			pbrMaterialObjects.insert_or_assign(editorId, config);
+			return true;
 		} catch (const std::exception& e) {
 			logger::error("Failed to deserialize config for {}: {}.", editorId, e.what());
+			return false;
 		}
 	}, enableVerboseJsonLogging);
 }
