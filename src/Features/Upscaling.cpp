@@ -1013,10 +1013,6 @@ void Upscaling::SetupResources()
 
 	copyDepthToSharedBufferPS.attach((ID3D11PixelShader*)Util::CompileShader(L"Data\\Shaders\\Upscaling\\CopyDepthToSharedBufferPS.hlsl", { { "PSHADER", "" } }, "ps_5_0"));
 
-	// Setup HDR resources only when the HDR Display feature is loaded
-	if (globals::features::hdrDisplay.loaded) {
-		globals::features::hdrDisplay.SetupResources();
-	}
 }
 
 void Upscaling::ClearShaderCache()
