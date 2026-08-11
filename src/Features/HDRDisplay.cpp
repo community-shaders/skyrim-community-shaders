@@ -1569,10 +1569,8 @@ float4 HDRDisplay::GetSharedDataHDR() const
 		return { 0.0f, 0.0f, 0.0f, 0.0f };
 
 	auto* state = globals::state;
-	const bool isMainOrLoading = state->isMainMenuOpen || state->isLoadingMenuOpen;
-	auto* ui = globals::game::ui;
-	const bool inMenuOrPause =
-		ui && (ui->GameIsPaused() || state->isMainMenuOpen || state->isLoadingMenuOpen || state->isMapMenuOpen);
+	const bool isMainOrLoading = state->IsMainOrLoadingMenuOpen();
+	const bool inMenuOrPause = state->IsPausedOrMenuOpen(globals::game::ui);
 
 	float menuSceneEncoding = kHdrMenuSceneGameplay;
 	if (isMainOrLoading) {
@@ -1591,7 +1589,7 @@ float4 HDRDisplay::GetSharedDataHDR() const
 
 HDRDisplay::HDRDataCB HDRDisplay::BuildHDRData() const
 {
-	bool isMainOrLoadingMenu = globals::state->isMainMenuOpen || globals::state->isLoadingMenuOpen;
+	bool isMainOrLoadingMenu = globals::state->IsMainOrLoadingMenuOpen();
 	auto* ui = globals::game::ui;
 	bool skipUIComposite = IsFGCompositingThisFrame();
 

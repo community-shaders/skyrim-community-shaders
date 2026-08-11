@@ -74,6 +74,7 @@ void Profiler::Release()
 	results.clear();
 	knownTimers.clear();
 	knownTimerIndex.clear();
+	collectedFrames = 0;
 	totalTimeMs = 0.0f;
 	cpuTotalTimeMs = 0.0f;
 	initialized = false;
@@ -164,6 +165,7 @@ void Profiler::CollectResults()
 		return;
 
 	frame.inFlight = false;
+	collectedFrames++;
 
 	struct ActiveTimerData
 	{
@@ -202,8 +204,11 @@ void Profiler::CollectResults()
 			auto& known = knownTimers[it->second];
 			known.gpu.PushSample(ms);
 			known.cpu.PushSample(timer.cpuMs);
+			known.lastSampleFrame = collectedFrames;
 		}
 	}
+
+	RetireStaleTimers();
 
 	totalTimeMs = activeTotalMs;
 	cpuTotalTimeMs = activeCpuTotalMs;
@@ -233,4 +238,20 @@ void Profiler::CollectResults()
 		result.historyCount = known.gpu.count;
 		results.push_back(std::move(result));
 	}
+}
+void Profiler::RetireStaleTimers()
+{
+	const size_t before = knownTimers.size();
+	std::erase_if(knownTimers, [this](const KnownTimer& known) {
+		return collectedFrames - known.lastSampleFrame >= kTimerRetireFrames;
+	});
+	if (knownTimers.size() != before)
+		RebuildTimerIndex();
+}
+
+void Profiler::RebuildTimerIndex()
+{
+	knownTimerIndex.clear();
+	for (size_t i = 0; i < knownTimers.size(); i++)
+		knownTimerIndex[knownTimers[i].name] = i;
 }

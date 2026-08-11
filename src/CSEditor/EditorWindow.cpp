@@ -2222,7 +2222,7 @@ bool EditorWindow::CanBeOpen()
 {
 	auto* player = globals::game::player;
 	auto* state = globals::state;
-	return player && player->parentCell && !state->isLoadingMenuOpen && !state->isMainMenuOpen;
+	return player && player->parentCell && !state->IsMainOrLoadingMenuOpen();
 }
 
 void EditorWindow::DisableVanityCamera()

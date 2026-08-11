@@ -302,10 +302,9 @@ RE::BSEventNotifyControl SceneSettingsManager::MenuOpenCloseEventHandler::Proces
 
 void SceneSettingsManager::Update()
 {
-	// Revert interior overrides on main/loading menu (same check as LinearLighting)
+	// Revert interior overrides on main/loading menu
 	if (isCurrentlyApplied) {
-		bool isMainOrLoading = globals::state->isMainMenuOpen || globals::state->isLoadingMenuOpen;
-		if (isMainOrLoading) {
+		if (globals::state->IsMainOrLoadingMenuOpen()) {
 			RevertToExteriorSettings();
 			isCurrentlyApplied = false;
 		}

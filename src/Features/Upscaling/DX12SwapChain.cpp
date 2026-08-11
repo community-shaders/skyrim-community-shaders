@@ -107,21 +107,37 @@ void DX12SwapChain::CreateInterop()
 
 	swapChainProxy = new DXGISwapChainProxy(swapChain);
 
+	RecreateWrappedResources(swapChainDesc);
+}
+
+void DX12SwapChain::RecreateWrappedResources(const DXGI_SWAP_CHAIN_DESC1& desc)
+{
 	D3D11_TEXTURE2D_DESC texDesc11{};
-	texDesc11.Width = swapChainDesc.Width;
-	texDesc11.Height = swapChainDesc.Height;
+	texDesc11.Width = desc.Width;
+	texDesc11.Height = desc.Height;
 	texDesc11.MipLevels = 1;
 	texDesc11.ArraySize = 1;
-	texDesc11.Format = swapChainDesc.Format;
+	texDesc11.Format = desc.Format;
 	texDesc11.SampleDesc.Count = 1;
 	texDesc11.SampleDesc.Quality = 0;
 	texDesc11.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET | D3D11_BIND_UNORDERED_ACCESS;
 
-	swapChainBufferWrapped = new WrappedResource(texDesc11, d3d11Device.get(), d3d12Device.get());
+	// Build both replacements before releasing the active resources so a failed
+	// allocation cannot leave the proxy with only half of its interop textures.
+	auto newSwapChainBuffer = std::make_unique<WrappedResource>(texDesc11, d3d11Device.get(), d3d12Device.get());
 
 	// UI buffer uses R8G8B8A8_UNORM - vanilla UI is SDR and 8-bit precision
 	texDesc11.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-	uiBufferWrapped = new WrappedResource(texDesc11, d3d11Device.get(), d3d12Device.get());
+	auto newUiBuffer = std::make_unique<WrappedResource>(texDesc11, d3d11Device.get(), d3d12Device.get());
+
+	delete swapChainBufferWrapped;
+	delete uiBufferWrapped;
+	swapChainBufferWrapped = newSwapChainBuffer.release();
+	uiBufferWrapped = newUiBuffer.release();
+
+	const float clearColor[4]{};
+	d3d11Context->ClearRenderTargetView(swapChainBufferWrapped->rtv, clearColor);
+	d3d11Context->ClearRenderTargetView(uiBufferWrapped->rtv, clearColor);
 }
 
 DXGISwapChainProxy* DX12SwapChain::GetSwapChainProxy()
@@ -139,9 +155,62 @@ void DX12SwapChain::SetD3D11DeviceContext(ID3D11DeviceContext* a_d3d11Context)
 	DX::ThrowIfFailed(a_d3d11Context->QueryInterface(IID_PPV_ARGS(&d3d11Context)));
 }
 
-HRESULT DX12SwapChain::GetBuffer(void** ppSurface)
+HRESULT DX12SwapChain::GetBuffer(UINT buffer, REFIID riid, void** ppSurface)
 {
-	*ppSurface = swapChainBufferWrapped->resource11;
+	if (!ppSurface)
+		return E_POINTER;
+
+	*ppSurface = nullptr;
+	if (buffer != 0 || !swapChainBufferWrapped || !swapChainBufferWrapped->resource11)
+		return DXGI_ERROR_INVALID_CALL;
+
+	// IDXGISwapChain::GetBuffer returns an owned COM reference. Returning the raw
+	// pointer here let the caller's Release destroy the shared texture while the
+	// D3D12 side still retained and submitted its corresponding resource.
+	return swapChainBufferWrapped->resource11->QueryInterface(riid, ppSurface);
+}
+
+HRESULT DX12SwapChain::ResizeBuffers(UINT bufferCount, UINT width, UINT height, DXGI_FORMAT format, UINT flags)
+{
+	if (!swapChain)
+		return DXGI_ERROR_INVALID_CALL;
+
+	// DXGI defines zero as "preserve the current buffer count". FidelityFX's
+	// frame-generation swap-chain stores the supplied value verbatim and uses it
+	// as its replacement-buffer count, so forwarding zero leaves it with no valid
+	// source resource at the next Present.
+	const UINT effectiveBufferCount = bufferCount ? bufferCount : swapChainDesc.BufferCount;
+	if (!bufferCount)
+		logger::warn("[FidelityFX] Normalized ResizeBuffers count from 0 to {} to preserve replacement buffers", effectiveBufferCount);
+	if (effectiveBufferCount != 2) {
+		logger::error("[DX12SwapChain] Rejected unsupported resize buffer count {} (CS requires 2)", effectiveBufferCount);
+		return DXGI_ERROR_UNSUPPORTED;
+	}
+
+	// These references are to FidelityFX replacement buffers. They must not keep
+	// the old generation alive across the provider's resize, and must be refreshed
+	// before CS records another copy.
+	swapChainBuffers[0] = nullptr;
+	swapChainBuffers[1] = nullptr;
+	const HRESULT result = swapChain->ResizeBuffers(effectiveBufferCount, width, height, format, flags);
+	if (FAILED(result))
+		return result;
+
+	DXGI_SWAP_CHAIN_DESC1 resizedDesc{};
+	const HRESULT descResult = swapChain->GetDesc1(&resizedDesc);
+	if (FAILED(descResult))
+		return descResult;
+
+	const bool wrappedResourcesChanged = resizedDesc.Width != swapChainDesc.Width ||
+	                                     resizedDesc.Height != swapChainDesc.Height ||
+	                                     resizedDesc.Format != swapChainDesc.Format;
+	if (wrappedResourcesChanged)
+		RecreateWrappedResources(resizedDesc);
+	swapChainDesc = resizedDesc;
+
+	DX::ThrowIfFailed(swapChain->GetBuffer(0, IID_PPV_ARGS(swapChainBuffers[0].put())));
+	DX::ThrowIfFailed(swapChain->GetBuffer(1, IID_PPV_ARGS(swapChainBuffers[1].put())));
+	frameIndex = swapChain->GetCurrentBackBufferIndex();
 	return S_OK;
 }
 
@@ -208,6 +277,7 @@ HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT Flags)
 	frameIndex = swapChain->GetCurrentBackBufferIndex();
 
 	float clearColor[4]{ 0, 0, 0, 0 };
+	d3d11Context->ClearRenderTargetView(swapChainBufferWrapped->rtv, clearColor);
 	d3d11Context->ClearRenderTargetView(uiBufferWrapped->rtv, clearColor);
 
 	// If VSync is disabled, use frame limiter to prevent tearing and optimise pacing
@@ -387,9 +457,9 @@ HRESULT STDMETHODCALLTYPE DXGISwapChainProxy::Present(UINT SyncInterval, UINT Fl
 	return globals::features::upscaling.dx12SwapChain.Present(SyncInterval, Flags);
 }
 
-HRESULT STDMETHODCALLTYPE DXGISwapChainProxy::GetBuffer(UINT, _In_ REFIID, _COM_Outptr_ void** ppSurface)
+HRESULT STDMETHODCALLTYPE DXGISwapChainProxy::GetBuffer(UINT buffer, _In_ REFIID riid, _COM_Outptr_ void** ppSurface)
 {
-	return globals::features::upscaling.dx12SwapChain.GetBuffer(ppSurface);
+	return globals::features::upscaling.dx12SwapChain.GetBuffer(buffer, riid, ppSurface);
 }
 
 HRESULT STDMETHODCALLTYPE DXGISwapChainProxy::SetFullscreenState(BOOL Fullscreen, _In_opt_ IDXGIOutput* pTarget)
@@ -409,7 +479,7 @@ HRESULT STDMETHODCALLTYPE DXGISwapChainProxy::GetDesc(_Out_ DXGI_SWAP_CHAIN_DESC
 
 HRESULT STDMETHODCALLTYPE DXGISwapChainProxy::ResizeBuffers(UINT BufferCount, UINT Width, UINT Height, DXGI_FORMAT NewFormat, UINT SwapChainFlags)
 {
-	return swapChain->ResizeBuffers(BufferCount, Width, Height, NewFormat, SwapChainFlags);
+	return globals::features::upscaling.dx12SwapChain.ResizeBuffers(BufferCount, Width, Height, NewFormat, SwapChainFlags);
 }
 
 HRESULT STDMETHODCALLTYPE DXGISwapChainProxy::ResizeTarget(_In_ const DXGI_MODE_DESC* pNewTargetParameters)

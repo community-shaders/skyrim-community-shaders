@@ -193,7 +193,7 @@ jobs:
                   # semantic-release's floor for every RC cut from dev.
                   commit: ${{ github.event.pull_request.head.sha }}
                   prerelease: true
-                  artifacts: "${{ github.workspace }}/dist/CommunityShaders_AIO-*.zip"
+                  artifacts: "${{ github.workspace }}/dist/CommunityShaders_AIO-*.7z,${{ github.workspace }}/dist/CommunityShaders_AIO-*.zip"
                   bodyFile: release-notes.md
                   allowUpdates: true
                   replacesArtifacts: true
@@ -209,7 +209,7 @@ jobs:
                   # step above for why dev-reachable preview tags break releases.
                   commit: ${{ github.event.pull_request.head.sha }}
                   prerelease: true
-                  artifacts: "${{ github.workspace }}/dist/CommunityShaders_AIO-*.zip"
+                  artifacts: "${{ github.workspace }}/dist/CommunityShaders_AIO-*.7z,${{ github.workspace }}/dist/CommunityShaders_AIO-*.zip"
                   generateReleaseNotes: true
                   allowUpdates: true
                   replacesArtifacts: true
