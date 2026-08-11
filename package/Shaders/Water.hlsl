@@ -521,16 +521,15 @@ float GetFlowmapHeightBarycentric(PS_INPUT input, float2 flowmapDimensions, floa
 }
 
 /**
- * Computes mip level for flowmap texture sampling
+ * Computes mip level from continuous (non-flowmapped) UVs.
+ * Flow-rotated UVs have discontinuous ddx/ddy and must not be used for LOD.
  */
-float GetFlowmapMipLevel(float2 flowmapUV)
+float GetFlowmapMipLevel(float2 baseUV)
 {
 	float2 textureDims;
 	FlowMapNormalsTex.GetDimensions(textureDims.x, textureDims.y);
 
-	textureDims /= 8.0;
-
-	float2 texCoordsPerSize = flowmapUV * textureDims;
+	float2 texCoordsPerSize = baseUV * textureDims;
 	float2 dxSize = ddx(texCoordsPerSize);
 	float2 dySize = ddy(texCoordsPerSize);
 	float2 dTexCoords = dxSize * dxSize + dySize * dySize;
@@ -544,24 +543,20 @@ float GetFlowmapMipLevel(float2 flowmapUV)
  */
 
 /**
- * Generates flowmap-based normal (no parallax - flowmap normals are not parallax-shifted)
- * Uses mip clamping to preserve detail at distance and prevent over-blurring
+ * Generates flowmap-based normal (no parallax - flowmap normals are not parallax-shifted).
+ * Mip LOD uses non-flowmapped TexCoord3 derivatives — flow-rotated UVs break hardware/manual
+ * mip selection (stuck mip 0 shimmer, or excessive LOD + UV shrink that flattens normals).
  */
-float3 GetFlowmapNormal(PS_INPUT input, float2 uvShift, float multiplier, float offset)
+float3 GetFlowmapNormal(PS_INPUT input, float2 uvShift, float multiplier, float offset, float2 dx, float2 dy)
 {
 	FlowmapData flowData = GetFlowmapDataUV(input, uvShift);
 	float2 uv = offset + (flowData.flowVector - float2(multiplier * ((0.001 * ReflectionColor.w) * flowData.color.w), 0));
 
-	float2 dx = ddx(uv);
-	float2 dy = ddy(uv);
-	float mipLevel = 0.5 * log2(max(dot(dx, dx), dot(dy, dy)));
-	mipLevel = clamp(mipLevel + SharedData::MipBias, 0, 5);
+	// Match UV footprint: flowVector scales by this (see GetFlowmapDataTextureSpace)
+	float flowStrength = sqrt(1.01 - flowData.color.z);
+	float mipScale = exp2(SharedData::MipBias) * flowStrength;
 
-	float mipScale = exp2(-mipLevel);
-	float2 scaledFlowVector = flowData.flowVector * mipScale;
-	float2 scaledUv = offset + (scaledFlowVector - float2(multiplier * ((0.001 * ReflectionColor.w) * flowData.color.w), 0));
-
-	return float3(FlowMapNormalsTex.SampleLevel(FlowMapNormalsSampler, scaledUv, mipLevel).xy, flowData.color.z);
+	return float3(FlowMapNormalsTex.SampleGrad(FlowMapNormalsSampler, uv, dx * mipScale, dy * mipScale).xy, flowData.color.z);
 }
 
 /**
@@ -665,11 +660,16 @@ WaterNormalData GetWaterNormal(PS_INPUT input, float distanceFactor, float norma
 	// Calculate cell blend weights using parallaxed input
 	float2 normalMul = 0.5 + -(-0.5 + abs(frac(flowmapInput.TexCoord2.zw * (64 * flowmapDimensions)) * 2 - 1));
 
+	// Same UV scale as flowVector before rotation — shared so all 4 blend samples use matching LOD
+	float2 baseUV = 64 * flowmapInput.TexCoord3.xy;
+	float2 flowNormalDx = ddx(baseUV);
+	float2 flowNormalDy = ddy(baseUV);
+
 	// Sample flowmap normals with parallax applied
-	float3 flowmapNormal0 = GetFlowmapNormal(flowmapInput, uvShift, 9.92, 0);
-	float3 flowmapNormal1 = GetFlowmapNormal(flowmapInput, float2(0, uvShift.y), 10.64, 0.27);
-	float3 flowmapNormal2 = GetFlowmapNormal(flowmapInput, 0.0.xx, 8, 0);
-	float3 flowmapNormal3 = GetFlowmapNormal(flowmapInput, float2(uvShift.x, 0), 8.48, 0.62);
+	float3 flowmapNormal0 = GetFlowmapNormal(flowmapInput, uvShift, 9.92, 0, flowNormalDx, flowNormalDy);
+	float3 flowmapNormal1 = GetFlowmapNormal(flowmapInput, float2(0, uvShift.y), 10.64, 0.27, flowNormalDx, flowNormalDy);
+	float3 flowmapNormal2 = GetFlowmapNormal(flowmapInput, 0.0.xx, 8, 0, flowNormalDx, flowNormalDy);
+	float3 flowmapNormal3 = GetFlowmapNormal(flowmapInput, float2(uvShift.x, 0), 8.48, 0.62, flowNormalDx, flowNormalDy);
 
 	float2 flowmapNormalWeighted =
 		normalMul.y * (normalMul.x * flowmapNormal2.xy + (1 - normalMul.x) * flowmapNormal3.xy) +
