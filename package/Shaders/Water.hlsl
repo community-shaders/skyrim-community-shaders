@@ -564,7 +564,8 @@ float GetFlowmapMipLevel(float2 flowmapUV)
 
 /**
  * Generates flowmap-based normal (no parallax - flowmap normals are not parallax-shifted).
- * Matches FlowMapTex LOD: hardware level minus 6.
+ * Uses texture-derived LOD with shared bias, mid-distance smoothing,
+ * and a far-mip cap.
  */
 float3 GetFlowmapNormal(PS_INPUT input, float2 uvShift, float multiplier, float offset)
 {
