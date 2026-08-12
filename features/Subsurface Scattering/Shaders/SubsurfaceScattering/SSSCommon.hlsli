@@ -22,22 +22,51 @@ cbuffer PerFrameSSS : register(b1)
 	float4 MeanFreePathHuman;
 };
 
-float3 SSSRemoveAlbedo(float3 color, float3 albedo, uint mode)
+float3 SSSDecodeAlbedo(float3 encodedAlbedo)
 {
-	if (mode == SSS_SCATTER_MODE_PRE)
-		return color;
-	albedo /= Color::PBRLightingScale;
-	float3 divisor = (mode == SSS_SCATTER_MODE_PRE_POST) ? sqrt(albedo) : albedo;
-	return lerp(color, color / max(divisor, EPSILON_SSS_ALBEDO), albedo > EPSILON_SSS_ALBEDO);
+	float3 albedo = encodedAlbedo / Color::PBRLightingScale;
+	return max(Color::IrradianceToLinear(albedo), 0.0f);
 }
 
-float3 SSSApplyAlbedo(float3 irradiance, float3 albedo, uint mode)
+float3 SSSGetAlbedoFactor(float3 albedo, uint mode)
+{
+	if (mode == SSS_SCATTER_MODE_PRE)
+		return 1.0f;
+	return (mode == SSS_SCATTER_MODE_PRE_POST) ? sqrt(max(albedo, 0.0f)) : max(albedo, 0.0f);
+}
+
+float3 SSSGetAlbedoParticipation(float3 albedo)
+{
+	// Keep the existing low-albedo protection, but transition all channels
+	// continuously instead of changing semantics at one quantized UNORM code.
+	// The threshold is converted to the same linear domain as albedo so non-linear
+	// lighting retains its previous effective cutoff.
+	float threshold = Color::IrradianceToLinear(EPSILON_SSS_ALBEDO);
+	return smoothstep(threshold, threshold * 4.0f, albedo);
+}
+
+float3 SSSRemoveAlbedo(float3 linearColor, float3 albedo, uint mode)
+{
+	if (mode == SSS_SCATTER_MODE_PRE)
+		return linearColor;
+
+	float3 factor = SSSGetAlbedoFactor(albedo, mode);
+	float3 participation = SSSGetAlbedoParticipation(albedo);
+	return linearColor * participation / max(factor, EPSILON_DIVISION);
+}
+
+float3 SSSApplyAlbedo(float3 irradiance, float3 originalLinearColor, float3 albedo, uint mode)
 {
 	if (mode == SSS_SCATTER_MODE_PRE)
 		return irradiance;
-	albedo /= Color::PBRLightingScale;
-	float3 multiplier = (mode == SSS_SCATTER_MODE_PRE_POST) ? sqrt(albedo) : albedo;
-	return lerp(irradiance, irradiance * multiplier, albedo > EPSILON_SSS_ALBEDO);
+
+	float3 factor = SSSGetAlbedoFactor(albedo, mode);
+	float3 participation = SSSGetAlbedoParticipation(albedo);
+
+	// Participation gates both emission into and reception from the blur. Squaring
+	// it here makes the operation an exact identity without blur, while zero-albedo
+	// channels retain the original color and cannot acquire unpremultiplied energy.
+	return irradiance * factor * participation + originalLinearColor * (1.0f - participation * participation);
 }
 
 #endif

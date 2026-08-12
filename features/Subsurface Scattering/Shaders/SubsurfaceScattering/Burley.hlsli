@@ -48,24 +48,25 @@ float3 GetScalingFactor(float3 albedo)
 	return 3.5f + 100.f * pow(abs(value), 4);
 }
 
-float4 BurleyNormalizedSS(uint2 DTid, float2 texCoord, float sssAmount, bool humanProfile)
+float4 BurleyNormalizedSS(uint2 DTid, float2 texCoord, float sssAmount, bool humanProfile, float4 originalSceneColor)
 {
 	float centerDepth = SharedData::GetScreenDepth(DepthTexture[DTid].x);
 
 	float4 centerColor = ColorTexture[DTid];
 	if (sssAmount == 0 || centerDepth <= 0) {
-		return centerColor;
+		return originalSceneColor;
 	}
 
-	float4 surfaceAlbedo = AlbedoTexture[DTid];
-	float3 originalColor = centerColor.xyz;
+	float4 surfaceAlbedoSample = AlbedoTexture[DTid];
+	float3 surfaceAlbedo = SSSDecodeAlbedo(surfaceAlbedoSample.xyz);
+	float3 originalIrradiance = centerColor.xyz;
 
 	float4 diffuseMeanFreePath = humanProfile ? MeanFreePathHuman : MeanFreePathBase;
 	diffuseMeanFreePath.xyz = float3(max(diffuseMeanFreePath.x, 1e-5f), max(diffuseMeanFreePath.y, 1e-5f), max(diffuseMeanFreePath.z, 1e-5f));
 	diffuseMeanFreePath *= sssAmount;
 
 	float dmfpForSampling = diffuseMeanFreePath.w;
-	float s = GetScalingFactor(surfaceAlbedo.www).x;
+	float s = GetScalingFactor(surfaceAlbedoSample.www).x;
 	float d = dmfpForSampling / s;
 	float3 s3d = GetScalingFactor(surfaceAlbedo.xyz);
 	float3 d3d = diffuseMeanFreePath.xyz * dmfpForSampling / s3d;
@@ -129,13 +130,11 @@ float4 BurleyNormalizedSS(uint2 DTid, float2 texCoord, float sssAmount, bool hum
 	}
 
 	colorSum *= any(weightSum == 0.0f) ? 0.0f : (1.0f / weightSum);
-	colorSum = lerp(colorSum, originalColor, saturate(centerWeight));
+	colorSum = lerp(colorSum, originalIrradiance, saturate(centerWeight));
 
-	float3 albedo = AlbedoTexture[DTid.xy].xyz;
-	float3 color = SSSApplyAlbedo(Color::IrradianceToGamma(colorSum), albedo, SSS_SCATTER_MODE_POST);
-	float3 centerColorRestored = SSSApplyAlbedo(Color::IrradianceToGamma(originalColor), albedo, SSS_SCATTER_MODE_POST);
-	color = lerp(centerColorRestored, color, saturate(sssAmount > 0.0));
+	float3 color = SSSApplyAlbedo(colorSum, Color::IrradianceToLinear(originalSceneColor.rgb), surfaceAlbedo, SSS_SCATTER_MODE_POST);
+	color = Color::IrradianceToGamma(color);
 
-	float4 outColor = float4(color, ColorTexture[DTid.xy].w);
+	float4 outColor = float4(color, originalSceneColor.w);
 	return outColor;
 }
