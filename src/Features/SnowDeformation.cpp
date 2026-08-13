@@ -9,6 +9,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	EnableSnowDeformation,
 	StampRadius,
 	RefillTime,
+	RefillOnlyWhenSnowing,
 	RangeTrenchesM)
 
 void SnowDeformation::SetupResources()
@@ -122,7 +123,15 @@ void SnowDeformation::Prepass()
 	perFrameData.TexelSize = deformWorldSize / kTextureDim;
 
 	float deltaTime = *globals::game::deltaTime;
-	perFrameData.RefillAmount = settings.RefillTime > 0.0f ? deltaTime / settings.RefillTime : 0.0f;
+	// Refill gate: with RefillOnlyWhenSnowing (default), compressed snow only
+	// recovers while the CURRENT weather actually carries snow — trails
+	// persist through clear spells (and interiors, where there is no sky).
+	bool refillActive = !settings.RefillOnlyWhenSnowing;
+	if (!refillActive)
+		if (auto* sky = RE::Sky::GetSingleton())
+			if (auto* weather = sky->currentWeather)
+				refillActive = weather->data.flags.any(RE::TESWeather::WeatherDataFlag::kSnow);
+	perFrameData.RefillAmount = (refillActive && settings.RefillTime > 0.0f) ? deltaTime / settings.RefillTime : 0.0f;
 
 	perFrameData.ClearMap = clearRequested;
 	clearRequested = false;

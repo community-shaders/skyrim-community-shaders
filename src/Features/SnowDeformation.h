@@ -45,6 +45,8 @@ public:
 		float StampRadius = 20.0f;
 		/** @brief Seconds for compressed snow to fully recover. 0 disables refilling. */
 		float RefillTime = 700.0f;
+		/** @brief When set (default), compressed snow only recovers while the current weather is actually snowing — trails persist through clear spells and interiors. */
+		bool RefillOnlyWhenSnowing = true;
 		/** @brief Render distances in METERS (converted via kUnitsPerMeter). Shell scales the warped grid's spacing (CB-only, applies live); Trenches resizes the deformation window (the map clears on apply — content is scale-relative); Object Snow is the statics capture cutoff. */
 		float RangeTrenchesM = 100.0f;
 	};

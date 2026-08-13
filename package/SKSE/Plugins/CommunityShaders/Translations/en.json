@@ -1335,6 +1335,8 @@
     "feature.snow_deformation.name": "Snow Deformation",
     "feature.snow_deformation.range_trenches": "Trenches",
     "feature.snow_deformation.range_trenches_tooltip": "Deformation window radius (also the actor stamping cutoff). Applying a change CLEARS existing trenches; trench detail coarsens with range.",
+    "feature.snow_deformation.refill_only_snowing": "Refill Only While Snowing",
+    "feature.snow_deformation.refill_only_snowing_tooltip": "Compressed snow only recovers while the current weather is snowing. Trails and trenches persist through clear weather.",
     "feature.snow_deformation.refill_time": "Snow Refill Time",
     "feature.snow_deformation.refill_time_tooltip": "Time for compressed snow to fully recover. 0 disables refilling.",
     "feature.snow_deformation.render_distance": "Render Distance",
