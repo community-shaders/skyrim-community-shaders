@@ -31,6 +31,8 @@ public:
 	{
 		bool EnableSnowDeformation = true;
 		bool ShowDebugTexture = false;
+		/** @brief Scale on Havok collision-shape radii (20 = 1.0x = the shapes' actual size). */
+		float StampRadius = 20.0f;
 	};
 
 	/** @brief Per-dispatch constants for the deformation update. Layout must match PerFrame in DeformationUpdateCS.hlsl. */
@@ -72,7 +74,21 @@ public:
 	virtual void RestoreDefaultSettings() override;
 
 protected:
+	/** @brief Fills perFrameData.Stamps from the player and nearby loaded actors. Implemented in SnowDeformation/Stamping.cpp. */
+	void GatherStamps(PerFrame& perFrameData);
+
 	float2 windowOrigin = { 0, 0 };
 	DirectX::XMINT2 pendingScrollDelta = { 0, 0 };
 	bool clearRequested = true;
+
+	/** @brief Trail history per collision shape: key = (formID << 16) | traversal index. */
+	std::unordered_map<uint64_t, float2> stampPrevPositions;
+
+	/** @brief Stillness latch per corpse (formID). Ragdoll micro-drift accumulates against the FROZEN resting anchors and would eventually cross the movement gate, firing a one-frame trench pulse under an already-buried corpse. Once a corpse has been still long enough it settles: only a large accumulated displacement (real dragging, explosions) wakes it again. Erased when the actor is seen alive (reanimation). */
+	struct CorpseRest
+	{
+		uint16_t stillFrames = 0;
+		bool settled = false;
+	};
+	std::unordered_map<uint32_t, CorpseRest> corpseRestStates;
 };
