@@ -8,7 +8,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	SnowDeformation::Settings,
 	EnableSnowDeformation,
 	StampRadius,
-	RefillTime)
+	RefillTime,
+	RangeTrenchesM)
 
 void SnowDeformation::SetupResources()
 {
@@ -57,26 +58,43 @@ SnowDeformation::SettingsGPU SnowDeformation::GetCommonBufferData(bool a_inWorld
 		// cached FrameBuffer camera position: it is exactly what the lighting
 		// pixel shader sees as CameraPosAdjust, so map and terrain agree.
 		auto eyePosFB = globals::game::frameBufferCached.GetCameraPosAdjust();
+		const float deformTexel = deformWorldSize / kTextureDim;
 		float2 desiredOrigin = {
-			std::floor((eyePosFB.x - kWorldSize * 0.5f) / kTexelSize) * kTexelSize,
-			std::floor((eyePosFB.y - kWorldSize * 0.5f) / kTexelSize) * kTexelSize
+			std::floor((eyePosFB.x - deformWorldSize * 0.5f) / deformTexel) * deformTexel,
+			std::floor((eyePosFB.y - deformWorldSize * 0.5f) / deformTexel) * deformTexel
 		};
 
-		pendingScrollDelta.x += (int)std::lround((desiredOrigin.x - windowOrigin.x) / kTexelSize);
-		pendingScrollDelta.y += (int)std::lround((desiredOrigin.y - windowOrigin.y) / kTexelSize);
+		pendingScrollDelta.x += (int)std::lround((desiredOrigin.x - windowOrigin.x) / deformTexel);
+		pendingScrollDelta.y += (int)std::lround((desiredOrigin.y - windowOrigin.y) / deformTexel);
 		windowOrigin = desiredOrigin;
 	}
 
 	SettingsGPU data{};
 	data.WindowOrigin = windowOrigin;
-	data.InvWorldSize = 1.0f / kWorldSize;
+	data.InvWorldSize = 1.0f / deformWorldSize;
 	data.EnableSnowDeformation = settings.EnableSnowDeformation;
 	data.DebugTerrainOverlay = debugTerrainOverlay ? 1u : 0u;
 	return data;
 }
 
+void SnowDeformation::ApplyRangeSettings()
+{
+	// Trench window: content is scale-relative, so a resize clears the map.
+	if (trenchRangeDirty || !rangeInitApplied) {
+		float newWorldSize = std::clamp(settings.RangeTrenchesM, 29.0f, 200.0f) * 2.0f * kUnitsPerMeter;
+		if (std::abs(newWorldSize - deformWorldSize) > 1.0f) {
+			deformWorldSize = newWorldSize;
+			clearRequested = true;
+		}
+		trenchRangeDirty = false;
+	}
+	rangeInitApplied = true;
+}
+
 void SnowDeformation::Prepass()
 {
+	ApplyRangeSettings();
+
 	auto context = globals::d3d::context;
 
 	// The lighting shader samples t101 whenever the feature is compiled in, so
@@ -101,7 +119,7 @@ void SnowDeformation::Prepass()
 	pendingScrollDelta = { 0, 0 };
 
 	perFrameData.WindowOrigin = windowOrigin;
-	perFrameData.TexelSize = kTexelSize;
+	perFrameData.TexelSize = deformWorldSize / kTextureDim;
 
 	float deltaTime = *globals::game::deltaTime;
 	perFrameData.RefillAmount = settings.RefillTime > 0.0f ? deltaTime / settings.RefillTime : 0.0f;

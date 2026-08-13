@@ -28,11 +28,14 @@ public:
 
 	// The deformation map is a square world-space window that follows the camera
 	// in whole-texel steps. Values are normalized depression depth: 0 = untouched
-	// snow, 1 = compressed to the ground.
+	// snow, 1 = compressed to the ground. The window's WORLD size is runtime
+	// (deformWorldSize, driven by the Trenches range slider); the texture
+	// resolution is fixed, so trench detail coarsens with range.
 	static constexpr uint kTextureDim = 2048;
-	static constexpr float kWorldSize = 8192.0f;
-	static constexpr float kTexelSize = kWorldSize / kTextureDim;
 	static constexpr uint kMaxStamps = 128;
+
+	/** @brief Skyrim world units per meter (1 unit ≈ 1.43 cm). Range sliders are in meters. */
+	static constexpr float kUnitsPerMeter = 70.0f;
 
 	struct Settings
 	{
@@ -42,6 +45,8 @@ public:
 		float StampRadius = 20.0f;
 		/** @brief Seconds for compressed snow to fully recover. 0 disables refilling. */
 		float RefillTime = 700.0f;
+		/** @brief Render distances in METERS (converted via kUnitsPerMeter). Shell scales the warped grid's spacing (CB-only, applies live); Trenches resizes the deformation window (the map clears on apply — content is scale-relative); Object Snow is the statics capture cutoff. */
+		float RangeTrenchesM = 100.0f;
 	};
 
 	/** @brief GPU-side settings, appended to the shared FeatureData cbuffer (b6). Layout must match SnowDeformationSettings in SharedData.hlsli. */
@@ -148,6 +153,17 @@ protected:
 	DirectX::XMINT2 pendingScrollDelta = { 0, 0 };
 	bool clearRequested = true;
 
+	// ---- Runtime render-distance state (driven by the Range* settings) ----
+	/** @brief Deformation window world size (2x the Trenches range). Changing it invalidates the map (content is scale-relative), so the slider clears on apply. */
+	float deformWorldSize = 14000.0f;
+	bool trenchRangeDirty = false;
+	bool rangeInitApplied = false;
+
+public:
+	/** @brief Applies pending range-setting changes (trench window resize + map clear). Called at Prepass start; the first call applies loaded settings. */
+	void ApplyRangeSettings();
+
+protected:
 	/** @brief Trail history per collision shape: key = (formID << 16) | traversal index. */
 	std::unordered_map<uint64_t, float2> stampPrevPositions;
 

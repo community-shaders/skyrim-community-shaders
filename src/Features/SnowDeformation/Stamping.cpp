@@ -45,7 +45,7 @@ void SnowDeformation::GatherStamps(PerFrame& perFrameData)
 			return;
 		auto position = actor->GetPosition();
 		// Outside the deformation window nothing can be recorded anyway.
-		if (cameraPosition.GetSquaredDistance(position) > 0.25f * kWorldSize * kWorldSize)
+		if (cameraPosition.GetSquaredDistance(position) > 0.25f * deformWorldSize * deformWorldSize)
 			return;
 		auto root = actor->Get3D(false);
 		if (!root)
