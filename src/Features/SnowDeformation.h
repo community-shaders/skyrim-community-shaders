@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Buffer.h"
+
 struct SnowDeformation : Feature
 {
 public:
@@ -17,17 +19,60 @@ public:
 				T("feature.snow_deformation.key_feature_4", "Compute-shader based, low performance impact") } };
 	};
 
+	// The deformation map is a square world-space window that follows the camera
+	// in whole-texel steps. Values are normalized depression depth: 0 = untouched
+	// snow, 1 = compressed to the ground.
+	static constexpr uint kTextureDim = 2048;
+	static constexpr float kWorldSize = 8192.0f;
+	static constexpr float kTexelSize = kWorldSize / kTextureDim;
+	static constexpr uint kMaxStamps = 128;
+
 	struct Settings
 	{
 		bool EnableSnowDeformation = true;
+		bool ShowDebugTexture = false;
 	};
+
+	/** @brief Per-dispatch constants for the deformation update. Layout must match PerFrame in DeformationUpdateCS.hlsl. */
+	struct alignas(16) PerFrame
+	{
+		float2 WindowOrigin;
+		DirectX::XMINT2 ScrollDelta;
+
+		float TexelSize;
+		uint StampCount;
+		float RefillAmount;
+		uint ClearMap;
+
+		float4 Stamps[kMaxStamps];
+		/** @brief Segment start per stamp (the stamped shape's previous position) — stamps are capsules, so trails stay continuous regardless of actor speed. */
+		float4 StampEnds[kMaxStamps];
+	};
+	STATIC_ASSERT_ALIGNAS_16(PerFrame);
 
 	Settings settings;
 
-	/** @brief Draws the ImGui settings UI. Implemented in SnowDeformation/Menu.cpp. */
+	ConstantBuffer* perFrame = nullptr;
+	Texture2D* deformationTextures[2] = { nullptr, nullptr };
+	uint currentTexture = 0;
+
+	/** @brief SRV of the most recently written deformation map, for shader sampling and debug UI. */
+	ID3D11ShaderResourceView* GetDeformationSRV() const { return deformationTextures[currentTexture]->srv.get(); }
+	/** @brief World XY of the corner of texel (0,0) of the current deformation window. */
+	float2 GetWindowOrigin() const { return windowOrigin; }
+
+	/** @brief Creates the ping-pong deformation textures and the per-frame constant buffer. */
+	virtual void SetupResources() override;
+
+	/** @brief Draws the ImGui settings UI, including the debug view of the deformation map. Implemented in SnowDeformation/Menu.cpp. */
 	virtual void DrawSettings() override;
 
 	virtual void LoadSettings(json& o_json) override;
 	virtual void SaveSettings(json& o_json) override;
 	virtual void RestoreDefaultSettings() override;
+
+protected:
+	float2 windowOrigin = { 0, 0 };
+	DirectX::XMINT2 pendingScrollDelta = { 0, 0 };
+	bool clearRequested = true;
 };
