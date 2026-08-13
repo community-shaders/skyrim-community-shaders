@@ -33,6 +33,8 @@ public:
 		bool ShowDebugTexture = false;
 		/** @brief Scale on Havok collision-shape radii (20 = 1.0x = the shapes' actual size). */
 		float StampRadius = 20.0f;
+		/** @brief Seconds for compressed snow to fully recover. 0 disables refilling. */
+		float RefillTime = 700.0f;
 	};
 
 	/** @brief Per-dispatch constants for the deformation update. Layout must match PerFrame in DeformationUpdateCS.hlsl. */
@@ -66,6 +68,17 @@ public:
 	/** @brief Creates the ping-pong deformation textures and the per-frame constant buffer. */
 	virtual void SetupResources() override;
 
+	/**
+	 * @brief Per-frame update: gathers actor stamp positions, scrolls the window
+	 * to follow the camera, and dispatches the deformation update compute shader.
+	 */
+	virtual void Prepass() override;
+
+	/** @brief Returns the deformation update compute shader, compiling it on first use. */
+	ID3D11ComputeShader* GetDeformationUpdateCS();
+	ID3D11ComputeShader* deformationUpdateCS = nullptr;
+	virtual void ClearShaderCache() override;
+
 	/** @brief Draws the ImGui settings UI, including the debug view of the deformation map. Implemented in SnowDeformation/Menu.cpp. */
 	virtual void DrawSettings() override;
 
@@ -76,6 +89,9 @@ public:
 protected:
 	/** @brief Fills perFrameData.Stamps from the player and nearby loaded actors. Implemented in SnowDeformation/Stamping.cpp. */
 	void GatherStamps(PerFrame& perFrameData);
+
+	/** @brief Advances the deformation window to follow the camera in whole-texel steps, accumulating the scroll delta for the next update dispatch. */
+	void UpdateWindowOrigin();
 
 	float2 windowOrigin = { 0, 0 };
 	DirectX::XMINT2 pendingScrollDelta = { 0, 0 };
