@@ -27,6 +27,7 @@
 #include "Features/Skin.h"
 #include "Features/SkySync.h"
 #include "Features/Skylighting.h"
+#include "Features/SnowDeformation.h"
 #include "Features/SubsurfaceScattering.h"
 #include "Features/TerrainBlending.h"
 #include "Features/TerrainHelper.h"
@@ -77,6 +78,7 @@ namespace globals
 		Skylighting skylighting{};
 		TerrainVariation terrainVariation{};
 		SkySync skySync{};
+		SnowDeformation snowDeformation{};
 		SubsurfaceScattering subsurfaceScattering{};
 		TerrainBlending terrainBlending{};
 		TerrainHelper terrainHelper{};
