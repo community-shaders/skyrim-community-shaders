@@ -26,10 +26,9 @@ public:
 				T("feature.snow_deformation.key_feature_4", "Compute-shader based, low performance impact") } };
 	};
 
-	// The deformation map is a square world-space window that follows the camera
-	// in whole-texel steps. Values are normalized depression depth: 0 = untouched
-	// snow, 1 = compressed to the ground. The window's WORLD size is runtime
-	// (deformWorldSize, driven by the Trenches range slider); the texture
+	// Square world-space deformation window following the camera in whole-texel
+	// steps. Texel value = normalized depression depth, 0 = untouched snow,
+	// 1 = compressed to the ground. World size is runtime (deformWorldSize),
 	// resolution is fixed, so trench detail coarsens with range.
 	static constexpr uint kTextureDim = 2048;
 	static constexpr uint kMaxStamps = 128;
@@ -45,9 +44,9 @@ public:
 		float StampRadius = 20.0f;
 		/** @brief Seconds for compressed snow to fully recover. 0 disables refilling. */
 		float RefillTime = 700.0f;
-		/** @brief When set (default), compressed snow only recovers while the current weather is actually snowing — trails persist through clear spells and interiors. */
+		/** @brief Only refill while the current weather is snowing, so trails persist through clear spells and interiors. */
 		bool RefillOnlyWhenSnowing = true;
-		/** @brief Render distances in METERS (converted via kUnitsPerMeter). Shell scales the warped grid's spacing (CB-only, applies live); Trenches resizes the deformation window (the map clears on apply — content is scale-relative); Object Snow is the statics capture cutoff. */
+		/** @brief Trenches render range in meters (converted via kUnitsPerMeter). Applying a change clears the map: content is scale-relative. */
 		float RangeTrenchesM = 100.0f;
 	};
 
@@ -66,10 +65,9 @@ public:
 	/**
 	 * @brief Returns this frame's GPU settings for the shared FeatureData buffer.
 	 *
-	 * Also advances the deformation window when a_inWorld is true: the origin
-	 * MUST be computed here (during State::UpdateSharedData, before Prepass)
-	 * so the constant buffer and the scrolled texture agree within a frame —
-	 * computing it in Prepass makes trails swim on window-scroll frames.
+	 * Also advances the deformation window when a_inWorld is true. The origin
+	 * must be computed here (during State::UpdateSharedData, before Prepass) so
+	 * the constant buffer and the scrolled texture agree within a frame.
 	 */
 	SettingsGPU GetCommonBufferData(bool a_inWorld);
 
@@ -85,7 +83,7 @@ public:
 		uint ClearMap;
 
 		float4 Stamps[kMaxStamps];
-		/** @brief Segment start per stamp (the stamped shape's previous position) — stamps are capsules, so trails stay continuous regardless of actor speed. */
+		/** @brief Capsule segment start per stamp (the stamped shape's previous position). */
 		float4 StampEnds[kMaxStamps];
 	};
 	STATIC_ASSERT_ALIGNAS_16(PerFrame);
@@ -122,7 +120,7 @@ public:
 	virtual void SaveSettings(json& o_json) override;
 	virtual void RestoreDefaultSettings() override;
 
-	/** @brief Installs both landscape hooks. Implemented in SnowDeformation/TerrainData.cpp. The TESObjectLAND detour is installed here (after TruePBR's, which runs first in the feature list) so ours is OUTER and sees the final — possibly TruePBR-replaced — material on each quad. */
+	/** @brief Installs both landscape hooks; the TESObjectLAND detour attaches after TruePBR's so it sees the final quad materials. Implemented in SnowDeformation/TerrainData.cpp. */
 	virtual void PostPostLoad() override;
 
 	/** @brief Caches a "tile is snow material" bitmask per landscape quad material, for the terrain shader's per-tile snow detection. */
@@ -156,7 +154,7 @@ protected:
 	bool clearRequested = true;
 
 	// ---- Runtime render-distance state (driven by the Range* settings) ----
-	/** @brief Deformation window world size (2x the Trenches range). Changing it invalidates the map (content is scale-relative), so the slider clears on apply. */
+	/** @brief Deformation window world size (2x the Trenches range). Changing it clears the map. */
 	float deformWorldSize = 14000.0f;
 	bool trenchRangeDirty = false;
 	bool rangeInitApplied = false;
@@ -169,10 +167,10 @@ protected:
 	/** @brief Trail history per collision shape: key = (formID << 16) | traversal index. */
 	std::unordered_map<uint64_t, float2> stampPrevPositions;
 
-	/** @brief Last 3D-root position per loose inanimate object (formID), rebuilt every frame from the in-range scan. Props carve only while their root MOVES — the cheap position gate runs before any collision traversal, so resting world clutter costs one hash lookup per frame. */
+	/** @brief Last 3D-root position per loose prop (formID), rebuilt every frame from the in-range scan. The position gate runs before any collision traversal, so resting clutter costs one hash lookup per frame. */
 	std::unordered_map<uint32_t, RE::NiPoint3> propPrevPositions;
 
-	/** @brief Stillness latch per corpse (formID). Ragdoll micro-drift accumulates against the FROZEN resting anchors and would eventually cross the movement gate, firing a one-frame trench pulse under an already-buried corpse. Once a corpse has been still long enough it settles: only a large accumulated displacement (real dragging, explosions) wakes it again. Erased when the actor is seen alive (reanimation). */
+	/** @brief Stillness latch per corpse (formID). Once settled, only a large accumulated displacement (dragging, explosions) wakes it, so ragdoll micro-drift cannot re-trench under a buried corpse. Erased when the actor is seen alive again. */
 	struct CorpseRest
 	{
 		uint16_t stillFrames = 0;

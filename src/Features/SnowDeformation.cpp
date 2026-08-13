@@ -50,14 +50,13 @@ void SnowDeformation::SetupResources()
 
 SnowDeformation::SettingsGPU SnowDeformation::GetCommonBufferData(bool a_inWorld)
 {
-	// Advance the window once per frame, and only from the in-world upload —
-	// the reflections/early uploads can carry probe cameras whose position
-	// must not steer the deformation window.
+	// Advance the window once per frame and only from the in-world upload:
+	// reflection/early uploads carry probe cameras that must not steer it.
 	static Util::FrameChecker frameChecker;
 	if (a_inWorld && frameChecker.IsNewFrame()) {
-		// Snap to whole texels so scrolling never resamples the map. Use the
-		// cached FrameBuffer camera position: it is exactly what the lighting
-		// pixel shader sees as CameraPosAdjust, so map and terrain agree.
+		// Snap to whole texels so scrolling never resamples the map. The
+		// cached FrameBuffer camera position is what the lighting pixel
+		// shader sees as CameraPosAdjust, so map and terrain agree.
 		auto eyePosFB = globals::game::frameBufferCached.GetCameraPosAdjust();
 		const float deformTexel = deformWorldSize / kTextureDim;
 		float2 desiredOrigin = {
@@ -98,9 +97,9 @@ void SnowDeformation::Prepass()
 
 	auto context = globals::d3d::context;
 
-	// The lighting shader samples t101 whenever the feature is compiled in, so
-	// keep the SRV bound even while paused or disabled (the shader also checks
-	// EnableSnowDeformation from FeatureData before using it).
+	// Keep t101 bound even while paused or disabled: the lighting shader
+	// samples it whenever the feature is compiled in (and gates on
+	// EnableSnowDeformation from FeatureData).
 	ID3D11ShaderResourceView* deformationSRV = GetDeformationSRV();
 	context->PSSetShaderResources(101, 1, &deformationSRV);
 
@@ -114,8 +113,7 @@ void SnowDeformation::Prepass()
 	PerFrame perFrameData{};
 
 	// The window origin was advanced in GetCommonBufferData (during
-	// UpdateSharedData) so the FeatureData constant buffer and the texture we
-	// scroll here describe the same frame. We only consume the stored state.
+	// UpdateSharedData); only consume the stored state here.
 	perFrameData.ScrollDelta = pendingScrollDelta;
 	pendingScrollDelta = { 0, 0 };
 
@@ -123,9 +121,8 @@ void SnowDeformation::Prepass()
 	perFrameData.TexelSize = deformWorldSize / kTextureDim;
 
 	float deltaTime = *globals::game::deltaTime;
-	// Refill gate: with RefillOnlyWhenSnowing (default), compressed snow only
-	// recovers while the CURRENT weather actually carries snow — trails
-	// persist through clear spells (and interiors, where there is no sky).
+	// With RefillOnlyWhenSnowing, snow only recovers while the current
+	// weather carries snow; interiors have no sky and do not refill.
 	bool refillActive = !settings.RefillOnlyWhenSnowing;
 	if (!refillActive)
 		if (auto* sky = RE::Sky::GetSingleton())

@@ -3,7 +3,7 @@
 #include "Globals.h"
 #include "State.h"
 
-/** @brief True when a land texture is snow by material (the same classification the vanilla shader constants encode). */
+/** @brief True when a land texture's material is snow (the classification the vanilla shader constants encode). */
 static bool IsSnowLandTexture(RE::TESLandTexture* a_landTexture)
 {
 	if (!a_landTexture || a_landTexture->formID == 0)
@@ -23,10 +23,8 @@ void SnowDeformation::TESObjectLAND_SetupMaterial(RE::TESObjectLAND* land)
 		if (land->loadedData->mesh[quadI] == nullptr)
 			continue;
 
-		// This hook is OUTER relative to TruePBR's, so the shader property here
-		// is the final one used for drawing — vanilla or TruePBR-replaced.
-		// (TruePBR allocates a whole new property + material per quad, so the
-		// vanilla material would be the wrong cache key.)
+		// Runs after TruePBR's detour, so this is the final material used for
+		// drawing (TruePBR allocates a new property + material per quad).
 		const auto& children = land->loadedData->mesh[quadI]->GetChildren();
 		auto geometry = children.empty() ? nullptr : static_cast<RE::BSGeometry*>(children[0].get());
 		if (geometry == nullptr)
@@ -46,8 +44,7 @@ void SnowDeformation::TESObjectLAND_SetupMaterial(RE::TESObjectLAND* land)
 		}
 
 		const std::unique_lock lock(snowMaskMutex);
-		// Materials are freed on cell unload; bound the map so stale pointers
-		// cannot accumulate over a long session.
+		// Materials are freed on cell unload; bound the map against stale pointers.
 		if (snowMasks.size() > 16384)
 			snowMasks.clear();
 		snowMasks[reinterpret_cast<uintptr_t>(shaderProp->material)] = mask;
@@ -58,7 +55,7 @@ void SnowDeformation::BSLightingShader_SetupMaterial(RE::BSLightingShaderMateria
 {
 	auto state = globals::state;
 
-	// Always clear first so bits never leak from the previous landscape draw.
+	// Clear first so bits never leak from the previous landscape draw.
 	state->permutationData.ExtraFeatureDescriptor &= ~uint(State::ExtraFeatureDescriptors::SnowLandIsSnowMask);
 
 	if (material == nullptr)
@@ -115,10 +112,9 @@ struct SD_BSLightingShader_SetupMaterial
 
 void SnowDeformation::PostPostLoad()
 {
-	// Same detour target as TruePBR. TruePBR sits earlier in the feature list,
-	// so its PostPostLoad detour is already installed; attaching now makes our
-	// hook OUTER (detours are LIFO), i.e. we run after TruePBR has replaced
-	// quad materials and can key the snow masks by the final material pointer.
+	// Same detour target as TruePBR, whose PostPostLoad runs earlier in the
+	// feature list. Detours are LIFO, so attaching now makes this hook outer:
+	// it sees the final, possibly TruePBR-replaced, quad materials.
 	logger::info("[SNOW DEFORMATION] Hooking TESObjectLAND");
 	stl::detour_thunk<SD_TESObjectLAND_SetupMaterial>(REL::RelocationID(18368, 18791));
 

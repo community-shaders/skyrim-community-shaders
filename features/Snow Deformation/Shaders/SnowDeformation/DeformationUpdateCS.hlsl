@@ -60,10 +60,8 @@ RWTexture2D<float> CurrentDeformation : register(u0);
 
 		[branch] if (distSq < radius * radius)
 		{
-			// Smooth falloff starting at 0.2 of the radius: trails get soft,
-			// wide borders instead of hard-walled circles, and the wide band
-			// keeps trench walls representable for coarser consumers of the
-			// map (grid-based geometry sampling it at lower resolution).
+			// Falloff from 0.2 of the radius keeps a wide edge band, so
+			// coarser consumers of the map can still represent trench walls.
 			float falloff = 1.0 - smoothstep(0.2, 1.0, sqrt(distSq) / radius);
 			deformation = max(deformation, Stamps[i].z * falloff);
 		}

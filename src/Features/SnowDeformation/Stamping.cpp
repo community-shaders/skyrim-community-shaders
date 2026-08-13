@@ -3,24 +3,18 @@
 #include "Utils/ActorUtils.h"
 #include "Utils/Game.h"
 
-// Shapes whose bottom is more than this far above the actor's ground position
-// do not carve: feet, calves, a sneaking torso and ragdoll limbs pass, heads
-// walking by do not.
+// Shapes whose bottom is further than this above ground level do not carve.
 static constexpr float kStampSurfaceBand = 40.0f;
-// Sanity clamp on extracted shape radii (rejects degenerate and room-sized
-// collision shapes).
+// Sanity clamp on extracted shape radii.
 static constexpr float kMinStampShapeRadius = 4.0f;
 static constexpr float kMaxStampShapeRadius = 128.0f;
-// StampRadius setting value that leaves shape radii unscaled.
+// StampRadius setting value at which shape radii are unscaled.
 static constexpr float kStampRadiusNeutral = 20.0f;
-// A shape moving further than this in one frame is teleporting (fast travel,
-// cell load): the capsule collapses to a point instead of carving a line
-// across the window.
+// Per-frame movement beyond this (teleport, cell load) breaks the capsule trail.
 static constexpr float kTrailBreakDistance = 256.0f;
-// Movement below this (in units, per gate check) counts as standing still.
+// Movement below this counts as standing still.
 static constexpr float kStampMovementGate = 3.0f;
-// Settled-latch tuning: accumulated displacement that wakes a settled corpse
-// (real dragging/explosions), and how long a corpse must be still to settle.
+// Corpse settled-latch: wake displacement and frames-still until settled.
 static constexpr float kCorpseWakeDistance = 50.0f;
 static constexpr uint16_t kCorpseSettleFrames = 90;
 
@@ -30,13 +24,9 @@ void SnowDeformation::GatherStamps(PerFrame& perFrameData)
 	RE::NiPoint3 cameraPosition = Util::GetEyePosition();
 	std::unordered_map<uint64_t, float2> currentPositions;
 
-	// Stamps come from the actors' actual Havok collision shapes — the same
-	// per-shape extraction Grass Collision uses (Util::GetShapeBound over
-	// TraverseScenegraphCollision) instead of one scaled circle at the actor
-	// center. Feet and lower-leg capsules carve individually (trails gain
-	// real footfall structure), ragdolls carve where their limbs lie, and
-	// horses or giants get wide tracks from their genuinely larger shapes
-	// with no per-race tuning.
+	// Stamps come from actors' Havok collision shapes (Util::GetShapeBound
+	// over TraverseScenegraphCollision), so feet, legs and ragdoll limbs
+	// carve individually.
 	auto addStamps = [&](RE::ActorHandle a_handle) {
 		if (stampCount >= kMaxStamps)
 			return;
@@ -44,7 +34,7 @@ void SnowDeformation::GatherStamps(PerFrame& perFrameData)
 		if (!actor || !actor->Is3DLoaded())
 			return;
 		auto position = actor->GetPosition();
-		// Outside the deformation window nothing can be recorded anyway.
+		// Cull to the deformation window.
 		if (cameraPosition.GetSquaredDistance(position) > 0.25f * deformWorldSize * deformWorldSize)
 			return;
 		auto root = actor->Get3D(false);
@@ -52,12 +42,9 @@ void SnowDeformation::GatherStamps(PerFrame& perFrameData)
 			return;
 
 		const uint32_t formID = actor->formID;
-		// The living keep their trenches open just by being there; the dead
-		// carve only WHILE MOVING (the ragdoll fall stamps its imprint),
-		// then go quiet at rest — and the refill slowly buries them. A
-		// corpse already at rest when first seen never stamps at all. Do not
-		// waive first-sight for fresh kills to cover decapitation's 3D swap:
-		// the waiver re-trenches under already-buried corpses.
+		// The dead carve only while moving; at rest the refill buries them.
+		// No first-sight waiver: decapitation swaps the 3D, and a waiver
+		// would re-trench under already-buried corpses.
 		const bool isDead = actor->IsDead();
 
 		CorpseRest* rest = nullptr;
@@ -66,17 +53,14 @@ void SnowDeformation::GatherStamps(PerFrame& perFrameData)
 				corpseRestStates.clear();
 			rest = &corpseRestStates[formID];
 		} else {
-			// Seen alive (including reanimation): back to living rules.
+			// Reanimated: back to living rules.
 			corpseRestStates.erase(formID);
 		}
 		bool anyShapeMoved = false;
 		bool anyShapeWoken = false;
 
-		// Airborne LIVING actors do not touch the snow: jumping, levitating
-		// or falling carves nothing until contact. Dead ragdolls are exempt:
-		// their controllers freeze in stale states (often kInAir), which
-		// would suppress normal corpse imprints; their movement gate
-		// governs them instead.
+		// Airborne living actors do not carve. Dead ragdolls are exempt:
+		// their controllers freeze in stale states (often kInAir).
 		if (!isDead)
 			if (auto* charController = actor->GetCharController(); charController && charController->context.currentState == RE::hkpCharacterStateType::kInAir)
 				return;
@@ -96,9 +80,8 @@ void SnowDeformation::GatherStamps(PerFrame& perFrameData)
 				if (radius < kMinStampShapeRadius || radius > kMaxStampShapeRadius)
 					return RE::BSVisit::BSVisitControl::kContinue;
 
-				// Capsule stamping: the segment runs from this shape's
-				// previous position, so fast movers carve continuous trails
-				// instead of chains of spaced circles.
+				// Capsule stamp from the shape's previous position keeps
+				// fast movers' trails continuous.
 				float2 current = { centerPos.x, centerPos.y };
 				float2 previous = current;
 				const uint64_t key = (uint64_t(formID) << 16) | uint64_t(thisIndex & 0xFFFF);
@@ -113,19 +96,16 @@ void SnowDeformation::GatherStamps(PerFrame& perFrameData)
 					moved = sqDelta > kStampMovementGate * kStampMovementGate;
 				}
 				const bool firstSight = (it == stampPrevPositions.end());
-				// Measured against the frozen resting anchor, so dragging
-				// accumulates past the wake distance within a few frames
-				// while jitter oscillating around a point never does.
+				// Against the frozen resting anchor: dragging accumulates
+				// past the gate, ragdoll jitter does not.
 				const bool woken = !firstSight && sqDelta > kCorpseWakeDistance * kCorpseWakeDistance;
 				if (isDead) {
 					anyShapeMoved |= !firstSight && moved;
 					anyShapeWoken |= woken;
 				}
 				if (isDead && (firstSight || !moved || (rest->settled && !woken))) {
-					// Corpse at rest: no stamp. Keep the OLD anchor so
-					// ragdoll micro-jitter cannot hold the trench open, but
-					// real movement (dragging, explosions) re-triggers
-					// against it. First-seen corpses store a baseline.
+					// At rest: no stamp. Keep the old anchor so micro-jitter
+					// cannot hold the trench open.
 					currentPositions[key] = firstSight ? current : it->second;
 					return RE::BSVisit::BSVisitControl::kContinue;
 				}
@@ -135,7 +115,7 @@ void SnowDeformation::GatherStamps(PerFrame& perFrameData)
 				stamp.x = current.x;
 				stamp.y = current.y;
 				stamp.z = 1.0f;
-				// StampRadius acts as a scale on the shape's own radius.
+				// StampRadius scales the shape's own radius.
 				stamp.w = radius * settings.StampRadius / kStampRadiusNeutral;
 				perFrameData.Stamps[stampCount] = stamp;
 				perFrameData.StampEnds[stampCount] = { previous.x, previous.y, 0.0f, 0.0f };
@@ -164,11 +144,8 @@ void SnowDeformation::GatherStamps(PerFrame& perFrameData)
 			addStamps(actorHandle);
 	}
 
-	// Loose inanimate objects (dropped weapons, kicked clutter, tumbling
-	// barrels, thrown ingredients) carve while they MOVE; at rest they go
-	// quiet and the refill buries their imprint — same story as corpses.
-	// The gate runs on the cheap 3D-root position first, so collision
-	// traversal only ever happens for props actually in motion.
+	// Loose props carve while moving. The cheap root-position gate runs
+	// before any collision traversal.
 	std::unordered_map<uint32_t, RE::NiPoint3> currentPropPositions;
 	const auto tes = RE::TES::GetSingleton();
 	auto* playerRef = RE::PlayerCharacter::GetSingleton();
@@ -179,9 +156,8 @@ void SnowDeformation::GatherStamps(PerFrame& perFrameData)
 			auto* base = a_ref->GetBaseObject();
 			if (!base)
 				return RE::BSContainer::ForEachResult::kContinue;
-			// Havok-movable base types only — statics, trees, furniture and
-			// containers never travel, and flying projectiles must not carve
-			// the snow under their flight path.
+			// Havok-movable base types only; projectiles must not carve
+			// under their flight path.
 			switch (base->GetFormType()) {
 			case RE::FormType::Misc:
 			case RE::FormType::Weapon:
@@ -204,11 +180,9 @@ void SnowDeformation::GatherStamps(PerFrame& perFrameData)
 			if (!root)
 				return RE::BSContainer::ForEachResult::kContinue;
 
-			// Movement gate on the 3D root's WORLD transform — never the
-			// reference position: Havok-simulated clutter moves its scene
-			// graph every frame while the REFERENCE's stored position lags
-			// until the body settles (a rolling stone left no tracks because
-			// its ref position sat frozen through the whole roll).
+			// Gate on the 3D root's world transform, not the reference
+			// position: Havok moves the scene graph every frame while the
+			// reference position lags until the body settles.
 			const auto position = root->world.translate;
 			const uint32_t formID = a_ref->formID;
 			auto prevIt = propPrevPositions.find(formID);
@@ -216,9 +190,8 @@ void SnowDeformation::GatherStamps(PerFrame& perFrameData)
 				currentPropPositions[formID] = position;
 				return RE::BSContainer::ForEachResult::kContinue;  // first sight: baseline only
 			}
-			// FROZEN anchor: slow motion accumulates toward the gate instead
-			// of being reset every frame. Sleeping Havok props are truly
-			// frozen, so drift pulses cannot happen.
+			// Frozen anchor: slow motion accumulates toward the gate instead
+			// of resetting every frame.
 			const bool propMoved = position.GetSquaredDistance(prevIt->second) >= kStampMovementGate * kStampMovementGate;
 			currentPropPositions[formID] = propMoved ? position : prevIt->second;
 			if (!propMoved)
@@ -226,9 +199,7 @@ void SnowDeformation::GatherStamps(PerFrame& perFrameData)
 			if (stampCount >= kMaxStamps)
 				return RE::BSContainer::ForEachResult::kContinue;  // keep collecting anchors
 
-			// Ground reference is the LAND height, not the object's own
-			// origin — a thrown or carried item rides high above it, so the
-			// near-surface gate keeps mid-air flight paths from carving.
+			// Ground = land height, so mid-air flight paths do not carve.
 			float groundZ = position.z;
 			tes->GetLandHeight(position, groundZ);
 
@@ -245,9 +216,8 @@ void SnowDeformation::GatherStamps(PerFrame& perFrameData)
 					if (radius < kMinStampShapeRadius || radius > kMaxStampShapeRadius)
 						return RE::BSVisit::BSVisitControl::kContinue;
 
-					// Same capsule-trail scheme as actors: props share the
-					// (formID << 16 | shape) keyspace, which cannot collide
-					// with actor keys because formIDs are unique.
+					// Props share the (formID << 16 | shape) keyspace with
+					// actors; formIDs are unique.
 					float2 current = { centerPos.x, centerPos.y };
 					float2 previous = current;
 					const uint64_t key = (uint64_t(formID) << 16) | uint64_t(thisIndex & 0xFFFF);
@@ -271,9 +241,8 @@ void SnowDeformation::GatherStamps(PerFrame& perFrameData)
 				return RE::BSVisit::BSVisitControl::kContinue;
 			});
 
-			// Fallback for props whose collision shape type has no bound
-			// extractor (MOPP/list clutter): one stamp from the 3D root's
-			// bound sphere, so anything that rolls always carves SOMETHING.
+			// Shape types with no bound extractor (MOPP/list): one stamp from
+			// the root's bound sphere.
 			if (shapeIndex == 0 && stampCount < kMaxStamps) {
 				const auto& bound = root->worldBound;
 				float radius = std::clamp(bound.radius, kMinStampShapeRadius, kMaxStampShapeRadius);

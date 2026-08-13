@@ -27,11 +27,9 @@ namespace SnowDeformation
 		float deformation = 0.0;
 		[branch] if (border > 0.0)
 		{
-			// B-spline bicubic via 4 bilinear taps: smooth in both value and
-			// gradient across texels. Consumers derive normals from this
-			// field, and gradient-continuous interpolation is what keeps
-			// per-texel banding out of the shading; it also softens ~1 texel
-			// of content stepping for free.
+			// B-spline bicubic via 4 bilinear taps: value- and gradient-
+			// continuous, so normals derived from this field do not band
+			// per texel.
 			float2 t = uv * MapDim - 0.5;
 			float2 i = floor(t);
 			float2 f = t - i;
