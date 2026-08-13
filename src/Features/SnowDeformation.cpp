@@ -2,6 +2,7 @@
 
 #include "Globals.h"
 #include "Utils/D3D.h"
+#include "Utils/Game.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	SnowDeformation::Settings,
@@ -45,24 +46,45 @@ void SnowDeformation::SetupResources()
 	}
 }
 
-void SnowDeformation::UpdateWindowOrigin()
+SnowDeformation::SettingsGPU SnowDeformation::GetCommonBufferData(bool a_inWorld)
 {
-	// Snap to whole texels so scrolling never resamples the map. Use the
-	// cached FrameBuffer camera position: it is exactly what the lighting
-	// pixel shader sees as CameraPosAdjust, so map and terrain agree.
-	auto eyePosFB = globals::game::frameBufferCached.GetCameraPosAdjust();
-	float2 desiredOrigin = {
-		std::floor((eyePosFB.x - kWorldSize * 0.5f) / kTexelSize) * kTexelSize,
-		std::floor((eyePosFB.y - kWorldSize * 0.5f) / kTexelSize) * kTexelSize
-	};
+	// Advance the window once per frame, and only from the in-world upload —
+	// the reflections/early uploads can carry probe cameras whose position
+	// must not steer the deformation window.
+	static Util::FrameChecker frameChecker;
+	if (a_inWorld && frameChecker.IsNewFrame()) {
+		// Snap to whole texels so scrolling never resamples the map. Use the
+		// cached FrameBuffer camera position: it is exactly what the lighting
+		// pixel shader sees as CameraPosAdjust, so map and terrain agree.
+		auto eyePosFB = globals::game::frameBufferCached.GetCameraPosAdjust();
+		float2 desiredOrigin = {
+			std::floor((eyePosFB.x - kWorldSize * 0.5f) / kTexelSize) * kTexelSize,
+			std::floor((eyePosFB.y - kWorldSize * 0.5f) / kTexelSize) * kTexelSize
+		};
 
-	pendingScrollDelta.x += (int)std::lround((desiredOrigin.x - windowOrigin.x) / kTexelSize);
-	pendingScrollDelta.y += (int)std::lround((desiredOrigin.y - windowOrigin.y) / kTexelSize);
-	windowOrigin = desiredOrigin;
+		pendingScrollDelta.x += (int)std::lround((desiredOrigin.x - windowOrigin.x) / kTexelSize);
+		pendingScrollDelta.y += (int)std::lround((desiredOrigin.y - windowOrigin.y) / kTexelSize);
+		windowOrigin = desiredOrigin;
+	}
+
+	SettingsGPU data{};
+	data.WindowOrigin = windowOrigin;
+	data.InvWorldSize = 1.0f / kWorldSize;
+	data.EnableSnowDeformation = settings.EnableSnowDeformation;
+	data.DebugTerrainOverlay = debugTerrainOverlay ? 1u : 0u;
+	return data;
 }
 
 void SnowDeformation::Prepass()
 {
+	auto context = globals::d3d::context;
+
+	// The lighting shader samples t101 whenever the feature is compiled in, so
+	// keep the SRV bound even while paused or disabled (the shader also checks
+	// EnableSnowDeformation from FeatureData before using it).
+	ID3D11ShaderResourceView* deformationSRV = GetDeformationSRV();
+	context->PSSetShaderResources(101, 1, &deformationSRV);
+
 	if (!settings.EnableSnowDeformation)
 		return;
 
@@ -70,11 +92,11 @@ void SnowDeformation::Prepass()
 	if (ui && ui->GameIsPaused())
 		return;
 
-	auto context = globals::d3d::context;
-
-	UpdateWindowOrigin();
-
 	PerFrame perFrameData{};
+
+	// The window origin was advanced in GetCommonBufferData (during
+	// UpdateSharedData) so the FeatureData constant buffer and the texture we
+	// scroll here describe the same frame. We only consume the stored state.
 	perFrameData.ScrollDelta = pendingScrollDelta;
 	pendingScrollDelta = { 0, 0 };
 
@@ -120,6 +142,10 @@ void SnowDeformation::Prepass()
 
 	ID3D11UnorderedAccessView* nullUavs[1] = { nullptr };
 	context->CSSetUnorderedAccessViews(0, 1, nullUavs, nullptr);
+
+	// Rebind: after the ping-pong flip this points at the freshly written map.
+	deformationSRV = GetDeformationSRV();
+	context->PSSetShaderResources(101, 1, &deformationSRV);
 }
 
 ID3D11ComputeShader* SnowDeformation::GetDeformationUpdateCS()

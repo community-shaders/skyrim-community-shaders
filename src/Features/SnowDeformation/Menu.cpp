@@ -29,6 +29,11 @@ void SnowDeformation::DrawSettings()
 			ImGui::TreePop();
 		}
 
+		ImGui::Text("Snow mask cache: %zu entries, %llu hits, %llu misses",
+			snowMasksSizeForUI(),
+			(unsigned long long)landMaskHits.load(std::memory_order_relaxed),
+			(unsigned long long)landMaskMisses.load(std::memory_order_relaxed));
+
 		ImGui::TreePop();
 	}
 }

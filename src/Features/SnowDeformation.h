@@ -37,6 +37,28 @@ public:
 		float RefillTime = 700.0f;
 	};
 
+	/** @brief GPU-side settings, appended to the shared FeatureData cbuffer (b6). Layout must match SnowDeformationSettings in SharedData.hlsli. */
+	struct alignas(16) SettingsGPU
+	{
+		float2 WindowOrigin;
+		float InvWorldSize;
+		uint EnableSnowDeformation;
+
+		uint DebugTerrainOverlay;
+		float3 padSnow;
+	};
+	STATIC_ASSERT_ALIGNAS_16(SettingsGPU);
+
+	/**
+	 * @brief Returns this frame's GPU settings for the shared FeatureData buffer.
+	 *
+	 * Also advances the deformation window when a_inWorld is true: the origin
+	 * MUST be computed here (during State::UpdateSharedData, before Prepass)
+	 * so the constant buffer and the scrolled texture agree within a frame —
+	 * computing it in Prepass makes trails swim on window-scroll frames.
+	 */
+	SettingsGPU GetCommonBufferData(bool a_inWorld);
+
 	/** @brief Per-dispatch constants for the deformation update. Layout must match PerFrame in DeformationUpdateCS.hlsl. */
 	struct alignas(16) PerFrame
 	{
@@ -86,12 +108,34 @@ public:
 	virtual void SaveSettings(json& o_json) override;
 	virtual void RestoreDefaultSettings() override;
 
+	/** @brief Installs both landscape hooks. Implemented in SnowDeformation/TerrainData.cpp. The TESObjectLAND detour is installed here (after TruePBR's, which runs first in the feature list) so ours is OUTER and sees the final — possibly TruePBR-replaced — material on each quad. */
+	virtual void PostPostLoad() override;
+
+	/** @brief Caches a "tile is snow material" bitmask per landscape quad material, for the terrain shader's per-tile snow detection. */
+	void TESObjectLAND_SetupMaterial(RE::TESObjectLAND* land);
+	/** @brief Publishes the cached snow mask for the material about to be drawn via ExtraFeatureDescriptor bits 10-15. */
+	void BSLightingShader_SetupMaterial(RE::BSLightingShaderMaterialBase const* material);
+
+	/** @brief Diagnostics shown in the settings UI: landscape materials that hit/missed the snow-mask cache at draw time. */
+	std::atomic<uint64_t> landMaskHits{ 0 };
+	std::atomic<uint64_t> landMaskMisses{ 0 };
+
+	/** @brief Thread-safe size read for the settings UI. */
+	size_t snowMasksSizeForUI()
+	{
+		const std::shared_lock lock(snowMaskMutex);
+		return snowMasks.size();
+	}
+
+	/** @brief Runtime-only diagnostic toggle; not persisted in settings JSON. */
+	bool debugTerrainOverlay = false;
+
 protected:
 	/** @brief Fills perFrameData.Stamps from the player and nearby loaded actors. Implemented in SnowDeformation/Stamping.cpp. */
 	void GatherStamps(PerFrame& perFrameData);
 
-	/** @brief Advances the deformation window to follow the camera in whole-texel steps, accumulating the scroll delta for the next update dispatch. */
-	void UpdateWindowOrigin();
+	std::unordered_map<uintptr_t, uint8_t> snowMasks;
+	std::shared_mutex snowMaskMutex;
 
 	float2 windowOrigin = { 0, 0 };
 	DirectX::XMINT2 pendingScrollDelta = { 0, 0 };

@@ -346,6 +346,16 @@ namespace SharedData
 		float4 wetParams;
 	};
 
+	struct SnowDeformationSettings
+	{
+		float2 WindowOrigin;
+		float InvWorldSize;
+		uint EnableSnowDeformation;
+
+		uint DebugTerrainOverlay;
+		float3 padSnow;
+	};
+
 	cbuffer FeatureData : register(b6)
 	{
 		GrassLightingSettings grassLightingSettings;
@@ -367,6 +377,7 @@ namespace SharedData
 		ExponentialHeightFogSettings exponentialHeightFogSettings;
 		TruePBRSettings truePBRSettings;
 		SkinData skinData;
+		SnowDeformationSettings snowDeformationSettings;
 	};
 
 	Texture2D<float4> DepthTexture : register(t17);
