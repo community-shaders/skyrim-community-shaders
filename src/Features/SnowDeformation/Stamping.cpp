@@ -164,6 +164,146 @@ void SnowDeformation::GatherStamps(PerFrame& perFrameData)
 			addStamps(actorHandle);
 	}
 
+	// Loose inanimate objects (dropped weapons, kicked clutter, tumbling
+	// barrels, thrown ingredients) carve while they MOVE; at rest they go
+	// quiet and the refill buries their imprint — same story as corpses.
+	// The gate runs on the cheap 3D-root position first, so collision
+	// traversal only ever happens for props actually in motion.
+	std::unordered_map<uint32_t, RE::NiPoint3> currentPropPositions;
+	const auto tes = RE::TES::GetSingleton();
+	auto* playerRef = RE::PlayerCharacter::GetSingleton();
+	if (tes && playerRef) {
+		tes->ForEachReferenceInRange(playerRef, 0.5f * deformWorldSize, [&](RE::TESObjectREFR* a_ref) {
+			if (!a_ref || a_ref->As<RE::Actor>())
+				return RE::BSContainer::ForEachResult::kContinue;
+			auto* base = a_ref->GetBaseObject();
+			if (!base)
+				return RE::BSContainer::ForEachResult::kContinue;
+			// Havok-movable base types only — statics, trees, furniture and
+			// containers never travel, and flying projectiles must not carve
+			// the snow under their flight path.
+			switch (base->GetFormType()) {
+			case RE::FormType::Misc:
+			case RE::FormType::Weapon:
+			case RE::FormType::Armor:
+			case RE::FormType::Ammo:
+			case RE::FormType::Book:
+			case RE::FormType::Ingredient:
+			case RE::FormType::AlchemyItem:
+			case RE::FormType::SoulGem:
+			case RE::FormType::KeyMaster:
+			case RE::FormType::Light:
+			case RE::FormType::MovableStatic:
+				break;
+			default:
+				return RE::BSContainer::ForEachResult::kContinue;
+			}
+			if (!a_ref->Is3DLoaded())
+				return RE::BSContainer::ForEachResult::kContinue;
+			auto root = a_ref->Get3D(false);
+			if (!root)
+				return RE::BSContainer::ForEachResult::kContinue;
+
+			// Movement gate on the 3D root's WORLD transform — never the
+			// reference position: Havok-simulated clutter moves its scene
+			// graph every frame while the REFERENCE's stored position lags
+			// until the body settles (a rolling stone left no tracks because
+			// its ref position sat frozen through the whole roll).
+			const auto position = root->world.translate;
+			const uint32_t formID = a_ref->formID;
+			auto prevIt = propPrevPositions.find(formID);
+			if (prevIt == propPrevPositions.end()) {
+				currentPropPositions[formID] = position;
+				return RE::BSContainer::ForEachResult::kContinue;  // first sight: baseline only
+			}
+			// FROZEN anchor: slow motion accumulates toward the gate instead
+			// of being reset every frame. Sleeping Havok props are truly
+			// frozen, so drift pulses cannot happen.
+			const bool propMoved = position.GetSquaredDistance(prevIt->second) >= kStampMovementGate * kStampMovementGate;
+			currentPropPositions[formID] = propMoved ? position : prevIt->second;
+			if (!propMoved)
+				return RE::BSContainer::ForEachResult::kContinue;  // at rest: the refill buries it
+			if (stampCount >= kMaxStamps)
+				return RE::BSContainer::ForEachResult::kContinue;  // keep collecting anchors
+
+			// Ground reference is the LAND height, not the object's own
+			// origin — a thrown or carried item rides high above it, so the
+			// near-surface gate keeps mid-air flight paths from carving.
+			float groundZ = position.z;
+			tes->GetLandHeight(position, groundZ);
+
+			uint32_t shapeIndex = 0;
+			RE::BSVisit::TraverseScenegraphCollision(root, [&](RE::bhkNiCollisionObject* a_object) -> RE::BSVisit::BSVisitControl {
+				RE::NiPoint3 centerPos;
+				float radius;
+				if (Util::GetShapeBound(a_object, centerPos, radius)) {
+					const uint32_t thisIndex = shapeIndex++;
+					if (stampCount >= kMaxStamps)
+						return RE::BSVisit::BSVisitControl::kStop;
+					if (centerPos.z - radius > groundZ + kStampSurfaceBand)
+						return RE::BSVisit::BSVisitControl::kContinue;
+					if (radius < kMinStampShapeRadius || radius > kMaxStampShapeRadius)
+						return RE::BSVisit::BSVisitControl::kContinue;
+
+					// Same capsule-trail scheme as actors: props share the
+					// (formID << 16 | shape) keyspace, which cannot collide
+					// with actor keys because formIDs are unique.
+					float2 current = { centerPos.x, centerPos.y };
+					float2 previous = current;
+					const uint64_t key = (uint64_t(formID) << 16) | uint64_t(thisIndex & 0xFFFF);
+					auto it = stampPrevPositions.find(key);
+					if (it != stampPrevPositions.end()) {
+						float2 delta = { current.x - it->second.x, current.y - it->second.y };
+						if (delta.x * delta.x + delta.y * delta.y < kTrailBreakDistance * kTrailBreakDistance)
+							previous = it->second;
+					}
+					currentPositions[key] = current;
+
+					float4 stamp{};
+					stamp.x = current.x;
+					stamp.y = current.y;
+					stamp.z = 1.0f;
+					stamp.w = radius * settings.StampRadius / kStampRadiusNeutral;
+					perFrameData.Stamps[stampCount] = stamp;
+					perFrameData.StampEnds[stampCount] = { previous.x, previous.y, 0.0f, 0.0f };
+					stampCount++;
+				}
+				return RE::BSVisit::BSVisitControl::kContinue;
+			});
+
+			// Fallback for props whose collision shape type has no bound
+			// extractor (MOPP/list clutter): one stamp from the 3D root's
+			// bound sphere, so anything that rolls always carves SOMETHING.
+			if (shapeIndex == 0 && stampCount < kMaxStamps) {
+				const auto& bound = root->worldBound;
+				float radius = std::clamp(bound.radius, kMinStampShapeRadius, kMaxStampShapeRadius);
+				if (bound.center.z - radius <= groundZ + kStampSurfaceBand) {
+					float2 current = { bound.center.x, bound.center.y };
+					float2 previous = current;
+					const uint64_t key = (uint64_t(formID) << 16) | 0xFFFFull;
+					auto it = stampPrevPositions.find(key);
+					if (it != stampPrevPositions.end()) {
+						float2 delta = { current.x - it->second.x, current.y - it->second.y };
+						if (delta.x * delta.x + delta.y * delta.y < kTrailBreakDistance * kTrailBreakDistance)
+							previous = it->second;
+					}
+					currentPositions[key] = current;
+
+					float4 stamp{};
+					stamp.x = current.x;
+					stamp.y = current.y;
+					stamp.z = 1.0f;
+					stamp.w = radius * settings.StampRadius / kStampRadiusNeutral;
+					perFrameData.Stamps[stampCount] = stamp;
+					perFrameData.StampEnds[stampCount] = { previous.x, previous.y, 0.0f, 0.0f };
+					stampCount++;
+				}
+			}
+			return RE::BSContainer::ForEachResult::kContinue;
+		});
+	}
+	propPrevPositions = std::move(currentPropPositions);
+
 	stampPrevPositions = std::move(currentPositions);
 	perFrameData.StampCount = stampCount;
 }

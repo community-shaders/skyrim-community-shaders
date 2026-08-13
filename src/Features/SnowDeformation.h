@@ -151,6 +151,9 @@ protected:
 	/** @brief Trail history per collision shape: key = (formID << 16) | traversal index. */
 	std::unordered_map<uint64_t, float2> stampPrevPositions;
 
+	/** @brief Last 3D-root position per loose inanimate object (formID), rebuilt every frame from the in-range scan. Props carve only while their root MOVES — the cheap position gate runs before any collision traversal, so resting world clutter costs one hash lookup per frame. */
+	std::unordered_map<uint32_t, RE::NiPoint3> propPrevPositions;
+
 	/** @brief Stillness latch per corpse (formID). Ragdoll micro-drift accumulates against the FROZEN resting anchors and would eventually cross the movement gate, firing a one-frame trench pulse under an already-buried corpse. Once a corpse has been still long enough it settles: only a large accumulated displacement (real dragging, explosions) wakes it again. Erased when the actor is seen alive (reanimation). */
 	struct CorpseRest
 	{
