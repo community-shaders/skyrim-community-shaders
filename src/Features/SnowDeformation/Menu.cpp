@@ -26,6 +26,10 @@ void SnowDeformation::DrawSettings()
 			if (ImGui::Button(T(TKEY("clear"), "Clear Deformation Map")))
 				clearRequested = true;
 
+			ImGui::Checkbox(T(TKEY("debug_overlay"), "Debug Terrain Overlay"), &debugTerrainOverlay);
+			if (auto _tt = Util::HoverTooltipWrapper())
+				ImGui::Text("%s", T(TKEY("debug_overlay_tooltip"), "Paints diagnostics on terrain: red = outside deformation window, green = deformation, blue = detected snow."));
+
 			ImGui::TreePop();
 		}
 

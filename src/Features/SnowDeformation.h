@@ -8,7 +8,14 @@ public:
 	virtual inline std::string GetName() override { return "Snow Deformation"; }
 	virtual std::string GetDisplayName() override { return T("feature.snow_deformation.name", "Snow Deformation"); }
 	virtual inline std::string GetShortName() override { return "SnowDeformation"; }
+	virtual inline std::string_view GetShaderDefineName() override { return "SNOW_DEFORMATION"; }
 	virtual std::string_view GetCategory() const override { return FeatureCategories::kLandscapeAndTextures; }
+
+	/** @brief The lighting shader samples the deformation map on landscape draws. */
+	virtual bool HasShaderDefine(RE::BSShader::Type shaderType) override
+	{
+		return shaderType == RE::BSShader::Type::Lighting;
+	}
 
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
