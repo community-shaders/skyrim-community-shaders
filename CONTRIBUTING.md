@@ -3,9 +3,9 @@ If you would like to contribute to Community Shaders, you can do so by raising a
 
 ## What is considered a useful contribution
 
-- New feature for Community Shaders
+- New Community Shader features
 - Bug fixes
-- Performance improvement
+- Performance improvements
 - Documentation
 - Code refactors
 
@@ -25,7 +25,7 @@ All contributions fall under this project's license, GPL-3.0 or later.
   - The exception to this rule is Coderabbit comments, which can be dismissed if not applicable. However, you may need to explain why you dismissed a Coderabbit comment, so ensure you have good reason to do so.
 - Avoid rebasing your branch as this loses commit history and makes it harder to review the diff.
 - PR titles need to follow conventional commit rules and be short.
-- Do not raise PRs with AI comments. A proper explanatory comment describing something that's not obvious is fine. A dev log of why a function exists is not.
+- PRs should only have useful code comments, such as explaining something that's not obvious. A PR filled with AI-slop comments will not be merged.
 - Do not PR work-in-progress code. This means no debugging code, commented-out experiments, draft code, etc. We do not allow this even if you intend to clean up with a follow-up PR. All PRs must be polished when raised, even if the feature itself is incomplete.
 - There should be no dead code in your PR. If it will be used in a subsequent PR, raise the code in there, not ahead of time.
 - Feature settings should be included in PR if applicable. Don't PR a feature that needs settings without them.
