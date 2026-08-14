@@ -72,7 +72,20 @@ if ($haveDlls -and (Test-Path $Stamp) -and ((Get-Content $Stamp -Raw).Trim() -eq
     exit 0
 }
 
+# pip installs console scripts beside the active Python interpreter, but that
+# directory is not necessarily on PATH (notably with the python.org install).
+# Discover it from Python so `python -m pip install meson ninja` is sufficient.
 $meson = (Get-Command meson -ErrorAction SilentlyContinue).Source
+if (-not $meson) {
+    $python = (Get-Command python -ErrorAction SilentlyContinue).Source
+    if ($python) {
+        $pythonScripts = (& $python -c "import sysconfig; print(sysconfig.get_path('scripts'))" 2>$null)
+        if ($LASTEXITCODE -eq 0 -and $pythonScripts -and (Test-Path $pythonScripts)) {
+            $env:Path = "$pythonScripts;$env:Path"
+            $meson = (Get-Command meson -ErrorAction SilentlyContinue).Source
+        }
+    }
+}
 if (-not $meson) {
     if ($haveDlls) {
         Write-Warning "[build-dxvk] meson not found; reusing the existing DXVK build (it may be stale vs $short)."
