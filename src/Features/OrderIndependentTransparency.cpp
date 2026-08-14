@@ -1195,8 +1195,13 @@ void OrderIndependentTransparency::EndAlphaGroup()
 	context->VSSetShader(nullptr, nullptr, 0);
 
 	globals::game::stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_RENDERTARGET);
+	globals::game::stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_VIEWPORT);
 	globals::game::stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_DEPTH_MODE);
+	globals::game::stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_RASTER_CULL_MODE);
+	globals::game::stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_RASTER_DEPTH_BIAS);
 	globals::game::stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_ALPHA_BLEND);
+	globals::game::stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_VERTEX_DESC);
+	globals::game::stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_PRIMITIVE_TOPO);
 }
 
 void OrderIndependentTransparency::BeginWater()
