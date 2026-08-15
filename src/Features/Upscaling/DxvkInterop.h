@@ -18,7 +18,7 @@
 // so when running on the real (non-DXVK) D3D11 these QueryInterface calls simply
 // fail and IsAvailable() returns false.
 
-#include <d3d11.h>
+#include <d3d11_4.h>
 #include <dxgi1_6.h>
 #include <vector>
 #include <vulkan/vulkan.h>
@@ -56,6 +56,15 @@ IDXGIVkInteropDevice : public IUnknown
 	virtual void STDMETHODCALLTYPE FlushRenderingCommands() = 0;
 	virtual void STDMETHODCALLTYPE LockSubmissionQueue() = 0;
 	virtual void STDMETHODCALLTYPE ReleaseSubmissionQueue() = 0;
+};
+
+MIDL_INTERFACE("e2ef5fa5-dc21-4af7-90c4-f67ef6a09324")
+IDXGIVkInteropDevice1 : public IDXGIVkInteropDevice
+{
+	virtual void STDMETHODCALLTYPE GetSubmissionQueue1(
+		VkQueue * pQueue, uint32_t* pQueueIndex, uint32_t* pQueueFamilyIndex) = 0;
+	virtual HRESULT STDMETHODCALLTYPE CreateTexture2DFromVkImage(
+		const D3D11_TEXTURE2D_DESC1* pDesc, VkImage image, ID3D11Texture2D** ppTexture2D) = 0;
 };
 
 // Vulkan interop factory — the VkInstance + loader entry point used by DXVK.
@@ -183,7 +192,6 @@ private:
 	bool available = false;
 
 	winrt::com_ptr<IDXGIVkInteropDevice> interopDevice;
-
 	VkInstance instance = VK_NULL_HANDLE;
 	VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
 	VkDevice device = VK_NULL_HANDLE;
@@ -195,6 +203,9 @@ private:
 	PFN_vkDestroyImageView vkDestroyImageView = nullptr;
 
 	// Command-buffer ring (recorded on DXVK's queue family, submitted on its queue).
+	// Streamline records from both render and present paths, so a transaction lock must cover the
+	// entire BeginFrameCommandBuffer -> record -> SubmitFrameCommandBuffer sequence.
+	std::recursive_mutex commandRingMutex;
 	VkCommandPool commandPool = VK_NULL_HANDLE;
 	std::vector<VkCommandBuffer> commandBuffers;
 	std::vector<VkFence> commandFences;

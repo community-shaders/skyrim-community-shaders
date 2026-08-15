@@ -63,16 +63,32 @@ $sha = ''
 try { $sha = (& git -C $DxvkSrc rev-parse HEAD 2>$null) } catch {}
 if (-not $sha) { $sha = 'unknown' }
 $short = $sha.Substring(0, [Math]::Min(8, $sha.Length))
+$diffHash = (& git -C $DxvkSrc diff --no-ext-diff HEAD | & git -C $DxvkSrc hash-object --stdin)
+if (-not $diffHash) { $diffHash = 'clean' }
+$sourceStamp = "$sha-$diffHash"
 
 $haveDlls = (Test-Path $D3d11Dll) -and (Test-Path $DxgiDll)
 
 # Fast path: DLLs present and built from the current submodule commit -> nothing to do.
-if ($haveDlls -and (Test-Path $Stamp) -and ((Get-Content $Stamp -Raw).Trim() -eq $sha)) {
+if ($haveDlls -and (Test-Path $Stamp) -and ((Get-Content $Stamp -Raw).Trim() -eq $sourceStamp)) {
     Write-Host "[build-dxvk] DXVK d3d11+dxgi up to date ($short) - skipping"
     exit 0
 }
 
+# pip installs console scripts beside the active Python interpreter, but that
+# directory is not necessarily on PATH (notably with the python.org install).
+# Discover it from Python so `python -m pip install meson ninja` is sufficient.
 $meson = (Get-Command meson -ErrorAction SilentlyContinue).Source
+if (-not $meson) {
+    $python = (Get-Command python -ErrorAction SilentlyContinue).Source
+    if ($python) {
+        $pythonScripts = (& $python -c "import sysconfig; print(sysconfig.get_path('scripts'))" 2>$null)
+        if ($LASTEXITCODE -eq 0 -and $pythonScripts -and (Test-Path $pythonScripts)) {
+            $env:Path = "$pythonScripts;$env:Path"
+            $meson = (Get-Command meson -ErrorAction SilentlyContinue).Source
+        }
+    }
+}
 if (-not $meson) {
     if ($haveDlls) {
         Write-Warning "[build-dxvk] meson not found; reusing the existing DXVK build (it may be stale vs $short)."
@@ -116,6 +132,6 @@ if (-not ((Test-Path $D3d11Dll) -and (Test-Path $DxgiDll))) {
     exit 1
 }
 
-Set-Content -Path $Stamp -Value $sha -Encoding ascii
+Set-Content -Path $Stamp -Value $sourceStamp -Encoding ascii
 Write-Host "[build-dxvk] done ($short)"
 exit 0

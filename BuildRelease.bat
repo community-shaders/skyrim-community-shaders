@@ -62,12 +62,25 @@ rem (see tools\build-streamline.ps1). All Build*.bat wrappers reach this through
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0tools\build-streamline.ps1"
 if errorlevel 1 exit /b 1
 
+rem A warm build may have been configured before DXVK existed. In that case the
+rem configure-time EXISTS guard omitted the AIO staging command, so configure
+rem once more now that build-dxvk.ps1 has produced the DLLs.
+if not exist "build\%configpreset%\CMakeCache.txt" goto :configure
+if not exist "extern\dxvk\build\src\d3d11\dxvk_d3d11.dll" goto :warm
+findstr /s /m /c:"stage-dxvk-dlls.ps1" "build\%configpreset%\*.vcxproj" "build\%configpreset%\build.ninja" >nul 2>&1
+if errorlevel 1 (
+    echo DXVK was built after the last configure; refreshing CMake staging rules
+    goto :configure
+)
+
+:warm
 rem 'if errorlevel 1' is evaluated at run time; %ERRORLEVEL% inside a
 rem parenthesized block expands at parse time and misses failures.
 if exist "build\%configpreset%\CMakeCache.txt" (
     echo Build folder warm, skipping configure
     goto :build
 )
+:configure
 cmake -S . --preset=%configpreset%
 if errorlevel 1 exit /b 1
 

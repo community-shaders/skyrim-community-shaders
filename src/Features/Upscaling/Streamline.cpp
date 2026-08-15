@@ -115,6 +115,7 @@ namespace
 		// DRS upscaler stops doubling).
 		bool dlssgModeCached = false;
 		bool dlssgModeOn = false;
+		std::atomic<bool> frameGenPresentOwned = false;
 		uint32_t dlssgCachedRenderW = 0, dlssgCachedRenderH = 0, dlssgCachedDisplayW = 0, dlssgCachedDisplayH = 0;
 		// Multi Frame Generation: cached numFramesToGenerate + auto-mode are part of the options key, so a
 		// multiplier/mode change re-issues slDLSSGSetOptions. dlssgMaxFramesToGenerate is the hardware cap
@@ -874,7 +875,8 @@ static bool cs_BuildConstants(sl::Constants& a_consts, uint32_t a_outputWidth, u
 // view (depth aspect for depth formats); the caller collects a_outView for destruction after the submit.
 // Returns false if the backing VkImage can't be obtained.
 static bool cs_WrapInteropImage(DxvkInterop* a_dxvk, VkDevice a_device, PFN_vkCreateImageView a_createView,
-	ID3D11Resource* a_res, sl::Resource& a_out, uint32_t a_w, uint32_t a_h, VkImageView& a_outView)
+	ID3D11Resource* a_res, sl::Resource& a_out, VkImageView& a_outView,
+	const char* a_label)
 {
 	a_outView = VK_NULL_HANDLE;
 	VkImage image = VK_NULL_HANDLE;
@@ -894,12 +896,24 @@ static bool cs_WrapInteropImage(DxvkInterop* a_dxvk, VkDevice a_device, PFN_vkCr
 			ci.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
 		ci.subresourceRange.levelCount = 1;
 		ci.subresourceRange.layerCount = 1;
-		a_createView(a_device, &ci, nullptr, &view);
+		const VkResult viewResult = a_createView(a_device, &ci, nullptr, &view);
+		if (viewResult != VK_SUCCESS) {
+			logger::error("[Streamline] {} vkCreateImageView failed ({})", a_label, static_cast<int>(viewResult));
+			return false;
+		}
 		a_outView = view;
 	}
+	if (view == VK_NULL_HANDLE) {
+		logger::error("[Streamline] {} has no Vulkan image view", a_label);
+		return false;
+	}
 	a_out = sl::Resource{ sl::ResourceType::eTex2d, image, nullptr, view, static_cast<uint32_t>(layout) };
-	a_out.width = a_w;
-	a_out.height = a_h;
+	// Resource dimensions describe the full VkImage allocation. The valid low-resolution render
+	// rectangle is supplied separately through sl::ResourceTag::extent. Reporting the subrect here
+	// caused SL/NGX to build descriptors for a 1706x1066 image while the view actually addressed a
+	// 2560x1600 image, eventually hanging the GPU during DLSS evaluation.
+	a_out.width = info.extent.width;
+	a_out.height = info.extent.height;
 	a_out.nativeFormat = static_cast<uint32_t>(info.format);
 	a_out.mipLevels = info.mipLevels;
 	a_out.arrayLayers = info.arrayLayers;
@@ -964,7 +978,9 @@ static sl::Result cs_EvaluateFeatureCore(sl::Feature a_feature, const sl::Viewpo
 			if (!cs_BuildConstants(consts, a_outputWidth, a_outputHeight, a_jitterX, a_jitterY))
 				return sl::Result::eOk;
 			s_constFrameByVp[vpId] = g_sl.renderFrameId;
-			g_sl.slSetConstants(consts, *token, a_viewport);
+			const sl::Result constantsRes = g_sl.slSetConstants(consts, *token, a_viewport);
+			if (constantsRes != sl::Result::eOk)
+				logger::error("[Streamline] slSetConstants failed ({})", static_cast<int>(constantsRes));
 		}
 		s_evalFrameByVp[vpId] = g_sl.renderFrameId;
 	} else {
@@ -979,9 +995,9 @@ static sl::Result cs_EvaluateFeatureCore(sl::Feature a_feature, const sl::Viewpo
 		dxvk->GetDeviceProcAddr()(vkDevice, "vkCreateImageView"));
 	VkImageView views[5] = {};
 	int nv = 0;
-	const auto wrap = [&](ID3D11Resource* a_res, sl::Resource& a_out, uint32_t a_w, uint32_t a_h) -> bool {
+	const auto wrap = [&](ID3D11Resource* a_res, sl::Resource& a_out, const char* a_label) -> bool {
 		VkImageView v = VK_NULL_HANDLE;
-		if (!cs_WrapInteropImage(dxvk, vkDevice, vkCreateImageView, a_res, a_out, a_w, a_h, v))
+		if (!cs_WrapInteropImage(dxvk, vkDevice, vkCreateImageView, a_res, a_out, v, a_label))
 			return false;
 		if (v != VK_NULL_HANDLE && nv < 5)
 			views[nv++] = v;
@@ -991,31 +1007,39 @@ static sl::Result cs_EvaluateFeatureCore(sl::Feature a_feature, const sl::Viewpo
 	const bool haveColor = (a_colorIn && a_colorOut);
 	const bool haveHudless = (a_hudlessColor != nullptr);
 	sl::Resource colorInRes{}, colorOutRes{}, depthRes{}, mvecRes{}, hudlessRes{};
-	bool ok = wrap(a_depth, depthRes, a_renderWidth, a_renderHeight) &&
-	          wrap(a_motionVectors, mvecRes, a_renderWidth, a_renderHeight);
+	sl::SubresourceRange depthSubresource{};
+	bool ok = wrap(a_depth, depthRes, "depth") &&
+	          wrap(a_motionVectors, mvecRes, "motion-vectors");
 	if (ok && haveColor)
-		ok = wrap(a_colorIn, colorInRes, a_renderWidth, a_renderHeight) &&
-		     wrap(a_colorOut, colorOutRes, a_outputWidth, a_outputHeight);
+		ok = wrap(a_colorIn, colorInRes, "scaling-input") &&
+		     wrap(a_colorOut, colorOutRes, "scaling-output");
 	// HUDLessColor is the post-upscale, pre-UI scene at DISPLAY (output) resolution — tag it at output dims.
 	if (ok && haveHudless)
-		ok = wrap(a_hudlessColor, hudlessRes, a_outputWidth, a_outputHeight);
+		ok = wrap(a_hudlessColor, hudlessRes, "hudless-color");
 	if (!ok) {
 		cs_DestroyViews(dxvk, vkDevice, views, nv);
 		return sl::Result::eErrorMissingInputParameter;
 	}
-
-	// Motion vectors must carry the SAME dimensions + subrect as depth (SL/FFX reconstruct MV on the depth
-	// grid). Force MV's reported dimensions to depth's and tag both with the one renderExtent below.
-	mvecRes.width = depthRes.width;
-	mvecRes.height = depthRes.height;
+	// sl.dlss otherwise defaults NVSDK_NGX_Resource_VK::SubresourceRange to COLOR for every
+	// resource. Explicitly describe the depth aspect so the D24S8 image view and NGX metadata agree.
+	depthSubresource.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+	depthSubresource.baseMipLevel = 0;
+	depthSubresource.levelCount = 1;
+	depthSubresource.baseArrayLayer = 0;
+	depthSubresource.layerCount = 1;
+	depthRes.next = &depthSubresource;
 
 	sl::Extent renderExtent{ 0, 0, a_renderWidth, a_renderHeight };
 	sl::Extent outputExtent{ 0, 0, a_outputWidth, a_outputHeight };
 	sl::ResourceTag tags[5];
 	uint32_t nt = 0;
 	if (haveColor) {
-		tags[nt++] = sl::ResourceTag{ &colorInRes, sl::kBufferTypeScalingInputColor, sl::ResourceLifecycle::eValidUntilPresent, &renderExtent };
-		tags[nt++] = sl::ResourceTag{ &colorOutRes, sl::kBufferTypeScalingOutputColor, sl::ResourceLifecycle::eValidUntilPresent, &outputExtent };
+		// The DLSS plugin requires these through Evaluate. In particular, eOnlyValidNow may make SL
+		// protect the output with an internal copy, causing NGX to write that copy instead of the image
+		// the caller immediately consumes. The completion fence below extends the actual Vulkan-view
+		// lifetime through GPU execution as well.
+		tags[nt++] = sl::ResourceTag{ &colorInRes, sl::kBufferTypeScalingInputColor, sl::ResourceLifecycle::eValidUntilEvaluate, &renderExtent };
+		tags[nt++] = sl::ResourceTag{ &colorOutRes, sl::kBufferTypeScalingOutputColor, sl::ResourceLifecycle::eValidUntilEvaluate, &outputExtent };
 	}
 	// DLSS-G inputs are eOnlyValidNow: SL snapshots them into its own copies inside this very
 	// command buffer at tag time, so present-time interpolation never touches live game
@@ -1028,25 +1052,56 @@ static sl::Result cs_EvaluateFeatureCore(sl::Feature a_feature, const sl::Viewpo
 	// working (2026-07-05) this is the documented configuration. The upscaler in/out tags stay
 	// eValidUntilPresent: they are consumed inside this same submission and DLSS-G reads the
 	// intercepted backbuffer, not these.
-	tags[nt++] = sl::ResourceTag{ &depthRes, sl::kBufferTypeDepth, sl::ResourceLifecycle::eOnlyValidNow, &renderExtent };
-	tags[nt++] = sl::ResourceTag{ &mvecRes, sl::kBufferTypeMotionVectors, sl::ResourceLifecycle::eOnlyValidNow, &renderExtent };
+	const auto inputLifecycle = haveColor ? sl::ResourceLifecycle::eValidUntilEvaluate : sl::ResourceLifecycle::eOnlyValidNow;
+	tags[nt++] = sl::ResourceTag{ &depthRes, sl::kBufferTypeDepth, inputLifecycle, &renderExtent };
+	tags[nt++] = sl::ResourceTag{ &mvecRes, sl::kBufferTypeMotionVectors, inputLifecycle, &renderExtent };
 	if (haveHudless)
 		tags[nt++] = sl::ResourceTag{ &hudlessRes, sl::kBufferTypeHUDLessColor, sl::ResourceLifecycle::eOnlyValidNow, &outputExtent };
 
 	sl::Result evalRes = sl::Result::eErrorNotInitialized;
 	VkCommandBuffer cmd = dxvk->BeginFrameCommandBuffer();
 	if (cmd != VK_NULL_HANDLE) {
-		g_sl.slSetTagForFrame(*token, a_viewport, tags, nt, cmd);
+		const sl::Result tagRes = g_sl.slSetTagForFrame(*token, a_viewport, tags, nt, cmd);
 		const sl::BaseStructure* inputs[] = { &a_viewport };
 		evalRes = g_sl.slEvaluateFeature(a_feature, *token, inputs, static_cast<uint32_t>(std::size(inputs)), cmd);
-		// Submit async — no per-frame GPU catch-up wait (e22095b9's perf win, kept under frame
-		// generation too thanks to the bound above). The views are referenced by the submitted
-		// dispatch; the deferred-delete ring frees them once this slot's fence signals.
-		dxvk->SubmitFrameCommandBuffer(cmd, /*waitIdle=*/false);
-		dxvk->QueueViewsForDeferredDelete(views, static_cast<uint32_t>(nv));
+		// Streamline records the upscaler dispatch directly into our Vulkan command buffer, outside
+		// DXVK's resource tracker. Make those shader writes available to the D3D11 CopyResource that
+		// consumes this image after the submission completes. Queue ordering by itself only provides
+		// execution ordering; without a memory dependency DXVK may legally observe the old (cleared)
+		// contents even though the fence has signalled.
+		if (haveColor && evalRes == sl::Result::eOk) {
+			VkImageMemoryBarrier outputBarrier{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+			outputBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+			outputBarrier.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
+			outputBarrier.oldLayout = static_cast<VkImageLayout>(colorOutRes.state);
+			outputBarrier.newLayout = static_cast<VkImageLayout>(colorOutRes.state);
+			outputBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			outputBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			outputBarrier.image = static_cast<VkImage>(colorOutRes.native);
+			outputBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			outputBarrier.subresourceRange.baseMipLevel = 0;
+			outputBarrier.subresourceRange.levelCount = colorOutRes.mipLevels;
+			outputBarrier.subresourceRange.baseArrayLayer = 0;
+			outputBarrier.subresourceRange.layerCount = colorOutRes.arrayLayers;
+			vkCmdPipelineBarrier(cmd,
+				VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0,
+				0, nullptr, 0, nullptr, 1, &outputBarrier);
+		}
+		// The external command buffer is submitted on DXVK's graphics VkQueue before this call
+		// returns. Subsequent D3D11 work (including CopyResource of the output) is submitted to the
+		// same queue later, so Vulkan queue order provides the dependency without a CPU/GPU wait.
+		const bool submitted = dxvk->SubmitFrameCommandBuffer(cmd, false);
+		if (submitted)
+			dxvk->QueueViewsForDeferredDelete(views, static_cast<uint32_t>(nv));
+		else
+			cs_DestroyViews(dxvk, vkDevice, views, nv);
+		if (tagRes != sl::Result::eOk || evalRes != sl::Result::eOk || !submitted)
+			logger::error("[Streamline] feature evaluation failed: feature={} tag={} eval={} submit={}",
+				static_cast<int>(a_feature), static_cast<int>(tagRes), static_cast<int>(evalRes), submitted);
 	} else {
 		// Nothing was submitted — the views carry no pending GPU work, so free them immediately.
 		cs_DestroyViews(dxvk, vkDevice, views, nv);
+		logger::error("[Streamline] command-buffer acquisition failed for feature {}", static_cast<int>(a_feature));
 	}
 	return evalRes;
 }
@@ -1073,10 +1128,6 @@ void Streamline::EvaluateDLSS(ID3D11Resource* a_colorIn, ID3D11Resource* a_color
 	// whether the interop command ring is ready yet — a timing check, not a DXVK-availability check.
 	if (!dxvk->CommandResourcesReady())
 		return;
-	// Flush DXVK's pending D3D11 rendering so the interop VkImages are submitted/consistent before SL
-	// records its compute work; SL applies the layout barriers itself from the tagged per-resource state.
-	dxvk->FlushRenderingCommands();
-
 	(void)a_sharpness;  // sharpness is deprecated in DLSSOptions; RCAS handles sharpening.
 
 	__try {
@@ -1175,8 +1226,6 @@ void Streamline::EvaluateXeSS(ID3D11Resource* a_colorIn, ID3D11Resource* a_color
 	auto* dxvk = DxvkInterop::GetSingleton();
 	if (!dxvk->CommandResourcesReady())
 		return;
-	dxvk->FlushRenderingCommands();
-
 	__try {
 		sl::XeSSMode xessMode = sl::XeSSMode::eQuality;
 		switch (a_qualityMode) {
@@ -1240,8 +1289,6 @@ void Streamline::EvaluateFSR(ID3D11Resource* a_colorIn, ID3D11Resource* a_colorO
 	auto* dxvk = DxvkInterop::GetSingleton();
 	if (!dxvk->CommandResourcesReady())
 		return;
-	dxvk->FlushRenderingCommands();
-
 	__try {
 		sl::FSRMode fsrMode = sl::FSRMode::eMaxQuality;
 		switch (a_qualityMode) {
@@ -1315,8 +1362,6 @@ void Streamline::EvaluateFSRFrameGen(ID3D11Resource* a_depth, ID3D11Resource* a_
 	auto* dxvk = DxvkInterop::GetSingleton();
 	if (!dxvk->CommandResourcesReady())
 		return;
-	dxvk->FlushRenderingCommands();
-
 	__try {
 		const sl::ViewportHandle fgViewport{ 1 };
 		// Tag depth + MV (FG-prepare inputs) AND the hudless scene (present-time UI extraction). No color, so
@@ -1429,6 +1474,7 @@ void Streamline::SetDLSSGMode(bool a_enable, uint32_t a_renderWidth, uint32_t a_
 		} else {
 			g_sl.dlssgModeCached = true;
 			g_sl.dlssgModeOn = a_enable;
+			g_sl.frameGenPresentOwned.store(a_enable, std::memory_order_release);
 			g_sl.dlssgCachedNumFrames = numFrames;
 			g_sl.dlssgCachedAuto = a_autoMode;
 			g_sl.dlssgCachedDynamic = a_dynamic;
@@ -1476,6 +1522,7 @@ bool Streamline::SetFSRFrameGen(bool a_enable, uint32_t a_renderWidth, uint32_t 
 			logger::warn("[Streamline] slFSRFrameGenerationSetOptions failed (result {})", static_cast<int>(res));
 		} else {
 			ok = true;
+			g_sl.frameGenPresentOwned.store(a_enable, std::memory_order_release);
 			logger::info("[Streamline] FSR frame generation {} (render {}x{} display {}x{})",
 				a_enable ? "ENABLED" : "disabled", a_renderWidth, a_renderHeight, a_displayWidth, a_displayHeight);
 		}
@@ -1777,8 +1824,10 @@ void Streamline::RegisterDxvkOwnershipPredicate()
 		logger::warn("[Streamline] dxvkSetFrameGenOwnershipQuery not found in DXVK module");
 		return;
 	}
-	setQuery([](VkSwapchainKHR) -> bool { return true; });
-	logger::info("[Streamline] registered DXVK ownership predicate (all swapchains externally paced)");
+	setQuery([](VkSwapchainKHR) -> bool {
+		return g_sl.frameGenPresentOwned.load(std::memory_order_acquire);
+	});
+	logger::info("[Streamline] registered DXVK ownership predicate (active frame generation only)");
 
 	// Register the swapchain-torn-down callback used to (un)load DLSS-G in the no-swapchain window
 	// (Streamline DLSS-G guide §18). Non-fatal if the DXVK build predates the export.
