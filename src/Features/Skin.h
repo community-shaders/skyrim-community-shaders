@@ -81,7 +81,6 @@ struct Skin : Feature
 		float FuzzStrength = 1.0f;
 		float FuzzRoughness = 0.35f;
 		float FuzzF0 = 0.045f;
-		bool UseDynamicWetness = false;
 	} settings;
 
 	struct alignas(16) SkinData
@@ -176,6 +175,4 @@ struct Skin : Feature
 			return;
 		}
 	};
-
-	bool isDynamicWetnessAvailable = false;
 };
