@@ -134,6 +134,7 @@ void DxvkInterop::ReleaseSubmissionQueue() const
 
 bool DxvkInterop::CreateCommandResources(uint32_t a_framesInFlight)
 {
+	std::lock_guard lock(commandRingMutex);
 	if (!available)
 		return false;
 	if (commandPool != VK_NULL_HANDLE)
@@ -181,6 +182,7 @@ bool DxvkInterop::CreateCommandResources(uint32_t a_framesInFlight)
 
 void DxvkInterop::DestroyCommandResources()
 {
+	std::lock_guard lock(commandRingMutex);
 	if (device == VK_NULL_HANDLE)
 		return;
 
@@ -215,6 +217,7 @@ void DxvkInterop::DestroyCommandResources()
 
 void DxvkInterop::DrainCommandRing()
 {
+	std::lock_guard lock(commandRingMutex);
 	if (commandPool == VK_NULL_HANDLE || device == VK_NULL_HANDLE)
 		return;
 
@@ -240,6 +243,15 @@ VkCommandBuffer DxvkInterop::BeginFrameCommandBuffer()
 {
 	if (commandPool == VK_NULL_HANDLE)
 		return VK_NULL_HANDLE;
+
+	// Vulkan command pools and their command buffers require external synchronization. This ring is
+	// used by both the render thread and Streamline's present/tag path, so retain the lock until the
+	// matching SubmitFrameCommandBuffer call has ended and submitted this recording.
+	commandRingMutex.lock();
+	if (commandPool == VK_NULL_HANDLE) {
+		commandRingMutex.unlock();
+		return VK_NULL_HANDLE;
+	}
 
 	// NEVER-BLOCKING acquire (task #88 experiment): a fence wait here deadlocks under SL's
 	// eBlockPresentingClientQueue (the queue is held at each present until FG completes, so ring
@@ -313,6 +325,7 @@ VkCommandBuffer DxvkInterop::BeginFrameCommandBuffer()
 	beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 	if (vkBeginCommandBuffer(cb, &beginInfo) != VK_SUCCESS) {
 		logger::error("[DxvkInterop] vkBeginCommandBuffer failed");
+		commandRingMutex.unlock();
 		return VK_NULL_HANDLE;
 	}
 	return cb;
@@ -320,6 +333,8 @@ VkCommandBuffer DxvkInterop::BeginFrameCommandBuffer()
 
 bool DxvkInterop::SubmitFrameCommandBuffer(VkCommandBuffer a_commandBuffer, bool a_waitIdle)
 {
+	// BeginFrameCommandBuffer deliberately leaves this held across Streamline's recording calls.
+	std::unique_lock<std::recursive_mutex> transactionLock(commandRingMutex, std::adopt_lock);
 	if (commandPool == VK_NULL_HANDLE || a_commandBuffer == VK_NULL_HANDLE)
 		return false;
 
@@ -347,14 +362,20 @@ bool DxvkInterop::SubmitFrameCommandBuffer(VkCommandBuffer a_commandBuffer, bool
 		return false;
 	}
 
-	if (a_waitIdle)
-		vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_MAX);
+	if (a_waitIdle) {
+		vr = vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_MAX);
+		if (vr != VK_SUCCESS) {
+			logger::error("[DxvkInterop] upscaler completion wait failed ({})", static_cast<int>(vr));
+			return false;
+		}
+	}
 
 	return true;
 }
 
 void DxvkInterop::QueueViewsForDeferredDelete(const VkImageView* a_views, uint32_t a_count)
 {
+	std::lock_guard lock(commandRingMutex);
 	// Tag the views to the ring slot the just-submitted command buffer used (commandFrameIndex is
 	// only advanced by the next BeginFrameCommandBuffer). They are destroyed when that slot's fence
 	// signals at reuse — see BeginFrameCommandBuffer.
