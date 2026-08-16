@@ -76,6 +76,40 @@ bool Upscaling::PerfModeState::IsEligible(const Settings& a_settings, UpscaleMet
 	return Upscaling::GetQualityModeResolutionScale(qualityMode) < kPerfModeScaleThreshold;
 }
 
+// Hot-Envelope (experimental): does the requested quality render into a region
+// that fits the targets already allocated at boot?
+//
+// Only ever RELAXES the restart condition, and only downward. A quality larger
+// than the latched one still fails this and still forces the relatch, because
+// the targets genuinely are too small for it. Returns false unless the feature
+// is switched on, so the shipped path is unchanged.
+//
+// Compared in the same units the latch was created in - ScaleVRRenderDimension
+// of the true HMD size - so this cannot disagree with EnsureBootLatch about what
+// a quality's render size is.
+bool Upscaling::PerfModeState::HotEnvelopeFits(const Settings& a_settings, uint32_t a_qualityMode) const
+{
+	if (!a_settings.vrHotEnvelope) {
+		return false;
+	}
+	if (!boot.valid || !boot.active || !boot.renderEyeWidth || !boot.renderEyeHeight) {
+		return false;
+	}
+	if (!trueHMDEyeWidth || !trueHMDEyeHeight) {
+		return false;
+	}
+
+	const float scale = Upscaling::GetQualityModeResolutionScale(a_qualityMode);
+	if (!std::isfinite(scale) || scale <= 0.0f) {
+		return false;
+	}
+
+	const uint32_t wantWidth = ScaleVRRenderDimension(trueHMDEyeWidth, scale);
+	const uint32_t wantHeight = ScaleVRRenderDimension(trueHMDEyeHeight, scale);
+
+	return wantWidth <= boot.renderEyeWidth && wantHeight <= boot.renderEyeHeight;
+}
+
 void Upscaling::PerfModeState::UpdateRestartRequiredState(const Settings& a_settings, UpscaleMethod a_method)
 {
 	const uint32_t qualityMode = ClampQualityMode(a_settings.qualityMode);
@@ -94,6 +128,7 @@ void Upscaling::PerfModeState::UpdateRestartRequiredState(const Settings& a_sett
 				.eligibleNow = eligibleNow,
 				.methodMatches = boot.method == a_method,
 				.qualityModeMatches = boot.qualityMode == qualityMode,
+				.renderSizeFitsAllocation = HotEnvelopeFits(a_settings, qualityMode),
 			});
 		return;
 	}
@@ -201,4 +236,28 @@ float2 Upscaling::PerfModeState::GetRenderScreenSize() const
 		return { 0.0f, 0.0f };
 
 	return { static_cast<float>(boot.renderEyeWidth * 2u), static_cast<float>(boot.renderEyeHeight) };
+}
+
+// Hot-Envelope: the region the ACTIVE quality should render into, which is a
+// sub-rect of the latched allocation that GetRenderScreenSize returns.
+//
+// Returns the allocation itself whenever the feature is off or the quality does
+// not fit, so callers can use it unconditionally and get today's behaviour.
+float2 Upscaling::PerfModeState::GetActiveRenderScreenSize(const Settings& a_settings) const
+{
+	const float2 allocation = GetRenderScreenSize();
+	const uint32_t qualityMode = ClampQualityMode(a_settings.qualityMode);
+	if (!HotEnvelopeFits(a_settings, qualityMode)) {
+		return allocation;
+	}
+
+	const float scale = Upscaling::GetQualityModeResolutionScale(qualityMode);
+	const uint32_t width = ScaleVRRenderDimension(trueHMDEyeWidth, scale);
+	const uint32_t height = ScaleVRRenderDimension(trueHMDEyeHeight, scale);
+	if (!width || !height) {
+		return allocation;
+	}
+
+	// Double-wide, matching GetRenderScreenSize' convention.
+	return { static_cast<float>(width * 2u), static_cast<float>(height) };
 }

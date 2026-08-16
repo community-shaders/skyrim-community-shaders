@@ -68,6 +68,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	qualityMode,
 	dlssPreset,
 	renderScaleMode,
+	vrHotEnvelope,
 	perfMode,
 	frameLimitMode,
 	frameGenerationMode,
@@ -18968,9 +18969,15 @@ void Upscaling::RefreshRuntimeResolutionPlan()
 	const bool vrRenderScaleLatched = IsVRRenderScaleModeLatched();
 	if (vrRenderScaleLatched) {
 		const float2 displaySize = perfMode.GetDisplayScreenSize();
-		const float2 renderSize = perfMode.GetRenderScreenSize();
+		// Hot-Envelope: the latched size becomes the ALLOCATION, and the active
+		// quality renders into a sub-rect of it. With the feature off the two
+		// are the same value and this is the shipped behaviour exactly.
+		const float2 allocationSize = perfMode.GetRenderScreenSize();
+		const float2 renderSize = perfMode.GetActiveRenderScreenSize(settings);
 		if (displaySize.x > 0.0f && displaySize.y > 0.0f)
 			plan.trueHMDDisplaySize = displaySize;
+		if (allocationSize.x > 0.0f && allocationSize.y > 0.0f)
+			plan.engineAllocationSize = allocationSize;
 		if (renderSize.x > 0.0f && renderSize.y > 0.0f)
 			plan.engineRenderSize = renderSize;
 		plan.finalOutputSize = plan.trueHMDDisplaySize;
@@ -39165,7 +39172,24 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 		const int renderHeight = std::max(1, static_cast<int>(runtimeResolutionPlan.engineRenderSize.y));
 		const int outputWidth = std::max(renderWidth, static_cast<int>(runtimeResolutionPlan.finalOutputSize.x));
 
-		resolutionScale = { 1.0f, 1.0f };
+		// Hot-Envelope: the rendered region relative to the physical targets.
+		//
+		// Without the feature these are equal and the ratio is 1.0, which is the
+		// shipped behaviour - the targets were sized for exactly this quality, so
+		// there is no sub-rect. With it, the targets stay at the boot quality's
+		// size and a lower quality renders into part of them, so the ratio is
+		// what tells Skyrim's dynamic-resolution plumbing which part.
+		const float allocWidth = runtimeResolutionPlan.engineAllocationSize.x > 0.0f ?
+		                             runtimeResolutionPlan.engineAllocationSize.x :
+		                             static_cast<float>(renderWidth);
+		const float allocHeight = runtimeResolutionPlan.engineAllocationSize.y > 0.0f ?
+		                              runtimeResolutionPlan.engineAllocationSize.y :
+		                              static_cast<float>(renderHeight);
+		const float envelopeX = std::clamp(static_cast<float>(renderWidth) / allocWidth, 0.0f, 1.0f);
+		const float envelopeY = std::clamp(static_cast<float>(renderHeight) / allocHeight, 0.0f, 1.0f);
+		const bool hotEnvelopeActive = envelopeX < 1.0f || envelopeY < 1.0f;
+
+		resolutionScale = { envelopeX, envelopeY };
 		auto phaseCount = GetJitterPhaseCount(renderWidth, outputWidth);
 		GetJitterOffset(&jitter.x, &jitter.y, state->frameCount, phaseCount);
 		// Loading screens reset vendor history every frame; unintegrated jitter only vibrates the image.
@@ -39180,7 +39204,14 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 		a_viewport->projectionPosScaleX = targetProjectionPosScaleX;
 		a_viewport->projectionPosScaleY = targetProjectionPosScaleY;
 
-		const bool dynamicResolutionDirty = ApplyLockedFullResolutionDynamicResolutionState(a_viewport);
+		// Hot-Envelope: only lock to full resolution when the rendered region IS
+		// the whole allocation. When it is a sub-rect, the ratio has to reach
+		// Skyrim's dynamic-resolution state or nothing downstream will render
+		// smaller - the relatch would be skipped and the quality change would do
+		// nothing at all.
+		const bool dynamicResolutionDirty =
+			hotEnvelopeActive ? ApplyDynamicResolutionState(a_viewport) :
+								ApplyLockedFullResolutionDynamicResolutionState(a_viewport);
 		if (projectionDirty && !dynamicResolutionDirty)
 			UpdateCameraData();
 
@@ -39318,7 +39349,12 @@ bool Upscaling::ApplyDynamicResolutionState(RE::BSGraphics::State* a_viewport)
 	if (!a_viewport)
 		return false;
 
-	if (IsVRRenderScaleModeLatched()) {
+	// Hot-Envelope: a latched render scale normally means the targets were sized
+	// for exactly this quality, so the ratio is 1.0 and locking is right. When
+	// the envelope is holding a SMALLER quality inside larger targets the ratio
+	// is below 1.0 and must be allowed through, or the sub-rect never reaches
+	// Skyrim's plumbing and the quality change renders nothing different.
+	if (IsVRRenderScaleModeLatched() && resolutionScale.x >= 1.0f && resolutionScale.y >= 1.0f) {
 		return ApplyLockedFullResolutionDynamicResolutionState(a_viewport);
 	}
 

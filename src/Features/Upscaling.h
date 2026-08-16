@@ -212,6 +212,16 @@ public:
 		uint qualityMode = 3;            // Shared upscaler preset; defaults to Quality
 		uint dlssPreset = kDLSSPresetK;  // Settings ids: J, K, L, M, F, E (default K)
 		uint renderScaleMode = 1;
+		// Hot-Envelope (experimental, VR Render Scale Mode only).
+		//
+		// Treats the boot quality as an upper BOUND rather than a fixed point.
+		// Any quality at or below it renders into a sub-region of the targets
+		// already allocated and needs no render-target recreation; anything
+		// above it still relatches exactly as before.
+		//
+		// Off by default, and with it off every path below is byte-identical to
+		// the shipped build.
+		uint vrHotEnvelope = 0;
 		uint perfMode = 1;
 		uint frameLimitMode = 1;
 		uint frameGenerationMode = 0;  // Disabled by default
@@ -388,6 +398,9 @@ public:
 		UpscalingOutputTarget outputTarget = UpscalingOutputTarget::Main;
 		uint32_t qualityMode = 0;
 		float2 trueHMDDisplaySize{ 0.0f, 0.0f };
+		// Hot-Envelope: the physical targets, which do not move while the
+		// envelope holds. Equal to engineRenderSize when the feature is off.
+		float2 engineAllocationSize{ 0.0f, 0.0f };
 		float2 engineRenderSize{ 0.0f, 0.0f };
 		float2 finalOutputSize{ 0.0f, 0.0f };
 		bool vendorMethod = false;
@@ -1275,6 +1288,10 @@ public:
 		void RecordTrueHMDSize(uint32_t a_eyeWidth, uint32_t a_eyeHeight);
 		bool IsRequested(const Settings& a_settings) const;
 		bool IsEligible(const Settings& a_settings, UpscaleMethod a_method) const;
+		// Hot-Envelope: true when the requested quality's render size fits the
+		// targets latched at boot, so no recreation is needed. Always false
+		// unless Settings::vrHotEnvelope is set.
+		bool HotEnvelopeFits(const Settings& a_settings, uint32_t a_qualityMode) const;
 		void UpdateRestartRequiredState(const Settings& a_settings, UpscaleMethod a_method);
 		bool EnsureBootLatch(const Settings& a_settings, UpscaleMethod a_method, bool a_allowCreate, uint32_t a_generation = 0);
 		bool IsActive(const Settings& a_settings, UpscaleMethod a_method) const;
@@ -1282,6 +1299,10 @@ public:
 		void SetSubmitStageVendorAllowed(bool a_allowed);
 		float2 GetDisplayScreenSize() const;
 		float2 GetRenderScreenSize() const;
+		// Hot-Envelope: the sub-rect the ACTIVE quality renders into. Equals
+		// GetRenderScreenSize whenever the feature is off, so callers need no
+		// branch of their own.
+		float2 GetActiveRenderScreenSize(const Settings& a_settings) const;
 		const BootSnapshot& GetBootSnapshot() const { return boot; }
 		bool HasKnownHMDSize() const { return trueHMDEyeWidth != 0 && trueHMDEyeHeight != 0; }
 		bool HasRestartRequiredChange() const { return restartRequired; }
