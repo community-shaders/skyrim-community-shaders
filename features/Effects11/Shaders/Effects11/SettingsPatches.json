@@ -114,7 +114,10 @@
 			{ "variable": "|- AA - Enable CREAA", "value": "false" },
 			{ "variable": "---------- FXAA: Use FXAA ----------", "value": "false" },
 			{ "variable": "ANTIALIASING.SMAA.Enable SMAA", "value": "false" },
-			{ "variable": "ANTIALIASING.CREAA.Enable CREAA", "value": "false" }
+			{ "variable": "ANTIALIASING.CREAA.Enable CREAA", "value": "false" },
+
+			{ "variable": "[Truth 70] Postpass | Vignette Strength", "value": "0.0" },
+			{ "variable": "[Truth 70] Postpass | Grain Shape", "value": "0.0" }
 		]
 	},
 	{
@@ -136,7 +139,9 @@
 
 			{ "variable": "Grain", "value": "false" },
 			{ "variable": "Lens Distortion", "value": "false" },
-			{ "variable": "Vignette", "value": "false" }
+			{ "variable": "Vignette", "value": "false" },
+
+			{ "variable": "GRADE | Clarity Enable", "value": "false" }
 		]
 	}
 ]
