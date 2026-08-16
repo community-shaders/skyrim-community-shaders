@@ -20326,7 +20326,14 @@ bool Upscaling::IsVRRenderScalePhysicalContractConverged(
 		!boot.perfModeEnabled ||
 		boot.generation == 0 ||
 		boot.method != a_upscaleMethod ||
-		ClampQualityModeUInt(boot.qualityMode) != ClampQualityModeUInt(a_qualityMode)) {
+		// Hot-Envelope (experimental): "converged" asks whether the PHYSICAL targets
+		// support the requested quality. Equality answers that when the render size
+		// always equals the allocation, which was true until the envelope allowed
+		// them to differ. A quality that fits the allocation is converged: the
+		// targets genuinely are big enough, and only the extent rendered into them
+		// differs. Anything larger still fails and still forces a real relatch.
+		(ClampQualityModeUInt(boot.qualityMode) != ClampQualityModeUInt(a_qualityMode) &&
+			!perfMode.HotEnvelopeFits(settings, ClampQualityModeUInt(a_qualityMode)))) {
 		return false;
 	}
 
@@ -49308,7 +49315,12 @@ void Upscaling::ApplyPendingVRUpscalingTransition()
 		RequestHistoryReset();
 		if (targetMethod == UpscaleMethod::kDLSS)
 			pendingDLSSHistoryReset.store(true, std::memory_order_release);
-		if ((qualityChanged || renderScaleModeChanged) && (IsVRRenderScaleModeLatched() || GetPerfModeRequested()))
+		// Hot-Envelope (experimental): same fits-check as the immediate path. A
+		// destination quality that renders inside the current allocation needs the
+		// history reset above, but no physical recreate.
+		const bool profileQualityNeedsRealloc =
+			qualityChanged && !perfMode.HotEnvelopeFits(settings, targetQualityMode);
+		if ((profileQualityNeedsRealloc || renderScaleModeChanged) && (IsVRRenderScaleModeLatched() || GetPerfModeRequested()))
 			RequestPerfModeRenderTargetRecreate("VR render-scale profile change", transitionOrigin);
 	}
 
