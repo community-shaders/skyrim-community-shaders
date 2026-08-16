@@ -19521,7 +19521,13 @@ void Upscaling::ApplyCSMenuUpscalingTransition(UpscaleMethod a_targetMethod, boo
 		physicalContractRecoveryRequired) {
 		SetPerfModeRequested(targetRenderScaleMode, a_reason, false, a_origin);
 	}
-	if (qualityChanged || renderScaleModeChanged)
+	// Hot-Envelope (experimental): skip the physical recreate when the new quality
+	// renders inside the targets already allocated. settings.qualityMode holds the
+	// DESTINATION quality by this point, so this asks about where we are going.
+	const bool qualityNeedsRealloc =
+		qualityChanged &&
+		!perfMode.HotEnvelopeFits(settings, ClampQualityModeUInt(settings.qualityMode));
+	if (qualityNeedsRealloc || renderScaleModeChanged)
 		RequestPerfModeRenderTargetRecreate(a_reason, a_origin);
 }
 
@@ -49010,7 +49016,16 @@ bool Upscaling::ShouldStageVRRenderScaleTransition(bool a_renderScaleModeEnabled
 	if (currentRenderScaleMode != targetRenderScaleMode)
 		return true;
 
-	if (effectiveQualityMode != qualityMode && (currentRenderScaleMode || targetRenderScaleMode || IsVRRenderScaleModeLatched() || perfMode.HasRestartRequiredChange()))
+	// Hot-Envelope (experimental): a quality that renders inside the targets
+	// already allocated needs no render-scale transition at all. Only the logical
+	// extent moves, which ApplyDynamicResolutionState handles on its own.
+	//
+	// A quality ABOVE the envelope does not fit, so this still returns true and
+	// the transition stages exactly as before. HotEnvelopeFits is false whenever
+	// the feature is off, so the shipped path is unchanged.
+	if (effectiveQualityMode != qualityMode &&
+		!perfMode.HotEnvelopeFits(settings, qualityMode) &&
+		(currentRenderScaleMode || targetRenderScaleMode || IsVRRenderScaleModeLatched() || perfMode.HasRestartRequiredChange()))
 		return true;
 
 	return currentPerfMode != targetPerfMode;
