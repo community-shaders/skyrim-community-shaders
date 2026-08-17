@@ -1536,6 +1536,59 @@ namespace
 		region.height = GetD3DBoxHeight(region.box);
 		region.valid = region.width != 0 && region.height != 0 && region.depthWidth != 0 && region.depthHeight != 0;
 		region.matchesExpectedSize = region.width == expectedEyeWidth && region.height == expectedEyeHeight;
+
+		// Hot-Envelope: the submit-stage mismatch that loops the recovery relatch
+		// happens here. The colour box resolves the submitted bounds against
+		// sourceDesc - the ALLOCATED texture - while expectedEye* is the ACTIVE
+		// quality's input size. Those are equal in stock, so the difference has
+		// never mattered; under an envelope they diverge and the mismatch fires.
+		//
+		// Note the depth path a few lines above already resolves against
+		// expectedEye*, so the two disagree under an envelope.
+		//
+		// Before correcting the colour box we need the real layout: where the
+		// rendered sub-rect actually sits inside a double-wide allocation. That
+		// decides whether eye 1 starts at the half boundary or directly after
+		// eye 0's shrunken region, and the two need different corrections. This
+		// logs it rather than assuming it. Deduplicated on the full geometry, so
+		// it emits on change, not per eye per frame.
+		{
+			float lMinU = 0.0f, lMinV = 0.0f, lMaxU = 0.0f, lMaxV = 0.0f;
+			const bool haveBounds = inputBounds && TryGetNormalizedVRBounds(inputBounds, lMinU, lMinV, lMaxU, lMaxV);
+			static uint64_t loggedSignature[2] = { 0xFFFFFFFFFFFFFFFFull, 0xFFFFFFFFFFFFFFFFull };
+			const uint32_t eyeSlot = eyeIndex > 0u ? 1u : 0u;
+			const uint64_t signature =
+				(static_cast<uint64_t>(sourceDesc.Width) << 40) ^
+				(static_cast<uint64_t>(sourceDesc.Height) << 24) ^
+				(static_cast<uint64_t>(expectedEyeWidth) << 8) ^
+				static_cast<uint64_t>(expectedEyeHeight) ^
+				(static_cast<uint64_t>(region.box.left) << 48) ^
+				(static_cast<uint64_t>(region.box.right) << 32) ^
+				(static_cast<uint64_t>(region.matchesExpectedSize ? 1u : 0u) << 63);
+			if (signature != loggedSignature[eyeSlot]) {
+				loggedSignature[eyeSlot] = signature;
+				logger::info(
+					"[HotEnvelope][submit] eye {} | texture {}x{} array={} | expected {}x{} | eyeOriginX={} | bounds={} u[{:.4f},{:.4f}] v[{:.4f},{:.4f}] | combinedLayout={} boundsCombined={} | box x[{},{}] y[{},{}] = {}x{} | depth off[{},{}] {}x{} | matches={}",
+					eyeIndex,
+					sourceDesc.Width,
+					sourceDesc.Height,
+					sourceDesc.ArraySize,
+					expectedEyeWidth,
+					expectedEyeHeight,
+					baseDepthOffsetX,
+					haveBounds ? "yes" : "no",
+					lMinU, lMaxU, lMinV, lMaxV,
+					sourceUsesCombinedStereoLayout,
+					inputBoundsUseCombinedStereoSpace,
+					region.box.left, region.box.right,
+					region.box.top, region.box.bottom,
+					region.width, region.height,
+					region.depthOffsetX, region.depthOffsetY,
+					region.depthWidth, region.depthHeight,
+					region.matchesExpectedSize);
+			}
+		}
+
 		return region;
 	}
 
