@@ -39202,6 +39202,30 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 		const float envelopeY = std::clamp(static_cast<float>(renderHeight) / allocHeight, 0.0f, 1.0f);
 		const bool hotEnvelopeActive = envelopeX < 1.0f || envelopeY < 1.0f;
 
+		// Hot-Envelope: the whole geometry in one line, on change only.
+		// Upscaling is a singleton and this runs on the render thread, so plain
+		// statics are safe here. Render vs allocation IS the sub-rect - if the
+		// image looks upscaled from too small a region, this line says so.
+		{
+			static int loggedRender = -1, loggedAlloc = -1, loggedOutput = -1;
+			if (renderWidth != loggedRender || static_cast<int>(allocWidth) != loggedAlloc || outputWidth != loggedOutput) {
+				loggedRender = renderWidth;
+				loggedAlloc = static_cast<int>(allocWidth);
+				loggedOutput = outputWidth;
+				logger::info(
+					"[HotEnvelope][plan] render {}x{} into allocation {}x{} -> output {} | scale {:.3f}x{:.3f} | subRect={} | path={}",
+					renderWidth,
+					renderHeight,
+					static_cast<int>(allocWidth),
+					static_cast<int>(allocHeight),
+					outputWidth,
+					envelopeX,
+					envelopeY,
+					hotEnvelopeActive ? "yes" : "no",
+					hotEnvelopeActive ? "ApplyDynamicResolutionState" : "ApplyLockedFullResolution");
+			}
+		}
+
 		resolutionScale = { envelopeX, envelopeY };
 		auto phaseCount = GetJitterPhaseCount(renderWidth, outputWidth);
 		GetJitterOffset(&jitter.x, &jitter.y, state->frameCount, phaseCount);
@@ -48601,13 +48625,23 @@ void Upscaling::MarkVendorRuntimeResourcesDirty(UpscaleMethod a_upscaleMethod, u
 {
 	const uint32_t generation = a_generation != 0 ? a_generation : GetActiveVRRenderScaleContractGeneration();
 	switch (a_upscaleMethod) {
+	// Hot-Envelope: these two flags are what stranded the whole renderer when the
+	// relatch was skipped - GetVRUpscalingApplyBlockReasonsForAPI folds them into
+	// RelatchPending, which refuses the external API AND the CS menu alike. The
+	// existing lifecycle record is logger::debug behind ShouldEmitUpscalingDiagLogs,
+	// so a stranded flag left no trace. Log the edges at info, deduplicated by the
+	// flag's own transition so this costs one line per real change.
 	case UpscaleMethod::kDLSS:
 		pendingDLSSResetGeneration.store(generation, std::memory_order_release);
-		pendingDLSSReset.store(true, std::memory_order_release);
+		if (!pendingDLSSReset.exchange(true, std::memory_order_acq_rel)) {
+			logger::info("[HotEnvelope][vendor] DLSS resources DIRTY at generation {}. Requests are refused until a matching READY.", generation);
+		}
 		break;
 	case UpscaleMethod::kFSR:
 		pendingFSRResetGeneration.store(generation, std::memory_order_release);
-		pendingFSRReset.store(true, std::memory_order_release);
+		if (!pendingFSRReset.exchange(true, std::memory_order_acq_rel)) {
+			logger::info("[HotEnvelope][vendor] FSR resources DIRTY at generation {}. Requests are refused until a matching READY.", generation);
+		}
 		break;
 	default:
 		break;
@@ -48622,12 +48656,16 @@ void Upscaling::MarkVendorRuntimeResourcesReady(UpscaleMethod a_upscaleMethod, u
 	case UpscaleMethod::kDLSS:
 		vrDLSSRuntimeResourceGeneration = generation;
 		pendingDLSSResetGeneration.store(0, std::memory_order_release);
-		pendingDLSSReset.store(false, std::memory_order_release);
+		if (pendingDLSSReset.exchange(false, std::memory_order_acq_rel)) {
+			logger::info("[HotEnvelope][vendor] DLSS resources READY at generation {}.", generation);
+		}
 		break;
 	case UpscaleMethod::kFSR:
 		vrFSRRuntimeResourceGeneration = generation;
 		pendingFSRResetGeneration.store(0, std::memory_order_release);
-		pendingFSRReset.store(false, std::memory_order_release);
+		if (pendingFSRReset.exchange(false, std::memory_order_acq_rel)) {
+			logger::info("[HotEnvelope][vendor] FSR resources READY at generation {}.", generation);
+		}
 		break;
 	default:
 		break;
@@ -48642,7 +48680,11 @@ void Upscaling::ClearVendorRuntimeResourcesDirty(UpscaleMethod a_upscaleMethod, 
 		if (a_clearRuntimeGeneration)
 			vrDLSSRuntimeResourceGeneration = 0;
 		pendingDLSSResetGeneration.store(0, std::memory_order_release);
-		pendingDLSSReset.store(false, std::memory_order_release);
+		// Distinct from READY: this drops the dirty flag without the resources
+		// having been rebuilt. Worth telling apart in the log.
+		if (pendingDLSSReset.exchange(false, std::memory_order_acq_rel)) {
+			logger::info("[HotEnvelope][vendor] DLSS dirty flag CLEARED without rebuild (clearRuntimeGeneration={}).", a_clearRuntimeGeneration);
+		}
 		break;
 	case UpscaleMethod::kFSR:
 		if (a_clearRuntimeGeneration)

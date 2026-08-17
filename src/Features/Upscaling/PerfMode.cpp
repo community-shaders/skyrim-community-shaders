@@ -106,8 +106,30 @@ bool Upscaling::PerfModeState::HotEnvelopeFits(const Settings& a_settings, uint3
 
 	const uint32_t wantWidth = ScaleVRRenderDimension(trueHMDEyeWidth, scale);
 	const uint32_t wantHeight = ScaleVRRenderDimension(trueHMDEyeHeight, scale);
+	const bool fits = wantWidth <= boot.renderEyeWidth && wantHeight <= boot.renderEyeHeight;
 
-	return wantWidth <= boot.renderEyeWidth && wantHeight <= boot.renderEyeHeight;
+	// Called from five sites per change, so log only when the question or the
+	// answer moves. Upscaling is a singleton and these are diagnostic state, not
+	// logic - the return value does not depend on them.
+	static uint32_t loggedQuality = 0xFFFFFFFFu;
+	static uint32_t loggedBoot = 0xFFFFFFFFu;
+	static int loggedFits = -1;
+	if (a_qualityMode != loggedQuality || boot.qualityMode != loggedBoot || static_cast<int>(fits) != loggedFits) {
+		loggedQuality = a_qualityMode;
+		loggedBoot = boot.qualityMode;
+		loggedFits = static_cast<int>(fits);
+		logger::info(
+			"[HotEnvelope][fits] quality {} wants {}x{}; envelope is quality {} at {}x{} -> {}",
+			a_qualityMode,
+			wantWidth,
+			wantHeight,
+			boot.qualityMode,
+			boot.renderEyeWidth,
+			boot.renderEyeHeight,
+			fits ? "FITS (no relatch)" : "TOO LARGE (relatch required)");
+	}
+
+	return fits;
 }
 
 void Upscaling::PerfModeState::UpdateRestartRequiredState(const Settings& a_settings, UpscaleMethod a_method)
