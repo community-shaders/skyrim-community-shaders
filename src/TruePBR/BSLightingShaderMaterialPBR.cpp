@@ -2,10 +2,16 @@
 
 #include "TruePBR.h"
 
-/** @brief Drops textureSet unless it really is one; malformed meshes can link any block, and calling BSTextureSet virtuals on it is a CTD. */
+/** @brief Drops textureSet unless its NiRTTI derives from BSTextureSet; malformed meshes can link any block, and calling BSTextureSet virtuals on it is a CTD. */
 static void DiscardMislinkedTextureSet(RE::NiPointer<RE::BSTextureSet>& textureSet)
 {
-	if (textureSet != nullptr && netimmerse_cast<RE::BSShaderTextureSet*>(textureSet.get()) == nullptr) {
+	if (textureSet == nullptr) {
+		return;
+	}
+
+	static const auto* textureSetRTTI = REL::Relocation<const RE::NiRTTI*>{ RE::BSTextureSet::Ni_RTTI }.get();
+	const RE::NiRTTI* rtti = textureSet->GetRTTI();
+	if (rtti == nullptr || !rtti->IsKindOf(textureSetRTTI)) {
 		textureSet.reset();
 	}
 }
