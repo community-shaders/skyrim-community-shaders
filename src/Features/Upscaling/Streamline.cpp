@@ -1148,6 +1148,34 @@ bool Streamline::SetDLSSOptions(DLSSViewportRole viewportRole, sl::ViewportHandl
 	dlssOptions.preExposure = 1.0f;
 	dlssOptions.sharpness = 0.0f;
 
+	// Hot-Envelope groundwork: what input range will ONE DLSS context accept?
+	//
+	// CSX keeps a context per qualityMode + dlssPreset, each created at its own
+	// input resolution, and recreating them is what drags in the vendor-resource
+	// reset. If [renderWidthMin, renderWidthMax] for a single mode already spans
+	// the envelope, one context can serve every quality at or below the boot
+	// quality by varying the tagged input extent, and the per-quality contexts
+	// can go away entirely rather than being reset more cleverly.
+	//
+	// Diagnostic only - nothing below reads it. This function early-returns on a
+	// cache hit, so it runs on change rather than per frame.
+	if (slDLSSGetOptimalSettings) {
+		sl::DLSSOptimalSettings optimal{};
+		if (slDLSSGetOptimalSettings(dlssOptions, optimal) == sl::Result::eOk) {
+			logger::info(
+				"[Streamline][HotEnvelope] DLSS mode {} output {}x{}: optimal {}x{}, accepts {}x{} .. {}x{}",
+				magic_enum::enum_name(dlssOptions.mode),
+				width,
+				height,
+				optimal.optimalRenderWidth,
+				optimal.optimalRenderHeight,
+				optimal.renderWidthMin,
+				optimal.renderHeightMin,
+				optimal.renderWidthMax,
+				optimal.renderHeightMax);
+		}
+	}
+
 	if (SL_FAILED(result, slDLSSSetOptions(p_viewport, dlssOptions))) {
 		logger::critical("[Streamline] Could not enable DLSS for viewport {} eye {}: {}",
 			static_cast<uint32_t>(p_viewport),
