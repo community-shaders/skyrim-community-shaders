@@ -1530,14 +1530,24 @@ namespace
 			};
 			region.fromOpenVRBounds = true;
 			if (inputBoundsUseCombinedStereoSpace) {
-				const uint32_t depthLeft = Util::NormalizedCoordinates::ResolvePixelBoundary(minU, sourceStereoLayout.width);
-				const uint32_t depthTop = Util::NormalizedCoordinates::ResolvePixelBoundary(minV, sourceStereoLayout.height);
-				const uint32_t depthRight = Util::NormalizedCoordinates::ResolvePixelBoundary(maxU, sourceStereoLayout.width);
-				const uint32_t depthBottom = Util::NormalizedCoordinates::ResolvePixelBoundary(maxV, sourceStereoLayout.height);
-				region.depthOffsetX = depthLeft;
-				region.depthOffsetY = depthTop;
-				region.depthWidth = depthRight > depthLeft ? depthRight - depthLeft : 0u;
-				region.depthHeight = depthBottom > depthTop ? depthBottom - depthTop : 0u;
+				// Hot-Envelope: depth takes the SAME region as colour, by construction.
+				//
+				// This previously resolved against sourceStereoLayout while colour
+				// resolved against sourceDesc. Identical in stock, but under an
+				// envelope the origins diverge - measured at 2328 for colour against
+				// 2054, 1746 and 1164 for depth at Balanced, Performance and
+				// UltraPerformance. Depth then described a different part of the eye
+				// than the colour it belonged to, so stereo reconstruction collapsed
+				// the scene into flat planes, correct only at the envelope quality
+				// where the two origins happen to coincide.
+				//
+				// Deriving depth from the colour box removes the possibility of them
+				// disagreeing rather than keeping two derivations in step. In stock
+				// the layout equals the texture, so this is the same result as before.
+				region.depthOffsetX = region.box.left;
+				region.depthOffsetY = region.box.top;
+				region.depthWidth = right > left ? right - left : 0u;
+				region.depthHeight = bottom > top ? bottom - top : 0u;
 			} else {
 				const uint32_t depthLeft = Util::NormalizedCoordinates::ResolvePixelBoundary(minU, expectedEyeWidth);
 				const uint32_t depthTop = Util::NormalizedCoordinates::ResolvePixelBoundary(minV, expectedEyeHeight);
@@ -6464,8 +6474,21 @@ namespace
 			       a_actual > 0.0f &&
 			       a_actual == static_cast<float>(a_expected);
 		};
-		return matchesDimension(a_plan.engineRenderSize.x, renderWidth) &&
-		       matchesDimension(a_plan.engineRenderSize.y, a_boot.renderEyeHeight) &&
+		// Hot-Envelope: this asks whether the PHYSICAL plan still matches the boot
+		// contract, so it must compare the allocation. engineRenderSize answered
+		// that only because the two were always equal; under an envelope the render
+		// extent is deliberately smaller and this would report "not exact" forever.
+		//
+		// engineAllocationSize is zero on plans that never set it, so fall back to
+		// engineRenderSize and keep the original behaviour exactly.
+		const float allocationX = a_plan.engineAllocationSize.x > 0.0f ?
+		                              a_plan.engineAllocationSize.x :
+		                              a_plan.engineRenderSize.x;
+		const float allocationY = a_plan.engineAllocationSize.y > 0.0f ?
+		                              a_plan.engineAllocationSize.y :
+		                              a_plan.engineRenderSize.y;
+		return matchesDimension(allocationX, renderWidth) &&
+		       matchesDimension(allocationY, a_boot.renderEyeHeight) &&
 		       matchesDimension(a_plan.finalOutputSize.x, displayWidth) &&
 		       matchesDimension(a_plan.finalOutputSize.y, a_boot.displayEyeHeight);
 	}
