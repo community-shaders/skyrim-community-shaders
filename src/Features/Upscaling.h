@@ -2555,6 +2555,20 @@ public:
 	void QueueVRFpsStabilizerLoadSync(uint32_t a_frame);
 	void ApplyPendingVRFpsStabilizerLoadSync();
 	bool ShouldStageVRRenderScaleTransition(bool a_renderScaleModeEnabled, uint32_t a_qualityMode) const;
+
+	// Hot-Envelope (experimental): is any physical recovery still unresolved?
+	// Mirrors the condition QueueVRRenderScaleRequest defers on, so the envelope
+	// and the queue cannot disagree about whether work is in flight.
+	[[nodiscard]] bool HasUnresolvedVRRenderScalePhysicalRecovery() const;
+
+	// Hot-Envelope (experimental): may the relatch be skipped for this quality?
+	//
+	// HotEnvelopeFits alone is not sufficient. A relatch that is ALREADY IN
+	// FLIGHT has armed a physical mutation epoch which only the relatch's own
+	// completion or no-op path clears; answering "fits, skip it" there abandons
+	// that work and strands the epoch, which blocks every later request. So the
+	// envelope may only ever prevent a relatch from STARTING.
+	[[nodiscard]] bool HotEnvelopeMayRelax(uint32_t a_qualityMode) const;
 	bool ShouldDeferVRUpscalingTransitionSettings() const;
 	bool ShouldWaitForVRUpscalingTransitionDelay() const;
 	void MarkPerfModeRenderTargetRecreateQueued(uint32_t a_delayFrames = 0);

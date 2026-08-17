@@ -18973,7 +18973,13 @@ void Upscaling::RefreshRuntimeResolutionPlan()
 		// quality renders into a sub-rect of it. With the feature off the two
 		// are the same value and this is the shipped behaviour exactly.
 		const float2 allocationSize = perfMode.GetRenderScreenSize();
-		const float2 renderSize = perfMode.GetActiveRenderScreenSize(settings);
+		// Hot-Envelope: while a physical mutation is in flight the allocation is
+		// being rebuilt underneath us, so rendering into a sub-rect of it races
+		// the recreation. Fall back to the allocation - which is stock behaviour -
+		// until the relatch has published.
+		const float2 renderSize = HasUnresolvedVRRenderScalePhysicalRecovery() ?
+		                              allocationSize :
+		                              perfMode.GetActiveRenderScreenSize(settings);
 		if (displaySize.x > 0.0f && displaySize.y > 0.0f)
 			plan.trueHMDDisplaySize = displaySize;
 		if (allocationSize.x > 0.0f && allocationSize.y > 0.0f)
@@ -19526,7 +19532,7 @@ void Upscaling::ApplyCSMenuUpscalingTransition(UpscaleMethod a_targetMethod, boo
 	// DESTINATION quality by this point, so this asks about where we are going.
 	const bool qualityNeedsRealloc =
 		qualityChanged &&
-		!perfMode.HotEnvelopeFits(settings, ClampQualityModeUInt(settings.qualityMode));
+		!HotEnvelopeMayRelax(ClampQualityModeUInt(settings.qualityMode));
 	if (qualityNeedsRealloc || renderScaleModeChanged)
 		RequestPerfModeRenderTargetRecreate(a_reason, a_origin);
 }
@@ -20333,7 +20339,7 @@ bool Upscaling::IsVRRenderScalePhysicalContractConverged(
 		// targets genuinely are big enough, and only the extent rendered into them
 		// differs. Anything larger still fails and still forces a real relatch.
 		(ClampQualityModeUInt(boot.qualityMode) != ClampQualityModeUInt(a_qualityMode) &&
-			!perfMode.HotEnvelopeFits(settings, ClampQualityModeUInt(a_qualityMode)))) {
+			!HotEnvelopeMayRelax(ClampQualityModeUInt(a_qualityMode)))) {
 		return false;
 	}
 
@@ -49044,6 +49050,46 @@ bool Upscaling::HasPendingVRRenderScaleTransition() const
 	return IsVRRenderScaleCurrentOrTargetRelevant(*this);
 }
 
+bool Upscaling::HasUnresolvedVRRenderScalePhysicalRecovery() const
+{
+	// Same four conditions QueueVRRenderScaleRequest defers on. Kept in one place
+	// so the envelope and the request queue cannot drift apart.
+	return vrRenderScaleUnresolvedPhysicalMutationEpoch.load(std::memory_order_acquire) != 0 ||
+	       vrRenderScalePostMutationSerializationEpoch.load(std::memory_order_acquire) != 0 ||
+	       vrRenderScalePreMutationNativeFallbackAdmissionActive.load(std::memory_order_acquire) ||
+	       HasLiveVRRenderScaleProviderNeutralRecoveryWorker();
+}
+
+bool Upscaling::HotEnvelopeMayRelax(uint32_t a_qualityMode) const
+{
+	if (HasUnresolvedVRRenderScalePhysicalRecovery()) {
+		// A relatch is in flight. Its armed mutation epoch is cleared only by its
+		// own completion or no-op path, so skipping it here strands the epoch and
+		// blocks every subsequent request - the run-2 failure.
+		//
+		// Log which of the four held, deduplicated, so the next session either
+		// confirms this mechanism or rules it out instead of leaving it argued.
+		static uint32_t loggedMask = 0xFFFFFFFFu;
+		const uint32_t mask =
+			(vrRenderScaleUnresolvedPhysicalMutationEpoch.load(std::memory_order_acquire) != 0 ? 1u : 0u) |
+			(vrRenderScalePostMutationSerializationEpoch.load(std::memory_order_acquire) != 0 ? 2u : 0u) |
+			(vrRenderScalePreMutationNativeFallbackAdmissionActive.load(std::memory_order_acquire) ? 4u : 0u) |
+			(HasLiveVRRenderScaleProviderNeutralRecoveryWorker() ? 8u : 0u);
+		if (mask != loggedMask) {
+			loggedMask = mask;
+			logger::info(
+				"[HotEnvelope][inflight] relaxation refused for quality {}: mutationEpoch={} postMutationSerialization={} preMutationFallback={} recoveryWorker={}",
+				a_qualityMode,
+				(mask & 1u) != 0,
+				(mask & 2u) != 0,
+				(mask & 4u) != 0,
+				(mask & 8u) != 0);
+		}
+		return false;
+	}
+	return perfMode.HotEnvelopeFits(settings, a_qualityMode);
+}
+
 bool Upscaling::ShouldStageVRRenderScaleTransition(bool a_renderScaleModeEnabled, uint32_t a_qualityMode) const
 {
 	if (!globals::game::isVR || !IsRenderScaleMethodEligible(GetConfiguredUpscaleMethodForTransition()))
@@ -49073,7 +49119,7 @@ bool Upscaling::ShouldStageVRRenderScaleTransition(bool a_renderScaleModeEnabled
 	// the transition stages exactly as before. HotEnvelopeFits is false whenever
 	// the feature is off, so the shipped path is unchanged.
 	if (effectiveQualityMode != qualityMode &&
-		!perfMode.HotEnvelopeFits(settings, qualityMode) &&
+		!HotEnvelopeMayRelax(qualityMode) &&
 		(currentRenderScaleMode || targetRenderScaleMode || IsVRRenderScaleModeLatched() || perfMode.HasRestartRequiredChange()))
 		return true;
 
@@ -49361,7 +49407,7 @@ void Upscaling::ApplyPendingVRUpscalingTransition()
 		// destination quality that renders inside the current allocation needs the
 		// history reset above, but no physical recreate.
 		const bool profileQualityNeedsRealloc =
-			qualityChanged && !perfMode.HotEnvelopeFits(settings, targetQualityMode);
+			qualityChanged && !HotEnvelopeMayRelax(targetQualityMode);
 		if ((profileQualityNeedsRealloc || renderScaleModeChanged) && (IsVRRenderScaleModeLatched() || GetPerfModeRequested()))
 			RequestPerfModeRenderTargetRecreate("VR render-scale profile change", transitionOrigin);
 	}
