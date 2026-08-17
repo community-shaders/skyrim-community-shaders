@@ -1493,35 +1493,33 @@ namespace
 			if (!TryGetNormalizedVRBounds(inputBounds, minU, minV, maxU, maxV)) {
 				return region;
 			}
-			// Hot-Envelope: resolve the colour box against the PACKED stereo layout
-			// rather than the allocated texture whenever the two differ.
+			// Hot-Envelope: clamp the colour box to the ACTIVE render extent.
 			//
-			// The engine packs both eyes at the ACTIVE render size - measured:
-			// eyeOriginX tracks expectedEyeWidth exactly (1164, 1746, 2054, 2328) -
-			// but submits bounds of u[0,0.5] and u[0.5,1]. Resolving those against
-			// sourceDesc maps them onto the halves of the allocation instead, so the
-			// box comes out 2328x2372 where the content is 2054x2092. That is what
-			// makes matchesExpectedSize false and loops the recovery relatch.
+			// The game submits bounds of u[0,0.5] and u[0.5,1] whatever the active
+			// quality, so resolving them against sourceDesc spans a whole half of the
+			// allocation - 2328x2372 - while only expectedEye*, say 2054x2092, has
+			// been rendered into it. That oversized box made matchesExpectedSize false
+			// and looped the recovery relatch, and handed DLSS a source region a
+			// quarter larger than the content.
 			//
-			// The depth path below already resolves against sourceStereoLayout and is
-			// correct; this makes colour agree with it.
+			// The ORIGIN comes from the allocation, the EXTENT from the active quality.
 			//
-			// Self-gating: the layout equals the texture unless an envelope is active,
-			// so `< sourceDesc` is false in stock and the resolution is byte-identical
-			// to before. Only applied for bounds expressed in combined stereo space,
-			// which is the case the layout describes.
-			const bool packedLayoutSmaller =
-				inputBoundsUseCombinedStereoSpace &&
-				sourceStereoLayout.width != 0 && sourceStereoLayout.height != 0 &&
-				sourceStereoLayout.width < sourceDesc.Width &&
-				sourceStereoLayout.height <= sourceDesc.Height;
-			const uint32_t resolveWidth = packedLayoutSmaller ? sourceStereoLayout.width : sourceDesc.Width;
-			const uint32_t resolveHeight = packedLayoutSmaller ? sourceStereoLayout.height : sourceDesc.Height;
-
-			const uint32_t left = Util::NormalizedCoordinates::ResolvePixelBoundary(minU, resolveWidth);
-			const uint32_t top = Util::NormalizedCoordinates::ResolvePixelBoundary(minV, resolveHeight);
-			const uint32_t right = Util::NormalizedCoordinates::ResolvePixelBoundary(maxU, resolveWidth);
-			const uint32_t bottom = Util::NormalizedCoordinates::ResolvePixelBoundary(maxV, resolveHeight);
+			// Resolving the origin against sourceStereoLayout instead was tried and is
+			// wrong: it put eye 1 at 2054 rather than 2328 and produced misaligned,
+			// cross-eyed stereo at every quality except the envelope itself - where the
+			// layout equals the texture and the change was inert, which is exactly the
+			// "good for one preset" that was observed. So the engine renders each eye
+			// into ITS OWN HALF OF THE ALLOCATION, shrunken within that half; it does
+			// not repack the eyes at the active size.
+			//
+			// Self-gating: at the envelope quality expectedEye* equals the resolved
+			// span, so the clamps below are no-ops and stock behaviour is unchanged.
+			const uint32_t left = Util::NormalizedCoordinates::ResolvePixelBoundary(minU, sourceDesc.Width);
+			const uint32_t top = Util::NormalizedCoordinates::ResolvePixelBoundary(minV, sourceDesc.Height);
+			const uint32_t resolvedRight = Util::NormalizedCoordinates::ResolvePixelBoundary(maxU, sourceDesc.Width);
+			const uint32_t resolvedBottom = Util::NormalizedCoordinates::ResolvePixelBoundary(maxV, sourceDesc.Height);
+			const uint32_t right = std::min(resolvedRight, left + expectedEyeWidth);
+			const uint32_t bottom = std::min(resolvedBottom, top + expectedEyeHeight);
 			region.box = {
 				left,
 				top,
