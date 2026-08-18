@@ -222,6 +222,21 @@ public:
 		// Off by default, and with it off every path below is byte-identical to
 		// the shipped build.
 		uint vrHotEnvelope = 0;
+		// Hot-Envelope diagnostic. Where eye 1 begins inside the allocation.
+		//
+		// Two self-consistent answers have been built and both produced broken
+		// stereo, so this stops guessing and makes the origin sweepable at
+		// runtime instead of one value per 38-minute build:
+		//
+		//   0 packed     - directly after eye 0's rendered region (what stock
+		//                  CSX derives on its own, and what deef8e9f built)
+		//   1 allocation - the half boundary of the physical target (46d88e69)
+		//   2 manual     - vrHotEnvelopeEyeOriginPx, to bracket between them
+		//
+		// Inert unless vrHotEnvelope is set: with the envelope off the packed
+		// layout and the allocation half are the same pixel.
+		uint vrHotEnvelopeEyeOrigin = 0;
+		uint vrHotEnvelopeEyeOriginPx = 0;
 		uint perfMode = 1;
 		uint frameLimitMode = 1;
 		uint frameGenerationMode = 0;  // Disabled by default

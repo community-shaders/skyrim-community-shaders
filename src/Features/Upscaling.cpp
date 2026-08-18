@@ -69,6 +69,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	dlssPreset,
 	renderScaleMode,
 	vrHotEnvelope,
+	vrHotEnvelopeEyeOrigin,
+	vrHotEnvelopeEyeOriginPx,
 	perfMode,
 	frameLimitMode,
 	frameGenerationMode,
@@ -1502,19 +1504,39 @@ namespace
 			// and looped the recovery relatch, and handed DLSS a source region a
 			// quarter larger than the content.
 			//
-			// The ORIGIN comes from the allocation, the EXTENT from the active quality.
+			// The EXTENT is settled: it is the active quality's input size, and
+			// clamping to it removed the relatch loop.
 			//
-			// Resolving the origin against sourceStereoLayout instead was tried and is
-			// wrong: it put eye 1 at 2054 rather than 2328 and produced misaligned,
-			// cross-eyed stereo at every quality except the envelope itself - where the
-			// layout equals the texture and the change was inert, which is exactly the
-			// "good for one preset" that was observed. So the engine renders each eye
-			// into ITS OWN HALF OF THE ALLOCATION, shrunken within that half; it does
-			// not repack the eyes at the active size.
-			//
-			// Self-gating: at the envelope quality expectedEye* equals the resolved
-			// span, so the clamps below are no-ops and stock behaviour is unchanged.
-			const uint32_t left = Util::NormalizedCoordinates::ResolvePixelBoundary(minU, sourceDesc.Width);
+			// The ORIGIN is not settled, and this is the diagnostic. Both candidates
+			// have now been built and both broke stereo: the packed origin (eye 1
+			// directly after eye 0's rendered region) was cross-eyed, the allocation
+			// half was flat/cardboard, and each was correct only at the envelope
+			// quality - which is the one case where they are the same pixel, so
+			// neither run distinguishes anything. A third value, or a different
+			// defect entirely, is still open. Make it sweepable at runtime rather
+			// than spending a build per candidate.
+			const uint32_t allocationLeft = Util::NormalizedCoordinates::ResolvePixelBoundary(minU, sourceDesc.Width);
+			const uint32_t packedLeft = baseDepthOffsetX;  // sourceStereoLayout.eyes[eyeIndex].minX
+			const auto& hotEnvelopeSettings = globals::features::upscaling.settings;
+			uint32_t left = allocationLeft;
+			if (hotEnvelopeSettings.vrHotEnvelope != 0u) {
+				switch (hotEnvelopeSettings.vrHotEnvelopeEyeOrigin) {
+				case 1u:
+					left = allocationLeft;
+					break;
+				case 2u:
+					left = eyeIndex ? hotEnvelopeSettings.vrHotEnvelopeEyeOriginPx : 0u;
+					break;
+				default:
+					left = packedLeft;
+					break;
+				}
+				// Never let a swept origin run the box off the end of the texture.
+				const uint32_t maxLeft = sourceDesc.Width > expectedEyeWidth ?
+				                             sourceDesc.Width - expectedEyeWidth :
+				                             0u;
+				left = std::min(left, maxLeft);
+			}
 			const uint32_t top = Util::NormalizedCoordinates::ResolvePixelBoundary(minV, sourceDesc.Height);
 			const uint32_t resolvedRight = Util::NormalizedCoordinates::ResolvePixelBoundary(maxU, sourceDesc.Width);
 			const uint32_t resolvedBottom = Util::NormalizedCoordinates::ResolvePixelBoundary(maxV, sourceDesc.Height);
@@ -1591,11 +1613,16 @@ namespace
 				static_cast<uint64_t>(expectedEyeHeight) ^
 				(static_cast<uint64_t>(region.box.left) << 48) ^
 				(static_cast<uint64_t>(region.box.right) << 32) ^
-				(static_cast<uint64_t>(region.matchesExpectedSize ? 1u : 0u) << 63);
+				(static_cast<uint64_t>(region.matchesExpectedSize ? 1u : 0u) << 63) ^
+				// Sweeping the origin live must re-emit, or the sweep is invisible.
+				(static_cast<uint64_t>(globals::features::upscaling.settings.vrHotEnvelopeEyeOrigin) << 16);
 			if (signature != loggedSignature[eyeSlot]) {
 				loggedSignature[eyeSlot] = signature;
 				logger::info(
-					"[HotEnvelope][submit] eye {} | texture {}x{} array={} | expected {}x{} | eyeOriginX={} | bounds={} u[{:.4f},{:.4f}] v[{:.4f},{:.4f}] | combinedLayout={} boundsCombined={} | box x[{},{}] y[{},{}] = {}x{} | depth off[{},{}] {}x{} | matches={}",
+					"[HotEnvelope][submit] originMode={} | eye {} | texture {}x{} array={} | expected {}x{} | eyeOriginX={} | bounds={} u[{:.4f},{:.4f}] v[{:.4f},{:.4f}] | combinedLayout={} boundsCombined={} | box x[{},{}] y[{},{}] = {}x{} | depth off[{},{}] {}x{} | matches={}",
+					globals::features::upscaling.settings.vrHotEnvelope != 0u ?
+						globals::features::upscaling.settings.vrHotEnvelopeEyeOrigin :
+						1u,
 					eyeIndex,
 					sourceDesc.Width,
 					sourceDesc.Height,
@@ -15109,6 +15136,32 @@ void Upscaling::DrawSettings()
 		if (openCompositeBlocksUpscaling) {
 			Util::Text::WrappedWarning("%s", kOpenCompositeRenderScaleBlockWarning);
 		}
+
+		// Hot-Envelope diagnostic: sweep the eye-1 origin without rebuilding.
+		// Only shown while the experimental envelope is on, so the stock menu is
+		// unchanged.
+		if (globals::game::isVR && settings.vrHotEnvelope != 0u) {
+			ImGui::SeparatorText("Hot-Envelope Diagnostic");
+			const char* eyeOriginModes[] = { "Packed", "Allocation half", "Manual" };
+			int eyeOrigin = static_cast<int>(std::min<uint32_t>(settings.vrHotEnvelopeEyeOrigin, 2u));
+			if (ImGui::SliderInt("Eye 1 Origin", &eyeOrigin, 0, 2, eyeOriginModes[std::clamp(eyeOrigin, 0, 2)]))
+				settings.vrHotEnvelopeEyeOrigin = static_cast<uint32_t>(std::clamp(eyeOrigin, 0, 2));
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::TextUnformatted("Where eye 1 begins inside the physical target under an active envelope.");
+				ImGui::TextUnformatted("Packed: directly after eye 0's rendered region. Allocation half: the target's midpoint.");
+				ImGui::TextUnformatted("Both have been built and both broke stereo; Manual brackets between them.");
+				ImGui::TextUnformatted("Takes effect on the next submitted frame. No relatch, no restart.");
+			}
+			if (settings.vrHotEnvelopeEyeOrigin == 2u) {
+				int eyeOriginPx = static_cast<int>(std::min<uint32_t>(settings.vrHotEnvelopeEyeOriginPx, 8192u));
+				if (ImGui::SliderInt("Eye 1 Origin (px)", &eyeOriginPx, 0, 8192))
+					settings.vrHotEnvelopeEyeOriginPx = static_cast<uint32_t>(std::clamp(eyeOriginPx, 0, 8192));
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::TextUnformatted("Absolute x of eye 1 in the physical target. Clamped so the box stays inside the texture.");
+				}
+			}
+		}
+
 		// The startup MainMenu override deliberately presents a native None
 		// contract while retaining the saved gameplay profile. PerfMode's legacy
 		// restart flag compares that saved profile with the (intentionally absent)
