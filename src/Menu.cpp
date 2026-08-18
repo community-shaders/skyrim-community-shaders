@@ -1040,7 +1040,6 @@ void Menu::ProcessInputEventQueue()
 {
 	std::unique_lock<std::shared_mutex> mutex(_inputEventMutex);
 	ImGuiIO& io = ImGui::GetIO();
-	float skyrimWheelY = 0.0f;
 	for (auto& event : _keyEventQueue) {
 		if (event.eventType == RE::INPUT_EVENT_TYPE::kChar) {
 			io.AddInputCharacter(event.keyCode);
@@ -1053,11 +1052,6 @@ void Menu::ProcessInputEventQueue()
 			if (event.keyCode > 7) {  // middle scroll
 				if (ew && ew->previewMode == EditorWindow::PreviewMode::FreeCamera) {
 					ew->AdjustFlySpeed(event.keyCode == 8 ? 1.0f : -1.0f);
-				} else if (!flying) {
-					// Skyrim models the wheel as a pseudo-button. Count only its initial transition;
-					// forwarding held repeats makes a trackpad gesture scroll once per game poll.
-					if (event.IsDown())
-						skyrimWheelY += event.keyCode == 8 ? 1.0f : -1.0f;
 				}
 			} else if (!flying) {
 				if (event.keyCode > 5)
@@ -1276,8 +1270,7 @@ void Menu::ProcessInputEventQueue()
 	}
 
 	const auto directInputWheelRaw = _directInputWheelDelta.exchange(0, std::memory_order_relaxed);
-	const float wheelY = directInputWheelRaw != 0 ?
-		static_cast<float>(directInputWheelRaw) / static_cast<float>(WHEEL_DELTA) : skyrimWheelY;
+	const float wheelY = static_cast<float>(directInputWheelRaw) / static_cast<float>(WHEEL_DELTA);
 	if (wheelY != 0.0f)
 		io.AddMouseWheelEvent(0.0f, wheelY);
 
