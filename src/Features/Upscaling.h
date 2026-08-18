@@ -222,20 +222,25 @@ public:
 		// Off by default, and with it off every path below is byte-identical to
 		// the shipped build.
 		uint vrHotEnvelope = 0;
-		// Hot-Envelope diagnostic. Where eye 1 begins inside the allocation.
+		// Where eye 1 begins inside the allocation.
 		//
-		// Two self-consistent answers have been built and both produced broken
-		// stereo, so this stops guessing and makes the origin sweepable at
-		// runtime instead of one value per 38-minute build:
+		//   0 packed     - directly after eye 0's rendered region
+		//   1 allocation - the half boundary of the physical target
+		//   2 manual     - vrHotEnvelopeEyeOriginPx
 		//
-		//   0 packed     - directly after eye 0's rendered region (what stock
-		//                  CSX derives on its own, and what deef8e9f built)
-		//   1 allocation - the half boundary of the physical target (46d88e69)
-		//   2 manual     - vrHotEnvelopeEyeOriginPx, to bracket between them
+		// MEASURED 2026-08-18, so the default is now the answer rather than a
+		// candidate: under an active envelope the engine renders each eye into
+		// its own half of the allocation and shrinks it within that half. It
+		// does not repack. At quality 4 (ratio 0.882) eye 1 reads correctly from
+		// 2328 and is double-visioned from the packed 2054.
+		//
+		// The sweep is retained for confirmation, not because the answer is
+		// open. Note that colour and depth deliberately differ: depth stays
+		// packed, because it drives DispatchHMDMaskClear rather than stereo.
 		//
 		// Inert unless vrHotEnvelope is set: with the envelope off the packed
 		// layout and the allocation half are the same pixel.
-		uint vrHotEnvelopeEyeOrigin = 0;
+		uint vrHotEnvelopeEyeOrigin = 1;
 		uint vrHotEnvelopeEyeOriginPx = 0;
 		uint perfMode = 1;
 		uint frameLimitMode = 1;

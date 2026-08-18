@@ -15142,15 +15142,41 @@ void Upscaling::DrawSettings()
 		// unchanged.
 		if (globals::game::isVR && settings.vrHotEnvelope != 0u) {
 			ImGui::SeparatorText("Hot-Envelope Diagnostic");
+
+			// The three modes resolve to the SAME pixel whenever the rendered
+			// region fills the allocation, which is every quality at or above
+			// the envelope. Sweeping there looks like a null result and is
+			// really a null experiment - it cost three builds and a session
+			// before the control said so. Say it here instead.
+			const bool subRectActive =
+				runtimeResolutionPlan.engineAllocationSize.x > 0.0f &&
+				runtimeResolutionPlan.engineRenderSize.x > 0.0f &&
+				runtimeResolutionPlan.engineRenderSize.x < runtimeResolutionPlan.engineAllocationSize.x;
+			if (!subRectActive) {
+				Util::Text::WrappedWarning(
+					"%s",
+					"No sub-rect at this preset: the rendered region fills the allocation, so every origin "
+					"below resolves to the same pixel and changing it cannot do anything. Select a preset "
+					"BELOW the envelope quality to make this control meaningful.");
+			}
+
+			auto envelopeDisabledGuard = Util::DisableGuard(!subRectActive);
 			const char* eyeOriginModes[] = { "Packed", "Allocation half", "Manual" };
 			int eyeOrigin = static_cast<int>(std::min<uint32_t>(settings.vrHotEnvelopeEyeOrigin, 2u));
 			if (ImGui::SliderInt("Eye 1 Origin", &eyeOrigin, 0, 2, eyeOriginModes[std::clamp(eyeOrigin, 0, 2)]))
 				settings.vrHotEnvelopeEyeOrigin = static_cast<uint32_t>(std::clamp(eyeOrigin, 0, 2));
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::TextUnformatted("Where eye 1 begins inside the physical target under an active envelope.");
-				ImGui::TextUnformatted("Packed: directly after eye 0's rendered region. Allocation half: the target's midpoint.");
-				ImGui::TextUnformatted("Both have been built and both broke stereo; Manual brackets between them.");
-				ImGui::TextUnformatted("Takes effect on the next submitted frame. No relatch, no restart.");
+				ImGui::TextUnformatted("Allocation half is the measured answer and the default; Packed is double-visioned.");
+				ImGui::TextUnformatted("Retained for confirmation. Takes effect on the next submitted frame.");
+			}
+			if (subRectActive) {
+				ImGui::Text(
+					"Sub-rect active: render %d wide into allocation %d. Packed would be %d, allocation half %d.",
+					static_cast<int>(runtimeResolutionPlan.engineRenderSize.x),
+					static_cast<int>(runtimeResolutionPlan.engineAllocationSize.x),
+					static_cast<int>(runtimeResolutionPlan.engineRenderSize.x) / 2,
+					static_cast<int>(runtimeResolutionPlan.engineAllocationSize.x) / 2);
 			}
 			if (settings.vrHotEnvelopeEyeOrigin == 2u) {
 				int eyeOriginPx = static_cast<int>(std::min<uint32_t>(settings.vrHotEnvelopeEyeOriginPx, 8192u));
