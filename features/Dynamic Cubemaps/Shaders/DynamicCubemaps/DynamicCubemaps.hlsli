@@ -122,7 +122,8 @@ namespace DynamicCubemaps
 		}
 		} else {
 #		if defined(IBL) && defined(LIGHTING)
-			float3 specularIrradiance = ImageBasedLighting::StaticSpecularIBLTexture.SampleLevel(SampColorSampler, R.xzy, level).xyz;
+			// StaticSpecularIBLTexture is hardcoded to 8 mips (IBL.cpp); do not share the dynamic cubemap scale.
+			float3 specularIrradiance = ImageBasedLighting::StaticSpecularIBLTexture.SampleLevel(SampColorSampler, R.xzy, roughness * 7.0).xyz;
 			finalIrradiance = specularIrradiance;
 #		endif
 		}

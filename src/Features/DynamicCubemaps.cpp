@@ -1,5 +1,6 @@
 #include "DynamicCubemaps.h"
 
+#include <cassert>
 #include <DDSTextureLoader.h>
 #include <DirectXTex.h>
 
@@ -651,6 +652,7 @@ void DynamicCubemaps::SetupResources()
 	{
 		D3D11_TEXTURE2D_DESC texDesc;
 		cubemap.texture->GetDesc(&texDesc);
+		assert(texDesc.Width == (1u << (MIPLEVELS - 1)));
 
 		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc;
 		cubemap.SRV->GetDesc(&srvDesc);
@@ -735,7 +737,7 @@ void DynamicCubemaps::SetupResources()
 				++bc6hMipLevels;
 			// Clamp: must not exceed envTexture's mip count (source reads) or the UAV array size.
 			bc6hMipLevels = std::min<std::uint32_t>(bc6hMipLevels, MIPLEVELS);
-			bc6hMipLevels = std::min<std::uint32_t>(bc6hMipLevels, 9u);
+			bc6hMipLevels = std::min<std::uint32_t>(bc6hMipLevels, static_cast<std::uint32_t>(std::size(bc6hScratchUAVs)));
 
 			D3D11_TEXTURE2D_DESC scratchDesc = {};
 			scratchDesc.Width = scratchBase;
