@@ -1,4 +1,5 @@
 #include "Deferred.h"
+#include "Features/RenderDoc.h"
 #include "Features/Upscaling.h"
 #include "FrameAnnotations.h"
 #include "Globals.h"
@@ -215,6 +216,8 @@ bool Load()
 	}
 
 	if (errors.empty()) {
+		// RenderDoc patches the D3D imports, so load it before capturing the IAT originals.
+		globals::features::renderDoc.Load();
 		Hooks::InstallEarlyHooks();
 		logger::info("Calling feature Load methods");
 		Feature::ForEachLoadedFeature("Load", [](Feature* feature) { feature->Load(); });

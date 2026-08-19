@@ -55,6 +55,7 @@ public:
 	uint32_t currentPixelDescriptor = 0;
 	spdlog::level::level_enum logLevel = spdlog::level::info;
 	bool enableDeveloperMode = false;  ///< Explicit developer mode toggle; also enabled when log level is debug/trace.
+	bool enableDXVK = true;            ///< Restart-gated renderer selection; false uses the system D3D11/DXGI runtime.
 	std::string shaderDefinesString = "";
 	std::vector<std::pair<std::string, std::string>> shaderDefines{};  // data structure to parse string into; needed to avoid dangling pointers
 
