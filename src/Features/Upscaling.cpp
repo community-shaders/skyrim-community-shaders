@@ -6444,7 +6444,8 @@ namespace
 			const char* a_label,
 			const char* a_context,
 			uint32_t a_renderWidth = 0u,
-			uint32_t a_allocWidth = 0u)
+			uint32_t a_allocWidth = 0u,
+			uint32_t a_validHeight = 0u)
 		{
 			auto* device = globals::d3d::device;
 			auto* context = globals::d3d::context;
@@ -6517,9 +6518,15 @@ namespace
 					return;
 			}
 
-			// A middle scanline. High enough to be scene rather than sky, and
-			// one row is enough because the question is about columns.
-			const UINT row = desc.Height / 2u;
+			// A middle scanline of the VALID region, not of the texture.
+			//
+			// Using the texture height put the row at allocationHeight/2, which at
+			// UltraPerformance is exactly outside a render height of the same value -
+			// so both eye buffers reported "active none" and looked like a finding.
+			// Codex caught this independently. One row is still enough, because the
+			// question is about columns.
+			const UINT validHeight = a_validHeight ? std::min<uint32_t>(a_validHeight, desc.Height) : desc.Height;
+			const UINT row = std::max<UINT>(1u, validHeight) / 2u;
 			D3D11_BOX box{ 0u, row, 0u, desc.Width, row + 1u, 1u };
 			context->CopySubresourceRegion(
 				a_slot.staging[a_slot.ring].get(), 0, 0, 0, 0, a_resource, a_subresource, &box);
@@ -45971,7 +45978,8 @@ bool Upscaling::SubmitVRUpscaledFrame(vr::EVREye a_eye, uint64_t a_compositorCyc
 					"kMAIN",
 					probeContext.c_str(),
 					probeRenderWidth,
-					probeAllocWidth);
+					probeAllocWidth,
+					eyeHeightIn);
 			}
 			// No verdict for the per-eye buffer: the copy fills it exactly, so
 			// the expectation is simply "active across its whole width". Dead
@@ -45982,7 +45990,10 @@ bool Upscaling::SubmitVRUpscaledFrame(vr::EVREye a_eye, uint64_t a_compositorCyc
 				0,
 				probeSignature,
 				eyeIndex == 0u ? "eye0In" : "eye1In",
-				probeContext.c_str());
+				probeContext.c_str(),
+				0u,
+				0u,
+				eyeHeightIn);
 
 			// The submitted texture. This is the decisive one, and it has a
 			// pre-registered answer: active across the full output width means
