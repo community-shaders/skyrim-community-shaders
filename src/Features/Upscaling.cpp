@@ -45799,12 +45799,17 @@ bool Upscaling::SubmitVRUpscaledFrame(vr::EVREye a_eye, uint64_t a_compositorCyc
 		LogSubmitDecisionIfChanged(
 			eyeIndex,
 			std::format(
-				"quality(runtime {} boot {} gen {}) | plan(owner {} alloc {}x{} render {}x{} out {}x{}) | "
-				"ratio {:.4f}x{:.4f} lock {} | menu(presentationRT {} fullOutputSrc {} finalComposite {} layerGen {}) | "
+				"quality(requested {} runtime {} boot {} gen {}) | plan(owner {} alloc {}x{} render {}x{} out {}x{}) | "
+				"ratio {:.4f}x{:.4f} lock {} | menu(ctx {} attempt {} presentationRT {} fullOutputSrc {} finalComposite {} layerGen {}) | "
 				"src(tex {}x{} array {} fmt {} sub {}) | bounds({} u[{:.4f},{:.4f}] v[{:.4f},{:.4f}] combined {}) | "
 				"widths(eyeIn {} srcEyeIn {} eyeOut {}) | layout(packedOrigin {} allocOrigin {} originMode {}) | "
 				"box x[{},{}] y[{},{}] | depth off[{},{}] {}x{} | matches {} | reuse {} | out(tex {}x{})",
-				GetRuntimeQualityMode(), perfMode.GetBootSnapshot().qualityMode, activeContractGeneration,
+				// Under a latched render scale GetRuntimeQualityMode() returns the
+				// BOOT quality, so without settings.qualityMode the record cannot
+				// say which preset was actually asked for - the one thing the
+				// envelope is about.
+				settings.qualityMode, GetRuntimeQualityMode(),
+				perfMode.GetBootSnapshot().qualityMode, activeContractGeneration,
 				static_cast<int>(runtimeResolutionPlan.owner),
 				static_cast<int>(runtimeResolutionPlan.engineAllocationSize.x),
 				static_cast<int>(runtimeResolutionPlan.engineAllocationSize.y),
@@ -45816,6 +45821,7 @@ bool Upscaling::SubmitVRUpscaledFrame(vr::EVREye a_eye, uint64_t a_compositorCyc
 				globals::game::graphicsState ?
 					static_cast<uint32_t>(globals::game::graphicsState->GetRuntimeData().dynamicResolutionLock) :
 					255u,
+				currentMenuPresentationContext, menuPresentationAttempt,
 				presentationRenderTarget, presentationSourceHasFullOutputSize,
 				submitStageMenuFinalCompositeRequested, submitStageMenuLayerGeneration,
 				sourceDesc.Width, sourceDesc.Height, sourceDesc.ArraySize,
