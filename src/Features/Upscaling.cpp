@@ -6338,6 +6338,15 @@ namespace
 			winrt::com_ptr<ID3D11Texture2D> staging[kRingDepth];
 			std::vector<uint8_t> previous;
 			std::vector<uint8_t> changes;
+			// Spatial variation against the neighbouring pixel in the same
+			// frame. This exists to falsify the probe's one load-bearing
+			// assumption: that untouched columns stay byte-identical between
+			// frames. If the engine clears the whole target to a value that
+			// changes per frame, dead columns would register as changing and
+			// the gap would vanish. A clear is spatially uniform and rendered
+			// content is not, so "changes between frames but matches its
+			// neighbours" detects exactly that case.
+			std::vector<uint8_t> variation;
 			uint64_t signature = 0;
 			uint32_t width = 0;
 			uint32_t bytesPerPixel = 0;
@@ -6378,6 +6387,7 @@ namespace
 				staging = nullptr;
 			a_slot.previous.assign(static_cast<size_t>(a_width) * a_bytesPerPixel, 0u);
 			a_slot.changes.assign(a_width, 0u);
+			a_slot.variation.assign(a_width, 0u);
 			a_slot.signature = a_signature;
 			a_slot.width = a_width;
 			a_slot.bytesPerPixel = a_bytesPerPixel;
@@ -6526,18 +6536,26 @@ namespace
 					const size_t rowBytes = std::min<size_t>(
 						std::min<size_t>(mapped.RowPitch, static_cast<size_t>(a_slot.width) * bytesPerPixel),
 						a_slot.previous.size());
-					if (a_slot.havePrevious) {
-						for (size_t offset = 0; offset + bytesPerPixel <= rowBytes; offset += bytesPerPixel) {
-							const size_t column = offset / bytesPerPixel;
-							if (column >= a_slot.changes.size())
-								break;
-							if (a_slot.changes[column] >= kMinChanges)
-								continue;
-							if (std::memcmp(bytes + offset, a_slot.previous.data() + offset, bytesPerPixel) != 0)
-								++a_slot.changes[column];
+					for (size_t offset = 0; offset + bytesPerPixel <= rowBytes; offset += bytesPerPixel) {
+						const size_t column = offset / bytesPerPixel;
+						if (column >= a_slot.changes.size())
+							break;
+						// Column 0 has no left neighbour, so look right instead;
+						// the leftmost column is where a real range begins and
+						// must not be excluded by an edge case.
+						const size_t neighbour = column == 0u ? offset + bytesPerPixel : offset - bytesPerPixel;
+						if (neighbour + bytesPerPixel <= rowBytes &&
+							a_slot.variation[column] < kMinChanges &&
+							std::memcmp(bytes + offset, bytes + neighbour, bytesPerPixel) != 0) {
+							++a_slot.variation[column];
 						}
-						++a_slot.samples;
+						if (a_slot.havePrevious && a_slot.changes[column] < kMinChanges &&
+							std::memcmp(bytes + offset, a_slot.previous.data() + offset, bytesPerPixel) != 0) {
+							++a_slot.changes[column];
+						}
 					}
+					if (a_slot.havePrevious)
+						++a_slot.samples;
 					std::memcpy(a_slot.previous.data(), bytes, std::min(rowBytes, a_slot.previous.size()));
 					a_slot.havePrevious = true;
 					context->Unmap(a_slot.staging[readIndex].get(), 0);
@@ -6565,6 +6583,32 @@ namespace
 			size_t widestGap = 0;
 			const std::string described = DescribeActive(a_slot.changes, widestGap);
 
+			// Test the assumption instead of trusting it. Columns that change
+			// between frames while matching their neighbours are not rendered
+			// content; that is what a per-frame clear to a varying value looks
+			// like, and it would silently close the gap we are measuring.
+			size_t changedColumns = 0;
+			size_t changedButUniform = 0;
+			for (size_t column = 0; column < a_slot.changes.size(); ++column) {
+				if (a_slot.changes[column] < kMinChanges)
+					continue;
+				++changedColumns;
+				if (a_slot.variation[column] < kMinChanges)
+					++changedButUniform;
+			}
+			const bool clearConfound =
+				changedColumns > 0 &&
+				changedButUniform * 100u / changedColumns > 20u;
+			if (clearConfound) {
+				logger::warn(
+					"[EnvProbe] {} SUSPECT: {} of {} changing columns are spatially uniform. That is the "
+					"signature of a per-frame clear to a varying value rather than rendered content, and it "
+					"would hide a real gap. Do not trust the verdict below.",
+					a_label,
+					changedButUniform,
+					changedColumns);
+			}
+
 			std::string verdict;
 			if (a_renderWidth && a_allocWidth && a_allocWidth > a_renderWidth) {
 				const size_t expectedGap = (a_allocWidth - a_renderWidth) / 2u;
@@ -6578,7 +6622,8 @@ namespace
 					a_renderWidth,
 					expectedGap,
 					widestGap,
-					gapMatches         ? "ALLOCATION HALVES" :
+					clearConfound      ? "SUSPECT - clear confound, see warning above" :
+						gapMatches     ? "ALLOCATION HALVES" :
 						widestGap == 0 ? "REPACKED" :
 										 "NEITHER - unexpected layout");
 			}
@@ -6593,6 +6638,11 @@ namespace
 				a_slot.samples,
 				described,
 				verdict);
+			logger::info(
+				"[EnvProbe] {} detail: changing columns {}, of which spatially uniform {} (uniform means cleared, not drawn).",
+				a_label,
+				changedColumns,
+				changedButUniform);
 		}
 
 		Slot mainTarget;
