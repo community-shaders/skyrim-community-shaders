@@ -247,6 +247,10 @@ public:
 		// settle one question rather than to run continuously. Reports once per
 		// distinct geometry, then stays silent until the geometry changes.
 		uint vrHotEnvelopeProbe = 0;
+		// Auto-debug: one structured record per submit decision per eye, emitted
+		// on change and capped, so an entire flow can be reconstructed from the
+		// log rather than from someone watching and reporting impressions.
+		uint vrHotEnvelopeTrace = 0;
 		uint perfMode = 1;
 		uint frameLimitMode = 1;
 		uint frameGenerationMode = 0;  // Disabled by default

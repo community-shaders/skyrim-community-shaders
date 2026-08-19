@@ -72,6 +72,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	vrHotEnvelopeEyeOrigin,
 	vrHotEnvelopeEyeOriginPx,
 	vrHotEnvelopeProbe,
+	vrHotEnvelopeTrace,
 	perfMode,
 	frameLimitMode,
 	frameGenerationMode,
@@ -6647,9 +6648,43 @@ namespace
 
 		Slot mainTarget;
 		Slot eyeInput[2];
+		// The texture actually handed to the compositor. This is the one that
+		// matters: if the scene occupies only part of it, the eye is presented
+		// with the wrong field of view, which looks unremarkable on a flat
+		// desktop mirror and badly wrong in a headset.
+		Slot eyeOutput[2];
 	};
 
 	EnvelopeColumnProbe g_envelopeColumnProbe;
+
+	// Auto-debug: emit a submit-decision record when its content changes.
+	//
+	// Per frame per eye would be 144 lines a second and unreadable; once per
+	// distinct decision is a legible flow that can be reconstructed after the
+	// fact. A bounded total stops a long session filling the disk.
+	void LogSubmitDecisionIfChanged(uint32_t a_eyeIndex, const std::string& a_record)
+	{
+		static constexpr uint32_t kMaxRecords = 400u;
+		static std::string lastRecord[2];
+		static uint32_t emitted = 0;
+		const uint32_t slot = a_eyeIndex > 0u ? 1u : 0u;
+		if (a_record == lastRecord[slot])
+			return;
+		if (emitted >= kMaxRecords) {
+			static bool loggedCap = false;
+			if (!loggedCap) {
+				loggedCap = true;
+				logger::warn(
+					"[SubmitTrace] record cap {} reached; further decisions are not logged. "
+					"The flow up to this point is complete.",
+					kMaxRecords);
+			}
+			return;
+		}
+		lastRecord[slot] = a_record;
+		++emitted;
+		logger::info("[SubmitTrace] eye {} | {}", a_eyeIndex, a_record);
+	}
 
 	bool IsCommonVendorTextureCompatible(
 		const Texture2D* a_texture,
@@ -45747,6 +45782,55 @@ bool Upscaling::SubmitVRUpscaledFrame(vr::EVREye a_eye, uint64_t a_compositorCyc
 		cachedEyeState.depthOffsetY == sourceRegion.depthOffsetY &&
 		vrIntermediateColorOut[eyeIndex] &&
 		vrIntermediateColorOut[eyeIndex]->resource;
+
+	// Auto-debug: one structured record per submit decision, per eye.
+	//
+	// Placed before the reuse branch so both paths are captured, and emitted on
+	// change of signature rather than per frame, so a steady scene produces a
+	// handful of lines and a menu edge produces exactly the lines that matter.
+	// The point is that a whole flow can be reconstructed afterwards from the
+	// log without anyone watching a headset and reporting impressions.
+	if (settings.vrHotEnvelope != 0u && settings.vrHotEnvelopeTrace != 0u) {
+		D3D11_TEXTURE2D_DESC outDesc{};
+		const bool haveOut = vrIntermediateColorOut[eyeIndex] &&
+		                     TryGetTexture2DDesc(vrIntermediateColorOut[eyeIndex]->resource.get(), outDesc);
+		float bMinU = 0.0f, bMinV = 0.0f, bMaxU = 0.0f, bMaxV = 0.0f;
+		const bool haveBounds = TryGetNormalizedVRBounds(a_inputBounds, bMinU, bMinV, bMaxU, bMaxV);
+		LogSubmitDecisionIfChanged(
+			eyeIndex,
+			std::format(
+				"quality(runtime {} boot {} gen {}) | plan(owner {} alloc {}x{} render {}x{} out {}x{}) | "
+				"ratio {:.4f}x{:.4f} lock {} | menu(presentationRT {} fullOutputSrc {} finalComposite {} layerGen {}) | "
+				"src(tex {}x{} array {} fmt {} sub {}) | bounds({} u[{:.4f},{:.4f}] v[{:.4f},{:.4f}] combined {}) | "
+				"widths(eyeIn {} srcEyeIn {} eyeOut {}) | layout(packedOrigin {} allocOrigin {} originMode {}) | "
+				"box x[{},{}] y[{},{}] | depth off[{},{}] {}x{} | matches {} | reuse {} | out(tex {}x{})",
+				GetRuntimeQualityMode(), perfMode.GetBootSnapshot().qualityMode, activeContractGeneration,
+				static_cast<int>(runtimeResolutionPlan.owner),
+				static_cast<int>(runtimeResolutionPlan.engineAllocationSize.x),
+				static_cast<int>(runtimeResolutionPlan.engineAllocationSize.y),
+				static_cast<int>(runtimeResolutionPlan.engineRenderSize.x),
+				static_cast<int>(runtimeResolutionPlan.engineRenderSize.y),
+				static_cast<int>(runtimeResolutionPlan.finalOutputSize.x),
+				static_cast<int>(runtimeResolutionPlan.finalOutputSize.y),
+				dynamicResolutionWidthRatio, dynamicResolutionHeightRatio,
+				globals::game::graphicsState ?
+					static_cast<uint32_t>(globals::game::graphicsState->GetRuntimeData().dynamicResolutionLock) :
+					255u,
+				presentationRenderTarget, presentationSourceHasFullOutputSize,
+				submitStageMenuFinalCompositeRequested, submitStageMenuLayerGeneration,
+				sourceDesc.Width, sourceDesc.Height, sourceDesc.ArraySize,
+				static_cast<int>(sourceDesc.Format), sourceSubresource,
+				haveBounds, bMinU, bMaxU, bMinV, bMaxV, inputBoundsUseCombinedStereoSpace,
+				eyeWidthIn, sourceEyeWidthIn, eyeWidthOut,
+				sourceStereoLayout.eyes[eyeIndex > 0u ? 1u : 0u].minX, sourceDesc.Width / 2u,
+				settings.vrHotEnvelopeEyeOrigin,
+				colorBox.left, colorBox.right, colorBox.top, colorBox.bottom,
+				sourceRegion.depthOffsetX, sourceRegion.depthOffsetY,
+				sourceRegion.depthWidth, sourceRegion.depthHeight,
+				sourceRegion.matchesExpectedSize, canReuseSubmitStageEyeOutput,
+				haveOut ? outDesc.Width : 0u, haveOut ? outDesc.Height : 0u));
+	}
+
 	if (canReuseSubmitStageEyeOutput) {
 		a_outputTexture = *a_inputTexture;
 		a_outputTexture.handle = vrIntermediateColorOut[eyeIndex]->resource.get();
@@ -45840,6 +45924,35 @@ bool Upscaling::SubmitVRUpscaledFrame(vr::EVREye a_eye, uint64_t a_compositorCyc
 				probeSignature,
 				eyeIndex == 0u ? "eye0In" : "eye1In",
 				probeContext.c_str());
+
+			// The submitted texture. This is the decisive one, and it has a
+			// pre-registered answer: active across the full output width means
+			// the eye image is whole and the fault is in bounds or projection;
+			// a boundary near eyeWidthIn/eyeWidthOut of the width means the
+			// scene occupies only part of the eye and the crop is real.
+			//
+			// One frame stale, because the vendor dispatch that fills it runs
+			// after this point. Irrelevant to frame-to-frame activity, and
+			// noted so the lag is never mistaken for a finding.
+			if (vrIntermediateColorOut[eyeIndex] && vrIntermediateColorOut[eyeIndex]->resource) {
+				const uint32_t expectedSceneWidth = eyeWidthOut && eyeWidthIn ?
+				                                        static_cast<uint32_t>(
+															static_cast<uint64_t>(eyeWidthOut) * eyeWidthIn /
+															std::max<uint32_t>(1u, sourceDesc.Width / 2u)) :
+				                                        0u;
+				const auto outContext = std::format(
+					"{} | if cropped, scene ends near {} of {}",
+					probeContext,
+					expectedSceneWidth,
+					eyeWidthOut);
+				g_envelopeColumnProbe.Probe(
+					g_envelopeColumnProbe.eyeOutput[eyeIndex],
+					vrIntermediateColorOut[eyeIndex]->resource.get(),
+					0,
+					probeSignature,
+					eyeIndex == 0u ? "eye0Out" : "eye1Out",
+					outContext.c_str());
+			}
 		}
 	}
 
