@@ -138,7 +138,8 @@
                 "CMAKE_INTERPROCEDURAL_OPTIMIZATION": "OFF",
                 "SC_COMPILE_PDB": "OFF",
                 "ZIP_TO_DIST": "OFF",
-                "AIO_ZIP_TO_DIST": "OFF"
+                "AIO_ZIP_TO_DIST": "OFF",
+                "DXVK_CLEANUP_TESTS": "ON"
             }
         }
     ],

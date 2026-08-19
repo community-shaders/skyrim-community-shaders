@@ -17,7 +17,6 @@
         "bshoshany-thread-pool",
         "clib-util",
         "cppwinrt",
-        "directx-headers",
         "directxtex",
         "effects11",
         "eastl",
@@ -64,10 +63,6 @@
         {
             "name": "tracy",
             "version-string": "0.13.3-14a1a322"
-        },
-        {
-            "name": "directx-headers",
-            "version": "1.614.1"
         }
     ],
     "builtin-baseline": "dddca6fa87f177e0678e2545c4b4636a44aa05bd"
