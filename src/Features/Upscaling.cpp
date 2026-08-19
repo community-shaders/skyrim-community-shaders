@@ -45802,7 +45802,7 @@ bool Upscaling::SubmitVRUpscaledFrame(vr::EVREye a_eye, uint64_t a_compositorCyc
 				"quality(requested {} runtime {} boot {} gen {}) | plan(owner {} alloc {}x{} render {}x{} out {}x{}) | "
 				"ratio {:.4f}x{:.4f} lock {} | menu(ctx {} attempt {} presentationRT {} fullOutputSrc {} finalComposite {} layerGen {}) | "
 				"src(tex {}x{} array {} fmt {} sub {}) | bounds({} u[{:.4f},{:.4f}] v[{:.4f},{:.4f}] combined {}) | "
-				"widths(eyeIn {} srcEyeIn {} eyeOut {}) | layout(packedOrigin {} allocOrigin {} originMode {}) | "
+				"widths(eyeIn {} srcEyeIn {} eyeOut {}) | layout(packedOrigin {} allocOrigin {} originMode {} encodeOrigin {} colourVsEncode {}) | "
 				"box x[{},{}] y[{},{}] | depth off[{},{}] {}x{} | matches {} | reuse {} | out(tex {}x{})",
 				// Under a latched render scale GetRuntimeQualityMode() returns the
 				// BOOT quality, so without settings.qualityMode the record cannot
@@ -45830,6 +45830,14 @@ bool Upscaling::SubmitVRUpscaledFrame(vr::EVREye a_eye, uint64_t a_compositorCyc
 				eyeWidthIn, sourceEyeWidthIn, eyeWidthOut,
 				sourceStereoLayout.eyes[eyeIndex > 0u ? 1u : 0u].minX, sourceDesc.Width / 2u,
 				settings.vrHotEnvelopeEyeOrigin,
+				// EncodeSubmitStageVRInputs builds its OWN packed layout from
+				// eyeWidthIn for depth, motion vectors, normals and masks. The
+				// colour box can be somewhere else entirely, and under an
+				// envelope with originMode 1 it is - by exactly this delta. That
+				// disagreement is invisible in every existing log, so print both
+				// and the gap between them rather than leaving it to be derived.
+				eyeIndex > 0u ? eyeWidthIn : 0u,
+				static_cast<int64_t>(colorBox.left) - static_cast<int64_t>(eyeIndex > 0u ? eyeWidthIn : 0u),
 				colorBox.left, colorBox.right, colorBox.top, colorBox.bottom,
 				sourceRegion.depthOffsetX, sourceRegion.depthOffsetY,
 				sourceRegion.depthWidth, sourceRegion.depthHeight,
