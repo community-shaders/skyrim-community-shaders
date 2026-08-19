@@ -6686,6 +6686,22 @@ namespace
 		logger::info("[SubmitTrace] eye {} | {}", a_eyeIndex, a_record);
 	}
 
+	// Separate dedupe state from the decision record: the output can change
+	// while the decision does not, and sharing one "last seen" string would let
+	// either hide the other.
+	void LogSubmitOutputIfChanged(uint32_t a_eyeIndex, const std::string& a_record)
+	{
+		static constexpr uint32_t kMaxRecords = 200u;
+		static std::string lastRecord[2];
+		static uint32_t emitted = 0;
+		const uint32_t slot = a_eyeIndex > 0u ? 1u : 0u;
+		if (a_record == lastRecord[slot] || emitted >= kMaxRecords)
+			return;
+		lastRecord[slot] = a_record;
+		++emitted;
+		logger::info("[SubmitOut] eye {} | {}", a_eyeIndex, a_record);
+	}
+
 	bool IsCommonVendorTextureCompatible(
 		const Texture2D* a_texture,
 		const D3D11_TEXTURE2D_DESC& a_expected)
@@ -44893,6 +44909,35 @@ bool Upscaling::SubmitVRUpscaledFrame(vr::EVREye a_eye, uint64_t a_compositorCyc
 	vr::Texture_t& a_outputTexture, vr::VRTextureBounds_t& a_outputBounds, VRRenderScalePresentationObservation& a_presentationObservation)
 {
 	a_presentationObservation = {};
+
+	// Auto-debug: record what we actually hand the compositor, on every exit.
+	//
+	// The decision record earlier in this function is emitted before the output
+	// is chosen, and there are many return paths - so without a scope exit the
+	// last step of the pipeline is the one step we cannot see. Bounds and the
+	// output texture are exactly where the "bounds or projection" branch of the
+	// remaining hypothesis lives, so this is not an optional extra.
+	const uint32_t submitTraceEyeIndex = a_eye == vr::Eye_Right ? 1u : 0u;
+	auto submitOutputTrace = ScopeExit([&]() {
+		if (settings.vrHotEnvelope == 0u || settings.vrHotEnvelopeTrace == 0u)
+			return;
+		D3D11_TEXTURE2D_DESC outDesc{};
+		const bool haveOut =
+			a_outputTexture.handle &&
+			TryGetTexture2DDesc(static_cast<ID3D11Resource*>(a_outputTexture.handle), outDesc);
+		LogSubmitOutputIfChanged(
+			submitTraceEyeIndex,
+			std::format(
+				"out(tex {}x{} fmt {} type {}) | outBounds u[{:.4f},{:.4f}] v[{:.4f},{:.4f}] | handle {}",
+				haveOut ? outDesc.Width : 0u,
+				haveOut ? outDesc.Height : 0u,
+				haveOut ? static_cast<int>(outDesc.Format) : -1,
+				static_cast<int>(a_outputTexture.eType),
+				a_outputBounds.uMin, a_outputBounds.uMax,
+				a_outputBounds.vMin, a_outputBounds.vMax,
+				a_outputTexture.handle ? "set" : "null"));
+	});
+
 	if (!a_inputTexture || !a_inputTexture->handle || a_inputTexture->eType != vr::TextureType_DirectX) {
 		return false;
 	}

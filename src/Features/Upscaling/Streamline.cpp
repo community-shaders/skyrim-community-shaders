@@ -183,6 +183,14 @@ namespace
 
 	bool ShouldLogDLSSDiagnostics()
 	{
+		// This is why DLSSDiag produced zero lines in every Hot-Envelope capture:
+		// it is developer-mode only, and nobody was in developer mode. The extents
+		// it reports are the only record of what DLSS was actually told, so let the
+		// envelope trace flag enable it too.
+		if (globals::features::upscaling.settings.vrHotEnvelope != 0u &&
+			globals::features::upscaling.settings.vrHotEnvelopeTrace != 0u) {
+			return true;
+		}
 		return globals::state && globals::state->IsDeveloperMode();
 	}
 
