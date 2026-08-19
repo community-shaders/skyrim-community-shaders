@@ -6324,19 +6324,29 @@ namespace
 		static constexpr uint32_t kRingDepth = 3u;
 		static constexpr uint32_t kProbeFrames = 48u;
 		static constexpr uint32_t kMaxWidth = 16384u;
+		// A column must change in at least this many sampled frames to count as
+		// rendered. One change is not enough: a single spurious difference -
+		// dither, a one-off clear, a resource alias - would mark a dead column
+		// active and erase the very gap this exists to detect.
+		static constexpr uint8_t kMinChanges = 3u;
+		// Columns adjacent to a boundary are ambiguous, so only report a gap
+		// wider than this. Well below the smallest real gap (274 px).
+		static constexpr size_t kMinGapWidth = 32u;
 
 		struct Slot
 		{
 			winrt::com_ptr<ID3D11Texture2D> staging[kRingDepth];
 			std::vector<uint8_t> previous;
-			std::vector<uint8_t> active;
+			std::vector<uint8_t> changes;
 			uint64_t signature = 0;
 			uint32_t width = 0;
 			uint32_t bytesPerPixel = 0;
 			uint32_t ring = 0;
 			uint32_t frames = 0;
+			uint32_t samples = 0;
 			bool havePrevious = false;
 			bool reported = false;
+			bool announced = false;
 		};
 
 		// Only the formats a Skyrim scene target actually uses. Anything else
@@ -6367,39 +6377,44 @@ namespace
 			for (auto& staging : a_slot.staging)
 				staging = nullptr;
 			a_slot.previous.assign(static_cast<size_t>(a_width) * a_bytesPerPixel, 0u);
-			a_slot.active.assign(a_width, 0u);
+			a_slot.changes.assign(a_width, 0u);
 			a_slot.signature = a_signature;
 			a_slot.width = a_width;
 			a_slot.bytesPerPixel = a_bytesPerPixel;
 			a_slot.ring = 0;
 			a_slot.frames = 0;
+			a_slot.samples = 0;
 			a_slot.havePrevious = false;
 			a_slot.reported = false;
+			a_slot.announced = false;
 		}
 
 		// Collapse the per-column activity into readable pixel ranges. A gap
 		// wider than a few pixels is the whole finding, so report gaps
 		// explicitly rather than leaving them to be inferred from the ranges.
-		static std::string DescribeActive(const std::vector<uint8_t>& a_active)
+		static std::string DescribeActive(const std::vector<uint8_t>& a_changes, size_t& o_widestGap)
 		{
 			std::string ranges;
 			std::string gaps;
 			size_t index = 0;
-			const size_t count = a_active.size();
+			const size_t count = a_changes.size();
 			bool firstRange = true;
 			bool firstGap = true;
 			size_t lastActiveEnd = 0;
+			o_widestGap = 0;
+			const auto isActive = [&](size_t i) { return a_changes[i] >= kMinChanges; };
 			while (index < count) {
-				while (index < count && !a_active[index])
+				while (index < count && !isActive(index))
 					++index;
 				if (index >= count)
 					break;
 				const size_t start = index;
-				while (index < count && a_active[index])
+				while (index < count && isActive(index))
 					++index;
-				if (!firstRange && start > lastActiveEnd + 8) {
+				if (!firstRange && start - lastActiveEnd >= kMinGapWidth) {
 					gaps += std::format("{}{}-{}", firstGap ? "" : ", ", lastActiveEnd, start);
 					firstGap = false;
+					o_widestGap = std::max(o_widestGap, start - lastActiveEnd);
 				}
 				ranges += std::format("{}{}-{}", firstRange ? "" : ", ", start, index);
 				firstRange = false;
@@ -6416,7 +6431,9 @@ namespace
 			UINT a_subresource,
 			uint64_t a_signature,
 			const char* a_label,
-			const char* a_context)
+			const char* a_context,
+			uint32_t a_renderWidth = 0u,
+			uint32_t a_allocWidth = 0u)
 		{
 			auto* device = globals::d3d::device;
 			auto* context = globals::d3d::context;
@@ -6426,8 +6443,18 @@ namespace
 			D3D11_TEXTURE2D_DESC desc{};
 			if (!TryGetTexture2DDesc(a_resource, desc))
 				return;
-			if (!desc.Width || !desc.Height || desc.Width > kMaxWidth || desc.SampleDesc.Count != 1)
+			if (!desc.Width || !desc.Height || desc.Width > kMaxWidth || desc.SampleDesc.Count != 1) {
+				// Silence here would look identical to "the probe never ran",
+				// which is the failure mode that wastes a whole session.
+				static bool loggedShape = false;
+				if (!loggedShape) {
+					loggedShape = true;
+					logger::warn(
+						"[EnvProbe] {} is {}x{} samples={}; probe cannot read it and is disabled for it.",
+						a_label, desc.Width, desc.Height, desc.SampleDesc.Count);
+				}
 				return;
+			}
 
 			const uint32_t bytesPerPixel = BytesPerPixel(desc.Format);
 			if (!bytesPerPixel) {
@@ -6444,10 +6471,26 @@ namespace
 
 			if (a_slot.signature != a_signature || a_slot.width != desc.Width ||
 				a_slot.bytesPerPixel != bytesPerPixel) {
+				// Say so when a window is abandoned part-way. Otherwise a session
+				// spent changing preset every few seconds produces no output at
+				// all and looks like a broken build rather than a rushed run.
+				if (a_slot.frames > 0 && !a_slot.reported) {
+					logger::info(
+						"[EnvProbe] {} abandoned after {} of {} frames because the geometry changed. "
+						"Hold one preset longer than that to get a verdict.",
+						a_label, a_slot.frames, kProbeFrames);
+				}
 				Reset(a_slot, a_signature, desc.Width, bytesPerPixel);
 			}
 			if (a_slot.reported)
 				return;
+
+			if (!a_slot.announced) {
+				a_slot.announced = true;
+				logger::info(
+					"[EnvProbe] {} armed: {}x{} | {} | sampling {} frames, move your head normally.",
+					a_label, desc.Width, desc.Height, a_context, kProbeFrames);
+			}
 
 			if (!a_slot.staging[a_slot.ring]) {
 				D3D11_TEXTURE2D_DESC stagingDesc{};
@@ -6486,13 +6529,14 @@ namespace
 					if (a_slot.havePrevious) {
 						for (size_t offset = 0; offset + bytesPerPixel <= rowBytes; offset += bytesPerPixel) {
 							const size_t column = offset / bytesPerPixel;
-							if (column >= a_slot.active.size())
+							if (column >= a_slot.changes.size())
 								break;
-							if (a_slot.active[column])
+							if (a_slot.changes[column] >= kMinChanges)
 								continue;
 							if (std::memcmp(bytes + offset, a_slot.previous.data() + offset, bytesPerPixel) != 0)
-								a_slot.active[column] = 1u;
+								++a_slot.changes[column];
 						}
+						++a_slot.samples;
 					}
 					std::memcpy(a_slot.previous.data(), bytes, std::min(rowBytes, a_slot.previous.size()));
 					a_slot.havePrevious = true;
@@ -6505,14 +6549,50 @@ namespace
 				return;
 
 			a_slot.reported = true;
+
+			// Too few usable comparisons means the scene was static, not that
+			// nothing was rendered. Reporting "no active columns" from that would
+			// be a confident wrong answer, which is the failure this whole probe
+			// exists to avoid.
+			if (a_slot.samples < kMinChanges * 2u) {
+				logger::warn(
+					"[EnvProbe] {} INCONCLUSIVE: only {} usable samples in {} frames. The view was too "
+					"static to tell rendered columns from stale ones. Re-run and keep moving.",
+					a_label, a_slot.samples, a_slot.frames);
+				return;
+			}
+
+			size_t widestGap = 0;
+			const std::string described = DescribeActive(a_slot.changes, widestGap);
+
+			std::string verdict;
+			if (a_renderWidth && a_allocWidth && a_allocWidth > a_renderWidth) {
+				const size_t expectedGap = (a_allocWidth - a_renderWidth) / 2u;
+				// Generous tolerance: we are separating "a gap of hundreds of
+				// pixels" from "no gap", not measuring the gap.
+				const size_t tolerance = std::max<size_t>(kMinGapWidth, expectedGap / 4u);
+				const bool gapMatches =
+					widestGap + tolerance >= expectedGap && widestGap <= expectedGap + tolerance;
+				verdict = std::format(
+					" | predicted repacked 0-{} no gap, halves gap {} px | widest gap {} px => VERDICT {}",
+					a_renderWidth,
+					expectedGap,
+					widestGap,
+					gapMatches         ? "ALLOCATION HALVES" :
+						widestGap == 0 ? "REPACKED" :
+										 "NEITHER - unexpected layout");
+			}
+
 			logger::info(
-				"[EnvProbe] {} {}x{} | {} | frames {} | {}",
+				"[EnvProbe] {} {}x{} | {} | frames {} samples {} | {}{}",
 				a_label,
 				desc.Width,
 				desc.Height,
 				a_context,
 				a_slot.frames,
-				DescribeActive(a_slot.active));
+				a_slot.samples,
+				described,
+				verdict);
 		}
 
 		Slot mainTarget;
@@ -45666,22 +45746,51 @@ bool Upscaling::SubmitVRUpscaledFrame(vr::EVREye a_eye, uint64_t a_compositorCyc
 			settings.vrHotEnvelopeEyeOrigin,
 			colorBox.left,
 			colorBox.right);
-		if (eyeIndex == 0u) {
+		// Two ways to spend a session and learn nothing, both of which have
+		// already happened once here. Say so rather than reporting a confident
+		// null.
+		const uint32_t probeRenderWidth = eyeWidthIn * 2u;
+		const uint32_t probeAllocWidth = sourceDesc.Width;
+		if (probeRenderWidth >= probeAllocWidth) {
+			static bool loggedNoSubRect = false;
+			if (!loggedNoSubRect) {
+				loggedNoSubRect = true;
+				logger::warn(
+					"[EnvProbe] no sub-rect at this preset: render {} fills allocation {}, so both candidate "
+					"layouts are the same pixel and nothing here can distinguish them. Select a preset BELOW "
+					"the envelope quality.",
+					probeRenderWidth,
+					probeAllocWidth);
+			}
+		} else if (IsLoadingMenuContextActive()) {
+			static bool loggedLoading = false;
+			if (!loggedLoading) {
+				loggedLoading = true;
+				logger::info("[EnvProbe] holding off while a loading screen owns presentation.");
+			}
+		} else {
+			if (eyeIndex == 0u) {
+				g_envelopeColumnProbe.Probe(
+					g_envelopeColumnProbe.mainTarget,
+					sourceTexture,
+					sourceSubresource,
+					probeSignature,
+					"kMAIN",
+					probeContext.c_str(),
+					probeRenderWidth,
+					probeAllocWidth);
+			}
+			// No verdict for the per-eye buffer: the copy fills it exactly, so
+			// the expectation is simply "active across its whole width". Dead
+			// columns here mean we sourced from somewhere never drawn.
 			g_envelopeColumnProbe.Probe(
-				g_envelopeColumnProbe.mainTarget,
-				sourceTexture,
-				sourceSubresource,
+				g_envelopeColumnProbe.eyeInput[eyeIndex],
+				vrIntermediateColorIn[eyeIndex]->resource.get(),
+				0,
 				probeSignature,
-				"kMAIN",
+				eyeIndex == 0u ? "eye0In" : "eye1In",
 				probeContext.c_str());
 		}
-		g_envelopeColumnProbe.Probe(
-			g_envelopeColumnProbe.eyeInput[eyeIndex],
-			vrIntermediateColorIn[eyeIndex]->resource.get(),
-			0,
-			probeSignature,
-			eyeIndex == 0u ? "eye0In" : "eye1In",
-			probeContext.c_str());
 	}
 
 	const auto presentStretchOutput = [&](uint32_t inputWidth, uint32_t inputHeight, VRRenderScalePresentationPath a_path) {
