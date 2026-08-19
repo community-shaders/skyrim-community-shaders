@@ -71,6 +71,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	vrHotEnvelope,
 	vrHotEnvelopeEyeOrigin,
 	vrHotEnvelopeEyeOriginPx,
+	vrHotEnvelopeProbe,
 	perfMode,
 	frameLimitMode,
 	frameGenerationMode,
@@ -6295,6 +6296,230 @@ namespace
 		texture->GetDesc(&outDesc);
 		return true;
 	}
+
+	// Hot-Envelope: answer "where did the engine actually write pixels" from
+	// logged data rather than from someone judging an image in a headset.
+	//
+	// Every conclusion this investigation has reached about eye placement came
+	// from a human looking at stereo while something else moved underneath them,
+	// and two of those readings later turned out to be confounded. This decides
+	// it mechanically.
+	//
+	// Method: copy one scanline per frame into a staging texture and compare it
+	// byte-for-byte with the previous frame's. Columns whose bytes change are
+	// being rendered; columns that never change across the window are stale or
+	// were never touched. That is exactly what separates the two candidates:
+	//
+	//   repacked           active [0, render)                     no gap
+	//   allocation halves  active [0, renderHalf) and
+	//                      [allocHalf, allocHalf + renderHalf)     gap between
+	//
+	// The gap either exists or it does not, which needs no judgement at all.
+	//
+	// Deliberately no format decoding: we ask only whether bytes changed, never
+	// what colour they are, so this works for whatever format the target uses.
+	// It also means ordinary head motion supplies all the variation needed.
+	struct EnvelopeColumnProbe
+	{
+		static constexpr uint32_t kRingDepth = 3u;
+		static constexpr uint32_t kProbeFrames = 48u;
+		static constexpr uint32_t kMaxWidth = 16384u;
+
+		struct Slot
+		{
+			winrt::com_ptr<ID3D11Texture2D> staging[kRingDepth];
+			std::vector<uint8_t> previous;
+			std::vector<uint8_t> active;
+			uint64_t signature = 0;
+			uint32_t width = 0;
+			uint32_t bytesPerPixel = 0;
+			uint32_t ring = 0;
+			uint32_t frames = 0;
+			bool havePrevious = false;
+			bool reported = false;
+		};
+
+		// Only the formats a Skyrim scene target actually uses. Anything else
+		// reports once and disables itself rather than guessing a stride and
+		// producing a confident wrong answer.
+		static uint32_t BytesPerPixel(DXGI_FORMAT a_format)
+		{
+			switch (a_format) {
+			case DXGI_FORMAT_R11G11B10_FLOAT:
+			case DXGI_FORMAT_R8G8B8A8_UNORM:
+			case DXGI_FORMAT_R8G8B8A8_UNORM_SRGB:
+			case DXGI_FORMAT_R8G8B8A8_TYPELESS:
+			case DXGI_FORMAT_R10G10B10A2_UNORM:
+			case DXGI_FORMAT_R16G16_FLOAT:
+				return 4u;
+			case DXGI_FORMAT_R16G16B16A16_FLOAT:
+			case DXGI_FORMAT_R16G16B16A16_TYPELESS:
+				return 8u;
+			case DXGI_FORMAT_R32G32B32A32_FLOAT:
+				return 16u;
+			default:
+				return 0u;
+			}
+		}
+
+		static void Reset(Slot& a_slot, uint64_t a_signature, uint32_t a_width, uint32_t a_bytesPerPixel)
+		{
+			for (auto& staging : a_slot.staging)
+				staging = nullptr;
+			a_slot.previous.assign(static_cast<size_t>(a_width) * a_bytesPerPixel, 0u);
+			a_slot.active.assign(a_width, 0u);
+			a_slot.signature = a_signature;
+			a_slot.width = a_width;
+			a_slot.bytesPerPixel = a_bytesPerPixel;
+			a_slot.ring = 0;
+			a_slot.frames = 0;
+			a_slot.havePrevious = false;
+			a_slot.reported = false;
+		}
+
+		// Collapse the per-column activity into readable pixel ranges. A gap
+		// wider than a few pixels is the whole finding, so report gaps
+		// explicitly rather than leaving them to be inferred from the ranges.
+		static std::string DescribeActive(const std::vector<uint8_t>& a_active)
+		{
+			std::string ranges;
+			std::string gaps;
+			size_t index = 0;
+			const size_t count = a_active.size();
+			bool firstRange = true;
+			bool firstGap = true;
+			size_t lastActiveEnd = 0;
+			while (index < count) {
+				while (index < count && !a_active[index])
+					++index;
+				if (index >= count)
+					break;
+				const size_t start = index;
+				while (index < count && a_active[index])
+					++index;
+				if (!firstRange && start > lastActiveEnd + 8) {
+					gaps += std::format("{}{}-{}", firstGap ? "" : ", ", lastActiveEnd, start);
+					firstGap = false;
+				}
+				ranges += std::format("{}{}-{}", firstRange ? "" : ", ", start, index);
+				firstRange = false;
+				lastActiveEnd = index;
+			}
+			if (ranges.empty())
+				ranges = "none";
+			return std::format("active px {} | gaps {}", ranges, gaps.empty() ? "none" : gaps);
+		}
+
+		void Probe(
+			Slot& a_slot,
+			ID3D11Resource* a_resource,
+			UINT a_subresource,
+			uint64_t a_signature,
+			const char* a_label,
+			const char* a_context)
+		{
+			auto* device = globals::d3d::device;
+			auto* context = globals::d3d::context;
+			if (!device || !context || !a_resource)
+				return;
+
+			D3D11_TEXTURE2D_DESC desc{};
+			if (!TryGetTexture2DDesc(a_resource, desc))
+				return;
+			if (!desc.Width || !desc.Height || desc.Width > kMaxWidth || desc.SampleDesc.Count != 1)
+				return;
+
+			const uint32_t bytesPerPixel = BytesPerPixel(desc.Format);
+			if (!bytesPerPixel) {
+				static bool loggedFormat = false;
+				if (!loggedFormat) {
+					loggedFormat = true;
+					logger::warn(
+						"[EnvProbe] {} has format {} with no known stride; probe disabled for it.",
+						a_label,
+						static_cast<int>(desc.Format));
+				}
+				return;
+			}
+
+			if (a_slot.signature != a_signature || a_slot.width != desc.Width ||
+				a_slot.bytesPerPixel != bytesPerPixel) {
+				Reset(a_slot, a_signature, desc.Width, bytesPerPixel);
+			}
+			if (a_slot.reported)
+				return;
+
+			if (!a_slot.staging[a_slot.ring]) {
+				D3D11_TEXTURE2D_DESC stagingDesc{};
+				stagingDesc.Width = desc.Width;
+				stagingDesc.Height = 1;
+				stagingDesc.MipLevels = 1;
+				stagingDesc.ArraySize = 1;
+				stagingDesc.Format = desc.Format;
+				stagingDesc.SampleDesc.Count = 1;
+				stagingDesc.Usage = D3D11_USAGE_STAGING;
+				stagingDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+				if (FAILED(device->CreateTexture2D(&stagingDesc, nullptr, a_slot.staging[a_slot.ring].put())))
+					return;
+			}
+
+			// A middle scanline. High enough to be scene rather than sky, and
+			// one row is enough because the question is about columns.
+			const UINT row = desc.Height / 2u;
+			D3D11_BOX box{ 0u, row, 0u, desc.Width, row + 1u, 1u };
+			context->CopySubresourceRegion(
+				a_slot.staging[a_slot.ring].get(), 0, 0, 0, 0, a_resource, a_subresource, &box);
+
+			// Read the copy from two frames ago so the map never blocks the GPU.
+			const uint32_t readIndex = (a_slot.ring + 1u) % kRingDepth;
+			if (a_slot.staging[readIndex] && a_slot.frames >= kRingDepth - 1u) {
+				D3D11_MAPPED_SUBRESOURCE mapped{};
+				const HRESULT hr = context->Map(
+					a_slot.staging[readIndex].get(), 0, D3D11_MAP_READ, D3D11_MAP_FLAG_DO_NOT_WAIT, &mapped);
+				if (SUCCEEDED(hr) && mapped.pData) {
+					const auto* bytes = static_cast<const uint8_t*>(mapped.pData);
+					// Bound by the comparison buffer as well as the row: RowPitch is
+					// padded, and must never index past `previous`.
+					const size_t rowBytes = std::min<size_t>(
+						std::min<size_t>(mapped.RowPitch, static_cast<size_t>(a_slot.width) * bytesPerPixel),
+						a_slot.previous.size());
+					if (a_slot.havePrevious) {
+						for (size_t offset = 0; offset + bytesPerPixel <= rowBytes; offset += bytesPerPixel) {
+							const size_t column = offset / bytesPerPixel;
+							if (column >= a_slot.active.size())
+								break;
+							if (a_slot.active[column])
+								continue;
+							if (std::memcmp(bytes + offset, a_slot.previous.data() + offset, bytesPerPixel) != 0)
+								a_slot.active[column] = 1u;
+						}
+					}
+					std::memcpy(a_slot.previous.data(), bytes, std::min(rowBytes, a_slot.previous.size()));
+					a_slot.havePrevious = true;
+					context->Unmap(a_slot.staging[readIndex].get(), 0);
+				}
+			}
+
+			a_slot.ring = (a_slot.ring + 1u) % kRingDepth;
+			if (++a_slot.frames < kProbeFrames)
+				return;
+
+			a_slot.reported = true;
+			logger::info(
+				"[EnvProbe] {} {}x{} | {} | frames {} | {}",
+				a_label,
+				desc.Width,
+				desc.Height,
+				a_context,
+				a_slot.frames,
+				DescribeActive(a_slot.active));
+		}
+
+		Slot mainTarget;
+		Slot eyeInput[2];
+	};
+
+	EnvelopeColumnProbe g_envelopeColumnProbe;
 
 	bool IsCommonVendorTextureCompatible(
 		const Texture2D* a_texture,
@@ -45412,6 +45637,52 @@ bool Upscaling::SubmitVRUpscaledFrame(vr::EVREye a_eye, uint64_t a_compositorCyc
 	context->CopySubresourceRegion(vrIntermediateColorIn[eyeIndex]->resource.get(), 0, 0, 0, 0, sourceTexture, sourceSubresource, &colorBox);
 	if (MarkSubmitStageDeviceLostIfDeviceRemoved("submit-stage source copy"))
 		return false;
+
+	// Hot-Envelope: probe both ends of this copy.
+	//
+	// The desktop mirror shows a correct image while the headset does not, which
+	// says the engine's frame is fine and the damage is done somewhere in this
+	// submit chain. So it is not enough to know where the engine wrote - we also
+	// need to know what actually landed in the buffer DLSS consumes.
+	//
+	// kMAIN answers "where are the valid pixels": a gap between the two eye
+	// regions means allocation halves, no gap means repacked.
+	// The per-eye input answers "did we copy the right thing": it should be
+	// active across its full width, because the copy fills it exactly. Dead
+	// columns there mean we sourced from somewhere the engine never drew.
+	if (settings.vrHotEnvelope != 0u && settings.vrHotEnvelopeProbe != 0u) {
+		const uint64_t probeSignature =
+			(static_cast<uint64_t>(eyeWidthIn) << 40) ^
+			(static_cast<uint64_t>(eyeHeightIn) << 24) ^
+			(static_cast<uint64_t>(sourceDesc.Width) << 8) ^
+			static_cast<uint64_t>(settings.vrHotEnvelopeEyeOrigin);
+		const auto probeContext = std::format(
+			"alloc {}x{} render {}x{} eye {} originMode {} box[{},{}]",
+			sourceDesc.Width,
+			sourceDesc.Height,
+			eyeWidthIn * 2u,
+			eyeHeightIn,
+			eyeIndex,
+			settings.vrHotEnvelopeEyeOrigin,
+			colorBox.left,
+			colorBox.right);
+		if (eyeIndex == 0u) {
+			g_envelopeColumnProbe.Probe(
+				g_envelopeColumnProbe.mainTarget,
+				sourceTexture,
+				sourceSubresource,
+				probeSignature,
+				"kMAIN",
+				probeContext.c_str());
+		}
+		g_envelopeColumnProbe.Probe(
+			g_envelopeColumnProbe.eyeInput[eyeIndex],
+			vrIntermediateColorIn[eyeIndex]->resource.get(),
+			0,
+			probeSignature,
+			eyeIndex == 0u ? "eye0In" : "eye1In",
+			probeContext.c_str());
+	}
 
 	const auto presentStretchOutput = [&](uint32_t inputWidth, uint32_t inputHeight, VRRenderScalePresentationPath a_path) {
 		if (!StretchSubmitStageEyeOutput(eyeIndex, inputWidth, inputHeight, eyeWidthOut, eyeHeightOut) ||
