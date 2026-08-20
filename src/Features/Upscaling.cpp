@@ -19675,88 +19675,61 @@ void Upscaling::RefreshRuntimeResolutionPlan()
 		// Hot-Envelope: the latched size becomes the ALLOCATION, and the active
 		// quality renders into a sub-rect of it. With the feature off the two
 		// are the same value and this is the shipped behaviour exactly.
-		// Phase 0A: the allocation comes from the shared planner too, so the
-		// render-scale flow has one producer rather than two.
 		//
-		// Behaviour-null: boot.renderEyeWidth is itself
-		// ScaleVRRenderDimension(trueHMDEyeWidth, bootScale) (PerfMode.cpp:196),
-		// which is the expression the planner evaluates. Same inputs, same
-		// function. The shadow run confirmed it on real data - the one envelope
-		// line matched the allocation to the pixel at 4656x2372.
+		// Phase 0A: ONE decision per plan refresh, carrying both extents.
 		//
-		// Falls back to the latched value whenever the planner cannot answer, so
-		// a boot snapshot that exists while the display is unknown still works
-		// exactly as it does today.
-		const float2 allocationSize = [&]() -> float2 {
-			const float2 latched = perfMode.GetRenderScreenSize();
-			const float2 display = perfMode.GetDisplayScreenSize();
-			if (display.x < 2.0f || display.y < 2.0f)
-				return latched;
-
+		// Codex's C1 asked for a single immutable decision rather than several
+		// calls, and the first adoption did not deliver that - it asked the
+		// planner for the allocation and then asked again for the render extent,
+		// which is two answers that merely happen to agree. A HotEnvelope
+		// decision already carries both, so one call is both closer to the
+		// requirement and simpler.
+		//
+		// Behaviour-null. The allocation is ScaleVRRenderDimension(display,
+		// bootScale) either way - the same expression PerfMode.cpp:196 latches -
+		// and the render extent keeps today's answer because the planner reports
+		// RelatchRequired for a quality that does not fit, which falls back to
+		// the allocation exactly as GetActiveRenderScreenSize() did. Physical
+		// recovery is expressed as a phase, so the collapse to the allocation
+		// happens inside the planner instead of around it.
+		VRGeometryPolicy::Decision geometryDecision{};
+		bool geometryUsable = false;
+		{
 			const auto& boot = perfMode.GetBootSnapshot();
-			if (!boot.valid)
-				return latched;
+			if (boot.valid && displaySize.x >= 2.0f && displaySize.y >= 2.0f) {
+				VRGeometryPolicy::Inputs inputs{};
+				inputs.flow = VRGeometryPolicy::Flow::HotEnvelope;
+				inputs.phase = HasUnresolvedVRRenderScalePhysicalRecovery() ?
+				                   VRGeometryPolicy::Phase::PhysicalRecovery :
+				                   VRGeometryPolicy::Phase::Stable;
+				inputs.displayPerEye = {
+					static_cast<uint32_t>(displaySize.x) / 2u,
+					static_cast<uint32_t>(displaySize.y)
+				};
+				inputs.bootQuality = boot.qualityMode;
+				inputs.activeQuality = ClampQualityModeUInt(settings.qualityMode);
+				geometryDecision = VRGeometryPolicy::Derive(inputs);
+				geometryUsable = geometryDecision.action != VRGeometryPolicy::Action::Invalid;
+			}
+		}
 
-			VRGeometryPolicy::Inputs inputs{};
-			inputs.flow = VRGeometryPolicy::Flow::RenderScaleOn;
-			inputs.phase = VRGeometryPolicy::Phase::Stable;
-			inputs.displayPerEye = {
-				static_cast<uint32_t>(display.x) / 2u,
-				static_cast<uint32_t>(display.y)
-			};
-			inputs.bootQuality = boot.qualityMode;
-			inputs.activeQuality = boot.qualityMode;
+		const float2 allocationSize = geometryUsable ?
+		                                  float2{
+											  static_cast<float>(geometryDecision.plan.allocationCombined.width),
+											  static_cast<float>(geometryDecision.plan.allocationCombined.height)
+										  } :
+										  perfMode.GetRenderScreenSize();
 
-			const auto decision = VRGeometryPolicy::Derive(inputs);
-			if (decision.action != VRGeometryPolicy::Action::Use)
-				return latched;
-
-			return float2{
-				static_cast<float>(decision.plan.allocationCombined.width),
-				static_cast<float>(decision.plan.allocationCombined.height)
-			};
-		}();
-		// Hot-Envelope: while a physical mutation is in flight the allocation is
-		// being rebuilt underneath us, so rendering into a sub-rect of it races
-		// the recreation. Fall back to the allocation - which is stock behaviour -
-		// until the relatch has published.
-		// Phase 0A: the render extent now comes from the shared planner rather
-		// than from a calculation local to this function, so production and the
-		// tests cannot drift into two implementations of the same rule.
-		//
-		// Behaviour-null: the planner reports RelatchRequired when the requested
-		// quality does not fit its allocation, and this reproduces today's answer
-		// by substituting the allocation in that case - which is what
-		// GetActiveRenderScreenSize() already did. Whether a non-fitting quality
-		// should keep returning a size at all is phase 2's decision, and it is
-		// deliberately not being made here.
-		const float2 renderSize = [&]() -> float2 {
-			if (HasUnresolvedVRRenderScalePhysicalRecovery())
-				return allocationSize;
-
-			if (displaySize.x < 2.0f || displaySize.y < 2.0f)
-				return perfMode.GetActiveRenderScreenSize(settings);
-
-			VRGeometryPolicy::Inputs inputs{};
-			inputs.flow = VRGeometryPolicy::Flow::HotEnvelope;
-			inputs.phase = VRGeometryPolicy::Phase::Stable;
-			inputs.displayPerEye = {
-				static_cast<uint32_t>(displaySize.x) / 2u,
-				static_cast<uint32_t>(displaySize.y)
-			};
-			const auto& boot = perfMode.GetBootSnapshot();
-			inputs.bootQuality = boot.valid ? boot.qualityMode : ClampQualityModeUInt(settings.qualityMode);
-			inputs.activeQuality = ClampQualityModeUInt(settings.qualityMode);
-
-			const auto decision = VRGeometryPolicy::Derive(inputs);
-			if (decision.action != VRGeometryPolicy::Action::Use)
-				return allocationSize;
-
-			return float2{
-				static_cast<float>(decision.plan.renderCombined.width),
-				static_cast<float>(decision.plan.renderCombined.height)
-			};
-		}();
+		// A quality that does not fit its allocation reports RelatchRequired, and
+		// today's behaviour is to render the allocation instead. Preserved here;
+		// whether that is right is phase 2's call.
+		const float2 renderSize =
+			(geometryUsable && geometryDecision.action == VRGeometryPolicy::Action::Use) ?
+				float2{
+					static_cast<float>(geometryDecision.plan.renderCombined.width),
+					static_cast<float>(geometryDecision.plan.renderCombined.height)
+				} :
+				allocationSize;
 		if (displaySize.x > 0.0f && displaySize.y > 0.0f)
 			plan.trueHMDDisplaySize = displaySize;
 		if (allocationSize.x > 0.0f && allocationSize.y > 0.0f)
