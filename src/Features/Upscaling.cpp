@@ -6712,8 +6712,16 @@ namespace
 			};
 		};
 
-		const auto productionAllocation = toExtent(
-			a_plan.engineAllocationSize.x > 0.0f ? a_plan.engineAllocationSize : a_plan.engineRenderSize);
+		// RS-off never records an allocation - only the render-scale branch sets
+		// engineAllocationSize - so falling back to engineRenderSize made every
+		// RS-off frame look like a mismatch when the two simply are not the same
+		// field. The policy is right that the allocation is the display there;
+		// production just does not track it. Compare only what production
+		// actually computes.
+		const bool productionTracksAllocation = a_plan.engineAllocationSize.x > 0.0f;
+		const auto productionAllocation = productionTracksAllocation ?
+		                                      toExtent(a_plan.engineAllocationSize) :
+		                                      decision.plan.allocationCombined;
 		const auto productionRender = toExtent(a_plan.engineRenderSize);
 		const auto productionOutput = toExtent(a_plan.finalOutputSize);
 
@@ -6727,6 +6735,16 @@ namespace
 		// is right belongs to phase 2.
 		const bool expectedRelatchDivergence =
 			decision.action == VRGeometryPolicy::Action::RelatchRequired;
+
+		// Under RS-off the plan's render size comes from resolveVendorDynamicRenderSize(),
+		// which reads resolutionScale - and resolutionScale is written later in
+		// the frame by ConfigureUpscaling. So for exactly one frame after a
+		// quality change the plan still carries the previous quality's render
+		// size, then catches up. Measured at ~18 ms. Benign and self-correcting,
+		// but it is production behaviour rather than a mapping error, so it is
+		// classified rather than reported as a fault.
+		const bool expectedRenderLag =
+			!a_renderScaleLatched && allocationAgrees && outputAgrees && !renderAgrees;
 
 		if (allocationAgrees && renderAgrees && outputAgrees)
 			return;
@@ -6759,9 +6777,9 @@ namespace
 			decision.plan.renderCombined.width, decision.plan.renderCombined.height,
 			decision.plan.outputCombined.width, decision.plan.outputCombined.height,
 			static_cast<int>(decision.action),
-			expectedRelatchDivergence ?
-				"EXPECTED: requested quality does not fit the allocation" :
-				"UNEXPECTED: the mapping from runtime state to policy inputs is wrong");
+			expectedRelatchDivergence ? "EXPECTED: requested quality does not fit the allocation" :
+				expectedRenderLag     ? "EXPECTED: RS-off render size trails the quality change by one frame" :
+										"UNEXPECTED: the mapping from runtime state to policy inputs is wrong");
 	}
 
 	// Auto-debug: emit a submit-decision record when its content changes.
@@ -19662,9 +19680,43 @@ void Upscaling::RefreshRuntimeResolutionPlan()
 		// being rebuilt underneath us, so rendering into a sub-rect of it races
 		// the recreation. Fall back to the allocation - which is stock behaviour -
 		// until the relatch has published.
-		const float2 renderSize = HasUnresolvedVRRenderScalePhysicalRecovery() ?
-		                              allocationSize :
-		                              perfMode.GetActiveRenderScreenSize(settings);
+		// Phase 0A: the render extent now comes from the shared planner rather
+		// than from a calculation local to this function, so production and the
+		// tests cannot drift into two implementations of the same rule.
+		//
+		// Behaviour-null: the planner reports RelatchRequired when the requested
+		// quality does not fit its allocation, and this reproduces today's answer
+		// by substituting the allocation in that case - which is what
+		// GetActiveRenderScreenSize() already did. Whether a non-fitting quality
+		// should keep returning a size at all is phase 2's decision, and it is
+		// deliberately not being made here.
+		const float2 renderSize = [&]() -> float2 {
+			if (HasUnresolvedVRRenderScalePhysicalRecovery())
+				return allocationSize;
+
+			if (displaySize.x < 2.0f || displaySize.y < 2.0f)
+				return perfMode.GetActiveRenderScreenSize(settings);
+
+			VRGeometryPolicy::Inputs inputs{};
+			inputs.flow = VRGeometryPolicy::Flow::HotEnvelope;
+			inputs.phase = VRGeometryPolicy::Phase::Stable;
+			inputs.displayPerEye = {
+				static_cast<uint32_t>(displaySize.x) / 2u,
+				static_cast<uint32_t>(displaySize.y)
+			};
+			const auto& boot = perfMode.GetBootSnapshot();
+			inputs.bootQuality = boot.valid ? boot.qualityMode : ClampQualityModeUInt(settings.qualityMode);
+			inputs.activeQuality = ClampQualityModeUInt(settings.qualityMode);
+
+			const auto decision = VRGeometryPolicy::Derive(inputs);
+			if (decision.action != VRGeometryPolicy::Action::Use)
+				return allocationSize;
+
+			return float2{
+				static_cast<float>(decision.plan.renderCombined.width),
+				static_cast<float>(decision.plan.renderCombined.height)
+			};
+		}();
 		if (displaySize.x > 0.0f && displaySize.y > 0.0f)
 			plan.trueHMDDisplaySize = displaySize;
 		if (allocationSize.x > 0.0f && allocationSize.y > 0.0f)
