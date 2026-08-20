@@ -1,7 +1,7 @@
 diff --git a/CMakeLists.txt b/CMakeLists.txt
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
-@@ -292,2 +292,23 @@ if(PROJECT_IS_TOP_LEVEL)
+@@ -292,2 +292,22 @@ if(PROJECT_IS_TOP_LEVEL)
      set(CMAKE_COLOR_DIAGNOSTICS ON)
  endif()
 +
@@ -9,11 +9,7 @@ diff --git a/CMakeLists.txt b/CMakeLists.txt
 +option(VCPKG_GUI_TOOLS "Build Tracy GUI profiler application" OFF)
 +
 +if(VCPKG_CLI_TOOLS OR VCPKG_GUI_TOOLS)
-+    # The individual tool projects include these files independently, but
-+    # when building multiple tools in one CMake tree their targets must be
-+    # initialized only once, with the union of the requested functionality.
 +    set(VENDOR_GUI ${VCPKG_GUI_TOOLS})
-+    set(NO_STATISTICS OFF)
 +    include(cmake/vendor.cmake)
 +    include(cmake/server.cmake)
 +endif()
@@ -28,15 +24,90 @@ diff --git a/CMakeLists.txt b/CMakeLists.txt
 +if(VCPKG_GUI_TOOLS)
 +    add_subdirectory(profiler)
 +endif()
+diff --git a/capture/CMakeLists.txt b/capture/CMakeLists.txt
+--- a/capture/CMakeLists.txt
++++ b/capture/CMakeLists.txt
+@@ -25,5 +25,5 @@
+ add_executable(${PROJECT_NAME} ${PROGRAM_FILES} ${COMMON_FILES} ${SERVER_FILES})
+ add_git_ref(${PROJECT_NAME})
+-target_link_libraries(${PROJECT_NAME} PRIVATE TracyServer TracyGetOpt)
++target_link_libraries(${PROJECT_NAME} PRIVATE TracyServerNoStatistics TracyGetOpt)
+ set_property(DIRECTORY ${CMAKE_CURRENT_LIST_DIR} PROPERTY VS_STARTUP_PROJECT ${PROJECT_NAME})
+ 
+@@ -32,5 +32,5 @@
+ add_executable(tracy-capture-daemon src/capturedaemon.cpp src/CaptureOutput.cpp ${COMMON_FILES} ${SERVER_FILES})
+ add_git_ref(tracy-capture-daemon)
+-target_link_libraries(tracy-capture-daemon PRIVATE TracyServer TracyGetOpt)
++target_link_libraries(tracy-capture-daemon PRIVATE TracyServerNoStatistics TracyGetOpt)
+ 
+ install(TARGETS tracy-capture-daemon DESTINATION ${CMAKE_INSTALL_BINDIR})
 diff --git a/cmake/server.cmake b/cmake/server.cmake
 --- a/cmake/server.cmake
 +++ b/cmake/server.cmake
-@@ -1,1 +1,2 @@
+@@ -1,3 +1,5 @@
 +include_guard(GLOBAL)
++
  set(TRACY_COMMON_DIR ${CMAKE_CURRENT_LIST_DIR}/../public/common)
+ 
+ set(TRACY_COMMON_SOURCES
+@@ -27,9 +29,13 @@ set(TRACY_SERVER_SOURCES
+ list(TRANSFORM TRACY_SERVER_SOURCES PREPEND "${TRACY_SERVER_DIR}/")
+ 
+ 
+-add_library(TracyServer STATIC EXCLUDE_FROM_ALL ${TRACY_COMMON_SOURCES} ${TRACY_SERVER_SOURCES})
+-target_include_directories(TracyServer PUBLIC ${TRACY_COMMON_DIR} ${TRACY_SERVER_DIR})
+-target_link_libraries(TracyServer PUBLIC TracyCapstone libzstd PPQSort::PPQSort)
+-if(NO_STATISTICS)
+-    target_compile_definitions(TracyServer PUBLIC TRACY_NO_STATISTICS)
+-endif()
++function(tracy_add_server TARGET_NAME)
++    add_library(${TARGET_NAME} STATIC EXCLUDE_FROM_ALL ${TRACY_COMMON_SOURCES} ${TRACY_SERVER_SOURCES})
++    target_include_directories(${TARGET_NAME} PUBLIC ${TRACY_COMMON_DIR} ${TRACY_SERVER_DIR})
++    target_link_libraries(${TARGET_NAME} PUBLIC TracyCapstone libzstd PPQSort::PPQSort)
++endfunction()
++
++tracy_add_server(TracyServer)
++
++tracy_add_server(TracyServerNoStatistics)
++target_compile_definitions(TracyServerNoStatistics PUBLIC TRACY_NO_STATISTICS)
 diff --git a/cmake/vendor.cmake b/cmake/vendor.cmake
 --- a/cmake/vendor.cmake
 +++ b/cmake/vendor.cmake
-@@ -1,1 +1,2 @@
+@@ -1,3 +1,5 @@
 +include_guard(GLOBAL)
++
  # Vendor Specific CMake
+ # The Tracy project keeps most vendor source locally
+ 
+diff --git a/import/CMakeLists.txt b/import/CMakeLists.txt
+--- a/import/CMakeLists.txt
++++ b/import/CMakeLists.txt
+@@ -19,12 +19,12 @@ include(${CMAKE_CURRENT_LIST_DIR}/../cmake/GitRef.cmake)
+ add_executable(tracy-import-chrome
+     src/import-chrome.cpp
+ )
+ add_git_ref(tracy-import-chrome)
+-target_link_libraries(tracy-import-chrome PRIVATE TracyServer nlohmann_json::nlohmann_json)
++target_link_libraries(tracy-import-chrome PRIVATE TracyServerNoStatistics nlohmann_json::nlohmann_json)
+ 
+ add_executable(tracy-import-fuchsia
+     src/import-fuchsia.cpp
+ )
+ add_git_ref(tracy-import-fuchsia)
+-target_link_libraries(tracy-import-fuchsia PRIVATE TracyServer)
++target_link_libraries(tracy-import-fuchsia PRIVATE TracyServerNoStatistics)
+ 
+ set_property(DIRECTORY ${CMAKE_CURRENT_LIST_DIR} PROPERTY VS_STARTUP_PROJECT ${PROJECT_NAME})
+diff --git a/update/CMakeLists.txt b/update/CMakeLists.txt
+--- a/update/CMakeLists.txt
++++ b/update/CMakeLists.txt
+@@ -27,7 +27,7 @@ set(PROGRAM_FILES
+ )
+ 
+ add_executable(${PROJECT_NAME} ${PROGRAM_FILES} ${COMMON_FILES} ${SERVER_FILES})
+ add_git_ref(${PROJECT_NAME})
+-target_link_libraries(${PROJECT_NAME} PRIVATE TracyServer TracyGetOpt)
++target_link_libraries(${PROJECT_NAME} PRIVATE TracyServerNoStatistics TracyGetOpt)
+ set_property(DIRECTORY ${CMAKE_CURRENT_LIST_DIR} PROPERTY VS_STARTUP_PROJECT ${PROJECT_NAME})
+ 
+ install(TARGETS ${PROJECT_NAME} DESTINATION ${CMAKE_INSTALL_BINDIR})
