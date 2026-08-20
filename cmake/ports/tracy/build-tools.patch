@@ -1,18 +1,30 @@
 diff --git a/CMakeLists.txt b/CMakeLists.txt
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
-@@ -292,2 +292,14 @@ if(PROJECT_IS_TOP_LEVEL)
+@@ -292,2 +292,23 @@ if(PROJECT_IS_TOP_LEVEL)
      set(CMAKE_COLOR_DIAGNOSTICS ON)
  endif()
 +
 +option(VCPKG_CLI_TOOLS "Build Tracy command-line tools (csvexport, capture, import, update)" OFF)
 +option(VCPKG_GUI_TOOLS "Build Tracy GUI profiler application" OFF)
++
++if(VCPKG_CLI_TOOLS OR VCPKG_GUI_TOOLS)
++    # The individual tool projects include these files independently, but
++    # when building multiple tools in one CMake tree their targets must be
++    # initialized only once, with the union of the requested functionality.
++    set(VENDOR_GUI ${VCPKG_GUI_TOOLS})
++    set(NO_STATISTICS OFF)
++    include(cmake/vendor.cmake)
++    include(cmake/server.cmake)
++endif()
++
 +if(VCPKG_CLI_TOOLS)
 +    add_subdirectory(csvexport)
 +    add_subdirectory(capture)
 +    add_subdirectory(import)
 +    add_subdirectory(update)
 +endif()
++
 +if(VCPKG_GUI_TOOLS)
 +    add_subdirectory(profiler)
 +endif()
