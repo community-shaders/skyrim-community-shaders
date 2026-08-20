@@ -1401,6 +1401,11 @@ if(BUILD_CONTROLLER_TESTS)
         OverlayPolicy
         tests/overlay_policy_test.cpp
     )
+    add_controller_test(
+        vr_geometry_policy_test
+        VRGeometryPolicy
+        tests/vr_geometry_policy_test.cpp
+    )
 
     add_custom_target(
         controller_tests
@@ -1409,6 +1414,7 @@ if(BUILD_CONTROLLER_TESTS)
             vr_vendor_relatch_policy_test
             fsr_host_lifecycle_policy_test
             overlay_policy_test
+            vr_geometry_policy_test
     )
 endif()
 
