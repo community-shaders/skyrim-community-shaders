@@ -1,7 +1,7 @@
 diff --git a/CMakeLists.txt b/CMakeLists.txt
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
-@@ -292,2 +292,22 @@ if(PROJECT_IS_TOP_LEVEL)
+@@ -292,2 +292,24 @@ if(PROJECT_IS_TOP_LEVEL)
      set(CMAKE_COLOR_DIAGNOSTICS ON)
  endif()
 +
@@ -9,6 +9,8 @@ diff --git a/CMakeLists.txt b/CMakeLists.txt
 +option(VCPKG_GUI_TOOLS "Build Tracy GUI profiler application" OFF)
 +
 +if(VCPKG_CLI_TOOLS OR VCPKG_GUI_TOOLS)
++    enable_language(C)
++    set(CMAKE_CXX_STANDARD 20)
 +    set(VENDOR_GUI ${VCPKG_GUI_TOOLS})
 +    include(cmake/vendor.cmake)
 +    include(cmake/server.cmake)
