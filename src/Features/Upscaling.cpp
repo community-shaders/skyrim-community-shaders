@@ -38698,7 +38698,7 @@ void Upscaling::ClearVRDirectUpscaledEyeOutput(uint32_t eyeIndex, ID3D11Unordere
 }
 
 bool Upscaling::EncodeSubmitStageVRInputs(ID3D11Resource* colorSource, ID3D11Resource* motionVectors, ID3D11Resource* depthSource,
-	uint32_t inputWidthPerEye, uint32_t inputHeight, uint32_t outputWidthPerEye, uint32_t outputHeight, bool copyDepthInput, bool allowFoveatedRegionEncode, bool* encodedFoveatedRegions, uint32_t contractGeneration, uint32_t a_sourceSpaceWidth, uint32_t a_eyeOneOriginX)
+	uint32_t inputWidthPerEye, uint32_t inputHeight, uint32_t outputWidthPerEye, uint32_t outputHeight, bool copyDepthInput, bool allowFoveatedRegionEncode, bool* encodedFoveatedRegions, uint32_t contractGeneration)
 {
 	if (encodedFoveatedRegions)
 		*encodedFoveatedRegions = false;
@@ -38799,27 +38799,12 @@ bool Upscaling::EncodeSubmitStageVRInputs(ID3D11Resource* colorSource, ID3D11Res
 		context->CSSetConstantBuffers(0, 1, &upscalingBuffer);
 		context->CSSetShader(encodeShader, nullptr, 0);
 
-		// The shader clamps every sample against TrueSamplingDim and treats
-		// SourceOffset as absolute in the same space. Those two must therefore
-		// describe the SOURCE TEXTURE, not the render extent. In stock they are
-		// the same number, so the distinction never mattered; under an envelope
-		// the source is the allocation and the render extent is smaller, and
-		// using the render extent here silently clips the far side of eye 1.
-		const uint32_t sourceSpaceWidth = a_sourceSpaceWidth ? a_sourceSpaceWidth : inputStereoLayout.width;
-		const float2 renderSize = { static_cast<float>(sourceSpaceWidth), static_cast<float>(inputStereoLayout.height) };
+		const float2 renderSize = { static_cast<float>(inputStereoLayout.width), static_cast<float>(inputStereoLayout.height) };
 
 		auto dispatchEyeEncode = [&](uint32_t eye, uint32_t inputMinX, uint32_t inputMinY, uint32_t inputMaxX, uint32_t inputMaxY) -> bool {
 			if (eye >= 2 || inputMaxX <= inputMinX || inputMaxY <= inputMinY)
 				return false;
 			const auto& sourceEyeRegion = inputStereoLayout.eyes[eye];
-			// Depth, motion vectors, normals and masks must be read from the same
-			// columns as the colour the vendor reconstructs from. Measured: with
-			// colour at the allocation half and this layout packed, the two
-			// disagreed by exactly 274 / 582 / 1164 px at Balanced / Performance /
-			// UltraPerformance - the severity ordering of the reported defect, and
-			// zero at the envelope quality where the image is correct.
-			const uint32_t eyeSourceOriginX =
-				(eye == 1u && a_eyeOneOriginX) ? a_eyeOneOriginX : sourceEyeRegion.minX;
 
 			inputMinX = std::min(inputMinX, inputWidthPerEye);
 			inputMinY = std::min(inputMinY, inputHeight);
@@ -38838,7 +38823,7 @@ bool Upscaling::EncodeSubmitStageVRInputs(ID3D11Resource* colorSource, ID3D11Res
 			upscalingData.seamHalfWidthPx = 2.0f;
 			upscalingData.maskDepthThreshold = 1e-6f;
 			upscalingData.vrSeamHardening = 1.0f;
-			upscalingData.sourceOffset = { static_cast<float>(eyeSourceOriginX + inputMinX), static_cast<float>(inputMinY) };
+			upscalingData.sourceOffset = { static_cast<float>(sourceEyeRegion.minX + inputMinX), static_cast<float>(inputMinY) };
 			upscalingData.outputOffset = { static_cast<float>(inputMinX), static_cast<float>(inputMinY) };
 			upscalingDataCB->Update(upscalingData);
 
@@ -38852,15 +38837,11 @@ bool Upscaling::EncodeSubmitStageVRInputs(ID3D11Resource* colorSource, ID3D11Res
 			context->Dispatch((dispatchWidth + 7u) >> 3, (dispatchHeight + 7u) >> 3, 1);
 
 			if (copyDepthInput) {
-				// Same origin as the encode dispatch above, for the same reason:
-				// leaving the raw depth copy on the packed origin while the
-				// motion vectors move would be a half fix, and the two would
-				// disagree by the same delta this change exists to remove.
 				D3D11_BOX srcBox{
-					eyeSourceOriginX + inputMinX,
+					sourceEyeRegion.minX + inputMinX,
 					sourceEyeRegion.minY + inputMinY,
 					0,
-					eyeSourceOriginX + inputMaxX,
+					sourceEyeRegion.minX + inputMaxX,
 					sourceEyeRegion.minY + inputMaxY,
 					1
 				};
@@ -45189,21 +45170,6 @@ bool Upscaling::SubmitVRUpscaledFrame(vr::EVREye a_eye, uint64_t a_compositorCyc
 	const bool inputBoundsUseCombinedStereoSpace =
 		sourceUsesCombinedStereoLayout &&
 		InputBoundsUseCombinedStereoSpace(a_inputBounds, eyeIndex);
-	// Hot-Envelope: hand the encode the same coordinate space the colour box is
-	// resolved in, so depth, motion vectors and masks describe the same columns
-	// as the colour the vendor reconstructs from. Declared at function scope
-	// because both the primary encode and the full-eye fallback need it.
-	//
-	// Both values are 0 unless an envelope is holding a smaller render inside a
-	// larger allocation with the allocation-half origin, so every other
-	// configuration passes the same arguments the shipped build does.
-	const bool encodeFollowsAllocationOrigin =
-		settings.vrHotEnvelope != 0u &&
-		settings.vrHotEnvelopeEyeOrigin == 1u &&
-		sourceDesc.Width > eyeWidthIn * 2u;
-	const uint32_t encodeSourceSpaceWidth = encodeFollowsAllocationOrigin ? sourceDesc.Width : 0u;
-	const uint32_t encodeEyeOneOriginX = encodeFollowsAllocationOrigin ? sourceDesc.Width / 2u : 0u;
-
 	const auto sourceRegion = ResolveVRSubmitSourceRegion(
 		sourceDesc,
 		eyeIndex,
@@ -45728,7 +45694,7 @@ bool Upscaling::SubmitVRUpscaledFrame(vr::EVREye a_eye, uint64_t a_compositorCyc
 		submitStagePreparedFrameFoveatedRegionEncode = false;
 	} else if (!submitStagePreparedThisFrame || submitStagePreparedFramePresentationOnly) {
 		bool encodedFoveatedRegions = false;
-		if (!EncodeSubmitStageVRInputs(sourceTexture, motionVector.texture, depth.texture, eyeWidthIn, eyeHeightIn, eyeWidthOut, eyeHeightOut, submitStageNeedsRawDepthInput, foveatedRequested, &encodedFoveatedRegions, activeContractGeneration, encodeSourceSpaceWidth, encodeEyeOneOriginX)) {
+		if (!EncodeSubmitStageVRInputs(sourceTexture, motionVector.texture, depth.texture, eyeWidthIn, eyeHeightIn, eyeWidthOut, eyeHeightOut, submitStageNeedsRawDepthInput, foveatedRequested, &encodedFoveatedRegions, activeContractGeneration)) {
 			if (IsSubmitStageDeviceLost())
 				return false;
 			return false;
@@ -46380,12 +46346,7 @@ bool Upscaling::SubmitVRUpscaledFrame(vr::EVREye a_eye, uint64_t a_compositorCyc
 			submitStageNeedsRawDepthInput,
 			false,
 			&encodedFoveatedRegions,
-			activeContractGeneration,
-			// Same space as the primary encode. A fallback that re-encoded on the
-			// packed origin would reintroduce the very disagreement this fixes,
-			// and only on the path taken when something else already went wrong.
-			encodeSourceSpaceWidth,
-			encodeEyeOneOriginX);
+			activeContractGeneration);
 		if (IsSubmitStageDeviceLost())
 			return false;
 
