@@ -28,9 +28,8 @@ hookIntoChildren=True)`, or launch from the RenderDoc GUI) — `<loader>` is `sk
     for SE/AE and `sksevr_loader.exe` for VR. The **main menu** already runs the TAA pass, so it is
     a valid capture surface on either edition.
 -   The build must be in **TAA upscaling mode** (DLSS/FSR replace `ISTemporalAA`) and ideally with
-    **HDR and frame-generation off** — otherwise Open Shaders presents through a DX12 interop
-    swapchain and RenderDoc captures only the D3D12 present (Copy/Present, no draws), not the
-    D3D11 TAA pass.
+    **HDR and frame-generation off**. Capture the D3D11 work before the Vulkan presentation path;
+    otherwise the D3D11 TAA pass may not appear in the captured frame.
 -   `fxc.exe` (Windows SDK) — same compiler the offline verifier uses.
 
 ## Steps
@@ -185,10 +184,9 @@ These transfer to any GPU-shader RE/validation work, not just TAA:
 -   **Find the pass by its resource fingerprint, and reverse-scan.** Match a draw by its bound
     textures/buffers, not its index (indices shift frame to frame). Post-process sits near frame end,
     so scan drawcalls in reverse — a full-frame state sweep can time out on a large capture.
--   **Interop swapchains hide the inner API.** When an app presents D3D11 work through a DX12 interop
-    swapchain (here: HDR / frame-gen / upscaler paths), RenderDoc hooks the D3D12 present and the
-    D3D11 draws aren't in the frame at all. Disable the feature that triggers interop to capture the
-    inner API; if you can't, fall back to offline byte-identity for that permutation.
+-   **Interop presentation can hide the inner API.** With the Vulkan frame-gen/upscaler path active,
+    RenderDoc may capture presentation without the D3D11 draws. Disable the feature that triggers
+    interop to capture the inner API; if you can't, fall back to offline byte-identity for that permutation.
 -   **Captures scale with scene complexity.** A heavy scene (especially stereo/VR) can produce a
     multi-GB capture that wedges the tools; shrink the scene (interior, lower res) to keep captures
     loadable. Verify a new capture by file timestamp/size — capture APIs sometimes return a stale path.

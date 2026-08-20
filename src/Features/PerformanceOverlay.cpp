@@ -22,6 +22,7 @@
 #include "Features/PerformanceOverlay/ABTesting/ABTestAggregator.h"
 #include "Features/PerformanceOverlay/ABTesting/ABTesting.h"
 #include "Features/Upscaling.h"
+#include "Features/Upscaling/Streamline.h"
 #include "Globals.h"
 #include "I18n/I18n.h"
 #include "Menu.h"
@@ -168,7 +169,7 @@ void PerformanceOverlay::DrawSettings()
 			ImGui::Checkbox(T(TKEY("show_post_fg_graph"), "Show Post-FG Frametime Graph"), &this->settings.ShowPostFGFrameTimeGraph);
 			if (ImGui::IsItemHovered()) {
 				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("%s", T(TKEY("post_fg_graph_tooltip"), "FSR Frame Generation uses calculated timing data (2x Pre-FG).\nDLSS Frame Generation provides measured timing data."));
+					ImGui::Text("%s", T(TKEY("post_fg_graph_tooltip"), "Post-FG timing is estimated from the pre-FG frame time and the presentation multiplier reported by the active frame-generation backend."));
 				}
 			}
 		} else if (this->settings.ShowFPS) {
@@ -476,22 +477,9 @@ void PerformanceOverlay::DrawFPS()
 		}
 	}
 
-	// Show Post-FG frametime graph if enabled
-	if (this->settings.ShowPostFGFrameTimeGraph && this->state.isFrameGenerationActive) {
-		// Check if FSR frame generation is active (FSR doesn't provide timing data)
-		bool isFrameGenActive = globals::features::upscaling.IsFrameGenerationActive();
-
-		if (isFrameGenActive) {
-			// Show note that FSR uses calculated data
-			Util::Text::Warning("%s", T(TKEY("post_fg_calculated"), "Post-FG: Calculated timing (2x Pre-FG)"));
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("AMD FSR Frame Generation uses calculated timing data (2x Pre-FG).\nNVIDIA DLSS Frame Generation provides measured timing data.");
-			}
-		}
-
-		// Show post-FG graph for both DLSS and FSR (FSR uses calculated data)
+	if (this->settings.ShowPostFGFrameTimeGraph && this->state.isFrameGenerationActive)
 		this->DrawPostFGFrameTimeGraph();
-	}
+
 }
 
 void PerformanceOverlay::DrawVRAM()
@@ -1919,7 +1907,6 @@ void PerformanceOverlay::UpdateSummaryTestData(float smoothedFrameTime, float ot
 
 void PerformanceOverlay::UpdateGraphValues()
 {
-	// Check if Frame Generation is active
 	state.isFrameGenerationActive = globals::features::upscaling.IsFrameGenerationActive();
 
 	// Sync frame history buffer size with user settings
@@ -1996,28 +1983,14 @@ void PerformanceOverlay::UpdateGraphValues()
 	state.smoothedMaxFrameTime = state.smoothedMaxFrameTime + Settings::kSmoothingFactor * (graphMax - state.smoothedMaxFrameTime);
 
 	if (state.isFrameGenerationActive) {
-		// Get frametime directly from the Frame Generation system
-		float fgDeltaTime = globals::features::upscaling.GetFrameGenerationFrameTime();
-
-		// Check if FSR frame generation is active (FSR doesn't provide timing data)
-		bool isFrameGenActive = globals::features::upscaling.IsFrameGenerationActive();
-		if (fgDeltaTime > 0.0f && !isFrameGenActive) {
-			state.postFGFrameTimeMs = fgDeltaTime * 1000.0f;
-			state.postFGFps = 1000.0f / state.postFGFrameTimeMs;
-		} else {
-			// Fallback if FG time is not available
-			state.postFGFrameTimeMs = state.frameTimeMs / Settings::kFrameGenerationMultiplier;
-			state.postFGFps = state.fps * Settings::kFrameGenerationMultiplier;
-		}
-
-		// Update post-FG smooth values when timer elapses
-		if (state.updateTimer <= 0.0f) {
-			state.postFGSmoothFps = state.postFGFps;
-			state.postFGSmoothFrameTimeMs = state.postFGFrameTimeMs;
-		}
-
-		// Update post-FG frametime history
+		const float multiplier = static_cast<float>(
+			globals::features::upscaling.GetFrameGenerationMultiplier());
+		state.postFGFrameTimeMs = state.frameTimeMs / multiplier;
+		state.postFGFps = state.fps * multiplier;
 		state.postFGFrameTimeHistory.Push(state.postFGFrameTimeMs);
+	} else {
+		state.postFGFrameTimeMs = 0.0f;
+		state.postFGFps = 0.0f;
 	}
 
 	// Update smooth values with user-specified interval
@@ -2025,6 +1998,8 @@ void PerformanceOverlay::UpdateGraphValues()
 	if (state.updateTimer >= settings.UpdateInterval) {
 		state.smoothFps = state.fps;  // Sampling white noise won't give you smoothed noise. This is useless.
 		state.smoothFrameTimeMs = state.frameTimeMs;
+		state.postFGSmoothFps = state.postFGFps;
+		state.postFGSmoothFrameTimeMs = state.postFGFrameTimeMs;
 		state.updateTimer = 0.0f;
 	}
 }

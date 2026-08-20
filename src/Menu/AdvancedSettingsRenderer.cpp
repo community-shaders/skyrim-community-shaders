@@ -7,6 +7,7 @@
 #include <thread>
 
 #include "CSEditor/EditorWindow.h"
+#include "DxvkLoader.h"
 #include "FeatureIssues.h"
 #include "Features/PerformanceOverlay/ABTesting/ABTesting.h"
 #include "Fonts.h"
@@ -735,6 +736,25 @@ void AdvancedSettingsRenderer::RenderDeveloperSection()
 
 void AdvancedSettingsRenderer::RenderTestingSection()
 {
+	auto* state = globals::state;
+	ImGui::SeparatorText(T("menu.advanced.renderer", "Renderer"));
+	const bool dxvkActive = DxvkLoader::IsLoaded();
+	if (ImGui::Checkbox(T("menu.advanced.enable_dxvk", "Enable DXVK"), &state->enableDXVK))
+		logger::info("DXVK {} requested for next launch", state->enableDXVK ? "enabled" : "disabled");
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::TextWrapped("%s", T("menu.advanced.enable_dxvk_tooltip",
+			"Uses the bundled Vulkan-based D3D11 renderer. When disabled, Community Shaders uses Windows' native D3D11/DXGI runtime and Vulkan upscaling is unavailable. Requires a restart."));
+	}
+	ImGui::TextDisabled("%s: %s", T("menu.advanced.renderer_active", "Active renderer"),
+		dxvkActive ? "DXVK (Vulkan)" : "Native D3D11");
+	if (state->enableDXVK != dxvkActive) {
+		const auto& theme = Menu::GetSingleton()->GetTheme();
+		ImGui::TextColored(theme.StatusPalette.RestartNeeded, "%s",
+			T("menu.advanced.renderer_restart", "Restart required to apply the renderer change."));
+	}
+
+	ImGui::Spacing();
+
 	// A/B Testing settings
 	auto* abTestingManager = ABTestingManager::GetSingleton();
 	abTestingManager->DrawSettingsUI();

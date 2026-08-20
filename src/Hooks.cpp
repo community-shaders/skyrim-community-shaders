@@ -3,6 +3,7 @@
 #include "ShaderTools/BSShaderHooks.h"
 #include "Utils/ExternalEmittance.h"
 
+#include "DxvkLoader.h"
 #include "Feature.h"
 #include "Globals.h"
 #include "Menu.h"
@@ -13,11 +14,13 @@
 #include "Features/Effects11.h"
 #include "Features/HDRDisplay.h"
 #include "Features/InteriorSun.h"
-#include "Features/ScreenshotFeature.h"
 #include "Features/LightLimitFix.h"
+#include "Features/ScreenshotFeature.h"
 #include "Features/Skin.h"
 #include "Features/SkySync.h"
 #include "Features/Upscaling.h"
+#include "Features/Upscaling/DXVKInterop.h"
+#include "Features/Upscaling/Streamline.h"
 #include "Features/VolumetricLighting.h"
 
 std::unordered_map<void*, std::pair<std::unique_ptr<uint8_t[]>, size_t>> ShaderBytecodeMap;
@@ -323,14 +326,34 @@ struct IDXGISwapChain_Present
 	static HRESULT WINAPI thunk(IDXGISwapChain* This, UINT SyncInterval, UINT Flags)
 	{
 		globals::state->Reset();
+		const auto& upscaling = globals::features::upscaling;
+		const bool dlssgActive = upscaling.IsFrameGenerationActive() &&
+		                         upscaling.GetFrameGenMethod() == Upscaling::FrameGenMethod::kDLSSG;
+
+		// DLSS-G on Vulkan requires SyncInterval 0.
+		{
+			SyncInterval = dlssgActive ? 0u : (upscaling.settings.vsync ? 1u : 0u);
+			if (upscaling.IsFrameGenerationActive() && upscaling.settings.fgAllowTearing &&
+				Upscaling::IsTearingSupported() && upscaling.isWindowed && SyncInterval == 0u)
+				Flags |= DXGI_PRESENT_ALLOW_TEARING;
+			else
+				Flags &= ~DXGI_PRESENT_ALLOW_TEARING;
+		}
+
+		const bool bridgedPresentMarkers = globals::features::upscaling.BeginPresentMarkers();
 
 		HRESULT retval = globals::features::hdrDisplay.HandleSwapChainPresent(
 			This,
 			SyncInterval,
 			Flags,
 			[&](IDXGISwapChain* swapChain, UINT syncInterval, UINT presentFlags) {
-				return func(swapChain, syncInterval, presentFlags);
+				return globals::features::upscaling.PresentWithFrameGeneration(
+					swapChain, syncInterval, presentFlags,
+					[&](IDXGISwapChain* sc, UINT si, UINT f) { return func(sc, si, f); });
 			});
+
+		globals::features::upscaling.EndPresentMarkers(bridgedPresentMarkers);
+		globals::features::upscaling.NotifyPresentResult(retval);
 
 		globals::features::screenshotFeature.ProcessCaptureRequest();
 
@@ -367,6 +390,8 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 	DXGI_ADAPTER_DESC adapterDesc;
 	pAdapter->GetDesc(&adapterDesc);
 	globals::state->SetAdapterDescription(adapterDesc.Description);
+
+	logger::info("D3D11CreateDeviceAndSwapChain intercepted (forcing D3D_FEATURE_LEVEL_11_1)");
 
 	const D3D_FEATURE_LEVEL featureLevel = D3D_FEATURE_LEVEL_11_1;
 
@@ -470,10 +495,6 @@ struct BSInputDeviceManager_PollInputDevices
 {
 	static void thunk(RE::BSTEventSource<RE::InputEvent*>* a_dispatcher, RE::InputEvent* const* a_events)
 	{
-		// Reflex sleep/cap runs here by design: this executes before rendering work for the frame.
-		// UpdateReflex() enforces "once per frame" internally in case this hook is hit multiple times.
-		globals::features::upscaling.streamline.UpdateReflex();
-
 		bool blockedDevice = true;
 
 		auto menu = globals::menu;
@@ -522,6 +543,18 @@ namespace Hooks
 			logger::info("Accessing render device information");
 			globals::ReInit();
 
+			if (auto* device = globals::d3d::device) {
+				void* firstVFunc = (*reinterpret_cast<void***>(device))[0];
+				HMODULE implModule = nullptr;
+				wchar_t implPath[MAX_PATH]{};
+				if (::GetModuleHandleExW(
+						GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+						static_cast<LPCWSTR>(firstVFunc), &implModule) &&
+					::GetModuleFileNameW(implModule, implPath, MAX_PATH) != 0) {
+					logger::info("D3D11 device implemented by {}", stl::utf16_to_utf8(implPath).value_or("<unknown>"s));
+				}
+			}
+
 			logger::info("Detouring virtual function tables");
 			// InstallSwapChainPresentHooks installs SwapChainPresentBottom (suppression) and OMSetBlendState first.
 			// IDXGISwapChain_Present is installed last so it sits at the top of the Detours chain and fires first.
@@ -550,6 +583,29 @@ namespace Hooks
 			auto menu = globals::menu;
 			if ((a_msg == WM_KILLFOCUS || a_msg == WM_SETFOCUS) && menu->initialized) {
 				menu->focusChanged = true;
+			}
+			// Only update atomics from the window thread; SL/FFX calls stay on the render thread.
+			switch (a_msg) {
+			case WM_ACTIVATEAPP:
+				Upscaling::NotifyWindowFocus(a_wParam != FALSE);
+				break;
+			case WM_ACTIVATE:
+				Upscaling::NotifyWindowFocus(LOWORD(a_wParam) != WA_INACTIVE);
+				break;
+			case WM_SETFOCUS:
+				Upscaling::NotifyWindowFocus(true);
+				break;
+			case WM_KILLFOCUS:
+				Upscaling::NotifyWindowFocus(false);
+				break;
+			case WM_ENTERSIZEMOVE:
+				Upscaling::NotifyWindowModifying(true);
+				break;
+			case WM_EXITSIZEMOVE:
+				Upscaling::NotifyWindowModifying(false);
+				break;
+			default:
+				break;
 			}
 			if (a_msg == WM_CLOSE) {
 				globals::OnGameWindowClose();
@@ -1050,12 +1106,31 @@ namespace Hooks
 
 	void InstallEarlyHooks()
 	{
+		// Load DXVK before the game creates its D3D11 device.
+		const bool nativeMode = DxvkLoader::NativeModeRequested();
+		const bool dxvkLoaded = DxvkLoader::Load();
+		if (!nativeMode && !dxvkLoaded) {
+			stl::report_and_fail(
+				"Community Shaders could not load its bundled DXVK renderer (dxvk_d3d11.dll / dxvk_dxgi.dll) "
+				"from Data/SKSE/Plugins/CommunityShaders/bin. Reinstall Community Shaders or verify the files exist."sv);
+		}
+		if (nativeMode) {
+			globals::features::upscaling.loaded = false;
+			logger::info("[Native] DXVK and Vulkan upscaling disabled; Community Shaders is using system D3D11/DXGI");
+		}
+
 		if (!globals::features::upscaling.loaded) {
 			logger::info("Hooking D3D11CreateDeviceAndSwapChain");
-			*(uintptr_t*)&ptrD3D11CreateDeviceAndSwapChain = SKSE::PatchIAT(hk_D3D11CreateDeviceAndSwapChain, "d3d11.dll", "D3D11CreateDeviceAndSwapChain");
+			const auto iatOriginal = SKSE::PatchIAT(hk_D3D11CreateDeviceAndSwapChain, "d3d11.dll", "D3D11CreateDeviceAndSwapChain");
+			*(uintptr_t*)&ptrD3D11CreateDeviceAndSwapChain = dxvkLoaded ?
+			                                                     reinterpret_cast<uintptr_t>(DxvkLoader::GetD3D11CreateDeviceAndSwapChain()) :
+			                                                     iatOriginal;
 		}
 
 		logger::info("Hooking CreateDXGIFactory");
-		*(uintptr_t*)&ptrCreateDXGIFactory = SKSE::PatchIAT(hk_CreateDXGIFactory, "dxgi.dll", "CreateDXGIFactory");
+		const auto dxgiOriginal = SKSE::PatchIAT(hk_CreateDXGIFactory, "dxgi.dll", "CreateDXGIFactory");
+		*(uintptr_t*)&ptrCreateDXGIFactory = dxvkLoaded ?
+		                                         reinterpret_cast<uintptr_t>(DxvkLoader::GetCreateDXGIFactory()) :
+		                                         dxgiOriginal;
 	}
 }

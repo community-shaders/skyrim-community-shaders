@@ -48,14 +48,15 @@ option(
 )
 option(
     AIO_ZIP_TO_DIST
-    "Zip the base mod and addons to a AIO zip file in dist."
+    "Package the base mod and addons as an AIO archive in dist."
     ON
 )
 option(TRACY_SUPPORT "Enable support for tracy profiler" OFF)
+option(DXVK_CLEANUP_TESTS "Build behavior-preserving DXVK state tests" OFF)
 option(ENABLE_ENB_EXTENDER "Enable ENBExtender reimplementation (weather blending, time-of-day, technique bindings)" ON)
 message("\tAuto plugin deployment: ${AUTO_PLUGIN_DEPLOYMENT}")
 message("\tZip to dist: ${ZIP_TO_DIST}")
-message("\tAIO Zip to dist: ${AIO_ZIP_TO_DIST}")
+message("\tAIO archive to dist: ${AIO_ZIP_TO_DIST}")
 message("\tTracy profiler: ${TRACY_SUPPORT}")
 
 # #######################################################################################################################
@@ -97,17 +98,19 @@ find_package(cppwinrt CONFIG REQUIRED)
 find_package(unordered_dense CONFIG REQUIRED)
 find_package(efsw CONFIG REQUIRED)
 find_package(Tracy CONFIG REQUIRED)
-find_package(directx-headers CONFIG REQUIRED)
 find_package(effects11 CONFIG REQUIRED)
 
 if(DEVBENCH_BRIDGE)
     find_package(devbench-api CONFIG REQUIRED)
 endif()
-add_subdirectory(${CMAKE_SOURCE_DIR}/cmake/Streamline)
-
 find_path(DETOURS_INCLUDE_DIRS "detours/detours.h")
 find_library(DETOURS_LIBRARY detours REQUIRED)
-include(FidelityFX-SDK)
+
+# Vulkan headers must match across the DXVK and upscaler interop boundary.
+find_package(Vulkan REQUIRED)
+
+# Streamline is linked as headers and loaded through its Vulkan interposer at runtime.
+add_subdirectory(${CMAKE_SOURCE_DIR}/cmake/Streamline)
 
 target_compile_definitions(
     ${PROJECT_NAME}
@@ -135,6 +138,7 @@ target_include_directories(
         ${CLIB_UTIL_INCLUDE_DIRS}
         "${CMAKE_SOURCE_DIR}/package/Shaders"
         "${CMAKE_SOURCE_DIR}/extern/sk_hdr_png/include"
+        "${CMAKE_SOURCE_DIR}/extern/dxvk/include"
         ${DETOURS_INCLUDE_DIRS}
 )
 
@@ -158,14 +162,44 @@ target_link_libraries(
         unordered_dense::unordered_dense
         efsw::efsw
         Tracy::TracyClient
-        Streamline
-        d3d12.lib
-        Microsoft::DirectX-Headers
         ${DETOURS_LIBRARY}
         Microsoft::Effects11
         windowsapp
         windowscodecs
+        Vulkan::Vulkan
+        Streamline
 )
+
+if(DXVK_CLEANUP_TESTS)
+    enable_testing()
+    find_package(Catch2 CONFIG REQUIRED)
+    add_executable(
+        DXVKCleanupTests
+        tests/DXVKPresenterStateTests.cpp
+        tests/DxvkModulePathTests.cpp
+        src/DxvkModulePath.cpp
+        src/Features/Upscaling/DXVKPresenterState.cpp
+        src/Features/Upscaling/FrameGenWatchdog.cpp
+    )
+    target_include_directories(
+        DXVKCleanupTests
+        PRIVATE
+        "${CMAKE_SOURCE_DIR}/src"
+        "${CMAKE_SOURCE_DIR}/include"
+        "${CMAKE_SOURCE_DIR}/extern/dxvk/include"
+        "${CMAKE_CURRENT_BINARY_DIR}/cmake"
+    )
+    target_compile_features(DXVKCleanupTests PRIVATE cxx_std_23)
+    target_precompile_headers(DXVKCleanupTests PRIVATE include/PCH.h)
+    target_link_libraries(DXVKCleanupTests PRIVATE Catch2::Catch2WithMain Vulkan::Vulkan CommonLibSSE)
+    add_test(NAME DXVKCleanupTests COMMAND DXVKCleanupTests)
+    find_program(POWERSHELL_EXECUTABLE NAMES pwsh powershell REQUIRED)
+    add_test(
+        NAME DependencyBuildTests
+        COMMAND "${POWERSHELL_EXECUTABLE}" -NoProfile -ExecutionPolicy Bypass
+            -File "${CMAKE_SOURCE_DIR}/tests/DependencyBuildTests.ps1"
+    )
+endif()
 
 # devbench bridge: opt-out via -DDEVBENCH_BRIDGE=OFF. When off, the port isn't required
 # and DevBenchBridge.cpp compiles to an empty Install().
@@ -466,6 +500,117 @@ install(
 )
 install(CODE "file(REMOVE \${CMAKE_INSTALL_PREFIX}/Core)" COMPONENT Shaders)
 
+# Remove runtime directories superseded by the unified bin layout.
+install(CODE
+    "file(REMOVE_RECURSE
+        \"\${CMAKE_INSTALL_PREFIX}/SKSE/Plugins/CommunityShaders/dxvk\"
+        \"\${CMAKE_INSTALL_PREFIX}/SKSE/Plugins/CommunityShaders/Streamline\"
+    )"
+    COMPONENT Shaders
+)
+
+# Stage prefixed DXVK DLLs without colliding with the system D3D modules.
+include(cmake/DxvkRuntimeManifest.cmake)
+cs_write_dxvk_runtime_manifest("${CMAKE_CURRENT_BINARY_DIR}/dxvk-runtime-manifest.txt")
+set(DXVK_BUILD_DIR "${CMAKE_SOURCE_DIR}/extern/dxvk/build/src")
+set(_DXVK_RUNTIME_DLLS
+    "${DXVK_BUILD_DIR}/d3d11/dxvk_d3d11.dll"
+    "${DXVK_BUILD_DIR}/dxgi/dxvk_dxgi.dll"
+)
+install(
+    CODE
+    "
+    execute_process(
+        COMMAND powershell -NoProfile -ExecutionPolicy Bypass
+            -File \"${CMAKE_SOURCE_DIR}/tools/stage-dxvk-dlls.ps1\"
+            -Src \"${DXVK_BUILD_DIR}\"
+            -Dst \"\${CMAKE_INSTALL_PREFIX}/SKSE/Plugins/CommunityShaders/bin\"
+        RESULT_VARIABLE _dxvk_stage_rc
+    )
+    if(NOT _dxvk_stage_rc EQUAL 0)
+        message(FATAL_ERROR \"stage-dxvk-dlls.ps1 failed with code \${_dxvk_stage_rc}\")
+    endif()
+    "
+    COMPONENT DXVK
+)
+
+# Prebuilt runtimes ship from package/; locally built fork plugins are staged below.
+# FSR requires the pinned Vulkan runtime to be present and unmodified.
+set(_FFX_VK_RUNTIME "${CMAKE_SOURCE_DIR}/package/SKSE/Plugins/CommunityShaders/bin/amd_fidelityfx_vk.dll")
+if(NOT EXISTS "${_FFX_VK_RUNTIME}")
+    message(FATAL_ERROR "Missing Vulkan FSR runtime: ${_FFX_VK_RUNTIME}")
+endif()
+set(_FFX_VK_PINNED "${CMAKE_SOURCE_DIR}/extern/Streamline/external/fidelityfx-bin/amd_fidelityfx_vk.dll")
+if(NOT EXISTS "${_FFX_VK_PINNED}")
+    message(FATAL_ERROR "Missing pinned Vulkan FSR runtime: ${_FFX_VK_PINNED}; run git lfs pull in extern/Streamline")
+endif()
+file(SHA256 "${_FFX_VK_RUNTIME}" _FFX_VK_RUNTIME_SHA256)
+file(SHA256 "${_FFX_VK_PINNED}" _FFX_VK_PINNED_SHA256)
+if(NOT _FFX_VK_RUNTIME_SHA256 STREQUAL _FFX_VK_PINNED_SHA256)
+    message(FATAL_ERROR "Packaged Vulkan FSR runtime does not match the pinned Streamline fork")
+endif()
+
+# Reject legacy backend binaries in Vulkan package inputs.
+file(GLOB_RECURSE _LEGACY_UPSCALING_RUNTIMES
+    "${CMAKE_SOURCE_DIR}/package/*dx12*"
+    "${CMAKE_SOURCE_DIR}/package/*d3d12*"
+    "${CMAKE_SOURCE_DIR}/features/Upscaling/*dx12*"
+    "${CMAKE_SOURCE_DIR}/features/Upscaling/*d3d12*"
+)
+if(_LEGACY_UPSCALING_RUNTIMES)
+    message(FATAL_ERROR "Legacy upscaling runtimes found in Vulkan package inputs: ${_LEGACY_UPSCALING_RUNTIMES}")
+endif()
+
+# Only stage plugins requested by Streamline initialization. Explicit paths make
+# a missing build output fail package installation instead of silently omitting it.
+set(_SL_FORK_DLLS)
+foreach(_plugin IN ITEMS sl.interposer sl.reflex sl.fsr sl.fsr_g sl.xess)
+    list(APPEND _SL_FORK_DLLS "${CMAKE_SOURCE_DIR}/extern/Streamline/_artifacts/${_plugin}/Develop_x64/${_plugin}.dll")
+endforeach()
+install(
+    FILES ${_SL_FORK_DLLS}
+    DESTINATION SKSE/Plugins/CommunityShaders/bin
+    COMPONENT Streamline
+)
+
+set(_DXVK_LICENSE "${CMAKE_SOURCE_DIR}/extern/dxvk/LICENSE")
+set(_FFX_LICENSE "${CMAKE_SOURCE_DIR}/extern/Streamline/external/fidelityfx-sdk/LICENSE.txt")
+set(_XESS_LICENSE "${CMAKE_SOURCE_DIR}/extern/Streamline/external/xess/LICENSE.txt")
+set(_XESS_THIRD_PARTY_NOTICES "${CMAKE_SOURCE_DIR}/extern/Streamline/external/xess/third-party-programs.txt")
+install(
+    FILES "${_DXVK_LICENSE}"
+    DESTINATION SKSE/Plugins/CommunityShaders/bin
+    RENAME dxvk.license.txt
+    COMPONENT DXVK
+)
+install(
+    FILES "${_FFX_LICENSE}"
+    DESTINATION SKSE/Plugins/CommunityShaders/bin
+    RENAME fidelityfx.license.txt
+    COMPONENT Streamline
+)
+install(
+    FILES "${_XESS_LICENSE}"
+    DESTINATION SKSE/Plugins/CommunityShaders/bin
+    RENAME xess.license.txt
+    COMPONENT Streamline
+)
+install(
+    FILES "${_XESS_THIRD_PARTY_NOTICES}"
+    DESTINATION SKSE/Plugins/CommunityShaders/bin
+    RENAME xess.third-party-programs.txt
+    COMPONENT Streamline
+)
+set(
+    _AIO_RUNTIME_INPUTS
+    ${_DXVK_RUNTIME_DLLS}
+    ${_SL_FORK_DLLS}
+    "${_DXVK_LICENSE}"
+    "${_FFX_LICENSE}"
+    "${_XESS_LICENSE}"
+    "${_XESS_THIRD_PARTY_NOTICES}"
+)
+
 # #######################################################################################################################
 # # Automatic AIO preparation (incremental copy system)
 # #######################################################################################################################
@@ -514,6 +659,10 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
         list(FILTER _tmp EXCLUDE REGEX "/Shaders/")
         list(APPEND _AIO_PACKAGE_FILES ${_tmp})
     endforeach()
+    list(
+        APPEND _AIO_PACKAGE_FILES
+        ${_AIO_RUNTIME_INPUTS}
+    )
 
     # Prepare AIO by copying files only when different. This avoids updating
     # timestamps for unchanged files and prevents downstream incremental
@@ -527,6 +676,23 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
     file(WRITE "${_feature_paths_file}" "")
     foreach(_fpath IN LISTS FEATURE_PATHS)
         file(APPEND "${_feature_paths_file}" "${_fpath}\n")
+    endforeach()
+
+    set(_runtime_paths_file "${CMAKE_CURRENT_BINARY_DIR}/runtime_paths.txt")
+    file(WRITE "${_runtime_paths_file}" "")
+    foreach(_runtime_file IN LISTS _DXVK_RUNTIME_DLLS _SL_FORK_DLLS)
+        get_filename_component(_runtime_name "${_runtime_file}" NAME)
+        file(APPEND "${_runtime_paths_file}" "SKSE/Plugins/CommunityShaders/bin/${_runtime_name}\n")
+    endforeach()
+    foreach(
+        _runtime_name
+        IN ITEMS
+            dxvk.license.txt
+            fidelityfx.license.txt
+            xess.license.txt
+            xess.third-party-programs.txt
+    )
+        file(APPEND "${_runtime_paths_file}" "SKSE/Plugins/CommunityShaders/bin/${_runtime_name}\n")
     endforeach()
 
     # Ensure SKSE/Plugins dir exists
@@ -547,6 +713,7 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
         -DAIO_DIR="${AIO_DIR}"
         -DSOURCE_DIR="${CMAKE_SOURCE_DIR}"
         -DFEATURE_PATHS_FILE="${_feature_paths_file}"
+        -DRUNTIME_PATHS_FILE="${_runtime_paths_file}"
         -P
         "${CMAKE_SOURCE_DIR}/cmake/CleanupStaleEntries.cmake"
     )
@@ -577,6 +744,38 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
             append_copy_if_different(_prepare_aio_cmds _feature_files "${_fpath}" "${AIO_DIR}")
         endif()
     endforeach()
+
+    # Mirror runtime install rules into the glob-based AIO staging path.
+    set(_aio_runtime_dir "${AIO_DIR}/SKSE/Plugins/CommunityShaders/bin")
+
+    # Remove the old split layout without clearing other incremental AIO files.
+    list(
+        APPEND _prepare_aio_cmds
+        COMMAND ${CMAKE_COMMAND} -E remove_directory "${AIO_DIR}/SKSE/Plugins/CommunityShaders/dxvk"
+        COMMAND ${CMAKE_COMMAND} -E remove_directory "${AIO_DIR}/SKSE/Plugins/CommunityShaders/Streamline"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${_aio_runtime_dir}"
+    )
+
+    list(
+        APPEND _prepare_aio_cmds
+        COMMAND powershell -NoProfile -ExecutionPolicy Bypass
+            -File "${CMAKE_SOURCE_DIR}/tools/stage-dxvk-dlls.ps1"
+            -Src "${DXVK_BUILD_DIR}"
+            -Dst "${_aio_runtime_dir}"
+    )
+
+    # Stage locally built Streamline fork plugins.
+    foreach(_sl IN LISTS _SL_FORK_DLLS)
+        list(APPEND _prepare_aio_cmds COMMAND ${CMAKE_COMMAND} -E copy_if_different "${_sl}" "${_aio_runtime_dir}/")
+    endforeach()
+
+    list(
+        APPEND _prepare_aio_cmds
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${_DXVK_LICENSE}" "${_aio_runtime_dir}/dxvk.license.txt"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${_FFX_LICENSE}" "${_aio_runtime_dir}/fidelityfx.license.txt"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${_XESS_LICENSE}" "${_aio_runtime_dir}/xess.license.txt"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${_XESS_THIRD_PARTY_NOTICES}" "${_aio_runtime_dir}/xess.third-party-programs.txt"
+    )
 
     # Remove CORE from AIO if it exists (keep rest intact)
     list(
@@ -695,6 +894,7 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
         DEPENDS
             ${HLSL_FILES}
             ${CMAKE_SOURCE_DIR}/cmake/CleanupStaleEntries.cmake
+            ${CMAKE_CURRENT_BINARY_DIR}/prepare_aio.stamp
         COMMENT "Copying changed shaders into AIO/Shaders"
     )
 
@@ -989,8 +1189,12 @@ if(ZIP_TO_DIST)
     endforeach()
 endif()
 
-# Create a AIO zip for easier testing
+# Create an AIO archive for easier testing
 if(AIO_ZIP_TO_DIST)
+    if(NOT SEVENZ_EXECUTABLE)
+        message(FATAL_ERROR "7-Zip is required for the maximum-compression AIO package")
+    endif()
+
     if(NOT ZIP_TO_DIST)
         add_custom_command(
             TARGET ${PROJECT_NAME}
@@ -1001,43 +1205,30 @@ if(AIO_ZIP_TO_DIST)
         )
     endif()
 
-    # Create a stamp-producing custom command for the AIO archive so CMake
-    # only rebuilds the archive when its inputs change. The archive filename
-    # keeps the UTC timestamp as before, but the command writes a stable
-    # stamp file that CMake can track as OUTPUT.
-    if(SEVENZ_EXECUTABLE)
-        set(TARGET_AIO_ZIP "${PROJECT_NAME}_AIO-${UTC_NOW}.7z")
-    else()
-        set(TARGET_AIO_ZIP "${PROJECT_NAME}_AIO-${UTC_NOW}.zip")
-    endif()
+    # Use a stamp-producing custom command so the archive is rebuilt only when
+    # its inputs change. The timestamped archive name itself is not a stable
+    # output that CMake can track across configure runs.
+    # Solid LZMA2 keeps the Vulkan AIO below the distribution size limit.
+    set(TARGET_AIO_ZIP "${PROJECT_NAME}_AIO-${UTC_NOW}.7z")
     set(AIO_ARCHIVE "${CMAKE_SOURCE_DIR}/dist/${TARGET_AIO_ZIP}")
-    set(AIO_ZIP_STAMP "${CMAKE_CURRENT_BINARY_DIR}/aio_package.stamp")
+    set(AIO_ZIP_STAMP "${CMAKE_CURRENT_BINARY_DIR}/aio_package_7z.stamp")
 
-    message("Zipping ${AIO_DIR} to ${AIO_ARCHIVE}")
+    message("Compressing ${AIO_DIR} to ${AIO_ARCHIVE}")
 
-    if(SEVENZ_EXECUTABLE)
-        add_custom_command(
-            OUTPUT ${AIO_ZIP_STAMP}
-            COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_SOURCE_DIR}/dist"
-            COMMAND ${CMAKE_COMMAND} -E rm -f "${AIO_ARCHIVE}"
-            COMMAND "${SEVENZ_EXECUTABLE}" a -t7z -mx1 -mmt=on "${AIO_ARCHIVE}" *
-            COMMAND ${CMAKE_COMMAND} -E touch ${AIO_ZIP_STAMP}
-            WORKING_DIRECTORY ${AIO_DIR}
-            DEPENDS PREPARE_AIO ${CMAKE_CURRENT_BINARY_DIR}/copy_shaders.stamp
-            COMMENT "Creating AIO archive ${AIO_ARCHIVE}"
-        )
-    else()
-        message(WARNING "7z not found; AIO archive will use uncompressed zip")
-        add_custom_command(
-            OUTPUT ${AIO_ZIP_STAMP}
-            COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_SOURCE_DIR}/dist"
-            COMMAND ${CMAKE_COMMAND} -E tar cf ${AIO_ARCHIVE} --format=zip -- .
-            COMMAND ${CMAKE_COMMAND} -E touch ${AIO_ZIP_STAMP}
-            WORKING_DIRECTORY ${AIO_DIR}
-            DEPENDS PREPARE_AIO ${CMAKE_CURRENT_BINARY_DIR}/copy_shaders.stamp
-            COMMENT "Creating AIO archive ${AIO_ARCHIVE}"
-        )
-    endif()
+    add_custom_command(
+        OUTPUT ${AIO_ZIP_STAMP}
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_SOURCE_DIR}/dist"
+        COMMAND ${CMAKE_COMMAND} -E rm -f "${AIO_ARCHIVE}"
+        COMMAND
+            "${SEVENZ_EXECUTABLE}" a -t7z "${AIO_ARCHIVE}" "*"
+            -mx=9 -m0=lzma2 -md=128m -mfb=273 -ms=on -mmt=on -bd -y
+        COMMAND ${CMAKE_COMMAND} -E touch ${AIO_ZIP_STAMP}
+        WORKING_DIRECTORY ${AIO_DIR}
+        DEPENDS
+            ${CMAKE_CURRENT_BINARY_DIR}/prepare_aio.stamp
+            ${CMAKE_CURRENT_BINARY_DIR}/copy_shaders.stamp
+        COMMENT "Creating maximum-compression AIO archive ${AIO_ARCHIVE}"
+    )
 
     add_custom_target(AIO_ZIP_PACKAGE ALL DEPENDS ${AIO_ZIP_STAMP})
 endif()
@@ -1137,7 +1328,7 @@ if(TARGET PREPARE_AIO)
 else()
     add_custom_command(
         OUTPUT ${AIO_DIR}/SKSE/Plugins/${PROJECT_NAME}.dll
-        DEPENDS ${PROJECT_NAME} ${CORE_SOURCES}
+        DEPENDS ${PROJECT_NAME} ${CORE_SOURCES} ${_AIO_RUNTIME_INPUTS}
         COMMAND ${CMAKE_COMMAND} --install ${CMAKE_BINARY_DIR} --config $<CONFIG> --prefix ${AIO_DIR}
         COMMENT "Installing to AIO folder"
     )
@@ -1156,13 +1347,15 @@ if(TARGET PREPARE_AIO)
             OUTPUT ${AIO_PACKAGE}
             COMMAND ${CMAKE_COMMAND} -E make_directory "${DIST_PATH}"
             COMMAND ${CMAKE_COMMAND} -E rm -f "${AIO_PACKAGE}"
-            COMMAND "${SEVENZ_EXECUTABLE}" a -t7z -mx1 -mmt=on "${AIO_PACKAGE}" *
+            COMMAND
+                "${SEVENZ_EXECUTABLE}" a -t7z "${AIO_PACKAGE}" "*"
+                -mx=9 -m0=lzma2 -md=128m -mfb=273 -ms=on -mmt=on -bd -y
             WORKING_DIRECTORY ${AIO_DIR}
             DEPENDS
                 ${CMAKE_CURRENT_BINARY_DIR}/prepare_aio.stamp
                 copy_shaders.stamp
                 ${PROJECT_NAME}
-            COMMENT "Creating AIO archive (from prepared AIO dir)"
+            COMMENT "Creating maximum-compression AIO package (from prepared AIO dir)"
         )
     else()
         add_custom_command(
@@ -1174,32 +1367,39 @@ if(TARGET PREPARE_AIO)
                 ${CMAKE_CURRENT_BINARY_DIR}/prepare_aio.stamp
                 copy_shaders.stamp
                 ${PROJECT_NAME}
-            COMMENT "Creating AIO zip package (from prepared AIO dir)"
+            COMMENT "Creating fallback AIO zip package (from prepared AIO dir)"
         )
     endif()
 else()
-    # AIO_PACKAGE is named .7z whenever 7-Zip exists, so this branch must honour
-    # SEVENZ_EXECUTABLE too or it emits a deflate zip wearing a .7z extension.
     if(SEVENZ_EXECUTABLE)
-        set(AIO_ARCHIVE_COMMAND
-            "${SEVENZ_EXECUTABLE}" a -t7z -mx1 -mmt=on "${AIO_PACKAGE}" *
+        add_custom_command(
+            OUTPUT ${AIO_PACKAGE}
+            DEPENDS ${PROJECT_NAME} ${CORE_SOURCES} ${_AIO_RUNTIME_INPUTS}
+            COMMAND ${CMAKE_COMMAND} -E make_directory ${AIO_DIR}
+            COMMAND ${CMAKE_COMMAND} --install ${CMAKE_BINARY_DIR} --config $<CONFIG> --prefix ${AIO_DIR}
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${DIST_PATH}"
+            COMMAND ${CMAKE_COMMAND} -E rm -f "${AIO_PACKAGE}"
+            COMMAND
+                ${CMAKE_COMMAND} -E chdir ${AIO_DIR} "${SEVENZ_EXECUTABLE}" a -t7z
+                "${AIO_PACKAGE}" "*" -mx=9 -m0=lzma2 -md=128m -mfb=273 -ms=on -mmt=on -bd -y
+            COMMENT "Creating maximum-compression AIO package (full install)"
+            VERBATIM
         )
     else()
-        set(AIO_ARCHIVE_COMMAND
-            ${CMAKE_COMMAND} -E tar cfv ${AIO_PACKAGE} --format=zip -- .
+        add_custom_command(
+            OUTPUT ${AIO_PACKAGE}
+            DEPENDS ${PROJECT_NAME} ${CORE_SOURCES} ${_AIO_RUNTIME_INPUTS}
+            COMMAND ${CMAKE_COMMAND} -E make_directory ${AIO_DIR}
+            COMMAND ${CMAKE_COMMAND} --install ${CMAKE_BINARY_DIR} --config $<CONFIG> --prefix ${AIO_DIR}
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${DIST_PATH}"
+            COMMAND ${CMAKE_COMMAND} -E rm -f "${AIO_PACKAGE}"
+            COMMAND
+                ${CMAKE_COMMAND} -E chdir ${AIO_DIR} ${CMAKE_COMMAND} -E tar cfv
+                ${AIO_PACKAGE} --format=zip -- .
+            COMMENT "Creating fallback AIO zip package (full install)"
+            VERBATIM
         )
     endif()
-    add_custom_command(
-        OUTPUT ${AIO_PACKAGE}
-        DEPENDS ${PROJECT_NAME} ${CORE_SOURCES}
-        COMMAND ${CMAKE_COMMAND} -E make_directory ${AIO_DIR}
-        COMMAND ${CMAKE_COMMAND} --install ${CMAKE_BINARY_DIR} --config $<CONFIG> --prefix ${AIO_DIR}
-        COMMAND ${CMAKE_COMMAND} -E make_directory "${DIST_PATH}"
-        COMMAND ${CMAKE_COMMAND} -E rm -f "${AIO_PACKAGE}"
-        COMMAND ${CMAKE_COMMAND} -E chdir ${AIO_DIR} ${AIO_ARCHIVE_COMMAND}
-        COMMENT "Creating AIO archive (full install)"
-        VERBATIM
-    )
 endif()
 add_custom_target("Package-AIO-Manual" DEPENDS ${AIO_PACKAGE})
 

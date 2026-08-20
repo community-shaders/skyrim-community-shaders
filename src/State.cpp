@@ -510,6 +510,7 @@ void State::SaveToJson(nlohmann::json& settings)
 	advanced["Dump Shaders"] = shaderCache->IsDump();
 	advanced["Log Level"] = logLevel;
 	advanced["Developer Mode"] = enableDeveloperMode;
+	advanced["Enable DXVK"] = enableDXVK;
 	advanced["Shader Defines"] = shaderDefinesString;
 	advanced["Compiler Threads"] = shaderCache->compilationThreadCount;
 	advanced["Background Compiler Threads"] = shaderCache->backgroundCompilationThreadCount;
@@ -583,6 +584,8 @@ void State::LoadFromJson(nlohmann::json& settings)
 			logLevel = magic_enum::enum_cast<spdlog::level::level_enum>(advanced["Log Level"].get<int>()).value_or(spdlog::level::info);
 		if (advanced.contains("Developer Mode") && advanced["Developer Mode"].is_boolean())
 			enableDeveloperMode = advanced["Developer Mode"];
+		if (advanced.contains("Enable DXVK") && advanced["Enable DXVK"].is_boolean())
+			enableDXVK = advanced["Enable DXVK"];
 		if (advanced.contains("Shader Defines") && advanced["Shader Defines"].is_string())
 			SetDefines(advanced["Shader Defines"]);
 		if (advanced.contains("Compiler Threads") && advanced["Compiler Threads"].is_number_integer())
@@ -1057,9 +1060,7 @@ void State::UpdateSharedData([[maybe_unused]] bool a_inWorld, [[maybe_unused]] b
 			if (temporal && upscaleMethod != Upscaling::UpscaleMethod::kTAA) {
 				float2 screenSz{ (float)globals::game::graphicsState->screenWidth, (float)globals::game::graphicsState->screenHeight };
 				auto renderSize = Util::ConvertToDynamic(screenSz, true);
-				data.MipBias = std::log2f(renderSize.x / screenSz.x);
-				if (upscaleMethod == Upscaling::UpscaleMethod::kDLSS)
-					data.MipBias -= 1.0f;
+				data.MipBias = std::log2f(renderSize.x / screenSz.x) - 1.0f;
 			} else {
 				data.MipBias = 0;
 			}
@@ -1197,5 +1198,4 @@ bool State::HasDirectionalShadows() const
 {
 	return !Util::IsInterior() || globals::features::interiorSun.IsActiveInteriorSun();
 }
-
 

@@ -930,11 +930,6 @@ void Menu::DrawFooter()
 													"Game Version: {runtime} {version}")
 								.c_str());
 	ImGui::SameLine();
-	ImGui::BulletText("%s", I18n::GetSingleton()->Format("menu.footer.d3d12_swap_chain",
-													{ { "status", globals::features::upscaling.d3d12SwapChainActive ? std::string(T("common.active", "Active")) : std::string(T("common.inactive", "Inactive")) } },
-													"D3D12 Swap Chain: {status}")
-								.c_str());
-	ImGui::SameLine();
 	ImGui::BulletText("%s", I18n::GetSingleton()->Format("menu.footer.gpu",
 													{ { "name", globals::state->adapterDescription } },
 													"GPU: {name}")
