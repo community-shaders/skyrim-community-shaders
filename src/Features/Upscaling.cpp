@@ -5,6 +5,7 @@
 #include "Features/RenderDoc.h"
 #include "Features/ScreenSpaceGI.h"
 #include "Features/ScreenSpaceShadows.h"
+#include "Features/Upscaling/VRGeometryPolicy.h"
 #include "Features/VolumetricLighting.h"
 #include "FoveatedCommon.h"
 #include "Hooks.h"
@@ -6663,6 +6664,105 @@ namespace
 	};
 
 	EnvelopeColumnProbe g_envelopeColumnProbe;
+
+	// Phase 0A: compare the pure planner against what production computed.
+	//
+	// Reports on change of signature, so a steady scene produces one line per
+	// distinct geometry rather than one per frame. Silence means the planner and
+	// production agree on real data, which is the precondition for letting
+	// production depend on it.
+	void LogGeometryPolicyShadowMismatch(
+		const Upscaling::RuntimeResolutionPlan& a_plan,
+		const float2& a_displayCombined,
+		const Upscaling::PerfModeState::BootSnapshot& a_boot,
+		uint32_t a_requestedQuality,
+		uint32_t a_runtimeQuality,
+		bool a_renderScaleLatched,
+		bool a_physicalRecovery)
+	{
+		if (a_displayCombined.x < 2.0f || a_displayCombined.y < 2.0f)
+			return;
+
+		VRGeometryPolicy::Inputs inputs{};
+		inputs.displayPerEye = {
+			static_cast<uint32_t>(a_displayCombined.x) / 2u,
+			static_cast<uint32_t>(a_displayCombined.y)
+		};
+		inputs.phase = a_physicalRecovery ?
+		                   VRGeometryPolicy::Phase::PhysicalRecovery :
+		                   VRGeometryPolicy::Phase::Stable;
+
+		if (a_renderScaleLatched) {
+			// Render Scale Mode is the envelope with boot == active, so one flow
+			// covers both by the diagonal identity the tests assert.
+			inputs.flow = VRGeometryPolicy::Flow::HotEnvelope;
+			inputs.bootQuality = a_boot.valid ? a_boot.qualityMode : a_requestedQuality;
+			inputs.activeQuality = a_requestedQuality;
+		} else {
+			inputs.flow = VRGeometryPolicy::Flow::RenderScaleOff;
+			inputs.bootQuality = a_runtimeQuality;
+			inputs.activeQuality = a_runtimeQuality;
+		}
+
+		const auto decision = VRGeometryPolicy::Derive(inputs);
+		const auto toExtent = [](const float2& a_value) {
+			return VRGeometryPolicy::Extent{
+				static_cast<uint32_t>(a_value.x),
+				static_cast<uint32_t>(a_value.y)
+			};
+		};
+
+		const auto productionAllocation = toExtent(
+			a_plan.engineAllocationSize.x > 0.0f ? a_plan.engineAllocationSize : a_plan.engineRenderSize);
+		const auto productionRender = toExtent(a_plan.engineRenderSize);
+		const auto productionOutput = toExtent(a_plan.finalOutputSize);
+
+		const bool allocationAgrees = productionAllocation == decision.plan.allocationCombined;
+		const bool renderAgrees = productionRender == decision.plan.renderCombined;
+		const bool outputAgrees = productionOutput == decision.plan.outputCombined;
+		// A quality that does not fit its allocation is the one case production
+		// and the policy are expected to differ: production silently returns the
+		// allocation, the policy reports RelatchRequired and keeps the requested
+		// size. Recorded rather than treated as a defect, because deciding which
+		// is right belongs to phase 2.
+		const bool expectedRelatchDivergence =
+			decision.action == VRGeometryPolicy::Action::RelatchRequired;
+
+		if (allocationAgrees && renderAgrees && outputAgrees)
+			return;
+
+		static uint64_t loggedSignature = 0xFFFFFFFFFFFFFFFFull;
+		const uint64_t signature =
+			(static_cast<uint64_t>(productionAllocation.width) << 44) ^
+			(static_cast<uint64_t>(productionRender.width) << 28) ^
+			(static_cast<uint64_t>(decision.plan.renderCombined.width) << 12) ^
+			(static_cast<uint64_t>(inputs.bootQuality) << 8) ^
+			static_cast<uint64_t>(inputs.activeQuality);
+		if (signature == loggedSignature)
+			return;
+		loggedSignature = signature;
+
+		logger::warn(
+			"[GeomShadow] flow={} phase={} boot={} active={} display {}x{} | "
+			"production alloc {}x{} render {}x{} output {}x{} | "
+			"policy alloc {}x{} render {}x{} output {}x{} | action={} | {}",
+			a_renderScaleLatched ? "envelope" : "rs-off",
+			a_physicalRecovery ? "recovery" : "stable",
+			inputs.bootQuality,
+			inputs.activeQuality,
+			inputs.displayPerEye.width,
+			inputs.displayPerEye.height,
+			productionAllocation.width, productionAllocation.height,
+			productionRender.width, productionRender.height,
+			productionOutput.width, productionOutput.height,
+			decision.plan.allocationCombined.width, decision.plan.allocationCombined.height,
+			decision.plan.renderCombined.width, decision.plan.renderCombined.height,
+			decision.plan.outputCombined.width, decision.plan.outputCombined.height,
+			static_cast<int>(decision.action),
+			expectedRelatchDivergence ?
+				"EXPECTED: requested quality does not fit the allocation" :
+				"UNEXPECTED: the mapping from runtime state to policy inputs is wrong");
+	}
 
 	// Auto-debug: emit a submit-decision record when its content changes.
 	//
@@ -19584,6 +19684,27 @@ void Upscaling::RefreshRuntimeResolutionPlan()
 		plan.outputTarget = dlssUsesSharpenerOutput ?
 		                        UpscalingOutputTarget::Sharpener :
 		                        UpscalingOutputTarget::Main;
+	}
+
+	// Phase 0A shadow comparison: run the pure planner alongside production and
+	// report any disagreement. Nothing here feeds the plan.
+	//
+	// The compile-time tests already prove the policy reproduces the two sizing
+	// rules. What they cannot prove is that the RUNTIME state maps onto its
+	// inputs the way it is assumed to - that the boot snapshot really carries
+	// the allocation, that settings.qualityMode really drives the active render,
+	// that the display is what it is taken to be. That mapping is the part worth
+	// checking before production is allowed to depend on it, and this is the
+	// cheapest way to check it: on real data, with no behaviour change.
+	if (settings.vrHotEnvelope != 0u && globals::game::isVR) {
+		LogGeometryPolicyShadowMismatch(
+			plan,
+			perfMode.GetDisplayScreenSize(),
+			perfMode.GetBootSnapshot(),
+			ClampQualityModeUInt(settings.qualityMode),
+			GetRuntimeQualityMode(),
+			vrRenderScaleLatched,
+			HasUnresolvedVRRenderScalePhysicalRecovery());
 	}
 
 	plan.foveatedActive = IsFoveatedVendorDispatchEnabled(plan.upscaleMethod);
