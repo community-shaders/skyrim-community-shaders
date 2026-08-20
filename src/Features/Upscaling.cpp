@@ -19675,7 +19675,47 @@ void Upscaling::RefreshRuntimeResolutionPlan()
 		// Hot-Envelope: the latched size becomes the ALLOCATION, and the active
 		// quality renders into a sub-rect of it. With the feature off the two
 		// are the same value and this is the shipped behaviour exactly.
-		const float2 allocationSize = perfMode.GetRenderScreenSize();
+		// Phase 0A: the allocation comes from the shared planner too, so the
+		// render-scale flow has one producer rather than two.
+		//
+		// Behaviour-null: boot.renderEyeWidth is itself
+		// ScaleVRRenderDimension(trueHMDEyeWidth, bootScale) (PerfMode.cpp:196),
+		// which is the expression the planner evaluates. Same inputs, same
+		// function. The shadow run confirmed it on real data - the one envelope
+		// line matched the allocation to the pixel at 4656x2372.
+		//
+		// Falls back to the latched value whenever the planner cannot answer, so
+		// a boot snapshot that exists while the display is unknown still works
+		// exactly as it does today.
+		const float2 allocationSize = [&]() -> float2 {
+			const float2 latched = perfMode.GetRenderScreenSize();
+			const float2 display = perfMode.GetDisplayScreenSize();
+			if (display.x < 2.0f || display.y < 2.0f)
+				return latched;
+
+			const auto& boot = perfMode.GetBootSnapshot();
+			if (!boot.valid)
+				return latched;
+
+			VRGeometryPolicy::Inputs inputs{};
+			inputs.flow = VRGeometryPolicy::Flow::RenderScaleOn;
+			inputs.phase = VRGeometryPolicy::Phase::Stable;
+			inputs.displayPerEye = {
+				static_cast<uint32_t>(display.x) / 2u,
+				static_cast<uint32_t>(display.y)
+			};
+			inputs.bootQuality = boot.qualityMode;
+			inputs.activeQuality = boot.qualityMode;
+
+			const auto decision = VRGeometryPolicy::Derive(inputs);
+			if (decision.action != VRGeometryPolicy::Action::Use)
+				return latched;
+
+			return float2{
+				static_cast<float>(decision.plan.allocationCombined.width),
+				static_cast<float>(decision.plan.allocationCombined.height)
+			};
+		}();
 		// Hot-Envelope: while a physical mutation is in flight the allocation is
 		// being rebuilt underneath us, so rendering into a sub-rect of it races
 		// the recreation. Fall back to the allocation - which is stock behaviour -
