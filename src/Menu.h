@@ -153,6 +153,8 @@ public:
 
 	/** @brief Translates raw Skyrim input events into the internal key event queue */
 	void ProcessInputEvents(RE::InputEvent* const* a_events);
+	/** Records the raw DirectInput mouse-wheel delta before Skyrim reduces it to pseudo-buttons. */
+	void RecordDirectInputWheelDelta(std::int32_t delta);
 	/** @brief Returns true if the menu should consume all input (menu open or capturing hotkey) */
 	bool ShouldSwallowInput();
 	/** @brief Returns true if the free camera preview is in flying mode */
@@ -559,6 +561,7 @@ private:
 	// Input event handling
 	std::vector<KeyEvent> _keyEventQueue;
 	mutable std::shared_mutex _inputEventMutex;
+	std::atomic<int64_t> _directInputWheelDelta = 0;
 
 	// Keys whose key-down already fired a combo hotkey. Their matching key-up is
 	// suppressed so a shared single-key binding (e.g. End) doesn't also fire once
