@@ -46885,6 +46885,17 @@ namespace
 		uint32_t outputHeight = 0;
 		uint32_t allocationWidth = 0;
 		uint32_t allocationHeight = 0;
+		// Where the engine actually drew, as integers rather than as a visual
+		// judgement. This is the half of the record that settles the packed vs
+		// allocation-separated contradiction, if the viewport here is per-eye.
+		int32_t viewportX = -1;
+		int32_t viewportY = -1;
+		int32_t viewportWidth = -1;
+		int32_t viewportHeight = -1;
+		int32_t scissorLeft = -1;
+		int32_t scissorRight = -1;
+		uint32_t viewportCount = 0;
+		uint32_t eyeOriginMode = 0;
 		bool replaced = false;
 
 		bool operator==(const DynResPassTraceKey&) const = default;
@@ -46914,10 +46925,10 @@ namespace
 		}
 
 		g_dynResPassTraceSeen[g_dynResPassTraceCount++] = a_key;
-
 		logger::info(
 			"[DynResPass] pass={} stage={} decision={} reason={} | plan A={}x{} R={}x{} O={}x{} | "
-			"source={}x{} target={}x{} | box=[0,{})x[0,{}) | vanillaRuns={}",
+			"source={}x{} target={}x{} | box=[0,{})x[0,{}) | "
+			"viewports={} vp0=[x{} y{} {}x{}] scissor0=[{},{}) | eyeOriginMode={} | vanillaRuns={}",
 			a_key.passName ? a_key.passName : "unknown",
 			a_key.stage == 0u ? "Render" : "Dispatch",
 			a_key.replaced ? "REPLACED" : "FELL-THROUGH",
@@ -46928,6 +46939,10 @@ namespace
 			a_key.sourceWidth, a_key.sourceHeight,
 			a_key.targetWidth, a_key.targetHeight,
 			a_key.inputWidth, a_key.inputHeight,
+			a_key.viewportCount,
+			a_key.viewportX, a_key.viewportY, a_key.viewportWidth, a_key.viewportHeight,
+			a_key.scissorLeft, a_key.scissorRight,
+			a_key.eyeOriginMode,
 			a_key.replaced ? "no" : "YES");
 	}
 }
@@ -46987,6 +47002,43 @@ bool Upscaling::TryReplaceVanillaDynamicResolutionUpsample(const char* a_passNam
 	auto context = globals::d3d::context;
 	if (!context)
 		return bail("no-d3d-context");
+
+	// Where the engine actually drew, captured before this function touches any
+	// state. Read-only Get calls; no D3D state is modified.
+	//
+	// This exists to settle a contradiction. Skyrim's own dynamic-resolution
+	// constants say the two eyes are PACKED - FrameBuffer.hlsli clamps eye 1 to
+	// [0.5*ratio, ratio), i.e. pixel 0.5*R - and every CS consumer agrees. But a
+	// measurement recorded in Upscaling.h says eye 1 sits at the allocation half,
+	// 0.5*A. Under Render Scale ON those are the same pixel; under Hot-Envelope
+	// they are 274 pixels apart at Balanced. One of the two is wrong, and the
+	// measurement's stated basis was a visual judgement.
+	//
+	// An integer settles it. If the viewport here turns out to be full-target
+	// rather than per-eye, that is a real answer too: it means this boundary
+	// cannot decide the question and a scene-time observation is required.
+	if (traceEnabled) {
+		std::array<D3D11_VIEWPORT, D3D11_VIEWPORT_AND_SCISSORRECT_OBJECT_COUNT_PER_PIPELINE> traceViewports{};
+		UINT traceViewportCount = static_cast<UINT>(traceViewports.size());
+		context->RSGetViewports(&traceViewportCount, traceViewports.data());
+		trace.viewportCount = traceViewportCount;
+		if (traceViewportCount > 0) {
+			trace.viewportX = static_cast<int32_t>(traceViewports[0].TopLeftX);
+			trace.viewportY = static_cast<int32_t>(traceViewports[0].TopLeftY);
+			trace.viewportWidth = static_cast<int32_t>(traceViewports[0].Width);
+			trace.viewportHeight = static_cast<int32_t>(traceViewports[0].Height);
+		}
+
+		std::array<D3D11_RECT, D3D11_VIEWPORT_AND_SCISSORRECT_OBJECT_COUNT_PER_PIPELINE> traceScissors{};
+		UINT traceScissorCount = static_cast<UINT>(traceScissors.size());
+		context->RSGetScissorRects(&traceScissorCount, traceScissors.data());
+		if (traceScissorCount > 0) {
+			trace.scissorLeft = static_cast<int32_t>(traceScissors[0].left);
+			trace.scissorRight = static_cast<int32_t>(traceScissors[0].right);
+		}
+
+		trace.eyeOriginMode = settings.vrHotEnvelopeEyeOrigin;
+	}
 
 	uint32_t inputWidth = ClampPositiveDimension(resolutionPlan.engineRenderSize.width);
 	uint32_t inputHeight = ClampPositiveDimension(resolutionPlan.engineRenderSize.height);
