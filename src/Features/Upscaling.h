@@ -279,6 +279,11 @@ public:
 		// on change and capped, so an entire flow can be reconstructed from the
 		// log rather than from someone watching and reporting impressions.
 		uint vrHotEnvelopeTrace = 0;
+		// CDO-001 phase 3, narrowed to one question: does the vanilla
+		// dynamic-resolution expansion actually run under Render Scale Mode, and
+		// with what boxes? Metadata only - no readback, no mutation. Reports each
+		// distinct decision once and then stays silent.
+		uint vrDynResPassTrace = 0;
 		uint perfMode = 1;
 		uint frameLimitMode = 1;
 		uint frameGenerationMode = 0;  // Disabled by default

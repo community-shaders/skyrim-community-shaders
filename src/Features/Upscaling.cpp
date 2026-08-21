@@ -74,6 +74,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	vrHotEnvelopeEyeOriginPx,
 	vrHotEnvelopeProbe,
 	vrHotEnvelopeTrace,
+	vrDynResPassTrace,
 	perfMode,
 	frameLimitMode,
 	frameGenerationMode,
@@ -46850,38 +46851,142 @@ bool Upscaling::SubmitVRUpscaledFrame(vr::EVREye a_eye, uint64_t a_compositorCyc
 	return true;
 }
 
+namespace
+{
+	// CDO-001 phase 3, narrowed to a single question:
+	//
+	//     Does the vanilla dynamic-resolution expansion run under Render Scale
+	//     Mode, and if it is replaced, what box is copied?
+	//
+	// This matters because H1 predicts an R->A expansion followed by an R-sized
+	// crop. Returning true here SKIPS the vanilla pass; returning false lets it
+	// run. So "did the expansion happen" is exactly "did this function return
+	// false, and why" - and every reason is nameable from source.
+	//
+	// Metadata only: resource descriptions and boxes, never contents. Each
+	// distinct decision is reported once and then stays silent, so the record is
+	// bounded by the number of distinct states rather than by frame count. That
+	// is what keeps it inside the protocol's non-interference requirement.
+	//
+	// A recorded box says what a pass was ASKED to do, not what the pixels are.
+	// This can scope the later phases; it cannot localize anything.
+	struct DynResPassTraceKey
+	{
+		const char* passName = nullptr;
+		uint32_t stage = 0;
+		const char* reason = nullptr;
+		uint32_t sourceWidth = 0;
+		uint32_t sourceHeight = 0;
+		uint32_t targetWidth = 0;
+		uint32_t targetHeight = 0;
+		uint32_t inputWidth = 0;
+		uint32_t inputHeight = 0;
+		uint32_t outputWidth = 0;
+		uint32_t outputHeight = 0;
+		uint32_t allocationWidth = 0;
+		uint32_t allocationHeight = 0;
+		bool replaced = false;
+
+		bool operator==(const DynResPassTraceKey&) const = default;
+	};
+
+	constexpr size_t kDynResPassTraceCapacity = 64;
+	std::array<DynResPassTraceKey, kDynResPassTraceCapacity> g_dynResPassTraceSeen{};
+	size_t g_dynResPassTraceCount = 0;
+	bool g_dynResPassTraceSaturated = false;
+
+	void LogDynResPassDecisionIfNew(const DynResPassTraceKey& a_key)
+	{
+		for (size_t i = 0; i < g_dynResPassTraceCount; ++i) {
+			if (g_dynResPassTraceSeen[i] == a_key)
+				return;
+		}
+
+		if (g_dynResPassTraceCount >= kDynResPassTraceCapacity) {
+			if (!g_dynResPassTraceSaturated) {
+				g_dynResPassTraceSaturated = true;
+				logger::info(
+					"[DynResPass] Trace capacity {} reached; further distinct decisions are not recorded. "
+					"Treat the record as incomplete rather than exhaustive.",
+					kDynResPassTraceCapacity);
+			}
+			return;
+		}
+
+		g_dynResPassTraceSeen[g_dynResPassTraceCount++] = a_key;
+
+		logger::info(
+			"[DynResPass] pass={} stage={} decision={} reason={} | plan A={}x{} R={}x{} O={}x{} | "
+			"source={}x{} target={}x{} | box=[0,{})x[0,{}) | vanillaRuns={}",
+			a_key.passName ? a_key.passName : "unknown",
+			a_key.stage == 0u ? "Render" : "Dispatch",
+			a_key.replaced ? "REPLACED" : "FELL-THROUGH",
+			a_key.reason ? a_key.reason : "unknown",
+			a_key.allocationWidth, a_key.allocationHeight,
+			a_key.inputWidth, a_key.inputHeight,
+			a_key.outputWidth, a_key.outputHeight,
+			a_key.sourceWidth, a_key.sourceHeight,
+			a_key.targetWidth, a_key.targetHeight,
+			a_key.inputWidth, a_key.inputHeight,
+			a_key.replaced ? "no" : "YES");
+	}
+}
+
 bool Upscaling::TryReplaceVanillaDynamicResolutionUpsample(const char* a_passName, DynamicResolutionUpsampleStage a_stage)
 {
-	if (IsVRMenuDisplayResolutionPassActive())
+	// CDO-001 phase 3 instrument. Records the decision and its reason; changes
+	// no control flow. Each early return keeps its original condition and order,
+	// so short-circuit behaviour is identical - the multi-condition gate is only
+	// split so the record can name which clause fired.
+	DynResPassTraceKey trace{};
+	trace.passName = a_passName ? a_passName : "dynamic-resolution pass";
+	trace.stage = static_cast<uint32_t>(a_stage);
+	const bool traceEnabled = settings.vrDynResPassTrace != 0u;
+	const auto bail = [&](const char* a_reason) {
+		if (traceEnabled) {
+			trace.reason = a_reason;
+			trace.replaced = false;
+			LogDynResPassDecisionIfNew(trace);
+		}
 		return false;
+	};
+
+	if (IsVRMenuDisplayResolutionPassActive())
+		return bail("menu-display-resolution-pass-active");
 
 	auto state = globals::state;
 	const auto upscaleMethod = GetRuntimeUpscaleMethod();
-	if (!globals::game::isVR ||
-		!IsVendorUpscalingMethod(upscaleMethod) ||
-		!IsVRRenderScaleSubmitPathEnabled() ||
-		!IsSubmitStageUpscalingActive() ||
-		ShouldSuppressVRInSceneOverlaySubmit() ||
-		IsCommunityShadersMenuOpen()) {
-		return false;
-	}
+	if (!globals::game::isVR)
+		return bail("not-vr");
+	if (!IsVendorUpscalingMethod(upscaleMethod))
+		return bail("not-vendor-upscaler");
+	if (!IsVRRenderScaleSubmitPathEnabled())
+		return bail("render-scale-submit-path-disabled");
+	if (!IsSubmitStageUpscalingActive())
+		return bail("submit-stage-upscaling-inactive");
+	if (ShouldSuppressVRInSceneOverlaySubmit())
+		return bail("in-scene-overlay-suppressed");
+	if (IsCommunityShadersMenuOpen())
+		return bail("cs-menu-open");
 	if (!state)
-		return false;
+		return bail("no-state");
 	if (IsVRTransitionPresentationProtectionActive(*this, state) &&
 		IsVRLoadingPresentationContextActive(state)) {
-		return false;
+		return bail("transition-presentation-protection");
 	}
 
 	EnsureRuntimeResolutionStateCurrent();
 	const auto& resolutionPlan = GetRuntimeResolutionPlan();
+	trace.allocationWidth = ClampPositiveDimension(resolutionPlan.engineAllocationSize.width);
+	trace.allocationHeight = ClampPositiveDimension(resolutionPlan.engineAllocationSize.height);
 	if (resolutionPlan.owner != ResolutionOwner::VRRenderScaleMode ||
 		resolutionPlan.outputTarget != UpscalingOutputTarget::SubmitStageIntermediate) {
-		return false;
+		return bail("plan-owner-not-render-scale-submit");
 	}
 
 	auto context = globals::d3d::context;
 	if (!context)
-		return false;
+		return bail("no-d3d-context");
 
 	uint32_t inputWidth = ClampPositiveDimension(resolutionPlan.engineRenderSize.width);
 	uint32_t inputHeight = ClampPositiveDimension(resolutionPlan.engineRenderSize.height);
@@ -46896,10 +47001,14 @@ bool Upscaling::TryReplaceVanillaDynamicResolutionUpsample(const char* a_passNam
 		outputWidth = ClampPositiveDimension(state->screenSize.x);
 		outputHeight = ClampPositiveDimension(state->screenSize.y);
 	}
+	trace.inputWidth = inputWidth;
+	trace.inputHeight = inputHeight;
+	trace.outputWidth = outputWidth;
+	trace.outputHeight = outputHeight;
 	if (!inputWidth || !inputHeight)
-		return false;
+		return bail("no-input-extent");
 	if (inputWidth >= outputWidth && inputHeight >= outputHeight)
-		return false;
+		return bail("input-not-smaller-than-output");
 
 	ID3D11ShaderResourceView* psSourceSRV = nullptr;
 	ID3D11ShaderResourceView* csSourceSRV = nullptr;
@@ -46974,7 +47083,14 @@ bool Upscaling::TryReplaceVanillaDynamicResolutionUpsample(const char* a_passNam
 			loggedMissingSource = true;
 		}
 		releaseSourceSRVs();
-		return false;
+		return bail("no-suitable-source-srv");
+	}
+
+	if (traceEnabled) {
+		D3D11_TEXTURE2D_DESC traceSourceDesc{};
+		sourceTexture->GetDesc(&traceSourceDesc);
+		trace.sourceWidth = traceSourceDesc.Width;
+		trace.sourceHeight = traceSourceDesc.Height;
 	}
 
 	ID3D11RenderTargetView* outputRTV = nullptr;
@@ -46984,7 +47100,7 @@ bool Upscaling::TryReplaceVanillaDynamicResolutionUpsample(const char* a_passNam
 		sourceTexture->Release();
 		sourceResource->Release();
 		releaseSourceSRVs();
-		return false;
+		return bail("no-output-rtv");
 	}
 
 	ID3D11Resource* outputResource = nullptr;
@@ -46999,7 +47115,14 @@ bool Upscaling::TryReplaceVanillaDynamicResolutionUpsample(const char* a_passNam
 		sourceTexture->Release();
 		sourceResource->Release();
 		releaseSourceSRVs();
-		return false;
+		return bail("output-not-texture2d");
+	}
+
+	if (traceEnabled) {
+		D3D11_TEXTURE2D_DESC traceTargetDesc{};
+		outputTexture->GetDesc(&traceTargetDesc);
+		trace.targetWidth = traceTargetDesc.Width;
+		trace.targetHeight = traceTargetDesc.Height;
 	}
 
 	const auto releaseRefs = [&]() {
@@ -47029,7 +47152,7 @@ bool Upscaling::TryReplaceVanillaDynamicResolutionUpsample(const char* a_passNam
 	const bool interactionUiContext = !IsKnownGameMenuContextActive();
 	if ((inPlacePass || uiRenderTargetPass) && interactionUiContext) {
 		releaseRefs();
-		return false;
+		return bail("in-place-or-ui-render-target");
 	}
 
 	unbindSourceSRV();
@@ -47077,6 +47200,13 @@ bool Upscaling::TryReplaceVanillaDynamicResolutionUpsample(const char* a_passNam
 
 	const bool copiedToOutput = copyDynamicRegionToTarget(outputTexture);
 	if (copiedToOutput) {
+		if (traceEnabled) {
+			// The replacement ran: vanilla's expansion did NOT happen for this
+			// pass, and the box below is what was copied instead.
+			trace.reason = "replaced-with-dynamic-region-copy";
+			trace.replaced = true;
+			LogDynResPassDecisionIfNew(trace);
+		}
 		context->OMSetRenderTargets(1, &outputRTV, outputDSV);
 		releaseRefs();
 		if (globals::game::stateUpdateFlags)
@@ -47087,7 +47217,7 @@ bool Upscaling::TryReplaceVanillaDynamicResolutionUpsample(const char* a_passNam
 	context->OMSetRenderTargets(1, &outputRTV, outputDSV);
 	restoreSourceSRVs();
 	releaseRefs();
-	return false;
+	return bail("copy-declined");
 }
 
 void Upscaling::RequestHistoryReset()
