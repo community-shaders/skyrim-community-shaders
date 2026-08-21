@@ -175,7 +175,7 @@ namespace
 		auto& upscaling = globals::features::upscaling;
 		const auto& resolutionPlan = upscaling.GetRuntimeResolutionPlan();
 		a_displaySize = resolutionPlan.finalOutputSize;
-		a_renderSize = resolutionPlan.engineRenderSize;
+		a_renderSize = VRGeometry::ToFloat2(resolutionPlan.engineRenderSize);
 
 		if (a_displaySize.x <= 0.0f || a_displaySize.y <= 0.0f)
 			a_displaySize = state->screenSize;

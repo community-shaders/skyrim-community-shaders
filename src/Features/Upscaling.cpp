@@ -5592,8 +5592,8 @@ namespace
 
 		add(static_cast<uint64_t>(a_upscaleMethod));
 		const auto& plan = a_upscaling.GetRuntimeResolutionPlan();
-		addFloat(plan.engineRenderSize.x);
-		addFloat(plan.engineRenderSize.y);
+		addFloat(plan.engineRenderSize.width);
+		addFloat(plan.engineRenderSize.height);
 		addFloat(plan.finalOutputSize.x);
 		addFloat(plan.finalOutputSize.y);
 		add(a_upscaling.GetActiveVRRenderScaleContractGeneration());
@@ -6711,6 +6711,12 @@ namespace
 				static_cast<uint32_t>(a_value.y)
 			};
 		};
+		const auto toTaggedExtent = [](const auto& a_extent) {
+			return VRGeometryPolicy::Extent{
+				static_cast<uint32_t>(a_extent.width),
+				static_cast<uint32_t>(a_extent.height)
+			};
+		};
 
 		// RS-off never records an allocation - only the render-scale branch sets
 		// engineAllocationSize - so falling back to engineRenderSize made every
@@ -6718,11 +6724,11 @@ namespace
 		// field. The policy is right that the allocation is the display there;
 		// production just does not track it. Compare only what production
 		// actually computes.
-		const bool productionTracksAllocation = a_plan.engineAllocationSize.x > 0.0f;
+		const bool productionTracksAllocation = a_plan.engineAllocationSize.width > 0.0f;
 		const auto productionAllocation = productionTracksAllocation ?
-		                                      toExtent(a_plan.engineAllocationSize) :
+		                                      toTaggedExtent(a_plan.engineAllocationSize) :
 		                                      decision.plan.allocationCombined;
-		const auto productionRender = toExtent(a_plan.engineRenderSize);
+		const auto productionRender = toTaggedExtent(a_plan.engineRenderSize);
 		const auto productionOutput = toExtent(a_plan.finalOutputSize);
 
 		const bool allocationAgrees = productionAllocation == decision.plan.allocationCombined;
@@ -7033,12 +7039,12 @@ namespace
 		//
 		// engineAllocationSize is zero on plans that never set it, so fall back to
 		// engineRenderSize and keep the original behaviour exactly.
-		const float allocationX = a_plan.engineAllocationSize.x > 0.0f ?
-		                              a_plan.engineAllocationSize.x :
-		                              a_plan.engineRenderSize.x;
-		const float allocationY = a_plan.engineAllocationSize.y > 0.0f ?
-		                              a_plan.engineAllocationSize.y :
-		                              a_plan.engineRenderSize.y;
+		const float allocationX = a_plan.engineAllocationSize.width > 0.0f ?
+		                              a_plan.engineAllocationSize.width :
+		                              a_plan.engineRenderSize.width;
+		const float allocationY = a_plan.engineAllocationSize.height > 0.0f ?
+		                              a_plan.engineAllocationSize.height :
+		                              a_plan.engineRenderSize.height;
 		return matchesDimension(allocationX, renderWidth) &&
 		       matchesDimension(allocationY, a_boot.renderEyeHeight) &&
 		       matchesDimension(a_plan.finalOutputSize.x, displayWidth) &&
@@ -7217,11 +7223,11 @@ namespace
 				boot.renderEyeWidth :
 				std::max<uint32_t>(
 					1u,
-					ClampPositiveDimension(plan.engineRenderSize.x) / 2u);
+					ClampPositiveDimension(plan.engineRenderSize.width) / 2u);
 		const uint32_t renderEyeHeight =
 			activeRenderScaleContract ?
 				boot.renderEyeHeight :
-				ClampPositiveDimension(plan.engineRenderSize.y);
+				ClampPositiveDimension(plan.engineRenderSize.height);
 		const uint32_t displayEyeWidth =
 			activeRenderScaleContract ?
 				boot.displayEyeWidth :
@@ -7233,7 +7239,7 @@ namespace
 				boot.displayEyeHeight :
 				ClampPositiveDimension(plan.finalOutputSize.y);
 		const uint32_t combinedRenderWidth =
-			ClampPositiveDimension(plan.engineRenderSize.x);
+			ClampPositiveDimension(plan.engineRenderSize.width);
 		const uint32_t combinedDisplayWidth =
 			ClampPositiveDimension(plan.finalOutputSize.x);
 		// Physical screenSize follows the recreated engine targets in Render Scale;
@@ -7334,20 +7340,20 @@ namespace
 		// active. Accept only that exact 1:1 quality-zero contract.
 		if (a_plan.owner != Upscaling::ResolutionOwner::Native ||
 			a_plan.qualityMode != 0 ||
-			!std::isfinite(a_plan.engineRenderSize.x) ||
-			!std::isfinite(a_plan.engineRenderSize.y) ||
+			!std::isfinite(a_plan.engineRenderSize.width) ||
+			!std::isfinite(a_plan.engineRenderSize.height) ||
 			!std::isfinite(a_plan.finalOutputSize.x) ||
 			!std::isfinite(a_plan.finalOutputSize.y) ||
-			a_plan.engineRenderSize.x <= 0.0f ||
-			a_plan.engineRenderSize.y <= 0.0f ||
+			a_plan.engineRenderSize.width <= 0.0f ||
+			a_plan.engineRenderSize.height <= 0.0f ||
 			a_plan.finalOutputSize.x <= 0.0f ||
 			a_plan.finalOutputSize.y <= 0.0f) {
 			return false;
 		}
 
-		return ClampPositiveDimension(a_plan.engineRenderSize.x) ==
+		return ClampPositiveDimension(a_plan.engineRenderSize.width) ==
 		           ClampPositiveDimension(a_plan.finalOutputSize.x) &&
-		       ClampPositiveDimension(a_plan.engineRenderSize.y) ==
+		       ClampPositiveDimension(a_plan.engineRenderSize.height) ==
 		           ClampPositiveDimension(a_plan.finalOutputSize.y);
 	}
 
@@ -7402,19 +7408,19 @@ namespace
 			plan.perfModeRestartRequired ||
 			!std::isfinite(plan.finalOutputSize.x) ||
 			!std::isfinite(plan.finalOutputSize.y) ||
-			!std::isfinite(plan.engineRenderSize.x) ||
-			!std::isfinite(plan.engineRenderSize.y) ||
+			!std::isfinite(plan.engineRenderSize.width) ||
+			!std::isfinite(plan.engineRenderSize.height) ||
 			plan.finalOutputSize.x <= 0.0f ||
 			plan.finalOutputSize.y <= 0.0f ||
-			plan.engineRenderSize.x <= 0.0f ||
-			plan.engineRenderSize.y <= 0.0f) {
+			plan.engineRenderSize.width <= 0.0f ||
+			plan.engineRenderSize.height <= 0.0f) {
 			return false;
 		}
 
 		const uint32_t displayWidth = ClampPositiveDimension(plan.finalOutputSize.x);
 		const uint32_t displayHeight = ClampPositiveDimension(plan.finalOutputSize.y);
-		const uint32_t renderWidth = ClampPositiveDimension(plan.engineRenderSize.x);
-		const uint32_t renderHeight = ClampPositiveDimension(plan.engineRenderSize.y);
+		const uint32_t renderWidth = ClampPositiveDimension(plan.engineRenderSize.width);
+		const uint32_t renderHeight = ClampPositiveDimension(plan.engineRenderSize.height);
 		if (!displayWidth ||
 			!displayHeight ||
 			!renderWidth ||
@@ -11046,8 +11052,8 @@ namespace
 						static_cast<uint32_t>(a_plan.owner),
 						static_cast<uint32_t>(a_plan.outputTarget),
 						a_plan.qualityMode,
-						ClampPositiveDimension(a_plan.engineRenderSize.x),
-						ClampPositiveDimension(a_plan.engineRenderSize.y),
+						ClampPositiveDimension(a_plan.engineRenderSize.width),
+						ClampPositiveDimension(a_plan.engineRenderSize.height),
 						ClampPositiveDimension(a_plan.finalOutputSize.x),
 						ClampPositiveDimension(a_plan.finalOutputSize.y),
 						a_plan.vendorMethod,
@@ -11204,8 +11210,8 @@ namespace
 		key.qualityMode = a_plan.qualityMode;
 		key.displayWidth = clampLogDimension(a_plan.trueHMDDisplaySize.x);
 		key.displayHeight = clampLogDimension(a_plan.trueHMDDisplaySize.y);
-		key.renderWidth = clampLogDimension(a_plan.engineRenderSize.x);
-		key.renderHeight = clampLogDimension(a_plan.engineRenderSize.y);
+		key.renderWidth = clampLogDimension(a_plan.engineRenderSize.width);
+		key.renderHeight = clampLogDimension(a_plan.engineRenderSize.height);
 		key.finalWidth = clampLogDimension(a_plan.finalOutputSize.x);
 		key.finalHeight = clampLogDimension(a_plan.finalOutputSize.y);
 		return key;
@@ -12590,8 +12596,8 @@ bool Upscaling::IsVRMenuTransportContractPresent() const
 
 	const auto& plan = runtimeResolutionPlan;
 	return plan.owner == ResolutionOwner::VRRenderScaleMode &&
-	       plan.finalOutputSize.x > plan.engineRenderSize.x &&
-	       plan.finalOutputSize.y > plan.engineRenderSize.y;
+	       plan.finalOutputSize.x > plan.engineRenderSize.width &&
+	       plan.finalOutputSize.y > plan.engineRenderSize.height;
 }
 
 bool Upscaling::IsVRMenuSemanticAdapterEligible() const
@@ -14229,8 +14235,8 @@ bool Upscaling::PrewarmVRMenuFinalCompositeResources(DXGI_FORMAT a_layerFormat)
 	}
 
 	const auto& plan = GetRuntimeResolutionPlan();
-	const uint32_t renderWidth = ClampPositiveDimension(plan.engineRenderSize.x);
-	const uint32_t renderHeight = ClampPositiveDimension(plan.engineRenderSize.y);
+	const uint32_t renderWidth = ClampPositiveDimension(plan.engineRenderSize.width);
+	const uint32_t renderHeight = ClampPositiveDimension(plan.engineRenderSize.height);
 	const uint32_t finalWidth = ClampPositiveDimension(plan.finalOutputSize.x);
 	const uint32_t finalHeight = ClampPositiveDimension(plan.finalOutputSize.y);
 	if (!renderWidth || !renderHeight || !finalWidth || !finalHeight ||
@@ -14565,8 +14571,8 @@ bool Upscaling::TryCaptureAndSuppressVRMenuBridgeDraw(
 	}
 
 	const auto& plan = GetRuntimeResolutionPlan();
-	const uint32_t renderWidth = ClampPositiveDimension(plan.engineRenderSize.x);
-	const uint32_t renderHeight = ClampPositiveDimension(plan.engineRenderSize.y);
+	const uint32_t renderWidth = ClampPositiveDimension(plan.engineRenderSize.width);
+	const uint32_t renderHeight = ClampPositiveDimension(plan.engineRenderSize.height);
 	const uint32_t finalWidth = ClampPositiveDimension(plan.finalOutputSize.x);
 	const uint32_t finalHeight = ClampPositiveDimension(plan.finalOutputSize.y);
 	if (!renderWidth || !renderHeight || !finalWidth || !finalHeight ||
@@ -14935,8 +14941,8 @@ namespace
 							static_cast<uint32_t>(runtimePlan.owner),
 							static_cast<uint32_t>(runtimePlan.outputTarget),
 							runtimePlan.qualityMode,
-							ClampPositiveDimension(runtimePlan.engineRenderSize.x),
-							ClampPositiveDimension(runtimePlan.engineRenderSize.y),
+							ClampPositiveDimension(runtimePlan.engineRenderSize.width),
+							ClampPositiveDimension(runtimePlan.engineRenderSize.height),
 							ClampPositiveDimension(runtimePlan.finalOutputSize.x),
 							ClampPositiveDimension(runtimePlan.finalOutputSize.y),
 							GetVRMenuPresentationTraceScopeDescription()); });
@@ -15680,9 +15686,9 @@ void Upscaling::DrawSettings()
 			// really a null experiment - it cost three builds and a session
 			// before the control said so. Say it here instead.
 			const bool subRectActive =
-				runtimeResolutionPlan.engineAllocationSize.x > 0.0f &&
-				runtimeResolutionPlan.engineRenderSize.x > 0.0f &&
-				runtimeResolutionPlan.engineRenderSize.x < runtimeResolutionPlan.engineAllocationSize.x;
+				runtimeResolutionPlan.engineAllocationSize.width > 0.0f &&
+				runtimeResolutionPlan.engineRenderSize.width > 0.0f &&
+				runtimeResolutionPlan.engineRenderSize.width < runtimeResolutionPlan.engineAllocationSize.width;
 			if (!subRectActive) {
 				Util::Text::WrappedWarning(
 					"%s",
@@ -15704,10 +15710,10 @@ void Upscaling::DrawSettings()
 			if (subRectActive) {
 				ImGui::Text(
 					"Sub-rect active: render %d wide into allocation %d. Packed would be %d, allocation half %d.",
-					static_cast<int>(runtimeResolutionPlan.engineRenderSize.x),
-					static_cast<int>(runtimeResolutionPlan.engineAllocationSize.x),
-					static_cast<int>(runtimeResolutionPlan.engineRenderSize.x) / 2,
-					static_cast<int>(runtimeResolutionPlan.engineAllocationSize.x) / 2);
+					static_cast<int>(runtimeResolutionPlan.engineRenderSize.width),
+					static_cast<int>(runtimeResolutionPlan.engineAllocationSize.width),
+					static_cast<int>(runtimeResolutionPlan.engineRenderSize.width) / 2,
+					static_cast<int>(runtimeResolutionPlan.engineAllocationSize.width) / 2);
 			}
 			if (settings.vrHotEnvelopeEyeOrigin == 2u) {
 				int eyeOriginPx = static_cast<int>(std::min<uint32_t>(settings.vrHotEnvelopeEyeOriginPx, 8192u));
@@ -19586,7 +19592,7 @@ float Upscaling::ResolveRuntimeMipBias(bool a_temporal)
 	if (runtimeResolutionPlan.owner == ResolutionOwner::VRRenderScaleMode) {
 		return ResolveMaterialMipBias(
 			runtimeResolutionPlan.upscaleMethod,
-			runtimeResolutionPlan.engineRenderSize,
+			VRGeometry::ToFloat2(runtimeResolutionPlan.engineRenderSize),
 			runtimeResolutionPlan.finalOutputSize);
 	}
 
@@ -19643,7 +19649,7 @@ void Upscaling::RefreshRuntimeResolutionPlan()
 	auto* state = globals::state;
 	const float2 screenSize = state ? state->screenSize : float2{ 0.0f, 0.0f };
 	plan.trueHMDDisplaySize = screenSize;
-	plan.engineRenderSize = state ? Util::ConvertToDynamic(screenSize) : screenSize;
+	plan.engineRenderSize = VRGeometry::AsRenderExtent(state ? Util::ConvertToDynamic(screenSize) : screenSize);
 	plan.finalOutputSize = screenSize;
 
 	// In VR vendor paths, the engine dynamic-resolution ratios are temporarily forced to 1:1
@@ -19713,35 +19719,38 @@ void Upscaling::RefreshRuntimeResolutionPlan()
 			}
 		}
 
-		const float2 allocationSize = geometryUsable ?
-		                                  float2{
-											  static_cast<float>(geometryDecision.plan.allocationCombined.width),
-											  static_cast<float>(geometryDecision.plan.allocationCombined.height)
-										  } :
-										  perfMode.GetRenderScreenSize();
+		const VRGeometry::AllocationExtent allocationSize = geometryUsable ?
+		                                                        VRGeometry::AllocationExtent{
+																	static_cast<float>(geometryDecision.plan.allocationCombined.width),
+																	static_cast<float>(geometryDecision.plan.allocationCombined.height)
+																} :
+																VRGeometry::AsAllocationExtent(perfMode.GetRenderScreenSize());
 
 		// A quality that does not fit its allocation reports RelatchRequired, and
 		// today's behaviour is to render the allocation instead. Preserved here;
-		// whether that is right is phase 2's call.
-		const float2 renderSize =
+		// whether that is right is phase 2's call. The fallback is now a named
+		// crossing between two geometries rather than an assignment, which is the
+		// point of the types: it is exactly the kind of substitution that used to
+		// be invisible.
+		const VRGeometry::RenderExtent renderSize =
 			(geometryUsable && geometryDecision.action == VRGeometryPolicy::Action::Use) ?
-				float2{
+				VRGeometry::RenderExtent{
 					static_cast<float>(geometryDecision.plan.renderCombined.width),
 					static_cast<float>(geometryDecision.plan.renderCombined.height)
 				} :
-				allocationSize;
+				VRGeometry::RenderExtent{ allocationSize.width, allocationSize.height };
 		if (displaySize.x > 0.0f && displaySize.y > 0.0f)
 			plan.trueHMDDisplaySize = displaySize;
-		if (allocationSize.x > 0.0f && allocationSize.y > 0.0f)
+		if (allocationSize.width > 0.0f && allocationSize.height > 0.0f)
 			plan.engineAllocationSize = allocationSize;
-		if (renderSize.x > 0.0f && renderSize.y > 0.0f)
+		if (renderSize.width > 0.0f && renderSize.height > 0.0f)
 			plan.engineRenderSize = renderSize;
 		plan.finalOutputSize = plan.trueHMDDisplaySize;
 		plan.owner = ResolutionOwner::VRRenderScaleMode;
 		plan.outputTarget = UpscalingOutputTarget::SubmitStageIntermediate;
 	} else if (plan.vendorMethod && IsUpscalingActive()) {
 		if (globals::game::isVR)
-			plan.engineRenderSize = resolveVendorDynamicRenderSize(plan.trueHMDDisplaySize);
+			plan.engineRenderSize = VRGeometry::AsRenderExtent(resolveVendorDynamicRenderSize(plan.trueHMDDisplaySize));
 		plan.owner = ResolutionOwner::VendorDynamicResolution;
 		const bool dlssUsesSharpenerOutput =
 			plan.upscaleMethod == UpscaleMethod::kDLSS &&
@@ -19786,8 +19795,8 @@ void Upscaling::RefreshRuntimeResolutionPlan()
 			centerOffsets[1] = { 0.0f, 0.0f };
 
 		const uint32_t eyeDivisor = globals::game::isVR ? 2u : 1u;
-		const uint32_t inputWidthPerEye = std::max<uint32_t>(1u, ClampPositiveDimension(plan.engineRenderSize.x) / eyeDivisor);
-		const uint32_t inputHeight = ClampPositiveDimension(plan.engineRenderSize.y);
+		const uint32_t inputWidthPerEye = std::max<uint32_t>(1u, ClampPositiveDimension(plan.engineRenderSize.width) / eyeDivisor);
+		const uint32_t inputHeight = ClampPositiveDimension(plan.engineRenderSize.height);
 		const uint32_t outputWidthPerEye = std::max<uint32_t>(1u, ClampPositiveDimension(plan.finalOutputSize.x) / eyeDivisor);
 		const uint32_t outputHeight = ClampPositiveDimension(plan.finalOutputSize.y);
 		const float peripheryTAAOuterScale = plan.peripheryTAAActive ?
@@ -29752,9 +29761,9 @@ bool Upscaling::PrepareVRNativeRestorePresentationObservation(
 		!resolutionPlan.vendorMethod &&
 		resolutionPlan.owner == ResolutionOwner::Native &&
 		ClampPositiveDimension(
-			resolutionPlan.engineRenderSize.x) == sourceDesc.Width &&
+			resolutionPlan.engineRenderSize.width) == sourceDesc.Width &&
 		ClampPositiveDimension(
-			resolutionPlan.engineRenderSize.y) == sourceDesc.Height;
+			resolutionPlan.engineRenderSize.height) == sourceDesc.Height;
 	const bool fixedVendorRuntimePlanExact =
 		IsVendorUpscalingMethod(applied.method) &&
 		resolutionPlan.vendorMethod &&
@@ -29762,9 +29771,9 @@ bool Upscaling::PrepareVRNativeRestorePresentationObservation(
 			resolutionPlan,
 			applied.method) &&
 		ClampPositiveDimension(
-			resolutionPlan.engineRenderSize.x) == sourceDesc.Width &&
+			resolutionPlan.engineRenderSize.width) == sourceDesc.Width &&
 		ClampPositiveDimension(
-			resolutionPlan.engineRenderSize.y) == sourceDesc.Height;
+			resolutionPlan.engineRenderSize.height) == sourceDesc.Height;
 	const bool nativeSource =
 		IsVRNativeEngineOutputSubmitTexture(sourceTexture);
 	const bool fixedVendorSource =
@@ -34174,8 +34183,8 @@ Upscaling::VRVendorResourceResetResult Upscaling::RecreateVendorRuntimeResources
 			"[Upscaling][Diag] Recreate vendor runtime resources method={} recreateTemporal={} render={}x{} display={}x{} pendingDLSS={} pendingFSR={} fsrResourcesBefore={}",
 			magic_enum::enum_name(a_upscaleMethod),
 			BoolText(a_recreateTemporalResources),
-			ClampPositiveDimension(runtimeResolutionPlan.engineRenderSize.x),
-			ClampPositiveDimension(runtimeResolutionPlan.engineRenderSize.y),
+			ClampPositiveDimension(runtimeResolutionPlan.engineRenderSize.width),
+			ClampPositiveDimension(runtimeResolutionPlan.engineRenderSize.height),
 			ClampPositiveDimension(runtimeResolutionPlan.finalOutputSize.x),
 			ClampPositiveDimension(runtimeResolutionPlan.finalOutputSize.y),
 			BoolText(pendingDLSSReset.load(std::memory_order_acquire)),
@@ -34288,15 +34297,15 @@ bool Upscaling::ApplyPendingVendorRuntimeReset(UpscaleMethod a_upscaleMethod, co
 	const auto areCurrentFSRResourcesCompatible = [&]() {
 		if (runtimeResolutionPlan.finalOutputSize.x <= 0.0f ||
 			runtimeResolutionPlan.finalOutputSize.y <= 0.0f ||
-			runtimeResolutionPlan.engineRenderSize.x <= 0.0f ||
-			runtimeResolutionPlan.engineRenderSize.y <= 0.0f) {
+			runtimeResolutionPlan.engineRenderSize.width <= 0.0f ||
+			runtimeResolutionPlan.engineRenderSize.height <= 0.0f) {
 			return false;
 		}
 
 		const uint32_t displayWidthPerEye = std::max<uint32_t>(1u, ClampPositiveDimension(runtimeResolutionPlan.finalOutputSize.x) / 2u);
 		const uint32_t displayHeight = ClampPositiveDimension(runtimeResolutionPlan.finalOutputSize.y);
-		const uint32_t renderWidthPerEye = std::max<uint32_t>(1u, ClampPositiveDimension(runtimeResolutionPlan.engineRenderSize.x) / 2u);
-		const uint32_t renderHeight = ClampPositiveDimension(runtimeResolutionPlan.engineRenderSize.y);
+		const uint32_t renderWidthPerEye = std::max<uint32_t>(1u, ClampPositiveDimension(runtimeResolutionPlan.engineRenderSize.width) / 2u);
+		const uint32_t renderHeight = ClampPositiveDimension(runtimeResolutionPlan.engineRenderSize.height);
 		return fidelityFX.AreFSRResourcesCompatible(renderWidthPerEye, renderHeight, displayWidthPerEye, displayHeight, 2u);
 	};
 
@@ -34830,15 +34839,15 @@ bool Upscaling::CheckResources(UpscaleMethod a_upscalemethod)
 			!fidelityFX.HasFSRResources() ||
 			runtimeResolutionPlan.finalOutputSize.x <= 0.0f ||
 			runtimeResolutionPlan.finalOutputSize.y <= 0.0f ||
-			runtimeResolutionPlan.engineRenderSize.x <= 0.0f ||
-			runtimeResolutionPlan.engineRenderSize.y <= 0.0f) {
+			runtimeResolutionPlan.engineRenderSize.width <= 0.0f ||
+			runtimeResolutionPlan.engineRenderSize.height <= 0.0f) {
 			return false;
 		}
 
 		const uint32_t displayWidthPerEye = std::max<uint32_t>(1u, ClampPositiveDimension(runtimeResolutionPlan.finalOutputSize.x) / 2u);
 		const uint32_t displayHeight = ClampPositiveDimension(runtimeResolutionPlan.finalOutputSize.y);
-		const uint32_t renderWidthPerEye = std::max<uint32_t>(1u, ClampPositiveDimension(runtimeResolutionPlan.engineRenderSize.x) / 2u);
-		const uint32_t renderHeight = ClampPositiveDimension(runtimeResolutionPlan.engineRenderSize.y);
+		const uint32_t renderWidthPerEye = std::max<uint32_t>(1u, ClampPositiveDimension(runtimeResolutionPlan.engineRenderSize.width) / 2u);
+		const uint32_t renderHeight = ClampPositiveDimension(runtimeResolutionPlan.engineRenderSize.height);
 		return fidelityFX.AreFSRResourcesCompatible(renderWidthPerEye, renderHeight, displayWidthPerEye, displayHeight, 2u);
 	};
 	const bool vrFSRQualityChangeCanPreserveResources =
@@ -35630,7 +35639,7 @@ bool Upscaling::GetRuntimeFoveatedRegionDimensions(uint32_t& a_inputWidthPerEye,
 		return false;
 
 	float2 outputSize = runtimeResolutionPlan.finalOutputSize;
-	float2 renderSize = runtimeResolutionPlan.engineRenderSize;
+	float2 renderSize = VRGeometry::ToFloat2(runtimeResolutionPlan.engineRenderSize);
 	if (outputSize.x <= 0.0f || outputSize.y <= 0.0f)
 		outputSize = state->screenSize;
 	if (renderSize.x <= 0.0f || renderSize.y <= 0.0f)
@@ -38001,7 +38010,7 @@ bool Upscaling::PreparePerEyeInputs(ID3D11Resource* colorSrc, ID3D11Resource* de
 	});
 
 	auto screenSize = runtimeResolutionPlan.finalOutputSize;
-	auto renderSize = runtimeResolutionPlan.engineRenderSize;
+	auto renderSize = VRGeometry::ToFloat2(runtimeResolutionPlan.engineRenderSize);
 	if (screenSize.x <= 0.0f || screenSize.y <= 0.0f)
 		screenSize = state->screenSize;
 	if (renderSize.x <= 0.0f || renderSize.y <= 0.0f)
@@ -38335,7 +38344,7 @@ void Upscaling::FinalizePerEyeOutputs(ID3D11Resource* colorDst)
 	});
 
 	auto screenSize = runtimeResolutionPlan.finalOutputSize;
-	auto renderSize = runtimeResolutionPlan.engineRenderSize;
+	auto renderSize = VRGeometry::ToFloat2(runtimeResolutionPlan.engineRenderSize);
 	if (screenSize.x <= 0.0f || screenSize.y <= 0.0f)
 		screenSize = state->screenSize;
 	if (renderSize.x <= 0.0f || renderSize.y <= 0.0f)
@@ -39958,8 +39967,8 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 	};
 
 	if (runtimeResolutionPlan.owner == ResolutionOwner::VRRenderScaleMode) {
-		const int renderWidth = std::max(1, static_cast<int>(runtimeResolutionPlan.engineRenderSize.x));
-		const int renderHeight = std::max(1, static_cast<int>(runtimeResolutionPlan.engineRenderSize.y));
+		const int renderWidth = std::max(1, static_cast<int>(runtimeResolutionPlan.engineRenderSize.width));
+		const int renderHeight = std::max(1, static_cast<int>(runtimeResolutionPlan.engineRenderSize.height));
 		const int outputWidth = std::max(renderWidth, static_cast<int>(runtimeResolutionPlan.finalOutputSize.x));
 
 		// Hot-Envelope: the rendered region relative to the physical targets.
@@ -39969,11 +39978,11 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 		// there is no sub-rect. With it, the targets stay at the boot quality's
 		// size and a lower quality renders into part of them, so the ratio is
 		// what tells Skyrim's dynamic-resolution plumbing which part.
-		const float allocWidth = runtimeResolutionPlan.engineAllocationSize.x > 0.0f ?
-		                             runtimeResolutionPlan.engineAllocationSize.x :
+		const float allocWidth = runtimeResolutionPlan.engineAllocationSize.width > 0.0f ?
+		                             runtimeResolutionPlan.engineAllocationSize.width :
 		                             static_cast<float>(renderWidth);
-		const float allocHeight = runtimeResolutionPlan.engineAllocationSize.y > 0.0f ?
-		                              runtimeResolutionPlan.engineAllocationSize.y :
+		const float allocHeight = runtimeResolutionPlan.engineAllocationSize.height > 0.0f ?
+		                              runtimeResolutionPlan.engineAllocationSize.height :
 		                              static_cast<float>(renderHeight);
 		const float envelopeX = std::clamp(static_cast<float>(renderWidth) / allocWidth, 0.0f, 1.0f);
 		const float envelopeY = std::clamp(static_cast<float>(renderHeight) / allocHeight, 0.0f, 1.0f);
@@ -40826,19 +40835,19 @@ bool Upscaling::TryRepairVRPostLoadFixedCompositorCandidate(
 		plan.knownMenuContextActive ||
 		plan.loadingMenuActive ||
 		plan.perfModeRestartRequired ||
-		!std::isfinite(plan.engineRenderSize.x) ||
-		!std::isfinite(plan.engineRenderSize.y) ||
+		!std::isfinite(plan.engineRenderSize.width) ||
+		!std::isfinite(plan.engineRenderSize.height) ||
 		!std::isfinite(plan.finalOutputSize.x) ||
 		!std::isfinite(plan.finalOutputSize.y) ||
-		plan.engineRenderSize.x <= 0.0f ||
-		plan.engineRenderSize.y <= 0.0f ||
+		plan.engineRenderSize.width <= 0.0f ||
+		plan.engineRenderSize.height <= 0.0f ||
 		plan.finalOutputSize.x <= 0.0f ||
 		plan.finalOutputSize.y <= 0.0f) {
 		return false;
 	}
 
-	const uint32_t renderWidth = ClampPositiveDimension(plan.engineRenderSize.x);
-	const uint32_t renderHeight = ClampPositiveDimension(plan.engineRenderSize.y);
+	const uint32_t renderWidth = ClampPositiveDimension(plan.engineRenderSize.width);
+	const uint32_t renderHeight = ClampPositiveDimension(plan.engineRenderSize.height);
 	const uint32_t displayWidth = ClampPositiveDimension(plan.finalOutputSize.x);
 	const uint32_t displayHeight = ClampPositiveDimension(plan.finalOutputSize.y);
 	const auto exactDimension = [](float a_actual, uint32_t a_expected) {
@@ -40852,8 +40861,8 @@ bool Upscaling::TryRepairVRPostLoadFixedCompositorCandidate(
 		renderHeight != a_expectedRenderHeight ||
 		(renderWidth & 1u) != 0 ||
 		(displayWidth & 1u) != 0 ||
-		!exactDimension(plan.engineRenderSize.x, renderWidth) ||
-		!exactDimension(plan.engineRenderSize.y, renderHeight) ||
+		!exactDimension(plan.engineRenderSize.width, renderWidth) ||
+		!exactDimension(plan.engineRenderSize.height, renderHeight) ||
 		!exactDimension(plan.finalOutputSize.x, displayWidth) ||
 		!exactDimension(plan.finalOutputSize.y, displayHeight) ||
 		displayWidth != ClampPositiveDimension(state->screenSize.x) ||
@@ -42771,9 +42780,9 @@ bool Upscaling::ShouldSuppressVRPostLoadCompositorSubmit(
 			const uint32_t planHeight =
 				ClampPositiveDimension(a_plan.finalOutputSize.y);
 			const uint32_t planRenderWidth =
-				ClampPositiveDimension(a_plan.engineRenderSize.x);
+				ClampPositiveDimension(a_plan.engineRenderSize.width);
 			const uint32_t planRenderHeight =
-				ClampPositiveDimension(a_plan.engineRenderSize.y);
+				ClampPositiveDimension(a_plan.engineRenderSize.height);
 			const bool currentWorldFrameComplete =
 				HasCompletedVRWorldFrameAfterLatestLoad(state) &&
 				state->frameCount == currentFrame &&
@@ -42809,16 +42818,16 @@ bool Upscaling::ShouldSuppressVRPostLoadCompositorSubmit(
 		           !a_plan.knownMenuContextActive &&
 		           !a_plan.loadingMenuActive &&
 		           !a_plan.perfModeRestartRequired &&
-		           std::isfinite(a_plan.engineRenderSize.x) &&
-		           std::isfinite(a_plan.engineRenderSize.y) &&
+		           std::isfinite(a_plan.engineRenderSize.width) &&
+		           std::isfinite(a_plan.engineRenderSize.height) &&
 		           std::isfinite(a_plan.finalOutputSize.x) &&
 		           std::isfinite(a_plan.finalOutputSize.y) &&
-		           a_plan.engineRenderSize.x > 0.0f &&
-		           a_plan.engineRenderSize.y > 0.0f &&
+		           a_plan.engineRenderSize.width > 0.0f &&
+		           a_plan.engineRenderSize.height > 0.0f &&
 		           a_plan.finalOutputSize.x > 0.0f &&
 		           a_plan.finalOutputSize.y > 0.0f &&
-		           a_plan.engineRenderSize.x == static_cast<float>(planRenderWidth) &&
-		           a_plan.engineRenderSize.y == static_cast<float>(planRenderHeight) &&
+		           a_plan.engineRenderSize.width == static_cast<float>(planRenderWidth) &&
+		           a_plan.engineRenderSize.height == static_cast<float>(planRenderHeight) &&
 		           a_plan.finalOutputSize.x == static_cast<float>(planWidth) &&
 		           a_plan.finalOutputSize.y == static_cast<float>(planHeight) &&
 		           planWidth == expectedWidth &&
@@ -42844,8 +42853,8 @@ bool Upscaling::ShouldSuppressVRPostLoadCompositorSubmit(
 			!resolutionPlan.knownMenuContextActive &&
 			!resolutionPlan.loadingMenuActive &&
 			!resolutionPlan.perfModeRestartRequired &&
-			ClampPositiveDimension(resolutionPlan.engineRenderSize.x) == expectedWidth &&
-			ClampPositiveDimension(resolutionPlan.engineRenderSize.y) == expectedHeight &&
+			ClampPositiveDimension(resolutionPlan.engineRenderSize.width) == expectedWidth &&
+			ClampPositiveDimension(resolutionPlan.engineRenderSize.height) == expectedHeight &&
 			ClampPositiveDimension(resolutionPlan.finalOutputSize.x) == expectedWidth &&
 			ClampPositiveDimension(resolutionPlan.finalOutputSize.y) == expectedHeight &&
 			sourceDesc.Width == expectedWidth &&
@@ -42959,11 +42968,11 @@ bool Upscaling::ShouldSuppressVRPostLoadCompositorSubmit(
 		a_presentationObservation &&
 		a_presentationObservation->valid) {
 		const uint32_t combinedRenderWidth =
-			ClampPositiveDimension(resolutionPlan.engineRenderSize.x);
+			ClampPositiveDimension(resolutionPlan.engineRenderSize.width);
 		const uint32_t renderEyeWidth =
 			std::max<uint32_t>(1u, combinedRenderWidth / 2u);
 		const uint32_t renderEyeHeight =
-			ClampPositiveDimension(resolutionPlan.engineRenderSize.y);
+			ClampPositiveDimension(resolutionPlan.engineRenderSize.height);
 		const uint32_t combinedDisplayWidth =
 			ClampPositiveDimension(resolutionPlan.finalOutputSize.x);
 		const uint32_t displayEyeWidth =
@@ -43046,9 +43055,9 @@ bool Upscaling::ShouldSuppressVRPostLoadCompositorSubmit(
 			const uint64_t repairEpoch =
 				vrPostLoadCompositorHoldEpoch.load(std::memory_order_acquire);
 			const uint32_t repairRenderWidth =
-				ClampPositiveDimension(resolutionPlan.engineRenderSize.x);
+				ClampPositiveDimension(resolutionPlan.engineRenderSize.width);
 			const uint32_t repairRenderHeight =
-				ClampPositiveDimension(resolutionPlan.engineRenderSize.y);
+				ClampPositiveDimension(resolutionPlan.engineRenderSize.height);
 			lock.unlock();
 			const bool repaired =
 				TryRepairVRPostLoadFixedCompositorCandidate(
@@ -43124,9 +43133,9 @@ bool Upscaling::ShouldSuppressVRPostLoadCompositorSubmit(
 				currentHoldState != VRPostLoadCompositorHoldState::Idle &&
 				globals::state == state &&
 				isFixedCandidateContractExact(currentPlan) &&
-				currentPlan.engineRenderSize.x ==
+				currentPlan.engineRenderSize.width ==
 					static_cast<float>(repairRenderWidth) &&
-				currentPlan.engineRenderSize.y ==
+				currentPlan.engineRenderSize.height ==
 					static_cast<float>(repairRenderHeight);
 			if (!holdUnchanged) {
 				fixedCandidate = false;
@@ -45309,8 +45318,8 @@ bool Upscaling::SubmitVRUpscaledFrame(vr::EVREye a_eye, uint64_t a_compositorCyc
 	if (vrRenderScaleMode) {
 		eyeWidthOut = std::max<uint32_t>(1u, ClampPositiveDimension(resolutionPlan.finalOutputSize.x) / 2u);
 		eyeHeightOut = ClampPositiveDimension(resolutionPlan.finalOutputSize.y);
-		eyeWidthIn = std::max<uint32_t>(1u, ClampPositiveDimension(resolutionPlan.engineRenderSize.x) / 2u);
-		eyeHeightIn = ClampPositiveDimension(resolutionPlan.engineRenderSize.y);
+		eyeWidthIn = std::max<uint32_t>(1u, ClampPositiveDimension(resolutionPlan.engineRenderSize.width) / 2u);
+		eyeHeightIn = ClampPositiveDimension(resolutionPlan.engineRenderSize.height);
 	} else {
 		const auto dynamicRenderSize = Util::ConvertToDynamic(screenSize, true);
 		eyeWidthOut = static_cast<uint32_t>(screenSize.x / 2.0f);
@@ -46049,10 +46058,10 @@ bool Upscaling::SubmitVRUpscaledFrame(vr::EVREye a_eye, uint64_t a_compositorCyc
 				settings.qualityMode, GetRuntimeQualityMode(),
 				perfMode.GetBootSnapshot().qualityMode, activeContractGeneration,
 				static_cast<int>(runtimeResolutionPlan.owner),
-				static_cast<int>(runtimeResolutionPlan.engineAllocationSize.x),
-				static_cast<int>(runtimeResolutionPlan.engineAllocationSize.y),
-				static_cast<int>(runtimeResolutionPlan.engineRenderSize.x),
-				static_cast<int>(runtimeResolutionPlan.engineRenderSize.y),
+				static_cast<int>(runtimeResolutionPlan.engineAllocationSize.width),
+				static_cast<int>(runtimeResolutionPlan.engineAllocationSize.height),
+				static_cast<int>(runtimeResolutionPlan.engineRenderSize.width),
+				static_cast<int>(runtimeResolutionPlan.engineRenderSize.height),
 				static_cast<int>(runtimeResolutionPlan.finalOutputSize.x),
 				static_cast<int>(runtimeResolutionPlan.finalOutputSize.y),
 				dynamicResolutionWidthRatio, dynamicResolutionHeightRatio,
@@ -46874,8 +46883,8 @@ bool Upscaling::TryReplaceVanillaDynamicResolutionUpsample(const char* a_passNam
 	if (!context)
 		return false;
 
-	uint32_t inputWidth = ClampPositiveDimension(resolutionPlan.engineRenderSize.x);
-	uint32_t inputHeight = ClampPositiveDimension(resolutionPlan.engineRenderSize.y);
+	uint32_t inputWidth = ClampPositiveDimension(resolutionPlan.engineRenderSize.width);
+	uint32_t inputHeight = ClampPositiveDimension(resolutionPlan.engineRenderSize.height);
 	uint32_t outputWidth = ClampPositiveDimension(resolutionPlan.finalOutputSize.x);
 	uint32_t outputHeight = ClampPositiveDimension(resolutionPlan.finalOutputSize.y);
 	if (!inputWidth || !inputHeight) {
@@ -50631,7 +50640,7 @@ void Upscaling::UpdateHistoryResetState(UpscaleMethod a_upscaleMethod)
 	const bool loadingMenuOpen = IsLoadingMenuContextActive();
 	const float2 screenSize = state->screenSize;
 	EnsureRuntimeResolutionStateCurrent();
-	float2 engineRenderSize = runtimeResolutionPlan.engineRenderSize;
+	float2 engineRenderSize = VRGeometry::ToFloat2(runtimeResolutionPlan.engineRenderSize);
 	float2 finalOutputSize = runtimeResolutionPlan.finalOutputSize;
 	if (engineRenderSize.x <= 0.0f || engineRenderSize.y <= 0.0f)
 		engineRenderSize = Util::ConvertToDynamic(screenSize);
@@ -51043,7 +51052,7 @@ void Upscaling::Upscale()
 			return false;
 
 		auto outputSize = runtimeResolutionPlan.finalOutputSize;
-		auto renderSize = runtimeResolutionPlan.engineRenderSize;
+		auto renderSize = VRGeometry::ToFloat2(runtimeResolutionPlan.engineRenderSize);
 		if (outputSize.x <= 0.0f || outputSize.y <= 0.0f)
 			outputSize = state->screenSize;
 		if (renderSize.x <= 0.0f || renderSize.y <= 0.0f)
@@ -51566,8 +51575,8 @@ void Upscaling::RefreshSubmitStageUnderwaterMask()
 	if (!vrRenderScaleActive) {
 		return;
 	}
-	const uint32_t inputEyeWidth = std::max<uint32_t>(1u, ClampPositiveDimension(runtimeResolutionPlan.engineRenderSize.x) / 2u);
-	const uint32_t inputHeight = ClampPositiveDimension(runtimeResolutionPlan.engineRenderSize.y);
+	const uint32_t inputEyeWidth = std::max<uint32_t>(1u, ClampPositiveDimension(runtimeResolutionPlan.engineRenderSize.width) / 2u);
+	const uint32_t inputHeight = ClampPositiveDimension(runtimeResolutionPlan.engineRenderSize.height);
 	if (!inputEyeWidth || !inputHeight) {
 		return;
 	}

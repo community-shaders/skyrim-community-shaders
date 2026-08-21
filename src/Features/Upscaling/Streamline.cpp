@@ -385,8 +385,8 @@ namespace
 			plan.qualityMode,
 			static_cast<uint32_t>(plan.trueHMDDisplaySize.x),
 			static_cast<uint32_t>(plan.trueHMDDisplaySize.y),
-			static_cast<uint32_t>(plan.engineRenderSize.x),
-			static_cast<uint32_t>(plan.engineRenderSize.y),
+			static_cast<uint32_t>(plan.engineRenderSize.width),
+			static_cast<uint32_t>(plan.engineRenderSize.height),
 			static_cast<uint32_t>(plan.finalOutputSize.x),
 			static_cast<uint32_t>(plan.finalOutputSize.y),
 			plan.foveatedActive,
@@ -1843,7 +1843,7 @@ bool Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_r
 	}
 
 	auto screenSize = upscaling.GetRuntimeResolutionPlan().finalOutputSize;
-	auto renderSize = upscaling.GetRuntimeResolutionPlan().engineRenderSize;
+	auto renderSize = VRGeometry::ToFloat2(upscaling.GetRuntimeResolutionPlan().engineRenderSize);
 	if (screenSize.x <= 0.0f || screenSize.y <= 0.0f)
 		screenSize = state->screenSize;
 	if (renderSize.x <= 0.0f || renderSize.y <= 0.0f)

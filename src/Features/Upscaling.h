@@ -7,6 +7,7 @@
 #include "Upscaling/LumaSharpen/LumaSharpen.h"
 #include "Upscaling/RCAS/RCAS.h"
 #include "Upscaling/Streamline.h"
+#include "Upscaling/VRGeometrySpaces.h"
 #include "Upscaling/VRVendorRelatchPolicy.h"
 #include <array>
 #include <atomic>
@@ -20,6 +21,33 @@
 #include <optional>
 #include <vector>
 #include <winrt/base.h>
+
+
+// The float2 half of the geometry types. Kept out of VRGeometrySpaces.h so that
+// header stays dependency-free and testable on its own; kept named and free
+// rather than implicit so every conversion between a tagged geometry and a bare
+// pair is one grep away.
+namespace VRGeometry
+{
+	/** @brief Drops the space tag, at an engine, vendor or D3D boundary that wants a bare pair. */
+	template <class Space>
+	[[nodiscard]] inline float2 ToFloat2(const Extent2F<Space>& a_extent) noexcept
+	{
+		return float2{ a_extent.width, a_extent.height };
+	}
+
+	/** @brief Claims a bare pair is a render extent. Deliberately explicit: the claim can be wrong. */
+	[[nodiscard]] inline RenderExtent AsRenderExtent(const float2& a_value) noexcept
+	{
+		return RenderExtent{ a_value.x, a_value.y };
+	}
+
+	/** @brief Claims a bare pair is a physical allocation. Deliberately explicit: the claim can be wrong. */
+	[[nodiscard]] inline AllocationExtent AsAllocationExtent(const float2& a_value) noexcept
+	{
+		return AllocationExtent{ a_value.x, a_value.y };
+	}
+}
 
 namespace RE
 {
@@ -429,8 +457,8 @@ public:
 		float2 trueHMDDisplaySize{ 0.0f, 0.0f };
 		// Hot-Envelope: the physical targets, which do not move while the
 		// envelope holds. Equal to engineRenderSize when the feature is off.
-		float2 engineAllocationSize{ 0.0f, 0.0f };
-		float2 engineRenderSize{ 0.0f, 0.0f };
+		VRGeometry::AllocationExtent engineAllocationSize{};
+		VRGeometry::RenderExtent engineRenderSize{};
 		float2 finalOutputSize{ 0.0f, 0.0f };
 		bool vendorMethod = false;
 		bool foveatedActive = false;
