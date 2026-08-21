@@ -229,9 +229,9 @@ HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT Flags)
 	bool isHDR = hdr && hdr->settings.enableHDR;
 
 	// Wait for D3D11 to finish (includes ApplyHDR scene encoding AND UIBrightnessCS)
+	fenceValue++;
 	DX::ThrowIfFailed(d3d11Context->Signal(d3d11Fence.get(), fenceValue));
 	DX::ThrowIfFailed(commandQueue->Wait(d3d12Fence.get(), fenceValue));
-	fenceValue++;
 
 	// New frame, reset
 	DX::ThrowIfFailed(commandAllocators[frameIndex]->Reset());
@@ -269,9 +269,9 @@ HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT Flags)
 	DX::ThrowIfFailed(swapChain->Present(SyncInterval, Flags));
 
 	// Wait for D3D12 to finish
+	fenceValue++;
 	DX::ThrowIfFailed(commandQueue->Signal(d3d12Fence.get(), fenceValue));
 	DX::ThrowIfFailed(d3d11Context->Wait(d3d11Fence.get(), fenceValue));
-	fenceValue++;
 
 	// Update the frame index
 	frameIndex = swapChain->GetCurrentBackBufferIndex();
