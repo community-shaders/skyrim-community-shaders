@@ -37987,6 +37987,76 @@ bool Upscaling::ApplySubmitStageDLSSSharpening(uint32_t eyeIndex, const Texture2
 	}
 }
 
+namespace
+{
+	// CDO-001 phase 3, second narrowed question.
+	//
+	// AreActiveVRIntermediateTexturesCompatible accepts a per-eye vendor INPUT
+	// texture at >= the size needed, while requiring the OUTPUT to be ==. In the
+	// shipped build that slack is unreachable: a quality change bumps the
+	// contract generation and everything is recreated. Hot-Envelope holds that
+	// generation stable on purpose, so a boot-quality input can be reused for a
+	// smaller active field and never resized.
+	//
+	// If that happens, the texture description and the picture inside it stop
+	// agreeing - description 2328 wide, field 2054 wide - which is exactly the
+	// state a resource description cannot express. Two consumers are known to
+	// handle it correctly; the rest are unaudited.
+	//
+	// This records both numbers so we know whether the state is live rather than
+	// theoretical. Descriptions only - no contents, no readback, no mutation.
+	struct VRIntermediateSlackKey
+	{
+		uint32_t fieldWidth = 0, fieldHeight = 0;
+		uint32_t outWidth = 0, outHeight = 0;
+		uint32_t eye = 0;
+		uint32_t colorInW = 0, colorInH = 0;
+		uint32_t depthW = 0, depthH = 0;
+		uint32_t mvecW = 0, mvecH = 0;
+		uint32_t reactiveW = 0, reactiveH = 0;
+		uint32_t transparencyW = 0, transparencyH = 0;
+		uint32_t colorOutW = 0, colorOutH = 0;
+		uint32_t generation = 0;
+
+		bool operator==(const VRIntermediateSlackKey&) const = default;
+	};
+
+	constexpr size_t kVRIntermediateSlackCapacity = 32;
+	std::array<VRIntermediateSlackKey, kVRIntermediateSlackCapacity> g_vrIntermediateSlackSeen{};
+	size_t g_vrIntermediateSlackCount = 0;
+
+	void LogVRIntermediateSlackIfNew(const VRIntermediateSlackKey& a_key)
+	{
+		for (size_t i = 0; i < g_vrIntermediateSlackCount; ++i) {
+			if (g_vrIntermediateSlackSeen[i] == a_key)
+				return;
+		}
+		if (g_vrIntermediateSlackCount >= kVRIntermediateSlackCapacity)
+			return;
+		g_vrIntermediateSlackSeen[g_vrIntermediateSlackCount++] = a_key;
+
+		const bool slack =
+			a_key.colorInW > a_key.fieldWidth || a_key.colorInH > a_key.fieldHeight ||
+			a_key.depthW > a_key.fieldWidth || a_key.mvecW > a_key.fieldWidth ||
+			a_key.reactiveW > a_key.fieldWidth || a_key.transparencyW > a_key.fieldWidth;
+
+		logger::info(
+			"[VRIntermediate] eye={} field={}x{} out={}x{} gen={} | colorIn={}x{} depth={}x{} mvec={}x{} "
+			"reactive={}x{} transparency={}x{} colorOut={}x{} | oversizedInput={}",
+			a_key.eye,
+			a_key.fieldWidth, a_key.fieldHeight,
+			a_key.outWidth, a_key.outHeight,
+			a_key.generation,
+			a_key.colorInW, a_key.colorInH,
+			a_key.depthW, a_key.depthH,
+			a_key.mvecW, a_key.mvecH,
+			a_key.reactiveW, a_key.reactiveH,
+			a_key.transparencyW, a_key.transparencyH,
+			a_key.colorOutW, a_key.colorOutH,
+			slack ? "YES" : "no");
+	}
+}
+
 bool Upscaling::PreparePerEyeInputs(ID3D11Resource* colorSrc, ID3D11Resource* depthSrc, ID3D11Resource* mvecSrc,
 	ID3D11Resource* reactiveSrc, ID3D11Resource* transparencySrc, bool copyAuxiliaryInputs, bool copyDepthInput)
 {
@@ -38060,6 +38130,36 @@ bool Upscaling::PreparePerEyeInputs(ID3D11Resource* colorSrc, ID3D11Resource* de
 				!vrIntermediateTransparencyMask[0] || !vrIntermediateTransparencyMask[0]->resource ||
 				!vrIntermediateTransparencyMask[1] || !vrIntermediateTransparencyMask[1]->resource))) {
 		return false;
+	}
+
+	if (settings.vrDynResPassTrace != 0u) {
+		const auto dim = [](const eastl::unique_ptr<Texture2D>& a_texture, bool a_width) -> uint32_t {
+			if (!a_texture)
+				return 0u;
+			return a_width ? a_texture->desc.Width : a_texture->desc.Height;
+		};
+		for (uint32_t eye = 0; eye < 2; ++eye) {
+			VRIntermediateSlackKey key{};
+			key.fieldWidth = eyeWidthIn;
+			key.fieldHeight = eyeHeightIn;
+			key.outWidth = eyeWidthOut;
+			key.outHeight = eyeHeightOut;
+			key.eye = eye;
+			key.colorInW = dim(vrIntermediateColorIn[eye], true);
+			key.colorInH = dim(vrIntermediateColorIn[eye], false);
+			key.depthW = dim(vrIntermediateDepth[eye], true);
+			key.depthH = dim(vrIntermediateDepth[eye], false);
+			key.mvecW = dim(vrIntermediateMotionVectors[eye], true);
+			key.mvecH = dim(vrIntermediateMotionVectors[eye], false);
+			key.reactiveW = dim(vrIntermediateReactiveMask[eye], true);
+			key.reactiveH = dim(vrIntermediateReactiveMask[eye], false);
+			key.transparencyW = dim(vrIntermediateTransparencyMask[eye], true);
+			key.transparencyH = dim(vrIntermediateTransparencyMask[eye], false);
+			key.colorOutW = dim(vrIntermediateColorOut[eye], true);
+			key.colorOutH = dim(vrIntermediateColorOut[eye], false);
+			key.generation = vrIntermediateTextureGeneration;
+			LogVRIntermediateSlackIfNew(key);
+		}
 	}
 
 	// Extract both eyes' required inputs from combined stereo buffers.
