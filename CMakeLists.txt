@@ -1411,6 +1411,11 @@ if(BUILD_CONTROLLER_TESTS)
         VRGeometrySpaces
         tests/vr_geometry_spaces_test.cpp
     )
+    add_controller_test(
+        vr_pipeline_contract_test
+        VRPipelineContract
+        tests/vr_pipeline_contract_test.cpp
+    )
 
     add_custom_target(
         controller_tests
@@ -1421,6 +1426,7 @@ if(BUILD_CONTROLLER_TESTS)
             overlay_policy_test
             vr_geometry_policy_test
             vr_geometry_spaces_test
+            vr_pipeline_contract_test
     )
 endif()
 
