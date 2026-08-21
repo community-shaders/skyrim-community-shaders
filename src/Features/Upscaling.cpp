@@ -75,6 +75,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	vrHotEnvelopeProbe,
 	vrHotEnvelopeTrace,
 	vrDynResPassTrace,
+	vrDiagGeometryLog,
 	perfMode,
 	frameLimitMode,
 	frameGenerationMode,
@@ -11218,11 +11219,21 @@ namespace
 		return key;
 	}
 
+	// True when the geometry diagnostics should be emitted, either because the
+	// whole debug channel is on or because vrDiagGeometryLog asked for just
+	// these. Kept separate so the targeted switch never widens into the global
+	// one by accident.
+	[[nodiscard]] bool ShouldEmitCDOGeometryLogs()
+	{
+		return globals::features::upscaling.settings.vrDiagGeometryLog != 0u ||
+		       (globals::state && globals::state->IsDeveloperMode());
+	}
+
 	void LogRuntimeResolutionPlanIfChanged(const Upscaling::RuntimeResolutionPlan& a_plan)
 	{
 		static RuntimeResolutionPlanLogKey previousKey{};
 		static bool previousKeyValid = false;
-		if (!globals::state || !globals::state->IsDeveloperMode()) {
+		if (!globals::state || !ShouldEmitCDOGeometryLogs()) {
 			previousKeyValid = false;
 			return;
 		}
@@ -11231,17 +11242,36 @@ namespace
 		if (previousKeyValid && key == previousKey)
 			return;
 
-		logger::debug(
-			"[VRRenderScale] Runtime plan: owner={} method={} quality={} display={}x{} render={}x{} final={}x{}",
-			magic_enum::enum_name(key.owner),
-			magic_enum::enum_name(key.method),
-			key.qualityMode,
-			key.displayWidth,
-			key.displayHeight,
-			key.renderWidth,
-			key.renderHeight,
-			key.finalWidth,
-			key.finalHeight);
+		// Stock CSX emits this at debug, which is only reachable by turning the
+		// whole debug channel on. When vrDiagGeometryLog asks for just the
+		// geometry lines, emit the identical record at info instead. The stock
+		// path is untouched: with the flag off this is byte-for-byte the
+		// original call.
+		if (globals::features::upscaling.settings.vrDiagGeometryLog != 0u) {
+			logger::info(
+				"[VRRenderScale] Runtime plan: owner={} method={} quality={} display={}x{} render={}x{} final={}x{}",
+				magic_enum::enum_name(key.owner),
+				magic_enum::enum_name(key.method),
+				key.qualityMode,
+				key.displayWidth,
+				key.displayHeight,
+				key.renderWidth,
+				key.renderHeight,
+				key.finalWidth,
+				key.finalHeight);
+		} else {
+			logger::debug(
+				"[VRRenderScale] Runtime plan: owner={} method={} quality={} display={}x{} render={}x{} final={}x{}",
+				magic_enum::enum_name(key.owner),
+				magic_enum::enum_name(key.method),
+				key.qualityMode,
+				key.displayWidth,
+				key.displayHeight,
+				key.renderWidth,
+				key.renderHeight,
+				key.finalWidth,
+				key.finalHeight);
+		}
 
 		previousKey = key;
 		previousKeyValid = true;

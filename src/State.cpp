@@ -1433,11 +1433,26 @@ bool State::IsDeveloperMode()
 void State::ModifyRenderTarget(RE::RENDER_TARGETS::RENDER_TARGET a_target, RE::BSGraphics::RenderTargetProperties* a_properties)
 {
 	if (globals::features::upscaling.AdjustVRRenderScaleRenderTargetProperties(a_target, a_properties)) {
-		logger::debug(
-			"[Upscaling] Adjusted {} render target properties to {}x{} for VR render scale.",
-			magic_enum::enum_name(a_target),
-			a_properties->width,
-			a_properties->height);
+		// This is the allocation, per target, read from the path that actually
+		// rewrites what Skyrim will allocate - not from the resolution plan. That
+		// makes it an independent check on the plan rather than a second printing
+		// of it, which is why it is worth promoting on its own.
+		//
+		// Stock emits at debug, reachable only by enabling the whole debug
+		// channel. With vrDiagGeometryLog set, emit the identical record at info.
+		if (globals::features::upscaling.settings.vrDiagGeometryLog != 0u) {
+			logger::info(
+				"[Upscaling] Adjusted {} render target properties to {}x{} for VR render scale.",
+				magic_enum::enum_name(a_target),
+				a_properties->width,
+				a_properties->height);
+		} else {
+			logger::debug(
+				"[Upscaling] Adjusted {} render target properties to {}x{} for VR render scale.",
+				magic_enum::enum_name(a_target),
+				a_properties->width,
+				a_properties->height);
+		}
 	}
 
 	a_properties->supportUnorderedAccess = true;

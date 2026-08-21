@@ -284,6 +284,13 @@ public:
 		// with what boxes? Metadata only - no readback, no mutation. Reports each
 		// distinct decision once and then stays silent.
 		uint vrDynResPassTrace = 0;
+		// Echoes the stock CSX geometry diagnostics at info level, WITHOUT setting
+		// the global log level to debug. Those lines are gated on IsDeveloperMode(),
+		// which is literally "log level <= debug", so the only way to see them
+		// normally is to enable all 129 debug calls in this file at once. This
+		// promotes just the two that carry geometry, so the independent read costs
+		// what those two lines cost rather than what the whole debug channel costs.
+		uint vrDiagGeometryLog = 0;
 		uint perfMode = 1;
 		uint frameLimitMode = 1;
 		uint frameGenerationMode = 0;  // Disabled by default
