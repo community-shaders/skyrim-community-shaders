@@ -78,6 +78,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	vrDynResPassTrace,
 	vrDiagGeometryLog,
 	cdo4Telemetry,
+	cdo4CommonRecorder,
 	perfMode,
 	frameLimitMode,
 	frameGenerationMode,
@@ -19670,6 +19671,28 @@ void Upscaling::InvalidateFrameScopedUpscalingState()
 
 namespace
 {
+	// CDO4-001 phase 2, item 5. The common recorder's submit latch.
+	//
+	// SubmitVRUpscaledFrame is CS's own OpenVR hook, not a Frame Annotations
+	// wrapper, so it exists in every arm - which is why the submit category can
+	// be part of a comparator that must also work in the native arm.
+	//
+	// Latched here and flushed with the rest of the frame's record, because the
+	// submit happens after the point where the record is emitted.
+	std::atomic<std::uint64_t> g_cdo4SubmitDigest{ 0u };
+	std::atomic<std::uint32_t> g_cdo4SubmitFrame{ 0u };
+	std::atomic<bool> g_cdo4SubmitFallback{ false };
+
+	void CDO4LatchSubmit(std::uint32_t a_frame, std::uint64_t a_digest, bool a_fallback) noexcept
+	{
+		g_cdo4SubmitDigest.store(a_digest, std::memory_order_release);
+		g_cdo4SubmitFrame.store(a_frame, std::memory_order_release);
+		g_cdo4SubmitFallback.store(a_fallback, std::memory_order_release);
+	}
+}
+
+namespace
+{
 	// CDO4-001 phase 2 emitter. One line of JSON per record, prefixed so a run's
 	// stream can be extracted from the log into the .jsonl files the evidence
 	// layout expects.
@@ -20063,6 +20086,149 @@ void Upscaling::RefreshRuntimeResolutionPlan()
 					identity.width, identity.height, identity.format));
 			}
 		}
+	}
+
+	// CDO4-001 phase 2, item 5. The minimal common recorder.
+	//
+	// Independent of cdo4Telemetry on purpose: this must be ON IN EVERY ARM,
+	// including the native one, or there is nothing to compare against.
+	//
+	// Observes only what exists without the ImageSpace wrappers - no pass IDs,
+	// no writer events - because arm A does not have them and a recorder that
+	// needed them would be comparing two different populations.
+	if (settings.cdo4CommonRecorder != 0u) {
+		auto* crState = globals::state;
+		const auto& crBoot = perfMode.GetBootSnapshot();
+		const std::uint32_t crGeneration = crBoot.valid ? crBoot.generation : 0u;
+
+		CDO4CommonRecorder::FrameRecord rec{};
+		rec.frame = crState ? static_cast<std::uint32_t>(crState->frameCount) : 0u;
+		rec.planHash = CDO4PlanHash(runtimeResolutionPlan, crGeneration);
+		rec.contractGeneration = crGeneration;
+
+		const auto dimOf = [](float a_value) {
+			return a_value > 0.0f ? static_cast<std::uint32_t>(a_value) : 0u;
+		};
+
+		{
+			CDO4CommonRecorder::Digest d;
+			d.Add(dimOf(runtimeResolutionPlan.engineAllocationSize.width));
+			d.Add(dimOf(runtimeResolutionPlan.engineAllocationSize.height));
+			d.Add(dimOf(runtimeResolutionPlan.engineRenderSize.width));
+			d.Add(dimOf(runtimeResolutionPlan.engineRenderSize.height));
+			d.Add(dimOf(runtimeResolutionPlan.finalOutputSize.x));
+			d.Add(dimOf(runtimeResolutionPlan.finalOutputSize.y));
+			d.Add(static_cast<std::uint32_t>(runtimeResolutionPlan.owner));
+			d.Add(static_cast<std::uint32_t>(runtimeResolutionPlan.outputTarget));
+			d.Add(runtimeResolutionPlan.qualityMode);
+			rec.plan = d.Value();
+		}
+
+		if (auto* crRenderer = globals::game::renderer) {
+			CDO4CommonRecorder::Digest d;
+			const auto addTexture = [&d](ID3D11Texture2D* a_texture) {
+				if (!a_texture) {
+					d.Add(std::uint64_t{ 0u });
+					return;
+				}
+				D3D11_TEXTURE2D_DESC desc{};
+				a_texture->GetDesc(&desc);
+				d.Add(desc.Width);
+				d.Add(desc.Height);
+				d.Add(static_cast<std::uint32_t>(desc.Format));
+				d.Add(desc.ArraySize);
+				d.Add(desc.MipLevels);
+				d.Add(desc.SampleDesc.Count);
+			};
+			addTexture(crRenderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN].texture);
+			addTexture(crRenderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR].texture);
+			addTexture(crRenderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN].texture);
+			rec.resources = d.Value();
+		}
+
+		if (auto* crContext = globals::d3d::context) {
+			CDO4CommonRecorder::Digest d;
+			std::array<D3D11_VIEWPORT, D3D11_VIEWPORT_AND_SCISSORRECT_OBJECT_COUNT_PER_PIPELINE> vps{};
+			UINT vpCount = static_cast<UINT>(vps.size());
+			crContext->RSGetViewports(&vpCount, vps.data());
+			d.Add(static_cast<std::uint32_t>(vpCount));
+			for (UINT i = 0; i < vpCount && i < vps.size(); ++i) {
+				d.Add(vps[i].TopLeftX);
+				d.Add(vps[i].TopLeftY);
+				d.Add(vps[i].Width);
+				d.Add(vps[i].Height);
+			}
+			std::array<D3D11_RECT, D3D11_VIEWPORT_AND_SCISSORRECT_OBJECT_COUNT_PER_PIPELINE> scs{};
+			UINT scCount = static_cast<UINT>(scs.size());
+			crContext->RSGetScissorRects(&scCount, scs.data());
+			d.Add(static_cast<std::uint32_t>(scCount));
+			for (UINT i = 0; i < scCount && i < scs.size(); ++i) {
+				d.Add(static_cast<std::uint32_t>(scs[i].left));
+				d.Add(static_cast<std::uint32_t>(scs[i].top));
+				d.Add(static_cast<std::uint32_t>(scs[i].right));
+				d.Add(static_cast<std::uint32_t>(scs[i].bottom));
+			}
+			rec.raster = d.Value();
+		}
+
+		if (crState) {
+			CDO4CommonRecorder::Digest d;
+			d.Add(crState->screenSize.x);
+			d.Add(crState->screenSize.y);
+			rec.camera = d.Value();
+		}
+
+		{
+			CDO4CommonRecorder::Digest d;
+			d.Add(static_cast<std::uint32_t>(GetRuntimeUpscaleMethod()));
+			d.Add(GetRuntimeQualityMode());
+			d.Add(ClampQualityModeUInt(settings.qualityMode));
+			d.Add(crBoot.valid ? crBoot.qualityMode : 0u);
+			d.Add(crGeneration);
+			rec.provider = d.Value();
+		}
+
+		{
+			CDO4CommonRecorder::Digest d;
+			d.Add(historyResetRequested);
+			d.Add(historyResetThisFrame);
+			d.Add(crGeneration);
+			rec.history = d.Value();
+		}
+
+		if (g_cdo4SubmitFrame.load(std::memory_order_acquire) != 0u) {
+			rec.submit = g_cdo4SubmitDigest.load(std::memory_order_acquire);
+			rec.fallbackTaken = g_cdo4SubmitFallback.load(std::memory_order_acquire);
+		}
+
+		rec.menuContext = runtimeResolutionPlan.menuContextActive;
+		rec.loadingContext = runtimeResolutionPlan.loadingMenuActive;
+		rec.relatchPending = pendingPerfModeRenderTargetRecreate.load(std::memory_order_acquire) ||
+		                     perfModeRenderTargetRecreateInProgress.load(std::memory_order_acquire);
+		rec.deviceLost = IsSubmitStageDeviceLost();
+
+		const auto orNull = [](std::uint64_t a_value) {
+			return a_value != 0u;
+		};
+		logger::info(
+			"{} {{\"schema\":{},\"frame\":{},\"planHash\":\"{:016X}\",\"gen\":{},"
+			"\"h\":{{\"plan\":\"{:016X}\",\"resources\":{},\"raster\":{},\"camera\":{},"
+			"\"provider\":\"{:016X}\",\"history\":\"{:016X}\",\"submit\":{}}},"
+			"\"comparable\":{},\"flags\":{{\"menu\":{},\"loading\":{},\"relatch\":{},\"deviceLost\":{},\"fallback\":{}}}}}",
+			CDO4CommonRecorder::kPrefix, CDO4CommonRecorder::kSchemaVersion,
+			rec.frame, rec.planHash, rec.contractGeneration,
+			rec.plan,
+			orNull(rec.resources) ? std::format("\"{:016X}\"", rec.resources) : std::string("null"),
+			orNull(rec.raster) ? std::format("\"{:016X}\"", rec.raster) : std::string("null"),
+			orNull(rec.camera) ? std::format("\"{:016X}\"", rec.camera) : std::string("null"),
+			rec.provider, rec.history,
+			orNull(rec.submit) ? std::format("\"{:016X}\"", rec.submit) : std::string("null"),
+			CDO4CommonRecorder::Comparable(rec) ? "true" : "false",
+			rec.menuContext ? "true" : "false",
+			rec.loadingContext ? "true" : "false",
+			rec.relatchPending ? "true" : "false",
+			rec.deviceLost ? "true" : "false",
+			rec.fallbackTaken ? "true" : "false");
 	}
 }
 

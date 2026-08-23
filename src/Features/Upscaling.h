@@ -7,6 +7,7 @@
 #include "Upscaling/LumaSharpen/LumaSharpen.h"
 #include "Upscaling/RCAS/RCAS.h"
 #include "Upscaling/Streamline.h"
+#include "Upscaling/CDO4CommonRecorder.h"
 #include "Upscaling/CDO4Telemetry.h"
 #include "Upscaling/VRGeometrySpaces.h"
 #include "Upscaling/VRVendorRelatchPolicy.h"
@@ -298,6 +299,12 @@ public:
 		// Default off. The earlier loggers deduplicated without an occurrence
 		// stream and so can scope work but never be confirmatory; this one can.
 		uint cdo4Telemetry = 0;
+		// The minimal common recorder. This is the COMPARATOR for the
+		// non-interference matrix and must be ON IN EVERY ARM, including the
+		// native one - recording only in the instrumented arm would compare a
+		// stream against nothing. Independent of cdo4Telemetry for exactly that
+		// reason.
+		uint cdo4CommonRecorder = 0;
 		uint perfMode = 1;
 		uint frameLimitMode = 1;
 		uint frameGenerationMode = 0;  // Disabled by default
