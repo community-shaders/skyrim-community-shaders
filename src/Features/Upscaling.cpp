@@ -20229,6 +20229,42 @@ void Upscaling::RefreshRuntimeResolutionPlan()
 			rec.relatchPending ? "true" : "false",
 			rec.deviceLost ? "true" : "false",
 			rec.fallbackTaken ? "true" : "false");
+		// Raw values alongside the hashes.
+		//
+		// Session 1 exposed the gap: when the display extent came into question I
+		// could not answer it from my own record, because screenSize was hashed
+		// into `camera` and nothing emitted it. A comparator that emits only
+		// hashes cannot be interrogated - it can say two runs differ but never
+		// what either one was.
+		//
+		// Foveation is included because it is enabled in CS (Pimax and OpenXR
+		// Toolkit have theirs off; CS owns it), it sits in the render path, and
+		// its per-eye input extent is derived from the render extent. Whether it
+		// actually runs was UNRESOLVED after session 1: CS logs foveation only at
+		// debug and warn, so the silence at info level proved nothing. This makes
+		// it a recorded fact per frame instead of an assumption.
+		const auto& fov = runtimeResolutionPlan.foveatedRegion;
+		logger::info(
+			"{} {{\"schema\":{},\"frame\":{},\"payload\":\"RAW\",\"planHash\":\"{:016X}\","
+			"\"A\":{{\"w\":{},\"h\":{}}},\"R\":{{\"w\":{},\"h\":{}}},\"O\":{{\"w\":{},\"h\":{}}},"
+			"\"owner\":{},\"activeQuality\":{},\"bootQuality\":{},"
+			"\"foveated\":{{\"active\":{},\"planValid\":{},\"inputPerEye\":{{\"w\":{},\"h\":{}}},"
+			"\"outputPerEye\":{{\"w\":{},\"h\":{}}},\"centerScale\":{:.6f},\"centerHorizontalScale\":{:.6f},"
+			"\"peripheryTAAOuterScale\":{:.6f}}}}}",
+			CDO4CommonRecorder::kPrefix, CDO4CommonRecorder::kSchemaVersion,
+			rec.frame, rec.planHash,
+			dimOf(runtimeResolutionPlan.engineAllocationSize.width), dimOf(runtimeResolutionPlan.engineAllocationSize.height),
+			dimOf(runtimeResolutionPlan.engineRenderSize.width), dimOf(runtimeResolutionPlan.engineRenderSize.height),
+			dimOf(runtimeResolutionPlan.finalOutputSize.x), dimOf(runtimeResolutionPlan.finalOutputSize.y),
+			static_cast<std::uint32_t>(runtimeResolutionPlan.owner),
+			runtimeResolutionPlan.qualityMode,
+			crBoot.valid ? crBoot.qualityMode : 0u,
+			runtimeResolutionPlan.foveatedActive ? "true" : "false",
+			fov.IsValid() ? "true" : "false",
+			fov.inputWidthPerEye, fov.inputHeight,
+			fov.outputWidthPerEye, fov.outputHeight,
+			fov.centerScale, fov.centerHorizontalScale, fov.peripheryTAAOuterScale);
+
 	}
 }
 
