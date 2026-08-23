@@ -45675,6 +45675,44 @@ bool Upscaling::SubmitVRUpscaledFrame(vr::EVREye a_eye, uint64_t a_compositorCyc
 {
 	a_presentationObservation = {};
 
+	// CDO4-001 phase 2, item 5. Latch what the submit path was HANDED, for the
+	// common recorder.
+	//
+	// At entry rather than at a return, deliberately: this function has many exit
+	// paths, and the comparator needs a record on every frame the path is
+	// entered, not only on the ones that reach a particular return. A missing
+	// submit hash would otherwise be indistinguishable from a path that took an
+	// early exit - the same absent-versus-empty confusion the protocol forbids.
+	//
+	// This latch was DEFINED in the first version of the recorder and never
+	// called, which the stability check caught: submit was null in 100% of
+	// 23,972 comparable frames.
+	if (settings.cdo4CommonRecorder != 0u) {
+		CDO4CommonRecorder::Digest d;
+		d.Add(static_cast<std::uint32_t>(a_eye));
+		d.Add(a_compositorCycleToken);
+		if (a_inputTexture) {
+			d.Add(reinterpret_cast<std::uint64_t>(a_inputTexture->handle));
+			d.Add(static_cast<std::uint32_t>(a_inputTexture->eType));
+			d.Add(static_cast<std::uint32_t>(a_inputTexture->eColorSpace));
+		} else {
+			d.Add(std::uint64_t{ 0u });
+		}
+		if (a_inputBounds) {
+			d.Add(a_inputBounds->uMin);
+			d.Add(a_inputBounds->uMax);
+			d.Add(a_inputBounds->vMin);
+			d.Add(a_inputBounds->vMax);
+		} else {
+			d.Add(std::uint64_t{ 0u });
+		}
+		auto* submitState = globals::state;
+		CDO4LatchSubmit(
+			submitState ? static_cast<std::uint32_t>(submitState->frameCount) : 0u,
+			d.Value(),
+			false);
+	}
+
 	// Auto-debug: record what we actually hand the compositor, on every exit.
 	//
 	// The decision record earlier in this function is emitted before the output
