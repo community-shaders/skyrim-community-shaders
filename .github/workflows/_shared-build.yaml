@@ -93,7 +93,18 @@ jobs:
 
             - name: Run controller tests
               run: |
-                  ctest --test-dir ${{ matrix.compiler.build-dir }} -C Release --output-on-failure --no-tests=error -R "PerfModeRestartState|VRVendorRelatchPolicy|FSRHostLifecyclePolicy" --timeout 60
+                  # Unfiltered on purpose. This step previously carried
+                  # -R "PerfModeRestartState|VRVendorRelatchPolicy|FSRHostLifecyclePolicy",
+                  # a hand-maintained list that silently excluded every test added
+                  # after it was written - OverlayPolicy, VRGeometryPolicy,
+                  # VRGeometrySpaces and VRPipelineContract. The compile-time
+                  # assertions in those still ran, because building them IS running
+                  # them, but their runtime main() never executed once.
+                  #
+                  # The configure preset above sets BUILD_SHADER_TESTS=OFF, so this
+                  # build directory registers controller tests only. --no-tests=error
+                  # keeps an empty set from passing silently.
+                  ctest --test-dir ${{ matrix.compiler.build-dir }} -C Release --output-on-failure --no-tests=error --timeout 60
 
             - name: Extract version from CMake
               id: get_version
