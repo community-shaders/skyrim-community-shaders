@@ -40,7 +40,8 @@ namespace CDO4Telemetry
 		RenderTargetProperties, // A1  pre-create
 		RenderTargetIdentity,   // A2  post-create, the only thing that confirms a resource
 		IntermediateCapacity,   // Ks* capacity vs command footprint
-		VendorDeclaredRegion    // Ks* -> V0
+		VendorDeclaredRegion,   // Ks* -> V0
+		EffectiveConfiguration  // C0  what was actually installed, not what was asked for
 	};
 
 	[[nodiscard]] inline constexpr const char* PayloadName(Payload a_payload) noexcept
@@ -53,6 +54,7 @@ namespace CDO4Telemetry
 		case Payload::RenderTargetIdentity:   return "RENDER_TARGET_IDENTITY";
 		case Payload::IntermediateCapacity:   return "INTERMEDIATE_CAPACITY";
 		case Payload::VendorDeclaredRegion:   return "VENDOR_DECLARED_REGION";
+		case Payload::EffectiveConfiguration: return "EFFECTIVE_CONFIGURATION";
 		default:                              return "UNKNOWN";
 		}
 	}

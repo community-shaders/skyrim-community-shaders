@@ -15,6 +15,29 @@ namespace FrameAnnotations
 {
 	namespace
 	{
+		// CDO4-001 phase 2, item 4. Set only after the ImageSpace vtable writes
+		// have actually run, so this records what happened rather than what was
+		// configured. The two differ whenever Frame Annotations is off, which is
+		// the public MGO preset default.
+		std::atomic<bool> g_targetWrappersInstalled{ false };
+		std::atomic<std::uint32_t> g_targetWrapperInstallId{ 0u };
+	}
+
+	bool TargetWrappersInstalled() noexcept
+	{
+		return g_targetWrappersInstalled.load(std::memory_order_acquire);
+	}
+
+	std::uint32_t TargetWrapperInstallId() noexcept
+	{
+		return g_targetWrapperInstallId.load(std::memory_order_acquire);
+	}
+}
+
+namespace FrameAnnotations
+{
+	namespace
+	{
 		std::atomic_uint32_t renderShadowmasksPhaseDepth{ 0 };
 
 		// Shader defines change rarely, so cache their filename suffix instead of
@@ -1142,6 +1165,12 @@ namespace FrameAnnotations
 			stl::detour_thunk<BSShaderAccumulator_RenderBatches>(REL::RelocationID(99963, 106609));
 		stl::detour_thunk<BSShaderAccumulator_RenderPersistentPassList>(REL::RelocationID(100840, 107630));
 		stl::detour_thunk<BSShaderAccumulator_RenderEffects>(REL::RelocationID(99940, 106585));
+
+		// CDO4-001 phase 2, item 4. Reached only if the early return above did
+		// NOT fire, so this records that the ImageSpace target wrappers were
+		// actually written - not merely that annotations were configured on.
+		g_targetWrapperInstallId.store(1u, std::memory_order_release);
+		g_targetWrappersInstalled.store(true, std::memory_order_release);
 	}
 
 	void OnDataLoaded()

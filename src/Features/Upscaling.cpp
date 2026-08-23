@@ -17,6 +17,7 @@
 #include "RE/R/RaceSexMenu.h"
 #include "RE/U/UIMessageQueue.h"
 #include "ShaderCache.h"
+#include "FrameAnnotations.h"
 #include "State.h"
 #include "Upscaling/DX12SwapChain.h"
 #include "Upscaling/FidelityFX.h"
@@ -19959,6 +19960,48 @@ void Upscaling::RefreshRuntimeResolutionPlan()
 	// resource. The property record in State::ModifyRenderTarget is pre-create
 	// and proves the sizing hook ran, nothing more.
 	if (settings.cdo4Telemetry != 0u) {
+		// CDO4-001 phase 2, item 4. The C0 record: what was actually INSTALLED,
+		// not what the settings asked for.
+		//
+		// This distinction is the whole point. FrameAnnotations::OnPostPostLoad
+		// returns early when frameAnnotations is false, and every ImageSpace
+		// vtable write - including the three passes the dynamic-resolution
+		// replacement hooks - sits after that return. So with Frame Annotations
+		// off the target wrappers DO NOT EXIST, and an absent pass trace means
+		// "never installed" rather than "never called". The public MGO presets
+		// set Frame Annotations false, which makes recording the configured value
+		// alone actively misleading.
+		//
+		// Emitted once per session, before any other record, so every later event
+		// can be read against the topology that produced it.
+		static bool loggedEffectiveConfiguration = false;
+		if (!loggedEffectiveConfiguration) {
+			loggedEffectiveConfiguration = true;
+			CDO4Telemetry::Envelope env{};
+			env.eventId = CDO4Telemetry::ReserveEventId();
+			env.frame = CDO4Frame();
+			env.eye = CDO4Telemetry::kNoEye;
+			env.payload = CDO4Telemetry::Payload::EffectiveConfiguration;
+			auto* cfgState = globals::state;
+			CDO4Emit(env, std::format(
+				"\"frameAnnotationsEffective\":{},"
+				"\"targetWrappersInstalled\":{},"
+				"\"targetWrapperInstallId\":{},"
+				"\"passTraceUsable\":{},"
+				"\"vrDynResPassTrace\":{},\"vrDiagGeometryLog\":{},"
+				"\"vrHotEnvelope\":{},\"vrHotEnvelopeEyeOrigin\":{},"
+				"\"renderScaleMode\":{},\"qualityMode\":{},\"isVR\":{}",
+				cfgState && cfgState->frameAnnotations ? "true" : "false",
+				FrameAnnotations::TargetWrappersInstalled() ? "true" : "false",
+				FrameAnnotations::TargetWrapperInstallId(),
+				// A pass trace can only mean anything when the wrappers exist.
+				FrameAnnotations::TargetWrappersInstalled() ? "true" : "false",
+				settings.vrDynResPassTrace, settings.vrDiagGeometryLog,
+				settings.vrHotEnvelope, settings.vrHotEnvelopeEyeOrigin,
+				settings.renderScaleMode, settings.qualityMode,
+				globals::game::isVR ? "true" : "false"));
+		}
+
 		const auto& boot = perfMode.GetBootSnapshot();
 		const std::uint32_t generation = boot.valid ? boot.generation : 0u;
 		const std::uint64_t planHash = CDO4PlanHash(runtimeResolutionPlan, generation);
