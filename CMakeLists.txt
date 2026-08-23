@@ -1416,6 +1416,11 @@ if(BUILD_CONTROLLER_TESTS)
         VRPipelineContract
         tests/vr_pipeline_contract_test.cpp
     )
+    add_controller_test(
+        cdo4_policy_test
+        CDO4Policy
+        tests/cdo4_policy_test.cpp
+    )
 
     add_custom_target(
         controller_tests
@@ -1427,6 +1432,7 @@ if(BUILD_CONTROLLER_TESTS)
             vr_geometry_policy_test
             vr_geometry_spaces_test
             vr_pipeline_contract_test
+            cdo4_policy_test
     )
 endif()
 
