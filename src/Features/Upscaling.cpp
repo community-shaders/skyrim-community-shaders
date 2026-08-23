@@ -76,6 +76,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	vrHotEnvelopeTrace,
 	vrDynResPassTrace,
 	vrDiagGeometryLog,
+	cdo4Telemetry,
 	perfMode,
 	frameLimitMode,
 	frameGenerationMode,
@@ -19666,6 +19667,100 @@ void Upscaling::InvalidateFrameScopedUpscalingState()
 		std::memory_order_release);
 }
 
+namespace
+{
+	// CDO4-001 phase 2 emitter. One line of JSON per record, prefixed so a run's
+	// stream can be extracted from the log into the .jsonl files the evidence
+	// layout expects.
+	//
+	// Every emission reserves an ID first, so a record that fails to emit still
+	// appears in the accounting as a drop rather than vanishing.
+	bool CDO4Enabled()
+	{
+		return globals::features::upscaling.settings.cdo4Telemetry != 0u;
+	}
+
+	std::uint32_t CDO4Frame()
+	{
+		auto* state = globals::state;
+		return state ? static_cast<std::uint32_t>(state->frameCount) : 0u;
+	}
+
+	/** @brief Emits the envelope plus a caller-supplied payload body. */
+	void CDO4Emit(const CDO4Telemetry::Envelope& a_env, const std::string& a_body)
+	{
+		logger::info(
+			"{} {{\"schema\":{},\"event\":{},\"parent\":{},\"frame\":{},\"cycle\":{},\"eye\":{},"
+			"\"planHash\":\"{:016X}\",\"generation\":{},\"payload\":\"{}\",{}}}",
+			CDO4Telemetry::kPrefix,
+			CDO4Telemetry::kSchemaVersion,
+			a_env.eventId,
+			a_env.parentEventId,
+			a_env.frame,
+			a_env.compositorCycleToken,
+			a_env.eye == CDO4Telemetry::kNoEye ? -1 : static_cast<int>(a_env.eye),
+			a_env.planHash,
+			a_env.contractGeneration,
+			CDO4Telemetry::PayloadName(a_env.payload),
+			a_body);
+		CDO4Telemetry::NoteEmitted();
+	}
+
+	/** @brief The plan hash currently in force, or 0 when no plan is published. */
+	std::uint64_t CDO4PlanHash(const Upscaling::RuntimeResolutionPlan& a_plan, std::uint32_t a_generation)
+	{
+		const auto dim = [](float a_value) {
+			return a_value > 0.0f ? static_cast<std::uint32_t>(a_value) : 0u;
+		};
+		return CDO4Telemetry::HashPlan(
+			dim(a_plan.engineAllocationSize.width), dim(a_plan.engineAllocationSize.height),
+			dim(a_plan.engineRenderSize.width), dim(a_plan.engineRenderSize.height),
+			dim(a_plan.finalOutputSize.x), dim(a_plan.finalOutputSize.y),
+			0u,
+			a_plan.qualityMode,
+			static_cast<std::uint32_t>(a_plan.owner),
+			a_generation);
+	}
+
+	/** @brief Stable identity for a texture: address plus descriptor, generation bumped on change. */
+	CDO4Telemetry::ResourceIdentity CDO4Identity(ID3D11Texture2D* a_texture)
+	{
+		CDO4Telemetry::ResourceIdentity id{};
+		if (!a_texture)
+			return id;
+		D3D11_TEXTURE2D_DESC desc{};
+		a_texture->GetDesc(&desc);
+		id.address = reinterpret_cast<std::uint64_t>(a_texture);
+		id.width = desc.Width;
+		id.height = desc.Height;
+		id.format = static_cast<std::uint32_t>(desc.Format);
+
+		// A COM address can be recycled. Bump a generation whenever the same
+		// address is seen describing something different, so two records can only
+		// join when the descriptor agrees too.
+		static std::array<CDO4Telemetry::ResourceIdentity, 64> seen{};
+		static size_t seenCount = 0;
+		static std::uint32_t nextGeneration = 1u;
+		for (size_t i = 0; i < seenCount; ++i) {
+			if (seen[i].address == id.address) {
+				if (seen[i].DescribesSame(id)) {
+					id.generation = seen[i].generation;
+					return id;
+				}
+				id.generation = nextGeneration++;
+				seen[i] = id;
+				return id;
+			}
+		}
+		id.generation = nextGeneration++;
+		if (seenCount < seen.size())
+			seen[seenCount++] = id;
+		else
+			CDO4Telemetry::NoteSaturated();
+		return id;
+	}
+}
+
 void Upscaling::RefreshRuntimeResolutionPlan()
 {
 	RuntimeResolutionPlan plan{};
@@ -19851,6 +19946,81 @@ void Upscaling::RefreshRuntimeResolutionPlan()
 
 	runtimeResolutionPlan = plan;
 	LogRuntimeResolutionPlanIfChanged(runtimeResolutionPlan);
+
+	// CDO4-001 phase 2, items 2 and 3. One immutable frame contract, plus the
+	// post-create resource identity that A1->A2 needs.
+	//
+	// Emitted on CHANGE, not per frame, but every emission carries a monotonic
+	// event ID so the stream still has ancestry - the failing property of the
+	// earlier loggers was deduplication WITHOUT an occurrence reference, not
+	// deduplication itself.
+	//
+	// The identity record is the only thing here that can confirm a physical
+	// resource. The property record in State::ModifyRenderTarget is pre-create
+	// and proves the sizing hook ran, nothing more.
+	if (settings.cdo4Telemetry != 0u) {
+		const auto& boot = perfMode.GetBootSnapshot();
+		const std::uint32_t generation = boot.valid ? boot.generation : 0u;
+		const std::uint64_t planHash = CDO4PlanHash(runtimeResolutionPlan, generation);
+
+		static std::uint64_t previousPlanHash = 0u;
+		static std::uint64_t previousIdentityKey = 0u;
+		static std::uint64_t planEventId = 0u;
+
+		if (planHash != previousPlanHash) {
+			previousPlanHash = planHash;
+			CDO4Telemetry::Envelope env{};
+			env.eventId = CDO4Telemetry::ReserveEventId();
+			planEventId = env.eventId;
+			env.frame = CDO4Frame();
+			env.eye = CDO4Telemetry::kNoEye;
+			env.planHash = planHash;
+			env.contractGeneration = generation;
+			env.payload = CDO4Telemetry::Payload::PlanPublished;
+			const auto dim = [](float a_value) {
+				return a_value > 0.0f ? static_cast<std::uint32_t>(a_value) : 0u;
+			};
+			CDO4Emit(env, std::format(
+				"\"owner\":\"{}\",\"activeQuality\":{},\"bootQuality\":{},"
+				"\"A\":{{\"w\":{},\"h\":{}}},\"R\":{{\"w\":{},\"h\":{}}},\"O\":{{\"w\":{},\"h\":{}}}",
+				magic_enum::enum_name(runtimeResolutionPlan.owner),
+				runtimeResolutionPlan.qualityMode,
+				boot.valid ? boot.qualityMode : 0u,
+				dim(runtimeResolutionPlan.engineAllocationSize.width),
+				dim(runtimeResolutionPlan.engineAllocationSize.height),
+				dim(runtimeResolutionPlan.engineRenderSize.width),
+				dim(runtimeResolutionPlan.engineRenderSize.height),
+				dim(runtimeResolutionPlan.finalOutputSize.x),
+				dim(runtimeResolutionPlan.finalOutputSize.y)));
+		}
+
+		if (auto* renderer = globals::game::renderer) {
+			auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
+			const auto identity = CDO4Identity(static_cast<ID3D11Texture2D*>(main.texture));
+			const std::uint64_t key = identity.address ^
+			                          (static_cast<std::uint64_t>(identity.width) << 20) ^
+			                          (static_cast<std::uint64_t>(identity.height) << 40) ^
+			                          static_cast<std::uint64_t>(identity.generation);
+			if (identity.address != 0u && key != previousIdentityKey) {
+				previousIdentityKey = key;
+				CDO4Telemetry::Envelope env{};
+				env.eventId = CDO4Telemetry::ReserveEventId();
+				// Parented to the plan record, so the A0 -> A1 -> A2 chain is
+				// recorded rather than reconstructed from timestamps.
+				env.parentEventId = planEventId;
+				env.frame = CDO4Frame();
+				env.eye = CDO4Telemetry::kNoEye;
+				env.planHash = planHash;
+				env.contractGeneration = generation;
+				env.payload = CDO4Telemetry::Payload::RenderTargetIdentity;
+				CDO4Emit(env, std::format(
+					"\"target\":\"kMAIN\",\"id\":\"{:016X}\",\"gen\":{},"
+					"\"postCreate\":true,\"desc\":{{\"w\":{},\"h\":{},\"fmt\":{}}}",
+					identity.address, identity.generation,
+					identity.width, identity.height, identity.format));
+			}
+		}
+	}
 }
 
 bool Upscaling::IsRenderScaleModeRequested() const
@@ -38162,6 +38332,12 @@ bool Upscaling::PreparePerEyeInputs(ID3D11Resource* colorSrc, ID3D11Resource* de
 		return false;
 	}
 
+	// SUPERSEDED PLACEMENT. Kept for continuity, but this is PreparePerEyeInputs,
+	// and normal RS-on and Hot submit-stage operation goes through
+	// EncodeSubmitStageVRInputs instead - so this can miss the very path it was
+	// written to characterize. The CDO4 record on the real path is the one that
+	// counts; a [VRIntermediate] line is exploratory and must not be read as
+	// CDO4 evidence.
 	if (settings.vrDynResPassTrace != 0u) {
 		const auto dim = [](const eastl::unique_ptr<Texture2D>& a_texture, bool a_width) -> uint32_t {
 			if (!a_texture)
@@ -39023,6 +39199,7 @@ void Upscaling::ClearVRDirectUpscaledEyeOutput(uint32_t eyeIndex, ID3D11Unordere
 		colorOffsetX);
 }
 
+
 bool Upscaling::EncodeSubmitStageVRInputs(ID3D11Resource* colorSource, ID3D11Resource* motionVectors, ID3D11Resource* depthSource,
 	uint32_t inputWidthPerEye, uint32_t inputHeight, uint32_t outputWidthPerEye, uint32_t outputHeight, bool copyDepthInput, bool allowFoveatedRegionEncode, bool* encodedFoveatedRegions, uint32_t contractGeneration)
 {
@@ -39098,6 +39275,52 @@ bool Upscaling::EncodeSubmitStageVRInputs(ID3D11Resource* colorSource, ID3D11Res
 		return false;
 	}
 
+
+	// CDO4-001 phase 2, item 1. THIS is the path the Hot flow takes - the earlier
+	// [VRIntermediate] logger sat in PreparePerEyeInputs and could miss it
+	// entirely. Recorded here, immediately after the intermediates are ensured,
+	// with the five quantities kept apart: capacity is a descriptor, the command
+	// write footprint is the extent this frame actually writes, and defined
+	// coverage is NOT inferable from either - it needs L4 provenance and is
+	// emitted as null.
+	if (CDO4Enabled()) {
+		const auto& plan = GetRuntimeResolutionPlan();
+		const std::uint64_t planHash = CDO4PlanHash(plan, contractGeneration);
+		const auto describe = [](const eastl::unique_ptr<Texture2D>& a_texture) {
+			return a_texture ? CDO4Identity(static_cast<ID3D11Texture2D*>(a_texture->resource.get())) :
+			                   CDO4Telemetry::ResourceIdentity{};
+		};
+		for (std::uint32_t eye = 0; eye < 2u; ++eye) {
+			const auto colourIn = describe(vrIntermediateColorIn[eye]);
+			const auto depthIn = describe(vrIntermediateDepth[eye]);
+			const auto mvecIn = describe(vrIntermediateMotionVectors[eye]);
+			const auto colourOut = describe(vrIntermediateColorOut[eye]);
+
+			CDO4Telemetry::Envelope env{};
+			env.eventId = CDO4Telemetry::ReserveEventId();
+			env.frame = CDO4Frame();
+			env.eye = eye;
+			env.planHash = planHash;
+			env.contractGeneration = contractGeneration;
+			env.payload = CDO4Telemetry::Payload::IntermediateCapacity;
+
+			CDO4Emit(env, std::format(
+				"\"method\":\"{}\","
+				"\"commandWriteFootprint\":{{\"w\":{},\"h\":{}}},"
+				"\"definedCurrentFrameCoverage\":null,"
+				"\"colourIn\":{{\"id\":\"{:016X}\",\"gen\":{},\"w\":{},\"h\":{}}},"
+				"\"depthIn\":{{\"id\":\"{:016X}\",\"gen\":{},\"w\":{},\"h\":{}}},"
+				"\"motionIn\":{{\"id\":\"{:016X}\",\"gen\":{},\"w\":{},\"h\":{}}},"
+				"\"colourOut\":{{\"id\":\"{:016X}\",\"gen\":{},\"w\":{},\"h\":{}}},"
+				"\"outsideCoverageProvenance\":\"UNKNOWN\"",
+				magic_enum::enum_name(upscaleMethod),
+				inputWidthPerEye, inputHeight,
+				colourIn.address, colourIn.generation, colourIn.width, colourIn.height,
+				depthIn.address, depthIn.generation, depthIn.width, depthIn.height,
+				mvecIn.address, mvecIn.generation, mvecIn.width, mvecIn.height,
+				colourOut.address, colourOut.generation, colourOut.width, colourOut.height));
+		}
+	}
 	for (uint32_t eye = 0; eye < 2; ++eye) {
 		if ((copyDepthInput && (!vrIntermediateDepth[eye] || !vrIntermediateDepth[eye]->resource)) ||
 			(upscaleMethod == UpscaleMethod::kFSR && (!vrIntermediateLinearDepth[eye] || !vrIntermediateLinearDepth[eye]->resource || !vrIntermediateLinearDepth[eye]->uav)) ||

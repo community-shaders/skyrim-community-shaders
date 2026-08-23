@@ -7,6 +7,7 @@
 #include "Upscaling/LumaSharpen/LumaSharpen.h"
 #include "Upscaling/RCAS/RCAS.h"
 #include "Upscaling/Streamline.h"
+#include "Upscaling/CDO4Telemetry.h"
 #include "Upscaling/VRGeometrySpaces.h"
 #include "Upscaling/VRVendorRelatchPolicy.h"
 #include <array>
@@ -291,6 +292,12 @@ public:
 		// promotes just the two that carry geometry, so the independent read costs
 		// what those two lines cost rather than what the whole debug channel costs.
 		uint vrDiagGeometryLog = 0;
+		// CDO4-001 phase 2. The event-envelope telemetry: every record carries a
+		// monotonic event ID, its parent, the plan hash and a stable resource
+		// identity, with window begin/end and reserved/emitted/dropped totals.
+		// Default off. The earlier loggers deduplicated without an occurrence
+		// stream and so can scope work but never be confirmatory; this one can.
+		uint cdo4Telemetry = 0;
 		uint perfMode = 1;
 		uint frameLimitMode = 1;
 		uint frameGenerationMode = 0;  // Disabled by default

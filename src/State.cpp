@@ -1432,7 +1432,36 @@ bool State::IsDeveloperMode()
 
 void State::ModifyRenderTarget(RE::RENDER_TARGETS::RENDER_TARGET a_target, RE::BSGraphics::RenderTargetProperties* a_properties)
 {
-	if (globals::features::upscaling.AdjustVRRenderScaleRenderTargetProperties(a_target, a_properties)) {
+	// CDO4-001 phase 2, item 3, first half. Capture BEFORE the adjustment so the
+	// A0->A1 edge has both sides, and record the invocation even when nothing
+	// changes - NO_PROPERTY_CHANGE_REQUIRED needs a positive record, not an
+	// absence. This is a PRE-CREATE property; the created resource is a separate
+	// record and only that one can confirm anything.
+	const std::uint32_t cdo4BeforeWidth = a_properties ? a_properties->width : 0u;
+	const std::uint32_t cdo4BeforeHeight = a_properties ? a_properties->height : 0u;
+	const bool cdo4Adjusted = globals::features::upscaling.AdjustVRRenderScaleRenderTargetProperties(a_target, a_properties);
+
+	if (globals::features::upscaling.settings.cdo4Telemetry != 0u && a_properties) {
+		CDO4Telemetry::Envelope env{};
+		env.eventId = CDO4Telemetry::ReserveEventId();
+		env.frame = globals::state ? static_cast<std::uint32_t>(globals::state->frameCount) : 0u;
+		env.eye = CDO4Telemetry::kNoEye;
+		env.payload = CDO4Telemetry::Payload::RenderTargetProperties;
+		logger::info(
+			"{} {{\"schema\":{},\"event\":{},\"parent\":0,\"frame\":{},\"cycle\":0,\"eye\":-1,"
+			"\"planHash\":\"0000000000000000\",\"generation\":0,\"payload\":\"{}\","
+			"\"target\":\"{}\",\"before\":{{\"w\":{},\"h\":{}}},\"after\":{{\"w\":{},\"h\":{}}},"
+			"\"adjusted\":{},\"postCreate\":false}}",
+			CDO4Telemetry::kPrefix, CDO4Telemetry::kSchemaVersion, env.eventId, env.frame,
+			CDO4Telemetry::PayloadName(env.payload),
+			magic_enum::enum_name(a_target),
+			cdo4BeforeWidth, cdo4BeforeHeight,
+			a_properties->width, a_properties->height,
+			cdo4Adjusted ? "true" : "false");
+		CDO4Telemetry::NoteEmitted();
+	}
+
+	if (cdo4Adjusted) {
 		// This is the allocation, per target, read from the path that actually
 		// rewrites what Skyrim will allocate - not from the resolution plan. That
 		// makes it an independent check on the plan rather than a second printing
