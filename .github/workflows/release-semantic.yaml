@@ -40,6 +40,9 @@ jobs:
               with:
                   app-id: ${{ secrets.APP_ID }}
                   private-key: ${{ secrets.APP_PRIVATE_KEY }}
+                  # Least privilege: this job only pushes commits/tags and reads/edits
+                  # releases via the app token (build dispatch uses github.token instead).
+                  permission-contents: write
 
             # TEMPORARY DEBUG: verify the generated App token can actually reach
             # the repo before checkout. Remove once the auth issue is resolved.

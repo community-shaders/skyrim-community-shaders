@@ -73,8 +73,8 @@ jobs:
                     echo 'No tag provided and no reachable stable release tag found for Nexus upload' >&2
                     exit 1
                   fi
-                  if [[ "$TAG" == *-* ]]; then
-                    echo "ERROR: '$TAG' is a pre-release tag. Only stable releases are uploaded to Nexus." >&2
+                  if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+                    echo "ERROR: '$TAG' is not a stable release tag (expected vX.Y.Z). Only stable releases are uploaded to Nexus." >&2
                     exit 1
                   fi
                   DRAFT=$(gh api "repos/$GITHUB_REPOSITORY/releases" \
@@ -83,6 +83,10 @@ jobs:
                     echo "ERROR: Release '$TAG' is not published. Publish the GitHub release before uploading to Nexus." >&2
                     exit 1
                   fi
+                  # Branch-dispatch can fall back to an older tag than the checked-out
+                  # tip — pin the tree to it so ini metadata and changelog generation
+                  # below reflect what was actually released, not the branch tip.
+                  git checkout "$TAG"
                   VERSION="${TAG#v}"
                   echo "tag=$TAG" >> $GITHUB_OUTPUT
                   echo "version=$VERSION" >> $GITHUB_OUTPUT
@@ -425,7 +429,13 @@ jobs:
                   override = os.environ.get('OVERRIDE_FILE_ID', '').strip()
                   file_id, candidates, check = '', '', main or files
                   if override:
-                      file_id = override
+                      matched = next((f for f in main if str(f.get('file_id')) == override), None)
+                      if matched:
+                          file_id, check = override, [matched]
+                      else:
+                          candidates = '; '.join(
+                              f\"{f.get('name', '?')} (id {f.get('file_id', '?')}, v{f.get('version', '?')})\"
+                              for f in main)
                   elif len(main) == 1:
                       file_id = str(main[0]['file_id'])
                   elif len(main) > 1:
@@ -487,9 +497,9 @@ jobs:
                     exit 0
                   fi
                   if [ -n "$CANDIDATES" ]; then
-                    echo "ERROR: '$MOD_NAME' has more than one MAIN-category file on Nexus — cannot auto-resolve which one to attach this version to:" >&2
+                    echo "ERROR: Could not resolve which Nexus file to attach this version to for '$MOD_NAME'. MAIN-category file(s) on Nexus:" >&2
                     echo "  $CANDIDATES" >&2
-                    echo "Set 'nexusfileid = <id>' in the feature's [Nexus] ini section to pin the correct file." >&2
+                    echo "Set 'nexusfileid = <id>' in the feature's [Nexus] ini section to pin the correct file (or fix it if already set)." >&2
                   else
                     echo "ERROR: Could not resolve an existing MAIN-category file ID from Nexus for '$MOD_NAME'." >&2
                     echo "The mod's first file must be uploaded manually via the Nexus website before automated version uploads can attach to it." >&2
@@ -511,6 +521,7 @@ jobs:
                   description: ${{ steps.prep.outputs.description }}
                   changelog: ${{ matrix.changelog }}
                   category: main
+                  update_mod_version: true
 
             - name: Report upload failure
               if: steps.upload.outcome == 'failure'

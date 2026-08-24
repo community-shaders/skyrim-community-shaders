@@ -64,6 +64,11 @@ jobs:
               with:
                   app-id: ${{ secrets.APP_ID }}
                   private-key: ${{ secrets.APP_PRIVATE_KEY }}
+                  # Least privilege: this job pushes branches, opens/closes PRs, and
+                  # creates the "hotfix" label.
+                  permission-contents: write
+                  permission-pull-requests: write
+                  permission-issues: write
 
             # TEMPORARY DEBUG: verify the generated App token can actually reach
             # the repo before checkout. Remove once the auth issue is resolved.
