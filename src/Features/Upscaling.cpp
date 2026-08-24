@@ -19683,6 +19683,30 @@ namespace
 	std::atomic<std::uint32_t> g_cdo4SubmitFrame{ 0u };
 	std::atomic<bool> g_cdo4SubmitFallback{ false };
 
+	// Raw submit bounds, latched beside the digest.
+	//
+	// These are the L5 coordinate evidence - which part of the field the submit
+	// path was told to read - and they are the "bounds" half of the remaining
+	// bounds-or-projection hypothesis. Hashing them alone answers "did this
+	// change"; emitting them raw answers "to what", which the hash cannot.
+	std::atomic<float> g_cdo4SubmitUMin{ 0.0f };
+	std::atomic<float> g_cdo4SubmitUMax{ 0.0f };
+	std::atomic<float> g_cdo4SubmitVMin{ 0.0f };
+	std::atomic<float> g_cdo4SubmitVMax{ 0.0f };
+	std::atomic<bool> g_cdo4SubmitBoundsValid{ false };
+
+	void CDO4LatchSubmitBounds(const vr::VRTextureBounds_t* a_bounds) noexcept
+	{
+		const bool valid = a_bounds != nullptr;
+		if (valid) {
+			g_cdo4SubmitUMin.store(a_bounds->uMin, std::memory_order_relaxed);
+			g_cdo4SubmitUMax.store(a_bounds->uMax, std::memory_order_relaxed);
+			g_cdo4SubmitVMin.store(a_bounds->vMin, std::memory_order_relaxed);
+			g_cdo4SubmitVMax.store(a_bounds->vMax, std::memory_order_relaxed);
+		}
+		g_cdo4SubmitBoundsValid.store(valid, std::memory_order_release);
+	}
+
 	void CDO4LatchSubmit(std::uint32_t a_frame, std::uint64_t a_digest, bool a_fallback) noexcept
 	{
 		g_cdo4SubmitDigest.store(a_digest, std::memory_order_release);
@@ -20250,7 +20274,8 @@ void Upscaling::RefreshRuntimeResolutionPlan()
 			"\"owner\":{},\"activeQuality\":{},\"bootQuality\":{},"
 			"\"foveated\":{{\"active\":{},\"planValid\":{},\"inputPerEye\":{{\"w\":{},\"h\":{}}},"
 			"\"outputPerEye\":{{\"w\":{},\"h\":{}}},\"centerScale\":{:.6f},\"centerHorizontalScale\":{:.6f},"
-			"\"peripheryTAAOuterScale\":{:.6f}}}}}",
+			"\"peripheryTAAOuterScale\":{:.6f}}},"
+			"\"submitBounds\":{{\"valid\":{},\"uMin\":{:.6f},\"uMax\":{:.6f},\"vMin\":{:.6f},\"vMax\":{:.6f}}}}}",
 			CDO4CommonRecorder::kPrefix, CDO4CommonRecorder::kSchemaVersion,
 			rec.frame, rec.planHash,
 			dimOf(runtimeResolutionPlan.engineAllocationSize.width), dimOf(runtimeResolutionPlan.engineAllocationSize.height),
@@ -20263,7 +20288,12 @@ void Upscaling::RefreshRuntimeResolutionPlan()
 			fov.IsValid() ? "true" : "false",
 			fov.inputWidthPerEye, fov.inputHeight,
 			fov.outputWidthPerEye, fov.outputHeight,
-			fov.centerScale, fov.centerHorizontalScale, fov.peripheryTAAOuterScale);
+			fov.centerScale, fov.centerHorizontalScale, fov.peripheryTAAOuterScale,
+			g_cdo4SubmitBoundsValid.load(std::memory_order_acquire) ? "true" : "false",
+			g_cdo4SubmitUMin.load(std::memory_order_relaxed),
+			g_cdo4SubmitUMax.load(std::memory_order_relaxed),
+			g_cdo4SubmitVMin.load(std::memory_order_relaxed),
+			g_cdo4SubmitVMax.load(std::memory_order_relaxed));
 
 	}
 }
@@ -45724,16 +45754,33 @@ bool Upscaling::SubmitVRUpscaledFrame(vr::EVREye a_eye, uint64_t a_compositorCyc
 	// called, which the stability check caught: submit was null in 100% of
 	// 23,972 comparable frames.
 	if (settings.cdo4CommonRecorder != 0u) {
+		// What goes into this digest, and what deliberately does not.
+		//
+		// Session 2 measured 21,816 DISTINCT submit values in 21,816 records -
+		// every frame unique. That is not a state category, it is a per-frame
+		// fingerprint, and it can never agree between two runs. The cause was
+		// a_compositorCycleToken, which increments every frame, so uniqueness was
+		// guaranteed by construction rather than observed. Populating the field
+		// fixed the null; it did not produce a working category.
+		//
+		// The token is not lost - it is already carried in the telemetry
+		// envelope, where a per-frame correlator belongs. The same argument
+		// excludes the texture handle: a swapchain pointer rotates through the
+		// buffer set and differs between processes, so it is identity, not state.
+		//
+		// What remains is what the submit path was TOLD: which eye, what kind of
+		// texture, in what colour space, over which bounds. Those are stable
+		// while the configuration is stable, which is the property a comparator
+		// needs.
 		CDO4CommonRecorder::Digest d;
 		d.Add(static_cast<std::uint32_t>(a_eye));
-		d.Add(a_compositorCycleToken);
 		if (a_inputTexture) {
-			d.Add(reinterpret_cast<std::uint64_t>(a_inputTexture->handle));
 			d.Add(static_cast<std::uint32_t>(a_inputTexture->eType));
 			d.Add(static_cast<std::uint32_t>(a_inputTexture->eColorSpace));
 		} else {
 			d.Add(std::uint64_t{ 0u });
 		}
+		CDO4LatchSubmitBounds(a_inputBounds);
 		if (a_inputBounds) {
 			d.Add(a_inputBounds->uMin);
 			d.Add(a_inputBounds->uMax);
