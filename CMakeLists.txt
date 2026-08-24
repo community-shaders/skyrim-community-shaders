@@ -1421,6 +1421,11 @@ if(BUILD_CONTROLLER_TESTS)
         CDO4Policy
         tests/cdo4_policy_test.cpp
     )
+    add_controller_test(
+        cdo4_frame_match_test
+        CDO4FrameMatch
+        tests/cdo4_frame_match_test.cpp
+    )
 
     add_custom_target(
         controller_tests
