@@ -20268,6 +20268,7 @@ void Upscaling::RefreshRuntimeResolutionPlan()
 		// debug and warn, so the silence at info level proved nothing. This makes
 		// it a recorded fact per frame instead of an assumption.
 		const auto& fov = runtimeResolutionPlan.foveatedRegion;
+		auto* cdo4State = globals::state;
 		logger::info(
 			"{} {{\"schema\":{},\"frame\":{},\"payload\":\"RAW\",\"planHash\":\"{:016X}\","
 			"\"A\":{{\"w\":{},\"h\":{}}},\"R\":{{\"w\":{},\"h\":{}}},\"O\":{{\"w\":{},\"h\":{}}},"
@@ -20275,7 +20276,8 @@ void Upscaling::RefreshRuntimeResolutionPlan()
 			"\"foveated\":{{\"active\":{},\"planValid\":{},\"inputPerEye\":{{\"w\":{},\"h\":{}}},"
 			"\"outputPerEye\":{{\"w\":{},\"h\":{}}},\"centerScale\":{:.6f},\"centerHorizontalScale\":{:.6f},"
 			"\"peripheryTAAOuterScale\":{:.6f}}},"
-			"\"submitBounds\":{{\"valid\":{},\"uMin\":{:.6f},\"uMax\":{:.6f},\"vMin\":{:.6f},\"vMax\":{:.6f}}}}}",
+			"\"submitBounds\":{{\"valid\":{},\"uMin\":{:.6f},\"uMax\":{:.6f},\"vMin\":{:.6f},\"vMax\":{:.6f}}},"
+			"\"arm\":{{\"frameAnnotations\":{},\"targetWrappersInstalled\":{},\"targetWrapperInstallId\":{}}}}}",
 			CDO4CommonRecorder::kPrefix, CDO4CommonRecorder::kSchemaVersion,
 			rec.frame, rec.planHash,
 			dimOf(runtimeResolutionPlan.engineAllocationSize.width), dimOf(runtimeResolutionPlan.engineAllocationSize.height),
@@ -20293,7 +20295,22 @@ void Upscaling::RefreshRuntimeResolutionPlan()
 			g_cdo4SubmitUMin.load(std::memory_order_relaxed),
 			g_cdo4SubmitUMax.load(std::memory_order_relaxed),
 			g_cdo4SubmitVMin.load(std::memory_order_relaxed),
-			g_cdo4SubmitVMax.load(std::memory_order_relaxed));
+			g_cdo4SubmitVMax.load(std::memory_order_relaxed),
+			// Arm identity, in the comparator itself.
+			//
+			// This state is otherwise emitted ONLY under CDO4Emit, which is gated
+			// on cdo4Telemetry - and that was off in sessions 1 and 2. An arm A
+			// versus arm B pair run the same way would therefore not record which
+			// arm it was, and the arm would be an assumption rather than a
+			// measurement. Putting it here makes every run self-certifying, with
+			// no extra instrument enabled to find out.
+			//
+			// RAW only, never hashed into a category. It is the independent
+			// variable: comparing it across arms would report a difference on
+			// every matched pair and drown the signal it is meant to isolate.
+			(cdo4State && cdo4State->frameAnnotations) ? "true" : "false",
+			FrameAnnotations::TargetWrappersInstalled() ? "true" : "false",
+			FrameAnnotations::TargetWrapperInstallId());
 
 	}
 }

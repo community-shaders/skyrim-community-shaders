@@ -139,6 +139,57 @@ namespace CDO4FrameMatch
 		return CategoryUsability::DegenerateAbsent;
 	}
 
+	// Which arm a run was.
+	//
+	// Recorded in the comparator's RAW line rather than in telemetry, because
+	// telemetry is itself one of the instruments under test and was off for the
+	// pilot sessions. A run that cannot state its own arm forces the arm to be an
+	// assumption, and the whole point of an A-versus-B comparison is that the one
+	// thing that differs is known rather than believed.
+	struct ArmIdentity
+	{
+		bool recorded{ false };
+		bool frameAnnotations{ false };
+		bool targetWrappersInstalled{ false };
+		std::uint32_t targetWrapperInstallId{ 0u };
+	};
+
+	enum class ArmPairing : std::uint8_t
+	{
+		Differential,  // the arms differ in the intended way
+		SameArm,       // both runs are the same arm
+		Unrecorded,    // at least one run cannot say
+	};
+
+	[[nodiscard]] constexpr ArmPairing ClassifyArmPairing(
+		const ArmIdentity& a_lhs,
+		const ArmIdentity& a_rhs) noexcept
+	{
+		if (!a_lhs.recorded || !a_rhs.recorded)
+			return ArmPairing::Unrecorded;
+
+		// The wrapper installation is the arm. frameAnnotations is the setting
+		// that requests it, but item 4 established that the setting can be on
+		// while the wrappers are absent, so the installed state is what counts.
+		return a_lhs.targetWrappersInstalled != a_rhs.targetWrappersInstalled ?
+		           ArmPairing::Differential :
+		           ArmPairing::SameArm;
+	}
+
+	// A same-arm pair is a perfectly good repeatability check - that is exactly
+	// what sessions 1 and 2 were. It is NOT an instrument non-interference test,
+	// and reporting one as the other would turn "we changed nothing and nothing
+	// changed" into "the instrument is harmless".
+	[[nodiscard]] constexpr bool MayScoreAsNonInterference(ArmPairing a_pairing) noexcept
+	{
+		return a_pairing == ArmPairing::Differential;
+	}
+
+	[[nodiscard]] constexpr bool MayScoreAsRepeatability(ArmPairing a_pairing) noexcept
+	{
+		return a_pairing == ArmPairing::SameArm;
+	}
+
 	enum class Mode : std::uint8_t
 	{
 		// Startup: align by transition ordinal, then by offset within the block.

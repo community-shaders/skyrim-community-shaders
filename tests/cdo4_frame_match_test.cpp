@@ -110,6 +110,45 @@ namespace
 	static_assert(CombineUsability(CategoryUsability::DegeneratePerFrameUnique, CategoryUsability::Usable) ==
 				  CombineUsability(CategoryUsability::Usable, CategoryUsability::DegeneratePerFrameUnique));
 
+	// ------------------------------------------------------------------ arm pair
+
+	constexpr ArmIdentity kArmA{ true, false, false, 0u };
+	constexpr ArmIdentity kArmB{ true, true, true, 7u };
+	constexpr ArmIdentity kUnrecorded{};
+
+	static_assert(ClassifyArmPairing(kArmA, kArmB) == ArmPairing::Differential);
+	static_assert(ClassifyArmPairing(kArmB, kArmA) == ArmPairing::Differential);
+	static_assert(ClassifyArmPairing(kArmA, kArmA) == ArmPairing::SameArm);
+	static_assert(ClassifyArmPairing(kArmB, kArmB) == ArmPairing::SameArm);
+
+	// Sessions 1 and 2: neither could state its arm, because the field did not
+	// exist in those builds. That must read as Unrecorded, never as SameArm -
+	// "both were arm A" was an assumption, however well-founded.
+	static_assert(ClassifyArmPairing(kUnrecorded, kUnrecorded) == ArmPairing::Unrecorded);
+	static_assert(ClassifyArmPairing(kArmA, kUnrecorded) == ArmPairing::Unrecorded);
+	static_assert(ClassifyArmPairing(kUnrecorded, kArmB) == ArmPairing::Unrecorded);
+
+	// The installed state is the arm, not the setting that requests it. Item 4
+	// established the setting can be on while the wrappers are absent.
+	constexpr ArmIdentity kRequestedButAbsent{ true, true, false, 0u };
+	static_assert(ClassifyArmPairing(kArmA, kRequestedButAbsent) == ArmPairing::SameArm);
+	static_assert(ClassifyArmPairing(kArmB, kRequestedButAbsent) == ArmPairing::Differential);
+
+	// A same-arm pair is a repeatability check and not a non-interference test.
+	// Reporting one as the other turns "we changed nothing and nothing changed"
+	// into "the instrument is harmless".
+	static_assert(MayScoreAsNonInterference(ArmPairing::Differential));
+	static_assert(!MayScoreAsNonInterference(ArmPairing::SameArm));
+	static_assert(!MayScoreAsNonInterference(ArmPairing::Unrecorded));
+	static_assert(MayScoreAsRepeatability(ArmPairing::SameArm));
+	static_assert(!MayScoreAsRepeatability(ArmPairing::Differential));
+	static_assert(!MayScoreAsRepeatability(ArmPairing::Unrecorded));
+
+	// Unrecorded supports NEITHER claim. A run that cannot state its arm cannot
+	// be scored as any kind of comparison.
+	static_assert(!MayScoreAsNonInterference(ArmPairing::Unrecorded) &&
+				  !MayScoreAsRepeatability(ArmPairing::Unrecorded));
+
 	// ------------------------------------------------------------------- anchor
 
 	// The measured case: session 1 and session 2, offset 437 at every transition.
