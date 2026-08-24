@@ -1045,7 +1045,12 @@ namespace Hooks
 			}
 		}
 
-		stl::write_thunk_call<BSLightingShader_SetupGeometry_GeometrySetupConstantPointLights>(REL::RelocationID(100565, 107300).address() + REL::Relocate(0x523, 0xB0E));
+		// The 1.7.99 AE recompile shifted this function's layout by +0x22 bytes past this
+		// point (same shift EngineFixes found and compensates for at two other call sites
+		// inside this same function, in bslightingshader_parallax_bug.h and
+		// bslightingambientspecular.h) - 0xB0E lands mid-instruction on 1.7.99 and corrupts
+		// adjacent code instead of patching the intended CALL.
+		stl::write_thunk_call<BSLightingShader_SetupGeometry_GeometrySetupConstantPointLights>(REL::RelocationID(100565, 107300).address() + REL::Relocate(0x523, REL::Module::IsAtLeast(SKSE::RUNTIME_SSE_1_7_99) ? 0xB30 : 0xB0E));
 	}
 
 	void InstallEarlyHooks()
