@@ -1371,6 +1371,19 @@ endif()
 if(BUILD_CONTROLLER_TESTS)
     enable_testing()
 
+    # Registration is in ONE place on purpose.
+    #
+    # This used to be two: add_controller_test registered the test with ctest,
+    # and a hand-maintained DEPENDS list on the controller_tests target decided
+    # what actually got built. Because the test executables are EXCLUDE_FROM_ALL,
+    # a test added to the first list and forgotten in the second was never built,
+    # and ctest then failed on a missing executable - an exit code 1 with no
+    # compiler error anywhere in the log, which is a genuinely confusing way to
+    # find out. That happened once, with cdo4_frame_match_test.
+    #
+    # The accumulator makes the whole class of mistake impossible.
+    set(CONTROLLER_TEST_TARGETS "")
+
     function(add_controller_test TARGET_NAME TEST_NAME SOURCE_FILE)
         add_executable(${TARGET_NAME} EXCLUDE_FROM_ALL ${SOURCE_FILE})
         target_compile_features(${TARGET_NAME} PRIVATE cxx_std_23)
@@ -1379,6 +1392,7 @@ if(BUILD_CONTROLLER_TESTS)
             PRIVATE "${PROJECT_SOURCE_DIR}/src"
         )
         add_test(NAME ${TEST_NAME} COMMAND ${TARGET_NAME})
+        set(CONTROLLER_TEST_TARGETS ${CONTROLLER_TEST_TARGETS} ${TARGET_NAME} PARENT_SCOPE)
     endfunction()
 
     add_controller_test(
@@ -1427,18 +1441,9 @@ if(BUILD_CONTROLLER_TESTS)
         tests/cdo4_frame_match_test.cpp
     )
 
-    add_custom_target(
-        controller_tests
-        DEPENDS
-            perf_mode_restart_state_test
-            vr_vendor_relatch_policy_test
-            fsr_host_lifecycle_policy_test
-            overlay_policy_test
-            vr_geometry_policy_test
-            vr_geometry_spaces_test
-            vr_pipeline_contract_test
-            cdo4_policy_test
-    )
+    add_custom_target(controller_tests DEPENDS ${CONTROLLER_TEST_TARGETS})
+    list(LENGTH CONTROLLER_TEST_TARGETS _controller_test_count)
+    message(STATUS "controller tests registered: ${_controller_test_count} (${CONTROLLER_TEST_TARGETS})")
 endif()
 
 message("*************************************************************")
