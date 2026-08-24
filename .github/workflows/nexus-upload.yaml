@@ -318,6 +318,18 @@ jobs:
                       print(line)
                       summary.write(line + '\n')
 
+                  def resolve_check_files(main, files, override):
+                      # Mirrors the upload-step resolution: an explicit override must
+                      # match an actual MAIN file; multiple MAIN files with no override
+                      # is ambiguous. Both are unresolved rather than silently checked
+                      # against every candidate, which could report a stale/wrong match.
+                      if override:
+                          matched = next((f for f in main if str(f.get('file_id')) == override), None)
+                          return [matched] if matched else None
+                      if len(main) > 1:
+                          return None
+                      return main if main else files
+
                   w('## Dry Run — Nexus Version Check')
                   w()
                   if not api_key:
@@ -351,7 +363,11 @@ jobs:
                           api_ok = True
                           files = data.get('files', [])
                           main = [f for f in files if f.get('category_name') == 'MAIN']
-                          check = main if main else files
+                          override = str(row.get('file_id') or '').strip()
+                          check = resolve_check_files(main, files, override)
+                          if check is None:
+                              w(f'| {link} | `{planned}` | ❓ unresolved file_id | — |')
+                              continue
                           seen = []
                           for f in check:
                               v = f.get('version', '')
@@ -590,7 +606,19 @@ jobs:
                   def w(line=''):
                       summary.write(line + '\n')
 
-                  def nexus_versions(mod_id):
+                  def resolve_check_files(main, files, override):
+                      # Mirrors the upload-step resolution: an explicit override must
+                      # match an actual MAIN file; multiple MAIN files with no override
+                      # is ambiguous. Both are unresolved rather than silently checked
+                      # against every candidate, which could report a stale/wrong match.
+                      if override:
+                          matched = next((f for f in main if str(f.get('file_id')) == override), None)
+                          return [matched] if matched else None
+                      if len(main) > 1:
+                          return None
+                      return main if main else files
+
+                  def nexus_versions(mod_id, override):
                       if not api_key or not mod_id:
                           return None
                       url = f'https://api.nexusmods.com/v1/games/{game_id}/mods/{mod_id}/files.json'
@@ -603,7 +631,9 @@ jobs:
                           with urllib.request.urlopen(req, timeout=15) as resp:
                               files = json.load(resp).get('files', [])
                           main = [f for f in files if f.get('category_name') == 'MAIN']
-                          check = main if main else files
+                          check = resolve_check_files(main, files, override)
+                          if check is None:
+                              return None
                           seen = []
                           for f in check:
                               v = f.get('version', '')
@@ -622,7 +652,8 @@ jobs:
                       label = row.get('mod_filename', name)
                       url = f'https://www.nexusmods.com/{game_id}/mods/{mod_id}'
                       artifact = f'nexus-upload-{name}'
-                      versions = nexus_versions(mod_id)
+                      override = str(row.get('file_id') or '').strip()
+                      versions = nexus_versions(mod_id, override)
                       if versions is None:
                           status, icon = 'unknown', '❓'
                           unknowns.append(label)
