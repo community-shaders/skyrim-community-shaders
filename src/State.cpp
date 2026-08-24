@@ -10,13 +10,12 @@
 #include "Features/CloudShadows.h"
 #include "Features/Effects11.h"
 #include "Features/ExponentialHeightFog.h"
-#include "Features/SkySync.h"
 #include "Features/HDRDisplay.h"
 #include "Features/InteriorSun.h"
 #include "Features/PerformanceOverlay.h"
 #include "Features/Skin.h"
-#include "Features/Skylighting.h"
 #include "Features/SkySync.h"
+#include "Features/Skylighting.h"
 #include "Features/TerrainBlending.h"
 #include "Features/TerrainHelper.h"
 #include "Features/Upscaling.h"
@@ -34,6 +33,21 @@
 #ifdef TRACY_ENABLE
 static thread_local std::vector<TracyCZoneCtx> s_tracyPerfZones;
 #endif
+
+void State::UpdateLightingShaderPermutation(RE::BSRenderPass* a_pass)
+{
+	constexpr auto additiveLighting = static_cast<uint32_t>(ExtraShaderDescriptors::AdditiveLighting);
+	permutationData.ExtraShaderDescriptor &= ~additiveLighting;
+
+	if (!a_pass || !a_pass->geometry)
+		return;
+
+	auto* alphaProperty = a_pass->geometry->GetGeometryRuntimeData().alphaProperty.get();
+	if (alphaProperty && alphaProperty->GetAlphaBlending() &&
+		alphaProperty->GetDestBlendMode() == RE::NiAlphaProperty::AlphaFunction::kOne) {
+		permutationData.ExtraShaderDescriptor |= additiveLighting;
+	}
+}
 
 void State::UpdateSkyShaderPermutation(RE::BSRenderPass* a_pass)
 {
@@ -1197,5 +1211,3 @@ bool State::HasDirectionalShadows() const
 {
 	return !Util::IsInterior() || globals::features::interiorSun.IsActiveInteriorSun();
 }
-
-

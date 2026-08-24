@@ -13,8 +13,8 @@
 #include "Features/Effects11.h"
 #include "Features/HDRDisplay.h"
 #include "Features/InteriorSun.h"
-#include "Features/ScreenshotFeature.h"
 #include "Features/LightLimitFix.h"
+#include "Features/ScreenshotFeature.h"
 #include "Features/Skin.h"
 #include "Features/SkySync.h"
 #include "Features/Upscaling.h"
@@ -161,6 +161,19 @@ bool Hooks::BSShader_BeginTechnique::thunk(RE::BSShader* shader, uint32_t vertex
 	state->lastModifiedPixelDescriptor = state->modifiedPixelDescriptor;
 
 	return shaderFound;
+}
+
+namespace LightingExtensions
+{
+	struct BSLightingShader_SetupGeometry
+	{
+		static void thunk(RE::BSShader* shader, RE::BSRenderPass* pass, uint32_t renderFlags)
+		{
+			globals::state->UpdateLightingShaderPermutation(pass);
+			func(shader, pass, renderFlags);
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
 }
 
 namespace EffectExtensions
@@ -487,8 +500,8 @@ struct BSInputDeviceManager_PollInputDevices
 
 			if (*a_events) {
 				if (auto device = (*a_events)->GetDevice()) {
-						// Block all devices except gamepad when menu is open
-						blockedDevice = (device != RE::INPUT_DEVICES::INPUT_DEVICE::kGamepad);
+					// Block all devices except gamepad when menu is open
+					blockedDevice = (device != RE::INPUT_DEVICES::INPUT_DEVICE::kGamepad);
 				}
 			}
 		}
@@ -1012,6 +1025,7 @@ namespace Hooks
 		stl::detour_thunk<MenuManagerDrawInterfaceStart>(REL::RelocationID(79947, 82084));
 
 		logger::info("Installing SetupGeometry hooks");
+		stl::write_vfunc<0x6, LightingExtensions::BSLightingShader_SetupGeometry>(RE::VTABLE_BSLightingShader[0]);
 		stl::write_vfunc<0x6, EffectExtensions::BSEffectShader_SetupGeometry>(RE::VTABLE_BSEffectShader[0]);
 		stl::write_vfunc<0x6, SkyExtensions::BSSkyShader_SetupGeometry>(RE::VTABLE_BSSkyShader[0]);
 		stl::write_thunk_call<GrassExtensions::BSGrassShaderProperty_ctor>(REL::RelocationID(15214, 15383).address() + REL::Relocate(0x45B, 0x4F5));

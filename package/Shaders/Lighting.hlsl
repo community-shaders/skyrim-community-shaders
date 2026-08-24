@@ -1217,7 +1217,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		weights[0] = weights[1] = weights[2] = weights[3] = weights[4] = weights[5] = 0.0;
 
 		const bool doTerrainPom = ExtendedMaterials::TerrainHasAnyDisplacement() &&
-			ExtendedMaterials::TerrainMaxWeightedHeightScale(input, displacementParams) > 0.01;
+		                          ExtendedMaterials::TerrainMaxWeightedHeightScale(input, displacementParams) > 0.01;
 		[branch] if (doTerrainPom)
 		{
 			uv = ExtendedMaterials::GetParallaxCoords(input, viewPosition.z, uv, mipLevels, terrainMaxTexDim, viewDirection, tbnTr, screenNoise, displacementParams, sharedOffset, pixelOffset, weights);
@@ -1485,8 +1485,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float2 blendColorUV = input.TexCoord0.zw;
 	[branch] if (SharedData::terrainVariationSettings.enableLODTerrainTilingFix)
 		lodLandColor = StochasticSampleLOD(screenNoise, TexLandLodBlend1Sampler, SampLandLodBlend1Sampler, blendColorUV);
-	else
-		lodLandColor = TexLandLodBlend1Sampler.SampleBias(SampLandLodBlend1Sampler, blendColorUV, SharedData::MipBias);
+	else lodLandColor = TexLandLodBlend1Sampler.SampleBias(SampLandLodBlend1Sampler, blendColorUV, SharedData::MipBias);
 #		else
 	lodLandColor = TexLandLodBlend1Sampler.Sample(SampLandLodBlend1Sampler, input.TexCoord0.zw);
 #		endif
@@ -1968,15 +1967,18 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		if defined(DEFERRED)
 	sh2 skylightingSH = Skylighting::Sample(positionMSSkylight, worldNormal
 #			if defined(SKYLIGHTING_SHADOW_VIS)
-		, skylightingShadowVisibility
+		,
+		skylightingShadowVisibility
 #			endif
 	);
 #		else
 	sh2 skylightingSH = inWorld ? Skylighting::Sample(positionMSSkylight, worldNormal
 #			if defined(SKYLIGHTING_SHADOW_VIS)
-		, skylightingShadowVisibility
+									  ,
+									  skylightingShadowVisibility
 #			endif
-	) : Skylighting::UNIT_SH;
+									  ) :
+	                              Skylighting::UNIT_SH;
 #		endif
 #	endif
 
@@ -2130,7 +2132,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		if !defined(SKYLIGHTING_SHADOW_VIS)
 		dirSoftShadow =
 #		endif
-		ShadowSampling::GetLightingShadow(input.WorldPosition.xyz, dirVSMDetailedShadow);
+			ShadowSampling::GetLightingShadow(input.WorldPosition.xyz, dirVSMDetailedShadow);
 #	endif
 
 	float dirDetailedShadow = 1.0;
@@ -2726,6 +2728,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		fogFactor = exponentialHeightFog.w;
 	}
 #		endif
+	if ((Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::AdditiveLighting) != 0) {
+		vanillaFogColor = 0.0;
+		fogColor = 0.0;
+	}
 	if ((FrameBuffer::FrameParams.y && FrameBuffer::FrameParams.z) || inReflection) {
 #		if defined(EXP_HEIGHT_FOG)
 		if (SharedData::exponentialHeightFogSettings.enabled) {
