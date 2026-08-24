@@ -4,24 +4,8 @@ on:
     workflow_dispatch:
         inputs:
             tag:
-                description: "Release tag to upload to Nexus"
-                required: true
-            nexus_game_id:
-                description: "Nexus game ID"
+                description: "Release tag to upload to Nexus (defaults to the dispatched ref if it's a tag, else the latest reachable stable tag)"
                 required: false
-                default: "skyrimspecialedition"
-            nexus_mod_id:
-                description: "Nexus mod ID"
-                required: false
-                default: "86492"
-            artifact_pattern:
-                description: "Artifact glob pattern to select the package to upload"
-                required: false
-                default: "CommunityShaders-*.zip"
-            mod_filename:
-                description: "Filename used for the Nexus mod upload"
-                required: false
-                default: "Community Shaders"
             dry_run:
                 description: "If true, do not upload to Nexus; only report the planned upload"
                 required: false
@@ -30,47 +14,16 @@ on:
                 options:
                     - "true"
                     - "false"
-            changelog:
-                description: "Optional release notes or changelog for Nexus"
-                required: false
-            nexus_file_group_id:
-                description: "Nexus file group ID for the core mod"
-                required: false
-                default: "3119152"
     workflow_call:
         inputs:
             tag:
-                description: "Release tag to upload to Nexus"
-                required: true
-                type: string
-            nexus_game_id:
+                description: "Release tag to upload to Nexus (defaults to the dispatched ref if it's a tag, else the latest reachable stable tag)"
                 required: false
                 type: string
-                default: "skyrimspecialedition"
-            nexus_mod_id:
-                required: false
-                type: string
-                default: "86492"
-            artifact_pattern:
-                required: false
-                type: string
-                default: "CommunityShaders-*.zip"
-            mod_filename:
-                required: false
-                type: string
-                default: "Community Shaders"
             dry_run:
                 required: false
                 type: string
                 default: "true"
-            changelog:
-                required: false
-                type: string
-                default: ""
-            nexus_file_group_id:
-                required: false
-                type: string
-                default: "3119152"
         secrets:
             UNEX_APIKEY:
                 required: false
@@ -108,7 +61,16 @@ jobs:
               run: |
                   TAG="$INPUT_TAG"
                   if [ -z "$TAG" ]; then
-                    echo 'No tag provided for Nexus upload' >&2
+                    if [ "$REF_TYPE" = "tag" ]; then
+                      TAG="$REF_NAME"
+                    else
+                      # Dispatched from a branch — fall back to the latest reachable
+                      # stable tag instead of requiring one to be typed in manually.
+                      TAG=$(git tag --merged HEAD --list 'v*.*.*' --sort=-v:refname | grep -v -- '-' | head -1)
+                    fi
+                  fi
+                  if [ -z "$TAG" ]; then
+                    echo 'No tag provided and no reachable stable release tag found for Nexus upload' >&2
                     exit 1
                   fi
                   if [[ "$TAG" == *-* ]]; then
@@ -126,6 +88,8 @@ jobs:
                   echo "version=$VERSION" >> $GITHUB_OUTPUT
               env:
                   INPUT_TAG: ${{ inputs.tag || '' }}
+                  REF_TYPE: ${{ github.ref_type }}
+                  REF_NAME: ${{ github.ref_name }}
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
             - name: Compute dry-run mode
@@ -151,15 +115,10 @@ jobs:
                   else
                     ARGS+=( --all-features )
                   fi
-                  if [ -n "$INPUT_NEXUS_MOD_ID" ]; then
-                    ARGS+=( --core-mod-id "$INPUT_NEXUS_MOD_ID" )
-                  fi
-                  if [ -n "$INPUT_MOD_FILENAME" ]; then
-                    ARGS+=( --core-filename "$INPUT_MOD_FILENAME" )
-                  fi
-                  if [ -n "$INPUT_ARTIFACT_PATTERN" ]; then
-                    ARGS+=( --core-artifact-pattern "$INPUT_ARTIFACT_PATTERN" )
-                  fi
+                  # --core-mod-id/--core-filename/--core-artifact-pattern are left
+                  # unset here — feature_version_audit.py's own defaults (86492,
+                  # "Community Shaders", "CommunityShaders-*.zip") are the only
+                  # values ever used in practice.
                   # Strip the leading 'v' so we get e.g. "1.5.2" — the value
                   # is rendered into Nexus file descriptions, where the
                   # bare semver is what users see in the UI.
@@ -190,21 +149,6 @@ jobs:
                   with open('nexus-matrix-raw.json', 'w') as f:
                       json.dump(data, f)
                   "
-
-                  # Inject core file_group_id from workflow input if provided.
-                  if [ -n "$INPUT_NEXUS_FILE_GROUP_ID" ]; then
-                    python -c "
-                  import json, os
-                  with open('nexus-matrix-raw.json') as f:
-                      data = json.load(f)
-                  for row in data:
-                      if row.get('name') == 'core':
-                          row['file_group_id'] = os.environ['INPUT_NEXUS_FILE_GROUP_ID']
-                          break
-                  with open('nexus-matrix-raw.json', 'w') as f:
-                      json.dump(data, f)
-                  "
-                  fi
 
                   python -c "
                   import json, os, fnmatch
@@ -283,10 +227,6 @@ jobs:
                   echo "has_uploads=${HAS_UPLOADS}" >> "$GITHUB_OUTPUT"
               env:
                   RELEASE_TAG: ${{ steps.resolve.outputs.tag }}
-                  INPUT_NEXUS_MOD_ID: ${{ inputs.nexus_mod_id || '' }}
-                  INPUT_MOD_FILENAME: ${{ inputs.mod_filename || '' }}
-                  INPUT_ARTIFACT_PATTERN: ${{ inputs.artifact_pattern || '' }}
-                  INPUT_NEXUS_FILE_GROUP_ID: ${{ inputs.nexus_file_group_id || '' }}
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     prepare-artifacts:
@@ -433,7 +373,7 @@ jobs:
               env:
                   UPLOAD_MATRIX: ${{ needs.prepare-nexus-matrix.outputs.upload_matrix }}
                   VERSION: ${{ needs.prepare-nexus-matrix.outputs.version }}
-                  NEXUS_GAME_ID: ${{ inputs.nexus_game_id || 'skyrimspecialedition' }}
+                  NEXUS_GAME_ID: skyrimspecialedition
                   UNEX_APIKEY: ${{ secrets.UNEX_APIKEY }}
 
     upload-to-nexus:
@@ -457,29 +397,54 @@ jobs:
               env:
                   MOD_ID: ${{ matrix.nexus_mod_id }}
                   VERSION: ${{ matrix.mod_version || needs.prepare-nexus-matrix.outputs.version }}
-                  GAME_ID: ${{ inputs.nexus_game_id || 'skyrimspecialedition' }}
+                  GAME_ID: skyrimspecialedition
                   API_KEY: ${{ secrets.UNEX_APIKEY }}
+                  OVERRIDE_FILE_ID: ${{ matrix.file_id || '' }}
               run: |
                   if [ -z "$API_KEY" ] || [ -z "$MOD_ID" ]; then
                     echo "should_upload=true" >> $GITHUB_OUTPUT
+                    echo "file_id=" >> $GITHUB_OUTPUT
+                    echo "candidates=" >> $GITHUB_OUTPUT
                     exit 0
                   fi
-                  EXISTING=$(curl -sf \
+                  # file_id is resolved from the mod's MAIN-category file — the
+                  # upload-action attaches new versions to an existing file rather
+                  # than a file group. When a mod has more than one MAIN file (e.g.
+                  # optional variants uploaded alongside the primary download), which
+                  # one to bump is ambiguous and is NOT guessed: pin it explicitly via
+                  # `nexusfileid` in the feature's [Nexus] ini section.
+                  RESULT=$(curl -sf \
                     -H "apikey: $API_KEY" \
                     -H "Accept: application/json" \
                     "https://api.nexusmods.com/v1/games/$GAME_ID/mods/$MOD_ID/files.json" \
                     | python3 -c "
                   import json, sys, os
                   data = json.load(sys.stdin)
-                  main = [f for f in data.get('files', []) if f.get('category_name') == 'MAIN']
-                  versions = [f.get('version', '') for f in (main or data.get('files', []))]
-                  print('true' if os.environ['VERSION'] in versions else 'false')
-                  " 2>/dev/null || echo "false")
-                  if [ "$EXISTING" = "true" ]; then
+                  files = data.get('files', [])
+                  main = [f for f in files if f.get('category_name') == 'MAIN']
+                  override = os.environ.get('OVERRIDE_FILE_ID', '').strip()
+                  file_id, candidates, check = '', '', main or files
+                  if override:
+                      file_id = override
+                  elif len(main) == 1:
+                      file_id = str(main[0]['file_id'])
+                  elif len(main) > 1:
+                      candidates = '; '.join(
+                          f\"{f.get('name', '?')} (id {f.get('file_id', '?')}, v{f.get('version', '?')})\"
+                          for f in main)
+                  versions = [f.get('version', '') for f in check]
+                  print('true' if os.environ['VERSION'] not in versions else 'false')
+                  print(file_id)
+                  print(candidates)
+                  " 2>/dev/null || echo "true")
+                  SHOULD_UPLOAD=$(echo "$RESULT" | sed -n 1p)
+                  FILE_ID=$(echo "$RESULT" | sed -n 2p)
+                  CANDIDATES=$(echo "$RESULT" | sed -n 3p)
+                  echo "should_upload=${SHOULD_UPLOAD:-true}" >> $GITHUB_OUTPUT
+                  echo "file_id=$FILE_ID" >> $GITHUB_OUTPUT
+                  echo "candidates=$CANDIDATES" >> $GITHUB_OUTPUT
+                  if [ "$SHOULD_UPLOAD" = "false" ]; then
                     echo "Version $VERSION already exists on Nexus for mod $MOD_ID — skipping upload."
-                    echo "should_upload=false" >> $GITHUB_OUTPUT
-                  else
-                    echo "should_upload=true" >> $GITHUB_OUTPUT
                   fi
 
             - name: Find artifact and build description
@@ -511,40 +476,50 @@ jobs:
                     echo 'NEXUS_DESC_EOF'
                   } >> "$GITHUB_OUTPUT"
 
-            - name: Validate file_group_id
+            - name: Validate file_id
               if: steps.version-check.outputs.should_upload == 'true'
               env:
-                  FILE_GROUP_ID: ${{ matrix.file_group_id }}
+                  FILE_ID: ${{ steps.version-check.outputs.file_id }}
+                  CANDIDATES: ${{ steps.version-check.outputs.candidates }}
                   MOD_NAME: ${{ matrix.mod_filename }}
               run: |
-                  if [ -z "$FILE_GROUP_ID" ] || [ "$FILE_GROUP_ID" = "000000" ]; then
-                    echo "ERROR: file_group_id is '${FILE_GROUP_ID}' for '$MOD_NAME'." >&2
-                    echo "Set nexusfilegroupid in the feature's [Nexus] ini section." >&2
-                    exit 1
+                  if [ -n "$FILE_ID" ]; then
+                    exit 0
                   fi
+                  if [ -n "$CANDIDATES" ]; then
+                    echo "ERROR: '$MOD_NAME' has more than one MAIN-category file on Nexus — cannot auto-resolve which one to attach this version to:" >&2
+                    echo "  $CANDIDATES" >&2
+                    echo "Set 'nexusfileid = <id>' in the feature's [Nexus] ini section to pin the correct file." >&2
+                  else
+                    echo "ERROR: Could not resolve an existing MAIN-category file ID from Nexus for '$MOD_NAME'." >&2
+                    echo "The mod's first file must be uploaded manually via the Nexus website before automated version uploads can attach to it." >&2
+                  fi
+                  exit 1
 
             - name: Upload to Nexus
               id: upload
               if: steps.version-check.outputs.should_upload == 'true'
               continue-on-error: true
-              uses: Nexus-Mods/upload-action@a746f1867153abc77beed950bf7526ece1a9f8c4  # v1.0.0-beta.5
+              uses: Nexus-Mods/upload-action@c96019556046053aa26044b44396cd38929daf23  # v1.0.0-beta.10
               with:
                   api_key: ${{ secrets.UNEX_APIKEY }}
-                  file_group_id: ${{ matrix.file_group_id }}
+                  mod_id: ${{ matrix.nexus_mod_id }}
+                  file_id: ${{ steps.version-check.outputs.file_id }}
                   filename: ${{ steps.prep.outputs.file }}
                   version: ${{ matrix.mod_version || needs.prepare-nexus-matrix.outputs.version }}
                   display_name: ${{ matrix.mod_filename }}
                   description: ${{ steps.prep.outputs.description }}
-                  file_category: main
+                  changelog: ${{ matrix.changelog }}
+                  category: main
 
             - name: Report upload failure
               if: steps.upload.outcome == 'failure'
               env:
                   MOD_NAME: ${{ matrix.mod_filename }}
                   MOD_ID: ${{ matrix.nexus_mod_id }}
-                  FILE_GROUP_ID: ${{ matrix.file_group_id }}
+                  FILE_ID: ${{ steps.version-check.outputs.file_id }}
                   VERSION: ${{ matrix.mod_version || needs.prepare-nexus-matrix.outputs.version }}
-                  GAME_ID: ${{ inputs.nexus_game_id || 'skyrimspecialedition' }}
+                  GAME_ID: skyrimspecialedition
                   ARTIFACT_NAME: nexus-upload-${{ matrix.name }}
               run: |
                   {
@@ -554,7 +529,7 @@ jobs:
                     echo "|-------|-------|"
                     echo "| Mod | [$MOD_NAME](https://www.nexusmods.com/$GAME_ID/mods/$MOD_ID) |"
                     echo "| Version | \`$VERSION\` |"
-                    echo "| File group ID | \`$FILE_GROUP_ID\` |"
+                    echo "| File ID | \`$FILE_ID\` |"
                     echo "| Artifact | \`$ARTIFACT_NAME\` |"
                     echo ""
                     echo "**Check the _Upload to Nexus_ step log above for the specific error.**"
@@ -672,5 +647,5 @@ jobs:
               env:
                   UPLOAD_MATRIX: ${{ needs.prepare-nexus-matrix.outputs.upload_matrix }}
                   VERSION: ${{ needs.prepare-nexus-matrix.outputs.version }}
-                  NEXUS_GAME_ID: ${{ inputs.nexus_game_id || 'skyrimspecialedition' }}
+                  NEXUS_GAME_ID: skyrimspecialedition
                   UNEX_APIKEY: ${{ secrets.UNEX_APIKEY }}

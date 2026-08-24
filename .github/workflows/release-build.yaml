@@ -205,7 +205,6 @@ jobs:
         uses: ./.github/workflows/nexus-upload.yaml
         with:
             tag: ${{ github.event.release.tag_name }}
-            artifact_pattern: "CommunityShaders-*.zip"
             dry_run: "true"
         secrets:
             UNEX_APIKEY: ${{ secrets.UNEX_APIKEY }}
