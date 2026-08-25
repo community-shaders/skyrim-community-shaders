@@ -258,19 +258,43 @@ public:
 		//   1 allocation - the half boundary of the physical target
 		//   2 manual     - vrHotEnvelopeEyeOriginPx
 		//
-		// MEASURED 2026-08-18, so the default is now the answer rather than a
-		// candidate: under an active envelope the engine renders each eye into
-		// its own half of the allocation and shrinks it within that half. It
-		// does not repack. At quality 4 (ratio 0.882) eye 1 reads correctly from
-		// 2328 and is double-visioned from the packed 2054.
+		// PACKED, corrected 2026-08-25. The engine DOES repack: eye 1 begins
+		// directly after eye 0's rendered region, not at the half boundary of
+		// the physical target. Skyrim's own FrameBuffer.hlsli says so - it clamps
+		// eye 1 to [0.5*ratio, ratio) - and every CS consumer agreed all along.
 		//
-		// The sweep is retained for confirmation, not because the answer is
-		// open. Note that colour and depth deliberately differ: depth stays
-		// packed, because it drives DispatchHMDMaskClear rather than stereo.
+		// This comment previously asserted the opposite, as MEASURED 2026-08-18:
+		// that eye 1 read correctly from the allocation half at 2328 and was
+		// double-visioned from the packed 2054. That was wrong, and it is worth
+		// recording HOW it was wrong.
+		//
+		// Its basis was a visual judgement, and it was made with Frame
+		// Annotations OFF - which we now know gates the dynamic-resolution
+		// upsample replacement, so the vanilla pass was corrupting the very
+		// image being judged. The observation that set this default was made on
+		// a broken picture, and it then stood as settled fact through six failed
+		// fix attempts.
+		//
+		// Corrected by direct test on 2026-08-25 with the replacement active and
+		// the prediction registered in writing beforehand. At boot quality 3 with
+		// an active envelope and quality forced to 4, origin 1 gave wrong 3D
+		// depth and crossed eyes on a sharp image - the signature of a 274 px
+		// horizontal disparity error, not a resolution error. Origin 0 gave
+		// correct depth and no convergence strain.
+		//
+		// The same session produced an in-session control worth knowing about:
+		// opening the CS menu makes TryReplaceVanillaDynamicResolutionUpsample
+		// bail on cs-menu-open, so the vanilla path resumes and the defect
+		// reappears while the menu is up, then vanishes when it closes. The two
+		// code paths can be toggled by hand in one scene.
+		//
+		// Note that colour and depth deliberately differ: depth stays packed
+		// regardless, because it drives DispatchHMDMaskClear rather than stereo.
 		//
 		// Inert unless vrHotEnvelope is set: with the envelope off the packed
-		// layout and the allocation half are the same pixel.
-		uint vrHotEnvelopeEyeOrigin = 1;
+		// layout and the allocation half are the same pixel, which is why this
+		// could never have been caught before Hot-Envelope existed.
+		uint vrHotEnvelopeEyeOrigin = 0;
 		uint vrHotEnvelopeEyeOriginPx = 0;
 		// Column-activity probe over the submit chain. Off by default: it costs
 		// a scanline copy and a non-blocking map per frame, and it exists to
