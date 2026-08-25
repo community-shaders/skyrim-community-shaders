@@ -252,7 +252,9 @@ public:
 		THLand4HasDisplacement = 1 << 4,
 		THLand5HasDisplacement = 1 << 5,
 		ETMaterialModel = 0b111 << 6,
-		THLandHasDisplacement = 1 << 9
+		THLandHasDisplacement = 1 << 9,
+		// Bits 10-15: SnowDeformation per-tile landscape snow flags (tile 0 = bit 10).
+		SnowLandIsSnowMask = 0b111111 << 10
 	};
 
 	bool inWorld = false;

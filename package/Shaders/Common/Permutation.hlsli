@@ -87,6 +87,10 @@ namespace Permutation
 		static const int THLand4HasDisplacement = (1 << 4);
 		static const int THLand5HasDisplacement = (1 << 5);
 		static const int THLandHasDisplacement = (1 << 9);
+
+		// SnowDeformation per-tile landscape snow flags (tile 0 = bit 10).
+		static const uint SnowLandIsSnowShift = 10;
+		static const uint SnowLandIsSnowMask = (0x3F << 10);
 	}
 
 	cbuffer PerShader : register(b4)

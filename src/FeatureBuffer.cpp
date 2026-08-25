@@ -16,6 +16,7 @@
 #include "Features/LinearLighting.h"
 #include "Features/Skin.h"
 #include "Features/Skylighting.h"
+#include "Features/SnowDeformation.h"
 #include "Features/TerrainBlending.h"
 #include "Features/TerrainShadows.h"
 #include "Features/TerrainVariation.h"
@@ -62,5 +63,6 @@ std::pair<unsigned char*, size_t> GetFeatureBufferData(bool a_inWorld)
 		globals::features::terrainBlending.settings,
 		globals::features::exponentialHeightFog.GetCommonBufferData(),
 		globals::features::truePBR.settings,
-		globals::features::skin.GetCommonBufferData());
+		globals::features::skin.GetCommonBufferData(),
+		globals::features::snowDeformation.GetCommonBufferData(a_inWorld));
 }
