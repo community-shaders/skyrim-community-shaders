@@ -234,6 +234,8 @@ HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT Flags)
 	DX::ThrowIfFailed(commandQueue->Wait(d3d12Fence.get(), fenceValue));
 
 	// New frame, reset
+	if (frameFenceValues[frameIndex])
+		DX::ThrowIfFailed(d3d12Fence->SetEventOnCompletion(frameFenceValues[frameIndex], nullptr));
 	DX::ThrowIfFailed(commandAllocators[frameIndex]->Reset());
 	DX::ThrowIfFailed(commandLists[frameIndex]->Reset(commandAllocators[frameIndex].get(), nullptr));
 
@@ -271,6 +273,7 @@ HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT Flags)
 	// Wait for D3D12 to finish
 	fenceValue++;
 	DX::ThrowIfFailed(commandQueue->Signal(d3d12Fence.get(), fenceValue));
+	frameFenceValues[frameIndex] = fenceValue;
 	DX::ThrowIfFailed(d3d11Context->Wait(d3d11Fence.get(), fenceValue));
 
 	// Update the frame index
