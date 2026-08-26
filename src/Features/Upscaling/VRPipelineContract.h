@@ -566,4 +566,43 @@ namespace VRPipelineContract
 		       matches(a_allocationWidth, a_allocationHeight) ||
 		       matches(a_finalWidth, a_finalHeight);
 	}
+
+	// Is handing a frame back to Skyrim's vanilla dynamic-resolution upsample an
+	// acceptable substitute for CSX's replacement?
+	//
+	// It is exactly when the vanilla path's assumption holds: that the rendered
+	// content fills the target it is upsampling from. Vanilla derives its eye
+	// split and its scale from Skyrim's own dynamic-resolution constants, which
+	// know the render extent and the output extent and have no concept of an
+	// allocation that differs from both.
+	//
+	//   Render Scale OFF   A == O   vanilla is correct
+	//   Render Scale ON    A == R   vanilla is correct
+	//   Hot-Envelope       A != R   vanilla reads past the rendered region
+	//
+	// This is why several stock guards that fall back to vanilla are harmless in
+	// stock and harmful under an active envelope. They were written when falling
+	// back was free.
+	//
+	// Measured 2026-08-26: with the CS menu open under an active envelope the
+	// scene behind the menu shows crossed eyes and wrong depth, and closing the
+	// menu restores it - the fallback made visible, on demand.
+	[[nodiscard]] constexpr bool VanillaUpsampleIsSafeFallback(
+		std::uint32_t a_renderWidth,
+		std::uint32_t a_renderHeight,
+		std::uint32_t a_allocationWidth,
+		std::uint32_t a_allocationHeight) noexcept
+	{
+		// An unknown allocation is not a licence to assume the fallback is safe.
+		// Refusing here keeps the replacement running, which is correct wherever
+		// the allocation is genuinely absent because A then equals R by
+		// definition and the replacement produces the same result.
+		if (a_allocationWidth == 0u || a_allocationHeight == 0u)
+			return false;
+
+		if (a_renderWidth == 0u || a_renderHeight == 0u)
+			return false;
+
+		return a_renderWidth == a_allocationWidth && a_renderHeight == a_allocationHeight;
+	}
 }

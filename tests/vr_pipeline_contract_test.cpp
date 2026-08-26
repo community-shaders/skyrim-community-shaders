@@ -450,6 +450,43 @@ namespace
 		return true;
 	}
 	static_assert(AllSevenQualitiesModelled());
+	// --------------------------------------- vanilla upsample fallback safety
+
+	// The three configurations, which is the whole point of the predicate.
+	// Render Scale ON: allocation == render, vanilla is correct.
+	static_assert(VRPipelineContract::VanillaUpsampleIsSafeFallback(
+		4108u, 2092u, 4108u, 2092u));
+	// Render Scale OFF: allocation == render at full size, likewise.
+	static_assert(VRPipelineContract::VanillaUpsampleIsSafeFallback(
+		6988u, 3558u, 6988u, 3558u));
+	// Hot-Envelope below the envelope: allocation exceeds render, vanilla reads
+	// past the rendered region. THE MEASURED CASE.
+	static_assert(!VRPipelineContract::VanillaUpsampleIsSafeFallback(
+		4108u, 2092u, 4656u, 2372u));
+
+	// A single differing axis is enough to make the fallback unsafe. Both must
+	// agree, or vanilla's assumption is broken on that axis.
+	static_assert(!VRPipelineContract::VanillaUpsampleIsSafeFallback(
+		4108u, 2092u, 4656u, 2092u));
+	static_assert(!VRPipelineContract::VanillaUpsampleIsSafeFallback(
+		4108u, 2092u, 4108u, 2372u));
+
+	// An allocation SMALLER than the render extent is not "safe" either. It
+	// should never happen, and treating an impossible state as safe is how a
+	// guard becomes a formality.
+	static_assert(!VRPipelineContract::VanillaUpsampleIsSafeFallback(
+		4656u, 2372u, 4108u, 2092u));
+
+	// Unknown extents refuse. An absent allocation must not read as agreement -
+	// refusing keeps the replacement running, which is correct wherever the
+	// allocation is genuinely absent, because A equals R there by definition.
+	static_assert(!VRPipelineContract::VanillaUpsampleIsSafeFallback(
+		4108u, 2092u, 0u, 0u));
+	static_assert(!VRPipelineContract::VanillaUpsampleIsSafeFallback(
+		0u, 0u, 4656u, 2372u));
+	static_assert(!VRPipelineContract::VanillaUpsampleIsSafeFallback(
+		0u, 0u, 0u, 0u));
+
 	// ------------------------------------------- menu composite destination size
 
 	// THE MEASURED CASE, 2026-08-25. Boot quality 3, active 4, envelope open.

@@ -47700,8 +47700,40 @@ bool Upscaling::TryReplaceVanillaDynamicResolutionUpsample(const char* a_passNam
 		return bail("submit-stage-upscaling-inactive");
 	if (ShouldSuppressVRInSceneOverlaySubmit())
 		return bail("in-scene-overlay-suppressed");
-	if (IsCommunityShadersMenuOpen())
-		return bail("cs-menu-open");
+	// The CS-menu bail is honoured only while falling back is actually safe.
+	//
+	// This condition is STOCK - baseline 2051e2aea line 45806, inside the
+	// compound guard; the split into named bails changed no control flow. In
+	// stock it costs nothing, because handing the frame to the vanilla upsample
+	// produces a correct image whenever A == R or A == O, which is always.
+	//
+	// Under an active envelope it is not free. Measured 2026-08-26: with the CS
+	// menu open the scene behind it shows crossed eyes and wrong depth, and
+	// closing the menu restores it immediately. The bail is the whole cause.
+	//
+	// What the bail is FOR is not documented anywhere and no comment survives to
+	// say. So this narrows rather than removes it: stock behaviour is preserved
+	// exactly wherever the fallback is safe, and only the configuration in which
+	// the fallback is provably wrong takes the other branch. If the CS menu turns
+	// out to need the vanilla path for a reason we have not found, the symptom
+	// appears immediately and on screen, and reverting is deleting one condition.
+	if (IsCommunityShadersMenuOpen()) {
+		// Refresh before comparing. The unconditional refresh sits further down
+		// this function, so reading the plan here would otherwise see the
+		// previous frame's geometry - harmless on a steady frame and wrong on
+		// exactly the transition frames this comparison is about. The call is
+		// frame-guarded and returns immediately when already current, and it is
+		// placed inside this branch so that no other path's ordering moves.
+		EnsureRuntimeResolutionStateCurrent();
+		const auto& menuBailPlan = GetRuntimeResolutionPlan();
+		if (VRPipelineContract::VanillaUpsampleIsSafeFallback(
+				ClampPositiveDimension(menuBailPlan.engineRenderSize.width),
+				ClampPositiveDimension(menuBailPlan.engineRenderSize.height),
+				ClampPositiveDimension(menuBailPlan.engineAllocationSize.width),
+				ClampPositiveDimension(menuBailPlan.engineAllocationSize.height))) {
+			return bail("cs-menu-open");
+		}
+	}
 	if (!state)
 		return bail("no-state");
 	if (IsVRTransitionPresentationProtectionActive(*this, state) &&
