@@ -106,6 +106,58 @@ jobs:
                   # keeps an empty set from passing silently.
                   ctest --test-dir ${{ matrix.compiler.build-dir }} -C Release --output-on-failure --no-tests=error --timeout 60
 
+                  # Leave proof that this step actually executed. See the guard below.
+                  echo "ran" > "${{ matrix.compiler.build-dir }}/controller-tests-ran.marker"
+
+            - name: Assert the controller tests actually ran
+              shell: pwsh
+              run: |
+                  # On 2026-08-26 this job reported SUCCESS while containing no
+                  # controller test steps at all. The API step list went straight
+                  # from "Build using run-cmake" to "Extract version from CMake" -
+                  # seven steps where the previous run had nine. Both the base and
+                  # head branches contained the steps; GitHub was in a Critical
+                  # Actions outage and served a workflow that was not the one in the
+                  # repository.
+                  #
+                  # No step can detect its own absence, so this cannot protect
+                  # against a wholesale stale-workflow event - if the dispatcher
+                  # drops steps it may drop this one too. What it does close is the
+                  # ordinary case, which has already bitten this project twice: a
+                  # hand-maintained ctest -R filter that silently excluded every
+                  # newer test, and a controller_tests target whose DEPENDS list was
+                  # missing a registration so ctest ran an executable that was never
+                  # built.
+                  #
+                  # Three failures in one week of CI reporting success about
+                  # something it did not measure is enough to make the absence
+                  # itself a failure.
+                  $marker = "${{ matrix.compiler.build-dir }}/controller-tests-ran.marker"
+                  if (-not (Test-Path $marker)) {
+                      Write-Host "::error::The controller test step did not run. This job may not have executed the workflow in the repository - check the job's step list against .github/workflows/_shared-build.yaml before trusting any result from it."
+                      exit 1
+                  }
+
+                  # A positive count, not merely a non-empty run. --no-tests=error
+                  # already rejects an empty set; this rejects a SHRUNKEN one, which
+                  # is what a filter or a missing registration produces.
+                  $out = ctest --test-dir "${{ matrix.compiler.build-dir }}" -C Release -N
+                  $line = $out | Select-String -Pattern 'Total Tests:\s*(\d+)'
+                  if (-not $line) {
+                      Write-Host "::error::Could not read a test count from ctest -N."
+                      exit 1
+                  }
+                  $count = [int]$line.Matches[0].Groups[1].Value
+                  # Raise this when tests are added. It is a floor, deliberately -
+                  # a number that only ever goes up is a number someone has to think
+                  # about.
+                  $minimum = 9
+                  Write-Host "controller tests discovered: $count (minimum $minimum)"
+                  if ($count -lt $minimum) {
+                      Write-Host "::error::Expected at least $minimum controller tests, found $count. A test was dropped, filtered, or never registered."
+                      exit 1
+                  }
+
             - name: Extract version from CMake
               id: get_version
               shell: pwsh
