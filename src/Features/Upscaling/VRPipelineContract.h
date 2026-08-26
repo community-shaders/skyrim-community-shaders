@@ -522,4 +522,48 @@ namespace VRPipelineContract
 			static_cast<float>(a_state.activeRegion.origin.y) - originShiftY
 		};
 	}
+
+	// Is a menu composite destination one of the geometries the pipeline can
+	// legitimately be compositing into?
+	//
+	// FOUND BY MEASUREMENT 2026-08-25. The original check accepted the render
+	// extent or the output extent and had no case for the ALLOCATION. Under an
+	// active Hot-Envelope the menu's destination IS the allocation, so the check
+	// failed, the menu frame transaction was poisoned with
+	// "destination-size-mismatch", the menu layer was marked required but never
+	// captured, and the menu was never composited - audible, interactive, and
+	// invisible. 2,435 poisons in a single three-minute session, one reason only.
+	//
+	// It could not fire before Hot-Envelope existed. Render Scale on gives
+	// A == R, Render Scale off gives A == O; either way the destination matched
+	// one of the two accepted values by coincidence. Hot-Envelope is the first
+	// configuration in which the allocation is a THIRD distinct geometry, and
+	// this predicate is a textbook instance of the conflation the phase 1a site
+	// table was built to enumerate: a consumer that knows render and output and
+	// has never needed to know allocation.
+	//
+	// A zero or unset allocation is clamped to 1x1 upstream, so it cannot
+	// accidentally match a real destination.
+	[[nodiscard]] constexpr bool IsMenuDestinationSizeValid(
+		std::uint32_t a_destinationWidth,
+		std::uint32_t a_destinationHeight,
+		std::uint32_t a_renderWidth,
+		std::uint32_t a_renderHeight,
+		std::uint32_t a_allocationWidth,
+		std::uint32_t a_allocationHeight,
+		std::uint32_t a_finalWidth,
+		std::uint32_t a_finalHeight) noexcept
+	{
+		if (a_destinationWidth == 0u || a_destinationHeight == 0u)
+			return false;
+
+		const auto matches = [&](std::uint32_t a_width, std::uint32_t a_height) {
+			return a_width != 0u && a_height != 0u &&
+			       a_destinationWidth == a_width && a_destinationHeight == a_height;
+		};
+
+		return matches(a_renderWidth, a_renderHeight) ||
+		       matches(a_allocationWidth, a_allocationHeight) ||
+		       matches(a_finalWidth, a_finalHeight);
+	}
 }

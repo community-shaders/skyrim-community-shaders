@@ -450,6 +450,55 @@ namespace
 		return true;
 	}
 	static_assert(AllSevenQualitiesModelled());
+	// ------------------------------------------- menu composite destination size
+
+	// THE MEASURED CASE, 2026-08-25. Boot quality 3, active 4, envelope open.
+	// The destination is the ALLOCATION and the old check had no case for it, so
+	// every menu frame was poisoned with destination-size-mismatch and the menu
+	// was never composited - audible, interactive, invisible.
+	static_assert(VRPipelineContract::IsMenuDestinationSizeValid(
+		4656u, 2372u,   // destination = allocation
+		4108u, 2092u,   // render
+		4656u, 2372u,   // allocation
+		6988u, 3558u)); // output
+
+	// The two the original check already accepted must keep working.
+	static_assert(VRPipelineContract::IsMenuDestinationSizeValid(
+		4108u, 2092u, 4108u, 2092u, 4656u, 2372u, 6988u, 3558u));
+	static_assert(VRPipelineContract::IsMenuDestinationSizeValid(
+		6988u, 3558u, 4108u, 2092u, 4656u, 2372u, 6988u, 3558u));
+
+	// A destination matching NONE of the three is still a mismatch. Widening the
+	// predicate must not turn it into a rubber stamp.
+	static_assert(!VRPipelineContract::IsMenuDestinationSizeValid(
+		1234u, 5678u, 4108u, 2092u, 4656u, 2372u, 6988u, 3558u));
+
+	// Width right, height wrong - both must match, and vice versa.
+	static_assert(!VRPipelineContract::IsMenuDestinationSizeValid(
+		4656u, 2092u, 4108u, 2092u, 4656u, 2372u, 6988u, 3558u));
+	static_assert(!VRPipelineContract::IsMenuDestinationSizeValid(
+		4108u, 2372u, 4108u, 2092u, 4656u, 2372u, 6988u, 3558u));
+
+	// The pre-Hot-Envelope configurations, which is why this never fired before.
+	// Render Scale ON: allocation == render.
+	static_assert(VRPipelineContract::IsMenuDestinationSizeValid(
+		4108u, 2092u, 4108u, 2092u, 4108u, 2092u, 6988u, 3558u));
+	// Render Scale OFF: allocation == output.
+	static_assert(VRPipelineContract::IsMenuDestinationSizeValid(
+		6988u, 3558u, 6988u, 3558u, 6988u, 3558u, 6988u, 3558u));
+
+	// A zero destination is never valid, even against a zero candidate. Nothing
+	// composites into a zero-sized target, and letting 0 == 0 pass would turn an
+	// unset plan into a silent acceptance.
+	static_assert(!VRPipelineContract::IsMenuDestinationSizeValid(
+		0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u));
+	static_assert(!VRPipelineContract::IsMenuDestinationSizeValid(
+		0u, 2372u, 4108u, 2092u, 4656u, 2372u, 6988u, 3558u));
+
+	// An unset candidate must not match anything either - the same rule from the
+	// other side.
+	static_assert(!VRPipelineContract::IsMenuDestinationSizeValid(
+		4656u, 2372u, 4108u, 2092u, 0u, 0u, 6988u, 3558u));
 }
 
 int main()

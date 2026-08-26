@@ -6,6 +6,7 @@
 #include "Features/ScreenSpaceGI.h"
 #include "Features/ScreenSpaceShadows.h"
 #include "Features/Upscaling/VRGeometryPolicy.h"
+#include "Features/Upscaling/VRPipelineContract.h"
 #include "Features/VolumetricLighting.h"
 #include "FoveatedCommon.h"
 #include "Hooks.h"
@@ -14613,9 +14614,27 @@ bool Upscaling::TryCaptureAndSuppressVRMenuBridgeDraw(
 		finalWidth <= renderWidth || finalHeight <= renderHeight) {
 		return decide("invalid-resolution-plan", false);
 	}
-	const bool destinationSizeValid =
-		(destination.width == renderWidth && destination.height == renderHeight) ||
-		(destination.width == finalWidth && destination.height == finalHeight);
+	// The ALLOCATION is a legitimate destination and was missing here.
+	//
+	// Measured 2026-08-25: with the envelope open at boot 3 / active 4 the
+	// destination is 4656x2372 - the allocation - while this check accepted only
+	// 4108x2092 (render) or 6988x3558 (output). Every menu frame was therefore
+	// poisoned with "destination-size-mismatch", the menu layer was flagged
+	// required but never captured, and the menu was never composited. 2,435
+	// poisons in one three-minute session, that reason and no other.
+	//
+	// It could not have fired before Hot-Envelope: Render Scale on gives A == R
+	// and off gives A == O, so the destination always coincided with one of the
+	// two accepted values. This is the conflation the phase 1a site table exists
+	// to enumerate - a consumer that knows render and output and never needed to
+	// know allocation.
+	const uint32_t allocationWidth = ClampPositiveDimension(plan.engineAllocationSize.width);
+	const uint32_t allocationHeight = ClampPositiveDimension(plan.engineAllocationSize.height);
+	const bool destinationSizeValid = VRPipelineContract::IsMenuDestinationSizeValid(
+		destination.width, destination.height,
+		renderWidth, renderHeight,
+		allocationWidth, allocationHeight,
+		finalWidth, finalHeight);
 	if (!destinationSizeValid)
 		return decide("destination-size-mismatch", false);
 	if (destination.samples != 1)
