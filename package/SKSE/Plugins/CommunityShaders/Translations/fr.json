@@ -171,7 +171,7 @@
     "cs_editor.fog_power": "Puissance du brouillard",
     "cs_editor.fog_power_short": "Puissance",
     "cs_editor.force_this_weather": "Forcez cette météo",
-    "cs_editor.force_weather": "Force Météo",
+    "cs_editor.force_weather": "Forcer la Météo",
     "cs_editor.form_id": "ID du formulaire",
     "cs_editor.form_id_label": "ID du formulaire : %08X",
     "cs_editor.form_record_references": "Références d'entrée de formulaire utilisées par cette météo.",
