@@ -47617,7 +47617,53 @@ namespace
 		uint32_t eyeOriginMode = 0;
 		bool replaced = false;
 
-		bool operator==(const DynResPassTraceKey&) const = default;
+		// Deliberately NOT `= default`.
+		//
+		// The scissor rectangle changes every frame under dynamic resolution, so
+		// including it in the dedup key made every frame a distinct decision. The
+		// 64-slot table filled in about fourteen seconds and the trace went blind
+		// before the first quality change of the session that exposed this - it
+		// recorded the at-envelope geometry and nothing else, missing Balanced,
+		// Performance and Ultra Performance entirely.
+		//
+		// To its credit the instrument said so: "Trace capacity 64 reached;
+		// further distinct decisions are not recorded." The warning was in the
+		// log and was there to be read.
+		//
+		// This is the third instance of one mistake in this project: a key that
+		// contains a per-frame-varying quantity. The submit digest carried the
+		// compositor cycle token and became unique per frame; a category that is
+		// unique per frame is not a state. The rule is the same here - a dedup
+		// key must contain what identifies a DECISION, not what identifies a
+		// FRAME.
+		//
+		// The scissor is still printed. It is evidence worth having on each
+		// recorded line; it is just not part of what makes a line worth
+		// recording. The viewport stays in the key: it was added to settle the
+		// packed-versus-allocation question and it is stable within a geometry,
+		// which is exactly the property the scissor lacks.
+		[[nodiscard]] bool operator==(const DynResPassTraceKey& a_other) const
+		{
+			return passName == a_other.passName &&
+			       stage == a_other.stage &&
+			       reason == a_other.reason &&
+			       sourceWidth == a_other.sourceWidth &&
+			       sourceHeight == a_other.sourceHeight &&
+			       targetWidth == a_other.targetWidth &&
+			       targetHeight == a_other.targetHeight &&
+			       inputWidth == a_other.inputWidth &&
+			       inputHeight == a_other.inputHeight &&
+			       outputWidth == a_other.outputWidth &&
+			       outputHeight == a_other.outputHeight &&
+			       allocationWidth == a_other.allocationWidth &&
+			       allocationHeight == a_other.allocationHeight &&
+			       viewportX == a_other.viewportX &&
+			       viewportY == a_other.viewportY &&
+			       viewportWidth == a_other.viewportWidth &&
+			       viewportHeight == a_other.viewportHeight &&
+			       viewportCount == a_other.viewportCount &&
+			       eyeOriginMode == a_other.eyeOriginMode;
+		}
 	};
 
 	constexpr size_t kDynResPassTraceCapacity = 64;
