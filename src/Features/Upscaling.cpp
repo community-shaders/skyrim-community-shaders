@@ -82,6 +82,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	cdo4Telemetry,
 	cdo4CommonRecorder,
 	vrDiagFramebufferDescriptorLog,
+	vrDiagMirrorPathTrace,
 	perfMode,
 	frameLimitMode,
 	frameGenerationMode,
@@ -39510,6 +39511,41 @@ void Upscaling::PresentVRMenuDesktopMirror(IDXGISwapChain* a_swapChain)
 		return;
 	D3D11_TEXTURE2D_DESC backBufferDesc{};
 	backBuffer->GetDesc(&backBufferDesc);
+
+	// The THIRD writer of the desktop window, and the only one that writes the
+	// backbuffer directly. Its geometry comes from the MENU composite layer, not
+	// from the render extent - so if the menu layer and the submit-stage
+	// writeback disagree about the eye size, the window carries both mappings at
+	// once. That is a candidate for regions at different scales with nothing
+	// stale, which is what is actually observed.
+	//
+	// Deduplicated on the geometry, not the frame.
+	if (settings.vrDiagMirrorPathTrace != 0u) {
+		CDO4CommonRecorder::Digest presentKey;
+		presentKey.Add(backBufferDesc.Width);
+		presentKey.Add(backBufferDesc.Height);
+		presentKey.Add(static_cast<std::uint32_t>(backBufferDesc.Format));
+		presentKey.Add(vrMenuFinalCompositeLayerWidth);
+		presentKey.Add(vrMenuFinalCompositeLayerHeight);
+		presentKey.Add(planGeneration);
+
+		static std::atomic_uint64_t s_presentMirrorLastKey{ 0u };
+		const std::uint64_t presentKeyValue = presentKey.Value();
+		if (presentKeyValue != s_presentMirrorLastKey.exchange(
+								   presentKeyValue, std::memory_order_acq_rel)) {
+			logger::info(
+				"[MirrorPath] {{\"writer\":\"present-menu-blit\","
+				"\"backBuffer\":{{\"w\":{},\"h\":{},\"fmt\":{}}},"
+				"\"menuLayer\":{{\"w\":{},\"h\":{}}},"
+				"\"eyeArgPassed\":{{\"w\":{},\"h\":{}}},\"planGeneration\":{}}}",
+				backBufferDesc.Width, backBufferDesc.Height,
+				static_cast<std::uint32_t>(backBufferDesc.Format),
+				vrMenuFinalCompositeLayerWidth, vrMenuFinalCompositeLayerHeight,
+				vrMenuFinalCompositeLayerWidth / 2u, vrMenuFinalCompositeLayerHeight,
+				planGeneration);
+		}
+	}
+
 	(void)BlitVRRenderScaleDesktopMirror(
 		backBuffer.get(),
 		backBufferDesc,
@@ -47763,6 +47799,85 @@ bool Upscaling::SubmitVRUpscaledFrame(vr::EVREye a_eye, uint64_t a_compositorCyc
 			vrIntermediateColorOut[1]->desc.Height >= eyeHeightOut &&
 			vrIntermediateColorOut[0]->desc.Format == sourceDesc.Format &&
 			vrIntermediateColorOut[1]->desc.Format == sourceDesc.Format;
+
+		// Which writer owns the window this frame, and which condition decided
+		// it. The window shows one region at Quality and Balanced and three at
+		// Performance; this conjunction is the only categorical switch on the
+		// path, so it either names the cause or rules itself out.
+		//
+		// Deduplicated on the decision and its dimensions - no frame number.
+		if (settings.vrDiagMirrorPathTrace != 0u) {
+			const auto* out0 = vrIntermediateColorOut[0].get();
+			const auto* out1 = vrIntermediateColorOut[1].get();
+			CDO4CommonRecorder::Digest mirrorKey;
+			mirrorKey.Add(static_cast<std::uint32_t>(canMirrorToSource ? 1u : 0u));
+			mirrorKey.Add(sourceDesc.Width);
+			mirrorKey.Add(sourceDesc.Height);
+			mirrorKey.Add(sourceDesc.ArraySize);
+			mirrorKey.Add(static_cast<std::uint32_t>(sourceDesc.Format));
+			mirrorKey.Add(eyeWidthOut);
+			mirrorKey.Add(eyeHeightOut);
+			mirrorKey.Add(out0 ? out0->desc.Width : 0u);
+			mirrorKey.Add(out0 ? out0->desc.Height : 0u);
+			mirrorKey.Add(out1 ? out1->desc.Width : 0u);
+			mirrorKey.Add(out1 ? out1->desc.Height : 0u);
+			mirrorKey.Add(static_cast<std::uint32_t>(eyeIndex));
+
+			static std::atomic_uint64_t s_mirrorPathLastKey{ 0u };
+			static std::atomic_uint32_t s_mirrorPathEmitted{ 0u };
+			constexpr std::uint32_t kMirrorPathEmitCap = 128u;
+			const std::uint64_t mirrorKeyValue = mirrorKey.Value();
+			if (mirrorKeyValue != s_mirrorPathLastKey.exchange(
+									  mirrorKeyValue, std::memory_order_acq_rel)) {
+				const std::uint32_t emitted =
+					s_mirrorPathEmitted.fetch_add(1u, std::memory_order_relaxed);
+				if (emitted < kMirrorPathEmitCap) {
+					// Every conjunct reported separately. A single "false" says
+					// nothing about which of eight conditions refused.
+					logger::info(
+						"[MirrorPath] {{\"eye\":{},\"writer\":\"{}\","
+						"\"source\":{{\"w\":{},\"h\":{},\"arr\":{},\"fmt\":{}}},"
+						"\"eyeOut\":{{\"w\":{},\"h\":{}}},"
+						"\"out0\":{{\"w\":{},\"h\":{},\"fmt\":{}}},"
+						"\"out1\":{{\"w\":{},\"h\":{},\"fmt\":{}}},"
+						"\"cond\":{{\"arraySize1\":{},\"srcW_ge_2xEye\":{},"
+						"\"srcH_ge_eye\":{},\"outsExist\":{},\"out0W\":{},"
+						"\"out0H\":{},\"out1W\":{},\"out1H\":{},"
+						"\"fmt0\":{},\"fmt1\":{}}},"
+						"\"stabilizeFallbackEnabled\":{}}}",
+						static_cast<std::uint32_t>(eyeIndex),
+						canMirrorToSource ? "submit-copy-writeback" :
+											"not-copy-writeback",
+						sourceDesc.Width, sourceDesc.Height, sourceDesc.ArraySize,
+						static_cast<std::uint32_t>(sourceDesc.Format),
+						eyeWidthOut, eyeHeightOut,
+						out0 ? out0->desc.Width : 0u,
+						out0 ? out0->desc.Height : 0u,
+						out0 ? static_cast<std::uint32_t>(out0->desc.Format) : 0u,
+						out1 ? out1->desc.Width : 0u,
+						out1 ? out1->desc.Height : 0u,
+						out1 ? static_cast<std::uint32_t>(out1->desc.Format) : 0u,
+						sourceDesc.ArraySize == 1 ? "true" : "false",
+						sourceDesc.Width >= eyeWidthOut * 2 ? "true" : "false",
+						sourceDesc.Height >= eyeHeightOut ? "true" : "false",
+						(out0 && out1 && out0->resource && out1->resource) ? "true" : "false",
+						(out0 && out0->desc.Width >= eyeWidthOut) ? "true" : "false",
+						(out0 && out0->desc.Height >= eyeHeightOut) ? "true" : "false",
+						(out1 && out1->desc.Width >= eyeWidthOut) ? "true" : "false",
+						(out1 && out1->desc.Height >= eyeHeightOut) ? "true" : "false",
+						(out0 && out0->desc.Format == sourceDesc.Format) ? "true" : "false",
+						(out1 && out1->desc.Format == sourceDesc.Format) ? "true" : "false",
+						globals::features::vr.settings.StabilizeRenderScaleDesktopMirror ?
+							"true" : "false");
+				} else if (emitted == kMirrorPathEmitCap) {
+					logger::warn(
+						"[MirrorPath] Emit cap {} reached. The record is "
+						"INCOMPLETE from here on; do not read any absence in it "
+						"as evidence.",
+						kMirrorPathEmitCap);
+				}
+			}
+		}
 
 		if (canMirrorToSource) {
 			vrDesktopMirrorBlitRTV = nullptr;

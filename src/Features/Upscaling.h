@@ -375,6 +375,27 @@ public:
 		// per-frame quantity: the submit digest and the dynres trace key were
 		// both destroyed by exactly that mistake.
 		uint vrDiagFramebufferDescriptorLog = 0;
+		// The desktop mirror path trace.
+		//
+		// The window is written by CS, not by Skyrim - PresentVRMenuDesktopMirror
+		// is called from the IDXGISwapChain::Present hook. And there is more than
+		// one writer:
+		//
+		//   1. submit-stage writeback   CopySubresourceRegion, eye 0 at x=0
+		//   2. submit-stage writeback   CopySubresourceRegion, eye 1 at
+		//                               x=eyeWidthOut
+		//   3. present-time blit        BlitVRRenderScaleDesktopMirror, sized
+		//                               from vrMenuFinalCompositeLayerWidth/2
+		//
+		// Writer 1/2 are guarded by canMirrorToSource, a conjunction of eight
+		// size and format conditions. If any of them flips, the frame falls to a
+		// different writer with a different geometry - which is a CATEGORICAL
+		// switch, and the window shows one region or three.
+		//
+		// This records which writer ran, with every dimension it used and which
+		// sub-condition refused. Deduplicated on the decision, so it prints once
+		// per distinct outcome rather than per frame.
+		uint vrDiagMirrorPathTrace = 0;
 		uint perfMode = 1;
 		uint frameLimitMode = 1;
 		uint frameGenerationMode = 0;  // Disabled by default
