@@ -1165,11 +1165,22 @@ bool Streamline::SetDLSSOptions(DLSSViewportRole viewportRole, sl::ViewportHandl
 	// quality by varying the tagged input extent, and the per-quality contexts
 	// can go away entirely rather than being reset more cleverly.
 	//
-	// Diagnostic only - nothing below reads it. This function early-returns on a
-	// cache hit, so it runs on change rather than per frame.
+	// No longer diagnostic only - the minimum is published, see below.
+	//
+	// It was diagnostic only, and that was the miss. The comment above asked
+	// whether the accepted range spans the envelope; the answer has been printed
+	// in every log since and nobody read it. On a 3494x3558 output eMaxQuality
+	// accepts 1747x1779 at minimum, Hot-Envelope holds ONE context and feeds it
+	// every lower quality's extent, and Ultra Performance feeds 1164 - 583 pixels
+	// below the floor. That is the freeze.
+	//
+	// This function early-returns on a cache hit, so it runs on change rather
+	// than per frame.
 	if (slDLSSGetOptimalSettings) {
 		sl::DLSSOptimalSettings optimal{};
 		if (slDLSSGetOptimalSettings(dlssOptions, optimal) == sl::Result::eOk) {
+			Upscaling::PublishVendorAcceptedMinimum(
+				optimal.renderWidthMin, optimal.renderHeightMin);
 			logger::info(
 				"[Streamline][HotEnvelope] DLSS mode {} output {}x{}: optimal {}x{}, accepts {}x{} .. {}x{}",
 				magic_enum::enum_name(dlssOptions.mode),

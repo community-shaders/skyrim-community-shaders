@@ -72,6 +72,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	dlssPreset,
 	renderScaleMode,
 	vrHotEnvelope,
+	vrHotEnvelopeClampToVendorMinimum,
 	vrHotEnvelopeEyeOrigin,
 	vrHotEnvelopeEyeOriginPx,
 	vrHotEnvelopeProbe,
@@ -112,6 +113,30 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	reflexFPSLimit);
 
 decltype(&D3D11CreateDeviceAndSwapChain) ptrD3D11CreateDeviceAndSwapChainUpscaling;
+
+namespace
+{
+	// Published by the upscaler on context configuration, read by the planner.
+	// Zero until the vendor has answered; never treated as a floor while zero.
+	std::atomic<uint32_t> g_vendorAcceptedMinWidthPerEye{ 0u };
+	std::atomic<uint32_t> g_vendorAcceptedMinHeight{ 0u };
+}
+
+void Upscaling::PublishVendorAcceptedMinimum(uint32_t a_widthPerEye, uint32_t a_heightPerEye) noexcept
+{
+	g_vendorAcceptedMinWidthPerEye.store(a_widthPerEye, std::memory_order_release);
+	g_vendorAcceptedMinHeight.store(a_heightPerEye, std::memory_order_release);
+}
+
+uint32_t Upscaling::VendorAcceptedMinimumWidthPerEye() noexcept
+{
+	return g_vendorAcceptedMinWidthPerEye.load(std::memory_order_acquire);
+}
+
+uint32_t Upscaling::VendorAcceptedMinimumHeight() noexcept
+{
+	return g_vendorAcceptedMinHeight.load(std::memory_order_acquire);
+}
 
 uint32_t Upscaling::ScaleVRRenderDimension(uint32_t a_dimension, float a_scale)
 {
@@ -19936,8 +19961,61 @@ void Upscaling::RefreshRuntimeResolutionPlan()
 			plan.trueHMDDisplaySize = displaySize;
 		if (allocationSize.width > 0.0f && allocationSize.height > 0.0f)
 			plan.engineAllocationSize = allocationSize;
-		if (renderSize.width > 0.0f && renderSize.height > 0.0f)
-			plan.engineRenderSize = renderSize;
+		// EXPERIMENT vrHotEnvelopeClampToVendorMinimum, off by default.
+		//
+		// Hot-Envelope holds one vendor context for the boot quality and feeds it
+		// every lower quality's extent. Measured on a 3494x3558 output,
+		// eMaxQuality accepts 1747x1779 at minimum. Quality feeds 2328 and
+		// Balanced 2054, both inside. Performance feeds 1746 - one pixel under -
+		// and works. Ultra Performance feeds 1164, which is 583 under, and the
+		// image freezes at full frame rate with nothing logged.
+		//
+		// This clamps the fed extent up to the published minimum so the vendor
+		// receives something it accepts. It is a DIAGNOSTIC INTERVENTION: if the
+		// freeze stops, the mechanism is confirmed. It is not the fix, because a
+		// clamped Ultra Performance is not Ultra Performance - it renders at the
+		// floor and costs what the floor costs. What the correct behaviour is,
+		// clamp or refuse-and-relatch, is left open until the mechanism is known.
+		if (renderSize.width > 0.0f && renderSize.height > 0.0f) {
+			auto clampedRenderSize = renderSize;
+			if (settings.vrHotEnvelopeClampToVendorMinimum != 0u) {
+				const uint32_t minWidthPerEye = VendorAcceptedMinimumWidthPerEye();
+				const uint32_t minHeight = VendorAcceptedMinimumHeight();
+				// Zero means the vendor has not answered yet. Clamping to zero
+				// would be a silent no-op that looked like a working experiment.
+				if (minWidthPerEye > 0u && minHeight > 0u) {
+					const float minCombinedWidth = static_cast<float>(minWidthPerEye) * 2.0f;
+					const float minCombinedHeight = static_cast<float>(minHeight);
+					const bool clampedWidth = clampedRenderSize.width < minCombinedWidth;
+					const bool clampedHeight = clampedRenderSize.height < minCombinedHeight;
+					if (clampedWidth || clampedHeight) {
+						// Never above the allocation - the envelope is still the
+						// upper bound and a clamp must not manufacture a relatch.
+						const float allocationWidth = allocationSize.width > 0.0f ?
+						                                  allocationSize.width :
+						                                  clampedRenderSize.width;
+						const float allocationHeight = allocationSize.height > 0.0f ?
+						                                   allocationSize.height :
+						                                   clampedRenderSize.height;
+						const auto before = clampedRenderSize;
+						clampedRenderSize.width = std::min(std::max(clampedRenderSize.width, minCombinedWidth), allocationWidth);
+						clampedRenderSize.height = std::min(std::max(clampedRenderSize.height, minCombinedHeight), allocationHeight);
+						static VRGeometry::RenderExtent loggedFrom{};
+						if (!(loggedFrom == before)) {
+							loggedFrom = before;
+							logger::info(
+								"[HotEnvelope][clamp] render {}x{} is below the vendor minimum {}x{} per eye; "
+								"clamped to {}x{} (allocation {}x{}). EXPERIMENT, diagnostic only.",
+								static_cast<uint32_t>(before.width), static_cast<uint32_t>(before.height),
+								minWidthPerEye, minHeight,
+								static_cast<uint32_t>(clampedRenderSize.width), static_cast<uint32_t>(clampedRenderSize.height),
+								static_cast<uint32_t>(allocationWidth), static_cast<uint32_t>(allocationHeight));
+						}
+					}
+				}
+			}
+			plan.engineRenderSize = clampedRenderSize;
+		}
 		plan.finalOutputSize = plan.trueHMDDisplaySize;
 		plan.owner = ResolutionOwner::VRRenderScaleMode;
 		plan.outputTarget = UpscalingOutputTarget::SubmitStageIntermediate;

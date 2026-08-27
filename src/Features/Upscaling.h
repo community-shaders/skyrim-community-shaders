@@ -235,6 +235,22 @@ public:
 	// Native/inactive callers must retain the headset-provided dimension.
 	static uint32_t ScaleVRRenderDimension(uint32_t a_dimension, float a_scale);
 
+	// The vendor's accepted input minimum, published by the upscaler when it
+	// queries its own optimal settings.
+	//
+	// Hot-Envelope holds ONE vendor context for the boot quality and feeds it
+	// every lower quality's extent, because recreating the context is the relatch
+	// the feature exists to avoid. That only works while the extents stay inside
+	// the context's accepted range - and measured on a 3494x3558 output,
+	// eMaxQuality accepts a minimum of 1747x1779, while Ultra Performance feeds
+	// 1164. Performance feeds 1746, one pixel under, and works; Ultra Performance
+	// is 583 under and freezes.
+	//
+	// Zero means "not yet published" and must never be treated as a floor.
+	static void PublishVendorAcceptedMinimum(uint32_t a_widthPerEye, uint32_t a_heightPerEye) noexcept;
+	[[nodiscard]] static uint32_t VendorAcceptedMinimumWidthPerEye() noexcept;
+	[[nodiscard]] static uint32_t VendorAcceptedMinimumHeight() noexcept;
+
 	struct Settings
 	{
 		uint upscaleMethod = (uint)UpscaleMethod::kDLSS;
@@ -294,6 +310,17 @@ public:
 		// Inert unless vrHotEnvelope is set: with the envelope off the packed
 		// layout and the allocation half are the same pixel, which is why this
 		// could never have been caught before Hot-Envelope existed.
+		// EXPERIMENT, off by default. Clamp the per-eye render extent up to the
+		// vendor's published accepted minimum instead of feeding an out-of-range
+		// extent.
+		//
+		// This is a diagnostic intervention, not a fix. If it stops the Ultra
+		// Performance freeze it confirms the mechanism; it does NOT decide what
+		// the correct behaviour is, because a clamped q6 is no longer Ultra
+		// Performance - it renders at the floor. The design question, whether to
+		// clamp or to refuse the quality and relatch, is deliberately left open
+		// until the mechanism is confirmed.
+		uint vrHotEnvelopeClampToVendorMinimum = 0;
 		uint vrHotEnvelopeEyeOrigin = 0;
 		uint vrHotEnvelopeEyeOriginPx = 0;
 		// Column-activity probe over the submit chain. Off by default: it costs
