@@ -20437,6 +20437,41 @@ void Upscaling::RefreshRuntimeResolutionPlan()
 				std::uint32_t format = 0;
 				bool present = false;
 				bool hasCopy = false;
+				bool viaView = false;
+			};
+
+			// Resolve the slot's texture the way ScreenshotFeature does.
+			//
+			// The 2026-08-27 run read `slot.texture` alone and reported
+			// kFRAMEBUFFER absent in all 13 records. That was this probe, not the
+			// surface: kFRAMEBUFFER's texture slot is null BY DESIGN and the real
+			// resource is reached by QueryInterface on the SRV or RTV, which
+			// ScreenshotFeature::ResolveSlotTexture already had to solve. So the
+			// run could say nothing about the one surface it was named after.
+			//
+			// `holder` keeps the QI refcount alive for the GetDesc call.
+			const auto resolveSlotTexture =
+				[](const RE::BSGraphics::RenderTargetData& a_slot,
+					winrt::com_ptr<ID3D11Texture2D>& a_holder)
+				-> ID3D11Texture2D* {
+				if (a_slot.texture)
+					return a_slot.texture;
+				const auto fromView = [&](ID3D11View* a_view) -> ID3D11Texture2D* {
+					if (!a_view)
+						return nullptr;
+					winrt::com_ptr<ID3D11Resource> resource;
+					a_view->GetResource(resource.put());
+					if (!resource)
+						return nullptr;
+					if (FAILED(resource->QueryInterface(
+							__uuidof(ID3D11Texture2D), a_holder.put_void()))) {
+						return nullptr;
+					}
+					return a_holder.get();
+				};
+				if (auto* fromSRV = fromView(a_slot.SRV))
+					return fromSRV;
+				return fromView(a_slot.RTV);
 			};
 
 			const auto describe =
@@ -20445,10 +20480,16 @@ void Upscaling::RefreshRuntimeResolutionPlan()
 					const auto& slot =
 						fbRenderer->GetRuntimeData().renderTargets[a_target];
 					out.hasCopy = slot.textureCopy != nullptr;
-					if (!slot.texture)
+					winrt::com_ptr<ID3D11Texture2D> holder;
+					auto* texture = resolveSlotTexture(slot, holder);
+					if (!texture)
 						return out;
+					// Distinguishes "the slot carried it" from "recovered through
+					// a view", so a future absence names which path came up empty
+					// instead of collapsing both into present=false again.
+					out.viaView = slot.texture == nullptr;
 					D3D11_TEXTURE2D_DESC desc{};
-					slot.texture->GetDesc(&desc);
+					texture->GetDesc(&desc);
 					out.present = true;
 					out.width = desc.Width;
 					out.height = desc.Height;
@@ -20481,6 +20522,7 @@ void Upscaling::RefreshRuntimeResolutionPlan()
 				fbKey.Add(d.format);
 				fbKey.Add(static_cast<std::uint32_t>(d.present ? 1u : 0u));
 				fbKey.Add(static_cast<std::uint32_t>(d.hasCopy ? 1u : 0u));
+				fbKey.Add(static_cast<std::uint32_t>(d.viaView ? 1u : 0u));
 			}
 			fbKey.Add(fbDim(runtimeResolutionPlan.engineAllocationSize.width));
 			fbKey.Add(fbDim(runtimeResolutionPlan.engineAllocationSize.height));
@@ -20509,11 +20551,12 @@ void Upscaling::RefreshRuntimeResolutionPlan()
 					const auto describeJson = [](const FbDescriptor& a_d) {
 						return std::format(
 							"{{\"present\":{},\"w\":{},\"h\":{},\"arraySize\":{},"
-							"\"samples\":{},\"fmt\":{},\"hasCopy\":{}}}",
+							"\"samples\":{},\"fmt\":{},\"hasCopy\":{},\"viaView\":{}}}",
 							a_d.present ? "true" : "false",
 							a_d.width, a_d.height, a_d.arraySize,
 							a_d.sampleCount, a_d.format,
-							a_d.hasCopy ? "true" : "false");
+							a_d.hasCopy ? "true" : "false",
+							a_d.viaView ? "true" : "false");
 					};
 					logger::info(
 						"[FBDesc] {{\"frame\":{},\"activeQuality\":{},\"bootQuality\":{},"
