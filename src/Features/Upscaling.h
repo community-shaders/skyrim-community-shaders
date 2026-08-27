@@ -356,6 +356,25 @@ public:
 		// stream against nothing. Independent of cdo4Telemetry for exactly that
 		// reason.
 		uint cdo4CommonRecorder = 0;
+		// The framebuffer descriptor log.
+		//
+		// The Skyrim desktop window is the swap-chain backbuffer, which CS reads
+		// (screenshots) and never writes or resizes. Under an active Hot-Envelope
+		// it has twice shown a banded image composed from several sources, and
+		// three source-reading explanations of that were wrong. So this records,
+		// from the RUNNING GAME rather than from a target list, what the
+		// framebuffer descriptors actually are while the plan moves underneath
+		// them.
+		//
+		// kMAIN is the control: it is engine-sized and must move. A run in which
+		// kMAIN moves and a framebuffer does not is the asymmetry this is looking
+		// for. A run in which NOTHING moves means the instrument, not the
+		// pipeline, is being observed, and nothing may be read from it.
+		//
+		// Deduplicated on the descriptor tuple ONLY. No frame number, no
+		// per-frame quantity: the submit digest and the dynres trace key were
+		// both destroyed by exactly that mistake.
+		uint vrDiagFramebufferDescriptorLog = 0;
 		uint perfMode = 1;
 		uint frameLimitMode = 1;
 		uint frameGenerationMode = 0;  // Disabled by default

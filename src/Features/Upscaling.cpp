@@ -81,6 +81,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	vrDiagGeometryLog,
 	cdo4Telemetry,
 	cdo4CommonRecorder,
+	vrDiagFramebufferDescriptorLog,
 	perfMode,
 	frameLimitMode,
 	frameGenerationMode,
@@ -20409,6 +20410,137 @@ void Upscaling::RefreshRuntimeResolutionPlan()
 			FrameAnnotations::TargetWrappersInstalled() ? "true" : "false",
 			FrameAnnotations::TargetWrapperInstallId());
 
+	}
+
+	// The framebuffer descriptor log.
+	//
+	// Answers one question from the running game: while the plan moves, WHICH of
+	// these surfaces move with it? Reading the target lists cannot answer it,
+	// because the lists are the probe/offer sets and the actual resize happens in
+	// State::ModifyRenderTarget via AdjustVRRenderScaleRenderTargetProperties,
+	// which resizes only IsVRRenderScaleEngineSizedTarget /
+	// IsVRRenderScaleDisplaySizedTarget / kUNDERWATER_MASK.
+	//
+	// kMAIN is the control and must move. kFRAMEBUFFER is the desktop window.
+	// kVR_FRAMEBUFFER is included because it is probed as REQUIRED at engine size
+	// (kVRRenderScaleFramebufferProbeIndex) while appearing in no resize list -
+	// an asymmetry found by reading, and therefore exactly the kind of claim that
+	// has to be measured before it is believed.
+	if (settings.vrDiagFramebufferDescriptorLog != 0u && globals::game::isVR) {
+		if (auto* fbRenderer = globals::game::renderer) {
+			struct FbDescriptor
+			{
+				std::uint32_t width = 0;
+				std::uint32_t height = 0;
+				std::uint32_t arraySize = 0;
+				std::uint32_t sampleCount = 0;
+				std::uint32_t format = 0;
+				bool present = false;
+				bool hasCopy = false;
+			};
+
+			const auto describe =
+				[&](RE::RENDER_TARGETS::RENDER_TARGET a_target) {
+					FbDescriptor out{};
+					const auto& slot =
+						fbRenderer->GetRuntimeData().renderTargets[a_target];
+					out.hasCopy = slot.textureCopy != nullptr;
+					if (!slot.texture)
+						return out;
+					D3D11_TEXTURE2D_DESC desc{};
+					slot.texture->GetDesc(&desc);
+					out.present = true;
+					out.width = desc.Width;
+					out.height = desc.Height;
+					out.arraySize = desc.ArraySize;
+					out.sampleCount = desc.SampleDesc.Count;
+					out.format = static_cast<std::uint32_t>(desc.Format);
+					return out;
+				};
+
+			const auto fbMain = describe(RE::RENDER_TARGETS::kMAIN);
+			const auto fbFramebuffer = describe(RE::RENDER_TARGETS::kFRAMEBUFFER);
+			const auto fbVRFramebuffer =
+				describe(RE::RENDER_TARGETS::kVR_FRAMEBUFFER);
+
+			const auto fbDim = [](float a_value) {
+				return a_value > 0.0f ? static_cast<std::uint32_t>(a_value) : 0u;
+			};
+
+			// The dedup key. Descriptor tuple plus plan geometry plus the quality
+			// that asked for it - all state, nothing per-frame. Adding the frame
+			// number here would make every frame its own key and print 72 lines a
+			// second, which is how the dynres trace went blind after fourteen
+			// seconds.
+			CDO4CommonRecorder::Digest fbKey;
+			for (const auto& d : { fbMain, fbFramebuffer, fbVRFramebuffer }) {
+				fbKey.Add(d.width);
+				fbKey.Add(d.height);
+				fbKey.Add(d.arraySize);
+				fbKey.Add(d.sampleCount);
+				fbKey.Add(d.format);
+				fbKey.Add(static_cast<std::uint32_t>(d.present ? 1u : 0u));
+				fbKey.Add(static_cast<std::uint32_t>(d.hasCopy ? 1u : 0u));
+			}
+			fbKey.Add(fbDim(runtimeResolutionPlan.engineAllocationSize.width));
+			fbKey.Add(fbDim(runtimeResolutionPlan.engineAllocationSize.height));
+			fbKey.Add(fbDim(runtimeResolutionPlan.engineRenderSize.width));
+			fbKey.Add(fbDim(runtimeResolutionPlan.engineRenderSize.height));
+			fbKey.Add(fbDim(runtimeResolutionPlan.finalOutputSize.x));
+			fbKey.Add(fbDim(runtimeResolutionPlan.finalOutputSize.y));
+			fbKey.Add(runtimeResolutionPlan.qualityMode);
+
+			static std::atomic_uint64_t s_fbDescriptorLastKey{ 0u };
+			static std::atomic_uint32_t s_fbDescriptorEmitted{ 0u };
+			const std::uint64_t fbKeyValue = fbKey.Value();
+
+			// Cap the record so a key that unexpectedly varies per frame cannot
+			// fill the log. If this warns, the record is INCOMPLETE and no
+			// absence in it may be read as evidence.
+			constexpr std::uint32_t kFbDescriptorEmitCap = 96u;
+
+			if (fbKeyValue != s_fbDescriptorLastKey.exchange(
+								  fbKeyValue, std::memory_order_acq_rel)) {
+				const std::uint32_t emitted = s_fbDescriptorEmitted.fetch_add(
+					1u, std::memory_order_relaxed);
+				if (emitted < kFbDescriptorEmitCap) {
+					auto* fbState = globals::state;
+					const auto& fbBoot = perfMode.GetBootSnapshot();
+					const auto describeJson = [](const FbDescriptor& a_d) {
+						return std::format(
+							"{{\"present\":{},\"w\":{},\"h\":{},\"arraySize\":{},"
+							"\"samples\":{},\"fmt\":{},\"hasCopy\":{}}}",
+							a_d.present ? "true" : "false",
+							a_d.width, a_d.height, a_d.arraySize,
+							a_d.sampleCount, a_d.format,
+							a_d.hasCopy ? "true" : "false");
+					};
+					logger::info(
+						"[FBDesc] {{\"frame\":{},\"activeQuality\":{},\"bootQuality\":{},"
+						"\"A\":{{\"w\":{},\"h\":{}}},\"R\":{{\"w\":{},\"h\":{}}},"
+						"\"O\":{{\"w\":{},\"h\":{}}},"
+						"\"kMAIN\":{},\"kFRAMEBUFFER\":{},\"kVR_FRAMEBUFFER\":{}}}",
+						fbState ? static_cast<std::uint32_t>(fbState->frameCount) : 0u,
+						runtimeResolutionPlan.qualityMode,
+						fbBoot.valid ? fbBoot.qualityMode : 0u,
+						fbDim(runtimeResolutionPlan.engineAllocationSize.width),
+						fbDim(runtimeResolutionPlan.engineAllocationSize.height),
+						fbDim(runtimeResolutionPlan.engineRenderSize.width),
+						fbDim(runtimeResolutionPlan.engineRenderSize.height),
+						fbDim(runtimeResolutionPlan.finalOutputSize.x),
+						fbDim(runtimeResolutionPlan.finalOutputSize.y),
+						describeJson(fbMain),
+						describeJson(fbFramebuffer),
+						describeJson(fbVRFramebuffer));
+				} else if (emitted == kFbDescriptorEmitCap) {
+					logger::warn(
+						"[FBDesc] Emit cap {} reached. The descriptor record is "
+						"INCOMPLETE from here on; do not read any absence in it "
+						"as evidence.",
+						kFbDescriptorEmitCap);
+				}
+			}
+		}
 	}
 }
 
