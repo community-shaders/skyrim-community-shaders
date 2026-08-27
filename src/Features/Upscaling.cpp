@@ -20438,6 +20438,18 @@ void Upscaling::RefreshRuntimeResolutionPlan()
 				bool present = false;
 				bool hasCopy = false;
 				bool viaView = false;
+				// Run 2 resolved kFRAMEBUFFER to 3840x2160 on frame 0 and to
+				// 1024x1024 from frame 2 onward, and the desktop window is
+				// neither (1540x1534). "First view that answers" is therefore not
+				// enough: it cannot say WHICH view answered, so it cannot say
+				// what was measured. Record each path separately and stop
+				// guessing.
+				std::uint32_t slotWidth = 0;
+				std::uint32_t slotHeight = 0;
+				std::uint32_t srvWidth = 0;
+				std::uint32_t srvHeight = 0;
+				std::uint32_t rtvWidth = 0;
+				std::uint32_t rtvHeight = 0;
 			};
 
 			// Resolve the slot's texture the way ScreenshotFeature does.
@@ -20450,29 +20462,37 @@ void Upscaling::RefreshRuntimeResolutionPlan()
 			// run could say nothing about the one surface it was named after.
 			//
 			// `holder` keeps the QI refcount alive for the GetDesc call.
-			const auto resolveSlotTexture =
-				[](const RE::BSGraphics::RenderTargetData& a_slot,
+			const auto textureFromView =
+				[](ID3D11View* a_view,
 					winrt::com_ptr<ID3D11Texture2D>& a_holder)
 				-> ID3D11Texture2D* {
-				if (a_slot.texture)
-					return a_slot.texture;
-				const auto fromView = [&](ID3D11View* a_view) -> ID3D11Texture2D* {
-					if (!a_view)
-						return nullptr;
-					winrt::com_ptr<ID3D11Resource> resource;
-					a_view->GetResource(resource.put());
-					if (!resource)
-						return nullptr;
-					if (FAILED(resource->QueryInterface(
-							__uuidof(ID3D11Texture2D), a_holder.put_void()))) {
-						return nullptr;
-					}
-					return a_holder.get();
-				};
-				if (auto* fromSRV = fromView(a_slot.SRV))
-					return fromSRV;
-				return fromView(a_slot.RTV);
+				if (!a_view)
+					return nullptr;
+				winrt::com_ptr<ID3D11Resource> resource;
+				a_view->GetResource(resource.put());
+				if (!resource)
+					return nullptr;
+				if (FAILED(resource->QueryInterface(
+						__uuidof(ID3D11Texture2D), a_holder.put_void()))) {
+					return nullptr;
+				}
+				return a_holder.get();
 			};
+
+			// Measure one specific path and report its extent, or 0x0 when that
+			// path has nothing. Never falls through to another path: the whole
+			// point is that each is reported on its own.
+			const auto measurePath =
+				[](ID3D11Texture2D* a_texture,
+					std::uint32_t& a_outWidth,
+					std::uint32_t& a_outHeight) {
+					if (!a_texture)
+						return;
+					D3D11_TEXTURE2D_DESC desc{};
+					a_texture->GetDesc(&desc);
+					a_outWidth = desc.Width;
+					a_outHeight = desc.Height;
+				};
 
 			const auto describe =
 				[&](RE::RENDER_TARGETS::RENDER_TARGET a_target) {
@@ -20480,14 +20500,28 @@ void Upscaling::RefreshRuntimeResolutionPlan()
 					const auto& slot =
 						fbRenderer->GetRuntimeData().renderTargets[a_target];
 					out.hasCopy = slot.textureCopy != nullptr;
-					winrt::com_ptr<ID3D11Texture2D> holder;
-					auto* texture = resolveSlotTexture(slot, holder);
+
+					// Each path measured independently, so the record says WHICH
+					// one answered rather than only that something did.
+					winrt::com_ptr<ID3D11Texture2D> srvHolder;
+					winrt::com_ptr<ID3D11Texture2D> rtvHolder;
+					auto* fromSlot = slot.texture;
+					auto* fromSRV = textureFromView(slot.SRV, srvHolder);
+					auto* fromRTV = textureFromView(slot.RTV, rtvHolder);
+					measurePath(fromSlot, out.slotWidth, out.slotHeight);
+					measurePath(fromSRV, out.srvWidth, out.srvHeight);
+					measurePath(fromRTV, out.rtvWidth, out.rtvHeight);
+
+					// Same precedence ScreenshotFeature uses, so the headline
+					// extent stays comparable with run 2's records.
+					auto* texture = fromSlot ? fromSlot :
+					                           (fromSRV ? fromSRV : fromRTV);
 					if (!texture)
 						return out;
 					// Distinguishes "the slot carried it" from "recovered through
 					// a view", so a future absence names which path came up empty
 					// instead of collapsing both into present=false again.
-					out.viaView = slot.texture == nullptr;
+					out.viaView = fromSlot == nullptr;
 					D3D11_TEXTURE2D_DESC desc{};
 					texture->GetDesc(&desc);
 					out.present = true;
@@ -20523,6 +20557,12 @@ void Upscaling::RefreshRuntimeResolutionPlan()
 				fbKey.Add(static_cast<std::uint32_t>(d.present ? 1u : 0u));
 				fbKey.Add(static_cast<std::uint32_t>(d.hasCopy ? 1u : 0u));
 				fbKey.Add(static_cast<std::uint32_t>(d.viaView ? 1u : 0u));
+				fbKey.Add(d.slotWidth);
+				fbKey.Add(d.slotHeight);
+				fbKey.Add(d.srvWidth);
+				fbKey.Add(d.srvHeight);
+				fbKey.Add(d.rtvWidth);
+				fbKey.Add(d.rtvHeight);
 			}
 			fbKey.Add(fbDim(runtimeResolutionPlan.engineAllocationSize.width));
 			fbKey.Add(fbDim(runtimeResolutionPlan.engineAllocationSize.height));
@@ -20551,12 +20591,17 @@ void Upscaling::RefreshRuntimeResolutionPlan()
 					const auto describeJson = [](const FbDescriptor& a_d) {
 						return std::format(
 							"{{\"present\":{},\"w\":{},\"h\":{},\"arraySize\":{},"
-							"\"samples\":{},\"fmt\":{},\"hasCopy\":{},\"viaView\":{}}}",
+							"\"samples\":{},\"fmt\":{},\"hasCopy\":{},\"viaView\":{},"
+							"\"slot\":{{\"w\":{},\"h\":{}}},\"srv\":{{\"w\":{},\"h\":{}}},"
+							"\"rtv\":{{\"w\":{},\"h\":{}}}}}",
 							a_d.present ? "true" : "false",
 							a_d.width, a_d.height, a_d.arraySize,
 							a_d.sampleCount, a_d.format,
 							a_d.hasCopy ? "true" : "false",
-							a_d.viaView ? "true" : "false");
+							a_d.viaView ? "true" : "false",
+							a_d.slotWidth, a_d.slotHeight,
+							a_d.srvWidth, a_d.srvHeight,
+							a_d.rtvWidth, a_d.rtvHeight);
 					};
 					logger::info(
 						"[FBDesc] {{\"frame\":{},\"activeQuality\":{},\"bootQuality\":{},"
