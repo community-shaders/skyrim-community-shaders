@@ -19968,8 +19968,25 @@ void Upscaling::RefreshRuntimeResolutionPlan()
 		// every lower quality's extent. Measured on a 3494x3558 output,
 		// eMaxQuality accepts 1747x1779 at minimum. Quality feeds 2328 and
 		// Balanced 2054, both inside. Performance feeds 1746 - one pixel under -
-		// and works. Ultra Performance feeds 1164, which is 583 under, and the
-		// image freezes at full frame rate with nothing logged.
+		// and Ultra Performance feeds 1164, which is 583 under and freezes the
+		// image at full frame rate with nothing logged.
+		//
+		// CORRECTED 2026-08-27: this comment used to say Performance "works".
+		// It does not. Performance is the ONLY ladder step outside the accepted
+		// range short of the freeze, and it is exactly the step at which the
+		// desktop window splits into three differently-scaled regions -
+		// reproducibly, reversibly, on two builds. So the ladder reads:
+		//
+		//   q3 2328x2372   inside            -> one region
+		//   q4 2054x2092   inside            -> one region
+		//   q5 1746x1778   1 px under, both  -> three regions
+		//   q6 1164x1186   583 px under      -> frozen
+		//
+		// Rik established that the three regions are NOT stale: all of them
+		// track his head movement. They are live content at different scales,
+		// which rules out the retained-margin story this file previously
+		// assumed and points at the vendor being evaluated on an extent other
+		// than the one the blit is computed from.
 		//
 		// This clamps the fed extent up to the published minimum so the vendor
 		// receives something it accepts. It is a DIAGNOSTIC INTERVENTION: if the
@@ -19977,6 +19994,10 @@ void Upscaling::RefreshRuntimeResolutionPlan()
 		// clamped Ultra Performance is not Ultra Performance - it renders at the
 		// floor and costs what the floor costs. What the correct behaviour is,
 		// clamp or refuse-and-relatch, is left open until the mechanism is known.
+		//
+		// At Performance the clamp costs 2 px of width and 1 of height
+		// (3492x1778 -> 3494x1779), so it is a near-free test of whether the
+		// range boundary is what separates one region from three.
 		if (renderSize.width > 0.0f && renderSize.height > 0.0f) {
 			auto clampedRenderSize = renderSize;
 			if (settings.vrHotEnvelopeClampToVendorMinimum != 0u) {
