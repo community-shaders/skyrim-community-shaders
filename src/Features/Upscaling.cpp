@@ -39486,12 +39486,59 @@ void Upscaling::PresentVRMenuDesktopMirror(IDXGISwapChain* a_swapChain)
 
 	const uint32_t frame = globals::state->frameCount;
 	const uint32_t planGeneration = GetActiveVRRenderScaleContractGeneration();
-	if (!vrMenuCommittedLayerValid ||
-		!vrMenuCommittedCompositeLayer ||
+
+	// Why this writer DID NOT RUN.
+	//
+	// Writer 3 stretches the left half of the committed menu layer over the
+	// whole backbuffer (sourceScale 0.5, full-target viewport), so when it runs
+	// the window is one image - which is what "one area" is. Its geometry was
+	// constant across the entire 2026-08-27 ladder, so it cannot produce three
+	// regions by changing. It can only produce them by STOPPING, and letting
+	// whatever else writes the backbuffer show through.
+	//
+	// Every bail below was previously silent, which made the one thing worth
+	// knowing unobservable. An absent record cannot distinguish "ran normally"
+	// from "returned at the first condition".
+	const auto traceMenuMirrorBail = [&](const char* a_reason) {
+		if (settings.vrDiagMirrorPathTrace == 0u)
+			return;
+		CDO4CommonRecorder::Digest bailKey;
+		bailKey.Add(std::uint64_t{ reinterpret_cast<std::uintptr_t>(a_reason) });
+		bailKey.Add(planGeneration);
+		bailKey.Add(vrMenuCommittedLayerPlanGeneration);
+		bailKey.Add(vrMenuCommittedLayerOperationCount);
+		bailKey.Add(static_cast<std::uint32_t>(vrMenuCommittedLayerValid ? 1u : 0u));
+		static std::atomic_uint64_t s_bailLastKey{ 0u };
+		const std::uint64_t bailKeyValue = bailKey.Value();
+		if (bailKeyValue == s_bailLastKey.exchange(bailKeyValue, std::memory_order_acq_rel))
+			return;
+		logger::info(
+			"[MirrorPath] {{\"writer\":\"present-menu-blit\",\"ran\":false,"
+			"\"reason\":\"{}\",\"layerValid\":{},\"operationCount\":{},"
+			"\"layerPlanGeneration\":{},\"planGeneration\":{}}}",
+			a_reason,
+			vrMenuCommittedLayerValid ? "true" : "false",
+			vrMenuCommittedLayerOperationCount,
+			vrMenuCommittedLayerPlanGeneration,
+			planGeneration);
+	};
+
+	if (!vrMenuCommittedLayerValid) {
+		traceMenuMirrorBail("layer-not-valid");
+		return;
+	}
+	if (!vrMenuCommittedCompositeLayer ||
 		!vrMenuCommittedCompositeLayer->resource ||
-		!vrMenuCommittedCompositeLayer->srv ||
-		vrMenuCommittedLayerOperationCount == 0 ||
-		vrMenuCommittedLayerPlanGeneration != planGeneration) {
+		!vrMenuCommittedCompositeLayer->srv) {
+		traceMenuMirrorBail("layer-resource-missing");
+		return;
+	}
+	if (vrMenuCommittedLayerOperationCount == 0) {
+		traceMenuMirrorBail("layer-operation-count-zero");
+		return;
+	}
+	if (vrMenuCommittedLayerPlanGeneration != planGeneration) {
+		traceMenuMirrorBail("layer-plan-generation-stale");
 		return;
 	}
 
@@ -39534,7 +39581,7 @@ void Upscaling::PresentVRMenuDesktopMirror(IDXGISwapChain* a_swapChain)
 		if (presentKeyValue != s_presentMirrorLastKey.exchange(
 								   presentKeyValue, std::memory_order_acq_rel)) {
 			logger::info(
-				"[MirrorPath] {{\"writer\":\"present-menu-blit\","
+				"[MirrorPath] {{\"writer\":\"present-menu-blit\",\"ran\":true,"
 				"\"backBuffer\":{{\"w\":{},\"h\":{},\"fmt\":{}}},"
 				"\"menuLayer\":{{\"w\":{},\"h\":{}}},"
 				"\"eyeArgPassed\":{{\"w\":{},\"h\":{}}},\"planGeneration\":{}}}",
@@ -39546,13 +39593,41 @@ void Upscaling::PresentVRMenuDesktopMirror(IDXGISwapChain* a_swapChain)
 		}
 	}
 
-	(void)BlitVRRenderScaleDesktopMirror(
+	// The blit has its own guards - a composite source narrower than
+	// eyeWidth*2, a target without RENDER_TARGET bind, a missing shader - and
+	// every one of them returns false silently. Reaching this line is therefore
+	// not the same as writing the window, and the difference is exactly the
+	// question. Record the transition in the outcome, not every frame.
+	const bool menuMirrorBlitSucceeded = BlitVRRenderScaleDesktopMirror(
 		backBuffer.get(),
 		backBufferDesc,
 		vrMenuFinalCompositeLayerWidth / 2u,
 		vrMenuFinalCompositeLayerHeight,
 		nullptr,
 		true);
+
+	if (settings.vrDiagMirrorPathTrace != 0u) {
+		static std::atomic_int s_lastBlitOutcome{ -1 };
+		const int blitOutcome = menuMirrorBlitSucceeded ? 1 : 0;
+		if (blitOutcome != s_lastBlitOutcome.exchange(
+							   blitOutcome, std::memory_order_acq_rel)) {
+			const auto* layer = vrMenuCommittedCompositeLayer.get();
+			logger::info(
+				"[MirrorPath] {{\"writer\":\"present-menu-blit\",\"blitSucceeded\":{},"
+				"\"backBuffer\":{{\"w\":{},\"h\":{},\"fmt\":{},\"bindRT\":{}}},"
+				"\"compositeLayer\":{{\"w\":{},\"h\":{}}},"
+				"\"eyeArgPassed\":{{\"w\":{},\"h\":{}}}}}",
+				menuMirrorBlitSucceeded ? "true" : "false",
+				backBufferDesc.Width, backBufferDesc.Height,
+				static_cast<std::uint32_t>(backBufferDesc.Format),
+				(backBufferDesc.BindFlags & D3D11_BIND_RENDER_TARGET) != 0 ?
+					"true" : "false",
+				layer ? layer->desc.Width : 0u,
+				layer ? layer->desc.Height : 0u,
+				vrMenuFinalCompositeLayerWidth / 2u,
+				vrMenuFinalCompositeLayerHeight);
+		}
+	}
 }
 
 bool Upscaling::BlitVRRenderScaleDesktopMirror(
@@ -47821,13 +47896,27 @@ bool Upscaling::SubmitVRUpscaledFrame(vr::EVREye a_eye, uint64_t a_compositorCyc
 			mirrorKey.Add(out0 ? out0->desc.Height : 0u);
 			mirrorKey.Add(out1 ? out1->desc.Width : 0u);
 			mirrorKey.Add(out1 ? out1->desc.Height : 0u);
-			mirrorKey.Add(static_cast<std::uint32_t>(eyeIndex));
-
-			static std::atomic_uint64_t s_mirrorPathLastKey{ 0u };
+			// eyeIndex is NOT in the key.
+			//
+			// It was, in the first version, and eyes alternate every frame - so
+			// the key changed on every call, the site emitted every frame, and
+			// the 128-record cap was reached 0.93 s after the first record, 17 s
+			// before the ladder even reached Balanced. The trace never saw the
+			// qualities it was built to compare.
+			//
+			// That is the same defect as the submit digest's compositor cycle
+			// token and the dynres trace's scissor rect: a per-frame-varying
+			// quantity in a deduplication key destroys the thing it keys. The
+			// comment above warned about the frame number specifically and I put
+			// in something that alternates every frame instead.
+			//
+			// Each eye now gets its own key, which is what "per eye" required.
+			static std::array<std::atomic_uint64_t, 2> s_mirrorPathLastKey{};
 			static std::atomic_uint32_t s_mirrorPathEmitted{ 0u };
 			constexpr std::uint32_t kMirrorPathEmitCap = 128u;
+			const std::size_t mirrorKeySlot = eyeIndex < 2u ? eyeIndex : 0u;
 			const std::uint64_t mirrorKeyValue = mirrorKey.Value();
-			if (mirrorKeyValue != s_mirrorPathLastKey.exchange(
+			if (mirrorKeyValue != s_mirrorPathLastKey[mirrorKeySlot].exchange(
 									  mirrorKeyValue, std::memory_order_acq_rel)) {
 				const std::uint32_t emitted =
 					s_mirrorPathEmitted.fetch_add(1u, std::memory_order_relaxed);
