@@ -82,6 +82,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	cdo4Telemetry,
 	cdo4CommonRecorder,
 	vrDiagFramebufferDescriptorLog,
+	vrDiagGenerationCacheProbe,
 	vrDiagMirrorPathTrace,
 	perfMode,
 	frameLimitMode,
@@ -41518,6 +41519,145 @@ void Upscaling::SetupResources()
 void Upscaling::SetupRenderTargetResources()
 {
 	SetupResources();
+	LogVRGenerationPackageInventory("after-setup-render-target-resources");
+}
+
+// What a cached "generation" would actually have to contain, and what it costs.
+//
+// The rolling-cache proposal keeps several complete, correctly sized generations
+// resident so quality changes become a package switch instead of a relatch,
+// preserving A == R. Two things decide whether that is buildable, and both are
+// answerable by enumerating live descriptors rather than by argument:
+//
+//   what is in a package  - every target CSX resizes, plus the depth stencils,
+//                           plus CSX's own per-eye intermediates. Seven features
+//                           rebuild more on top of this; those are timed
+//                           separately in State::SetupRenderTargetResources.
+//   what it costs         - summed bytes. If three rungs do not fit alongside a
+//                           heavy modlist, the design is dead before any code.
+//
+// Pure observation: reads descriptors, allocates nothing, draws nothing.
+void Upscaling::LogVRGenerationPackageInventory(const char* a_phase)
+{
+	if (settings.vrDiagGenerationCacheProbe == 0u || !globals::game::isVR)
+		return;
+	auto* renderer = globals::game::renderer;
+	if (!renderer)
+		return;
+
+	// Bytes per pixel for the formats this engine actually uses for render
+	// targets. Unknown formats are counted at 4 and named, so a wrong total can
+	// never look like a right one.
+	const auto bytesPerPixel = [](DXGI_FORMAT a_format) -> uint32_t {
+		switch (a_format) {
+		case DXGI_FORMAT_R32G32B32A32_FLOAT:
+			return 16u;
+		case DXGI_FORMAT_R16G16B16A16_FLOAT:
+		case DXGI_FORMAT_R32G32_FLOAT:
+			return 8u;
+		case DXGI_FORMAT_R8G8B8A8_UNORM:
+		case DXGI_FORMAT_R8G8B8A8_UNORM_SRGB:
+		case DXGI_FORMAT_R8G8B8A8_TYPELESS:
+		case DXGI_FORMAT_R11G11B10_FLOAT:
+		case DXGI_FORMAT_R10G10B10A2_UNORM:
+		case DXGI_FORMAT_R16G16_FLOAT:
+		case DXGI_FORMAT_R16G16_UNORM:
+		case DXGI_FORMAT_R32_FLOAT:
+		case DXGI_FORMAT_R24G8_TYPELESS:
+		case DXGI_FORMAT_D24_UNORM_S8_UINT:
+			return 4u;
+		case DXGI_FORMAT_R16_FLOAT:
+		case DXGI_FORMAT_R16_UNORM:
+			return 2u;
+		case DXGI_FORMAT_R8_UNORM:
+		case DXGI_FORMAT_R8_UINT:
+			return 1u;
+		default:
+			return 4u;
+		}
+	};
+
+	std::uint64_t totalBytes = 0u;
+	uint32_t counted = 0u;
+	uint32_t unknownFormats = 0u;
+	std::string entries;
+
+	const auto addTexture = [&](const char* a_name, ID3D11Texture2D* a_texture, bool a_isCopy) {
+		if (!a_texture)
+			return;
+		D3D11_TEXTURE2D_DESC desc{};
+		a_texture->GetDesc(&desc);
+		const uint32_t bpp = bytesPerPixel(desc.Format);
+		if (bpp == 4u && desc.Format != DXGI_FORMAT_R8G8B8A8_UNORM &&
+			desc.Format != DXGI_FORMAT_R11G11B10_FLOAT &&
+			desc.Format != DXGI_FORMAT_R24G8_TYPELESS) {
+			++unknownFormats;
+		}
+		const std::uint64_t bytes =
+			static_cast<std::uint64_t>(desc.Width) * desc.Height *
+			std::max<uint32_t>(desc.ArraySize, 1u) * bpp;
+		totalBytes += bytes;
+		++counted;
+		if (!entries.empty())
+			entries += ',';
+		std::format_to(std::back_inserter(entries),
+			"{{\"n\":\"{}{}\",\"w\":{},\"h\":{},\"arr\":{},\"fmt\":{},\"bpp\":{},\"mb\":{:.2f}}}",
+			a_name, a_isCopy ? ".copy" : "",
+			desc.Width, desc.Height, desc.ArraySize,
+			static_cast<uint32_t>(desc.Format), bpp,
+			static_cast<double>(bytes) / (1024.0 * 1024.0));
+	};
+
+	const auto addRenderTarget = [&](RE::RENDER_TARGETS::RENDER_TARGET a_target) {
+		const auto& slot = renderer->GetRuntimeData().renderTargets[a_target];
+		const auto name = magic_enum::enum_name(a_target);
+		addTexture(std::string(name).c_str(), slot.texture, false);
+		addTexture(std::string(name).c_str(), slot.textureCopy, true);
+	};
+
+	for (const auto target : kVRRenderScaleEngineSizedTargets)
+		addRenderTarget(target);
+	for (const auto target : kVRRenderScaleDisplaySizedTargets)
+		addRenderTarget(target);
+	for (const auto target : kVRRenderScaleDeferredTargets)
+		addRenderTarget(target);
+	addRenderTarget(RE::RENDER_TARGETS::kUNDERWATER_MASK);
+	addRenderTarget(RE::RENDER_TARGETS::kVR_FRAMEBUFFER);
+
+	const auto& depthStencils = renderer->GetDepthStencilData().depthStencils;
+	addTexture("DEPTH_MAIN", depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN].texture, false);
+	addTexture("DEPTH_MAIN_COPY", depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN_COPY].texture, false);
+
+	// CSX's own per-eye intermediates are part of a generation too.
+	for (uint32_t eye = 0; eye < 2; ++eye) {
+		const auto suffix = eye == 0 ? "L" : "R";
+		if (vrIntermediateColorIn[eye])
+			addTexture((std::string("csxColorIn") + suffix).c_str(), vrIntermediateColorIn[eye]->resource.get(), false);
+		if (vrIntermediateColorOut[eye])
+			addTexture((std::string("csxColorOut") + suffix).c_str(), vrIntermediateColorOut[eye]->resource.get(), false);
+		if (vrIntermediateDepth[eye])
+			addTexture((std::string("csxDepth") + suffix).c_str(), vrIntermediateDepth[eye]->resource.get(), false);
+		if (vrIntermediateLinearDepth[eye])
+			addTexture((std::string("csxLinearDepth") + suffix).c_str(), vrIntermediateLinearDepth[eye]->resource.get(), false);
+	}
+
+	EnsureRuntimeResolutionStateCurrent();
+	const auto& plan = GetRuntimeResolutionPlan();
+	logger::info(
+		"[GenCacheProbe] {{\"probe\":\"package-inventory\",\"phase\":\"{}\","
+		"\"quality\":{},\"A\":{{\"w\":{},\"h\":{}}},\"R\":{{\"w\":{},\"h\":{}}},"
+		"\"O\":{{\"w\":{},\"h\":{}}},\"textures\":{},\"unknownFormats\":{},"
+		"\"totalMB\":{:.1f},\"entries\":[{}]}}",
+		a_phase, plan.qualityMode,
+		ClampPositiveDimension(plan.engineAllocationSize.width),
+		ClampPositiveDimension(plan.engineAllocationSize.height),
+		ClampPositiveDimension(plan.engineRenderSize.width),
+		ClampPositiveDimension(plan.engineRenderSize.height),
+		ClampPositiveDimension(plan.finalOutputSize.x),
+		ClampPositiveDimension(plan.finalOutputSize.y),
+		counted, unknownFormats,
+		static_cast<double>(totalBytes) / (1024.0 * 1024.0),
+		entries);
 }
 
 void Upscaling::ClearShaderCache()

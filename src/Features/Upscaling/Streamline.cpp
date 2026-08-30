@@ -1193,6 +1193,58 @@ bool Streamline::SetDLSSOptions(DLSSViewportRole viewportRole, sl::ViewportHandl
 				optimal.renderWidthMax,
 				optimal.renderHeightMax);
 		}
+
+		// Every mode's accepted range, not only the active one.
+		//
+		// Only eMaxQuality has ever been measured, and that single number leaves
+		// the ladder unexplained: Performance feeds 1746x1778 against a 1747x1779
+		// floor, one pixel under - yet STOCK Performance works, and stock uses
+		// eMaxPerformance for that rung. Either that mode floors lower, or the
+		// floor is not universally output/2. The answer decides whether a
+		// per-rung generation cache can give each rung a legal context of its
+		// own, and it is a pure query with no side effects.
+		//
+		// Emitted once per output size, not per context creation.
+		if (globals::features::upscaling.settings.vrDiagGenerationCacheProbe != 0u) {
+			static uint32_t loggedSweepWidth = 0;
+			static uint32_t loggedSweepHeight = 0;
+			if (loggedSweepWidth != width || loggedSweepHeight != height) {
+				loggedSweepWidth = width;
+				loggedSweepHeight = height;
+				constexpr sl::DLSSMode kSweepModes[] = {
+					sl::DLSSMode::eDLAA,
+					sl::DLSSMode::eMaxQuality,
+					sl::DLSSMode::eBalanced,
+					sl::DLSSMode::eMaxPerformance,
+					sl::DLSSMode::eUltraPerformance,
+				};
+				for (const auto sweepMode : kSweepModes) {
+					sl::DLSSOptions sweepOptions = dlssOptions;
+					sweepOptions.mode = sweepMode;
+					sl::DLSSOptimalSettings sweep{};
+					if (slDLSSGetOptimalSettings(sweepOptions, sweep) != sl::Result::eOk) {
+						logger::info(
+							"[GenCacheProbe] {{\"probe\":\"dlss-range\",\"mode\":\"{}\","
+							"\"output\":{{\"w\":{},\"h\":{}}},\"query\":\"failed\"}}",
+							magic_enum::enum_name(sweepMode), width, height);
+						continue;
+					}
+					// halfOutput is printed because the working theory is that the
+					// floor is exactly output/2, and both halves are odd here -
+					// which an even-forced render extent can never reach.
+					logger::info(
+						"[GenCacheProbe] {{\"probe\":\"dlss-range\",\"mode\":\"{}\","
+						"\"output\":{{\"w\":{},\"h\":{}}},\"optimal\":{{\"w\":{},\"h\":{}}},"
+						"\"min\":{{\"w\":{},\"h\":{}}},\"max\":{{\"w\":{},\"h\":{}}},"
+						"\"halfOutput\":{{\"w\":{},\"h\":{}}}}}",
+						magic_enum::enum_name(sweepMode), width, height,
+						sweep.optimalRenderWidth, sweep.optimalRenderHeight,
+						sweep.renderWidthMin, sweep.renderHeightMin,
+						sweep.renderWidthMax, sweep.renderHeightMax,
+						width / 2u, height / 2u);
+				}
+			}
+		}
 	}
 
 	if (SL_FAILED(result, slDLSSSetOptions(p_viewport, dlssOptions))) {

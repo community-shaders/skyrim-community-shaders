@@ -375,6 +375,38 @@ public:
 		// per-frame quantity: the submit digest and the dynres trace key were
 		// both destroyed by exactly that mistake.
 		uint vrDiagFramebufferDescriptorLog = 0;
+		// The rolling-generation-cache feasibility probe.
+		//
+		// Hot-Envelope exists to avoid the relatch hitch, and it pays for that by
+		// breaking A == R, which has now produced five defects. The proposed
+		// alternative keeps several complete, correctly sized generations resident
+		// and switches between them, preserving A == R everywhere.
+		//
+		// Three questions decide whether that is buildable, and none of them has
+		// ever been measured. This one switch answers all four:
+		//
+		//   1. WHERE DOES THE HITCH GO?  59 ms with Render Scale on, 34 ms off -
+		//      so 25 ms is CSX's own path. Phase timing says whether that is one
+		//      fixable thing or spread thin. If the relatch can be made cheap and
+		//      rare, the cache may not be needed at all.
+		//
+		//   2. WHAT IS A GENERATION?  Not the engine's target table alone:
+		//      State::SetupRenderTargetResources walks SEVEN features plus
+		//      deferred, each rebuilding its own screen-sized resources. The
+		//      inventory dump makes the real package contents measurable rather
+		//      than inferred.
+		//
+		//   3. WHAT DOES IT COST IN VRAM?  Summed from live descriptors, per
+		//      generation. If three rungs do not fit alongside a heavy modlist the
+		//      design is dead and no code needs writing.
+		//
+		//   4. WHAT WILL EACH RUNG'S VENDOR CONTEXT ACCEPT?  Only eMaxQuality's
+		//      range has ever been measured, and that leaves the ladder
+		//      unexplained: if every ranged mode floors at output/2 then stock
+		//      Performance would also be a pixel under, and stock works.
+		//
+		// Pure observation. No control flow changes, no allocation, no draws.
+		uint vrDiagGenerationCacheProbe = 0;
 		// The desktop mirror path trace.
 		//
 		// The window is written by CS, not by Skyrim - PresentVRMenuDesktopMirror
@@ -2082,6 +2114,10 @@ public:
 	bool ApplyLockedFullResolutionDynamicResolutionState(RE::BSGraphics::State* a_state);
 	bool ApplyDynamicResolutionState(RE::BSGraphics::State* a_state);
 	void PrepareFullResolutionPostProcessing(RE::BSGraphics::State* a_state = nullptr, bool a_resetProjection = false);
+
+	/// Enumerate everything a cached render generation would have to contain, and
+	/// sum its VRAM cost from live descriptors. Observation only.
+	void LogVRGenerationPackageInventory(const char* a_phase);
 	VRVendorResourceResetResult ResetVRSubmitStageState(bool a_destroyDLSSResources = true, bool a_destroySharedResources = true, bool a_preserveVRIntermediateTextures = false);
 	void RequestVRSubmitStageHistoryReset();
 	bool IsSubmitStageUpscalingActive() const;

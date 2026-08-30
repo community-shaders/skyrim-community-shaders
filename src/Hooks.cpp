@@ -1,5 +1,7 @@
 #include "Hooks.h"
 
+#include <chrono>
+
 #include "ShaderTools/BSShaderHooks.h"
 #include "Utils/ExternalEmittance.h"
 
@@ -1077,9 +1079,35 @@ struct BSShaderRenderTargets_Create
 		void* a_context,
 		bool* a_engineCreateEntered)
 	{
+		// Where do the 59 milliseconds go?
+		//
+		// The relatch hitch is the entire reason Hot-Envelope exists, and its
+		// composition has never been measured. What IS measured is that Render
+		// Scale on costs 59 ms against 34 ms off - so roughly 25 ms is CSX's own
+		// path, not the engine's. If that is one fixable thing, relatch may be
+		// cheap enough that no generation cache is needed; if it is spread thin,
+		// the cache case gets stronger. Either answer is worth having before
+		// anyone writes a cache.
+		//
+		// Wall clock per phase, emitted once per relatch. No control flow change.
+		const bool profileRelatch =
+			globals::features::upscaling.settings.vrDiagGenerationCacheProbe != 0u;
+		const auto phaseClock = []() { return std::chrono::steady_clock::now(); };
+		const auto phaseMs = [](auto a_from, auto a_to) {
+			return std::chrono::duration<double, std::milli>(a_to - a_from).count();
+		};
+		const auto tStart = phaseClock();
+		auto tLockAcquired = tStart;
+		auto tBeforeCallbacks = tStart;
+		auto tEngineCreate = tStart;
+		auto tAfterCallback = tStart;
+		auto tLockReleased = tStart;
+		auto tReInit = tStart;
+
 		{
 			const std::unique_lock recreateLock(
 				g_renderTargetRecreationMutex);
+			tLockAcquired = phaseClock();
 			try {
 				if (a_beforeEngineCreate)
 					a_beforeEngineCreate(a_context);
@@ -1087,7 +1115,9 @@ struct BSShaderRenderTargets_Create
 					a_onEngineCreateEntered(a_context);
 				if (a_engineCreateEntered)
 					*a_engineCreateEntered = true;
+				tBeforeCallbacks = phaseClock();
 				func();
+				tEngineCreate = phaseClock();
 			} catch (...) {
 				// Offered resources must be reclaimed while recreation still owns
 				// the unique table lock. Reachability is untrusted on this path.
@@ -1099,11 +1129,29 @@ struct BSShaderRenderTargets_Create
 				!a_afterEngineCreate(a_context, false)) {
 				return false;
 			}
+			tAfterCallback = phaseClock();
 		}
+		tLockReleased = phaseClock();
 		globals::ReInit();
+		tReInit = phaseClock();
 		if (!CanSetupRenderingResources())
 			return false;
 		globals::state->SetupRenderTargetResources();
+		if (profileRelatch) {
+			const auto tEnd = phaseClock();
+			logger::info(
+				"[GenCacheProbe] {{\"probe\":\"relatch-phases\",\"totalMs\":{:.2f},"
+				"\"lockWaitMs\":{:.2f},\"beforeCallbacksMs\":{:.2f},"
+				"\"engineCreateMs\":{:.2f},\"afterCallbackMs\":{:.2f},"
+				"\"reInitMs\":{:.2f},\"setupRenderTargetResourcesMs\":{:.2f}}}",
+				phaseMs(tStart, tEnd),
+				phaseMs(tStart, tLockAcquired),
+				phaseMs(tLockAcquired, tBeforeCallbacks),
+				phaseMs(tBeforeCallbacks, tEngineCreate),
+				phaseMs(tEngineCreate, tAfterCallback),
+				phaseMs(tLockReleased, tReInit),
+				phaseMs(tReInit, tEnd));
+		}
 		return true;
 	}
 	static inline REL::Relocation<decltype(thunk)> func;

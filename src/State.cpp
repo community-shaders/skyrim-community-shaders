@@ -1,5 +1,9 @@
 #include "State.h"
 
+#include <chrono>
+#include <format>
+#include <iterator>
+
 #ifndef WIN32_LEAN_AND_MEAN
 #	define WIN32_LEAN_AND_MEAN
 #endif
@@ -790,8 +794,44 @@ void State::SetupRenderTargetResources()
 
 	// VR render-scale relatch only needs resources tied to recreated render targets.
 	// Keep disk/world discovery and full feature setup on State::Setup().
-	Feature::ForEachLoadedFeature("SetupRenderTargetResources", [](Feature* feature) { feature->SetupRenderTargetResources(); });
+	//
+	// This walk is the reason a cached "generation" is not just the engine's
+	// render-target table. Seven features rebuild their own screen-sized
+	// resources here, and deferred rebuilds more. Any design that switches
+	// generations by repointing state has to account for every one of them, so
+	// the per-feature cost is measured rather than assumed.
+	const bool profileFeatures =
+		globals::features::upscaling.settings.vrDiagGenerationCacheProbe != 0u;
+	if (!profileFeatures) {
+		Feature::ForEachLoadedFeature("SetupRenderTargetResources", [](Feature* feature) { feature->SetupRenderTargetResources(); });
+		globals::deferred->SetupResources();
+		return;
+	}
+
+	const auto clock = []() { return std::chrono::steady_clock::now(); };
+	const auto ms = [](auto a_from, auto a_to) {
+		return std::chrono::duration<double, std::milli>(a_to - a_from).count();
+	};
+	const auto featuresBegin = clock();
+	std::string perFeature;
+	Feature::ForEachLoadedFeature("SetupRenderTargetResources", [&](Feature* feature) {
+		const auto begin = clock();
+		feature->SetupRenderTargetResources();
+		const auto end = clock();
+		if (!perFeature.empty())
+			perFeature += ',';
+		std::format_to(std::back_inserter(perFeature),
+			"{{\"feature\":\"{}\",\"ms\":{:.2f}}}",
+			feature ? feature->GetName() : std::string("unknown"),
+			ms(begin, end));
+	});
+	const auto featuresEnd = clock();
 	globals::deferred->SetupResources();
+	const auto deferredEnd = clock();
+	logger::info(
+		"[GenCacheProbe] {{\"probe\":\"setup-render-target-resources\","
+		"\"featuresMs\":{:.2f},\"deferredMs\":{:.2f},\"perFeature\":[{}]}}",
+		ms(featuresBegin, featuresEnd), ms(featuresEnd, deferredEnd), perFeature);
 }
 
 static std::filesystem::path GetConfigPath(State::ConfigMode a_configMode)
