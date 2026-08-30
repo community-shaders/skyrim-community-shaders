@@ -74,7 +74,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	vrHotEnvelope,
 	vrHotEnvelopeClampToVendorMinimum,
 	vrHotEnvelopePostSceneStateFence,
-	vrHotEnvelopeDesktopAcceptedEye,
 	vrHotEnvelopeEyeOrigin,
 	vrHotEnvelopeEyeOriginPx,
 	vrHotEnvelopeProbe,
@@ -23171,7 +23170,6 @@ void Upscaling::DestroyVRIntermediateTextures(bool a_clearRapidTransitionGuard)
 
 	retireArray(vrIntermediateColorIn, retired.colorIn);
 	retireArray(vrIntermediateColorOut, retired.colorOut);
-	InvalidateVRDesktopAcceptedEye("intermediate-retired");
 	retireArray(vrIntermediateDepth, retired.depth);
 	retireArray(vrIntermediateLinearDepth, retired.linearDepth);
 	retireArray(vrIntermediateMotionVectors, retired.motionVectors);
@@ -23196,7 +23194,6 @@ void Upscaling::DestroyVRIntermediateTextures(bool a_clearRapidTransitionGuard)
 	for (uint32_t i = 0; i < 2; ++i) {
 		vrIntermediateColorIn[i].reset();
 		vrIntermediateColorOut[i].reset();
-		InvalidateVRDesktopAcceptedEye("intermediate-reset");
 		vrIntermediateDepth[i].reset();
 		vrIntermediateLinearDepth[i].reset();
 		vrIntermediateMotionVectors[i].reset();
@@ -38492,7 +38489,6 @@ bool Upscaling::CreateVRIntermediateTextures(uint32_t inWidth, uint32_t inHeight
 	for (uint32_t eye = 0; eye < 2; ++eye) {
 		vrIntermediateColorIn[eye] = std::move(replacement.colorIn[eye]);
 		vrIntermediateColorOut[eye] = std::move(replacement.colorOut[eye]);
-		InvalidateVRDesktopAcceptedEye("intermediate-recreated");
 		vrIntermediateDepth[eye] = std::move(replacement.depth[eye]);
 		vrIntermediateLinearDepth[eye] = std::move(replacement.linearDepth[eye]);
 		vrIntermediateMotionVectors[eye] = std::move(replacement.motionVectors[eye]);
@@ -38722,7 +38718,6 @@ bool Upscaling::EnsureVRPresentationTextures(uint32_t inWidth, uint32_t inHeight
 	for (uint32_t eye = 0; eye < 2; ++eye) {
 		vrIntermediateColorIn[eye] = std::move(replacementColorIn[eye]);
 		vrIntermediateColorOut[eye] = std::move(replacementColorOut[eye]);
-		InvalidateVRDesktopAcceptedEye("intermediate-replaced");
 	}
 
 	return true;
@@ -39485,129 +39480,6 @@ bool Upscaling::PublishVRMenuDesktopEye(uint32_t a_eyeIndex, const Texture2D& a_
 	return true;
 }
 
-// Desktop-window telemetry.
-//
-// Rik's requirement: if the run does not give us what we want we must be able to
-// see WHY in the log, without guessing. Counters answer the question a single
-// deduplicated record cannot - "did this happen on every frame, or only once?" -
-// which is exactly the ambiguity that made the last run's admission rate
-// unknowable and is the stated stop condition for this design.
-namespace
-{
-	struct VRDesktopWindowCounters
-	{
-		std::atomic_uint32_t presentInvocations{ 0u };
-		std::atomic_uint32_t gateAdmitted{ 0u };
-		std::atomic_uint32_t modeMenuOverlay{ 0u };
-		std::atomic_uint32_t modeAcceptedLeftEye{ 0u };
-		std::atomic_uint32_t blitSucceeded{ 0u };
-		std::atomic_uint32_t blitFailed{ 0u };
-		std::atomic_uint32_t acceptedEyePublished{ 0u };
-		std::atomic_uint32_t acceptedEyeInvalidated{ 0u };
-		// Why AcceptedLeftEye was not selected on an ADMITTED frame.
-		std::atomic_uint32_t refuseDisabled{ 0u };
-		std::atomic_uint32_t refuseNotHotEnvelope{ 0u };
-		std::atomic_uint32_t refuseNoSubRect{ 0u };
-		std::atomic_uint32_t refuseEyeNotValid{ 0u };
-		std::atomic_uint32_t refuseEyeStaleFrame{ 0u };
-		std::atomic_uint32_t refuseEyeGeneration{ 0u };
-		std::atomic_uint32_t refuseEyeResource{ 0u };
-	};
-
-	VRDesktopWindowCounters g_vrDesktopWindowCounters{};
-	std::atomic_uint32_t g_vrDesktopWindowSummaryFrame{ 0u };
-
-	constexpr std::uint32_t kVRDesktopWindowSummaryInterval = 600u;  // ~8 s at 72 Hz
-}
-
-void Upscaling::InvalidateVRDesktopAcceptedEye(const char* a_reason) noexcept
-{
-	if (!vrDesktopAcceptedEye.valid && !vrDesktopAcceptedEye.srv)
-		return;
-	vrDesktopAcceptedEye = VRDesktopAcceptedEye{};
-	g_vrDesktopWindowCounters.acceptedEyeInvalidated.fetch_add(1u, std::memory_order_relaxed);
-	if (settings.vrHotEnvelopeDesktopAcceptedEye != 0u) {
-		static const char* s_lastReason = nullptr;
-		if (s_lastReason != a_reason) {
-			s_lastReason = a_reason;
-			logger::info(
-				"[DesktopEye] {{\"event\":\"invalidated\",\"reason\":\"{}\"}}",
-				a_reason ? a_reason : "unspecified");
-		}
-	}
-}
-
-void Upscaling::ObserveAcceptedVRSubmitForDesktop(
-	std::uint64_t a_compositorCycleToken,
-	vr::EVREye a_eye,
-	ID3D11Texture2D* a_acceptedTexture) noexcept
-{
-	if (settings.vrHotEnvelopeDesktopAcceptedEye == 0u)
-		return;
-	// Left eye only - the window shows one eye and the right is never sampled.
-	if (a_eye != vr::Eye_Left || !a_acceptedTexture)
-		return;
-
-	// Resolve the accepted handle against the KNOWN per-eye output wrapper rather
-	// than trusting that vrIntermediateColorOut[0] is what was submitted. An
-	// unrecognised output is a named refusal, not a silent fallthrough.
-	auto* output = vrIntermediateColorOut[0].get();
-	if (!output || !output->resource || !output->srv) {
-		static bool loggedMissing = false;
-		if (!loggedMissing) {
-			loggedMissing = true;
-			logger::info(
-				"[DesktopEye] {{\"event\":\"publish-refused\",\"reason\":\"output-wrapper-missing\"}}");
-		}
-		return;
-	}
-
-	const auto acceptedIdentity = GetCOMIdentityAddress(a_acceptedTexture);
-	const auto outputIdentity = GetCOMIdentityAddress(output->resource.get());
-	if (acceptedIdentity != outputIdentity) {
-		// A different known output may be accepted on other paths (for example a
-		// persistent sharpener texture). Name it rather than guessing.
-		static std::uintptr_t s_loggedUnknown = 0;
-		if (s_loggedUnknown != acceptedIdentity) {
-			s_loggedUnknown = acceptedIdentity;
-			logger::info(
-				"[DesktopEye] {{\"event\":\"publish-refused\",\"reason\":\"unknown-output-identity\","
-				"\"accepted\":\"{:016X}\",\"expected\":\"{:016X}\"}}",
-				static_cast<std::uint64_t>(acceptedIdentity),
-				static_cast<std::uint64_t>(outputIdentity));
-		}
-		return;
-	}
-
-	const auto boot = perfMode.GetBootSnapshot();
-	vrDesktopAcceptedEye.srv = output->srv;
-	vrDesktopAcceptedEye.textureIdentity = acceptedIdentity;
-	vrDesktopAcceptedEye.compositorCycleToken = a_compositorCycleToken;
-	vrDesktopAcceptedEye.frame = globals::state ? globals::state->frameCount : 0u;
-	vrDesktopAcceptedEye.contractGeneration = boot.valid ? boot.generation : 0u;
-	vrDesktopAcceptedEye.width = output->desc.Width;
-	vrDesktopAcceptedEye.height = output->desc.Height;
-	vrDesktopAcceptedEye.valid = true;
-	g_vrDesktopWindowCounters.acceptedEyePublished.fetch_add(1u, std::memory_order_relaxed);
-
-	static std::uint64_t s_publishedKey = 0u;
-	CDO4CommonRecorder::Digest publishKey;
-	publishKey.Add(static_cast<std::uint64_t>(acceptedIdentity));
-	publishKey.Add(vrDesktopAcceptedEye.width);
-	publishKey.Add(vrDesktopAcceptedEye.height);
-	publishKey.Add(vrDesktopAcceptedEye.contractGeneration);
-	const std::uint64_t publishValue = publishKey.Value();
-	if (publishValue != s_publishedKey) {
-		s_publishedKey = publishValue;
-		logger::info(
-			"[DesktopEye] {{\"event\":\"published\",\"identity\":\"{:016X}\","
-			"\"w\":{},\"h\":{},\"generation\":{},\"frame\":{}}}",
-			static_cast<std::uint64_t>(acceptedIdentity),
-			vrDesktopAcceptedEye.width, vrDesktopAcceptedEye.height,
-			vrDesktopAcceptedEye.contractGeneration, vrDesktopAcceptedEye.frame);
-	}
-}
-
 void Upscaling::PresentVRMenuDesktopMirror(IDXGISwapChain* a_swapChain)
 {
 	if (!globals::game::isVR || !a_swapChain || !globals::state)
@@ -39615,46 +39487,6 @@ void Upscaling::PresentVRMenuDesktopMirror(IDXGISwapChain* a_swapChain)
 
 	const uint32_t frame = globals::state->frameCount;
 	const uint32_t planGeneration = GetActiveVRRenderScaleContractGeneration();
-
-	g_vrDesktopWindowCounters.presentInvocations.fetch_add(1u, std::memory_order_relaxed);
-
-	// The periodic summary.
-	//
-	// This exists because deduplicated records CANNOT answer "did it happen every
-	// frame, or once?" - a pass that ran every frame and one that alternated
-	// produce identical logs. That ambiguity is why the previous run could not
-	// establish the admission rate, and an intermittent rate here would mean the
-	// window flickers rather than being repaired. Counters settle it.
-	if (settings.vrHotEnvelopeDesktopAcceptedEye != 0u ||
-		settings.vrHotEnvelopePostSceneStateFence != 0u) {
-		const std::uint32_t lastSummary =
-			g_vrDesktopWindowSummaryFrame.load(std::memory_order_relaxed);
-		if (frame >= lastSummary + kVRDesktopWindowSummaryInterval) {
-			g_vrDesktopWindowSummaryFrame.store(frame, std::memory_order_relaxed);
-			const auto& c = g_vrDesktopWindowCounters;
-			const auto load = [](const std::atomic_uint32_t& a_v) {
-				return a_v.load(std::memory_order_relaxed);
-			};
-			logger::info(
-				"[DesktopEye] {{\"event\":\"summary\",\"frame\":{},\"windowFrames\":{},"
-				"\"presentInvocations\":{},\"gateAdmitted\":{},"
-				"\"modeAcceptedLeftEye\":{},\"modeMenuOverlay\":{},"
-				"\"blitSucceeded\":{},\"blitFailed\":{},"
-				"\"acceptedEyePublished\":{},\"acceptedEyeInvalidated\":{},"
-				"\"refuse\":{{\"disabled\":{},\"notRenderScale\":{},\"noSubRect\":{},"
-				"\"eyeNotValid\":{},\"eyeStaleFrame\":{},\"eyeGeneration\":{},"
-				"\"eyeResource\":{}}}}}",
-				frame, kVRDesktopWindowSummaryInterval,
-				load(c.presentInvocations), load(c.gateAdmitted),
-				load(c.modeAcceptedLeftEye), load(c.modeMenuOverlay),
-				load(c.blitSucceeded), load(c.blitFailed),
-				load(c.acceptedEyePublished), load(c.acceptedEyeInvalidated),
-				load(c.refuseDisabled), load(c.refuseNotHotEnvelope),
-				load(c.refuseNoSubRect), load(c.refuseEyeNotValid),
-				load(c.refuseEyeStaleFrame), load(c.refuseEyeGeneration),
-				load(c.refuseEyeResource));
-		}
-	}
 
 	// Does the fence HOLD all the way to Present?
 	//
@@ -39800,85 +39632,6 @@ void Upscaling::PresentVRMenuDesktopMirror(IDXGISwapChain* a_swapChain)
 		}
 	}
 
-	// Past every existing gate, so a draw into this backbuffer is going to happen
-	// regardless. Choosing AcceptedLeftEye here changes that draw's SOURCE and
-	// BLEND; it never adds one. If any condition below refuses, the original menu
-	// overlay runs exactly as before.
-	g_vrDesktopWindowCounters.gateAdmitted.fetch_add(1u, std::memory_order_relaxed);
-
-	auto mode = VRDesktopPresentMode::MenuOverlay;
-	ID3D11ShaderResourceView* acceptedEyeSRV = nullptr;
-	const char* acceptedEyeRefusal = nullptr;
-
-	if (settings.vrHotEnvelopeDesktopAcceptedEye == 0u) {
-		acceptedEyeRefusal = "disabled";
-		g_vrDesktopWindowCounters.refuseDisabled.fetch_add(1u, std::memory_order_relaxed);
-	} else {
-		EnsureRuntimeResolutionStateCurrent();
-		const auto& desktopPlan = GetRuntimeResolutionPlan();
-		const uint32_t planRenderWidth = ClampPositiveDimension(desktopPlan.engineRenderSize.width);
-		const uint32_t planRenderHeight = ClampPositiveDimension(desktopPlan.engineRenderSize.height);
-		const uint32_t planAllocWidth = ClampPositiveDimension(desktopPlan.engineAllocationSize.width);
-		const uint32_t planAllocHeight = ClampPositiveDimension(desktopPlan.engineAllocationSize.height);
-		const auto desktopBoot = perfMode.GetBootSnapshot();
-		const std::uint32_t activeGeneration = desktopBoot.valid ? desktopBoot.generation : 0u;
-
-		if (desktopPlan.owner != ResolutionOwner::VRRenderScaleMode) {
-			acceptedEyeRefusal = "not-render-scale-owner";
-			g_vrDesktopWindowCounters.refuseNotHotEnvelope.fetch_add(1u, std::memory_order_relaxed);
-		} else if (planRenderWidth == 0u || planAllocWidth == 0u ||
-				   (planRenderWidth >= planAllocWidth && planRenderHeight >= planAllocHeight)) {
-			// A == R is stock-equivalent and already correct. Control arm.
-			acceptedEyeRefusal = "no-sub-rect";
-			g_vrDesktopWindowCounters.refuseNoSubRect.fetch_add(1u, std::memory_order_relaxed);
-		} else if (!vrDesktopAcceptedEye.valid || !vrDesktopAcceptedEye.srv) {
-			acceptedEyeRefusal = "accepted-eye-not-published";
-			g_vrDesktopWindowCounters.refuseEyeNotValid.fetch_add(1u, std::memory_order_relaxed);
-		} else if (vrDesktopAcceptedEye.contractGeneration != activeGeneration) {
-			acceptedEyeRefusal = "accepted-eye-generation-mismatch";
-			g_vrDesktopWindowCounters.refuseEyeGeneration.fetch_add(1u, std::memory_order_relaxed);
-		} else if (vrDesktopAcceptedEye.width == 0u || vrDesktopAcceptedEye.height == 0u) {
-			acceptedEyeRefusal = "accepted-eye-dimensions-invalid";
-			g_vrDesktopWindowCounters.refuseEyeResource.fetch_add(1u, std::memory_order_relaxed);
-		} else if (frame > vrDesktopAcceptedEye.frame &&
-				   (frame - vrDesktopAcceptedEye.frame) > 1u) {
-			// One frame of lag is the normal submit-then-present ordering. More
-			// than that means we would be showing a stale eye to keep the window
-			// pretty, which the design forbids.
-			acceptedEyeRefusal = "accepted-eye-stale-frame";
-			g_vrDesktopWindowCounters.refuseEyeStaleFrame.fetch_add(1u, std::memory_order_relaxed);
-		} else {
-			mode = VRDesktopPresentMode::AcceptedLeftEye;
-			acceptedEyeSRV = vrDesktopAcceptedEye.srv.get();
-		}
-	}
-
-	if (mode == VRDesktopPresentMode::AcceptedLeftEye) {
-		g_vrDesktopWindowCounters.modeAcceptedLeftEye.fetch_add(1u, std::memory_order_relaxed);
-	} else {
-		g_vrDesktopWindowCounters.modeMenuOverlay.fetch_add(1u, std::memory_order_relaxed);
-	}
-
-	// Named, deduplicated refusal. An absent record must never be readable as
-	// "it worked" - that mistake has been made five times in this project.
-	if (settings.vrHotEnvelopeDesktopAcceptedEye != 0u && acceptedEyeRefusal) {
-		static const char* s_lastRefusal = nullptr;
-		static std::uint32_t s_lastRefusalGeneration = 0u;
-		if (s_lastRefusal != acceptedEyeRefusal || s_lastRefusalGeneration != planGeneration) {
-			s_lastRefusal = acceptedEyeRefusal;
-			s_lastRefusalGeneration = planGeneration;
-			logger::info(
-				"[DesktopEye] {{\"event\":\"mode-refused\",\"reason\":\"{}\",\"frame\":{},"
-				"\"acceptedEye\":{{\"valid\":{},\"frame\":{},\"generation\":{},\"w\":{},\"h\":{}}},"
-				"\"planGeneration\":{}}}",
-				acceptedEyeRefusal, frame,
-				vrDesktopAcceptedEye.valid ? "true" : "false",
-				vrDesktopAcceptedEye.frame, vrDesktopAcceptedEye.contractGeneration,
-				vrDesktopAcceptedEye.width, vrDesktopAcceptedEye.height,
-				planGeneration);
-		}
-	}
-
 	// The blit has its own guards - a composite source narrower than
 	// eyeWidth*2, a target without RENDER_TARGET bind, a missing shader - and
 	// every one of them returns false silently. Reaching this line is therefore
@@ -39890,14 +39643,7 @@ void Upscaling::PresentVRMenuDesktopMirror(IDXGISwapChain* a_swapChain)
 		vrMenuFinalCompositeLayerWidth / 2u,
 		vrMenuFinalCompositeLayerHeight,
 		nullptr,
-		mode,
-		acceptedEyeSRV);
-
-	if (menuMirrorBlitSucceeded) {
-		g_vrDesktopWindowCounters.blitSucceeded.fetch_add(1u, std::memory_order_relaxed);
-	} else {
-		g_vrDesktopWindowCounters.blitFailed.fetch_add(1u, std::memory_order_relaxed);
-	}
+		true);
 
 	if (settings.vrDiagMirrorPathTrace != 0u) {
 		static std::atomic_int s_lastBlitOutcome{ -1 };
@@ -39929,36 +39675,21 @@ bool Upscaling::BlitVRRenderScaleDesktopMirror(
 	uint32_t a_eyeWidth,
 	uint32_t a_eyeHeight,
 	Texture2D* const* a_eyeSources,
-	VRDesktopPresentMode a_mode,
-	ID3D11ShaderResourceView* a_acceptedEyeSRV)
+	bool a_compositeCommittedMenuLayer)
 {
-	const bool compositeCommittedMenuLayer =
-		a_mode == VRDesktopPresentMode::MenuOverlay;
-	const bool acceptedLeftEye =
-		a_mode == VRDesktopPresentMode::AcceptedLeftEye;
-
 	Texture2D* defaultEyeSources[2] = {
 		vrIntermediateColorOut[0].get(),
 		vrIntermediateColorOut[1].get()
 	};
 	Texture2D* const* eyeSources = a_eyeSources ? a_eyeSources : defaultEyeSources;
-	Texture2D* compositeSource = compositeCommittedMenuLayer ?
+	Texture2D* compositeSource = a_compositeCommittedMenuLayer ?
 	                                 vrMenuCommittedCompositeLayer.get() :
 	                                 nullptr;
-	if (!a_targetTexture || a_targetDesc.Width < 2 || a_targetDesc.Height == 0 ||
+	if (!a_targetTexture || a_targetDesc.Width < 2 || a_targetDesc.Height == 0 || !a_eyeWidth || !a_eyeHeight ||
 		a_targetDesc.ArraySize != 1 || a_targetDesc.SampleDesc.Count != 1) {
 		return false;
 	}
-	// The accepted-eye mode samples the full 0..1 of one already-correct texture
-	// and covers the whole live target, so the per-eye extents the other modes
-	// need do not apply to it.
-	if (!acceptedLeftEye && (!a_eyeWidth || !a_eyeHeight)) {
-		return false;
-	}
-	if (acceptedLeftEye) {
-		if (!a_acceptedEyeSRV)
-			return false;
-	} else if (compositeCommittedMenuLayer) {
+	if (a_compositeCommittedMenuLayer) {
 		if (!compositeSource || !compositeSource->srv ||
 			compositeSource->desc.Width < a_eyeWidth * 2u ||
 			compositeSource->desc.Height < a_eyeHeight) {
@@ -39978,11 +39709,9 @@ bool Upscaling::BlitVRRenderScaleDesktopMirror(
 	auto* context = globals::d3d::context;
 	auto* device = globals::d3d::device;
 	auto* deferred = globals::deferred;
-	// Opaque for the accepted eye: it fully covers the target, so blending would
-	// only add a destination read the result cannot use.
-	auto* blendState = compositeCommittedMenuLayer ? vrMenuCompositeBlendState.get() : upscaleBlendState.get();
+	auto* blendState = a_compositeCommittedMenuLayer ? vrMenuCompositeBlendState.get() : upscaleBlendState.get();
 	if (!context || !device || !deferred || !deferred->linearSampler || !upscaleRasterizerState || !blendState ||
-		(compositeCommittedMenuLayer && !vrMenuLayerCompositeCB)) {
+		(a_compositeCommittedMenuLayer && !vrMenuLayerCompositeCB)) {
 		return false;
 	}
 	const DXGI_FORMAT targetRTVFormat = GetRenderTargetViewFormat(a_targetDesc.Format);
@@ -39992,7 +39721,7 @@ bool Upscaling::BlitVRRenderScaleDesktopMirror(
 
 	ID3D11PixelShader* pixelShader = nullptr;
 	try {
-		pixelShader = compositeCommittedMenuLayer ?
+		pixelShader = a_compositeCommittedMenuLayer ?
 		                  GetVRMenuLayerCompositePS() :
 		                  GetVRDesktopMirrorBlitPS();
 	} catch (const std::exception& e) {
@@ -40157,14 +39886,7 @@ bool Upscaling::BlitVRRenderScaleDesktopMirror(
 		context->GSSetShader(nullptr, nullptr, 0);
 		context->PSSetShader(pixelShader, nullptr, 0);
 		context->PSSetSamplers(0, 1, &sampler);
-		// ONLY the menu-layer shader consumes this constant buffer.
-		//
-		// The accepted-eye path uses GetVRDesktopMirrorBlitPS - the same shader
-		// the stereo path uses per eye - which maps its whole source across the
-		// viewport. That is exactly what one already-correct eye needs, so it
-		// sets no constant buffer at all: one fewer update, and no
-		// premultiplied-alpha compositing applied to an opaque image.
-		if (compositeCommittedMenuLayer) {
+		if (a_compositeCommittedMenuLayer) {
 			VRMenuLayerCompositeCB compositeData{};
 			compositeData.sourceScale = { 0.5f, 1.0f };
 			compositeData.sourceOffset = { 0.0f, 0.0f };
@@ -40175,15 +39897,7 @@ bool Upscaling::BlitVRRenderScaleDesktopMirror(
 			context->PSSetConstantBuffers(0, 1, &compositeBuffer);
 		}
 
-		if (compositeCommittedMenuLayer || acceptedLeftEye) {
-			// ONE full-window draw, whichever source. This is the operation CSX
-			// already performs on every admitted frame; the accepted-eye mode
-			// changes its source and blend, never its count or its coverage.
-			//
-			// The viewport is sized from the LIVE backbuffer descriptor. The
-			// companion-window size comes from the user's Skyrim INI - 1024x1024
-			// is one rig's configuration, not a constant, and the backbuffer was
-			// 3840x2160 at frame 0 on that same rig before being recreated.
+		if (a_compositeCommittedMenuLayer) {
 			D3D11_VIEWPORT viewport{};
 			viewport.TopLeftX = 0.0f;
 			viewport.TopLeftY = 0.0f;
@@ -40192,9 +39906,7 @@ bool Upscaling::BlitVRRenderScaleDesktopMirror(
 			viewport.MinDepth = 0.0f;
 			viewport.MaxDepth = 1.0f;
 
-			ID3D11ShaderResourceView* sourceSRV = acceptedLeftEye ?
-			                                          a_acceptedEyeSRV :
-			                                          compositeSource->srv.get();
+			ID3D11ShaderResourceView* sourceSRV = compositeSource->srv.get();
 			context->RSSetViewports(1, &viewport);
 			context->PSSetShaderResources(0, 1, &sourceSRV);
 			context->Draw(3, 0);

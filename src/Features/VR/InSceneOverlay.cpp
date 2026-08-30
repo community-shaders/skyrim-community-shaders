@@ -525,21 +525,6 @@ void main(uint3 dispatchThreadID : SV_DispatchThreadID)
 							a_bounds,
 							a_texture->eColorSpace);
 					}
-					// The desktop-window observer, at the SAME acceptance
-					// boundary and independent of whether a screenshot is
-					// pending. Only an eye OpenVR actually accepted may be shown
-					// on the desktop - the existence of an intermediate texture
-					// proves nothing about its currency, and it can be retired or
-					// recreated underneath us.
-					if (result == vr::VRCompositorError_None &&
-						a_texture &&
-						a_texture->handle &&
-						a_texture->eType == vr::TextureType_DirectX) {
-						upscaling.ObserveAcceptedVRSubmitForDesktop(
-							compositorCycleToken,
-							eEye,
-							static_cast<ID3D11Texture2D*>(a_texture->handle));
-					}
 				}
 				uint64_t completionScopeEpoch =
 					postLoadSubmitScopeEpoch;
