@@ -73,7 +73,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	renderScaleMode,
 	vrHotEnvelope,
 	vrHotEnvelopeClampToVendorMinimum,
-	vrHotEnvelopePostSceneStateFence,
 	vrHotEnvelopeEyeOrigin,
 	vrHotEnvelopeEyeOriginPx,
 	vrHotEnvelopeProbe,
@@ -39488,44 +39487,6 @@ void Upscaling::PresentVRMenuDesktopMirror(IDXGISwapChain* a_swapChain)
 	const uint32_t frame = globals::state->frameCount;
 	const uint32_t planGeneration = GetActiveVRRenderScaleContractGeneration();
 
-	// Does the fence HOLD all the way to Present?
-	//
-	// Placed before every early return below, because the question is about
-	// engine state at presentation time and has nothing to do with whether the
-	// menu layer happens to be valid. Without this the fence could apply and
-	// something later could reopen the phase, and the run would not be able to
-	// tell that apart from the fence never working.
-	if (settings.vrHotEnvelopePostSceneStateFence != 0u) {
-		if (auto* presentState = globals::game::graphicsState) {
-			const auto& presentRuntime = presentState->GetRuntimeData();
-			CDO4CommonRecorder::Digest presentKey;
-			presentKey.Add(presentRuntime.dynamicResolutionWidthRatio);
-			presentKey.Add(presentRuntime.dynamicResolutionHeightRatio);
-			presentKey.Add(static_cast<std::uint32_t>(presentRuntime.dynamicResolutionLock));
-			presentKey.Add(planGeneration);
-			static std::atomic_uint64_t s_presentPhaseKey{ 0u };
-			const std::uint64_t presentKeyValue = presentKey.Value();
-			if (presentKeyValue != s_presentPhaseKey.exchange(
-									   presentKeyValue, std::memory_order_acq_rel)) {
-				const auto& presentPlan = GetRuntimeResolutionPlan();
-				logger::info(
-					"[DynResPhase] {{\"phase\":\"present\",\"frame\":{},"
-					"\"widthRatio\":{:.4f},\"heightRatio\":{:.4f},\"lock\":{},"
-					"\"A\":{{\"w\":{},\"h\":{}}},\"R\":{{\"w\":{},\"h\":{}}},"
-					"\"planGeneration\":{}}}",
-					frame,
-					presentRuntime.dynamicResolutionWidthRatio,
-					presentRuntime.dynamicResolutionHeightRatio,
-					static_cast<std::uint32_t>(presentRuntime.dynamicResolutionLock),
-					ClampPositiveDimension(presentPlan.engineAllocationSize.width),
-					ClampPositiveDimension(presentPlan.engineAllocationSize.height),
-					ClampPositiveDimension(presentPlan.engineRenderSize.width),
-					ClampPositiveDimension(presentPlan.engineRenderSize.height),
-					planGeneration);
-			}
-		}
-	}
-
 	// Why this writer DID NOT RUN.
 	//
 	// Writer 3 stretches the left half of the committed menu layer over the
@@ -41375,84 +41336,6 @@ bool Upscaling::ApplyDynamicResolutionState(RE::BSGraphics::State* a_viewport)
 	dynamicResolutionWidthRatio = resolutionScale.x;
 	dynamicResolutionHeightRatio = resolutionScale.y;
 	return false;
-}
-
-bool Upscaling::FinalizeVRHotEnvelopeScenePhase(RE::BSGraphics::State* a_state)
-{
-	// Deduplicated on the decision, never per frame - a per-frame-varying key
-	// has destroyed three instruments in this project already.
-	const auto trace = [&](const char* a_reason,
-						   float a_beforeWidthRatio, float a_beforeHeightRatio,
-						   std::uint32_t a_beforeLock, bool a_applied) {
-		if (settings.vrHotEnvelopePostSceneStateFence == 0u)
-			return;
-		CDO4CommonRecorder::Digest key;
-		key.Add(std::uint64_t{ reinterpret_cast<std::uintptr_t>(a_reason) });
-		key.Add(a_beforeWidthRatio);
-		key.Add(a_beforeHeightRatio);
-		key.Add(a_beforeLock);
-		key.Add(static_cast<std::uint32_t>(a_applied ? 1u : 0u));
-		static std::atomic_uint64_t s_lastKey{ 0u };
-		const std::uint64_t value = key.Value();
-		if (value == s_lastKey.exchange(value, std::memory_order_acq_rel))
-			return;
-		const auto& tracePlan = GetRuntimeResolutionPlan();
-		logger::info(
-			"[DynResPhase] {{\"phase\":\"post-scene-fence\",\"applied\":{},\"reason\":\"{}\","
-			"\"A\":{{\"w\":{},\"h\":{}}},\"R\":{{\"w\":{},\"h\":{}}},"
-			"\"before\":{{\"widthRatio\":{:.4f},\"heightRatio\":{:.4f},\"lock\":{}}}}}",
-			a_applied ? "true" : "false", a_reason,
-			ClampPositiveDimension(tracePlan.engineAllocationSize.width),
-			ClampPositiveDimension(tracePlan.engineAllocationSize.height),
-			ClampPositiveDimension(tracePlan.engineRenderSize.width),
-			ClampPositiveDimension(tracePlan.engineRenderSize.height),
-			a_beforeWidthRatio, a_beforeHeightRatio, a_beforeLock);
-	};
-
-	if (settings.vrHotEnvelopePostSceneStateFence == 0u)
-		return false;
-	if (!globals::game::isVR || !a_state)
-		return false;
-
-	const auto& runtimeData = a_state->GetRuntimeData();
-	const float beforeWidthRatio = runtimeData.dynamicResolutionWidthRatio;
-	const float beforeHeightRatio = runtimeData.dynamicResolutionHeightRatio;
-	const std::uint32_t beforeLock =
-		static_cast<std::uint32_t>(runtimeData.dynamicResolutionLock);
-
-	EnsureRuntimeResolutionStateCurrent();
-	const auto& plan = GetRuntimeResolutionPlan();
-	if (plan.owner != ResolutionOwner::VRRenderScaleMode) {
-		trace("plan-owner-not-render-scale", beforeWidthRatio, beforeHeightRatio, beforeLock, false);
-		return false;
-	}
-
-	const uint32_t renderWidth = ClampPositiveDimension(plan.engineRenderSize.width);
-	const uint32_t renderHeight = ClampPositiveDimension(plan.engineRenderSize.height);
-	const uint32_t allocationWidth = ClampPositiveDimension(plan.engineAllocationSize.width);
-	const uint32_t allocationHeight = ClampPositiveDimension(plan.engineAllocationSize.height);
-	if (renderWidth == 0u || renderHeight == 0u ||
-		allocationWidth == 0u || allocationHeight == 0u) {
-		trace("plan-dimensions-invalid", beforeWidthRatio, beforeHeightRatio, beforeLock, false);
-		return false;
-	}
-
-	// Geometry is authoritative, never the requested quality name. At Quality
-	// A == R, so this refuses and the preserved call path runs - which makes
-	// Quality a control arm rather than a special case.
-	const bool hasSubRect =
-		renderWidth < allocationWidth || renderHeight < allocationHeight;
-	if (!hasSubRect) {
-		trace("no-sub-rect", beforeWidthRatio, beforeHeightRatio, beforeLock, false);
-		return false;
-	}
-
-	// Close ONLY the engine-facing phase. a_resetProjection = false is load
-	// bearing: resetting projection here would erase the jitter and projection
-	// offsets and turn a presentation-state fix into a camera change.
-	PrepareFullResolutionPostProcessing(a_state, false);
-	trace("closed", beforeWidthRatio, beforeHeightRatio, beforeLock, true);
-	return true;
 }
 
 void Upscaling::PrepareFullResolutionPostProcessing(RE::BSGraphics::State* a_viewport, bool a_resetProjection)
@@ -53538,22 +53421,7 @@ void Upscaling::Main_PostProcessing::thunk(RE::ImageSpaceManager* a_this, uint32
 		func(a_this, a3, a_target, a_4, a_5);
 		BSImagespaceShaderISTemporalAA->taaEnabled = false;
 
-		// The post-scene phase boundary.
-		//
-		// The reduced scene and its post-processing are finished here, so the
-		// sub-rect no longer describes anything: the content is full size from
-		// this point to Present. The call below used to REOPEN the reduced phase
-		// unconditionally, leaving R/A with lock=0 published for every late menu,
-		// presentation and companion-window pass - and SetScissorRect::thunk
-		// scales every rect it sees while the lock is open, with kFRAMEBUFFER
-		// unprotected.
-		//
-		// The fence refuses unless the geometry actually has a sub-rect, so every
-		// non-envelope configuration - flat, stock render scale, and Quality where
-		// A == R - falls through to exactly the previous behaviour.
-		if (!upscaling.FinalizeVRHotEnvelopeScenePhase(globals::game::graphicsState)) {
-			upscaling.ApplyDynamicResolutionState(globals::game::graphicsState);
-		}
+		upscaling.ApplyDynamicResolutionState(globals::game::graphicsState);
 		return;
 	}
 

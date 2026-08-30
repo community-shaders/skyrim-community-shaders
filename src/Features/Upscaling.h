@@ -321,33 +321,6 @@ public:
 		// clamp or to refuse the quality and relatch, is deliberately left open
 		// until the mechanism is confirmed.
 		uint vrHotEnvelopeClampToVendorMinimum = 0;
-		// The post-scene dynamic-resolution phase fence. Codex's design,
-		// docs/DESIGN_ZERO_COST_POST_SCENE_STATE_FENCE_FOR_CLAUDE.md.
-		//
-		// Hot-Envelope needs the engine-facing ratio at R/A with the lock OPEN
-		// while Skyrim draws R into the allocation-sized targets. It does not
-		// need it afterwards - once the reduced post-processing has finished,
-		// the content is full-size and the sub-rect describes nothing.
-		//
-		// Stock never has this problem: ApplyDynamicResolutionState returns
-		// ApplyLockedFullResolutionDynamicResolutionState unconditionally under
-		// Render Scale Mode, so stock publishes 1.0 with lock=1 all frame. We
-		// added a condition so the sub-rect can reach the engine, and then never
-		// closed the phase.
-		//
-		// The visible consumer is SetScissorRect::thunk: it multiplies EVERY
-		// scissor rect by the ratio whenever lock == 0, and the five protected
-		// targets are UI surfaces only - kFRAMEBUFFER, the desktop backbuffer,
-		// is not among them.
-		//
-		// This is a state lifetime defect, not a bad ratio. Zero rendering work:
-		// it replaces one state-publication call at an existing hook with the
-		// complementary one CSX already uses elsewhere.
-		//
-		// Diagnostic rollout switch, not a user-facing correctness option. If
-		// the confirming run accepts it, make the geometry gate automatic and
-		// retire the switch.
-		uint vrHotEnvelopePostSceneStateFence = 0;
 		uint vrHotEnvelopeEyeOrigin = 0;
 		uint vrHotEnvelopeEyeOriginPx = 0;
 		// Column-activity probe over the submit chain. Off by default: it costs
@@ -2109,23 +2082,6 @@ public:
 	bool ApplyLockedFullResolutionDynamicResolutionState(RE::BSGraphics::State* a_state);
 	bool ApplyDynamicResolutionState(RE::BSGraphics::State* a_state);
 	void PrepareFullResolutionPostProcessing(RE::BSGraphics::State* a_state = nullptr, bool a_resetProjection = false);
-
-	/**
-	 * @brief Close the engine-facing dynamic-resolution phase after the reduced
-	 *        scene work, leaving presentation surfaces untransformed.
-	 *
-	 * Gated on geometry, never on a quality name: VR, the render-scale plan
-	 * owner, and an actual sub-rect (`A > R`). Quality, where `A == R`, is
-	 * therefore a control arm and takes no new action.
-	 *
-	 * Preserves `resolutionScale`, the A/R/O plan, jitter and projection - those
-	 * are the persistent internal contract the submit stage reads explicitly.
-	 * Only the phase-local engine interface changes.
-	 *
-	 * @return true when the fence applied, so the caller can fall through to the
-	 *         previous behaviour for every non-envelope configuration.
-	 */
-	bool FinalizeVRHotEnvelopeScenePhase(RE::BSGraphics::State* a_state);
 	VRVendorResourceResetResult ResetVRSubmitStageState(bool a_destroyDLSSResources = true, bool a_destroySharedResources = true, bool a_preserveVRIntermediateTextures = false);
 	void RequestVRSubmitStageHistoryReset();
 	bool IsSubmitStageUpscalingActive() const;
