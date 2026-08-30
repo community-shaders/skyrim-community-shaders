@@ -348,6 +348,26 @@ public:
 		// the confirming run accepts it, make the geometry gate automatic and
 		// retire the switch.
 		uint vrHotEnvelopePostSceneStateFence = 0;
+		// The desktop window fix: draw the ACCEPTED LEFT EYE into the backbuffer
+		// instead of the committed menu layer, under Hot-Envelope with A > R.
+		//
+		// Six mechanisms for the banded window have been falsified, and the last
+		// of them proved no CS writer and no engine state we publish reaches that
+		// surface. So this stops trying to make Skyrim's hidden companion writer
+		// understand our geometry, and writes the surface from the buffer already
+		// proven correct in the headset.
+		//
+		// Cost neutrality is the whole point and rests on ONE fact:
+		// PresentVRMenuDesktopMirror already performs a full-window draw into this
+		// backbuffer every admitted frame. This changes that draw's SOURCE and
+		// BLEND - it does not add one. Draw count, target coverage and source
+		// sample count all stay at one, and the opaque blend removes a destination
+		// read the alpha path performed.
+		//
+		// It therefore only repairs frames the menu pass would already have drawn.
+		// Startup frames where the layer is invalid stay unrepaired ON PURPOSE,
+		// because repairing them would mean adding a draw.
+		uint vrHotEnvelopeDesktopAcceptedEye = 0;
 		uint vrHotEnvelopeEyeOrigin = 0;
 		uint vrHotEnvelopeEyeOriginPx = 0;
 		// Column-activity probe over the submit chain. Off by default: it costs
@@ -2097,9 +2117,63 @@ public:
 		ID3D11Resource* a_transparencySource,
 		uint32_t a_contractGeneration) const;
 	void FinalizePerEyeOutputs(ID3D11Resource* colorDst);
+	/**
+	 * @brief What the desktop helper draws. Replaces the previous bool so a new
+	 *        source cannot be added by appending a second draw.
+	 *
+	 * Cost neutrality depends on there being exactly ONE full-window operation.
+	 * Calling the helper twice would duplicate its D3D11 Get/Set/restore block
+	 * and make the cost argument false, so the mode selects the source and blend
+	 * of the single existing draw instead.
+	 */
+	enum class VRDesktopPresentMode : std::uint32_t
+	{
+		StereoPair,       ///< existing submit-texture fallback, unchanged
+		MenuOverlay,      ///< existing committed menu layer, premultiplied alpha
+		AcceptedLeftEye,  ///< Hot-Envelope window mode: the accepted left eye, opaque
+	};
+
+	/**
+	 * @brief The left eye OpenVR actually accepted, published only on success.
+	 *
+	 * Existence of `vrIntermediateColorOut[0]` does not mean it is current: it can
+	 * be retired, recreated or belong to a superseded contract generation. This
+	 * record is written only after the wrapped Submit returns
+	 * `VRCompositorError_None` for `vr::Eye_Left`, and is invalidated on
+	 * recreation, generation change, device loss, runtime reset and shutdown.
+	 *
+	 * The `com_ptr` keeps the sampled resource alive. The swap-chain backbuffer is
+	 * never retained here - holding it would block `ResizeBuffers`.
+	 */
+	struct VRDesktopAcceptedEye
+	{
+		winrt::com_ptr<ID3D11ShaderResourceView> srv;
+		std::uintptr_t textureIdentity = 0;
+		std::uint64_t compositorCycleToken = 0;
+		std::uint32_t frame = std::numeric_limits<std::uint32_t>::max();
+		std::uint32_t contractGeneration = 0;
+		std::uint32_t width = 0;
+		std::uint32_t height = 0;
+		bool valid = false;
+	};
+
+	/// Publish the accepted left eye. Called from the Submit interception at the
+	/// same boundary the screenshot observer uses, independent of whether a
+	/// screenshot is pending.
+	void ObserveAcceptedVRSubmitForDesktop(
+		std::uint64_t a_compositorCycleToken,
+		vr::EVREye a_eye,
+		ID3D11Texture2D* a_acceptedTexture) noexcept;
+
+	/// Drop the published eye with a named, deduplicated reason.
+	void InvalidateVRDesktopAcceptedEye(const char* a_reason) noexcept;
+
 	bool BlitVRRenderScaleDesktopMirror(ID3D11Texture2D* a_targetTexture, const D3D11_TEXTURE2D_DESC& a_targetDesc,
 		uint32_t a_eyeWidth, uint32_t a_eyeHeight, Texture2D* const* a_eyeSources = nullptr,
-		bool a_compositeCommittedMenuLayer = false);
+		VRDesktopPresentMode a_mode = VRDesktopPresentMode::StereoPair,
+		ID3D11ShaderResourceView* a_acceptedEyeSRV = nullptr);
+
+	VRDesktopAcceptedEye vrDesktopAcceptedEye{};
 	void PresentVRMenuDesktopMirror(IDXGISwapChain* a_swapChain);
 	bool EnsureSubmitStageDLSSSharpenerTexture(uint32_t eyeIndex, const Texture2D& colorOutput);
 	bool ApplySubmitStageDLSSSharpening(uint32_t eyeIndex, const Texture2D& sharpenInput);
