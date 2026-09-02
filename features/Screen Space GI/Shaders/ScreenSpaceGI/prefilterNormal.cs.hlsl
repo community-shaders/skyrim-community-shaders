@@ -1,18 +1,37 @@
+#include "Common/FrameBuffer.hlsli"
 #include "Common/GBuffer.hlsli"
 #include "ScreenSpaceGI/common.hlsli"
 
 Texture2D<float4> srcNormalRoughness : register(t0);
+Texture2D<float> srcWorkingDepth : register(t1);
 
 RWTexture2D<unorm float2> outNormal0 : register(u0);
 RWTexture2D<unorm float2> outNormal1 : register(u1);
 RWTexture2D<unorm float2> outNormal2 : register(u2);
 RWTexture2D<unorm float2> outNormal3 : register(u3);
 RWTexture2D<unorm float2> outNormal4 : register(u4);
+RWTexture2D<half3> outCurrentGeo : register(u5);
 
 float2 NormalMIPFilter(float2 enc0, float2 enc1, float2 enc2, float2 enc3)
 {
 	float3 avg = GBuffer::DecodeNormal(enc0) + GBuffer::DecodeNormal(enc1) + GBuffer::DecodeNormal(enc2) + GBuffer::DecodeNormal(enc3);
 	return GBuffer::EncodeNormal(normalize(avg));
+}
+
+void WriteCurrentGeometry(uint2 pixCoord, float2 encodedNormal)
+{
+	if (any(pixCoord >= uint2(OUT_FRAME_DIM)))
+		return;
+
+	float viewZ = READ_DEPTH(srcWorkingDepth, pixCoord);
+	if (viewZ <= FP_Z) {
+		outCurrentGeo[pixCoord] = 0;
+		return;
+	}
+
+	float3 normalVS = GBuffer::DecodeNormal(encodedNormal);
+	float3 normalWS = normalize(ViewToWorldVector(normalVS, FrameBuffer::CameraViewInverse));
+	outCurrentGeo[pixCoord] = half3(viewZ, GBuffer::EncodeNormal(normalWS));
 }
 
 groupshared float2 g_scratchNormal[8][8];
@@ -36,6 +55,13 @@ groupshared float2 g_scratchNormal[8][8];
 	outNormal0[pixCoord + uint2(1, 0)] = normal1;
 	outNormal0[pixCoord + uint2(0, 1)] = normal2;
 	outNormal0[pixCoord + uint2(1, 1)] = normal3;
+	[branch] if (MultiBounceMode != 0)
+	{
+		WriteCurrentGeometry(pixCoord + uint2(0, 0), normal0);
+		WriteCurrentGeometry(pixCoord + uint2(1, 0), normal1);
+		WriteCurrentGeometry(pixCoord + uint2(0, 1), normal2);
+		WriteCurrentGeometry(pixCoord + uint2(1, 1), normal3);
+	}
 
 	// MIP 1
 	float2 nm1 = NormalMIPFilter(normal0, normal1, normal2, normal3);

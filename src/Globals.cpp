@@ -1,6 +1,7 @@
 #include "Globals.h"
 
 #include "Deferred.h"
+#include "Features/CSEditor.h"
 #include "Features/CloudShadows.h"
 #include "Features/DynamicCubemaps.h"
 #include "Features/Effects11.h"
@@ -18,10 +19,12 @@
 #include "Features/LODBlending.h"
 #include "Features/LightLimitFix.h"
 #include "Features/LinearLighting.h"
+#include "Features/NRD.h"
 #include "Features/PerformanceOverlay.h"
 #include "Features/RemoteControl.h"
 #include "Features/RenderDoc.h"
 #include "Features/ScreenSpaceGI.h"
+#include "Features/ScreenSpaceReflections.h"
 #include "Features/ScreenSpaceShadows.h"
 #include "Features/ScreenshotFeature.h"
 #include "Features/Skin.h"
@@ -37,7 +40,6 @@
 #include "Features/VolumetricLighting.h"
 #include "Features/VolumetricShadows.h"
 #include "Features/WaterEffects.h"
-#include "Features/CSEditor.h"
 #include "Features/WetnessEffects.h"
 #include "Menu.h"
 #include "SceneSettingsManager.h"
@@ -72,7 +74,9 @@ namespace globals
 		HorizonFix horizonFix{};
 		InteriorSun interiorSun{};
 		InverseSquareLighting inverseSquareLighting{};
+		NRD nrd{};
 		ScreenSpaceGI screenSpaceGI{};
+		ScreenSpaceReflections screenSpaceReflections{};
 		ScreenSpaceShadows screenSpaceShadows{};
 		Skylighting skylighting{};
 		TerrainVariation terrainVariation{};

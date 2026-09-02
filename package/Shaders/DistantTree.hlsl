@@ -31,7 +31,6 @@ struct VS_OUTPUT
 	float4 PreviousWorldPosition: POSITION2;
 #endif  // RENDER_DEPTH
 	float4 ViewPosition: POSITION3;
-
 };
 
 #ifdef VSHADER
@@ -224,7 +223,7 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 directionalAmbientColor = max(0, Color::Ambient(SharedData::GetAmbient(normal)));
 #			if defined(IBL)
 	if (SharedData::iblSettings.EnableIBL) {
-		directionalAmbientColor = ImageBasedLighting::GetDiffuseIBL(directionalAmbientColor, -normal);
+		directionalAmbientColor = ImageBasedLighting::GetDiffuseIBL(directionalAmbientColor, -normal, input.WorldPosition.xyz);
 	}
 #			endif
 	diffuseColor += directionalAmbientColor;
@@ -264,7 +263,7 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 directionalAmbientColor = Color::Ambient(SharedData::GetAmbient(normal));
 #			if defined(IBL)
 	if (SharedData::iblSettings.EnableIBL) {
-		directionalAmbientColor = ImageBasedLighting::GetDiffuseIBL(directionalAmbientColor, -normal);
+		directionalAmbientColor = ImageBasedLighting::GetDiffuseIBL(directionalAmbientColor, -normal, input.WorldPosition.xyz);
 	}
 #			endif
 	diffuseColor += directionalAmbientColor;

@@ -28,9 +28,12 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	SkyIBLSaturation,
 	FogAmount,
 	DALCMode,
+	SkylightingAffectsEnv,
 	DisableInInteriors,
 	DisableInWorldMap,
-	DisableInLoadingScreen)
+	DisableInLoadingScreen,
+	EnableReflectionFallback,
+	ReflectionFallbackDistance)
 
 void IBL::DrawSettings()
 {
@@ -72,8 +75,7 @@ void IBL::DrawSettings()
 		const char* dalcModeNames[] = {
 			T(TKEY("dalc_mode_luminance_ratio"), "Luminance Ratio"),
 			T(TKEY("dalc_mode_color_ratio"), "Color Ratio"),
-			T(TKEY("dalc_mode_dalc_plus_sky"), "DALC + Sky"),
-			T(TKEY("dalc_mode_dalc_plus_sky_directional"), "DALC + Sky (Directional)")
+			T(TKEY("dalc_mode_dalc_plus_sky"), "DALC + Sky")
 		};
 		int dalcMode = static_cast<int>(settings.DALCMode);
 		if (ImGui::Combo(T(TKEY("dalc_mode"), "DALC Mode"), &dalcMode, dalcModeNames, IM_ARRAYSIZE(dalcModeNames))) {
@@ -84,13 +86,26 @@ void IBL::DrawSettings()
 								  "How the DALC-to-IBL brightness ratio is computed:\n"
 								  "Luminance Ratio: Scalar ratio from overall luminance (loses DALC color tint).\n"
 								  "Color Ratio: Per-channel ratio (preserves DALC color tint).\n"
-								  "DALC + Sky: Uses vanilla ambient as base, sky IBL on top. Skylighting only affects sky.\n"
-								  "DALC + Sky (Directional): Same, but Skylighting also dims vanilla ambient per-direction."));
+								  "DALC + Sky: Uses vanilla ambient as base, with sky IBL added on top."));
 		}
+	}
+	ImGui::Checkbox(T(TKEY("skylighting_affects_env"), "Skylighting Affects Env/DALC"), (bool*)&settings.SkylightingAffectsEnv);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("%s", T(TKEY("skylighting_affects_env_tooltip"),
+							  "Applies Skylighting visibility to both sky IBL and the environment/DALC contribution.\n"
+							  "When disabled, Skylighting only modulates sky IBL."));
 	}
 	ImGui::Checkbox(T(TKEY("use_static_ibl"), "Use Static IBL For Out-of-World Objects"), (bool*)&settings.UseStaticIBL);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("%s", T(TKEY("use_static_ibl_tooltip"), "Uses pre-baked static IBL cubemap textures for objects rendered outside the game world (e.g. inventory items, loading screens)."));
+	}
+	ImGui::Checkbox(T(TKEY("enable_reflection_fallback"), "Reflection Cubemap Distance Fallback"), (bool*)&settings.EnableReflectionFallback);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("%s", T(TKEY("enable_reflection_fallback_tooltip"), "Fades the dynamic environment IBL toward the ReflectionsCubemap-only IBL at distance, matching Water's reflection cubemap distance fallback."));
+	}
+	Util::WeatherUI::SliderFloat(T(TKEY("reflection_fallback_distance"), "Reflection Fallback Distance"), this, "ReflectionFallbackDistance", &settings.ReflectionFallbackDistance, 0.0f, 100000.0f, "%.0f");
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("%s", T(TKEY("reflection_fallback_distance_tooltip"), "Distance at which IBL is fully transitioned to the ReflectionsCubemap-only contribution."));
 	}
 	Util::WeatherUI::SliderFloat(T(TKEY("fog_mix"), "Fog Mix"), this, "FogAmount", &settings.FogAmount, 0.0f, 1.0f, "%.2f");
 	if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -119,6 +134,12 @@ void IBL::DrawSettings()
 void IBL::LoadSettings(json& o_json)
 {
 	settings = o_json;
+	if (settings.DALCMode == 3) {
+		// Preserve the former "DALC + Sky (Directional)" result with the new
+		// independent source mode and Skylighting option.
+		settings.DALCMode = 2;
+		settings.SkylightingAffectsEnv = 1;
+	}
 }
 
 void IBL::SaveSettings(json& o_json)
@@ -192,6 +213,26 @@ void IBL::RegisterWeatherVariables()
 		1.0f,
 		0.0f, 2.0f));
 
+	// Reflection-cubemap distance fallback toggle
+	registry->RegisterVariable(std::make_shared<WeatherVariables::WeatherVariable<bool>>(
+		"EnableReflectionFallback",
+		T("feature.ibl.enable_reflection_fallback", "Reflection Cubemap Distance Fallback"),
+		T("feature.ibl.enable_reflection_fallback_weather_tooltip", "Enable fading the dynamic environment IBL to ReflectionCubemap-only IBL at distance."),
+		(bool*)&settings.EnableReflectionFallback,
+		true,
+		[](const bool& from, const bool& to, float factor) {
+			return factor > 0.5f ? to : from;  // Switch at transition midpoint
+		}));
+
+	// Reflection-cubemap distance fallback distance
+	registry->RegisterVariable(std::make_shared<WeatherVariables::FloatVariable>(
+		"ReflectionFallbackDistance",
+		T("feature.ibl.reflection_fallback_distance", "Reflection Fallback Distance"),
+		T("feature.ibl.reflection_fallback_distance_weather_tooltip", "Distance at which IBL is fully ReflectionCubemap-only."),
+		&settings.ReflectionFallbackDistance,
+		1024.0f,
+		0.0f, 100000.0f));
+
 	// How much IBL brightness is matched to vanilla ambient (DALC)
 	registry->RegisterVariable(std::make_shared<WeatherVariables::FloatVariable>(
 		"DALCAmount",
@@ -224,7 +265,10 @@ IBL::PerFrame IBL::GetCommonBufferData() const
 		.EnvIBLSaturation = settings.EnvIBLSaturation,
 		.SkyIBLSaturation = settings.SkyIBLSaturation,
 		.FogAmount = settings.FogAmount,
-		.DALCMode = settings.DALCMode
+		.DALCMode = settings.DALCMode,
+		.SkylightingAffectsEnv = settings.SkylightingAffectsEnv,
+		.EnableReflectionFallback = settings.EnableReflectionFallback,
+		.ReflectionFallbackDistance = settings.ReflectionFallbackDistance
 	};
 
 	if (!sceneDisabled && globals::features::effects11.loaded) {

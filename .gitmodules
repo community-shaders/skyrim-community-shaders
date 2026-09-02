@@ -8,3 +8,6 @@
 	path = extern/FidelityFX-SDK
 	url = https://github.com/alandtse/FidelityFX-SDK-DX11
 	branch = optiscaler-build
+[submodule "extern/NRD"]
+	path = extern/NRD
+	url = https://github.com/NVIDIA-RTX/NRD.git

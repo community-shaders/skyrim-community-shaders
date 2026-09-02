@@ -37,9 +37,9 @@ struct VS_OUTPUT
 	float Fade: TEXCOORD2;
 	float3 Color: COLOR0;
 	float3 ViewSpacePosition: TEXCOORD3;
-#	if defined(RENDER_DEPTH)
+#if defined(RENDER_DEPTH)
 	float2 Depth: TEXCOORD4;
-#	endif  // RENDER_DEPTH
+#endif  // RENDER_DEPTH
 	float3 WorldPosition: POSITION1;
 	float3 PreviousWorldPosition: POSITION2;
 #ifdef GRASS_LIGHTING
@@ -256,7 +256,7 @@ struct PS_OUTPUT
 	float4 Specular: SV_Target4;
 	float4 Masks: SV_Target6;
 	float4 Masks2: SV_Target7;
-#	endif      // RENDER_DEPTH
+#	endif  // RENDER_DEPTH
 };
 #else
 struct PS_OUTPUT
@@ -278,8 +278,6 @@ struct PS_OUTPUT
 SamplerState SampBaseSampler : register(s0);
 SamplerState SampShadowMaskSampler : register(s1);
 
-
-
 Texture2D<float4> TexBaseSampler : register(t0);
 Texture2D<float4> TexShadowMaskSampler : register(t1);
 
@@ -289,8 +287,6 @@ cbuffer PerFrame : register(b0)
 	float4 VPOSOffset : packoffset(c2);
 	float4 cb0_2[7] : packoffset(c3);
 }
-
-
 
 cbuffer AlphaTestRefCB : register(b11)
 {
@@ -404,8 +400,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	float3x3 tbn = 0;
 
-	if (complex)
-	{
+	if (complex) {
 		float3 normalColor = GrassLighting::TransformNormal(specColor.xyz);
 		// world-space -> tangent-space -> world-space.
 		// This is because we don't have pre-computed tangents.
@@ -461,22 +456,23 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float vertexAO = max(max(vertexColor.r, vertexColor.g), vertexColor.b);
 	vertexColor /= max(vertexAO, EPSILON_DIVISION);
 
-#				if defined(SKYLIGHTING)
+#			if defined(SKYLIGHTING)
 	float3 positionMSSkylight = input.WorldPosition.xyz;
 	sh2 skylightingSH = Skylighting::Sample(positionMSSkylight, normal
-#					if defined(SKYLIGHTING_SHADOW_VIS)
-		, skylightingShadowVisibility
-#					endif
+#				if defined(SKYLIGHTING_SHADOW_VIS)
+		,
+		skylightingShadowVisibility
+#				endif
 	);
 	float skylightingDiffuse = Skylighting::GetSkylightingDiffuse(skylightingSH, positionMSSkylight, normal, vertexAO);
-#				endif  // SKYLIGHTING
+#			endif  // SKYLIGHTING
 
 	float3 albedo = baseColor.xyz * vertexColor;
 
 	float dirSoftShadow = dirDetailedShadow;
-#				if defined(SKYLIGHTING_SHADOW_VIS)
+#			if defined(SKYLIGHTING_SHADOW_VIS)
 	dirSoftShadow = skylightingShadowVisibility;
-#				endif
+#			endif
 
 	float3 subsurfaceColor = dirLightColor * dirSoftShadow * (GetSoftLightMultiplier(dirLightAngle, softLightRolloff)) * Color::VanillaNormalization();
 
@@ -546,10 +542,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	float3 directionalAmbientColor = Color::Ambient(max(0, SharedData::GetAmbient(normal)));
 
-#				if defined(IBL)
+#			if defined(IBL)
 	if (SharedData::iblSettings.EnableIBL)
-		directionalAmbientColor = ImageBasedLighting::GetDiffuseIBL(directionalAmbientColor, -normal);
-#				endif
+		directionalAmbientColor = ImageBasedLighting::GetDiffuseIBL(directionalAmbientColor, -normal, input.WorldPosition.xyz);
+#			endif
+
+	if (SharedData::ssgiSettings.EnableIL != 0)
+		directionalAmbientColor = 0;
 
 	diffuseColor += directionalAmbientColor;
 	diffuseColor += subsurfaceColor * albedo;
@@ -557,9 +556,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	directionalAmbientColor *= albedo;
 
-#				if defined(SKYLIGHTING)
+#			if defined(SKYLIGHTING)
 	Skylighting::ApplySkylighting(diffuseColor, directionalAmbientColor, albedo, skylightingDiffuse);
-#				endif
+#			endif
 
 	specularColor += lightsSpecularColor;
 	specularColor *= specColor.w * SharedData::grassLightingSettings.SpecularStrength;
@@ -703,7 +702,8 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 positionMSSkylight = input.WorldPosition.xyz;
 	sh2 skylightingSH = Skylighting::Sample(positionMSSkylight, normal
 #				if defined(SKYLIGHTING_SHADOW_VIS)
-		, skylightingShadowVisibility
+		,
+		skylightingShadowVisibility
 #				endif
 	);
 	float skylightingDiffuse = Skylighting::GetSkylightingDiffuse(skylightingSH, positionMSSkylight, normal, vertexAO);
@@ -713,7 +713,7 @@ PS_OUTPUT main(PS_INPUT input)
 
 #			if defined(IBL)
 	if (SharedData::iblSettings.EnableIBL)
-		directionalAmbientColor = ImageBasedLighting::GetDiffuseIBL(directionalAmbientColor, -normal);
+		directionalAmbientColor = ImageBasedLighting::GetDiffuseIBL(directionalAmbientColor, -normal, input.WorldPosition.xyz);
 #			endif
 
 	float3 albedo = baseColor.xyz * vertexColor;

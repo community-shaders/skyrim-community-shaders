@@ -139,13 +139,13 @@ namespace ShadowSampling
 		return max(0, SharedData::GetAmbient(LightingSampleNormal));
 	}
 
-	float3 GetAmbientLighting()
+	float3 GetAmbientLighting(float3 positionMS)
 	{
 		float3 ambientColor = GetRawAmbientLighting();
 
 #if defined(IBL)
 		if (SharedData::iblSettings.EnableIBL) {
-			ambientColor = ImageBasedLighting::GetDiffuseIBL(ambientColor, ImageBasedLightingNormal);
+			ambientColor = ImageBasedLighting::GetDiffuseIBL(ambientColor, ImageBasedLightingNormal, positionMS);
 		}
 #endif
 
@@ -158,14 +158,14 @@ namespace ShadowSampling
 		return Color::DirectionalLight(SharedData::DirLightColor.xyz / max(llDirLightMult, MinDirectionalLightMultiplier), SharedData::linearLightingSettings.isDirLightLinear) * llDirLightMult;
 	}
 
-	float3 GetSceneLightingColor()
+	float3 GetSceneLightingColor(float3 positionMS)
 	{
-		return GetAmbientLighting() + GetDirectionalLighting();
+		return GetAmbientLighting(positionMS) + GetDirectionalLighting();
 	}
 
-	void ExtractLighting(float3 inputColor, out float3 dirColor, out float3 ambientColor)
+	void ExtractLighting(float3 inputColor, float3 positionMS, out float3 dirColor, out float3 ambientColor)
 	{
-		float3 ambientColorAmb = GetAmbientLighting();
+		float3 ambientColorAmb = GetAmbientLighting(positionMS);
 		float3 dirLightColorDir = GetDirectionalLighting();
 
 		float inputLuma = Color::RGBToLuminance(inputColor);

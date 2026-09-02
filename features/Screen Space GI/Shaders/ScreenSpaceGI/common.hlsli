@@ -25,9 +25,8 @@
 
 cbuffer SSGICB : register(b1)
 {
-	float4x4 PrevInvViewMat;
-	float4 NDCToViewMul;
-	float4 NDCToViewAdd;
+	float2 NDCToViewMul;
+	float2 NDCToViewAdd;
 
 	float2 TexDim;
 	float2 RcpTexDim;
@@ -36,32 +35,15 @@ cbuffer SSGICB : register(b1)
 
 	uint FrameIndex;
 
-	uint NumSlices;
 	uint NumSteps;
 
-	float MinScreenRadius;
-	float AORadius;
-	float GIRadius;
-	float EffectRadius;
 	float Thickness;
-	float2 DepthFadeRange;
-	float DepthFadeScaleConst;
-
-	float GISaturation;
-	float GIDistanceCompensation;
-	float GICompensationMaxDist;
-	float pad1;
-
 	float AOPower;
+
 	float GIStrength;
-
-	float DepthDisocclusion;
-	float NormalDisocclusion;
-	uint MaxAccumFrames;
-
-	float BlurRadius;
-	float DistanceNormalisation;
-	float2 pad;
+	float DiffuseCubemapMult;
+	uint UseDynamicCubemap;
+	uint MultiBounceMode;
 };
 
 SamplerState samplerPointClamp : register(s0);
@@ -69,8 +51,10 @@ SamplerState samplerLinearClamp : register(s1);
 
 ///////////////////////////////////////////////////////////////////////////////
 
-// first person z
-#define FP_Z (18.0)
+// Use the engine's global near plane instead of a hard-coded first-person distance.
+// A large fixed threshold (18.0) culls visible close geometry and makes SSGI's
+// AO/visibility output zero for those pixels, which darkens surfaces near the camera.
+#define FP_Z (SharedData::CameraData.y)
 
 #define ISNAN(x) (!(x < 0.f || x > 0.f || x == 0.f))
 float filterNaN(float v)
@@ -90,28 +74,11 @@ float4 filterInf(float4 v) { return float4(filterInf(v.x), filterInf(v.y), filte
 // uv - normalised position in FrameDim
 // texCoord - texture coordinate
 
-#ifdef HALF_RES
-#	define RES_MIP 1
-#	define READ_DEPTH(tex, px) tex.Load(int3(px, RES_MIP))
-#	define FULLRES_LOAD(tex, px, texCoord, samp) tex.SampleLevel(samp, texCoord, 0)
-#	define OUT_FRAME_DIM (FrameDim * 0.5)
-#	define RCP_OUT_FRAME_DIM (RcpFrameDim * 2)
-#	define OUT_FRAME_SCALE (frameScale * 0.5)
-#elif defined(QUARTER_RES)
-#	define RES_MIP 2
-#	define READ_DEPTH(tex, px) tex.Load(int3(px, RES_MIP))
-#	define FULLRES_LOAD(tex, px, texCoord, samp) tex.SampleLevel(samp, texCoord, 0)
-#	define OUT_FRAME_DIM (FrameDim * 0.25)
-#	define RCP_OUT_FRAME_DIM (RcpFrameDim * 4)
-#	define OUT_FRAME_SCALE (frameScale * 0.25)
-#else
-#	define RES_MIP 0
-#	define READ_DEPTH(tex, px) tex[px]
-#	define FULLRES_LOAD(tex, px, texCoord, samp) tex[px]
-#	define OUT_FRAME_DIM FrameDim
-#	define RCP_OUT_FRAME_DIM RcpFrameDim
-#	define OUT_FRAME_SCALE frameScale
-#endif
+#define READ_DEPTH(tex, px) tex[px]
+#define FULLRES_LOAD(tex, px, texCoord, samp) tex[px]
+#define OUT_FRAME_DIM FrameDim
+#define RCP_OUT_FRAME_DIM RcpFrameDim
+#define OUT_FRAME_SCALE frameScale
 
 ///////////////////////////////////////////////////////////////////////////////
 

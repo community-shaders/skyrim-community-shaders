@@ -178,9 +178,9 @@ VS_OUTPUT main(VS_INPUT input)
 	vsout.HPosition.z = heightMult * 0.5 + worldViewPos.z;
 	vsout.HPosition.w = worldViewPos.w;
 
-#	if defined(HORIZON_FIX)
+#		if defined(HORIZON_FIX)
 	vsout.HPosition.z = min(vsout.HPosition.z, vsout.HPosition.w * HorizonFix::FoldedDepth);
-#	endif
+#		endif
 
 #		if defined(STENCIL)
 	vsout.WorldPosition = worldPos;
@@ -1108,7 +1108,7 @@ PS_OUTPUT main(PS_INPUT input)
 
 	float3 dirColor;
 	float3 ambientColor;
-	ShadowSampling::ExtractLighting(diffuseOutput.refractionDiffuseColor, dirColor, ambientColor);
+	ShadowSampling::ExtractLighting(diffuseOutput.refractionDiffuseColor, input.WPosition.xyz, dirColor, ambientColor);
 
 	dirColor *= dirShadow;
 
@@ -1195,7 +1195,7 @@ PS_OUTPUT main(PS_INPUT input)
 
 #						if defined(IBL)
 	if (SharedData::iblSettings.EnableIBL) {
-		fogColor = ImageBasedLighting::GetFogIBLColor(fogColor);
+		fogColor = ImageBasedLighting::GetFogIBLColor(fogColor, input.WPosition.xyz);
 	}
 #						endif
 #						if defined(EXP_HEIGHT_FOG)
@@ -1246,7 +1246,7 @@ PS_OUTPUT main(PS_INPUT input)
 
 #						if defined(IBL)
 	if (SharedData::iblSettings.EnableIBL) {
-		preFogColor = ImageBasedLighting::GetFogIBLColor(preFogColor);
+		preFogColor = ImageBasedLighting::GetFogIBLColor(preFogColor, input.WPosition.xyz);
 	}
 #						endif
 #						if defined(EXP_HEIGHT_FOG)
@@ -1283,7 +1283,7 @@ PS_OUTPUT main(PS_INPUT input)
 #						endif
 #						if defined(IBL)
 	if (SharedData::iblSettings.EnableIBL) {
-		fogColor = ImageBasedLighting::GetFogIBLColor(fogColor);
+		fogColor = ImageBasedLighting::GetFogIBLColor(fogColor, input.WPosition.xyz);
 	}
 #						endif
 	refractionColor = lerp(refractionColor, fogColor, Color::FogAlpha(fogFactor));

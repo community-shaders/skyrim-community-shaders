@@ -10,9 +10,9 @@
 #define EFFECT
 
 #if defined(SOFT) && defined(NORMALS) && defined(TEXTURE) && defined(FALLOFF) && defined(VC) && \
-    !defined(LIGHTING) && !defined(PARTICLES) && !defined(STRIP_PARTICLES) &&                    \
-    !defined(BLOOD) && !defined(MEMBRANE) && !defined(ADDBLEND) && !defined(MULTBLEND) &&        \
-    !defined(MULTBLEND_DECAL) && !defined(ALPHA_TEST) && !defined(DEFERRED) && !defined(SKINNED)
+	!defined(LIGHTING) && !defined(PARTICLES) && !defined(STRIP_PARTICLES) &&                   \
+	!defined(BLOOD) && !defined(MEMBRANE) && !defined(ADDBLEND) && !defined(MULTBLEND) &&       \
+	!defined(MULTBLEND_DECAL) && !defined(ALPHA_TEST) && !defined(DEFERRED) && !defined(SKINNED)
 #	define IS_VOLUMETRIC_FOG
 #endif
 
@@ -483,7 +483,7 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float2 screenPo
 	float3 color = DLightColor.xyz * Color::EffectLightingMult();
 	bool suppressExternalEmittance = SharedData::InInterior && (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::SuppressExternalEmittance);
 	if (suppressExternalEmittance) {
-		color = ShadowSampling::GetAmbientLighting() + ShadowSampling::GetDirectionalLighting();
+		color = ShadowSampling::GetAmbientLighting(worldPosition) + ShadowSampling::GetDirectionalLighting();
 	}
 
 #		if defined(SKYLIGHTING)
@@ -498,12 +498,12 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float2 screenPo
 
 	float3 dirColor;
 	float3 ambientColor;
-	ShadowSampling::ExtractLighting(color, dirColor, ambientColor);
+	ShadowSampling::ExtractLighting(color, worldPosition, dirColor, ambientColor);
 
 #		if defined(EFFECTS11)
 	if (SharedData::enbSettings.Enable) {
 		dirColor = ShadowSampling::GetDirectionalLighting();
-		ambientColor = ShadowSampling::GetAmbientLighting();
+		ambientColor = ShadowSampling::GetAmbientLighting(worldPosition);
 		dirColor *= SharedData::enbSettings.ParticleLightingInfluence;
 		ambientColor *= SharedData::enbSettings.ParticleAmbientInfluence;
 	}
@@ -565,7 +565,7 @@ float3 GetLightingShadow(float3 color, float3 worldPosition, float2 screenPositi
 {
 	float3 dirColor;
 	float3 ambientColor;
-	ShadowSampling::ExtractLighting(color, dirColor, ambientColor);
+	ShadowSampling::ExtractLighting(color, worldPosition, dirColor, ambientColor);
 
 	static const uint sampleCount = 8;
 	static const float rcpSampleCount = 1.0 / float(sampleCount);
@@ -667,7 +667,7 @@ PS_OUTPUT main(PS_INPUT input)
 	bool isFire = false;
 #		if defined(ADDBLEND)
 #			if defined(SOFT)
-    if (Permutation::PixelShaderDescriptor & Permutation::EffectFlags::GrayscaleToColor && Permutation::PixelShaderDescriptor & Permutation::EffectFlags::GrayscaleToAlpha)
+	if (Permutation::PixelShaderDescriptor & Permutation::EffectFlags::GrayscaleToColor && Permutation::PixelShaderDescriptor & Permutation::EffectFlags::GrayscaleToAlpha)
 		isFire = true;
 #			elif defined(PARTICLES) && defined(TEXCOORD_INDEX) && defined(INDEXED_TEXTURE)
 	isFire = true;
@@ -819,7 +819,7 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 fogColor = Color::Fog(input.FogParam.xyz);
 #		if defined(IBL)
 	if (SharedData::iblSettings.EnableIBL) {
-		fogColor = ImageBasedLighting::GetFogIBLColor(fogColor);
+		fogColor = ImageBasedLighting::GetFogIBLColor(fogColor, input.WorldPosition.xyz);
 	}
 #		endif
 #		if defined(EXP_HEIGHT_FOG)
@@ -843,20 +843,20 @@ PS_OUTPUT main(PS_INPUT input)
 		}
 	}
 #		endif
-#        if defined(ADDBLEND)
-#            if defined(EXP_HEIGHT_FOG)
-    float3 blendedColor = lightColor * (1 - vanillaFogFactor) * (1 - expFogFactor);
-#            else
-    float3 blendedColor = lightColor * (1 - fogFactor);
-#            endif
-#	if defined(EFFECTS11)
+#		if defined(ADDBLEND)
+#			if defined(EXP_HEIGHT_FOG)
+	float3 blendedColor = lightColor * (1 - vanillaFogFactor) * (1 - expFogFactor);
+#			else
+	float3 blendedColor = lightColor * (1 - fogFactor);
+#			endif
+#			if defined(EFFECTS11)
 	if (SharedData::enbSettings.Enable) {
 		if (isFire)
 			blendedColor = pow(abs(blendedColor), SharedData::enbSettings.FireCurve) * SharedData::enbSettings.FireIntensity;
 		else
 			blendedColor *= SharedData::enbSettings.LightSpriteIntensity;
 	}
-#	endif
+#			endif
 #		elif defined(MULTBLEND) || defined(MULTBLEND_DECAL)
 #			if defined(EXP_HEIGHT_FOG)
 	float3 blendedColor = lerp(lightColor, 1.0.xxx, saturate(1.5 * vanillaFogFactor).xxx);

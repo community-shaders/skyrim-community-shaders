@@ -226,7 +226,7 @@ float3 ComputeSkyLightScattering(float3 positionWS, float3 viewDirection)
 		SharedData::exponentialHeightFogSettings.fogInscatteringColor.a *
 		skyVisibility;
 	[branch] if (VolumetricFogHasIBL)
-		skyLighting = ImageBasedLighting::GetIBLColorOccluded(skyDirection, skyVisibility);
+		skyLighting = ImageBasedLighting::GetIBLColorOccluded(skyDirection, skyVisibility, positionWS);
 
 	return skyLighting *
 	       SharedData::exponentialHeightFogSettings.volumetricSkyLightingIntensity;

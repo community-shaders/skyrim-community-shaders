@@ -20,10 +20,12 @@
 #include "Features/LODBlending.h"
 #include "Features/LightLimitFix.h"
 #include "Features/LinearLighting.h"
+#include "Features/NRD.h"
 #include "Features/PerformanceOverlay.h"
 #include "Features/RemoteControl.h"
 #include "Features/RenderDoc.h"
 #include "Features/ScreenSpaceGI.h"
+#include "Features/ScreenSpaceReflections.h"
 #include "Features/ScreenSpaceShadows.h"
 #include "Features/ScreenshotFeature.h"
 #include "Features/Skin.h"
@@ -233,7 +235,9 @@ const std::vector<Feature*>& Feature::GetFeatureList()
 		&globals::features::performanceOverlay,
 		&globals::features::subsurfaceScattering,
 		&globals::features::terrainShadows,
+		&globals::features::nrd,
 		&globals::features::screenSpaceGI,
+		&globals::features::screenSpaceReflections,
 		&globals::features::skylighting,
 		&globals::features::skySync,
 		&globals::features::terrainBlending,

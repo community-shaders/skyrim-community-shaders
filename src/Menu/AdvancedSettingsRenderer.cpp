@@ -7,6 +7,7 @@
 #include <thread>
 
 #include "CSEditor/EditorWindow.h"
+#include "Deferred.h"
 #include "FeatureIssues.h"
 #include "Features/PerformanceOverlay/ABTesting/ABTesting.h"
 #include "Fonts.h"
@@ -715,6 +716,16 @@ void AdvancedSettingsRenderer::RenderDeveloperSection()
 
 	// Developer Mode Testing Section
 	if (globals::state->IsDeveloperMode()) {
+		ImGui::Spacing();
+		ImGui::Separator();
+		ImGui::Spacing();
+
+		globals::deferred->DrawSettings();
+
+		ImGui::Spacing();
+		ImGui::Separator();
+		ImGui::Spacing();
+
 		FeatureIssues::Test::DrawDeveloperModeTestingUI();
 
 		ImGui::Spacing();

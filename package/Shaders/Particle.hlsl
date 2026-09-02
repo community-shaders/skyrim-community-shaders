@@ -91,7 +91,7 @@ VS_OUTPUT main(VS_INPUT input)
 	float4 viewPosition = mul(WorldViewProj, msPosition);
 #		if defined(RAIN)
 	float3 rainVelocity = Velocity.xyz;
-#		if defined(EFFECTS11)
+#			if defined(EFFECTS11)
 	if (SharedData::enbSettings.EnableRain) {
 		float velLen = length(rainVelocity);
 		if (velLen > 0) {
@@ -99,7 +99,7 @@ VS_OUTPUT main(VS_INPUT input)
 			rainVelocity = lerp(normVel, rainVelocity, SharedData::enbSettings.RainMotionStretch);
 		}
 	}
-#		endif
+#			endif
 	float4 adjustedMsPosition = msPosition - float4(rainVelocity, 0);
 	float positionBlendParam = 0.5 * (1 + input.TexCoord1.y);
 	float4 adjustedViewPosition = mul(WorldViewProj, adjustedMsPosition);
@@ -191,9 +191,9 @@ VS_OUTPUT main(VS_INPUT input)
 	vsout.Color.xyz = color.xyz;
 #	endif
 
-#		if defined(ENVCUBE) && defined(RAIN) && defined(EFFECTS11)
+#	if defined(ENVCUBE) && defined(RAIN) && defined(EFFECTS11)
 	vsout.RaindropData.xy = input.TexCoord1.xy * 0.5 + 0.5;
-#		endif
+#	endif
 
 	return vsout;
 }
@@ -271,48 +271,48 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	endif
 
 #	if defined(ENVCUBE) && defined(RAIN) && defined(DYNAMIC_CUBEMAPS) && defined(EFFECTS11)
-if (SharedData::enbSettings.EnableRain) {
-	float4 raindropNormal = TexRaindropNormals.Sample(SampSourceTexture, input.RaindropData.xy);
-    float alpha = saturate(raindropNormal.w * (1.0 - SharedData::enbSettings.RainMotionTransparency));
-   	clip(alpha - (4.0 / 255.0));
-	raindropNormal.y = 1.0 - raindropNormal.y;
+	if (SharedData::enbSettings.EnableRain) {
+		float4 raindropNormal = TexRaindropNormals.Sample(SampSourceTexture, input.RaindropData.xy);
+		float alpha = saturate(raindropNormal.w * (1.0 - SharedData::enbSettings.RainMotionTransparency));
+		clip(alpha - (4.0 / 255.0));
+		raindropNormal.y = 1.0 - raindropNormal.y;
 
-    // Reconstruct camera-relative worldspace position (camera at origin).
-    float2 uv = input.Position.xy * SharedData::BufferDim.zw;
-    float4 posCS = float4(2.0 * float2(uv.x, 1.0 - uv.y) - 1.0, input.Position.z, 1.0);
-    float4 posWS = mul(FrameBuffer::CameraViewProjInverse, posCS);
-    posWS.xyz /= posWS.w;
+		// Reconstruct camera-relative worldspace position (camera at origin).
+		float2 uv = input.Position.xy * SharedData::BufferDim.zw;
+		float4 posCS = float4(2.0 * float2(uv.x, 1.0 - uv.y) - 1.0, input.Position.z, 1.0);
+		float4 posWS = mul(FrameBuffer::CameraViewProjInverse, posCS);
+		posWS.xyz /= posWS.w;
 
-    // Build worldspace TBN from screen-space derivatives. The billboard is camera-aligned,
-    // so dPdx/dPdy lie in the billboard plane along screen X/Y.
-    float3 T = normalize(ddx(posWS.xyz));
-    float3 N = normalize(cross(T, -ddy(posWS.xyz)));
-    float3 B = cross(N, T);
-    float3x3 TBN = float3x3(T, B, N);
+		// Build worldspace TBN from screen-space derivatives. The billboard is camera-aligned,
+		// so dPdx/dPdy lie in the billboard plane along screen X/Y.
+		float3 T = normalize(ddx(posWS.xyz));
+		float3 N = normalize(cross(T, -ddy(posWS.xyz)));
+		float3 B = cross(N, T);
+		float3x3 TBN = float3x3(T, B, N);
 
-    float3 normalTS = normalize(raindropNormal.xyz * 2.0 - 1.0);
-    float3 normalWS = normalize(mul(normalTS, TBN));
+		float3 normalTS = normalize(raindropNormal.xyz * 2.0 - 1.0);
+		float3 normalWS = normalize(mul(normalTS, TBN));
 
-	if (frontFace)
-		normalWS = -normalWS;
+		if (frontFace)
+			normalWS = -normalWS;
 
-    float3 V = normalize(-posWS.xyz);
-    float NdotV = saturate(dot(normalWS, V));
-    float fresnel = 0.02 + 0.98 * pow(1.0 - NdotV, 5.0);
+		float3 V = normalize(-posWS.xyz);
+		float NdotV = saturate(dot(normalWS, V));
+		float fresnel = 0.02 + 0.98 * pow(1.0 - NdotV, 5.0);
 
-    float3 reflectDir = reflect(-V, normalWS);
-    float3 refractDir = refract(-V, normalWS, 1.0 / 1.33);
-    if (dot(refractDir, refractDir) < 1e-4)
-        refractDir = -V;
+		float3 reflectDir = reflect(-V, normalWS);
+		float3 refractDir = refract(-V, normalWS, 1.0 / 1.33);
+		if (dot(refractDir, refractDir) < 1e-4)
+			refractDir = -V;
 
-    float3 reflectColor = Color::IrradianceToLinear(DynamicCubemaps::EnvReflectionsTexture.SampleLevel(SampSourceTexture, reflectDir, 0).xyz);
-    float3 refractColor = Color::IrradianceToLinear(DynamicCubemaps::EnvReflectionsTexture.SampleLevel(SampSourceTexture, refractDir, 0).xyz);
+		float3 reflectColor = Color::IrradianceToLinear(DynamicCubemaps::EnvReflectionsTexture.SampleLevel(SampSourceTexture, reflectDir, 0).xyz);
+		float3 refractColor = Color::IrradianceToLinear(DynamicCubemaps::EnvReflectionsTexture.SampleLevel(SampSourceTexture, refractDir, 0).xyz);
 
-    psout.Color.xyz = Color::IrradianceToGamma(lerp(refractColor, reflectColor, fresnel));
-    psout.Color.w = alpha;
-    psout.Normal = float4(0, 1, 0, alpha);
-    return psout;
-}
+		psout.Color.xyz = Color::IrradianceToGamma(lerp(refractColor, reflectColor, fresnel));
+		psout.Color.w = alpha;
+		psout.Normal = float4(0, 1, 0, alpha);
+		return psout;
+	}
 #	endif
 
 	float4 sourceColor = TexSourceTexture.Sample(SampSourceTexture, input.TexCoord0);
@@ -342,7 +342,7 @@ if (SharedData::enbSettings.EnableRain) {
 	float3 ambientColor = max(0, SharedData::GetAmbient(float3(0, 0, 1)));
 #	if defined(IBL)
 	if (SharedData::iblSettings.EnableIBL) {
-		ambientColor = ImageBasedLighting::GetDiffuseIBL(ambientColor, float3(0, 0, -1));
+		ambientColor = ImageBasedLighting::GetDiffuseIBL(ambientColor, float3(0, 0, -1), positionWS.xyz);
 	}
 #	endif
 
