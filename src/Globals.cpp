@@ -1,6 +1,7 @@
 #include "Globals.h"
 
 #include "Deferred.h"
+#include "Features/CSEditor.h"
 #include "Features/CloudShadows.h"
 #include "Features/DynamicCubemaps.h"
 #include "Features/Effects11.h"
@@ -34,10 +35,10 @@
 #include "Features/TerrainVariation.h"
 #include "Features/UnifiedWater.h"
 #include "Features/Upscaling.h"
+#include "Features/VanillaFresnel.h"
 #include "Features/VolumetricLighting.h"
 #include "Features/VolumetricShadows.h"
 #include "Features/WaterEffects.h"
-#include "Features/CSEditor.h"
 #include "Features/WetnessEffects.h"
 #include "Menu.h"
 #include "SceneSettingsManager.h"
@@ -82,6 +83,7 @@ namespace globals
 		TerrainHelper terrainHelper{};
 		TerrainShadows terrainShadows{};
 		UnifiedWater unifiedWater{};
+		VanillaFresnel vanillaFresnel{};
 		VolumetricLighting volumetricLighting{};
 		WaterEffects waterEffects{};
 		PerformanceOverlay performanceOverlay{};
