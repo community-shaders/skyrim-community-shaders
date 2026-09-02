@@ -5,13 +5,13 @@
 #ifndef TERRAIN_VARIATION_HLSLI
 #define TERRAIN_VARIATION_HLSLI
 
+#include "Common/Color.hlsli"
 #include "Common/SharedData.hlsli"
 
 // --------------------- CONSTANTS AND STRUCTURES --------------------- //
 static const float HEIGHT_INFLUENCE = 0.3;  // How much height affects blending (0=pure stochastic, 1=pure height)
 static const float2x2 SKEW_MATRIX = float2x2(1.0, 0.0, -0.57735027, 1.15470054);
 static const float WORLD_SCALE = 332.54;
-static const float3 LUMINANCE_WEIGHTS = float3(0.2126, 0.7152, 0.0722);
 static const float2 HASH_MULTIPLIER = float2(1271.5151, 3337.8237);
 // Fade width for c1/c2 rank-swap seams when discarding the third triangle corner.
 static const float TAP_SWAP_FADE_WIDTH = 0.1;
@@ -169,8 +169,8 @@ inline float4 StochasticEffect(Texture2D tex, SamplerState samp, float2 uv, Stoc
 	float4 s2 = tex.SampleLevel(samp, uv + offsets.offset2, mipLevel);
 
 	// Height calculation - use luminance for RGB data, alpha when available
-	float h1 = lerp(dot(s1.rgb, LUMINANCE_WEIGHTS), s1.a, step(0.001, s1.a));
-	float h2 = lerp(dot(s2.rgb, LUMINANCE_WEIGHTS), s2.a, step(0.001, s2.a));
+	float h1 = lerp(Color::RGBToLuminance(s1.rgb), s1.a, step(0.001, s1.a));
+	float h2 = lerp(Color::RGBToLuminance(s2.rgb), s2.a, step(0.001, s2.a));
 	return StochasticBlendTwoSamples(s1, s2, offsets.tap1Weight, h1, h2);
 }
 

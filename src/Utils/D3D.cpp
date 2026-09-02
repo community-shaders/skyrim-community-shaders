@@ -106,41 +106,6 @@ namespace Util
 		Resource->SetPrivateData(WKPDID_D3DDebugObjectNameT, len, buffer);
 	}
 
-	struct CustomInclude : public ID3DInclude
-	{
-		HRESULT Open([[maybe_unused]] D3D_INCLUDE_TYPE IncludeType, LPCSTR pFileName, [[maybe_unused]] LPCVOID pParentData, LPCVOID* ppData, UINT* pBytes) override
-		{
-			std::filesystem::path filePath = pFileName;
-			filePath = L"Data\\Shaders" / filePath;
-
-			std::ifstream file(filePath, std::ios::binary);
-			if (!file.is_open()) {
-				*ppData = NULL;
-				*pBytes = 0;
-				return E_FAIL;
-			}
-
-			// Get filesize
-			file.seekg(0, std::ios::end);
-			UINT size = static_cast<UINT>(file.tellg());
-			file.seekg(0, std::ios::beg);
-
-			// Create buffer and read file
-			char* data = new char[size];
-			file.read(data, size);
-			*ppData = data;
-			*pBytes = size;
-			return S_OK;
-		}
-
-		HRESULT Close(LPCVOID pData) override
-		{
-			if (pData)
-				delete[] pData;
-			return S_OK;
-		}
-	};
-
 	ID3D11DeviceChild* CompileShader(const wchar_t* FilePath, const std::vector<std::pair<const char*, const char*>>& Defines, const char* ProgramType, const char* Program)
 	{
 		auto device = globals::d3d::device;

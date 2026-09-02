@@ -13,6 +13,7 @@
 #include "Features/HDRDisplay.h"
 #include "Features/InteriorSun.h"
 #include "Features/PerformanceOverlay.h"
+#include "Features/PostProcessing.h"
 #include "Features/Skin.h"
 #include "Features/SkySync.h"
 #include "Features/Skylighting.h"
@@ -199,10 +200,42 @@ void State::Debug()
 	}
 }
 
+State::TonemapOwner State::GetTonemapOwner()
+{
+	static Util::FrameChecker tonemapOwnerFrameChecker;
+	static TonemapOwner cachedOwner = TonemapOwner::kVanilla;
+
+	if (!tonemapOwnerFrameChecker.IsNewFrame())
+		return cachedOwner;
+
+	auto& effects11 = globals::features::effects11;
+	auto& postProcessing = globals::features::postProcessing;
+
+	// Effects11 does not run over the main menu or loading screen: those composite UI and
+	// scene into one buffer, so an ENB preset would grade the menu itself. It must not claim
+	// ownership there either, or Post Processing would lose its tonemap to a pass that never
+	// renders.
+	const bool effects11CanRender = !IsMainOrLoadingMenuOpen();
+
+	// Effects11 wins ties: its effects form a complete ENB preset (tonemap, bloom, lens,
+	// adaptation) that looks wrong when only partially applied, whereas Post Processing
+	// degrades gracefully to the vanilla tonemap.
+	if (effects11.loaded && effects11CanRender && effects11.WantsTonemapOwnership())
+		cachedOwner = TonemapOwner::kEffects11;
+	else if (postProcessing.loaded && postProcessing.WantsTonemapOwnership())
+		cachedOwner = TonemapOwner::kPostProcessing;
+	else
+		cachedOwner = TonemapOwner::kVanilla;
+
+	return cachedOwner;
+}
+
 bool State::HandlePostProcessing(RE::RENDER_TARGET a_input, RE::RENDER_TARGET a_output)
 {
-	auto& effects11 = globals::features::effects11;
-	if (!effects11.loaded || !effects11.HandleTonemapRender(a_input, a_output))
+	if (GetTonemapOwner() != TonemapOwner::kEffects11)
+		return false;
+
+	if (!globals::features::effects11.RenderTonemap(a_input, a_output))
 		return false;
 
 	auto renderer = globals::game::renderer;

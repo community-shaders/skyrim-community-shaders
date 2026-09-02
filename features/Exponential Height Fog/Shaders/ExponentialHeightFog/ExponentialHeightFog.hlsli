@@ -1,6 +1,7 @@
 #ifndef __EXPONENTIAL_HEIGHT_FOG_HLSLI__
 #define __EXPONENTIAL_HEIGHT_FOG_HLSLI__
 
+#include "Common/Color.hlsli"
 #include "Common/Random.hlsli"
 #include "Common/SharedData.hlsli"
 #include "ExponentialHeightFog/VolumetricFogCommon.hlsli"
@@ -209,7 +210,7 @@ namespace ExponentialHeightFog
 			float3 lightDirection = normalize(SharedData::DirLightDirection.xyz);
 			float cosTheta = dot(lightDirection, viewDirection);
 			float phase = HenyeyGreenstein(cosTheta, SharedData::exponentialHeightFogSettings.directionalInscatteringAnisotropy);
-			float3 directionalLightInscattering = SharedData::DirLightColor.xyz * phase;
+			float3 directionalLightInscattering = Color::GamutTransform(SharedData::DirLightColor.xyz) * phase;
 			directionalInscattering = directionalLightInscattering * (1.0f - expFogFactor) * SharedData::exponentialHeightFogSettings.directionalInscatteringMultiplier;
 		}
 

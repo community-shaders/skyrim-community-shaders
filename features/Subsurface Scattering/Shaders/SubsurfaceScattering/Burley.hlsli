@@ -62,6 +62,8 @@ float4 BurleyNormalizedSS(uint2 DTid, float2 texCoord, float sssAmount, bool hum
 	float3 originalIrradiance = centerColor.xyz;
 
 	float4 diffuseMeanFreePath = humanProfile ? MeanFreePathHuman : MeanFreePathBase;
+	// MFP channels are defined relative to color space primaries; convert to working gamut
+	diffuseMeanFreePath.xyz = Color::GamutTransform(diffuseMeanFreePath.xyz);
 	diffuseMeanFreePath.xyz = float3(max(diffuseMeanFreePath.x, 1e-5f), max(diffuseMeanFreePath.y, 1e-5f), max(diffuseMeanFreePath.z, 1e-5f));
 	diffuseMeanFreePath *= sssAmount;
 

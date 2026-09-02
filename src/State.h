@@ -88,6 +88,37 @@ public:
 	/** @brief One-time post-D3D setup: creates resources, probes GPU caps, initializes features. */
 	void Setup();
 
+	/**
+	 * @brief Which feature owns the HDR tonemap pass this frame.
+	 *
+	 * Effects11 and Post Processing both replace the vanilla ISHDR tonemap and cannot
+	 * coexist: Effects11 skips the whole pass, while Post Processing relies on it running
+	 * so ISHDR can take its passthrough branch. Exactly one owner is resolved per frame.
+	 */
+	enum class TonemapOwner
+	{
+		kVanilla,         ///< Vanilla ISHDR tonemap runs unmodified.
+		kPostProcessing,  ///< Post Processing pipeline drives tonemapping.
+		kEffects11        ///< Effects11 (ENB-compatible) replaces the pass entirely.
+	};
+
+	/**
+	 * @brief Resolves the tonemap owner for the current frame (cached once per frame).
+	 *
+	 * Effects11 wins when both features want the pass, because it applies a whole-preset
+	 * look that degrades badly when partially applied. The choice is surfaced in both
+	 * feature UIs so the loser is not silently disabled.
+	 *
+	 * @return The feature owning tonemapping this frame.
+	 */
+	TonemapOwner GetTonemapOwner();
+
+	/**
+	 * @brief Dispatches the HDR tonemap pass to the resolved owner.
+	 * @param a_input Render target holding the scene color to tonemap.
+	 * @param a_output Render target receiving the tonemapped result.
+	 * @return True if the vanilla pass was fully replaced and must not be invoked.
+	 */
 	bool HandlePostProcessing(RE::RENDER_TARGET a_input, RE::RENDER_TARGET a_output);
 
 	/**
