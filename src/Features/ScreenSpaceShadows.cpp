@@ -66,7 +66,7 @@ void ScreenSpaceShadows::ClearShaderCache()
 
 uint ScreenSpaceShadows::GetScaledSampleCount()
 {
-	float2 renderSize = Util::ConvertToDynamic(float2{ (float)globals::game::graphicsState->screenWidth, (float)globals::game::graphicsState->screenHeight });
+	float2 renderSize = Util::ConvertToDynamic(globals::state->screenSize);
 
 	// Scale sample count based on both dimensions relative to 1920x1080 reference
 	float2 referenceRes = { 1920.0f, 1080.0f };
@@ -127,7 +127,7 @@ void ScreenSpaceShadows::DrawShadows()
 
 	auto lightProjectionF = CalculateLightProjection();
 
-	float2 renderSize = Util::ConvertToDynamic(float2{ (float)globals::game::graphicsState->screenWidth, (float)globals::game::graphicsState->screenHeight });
+	float2 renderSize = Util::ConvertToDynamic(globals::state->screenSize);
 	int viewportSize[2] = { (int)renderSize.x, (int)renderSize.y };
 
 	int minRenderBounds[2] = { 0, 0 };

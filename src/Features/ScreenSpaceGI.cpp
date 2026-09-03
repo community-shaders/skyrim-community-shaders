@@ -766,7 +766,7 @@ void ScreenSpaceGI::DrawSSGI()
 	auto rts = renderer->GetRuntimeData().renderTargets;
 	auto deferred = globals::deferred;
 
-	float2 size = Util::ConvertToDynamic(float2{ (float)globals::game::graphicsState->screenWidth, (float)globals::game::graphicsState->screenHeight });
+	float2 size = Util::ConvertToDynamic(globals::state->screenSize);
 	auto resolution = std::array{ (uint)size.x, (uint)size.y };
 	auto resChoices = std::array{
 		resolution, std::array{ resolution[0] >> 1, resolution[1] >> 1 }, std::array{ resolution[0] >> 2, resolution[1] >> 2 }

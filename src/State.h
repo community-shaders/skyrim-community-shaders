@@ -264,6 +264,7 @@ public:
 
 	bool inWorld = false;
 	bool activeReflections = false;
+	float2 screenSize = {};
 
 	// Cached menu open states, updated once per frame in Reset().
 	// Avoids repeated IsMenuOpen calls (each constructs a BSFixedString).

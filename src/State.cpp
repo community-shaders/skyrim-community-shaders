@@ -855,6 +855,7 @@ void State::SetupResources()
 	// Grab main texture to get resolution
 	D3D11_TEXTURE2D_DESC texDesc{};
 	renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN].texture->GetDesc(&texDesc);
+	screenSize = { (float)texDesc.Width, (float)texDesc.Height };
 
 	globals::d3d::context->QueryInterface(__uuidof(pPerf), reinterpret_cast<void**>(&pPerf));
 
@@ -1035,7 +1036,7 @@ void State::UpdateSharedData([[maybe_unused]] bool a_inWorld, [[maybe_unused]] b
 		data.DirLightDirection.Normalize();
 
 		data.CameraData = Util::GetCameraData();
-		data.BufferDim = { (float)globals::game::graphicsState->screenWidth, (float)globals::game::graphicsState->screenHeight, 1.0f / (float)globals::game::graphicsState->screenWidth, 1.0f / (float)globals::game::graphicsState->screenHeight };
+		data.BufferDim = { screenSize.x, screenSize.y, 1.0f / screenSize.x, 1.0f / screenSize.y };
 		data.Timer = timer;
 
 		auto temporal = Util::GetTemporal();
@@ -1069,7 +1070,7 @@ void State::UpdateSharedData([[maybe_unused]] bool a_inWorld, [[maybe_unused]] b
 		if (upscaling.loaded) {
 			auto upscaleMethod = upscaling.GetUpscaleMethod();
 			if (temporal && upscaleMethod != Upscaling::UpscaleMethod::kTAA) {
-				float2 screenSz{ (float)globals::game::graphicsState->screenWidth, (float)globals::game::graphicsState->screenHeight };
+				float2 screenSz = screenSize;
 				auto renderSize = Util::ConvertToDynamic(screenSz, true);
 				data.MipBias = std::log2f(renderSize.x / screenSz.x);
 				if (upscaleMethod == Upscaling::UpscaleMethod::kDLSS)

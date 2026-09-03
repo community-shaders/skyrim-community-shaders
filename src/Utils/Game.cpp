@@ -187,7 +187,7 @@ namespace Util
 		static float& cameraFOVDeg = (*(float*)(REL::RelocationID(513786, 388785).address()));  // FOV degrees
 		float hFOVRad = cameraFOVDeg * (3.14159265359f / 180.0f);
 		float unitHalfWidth = tan(hFOVRad / 2);                                                                // This is same as camera frustum RL
-		float unitHalfHeight = unitHalfWidth / ((float)globals::game::graphicsState->screenWidth / (float)globals::game::graphicsState->screenHeight);  // frustum TB
+		float unitHalfHeight = unitHalfWidth / (globals::state->screenSize.x / globals::state->screenSize.y);  // frustum TB
 		float vFOVRad = 2.0f * atan(unitHalfHeight);
 		return vFOVRad;
 	}
@@ -207,11 +207,9 @@ namespace Util
 
 	DispatchCount GetScreenDispatchCount(bool a_dynamic)
 	{
-		float2 resolution{ (float)globals::game::graphicsState->screenWidth, (float)globals::game::graphicsState->screenHeight };
-
-		// Feature passes use the scaled render area even when the vanilla dynamic-resolution lock is set.
-		if (a_dynamic)
-			resolution = ConvertToDynamic(resolution, true);
+		// screenSize is the actual render-buffer size, already at render scale.
+		float2 resolution = globals::state->screenSize;
+		(void)a_dynamic;
 
 		uint dispatchX = (uint)std::ceil(resolution.x / 8.0f);
 		uint dispatchY = (uint)std::ceil(resolution.y / 8.0f);
