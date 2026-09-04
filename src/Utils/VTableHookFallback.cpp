@@ -42,15 +42,17 @@ namespace Util
 	{
 		std::scoped_lock lock(clonedVTableMutex);
 
+		// Check the bound before reading the slot: the object may already point at a clone,
+		// which has exactly maxClonedVTableSlots entries.
+		if (a_idx >= maxClonedVTableSlots) {
+			logger::warn("[Hooks] virtual slot {} exceeds the supported clone size {}; left unhooked (Detours error {})", a_idx, maxClonedVTableSlots, a_detourError);
+			return 0;
+		}
+
 		// Read the vtable pointer under the lock: another thread may have just pointed this
 		// object at a clone, and the clone check below must see that.
 		auto vtable = *static_cast<std::uintptr_t**>(a_object);
 		const auto original = vtable[a_idx];
-
-		if (a_idx >= maxClonedVTableSlots) {
-			logger::warn("[Hooks] virtual slot {} exceeds the supported clone size {}; left unhooked (Detours error {})", a_idx, maxClonedVTableSlots, a_detourError);
-			return original;
-		}
 
 		// If an earlier hook already pointed this object at a clone, patch that clone; a new
 		// clone would drop the earlier hook. `original` was read from the clone, so the hooks
@@ -87,8 +89,11 @@ namespace Util
 			return original;
 		}
 		clone[a_idx] = reinterpret_cast<std::uintptr_t>(a_thunk);
-		*static_cast<std::uintptr_t**>(a_object) = clone.get();
-		clonedVTables[a_object] = std::move(clone);
+		// Store the clone before pointing the object at it, so a throwing insert cannot
+		// leave the object with a dangling vtable pointer.
+		auto& storedClone = clonedVTables[a_object];
+		storedClone = std::move(clone);
+		*static_cast<std::uintptr_t**>(a_object) = storedClone.get();
 		logger::warn("[Hooks] Detours could not patch virtual slot {} (error {}) and the vtable page refused VirtualProtect (error {}); repointed the object at a patched vtable clone", a_idx, a_detourError, protectError);
 		return original;
 	}
