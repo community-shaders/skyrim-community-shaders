@@ -81,7 +81,7 @@ namespace BackgroundBlur
 		winrt::com_ptr<ID3D11ShaderResourceView> cachedSourceSRV;
 		ID3D11Texture2D* cachedSourceTexture = nullptr;  // raw pointer for cache invalidation check
 
-		// Frozen copy of the HDR world buffer, captured once when a persistent vanilla menu
+		// Frozen copy of the HDR world buffer, captured once when a persistent vanilla menu is open
 		winrt::com_ptr<ID3D11Texture2D> frozenSceneTexture;
 		bool wasPersistentMenuOpen = false;
 
