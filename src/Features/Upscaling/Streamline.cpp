@@ -1768,7 +1768,20 @@ bool Streamline::SetDLSSGMode(bool a_enable, uint32_t a_displayWidth, uint32_t a
 		options.colorWidth = a_displayWidth;
 		options.colorHeight = a_displayHeight;
 		// Volatile inputs are copied into Streamline-owned resources before present.
-		options.queueParallelismMode = sl::DLSSGQueueParallelismMode::eBlockNoClientQueues;
+		//
+		// eBlockNoClientQueues is the faster-sounding option and was what this used, but Streamline
+		// only permits it if the client waits on DLSSGState::inputsProcessingCompletionFence before
+		// modifying or destroying any resource tagged as a DLSS-G input. CS never reads that fence,
+		// so it can overwrite depth, motion vectors or the hudless colour while DLSS-G is still
+		// consuming them for the previously presented frame. The symptom of that race is an
+		// occasional corrupt generated frame rather than a measurable slowdown.
+		//
+		// The queue parallelism it buys does not show up here in any case. Six paired runs at the
+		// refresh rate, a fresh game instance each, were indistinguishable: frame-time deviation
+		// 0.012 / 0.014 / 0.012 ms against 0.013 / 0.014 / 0.019 ms, with GPU-busy differences
+		// swamped by which way the camera happened to be facing. The mode was trading a correctness
+		// guarantee for nothing measurable, so take the documented default, whose contract CS meets.
+		options.queueParallelismMode = sl::DLSSGQueueParallelismMode::eBlockPresentingClientQueue;
 		const sl::Result res = g_sl.slDLSSGSetOptions(g_sl.viewport, options);
 		if (res != sl::Result::eOk) {
 			if (changed)
