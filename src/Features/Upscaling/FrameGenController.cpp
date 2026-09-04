@@ -241,6 +241,20 @@ namespace FrameGen
 			return;
 		}
 
+		// The two interpolators want opposite presentation behaviour, so choose per method rather
+		// than once for the session. Tear-free replaces a queued image instead of queueing it, which
+		// is what DLSS-G's flip metering needs and what destroys FSR-FG once FFX stops spacing its
+		// pair: the interpolated frame lands a fraction of a millisecond before the real one and is
+		// superseded before scanout. Measured on a 60 Hz display at a 20 fps cap, tear-free left
+		// FSR-FG at 10.5 fps against a 20 fps target with 48% of presents never displayed, where a
+		// queueing mode held 18.9; DLSS-G wanted the reverse, holding its target exactly under
+		// tear-free and losing 44% under the queueing mode.
+		//
+		// Presenter::pickPresentMode reads this at swapchain creation, so it has to be set before
+		// the recreate below -- which a method switch performs anyway, so no extra recreate is
+		// introduced by choosing here.
+		Streamline::PushDxvkTearingPreference(wantFSRFG ? 2u : 0u);
+
 		sl->SetDLSSGDesiredLoaded(wantDLSSG);
 		sl->SetFSRFGDesiredLoaded(wantFSRFG);
 		BeginPresenterRecreateTransition();
