@@ -843,8 +843,6 @@ void State::SetupResources()
 
 	frameTimingActive = false;
 
-	auto renderer = globals::game::renderer;
-
 	permutationCB = new ConstantBuffer(ConstantBufferDesc<PermutationCB>());
 	sharedDataCB = new ConstantBuffer(ConstantBufferDesc<SharedDataCB>());
 
@@ -852,10 +850,20 @@ void State::SetupResources()
 	(void)data;
 	featureDataCB = new ConstantBuffer(ConstantBufferDesc((uint32_t)size));
 
-	// Grab main texture to get resolution
-	D3D11_TEXTURE2D_DESC texDesc{};
-	renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN].texture->GetDesc(&texDesc);
-	screenSize = { (float)texDesc.Width, (float)texDesc.Height };
+	const auto renderDimensions = Util::GetRenderDimensions();
+	screenSize = renderDimensions.BufferSize;
+	const auto& runtimeData = globals::game::graphicsState->GetRuntimeData();
+	logger::info(
+		"[RenderDimensions] setup output={}x{}, buffer={}x{}, active={}x{}, active/buffer={:.4f}x{:.4f}, lock={}",
+		static_cast<uint32_t>(renderDimensions.OutputSize.x),
+		static_cast<uint32_t>(renderDimensions.OutputSize.y),
+		static_cast<uint32_t>(renderDimensions.BufferSize.x),
+		static_cast<uint32_t>(renderDimensions.BufferSize.y),
+		static_cast<uint32_t>(renderDimensions.ActiveSize.x),
+		static_cast<uint32_t>(renderDimensions.ActiveSize.y),
+		renderDimensions.ActiveToBufferScale.x,
+		renderDimensions.ActiveToBufferScale.y,
+		runtimeData.dynamicResolutionLock);
 
 	globals::d3d::context->QueryInterface(__uuidof(pPerf), reinterpret_cast<void**>(&pPerf));
 
@@ -1036,6 +1044,8 @@ void State::UpdateSharedData([[maybe_unused]] bool a_inWorld, [[maybe_unused]] b
 		data.DirLightDirection.Normalize();
 
 		data.CameraData = Util::GetCameraData();
+		const auto renderDimensions = Util::GetRenderDimensions();
+		screenSize = renderDimensions.BufferSize;
 		data.BufferDim = { screenSize.x, screenSize.y, 1.0f / screenSize.x, 1.0f / screenSize.y };
 		data.Timer = timer;
 

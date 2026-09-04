@@ -667,8 +667,8 @@ bool ScreenSpaceGI::ShadersOK()
 void ScreenSpaceGI::UpdateSB()
 {
 	float2 res = { (float)texRadiance->desc.Width, (float)texRadiance->desc.Height };
-	float2 dynres = Util::ConvertToDynamic(res);
-	dynres = { floor(dynres.x), floor(dynres.y) };
+	float2 dynres = Util::GetActiveRenderSize();
+	dynres = { std::min(floor(dynres.x), res.x), std::min(floor(dynres.y), res.y) };
 
 	static float4x4 prevInvView = {};
 
@@ -766,7 +766,7 @@ void ScreenSpaceGI::DrawSSGI()
 	auto rts = renderer->GetRuntimeData().renderTargets;
 	auto deferred = globals::deferred;
 
-	float2 size = Util::ConvertToDynamic(globals::state->screenSize);
+	float2 size = Util::GetActiveRenderSize();
 	auto resolution = std::array{ (uint)size.x, (uint)size.y };
 	auto resChoices = std::array{
 		resolution, std::array{ resolution[0] >> 1, resolution[1] >> 1 }, std::array{ resolution[0] >> 2, resolution[1] >> 2 }

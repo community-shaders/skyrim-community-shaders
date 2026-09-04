@@ -192,6 +192,69 @@ namespace Util
 		return vFOVRad;
 	}
 
+	float2 GetOutputSize()
+	{
+		if (!globals::game::graphicsState)
+			return {};
+
+		return {
+			static_cast<float>(globals::game::graphicsState->screenWidth),
+			static_cast<float>(globals::game::graphicsState->screenHeight)
+		};
+	}
+
+	float2 GetRenderBufferSize()
+	{
+		float2 size = GetOutputSize();
+		if (!globals::game::renderer)
+			return size;
+
+		auto& main = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
+		if (!main.texture)
+			return size;
+
+		D3D11_TEXTURE2D_DESC desc{};
+		main.texture->GetDesc(&desc);
+		if (desc.Width && desc.Height)
+			size = { static_cast<float>(desc.Width), static_cast<float>(desc.Height) };
+
+		return size;
+	}
+
+	RenderDimensions GetRenderDimensions()
+	{
+		RenderDimensions dimensions{};
+		dimensions.OutputSize = GetOutputSize();
+		dimensions.BufferSize = GetRenderBufferSize();
+
+		if (dimensions.OutputSize.x <= 0.0f || dimensions.OutputSize.y <= 0.0f)
+			dimensions.OutputSize = dimensions.BufferSize;
+		if (dimensions.BufferSize.x <= 0.0f || dimensions.BufferSize.y <= 0.0f)
+			dimensions.BufferSize = dimensions.OutputSize;
+
+		dimensions.BufferIsOutputSized =
+			static_cast<uint32_t>(dimensions.BufferSize.x) == static_cast<uint32_t>(dimensions.OutputSize.x) &&
+			static_cast<uint32_t>(dimensions.BufferSize.y) == static_cast<uint32_t>(dimensions.OutputSize.y);
+
+		// When an external upscaler replaces kMAIN with a render-resolution texture,
+		// its dimensions already include the scale. Applying the engine ratio again
+		// is the source of the displaced screen-space effects seen with PureDark.
+		dimensions.ActiveSize = dimensions.BufferIsOutputSized ? ConvertToDynamic(dimensions.BufferSize) : dimensions.BufferSize;
+		dimensions.ActiveSize.x = std::clamp(std::floor(dimensions.ActiveSize.x), 1.0f, dimensions.BufferSize.x);
+		dimensions.ActiveSize.y = std::clamp(std::floor(dimensions.ActiveSize.y), 1.0f, dimensions.BufferSize.y);
+		dimensions.ActiveToBufferScale = {
+			dimensions.ActiveSize.x / dimensions.BufferSize.x,
+			dimensions.ActiveSize.y / dimensions.BufferSize.y
+		};
+
+		return dimensions;
+	}
+
+	float2 GetActiveRenderSize()
+	{
+		return GetRenderDimensions().ActiveSize;
+	}
+
 	float2 ConvertToDynamic(float2 a_size, bool a_ignoreLock)
 	{
 		auto viewport = globals::game::graphicsState;
@@ -207,9 +270,8 @@ namespace Util
 
 	DispatchCount GetScreenDispatchCount(bool a_dynamic)
 	{
-		// screenSize is the actual render-buffer size, already at render scale.
-		float2 resolution = globals::state->screenSize;
-		(void)a_dynamic;
+		const auto dimensions = GetRenderDimensions();
+		const float2 resolution = a_dynamic ? dimensions.ActiveSize : dimensions.OutputSize;
 
 		uint dispatchX = (uint)std::ceil(resolution.x / 8.0f);
 		uint dispatchY = (uint)std::ceil(resolution.y / 8.0f);

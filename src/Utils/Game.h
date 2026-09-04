@@ -37,6 +37,29 @@ namespace Util
 
 	RE::NiPoint3 GetEyePosition();
 
+	/**
+	 * @brief Resolution spaces used by screen-space rendering.
+	 *
+	 * OutputSize is the game/window output size. BufferSize is the physical
+	 * kMAIN texture size. ActiveSize is the portion of that texture rendered
+	 * this frame. External upscalers may resize kMAIN themselves while also
+	 * exposing dynamic-resolution ratios, so those ratios must not be applied
+	 * to an already-resized buffer.
+	 */
+	struct RenderDimensions
+	{
+		float2 OutputSize{};
+		float2 BufferSize{};
+		float2 ActiveSize{};
+		float2 ActiveToBufferScale{ 1.0f, 1.0f };
+		bool BufferIsOutputSized = true;
+	};
+
+	[[nodiscard]] float2 GetOutputSize();
+	[[nodiscard]] float2 GetRenderBufferSize();
+	[[nodiscard]] RenderDimensions GetRenderDimensions();
+	[[nodiscard]] float2 GetActiveRenderSize();
+
 	float2 ConvertToDynamic(float2 a_size, bool a_ignoreLock = false);
 
 	// Game unit conversions

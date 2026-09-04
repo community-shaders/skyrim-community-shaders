@@ -20,7 +20,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	EnableLightsVisualisation,
 	LightsVisualisationMode)
 
-static constexpr uint CLUSTER_MAX_LIGHTS = 128;
+// Keep the allocation in sync with MAX_CLUSTER_LIGHTS in Common.hlsli.
+static constexpr uint CLUSTER_MAX_LIGHTS = 256;
 
 void LightLimitFix::DrawSettings()
 {
@@ -88,7 +89,11 @@ LightLimitFix::PerFrame LightLimitFix::GetCommonBufferData()
 
 void LightLimitFix::SetupResources()
 {
-	float2 screenSize{ (float)globals::game::graphicsState->screenWidth, (float)globals::game::graphicsState->screenHeight };
+	const auto dimensions = Util::GetRenderDimensions();
+	float2 screenSize{
+		std::max(dimensions.OutputSize.x, dimensions.BufferSize.x),
+		std::max(dimensions.OutputSize.y, dimensions.BufferSize.y)
+	};
 	clusterSize[0] = ((uint)screenSize.x + 63) / 64;
 	clusterSize[1] = ((uint)screenSize.y + 63) / 64;
 	clusterSize[2] = 32;
@@ -518,7 +523,22 @@ void LightLimitFix::UpdateStructure()
 	lightsNear = *globals::game::cameraNear;
 	lightsFar = *globals::game::cameraFar;
 
-	auto renderSize = Util::ConvertToDynamic(float2{ (float)globals::game::graphicsState->screenWidth, (float)globals::game::graphicsState->screenHeight });
+	const auto dimensions = Util::GetRenderDimensions();
+	const auto renderSize = dimensions.ActiveSize;
+	static bool loggedDimensions = false;
+	if (!loggedDimensions) {
+		const auto& runtimeData = globals::game::graphicsState->GetRuntimeData();
+		logger::info(
+			"[RenderDimensions] LightLimitFix output={}x{}, buffer={}x{}, active={}x{}, lock={}",
+			static_cast<uint32_t>(dimensions.OutputSize.x),
+			static_cast<uint32_t>(dimensions.OutputSize.y),
+			static_cast<uint32_t>(dimensions.BufferSize.x),
+			static_cast<uint32_t>(dimensions.BufferSize.y),
+			static_cast<uint32_t>(dimensions.ActiveSize.x),
+			static_cast<uint32_t>(dimensions.ActiveSize.y),
+			runtimeData.dynamicResolutionLock);
+		loggedDimensions = true;
+	}
 	clusterSize[0] = ((uint)renderSize.x + 63) / 64;
 	clusterSize[1] = ((uint)renderSize.y + 63) / 64;
 	clusterSize[2] = 32;

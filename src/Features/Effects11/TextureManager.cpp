@@ -5,6 +5,7 @@
 #include "EffectManager.h"
 #include "Globals.h"
 #include "State.h"
+#include "Utils/Game.h"
 
 TextureManager& TextureManager::GetSingleton()
 {
@@ -38,8 +39,9 @@ void TextureManager::SwapTextures(const std::string& name1, const std::string& n
 
 void TextureManager::CreateCommonTextures()
 {
-	UINT screenWidth = globals::game::graphicsState->screenWidth;
-	UINT screenHeight = globals::game::graphicsState->screenHeight;
+	const auto bufferSize = Util::GetRenderBufferSize();
+	UINT screenWidth = static_cast<UINT>(bufferSize.x);
+	UINT screenHeight = static_cast<UINT>(bufferSize.y);
 
 	commonTextureCache.insert({ "TextureHDRTemp", CreateTexture(screenWidth, screenHeight, DXGI_FORMAT_R16G16B16A16_FLOAT, "TextureManager::TextureHDRTemp") });
 	commonTextureCache.insert({ "TextureHDRTemp2", CreateTexture(screenWidth, screenHeight, DXGI_FORMAT_R16G16B16A16_FLOAT, "TextureManager::TextureHDRTemp2") });

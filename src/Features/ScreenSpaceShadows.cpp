@@ -66,7 +66,7 @@ void ScreenSpaceShadows::ClearShaderCache()
 
 uint ScreenSpaceShadows::GetScaledSampleCount()
 {
-	float2 renderSize = Util::ConvertToDynamic(globals::state->screenSize);
+	float2 renderSize = Util::GetActiveRenderSize();
 
 	// Scale sample count based on both dimensions relative to 1920x1080 reference
 	float2 referenceRes = { 1920.0f, 1080.0f };
@@ -127,7 +127,8 @@ void ScreenSpaceShadows::DrawShadows()
 
 	auto lightProjectionF = CalculateLightProjection();
 
-	float2 renderSize = Util::ConvertToDynamic(globals::state->screenSize);
+	const auto dimensions = Util::GetRenderDimensions();
+	float2 renderSize = dimensions.ActiveSize;
 	int viewportSize[2] = { (int)renderSize.x, (int)renderSize.y };
 
 	int minRenderBounds[2] = { 0, 0 };
@@ -150,9 +151,9 @@ void ScreenSpaceShadows::DrawShadows()
 	auto buffer = raymarchCB->CB();
 	context->CSSetConstantBuffers(1, 1, &buffer);
 
-	auto viewport = globals::game::graphicsState;
-
-	float2 dynamicRes = { viewport->GetRuntimeData().dynamicResolutionWidthRatio, viewport->GetRuntimeData().dynamicResolutionHeightRatio };
+	// bend_sss addresses a full physical texture with active-render pixels. This
+	// scale is 1 when an external upscaler has already resized the texture.
+	float2 dynamicRes = dimensions.ActiveToBufferScale;
 
 	// Shared dispatch logic
 	auto Dispatch = [&](ID3D11ComputeShader* shader, const float* lightProj,

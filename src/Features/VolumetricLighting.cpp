@@ -174,8 +174,9 @@ void VolumetricLighting::SetupResources()
 
 void VolumetricLighting::EarlyPrepass()
 {
-	int32_t width = static_cast<int32_t>((float)globals::game::graphicsState->screenWidth);
-	int32_t height = static_cast<int32_t>((float)globals::game::graphicsState->screenHeight);
+	const auto renderSize = Util::GetActiveRenderSize();
+	int32_t width = static_cast<int32_t>(renderSize.x);
+	int32_t height = static_cast<int32_t>(renderSize.y);
 
 	if (width != vlData.screenX || height != vlData.screenY) {
 		blurHCS = nullptr;

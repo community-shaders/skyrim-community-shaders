@@ -696,8 +696,7 @@ void Effects11::DrawVolumetricRays()
 
 	D3D11_TEXTURE2D_DESC mainTexDesc{};
 	main.texture->GetDesc(&mainTexDesc);
-	float2 resolution = { static_cast<float>(mainTexDesc.Width), static_cast<float>(mainTexDesc.Height) };
-	resolution = Util::ConvertToDynamic(resolution);
+	float2 resolution = Util::GetActiveRenderSize();
 	uint32_t dynWidth = static_cast<uint32_t>(resolution.x);
 	uint32_t dynHeight = static_cast<uint32_t>(resolution.y);
 
