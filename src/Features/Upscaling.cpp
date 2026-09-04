@@ -601,8 +601,21 @@ double Upscaling::GetTargetFrameRate() const
 	if (!loaded)
 		return 0.0;
 	const int divisor = settings.frameRateLimitDivisor;
-	if (divisor <= 0)
+	if (divisor <= 0) {
+		// "Unlocked" with DLSS-G means no frame generation at all. sl.dlss_g presents tear-free --
+		// its flip metering cannot space a generated frame across tearing presents -- so output
+		// cannot exceed the refresh rate. Uncapped, the game renders at the refresh rate by itself
+		// and leaves DLSS-G no room to insert anything: measured 60.3 rendered against 59.9
+		// presented, a flat 1:1, where a refresh-rate cap gives the expected 30.2 rendered and 59.9
+		// presented. Target the refresh rate so the feature the user switched on actually runs;
+		// there is no frame rate above it for DLSS-G to reach anyway.
+		// Keyed off the setting rather than IsFrameGenerationActive(), which is false until frame
+		// generation has engaged: gating on it is self-defeating, because without the cap the game
+		// fills the refresh rate on its own and DLSS-G never gets the room it needs to engage.
+		if (settings.frameGeneration && GetFrameGenMethod() == FrameGenMethod::kDLSSG)
+			return std::max(1.0, static_cast<double>(GetMonitorRefreshRate()));
 		return 0.0;
+	}
 	// Deliberately NOT rounded to a whole frame rate. The target is a submultiple of the display
 	// refresh, and rounding it breaks that relationship: at 165 Hz a divisor of 4 becomes 41 fps
 	// (24.390 ms) instead of 41.25 (24.242 ms, exactly four refresh intervals). That 0.61% error
