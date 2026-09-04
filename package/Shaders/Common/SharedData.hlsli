@@ -187,7 +187,8 @@ namespace SharedData
 	struct TerrainVariationSettings
 	{
 		uint enableLODTerrainTilingFix;  ///< 1 = apply variation to LOD terrain.
-		uint3 pad;
+		uint enableMeshSupport;          ///< 1 = apply variation to landscape-textured meshes.
+		uint2 pad;
 	};
 
 	struct IBLSettings
