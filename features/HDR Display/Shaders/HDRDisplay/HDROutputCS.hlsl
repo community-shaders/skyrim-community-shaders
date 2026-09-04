@@ -10,6 +10,8 @@
 Texture2D<float4> SceneTex : register(t0);
 Texture2D<float4> UITex : register(t1);
 RWTexture2D<float4> HDROutput : register(u0);
+/** Presented frame for XeSS-FG (HUD-less + UI); only written when writeFgComposite is set. */
+RWTexture2D<float4> FGCompositeOutput : register(u1);
 
 cbuffer PerFrame : register(b0)
 {
@@ -23,6 +25,7 @@ cbuffer PerFrame : register(b0)
 	float fgTweenMenuMidAlphaBoost : packoffset(c1.w);  ///< TweenMenu: soften AA band when compositing here (UIBrightnessCS skips while paused)
 	float previewSDR : packoffset(c2.x);                ///< 1.0 = emit sRGB SDR (crop preview) instead of PQ HDR10
 	float applyAutoHDR : packoffset(c2.y);              ///< 1.0 = Effects11 replaced ISHDR, so expand its SDR result into HDR
+	float writeFgComposite : packoffset(c2.z);          ///< 1.0 = also write HUD-less + UI to FGCompositeOutput (SDR frame generation)
 }
 
 [numthreads(8, 8, 1)] void main(uint3 dispatchID : SV_DispatchThreadID) {
@@ -109,6 +112,11 @@ cbuffer PerFrame : register(b0)
 		}
 
 		finalColor = saturate(finalColor);
+
+		// Frame generation presents HUD-less + UI while the interpolator receives HUD-less only.
+		// Same premultiplied blend UICompositeCS applies, produced here in the same dispatch.
+		if (writeFgComposite > 0.5)
+			FGCompositeOutput[dispatchID.xy] = float4(saturate(ui.rgb + saturate(sceneGamma) * (1.0 - ui.a)), 1.0);
 	}
 
 	HDROutput[dispatchID.xy] = float4(finalColor, 1.0);

@@ -2005,9 +2005,13 @@ void PerformanceOverlay::UpdateGraphValues()
 			state.postFGFrameTimeMs = fgDeltaTime * 1000.0f;
 			state.postFGFps = 1000.0f / state.postFGFrameTimeMs;
 		} else {
-			// Fallback if FG time is not available
-			state.postFGFrameTimeMs = state.frameTimeMs / Settings::kFrameGenerationMultiplier;
-			state.postFGFps = state.fps * Settings::kFrameGenerationMultiplier;
+			// Fallback if FG time is not available. Multi-frame generation presents more than
+			// one frame per rendered frame, so use the multiplier the backend is running at.
+			const float multiplier = std::max(
+				Settings::kFrameGenerationMultiplier,
+				static_cast<float>(globals::features::upscaling.GetFrameGenerationMultiplier()));
+			state.postFGFrameTimeMs = state.frameTimeMs / multiplier;
+			state.postFGFps = state.fps * multiplier;
 		}
 
 		// Update post-FG smooth values when timer elapses

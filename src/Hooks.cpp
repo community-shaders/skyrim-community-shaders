@@ -531,6 +531,9 @@ struct BSInputDeviceManager_PollInputDevices
 		// Reflex sleep/cap runs here by design: this executes before rendering work for the frame.
 		// UpdateReflex() enforces "once per frame" internally in case this hook is hit multiple times.
 		globals::features::upscaling.streamline.UpdateReflex();
+		auto& upscaling = globals::features::upscaling;
+		if (upscaling.activeFrameGenerationMode == static_cast<uint>(Upscaling::FrameGenerationMethod::kXESS))
+			upscaling.intelXeSSFrameGeneration.BeginFrame();
 
 		bool blockedDevice = true;
 

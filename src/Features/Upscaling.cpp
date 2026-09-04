@@ -7,7 +7,10 @@
 #include "State.h"
 #include "Upscaling/DX12SwapChain.h"
 #include "Upscaling/FidelityFX.h"
+#include "Upscaling/IntelXeSS.h"
+#include "Upscaling/IntelXeSSFrameGeneration.h"
 #include "Upscaling/Streamline.h"
+#include "Utils/Format.h"
 #include "Utils/Game.h"
 #include "Utils/UI.h"
 #include "Utils/VersionedRelocation.h"
@@ -25,10 +28,13 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	upscaleMethod,
 	upscaleMethodNoDLSS,
 	qualityMode,
+	qualityModeXeSS,
 	frameLimitMode,
 	frameGenerationMode,
 	frameGenerationForceEnable,
 	frameGenerationAllowInMenus,
+	frameGenerationMultiplier,
+	frameGenerationXeSSUIMode,
 	streamlineLogLevel,
 	sharpnessFSR,
 	sharpnessEnabledDLSS,
@@ -41,6 +47,58 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	reflexFPSLimit);
 
 decltype(&D3D11CreateDeviceAndSwapChain) ptrD3D11CreateDeviceAndSwapChainUpscaling;
+
+namespace
+{
+	xess_quality_settings_t ToXeSSQuality(uint32_t a_qualityMode)
+	{
+		switch (a_qualityMode) {
+		case 0:
+			return XESS_QUALITY_SETTING_AA;
+		case 1:
+			return XESS_QUALITY_SETTING_ULTRA_QUALITY_PLUS;
+		case 2:
+			return XESS_QUALITY_SETTING_ULTRA_QUALITY;
+		case 3:
+			return XESS_QUALITY_SETTING_QUALITY;
+		case 4:
+			return XESS_QUALITY_SETTING_BALANCED;
+		case 5:
+			return XESS_QUALITY_SETTING_PERFORMANCE;
+		case 6:
+		default:
+			return XESS_QUALITY_SETTING_ULTRA_PERFORMANCE;
+		}
+	}
+
+	bool WaitForD3D11Idle()
+	{
+		if (!globals::d3d::device || !globals::d3d::context)
+			return true;
+
+		D3D11_QUERY_DESC queryDesc{};
+		queryDesc.Query = D3D11_QUERY_EVENT;
+		winrt::com_ptr<ID3D11Query> query;
+		if (FAILED(globals::d3d::device->CreateQuery(&queryDesc, query.put()))) {
+			logger::error("[XeSS-SR] Failed to create the GPU-idle synchronization query");
+			return false;
+		}
+
+		globals::d3d::context->End(query.get());
+		globals::d3d::context->Flush();
+		const ULONGLONG deadline = GetTickCount64() + 5000;
+		while (true) {
+			const HRESULT result = globals::d3d::context->GetData(query.get(), nullptr, 0, D3D11_ASYNC_GETDATA_DONOTFLUSH);
+			if (result == S_OK)
+				return true;
+			if (FAILED(result) || GetTickCount64() >= deadline) {
+				logger::error("[XeSS-SR] Timed out waiting for pending GPU work before an SDK lifecycle change");
+				return false;
+			}
+			SwitchToThread();
+		}
+	}
+}
 
 /**
  * @brief Creates a Direct3D 11 device and swap chain, with support for advanced upscaling and frame generation features.
@@ -69,6 +127,19 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChainUpscaling(
 
 	auto& upscaling = globals::features::upscaling;
 	upscaling.LoadUpscalingSDKs();
+	upscaling.isIntelAdapter = adapterDesc.VendorId == 0x8086;
+	// Which upscaler paths (native XeSS-SR, XMX) apply is a per-GPU and per-driver fact; log both.
+	LARGE_INTEGER umdVersion{};
+	const bool haveDriverVersion = SUCCEEDED(pAdapter->CheckInterfaceSupport(__uuidof(IDXGIDevice), &umdVersion));
+	logger::info("[Upscaling] Adapter: {} (vendor 0x{:04X}, device 0x{:04X}, {} MB dedicated VRAM, driver {}.{}.{}.{})",
+		Util::WStringToString(adapterDesc.Description),
+		adapterDesc.VendorId,
+		adapterDesc.DeviceId,
+		adapterDesc.DedicatedVideoMemory / (1024ull * 1024ull),
+		haveDriverVersion ? HIWORD(umdVersion.HighPart) : 0,
+		haveDriverVersion ? LOWORD(umdVersion.HighPart) : 0,
+		haveDriverVersion ? HIWORD(umdVersion.LowPart) : 0,
+		haveDriverVersion ? LOWORD(umdVersion.LowPart) : 0);
 
 	// FLIP_DISCARD requires BufferCount >= 2 and a flip-model-compatible (non-sRGB) format.
 	pSwapChainDesc->SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
@@ -76,7 +147,7 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChainUpscaling(
 		pSwapChainDesc->BufferCount = 2;
 
 	if (globals::features::hdrDisplay.loaded) {
-		logger::info("[Upscaling] Upgrading swap chain format from {} to R10G10B10A2_UNORM for HDR", static_cast<int>(pSwapChainDesc->BufferDesc.Format));
+		logger::info("[Upscaling] Requesting R10G10B10A2_UNORM swap chain (was format {}) for the frame-generation proxy; HDR output is decided separately", static_cast<int>(pSwapChainDesc->BufferDesc.Format));
 		pSwapChainDesc->BufferDesc.Format = DXGI_FORMAT_R10G10B10A2_UNORM;
 	} else if (pSwapChainDesc->BufferDesc.Format == DXGI_FORMAT_B8G8R8A8_UNORM_SRGB) {
 		pSwapChainDesc->BufferDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
@@ -84,35 +155,41 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChainUpscaling(
 		pSwapChainDesc->BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
 	}
 
-	bool shouldProxy = true;
-	if (shouldProxy)
-		if (!pSwapChainDesc->Windowed)
-			shouldProxy = false;
-
 	auto refreshRate = Upscaling::GetRefreshRate(pSwapChainDesc->OutputWindow);
 	upscaling.refreshRate = refreshRate;
 
-	if (shouldProxy) {
-		if (upscaling.settings.frameGenerationMode)
-			if (refreshRate >= 120)
-				shouldProxy = true;
-			else if (upscaling.settings.frameGenerationForceEnable)
-				shouldProxy = true;
-			else
-				shouldProxy = false;
-		else
-			shouldProxy = false;
-	}
+	// DLSS availability is not known until after device creation, so prepare the XeSS path
+	// when either settings slot asks for it; GetUpscaleMethod picks the authoritative slot later.
+	const bool wantsXeSS =
+		static_cast<Upscaling::UpscaleMethod>(upscaling.settings.upscaleMethod) == Upscaling::UpscaleMethod::kXESS ||
+		static_cast<Upscaling::UpscaleMethod>(upscaling.settings.upscaleMethodNoDLSS) == Upscaling::UpscaleMethod::kXESS;
+	// Intel GPUs take the driver's native D3D11 XeSS-SR; everyone else needs the D3D12 library.
+	const bool wantsXeSSD3D12 = wantsXeSS && !upscaling.isIntelAdapter;
+	const bool frameGenerationEligible = upscaling.settings.frameGenerationMode &&
+	                                     (refreshRate >= 120 || upscaling.settings.frameGenerationForceEnable);
+	const bool frameGenerationRuntimeAvailable = frameGenerationEligible && upscaling.HasFrameGenModule();
+	const bool xessD3D12RuntimeAvailable = wantsXeSSD3D12 && upscaling.intelXeSSD3D12.IsRuntimeAvailable();
+	bool shouldProxy = pSwapChainDesc->Windowed && (frameGenerationRuntimeAvailable || xessD3D12RuntimeAvailable);
 
 	upscaling.lowRefreshRate = refreshRate < 120;
 	upscaling.isWindowed = pSwapChainDesc->Windowed;
+	logger::info(
+		"[Upscaling] Display refresh rate {:.2f} Hz (windowed={}, frame generation eligible={}, force enable={}, frame limit={})",
+		refreshRate,
+		pSwapChainDesc->Windowed != 0,
+		frameGenerationEligible,
+		upscaling.settings.frameGenerationForceEnable != 0,
+		upscaling.settings.frameLimitMode != 0);
 
 	const D3D_FEATURE_LEVEL featureLevel = D3D_FEATURE_LEVEL_11_1;
 
 	if (shouldProxy) {
-		logger::info("[Frame Generation] Frame Generation enabled, using D3D12 proxy");
+		logger::info(
+			"[Upscaling] Using D3D12 proxy (frame generation={}, cross-vendor XeSS-SR={})",
+			frameGenerationRuntimeAvailable,
+			xessD3D12RuntimeAvailable);
 
-		if (upscaling.HasFrameGenModule()) {
+		{
 			DX::ThrowIfFailed(D3D11CreateDevice(
 				pAdapter,
 				DriverType,
@@ -127,31 +204,46 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChainUpscaling(
 
 			upscaling.SetProxyD3D11Device(*ppDevice);
 			upscaling.SetProxyD3D11DeviceContext(*ppImmediateContext);
-			upscaling.CreateProxySwapChain(pAdapter, *pSwapChainDesc);
-			upscaling.CreateProxyInterop();
+			if (upscaling.isIntelAdapter)
+				upscaling.intelXeSS.Initialize(*ppDevice);
+			if (upscaling.CreateProxySwapChain(pAdapter, *pSwapChainDesc, frameGenerationRuntimeAvailable)) {
+				upscaling.CreateProxyInterop();
+				upscaling.xessD3D12PathActive = xessD3D12RuntimeAvailable &&
+				                                upscaling.intelXeSSD3D12.Initialize(upscaling.dx12SwapChain.d3d12Device.get());
 
-			*ppSwapChain = upscaling.GetProxySwapChain();
+				*ppSwapChain = upscaling.GetProxySwapChain();
 
-			upscaling.d3d12SwapChainActive = true;
+				upscaling.d3d12SwapChainActive = true;
+				upscaling.activeFrameGenerationMode = frameGenerationRuntimeAvailable ?
+				                                          upscaling.settings.frameGenerationMode :
+				                                          static_cast<uint>(Upscaling::FrameGenerationMethod::kNONE);
 
-			if (upscaling.IsBackendInitialized()) {
-				upscaling.UpgradeBackendInterface((void**)&(*ppDevice));
-				// Don't wrap the swap chain with Streamline when using the D3D12
-				// proxy.  The proxy's GetDevice() returns the D3D11 device for
-				// IID_ID3D11Device, which other SKSE plugins (e.g. SkyrimPlatform)
-				// rely on.  Streamline's wrapper would bypass this override and
-				// forward to the underlying D3D12 swap chain, causing
-				// E_NOINTERFACE.  The proxy must remain the outermost layer.
-				upscaling.SetBackendD3DDevice(*ppDevice);
-				// Feature availability (notably Reflex/PCL) is only reliable after device bind.
-				upscaling.CheckBackendFeatures(pAdapter);
-				upscaling.PostBackendDevice();
+				if (upscaling.IsBackendInitialized()) {
+					upscaling.UpgradeBackendInterface((void**)&(*ppDevice));
+					// Don't wrap the swap chain with Streamline when using the D3D12
+					// proxy. The proxy must remain the outermost layer so GetDevice
+					// can continue exposing the D3D11 device to other SKSE plugins.
+					upscaling.SetBackendD3DDevice(*ppDevice);
+					upscaling.CheckBackendFeatures(pAdapter);
+					upscaling.PostBackendDevice();
+				}
+
+				return S_OK;
 			}
 
-			return S_OK;
-		} else {
-			logger::warn("[Frame Generation] FidelityFX DLLs are not loaded, skipping proxy");
-			upscaling.fidelityFXMissing = true;
+			logger::error("[Upscaling] Failed to initialize the D3D12 proxy; falling back to the native D3D11 swap chain");
+			if (frameGenerationEligible && upscaling.settings.frameGenerationMode == static_cast<uint>(Upscaling::FrameGenerationMethod::kXESS))
+				upscaling.intelXeSSFrameGenerationMissing = true;
+			else if (frameGenerationEligible)
+				upscaling.fidelityFXMissing = true;
+			if (ppImmediateContext && *ppImmediateContext) {
+				(*ppImmediateContext)->Release();
+				*ppImmediateContext = nullptr;
+			}
+			if (ppDevice && *ppDevice) {
+				(*ppDevice)->Release();
+				*ppDevice = nullptr;
+			}
 		}
 	}
 
@@ -168,6 +260,9 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChainUpscaling(
 		pFeatureLevel,
 		ppImmediateContext);
 
+	if (SUCCEEDED(ret) && ppDevice && *ppDevice && upscaling.isIntelAdapter)
+		upscaling.intelXeSS.Initialize(*ppDevice);
+
 	if (upscaling.IsBackendInitialized()) {
 		upscaling.UpgradeBackendInterface((void**)&(*ppDevice));
 		upscaling.UpgradeBackendInterface((void**)&(*ppSwapChain));
@@ -182,41 +277,46 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChainUpscaling(
 
 void Upscaling::DrawSettings()
 {
-	// Display upscaling options in the UI
-	std::vector<std::string> upscaleModes = {
-		T(TKEY("method_none"), "None"),
-		T(TKEY("method_taa"), "TAA")
+	struct UpscaleModeOption
+	{
+		UpscaleMethod method;
+		std::string label;
 	};
 
-	std::string fsrLabel = "AMD FSR 3.1";
-	upscaleModes.push_back(fsrLabel);
+	std::vector<UpscaleModeOption> upscaleModes = {
+		{ UpscaleMethod::kNONE, T(TKEY("method_none"), "None") },
+		{ UpscaleMethod::kTAA, T(TKEY("method_taa"), "TAA") },
+		{ UpscaleMethod::kFSR, "AMD FSR 3.1" }
+	};
+	const bool xessRuntimeAvailable = isIntelAdapter ? intelXeSS.IsRuntimeAvailable() : intelXeSSD3D12.IsRuntimeAvailable();
+	if (xessRuntimeAvailable)
+		upscaleModes.push_back({ UpscaleMethod::kXESS, T(TKEY("method_xess"), "Intel XeSS-SR") });
+	if (streamline.featureDLSS)
+		upscaleModes.push_back({ UpscaleMethod::kDLSS, "NVIDIA DLSS" });
 
-	std::string dlssLabel = "NVIDIA DLSS";
-	upscaleModes.push_back(dlssLabel);
-
-	// Determine available modes
-	bool featureDLSS = streamline.featureDLSS;
-	bool featureFSR = true;  // FSR is always available
-
-	uint32_t* currentUpscaleMode = &settings.upscaleMethod;
-	uint32_t availableModes = 1;  // Start with TAA
-	if (featureFSR)
-		availableModes = 2;  // Add FSR
-	if (featureDLSS)
-		availableModes = 3;  // Add DLSS if available
-	else
-		currentUpscaleMode = &settings.upscaleMethodNoDLSS;
-
-	// Dropdown for method selection
+	auto* selectedSetting = streamline.featureDLSS ? &settings.upscaleMethod : &settings.upscaleMethodNoDLSS;
+	auto selectedMethod = static_cast<UpscaleMethod>(*selectedSetting);
+	if (*selectedSetting > static_cast<uint>(UpscaleMethod::kXESS))
+		selectedMethod = GetUpscaleMethod();
+	int selectedIndex = 0;
 	std::vector<const char*> modeLabels;
-	for (uint32_t i = 0; i <= availableModes; ++i)
-		modeLabels.push_back(upscaleModes[i].c_str());
-	ImGui::Combo(T(TKEY("method"), "Method"), (int*)currentUpscaleMode, modeLabels.data(), (int)modeLabels.size());
-
-	*currentUpscaleMode = std::min(availableModes, *currentUpscaleMode);
+	modeLabels.reserve(upscaleModes.size());
+	for (size_t i = 0; i < upscaleModes.size(); ++i) {
+		modeLabels.push_back(upscaleModes[i].label.c_str());
+		if (upscaleModes[i].method == selectedMethod)
+			selectedIndex = static_cast<int>(i);
+	}
+	if (ImGui::Combo(T(TKEY("method"), "Method"), &selectedIndex, modeLabels.data(), static_cast<int>(modeLabels.size()))) {
+		selectedMethod = upscaleModes[static_cast<size_t>(selectedIndex)].method;
+		*selectedSetting = static_cast<uint32_t>(selectedMethod);
+		if (selectedMethod != UpscaleMethod::kDLSS)
+			settings.upscaleMethodNoDLSS = static_cast<uint32_t>(selectedMethod);
+	}
 
 	// Check the current upscale method
 	auto upscaleMethod = GetUpscaleMethod();
+	if (selectedMethod == UpscaleMethod::kXESS && upscaleMethod != UpscaleMethod::kXESS && xessRuntimeAvailable)
+		Util::Text::Warning("%s", T(TKEY("xess_restart_warning"), "XeSS backend change requires a restart."));
 
 	// Display warning for DLSS resolution limits
 	if (upscaleMethod == UpscaleMethod::kDLSS) {
@@ -227,6 +327,9 @@ void Upscaling::DrawSettings()
 			Util::Text::Warning("DLSS will not function. Lower your resolution or select a different upscaling method.");
 		}
 	}
+	if (upscaleMethod == UpscaleMethod::kXESS &&
+		(xessD3D12PathActive ? intelXeSSD3D12.oldDriverWarning : intelXeSS.oldDriverWarning))
+		Util::Text::Warning("%s", T(TKEY("xess_old_driver_warning"), "Warning: XeSS supports this GPU, but Intel recommends a newer graphics driver."));
 
 	// Display upscaling settings if applicable
 	if (upscaleMethod != UpscaleMethod::kNONE && upscaleMethod != UpscaleMethod::kTAA) {
@@ -244,18 +347,35 @@ void Upscaling::DrawSettings()
 			T(TKEY("preset_quality"), "Quality"),
 			T(TKEY("preset_native_aa"), "Native AA")
 		};
+		const char* upscalePresetsXeSS[] = {
+			T(TKEY("preset_ultra_performance"), "Ultra Performance"),
+			T(TKEY("preset_performance"), "Performance"),
+			T(TKEY("preset_balanced"), "Balanced"),
+			T(TKEY("preset_quality"), "Quality"),
+			T(TKEY("preset_ultra_quality"), "Ultra Quality"),
+			T(TKEY("preset_ultra_quality_plus"), "Ultra Quality Plus"),
+			T(TKEY("preset_native_aa"), "Native AA")
+		};
 
 		// Compute a safe preset index (4 - qualityMode) clamped to [0,4] to avoid negative/overflow indexing
 		int presetIndex = 0;
-		if (settings.qualityMode <= 4)
-			presetIndex = 4 - static_cast<int>(settings.qualityMode);
-		presetIndex = std::clamp(presetIndex, 0, 4);
+		if (upscaleMethod == UpscaleMethod::kXESS) {
+			if (settings.qualityModeXeSS <= 6)
+				presetIndex = 6 - static_cast<int>(settings.qualityModeXeSS);
+			presetIndex = std::clamp(presetIndex, 0, 6);
+		} else {
+			if (settings.qualityMode <= 4)
+				presetIndex = 4 - static_cast<int>(settings.qualityMode);
+			presetIndex = std::clamp(presetIndex, 0, 4);
+		}
 
 		// Choose preset name set and the corresponding scales once, then show a
 		// single SliderInt to avoid duplicated calls.
 		const char* baseLabel = nullptr;
 
-		if (upscaleMethod == UpscaleMethod::kFSR) {
+		if (upscaleMethod == UpscaleMethod::kXESS) {
+			baseLabel = upscalePresetsXeSS[presetIndex];
+		} else if (upscaleMethod == UpscaleMethod::kFSR) {
 			baseLabel = upscalePresets[presetIndex];
 		} else if (upscaleMethod == UpscaleMethod::kDLSS) {
 			baseLabel = upscalePresetsDLSS[presetIndex];
@@ -265,7 +385,10 @@ void Upscaling::DrawSettings()
 			// Format the label with preset name and resolution scale
 			std::string labelWithScale = std::format("{} ( {:.2f}x )", baseLabel, (resolutionScale.x + resolutionScale.y) * 0.5f);
 
-			ImGui::SliderInt(T(TKEY("upscale_preset"), "Upscale Preset"), (int*)&settings.qualityMode, 0, 4, labelWithScale.c_str());
+			if (upscaleMethod == UpscaleMethod::kXESS)
+				ImGui::SliderInt(T(TKEY("upscale_preset"), "Upscale Preset"), (int*)&settings.qualityModeXeSS, 0, 6, labelWithScale.c_str());
+			else
+				ImGui::SliderInt(T(TKEY("upscale_preset"), "Upscale Preset"), (int*)&settings.qualityMode, 0, 4, labelWithScale.c_str());
 		}
 
 		if (upscaleMethod == UpscaleMethod::kFSR) {
@@ -304,15 +427,79 @@ void Upscaling::DrawSettings()
 	if (ImGui::TreeNodeEx(T(TKEY("frame_generation"), "Frame Generation"), ImGuiTreeNodeFlags_DefaultOpen)) {
 		ImGui::Text("%s", T(TKEY("frame_generation_desc"),
 							  "Frame Generation interpolates real frames with generated ones for a smoother experience"));
-		ImGui::Text("%s", T(TKEY("frame_generation_tech"),
-							  "Uses AMD FSR Frame Generation technology"));
-		if (HasFrameGenModule())
-			ImGui::Text("%s", T(TKEY("frame_generation_available"),
-								  "AMD FSR Frame Generation is available."));
+
+		const char* frameGenerationProviders[] = {
+			T(TKEY("frame_generation_off"), "Off"),
+			T(TKEY("frame_generation_fsr_provider"), "AMD FSR Frame Generation"),
+			T(TKEY("frame_generation_xess_provider"), "Intel XeSS-FG with XeLL")
+		};
+		int frameGenerationProvider = std::clamp(static_cast<int>(settings.frameGenerationMode), 0, 2);
+		if (ImGui::Combo(T(TKEY("frame_generation_provider"), "Technology"), &frameGenerationProvider, frameGenerationProviders, IM_ARRAYSIZE(frameGenerationProviders)))
+			settings.frameGenerationMode = static_cast<uint>(frameGenerationProvider);
+
+		if (settings.frameGenerationMode == static_cast<uint>(FrameGenerationMethod::kXESS))
+			ImGui::Text("%s", T(TKEY("frame_generation_xess_tech"), "Uses Intel XeSS Frame Generation with mandatory XeLL latency reduction"));
+		else if (settings.frameGenerationMode == static_cast<uint>(FrameGenerationMethod::kFSR))
+			ImGui::Text("%s", T(TKEY("frame_generation_fsr_tech"), "Uses AMD FSR Frame Generation technology"));
+
+		if (settings.frameGenerationMode == static_cast<uint>(FrameGenerationMethod::kXESS)) {
+			// The proxy swap chain is created with the adapter maximum, so the multiplier can be
+			// changed live. Before it exists, offer the full range the SDK can support.
+			const uint reportedMax = intelXeSSFrameGeneration.GetMaxInterpolatedFrames();
+			const uint supportedMultiplier = reportedMax ?
+			                                     std::min<uint>(kMaxFrameGenerationMultiplier, 1 + reportedMax) :
+			                                     kMaxFrameGenerationMultiplier;
+
+			const char* multipliers[] = {
+				T(TKEY("frame_generation_multiplier_2x"), "2x (1 generated frame)"),
+				T(TKEY("frame_generation_multiplier_3x"), "3x (2 generated frames)"),
+				T(TKEY("frame_generation_multiplier_4x"), "4x (3 generated frames)")
+			};
+			const int optionCount = static_cast<int>(supportedMultiplier - kMinFrameGenerationMultiplier) + 1;
+			int multiplierIndex = std::clamp(static_cast<int>(settings.frameGenerationMultiplier) - static_cast<int>(kMinFrameGenerationMultiplier), 0, optionCount - 1);
+			ImGui::Combo(T(TKEY("frame_generation_multiplier"), "Multi Frame Generation"), &multiplierIndex, multipliers, optionCount);
+			// Written back unconditionally so a saved multiplier the adapter cannot reach is clamped here too.
+			settings.frameGenerationMultiplier = static_cast<uint>(multiplierIndex) + kMinFrameGenerationMultiplier;
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::TextUnformatted(T(TKEY("frame_generation_multiplier_tooltip_1"), "How many frames are presented for every frame the game renders."));
+				ImGui::TextUnformatted(T(TKEY("frame_generation_multiplier_tooltip_2"), "Higher multipliers are smoother but generate more of the image, which adds latency and artifacts."));
+				ImGui::TextUnformatted(T(TKEY("frame_generation_multiplier_tooltip_3"), "With Frame Limit enabled the rendered frame rate is divided by the multiplier, so the presented rate stays at your refresh rate."));
+			}
+			if (reportedMax && supportedMultiplier < kMaxFrameGenerationMultiplier) {
+				const std::string cappedNote = I18n::GetSingleton()->Format(
+					TKEY("frame_generation_multiplier_capped"),
+					{ { "multiplier", std::to_string(supportedMultiplier) } },
+					"This GPU supports up to {multiplier}x frame generation.");
+				ImGui::TextDisabled("%s", cappedNote.c_str());
+			}
+
+			// Indices match xefg_swapchain_ui_mode_t so the setting stores the SDK value directly.
+			const char* uiModes[] = {
+				T(TKEY("frame_generation_xess_ui_mode_auto"), "Auto (SDK decides)"),
+				T(TKEY("frame_generation_xess_ui_mode_none"), "Interpolate UI (no composition)"),
+				T(TKEY("frame_generation_xess_ui_mode_backbuffer_ui"), "Back buffer + UI texture"),
+				T(TKEY("frame_generation_xess_ui_mode_hudless_ui"), "HUD-less + UI texture"),
+				T(TKEY("frame_generation_xess_ui_mode_backbuffer_hudless"), "HUD-less + extract UI from back buffer"),
+				T(TKEY("frame_generation_xess_ui_mode_backbuffer_hudless_ui"), "HUD-less + UI texture + back buffer refinement")
+			};
+			int uiModeIndex = std::clamp(static_cast<int>(settings.frameGenerationXeSSUIMode), 0, IM_ARRAYSIZE(uiModes) - 1);
+			if (ImGui::Combo(T(TKEY("frame_generation_xess_ui_mode"), "XeSS-FG UI Handling"), &uiModeIndex, uiModes, IM_ARRAYSIZE(uiModes)))
+				settings.frameGenerationXeSSUIMode = static_cast<uint>(uiModeIndex);
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::TextUnformatted(T(TKEY("frame_generation_xess_ui_mode_tooltip_1"), "How XeSS-FG puts the HUD onto generated frames."));
+				ImGui::TextUnformatted(T(TKEY("frame_generation_xess_ui_mode_tooltip_2"), "'Interpolate UI' is Intel's default and never depends on the UI texture; the composition modes keep the HUD sharper but rely on it."));
+				ImGui::TextUnformatted(T(TKEY("frame_generation_xess_ui_mode_tooltip_3"), "Intel recommends the back buffer refinement mode for HDR10 output, where the UI texture only has 2-bit alpha."));
+			}
+			if (frameGenerationDx12PathActive && settings.frameGenerationXeSSUIMode != intelXeSSFrameGeneration.GetUiMode())
+				Util::Text::Warning("%s", T(TKEY("frame_generation_xess_ui_mode_restart"), "Warning: UI handling change requires restart"));
+		}
+
+		if (settings.frameGenerationMode && HasFrameGenModule())
+			ImGui::Text("%s", T(TKEY("frame_generation_available"), "The selected Frame Generation runtime is available."));
 		ImGui::Text("%s", T(TKEY("frame_generation_proxy_note"),
 							  "Requires a D3D11 to D3D12 proxy which can create compatibility issues"));
 		ImGui::Text("%s", T(TKEY("frame_generation_restart_note"),
-							  "Toggling this setting requires a restart to work correctly"));
+							  "Changing this setting requires a restart to work correctly"));
 
 		bool onlyRequiresRestart = true;
 
@@ -328,21 +515,18 @@ void Upscaling::DrawSettings()
 			onlyRequiresRestart = false;
 		}
 
-		if (fidelityFXMissing) {
+		if (settings.frameGenerationMode == static_cast<uint>(FrameGenerationMethod::kFSR) && (fidelityFXMissing || !fidelityFX.featureFSR3FG)) {
 			Util::Text::Warning("Warning: FidelityFX DLLs are not loaded");
 
 			onlyRequiresRestart = false;
 		}
+		if (settings.frameGenerationMode == static_cast<uint>(FrameGenerationMethod::kXESS) && (intelXeSSFrameGenerationMissing || !intelXeSSFrameGeneration.IsAvailable())) {
+			Util::Text::Warning("%s", T(TKEY("frame_generation_xess_missing"), "Warning: XeSS-FG or XeLL DLLs are not loaded"));
+			onlyRequiresRestart = false;
+		}
 
-		if (onlyRequiresRestart && settings.frameGenerationMode && !frameGenerationDx12PathActive)
+		if (onlyRequiresRestart && settings.frameGenerationMode != activeFrameGenerationMode)
 			Util::Text::Warning("Warning: Requires restart");
-
-		if (!settings.frameGenerationMode && frameGenerationDx12PathActive)
-			Util::Text::Warning("Warning: Requires restart");
-
-		bool fgEnabled = settings.frameGenerationMode != 0;
-		if (ImGui::Checkbox(T(TKEY("frame_generation"), "Frame Generation"), &fgEnabled))
-			settings.frameGenerationMode = fgEnabled ? 1 : 0;
 
 		if (!frameGenerationDx12PathActive)
 			ImGui::BeginDisabled();
@@ -460,6 +644,7 @@ void Upscaling::DrawSettings()
 		ImGui::Separator();
 		Util::DrawDllVersionTable("AMD FidelityFX DLLs (click to open folder)", FidelityFX::PluginDir, FidelityFX::dllVersions, "ffx_dll_versions");
 		Util::DrawDllVersionTable("NVIDIA Streamline DLLs (click to open folder)", Streamline::PluginDir, Streamline::dllVersions, "sl_dll_versions");
+		Util::DrawDllVersionTable(T(TKEY("xess_dll_versions"), "Intel XeSS/XeLL DLLs (click to open folder)"), IntelXeSS::PluginDir, IntelXeSS::dllVersions, "xess_dll_versions");
 		ImGui::TreePop();
 	}
 }
@@ -481,7 +666,7 @@ void Upscaling::LoadSettings(json& o_json)
 	settings = o_json;
 
 	// Sanitize loaded settings to ensure enum indices are valid
-	constexpr auto enumCount = 4;  // UpscaleMethod has 4 values: kNONE, kTAA, kFSR, kDLSS
+	constexpr auto enumCount = 5;
 	if (settings.upscaleMethod >= static_cast<uint>(enumCount)) {
 		logger::warn("[Upscaling] Loaded upscaleMethod {} out of range, clamping to {}", settings.upscaleMethod, enumCount ? enumCount - 1 : 0);
 		settings.upscaleMethod = enumCount ? enumCount - 1 : 0;
@@ -490,9 +675,30 @@ void Upscaling::LoadSettings(json& o_json)
 		logger::warn("[Upscaling] Loaded upscaleMethodNoDLSS {} out of range, clamping to {}", settings.upscaleMethodNoDLSS, enumCount ? enumCount - 1 : 0);
 		settings.upscaleMethodNoDLSS = enumCount ? enumCount - 1 : 0;
 	}
+	if (settings.qualityMode > 4) {
+		logger::warn("[Upscaling] Loaded qualityMode {} out of range, resetting to Quality", settings.qualityMode);
+		settings.qualityMode = 1;
+	}
+	if (settings.qualityModeXeSS > 6) {
+		logger::warn("[Upscaling] Loaded qualityModeXeSS {} out of range, resetting to Quality", settings.qualityModeXeSS);
+		settings.qualityModeXeSS = 3;
+	}
 	if (settings.presetDLSS > 4) {
 		logger::warn("[Upscaling] Loaded presetDLSS {} out of range, resetting to 0 (Default)", settings.presetDLSS);
 		settings.presetDLSS = 0;
+	}
+	if (settings.frameGenerationMode > static_cast<uint>(FrameGenerationMethod::kXESS)) {
+		logger::warn("[Upscaling] Loaded frameGenerationMode {} out of range, resetting to AMD FSR Frame Generation", settings.frameGenerationMode);
+		settings.frameGenerationMode = static_cast<uint>(FrameGenerationMethod::kFSR);
+	}
+	const uint clampedMultiplier = std::clamp(settings.frameGenerationMultiplier, kMinFrameGenerationMultiplier, kMaxFrameGenerationMultiplier);
+	if (clampedMultiplier != settings.frameGenerationMultiplier) {
+		logger::warn("[Upscaling] Loaded frameGenerationMultiplier {} out of range, clamping to {}", settings.frameGenerationMultiplier, clampedMultiplier);
+		settings.frameGenerationMultiplier = clampedMultiplier;
+	}
+	if (settings.frameGenerationXeSSUIMode > static_cast<uint>(XEFG_SWAPCHAIN_UI_MODE_BACKBUFFER_HUDLESS_UITEXTURE)) {
+		logger::warn("[Upscaling] Loaded frameGenerationXeSSUIMode {} out of range, resetting to HUD-less + UI texture", settings.frameGenerationXeSSUIMode);
+		settings.frameGenerationXeSSUIMode = static_cast<uint>(XEFG_SWAPCHAIN_UI_MODE_HUDLESS_UITEXTURE);
 	}
 	const float originalReflexFPSLimit = settings.reflexFPSLimit;
 	if (!std::isfinite(settings.reflexFPSLimit)) {
@@ -526,6 +732,10 @@ void Upscaling::RestoreDefaultSettings()
 
 void Upscaling::DataLoaded()
 {
+	// PostPostLoad can run before the UI event source is available. Retry here;
+	// registration is idempotent so normal startup does not add the sink twice.
+	MenuOpenCloseEventHandler::Register();
+
 	// Fix screenshots fix from Engine Fixes
 	Util::DisableVanillaTAA();
 
@@ -553,6 +763,8 @@ struct BSImageSpace_Init_FXAA
 };
 void Upscaling::PostPostLoad()
 {
+	MenuOpenCloseEventHandler::Register();
+
 	bool isGOG = !GetModuleHandle(L"steam_api64.dll");
 	stl::detour_thunk<MenuManagerDrawInterfaceStartHook>(REL::RelocationID(79947, 82084));
 
@@ -580,19 +792,109 @@ void Upscaling::PostPostLoad()
 	logger::info("[Upscaling] Installed hooks");
 }
 
+RE::BSEventNotifyControl Upscaling::MenuOpenCloseEventHandler::ProcessEvent(
+	const RE::MenuOpenCloseEvent* a_event,
+	RE::BSTEventSource<RE::MenuOpenCloseEvent>*)
+{
+	if (a_event && a_event->menuName == RE::LoadingMenu::MENU_NAME && !a_event->opening) {
+		globals::features::upscaling.pendingXeSSReset.store(true, std::memory_order_release);
+		globals::features::upscaling.pendingXeSSFrameGenerationReset.store(true, std::memory_order_release);
+	}
+	return RE::BSEventNotifyControl::kContinue;
+}
+
+bool Upscaling::MenuOpenCloseEventHandler::Register()
+{
+	static MenuOpenCloseEventHandler singleton;
+	static bool registered = false;
+	if (registered)
+		return true;
+
+	auto* ui = globals::game::ui;
+	if (!ui) {
+		logger::error("[Upscaling] UI event source not found; temporal history resets on loading transitions are unavailable");
+		return false;
+	}
+	auto* source = ui->GetEventSource<RE::MenuOpenCloseEvent>();
+	if (!source)
+		return false;
+	source->AddEventSink(&singleton);
+	registered = true;
+	logger::info("[Upscaling] Registered MenuOpenCloseEventHandler");
+	return true;
+}
+
 #undef I18N_KEY_PREFIX
+
+bool Upscaling::XeSSSharesFrameGenerationInputs() const
+{
+	return d3d12SwapChainActive && !xessD3D12PathActive &&
+	       dx12SwapChain.depthBufferShared12 && dx12SwapChain.depthBufferShared12->uav &&
+	       dx12SwapChain.motionVectorBufferShared12 && dx12SwapChain.motionVectorBufferShared12->uav;
+}
+
+ID3D11Resource* Upscaling::GetXeSSDepthResource() const
+{
+	if (XeSSSharesFrameGenerationInputs())
+		return dx12SwapChain.depthBufferShared12->resource11;
+	return xessDepthTexture ? xessDepthTexture->resource.get() : nullptr;
+}
+
+ID3D11UnorderedAccessView* Upscaling::GetXeSSDepthUAV() const
+{
+	if (XeSSSharesFrameGenerationInputs())
+		return dx12SwapChain.depthBufferShared12->uav;
+	return xessDepthTexture ? xessDepthTexture->uav.get() : nullptr;
+}
 
 Upscaling::UpscaleMethod Upscaling::GetUpscaleMethod() const
 {
-	if (streamline.featureDLSS)
-		return (UpscaleMethod)settings.upscaleMethod;
-	return (UpscaleMethod)settings.upscaleMethodNoDLSS;
+	const auto isAvailable = [this](UpscaleMethod a_method) {
+		switch (a_method) {
+		case UpscaleMethod::kDLSS:
+			return streamline.featureDLSS;
+		case UpscaleMethod::kXESS:
+			return xessD3D12PathActive ? intelXeSSD3D12.available : intelXeSS.available;
+		case UpscaleMethod::kNONE:
+		case UpscaleMethod::kTAA:
+		case UpscaleMethod::kFSR:
+			return true;
+		default:
+			return false;
+		}
+	};
+
+	// The menu edits upscaleMethod only when DLSS exists and upscaleMethodNoDLSS otherwise, so
+	// the slot it shows must be the slot that decides. Consulting upscaleMethod first on a
+	// non-DLSS machine let a stale FSR/TAA value in that slot silently override the user's
+	// XeSS choice, with the menu insisting a restart would fix it.
+	const bool dlssAvailable = streamline.featureDLSS;
+	const auto configured = static_cast<UpscaleMethod>(dlssAvailable ? settings.upscaleMethod : settings.upscaleMethodNoDLSS);
+	UpscaleMethod resolved = UpscaleMethod::kFSR;
+	if (isAvailable(configured)) {
+		resolved = configured;
+	} else if (dlssAvailable && isAvailable(static_cast<UpscaleMethod>(settings.upscaleMethodNoDLSS))) {
+		resolved = static_cast<UpscaleMethod>(settings.upscaleMethodNoDLSS);
+	}
+
+	// Logged once per change so a fallback shows up in the log instead of only in the image.
+	static UpscaleMethod lastLoggedConfigured = static_cast<UpscaleMethod>(~0u);
+	static UpscaleMethod lastLoggedResolved = static_cast<UpscaleMethod>(~0u);
+	if (configured != lastLoggedConfigured || resolved != lastLoggedResolved) {
+		lastLoggedConfigured = configured;
+		lastLoggedResolved = resolved;
+		if (resolved != configured) {
+			logger::warn("[Upscaling] Configured upscaler {} is unavailable; using {} (DLSS available={})",
+				static_cast<uint>(configured), static_cast<uint>(resolved), dlssAvailable);
+		} else {
+			logger::info("[Upscaling] Active upscaler: {} (DLSS available={})", static_cast<uint>(resolved), dlssAvailable);
+		}
+	}
+	return resolved;
 }
 
 void Upscaling::CreateUpscalingTextureResources(UpscaleMethod a_upscalemethod)
 {
-	logger::debug("[Upscaling] Creating texture resources for method {} ({})", static_cast<int>(a_upscalemethod), magic_enum::enum_name(a_upscalemethod));
-
 	auto renderer = globals::game::renderer;
 	auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 
@@ -604,11 +906,32 @@ void Upscaling::CreateUpscalingTextureResources(UpscaleMethod a_upscalemethod)
 	main.UAV->GetDesc(&uavDesc);
 
 	texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
+	const auto matchesTexture = [](const Texture2D* a_texture, const D3D11_TEXTURE2D_DESC& a_desc) {
+		if (!a_texture)
+			return false;
+		const auto& current = a_texture->desc;
+		return current.Width == a_desc.Width &&
+		       current.Height == a_desc.Height &&
+		       current.MipLevels == a_desc.MipLevels &&
+		       current.ArraySize == a_desc.ArraySize &&
+		       current.Format == a_desc.Format &&
+		       current.SampleDesc.Count == a_desc.SampleDesc.Count &&
+		       current.SampleDesc.Quality == a_desc.SampleDesc.Quality &&
+		       current.BindFlags == a_desc.BindFlags;
+	};
 
-	if (a_upscalemethod == UpscaleMethod::kDLSS || a_upscalemethod == UpscaleMethod::kFSR) {
+	if (a_upscalemethod == UpscaleMethod::kDLSS || a_upscalemethod == UpscaleMethod::kFSR || a_upscalemethod == UpscaleMethod::kXESS) {
 		texDesc.Format = DXGI_FORMAT_R8_UNORM;
 		srvDesc.Format = texDesc.Format;
 		uavDesc.Format = texDesc.Format;
+		if (reactiveMaskTexture && !matchesTexture(reactiveMaskTexture, texDesc)) {
+			delete reactiveMaskTexture;
+			reactiveMaskTexture = nullptr;
+		}
+		if (transparencyCompositionMaskTexture && !matchesTexture(transparencyCompositionMaskTexture, texDesc)) {
+			delete transparencyCompositionMaskTexture;
+			transparencyCompositionMaskTexture = nullptr;
+		}
 
 		if (!reactiveMaskTexture) {
 			reactiveMaskTexture = new Texture2D(texDesc);
@@ -620,6 +943,60 @@ void Upscaling::CreateUpscalingTextureResources(UpscaleMethod a_upscalemethod)
 			transparencyCompositionMaskTexture = new Texture2D(texDesc);
 			transparencyCompositionMaskTexture->CreateSRV(srvDesc);
 			transparencyCompositionMaskTexture->CreateUAV(uavDesc);
+		}
+	}
+
+	if (a_upscalemethod == UpscaleMethod::kXESS) {
+		main.texture->GetDesc(&texDesc);
+		texDesc.Format = DXGI_FORMAT_R32_FLOAT;
+		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
+		// The private depth input is only needed when XeSS-SR cannot read the shared FG buffer.
+		if (xessDepthTexture && (XeSSSharesFrameGenerationInputs() || !matchesTexture(xessDepthTexture, texDesc))) {
+			delete xessDepthTexture;
+			xessDepthTexture = nullptr;
+		}
+		if (!xessDepthTexture && !XeSSSharesFrameGenerationInputs()) {
+			srvDesc = {};
+			srvDesc.Format = texDesc.Format;
+			srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+			srvDesc.Texture2D.MostDetailedMip = 0;
+			srvDesc.Texture2D.MipLevels = 1;
+
+			uavDesc = {};
+			uavDesc.Format = texDesc.Format;
+			uavDesc.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D;
+			uavDesc.Texture2D.MipSlice = 0;
+
+			xessDepthTexture = new Texture2D(texDesc);
+			xessDepthTexture->CreateSRV(srvDesc);
+			xessDepthTexture->CreateUAV(uavDesc);
+			Util::SetResourceName(xessDepthTexture->resource.get(), "XeSS_InputDepth");
+		}
+
+		if (!xessD3D12PathActive) {
+			main.texture->GetDesc(&texDesc);
+			texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
+			if (xessOutputTexture && !matchesTexture(xessOutputTexture, texDesc)) {
+				delete xessOutputTexture;
+				xessOutputTexture = nullptr;
+			}
+			if (!xessOutputTexture) {
+				srvDesc = {};
+				srvDesc.Format = texDesc.Format;
+				srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+				srvDesc.Texture2D.MostDetailedMip = 0;
+				srvDesc.Texture2D.MipLevels = 1;
+
+				uavDesc = {};
+				uavDesc.Format = texDesc.Format;
+				uavDesc.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D;
+				uavDesc.Texture2D.MipSlice = 0;
+
+				xessOutputTexture = new Texture2D(texDesc);
+				xessOutputTexture->CreateSRV(srvDesc);
+				xessOutputTexture->CreateUAV(uavDesc);
+				Util::SetResourceName(xessOutputTexture->resource.get(), "XeSS_OutputColor");
+			}
 		}
 	}
 
@@ -669,7 +1046,7 @@ void Upscaling::DestroyUpscalingTextureResources(UpscaleMethod a_upscalemethod)
 
 	// Clean up D3D11 textures that are no longer needed
 	// Only destroy textures when switching away from methods that use them
-	if (a_upscalemethod != UpscaleMethod::kDLSS && a_upscalemethod != UpscaleMethod::kFSR) {
+	if (a_upscalemethod != UpscaleMethod::kDLSS && a_upscalemethod != UpscaleMethod::kFSR && a_upscalemethod != UpscaleMethod::kXESS) {
 		if (reactiveMaskTexture) {
 			reactiveMaskTexture->srv = nullptr;
 			reactiveMaskTexture->uav = nullptr;
@@ -687,6 +1064,13 @@ void Upscaling::DestroyUpscalingTextureResources(UpscaleMethod a_upscalemethod)
 			delete transparencyCompositionMaskTexture;
 			transparencyCompositionMaskTexture = nullptr;
 		}
+	}
+
+	if (a_upscalemethod != UpscaleMethod::kXESS) {
+		delete xessDepthTexture;
+		xessDepthTexture = nullptr;
+		delete xessOutputTexture;
+		xessOutputTexture = nullptr;
 	}
 
 	// Motion vector copy texture is only needed for DLSS - destroy when switching away from DLSS
@@ -725,10 +1109,23 @@ void Upscaling::CheckResources(UpscaleMethod a_upscalemethod)
 
 		// Destroy previous upscaling method resources (only if they were actually active)
 		if (upscaleModeChanged) {
-			DestroyUpscalingTextureResources(a_upscalemethod);
+			const bool xessLifecycleSafe = previousUpscaleMode != UpscaleMethod::kXESS ||
+			                               (xessD3D12PathActive ? dx12SwapChain.WaitForIdle() : WaitForD3D11Idle());
+			if (xessLifecycleSafe)
+				DestroyUpscalingTextureResources(a_upscalemethod);
+			else
+				logger::warn("[XeSS-SR] Retaining inactive XeSS textures because pending GPU work did not finish safely");
 
 			// Only destroy SDK resources if the previous method was actually performing upscaling
-			if (previousUpscalingWasActive) {
+			if (previousUpscaleMode == UpscaleMethod::kXESS) {
+				if (xessLifecycleSafe) {
+					if (xessD3D12PathActive)
+						intelXeSSD3D12.DestroyResources();
+					else
+						intelXeSS.DestroyResources();
+				} else
+					logger::warn("[XeSS-SR] Keeping the inactive context alive because pending GPU work did not finish safely");
+			} else if (previousUpscalingWasActive) {
 				if (previousUpscaleMode == UpscaleMethod::kDLSS)
 					streamline.DestroyDLSSResources();
 				else if (previousUpscaleMode == UpscaleMethod::kFSR)
@@ -767,6 +1164,13 @@ ID3D11ComputeShader* Upscaling::GetEncodeTexturesCS()
 			break;
 		case UpscaleMethod::kFSR:
 			defines.push_back({ "FSR", "" });
+			break;
+		case UpscaleMethod::kXESS:
+			defines.push_back({ "XESS", "" });
+			defines.push_back({ "DEPTH_OUTPUT", "" });
+			// Session-constant, so it is safe to bake into the cached permutation.
+			if (XeSSSharesFrameGenerationInputs())
+				defines.push_back({ "SHARED_MOTION_VECTORS", "" });
 			break;
 		default:
 			// No define for NONE or TAA
@@ -808,6 +1212,71 @@ ID3D11VertexShader* Upscaling::GetUpscaleVS()
 	}
 
 	return upscaleVS.get();
+}
+
+ID3D11ComputeShader* Upscaling::GetUICompositeCS()
+{
+	if (!uiCompositeCS) {
+		logger::debug("Compiling UICompositeCS.hlsl");
+		uiCompositeCS.attach((ID3D11ComputeShader*)Util::CompileShader(L"Data/Shaders/Upscaling/UICompositeCS.hlsl", {}, "cs_5_0"));
+	}
+
+	return uiCompositeCS.get();
+}
+
+bool Upscaling::CompositeFrameGenerationUI()
+{
+	ZoneScoped;
+
+	static bool warnedMissingCompositeInputs = false;
+	static bool warnedMissingCompositeShader = false;
+
+	auto* hudless = dx12SwapChain.swapChainBufferWrapped;
+	auto* ui = dx12SwapChain.uiBufferWrapped;
+	auto* present = dx12SwapChain.presentBufferWrapped;
+	if (!hudless || !hudless->srv || !ui || !ui->srv || !present || !present->uav) {
+		if (!warnedMissingCompositeInputs) {
+			warnedMissingCompositeInputs = true;
+			logger::error("[XeSS-FG] UI composite skipped: interop textures are missing; the presented frame stays HUD-less");
+		}
+		return false;
+	}
+
+	auto* computeShader = GetUICompositeCS();
+	if (!computeShader) {
+		if (!warnedMissingCompositeShader) {
+			warnedMissingCompositeShader = true;
+			logger::error("[XeSS-FG] UI composite skipped: Data/Shaders/Upscaling/UICompositeCS.hlsl failed to compile or is not installed; the presented frame stays HUD-less");
+		}
+		return false;
+	}
+
+	auto context = globals::d3d::context;
+	auto state = globals::state;
+
+	state->BeginPerfEvent("Frame Generation UI Composite");
+
+	ID3D11ShaderResourceView* views[2] = { hudless->srv, ui->srv };
+	context->CSSetShaderResources(0, ARRAYSIZE(views), views);
+
+	ID3D11UnorderedAccessView* uavs[1] = { present->uav };
+	context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
+
+	context->CSSetShader(computeShader, nullptr, 0);
+
+	globals::profiler->BeginPass("Upscaling::FrameGenerationUIComposite");
+	context->Dispatch((dx12SwapChain.swapChainDesc.Width + 7) / 8, (dx12SwapChain.swapChainDesc.Height + 7) / 8, 1);
+	globals::profiler->EndPass();
+
+	views[0] = nullptr;
+	views[1] = nullptr;
+	context->CSSetShaderResources(0, ARRAYSIZE(views), views);
+	uavs[0] = nullptr;
+	context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
+	context->CSSetShader(nullptr, nullptr, 0);
+
+	state->EndPerfEvent();
+	return true;
 }
 
 eastl::unique_ptr<Texture2D> Upscaling::CreateTextureFromSource(ID3D11Resource* src, uint32_t width, uint32_t height,
@@ -853,8 +1322,8 @@ eastl::unique_ptr<Texture2D> Upscaling::CreateTextureFromSource(ID3D11Resource* 
 int32_t GetJitterPhaseCount(int32_t renderWidth, int32_t displayWidth)
 {
 	const float basePhaseCount = 8.0f;
-	const int32_t jitterPhaseCount = int32_t(basePhaseCount * pow((float(displayWidth) / renderWidth), 2.0f));
-	return jitterPhaseCount;
+	const auto jitterPhaseCount = static_cast<int32_t>(std::ceil(basePhaseCount * std::pow((float(displayWidth) / renderWidth), 2.0f)));
+	return std::max(1, jitterPhaseCount);
 }
 
 // Calculate halton number for index and base.
@@ -906,21 +1375,80 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 	auto screenWidth = static_cast<int>(screenSize.x);
 	auto screenHeight = static_cast<int>(screenSize.y);
 
-	if (upscaleMethod != UpscaleMethod::kNONE && upscaleMethod != UpscaleMethod::kTAA) {
-		float resolutionScaleBase = 1.0f / ffxFsr3GetUpscaleRatioFromQualityMode((FfxFsr3QualityMode)settings.qualityMode);
+	int renderWidth = screenWidth;
+	int renderHeight = screenHeight;
+	bool useTemporalUpscaler = upscaleMethod != UpscaleMethod::kNONE && upscaleMethod != UpscaleMethod::kTAA;
 
-		auto renderWidth = static_cast<int>(screenWidth * resolutionScaleBase);
-		auto renderHeight = static_cast<int>(screenHeight * resolutionScaleBase);
+	if (upscaleMethod == UpscaleMethod::kXESS) {
+		const xess_2d_t outputResolution{ static_cast<uint32_t>(screenWidth), static_cast<uint32_t>(screenHeight) };
+		const auto quality = ToXeSSQuality(settings.qualityModeXeSS);
+		bool requiresInitialization = false;
+		bool safeToInitialize = false;
+		bool initialized = false;
+		uint32_t optimalWidth = 0;
+		uint32_t optimalHeight = 0;
 
+		if (xessD3D12PathActive) {
+			const auto& currentOutput = intelXeSSD3D12.GetOutputResolution();
+			requiresInitialization = !intelXeSSD3D12.initialized ||
+			                         currentOutput.x != outputResolution.x || currentOutput.y != outputResolution.y ||
+			                         intelXeSSD3D12.GetQuality() != quality || !intelXeSSD3D12.UsesResponsiveMask() ||
+			                         !intelXeSSD3D12.UsesAutoExposure();
+			safeToInitialize = !intelXeSSD3D12.initialized || !requiresInitialization || dx12SwapChain.WaitForIdle();
+			if (safeToInitialize)
+				initialized = intelXeSSD3D12.CreateResources(outputResolution, quality, true, true);
+			if (initialized) {
+				const auto& inputRange = intelXeSSD3D12.GetInputResolutionRange();
+				optimalWidth = inputRange.optimal.x;
+				optimalHeight = inputRange.optimal.y;
+			}
+		} else {
+			const auto& currentOutput = intelXeSS.GetOutputResolution();
+			requiresInitialization = !intelXeSS.initialized ||
+			                         currentOutput.x != outputResolution.x || currentOutput.y != outputResolution.y ||
+			                         intelXeSS.GetQuality() != quality || !intelXeSS.UsesResponsiveMask() || !intelXeSS.UsesAutoExposure();
+			safeToInitialize = !intelXeSS.initialized || !requiresInitialization || WaitForD3D11Idle();
+			if (safeToInitialize)
+				initialized = intelXeSS.CreateResources(outputResolution, quality, true, true);
+			if (initialized) {
+				const auto& inputRange = intelXeSS.GetInputResolutionRange();
+				optimalWidth = inputRange.optimal.x;
+				optimalHeight = inputRange.optimal.y;
+			}
+		}
+
+		if (safeToInitialize)
+			CreateUpscalingTextureResources(upscaleMethod);
+		if (initialized) {
+			renderWidth = static_cast<int>(optimalWidth);
+			renderHeight = static_cast<int>(optimalHeight);
+			if (requiresInitialization)
+				pendingXeSSReset.store(true, std::memory_order_release);
+		} else {
+			logger::error("[XeSS-SR] Could not configure resources; falling back for this session");
+			if (xessD3D12PathActive)
+				intelXeSSD3D12.available = false;
+			else
+				intelXeSS.available = false;
+			upscaleMethod = GetUpscaleMethod();
+			CheckResources(upscaleMethod);
+			useTemporalUpscaler = upscaleMethod != UpscaleMethod::kNONE && upscaleMethod != UpscaleMethod::kTAA;
+		}
+	}
+
+	if (useTemporalUpscaler && upscaleMethod != UpscaleMethod::kXESS) {
+		const float resolutionScaleBase = 1.0f / ffxFsr3GetUpscaleRatioFromQualityMode((FfxFsr3QualityMode)settings.qualityMode);
+		renderWidth = static_cast<int>(screenWidth * resolutionScaleBase);
+		renderHeight = static_cast<int>(screenHeight * resolutionScaleBase);
+	}
+
+	if (useTemporalUpscaler) {
 		resolutionScale.x = static_cast<float>(renderWidth) / static_cast<float>(screenWidth);
 		resolutionScale.y = static_cast<float>(renderHeight) / static_cast<float>(screenHeight);
 
 		auto phaseCount = GetJitterPhaseCount(renderWidth, screenWidth);
-
 		GetJitterOffset(&jitter.x, &jitter.y, state->frameCount, phaseCount);
-
 		a_viewport->projectionPosScaleX = -2.0f * jitter.x / renderWidth;
-
 		a_viewport->projectionPosScaleY = 2.0f * jitter.y / renderHeight;
 	} else {
 		resolutionScale = { 1.0f, 1.0f };
@@ -1010,18 +1538,18 @@ void Upscaling::SetupResources()
 		dx12SwapChain.CreateSharedResources();
 
 	copyDepthToSharedBufferPS.attach((ID3D11PixelShader*)Util::CompileShader(L"Data\\Shaders\\Upscaling\\CopyDepthToSharedBufferPS.hlsl", { { "PSHADER", "" } }, "ps_5_0"));
-
 }
 
 void Upscaling::ClearShaderCache()
 {
-	for (int i = 0; i < 4; ++i) {
+	for (size_t i = 0; i < (size_t)UpscaleMethod::kTOTAL; ++i) {
 		encodeTexturesCS[i] = nullptr;  // com_ptr automatically releases
 	}
 
 	depthRefractionUpscalePS = nullptr;  // com_ptr automatically releases
 	underwaterMaskUpscalePS = nullptr;   // com_ptr automatically releases
 	upscaleVS = nullptr;                 // com_ptr automatically releases
+	uiCompositeCS = nullptr;             // com_ptr automatically releases
 }
 
 void Upscaling::CopySharedD3D12Resources()
@@ -1032,6 +1560,13 @@ void Upscaling::CopySharedD3D12Resources()
 
 	auto renderer = globals::game::renderer;
 	auto context = globals::d3d::context;
+
+	// Native XeSS-SR consumes the D3D11 side of these same buffers, so EncodeTexturesCS writes
+	// depth and motion vectors into them later this frame (before Present). Nothing to copy.
+	if (GetUpscaleMethod() == UpscaleMethod::kXESS && XeSSSharesFrameGenerationInputs()) {
+		globals::state->EndPerfEvent();
+		return;
+	}
 
 	auto& motionVector = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
 	context->CopyResource(dx12SwapChain.motionVectorBufferShared12->resource11, motionVector.texture);
@@ -1131,6 +1666,9 @@ void Upscaling::TimerSleepQPC(int64_t targetQPC)
 
 void Upscaling::FrameLimiter()
 {
+	if (activeFrameGenerationMode == static_cast<uint>(FrameGenerationMethod::kXESS))
+		return;
+
 	if (d3d12SwapChainActive) {
 		// Use frame latency waitable object if available for better frame pacing
 		HANDLE waitableObject = GetFrameLatencyWaitableObject();
@@ -1219,29 +1757,55 @@ double Upscaling::GetRefreshRate(HWND a_window)
 
 bool Upscaling::IsFrameGenerationDx12PathActive() const
 {
-	return d3d12SwapChainActive;
+	return d3d12SwapChainActive &&
+	       activeFrameGenerationMode != static_cast<uint>(FrameGenerationMethod::kNONE) &&
+	       dx12SwapChain.UsesFrameGenerationProvider();
 }
 
 bool Upscaling::IsFrameGenerationActive() const
 {
-	return IsFrameGenerationDx12PathActive() && settings.frameGenerationMode && fidelityFX.isFrameGenActive;
+	if (!IsFrameGenerationDx12PathActive())
+		return false;
+	if (activeFrameGenerationMode == static_cast<uint>(FrameGenerationMethod::kXESS))
+		return intelXeSSFrameGeneration.IsActive();
+	if (activeFrameGenerationMode == static_cast<uint>(FrameGenerationMethod::kFSR))
+		return fidelityFX.isFrameGenActive;
+	return false;
 }
 
 bool Upscaling::ShouldUseFrameGenerationThisFrame() const
 {
 	auto* state = globals::state;
 	const bool menuOpen = state && state->IsPausedOrMenuOpen(globals::game::ui);
-	return IsFrameGenerationDx12PathActive() && settings.frameGenerationMode && (settings.frameGenerationAllowInMenus || !menuOpen);
+	return IsFrameGenerationDx12PathActive() &&
+	       settings.frameGenerationMode == activeFrameGenerationMode &&
+	       activeFrameGenerationMode != static_cast<uint>(FrameGenerationMethod::kNONE) &&
+	       (settings.frameGenerationAllowInMenus || !menuOpen);
+}
+
+uint32_t Upscaling::GetFrameGenerationMultiplier() const
+{
+	if (!ShouldUseFrameGenerationThisFrame())
+		return 1;
+
+	// FSR-FG in this integration always presents one interpolated frame per rendered frame.
+	if (activeFrameGenerationMode != static_cast<uint>(FrameGenerationMethod::kXESS))
+		return kMinFrameGenerationMultiplier;
+
+	const uint32_t supportedMax = std::min<uint32_t>(
+		kMaxFrameGenerationMultiplier,
+		1 + std::max<uint32_t>(1, intelXeSSFrameGeneration.GetMaxInterpolatedFrames()));
+	return std::clamp<uint32_t>(settings.frameGenerationMultiplier, kMinFrameGenerationMultiplier, supportedMax);
 }
 
 bool Upscaling::IsUpscalingActive() const
 {
 	auto method = GetUpscaleMethod();
 
-	// Only consider vendor upscalers (FSR/DLSS) as "active" when the
+	// Only consider vendor upscalers as "active" when the
 	// selected method actually produces a downscale. If the renderer is
 	// currently running at 1:1 (no downscale), treat upscaling as inactive.
-	if (!(method == UpscaleMethod::kFSR || method == UpscaleMethod::kDLSS)) {
+	if (!(method == UpscaleMethod::kFSR || method == UpscaleMethod::kDLSS || method == UpscaleMethod::kXESS)) {
 		return false;
 	}
 
@@ -1277,6 +1841,9 @@ void Upscaling::LoadUpscalingSDKs()
 	// This ensures all SDKs are available before any D3D device creation
 	streamline.LoadInterposer();
 	fidelityFX.LoadFFX();  // Only for frame generation now
+	intelXeSS.Load();
+	intelXeSSD3D12.Load();
+	intelXeSSFrameGeneration.Load();
 }
 
 HANDLE Upscaling::GetFrameLatencyWaitableObject() const
@@ -1318,7 +1885,11 @@ void Upscaling::PostBackendDevice()
 // Module availability methods
 bool Upscaling::HasFrameGenModule() const
 {
-	return fidelityFX.featureFSR3FG;
+	if (settings.frameGenerationMode == static_cast<uint>(FrameGenerationMethod::kXESS))
+		return intelXeSSFrameGeneration.IsAvailable();
+	if (settings.frameGenerationMode == static_cast<uint>(FrameGenerationMethod::kFSR))
+		return fidelityFX.featureFSR3FG;
+	return false;
 }
 
 // Proxy interface methods
@@ -1332,9 +1903,9 @@ void Upscaling::SetProxyD3D11DeviceContext(ID3D11DeviceContext* context)
 	dx12SwapChain.SetD3D11DeviceContext(context);
 }
 
-void Upscaling::CreateProxySwapChain(IDXGIAdapter* adapter, DXGI_SWAP_CHAIN_DESC swapChainDesc)
+bool Upscaling::CreateProxySwapChain(IDXGIAdapter* adapter, DXGI_SWAP_CHAIN_DESC swapChainDesc, bool enableFrameGenerationProvider)
 {
-	dx12SwapChain.CreateSwapChain(adapter, swapChainDesc);
+	return dx12SwapChain.CreateSwapChain(adapter, swapChainDesc, enableFrameGenerationProvider);
 }
 
 void Upscaling::CreateProxyInterop()
@@ -1396,8 +1967,10 @@ void Upscaling::Upscale()
 		ID3D11UnorderedAccessView* uavs[4] = {
 			reactiveMaskTexture->uav.get(),
 			transparencyCompositionMaskTexture->uav.get(),
-			(upscaleMethod == UpscaleMethod::kDLSS) ? motionVectorCopyTexture->uav.get() : nullptr,
-			nullptr
+			(upscaleMethod == UpscaleMethod::kDLSS)                                      ? motionVectorCopyTexture->uav.get() :
+			(upscaleMethod == UpscaleMethod::kXESS && XeSSSharesFrameGenerationInputs()) ? dx12SwapChain.motionVectorBufferShared12->uav :
+																						   nullptr,
+			(upscaleMethod == UpscaleMethod::kXESS) ? GetXeSSDepthUAV() : nullptr
 		};
 		context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
 
@@ -1428,6 +2001,42 @@ void Upscaling::Upscale()
 			streamline.Upscale(main.texture, reactiveMaskTexture->resource.get(), transparencyCompositionMaskTexture->resource.get(), motionVectorCopyTexture->resource.get());
 		} else if (upscaleMethod == UpscaleMethod::kFSR) {
 			fidelityFX.Upscale(main.texture, reactiveMaskTexture->resource.get(), transparencyCompositionMaskTexture->resource.get(), motionVector.texture, settings.sharpnessFSR);
+		} else if (upscaleMethod == UpscaleMethod::kXESS && GetXeSSDepthResource() && (xessD3D12PathActive || xessOutputTexture)) {
+			const auto renderSize = Util::ConvertToDynamic(float2{ (float)globals::game::graphicsState->screenWidth, (float)globals::game::graphicsState->screenHeight });
+			const bool resetHistory = pendingXeSSReset.exchange(false, std::memory_order_acq_rel);
+			const bool succeeded = xessD3D12PathActive ?
+			                           dx12SwapChain.ExecuteXeSS(
+										   main.texture,
+										   GetXeSSDepthResource(),
+										   motionVector.texture,
+										   reactiveMaskTexture->resource.get(),
+										   main.texture,
+										   static_cast<uint32_t>(renderSize.x),
+										   static_cast<uint32_t>(renderSize.y),
+										   -jitter.x,
+										   -jitter.y,
+										   resetHistory) :
+			                           intelXeSS.Upscale(
+										   main.texture,
+										   GetXeSSDepthResource(),
+										   motionVector.texture,
+										   reactiveMaskTexture->resource.get(),
+										   xessOutputTexture->resource.get(),
+										   static_cast<uint32_t>(renderSize.x),
+										   static_cast<uint32_t>(renderSize.y),
+										   -jitter.x,
+										   -jitter.y,
+										   resetHistory);
+			if (succeeded) {
+				if (!xessD3D12PathActive)
+					context->CopyResource(main.texture, xessOutputTexture->resource.get());
+			} else {
+				logger::error("[XeSS-SR] Dispatch failed; falling back on the next frame");
+				if (xessD3D12PathActive)
+					intelXeSSD3D12.available = false;
+				else
+					intelXeSS.available = false;
+			}
 		}
 
 		state->EndPerfEvent();
@@ -1649,9 +2258,13 @@ void Upscaling::ApplySharpening()
 
 void Upscaling::Main_UpdateJitter::thunk(RE::BSGraphics::State* a_state)
 {
-	globals::features::upscaling.ConfigureTAA();
+	auto& upscaling = globals::features::upscaling;
+	// First per-frame render work the mod sees: the XeLL simulation phase ends here.
+	if (upscaling.activeFrameGenerationMode == static_cast<uint>(FrameGenerationMethod::kXESS))
+		upscaling.intelXeSSFrameGeneration.BeginRenderSubmit();
+	upscaling.ConfigureTAA();
 	func(a_state);
-	globals::features::upscaling.ConfigureUpscaling(a_state);
+	upscaling.ConfigureUpscaling(a_state);
 }
 
 void Upscaling::MenuManagerDrawInterfaceStartHook::thunk(int64_t a1)

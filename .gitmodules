@@ -8,3 +8,6 @@
 	path = extern/FidelityFX-SDK
 	url = https://github.com/alandtse/FidelityFX-SDK-DX11
 	branch = optiscaler-build
+[submodule "extern/XeSS-SDK"]
+	path = extern/XeSS-SDK
+	url = https://github.com/intel/xess.git

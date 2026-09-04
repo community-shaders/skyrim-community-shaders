@@ -63,11 +63,14 @@ RWTexture2D<float> DepthOutput : register(u3);
 	}
 
 	MotionVectorOutput[dispatchID.xy] = lerp(longestMotionVector, motionVector, nearFactor);
+#elif defined(SHARED_MOTION_VECTORS)
+	// XeSS-FG shares this buffer and wants the undilated low-res motion vectors as rendered.
+	MotionVectorOutput[dispatchID.xy] = MotionVectorMask[dispatchID.xy];
 #endif
 
 #if defined(DEPTH_OUTPUT)
-	// Copy depth as R32_FLOAT so FSR DX11 backend receives a typed format.
-	// The raw depth resource is R24G8_TYPELESS which maps to FFX_SURFACE_FORMAT_UNKNOWN.
+	// Copy depth as R32_FLOAT so temporal upscalers receive a typed format.
+	// The raw depth resource is R24G8_TYPELESS and cannot be passed directly to every SDK.
 	DepthOutput[dispatchID.xy] = DepthMask[dispatchID.xy];
 #endif
 

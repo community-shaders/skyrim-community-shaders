@@ -798,6 +798,7 @@ void State::CheckTypedUAVLoadSupport()
 		{ DXGI_FORMAT_R16G16B16A16_UNORM, "R16G16B16A16_UNORM", "Grass Collision (collisionTexture)" },
 		{ DXGI_FORMAT_R16G16_UNORM, "R16G16_UNORM", "Terrain Shadows (RWTexShadowHeights)" },
 		{ DXGI_FORMAT_R8G8B8A8_UNORM, "R8G8B8A8_UNORM", "HDR Display UI brightness (uiTexture)" },
+		{ DXGI_FORMAT_R10G10B10A2_UNORM, "R10G10B10A2_UNORM", "HDR Display UI brightness on the XeSS-FG UI buffer (uiBufferWrapped)" },
 		{ DXGI_FORMAT_R8_UINT, "R8_UINT", "Skylighting accumulation frames (outAccumFramesArray)" },
 		{ DXGI_FORMAT_R16_FLOAT, "R16_FLOAT", "Vanilla volumetric lighting density (DensityRW)" },
 	};

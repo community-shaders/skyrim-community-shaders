@@ -408,11 +408,9 @@ void HDRDisplay::DrawSettings()
 		};
 		const char* forceEnableLabel = T(TKEY("force_enable_hdr"), "Force Enable HDR");
 		const char* cancelLabel = T(TKEY("cancel"), "Cancel");
-		const float buttonWidth = std::max({
-			ThemeManager::Constants::POPUP_BUTTON_WIDTH * Util::GetUIScale(),
+		const float buttonWidth = std::max({ ThemeManager::Constants::POPUP_BUTTON_WIDTH * Util::GetUIScale(),
 			buttonWidthForLabel(forceEnableLabel),
-			buttonWidthForLabel(cancelLabel)
-		});
+			buttonWidthForLabel(cancelLabel) });
 
 		if (ImGui::Button(forceEnableLabel, ImVec2(buttonWidth, 0))) {
 			{
@@ -1179,7 +1177,17 @@ void HDRDisplay::ApplyHDR()
 			return;
 		}
 
-		DispatchHDROutput(sceneSRV, uiSRV, outputTexture->uav.get());
+		// In SDR the composite is the same premultiplied blend UICompositeCS would run at Present;
+		// producing it here saves that full-resolution pass. HDR keeps the separate pass because
+		// the UI is PQ-encoded only later, by UIBrightnessCS.
+		const bool writeComposite = ShouldWriteFGComposite();
+		DispatchHDROutput(
+			sceneSRV,
+			uiSRV,
+			outputTexture->uav.get(),
+			writeComposite ? upscaling.dx12SwapChain.presentBufferWrapped->uav : nullptr);
+		if (writeComposite)
+			upscaling.dx12SwapChain.presentBufferValid = true;
 	}
 
 	if (upscaling.d3d12SwapChainActive) {
@@ -1200,7 +1208,7 @@ void HDRDisplay::ApplyHDR()
 	state->EndPerfEvent();
 }
 
-void HDRDisplay::DispatchHDROutput(ID3D11ShaderResourceView* sceneSRV, ID3D11ShaderResourceView* uiSRV, ID3D11UnorderedAccessView* uav)
+void HDRDisplay::DispatchHDROutput(ID3D11ShaderResourceView* sceneSRV, ID3D11ShaderResourceView* uiSRV, ID3D11UnorderedAccessView* uav, ID3D11UnorderedAccessView* compositeUAV)
 {
 	auto context = globals::d3d::context;
 	auto computeShader = GetHDROutputCS();
@@ -1210,7 +1218,7 @@ void HDRDisplay::DispatchHDROutput(ID3D11ShaderResourceView* sceneSRV, ID3D11Sha
 	ID3D11ShaderResourceView* views[2] = { sceneSRV, uiSRV };
 	context->CSSetShaderResources(0, ARRAYSIZE(views), views);
 
-	ID3D11UnorderedAccessView* uavs[1] = { uav };
+	ID3D11UnorderedAccessView* uavs[2] = { uav, compositeUAV };
 	context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
 
 	ID3D11Buffer* cbs[1] = { hdrDataCB->CB() };
@@ -1228,6 +1236,7 @@ void HDRDisplay::DispatchHDROutput(ID3D11ShaderResourceView* sceneSRV, ID3D11Sha
 	context->CSSetShaderResources(0, ARRAYSIZE(views), views);
 
 	uavs[0] = nullptr;
+	uavs[1] = nullptr;
 	context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
 
 	cbs[0] = nullptr;
@@ -1612,7 +1621,18 @@ HDRDisplay::HDRDataCB HDRDisplay::BuildHDRData() const
 	data.fgTweenMenuMidAlphaBoost = (ui && ui->IsMenuOpen(RE::TweenMenu::MENU_NAME)) ? 1.f : 0.f;
 	data.previewSDR = 0.f;
 	data.applyAutoHDR = globals::features::effects11.ReplacedTonemapperThisFrame() ? 1.f : 0.f;
+	data.writeFgComposite = ShouldWriteFGComposite() ? 1.f : 0.f;
 	return data;
+}
+
+bool HDRDisplay::ShouldWriteFGComposite() const
+{
+	const auto& upscaling = globals::features::upscaling;
+	return IsFGCompositingThisFrame() &&
+	       !settings.enableHDR &&
+	       upscaling.d3d12SwapChainActive &&
+	       upscaling.dx12SwapChain.presentBufferWrapped &&
+	       upscaling.dx12SwapChain.presentBufferWrapped->uav;
 }
 
 void HDRDisplay::UpdateHDRData() const

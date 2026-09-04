@@ -104,6 +104,7 @@ if(DEVBENCH_BRIDGE)
     find_package(devbench-api CONFIG REQUIRED)
 endif()
 add_subdirectory(${CMAKE_SOURCE_DIR}/cmake/Streamline)
+add_subdirectory(${CMAKE_SOURCE_DIR}/cmake/XeSS)
 
 find_path(DETOURS_INCLUDE_DIRS "detours/detours.h")
 find_library(DETOURS_LIBRARY detours REQUIRED)
@@ -159,6 +160,7 @@ target_link_libraries(
         efsw::efsw
         Tracy::TracyClient
         Streamline
+        IntelXeSS
         d3d12.lib
         Microsoft::DirectX-Headers
         ${DETOURS_LIBRARY}

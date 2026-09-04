@@ -173,7 +173,7 @@ public:
 		float fgTweenMenuMidAlphaBoost;  ///< 1.0 = TweenMenu (pause) open — FG UIBrightnessCS mid-alpha boost only
 		float previewSDR;                ///< 1.0 = emit sRGB SDR (crop preview) instead of PQ HDR10
 		float applyAutoHDR;              ///< 1.0 = Effects11 replaced ISHDR, so expand its SDR result into HDR
-		float pad2;
+		float writeFgComposite;          ///< 1.0 = also write HUD-less + UI into the FG present buffer (SDR frame generation)
 		float pad3;
 	};
 
@@ -186,8 +186,8 @@ public:
 
 	Texture2D* hdrTexture = nullptr;
 	Texture2D* outputTexture = nullptr;
-	Texture2D* uiTexture = nullptr;          // Separate UI render target for proper compositing
-	Texture2D* cleanSceneCapture = nullptr;  // Pre-blur copy of hdrTexture for clean captures
+	Texture2D* uiTexture = nullptr;            // Separate UI render target for proper compositing
+	Texture2D* cleanSceneCapture = nullptr;    // Pre-blur copy of hdrTexture for clean captures
 	uint cleanSceneCaptureFrame = UINT32_MAX;  // frameCount when cleanSceneCapture was last refreshed
 
 	ID3D11ComputeShader* hdrOutputCS = nullptr;
@@ -261,7 +261,13 @@ private:
 	D3D12UIBufferMode GetD3D12UIBufferMode();
 
 	// Bind scene (t0), UI (t1, may be null), UAV (u0), CB (b0); dispatch the output CS; unbind.
-	void DispatchHDROutput(ID3D11ShaderResourceView* sceneSRV, ID3D11ShaderResourceView* uiSRV, ID3D11UnorderedAccessView* uav);
+	/**
+	 * @param compositeUAV Optional second output receiving HUD-less + UI for the XeSS-FG present
+	 *        buffer, so SDR frame generation needs no separate composite pass.
+	 */
+	void DispatchHDROutput(ID3D11ShaderResourceView* sceneSRV, ID3D11ShaderResourceView* uiSRV, ID3D11UnorderedAccessView* uav, ID3D11UnorderedAccessView* compositeUAV = nullptr);
+	/** True when HDROutputCS should produce the FG present composite itself (SDR, XeSS-FG active). */
+	bool ShouldWriteFGComposite() const;
 
 	// True when FFX frame generation is actively compositing UI this frame.
 	bool IsFGCompositingThisFrame() const;
