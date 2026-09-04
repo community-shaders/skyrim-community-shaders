@@ -391,7 +391,22 @@ struct IDXGISwapChain_Present
 			if (up.loaded) {
 				const bool dlssgActive = up.IsFrameGenerationActive() &&
 				                         up.GetFrameGenMethod() == Upscaling::FrameGenMethod::kDLSSG;
-				SyncInterval = dlssgActive ? 0u : (up.settings.vsync ? 1u : 0u);
+				// Key the interval off sl.dlss_g sitting in the present path, not off CS considering
+				// frame generation active. IsFrameGenerationActive() also folds in presenter
+				// readiness, so a swapchain or colour-space transition turns it false while the
+				// plugin is still loaded and still presenting. CS then hands it SyncInterval 1,
+				// which it rejects:
+				//   dlfgPresent.cpp:1018[presentCommon] VSync interval 1 not supported with FG
+				// observed escalating (occurrence 8, 16, 32) immediately before DLSS-G lost its
+				// input tags and fell back to the previous frame's constants:
+				//   commonInterface.h:622[get] Unable to find 'common' constants for frame N
+				//   commonInterface.h:256[getTaggedResource] Failed to find global tag kBufferTypeDepth
+				//   commonInterface.h:256[getTaggedResource] Failed to find global tag kBufferTypeMotionVectors
+				// Interpolating from stale constants with neither depth nor motion vectors is what
+				// surfaces as a flickering generated frame, most visibly on distant high-contrast
+				// geometry such as mountains.
+				const bool dlssgInPresentPath = Streamline::GetSingleton()->IsDLSSGLoaded();
+				SyncInterval = (dlssgActive || dlssgInPresentPath) ? 0u : (up.settings.vsync ? 1u : 0u);
 				if (dlssgActive) {
 					auto* sl = Streamline::GetSingleton();
 					sl->QueryDLSSGCapabilities();
