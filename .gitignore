@@ -11,4 +11,4 @@ shadertoolsconfig.json
 **/.DS_Store
 .claude/settings.local.json
 
-tools/__pycache__/
+**/__pycache__/

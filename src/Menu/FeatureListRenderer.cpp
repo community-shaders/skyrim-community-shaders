@@ -23,7 +23,6 @@
 #include "State.h"
 #include "Util.h"
 #include "Utils/UI.h"
-#include "WeatherVariableRegistry.h"
 
 namespace
 {
@@ -796,37 +795,32 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureSettings(Feature* feat, 
 		ImGui::Text("%s", T("menu.features.enable_to_access_config", "Enable the feature above to access its configuration options."));
 	} else {
 		if (isLoaded) {
-			auto weatherRegistry = WeatherVariables::GlobalWeatherRegistry::GetSingleton();
-			if (weatherRegistry->HasWeatherSupport(feat->GetShortName())) {
-				bool paused = weatherRegistry->IsFeaturePaused(feat->GetShortName());
-				if (ImGui::Checkbox(T("menu.features.pause_weather_overrides", "Pause Weather Overrides"), &paused)) {
-					weatherRegistry->SetFeaturePaused(feat->GetShortName(), paused);
-				}
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text(
-						"%s",
-						T("menu.features.pause_weather_tooltip",
-							"Temporarily disable weather-based setting adjustments for this feature.\n"
-							"This state is not saved."));
-				}
-				ImGui::Separator();
-			}
-
-			// Scene-specific settings toggle (Interior Only / TimeOfDay / Weather-Specific)
-			// Show toggle whenever scene entries exist for this feature, even if feature-paused
+			// Scene-specific settings toggle (Interior Only / TimeOfDay / Weather-Specific).
+			// Keyed on entries existing anywhere, not on them applying here, so a feature authored for
+			// scenes the player is not currently in stays visible and pausable.
 			{
 				const auto& featureShortName = feat->GetShortName();
 				auto* sceneMgr = globals::sceneSettingsManager;
 				bool scenePaused = sceneMgr->IsFeaturePaused(featureShortName);
-				if (sceneControlled || scenePaused) {
+				if (sceneMgr->HasAnySceneEntriesForFeature(featureShortName) || scenePaused) {
 					bool active = !scenePaused;
 					if (Util::FeatureToggle("##PauseSceneSettings", &active))
 						sceneMgr->SetFeaturePaused(featureShortName, !active);
 					ImGui::SameLine();
 					ImGui::Text("%s", T("menu.features.scene_specific_settings", "Scene Specific Settings"));
+					if (!scenePaused && !sceneControlled) {
+						ImGui::SameLine();
+						Util::Text::Disabled("%s", T("menu.features.scene_not_active_here", "(not active here)"));
+					}
 					if (auto _tt = Util::HoverTooltipWrapper()) {
-						ImGui::Text("%s", T(scenePaused ? "menu.features.scene_paused_tooltip" : "menu.features.scene_active_tooltip",
-											  scenePaused ? "Paused - click to resume" : "Active - click to pause"));
+						if (scenePaused)
+							ImGui::Text("%s", T("menu.features.scene_paused_tooltip", "Paused - click to resume"));
+						else if (sceneControlled)
+							ImGui::Text("%s", T("menu.features.scene_active_tooltip", "Active - click to pause"));
+						else
+							ImGui::Text("%s", T("menu.features.scene_inactive_tooltip",
+												  "Authored for other scenes, so nothing is overridden here.\n"
+												  "Click to pause this feature's scene settings everywhere."));
 					}
 					ImGui::Separator();
 				}
@@ -950,14 +944,14 @@ void FeatureListRenderer::DrawMenuVisitor::RenderRestoreDefaultsButton(Feature* 
 	ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(1.0f, 1.0f, 1.0f, 0.5f));
 
 	auto& menu = *globals::menu;
-	if (menu.uiIcons.featureSettingRevert.texture) {
-		if (ImGui::ImageButton("##RestoreDefaults", menu.uiIcons.featureSettingRevert.texture, iconSize)) {
-			feat->RestoreDefaultSettings();
-		}
-	} else {
-		if (ImGui::Button("R##RestoreDefaults", iconSize)) {
-			feat->RestoreDefaultSettings();
-		}
+	const bool restore = menu.uiIcons.featureSettingRevert.texture ?
+	                         ImGui::ImageButton("##RestoreDefaults", menu.uiIcons.featureSettingRevert.texture, iconSize) :
+	                         ImGui::Button("R##RestoreDefaults", iconSize);
+	if (restore) {
+		feat->RestoreDefaultSettings();
+		// Rewrites the base values behind a live scene layer, so the resolver has to re-baseline or
+		// the next resolve restores the pre-default values.
+		globals::sceneSettingsManager->CaptureExternalFeatureChanges(feat);
 	}
 
 	ImGui::PopStyleColor(3);

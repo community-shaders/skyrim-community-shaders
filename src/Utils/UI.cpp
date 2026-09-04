@@ -1,6 +1,7 @@
 #include "UI.h"
 
 #include "../CSEditor/EditorWindow.h"
+#include "../CSEditor/SceneWidgetInterceptor.h"
 #include "../I18n/I18n.h"
 #include "D3D.h"
 #include "FileSystem.h"
@@ -10,8 +11,6 @@
 #include "Menu/ThemeManager.h"
 #include "PerfUtils.h"
 #include "ShaderCache.h"
-#include "WeatherManager.h"
-#include "WeatherVariableRegistry.h"
 
 #ifndef DIRECTINPUT_VERSION
 #	define DIRECTINPUT_VERSION 0x0800
@@ -91,7 +90,7 @@ namespace Util
 	HoverTooltipWrapper::HoverTooltipWrapper() :
 		previousFont(nullptr)
 	{
-		hovered = ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal | ImGuiHoveredFlags_AllowWhenDisabled);
+		hovered = ImGui::IsItemHovered(kTooltipWhenDisabled);
 		if (hovered) {
 			ImGui::BeginTooltip();
 			ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
@@ -389,11 +388,16 @@ namespace Util
 		return result;
 	}
 
+	constexpr float kPercentageScale = 1e2f;
+
 	bool PercentageSlider(const char* label, float* data, float lb, float ub, const char* format)
 	{
-		float percentageData = (*data) * 1e2f;
+		// The slider binds a temporary, so name the member it stands for or scene authoring misses it.
+		SceneWidgetInterceptor::ProxyScope sceneProxy(data, kPercentageScale);
+
+		float percentageData = (*data) * kPercentageScale;
 		bool retval = ImGui::SliderFloat(label, &percentageData, lb, ub, format);
-		(*data) = percentageData * 1e-2f;
+		(*data) = percentageData / kPercentageScale;
 		return retval;
 	}
 
@@ -1265,6 +1269,22 @@ namespace Util
 			baseColor.w);
 	}
 
+	void PushTintedFrameStyle(const ImVec4& color)
+	{
+		using Constants = ThemeManager::Constants;
+		ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(color.x, color.y, color.z, Constants::TINTED_FRAME_BG_ALPHA));
+		ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(color.x, color.y, color.z, Constants::TINTED_FRAME_BG_HOVERED_ALPHA));
+		ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(color.x, color.y, color.z, Constants::TINTED_FRAME_BG_ACTIVE_ALPHA));
+		ImGui::PushStyleColor(ImGuiCol_Border, color);
+		ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, Constants::TINTED_FRAME_BORDER_SIZE);
+	}
+
+	void PopTintedFrameStyle()
+	{
+		ImGui::PopStyleColor(4);
+		ImGui::PopStyleVar();
+	}
+
 	void DrawSearchIcon(const ImVec2& position, float size, float alpha)
 	{
 		ImDrawList* drawList = ImGui::GetWindowDrawList();
@@ -2102,257 +2122,6 @@ namespace Util
 		}
 
 		return clicked;
-	}
-
-	namespace WeatherUI
-	{
-		bool IsWeatherControlled(Feature* feature, const char* settingName)
-		{
-			if (!feature || !settingName) {
-				return false;
-			}
-
-			auto* globalRegistry = WeatherVariables::GlobalWeatherRegistry::GetSingleton();
-			auto* weatherManager = globals::weatherManager;
-
-			// Check if this feature has registered weather variables
-			std::string featureName = feature->GetShortName();
-			if (!globalRegistry->HasWeatherSupport(featureName)) {
-				return false;
-			}
-
-			// Still controlled if variable is mid-transition (e.g., transitioning to a weather without an override)
-			if (globalRegistry->IsFeatureVariableInTransition(featureName, settingName)) {
-				return true;
-			}
-
-			// Check if current weather exists
-			auto currentWeathers = weatherManager->GetCurrentWeathers();
-			if (!currentWeathers.currentWeather) {
-				return false;
-			}
-
-			// Load weather settings for this feature
-			json weatherSettings;
-			if (!weatherManager->LoadSettingsFromWeather(currentWeathers.currentWeather, featureName, weatherSettings)) {
-				return false;
-			}
-
-			// Check if this specific setting has an override
-			return weatherSettings.contains(settingName) && !weatherSettings[settingName].is_null();
-		}
-
-		bool SliderFloat(const char* label, Feature* feature, const char* settingName, float* value, float min, float max, const char* format)
-		{
-			bool isControlled = IsWeatherControlled(feature, settingName);
-
-			if (isControlled) {
-				auto* weatherManager = globals::weatherManager;
-				auto currentWeathers = weatherManager->GetCurrentWeathers();
-
-				// Make it look like a clickable button when weather-controlled
-				ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.3f, 0.3f, 0.4f, 0.8f));
-				ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.4f, 0.4f, 0.5f, 0.9f));
-				ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(0.5f, 0.5f, 0.6f, 1.0f));
-				ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.7f);
-			}
-
-			ImGuiSliderFlags flags = isControlled ? (static_cast<ImGuiSliderFlags>(ImGuiSliderFlags_NoInput) | static_cast<ImGuiSliderFlags>(ImGuiSliderFlags_ReadOnly)) : ImGuiSliderFlags_None;
-			bool changed = ImGui::SliderFloat(label, value, min, max, format, flags);
-
-			if (isControlled) {
-				ImGui::PopStyleVar();
-				ImGui::PopStyleColor(3);
-
-				// Check if clicked
-				if (ImGui::IsItemClicked()) {
-					auto* weatherManager = globals::weatherManager;
-					auto* editorWindow = EditorWindow::GetSingleton();
-					auto currentWeathers = weatherManager->GetCurrentWeathers();
-
-					if (currentWeathers.currentWeather && editorWindow) {
-						editorWindow->OpenWeatherFeatureSetting(
-							currentWeathers.currentWeather,
-							feature->GetShortName(),
-							settingName);
-					}
-				}
-
-				if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-					ImGui::BeginTooltip();
-					auto* weatherManager = globals::weatherManager;
-					auto currentWeathers = weatherManager->GetCurrentWeathers();
-					ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
-					Util::Text::Warning("Weather Override Active");
-					ImGui::TextWrapped("This setting is controlled by the current weather (%s).",
-						currentWeathers.currentWeather ? currentWeathers.currentWeather->GetFormEditorID() : "Unknown");
-					ImGui::Separator();
-					Util::Text::Success("Click to open CS Editor");
-					ImGui::PopTextWrapPos();
-					ImGui::EndTooltip();
-				}
-
-				return false;  // Prevent changes when weather-controlled
-			}
-
-			return changed;
-		}
-
-		bool Checkbox(const char* label, Feature* feature, const char* settingName, bool* value)
-		{
-			bool isControlled = IsWeatherControlled(feature, settingName);
-
-			if (isControlled) {
-				auto* weatherManager = globals::weatherManager;
-				auto currentWeathers = weatherManager->GetCurrentWeathers();
-
-				ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.3f, 0.3f, 0.4f, 0.8f));
-				ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.4f, 0.4f, 0.5f, 0.9f));
-				ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.7f);
-				ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
-			}
-
-			bool changed = ImGui::Checkbox(label, value);
-
-			if (isControlled) {
-				ImGui::PopItemFlag();
-				ImGui::PopStyleVar();
-				ImGui::PopStyleColor(2);
-
-				if (ImGui::IsItemClicked()) {
-					auto* weatherManager = globals::weatherManager;
-					auto* editorWindow = EditorWindow::GetSingleton();
-					auto currentWeathers = weatherManager->GetCurrentWeathers();
-
-					if (currentWeathers.currentWeather && editorWindow) {
-						editorWindow->OpenWeatherFeatureSetting(
-							currentWeathers.currentWeather,
-							feature->GetShortName(),
-							settingName);
-					}
-				}
-
-				if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-					ImGui::BeginTooltip();
-					auto* weatherManager = globals::weatherManager;
-					auto currentWeathers = weatherManager->GetCurrentWeathers();
-					ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
-					Util::Text::Warning("Weather Override Active");
-					ImGui::TextWrapped("This setting is controlled by the current weather (%s).",
-						currentWeathers.currentWeather ? currentWeathers.currentWeather->GetFormEditorID() : "Unknown");
-					ImGui::Separator();
-					Util::Text::Success("Click to open CS Editor");
-					ImGui::PopTextWrapPos();
-					ImGui::EndTooltip();
-				}
-
-				return false;
-			}
-
-			return changed;
-		}
-
-		bool ColorEdit3(const char* label, Feature* feature, const char* settingName, float col[3])
-		{
-			bool isControlled = IsWeatherControlled(feature, settingName);
-
-			if (isControlled) {
-				auto* weatherManager = globals::weatherManager;
-				auto currentWeathers = weatherManager->GetCurrentWeathers();
-
-				ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.7f);
-				ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
-			}
-
-			bool changed = ImGui::ColorEdit3(label, col);
-
-			if (isControlled) {
-				ImGui::PopItemFlag();
-				ImGui::PopStyleVar();
-
-				if (ImGui::IsItemClicked()) {
-					auto* weatherManager = globals::weatherManager;
-					auto* editorWindow = EditorWindow::GetSingleton();
-					auto currentWeathers = weatherManager->GetCurrentWeathers();
-
-					if (currentWeathers.currentWeather && editorWindow) {
-						editorWindow->OpenWeatherFeatureSetting(
-							currentWeathers.currentWeather,
-							feature->GetShortName(),
-							settingName);
-					}
-				}
-
-				if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-					ImGui::BeginTooltip();
-					auto* weatherManager = globals::weatherManager;
-					auto currentWeathers = weatherManager->GetCurrentWeathers();
-					ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
-					Util::Text::Warning("Weather Override Active");
-					ImGui::TextWrapped("This setting is controlled by the current weather (%s).",
-						currentWeathers.currentWeather ? currentWeathers.currentWeather->GetFormEditorID() : "Unknown");
-					ImGui::Separator();
-					Util::Text::Success("Click to open CS Editor");
-					ImGui::PopTextWrapPos();
-					ImGui::EndTooltip();
-				}
-
-				return false;
-			}
-
-			return changed;
-		}
-
-		bool ColorEdit4(const char* label, Feature* feature, const char* settingName, float col[4])
-		{
-			bool isControlled = IsWeatherControlled(feature, settingName);
-
-			if (isControlled) {
-				auto* weatherManager = globals::weatherManager;
-				auto currentWeathers = weatherManager->GetCurrentWeathers();
-
-				ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.7f);
-				ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
-			}
-
-			bool changed = ImGui::ColorEdit4(label, col);
-
-			if (isControlled) {
-				ImGui::PopItemFlag();
-				ImGui::PopStyleVar();
-
-				if (ImGui::IsItemClicked()) {
-					auto* weatherManager = globals::weatherManager;
-					auto* editorWindow = EditorWindow::GetSingleton();
-					auto currentWeathers = weatherManager->GetCurrentWeathers();
-
-					if (currentWeathers.currentWeather && editorWindow) {
-						editorWindow->OpenWeatherFeatureSetting(
-							currentWeathers.currentWeather,
-							feature->GetShortName(),
-							settingName);
-					}
-				}
-
-				if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-					ImGui::BeginTooltip();
-					auto* weatherManager = globals::weatherManager;
-					auto currentWeathers = weatherManager->GetCurrentWeathers();
-					ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
-					Util::Text::Warning("Weather Override Active");
-					ImGui::TextWrapped("This setting is controlled by the current weather (%s).",
-						currentWeathers.currentWeather ? currentWeathers.currentWeather->GetFormEditorID() : "Unknown");
-					ImGui::Separator();
-					Util::Text::Success("Click to open CS Editor");
-					ImGui::PopTextWrapPos();
-					ImGui::EndTooltip();
-				}
-
-				return false;
-			}
-
-			return changed;
-		}
 	}
 
 	bool InputComboWidget(

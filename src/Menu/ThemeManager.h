@@ -229,6 +229,12 @@ public:
 		static constexpr float OVERLAP_FADEOUT_SPEED = 4.0f;    // Fade-out speed (units/sec)
 		static constexpr float OVERLAP_ALPHA_EPSILON = 0.005f;  // Below this alpha is clamped to zero
 
+		// Tinted control frame: marks where a value comes from (inherited, or a scene override's winning layer)
+		static constexpr float TINTED_FRAME_BG_ALPHA = 0.25f;
+		static constexpr float TINTED_FRAME_BG_HOVERED_ALPHA = 0.35f;
+		static constexpr float TINTED_FRAME_BG_ACTIVE_ALPHA = 0.45f;
+		static constexpr float TINTED_FRAME_BORDER_SIZE = 1.0f;
+
 		// Status button brightness adjustment offsets. Bright colors are darkened by the same amounts for contrast.
 		static constexpr float BUTTON_MIN_COLOR_CHANNEL = 0.0f;
 		static constexpr float BUTTON_MAX_COLOR_CHANNEL = 1.0f;

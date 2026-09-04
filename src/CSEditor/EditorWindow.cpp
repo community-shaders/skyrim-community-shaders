@@ -5,10 +5,10 @@
 #include "Features/HDRDisplay.h"
 #include "Features/Upscaling.h"
 #include "Globals.h"
-#include "InteriorOnlyPanel.h"
 #include "Menu.h"
 #include "Menu/BackgroundBlur.h"
 #include "PaletteWindow.h"
+#include "SceneSettingsUI.h"
 #include "State.h"
 #include "Utils/Game.h"
 #include "Utils/UI.h"
@@ -213,6 +213,38 @@ std::string EditorWindow::ResolveEditorId(RE::TESForm* form, const WidgetVec& wi
 	return editorid ? editorid : std::format("0x{:08X}", form->GetFormID());
 }
 
+void EditorWindow::DrawActiveWeatherIndicator()
+{
+	auto* sky = globals::game::sky;
+	auto* weather = sky ? sky->currentWeather : nullptr;
+	if (!weather)
+		return;
+
+	const auto& theme = Menu::GetSingleton()->GetTheme();
+	const auto id = weather->GetFormID();
+
+	ImGui::PushStyleColor(ImGuiCol_Text, theme.StatusPalette.RestartNeeded);
+	ImGui::Text("%s", T(TKEY("active"), "Active:"));
+	ImGui::PopStyleColor();
+	ImGui::SameLine();
+	ImGui::TextColored(theme.Palette.Text, "%s", ResolveEditorId(weather, weatherWidgets).c_str());
+	ImGui::SameLine();
+	ImGui::TextDisabled("(0x%08X)", id);
+	ImGui::SameLine();
+	if (ImGui::SmallButton(std::format("{}##active_weather_indicator", T(TKEY("open"), "Open")).c_str())) {
+		for (const auto& widget : weatherWidgets) {
+			if (widget->form && widget->form->GetFormID() == id) {
+				widget->SetOpen(true);
+				widget->RequestFocus();
+				break;
+			}
+		}
+	}
+	ImGui::Spacing();
+	ImGui::Separator();
+	ImGui::Spacing();
+}
+
 void EditorWindow::ShowObjectsWindow()
 {
 	Util::BeginWithRoundedClose(T(TKEY("weather_lighting_browser"), "CS Editor Browser"), nullptr);
@@ -261,14 +293,18 @@ void EditorWindow::ShowObjectsWindow()
 				{ "Shader Particle Geometry", T(TKEY("category_shader_particle"), "Shader Particle Geometry") },
 				{ "Lens Flare", T(TKEY("category_lens_flare"), "Lens Flare") },
 				{ "Visual Effect", T(TKEY("category_visual_effect"), "Visual Effect") },
-				{ "Interior Only", T(TKEY("category_interior_only"), "Interior Only") },
-				{ "Light Editor", T(TKEY("category_lighting_editor"), "Light Editor") }
+				{ "Light Editor", T(TKEY("category_lighting_editor"), "Light Editor") },
+				{ "Scene Manager", T(TKEY("category_scene_manager"), "Scene Manager") },
+				{ "Locations", T(TKEY("category_locations"), "Locations") }
 			};
 			for (int i = 0; i < IM_ARRAYSIZE(categories); ++i) {
 				// Highlight the selected category
 				if (ImGui::Selectable(categories[i].label, m_selectedCategory == categories[i].id)) {
 					m_selectedCategory = categories[i].id;  // Keep the stable English ID internally
 				}
+				// The Scene Manager panel has no room for a feature column, so it owns one here.
+				if (m_selectedCategory == categories[i].id && m_selectedCategory == "Scene Manager")
+					SceneSettingsUI::DrawSceneManagerCategoryFeatures();
 			}
 			ImGui::EndListBox();
 		}
@@ -279,18 +315,23 @@ void EditorWindow::ShowObjectsWindow()
 		ImGui::TableSetColumnIndex(1);
 
 		if (ImGui::BeginChild("##ObjectsContent", { 0, 0 }, ImGuiChildFlags_Borders, kStickyHeaderFlags)) {
-			// Interior Only category has its own panel
-			if (m_selectedCategory == "Interior Only") {
-				InteriorOnlyPanel::Draw();
-				ImGui::EndChild();
-				ImGui::EndTable();
-				ImGui::End();
-				return;
-			}
+			// Categories that own their whole panel instead of listing form widgets.
+			const bool isLightEditor = m_selectedCategory == "Light Editor";
+			const bool isLocations = m_selectedCategory == "Locations";
+			if (isLightEditor || isLocations || m_selectedCategory == "Scene Manager") {
+				const char* scrollId = "##SceneManagerScroll";
+				if (isLightEditor)
+					scrollId = "##LightEditorScroll";
+				else if (isLocations)
+					scrollId = "##LocationsScroll";
 
-			if (m_selectedCategory == "Light Editor") {
-				BeginScrollableContent("##LightEditorScroll");
-				lightEditor.DrawSettings();
+				BeginScrollableContent(scrollId);
+				if (isLightEditor)
+					lightEditor.DrawSettings();
+				else if (isLocations)
+					SceneSettingsUI::DrawLocationBrowser();
+				else
+					SceneSettingsUI::DrawSceneManagerPanel();
 				EndScrollableContent();
 				ImGui::EndChild();
 				ImGui::EndTable();
@@ -1060,7 +1101,7 @@ void EditorWindow::RenderUI()
 				ImGui::BeginDisabled();
 				ImGui::MenuItem(T(TKEY("edit_current_cell_lighting"), "Edit Current Cell Lighting"));
 				ImGui::EndDisabled();
-				Util::AddTooltip(T(TKEY("interior_only_available"), "Only available in interior cells"), ImGuiHoveredFlags_DelayNormal | ImGuiHoveredFlags_AllowWhenDisabled);
+				Util::AddTooltip(T(TKEY("interior_only_available"), "Only available in interior cells"), Util::kTooltipWhenDisabled);
 			}
 
 			ImGui::Separator();
@@ -1086,7 +1127,7 @@ void EditorWindow::RenderUI()
 			}
 			if (hdrActive) {
 				ImGui::EndDisabled();
-				Util::AddTooltip(T(TKEY("viewport_unavailable_hdr"), "Viewport is unavailable when HDR Display is enabled"), ImGuiHoveredFlags_DelayNormal | ImGuiHoveredFlags_AllowWhenDisabled);
+				Util::AddTooltip(T(TKEY("viewport_unavailable_hdr"), "Viewport is unavailable when HDR Display is enabled"), Util::kTooltipWhenDisabled);
 			}
 			if (ImGui::Checkbox(T(TKEY("palette"), "Palette"), &PaletteWindow::GetSingleton()->open)) {
 			}
@@ -1400,6 +1441,9 @@ void EditorWindow::RenderUI()
 
 	ShowWidgetWindow();
 
+	// Locations are not form widgets, so their windows are drawn alongside the widget pass.
+	SceneSettingsUI::DrawLocationWindows();
+
 	// Show palette window
 	PaletteWindow::GetSingleton()->Draw();
 
@@ -1412,36 +1456,6 @@ void EditorWindow::RenderUI()
 
 	// Restore previous font scale
 	ImGui::GetStyle().FontScaleMain = previousScale;
-}
-
-void EditorWindow::OpenWeatherFeatureSetting(RE::TESWeather* weather, const std::string& featureName, const std::string& settingName)
-{
-	if (!weather) {
-		return;
-	}
-
-	// Open the editor if it's not already open
-	if (!open) {
-		open = true;
-	}
-
-	// Find the weather widget
-	for (auto& widget : weatherWidgets) {
-		auto* weatherWidget = dynamic_cast<WeatherWidget*>(widget.get());
-		if (weatherWidget && weatherWidget->weather == weather) {
-			// Open the widget if it's not already open
-			if (!weatherWidget->open) {
-				weatherWidget->open = true;
-			}
-
-			// Set up navigation to the specific feature/setting
-			weatherWidget->NavigateToFeatureSetting(featureName, settingName);
-
-			// Focus the widget window
-			weatherWidget->RequestFocus();
-			break;
-		}
-	}
 }
 
 EditorWindow::~EditorWindow()
@@ -1484,16 +1498,28 @@ void EditorWindow::UpdateOpenState()
 {
 	static bool wasOpen = false;
 
+	// Runs even while closed so a Scene Manager panel's pause is always released.
+	SceneSettingsUI::SyncTimePause();
+
+	// The user can release the lock from the weather controls; it stops being ours the moment they do.
+	if (weatherLockedByOverlay && !IsWeatherLocked())
+		weatherLockedByOverlay = false;
+
 	if (open && !wasOpen) {
 		DisableVanityCamera();
 		HideGameMenus();
 		BackgroundBlur::SetCSEditorActive(IsViewportActive());
+		LockWeatherForOverlay();
 
 	} else if (!open && wasOpen) {
 		lightEditor.ResetOverrides();
 		RestoreVanityCamera();
 		ShowGameMenus();
 		BackgroundBlur::SetCSEditorActive(false);
+		if (weatherLockedByOverlay) {
+			UnlockWeather();
+			weatherLockedByOverlay = false;
+		}
 	}
 
 	wasOpen = open;
@@ -1593,6 +1619,10 @@ void EditorWindow::LoadSettings()
 		}
 	}
 	m_selectedCategory = settings.selectedCategory;
+	if (m_selectedCategory == "Interior Only") {
+		m_selectedCategory = "Weather";
+		settings.selectedCategory = m_selectedCategory;
+	}
 	SetWidgetTypeSizesFromJson(settings.widgetTypeSizes);
 }
 
@@ -2030,6 +2060,17 @@ void EditorWindow::LockWeather(RE::TESWeather* weather)
 	MaintainWeatherLock();
 
 	logger::info("Weather locked: {}", weather->GetFormEditorID() ? weather->GetFormEditorID() : "Unknown");
+}
+
+void EditorWindow::LockWeatherForOverlay()
+{
+	// Weather drifting mid-session changes the scene under whatever is being edited.
+	auto* sky = globals::game::sky;
+	if (!sky || IsWeatherLocked())
+		return;
+
+	LockWeather(sky->currentWeather);
+	weatherLockedByOverlay = IsWeatherLocked();
 }
 
 void EditorWindow::UnlockWeather()

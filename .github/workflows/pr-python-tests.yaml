@@ -1,0 +1,40 @@
+name: "PR: Python Tests"
+
+on:
+    # The scene settings catalog generator statically parses `src/**`, so a
+    # change to any feature source can move the catalog and trip the build-time
+    # `--min-controllable` floors. Running here catches that on Ubuntu in
+    # seconds instead of waiting for the Windows build job.
+    pull_request:
+        types: [opened, synchronize, reopened, ready_for_review]
+        paths:
+            - "src/**"
+            - "cmake/generate_scene_settings_catalog.py"
+            - "tests/**"
+            - ".github/workflows/pr-python-tests.yaml"
+
+permissions:
+    contents: read
+
+jobs:
+    unit-tests:
+        name: Scene settings generator and policy tests
+        if: ${{ !github.event.pull_request.draft }}
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v6
+              with:
+                  ref: ${{ github.event.pull_request.head.sha }}
+                  persist-credentials: false
+
+            - uses: actions/setup-python@v6
+              with:
+                  python-version: "3.11"
+
+            # Named explicitly rather than discovered: `tests/` has no
+            # `__init__.py`, so `unittest discover` cannot import it.
+            - name: Run unit tests
+              run: |
+                  python -m unittest \
+                      tests.test_scene_settings_catalog_generator \
+                      tests.test_scene_settings_policy

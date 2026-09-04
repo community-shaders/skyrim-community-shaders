@@ -6,11 +6,11 @@
 #include "Deferred.h"
 #include "Feature.h"
 #include "Menu.h"
+#include "SceneSettingsManager.h"
 #include "State.h"
 #include "Util.h"
 #include "Utils/Game.h"
 #include "Utils/UI.h"
-#include "WeatherManager.h"
 
 #include "CSEditor/EditorWindow.h"
 #include <cstring>
@@ -316,13 +316,15 @@ void CSEditor::DrawWeatherStatusPanel()
 {
 	ImGui::Spacing();
 
-	auto weatherManager = globals::weatherManager;
-	auto currentWeathers = weatherManager->GetCurrentWeathers();
+	auto* sky = globals::game::sky;
+	auto* currentWeather = sky ? sky->currentWeather : nullptr;
+	auto* lastWeather = sky ? sky->lastWeather : nullptr;
+	const float lerpFactor = sky ? sky->currentWeatherPct : 0.0f;
 	const auto& theme = Menu::GetSingleton()->GetTheme();
 
-	if (currentWeathers.currentWeather) {
+	if (currentWeather) {
 		// Show if weather has custom settings
-		if (weatherManager->HasWeatherSettings(currentWeathers.currentWeather)) {
+		if (globals::sceneSettingsManager->HasWeatherConfig(currentWeather->GetFormID())) {
 			ImGui::TextColored(theme.StatusPalette.SuccessColor, "%s", T(TKEY("has_custom_settings"), "Has Custom Settings"));
 		} else {
 			ImGui::TextColored(theme.StatusPalette.Disable, "%s", T(TKEY("using_default_settings"), "Using Default Settings"));
@@ -330,23 +332,23 @@ void CSEditor::DrawWeatherStatusPanel()
 
 		// Show what the current weather is
 		ImGui::Text(T(TKEY("current_weather"), "Current Weather: %s"),
-			currentWeathers.currentWeather->GetFormEditorID() ?
-				currentWeathers.currentWeather->GetFormEditorID() :
-				std::format("{:08X}", currentWeathers.currentWeather->GetFormID()).c_str());
+			currentWeather->GetFormEditorID() ?
+				currentWeather->GetFormEditorID() :
+				std::format("{:08X}", currentWeather->GetFormID()).c_str());
 
 		// Always reserve space for transition info to prevent UI shifting
-		if (currentWeathers.lastWeather && currentWeathers.lerpFactor < 1.0f) {
+		if (lastWeather && lerpFactor < 1.0f) {
 			ImGui::Text(T(TKEY("transitioning_from"), "Transitioning From: %s"),
-				currentWeathers.lastWeather->GetFormEditorID() ?
-					currentWeathers.lastWeather->GetFormEditorID() :
-					std::format("{:08X}", currentWeathers.lastWeather->GetFormID()).c_str());
+				lastWeather->GetFormEditorID() ?
+					lastWeather->GetFormEditorID() :
+					std::format("{:08X}", lastWeather->GetFormID()).c_str());
 		} else {
 			ImGui::Text("%s", T(TKEY("no_transition"), "Transitioning From: No Transition"));
 		}
 
 		// Always show progress bar
-		const bool isTransitioning = currentWeathers.lastWeather && currentWeathers.lerpFactor < 1.0f;
-		float displayPct = isTransitioning ? currentWeathers.lerpFactor : 1.0f;
+		const bool isTransitioning = lastWeather && lerpFactor < 1.0f;
+		float displayPct = isTransitioning ? lerpFactor : 1.0f;
 
 		// Show background color when transition is complete
 		if (!isTransitioning) {
@@ -355,7 +357,7 @@ void CSEditor::DrawWeatherStatusPanel()
 
 		std::string transitionOverlay;
 		if (isTransitioning) {
-			float transitionPct = currentWeathers.lerpFactor * 100.0f;
+			float transitionPct = lerpFactor * 100.0f;
 			transitionOverlay = std::vformat(T(TKEY("transition_progress"), "Transition: {:.1f}%"), std::make_format_args(transitionPct));
 		}
 		ImGui::ProgressBar(displayPct, ImVec2(-1, 0), transitionOverlay.c_str());
