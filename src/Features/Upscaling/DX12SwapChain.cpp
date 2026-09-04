@@ -523,11 +523,17 @@ HRESULT DX12SwapChain::PresentInternal(UINT SyncInterval, UINT Flags, const DXGI
 		// each happens once per settings or menu transition, never per frame. Calling it mid-frame
 		// with the GPU busy coincided with device removal when XeSS-SR shared the adapter.
 		const uint32_t minimumIntervalUs = ComputeXeLLMinimumIntervalUs();
+		// A failed drain is exactly the state the comment above warns about, so skip the
+		// reconfiguration rather than making the call the checklist forbids. SleepModeWouldChange
+		// still reports the pending change next frame, so this retries on its own.
+		bool sleepModeSafe = true;
 		if (upscaling.intelXeSSFrameGeneration.SleepModeWouldChange(frameGenerationThisFrame, minimumIntervalUs)) {
-			if (!WaitForIdle())
-				logger::warn("[XeSS-FG] Could not drain the GPU before changing the XeLL sleep mode");
+			sleepModeSafe = WaitForIdle();
+			if (!sleepModeSafe)
+				logger::warn("[XeSS-FG] Could not drain the GPU before changing the XeLL sleep mode; deferring it to the next frame");
 		}
-		upscaling.intelXeSSFrameGeneration.SetEnabled(frameGenerationThisFrame, minimumIntervalUs);
+		if (sleepModeSafe)
+			upscaling.intelXeSSFrameGeneration.SetEnabled(frameGenerationThisFrame, minimumIntervalUs);
 
 		auto viewMatrix = globals::game::frameBufferCached.GetCameraView().Transpose();
 		auto projectionMatrix = globals::game::frameBufferCached.GetCameraProjUnjittered().Transpose();
