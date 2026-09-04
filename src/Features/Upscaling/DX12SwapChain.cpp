@@ -390,13 +390,29 @@ HRESULT DX12SwapChain::ResizeBuffersInternal(
 		result = swapChain->ResizeBuffers1(effectiveBufferCount, width, height, format, flags, creationNodeMask, presentQueue);
 	else
 		result = swapChain->ResizeBuffers(effectiveBufferCount, width, height, format, flags);
-	if (FAILED(result))
+
+	// DXGI leaves the previous buffers intact when the resize fails, so the swap chain stays
+	// usable and the game presents again. Every early return past the clears above therefore has
+	// to restore the references, or PresentInternal records a barrier and a CopyResource against
+	// a null ID3D12Resource.
+	const auto restoreBackBuffers = [this]() {
+		if (FAILED(swapChain->GetBuffer(0, IID_PPV_ARGS(swapChainBuffers[0].put()))) ||
+			FAILED(swapChain->GetBuffer(1, IID_PPV_ARGS(swapChainBuffers[1].put()))))
+			logger::error("[DX12SwapChain] Could not restore the back-buffer references after a failed resize");
+		frameIndex = swapChain->GetCurrentBackBufferIndex();
+	};
+
+	if (FAILED(result)) {
+		restoreBackBuffers();
 		return result;
+	}
 
 	DXGI_SWAP_CHAIN_DESC1 resizedDesc{};
 	const HRESULT descResult = swapChain->GetDesc1(&resizedDesc);
-	if (FAILED(descResult))
+	if (FAILED(descResult)) {
+		restoreBackBuffers();
 		return descResult;
+	}
 
 	const bool wrappedResourcesChanged = resizedDesc.Width != swapChainDesc.Width ||
 	                                     resizedDesc.Height != swapChainDesc.Height ||
@@ -467,21 +483,30 @@ HRESULT DX12SwapChain::PresentInternal(UINT SyncInterval, UINT Flags, const DXGI
 	// Copy shared texture to swap chain buffer
 	{
 		auto fakeSwapChain = (compositedPresent ? presentBufferWrapped : swapChainBufferWrapped)->resource.get();
+		// A resize that failed after clearing the cached references restores them, but GetBuffer
+		// can itself fail. Recording a barrier and a copy against a null resource is an invalid
+		// call to the driver, so drop the copy for this frame instead.
+		if (!swapChainBuffers[frameIndex])
+			(void)swapChain->GetBuffer(frameIndex, IID_PPV_ARGS(swapChainBuffers[frameIndex].put()));
 		auto realSwapChain = swapChainBuffers[frameIndex].get();
-		{
-			std::vector<D3D12_RESOURCE_BARRIER> barriers;
-			barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(fakeSwapChain, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_SOURCE));
-			barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(realSwapChain, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_COPY_DEST));
-			commandLists[frameIndex]->ResourceBarrier(static_cast<UINT>(barriers.size()), barriers.data());
-		}
+		if (!realSwapChain) {
+			logger::error("[DX12SwapChain] Back buffer {} is unavailable; skipping the present copy for this frame", frameIndex);
+		} else {
+			{
+				std::vector<D3D12_RESOURCE_BARRIER> barriers;
+				barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(fakeSwapChain, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_SOURCE));
+				barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(realSwapChain, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_COPY_DEST));
+				commandLists[frameIndex]->ResourceBarrier(static_cast<UINT>(barriers.size()), barriers.data());
+			}
 
-		commandLists[frameIndex]->CopyResource(realSwapChain, fakeSwapChain);
+			commandLists[frameIndex]->CopyResource(realSwapChain, fakeSwapChain);
 
-		{
-			std::vector<D3D12_RESOURCE_BARRIER> barriers;
-			barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(fakeSwapChain, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_COMMON));
-			barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(realSwapChain, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT));
-			commandLists[frameIndex]->ResourceBarrier(static_cast<UINT>(barriers.size()), barriers.data());
+			{
+				std::vector<D3D12_RESOURCE_BARRIER> barriers;
+				barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(fakeSwapChain, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_COMMON));
+				barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(realSwapChain, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT));
+				commandLists[frameIndex]->ResourceBarrier(static_cast<UINT>(barriers.size()), barriers.data());
+			}
 		}
 	}
 

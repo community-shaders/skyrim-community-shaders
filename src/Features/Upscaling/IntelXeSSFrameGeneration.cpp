@@ -739,11 +739,11 @@ bool IntelXeSSFrameGeneration::BeginFrame()
 
 bool IntelXeSSFrameGeneration::BeginFrame(uint64_t globalsFrame)
 {
-	std::scoped_lock lock(mutex_);
-	return StartFrameUnlocked(globalsFrame);
+	std::unique_lock lock(mutex_);
+	return StartFrameUnlocked(lock, globalsFrame);
 }
 
-bool IntelXeSSFrameGeneration::StartFrameUnlocked(uint64_t globalsFrame)
+bool IntelXeSSFrameGeneration::StartFrameUnlocked(std::unique_lock<std::mutex>& a_lock, uint64_t globalsFrame)
 {
 	if (!initialized_ || !xellContext_)
 		return false;
@@ -767,8 +767,23 @@ bool IntelXeSSFrameGeneration::StartFrameUnlocked(uint64_t globalsFrame)
 	taggedThisFrame_ = false;
 	inputSampleSent_ = false;
 
-	if (!CheckXeLLResult(xell_.sleep(xellContext_, currentPresentId_), "sleep at frame start"))
+	// xellSleep blocks the caller until the pacing deadline. BeginFrame runs on the game's
+	// input/main thread while TagFrame, BeforePresent and AfterPresent take this same mutex on
+	// the render/present thread, so holding it here would turn a main-thread frame cap into a
+	// render-thread stall. Release it for the sleep only.
+	const xell_context_handle_t sleepContext = xellContext_;
+	const uint32_t sleepPresentId = currentPresentId_;
+	a_lock.unlock();
+	const xell_result_t sleepResult = xell_.sleep(sleepContext, sleepPresentId);
+	a_lock.lock();
+	if (!CheckXeLLResult(sleepResult, "sleep at frame start"))
 		success = false;
+
+	// Shutdown or another frame could have run while the lock was released; emitting the marker
+	// sequence against a destroyed context or a superseded present ID would be wrong either way.
+	if (!initialized_ || !xellContext_ || xellContext_ != sleepContext || currentPresentId_ != sleepPresentId)
+		return false;
+
 	frameStage_ = FrameStage::Simulation;
 	success &= AddMarkerUnlocked(XELL_SIMULATION_START);
 	success &= AddMarkerUnlocked(XELL_INPUT_SAMPLE);
@@ -859,7 +874,9 @@ bool IntelXeSSFrameGeneration::TagResourceUnlocked(
 
 bool IntelXeSSFrameGeneration::TagFrame(const FrameData& frame)
 {
-	std::scoped_lock lock(mutex_);
+	// unique_lock rather than scoped_lock: the StartFrameUnlocked fallback below releases it
+	// around the blocking XeLL sleep.
+	std::unique_lock lock(mutex_);
 	if (!initialized_ || !xefgContext_ || !xellContext_)
 		return false;
 
@@ -870,7 +887,11 @@ bool IntelXeSSFrameGeneration::TagFrame(const FrameData& frame)
 			logger::warn("[XeSS-FG] TagFrame ran before BeginFrame; XeLL sleep is occurring later than intended");
 		}
 		const uint64_t currentGlobalsFrame = GetGlobalsFrame(fallbackGlobalsFrame_);
-		if (currentGlobalsFrame == lastGlobalsFrame_ || !StartFrameUnlocked(currentGlobalsFrame))
+		if (currentGlobalsFrame == lastGlobalsFrame_ || !StartFrameUnlocked(lock, currentGlobalsFrame))
+			return false;
+		// StartFrameUnlocked drops the lock around the XeLL sleep; re-check the XeFG context it
+		// re-validated only for XeLL before the rest of this function uses it.
+		if (!xefgContext_)
 			return false;
 	}
 	if (frameStage_ == FrameStage::Simulation) {

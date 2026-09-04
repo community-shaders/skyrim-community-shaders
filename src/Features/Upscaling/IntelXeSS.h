@@ -17,8 +17,9 @@
  * The D3D11 XeSS-SR implementation is available only on supported Intel Arc
  * hardware. The DLL is optional: load, device-support, and initialization
  * failures leave the backend disabled without affecting the other upscalers.
- * XeSS is not thread safe, so all methods except the SDK logging callback must
- * be called from the thread that created the context.
+ * XeSS is not thread safe, so all methods except the SDK logging callback must be
+ * serialized. The engine already provides that, but it moves the calls between the
+ * render and main threads, so there is no fixed owning thread; see AdoptCallingThread.
  */
 class IntelXeSS
 {
@@ -156,7 +157,8 @@ private:
 
 	bool ResolveApi();
 	bool EnsureContext();
-	bool CheckOwnerThread(const char* a_operation) const;
+	/** @brief Records the calling thread as the current SDK caller, logging the first move. */
+	void AdoptCallingThread(const char* a_operation) const;
 	bool ValidateExecutionResources(
 		ID3D11Resource* a_color,
 		ID3D11Resource* a_depth,
@@ -172,7 +174,7 @@ private:
 	Api api_{};
 	xess_context_handle_t context_ = nullptr;
 	winrt::com_ptr<ID3D11Device> device_;
-	/** Thread of the most recent SDK call; diagnostic only, adopted on change (see CheckOwnerThread). */
+	/** Thread of the most recent SDK call; diagnostic only, adopted on change (see AdoptCallingThread). */
 	mutable std::thread::id ownerThread_{};
 
 	xess_2d_t outputResolution_{};

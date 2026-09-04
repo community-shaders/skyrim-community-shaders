@@ -1103,6 +1103,32 @@ void Upscaling::CheckResources(UpscaleMethod a_upscalemethod)
 	bool frameGenModeChanged = frameGenModeCurrent != previousFrameGenMode;
 	bool upscaleModeChanged = (previousUpscaleMode != a_upscalemethod);
 
+	// A drain failure below leaves the XeSS textures and the SDK context alive while the
+	// tracking update still moves previousUpscaleMode off kXESS, so the teardown branch would
+	// never be entered again. Retry it here, before that state is consulted, until the GPU
+	// drains or the retry budget runs out.
+	if (pendingXeSSTeardown) {
+		if (a_upscalemethod == UpscaleMethod::kXESS) {
+			// The context was never destroyed, so switching back simply reuses it.
+			pendingXeSSTeardown = false;
+			pendingXeSSTeardownAttempts = 0;
+		} else if (xessD3D12PathActive ? dx12SwapChain.WaitForIdle() : WaitForD3D11Idle()) {
+			DestroyUpscalingTextureResources(a_upscalemethod);
+			if (xessD3D12PathActive)
+				intelXeSSD3D12.DestroyResources();
+			else
+				intelXeSS.DestroyResources();
+			pendingXeSSTeardown = false;
+			pendingXeSSTeardownAttempts = 0;
+			logger::info("[XeSS-SR] Deferred teardown completed once pending GPU work finished");
+		} else if (++pendingXeSSTeardownAttempts >= kMaxXeSSTeardownAttempts) {
+			// Each attempt can block for the full drain timeout; retrying every frame forever
+			// would stall the game harder than the leak it is trying to avoid.
+			pendingXeSSTeardown = false;
+			logger::error("[XeSS-SR] Giving up on the deferred teardown after {} attempts; the inactive context stays alive for this session", pendingXeSSTeardownAttempts);
+		}
+	}
+
 	if (upscaleModeChanged || frameGenModeChanged) {
 		logger::debug("[Upscaling] Resource change detected - Upscale: {} ({}) -> {} ({}), FrameGen: {} -> {} (d3d12Active={})",
 			static_cast<int>(previousUpscaleMode), magic_enum::enum_name(previousUpscaleMode), static_cast<int>(a_upscalemethod), magic_enum::enum_name(a_upscalemethod), previousFrameGenMode, frameGenModeCurrent, d3d12SwapChainActive);
@@ -1123,8 +1149,12 @@ void Upscaling::CheckResources(UpscaleMethod a_upscalemethod)
 						intelXeSSD3D12.DestroyResources();
 					else
 						intelXeSS.DestroyResources();
-				} else
-					logger::warn("[XeSS-SR] Keeping the inactive context alive because pending GPU work did not finish safely");
+				} else {
+					// Queue the retry; the tracking update below erases the last trace of kXESS.
+					pendingXeSSTeardown = true;
+					pendingXeSSTeardownAttempts = 0;
+					logger::warn("[XeSS-SR] Keeping the inactive context alive because pending GPU work did not finish safely; teardown deferred to a later frame");
+				}
 			} else if (previousUpscalingWasActive) {
 				if (previousUpscaleMode == UpscaleMethod::kDLSS)
 					streamline.DestroyDLSSResources();

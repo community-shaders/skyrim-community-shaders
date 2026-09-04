@@ -173,41 +173,40 @@ public:
 	bool Shutdown();
 
 private:
+	// decltype keeps the pinned SDK headers as the single source of truth for these prototypes,
+	// so a future SDK bump that changes one fails to compile instead of corrupting the stack at
+	// runtime. Matches the pattern already used in IntelXeSSD3D12.h.
 	struct XeFGFunctions
 	{
-		xefg_swapchain_result_t (*getVersion)(xefg_swapchain_version_t*) = nullptr;
-		xefg_swapchain_result_t (*getProperties)(xefg_swapchain_handle_t, xefg_swapchain_properties_t*) = nullptr;
-		xefg_swapchain_result_t (*tagFrameConstants)(xefg_swapchain_handle_t, uint32_t, const xefg_swapchain_frame_constant_data_t*) = nullptr;
-		xefg_swapchain_result_t (*setEnabled)(xefg_swapchain_handle_t, uint32_t) = nullptr;
-		xefg_swapchain_result_t (*setPresentId)(xefg_swapchain_handle_t, uint32_t) = nullptr;
-		xefg_swapchain_result_t (*getLastPresentStatus)(xefg_swapchain_handle_t, xefg_swapchain_present_status_t*) = nullptr;
-		xefg_swapchain_result_t (*setLoggingCallback)(xefg_swapchain_handle_t, xefg_swapchain_logging_level_t, xefg_swapchain_app_log_callback_t, void*) = nullptr;
-		xefg_swapchain_result_t (*destroy)(xefg_swapchain_handle_t) = nullptr;
-		xefg_swapchain_result_t (*setLatencyReduction)(xefg_swapchain_handle_t, void*) = nullptr;
-		xefg_swapchain_result_t (*setUiCompositionState)(xefg_swapchain_handle_t, xefg_swapchain_ui_composition_state_t) = nullptr;
+		decltype(&xefgSwapChainGetVersion) getVersion = nullptr;
+		decltype(&xefgSwapChainGetProperties) getProperties = nullptr;
+		decltype(&xefgSwapChainTagFrameConstants) tagFrameConstants = nullptr;
+		decltype(&xefgSwapChainSetEnabled) setEnabled = nullptr;
+		decltype(&xefgSwapChainSetPresentId) setPresentId = nullptr;
+		decltype(&xefgSwapChainGetLastPresentStatus) getLastPresentStatus = nullptr;
+		decltype(&xefgSwapChainSetLoggingCallback) setLoggingCallback = nullptr;
+		decltype(&xefgSwapChainDestroy) destroy = nullptr;
+		/** The pinned SDK deliberately types the second parameter as void*. */
+		decltype(&xefgSwapChainSetLatencyReduction) setLatencyReduction = nullptr;
+		decltype(&xefgSwapChainSetUiCompositionState) setUiCompositionState = nullptr;
 		/** Optional: absent in SDKs older than the multi-frame-generation release. */
-		xefg_swapchain_result_t (*setNumInterpolatedFrames)(xefg_swapchain_handle_t, uint32_t) = nullptr;
-		xefg_swapchain_result_t (*d3d12CreateContext)(ID3D12Device*, xefg_swapchain_handle_t*) = nullptr;
-		xefg_swapchain_result_t (*d3d12GetProperties)(xefg_swapchain_handle_t,
-			const xefg_swapchain_d3d12_init_params_t*, uint32_t, uint32_t, DXGI_FORMAT,
-			xefg_swapchain_properties_t*) = nullptr;
-		xefg_swapchain_result_t (*d3d12InitFromSwapChainDesc)(xefg_swapchain_handle_t,
-			HWND, const DXGI_SWAP_CHAIN_DESC1*, const DXGI_SWAP_CHAIN_FULLSCREEN_DESC*,
-			ID3D12CommandQueue*, IDXGIFactory2*, const xefg_swapchain_d3d12_init_params_t*) = nullptr;
-		xefg_swapchain_result_t (*d3d12GetSwapChainPtr)(xefg_swapchain_handle_t, REFIID, void**) = nullptr;
-		xefg_swapchain_result_t (*d3d12TagFrameResource)(xefg_swapchain_handle_t,
-			ID3D12CommandList*, uint32_t, const xefg_swapchain_d3d12_resource_data_t*) = nullptr;
+		decltype(&xefgSwapChainSetNumInterpolatedFrames) setNumInterpolatedFrames = nullptr;
+		decltype(&xefgSwapChainD3D12CreateContext) d3d12CreateContext = nullptr;
+		decltype(&xefgSwapChainD3D12GetProperties) d3d12GetProperties = nullptr;
+		decltype(&xefgSwapChainD3D12InitFromSwapChainDesc) d3d12InitFromSwapChainDesc = nullptr;
+		decltype(&xefgSwapChainD3D12GetSwapChainPtr) d3d12GetSwapChainPtr = nullptr;
+		decltype(&xefgSwapChainD3D12TagFrameResource) d3d12TagFrameResource = nullptr;
 	};
 
 	struct XeLLFunctions
 	{
-		xell_result_t (*getVersion)(xell_version_t*) = nullptr;
-		xell_result_t (*d3d12CreateContext)(ID3D12Device*, xell_context_handle_t*) = nullptr;
-		xell_result_t (*destroy)(xell_context_handle_t) = nullptr;
-		xell_result_t (*setSleepMode)(xell_context_handle_t, const xell_sleep_params_t*) = nullptr;
-		xell_result_t (*sleep)(xell_context_handle_t, uint32_t) = nullptr;
-		xell_result_t (*addMarkerData)(xell_context_handle_t, uint32_t, xell_latency_marker_type_t) = nullptr;
-		xell_result_t (*setLoggingCallback)(xell_context_handle_t, xell_logging_level_t, xell_app_log_callback_t) = nullptr;
+		decltype(&xellGetVersion) getVersion = nullptr;
+		decltype(&xellD3D12CreateContext) d3d12CreateContext = nullptr;
+		decltype(&xellDestroyContext) destroy = nullptr;
+		decltype(&xellSetSleepMode) setSleepMode = nullptr;
+		decltype(&xellSleep) sleep = nullptr;
+		decltype(&xellAddMarkerData) addMarkerData = nullptr;
+		decltype(&xellSetLoggingCallback) setLoggingCallback = nullptr;
 	};
 
 	enum class FrameStage : uint8_t
@@ -224,7 +223,12 @@ private:
 	bool ResolveExportsUnlocked();
 	void UnloadModulesUnlocked();
 	bool DestroyContextsUnlocked(bool unloadModules);
-	bool StartFrameUnlocked(uint64_t globalsFrame);
+	/**
+	 * @brief Opens the XeLL marker sequence for a new game frame.
+	 * @param a_lock Lock held on mutex_; released around the blocking xellSleep and re-acquired
+	 *        before the marker sequence, so the presenting thread is not stalled by the frame cap.
+	 */
+	bool StartFrameUnlocked(std::unique_lock<std::mutex>& a_lock, uint64_t globalsFrame);
 	bool CompleteOpenFrameUnlocked();
 	bool AddMarkerUnlocked(xell_latency_marker_type_t marker);
 	bool UpdateUiCompositionUnlocked(bool enabled);

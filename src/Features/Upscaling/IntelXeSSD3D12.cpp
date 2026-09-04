@@ -167,8 +167,11 @@ bool IntelXeSSD3D12::Initialize(ID3D12Device* a_device)
 		return false;
 	if (context_ && device_.get() == a_device)
 		return true;
-	if (context_ && (!CheckOwnerThread("Initialize") || !DestroyResources()))
-		return false;
+	if (context_) {
+		AdoptCallingThread("Initialize");
+		if (!DestroyResources())
+			return false;
+	}
 
 	// Same thread model as IntelXeSS::Initialize: the device is bound on the main thread, but
 	// every SDK call happens on the render thread, so the context is created there on first
@@ -190,10 +193,7 @@ bool IntelXeSSD3D12::EnsureContext()
 	if (!module_ || !device_ || !api_.createContext)
 		return false;
 	// First caller after Initialize(device) adopts ownership; see Initialize.
-	if (ownerThread_ == std::thread::id{})
-		ownerThread_ = std::this_thread::get_id();
-	else if (!CheckOwnerThread("xessD3D12CreateContext"))
-		return false;
+	AdoptCallingThread("xessD3D12CreateContext");
 
 	xess_context_handle_t newContext = nullptr;
 	const auto result = api_.createContext(device_.get(), &newContext);
@@ -227,9 +227,10 @@ bool IntelXeSSD3D12::CreateResources(
 	bool a_useAutoExposure)
 {
 	if (!a_outputResolution.x || !a_outputResolution.y || !IsKnownQuality(a_quality) ||
-		!EnsureContext() || !CheckOwnerThread("xessD3D12Init")) {
+		!EnsureContext()) {
 		return false;
 	}
+	AdoptCallingThread("xessD3D12Init");
 
 	uint32_t initFlags = XESS_INIT_FLAG_NONE;
 	if (a_useResponsiveMask)
@@ -310,9 +311,10 @@ bool IntelXeSSD3D12::QueryOptimalInputResolution(
 {
 	a_result = {};
 	if (!a_outputResolution.x || !a_outputResolution.y || !IsKnownQuality(a_quality) ||
-		!EnsureContext() || !CheckOwnerThread("xessGetOptimalInputResolution")) {
+		!EnsureContext()) {
 		return false;
 	}
+	AdoptCallingThread("xessGetOptimalInputResolution");
 	return LogResult(
 		"xessGetOptimalInputResolution",
 		api_.getOptimalInputResolution(
@@ -333,8 +335,9 @@ bool IntelXeSSD3D12::Upscale(
 	bool a_resetHistory,
 	float a_exposureScale)
 {
-	if (!initialized || !context_ || !a_commandList || !CheckOwnerThread("xessD3D12Execute"))
+	if (!initialized || !context_ || !a_commandList)
 		return false;
+	AdoptCallingThread("xessD3D12Execute");
 	if (!std::isfinite(a_jitterOffsetX) || !std::isfinite(a_jitterOffsetY) ||
 		std::abs(a_jitterOffsetX) > kJitterLimit + kJitterEpsilon ||
 		std::abs(a_jitterOffsetY) > kJitterLimit + kJitterEpsilon ||
@@ -434,8 +437,7 @@ bool IntelXeSSD3D12::DestroyResources()
 		ResetConfiguration();
 		return true;
 	}
-	if (!CheckOwnerThread("xessDestroyContext"))
-		return false;
+	AdoptCallingThread("xessDestroyContext");
 	if (!LogResult("xessDestroyContext", api_.destroyContext(context_)))
 		return false;
 	context_ = nullptr;
@@ -464,18 +466,16 @@ bool IntelXeSSD3D12::Shutdown()
 	return true;
 }
 
-bool IntelXeSSD3D12::CheckOwnerThread(const char* a_operation) const
+void IntelXeSSD3D12::AdoptCallingThread(const char* a_operation) const
 {
 	const auto thisThread = std::this_thread::get_id();
-	if (ownerThread_ == std::thread::id{} || ownerThread_ == thisThread) {
-		ownerThread_ = thisThread;
-		return true;
-	}
-	// Same reasoning as IntelXeSS::CheckOwnerThread: the engine moves these calls between the
+	if (ownerThread_ == thisThread)
+		return;
+	// Same reasoning as IntelXeSS::AdoptCallingThread: the engine moves these calls between the
 	// render and main threads, and only serializes them, so adopt instead of refusing.
-	logger::info("[XeSS-SR D3D12] {} moved to another thread; adopting it as the calling thread", a_operation);
+	if (ownerThread_ != std::thread::id{})
+		logger::info("[XeSS-SR D3D12] {} moved to another thread; adopting it as the calling thread", a_operation);
 	ownerThread_ = thisThread;
-	return true;
 }
 
 bool IntelXeSSD3D12::LogResult(const char* a_operation, xess_result_t a_result, bool a_warningIsSuccess) const

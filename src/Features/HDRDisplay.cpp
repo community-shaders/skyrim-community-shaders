@@ -1134,7 +1134,11 @@ void HDRDisplay::ApplyHDR()
 	auto state = globals::state;
 	auto renderer = globals::game::renderer;
 
-	UpdateHDRData();
+	// One evaluation drives the constant buffer, the UAV binding and presentBufferValid; a second
+	// call could disagree (menu state moves between them) and leave PresentInternal consuming a
+	// buffer HDROutputCS never wrote.
+	const bool writeComposite = ShouldWriteFGComposite();
+	UpdateHDRData(writeComposite);
 
 	state->BeginPerfEvent("HDR Processing");
 
@@ -1180,7 +1184,6 @@ void HDRDisplay::ApplyHDR()
 		// In SDR the composite is the same premultiplied blend UICompositeCS would run at Present;
 		// producing it here saves that full-resolution pass. HDR keeps the separate pass because
 		// the UI is PQ-encoded only later, by UIBrightnessCS.
-		const bool writeComposite = ShouldWriteFGComposite();
 		DispatchHDROutput(
 			sceneSRV,
 			uiSRV,
@@ -1596,7 +1599,7 @@ float4 HDRDisplay::GetSharedDataHDR() const
 	};
 }
 
-HDRDisplay::HDRDataCB HDRDisplay::BuildHDRData() const
+HDRDisplay::HDRDataCB HDRDisplay::BuildHDRData(std::optional<bool> a_writeFgComposite) const
 {
 	bool isMainOrLoadingMenu = globals::state->IsMainOrLoadingMenuOpen();
 	auto* ui = globals::game::ui;
@@ -1621,7 +1624,7 @@ HDRDisplay::HDRDataCB HDRDisplay::BuildHDRData() const
 	data.fgTweenMenuMidAlphaBoost = (ui && ui->IsMenuOpen(RE::TweenMenu::MENU_NAME)) ? 1.f : 0.f;
 	data.previewSDR = 0.f;
 	data.applyAutoHDR = globals::features::effects11.ReplacedTonemapperThisFrame() ? 1.f : 0.f;
-	data.writeFgComposite = ShouldWriteFGComposite() ? 1.f : 0.f;
+	data.writeFgComposite = a_writeFgComposite.value_or(ShouldWriteFGComposite()) ? 1.f : 0.f;
 	return data;
 }
 
@@ -1635,12 +1638,12 @@ bool HDRDisplay::ShouldWriteFGComposite() const
 	       upscaling.dx12SwapChain.presentBufferWrapped->uav;
 }
 
-void HDRDisplay::UpdateHDRData() const
+void HDRDisplay::UpdateHDRData(std::optional<bool> a_writeFgComposite) const
 {
 	if (!hdrDataCB)
 		return;
 
-	hdrDataCB->Update(BuildHDRData());
+	hdrDataCB->Update(BuildHDRData(a_writeFgComposite));
 }
 
 void HDRDisplay::UpdateSwapChainColorSpace() const

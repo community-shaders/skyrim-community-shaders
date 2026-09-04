@@ -16,6 +16,9 @@
  *
  * This is the fallback path for non-Intel adapters. Rendering remains D3D11;
  * shared textures and a shared fence hand each XeSS dispatch to D3D12.
+ * XeSS is not thread safe, so the SDK calls must be serialized. The engine already
+ * provides that, but it moves them between the render and main threads, so there is
+ * no fixed owning thread; see AdoptCallingThread.
  */
 class IntelXeSSD3D12
 {
@@ -138,7 +141,8 @@ private:
 
 	bool ResolveApi();
 	bool EnsureContext();
-	bool CheckOwnerThread(const char* a_operation) const;
+	/** @brief Records the calling thread as the current SDK caller, logging the first move. */
+	void AdoptCallingThread(const char* a_operation) const;
 	bool ValidateExecutionResources(
 		ID3D12Resource* a_color,
 		ID3D12Resource* a_depth,
@@ -154,7 +158,7 @@ private:
 	Api api_{};
 	xess_context_handle_t context_ = nullptr;
 	winrt::com_ptr<ID3D12Device> device_;
-	/** Thread of the most recent SDK call; diagnostic only, adopted on change (see CheckOwnerThread). */
+	/** Thread of the most recent SDK call; diagnostic only, adopted on change (see AdoptCallingThread). */
 	mutable std::thread::id ownerThread_{};
 	xess_2d_t outputResolution_{};
 	InputResolutionRange inputResolutionRange_{};

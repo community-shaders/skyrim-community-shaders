@@ -7,6 +7,7 @@
 #include <dxgi.h>
 #include <functional>
 #include <mutex>
+#include <optional>
 #include <unordered_map>
 
 struct HDRDisplay : public Feature
@@ -76,8 +77,12 @@ public:
 
 	/** @brief Returns the HDR shared data (enable flag, paper white, peak nits, menu scene encoding). */
 	float4 GetSharedDataHDR() const;
-	/** @brief Updates the HDR constant buffer with current settings and menu state. */
-	void UpdateHDRData() const;
+	/**
+	 * @brief Updates the HDR constant buffer with current settings and menu state.
+	 * @param a_writeFgComposite Overrides ShouldWriteFGComposite(); pass the value the caller
+	 *        also uses for the UAV binding so the shader and the CPU side cannot disagree.
+	 */
+	void UpdateHDRData(std::optional<bool> a_writeFgComposite = std::nullopt) const;
 	/** @brief Sets the swap chain color space to HDR10 (PQ/BT.2020) or SDR (sRGB) based on settings. */
 	void UpdateSwapChainColorSpace() const;
 
@@ -180,7 +185,7 @@ public:
 	static_assert((sizeof(HDRDataCB) % 16) == 0, "CB size not padded correctly");
 
 	// HDR data CB contents from current settings/game state (previewSDR=0).
-	HDRDataCB BuildHDRData() const;
+	HDRDataCB BuildHDRData(std::optional<bool> a_writeFgComposite = std::nullopt) const;
 
 	ConstantBuffer* hdrDataCB = nullptr;
 

@@ -232,6 +232,16 @@ public:
 	bool depthUpscaleUseWideKernel = false;
 
 	/**
+	 * Set when a XeSS lifecycle change had to be skipped because the GPU drain failed.
+	 * CheckResources retries the teardown on later frames; without it the tracking update
+	 * would hide the pending kXESS state and leak the SDK context for the session.
+	 */
+	bool pendingXeSSTeardown = false;
+	/** Retry budget for pendingXeSSTeardown; each attempt can block for the full drain timeout. */
+	uint32_t pendingXeSSTeardownAttempts = 0;
+	static constexpr uint32_t kMaxXeSSTeardownAttempts = 3;
+
+	/**
 	 * Set when XeSS resources change or LoadingMenu closes. The next XeSS-SR
 	 * dispatch drops temporal history to avoid carrying data across discontinuities.
 	 */

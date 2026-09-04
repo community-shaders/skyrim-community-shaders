@@ -207,7 +207,8 @@ bool IntelXeSS::Initialize(ID3D11Device* a_device)
 		return true;
 
 	if (context_) {
-		if (!CheckOwnerThread("Initialize") || !DestroyResources())
+		AdoptCallingThread("Initialize");
+		if (!DestroyResources())
 			return false;
 	}
 
@@ -247,10 +248,7 @@ bool IntelXeSS::EnsureContext()
 		return false;
 	}
 	// First caller after Initialize(device) adopts ownership; see Initialize.
-	if (ownerThread_ == std::thread::id{})
-		ownerThread_ = std::this_thread::get_id();
-	else if (!CheckOwnerThread("xessD3D11CreateContext"))
-		return false;
+	AdoptCallingThread("xessD3D11CreateContext");
 
 	xess_context_handle_t newContext = nullptr;
 	const auto result = api_.createContext(device_.get(), &newContext);
@@ -324,8 +322,9 @@ bool IntelXeSS::CreateResources(
 		return true;
 	}
 
-	if (!EnsureContext() || !CheckOwnerThread("xessD3D11Init"))
+	if (!EnsureContext())
 		return false;
+	AdoptCallingThread("xessD3D11Init");
 
 	InputResolutionRange inputRange{};
 	if (!QueryOptimalInputResolution(a_outputResolution, a_quality, inputRange))
@@ -380,8 +379,9 @@ bool IntelXeSS::QueryOptimalInputResolution(
 		logger::error("[XeSS-SR] Invalid output resolution or quality passed to xessGetOptimalInputResolution");
 		return false;
 	}
-	if (!EnsureContext() || !CheckOwnerThread("xessGetOptimalInputResolution"))
+	if (!EnsureContext())
 		return false;
+	AdoptCallingThread("xessGetOptimalInputResolution");
 
 	const auto result = api_.getOptimalInputResolution(
 		context_,
@@ -410,8 +410,7 @@ bool IntelXeSS::Upscale(
 		logger::error("[XeSS-SR] Upscale called before successful initialization");
 		return false;
 	}
-	if (!CheckOwnerThread("xessD3D11Execute"))
-		return false;
+	AdoptCallingThread("xessD3D11Execute");
 	if (!std::isfinite(a_jitterOffsetX) || !std::isfinite(a_jitterOffsetY) ||
 		std::abs(a_jitterOffsetX) > kJitterLimit + kJitterEpsilon ||
 		std::abs(a_jitterOffsetY) > kJitterLimit + kJitterEpsilon) {
@@ -588,8 +587,7 @@ bool IntelXeSS::DestroyResources()
 		ResetConfiguration();
 		return true;
 	}
-	if (!CheckOwnerThread("xessDestroyContext"))
-		return false;
+	AdoptCallingThread("xessDestroyContext");
 
 	const auto result = api_.destroyContext(context_);
 	if (!LogResult("xessDestroyContext", result))
@@ -629,21 +627,19 @@ bool IntelXeSS::Shutdown()
 	return true;
 }
 
-bool IntelXeSS::CheckOwnerThread(const char* a_operation) const
+void IntelXeSS::AdoptCallingThread(const char* a_operation) const
 {
 	const auto thisThread = std::this_thread::get_id();
-	if (ownerThread_ == std::thread::id{} || ownerThread_ == thisThread) {
-		ownerThread_ = thisThread;
-		return true;
-	}
+	if (ownerThread_ == thisThread)
+		return;
 
 	// Skyrim issues the upscaling calls from the render thread in the main menu and from the
 	// main thread in the world, so a fixed owner is impossible here. The SDK only forbids
 	// concurrent use, which the engine already serializes; the D3D11 immediate context has no
 	// thread affinity. Adopt the new thread and leave a trace in the log.
-	logger::info("[XeSS-SR] {} moved to another thread; adopting it as the calling thread", a_operation);
+	if (ownerThread_ != std::thread::id{})
+		logger::info("[XeSS-SR] {} moved to another thread; adopting it as the calling thread", a_operation);
 	ownerThread_ = thisThread;
-	return true;
 }
 
 bool IntelXeSS::LogResult(const char* a_operation, xess_result_t a_result, bool a_warningIsSuccess) const
