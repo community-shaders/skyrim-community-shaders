@@ -3,16 +3,16 @@
 namespace Util
 {
 	/**
-	 * @brief Hooks virtual slot a_idx of COM object a_object with a_thunk after Detours
-	 * failed to patch the slot's implementation: swaps the vtable slot in place, or, when
-	 * the vtable page itself rejects VirtualProtect, repoints the object at a patched
-	 * clone of its vtable.
+	 * @brief Hook virtual slot a_idx of a_object with a_thunk when Detours could not patch
+	 * the function in that slot.
 	 *
-	 * Needed under Wine/CrossOver, where the D3D11 translation layer lives in host-mapped
-	 * memory whose pages reject every protection change, so only the clone can carry the
-	 * hook.
+	 * First writes a_thunk into the vtable slot in place. When the vtable page rejects
+	 * VirtualProtect, points the object at a patched clone of its vtable instead.
 	 *
-	 * @return The original function pointer the hook must call through.
+	 * Under Wine/CrossOver the D3D11 translation layer lives in host-mapped memory that
+	 * rejects every protection change, so only the clone can carry the hook.
+	 *
+	 * @return The original function pointer that the hook must call.
 	 */
 	std::uintptr_t VTableHookFallback(void* a_object, std::size_t a_idx, void* a_thunk, LONG a_detourError);
 }

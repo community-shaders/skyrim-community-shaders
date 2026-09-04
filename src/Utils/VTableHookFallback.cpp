@@ -8,16 +8,17 @@
 
 namespace
 {
-	inline constexpr std::size_t max_cloned_vtable_slots = 256;
+	inline constexpr std::size_t maxClonedVTableSlots = 256;
 
-	// Objects repointed at a plugin-owned vtable clone. Later hooks on the same object
-	// must patch the same clone, and clones must stay dispatchable after this DLL's
-	// static destructors have run, so the map is intentionally leaked.
+	// Objects that now point at a vtable clone owned by this DLL. A later hook on the same
+	// object must patch the same clone. The map is leaked on purpose: the game still calls
+	// through the clones after this DLL's static destructors have run.
 	std::mutex clonedVTableMutex;
 	auto& clonedVTables = *new std::unordered_map<void*, std::unique_ptr<std::uintptr_t[]>>();
 
-	// Copies vtable slots page by page, stopping at the first page that faults; the
-	// vtable may live in memory VirtualQuery cannot measure. Returns the slots copied.
+	// Copies vtable slots one page at a time and stops at the first page that faults,
+	// because VirtualQuery cannot always report how far the vtable stays readable.
+	// Returns the number of slots copied.
 	std::size_t CopyReadableSlots(std::uintptr_t* a_dst, const std::uintptr_t* a_src, std::size_t a_count) noexcept
 	{
 		std::size_t copied = 0;
@@ -41,19 +42,19 @@ namespace Util
 	{
 		std::scoped_lock lock(clonedVTableMutex);
 
-		// Read under the lock: a concurrent hook may have just repointed this object at a
-		// clone, and the clone check below must see the current vtable pointer.
+		// Read the vtable pointer under the lock: another thread may have just pointed this
+		// object at a clone, and the clone check below must see that.
 		auto vtable = *static_cast<std::uintptr_t**>(a_object);
 		const auto original = vtable[a_idx];
 
-		if (a_idx >= max_cloned_vtable_slots) {
-			logger::warn("[Hooks] virtual slot {} exceeds the supported clone size {}; left unhooked (Detours error {})", a_idx, max_cloned_vtable_slots, a_detourError);
+		if (a_idx >= maxClonedVTableSlots) {
+			logger::warn("[Hooks] virtual slot {} exceeds the supported clone size {}; left unhooked (Detours error {})", a_idx, maxClonedVTableSlots, a_detourError);
 			return original;
 		}
 
-		// An earlier hook may already have repointed this object at a clone; cloning again
-		// would discard it. The slot value read above came from the clone, so returning it
-		// preserves chaining.
+		// If an earlier hook already pointed this object at a clone, patch that clone; a new
+		// clone would drop the earlier hook. `original` was read from the clone, so the hooks
+		// still chain.
 		if (auto it = clonedVTables.find(a_object); it != clonedVTables.end() && it->second.get() == vtable) {
 			it->second[a_idx] = reinterpret_cast<std::uintptr_t>(a_thunk);
 			logger::warn("[Hooks] Detours could not patch virtual slot {} (error {}); patched the object's existing vtable clone", a_idx, a_detourError);
@@ -61,11 +62,11 @@ namespace Util
 		}
 
 		MEMORY_BASIC_INFORMATION mbi{};
-		const bool queried = VirtualQuery(vtable, &mbi, sizeof(mbi)) == sizeof(mbi);
+		const bool querySucceeded = VirtualQuery(vtable, &mbi, sizeof(mbi)) == sizeof(mbi);
 
 		// Swap the slot in place, keeping execute rights if the page has them.
 		constexpr DWORD executeProtects = PAGE_EXECUTE | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY;
-		const DWORD writableProtect = (queried && (mbi.Protect & executeProtects) != 0) ? PAGE_EXECUTE_READWRITE : PAGE_READWRITE;
+		const DWORD writableProtect = (querySucceeded && (mbi.Protect & executeProtects) != 0) ? PAGE_EXECUTE_READWRITE : PAGE_READWRITE;
 		DWORD previousProtect = 0;
 		if (VirtualProtect(&vtable[a_idx], sizeof(std::uintptr_t), writableProtect, &previousProtect)) {
 			vtable[a_idx] = reinterpret_cast<std::uintptr_t>(a_thunk);
@@ -75,20 +76,20 @@ namespace Util
 			logger::warn("[Hooks] Detours could not patch virtual slot {} (error {}); swapped the vtable slot in place", a_idx, a_detourError);
 			return original;
 		}
-		const DWORD protectResult = GetLastError();
+		const DWORD protectError = GetLastError();
 
-		// Clone the vtable, patch the copy, repoint the object; needs no protection change.
-		// Copy the full capacity so every readable source slot keeps resolving through
-		// the clone.
-		auto clone = std::make_unique<std::uintptr_t[]>(max_cloned_vtable_slots);
-		if (CopyReadableSlots(clone.get(), vtable, max_cloned_vtable_slots) <= a_idx) {
-			logger::warn("[Hooks] virtual slot {} could not be hooked: Detours failed (error {}), the vtable page refused VirtualProtect (error {}), and the vtable was unreadable at that slot", a_idx, a_detourError, protectResult);
+		// Last option: clone the vtable, patch the clone, and point the object at it. This
+		// needs no protection change. Copy every readable slot, not only a_idx, so the other
+		// virtual functions keep working through the clone.
+		auto clone = std::make_unique<std::uintptr_t[]>(maxClonedVTableSlots);
+		if (CopyReadableSlots(clone.get(), vtable, maxClonedVTableSlots) <= a_idx) {
+			logger::warn("[Hooks] virtual slot {} could not be hooked: Detours failed (error {}), the vtable page refused VirtualProtect (error {}), and the vtable was unreadable at that slot", a_idx, a_detourError, protectError);
 			return original;
 		}
 		clone[a_idx] = reinterpret_cast<std::uintptr_t>(a_thunk);
 		*static_cast<std::uintptr_t**>(a_object) = clone.get();
 		clonedVTables[a_object] = std::move(clone);
-		logger::warn("[Hooks] Detours could not patch virtual slot {} (error {}) and the vtable page refused VirtualProtect (error {}); repointed the object at a patched vtable clone", a_idx, a_detourError, protectResult);
+		logger::warn("[Hooks] Detours could not patch virtual slot {} (error {}) and the vtable page refused VirtualProtect (error {}); repointed the object at a patched vtable clone", a_idx, a_detourError, protectError);
 		return original;
 	}
 }
