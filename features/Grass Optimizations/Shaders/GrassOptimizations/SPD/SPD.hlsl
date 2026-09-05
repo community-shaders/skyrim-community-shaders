@@ -21,12 +21,18 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+// Grass uses six SPD output mips. The upstream tail is retained but excluded because its additional UAV bindings exceed D3D11's eight-slot limit.
+#ifndef SPD_MAX_MIPS
+#define SPD_MAX_MIPS 6
+#endif
+
 globallycoherent RWTexture2D<float> SpdMip1 : register(u0);
 globallycoherent RWTexture2D<float> SpdMip2 : register(u1);
 globallycoherent RWTexture2D<float> SpdMip3 : register(u2);
 globallycoherent RWTexture2D<float> SpdMip4 : register(u3);
 globallycoherent RWTexture2D<float> SpdMip5 : register(u4);
 globallycoherent RWTexture2D<float> SpdMip6 : register(u5);
+#if SPD_MAX_MIPS > 6
 globallycoherent RWTexture2D<float> SpdMip7 : register(u6);
 globallycoherent RWTexture2D<float> SpdMip8 : register(u7);
 globallycoherent RWTexture2D<float> SpdMip9 : register(u8);
@@ -34,18 +40,19 @@ globallycoherent RWTexture2D<float> SpdMip10 : register(u9);
 globallycoherent RWTexture2D<float> SpdMip11 : register(u10);
 globallycoherent RWTexture2D<float> SpdMip12 : register(u11);
 globallycoherent RWByteAddressBuffer SpdCounter : register(u12);
-// Mip 0 is read through a UAV rather than an SRV: binding it as a shader resource while the levels
-// below it are UAVs on the same texture lets the runtime null the SRV slot for an overlapping view.
-RWTexture2D<float> SpdSource : register(u13);
+#endif
+// Read mip 0 through a dedicated SRV to avoid overlap and keep the single-dispatch path within D3D11's UAV limit.
+Texture2D<float> SpdSource : register(t0);
 
 cbuffer SpdParams : register(b0)
 {
     uint2 SpdSourceSize; // dimensions of the source mip
-    uint SpdMipCount; // output mips to produce, 1..12
-    uint SpdNumWorkGroups; // groups dispatched, so the last one can finish the tail
+    uint SpdMipCount; // output mips to produce, 1..SPD_MAX_MIPS
+    uint SpdNumWorkGroups; // groups dispatched, so the last one can finish the optional tail
 };
 
 groupshared float spdIntermediate[16][16];
+#if SPD_MAX_MIPS > 6
 groupshared uint spdCounterValue;
 
 // The tail phase re-reads mip 6, the level every group has finished writing by the time it runs.
@@ -53,10 +60,11 @@ float SpdLoad(int2 tex)
 {
     return SpdMip6[tex];
 }
+#endif
 
 float SpdLoadSource(int2 tex)
 {
-    return SpdSource[clamp(tex, int2(0, 0), int2(SpdSourceSize) - 1)];
+    return SpdSource.Load(int3(clamp(tex, int2(0, 0), int2(SpdSourceSize) - 1), 0));
 }
 
 void SpdStore(int2 pix, float value, uint index)
@@ -81,6 +89,7 @@ void SpdStore(int2 pix, float value, uint index)
         case 5:
             SpdMip6[pix] = value;
             break;
+#if SPD_MAX_MIPS > 6
         case 6:
             SpdMip7[pix] = value;
             break;
@@ -99,6 +108,7 @@ void SpdStore(int2 pix, float value, uint index)
         default:
             SpdMip12[pix] = value;
             break;
+#endif
     }
 }
 
@@ -117,14 +127,16 @@ float SpdLoadIntermediate(uint x, uint y)
     return spdIntermediate[x][y];
 }
 
+#if SPD_MAX_MIPS > 6
 // Only last active workgroup should proceed
 bool SpdExitWorkgroup(uint numWorkGroups, uint localInvocationIndex)
 {
    if (localInvocationIndex == 0)
-		SpdCounter.InterlockedAdd(0, 1, spdCounterValue);
-	GroupMemoryBarrierWithGroupSync();
-	return spdCounterValue != (numWorkGroups - 1);
+        SpdCounter.InterlockedAdd(0, 1, spdCounterValue);
+    GroupMemoryBarrierWithGroupSync();
+    return spdCounterValue != (numWorkGroups - 1);
 }
+#endif
 
 float SpdReduceIntermediate(uint2 i0, uint2 i1, uint2 i2, uint2 i3)
 {
@@ -135,6 +147,7 @@ float SpdReduceIntermediate(uint2 i0, uint2 i1, uint2 i2, uint2 i3)
     return SpdReduce4(v0, v1, v2, v3);
 }
 
+#if SPD_MAX_MIPS > 6
 float SpdReduceLoad4(uint2 i0, uint2 i1, uint2 i2, uint2 i3)
 {
     float v0 = SpdLoad(int2(i0));
@@ -148,6 +161,7 @@ float SpdReduceLoad4(uint2 base)
 {
     return SpdReduceLoad4(uint2(base + uint2(0, 0)), uint2(base + uint2(0, 1)), uint2(base + uint2(1, 0)), uint2(base + uint2(1, 1)));
 }
+#endif
 
 float SpdReduceLoadSource(int2 base)
 {
@@ -251,25 +265,26 @@ void SpdDownsampleMip_5(uint2 workGroupID, uint localInvocationIndex, uint mip)
     }
 }
 
+#if SPD_MAX_MIPS > 6
 void SpdDownsampleMips_6_7(uint x, uint y, uint mips)
 {
-    int2   tex = int2(x * 4 + 0, y * 4 + 0);
-    int2   pix = int2(x * 2 + 0, y * 2 + 0);
-    float v0  = SpdReduceLoad4(tex);
+    int2 tex = int2(x * 4 + 0, y * 4 + 0);
+    int2 pix = int2(x * 2 + 0, y * 2 + 0);
+    float v0 = SpdReduceLoad4(tex);
     SpdStore(pix, v0, 6);
 
-    tex       = int2(x * 4 + 2, y * 4 + 0);
-    pix       = int2(x * 2 + 1, y * 2 + 0);
+    tex = int2(x * 4 + 2, y * 4 + 0);
+    pix = int2(x * 2 + 1, y * 2 + 0);
     float v1 = SpdReduceLoad4(tex);
     SpdStore(pix, v1, 6);
 
-    tex       = int2(x * 4 + 0, y * 4 + 2);
-    pix       = int2(x * 2 + 0, y * 2 + 1);
+    tex = int2(x * 4 + 0, y * 4 + 2);
+    pix = int2(x * 2 + 0, y * 2 + 1);
     float v2 = SpdReduceLoad4(tex);
     SpdStore(pix, v2, 6);
 
-    tex       = int2(x * 4 + 2, y * 4 + 2);
-    pix       = int2(x * 2 + 1, y * 2 + 1);
+    tex = int2(x * 4 + 2, y * 4 + 2);
+    pix = int2(x * 2 + 1, y * 2 + 1);
     float v3 = SpdReduceLoad4(tex);
     SpdStore(pix, v3, 6);
 
@@ -281,6 +296,7 @@ void SpdDownsampleMips_6_7(uint x, uint y, uint mips)
     SpdStore(int2(x, y), v, 7);
     SpdStoreIntermediate(x, y, v);
 }
+#endif
 
 void SpdDownsampleNextFour(uint x, uint y, uint2 workGroupID, uint localInvocationIndex, uint baseMip, uint mips)
 {
@@ -322,7 +338,7 @@ uint2 ffxRemapForWaveReduction(uint a)
     return uint2(ffxBitfieldInsertMask(ffxBitfieldExtract(a, 2u, 3u), a, 1u), ffxBitfieldInsertMask(ffxBitfieldExtract(a, 3u, 3u), ffxBitfieldExtract(a, 1u, 2u), 2u));
 }
 
-// Reduces one 64x64 tile to six levels, then the last group to arrive carries the remainder alone.
+// Reduces one 64x64 tile to six levels, then optionally lets the last group finish the tail.
 void SpdDownsample(uint2 workGroupID, uint localInvocationIndex, uint mips, uint numWorkGroups)
 {
     // compute MIP level 0 and 1
@@ -334,6 +350,7 @@ void SpdDownsample(uint2 workGroupID, uint localInvocationIndex, uint mips, uint
     // compute MIP level 2, 3, 4, 5
     SpdDownsampleNextFour(x, y, workGroupID, localInvocationIndex, 2, mips);
 
+#if SPD_MAX_MIPS > 6
     if (mips <= 6)
         return;
 
@@ -352,6 +369,7 @@ void SpdDownsample(uint2 workGroupID, uint localInvocationIndex, uint mips, uint
 
     // compute MIP level 8, 9, 10, 11
     SpdDownsampleNextFour(x, y, uint2(0, 0), localInvocationIndex, 8, mips);
+#endif
 }
 
 [numthreads(256, 1, 1)] void main(uint3 WorkGroupId : SV_GroupID, uint LocalThreadIndex : SV_GroupIndex)

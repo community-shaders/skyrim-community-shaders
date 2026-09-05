@@ -568,7 +568,7 @@ void GrassOptimizations::UploadCullState(ID3D11Device* device, ID3D11DeviceConte
 		if (b.cullVisible)
 			CullBucket(b, ctx);
 
-	ID3D11UnorderedAccessView* nullUAVs[3 + 3 * (size_t)GrassMeshLibrary::LODTier::kCount] = {};
+	ID3D11UnorderedAccessView* nullUAVs[4 + 2 * (size_t)GrassMeshLibrary::LODTier::kCount] = {};
 	ctx->CSSetUnorderedAccessViews(0, (UINT)std::size(nullUAVs), nullUAVs, nullptr);
 	ID3D11ShaderResourceView* nullSRVs[4] = {};
 	ctx->CSSetShaderResources(0, 4, nullSRVs);
@@ -583,9 +583,7 @@ void GrassOptimizations::BuildFrustumSoA(FrustumSoA& out, const RE::NiFrustumPla
 		RE::NiFrustumPlanes::ActivePlane::kTop, RE::NiFrustumPlanes::ActivePlane::kBottom
 	};
 
-	// Slots 6 and 7, and any inactive plane, get a zero normal with constant -1: the dot is then
-	// 0 and 0 - (-1) = 1 >= 0, so the slot always passes. Padding this way keeps the inner test
-	// completely branch-free instead of testing activePlanes per slice.
+	// Pad unused and inactive slots with an always-pass plane (zero normal, constant -1), keeping the per-slice test branch-free.
 	alignas(16) float nx[8], ny[8], nz[8], d[8];
 	for (uint32_t i = 0; i < 8; ++i) {
 		nx[i] = ny[i] = nz[i] = 0.0f;
@@ -620,8 +618,8 @@ bool GrassOptimizations::AabbVisible(const FrustumSoA& f, __m128 lo, __m128 hi)
 	const __m128 hz = _mm_shuffle_ps(hi, hi, _MM_SHUFFLE(2, 2, 2, 2));
 
 	for (uint32_t g = 0; g < 2; ++g) {
-		// Positive vertex: the box corner furthest along each plane normal. blendv keys off the
-		// normal's sign bit.
+		// Positive vertex: the box corner furthest along each plane normal.
+		// blendv keys off the normal's sign bit.
 		const __m128 px = _mm_blendv_ps(hx, lx, f.nx[g]);
 		const __m128 py = _mm_blendv_ps(hy, ly, f.ny[g]);
 		const __m128 pz = _mm_blendv_ps(hz, lz, f.nz[g]);
@@ -673,23 +671,28 @@ ID3D11ComputeShader* GrassOptimizations::GetCullCS()
 
 void GrassOptimizations::CullBucket(GrassBucket& b, ID3D11DeviceContext* ctx)
 {
+	static_assert(
+		(size_t)GrassMeshLibrary::LODTier::kMiddle == 0 &&
+		(size_t)GrassMeshLibrary::LODTier::kFar == 1 &&
+		(size_t)GrassMeshLibrary::LODTier::kCount == 2,
+		"GrassCullingCS LOD counter offsets must match LODTier");
+
 	if (b.cullSlot == UINT32_MAX)
 		return;
 
 	// Clearing the args view allows the instance count to be directly reset to zero for the draw.
 	const UINT zeros[4] = { 0, 0, 0, 0 };
 	ctx->ClearUnorderedAccessViewUint(b.argsUAV, zeros);
+	ctx->ClearUnorderedAccessViewUint(b.lodCounterUAV, zeros);
 
-	// The main bin then one triple per LOD tier, matching u0-u8 in GrassCullingCS.
-	ID3D11UnorderedAccessView* uavs[3 + 3 * (size_t)GrassMeshLibrary::LODTier::kCount] = { b.compactedUAV, b.extrasUAV, b.argsUAV };
+	// Main outputs, two outputs per LOD tier, then the shared LOD counter, matching u0-u7 in GrassCullingCS.
+	ID3D11UnorderedAccessView* uavs[4 + 2 * (size_t)GrassMeshLibrary::LODTier::kCount] = { b.compactedUAV, b.extrasUAV, b.argsUAV };
 	for (size_t tier = 0; tier < (size_t)GrassMeshLibrary::LODTier::kCount; ++tier) {
 		const GrassBucket::LODBin& bin = b.lodBins[tier];
-		if (bin.active)
-			ctx->ClearUnorderedAccessViewUint(bin.argsUAV, zeros);
-		uavs[3 + tier * 3 + 0] = bin.active ? bin.compactedUAV : nullptr;
-		uavs[3 + tier * 3 + 1] = bin.active ? bin.extrasUAV : nullptr;
-		uavs[3 + tier * 3 + 2] = bin.active ? bin.argsUAV : nullptr;
+		uavs[3 + tier * 2 + 0] = bin.active ? bin.compactedUAV : nullptr;
+		uavs[3 + tier * 2 + 1] = bin.active ? bin.extrasUAV : nullptr;
 	}
+	uavs[std::size(uavs) - 1] = b.lodCounterUAV;
 	ctx->CSSetUnorderedAccessViews(0, (UINT)std::size(uavs), uavs, nullptr);
 
 	ID3D11ShaderResourceView* sliceTableSRV = sliceTable ? sliceTable->srv.get() : nullptr;
@@ -705,6 +708,18 @@ void GrassOptimizations::CullBucket(GrassBucket& b, ID3D11DeviceContext* ctx)
 	// Skipping the dispatch keeps the instance count at zero for the draw.
 	if (b.visibleInstances && b.sliceTableCount && sliceTableSRV)
 		ctx->Dispatch((b.visibleInstances + 63) / 64, 1, 1);
+
+	// The LOD counter UAV must be unbound before its values can be copied into the draw arguments.
+	ID3D11UnorderedAccessView* nullUAVs[std::size(uavs)] = {};
+	ctx->CSSetUnorderedAccessViews(0, (UINT)std::size(nullUAVs), nullUAVs, nullptr);
+	for (size_t tier = 0; tier < (size_t)GrassMeshLibrary::LODTier::kCount; ++tier) {
+		const GrassBucket::LODBin& bin = b.lodBins[tier];
+		if (!bin.active || !bin.argsBuf)
+			continue;
+		const UINT countOffset = (UINT)(tier * sizeof(uint32_t));
+		const D3D11_BOX countBox{ countOffset, 0, 0, countOffset + sizeof(uint32_t), 1, 1 };
+		ctx->CopySubresourceRegion(bin.argsBuf, 0, instanceCountOffset, 0, 0, b.lodCounterBuf, 0, &countBox);
+	}
 }
 
 bool GrassOptimizations::EnsureCullBucketCapacity(uint32_t slots, [[maybe_unused]] ID3D11Device* device)
@@ -925,7 +940,6 @@ void GrassOptimizations::Hooks::DrawInstanceTriShape::thunk(RE::BSRenderPass* pa
 		b->drawnPassKey = passKey;
 	}
 
-	// b outlives the lock: buckets is node-based and only UpdateGrass erases, on this same thread.
 	if (!b->cullVisible) {
 		return;
 	}
@@ -961,8 +975,6 @@ void GrassOptimizations::Hooks::DrawInstanceTriShape::thunk(RE::BSRenderPass* pa
 	ctx->IASetIndexBuffer(indexB, DXGI_FORMAT_R16_UINT, 0);
 
 	ID3D11Buffer* vbs[2] = { meshVB, nullptr };
-	// Stream 0 is the mesh's own vertex buffer, so its stride comes from that mesh's descriptor; only
-	// stream 1, the compacted instance records, is fixed at kGrassStride.
 	UINT strides[2] = { VertexStrideFromDesc(descVal), kGrassStride };
 	UINT offsets[2] = { 0, 0 };
 	if (!strides[0])

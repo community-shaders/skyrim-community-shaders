@@ -51,7 +51,7 @@ cbuffer CullBucket : register(b1)
     float MinPixelScale;
     float IsComplex;
     float MidLODEnabled;
-    // The dispatch covers only these slices' combined instance count.
+    // The dispatch covers the instances referenced by this slice range.
     uint SliceTableOffset;
     uint SliceCount;
     float FarLODEnabled;
@@ -60,9 +60,9 @@ cbuffer CullBucket : register(b1)
 
 ByteAddressBuffer Instances : register(t0);
 StructuredBuffer<float4> Origins : register(t1);
-// Max-depth reduction of the scene depth copy (see GrassHiZCS.hlsl).
+// Scene-depth max pyramid; see GrassHiZCS.hlsl.
 Texture2D<float> HiZ : register(t2);
-// Maps a compacted thread index back to a real instance: .x = the slice's first instance, .y = the instance total of every visible slice before it.
+// .x is the first source instance; .y is the compacted start index.
 StructuredBuffer<uint2> SliceTable : register(t3);
 
 RWByteAddressBuffer Compacted : register(u0);
@@ -71,13 +71,16 @@ RWByteAddressBuffer Counter : register(u2);
 
 RWByteAddressBuffer MidLODCompacted : register(u3);
 RWStructuredBuffer<float4> MidLODExtras : register(u4);
-RWByteAddressBuffer MidLODCounter : register(u5);
 
-RWByteAddressBuffer FarLODCompacted : register(u6);
-RWStructuredBuffer<float4> FarLODExtras : register(u7);
-RWByteAddressBuffer FarLODCounter : register(u8);
+RWByteAddressBuffer FarLODCompacted : register(u5);
+RWStructuredBuffer<float4> FarLODExtras : register(u6);
+// Both LOD counts share one UAV so the shader stays within D3D11's eight-UAV limit.
+RWByteAddressBuffer LODCounters : register(u7);
 
-// Uses a uint hash to generate a random float between [0, 1)
+static const uint MiddleLODCountOffset = 0;
+static const uint FarLODCountOffset = 4;
+
+// Convert hashed bits to a uniform value in [0, 1).
 float RandFloat(uint bits)
 {
     const uint mantissaMask = 0x007FFFFFu;
@@ -89,7 +92,7 @@ float RandFloat(uint bits)
     return asfloat(bits) - 1.0;
 }
 
-// Precomputed here so the vertex shader only scales by the wind vector and adds.
+// Precompute the per-instance wind term used by the vertex shader.
 float WindScalar(float basis, float timer)
 {
     const float a = 0.4 * (basis + timer);
@@ -107,7 +110,7 @@ float WindScalar(float basis, float timer)
     if (compactIdx >= InstanceCount || SliceCount == 0)
         return;
 
-    // Map the compacted index back to a real instance, searching on the running total in .y.
+    // Find the source slice containing this compacted index.
     uint lo = 0;
     uint hi = SliceCount - 1;
     [loop] while (lo < hi)
@@ -120,10 +123,10 @@ float WindScalar(float basis, float timer)
     }
     const uint2 slice = SliceTable[SliceTableOffset + lo];
 
-    // Keyed off the real index, so an instance keeps its dither decisions as slices come and go.
+    // Use the source index to keep dither decisions stable across slice changes.
     const uint idx = slice.x + (compactIdx - slice.y);
 
-    // Utilize one hash for both dithers, since pcg2d's outputs are independent
+    // Generate independent density and LOD dither values with one hash.
     const uint2 rand = Random::pcg2d(uint2(idx, 0u));
 
     const uint base = idx * 32;
@@ -141,7 +144,7 @@ float WindScalar(float basis, float timer)
 
     const float dist = sqrt(distSq);
 
-    // Mesh complexity only biases culling past CostBiasStartDist, ramping to full over the distance past that
+    // Ramp the mesh-cost bias in beyond CostBiasStartDist.
     const float costRamp = saturate((dist - CostBiasStartDist) / max(CostBiasStartDist, 1e-4));
     const float effCostBias = MeshCostBias * costRamp;
 
@@ -157,8 +160,7 @@ float WindScalar(float basis, float timer)
             return;
     }
 
-    // The vertex shader grows each instance by (1 + InstanceData4.y * ScaleMask). ScaleMask is not
-    // visible here, so assume 1 and ignore shrink: over-estimating the radius only costs culling.
+    // Conservatively approximate the vertex shader's ScaleMask-based size variation.
     const float sizeVariance = f16tof32(raw1.z >> 16);
     const float instanceRadius = ModelRadius * (1.0 + max(sizeVariance, 0.0));
 
@@ -170,7 +172,7 @@ float WindScalar(float basis, float timer)
 
     if (HiZEnabled > 0.5)
     {
-        // ModelRadius bounds about BoundCenter, not the instance root, so the sphere has to be there to be accurately occluded.
+        // Transform the model-space bounding-sphere center into instance space.
         const float3 rot0 = float3(f16tof32(raw0.z & 0xFFFF), f16tof32(raw0.z >> 16), f16tof32(raw0.w & 0xFFFF));
         const float3 rot1 = float3(f16tof32(raw1.x & 0xFFFF), f16tof32(raw1.x >> 16), f16tof32(raw1.y & 0xFFFF));
         const float3 rot2 = float3(f16tof32(raw1.z & 0xFFFF), f16tof32(raw0.w >> 16), f16tof32(raw1.y >> 16));
@@ -187,12 +189,13 @@ float WindScalar(float basis, float timer)
         {
             const float2 uv = (clipC.xy / clipC.w) * float2(0.5, -0.5) + 0.5;
             const float2 tc = uv * HiZSize;
-            const float rT = projPxOcc / HiZTexelPixels;  // occlusion radius expressed in level-0 texels
+            // Projected radius in level-0 Hi-Z texels.
+            const float rT = projPxOcc / HiZTexelPixels;
 
-            // The level where the instance spans ~2 texels, so the 3x3 below covers it exactly. 
+            // Select a mip coarse enough for the 3x3 footprint to cover the sphere.
             const float wantLevel = ceil(log2(max(2.0 * rT, 1.0)));
 
-            // A level too fine to cover the instance would underestimate the max and cull visible grass.
+            // Skip occlusion when no available mip can cover the sphere safely.
             [branch] if (wantLevel <= HiZMipCount - 1.0)
             {
             const int level = (int)wantLevel;
@@ -204,8 +207,7 @@ float WindScalar(float basis, float timer)
             const int2 t0 = int2(floor(tcL - rTL));
             const int2 t1 = int2(floor(tcL + rTL));
 
-            // An instance hides only once even its nearest point is behind the occluder. A camera inside
-            // the sphere collapses dvC, putting nearZ below any tile depth so the test never fires.
+            // Test the sphere's nearest point; a camera inside it yields a non-occluded depth.
             const float3 dvNear = dvC * (max(distC - occRadius, 0.0) / distC);
             const float4 clipN = mul(FrameBuffer::CameraViewProj, float4(dvNear, 1.0));
             const float nearZ = clipN.z / max(clipN.w, 1e-4);
@@ -223,8 +225,7 @@ float WindScalar(float basis, float timer)
                 }
             }
 
-            // Behind the farthest occluder of every covering tile means hidden. The tolerance absorbs
-            // projection and depth error that would otherwise drop instances only marginally behind it.
+            // Cull only when the sphere is behind every sampled tile, allowing for depth error.
             if (nearZ > tileMax + OcclusionBias)
                 return;
             }
@@ -264,9 +265,7 @@ float WindScalar(float basis, float timer)
 
     const float4 e1 = float4(WindScalar(basis, TimeBase * WavePeriod), WindScalar(basis, PrevTimeBase * WavePeriod), fade, collisionFlag + farFlag);
 
-    // Both thresholds are dithered over MeshLODBandPx so each swap is gradual rather than a visible
-    // line, and both compare the same hash so an instance crosses middle then far in order as it
-    // recedes, instead of picking each band independently and popping back to a nearer mesh.
+    // Dither both LOD transitions with the same value to keep tier changes gradual and ordered.
     const float h = RandFloat(rand.y);
     const float halfBand = MeshLODBandPx * 0.5;
     const float bandRcp = 1.0 / max(MeshLODBandPx, 1e-4);
@@ -277,13 +276,13 @@ float WindScalar(float basis, float timer)
     if (FarLODEnabled > 0.5 && h < saturate((FarLODPixelSize + halfBand - projPx) * bandRcp))
         tier = 2;
 
-    // Scaled by 4 so it clears the collision and far-shading flags already packed into e1.w.
+    // Store the tier above the two low flag bits in e1.w.
     const float4 e1Tier = float4(e1.xyz, e1.w + 4.0 * (float)tier);
 
     uint slot;
     if (tier == 2)
     {
-        FarLODCounter.InterlockedAdd(0, 1, slot);
+        LODCounters.InterlockedAdd(FarLODCountOffset, 1, slot);
         FarLODCompacted.Store4(slot * 32, raw0);
         FarLODCompacted.Store4(slot * 32 + 16, raw1);
         FarLODExtras[slot * 2 + 0] = e0;
@@ -291,7 +290,7 @@ float WindScalar(float basis, float timer)
     }
     else if (tier == 1)
     {
-        MidLODCounter.InterlockedAdd(0, 1, slot);
+        LODCounters.InterlockedAdd(MiddleLODCountOffset, 1, slot);
         MidLODCompacted.Store4(slot * 32, raw0);
         MidLODCompacted.Store4(slot * 32 + 16, raw1);
         MidLODExtras[slot * 2 + 0] = e0;

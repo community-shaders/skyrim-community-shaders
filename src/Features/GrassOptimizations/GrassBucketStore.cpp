@@ -792,6 +792,24 @@ bool GrassBucketStore::CreateBucketArgsBuffer(GrassBucket& b, ID3D11Device* devi
 	}
 	Util::SetResourceName(b.argsUAV, "GrassOptimizations::ArgsBuf UAV");
 
+	const uint32_t initLODCounts[(size_t)GrassMeshLibrary::LODTier::kCount] = {};
+	bd.ByteWidth = sizeof(initLODCounts);
+	bd.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_ALLOW_RAW_VIEWS;
+	init.pSysMem = initLODCounts;
+	if (FAILED(device->CreateBuffer(&bd, &init, &b.lodCounterBuf)) || !b.lodCounterBuf) {
+		logger::error("[GRASS OPTIMIZATIONS] LOD counter buffer create failed");
+		return false;
+	}
+	Util::SetResourceName(b.lodCounterBuf, "GrassOptimizations::LODCounterBuf");
+
+	uav.Buffer.FirstElement = 0;
+	uav.Buffer.NumElements = (UINT)std::size(initLODCounts);
+	if (FAILED(device->CreateUnorderedAccessView(b.lodCounterBuf, &uav, &b.lodCounterUAV)) || !b.lodCounterUAV) {
+		logger::error("[GRASS OPTIMIZATIONS] LOD counter UAV create failed");
+		return false;
+	}
+	Util::SetResourceName(b.lodCounterUAV, "GrassOptimizations::LODCounterBuf UAV");
+
 	return true;
 }
 
@@ -965,8 +983,7 @@ bool GrassBucketStore::EnsureLODBin(GrassBucket& b, GrassMeshLibrary::LODTier ti
 		D3D11_BUFFER_DESC bd{};
 		bd.ByteWidth = 8 * sizeof(uint32_t);
 		bd.Usage = D3D11_USAGE_DEFAULT;
-		bd.BindFlags = D3D11_BIND_UNORDERED_ACCESS;
-		bd.MiscFlags = D3D11_RESOURCE_MISC_DRAWINDIRECT_ARGS | D3D11_RESOURCE_MISC_BUFFER_ALLOW_RAW_VIEWS;
+		bd.MiscFlags = D3D11_RESOURCE_MISC_DRAWINDIRECT_ARGS;
 
 		if (FAILED(device->CreateBuffer(&bd, &init, &bin.argsBuf)) || !bin.argsBuf) {
 			logger::error("[GRASS OPTIMIZATIONS] {} LOD args buffer create failed", tierName);
@@ -974,18 +991,6 @@ bool GrassBucketStore::EnsureLODBin(GrassBucket& b, GrassMeshLibrary::LODTier ti
 			return false;
 		}
 		Util::SetResourceName(bin.argsBuf, "GrassOptimizations::LODArgsBuf");
-
-		D3D11_UNORDERED_ACCESS_VIEW_DESC uav{};
-		uav.Format = DXGI_FORMAT_R32_TYPELESS;
-		uav.ViewDimension = D3D11_UAV_DIMENSION_BUFFER;
-		uav.Buffer.FirstElement = instanceCountOffset / sizeof(uint32_t);
-		uav.Buffer.NumElements = 1;
-		uav.Buffer.Flags = D3D11_BUFFER_UAV_FLAG_RAW;
-		if (FAILED(device->CreateUnorderedAccessView(bin.argsBuf, &uav, &bin.argsUAV)) || !bin.argsUAV) {
-			logger::error("[GRASS OPTIMIZATIONS] {} LOD args UAV create failed", tierName);
-			bin.Release();
-			return false;
-		}
 	}
 
 	bin.capacityInstances = cap;

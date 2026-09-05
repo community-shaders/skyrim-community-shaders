@@ -71,12 +71,11 @@ private:
 	bool usingLiveDepth = false;
 	std::array<uint32_t, 10> lastLogKey{};
 	std::vector<winrt::com_ptr<ID3D11UnorderedAccessView>> mipUAVs;
+	winrt::com_ptr<ID3D11ShaderResourceView> mip0SRV;
 	std::unique_ptr<ConstantBuffer> paramsCB;
 
 	ID3D11ComputeShader* baseCS = nullptr;
 	ID3D11ComputeShader* spdCS = nullptr;
-	// SPD's cross-group counter. The last group to finish the tile phase resets it for next frame.
-	std::unique_ptr<Buffer> spdCounter;
 
 	uint32_t width = 0;
 	uint32_t height = 0;
