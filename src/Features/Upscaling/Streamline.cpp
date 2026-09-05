@@ -145,6 +145,9 @@ namespace
 	// Runs between DXVK swapchain destruction and creation.
 	bool DxvkSwapchainTornDownCallback()
 	{
+		// A new swapchain gets a fresh frame-generation ownership latch, so any earlier verdict
+		// that the presenter would not attach present-wait semaphores no longer applies.
+		DXVKInterop::GetSingleton()->ResetPresentWaitUnattachedForSwapchain();
 		if (g_sl.dispatchFaulted.load(std::memory_order_acquire)) {
 			g_sl.dlssgModeCached = false;
 			g_sl.dlssgModeOn = false;
@@ -2058,7 +2061,9 @@ void Streamline::TagDLSSGResources(ID3D11Resource* a_depth, ID3D11Resource* a_mo
 		bool lifetimesRetained = false;
 		if (cs_SubmitPresentTags(dxvk, *token, g_sl.viewport, tags, tagCount,
 				views, viewCount, resources, static_cast<uint32_t>(std::size(resources)), tagResult,
-				lifetimesRetained, g_dlssgCurrentlyLoaded.load(std::memory_order_acquire))) {
+				lifetimesRetained,
+				g_dlssgCurrentlyLoaded.load(std::memory_order_acquire) &&
+					!dxvk->IsPresentWaitUnattachedForSwapchain())) {
 			g_sl.dlssgTaggedThisFrame = true;
 		} else {
 			if (!lifetimesRetained)
@@ -2095,7 +2100,9 @@ void Streamline::ClearDLSSGTags()
 		bool lifetimesRetained = false;
 		if (cs_SubmitPresentTags(dxvk, *token, g_sl.viewport, tags,
 				static_cast<uint32_t>(std::size(tags)), nullptr, 0, nullptr, 0, tagResult,
-				lifetimesRetained, g_dlssgCurrentlyLoaded.load(std::memory_order_acquire))) {
+				lifetimesRetained,
+				g_dlssgCurrentlyLoaded.load(std::memory_order_acquire) &&
+					!dxvk->IsPresentWaitUnattachedForSwapchain())) {
 			g_sl.dlssgTaggedThisFrame = true;
 		} else {
 			logger::error("[Streamline] DLSS-G passthrough tag submission failed (result {})",

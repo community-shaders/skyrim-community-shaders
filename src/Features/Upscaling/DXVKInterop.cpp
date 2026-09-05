@@ -424,13 +424,20 @@ bool DXVKInterop::RefreshPresenterSurfaceState()
 void DXVKInterop::CommitPresenterSurfaceStateForRenderFrame()
 {
 	std::lock_guard lock(presenterStateMutex);
-	if (!observedPresenterState.serial ||
-		observedPresenterState.serial <= committedPresenterState.serial)
-		return;
 
+	// The pending-transition check has to run before the no-new-serial early return below.
+	// With it placed after that return, the timeout only ticked on frames where a new serial
+	// had already been observed - which is exactly the case that does not need a timeout. A
+	// transition waiting on a serial that never arrives (a stale swapchain, or one created
+	// before the observation hook attached) returned early every frame, never counted, and
+	// stayed pending for the session, pinning IsPresenterStateReadyForFrame() false and with
+	// it IsFrameGenerationActive(). The counter has to run on every frame the transition is
+	// unsatisfied, whatever the reason.
 	if (presenterTransitionPending) {
-		if (observedPresenterState.serial <= presenterTransitionBaselineSerial ||
-			observedPresenterState.requestedColorSpace != presenterTransitionRequestedColorSpace) {
+		const bool satisfied =
+			observedPresenterState.serial > presenterTransitionBaselineSerial &&
+			observedPresenterState.requestedColorSpace == presenterTransitionRequestedColorSpace;
+		if (!satisfied) {
 			if (++presenterTransitionFrameCount > 120) {
 				logger::warn("[DXVKInterop] presenter color-space transition timed out after {} frames; cancelling",
 					presenterTransitionFrameCount);
@@ -439,6 +446,13 @@ void DXVKInterop::CommitPresenterSurfaceStateForRenderFrame()
 			}
 			return;
 		}
+	}
+
+	if (!observedPresenterState.serial ||
+		observedPresenterState.serial <= committedPresenterState.serial)
+		return;
+
+	if (presenterTransitionPending) {
 		presenterTransitionPending = false;
 		presenterTransitionFrameCount = 0;
 	}
@@ -1145,6 +1159,18 @@ bool DXVKInterop::IsDeviceLost() const
 	return deviceLost;
 }
 
+bool DXVKInterop::IsPresentWaitUnattachedForSwapchain() const
+{
+	std::lock_guard lock(commandRingMutex);
+	return presentWaitUnattachedForSwapchain;
+}
+
+void DXVKInterop::ResetPresentWaitUnattachedForSwapchain()
+{
+	std::lock_guard lock(commandRingMutex);
+	presentWaitUnattachedForSwapchain = false;
+}
+
 bool DXVKInterop::RecoverCommandRing()
 {
 	std::lock_guard lock(commandRingMutex);
@@ -1640,6 +1666,7 @@ void DXVKInterop::NotifyPresentWaitQueued()
 				cancelAttempt.exceptionCode);
 			return;
 		}
+		const uint32_t slot = pushedPresentWaitSlot;
 		pushedPresentWaitSlot = UINT32_MAX;
 		pushedPresentWaitGeneration = 0;
 		if (!WaitDeviceIdle()) {
@@ -1647,10 +1674,46 @@ void DXVKInterop::NotifyPresentWaitQueued()
 			logger::error("[DXVKInterop] cancelled present-wait semaphore remains quarantined because device idle could not be proven");
 			return;
 		}
-		pushedPresentWaitSlot = UINT32_MAX;
-		pushedPresentWaitGeneration = 0;
-		commandRingFaulted = true;
-		logger::warn("[DXVKInterop] quarantined an unpresented one-shot semaphore for command-ring recovery");
+		// The registration is cancelled and the device is provably idle, but the submit that
+		// carried this one-shot semaphore may already have signalled it, and no present will
+		// ever wait on it now. A signalled binary semaphore cannot legally be re-signalled, so
+		// the slot's semaphore has to be replaced before the slot is reused. Replacing just this
+		// semaphore is sufficient; previously this path faulted the whole ring instead, which
+		// destroyed and recreated every command buffer, fence and semaphore once per unconsumed
+		// present. Under a present stall that repeated every frame - thousands of times a
+		// session - and kept frame generation from ever engaging while the game kept
+		// rendering, so it also read as a false pass in the freeze harness.
+		VkSemaphore& stale = presentWaitSemaphores[slot];
+		const VulkanVoidAttempt destroyAttempt = DestroySemaphoreSEH(device, stale);
+		if (!destroyAttempt.completed) {
+			stale = VK_NULL_HANDLE;
+			vulkanResourceDestructionTerminalFault = true;
+			commandRingFaulted = true;
+			logger::error("[DXVKInterop] stale present-wait semaphore destruction faulted (SEH {:#x})",
+				destroyAttempt.exceptionCode);
+			return;
+		}
+		stale = VK_NULL_HANDLE;
+		VkSemaphoreCreateInfo semaphoreInfo{ VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
+		const VulkanResultAttempt createAttempt = CreateSemaphoreSEH(device, &semaphoreInfo, &stale);
+		if (createAttempt.exceptionCode || createAttempt.result != VK_SUCCESS) {
+			stale = VK_NULL_HANDLE;
+			commandRingFaulted = true;
+			if (createAttempt.exceptionCode) {
+				logger::error("[DXVKInterop] present-wait semaphore recreation faulted (SEH {:#x})",
+					createAttempt.exceptionCode);
+			} else {
+				logger::error("[DXVKInterop] present-wait semaphore recreation failed ({})",
+					static_cast<int>(createAttempt.result));
+			}
+			return;
+		}
+		presentWaitInUse[slot] = false;
+		// A present went by without taking this semaphore, so the presenter is not attaching
+		// present-wait semaphores to this swapchain. Stop asking for one until it is recreated;
+		// otherwise every subsequent present orphans another.
+		if (!std::exchange(presentWaitUnattachedForSwapchain, true))
+			logger::warn("[DXVKInterop] replaced an unpresented one-shot semaphore (slot {}); presenter is not attaching present-wait semaphores to this swapchain, suppressing until recreate", slot);
 		return;
 	}
 	latchTerminalFault(stateAttempt.state == kPresentWaitUncertain ?

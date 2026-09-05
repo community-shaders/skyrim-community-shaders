@@ -140,6 +140,10 @@ public:
 	bool CommandResourcesReady() const;
 	/** @brief Whether an ambiguous submission fault quarantined the command ring. */
 	bool HasCommandRingFault() const;
+	/** @brief True once a present has completed without consuming its registered one-shot semaphore. */
+	[[nodiscard]] bool IsPresentWaitUnattachedForSwapchain() const;
+	/** @brief Forgets the unattached verdict; call when the swapchain is recreated. */
+	void ResetPresentWaitUnattachedForSwapchain();
 	/** @brief True once VK_ERROR_DEVICE_LOST has been observed. Terminal for the session. */
 	bool IsDeviceLost() const;
 	/** @brief Recreates a quarantined command ring after proving the Vulkan device idle. */
@@ -265,6 +269,12 @@ private:
 	uint32_t (*cancelPresentWaitSemaphore)(VkSemaphore) = nullptr;
 	uint32_t (*releaseQueuedPresentWaitSemaphoresAfterIdle)() = nullptr;
 	bool presentWaitInteropTerminalFault = false;
+	// Set when a present completed without consuming the one-shot semaphore registered for
+	// it: the presenter has shown it will not attach present-wait semaphores to this
+	// swapchain (its frame-generation ownership is latched at creation, and can disagree
+	// with the live query). Requesting one every frame after that only manufactures an
+	// orphaned semaphore per present. Cleared when the swapchain is recreated.
+	bool presentWaitUnattachedForSwapchain = false;
 	// Latched on VK_ERROR_DEVICE_LOST. Terminal: a lost device is never recovered, so every
 	// completion-proof path must fail fast instead of retrying it once per frame.
 	bool deviceLost = false;
