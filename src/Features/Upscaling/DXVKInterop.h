@@ -140,6 +140,8 @@ public:
 	bool CommandResourcesReady() const;
 	/** @brief Whether an ambiguous submission fault quarantined the command ring. */
 	bool HasCommandRingFault() const;
+	/** @brief True once VK_ERROR_DEVICE_LOST has been observed. Terminal for the session. */
+	bool IsDeviceLost() const;
 	/** @brief Recreates a quarantined command ring after proving the Vulkan device idle. */
 	[[nodiscard]] bool RecoverCommandRing();
 	/** @brief Whether a tag submission can be GPU-ordered before DXVK's next present. */
@@ -263,6 +265,9 @@ private:
 	uint32_t (*cancelPresentWaitSemaphore)(VkSemaphore) = nullptr;
 	uint32_t (*releaseQueuedPresentWaitSemaphoresAfterIdle)() = nullptr;
 	bool presentWaitInteropTerminalFault = false;
+	// Latched on VK_ERROR_DEVICE_LOST. Terminal: a lost device is never recovered, so every
+	// completion-proof path must fail fast instead of retrying it once per frame.
+	bool deviceLost = false;
 	bool synchronousPresentControlAvailable = false;
 	bool presentQueueSplit = false;
 	bool commandRingFaulted = false;

@@ -633,6 +633,13 @@ bool DXVKInterop::WaitDeviceIdle()
 	std::lock_guard lock(commandRingMutex);
 	if (!interopDevice || !vkGetDeviceProcAddr || device == VK_NULL_HANDLE)
 		return false;
+	// A lost device never comes back, so every caller that waits on idle to prove completion will
+	// fail forever. Returning early keeps that from becoming a per-frame retry: the callers above
+	// this one re-enter on the next frame, and without the latch a single loss produced 243k
+	// vkDeviceWaitIdle(-4) lines and 638k log lines in one session while the game hammered a dead
+	// device. Fail fast and silently instead; the loss itself is reported once, below.
+	if (deviceLost)
+		return false;
 	if (submissionQueueLockUncertain) {
 		logger::error("[DXVKInterop] refusing device-idle synchronization because the submission queue lock state is uncertain");
 		return false;
@@ -662,7 +669,15 @@ bool DXVKInterop::WaitDeviceIdle()
 		logger::error("[DXVKInterop] vkDeviceWaitIdle is unavailable");
 		return false;
 	} else if (attempt.result != VK_SUCCESS) {
-		logger::error("[DXVKInterop] vkDeviceWaitIdle failed ({})", static_cast<int>(attempt.result));
+		if (attempt.result == VK_ERROR_DEVICE_LOST) {
+			deviceLost = true;
+			commandRingFaulted = true;
+			presentWaitInteropTerminalFault = true;
+			enqueueInteropCommandBuffer = nullptr;
+			logger::critical("[DXVKInterop] device lost; Vulkan interop is quarantined for this session");
+		} else {
+			logger::error("[DXVKInterop] vkDeviceWaitIdle failed ({})", static_cast<int>(attempt.result));
+		}
 		return false;
 	}
 	commandRingSubmissionsIdleProven = true;
@@ -1122,6 +1137,12 @@ bool DXVKInterop::HasCommandRingFault() const
 {
 	std::lock_guard lock(commandRingMutex);
 	return commandRingFaulted || vulkanResourceDestructionTerminalFault || submissionQueueLockUncertain;
+}
+
+bool DXVKInterop::IsDeviceLost() const
+{
+	std::lock_guard lock(commandRingMutex);
+	return deviceLost;
 }
 
 bool DXVKInterop::RecoverCommandRing()

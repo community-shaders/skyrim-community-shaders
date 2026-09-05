@@ -548,10 +548,22 @@ bool Upscaling::IsFrameGenerationActive() const
 void Upscaling::BeginRenderFrame()
 {
 	auto* dxvk = DXVKInterop::GetSingleton();
-	if (dxvk->HasCommandRingFault() &&
-		!dxvk->RecoverCommandRing()) {
-		settings.frameGeneration = false;
-		logger::error("[Upscaling] Vulkan command-ring recovery failed; falling back to TAA");
+	// Report an unrecoverable ring once, not once per frame. This runs every frame, so a fault that
+	// cannot be recovered -- a lost device above all -- used to re-enter recovery and log on every
+	// single one: 81k "recovery failed" lines against 243k vkDeviceWaitIdle(-4) in one session.
+	// frameGeneration is deliberately not cleared here either; it is persisted user configuration,
+	// and IsFrameGenerationActive() already returns false while the ring is faulted.
+	static bool ringRecoveryReported = false;
+	if (dxvk->HasCommandRingFault()) {
+		if (dxvk->IsDeviceLost()) {
+			if (!std::exchange(ringRecoveryReported, true))
+				logger::error("[Upscaling] device lost; frame generation is unavailable for this session");
+		} else if (!dxvk->RecoverCommandRing()) {
+			if (!std::exchange(ringRecoveryReported, true))
+				logger::error("[Upscaling] Vulkan command-ring recovery failed; falling back to TAA");
+		} else {
+			ringRecoveryReported = false;
+		}
 	}
 
 	auto& hdr = globals::features::hdrDisplay;
@@ -680,6 +692,17 @@ HRESULT Upscaling::PresentWithFrameGeneration(IDXGISwapChain* a_swapChain, UINT 
 	auto* dxvk = DXVKInterop::GetSingleton();
 	auto* streamline = Streamline::GetSingleton();
 	auto requestFaultTeardown = [&](const char* a_reason) -> HRESULT {
+		// A lost device can never prove completion, so the deferral below would suppress every
+		// present for the rest of the session -- the screen stops updating while the log fills.
+		// That is the frame-generation freeze: measured 243k vkDeviceWaitIdle(-4) and 638k log
+		// lines in one session, the game hammering a device that was already gone. Nothing here can
+		// recover it, so stop trying and let the present through; the runtime reports the loss.
+		if (dxvk->IsDeviceLost()) {
+			static bool deviceLossReported = false;
+			if (!std::exchange(deviceLossReported, true))
+				logger::critical("[Upscaling] device lost ({}); presenting without frame generation", a_reason);
+			return a_present(a_swapChain, a_syncInterval, a_flags);
+		}
 		logger::error("[Upscaling] {} - disabling frame generation", a_reason);
 		settings.frameGeneration = false;
 		const uint32_t displayWidth = globals::game::graphicsState ? globals::game::graphicsState->screenWidth : 0;
@@ -691,7 +714,12 @@ HRESULT Upscaling::PresentWithFrameGeneration(IDXGISwapChain* a_swapChain, UINT 
 		const bool completionProven = dxvk->HasPendingPresentWaitSemaphore() ?
 			dxvk->DiscardPendingPresentWaitSemaphore() : dxvk->WaitDeviceIdle();
 		if (!completionProven) {
-			logger::error("[Upscaling] frame-generation fault teardown deferred because GPU completion could not be proven");
+			// Deferring suppresses this present. That is correct for a transient fault, but only
+			// while the wait can still succeed -- see the device-lost check at the top, which is
+			// what stops this becoming permanent.
+			static bool deferralReported = false;
+			if (!std::exchange(deferralReported, true))
+				logger::error("[Upscaling] frame-generation fault teardown deferred because GPU completion could not be proven");
 			return DXGI_STATUS_OCCLUDED;
 		}
 		if (streamline->IsFSRFGLoaded() &&

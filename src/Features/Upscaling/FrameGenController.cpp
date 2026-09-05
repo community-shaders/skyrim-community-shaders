@@ -89,10 +89,16 @@ namespace FrameGen
 		if (dispatchFaulted || faultRecoveryRequested) {
 			if (!faultRecoveryRequested) {
 				auto* dxvk = DXVKInterop::GetSingleton();
-				const bool completionProven = dxvk->HasPendingPresentWaitSemaphore() ?
-					dxvk->DiscardPendingPresentWaitSemaphore() : dxvk->WaitDeviceIdle();
+				const bool completionProven = dxvk->IsDeviceLost() ||
+				                              (dxvk->HasPendingPresentWaitSemaphore() ?
+				                                      dxvk->DiscardPendingPresentWaitSemaphore() :
+				                                      dxvk->WaitDeviceIdle());
 				if (!completionProven) {
-					logger::error("[FrameGen] Streamline fault teardown deferred because GPU completion could not be proven");
+					// Once only: this re-enters every reconcile, and a fault that cannot prove
+					// completion would otherwise log on every frame for the rest of the session.
+					static bool deferralReported = false;
+					if (!std::exchange(deferralReported, true))
+						logger::error("[FrameGen] Streamline fault teardown deferred because GPU completion could not be proven");
 					return;
 				}
 				streamline->SetDLSSGDesiredLoaded(false);
@@ -186,8 +192,15 @@ namespace FrameGen
 			const auto dims = CurrentDims(false);
 			if (!sl->SetDLSSGMode(false, dims.displayWidth, dims.displayHeight))
 				return false;
-			if (!DXVKInterop::GetSingleton()->WaitDeviceIdle()) {
-				logger::error("[FrameGen] DLSS-G teardown deferred because device idle could not be proven");
+			// A lost device has nothing left in flight to drain, and waiting on it can never
+			// succeed, so deferring here spins forever -- 17.6k of these in one session even after
+			// the wait itself was latched. Treat the mode as torn down and let the controller move
+			// on; the loss is reported once by DXVKInterop.
+			if (!DXVKInterop::GetSingleton()->IsDeviceLost() &&
+				!DXVKInterop::GetSingleton()->WaitDeviceIdle()) {
+				static bool deferralReported = false;
+				if (!std::exchange(deferralReported, true))
+					logger::error("[FrameGen] DLSS-G teardown deferred because device idle could not be proven");
 				return false;
 			}
 
