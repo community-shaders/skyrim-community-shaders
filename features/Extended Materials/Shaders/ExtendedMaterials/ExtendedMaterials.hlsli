@@ -8,17 +8,15 @@
 #ifndef EXTENDED_MATERIALS_HLSLI
 #define EXTENDED_MATERIALS_HLSLI
 
-#if defined(LANDSCAPE)
-#	if defined(TERRAIN_VARIATION)
-#		include "TerrainVariation/TerrainVariation.hlsli"
-#	else
+#if defined(TERRAIN_VARIATION)
+#	include "TerrainVariation/TerrainVariation.hlsli"
+#else
 struct StochasticOffsets
 {
 	float2 offset1;
 	float2 offset2;
 	float tap1Weight;
 };
-#	endif
 #endif
 
 struct DisplacementParams

@@ -11,6 +11,8 @@
 static const float HEIGHT_INFLUENCE = 0.3;  // How much height affects blending (0=pure stochastic, 1=pure height)
 static const float2x2 SKEW_MATRIX = float2x2(1.0, 0.0, -0.57735027, 1.15470054);
 static const float WORLD_SCALE = 332.54;
+// Mesh UVs already tile, so one lattice cell maps to one UV tile.
+static const float MESH_SCALE = 1.0;
 static const float3 LUMINANCE_WEIGHTS = float3(0.2126, 0.7152, 0.0722);
 static const float2 HASH_MULTIPLIER = float2(1271.5151, 3337.8237);
 // Fade width for c1/c2 rank-swap seams when discarding the third triangle corner.
@@ -76,9 +78,9 @@ inline float TerrainStochasticMipLevel(Texture2D tex)
 // Near c1/c2 ties, fade w2 so the discarded corner cannot pop;
 // near c0/c1 ties, disable that fade so the primary swap stays symmetric.
 // Contrast exponent is 2, so weights are squared rather than pow()'d.
-inline StochasticOffsets ComputeStochasticOffsets(float2 landscapeUV)
+inline StochasticOffsets ComputeStochasticOffsetsScaled(float2 uv, float scale)
 {
-	float2 skewUV = mul(SKEW_MATRIX, landscapeUV * WORLD_SCALE);
+	float2 skewUV = mul(SKEW_MATRIX, uv * scale);
 	float2 vxID = floor(skewUV);
 	float2 f = frac(skewUV);
 	float bz = 1.0 - f.x - f.y;
@@ -131,6 +133,16 @@ inline StochasticOffsets ComputeStochasticOffsets(float2 landscapeUV)
 	return o;
 }
 
+inline StochasticOffsets ComputeStochasticOffsets(float2 landscapeUV)
+{
+	return ComputeStochasticOffsetsScaled(landscapeUV, WORLD_SCALE);
+}
+
+inline StochasticOffsets ComputeStochasticOffsetsMesh(float2 meshUV)
+{
+	return ComputeStochasticOffsetsScaled(meshUV, MESH_SCALE);
+}
+
 // --------------------- STOCHASTIC SAMPLING FUNCTIONS --------------------- //
 
 // Height-aware blend of two stochastic taps. At tap1Weight == 1 returns s1.
@@ -180,6 +192,15 @@ inline float4 StochasticEffectParallax(Texture2D tex, SamplerState samp, float2 
 	float4 s1 = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
 	float4 s2 = tex.SampleLevel(samp, uv + offsets.offset2, mipLevel);
 	return StochasticBlendTwoSamples(s1, s2, offsets.tap1Weight, s1.a, s2.a);
+}
+
+// Height fetch for the mesh ray-march. Blends on the channel the march reads so relief tracks albedo.
+inline float StochasticHeightChannel(Texture2D<float4> tex, SamplerState samp, float2 uv, float mipLevel, uint channel, StochasticOffsets offsets)
+{
+	float4 s1 = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
+	float4 s2 = tex.SampleLevel(samp, uv + offsets.offset2, mipLevel);
+	float4 blended = StochasticBlendTwoSamples(s1, s2, offsets.tap1Weight, s1[channel], s2[channel]);
+	return blended[channel];
 }
 
 #endif  // TERRAIN_VARIATION_HLSLI

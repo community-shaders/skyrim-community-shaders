@@ -1431,6 +1431,8 @@
     "feature.terrain_variation.apply_to_lod_terrain": "Apply to LOD Terrain",
     "feature.terrain_variation.apply_to_lod_terrain_tooltip": "Applies the tiling fix to LOD terrain objects.\nThis helps reduce the visible tiling effect on distant terrain.",
     "feature.terrain_variation.description": "Terrain Variation reduces the repeating pattern effect on terrain textures.\nThis technique creates more natural-looking terrain by adding variation to texture sampling.",
+    "feature.terrain_variation.enable_mesh_support": "Enable Mesh Support",
+    "feature.terrain_variation.enable_mesh_support_tooltip": "Applies the tiling fix to meshes that use landscape textures, such as dirt cliffs and mountain slabs.\nAlpha tested meshes like foliage and decals are never affected.",
     "feature.terrain_variation.key_feature_1": "Reduces terrain texture tiling",
     "feature.terrain_variation.key_feature_2": "Stochastic texture sampling",
     "feature.terrain_variation.key_feature_3": "Improved terrain visual quality",
