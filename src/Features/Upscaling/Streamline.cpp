@@ -102,6 +102,49 @@ namespace
 		std::atomic<bool> dlssgCloneTagsPrimed{ false };
 	} g_sl;
 
+	// All DXVK exports used by Streamline, resolved once at device setup.
+	struct DxvkExports
+	{
+		using RequestSwapchainRecreateFn = void (*)();
+		using SetSyncPresentFn = void (*)(uint32_t);
+		using SetSwapchainTornDownCallbackFn = void (*)(bool (*)());
+		using SetPresentQueueDepthFn = void (*)(uint32_t);
+		using SetTearingPreferenceFn = void (*)(uint32_t);
+
+		HMODULE module = nullptr;
+		RequestSwapchainRecreateFn requestSwapchainRecreate = nullptr;
+		SetSyncPresentFn setSyncPresent = nullptr;
+		bool presenterSurfaceStateAvailable = false;
+		SetSwapchainTornDownCallbackFn setSwapchainTornDownCallback = nullptr;
+		SetPresentQueueDepthFn setPresentQueueDepth = nullptr;
+		SetTearingPreferenceFn setTearingPreference = nullptr;
+
+		void Resolve()
+		{
+			module = GetModuleHandleW(L"dxvk_d3d11.dll");
+			if (!module)
+				return;
+			requestSwapchainRecreate = reinterpret_cast<RequestSwapchainRecreateFn>(
+				GetProcAddress(module, "dxvkRequestSwapchainRecreate"));
+			setSyncPresent = reinterpret_cast<SetSyncPresentFn>(
+				GetProcAddress(module, "dxvkSetSyncPresent"));
+			presenterSurfaceStateAvailable =
+				GetProcAddress(module, "dxvkGetPresenterSurfaceState") != nullptr;
+			setSwapchainTornDownCallback = reinterpret_cast<SetSwapchainTornDownCallbackFn>(
+				GetProcAddress(module, "dxvkSetSwapchainTornDownCallback"));
+			setPresentQueueDepth = reinterpret_cast<SetPresentQueueDepthFn>(
+				GetProcAddress(module, "dxvkSetPresentQueueDepth"));
+			setTearingPreference = reinterpret_cast<SetTearingPreferenceFn>(
+				GetProcAddress(module, "dxvkSetTearingPreference"));
+		}
+
+		[[nodiscard]] bool HasFrameGenerationInterop() const
+		{
+			return module && requestSwapchainRecreate && setSyncPresent &&
+			       presenterSurfaceStateAvailable && setSwapchainTornDownCallback;
+		}
+	} g_dxvk;
+
 	// Feature load changes are applied only while the swapchain is torn down.
 	std::atomic<bool> g_dlssgDesiredLoaded{ false };
 	std::atomic<bool> g_dlssgCurrentlyLoaded{ false };
@@ -124,6 +167,7 @@ namespace
 			if (a_feature == sl::kFeatureFSR_G && !want)
 				g_fsrfgOwnsPresent.store(false, std::memory_order_release);
 			if (want) {
+				// Safe: render thread is blocked on the present lock during swapchain teardown/recreation.
 				if (a_feature == sl::kFeatureDLSS_G) {
 					g_sl.slGetFeatureFunction(sl::kFeatureDLSS_G, "slDLSSGSetOptions", reinterpret_cast<void*&>(g_sl.slDLSSGSetOptions));
 					g_sl.slGetFeatureFunction(sl::kFeatureDLSS_G, "slDLSSGGetState", reinterpret_cast<void*&>(g_sl.slDLSSGGetState));
@@ -152,8 +196,6 @@ namespace
 			g_sl.dlssgModeCached = false;
 			g_sl.dlssgModeOn = false;
 			g_sl.dlssgCloneTagsPrimed.store(false, std::memory_order_release);
-			if (g_fsrfgCurrentlyLoaded.load(std::memory_order_acquire))
-				DXVKInterop::GetSingleton()->ReleaseRetainedPresentResourcesAfterFSRSwapchainTeardown();
 			g_dlssgCurrentlyLoaded.store(false, std::memory_order_release);
 			g_fsrfgCurrentlyLoaded.store(false, std::memory_order_release);
 			g_fsrfgOwnsPresent.store(false, std::memory_order_release);
@@ -180,7 +222,6 @@ namespace
 			} else {
 				g_fsrfgCurrentlyLoaded.store(false, std::memory_order_release);
 			}
-			DXVKInterop::GetSingleton()->ReleaseRetainedPresentResourcesAfterFSRSwapchainTeardown();
 		}
 
 		const bool dlssgReconciled = ReconcileFgFeatureLoad(
@@ -190,38 +231,6 @@ namespace
 		return dlssgReconciled && fsrfgReconciled;
 	}
 
-	// DXVK's ownership predicate is 3-valued, not boolean:
-	//   0 = DXVK owns the present loop
-	//   1 = an FFX/FSR replacement swapchain owns it
-	//   2 = a DLSS-G proxy owns it
-	// Reporting 1 for DLSS-G leaves Presenter::m_dlssgOwned false, which strips the
-	// present ID that sl.dlss_g's pacer needs, never attaches the present-wait
-	// semaphores, and skips the frame-latency bypass — i.e. DLSS-G silently does not
-	// work. The signature must stay uint32_t; a bool return only defines AL.
-	enum : uint32_t
-	{
-		kFrameGenOwnerNone = 0,
-		kFrameGenOwnerFSR = 1,
-		kFrameGenOwnerDLSSG = 2,
-	};
-
-	uint32_t DxvkFrameGenerationOwnsSwapchain(VkSwapchainKHR a_swapchain)
-	{
-		if (g_dlssgCurrentlyLoaded.load(std::memory_order_acquire))
-			return kFrameGenOwnerDLSSG;
-		if (g_sl.dispatchFaulted.load(std::memory_order_acquire))
-			return g_fsrfgOwnsPresent.load(std::memory_order_acquire) ? kFrameGenOwnerFSR : kFrameGenOwnerNone;
-		if (!g_fsrfgOwnsPresent.load(std::memory_order_acquire) || !g_sl.slFSRFrameGenerationOwnsSwapchain)
-			return kFrameGenOwnerNone;
-
-		bool ownsSwapchain = false;
-		__try {
-			ownsSwapchain = g_sl.slFSRFrameGenerationOwnsSwapchain(a_swapchain);
-		} __except (EXCEPTION_EXECUTE_HANDLER) {
-			g_sl.dispatchFaulted = true;
-		}
-		return ownsSwapchain ? kFrameGenOwnerFSR : kFrameGenOwnerNone;
-	}
 	// Suppress only diagnostics that are both expected in this integration and repeated often
 	// enough to drown the log. Anything reporting a feature degrading or failing outright stays
 	// visible: those are exactly the lines that explain a silently non-working feature.
@@ -534,16 +543,10 @@ void Streamline::SetVulkanDevice()
 		featureXeSS = g_sl.slXeSSSetOptions != nullptr;
 	}
 
-	HMODULE dxvkModule = GetModuleHandleW(L"dxvk_d3d11.dll");
-	const bool frameGenerationInteropReady = dxvkModule &&
-		GetProcAddress(dxvkModule, "dxvkRequestSwapchainRecreate") &&
-		GetProcAddress(dxvkModule, "dxvkSetSyncPresent") &&
-		GetProcAddress(dxvkModule, "dxvkGetPresenterSurfaceState") &&
-		GetProcAddress(dxvkModule, "dxvkSetSwapchainTornDownCallback") &&
-		GetProcAddress(dxvkModule, "dxvkSetFrameGenOwnershipQuery");
-	// DXVK skips its frame-latency throttle by itself whenever a DLSS-G proxy owns the
-	// swapchain (Presenter::isDlssgOwned), driven by the ownership predicate we already
-	// register. There is no separate export to probe for any more.
+	g_dxvk.Resolve();
+	const bool frameGenerationInteropReady = g_dxvk.HasFrameGenerationInterop();
+	// DXVK skips its frame-latency throttle unconditionally now: it never runs a present-wait
+	// worker, so whatever owns the present loop owns the pacing.
 	const bool dlssgInteropReady = frameGenerationInteropReady;
 	featureDLSSG = featureDLSSG && dlssgHardware && dlssgInteropReady && dxvk->PresentWaitInteropReady();
 	featureFSRFG = featureFSRFG && frameGenerationInteropReady &&
@@ -683,7 +686,6 @@ bool Streamline::DiscardFSRFrameGenerationPreparedFrame()
 	const sl::ViewportHandle fgViewport{ 1 };
 	const sl::Result result = cs_DiscardFSRFrameGenerationPreparedFrame(fgViewport);
 	if (result == sl::Result::eErrorInvalidState) {
-		DXVKInterop::GetSingleton()->QuarantineUnconsumedFSRPresentViews();
 		return true;
 	}
 	if (result != sl::Result::eOk) {
@@ -693,7 +695,7 @@ bool Streamline::DiscardFSRFrameGenerationPreparedFrame()
 		return false;
 	}
 
-	DXVKInterop::GetSingleton()->NotifyFSRFrameConsumed();
+
 	return true;
 }
 
@@ -1184,18 +1186,27 @@ static bool cs_SubmitPresentTags(DXVKInterop* a_dxvk, sl::FrameToken& a_token,
 {
 	a_lifetimesRetained = false;
 	auto transaction = a_dxvk->BeginFrameCommandBuffer();
-	if (!transaction)
+	if (!transaction) {
+		logger::error("[Streamline] present tags: could not acquire an interop command buffer");
 		return false;
+	}
 
 	a_tagResult = cs_SetTagForFrame(
 		a_token, a_viewport, a_tags, a_tagCount, transaction.GetCommandBuffer());
-	if (a_tagResult != sl::Result::eOk)
+	if (a_tagResult != sl::Result::eOk) {
+		logger::error("[Streamline] present tags: slSetTagForFrame failed (result {})",
+			static_cast<int>(a_tagResult));
 		return false;
+	}
 	// Always request the present-wait signal: these tags are only ever submitted on the
 	// DLSS-G path, and the presenter attaches the semaphore whenever the ownership query
 	// reports a DLSS-G-owned swapchain. Gating this on "already loaded" deadlocks the
 	// first present of a transition, because loading cannot complete until presents do.
 	if (!a_dxvk->SubmitFrameCommandBuffer(transaction, a_signalForPresent)) {
+		// The tags themselves succeeded; the submission is what failed. Reporting a_tagResult
+		// here previously produced the nonsensical "tag submission failed (result 0)".
+		logger::error("[Streamline] present tags: interop submit failed (signalForPresent={})",
+			a_signalForPresent);
 		if (transaction.SubmissionMayBeInFlight()) {
 			a_dxvk->QueueViewsForDeferredDelete(transaction, a_views, a_viewCount);
 			a_dxvk->QueueResourcesForDeferredRelease(transaction, a_resources, a_resourceCount);
@@ -1224,8 +1235,8 @@ static bool cs_CanReleaseFailedFSRFrame(DXVKInterop* a_dxvk,
 			static_cast<int>(discardResult));
 	}
 
-	a_dxvk->QueueResourcesForPresent(a_transaction, a_resources, a_resourceCount);
-	a_dxvk->QuarantineViewsUntilFSRSwapchainTeardown(a_transaction, a_views, a_viewCount);
+	a_dxvk->QueueResourcesForDeferredRelease(a_transaction, a_resources, a_resourceCount);
+	a_dxvk->QueueViewsForDeferredDelete(a_transaction, a_views, a_viewCount);
 	return false;
 }
 
@@ -1399,15 +1410,9 @@ static sl::Result cs_EvaluateFeatureCore(sl::Feature a_feature, const sl::Viewpo
 		}
 
 		if (dxvk->SubmitFrameCommandBuffer(transaction)) {
-			if (a_feature == sl::kFeatureFSR_G) {
-				dxvk->QueueResourcesForPresent(
-					transaction, resources, static_cast<uint32_t>(std::size(resources)));
-				dxvk->QueueViewsForFSRPresent(transaction, views, static_cast<uint32_t>(nv));
-			} else {
-				dxvk->QueueResourcesForDeferredRelease(
-					transaction, resources, static_cast<uint32_t>(std::size(resources)));
-				dxvk->QueueViewsForDeferredDelete(transaction, views, static_cast<uint32_t>(nv));
-			}
+			dxvk->QueueResourcesForDeferredRelease(
+				transaction, resources, static_cast<uint32_t>(std::size(resources)));
+			dxvk->QueueViewsForDeferredDelete(transaction, views, static_cast<uint32_t>(nv));
 			if (a_outputReady)
 				*a_outputReady = true;
 			if (vpId < 2)
@@ -1862,10 +1867,26 @@ void Streamline::CaptureFSRFrameGenState()
 		return;
 	__try {
 		sl::FSRFrameGenState state{};
-		if (g_sl.slFSRGetFrameGenState(g_sl.viewport, state) == sl::Result::eOk) {
+		const sl::Result res = g_sl.slFSRGetFrameGenState(g_sl.viewport, state);
+		if (res == sl::Result::eOk) {
 			g_sl.frameGenerationMultiplier.store(
 				std::max(state.numFramesActuallyPresented, 1u), std::memory_order_release);
 			g_sl.fsrTotalPresentedFrames.store(state.totalPresentedFrames, std::memory_order_release);
+			// FSR-FG had no equivalent of the DLSS-G present-state log, so "frame generation is on
+			// but generating nothing" was invisible on this path and the overlay's Post-FG FPS was
+			// the only clue. Sample on the same cadence DLSS-G uses.
+			static uint32_t s_fsrSampleTick = 0u;
+			if ((++s_fsrSampleTick % 600u) == 0u) {
+				logger::info("[Streamline] FSR-FG presenting {} frame(s), total presented {}",
+					state.numFramesActuallyPresented, state.totalPresentedFrames);
+			}
+		} else {
+			static sl::Result s_lastFsrStateRes = sl::Result::eOk;
+			if (res != s_lastFsrStateRes) {
+				s_lastFsrStateRes = res;
+				logger::warn("[Streamline] slFSRGetFrameGenState failed (result {}) - Post-FG FPS falls back to an estimate",
+					static_cast<int>(res));
+			}
 		}
 	} __except (EXCEPTION_EXECUTE_HANDLER) {
 		g_sl.dispatchFaulted = true;
@@ -1913,27 +1934,54 @@ bool Streamline::IsDLSSGDynamicSupported() const
 	return g_sl.dlssgDynamicSupported.load(std::memory_order_acquire);
 }
 
-void Streamline::TagDLSSGResources(ID3D11Resource* a_depth, ID3D11Resource* a_motionVectors,
+// Names the precondition that pushed DLSS-G onto the passthrough path. Every early return in
+// TagDLSSGResources used to be silent, which made "frame generation is on but nothing is
+// generated" -- which still costs the latency of the frame-generation present path -- look
+// identical to a dozen unrelated causes. Logs only when the reason changes, so it cannot spam.
+static void cs_NoteDlssgTagSkip(const char* a_reason)
+{
+	static const char* s_last = nullptr;
+	if (s_last == a_reason)
+		return;
+	const char* const prev = s_last;
+	s_last = a_reason;
+	if (a_reason)
+		logger::warn("[Streamline] DLSS-G tagging real inputs SKIPPED ({}) - passthrough present, no frames generated", a_reason);
+	else if (prev)
+		logger::info("[Streamline] DLSS-G tagging real inputs again");
+}
+
+void Streamline::TagDLSSGResources(
+ID3D11Resource* a_depth, ID3D11Resource* a_motionVectors,
 	ID3D11Resource* a_hudlessColor, uint32_t a_renderWidth, uint32_t a_renderHeight,
 	uint32_t a_displayWidth, uint32_t a_displayHeight)
 {
-	if (!initialized || !featureDLSSG || g_sl.dispatchFaulted)
+	if (!initialized || !featureDLSSG || g_sl.dispatchFaulted) {
+		cs_NoteDlssgTagSkip(g_sl.dispatchFaulted ? "Streamline dispatch faulted" : "DLSS-G unavailable");
 		return;
-	if (!a_depth || !a_motionVectors)
+	}
+	if (!a_depth || !a_motionVectors) {
+		cs_NoteDlssgTagSkip("game gave no depth or motion-vector target");
 		return;
+	}
 
 	auto* dxvk = DXVKInterop::GetSingleton();
-	if (!dxvk->CommandResourcesReady())
+	if (!dxvk->CommandResourcesReady()) {
+		cs_NoteDlssgTagSkip("interop command resources not ready");
 		return;
+	}
 	if (!g_sl.dlssgCloneTagsPrimed.load(std::memory_order_acquire)) {
+		cs_NoteDlssgTagSkip("clone tags not primed yet");
 		ClearDLSSGTags();
 		return;
 	}
 
 	__try {
 		sl::FrameToken* token = RenderFrameToken();
-		if (!token)
+		if (!token) {
+			cs_NoteDlssgTagSkip("no render frame token");
 			return;
+		}
 
 		VkDevice vkDevice = dxvk->GetDevice();
 		const cs_VulkanProcAttempt createProcAttempt = cs_GetDeviceProcAddrSEH(
@@ -1968,62 +2016,12 @@ void Streamline::TagDLSSGResources(ID3D11Resource* a_depth, ID3D11Resource* a_mo
 
 		const auto makeResource = [&](ID3D11Resource* a_res, sl::Resource& a_out,
 			                          sl::SubresourceRange& a_subresource) {
-			VkImage image = VK_NULL_HANDLE;
-			VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
-			VkImageCreateInfo info{ VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO };
-			if (!vkCreateImageView || viewCount >= std::size(views))
+			if (viewCount >= std::size(views))
 				return false;
-			const cs_GetVkImageAttempt imageAttempt =
-				cs_GetVkImageSEH(dxvk, a_res, &image, &layout, &info);
-			if (imageAttempt.exceptionCode) {
-				viewCreationTerminalFault = true;
-				ID3D11Resource* resource = a_res;
-				dxvk->QuarantineResourcesAfterVulkanDestructionFault(&resource, 1);
-				g_sl.dispatchFaulted = true;
-				logger::error("[Streamline] DLSS-G DXVK image interop faulted (SEH {:#x})",
-					imageAttempt.exceptionCode);
-				return false;
-			}
-			if (!imageAttempt.succeeded || image == VK_NULL_HANDLE)
-				return false;
-			VkImageViewCreateInfo ci{ VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
-			ci.image = image;
-			ci.viewType = VK_IMAGE_VIEW_TYPE_2D;
-			ci.format = info.format;
-			ci.subresourceRange.aspectMask = cs_ImageAspect(info.format);
-			ci.subresourceRange.levelCount = 1;
-			ci.subresourceRange.layerCount = 1;
 			VkImageView& view = views[viewCount];
-			const cs_VulkanResultAttempt createAttempt =
-				cs_CreateImageViewSEH(vkCreateImageView, vkDevice, &ci, &view);
-			if (createAttempt.exceptionCode || createAttempt.result != VK_SUCCESS || view == VK_NULL_HANDLE) {
-				if (createAttempt.exceptionCode || view != VK_NULL_HANDLE) {
-					viewCreationTerminalFault = true;
-					ID3D11Resource* resource = a_res;
-					dxvk->QuarantineResourcesAfterVulkanDestructionFault(&resource, 1);
-				}
-				view = VK_NULL_HANDLE;
-				g_sl.dispatchFaulted = true;
-				logger::error("[Streamline] DLSS-G image-view creation failed (result {}, SEH {:#x})",
-					static_cast<int>(createAttempt.result), createAttempt.exceptionCode);
+			if (!cs_WrapInteropImage(dxvk, vkDevice, vkCreateImageView, a_res, a_out, a_subresource, view, viewCreationTerminalFault))
 				return false;
-			}
 			++viewCount;
-			a_out = sl::Resource{ sl::ResourceType::eTex2d, image, nullptr, view, static_cast<uint32_t>(layout) };
-			// Resource dimensions describe the image; tag extents describe the valid subrect.
-			a_out.width = info.extent.width;
-			a_out.height = info.extent.height;
-			a_out.nativeFormat = static_cast<uint32_t>(info.format);
-			a_out.mipLevels = info.mipLevels;
-			a_out.arrayLayers = info.arrayLayers;
-			a_out.usage = static_cast<uint32_t>(info.usage);
-			a_out.flags = static_cast<uint32_t>(info.flags);
-			a_subresource.aspectMask = ci.subresourceRange.aspectMask;
-			a_subresource.baseMipLevel = 0;
-			a_subresource.levelCount = 1;
-			a_subresource.baseArrayLayer = 0;
-			a_subresource.layerCount = 1;
-			a_out.next = &a_subresource;
 			return true;
 		};
 
@@ -2031,6 +2029,7 @@ void Streamline::TagDLSSGResources(ID3D11Resource* a_depth, ID3D11Resource* a_mo
 		sl::SubresourceRange depthRange{}, mvecRange{}, hudlessRange{};
 		if (!makeResource(a_depth, depthRes, depthRange) ||
 			!makeResource(a_motionVectors, mvecRes, mvecRange)) {
+			cs_NoteDlssgTagSkip("could not wrap depth/motion-vector resources for Vulkan");
 			abandonViewsAfterCreationFailure();
 			return;
 		}
@@ -2071,10 +2070,12 @@ void Streamline::TagDLSSGResources(ID3D11Resource* a_depth, ID3D11Resource* a_mo
 				views, viewCount, resources, static_cast<uint32_t>(std::size(resources)), tagResult,
 				lifetimesRetained, cs_WantPresentWaitSignal(dxvk))) {
 			g_sl.dlssgTaggedThisFrame = true;
+			cs_NoteDlssgTagSkip(nullptr);
 		} else {
+			cs_NoteDlssgTagSkip("tag submission rejected");
 			if (!lifetimesRetained)
 				destroyViews();
-			logger::error("[Streamline] DLSS-G resource tag submission failed (result {})",
+			logger::error("[Streamline] DLSS-G present tagging failed (last tag result {})",
 				static_cast<int>(tagResult));
 		}
 	} __except (EXCEPTION_EXECUTE_HANDLER) {
@@ -2130,37 +2131,42 @@ bool Streamline::EnsureDLSSGPresentTag()
 	if (!initialized || !featureDLSSG || g_sl.dispatchFaulted ||
 		!g_dlssgCurrentlyLoaded.load(std::memory_order_acquire))
 		return false;
-	if (!g_sl.dlssgTaggedThisFrame)
+	// Track the passthrough fallback separately from the reasons above: this also catches the
+	// cases where TagDLSSGResources was never called at all (paused, a menu is open, or the
+	// presenter was not ready), which otherwise leave no trace and read in the log exactly like
+	// healthy frame generation while generating nothing.
+	const bool hadRealTags = g_sl.dlssgTaggedThisFrame;
+	if (!hadRealTags)
 		ClearDLSSGTags();
+	{
+		static bool s_lastHadRealTags = true;
+		if (s_lastHadRealTags != hadRealTags) {
+			s_lastHadRealTags = hadRealTags;
+			if (hadRealTags)
+				logger::info("[Streamline] DLSS-G interpolation inputs restored");
+			else
+				logger::warn("[Streamline] DLSS-G falling back to passthrough tags - render pass submitted no interpolation inputs this frame");
+		}
+	}
 	return g_sl.dlssgTaggedThisFrame;
 }
 
 void Streamline::RegisterDxvkOwnershipPredicate()
 {
-	// Streamline-owned swapchains must bypass DXVK's present-wait worker.
-	HMODULE dxvkModule = GetModuleHandleW(L"dxvk_d3d11.dll");
-	if (!dxvkModule) {
-		logger::warn("[Streamline] DXVK module not loaded — cannot register ownership predicate");
+	// DXVK no longer asks who owns the present loop: it always presents as though something may
+	// have interposed, so there is no ownership predicate to register any more.
+	if (!g_dxvk.module) {
+		logger::warn("[Streamline] DXVK module not loaded — cannot register swapchain callbacks");
 		return;
 	}
-	using SetQueryFn = void (*)(uint32_t (*)(VkSwapchainKHR));
-	auto setQuery = reinterpret_cast<SetQueryFn>(GetProcAddress(dxvkModule, "dxvkSetFrameGenOwnershipQuery"));
-	if (!setQuery) {
-		logger::warn("[Streamline] dxvkSetFrameGenOwnershipQuery not found in DXVK module");
-		return;
-	}
-	setQuery(&DxvkFrameGenerationOwnsSwapchain);
-	logger::info("[Streamline] registered DXVK frame-generation ownership predicate");
 
 	// Streamline features may only be loaded or unloaded while no swapchain exists.
-	using SetTornDownFn = void (*)(bool (*)());
-	if (auto setTornDown = reinterpret_cast<SetTornDownFn>(GetProcAddress(dxvkModule, "dxvkSetSwapchainTornDownCallback"))) {
-		setTornDown(&DxvkSwapchainTornDownCallback);
+	if (g_dxvk.setSwapchainTornDownCallback) {
+		g_dxvk.setSwapchainTornDownCallback(&DxvkSwapchainTornDownCallback);
 		logger::info("[Streamline] registered DXVK swapchain-torn-down callback");
 	} else {
 		logger::warn("[Streamline] dxvkSetSwapchainTornDownCallback not found — frame-generation switching disabled");
 	}
-
 }
 
 bool Streamline::HasDispatchFaulted() const
@@ -2207,15 +2213,8 @@ bool Streamline::IsFSRFGPresentOwner() const
 
 void Streamline::RequestDxvkSwapchainRecreate(const char* a_reason)
 {
-	// Recreate the Vulkan swapchain to apply runtime feature load changes.
-	static auto requestRecreate = []() -> void (*)() {
-		HMODULE dxvkModule = GetModuleHandleW(L"dxvk_d3d11.dll");
-		if (!dxvkModule)
-			return nullptr;
-		return reinterpret_cast<void (*)()>(GetProcAddress(dxvkModule, "dxvkRequestSwapchainRecreate"));
-	}();
-	if (requestRecreate) {
-		requestRecreate();
+	if (g_dxvk.requestSwapchainRecreate) {
+		g_dxvk.requestSwapchainRecreate();
 		logger::info("[Streamline] requested DXVK swapchain recreate ({})", a_reason);
 	} else {
 		logger::warn("[Streamline] dxvkRequestSwapchainRecreate not found — {} cannot take effect", a_reason);
@@ -2225,14 +2224,8 @@ void Streamline::RequestDxvkSwapchainRecreate(const char* a_reason)
 void Streamline::PushDxvkSyncPresent(bool a_sync)
 {
 	// Frame-generation proxies require present to complete before the D3D11 hook returns.
-	static auto setSync = []() -> void (*)(uint32_t) {
-		HMODULE dxvkModule = GetModuleHandleW(L"dxvk_d3d11.dll");
-		if (!dxvkModule)
-			return nullptr;
-		return reinterpret_cast<void (*)(uint32_t)>(GetProcAddress(dxvkModule, "dxvkSetSyncPresent"));
-	}();
-	if (setSync) {
-		setSync(a_sync ? 1u : 0u);
+	if (g_dxvk.setSyncPresent) {
+		g_dxvk.setSyncPresent(a_sync ? 1u : 0u);
 	} else {
 		static bool s_warned = false;
 		if (!s_warned) {
@@ -2251,14 +2244,8 @@ void Streamline::PushDxvkPresentQueueDepth(uint32_t a_depth)
 	// parked in SleepConditionVariableSRW for exactly that reason, with the GPU idle 33% of the
 	// frame. A small depth lets the next frame be recorded while the proxy finishes presenting the
 	// previous one, without unbounding the overlap.
-	static auto setDepth = []() -> void (*)(uint32_t) {
-		HMODULE dxvkModule = GetModuleHandleW(L"dxvk_d3d11.dll");
-		if (!dxvkModule)
-			return nullptr;
-		return reinterpret_cast<void (*)(uint32_t)>(GetProcAddress(dxvkModule, "dxvkSetPresentQueueDepth"));
-	}();
-	if (setDepth) {
-		setDepth(a_depth);
+	if (g_dxvk.setPresentQueueDepth) {
+		g_dxvk.setPresentQueueDepth(a_depth);
 	} else {
 		static bool s_warned = false;
 		if (!s_warned) {
@@ -2279,14 +2266,8 @@ void Streamline::PushDxvkTearingPreference(uint32_t a_preference)
 	// 49.6% of present intervals at 0.0 ms with the rest near 48.5 ms instead of an even 24.2 ms,
 	// costing 5.1% of presents to drops. Nothing else wants it: MAILBOX caps at the refresh rate, so
 	// a target equal to the refresh has no headroom and loses ~3%.
-	static auto setTearing = []() -> void (*)(uint32_t) {
-		HMODULE dxvkModule = GetModuleHandleW(L"dxvk_d3d11.dll");
-		if (!dxvkModule)
-			return nullptr;
-		return reinterpret_cast<void (*)(uint32_t)>(GetProcAddress(dxvkModule, "dxvkSetTearingPreference"));
-	}();
-	if (setTearing) {
-		setTearing(a_preference);
+	if (g_dxvk.setTearingPreference) {
+		g_dxvk.setTearingPreference(a_preference);
 	} else {
 		static bool s_warned = false;
 		if (!s_warned) {

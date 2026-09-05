@@ -701,6 +701,22 @@ bool DXVKInterop::WaitDeviceIdle()
 	return true;
 }
 
+void DXVKInterop::LatchPresentWaitTerminalFault(const char* a_operation, DWORD a_exceptionCode)
+{
+	commandRingFaulted = true;
+	presentWaitInteropTerminalFault = true;
+	enqueueInteropCommandBuffer = nullptr;
+	pushedPresentWaitSlot = UINT32_MAX;
+	pushedPresentWaitGeneration = 0;
+	outstandingPresentWaitSubmissions.clear();
+	if (a_exceptionCode) {
+		logger::critical("[DXVKInterop] {} faulted (SEH {:#x}); present-wait interop is quarantined",
+			a_operation, a_exceptionCode);
+	} else {
+		logger::critical("[DXVKInterop] {}; present-wait interop is quarantined", a_operation);
+	}
+}
+
 bool DXVKInterop::ClearReleasedPresentWaitsAfterIdle()
 {
 	if (presentWaitInteropTerminalFault || !getPresentWaitSemaphoreState || !clearPresentWaitSemaphore)
@@ -709,42 +725,28 @@ bool DXVKInterop::ClearReleasedPresentWaitsAfterIdle()
 	constexpr uint32_t kPresentWaitNone = 0;
 	constexpr uint32_t kPresentWaitUncertain = 3;
 	constexpr uint32_t kPresentWaitReleased = 4;
-	const auto latchTerminalFault = [&](const char* a_operation, DWORD a_exceptionCode = 0) {
-		commandRingFaulted = true;
-		presentWaitInteropTerminalFault = true;
-		enqueueInteropCommandBuffer = nullptr;
-		pushedPresentWaitSlot = UINT32_MAX;
-		pushedPresentWaitGeneration = 0;
-		outstandingPresentWaitSubmissions.clear();
-		if (a_exceptionCode) {
-			logger::critical("[DXVKInterop] {} faulted (SEH {:#x}); present interop is quarantined",
-				a_operation, a_exceptionCode);
-		} else {
-			logger::critical("[DXVKInterop] {}; present interop is quarantined", a_operation);
-		}
-	};
 
 	for (size_t i = 0; i < outstandingPresentWaitSubmissions.size();) {
 		const PresentWaitSubmission submission = outstandingPresentWaitSubmissions[i];
 		const PresentWaitStateAttempt stateAttempt = GetPresentWaitSemaphoreStateSEH(
 			getPresentWaitSemaphoreState, submission.generation);
 		if (stateAttempt.exceptionCode) {
-			latchTerminalFault("idle-released present-wait query", stateAttempt.exceptionCode);
+			LatchPresentWaitTerminalFault("idle-released present-wait query", stateAttempt.exceptionCode);
 			return false;
 		}
 		if (stateAttempt.state != kPresentWaitReleased) {
 			if (stateAttempt.state == kPresentWaitUncertain || stateAttempt.state == kPresentWaitNone)
-				latchTerminalFault("idle-released present-wait state is unsafe");
+				LatchPresentWaitTerminalFault("idle-released present-wait state is unsafe");
 			return false;
 		}
 		if (submission.slot >= presentWaitInUse.size()) {
-			latchTerminalFault("idle-released present-wait slot is invalid");
+			LatchPresentWaitTerminalFault("idle-released present-wait slot is invalid");
 			return false;
 		}
 		const PresentWaitStateAttempt clearAttempt = ClearPresentWaitSemaphoreSEH(
 			clearPresentWaitSemaphore, submission.generation);
 		if (clearAttempt.exceptionCode || !clearAttempt.state) {
-			latchTerminalFault("idle-released present-wait generation could not be cleared",
+			LatchPresentWaitTerminalFault("idle-released present-wait generation could not be cleared",
 				clearAttempt.exceptionCode);
 			return false;
 		}
@@ -758,22 +760,22 @@ bool DXVKInterop::ClearReleasedPresentWaitsAfterIdle()
 	const PresentWaitStateAttempt stateAttempt = GetPresentWaitSemaphoreStateSEH(
 		getPresentWaitSemaphoreState, pushedPresentWaitGeneration);
 	if (stateAttempt.exceptionCode) {
-		latchTerminalFault("idle-released pushed present-wait query", stateAttempt.exceptionCode);
+		LatchPresentWaitTerminalFault("idle-released pushed present-wait query", stateAttempt.exceptionCode);
 		return false;
 	}
 	if (stateAttempt.state != kPresentWaitReleased) {
 		if (stateAttempt.state == kPresentWaitUncertain || stateAttempt.state == kPresentWaitNone)
-			latchTerminalFault("idle-released pushed present-wait state is unsafe");
+			LatchPresentWaitTerminalFault("idle-released pushed present-wait state is unsafe");
 		return false;
 	}
 	if (pushedPresentWaitSlot >= presentWaitInUse.size()) {
-		latchTerminalFault("idle-released pushed present-wait slot is invalid");
+		LatchPresentWaitTerminalFault("idle-released pushed present-wait slot is invalid");
 		return false;
 	}
 	const PresentWaitStateAttempt clearAttempt = ClearPresentWaitSemaphoreSEH(
 		clearPresentWaitSemaphore, pushedPresentWaitGeneration);
 	if (clearAttempt.exceptionCode || !clearAttempt.state) {
-		latchTerminalFault("idle-released pushed present-wait generation could not be cleared",
+		LatchPresentWaitTerminalFault("idle-released pushed present-wait generation could not be cleared",
 			clearAttempt.exceptionCode);
 		return false;
 	}
@@ -1010,7 +1012,6 @@ void DXVKInterop::DestroyCommandResources()
 	}
 	pendingViewDeletes.clear();
 	pendingResourceReleases.clear();
-	ReleaseRetainedFSRResourcesIfSafe();
 	for (VkSemaphore& semaphore : presentWaitSemaphores) {
 		if (semaphore == VK_NULL_HANDLE)
 			continue;
@@ -1136,7 +1137,6 @@ bool DXVKInterop::DrainCommandRing()
 				pendingResourceReleases[slotIndex].clear();
 		}
 	}
-	ReleaseRetainedFSRResourcesIfSafe();
 	return true;
 }
 
@@ -1405,7 +1405,6 @@ DXVKInterop::CommandTransaction DXVKInterop::BeginFrameCommandBuffer()
 	}
 	if (commandFrameIndex < pendingResourceReleases.size())
 		pendingResourceReleases[commandFrameIndex].clear();
-	ReleaseRetainedFSRResourcesIfSafe();
 
 	const VulkanResultAttempt resetAttempt = ResetCommandBufferSEH(cb);
 	if (resetAttempt.result != VK_SUCCESS) {
@@ -1448,12 +1447,34 @@ bool DXVKInterop::SubmitFrameCommandBuffer(CommandTransaction& a_transaction,
 		return false;
 	const uint32_t slot = a_transaction.slot;
 	const VkCommandBuffer commandBuffer = a_transaction.commandBuffer;
-	if (a_signalForNextPresent &&
-		(!PresentWaitInteropReady() ||
-		 pushedPresentWaitSlot != UINT32_MAX || slot >= presentWaitSemaphores.size() ||
-		 presentWaitSemaphores[slot] == VK_NULL_HANDLE || presentWaitInUse[slot])) {
-		logger::error("[DXVKInterop] no safe semaphore slot is available for the next present");
-		return false;
+	if (a_signalForNextPresent) {
+		// Report which precondition actually failed. A bare "no safe slot" message cost real
+		// debugging time: the five causes below need completely different fixes, and the
+		// message repeats every frame once any of them latches.
+		const char* reason = nullptr;
+		if (!PresentWaitInteropReady())
+			reason = "present-wait interop is not ready (missing DXVK export, terminal fault, split present queue or uncertain queue lock)";
+		else if (pushedPresentWaitSlot != UINT32_MAX)
+			reason = "a previously pushed slot was never consumed by a present";
+		else if (slot >= presentWaitSemaphores.size())
+			reason = "ring slot is outside the semaphore array";
+		else if (presentWaitSemaphores[slot] == VK_NULL_HANDLE)
+			reason = "this ring slot has no semaphore";
+		else if (presentWaitInUse[slot])
+			reason = "this ring slot's semaphore is still in use by an earlier present";
+
+		if (reason) {
+			static const char* s_lastReason = nullptr;
+			if (s_lastReason != reason) {
+				s_lastReason = reason;
+				logger::error("[DXVKInterop] no safe semaphore slot for the next present: {} "
+					"(slot {}, pushed {}, semaphores {})",
+					reason, slot,
+					pushedPresentWaitSlot == UINT32_MAX ? -1 : static_cast<int>(pushedPresentWaitSlot),
+					presentWaitSemaphores.size());
+			}
+			return false;
+		}
 	}
 
 	VkFence& fence = commandFences[slot];
@@ -1529,8 +1550,7 @@ bool DXVKInterop::HasPendingPresentWaitSemaphore() const
 	// dxvkEnqueueInteropCommandBuffer registers the semaphore as part of the submit, so a
 	// registered-but-not-yet-presented generation IS the pending state. Reporting it here is
 	// what lets the fault-teardown path discard it instead of leaving it unpresented.
-	return pushedPresentWaitSlot != UINT32_MAX ||
-	       (presentWaitInteropTerminalFault && !outstandingPresentWaitSubmissions.empty());
+	return pushedPresentWaitSlot != UINT32_MAX;
 }
 
 bool DXVKInterop::DiscardPendingPresentWaitSemaphore()
@@ -1575,31 +1595,18 @@ void DXVKInterop::NotifyPresentWaitQueued()
 	std::lock_guard lock(commandRingMutex);
 	if (presentWaitInteropTerminalFault)
 		return;
+	constexpr uint32_t kPresentWaitNone = 0;
 	constexpr uint32_t kPresentWaitPending = 1;
 	constexpr uint32_t kPresentWaitQueued = 2;
 	constexpr uint32_t kPresentWaitUncertain = 3;
 	constexpr uint32_t kPresentWaitReleased = 4;
-	const auto latchTerminalFault = [&](const char* a_operation, DWORD a_exceptionCode = 0) {
-		commandRingFaulted = true;
-		presentWaitInteropTerminalFault = true;
-		enqueueInteropCommandBuffer = nullptr;
-		pushedPresentWaitSlot = UINT32_MAX;
-		pushedPresentWaitGeneration = 0;
-		outstandingPresentWaitSubmissions.clear();
-		if (a_exceptionCode) {
-			logger::critical("[DXVKInterop] {} faulted (SEH {:#x}); present-wait interop disabled",
-				a_operation, a_exceptionCode);
-		} else {
-			logger::critical("[DXVKInterop] {}; present-wait interop disabled", a_operation);
-		}
-	};
 
 	for (size_t i = 0; i < outstandingPresentWaitSubmissions.size();) {
 		const PresentWaitSubmission submission = outstandingPresentWaitSubmissions[i];
 		const PresentWaitStateAttempt stateAttempt = GetPresentWaitSemaphoreStateSEH(
 			getPresentWaitSemaphoreState, submission.generation);
 		if (stateAttempt.exceptionCode) {
-			latchTerminalFault("present-wait release query", stateAttempt.exceptionCode);
+			LatchPresentWaitTerminalFault("present-wait release query", stateAttempt.exceptionCode);
 			return;
 		}
 		if (stateAttempt.state == kPresentWaitQueued) {
@@ -1607,14 +1614,14 @@ void DXVKInterop::NotifyPresentWaitQueued()
 			continue;
 		}
 		if (stateAttempt.state != kPresentWaitReleased || submission.slot >= presentWaitInUse.size()) {
-			latchTerminalFault(stateAttempt.state == kPresentWaitUncertain ?
+			LatchPresentWaitTerminalFault(stateAttempt.state == kPresentWaitUncertain ?
 				"present-wait consumption is uncertain" : "present-wait release state is invalid");
 			return;
 		}
 		const PresentWaitStateAttempt clearAttempt = ClearPresentWaitSemaphoreSEH(
 			clearPresentWaitSemaphore, submission.generation);
 		if (clearAttempt.exceptionCode || !clearAttempt.state) {
-			latchTerminalFault("released present-wait generation could not be cleared",
+			LatchPresentWaitTerminalFault("released present-wait generation could not be cleared",
 				clearAttempt.exceptionCode);
 			return;
 		}
@@ -1627,7 +1634,7 @@ void DXVKInterop::NotifyPresentWaitQueued()
 	const PresentWaitStateAttempt stateAttempt = GetPresentWaitSemaphoreStateSEH(
 		getPresentWaitSemaphoreState, pushedPresentWaitGeneration);
 	if (stateAttempt.exceptionCode) {
-		latchTerminalFault("present-wait state query", stateAttempt.exceptionCode);
+		LatchPresentWaitTerminalFault("present-wait state query", stateAttempt.exceptionCode);
 		return;
 	}
 	if (stateAttempt.state == kPresentWaitQueued) {
@@ -1639,13 +1646,13 @@ void DXVKInterop::NotifyPresentWaitQueued()
 	}
 	if (stateAttempt.state == kPresentWaitReleased) {
 		if (pushedPresentWaitSlot >= presentWaitInUse.size()) {
-			latchTerminalFault("released present-wait slot is invalid");
+			LatchPresentWaitTerminalFault("released present-wait slot is invalid");
 			return;
 		}
 		const PresentWaitStateAttempt clearAttempt = ClearPresentWaitSemaphoreSEH(
 			clearPresentWaitSemaphore, pushedPresentWaitGeneration);
 		if (clearAttempt.exceptionCode || !clearAttempt.state) {
-			latchTerminalFault("released present-wait generation could not be cleared",
+			LatchPresentWaitTerminalFault("released present-wait generation could not be cleared",
 				clearAttempt.exceptionCode);
 			return;
 		}
@@ -1654,15 +1661,25 @@ void DXVKInterop::NotifyPresentWaitQueued()
 		pushedPresentWaitGeneration = 0;
 		return;
 	}
-	if (stateAttempt.state == kPresentWaitPending) {
+	// Pending, Uncertain and None all mean the same thing here: no present has taken this
+	// registration, and none ever will. Uncertain in particular is what DXVK records when
+	// vkQueuePresentKHR returned something outside the expected set -- which is exactly what a
+	// frame-generation plugin skipping a present produces ("Couldn't lock the mutex on sync
+	// present - will skip the present"). Falling through on those states left
+	// pushedPresentWaitSlot latched forever, so every later SubmitFrameCommandBuffer was refused
+	// with "no safe semaphore slot is available for the next present" and frame generation was
+	// starved of its inputs for the rest of the session. Recover them the same conservative way.
+	if (stateAttempt.state == kPresentWaitPending ||
+		stateAttempt.state == kPresentWaitUncertain ||
+		stateAttempt.state == kPresentWaitNone) {
 		if (pushedPresentWaitSlot >= presentWaitSemaphores.size()) {
-			latchTerminalFault("pending present-wait slot is invalid");
+			LatchPresentWaitTerminalFault("unconsumed present-wait slot is invalid");
 			return;
 		}
 		const PresentWaitStateAttempt cancelAttempt = CancelPresentWaitSemaphoreSEH(
 			cancelPresentWaitSemaphore, presentWaitSemaphores[pushedPresentWaitSlot]);
 		if (cancelAttempt.exceptionCode || !cancelAttempt.state) {
-			latchTerminalFault("pending present-wait registration could not be cancelled",
+			LatchPresentWaitTerminalFault("pending present-wait registration could not be cancelled",
 				cancelAttempt.exceptionCode);
 			return;
 		}
@@ -1719,7 +1736,7 @@ void DXVKInterop::NotifyPresentWaitQueued()
 		}
 		return;
 	}
-	latchTerminalFault(stateAttempt.state == kPresentWaitUncertain ?
+	LatchPresentWaitTerminalFault(stateAttempt.state == kPresentWaitUncertain ?
 		"present-wait consumption is uncertain" : "present-wait state is invalid");
 }
 
@@ -1753,28 +1770,6 @@ void DXVKInterop::QueueResourcesForDeferredRelease(const CommandTransaction& a_t
 	}
 }
 
-void DXVKInterop::QueueResourcesForPresent(const CommandTransaction& a_transaction,
-	ID3D11Resource* const* a_resources, uint32_t a_count)
-{
-	if (a_transaction.owner != this || !a_transaction.ringLock.owns_lock() ||
-		!a_resources)
-		return;
-	fsrSwapchainTeardownConfirmed = false;
-	for (uint32_t i = 0; i < a_count; ++i) {
-		ID3D11Resource* resource = a_resources[i];
-		if (!resource)
-			continue;
-		const auto duplicate = std::find_if(
-			retainedPresentResources.begin(), retainedPresentResources.end(),
-			[resource](const auto& a_held) { return a_held.get() == resource; });
-		if (duplicate != retainedPresentResources.end())
-			continue;
-		winrt::com_ptr<ID3D11Resource> heldResource;
-		heldResource.copy_from(resource);
-		retainedPresentResources.push_back(std::move(heldResource));
-	}
-}
-
 void DXVKInterop::QuarantineResourcesAfterVulkanDestructionFault(
 	ID3D11Resource* const* a_resources, uint32_t a_count)
 {
@@ -1796,144 +1791,4 @@ void DXVKInterop::QuarantineResourcesAfterVulkanDestructionFault(
 		heldResource.copy_from(resource);
 		retainedPresentResources.push_back(std::move(heldResource));
 	}
-}
-
-void DXVKInterop::ReleaseRetainedFSRResourcesIfSafe()
-{
-	if (vulkanResourceDestructionTerminalFault || !fsrSwapchainTeardownConfirmed ||
-		!pendingFSRPresentViewGroups.empty())
-		return;
-
-	if (!quarantinedFSRPresentViewGroups.empty() && commandRingSubmissionsIdleProven && vkDestroyImageView) {
-		for (auto& group : quarantinedFSRPresentViewGroups) {
-			for (VkImageView& view : group.views) {
-				if (view == VK_NULL_HANDLE)
-					continue;
-				const VulkanVoidAttempt destroyAttempt = DestroyImageViewSEH(vkDestroyImageView, device, view);
-				if (!destroyAttempt.completed) {
-					vulkanResourceDestructionTerminalFault = true;
-					commandRingFaulted = true;
-					view = VK_NULL_HANDLE;
-					logger::error("[DXVKInterop] quarantined FSR view destruction faulted (SEH {:#x})",
-						destroyAttempt.exceptionCode);
-					return;
-				}
-				view = VK_NULL_HANDLE;
-			}
-		}
-		quarantinedFSRPresentViewGroups.clear();
-	}
-
-	if (!quarantinedFSRPresentViewGroups.empty())
-		return;
-
-	const bool viewsPending = std::any_of(pendingViewDeletes.begin(), pendingViewDeletes.end(),
-		[](const auto& a_slot) { return !a_slot.empty(); });
-	if (!viewsPending && !retainedPresentResources.empty()) {
-		logger::debug("[DXVKInterop] releasing {} resources after completed FSR teardown and view retirement",
-			retainedPresentResources.size());
-		retainedPresentResources.clear();
-	}
-}
-
-void DXVKInterop::QueueViewsForFSRPresent(const CommandTransaction& a_transaction,
-	const VkImageView* a_views, uint32_t a_count)
-{
-	if (a_transaction.owner != this || !a_transaction.ringLock.owns_lock() ||
-		!a_views || a_transaction.slot >= pendingViewDeletes.size())
-		return;
-	FSRPresentViewGroup group{};
-	group.slot = a_transaction.slot;
-	group.views.reserve(a_count);
-	for (uint32_t i = 0; i < a_count; ++i)
-		if (a_views[i] != VK_NULL_HANDLE)
-			group.views.push_back(a_views[i]);
-	if (!group.views.empty()) {
-		fsrSwapchainTeardownConfirmed = false;
-		pendingFSRPresentViewGroups.push_back(std::move(group));
-	}
-}
-
-void DXVKInterop::QuarantineViewsUntilFSRSwapchainTeardown(const CommandTransaction& a_transaction,
-	const VkImageView* a_views, uint32_t a_count)
-{
-	if (a_transaction.owner != this || !a_transaction.ringLock.owns_lock() ||
-		!a_views || a_transaction.slot >= pendingViewDeletes.size())
-		return;
-	FSRPresentViewGroup group{};
-	group.slot = a_transaction.slot;
-	group.views.reserve(a_count);
-	for (uint32_t i = 0; i < a_count; ++i)
-		if (a_views[i] != VK_NULL_HANDLE)
-			group.views.push_back(a_views[i]);
-	if (!group.views.empty()) {
-		fsrSwapchainTeardownConfirmed = false;
-		quarantinedFSRPresentViewGroups.push_back(std::move(group));
-	}
-}
-
-void DXVKInterop::NotifyFSRFrameConsumed()
-{
-	std::lock_guard lock(commandRingMutex);
-	for (auto& group : pendingFSRPresentViewGroups) {
-		if (group.slot < pendingViewDeletes.size()) {
-			auto& slot = pendingViewDeletes[group.slot];
-			slot.insert(slot.end(), group.views.begin(), group.views.end());
-		} else {
-			quarantinedFSRPresentViewGroups.push_back(std::move(group));
-		}
-	}
-	pendingFSRPresentViewGroups.clear();
-}
-
-void DXVKInterop::QuarantineUnconsumedFSRPresentViews()
-{
-	std::lock_guard lock(commandRingMutex);
-	for (auto& group : pendingFSRPresentViewGroups)
-		quarantinedFSRPresentViewGroups.push_back(std::move(group));
-	pendingFSRPresentViewGroups.clear();
-}
-
-void DXVKInterop::ReleaseRetainedPresentResourcesAfterFSRSwapchainTeardown()
-{
-	std::lock_guard lock(commandRingMutex);
-	fsrSwapchainTeardownConfirmed = true;
-	for (auto& group : pendingFSRPresentViewGroups)
-		quarantinedFSRPresentViewGroups.push_back(std::move(group));
-	pendingFSRPresentViewGroups.clear();
-
-	std::vector<FSRPresentViewGroup> unresolved;
-	for (auto& group : quarantinedFSRPresentViewGroups) {
-		if (group.slot < pendingViewDeletes.size()) {
-			auto& slot = pendingViewDeletes[group.slot];
-			slot.insert(slot.end(), group.views.begin(), group.views.end());
-			continue;
-		}
-		bool destructionFaulted = false;
-		if (!vulkanResourceDestructionTerminalFault && commandRingSubmissionsIdleProven &&
-			vkDestroyImageView) {
-			for (VkImageView& view : group.views) {
-				if (view == VK_NULL_HANDLE)
-					continue;
-				const VulkanVoidAttempt destroyAttempt = DestroyImageViewSEH(vkDestroyImageView, device, view);
-				if (destroyAttempt.completed) {
-					view = VK_NULL_HANDLE;
-				} else {
-					view = VK_NULL_HANDLE;
-					destructionFaulted = true;
-					commandRingFaulted = true;
-					vulkanResourceDestructionTerminalFault = true;
-					break;
-				}
-			}
-			if (destructionFaulted)
-				std::fill(group.views.begin(), group.views.end(), VK_NULL_HANDLE);
-		}
-		if (destructionFaulted || std::find_if(group.views.begin(), group.views.end(),
-				[](VkImageView a_view) { return a_view != VK_NULL_HANDLE; }) != group.views.end())
-			unresolved.push_back(std::move(group));
-	}
-	quarantinedFSRPresentViewGroups = std::move(unresolved);
-
-	ReleaseRetainedFSRResourcesIfSafe();
 }

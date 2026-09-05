@@ -614,18 +614,13 @@ double Upscaling::GetTargetFrameRate() const
 		return 0.0;
 	const int divisor = settings.frameRateLimitDivisor;
 	if (divisor <= 0) {
-		// "Unlocked" with DLSS-G means no frame generation at all. sl.dlss_g presents tear-free --
-		// its flip metering cannot space a generated frame across tearing presents -- so output
-		// cannot exceed the refresh rate. Uncapped, the game renders at the refresh rate by itself
-		// and leaves DLSS-G no room to insert anything: measured 60.3 rendered against 59.9
-		// presented, a flat 1:1, where a refresh-rate cap gives the expected 30.2 rendered and 59.9
-		// presented. Target the refresh rate so the feature the user switched on actually runs;
-		// there is no frame rate above it for DLSS-G to reach anyway.
-		// Keyed off the setting rather than IsFrameGenerationActive(), which is false until frame
-		// generation has engaged: gating on it is self-defeating, because without the cap the game
-		// fills the refresh rate on its own and DLSS-G never gets the room it needs to engage.
-		if (settings.frameGeneration && GetFrameGenMethod() == FrameGenMethod::kDLSSG)
-			return std::max(1.0, static_cast<double>(GetMonitorRefreshRate()));
+		// Unlocked means unlocked, for every frame-generation method. This used to return the
+		// refresh rate for DLSS-G, reasoning that sl.dlss_g presents tear-free and so cannot exceed
+		// the refresh rate anyway. That is true, but it does not justify silently capping a setting
+		// the user set to unlimited: the cap lands on the PRESENTED cadence (see
+		// GetRenderedFrameRateLimit), so 2x generation halved the RENDERED rate and with it the
+		// input latency the user actually feels. FSR-FG never did this, which is how the
+		// discrepancy was noticed. If guaranteed generation headroom is wanted, use the divisor.
 		return 0.0;
 	}
 	// Deliberately NOT rounded to a whole frame rate. The target is a submultiple of the display
@@ -701,7 +696,7 @@ HRESULT Upscaling::PresentWithFrameGeneration(IDXGISwapChain* a_swapChain, UINT 
 			static bool deviceLossReported = false;
 			if (!std::exchange(deviceLossReported, true))
 				logger::critical("[Upscaling] device lost ({}); presenting without frame generation", a_reason);
-			return a_present(a_swapChain, a_syncInterval, a_flags);
+			return a_present(a_swapChain, 0, a_flags);
 		}
 		logger::error("[Upscaling] {} - disabling frame generation", a_reason);
 		settings.frameGeneration = false;
@@ -734,7 +729,7 @@ HRESULT Upscaling::PresentWithFrameGeneration(IDXGISwapChain* a_swapChain, UINT 
 		streamline->SetFSRFGDesiredLoaded(false);
 		Streamline::RequestDxvkSwapchainRecreate(a_reason);
 		FrameGen::Controller::GetSingleton()->NotifyFaultTeardownRequested();
-		return a_present(a_swapChain, a_syncInterval, a_flags);
+		return a_present(a_swapChain, 0, a_flags);
 	};
 	if (streamline->HasDispatchFaulted() || dxvk->HasCommandRingFault()) {
 		settings.frameGeneration = false;

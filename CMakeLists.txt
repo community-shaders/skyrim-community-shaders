@@ -164,6 +164,7 @@ target_link_libraries(
         Microsoft::Effects11
         windowsapp
         windowscodecs
+        dbghelp
         Vulkan::Vulkan
         Streamline
 )

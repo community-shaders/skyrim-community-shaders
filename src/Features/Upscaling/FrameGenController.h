@@ -13,6 +13,13 @@ namespace FrameGen
 		kDLSSG,
 	};
 
+	enum class FSRDeliveryState : int
+	{
+		kNever = -1,
+		kTornDown = 0,
+		kDelivered = 1
+	};
+
 	class Controller
 	{
 	public:
@@ -53,8 +60,8 @@ namespace FrameGen
 
 		bool dlssgModeOn = false;
 
-		// -1 until sl.fsr_g accepts its first state update.
-		int fsrDelivered = -1;
+		// kNever until sl.fsr_g accepts its first state update.
+		FSRDeliveryState fsrDelivered = FSRDeliveryState::kNever;
 		uint32_t fsrDebugSigDelivered = 0;
 		bool fsrHDRDelivered = false;
 		// FFX bakes VSync into its wrapped swapchain.

@@ -101,7 +101,7 @@ public:
 	static inline std::atomic<bool> s_windowModifying{ false };
 
 	// Timing and scaling
-	double refreshRate = 0.0f;
+	double refreshRate = 0.0;
 	float2 resolutionScale = { 1.0f, 1.0f };
 
 	bool IsUpscalingActive() const;

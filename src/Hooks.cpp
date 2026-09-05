@@ -420,10 +420,62 @@ struct IDXGISwapChain_Present
 		const bool presentSucceeded = SUCCEEDED(retval);
 		if (presentSucceeded)
 			dxvk->RefreshPresenterSurfaceState();
-		if (retval == S_OK && streamline->IsFSRFGPresentOwner())
-			dxvk->NotifyFSRFrameConsumed();
-		dxvk->NotifyPresentWaitQueued();
+		// Resolve the pushed present-wait registration after every successful present, whoever
+		// owns it. Gating this on the FSR-FG owner left the slot latched forever under DLSS-G:
+		// SubmitFrameCommandBuffer then refused every subsequent present-wait submission and
+		// DLSS-G was starved of its input tags for the rest of the session.
+		if (presentSucceeded)
+			dxvk->NotifyPresentWaitQueued();
 		streamline->CaptureDLSSGPresentState();
+
+		// Ground-truth present rate. The overlay's numbers only exist while it is being drawn, so
+		// when the question is "why does the frame rate never exceed the refresh rate" there was
+		// nothing measured anywhere. This counts real presents through the hook, which is the
+		// rendered rate; multiply by the frame-generation multiplier for the displayed rate.
+		if (presentSucceeded) {
+			using clock = std::chrono::steady_clock;
+			static clock::time_point s_rateStart = clock::now();
+			static uint32_t s_rateFrames = 0u;
+			++s_rateFrames;
+			const auto now = clock::now();
+			const double elapsed = std::chrono::duration<double>(now - s_rateStart).count();
+			if (elapsed >= 5.0) {
+				auto& up = globals::features::upscaling;
+				const uint32_t mult = streamline->GetFrameGenerationMultiplier();
+				const double rendered = double(s_rateFrames) / elapsed;
+				logger::info("[Perf] rendered {:.1f} fps | x{} -> displayed {:.1f} fps | fg={} method={} syncInterval={}",
+					rendered, mult, rendered * double(mult),
+					up.IsFrameGenerationActive() ? "on" : "off",
+					up.GetFrameGenMethod() == Upscaling::FrameGenMethod::kDLSSG ? "DLSS-G" : "FSR-FG",
+					SyncInterval);
+
+				// DLSS-G paces presentation to the display refresh, so the RENDERED rate is pinned to
+				// refresh / multiplier however much GPU headroom there is: measured 30.0 fps rendered
+				// against 120.0 with frame generation off, on a 60 Hz mode. Forcing a tearing present
+				// mode does not lift it -- sl.dlss_g meters flips regardless of the Vulkan present mode.
+				// That is not a fault, it is what 2x generation at 60 Hz means, but it costs a 4x input
+				// latency regression for no extra displayed frames, and nothing said so. Frame
+				// generation is only worth enabling when the refresh rate is above what the GPU
+				// sustains unaided.
+				const int refresh = up.GetMonitorRefreshRate();
+				const bool refreshBound = up.IsFrameGenerationActive() && mult >= 2u && refresh > 0 &&
+				                          rendered > 0.0 &&
+				                          std::abs(rendered - double(refresh) / double(mult)) <
+				                              0.05 * double(refresh) / double(mult);
+				static int s_lastWarned = -1;
+				if (refreshBound && s_lastWarned != refresh) {
+					s_lastWarned = refresh;
+					logger::warn("[Perf] frame generation is refresh-bound: rendering is pinned to {} Hz / {}x = {:.0f} fps "
+					             "because presentation is paced to the display. Input latency is that of {:.0f} fps, not the "
+					             "displayed {}. A higher refresh rate, or turning frame generation off, will raise it.",
+						refresh, mult, double(refresh) / double(mult), double(refresh) / double(mult), refresh);
+				} else if (!refreshBound) {
+					s_lastWarned = -1;
+				}
+				s_rateStart = now;
+				s_rateFrames = 0u;
+			}
+		}
 
 		globals::features::screenshotFeature.ProcessCaptureRequest();
 

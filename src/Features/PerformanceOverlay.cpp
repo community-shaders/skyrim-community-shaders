@@ -1996,12 +1996,28 @@ void PerformanceOverlay::UpdateGraphValues()
 		const bool fsrOwnsPresent = streamline->IsFSRFGPresentOwner();
 		const uint64_t presented = fsrOwnsPresent ? streamline->GetTotalPresentedFrames() : 0u;
 		if (fsrOwnsPresent) {
-			if (presented > state.lastPresentedFrames && state.lastPresentedFrames != 0 && deltaTime > 0.0f) {
-				state.presentedAccum += static_cast<float>(presented - state.lastPresentedFrames);
+			// The FSR present counter is authoritative only while it is actually advancing. It sits at
+			// zero until sl.fsr_g's own present loop publishes it, and it is not written at all while
+			// the game is paused or a menu is up, because the capture call lives on the gameplay path.
+			// The elapsed window therefore has to accumulate unconditionally: gating it on the counter
+			// having advanced meant that if the counter never moved, lastPresentedFrames stayed 0, the
+			// guard could never pass, and Post-FG FPS read a permanent 0 -- which is what the overlay
+			// showed for FSR-FG. When the counter is not moving, fall back to the same multiplier
+			// estimate the DLSS-G path uses rather than reporting zero frames per second.
+			if (deltaTime > 0.0f) {
+				if (presented > state.lastPresentedFrames && state.lastPresentedFrames != 0)
+					state.presentedAccum += static_cast<float>(presented - state.lastPresentedFrames);
 				state.presentedElapsed += deltaTime;
 				if (state.presentedElapsed >= 0.25f) {
-					state.postFGFps = state.presentedAccum / state.presentedElapsed;
-					state.postFGFrameTimeMs = state.postFGFps > 0.0f ? 1000.0f / state.postFGFps : 0.0f;
+					if (state.presentedAccum > 0.0f) {
+						state.postFGFps = state.presentedAccum / state.presentedElapsed;
+						state.postFGFrameTimeMs = state.postFGFps > 0.0f ? 1000.0f / state.postFGFps : 0.0f;
+					} else {
+						const float fsrMultiplier = static_cast<float>(
+							std::max(streamline->GetFrameGenerationMultiplier(), 2u));
+						state.postFGFps = state.fps * fsrMultiplier;
+						state.postFGFrameTimeMs = state.frameTimeMs / fsrMultiplier;
+					}
 					state.presentedAccum = 0.0f;
 					state.presentedElapsed = 0.0f;
 				}
@@ -2025,6 +2041,23 @@ void PerformanceOverlay::UpdateGraphValues()
 		state.lastPresentedFrames = 0;
 		state.presentedAccum = 0.0f;
 		state.presentedElapsed = 0.0f;
+	}
+
+	// Periodic present-rate trace. The overlay is the only place these numbers exist, so when the
+	// question is "why is the frame rate not going above the refresh rate", there was nothing in
+	// the log to answer it. Samples what the overlay itself shows, once every few seconds.
+	{
+		static float s_traceTimer = 0.0f;
+		s_traceTimer += deltaTime;
+		if (s_traceTimer >= 5.0f) {
+			s_traceTimer = 0.0f;
+			auto& up = globals::features::upscaling;
+			logger::info("[Perf] rendered {:.1f} fps ({:.2f} ms) | post-FG {:.1f} fps ({:.2f} ms) | fg={} method={} mult={}",
+				state.fps, state.frameTimeMs, state.postFGFps, state.postFGFrameTimeMs,
+				state.isFrameGenerationActive ? "on" : "off",
+				up.GetFrameGenMethod() == Upscaling::FrameGenMethod::kDLSSG ? "DLSS-G" : "FSR-FG",
+				Streamline::GetSingleton()->GetFrameGenerationMultiplier());
+		}
 	}
 
 	// Update smooth values with user-specified interval

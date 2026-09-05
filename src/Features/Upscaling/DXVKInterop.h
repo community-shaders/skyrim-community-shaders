@@ -175,24 +175,10 @@ public:
 	/** @brief Holds D3D resources until the current ring slot completes. */
 	void QueueResourcesForDeferredRelease(const CommandTransaction& a_transaction,
 		ID3D11Resource* const* a_resources, uint32_t a_count);
-	/** @brief Holds resources consumed by frame generation across the matching outer present. */
-	void QueueResourcesForPresent(const CommandTransaction& a_transaction,
-		ID3D11Resource* const* a_resources, uint32_t a_count);
 	/** @brief Retains backing images permanently after ambiguous Vulkan view destruction. */
 	void QuarantineResourcesAfterVulkanDestructionFault(
 		ID3D11Resource* const* a_resources, uint32_t a_count);
-	/** @brief Holds accepted FSR views until the matching outer present consumes them. */
-	void QueueViewsForFSRPresent(const CommandTransaction& a_transaction,
-		const VkImageView* a_views, uint32_t a_count);
-	/** @brief Holds partially accepted FSR views until confirmed FFX teardown. */
-	void QuarantineViewsUntilFSRSwapchainTeardown(const CommandTransaction& a_transaction,
-		const VkImageView* a_views, uint32_t a_count);
-	/** @brief Fence-gates accepted FSR views after the plugin consumes or discards them. */
-	void NotifyFSRFrameConsumed();
 	/** @brief Quarantines accepted views when a failed present removed the plugin frame without proving consumption. */
-	void QuarantineUnconsumedFSRPresentViews();
-	/** @brief Releases FSR present lifetimes after its swapchain teardown completed successfully. */
-	void ReleaseRetainedPresentResourcesAfterFSRSwapchainTeardown();
 
 private:
 	DXVKInterop() = default;
@@ -205,11 +191,6 @@ private:
 		VkColorSpaceKHR effectiveColorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
 	};
 
-	struct FSRPresentViewGroup
-	{
-		uint32_t slot = UINT32_MAX;
-		std::vector<VkImageView> views;
-	};
 
 	struct PresentWaitSubmission
 	{
@@ -229,7 +210,7 @@ private:
 	static bool PresenterStateMatches(
 		const PresenterSurfaceState& a_state, VkColorSpaceKHR a_requestedColorSpace);
 	bool ClearReleasedPresentWaitsAfterIdle();
-	void ReleaseRetainedFSRResourcesIfSafe();
+	void LatchPresentWaitTerminalFault(const char* a_operation, DWORD a_exceptionCode = 0);
 
 	bool available = false;
 
@@ -285,13 +266,12 @@ private:
 	mutable bool commandRingSubmissionsIdleProven = false;
 	mutable bool submissionQueueLockUncertain = false;
 	// Indexed with the command ring.
+	// Resources held forever once Vulkan destruction has terminally faulted: leaking them is
+	// strictly better than risking a use-after-free on a device that is already unsafe.
+	std::vector<winrt::com_ptr<ID3D11Resource>> retainedPresentResources;
 	std::vector<std::vector<VkImageView>> pendingViewDeletes;
 	std::vector<std::vector<winrt::com_ptr<ID3D11Resource>>> pendingResourceReleases;
 	// FFX may consume tagged images on its own queues after host evaluation.
-	std::vector<winrt::com_ptr<ID3D11Resource>> retainedPresentResources;
-	std::vector<FSRPresentViewGroup> pendingFSRPresentViewGroups;
-	std::vector<FSRPresentViewGroup> quarantinedFSRPresentViewGroups;
-	bool fsrSwapchainTeardownConfirmed = false;
 	uint32_t framesInFlight = 0;
 	uint32_t commandFrameIndex = 0;
 };

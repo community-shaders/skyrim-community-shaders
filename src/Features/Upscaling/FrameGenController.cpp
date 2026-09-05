@@ -179,8 +179,8 @@ namespace FrameGen
 				owner = Method::kNone;
 			logger::warn("[FrameGen] DLSS-G was unloaded before mode teardown - reconciled local state");
 		}
-		if (!sl->IsFSRFGLoaded() && (fsrDelivered == 1 || owner == Method::kFSR)) {
-			fsrDelivered = 0;
+		if (!sl->IsFSRFGLoaded() && (fsrDelivered == FSRDeliveryState::kDelivered || owner == Method::kFSR)) {
+			fsrDelivered = FSRDeliveryState::kTornDown;
 			fsrVsyncRebakePending = false;
 			if (owner == Method::kFSR)
 				owner = Method::kNone;
@@ -208,7 +208,7 @@ namespace FrameGen
 			logger::info("[FrameGen] DLSS-G interpolation off + device drained (leaving DLSS-G)");
 		}
 
-		if (fsrDelivered == 1 && a_target != Method::kFSR) {
+		if (fsrDelivered == FSRDeliveryState::kDelivered && a_target != Method::kFSR) {
 			if (!DXVKInterop::GetSingleton()->DrainCommandRing()) {
 				logger::error("[FrameGen] FSR-FG teardown deferred because command completion could not be proven");
 				return false;
@@ -217,7 +217,7 @@ namespace FrameGen
 			if (!sl->SetFSRFrameGen(false, fsrHDRDelivered,
 					s.fgDebugView, s.fgDebugTearLines, s.fgDebugPacingLines, s.fgShowOnlyGenerated))
 				return false;
-			fsrDelivered = 0;
+			fsrDelivered = FSRDeliveryState::kTornDown;
 			fsrVsyncRebakePending = false;
 			if (owner == Method::kFSR)
 				owner = Method::kNone;
@@ -291,7 +291,7 @@ namespace FrameGen
 			return;
 
 		// Present the new interval once before recreating the FFX-wrapped swapchain.
-		if (fsrDelivered == 1 && upscaling.settings.vsync != fsrWrapVsync) {
+		if (fsrDelivered == FSRDeliveryState::kDelivered && upscaling.settings.vsync != fsrWrapVsync) {
 			if (!fsrVsyncRebakePending) {
 				fsrVsyncRebakePending = true;
 			} else {
@@ -306,16 +306,16 @@ namespace FrameGen
 
 		const uint32_t debugSig = FSRDebugSignature(upscaling.settings);
 		const bool hdr = IsHDRActive();
-		if (fsrDelivered == 1 && debugSig == fsrDebugSigDelivered && hdr == fsrHDRDelivered)
+		if (fsrDelivered == FSRDeliveryState::kDelivered && debugSig == fsrDebugSigDelivered && hdr == fsrHDRDelivered)
 			return;
 
-		const bool enableEdge = fsrDelivered != 1;
-		const bool hdrChanged = fsrDelivered == 1 && hdr != fsrHDRDelivered;
+		const bool enableEdge = fsrDelivered != FSRDeliveryState::kDelivered;
+		const bool hdrChanged = fsrDelivered == FSRDeliveryState::kDelivered && hdr != fsrHDRDelivered;
 
 		const auto& s = upscaling.settings;
 		if (sl->SetFSRFrameGen(true, hdr,
 				s.fgDebugView, s.fgDebugTearLines, s.fgDebugPacingLines, s.fgShowOnlyGenerated)) {
-			fsrDelivered = 1;
+			fsrDelivered = FSRDeliveryState::kDelivered;
 			fsrDebugSigDelivered = debugSig;
 			fsrHDRDelivered = hdr;
 			owner = Method::kFSR;
@@ -335,7 +335,7 @@ namespace FrameGen
 
 	bool Controller::IsFSRPresenterReady() const
 	{
-		if (phase != Phase::kIdle || DesiredMethod() != Method::kFSR || fsrDelivered != 1 ||
+		if (phase != Phase::kIdle || DesiredMethod() != Method::kFSR || fsrDelivered != FSRDeliveryState::kDelivered ||
 			!Streamline::GetSingleton()->IsFSRFGLoaded())
 			return false;
 
@@ -369,7 +369,7 @@ namespace FrameGen
 	void Controller::NotifyFaultTeardownRequested()
 	{
 		dlssgModeOn = false;
-		fsrDelivered = 0;
+		fsrDelivered = FSRDeliveryState::kTornDown;
 		fsrVsyncRebakePending = false;
 		faultRecoveryRequested = true;
 		phase = Phase::kTransitioning;

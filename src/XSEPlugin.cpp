@@ -1,3 +1,5 @@
+#include <dbghelp.h>
+
 #include "Deferred.h"
 #include "Features/RenderDoc.h"
 #include "Features/Upscaling.h"
@@ -17,6 +19,50 @@
 std::list<std::string> errors;
 
 bool Load();
+
+// Diagnostic crash capture. The frame-generation interop can take the process down during a
+// load with no Windows Error Reporting record and no .dmp, which leaves nothing to analyse.
+// A vectored handler runs before any SEH frame swallows the fault, so it sees the exception
+// even when something downstream would otherwise turn it into a silent exit.
+static LONG CALLBACK CommunityShadersCrashDump(EXCEPTION_POINTERS* a_exception)
+{
+	if (!a_exception || !a_exception->ExceptionRecord)
+		return EXCEPTION_CONTINUE_SEARCH;
+
+	const DWORD code = a_exception->ExceptionRecord->ExceptionCode;
+	// Ignore the benign ones the game raises constantly (C++ EH, debugger notifications).
+	if (code != EXCEPTION_ACCESS_VIOLATION && code != EXCEPTION_ILLEGAL_INSTRUCTION &&
+		code != EXCEPTION_STACK_OVERFLOW && code != EXCEPTION_INT_DIVIDE_BY_ZERO &&
+		code != 0xC0000409 /* fast-fail / stack cookie */)
+		return EXCEPTION_CONTINUE_SEARCH;
+
+	static std::atomic<bool> written{ false };
+	if (written.exchange(true))
+		return EXCEPTION_CONTINUE_SEARCH;
+
+	logger::critical("[CRASH] exception {:#x} at {} - writing CommunityShaders.dmp", code,
+		fmt::ptr(a_exception->ExceptionRecord->ExceptionAddress));
+	spdlog::default_logger()->flush();
+
+	wchar_t path[MAX_PATH]{};
+	GetModuleFileNameW(nullptr, path, MAX_PATH);
+	std::filesystem::path dump{ path };
+	dump = dump.parent_path() / L"CommunityShaders.dmp";
+
+	const HANDLE file = CreateFileW(dump.c_str(), GENERIC_WRITE, 0, nullptr,
+		CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+	if (file != INVALID_HANDLE_VALUE) {
+		MINIDUMP_EXCEPTION_INFORMATION info{};
+		info.ThreadId = GetCurrentThreadId();
+		info.ExceptionPointers = a_exception;
+		info.ClientPointers = FALSE;
+		MiniDumpWriteDump(GetCurrentProcess(), GetCurrentProcessId(), file,
+			static_cast<MINIDUMP_TYPE>(MiniDumpWithThreadInfo | MiniDumpWithIndirectlyReferencedMemory),
+			&info, nullptr, nullptr);
+		CloseHandle(file);
+	}
+	return EXCEPTION_CONTINUE_SEARCH;
+}
 
 void InitializeLog([[maybe_unused]] spdlog::level::level_enum a_level = spdlog::level::info)
 {
@@ -52,6 +98,7 @@ extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Load(const SKSE::LoadInterface* a_s
 	while (!REX::W32::IsDebuggerPresent()) {};
 #endif
 	InitializeLog();
+	AddVectoredExceptionHandler(1, &CommunityShadersCrashDump);
 	logger::info("Loaded {} {}", Plugin::NAME, Plugin::VERSION.string());
 	SKSE::Init(a_skse);
 	SKSE::AllocTrampoline(1 << 10);
