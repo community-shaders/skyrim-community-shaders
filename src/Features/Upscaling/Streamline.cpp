@@ -1168,6 +1168,14 @@ static bool cs_BarrierUpscalerOutput(VkCommandBuffer a_commandBuffer, const sl::
 	return barrierAttempt.completed;
 }
 
+// Whether a DLSS-G tag submission should carry a present-wait signal. Only DLSS-G presents consume
+// one, and only on a swapchain the presenter has not already shown it will leave unattached.
+static bool cs_WantPresentWaitSignal(const DXVKInterop* a_dxvk)
+{
+	return g_dlssgCurrentlyLoaded.load(std::memory_order_acquire) &&
+	       !a_dxvk->IsPresentWaitUnattachedForSwapchain();
+}
+
 static bool cs_SubmitPresentTags(DXVKInterop* a_dxvk, sl::FrameToken& a_token,
 	const sl::ViewportHandle& a_viewport, const sl::ResourceTag* a_tags, uint32_t a_tagCount,
 	const VkImageView* a_views, uint32_t a_viewCount,
@@ -2061,9 +2069,7 @@ void Streamline::TagDLSSGResources(ID3D11Resource* a_depth, ID3D11Resource* a_mo
 		bool lifetimesRetained = false;
 		if (cs_SubmitPresentTags(dxvk, *token, g_sl.viewport, tags, tagCount,
 				views, viewCount, resources, static_cast<uint32_t>(std::size(resources)), tagResult,
-				lifetimesRetained,
-				g_dlssgCurrentlyLoaded.load(std::memory_order_acquire) &&
-					!dxvk->IsPresentWaitUnattachedForSwapchain())) {
+				lifetimesRetained, cs_WantPresentWaitSignal(dxvk))) {
 			g_sl.dlssgTaggedThisFrame = true;
 		} else {
 			if (!lifetimesRetained)
@@ -2100,9 +2106,7 @@ void Streamline::ClearDLSSGTags()
 		bool lifetimesRetained = false;
 		if (cs_SubmitPresentTags(dxvk, *token, g_sl.viewport, tags,
 				static_cast<uint32_t>(std::size(tags)), nullptr, 0, nullptr, 0, tagResult,
-				lifetimesRetained,
-				g_dlssgCurrentlyLoaded.load(std::memory_order_acquire) &&
-					!dxvk->IsPresentWaitUnattachedForSwapchain())) {
+				lifetimesRetained, cs_WantPresentWaitSignal(dxvk))) {
 			g_sl.dlssgTaggedThisFrame = true;
 		} else {
 			logger::error("[Streamline] DLSS-G passthrough tag submission failed (result {})",

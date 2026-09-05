@@ -1678,11 +1678,9 @@ void DXVKInterop::NotifyPresentWaitQueued()
 		// carried this one-shot semaphore may already have signalled it, and no present will
 		// ever wait on it now. A signalled binary semaphore cannot legally be re-signalled, so
 		// the slot's semaphore has to be replaced before the slot is reused. Replacing just this
-		// semaphore is sufficient; previously this path faulted the whole ring instead, which
-		// destroyed and recreated every command buffer, fence and semaphore once per unconsumed
-		// present. Under a present stall that repeated every frame - thousands of times a
-		// session - and kept frame generation from ever engaging while the game kept
-		// rendering, so it also read as a false pass in the freeze harness.
+		// semaphore is sufficient: faulting the whole ring here instead destroyed and recreated
+		// every command buffer, fence and semaphore once per unconsumed present, which under a
+		// present stall repeated every frame and kept frame generation from ever engaging.
 		VkSemaphore& stale = presentWaitSemaphores[slot];
 		const VulkanVoidAttempt destroyAttempt = DestroySemaphoreSEH(device, stale);
 		if (!destroyAttempt.completed) {
@@ -1712,8 +1710,13 @@ void DXVKInterop::NotifyPresentWaitQueued()
 		// A present went by without taking this semaphore, so the presenter is not attaching
 		// present-wait semaphores to this swapchain. Stop asking for one until it is recreated;
 		// otherwise every subsequent present orphans another.
-		if (!std::exchange(presentWaitUnattachedForSwapchain, true))
-			logger::warn("[DXVKInterop] replaced an unpresented one-shot semaphore (slot {}); presenter is not attaching present-wait semaphores to this swapchain, suppressing until recreate", slot);
+		if (!std::exchange(presentWaitUnattachedForSwapchain, true)) {
+			logger::warn(
+				"[DXVKInterop] replaced an unpresented one-shot semaphore (slot {}); "
+				"presenter is not attaching present-wait semaphores to this swapchain, "
+				"suppressing until recreate",
+				slot);
+		}
 		return;
 	}
 	latchTerminalFault(stateAttempt.state == kPresentWaitUncertain ?
