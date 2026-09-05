@@ -117,20 +117,12 @@ jobs:
                           errors.append(f'{path.name}: Root must be a JSON object')
                           continue
 
-                      # Check for keys not in en.json (stale/typo keys)
+                      # Check for keys not in en.json (stale/typo keys) -- run
+                      # tools/sort-i18n.py --write --prune-extra to fix.
                       locale_keys = {k for k in data if k != '_meta'}
                       extra_keys = locale_keys - en_keys
                       if extra_keys:
                           errors.append(f'{path.name}: {len(extra_keys)} key(s) not in en.json: {sorted(extra_keys)[:5]}')
-
-                      # Check placeholder consistency
-                      import re
-                      placeholder_re = re.compile(r'\{(\w+)\}')
-                      for key in locale_keys & en_keys:
-                          en_placeholders = set(placeholder_re.findall(en_data[key]))
-                          locale_placeholders = set(placeholder_re.findall(data[key]))
-                          if en_placeholders != locale_placeholders:
-                              errors.append(f'{path.name}: Key \"{key}\" has mismatched placeholders: expected {en_placeholders}, got {locale_placeholders}')
 
                   if errors:
                       print(f'Found {len(errors)} error(s):')
@@ -140,3 +132,84 @@ jobs:
                   else:
                       print(f'All translation files valid. Checked {len(list(translations_dir.glob(\"*.json\"))) - 1} locale(s).')
                   "
+
+            - name: Check translation placeholder consistency
+              id: placeholder_check
+              continue-on-error: true
+              run: |
+                  python -c "
+                  import json, re, sys, pathlib
+
+                  translations_dir = pathlib.Path('package/SKSE/Plugins/CommunityShaders/Translations')
+                  en_path = translations_dir / 'en.json'
+                  with open(en_path, encoding='utf-8') as f:
+                      en_data = json.load(f)
+                  en_keys = {k for k in en_data if k != '_meta'}
+
+                  placeholder_re = re.compile(r'\{(\w+)\}')
+                  mismatches = []
+                  for path in sorted(translations_dir.glob('*.json')):
+                      if path.name == 'en.json':
+                          continue
+                      with open(path, encoding='utf-8') as f:
+                          data = json.load(f)
+                      locale_keys = {k for k in data if k != '_meta'}
+                      # An empty value means untranslated (I18n::Get() falls back to
+                      # English for these at runtime) -- not a real mismatch, skip it.
+                      for key in locale_keys & en_keys:
+                          if not data[key]:
+                              continue
+                          en_placeholders = set(placeholder_re.findall(en_data[key]))
+                          locale_placeholders = set(placeholder_re.findall(data[key]))
+                          if en_placeholders != locale_placeholders:
+                              mismatches.append(f'{path.name}: Key \"{key}\" has mismatched placeholders: expected {en_placeholders}, got {locale_placeholders}')
+
+                  if mismatches:
+                      print(f'Found {len(mismatches)} placeholder mismatch(es):')
+                      for m in mismatches:
+                          print(f'  - {m}')
+                      sys.exit(1)
+                  else:
+                      print('All translated placeholders match en.json.')
+                  "
+
+            - name: Comment on translation placeholder mismatch
+              if: ${{ steps.placeholder_check.outcome == 'failure' }}
+              continue-on-error: true
+              uses: actions/github-script@v9
+              with:
+                  script: |
+                      const marker = '<!-- placeholder-check-warning -->';
+                      const body = [
+                          marker,
+                          'Some translated strings have placeholders (`{version}`, `{name}`, ...) that don\'t match `en.json`.',
+                          '',
+                          'This does not block the PR -- it usually means a community translation hasn\'t caught up with a recent source string change yet. See the "Check translation placeholder consistency" job output for the full list.'
+                      ].join('\n');
+                      const comments = await github.paginate(
+                          github.rest.issues.listComments,
+                          {
+                              owner: context.repo.owner,
+                              repo: context.repo.repo,
+                              issue_number: context.issue.number,
+                              per_page: 100
+                          }
+                      );
+                      const comment = comments.find(comment =>
+                          comment.user.type === 'Bot' && comment.body.includes(marker)
+                      );
+                      if (comment) {
+                          await github.rest.issues.updateComment({
+                              owner: context.repo.owner,
+                              repo: context.repo.repo,
+                              comment_id: comment.id,
+                              body
+                          });
+                      } else {
+                          await github.rest.issues.createComment({
+                              owner: context.repo.owner,
+                              repo: context.repo.repo,
+                              issue_number: context.issue.number,
+                              body
+                          });
+                      }
