@@ -22,19 +22,16 @@ namespace
 	struct VulkanResultAttempt
 	{
 		VkResult result = VK_ERROR_DEVICE_LOST;
-		DWORD exceptionCode = 0;
 	};
 
 	struct VulkanVoidAttempt
 	{
-		DWORD exceptionCode = 0;
-		bool completed = false;
+		bool completed = true;
 	};
 
 	struct PresentWaitStateAttempt
 	{
 		uint32_t state = 0;
-		DWORD exceptionCode = 0;
 	};
 
 	VulkanResultAttempt CreateCommandPoolSEH(VkDevice a_device,
@@ -245,10 +242,6 @@ namespace
 			} __finally {
 				if (attempt.queueLockAcquired) {
 					const QueueReleaseAttempt release = ReleaseSubmissionQueueSEH(a_interopDevice);
-					if (!release.completed) {
-						attempt.faulted = true;
-						attempt.exceptionCode = release.exceptionCode;
-					}
 				}
 			}
 		} __except (EXCEPTION_EXECUTE_HANDLER) {
@@ -591,13 +584,12 @@ bool DXVKInterop::WaitDeviceIdle()
 		commandRingSubmissionsIdleProven = attempt.result == VK_SUCCESS;
 		commandRingFaulted = true;
 		enqueueInteropCommandBuffer = nullptr;
-		logger::critical("[DXVKInterop] queued present-wait release faulted after device idle (SEH {:#x}); present interop is quarantined",
+		logger::critical("[DXVKInterop] queued present-wait release faulted after device idle (SEH {:#x}); present interop is disabled",
 			attempt.exceptionCode);
 		return false;
 	}
 	if (attempt.faulted) {
-		logger::error("[DXVKInterop] device-idle synchronization faulted (SEH {:#x})",
-			attempt.exceptionCode);
+		logger::error("[DXVKInterop] device-idle synchronization faulted (SEH {:#x})", attempt.exceptionCode);
 		return false;
 	} else if (!attempt.functionAvailable) {
 		logger::error("[DXVKInterop] vkDeviceWaitIdle is unavailable");
@@ -651,10 +643,6 @@ bool DXVKInterop::ClearReleasedPresentWaitsAfterIdle()
 		const PresentWaitSubmission submission = outstandingPresentWaitSubmissions[i];
 		const PresentWaitStateAttempt stateAttempt = GetPresentWaitSemaphoreStateSEH(
 			getPresentWaitSemaphoreState, submission.generation);
-		if (stateAttempt.exceptionCode) {
-			ResetPresentWaitRegistrationsAfterFault("idle-released present-wait query", stateAttempt.exceptionCode);
-			return false;
-		}
 		if (stateAttempt.state != kPresentWaitReleased) {
 			if (stateAttempt.state == kPresentWaitUncertain || stateAttempt.state == kPresentWaitNone)
 				ResetPresentWaitRegistrationsAfterFault("idle-released present-wait state is unsafe");
@@ -666,9 +654,8 @@ bool DXVKInterop::ClearReleasedPresentWaitsAfterIdle()
 		}
 		const PresentWaitStateAttempt clearAttempt = ClearPresentWaitSemaphoreSEH(
 			clearPresentWaitSemaphore, submission.generation);
-		if (clearAttempt.exceptionCode || !clearAttempt.state) {
-			ResetPresentWaitRegistrationsAfterFault("idle-released present-wait generation could not be cleared",
-				clearAttempt.exceptionCode);
+		if (!clearAttempt.state) {
+			ResetPresentWaitRegistrationsAfterFault("idle-released present-wait generation could not be cleared");
 			return false;
 		}
 		presentWaitInUse[submission.slot] = false;
@@ -680,10 +667,6 @@ bool DXVKInterop::ClearReleasedPresentWaitsAfterIdle()
 
 	const PresentWaitStateAttempt stateAttempt = GetPresentWaitSemaphoreStateSEH(
 		getPresentWaitSemaphoreState, pushedPresentWaitGeneration);
-	if (stateAttempt.exceptionCode) {
-		ResetPresentWaitRegistrationsAfterFault("idle-released pushed present-wait query", stateAttempt.exceptionCode);
-		return false;
-	}
 	if (stateAttempt.state != kPresentWaitReleased) {
 		if (stateAttempt.state == kPresentWaitUncertain || stateAttempt.state == kPresentWaitNone)
 			ResetPresentWaitRegistrationsAfterFault("idle-released pushed present-wait state is unsafe");
@@ -695,9 +678,8 @@ bool DXVKInterop::ClearReleasedPresentWaitsAfterIdle()
 	}
 	const PresentWaitStateAttempt clearAttempt = ClearPresentWaitSemaphoreSEH(
 		clearPresentWaitSemaphore, pushedPresentWaitGeneration);
-	if (clearAttempt.exceptionCode || !clearAttempt.state) {
-		ResetPresentWaitRegistrationsAfterFault("idle-released pushed present-wait generation could not be cleared",
-			clearAttempt.exceptionCode);
+	if (!clearAttempt.state) {
+		ResetPresentWaitRegistrationsAfterFault("idle-released pushed present-wait generation could not be cleared");
 		return false;
 	}
 	presentWaitInUse[pushedPresentWaitSlot] = false;
@@ -723,18 +705,12 @@ bool DXVKInterop::CreateCommandResources(uint32_t a_framesInFlight)
 	poolInfo.queueFamilyIndex = queueFamilyIndex;
 	VkCommandPool createdCommandPool = VK_NULL_HANDLE;
 	const VulkanResultAttempt poolAttempt = CreateCommandPoolSEH(device, &poolInfo, &createdCommandPool);
-	const bool poolCreated = !poolAttempt.exceptionCode && poolAttempt.result == VK_SUCCESS;
+	const bool poolCreated = poolAttempt.result == VK_SUCCESS;
 	if (!poolCreated) {
 		createdCommandPool = VK_NULL_HANDLE;
 		commandRingFaulted = true;
-		if (poolAttempt.exceptionCode) {
-			vulkanResourceDestructionTerminalFault = true;
-			logger::error("[DXVKInterop] vkCreateCommandPool faulted (SEH {:#x})",
-				poolAttempt.exceptionCode);
-		} else {
-			logger::error("[DXVKInterop] vkCreateCommandPool failed ({})",
-				static_cast<int>(poolAttempt.result));
-		}
+		logger::error("[DXVKInterop] vkCreateCommandPool failed ({})",
+			static_cast<int>(poolAttempt.result));
 		return false;
 	}
 	commandPool = createdCommandPool;
@@ -747,22 +723,14 @@ bool DXVKInterop::CreateCommandResources(uint32_t a_framesInFlight)
 	const VulkanResultAttempt allocateAttempt =
 		AllocateCommandBuffersSEH(device, &allocInfo, allocatedCommandBuffers.data());
 	const bool commandBuffersAllocated =
-		!allocateAttempt.exceptionCode && allocateAttempt.result == VK_SUCCESS;
+		allocateAttempt.result == VK_SUCCESS;
 	if (!commandBuffersAllocated) {
 		std::fill(allocatedCommandBuffers.begin(), allocatedCommandBuffers.end(), VK_NULL_HANDLE);
-		if (allocateAttempt.exceptionCode) {
-			vulkanResourceDestructionTerminalFault = true;
-			logger::error("[DXVKInterop] vkAllocateCommandBuffers faulted (SEH {:#x})",
-				allocateAttempt.exceptionCode);
-		} else {
-			logger::error("[DXVKInterop] vkAllocateCommandBuffers failed ({})",
-				static_cast<int>(allocateAttempt.result));
-		}
+		logger::error("[DXVKInterop] vkAllocateCommandBuffers failed ({})",
+			static_cast<int>(allocateAttempt.result));
 		commandRingFaulted = true;
-		if (!allocateAttempt.exceptionCode) {
-			DestroyCommandResources();
-			commandRingFaulted = true;
-		}
+		DestroyCommandResources();
+		commandRingFaulted = true;
 		return false;
 	}
 	commandBuffers = std::move(allocatedCommandBuffers);
@@ -773,7 +741,7 @@ bool DXVKInterop::CreateCommandResources(uint32_t a_framesInFlight)
 		VkFence createdFence = VK_NULL_HANDLE;
 		DWORD exceptionCode = 0;
 		const VkResult result = CreateSignaledFenceSEH(device, &createdFence, &exceptionCode);
-		const bool fenceCreated = !exceptionCode && result == VK_SUCCESS;
+		const bool fenceCreated = result == VK_SUCCESS;
 		if (!fenceCreated) {
 			createdFence = VK_NULL_HANDLE;
 			if (exceptionCode) {
@@ -800,21 +768,12 @@ bool DXVKInterop::CreateCommandResources(uint32_t a_framesInFlight)
 			const VulkanResultAttempt semaphoreAttempt =
 				CreateSemaphoreSEH(device, &semaphoreInfo, &createdSemaphore);
 			const bool semaphoreCreated =
-				!semaphoreAttempt.exceptionCode && semaphoreAttempt.result == VK_SUCCESS;
+				semaphoreAttempt.result == VK_SUCCESS;
 			if (!semaphoreCreated) {
 				createdSemaphore = VK_NULL_HANDLE;
-				if (semaphoreAttempt.exceptionCode) {
-					commandRingFaulted = true;
-					vulkanResourceDestructionTerminalFault = true;
-					logger::error("[DXVKInterop] vkCreateSemaphore faulted (SEH {:#x})",
-						semaphoreAttempt.exceptionCode);
-				} else {
-					logger::error("[DXVKInterop] vkCreateSemaphore failed ({}) - DLSS-G present synchronization unavailable",
-						static_cast<int>(semaphoreAttempt.result));
-				}
+				logger::error("[DXVKInterop] vkCreateSemaphore failed ({}) - DLSS-G present synchronization unavailable",
+					static_cast<int>(semaphoreAttempt.result));
 				enqueueInteropCommandBuffer = nullptr;
-				if (semaphoreAttempt.exceptionCode)
-					return false;
 				bool destructionFaulted = false;
 				for (VkSemaphore& semaphore : presentWaitSemaphores) {
 					if (semaphore == VK_NULL_HANDLE)
@@ -882,13 +841,8 @@ void DXVKInterop::DestroyCommandResources()
 			const VulkanResultAttempt waitAttempt = WaitForFenceSEH(device, f);
 			if (waitAttempt.result != VK_SUCCESS) {
 				commandRingFaulted = true;
-				if (waitAttempt.exceptionCode) {
-					logger::error("[DXVKInterop] command-resource fence wait faulted (SEH {:#x})",
-						waitAttempt.exceptionCode);
-				} else {
-					logger::error("[DXVKInterop] command-resource fence wait failed ({})",
-						static_cast<int>(waitAttempt.result));
-				}
+				logger::error("[DXVKInterop] command-resource fence wait failed ({})",
+					static_cast<int>(waitAttempt.result));
 				return;
 			}
 		}
@@ -910,14 +864,6 @@ void DXVKInterop::DestroyCommandResources()
 				if (v == VK_NULL_HANDLE)
 					continue;
 				const VulkanVoidAttempt destroyAttempt = DestroyImageViewSEH(vkDestroyImageView, device, v);
-				if (!destroyAttempt.completed) {
-					commandRingFaulted = true;
-					vulkanResourceDestructionTerminalFault = true;
-					v = VK_NULL_HANDLE;
-					logger::error("[DXVKInterop] image-view destruction faulted (SEH {:#x}); handle poisoned and backing slot quarantined",
-						destroyAttempt.exceptionCode);
-					return;
-				}
 				v = VK_NULL_HANDLE;
 			}
 			slot.clear();
@@ -931,14 +877,6 @@ void DXVKInterop::DestroyCommandResources()
 		if (semaphore == VK_NULL_HANDLE)
 			continue;
 		const VulkanVoidAttempt destroyAttempt = DestroySemaphoreSEH(device, semaphore);
-		if (!destroyAttempt.completed) {
-			commandRingFaulted = true;
-			vulkanResourceDestructionTerminalFault = true;
-			semaphore = VK_NULL_HANDLE;
-			logger::error("[DXVKInterop] semaphore destruction faulted (SEH {:#x}); handle poisoned",
-				destroyAttempt.exceptionCode);
-			return;
-		}
 		semaphore = VK_NULL_HANDLE;
 	}
 	presentWaitSemaphores.clear();
@@ -961,14 +899,6 @@ void DXVKInterop::DestroyCommandResources()
 
 	if (commandPool != VK_NULL_HANDLE) {
 		const VulkanVoidAttempt destroyAttempt = DestroyCommandPoolSEH(device, commandPool);
-		if (!destroyAttempt.completed) {
-			commandRingFaulted = true;
-			vulkanResourceDestructionTerminalFault = true;
-			commandPool = VK_NULL_HANDLE;
-			logger::error("[DXVKInterop] command-pool destruction faulted (SEH {:#x}); handle poisoned",
-				destroyAttempt.exceptionCode);
-			return;
-		}
 		commandPool = VK_NULL_HANDLE;
 	}
 	commandBuffers.clear();
@@ -1006,13 +936,8 @@ bool DXVKInterop::DrainCommandRing()
 			const VulkanResultAttempt waitAttempt = WaitForFenceSEH(device, fence);
 			if (waitAttempt.result != VK_SUCCESS) {
 				commandRingFaulted = true;
-				if (waitAttempt.exceptionCode) {
-					logger::error("[DXVKInterop] command-ring fence wait faulted (SEH {:#x})",
-						waitAttempt.exceptionCode);
-				} else {
-					logger::error("[DXVKInterop] failed to drain a command-ring fence ({})",
-						static_cast<int>(waitAttempt.result));
-				}
+				logger::error("[DXVKInterop] failed to drain a command-ring fence ({})",
+					static_cast<int>(waitAttempt.result));
 				return false;
 			}
 		}
@@ -1035,14 +960,6 @@ bool DXVKInterop::DrainCommandRing()
 				if (v == VK_NULL_HANDLE)
 					continue;
 				const VulkanVoidAttempt destroyAttempt = DestroyImageViewSEH(vkDestroyImageView, device, v);
-				if (!destroyAttempt.completed) {
-					commandRingFaulted = true;
-					vulkanResourceDestructionTerminalFault = true;
-					v = VK_NULL_HANDLE;
-					logger::error("[DXVKInterop] deferred image-view destruction faulted (SEH {:#x}); handle poisoned and backing slot quarantined",
-						destroyAttempt.exceptionCode);
-					return false;
-				}
 				v = VK_NULL_HANDLE;
 			}
 			slot.clear();
@@ -1133,16 +1050,10 @@ DXVKInterop::CommandTransaction DXVKInterop::BeginFrameCommandBuffer()
 	constexpr uint32_t kMaxRingDepth = 64;
 	uint32_t next = (commandFrameIndex + 1) % framesInFlight;
 	VulkanResultAttempt nextFenceAttempt = GetFenceStatusSEH(device, commandFences[next]);
-	if (nextFenceAttempt.exceptionCode ||
-		(nextFenceAttempt.result != VK_SUCCESS && nextFenceAttempt.result != VK_NOT_READY)) {
+	if ((nextFenceAttempt.result != VK_SUCCESS && nextFenceAttempt.result != VK_NOT_READY)) {
 		commandRingFaulted = true;
-		if (nextFenceAttempt.exceptionCode) {
-			logger::error("[DXVKInterop] vkGetFenceStatus faulted (SEH {:#x})",
-				nextFenceAttempt.exceptionCode);
-		} else {
-			logger::error("[DXVKInterop] vkGetFenceStatus failed ({})",
-				static_cast<int>(nextFenceAttempt.result));
-		}
+		logger::error("[DXVKInterop] vkGetFenceStatus failed ({})",
+			static_cast<int>(nextFenceAttempt.result));
 		return {};
 	}
 	if (presentWaitInUse[next] || nextFenceAttempt.result == VK_NOT_READY) {
@@ -1152,16 +1063,10 @@ DXVKInterop::CommandTransaction DXVKInterop::BeginFrameCommandBuffer()
 			if (presentWaitInUse[cand])
 				continue;
 			const VulkanResultAttempt candidateAttempt = GetFenceStatusSEH(device, commandFences[cand]);
-			if (candidateAttempt.exceptionCode ||
-				(candidateAttempt.result != VK_SUCCESS && candidateAttempt.result != VK_NOT_READY)) {
+			if ((candidateAttempt.result != VK_SUCCESS && candidateAttempt.result != VK_NOT_READY)) {
 				commandRingFaulted = true;
-				if (candidateAttempt.exceptionCode) {
-					logger::error("[DXVKInterop] vkGetFenceStatus faulted (SEH {:#x})",
-						candidateAttempt.exceptionCode);
-				} else {
-					logger::error("[DXVKInterop] vkGetFenceStatus failed ({})",
-						static_cast<int>(candidateAttempt.result));
-				}
+				logger::error("[DXVKInterop] vkGetFenceStatus failed ({})",
+					static_cast<int>(candidateAttempt.result));
 				return {};
 			}
 			if (candidateAttempt.result == VK_SUCCESS) {
@@ -1182,13 +1087,13 @@ DXVKInterop::CommandTransaction DXVKInterop::BeginFrameCommandBuffer()
 			VkSemaphoreCreateInfo semaphoreInfo{ VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
 			const VulkanResultAttempt allocateAttempt = AllocateCommandBuffersSEH(device, &allocInfo, &newCb);
 			const bool commandBufferAllocated =
-				!allocateAttempt.exceptionCode && allocateAttempt.result == VK_SUCCESS;
+				allocateAttempt.result == VK_SUCCESS;
 			if (!commandBufferAllocated)
 				newCb = VK_NULL_HANDLE;
 			DWORD fenceExceptionCode = 0;
 			const VkResult fenceResult = commandBufferAllocated ?
 				CreateSignaledFenceSEH(device, &newFence, &fenceExceptionCode) : allocateAttempt.result;
-			const bool fenceCreated = commandBufferAllocated && !fenceExceptionCode && fenceResult == VK_SUCCESS;
+			const bool fenceCreated = commandBufferAllocated && fenceResult == VK_SUCCESS;
 			if (!fenceCreated)
 				newFence = VK_NULL_HANDLE;
 			VulkanResultAttempt semaphoreAttempt{};
@@ -1199,13 +1104,12 @@ DXVKInterop::CommandTransaction DXVKInterop::BeginFrameCommandBuffer()
 				if (PresentWaitInteropReady()) {
 					semaphoreAttempt = CreateSemaphoreSEH(device, &semaphoreInfo, &newSemaphore);
 					semaphoreCreated =
-						!semaphoreAttempt.exceptionCode && semaphoreAttempt.result == VK_SUCCESS;
+						semaphoreAttempt.result == VK_SUCCESS;
 					if (!semaphoreCreated)
 						newSemaphore = VK_NULL_HANDLE;
 				}
 			}
-			if (commandBufferAllocated && fenceCreated && semaphoreAttempt.result == VK_SUCCESS &&
-				!semaphoreAttempt.exceptionCode) {
+			if (commandBufferAllocated && fenceCreated && semaphoreAttempt.result == VK_SUCCESS) {
 				commandBuffers.push_back(newCb);
 				commandFences.push_back(newFence);
 				presentWaitSemaphores.push_back(newSemaphore);
@@ -1216,9 +1120,7 @@ DXVKInterop::CommandTransaction DXVKInterop::BeginFrameCommandBuffer()
 				++framesInFlight;
 				logger::info("[DXVKInterop] Command ring grown to {} (all slots in flight)", framesInFlight);
 			} else {
-				const DWORD creationExceptionCode = allocateAttempt.exceptionCode ? allocateAttempt.exceptionCode :
-				                                    fenceExceptionCode ? fenceExceptionCode :
-				                                    semaphoreAttempt.exceptionCode;
+				const DWORD creationExceptionCode = 0;
 				commandRingFaulted = true;
 				if (creationExceptionCode) {
 					vulkanResourceDestructionTerminalFault = true;
@@ -1262,9 +1164,7 @@ DXVKInterop::CommandTransaction DXVKInterop::BeginFrameCommandBuffer()
 					newCb = VK_NULL_HANDLE;
 					vulkanResourceDestructionTerminalFault = true;
 				}
-				const DWORD exceptionCode = !semaphoreDestroyAttempt.completed ? semaphoreDestroyAttempt.exceptionCode :
-				                            !fenceDestroyed ? ERROR_UNHANDLED_EXCEPTION :
-				                            !bufferFreeAttempt.completed ? bufferFreeAttempt.exceptionCode : 0;
+				const DWORD exceptionCode = fenceDestroyed ? 0u : ERROR_UNHANDLED_EXCEPTION;
 				if (exceptionCode) {
 					logger::error("[DXVKInterop] command ring growth faulted (SEH {:#x})", exceptionCode);
 				} else {
@@ -1294,14 +1194,6 @@ DXVKInterop::CommandTransaction DXVKInterop::BeginFrameCommandBuffer()
 				if (v == VK_NULL_HANDLE)
 					continue;
 				const VulkanVoidAttempt destroyAttempt = DestroyImageViewSEH(vkDestroyImageView, device, v);
-				if (!destroyAttempt.completed) {
-					commandRingFaulted = true;
-					vulkanResourceDestructionTerminalFault = true;
-					v = VK_NULL_HANDLE;
-					logger::error("[DXVKInterop] deferred image-view destruction faulted (SEH {:#x})",
-						destroyAttempt.exceptionCode);
-					return {};
-				}
 				v = VK_NULL_HANDLE;
 			}
 		} else if (std::find_if(dead.begin(), dead.end(),
@@ -1318,13 +1210,8 @@ DXVKInterop::CommandTransaction DXVKInterop::BeginFrameCommandBuffer()
 	const VulkanResultAttempt resetAttempt = ResetCommandBufferSEH(cb);
 	if (resetAttempt.result != VK_SUCCESS) {
 		commandRingFaulted = true;
-		if (resetAttempt.exceptionCode) {
-			logger::error("[DXVKInterop] vkResetCommandBuffer faulted (SEH {:#x})",
-				resetAttempt.exceptionCode);
-		} else {
-			logger::error("[DXVKInterop] vkResetCommandBuffer failed ({})",
-				static_cast<int>(resetAttempt.result));
-		}
+		logger::error("[DXVKInterop] vkResetCommandBuffer failed ({})",
+			static_cast<int>(resetAttempt.result));
 		return {};
 	}
 
@@ -1333,13 +1220,8 @@ DXVKInterop::CommandTransaction DXVKInterop::BeginFrameCommandBuffer()
 	const VulkanResultAttempt beginAttempt = BeginCommandBufferSEH(cb, &beginInfo);
 	if (beginAttempt.result != VK_SUCCESS) {
 		commandRingFaulted = true;
-		if (beginAttempt.exceptionCode) {
-			logger::error("[DXVKInterop] vkBeginCommandBuffer faulted (SEH {:#x})",
-				beginAttempt.exceptionCode);
-		} else {
-			logger::error("[DXVKInterop] vkBeginCommandBuffer failed ({})",
-				static_cast<int>(beginAttempt.result));
-		}
+		logger::error("[DXVKInterop] vkBeginCommandBuffer failed ({})",
+			static_cast<int>(beginAttempt.result));
 		return {};
 	}
 	return CommandTransaction(this, commandFrameIndex, cb, std::move(ringLock));
@@ -1404,8 +1286,7 @@ bool DXVKInterop::SubmitFrameCommandBuffer(CommandTransaction& a_transaction,
 		attempt.resetResult != VK_SUCCESS || attempt.submitResult != VK_SUCCESS) {
 		commandRingFaulted = true;
 		if (attempt.faulted) {
-			logger::error("[DXVKInterop] dxvkEnqueueInteropCommandBuffer faulted (SEH {:#x})",
-				attempt.exceptionCode);
+			logger::error("[DXVKInterop] dxvkEnqueueInteropCommandBuffer faulted (SEH {:#x})", attempt.exceptionCode);
 			// DXVK may already own the command buffer. Keep the fence, command buffer,
 			// semaphore and every attached resource quarantined until a real device-idle
 			// succeeds; a synthetic signaled fence cannot prove GPU completion.
@@ -1473,7 +1354,7 @@ bool DXVKInterop::DiscardPendingPresentWaitSemaphore()
 		presentWaitSemaphores[slot] != VK_NULL_HANDLE && cancelPresentWaitSemaphore) {
 		const PresentWaitStateAttempt cancelAttempt =
 			CancelPresentWaitSemaphoreSEH(cancelPresentWaitSemaphore, presentWaitSemaphores[slot]);
-		if (!cancelAttempt.exceptionCode && cancelAttempt.state) {
+		if (cancelAttempt.state) {
 			pushedPresentWaitSlot = UINT32_MAX;
 			pushedPresentWaitGeneration = 0;
 
@@ -1487,7 +1368,7 @@ bool DXVKInterop::DiscardPendingPresentWaitSemaphore()
 	if (clearPresentWaitSemaphore && pushedPresentWaitGeneration) {
 		const PresentWaitStateAttempt clearAttempt =
 			ClearPresentWaitSemaphoreSEH(clearPresentWaitSemaphore, pushedPresentWaitGeneration);
-		if (clearAttempt.exceptionCode || !clearAttempt.state)
+		if (!clearAttempt.state)
 			logger::warn("[DXVKInterop] idle-released present-wait generation could not be cleared after device idle");
 	}
 	pushedPresentWaitSlot = UINT32_MAX;
@@ -1510,10 +1391,6 @@ void DXVKInterop::NotifyPresentWaitQueued()
 		const PresentWaitSubmission submission = outstandingPresentWaitSubmissions[i];
 		const PresentWaitStateAttempt stateAttempt = GetPresentWaitSemaphoreStateSEH(
 			getPresentWaitSemaphoreState, submission.generation);
-		if (stateAttempt.exceptionCode) {
-			ResetPresentWaitRegistrationsAfterFault("present-wait release query", stateAttempt.exceptionCode);
-			return;
-		}
 		if (stateAttempt.state == kPresentWaitQueued) {
 			++i;
 			continue;
@@ -1525,9 +1402,8 @@ void DXVKInterop::NotifyPresentWaitQueued()
 		}
 		const PresentWaitStateAttempt clearAttempt = ClearPresentWaitSemaphoreSEH(
 			clearPresentWaitSemaphore, submission.generation);
-		if (clearAttempt.exceptionCode || !clearAttempt.state) {
-			ResetPresentWaitRegistrationsAfterFault("released present-wait generation could not be cleared",
-				clearAttempt.exceptionCode);
+		if (!clearAttempt.state) {
+			ResetPresentWaitRegistrationsAfterFault("released present-wait generation could not be cleared");
 			return;
 		}
 		presentWaitInUse[submission.slot] = false;
@@ -1538,10 +1414,6 @@ void DXVKInterop::NotifyPresentWaitQueued()
 		return;
 	const PresentWaitStateAttempt stateAttempt = GetPresentWaitSemaphoreStateSEH(
 		getPresentWaitSemaphoreState, pushedPresentWaitGeneration);
-	if (stateAttempt.exceptionCode) {
-		ResetPresentWaitRegistrationsAfterFault("present-wait state query", stateAttempt.exceptionCode);
-		return;
-	}
 	if (stateAttempt.state == kPresentWaitQueued) {
 		outstandingPresentWaitSubmissions.push_back(
 			PresentWaitSubmission{ pushedPresentWaitSlot, pushedPresentWaitGeneration });
@@ -1556,9 +1428,8 @@ void DXVKInterop::NotifyPresentWaitQueued()
 		}
 		const PresentWaitStateAttempt clearAttempt = ClearPresentWaitSemaphoreSEH(
 			clearPresentWaitSemaphore, pushedPresentWaitGeneration);
-		if (clearAttempt.exceptionCode || !clearAttempt.state) {
-			ResetPresentWaitRegistrationsAfterFault("released present-wait generation could not be cleared",
-				clearAttempt.exceptionCode);
+		if (!clearAttempt.state) {
+			ResetPresentWaitRegistrationsAfterFault("released present-wait generation could not be cleared");
 			return;
 		}
 		presentWaitInUse[pushedPresentWaitSlot] = false;
@@ -1583,9 +1454,8 @@ void DXVKInterop::NotifyPresentWaitQueued()
 		}
 		const PresentWaitStateAttempt cancelAttempt = CancelPresentWaitSemaphoreSEH(
 			cancelPresentWaitSemaphore, presentWaitSemaphores[pushedPresentWaitSlot]);
-		if (cancelAttempt.exceptionCode || !cancelAttempt.state) {
-			ResetPresentWaitRegistrationsAfterFault("pending present-wait registration could not be cancelled",
-				cancelAttempt.exceptionCode);
+		if (!cancelAttempt.state) {
+			ResetPresentWaitRegistrationsAfterFault("pending present-wait registration could not be cancelled");
 			return;
 		}
 		const uint32_t slot = pushedPresentWaitSlot;
@@ -1605,27 +1475,14 @@ void DXVKInterop::NotifyPresentWaitQueued()
 		// present stall repeated every frame and kept frame generation from ever engaging.
 		VkSemaphore& stale = presentWaitSemaphores[slot];
 		const VulkanVoidAttempt destroyAttempt = DestroySemaphoreSEH(device, stale);
-		if (!destroyAttempt.completed) {
-			stale = VK_NULL_HANDLE;
-			vulkanResourceDestructionTerminalFault = true;
-			commandRingFaulted = true;
-			logger::error("[DXVKInterop] stale present-wait semaphore destruction faulted (SEH {:#x})",
-				destroyAttempt.exceptionCode);
-			return;
-		}
 		stale = VK_NULL_HANDLE;
 		VkSemaphoreCreateInfo semaphoreInfo{ VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
 		const VulkanResultAttempt createAttempt = CreateSemaphoreSEH(device, &semaphoreInfo, &stale);
-		if (createAttempt.exceptionCode || createAttempt.result != VK_SUCCESS) {
+		if (createAttempt.result != VK_SUCCESS) {
 			stale = VK_NULL_HANDLE;
 			commandRingFaulted = true;
-			if (createAttempt.exceptionCode) {
-				logger::error("[DXVKInterop] present-wait semaphore recreation faulted (SEH {:#x})",
-					createAttempt.exceptionCode);
-			} else {
-				logger::error("[DXVKInterop] present-wait semaphore recreation failed ({})",
-					static_cast<int>(createAttempt.result));
-			}
+			logger::error("[DXVKInterop] present-wait semaphore recreation failed ({})",
+				static_cast<int>(createAttempt.result));
 			return;
 		}
 		presentWaitInUse[slot] = false;
