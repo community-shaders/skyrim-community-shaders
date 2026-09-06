@@ -222,6 +222,15 @@ void Upscaling::DrawSettings()
 
 			if (cur == UpscaleMethod::kFSR)
 				ImGui::SliderFloat(T(TKEY("sharpness"), "Sharpness"), &settings.sharpnessFSR, 0.0f, 1.0f, "%.1f");
+
+			// XeSS reaches its advertised quality only on Intel Arc, where it runs on XMX units.
+			// On any other GPU it silently uses the DP4a fallback, which resolves noticeably softer
+			// than FSR at the same preset. Users reasonably read that as the upscaler being broken.
+			if (cur == UpscaleMethod::kXeSS && !streamline->IsXeSSHardwareAccelerated()) {
+				ImGui::TextWrapped("%s", T(TKEY("xess_dp4a_note"),
+					"XeSS is running its DP4a fallback: hardware acceleration needs an Intel Arc GPU. "
+					"Expect a softer image than FSR at the same preset."));
+			}
 		}
 	}
 

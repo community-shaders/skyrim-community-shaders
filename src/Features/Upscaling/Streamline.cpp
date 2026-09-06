@@ -573,6 +573,10 @@ void Streamline::SetVulkanDevice()
 		VkPhysicalDeviceProperties props{};
 		getProps(dxvk->GetPhysicalDevice(), &props);
 		isNvidiaGPU = props.vendorID == 0x10DE;
+		// XeSS only runs its XMX path on Intel Arc. Everywhere else it falls back to DP4a, which
+		// is a materially softer image at the same quality preset -- that is XeSS behaving as
+		// designed, not the integration misbehaving, and it is worth saying so in the UI.
+		isIntelGPU = props.vendorID == 0x8086;
 		isRTXBelow40Series = isNvidiaGPU &&
 		                     ((props.deviceID >= 0x2200 && props.deviceID <= 0x2600) ||   // RTX 30 (Ampere)
 								(props.deviceID >= 0x1E00 && props.deviceID <= 0x1FFF));   // RTX 20 (Turing w/ RT)
@@ -899,11 +903,17 @@ static bool cs_BuildConstants(sl::Constants& a_consts, uint32_t a_outputWidth, u
 		clipToPrevClip = Matrix::Identity;
 		prevClipToClip = Matrix::Identity;
 		a_consts.reset = sl::Boolean::eTrue;
-		static bool s_loggedSingular = false;
-		if (!s_loggedSingular) {
-			s_loggedSingular = true;
-			logger::warn("[Streamline] singular camera reprojection matrices - substituting identity "
-			             "and resetting temporal history for affected frames");
+		// This resets the upscaler's temporal history, so it matters enormously how OFTEN it happens,
+		// not merely that it happened once. Logging it one-shot hid that: an upscaler starved of
+		// history every frame produces a soft, aliased image that looks like the upscaler is bad.
+		{
+			static uint32_t s_singularCount = 0u;
+			static uint32_t s_nextReport = 1u;
+			if (++s_singularCount >= s_nextReport) {
+				s_nextReport = s_singularCount * 8u;
+				logger::warn("[Streamline] singular camera reprojection matrices on {} frame(s) so far - "
+				             "temporal history reset each time", s_singularCount);
+			}
 		}
 	}
 	a_consts.clipToPrevClip = *reinterpret_cast<const sl::float4x4*>(&clipToPrevClip);

@@ -31,6 +31,8 @@ public:
 	[[nodiscard]] bool IsReflexSupported() const { return featureReflex; }
 	[[nodiscard]] bool IsDLSSGSupported() const { return featureDLSSG; }
 	[[nodiscard]] bool IsXeSSSupported() const { return featureXeSS; }
+	/** @brief True when XeSS would use its XMX path (Intel Arc) rather than the softer DP4a fallback. */
+	[[nodiscard]] bool IsXeSSHardwareAccelerated() const { return featureXeSS && isIntelGPU; }
 	[[nodiscard]] bool IsFSRSupported() const { return featureFSR; }
 	[[nodiscard]] bool IsFSRFGSupported() const { return featureFSRFG; }
 
@@ -169,5 +171,6 @@ private:
 	bool dlssgHardware = false;
 
 	bool isNvidiaGPU = false;
+	bool isIntelGPU = false;
 	bool isRTXBelow40Series = false;
 };
