@@ -452,49 +452,26 @@ void Upscaling::PostPostLoad()
 Upscaling::UpscaleMethod Upscaling::GetUpscaleMethod() const
 {
 	auto* streamline = Streamline::GetSingleton();
-	auto* dxvk = DXVKInterop::GetSingleton();
-	if (streamline->HasDispatchFaulted() ||
-		(dxvk->IsAvailable() && !dxvk->CommandResourcesReady()))
+	if (streamline->HasDispatchFaulted())
 		return UpscaleMethod::kTAA;
 
 	auto method = static_cast<UpscaleMethod>(settings.upscaleMethod);
 	for (uint32_t fallback = 0; fallback < 3; ++fallback) {
-		if (method == UpscaleMethod::kDLSS &&
-			(!streamline->IsDLSSSupported() || IsUpscaleMethodFailed(method))) {
+		if (method == UpscaleMethod::kDLSS && !streamline->IsDLSSSupported()) {
 			method = static_cast<UpscaleMethod>(settings.upscaleMethodNoDLSS);
 			if (method == UpscaleMethod::kDLSS)
 				method = UpscaleMethod::kFSR;
 			continue;
 		}
-		if (method == UpscaleMethod::kXeSS &&
-			(!streamline->IsXeSSSupported() || IsUpscaleMethodFailed(method))) {
+		if (method == UpscaleMethod::kXeSS && !streamline->IsXeSSSupported()) {
 			method = UpscaleMethod::kFSR;
 			continue;
 		}
-		if (method == UpscaleMethod::kFSR &&
-			(!streamline->IsFSRSupported() || IsUpscaleMethodFailed(method)))
+		if (method == UpscaleMethod::kFSR && !streamline->IsFSRSupported())
 			return UpscaleMethod::kTAA;
 		return method;
 	}
 	return UpscaleMethod::kTAA;
-}
-
-bool Upscaling::IsUpscaleMethodFailed(UpscaleMethod a_method) const
-{
-	const auto index = static_cast<size_t>(a_method);
-	return index < failedUpscaleMethods.size() && failedUpscaleMethods[index];
-}
-
-void Upscaling::MarkUpscaleMethodFailed(UpscaleMethod a_method)
-{
-	const auto index = static_cast<size_t>(a_method);
-	if (index >= failedUpscaleMethods.size() || failedUpscaleMethods[index])
-		return;
-
-	failedUpscaleMethods[index] = true;
-	const char* name = a_method == UpscaleMethod::kDLSS ? "DLSS" :
-	                   a_method == UpscaleMethod::kXeSS ? "XeSS" : "FSR";
-	logger::error("[Upscaling] {} evaluation failed; disabling that backend for this session", name);
 }
 
 void Upscaling::ApplyHardwareDefaults()
@@ -1531,8 +1508,6 @@ void Upscaling::Upscale()
 
 		if (result == Streamline::EvaluationResult::kReady)
 			context->CopyResource(main.texture, upscaledTexture->resource.get());
-		else if (result == Streamline::EvaluationResult::kFailed)
-			MarkUpscaleMethodFailed(method);
 
 		state->EndPerfEvent();
 		globals::profiler->EndPass();

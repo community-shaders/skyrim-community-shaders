@@ -193,10 +193,7 @@ public:
 
 private:
 	static constexpr size_t kUpscaleMethodCount = static_cast<size_t>(UpscaleMethod::kXeSS) + 1;
-	std::array<bool, kUpscaleMethodCount> failedUpscaleMethods{};
 
-	[[nodiscard]] bool IsUpscaleMethodFailed(UpscaleMethod a_method) const;
-	void MarkUpscaleMethodFailed(UpscaleMethod a_method);
 
 	void BeginRenderFrame();
 	void CreateUpscaledTexture();
