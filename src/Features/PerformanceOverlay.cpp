@@ -325,8 +325,7 @@ void PerformanceOverlay::DrawOverlay()
 			// Measure FPS text width
 			std::string fpsText = std::format("{:.1f} ({:.2f} ms)", this->state.smoothFps, this->state.smoothFrameTimeMs);
 			if (this->state.isFrameGenerationActive) {
-				fpsText = std::format("Render FPS: {:.1f} ({:.2f} ms, sd {:.2f})", this->state.smoothFps,
-					this->state.smoothFrameTimeMs, this->state.frameTimeStdDevMs);
+				fpsText = std::format("Render FPS: {:.0f} | {:.0f} (1%L)", this->state.avgFps, this->state.low1PctFps);
 			}
 			float fpsWidth = ImGui::CalcTextSize(fpsText.c_str()).x;
 			minWidth = std::max(minWidth, fpsWidth + Settings::kLabelPadding * scale);
@@ -416,27 +415,13 @@ void PerformanceOverlay::DrawFPS()
 		ImGui::Text(this->state.isFrameGenerationActive ? T(TKEY("render_fps"), "Render FPS:") : T(TKEY("fps"), "FPS:"));
 		ImGui::TableNextColumn();
 
-		// Check if buffer is full for the avg
-		auto frameData = this->state.frameTimeHistory.GetData();
-		size_t validFrameCount = std::count_if(frameData.begin(), frameData.end(), [](float ft) { return ft > 0.0f; });
-		bool bufferIsFull = validFrameCount == frameData.size();
-
-		if (bufferIsFull) {
-			float avgFrameTime = std::accumulate(frameData.begin(), frameData.end(), 0.0f) / frameData.size();
-			float avgFps = (avgFrameTime > 0.001f) ? 1000.0f / avgFrameTime : 0.0f;
-			ImGui::Text("%.1f (%.2f ms, sd %.2f) | Avg: %.1f", this->state.smoothFps,
-				this->state.smoothFrameTimeMs, this->state.frameTimeStdDevMs, avgFps);
-		} else {
-			ImGui::Text("%.1f (%.2f ms, sd %.2f)", this->state.smoothFps,
-				this->state.smoothFrameTimeMs, this->state.frameTimeStdDevMs);
-		}
+		ImGui::Text("%.0f | %.0f (1%%L)", this->state.avgFps, this->state.low1PctFps);
 
 		if (this->state.isFrameGenerationActive) {
 			ImGui::TableNextColumn();
 			ImGui::Text(T(TKEY("true_fps"), "True FPS:"));
 			ImGui::TableNextColumn();
-			ImGui::Text("%.1f (%.2f ms, sd %.2f)", this->state.postFGSmoothFps,
-				this->state.postFGSmoothFrameTimeMs, this->state.postFGFrameTimeStdDevMs);
+			ImGui::Text("%.0f | %.0f (1%%L)", this->state.postFGAvgFps, this->state.postFGLow1PctFps);
 		}
 
 		ImGui::EndTable();
@@ -1943,6 +1928,16 @@ void PerformanceOverlay::UpdateGraphValues()
 	                  static_cast<float>(state.overlayTimingFrequency.QuadPart);
 	state.lastUpdateTime = now;
 
+	// This clock only advances while the overlay is being drawn, so closing the menu and reopening
+	// it later produces one enormous "frame" covering the whole gap -- a 29 second sample was
+	// observed. Pushed into the history it swamps the worst one percent and drags the 1% low to
+	// zero, and it poisons the min/max the graph is scaled against. It is not a frame that was
+	// ever rendered, so drop the sample and resume timing from here.
+	constexpr float kMaxPlausibleFrameMs = 500.0f;
+	if (deltaTime > kMaxPlausibleFrameMs / 1000.0f || deltaTime <= 0.0f ||
+		state.frameTimeMs > kMaxPlausibleFrameMs || state.frameTimeMs <= 0.0f)
+		return;
+
 	// Insert latest frame time into circular buffer
 	float oldFrameTime = state.frameTimeHistory.GetData()[state.frameTimeHistory.GetHeadIdx()];  // what is the point of oldFrameTime?
 	state.frameTimeHistory.Push(state.frameTimeMs);
@@ -2075,37 +2070,24 @@ void PerformanceOverlay::UpdateGraphValues()
 		s_pacingTimer += deltaTime;
 		if (s_pacingTimer >= 5.0f) {
 			s_pacingTimer = 0.0f;
-			const auto histStdDev = [](std::span<const float> a_hist) {
-				double sum = 0.0; size_t n = 0;
-				for (float s : a_hist)
-					if (s > 0.0f) { sum += s; ++n; }
-				if (n < 2) return 0.0f;
-				const double mean = sum / double(n);
-				double acc = 0.0;
-				for (float s : a_hist)
-					if (s > 0.0f) { const double d = s - mean; acc += d * d; }
-				return static_cast<float>(std::sqrt(acc / double(n - 1)));
-			};
-			const auto spread = [](std::span<const float> a_hist, float& a_p50, float& a_p99, float& a_max) {
+			// Same figures the overlay shows, so a log from a play session can be compared against
+			// what was on screen. p99 is included because it is the interval the 1% low is derived
+			// from, and it says how long the worst frames actually were.
+			const auto p99 = [](std::span<const float> a_hist) {
 				std::vector<float> v;
 				v.reserve(a_hist.size());
 				for (float s : a_hist)
 					if (s > 0.0f)
 						v.push_back(s);
-				if (v.empty()) { a_p50 = a_p99 = a_max = 0.0f; return; }
+				if (v.empty())
+					return 0.0f;
 				std::sort(v.begin(), v.end());
-				a_p50 = v[v.size() / 2];
-				a_p99 = v[static_cast<size_t>(static_cast<double>(v.size() - 1) * 0.99)];
-				a_max = v.back();
+				return v[static_cast<size_t>(static_cast<double>(v.size() - 1) * 0.99)];
 			};
-			float rp50 = 0.0f, rp99 = 0.0f, rmax = 0.0f, tp50 = 0.0f, tp99 = 0.0f, tmax = 0.0f;
-			spread(state.frameTimeHistory.GetData(), rp50, rp99, rmax);
-			spread(state.postFGFrameTimeHistory.GetData(), tp50, tp99, tmax);
-			state.frameTimeStdDevMs = histStdDev(state.frameTimeHistory.GetData());
-			state.postFGFrameTimeStdDevMs = histStdDev(state.postFGFrameTimeHistory.GetData());
 			auto& up = globals::features::upscaling;
-			logger::info("[Pacing] render p50 {:.2f} p99 {:.2f} max {:.2f} sd {:.2f} ms | true p50 {:.2f} p99 {:.2f} max {:.2f} sd {:.2f} ms | fg={} method={}",
-				rp50, rp99, rmax, state.frameTimeStdDevMs, tp50, tp99, tmax, state.postFGFrameTimeStdDevMs,
+			logger::info("[Pacing] render {:.0f} | {:.0f} (1%L), p99 {:.2f} ms | true {:.0f} | {:.0f} (1%L), p99 {:.2f} ms | fg={} method={}",
+				state.avgFps, state.low1PctFps, p99(state.frameTimeHistory.GetData()),
+				state.postFGAvgFps, state.postFGLow1PctFps, p99(state.postFGFrameTimeHistory.GetData()),
 				state.isFrameGenerationActive ? "on" : "off",
 				up.GetFrameGenMethod() == Upscaling::FrameGenMethod::kDLSSG ? "DLSS-G" : "FSR-FG");
 		}
@@ -2118,6 +2100,28 @@ void PerformanceOverlay::UpdateGraphValues()
 		state.smoothFrameTimeMs = state.frameTimeMs;
 		state.postFGSmoothFps = state.postFGFps;
 		state.postFGSmoothFrameTimeMs = state.postFGFrameTimeMs;
+
+		// Average and 1% low, the way an overlay usually reports them: the 1% low is the mean of the
+		// worst one percent of intervals, converted to a frame rate, so a handful of long frames
+		// shows up as a number instead of disappearing into the average.
+		const auto summarise = [](std::span<const float> a_hist, float& a_avgFps, float& a_lowFps) {
+			std::vector<float> v;
+			v.reserve(a_hist.size());
+			for (float s : a_hist)
+				if (s > 0.0f)
+					v.push_back(s);
+			if (v.empty()) { a_avgFps = a_lowFps = 0.0f; return; }
+			const double mean = std::accumulate(v.begin(), v.end(), 0.0) / double(v.size());
+			a_avgFps = mean > 0.001 ? static_cast<float>(1000.0 / mean) : 0.0f;
+			std::sort(v.begin(), v.end());
+			const size_t worst = std::max<size_t>(1u, v.size() / 100u);
+			const double worstMean =
+				std::accumulate(v.end() - worst, v.end(), 0.0) / double(worst);
+			a_lowFps = worstMean > 0.001 ? static_cast<float>(1000.0 / worstMean) : 0.0f;
+		};
+		summarise(state.frameTimeHistory.GetData(), state.avgFps, state.low1PctFps);
+		summarise(state.postFGFrameTimeHistory.GetData(), state.postFGAvgFps, state.postFGLow1PctFps);
+
 		state.updateTimer = 0.0f;
 	}
 }
