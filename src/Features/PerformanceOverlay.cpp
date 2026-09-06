@@ -164,7 +164,7 @@ void PerformanceOverlay::DrawSettings()
 
 		bool isFrameGenerationActive = globals::features::upscaling.IsFrameGenerationActive();
 		if (this->settings.ShowFPS && isFrameGenerationActive) {
-			ImGui::Checkbox(T(TKEY("show_pre_fg_graph"), "Show Pre-FG Frametime Graph"), &this->settings.ShowPreFGFrameTimeGraph);
+			ImGui::Checkbox(T(TKEY("show_render_graph"), "Show Render Frametime Graph"), &this->settings.ShowPreFGFrameTimeGraph);
 
 			ImGui::Checkbox(T(TKEY("show_true_graph"), "Show True Frametime Graph"), &this->settings.ShowPostFGFrameTimeGraph);
 			if (ImGui::IsItemHovered()) {
@@ -325,7 +325,7 @@ void PerformanceOverlay::DrawOverlay()
 			// Measure FPS text width
 			std::string fpsText = std::format("{:.1f} ({:.2f} ms)", this->state.smoothFps, this->state.smoothFrameTimeMs);
 			if (this->state.isFrameGenerationActive) {
-				fpsText = std::format("Render FPS: {:.0f} | {:.0f} (1%L)", this->state.avgFps, this->state.low1PctFps);
+				fpsText = std::format("Render   {:.0f}   {:.0f}  1%", this->state.avgFps, this->state.low1PctFps);
 			}
 			float fpsWidth = ImGui::CalcTextSize(fpsText.c_str()).x;
 			minWidth = std::max(minWidth, fpsWidth + Settings::kLabelPadding * scale);
@@ -407,22 +407,28 @@ void PerformanceOverlay::DrawOverlay()
 
 void PerformanceOverlay::DrawFPS()
 {
-	if (ImGui::BeginTable("FrametimeTargets", 2, ImGuiTableFlags_SizingStretchProp)) {
-		ImGui::TableSetupColumn("##prop", ImGuiTableColumnFlags_WidthFixed, ImGui::GetTextLineHeight() * 5);
-		ImGui::TableSetupColumn("##value");
+	// Label, average, 1% low. The two figures sit in their own aligned columns rather than being
+	// run together with a separator, so the rows line up and read as a small table.
+	if (ImGui::BeginTable("FpsReadout", 3, ImGuiTableFlags_SizingStretchProp)) {
+		ImGui::TableSetupColumn("##label", ImGuiTableColumnFlags_WidthFixed, ImGui::GetTextLineHeight() * 5);
+		ImGui::TableSetupColumn("##avg", ImGuiTableColumnFlags_WidthFixed, ImGui::GetTextLineHeight() * 2.5f);
+		ImGui::TableSetupColumn("##low");
 
-		ImGui::TableNextColumn();
-		ImGui::Text(this->state.isFrameGenerationActive ? T(TKEY("render_fps"), "Render FPS:") : T(TKEY("fps"), "FPS:"));
-		ImGui::TableNextColumn();
-
-		ImGui::Text("%.0f | %.0f (1%%L)", this->state.avgFps, this->state.low1PctFps);
-
-		if (this->state.isFrameGenerationActive) {
+		// Same shape as the driver overlay: average, then the 1% low tagged as such. No separator
+		// glyph between them -- the columns already keep the two figures apart and aligned.
+		const auto row = [](const char* a_label, float a_avg, float a_low) {
 			ImGui::TableNextColumn();
-			ImGui::Text(T(TKEY("true_fps"), "True FPS:"));
+			ImGui::TextUnformatted(a_label);
 			ImGui::TableNextColumn();
-			ImGui::Text("%.0f | %.0f (1%%L)", this->state.postFGAvgFps, this->state.postFGLow1PctFps);
-		}
+			ImGui::Text("%.0f", a_avg);
+			ImGui::TableNextColumn();
+			ImGui::TextDisabled("%.0f (1%%L)", a_low);
+		};
+
+		row(this->state.isFrameGenerationActive ? T(TKEY("render_fps"), "Render") : T(TKEY("fps"), "FPS"),
+			this->state.avgFps, this->state.low1PctFps);
+		if (this->state.isFrameGenerationActive)
+			row(T(TKEY("true_fps"), "True"), this->state.postFGAvgFps, this->state.postFGLow1PctFps);
 
 		ImGui::EndTable();
 	}
@@ -432,9 +438,9 @@ void PerformanceOverlay::DrawFPS()
 		// Prepare overlay text
 		char overlay_text[128];
 		snprintf(overlay_text, IM_ARRAYSIZE(overlay_text),
-			"%s%.2f ms (%.1f FPS)",
-			this->state.isFrameGenerationActive ? "Pre-FG: " : "",
-			this->state.smoothFrameTimeMs, this->state.smoothFps);
+			"%s%.1f FPS   %.2f ms",
+			this->state.isFrameGenerationActive ? "Render   " : "",
+			this->state.smoothFps, this->state.smoothFrameTimeMs);
 
 		// Set graph colors
 		ImGui::PushStyleColor(ImGuiCol_PlotLines, ImVec4(0.0f, 1.0f, 0.0f, 1.0f));  // Green line
@@ -517,8 +523,8 @@ void PerformanceOverlay::DrawPostFGFrameTimeGraph()
 	// Prepare overlay text
 	char overlay_text[128];
 	snprintf(overlay_text, IM_ARRAYSIZE(overlay_text),
-		"True: %.2f ms (%.1f FPS)",
-		state.postFGSmoothFrameTimeMs, state.postFGSmoothFps);
+		"True   %.1f FPS   %.2f ms",
+		state.postFGSmoothFps, state.postFGSmoothFrameTimeMs);
 
 	// Set graph colors - blue for post-FG
 	ImGui::PushStyleColor(ImGuiCol_PlotLines, ImVec4(0.0f, 0.5f, 1.0f, 1.0f));  // Blue line
