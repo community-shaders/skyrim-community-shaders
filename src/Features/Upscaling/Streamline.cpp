@@ -711,8 +711,10 @@ void Streamline::CaptureDLSSGPresentState()
 			// without it a non-functional DLSS-G is silent and simply halves the frame rate.
 			static uint32_t s_sampleTick = 0u;
 			if ((++s_sampleTick % 600u) == 0u) {
-				logger::info("[Streamline] DLSS-G presented {} frame(s) since last query (status 0x{:X}, max {})",
-					state.numFramesActuallyPresented, static_cast<uint32_t>(state.status), state.numFramesToGenerateMax);
+				logger::info("[Streamline] DLSS-G presented {} frame(s) since last query (status 0x{:X}, max {}, vsyncSupportAvailable={})",
+					state.numFramesActuallyPresented, static_cast<uint32_t>(state.status), state.numFramesToGenerateMax,
+					state.bIsVsyncSupportAvailable == sl::Boolean::eTrue ? "yes" :
+					state.bIsVsyncSupportAvailable == sl::Boolean::eFalse ? "no" : "invalid");
 			}
 			static uint32_t s_lastStatus = UINT32_MAX;
 			const uint32_t status = static_cast<uint32_t>(state.status);

@@ -153,6 +153,10 @@ public:
 	[[nodiscard]] int GetMonitorRefreshRate() const;
 	/** @brief Highest refresh rate the display offers at its current resolution. */
 	[[nodiscard]] int GetHighestRefreshRate() const;
+	/** @brief DXVK tearing preference implied by the frame-rate setting: 1 = tearing, 0 = tear-free. */
+	[[nodiscard]] uint32_t GetPresentModePreference() const;
+	/** @brief Re-applies the present mode when the frame-rate setting changes; recreates the swapchain. */
+	void UpdatePresentModePreference();
 	/** @brief Returns the configured frame-rate cap, or zero when uncapped. */
 	[[nodiscard]] double GetTargetFrameRate() const;
 	/** @brief Returns the rendered-frame cap after accounting for fixed frame generation. */

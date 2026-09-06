@@ -448,36 +448,6 @@ struct IDXGISwapChain_Present
 					up.IsFrameGenerationActive() ? "on" : "off",
 					up.GetFrameGenMethod() == Upscaling::FrameGenMethod::kDLSSG ? "DLSS-G" : "FSR-FG",
 					SyncInterval);
-
-				// DLSS-G paces presentation to the display refresh, so the RENDERED rate is pinned to
-				// refresh / multiplier however much GPU headroom there is: measured 30.0 fps rendered
-				// against 120.0 with frame generation off, on a 60 Hz mode. Forcing a tearing present
-				// mode does not lift it -- sl.dlss_g meters flips regardless of the Vulkan present mode.
-				// That is not a fault, it is what 2x generation at 60 Hz means, but it costs a 4x input
-				// latency regression for no extra displayed frames, and nothing said so. Frame
-				// generation is only worth enabling when the refresh rate is above what the GPU
-				// sustains unaided.
-				const int refresh = up.GetMonitorRefreshRate();
-				const bool refreshBound = up.IsFrameGenerationActive() && mult >= 2u && refresh > 0 &&
-				                          rendered > 0.0 &&
-				                          std::abs(rendered - double(refresh) / double(mult)) <
-				                              0.05 * double(refresh) / double(mult);
-				static int s_lastWarned = -1;
-				if (refreshBound && s_lastWarned != refresh) {
-					s_lastWarned = refresh;
-					const int bestHz = up.GetHighestRefreshRate();
-					logger::warn("[Perf] frame generation is refresh-bound: rendering is pinned to {} Hz / {}x = {:.0f} fps "
-					             "because presentation is paced to the display, so input latency is that of {:.0f} fps rather "
-					             "than the displayed {}.{}",
-						refresh, mult, double(refresh) / double(mult), double(refresh) / double(mult), refresh,
-						bestHz > refresh ?
-							std::format(" This display supports {} Hz at the current resolution; selecting it would raise the "
-							            "rendered rate to {:.0f} fps. Below that, frame generation costs latency for no extra "
-							            "displayed frames and is better left off.", bestHz, double(bestHz) / double(mult)) :
-							std::string(" This is already the highest refresh rate the display offers at this resolution."));
-				} else if (!refreshBound) {
-					s_lastWarned = -1;
-				}
 				s_rateStart = now;
 				s_rateFrames = 0u;
 			}
@@ -630,6 +600,9 @@ struct BSInputDeviceManager_PollInputDevices
 			const uint32_t reflexLimitUs = (wantReflex && renderedFpsLimit > 0.0) ?
 				static_cast<uint32_t>(std::lround(1000000.0 / renderedFpsLimit)) : 0u;
 			Streamline::GetSingleton()->UpdateReflex(wantReflex, wantReflex && upscaling.settings.reflexBoost, reflexLimitUs);
+			// The present mode follows the frame-rate setting (tear-free only while a cap paces the
+			// output), so it has to be re-evaluated when that setting changes at runtime.
+			upscaling.UpdatePresentModePreference();
 			// Reflex owns the cap whenever it is active; GetEffectiveReflex already returns false for
 			// FSR-FG, where Reflex cannot apply it, so DXVK's limiter takes that case.
 			upscaling.ApplyDxvkFrameRateLimit(!wantReflex ? renderedFpsLimit : 0.0);

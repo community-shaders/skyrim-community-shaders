@@ -266,7 +266,8 @@ namespace FrameGen
 		// Presenter::pickPresentMode reads this at swapchain creation, so it has to be set before
 		// the recreate below -- which a method switch performs anyway, so no extra recreate is
 		// introduced by choosing here.
-		Streamline::PushDxvkTearingPreference(wantFSRFG ? 2u : 0u);
+		Streamline::PushDxvkTearingPreference(
+			wantFSRFG ? 2u : globals::features::upscaling.GetPresentModePreference());
 
 		sl->SetDLSSGDesiredLoaded(wantDLSSG);
 		sl->SetFSRFGDesiredLoaded(wantFSRFG);

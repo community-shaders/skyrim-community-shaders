@@ -251,34 +251,6 @@ void Upscaling::DrawSettings()
 				settings.frameGenMethod = (uint)fgMethods[std::clamp(fgSel, 0, static_cast<int>(fgMethods.size()) - 1)];
 		}
 
-		// DLSS FG paces presentation to the display refresh, so the RENDERED rate -- and with it the
-		// input latency -- is pinned to refresh / multiplier however much GPU headroom there is:
-		// measured 30 fps rendered against 120 with frame generation off on a 60 Hz mode. Below a
-		// refresh rate the GPU cannot already saturate, switching this on costs latency and buys no
-		// extra displayed frames. That was only ever visible in the log, which is no use to someone
-		// standing in this menu deciding whether to enable it, so it is said here too.
-		if (settings.frameGeneration && GetFrameGenMethod() == FrameGenMethod::kDLSSG && dlssgAvailable) {
-			const int  fgRefresh = GetMonitorRefreshRate();
-			const int  fgBest = GetHighestRefreshRate();
-			const uint fgMult = std::max<uint>(streamline->GetFrameGenerationMultiplier(), 2u);
-			const int  fgRendered = fgRefresh / static_cast<int>(fgMult);
-			const int  fgBestRendered = fgBest / static_cast<int>(fgMult);
-			if (fgRefresh > 0) {
-				ImGui::TextColored(ImVec4(1.0f, 0.76f, 0.25f, 1.0f), "%s",
-					std::vformat(T(TKEY("fg_refresh_bound"),
-					                 "Presentation is paced to the display, so the game renders at {} Hz / {}x = {} FPS "
-					                 "and input latency is that of {} FPS."),
-						std::make_format_args(fgRefresh, fgMult, fgRendered, fgRendered))
-						.c_str());
-				if (fgBest > fgRefresh)
-					ImGui::TextDisabled("%s",
-						std::vformat(T(TKEY("fg_refresh_available"),
-						                 "This display supports {} Hz at this resolution, which would give {} FPS rendered."),
-							std::make_format_args(fgBest, fgBestRendered))
-							.c_str());
-			}
-		}
-
 		if (settings.frameGeneration && GetFrameGenMethod() == FrameGenMethod::kDLSSG && dlssgAvailable) {
 			const uint32_t maxFrames = streamline->GetDLSSGMaxFramesToGenerate();
 			const uint     maxMultiplier = std::clamp<uint>(maxFrames > 0u ? maxFrames + 1u : 2u, 2u, 6u);
@@ -397,12 +369,15 @@ void Upscaling::Load()
 		// to drops and left frame-time deviation at 16.5 ms. MAILBOX brings that to 2.3 ms and puts
 		// output back on target.
 		//
-		// Applied unconditionally rather than only for DLSS-G. MAILBOX caps at the refresh rate, so
-		// a target equal to the refresh gives up ~3%, but switching modes per frame-generation
-		// method is worse: MAILBOX is outside IMMEDIATE's compatible-mode group on NVIDIA, so every
-		// switch forces a full swapchain recreate, and doing that on each method change crashed the
-		// game. One mode for the session avoids the recreate entirely.
-		Streamline::PushDxvkTearingPreference(0u);
+		// That reasoning holds only while the frame rate is capped. MAILBOX blocks in present at
+		// vblank, which pins DLSS-G's output to the refresh rate and the rendered rate to
+		// refresh/multiplier: measured 30 rendered / 60 presented with 25.5 ms of every frame spent
+		// inside Present, against 144 / 288 and 0.8 ms on the same scene with a tearing-capable
+		// mode. A user who asked for an unlimited frame rate is not asking for that, so the mode
+		// follows the frame-rate setting: tear-free while a cap paces the output anyway, tearing
+		// when the cap is off. Switching costs a swapchain recreate (MAILBOX is outside IMMEDIATE's
+		// compatible-mode group on NVIDIA), so it is done only when the setting actually changes.
+		Streamline::PushDxvkTearingPreference(GetPresentModePreference());
 	}
 
 	if (DxvkLoader::IsLoaded()) {
@@ -652,6 +627,35 @@ int Upscaling::GetHighestRefreshRate() const
 			best = std::max(best, mode.dmDisplayFrequency);
 	}
 	return static_cast<int>(best);
+}
+
+uint32_t Upscaling::GetPresentModePreference() const
+{
+	// 1 = tearing (IMMEDIATE) when the frame rate is unlocked, 0 = tear-free (MAILBOX) when a cap
+	// already paces the output. See the note in Load().
+	return settings.frameRateLimitDivisor <= 0 ? 1u : 0u;
+}
+
+void Upscaling::UpdatePresentModePreference()
+{
+	if (!loaded || !DxvkLoader::IsLoaded())
+		return;
+	static uint32_t s_applied = UINT32_MAX;
+	const uint32_t desired = GetPresentModePreference();
+	if (s_applied == desired)
+		return;
+	const bool first = s_applied == UINT32_MAX;
+	s_applied = desired;
+	Streamline::PushDxvkTearingPreference(desired);
+	// Presenter::pickPresentMode reads the preference at swapchain creation, so an already-created
+	// swapchain keeps the old mode until it is rebuilt. Skip the recreate on the first call, which
+	// only records what Load() already pushed.
+	if (!first) {
+		logger::info("[Upscaling] present mode preference -> {} (frame rate {})",
+			desired ? "tearing" : "tear-free",
+			settings.frameRateLimitDivisor <= 0 ? "unlocked" : "capped");
+		Streamline::RequestDxvkSwapchainRecreate("frame-rate setting changed present mode");
+	}
 }
 
 double Upscaling::GetTargetFrameRate() const
