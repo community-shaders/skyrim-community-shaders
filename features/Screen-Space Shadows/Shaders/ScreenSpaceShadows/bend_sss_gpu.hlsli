@@ -120,7 +120,7 @@ struct DispatchParameters
 #else
 	Texture2D<unorm float> DepthTexture;  // Depth Buffer Texture (rasterized non-linear depth, R24_UNORM_X8_TYPELESS)
 #endif
-	RWTexture2D<unorm float> OutputTexture;  // Output screen-space shadow buffer (typically single-channel, 8bit)
+	RWTexture2D<unorm float2> OutputTexture;  // Front- and back-facing shadow visibility (typically R8G8_UNORM)
 
 	SamplerState PointBorderSampler;  // A point sampler, with Wrap Mode set to Clamp-To-Border-Color (D3D12_TEXTURE_ADDRESS_MODE_BORDER), and Border Color set to "FarDepthValue" (typically zero), or some other far-depth value out of DepthBounds.
 									  // If you have issues where invalid shadows are appearing from off-screen, it is likely that this sampler is not correctly setup
@@ -320,7 +320,8 @@ void WriteScreenSpaceShadow(DispatchParameters inParameters, int3 inGroupID, int
 	// Start by reading the next value
 	int sample_index = inGroupThreadID.x + 1;
 
-	half4 shadow_value = 1;
+	half4 front_shadow_value = 1;
+	half4 back_shadow_value = 1;
 
 	// This is the inverse of how large the shadowing window is for the projected sample data.
 	// All values in the LDS sample list are scaled by 1.0 / sample_distance, such that all light directions become parallel.
@@ -330,27 +331,38 @@ void WriteScreenSpaceShadow(DispatchParameters inParameters, int3 inGroupID, int
 	// The min() function is to make sure the window is a minimum width when very close to the light. The +direction term will bias the result so the pixel at the very center of the light is either fully lit or shadowed
 	half depth_scale = min(sample_distance[0] + direction, 1.0 / inParameters.SurfaceThickness) * sample_distance[0] / depth_thickness_scale[0];
 
-	start_depth = start_depth * depth_scale - z_sign;
+	// The regular offset moves the receiver toward the light-facing side of its
+	// depth window. Reversing it gives back-facing/transmissive receivers a ray
+	// origin on the other side of that window, preventing their own continuous
+	// surface from shadowing the whole back side.
+	half scaled_start_depth = start_depth * depth_scale;
+	half front_start_depth = scaled_start_depth - z_sign;
+	half back_start_depth = scaled_start_depth + z_sign;
 
 	[unroll] for (i = 0; i < SAMPLE_COUNT; i++)
 	{
-		half depth_delta = abs(start_depth - DepthData[sample_index + i] * depth_scale);
+		half shadow_depth = DepthData[sample_index + i] * depth_scale;
+		half front_depth_delta = abs(front_start_depth - shadow_depth);
+		half back_depth_delta = abs(back_start_depth - shadow_depth);
 
 		// By using 4 values, the average shadow can be taken, which can help soften single-pixel shadows.
-		shadow_value[i & 3] = min(shadow_value[i & 3], depth_delta);
+		front_shadow_value[i & 3] = min(front_shadow_value[i & 3], front_depth_delta);
+		back_shadow_value[i & 3] = min(back_shadow_value[i & 3], back_depth_delta);
 	}
 
 	// Apply the contrast value.
 	// A value of 0 indicates a sample was exactly matched to the reference depth (and the result is fully shadowed)
 	// We want some boost to this range, so samples don't have to exactly match to produce a full shadow.
-	shadow_value = saturate(shadow_value * (inParameters.ShadowContrast) + (1 - inParameters.ShadowContrast));
+	front_shadow_value = saturate(front_shadow_value * inParameters.ShadowContrast + (1 - inParameters.ShadowContrast));
+	back_shadow_value = saturate(back_shadow_value * inParameters.ShadowContrast + (1 - inParameters.ShadowContrast));
 
-	half result = 0;
+	half2 result = 0;
 
 	// Take the average of 4 samples, this is useful to reduces aliasing noise in the source depth, especially with long shadows.
-	result = dot(shadow_value, 0.25);
+	result.x = dot(front_shadow_value, 0.25);
+	result.y = dot(back_shadow_value, 0.25);
 
-	// Asking the GPU to write scattered single-byte pixels isn't great,
+	// Asking the GPU to write scattered two-channel pixels isn't great,
 	// But thankfully the latency is hidden by all the work we're doing...
 	inParameters.OutputTexture[(int2)write_xy] = result;
 }
