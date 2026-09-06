@@ -1,6 +1,7 @@
 [![Latest Release](https://img.shields.io/github/v/release/community-shaders/skyrim-community-shaders)](https://github.com/community-shaders/skyrim-community-shaders/releases)
 [![License](https://img.shields.io/github/license/community-shaders/skyrim-community-shaders)](./LICENSE)
 [![Last Commit](https://img.shields.io/github/last-commit/community-shaders/skyrim-community-shaders)](https://github.com/community-shaders/skyrim-community-shaders/commits)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/community-shaders/skyrim-community-shaders/release-build.yaml?event=release)](https://github.com/community-shaders/skyrim-community-shaders/actions)
 [![Discord](https://img.shields.io/discord/1080142797870485606?label=discord&logo=discord&color=5865F2)](https://discord.com/invite/nkrQybAsyy)
 [![Open Issues](https://img.shields.io/github/issues/community-shaders/skyrim-community-shaders)](https://github.com/community-shaders/skyrim-community-shaders/issues)
 [![Contributors](https://img.shields.io/github/contributors/community-shaders/skyrim-community-shaders)](https://github.com/community-shaders/skyrim-community-shaders/graphs/contributors)
