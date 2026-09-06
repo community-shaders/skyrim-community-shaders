@@ -867,7 +867,7 @@ PS_OUTPUT main(PS_INPUT input)
 #		else
 #			if defined(EXP_HEIGHT_FOG)
 	float3 blendedColor = lerp(lightColor, vanillaFogColor, vanillaFogFactor.xxx);
-	blendedColor = lerp(blendedColor, fogColor, fogFactor.xxx);
+	blendedColor = lerp(blendedColor, fogColor, expFogFactor.xxx);
 #			else
 	float3 blendedColor = lerp(lightColor, fogColor, fogFactor.xxx);
 #			endif

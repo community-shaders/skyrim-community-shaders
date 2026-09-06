@@ -31,7 +31,9 @@ public:
 		uint OverrideComplexGrassSettings = false;
 		float BasicGrassBrightness = 1.0f;
 		float ComplexGrassThreshold = 0.03f;
-		float2 pad0;
+		// Only consumed by the GRASS_OPTIMIZATIONS permutation, for grass drawn with an LOD mesh.
+		float MidLODBrightness = 1.0f;
+		float FarLODBrightness = 1.0f;
 	};
 	STATIC_ASSERT_ALIGNAS_16(Settings);
 

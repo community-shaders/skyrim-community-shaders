@@ -27,6 +27,12 @@ void* operator new[](size_t size, size_t alignment, size_t alignmentOffset, cons
 
 using namespace std::literals;
 
+// Defined in src/Utils/VTableHookFallback.cpp
+namespace Util
+{
+	std::uintptr_t VTableHookFallback(void* a_object, std::size_t a_idx, void* a_thunk, LONG a_detourError);
+}
+
 namespace stl
 {
 	using namespace SKSE::stl;
@@ -107,10 +113,17 @@ namespace stl
 	{
 		auto vtable = *reinterpret_cast<uintptr_t**>(target);
 		T::func = vtable[idx];
-		DetourTransactionBegin();
-		DetourUpdateThread(GetCurrentThread());
-		DetourAttach(reinterpret_cast<PVOID*>(&T::func), reinterpret_cast<PVOID>(T::thunk));
-		DetourTransactionCommit();
+		LONG result = DetourTransactionBegin();
+		if (result == NO_ERROR) {
+			DetourUpdateThread(GetCurrentThread());
+			result = DetourAttach(reinterpret_cast<PVOID*>(&T::func), reinterpret_cast<PVOID>(T::thunk));
+			if (result == NO_ERROR)
+				result = DetourTransactionCommit();
+			else
+				DetourTransactionAbort();
+		}
+		if (result != NO_ERROR)
+			T::func = Util::VTableHookFallback(target, idx, reinterpret_cast<PVOID>(T::thunk), result);
 	}
 }
 
