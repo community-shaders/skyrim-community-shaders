@@ -890,29 +890,23 @@ static bool cs_BuildConstants(sl::Constants& a_consts, uint32_t a_outputWidth, u
 	Matrix prevClipToClip = clipToPrevClip.Invert();
 
 	// Matrix::Invert() yields NaN/inf when the source is singular, which the cached view-projection
-	// is on transient frames -- a camera cut, a menu, the frame after a load. Previously any such
-	// frame failed the finite check below and skipped the whole evaluate, which starves frame
-	// generation of camera constants for that frame and makes it reproject from stale data. That is
-	// visible as an interpolated frame collapsing towards a corner.
-	//
-	// Substitute identity, which says "no camera motion this frame", and flag a temporal reset so
-	// Streamline discards history rather than reprojecting through it. Feeding valid constants every
-	// frame matters more than describing the motion of a frame whose matrices do not exist yet.
+	// is on transient frames -- a camera cut, a menu, the frame after a load. Feeding Streamline
+	// valid constants every frame matters more than describing the motion of a frame whose
+	// matrices do not exist yet, so substitute identity below rather than skipping the evaluate.
 	const bool reprojectionFinite = cs_IsFiniteMatrix(clipToPrevClip) && cs_IsFiniteMatrix(prevClipToClip);
 	if (!reprojectionFinite) {
+		// Substitute identity -- "no camera motion this frame" -- rather than feeding Streamline NaN.
+		// Deliberately NOT a temporal reset: a reset wipes the upscaler's history, and doing that on
+		// a transient frame costs far more (visible shimmer on hair and grass, which carry the most
+		// high-frequency detail) than one frame of slightly wrong reprojection.
 		clipToPrevClip = Matrix::Identity;
 		prevClipToClip = Matrix::Identity;
-		a_consts.reset = sl::Boolean::eTrue;
-		// This resets the upscaler's temporal history, so it matters enormously how OFTEN it happens,
-		// not merely that it happened once. Logging it one-shot hid that: an upscaler starved of
-		// history every frame produces a soft, aliased image that looks like the upscaler is bad.
 		{
 			static uint32_t s_singularCount = 0u;
 			static uint32_t s_nextReport = 1u;
 			if (++s_singularCount >= s_nextReport) {
 				s_nextReport = s_singularCount * 8u;
-				logger::warn("[Streamline] singular camera reprojection matrices on {} frame(s) so far - "
-				             "temporal history reset each time", s_singularCount);
+				logger::warn("[Streamline] singular camera reprojection matrices on {} frame(s) so far", s_singularCount);
 			}
 		}
 	}
@@ -920,22 +914,6 @@ static bool cs_BuildConstants(sl::Constants& a_consts, uint32_t a_outputWidth, u
 	a_consts.prevClipToClip = *reinterpret_cast<const sl::float4x4*>(&prevClipToClip);
 
 	a_consts.jitterOffset = { -a_jitterX, -a_jitterY };
-	// Reset temporal history after leaving a loading screen.
-	{
-		static bool s_wasLoading = false;
-		static uint32_t s_observedFrame = UINT32_MAX;
-		static uint32_t s_resetFrame = UINT32_MAX;
-		const bool loading = globals::state->isLoadingMenuOpen;
-		if (s_observedFrame != g_sl.renderFrameId.load(std::memory_order_acquire)) {
-			s_observedFrame = g_sl.renderFrameId.load(std::memory_order_acquire);
-			if (!loading && s_wasLoading)
-				s_resetFrame = g_sl.renderFrameId.load(std::memory_order_acquire);
-			s_wasLoading = loading;
-		}
-		// Preserve a reset already requested above (singular reprojection matrices).
-		if (s_resetFrame == g_sl.renderFrameId.load(std::memory_order_acquire))
-			a_consts.reset = sl::Boolean::eTrue;
-	}
 	a_consts.mvecScale = { 1.0f, 1.0f };
 	a_consts.motionVectors3D = sl::Boolean::eFalse;
 	a_consts.motionVectorsInvalidValue = FLT_MIN;
