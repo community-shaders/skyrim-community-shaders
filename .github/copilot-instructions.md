@@ -39,7 +39,7 @@ SKSE64 plugin providing modular DirectX 11 graphics enhancements for Skyrim SE/A
 ### Essential Repository Setup
 
 ```bash
-git clone https://github.com/doodlum/skyrim-community-shaders.git --recursive
+git clone https://github.com/community-shaders/skyrim-community-shaders.git --recursive
 cd skyrim-community-shaders
 git submodule update --init --recursive  # If not cloned with --recursive
 ```
