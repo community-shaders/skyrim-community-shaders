@@ -4,23 +4,12 @@ namespace GrassLighting
 	{
 		albedo = max(albedo, 0.0);
 
-		// Leaf reflectance and transmittance have similar spectral shapes, so use
-		// the surface albedo directly and only adjust its transmission chroma.
-		float3 transmissionYCoCg = Color::RGBToYCoCg(albedo);
+		float grey = dot(albedo, 0.333333.xxx);
+		float3 transmissionTint = max(lerp(grey.xxx, albedo, 1.15), 0.0);
 
-		// Rotate green-dominant colors by up to 10 degrees toward yellow in the
-		// Co/Cg plane. Non-green or already yellowed grass keeps its original hue.
-		float maxChannel = max(max(albedo.r, albedo.g), albedo.b);
-		float greenDominance = saturate((albedo.g - max(albedo.r, albedo.b)) / max(maxChannel, 1e-4));
-		float hueSin = 0.17364818 * greenDominance;
-		float hueCos = lerp(1.0, 0.98480775, greenDominance);
-		float2 chroma = transmissionYCoCg.yz;
-		transmissionYCoCg.y = hueCos * chroma.x + hueSin * chroma.y;
-		transmissionYCoCg.z = hueCos * chroma.y - hueSin * chroma.x;
-
-		// Default normalized transmission/reflection saturation ratio: 1.15.
-		transmissionYCoCg.yz *= 1.15;
-		return max(Color::YCoCgToRGB(transmissionYCoCg), 0.0);
+		float greenDominance = saturate((albedo.g - max(albedo.r, albedo.b)) / max(albedo.g, 1e-4));
+		transmissionTint.r = lerp(transmissionTint.r, transmissionTint.g, 0.17 * greenDominance);
+		return transmissionTint;
 	}
 
 	float GetTransmissionFactor(float NdotL, float VdotL, float amount)
