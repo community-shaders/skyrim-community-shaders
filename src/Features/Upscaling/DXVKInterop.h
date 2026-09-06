@@ -175,9 +175,6 @@ public:
 	/** @brief Holds D3D resources until the current ring slot completes. */
 	void QueueResourcesForDeferredRelease(const CommandTransaction& a_transaction,
 		ID3D11Resource* const* a_resources, uint32_t a_count);
-	/** @brief Retains backing images permanently after ambiguous Vulkan view destruction. */
-	void QuarantineResourcesAfterVulkanDestructionFault(
-		ID3D11Resource* const* a_resources, uint32_t a_count);
 	/** @brief Quarantines accepted views when a failed present removed the plugin frame without proving consumption. */
 
 private:
@@ -268,7 +265,6 @@ private:
 	// Indexed with the command ring.
 	// Resources held forever once Vulkan destruction has terminally faulted: leaking them is
 	// strictly better than risking a use-after-free on a device that is already unsafe.
-	std::vector<winrt::com_ptr<ID3D11Resource>> retainedPresentResources;
 	std::vector<std::vector<VkImageView>> pendingViewDeletes;
 	std::vector<std::vector<winrt::com_ptr<ID3D11Resource>>> pendingResourceReleases;
 	// FFX may consume tagged images on its own queues after host evaluation.

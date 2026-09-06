@@ -1077,8 +1077,6 @@ static bool cs_WrapInteropImage(DXVKInterop* a_dxvk, VkDevice a_device, PFN_vkCr
 		cs_GetVkImageSEH(a_dxvk, a_res, &image, &layout, &info);
 	if (imageAttempt.exceptionCode) {
 		a_terminalFault = true;
-		ID3D11Resource* resource = a_res;
-		a_dxvk->QuarantineResourcesAfterVulkanDestructionFault(&resource, 1);
 		g_sl.dispatchFaulted = true;
 		logger::error("[Streamline] DXVK image interop faulted (SEH {:#x})",
 			imageAttempt.exceptionCode);
@@ -1101,8 +1099,6 @@ static bool cs_WrapInteropImage(DXVKInterop* a_dxvk, VkDevice a_device, PFN_vkCr
 	if (createAttempt.exceptionCode || createAttempt.result != VK_SUCCESS || view == VK_NULL_HANDLE) {
 		if (createAttempt.exceptionCode || view != VK_NULL_HANDLE) {
 			a_terminalFault = true;
-			ID3D11Resource* resource = a_res;
-			a_dxvk->QuarantineResourcesAfterVulkanDestructionFault(&resource, 1);
 		}
 		view = VK_NULL_HANDLE;
 		g_sl.dispatchFaulted = true;
@@ -1129,9 +1125,12 @@ static bool cs_WrapInteropImage(DXVKInterop* a_dxvk, VkDevice a_device, PFN_vkCr
 	return true;
 }
 
-static bool cs_DestroyViews(DXVKInterop* a_dxvk, VkDevice a_device,
+// a_dxvk/a_resources/a_resourceCount only ever fed the removed quarantine path; they are kept
+// so the call sites still read as "these views belong to these resources".
+static bool cs_DestroyViews([[maybe_unused]] DXVKInterop* a_dxvk, VkDevice a_device,
 	PFN_vkDestroyImageView a_destroyImageView, VkImageView* a_views, uint32_t a_count,
-	ID3D11Resource* const* a_resources = nullptr, uint32_t a_resourceCount = 0)
+	[[maybe_unused]] ID3D11Resource* const* a_resources = nullptr,
+	[[maybe_unused]] uint32_t a_resourceCount = 0)
 {
 	if (!a_destroyImageView)
 		return false;
@@ -1143,9 +1142,6 @@ static bool cs_DestroyViews(DXVKInterop* a_dxvk, VkDevice a_device,
 		if (!destroyAttempt.completed) {
 			a_views[i] = VK_NULL_HANDLE;
 			g_sl.dispatchFaulted = true;
-			if (a_dxvk)
-				a_dxvk->QuarantineResourcesAfterVulkanDestructionFault(
-					a_resources, a_resourceCount);
 			return false;
 		}
 		a_views[i] = VK_NULL_HANDLE;
@@ -1349,8 +1345,8 @@ static sl::Result cs_EvaluateFeatureCore(sl::Feature a_feature, const sl::Viewpo
 		ok = wrap(a_hudlessColor, hudlessRes);
 	if (!ok) {
 		if (viewCreationTerminalFault) {
-			dxvk->QuarantineResourcesAfterVulkanDestructionFault(
-				resources, static_cast<uint32_t>(std::size(resources)));
+			// The destroy entry point already faulted on these handles; calling it again would fault
+			// again, so abandon the views rather than retrying the destroy.
 			std::fill(std::begin(views), std::end(views), VK_NULL_HANDLE);
 		} else {
 			cs_DestroyViews(dxvk, vkDevice, vkDestroyImageView, views, static_cast<uint32_t>(nv),
@@ -1405,8 +1401,8 @@ static sl::Result cs_EvaluateFeatureCore(sl::Feature a_feature, const sl::Viewpo
 		}
 
 		if (haveColor && !cs_BarrierUpscalerOutput(cmd, colorOutRes)) {
-			dxvk->QuarantineResourcesAfterVulkanDestructionFault(
-				resources, static_cast<uint32_t>(std::size(resources)));
+			// The destroy entry point already faulted on these handles; calling it again would fault
+			// again, so abandon the views rather than retrying the destroy.
 			std::fill(std::begin(views), std::end(views), VK_NULL_HANDLE);
 			return sl::Result::eErrorExceptionHandler;
 		}
@@ -2017,8 +2013,8 @@ ID3D11Resource* a_depth, ID3D11Resource* a_motionVectors,
 				destroyViews();
 				return;
 			}
-			dxvk->QuarantineResourcesAfterVulkanDestructionFault(
-				resources, static_cast<uint32_t>(std::size(resources)));
+			// The destroy entry point already faulted on these handles; calling it again would fault
+			// again, so abandon the views rather than retrying the destroy.
 			std::fill(std::begin(views), std::end(views), VK_NULL_HANDLE);
 		};
 

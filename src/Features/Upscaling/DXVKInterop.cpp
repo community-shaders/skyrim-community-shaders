@@ -1770,25 +1770,3 @@ void DXVKInterop::QueueResourcesForDeferredRelease(const CommandTransaction& a_t
 	}
 }
 
-void DXVKInterop::QuarantineResourcesAfterVulkanDestructionFault(
-	ID3D11Resource* const* a_resources, uint32_t a_count)
-{
-	std::lock_guard lock(commandRingMutex);
-	commandRingFaulted = true;
-	vulkanResourceDestructionTerminalFault = true;
-	if (!a_resources)
-		return;
-	for (uint32_t i = 0; i < a_count; ++i) {
-		ID3D11Resource* resource = a_resources[i];
-		if (!resource)
-			continue;
-		const auto duplicate = std::find_if(
-			retainedPresentResources.begin(), retainedPresentResources.end(),
-			[resource](const auto& a_held) { return a_held.get() == resource; });
-		if (duplicate != retainedPresentResources.end())
-			continue;
-		winrt::com_ptr<ID3D11Resource> heldResource;
-		heldResource.copy_from(resource);
-		retainedPresentResources.push_back(std::move(heldResource));
-	}
-}

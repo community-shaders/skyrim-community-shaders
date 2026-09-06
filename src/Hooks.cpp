@@ -443,8 +443,12 @@ struct IDXGISwapChain_Present
 				auto& up = globals::features::upscaling;
 				const uint32_t mult = streamline->GetFrameGenerationMultiplier();
 				const double rendered = double(s_rateFrames) / elapsed;
-				logger::info("[Perf] rendered {:.1f} fps | x{} -> displayed {:.1f} fps | fg={} method={} syncInterval={}",
-					rendered, mult, rendered * double(mult),
+				// Report the generation multiplier, do not multiply by it. DLSSGState's
+				// numFramesActuallyPresented is a per-query count that alternates 1/2, so folding it
+				// into a "displayed" figure produced readings that looked like frame generation had
+				// stopped when it had not.
+				logger::info("[Perf] rendered {:.1f} fps | lastGenMultiplier={} | fg={} method={} syncInterval={}",
+					rendered, mult,
 					up.IsFrameGenerationActive() ? "on" : "off",
 					up.GetFrameGenMethod() == Upscaling::FrameGenMethod::kDLSSG ? "DLSS-G" : "FSR-FG",
 					SyncInterval);
