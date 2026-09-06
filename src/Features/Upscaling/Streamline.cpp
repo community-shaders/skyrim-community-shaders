@@ -1792,9 +1792,15 @@ bool Streamline::SetDLSSGMode(bool a_enable, uint32_t a_displayWidth, uint32_t a
 		// consuming them for the previously presented frame. The symptom of that race is an
 		// occasional corrupt generated frame rather than a measurable slowdown.
 		//
-		// The queue parallelism it buys does not show up here in any case. Six paired runs at the
-		// refresh rate, a fresh game instance each, were indistinguishable: frame-time deviation
-		// 0.012 / 0.014 / 0.012 ms against 0.013 / 0.014 / 0.019 ms, with GPU-busy differences
+		// The queue parallelism it buys does not show up here in any case, and the two things it
+		// might plausibly have bought were checked separately. It does not raise throughput: with
+		// eBlockNoClientQueues the rendered rate stayed at exactly 30.0 fps against a 60 Hz mode,
+		// identical to the default, because what pins the rendered rate is sl.dlss_g pacing presents
+		// to the display refresh -- not the client queue being blocked. (Forcing a tearing present
+		// mode and forcing eDynamic with a 240 fps target were also both measured and changed
+		// nothing; the latter simply stopped generating.) Nor does it smooth delivery: six paired
+		// runs at the refresh rate, a fresh game instance each, were indistinguishable -- frame-time
+		// deviation 0.012 / 0.014 / 0.012 ms against 0.013 / 0.014 / 0.019 ms, with GPU-busy differences
 		// swamped by which way the camera happened to be facing. The mode was trading a correctness
 		// guarantee for nothing measurable, so take the documented default, whose contract CS meets.
 		options.queueParallelismMode = sl::DLSSGQueueParallelismMode::eBlockPresentingClientQueue;
