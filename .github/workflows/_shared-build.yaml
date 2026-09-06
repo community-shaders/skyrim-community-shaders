@@ -107,7 +107,7 @@ jobs:
               uses: actions/cache/restore@v5
               with:
                   path: extern/dxvk/build
-                  key: ${{ runner.os }}-dxvk-trusted-v1-avx2ndebug-vksdk-${{ steps.dxvk_sha.outputs.sha }}
+                  key: ${{ runner.os }}-dxvk-trusted-v1-avxndebug-vksdk-${{ steps.dxvk_sha.outputs.sha }}
 
             - name: Install DXVK build tools (meson and ninja)
               if: steps.cache_dxvk.outputs.cache-hit != 'true'
@@ -120,7 +120,7 @@ jobs:
               shell: pwsh
               # Match the local release flags and build only staged APIs.
               run: |
-                  meson setup extern/dxvk/build extern/dxvk --buildtype release -Db_ndebug=true -Dcpp_args="/arch:AVX2" -Denable_d3d8=false -Denable_d3d9=false -Denable_d3d10=false
+                  meson setup extern/dxvk/build extern/dxvk --buildtype release -Db_ndebug=true -Dcpp_args="/arch:AVX" -Denable_d3d8=false -Denable_d3d9=false -Denable_d3d10=false
                   ninja -C extern/dxvk/build
 
             - name: Save DXVK build cache (trusted events only)
@@ -128,7 +128,7 @@ jobs:
               uses: actions/cache/save@v5
               with:
                   path: extern/dxvk/build
-                  key: ${{ runner.os }}-dxvk-trusted-v1-avx2ndebug-vksdk-${{ steps.dxvk_sha.outputs.sha }}
+                  key: ${{ runner.os }}-dxvk-trusted-v1-avxndebug-vksdk-${{ steps.dxvk_sha.outputs.sha }}
 
             - name: Build using run-cmake
               uses: lukka/run-cmake@v10

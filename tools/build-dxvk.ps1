@@ -118,7 +118,7 @@ if ($dirty) {
 }
 
 $haveDlls = (Test-Path $D3d11Dll) -and (Test-Path $DxgiDll)
-$buildKey = "$sha-$diffHash|$BuildType|b_ndebug=true|cpp_args=/arch:AVX2|apis=d3d11,dxgi"
+$buildKey = "$sha-$diffHash|$BuildType|b_ndebug=true|cpp_args=/arch:AVX|apis=d3d11,dxgi"
 
 if ($stampReusable -and $haveDlls -and (Test-Path $Stamp) -and ((Get-Content $Stamp -Raw).Trim() -eq $buildKey)) {
     Write-Host "[build-dxvk] DXVK d3d11+dxgi up to date ($short) - skipping"
@@ -158,16 +158,16 @@ Write-Host "[build-dxvk] building DXVK d3d11+dxgi ($short, $BuildType)..."
 # Meson compile reconfigures existing builds and Ninja handles source changes incrementally.
 if (-not (Test-Path (Join-Path $BuildDir 'build.ninja'))) {
     & $meson setup $BuildDir $DxvkSrc --vsenv --buildtype $BuildType `
-        -Db_ndebug=true -Dcpp_args="/arch:AVX2" `
+        -Db_ndebug=true -Dcpp_args="/arch:AVX" `
         -Denable_d3d8=false -Denable_d3d9=false -Denable_d3d10=false
     if ($LASTEXITCODE -ne 0) { Write-Error "[build-dxvk] meson setup failed"; exit 1 }
 }
 
 # Reapply the requested build type and fixed project flags to existing build directories.
 & $meson configure $BuildDir --buildtype $BuildType `
-    -Db_ndebug=true -Dcpp_args="/arch:AVX2" `
+    -Db_ndebug=true -Dcpp_args="/arch:AVX" `
     -Denable_d3d8=false -Denable_d3d9=false -Denable_d3d10=false
-if ($LASTEXITCODE -ne 0) { Write-Error "[build-dxvk] meson configure ($BuildType, ndebug, /arch:AVX2, d3d11+dxgi only) failed"; exit 1 }
+if ($LASTEXITCODE -ne 0) { Write-Error "[build-dxvk] meson configure ($BuildType, ndebug, /arch:AVX, d3d11+dxgi only) failed"; exit 1 }
 
 & $meson compile -C $BuildDir
 if ($LASTEXITCODE -ne 0) { Write-Error "[build-dxvk] meson compile failed"; exit 1 }
