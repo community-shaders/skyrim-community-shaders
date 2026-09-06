@@ -5,6 +5,7 @@
 #include "Utils/ExternalEmittance.h"
 #include "Utils/VersionedRelocation.h"
 
+#include "DxvkLoader.h"
 #include "Feature.h"
 #include "Globals.h"
 #include "Menu.h"
@@ -20,6 +21,9 @@
 #include "Features/Skin.h"
 #include "Features/SkySync.h"
 #include "Features/Upscaling.h"
+#include "Features/PerformanceOverlay.h"
+#include "Features/Upscaling/DXVKInterop.h"
+#include "Features/Upscaling/Streamline.h"
 #include "Features/VolumetricLighting.h"
 
 #include <unordered_map>
@@ -382,13 +386,82 @@ struct IDXGISwapChain_Present
 	{
 		globals::state->Reset();
 
+		// DLSS-G on Vulkan requires SyncInterval 0.
+		{
+			auto& up = globals::features::upscaling;
+			if (up.loaded) {
+				const bool dlssgActive = up.IsFrameGenerationActive() &&
+				                         up.GetFrameGenMethod() == Upscaling::FrameGenMethod::kDLSSG;
+				SyncInterval = dlssgActive ? 0u : (up.settings.vsync ? 1u : 0u);
+				if (dlssgActive) {
+					auto* sl = Streamline::GetSingleton();
+					sl->QueryDLSSGCapabilities();
+				}
+			}
+		}
+
+		auto* streamline = Streamline::GetSingleton();
+		streamline->SetPCLMarker(Streamline::PclMarker::RenderSubmitEnd);
+		streamline->SetPCLMarker(Streamline::PclMarker::TriggerFlash);
+		streamline->SetPCLMarker(Streamline::PclMarker::PresentStart);
+
 		HRESULT retval = globals::features::hdrDisplay.HandleSwapChainPresent(
 			This,
 			SyncInterval,
 			Flags,
 			[&](IDXGISwapChain* swapChain, UINT syncInterval, UINT presentFlags) {
-				return func(swapChain, syncInterval, presentFlags);
+				return globals::features::upscaling.PresentWithFrameGeneration(
+					swapChain, syncInterval, presentFlags,
+					[&](IDXGISwapChain* sc, UINT si, UINT f) { return func(sc, si, f); });
 			});
+
+		streamline->SetPCLMarker(Streamline::PclMarker::PresentEnd);
+
+		auto* dxvk = DXVKInterop::GetSingleton();
+		const bool presentSucceeded = SUCCEEDED(retval);
+		if (presentSucceeded)
+			dxvk->RefreshPresenterSurfaceState();
+		// Resolve the pushed present-wait registration after every successful present, whoever
+		// owns it. Gating this on the FSR-FG owner left the slot latched forever under DLSS-G:
+		// SubmitFrameCommandBuffer then refused every subsequent present-wait submission and
+		// DLSS-G was starved of its input tags for the rest of the session.
+		if (presentSucceeded)
+			dxvk->NotifyPresentWaitQueued();
+		streamline->CaptureDLSSGPresentState();
+
+		// Collect the overlay's frame metrics here rather than from its draw path, so hiding the
+		// overlay does not stop measurement and then feed the whole hidden interval back as a
+		// single frame. Cheap, and self-limiting to once per game frame.
+		globals::features::performanceOverlay.UpdateMetrics();
+
+		// Ground-truth present rate. The overlay's numbers only exist while it is being drawn, so
+		// when the question is "why does the frame rate never exceed the refresh rate" there was
+		// nothing measured anywhere. This counts real presents through the hook, which is the
+		// rendered rate; multiply by the frame-generation multiplier for the displayed rate.
+		if (presentSucceeded) {
+			using clock = std::chrono::steady_clock;
+			static clock::time_point s_rateStart = clock::now();
+			static uint32_t s_rateFrames = 0u;
+			++s_rateFrames;
+			const auto now = clock::now();
+			const double elapsed = std::chrono::duration<double>(now - s_rateStart).count();
+			if (elapsed >= 5.0) {
+				auto& up = globals::features::upscaling;
+				const uint32_t mult = streamline->GetFrameGenerationMultiplier();
+				const double rendered = double(s_rateFrames) / elapsed;
+				// Report the generation multiplier, do not multiply by it. DLSSGState's
+				// numFramesActuallyPresented is a per-query count that alternates 1/2, so folding it
+				// into a "displayed" figure produced readings that looked like frame generation had
+				// stopped when it had not.
+				logger::info("[Perf] rendered {:.1f} fps | lastGenMultiplier={} | fg={} method={} syncInterval={}",
+					rendered, mult,
+					up.IsFrameGenerationActive() ? "on" : "off",
+					up.GetFrameGenMethod() == Upscaling::FrameGenMethod::kDLSSG ? "DLSS-G" : "FSR-FG",
+					SyncInterval);
+				s_rateStart = now;
+				s_rateFrames = 0u;
+			}
+		}
 
 		globals::features::screenshotFeature.ProcessCaptureRequest();
 
@@ -425,6 +498,8 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 	DXGI_ADAPTER_DESC adapterDesc;
 	pAdapter->GetDesc(&adapterDesc);
 	globals::state->SetAdapterDescription(adapterDesc.Description);
+
+	logger::info("D3D11CreateDeviceAndSwapChain intercepted (forcing D3D_FEATURE_LEVEL_11_1)");
 
 	const D3D_FEATURE_LEVEL featureLevel = D3D_FEATURE_LEVEL_11_1;
 
@@ -528,9 +603,30 @@ struct BSInputDeviceManager_PollInputDevices
 {
 	static void thunk(RE::BSTEventSource<RE::InputEvent*>* a_dispatcher, RE::InputEvent* const* a_events)
 	{
-		// Reflex sleep/cap runs here by design: this executes before rendering work for the frame.
-		// UpdateReflex() enforces "once per frame" internally in case this hook is hit multiple times.
-		globals::features::upscaling.streamline.UpdateReflex();
+		{
+			auto& upscaling = globals::features::upscaling;
+			const bool wantReflex = upscaling.GetEffectiveReflex();
+			const double renderedFpsLimit = upscaling.GetRenderedFrameRateLimit();
+			// Hand the cap to Reflex even when Reflex's low-latency mode is off. The frame limiter is
+			// independent of the mode -- sl_reflex.h: "This setting is independent of
+			// ReflexOptions::mode; it can even be used with mode == ReflexMode::eOff" -- and the driver
+			// paces it far better than DXVK's limiter can. DXVK applies its cap from
+			// Presenter::signalFrame, i.e. on the submission thread after the present has already
+			// gone out, whereas Reflex sleeps in the render loop before simulation. That difference is
+			// visible as frame-time spikes on the FSR-FG path, which is the only path that was left on
+			// DXVK's limiter, and which does not show them under DLSS-G's Reflex cap at the same rate.
+			const uint32_t reflexLimitUs = renderedFpsLimit > 0.0 ?
+				static_cast<uint32_t>(std::lround(1000000.0 / renderedFpsLimit)) : 0u;
+			Streamline::GetSingleton()->UpdateReflex(wantReflex, wantReflex && upscaling.settings.reflexBoost, reflexLimitUs);
+			// The present mode follows the frame-rate setting (tear-free only while a cap paces the
+			// output), so it has to be re-evaluated when that setting changes at runtime.
+			upscaling.UpdatePresentModePreference();
+			// Reflex now owns the cap on both paths, so DXVK's limiter stays out of the way unless
+			// Reflex is not available at all to apply one.
+			const bool reflexLimiterActive = Streamline::GetSingleton()->IsReflexSupported();
+			upscaling.ApplyDxvkFrameRateLimit(reflexLimiterActive ? 0.0 : renderedFpsLimit);
+			Streamline::GetSingleton()->SetPCLMarker(Streamline::PclMarker::SimulationStart);
+		}
 
 		bool blockedDevice = true;
 
@@ -580,6 +676,18 @@ namespace Hooks
 			logger::info("Accessing render device information");
 			globals::ReInit();
 
+			if (auto* device = globals::d3d::device) {
+				void* firstVFunc = (*reinterpret_cast<void***>(device))[0];
+				HMODULE implModule = nullptr;
+				wchar_t implPath[MAX_PATH]{};
+				if (::GetModuleHandleExW(
+						GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+						static_cast<LPCWSTR>(firstVFunc), &implModule) &&
+					::GetModuleFileNameW(implModule, implPath, MAX_PATH) != 0) {
+					logger::info("D3D11 device implemented by {}", stl::utf16_to_utf8(implPath).value_or("<unknown>"s));
+				}
+			}
+
 			logger::info("Detouring virtual function tables");
 			// InstallSwapChainPresentHooks installs SwapChainPresentBottom (suppression) and OMSetBlendState first.
 			// IDXGISwapChain_Present is installed last so it sits at the top of the Detours chain and fires first.
@@ -608,6 +716,29 @@ namespace Hooks
 			auto menu = globals::menu;
 			if ((a_msg == WM_KILLFOCUS || a_msg == WM_SETFOCUS) && menu->initialized) {
 				menu->focusChanged = true;
+			}
+			// Only update atomics from the window thread; SL/FFX calls stay on the render thread.
+			switch (a_msg) {
+			case WM_ACTIVATEAPP:
+				Upscaling::NotifyWindowFocus(a_wParam != FALSE);
+				break;
+			case WM_ACTIVATE:
+				Upscaling::NotifyWindowFocus(LOWORD(a_wParam) != WA_INACTIVE);
+				break;
+			case WM_SETFOCUS:
+				Upscaling::NotifyWindowFocus(true);
+				break;
+			case WM_KILLFOCUS:
+				Upscaling::NotifyWindowFocus(false);
+				break;
+			case WM_ENTERSIZEMOVE:
+				Upscaling::NotifyWindowModifying(true);
+				break;
+			case WM_EXITSIZEMOVE:
+				Upscaling::NotifyWindowModifying(false);
+				break;
+			default:
+				break;
 			}
 			if (a_msg == WM_CLOSE) {
 				globals::OnGameWindowClose();
@@ -1111,12 +1242,31 @@ namespace Hooks
 
 	void InstallEarlyHooks()
 	{
+		// Load DXVK before the game creates its D3D11 device.
+		const bool nativeMode = DxvkLoader::NativeModeRequested();
+		const bool dxvkLoaded = DxvkLoader::Load();
+		if (!nativeMode && !dxvkLoaded) {
+			stl::report_and_fail(
+				"Community Shaders could not load its bundled DXVK renderer (dxvk_d3d11.dll / dxvk_dxgi.dll) "
+				"from Data/SKSE/Plugins/CommunityShaders/bin. Reinstall Community Shaders or verify the files exist."sv);
+		}
+		if (nativeMode) {
+			globals::features::upscaling.loaded = false;
+			logger::info("[Native] CS_NATIVE_D3D11=1: DXVK + upscaling disabled, using system d3d11/dxgi");
+		}
+
 		if (!globals::features::upscaling.loaded) {
 			logger::info("Hooking D3D11CreateDeviceAndSwapChain");
-			*(uintptr_t*)&ptrD3D11CreateDeviceAndSwapChain = SKSE::PatchIAT(hk_D3D11CreateDeviceAndSwapChain, "d3d11.dll", "D3D11CreateDeviceAndSwapChain");
+			const auto iatOriginal = SKSE::PatchIAT(hk_D3D11CreateDeviceAndSwapChain, "d3d11.dll", "D3D11CreateDeviceAndSwapChain");
+			*(uintptr_t*)&ptrD3D11CreateDeviceAndSwapChain = dxvkLoaded ?
+			                                                     reinterpret_cast<uintptr_t>(DxvkLoader::GetD3D11CreateDeviceAndSwapChain()) :
+			                                                     iatOriginal;
 		}
 
 		logger::info("Hooking CreateDXGIFactory");
-		*(uintptr_t*)&ptrCreateDXGIFactory = SKSE::PatchIAT(hk_CreateDXGIFactory, "dxgi.dll", "CreateDXGIFactory");
+		const auto dxgiOriginal = SKSE::PatchIAT(hk_CreateDXGIFactory, "dxgi.dll", "CreateDXGIFactory");
+		*(uintptr_t*)&ptrCreateDXGIFactory = dxvkLoaded ?
+		                                         reinterpret_cast<uintptr_t>(DxvkLoader::GetCreateDXGIFactory()) :
+		                                         dxgiOriginal;
 	}
 }

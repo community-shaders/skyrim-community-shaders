@@ -1,5 +1,4 @@
 #include "OverlayRenderer.h"
-#include "BackgroundBlur.h"
 #include "HomePageRenderer.h"
 #include "ThemeManager.h"
 
@@ -397,7 +396,6 @@ void OverlayRenderer::FinalizeImGuiFrame()
 	ImGui::Render();
 
 	// Apply background blur behind ImGui windows before rendering them
-	BackgroundBlur::RenderBackgroundBlur();
 
 	ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
 

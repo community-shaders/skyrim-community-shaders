@@ -5,7 +5,6 @@
 #include <string>
 #include <windows.h>
 
-#include "BackgroundBlur.h"
 #include "Features/ScreenshotFeature.h"
 #include "FontSelector.h"
 #include "Fonts.h"
@@ -542,13 +541,6 @@ void SettingsTabRenderer::RenderBehaviorTab()
 		}
 
 		SeparatorTextWithFont(T("menu.settings.visual_effects", "Visual Effects"), Menu::FontRole::Subheading);
-
-		if (ImGui::Checkbox(T("menu.settings.background_blur", "Background Blur"), &themeSettings.BackgroundBlurEnabled)) {
-			BackgroundBlur::SetEnabled(themeSettings.BackgroundBlurEnabled);
-		}
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("%s", T("menu.settings.background_blur_tooltip", "Applies a blur effect to the background behind the menu window."));
-		}
 
 		ImGui::EndTabItem();
 	}

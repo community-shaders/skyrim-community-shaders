@@ -65,6 +65,10 @@ jobs:
                   persist-credentials: false
                   allow-unsafe-pr-checkout: ${{ github.event_name == 'pull_request_target' }}
 
+            - name: Fetch Streamline LFS assets
+              shell: pwsh
+              run: git -C extern/Streamline lfs pull
+
             - name: Setup Build Environment
               id: setup
               uses: ./.github/actions/setup-build-environment
@@ -73,11 +77,119 @@ jobs:
                   cmake-preset: ${{ matrix.compiler.cmake-preset }}
                   build-dir: ${{ matrix.compiler.build-dir }}
 
+            # Build Streamline plugins before CMake discovers staging inputs.
+            - name: Build Streamline fork plugins
+              shell: pwsh
+              run: |
+                  ./tools/build-streamline.ps1 -Required
+                  if ($LASTEXITCODE -ne 0) {
+                    throw "Streamline fork build failed with exit code $LASTEXITCODE"
+                  }
+
+                  $artifacts = 'extern/Streamline/_artifacts'
+                  $required = @('sl.interposer', 'sl.fsr', 'sl.fsr_g', 'sl.xess')
+                  $missing = @($required | Where-Object {
+                    -not (Test-Path (Join-Path $artifacts "$_/Develop_x64/$_.dll"))
+                  })
+                  if ($missing.Count -ne 0) {
+                    throw "Streamline build did not produce: $($missing -join ', ')"
+                  }
+
+            - name: Resolve DXVK submodule SHA
+              id: dxvk_sha
+              shell: bash
+              run: echo "sha=$(git -C extern/dxvk rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+            # Keep trusted-saved caches in a versioned namespace so entries
+            # written before the restore-only policy cannot be reused.
+            - name: Restore DXVK build cache
+              id: cache_dxvk
+              uses: actions/cache/restore@v5
+              with:
+                  path: extern/dxvk/build
+                  key: ${{ runner.os }}-dxvk-trusted-v1-avxndebug-vksdk-${{ steps.dxvk_sha.outputs.sha }}
+
+            - name: Install DXVK build tools (meson and ninja)
+              if: steps.cache_dxvk.outputs.cache-hit != 'true'
+              shell: pwsh
+              run: |
+                  python -m pip install --upgrade meson ninja
+
+            - name: Build DXVK
+              if: steps.cache_dxvk.outputs.cache-hit != 'true'
+              shell: pwsh
+              # Match the local release flags and build only staged APIs.
+              run: |
+                  meson setup extern/dxvk/build extern/dxvk --buildtype release -Db_ndebug=true -Dcpp_args="/arch:AVX" -Denable_d3d8=false -Denable_d3d9=false -Denable_d3d10=false
+                  ninja -C extern/dxvk/build
+
+            - name: Save DXVK build cache (trusted events only)
+              if: github.event_name != 'pull_request' && github.event_name != 'pull_request_target' && steps.cache_dxvk.outputs.cache-hit != 'true'
+              uses: actions/cache/save@v5
+              with:
+                  path: extern/dxvk/build
+                  key: ${{ runner.os }}-dxvk-trusted-v1-avxndebug-vksdk-${{ steps.dxvk_sha.outputs.sha }}
+
             - name: Build using run-cmake
               uses: lukka/run-cmake@v10
               with:
                   configurePreset: ${{ matrix.compiler.cmake-preset }}
                   buildPreset: ${{ matrix.compiler.cmake-preset }}
+
+            - name: Verify packaged Vulkan runtimes
+              shell: pwsh
+              run: |
+                  $aioDir = '${{ matrix.compiler.build-dir }}/aio'
+                  $runtimeDir = Join-Path $aioDir 'SKSE/Plugins/CommunityShaders/bin'
+                  $required = @(
+                    'amd_fidelityfx_vk.dll',
+                    'dxvk_d3d11.dll',
+                    'dxvk_dxgi.dll',
+                    'dxvk.license.txt',
+                    'fidelityfx.license.txt',
+                    'libxess.dll',
+                    'license.txt',
+                    'NvLowLatencyVk.dll',
+                    'nvngx_dlss.dll',
+                    'nvngx_dlss.license.txt',
+                    'nvngx_dlssg.dll',
+                    'reflex.license.txt',
+                    'sl.common.dll',
+                    'sl.dlss.dll',
+                    'sl.dlss_g.dll',
+                    'sl.fsr.dll',
+                    'sl.fsr_g.dll',
+                    'sl.interposer.dll',
+                    'sl.pcl.dll',
+                    'sl.reflex.dll',
+                    'sl.xess.dll',
+                    'xess.license.txt',
+                    'xess.third-party-programs.txt'
+                  )
+                  $missing = @($required | Where-Object {
+                    -not (Test-Path (Join-Path $runtimeDir $_) -PathType Leaf)
+                  })
+                  if ($missing.Count -ne 0) {
+                    throw "AIO is missing required Vulkan runtimes: $($missing -join ', ')"
+                  }
+
+                  $legacy = @(Get-ChildItem -LiteralPath $aioDir -Recurse -File | Where-Object {
+                    $_.Name -match '(?i)(dx12|d3d12)'
+                  })
+                  if ($legacy.Count -ne 0) {
+                    throw "AIO contains legacy DX12 runtimes: $($legacy.FullName -join ', ')"
+                  }
+
+                  $archives = @(Get-ChildItem -LiteralPath dist -File | Where-Object {
+                    $_.Name -match '^CommunityShaders_AIO-.*\.(7z|zip)$'
+                  })
+                  if ($archives.Count -eq 0) {
+                    throw 'Build did not produce an AIO archive'
+                  }
+                  $oversized = @($archives | Where-Object { $_.Length -ge 100000000 })
+                  if ($oversized.Count -ne 0) {
+                    throw "AIO archive must be under 100 MB: $($oversized.Name -join ', ')"
+                  }
 
             - name: Extract version from CMake
               id: get_version
@@ -134,6 +246,10 @@ jobs:
                   submodules: recursive
                   persist-credentials: false
                   allow-unsafe-pr-checkout: ${{ github.event_name == 'pull_request_target' }}
+
+            - name: Fetch Streamline LFS assets
+              shell: pwsh
+              run: git -C extern/Streamline lfs pull
 
             - name: Check for HLSL Changes
               id: check-hlsl

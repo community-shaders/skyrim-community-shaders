@@ -17,7 +17,6 @@
         "bshoshany-thread-pool",
         "clib-util",
         "cppwinrt",
-        "directx-headers",
         "directxtex",
         "effects11",
         "eastl",
