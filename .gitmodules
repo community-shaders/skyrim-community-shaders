@@ -3,7 +3,9 @@
 	url = https://github.com/alandtse/CommonLibVR.git
 [submodule "extern/Streamline"]
 	path = extern/Streamline
-	url = https://github.com/doodlum/Streamline.git
+	url = https://github.com/community-shaders/Streamline.git
+	branch = extra-plugins
 [submodule "extern/dxvk"]
 	path = extern/dxvk
-	url = https://github.com/doodlum/dxvk.git
+	url = https://github.com/community-shaders/dxvk.git
+	branch = native
