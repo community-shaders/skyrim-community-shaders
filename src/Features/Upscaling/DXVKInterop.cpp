@@ -586,11 +586,10 @@ bool DXVKInterop::WaitDeviceIdle()
 		return false;
 
 	const DeviceIdleAttempt attempt = WaitDeviceIdleSEH(interopDevice.get(), vkGetDeviceProcAddr, device,
-		presentWaitInteropTerminalFault ? nullptr : releaseQueuedPresentWaitSemaphoresAfterIdle);
+		releaseQueuedPresentWaitSemaphoresAfterIdle);
 	if (attempt.presentWaitReleaseAttempted && !attempt.presentWaitReleaseCompleted) {
 		commandRingSubmissionsIdleProven = attempt.result == VK_SUCCESS;
 		commandRingFaulted = true;
-		presentWaitInteropTerminalFault = true;
 		enqueueInteropCommandBuffer = nullptr;
 		logger::critical("[DXVKInterop] queued present-wait release faulted after device idle (SEH {:#x}); present interop is quarantined",
 			attempt.exceptionCode);
@@ -607,7 +606,6 @@ bool DXVKInterop::WaitDeviceIdle()
 		if (attempt.result == VK_ERROR_DEVICE_LOST) {
 			deviceLost = true;
 			commandRingFaulted = true;
-			presentWaitInteropTerminalFault = true;
 			enqueueInteropCommandBuffer = nullptr;
 			logger::critical("[DXVKInterop] device lost; Vulkan interop is quarantined for this session");
 		} else {
@@ -622,25 +620,27 @@ bool DXVKInterop::WaitDeviceIdle()
 	return true;
 }
 
-void DXVKInterop::LatchPresentWaitTerminalFault(const char* a_operation, DWORD a_exceptionCode)
+// Drops whatever present-wait registrations are outstanding and lets the next frame register
+// again. This used to additionally set presentWaitInteropTerminalFault, commandRingFaulted and
+// null enqueueInteropCommandBuffer, which disabled present-wait interop -- and so DLSS-G -- for
+// the rest of the session. Every caller already returns failure for the frame; killing the
+// feature outright on top of that turned a recoverable hiccup into a dead run.
+void DXVKInterop::ResetPresentWaitRegistrationsAfterFault(const char* a_operation, DWORD a_exceptionCode)
 {
-	commandRingFaulted = true;
-	presentWaitInteropTerminalFault = true;
-	enqueueInteropCommandBuffer = nullptr;
 	pushedPresentWaitSlot = UINT32_MAX;
 	pushedPresentWaitGeneration = 0;
 	outstandingPresentWaitSubmissions.clear();
 	if (a_exceptionCode) {
-		logger::critical("[DXVKInterop] {} faulted (SEH {:#x}); present-wait interop is quarantined",
+		logger::warn("[DXVKInterop] {} faulted (SEH {:#x}); present-wait registrations reset",
 			a_operation, a_exceptionCode);
 	} else {
-		logger::critical("[DXVKInterop] {}; present-wait interop is quarantined", a_operation);
+		logger::warn("[DXVKInterop] {}; present-wait registrations reset", a_operation);
 	}
 }
 
 bool DXVKInterop::ClearReleasedPresentWaitsAfterIdle()
 {
-	if (presentWaitInteropTerminalFault || !getPresentWaitSemaphoreState || !clearPresentWaitSemaphore)
+	if (!getPresentWaitSemaphoreState || !clearPresentWaitSemaphore)
 		return false;
 
 	constexpr uint32_t kPresentWaitNone = 0;
@@ -652,22 +652,22 @@ bool DXVKInterop::ClearReleasedPresentWaitsAfterIdle()
 		const PresentWaitStateAttempt stateAttempt = GetPresentWaitSemaphoreStateSEH(
 			getPresentWaitSemaphoreState, submission.generation);
 		if (stateAttempt.exceptionCode) {
-			LatchPresentWaitTerminalFault("idle-released present-wait query", stateAttempt.exceptionCode);
+			ResetPresentWaitRegistrationsAfterFault("idle-released present-wait query", stateAttempt.exceptionCode);
 			return false;
 		}
 		if (stateAttempt.state != kPresentWaitReleased) {
 			if (stateAttempt.state == kPresentWaitUncertain || stateAttempt.state == kPresentWaitNone)
-				LatchPresentWaitTerminalFault("idle-released present-wait state is unsafe");
+				ResetPresentWaitRegistrationsAfterFault("idle-released present-wait state is unsafe");
 			return false;
 		}
 		if (submission.slot >= presentWaitInUse.size()) {
-			LatchPresentWaitTerminalFault("idle-released present-wait slot is invalid");
+			ResetPresentWaitRegistrationsAfterFault("idle-released present-wait slot is invalid");
 			return false;
 		}
 		const PresentWaitStateAttempt clearAttempt = ClearPresentWaitSemaphoreSEH(
 			clearPresentWaitSemaphore, submission.generation);
 		if (clearAttempt.exceptionCode || !clearAttempt.state) {
-			LatchPresentWaitTerminalFault("idle-released present-wait generation could not be cleared",
+			ResetPresentWaitRegistrationsAfterFault("idle-released present-wait generation could not be cleared",
 				clearAttempt.exceptionCode);
 			return false;
 		}
@@ -681,22 +681,22 @@ bool DXVKInterop::ClearReleasedPresentWaitsAfterIdle()
 	const PresentWaitStateAttempt stateAttempt = GetPresentWaitSemaphoreStateSEH(
 		getPresentWaitSemaphoreState, pushedPresentWaitGeneration);
 	if (stateAttempt.exceptionCode) {
-		LatchPresentWaitTerminalFault("idle-released pushed present-wait query", stateAttempt.exceptionCode);
+		ResetPresentWaitRegistrationsAfterFault("idle-released pushed present-wait query", stateAttempt.exceptionCode);
 		return false;
 	}
 	if (stateAttempt.state != kPresentWaitReleased) {
 		if (stateAttempt.state == kPresentWaitUncertain || stateAttempt.state == kPresentWaitNone)
-			LatchPresentWaitTerminalFault("idle-released pushed present-wait state is unsafe");
+			ResetPresentWaitRegistrationsAfterFault("idle-released pushed present-wait state is unsafe");
 		return false;
 	}
 	if (pushedPresentWaitSlot >= presentWaitInUse.size()) {
-		LatchPresentWaitTerminalFault("idle-released pushed present-wait slot is invalid");
+		ResetPresentWaitRegistrationsAfterFault("idle-released pushed present-wait slot is invalid");
 		return false;
 	}
 	const PresentWaitStateAttempt clearAttempt = ClearPresentWaitSemaphoreSEH(
 		clearPresentWaitSemaphore, pushedPresentWaitGeneration);
 	if (clearAttempt.exceptionCode || !clearAttempt.state) {
-		LatchPresentWaitTerminalFault("idle-released pushed present-wait generation could not be cleared",
+		ResetPresentWaitRegistrationsAfterFault("idle-released pushed present-wait generation could not be cleared",
 			clearAttempt.exceptionCode);
 		return false;
 	}
@@ -859,10 +859,6 @@ void DXVKInterop::DestroyCommandResources()
 		return;
 	if (vulkanResourceDestructionTerminalFault) {
 		logger::error("[DXVKInterop] Vulkan resource cleanup is terminally quarantined after a destruction fault");
-		return;
-	}
-	if (presentWaitInteropTerminalFault && pushedPresentWaitSlot != UINT32_MAX) {
-		logger::error("[DXVKInterop] present-wait handle remains quarantined after a terminal bridge fault");
 		return;
 	}
 	const bool hasRegisteredPresentWaits =
@@ -1117,7 +1113,7 @@ bool DXVKInterop::PresentWaitInteropReady() const
 	return enqueueInteropCommandBuffer != nullptr && getPresentWaitSemaphoreState != nullptr &&
 	       clearPresentWaitSemaphore != nullptr && cancelPresentWaitSemaphore != nullptr &&
 	       releaseQueuedPresentWaitSemaphoresAfterIdle != nullptr &&
-	       !presentWaitInteropTerminalFault && synchronousPresentControlAvailable &&
+	       synchronousPresentControlAvailable &&
 	       !presentQueueSplit;
 }
 
@@ -1450,7 +1446,7 @@ bool DXVKInterop::PushPendingPresentWaitSemaphore()
 	// callers that ran the old submit-then-push sequence stay correct; it succeeds when a
 	// registered generation is present and reports failure only when there genuinely is
 	// nothing registered.
-	if (presentWaitInteropTerminalFault || commandRingFaulted)
+	if (commandRingFaulted)
 		return false;
 	if (pushedPresentWaitSlot != UINT32_MAX && pushedPresentWaitGeneration)
 		return true;
@@ -1469,8 +1465,6 @@ bool DXVKInterop::HasPendingPresentWaitSemaphore() const
 bool DXVKInterop::DiscardPendingPresentWaitSemaphore()
 {
 	std::lock_guard lock(commandRingMutex);
-	if (presentWaitInteropTerminalFault)
-		return false;
 	if (pushedPresentWaitSlot == UINT32_MAX)
 		return true;
 
@@ -1506,8 +1500,6 @@ bool DXVKInterop::DiscardPendingPresentWaitSemaphore()
 void DXVKInterop::NotifyPresentWaitQueued()
 {
 	std::lock_guard lock(commandRingMutex);
-	if (presentWaitInteropTerminalFault)
-		return;
 	constexpr uint32_t kPresentWaitNone = 0;
 	constexpr uint32_t kPresentWaitPending = 1;
 	constexpr uint32_t kPresentWaitQueued = 2;
@@ -1519,7 +1511,7 @@ void DXVKInterop::NotifyPresentWaitQueued()
 		const PresentWaitStateAttempt stateAttempt = GetPresentWaitSemaphoreStateSEH(
 			getPresentWaitSemaphoreState, submission.generation);
 		if (stateAttempt.exceptionCode) {
-			LatchPresentWaitTerminalFault("present-wait release query", stateAttempt.exceptionCode);
+			ResetPresentWaitRegistrationsAfterFault("present-wait release query", stateAttempt.exceptionCode);
 			return;
 		}
 		if (stateAttempt.state == kPresentWaitQueued) {
@@ -1527,14 +1519,14 @@ void DXVKInterop::NotifyPresentWaitQueued()
 			continue;
 		}
 		if (stateAttempt.state != kPresentWaitReleased || submission.slot >= presentWaitInUse.size()) {
-			LatchPresentWaitTerminalFault(stateAttempt.state == kPresentWaitUncertain ?
+			ResetPresentWaitRegistrationsAfterFault(stateAttempt.state == kPresentWaitUncertain ?
 				"present-wait consumption is uncertain" : "present-wait release state is invalid");
 			return;
 		}
 		const PresentWaitStateAttempt clearAttempt = ClearPresentWaitSemaphoreSEH(
 			clearPresentWaitSemaphore, submission.generation);
 		if (clearAttempt.exceptionCode || !clearAttempt.state) {
-			LatchPresentWaitTerminalFault("released present-wait generation could not be cleared",
+			ResetPresentWaitRegistrationsAfterFault("released present-wait generation could not be cleared",
 				clearAttempt.exceptionCode);
 			return;
 		}
@@ -1547,7 +1539,7 @@ void DXVKInterop::NotifyPresentWaitQueued()
 	const PresentWaitStateAttempt stateAttempt = GetPresentWaitSemaphoreStateSEH(
 		getPresentWaitSemaphoreState, pushedPresentWaitGeneration);
 	if (stateAttempt.exceptionCode) {
-		LatchPresentWaitTerminalFault("present-wait state query", stateAttempt.exceptionCode);
+		ResetPresentWaitRegistrationsAfterFault("present-wait state query", stateAttempt.exceptionCode);
 		return;
 	}
 	if (stateAttempt.state == kPresentWaitQueued) {
@@ -1559,13 +1551,13 @@ void DXVKInterop::NotifyPresentWaitQueued()
 	}
 	if (stateAttempt.state == kPresentWaitReleased) {
 		if (pushedPresentWaitSlot >= presentWaitInUse.size()) {
-			LatchPresentWaitTerminalFault("released present-wait slot is invalid");
+			ResetPresentWaitRegistrationsAfterFault("released present-wait slot is invalid");
 			return;
 		}
 		const PresentWaitStateAttempt clearAttempt = ClearPresentWaitSemaphoreSEH(
 			clearPresentWaitSemaphore, pushedPresentWaitGeneration);
 		if (clearAttempt.exceptionCode || !clearAttempt.state) {
-			LatchPresentWaitTerminalFault("released present-wait generation could not be cleared",
+			ResetPresentWaitRegistrationsAfterFault("released present-wait generation could not be cleared",
 				clearAttempt.exceptionCode);
 			return;
 		}
@@ -1586,13 +1578,13 @@ void DXVKInterop::NotifyPresentWaitQueued()
 		stateAttempt.state == kPresentWaitUncertain ||
 		stateAttempt.state == kPresentWaitNone) {
 		if (pushedPresentWaitSlot >= presentWaitSemaphores.size()) {
-			LatchPresentWaitTerminalFault("unconsumed present-wait slot is invalid");
+			ResetPresentWaitRegistrationsAfterFault("unconsumed present-wait slot is invalid");
 			return;
 		}
 		const PresentWaitStateAttempt cancelAttempt = CancelPresentWaitSemaphoreSEH(
 			cancelPresentWaitSemaphore, presentWaitSemaphores[pushedPresentWaitSlot]);
 		if (cancelAttempt.exceptionCode || !cancelAttempt.state) {
-			LatchPresentWaitTerminalFault("pending present-wait registration could not be cancelled",
+			ResetPresentWaitRegistrationsAfterFault("pending present-wait registration could not be cancelled",
 				cancelAttempt.exceptionCode);
 			return;
 		}
@@ -1649,7 +1641,7 @@ void DXVKInterop::NotifyPresentWaitQueued()
 		}
 		return;
 	}
-	LatchPresentWaitTerminalFault(stateAttempt.state == kPresentWaitUncertain ?
+	ResetPresentWaitRegistrationsAfterFault(stateAttempt.state == kPresentWaitUncertain ?
 		"present-wait consumption is uncertain" : "present-wait state is invalid");
 }
 

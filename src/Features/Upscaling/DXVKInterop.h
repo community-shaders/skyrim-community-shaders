@@ -207,7 +207,7 @@ private:
 	static bool PresenterStateMatches(
 		const PresenterSurfaceState& a_state, VkColorSpaceKHR a_requestedColorSpace);
 	bool ClearReleasedPresentWaitsAfterIdle();
-	void LatchPresentWaitTerminalFault(const char* a_operation, DWORD a_exceptionCode = 0);
+	void ResetPresentWaitRegistrationsAfterFault(const char* a_operation, DWORD a_exceptionCode = 0);
 
 	bool available = false;
 
@@ -246,7 +246,6 @@ private:
 	uint32_t (*clearPresentWaitSemaphore)(uint64_t) = nullptr;
 	uint32_t (*cancelPresentWaitSemaphore)(VkSemaphore) = nullptr;
 	uint32_t (*releaseQueuedPresentWaitSemaphoresAfterIdle)() = nullptr;
-	bool presentWaitInteropTerminalFault = false;
 	// Set when a present completed without consuming the one-shot semaphore registered for
 	// it: the presenter has shown it will not attach present-wait semaphores to this
 	// swapchain (its frame-generation ownership is latched at creation, and can disagree
