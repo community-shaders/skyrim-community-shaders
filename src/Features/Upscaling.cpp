@@ -452,9 +452,6 @@ void Upscaling::PostPostLoad()
 Upscaling::UpscaleMethod Upscaling::GetUpscaleMethod() const
 {
 	auto* streamline = Streamline::GetSingleton();
-	if (streamline->HasDispatchFaulted())
-		return UpscaleMethod::kTAA;
-
 	auto method = static_cast<UpscaleMethod>(settings.upscaleMethod);
 	for (uint32_t fallback = 0; fallback < 3; ++fallback) {
 		if (method == UpscaleMethod::kDLSS && !streamline->IsDLSSSupported()) {
@@ -521,8 +518,7 @@ bool Upscaling::IsFrameGenerationActive() const
 {
 	if (!loaded || !settings.frameGeneration)
 		return false;
-	if (Streamline::GetSingleton()->HasDispatchFaulted() ||
-		DXVKInterop::GetSingleton()->HasCommandRingFault())
+	if (DXVKInterop::GetSingleton()->HasCommandRingFault())
 		return false;
 	const auto& hdr = globals::features::hdrDisplay;
 	const bool hdrActive = hdr.loaded && hdr.IsHDREnabledForFrame();
@@ -738,7 +734,7 @@ HRESULT Upscaling::PresentWithFrameGeneration(IDXGISwapChain* a_swapChain, UINT 
 		settings.frameGeneration = false;
 		const uint32_t displayWidth = globals::game::graphicsState ? globals::game::graphicsState->screenWidth : 0;
 		const uint32_t displayHeight = globals::game::graphicsState ? globals::game::graphicsState->screenHeight : 0;
-		if (!streamline->HasDispatchFaulted() && streamline->IsDLSSGLoaded() &&
+		if (streamline->IsDLSSGLoaded() &&
 			!streamline->SetDLSSGMode(false, displayWidth, displayHeight)) {
 			logger::error("[Upscaling] DLSS-G mode-off failed; continuing with device-idle teardown");
 		}
@@ -767,7 +763,7 @@ HRESULT Upscaling::PresentWithFrameGeneration(IDXGISwapChain* a_swapChain, UINT 
 		FrameGen::Controller::GetSingleton()->NotifyFaultTeardownRequested();
 		return a_present(a_swapChain, 0, a_flags);
 	};
-	if (streamline->HasDispatchFaulted() || dxvk->HasCommandRingFault()) {
+	if (dxvk->HasCommandRingFault()) {
 		settings.frameGeneration = false;
 		if (streamline->IsDLSSGLoaded() || streamline->IsFSRFGLoaded() ||
 			dxvk->HasPendingPresentWaitSemaphore())

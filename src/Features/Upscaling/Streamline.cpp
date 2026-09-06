@@ -76,7 +76,6 @@ namespace
 		std::atomic<bool> latencyMarkersNeeded = { false };
 
 		// Disable dispatch after an SEH fault to prevent repeated crashes.
-		std::atomic<bool> dispatchFaulted{ false };
 
 		bool reflexCacheValid = false;
 		sl::ReflexMode reflexCachedMode = sl::ReflexMode::eOff;
@@ -158,32 +157,27 @@ namespace
 		const bool want = a_desired.load(std::memory_order_acquire);
 		if (want == a_current.load(std::memory_order_acquire))
 			return true;
-		if (!g_sl.slSetFeatureLoaded || g_sl.dispatchFaulted.load(std::memory_order_acquire))
+		if (!g_sl.slSetFeatureLoaded)
 			return false;
-		__try {
-			if (g_sl.slSetFeatureLoaded(a_feature, want) != sl::Result::eOk)
-				return false;
-			a_current.store(want, std::memory_order_release);
-			if (a_feature == sl::kFeatureFSR_G && !want)
-				g_fsrfgOwnsPresent.store(false, std::memory_order_release);
-			if (want) {
-				// Safe: render thread is blocked on the present lock during swapchain teardown/recreation.
-				if (a_feature == sl::kFeatureDLSS_G) {
-					g_sl.slGetFeatureFunction(sl::kFeatureDLSS_G, "slDLSSGSetOptions", reinterpret_cast<void*&>(g_sl.slDLSSGSetOptions));
-					g_sl.slGetFeatureFunction(sl::kFeatureDLSS_G, "slDLSSGGetState", reinterpret_cast<void*&>(g_sl.slDLSSGGetState));
-				} else if (a_feature == sl::kFeatureFSR_G) {
-					g_sl.slGetFeatureFunction(sl::kFeatureFSR_G, "slFSRFrameGenerationSetOptions", reinterpret_cast<void*&>(g_sl.slFSRFrameGenerationSetOptions));
-					g_sl.slGetFeatureFunction(sl::kFeatureFSR_G, "slFSRGetFrameGenState", reinterpret_cast<void*&>(g_sl.slFSRGetFrameGenState));
-					g_sl.slGetFeatureFunction(sl::kFeatureFSR_G, "slFSRFrameGenerationDiscardPreparedFrame", reinterpret_cast<void*&>(g_sl.slFSRFrameGenerationDiscardPreparedFrame));
-					g_sl.slGetFeatureFunction(sl::kFeatureFSR_G, "slFSRFrameGenerationOwnsSwapchain", reinterpret_cast<void*&>(g_sl.slFSRFrameGenerationOwnsSwapchain));
-					g_sl.slGetFeatureFunction(sl::kFeatureFSR_G, "slFSRFrameGenerationCompleteSwapchainTeardown", reinterpret_cast<void*&>(g_sl.slFSRFrameGenerationCompleteSwapchainTeardown));
-				}
+		if (g_sl.slSetFeatureLoaded(a_feature, want) != sl::Result::eOk)
+			return false;
+		a_current.store(want, std::memory_order_release);
+		if (a_feature == sl::kFeatureFSR_G && !want)
+			g_fsrfgOwnsPresent.store(false, std::memory_order_release);
+		if (want) {
+			// Safe: render thread is blocked on the present lock during swapchain teardown/recreation.
+			if (a_feature == sl::kFeatureDLSS_G) {
+				g_sl.slGetFeatureFunction(sl::kFeatureDLSS_G, "slDLSSGSetOptions", reinterpret_cast<void*&>(g_sl.slDLSSGSetOptions));
+				g_sl.slGetFeatureFunction(sl::kFeatureDLSS_G, "slDLSSGGetState", reinterpret_cast<void*&>(g_sl.slDLSSGGetState));
+			} else if (a_feature == sl::kFeatureFSR_G) {
+				g_sl.slGetFeatureFunction(sl::kFeatureFSR_G, "slFSRFrameGenerationSetOptions", reinterpret_cast<void*&>(g_sl.slFSRFrameGenerationSetOptions));
+				g_sl.slGetFeatureFunction(sl::kFeatureFSR_G, "slFSRGetFrameGenState", reinterpret_cast<void*&>(g_sl.slFSRGetFrameGenState));
+				g_sl.slGetFeatureFunction(sl::kFeatureFSR_G, "slFSRFrameGenerationDiscardPreparedFrame", reinterpret_cast<void*&>(g_sl.slFSRFrameGenerationDiscardPreparedFrame));
+				g_sl.slGetFeatureFunction(sl::kFeatureFSR_G, "slFSRFrameGenerationOwnsSwapchain", reinterpret_cast<void*&>(g_sl.slFSRFrameGenerationOwnsSwapchain));
+				g_sl.slGetFeatureFunction(sl::kFeatureFSR_G, "slFSRFrameGenerationCompleteSwapchainTeardown", reinterpret_cast<void*&>(g_sl.slFSRFrameGenerationCompleteSwapchainTeardown));
 			}
-			return true;
-		} __except (EXCEPTION_EXECUTE_HANDLER) {
-			g_sl.dispatchFaulted = true;
-			return false;
 		}
+		return true;
 	}
 
 	// Runs between DXVK swapchain destruction and creation.
@@ -192,15 +186,6 @@ namespace
 		// A new swapchain gets a fresh frame-generation ownership latch, so any earlier verdict
 		// that the presenter would not attach present-wait semaphores no longer applies.
 		DXVKInterop::GetSingleton()->ResetPresentWaitUnattachedForSwapchain();
-		if (g_sl.dispatchFaulted.load(std::memory_order_acquire)) {
-			g_sl.dlssgModeCached = false;
-			g_sl.dlssgModeOn = false;
-			g_sl.dlssgCloneTagsPrimed.store(false, std::memory_order_release);
-			g_dlssgCurrentlyLoaded.store(false, std::memory_order_release);
-			g_fsrfgCurrentlyLoaded.store(false, std::memory_order_release);
-			g_fsrfgOwnsPresent.store(false, std::memory_order_release);
-			return true;
-		}
 
 		// Per-swapchain options and semaphores are invalid after teardown.
 		g_sl.dlssgModeCached = false;
@@ -212,11 +197,7 @@ namespace
 			if (g_sl.slFSRFrameGenerationCompleteSwapchainTeardown) {
 				bool teardownComplete = false;
 				const bool releaseFeatureContext = !g_fsrfgDesiredLoaded.load(std::memory_order_acquire);
-				__try {
-					teardownComplete = g_sl.slFSRFrameGenerationCompleteSwapchainTeardown(releaseFeatureContext);
-				} __except (EXCEPTION_EXECUTE_HANDLER) {
-					g_sl.dispatchFaulted = true;
-				}
+				teardownComplete = g_sl.slFSRFrameGenerationCompleteSwapchainTeardown(releaseFeatureContext);
 				if (!teardownComplete)
 					return false;
 			} else {
@@ -603,11 +584,7 @@ static sl::Result cs_SetTagForFrame(sl::FrameToken& a_token, const sl::ViewportH
 	const sl::ResourceTag* a_tags, uint32_t a_tagCount, VkCommandBuffer a_commandBuffer)
 {
 	sl::Result result = sl::Result::eErrorExceptionHandler;
-	__try {
-		result = g_sl.slSetTagForFrame(a_token, a_viewport, a_tags, a_tagCount, a_commandBuffer);
-	} __except (EXCEPTION_EXECUTE_HANDLER) {
-		g_sl.dispatchFaulted = true;
-	}
+	result = g_sl.slSetTagForFrame(a_token, a_viewport, a_tags, a_tagCount, a_commandBuffer);
 	return result;
 }
 
@@ -615,13 +592,9 @@ static sl::Result cs_EvaluateFeature(sl::Feature a_feature, sl::FrameToken& a_to
 	const sl::ViewportHandle& a_viewport, VkCommandBuffer a_commandBuffer)
 {
 	sl::Result result = sl::Result::eErrorExceptionHandler;
-	__try {
-		const sl::BaseStructure* inputs[] = { &a_viewport };
-		result = g_sl.slEvaluateFeature(
-			a_feature, a_token, inputs, static_cast<uint32_t>(std::size(inputs)), a_commandBuffer);
-	} __except (EXCEPTION_EXECUTE_HANDLER) {
-		g_sl.dispatchFaulted = true;
-	}
+	const sl::BaseStructure* inputs[] = { &a_viewport };
+	result = g_sl.slEvaluateFeature(
+		a_feature, a_token, inputs, static_cast<uint32_t>(std::size(inputs)), a_commandBuffer);
 	return result;
 }
 
@@ -631,12 +604,7 @@ static sl::Result cs_DiscardFSRFrameGenerationPreparedFrame(const sl::ViewportHa
 	if (!g_sl.slFSRFrameGenerationDiscardPreparedFrame)
 		return result;
 
-	__try {
-		result = g_sl.slFSRFrameGenerationDiscardPreparedFrame(a_viewport);
-	} __except (EXCEPTION_EXECUTE_HANDLER) {
-		g_sl.dispatchFaulted = true;
-		result = sl::Result::eErrorExceptionHandler;
-	}
+	result = g_sl.slFSRFrameGenerationDiscardPreparedFrame(a_viewport);
 	return result;
 }
 
@@ -659,8 +627,7 @@ static uint32_t SimFrameId()
 
 void Streamline::BeginRenderFrame()
 {
-	if (g_fsrfgCurrentlyLoaded.load(std::memory_order_acquire) &&
-		!g_sl.dispatchFaulted.load(std::memory_order_acquire))
+	if (g_fsrfgCurrentlyLoaded.load(std::memory_order_acquire))
 		(void)DiscardFSRFrameGenerationPreparedFrame();
 	// Adopt the index SimulationStart already used. It is SimFrameId(), i.e. renderFrameId + 1, so
 	// this is strictly increasing by construction -- which the tag and constant keying and CS's own
@@ -683,8 +650,7 @@ bool Streamline::DiscardFSRFrameGenerationPreparedFrame()
 {
 	if (!g_fsrfgCurrentlyLoaded.load(std::memory_order_acquire))
 		return true;
-	if (!g_sl.slFSRFrameGenerationDiscardPreparedFrame ||
-		g_sl.dispatchFaulted.load(std::memory_order_acquire))
+	if (!g_sl.slFSRFrameGenerationDiscardPreparedFrame)
 		return false;
 
 	const sl::ViewportHandle fgViewport{ 1 };
@@ -693,7 +659,6 @@ bool Streamline::DiscardFSRFrameGenerationPreparedFrame()
 		return true;
 	}
 	if (result != sl::Result::eOk) {
-		g_sl.dispatchFaulted = true;
 		logger::error("[Streamline] FSR prepared-frame discard failed (result {})",
 			static_cast<int>(result));
 		return false;
@@ -705,53 +670,49 @@ bool Streamline::DiscardFSRFrameGenerationPreparedFrame()
 
 void Streamline::CaptureDLSSGPresentState()
 {
-	if (!initialized || !featureDLSSG || g_sl.dispatchFaulted ||
+	if (!initialized || !featureDLSSG ||
 		!g_dlssgCurrentlyLoaded.load(std::memory_order_acquire) || !g_sl.dlssgModeOn)
 		return;
-	__try {
-		sl::DLSSGState state{};
-		if (g_sl.slDLSSGGetState(g_sl.viewport, state, nullptr) == sl::Result::eOk) {
-			// state.status says why DLSS-G is not generating. Report each distinct value once:
-			// without it a non-functional DLSS-G is silent and simply halves the frame rate.
-			static uint32_t s_dlssgLastPresented = UINT32_MAX;
-			if (s_dlssgLastPresented != state.numFramesActuallyPresented) {
-				const uint32_t prev = s_dlssgLastPresented;
-				s_dlssgLastPresented = state.numFramesActuallyPresented;
-				if (prev != UINT32_MAX && state.numFramesActuallyPresented < 2u)
-					logger::warn("[Streamline] DLSS-G stopped generating: presenting {} (was {})",
-						state.numFramesActuallyPresented, prev);
-			}
-			static uint32_t s_sampleTick = 0u;
-			if ((++s_sampleTick % 600u) == 0u) {
-				logger::info("[Streamline] DLSS-G presented {} frame(s) since last query (status 0x{:X}, max {}, vsyncSupportAvailable={})",
-					state.numFramesActuallyPresented, static_cast<uint32_t>(state.status), state.numFramesToGenerateMax,
-					state.bIsVsyncSupportAvailable == sl::Boolean::eTrue ? "yes" :
-					state.bIsVsyncSupportAvailable == sl::Boolean::eFalse ? "no" : "invalid");
-			}
-			static uint32_t s_lastStatus = UINT32_MAX;
-			const uint32_t status = static_cast<uint32_t>(state.status);
-			if (status != s_lastStatus) {
-				s_lastStatus = status;
-				if (status == 0u) {
-					logger::info("[Streamline] DLSS-G status OK (presenting {} frames, max {})",
-						state.numFramesActuallyPresented, state.numFramesToGenerateMax);
-				} else {
-					logger::warn("[Streamline] DLSS-G NOT generating - status 0x{:X}{}{}{}{}{} (presenting {})",
-						status,
-						(status & 0x1) ? " resolutionTooLow" : "",
-						(status & 0x2) ? " reflexNotDetectedAtRuntime" : "",
-						(status & 0x4) ? " hdrFormatNotSupported" : "",
-						(status & 0x8) ? " commonConstantsInvalid" : "",
-						(status & 0x10) ? " getCurrentBackBufferIndexNotCalled" : "",
-						state.numFramesActuallyPresented);
-				}
-			}
-			g_sl.frameGenerationMultiplier.store(
-				std::max(state.numFramesActuallyPresented, 1u), std::memory_order_release);
-			g_sl.dlssgCloneTagsPrimed.store(true, std::memory_order_release);
+	sl::DLSSGState state{};
+	if (g_sl.slDLSSGGetState(g_sl.viewport, state, nullptr) == sl::Result::eOk) {
+		// state.status says why DLSS-G is not generating. Report each distinct value once:
+		// without it a non-functional DLSS-G is silent and simply halves the frame rate.
+		static uint32_t s_dlssgLastPresented = UINT32_MAX;
+		if (s_dlssgLastPresented != state.numFramesActuallyPresented) {
+			const uint32_t prev = s_dlssgLastPresented;
+			s_dlssgLastPresented = state.numFramesActuallyPresented;
+			if (prev != UINT32_MAX && state.numFramesActuallyPresented < 2u)
+				logger::warn("[Streamline] DLSS-G stopped generating: presenting {} (was {})",
+					state.numFramesActuallyPresented, prev);
 		}
-	} __except (EXCEPTION_EXECUTE_HANDLER) {
-		g_sl.dispatchFaulted = true;
+		static uint32_t s_sampleTick = 0u;
+		if ((++s_sampleTick % 600u) == 0u) {
+			logger::info("[Streamline] DLSS-G presented {} frame(s) since last query (status 0x{:X}, max {}, vsyncSupportAvailable={})",
+				state.numFramesActuallyPresented, static_cast<uint32_t>(state.status), state.numFramesToGenerateMax,
+				state.bIsVsyncSupportAvailable == sl::Boolean::eTrue ? "yes" :
+				state.bIsVsyncSupportAvailable == sl::Boolean::eFalse ? "no" : "invalid");
+		}
+		static uint32_t s_lastStatus = UINT32_MAX;
+		const uint32_t status = static_cast<uint32_t>(state.status);
+		if (status != s_lastStatus) {
+			s_lastStatus = status;
+			if (status == 0u) {
+				logger::info("[Streamline] DLSS-G status OK (presenting {} frames, max {})",
+					state.numFramesActuallyPresented, state.numFramesToGenerateMax);
+			} else {
+				logger::warn("[Streamline] DLSS-G NOT generating - status 0x{:X}{}{}{}{}{} (presenting {})",
+					status,
+					(status & 0x1) ? " resolutionTooLow" : "",
+					(status & 0x2) ? " reflexNotDetectedAtRuntime" : "",
+					(status & 0x4) ? " hdrFormatNotSupported" : "",
+					(status & 0x8) ? " commonConstantsInvalid" : "",
+					(status & 0x10) ? " getCurrentBackBufferIndexNotCalled" : "",
+					state.numFramesActuallyPresented);
+			}
+		}
+		g_sl.frameGenerationMultiplier.store(
+			std::max(state.numFramesActuallyPresented, 1u), std::memory_order_release);
+		g_sl.dlssgCloneTagsPrimed.store(true, std::memory_order_release);
 	}
 }
 
@@ -760,55 +721,50 @@ void Streamline::UpdateReflex(bool a_enable, bool a_boost, uint32_t a_frameLimit
 	g_sl.latencyMarkersNeeded.store(a_enable || g_dlssgCurrentlyLoaded.load(std::memory_order_acquire) ||
 			g_fsrfgCurrentlyLoaded.load(std::memory_order_acquire),
 		std::memory_order_release);
-	if (!initialized || !featureReflex || g_sl.dispatchFaulted)
+	if (!initialized || !featureReflex)
 		return;
 
 	const sl::ReflexMode mode = !a_enable ? sl::ReflexMode::eOff :
 	                            a_boost   ? sl::ReflexMode::eLowLatencyWithBoost :
 	                                        sl::ReflexMode::eLowLatency;
 
-	__try {
-		if (!g_sl.reflexCacheValid || g_sl.reflexCachedMode != mode || g_sl.reflexCachedFrameLimitUs != a_frameLimitUs) {
-			sl::ReflexOptions options{};
-			options.mode = mode;
-			options.frameLimitUs = a_frameLimitUs;
-			const sl::Result reflexRes = g_sl.slReflexSetOptions(options);
-			if (reflexRes == sl::Result::eOk) {
-				g_sl.reflexCachedMode = mode;
-				g_sl.reflexCachedFrameLimitUs = a_frameLimitUs;
-				g_sl.reflexCacheValid = true;
-				logger::info("[Streamline] Reflex mode={} frameLimitUs={}",
-					mode == sl::ReflexMode::eOff ? "off" :
-					mode == sl::ReflexMode::eLowLatencyWithBoost ? "low-latency+boost" : "low-latency",
-					a_frameLimitUs);
-			} else {
-				logger::warn("[Streamline] slReflexSetOptions failed (result {})", static_cast<int>(reflexRes));
-			}
+	if (!g_sl.reflexCacheValid || g_sl.reflexCachedMode != mode || g_sl.reflexCachedFrameLimitUs != a_frameLimitUs) {
+		sl::ReflexOptions options{};
+		options.mode = mode;
+		options.frameLimitUs = a_frameLimitUs;
+		const sl::Result reflexRes = g_sl.slReflexSetOptions(options);
+		if (reflexRes == sl::Result::eOk) {
+			g_sl.reflexCachedMode = mode;
+			g_sl.reflexCachedFrameLimitUs = a_frameLimitUs;
+			g_sl.reflexCacheValid = true;
+			logger::info("[Streamline] Reflex mode={} frameLimitUs={}",
+				mode == sl::ReflexMode::eOff ? "off" :
+				mode == sl::ReflexMode::eLowLatencyWithBoost ? "low-latency+boost" : "low-latency",
+				a_frameLimitUs);
+		} else {
+			logger::warn("[Streamline] slReflexSetOptions failed (result {})", static_cast<int>(reflexRes));
 		}
-		// slReflexSleep is where the frame limiter is actually enforced, so it has to run whenever a
-		// limit is set -- not only when low-latency mode is on. Gating it on the mode is why the
-		// FSR-FG path's cap "could not be applied": frameLimitUs was handed to Reflex and then never
-		// given a chance to sleep on it, so the cap fell through to DXVK's limiter, which applies it
-		// from the submission thread after the present instead of in the render loop.
-		if (mode != sl::ReflexMode::eOff || a_frameLimitUs != 0u) {
-			// PollInputDevices can run more than once per rendered frame.
-			static uint32_t s_lastSleepFrame = UINT32_MAX;
-			const uint32_t simFrame = SimFrameId();
-			if (s_lastSleepFrame != simFrame) {
-				s_lastSleepFrame = simFrame;
-				if (sl::FrameToken* token = TokenForFrame(simFrame))
-					g_sl.slReflexSleep(*token);
-			}
+	}
+	// slReflexSleep is where the frame limiter is actually enforced, so it has to run whenever a
+	// limit is set -- not only when low-latency mode is on. Gating it on the mode is why the
+	// FSR-FG path's cap "could not be applied": frameLimitUs was handed to Reflex and then never
+	// given a chance to sleep on it, so the cap fell through to DXVK's limiter, which applies it
+	// from the submission thread after the present instead of in the render loop.
+	if (mode != sl::ReflexMode::eOff || a_frameLimitUs != 0u) {
+		// PollInputDevices can run more than once per rendered frame.
+		static uint32_t s_lastSleepFrame = UINT32_MAX;
+		const uint32_t simFrame = SimFrameId();
+		if (s_lastSleepFrame != simFrame) {
+			s_lastSleepFrame = simFrame;
+			if (sl::FrameToken* token = TokenForFrame(simFrame))
+				g_sl.slReflexSleep(*token);
 		}
-	} __except (EXCEPTION_EXECUTE_HANDLER) {
-		g_sl.dispatchFaulted = true;
-		logger::error("[Streamline] Reflex dispatch faulted — Streamline disabled for this session");
 	}
 }
 
 void Streamline::SetPCLMarker(PclMarker a_marker)
 {
-	if (!initialized || !g_sl.slPCLSetMarker || g_sl.dispatchFaulted)
+	if (!initialized || !g_sl.slPCLSetMarker)
 		return;
 	if (!g_sl.latencyMarkersNeeded.load(std::memory_order_acquire))
 		return;
@@ -824,21 +780,16 @@ void Streamline::SetPCLMarker(PclMarker a_marker)
 		g_sl.simMarkerFrameId.store(simFrame, std::memory_order_release);
 	}
 
-	__try {
-		const bool renderThreadMarker =
-			a_marker == PclMarker::RenderSubmitStart || a_marker == PclMarker::RenderSubmitEnd ||
-			a_marker == PclMarker::PresentStart || a_marker == PclMarker::PresentEnd ||
-			a_marker == PclMarker::TriggerFlash ||
-			a_marker == PclMarker::SimulationEnd;
-		sl::FrameToken* token = renderThreadMarker ?
-		                            RenderFrameToken() :
-		                            TokenForFrame(simFrame ? simFrame : SimFrameId());
-		if (token)
-			g_sl.slPCLSetMarker(static_cast<sl::PCLMarker>(a_marker), *token);
-	} __except (EXCEPTION_EXECUTE_HANDLER) {
-		g_sl.dispatchFaulted = true;
-		logger::error("[Streamline] PCL marker faulted — Streamline disabled for this session");
-	}
+	const bool renderThreadMarker =
+		a_marker == PclMarker::RenderSubmitStart || a_marker == PclMarker::RenderSubmitEnd ||
+		a_marker == PclMarker::PresentStart || a_marker == PclMarker::PresentEnd ||
+		a_marker == PclMarker::TriggerFlash ||
+		a_marker == PclMarker::SimulationEnd;
+	sl::FrameToken* token = renderThreadMarker ?
+	                            RenderFrameToken() :
+	                            TokenForFrame(simFrame ? simFrame : SimFrameId());
+	if (token)
+		g_sl.slPCLSetMarker(static_cast<sl::PCLMarker>(a_marker), *token);
 }
 
 // Returns false until the engine camera matrices are finite and invertible.
@@ -1078,7 +1029,6 @@ static bool cs_WrapInteropImage(DXVKInterop* a_dxvk, VkDevice a_device, PFN_vkCr
 		cs_GetVkImageSEH(a_dxvk, a_res, &image, &layout, &info);
 	if (imageAttempt.exceptionCode) {
 		a_terminalFault = true;
-		g_sl.dispatchFaulted = true;
 		logger::error("[Streamline] DXVK image interop faulted (SEH {:#x})",
 			imageAttempt.exceptionCode);
 		return false;
@@ -1102,7 +1052,6 @@ static bool cs_WrapInteropImage(DXVKInterop* a_dxvk, VkDevice a_device, PFN_vkCr
 			a_terminalFault = true;
 		}
 		view = VK_NULL_HANDLE;
-		g_sl.dispatchFaulted = true;
 		logger::error("[Streamline] Vulkan image-view creation failed (result {}, SEH {:#x})",
 			static_cast<int>(createAttempt.result), createAttempt.exceptionCode);
 		a_outView = VK_NULL_HANDLE;
@@ -1142,7 +1091,6 @@ static bool cs_DestroyViews([[maybe_unused]] DXVKInterop* a_dxvk, VkDevice a_dev
 			cs_DestroyImageViewSEH(a_destroyImageView, a_device, a_views[i]);
 		if (!destroyAttempt.completed) {
 			a_views[i] = VK_NULL_HANDLE;
-			g_sl.dispatchFaulted = true;
 			return false;
 		}
 		a_views[i] = VK_NULL_HANDLE;
@@ -1164,8 +1112,6 @@ static bool cs_BarrierUpscalerOutput(VkCommandBuffer a_commandBuffer, const sl::
 	barrier.subresourceRange.levelCount = a_output.mipLevels;
 	barrier.subresourceRange.layerCount = a_output.arrayLayers;
 	const cs_VulkanVoidAttempt barrierAttempt = cs_PipelineBarrierSEH(a_commandBuffer, &barrier);
-	if (!barrierAttempt.completed)
-		g_sl.dispatchFaulted = true;
 	return barrierAttempt.completed;
 }
 
@@ -1224,12 +1170,10 @@ static bool cs_CanReleaseFailedFSRFrame(DXVKInterop* a_dxvk,
 	const VkImageView* a_views, uint32_t a_viewCount,
 	ID3D11Resource* const* a_resources, uint32_t a_resourceCount)
 {
-	if (!a_transaction.SubmissionMayBeInFlight() &&
-		!g_sl.dispatchFaulted.load(std::memory_order_acquire)) {
+	if (!a_transaction.SubmissionMayBeInFlight()) {
 		const sl::Result discardResult = cs_DiscardFSRFrameGenerationPreparedFrame(a_viewport);
 		if (discardResult == sl::Result::eOk || discardResult == sl::Result::eErrorInvalidState)
 			return true;
-		g_sl.dispatchFaulted = true;
 		logger::error("[Streamline] failed to discard a partially accepted FSR-FG frame (result {})",
 			static_cast<int>(discardResult));
 	}
@@ -1304,7 +1248,6 @@ static sl::Result cs_EvaluateFeatureCore(sl::Feature a_feature, const sl::Viewpo
 	const cs_VulkanProcAttempt destroyProcAttempt = cs_GetDeviceProcAddrSEH(
 		dxvk->GetDeviceProcAddr(), vkDevice, "vkDestroyImageView");
 	if (createProcAttempt.exceptionCode || destroyProcAttempt.exceptionCode) {
-		g_sl.dispatchFaulted = true;
 		return sl::Result::eErrorExceptionHandler;
 	}
 	auto vkCreateImageView = reinterpret_cast<PFN_vkCreateImageView>(createProcAttempt.function);
@@ -1466,7 +1409,7 @@ Streamline::EvaluationResult Streamline::EvaluateDLSS(ID3D11Resource* a_colorIn,
 	bool outputReady = false;
 	bool evaluationSkipped = false;
 	EvaluationResult result = EvaluationResult::kFailed;
-	if (!initialized || !featureDLSS || g_sl.dispatchFaulted)
+	if (!initialized || !featureDLSS)
 		return result;
 	if (!a_colorIn || !a_colorOut || !a_depth || !a_motionVectors)
 		return result;
@@ -1475,86 +1418,81 @@ Streamline::EvaluationResult Streamline::EvaluateDLSS(ID3D11Resource* a_colorIn,
 	if (!dxvk->CommandResourcesReady())
 		return result;
 
-	__try {
-		sl::DLSSMode dlssMode = sl::DLSSMode::eMaxQuality;
-		switch (a_qualityMode) {
-		case 0:
-			dlssMode = sl::DLSSMode::eDLAA;
-			break;
-		case 1:
-			dlssMode = sl::DLSSMode::eMaxQuality;
-			break;
-		case 2:
-			dlssMode = sl::DLSSMode::eBalanced;
-			break;
-		case 3:
-			dlssMode = sl::DLSSMode::eMaxPerformance;
-			break;
-		case 4:
-			dlssMode = sl::DLSSMode::eUltraPerformance;
-			break;
-		default:
-			dlssMode = sl::DLSSMode::eMaxQuality;
-			break;
-		}
+	sl::DLSSMode dlssMode = sl::DLSSMode::eMaxQuality;
+	switch (a_qualityMode) {
+	case 0:
+		dlssMode = sl::DLSSMode::eDLAA;
+		break;
+	case 1:
+		dlssMode = sl::DLSSMode::eMaxQuality;
+		break;
+	case 2:
+		dlssMode = sl::DLSSMode::eBalanced;
+		break;
+	case 3:
+		dlssMode = sl::DLSSMode::eMaxPerformance;
+		break;
+	case 4:
+		dlssMode = sl::DLSSMode::eUltraPerformance;
+		break;
+	default:
+		dlssMode = sl::DLSSMode::eMaxQuality;
+		break;
+	}
 
-		sl::DLSSOptions options{};
-		options.mode = dlssMode;
-		options.outputWidth = a_outputWidth;
-		options.outputHeight = a_outputHeight;
-		// The Vulkan scene chain is always FP16 HDR.
-		options.colorBuffersHDR = sl::Boolean::eTrue;
-		options.useAutoExposure = sl::Boolean::eTrue;
+	sl::DLSSOptions options{};
+	options.mode = dlssMode;
+	options.outputWidth = a_outputWidth;
+	options.outputHeight = a_outputHeight;
+	// The Vulkan scene chain is always FP16 HDR.
+	options.colorBuffersHDR = sl::Boolean::eTrue;
+	options.useAutoExposure = sl::Boolean::eTrue;
 
-		// Use the recommended preset for the detected NVIDIA architecture.
-		if (isRTXBelow40Series) {
-			options.dlaaPreset = sl::DLSSPreset::ePresetJ;
-			options.ultraQualityPreset = sl::DLSSPreset::ePresetJ;
-			options.qualityPreset = sl::DLSSPreset::ePresetJ;
-			options.balancedPreset = sl::DLSSPreset::ePresetJ;
-			options.performancePreset = sl::DLSSPreset::ePresetJ;
-			options.ultraPerformancePreset = sl::DLSSPreset::ePresetM;
-		} else if (isNvidiaGPU) {
-			options.dlaaPreset = sl::DLSSPreset::ePresetJ;
-			options.ultraQualityPreset = sl::DLSSPreset::ePresetJ;
-			options.qualityPreset = sl::DLSSPreset::ePresetM;
-			options.balancedPreset = sl::DLSSPreset::ePresetM;
-			options.performancePreset = sl::DLSSPreset::ePresetM;
-			options.ultraPerformancePreset = sl::DLSSPreset::ePresetL;
-		}
+	// Use the recommended preset for the detected NVIDIA architecture.
+	if (isRTXBelow40Series) {
+		options.dlaaPreset = sl::DLSSPreset::ePresetJ;
+		options.ultraQualityPreset = sl::DLSSPreset::ePresetJ;
+		options.qualityPreset = sl::DLSSPreset::ePresetJ;
+		options.balancedPreset = sl::DLSSPreset::ePresetJ;
+		options.performancePreset = sl::DLSSPreset::ePresetJ;
+		options.ultraPerformancePreset = sl::DLSSPreset::ePresetM;
+	} else if (isNvidiaGPU) {
+		options.dlaaPreset = sl::DLSSPreset::ePresetJ;
+		options.ultraQualityPreset = sl::DLSSPreset::ePresetJ;
+		options.qualityPreset = sl::DLSSPreset::ePresetM;
+		options.balancedPreset = sl::DLSSPreset::ePresetM;
+		options.performancePreset = sl::DLSSPreset::ePresetM;
+		options.ultraPerformancePreset = sl::DLSSPreset::ePresetL;
+	}
 
-		static bool s_loggedPreset = false;
-		if (!s_loggedPreset) {
-			s_loggedPreset = true;
-			logger::info("[Streamline] DLSS presets set (mode {}): quality={} (RTX40+={} below40={})",
-				static_cast<int>(dlssMode), static_cast<int>(options.qualityPreset),
-				isNvidiaGPU && !isRTXBelow40Series, isRTXBelow40Series);
-		}
+	static bool s_loggedPreset = false;
+	if (!s_loggedPreset) {
+		s_loggedPreset = true;
+		logger::info("[Streamline] DLSS presets set (mode {}): quality={} (RTX40+={} below40={})",
+			static_cast<int>(dlssMode), static_cast<int>(options.qualityPreset),
+			isNvidiaGPU && !isRTXBelow40Series, isRTXBelow40Series);
+	}
 
-		const sl::Result optionsResult = g_sl.slDLSSSetOptions(g_sl.viewport, options);
-		if (optionsResult != sl::Result::eOk) {
-			logger::error("[Streamline] DLSS options failed (result {})", static_cast<int>(optionsResult));
-			return result;
-		}
+	const sl::Result optionsResult = g_sl.slDLSSSetOptions(g_sl.viewport, options);
+	if (optionsResult != sl::Result::eOk) {
+		logger::error("[Streamline] DLSS options failed (result {})", static_cast<int>(optionsResult));
+		return result;
+	}
 
-		const sl::Result evalRes = cs_EvaluateFeatureCore(sl::kFeatureDLSS, g_sl.viewport,
-			a_colorIn, a_colorOut, a_depth, a_motionVectors,
-			a_renderWidth, a_renderHeight, a_outputWidth, a_outputHeight, a_jitterX, a_jitterY,
-			nullptr, &outputReady, &evaluationSkipped);
-		result = cs_ClassifyEvaluation(evalRes, outputReady, evaluationSkipped);
+	const sl::Result evalRes = cs_EvaluateFeatureCore(sl::kFeatureDLSS, g_sl.viewport,
+		a_colorIn, a_colorOut, a_depth, a_motionVectors,
+		a_renderWidth, a_renderHeight, a_outputWidth, a_outputHeight, a_jitterX, a_jitterY,
+		nullptr, &outputReady, &evaluationSkipped);
+	result = cs_ClassifyEvaluation(evalRes, outputReady, evaluationSkipped);
 
-		static sl::Result s_loggedRes = sl::Result::eErrorNotInitialized;
-		static uint32_t s_loggedDims = 0;
-		const uint32_t dims = (a_renderWidth << 16) | (a_outputWidth & 0xFFFF);
-		if (evalRes != s_loggedRes || dims != s_loggedDims) {
-			s_loggedRes = evalRes;
-			s_loggedDims = dims;
-			logger::info("[Streamline] DLSS evaluate result={} render={}x{} output={}x{}",
-				static_cast<int>(evalRes), a_renderWidth, a_renderHeight, a_outputWidth, a_outputHeight);
-		}
-	} __except (EXCEPTION_EXECUTE_HANDLER) {
-		g_sl.dispatchFaulted = true;
-		logger::error("[Streamline] DLSS dispatch faulted — Streamline disabled for this session");
+	static sl::Result s_loggedRes = sl::Result::eErrorNotInitialized;
+	static uint32_t s_loggedDims = 0;
+	const uint32_t dims = (a_renderWidth << 16) | (a_outputWidth & 0xFFFF);
+	if (evalRes != s_loggedRes || dims != s_loggedDims) {
+		s_loggedRes = evalRes;
+		s_loggedDims = dims;
+		logger::info("[Streamline] DLSS evaluate result={} render={}x{} output={}x{}",
+			static_cast<int>(evalRes), a_renderWidth, a_renderHeight, a_outputWidth, a_outputHeight);
 	}
 	return result;
 }
@@ -1569,7 +1507,7 @@ Streamline::EvaluationResult Streamline::EvaluateXeSS(ID3D11Resource* a_colorIn,
 	bool outputReady = false;
 	bool evaluationSkipped = false;
 	EvaluationResult result = EvaluationResult::kFailed;
-	if (!initialized || !featureXeSS || g_sl.dispatchFaulted)
+	if (!initialized || !featureXeSS)
 		return result;
 	if (!a_colorIn || !a_colorOut || !a_depth || !a_motionVectors)
 		return result;
@@ -1578,56 +1516,51 @@ Streamline::EvaluationResult Streamline::EvaluateXeSS(ID3D11Resource* a_colorIn,
 	if (!dxvk->CommandResourcesReady())
 		return result;
 
-	__try {
-		sl::XeSSMode xessMode = sl::XeSSMode::eQuality;
-		switch (a_qualityMode) {
-		case 0:
-			xessMode = sl::XeSSMode::eNativeAA;
-			break;
-		case 1:
-			xessMode = sl::XeSSMode::eQuality;
-			break;
-		case 2:
-			xessMode = sl::XeSSMode::eBalanced;
-			break;
-		case 3:
-			xessMode = sl::XeSSMode::ePerformance;
-			break;
-		case 4:
-			xessMode = sl::XeSSMode::eUltraPerformance;
-			break;
-		}
+	sl::XeSSMode xessMode = sl::XeSSMode::eQuality;
+	switch (a_qualityMode) {
+	case 0:
+		xessMode = sl::XeSSMode::eNativeAA;
+		break;
+	case 1:
+		xessMode = sl::XeSSMode::eQuality;
+		break;
+	case 2:
+		xessMode = sl::XeSSMode::eBalanced;
+		break;
+	case 3:
+		xessMode = sl::XeSSMode::ePerformance;
+		break;
+	case 4:
+		xessMode = sl::XeSSMode::eUltraPerformance;
+		break;
+	}
 
-		sl::XeSSOptions xessOpts{};
-		xessOpts.mode = xessMode;
-		xessOpts.outputWidth = a_outputWidth;
-		xessOpts.outputHeight = a_outputHeight;
-		xessOpts.sharpness = a_sharpness;
-		xessOpts.colorBuffersHDR = sl::Boolean::eTrue;
-		const sl::Result optionsResult = g_sl.slXeSSSetOptions(g_sl.viewport, xessOpts);
-		if (optionsResult != sl::Result::eOk) {
-			logger::error("[Streamline] XeSS options failed (result {})", static_cast<int>(optionsResult));
-			return result;
-		}
+	sl::XeSSOptions xessOpts{};
+	xessOpts.mode = xessMode;
+	xessOpts.outputWidth = a_outputWidth;
+	xessOpts.outputHeight = a_outputHeight;
+	xessOpts.sharpness = a_sharpness;
+	xessOpts.colorBuffersHDR = sl::Boolean::eTrue;
+	const sl::Result optionsResult = g_sl.slXeSSSetOptions(g_sl.viewport, xessOpts);
+	if (optionsResult != sl::Result::eOk) {
+		logger::error("[Streamline] XeSS options failed (result {})", static_cast<int>(optionsResult));
+		return result;
+	}
 
-		const sl::Result evalRes = cs_EvaluateFeatureCore(sl::kFeatureXeSS, g_sl.viewport,
-			a_colorIn, a_colorOut, a_depth, a_motionVectors,
-			a_renderWidth, a_renderHeight, a_outputWidth, a_outputHeight, a_jitterX, a_jitterY,
-			nullptr, &outputReady, &evaluationSkipped);
-		result = cs_ClassifyEvaluation(evalRes, outputReady, evaluationSkipped);
+	const sl::Result evalRes = cs_EvaluateFeatureCore(sl::kFeatureXeSS, g_sl.viewport,
+		a_colorIn, a_colorOut, a_depth, a_motionVectors,
+		a_renderWidth, a_renderHeight, a_outputWidth, a_outputHeight, a_jitterX, a_jitterY,
+		nullptr, &outputReady, &evaluationSkipped);
+	result = cs_ClassifyEvaluation(evalRes, outputReady, evaluationSkipped);
 
-		static sl::Result s_loggedRes = sl::Result::eErrorNotInitialized;
-		static uint32_t s_loggedDims = 0;
-		const uint32_t dims = (a_renderWidth << 16) | (a_outputWidth & 0xFFFF);
-		if (evalRes != s_loggedRes || dims != s_loggedDims) {
-			s_loggedRes = evalRes;
-			s_loggedDims = dims;
-			logger::info("[Streamline] XeSS evaluate result={} render={}x{} output={}x{}",
-				static_cast<int>(evalRes), a_renderWidth, a_renderHeight, a_outputWidth, a_outputHeight);
-		}
-	} __except (EXCEPTION_EXECUTE_HANDLER) {
-		g_sl.dispatchFaulted = true;
-		logger::error("[Streamline] XeSS dispatch faulted — Streamline disabled for this session");
+	static sl::Result s_loggedRes = sl::Result::eErrorNotInitialized;
+	static uint32_t s_loggedDims = 0;
+	const uint32_t dims = (a_renderWidth << 16) | (a_outputWidth & 0xFFFF);
+	if (evalRes != s_loggedRes || dims != s_loggedDims) {
+		s_loggedRes = evalRes;
+		s_loggedDims = dims;
+		logger::info("[Streamline] XeSS evaluate result={} render={}x{} output={}x{}",
+			static_cast<int>(evalRes), a_renderWidth, a_renderHeight, a_outputWidth, a_outputHeight);
 	}
 	return result;
 }
@@ -1642,7 +1575,7 @@ Streamline::EvaluationResult Streamline::EvaluateFSR(ID3D11Resource* a_colorIn, 
 	bool outputReady = false;
 	bool evaluationSkipped = false;
 	EvaluationResult result = EvaluationResult::kFailed;
-	if (!initialized || !featureFSR || g_sl.dispatchFaulted)
+	if (!initialized || !featureFSR)
 		return result;
 	if (!a_colorIn || !a_colorOut || !a_depth || !a_motionVectors)
 		return result;
@@ -1651,56 +1584,51 @@ Streamline::EvaluationResult Streamline::EvaluateFSR(ID3D11Resource* a_colorIn, 
 	if (!dxvk->CommandResourcesReady())
 		return result;
 
-	__try {
-		sl::FSRMode fsrMode = sl::FSRMode::eMaxQuality;
-		switch (a_qualityMode) {
-		case 0:
-			fsrMode = sl::FSRMode::eNativeAA;
-			break;
-		case 1:
-			fsrMode = sl::FSRMode::eMaxQuality;
-			break;
-		case 2:
-			fsrMode = sl::FSRMode::eBalanced;
-			break;
-		case 3:
-			fsrMode = sl::FSRMode::eMaxPerformance;
-			break;
-		case 4:
-			fsrMode = sl::FSRMode::eUltraPerformance;
-			break;
-		}
+	sl::FSRMode fsrMode = sl::FSRMode::eMaxQuality;
+	switch (a_qualityMode) {
+	case 0:
+		fsrMode = sl::FSRMode::eNativeAA;
+		break;
+	case 1:
+		fsrMode = sl::FSRMode::eMaxQuality;
+		break;
+	case 2:
+		fsrMode = sl::FSRMode::eBalanced;
+		break;
+	case 3:
+		fsrMode = sl::FSRMode::eMaxPerformance;
+		break;
+	case 4:
+		fsrMode = sl::FSRMode::eUltraPerformance;
+		break;
+	}
 
-		sl::FSROptions fsrOpts{};
-		fsrOpts.mode = fsrMode;
-		fsrOpts.outputWidth = a_outputWidth;
-		fsrOpts.outputHeight = a_outputHeight;
-		fsrOpts.sharpness = a_sharpness;
-		fsrOpts.colorBuffersHDR = sl::Boolean::eTrue;
-		const sl::Result optionsResult = g_sl.slFSRSetOptions(g_sl.viewport, fsrOpts);
-		if (optionsResult != sl::Result::eOk) {
-			logger::error("[Streamline] FSR options failed (result {})", static_cast<int>(optionsResult));
-			return result;
-		}
+	sl::FSROptions fsrOpts{};
+	fsrOpts.mode = fsrMode;
+	fsrOpts.outputWidth = a_outputWidth;
+	fsrOpts.outputHeight = a_outputHeight;
+	fsrOpts.sharpness = a_sharpness;
+	fsrOpts.colorBuffersHDR = sl::Boolean::eTrue;
+	const sl::Result optionsResult = g_sl.slFSRSetOptions(g_sl.viewport, fsrOpts);
+	if (optionsResult != sl::Result::eOk) {
+		logger::error("[Streamline] FSR options failed (result {})", static_cast<int>(optionsResult));
+		return result;
+	}
 
-		const sl::Result evalRes = cs_EvaluateFeatureCore(sl::kFeatureFSR, g_sl.viewport,
-			a_colorIn, a_colorOut, a_depth, a_motionVectors,
-			a_renderWidth, a_renderHeight, a_outputWidth, a_outputHeight, a_jitterX, a_jitterY,
-			nullptr, &outputReady, &evaluationSkipped);
-		result = cs_ClassifyEvaluation(evalRes, outputReady, evaluationSkipped);
+	const sl::Result evalRes = cs_EvaluateFeatureCore(sl::kFeatureFSR, g_sl.viewport,
+		a_colorIn, a_colorOut, a_depth, a_motionVectors,
+		a_renderWidth, a_renderHeight, a_outputWidth, a_outputHeight, a_jitterX, a_jitterY,
+		nullptr, &outputReady, &evaluationSkipped);
+	result = cs_ClassifyEvaluation(evalRes, outputReady, evaluationSkipped);
 
-		static sl::Result s_loggedRes = sl::Result::eErrorNotInitialized;
-		static uint32_t s_loggedDims = 0;
-		const uint32_t dims = (a_renderWidth << 16) | (a_outputWidth & 0xFFFF);
-		if (evalRes != s_loggedRes || dims != s_loggedDims) {
-			s_loggedRes = evalRes;
-			s_loggedDims = dims;
-			logger::info("[Streamline] FSR evaluate result={} render={}x{} output={}x{}",
-				static_cast<int>(evalRes), a_renderWidth, a_renderHeight, a_outputWidth, a_outputHeight);
-		}
-	} __except (EXCEPTION_EXECUTE_HANDLER) {
-		g_sl.dispatchFaulted = true;
-		logger::error("[Streamline] FSR dispatch faulted — Streamline disabled for this session");
+	static sl::Result s_loggedRes = sl::Result::eErrorNotInitialized;
+	static uint32_t s_loggedDims = 0;
+	const uint32_t dims = (a_renderWidth << 16) | (a_outputWidth & 0xFFFF);
+	if (evalRes != s_loggedRes || dims != s_loggedDims) {
+		s_loggedRes = evalRes;
+		s_loggedDims = dims;
+		logger::info("[Streamline] FSR evaluate result={} render={}x{} output={}x{}",
+			static_cast<int>(evalRes), a_renderWidth, a_renderHeight, a_outputWidth, a_outputHeight);
 	}
 	return result;
 }
@@ -1712,7 +1640,7 @@ bool Streamline::EvaluateFSRFrameGen(ID3D11Resource* a_depth, ID3D11Resource* a_
 	float a_jitterX, float a_jitterY)
 {
 	// Isolate FSR frame-generation preparation from viewport 0 upscaling tags and constants.
-	if (!initialized || !featureFSRFG || g_sl.dispatchFaulted)
+	if (!initialized || !featureFSRFG)
 		return false;
 	if (!a_depth || !a_motionVectors || !a_hudlessColor)
 		return false;
@@ -1723,22 +1651,17 @@ bool Streamline::EvaluateFSRFrameGen(ID3D11Resource* a_depth, ID3D11Resource* a_
 
 	bool evaluationSubmitted = false;
 	bool accepted = false;
-	__try {
-		const sl::ViewportHandle fgViewport{ 1 };
-		const sl::Result evalRes = cs_EvaluateFeatureCore(sl::kFeatureFSR_G, fgViewport,
-			nullptr, nullptr, a_depth, a_motionVectors,
-			a_renderWidth, a_renderHeight, a_outputWidth, a_outputHeight, a_jitterX, a_jitterY,
-			a_hudlessColor, &evaluationSubmitted);
-		accepted = evalRes == sl::Result::eOk && evaluationSubmitted;
+	const sl::ViewportHandle fgViewport{ 1 };
+	const sl::Result evalRes = cs_EvaluateFeatureCore(sl::kFeatureFSR_G, fgViewport,
+		nullptr, nullptr, a_depth, a_motionVectors,
+		a_renderWidth, a_renderHeight, a_outputWidth, a_outputHeight, a_jitterX, a_jitterY,
+		a_hudlessColor, &evaluationSubmitted);
+	accepted = evalRes == sl::Result::eOk && evaluationSubmitted;
 
-		static sl::Result s_loggedRes = sl::Result::eErrorNotInitialized;
-		if (evalRes != s_loggedRes) {
-			s_loggedRes = evalRes;
-			logger::info("[Streamline] FSR FG-prepare result={} render={}x{}", static_cast<int>(evalRes), a_renderWidth, a_renderHeight);
-		}
-	} __except (EXCEPTION_EXECUTE_HANDLER) {
-		g_sl.dispatchFaulted = true;
-		logger::error("[Streamline] FSR FG-prepare faulted — Streamline disabled for this session");
+	static sl::Result s_loggedRes = sl::Result::eErrorNotInitialized;
+	if (evalRes != s_loggedRes) {
+		s_loggedRes = evalRes;
+		logger::info("[Streamline] FSR FG-prepare result={} render={}x{}", static_cast<int>(evalRes), a_renderWidth, a_renderHeight);
 	}
 	return accepted;
 }
@@ -1746,7 +1669,7 @@ bool Streamline::EvaluateFSRFrameGen(ID3D11Resource* a_depth, ID3D11Resource* a_
 bool Streamline::SetDLSSGMode(bool a_enable, uint32_t a_displayWidth, uint32_t a_displayHeight,
 	uint32_t a_numFramesToGenerate, bool a_autoMode, bool a_dynamic, float a_dynamicTargetFps)
 {
-	if (!initialized || !featureDLSSG || g_sl.dispatchFaulted)
+	if (!initialized || !featureDLSSG)
 		return false;
 
 	// Do not call the options entry point while DLSS-G is runtime-unloaded.
@@ -1767,66 +1690,61 @@ bool Streamline::SetDLSSGMode(bool a_enable, uint32_t a_displayWidth, uint32_t a
 	const bool wasModeOn = g_sl.dlssgModeOn;
 
 	bool succeeded = false;
-	__try {
-		sl::DLSSGOptions options{};
-		options.mode = !a_enable ? sl::DLSSGMode::eOff :
-		               a_dynamic ? sl::DLSSGMode::eDynamic :
-		               a_autoMode ? sl::DLSSGMode::eAuto :
-		                            sl::DLSSGMode::eOn;
-		options.numFramesToGenerate = numFrames;
-		if (a_dynamic)
-			options.dynamicTargetFrameRate = a_dynamicTargetFps;
-		// Retain resources across temporary loading-screen and menu disables.
-		options.flags = sl::DLSSGFlags::eRetainResourcesWhenOff;
-		options.mvecDepthWidth = a_displayWidth;
-		options.mvecDepthHeight = a_displayHeight;
-		options.colorWidth = a_displayWidth;
-		options.colorHeight = a_displayHeight;
-		// Volatile inputs are copied into Streamline-owned resources before present.
-		//
-		// eBlockNoClientQueues is the faster-sounding option and was what this used, but Streamline
-		// only permits it if the client waits on DLSSGState::inputsProcessingCompletionFence before
-		// modifying or destroying any resource tagged as a DLSS-G input. CS never reads that fence,
-		// so it can overwrite depth, motion vectors or the hudless colour while DLSS-G is still
-		// consuming them for the previously presented frame. The symptom of that race is an
-		// occasional corrupt generated frame rather than a measurable slowdown.
-		//
-		// The queue parallelism it buys does not show up here in any case, and the two things it
-		// might plausibly have bought were checked separately. It does not raise throughput: with
-		// eBlockNoClientQueues the rendered rate stayed at exactly 30.0 fps against a 60 Hz mode,
-		// identical to the default, because what pins the rendered rate is sl.dlss_g pacing presents
-		// to the display refresh -- not the client queue being blocked. (Forcing a tearing present
-		// mode and forcing eDynamic with a 240 fps target were also both measured and changed
-		// nothing; the latter simply stopped generating.) Nor does it smooth delivery: six paired
-		// runs at the refresh rate, a fresh game instance each, were indistinguishable -- frame-time
-		// deviation 0.012 / 0.014 / 0.012 ms against 0.013 / 0.014 / 0.019 ms, with GPU-busy differences
-		// swamped by which way the camera happened to be facing. The mode was trading a correctness
-		// guarantee for nothing measurable, so take the documented default, whose contract CS meets.
-		options.queueParallelismMode = sl::DLSSGQueueParallelismMode::eBlockPresentingClientQueue;
-		const sl::Result res = g_sl.slDLSSGSetOptions(g_sl.viewport, options);
-		if (res != sl::Result::eOk) {
-			if (changed)
-				logger::warn("[Streamline] slDLSSGSetOptions failed (result {})", static_cast<int>(res));
-		} else {
-			succeeded = true;
-			g_sl.dlssgModeCached = true;
-			g_sl.dlssgModeOn = a_enable;
-			g_sl.dlssgCachedNumFrames = numFrames;
-			g_sl.dlssgCachedAuto = a_autoMode;
-			g_sl.dlssgCachedDynamic = a_dynamic;
-			g_sl.dlssgCachedDynamicFps = a_dynamicTargetFps;
-			g_sl.dlssgCachedDisplayW = a_displayWidth;
-			g_sl.dlssgCachedDisplayH = a_displayHeight;
-			if (!a_enable || !wasModeOn)
-				g_sl.dlssgCloneTagsPrimed.store(false, std::memory_order_release);
-			if (changed)
-				logger::info("[Streamline] DLSS-G mode={} ({}) numFrames={} targetFps={} (max {}) display={}x{}", a_enable,
-					!a_enable ? "off" : a_dynamic ? "dynamic" : a_autoMode ? "auto" : "on", numFrames, a_dynamicTargetFps, maxFrames,
-					a_displayWidth, a_displayHeight);
-		}
-	} __except (EXCEPTION_EXECUTE_HANDLER) {
-		g_sl.dispatchFaulted = true;
-		logger::error("[Streamline] DLSS-G SetOptions faulted — Streamline disabled for this session");
+	sl::DLSSGOptions options{};
+	options.mode = !a_enable ? sl::DLSSGMode::eOff :
+	               a_dynamic ? sl::DLSSGMode::eDynamic :
+	               a_autoMode ? sl::DLSSGMode::eAuto :
+	                            sl::DLSSGMode::eOn;
+	options.numFramesToGenerate = numFrames;
+	if (a_dynamic)
+		options.dynamicTargetFrameRate = a_dynamicTargetFps;
+	// Retain resources across temporary loading-screen and menu disables.
+	options.flags = sl::DLSSGFlags::eRetainResourcesWhenOff;
+	options.mvecDepthWidth = a_displayWidth;
+	options.mvecDepthHeight = a_displayHeight;
+	options.colorWidth = a_displayWidth;
+	options.colorHeight = a_displayHeight;
+	// Volatile inputs are copied into Streamline-owned resources before present.
+	//
+	// eBlockNoClientQueues is the faster-sounding option and was what this used, but Streamline
+	// only permits it if the client waits on DLSSGState::inputsProcessingCompletionFence before
+	// modifying or destroying any resource tagged as a DLSS-G input. CS never reads that fence,
+	// so it can overwrite depth, motion vectors or the hudless colour while DLSS-G is still
+	// consuming them for the previously presented frame. The symptom of that race is an
+	// occasional corrupt generated frame rather than a measurable slowdown.
+	//
+	// The queue parallelism it buys does not show up here in any case, and the two things it
+	// might plausibly have bought were checked separately. It does not raise throughput: with
+	// eBlockNoClientQueues the rendered rate stayed at exactly 30.0 fps against a 60 Hz mode,
+	// identical to the default, because what pins the rendered rate is sl.dlss_g pacing presents
+	// to the display refresh -- not the client queue being blocked. (Forcing a tearing present
+	// mode and forcing eDynamic with a 240 fps target were also both measured and changed
+	// nothing; the latter simply stopped generating.) Nor does it smooth delivery: six paired
+	// runs at the refresh rate, a fresh game instance each, were indistinguishable -- frame-time
+	// deviation 0.012 / 0.014 / 0.012 ms against 0.013 / 0.014 / 0.019 ms, with GPU-busy differences
+	// swamped by which way the camera happened to be facing. The mode was trading a correctness
+	// guarantee for nothing measurable, so take the documented default, whose contract CS meets.
+	options.queueParallelismMode = sl::DLSSGQueueParallelismMode::eBlockPresentingClientQueue;
+	const sl::Result res = g_sl.slDLSSGSetOptions(g_sl.viewport, options);
+	if (res != sl::Result::eOk) {
+		if (changed)
+			logger::warn("[Streamline] slDLSSGSetOptions failed (result {})", static_cast<int>(res));
+	} else {
+		succeeded = true;
+		g_sl.dlssgModeCached = true;
+		g_sl.dlssgModeOn = a_enable;
+		g_sl.dlssgCachedNumFrames = numFrames;
+		g_sl.dlssgCachedAuto = a_autoMode;
+		g_sl.dlssgCachedDynamic = a_dynamic;
+		g_sl.dlssgCachedDynamicFps = a_dynamicTargetFps;
+		g_sl.dlssgCachedDisplayW = a_displayWidth;
+		g_sl.dlssgCachedDisplayH = a_displayHeight;
+		if (!a_enable || !wasModeOn)
+			g_sl.dlssgCloneTagsPrimed.store(false, std::memory_order_release);
+		if (changed)
+			logger::info("[Streamline] DLSS-G mode={} ({}) numFrames={} targetFps={} (max {}) display={}x{}", a_enable,
+				!a_enable ? "off" : a_dynamic ? "dynamic" : a_autoMode ? "auto" : "on", numFrames, a_dynamicTargetFps, maxFrames,
+				a_displayWidth, a_displayHeight);
 	}
 	return succeeded;
 }
@@ -1835,75 +1753,66 @@ bool Streamline::SetFSRFrameGen(bool a_enable, bool a_hdr,
 	bool a_debugView, bool a_debugTearLines, bool a_debugPacingLines, bool a_onlyPresentGenerated)
 {
 	// The caller retries until the runtime-loaded plugin accepts the option.
-	if (!initialized || !featureFSRFG || !g_sl.slFSRFrameGenerationSetOptions || g_sl.dispatchFaulted)
+	if (!initialized || !featureFSRFG || !g_sl.slFSRFrameGenerationSetOptions)
 		return false;
 	if (!g_fsrfgCurrentlyLoaded.load(std::memory_order_acquire))
 		return false;
 
 	bool ok = false;
-	__try {
-		sl::FSRFrameGenOptions options{};
-		options.enabled = a_enable ? sl::Boolean::eTrue : sl::Boolean::eFalse;
-		options.colorBuffersHDR = a_hdr ? sl::Boolean::eTrue : sl::Boolean::eFalse;
-		options.debugView = a_debugView ? sl::Boolean::eTrue : sl::Boolean::eFalse;
-		options.debugTearLines = a_debugTearLines ? sl::Boolean::eTrue : sl::Boolean::eFalse;
-		options.debugPacingLines = a_debugPacingLines ? sl::Boolean::eTrue : sl::Boolean::eFalse;
-		options.onlyPresentGenerated = a_onlyPresentGenerated ? sl::Boolean::eTrue : sl::Boolean::eFalse;
-		const sl::Result res = g_sl.slFSRFrameGenerationSetOptions(g_sl.viewport, options);
-		if (res != sl::Result::eOk) {
-			logger::error("[Streamline] slFSRFrameGenerationSetOptions failed (result {})", static_cast<int>(res));
-		} else {
-			ok = true;
-			g_fsrfgOwnsPresent.store(a_enable, std::memory_order_release);
-			if (!a_enable)
-				g_sl.frameGenerationMultiplier.store(1, std::memory_order_release);
-			logger::info("[Streamline] FSR frame generation {}", a_enable ? "enabled" : "disabled");
-		}
-	} __except (EXCEPTION_EXECUTE_HANDLER) {
-		g_sl.dispatchFaulted = true;
-		logger::error("[Streamline] FSR SetFrameGen faulted — Streamline disabled for this session");
+	sl::FSRFrameGenOptions options{};
+	options.enabled = a_enable ? sl::Boolean::eTrue : sl::Boolean::eFalse;
+	options.colorBuffersHDR = a_hdr ? sl::Boolean::eTrue : sl::Boolean::eFalse;
+	options.debugView = a_debugView ? sl::Boolean::eTrue : sl::Boolean::eFalse;
+	options.debugTearLines = a_debugTearLines ? sl::Boolean::eTrue : sl::Boolean::eFalse;
+	options.debugPacingLines = a_debugPacingLines ? sl::Boolean::eTrue : sl::Boolean::eFalse;
+	options.onlyPresentGenerated = a_onlyPresentGenerated ? sl::Boolean::eTrue : sl::Boolean::eFalse;
+	const sl::Result res = g_sl.slFSRFrameGenerationSetOptions(g_sl.viewport, options);
+	if (res != sl::Result::eOk) {
+		logger::error("[Streamline] slFSRFrameGenerationSetOptions failed (result {})", static_cast<int>(res));
+	} else {
+		ok = true;
+		g_fsrfgOwnsPresent.store(a_enable, std::memory_order_release);
+		if (!a_enable)
+			g_sl.frameGenerationMultiplier.store(1, std::memory_order_release);
+		logger::info("[Streamline] FSR frame generation {}", a_enable ? "enabled" : "disabled");
 	}
 	return ok;
 }
 
 void Streamline::CaptureFSRFrameGenState()
 {
-	if (!initialized || !featureFSRFG || !g_sl.slFSRGetFrameGenState || g_sl.dispatchFaulted)
+	if (!initialized || !featureFSRFG || !g_sl.slFSRGetFrameGenState)
 		return;
-	__try {
-		sl::FSRFrameGenState state{};
-		const sl::Result res = g_sl.slFSRGetFrameGenState(g_sl.viewport, state);
-		if (res == sl::Result::eOk) {
-			g_sl.frameGenerationMultiplier.store(
-				std::max(state.numFramesActuallyPresented, 1u), std::memory_order_release);
-			g_sl.fsrTotalPresentedFrames.store(state.totalPresentedFrames, std::memory_order_release);
-			// FSR-FG had no equivalent of the DLSS-G present-state log, so "frame generation is on
-			// but generating nothing" was invisible on this path and the overlay's Post-FG FPS was
-			// the only clue. Sample on the same cadence DLSS-G uses.
-			// Report every CHANGE in the presented count. A periodic sample cannot answer
-			// "is frame generation dropping out while it is switched on", because it cannot
-			// distinguish a steady 1 from a 2 that briefly fell to 1 between samples.
-			static uint32_t s_fsrLastPresented = UINT32_MAX;
-			if (s_fsrLastPresented != state.numFramesActuallyPresented) {
-				const uint32_t prev = s_fsrLastPresented;
-				s_fsrLastPresented = state.numFramesActuallyPresented;
-				if (prev != UINT32_MAX && state.numFramesActuallyPresented < 2u)
-					logger::warn("[Streamline] FSR-FG stopped generating: presenting {} (was {}), total presented {}",
-						state.numFramesActuallyPresented, prev, state.totalPresentedFrames);
-				else
-					logger::info("[Streamline] FSR-FG presenting {} frame(s) (was {}), total presented {}",
-						state.numFramesActuallyPresented, prev, state.totalPresentedFrames);
-			}
-		} else {
-			static sl::Result s_lastFsrStateRes = sl::Result::eOk;
-			if (res != s_lastFsrStateRes) {
-				s_lastFsrStateRes = res;
-				logger::warn("[Streamline] slFSRGetFrameGenState failed (result {}) - Post-FG FPS falls back to an estimate",
-					static_cast<int>(res));
-			}
+	sl::FSRFrameGenState state{};
+	const sl::Result res = g_sl.slFSRGetFrameGenState(g_sl.viewport, state);
+	if (res == sl::Result::eOk) {
+		g_sl.frameGenerationMultiplier.store(
+			std::max(state.numFramesActuallyPresented, 1u), std::memory_order_release);
+		g_sl.fsrTotalPresentedFrames.store(state.totalPresentedFrames, std::memory_order_release);
+		// FSR-FG had no equivalent of the DLSS-G present-state log, so "frame generation is on
+		// but generating nothing" was invisible on this path and the overlay's Post-FG FPS was
+		// the only clue. Sample on the same cadence DLSS-G uses.
+		// Report every CHANGE in the presented count. A periodic sample cannot answer
+		// "is frame generation dropping out while it is switched on", because it cannot
+		// distinguish a steady 1 from a 2 that briefly fell to 1 between samples.
+		static uint32_t s_fsrLastPresented = UINT32_MAX;
+		if (s_fsrLastPresented != state.numFramesActuallyPresented) {
+			const uint32_t prev = s_fsrLastPresented;
+			s_fsrLastPresented = state.numFramesActuallyPresented;
+			if (prev != UINT32_MAX && state.numFramesActuallyPresented < 2u)
+				logger::warn("[Streamline] FSR-FG stopped generating: presenting {} (was {}), total presented {}",
+					state.numFramesActuallyPresented, prev, state.totalPresentedFrames);
+			else
+				logger::info("[Streamline] FSR-FG presenting {} frame(s) (was {}), total presented {}",
+					state.numFramesActuallyPresented, prev, state.totalPresentedFrames);
 		}
-	} __except (EXCEPTION_EXECUTE_HANDLER) {
-		g_sl.dispatchFaulted = true;
+	} else {
+		static sl::Result s_lastFsrStateRes = sl::Result::eOk;
+		if (res != s_lastFsrStateRes) {
+			s_lastFsrStateRes = res;
+			logger::warn("[Streamline] slFSRGetFrameGenState failed (result {}) - Post-FG FPS falls back to an estimate",
+				static_cast<int>(res));
+		}
 	}
 }
 
@@ -1915,21 +1824,17 @@ uint64_t Streamline::GetTotalPresentedFrames() const
 void Streamline::QueryDLSSGCapabilities()
 {
 	// Streamline requires this state query on the present thread.
-	if (!initialized || !featureDLSSG || g_sl.dispatchFaulted ||
+	if (!initialized || !featureDLSSG ||
 		!g_dlssgCurrentlyLoaded.load(std::memory_order_acquire))
 		return;
 	if (g_sl.dlssgMaxFramesToGenerate.load(std::memory_order_acquire) != 0u)
 		return;
-	__try {
-		sl::DLSSGState state{};
-		if (g_sl.slDLSSGGetState(g_sl.viewport, state, nullptr) == sl::Result::eOk && state.numFramesToGenerateMax > 0u) {
-			g_sl.dlssgMaxFramesToGenerate.store(state.numFramesToGenerateMax, std::memory_order_release);
-			g_sl.dlssgDynamicSupported.store(state.bIsDynamicMFGSupported == sl::Boolean::eTrue, std::memory_order_release);
-			logger::info("[Streamline] DLSS-G numFramesToGenerateMax = {} (max {}x multiplier), DynamicMFG supported = {}",
-				state.numFramesToGenerateMax, state.numFramesToGenerateMax + 1u, state.bIsDynamicMFGSupported == sl::Boolean::eTrue);
-		}
-	} __except (EXCEPTION_EXECUTE_HANDLER) {
-		g_sl.dispatchFaulted = true;
+	sl::DLSSGState state{};
+	if (g_sl.slDLSSGGetState(g_sl.viewport, state, nullptr) == sl::Result::eOk && state.numFramesToGenerateMax > 0u) {
+		g_sl.dlssgMaxFramesToGenerate.store(state.numFramesToGenerateMax, std::memory_order_release);
+		g_sl.dlssgDynamicSupported.store(state.bIsDynamicMFGSupported == sl::Boolean::eTrue, std::memory_order_release);
+		logger::info("[Streamline] DLSS-G numFramesToGenerateMax = {} (max {}x multiplier), DynamicMFG supported = {}",
+			state.numFramesToGenerateMax, state.numFramesToGenerateMax + 1u, state.bIsDynamicMFGSupported == sl::Boolean::eTrue);
 	}
 }
 
@@ -1970,8 +1875,8 @@ ID3D11Resource* a_depth, ID3D11Resource* a_motionVectors,
 	ID3D11Resource* a_hudlessColor, uint32_t a_renderWidth, uint32_t a_renderHeight,
 	uint32_t a_displayWidth, uint32_t a_displayHeight)
 {
-	if (!initialized || !featureDLSSG || g_sl.dispatchFaulted) {
-		cs_NoteDlssgTagSkip(g_sl.dispatchFaulted ? "Streamline dispatch faulted" : "DLSS-G unavailable");
+	if (!initialized || !featureDLSSG) {
+		cs_NoteDlssgTagSkip("DLSS-G unavailable");
 		return;
 	}
 	if (!a_depth || !a_motionVectors) {
@@ -1990,146 +1895,134 @@ ID3D11Resource* a_depth, ID3D11Resource* a_motionVectors,
 		return;
 	}
 
-	__try {
-		sl::FrameToken* token = RenderFrameToken();
-		if (!token) {
-			cs_NoteDlssgTagSkip("no render frame token");
+	sl::FrameToken* token = RenderFrameToken();
+	if (!token) {
+		cs_NoteDlssgTagSkip("no render frame token");
+		return;
+	}
+
+	VkDevice vkDevice = dxvk->GetDevice();
+	const cs_VulkanProcAttempt createProcAttempt = cs_GetDeviceProcAddrSEH(
+		dxvk->GetDeviceProcAddr(), vkDevice, "vkCreateImageView");
+	const cs_VulkanProcAttempt destroyProcAttempt = cs_GetDeviceProcAddrSEH(
+		dxvk->GetDeviceProcAddr(), vkDevice, "vkDestroyImageView");
+	if (createProcAttempt.exceptionCode || destroyProcAttempt.exceptionCode) {
+		return;
+	}
+	auto vkCreateImageView = reinterpret_cast<PFN_vkCreateImageView>(createProcAttempt.function);
+	auto vkDestroyImageView = reinterpret_cast<PFN_vkDestroyImageView>(destroyProcAttempt.function);
+	if (!vkCreateImageView || !vkDestroyImageView)
+		return;
+	ID3D11Resource* resources[] = { a_depth, a_motionVectors, a_hudlessColor };
+	VkImageView views[3]{};
+	uint32_t viewCount = 0;
+	bool viewCreationTerminalFault = false;
+	const auto destroyViews = [&]() {
+		return cs_DestroyViews(dxvk, vkDevice, vkDestroyImageView, views, viewCount,
+			resources, static_cast<uint32_t>(std::size(resources)));
+	};
+	const auto abandonViewsAfterCreationFailure = [&]() {
+		if (!viewCreationTerminalFault) {
+			destroyViews();
 			return;
 		}
+		// The destroy entry point already faulted on these handles; calling it again would fault
+		// again, so abandon the views rather than retrying the destroy.
+		std::fill(std::begin(views), std::end(views), VK_NULL_HANDLE);
+	};
 
-		VkDevice vkDevice = dxvk->GetDevice();
-		const cs_VulkanProcAttempt createProcAttempt = cs_GetDeviceProcAddrSEH(
-			dxvk->GetDeviceProcAddr(), vkDevice, "vkCreateImageView");
-		const cs_VulkanProcAttempt destroyProcAttempt = cs_GetDeviceProcAddrSEH(
-			dxvk->GetDeviceProcAddr(), vkDevice, "vkDestroyImageView");
-		if (createProcAttempt.exceptionCode || destroyProcAttempt.exceptionCode) {
-			g_sl.dispatchFaulted = true;
-			return;
-		}
-		auto vkCreateImageView = reinterpret_cast<PFN_vkCreateImageView>(createProcAttempt.function);
-		auto vkDestroyImageView = reinterpret_cast<PFN_vkDestroyImageView>(destroyProcAttempt.function);
-		if (!vkCreateImageView || !vkDestroyImageView)
-			return;
-		ID3D11Resource* resources[] = { a_depth, a_motionVectors, a_hudlessColor };
-		VkImageView views[3]{};
-		uint32_t viewCount = 0;
-		bool viewCreationTerminalFault = false;
-		const auto destroyViews = [&]() {
-			return cs_DestroyViews(dxvk, vkDevice, vkDestroyImageView, views, viewCount,
-				resources, static_cast<uint32_t>(std::size(resources)));
-		};
-		const auto abandonViewsAfterCreationFailure = [&]() {
-			if (!viewCreationTerminalFault) {
-				destroyViews();
-				return;
-			}
-			// The destroy entry point already faulted on these handles; calling it again would fault
-			// again, so abandon the views rather than retrying the destroy.
-			std::fill(std::begin(views), std::end(views), VK_NULL_HANDLE);
-		};
+	const auto makeResource = [&](ID3D11Resource* a_res, sl::Resource& a_out,
+		                          sl::SubresourceRange& a_subresource) {
+		if (viewCount >= std::size(views))
+			return false;
+		VkImageView& view = views[viewCount];
+		if (!cs_WrapInteropImage(dxvk, vkDevice, vkCreateImageView, a_res, a_out, a_subresource, view, viewCreationTerminalFault))
+			return false;
+		++viewCount;
+		return true;
+	};
 
-		const auto makeResource = [&](ID3D11Resource* a_res, sl::Resource& a_out,
-			                          sl::SubresourceRange& a_subresource) {
-			if (viewCount >= std::size(views))
-				return false;
-			VkImageView& view = views[viewCount];
-			if (!cs_WrapInteropImage(dxvk, vkDevice, vkCreateImageView, a_res, a_out, a_subresource, view, viewCreationTerminalFault))
-				return false;
-			++viewCount;
-			return true;
-		};
+	sl::Resource depthRes{}, mvecRes{};
+	sl::SubresourceRange depthRange{}, mvecRange{}, hudlessRange{};
+	if (!makeResource(a_depth, depthRes, depthRange) ||
+		!makeResource(a_motionVectors, mvecRes, mvecRange)) {
+		cs_NoteDlssgTagSkip("could not wrap depth/motion-vector resources for Vulkan");
+		abandonViewsAfterCreationFailure();
+		return;
+	}
 
-		sl::Resource depthRes{}, mvecRes{};
-		sl::SubresourceRange depthRange{}, mvecRange{}, hudlessRange{};
-		if (!makeResource(a_depth, depthRes, depthRange) ||
-			!makeResource(a_motionVectors, mvecRes, mvecRange)) {
-			cs_NoteDlssgTagSkip("could not wrap depth/motion-vector resources for Vulkan");
+	sl::Extent extent{};
+	extent.width = a_renderWidth;
+	extent.height = a_renderHeight;
+
+	sl::ResourceTag tags[3];
+	uint32_t tagCount = 0;
+	tags[tagCount++] = { &depthRes, sl::kBufferTypeDepth, sl::ResourceLifecycle::eValidUntilPresent, &extent };
+	tags[tagCount++] = { &mvecRes, sl::kBufferTypeMotionVectors, sl::ResourceLifecycle::eValidUntilPresent, &extent };
+
+	// HUD-less color uses display dimensions rather than the render subrect.
+	sl::Extent displayExtent{};
+	displayExtent.width = a_displayWidth;
+	displayExtent.height = a_displayHeight;
+	sl::Resource hudlessRes{};
+	const uint32_t viewsBeforeHudless = viewCount;
+	if (a_hudlessColor) {
+		if (makeResource(a_hudlessColor, hudlessRes, hudlessRange)) {
+			tags[tagCount++] = { &hudlessRes, sl::kBufferTypeHUDLessColor, sl::ResourceLifecycle::eValidUntilPresent, &displayExtent };
+		} else if (viewCount != viewsBeforeHudless) {
 			abandonViewsAfterCreationFailure();
 			return;
-		}
-
-		sl::Extent extent{};
-		extent.width = a_renderWidth;
-		extent.height = a_renderHeight;
-
-		sl::ResourceTag tags[3];
-		uint32_t tagCount = 0;
-		tags[tagCount++] = { &depthRes, sl::kBufferTypeDepth, sl::ResourceLifecycle::eValidUntilPresent, &extent };
-		tags[tagCount++] = { &mvecRes, sl::kBufferTypeMotionVectors, sl::ResourceLifecycle::eValidUntilPresent, &extent };
-
-		// HUD-less color uses display dimensions rather than the render subrect.
-		sl::Extent displayExtent{};
-		displayExtent.width = a_displayWidth;
-		displayExtent.height = a_displayHeight;
-		sl::Resource hudlessRes{};
-		const uint32_t viewsBeforeHudless = viewCount;
-		if (a_hudlessColor) {
-			if (makeResource(a_hudlessColor, hudlessRes, hudlessRange)) {
-				tags[tagCount++] = { &hudlessRes, sl::kBufferTypeHUDLessColor, sl::ResourceLifecycle::eValidUntilPresent, &displayExtent };
-			} else if (g_sl.dispatchFaulted.load(std::memory_order_acquire) ||
-				viewCount != viewsBeforeHudless) {
-				abandonViewsAfterCreationFailure();
-				return;
-			} else {
-				tags[tagCount++] = { nullptr, sl::kBufferTypeHUDLessColor, sl::ResourceLifecycle::eOnlyValidNow, nullptr };
-			}
 		} else {
-			// Clear stale HUD-less input when capture is unavailable.
 			tags[tagCount++] = { nullptr, sl::kBufferTypeHUDLessColor, sl::ResourceLifecycle::eOnlyValidNow, nullptr };
 		}
+	} else {
+		// Clear stale HUD-less input when capture is unavailable.
+		tags[tagCount++] = { nullptr, sl::kBufferTypeHUDLessColor, sl::ResourceLifecycle::eOnlyValidNow, nullptr };
+	}
 
-		sl::Result tagResult = sl::Result::eErrorNotInitialized;
-		bool lifetimesRetained = false;
-		if (cs_SubmitPresentTags(dxvk, *token, g_sl.viewport, tags, tagCount,
-				views, viewCount, resources, static_cast<uint32_t>(std::size(resources)), tagResult,
-				lifetimesRetained, cs_WantPresentWaitSignal(dxvk))) {
-			g_sl.dlssgTaggedThisFrame = true;
-			cs_NoteDlssgTagSkip(nullptr);
-		} else {
-			cs_NoteDlssgTagSkip("tag submission rejected");
-			if (!lifetimesRetained)
-				destroyViews();
-			logger::error("[Streamline] DLSS-G present tagging failed (last tag result {})",
-				static_cast<int>(tagResult));
-		}
-	} __except (EXCEPTION_EXECUTE_HANDLER) {
-		g_sl.dispatchFaulted = true;
-		logger::error("[Streamline] DLSS-G tag faulted — Streamline disabled for this session");
+	sl::Result tagResult = sl::Result::eErrorNotInitialized;
+	bool lifetimesRetained = false;
+	if (cs_SubmitPresentTags(dxvk, *token, g_sl.viewport, tags, tagCount,
+			views, viewCount, resources, static_cast<uint32_t>(std::size(resources)), tagResult,
+			lifetimesRetained, cs_WantPresentWaitSignal(dxvk))) {
+		g_sl.dlssgTaggedThisFrame = true;
+		cs_NoteDlssgTagSkip(nullptr);
+	} else {
+		cs_NoteDlssgTagSkip("tag submission rejected");
+		if (!lifetimesRetained)
+			destroyViews();
+		logger::error("[Streamline] DLSS-G present tagging failed (last tag result {})",
+			static_cast<int>(tagResult));
 	}
 }
 
 void Streamline::ClearDLSSGTags()
 {
-	if (!initialized || !featureDLSSG || g_sl.dispatchFaulted)
+	if (!initialized || !featureDLSSG)
 		return;
 
-	__try {
-		sl::FrameToken* token = RenderFrameToken();
-		if (!token)
-			return;
+	sl::FrameToken* token = RenderFrameToken();
+	if (!token)
+		return;
 
-		// Null tags force passthrough when interpolation inputs are unavailable.
-		sl::ResourceTag tags[] = {
-			sl::ResourceTag{ nullptr, sl::kBufferTypeDepth, sl::ResourceLifecycle::eOnlyValidNow, nullptr },
-			sl::ResourceTag{ nullptr, sl::kBufferTypeMotionVectors, sl::ResourceLifecycle::eOnlyValidNow, nullptr },
-			sl::ResourceTag{ nullptr, sl::kBufferTypeHUDLessColor, sl::ResourceLifecycle::eOnlyValidNow, nullptr },
-		};
-		auto* dxvk = DXVKInterop::GetSingleton();
-		if (!dxvk->CommandResourcesReady())
-			return;
-		sl::Result tagResult = sl::Result::eErrorNotInitialized;
-		bool lifetimesRetained = false;
-		if (cs_SubmitPresentTags(dxvk, *token, g_sl.viewport, tags,
-				static_cast<uint32_t>(std::size(tags)), nullptr, 0, nullptr, 0, tagResult,
-				lifetimesRetained, cs_WantPresentWaitSignal(dxvk))) {
-			g_sl.dlssgTaggedThisFrame = true;
-		} else {
-			logger::error("[Streamline] DLSS-G passthrough tag submission failed (result {})",
-				static_cast<int>(tagResult));
-		}
-	} __except (EXCEPTION_EXECUTE_HANDLER) {
-		g_sl.dispatchFaulted = true;
-		logger::error("[Streamline] DLSS-G clear-tags faulted — Streamline disabled for this session");
+	// Null tags force passthrough when interpolation inputs are unavailable.
+	sl::ResourceTag tags[] = {
+		sl::ResourceTag{ nullptr, sl::kBufferTypeDepth, sl::ResourceLifecycle::eOnlyValidNow, nullptr },
+		sl::ResourceTag{ nullptr, sl::kBufferTypeMotionVectors, sl::ResourceLifecycle::eOnlyValidNow, nullptr },
+		sl::ResourceTag{ nullptr, sl::kBufferTypeHUDLessColor, sl::ResourceLifecycle::eOnlyValidNow, nullptr },
+	};
+	auto* dxvk = DXVKInterop::GetSingleton();
+	if (!dxvk->CommandResourcesReady())
+		return;
+	sl::Result tagResult = sl::Result::eErrorNotInitialized;
+	bool lifetimesRetained = false;
+	if (cs_SubmitPresentTags(dxvk, *token, g_sl.viewport, tags,
+			static_cast<uint32_t>(std::size(tags)), nullptr, 0, nullptr, 0, tagResult,
+			lifetimesRetained, cs_WantPresentWaitSignal(dxvk))) {
+		g_sl.dlssgTaggedThisFrame = true;
+	} else {
+		logger::error("[Streamline] DLSS-G passthrough tag submission failed (result {})",
+			static_cast<int>(tagResult));
 	}
 }
 
@@ -2142,7 +2035,7 @@ bool Streamline::EnsureDLSSGPresentTag()
 	// still pending and the ring is quarantined and rebuilt -- behind a vkDeviceWaitIdle -- once
 	// per frame. That is what made the game stutter and flicker after frame generation was turned
 	// off, and across a method switch.
-	if (!initialized || !featureDLSSG || g_sl.dispatchFaulted ||
+	if (!initialized || !featureDLSSG ||
 		!g_dlssgCurrentlyLoaded.load(std::memory_order_acquire))
 		return false;
 	// Track the passthrough fallback separately from the reasons above: this also catches the
@@ -2181,11 +2074,6 @@ void Streamline::RegisterDxvkOwnershipPredicate()
 	} else {
 		logger::warn("[Streamline] dxvkSetSwapchainTornDownCallback not found — frame-generation switching disabled");
 	}
-}
-
-bool Streamline::HasDispatchFaulted() const
-{
-	return g_sl.dispatchFaulted.load(std::memory_order_acquire);
 }
 
 void Streamline::SetDLSSGDesiredLoaded(bool a_loaded)

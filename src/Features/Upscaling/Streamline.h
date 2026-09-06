@@ -22,7 +22,6 @@ public:
 	/** @brief Returns whether feature support is final for this session. */
 	[[nodiscard]] bool IsFeatureSupportResolved() const { return vulkanDeviceSet || unavailable; }
 	/** @brief Whether a guarded Streamline call faulted and frame generation must be torn down. */
-	[[nodiscard]] bool HasDispatchFaulted() const;
 
 	/** @brief Disables interposition when no Streamline feature is configured. */
 	void MarkUnavailable() { unavailable = true; }

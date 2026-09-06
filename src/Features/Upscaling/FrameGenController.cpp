@@ -82,11 +82,8 @@ namespace FrameGen
 			return;
 
 		auto* streamline = Streamline::GetSingleton();
-		const bool dispatchFaulted = streamline->HasDispatchFaulted();
-		if (dispatchFaulted)
-			globals::features::upscaling.settings.frameGeneration = false;
 
-		if (dispatchFaulted || faultRecoveryRequested) {
+		if (faultRecoveryRequested) {
 			if (!faultRecoveryRequested) {
 				auto* dxvk = DXVKInterop::GetSingleton();
 				const bool completionProven = dxvk->IsDeviceLost() ||
@@ -98,28 +95,28 @@ namespace FrameGen
 					// completion would otherwise log on every frame for the rest of the session.
 					static bool deferralReported = false;
 					if (!std::exchange(deferralReported, true))
-						logger::error("[FrameGen] Streamline fault teardown deferred because GPU completion could not be proven");
+						logger::error("[FrameGen] fault teardown deferred because GPU completion could not be proven");
 					return;
 				}
 				streamline->SetDLSSGDesiredLoaded(false);
 				streamline->SetFSRFGDesiredLoaded(false);
 				faultRecoveryRequested = true;
 				BeginPresenterRecreateTransition();
-				Streamline::RequestDxvkSwapchainRecreate("Streamline dispatch fault");
+				Streamline::RequestDxvkSwapchainRecreate("frame-generation fault teardown");
 				phase = Phase::kTransitioning;
-				logger::error("[FrameGen] Streamline faulted; forcing frame-generation teardown at swapchain recreation");
+				logger::error("[FrameGen] fault reported; forcing frame-generation teardown at swapchain recreation");
 			}
 			if (phase == Phase::kTransitioning) {
 				if (!streamline->IsDLSSGLoadSettled() || !streamline->IsFSRFGLoadSettled() ||
 					streamline->IsDLSSGLoaded() || streamline->IsFSRFGLoaded())
 					return;
 				if (!DXVKInterop::GetSingleton()->DrainCommandRing()) {
-					logger::error("[FrameGen] Streamline fault cleanup deferred because command completion could not be proven");
+					logger::error("[FrameGen] fault cleanup deferred because command completion could not be proven");
 					return;
 				}
 				StepPhaseCompletion();
 			}
-			if (!dispatchFaulted && phase == Phase::kIdle)
+			if (phase == Phase::kIdle)
 				faultRecoveryRequested = false;
 			return;
 		}
