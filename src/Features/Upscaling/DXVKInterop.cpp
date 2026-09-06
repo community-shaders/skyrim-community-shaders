@@ -15,9 +15,7 @@ namespace
 		/// rejected the submission. Non-zero also covers the no-semaphore case (DXVK returns 1).
 		uint64_t generation = 0;
 		DWORD exceptionCode = 0;
-		bool queueLockAttempted = false;
 		bool queueLockAcquired = false;
-		bool queueReleaseCompleted = false;
 		bool faulted = false;
 	};
 
@@ -43,11 +41,7 @@ namespace
 		const VkCommandPoolCreateInfo* a_createInfo, VkCommandPool* a_commandPool) noexcept
 	{
 		VulkanResultAttempt attempt{};
-		__try {
-			attempt.result = vkCreateCommandPool(a_device, a_createInfo, nullptr, a_commandPool);
-		} __except (EXCEPTION_EXECUTE_HANDLER) {
-			attempt.exceptionCode = GetExceptionCode();
-		}
+		attempt.result = vkCreateCommandPool(a_device, a_createInfo, nullptr, a_commandPool);
 		return attempt;
 	}
 
@@ -55,11 +49,7 @@ namespace
 		const VkCommandBufferAllocateInfo* a_allocateInfo, VkCommandBuffer* a_commandBuffers) noexcept
 	{
 		VulkanResultAttempt attempt{};
-		__try {
-			attempt.result = vkAllocateCommandBuffers(a_device, a_allocateInfo, a_commandBuffers);
-		} __except (EXCEPTION_EXECUTE_HANDLER) {
-			attempt.exceptionCode = GetExceptionCode();
-		}
+		attempt.result = vkAllocateCommandBuffers(a_device, a_allocateInfo, a_commandBuffers);
 		return attempt;
 	}
 
@@ -67,44 +57,28 @@ namespace
 		const VkSemaphoreCreateInfo* a_createInfo, VkSemaphore* a_semaphore) noexcept
 	{
 		VulkanResultAttempt attempt{};
-		__try {
-			attempt.result = vkCreateSemaphore(a_device, a_createInfo, nullptr, a_semaphore);
-		} __except (EXCEPTION_EXECUTE_HANDLER) {
-			attempt.exceptionCode = GetExceptionCode();
-		}
+		attempt.result = vkCreateSemaphore(a_device, a_createInfo, nullptr, a_semaphore);
 		return attempt;
 	}
 
 	VulkanResultAttempt GetFenceStatusSEH(VkDevice a_device, VkFence a_fence) noexcept
 	{
 		VulkanResultAttempt attempt{};
-		__try {
-			attempt.result = vkGetFenceStatus(a_device, a_fence);
-		} __except (EXCEPTION_EXECUTE_HANDLER) {
-			attempt.exceptionCode = GetExceptionCode();
-		}
+		attempt.result = vkGetFenceStatus(a_device, a_fence);
 		return attempt;
 	}
 
 	VulkanResultAttempt WaitForFenceSEH(VkDevice a_device, VkFence a_fence) noexcept
 	{
 		VulkanResultAttempt attempt{};
-		__try {
-			attempt.result = vkWaitForFences(a_device, 1, &a_fence, VK_TRUE, UINT64_MAX);
-		} __except (EXCEPTION_EXECUTE_HANDLER) {
-			attempt.exceptionCode = GetExceptionCode();
-		}
+		attempt.result = vkWaitForFences(a_device, 1, &a_fence, VK_TRUE, UINT64_MAX);
 		return attempt;
 	}
 
 	VulkanResultAttempt ResetCommandBufferSEH(VkCommandBuffer a_commandBuffer) noexcept
 	{
 		VulkanResultAttempt attempt{};
-		__try {
-			attempt.result = vkResetCommandBuffer(a_commandBuffer, 0);
-		} __except (EXCEPTION_EXECUTE_HANDLER) {
-			attempt.exceptionCode = GetExceptionCode();
-		}
+		attempt.result = vkResetCommandBuffer(a_commandBuffer, 0);
 		return attempt;
 	}
 
@@ -112,11 +86,7 @@ namespace
 		const VkCommandBufferBeginInfo* a_beginInfo) noexcept
 	{
 		VulkanResultAttempt attempt{};
-		__try {
-			attempt.result = vkBeginCommandBuffer(a_commandBuffer, a_beginInfo);
-		} __except (EXCEPTION_EXECUTE_HANDLER) {
-			attempt.exceptionCode = GetExceptionCode();
-		}
+		attempt.result = vkBeginCommandBuffer(a_commandBuffer, a_beginInfo);
 		return attempt;
 	}
 
@@ -124,39 +94,27 @@ namespace
 		VkDevice a_device, VkImageView a_view) noexcept
 	{
 		VulkanVoidAttempt attempt{};
-		__try {
-			if (a_destroyImageView && a_view != VK_NULL_HANDLE)
-				a_destroyImageView(a_device, a_view, nullptr);
-			attempt.completed = true;
-		} __except (EXCEPTION_EXECUTE_HANDLER) {
-			attempt.exceptionCode = GetExceptionCode();
-		}
+		if (a_destroyImageView && a_view != VK_NULL_HANDLE)
+			a_destroyImageView(a_device, a_view, nullptr);
+		attempt.completed = true;
 		return attempt;
 	}
 
 	VulkanVoidAttempt DestroySemaphoreSEH(VkDevice a_device, VkSemaphore a_semaphore) noexcept
 	{
 		VulkanVoidAttempt attempt{};
-		__try {
-			if (a_semaphore != VK_NULL_HANDLE)
-				vkDestroySemaphore(a_device, a_semaphore, nullptr);
-			attempt.completed = true;
-		} __except (EXCEPTION_EXECUTE_HANDLER) {
-			attempt.exceptionCode = GetExceptionCode();
-		}
+		if (a_semaphore != VK_NULL_HANDLE)
+			vkDestroySemaphore(a_device, a_semaphore, nullptr);
+		attempt.completed = true;
 		return attempt;
 	}
 
 	VulkanVoidAttempt DestroyCommandPoolSEH(VkDevice a_device, VkCommandPool a_commandPool) noexcept
 	{
 		VulkanVoidAttempt attempt{};
-		__try {
-			if (a_commandPool != VK_NULL_HANDLE)
-				vkDestroyCommandPool(a_device, a_commandPool, nullptr);
-			attempt.completed = true;
-		} __except (EXCEPTION_EXECUTE_HANDLER) {
-			attempt.exceptionCode = GetExceptionCode();
-		}
+		if (a_commandPool != VK_NULL_HANDLE)
+			vkDestroyCommandPool(a_device, a_commandPool, nullptr);
+		attempt.completed = true;
 		return attempt;
 	}
 
@@ -164,13 +122,9 @@ namespace
 		uint32_t a_count, const VkCommandBuffer* a_commandBuffers) noexcept
 	{
 		VulkanVoidAttempt attempt{};
-		__try {
-			if (a_count)
-				vkFreeCommandBuffers(a_device, a_commandPool, a_count, a_commandBuffers);
-			attempt.completed = true;
-		} __except (EXCEPTION_EXECUTE_HANDLER) {
-			attempt.exceptionCode = GetExceptionCode();
-		}
+		if (a_count)
+			vkFreeCommandBuffers(a_device, a_commandPool, a_count, a_commandBuffers);
+		attempt.completed = true;
 		return attempt;
 	}
 
@@ -179,12 +133,8 @@ namespace
 		uint32_t (*a_getState)(uint64_t), uint64_t a_generation) noexcept
 	{
 		PresentWaitStateAttempt attempt{};
-		__try {
-			if (a_getState)
-				attempt.state = a_getState(a_generation);
-		} __except (EXCEPTION_EXECUTE_HANDLER) {
-			attempt.exceptionCode = GetExceptionCode();
-		}
+		if (a_getState)
+			attempt.state = a_getState(a_generation);
 		return attempt;
 	}
 
@@ -192,12 +142,8 @@ namespace
 		uint32_t (*a_clear)(uint64_t), uint64_t a_generation) noexcept
 	{
 		PresentWaitStateAttempt attempt{};
-		__try {
-			if (a_clear)
-				attempt.state = a_clear(a_generation);
-		} __except (EXCEPTION_EXECUTE_HANDLER) {
-			attempt.exceptionCode = GetExceptionCode();
-		}
+		if (a_clear)
+			attempt.state = a_clear(a_generation);
 		return attempt;
 	}
 
@@ -205,12 +151,8 @@ namespace
 		uint32_t (*a_cancel)(VkSemaphore), VkSemaphore a_semaphore) noexcept
 	{
 		PresentWaitStateAttempt attempt{};
-		__try {
-			if (a_cancel)
-				attempt.state = a_cancel(a_semaphore);
-		} __except (EXCEPTION_EXECUTE_HANDLER) {
-			attempt.exceptionCode = GetExceptionCode();
-		}
+		if (a_cancel)
+			attempt.state = a_cancel(a_semaphore);
 		return attempt;
 	}
 
@@ -223,12 +165,8 @@ namespace
 	QueueReleaseAttempt ReleaseSubmissionQueueSEH(IDXGIVkInteropDevice* a_interopDevice) noexcept
 	{
 		QueueReleaseAttempt attempt{};
-		__try {
-			a_interopDevice->ReleaseSubmissionQueue();
-			attempt.completed = true;
-		} __except (EXCEPTION_EXECUTE_HANDLER) {
-			attempt.exceptionCode = GetExceptionCode();
-		}
+		a_interopDevice->ReleaseSubmissionQueue();
+		attempt.completed = true;
 		return attempt;
 	}
 
@@ -275,9 +213,7 @@ namespace
 	{
 		VkResult result = VK_ERROR_INITIALIZATION_FAILED;
 		DWORD exceptionCode = 0;
-		bool queueLockAttempted = false;
 		bool queueLockAcquired = false;
-		bool queueReleaseCompleted = false;
 		bool functionAvailable = false;
 		bool presentWaitReleaseAttempted = false;
 		bool presentWaitReleaseCompleted = false;
@@ -293,7 +229,6 @@ namespace
 		__try {
 			a_interopDevice->FlushRenderingCommands();
 			__try {
-				attempt.queueLockAttempted = true;
 				a_interopDevice->LockSubmissionQueue();
 				attempt.queueLockAcquired = true;
 				auto waitIdle = reinterpret_cast<PFN_vkDeviceWaitIdle>(
@@ -310,7 +245,6 @@ namespace
 			} __finally {
 				if (attempt.queueLockAcquired) {
 					const QueueReleaseAttempt release = ReleaseSubmissionQueueSEH(a_interopDevice);
-					attempt.queueReleaseCompleted = release.completed;
 					if (!release.completed) {
 						attempt.faulted = true;
 						attempt.exceptionCode = release.exceptionCode;
@@ -329,13 +263,9 @@ namespace
 		VkResult result = VK_ERROR_DEVICE_LOST;
 		*a_fence = VK_NULL_HANDLE;
 		*a_exceptionCode = 0;
-		__try {
-			VkFenceCreateInfo fenceInfo{ VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
-			fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
-			result = vkCreateFence(a_device, &fenceInfo, nullptr, a_fence);
-		} __except (EXCEPTION_EXECUTE_HANDLER) {
-			*a_exceptionCode = GetExceptionCode();
-		}
+		VkFenceCreateInfo fenceInfo{ VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
+		fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+		result = vkCreateFence(a_device, &fenceInfo, nullptr, a_fence);
 		return result;
 	}
 
@@ -654,18 +584,9 @@ bool DXVKInterop::WaitDeviceIdle()
 	// device. Fail fast and silently instead; the loss itself is reported once, below.
 	if (deviceLost)
 		return false;
-	if (submissionQueueLockUncertain) {
-		logger::error("[DXVKInterop] refusing device-idle synchronization because the submission queue lock state is uncertain");
-		return false;
-	}
 
 	const DeviceIdleAttempt attempt = WaitDeviceIdleSEH(interopDevice.get(), vkGetDeviceProcAddr, device,
 		presentWaitInteropTerminalFault ? nullptr : releaseQueuedPresentWaitSemaphoresAfterIdle);
-	if (attempt.queueLockAttempted &&
-		(!attempt.queueLockAcquired || !attempt.queueReleaseCompleted)) {
-		submissionQueueLockUncertain = true;
-		logger::error("[DXVKInterop] submission queue lock state became uncertain during device-idle synchronization");
-	}
 	if (attempt.presentWaitReleaseAttempted && !attempt.presentWaitReleaseCompleted) {
 		commandRingSubmissionsIdleProven = attempt.result == VK_SUCCESS;
 		commandRingFaulted = true;
@@ -789,8 +710,6 @@ bool DXVKInterop::CreateCommandResources(uint32_t a_framesInFlight)
 {
 	std::lock_guard lock(commandRingMutex);
 	if (!available || vulkanResourceDestructionTerminalFault)
-		return false;
-	if (submissionQueueLockUncertain)
 		return false;
 	if (commandPool != VK_NULL_HANDLE)
 		return !commandRingFaulted;
@@ -948,7 +867,7 @@ void DXVKInterop::DestroyCommandResources()
 	}
 	const bool hasRegisteredPresentWaits =
 		pushedPresentWaitSlot != UINT32_MAX || !outstandingPresentWaitSubmissions.empty();
-	const bool requiresDeviceIdle = commandRingFaulted || submissionQueueLockUncertain ||
+	const bool requiresDeviceIdle = commandRingFaulted ||
 		hasRegisteredPresentWaits ||
 		std::find(presentWaitInUse.begin(), presentWaitInUse.end(), true) != presentWaitInUse.end();
 	if (requiresDeviceIdle && !WaitDeviceIdle()) {
@@ -1067,8 +986,6 @@ bool DXVKInterop::DrainCommandRing()
 	std::lock_guard lock(commandRingMutex);
 	if (vulkanResourceDestructionTerminalFault)
 		return false;
-	if (submissionQueueLockUncertain)
-		return false;
 	if (commandPool == VK_NULL_HANDLE)
 		return true;
 	if (device == VK_NULL_HANDLE)
@@ -1144,13 +1061,13 @@ bool DXVKInterop::CommandResourcesReady() const
 {
 	std::lock_guard lock(commandRingMutex);
 	return commandPool != VK_NULL_HANDLE && !commandRingFaulted &&
-	       !vulkanResourceDestructionTerminalFault && !submissionQueueLockUncertain;
+	       !vulkanResourceDestructionTerminalFault;
 }
 
 bool DXVKInterop::HasCommandRingFault() const
 {
 	std::lock_guard lock(commandRingMutex);
-	return commandRingFaulted || vulkanResourceDestructionTerminalFault || submissionQueueLockUncertain;
+	return commandRingFaulted || vulkanResourceDestructionTerminalFault;
 }
 
 bool DXVKInterop::IsDeviceLost() const
@@ -1177,11 +1094,7 @@ bool DXVKInterop::RecoverCommandRing()
 	if (vulkanResourceDestructionTerminalFault)
 		return false;
 	if (!commandRingFaulted)
-		return commandPool != VK_NULL_HANDLE && !submissionQueueLockUncertain;
-	if (submissionQueueLockUncertain) {
-		logger::error("[DXVKInterop] command ring cannot be recovered because the submission queue lock state is uncertain");
-		return false;
-	}
+		return commandPool != VK_NULL_HANDLE;
 
 	const uint32_t ringDepth = framesInFlight ? framesInFlight : 3;
 	if (!WaitDeviceIdle())
@@ -1205,19 +1118,19 @@ bool DXVKInterop::PresentWaitInteropReady() const
 	       clearPresentWaitSemaphore != nullptr && cancelPresentWaitSemaphore != nullptr &&
 	       releaseQueuedPresentWaitSemaphoresAfterIdle != nullptr &&
 	       !presentWaitInteropTerminalFault && synchronousPresentControlAvailable &&
-	       !presentQueueSplit && !submissionQueueLockUncertain;
+	       !presentQueueSplit;
 }
 
 bool DXVKInterop::FrameGenerationQueueInteropReady() const
 {
 	std::lock_guard lock(commandRingMutex);
-	return available && !presentQueueSplit && !submissionQueueLockUncertain;
+	return available && !presentQueueSplit;
 }
 
 DXVKInterop::CommandTransaction DXVKInterop::BeginFrameCommandBuffer()
 {
 	std::unique_lock ringLock(commandRingMutex);
-	if (commandPool == VK_NULL_HANDLE || commandRingFaulted || submissionQueueLockUncertain)
+	if (commandPool == VK_NULL_HANDLE || commandRingFaulted)
 		return {};
 
 	// Avoid waiting while Streamline owns the presenting queue; grow the ring if needed.
@@ -1443,7 +1356,7 @@ bool DXVKInterop::SubmitFrameCommandBuffer(CommandTransaction& a_transaction,
 		a_transaction.submitted || a_transaction.slot >= commandBuffers.size() ||
 		a_transaction.commandBuffer == VK_NULL_HANDLE ||
 		commandBuffers[a_transaction.slot] != a_transaction.commandBuffer ||
-		commandPool == VK_NULL_HANDLE || commandRingFaulted || submissionQueueLockUncertain)
+		commandPool == VK_NULL_HANDLE || commandRingFaulted)
 		return false;
 	const uint32_t slot = a_transaction.slot;
 	const VkCommandBuffer commandBuffer = a_transaction.commandBuffer;

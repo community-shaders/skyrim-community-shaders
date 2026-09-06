@@ -261,7 +261,6 @@ private:
 	bool commandRingFaulted = false;
 	bool vulkanResourceDestructionTerminalFault = false;
 	mutable bool commandRingSubmissionsIdleProven = false;
-	mutable bool submissionQueueLockUncertain = false;
 	// Indexed with the command ring.
 	// Resources held forever once Vulkan destruction has terminally faulted: leaking them is
 	// strictly better than risking a use-after-free on a device that is already unsafe.
