@@ -21,6 +21,7 @@
 #include "Features/Skin.h"
 #include "Features/SkySync.h"
 #include "Features/Upscaling.h"
+#include "Features/PerformanceOverlay.h"
 #include "Features/Upscaling/DXVKInterop.h"
 #include "Features/Upscaling/Streamline.h"
 #include "Features/VolumetricLighting.h"
@@ -427,6 +428,11 @@ struct IDXGISwapChain_Present
 		if (presentSucceeded)
 			dxvk->NotifyPresentWaitQueued();
 		streamline->CaptureDLSSGPresentState();
+
+		// Collect the overlay's frame metrics here rather than from its draw path, so hiding the
+		// overlay does not stop measurement and then feed the whole hidden interval back as a
+		// single frame. Cheap, and self-limiting to once per game frame.
+		globals::features::performanceOverlay.UpdateMetrics();
 
 		// Ground-truth present rate. The overlay's numbers only exist while it is being drawn, so
 		// when the question is "why does the frame rate never exceed the refresh rate" there was

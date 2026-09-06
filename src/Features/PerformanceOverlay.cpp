@@ -360,8 +360,8 @@ void PerformanceOverlay::DrawOverlay()
 	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f * scale, 1.0f * scale));
 	ImGui::SetWindowFontScale(this->settings.TextSize);
 
-	// Update graph values
-	this->UpdateGraphValues();
+	// Metrics are collected once per frame by UpdateMetrics(), whether or not the overlay is
+	// drawn; drawing must not be what decides whether a frame is measured.
 
 	bool needsSeparator = false;
 
@@ -1900,8 +1900,17 @@ void PerformanceOverlay::UpdateSummaryTestData(float smoothedFrameTime, float ot
 // PERFORMANCE OVERLAY STATE MANAGEMENT
 // ============================================================================
 
-void PerformanceOverlay::UpdateGraphValues()
+void PerformanceOverlay::UpdateMetrics()
 {
+	// Called once per present. Everything here is measurement only -- no ImGui -- because a
+	// metric that stops updating when the overlay is hidden reports the hidden interval as one
+	// enormous frame the moment it comes back, which is what made the 1% low read zero.
+	static uint32_t s_lastMetricFrame = UINT32_MAX;
+	const uint32_t metricFrame = globals::state ? globals::state->frameCount : 0u;
+	if (s_lastMetricFrame == metricFrame)
+		return;
+	s_lastMetricFrame = metricFrame;
+
 	state.isFrameGenerationActive = globals::features::upscaling.IsFrameGenerationActive();
 
 	// Sync frame history buffer size with user settings

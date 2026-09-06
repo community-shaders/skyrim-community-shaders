@@ -138,6 +138,11 @@ struct PerformanceOverlay : OverlayFeature
 				T("feature.performance_overlay.key_feature_7", "Movable overlay window with persistent positioning") } };
 	}
 	virtual void DrawSettings() override;
+
+	/** @brief Collects the frame metrics. Call once per present, independent of whether the
+	 *         overlay is drawn -- a metric that only advances while visible reports the hidden
+	 *         interval as one huge frame when it returns. */
+	void UpdateMetrics();
 	virtual void DataLoaded() override;
 	void DrawOverlay() override;
 	// Settings persistence and defaults
@@ -166,7 +171,6 @@ struct PerformanceOverlay : OverlayFeature
 	*
 	* No parameters; uses settings from the singleton.
 	*/
-	void UpdateGraphValues();
 	void DrawFPS();
 	void DrawVRAM();
 	void DrawPostFGFrameTimeGraph();
