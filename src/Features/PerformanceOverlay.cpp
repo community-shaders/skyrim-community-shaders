@@ -325,7 +325,7 @@ void PerformanceOverlay::DrawOverlay()
 			// Measure FPS text width
 			std::string fpsText = std::format("{:.1f} ({:.2f} ms)", this->state.smoothFps, this->state.smoothFrameTimeMs);
 			if (this->state.isFrameGenerationActive) {
-				fpsText = std::format("Render   {:.0f}   {:.0f}  1%", this->state.avgFps, this->state.low1PctFps);
+				fpsText = std::format("Render FPS   {:.0f}   {:.0f}  1%", this->state.avgFps, this->state.low1PctFps);
 			}
 			float fpsWidth = ImGui::CalcTextSize(fpsText.c_str()).x;
 			minWidth = std::max(minWidth, fpsWidth + Settings::kLabelPadding * scale);
@@ -425,10 +425,10 @@ void PerformanceOverlay::DrawFPS()
 			ImGui::TextDisabled("%.0f (1%%L)", a_low);
 		};
 
-		row(this->state.isFrameGenerationActive ? T(TKEY("render_fps"), "Render") : T(TKEY("fps"), "FPS"),
+		row(this->state.isFrameGenerationActive ? T(TKEY("render_fps"), "Render FPS") : T(TKEY("fps"), "FPS"),
 			this->state.avgFps, this->state.low1PctFps);
 		if (this->state.isFrameGenerationActive)
-			row(T(TKEY("true_fps"), "True"), this->state.postFGAvgFps, this->state.postFGLow1PctFps);
+			row(T(TKEY("true_fps"), "True FPS"), this->state.postFGAvgFps, this->state.postFGLow1PctFps);
 
 		ImGui::EndTable();
 	}
