@@ -514,7 +514,14 @@ void HDRDisplay::DrawSettings()
 			ImGui::TextUnformatted(T(TKEY("peak_brightness_tooltip_1"), "Set to match your display's actual peak brightness."));
 		}
 
-		ImGui::TextDisabled(T(TKEY("display_reports_max_nits"), "Display reports: %.0f nits max"), cachedDisplayMaxLuminance);
+		if (!cachedDisplayLuminanceValid) {
+			ImGui::TextDisabled("%s", T(TKEY("display_reports_unavailable"), "Display luminance: not reported by the driver"));
+		} else if (!cachedDisplayIsHDR) {
+			ImGui::TextDisabled(T(TKEY("display_reports_sdr"), "Display is in SDR mode; its advertised %.0f nits is EDID metadata, not a measured capability"),
+				cachedDisplayMaxLuminance);
+		} else {
+			ImGui::TextDisabled(T(TKEY("display_reports_max_nits"), "Display reports: %.0f nits max"), cachedDisplayMaxLuminance);
+		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::TextUnformatted(T(TKEY("display_reports_max_nits_tooltip_0"), "Reported by OS/driver (DXGI MaxLuminance), not a direct meter reading."));
 			ImGui::TextUnformatted(T(TKEY("display_reports_max_nits_tooltip_1"), "It may be EDID metadata and can differ from real highlight peak output."));
@@ -1383,22 +1390,34 @@ ID3D11ComputeShader* HDRDisplay::GetHDROutputCS()
 
 float HDRDisplay::GetDisplayMaxLuminance() const
 {
-	float maxLuminance = 1000.0f;
+	RefreshDisplayLuminance();
+	return cachedDisplayMaxLuminance;
+}
+
+void HDRDisplay::RefreshDisplayLuminance() const
+{
+	// MaxLuminance is only meaningful while the output is in an HDR colour space. On an SDR
+	// display it is EDID metadata the panel advertises, which is routinely far above anything it
+	// can show -- reporting it unqualified is how a 300 nit SDR monitor gets described as 1500
+	// nits. Record whether the query succeeded and whether the output is actually in HDR so the
+	// UI can say which of those it is instead of printing a number that looks authoritative.
+	cachedDisplayLuminanceValid = false;
+	cachedDisplayIsHDR = false;
 
 	winrt::com_ptr<IDXGIOutput> output;
 	if (globals::d3d::swapChain && SUCCEEDED(globals::d3d::swapChain->GetContainingOutput(output.put()))) {
 		winrt::com_ptr<IDXGIOutput6> output6;
 		if (SUCCEEDED(output->QueryInterface(IID_PPV_ARGS(output6.put())))) {
-			DXGI_OUTPUT_DESC1 desc1;
+			DXGI_OUTPUT_DESC1 desc1{};
 			if (SUCCEEDED(output6->GetDesc1(&desc1))) {
-				maxLuminance = desc1.MaxLuminance;
-				if (maxLuminance < 80.0f) {
-					maxLuminance = 1000.0f;  // Fallback if display reports invalid value
-				}
+				cachedDisplayLuminanceValid = true;
+				cachedDisplayIsHDR =
+					desc1.ColorSpace == DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020 ||
+					desc1.ColorSpace == DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709;
+				cachedDisplayMaxLuminance = desc1.MaxLuminance >= 80.0f ? desc1.MaxLuminance : 1000.0f;
 			}
 		}
 	}
-	return maxLuminance;
 }
 
 float4 HDRDisplay::GetSharedDataHDR() const
@@ -1458,6 +1477,11 @@ void HDRDisplay::UpdateHDRData() const
 
 void HDRDisplay::UpdateSwapChainColorSpace() const
 {
+	// The output's HDR state can change under us (the user toggling Windows HDR, or the swap
+	// chain moving to another monitor), and the cached luminance was previously read once at
+	// setup and never again.
+	RefreshDisplayLuminance();
+
 	IDXGISwapChain4* swapChain4 = nullptr;
 
 	if (globals::d3d::swapChain) {

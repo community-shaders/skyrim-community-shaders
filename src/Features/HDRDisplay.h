@@ -195,7 +195,14 @@ public:
 
 	/** @brief Queries the DXGI output for the display's maximum luminance in nits. */
 	float GetDisplayMaxLuminance() const;
+	/** @brief Re-reads the output's luminance and colour space. Cheap; call when the swap chain
+	 *         colour space changes, since the values are only meaningful in an HDR colour space. */
+	void RefreshDisplayLuminance() const;
 	mutable float cachedDisplayMaxLuminance = 1000.0f;
+	/** @brief Whether the OS reported an HDR colour space for the output the swap chain is on. */
+	mutable bool cachedDisplayIsHDR = false;
+	/** @brief Whether the luminance query succeeded at all. */
+	mutable bool cachedDisplayLuminanceValid = false;
 
 	ID3D11RenderTargetView* savedFramebufferRTV = nullptr;  // Original kFRAMEBUFFER.RTV for restoration
 

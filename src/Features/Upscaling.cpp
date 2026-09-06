@@ -1200,6 +1200,18 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 		auto renderWidth = static_cast<int>(screenWidth * resolutionScaleBase);
 		auto renderHeight = static_cast<int>(screenHeight * resolutionScaleBase);
 
+		// Report the internal resolution whenever the quality preset actually changes it, so a
+		// preset that silently fails to apply is visible without guessing from frame rate.
+		{
+			static int s_lastW = 0, s_lastH = 0;
+			static uint s_lastQuality = UINT_MAX;
+			if (s_lastW != renderWidth || s_lastH != renderHeight || s_lastQuality != settings.qualityMode) {
+				s_lastW = renderWidth; s_lastH = renderHeight; s_lastQuality = settings.qualityMode;
+				logger::info("[Upscaling] internal resolution {}x{} from {}x{} (quality {}, ratio {:.2f}x, method {})",
+					renderWidth, renderHeight, screenWidth, screenHeight, settings.qualityMode,
+					getUpscaleRatio(settings.qualityMode), static_cast<uint>(upscaleMethod));
+			}
+		}
 		resolutionScale.x = static_cast<float>(renderWidth) / static_cast<float>(screenWidth);
 		resolutionScale.y = static_cast<float>(renderHeight) / static_cast<float>(screenHeight);
 
