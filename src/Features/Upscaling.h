@@ -151,6 +151,8 @@ public:
 
 	/** @brief Returns the monitor refresh rate in hertz. */
 	[[nodiscard]] int GetMonitorRefreshRate() const;
+	/** @brief Highest refresh rate the display offers at its current resolution. */
+	[[nodiscard]] int GetHighestRefreshRate() const;
 	/** @brief Returns the configured frame-rate cap, or zero when uncapped. */
 	[[nodiscard]] double GetTargetFrameRate() const;
 	/** @brief Returns the rendered-frame cap after accounting for fixed frame generation. */

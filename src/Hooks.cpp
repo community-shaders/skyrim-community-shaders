@@ -379,27 +379,6 @@ namespace PostProcessingExtensions
 	};
 }
 
-// Highest refresh rate the display offers at its current resolution. Frame generation pins the
-// rendered rate to refresh / multiplier, so when that is the binding constraint the useful thing
-// to tell someone is not "try a higher refresh rate" but which one their display already has.
-static int cs_HighestRefreshRateForCurrentMode()
-{
-	DEVMODEA current{};
-	current.dmSize = sizeof(current);
-	if (!EnumDisplaySettingsA(nullptr, ENUM_CURRENT_SETTINGS, &current))
-		return 0;
-	DWORD best = current.dmDisplayFrequency;
-	DEVMODEA mode{};
-	mode.dmSize = sizeof(mode);
-	for (DWORD i = 0; EnumDisplaySettingsA(nullptr, i, &mode); ++i) {
-		if (mode.dmPelsWidth == current.dmPelsWidth && mode.dmPelsHeight == current.dmPelsHeight)
-			best = std::max(best, mode.dmDisplayFrequency);
-		mode = DEVMODEA{};
-		mode.dmSize = sizeof(mode);
-	}
-	return static_cast<int>(best);
-}
-
 struct IDXGISwapChain_Present
 {
 	static HRESULT WINAPI thunk(IDXGISwapChain* This, UINT SyncInterval, UINT Flags)
@@ -486,7 +465,7 @@ struct IDXGISwapChain_Present
 				static int s_lastWarned = -1;
 				if (refreshBound && s_lastWarned != refresh) {
 					s_lastWarned = refresh;
-					const int bestHz = cs_HighestRefreshRateForCurrentMode();
+					const int bestHz = up.GetHighestRefreshRate();
 					logger::warn("[Perf] frame generation is refresh-bound: rendering is pinned to {} Hz / {}x = {:.0f} fps "
 					             "because presentation is paced to the display, so input latency is that of {:.0f} fps rather "
 					             "than the displayed {}.{}",

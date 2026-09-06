@@ -251,6 +251,34 @@ void Upscaling::DrawSettings()
 				settings.frameGenMethod = (uint)fgMethods[std::clamp(fgSel, 0, static_cast<int>(fgMethods.size()) - 1)];
 		}
 
+		// DLSS FG paces presentation to the display refresh, so the RENDERED rate -- and with it the
+		// input latency -- is pinned to refresh / multiplier however much GPU headroom there is:
+		// measured 30 fps rendered against 120 with frame generation off on a 60 Hz mode. Below a
+		// refresh rate the GPU cannot already saturate, switching this on costs latency and buys no
+		// extra displayed frames. That was only ever visible in the log, which is no use to someone
+		// standing in this menu deciding whether to enable it, so it is said here too.
+		if (settings.frameGeneration && GetFrameGenMethod() == FrameGenMethod::kDLSSG && dlssgAvailable) {
+			const int  fgRefresh = GetMonitorRefreshRate();
+			const int  fgBest = GetHighestRefreshRate();
+			const uint fgMult = std::max<uint>(streamline->GetFrameGenerationMultiplier(), 2u);
+			const int  fgRendered = fgRefresh / static_cast<int>(fgMult);
+			const int  fgBestRendered = fgBest / static_cast<int>(fgMult);
+			if (fgRefresh > 0) {
+				ImGui::TextColored(ImVec4(1.0f, 0.76f, 0.25f, 1.0f), "%s",
+					std::vformat(T(TKEY("fg_refresh_bound"),
+					                 "Presentation is paced to the display, so the game renders at {} Hz / {}x = {} FPS "
+					                 "and input latency is that of {} FPS."),
+						std::make_format_args(fgRefresh, fgMult, fgRendered, fgRendered))
+						.c_str());
+				if (fgBest > fgRefresh)
+					ImGui::TextDisabled("%s",
+						std::vformat(T(TKEY("fg_refresh_available"),
+						                 "This display supports {} Hz at this resolution, which would give {} FPS rendered."),
+							std::make_format_args(fgBest, fgBestRendered))
+							.c_str());
+			}
+		}
+
 		if (settings.frameGeneration && GetFrameGenMethod() == FrameGenMethod::kDLSSG && dlssgAvailable) {
 			const uint32_t maxFrames = streamline->GetDLSSGMaxFramesToGenerate();
 			const uint     maxMultiplier = std::clamp<uint>(maxFrames > 0u ? maxFrames + 1u : 2u, 2u, 6u);
@@ -606,6 +634,24 @@ int Upscaling::GetMonitorRefreshRate() const
 	if (EnumDisplaySettingsA(nullptr, ENUM_CURRENT_SETTINGS, &dm) && (dm.dmFields & DM_DISPLAYFREQUENCY) && dm.dmDisplayFrequency > 1)
 		return static_cast<int>(dm.dmDisplayFrequency);
 	return 60;
+}
+
+int Upscaling::GetHighestRefreshRate() const
+{
+	DEVMODEA current{};
+	current.dmSize = sizeof(current);
+	if (!EnumDisplaySettingsA(nullptr, ENUM_CURRENT_SETTINGS, &current))
+		return GetMonitorRefreshRate();
+	DWORD best = current.dmDisplayFrequency;
+	for (DWORD i = 0;; ++i) {
+		DEVMODEA mode{};
+		mode.dmSize = sizeof(mode);
+		if (!EnumDisplaySettingsA(nullptr, i, &mode))
+			break;
+		if (mode.dmPelsWidth == current.dmPelsWidth && mode.dmPelsHeight == current.dmPelsHeight)
+			best = std::max(best, mode.dmDisplayFrequency);
+	}
+	return static_cast<int>(best);
 }
 
 double Upscaling::GetTargetFrameRate() const
