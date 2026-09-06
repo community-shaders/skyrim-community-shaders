@@ -496,7 +496,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	if (!SharedData::InInterior)
 		dirDetailedShadow *= shadowColor.x;
-	dirDetailedShadow += ShadowClampValue * (1.0 - dirDetailedShadow);
 	float dirTransmissionShadow = dirDetailedShadow;
 
 #			if defined(SCREEN_SPACE_SHADOWS)
@@ -722,7 +721,6 @@ PS_OUTPUT main(PS_INPUT input)
 
 	if (!SharedData::InInterior)
 		dirDetailedShadow = shadowColor.x;
-	dirDetailedShadow += ShadowClampValue * (1.0 - dirDetailedShadow);
 
 #			if defined(SCREEN_SPACE_SHADOWS)
 #				ifdef GRASS_OPTIMIZATIONS

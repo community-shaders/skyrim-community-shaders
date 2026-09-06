@@ -61,7 +61,7 @@ static const float3 noise3D[32] = {
 	const float fadeInThreshold = 15;
 	const static sh2 unitSH = Skylighting::UNIT_SH;
 	const SharedData::SkylightingSettings settings = SharedData::skylightingSettings;
-	uint3 cellID = uint3(max(int3(dtid) - settings.ArrayOrigin.xyz, 0) % Skylighting::ARRAY_DIM);
+	uint3 cellID = ((uint3)dtid - settings.ArrayOrigin.xyz) % Skylighting::ARRAY_DIM;
 	uint3 validMin = (uint3)max(0, settings.ValidMargin.xyz);
 	uint3 validMax = Skylighting::ARRAY_DIM - 1 + (uint3)min(0, settings.ValidMargin.xyz);
 	bool isValid = all(cellID >= validMin) && all(cellID <= validMax);  // check if the cell is newly added
