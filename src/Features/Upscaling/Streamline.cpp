@@ -709,6 +709,14 @@ void Streamline::CaptureDLSSGPresentState()
 		if (g_sl.slDLSSGGetState(g_sl.viewport, state, nullptr) == sl::Result::eOk) {
 			// state.status says why DLSS-G is not generating. Report each distinct value once:
 			// without it a non-functional DLSS-G is silent and simply halves the frame rate.
+			static uint32_t s_dlssgLastPresented = UINT32_MAX;
+			if (s_dlssgLastPresented != state.numFramesActuallyPresented) {
+				const uint32_t prev = s_dlssgLastPresented;
+				s_dlssgLastPresented = state.numFramesActuallyPresented;
+				if (prev != UINT32_MAX && state.numFramesActuallyPresented < 2u)
+					logger::warn("[Streamline] DLSS-G stopped generating: presenting {} (was {})",
+						state.numFramesActuallyPresented, prev);
+			}
 			static uint32_t s_sampleTick = 0u;
 			if ((++s_sampleTick % 600u) == 0u) {
 				logger::info("[Streamline] DLSS-G presented {} frame(s) since last query (status 0x{:X}, max {}, vsyncSupportAvailable={})",
@@ -773,7 +781,12 @@ void Streamline::UpdateReflex(bool a_enable, bool a_boost, uint32_t a_frameLimit
 				logger::warn("[Streamline] slReflexSetOptions failed (result {})", static_cast<int>(reflexRes));
 			}
 		}
-		if (mode != sl::ReflexMode::eOff) {
+		// slReflexSleep is where the frame limiter is actually enforced, so it has to run whenever a
+		// limit is set -- not only when low-latency mode is on. Gating it on the mode is why the
+		// FSR-FG path's cap "could not be applied": frameLimitUs was handed to Reflex and then never
+		// given a chance to sleep on it, so the cap fell through to DXVK's limiter, which applies it
+		// from the submission thread after the present instead of in the render loop.
+		if (mode != sl::ReflexMode::eOff || a_frameLimitUs != 0u) {
 			// PollInputDevices can run more than once per rendered frame.
 			static uint32_t s_lastSleepFrame = UINT32_MAX;
 			const uint32_t simFrame = SimFrameId();
@@ -1879,10 +1892,19 @@ void Streamline::CaptureFSRFrameGenState()
 			// FSR-FG had no equivalent of the DLSS-G present-state log, so "frame generation is on
 			// but generating nothing" was invisible on this path and the overlay's Post-FG FPS was
 			// the only clue. Sample on the same cadence DLSS-G uses.
-			static uint32_t s_fsrSampleTick = 0u;
-			if ((++s_fsrSampleTick % 600u) == 0u) {
-				logger::info("[Streamline] FSR-FG presenting {} frame(s), total presented {}",
-					state.numFramesActuallyPresented, state.totalPresentedFrames);
+			// Report every CHANGE in the presented count. A periodic sample cannot answer
+			// "is frame generation dropping out while it is switched on", because it cannot
+			// distinguish a steady 1 from a 2 that briefly fell to 1 between samples.
+			static uint32_t s_fsrLastPresented = UINT32_MAX;
+			if (s_fsrLastPresented != state.numFramesActuallyPresented) {
+				const uint32_t prev = s_fsrLastPresented;
+				s_fsrLastPresented = state.numFramesActuallyPresented;
+				if (prev != UINT32_MAX && state.numFramesActuallyPresented < 2u)
+					logger::warn("[Streamline] FSR-FG stopped generating: presenting {} (was {}), total presented {}",
+						state.numFramesActuallyPresented, prev, state.totalPresentedFrames);
+				else
+					logger::info("[Streamline] FSR-FG presenting {} frame(s) (was {}), total presented {}",
+						state.numFramesActuallyPresented, prev, state.totalPresentedFrames);
 			}
 		} else {
 			static sl::Result s_lastFsrStateRes = sl::Result::eOk;

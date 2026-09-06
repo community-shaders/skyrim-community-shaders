@@ -166,10 +166,10 @@ void PerformanceOverlay::DrawSettings()
 		if (this->settings.ShowFPS && isFrameGenerationActive) {
 			ImGui::Checkbox(T(TKEY("show_pre_fg_graph"), "Show Pre-FG Frametime Graph"), &this->settings.ShowPreFGFrameTimeGraph);
 
-			ImGui::Checkbox(T(TKEY("show_post_fg_graph"), "Show Post-FG Frametime Graph"), &this->settings.ShowPostFGFrameTimeGraph);
+			ImGui::Checkbox(T(TKEY("show_true_graph"), "Show True Frametime Graph"), &this->settings.ShowPostFGFrameTimeGraph);
 			if (ImGui::IsItemHovered()) {
 				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("%s", T(TKEY("post_fg_graph_tooltip"), "Post-FG timing is estimated from the pre-FG frame time and the presentation multiplier reported by the active frame-generation backend."));
+					ImGui::Text("%s", T(TKEY("true_graph_tooltip"), "True timing is the presented frame interval. The frame-generation backend reports how many frames it actually presented; where it publishes no count, the interval is derived from the render frame time and the reported multiplier."));
 				}
 			}
 		} else if (this->settings.ShowFPS) {
@@ -325,7 +325,8 @@ void PerformanceOverlay::DrawOverlay()
 			// Measure FPS text width
 			std::string fpsText = std::format("{:.1f} ({:.2f} ms)", this->state.smoothFps, this->state.smoothFrameTimeMs);
 			if (this->state.isFrameGenerationActive) {
-				fpsText = std::format("Raw FPS: {:.1f} ({:.2f} ms)", this->state.smoothFps, this->state.smoothFrameTimeMs);
+				fpsText = std::format("Render FPS: {:.1f} ({:.2f} ms, sd {:.2f})", this->state.smoothFps,
+					this->state.smoothFrameTimeMs, this->state.frameTimeStdDevMs);
 			}
 			float fpsWidth = ImGui::CalcTextSize(fpsText.c_str()).x;
 			minWidth = std::max(minWidth, fpsWidth + Settings::kLabelPadding * scale);
@@ -412,7 +413,7 @@ void PerformanceOverlay::DrawFPS()
 		ImGui::TableSetupColumn("##value");
 
 		ImGui::TableNextColumn();
-		ImGui::Text(this->state.isFrameGenerationActive ? T(TKEY("raw_fps"), "Raw FPS:") : T(TKEY("fps"), "FPS:"));
+		ImGui::Text(this->state.isFrameGenerationActive ? T(TKEY("render_fps"), "Render FPS:") : T(TKEY("fps"), "FPS:"));
 		ImGui::TableNextColumn();
 
 		// Check if buffer is full for the avg
@@ -423,16 +424,19 @@ void PerformanceOverlay::DrawFPS()
 		if (bufferIsFull) {
 			float avgFrameTime = std::accumulate(frameData.begin(), frameData.end(), 0.0f) / frameData.size();
 			float avgFps = (avgFrameTime > 0.001f) ? 1000.0f / avgFrameTime : 0.0f;
-			ImGui::Text("%.1f (%.2f ms) | Avg: %.1f", this->state.smoothFps, this->state.smoothFrameTimeMs, avgFps);
+			ImGui::Text("%.1f (%.2f ms, sd %.2f) | Avg: %.1f", this->state.smoothFps,
+				this->state.smoothFrameTimeMs, this->state.frameTimeStdDevMs, avgFps);
 		} else {
-			ImGui::Text("%.1f (%.2f ms)", this->state.smoothFps, this->state.smoothFrameTimeMs);
+			ImGui::Text("%.1f (%.2f ms, sd %.2f)", this->state.smoothFps,
+				this->state.smoothFrameTimeMs, this->state.frameTimeStdDevMs);
 		}
 
 		if (this->state.isFrameGenerationActive) {
 			ImGui::TableNextColumn();
-			ImGui::Text(T(TKEY("post_fg_fps"), "Post-FG FPS:"));
+			ImGui::Text(T(TKEY("true_fps"), "True FPS:"));
 			ImGui::TableNextColumn();
-			ImGui::Text("%.1f (%.2f ms)", this->state.postFGSmoothFps, this->state.postFGSmoothFrameTimeMs);
+			ImGui::Text("%.1f (%.2f ms, sd %.2f)", this->state.postFGSmoothFps,
+				this->state.postFGSmoothFrameTimeMs, this->state.postFGFrameTimeStdDevMs);
 		}
 
 		ImGui::EndTable();
@@ -528,7 +532,7 @@ void PerformanceOverlay::DrawPostFGFrameTimeGraph()
 	// Prepare overlay text
 	char overlay_text[128];
 	snprintf(overlay_text, IM_ARRAYSIZE(overlay_text),
-		"Post-FG: %.2f ms (%.1f FPS)",
+		"True: %.2f ms (%.1f FPS)",
 		state.postFGSmoothFrameTimeMs, state.postFGSmoothFps);
 
 	// Set graph colors - blue for post-FG
@@ -2004,22 +2008,25 @@ void PerformanceOverlay::UpdateGraphValues()
 			// guard could never pass, and Post-FG FPS read a permanent 0 -- which is what the overlay
 			// showed for FSR-FG. When the counter is not moving, fall back to the same multiplier
 			// estimate the DLSS-G path uses rather than reporting zero frames per second.
+			// Per frame, not per quarter second. This used to average the presented count over a
+			// 0.25 s window and push that same value into the history every frame, so the True
+			// graph was a flat stepped line next to an instantaneous Render graph and the two
+			// could not be compared. The presented delta for this frame over this frame's own
+			// delta time is the presented interval, on the same footing as the render interval.
 			if (deltaTime > 0.0f) {
-				if (presented > state.lastPresentedFrames && state.lastPresentedFrames != 0)
-					state.presentedAccum += static_cast<float>(presented - state.lastPresentedFrames);
-				state.presentedElapsed += deltaTime;
-				if (state.presentedElapsed >= 0.25f) {
-					if (state.presentedAccum > 0.0f) {
-						state.postFGFps = state.presentedAccum / state.presentedElapsed;
-						state.postFGFrameTimeMs = state.postFGFps > 0.0f ? 1000.0f / state.postFGFps : 0.0f;
-					} else {
-						const float fsrMultiplier = static_cast<float>(
-							std::max(streamline->GetFrameGenerationMultiplier(), 2u));
-						state.postFGFps = state.fps * fsrMultiplier;
-						state.postFGFrameTimeMs = state.frameTimeMs / fsrMultiplier;
-					}
-					state.presentedAccum = 0.0f;
-					state.presentedElapsed = 0.0f;
+				const uint64_t deltaPresented =
+					(state.lastPresentedFrames != 0 && presented > state.lastPresentedFrames)
+						? presented - state.lastPresentedFrames
+						: 0u;
+				if (deltaPresented > 0u) {
+					state.postFGFrameTimeMs = (deltaTime * 1000.0f) / static_cast<float>(deltaPresented);
+					state.postFGFps = state.postFGFrameTimeMs > 0.0f ? 1000.0f / state.postFGFrameTimeMs : 0.0f;
+				} else if (state.postFGFrameTimeMs <= 0.0f) {
+					// No count published yet: fall back to the reported multiplier rather than zero.
+					const float fsrMultiplier = static_cast<float>(
+						std::max(streamline->GetFrameGenerationMultiplier(), 2u));
+					state.postFGFps = state.fps * fsrMultiplier;
+					state.postFGFrameTimeMs = state.frameTimeMs / fsrMultiplier;
 				}
 			}
 		} else {
@@ -2057,6 +2064,50 @@ void PerformanceOverlay::UpdateGraphValues()
 				state.isFrameGenerationActive ? "on" : "off",
 				up.GetFrameGenMethod() == Upscaling::FrameGenMethod::kDLSSG ? "DLSS-G" : "FSR-FG",
 				Streamline::GetSingleton()->GetFrameGenerationMultiplier());
+		}
+	}
+
+	// Pacing trace. The averaged frame rate says nothing about how evenly frames land, which is
+	// the thing that actually gets noticed, so report the spread of the same history the graphs
+	// draw: median, 99th percentile and worst, for the render and true timelines.
+	{
+		static float s_pacingTimer = 0.0f;
+		s_pacingTimer += deltaTime;
+		if (s_pacingTimer >= 5.0f) {
+			s_pacingTimer = 0.0f;
+			const auto histStdDev = [](std::span<const float> a_hist) {
+				double sum = 0.0; size_t n = 0;
+				for (float s : a_hist)
+					if (s > 0.0f) { sum += s; ++n; }
+				if (n < 2) return 0.0f;
+				const double mean = sum / double(n);
+				double acc = 0.0;
+				for (float s : a_hist)
+					if (s > 0.0f) { const double d = s - mean; acc += d * d; }
+				return static_cast<float>(std::sqrt(acc / double(n - 1)));
+			};
+			const auto spread = [](std::span<const float> a_hist, float& a_p50, float& a_p99, float& a_max) {
+				std::vector<float> v;
+				v.reserve(a_hist.size());
+				for (float s : a_hist)
+					if (s > 0.0f)
+						v.push_back(s);
+				if (v.empty()) { a_p50 = a_p99 = a_max = 0.0f; return; }
+				std::sort(v.begin(), v.end());
+				a_p50 = v[v.size() / 2];
+				a_p99 = v[static_cast<size_t>(static_cast<double>(v.size() - 1) * 0.99)];
+				a_max = v.back();
+			};
+			float rp50 = 0.0f, rp99 = 0.0f, rmax = 0.0f, tp50 = 0.0f, tp99 = 0.0f, tmax = 0.0f;
+			spread(state.frameTimeHistory.GetData(), rp50, rp99, rmax);
+			spread(state.postFGFrameTimeHistory.GetData(), tp50, tp99, tmax);
+			state.frameTimeStdDevMs = histStdDev(state.frameTimeHistory.GetData());
+			state.postFGFrameTimeStdDevMs = histStdDev(state.postFGFrameTimeHistory.GetData());
+			auto& up = globals::features::upscaling;
+			logger::info("[Pacing] render p50 {:.2f} p99 {:.2f} max {:.2f} sd {:.2f} ms | true p50 {:.2f} p99 {:.2f} max {:.2f} sd {:.2f} ms | fg={} method={}",
+				rp50, rp99, rmax, state.frameTimeStdDevMs, tp50, tp99, tmax, state.postFGFrameTimeStdDevMs,
+				state.isFrameGenerationActive ? "on" : "off",
+				up.GetFrameGenMethod() == Upscaling::FrameGenMethod::kDLSSG ? "DLSS-G" : "FSR-FG");
 		}
 	}
 

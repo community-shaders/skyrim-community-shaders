@@ -601,15 +601,24 @@ struct BSInputDeviceManager_PollInputDevices
 			auto& upscaling = globals::features::upscaling;
 			const bool wantReflex = upscaling.GetEffectiveReflex();
 			const double renderedFpsLimit = upscaling.GetRenderedFrameRateLimit();
-			const uint32_t reflexLimitUs = (wantReflex && renderedFpsLimit > 0.0) ?
+			// Hand the cap to Reflex even when Reflex's low-latency mode is off. The frame limiter is
+			// independent of the mode -- sl_reflex.h: "This setting is independent of
+			// ReflexOptions::mode; it can even be used with mode == ReflexMode::eOff" -- and the driver
+			// paces it far better than DXVK's limiter can. DXVK applies its cap from
+			// Presenter::signalFrame, i.e. on the submission thread after the present has already
+			// gone out, whereas Reflex sleeps in the render loop before simulation. That difference is
+			// visible as frame-time spikes on the FSR-FG path, which is the only path that was left on
+			// DXVK's limiter, and which does not show them under DLSS-G's Reflex cap at the same rate.
+			const uint32_t reflexLimitUs = renderedFpsLimit > 0.0 ?
 				static_cast<uint32_t>(std::lround(1000000.0 / renderedFpsLimit)) : 0u;
 			Streamline::GetSingleton()->UpdateReflex(wantReflex, wantReflex && upscaling.settings.reflexBoost, reflexLimitUs);
 			// The present mode follows the frame-rate setting (tear-free only while a cap paces the
 			// output), so it has to be re-evaluated when that setting changes at runtime.
 			upscaling.UpdatePresentModePreference();
-			// Reflex owns the cap whenever it is active; GetEffectiveReflex already returns false for
-			// FSR-FG, where Reflex cannot apply it, so DXVK's limiter takes that case.
-			upscaling.ApplyDxvkFrameRateLimit(!wantReflex ? renderedFpsLimit : 0.0);
+			// Reflex now owns the cap on both paths, so DXVK's limiter stays out of the way unless
+			// Reflex is not available at all to apply one.
+			const bool reflexLimiterActive = Streamline::GetSingleton()->IsReflexSupported();
+			upscaling.ApplyDxvkFrameRateLimit(reflexLimiterActive ? 0.0 : renderedFpsLimit);
 			Streamline::GetSingleton()->SetPCLMarker(Streamline::PclMarker::SimulationStart);
 		}
 

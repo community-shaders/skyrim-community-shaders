@@ -239,6 +239,12 @@ struct PerformanceOverlay : OverlayFeature
 		float postFGSmoothFps = 0.0f;
 		float postFGSmoothFrameTimeMs = 0.0f;
 
+		// Spread of the frame intervals in the history the graphs draw. A mean frame rate cannot
+		// distinguish evenly delivered frames from the same average delivered unevenly, which is
+		// the difference that is actually felt.
+		float frameTimeStdDevMs = 0.0f;
+		float postFGFrameTimeStdDevMs = 0.0f;
+
 		// Update timing using QueryPerformanceCounter
 		float updateTimer = 0.0f;
 		LARGE_INTEGER overlayTimingFrequency = { 0 };
