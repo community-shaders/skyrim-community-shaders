@@ -347,6 +347,68 @@ target_sources(
 )
 
 # #######################################################################################################################
+# # Scene settings catalog
+# #######################################################################################################################
+
+set(SCENE_SETTINGS_PYTHON_ARGS "")
+find_package(Python3 COMPONENTS Interpreter REQUIRED)
+set(SCENE_SETTINGS_PYTHON_EXECUTABLE "${Python3_EXECUTABLE}")
+
+set(SCENE_SETTINGS_CATALOG_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
+set(SCENE_SETTINGS_CATALOG_HEADER "${SCENE_SETTINGS_CATALOG_DIR}/SceneSettingsCatalog.generated.h")
+set(SCENE_SETTINGS_CATALOG_SOURCE "${SCENE_SETTINGS_CATALOG_DIR}/SceneSettingsCatalog.generated.cpp")
+set(SCENE_SETTINGS_ADAPTERS_SOURCE "${SCENE_SETTINGS_CATALOG_DIR}/FeatureSceneSettingsAdapters.generated.cpp")
+
+file(
+    GLOB_RECURSE SCENE_SETTINGS_CATALOG_INPUTS
+    LIST_DIRECTORIES false
+    CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.hpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cxx"
+)
+
+add_custom_command(
+    OUTPUT
+        "${SCENE_SETTINGS_CATALOG_HEADER}"
+        "${SCENE_SETTINGS_CATALOG_SOURCE}"
+        "${SCENE_SETTINGS_ADAPTERS_SOURCE}"
+    COMMAND
+        ${SCENE_SETTINGS_PYTHON_EXECUTABLE}
+        ${SCENE_SETTINGS_PYTHON_ARGS}
+        "${CMAKE_CURRENT_SOURCE_DIR}/cmake/generate_scene_settings_catalog.py"
+        --source-dir
+        "${CMAKE_CURRENT_SOURCE_DIR}"
+        --out-dir
+        "${SCENE_SETTINGS_CATALOG_DIR}"
+        --min-entries
+        250
+        --min-controllable
+        290
+        --min-controllable-features
+        28
+    DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/cmake/generate_scene_settings_catalog.py"
+        ${SCENE_SETTINGS_CATALOG_INPUTS}
+    COMMENT "Generating scene settings catalog"
+    VERBATIM
+)
+
+target_include_directories(
+    "${PROJECT_NAME}"
+    PRIVATE "${SCENE_SETTINGS_CATALOG_DIR}"
+)
+
+target_sources(
+    "${PROJECT_NAME}"
+    PRIVATE
+        "${SCENE_SETTINGS_CATALOG_HEADER}"
+        "${SCENE_SETTINGS_CATALOG_SOURCE}"
+        "${SCENE_SETTINGS_ADAPTERS_SOURCE}"
+)
+
+# #######################################################################################################################
 # # clang-format
 # #######################################################################################################################
 

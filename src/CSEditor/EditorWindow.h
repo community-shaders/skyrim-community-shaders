@@ -132,6 +132,9 @@ public:
 	/** @brief Draw the Objects browser window listing all editable form widgets. */
 	void ShowObjectsWindow();
 
+	/** @brief Draw a compact "Active: <weather>" line matching the indicator shown atop other object categories. */
+	void DrawActiveWeatherIndicator();
+
 	/** @brief Draw the game viewport preview window with render target display. */
 	void ShowViewportWindow();
 
@@ -353,14 +356,6 @@ public:
 	 */
 	bool IsFavorite(const std::string& widgetId) const;
 
-	/**
-	 * @brief Navigate to and highlight a specific feature setting within a weather widget.
-	 * @param weather     The weather form to open.
-	 * @param featureName The feature tab name to select.
-	 * @param settingName The setting ID to scroll to and highlight.
-	 */
-	void OpenWeatherFeatureSetting(RE::TESWeather* weather, const std::string& featureName, const std::string& settingName);
-
 	/** @brief Destructor. Releases owned textures and widget resources. */
 	~EditorWindow();
 
@@ -379,6 +374,12 @@ private:
 
 	// Widget focus tracking for Ctrl+W
 	Widget* lastFocusedWidget = nullptr;
+
+	/** @brief Locks the current weather when the overlay opens, unless the user already locked one. */
+	void LockWeatherForOverlay();
+
+	/// True while the lock belongs to the overlay, so closing it only releases what it took.
+	bool weatherLockedByOverlay = false;
 
 	// Time control state
 	bool timePaused = false;

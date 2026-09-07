@@ -42,6 +42,7 @@
 #include "Utils/UI.h"
 
 #include "CSEditor/EditorWindow.h"
+#include "CSEditor/SceneWidgetInterceptor.h"
 #include "Features/CSEditor.h"
 #include "Features/Effects11.h"
 #include "Features/PerformanceOverlay.h"
@@ -739,6 +740,10 @@ void Menu::Init()
 	}
 
 	BuildCategoryCounts();
+
+	// Detours must land before any feature draws, and this is the first guaranteed render-thread
+	// point; Install logs its own failure and leaves the interceptor inert.
+	SceneWidgetInterceptor::Install();
 
 	initialized = true;
 }

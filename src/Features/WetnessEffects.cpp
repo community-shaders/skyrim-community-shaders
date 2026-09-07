@@ -1,5 +1,6 @@
 #include "WetnessEffects.h"
 #include "CSEditor.h"
+#include "CSEditor/SceneWidgetInterceptor.h"
 #include "I18n/I18n.h"
 #include "Menu.h"
 
@@ -617,6 +618,11 @@ void WetnessEffects::DrawSettings()
 
 		ImGui::TreePop();
 	}
+
+	// The weather picker and debug overrides have no scene-context meaning, so hide them while a
+	// Scene Manager replica is borrowing this panel to author overrides.
+	if (SceneWidgetInterceptor::IsArmed())
+		return;
 
 	ImGui::Spacing();
 	ImGui::Spacing();

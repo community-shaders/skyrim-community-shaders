@@ -173,6 +173,10 @@ namespace Util
 	 */
 	void SetTooltipPositionNearMouse(float estimatedHeight, float estimatedWidth = 0.0f);
 
+	/// Hover flags for a greyed control, which is exactly the one that has to explain why it is greyed.
+	inline constexpr ImGuiHoveredFlags kTooltipWhenDisabled =
+		ImGuiHoveredFlags_DelayNormal | ImGuiHoveredFlags_AllowWhenDisabled;
+
 	/**
 	 * Shows a positioned tooltip with wrapped text when the previous item is hovered.
 	 * Uses SetTooltipPositionNearMouse for viewport-aware placement.
@@ -421,46 +425,6 @@ namespace Util
 	 * @return The offset to add to cursor X position to center the content
 	 */
 	float GetCenterOffsetForContent(float contentWidth);
-
-	/**
-	 * Weather-controlled UI helpers
-	 * These functions automatically check if a setting has a weather-specific override
-	 * and disable the control if it's being controlled by the current weather
-	 */
-	namespace WeatherUI
-	{
-		/**
-		 * Check if a specific setting is currently controlled by weather
-		 * @param feature The feature to check
-		 * @param settingName The name of the setting (must match registered weather variable name)
-		 * @return True if weather is overriding this setting
-		 */
-		bool IsWeatherControlled(Feature* feature, const char* settingName);
-
-		/**
-		 * Weather-aware slider float that greys out when controlled by weather
-		 * @param label The label for the slider
-		 * @param feature The feature this setting belongs to
-		 * @param settingName The name of the setting (must match registered weather variable name)
-		 * @param value Pointer to the value
-		 * @param min Minimum value
-		 * @param max Maximum value
-		 * @param format Display format
-		 * @return True if value was changed (only possible when not weather-controlled)
-		 */
-		bool SliderFloat(const char* label, Feature* feature, const char* settingName, float* value, float min, float max, const char* format = "%.3f");
-
-		/**
-		 * Weather-aware checkbox that greys out when controlled by weather
-		 */
-		bool Checkbox(const char* label, Feature* feature, const char* settingName, bool* value);
-
-		/**
-		 * Weather-aware color edit that greys out when controlled by weather
-		 */
-		bool ColorEdit3(const char* label, Feature* feature, const char* settingName, float col[3]);
-		bool ColorEdit4(const char* label, Feature* feature, const char* settingName, float col[4]);
-	}
 
 	/**
 	 * Constraint-aware UI helpers
@@ -919,6 +883,15 @@ namespace Util
 	 * @return The color with pulsing brightness applied (alpha unchanged)
 	 */
 	ImVec4 GetPulsingColor(const ImVec4& baseColor, float speed = 4.0f, float minBrightness = 0.7f, float maxBrightness = 1.0f);
+
+	/**
+	 * @brief Tints the next control's frame and border to mark where its value comes from.
+	 * @param color Fully opaque marker color; the frame states get it at reduced alpha.
+	 */
+	void PushTintedFrameStyle(const ImVec4& color);
+
+	/** @brief Pops the style pushed by PushTintedFrameStyle. Always call after the corresponding push. */
+	void PopTintedFrameStyle();
 
 	/**
 	 * @brief Draws the feature search bar with magnifying glass icon.

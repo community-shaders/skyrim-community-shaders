@@ -303,18 +303,12 @@ void SetWidgetTypeSizesFromJson(const json& j)
 
 void PushInheritedStyle()
 {
-	const auto w = Util::Colors::GetWarning();
-	ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(w.x, w.y, w.z, 0.25f));
-	ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(w.x, w.y, w.z, 0.35f));
-	ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(w.x, w.y, w.z, 0.45f));
-	ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
-	ImGui::PushStyleColor(ImGuiCol_Border, w);
+	Util::PushTintedFrameStyle(Util::Colors::GetWarning());
 }
 
 void PopInheritedStyle()
 {
-	ImGui::PopStyleColor(4);
-	ImGui::PopStyleVar();
+	Util::PopTintedFrameStyle();
 }
 
 bool ContainsStringIgnoreCase(const std::string_view a_string, const std::string_view a_substring)

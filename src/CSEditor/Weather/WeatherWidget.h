@@ -13,7 +13,7 @@ using FogData = TESWeather::FogData;
  * Covers all weather properties: atmosphere colors, DALC directional
  * ambient lighting, clouds (32 layers), fog, per-TOD form references
  * (ImageSpace, volumetric lighting, precipitation, visual effect),
- * per-feature override settings, and parent-child inheritance.
+ * and parent-child inheritance.
  */
 class WeatherWidget : public Widget
 {
@@ -98,9 +98,6 @@ public:
 		RE::BGSShaderParticleGeometryData* precipitationData = nullptr;
 		RE::BGSReferenceEffect* referenceEffect = nullptr;
 
-		// Per-feature settings storage
-		std::map<std::string, json> featureSettings;
-
 		bool operator==(const Settings& o) const;
 	};
 
@@ -113,7 +110,7 @@ public:
 
 	~WeatherWidget();
 
-	/** @brief Renders the full weather editor UI with tabs for properties, DALC, atmosphere, clouds, fog, records, and features. */
+	/** @brief Renders the full weather editor UI with tabs for properties, DALC, atmosphere, clouds, fog, and records. */
 	void DrawWidget() override;
 
 	/** @brief Returns the human-readable widget type name for window sizing. */
@@ -149,23 +146,6 @@ public:
 	/** @brief Returns true if the current settings differ from the last saved state. */
 	bool HasUnsavedChanges() const override;
 
-	/** @brief Serializes per-feature override settings into the main JSON blob. */
-	void SaveFeatureSettings();
-
-	/** @brief Deserializes per-feature override settings from the main JSON blob. */
-	void LoadFeatureSettings();
-
-	// Navigation state for opening specific features
-	std::string pendingFeatureNavigation = "";
-	std::string pendingSettingHighlight = "";
-
-	/**
-	 * @brief Queues navigation to a specific feature setting tab and highlights the target setting.
-	 * @param featureName The feature name to navigate to.
-	 * @param settingName The setting name to highlight after navigation.
-	 */
-	void NavigateToFeatureSetting(const std::string& featureName, const std::string& settingName);
-
 private:
 	void InitializeInheritFlags();
 	void DrawDALCSettings();
@@ -174,7 +154,6 @@ private:
 	void DrawFogSettings();
 	void DrawFogSlider(const char* id, float& prop, float min, float max, const char* fmt, bool& inheritRef, bool isInherited, bool& changed);
 	void DrawFogRow(bool matches, const char* inheritKey, const char* label, const char* dayPropKey, const char* nightPropKey, float min, float max, const char* fmt, bool hasParent, WeatherWidget* parentWidget, bool& changed);
-	void DrawFeatureSettings();
 
 	// Cloud texture loading
 	ID3D11ShaderResourceView* GetCloudTexture(int layerIndex);

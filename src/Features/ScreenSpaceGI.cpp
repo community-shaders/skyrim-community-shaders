@@ -3,6 +3,7 @@
 #include <DirectXTex.h>
 
 #include "../I18n/I18n.h"
+#include "CSEditor/SceneWidgetInterceptor.h"
 #include "Deferred.h"
 #include "State.h"
 #include "Util.h"
@@ -90,7 +91,9 @@ void ScreenSpaceGI::DrawSettings()
 	{
 		auto qualityGuard = Util::DisableGuard(!settings.Enabled);
 
-		if (ImGui::BeginTable("Presets", 5)) {
+		// A preset button writes several settings at once, which the per-control override system
+		// cannot represent, so hide it while a Scene Manager replica is borrowing this panel.
+		if (!SceneWidgetInterceptor::IsArmed() && ImGui::BeginTable("Presets", 5)) {
 			ImGui::TableNextColumn();
 			if (ImGui::Button(T(TKEY("ao_only"), "AO only"), { -1, 0 })) {
 				settings.NumSlices = 1;
@@ -168,7 +171,7 @@ void ScreenSpaceGI::DrawSettings()
 									  "Controls accuracy of lighting, and noise when effect radius is large."));
 		}
 
-		if (ImGui::BeginTable("Less Work", 3)) {
+		if (ImGui::BeginTable("Less Work", 3, ImGuiTableFlags_SizingStretchSame)) {
 			ImGui::TableNextColumn();
 			recompileFlag |= ImGui::RadioButton(T(TKEY("full_res"), "Full Res"), &settings.ResolutionMode, 0);
 			ImGui::TableNextColumn();
@@ -319,6 +322,11 @@ void ScreenSpaceGI::DrawSettings()
 		}
 	}
 
+	// The buffer viewer has no scene-context meaning, so hide it while a Scene Manager replica
+	// is borrowing this panel to author overrides.
+	if (SceneWidgetInterceptor::IsArmed())
+		return;
+
 	///////////////////////////////
 	ImGui::SeparatorText(T(TKEY("debug"), "Debug"));
 
@@ -343,10 +351,19 @@ void ScreenSpaceGI::DrawSettings()
 
 void ScreenSpaceGI::LoadSettings(json& o_json)
 {
+	const auto previous = settings;
+
 	settings = o_json;
 	settings.ResolutionMode = std::clamp(settings.ResolutionMode, 0, 2);
 
-	recompileFlag = true;
+	// A scene override reloads the whole settings block on every value change, so recompiling
+	// unconditionally rebuilds all seven compute shaders per slider frame. Only the settings
+	// CompileComputeShaders turns into defines can actually invalidate them.
+	recompileFlag = recompileFlag ||
+	                settings.ResolutionMode != previous.ResolutionMode ||
+	                settings.EnableTemporalDenoiser != previous.EnableTemporalDenoiser ||
+	                settings.EnableGI != previous.EnableGI ||
+	                settings.EnableExperimentalSpecularGI != previous.EnableExperimentalSpecularGI;
 }
 
 void ScreenSpaceGI::SaveSettings(json& o_json)
