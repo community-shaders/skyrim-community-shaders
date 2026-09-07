@@ -34,7 +34,6 @@ bool LightIntersectsCluster(float3 position, float radiusSquared, ClusterAABB cl
 		return;
 
 	uint visibleLightCount = 0;
-	uint visibleLightIndices[MAX_CLUSTER_LIGHTS];
 
 	uint clusterIndex = dispatchThreadId.x +
 	                    dispatchThreadId.y * ClusterSize.x +
@@ -50,6 +49,13 @@ bool LightIntersectsCluster(float3 position, float radiusSquared, ClusterAABB cl
 
 	GroupMemoryBarrierWithGroupSync();
 
+	// Counted first, then written straight into lightIndexList, rather than staged through a local
+	// uint[MAX_CLUSTER_LIGHTS]. That array is indexed by a runtime value, which no GPU can keep in
+	// registers: on RDNA2 it became 1024 bytes of scratch memory per thread (measured with Radeon
+	// GPU Analyzer against gfx1035), read and written in the hottest loop this shader has. Testing
+	// each light twice is a buffer load and a handful of ALU; the scratch traffic it replaces is far
+	// more expensive, and the second pass is exact rather than conservative because neither the
+	// light set nor the cluster changes between the two.
 	for (uint i = 0; i < LightCount; i++) {
 		Light light = lights[i];
 
@@ -59,20 +65,29 @@ bool LightIntersectsCluster(float3 position, float radiusSquared, ClusterAABB cl
 
 		[branch] if (LightIntersectsCluster(positionVS, radiusSquared, cluster))
 		{
-			visibleLightIndices[visibleLightCount] = i;
 			visibleLightCount++;
 			if (visibleLightCount >= MAX_CLUSTER_LIGHTS)
 				break;
 		}
 	}
 
-	GroupMemoryBarrierWithGroupSync();
-
 	uint offset = 0;
 	InterlockedAdd(lightIndexCounter[0], visibleLightCount, offset);
 
-	for (uint j = 0; j < visibleLightCount; j++) {
-		lightIndexList[offset + j] = visibleLightIndices[j];
+	uint written = 0;
+
+	for (uint k = 0; k < LightCount && written < visibleLightCount; k++) {
+		Light light = lights[k];
+
+		float radiusSquared = light.radius * light.radius;
+
+		float3 positionVS = FrameBuffer::WorldToView(light.positionWS.xyz);
+
+		[branch] if (LightIntersectsCluster(positionVS, radiusSquared, cluster))
+		{
+			lightIndexList[offset + written] = k;
+			written++;
+		}
 	}
 
 	LightGrid output = {

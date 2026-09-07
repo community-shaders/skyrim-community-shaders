@@ -55,11 +55,6 @@ set(Boost_USE_STATIC_RUNTIME ON)
 
 set(BUILD_TESTS OFF)
 
-# Define _WINDOWS for all Windows builds (required by FidelityFX API loader)
-if(WIN32)
-	add_compile_definitions(_WINDOWS)
-endif()
-
 if(MSVC)
 	add_compile_definitions(
 		$<$<CONFIG:DEBUG>:_ITERATOR_DEBUG_LEVEL=0>

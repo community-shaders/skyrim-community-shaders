@@ -321,14 +321,6 @@ namespace
 	// Returns the texture that was presented to the display (post-ApplyHDR).
 	ID3D11Texture2D* ResolveDisplayedBackBuffer(winrt::com_ptr<ID3D11Texture2D>& holder)
 	{
-		auto& upscaling = globals::features::upscaling;
-		if (upscaling.d3d12SwapChainActive &&
-			upscaling.dx12SwapChain.swapChainBufferWrapped &&
-			upscaling.dx12SwapChain.swapChainBufferWrapped->resource11) {
-			holder.copy_from(upscaling.dx12SwapChain.swapChainBufferWrapped->resource11);
-			return holder.get();
-		}
-
 		if (!globals::d3d::swapChain) {
 			return nullptr;
 		}
@@ -344,7 +336,7 @@ namespace
 	bool IsFlatHdrScreenshotCapture()
 	{
 		return globals::features::hdrDisplay.loaded &&
-		       globals::features::hdrDisplay.settings.enableHDR;
+		       globals::features::hdrDisplay.IsHDREnabledForFrame();
 	}
 
 	// Picks the capture source:
@@ -610,7 +602,7 @@ void ScreenshotFeature::DrawSettings()
 	ImGui::TextWrapped("%s", T(TKEY("async_note"), "Capture and save run asynchronously without stalling the game."));
 
 	const bool hdrCaptureAvailable = globals::features::hdrDisplay.loaded &&
-	                                 globals::features::hdrDisplay.settings.enableHDR;
+	                                 globals::features::hdrDisplay.IsHDREnabledForFrame();
 
 	if (hdrCaptureAvailable) {
 		ImGui::TextWrapped("%s",

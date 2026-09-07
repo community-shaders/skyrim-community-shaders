@@ -199,7 +199,6 @@ void MenuManager::RenderDebugControl()
 		ImGui::TreePop();
 	}
 }
-
 float MenuManager::GetTimeOfDayBlendFactor(int timeIndex) const
 {
 	auto& effectManager = EffectManager::GetSingleton();
@@ -485,4 +484,3 @@ void MenuManager::RenderAllSettings()
 		ImGui::EndTabBar();
 	}
 }
-

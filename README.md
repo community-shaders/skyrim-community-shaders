@@ -27,7 +27,12 @@ SKSE core plugin for community-driven advanced graphics modifications.
     -   CMake Tools for Windows
     -   HLSL Tools
 -   [Git](https://git-scm.com/downloads)
+    -   Install [Git LFS](https://git-lfs.com/) and run `git lfs install`
     -   Edit the `PATH` environment variable and add the Git.exe install path as a new value
+-   [Vulkan SDK](https://vulkan.lunarg.com/sdk/home#windows) with `VULKAN_SDK` set by the installer
+-   [Python 3](https://www.python.org/downloads/)
+    -   Install the DXVK build tools with `python -m pip install meson ninja`
+-   [7-Zip](https://www.7-zip.org/) for the compressed AIO archive
 
 ## Optional Requirements
 
@@ -50,6 +55,7 @@ Install them manually only if you want them in everywhere.
 
 -   [Address Library for SKSE](https://www.nexusmods.com/skyrimspecialedition/mods/32444)
     -   Needed for SSE/AE
+-   A Vulkan-capable GPU with a current vendor graphics driver
 
 ## Build Instructions
 
@@ -60,18 +66,16 @@ To clone the repository with all submodules, run the following command in your t
 ```bash
 git clone https://github.com/doodlum/skyrim-community-shaders.git --recursive
 cd skyrim-community-shaders
+git -C extern/Streamline lfs pull
 ```
 
 ### Visual Studio build
 
-To build the project, just open `./skyrim-community-shaders` with Visual Studio's "Open Folder" feature. (Ensure you have `CMake Tools for Windows` selected when installing VS)
+Open `./skyrim-community-shaders` with Visual Studio's "Open Folder" feature for editing and CMake integration. Use `BuildRelease.bat` from the repository root for a complete build; it builds the pinned DXVK and Streamline dependencies before configuring CMake. The AIO folder is written to `./build/ALL/aio`, and the distributable archive is written to `./dist/`.
 
-Follow the prompts to `Configure` and `Build` the project.
-It should generate the AIO package in the `./build/ALL/aio` folder by default.
+#### Feature package targets
 
-#### Zip package & Optional targets
-
-If you change the `Solution Explorer` into `CMake Targets View`, you can find optional targets to create zip packages for each feature.
+If you change `Solution Explorer` to `CMake Targets View`, you can find optional targets that create ZIP packages for individual features.
 Right click on the target and select `Build` to create the zip package in `./dist/`.
 
 ### Advanced build with CMake in command line
@@ -81,6 +85,10 @@ Open the "Developer PowerShell for VS 2026" or the "x64 Native Tools Command Pro
 Then from the repository root run:
 
 ```pwsh
+# Build the Vulkan runtime dependencies first
+./tools/build-dxvk.ps1 -Required
+./tools/build-streamline.ps1 -Required
+
 # Generate the build files (uses the ALL preset)
 cmake --preset ALL
 
@@ -88,25 +96,28 @@ cmake --preset ALL
 cmake --build --preset ALL
 
 # Install an AIO package somewhere, e.g. $MOD_FOLDER
-cmake --install --preset ALL -- --prefix $MOD_FOLDER
+cmake --install ./build/ALL --config Release --prefix $MOD_FOLDER
 ```
 
 # Notes
 
 -   If you prefer to run the VC environment manually, launch Developer PowerShell or the x64 Native Tools prompt instead of calling vcvarsall.bat directly from PowerShell.
--   The convenience wrapper `BuildRelease.bat` also captures these steps.
+-   `BuildRelease.bat` is the supported one-command release build and fails if the required DXVK or Streamline outputs cannot be produced.
+-   Runtime DLLs and their notices are staged under `SKSE/Plugins/CommunityShaders/bin`; the old split `dxvk` and `Streamline` directories are not used.
+-   HDR frame generation currently requires DXVK to present native HDR10. The HDR10-to-scRGB presenter fallback disables frame generation because its HUD-less input is not available in the effective swapchain encoding. Supporting that path requires the HDR pipeline to render a same-frame, UI-free image directly in the presenter's format and transfer function rather than converting the completed HDR10 image afterward.
 
-#### Build a zip package
+#### Build a package
 
-You can build zip packages for optional cmake targets.
+You can build packages for optional CMake targets. AIO targets use maximum-compression solid 7z;
+CI rejects an AIO archive that is 100 MB or larger. Feature and Core targets remain ZIP files.
 Currently support `AIO_ZIP_PACKAGE`, `Package-AIO-Manual`, `Package-Core`, and `Package-<Feature>`:
 
 ```pwsh
 # Create a AIO package in ./dist/
-# Automated AIO zip (requires AIO_ZIP_TO_DIST=ON)
+# Automated AIO 7z (requires AIO_ZIP_TO_DIST=ON; target name retained for compatibility)
 cmake --build ./build/ALL --config Release --target AIO_ZIP_PACKAGE
 
-# Manual AIO package (install + tar)
+# Manual AIO package
 cmake --build ./build/ALL --config Release --target Package-AIO-Manual
 
 # Create a CommunityShaders core package in ./dist/

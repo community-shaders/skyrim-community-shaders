@@ -1,6 +1,7 @@
 // RenderDoc feature implementation providing in-application graphics debugging capabilities
 #include "Features/RenderDoc.h"
 
+#include "DxvkLoader.h"
 #include "Globals.h"
 #include "Utils/FileSystem.h"
 #include "Utils/Format.h"
@@ -35,6 +36,10 @@ RenderDoc* RenderDoc::GetSingleton()
 
 void RenderDoc::Load()
 {
+	if (renderDocModule) {
+		return;
+	}
+
 	// Only load RenderDoc if the user has enabled capture
 	if (!enableRenderDocCapture) {
 		logger::debug("[RenderDoc] RenderDoc capture disabled, skipping initialization");
@@ -120,6 +125,14 @@ void RenderDoc::Load()
 		logger::warn("[RenderDoc] Failed to prepare capture directory/template: {}", e.what());
 	}
 
+	// DXVK resources can outlive RenderDoc's normal frame-usage tracking.
+	char refAllBuf[8] = {};
+	const bool refAll = !(GetEnvironmentVariableA("CS_RENDERDOC_REF_ALL", refAllBuf, sizeof(refAllBuf)) && refAllBuf[0] == '0');
+	renderDocApi->SetCaptureOptionU32(eRENDERDOC_Option_RefAllResources, refAll ? 1 : 0);
+	// Reused command lists may have been recorded before capture begins.
+	renderDocApi->SetCaptureOptionU32(eRENDERDOC_Option_CaptureAllCmdLists, 1);
+	logger::info("[RenderDoc] Capture options: RefAllResources={}, CaptureAllCmdLists=1", refAll ? 1 : 0);
+
 	renderDocApi->MaskOverlayBits(eRENDERDOC_Overlay_None, eRENDERDOC_Overlay_None);
 	// Menu input owns capture hotkeys so they respect the configured frame count.
 	renderDocApi->SetCaptureKeys(nullptr, 0);
@@ -137,6 +150,22 @@ void RenderDoc::Load()
 
 	// Initialize capture count tracking
 	lastCaptureCount = renderDocApi->GetNumCaptures();
+
+	// RenderDoc replay requires DXVK's classic descriptor and conservative barrier paths.
+	if (!DxvkLoader::NativeModeRequested()) {
+		if (GetEnvironmentVariableA("DXVK_CONFIG", nullptr, 0) == 0) {
+			SetEnvironmentVariableA("DXVK_CONFIG",
+				"dxvk.enableDescriptorBuffer = False; dxvk.enableDescriptorHeap = False; "
+				"dxvk.enableGraphicsPipelineLibrary = False; dxvk.enableUnifiedImageLayouts = False; "
+				"d3d11.relaxedBarriers = False; d3d11.relaxedGraphicsBarriers = False");
+			logger::info("[RenderDoc] Applied DXVK capture config (legacy descriptor sets, strict barriers)");
+		} else {
+			logger::info("[RenderDoc] DXVK_CONFIG already set; leaving it untouched");
+		}
+		if (GetEnvironmentVariableA("DXVK_DEBUG", nullptr, 0) == 0) {
+			SetEnvironmentVariableA("DXVK_DEBUG", "markers");
+		}
+	}
 
 	logger::info("[RenderDoc] Successfully initialized");
 }
@@ -541,10 +570,50 @@ std::filesystem::path RenderDoc::GetCapturesPath() const
 	return Util::PathHelpers::GetCommunityShaderPath() / "Captures";
 }
 
+static std::filesystem::path FindRegisteredRenderDocLayerDll()
+{
+	constexpr const wchar_t* kLayerKey = L"SOFTWARE\\Khronos\\Vulkan\\ImplicitLayers";
+	for (HKEY hive : { HKEY_LOCAL_MACHINE, HKEY_CURRENT_USER }) {
+		HKEY key = nullptr;
+		if (RegOpenKeyExW(hive, kLayerKey, 0, KEY_READ, &key) != ERROR_SUCCESS) {
+			continue;
+		}
+		for (DWORD i = 0;; ++i) {
+			wchar_t valueName[MAX_PATH]{};
+			DWORD nameLen = MAX_PATH;
+			if (RegEnumValueW(key, i, valueName, &nameLen, nullptr, nullptr, nullptr, nullptr) != ERROR_SUCCESS) {
+				break;
+			}
+			std::filesystem::path jsonPath(valueName);
+			auto filename = jsonPath.filename().wstring();
+			std::transform(filename.begin(), filename.end(), filename.begin(), ::towlower);
+			if (filename == L"renderdoc.json") {
+				auto dllPath = jsonPath.parent_path() / L"renderdoc.dll";
+				std::error_code ec;
+				if (std::filesystem::exists(dllPath, ec)) {
+					RegCloseKey(key);
+					return dllPath;
+				}
+			}
+		}
+		RegCloseKey(key);
+	}
+	return {};
+}
+
 std::filesystem::path RenderDoc::GetRenderDocDllPath() const
 {
-	// RenderDoc DLL should be in Data/Renderdoc/
-	return Util::PathHelpers::GetDataPath() / "Renderdoc" / "renderdoc.dll";
+	wchar_t overridePath[MAX_PATH]{};
+	if (GetEnvironmentVariableW(L"CS_RENDERDOC_DLL", overridePath, MAX_PATH) && overridePath[0]) {
+		return std::filesystem::path(overridePath);
+	}
+
+	// Bind the same DLL as the Vulkan layer to avoid two RenderDoc instances.
+	if (auto layerDll = FindRegisteredRenderDocLayerDll(); !layerDll.empty()) {
+		return layerDll;
+	}
+
+	return Util::PathHelpers::GetDataPath() / "SKSE" / "Plugins" / "CommunityShaders" / "bin" / "renderdoc.dll";
 }
 
 void RenderDoc::SetupResources()

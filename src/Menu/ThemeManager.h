@@ -113,7 +113,6 @@ using json = nlohmann::json;
  * BLUR SHADER SYSTEM:
  * ===================
  * Separable Gaussian blur (horizontal + vertical passes) rendered at eighth resolution.
- * Hardcoded intensity (0.04) for consistent appearance. Toggle via BackgroundBlurEnabled.
  * Based on Unrimp rendering engine: https://github.com/cofenberg/unrimp
  *
  * MIGRATION FROM OLD CONFIGS:

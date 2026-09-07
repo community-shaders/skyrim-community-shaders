@@ -7,7 +7,6 @@
 #include "Globals.h"
 #include "InteriorOnlyPanel.h"
 #include "Menu.h"
-#include "Menu/BackgroundBlur.h"
 #include "PaletteWindow.h"
 #include "State.h"
 #include "Utils/Game.h"
@@ -1077,11 +1076,10 @@ void EditorWindow::RenderUI()
 			ImGui::EndMenu();
 		}
 		if (ImGui::BeginMenu(T(TKEY("window"), "Window"))) {
-			const bool hdrActive = globals::features::hdrDisplay.loaded && globals::features::hdrDisplay.settings.enableHDR;
+			const bool hdrActive = globals::features::hdrDisplay.loaded && globals::features::hdrDisplay.IsHDREnabledForFrame();
 			if (hdrActive)
 				ImGui::BeginDisabled();
 			if (ImGui::Checkbox(T(TKEY("viewport"), "Viewport"), &settings.showViewport)) {
-				BackgroundBlur::SetCSEditorActive(settings.showViewport);
 				Save();
 			}
 			if (hdrActive) {
@@ -1477,7 +1475,7 @@ void EditorWindow::SetupResources()
 
 bool EditorWindow::IsViewportActive() const
 {
-	return settings.showViewport && !(globals::features::hdrDisplay.loaded && globals::features::hdrDisplay.settings.enableHDR);
+	return settings.showViewport && !(globals::features::hdrDisplay.loaded && globals::features::hdrDisplay.IsHDREnabledForFrame());
 }
 
 void EditorWindow::UpdateOpenState()
@@ -1487,13 +1485,11 @@ void EditorWindow::UpdateOpenState()
 	if (open && !wasOpen) {
 		DisableVanityCamera();
 		HideGameMenus();
-		BackgroundBlur::SetCSEditorActive(IsViewportActive());
 
 	} else if (!open && wasOpen) {
 		lightEditor.ResetOverrides();
 		RestoreVanityCamera();
 		ShowGameMenus();
-		BackgroundBlur::SetCSEditorActive(false);
 	}
 
 	wasOpen = open;
@@ -1509,7 +1505,6 @@ void EditorWindow::Draw()
 		static bool prevViewportActive = false;
 		const bool viewportActive = IsViewportActive();
 		if (viewportActive != prevViewportActive) {
-			BackgroundBlur::SetCSEditorActive(viewportActive);
 			prevViewportActive = viewportActive;
 		}
 	}
@@ -2273,9 +2268,8 @@ void EditorWindow::HideGameMenus()
 	if (gameMenusHidden)
 		return;
 
-	// ShowMenus(false) stops the game from rendering to the back buffer.
-	// Without d3d12SwapChain, blur reads directly from that buffer and would freeze.
-	if (!globals::features::upscaling.d3d12SwapChainActive)
+	// The viewport blur reads the live back buffer, which stops updating while game menus are hidden.
+	if (IsViewportActive())
 		return;
 
 	if (auto ui = RE::UI::GetSingleton()) {

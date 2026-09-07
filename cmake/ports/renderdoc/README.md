@@ -28,7 +28,7 @@ For example, for v1.43:
 
 -   `https://renderdoc.org/stable/1.43/RenderDoc_1.43_64.zip`
 
-For Community Shaders, the DLL is stored in `package/SKSE/Plugins/Renderdoc/renderdoc.dll` and is deployed as part of the mod package.
+For Community Shaders, the DLL is stored in `package/SKSE/Plugins/CommunityShaders/bin/renderdoc.dll` and is deployed as part of the mod package.
 
 ## Usage
 

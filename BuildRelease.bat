@@ -49,15 +49,41 @@ if %ERRORLEVEL% NEQ 0 (
 rem Parallelize across projects too (MSBuild /m); Ninja is parallel by default.
 if not defined CMAKE_BUILD_PARALLEL_LEVEL set "CMAKE_BUILD_PARALLEL_LEVEL=%NUMBER_OF_PROCESSORS%"
 
+rem Complete builds require current Vulkan runtime outputs. Dev-Fast builds only
+rem the plugin DLL, so dependency builds are skipped entirely.
+if /I "%preset%" == "Dev-Fast" goto :runtimebuildsdone
+
+rem Build staged DXVK DLLs before configuring the package rules.
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0tools\build-dxvk.ps1" -Required
+if errorlevel 1 exit /b 1
+
+rem Build the Streamline fork plugins staged by CMake.
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0tools\build-streamline.ps1" -Required
+if errorlevel 1 exit /b 1
+:runtimebuildsdone
+
+rem 'if errorlevel 1' is evaluated at run time; %ERRORLEVEL% inside a
+rem parenthesized block expands at parse time and misses failures.
+
 rem Dev wrappers set SKIP_CONFIGURE=1 to avoid re-running cmake on warm builds.
 rem Shipping and CI builds always reconfigure so file globs (shader lists,
 rem feature paths) are never stale -- without this, new or deleted files are
-rem missed and the AIO zip is incomplete.
+rem missed and the AIO package is incomplete.
 if NOT "%SKIP_CONFIGURE%" == "1" goto :configure
-if exist "build\%configpreset%\CMakeCache.txt" (
-    echo Build folder warm, skipping configure
-    goto :build
+if not exist "build\%configpreset%\CMakeCache.txt" goto :configure
+
+rem A warm build configured before DXVK existed has no DLL staging rule. Refresh
+rem it once after build-dxvk.ps1 produces the runtime.
+if not exist "extern\dxvk\build\src\d3d11\dxvk_d3d11.dll" goto :build
+findstr /s /m /c:"stage-dxvk-dlls.ps1" "build\%configpreset%\*.vcxproj" "build\%configpreset%\build.ninja" "build\%configpreset%\cmake_install.cmake" >nul 2>&1
+if errorlevel 1 (
+    echo DXVK was built after the last configure; refreshing CMake staging rules
+    goto :configure
 )
+
+echo Build folder warm, skipping configure
+goto :build
+
 :configure
 cmake -S . --preset=%configpreset%
 if errorlevel 1 exit /b 1

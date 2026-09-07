@@ -1,10 +1,11 @@
 [submodule "extern/CommonLibSSE-NG"]
 	path = extern/CommonLibSSE-NG
 	url = https://github.com/alandtse/CommonLibVR.git
-[submodule "extern/Streamline-DX12"]
-	path = extern/Streamline-DX12
-	url = https://github.com/NVIDIAGameWorks/Streamline.git
-[submodule "extern/FidelityFX-SDK"]
-	path = extern/FidelityFX-SDK
-	url = https://github.com/alandtse/FidelityFX-SDK-DX11
-	branch = optiscaler-build
+[submodule "extern/Streamline"]
+	path = extern/Streamline
+	url = https://github.com/community-shaders/Streamline.git
+	branch = extra-plugins
+[submodule "extern/dxvk"]
+	path = extern/dxvk
+	url = https://github.com/community-shaders/dxvk.git
+	branch = native

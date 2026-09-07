@@ -138,6 +138,11 @@ struct PerformanceOverlay : OverlayFeature
 				T("feature.performance_overlay.key_feature_7", "Movable overlay window with persistent positioning") } };
 	}
 	virtual void DrawSettings() override;
+
+	/** @brief Collects the frame metrics. Call once per present, independent of whether the
+	 *         overlay is drawn -- a metric that only advances while visible reports the hidden
+	 *         interval as one huge frame when it returns. */
+	void UpdateMetrics();
 	virtual void DataLoaded() override;
 	void DrawOverlay() override;
 	// Settings persistence and defaults
@@ -166,7 +171,6 @@ struct PerformanceOverlay : OverlayFeature
 	*
 	* No parameters; uses settings from the singleton.
 	*/
-	void UpdateGraphValues();
 	void DrawFPS();
 	void DrawVRAM();
 	void DrawPostFGFrameTimeGraph();
@@ -233,8 +237,19 @@ struct PerformanceOverlay : OverlayFeature
 		// Smoothed metrics
 		float smoothFps = 0.0f;
 		float smoothFrameTimeMs = 0.0f;
+		uint64_t lastPresentedFrames = 0;
+		float presentedAccum = 0.0f;
+		float presentedElapsed = 0.0f;
 		float postFGSmoothFps = 0.0f;
 		float postFGSmoothFrameTimeMs = 0.0f;
+
+		// Average and 1% low, over the history the graphs draw. The 1% low is the mean of the worst
+		// one percent of frame intervals expressed as a frame rate: a mean alone cannot distinguish
+		// evenly delivered frames from the same average delivered unevenly, which is what is felt.
+		float avgFps = 0.0f;
+		float low1PctFps = 0.0f;
+		float postFGAvgFps = 0.0f;
+		float postFGLow1PctFps = 0.0f;
 
 		// Update timing using QueryPerformanceCounter
 		float updateTimer = 0.0f;
@@ -265,7 +280,6 @@ struct PerformanceOverlay : OverlayFeature
 		static constexpr float kGraphSpreadMultiplier = 2.0f;        // Standard deviation multiplier for graph range
 		static constexpr float kGraphMinSpread = 2.0f;               // ms - Minimum graph spread
 		static constexpr float kGraphMaxSpread = 20.0f;              // ms - Maximum graph spread
-		static constexpr float kFrameGenerationMultiplier = 2.0f;    // Frame generation doubles frame rate
 		static constexpr float kMaxUpdateInterval = 2.0f;            // seconds - Maximum update interval
 		static constexpr float kDefaultWindowPadding = 10.0f;        // pixels - Default window padding
 		static constexpr float kLabelPadding = 100.0f;               // pixels - Padding for labels

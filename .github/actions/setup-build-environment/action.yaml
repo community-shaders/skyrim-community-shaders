@@ -59,6 +59,31 @@ runs:
           with:
               arch: x64
 
+        # Export the installed SDK because the runner does not reload machine environment changes.
+        - name: Install and export Vulkan SDK
+          shell: pwsh
+          run: |
+              choco install vulkan-sdk -y --no-progress
+              if ($LASTEXITCODE -ne 0) {
+                throw "Vulkan SDK installation failed with exit code $LASTEXITCODE"
+              }
+
+              $vulkanSdk = [Environment]::GetEnvironmentVariable('VULKAN_SDK', 'Machine')
+              if (-not $vulkanSdk -or -not (Test-Path $vulkanSdk)) {
+                $vulkanSdk = Get-ChildItem 'C:\VulkanSDK' -Directory -ErrorAction SilentlyContinue |
+                  Sort-Object Name -Descending |
+                  Select-Object -First 1 -ExpandProperty FullName
+              }
+              if (-not $vulkanSdk -or
+                  -not (Test-Path (Join-Path $vulkanSdk 'Include\vulkan\vulkan.h')) -or
+                  -not (Test-Path (Join-Path $vulkanSdk 'Lib\vulkan-1.lib'))) {
+                throw "A complete Vulkan SDK installation could not be located"
+              }
+
+              "VULKAN_SDK=$vulkanSdk" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+              (Join-Path $vulkanSdk 'Bin') | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+              Write-Host "Using Vulkan SDK at $vulkanSdk"
+
         - name: Get MSVC version
           id: msvc_version
           shell: pwsh
@@ -119,7 +144,7 @@ runs:
           uses: actions/cache@v5
           with:
               path: ${{ inputs.build-dir }}
-              key: ${{ runner.os }}-cmake-msvc-${{ steps.msvc_version.outputs.version }}-${{ inputs.cache-key-suffix }}-${{ github.event.inputs.cache-key-suffix || 'default' }}-${{ hashFiles('.gitmodules', 'extern/**', 'CMakePresets.json', 'vcpkg.json', 'vcpkg-configuration.json') }}
+              key: ${{ runner.os }}-cmake-msvc-${{ steps.msvc_version.outputs.version }}-${{ inputs.cache-key-suffix }}-${{ github.event.inputs.cache-key-suffix || 'default' }}-${{ hashFiles('.gitmodules', 'extern/**', 'cmake/Streamline/CMakeLists.txt', 'CMakePresets.json', 'vcpkg.json', 'vcpkg-configuration.json') }}
               restore-keys: |
                   ${{ runner.os }}-cmake-msvc-${{ steps.msvc_version.outputs.version }}-${{ inputs.cache-key-suffix }}-${{ github.event.inputs.cache-key-suffix || 'default' }}-
                   ${{ runner.os }}-cmake-msvc-${{ steps.msvc_version.outputs.version }}-${{ inputs.cache-key-suffix }}-
@@ -129,7 +154,7 @@ runs:
           uses: actions/cache/restore@v5
           with:
               path: ${{ inputs.build-dir }}
-              key: ${{ runner.os }}-cmake-msvc-${{ steps.msvc_version.outputs.version }}-${{ inputs.cache-key-suffix }}-${{ github.event.inputs.cache-key-suffix || 'default' }}-${{ hashFiles('.gitmodules', 'extern/**', 'CMakePresets.json', 'vcpkg.json', 'vcpkg-configuration.json') }}
+              key: ${{ runner.os }}-cmake-msvc-${{ steps.msvc_version.outputs.version }}-${{ inputs.cache-key-suffix }}-${{ github.event.inputs.cache-key-suffix || 'default' }}-${{ hashFiles('.gitmodules', 'extern/**', 'cmake/Streamline/CMakeLists.txt', 'CMakePresets.json', 'vcpkg.json', 'vcpkg-configuration.json') }}
               restore-keys: |
                   ${{ runner.os }}-cmake-msvc-${{ steps.msvc_version.outputs.version }}-${{ inputs.cache-key-suffix }}-${{ github.event.inputs.cache-key-suffix || 'default' }}-
                   ${{ runner.os }}-cmake-msvc-${{ steps.msvc_version.outputs.version }}-${{ inputs.cache-key-suffix }}-

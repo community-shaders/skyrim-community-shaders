@@ -26,7 +26,6 @@
 #include "Features/Upscaling.h"
 #include "I18n/I18n.h"
 #include "Menu/AdvancedSettingsRenderer.h"
-#include "Menu/BackgroundBlur.h"
 #include "Menu/FeatureListRenderer.h"
 #include "Menu/Fonts.h"
 #include "Menu/HomePageRenderer.h"
@@ -163,7 +162,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	ShowFooter,
 	CenterHeader,
 	TooltipHoverDelay,
-	BackgroundBlurEnabled,
 	UseCustomCursor,
 	Cursor,
 	ScrollbarOpacity,
@@ -389,7 +387,6 @@ Menu::~Menu()
 	Util::CursorLoader::Shutdown();
 
 	// Clean up blur resources
-	BackgroundBlur::Cleanup();
 
 	ImGui_ImplDX11_Shutdown();
 	ImGui_ImplWin32_Shutdown();
@@ -543,7 +540,6 @@ void Menu::LoadTheme(json& o_json)
 		}
 
 		// Apply background blur enabled state from theme
-		BackgroundBlur::SetEnabled(settings.Theme.BackgroundBlurEnabled);
 	}
 }
 void Menu::SaveTheme(json& o_json)
@@ -621,7 +617,6 @@ bool Menu::LoadThemePreset(const std::string& themeName)
 			pendingCursorReload = true;
 
 			// Apply background blur enabled state from theme
-			BackgroundBlur::SetEnabled(settings.Theme.BackgroundBlurEnabled);
 
 			logger::info("Applied theme preset: {}", themeName);
 			return true;
@@ -732,11 +727,6 @@ void Menu::Init()
 	}
 
 	Util::CursorLoader::Reload(this);
-
-	// Initialize background blur system
-	if (!BackgroundBlur::Initialize()) {
-		logger::warn("Menu::Init() - Failed to initialize background blur system");
-	}
 
 	BuildCategoryCounts();
 
@@ -928,11 +918,6 @@ void Menu::DrawFooter()
 													{ { "runtime", std::string(magic_enum::enum_name(REL::Module::GetRuntime())) },
 														{ "version", Util::GetFormattedVersion(REL::Module::get().version()) } },
 													"Game Version: {runtime} {version}")
-								.c_str());
-	ImGui::SameLine();
-	ImGui::BulletText("%s", I18n::GetSingleton()->Format("menu.footer.d3d12_swap_chain",
-													{ { "status", globals::features::upscaling.d3d12SwapChainActive ? std::string(T("common.active", "Active")) : std::string(T("common.inactive", "Inactive")) } },
-													"D3D12 Swap Chain: {status}")
 								.c_str());
 	ImGui::SameLine();
 	ImGui::BulletText("%s", I18n::GetSingleton()->Format("menu.footer.gpu",
