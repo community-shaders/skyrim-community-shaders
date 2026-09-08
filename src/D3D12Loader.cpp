@@ -1,5 +1,6 @@
 #include "D3D12Loader.h"
 
+#include <array>
 #include <vector>
 
 namespace D3D12Loader
@@ -104,13 +105,15 @@ namespace D3D12Loader
 				if (FAILED(hr))
 					return hr;
 
-				hr = device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,
-					IID_PPV_ARGS(&m_allocator));
-				if (FAILED(hr))
-					return hr;
+				for (auto& slot : m_frames) {
+					hr = device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,
+						IID_PPV_ARGS(&slot.allocator));
+					if (FAILED(hr))
+						return hr;
+				}
 
 				hr = device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT,
-					m_allocator.Get(), nullptr, IID_PPV_ARGS(&m_list));
+					m_frames[0].allocator.Get(), nullptr, IID_PPV_ARGS(&m_list));
 				if (FAILED(hr))
 					return hr;
 				m_list->Close();
@@ -276,8 +279,18 @@ namespace D3D12Loader
 					return;
 				}
 
-				m_allocator->Reset();
-				m_list->Reset(m_allocator.Get(), nullptr);
+				// Reuse this slot's allocator only once the GPU is done with the frame that last
+				// used it. Waiting on the frame we just submitted instead would leave nothing in
+				// flight at all and idle the GPU across every present.
+				auto& slot = m_frames[m_frameIndex];
+
+				if (slot.fenceValue && m_fence->GetCompletedValue() < slot.fenceValue) {
+					m_fence->SetEventOnCompletion(slot.fenceValue, m_fenceEvent);
+					WaitForSingleObject(m_fenceEvent, INFINITE);
+				}
+
+				slot.allocator->Reset();
+				m_list->Reset(slot.allocator.Get(), nullptr);
 
 				D3D12_RESOURCE_BARRIER toCopy = {};
 				toCopy.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
@@ -299,13 +312,9 @@ namespace D3D12Loader
 
 				m_real->Present(syncInterval, flags);
 
-				// One frame of overlap: the engine starts writing the target again as soon as
-				// this returns, so the previous frame's copy has to have read it by then.
 				D3D12Loader::GetCommandQueue()->Signal(m_fence.Get(), ++m_fenceValue);
-				if (m_fence->GetCompletedValue() < m_fenceValue) {
-					m_fence->SetEventOnCompletion(m_fenceValue, m_fenceEvent);
-					WaitForSingleObject(m_fenceEvent, INFINITE);
-				}
+				slot.fenceValue = m_fenceValue;
+				m_frameIndex = (m_frameIndex + 1u) % FrameSlots;
 
 				m_on12->AcquireWrappedResources(wrapped, 1);
 			}
@@ -320,7 +329,16 @@ namespace D3D12Loader
 			ComPtr<ID3D12Resource> m_gameTarget;
 			ComPtr<ID3D11Texture2D> m_wrapped;
 
-			ComPtr<ID3D12CommandAllocator> m_allocator;
+			/// Two slots so a present does not have to wait on the frame it just submitted.
+			static constexpr uint32_t FrameSlots = 2u;
+
+			struct FrameSlot {
+				ComPtr<ID3D12CommandAllocator> allocator;
+				UINT64                         fenceValue = 0u;
+			};
+
+			std::array<FrameSlot, FrameSlots> m_frames;
+			uint32_t m_frameIndex = 0u;
 			ComPtr<ID3D12GraphicsCommandList> m_list;
 			ComPtr<ID3D12InfoQueue> m_infoQueue;
 			ComPtr<ID3D12Fence> m_fence;
