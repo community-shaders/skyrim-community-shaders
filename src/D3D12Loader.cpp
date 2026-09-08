@@ -1,6 +1,7 @@
 #include "D3D12Loader.h"
 
 #include <array>
+#include <cstring>
 #include <vector>
 
 namespace D3D12Loader
@@ -468,7 +469,32 @@ namespace D3D12Loader
 
 		// BGRA support is not optional here: the engine creates BGRA swap-chain formats and
 		// D3D11On12 refuses those views without it.
-		const UINT flags = Flags | D3D11_CREATE_DEVICE_BGRA_SUPPORT;
+		UINT flags = Flags | D3D11_CREATE_DEVICE_BGRA_SUPPORT;
+
+		// D3D11On12 batches commands onto an internal worker thread, and profiling this path
+		// found the render thread blocked in BatchedContext::IsBatchThreadIdle from inside
+		// ordinary per-draw calls -- SetConstantBuffers, IASetVertexBuffers and the
+		// Map/DISCARD rename. Half the render thread's samples were sitting in that wait while
+		// the GPU idled at 37%, so the batching was serialising rather than pipelining.
+		//
+		// Both of these tell the runtime to stop doing that, by different routes:
+		// SINGLETHREADED drops the locking that assumes concurrent context use, and
+		// PREVENT_INTERNAL_THREADING_OPTIMIZATIONS stops the worker thread being used at all.
+		// CS_D3D12_FLAGS selects between them for measurement.
+		char mode[16] = {};
+		GetEnvironmentVariableA("CS_D3D12_FLAGS", mode, sizeof(mode));
+
+		if (!std::strcmp(mode, "st")) {
+			flags |= D3D11_CREATE_DEVICE_SINGLETHREADED;
+			logger::info("[D3D12] Device flags: SINGLETHREADED");
+		} else if (!std::strcmp(mode, "noopt")) {
+			flags |= D3D11_CREATE_DEVICE_PREVENT_INTERNAL_THREADING_OPTIMIZATIONS;
+			logger::info("[D3D12] Device flags: PREVENT_INTERNAL_THREADING_OPTIMIZATIONS");
+		} else if (!std::strcmp(mode, "both")) {
+			flags |= D3D11_CREATE_DEVICE_SINGLETHREADED |
+			         D3D11_CREATE_DEVICE_PREVENT_INTERNAL_THREADING_OPTIMIZATIONS;
+			logger::info("[D3D12] Device flags: SINGLETHREADED + PREVENT_INTERNAL_THREADING_OPTIMIZATIONS");
+		}
 
 		HRESULT hr = D3D11On12CreateDevice(
 			g_device.Get(), flags,
