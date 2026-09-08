@@ -6,6 +6,7 @@
 #include "Utils/VersionedRelocation.h"
 
 #include "Aftermath.h"
+#include "D3D12Loader.h"
 #include "D3DX9MathUpgrade.h"
 #include "DxvkLoader.h"
 #include "Feature.h"
@@ -1271,10 +1272,22 @@ namespace Hooks
 		// before DXVK brings a Vulkan device up. Arming it later collects nothing, silently.
 		Aftermath::Enable();
 
+		// CS_D3D12=1 substitutes a D3D11-on-D3D12 runtime for DXVK, so the engine's draws
+		// become D3D12 work on a D3D12 queue. Checked before DXVK because the two are
+		// alternative back ends for the same two entry points -- only one can own them.
+		const bool d3d12Mode = D3D12Loader::Requested();
+		const bool d3d12Loaded = d3d12Mode && D3D12Loader::Load();
+
+		if (d3d12Mode && !d3d12Loaded) {
+			stl::report_and_fail(
+				"Community Shaders could not bring up the D3D12 translation layer requested by CS_D3D12=1. "
+				"Clear CS_D3D12 to fall back to the Vulkan renderer."sv);
+		}
+
 		// Load DXVK before the game creates its D3D11 device.
 		const bool nativeMode = DxvkLoader::NativeModeRequested();
-		const bool dxvkLoaded = DxvkLoader::Load();
-		if (!nativeMode && !dxvkLoaded) {
+		const bool dxvkLoaded = !d3d12Loaded && DxvkLoader::Load();
+		if (!nativeMode && !d3d12Loaded && !dxvkLoaded) {
 			stl::report_and_fail(
 				"Community Shaders could not load its bundled DXVK renderer (dxvk_d3d11.dll / dxvk_dxgi.dll) "
 				"from Data/SKSE/Plugins/CommunityShaders/bin. Reinstall Community Shaders or verify the files exist."sv);
@@ -1287,15 +1300,17 @@ namespace Hooks
 		if (!globals::features::upscaling.loaded) {
 			logger::info("Hooking D3D11CreateDeviceAndSwapChain");
 			const auto iatOriginal = SKSE::PatchIAT(hk_D3D11CreateDeviceAndSwapChain, "d3d11.dll", "D3D11CreateDeviceAndSwapChain");
-			*(uintptr_t*)&ptrD3D11CreateDeviceAndSwapChain = dxvkLoaded ?
-			                                                     reinterpret_cast<uintptr_t>(DxvkLoader::GetD3D11CreateDeviceAndSwapChain()) :
-			                                                     iatOriginal;
+			*(uintptr_t*)&ptrD3D11CreateDeviceAndSwapChain =
+				d3d12Loaded ? reinterpret_cast<uintptr_t>(&D3D12Loader::CreateDeviceAndSwapChain) :
+				dxvkLoaded  ? reinterpret_cast<uintptr_t>(DxvkLoader::GetD3D11CreateDeviceAndSwapChain()) :
+				              iatOriginal;
 		}
 
 		logger::info("Hooking CreateDXGIFactory");
 		const auto dxgiOriginal = SKSE::PatchIAT(hk_CreateDXGIFactory, "dxgi.dll", "CreateDXGIFactory");
-		*(uintptr_t*)&ptrCreateDXGIFactory = dxvkLoaded ?
-		                                         reinterpret_cast<uintptr_t>(DxvkLoader::GetCreateDXGIFactory()) :
-		                                         dxgiOriginal;
+		*(uintptr_t*)&ptrCreateDXGIFactory =
+			d3d12Loaded ? reinterpret_cast<uintptr_t>(&D3D12Loader::CreateFactory) :
+			dxvkLoaded  ? reinterpret_cast<uintptr_t>(DxvkLoader::GetCreateDXGIFactory()) :
+			              dxgiOriginal;
 	}
 }

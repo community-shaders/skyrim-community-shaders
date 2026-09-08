@@ -221,6 +221,9 @@ target_link_libraries(
         dbghelp
         Vulkan::Vulkan
         Streamline
+        d3d12
+        d3d11
+        dxgi
 )
 
 # devbench bridge: opt-out via -DDEVBENCH_BRIDGE=OFF. When off, the port isn't required

@@ -2,6 +2,7 @@
 
 #include "../I18n/I18n.h"
 #include "Deferred.h"
+#include "D3D12Loader.h"
 #include "DxvkLoader.h"
 #include "Features/Effects11/D3D11StateBackup.h"
 #include "HDRDisplay.h"
@@ -394,9 +395,10 @@ void Upscaling::Load()
 	}
 
 	const auto iatOriginal = SKSE::PatchIAT(hk_D3D11CreateDeviceAndSwapChainUpscaling, "d3d11.dll", "D3D11CreateDeviceAndSwapChain");
-	*(uintptr_t*)&ptrD3D11CreateDeviceAndSwapChainUpscaling = DxvkLoader::IsLoaded() ?
-	                                                              reinterpret_cast<uintptr_t>(DxvkLoader::GetD3D11CreateDeviceAndSwapChain()) :
-	                                                              iatOriginal;
+	*(uintptr_t*)&ptrD3D11CreateDeviceAndSwapChainUpscaling =
+		D3D12Loader::IsLoaded() ? reinterpret_cast<uintptr_t>(&D3D12Loader::CreateDeviceAndSwapChain) :
+		DxvkLoader::IsLoaded()  ? reinterpret_cast<uintptr_t>(DxvkLoader::GetD3D11CreateDeviceAndSwapChain()) :
+		                          iatOriginal;
 }
 
 struct BSImageSpace_Init_FXAA
