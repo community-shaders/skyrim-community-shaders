@@ -1,12 +1,73 @@
 diff --git a/include/BatchedContext.hpp b/include/BatchedContext.hpp
-index f853433..d9ba38c 100644
+index f853433..a65520e 100644
 --- a/include/BatchedContext.hpp
 +++ b/include/BatchedContext.hpp
-@@ -777,7 +777,21 @@ private: // Referenced by recording thread
+@@ -555,6 +555,7 @@ public:
+     void TRANSLATION_API ReleaseResource(Resource* pResource)
+     {
+         auto Lock = m_RecordingLock.TakeLock();
++        ForgetResourceInShadow(pResource);
+         auto Size = pResource->GetResourceSize();
+         m_PostBatchFunctions.emplace_back([pResource]() { pResource->Release(); });
+         m_PendingDestructionMemorySize += Size;
+@@ -759,6 +760,11 @@ private: // Referenced by recording and batch threads
+ 
+     uint64_t m_CompletedBatchID = 0;
+ 
++    // Batches the worker has finished, incremented after it signals m_BatchConsumedSemaphore.
++    // Lets the recording thread answer "is the worker idle" without a syscall; see
++    // IsBatchThreadIdle.
++    std::atomic<uint64_t> m_BatchesCompleted{ 0 };
++
+     const Callbacks m_Callbacks;
+     std::atomic<bool> m_bFlushPendingCallback;
+ 
+@@ -771,16 +777,82 @@ private: // Referenced by recording thread
+ 
+     void ClearStateImpl();
+ 
++    // Shadow of the constant-buffer bindings, so a bind that sets a slot to what it already holds
++    // can be dropped before it costs a batch append here and an execution on the worker. Kept in
++    // step with the immediate context by ClearStateImpl (which the runtime guarantees brackets
++    // every command list) and by ReleaseResource, so a destroyed resource can never linger here
++    // and be matched by a later allocation at the same address.
++    //
++    // The shadow is written on the recording thread and cleared by ReleaseResource, which is
++    // free-threaded. That is not synchronised, and does not need to be: D3D11 already forbids an
++    // app from binding a resource on one thread while destroying it on another, so the only
++    // pointer a clear can race with is one that is not being bound.
++    //
++    // The D3D11 runtime does not filter these: measured with D3D12TL_REDUNSTATS in a Whiterun
++    // exterior, 87,349,930 of 94,000,000 constant-buffer binds -- 93% -- set every slot to what it
++    // already held. D3D12TL_CBFILTER=0 turns the filtering off.
++    static inline const bool c_bFilterRedundantCBs = [] {
++        char buf[16] = {};
++        return !(GetEnvironmentVariableA("D3D12TL_CBFILTER", buf, sizeof(buf)) && buf[0] == '0');
++    }();
++
++    struct SConstantBufferShadow
++    {
++        Resource* pBuffer;
++        UINT FirstConstant;
++        UINT NumConstants;
++    };
++    SConstantBufferShadow m_CBShadow[ShaderStageCount][D3D11_COMMONSHADER_CONSTANT_BUFFER_HW_SLOT_COUNT] = {};
++
++    /// @brief Updates the shadow; true when every slot already held exactly this binding.
++    bool UpdateConstantBufferShadow(UINT Stage, UINT StartSlot, UINT NumBuffers, Resource* const* ppCBs,
++                                    CONST UINT* pFirstConstant, CONST UINT* pNumConstants) noexcept;
++
++    /// @brief Drops a resource from the shadow, so its address cannot be matched after it dies.
++    void ForgetResourceInShadow(Resource* pResource) noexcept;
++
+     const BatchStorageAllocator m_BatchStorageAllocator
+     {
+         m_CreationArgs.pParentContext ? &m_CreationArgs.pParentContext->m_FreePages :
              (m_CreationArgs.SubmitBatchesToWorkerThread ? &m_FreePages : nullptr)
      };
  
 -    static constexpr UINT c_CommandKickoffMinThreshold = 10; // Arbitrary for now
+-    OptLock<std::recursive_mutex> m_RecordingLock{ m_CreationArgs.CreatesAndDestroysAreMultithreaded };
 +    // Every translated D3D11 command runs through AddToBatch -> SubmitBatchIfIdle, and every
 +    // c_CommandKickoffMinThreshold of them that call does IsBatchThreadIdle, which is a
 +    // WaitForSingleObject syscall even at a zero timeout. At 10, a Skyrim frame of roughly
@@ -22,9 +83,607 @@ index f853433..d9ba38c 100644
 +        }
 +        return 64u; // measured best here: 38.81 -> 43.86 fps against upstream 10
 +    }();
-     OptLock<std::recursive_mutex> m_RecordingLock{ m_CreationArgs.CreatesAndDestroysAreMultithreaded };
++
++    // Upstream hands a batch to the worker only once the worker has gone idle. While the worker is
++    // behind, the recording thread therefore piles the whole frame into a single batch that the
++    // worker cannot start on, and the frame ends with the render thread blocked in Present waiting
++    // for all of it to drain -- 22% of render-thread samples in a Whiterun exterior here. Handing
++    // a batch over once it reaches a size keeps the worker fed and leaves only a short tail at the
++    // flush. c_MaxOutstandingBatches still supplies the back pressure.
++    //
++    // D3D12TL_BATCHSIZE overrides it; 0 restores the idle-only behaviour.
++    static inline const UINT c_CommandBatchMaxSize = [] {
++        char buf[16] = {};
++        if (GetEnvironmentVariableA("D3D12TL_BATCHSIZE", buf, sizeof(buf))) {
++            const int v = atoi(buf);
++            if (v >= 0) return static_cast<UINT>(v);
++        }
++        return 1024u;
++    }();
++    OptLock<RecursiveSRWLock> m_RecordingLock{ m_CreationArgs.CreatesAndDestroysAreMultithreaded };
      UINT m_CurrentCommandCount = 0;
      UINT m_NumOutstandingBatches = 0;
++    uint64_t m_BatchesSubmitted = 0;    // recording thread only; pairs with m_BatchesCompleted
+     uint64_t m_RecordingBatchID = 1;
+ 
+     BatchStorage m_CurrentBatch{ m_BatchStorageAllocator };
+diff --git a/include/ImmediateContext.hpp b/include/ImmediateContext.hpp
+index e9ad707..45ce17c 100644
+--- a/include/ImmediateContext.hpp
++++ b/include/ImmediateContext.hpp
+@@ -947,6 +947,10 @@ public:
+     UINT64 GetCommandListIDInterlockedRead(COMMAND_LIST_TYPE type) noexcept;
+     UINT64 GetCommandListIDWithCommands(COMMAND_LIST_TYPE type) noexcept;
+     UINT64 GetCompletedFenceValue(COMMAND_LIST_TYPE type) noexcept;
++
++    /// @brief RetiredObject::ReadyToDestroy's test, against cached fence values.
++    /// Callers must hold m_RenamesInFlight's lock.
++    bool IsWorkComplete(bool completionRequired, const UINT64 lastCommandListIDs[(UINT)COMMAND_LIST_TYPE::MAX_VALID]) noexcept;
+     ID3D12CommandQueue *GetCommandQueue(COMMAND_LIST_TYPE type) noexcept;
+     void ResetCommandList(UINT commandListTypeMask) noexcept;
+     void CloseCommandList(UINT commandListTypeMask) noexcept;
+@@ -1653,8 +1657,35 @@ private: // Dynamic/staging resource pools
+         return m_UploadHeapSuballocator;
+     }
+ 
++    // Both threads take this on every Map(WRITE_DISCARD) -- the recording thread to take a cookie
++    // out of a pool, the worker to put one back -- and after the other rename work was removed it
++    // is the largest single item in the worker profile, 20% of samples, sleeping in
++    // NtWaitForAlertByThreadId. Swapping it for an SRWLOCK, which spins before it sleeps, was
++    // measured and did not help (45.77/45.21 mutex vs SRW, interleaved), so the contention is the
++    // handoff itself rather than the primitive. Splitting the handoff is the next thing to try.
+     COptLockedContainer<RenameResourceSet> m_RenamesInFlight;
+ 
++    // Cookies pooled on resources across the whole device, so the caches cannot pin unbounded
++    // memory. Guarded by m_RenamesInFlight's lock, as are the pools themselves.
++    size_t m_CachedRenameCookieCount = 0;
++
++    // Atomic rather than under that lock: a resource's pool is given back from ~Resource, which
++    // can run while m_RenamesInFlight is held (a cookie released from DeleteRenameCookie), and
++    // that lock is not recursive. It is touched once per cookie created, not per rename.
++    std::atomic<size_t> m_CachedRenameCookieBytes{ 0 };
++
++public:
++    /// @brief Returns a destroyed resource's pooled bytes to the device-wide budget.
++    void ReturnRenameCookiePoolBudget(size_t bytes) noexcept;
++
++private:
++
++    // Last value read from each command list's fence. ID3D12Fence::GetCompletedValue is a call
++    // into the runtime and the rename fast path would otherwise make one per Map(WRITE_DISCARD);
++    // a stale value is safe here because it only ever under-reports progress, which costs a
++    // cookie reuse and never a correctness bug. Guarded by m_RenamesInFlight's lock.
++    UINT64 m_LastKnownCompletedFence[(UINT)COMMAND_LIST_TYPE::MAX_VALID] = {};
++
+ private: // State tracking
+     // Dirty states are marked during sets and converted to command list operations at draw time, to avoid multiple costly conversions due to 11/12 API differences
+     UINT64 m_DirtyStates;
+diff --git a/include/ImmediateContext.inl b/include/ImmediateContext.inl
+index c0b6c6c..3601791 100644
+--- a/include/ImmediateContext.inl
++++ b/include/ImmediateContext.inl
+@@ -942,8 +942,10 @@ inline void GetBufferViewDesc(Resource* pBuffer, TDesc& Desc, UINT APIOffset, UI
+         Desc.SizeInBytes =
+             min(GetDynamicBufferSize<TDesc>(pBuffer, APIOffset), APISize);
+         Desc.BufferLocation = Desc.SizeInBytes == 0 ? 0 :
+-            // TODO: Cache the GPU VA, frequent calls to this cause a CPU hotspot
+-            (pBuffer->GetUnderlyingResource()->GetGPUVirtualAddress() // Base of the DX12 resource
++            // Cached: see SResourceIdentity::m_CachedGPUVA. D3D12TL_VACACHE=0 restores the
++            // per-call GetGPUVirtualAddress that upstream flagged as a CPU hotspot.
++            ((g_bGpuVaCacheEnabled ? pBuffer->GetCachedGPUVirtualAddress()
++                                   : pBuffer->GetUnderlyingResource()->GetGPUVirtualAddress()) // Base of the DX12 resource
+                 + pBuffer->GetSubresourcePlacement(0).Offset // Base of the DX11 resource after renaming
+                 + APIOffset); // Offset from the base of the DX11 resource
+     }
+diff --git a/include/Resource.hpp b/include/Resource.hpp
+index def7d76..8abed6c 100644
+--- a/include/Resource.hpp
++++ b/include/Resource.hpp
+@@ -228,6 +228,19 @@ namespace D3D12TranslationLayer
+         ResidencyManager &m_residencyManager;
+     };
+ 
++    // Every optimisation here carries a runtime kill switch, so one binary can be measured against
++    // itself in a single session: the machine warms up across a session, which makes
++    // all-A-then-all-B runs incomparable and interleaved A/B the only honest way to measure.
++    inline const bool g_bPersistentMapEnabled = [] {
++        char buf[16] = {};
++        return !(GetEnvironmentVariableA("D3D12TL_PERSISTENTMAP", buf, sizeof(buf)) && buf[0] == '0');
++    }();
++
++    inline const bool g_bGpuVaCacheEnabled = [] {
++        char buf[16] = {};
++        return !(GetEnvironmentVariableA("D3D12TL_VACACHE", buf, sizeof(buf)) && buf[0] == '0');
++    }();
++
+     // Wraps the BufferSuballocation with functions that help automatically account for the 
+     // suballocated offset
+     class D3D12ResourceSuballocation
+@@ -238,7 +251,7 @@ namespace D3D12TranslationLayer
+             m_pResource(pResource), m_bufferSubAllocation(allocation) {}
+ 
+         bool IsInitialized() { return GetResource() != nullptr; }
+-        void Reset() { m_pResource = nullptr; }
++        void Reset() { m_pResource = nullptr; m_pPersistentBase = nullptr; }
+         ID3D12Resource *GetResource() const { return m_pResource; }
+         UINT64 GetOffset() const {
+ 
+@@ -263,6 +276,13 @@ namespace D3D12TranslationLayer
+             _In_opt_  const D3D12_RANGE *pReadRange,
+             _Outptr_opt_result_bytebuffer_(_Inexpressible_("Dependent on resource"))  void **ppData)
+         {
++            // Already persistently mapped, by this object or by the one it was copied from.
++            if (m_pPersistentBase)
++            {
++                *ppData = reinterpret_cast<BYTE *>(m_pPersistentBase) + GetOffset();
++                return S_OK;
++            }
++
+             D3D12_RANGE *pOffsetReadRange = nullptr;
+             D3D12_RANGE offsetReadRange;
+ 
+@@ -281,10 +301,61 @@ namespace D3D12TranslationLayer
+             return hr;
+         }
+ 
++        // Map the underlying heap once and keep it mapped.
++        //
++        // ID3D12Resource::Map takes an internal lock and refcounts every call, and the rename
++        // path would otherwise pay a Map/Unmap pair for every Map(WRITE_DISCARD) -- thousands
++        // of times a frame on a draw-call-heavy title. Persistent mapping of an upload heap is
++        // explicitly supported by D3D12; the heap is unmapped implicitly when it is destroyed.
++        //
++        // Only for CPU-write heaps. The cached base travels with copies of this object, so a
++        // suballocation copied out of a resource identity keeps the mapping.
++        HRESULT MapPersistent(
++            _In_opt_  const D3D12_RANGE *pReadRange,
++            _Outptr_opt_result_bytebuffer_(_Inexpressible_("Dependent on resource"))  void **ppData)
++        {
++            if (!g_bPersistentMapEnabled)
++            {
++                return Map(0, pReadRange, ppData);
++            }
++
++            if (!m_pPersistentBase)
++            {
++                D3D12_RANGE *pOffsetReadRange = nullptr;
++                D3D12_RANGE offsetReadRange;
++
++                if (pReadRange)
++                {
++                    offsetReadRange = OffsetRange(*pReadRange);
++                    pOffsetReadRange = &offsetReadRange;
++                }
++
++                void *pBase = nullptr;
++                HRESULT hr = GetResource()->Map(0, pOffsetReadRange, &pBase);
++                if (FAILED(hr))
++                {
++                    *ppData = nullptr;
++                    return hr;
++                }
++                m_pPersistentBase = pBase;
++            }
++
++            *ppData = reinterpret_cast<BYTE *>(m_pPersistentBase) + GetOffset();
++            return S_OK;
++        }
++
++        bool IsPersistentlyMapped() const { return m_pPersistentBase != nullptr; }
++
+         void Unmap(
+             UINT Subresource,
+             _In_opt_  const D3D12_RANGE *pWrittenRange)
+         {
++            // Nothing to balance: MapPersistent deliberately leaves the heap mapped.
++            if (m_pPersistentBase)
++            {
++                return;
++            }
++
+             D3D12_RANGE *pOffsetWrittenRange = nullptr;
+             D3D12_RANGE offsetWrittenRange;
+ 
+@@ -328,6 +399,8 @@ namespace D3D12TranslationLayer
+     private:
+         ID3D12Resource *m_pResource;
+         HeapSuballocationBlock m_bufferSubAllocation;
++        // Base address of the whole underlying heap once MapPersistent has mapped it, else null.
++        void *m_pPersistentBase = nullptr;
+     };
+ 
+     struct EncodedResourceSuballocation
+@@ -418,6 +491,12 @@ namespace D3D12TranslationLayer
+         AppResourceDesc* AppDesc() { return &m_creationArgs.m_appDesc; }
+ 
+         ID3D12Resource* GetUnderlyingResource() noexcept { return m_Identity->GetResource(); }
++
++        /// @brief Whether this resource is a rename cookie owned by another resource's pool.
++        bool IsPooledRenameCookie() const noexcept { return m_pRenameCookieOwner != nullptr; }
++
++        /// @brief GPU VA of the underlying buffer, cached. Zero for non-buffers.
++        D3D12_GPU_VIRTUAL_ADDRESS GetCachedGPUVirtualAddress() noexcept { return m_Identity->m_CachedGPUVA; }
+         void UnderlyingResourceChanged() noexcept(false);
+         void ZeroConstantBufferPadding() noexcept;
+ 
+@@ -627,6 +706,13 @@ namespace D3D12TranslationLayer
+             unique_comptr<ID3D12Resource> m_spUnderlyingResource;
+             D3D12ResourceSuballocation m_suballocation;
+ 
++            // GPU VA of the underlying resource, for buffers. ID3D12Resource::GetGPUVirtualAddress
++            // is a call into the D3D12 runtime and the view-desc path makes one per constant
++            // buffer per stage per draw, plus one per vertex and index buffer -- upstream flags it
++            // as a CPU hotspot. It cannot change without the identity's resource changing, so it is
++            // filled in by UnderlyingResourceChanged and rides along when identities are swapped.
++            D3D12_GPU_VIRTUAL_ADDRESS m_CachedGPUVA = 0;
++
+             ID3D12Resource *GetOwnedResource()
+             {
+                 assert(m_bOwnsUnderlyingResource);
+@@ -801,6 +887,27 @@ namespace D3D12TranslationLayer
+         // All resources
+         std::unique_ptr<SResourceIdentity> m_Identity;
+ 
++        // Rename cookie cache. Renaming swaps identities, so a resource and its cookies rotate a
++        // pool of backing stores between them and a retired cookie is already a correctly-sized
++        // target for the next Map(WRITE_DISCARD). A cookie carries a store the GPU may still be
++        // reading, so it is only handed out again once the command lists that referenced it have
++        // completed; cookies retire in order, so testing the front of the free list is enough.
++        // See ImmediateContext::CreateRenameCookie.
++        //
++        // The pool holds the reference for a cookie's whole life -- in flight or free -- so the
++        // fast path never touches ImmediateContext::m_RenamesInFlight, whose bookkeeping is a
++        // locked search of a device-wide deque on both the create and the delete.
++        std::vector<unique_comptr<Resource>> m_RenameCookiePool;
++        std::deque<Resource*> m_RetiredRenameCookies;
++
++        // Bytes of backing store the pool is holding, so the device-wide budget can be given back
++        // when this resource dies. A count cap alone is not enough: 16k cookies is nothing for a
++        // 256-byte constant buffer and gigabytes for a 1 MB dynamic vertex buffer.
++        size_t m_RenameCookiePoolBytes = 0;
++
++        // On a cookie, the resource whose pool owns it. Null on everything else.
++        Resource* m_pRenameCookieOwner = nullptr;
++
+         CResourceBindings m_currentBindings;
+ 
+         UINT m_SRVUniqueness; // MinLOD, renaming
+diff --git a/include/Util.hpp b/include/Util.hpp
+index 41571a4..a7b16a0 100644
+--- a/include/Util.hpp
++++ b/include/Util.hpp
+@@ -544,6 +544,79 @@ namespace D3D12TranslationLayer
+         seed ^= hasher(v) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+     }
+ 
++    // A recursive mutex that stays inline.
++    //
++    // std::recursive_mutex reaches into msvcp_win for every lock and unlock -- Mtx_lock and
++    // Mtx_unlock, each of which calls GetCurrentThreadId in kernel32 to track recursion -- and the
++    // batched context takes one per translated D3D11 command, roughly 63,000 times a frame. All of
++    // that shows up in a profile as cross-module call frames around a single SRWLOCK operation.
++    //
++    // The owner field is read without holding the lock. That is the standard pattern and it is
++    // sound: a thread only ever writes its own id there while it holds the lock, and clears it
++    // before releasing, so another thread can read a stale value but never its own id.
++    class RecursiveSRWLock
++    {
++    public:
++        RecursiveSRWLock() = default;
++        RecursiveSRWLock(RecursiveSRWLock const&) = delete;
++        RecursiveSRWLock& operator=(RecursiveSRWLock const&) = delete;
++
++        void lock() noexcept
++        {
++            const DWORD self = CurrentThreadId();
++            if (m_Owner.load(std::memory_order_relaxed) == self)
++            {
++                ++m_Recursion;
++                return;
++            }
++            AcquireSRWLockExclusive(&m_Lock);
++            m_Owner.store(self, std::memory_order_relaxed);
++            m_Recursion = 1;
++        }
++
++        bool try_lock() noexcept
++        {
++            const DWORD self = CurrentThreadId();
++            if (m_Owner.load(std::memory_order_relaxed) == self)
++            {
++                ++m_Recursion;
++                return true;
++            }
++            if (!TryAcquireSRWLockExclusive(&m_Lock))
++            {
++                return false;
++            }
++            m_Owner.store(self, std::memory_order_relaxed);
++            m_Recursion = 1;
++            return true;
++        }
++
++        void unlock() noexcept
++        {
++            assert(m_Owner.load(std::memory_order_relaxed) == CurrentThreadId());
++            if (--m_Recursion == 0)
++            {
++                m_Owner.store(0, std::memory_order_relaxed);
++                ReleaseSRWLockExclusive(&m_Lock);
++            }
++        }
++
++    private:
++        // What GetCurrentThreadId does, without the call into kernel32.
++        static DWORD CurrentThreadId() noexcept
++        {
++#if defined(_M_X64) || defined(_M_AMD64)
++            return static_cast<DWORD>(__readgsdword(0x48));
++#else
++            return GetCurrentThreadId();
++#endif
++        }
++
++        SRWLOCK m_Lock = SRWLOCK_INIT;
++        std::atomic<DWORD> m_Owner{ 0 };
++        UINT m_Recursion = 0;   // only touched by the owning thread
++    };
++
+     template <typename mutex_t = std::mutex>
+     class OptLock
+     {
+diff --git a/src/BatchedContext.cpp b/src/BatchedContext.cpp
+index 11e33e0..17476fe 100644
+--- a/src/BatchedContext.cpp
++++ b/src/BatchedContext.cpp
+@@ -400,6 +400,15 @@ template <> struct CommandDispatcher<BatchedContext::CmdRename::CmdValue>
+     {
+         auto& Data = GetCommandData<BatchedContext::CmdRename>(pCommandData);
+         ImmCtx.Rename(Data.pResource, Data.pRenameResource);
++
++        // A pooled cookie is retired here rather than through a post-batch function: after the
++        // swap it holds the store the *earlier* draws referenced, so stamping it with the command
++        // list ID now is already conservative, and it saves building and calling a std::function
++        // for every Map(WRITE_DISCARD) in the frame.
++        if (Data.pRenameResource->IsPooledRenameCookie())
++        {
++            ImmCtx.DeleteRenameCookie(Data.pRenameResource);
++        }
+     }
+ };
+ template <> struct CommandDispatcher<BatchedContext::CmdRenameViaCopy::CmdValue>
+@@ -871,9 +880,71 @@ template void TRANSLATION_API BatchedContext::SetSamplers<e_DS>(UINT, UINT, Samp
+ template void TRANSLATION_API BatchedContext::SetSamplers<e_CS>(UINT, UINT, Sampler**);
+ 
+ //----------------------------------------------------------------------------------------------------------------------------------
+-template <EShaderStage ShaderStage>
++// Measurement only, behind D3D12TL_REDUNSTATS: how many constant-buffer binds the D3D11 runtime
++// forwards that set a slot to what it already holds. Filtering those would save the batch append
++// here *and* the execution on the worker, but only if the runtime is not already filtering them.
++namespace
++{
++    struct RedundancyStats
++    {
++        Resource* Shadow[ShaderStageCount][D3D11_COMMONSHADER_CONSTANT_BUFFER_HW_SLOT_COUNT] = {};
++        uint64_t Slots = 0;
++        uint64_t RedundantSlots = 0;
++        uint64_t Calls = 0;
++        uint64_t RedundantCalls = 0;
++        char Path[MAX_PATH] = {};
++        bool Enabled = GetEnvironmentVariableA("D3D12TL_REDUNSTATS", Path, sizeof(Path)) != 0;
++    };
++    RedundancyStats g_Redundancy;
++
++    void CountConstantBufferBinds(UINT Stage, UINT StartSlot, UINT NumBuffers, Resource* const* ppCBs)
++    {
++        auto& St = g_Redundancy;
++        bool bAllSame = true;
++        for (UINT i = 0; i < NumBuffers; ++i)
++        {
++            const UINT slot = StartSlot + i;
++            if (Stage >= ShaderStageCount || slot >= D3D11_COMMONSHADER_CONSTANT_BUFFER_HW_SLOT_COUNT)
++            {
++                bAllSame = false;
++                continue;
++            }
++            ++St.Slots;
++            if (St.Shadow[Stage][slot] == ppCBs[i]) { ++St.RedundantSlots; }
++            else { bAllSame = false; St.Shadow[Stage][slot] = ppCBs[i]; }
++        }
++        ++St.Calls;
++        if (bAllSame) { ++St.RedundantCalls; }
++
++        if ((St.Calls % 500000) == 0)
++        {
++            FILE* f = nullptr;
++            if (fopen_s(&f, St.Path, "a") == 0 && f)
++            {
++                fprintf(f, "cb_binds calls=%llu redundant_calls=%llu slots=%llu redundant_slots=%llu\n",
++                    (unsigned long long)St.Calls, (unsigned long long)St.RedundantCalls,
++                    (unsigned long long)St.Slots, (unsigned long long)St.RedundantSlots);
++                fclose(f);
++            }
++        }
++    }
++}
++
++//----------------------------------------------------------------------------------------------------------------------------------
++template<EShaderStage ShaderStage>
+ void TRANSLATION_API BatchedContext::SetConstantBuffers(UINT StartSlot, __in_range(0, D3D11_COMMONSHADER_CONSTANT_BUFFER_HW_SLOT_COUNT) UINT NumBuffers, Resource** ppCBs, __in_ecount_opt(NumBuffers) CONST UINT* pFirstConstant, __in_ecount_opt(NumBuffers) CONST UINT* pNumConstants)
+ {
++    if (g_Redundancy.Enabled)
++    {
++        CountConstantBufferBinds((UINT)ShaderStage, StartSlot, NumBuffers, ppCBs);
++    }
++
++    if (c_bFilterRedundantCBs &&
++        UpdateConstantBufferShadow((UINT)ShaderStage, StartSlot, NumBuffers, ppCBs, pFirstConstant, pNumConstants))
++    {
++        return;
++    }
++
+     if (pFirstConstant)
+     {
+         EmplaceInBatch<CmdSetConstantBuffers>(ShaderStage, StartSlot, NumBuffers, ppCBs, pFirstConstant, pNumConstants);
+@@ -1151,14 +1222,30 @@ bool TRANSLATION_API BatchedContext::RenameAndMapBuffer(BatchedResource* pResour
+         SafeRenameResourceCookie cookie(ImmCtx.CreateRenameCookie(pResource->m_pResource, ResourceAllocationContext::FreeThread));
+     
+         Resource* pRenameResource = cookie.Get();
+-        pResource->m_LastRenamedResource = pRenameResource->GetIdentity()->m_suballocation;
+-        
++
+         D3D12_RANGE ReadRange = CD3DX12_RANGE(0, 0);
+         void* pData = nullptr;
+-    
+-        ThrowFailure(pResource->m_LastRenamedResource.Map(0, &ReadRange, &pData));
++
++        // Map through the identity's own suballocation rather than a copy of it, so the
++        // persistent mapping is cached where it survives -- the identity outlives this map, and
++        // is handed back out by the next rename that reuses this cookie. Taking the copy
++        // afterwards carries the cached base into it.
++        auto& RenameSuballocation = pRenameResource->GetIdentity()->m_suballocation;
++        ThrowFailure(RenameSuballocation.MapPersistent(&ReadRange, &pData));
++        pResource->m_LastRenamedResource = RenameSuballocation;
++
++        // A pooled cookie is retired by the batch command itself; only an unpooled one needs the
++        // post-batch function, whose std::function is not free at this rate.
++        const bool bPooled = pRenameResource->IsPooledRenameCookie();
+         AddToBatch(CmdRename{ pResource->m_pResource, cookie.Get() });
+-        AddPostBatchFunction([cleanup = cookie.Detach(), &immCtx = GetImmediateContextNoFlush()](){ immCtx.DeleteRenameCookie(cleanup); });
++        if (bPooled)
++        {
++            (void)cookie.Detach();
++        }
++        else
++        {
++            AddPostBatchFunction([cleanup = cookie.Detach(), &immCtx = GetImmediateContextNoFlush()](){ immCtx.DeleteRenameCookie(cleanup); });
++        }
+     
+         pMappedSubresource->pData = pData;
+         pMappedSubresource->RowPitch = pResource->m_pResource->GetSubresourcePlacement(0).Footprint.RowPitch;
+@@ -1200,7 +1287,14 @@ bool TRANSLATION_API BatchedContext::MapForRenameViaCopy(BatchedResource* pResou
+             SafeRenameResourceCookie cookie(ImmCtx.CreateRenameCookie(pResource->m_pResource, ResourceAllocationContext::FreeThread));
+ 
+             Resource* pRenameResource = cookie.Get();
+-            pResource->m_LastRenamedResource = pRenameResource->GetIdentity()->m_suballocation;
++
++            // Map the identity's suballocation, not a copy, so the persistent mapping is cached
++            // on the object the next reuse of this cookie hands back. See RenameAndMapBuffer.
++            auto& RenameSuballocation = pRenameResource->GetIdentity()->m_suballocation;
++            void* pPersistentData = nullptr;
++            D3D12_RANGE PersistentReadRange = CD3DX12_RANGE(0, 0);
++            ThrowFailure(RenameSuballocation.MapPersistent(&PersistentReadRange, &pPersistentData));
++            pResource->m_LastRenamedResource = RenameSuballocation;
+ 
+             pResource->m_PendingRenameViaCopyCookie.Reset(cookie.Detach());
+         }
+@@ -1543,9 +1637,54 @@ void TRANSLATION_API BatchedContext::ClearState()
+     ClearStateImpl();
+ }
+ 
++//----------------------------------------------------------------------------------------------------------------------------------
++bool BatchedContext::UpdateConstantBufferShadow(UINT Stage, UINT StartSlot, UINT NumBuffers, Resource* const* ppCBs,
++                                                CONST UINT* pFirstConstant, CONST UINT* pNumConstants) noexcept
++{
++    if (Stage >= ShaderStageCount ||
++        StartSlot + NumBuffers > D3D11_COMMONSHADER_CONSTANT_BUFFER_HW_SLOT_COUNT)
++    {
++        return false;
++    }
++
++    bool bAllSame = true;
++    for (UINT i = 0; i < NumBuffers; ++i)
++    {
++        const SConstantBufferShadow New =
++        {
++            ppCBs[i],
++            pFirstConstant ? pFirstConstant[i] : 0u,
++            pNumConstants ? pNumConstants[i] : (UINT)D3D10_REQ_CONSTANT_BUFFER_ELEMENT_COUNT,
++        };
++        auto& Slot = m_CBShadow[Stage][StartSlot + i];
++        if (Slot.pBuffer != New.pBuffer || Slot.FirstConstant != New.FirstConstant || Slot.NumConstants != New.NumConstants)
++        {
++            Slot = New;
++            bAllSame = false;
++        }
++    }
++    return bAllSame;
++}
++
++//----------------------------------------------------------------------------------------------------------------------------------
++void BatchedContext::ForgetResourceInShadow(Resource* pResource) noexcept
++{
++    for (auto& Stage : m_CBShadow)
++    {
++        for (auto& Slot : Stage)
++        {
++            if (Slot.pBuffer == pResource)
++            {
++                Slot = SConstantBufferShadow{};
++            }
++        }
++    }
++}
++
+ //----------------------------------------------------------------------------------------------------------------------------------
+ void BatchedContext::ClearStateImpl()
+ {
++    ZeroMemory(m_CBShadow, sizeof(m_CBShadow));
+     m_UAVs.Clear();
+     m_NumScissors = 0;
+     m_NumViewports = 0;
+@@ -1885,6 +2024,7 @@ bool TRANSLATION_API BatchedContext::SubmitBatch(bool bFlushImmCtxAfterBatch)
+         UNREFERENCED_PARAMETER(value);
+ 
+         ++m_NumOutstandingBatches;
++        ++m_BatchesSubmitted;
+     }
+     return true;
+ }
+@@ -1897,7 +2037,11 @@ void TRANSLATION_API BatchedContext::SubmitBatchIfIdle(bool bSkipFrequencyCheck)
+     if (m_CreationArgs.SubmitBatchesToWorkerThread && // Don't do work on the app thread.
+         (bSkipFrequencyCheck ||
+             m_CurrentCommandCount % c_CommandKickoffMinThreshold == 0) && // Avoid checking for idle all the time, it's not free.
+-        IsBatchThreadIdle())
++        // Hand the batch over once it is big enough even if the worker is still busy, so the
++        // worker stays fed instead of receiving the whole frame at the flush. See
++        // c_CommandBatchMaxSize.
++        ((c_CommandBatchMaxSize != 0 && m_CurrentCommandCount >= c_CommandBatchMaxSize) ||
++            IsBatchThreadIdle()))
+     {
+         SubmitBatch();
+     }
+@@ -1920,6 +2064,19 @@ bool BatchedContext::WaitForBatchThreadIdle()
+ bool BatchedContext::IsBatchThreadIdle()
+ {
+     assert(!IsBatchThread());
++    if (m_NumOutstandingBatches == 0)
++    {
++        return true;
++    }
++
++    // Draining the semaphore is a WaitForSingleObject even at a zero timeout, and while the worker
++    // is behind it only ever fails. The completion count answers that case without a syscall: the
++    // worker increments it after signalling, so equality means the drain below will succeed.
++    if (m_BatchesCompleted.load(std::memory_order_acquire) != m_BatchesSubmitted)
++    {
++        return false;
++    }
++
+     while (m_NumOutstandingBatches > 0 && WaitForSingleBatch(0));
+     return m_NumOutstandingBatches == 0;
+ }
+@@ -2008,6 +2165,10 @@ void BatchedContext::BatchThread()
+         BOOL value = ReleaseSemaphore(m_BatchConsumedSemaphore, 1, nullptr);
+         assert(value == TRUE);
+         UNREFERENCED_PARAMETER(value);
++
++        // After the signal, so that the recording thread seeing this value knows the semaphore
++        // drain will succeed.
++        m_BatchesCompleted.fetch_add(1, std::memory_order_release);
+     }
+ }
+ 
 diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
 index 8488c5d..f36d533 100644
 --- a/src/CMakeLists.txt
@@ -52,3 +711,254 @@ index 8488c5d..f36d533 100644
    else()
    target_compile_options(d3d12translationlayer PUBLIC /W4 /wd4238 /wd4324 -Werror -Wno-missing-braces -Wno-shift-overflow -Wno-delete-non-abstract-non-virtual-dtor -Wno-unused-lambda-capture -Wno-implicit-exception-spec-mismatch -Wno-unused-const-variable  -Wno-unused-variable -Wno-unused-parameter  -Wno-enum-compare -Wno-reorder-ctor -Wno-sign-compare -Wno-pessimizing-move -Wno-c++11-narrowing -Wno-address-of-temporary -Wno-switch -Wno-missing-field-initializers)
    endif()
+diff --git a/src/ImmediateContext.cpp b/src/ImmediateContext.cpp
+index 1952212..145a09c 100644
+--- a/src/ImmediateContext.cpp
++++ b/src/ImmediateContext.cpp
+@@ -4250,10 +4250,135 @@ void ImmediateContext::ReleaseSuballocatedHeap(AllocatorHeapType HeapType, D3D12
+ }
+ 
+ //----------------------------------------------------------------------------------------------------------------------------------
++// Bounds on the rename cookie caches. A cache converges on the number of renames a resource has
++// in flight, so these only matter for a resource that stops being mapped while holding a large
++// cache, or an app that maps pathologically many distinct dynamic resources.
++static constexpr size_t c_MaxCachedRenameCookiesPerResource = 16384;
++static constexpr size_t c_MaxCachedRenameCookies = 65536;
++// And a byte budget, because a count alone says nothing: 16k cookies is a few megabytes for a
++// 256-byte constant buffer and gigabytes for a 1 MB dynamic vertex buffer.
++static constexpr size_t c_MaxCachedRenameCookieBytes = 256u * 1024u * 1024u;
++
++// Kill switch, so one binary can be A/B'd against itself in a single session.
++static const bool c_bRenameCookieCacheEnabled = [] {
++    char buf[16] = {};
++    return !(GetEnvironmentVariableA("D3D12TL_RENAMECACHE", buf, sizeof(buf)) && buf[0] == '0');
++}();
++
++// D3D12TL_STATS=<path> dumps rename cache hit/miss counts there periodically. A cache that is
++// not being hit looks exactly like one that is not helping, so measure the hit rate before
++// concluding anything from a frame rate.
++static char g_RenameStatsPath[MAX_PATH] = {};
++static const bool c_bRenameStats = GetEnvironmentVariableA("D3D12TL_STATS", g_RenameStatsPath, sizeof(g_RenameStatsPath)) != 0;
++
++// Off by default: these are written from both the recording thread and the worker, and they
++// would otherwise be four atomics sharing a cache line on the hottest path in the frame.
++static std::atomic<uint64_t> g_RenameCacheHits{ 0 };
++static std::atomic<uint64_t> g_RenameCacheMisses{ 0 };
++static std::atomic<uint64_t> g_RenameCacheNotReady{ 0 };
++static std::atomic<uint64_t> g_RenameCacheParked{ 0 };
++
++static void CountRename(std::atomic<uint64_t>& counter)
++{
++    if (c_bRenameStats)
++    {
++        counter.fetch_add(1, std::memory_order_relaxed);
++    }
++}
++
++static void ReportRenameStats(size_t cached)
++{
++    if (!c_bRenameStats)
++    {
++        return;
++    }
++    const char* pPath = g_RenameStatsPath;
++
++    static std::atomic<uint64_t> s_LastReport{ 0 };
++    const uint64_t total = g_RenameCacheHits.load(std::memory_order_relaxed) +
++                           g_RenameCacheMisses.load(std::memory_order_relaxed);
++    if (total - s_LastReport.load(std::memory_order_relaxed) < 200000)
++    {
++        return;
++    }
++    s_LastReport.store(total, std::memory_order_relaxed);
++
++    FILE* f = nullptr;
++    if (fopen_s(&f, pPath, "a") == 0 && f)
++    {
++        fprintf(f, "renames=%llu hits=%llu misses=%llu notready=%llu parked=%llu cached=%zu\n",
++            (unsigned long long)total,
++            (unsigned long long)g_RenameCacheHits.load(std::memory_order_relaxed),
++            (unsigned long long)g_RenameCacheMisses.load(std::memory_order_relaxed),
++            (unsigned long long)g_RenameCacheNotReady.load(std::memory_order_relaxed),
++            (unsigned long long)g_RenameCacheParked.load(std::memory_order_relaxed),
++            cached);
++        fclose(f);
++    }
++}
++
++//----------------------------------------------------------------------------------------------------------------------------------
++bool ImmediateContext::IsWorkComplete(bool completionRequired, const UINT64 lastCommandListIDs[(UINT)COMMAND_LIST_TYPE::MAX_VALID]) noexcept
++{
++    if (!completionRequired)
++    {
++        return true;
++    }
++
++    for (UINT i = 0; i < (UINT)COMMAND_LIST_TYPE::MAX_VALID; ++i)
++    {
++        const UINT64 id = lastCommandListIDs[i];
++        if (id == 0 || id <= m_LastKnownCompletedFence[i])
++        {
++            continue;
++        }
++
++        // Only now is it worth calling into the runtime for a fresh value.
++        m_LastKnownCompletedFence[i] = GetCompletedFenceValue((COMMAND_LIST_TYPE)i);
++        if (id > m_LastKnownCompletedFence[i])
++        {
++            return false;
++        }
++    }
++    return true;
++}
++
++//----------------------------------------------------------------------------------------------------------------------------------
++// Renaming swaps identities, so a resource and its cookies rotate a pool of backing stores between
++// them: a retired cookie is already a complete, correctly-sized target for the next
++// Map(WRITE_DISCARD). Reusing one skips constructing a Resource -- and with it the
++// GetCopyableFootprints call into the D3D12 runtime, the suballocation, and the constant-buffer
++// padding zero, which costs a Map/Unmap pair of its own. That construction dominates a
++// draw-call-heavy frame, because D3D11 titles discard a dynamic constant buffer per draw.
++// (Upstream: "TODO: See if there's a good way to cache these guys.")
+ Resource* TRANSLATION_API ImmediateContext::CreateRenameCookie(Resource* pResource, ResourceAllocationContext threadingContext)
+ {
+     assert(pResource->GetEffectiveUsage() == RESOURCE_USAGE_DYNAMIC);
+ 
++    if (c_bRenameCookieCacheEnabled)
++    {
++        auto LockedContainer = m_RenamesInFlight.GetLocked();
++        auto& Cache = pResource->m_RetiredRenameCookies;
++        if (!Cache.empty())
++        {
++            Resource* pCached = Cache.front();
++
++            // The store it carries may still be being read. Cookies retire in order, so if the
++            // oldest is not free none of them are.
++            if (IsWorkComplete(pCached->m_bWaitForCompletionRequired, pCached->m_LastUsedCommandListID))
++            {
++                Cache.pop_front();
++                --m_CachedRenameCookieCount;
++                CountRename(g_RenameCacheHits);
++                ReportRenameStats(m_CachedRenameCookieCount);
++                return pCached;
++            }
++            CountRename(g_RenameCacheNotReady);
++        }
++        CountRename(g_RenameCacheMisses);
++        ReportRenameStats(m_CachedRenameCookieCount);
++    }
++
+     auto creationArgsCopy = pResource->m_creationArgs;
+     creationArgsCopy.m_appDesc.m_usage = RESOURCE_USAGE_STAGING; // Make sure it's suballocated
+     creationArgsCopy.m_heapDesc.Properties = CD3DX12_HEAP_PROPERTIES(Resource::GetD3D12HeapType(RESOURCE_USAGE_STAGING, creationArgsCopy.m_appDesc.CPUAccessFlags()), GetNodeMask(), GetNodeMask());
+@@ -4265,7 +4390,9 @@ Resource* TRANSLATION_API ImmediateContext::CreateRenameCookie(Resource* pResour
+     // Inherit the heap type from from the previous resource (which may account for the video flags stripped above).
+     creationArgsCopy.m_heapType = pResource->GetAllocatorHeapType();
+ 
+-    // TODO: See if there's a good way to cache these guys.
++    // Cache miss: build a new cookie. The padding zero is a real Map/Unmap pair, and it only has
++    // to happen once per backing store -- nothing writes past the app-visible width afterwards,
++    // so a recycled cookie's padding is still zero.
+     unique_comptr<Resource> renameResource = Resource::CreateResource(this, creationArgsCopy, threadingContext);
+     renameResource->ZeroConstantBufferPadding();
+ 
+@@ -4274,7 +4401,28 @@ Resource* TRANSLATION_API ImmediateContext::CreateRenameCookie(Resource* pResour
+ 
+     assert(renameResource->GetAllocatorHeapType() == pResource->GetAllocatorHeapType());
+ 
+-    m_RenamesInFlight.GetLocked()->emplace_back(renameResource.get());
++    // A pooled cookie is owned by the resource that created it for its whole life, in flight or
++    // free, so neither the create nor the delete has to search the device-wide in-flight deque.
++    // A resource that is not eligible falls back to upstream's bookkeeping.
++    {
++        auto LockedContainer = m_RenamesInFlight.GetLocked();
++        const size_t CookieBytes = renameResource->GetResourceSize();
++        if (c_bRenameCookieCacheEnabled &&
++            pResource->m_RenameCookiePool.size() < c_MaxCachedRenameCookiesPerResource &&
++            m_CachedRenameCookieCount < c_MaxCachedRenameCookies &&
++            m_CachedRenameCookieBytes.load(std::memory_order_relaxed) + CookieBytes <= c_MaxCachedRenameCookieBytes)
++        {
++            renameResource->m_pRenameCookieOwner = pResource;
++            pResource->m_RenameCookiePool.emplace_back(renameResource.get());
++            pResource->m_RenameCookiePoolBytes += CookieBytes;
++            m_CachedRenameCookieBytes.fetch_add(CookieBytes, std::memory_order_relaxed);
++        }
++        else
++        {
++            LockedContainer->emplace_back(renameResource.get());
++        }
++    }
++
+     return renameResource.get();
+ }
+ 
+@@ -4317,20 +4465,41 @@ void TRANSLATION_API ImmediateContext::RenameViaCopy(Resource* pResource, Resour
+     }
+ }
+ 
++//----------------------------------------------------------------------------------------------------------------------------------
++void ImmediateContext::ReturnRenameCookiePoolBudget(size_t bytes) noexcept
++{
++    if (bytes == 0)
++    {
++        return;
++    }
++    assert(m_CachedRenameCookieBytes.load(std::memory_order_relaxed) >= bytes);
++    m_CachedRenameCookieBytes.fetch_sub(bytes, std::memory_order_relaxed);
++}
++
+ //----------------------------------------------------------------------------------------------------------------------------------
+ void TRANSLATION_API ImmediateContext::DeleteRenameCookie(Resource* pRenameResource)
+ {
+     auto LockedContainer = m_RenamesInFlight.GetLocked();
+-    auto iter = std::find_if(LockedContainer->begin(), LockedContainer->end(),
+-                             [pRenameResource](unique_comptr<Resource> const& r) { return r.get() == pRenameResource; });
+-    assert(iter != LockedContainer->end());
+-
+     // The only scenario where video is relevant here is for decode bitstream buffers. All other instances of
+     // resource renaming are Map(DISCARD) graphics operations.
+     COMMAND_LIST_TYPE CmdListType = pRenameResource->GetAllocatorHeapType() == AllocatorHeapType::Decoder ?
+         COMMAND_LIST_TYPE::VIDEO_DECODE : COMMAND_LIST_TYPE::GRAPHICS;
+ 
+     pRenameResource->UsedInCommandList(CmdListType, GetCommandListID(CmdListType));
++
++    // Hand a pooled cookie back to its free list rather than destroying it. The next
++    // Map(WRITE_DISCARD) on that resource takes it straight back out once the GPU is done.
++    if (Resource* pOwner = pRenameResource->m_pRenameCookieOwner)
++    {
++        pOwner->m_RetiredRenameCookies.emplace_back(pRenameResource);
++        ++m_CachedRenameCookieCount;
++        CountRename(g_RenameCacheParked);
++        return;
++    }
++
++    auto iter = std::find_if(LockedContainer->begin(), LockedContainer->end(),
++                             [pRenameResource](unique_comptr<Resource> const& r) { return r.get() == pRenameResource; });
++    assert(iter != LockedContainer->end());
+     LockedContainer->erase(iter);
+ }
+ 
+diff --git a/src/Resource.cpp b/src/Resource.cpp
+index 0f48943..a6bc04e 100644
+--- a/src/Resource.cpp
++++ b/src/Resource.cpp
+@@ -331,6 +331,7 @@ namespace D3D12TranslationLayer
+             m_Identity.reset(nullptr);
+         }
+         m_pParent->ReturnAllBuffersToPool(*this);
++        m_pParent->ReturnRenameCookiePoolBudget(m_RenameCookiePoolBytes);
+ 
+         // If this resource was ever valid, ensure that it either still has its owned heap/resource, or that it returned its borrowed resource
+         assert(m_Identity.get() == nullptr || // The identity is deleted early in the case of failed initialization
+@@ -632,6 +633,11 @@ namespace D3D12TranslationLayer
+             return;
+         }
+ 
++        // The only place an identity's underlying resource is established, so the only place the
++        // cached VA needs refreshing. Non-buffers have no VA.
++        m_Identity->m_CachedGPUVA = Parent()->ResourceDimension12() == D3D12_RESOURCE_DIMENSION_BUFFER ?
++            m_Identity->GetResource()->GetGPUVirtualAddress() : 0;
++
+         m_Identity->m_currentState.Reset();
+ 
+         // For resources which own their underlying subresource, they're created in COMMON.

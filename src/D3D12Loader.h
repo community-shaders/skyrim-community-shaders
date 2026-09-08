@@ -23,7 +23,13 @@
  * the engine as an ID3D11Texture2D -- the engine's own rendering never round
  * trips through it.
  *
- * Enabled with CS_D3D12=1. Off by default while it is being brought up.
+ * Enabled with CS_D3D12=1. Off by default, and it should stay that
+ * way: measured head to head against DXVK on the same scene with no
+ * upscaler on either side, it runs at 44.59 fps against 154.35 on an
+ * RTX 4080. D3D11On12 keeps Microsoft's D3D11 runtime in the path and
+ * hangs a second translation underneath it, where DXVK replaces the
+ * runtime outright. tools/d3d11on12/README.md has the profiles, the
+ * optimisations that were landed, and the ones that were rejected.
  */
 namespace D3D12Loader
 {
