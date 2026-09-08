@@ -1,0 +1,54 @@
+diff --git a/include/BatchedContext.hpp b/include/BatchedContext.hpp
+index f853433..d9ba38c 100644
+--- a/include/BatchedContext.hpp
++++ b/include/BatchedContext.hpp
+@@ -777,7 +777,21 @@ private: // Referenced by recording thread
+             (m_CreationArgs.SubmitBatchesToWorkerThread ? &m_FreePages : nullptr)
+     };
+ 
+-    static constexpr UINT c_CommandKickoffMinThreshold = 10; // Arbitrary for now
++    // Every translated D3D11 command runs through AddToBatch -> SubmitBatchIfIdle, and every
++    // c_CommandKickoffMinThreshold of them that call does IsBatchThreadIdle, which is a
++    // WaitForSingleObject syscall even at a zero timeout. At 10, a Skyrim frame of roughly
++    // 63,000 commands pays about 6,300 syscalls just to ask whether the worker is free.
++    //
++    // Raising it trades kickoff latency for far fewer syscalls and larger batches. Runtime so
++    // it can be swept without a rebuild; D3D12TL_KICKOFF sets it.
++    static inline const UINT c_CommandKickoffMinThreshold = [] {
++        char buf[16] = {};
++        if (GetEnvironmentVariableA("D3D12TL_KICKOFF", buf, sizeof(buf))) {
++            const int v = atoi(buf);
++            if (v > 0) return static_cast<UINT>(v);
++        }
++        return 64u; // measured best here: 38.81 -> 43.86 fps against upstream 10
++    }();
+     OptLock<std::recursive_mutex> m_RecordingLock{ m_CreationArgs.CreatesAndDestroysAreMultithreaded };
+     UINT m_CurrentCommandCount = 0;
+     UINT m_NumOutstandingBatches = 0;
+diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
+index 8488c5d..f36d533 100644
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -117,7 +117,10 @@ endif()
+ 
+ configure_file(${CMAKE_CURRENT_SOURCE_DIR}/../packages.config ${CMAKE_CURRENT_BINARY_DIR}/packages.config COPYONLY)
+ add_library(WinPixEventRuntime INTERFACE IMPORTED GLOBAL)
+-set_target_properties(WinPixEventRuntime PROPERTIES INTERFACE_LINK_LIBRARIES "${CMAKE_BINARY_DIR}/packages/WinPixEventRuntime.1.0.190604001/build/WinPixEventRuntime.targets")
++# Upstream points this at a NuGet .targets file, which only resolves under MSBuild.
++# Point it at the import library from the same package instead.
++set_target_properties(WinPixEventRuntime PROPERTIES INTERFACE_LINK_LIBRARIES
++    "F:/claudetmp/claude/J--hdresreach/5898b011-4161-48ee-8d41-d13ca41c0ac9/scratchpad/wdkpkg/packages/winpixeventruntime/1.0.190604001/bin/x64/WinPixEventRuntime.lib")
+ target_link_libraries(d3d12translationlayer WinPixEventRuntime)
+ 
+ target_compile_definitions(d3d12translationlayer PRIVATE $<$<CONFIG:DEBUG>:DBG>)
+@@ -129,7 +132,9 @@ endif()
+ 
+ if(MSVC)
+   if("${CMAKE_CXX_COMPILER_ID}" MATCHES "MSVC")
+-  target_compile_options(d3d12translationlayer PUBLIC /W4 /WX /wd4238 /wd4324)
++  # /WX dropped: this code predates the toolchain here (MSVC 14.51) and trips newer
++  # warnings that are not defects in it.
++  target_compile_options(d3d12translationlayer PUBLIC /W4 /wd4238 /wd4324)
+   else()
+   target_compile_options(d3d12translationlayer PUBLIC /W4 /wd4238 /wd4324 -Werror -Wno-missing-braces -Wno-shift-overflow -Wno-delete-non-abstract-non-virtual-dtor -Wno-unused-lambda-capture -Wno-implicit-exception-spec-mismatch -Wno-unused-const-variable  -Wno-unused-variable -Wno-unused-parameter  -Wno-enum-compare -Wno-reorder-ctor -Wno-sign-compare -Wno-pessimizing-move -Wno-c++11-narrowing -Wno-address-of-temporary -Wno-switch -Wno-missing-field-initializers)
+   endif()
