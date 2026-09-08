@@ -1,5 +1,7 @@
 #include "D3D12Loader.h"
 
+#include <vector>
+
 namespace D3D12Loader
 {
 	namespace
@@ -121,6 +123,9 @@ namespace D3D12Loader
 				if (!m_fenceEvent)
 					return HRESULT_FROM_WIN32(GetLastError());
 
+				// Optional: only present when the debug layer is on.
+				D3D12Loader::GetDevice()->QueryInterface(IID_PPV_ARGS(&m_infoQueue));
+
 				// The engine renders into the wrapped resource from the first frame, so it has
 				// to start out owned by D3D11.
 				ID3D11Resource* acquire[] = { m_wrapped.Get() };
@@ -223,8 +228,40 @@ namespace D3D12Loader
 					CloseHandle(m_fenceEvent);
 			}
 
+			/// Drains the debug layer into our own log. Without this its messages only reach a
+			/// attached debugger, which is exactly what is unavailable when the game is driven
+			/// from a script.
+			void DrainDebugMessages()
+			{
+				if (!m_infoQueue)
+					return;
+
+				const UINT64 count = m_infoQueue->GetNumStoredMessages();
+
+				for (UINT64 i = 0; i < count; i++) {
+					SIZE_T length = 0;
+					if (FAILED(m_infoQueue->GetMessage(i, nullptr, &length)) || !length)
+						continue;
+
+					std::vector<uint8_t> storage(length);
+					auto* message = reinterpret_cast<D3D12_MESSAGE*>(storage.data());
+
+					if (FAILED(m_infoQueue->GetMessage(i, message, &length)))
+						continue;
+
+					if (message->Severity <= D3D12_MESSAGE_SEVERITY_WARNING) {
+						logger::warn("[D3D12/debug] {}",
+							std::string_view(message->pDescription, message->DescriptionByteLength));
+					}
+				}
+
+				m_infoQueue->ClearStoredMessages();
+			}
+
 			void CopyToBackBufferAndPresent(UINT syncInterval, UINT flags)
 			{
+				DrainDebugMessages();
+
 				// Hand the target back to D3D12 and make sure every translated draw that wrote
 				// it has been submitted before the copy is recorded behind them.
 				ID3D11Resource* wrapped[] = { m_wrapped.Get() };
@@ -285,6 +322,7 @@ namespace D3D12Loader
 
 			ComPtr<ID3D12CommandAllocator> m_allocator;
 			ComPtr<ID3D12GraphicsCommandList> m_list;
+			ComPtr<ID3D12InfoQueue> m_infoQueue;
 			ComPtr<ID3D12Fence> m_fence;
 			HANDLE m_fenceEvent = nullptr;
 			UINT64 m_fenceValue = 0;

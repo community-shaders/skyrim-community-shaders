@@ -1297,6 +1297,16 @@ namespace Hooks
 			logger::info("[Native] CS_NATIVE_D3D11=1: DXVK + upscaling disabled, using system d3d11/dxgi");
 		}
 
+		if (d3d12Loaded) {
+			// Upscaling's present path is built on the DXVK interop exports, and DXVK is not
+			// loaded on this back end. Leaving it enabled does not just lose upscaling, it
+			// takes the scene with it: the feature owns the final composite, so with its
+			// interop inactive the engine's image never reaches the back buffer and only the
+			// overlay is presented. Off until it is re-pointed at the D3D12 interfaces.
+			globals::features::upscaling.loaded = false;
+			logger::info("[D3D12] Upscaling disabled: not yet ported off the DXVK interop path");
+		}
+
 		if (!globals::features::upscaling.loaded) {
 			logger::info("Hooking D3D11CreateDeviceAndSwapChain");
 			const auto iatOriginal = SKSE::PatchIAT(hk_D3D11CreateDeviceAndSwapChain, "d3d11.dll", "D3D11CreateDeviceAndSwapChain");
