@@ -5,13 +5,7 @@
 
 namespace Util::VersionedRelocation
 {
-	/**
-	 * True on Skyrim AE 1.7.99 or newer.
-	 *
-	 * Canonical predicate for the 1.7.99 split — use it instead of repeating the
-	 * `IsAE() && IsAtLeast(...)` pair, including for engine behaviour changes that
-	 * are not address relocations.
-	 */
+	/** True on Skyrim AE 1.7.99 or newer. */
 	[[nodiscard]] inline bool IsAtLeastAE1799() noexcept
 	{
 		return REL::Module::IsAE() && REL::Module::IsAtLeast(SKSE::RUNTIME_SSE_1_7_99);

@@ -565,15 +565,7 @@ void Upscaling::PostPostLoad()
 	// Performs upscaling in between volumetric lighting and post processing
 	stl::write_thunk_call<Main_PostProcessing>(REL::RelocationID(100430, 107148).address() + REL::Relocate(0x1F0, 0x1E7));
 
-	// Patches RSSetScissorRect calls to use dynamic resolution.
-	//
-	// Not installed on AE 1.7.99+, which does this natively. The only rect that reaches
-	// this function in practice is BSShadowLight::projectedBoundingBox (+0x544), and
-	// 1.7.99 builds it from screen dimensions already multiplied by
-	// dynamicResolutionWidthRatio/dynamicResolutionHeightRatio inside
-	// CalculateActiveShadowCasterLights (AE id 107137), gated on the same
-	// dynamicResolutionLock the thunk below reads. Scaling again here would apply the
-	// ratio twice and shrink the scissor to ratio^2 of its correct extent.
+	// Patches RSSetScissorRect calls to use dynamic resolution
 	if (!Util::VersionedRelocation::IsAtLeastAE1799())
 		stl::detour_thunk<SetScissorRect>(REL::RelocationID(75564, 77365));
 
@@ -1708,12 +1700,6 @@ void Upscaling::Main_PostProcessing::thunk(RE::ImageSpaceManager* a_this, uint32
 	Util::SetTemporal(false);
 }
 
-// Only installed on SE and pre-1.7.99 AE; see PostPostLoad for why 1.7.99+ is excluded.
-//
-// Those runtimes pass the rect edges straight through, and the wrapped function then
-// treats the last two arguments as extents (right = a_left + a_right). Scaling all four
-// by the same ratio stays consistent with that, since a_left * r + a_right * r ==
-// (a_left + a_right) * r — do not "correct" this into edge arithmetic.
 void Upscaling::SetScissorRect::thunk(RE::BSGraphics::Renderer* This, int a_left, int a_top, int a_right, int a_bottom)
 {
 	auto viewport = globals::game::graphicsState;
