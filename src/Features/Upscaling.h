@@ -247,12 +247,6 @@ private:
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
-	struct SetScissorRect
-	{
-		static void thunk(RE::BSGraphics::Renderer* This, int a_left, int a_top, int a_right, int a_bottom);
-		static inline REL::Relocation<decltype(thunk)> func;
-	};
-
 	struct Main_RenderPrecipitation
 	{
 		static void thunk();
