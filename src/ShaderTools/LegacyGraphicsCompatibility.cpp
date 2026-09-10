@@ -29,11 +29,6 @@ namespace LegacyGraphicsCompatibility
 
 		thread_local CameraProjectionSnapshot cameraProjectionSnapshot;
 
-		[[nodiscard]] bool IsLegacyFlatRuntime() noexcept
-		{
-			return !REL::Module::IsVR() && IsLegacyVersion();
-		}
-
 		[[nodiscard]] std::uintptr_t ReadRelativeCallTarget(std::uintptr_t a_callSite) noexcept
 		{
 			std::int32_t displacement{};
@@ -660,7 +655,7 @@ namespace LegacyGraphicsCompatibility
 
 	void Install()
 	{
-		if (!IsLegacyFlatRuntime()) {
+		if (!IsLegacyVersion()) {
 			return;
 		}
 
