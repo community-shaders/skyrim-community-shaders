@@ -843,7 +843,7 @@ def analyze_features(FEATURES_DIR, feature_meta_map, base_ref, only_changed=Fals
         commit_link = ""
         if bump_commit:
             author_str = f" ({bump_author})" if bump_author else ""
-            commit_link = f"[link](https://github.com/doodlum/skyrim-community-shaders/commit/{bump_commit}){author_str}"
+            commit_link = f"[link](https://github.com/community-shaders/skyrim-community-shaders/commit/{bump_commit}){author_str}"
 
         def bold(val):
             return f"**{val}**" if is_attention and val != '' and val != '-' else val
@@ -934,7 +934,7 @@ def format_new_features_table(new_features, feature_meta_map, get_commit_author,
             nexus_link = f"[Nexus]({meta['mod_link']})" if meta and meta['mod_link'] else ("**Missing metadata**" if not meta else "")
             author = get_commit_author(commit) if commit else None
             author_str = f" ({author})" if author else ""
-            commit_link = f"[link](https://github.com/doodlum/skyrim-community-shaders/commit/{commit}){author_str}" if commit else ""
+            commit_link = f"[link](https://github.com/community-shaders/skyrim-community-shaders/commit/{commit}){author_str}" if commit else ""
             lines.append(f"| {boldmeta(name)} | {boldmeta(ver)} | {nexus_link} | {commit_link} |")
     return lines
 
