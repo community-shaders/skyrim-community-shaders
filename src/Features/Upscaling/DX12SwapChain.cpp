@@ -135,9 +135,7 @@ void DX12SwapChain::RecreateWrappedResources(const DXGI_SWAP_CHAIN_DESC1& desc)
 	swapChainBufferWrapped = newSwapChainBuffer.release();
 	uiBufferWrapped = newUiBuffer.release();
 
-	const float clearColor[4]{};
-	d3d11Context->ClearRenderTargetView(swapChainBufferWrapped->rtv, clearColor);
-	d3d11Context->ClearRenderTargetView(uiBufferWrapped->rtv, clearColor);
+	ClearWrappedBuffers();
 }
 
 DXGISwapChainProxy* DX12SwapChain::GetSwapChainProxy()
@@ -278,10 +276,6 @@ HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT Flags)
 
 	// Update the frame index
 	frameIndex = swapChain->GetCurrentBackBufferIndex();
-
-	float clearColor[4]{ 0, 0, 0, 0 };
-	d3d11Context->ClearRenderTargetView(swapChainBufferWrapped->rtv, clearColor);
-	d3d11Context->ClearRenderTargetView(uiBufferWrapped->rtv, clearColor);
 
 	// If VSync is disabled, use frame limiter to prevent tearing and optimise pacing
 	if (SyncInterval == 0)
@@ -517,6 +511,18 @@ void DX12SwapChain::SetColorSpace(bool enableHDR)
 		swapChain->SetColorSpace1(DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709);
 		logger::info("[DX12SwapChain] Set color space to SDR (sRGB)");
 	}
+}
+
+void DX12SwapChain::ClearWrappedBuffers()
+{
+	if (!d3d11Context)
+		return;
+
+	float clearColor[4]{ 0, 0, 0, 0 };
+	if (swapChainBufferWrapped && swapChainBufferWrapped->rtv)
+		d3d11Context->ClearRenderTargetView(swapChainBufferWrapped->rtv, clearColor);
+	if (uiBufferWrapped && uiBufferWrapped->rtv)
+		d3d11Context->ClearRenderTargetView(uiBufferWrapped->rtv, clearColor);
 }
 
 DX12SwapChain::BlurResources DX12SwapChain::GetBlurResources() const

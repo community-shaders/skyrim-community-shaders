@@ -1,5 +1,7 @@
 #include "LegacyGraphicsCompatibility.h"
 
+#include "Utils/VersionedRelocation.h"
+
 namespace LegacyGraphicsCompatibility
 {
 	namespace detail
@@ -140,7 +142,7 @@ namespace LegacyGraphicsCompatibility
 
 	bool IsLegacyVersion() noexcept
 	{
-		return !REL::Module::IsAE() || !REL::Module::IsAtLeast(SKSE::RUNTIME_SSE_1_7_99);
+		return !Util::VersionedRelocation::IsAtLeastAE1799();
 	}
 
 	void BindLegacyGrassPerGeometryToPixelShader()
