@@ -726,7 +726,8 @@ void ScreenSpaceGI::DrawSSGI()
 	auto& BSImagespaceShaderISSAOBlurH = imageSpaceManager->GetRuntimeData().BSImagespaceShaderISSAOBlurH;
 
 	// Toggle vanilla SSAO
-	BSImagespaceShaderISSAOBlurH->enableSAO = settings.EnableVanillaSSAO;
+	if (BSImagespaceShaderISSAOBlurH)
+		BSImagespaceShaderISSAOBlurH->enableSAO = settings.EnableVanillaSSAO;
 
 	if (!(settings.Enabled && ShadersOK())) {
 		FLOAT clr[4] = { 0.f, 0.f, 0.f, 0.f };

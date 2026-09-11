@@ -163,7 +163,7 @@ void HomePageRenderer::RenderQuickLinksSection()
 
 	ImGui::NextColumn();
 	if (ImGui::Button(T("menu.home.github", "GitHub"), ImVec2(-1, 0))) {
-		ShellExecuteA(NULL, "open", "https://github.com/doodlum/skyrim-community-shaders", NULL, NULL, SW_SHOWNORMAL);
+		ShellExecuteA(NULL, "open", "https://github.com/community-shaders/skyrim-community-shaders", NULL, NULL, SW_SHOWNORMAL);
 	}
 
 	ImGui::NextColumn();
@@ -173,7 +173,7 @@ void HomePageRenderer::RenderQuickLinksSection()
 
 	ImGui::NextColumn();
 	if (ImGui::Button(T("menu.home.dev_wiki", "Developer Wiki"), ImVec2(-1, 0))) {
-		ShellExecuteA(NULL, "open", "https://github.com/doodlum/skyrim-community-shaders/wiki", NULL, NULL, SW_SHOWNORMAL);
+		ShellExecuteA(NULL, "open", "https://github.com/community-shaders/skyrim-community-shaders/wiki", NULL, NULL, SW_SHOWNORMAL);
 	}
 
 	ImGui::Columns(1);

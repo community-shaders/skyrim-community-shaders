@@ -133,14 +133,21 @@ namespace GrassCollision
 		previousCollision = ComputeNormalFromHeights(previousCollisionCenter, previousCollisionX, previousCollisionY, delta) * avgPreviousAmount;
 	}
 
+#ifdef GRASS_OPTIMIZATIONS
+	// Positions arrive camera-relative: instances are already in world space here, so applying World again would double the offset.
+	void GetDisplacedPosition(VS_INPUT input, float3 worldPosition, float3 worldPositionCentre, out float3 displacement, out float3 previousDisplacement)
+	{
+#else
 	void GetDisplacedPosition(VS_INPUT input, float3 position, out float3 displacement, out float3 previousDisplacement)
 	{
 		float3 worldPosition = mul(World, float4(position.xyz, 1.0)).xyz;
+#endif
 		float nearFactor = smoothstep(2048.0, 0.0, length(worldPosition));
 
 		if (input.Color.w > 0.0 && nearFactor > 0.0) {
+#ifndef GRASS_OPTIMIZATIONS
 			float3 worldPositionCentre = mul(World, float4(input.InstanceData1.xyz, 1.0)).xyz;
-
+#endif
 			// Limit stretching
 			float3 remappedWorldPosition = lerp(worldPosition, worldPositionCentre, float3(0.95, 0.95, 0.0));
 

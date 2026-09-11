@@ -11,6 +11,7 @@
 #include "Features/ExtendedTranslucency.h"
 #include "Features/GrassCollision.h"
 #include "Features/GrassLighting.h"
+#include "Features/GrassOptimizations.h"
 #include "Features/HDRDisplay.h"
 #include "Features/HairSpecular.h"
 #include "Features/HorizonFix.h"
@@ -223,6 +224,7 @@ const std::vector<Feature*>& Feature::GetFeatureList()
 		&globals::features::volumetricShadows,
 		&globals::features::grassLighting,
 		&globals::features::grassCollision,
+		&globals::features::grassOptimizations,
 		&globals::features::screenSpaceShadows,
 		&globals::features::extendedMaterials,
 		&globals::features::wetnessEffects,
