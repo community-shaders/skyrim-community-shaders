@@ -74,7 +74,7 @@ void TerrainVariation::DataLoaded()
 {
 	auto dataHandler = RE::TESDataHandler::GetSingleton();
 	if (dataHandler == nullptr) {
-		logger::warn("TerrainVariation: No data handler, mesh support disabled");
+		logger::warn("TerrainVariation: No data handler, landscape texture path list unavailable; mesh support will use landscape/ prefix matching only");
 		return;
 	}
 
