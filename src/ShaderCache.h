@@ -626,6 +626,7 @@ namespace SIE
 		{
 			RenderDepthStencil = 7,
 			RenderDepth = 8,
+			TruePbr = 9,
 		};
 
 		enum class GrassShaderFlags

@@ -10,6 +10,7 @@
 #include "Menu.h"
 #include "ShaderCache.h"
 #include "State.h"
+#include "TruePBR.h"
 #include "Util.h"
 
 #include "Features/Effects11.h"
@@ -260,6 +261,7 @@ namespace GrassExtensions
 			auto* lightingProperty = *reinterpret_cast<RE::BSLightingShaderProperty**>(lightingPropertyAddress);
 
 			RE::BSLightingShaderProperty* grassProperty = func(property);
+			globals::features::truePBR.SetupGrassMaterial(lightingProperty, grassProperty);
 
 			if (lightingProperty->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kEffectLighting)) {
 				grassProperty->SetFlags(RE::BSShaderProperty::EShaderPropertyFlag8::kEffectLighting, true);

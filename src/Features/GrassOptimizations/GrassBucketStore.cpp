@@ -199,7 +199,7 @@ void GrassBucketStore::ApplyCaptures(std::vector<PendingCapture>& captures)
 	for (auto& pc : captures) {
 		const uint32_t meshId = meshLibrary.ResolveMeshId(pc.shape);
 		const uint32_t triCount = meshId ? 0u : (uint32_t)pc.shape->GetTrishapeRuntimeData().triangleCount;
-		const BucketKey bk{ meshId, meshId ? nullptr : pc.diffuseTexture, triCount, meshId ? 0u : pc.descVal };
+		const BucketKey bk{ meshId, pc.material, meshId ? nullptr : pc.diffuseTexture, triCount, meshId ? 0u : pc.descVal };
 		auto& b = buckets[bk];
 		b.meshId = meshId;
 		b.diffuseTexture = RE::NiPointer<RE::NiSourceTexture>(pc.diffuseTexture);
@@ -383,9 +383,16 @@ bool GrassBucketStore::StageCapture(RE::BSMultiStreamInstanceTriShape* shape, co
 		logger::debug("[GRASS OPTIMIZATIONS] capture rejected: count={} stride={} desc={:016X} shape={:p}", count, stride, descVal, (void*)shape);
 		return false;
 	}
+	auto shaderProperty = shape->GetGeometryRuntimeData().shaderProperty;
+	if (!shaderProperty || shaderProperty->GetRTTI() != globals::rtti::BSGrassShaderPropertyRTTI.get())
+		return false;
+	auto* material = static_cast<RE::BSGrassShaderProperty*>(shaderProperty.get())->material;
+	if (!material)
+		return false;
 
 	PendingCapture pc;
 	pc.shape = shape;
+	pc.material = material;
 	pc.descVal = descVal;
 	pc.diffuseTexture = tex;
 	pc.count = count;

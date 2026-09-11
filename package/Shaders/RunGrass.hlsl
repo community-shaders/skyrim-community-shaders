@@ -295,6 +295,9 @@ struct PS_OUTPUT
 	float4 NormalGlossiness: SV_Target2;
 	float4 Albedo: SV_Target3;
 	float4 Specular: SV_Target4;
+#	if defined(TRUE_PBR)
+	float4 Reflectance: SV_Target5;
+#	endif
 	float4 Masks: SV_Target6;
 	float4 Masks2: SV_Target7;
 #	endif  // RENDER_DEPTH
@@ -318,9 +321,19 @@ struct PS_OUTPUT
 #ifdef PSHADER
 SamplerState SampBaseSampler : register(s0);
 SamplerState SampShadowMaskSampler : register(s1);
+#	if defined(GRASS_LIGHTING) && defined(TRUE_PBR)
+SamplerState SampNormalSampler : register(s2);
+SamplerState SampRMAOSSampler : register(s3);
+SamplerState SampSubsurfaceSampler : register(s4);
+#	endif
 
 Texture2D<float4> TexBaseSampler : register(t0);
 Texture2D<float4> TexShadowMaskSampler : register(t1);
+#	if defined(GRASS_LIGHTING) && defined(TRUE_PBR)
+Texture2D<float4> TexNormalSampler : register(t2);
+Texture2D<float4> TexRMAOSSampler : register(t3);
+Texture2D<float4> TexSubsurfaceSampler : register(t4);
+#	endif
 
 cbuffer PerFrame : register(b0)
 {
@@ -372,6 +385,16 @@ cbuffer AlphaTestRefCB : register(b11)
 
 #	include "Common/ShadowSampling.hlsli"
 #	ifdef GRASS_LIGHTING
+#		if defined(TRUE_PBR)
+cbuffer PerMaterial : register(b1)
+{
+	uint PBRFlags : packoffset(c0.x);
+	float3 PBRParams1 : packoffset(c0.y);  // roughness scale, specular level
+	float4 PBRParams2 : packoffset(c1);    // subsurface color, subsurface opacity
+};
+
+#			include "Common/LightingEval.hlsli"
+#		endif
 #		include "GrassLighting/GrassLighting.hlsli"
 
 float GetSoftLightMultiplier(float angle, float rolloff)
@@ -383,6 +406,204 @@ float GetSoftLightMultiplier(float angle, float rolloff)
 	return saturate(arg1 - arg2);
 }
 
+#		if defined(TRUE_PBR)
+PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
+{
+	PS_OUTPUT psout = (PS_OUTPUT)0;
+	float4 baseColor = TexBaseSampler.SampleBias(SampBaseSampler, input.TexCoord.xy, SharedData::MipBias);
+	baseColor.xyz = Color::Diffuse(baseColor.xyz);
+
+#			if defined(RENDER_DEPTH)
+	float diffuseAlpha = input.Fade * baseColor.w;
+#			elif defined(DO_ALPHA_TEST)
+	float diffuseAlpha = input.Color.w * baseColor.w;
+#			endif
+#			if defined(RENDER_DEPTH) || defined(DO_ALPHA_TEST)
+	if ((diffuseAlpha - AlphaTestRefRS) < 0)
+		discard;
+#			endif
+#			if defined(RENDER_DEPTH)
+#				ifdef GRASS_OPTIMIZATIONS
+	psout.PS.xyz = input.HPosition.zzz;
+#				else
+	psout.PS.xyz = input.Depth.xxx / input.Depth.yyy;
+#				endif
+	psout.PS.w = diffuseAlpha;
+	return psout;
+#			else
+	if (SharedData::lodBlendingSettings.DisableTerrainVertexColors)
+		input.Color.xyz = 1;
+
+	if (SharedData::grassLightingSettings.OverrideComplexGrassSettings)
+		baseColor.xyz *= SharedData::grassLightingSettings.BasicGrassBrightness;
+
+#				ifdef GRASS_OPTIMIZATIONS
+	const float lodBrightness = input.LodTier > 1.5 ? SharedData::grassLightingSettings.FarLODBrightness : SharedData::grassLightingSettings.MidLODBrightness;
+	baseColor.xyz *= lerp(1.0, lodBrightness, saturate(input.LodTier));
+#				endif
+
+	psout.MotionVectors = MotionBlur::GetSSMotionVector(float4(input.WorldPosition, 1), float4(input.PreviousWorldPosition, 1));
+
+	float3 viewDirection = -normalize(input.WorldPosition.xyz);
+	float3 vertexNormal = normalize(input.VertexNormal.xyz);
+	if (!(Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::GrassSphereNormal) && !frontFace)
+		vertexNormal = -vertexNormal;
+
+#			ifdef GRASS_OPTIMIZATIONS
+	const bool pbrDetail = input.IsFar <= 0.5;
+#			else
+	const bool pbrDetail = true;
+#			endif
+	float3 normal = vertexNormal;
+	float4 rawRMAOS = float4(1, 0, 1, 0);
+#			ifdef GRASS_OPTIMIZATIONS
+	[branch] if (pbrDetail)
+#			else
+	if (pbrDetail)
+#			endif
+	{
+		float4 normalSample = TexNormalSampler.SampleBias(SampNormalSampler, input.TexCoord.xy, SharedData::MipBias);
+		float3x3 tbn = GrassLighting::CalculateTBN(vertexNormal, -input.WorldPosition.xyz, input.TexCoord.xy);
+		normal = normalize(mul(GrassLighting::TransformNormal(normalSample.xyz), tbn));
+		rawRMAOS = TexRMAOSSampler.SampleBias(SampRMAOSSampler, input.TexCoord.xy, SharedData::MipBias) *
+			float4(PBRParams1.x, 1, 1, PBRParams1.y);
+	}
+	MaterialProperties material = (MaterialProperties)0;
+	material.Roughness = clamp(rawRMAOS.x, PBR::Constants::MinRoughness, PBR::Constants::MaxRoughness);
+	material.Metallic = saturate(rawRMAOS.y);
+	material.AO = rawRMAOS.z;
+
+	float3 vertexColor = Color::ColorToLinear(input.Color.xyz);
+	float vertexAO = max(max(vertexColor.r, vertexColor.g), vertexColor.b);
+	vertexColor /= max(vertexAO, EPSILON_DIVISION);
+	material.BaseColor = baseColor.xyz * vertexColor;
+	material.F0 = lerp(saturate(rawRMAOS.w), material.BaseColor, material.Metallic);
+	material.BaseColor *= 1 - material.Metallic;
+	material.SubsurfaceColor = PBRParams2.xyz;
+	material.Thickness = PBRParams2.w;
+	[branch] if (pbrDetail && (PBRFlags & PBR::Flags::HasFeatureTexture0) != 0) {
+		float4 subsurface = TexSubsurfaceSampler.Sample(SampSubsurfaceSampler, input.TexCoord.xy);
+		material.SubsurfaceColor *= Color::Diffuse(subsurface.xyz);
+		material.Thickness *= subsurface.w;
+	}
+
+	float3 viewPosition = mul(FrameBuffer::CameraView, float4(input.WorldPosition.xyz, 1)).xyz;
+	float2 screenUV = FrameBuffer::ViewToUV(viewPosition);
+	float screenNoise = Random::InterleavedGradientNoise(input.HPosition.xy, SharedData::FrameCount);
+	float llDirLightMult = (SharedData::linearLightingSettings.enableLinearLighting && !SharedData::linearLightingSettings.isDirLightLinear) ? SharedData::linearLightingSettings.dirLightMult : 1.0f;
+	float3 dirLightColor = Color::DirectionalLight(SharedData::DirLightColor.xyz / max(llDirLightMult, 1e-5), SharedData::linearLightingSettings.isDirLightLinear) * llDirLightMult;
+#				if defined(EXP_HEIGHT_FOG)
+	if (SharedData::exponentialHeightFogSettings.enabled)
+		dirLightColor *= ExponentialHeightFog::GetSunlightFogAttenuation(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust.xyz);
+#				endif
+	if (!SharedData::InInterior)
+		dirLightColor *= ShadowSampling::GetWorldShadow(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust.xyz);
+
+	float4 shadowColor = TexShadowMaskSampler.Load(int3(input.HPosition.xy, 0));
+	float dirDetailedShadow = SharedData::InInterior ? 1.0 : shadowColor.x;
+	dirDetailedShadow += ShadowClampValue * (1.0 - dirDetailedShadow);
+#				if defined(SCREEN_SPACE_SHADOWS)
+#					ifdef GRASS_OPTIMIZATIONS
+	if (!SharedData::InInterior && dot(normal, SharedData::DirLightDirection.xyz) >= 0 && input.IsFar <= 0.5)
+#					else
+	if (!SharedData::InInterior && dot(normal, SharedData::DirLightDirection.xyz) >= 0)
+#					endif
+		dirDetailedShadow *= ScreenSpaceShadows::GetScreenSpaceShadow(input.HPosition.xyz, screenUV, screenNoise);
+#				endif  // SCREEN_SPACE_SHADOWS
+
+	float dirSoftShadow = dirDetailedShadow;
+	float skylightingShadowVisibility = 1.0;
+#				if defined(SKYLIGHTING)
+	sh2 skylightingSH = Skylighting::Sample(input.WorldPosition.xyz, normal, skylightingShadowVisibility);
+	dirSoftShadow = skylightingShadowVisibility;
+#				endif
+
+	DirectLightingOutput totalLighting = (DirectLightingOutput)0;
+	DirectContext dirContext = CreateDirectLightingContext(normal, normal, vertexNormal, viewDirection, viewDirection,
+		SharedData::DirLightDirection.xyz, SharedData::DirLightDirection.xyz, dirLightColor, dirDetailedShadow, dirSoftShadow);
+	DirectLightingOutput dirOutput;
+	PBR::GetDirectLightInputGrass(dirOutput, dirContext, material, pbrDetail);
+	totalLighting.diffuse += dirOutput.diffuse;
+	totalLighting.specular += dirOutput.specular;
+	totalLighting.transmission += dirOutput.transmission;
+
+#				if defined(LIGHT_LIMIT_FIX)
+	uint clusterIndex = 0;
+	uint lightCount = 0;
+	if (LightLimitFix::GetClusterIndex(screenUV, viewPosition.z, clusterIndex)) {
+		lightCount = LightLimitFix::lightGrid[clusterIndex].lightCount;
+		if (lightCount) {
+			uint lightOffset = LightLimitFix::lightGrid[clusterIndex].offset;
+			[loop] for (uint i = 0; i < lightCount; ++i) {
+				LightLimitFix::Light light = LightLimitFix::lights[LightLimitFix::lightList[lightOffset + i]];
+				float3 lightVector = light.positionWS.xyz - input.WorldPosition.xyz;
+				float lightDist = length(lightVector);
+#					if defined(ISL)
+				float attenuation = InverseSquareLighting::GetAttenuation(lightDist, light);
+				if (attenuation < 1e-5)
+					continue;
+#					else
+				float distanceFactor = saturate(lightDist / light.radius);
+				if (distanceFactor == 1)
+					continue;
+				float attenuation = 1 - distanceFactor * distanceFactor;
+#					endif
+				float3 lightColor = Color::PointLight(light.color.xyz) * attenuation * light.fade;
+				float lightShadow = (light.lightFlags & LightLimitFix::LightFlags::Shadow) ? shadowColor[light.shadowLightIndex] : 1.0;
+				float3 lightDirection = lightVector / max(lightDist, EPSILON_DIVISION);
+				DirectContext pointContext = CreateDirectLightingContext(normal, normal, vertexNormal, viewDirection, viewDirection,
+					lightDirection, lightDirection, lightColor, lightShadow, lightShadow);
+				DirectLightingOutput pointOutput;
+				PBR::GetDirectLightInputGrass(pointOutput, pointContext, material, pbrDetail);
+				totalLighting.diffuse += pointOutput.diffuse;
+				totalLighting.specular += pointOutput.specular;
+				totalLighting.transmission += pointOutput.transmission;
+			}
+		}
+	}
+#				endif
+
+	IndirectLobeWeights indirectLobes;
+	IndirectContext indirectContext = CreateIndirectLightingContext(normal, vertexNormal, viewDirection);
+	PBR::GetIndirectLobeWeightsGrass(indirectLobes, indirectContext, material, pbrDetail);
+
+	float3 directColor = totalLighting.diffuse * material.BaseColor + totalLighting.transmission;
+	float3 directionalAmbientColor = Color::Ambient(max(0, SharedData::GetAmbient(normal)));
+#				if defined(IBL)
+	if (SharedData::iblSettings.EnableIBL)
+		directionalAmbientColor = ImageBasedLighting::GetDiffuseIBL(directionalAmbientColor, -normal);
+#				endif
+	directColor += indirectLobes.diffuse * directionalAmbientColor;
+	float3 outputAlbedo = indirectLobes.diffuse;
+	directionalAmbientColor *= outputAlbedo;
+#				if defined(SKYLIGHTING)
+	float skylightingDiffuse = Skylighting::GetSkylightingDiffuse(skylightingSH, input.WorldPosition.xyz, normal, vertexAO);
+	Skylighting::ApplySkylighting(directColor, directionalAmbientColor, outputAlbedo, skylightingDiffuse);
+#				endif
+
+	float3 outputColor = FogNearColor.w * directColor;
+#				if defined(LIGHT_LIMIT_FIX) && defined(LLFDEBUG)
+	if (SharedData::lightLimitFixSettings.EnableLightsVisualisation) {
+		if (SharedData::lightLimitFixSettings.LightsVisualisationMode < 2) {
+			outputColor = Color::TurboColormap(0);
+		} else {
+			outputColor = Color::TurboColormap((float)lightCount / MAX_CLUSTER_LIGHTS);
+		}
+	}
+#				endif
+
+	float3 normalVS = normalize(FrameBuffer::WorldToView(normal, false));
+	psout.Diffuse = float4(outputColor, 1);
+	psout.NormalGlossiness = float4(GBuffer::EncodeNormal(normalVS), 1 - material.Roughness, 1);
+	psout.Albedo = float4(outputAlbedo, 1);
+	psout.Specular = float4(totalLighting.specular, 1);
+	psout.Reflectance = float4(indirectLobes.specular, 1);
+	psout.Masks = float4(0, 0, Color::RGBToYCoCg(directionalAmbientColor).x, 0);
+	psout.Masks2 = float4(1.0 - vertexAO, 0, 0, 1);
+	return psout;
+#			endif
+}
+#		else
 PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 {
 	PS_OUTPUT psout = (PS_OUTPUT)0;
@@ -669,6 +890,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		endif
 	return psout;
 }
+#		endif  // TRUE_PBR
 #	else
 PS_OUTPUT main(PS_INPUT input)
 {

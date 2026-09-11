@@ -921,7 +921,8 @@ void GrassOptimizations::Hooks::DrawInstanceTriShape::thunk(RE::BSRenderPass* pa
 
 		const uint32_t meshId = self.bucketStore.meshLibrary.ResolveMeshId(geometry);
 		const uint32_t triCount = meshId ? 0u : (uint32_t)geometry->GetTrishapeRuntimeData().triangleCount;
-		auto it = self.bucketStore.buckets.find({ meshId, meshId ? nullptr : diffuseTexture, triCount, meshId ? 0u : descVal });
+		auto* material = static_cast<RE::BSGrassShaderProperty*>(shaderProperty.get())->material;
+		auto it = self.bucketStore.buckets.find({ meshId, material, meshId ? nullptr : diffuseTexture, triCount, meshId ? 0u : descVal });
 		if (it == self.bucketStore.buckets.end() || !it->second.totalInstances || !it->second.instanceBuf) {
 			VanillaDrawInstanceTriShape(geometry);
 			return;

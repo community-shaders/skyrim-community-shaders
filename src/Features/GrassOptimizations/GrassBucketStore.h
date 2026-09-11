@@ -6,8 +6,9 @@
 struct BucketKey
 {
 	uint32_t meshId = 0;
-	// The remaining fields only key the bucket when meshId == 0. Texture and vertex format alone would let
-	// two variant .nifs share one bucket, which draws each other's instances against a single cached index count.
+	// An optimized draw shares the representative shape's material state.
+	RE::BSShaderMaterial* material = nullptr;
+	// Unresolved meshes also require texture and geometry identity.
 	RE::NiSourceTexture* tex = nullptr;
 	uint32_t triCount = 0;
 	uint64_t descVal = 0;
@@ -19,6 +20,7 @@ struct BucketKeyHash
 	size_t operator()(const BucketKey& k) const
 	{
 		return (std::hash<uint32_t>{}(k.meshId) * 31) ^
+		       std::hash<void*>{}(k.material) ^
 		       std::hash<void*>{}(k.tex) ^
 		       (std::hash<uint32_t>{}(k.triCount) * 131) ^
 		       (std::hash<uint64_t>{}(k.descVal) << 1);
@@ -51,6 +53,7 @@ static_assert(sizeof(SliceBounds) == 32);
 struct PendingCapture
 {
 	RE::BSMultiStreamInstanceTriShape* shape = nullptr;
+	RE::BSShaderMaterial* material = nullptr;
 	RE::NiSourceTexture* diffuseTexture = nullptr;
 	std::vector<uint8_t> bytes;
 	uint32_t count = 0;
