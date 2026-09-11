@@ -33,7 +33,7 @@ struct ScreenshotFeature : public Feature
 
 	/** @brief Captures a screenshot from the current back buffer and enqueues it for async encoding and save. */
 	void Capture();
-	/** @brief Checks for a pending capture request and executes Capture() if one is pending. Called after HDR Present processing. */
+	/** @brief Checks for a pending capture request and executes Capture() if one is pending. Should be called before the wrapped buffers are cleared. */
 	void ProcessCaptureRequest();
 	bool applyCropToScreenshot = true;
 
