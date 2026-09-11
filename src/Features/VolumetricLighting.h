@@ -92,15 +92,25 @@ public:
 	/** @brief Binds the screen dimensions constant buffer to compute shader slot 1. */
 	void SetDimensionsCB() const;
 	/**
-	 * @brief Calculates the thread group count for the horizontal blur dispatch.
+	 * @brief Calculates the thread group counts for the horizontal blur dispatch.
+	 *
+	 * Both axes are sized from the dynamic resolution render area so the blur never
+	 * touches the stale region outside it.
+	 *
 	 * @param threadGroupCountX Output parameter set to the required X thread group count.
+	 * @param threadGroupCountY Output parameter set to the number of rows to blur.
 	 */
-	void SetGroupCountsHCS(uint32_t& threadGroupCountX) const;
+	void SetGroupCountsHCS(uint32_t& threadGroupCountX, uint32_t& threadGroupCountY) const;
 	/**
-	 * @brief Calculates the thread group count for the vertical blur dispatch.
+	 * @brief Calculates the thread group counts for the vertical blur dispatch.
+	 *
+	 * Both axes are sized from the dynamic resolution render area so the blur never
+	 * touches the stale region outside it.
+	 *
+	 * @param threadGroupCountX Output parameter set to the number of columns to blur.
 	 * @param threadGroupCountY Output parameter set to the required Y thread group count.
 	 */
-	void SetGroupCountsVCS(uint32_t& threadGroupCountY) const;
+	void SetGroupCountsVCS(uint32_t& threadGroupCountX, uint32_t& threadGroupCountY) const;
 
 private:
 	struct VolumetricLightingDescriptor
@@ -136,6 +146,13 @@ private:
 	bool inInterior = false;
 	bool inInteriorWithSun = false;
 
+	/**
+	 * @brief Bounds of the dynamic resolution render area, in pixels.
+	 *
+	 * The blur targets are allocated at the full screen size but only the top-left
+	 * dynamic resolution region holds valid data, so these are the clamp bounds the
+	 * blur shaders sample against.
+	 */
 	struct VLData
 	{
 		int32_t screenX;
@@ -144,6 +161,11 @@ private:
 		int32_t screenYMin1;
 	};
 	VLData vlData = VLData();
+
+	// Full (non-dynamic) screen size, tracked separately so the cached blur shaders are
+	// only invalidated on an actual resolution change and not every dynamic resolution step.
+	int32_t fullScreenX = 0;
+	int32_t fullScreenY = 0;
 	ConstantBuffer* vlDataCB = nullptr;
 
 	static constexpr int32_t BlurThreadGroupSizeX = 256;

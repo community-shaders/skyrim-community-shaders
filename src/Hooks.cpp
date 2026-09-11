@@ -930,12 +930,12 @@ namespace Hooks
 							techniqueId = 0;
 							isShader = vl.GetOrCreateBlurHCS(CurrentlyDispatchedComputeShader);
 							vl.SetDimensionsCB();
-							vl.SetGroupCountsHCS(threadGroupCountX);
+							vl.SetGroupCountsHCS(threadGroupCountX, threadGroupCountY);
 						} else if (CurrentlyDispatchedComputeShader->name == "ISVolumetricLightingBlurVCS"sv) {
 							techniqueId = 0;
 							isShader = vl.GetOrCreateBlurVCS(CurrentlyDispatchedComputeShader);
 							vl.SetDimensionsCB();
-							vl.SetGroupCountsVCS(threadGroupCountY);
+							vl.SetGroupCountsVCS(threadGroupCountX, threadGroupCountY);
 						}
 					}
 					if (isShader != nullptr) {
