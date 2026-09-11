@@ -14,8 +14,10 @@ namespace NativeMenu::Vendor::Text
 		std::wstring wide;
 		const int    wideLen = MultiByteToWideChar(CP_UTF8, 0, a_utf8.c_str(), -1, nullptr, 0);
 		if (wideLen > 1) {
-			wide.resize(static_cast<std::size_t>(wideLen) - 1);
+			// wideLen includes the terminating NUL written by MultiByteToWideChar
+			wide.resize(static_cast<std::size_t>(wideLen));
 			MultiByteToWideChar(CP_UTF8, 0, a_utf8.c_str(), -1, wide.data(), wideLen);
+			wide.resize(static_cast<std::size_t>(wideLen) - 1);
 		}
 
 		return RE::GFxValue(interned.insert(std::move(wide)).first->c_str());

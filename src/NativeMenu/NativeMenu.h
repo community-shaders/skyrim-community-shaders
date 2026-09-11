@@ -3,6 +3,7 @@
 #include "NativeMenu/Vendor/VanillaSettingsEngine.h"
 
 #include <cstdio>
+#include <iterator>
 #include <string>
 #include <type_traits>
 #include <vector>
@@ -49,6 +50,60 @@ namespace NativeMenu
 
 	void __stdcall CommitAndSave(float value);
 
+	inline void AppendRows(std::vector<Row>& dest, std::vector<Row> src)
+	{
+		dest.insert(dest.end(), std::make_move_iterator(src.begin()), std::make_move_iterator(src.end()));
+	}
+
+	inline Row Checkbox(const char* label, SettingGetter getValue, SettingSetter setValue, float defaultValue,
+		const char* description = nullptr, SettingIsEnabled isEnabled = nullptr)
+	{
+		Row row;
+		row.type = RowType::kCheckbox;
+		row.label = label;
+		row.description = description;
+		row.getValue = getValue;
+		row.setValue = setValue;
+		row.defaultValue = defaultValue;
+		row.isEnabled = isEnabled;
+		row.commit = &CommitAndSave;
+		return row;
+	}
+
+	inline Row Dropdown(const char* label, std::vector<std::string> options, SettingGetter getValue,
+		SettingSetter setValue, float defaultValue, const char* description = nullptr,
+		SettingIsEnabled isEnabled = nullptr)
+	{
+		Row row;
+		row.type = RowType::kDropdown;
+		row.label = label;
+		row.description = description;
+		row.getValue = getValue;
+		row.setValue = setValue;
+		row.defaultValue = defaultValue;
+		row.options = std::move(options);
+		row.isEnabled = isEnabled;
+		row.commit = &CommitAndSave;
+		return row;
+	}
+
+	inline Row Slider(const char* label, SettingGetter getValue, SettingSetter setValue, float defaultValue,
+		const char* description = nullptr, SettingIsEnabled isEnabled = nullptr,
+		SettingFormatValue formatValue = nullptr)
+	{
+		Row row;
+		row.type = RowType::kSlider;
+		row.label = label;
+		row.description = description;
+		row.getValue = getValue;
+		row.setValue = setValue;
+		row.defaultValue = defaultValue;
+		row.isEnabled = isEnabled;
+		row.formatValue = formatValue;
+		row.commit = &CommitAndSave;
+		return row;
+	}
+
 	template <class Root, auto Member>
 	struct Bind
 	{
@@ -61,6 +116,7 @@ namespace NativeMenu
 
 		static float __stdcall GetFlag() { return Ref() != Value{} ? 1.0f : 0.0f; }
 		static void __stdcall SetFlag(float v) { Ref() = static_cast<Value>(v != 0.0f ? 1 : 0); }
+		static bool __stdcall IsFlagOn() { return Ref() != Value{}; }
 
 		static float Default() { return static_cast<float>(Root::Defaults().*Member); }
 	};
@@ -69,16 +125,7 @@ namespace NativeMenu
 	Row Checkbox(const char* label, const char* description = nullptr, SettingIsEnabled isEnabled = nullptr)
 	{
 		using B = Bind<Root, Member>;
-		Row row;
-		row.type = RowType::kCheckbox;
-		row.label = label;
-		row.description = description;
-		row.getValue = &B::GetFlag;
-		row.setValue = &B::SetFlag;
-		row.defaultValue = B::Default();
-		row.isEnabled = isEnabled;
-		row.commit = &CommitAndSave;
-		return row;
+		return Checkbox(label, &B::GetFlag, &B::SetFlag, B::Default(), description, isEnabled);
 	}
 
 	template <class Root, auto Member>
@@ -86,17 +133,7 @@ namespace NativeMenu
 		SettingIsEnabled isEnabled = nullptr)
 	{
 		using B = Bind<Root, Member>;
-		Row row;
-		row.type = RowType::kDropdown;
-		row.label = label;
-		row.description = description;
-		row.getValue = &B::GetValue;
-		row.setValue = &B::SetValue;
-		row.defaultValue = B::Default();
-		row.options = std::move(options);
-		row.isEnabled = isEnabled;
-		row.commit = &CommitAndSave;
-		return row;
+		return Dropdown(label, std::move(options), &B::GetValue, &B::SetValue, B::Default(), description, isEnabled);
 	}
 
 	template <class Root, auto Member>
@@ -104,17 +141,7 @@ namespace NativeMenu
 		SettingFormatValue formatValue = nullptr)
 	{
 		using B = Bind<Root, Member>;
-		Row row;
-		row.type = RowType::kSlider;
-		row.label = label;
-		row.description = description;
-		row.getValue = &B::GetValue;
-		row.setValue = &B::SetValue;
-		row.defaultValue = B::Default();
-		row.isEnabled = isEnabled;
-		row.formatValue = formatValue;
-		row.commit = &CommitAndSave;
-		return row;
+		return Slider(label, &B::GetValue, &B::SetValue, B::Default(), description, isEnabled, formatValue);
 	}
 
 	namespace detail
@@ -153,8 +180,9 @@ namespace NativeMenu
 
 	void RegisterRows(const char* tab, const std::vector<Row>& rows);
 
-	std::vector<Row> UpscalingRows();
 	std::vector<Row> GraphicsRows();
+	std::vector<Row> HDRRows();
+	std::vector<Row> SSGIRows();
 
 	void Register();
 }

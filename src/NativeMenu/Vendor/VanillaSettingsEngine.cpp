@@ -256,8 +256,11 @@ namespace NativeMenu::Vendor::VanillaSettingsEngine
 
 			const auto hook = [&](const char* a_name, RE::FxDelegate::CallbackDefn& a_original,
 								   RE::FxDelegateHandler::CallbackFn* a_replacement) {
-				RE::GString name(a_name);
-				a_fxDelegate->callbacks.Get(name, &a_original);
+				RE::GString                   name(a_name);
+				RE::FxDelegate::CallbackDefn  current{};
+				a_fxDelegate->callbacks.Get(name, &current);
+				if (current.callback != a_replacement)
+					a_original = current;
 				a_fxDelegate->callbacks.Set(name, RE::FxDelegate::CallbackDefn{ a_original.handler, a_replacement });
 			};
 
@@ -1273,10 +1276,6 @@ namespace NativeMenu::Vendor::VanillaSettingsEngine
 		g_showingCustomTab = false;
 		g_rowWidth = 0.0;
 		g_textFieldWidth = 0.0;
-		g_originalOptionChange = {};
-		g_originalRequestGameplay = {};
-		g_originalRequestDisplay = {};
-		g_originalRequestAudio = {};
 	}
 
 	bool AddSetting(std::string a_tab, Type a_type, std::string a_label, std::function<float()> a_getValue,
