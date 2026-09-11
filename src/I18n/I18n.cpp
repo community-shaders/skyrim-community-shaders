@@ -58,10 +58,11 @@ const char* I18n::Get(std::string_view key, const char* defaultText) const
 	{
 		std::shared_lock lock(mutex_);
 
-		// 1. Try current locale
+		// 1. Try current locale -- an empty value means untranslated (Weblate stores it
+		// this way rather than omitting the key), so fall through to English instead.
 		if (!strings_.empty()) {
 			auto it = strings_.find(keyStr);
-			if (it != strings_.end()) {
+			if (it != strings_.end() && !it->second.empty()) {
 				return it->second.c_str();
 			}
 		}
