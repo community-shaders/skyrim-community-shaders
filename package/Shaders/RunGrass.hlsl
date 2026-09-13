@@ -501,7 +501,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	float4 shadowColor = TexShadowMaskSampler.Load(int3(input.HPosition.xy, 0));
 	float dirDetailedShadow = SharedData::InInterior ? 1.0 : shadowColor.x;
-	dirDetailedShadow += ShadowClampValue * (1.0 - dirDetailedShadow);
 #				if defined(SCREEN_SPACE_SHADOWS)
 #					ifdef GRASS_OPTIMIZATIONS
 	if (!SharedData::InInterior && dot(normal, SharedData::DirLightDirection.xyz) >= 0 && input.IsFar <= 0.5)
