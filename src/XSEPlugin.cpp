@@ -198,6 +198,30 @@ bool Load()
 		}
 	}
 
+	const auto path = std::filesystem::path("Data/SKSE/Plugins/SexLabUtil.dll");
+
+	DWORD dummy;
+	const auto size = GetFileVersionInfoSizeW(path.c_str(), &dummy);
+
+	if (size) {
+		std::vector<std::byte> data(size);
+
+		if (GetFileVersionInfoW(path.c_str(), 0, size, data.data())) {
+			VS_FIXEDFILEINFO* info = nullptr;
+			UINT infoSize = 0;
+
+			if (VerQueryValueW(data.data(), L"\\", reinterpret_cast<void**>(&info), &infoSize) && info) {
+				const auto major = HIWORD(info->dwFileVersionMS);
+
+				if (major < 2) {
+					auto errorMessage = std::format("Incompatible version of SexLabUtil.dll detected. Use SexLab P+ instead");
+					logger::error("{}", errorMessage);
+					errors.push_back(errorMessage);
+				}
+			}
+		}
+	}
+
 	auto pushMissingDllError = [&](std::string_view dllName) {
 		auto errorMessage = std::format("Required DLL {} was missing", dllName);
 		logger::error("{}", errorMessage);
