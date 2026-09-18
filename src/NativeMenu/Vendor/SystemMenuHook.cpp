@@ -18,6 +18,7 @@ namespace NativeMenu::Vendor::SystemMenuHook
 		constexpr const char* kSystemPageMember = "__cs_systemPage";
 		constexpr int kInjectionRetryTicks = 150;
 
+		std::atomic<bool> g_sessionActive{ false };
 		std::atomic<bool> g_injected{ false };
 		std::atomic<int>  g_injectTicks{ 0 };
 
@@ -27,7 +28,6 @@ namespace NativeMenu::Vendor::SystemMenuHook
 				a_value.HasMember("MappingList");
 		}
 
-		// BFS for SystemPage by structural signature.
 		bool FindSystemPage(const RE::GFxValue& a_root, RE::GFxValue& a_out, int a_maxDepth)
 		{
 			std::vector<RE::GFxValue> current{ a_root };
@@ -61,7 +61,7 @@ namespace NativeMenu::Vendor::SystemMenuHook
 
 		void Tick(RE::JournalMenu* a_this)
 		{
-			if (!a_this || !a_this->uiMovie)
+			if (!g_sessionActive.load() || !a_this || !a_this->uiMovie)
 				return;
 			auto* view = a_this->uiMovie.get();
 
@@ -97,7 +97,6 @@ namespace NativeMenu::Vendor::SystemMenuHook
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
-		// Reset injection state each time the System menu opens.
 		class JournalSink : public RE::BSTEventSink<RE::MenuOpenCloseEvent>
 		{
 		public:
@@ -110,9 +109,18 @@ namespace NativeMenu::Vendor::SystemMenuHook
 			RE::BSEventNotifyControl ProcessEvent(
 				const RE::MenuOpenCloseEvent* a_event, RE::BSTEventSource<RE::MenuOpenCloseEvent>*) override
 			{
-				if (a_event && a_event->menuName == RE::JournalMenu::MENU_NAME) {
+				if (!a_event || a_event->menuName != RE::JournalMenu::MENU_NAME)
+					return RE::BSEventNotifyControl::kContinue;
+
+				if (a_event->opening) {
+					g_sessionActive.store(true);
 					g_injected.store(false);
-					g_injectTicks.store(a_event->opening ? kInjectionRetryTicks : 0);
+					g_injectTicks.store(kInjectionRetryTicks);
+					VanillaSettingsEngine::Reset();
+				} else {
+					g_sessionActive.store(false);
+					g_injected.store(false);
+					g_injectTicks.store(0);
 					VanillaSettingsEngine::Reset();
 				}
 				return RE::BSEventNotifyControl::kContinue;
