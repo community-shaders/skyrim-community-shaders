@@ -820,7 +820,7 @@ HDRDisplay::D3D12UIBufferMode HDRDisplay::GetD3D12UIBufferMode()
 	if (!globals::features::upscaling.d3d12SwapChainActive)
 		return mode;
 
-	const bool hdrReady = loaded && hdrDataCB && outputTexture;
+	const bool hdrReady = loaded && settings.enableHDR && hdrDataCB && outputTexture;
 	const bool hdrShaderAvailable = hdrReady && GetHDROutputCS() != nullptr;
 
 	mode.useUIBuffer = hdrShaderAvailable || IsFGCompositingThisFrame();
@@ -1089,7 +1089,7 @@ HRESULT HDRDisplay::HandleSwapChainPresent(
 	const std::function<HRESULT(IDXGISwapChain*, UINT, UINT)>& presentChain)
 {
 	const bool frameGenActive = globals::features::upscaling.d3d12SwapChainActive;
-	const bool hdrReady = loaded && hdrDataCB && outputTexture && (settings.enableHDR || frameGenActive);
+	const bool hdrReady = loaded && hdrDataCB && outputTexture && settings.enableHDR;
 
 	D3D11_VIEWPORT savedViewport{};
 	UINT viewportCount = 1;

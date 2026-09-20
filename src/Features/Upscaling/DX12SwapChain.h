@@ -117,8 +117,6 @@ public:
 
 	void SetColorSpace(bool enableHDR);
 
-	void ClearWrappedBuffers();
-
 	// Resources needed by BackgroundBlur when D3D12 swap chain is active
 	struct BlurResources
 	{
