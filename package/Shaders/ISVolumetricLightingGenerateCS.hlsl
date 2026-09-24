@@ -87,9 +87,16 @@ cbuffer PerTechnique : register(b0)
 	float densityFactor = noise * (1 - 0.75 * smoothstep(0, 1, saturate(2 * positionWS.z / 300)));
 	float densityContribution = lerp(1, densityFactor, DensityContribution);
 
-	float LdotN = dot(normalize(-positionWS.xyz), DirLightDirection);
+	float3 viewDirection = normalize(positionWS.xyz);
+
+	float LdotN = dot(-viewDirection, DirLightDirection);
 	float phaseFactor = (1 - PhaseScattering * PhaseScattering) * rcp(4 * Math::PI * (1 - LdotN * PhaseScattering));
 	float phaseContribution = lerp(1, phaseFactor, PhaseContribution);
+
+	float lightAlignment = saturate(dot(viewDirection, SharedData::DirLightDirection.xyz));
+	float godRayContribution = 1;
+	if (SharedData::volumetricLightingSettings.GodRayGain != 0)
+		godRayContribution += SharedData::volumetricLightingSettings.GodRayGain * pow(lightAlignment, SharedData::volumetricLightingSettings.GodRayExponent);
 
 	float shadowContribution = noShadow;
 
@@ -97,7 +104,7 @@ cbuffer PerTechnique : register(b0)
 	shadowContribution *= sqrt(ShadowSampling::GetWorldShadow(positionWS.xyz, PosAdjust));
 #	endif
 
-	float vl = shadowContribution * densityContribution * phaseContribution;
+	float vl = shadowContribution * densityContribution * phaseContribution * godRayContribution;
 
 	DensityRW[dispatchID.xyz] = vl;
 }

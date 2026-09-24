@@ -351,6 +351,13 @@ namespace SharedData
 		float4 wetParams;
 	};
 
+	struct VolumetricLightingSettings
+	{
+		float GodRayGain;
+		float GodRayExponent;
+		float2 pad0;
+	};
+
 	cbuffer FeatureData : register(b6)
 	{
 		GrassLightingSettings grassLightingSettings;
@@ -372,6 +379,7 @@ namespace SharedData
 		ExponentialHeightFogSettings exponentialHeightFogSettings;
 		TruePBRSettings truePBRSettings;
 		SkinData skinData;
+		VolumetricLightingSettings volumetricLightingSettings;
 	};
 
 	Texture2D<float4> DepthTexture : register(t17);

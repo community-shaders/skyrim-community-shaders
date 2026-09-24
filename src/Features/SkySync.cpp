@@ -3,6 +3,7 @@
 #include "RE/B/BSVolumetricLightingRenderData.h"
 
 #include "Utils/Game.h"
+#include "VolumetricLighting.h"
 
 #define I18N_KEY_PREFIX "feature.sky_sync."
 
@@ -184,8 +185,7 @@ void SkySync::PostPostLoad()
 
 	gSunPosition = reinterpret_cast<RE::NiPoint3*>(REL::RelocationID(527924, 414871).address());
 
-	gVolumetricLighting = reinterpret_cast<RE::BSVolumetricLightingRenderData*>(
-		REL::RelocationID(527719, 414629).address() - offsetof(RE::BSVolumetricLightingRenderData, color));
+	gVolumetricLighting = &VolumetricLighting::GetRenderData();
 
 	logger::info("[Sky Sync] Installed hooks");
 }

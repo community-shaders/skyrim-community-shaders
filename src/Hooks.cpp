@@ -325,6 +325,8 @@ namespace WeatherExtensions
 			if (globals::features::effects11.loaded)
 				globals::features::effects11.OnSkyUpdateColors(sky);
 			globals::features::skySync.OnSkyUpdateColors(sky);
+			if (globals::features::volumetricLighting.loaded)
+				globals::features::volumetricLighting.ApplyGodRaySettings();
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
