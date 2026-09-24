@@ -685,7 +685,9 @@ void Skylighting::BSShaderAccumulator_StartGroupingAlphas::GrowPool()
 	constexpr std::size_t poolBytes = POOL_SIZE * sizeof(RE::BSBatchRenderer::GeometryGroup);
 	static SKSE::Trampoline poolMemory{ "Skylighting alpha group pool" };
 	poolMemory.create(poolBytes);
-	const auto pool = reinterpret_cast<std::uintptr_t>(poolMemory.allocate(poolBytes));
+	void* poolData = poolMemory.allocate(poolBytes);
+	std::memset(poolData, 0, poolBytes);  // Trampoline fills with int3, the engine expects a zeroed .bss pool
+	const auto pool = reinterpret_cast<std::uintptr_t>(poolData);
 	for (const auto site : leaSites) {
 		const auto displacement = static_cast<std::intptr_t>(pool) - static_cast<std::intptr_t>(site + LEA_SIZE);
 		assert(displacement >= INT32_MIN && displacement <= INT32_MAX);
