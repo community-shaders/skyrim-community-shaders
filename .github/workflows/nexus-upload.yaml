@@ -35,6 +35,10 @@ on:
 permissions:
     contents: read
 
+env:
+    # Nexus version categories that no longer count as present for the skip/exists checks.
+    NEXUS_UNAVAILABLE_CATEGORIES: archived,removed
+
 jobs:
     prepare-nexus-matrix:
         runs-on: ubuntu-latest
@@ -147,12 +151,55 @@ jobs:
                   with open('nexus-matrix-raw.json') as f:
                       data = json.load(f)
                   for row in data:
+                      # configparser keeps quotes around ini values (e.g. v1.9.0 GrassOptimizations.ini).
+                      if row.get('nexus_mod_id'):
+                          row['nexus_mod_id'] = str(row['nexus_mod_id']).strip().strip('\"')
                       if row.get('name') == 'core':
                           row['changelog'] = body
-                          break
                   with open('nexus-matrix-raw.json', 'w') as f:
                       json.dump(data, f)
                   "
+
+                  # Resolve v3 IDs per run: mod-file IDs change when a file is re-created on Nexus.
+                  python3 << 'PYEOF'
+                  import json, os, urllib.request
+
+                  api_key = os.environ.get('UNEX_APIKEY', '')
+
+                  def get_json(path):
+                      req = urllib.request.Request(f'https://api.nexusmods.com/v3/{path}', headers={
+                          'apikey': api_key,
+                          'User-Agent': 'community-shaders-ci/1.0',
+                          'Accept': 'application/json',
+                      })
+                      with urllib.request.urlopen(req, timeout=15) as resp:
+                          return json.load(resp)
+
+                  with open('nexus-matrix-raw.json') as f:
+                      data = json.load(f)
+                  for row in data:
+                      # Older tags pin file IDs in their inis; those go stale, so always resolve.
+                      row.pop('file_id', None)
+                      label = row.get('mod_filename') or row.get('name', '?')
+                      if not api_key or not row.get('nexus_mod_id'):
+                          continue
+                      try:
+                          row['unique_mod_id'] = get_json(f"games/skyrimspecialedition/mods/{row['nexus_mod_id']}")['data']['id']
+                          mod_files = get_json(f"mods/{row['unique_mod_id']}/files")['data']['mod_files']
+                      except Exception as e:
+                          print(f'::warning title=Nexus ID lookup::{label}: {e}')
+                          continue
+                      active = [f for f in mod_files if f.get('is_active')]
+                      named = [f for f in active if f.get('name', '').casefold() == label.casefold()]
+                      match = named or (active if len(active) == 1 else [])
+                      if len(match) == 1:
+                          row['file_id'] = match[0]['id']
+                      else:
+                          names = ', '.join(repr(f.get('name')) for f in active) or 'none'
+                          print(f"::warning title=Nexus ID lookup::{label}: no single active mod file named {label!r} (active: {names})")
+                  with open('nexus-matrix-raw.json', 'w') as f:
+                      json.dump(data, f)
+                  PYEOF
 
                   python -c "
                   import json, os, fnmatch
@@ -232,6 +279,7 @@ jobs:
               env:
                   RELEASE_TAG: ${{ steps.resolve.outputs.tag }}
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  UNEX_APIKEY: ${{ secrets.UNEX_APIKEY }}
 
     prepare-artifacts:
         needs: prepare-nexus-matrix
@@ -305,30 +353,28 @@ jobs:
             - name: Query Nexus for existing versions
               run: |
                   python3 << 'PYEOF'
-                  import json, os, urllib.request, urllib.error
+                  import json, os, sys, urllib.request, urllib.error
 
                   rows = json.loads(os.environ['UPLOAD_MATRIX']).get('include', [])
                   rows = [r for r in rows if not r.get('skip')]
                   version = os.environ.get('VERSION', '')
                   game_id = os.environ.get('NEXUS_GAME_ID', 'skyrimspecialedition')
                   api_key = os.environ.get('UNEX_APIKEY', '')
+                  unavailable = os.environ['NEXUS_UNAVAILABLE_CATEGORIES'].split(',')
                   summary = open(os.environ['GITHUB_STEP_SUMMARY'], 'a')
 
                   def w(line=''):
                       print(line)
                       summary.write(line + '\n')
 
-                  def resolve_check_files(main, files, override):
-                      # Mirrors the upload-step resolution: an explicit override must
-                      # match an actual MAIN file; multiple MAIN files with no override
-                      # is ambiguous. Both are unresolved rather than silently checked
-                      # against every candidate, which could report a stale/wrong match.
-                      if override:
-                          matched = next((f for f in main if str(f.get('file_id')) == override), None)
-                          return [matched] if matched else None
-                      if len(main) > 1:
-                          return None
-                      return main if main else files
+                  def get_json(api_url):
+                      req = urllib.request.Request(api_url, headers={
+                          'apikey': api_key,
+                          'User-Agent': 'community-shaders-ci/1.0',
+                          'Accept': 'application/json',
+                      })
+                      with urllib.request.urlopen(req, timeout=15) as resp:
+                          return json.load(resp)
 
                   w('## Dry Run — Nexus Version Check')
                   w()
@@ -339,6 +385,7 @@ jobs:
                   w('|---------|---------|--------|-------------------|')
 
                   api_ok = False
+                  failed = []
                   for row in rows:
                       name = row.get('name', '')
                       mod_id = str(row.get('nexus_mod_id', ''))
@@ -347,29 +394,17 @@ jobs:
                       url = f'https://www.nexusmods.com/{game_id}/mods/{mod_id}'
                       link = f'[{label}]({url})'
 
-                      if not api_key or not mod_id:
-                          w(f'| {link} | `{planned}` | ⚠️ skipped | — |')
+                      if not row.get('unique_mod_id') or not row.get('file_id'):
+                          w(f'| {link} | `{planned}` | ❓ unresolved Nexus IDs | — |')
+                          failed.append(label)
                           continue
 
-                      api_url = f'https://api.nexusmods.com/v1/games/{game_id}/mods/{mod_id}/files.json'
-                      req = urllib.request.Request(api_url, headers={
-                          'apikey': api_key,
-                          'User-Agent': 'community-shaders-ci/1.0',
-                          'Accept': 'application/json',
-                      })
                       try:
-                          with urllib.request.urlopen(req, timeout=15) as resp:
-                              data = json.load(resp)
+                          data = get_json(f"https://api.nexusmods.com/v3/mod-files/{row['file_id']}/versions")
                           api_ok = True
-                          files = data.get('files', [])
-                          main = [f for f in files if f.get('category_name') == 'MAIN']
-                          override = str(row.get('file_id') or '').strip()
-                          check = resolve_check_files(main, files, override)
-                          if check is None:
-                              w(f'| {link} | `{planned}` | ❓ unresolved file_id | — |')
-                              continue
                           seen = []
-                          for f in check:
+                          available = [f for f in data['data']['versions'] if f.get('category') not in unavailable]
+                          for f in sorted(available, key=lambda f: f.get('uploaded_at', '')):
                               v = f.get('version', '')
                               if v and v not in seen:
                                   seen.append(v)
@@ -379,8 +414,10 @@ jobs:
                       except urllib.error.HTTPError as e:
                           err = {401: '❌ auth failed', 403: '❌ forbidden'}.get(e.code, f'❌ HTTP {e.code}')
                           w(f'| {link} | `{planned}` | {err} | — |')
+                          failed.append(label)
                       except Exception:
                           w(f'| {link} | `{planned}` | ❌ error | — |')
+                          failed.append(label)
 
                   w()
                   if api_key:
@@ -389,6 +426,9 @@ jobs:
                       else:
                           w('> ⚠️ UNEX_APIKEY may be invalid — all API calls failed.')
                   summary.close()
+                  if failed:
+                      print(f"::error title=Nexus dry run::Real upload would fail for: {', '.join(failed)}")
+                      sys.exit(1)
                   PYEOF
               env:
                   UPLOAD_MATRIX: ${{ needs.prepare-nexus-matrix.outputs.upload_matrix }}
@@ -416,59 +456,26 @@ jobs:
               id: version-check
               env:
                   MOD_ID: ${{ matrix.nexus_mod_id }}
+                  FILE_ID: ${{ matrix.file_id || '' }}
                   VERSION: ${{ matrix.mod_version || needs.prepare-nexus-matrix.outputs.version }}
-                  GAME_ID: skyrimspecialedition
                   API_KEY: ${{ secrets.UNEX_APIKEY }}
-                  OVERRIDE_FILE_ID: ${{ matrix.file_id || '' }}
               run: |
-                  if [ -z "$API_KEY" ] || [ -z "$MOD_ID" ]; then
+                  if [ -z "$API_KEY" ] || [ -z "$FILE_ID" ]; then
                     echo "should_upload=true" >> $GITHUB_OUTPUT
-                    echo "file_id=" >> $GITHUB_OUTPUT
-                    echo "candidates=" >> $GITHUB_OUTPUT
                     exit 0
                   fi
-                  # file_id is resolved from the mod's MAIN-category file — the
-                  # upload-action attaches new versions to an existing file rather
-                  # than a file group. When a mod has more than one MAIN file (e.g.
-                  # optional variants uploaded alongside the primary download), which
-                  # one to bump is ambiguous and is NOT guessed: pin it explicitly via
-                  # `nexusfileid` in the feature's [Nexus] ini section.
-                  RESULT=$(curl -sf \
+                  SHOULD_UPLOAD=$(curl -sf \
                     -H "apikey: $API_KEY" \
                     -H "Accept: application/json" \
-                    "https://api.nexusmods.com/v1/games/$GAME_ID/mods/$MOD_ID/files.json" \
+                    "https://api.nexusmods.com/v3/mod-files/$FILE_ID/versions" \
                     | python3 -c "
                   import json, sys, os
-                  data = json.load(sys.stdin)
-                  files = data.get('files', [])
-                  main = [f for f in files if f.get('category_name') == 'MAIN']
-                  override = os.environ.get('OVERRIDE_FILE_ID', '').strip()
-                  file_id, candidates, check = '', '', main or files
-                  if override:
-                      matched = next((f for f in main if str(f.get('file_id')) == override), None)
-                      if matched:
-                          file_id, check = override, [matched]
-                      else:
-                          candidates = '; '.join(
-                              f\"{f.get('name', '?')} (id {f.get('file_id', '?')}, v{f.get('version', '?')})\"
-                              for f in main)
-                  elif len(main) == 1:
-                      file_id = str(main[0]['file_id'])
-                  elif len(main) > 1:
-                      candidates = '; '.join(
-                          f\"{f.get('name', '?')} (id {f.get('file_id', '?')}, v{f.get('version', '?')})\"
-                          for f in main)
-                  versions = [f.get('version', '') for f in check]
-                  print('true' if os.environ['VERSION'] not in versions else 'false')
-                  print(file_id)
-                  print(candidates)
+                  unavailable = os.environ['NEXUS_UNAVAILABLE_CATEGORIES'].split(',')
+                  versions = [v.get('version', '') for v in json.load(sys.stdin)['data']['versions']
+                              if v.get('category') not in unavailable]
+                  print('false' if os.environ['VERSION'] in versions else 'true')
                   " 2>/dev/null || echo "true")
-                  SHOULD_UPLOAD=$(echo "$RESULT" | sed -n 1p)
-                  FILE_ID=$(echo "$RESULT" | sed -n 2p)
-                  CANDIDATES=$(echo "$RESULT" | sed -n 3p)
                   echo "should_upload=${SHOULD_UPLOAD:-true}" >> $GITHUB_OUTPUT
-                  echo "file_id=$FILE_ID" >> $GITHUB_OUTPUT
-                  echo "candidates=$CANDIDATES" >> $GITHUB_OUTPUT
                   if [ "$SHOULD_UPLOAD" = "false" ]; then
                     echo "Version $VERSION already exists on Nexus for mod $MOD_ID — skipping upload."
                   fi
@@ -502,25 +509,19 @@ jobs:
                     echo 'NEXUS_DESC_EOF'
                   } >> "$GITHUB_OUTPUT"
 
-            - name: Validate file_id
+            - name: Validate Nexus IDs
               if: steps.version-check.outputs.should_upload == 'true'
               env:
-                  FILE_ID: ${{ steps.version-check.outputs.file_id }}
-                  CANDIDATES: ${{ steps.version-check.outputs.candidates }}
+                  FILE_ID: ${{ matrix.file_id || '' }}
+                  UNIQUE_MOD_ID: ${{ matrix.unique_mod_id || '' }}
+                  MOD_ID: ${{ matrix.nexus_mod_id }}
                   MOD_NAME: ${{ matrix.mod_filename }}
               run: |
-                  if [ -n "$FILE_ID" ]; then
-                    exit 0
+                  if [ -z "$FILE_ID" ] || [ -z "$UNIQUE_MOD_ID" ]; then
+                    echo "ERROR: Could not resolve Nexus IDs for '$MOD_NAME' (mod $MOD_ID); see the 'Generate Nexus upload matrix' warnings." >&2
+                    echo "The mod needs exactly one active file named '$MOD_NAME' (the ini's nexusfilename), or a single active file." >&2
+                    exit 1
                   fi
-                  if [ -n "$CANDIDATES" ]; then
-                    echo "ERROR: Could not resolve which Nexus file to attach this version to for '$MOD_NAME'. MAIN-category file(s) on Nexus:" >&2
-                    echo "  $CANDIDATES" >&2
-                    echo "Set 'nexusfileid = <id>' in the feature's [Nexus] ini section to pin the correct file (or fix it if already set)." >&2
-                  else
-                    echo "ERROR: Could not resolve an existing MAIN-category file ID from Nexus for '$MOD_NAME'." >&2
-                    echo "The mod's first file must be uploaded manually via the Nexus website before automated version uploads can attach to it." >&2
-                  fi
-                  exit 1
 
             - name: Upload to Nexus
               id: upload
@@ -529,8 +530,8 @@ jobs:
               uses: Nexus-Mods/upload-action@c96019556046053aa26044b44396cd38929daf23  # v1.0.0-beta.10
               with:
                   api_key: ${{ secrets.UNEX_APIKEY }}
-                  mod_id: ${{ matrix.nexus_mod_id }}
-                  file_id: ${{ steps.version-check.outputs.file_id }}
+                  mod_id: ${{ matrix.unique_mod_id }}
+                  file_id: ${{ matrix.file_id }}
                   filename: ${{ steps.prep.outputs.file }}
                   version: ${{ matrix.mod_version || needs.prepare-nexus-matrix.outputs.version }}
                   display_name: ${{ matrix.mod_filename }}
@@ -544,7 +545,7 @@ jobs:
               env:
                   MOD_NAME: ${{ matrix.mod_filename }}
                   MOD_ID: ${{ matrix.nexus_mod_id }}
-                  FILE_ID: ${{ steps.version-check.outputs.file_id }}
+                  FILE_ID: ${{ matrix.file_id }}
                   VERSION: ${{ matrix.mod_version || needs.prepare-nexus-matrix.outputs.version }}
                   GAME_ID: skyrimspecialedition
                   ARTIFACT_NAME: nexus-upload-${{ matrix.name }}
@@ -606,22 +607,10 @@ jobs:
                   def w(line=''):
                       summary.write(line + '\n')
 
-                  def resolve_check_files(main, files, override):
-                      # Mirrors the upload-step resolution: an explicit override must
-                      # match an actual MAIN file; multiple MAIN files with no override
-                      # is ambiguous. Both are unresolved rather than silently checked
-                      # against every candidate, which could report a stale/wrong match.
-                      if override:
-                          matched = next((f for f in main if str(f.get('file_id')) == override), None)
-                          return [matched] if matched else None
-                      if len(main) > 1:
+                  def nexus_versions(file_id):
+                      if not api_key or not file_id:
                           return None
-                      return main if main else files
-
-                  def nexus_versions(mod_id, override):
-                      if not api_key or not mod_id:
-                          return None
-                      url = f'https://api.nexusmods.com/v1/games/{game_id}/mods/{mod_id}/files.json'
+                      url = f'https://api.nexusmods.com/v3/mod-files/{file_id}/versions'
                       req = urllib.request.Request(url, headers={
                           'apikey': api_key,
                           'User-Agent': 'community-shaders-ci/1.0',
@@ -629,17 +618,9 @@ jobs:
                       })
                       try:
                           with urllib.request.urlopen(req, timeout=15) as resp:
-                              files = json.load(resp).get('files', [])
-                          main = [f for f in files if f.get('category_name') == 'MAIN']
-                          check = resolve_check_files(main, files, override)
-                          if check is None:
-                              return None
-                          seen = []
-                          for f in check:
-                              v = f.get('version', '')
-                              if v and v not in seen:
-                                  seen.append(v)
-                          return seen
+                              unavailable = os.environ['NEXUS_UNAVAILABLE_CATEGORIES'].split(',')
+                              return [v.get('version', '') for v in json.load(resp)['data']['versions']
+                                      if v.get('category') not in unavailable]
                       except Exception:
                           return None
 
@@ -652,8 +633,7 @@ jobs:
                       label = row.get('mod_filename', name)
                       url = f'https://www.nexusmods.com/{game_id}/mods/{mod_id}'
                       artifact = f'nexus-upload-{name}'
-                      override = str(row.get('file_id') or '').strip()
-                      versions = nexus_versions(mod_id, override)
+                      versions = nexus_versions(row.get('file_id'))
                       if versions is None:
                           status, icon = 'unknown', '❓'
                           unknowns.append(label)

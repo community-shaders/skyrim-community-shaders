@@ -1655,6 +1655,11 @@ struct PBR_BSLightingShader_SetupMaterial
 			return;
 		}
 
+		// Vanilla dereferences these unconditionally; they are null when the texture set never loaded or was cleared.
+		if ((material->diffuseRenderTargetSourceIndex == -1 && !material->diffuseTexture) || !material->normalTexture) {
+			return;
+		}
+
 		func(shader, material);
 	}
 	static inline REL::Relocation<decltype(thunk)> func;
