@@ -54,45 +54,28 @@ static constexpr float kTimingTableMetricColumnWidth = 55.0f;
 static constexpr float kTimingTablePercentColumnWidth = 45.0f;
 static constexpr float kStatsRefreshSeconds = 1.0f;
 
-// The column a timing table is sorted by (-1: the order the passes ran in)
-// and its direction, from the table's sort specs.
-struct TimingSort
-{
-	int column = -1;
-	bool descending = false;
-};
-
-static TimingSort ReadTimingSort()
-{
-	TimingSort sort;
-	if (const ImGuiTableSortSpecs* specs = ImGui::TableGetSortSpecs(); specs && specs->SpecsCount > 0) {
-		sort.column = specs->Specs[0].ColumnIndex;
-		sort.descending = specs->Specs[0].SortDirection == ImGuiSortDirection_Descending;
-	}
-	return sort;
-}
-
-// Orders timing rows by the sorted column: 0 = name (case-insensitive),
-// 1-3 = Avg / P95 / P99, 4 = % (the share of the average). Stable, so equal
-// rows keep the order they ran in.
+// Comparators for a timing table's columns: Pass by name (case-insensitive), then
+// Avg / P95 / P99 by value, and % by the average's share, which orders like the
+// average itself. Rows are pointers into the cached entries.
 template <class Row, class NameOf, class MetricsOf>
-static void SortTimingRows(std::vector<const Row*>& a_rows, TimingSort a_sort, NameOf a_nameOf, MetricsOf a_metricsOf)
+static std::vector<Util::TableRowSortFunc<const Row*>> TimingRowSorts(NameOf a_nameOf, MetricsOf a_metricsOf)
 {
-	if (a_sort.column < 0)
-		return;
-	auto less = [&](const Row* a_lhs, const Row* a_rhs) {
-		if (a_sort.column == 0) {
-			return std::ranges::lexicographical_compare(a_nameOf(*a_lhs), a_nameOf(*a_rhs), [](char a_l, char a_r) {
-				return std::tolower(static_cast<unsigned char>(a_l)) < std::tolower(static_cast<unsigned char>(a_r));
+	auto byName = [a_nameOf](const Row* a_lhs, const Row* a_rhs, bool a_ascending) {
+		auto less = [](const std::string& a_l, const std::string& a_r) {
+			return std::ranges::lexicographical_compare(a_l, a_r, [](char a_x, char a_y) {
+				return std::tolower(static_cast<unsigned char>(a_x)) < std::tolower(static_cast<unsigned char>(a_y));
 			});
-		}
-		const size_t metric = std::min<size_t>(static_cast<size_t>(a_sort.column) - 1, 2);
-		const size_t key = a_sort.column == 4 ? 0 : metric;
-		return a_metricsOf(*a_lhs)[key] < a_metricsOf(*a_rhs)[key];
+		};
+		return a_ascending ? less(a_nameOf(*a_lhs), a_nameOf(*a_rhs)) : less(a_nameOf(*a_rhs), a_nameOf(*a_lhs));
 	};
-	std::ranges::stable_sort(a_rows, [&](const Row* a_lhs, const Row* a_rhs) {
-		return a_sort.descending ? less(a_rhs, a_lhs) : less(a_lhs, a_rhs);
-	});
+	auto byMetric = [a_metricsOf](size_t a_index) {
+		return [a_metricsOf, a_index](const Row* a_lhs, const Row* a_rhs, bool a_ascending) {
+			const float l = a_metricsOf(*a_lhs)[a_index];
+			const float r = a_metricsOf(*a_rhs)[a_index];
+			return a_ascending ? l < r : r < l;
+		};
+	};
+	return { byName, byMetric(0), byMetric(1), byMetric(2), byMetric(0) };
 }
 
 struct GraphLayout
@@ -337,14 +320,18 @@ void ProfilingRenderer::RenderStatistics(bool showTable, bool showModeToggle)
 			SetupTimingTableColumns(true);
 			ImGui::TableHeadersRow();
 
-			// Groups sort among themselves and each group's passes within it.
-			const TimingSort sort = ReadTimingSort();
+			// Groups sort among themselves and each group's passes within it. No
+			// active sort (the tristate's third click) keeps the order the passes ran in.
+			const Util::TableSortSpec sort = Util::ReadTableSortSpec();
+			const auto groupSorts = TimingRowSorts<GroupEntry>([](const GroupEntry& a_group) -> const std::string& { return a_group.name; },
+				[](const GroupEntry& a_group) { return std::array{ a_group.totalAvgMs, a_group.totalP95Ms, a_group.totalP99Ms }; });
+			const auto passSorts = TimingRowSorts<PassEntry>([](const PassEntry& a_pass) -> const std::string& { return a_pass.label; },
+				[](const PassEntry& a_pass) { return std::array{ a_pass.avgMs, a_pass.p95Ms, a_pass.p99Ms }; });
 			std::vector<const GroupEntry*> groups;
 			groups.reserve(cachedGroups.size());
 			for (const auto& group : cachedGroups)
 				groups.push_back(&group);
-			SortTimingRows(groups, sort, [](const GroupEntry& a_group) -> const std::string& { return a_group.name; },
-				[](const GroupEntry& a_group) { return std::array{ a_group.totalAvgMs, a_group.totalP95Ms, a_group.totalP99Ms }; });
+			Util::SortTableRows(groups, sort, groupSorts);
 
 			for (const GroupEntry* groupRow : groups) {
 				const auto& group = *groupRow;
@@ -378,8 +365,7 @@ void ProfilingRenderer::RenderStatistics(bool showTable, bool showModeToggle)
 						passes.reserve(group.passes.size());
 						for (const auto& pass : group.passes)
 							passes.push_back(&pass);
-						SortTimingRows(passes, sort, [](const PassEntry& a_pass) -> const std::string& { return a_pass.label; },
-							[](const PassEntry& a_pass) { return std::array{ a_pass.avgMs, a_pass.p95Ms, a_pass.p99Ms }; });
+						Util::SortTableRows(passes, sort, passSorts);
 						for (const PassEntry* passRow : passes) {
 							const auto& pass = *passRow;
 							ImGui::TableNextRow();
@@ -492,8 +478,9 @@ void ProfilingRenderer::RenderFeatureTimers(const std::string& featurePrefix)
 		rows.reserve(entries.size());
 		for (const auto& e : entries)
 			rows.push_back(&e);
-		SortTimingRows(rows, ReadTimingSort(), [](const Entry& a_entry) -> const std::string& { return a_entry.label; },
-			[](const Entry& a_entry) { return std::array{ a_entry.avgMs, a_entry.p95Ms, a_entry.p99Ms }; });
+		Util::SortTableRows(rows, Util::ReadTableSortSpec(),
+			TimingRowSorts<Entry>([](const Entry& a_entry) -> const std::string& { return a_entry.label; },
+				[](const Entry& a_entry) { return std::array{ a_entry.avgMs, a_entry.p95Ms, a_entry.p99Ms }; }));
 
 		for (const Entry* row : rows) {
 			const auto& e = *row;

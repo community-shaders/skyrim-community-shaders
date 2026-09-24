@@ -1392,6 +1392,16 @@ namespace Util
 		ImGui::PopID();
 	}
 
+	TableSortSpec ReadTableSortSpec(int defaultColumn, bool defaultAscending)
+	{
+		TableSortSpec spec{ defaultColumn, defaultAscending };
+		if (const ImGuiTableSortSpecs* sortSpecs = ImGui::TableGetSortSpecs(); sortSpecs && sortSpecs->SpecsCount > 0) {
+			spec.column = sortSpecs->Specs->ColumnIndex;
+			spec.ascending = sortSpecs->Specs->SortDirection == ImGuiSortDirection_Ascending;
+		}
+		return spec;
+	}
+
 	void ShowSortedStringTableStrings(
 		const char* table_id,
 		const std::vector<std::string>& headers,
@@ -1407,22 +1417,15 @@ namespace Util
 				ImGui::TableSetupColumn(header.c_str());
 			ImGui::TableHeadersRow();
 
-			// Determine sorting
-			int sortCol = static_cast<int>(sortColumn);
-			bool sortAsc = ascending;
-			if (const ImGuiTableSortSpecs* sortSpecs = ImGui::TableGetSortSpecs()) {
-				if (sortSpecs->SpecsCount > 0) {
-					sortCol = sortSpecs->Specs->ColumnIndex;
-					sortAsc = sortSpecs->Specs->SortDirection == ImGuiSortDirection_Ascending;
-				}
-			}
+			const TableSortSpec spec = ReadTableSortSpec(static_cast<int>(sortColumn), ascending);
 
 			// Make a copy if sorting is needed
 			std::vector<std::vector<std::string>> sortedRows = rows;
-			if (sortCol >= 0 && static_cast<size_t>(sortCol) < headers.size()) {
+			if (spec.column >= 0 && static_cast<size_t>(spec.column) < headers.size()) {
 				// Fallback to default string sort if no custom sort is provided
-				auto cmp = (sortCol < static_cast<int>(customSorts.size()) && customSorts[sortCol]) ? customSorts[sortCol] : StringSortComparator;
-				std::sort(sortedRows.begin(), sortedRows.end(), [sortCol, sortAsc, &cmp](const std::vector<std::string>& a, const std::vector<std::string>& b) {
+				auto cmp = (spec.column < static_cast<int>(customSorts.size()) && customSorts[spec.column]) ? customSorts[spec.column] : StringSortComparator;
+				const size_t sortCol = static_cast<size_t>(spec.column);
+				SortTableRowsWith<std::vector<std::string>>(sortedRows, spec, [sortCol, &cmp](const std::vector<std::string>& a, const std::vector<std::string>& b, bool sortAsc) {
 					const std::string& aVal = (sortCol < a.size()) ? a[sortCol] : std::string();
 					const std::string& bVal = (sortCol < b.size()) ? b[sortCol] : std::string();
 					return cmp(aVal, bVal, sortAsc);

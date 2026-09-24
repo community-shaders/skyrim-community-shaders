@@ -1250,21 +1250,12 @@ void PerformanceOverlay::DrawABTestSection(const std::vector<DrawCallRow>& allRo
 
 				// Sort the settings diff if needed
 				std::vector<SettingsDiffEntry> sortedDiff = this->settingsDiff;
-				if (const ImGuiTableSortSpecs* sortSpecs = ImGui::TableGetSortSpecs()) {
-					if (sortSpecs->SpecsCount > 0) {
-						int sortCol = sortSpecs->Specs->ColumnIndex;
-						bool sortAsc = sortSpecs->Specs->SortDirection == ImGuiSortDirection_Ascending;
-						std::sort(sortedDiff.begin(), sortedDiff.end(), [sortCol, sortAsc](const SettingsDiffEntry& a, const SettingsDiffEntry& b) {
-							if (sortCol == 0)
-								return sortAsc ? (a.path < b.path) : (a.path > b.path);
-							if (sortCol == 1)
-								return sortAsc ? (a.aValue < b.aValue) : (a.aValue > b.aValue);
-							if (sortCol == 2)
-								return sortAsc ? (a.bValue < b.bValue) : (a.bValue > b.bValue);
-							return false;
-						});
-					}
-				}
+				static const std::vector<Util::TableRowSortFunc<SettingsDiffEntry>> diffSorts = {
+					[](const SettingsDiffEntry& a, const SettingsDiffEntry& b, bool asc) { return asc ? (a.path < b.path) : (a.path > b.path); },
+					[](const SettingsDiffEntry& a, const SettingsDiffEntry& b, bool asc) { return asc ? (a.aValue < b.aValue) : (a.aValue > b.aValue); },
+					[](const SettingsDiffEntry& a, const SettingsDiffEntry& b, bool asc) { return asc ? (a.bValue < b.bValue) : (a.bValue > b.bValue); },
+				};
+				Util::SortTableRows(sortedDiff, Util::ReadTableSortSpec(0, true), diffSorts);
 				for (const auto& entry : sortedDiff) {
 					ImGui::TableNextRow();
 					ImGui::TableSetColumnIndex(0);

@@ -589,6 +589,44 @@ namespace Util
 	// Table sort function for string columns
 	using TableSortFunc = std::function<bool(const std::string&, const std::string&, bool)>;
 	using TableCellRenderFunc = std::function<void(int row, int col, const std::string& value)>;
+	/** @brief Row comparator for one column of a sortable table: (a, b, ascending) -> a before b. */
+	template <typename T>
+	using TableRowSortFunc = std::function<bool(const T&, const T&, bool)>;
+
+	/** @brief The column a sortable table is sorted by and the direction. column -1 = leave the rows as they are. */
+	struct TableSortSpec
+	{
+		int column = -1;
+		bool ascending = true;
+	};
+
+	/**
+	 * @brief Reads the current table's sort specs (between BeginTable and EndTable).
+	 * Falls back to the defaults when the table has no active sort: a table that is not
+	 * sortable, or a tristate one the user has un-sorted. Pass -1 to leave the rows as they are then.
+	 */
+	TableSortSpec ReadTableSortSpec(int defaultColumn = -1, bool defaultAscending = true);
+
+	/** @brief Stable-sorts rows with one comparator, unless the spec says to leave them as they are. */
+	template <typename T>
+	void SortTableRowsWith(std::vector<T>& rows, const TableSortSpec& spec, const TableRowSortFunc<T>& comparator)
+	{
+		if (spec.column < 0 || !comparator)
+			return;
+		const bool ascending = spec.ascending;
+		std::stable_sort(rows.begin(), rows.end(), [&comparator, ascending](const T& a, const T& b) {
+			return comparator(a, b, ascending);
+		});
+	}
+
+	/** @brief Stable-sorts rows by the spec's column with that column's comparator; a column without one leaves the rows as they are. */
+	template <typename T>
+	void SortTableRows(std::vector<T>& rows, const TableSortSpec& spec, const std::vector<TableRowSortFunc<T>>& customSorts)
+	{
+		if (spec.column < 0 || static_cast<size_t>(spec.column) >= customSorts.size())
+			return;
+		SortTableRowsWith(rows, spec, customSorts[spec.column]);
+	}
 
 	/**
 	 * Renders a sortable ImGui table for string tables (vector<vector<string>>).
@@ -650,23 +688,7 @@ namespace Util
 			}
 			ImGui::TableHeadersRow();
 
-			// Interactive sorting
-			int sortCol = static_cast<int>(sortColumn);
-			bool sortAsc = ascending;
-			if (const ImGuiTableSortSpecs* sortSpecs = ImGui::TableGetSortSpecs()) {
-				if (sortSpecs->SpecsCount > 0) {
-					sortCol = sortSpecs->Specs->ColumnIndex;
-					sortAsc = sortSpecs->Specs->SortDirection == ImGuiSortDirection_Ascending;
-				}
-			}
-			if (sortCol >= 0 && static_cast<size_t>(sortCol) < headers.size()) {
-				if (sortCol < static_cast<int>(customSorts.size()) && customSorts[sortCol]) {
-					auto cmp = customSorts[sortCol];
-					std::sort(rows.begin(), rows.end(), [sortCol, sortAsc, &cmp](const T& a, const T& b) {
-						return cmp(a, b, sortAsc);
-					});
-				}
-			}
+			SortTableRows(rows, ReadTableSortSpec(static_cast<int>(sortColumn), ascending), customSorts);
 
 			// Render main (sorted) rows
 			for (size_t rowIdx = 0; rowIdx < rows.size(); ++rowIdx) {
@@ -1382,23 +1404,7 @@ namespace Util
 			}
 			ImGui::TableHeadersRow();
 
-			// Interactive sorting
-			int sortCol = static_cast<int>(sortColumn);
-			bool sortAsc = ascending;
-			if (const ImGuiTableSortSpecs* sortSpecs = ImGui::TableGetSortSpecs()) {
-				if (sortSpecs->SpecsCount > 0) {
-					sortCol = sortSpecs->Specs->ColumnIndex;
-					sortAsc = sortSpecs->Specs->SortDirection == ImGuiSortDirection_Ascending;
-				}
-			}
-			if (sortCol >= 0 && static_cast<size_t>(sortCol) < columns.size()) {
-				if (sortCol < static_cast<int>(customSorts.size()) && customSorts[sortCol]) {
-					auto cmp = customSorts[sortCol];
-					std::sort(filteredRows.begin(), filteredRows.end(), [sortCol, sortAsc, &cmp](const T& a, const T& b) {
-						return cmp(a, b, sortAsc);
-					});
-				}
-			}
+			SortTableRows(filteredRows, ReadTableSortSpec(static_cast<int>(sortColumn), ascending), customSorts);
 
 			// Render rows with input event support
 			for (size_t rowIdx = 0; rowIdx < filteredRows.size(); ++rowIdx) {
