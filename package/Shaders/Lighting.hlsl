@@ -867,6 +867,10 @@ float GetSnowParameterY(float texProjTmp, float alpha)
 #		include "Common/LightingLandscape.hlsli"
 #	endif
 
+#	if defined(SNOW_DEFORMATION) && defined(LANDSCAPE)
+#		include "SnowDeformation/SnowDeformation.hlsli"
+#	endif
+
 #	if defined(TERRAIN_VARIATION) && !(defined(LOD) || defined(SKIN) || defined(HAIR) || defined(EYE) || defined(TREE_ANIM) || defined(LODOBJECTSHD) || defined(LODOBJECTS) || defined(DEPTH_WRITE_DECALS))
 #		define TERRAIN_VARIATION_MESH
 #	endif
@@ -1383,6 +1387,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	normal = float4(blendedNormalRGB, blendedNormalAlpha);
 #		if defined(TRUE_PBR)
 	rawRMAOS = blendedRMAOS;
+#		endif
+
+#		if defined(SNOW_DEFORMATION)
+	SnowDeformation::DebugLandOverlay(baseColor.xyz, input.WorldPosition.xy, input.LandBlendWeights1, input.LandBlendWeights2.xy);
 #		endif
 #	else  // Non-landscape code
 	float4 rawBaseColor;
