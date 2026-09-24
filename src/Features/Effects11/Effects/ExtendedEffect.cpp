@@ -339,10 +339,9 @@ void ExtendedEffect::SyncWeatherVarFromUI(size_t index, uint32_t weatherID)
 			values[key] = value;
 	}
 
-	auto& dirty = dirtyWeatherFiles[entry->fileName];
-	dirty.weatherID = weatherID;
+	auto& dirtyKeys = dirtyWeatherFiles[entry->fileName];
 	for (const auto& [key, value] : updates)
-		dirty.keys.insert(key);
+		dirtyKeys[key] = weatherID;
 }
 
 void ExtendedEffect::SaveWeatherOverrides()
@@ -353,19 +352,18 @@ void ExtendedEffect::SaveWeatherOverrides()
 	std::string section = GetName();
 	std::transform(section.begin(), section.end(), section.begin(), ::toupper);
 
-	for (const auto& [fileName, dirty] : dirtyWeatherFiles) {
-		auto valuesIt = weatherData.find(dirty.weatherID);
-		if (valuesIt == weatherData.end())
-			continue;
-
+	for (const auto& [fileName, dirtyKeys] : dirtyWeatherFiles) {
 		std::string filePath = (PresetManager::GetSingleton().GetENBSeriesPath() / fileName).string();
-		for (const auto& key : dirty.keys) {
+		for (const auto& [key, sourceWeatherID] : dirtyKeys) {
+			auto valuesIt = weatherData.find(sourceWeatherID);
+			if (valuesIt == weatherData.end())
+				continue;
 			auto it = valuesIt->second.find(key);
 			if (it != valuesIt->second.end() && !WritePrivateProfileStringA(section.c_str(), key.c_str(), it->second.c_str(), filePath.c_str()))
 				logger::warn("[EFFECTS11] Failed to write key '{}' to weather file '{}'", key, filePath);
 		}
 		WritePrivateProfileStringA(NULL, NULL, NULL, filePath.c_str());
-		logger::info("[EFFECTS11] Saved {} weather override(s) to '{}' for effect '{}'", dirty.keys.size(), filePath, GetName());
+		logger::info("[EFFECTS11] Saved {} weather override(s) to '{}' for effect '{}'", dirtyKeys.size(), filePath, GetName());
 	}
 
 	dirtyWeatherFiles.clear();

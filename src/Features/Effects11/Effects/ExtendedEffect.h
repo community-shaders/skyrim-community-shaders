@@ -27,12 +27,10 @@ private:
 	using WeatherValues = std::unordered_map<std::string, std::string>;
 	std::unordered_map<uint32_t, WeatherValues> weatherData;
 
-	struct DirtyWeatherFile
-	{
-		uint32_t weatherID = 0;
-		std::unordered_set<std::string> keys;
-	};
-	std::unordered_map<std::string, DirtyWeatherFile> dirtyWeatherFiles;
+	/** @brief Dirty ini keys per weather file, each mapped to the weather ID whose values it was edited under.
+		Several weatherlist sections may share one FileName, so the source weather is tracked per key. */
+	using DirtyWeatherKeys = std::unordered_map<std::string, uint32_t>;
+	std::unordered_map<std::string, DirtyWeatherKeys> dirtyWeatherFiles;
 
 	std::unordered_map<std::string, int> bindingCache;
 

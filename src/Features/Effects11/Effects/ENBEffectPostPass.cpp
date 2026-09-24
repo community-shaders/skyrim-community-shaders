@@ -32,6 +32,12 @@ void ENBEffectPostPass::UpdateEffectVariables()
 
 void ENBEffectPostPass::CreateEffectTextures()
 {
-	auto* graphicsState = globals::game::graphicsState;
-	effectTextureCache["TextureScratch"] = CreateTexture(graphicsState->screenWidth, graphicsState->screenHeight, DXGI_FORMAT_R10G10B10A2_UNORM, "ENBEffectPostPass::TextureScratch");
+	// Match TextureSDRTemp exactly, since Execute copies the scratch result into it with CopyResource
+	auto* textureSDRTemp = TextureManager::GetSingleton().GetCommonTexture("TextureSDRTemp");
+	if (!textureSDRTemp || !textureSDRTemp->texture)
+		return;
+
+	D3D11_TEXTURE2D_DESC desc;
+	textureSDRTemp->texture->GetDesc(&desc);
+	effectTextureCache["TextureScratch"] = CreateTexture(desc.Width, desc.Height, desc.Format, "ENBEffectPostPass::TextureScratch");
 }

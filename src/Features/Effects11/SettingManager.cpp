@@ -5,6 +5,7 @@
 #include <Windows.h>
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <filesystem>
 #include <string>
 #include <tuple>
@@ -40,7 +41,8 @@ static bool TryParseFloat(const std::string& a_value, float& a_out)
 				return false;
 			}
 		}
-		return true;
+		// stof accepts "nan"/"inf", and std::clamp lets NaN through
+		return std::isfinite(a_out);
 	} catch (...) {
 		return false;
 	}
