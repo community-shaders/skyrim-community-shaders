@@ -1370,7 +1370,7 @@
     "feature.skylighting.rebuild_tooltip": "Changes below require rebuilding, a loading screen, or moving away from the current location to apply.",
     "feature.skylighting.specular_min_visibility": "Specular Min Visibility",
     "feature.snow_deformation.clear": "Clear Deformation Map",
-    "feature.snow_deformation.debug_hint": "White = compressed snow. The map follows the camera.",
+    "feature.snow_deformation.debug_hint": "White = compressed snow. The map is stored wrapped around: it scrolls with the camera and wraps at the edges.",
     "feature.snow_deformation.debug_options": "Debugging Options",
     "feature.snow_deformation.debug_overlay": "Debug Terrain Overlay",
     "feature.snow_deformation.debug_overlay_tooltip": "Paints diagnostics on terrain: red = outside deformation window, green = deformation, blue = detected snow.",

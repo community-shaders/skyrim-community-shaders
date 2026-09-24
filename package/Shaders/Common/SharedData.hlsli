@@ -358,7 +358,8 @@ namespace SharedData
 		uint EnableSnowDeformation;
 
 		uint DebugTerrainOverlay;
-		float3 padSnow;
+		int2 MapOrigin;  // physical texel of the window's logical (0,0)
+		float padSnow;
 	};
 
 	cbuffer FeatureData : register(b6)

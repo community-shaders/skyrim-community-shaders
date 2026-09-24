@@ -33,7 +33,7 @@ void SnowDeformation::DrawSettings()
 		if (ImGui::TreeNodeEx(T(TKEY("debug_options"), "Debugging Options"), ImGuiTreeNodeFlags_Framed)) {
 			ImGui::Checkbox(T(TKEY("show_debug"), "Show Deformation Map"), &settings.ShowDebugTexture);
 			if (settings.ShowDebugTexture) {
-				ImGui::Text("%s", T(TKEY("debug_hint"), "White = compressed snow. The map follows the camera."));
+				ImGui::Text("%s", T(TKEY("debug_hint"), "White = compressed snow. The map is stored wrapped around: it scrolls with the camera and wraps at the edges."));
 				if (auto* deformationSRV = GetDeformationSRV())
 					ImGui::Image(deformationSRV, { 512.0f, 512.0f });
 			}

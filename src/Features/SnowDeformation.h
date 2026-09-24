@@ -27,8 +27,9 @@ public:
 	};
 
 	// Square world-space deformation window following the camera in whole-texel
-	// steps. Texel value = normalized depression depth, 0 = untouched snow,
-	// 1 = compressed to the ground. World size is runtime (deformWorldSize),
+	// steps, stored toroidally (physical texel = world texel masked by dim - 1).
+	// Texel value = normalized depression depth, 0 = untouched snow, 1 =
+	// compressed to the ground. World size is runtime (deformWorldSize),
 	// resolution is fixed, so trench detail coarsens with range.
 	static constexpr uint kTextureDim = 2048;
 	static constexpr uint kMaxStamps = 128;
@@ -58,7 +59,9 @@ public:
 		uint EnableSnowDeformation;
 
 		uint DebugTerrainOverlay;
-		float3 padSnow;
+		/** @brief Physical texel of the window's logical (0,0) in the toroidal map. */
+		DirectX::XMINT2 MapOrigin;
+		float padSnow;
 	};
 	STATIC_ASSERT_ALIGNAS_16(SettingsGPU);
 
@@ -75,16 +78,22 @@ public:
 	struct alignas(16) PerFrame
 	{
 		float2 WindowOrigin;
-		DirectX::XMINT2 ScrollDelta;
+		DirectX::XMINT2 MapOrigin;
 
 		float TexelSize;
 		uint StampCount;
 		float RefillAmount;
-		uint ClearMap;
+		uint RefillRowStart;
+
+		/** @brief Logical rects (x0, y0, w, h) the scroll or a clear reassigned; RingCS zeroes them. */
+		DirectX::XMINT4 RingRects[2];
+		uint RingTotalTexels;
+		uint RefillRowCount;
+		uint pad[2];
 
 		/** @brief Per stamp: xy capsule segment end (current position), z depth, w 1 / radius^2. */
 		float4 Stamps[kMaxStamps];
-		/** @brief Capsule segment start per stamp (the stamped shape's previous position). */
+		/** @brief Per stamp: xy capsule segment start (the shape's previous position), z radius. */
 		float4 StampEnds[kMaxStamps];
 	};
 	STATIC_ASSERT_ALIGNAS_16(PerFrame);
@@ -92,28 +101,32 @@ public:
 	Settings settings;
 
 	ConstantBuffer* perFrame = nullptr;
-	Texture2D* deformationTextures[2] = { nullptr, nullptr };
-	uint currentTexture = 0;
+	/** @brief The deformation map, toroidal and updated in place. */
+	Texture2D* deformationTexture = nullptr;
 
-	/** @brief SRV of the most recently written deformation map, for shader sampling and debug UI. */
-	ID3D11ShaderResourceView* GetDeformationSRV() const { return deformationTextures[currentTexture] ? deformationTextures[currentTexture]->srv.get() : nullptr; }
+	/** @brief SRV of the deformation map, for shader sampling and debug UI. */
+	ID3D11ShaderResourceView* GetDeformationSRV() const { return deformationTexture ? deformationTexture->srv.get() : nullptr; }
 	/** @brief World XY of the corner of texel (0,0) of the current deformation window. */
 	float2 GetWindowOrigin() const { return windowOrigin; }
 
-	/** @brief Creates the ping-pong deformation textures and the per-frame constant buffer. */
+	/** @brief Creates the deformation map, the stamp tile list and the per-frame constant buffer. */
 	virtual void SetupResources() override;
 
 	/**
-	 * @brief Per-frame update: gathers actor stamp positions, scrolls the window
-	 * to follow the camera, and dispatches the deformation update compute shader.
+	 * @brief Per-frame update: gathers stamps, then clears the texels the window
+	 * scrolled onto, refills one band of rows and applies the stamps, each only
+	 * where there is work.
 	 */
 	virtual void Prepass() override;
 
-	/** @brief Returns the deformation update compute shader, compiling it on first use. */
-	ID3D11ComputeShader* GetDeformationUpdateCS();
-	ID3D11ComputeShader* deformationUpdateCS = nullptr;
-	/** @brief Set when the compile fails, so it is not retried every frame; cleared by ClearShaderCache. */
-	bool deformationUpdateCSFailed = false;
+	/** @brief Compiles the update passes on first use; false while they are unavailable. */
+	bool EnsureUpdateShaders();
+	ID3D11ComputeShader* ringCS = nullptr;
+	ID3D11ComputeShader* refillCS = nullptr;
+	ID3D11ComputeShader* stampCS = nullptr;
+	ID3D11ComputeShader* stampAllCS = nullptr;
+	/** @brief Set when a compile fails, so it is not retried every frame; cleared by ClearShaderCache. */
+	bool updateShadersFailed = false;
 	virtual void ClearShaderCache() override;
 
 	/** @brief Draws the ImGui settings UI, including the debug view of the deformation map. Implemented in SnowDeformation/Menu.cpp. */
@@ -153,13 +166,31 @@ protected:
 	std::shared_mutex snowMaskMutex;
 
 	float2 windowOrigin = { 0, 0 };
+	/** @brief World texel index of the window's logical (0,0); its low bits are the physical origin. */
+	DirectX::XMINT2 windowOriginTexel = { 0, 0 };
+	DirectX::XMINT2 mapOrigin = { 0, 0 };
 	DirectX::XMINT2 pendingScrollDelta = { 0, 0 };
 	bool clearRequested = true;
 
-	/** @brief Smallest refill applied in one dispatch: two R16F steps just below 1.0, so it always moves a stored value. */
+	/** @brief Smallest refill applied in one sweep: two R16F steps just below 1.0, so it always moves a stored value. */
 	static constexpr float kRefillStep = 1.0f / 1024.0f;
-	/** @brief Refill accumulated since the last dispatch that applied any. */
+	/** @brief A refill sweep covers the map in this many bands of rows, one band per frame. */
+	static constexpr uint kRefillBands = 32;
+	/** @brief Refill accumulated since the last sweep started. */
 	float refillBank = 0.0f;
+	/** @brief Refill every texel receives in the running sweep. */
+	float refillSweepAmount = 0.0f;
+	/** @brief Next band of the running sweep; -1 when no sweep runs. */
+	int refillBand = -1;
+
+	/** @brief Stamp-pass tile list capacity; past it the pass covers the whole map. */
+	static constexpr uint kStampTileCap = 8192;
+	winrt::com_ptr<ID3D11Buffer> stampTileBuffer;
+	winrt::com_ptr<ID3D11ShaderResourceView> stampTileSRV;
+	std::vector<uint32_t> stampTiles;
+	std::vector<uint32_t> stampTileBits;
+	/** @brief Fills stampTiles with the physical 8x8 tiles the stamps touch; false on overflow. */
+	bool BuildStampTiles(const PerFrame& a_data);
 
 	// ---- Runtime render-distance state (driven by the Range* settings) ----
 	/** @brief Deformation window world size (2x the Trenches range). Changing it clears the map. */
@@ -175,8 +206,42 @@ protected:
 	/** @brief Trail history per collision shape: key = (formID << 16) | traversal index. */
 	std::unordered_map<uint64_t, float2> stampPrevPositions;
 
-	/** @brief Last 3D-root position per loose prop (formID), rebuilt every frame from the in-range scan. The position gate runs before any collision traversal, so resting clutter costs one hash lookup per frame. */
-	std::unordered_map<uint32_t, RE::NiPoint3> propPrevPositions;
+	/** @brief An actor's collision shapes in skeleton-walk order, with their radii. */
+	struct ActorShapes
+	{
+		struct Shape
+		{
+			RE::NiPointer<RE::bhkNiCollisionObject> object;
+			float radius = 0.0f;
+		};
+		RE::NiPointer<RE::NiAVObject> root;
+		uint32_t builtFrame = 0;
+		uint32_t seenFrame = 0;
+		std::vector<Shape> shapes;
+	};
+	/** @brief Frames an actor's cached shapes live before the skeleton is walked again. */
+	static constexpr uint32_t kActorShapeCacheFrames = 30;
+	std::unordered_map<uint32_t, ActorShapes> actorShapeCache;
+	uint32_t gatherFrame = 0;
+
+	/** @brief GatherStamps' per-frame working sets, cleared rather than rebuilt each frame. */
+	std::unordered_map<uint64_t, float2> stampAnchorScratch;
+	std::unordered_set<uint32_t> anchoredRefScratch;
+
+	/** @brief Last moving 3D-root position per loose prop (formID), and the scan cycle it was last seen in. */
+	struct PropAnchor
+	{
+		RE::NiPoint3 pos;
+		uint32_t cycle = 0;
+	};
+	std::unordered_map<uint32_t, PropAnchor> propPrevPositions;
+	/** @brief Frames it takes to walk every cell in range once. */
+	static constexpr uint32_t kPropScanInterval = 6;
+	uint32_t propScanFrame = 0;
+	uint32_t propScanCycle = 0;
+	std::vector<RE::TESObjectCELL*> propScanCells;
+	/** @brief Props found moving in each slice's walk, revisited every frame until that slice is walked again. */
+	std::vector<RE::ObjectRefHandle> propScanMovers[kPropScanInterval];
 
 	/** @brief Stillness latch per corpse (formID). Once settled, only a large accumulated displacement (dragging, explosions) wakes it, so ragdoll micro-drift cannot re-trench under a buried corpse. Erased when the actor is seen alive again. */
 	struct CorpseRest

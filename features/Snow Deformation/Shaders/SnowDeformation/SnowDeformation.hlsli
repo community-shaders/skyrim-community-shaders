@@ -1,8 +1,8 @@
 // Snow deformation sampling for the lighting pixel shader.
 //
-// The deformation map is a world-space window (absolute coordinates) around
-// the camera, produced each frame by DeformationUpdateCS. Texel value is
-// normalized depression depth: 0 = untouched snow, 1 = compressed to ground.
+// The deformation map is a toroidal world-space window around the camera,
+// updated by DeformationUpdateCS. Texel value is normalized depression depth:
+// 0 = untouched snow, 1 = compressed to ground.
 
 namespace SnowDeformation
 {
@@ -14,6 +14,29 @@ namespace SnowDeformation
 	float2 GetDeformationUV(float2 absWorldXY)
 	{
 		return (absWorldXY - SharedData::snowDeformationSettings.WindowOrigin) * SharedData::snowDeformationSettings.InvWorldSize;
+	}
+
+	// Bilinear at fractional logical texel coordinates. Loads, not a sampler:
+	// the map is toroidal, and a sampler would filter across the physical wrap
+	// seam. Clamped logically first (the map border is the window border),
+	// then each tap is masked to its physical texel.
+	float DeformBilinear(float2 t)
+	{
+		t = clamp(t, 0.0, MapDim - 1.001);
+		const int2 t0 = (int2)t;
+		const float2 f = t - t0;
+		const int2 t1 = min(t0 + 1, int(MapDim) - 1);
+
+		const int2 mask = int(MapDim) - 1;
+		const int2 origin = SharedData::snowDeformationSettings.MapOrigin;
+		const int2 q0 = (t0 + origin) & mask;
+		const int2 q1 = (t1 + origin) & mask;
+
+		const float s00 = DeformationMap.Load(int3(q0.x, q0.y, 0));
+		const float s10 = DeformationMap.Load(int3(q1.x, q0.y, 0));
+		const float s01 = DeformationMap.Load(int3(q0.x, q1.y, 0));
+		const float s11 = DeformationMap.Load(int3(q1.x, q1.y, 0));
+		return lerp(lerp(s00, s10, f.x), lerp(s01, s11, f.x), f.y);
 	}
 
 	float GetDeformation(float2 absWorldXY)
@@ -43,13 +66,13 @@ namespace SnowDeformation
 
 			float2 g0 = w0 + w1;
 			float2 g1 = w2 + w3;
-			float2 h0 = (i + 0.5 - 1.0 + w1 / g0) / MapDim;
-			float2 h1 = (i + 0.5 + 1.0 + w3 / g1) / MapDim;
+			float2 h0 = i - 1.0 + w1 / g0;
+			float2 h1 = i + 1.0 + w3 / g1;
 
-			float s00 = DeformationMap.SampleLevel(SampColorSampler, float2(h0.x, h0.y), 0);
-			float s10 = DeformationMap.SampleLevel(SampColorSampler, float2(h1.x, h0.y), 0);
-			float s01 = DeformationMap.SampleLevel(SampColorSampler, float2(h0.x, h1.y), 0);
-			float s11 = DeformationMap.SampleLevel(SampColorSampler, float2(h1.x, h1.y), 0);
+			float s00 = DeformBilinear(float2(h0.x, h0.y));
+			float s10 = DeformBilinear(float2(h1.x, h0.y));
+			float s01 = DeformBilinear(float2(h0.x, h1.y));
+			float s11 = DeformBilinear(float2(h1.x, h1.y));
 
 			deformation = (g0.y * (g0.x * s00 + g1.x * s10) + g1.y * (g0.x * s01 + g1.x * s11)) * border;
 		}
