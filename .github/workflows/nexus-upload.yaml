@@ -149,7 +149,7 @@ jobs:
                   body = re.split(r'^-{3,}[ \t]*$', body, maxsplit=1, flags=re.M)[0]
                   # Nexus renders plain text: drop the version/date heading, PR/commit links and markdown markers.
                   body = re.sub(r'^#+ \[\d.*$', '', body, flags=re.M)
-                  body = re.sub(r'(, closes \[[^\]]+\]\([^)]+\))+| \(\[[^\]]+\]\([^)]+\)\)', '', body)
+                  body = re.sub(r'(, closes \[[^\]]+\]\([^)]+\))+| \(\[(#\d+|[0-9a-f]{7})\]\([^)]+\)\)', '', body)
                   body = re.sub(r'^#+ ', '', body, flags=re.M).replace('**', '')
                   body = re.sub(r'\n{3,}', '\n\n', body).strip()
                   with open('nexus-matrix-raw.json') as f:
