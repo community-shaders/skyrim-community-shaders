@@ -1,6 +1,8 @@
 #include "ProfilingRenderer.h"
 
 #include <algorithm>
+#include <array>
+#include <cctype>
 #include <cmath>
 #include <unordered_map>
 #include <imgui.h>
@@ -51,6 +53,47 @@ static constexpr float kFeatureGraphMinFrameTimeSec = 0.00001f;
 static constexpr float kTimingTableMetricColumnWidth = 55.0f;
 static constexpr float kTimingTablePercentColumnWidth = 45.0f;
 static constexpr float kStatsRefreshSeconds = 1.0f;
+
+// The column a timing table is sorted by (-1: the order the passes ran in)
+// and its direction, from the table's sort specs.
+struct TimingSort
+{
+	int column = -1;
+	bool descending = false;
+};
+
+static TimingSort ReadTimingSort()
+{
+	TimingSort sort;
+	if (const ImGuiTableSortSpecs* specs = ImGui::TableGetSortSpecs(); specs && specs->SpecsCount > 0) {
+		sort.column = specs->Specs[0].ColumnIndex;
+		sort.descending = specs->Specs[0].SortDirection == ImGuiSortDirection_Descending;
+	}
+	return sort;
+}
+
+// Orders timing rows by the sorted column: 0 = name (case-insensitive),
+// 1-3 = Avg / P95 / P99, 4 = % (the share of the average). Stable, so equal
+// rows keep the order they ran in.
+template <class Row, class NameOf, class MetricsOf>
+static void SortTimingRows(std::vector<const Row*>& a_rows, TimingSort a_sort, NameOf a_nameOf, MetricsOf a_metricsOf)
+{
+	if (a_sort.column < 0)
+		return;
+	auto less = [&](const Row* a_lhs, const Row* a_rhs) {
+		if (a_sort.column == 0) {
+			return std::ranges::lexicographical_compare(a_nameOf(*a_lhs), a_nameOf(*a_rhs), [](char a_l, char a_r) {
+				return std::tolower(static_cast<unsigned char>(a_l)) < std::tolower(static_cast<unsigned char>(a_r));
+			});
+		}
+		const size_t metric = std::min<size_t>(static_cast<size_t>(a_sort.column) - 1, 2);
+		const size_t key = a_sort.column == 4 ? 0 : metric;
+		return a_metricsOf(*a_lhs)[key] < a_metricsOf(*a_rhs)[key];
+	};
+	std::ranges::stable_sort(a_rows, [&](const Row* a_lhs, const Row* a_rhs) {
+		return a_sort.descending ? less(a_rhs, a_lhs) : less(a_lhs, a_rhs);
+	});
+}
 
 struct GraphLayout
 {
@@ -147,12 +190,14 @@ void ProfilingRenderer::RenderTimingModeToggle()
 void ProfilingRenderer::SetupTimingTableColumns(bool includePercentColumn)
 {
 	const float scale = Util::GetUIScale();
+	// Timings sort slowest first on the first click, names A to Z.
+	constexpr ImGuiTableColumnFlags metricFlags = ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_PreferSortDescending;
 	ImGui::TableSetupColumn(T("menu.profiling.pass", "Pass"), ImGuiTableColumnFlags_WidthStretch, 3.0f);
-	ImGui::TableSetupColumn(T("menu.profiling.avg", "Avg"), ImGuiTableColumnFlags_WidthFixed, kTimingTableMetricColumnWidth * scale);
-	ImGui::TableSetupColumn(T("menu.profiling.p95", "P95"), ImGuiTableColumnFlags_WidthFixed, kTimingTableMetricColumnWidth * scale);
-	ImGui::TableSetupColumn(T("menu.profiling.p99", "P99"), ImGuiTableColumnFlags_WidthFixed, kTimingTableMetricColumnWidth * scale);
+	ImGui::TableSetupColumn(T("menu.profiling.avg", "Avg"), metricFlags, kTimingTableMetricColumnWidth * scale);
+	ImGui::TableSetupColumn(T("menu.profiling.p95", "P95"), metricFlags, kTimingTableMetricColumnWidth * scale);
+	ImGui::TableSetupColumn(T("menu.profiling.p99", "P99"), metricFlags, kTimingTableMetricColumnWidth * scale);
 	if (includePercentColumn)
-		ImGui::TableSetupColumn(T("menu.profiling.percent", "%"), ImGuiTableColumnFlags_WidthFixed, kTimingTablePercentColumnWidth * scale);
+		ImGui::TableSetupColumn(T("menu.profiling.percent", "%"), metricFlags, kTimingTablePercentColumnWidth * scale);
 }
 
 void ProfilingRenderer::RenderGraph()
@@ -285,13 +330,24 @@ void ProfilingRenderer::RenderStatistics(bool showTable, bool showModeToggle)
 		float availHeight = ImGui::GetContentRegionAvail().y - ImGui::GetFrameHeightWithSpacing();
 
 		if (ImGui::BeginTable("##Profiler", 5,
-				ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_PadOuterX | ImGuiTableFlags_ScrollY,
+				ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_PadOuterX | ImGuiTableFlags_ScrollY |
+					ImGuiTableFlags_Sortable | ImGuiTableFlags_SortTristate,
 				ImVec2(0.0f, availHeight))) {
 			ImGui::TableSetupScrollFreeze(0, 1);
 			SetupTimingTableColumns(true);
 			ImGui::TableHeadersRow();
 
-			for (const auto& group : cachedGroups) {
+			// Groups sort among themselves and each group's passes within it.
+			const TimingSort sort = ReadTimingSort();
+			std::vector<const GroupEntry*> groups;
+			groups.reserve(cachedGroups.size());
+			for (const auto& group : cachedGroups)
+				groups.push_back(&group);
+			SortTimingRows(groups, sort, [](const GroupEntry& a_group) -> const std::string& { return a_group.name; },
+				[](const GroupEntry& a_group) { return std::array{ a_group.totalAvgMs, a_group.totalP95Ms, a_group.totalP99Ms }; });
+
+			for (const GroupEntry* groupRow : groups) {
+				const auto& group = *groupRow;
 				ImGui::TableNextRow();
 				ImGui::TableNextColumn();
 
@@ -318,7 +374,14 @@ void ProfilingRenderer::RenderStatistics(bool showTable, bool showModeToggle)
 					if (cachedTotalAvgMs > 0.0f)
 						TextHeat("%5.1f", (group.totalAvgMs / cachedTotalAvgMs) * 100.0f, 100.0f);
 					if (open) {
-						for (const auto& pass : group.passes) {
+						std::vector<const PassEntry*> passes;
+						passes.reserve(group.passes.size());
+						for (const auto& pass : group.passes)
+							passes.push_back(&pass);
+						SortTimingRows(passes, sort, [](const PassEntry& a_pass) -> const std::string& { return a_pass.label; },
+							[](const PassEntry& a_pass) { return std::array{ a_pass.avgMs, a_pass.p95Ms, a_pass.p99Ms }; });
+						for (const PassEntry* passRow : passes) {
+							const auto& pass = *passRow;
 							ImGui::TableNextRow();
 							ImGui::TableNextColumn();
 							ImGui::TreeNodeEx(pass.label.c_str(), ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen);
@@ -420,11 +483,20 @@ void ProfilingRenderer::RenderFeatureTimers(const std::string& featurePrefix)
 		ImGui::Spacing();
 	}
 
-	if (ImGui::BeginTable("##FeatureTimers", 4, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_PadOuterX)) {
+	if (ImGui::BeginTable("##FeatureTimers", 4, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_PadOuterX | ImGuiTableFlags_Sortable | ImGuiTableFlags_SortTristate)) {
 		SetupTimingTableColumns(false);
 		ImGui::TableHeadersRow();
 
-		for (const auto& e : entries) {
+		// The Total row stays last whatever the order.
+		std::vector<const Entry*> rows;
+		rows.reserve(entries.size());
+		for (const auto& e : entries)
+			rows.push_back(&e);
+		SortTimingRows(rows, ReadTimingSort(), [](const Entry& a_entry) -> const std::string& { return a_entry.label; },
+			[](const Entry& a_entry) { return std::array{ a_entry.avgMs, a_entry.p95Ms, a_entry.p99Ms }; });
+
+		for (const Entry* row : rows) {
+			const auto& e = *row;
 			ImGui::TableNextRow();
 			ImGui::TableNextColumn();
 			ImGui::Text("%s", e.label.c_str());
