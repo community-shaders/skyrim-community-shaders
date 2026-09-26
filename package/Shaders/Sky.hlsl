@@ -306,7 +306,12 @@ PS_OUTPUT main(PS_INPUT input)
 #	if defined(EXP_HEIGHT_FOG)
 	const bool inReflection = (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InReflection) != 0;
 	if (inReflection && SharedData::exponentialHeightFogSettings.enabled) {
-		float3 skyFogPosition = normalize(input.FogPosition.xyz) * SharedData::CameraData.x;
+		float skyFogDistance = SharedData::CameraData.x;
+#		if defined(HORIZON_FIX)
+		// Match the main view (ISSAOComposite.hlsl): fog the sky out to the HorizonFix far water's horizon
+		skyFogDistance = max(skyFogDistance, SharedData::horizonFixSettings.farWaterDistance);
+#		endif
+		float3 skyFogPosition = normalize(input.FogPosition.xyz) * skyFogDistance;
 		float4 exponentialHeightFog = ExponentialHeightFog::GetExponentialHeightFogNoVolumetric(skyFogPosition, FrameBuffer::CameraPosAdjust.xyz, psout.Color.xyz, float4(input.Position.xy * FrameBuffer::DynamicResolutionParams2.xy, input.Position.z, 1));
 		psout.Color.xyz = lerp(psout.Color.xyz, exponentialHeightFog.xyz, exponentialHeightFog.w);
 	}
