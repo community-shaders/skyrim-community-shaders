@@ -300,6 +300,9 @@ void Skylighting::PostPostLoad()
 
 	stl::write_thunk_call<SetViewFrustum>(REL::RelocationID(25643, 26185).address() + REL::Relocate(0x5D9, 0x59D));
 
+	BSShaderAccumulator_StartGroupingAlphas::GrowPool();
+	stl::write_vfunc<0x28, BSShaderAccumulator_StartGroupingAlphas>(RE::VTABLE_BSShaderAccumulator[0]);
+
 	MenuOpenCloseEventHandler::Register();
 }
 
@@ -646,6 +649,61 @@ void Skylighting::CaptureShadowCascadeSRV()
 void Skylighting::Main_Precipitation_RenderOcclusion::thunk()
 {
 	globals::features::skylighting.RenderOcclusion();
+}
+
+void Skylighting::BSShaderAccumulator_StartGroupingAlphas::GrowPool()
+{
+	// The pool base is only addressed by `lea reg, [rip + disp32]` in these functions (sort, allocate, peek, render)
+	constexpr std::size_t SCAN_BYTES = 0x100;
+	constexpr std::size_t LEA_SIZE = 7;
+	constexpr std::size_t LEA_DISP_OFFSET = 3;
+	constexpr std::size_t POOL_REFERENCES = 5;
+
+	const std::uintptr_t vanillaPool = REL::RelocationID(528327, 415278).address();
+	std::set<std::uintptr_t> leaSites;  // scan windows can overlap adjacent functions
+	for (const auto& function : { REL::RelocationID(100857, 107647), REL::RelocationID(100874, 107670), REL::RelocationID(100876, 107672), REL::RelocationID(100877, 107673) }) {
+		const auto* code = reinterpret_cast<const std::uint8_t*>(function.address());
+		for (const auto* lea = code; lea < code + SCAN_BYTES; ++lea) {
+			// REX.W/REX.WR 8D with a RIP-relative ModRM
+			const bool isRipLea = (lea[0] & 0xFB) == 0x48 && lea[1] == 0x8D && (lea[2] & 0xC7) == 0x05;
+			const auto site = reinterpret_cast<std::uintptr_t>(lea);
+			if (isRipLea && site + LEA_SIZE + *reinterpret_cast<const std::int32_t*>(lea + LEA_DISP_OFFSET) == vanillaPool)
+				leaSites.insert(site);
+		}
+	}
+	if (leaSites.size() != POOL_REFERENCES) {
+		logger::warn("[SKYLIGHTING] Found {}/{} alpha group pool references, keeping vanilla pool of {}", leaSites.size(), POOL_REFERENCES, VANILLA_POOL_SIZE);
+		return;
+	}
+
+	// Allocated near the executable so the patched rel32 displacements can reach it
+	constexpr std::size_t poolBytes = POOL_SIZE * sizeof(RE::BSBatchRenderer::GeometryGroup);
+	static SKSE::Trampoline poolMemory{ "Skylighting alpha group pool" };
+	poolMemory.create(poolBytes);
+	void* poolData = poolMemory.allocate(poolBytes);
+	std::memset(poolData, 0, poolBytes);  // Trampoline fills with int3, the engine expects a zeroed .bss pool
+	const auto pool = reinterpret_cast<std::uintptr_t>(poolData);
+	for (const auto site : leaSites) {
+		const auto displacement = static_cast<std::intptr_t>(pool) - static_cast<std::intptr_t>(site + LEA_SIZE);
+		assert(displacement >= INT32_MIN && displacement <= INT32_MAX);
+		const auto displacement32 = static_cast<std::int32_t>(displacement);
+		REL::safe_write(site + LEA_DISP_OFFSET, &displacement32, sizeof(displacement32));
+	}
+	poolCapacity = POOL_SIZE;
+	logger::info("[SKYLIGHTING] Alpha group pool grown from {} to {}", VANILLA_POOL_SIZE, POOL_SIZE);
+}
+
+RE::BSBatchRenderer::GeometryGroup* Skylighting::BSShaderAccumulator_StartGroupingAlphas::thunk(RE::BSShaderAccumulator* accumulator, RE::NiBound* bound)
+{
+	// The engine allocates from this pool without a bounds check; callers already handle a null group
+	static REL::Relocation<std::uint32_t*> poolCount{ REL::RelocationID(528319, 415271) };
+	if (*poolCount >= poolCapacity) {
+		static bool warned = false;
+		if (!std::exchange(warned, true))
+			logger::warn("[SKYLIGHTING] Alpha group pool full, extra ordered geometry renders unsorted");
+		return nullptr;
+	}
+	return func(accumulator, bound);
 }
 
 RE::BSEventNotifyControl Skylighting::MenuOpenCloseEventHandler::ProcessEvent(const RE::MenuOpenCloseEvent* a_event, RE::BSTEventSource<RE::MenuOpenCloseEvent>*)
