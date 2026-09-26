@@ -12,6 +12,8 @@ namespace LightFlags
 	static const uint PortalStrict = (1 << 0);
 	static const uint Shadow = (1 << 1);
 	static const uint Simple = (1 << 2);
+	static const uint ShadowCaster = (1 << 3);
+	static const uint LocalShadow = (1 << 4);
 
 	static const uint Initialised = (1 << 8);
 	static const uint Disabled = (1 << 9);
@@ -44,7 +46,7 @@ struct Light
 	uint4 roomFlags;
 	uint lightFlags;
 	uint shadowLightIndex;
-	uint pad0;
+	uint localShadowIndex;
 	uint pad1;
 };
 

@@ -363,7 +363,7 @@ if (SharedData::enbSettings.EnableRain) {
 			{
 				uint clusteredLightIndex = LightLimitFix::lightList[lightOffset + i];
 				LightLimitFix::Light light = LightLimitFix::lights[clusteredLightIndex];
-				if (LightLimitFix::IsLightIgnored(light) || light.lightFlags & LightLimitFix::LightFlags::Shadow) {
+				if (LightLimitFix::IsLightIgnored(light) || light.lightFlags & LightLimitFix::LightFlags::ShadowCaster) {
 					continue;
 				}
 				float3 lightDirection = light.positionWS.xyz - positionWS.xyz;
