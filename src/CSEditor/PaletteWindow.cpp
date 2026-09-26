@@ -245,6 +245,13 @@ void PaletteWindow::DrawValuesTab()
 				ImGui::SetClipboardText(std::to_string(entry->value).c_str());
 			}
 
+			// Drag source
+			if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
+				ImGui::SetDragDropPayload("VALUE_DND", &entry->value, sizeof(float));
+				ImGui::Text("%s: %.3f", entry->name.c_str(), entry->value);
+				ImGui::EndDragDropSource();
+			}
+
 			Util::AddTooltip(std::format("{}\n{}",
 				std::vformat(T(TKEY("used_times"), "Used {} times"), std::make_format_args(entry->useCount)),
 				T(TKEY("click_to_copy"), "Click to copy"))
@@ -273,6 +280,13 @@ void PaletteWindow::DrawValuesTab()
 				copiedValueName = entry->name;
 				hasValueInClipboard = true;
 				ImGui::SetClipboardText(std::to_string(entry->value).c_str());
+			}
+
+			// Drag source
+			if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
+				ImGui::SetDragDropPayload("VALUE_DND", &entry->value, sizeof(float));
+				ImGui::Text("%s: %.3f", entry->name.c_str(), entry->value);
+				ImGui::EndDragDropSource();
 			}
 
 			// Right-click to remove

@@ -294,6 +294,76 @@ namespace Util
 
 			return name;
 		}
+
+		bool WriteFileAtomically(const std::filesystem::path& path, std::string_view content, std::string_view context)
+		{
+			std::error_code ec;
+			if (!path.parent_path().empty()) {
+				std::filesystem::create_directories(path.parent_path(), ec);
+				if (ec) {
+					logger::error("Could not create directory for {} '{}': {}", context, path.string(), ec.message());
+					return false;
+				}
+			}
+
+			// Process and thread qualified so concurrent writers cannot collide on the temporary.
+			auto temporaryPath = path;
+			temporaryPath += std::format(".{}.{}.tmp", ::GetCurrentProcessId(), ::GetCurrentThreadId());
+			{
+				std::ofstream file(temporaryPath, std::ios::binary | std::ios::trunc);
+				if (!file.is_open()) {
+					logger::error("Could not open temporary {} file '{}'", context, temporaryPath.string());
+					return false;
+				}
+				file.write(content.data(), static_cast<std::streamsize>(content.size()));
+				file.flush();
+				if (file.fail()) {
+					logger::error("Could not write temporary {} file '{}'", context, temporaryPath.string());
+					file.close();
+					std::filesystem::remove(temporaryPath, ec);
+					return false;
+				}
+				file.close();
+				if (file.fail()) {
+					logger::error("Could not close temporary {} file '{}'", context, temporaryPath.string());
+					std::filesystem::remove(temporaryPath, ec);
+					return false;
+				}
+			}
+
+			if (!::MoveFileExW(temporaryPath.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+				const auto moveError = ::GetLastError();
+				// Virtual filesystems can reject the replace while still allowing a direct write.
+				std::ofstream fallback(path, std::ios::binary | std::ios::trunc);
+				if (fallback.is_open()) {
+					fallback.write(content.data(), static_cast<std::streamsize>(content.size()));
+					fallback.flush();
+					const bool wrote = !fallback.fail();
+					fallback.close();
+					if (wrote && !fallback.fail()) {
+						std::filesystem::remove(temporaryPath, ec);
+						logger::warn("Replaced {} '{}' by direct write (Win32 error {})", context, path.string(), moveError);
+						return true;
+					}
+				}
+				logger::error("Could not replace {} '{}' (Win32 error {})", context, path.string(), moveError);
+				std::filesystem::remove(temporaryPath, ec);
+				return false;
+			}
+			return true;
+		}
+
+		bool WriteJsonAtomically(const std::filesystem::path& path, const nlohmann::json& data, int indent, std::string_view context)
+		{
+			std::string serialized;
+			try {
+				serialized = data.dump(indent);
+			} catch (const std::exception& e) {
+				logger::error("Could not serialize {} '{}': {}", context, path.string(), e.what());
+				return false;
+			}
+			return WriteFileAtomically(path, serialized, context);
+		}
 	}
 }
 

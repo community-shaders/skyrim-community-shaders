@@ -251,6 +251,25 @@ namespace Util
 		 * @return Sanitized string safe for use as a filename
 		 */
 		std::string SanitizeFileName(std::string name);
+
+		/**
+		 * Writes a file atomically: serializes to a sibling temporary, then replaces the target.
+		 *
+		 * A partial write can never be observed at the target path, so a crash, a full disk, or a
+		 * throwing serializer leaves the previous contents intact instead of a truncated file.
+		 *
+		 * @param path Destination file path
+		 * @param content Bytes to write
+		 * @param context Human-readable description used in log messages
+		 * @return true when the target now holds the new contents
+		 */
+		bool WriteFileAtomically(const std::filesystem::path& path, std::string_view content, std::string_view context);
+
+		/**
+		 * Serializes JSON and writes it through WriteFileAtomically.
+		 * A serialization failure leaves the target untouched.
+		 */
+		bool WriteJsonAtomically(const std::filesystem::path& path, const nlohmann::json& data, int indent, std::string_view context);
 	}
 
 	/**

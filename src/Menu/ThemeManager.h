@@ -209,6 +209,12 @@ public:
 		static constexpr float SCENE_SETTING_DROPDOWN_RATIO = 0.6f;    // Setting dropdown width ratio
 		static constexpr float SCENE_VALUE_LABEL_OFFSET_RATIO = 0.5f;  // Value label right-alignment ratio
 
+		static constexpr float SCENE_INDICATOR_RADIUS_RATIO = 0.25f;  // Scene indicator dot radius relative to the text line height
+
+		// Icon drawing constants
+		static constexpr int ICON_CIRCLE_SEGMENTS = 16;        // Segments for small icon circles
+		static constexpr float ICON_OUTLINE_THICKNESS = 1.5f;  // Outline stroke for hollow icons, before UI scale
+
 		// Search input constants
 		static constexpr float SEARCH_BASELINE_SCREEN_HEIGHT = 1440.0f;  // Search chrome is authored for 2K.
 		static constexpr float SEARCH_ICON_SIZE = 20.0f;              // Default search icon size
@@ -228,6 +234,12 @@ public:
 		static constexpr float OVERLAP_FADEIN_SPEED = 8.0f;     // Fade-in speed (units/sec)
 		static constexpr float OVERLAP_FADEOUT_SPEED = 4.0f;    // Fade-out speed (units/sec)
 		static constexpr float OVERLAP_ALPHA_EPSILON = 0.005f;  // Below this alpha is clamped to zero
+
+		// Tinted control frame: marks where a value comes from (inherited, or a scene override's winning layer)
+		static constexpr float TINTED_FRAME_BG_ALPHA = 0.25f;
+		static constexpr float TINTED_FRAME_BG_HOVERED_ALPHA = 0.35f;
+		static constexpr float TINTED_FRAME_BG_ACTIVE_ALPHA = 0.45f;
+		static constexpr float TINTED_FRAME_BORDER_SIZE = 1.0f;
 
 		// Status button brightness adjustment offsets. Bright colors are darkened by the same amounts for contrast.
 		static constexpr float BUTTON_MIN_COLOR_CHANNEL = 0.0f;

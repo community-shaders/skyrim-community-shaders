@@ -50,6 +50,14 @@ namespace NativeMenu
 
 	void __stdcall CommitAndSave(float value);
 
+	/**
+	 * @brief Whether a feature's base settings are editable from here.
+	 *
+	 * Rows write the live settings, which the Scene Manager reverts on its next resolve, so a row
+	 * that edits a scene-controlled feature has to grey out the way the ImGui feature panel does.
+	 */
+	bool IsFeatureEditable(const std::string& featureShortName);
+
 	inline void AppendRows(std::vector<Row>& dest, std::vector<Row> src)
 	{
 		dest.insert(dest.end(), std::make_move_iterator(src.begin()), std::make_move_iterator(src.end()));

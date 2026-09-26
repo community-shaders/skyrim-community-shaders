@@ -41,8 +41,6 @@ public:
 	virtual void LoadSettings(json& o_json) override;
 	virtual void SaveSettings(json& o_json) override;
 
-	/** @brief Registers all fog parameters as weather-interpolatable variables. */
-	void RegisterWeatherVariables() override;
 	/** @brief Captures the current directional shadow map SRV for use in volumetric fog light scattering. */
 	void CaptureDirectionalShadowMap();
 

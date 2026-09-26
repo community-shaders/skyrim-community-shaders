@@ -5,10 +5,10 @@
 #include "Features/HDRDisplay.h"
 #include "Features/Upscaling.h"
 #include "Globals.h"
-#include "InteriorOnlyPanel.h"
 #include "Menu.h"
 #include "Menu/BackgroundBlur.h"
 #include "PaletteWindow.h"
+#include "SceneManager/SceneSettingsUI.h"
 #include "State.h"
 #include "Utils/Game.h"
 #include "Utils/UI.h"
@@ -17,6 +17,7 @@
 #include "imgui_internal.h"
 
 #include <atomic>
+#include <cmath>
 #include <cstring>
 
 #define I18N_KEY_PREFIX "cs_editor."
@@ -65,15 +66,6 @@ void DrawIconStar(ImVec2 center, float radius, ImU32 color, bool filled)
 	}
 }
 
-void DrawIconCircle(ImVec2 center, float radius, ImU32 color, bool filled)
-{
-	auto* drawList = ImGui::GetWindowDrawList();
-	if (filled)
-		drawList->AddCircleFilled(center, radius, color, 16);
-	else
-		drawList->AddCircle(center, radius, color, 16, 1.5f * Util::GetUIScale());
-}
-
 void DrawIconWave(ImVec2 center, float width, ImU32 color, bool filled)
 {
 	auto* drawList = ImGui::GetWindowDrawList();
@@ -113,7 +105,7 @@ bool IconButton(const char* label, bool filled, const char* iconType)
 	if (strcmp(iconType, "star") == 0) {
 		DrawIconStar(center, iconSize, iconColor, filled);
 	} else if (strcmp(iconType, "circle") == 0) {
-		DrawIconCircle(center, iconSize, iconColor, filled);
+		Util::DrawIconCircle(center, iconSize, iconColor, filled);
 	} else if (strcmp(iconType, "wave") == 0) {
 		DrawIconWave(center, buttonSize.x * 0.7f, iconColor, filled);
 	}
@@ -213,6 +205,38 @@ std::string EditorWindow::ResolveEditorId(RE::TESForm* form, const WidgetVec& wi
 	return editorid ? editorid : std::format("0x{:08X}", form->GetFormID());
 }
 
+void EditorWindow::DrawActiveWeatherIndicator()
+{
+	auto* sky = globals::game::sky;
+	auto* weather = sky ? sky->currentWeather : nullptr;
+	if (!weather)
+		return;
+
+	const auto& theme = Menu::GetSingleton()->GetTheme();
+	const auto id = weather->GetFormID();
+
+	ImGui::PushStyleColor(ImGuiCol_Text, theme.StatusPalette.RestartNeeded);
+	ImGui::Text("%s", T(TKEY("active"), "Active:"));
+	ImGui::PopStyleColor();
+	ImGui::SameLine();
+	ImGui::TextColored(theme.Palette.Text, "%s", ResolveEditorId(weather, weatherWidgets).c_str());
+	ImGui::SameLine();
+	ImGui::TextDisabled("(0x%08X)", id);
+	ImGui::SameLine();
+	if (ImGui::SmallButton(std::format("{}##active_weather_indicator", T(TKEY("open"), "Open")).c_str())) {
+		for (const auto& widget : weatherWidgets) {
+			if (widget->form && widget->form->GetFormID() == id) {
+				widget->SetOpen(true);
+				widget->RequestFocus();
+				break;
+			}
+		}
+	}
+	ImGui::Spacing();
+	ImGui::Separator();
+	ImGui::Spacing();
+}
+
 void EditorWindow::ShowObjectsWindow()
 {
 	Util::BeginWithRoundedClose(T(TKEY("weather_lighting_browser"), "CS Editor Browser"), nullptr);
@@ -261,14 +285,18 @@ void EditorWindow::ShowObjectsWindow()
 				{ "Shader Particle Geometry", T(TKEY("category_shader_particle"), "Shader Particle Geometry") },
 				{ "Lens Flare", T(TKEY("category_lens_flare"), "Lens Flare") },
 				{ "Visual Effect", T(TKEY("category_visual_effect"), "Visual Effect") },
-				{ "Interior Only", T(TKEY("category_interior_only"), "Interior Only") },
-				{ "Light Editor", T(TKEY("category_lighting_editor"), "Light Editor") }
+				{ "Light Editor", T(TKEY("category_lighting_editor"), "Light Editor") },
+				{ "Scene Manager", T(TKEY("category_scene_manager"), "Scene Manager") },
+				{ "Locations", T(TKEY("category_locations"), "Locations") }
 			};
 			for (int i = 0; i < IM_ARRAYSIZE(categories); ++i) {
 				// Highlight the selected category
 				if (ImGui::Selectable(categories[i].label, m_selectedCategory == categories[i].id)) {
 					m_selectedCategory = categories[i].id;  // Keep the stable English ID internally
 				}
+				// The Scene Manager panel has no room for a feature column, so it owns one here.
+				if (m_selectedCategory == categories[i].id && m_selectedCategory == "Scene Manager")
+					SceneSettingsUI::DrawSceneManagerCategoryFeatures();
 			}
 			ImGui::EndListBox();
 		}
@@ -279,18 +307,23 @@ void EditorWindow::ShowObjectsWindow()
 		ImGui::TableSetColumnIndex(1);
 
 		if (ImGui::BeginChild("##ObjectsContent", { 0, 0 }, ImGuiChildFlags_Borders, kStickyHeaderFlags)) {
-			// Interior Only category has its own panel
-			if (m_selectedCategory == "Interior Only") {
-				InteriorOnlyPanel::Draw();
-				ImGui::EndChild();
-				ImGui::EndTable();
-				ImGui::End();
-				return;
-			}
+			// Categories that own their whole panel instead of listing form widgets.
+			const bool isLightEditor = m_selectedCategory == "Light Editor";
+			const bool isLocations = m_selectedCategory == "Locations";
+			if (isLightEditor || isLocations || m_selectedCategory == "Scene Manager") {
+				const char* scrollId = "##SceneManagerScroll";
+				if (isLightEditor)
+					scrollId = "##LightEditorScroll";
+				else if (isLocations)
+					scrollId = "##LocationsScroll";
 
-			if (m_selectedCategory == "Light Editor") {
-				BeginScrollableContent("##LightEditorScroll");
-				lightEditor.DrawSettings();
+				BeginScrollableContent(scrollId);
+				if (isLightEditor)
+					lightEditor.DrawSettings();
+				else if (isLocations)
+					SceneSettingsUI::DrawLocationBrowser();
+				else
+					SceneSettingsUI::DrawSceneManagerPanel();
 				EndScrollableContent();
 				ImGui::EndChild();
 				ImGui::EndTable();
@@ -909,40 +942,161 @@ void EditorWindow::ShowObjectsWindow()
 	ImGui::End();
 }
 
+/// Insets that keep the preview clear of the window and frame borders it sits inside.
+static ImVec2 GetViewportBorderInsets()
+{
+	const auto& style = ImGui::GetStyle();
+	return ImVec2(
+		style.WindowBorderSize > 0.0f ? std::ceil((style.WindowBorderSize + 1.0f) * 0.5f) : 0.0f,
+		std::max(0.0f, std::ceil((style.FrameBorderSize - 1.0f) * 0.5f)));
+}
+
 void EditorWindow::ShowViewportWindow()
 {
-	Util::BeginWithRoundedClose(T(TKEY("viewport"), "Viewport"), nullptr, ImGuiWindowFlags_NoFocusOnAppearing);
+	const ImU32 borderHoveredColor = ImGui::GetColorU32(ImGuiCol_SeparatorHovered);
+	const ImU32 borderActiveColor = ImGui::GetColorU32(ImGuiCol_SeparatorActive);
+	const ImU32 gripHoveredColor = ImGui::GetColorU32(ImGuiCol_ResizeGripHovered);
+	const ImU32 gripActiveColor = ImGui::GetColorU32(ImGuiCol_ResizeGripActive);
+	// The preview fills the window, so the stock grips and borders are drawn by hand below instead.
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+	ImGui::PushStyleVar(ImGuiStyleVar_ImageBorderSize, 0.0f);
+	ImGui::PushStyleColor(ImGuiCol_ResizeGrip, IM_COL32(0, 0, 0, 0));
+	ImGui::PushStyleColor(ImGuiCol_ResizeGripHovered, IM_COL32(0, 0, 0, 0));
+	ImGui::PushStyleColor(ImGuiCol_ResizeGripActive, IM_COL32(0, 0, 0, 0));
+	ImGui::PushStyleColor(ImGuiCol_SeparatorHovered, IM_COL32(0, 0, 0, 0));
+	ImGui::PushStyleColor(ImGuiCol_SeparatorActive, IM_COL32(0, 0, 0, 0));
+	const auto popStyle = []() {
+		ImGui::PopStyleColor(5);
+		ImGui::PopStyleVar(2);
+	};
 
-	// The size of the image in ImGui																														   // Get the available space in the current window
-	ImVec2 availableSpace = ImGui::GetContentRegionAvail();
+	const char* windowName = T(TKEY("viewport"), "Viewport");
+	const ImVec2 borderInsets = GetViewportBorderInsets();
+	struct ViewportSizeConstraint
+	{
+		ImGuiWindow* window;
+		ImVec2 frameSize;
+	};
+	ViewportSizeConstraint constraint{
+		ImGui::FindWindowByName(windowName),
+		ImVec2(borderInsets.x * 2.0f, ImGui::GetFrameHeight() + borderInsets.x + borderInsets.y)
+	};
+	// Resizing drives width from height on the vertical borders and splits the difference on the
+	// corners, so the window keeps the game aspect ratio whichever edge is dragged.
+	ImGui::SetNextWindowSizeConstraints(ImGui::GetStyle().WindowMinSize, ImVec2(FLT_MAX, FLT_MAX), [](ImGuiSizeCallbackData* data) {
+		const auto& constraint = *static_cast<const ViewportSizeConstraint*>(data->UserData);
+		const auto displaySize = ImGui::GetIO().DisplaySize;
+		const float aspectRatio = displaySize.x / displaySize.y;
+		float imageWidth = data->DesiredSize.x - constraint.frameSize.x;
+		const float imageHeight = data->DesiredSize.y - constraint.frameSize.y;
+		if (auto* window = constraint.window) {
+			const ImGuiID activeID = ImGui::GetActiveID();
+			if (activeID == ImGui::GetWindowResizeBorderID(window, ImGuiDir_Up) || activeID == ImGui::GetWindowResizeBorderID(window, ImGuiDir_Down)) {
+				imageWidth = imageHeight * aspectRatio;
+			} else if (activeID == ImGui::GetWindowResizeCornerID(window, 0) || activeID == ImGui::GetWindowResizeCornerID(window, 1)) {
+				const float aspectRatioSquared = aspectRatio * aspectRatio;
+				imageWidth = (imageWidth * aspectRatioSquared + imageHeight * aspectRatio) / (aspectRatioSquared + 1.0f);
+			}
+		}
+		const auto minSize = ImGui::GetStyle().WindowMinSize;
+		const float minHeight = std::max(minSize.y, ImGui::GetFrameHeight() + std::max(0.0f, ImGui::GetStyle().WindowRounding - 1.0f));
+		const float minWidth = std::ceil(std::max(minSize.x, (minHeight - constraint.frameSize.y) * aspectRatio + constraint.frameSize.x));
+		data->DesiredSize.x = std::max(std::round(imageWidth + constraint.frameSize.x), minWidth);
+		data->DesiredSize.y = std::round((data->DesiredSize.x - constraint.frameSize.x) / aspectRatio + constraint.frameSize.y); }, &constraint);
 
-	// Calculate aspect ratio of the image
-	float aspectRatio = ImGui::GetIO().DisplaySize.x / ImGui::GetIO().DisplaySize.y;
-
-	// Determine the size to fit while preserving the aspect ratio
-	ImVec2 imageSize;
-	if (availableSpace.x / availableSpace.y < aspectRatio) {
-		// Fit width
-		imageSize.x = availableSpace.x;
-		imageSize.y = availableSpace.x / aspectRatio;
-	} else {
-		// Fit height
-		imageSize.y = availableSpace.y;
-		imageSize.x = availableSpace.y * aspectRatio;
+	// Begin() returns false while collapsed; Draw() reads this to skip next frame's framebuffer copy.
+	viewportCollapsed = !Util::BeginWithRoundedClose(windowName, nullptr,
+		ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+	if (viewportCollapsed) {
+		ImGui::End();
+		popStyle();
+		return;
 	}
+
+	auto* window = ImGui::GetCurrentWindow();
+	auto* drawList = ImGui::GetWindowDrawList();
+	ImRect imageRect = window->InnerRect;
+	if (!window->DockIsActive) {
+		imageRect.Min.x += borderInsets.x;
+		imageRect.Min.y += borderInsets.y;
+		imageRect.Max.x -= borderInsets.x;
+		imageRect.Max.y -= borderInsets.x;
+	}
+	ImRect clipRect = imageRect;
+	clipRect.ClipWith(window->OuterRectClipped);
+	ImGui::PushClipRect(clipRect.Min, clipRect.Max, false);
+	if (window->DockIsActive) {
+		// Docking ignores the size constraint, so letterbox the preview inside the node instead.
+		const auto displaySize = ImGui::GetIO().DisplaySize;
+		const float aspectRatio = displaySize.x / displaySize.y;
+		const float imageWidth = std::min(imageRect.GetWidth(), imageRect.GetHeight() * aspectRatio);
+		imageRect.Max = ImVec2(imageRect.Min.x + imageWidth, imageRect.Min.y + imageWidth / aspectRatio);
+		drawList->AddRectFilled(window->InnerRect.Min, window->InnerRect.Max, ImGui::GetColorU32(ImGuiCol_WindowBg));
+	}
+	ImGui::SetCursorScreenPos(imageRect.Min);
+	const ImVec2 imageSize = imageRect.GetSize();
 
 	if (tempTexture && tempTexture->srv) {
 		// tempTexture is a raw copy of the framebuffer RT; its alpha is not guaranteed to be 1,
 		// so a plain ImGui::Image can show the dimmed backdrop through as a transparency cutout.
-		const ImVec2 imageMin = ImGui::GetCursorScreenPos();
-		const ImVec2 imageMax(imageMin.x + imageSize.x, imageMin.y + imageSize.y);
-		ImGui::GetWindowDrawList()->AddRectFilled(imageMin, imageMax, IM_COL32_BLACK);
+		drawList->AddRectFilled(imageRect.Min, imageRect.Max, IM_COL32_BLACK);
 		ImGui::Image((void*)tempTexture->srv.get(), imageSize);
 	} else {
+		drawList->AddRectFilled(imageRect.Min, imageRect.Max, ImGui::GetColorU32(ImGuiCol_WindowBg));
 		ImGui::TextDisabled("%s", T(TKEY("viewport_unavailable"), "Viewport unavailable"));
 	}
 
+	if (!window->DockIsActive) {
+		const ImRect hostRect = window->Viewport->GetMainRect();
+		drawList->PushClipRect(hostRect.Min, hostRect.Max);
+		if (window->WindowBorderSize > 0.0f)
+			drawList->AddRect(window->Pos, window->Rect().Max, ImGui::GetColorU32(ImGuiCol_Border), window->WindowRounding, ImDrawFlags_RoundCornersTop, window->WindowBorderSize);
+		const bool borderHeld = window->ResizeBorderHeld != -1;
+		const int resizeBorder = borderHeld ? window->ResizeBorderHeld : window->ResizeBorderHovered;
+		if (resizeBorder != -1) {
+			constexpr float minResizeBorderThickness = 2.0f;
+			const float rounding = window->WindowRounding;
+			const ImVec2 borderMin(window->Pos.x + 0.5f, window->Pos.y + 0.5f);
+			const ImVec2 borderMax(window->Rect().Max.x - 0.5f, window->Rect().Max.y - 0.5f);
+			const ImVec2 topLeftCenter(borderMin.x + rounding, borderMin.y + rounding);
+			const ImVec2 topRightCenter(borderMax.x - rounding, borderMin.y + rounding);
+			switch (resizeBorder) {
+			case ImGuiDir_Left:
+				drawList->PathLineTo(ImVec2(borderMin.x, borderMax.y));
+				drawList->PathArcTo(topLeftCenter, rounding, IM_PI, IM_PI * 1.25f);
+				break;
+			case ImGuiDir_Right:
+				drawList->PathArcTo(topRightCenter, rounding, -IM_PI * 0.25f, 0.0f);
+				drawList->PathLineTo(ImVec2(borderMax.x, borderMax.y));
+				break;
+			case ImGuiDir_Up:
+				drawList->PathArcTo(topLeftCenter, rounding, IM_PI * 1.25f, IM_PI * 1.5f);
+				drawList->PathArcTo(topRightCenter, rounding, IM_PI * 1.5f, IM_PI * 1.75f);
+				break;
+			case ImGuiDir_Down:
+				drawList->PathLineTo(ImVec2(borderMin.x, borderMax.y));
+				drawList->PathLineTo(borderMax);
+				break;
+			}
+			drawList->PathStroke(borderHeld ? borderActiveColor : borderHoveredColor, ImDrawFlags_None, std::max(minResizeBorderThickness, window->WindowBorderSize));
+		}
+		for (int cornerIndex = 0; cornerIndex < 2; ++cornerIndex) {
+			const ImGuiID cornerID = ImGui::GetWindowResizeCornerID(window, cornerIndex);
+			const bool held = ImGui::GetActiveID() == cornerID;
+			if (!held && ImGui::GetHoveredID() != cornerID)
+				continue;
+			const ImU32 color = held ? gripActiveColor : gripHoveredColor;
+			const float gripSize = ImGui::GetFontSize();
+			const ImVec2 corner(cornerIndex == 0 ? window->Rect().Max.x : window->Pos.x, window->Rect().Max.y);
+			const float direction = cornerIndex == 0 ? -1.0f : 1.0f;
+			drawList->AddTriangleFilled(corner, ImVec2(corner.x + direction * gripSize, corner.y), ImVec2(corner.x, corner.y - gripSize), color);
+		}
+		drawList->PopClipRect();
+	}
+
+	ImGui::PopClipRect();
 	ImGui::End();
+	popStyle();
 }
 
 void EditorWindow::ShowWidgetWindow()
@@ -1060,7 +1214,7 @@ void EditorWindow::RenderUI()
 				ImGui::BeginDisabled();
 				ImGui::MenuItem(T(TKEY("edit_current_cell_lighting"), "Edit Current Cell Lighting"));
 				ImGui::EndDisabled();
-				Util::AddTooltip(T(TKEY("interior_only_available"), "Only available in interior cells"), ImGuiHoveredFlags_DelayNormal | ImGuiHoveredFlags_AllowWhenDisabled);
+				Util::AddTooltip(T(TKEY("interior_only_available"), "Only available in interior cells"), Util::kTooltipWhenDisabled);
 			}
 
 			ImGui::Separator();
@@ -1086,7 +1240,7 @@ void EditorWindow::RenderUI()
 			}
 			if (hdrActive) {
 				ImGui::EndDisabled();
-				Util::AddTooltip(T(TKEY("viewport_unavailable_hdr"), "Viewport is unavailable when HDR Display is enabled"), ImGuiHoveredFlags_DelayNormal | ImGuiHoveredFlags_AllowWhenDisabled);
+				Util::AddTooltip(T(TKEY("viewport_unavailable_hdr"), "Viewport is unavailable when HDR Display is enabled"), Util::kTooltipWhenDisabled);
 			}
 			if (ImGui::Checkbox(T(TKEY("palette"), "Palette"), &PaletteWindow::GetSingleton()->open)) {
 			}
@@ -1379,8 +1533,9 @@ void EditorWindow::RenderUI()
 	if (IsViewportActive()) {
 		// Size viewport height to match game aspect ratio so the preview fits snugly
 		const float aspectRatio = width / height;
-		const float imageHeight = viewportWidth / aspectRatio;
-		const float chromeHeight = ImGui::GetFrameHeight() + ImGui::GetStyle().WindowPadding.y * 2.0f;
+		const ImVec2 borderInsets = GetViewportBorderInsets();
+		const float imageHeight = (viewportWidth - borderInsets.x * 2.0f) / aspectRatio;
+		const float chromeHeight = ImGui::GetFrameHeight() + borderInsets.x + borderInsets.y;
 		const float viewportHeight = imageHeight + chromeHeight;
 		ImGui::SetNextWindowSize(ImVec2(viewportWidth, viewportHeight), layoutCond);
 		ImGui::SetNextWindowPos(ImVec2(pad + browserWidth + pad, menuBarHeight + pad), layoutCond);
@@ -1400,6 +1555,9 @@ void EditorWindow::RenderUI()
 
 	ShowWidgetWindow();
 
+	// Locations are not form widgets, so their windows are drawn alongside the widget pass.
+	SceneSettingsUI::DrawLocationWindows();
+
 	// Show palette window
 	PaletteWindow::GetSingleton()->Draw();
 
@@ -1412,36 +1570,6 @@ void EditorWindow::RenderUI()
 
 	// Restore previous font scale
 	ImGui::GetStyle().FontScaleMain = previousScale;
-}
-
-void EditorWindow::OpenWeatherFeatureSetting(RE::TESWeather* weather, const std::string& featureName, const std::string& settingName)
-{
-	if (!weather) {
-		return;
-	}
-
-	// Open the editor if it's not already open
-	if (!open) {
-		open = true;
-	}
-
-	// Find the weather widget
-	for (auto& widget : weatherWidgets) {
-		auto* weatherWidget = dynamic_cast<WeatherWidget*>(widget.get());
-		if (weatherWidget && weatherWidget->weather == weather) {
-			// Open the widget if it's not already open
-			if (!weatherWidget->open) {
-				weatherWidget->open = true;
-			}
-
-			// Set up navigation to the specific feature/setting
-			weatherWidget->NavigateToFeatureSetting(featureName, settingName);
-
-			// Focus the widget window
-			weatherWidget->RequestFocus();
-			break;
-		}
-	}
 }
 
 EditorWindow::~EditorWindow()
@@ -1484,16 +1612,28 @@ void EditorWindow::UpdateOpenState()
 {
 	static bool wasOpen = false;
 
+	// Runs even while closed so a Scene Manager panel's pause is always released.
+	SceneSettingsUI::SyncTimePause();
+
+	// The user can release the lock from the weather controls; it stops being ours the moment they do.
+	if (weatherLockedByOverlay && !IsWeatherLocked())
+		weatherLockedByOverlay = false;
+
 	if (open && !wasOpen) {
 		DisableVanityCamera();
 		HideGameMenus();
 		BackgroundBlur::SetCSEditorActive(IsViewportActive());
+		LockWeatherForOverlay();
 
 	} else if (!open && wasOpen) {
 		lightEditor.ResetOverrides();
 		RestoreVanityCamera();
 		ShowGameMenus();
 		BackgroundBlur::SetCSEditorActive(false);
+		if (weatherLockedByOverlay) {
+			UnlockWeather();
+			weatherLockedByOverlay = false;
+		}
 	}
 
 	wasOpen = open;
@@ -1517,7 +1657,8 @@ void EditorWindow::Draw()
 	if (!IsViewportActive()) {
 		delete tempTexture;
 		tempTexture = nullptr;
-	} else {
+	} else if (!viewportCollapsed) {
+		// Kept allocated while collapsed so expanding costs one stale frame rather than a reupload.
 		auto renderer = globals::game::renderer;
 		if (renderer) {
 			auto& framebuffer = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kFRAMEBUFFER];
@@ -1593,6 +1734,10 @@ void EditorWindow::LoadSettings()
 		}
 	}
 	m_selectedCategory = settings.selectedCategory;
+	if (m_selectedCategory == "Interior Only") {
+		m_selectedCategory = "Weather";
+		settings.selectedCategory = m_selectedCategory;
+	}
 	SetWidgetTypeSizesFromJson(settings.widgetTypeSizes);
 }
 
@@ -2030,6 +2175,17 @@ void EditorWindow::LockWeather(RE::TESWeather* weather)
 	MaintainWeatherLock();
 
 	logger::info("Weather locked: {}", weather->GetFormEditorID() ? weather->GetFormEditorID() : "Unknown");
+}
+
+void EditorWindow::LockWeatherForOverlay()
+{
+	// Weather drifting mid-session changes the scene under whatever is being edited.
+	auto* sky = globals::game::sky;
+	if (!sky || IsWeatherLocked())
+		return;
+
+	LockWeather(sky->currentWeather);
+	weatherLockedByOverlay = IsWeatherLocked();
 }
 
 void EditorWindow::UnlockWeather()

@@ -130,4 +130,6 @@ namespace Util
 	 * that any code building a cache path by hand stays in sync.
 	 */
 	std::string GetShaderDefinesSuffix(const std::string& definesStr);
+
+	std::string PrettifyIdentifier(std::string_view id);
 }  // namespace Util

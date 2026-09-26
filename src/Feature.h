@@ -148,6 +148,12 @@ public:
 	 */
 	virtual bool IsDisabledByDefault() const { return IsCore() && GetReleaseStage() != ReleaseStage::Release; }
 
+	/** @brief Whether the feature can never be disabled at boot, e.g. infrastructure other features rely on. */
+	virtual bool IsAlwaysEnabled() const { return false; }
+
+	/** @brief Whether the feature persists through the shared settings JSON rather than its own store. */
+	virtual bool UsesMainSettings() const { return true; }
+
 	/**
 	 * Whether the feature will show up in the GUI menu
 	 */
@@ -256,13 +262,6 @@ public:
 	 * Features should override this to provide their weather analysis section name and draw function.
 	 */
 	virtual WeatherAnalysisConfig GetWeatherAnalysisConfig() const { return {}; }
-
-	/**
-	 * @brief Called during feature initialization to register weather-controllable variables
-	 * Features should register their weather variables here using the WeatherVariables::GlobalWeatherRegistry
-	 * The weather system will automatically handle save/load/lerp for all registered variables
-	 */
-	virtual void RegisterWeatherVariables() {}
 
 	/**
 	 * @brief Returns constraints this feature imposes on other features' settings

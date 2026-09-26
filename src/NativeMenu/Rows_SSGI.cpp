@@ -82,6 +82,16 @@ namespace
 		s.EnableGI = preset.enableGI;
 		globals::features::screenSpaceGI.recompileFlag = true;
 	}
+
+	bool __stdcall IsSSGIEditable()
+	{
+		return NativeMenu::IsFeatureEditable(globals::features::screenSpaceGI.GetShortName());
+	}
+
+	bool __stdcall IsSSGIQualityEditable()
+	{
+		return IsSSGIEditable() && NativeMenu::Bind<SSGIRoot, &Settings::Enabled>::IsFlagOn();
+	}
 }
 
 namespace NativeMenu
@@ -91,19 +101,18 @@ namespace NativeMenu
 		if (!globals::features::screenSpaceGI.loaded)
 			return {};
 
-		using Enabled = Bind<SSGIRoot, &Settings::Enabled>;
-
 		return {
 			Checkbox<SSGIRoot, &Settings::Enabled>(T(TKEY("enable"), "Enable Screen Space GI"),
 				T(TKEY("enable_desc"),
-					"Toggles Screen Space GI. When disabled, the quality preset below is greyed out.")),
+					"Toggles Screen Space GI. When disabled, the quality preset below is greyed out."),
+				&IsSSGIEditable),
 
 			Dropdown(T(TKEY("quality"), "Screen Space GI Quality"), SSGIQualityOptions(), &GetSSGIQuality,
 				&SetSSGIQuality, static_cast<float>(FindSSGIPresetIndex(Settings{})),
 				T(TKEY("quality_desc"),
 					"Trades render resolution and sample count for visual quality. Matches the presets in the Screen "
 					"Space GI panel's Quality/Performance section."),
-				&Enabled::IsFlagOn),
+				&IsSSGIQualityEditable),
 		};
 	}
 }
