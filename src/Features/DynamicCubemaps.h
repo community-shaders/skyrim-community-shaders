@@ -26,11 +26,11 @@ public:
 
 /**
 	 * Feature that generates dynamic cube maps for environment mapping and reflections.
-	 * 
+	 *
 	 * Manages GPU resources and compute passes to capture and process environmental
 	 * data into cube maps for real-time reflections and specular irradiance calculations.
 	 */
-	struct DynamicCubemaps : Feature
+struct DynamicCubemaps : Feature
 {
 public:
 	const std::string defaultDynamicCubeMapSavePath = "Data\\textures\\DynamicCubemaps";
@@ -50,17 +50,34 @@ public:
 	ConstantBuffer* spmapCB = nullptr;
 	Texture2D* envTexture = nullptr;
 	Texture2D* envReflectionsTexture = nullptr;
+	Texture2D* envFilteredTexture = nullptr;
 	ID3D11UnorderedAccessView* uavArray[8];
-	ID3D11UnorderedAccessView* uavReflectionsArray[8];
 
 	// Reflection capture
 
 	struct alignas(16) UpdateCubemapCB
 	{
 		float3 CameraPreviousPosAdjust;
-		uint pad0;
+		uint CaptureIndex;
+		float CaptureDeltaTime;
+		uint ResetCapture;
+		uint pad0[2];
 	};
 	STATIC_ASSERT_ALIGNAS_16(UpdateCubemapCB);
+
+	struct alignas(16) CaptureLightingState
+	{
+		float ReferenceLuminance;
+		uint PendingResetMask;
+		uint Reset;
+		uint Initialized;
+	};
+	STATIC_ASSERT_ALIGNAS_16(CaptureLightingState);
+
+	std::unique_ptr<StructuredBuffer> captureLightingState;
+	ID3D11ComputeShader* detectCaptureLightingCS = nullptr;
+	float3 cameraPreviousPosAdjust[2] = {};
+	float previousCaptureTime[2] = {};
 
 	ID3D11ComputeShader* updateCubemapCS = nullptr;
 	ID3D11ComputeShader* updateCubemapReflectionsCS = nullptr;
@@ -88,6 +105,7 @@ public:
 	bool fakeReflections = false;
 
 	bool resetCapture[2] = { true, true };
+	bool cubemapValid[2] = {};
 	bool recompileFlag = false;
 	float previousHoursPassed = 0.0f;
 
@@ -116,8 +134,7 @@ public:
 	ID3D11ComputeShader* bc6hEncodeCS = nullptr;
 	ConstantBuffer* bc6hEncodeCB = nullptr;
 
-	ID3D11ShaderResourceView* envTextureArraySRV = nullptr;
-	ID3D11ShaderResourceView* envReflectionsTextureArraySRV = nullptr;
+	ID3D11ShaderResourceView* envFilteredTextureArraySRV = nullptr;
 
 	Texture2D* envTextureBC6H = nullptr;
 	Texture2D* envReflectionsTextureBC6H = nullptr;
@@ -162,7 +179,7 @@ public:
  * Indicates whether the feature applies shader defines to the given shader type.
  * @returns Always `true`.
  */
-bool HasShaderDefine(RE::BSShader::Type) override { return true; };
+	bool HasShaderDefine(RE::BSShader::Type) override { return true; };
 
 	/**
 	 * Initialize Direct3D resources required for dynamic cubemap generation.
@@ -178,6 +195,7 @@ bool HasShaderDefine(RE::BSShader::Type) override { return true; };
 	virtual void PostPostLoad() override;
 
 	virtual void ClearShaderCache() override;
+	ID3D11ComputeShader* GetComputeShaderDetectLighting();
 	ID3D11ComputeShader* GetComputeShaderUpdate();
 	ID3D11ComputeShader* GetComputeShaderUpdateReflections();
 	ID3D11ComputeShader* GetComputeShaderUpdateFakeReflections();
