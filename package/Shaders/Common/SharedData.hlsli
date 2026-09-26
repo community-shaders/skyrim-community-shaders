@@ -276,6 +276,9 @@ namespace SharedData
 		uint UseProceduralGradientWeights;
 		float ProceduralGradientWeightCurve;
 
+		float LightSpriteCurve;
+		float3 pad1;
+
 		float ParticleIntensity;
 		float ParticleLightingInfluence;
 		float ParticleAmbientInfluence;

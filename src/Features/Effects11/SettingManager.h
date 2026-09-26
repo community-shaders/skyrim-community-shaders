@@ -106,6 +106,7 @@ struct Setting
 	float step = 0.01f;
 	std::string dependsOnKey;
 	std::string dependsOnCategory;
+	std::vector<std::string> legacyKeys;
 };
 
 class SettingManager
@@ -149,6 +150,7 @@ public:
 
 	void SetCategoryDependency(const std::string& category, const std::string& dependsOnKey, const std::string& dependsOnCategory);
 	void SetSettingDependency(const std::string& key, const std::string& category, const std::string& dependsOnKey, const std::string& dependsOnCategory);
+	void SetSettingLegacyKey(const std::string& key, const std::string& category, const std::string& legacyKey);
 	bool IsCategoryEnabled(const std::string& category);
 	bool IsSettingEnabled(const std::string& key, const std::string& category);
 
@@ -200,6 +202,7 @@ private:
 	uint32_t currentWeatherID = 0;
 	uint32_t lastWeatherID = 0;
 	float weatherBlendFactor = 0.0f;
+	uint32_t multipleWeathersSettingID = 0xFFFFFFFF;
 
 	float timeOfDay1[4] = { 0, 0, 0, 0 };
 	float timeOfDay2[4] = { 0, 0, 0, 0 };
@@ -208,6 +211,7 @@ private:
 
 	void RegisterSettingInternal(Setting& setting);
 	void LoadWeatherIgnoreSettings(const std::string& filePath);
+	bool IsWeatherSystemEnabledInternal() const;
 
 	template <typename T>
 	T GetValueInternal(uint32_t id, bool rawValue = false) const;

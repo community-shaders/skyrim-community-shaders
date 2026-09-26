@@ -673,11 +673,6 @@ PS_OUTPUT main(PS_INPUT input)
 	isFire = true;
 #			endif
 #		endif
-
-#		if !defined(IS_VOLUMETRIC_FOG) && !defined(MULTBLEND) && !defined(MULTBLEND_DECAL)
-	if (SharedData::enbSettings.Enable && !(Permutation::VertexShaderDescriptor & Permutation::EffectFlags::SkyObject) && !isFire)
-		propertyColor *= SharedData::enbSettings.ParticleIntensity;
-#		endif
 #	endif
 
 #	if defined(LIGHTING)
@@ -689,6 +684,12 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 viewPosition = mul(FrameBuffer::CameraView, float4(input.WorldPosition.xyz, 1)).xyz;
 	float2 screenUV = FrameBuffer::ViewToUV(viewPosition);
 	bool inWorld = Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InWorld;
+
+#			if defined(EFFECTS11)
+	float clusteredPointScale = SharedData::enbSettings.Enable ? SharedData::enbSettings.ParticlePointLightingInfluence : 1.0;
+#			else
+	float clusteredPointScale = 1.0;
+#			endif
 
 	uint clusterIndex = 0;
 	if (inWorld && LightLimitFix::GetClusterIndex(screenUV, viewPosition.z, clusterIndex)) {
@@ -713,7 +714,7 @@ PS_OUTPUT main(PS_INPUT input)
 
 			const bool isPointLightLinear = light.lightFlags & LightLimitFix::LightFlags::Linear;
 			float3 lightColor = Color::PointLight(light.color.xyz, isPointLightLinear) * intensityMultiplier * 0.5 * light.fade * Color::EffectLightingMult();
-			propertyColor += lightColor;
+			propertyColor += lightColor * clusteredPointScale;
 		}
 	}
 
@@ -721,6 +722,11 @@ PS_OUTPUT main(PS_INPUT input)
 #	elif defined(MEMBRANE)
 	propertyColor *= 0;
 	lightingInfluence = 0;
+#	endif
+
+#	if defined(EFFECTS11) && !defined(IS_VOLUMETRIC_FOG) && !defined(MULTBLEND) && !defined(MULTBLEND_DECAL)
+	if (SharedData::enbSettings.Enable && !(Permutation::VertexShaderDescriptor & Permutation::EffectFlags::SkyObject) && !isFire)
+		propertyColor *= SharedData::enbSettings.ParticleIntensity;
 #	endif
 
 	float4 baseTexColor = float4(1, 1, 1, 1);
@@ -854,7 +860,7 @@ PS_OUTPUT main(PS_INPUT input)
 		if (isFire)
 			blendedColor = pow(abs(blendedColor), SharedData::enbSettings.FireCurve) * SharedData::enbSettings.FireIntensity;
 		else
-			blendedColor *= SharedData::enbSettings.LightSpriteIntensity;
+			blendedColor = pow(abs(blendedColor), SharedData::enbSettings.LightSpriteCurve) * SharedData::enbSettings.LightSpriteIntensity;
 	}
 #	endif
 #		elif defined(MULTBLEND) || defined(MULTBLEND_DECAL)

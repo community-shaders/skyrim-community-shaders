@@ -125,6 +125,9 @@ public:
 
 		float vectorValue[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 
+		float baseFloatValue = 0.0f;
+		float baseVectorValue[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+
 		// UI properties
 		float floatMin = 0.0f;
 		float floatMax = 1.0f;
@@ -152,6 +155,11 @@ public:
 	};
 
 	std::vector<UIVariable> uiVariables;
+
+	static bool IsWeatherSeparated(const UIVariable& uiVar) { return !uiVar.separation.empty() && uiVar.separation != "None"; }
+	static void CaptureBaseValue(UIVariable& uiVar);
+	void CaptureBaseValues();
+	virtual void SaveWeatherOverrides() {}
 
 	struct GroupMeta
 	{
@@ -231,6 +239,7 @@ public:
 	{
 		bool executed = false;
 		bool inOutput = false;
+		bool inTemp = false;
 	};
 
 	// Execute a technique sequence with ping-pong rendering

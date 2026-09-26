@@ -98,6 +98,10 @@ public:
 		float timeOfDay2[4];
 		float eNightDayFactor;
 		float eInteriorFactor;
+		float fieldOfView;
+		float tempInfo1[4];
+		float tempInfo2[4];
+		float lightParameters[4];
 	} commonData;
 	uint32_t frameCount = 0;
 
@@ -138,7 +142,7 @@ public:
 	void ExecuteEffect(EffectBase& effect, uint32_t enableSettingID = 0xFFFFFFFF);
 
 	// Texture copy using pixel shader
-	void CopyTexture(ID3D11ShaderResourceView* source, ID3D11RenderTargetView* destination);
+	void CopyTexture(ID3D11ShaderResourceView* source, ID3D11RenderTargetView* destination, bool dither = true);
 
 	// Color correction using compute shader
 	void ApplyColorCorrection(ID3D11UnorderedAccessView* textureUAV);
@@ -153,5 +157,18 @@ private:
 	/** @brief Logs the resolved preset location, or why no preset is in use. */
 	void LogPresetStatus() const;
 
+	/** @brief Fills ENB tempInfo1 (cursor position, menu flag, button mask) and tempInfo2 (last left/right click). */
+	void UpdateCursorData();
+	/** @brief Fills ENB LightParameters with the sun's screen UV (xy) and visibility (w). */
+	void UpdateLightParameters();
+	/** @brief True if the effect is compiled and its enable setting (if any) is on. */
+	bool WillEffectRun(EffectBase& effect, uint32_t enableSettingID);
+
 	bool initialized = false;
+
+	RE::TESWeather* cachedLastWeather = nullptr;
+	float averageFps = 60.0f;
+	float cursorPosition[2] = { 0.5f, 0.5f };
+	float lastLeftClick[2] = { 0.5f, 0.5f };
+	float lastRightClick[2] = { 0.5f, 0.5f };
 };
