@@ -1,13 +1,21 @@
 #include "DynamicCubemaps.h"
 
-#include <cassert>
 #include <DDSTextureLoader.h>
 #include <DirectXTex.h>
+#include <cassert>
 
 #include "I18n/I18n.h"
+#include "LinearLighting.h"
 #include "ShaderCache.h"
 #include "State.h"
 #include "Utils/D3D.h"
+
+DynamicCubemaps::Settings DynamicCubemaps::GetCommonBufferData() const
+{
+	auto data = settings;
+	globals::features::linearLighting.SRGBToWorking(&data.CubemapColor.x);
+	return data;
+}
 
 #define I18N_KEY_PREFIX "feature.dynamic_cubemaps."
 
@@ -176,6 +184,9 @@ bool MenuOpenCloseEventHandler::Register()
 
 void DynamicCubemaps::ClearShaderCache()
 {
+	resetCapture[0] = resetCapture[1] = true;
+	cubemapValid[0] = cubemapValid[1] = false;
+	nextTask = NextTask::kCaptureInferAndIrradianceA;
 	if (updateCubemapCS) {
 		updateCubemapCS->Release();
 		updateCubemapCS = nullptr;
@@ -422,7 +433,6 @@ void DynamicCubemaps::Irradiance(bool a_reflections, uint32_t a_startLevel, uint
 			context->CopySubresourceRegion(a_reflections ? envReflectionsTexture->resource.get() : envTexture->resource.get(), D3D11CalcSubresource(0, face, MIPLEVELS), 0, 0, 0, envInferredTexture->resource.get(), srcSubresourceIndex, nullptr);
 		}
 
-
 		auto srv = envInferredTexture->srv.get();
 		context->GenerateMips(srv);
 	}
@@ -445,10 +455,9 @@ void DynamicCubemaps::Irradiance(bool a_reflections, uint32_t a_startLevel, uint
 			size /= 2;
 
 		// Suffix: A = level 1, BA = levels 2..N-1, BB = last level.
-		const char* suffix = (a_startLevel == 1) ? "A" : (a_endLevel == MIPLEVELS) ? "BB" : "BA";
-		const auto passName = a_reflections
-			? std::format("DynamicCubemaps::IrradianceReflections{}", suffix)
-			: std::format("DynamicCubemaps::Irradiance{}", suffix);
+		const char* suffix = (a_startLevel == 1) ? "A" : (a_endLevel == MIPLEVELS) ? "BB" :
+		                                                                             "BA";
+		const auto passName = a_reflections ? std::format("DynamicCubemaps::IrradianceReflections{}", suffix) : std::format("DynamicCubemaps::Irradiance{}", suffix);
 		globals::profiler->BeginPass(passName);
 		for (std::uint32_t level = a_startLevel; level < a_endLevel; level++, size /= 2) {
 			const UINT numGroups = (UINT)std::max(1u, (size + 7u) / 8u);
@@ -527,17 +536,17 @@ void DynamicCubemaps::CompressToBC6H(bool a_reflections)
 		context->CSSetShader(nullptr, nullptr, 0);
 	}
 
-
 	auto dst = a_reflections ? envReflectionsTextureBC6H : envTextureBC6H;
 	context->CopyResource(dst->resource.get(), bc6hScratchTexture->resource.get());
+	cubemapValid[a_reflections ? 1 : 0] = true;
 }
 
 /**
  * @brief Advances the cubemap update pipeline state machine by one task.
  *
- * Executes the next step in a multi-frame sequence that captures, infers, filters, 
- * and compresses environment cubemaps. Resets capture when game time jumps 
- * significantly and recompiles shaders if needed. Processes either the base or 
+ * Executes the next step in a multi-frame sequence that captures, infers, filters,
+ * and compresses environment cubemaps. Resets capture when game time jumps
+ * significantly and recompiles shaders if needed. Processes either the base or
  * reflection variant depending on the current task.
  */
 void DynamicCubemaps::UpdateCubemap()
@@ -569,7 +578,14 @@ void DynamicCubemaps::UpdateCubemap()
 		recompileFlag = false;
 	}
 
-	static constexpr uint32_t kIrradianceSplit  = 2;
+	if (!GetComputeShaderUpdate() || !GetComputeShaderInferrence() || !GetComputeShaderSpecularIrradiance() || !GetComputeShaderBC6HEncode())
+		return;
+	if (activeReflections && !(fakeReflections ?
+									 (GetComputeShaderUpdateFakeReflections() && GetComputeShaderInferrenceFakeReflections()) :
+									 (GetComputeShaderUpdateReflections() && GetComputeShaderInferrenceReflections())))
+		return;
+
+	static constexpr uint32_t kIrradianceSplit = 2;
 	static constexpr uint32_t kIrradianceSplitB = MIPLEVELS - 1;
 
 	switch (nextTask) {
@@ -616,8 +632,8 @@ void DynamicCubemaps::PostDeferred()
 	auto context = globals::d3d::context;
 
 	ID3D11ShaderResourceView* views[2] = {
-		(activeReflections ? envReflectionsTextureBC6H : envTextureBC6H)->srv.get(),
-		envTextureBC6H->srv.get()
+		cubemapValid[activeReflections ? 1 : 0] ? (activeReflections ? envReflectionsTextureBC6H : envTextureBC6H)->srv.get() : nullptr,
+		cubemapValid[0] ? envTextureBC6H->srv.get() : nullptr
 	};
 	context->PSSetShaderResources(30, 2, views);
 }

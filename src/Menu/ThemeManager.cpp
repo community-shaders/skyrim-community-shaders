@@ -5,8 +5,10 @@
 #include "BackgroundBlur.h"
 #include "Fonts.h"
 #include "I18n/I18n.h"
+#include "IconsFontAwesome5.h"
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <cstdlib>
@@ -146,6 +148,41 @@ namespace
 			return atlas->GetGlyphRangesKorean();
 		}
 		return nullptr;
+	}
+
+	bool MergeFontAwesome5(ImFontAtlas* atlas, ImFont* dstFont, float fontSize)
+	{
+		if (!atlas || !dstFont) {
+			return false;
+		}
+
+		auto dataIconPath = Util::PathHelpers::GetDataPath() / "Interface" / "CommunityShaders" / "Fonts" / FONT_ICON_FILE_NAME_FAS;
+		std::array<std::filesystem::path, 2> iconPathCandidates = {
+			dataIconPath,
+			std::filesystem::path("Data\\Interface\\CommunityShaders\\Fonts") / FONT_ICON_FILE_NAME_FAS
+		};
+
+		static const ImWchar iconsRanges[] = { ICON_MIN_FA, ICON_MAX_FA, 0 };
+
+		ImFontConfig mergeConfig;
+		mergeConfig.MergeMode = true;
+		mergeConfig.PixelSnapH = true;
+		mergeConfig.DstFont = dstFont;
+
+		for (const auto& iconPath : iconPathCandidates) {
+			if (!std::filesystem::exists(iconPath)) {
+				continue;
+			}
+
+			if (atlas->AddFontFromFileTTF(iconPath.string().c_str(), fontSize, &mergeConfig, iconsRanges)) {
+				return true;
+			}
+		}
+
+		logger::warn("Failed to merge Font Awesome 5 icons. Tried: {}; {}",
+			iconPathCandidates[0].string(),
+			iconPathCandidates[1].string());
+		return false;
 	}
 }
 
@@ -385,6 +422,7 @@ bool ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 					ImFontConfig cfg = font_config;
 					auto* font = io.Fonts->AddFontFromFileTTF(fontPath.string().c_str(), roundedSize, &cfg);
 					if (font) {
+						MergeFontAwesome5(io.Fonts, font, roundedSize);
 						atlasCache.emplace(cacheKey, font);
 						loadedFont = font;
 					}
@@ -415,11 +453,13 @@ bool ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 			ImFontConfig cfg = font_config;
 			bodyFont = io.Fonts->AddFontFromFileTTF(defaultPath.string().c_str(), roundedBodySize, &cfg);
 			if (bodyFont) {
+				MergeFontAwesome5(io.Fonts, bodyFont, roundedBodySize);
 				atlasCache.emplace(cacheKey, bodyFont);
 			}
 		}
 		if (!bodyFont) {
 			bodyFont = io.Fonts->AddFontDefault();
+			MergeFontAwesome5(io.Fonts, bodyFont, roundedBodySize);
 		}
 
 		menu.loadedFontRoles[bodyIndex] = bodyFont;
@@ -563,6 +603,7 @@ bool ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 						baseFont = io.Fonts->AddFontDefault();
 					}
 
+					MergeFontAwesome5(io.Fonts, baseFont, roleSize);
 					tryMergeGlyphSet(baseFont, roleSize, primaryCJKFontPaths, primaryGlyphRanges, std::format("active locale '{}' glyphs", locale), role);
 					for (const auto& merge : supplementalGlyphMerges) {
 						tryMergeGlyphSet(baseFont, roleSize, merge.fontPaths, merge.glyphRanges.Data, std::format("locale display '{}'", merge.locale), role);
@@ -597,6 +638,7 @@ bool ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 		io.Fonts->Clear();
 		MenuFonts::InvalidatePreviewFonts();
 		ImFont* fallbackFont = io.Fonts->AddFontDefault();
+		MergeFontAwesome5(io.Fonts, fallbackFont, fontSize);
 		if (fallbackFont && io.Fonts->Build()) {
 			menu.loadedFontRoles.fill(fallbackFont);
 			io.FontDefault = fallbackFont;
@@ -631,6 +673,7 @@ bool ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 		io.Fonts->Clear();
 		MenuFonts::InvalidatePreviewFonts();
 		ImFont* fallbackFont = io.Fonts->AddFontDefault();
+		MergeFontAwesome5(io.Fonts, fallbackFont, fontSize);
 
 		bool recoverySucceeded = false;
 		if (fallbackFont && io.Fonts->Build()) {

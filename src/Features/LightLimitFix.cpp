@@ -265,6 +265,8 @@ void LightLimitFix::BSLightingShader_SetupGeometry_GeometrySetupConstantPointLig
 			// light.color *= runtimeData.fade;
 			light.fade = runtimeData.fade;
 		}
+		const auto workingColor = globals::features::linearLighting.LightColorToWorking(niLight);
+		light.color = { workingColor.red, workingColor.green, workingColor.blue };
 
 		light.fade *= bsLight->lodDimmer;
 
@@ -450,6 +452,8 @@ void LightLimitFix::UpdateLights()
 						// light.color *= runtimeData.fade;
 						light.fade = runtimeData.fade;
 					}
+					const auto workingColor = globals::features::linearLighting.LightColorToWorking(niLight);
+					light.color = { workingColor.red, workingColor.green, workingColor.blue };
 
 					light.fade *= bsLight->lodDimmer;
 
@@ -615,7 +619,7 @@ namespace
 		std::uint8_t data[4];
 	};
 
-	bool TryGetAlphaWeightedVertexColor(const std::uint8_t* a_rawVertexData, std::uint32_t a_vertexSize, std::uint32_t a_colorOffset, std::uint32_t a_vertexCount, VertexColor& a_outVertexColor)
+	bool TryGetAlphaWeightedVertexColor(const std::uint8_t* a_rawVertexData, std::uint32_t a_vertexSize, std::uint32_t a_colorOffset, std::uint32_t a_vertexCount, RE::NiColorA& a_outVertexColor)
 	{
 		if (!a_rawVertexData || a_vertexSize < sizeof(VertexColor) || a_vertexCount == 0)
 			return false;
@@ -629,10 +633,12 @@ namespace
 		for (std::uint32_t v = 0; v < a_vertexCount; ++v) {
 			const auto byteOffset = static_cast<std::size_t>(a_vertexSize) * v + a_colorOffset;
 			const auto* vertex = reinterpret_cast<const VertexColor*>(a_rawVertexData + byteOffset);
-			float alpha = vertex->data[3];
-			weightedR += vertex->data[0] * alpha;
-			weightedG += vertex->data[1] * alpha;
-			weightedB += vertex->data[2] * alpha;
+			const float alpha = vertex->data[3];
+			float color[]{ vertex->data[0] / 255.0f, vertex->data[1] / 255.0f, vertex->data[2] / 255.0f };
+			globals::features::linearLighting.SRGBToWorking(color);
+			weightedR += color[0] * alpha;
+			weightedG += color[1] * alpha;
+			weightedB += color[2] * alpha;
 			totalAlpha += alpha;
 			if (vertex->data[3] > maxAlpha)
 				maxAlpha = vertex->data[3];
@@ -641,27 +647,8 @@ namespace
 		if (totalAlpha == 0.f)
 			return false;
 
-		a_outVertexColor.data[0] = static_cast<std::uint8_t>(std::min(weightedR / totalAlpha, 255.f));
-		a_outVertexColor.data[1] = static_cast<std::uint8_t>(std::min(weightedG / totalAlpha, 255.f));
-		a_outVertexColor.data[2] = static_cast<std::uint8_t>(std::min(weightedB / totalAlpha, 255.f));
-		a_outVertexColor.data[3] = maxAlpha;
+		a_outVertexColor = { weightedR / totalAlpha, weightedG / totalAlpha, weightedB / totalAlpha, maxAlpha / 255.0f };
 		return true;
-	}
-
-	RE::NiColorA BuildEffectMaterialEmissiveTint(RE::BSEffectShaderMaterial* a_material, RE::BSEffectShaderProperty* a_shaderProperty)
-	{
-		RE::NiColorA tint{
-			a_material->baseColor.red * a_material->baseColorScale,
-			a_material->baseColor.green * a_material->baseColorScale,
-			a_material->baseColor.blue * a_material->baseColorScale,
-			1.0f
-		};
-		if (auto emittance = a_shaderProperty->emittanceColor) {
-			tint.red *= emittance->red;
-			tint.green *= emittance->green;
-			tint.blue *= emittance->blue;
-		}
-		return tint;
 	}
 
 	std::optional<std::string> GetLowercaseStem(const char* a_path)
@@ -748,11 +735,15 @@ LightLimitFix::VertexColorCacheEntry LightLimitFix::GetParticleLightConfig(RE::B
 		return {};
 
 	auto* node = a_pass->geometry;
+	auto& linearLighting = globals::features::linearLighting;
+	const bool colorManagementEnabled = linearLighting.IsLinearLightingActive();
+	const bool acesCgEnabled = colorManagementEnabled && linearLighting.IsACEScgActive();
 
 	{
 		std::shared_lock lock{ particleLightsMutex };
 		auto it = vertexColorCache.find(node);
-		if (it != vertexColorCache.end()) {
+		if (it != vertexColorCache.end() &&
+			(!it->second.valid || (it->second.colorManagementEnabled == colorManagementEnabled && it->second.acescgEnabled == acesCgEnabled))) {
 			return it->second;
 		}
 	}
@@ -781,10 +772,10 @@ LightLimitFix::VertexColorCacheEntry LightLimitFix::GetParticleLightConfig(RE::B
 
 	VertexColorCacheEntry entry{};
 	entry.valid = true;
-	entry.applyEffectMaterialTint = true;
+	entry.colorManagementEnabled = colorManagementEnabled;
+	entry.acescgEnabled = acesCgEnabled;
 	entry.config = config;
 	entry.baseColor = { 1, 1, 1, 1 };
-	bool hasVertexTint = false;
 	if (auto rendererData = a_pass->geometry->GetGeometryRuntimeData().rendererData) {
 		if (auto triShape = a_pass->geometry->AsTriShape()) {
 			const std::uint32_t vertexSize = rendererData->vertexDesc.GetSize();
@@ -792,22 +783,16 @@ LightLimitFix::VertexColorCacheEntry LightLimitFix::GetParticleLightConfig(RE::B
 				const std::uint32_t offset = rendererData->vertexDesc.GetAttributeOffset(RE::BSGraphics::Vertex::Attribute::VA_COLOR);
 				const std::uint32_t vertexCount = static_cast<std::uint32_t>(triShape->GetTrishapeRuntimeData().vertexCount);
 
-				VertexColor weightedVC{};
+				RE::NiColorA weightedVC{};
 				if (TryGetAlphaWeightedVertexColor(rendererData->rawVertexData, vertexSize, offset, vertexCount, weightedVC)) {
-					entry.baseColor.red *= weightedVC.data[0] / 255.f;
-					entry.baseColor.green *= weightedVC.data[1] / 255.f;
-					entry.baseColor.blue *= weightedVC.data[2] / 255.f;
-					hasVertexTint = true;
+					entry.baseColor.red *= weightedVC.red;
+					entry.baseColor.green *= weightedVC.green;
+					entry.baseColor.blue *= weightedVC.blue;
 					if (shaderProperty->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kVertexAlpha))
-						entry.baseColor.alpha *= weightedVC.data[3] / 255.f;
+						entry.baseColor.alpha *= weightedVC.alpha;
 				}
 			}
 		}
-	}
-
-	if (!hasVertexTint) {
-		entry.baseColor = BuildEffectMaterialEmissiveTint(material, shaderProperty);
-		entry.applyEffectMaterialTint = false;
 	}
 
 	{
@@ -833,16 +818,16 @@ bool LightLimitFix::QueueParticleLight(RE::BSRenderPass* a_pass, VertexColorCach
 		return false;
 
 	RE::NiColorA color = a_reference.baseColor;
-	if (a_reference.applyEffectMaterialTint) {
-		color.red *= material->baseColor.red * material->baseColorScale;
-		color.green *= material->baseColor.green * material->baseColorScale;
-		color.blue *= material->baseColor.blue * material->baseColorScale;
+	auto materialColor = globals::features::linearLighting.SRGBToWorking({ material->baseColor.red, material->baseColor.green, material->baseColor.blue });
+	color.red *= materialColor.red * material->baseColorScale;
+	color.green *= materialColor.green * material->baseColorScale;
+	color.blue *= materialColor.blue * material->baseColorScale;
 
-		if (auto emittance = shaderProperty->emittanceColor) {
-			color.red *= emittance->red;
-			color.green *= emittance->green;
-			color.blue *= emittance->blue;
-		}
+	if (auto emittance = shaderProperty->emittanceColor) {
+		auto emittanceColor = globals::features::linearLighting.SRGBToWorking(*emittance);
+		color.red *= emittanceColor.red;
+		color.green *= emittanceColor.green;
+		color.blue *= emittanceColor.blue;
 	}
 
 	ResolvedParticleLight resolved;
@@ -898,10 +883,8 @@ void LightLimitFix::AddParticleLightsToBuffer(eastl::vector<LightData>& a_lights
 
 		LightData light{};
 		constexpr float invPI = 1.f / std::numbers::pi_v<float>;
-		light.color.x = pl.color.red * invPI;
-		light.color.y = pl.color.green * invPI;
-		light.color.z = pl.color.blue * invPI;
-		light.color *= pl.color.alpha;
+		light.color = { pl.color.red, pl.color.green, pl.color.blue };
+		light.color *= invPI * pl.color.alpha;
 
 		if (effects11.enableEffect)
 			effects11.OverridePointLightColor(light.color);

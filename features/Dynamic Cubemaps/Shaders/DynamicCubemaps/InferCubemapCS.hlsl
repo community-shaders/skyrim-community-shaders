@@ -1,4 +1,5 @@
 #include "Common/Color.hlsli"
+#include "Common/ColorManagement.hlsli"
 #include "Common/SharedData.hlsli"
 
 TextureCube<float4> EnvCaptureTexture : register(t0);
@@ -90,11 +91,11 @@ float3 GetSamplingVector(uint3 ThreadID, in RWTexture2DArray<float4> OutputTextu
 	}
 
 #if defined(REFLECTIONS)
-	color.rgb = lerp(color.rgb, Color::IrradianceToLinear(ReflectionsTexture.SampleLevel(LinearSampler, uv, 0.0).rgb), saturate(mipLevel / 8.0));
+	color.rgb = lerp(color.rgb, ColorManagement::SceneToLinear(ReflectionsTexture.SampleLevel(LinearSampler, uv, 0.0).rgb), saturate(mipLevel / 8.0));
 #else
 	color.rgb = lerp(color.rgb, color.rgb * DefaultCubemap.SampleLevel(LinearSampler, uv, 0.0).xyz, saturate(mipLevel / 8.0));
 #endif
 
-	color.rgb = Color::IrradianceToGamma(color.rgb);
+	color.rgb = ColorManagement::LinearToScene(color.rgb);
 	EnvInferredTexture[ThreadID] = max(0, color);
 }

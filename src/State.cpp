@@ -13,6 +13,7 @@
 #include "Features/HDRDisplay.h"
 #include "Features/InteriorSun.h"
 #include "Features/PerformanceOverlay.h"
+#include "Features/PostProcessing.h"
 #include "Features/Skin.h"
 #include "Features/SkySync.h"
 #include "Features/Skylighting.h"
@@ -199,10 +200,37 @@ void State::Debug()
 	}
 }
 
+State::TonemapOwner State::GetTonemapOwner()
+{
+	if (tonemapOwner)
+		return *tonemapOwner;
+	auto& effects11 = globals::features::effects11;
+	auto& postProcessing = globals::features::postProcessing;
+
+	// Effects11 does not run over the main menu or loading screen: those composite UI and
+	// scene into one buffer, so an ENB preset would grade the menu itself. It must not claim
+	// ownership there either, or Post Processing would lose its tonemap to a pass that never
+	// renders.
+	const bool effects11CanRender = !IsMainOrLoadingMenuOpen();
+
+	// Effects11 wins ties: its effects form a complete ENB preset (tonemap, bloom, lens,
+	// adaptation) that looks wrong when only partially applied, whereas Post Processing
+	// degrades gracefully to the vanilla tonemap.
+	if (effects11.loaded && effects11CanRender && effects11.WantsTonemapOwnership())
+		tonemapOwner = TonemapOwner::kEffects11;
+	else if (postProcessing.loaded && postProcessing.WantsTonemapOwnership())
+		tonemapOwner = TonemapOwner::kPostProcessing;
+	else
+		tonemapOwner = TonemapOwner::kVanilla;
+	return *tonemapOwner;
+}
+
 bool State::HandlePostProcessing(RE::RENDER_TARGET a_input, RE::RENDER_TARGET a_output)
 {
-	auto& effects11 = globals::features::effects11;
-	if (!effects11.loaded || !effects11.HandleTonemapRender(a_input, a_output))
+	if (GetTonemapOwner() != TonemapOwner::kEffects11)
+		return false;
+
+	if (!globals::features::effects11.RenderTonemap(a_input, a_output))
 		return false;
 
 	auto renderer = globals::game::renderer;
@@ -259,6 +287,7 @@ void State::Reset()
 	lastVertexDescriptor = 0;
 	std::memset(&permutationDataPrevious, 0xFF, sizeof(PermutationCB));
 	frameCount++;
+	tonemapOwner.reset();
 	// Publish for off-thread readers (e.g. the MCP listener thread).
 	frameCountAtomic.store(frameCount, std::memory_order_relaxed);
 
@@ -293,12 +322,14 @@ void State::Setup()
 
 	Feature::ForEachLoadedFeature("SetupResources", [](Feature* feature) { feature->SetupResources(); });
 	globals::deferred->SetupResources();
+	Feature::ForEachLoadedFeature("PostSetupResources", [](Feature* feature) { feature->PostSetupResources(); });
 
 	// Load per-weather settings after features are setup
 	globals::weatherManager->LoadPerWeatherSettingsFromDisk();
 
 	// Load scene-specific settings (Interior Only, etc.)
 	globals::sceneSettingsManager->LoadAll();
+	tonemapOwner.reset();
 }
 
 static std::string GetConfigPath(State::ConfigMode a_configMode)
@@ -750,10 +781,8 @@ std::vector<std::pair<std::string, std::string>>* State::GetDefines()
 
 bool State::ShaderEnabled(const RE::BSShader::Type a_type)
 {
-	if (a_type > RE::BSShader::Type::None && a_type < RE::BSShader::Type::Total) {
-		return enabledClasses[magic_enum::enum_integer(a_type) - 1];
-	}
-	return false;
+	return a_type > RE::BSShader::Type::None && a_type < RE::BSShader::Type::Total &&
+	       enabledClasses[static_cast<size_t>(a_type) - 1];
 }
 
 bool State::IsShaderEnabled(const RE::BSShader& a_shader)
@@ -1015,6 +1044,7 @@ void State::UpdateSharedData([[maybe_unused]] bool a_inWorld, [[maybe_unused]] b
 {
 	{
 		SharedDataCB data{};
+		SharedLighting lighting{};
 
 		const auto shaderManager = globals::game::smState;
 		const RE::NiTransform& dalcTransform = shaderManager->directionalAmbientTransform;
@@ -1023,11 +1053,12 @@ void State::UpdateSharedData([[maybe_unused]] bool a_inWorld, [[maybe_unused]] b
 		auto dirLight = skyrim_cast<RE::NiDirectionalLight*>(shadowSceneNode->GetRuntimeData().sunLight->light.get());
 
 		auto& lightRuntimeData = dirLight->GetLightRuntimeData();
-		data.DirLightColor = { lightRuntimeData.diffuse.red, lightRuntimeData.diffuse.green, lightRuntimeData.diffuse.blue, 1.0f };
-		data.DirLightColor *= lightRuntimeData.fade;
-
+		lighting.directionalLight = dirLight;
+		lighting.directional.color = lightRuntimeData.diffuse;
+		lighting.directional.intensity = lightRuntimeData.fade;
 		if (auto imageSpaceManager = globals::game::imageSpaceManager)
-			data.DirLightColor *= imageSpaceManager->GetRuntimeData().data.baseData.hdr.sunlightScale;
+			lighting.directional.intensity *= imageSpaceManager->GetRuntimeData().data.baseData.hdr.sunlightScale;
+		lighting.directional.alpha = lighting.directional.intensity;
 
 		const auto& direction = dirLight->GetWorldDirection();
 		data.DirLightDirection = { -direction.x, -direction.y, -direction.z, 0.0f };
@@ -1041,6 +1072,7 @@ void State::UpdateSharedData([[maybe_unused]] bool a_inWorld, [[maybe_unused]] b
 
 		data.FrameCount = frameCount * temporal;
 		data.FrameCountAlwaysActive = frameCount;
+		data.ResetHistory = ShouldResetHistory();
 
 		if (a_inWorld) {
 			for (int i = -2; i <= 2; i++) {
@@ -1081,6 +1113,10 @@ void State::UpdateSharedData([[maybe_unused]] bool a_inWorld, [[maybe_unused]] b
 		}
 
 		if (auto sky = globals::game::sky) {
+			auto getMoonColor = [&](const RE::Moon* moon, const Util::ColorSpace::LightColor& baseColor) {
+				return Util::Moon::GetLightColor(moon, baseColor, globals::features::skySync.settings.NewMoonIntensity, globals::features::skySync.settings.CrescentMoonIntensity, globals::features::skySync.settings.FullMoonIntensity);
+			};
+
 			// Process sun
 			if (auto sun = sky->sun; sun && sun->root && sky->root) {
 				const auto& sunPos = sun->root->world.translate;
@@ -1090,8 +1126,10 @@ void State::UpdateSharedData([[maybe_unused]] bool a_inWorld, [[maybe_unused]] b
 				data.SunDirection = { sunDirection.x, sunDirection.y, sunDirection.z, 0.0f };
 
 				if (sun->sunBase) {
-					if (const auto prop = skyrim_cast<RE::BSSkyShaderProperty*>(sun->sunBase->GetGeometryRuntimeData().shaderProperty.get()))
-						data.SunColor = { prop->kBlendColor.red * prop->kBlendColor.alpha, prop->kBlendColor.green * prop->kBlendColor.alpha, prop->kBlendColor.blue * prop->kBlendColor.alpha, prop->kBlendColor.alpha };
+					if (const auto prop = skyrim_cast<RE::BSSkyShaderProperty*>(sun->sunBase->GetGeometryRuntimeData().shaderProperty.get())) {
+						const auto& sunColor = prop->kBlendColor;
+						lighting.sun = { .color = { sunColor.red, sunColor.green, sunColor.blue }, .intensity = sunColor.alpha, .alpha = sunColor.alpha };
+					}
 				}
 			}
 
@@ -1099,14 +1137,14 @@ void State::UpdateSharedData([[maybe_unused]] bool a_inWorld, [[maybe_unused]] b
 				auto dir = Util::Moon::GetDirection(masser, moonAndStarsLoaded);
 				data.MasserDirection = { dir.x, dir.y, dir.z, 0.0f };
 				if (masser->root && !masser->root->GetFlags().any(RE::NiAVObject::Flag::kHidden))
-					data.MasserColor = Util::Moon::GetBlendColor(masser, Util::Moon::MasserBaseColor, globals::features::skySync.settings.NewMoonIntensity, globals::features::skySync.settings.CrescentMoonIntensity, globals::features::skySync.settings.FullMoonIntensity);
+					lighting.masser = getMoonColor(masser, Util::Moon::MasserBaseColor);
 			}
 
 			if (auto secunda = sky->secunda) {
 				auto dir = Util::Moon::GetDirection(secunda, moonAndStarsLoaded);
 				data.SecundaDirection = { dir.x, dir.y, dir.z, 0.0f };
 				if (secunda->root && !secunda->root->GetFlags().any(RE::NiAVObject::Flag::kHidden))
-					data.SecundaColor = Util::Moon::GetBlendColor(secunda, Util::Moon::SecundaBaseColor, globals::features::skySync.settings.NewMoonIntensity, globals::features::skySync.settings.CrescentMoonIntensity, globals::features::skySync.settings.FullMoonIntensity);
+					lighting.secunda = getMoonColor(secunda, Util::Moon::SecundaBaseColor);
 			}
 		}
 
@@ -1128,6 +1166,13 @@ void State::UpdateSharedData([[maybe_unused]] bool a_inWorld, [[maybe_unused]] b
 
 		data.HDRData = globals::features::hdrDisplay.GetSharedDataHDR();
 
+		for (auto* feature : Feature::GetFeatureList())
+			if (feature->loaded)
+				feature->ModifySharedLighting(lighting);
+		data.DirLightColor = lighting.directional.GetColor();
+		data.SunColor = lighting.sun.GetColor();
+		data.MasserColor = lighting.masser.GetColor();
+		data.SecundaColor = lighting.secunda.GetColor();
 		sharedDataCB->Update(data);
 	}
 

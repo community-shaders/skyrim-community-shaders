@@ -1,4 +1,7 @@
-﻿#pragma once
+#pragma once
+#include <array>
+#include <optional>
+
 #include "RE/M/Moon.h"
 
 #include "Utils/Moon.h"
@@ -75,7 +78,6 @@ public:
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
-
 private:
 	enum class CellFlagExt : uint16_t
 	{
@@ -124,9 +126,9 @@ private:
 		bool sunsetHeadingLocked = false;
 		float vlIntensityFactor = 1.0f;
 
-		void Update(const RE::Sky* sky, RE::NiPoint3 dirs[], float intensities[], float fadeDuration, float fadeAdvance, bool a_immediateTransition);
+		void Update(const RE::Sky* sky, RE::NiPoint3 dirs[], float intensities[], std::optional<std::array<RE::NiColor, 3>> colors, float fadeDuration, float fadeAdvance, bool a_immediateTransition);
 		void LockSunElevation(RE::NiPoint3 dirs[]);
-		static void SetLighting(const RE::Sky* sky, RE::NiPoint3 dir);
+		static void SetLighting(const RE::Sky* sky, RE::NiPoint3 dir, float intensity, std::optional<RE::NiColor> color);
 		static void SetDirection(RE::NiPoint3& dir, float headingRadians, float elevRadians);
 		static void SetElevation(RE::NiPoint3& dir, float elevRadians);
 		static void ClampDirection(RE::NiPoint3& dir);
@@ -159,6 +161,7 @@ private:
 
 	float4 colors[3] = {};
 	float currentDim = 1.0f;
+	std::optional<std::array<RE::NiColor, 3>> workingLightColors = {};
 	bool sunSetting = false;
 	bool sunRising = false;
 	bool sunBelowHorizon = false;

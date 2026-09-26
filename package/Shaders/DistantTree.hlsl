@@ -1,4 +1,4 @@
-#include "Common/Color.hlsli"
+#include "Common/ColorManagement.hlsli"
 #include "Common/FrameBuffer.hlsli"
 #include "Common/GBuffer.hlsli"
 #include "Common/MotionBlur.hlsli"
@@ -31,7 +31,6 @@ struct VS_OUTPUT
 	float4 PreviousWorldPosition: POSITION2;
 #endif  // RENDER_DEPTH
 	float4 ViewPosition: POSITION3;
-
 };
 
 #ifdef VSHADER
@@ -153,7 +152,7 @@ const static float DepthOffsets[16] = {
 #	if defined(EXP_HEIGHT_FOG)
 void ApplyReflectionExponentialHeightFog(inout float3 color, float3 positionWS, float4 screenPosition)
 {
-	float3 fogColor = Color::Fog(AmbientColor.xyz);
+	float3 fogColor = ColorManagement::SRGBToWorking(AmbientColor.xyz);
 	float4 exponentialHeightFog = ExponentialHeightFog::GetExponentialHeightFogNoVolumetric(positionWS, FrameBuffer::CameraPosAdjust.xyz, fogColor, float4(screenPosition.xy * FrameBuffer::DynamicResolutionParams2.xy, screenPosition.z, 1));
 	color = lerp(color, exponentialHeightFog.xyz, exponentialHeightFog.w);
 }
@@ -188,7 +187,7 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.Diffuse.w = 0;
 #	else
 	float4 baseColor = TexDiffuse.SampleBias(SampDiffuse, input.TexCoord.xy, SharedData::MipBias);
-	baseColor.xyz = Color::Diffuse(baseColor.xyz);
+	baseColor.xyz = Color::Albedo(ColorManagement::TextureToWorking(baseColor.xyz));
 
 	if ((baseColor.w - AlphaTestRefRS) < 0) {
 		discard;
@@ -208,8 +207,7 @@ PS_OUTPUT main(PS_INPUT input)
 	if (dirShadow != 0.0)
 		dirShadow *= ShadowSampling::GetWorldShadow(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust.xyz);
 
-	float llDirLightMult = (SharedData::linearLightingSettings.enableLinearLighting && !SharedData::linearLightingSettings.isDirLightLinear) ? SharedData::linearLightingSettings.dirLightMult : 1.0f;
-	float3 diffuseColor = Color::DirectionalLight(SharedData::DirLightColor.xyz / max(llDirLightMult, 1e-5), SharedData::linearLightingSettings.isDirLightLinear) * dirShadow * 0.5 * llDirLightMult * Color::VanillaNormalization();
+	float3 diffuseColor = Color::DirectionalLight(SharedData::DirLightColor.xyz) * dirShadow * 0.5 * Color::BRDFScale;
 
 #			if defined(EXP_HEIGHT_FOG)
 	if (SharedData::exponentialHeightFogSettings.enabled) {
@@ -248,8 +246,7 @@ PS_OUTPUT main(PS_INPUT input)
 #		else
 	float dirShadow = ShadowSampling::GetWorldShadow(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust.xyz);
 
-	float llDirLightMult = (SharedData::linearLightingSettings.enableLinearLighting && !SharedData::linearLightingSettings.isDirLightLinear) ? SharedData::linearLightingSettings.dirLightMult : 1.0f;
-	float3 diffuseColor = Color::DirectionalLight(SharedData::DirLightColor.xyz / max(llDirLightMult, 1e-5), SharedData::linearLightingSettings.isDirLightLinear) * dirShadow * 0.5 * llDirLightMult * Color::VanillaNormalization();
+	float3 diffuseColor = Color::DirectionalLight(SharedData::DirLightColor.xyz) * dirShadow * 0.5 * Color::BRDFScale;
 
 #			if defined(EXP_HEIGHT_FOG)
 	if (SharedData::exponentialHeightFogSettings.enabled) {

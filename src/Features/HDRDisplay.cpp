@@ -408,11 +408,9 @@ void HDRDisplay::DrawSettings()
 		};
 		const char* forceEnableLabel = T(TKEY("force_enable_hdr"), "Force Enable HDR");
 		const char* cancelLabel = T(TKEY("cancel"), "Cancel");
-		const float buttonWidth = std::max({
-			ThemeManager::Constants::POPUP_BUTTON_WIDTH * Util::GetUIScale(),
+		const float buttonWidth = std::max({ ThemeManager::Constants::POPUP_BUTTON_WIDTH * Util::GetUIScale(),
 			buttonWidthForLabel(forceEnableLabel),
-			buttonWidthForLabel(cancelLabel)
-		});
+			buttonWidthForLabel(cancelLabel) });
 
 		if (ImGui::Button(forceEnableLabel, ImVec2(buttonWidth, 0))) {
 			{
@@ -1606,7 +1604,7 @@ HDRDisplay::HDRDataCB HDRDisplay::BuildHDRData() const
 
 	// Linear Lighting keeps the pipeline linear throughout.
 	// Without it, ISHDR gamma-encodes its output even in HDR mode.
-	bool isSceneLinear = globals::features::linearLighting.settings.enableLinearLighting;
+	bool isSceneLinear = globals::features::linearLighting.IsLinearLightingActive() && !isMainOrLoadingMenu;
 
 	// Use user-specified peak brightness for highlights compression
 	float effectivePeakNits = static_cast<float>(settings.hdrPeakNits);

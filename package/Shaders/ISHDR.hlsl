@@ -2,6 +2,7 @@
 #include "Common/DummyVSTexCoord.hlsl"
 #include "Common/FrameBuffer.hlsli"
 #include "Common/Math.hlsli"
+#include "Common/Permutation.hlsli"
 #include "Common/SharedData.hlsli"
 
 typedef VS_OUTPUT PS_INPUT;
@@ -84,7 +85,7 @@ float3 GetTonemapFactorReinhard(float3 luminance, bool isHDR = false)
 float3 GetTonemapFactorHejlBurgessDawson(float3 luminance, bool isHDR = false)
 {
 	float3 tmp = max(0, luminance - 0.004);
-	float3 color = Color::SrgbToLinear(((tmp * 6.2 + 0.5) * tmp) / (tmp * (tmp * 6.2 + 1.7) + 0.06));
+	float3 color = TransferFunctions::Gamma22ToLinear(((tmp * 6.2 + 0.5) * tmp) / (tmp * (tmp * 6.2 + 1.7) + 0.06));
 
 	if (isHDR)  // branch before shoulder (f''(x) = 0)
 	{
@@ -134,6 +135,32 @@ PS_OUTPUT main(PS_INPUT input)
 
 	float3 inputColor = BlendTex.Sample(BlendSampler, uv).xyz;
 
+#		if defined(ENABLE_LL)
+	if (Permutation::RenderToUI || SharedData::linearLightingSettings.isMainOrLoadingMenu) {
+		psout.Color = float4(inputColor, 1.0);
+		return psout;
+	}
+#		endif
+
+	float4 hdrShared = SharedData::HDRData;
+	bool isHDR = hdrShared.x > 0.5;
+	float menuSceneEncoding = hdrShared.w;
+	static const float MENU_SCENE_ISHDR_BYPASS_THRESHOLD = 0.9;  // encoding 1.0 == main/loading
+	if (menuSceneEncoding > MENU_SCENE_ISHDR_BYPASS_THRESHOLD)
+		isHDR = false;
+
+#		if defined(POSTPROCESS)
+	if (SharedData::postProcessingSettings.DisableVanillaTonemapping) {
+		if (!isHDR) {
+			inputColor = TransferFunctions::LinearToGamma22(inputColor);
+		}
+
+		psout.Color = float4(inputColor, 1.0);
+
+		return psout;
+	}
+#		endif
+
 	float3 bloomColor = 0;
 	if (Flags.x > 0.5) {
 		bloomColor = ImageTex.Sample(ImageSampler, uv).xyz;
@@ -142,13 +169,6 @@ PS_OUTPUT main(PS_INPUT input)
 	}
 
 	float2 avgValue = AvgTex.Sample(AvgSampler, input.TexCoord.xy).xy;
-
-	float4 hdrShared = SharedData::HDRData;
-	bool isHDR = hdrShared.x > 0.5;
-	float menuSceneEncoding = hdrShared.w;
-	static const float MENU_SCENE_ISHDR_BYPASS_THRESHOLD = 0.9;  // encoding 1.0 == main/loading
-	if (menuSceneEncoding > MENU_SCENE_ISHDR_BYPASS_THRESHOLD)
-		isHDR = false;
 
 	float3 outputColor = 0.0;
 
@@ -191,8 +211,9 @@ PS_OUTPUT main(PS_INPUT input)
 #		endif
 
 	if (isHDR) {
-		if (!ENABLE_LL)
-			outputColor = Color::GammaToLinearSafe(outputColor);
+#		if !defined(ENABLE_LL)
+		outputColor = TransferFunctions::SignedGamma22ToLinear(outputColor);
+#		endif
 		float paperWhiteNits = max(hdrShared.y, 1e-6);
 		float peakWhiteRatio = max(hdrShared.z / paperWhiteNits, 1.0);  // peakNits / paperWhite
 
@@ -212,12 +233,14 @@ PS_OUTPUT main(PS_INPUT input)
 		outputColor = Color::BT709ToBT2020(outputColor);
 		outputColor = exp2(DisplayMapping::RangeCompress(log2(max(0, outputColor)), log2(0.4 * peakWhiteRatio), log2(peakWhiteRatio), log2(100.f)));
 		outputColor = Color::BT2020ToBT709(outputColor);
-		if (!ENABLE_LL)
-			outputColor = Color::LinearToGammaSafe(outputColor);
+#		if !defined(ENABLE_LL)
+		outputColor = TransferFunctions::LinearToSignedGamma22(outputColor);
+#		endif
 	} else {
 		outputColor = max(0, outputColor);
-		if (ENABLE_LL)
-			outputColor = Color::LinearToGammaSafe(outputColor);
+#		if defined(ENABLE_LL)
+		outputColor = TransferFunctions::LinearToSignedGamma22(outputColor);
+#		endif
 		outputColor = FrameBuffer::ToSRGBColor(outputColor);
 	}
 

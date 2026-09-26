@@ -461,8 +461,7 @@ void TruePBR::SetupTextureSetData()
 		} catch (const std::exception& e) {
 			logger::error("Failed to deserialize config for {}: {}.", editorId, e.what());
 			return false;
-		}
-	}, enableVerboseJsonLogging);
+		} }, enableVerboseJsonLogging);
 }
 
 void TruePBR::ReloadTextureSetData()
@@ -480,8 +479,7 @@ void TruePBR::ReloadTextureSetData()
 		} catch (const std::exception& e) {
 			logger::error("Failed to deserialize config for {}: {}.", editorId, e.what());
 			return false;
-		}
-	}, enableVerboseJsonLogging);
+		} }, enableVerboseJsonLogging);
 
 	for (const auto& [material, textureSets] : BSLightingShaderMaterialPBRLandscape::All) {
 		for (uint32_t textureSetIndex = 0; textureSetIndex < BSLightingShaderMaterialPBRLandscape::NumTiles; ++textureSetIndex) {
@@ -523,8 +521,7 @@ void TruePBR::SetupMaterialObjectData()
 		} catch (const std::exception& e) {
 			logger::error("Failed to deserialize config for {}: {}.", editorId, e.what());
 			return false;
-		}
-	}, enableVerboseJsonLogging);
+		} }, enableVerboseJsonLogging);
 }
 
 TruePBR::PBRMaterialObjectData* TruePBR::GetPBRMaterialObjectData(const RE::TESForm* materialObject)

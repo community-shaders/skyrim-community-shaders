@@ -1,10 +1,53 @@
 #pragma once
 #include <array>
 #include <d3d11.h>
+#include <d3dcompiler.h>
+#include <filesystem>
+#include <fstream>
 #include <winrt/base.h>
 
 namespace Util
 {
+	/**
+	 * @brief ID3DInclude handler resolving #include paths under Data\Shaders,
+	 *        shared by every HLSL compile call site in this codebase.
+	 */
+	struct CustomInclude : public ID3DInclude
+	{
+		HRESULT Open([[maybe_unused]] D3D_INCLUDE_TYPE IncludeType, LPCSTR pFileName, [[maybe_unused]] LPCVOID pParentData, LPCVOID* ppData, UINT* pBytes) override
+		{
+			std::filesystem::path filePath = pFileName;
+			filePath = L"Data\\Shaders" / filePath;
+
+			std::ifstream file(filePath, std::ios::binary);
+			if (!file.is_open()) {
+				*ppData = NULL;
+				*pBytes = 0;
+				return E_FAIL;
+			}
+
+			file.seekg(0, std::ios::end);
+			UINT size = static_cast<UINT>(file.tellg());
+			file.seekg(0, std::ios::beg);
+
+			char* data = new char[size];
+			if (!file.read(data, size)) {
+				delete[] data;
+				*ppData = NULL;
+				*pBytes = 0;
+				return E_FAIL;
+			}
+			*ppData = data;
+			*pBytes = size;
+			return S_OK;
+		}
+
+		HRESULT Close(LPCVOID pData) override
+		{
+			delete[] static_cast<const char*>(pData);
+			return S_OK;
+		}
+	};
 	/**
 	 * @brief Look up the matching SRV for a given render target view.
 	 * @param a_rtv The render target view to look up.

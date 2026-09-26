@@ -5,6 +5,7 @@
 #ifndef TERRAIN_VARIATION_HLSLI
 #define TERRAIN_VARIATION_HLSLI
 
+#include "Common/ColorManagement.hlsli"
 #include "Common/SharedData.hlsli"
 
 // --------------------- CONSTANTS AND STRUCTURES --------------------- //
@@ -13,7 +14,6 @@ static const float2x2 SKEW_MATRIX = float2x2(1.0, 0.0, -0.57735027, 1.15470054);
 static const float WORLD_SCALE = 332.54;
 // Mesh UVs already tile, so one lattice cell maps to one UV tile.
 static const float MESH_SCALE = 1.0;
-static const float3 LUMINANCE_WEIGHTS = float3(0.2126, 0.7152, 0.0722);
 static const float2 HASH_MULTIPLIER = float2(1271.5151, 3337.8237);
 // Fade width for c1/c2 rank-swap seams when discarding the third triangle corner.
 static const float TAP_SWAP_FADE_WIDTH = 0.1;
@@ -154,7 +154,7 @@ inline float4 StochasticBlendTwoSamples(float4 s1, float4 s2, float tap1Weight, 
 }
 
 // Stochastic sampling function for Terrain LOD & LOD Mask.
-inline float4 StochasticSampleLOD(float rnd, Texture2D tex, SamplerState samp, float2 uv)
+inline float4 StochasticSampleLOD(float rnd, Texture2D tex, SamplerState samp, float2 uv, out float4 sampledColor)
 {
 	float2 cellID = floor(uv * 255437.0);
 	float2 offset1 = hashLOD(cellID) * 0.08;
@@ -167,12 +167,16 @@ inline float4 StochasticSampleLOD(float rnd, Texture2D tex, SamplerState samp, f
 	float4 s1 = tex.SampleBias(samp, uv + j1, SharedData::MipBias);
 	float4 s2 = tex.SampleBias(samp, uv + j2, SharedData::MipBias);
 
+	sampledColor = lerp(s2, s1, STOCHASTIC_LOD_BLEND);
+	s1 = ColorManagement::TextureToWorking(s1);
+	s2 = ColorManagement::TextureToWorking(s2);
+
 	// Simple 2-sample blend weighted toward first sample
 	return lerp(s2, s1, STOCHASTIC_LOD_BLEND);
 }
 
 // Main stochastic sampling function
-inline float4 StochasticEffect(Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets)
+inline float4 StochasticEffect(Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, bool colorTexture = false, bool linearInput = false)
 {
 	// Calculate custom mip level from original UVs.
 	float mipLevel = TerrainStochasticMipLevel(tex);
@@ -180,9 +184,15 @@ inline float4 StochasticEffect(Texture2D tex, SamplerState samp, float2 uv, Stoc
 	float4 s1 = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
 	float4 s2 = tex.SampleLevel(samp, uv + offsets.offset2, mipLevel);
 
-	// Height calculation - use luminance for RGB data, alpha when available
-	float h1 = lerp(dot(s1.rgb, LUMINANCE_WEIGHTS), s1.a, step(0.001, s1.a));
-	float h2 = lerp(dot(s2.rgb, LUMINANCE_WEIGHTS), s2.a, step(0.001, s2.a));
+	// Height weights belong to the source data, independent of the working gamut.
+	float h1 = lerp(dot(s1.rgb, float3(0.2125, 0.7154, 0.0721)), s1.a, step(0.001, s1.a));
+	float h2 = lerp(dot(s2.rgb, float3(0.2125, 0.7154, 0.0721)), s2.a, step(0.001, s2.a));
+
+	if (colorTexture) {
+		s1 = ColorManagement::TextureToWorking(s1, linearInput);
+		s2 = ColorManagement::TextureToWorking(s2, linearInput);
+	}
+
 	return StochasticBlendTwoSamples(s1, s2, offsets.tap1Weight, h1, h2);
 }
 

@@ -7,8 +7,8 @@ typedef VS_OUTPUT PS_INPUT;
 
 struct PS_OUTPUT
 {
-	float4 Color : SV_Target0;
-	float4 Feedback : SV_Target1;
+	float4 Color: SV_Target0;
+	float4 Feedback: SV_Target1;
 };
 
 #if defined(PSHADER)
@@ -38,20 +38,20 @@ cbuffer PerGeometry : register(b2)
 };
 
 // Decompiler comparison idiom: cmp(expr) => -(expr), used as a truthy mask in ?: selects.
-#define cmp -
+#	define cmp -
 
-#ifdef HDR_OUTPUT
+#	ifdef HDR_OUTPUT
 // Internal working space for TAA is PQ/BT2020.
 // PQ maps [0, 10000 nits] to [0, 1], so the vanilla 1.001 bracket ceiling is correct —
 // nothing in the scene legitimately exceeds 1.0 PQ. This is why PQ avoids the bracket
 // collapse that caused halos with the linear BT2020 working space.
 float3 ConvertRenderInput(float3 gammaColor)
 {
-	return DisplayMapping::LinearToPQ(Color::BT709ToBT2020(Color::GammaToLinearSafe(gammaColor)), 10000.0);
+	return DisplayMapping::LinearToPQ(Color::BT709ToBT2020(TransferFunctions::SignedGamma22ToLinear(gammaColor)), 10000.0);
 }
 float3 ConvertRenderOutput(float3 pqColor)
 {
-	return Color::LinearToGammaSafe(Color::BT2020ToBT709(DisplayMapping::PQtoLinear(pqColor, 10000.0)));
+	return TransferFunctions::LinearToSignedGamma22(Color::BT2020ToBT709(DisplayMapping::PQtoLinear(pqColor, 10000.0)));
 }
 // Feedback luma round-trip: feedbackOut.x is read back as history.x next frame.
 // Storing raw PQ luma [0,1] in a low-precision RT causes quantization banding in highlights
@@ -62,14 +62,14 @@ float EncodeFeedbackLuma(float pqLuma)
 {
 	// PQ → linear (single channel: luma only, no colour transform needed)
 	float linearLuma = DisplayMapping::PQtoLinear(pqLuma.xxx, 10000.0).x;
-	return Color::LinearToGammaSafe(linearLuma);
+	return TransferFunctions::LinearToSignedGamma22(linearLuma);
 }
 float DecodeFeedbackLuma(float gammaLuma)
 {
-	float linearLuma = Color::GammaToLinearSafe(gammaLuma);
+	float linearLuma = TransferFunctions::SignedGamma22ToLinear(gammaLuma);
 	return DisplayMapping::LinearToPQ(linearLuma.xxx, 10000.0).x;
 }
-#endif
+#	endif
 
 static const float3 kLumaWeights = float3(0.5, 0.25, 0.25);
 
@@ -241,11 +241,21 @@ PS_OUTPUT main(PS_INPUT input)
 	PS_OUTPUT psout;
 	float2 texCoord = input.TexCoord;
 	float4 colorOut, feedbackOut;
+	if (SharedData::ResetHistory) {
+		float2 uv = ClampScreenUV(texCoord, GetDynamicResolutionMax());
+		float luma = dot(SampleCenterRGB(uv).yzx, kLumaWeights);
+#	ifdef HDR_OUTPUT
+		luma = EncodeFeedbackLuma(luma);
+#	endif
+		psout.Color = float4(currentFrameTex.Sample(currentFrameSampler, uv).rgb, 1.0);
+		psout.Feedback = float4(luma, 0.0, 0.0, 1.0);
+		return psout;
+	}
 
 	// float4 packs — component reuse matches vanilla decompile (see header comment).
-	float4 motionReject, sampleUV, history, corner, tapMin; // was r0–r4
-	float4 tapA0, tapA1, tapB0, tapB1, tapC0, tapC1;       // was r6–r13
-	float4 center, centerMeta, bracketMax, weightedColor, mergeScratch, bracketMinReg; // was r14–r19
+	float4 motionReject, sampleUV, history, corner, tapMin;                             // was r0–r4
+	float4 tapA0, tapA1, tapB0, tapB1, tapC0, tapC1;                                    // was r6–r13
+	float4 center, centerMeta, bracketMax, weightedColor, mergeScratch, bracketMinReg;  // was r14–r19
 
 	float2 drMax = GetDynamicResolutionMax(), drUVMin, drUVMax, drCenter;
 	float4 drNeighborsA, drNeighborsB, drNeighborsC;

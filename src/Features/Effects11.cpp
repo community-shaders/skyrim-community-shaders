@@ -19,8 +19,16 @@
 #include "Utils/D3D.h"
 #include "Utils/Game.h"
 
+bool Effects11::HasShaderDefine(RE::BSShader::Type)
+{
+	return IsActive();
+}
+
 Effects11::PerFrame Effects11::GetCommonBufferData()
 {
+	if (!IsActive())
+		return {};
+
 	if (!loaded)
 		return {};
 
@@ -92,6 +100,13 @@ Effects11::PerFrame Effects11::GetCommonBufferData()
 void Effects11::DrawSettings()
 {
 	MenuManager::GetSingleton().RenderImGui();
+}
+
+bool Effects11::IsPresetEnabled() const
+{
+	auto& manager = EffectManager::GetSingleton();
+	return loaded && manager.IsInitialized() && manager.IsPresetLoaded() &&
+	       SettingManager::GetSingleton().GetValue<bool>("UseEffect", "GLOBAL");
 }
 
 void Effects11::ToggleEnabled()
@@ -188,6 +203,21 @@ void Effects11::SetupResources()
 	EffectManager::GetSingleton().Initialize();
 }
 
+void Effects11::PostSetupResources()
+{
+	resourcesReady = true;
+	Reset();
+}
+
+void Effects11::Reset()
+{
+	if (!resourcesReady)
+		return;
+	const bool enabled = IsPresetEnabled();
+	if (enabled != presetActive)
+		globals::shaderCache->Reload([this, enabled] { presetActive = enabled; });
+}
+
 void Effects11::ClearShaderCache()
 {
 	if (raymarchVolumetricRaysPS) {
@@ -207,7 +237,8 @@ void Effects11::ClearShaderCache()
 		blurVCS = nullptr;
 	}
 
-	EffectManager::GetSingleton().ReloadShaders();
+	if (EffectManager::GetSingleton().IsInitialized())
+		EffectManager::GetSingleton().ReloadShaders();
 }
 
 void Effects11::Prepass()
@@ -465,6 +496,11 @@ void Effects11::OverrideWeather(RE::Sky* a_sky)
 
 void Effects11::CheckCommonData()
 {
+	if (!IsActive()) {
+		enableEffect = false;
+		return;
+	}
+
 	static Util::FrameChecker checker;
 	if (checker.IsNewFrame()) {
 		ENBHelper::Update();
@@ -472,7 +508,7 @@ void Effects11::CheckCommonData()
 		auto& settingManager = SettingManager::GetSingleton();
 		auto& effectManager = EffectManager::GetSingleton();
 
-		enableEffect = !globals::state->IsFullScreenMenuOpen() && globals::shaderCache->IsEnabled() && settingManager.GetValue<bool>("UseEffect", "GLOBAL") && effectManager.IsPresetLoaded();
+		enableEffect = !globals::state->IsFullScreenMenuOpen() && globals::shaderCache->IsEnabled() && effectManager.IsPresetLoaded();
 
 		auto& weatherManager = WeatherManager::GetSingleton();
 
@@ -524,27 +560,39 @@ void Effects11::OnSkyUpdateColors(RE::Sky* a_sky)
 		OverrideWeather(a_sky);
 }
 
-bool Effects11::ReplacedTonemapperThisFrame() const
-{
-	return tonemapReplacedFrame == globals::state->frameCount;
-}
-
-bool Effects11::HandleTonemapRender(RE::RENDER_TARGET a_input, RE::RENDER_TARGET a_output)
+bool Effects11::WantsTonemapOwnership()
 {
 	CheckCommonData();
 
-	auto& settingManager = SettingManager::GetSingleton();
+	// The initialized check must be part of ownership, not just of rendering: if it were only
+	// checked at render time, the arbiter would still report Effects11 as the owner while the
+	// vanilla pass ran, having already stripped Post Processing's tonemap flag and skipped its
+	// pipeline for that frame.
 	auto& effectManager = EffectManager::GetSingleton();
+	if (!effectManager.IsInitialized() || !effectManager.IsPresetLoaded())
+		return false;
 
-	if (enableEffect && !settingManager.GetValue<bool>("UseOriginalPostProcessing", "EFFECT")) {
-		auto& renderTargets = globals::game::renderer->GetRuntimeData().renderTargets;
-		// Only claim the tonemap pass if the effect chain actually wrote the output
-		if (effectManager.ExecuteEffects(renderTargets[a_input], renderTargets[a_output])) {
-			tonemapReplacedFrame = globals::state->frameCount;
-			return true;
-		}
+	return enableEffect && !SettingManager::GetSingleton().GetValue<bool>("UseOriginalPostProcessing", "EFFECT");
+}
+
+bool Effects11::RenderTonemap(RE::RENDER_TARGET a_input, RE::RENDER_TARGET a_output)
+{
+	auto& effectManager = EffectManager::GetSingleton();
+	if (!effectManager.IsInitialized())
+		return false;
+
+	auto& renderTargets = globals::game::renderer->GetRuntimeData().renderTargets;
+	// Only report replacement after the effect chain actually wrote the output.
+	if (effectManager.ExecuteEffects(renderTargets[a_input], renderTargets[a_output])) {
+		tonemapReplacedFrame = globals::state->frameCount;
+		return true;
 	}
 	return false;
+}
+
+bool Effects11::ReplacedTonemapperThisFrame() const
+{
+	return tonemapReplacedFrame == globals::state->frameCount;
 }
 
 void Effects11::ModifySky(RE::BSRenderPass* Pass)
@@ -569,7 +617,6 @@ void Effects11::ModifySky(RE::BSRenderPass* Pass)
 	}
 }
 
-
 void Effects11::ModifyParticle(RE::BSRenderPass* Pass)
 {
 	if (!enableEffect || !raindropSRV)
@@ -589,7 +636,6 @@ void Effects11::ModifyParticle(RE::BSRenderPass* Pass)
 	ID3D11Buffer* cbs[] = { globals::state->sharedDataCB->CB(), globals::state->featureDataCB->CB() };
 	context->VSSetConstantBuffers(5, 2, cbs);
 }
-
 
 void Effects11::ParticleShaderHacks()
 {
