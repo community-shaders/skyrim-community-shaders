@@ -26,8 +26,7 @@ Effects11::PerFrame Effects11::GetCommonBufferData()
 
 	CheckCommonData();
 
-	const uint32_t frame = globals::state->frameCount;
-	if (perFrameCacheFrame == frame)
+	if (!perFrameCacheChecker.IsNewFrame())
 		return perFrameCache;
 
 	auto& settingManager = SettingManager::GetSingleton();
@@ -92,7 +91,6 @@ Effects11::PerFrame Effects11::GetCommonBufferData()
 	data.ProceduralSunGlowIntensity = settingManager.GetInterpolatedTimeOfDayValue("GlowIntensity", "PROCEDURALSUN");
 
 	perFrameCache = data;
-	perFrameCacheFrame = frame;
 	return data;
 }
 
@@ -583,16 +581,8 @@ void Effects11::ModifySky(RE::BSRenderPass* Pass)
 
 bool Effects11::IsRainEnabled()
 {
-	if (!enableEffect || !raindropSRV)
-		return false;
-
-	// Queried for every rain particle pass, so the string-keyed lookup is resolved once
-	auto& settingManager = SettingManager::GetSingleton();
-	if (rainEnabledSettingID == UINT32_MAX)
-		rainEnabledSettingID = settingManager.GetSettingID("Enable", "RAIN");
-	if (rainEnabledSettingID == UINT32_MAX)
-		return false;
-	return settingManager.GetValue<bool>(rainEnabledSettingID);
+	// Queried for every rain particle pass, so the cached id skips the string-keyed lookup
+	return enableEffect && raindropSRV && SettingManager::GetSingleton().GetValue<bool>(EffectManager::GetSingleton().ids.enableRain);
 }
 
 void Effects11::ModifyParticle(RE::BSRenderPass* Pass)

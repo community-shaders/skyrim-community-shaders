@@ -10,6 +10,7 @@
 class ExtendedEffect : public Effect
 {
 public:
+	/** @brief Loads per-weather values and builds the blending caches; runs after every compile. */
 	void LoadWeatherData();
 	void ApplyWeatherBlending(float blendFactor, uint32_t currentWeatherID, uint32_t lastWeatherID);
 	void SyncWeatherVarFromUI(size_t index, uint32_t weatherID);
@@ -44,11 +45,8 @@ private:
 	std::vector<WeatherVarSlot> weatherVarSlots;
 	std::vector<int> weatherSlotOfVariable;                                           ///< uiVariables index -> slot, or -1
 	std::unordered_map<uint32_t, std::vector<ParsedWeatherValue>> parsedWeatherData;  ///< One entry per slot for each weatherData ID
-	ID3DX11Effect* weatherCacheEffect = nullptr;
-	size_t weatherCacheVariableCount = 0;
 
-	/** @brief Rebuilds the weather caches when the effect was recompiled since the last build. */
-	void EnsureWeatherCaches();
+	/** @brief Collects the weather slots and parses every weather's values into them. */
 	void RebuildWeatherCaches();
 	/** @brief Parses one slot's value from a weather file; unparsable components are left undefined. */
 	static void ParseWeatherValue(const WeatherValues& values, const WeatherVarSlot& slot, ParsedWeatherValue& out);
@@ -68,11 +66,8 @@ private:
 		std::vector<TimeOfDayEntry> entries;
 	};
 	std::vector<TimeOfDayGroup> timeOfDayGroups;
-	ID3DX11Effect* timeOfDayCacheEffect = nullptr;
-	size_t timeOfDayCacheVariableCount = 0;
 
-	/** @brief Rebuilds the time-of-day groups when the effect was recompiled since the last build. */
-	void EnsureTimeOfDayGroups();
+	/** @brief Groups the time-of-day variables by the base effect variable they blend into. */
 	void RebuildTimeOfDayGroups();
 
 	/** @brief Dirty ini keys per weather file, each mapped to the weather ID whose values it was edited under.

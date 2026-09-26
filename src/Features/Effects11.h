@@ -131,9 +131,7 @@ private:
 
 	// The feature buffer is rebuilt several times per frame, so GetCommonBufferData's lookups are replayed from here
 	PerFrame perFrameCache{};
-	uint perFrameCacheFrame = UINT32_MAX;
-
-	uint32_t rainEnabledSettingID = UINT32_MAX;  ///< RAIN:Enable, resolved on first use
+	Util::FrameChecker perFrameCacheChecker;
 };
 
 #pragma warning(pop)
