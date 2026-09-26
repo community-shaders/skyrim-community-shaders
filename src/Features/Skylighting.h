@@ -95,15 +95,14 @@ public:
 	// misc parameters
 	uint probeArrayDims[3] = { 256, 256, 128 };
 	float occlusionDistance = 10000.f;
+	// Slack below the probe grid for eye movement between the grid update and the occlusion render.
+	static constexpr float OCCLUSION_BELOW_GRID_MARGIN = 512.f;
 
 	// cached variables
 	bool queuedResetSkylighting = true;
 	bool inOcclusion = false;
-	// Occluders wholly below this height can't shadow any probe, so the occlusion render skips them.
-	float occlusionCullBelowZ = -FLT_MAX;
-	static constexpr float OcclusionBelowGridMargin = 512.f;
-	// Shallower sun directions keep every occluder, as a texel's footprint reaches further below the probes.
-	static constexpr float OcclusionBelowGridMaxDirectionZ = -.25f;
+	// World height of the probe grid's bottom layer, from the snapped grid origin.
+	float probeGridBottomZ = -FLT_MAX;
 	REX::W32::XMFLOAT4X4 OcclusionTransform;
 	float4 OcclusionDir;
 	uint frameCount = 0;
