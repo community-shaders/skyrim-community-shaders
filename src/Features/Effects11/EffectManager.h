@@ -2,6 +2,7 @@
 
 #include "Effects/ENBAdaptation.h"
 #include "Effects/ENBBloom.h"
+#include "Effects/ENBDepthOfField.h"
 #include "Effects/ENBEffect.h"
 #include "Effects/ENBEffectPostPass.h"
 #include "Effects/ENBLens.h"
@@ -57,6 +58,7 @@ public:
 	void UpdateCommonVariablesForEffect(Effect& effect);
 
 public:
+	ENBDepthOfField enbDepthOfField;
 	ENBBloom enbBloom;
 	ENBLens enbLens;
 	ENBAdaptation enbAdaptation;
@@ -108,6 +110,7 @@ public:
 		uint32_t useBloom = 0xFFFFFFFF;
 		uint32_t useLens = 0xFFFFFFFF;
 		uint32_t useAdaptation = 0xFFFFFFFF;
+		uint32_t useDepthOfField = 0xFFFFFFFF;
 		uint32_t usePostPass = 0xFFFFFFFF;
 
 		uint32_t enableMultipleWeathers = 0xFFFFFFFF;
@@ -139,6 +142,9 @@ public:
 
 	// Texture copy using pixel shader
 	void CopyTexture(ID3D11ShaderResourceView* source, ID3D11RenderTargetView* destination);
+
+	/** @brief Copies source into destination with CopyResource when layouts match, else via CopyTexture, leaving no RTV bound. */
+	void CopyToTarget(ID3D11Texture2D* source, ID3D11ShaderResourceView* sourceSRV, ID3D11Texture2D* destination, ID3D11RenderTargetView* destinationRTV);
 
 	// Color correction using compute shader
 	void ApplyColorCorrection(ID3D11UnorderedAccessView* textureUAV);

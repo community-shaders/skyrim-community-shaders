@@ -68,6 +68,16 @@ Effects11::PerFrame Effects11::GetCommonBufferData()
 
 	data.EnableProceduralSun = enableEffect && settingManager.GetValue<bool>("EnableProceduralSun", "EFFECT");
 
+	data.EnableWater = enableEffect && settingManager.GetValue<bool>("EnableWater", "EFFECT");
+	data.WaterWavesAmplitude = settingManager.GetInterpolatedTimeOfDayValue("WavesAmplitude", "WATER");
+	data.WaterMuddiness = settingManager.GetValue<float>("Muddiness", "WATER");
+	data.WaterSunLightingMultiplier = settingManager.GetValue<float>("SunLightingMultiplier", "WATER");
+	data.WaterSunSpecularMultiplier = settingManager.GetValue<float>("SunSpecularMultiplier", "WATER");
+	data.WaterFresnelMin = settingManager.GetValue<float>("FresnelMin", "WATER");
+	data.WaterFresnelMax = settingManager.GetValue<float>("FresnelMax", "WATER");
+	data.WaterFresnelMultiplier = settingManager.GetValue<float>("FresnelMultiplier", "WATER");
+	data.WaterReflectionAmount = settingManager.GetValue<float>("ReflectionAmount", "WATER");
+
 	{
 		float size = settingManager.GetValue<float>("Size", "PROCEDURALSUN");
 		float edgeSoftness = settingManager.GetValue<float>("EdgeSoftness", "PROCEDURALSUN");
@@ -401,6 +411,16 @@ void Effects11::OverrideWeather(RE::Sky* a_sky)
 			skyStaticsColorF3 = Intensity(skyStaticsColorF3, settingManager.GetInterpolatedTimeOfDayValue("Intensity", "VOLUMETRICFOG"));
 
 			skyStaticsColor = F3ToNi(skyStaticsColorF3);
+		}
+
+		if (settingManager.GetValue<bool>("EnableWater", "EFFECT")) {
+			auto& waterColor = colors[(uint)RE::TESWeather::ColorTypes::kWaterMultiplier];
+
+			auto waterColorF3 = NiToF3(waterColor);
+
+			waterColorF3 = Intensity(waterColorF3, settingManager.GetInterpolatedTimeOfDayValue("Brightness", "WATER"));
+
+			waterColor = F3ToNi(waterColorF3);
 		}
 
 		float gradientIntensity = settingManager.GetInterpolatedTimeOfDayValue("GradientIntensity", "SKY");
