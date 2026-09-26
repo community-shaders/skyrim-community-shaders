@@ -6,12 +6,12 @@ private:
 	static constexpr std::string_view MOD_ID = "139185";
 
 public:
-	static constexpr int kMaxCloudLayers = 32;
+	static constexpr int kMaxCloudDecks = 32;
 
 	struct alignas(16) Settings
 	{
 		float Opacity = 0.5f;
-		float pad[3];
+		float pad[3]{};
 	};
 
 	Settings settings;
@@ -35,24 +35,32 @@ public:
 	virtual inline bool HasShaderDefine(RE::BSShader::Type) override { return true; }
 
 	bool overrideSky = false;
+	/** @brief Set by any sky draw into the reflections cubemap, so its face's chain starts even without clouds. */
+	bool reflectionSkyDraw = false;
 	/**
 	 * @brief Applies sky shader render state overrides for cloud shadow capture.
 	 *
-	 * When overrideSky is set, redirects rendering to the cloud occlusion cubemap
-	 * and configures the appropriate blend state and depth resources.
+	 * Starts the face's deck chain on any reflection sky draw. When overrideSky is also
+	 * set, redirects rendering to the cloud occlusion cubemap with the matching blend state and depth.
 	 */
 	void SkyShaderHacks();
 
-	Texture2D* texCloudShadowLayers[kMaxCloudLayers] = {};
-	ID3D11RenderTargetView* cloudShadowLayerRTVs[kMaxCloudLayers][6] = {};
+	/** @brief Zeroed cubemap standing in for "no cloud deck has drawn yet" at the head of a chain. */
+	Texture2D* texOcclusionBase = nullptr;
+
+	/** @brief Per-deck running occlusion: deck N's texture holds every deck drawn up to and including N. */
+	Texture2D* texOcclusionChain[kMaxCloudDecks] = {};
+	ID3D11RenderTargetView* occlusionChainRTVs[kMaxCloudDecks][6] = {};
+
+	/** @brief Per-face composite of the whole deck chain, rebuilt as each cubemap face finishes. */
+	Texture2D* texCubemapCloudOcc = nullptr;
+	/** @brief Frozen snapshot of the composite, bound at t25 so the live composite can keep being written. */
 	Texture2D* texCubemapCloudOccCopy = nullptr;
-	Texture2D* texSelfShadowCopy = nullptr;
 
 	UINT cubemapMipLevels = 1;
-	int currentLayerForDraw = 0;
+	int currentDeckForDraw = 0;
 
-	uint32_t renderedLayersMask[6] = {};
-	uint32_t globalRenderedMask = 0;
+	int chainLastDeck[6] = { -1, -1, -1, -1, -1, -1 };
 	int previouslyRenderedSide = -1;
 
 	ID3D11BlendState* cloudShadowBlendState = nullptr;
@@ -70,21 +78,22 @@ public:
 	Settings GetCommonBufferData();
 
 	/**
-	 * @brief Clears the cloud occlusion render target for a given cubemap face if not yet cleared this frame.
+	 * @brief Starts a new frame's deck chain for a cubemap face, once per face per frame.
 	 * @param side Cubemap face index (0-5).
 	 */
 	void CheckResourcesSide(int side);
+	/** @brief Publishes a face's finished deck chain into the composite cubemap. */
 	void PropagateToCompletion(int side);
 	/**
-	 * @brief Checks if the current sky render pass is rendering clouds to the reflections cubemap and flags it for override.
-	 * @param Pass The BSRenderPass being set up for rendering.
+	 * @brief Finds which of the sky's cloud decks a render pass belongs to.
+	 * @return Deck index, or -1 if the pass is not an active cloud deck.
 	 */
-	int FindCloudLayer(RE::BSRenderPass* Pass);
+	int FindCloudDeck(RE::BSRenderPass* Pass);
 	void ModifySky(RE::BSRenderPass* Pass);
 
 	/** @brief Copies the cloud occlusion cubemap and binds it as a shader resource for the reflections prepass. */
 	virtual void ReflectionsPrepass() override;
-	/** @brief Binds the cloud occlusion cubemap as a shader resource for the early prepass. */
+	/** @brief Flushes the last cubemap face's deck chain into the composite. */
 	virtual void EarlyPrepass() override;
 
 	/** @brief Installs the BSSkyShader hooks after all plugins have loaded. */
