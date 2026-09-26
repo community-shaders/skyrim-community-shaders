@@ -212,6 +212,14 @@ namespace PBR
 			}
 #endif
 		}
+
+		[branch] if (SharedData::truePBRSettings.EnableMicroShadows != 0)
+		{
+			float microShadow = lerp(1.0, ApproximateDirectOcculusion(material.AO, NdotL), SharedData::truePBRSettings.MicroShadowStrength);
+			lightingOutput.diffuse *= microShadow;
+			lightingOutput.specular *= microShadow;
+			lightingOutput.coatDiffuse *= microShadow;
+		}
 	}
 
 	void GetIndirectLobeWeights(out IndirectLobeWeights lobeWeights, IndirectContext context, MaterialProperties material)
