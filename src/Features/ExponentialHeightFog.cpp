@@ -396,9 +396,12 @@ void ExponentialHeightFog::Prepass()
 		return;
 	}
 
-	// Shaders ignore the fog volume while suppressed, so skip building it but keep the resources
-	if (IsSuppressed())
+	// Pause while suppressed: skip building, but keep resources and history contiguous so the fog resumes from its cache
+	if (IsSuppressed()) {
+		if (lastPrepassFrame != UINT32_MAX)
+			lastPrepassFrame = globals::state->frameCount;
 		return;
+	}
 
 	EnsureVolumetricResources();
 
@@ -493,6 +496,8 @@ void ExponentialHeightFog::Prepass()
 		0.0f,
 		0.0f
 	};
+	cb.historyViewProj = historyViewProj;
+	cb.historyPosAdjust = historyPosAdjust;
 	volumetricFogCB->Update(cb);
 
 	auto context = globals::d3d::context;
@@ -603,6 +608,8 @@ void ExponentialHeightFog::Prepass()
 	}
 
 	lastPrepassFrame = globals::state->frameCount;
+	historyViewProj = globals::game::frameBufferCached.GetCameraViewProjUnjittered();
+	historyPosAdjust = globals::game::frameBufferCached.GetCameraPosAdjust();
 	BindIntegratedLightScattering();
 }
 

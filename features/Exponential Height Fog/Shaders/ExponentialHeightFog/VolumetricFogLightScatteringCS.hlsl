@@ -70,8 +70,8 @@ bool IsFroxelBehindSceneDepth(uint3 coord)
 
 float3 ComputeHistoryVolumeUVAndDepth(float3 positionWS, out bool validHistory, out float previousViewDepth)
 {
-	float3 previousPositionWS = positionWS + FrameBuffer::CameraPosAdjust.xyz - FrameBuffer::CameraPreviousPosAdjust.xyz;
-	float4 previousClip = mul(FrameBuffer::CameraPreviousViewProjUnjittered, float4(previousPositionWS, 1.0f));
+	float3 previousPositionWS = positionWS + FrameBuffer::CameraPosAdjust.xyz - VolumetricFogHistoryPosAdjust.xyz;
+	float4 previousClip = mul(VolumetricFogHistoryViewProj, float4(previousPositionWS, 1.0f));
 
 	previousViewDepth = abs(previousClip.w);
 	validHistory = previousClip.w > 0.0f;

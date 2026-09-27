@@ -98,6 +98,8 @@ private:
 		float4 frameJitterOffsets[16] = {};
 		float4 historyParameters = {};
 		float4 jitterParameters = {};  // x = LightScatteringSampleJitterMultiplier, y = StateFrameIndexMod8, zw = unused
+		float4x4 historyViewProj = {};
+		float4 historyPosAdjust = {};
 	};
 	STATIC_ASSERT_ALIGNAS_16(VolumetricFogCB);
 
@@ -126,6 +128,9 @@ private:
 	ID3D11ComputeShader* lightScatteringCS = nullptr;
 	ID3D11ComputeShader* integrationCS = nullptr;
 	DirectX::XMUINT4 currentGridSize = {};
+	// Camera the history volume was built with, so it reprojects correctly after a suppressed pause
+	float4x4 historyViewProj = {};
+	float4 historyPosAdjust = {};
 	bool hasLightScatteringHistory = false;
 	bool hasConservativeDepthHistory = false;
 	uint32_t lastPrepassFrame = UINT32_MAX;
