@@ -2268,6 +2268,7 @@
     "native_menu.graphics.heading": "Community Shaders",
     "native_menu.graphics.open_menu": "Open Community Shaders Menu",
     "native_menu.graphics.open_menu_desc": "Opens the full Community Shaders settings window.",
+    "native_menu.graphics.tab": "Graphics",
     "native_menu.hdr.enable": "Enable HDR",
     "native_menu.hdr.enable_desc": "Real HDR output for HDR displays. Greyed out until an HDR-capable, HDR-enabled display is detected; use the full settings menu's Advanced override to force it otherwise.",
     "native_menu.ssgi.enable": "Enable Screen Space GI",
