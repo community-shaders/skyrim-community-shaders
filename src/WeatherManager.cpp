@@ -94,6 +94,10 @@ void WeatherManager::LoadPerWeatherSettingsFromDisk()
 
 void WeatherManager::UpdateFeatures()
 {
+	// The map has no weather: keep feature settings from before it opened
+	if (globals::state->isMapMenuOpen)
+		return;
+
 	auto currentWeathers = GetCurrentWeathers();
 
 	// Check if weather state has changed
