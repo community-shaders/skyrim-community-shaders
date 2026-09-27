@@ -40,6 +40,8 @@ void Skylighting::ResetSkylighting()
 	float clrf[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
 	context->ClearUnorderedAccessViewFloat(texShadowVisibility->uav.get(), clrf);
 
+	// Grid bottom is stale until the next in-world buffer update, so don't cull this frame
+	probeGridBottomZ = -FLT_MAX;
 	queuedResetSkylighting = false;
 }
 
