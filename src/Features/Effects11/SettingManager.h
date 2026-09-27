@@ -88,6 +88,10 @@ struct ColorTimeOfDayValue
 
 };
 
+static_assert(TimeOfDayValue::Total <= 8 && ColorTimeOfDayValue::Total <= 8, "periods must fit the uint8_t mask");
+/** @brief Defined-period mask covering every time-of-day period; scalar settings always use it. */
+inline constexpr uint8_t AllPeriodsMask = static_cast<uint8_t>((1u << TimeOfDayValue::Total) - 1);
+
 using SettingValue = std::variant<bool, float, TimeOfDayValue, ColorTimeOfDayValue>;
 
 struct Setting
@@ -201,10 +205,10 @@ private:
 	std::vector<std::string> categoryOrder;
 	std::unordered_map<uint32_t, std::vector<SettingValue>> weatherData;
 	std::unordered_map<uint32_t, std::vector<SettingValue>> lastSavedWeatherData;
-	// Which settings each weather actually defines (in its file or by a UI edit). The others read the live
+	// Per setting, the periods each weather actually defines (in its file or by a UI edit). The others read the live
 	// enbseries.ini value rather than the copy snapshotted when the weather file was loaded.
-	std::unordered_map<uint32_t, std::vector<bool>> weatherDefined;
-	std::unordered_map<uint32_t, std::vector<bool>> lastSavedWeatherDefined;
+	std::unordered_map<uint32_t, std::vector<uint8_t>> weatherDefined;
+	std::unordered_map<uint32_t, std::vector<uint8_t>> lastSavedWeatherDefined;
 
 	uint32_t currentWeatherID = 0;
 	uint32_t lastWeatherID = 0;
@@ -219,8 +223,10 @@ private:
 	void RegisterSettingInternal(Setting& setting);
 	void LoadWeatherIgnoreSettings(const std::string& filePath);
 	bool IsWeatherSystemEnabledInternal() const;
-	/** @brief True if the weather defines the setting, in its file or through a UI edit. */
-	bool IsWeatherDefined(uint32_t weatherID, uint32_t settingID) const;
+	/** @brief Bitmask of the periods the weather defines for the setting, in its file or through a UI edit. */
+	uint8_t GetWeatherDefinedMask(uint32_t weatherID, uint32_t settingID) const;
+	/** @brief The setting as the weather sees it: its defined periods over the live enbseries.ini value. */
+	SettingValue ResolveWeatherValue(uint32_t weatherID, uint32_t settingID) const;
 
 	template <typename T>
 	T GetValueInternal(uint32_t id, bool rawValue = false) const;
@@ -231,7 +237,8 @@ private:
 	SettingValue InterpolateValues(const SettingValue& a, const SettingValue& b, float t) const;
 	float ComputeTimeOfDayInterpolation(const TimeOfDayValue& value) const;
 	float3 ComputeColorTimeOfDayInterpolation(const ColorTimeOfDayValue& value) const;
-	/** @return true if the file set the setting under any of its keys. */
-	bool LoadSettingFromFile(const std::string& filePath, const std::string& section, const std::string& key, Setting& setting);
-	void SaveSettingToFile(const std::string& filePath, const std::string& section, const std::string& key, const Setting& setting);
+	/** @return Bitmask of the periods the file set under any of its keys; scalars set every bit. */
+	uint8_t LoadSettingFromFile(const std::string& filePath, const std::string& section, const std::string& key, Setting& setting);
+	/** @brief Writes the setting; time-of-day types write only the periods in periodMask. */
+	void SaveSettingToFile(const std::string& filePath, const std::string& section, const std::string& key, const Setting& setting, uint8_t periodMask = AllPeriodsMask);
 };
