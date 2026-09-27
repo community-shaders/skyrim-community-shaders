@@ -116,10 +116,16 @@ bool SettingManager::IsWeatherSystemEnabledInternal() const
 	return enabled && *enabled;
 }
 
+/** @brief True if the weather's defined-flags mark the setting. */
+static bool IsDefinedIn(const std::unordered_map<uint32_t, std::vector<bool>>& a_defined, uint32_t weatherID, uint32_t settingID)
+{
+	auto definedIt = a_defined.find(weatherID);
+	return definedIt != a_defined.end() && settingID < definedIt->second.size() && definedIt->second[settingID];
+}
+
 bool SettingManager::IsWeatherDefined(uint32_t weatherID, uint32_t settingID) const
 {
-	auto definedIt = weatherDefined.find(weatherID);
-	return definedIt != weatherDefined.end() && settingID < definedIt->second.size() && definedIt->second[settingID];
+	return IsDefinedIn(weatherDefined, weatherID, settingID);
 }
 
 void SettingManager::RegisterBoolSetting(const std::string& key, const std::string& category,
@@ -547,6 +553,7 @@ void SettingManager::LoadWeatherSettings(const std::vector<uint32_t>& weatherIDs
 			weatherData[weatherID] = loadedValues;
 			lastSavedWeatherData[weatherID] = loadedValues;
 			weatherDefined[weatherID] = definedValues;
+			lastSavedWeatherDefined[weatherID] = definedValues;
 		}
 	}
 }
@@ -578,7 +585,8 @@ void SettingManager::SaveWeatherSettings(const std::string& weatherKey, const st
 			// Only write what the weather defines; the rest belongs to enbseries.ini
 			if (setting.hasWeatherSupport && IsWeatherDefined(weatherID, setting.id) && setting.id < weatherValues.size()) {
 				bool changed = true;
-				if (lastIt != lastSavedWeatherData.end() && setting.id < lastIt->second.size()) {
+				// A newly defined setting must be written even if it matches the snapshot, which held the enbseries.ini value
+				if (IsDefinedIn(lastSavedWeatherDefined, weatherID, setting.id) && lastIt != lastSavedWeatherData.end() && setting.id < lastIt->second.size()) {
 					if (weatherValues[setting.id] == lastIt->second[setting.id]) {
 						changed = false;
 					}
@@ -594,6 +602,7 @@ void SettingManager::SaveWeatherSettings(const std::string& weatherKey, const st
 
 		// Update last saved state
 		lastSavedWeatherData[weatherID] = weatherValues;
+		lastSavedWeatherDefined[weatherID] = weatherDefined[weatherID];
 	}
 
 	if (settingsToWrite.empty()) {
@@ -725,6 +734,7 @@ void SettingManager::LoadFromFile(const std::string& filePath)
 		}
 
 		lastSavedWeatherData = weatherData;
+		lastSavedWeatherDefined = weatherDefined;
 	}
 }
 

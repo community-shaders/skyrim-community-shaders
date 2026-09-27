@@ -204,6 +204,7 @@ private:
 	// Which settings each weather actually defines (in its file or by a UI edit). The others read the live
 	// enbseries.ini value rather than the copy snapshotted when the weather file was loaded.
 	std::unordered_map<uint32_t, std::vector<bool>> weatherDefined;
+	std::unordered_map<uint32_t, std::vector<bool>> lastSavedWeatherDefined;
 
 	uint32_t currentWeatherID = 0;
 	uint32_t lastWeatherID = 0;

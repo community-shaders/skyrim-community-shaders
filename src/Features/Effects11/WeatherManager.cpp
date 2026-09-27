@@ -288,8 +288,9 @@ uint32_t WeatherManager::GetWeatherIndex(uint32_t weatherID) const
 	const std::string& sectionName = it->second;
 	constexpr size_t prefixLength = sizeof("WEATHER") - 1;
 	uint32_t index = 0;
-	const auto result = std::from_chars(sectionName.data() + prefixLength, sectionName.data() + sectionName.size(), index);
-	return result.ec == std::errc() ? index : 0;
+	const char* sectionEnd = sectionName.data() + sectionName.size();
+	const auto result = std::from_chars(sectionName.data() + prefixLength, sectionEnd, index);
+	return result.ec == std::errc() && result.ptr == sectionEnd ? index : 0;
 }
 
 std::unordered_map<std::string, std::string> WeatherManager::GetWeatherFiles() const
