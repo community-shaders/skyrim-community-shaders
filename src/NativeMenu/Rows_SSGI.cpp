@@ -8,7 +8,7 @@
 #include <array>
 #include <optional>
 
-#define I18N_KEY_PREFIX "native_menu.ssgi."
+#define I18N_KEY_PREFIX "feature.screen_space_gi."
 
 namespace
 {
@@ -52,12 +52,12 @@ namespace
 	std::vector<std::string> SSGIQualityOptions()
 	{
 		return {
-			T(TKEY("preset_ao_only"), "AO Only"),
-			T(TKEY("preset_low"), "Low"),
-			T(TKEY("preset_standard"), "Standard"),
-			T(TKEY("preset_extreme"), "Extreme"),
-			T(TKEY("preset_reference"), "Reference"),
-			T(TKEY("preset_custom"), "Custom"),
+			T(TKEY("ao_only"), "AO only"),
+			T(TKEY("low"), "Low"),
+			T(TKEY("standard"), "Standard"),
+			T(TKEY("extreme"), "Extreme"),
+			T(TKEY("reference"), "Reference"),
+			T(TKEY("custom"), "Custom"),
 		};
 	}
 
@@ -94,15 +94,12 @@ namespace NativeMenu
 		using Enabled = Bind<SSGIRoot, &Settings::Enabled>;
 
 		return {
-			Checkbox<SSGIRoot, &Settings::Enabled>(T(TKEY("enable"), "Enable Screen Space GI"),
-				T(TKEY("enable_desc"),
-					"Toggles Screen Space GI. When disabled, the quality preset below is greyed out.")),
+			Checkbox<SSGIRoot, &Settings::Enabled>(T(TKEY("enabled"), "Enabled"),
+				T(TKEY("enabled_tooltip"),
+					"Enable Screen Space Global Illumination. When disabled, all other settings are ignored.")),
 
-			Dropdown(T(TKEY("quality"), "Screen Space GI Quality"), SSGIQualityOptions(), &GetSSGIQuality,
-				&SetSSGIQuality, static_cast<float>(FindSSGIPresetIndex(Settings{})),
-				T(TKEY("quality_desc"),
-					"Trades render resolution and sample count for visual quality. Matches the presets in the Screen "
-					"Space GI panel's Quality/Performance section."),
+			Dropdown(T(TKEY("quality_performance"), "Quality/Performance"), SSGIQualityOptions(), &GetSSGIQuality,
+				&SetSSGIQuality, static_cast<float>(FindSSGIPresetIndex(Settings{})), nullptr,
 				&Enabled::IsFlagOn),
 		};
 	}
