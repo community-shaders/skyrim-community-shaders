@@ -125,6 +125,16 @@ public:
 
 		float vectorValue[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 
+		float baseFloatValue = 0.0f;
+		float baseVectorValue[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+
+		// Value compiled into the shader, before the preset ini is applied ("Reset to default")
+		float defaultFloatValue = 0.0f;
+		int defaultIntValue = 0;
+		bool defaultBoolValue = false;
+		float defaultVectorValue[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+		bool hasDefaultValue = false;
+
 		// UI properties
 		float floatMin = 0.0f;
 		float floatMax = 1.0f;
@@ -152,6 +162,15 @@ public:
 	};
 
 	std::vector<UIVariable> uiVariables;
+
+	static bool IsWeatherSeparated(const UIVariable& uiVar) { return !uiVar.separation.empty() && uiVar.separation != "None"; }
+	static void CaptureBaseValue(UIVariable& uiVar);
+	/** @brief Records the current value as the shader default. Only meaningful before the ini is applied. */
+	static void CaptureDefaultValue(UIVariable& uiVar);
+	/** @brief Restores the shader default captured by CaptureDefaultValue. @return False when none was captured. */
+	static bool RestoreDefaultValue(UIVariable& uiVar);
+	void CaptureBaseValues();
+	virtual void SaveWeatherOverrides() {}
 
 	struct GroupMeta
 	{
@@ -231,6 +250,7 @@ public:
 	{
 		bool executed = false;
 		bool inOutput = false;
+		bool inTemp = false;
 	};
 
 	// Execute a technique sequence with ping-pong rendering

@@ -3,6 +3,7 @@ Texture2D SourceTexture : register(t0);
 cbuffer DitherParams : register(b0)
 {
 	uint FrameCount;
+	float DitherAmplitude;
 };
 
 struct PS_INPUT
@@ -34,6 +35,6 @@ float3 TriDither(float2 screenPos, uint frameCount)
 float4 main(PS_INPUT input) : SV_TARGET
 {
 	float3 color = SourceTexture.Load(int3(input.pos.xy, 0)).rgb;
-	color += TriDither(input.pos.xy, FrameCount) / 255.0;
+	color += TriDither(input.pos.xy, FrameCount) * DitherAmplitude;
 	return float4(color, 1.0);
 }

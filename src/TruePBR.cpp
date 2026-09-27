@@ -45,7 +45,9 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	TruePBR::Settings,
-	VertexAOStrength);
+	VertexAOStrength,
+	EnableMicroShadows,
+	MicroShadowStrength);
 
 #define CHECK_PBR_TEXTURE(textureName)                                                                         \
 	if (!(pbrMaterial->textureName)) {                                                                         \
@@ -128,6 +130,17 @@ void TruePBR::DrawSettings()
 {
 	if (ImGui::TreeNodeEx(T(TKEY("global_settings"), "Global Settings"), ImGuiTreeNodeFlags_DefaultOpen)) {
 		ImGui::SliderFloat(T(TKEY("vertex_ao_strength"), "Vertex AO Strength"), &settings.VertexAOStrength, 0.f, 1.f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+
+		ImGui::Checkbox(T(TKEY("micro_shadows"), "Micro Shadows"), (bool*)&settings.EnableMicroShadows);
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::Text("%s", T(TKEY("micro_shadows_tooltip"), "Occludes direct light with the material's ambient occlusion map, adding contact shadowing to surface detail such as seams, rivets and fabric weave."));
+
+		if (settings.EnableMicroShadows) {
+			ImGui::SliderFloat(T(TKEY("micro_shadow_strength"), "Micro Shadow Strength"), &settings.MicroShadowStrength, 0.f, 1.f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+			if (auto _tt = Util::HoverTooltipWrapper())
+				ImGui::Text("%s", T(TKEY("micro_shadow_strength_tooltip"), "How strongly ambient occlusion darkens direct light."));
+		}
+
 		ImGui::TreePop();
 	}
 
@@ -1652,6 +1665,11 @@ struct PBR_BSLightingShader_SetupMaterial
 	static void thunk(RE::BSLightingShader* shader, RE::BSLightingShaderMaterialBase const* material)
 	{
 		if (globals::features::truePBR.BSLightingShader_SetupMaterial(shader, material)) {
+			return;
+		}
+
+		// Vanilla dereferences these unconditionally; they are null when the texture set never loaded or was cleared.
+		if ((material->diffuseRenderTargetSourceIndex == -1 && !material->diffuseTexture) || !material->normalTexture) {
 			return;
 		}
 

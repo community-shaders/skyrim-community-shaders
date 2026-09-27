@@ -276,6 +276,9 @@ namespace SharedData
 		uint UseProceduralGradientWeights;
 		float ProceduralGradientWeightCurve;
 
+		float LightSpriteCurve;
+		float3 pad1;
+
 		float ParticleIntensity;
 		float ParticleLightingInfluence;
 		float ParticleAmbientInfluence;
@@ -337,7 +340,9 @@ namespace SharedData
 	struct TruePBRSettings
 	{
 		float VertexAOStrength;
-		uint3 pad;
+		uint EnableMicroShadows;
+		float MicroShadowStrength;
+		uint pad;
 	};
 
 	struct SkinData
@@ -349,6 +354,12 @@ namespace SharedData
 		float4 fuzzParams;
 		float4 physicalParams;
 		float4 wetParams;
+	};
+
+	struct HorizonFixSettings
+	{
+		float farWaterDistance;
+		float3 pad;
 	};
 
 	cbuffer FeatureData : register(b6)
@@ -372,6 +383,7 @@ namespace SharedData
 		ExponentialHeightFogSettings exponentialHeightFogSettings;
 		TruePBRSettings truePBRSettings;
 		SkinData skinData;
+		HorizonFixSettings horizonFixSettings;
 	};
 
 	Texture2D<float4> DepthTexture : register(t17);

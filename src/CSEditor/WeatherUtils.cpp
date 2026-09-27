@@ -2,7 +2,6 @@
 #include "../I18n/I18n.h"
 #include "EditorWindow.h"
 #include "PaletteWindow.h"
-#include "Utils/FileSystem.h"
 #include "Utils/UI.h"
 
 #define I18N_KEY_PREFIX "cs_editor."
@@ -40,13 +39,9 @@ namespace WeatherUtils::TexturePath
 			if (part == "..")
 				return false;
 
-		const std::filesystem::path dataPath = Util::PathHelpers::GetDataPath();
-		const std::filesystem::path fullPath = lower.starts_with(kTexturePrefix) ?
-		                                           dataPath / lower :
-		                                           dataPath / kTexturePrefix / lower;
-
-		std::error_code ec;
-		return std::filesystem::exists(fullPath, ec) && !ec;
+		// Resolve through the resource system so BSA-packed textures count as present
+		const std::string resourcePath = lower.starts_with(kTexturePrefix) ? lower : std::string(kTexturePrefix) + lower;
+		return RE::BSResourceNiBinaryStream(resourcePath).good();
 	}
 
 	std::string BuildResourcePath(std::string_view path)

@@ -79,9 +79,12 @@ public:
 	struct alignas(16) Settings
 	{
 		float VertexAOStrength = 1.0f;
-		uint pad[3];
+		uint EnableMicroShadows = 1;
+		float MicroShadowStrength = 1.0f;
+		uint pad;
 	};
 	STATIC_ASSERT_ALIGNAS_16(Settings);
+	static_assert(sizeof(Settings) == 16);
 
 	Settings settings;
 

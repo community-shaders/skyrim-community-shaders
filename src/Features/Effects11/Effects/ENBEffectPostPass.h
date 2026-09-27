@@ -9,4 +9,5 @@ public:
 
 	virtual void Execute() override;
 	virtual void UpdateEffectVariables() override;
+	virtual void CreateEffectTextures() override;
 };

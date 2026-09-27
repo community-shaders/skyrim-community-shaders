@@ -201,7 +201,7 @@ void PrecipitationWidget::LoadSettings()
 					} else {
 						settings.particleTexture = texPath;
 						if (!WeatherUtils::TexturePath::ExistsOnDisk(texPath))
-							logger::warn("Precipitation {}: saved texture path '{}' not found on disk", GetEditorID(), texPath);
+							logger::warn("Precipitation {}: saved texture path '{}' not found", GetEditorID(), texPath);
 					}
 				}
 			}
@@ -288,7 +288,7 @@ void PrecipitationWidget::ApplyLiveParticleTexture(const std::string& path)
 		return;
 	if (!WeatherUtils::TexturePath::ExistsOnDisk(path)) {
 		if (path != lastInvalidTexture) {
-			logger::warn("Precipitation {}: invalid texture path '{}', must end with '.dds'", GetEditorID(), path);
+			logger::warn("Precipitation {}: texture '{}' not found", GetEditorID(), path);
 			lastInvalidTexture = path;
 		}
 		return;

@@ -23,7 +23,7 @@ namespace Skin
 		float4 skinPerGeometry;
 	};
 #endif
-#if defined(SKIN)
+#if defined(CS_SKIN_SHADING)
 	Texture2D<float4> TexSkinDetailNormal : register(t72);
 
 	// [Jorge Jimenez, Diego Gutierrez 2015, "Separable Subsurface Scattering"]

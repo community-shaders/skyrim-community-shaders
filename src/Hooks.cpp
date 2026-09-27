@@ -115,7 +115,7 @@ struct BSShader_LoadShaders
 					if (const auto bytecode = GetShaderBytecode(entry->shader)) {
 						DumpShader(shader, entry, std::span(*bytecode));
 					} else {
-						logger::warn("No captured bytecode for vertex shader {} descriptor {:X}", shader->fxpFilename, entry->id);
+						logger::warn("No captured bytecode for vertex shader {} descriptor {:X}", shader->fxpFilename ? shader->fxpFilename : "Unknown", entry->id);
 					}
 				}
 				auto vertexShaderDesriptor = entry->id;
@@ -129,7 +129,7 @@ struct BSShader_LoadShaders
 					if (const auto bytecode = GetShaderBytecode(entry->shader)) {
 						DumpShader(shader, entry, std::span(*bytecode));
 					} else {
-						logger::warn("No captured bytecode for pixel shader {} descriptor {:X}", shader->fxpFilename, entry->id);
+						logger::warn("No captured bytecode for pixel shader {} descriptor {:X}", shader->fxpFilename ? shader->fxpFilename : "Unknown", entry->id);
 					}
 				}
 				auto vertexShaderDesriptor = entry->id;

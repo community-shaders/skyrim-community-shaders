@@ -159,10 +159,12 @@ namespace NativeMenu::Vendor::VanillaSettingsEngine
 
 		bool                          g_hooked = false;
 		RE::FxDelegate*               g_hookedDelegate = nullptr;
-		RE::FxDelegate::CallbackDefn  g_originalOptionChange{};
-		RE::FxDelegate::CallbackDefn  g_originalRequestGameplay{};
-		RE::FxDelegate::CallbackDefn  g_originalRequestDisplay{};
-		RE::FxDelegate::CallbackDefn  g_originalRequestAudio{};
+		// Function pointers only: a CallbackDefn's GPtr handler would keep a closed JournalMenu alive
+		// until the next session's hook released it mid-tick.
+		RE::FxDelegateHandler::CallbackFn* g_originalOptionChange = nullptr;
+		RE::FxDelegateHandler::CallbackFn* g_originalRequestGameplay = nullptr;
+		RE::FxDelegateHandler::CallbackFn* g_originalRequestDisplay = nullptr;
+		RE::FxDelegateHandler::CallbackFn* g_originalRequestAudio = nullptr;
 		std::string                   g_currentTab;
 		bool                          g_haveCurrentTab = false;
 		bool                          g_settingsListInjected = false;
@@ -185,41 +187,38 @@ namespace NativeMenu::Vendor::VanillaSettingsEngine
 				const auto id = static_cast<std::uint32_t>(a_params[0].GetNumber());
 				if (id >= kIdBase) {
 					const auto idx = id - kIdBase;
-					const auto value = a_params[1].IsNumber() ? a_params[1].GetNumber() : -1.0;
+					// Audio rows use FormIDs; ESL / late-load IDs overlap kIdBase.
+					// Only swallow the event when the index is a real CS row.
 					if (idx < g_settings.size()) {
-						logger::debug("VanillaSettingsEngine: OptionChange '{}' in '{}' = {} (id={})",
-							g_settings[idx].type == Type::kLabel ? "(label)" : g_settings[idx].label.c_str(),
-							g_settings[idx].tab, value, id);
-					} else {
-						logger::warn("VanillaSettingsEngine: OptionChange for unknown id {} (idx {})", id, idx);
-					}
-					// Vanilla doesn't block input on a greyed row, so drop the change here instead.
-					if (idx < g_settings.size() && a_params[1].IsNumber() &&
-						(!g_settings[idx].isEnabled || g_settings[idx].isEnabled())) {
-						// A press arrives as 1; vanilla's reset-to-defaults
-						// dispatches the default instead, 0 for a button, which
-						// must not fire the action.
-						const auto toggles = g_settings[idx].type == Type::kButton ||
-							g_settings[idx].type == Type::kCheckbox;
-						if (toggles && !ClaimToggle(static_cast<int>(idx)))
-							return;
+						const auto value = a_params[1].IsNumber() ? a_params[1].GetNumber() : -1.0;
+						// Vanilla doesn't block input on a greyed row, so drop the change here instead.
+						if (a_params[1].IsNumber() &&
+							(!g_settings[idx].isEnabled || g_settings[idx].isEnabled())) {
+							// A press arrives as 1; vanilla's reset-to-defaults
+							// dispatches the default instead, 0 for a button, which
+							// must not fire the action.
+							const auto toggles = g_settings[idx].type == Type::kButton ||
+								g_settings[idx].type == Type::kCheckbox;
+							if (toggles && !ClaimToggle(static_cast<int>(idx)))
+								return;
 
-						if (g_settings[idx].type == Type::kButton) {
-							if (g_settings[idx].onPress && value != 0.0) {
-								g_settings[idx].flashTicks = kButtonFlashTicks;
-								g_settings[idx].onPress();
+							if (g_settings[idx].type == Type::kButton) {
+								if (g_settings[idx].onPress && value != 0.0) {
+									g_settings[idx].flashTicks = kButtonFlashTicks;
+									g_settings[idx].onPress();
+								}
+							} else if (g_settings[idx].onChange) {
+								g_settings[idx].onChange(static_cast<float>(value));
+								QueueCommit(g_settings[idx], static_cast<float>(value));
 							}
-						} else if (g_settings[idx].onChange) {
-							g_settings[idx].onChange(static_cast<float>(value));
-							QueueCommit(g_settings[idx], static_cast<float>(value));
 						}
+						return;
 					}
-					return;
 				}
 			}
 
-			if (g_originalOptionChange.callback)
-				g_originalOptionChange.callback(a_params);
+			if (g_originalOptionChange)
+				g_originalOptionChange(a_params);
 		}
 
 		// Fires when the player picks a native tab - forwarded to the real
@@ -230,8 +229,8 @@ namespace NativeMenu::Vendor::VanillaSettingsEngine
 			g_haveCurrentTab = true;
 			g_showingCustomTab = false;
 			g_optionsListTouched = false;
-			if (g_originalRequestGameplay.callback)
-				g_originalRequestGameplay.callback(a_params);
+			if (g_originalRequestGameplay)
+				g_originalRequestGameplay(a_params);
 		}
 
 		void OnRequestDisplayOptions(const RE::FxDelegateArgs& a_params)
@@ -240,8 +239,8 @@ namespace NativeMenu::Vendor::VanillaSettingsEngine
 			g_haveCurrentTab = true;
 			g_showingCustomTab = false;
 			g_optionsListTouched = false;
-			if (g_originalRequestDisplay.callback)
-				g_originalRequestDisplay.callback(a_params);
+			if (g_originalRequestDisplay)
+				g_originalRequestDisplay(a_params);
 		}
 
 		void OnRequestAudioOptions(const RE::FxDelegateArgs& a_params)
@@ -250,8 +249,8 @@ namespace NativeMenu::Vendor::VanillaSettingsEngine
 			g_haveCurrentTab = true;
 			g_showingCustomTab = false;
 			g_optionsListTouched = false;
-			if (g_originalRequestAudio.callback)
-				g_originalRequestAudio.callback(a_params);
+			if (g_originalRequestAudio)
+				g_originalRequestAudio(a_params);
 		}
 
 		void InstallHooks(RE::FxDelegate* a_fxDelegate)
@@ -261,15 +260,15 @@ namespace NativeMenu::Vendor::VanillaSettingsEngine
 			if (g_hooked && g_hookedDelegate == a_fxDelegate)
 				return;
 
-			const auto hook = [&](const char* a_name, RE::FxDelegate::CallbackDefn& a_original,
+			const auto hook = [&](const char* a_name, RE::FxDelegateHandler::CallbackFn*& a_original,
 								   RE::FxDelegateHandler::CallbackFn* a_replacement) {
 				RE::GString                  name(a_name);
 				RE::FxDelegate::CallbackDefn current{};
 				a_fxDelegate->callbacks.Get(name, &current);
 				if (current.callback == a_replacement)
 					return;
-				a_original = current;
-				a_fxDelegate->callbacks.Set(name, RE::FxDelegate::CallbackDefn{ a_original.handler, a_replacement });
+				a_original = current.callback;
+				a_fxDelegate->callbacks.Set(name, RE::FxDelegate::CallbackDefn{ current.handler, a_replacement });
 			};
 
 			hook("OptionChange", g_originalOptionChange, &OnOptionChange);

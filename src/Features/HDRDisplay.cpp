@@ -1605,8 +1605,8 @@ HDRDisplay::HDRDataCB HDRDisplay::BuildHDRData() const
 	bool skipUIComposite = IsFGCompositingThisFrame();
 
 	// Linear Lighting keeps the pipeline linear throughout.
-	// Without it, ISHDR gamma-encodes its output even in HDR mode.
-	bool isSceneLinear = globals::features::linearLighting.settings.enableLinearLighting;
+	// Without it, ISHDR gamma-encodes its output even in HDR mode. Linear Lighting stands down on the flat world map.
+	bool isSceneLinear = globals::features::linearLighting.settings.enableLinearLighting && !globals::state->IsFlatWorldMapOpen();
 
 	// Use user-specified peak brightness for highlights compression
 	float effectivePeakNits = static_cast<float>(settings.hdrPeakNits);

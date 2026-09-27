@@ -6,9 +6,9 @@ Quick reference for creating new graphics features in Community Shaders.
 
 Template files to copy and customize:
 
--   `template/NewFeature.h` → Copy to `src/Features/YourFeature.h`
--   `template/NewFeature.cpp` → Copy to `src/Features/YourFeature.cpp`
--   `template/New Feature/` → Copy to `features/YourFeature/`
+-   `docs/new-feature-template/NewFeature.h` → Copy to `src/Features/YourFeature.h`
+-   `docs/new-feature-template/NewFeature.cpp` → Copy to `src/Features/YourFeature.cpp`
+-   `docs/new-feature-template/New Feature/` → Copy to `features/YourFeature/`
 
 ## Core System Registration
 
@@ -16,23 +16,23 @@ These are the **required** files that must be modified for your feature to appea
 
 ### 1. `src/Globals.h`
 
-**Forward Declaration** - Add at top with other feature declarations (~lines 1-30):
+**Forward Declaration** - Add at top with other feature declarations:
 
 struct YourFeature;
 
-**Feature Instance Declaration** - Add in `globals::features` namespace (~lines 51-80):
+**Feature Instance Declaration** - Add in `globals::features` namespace:
 
 extern YourFeature yourFeature;
 
 ### 2. `src/Globals.cpp`
 
-**Feature Instance Definition** - Add in `globals::features` namespace (~lines 48-75):
+**Feature Instance Definition** - Add in `globals::features` namespace:
 
 YourFeature yourFeature{};
 
 ### 3. `src/Feature.cpp`
 
-**Feature Registration** - Add to features vector in `GetFeatureList()` (~lines 200-225):
+**Feature Registration** - Add to features vector in `GetFeatureList()`:
 
 &globals::features::yourFeature,
 

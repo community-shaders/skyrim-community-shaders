@@ -194,6 +194,10 @@ bool Feature::ValidateCache(CSimpleIniA& a_ini)
 
 	if (loaded) {
 		auto versionInCache = a_ini.GetValue(ini_name.c_str(), "Version");
+		if (!versionInCache) {
+			logger::info("No cached version found. Installed {}", version);
+			return false;
+		}
 		if (strcmp(versionInCache, version.c_str()) != 0) {
 			logger::info("Change in version detected. Installed {} but {} in Disk Cache", version, versionInCache);
 			return false;

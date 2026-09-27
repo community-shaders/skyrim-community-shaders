@@ -616,9 +616,9 @@ namespace WeatherUtils
 		bool HasDdsExtension(std::string_view path);
 
 		/**
-		 * @brief Check if a texture file exists under Data/textures/.
+		 * @brief Check if a texture exists under Data/textures/, as a loose file or inside a loaded BSA.
 		 * @param path Texture path (with or without the leading "textures\" prefix).
-		 * @return True if the file exists on disk.
+		 * @return True if the game's resource system can open the file.
 		 */
 		bool ExistsOnDisk(std::string_view path);
 

@@ -79,25 +79,32 @@ namespace Util::Moon
 		return RE::Moon::Phases::Phase::kFull;
 	}
 
+	/** @brief Whether Moon and Stars (po3_MoonMod.dll) is loaded. */
+	inline bool IsMoonAndStarsLoaded()
+	{
+		static const bool loaded = GetModuleHandle(L"po3_MoonMod.dll") != nullptr;
+		return loaded;
+	}
+
+	/** @brief Get the axis a moon faces along from its rotation; Moon and Stars meshes are a quarter turn off vanilla. */
+	inline RE::NiPoint3 GetFacingAxis(const RE::NiMatrix3& rotate)
+	{
+		const auto dir = rotate.GetVectorY();
+		return IsMoonAndStarsLoaded() ? RE::NiPoint3{ dir.y, -dir.x, dir.z } : dir;
+	}
+
 	/**
 	 * @brief Get the normalised world-space direction vector towards a moon.
 	 * @param moon The moon object to query.
-	 * @param applyMoonAndStarsCompat When true, applies axis swapping for Moon and Stars mod compatibility.
 	 * @return The unit direction vector, or straight up (0,0,1) if the moon is invalid.
 	 */
-	inline RE::NiPoint3 GetDirection(const RE::Moon* moon, bool applyMoonAndStarsCompat = false)
+	inline RE::NiPoint3 GetDirection(const RE::Moon* moon)
 	{
 		if (!moon || !moon->root)
 			return { 0.0f, 0.0f, 1.0f };
 
-		auto dir = moon->root->world.rotate.GetVectorY();
+		auto dir = GetFacingAxis(moon->root->world.rotate);
 		dir.Unitize();
-
-		if (applyMoonAndStarsCompat) {
-			std::swap(dir.x, dir.y);
-			dir.x = -dir.x;
-		}
-
 		return dir;
 	}
 

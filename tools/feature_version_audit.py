@@ -220,9 +220,6 @@ def get_feature_ini_metadata(feature_dir_or_ini_path):
             'description': section_items.get('nexusdescription') or section_items.get('nexus_description') or section_items.get('description'),
             'artifact_pattern': section_items.get('nexusartifactpattern') or section_items.get('nexus_artifact_pattern') or section_items.get('artifact_pattern'),
             'short_name': section_items.get('shortname') or section_items.get('short_name') or section_items.get('nexusshortname') or section_items.get('nexus_short_name'),
-            # Manual override for mods whose Nexus page has more than one MAIN-category
-            # file, where auto-resolution by "most recently uploaded" is ambiguous.
-            'file_id': section_items.get('nexusfileid') or section_items.get('nexus_file_id'),
         }
         metadata.update({k: v for k, v in section_metadata.items() if v is not None and v != ""})
         key_features = section_items.get('nexuskeyfeatures') or section_items.get('nexus_key_features') or section_items.get('key_features') or section_items.get('keyfeatures')
@@ -1099,8 +1096,6 @@ def build_nexus_upload_matrix(feature_metadata, core_mod_id, core_filename, core
         }
         if mod_version:
             row['mod_version'] = mod_version
-        if ini_metadata.get('file_id'):
-            row['file_id'] = ini_metadata['file_id']
         if base_ref:
             feature_dir = find_feature_dir(name) or FEATURES_DIR / name
             changelog = get_feature_changelog(feature_dir, info, base_ref)

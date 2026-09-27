@@ -4,15 +4,13 @@ This file provides guidance for AI assistants working with the Skyrim Community 
 
 ## Primary Documentation
 
-**For comprehensive development guidance, see `.claude/CLAUDE.md`** which provides detailed information on:
+**For development guidance, see `.claude/CLAUDE.md`** which covers:
 
--   Build commands and development setup
--   Architecture overview and critical dependencies (CommonLibSSE-NG)
--   Runtime targeting system for SE/AE compatibility
--   Core architecture including Globals system and feature registry
--   Shader architecture (base shaders in `package/Shaders/`, feature shaders, compute shader patterns)
--   Development workflows and best practices
--   Common pitfalls and testing requirements
+-   Build wrappers and shader validation
+-   Feature layout and SE/AE runtime targeting (CommonLibSSE-NG)
+-   Feature release stages (Alpha / Beta / Unreleased) and versioning
+-   Project conventions (D3D11 resource naming, UI constants, i18n)
+-   Commit and branch rules
 
 ## Quick Reference
 
@@ -28,7 +26,7 @@ SKSE plugin providing advanced DirectX 11 graphics modifications for Skyrim SE/A
 
 ### Build Options
 
-**Runtime Presets**: `ALL` (universal), `SE`, `AE`, `ALL-TRACY`
+**Presets**: `ALL` (universal SE/AE, default), `ALL-VS2022`, `ALL-DEBUG`, `Dev-Fast`, `PR` (see `CMakePresets.json`)
 
 **CMake Options** (set in user preset):
 
@@ -44,7 +42,7 @@ SKSE plugin providing advanced DirectX 11 graphics modifications for Skyrim SE/A
 -   `PREPARE_AIO`, `prepare_shaders`, `COPY_SHADERS`, `AIO_ZIP_PACKAGE`
 -   `FORMAT_CODE`, `generate_shader_configs`
 
-For full details about manual packaging targets (Package-Core, Package-AIO-Manual, Package-<Feature>, AIO) and example workflows, see the "Manual packaging targets (detailed)" section in `.claude/CLAUDE.md` to avoid duplication.
+For full details about manual packaging targets (Package-Core, Package-AIO-Manual, Package-<Feature>, AIO) and example workflows, see the "Build Instructions" section in `README.md` to avoid duplication.
 
 ### AI Assistant Role
 
