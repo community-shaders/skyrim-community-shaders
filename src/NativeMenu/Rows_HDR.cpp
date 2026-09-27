@@ -6,7 +6,7 @@
 
 #include <mutex>
 
-#define I18N_KEY_PREFIX "native_menu.hdr."
+#define I18N_KEY_PREFIX "feature.hdr_display."
 
 namespace
 {
@@ -44,11 +44,9 @@ namespace NativeMenu
 			return {};
 
 		return {
-			Checkbox(T(TKEY("enable"), "Enable HDR"), &GetHDREnabled, &SetHDREnabled,
+			Checkbox(T(TKEY("enable_hdr"), "Enable HDR"), &GetHDREnabled, &SetHDREnabled,
 				HDRDisplay::Settings{}.enableHDR ? 1.0f : 0.0f,
-				T(TKEY("enable_desc"),
-					"Real HDR output for HDR displays. Greyed out until an HDR-capable, HDR-enabled display is detected; "
-					"use the full settings menu's Advanced override to force it otherwise."),
+				T(TKEY("enable_hdr_tooltip"), "Enable HDR output. Matches vanilla visuals with extended dynamic range."),
 				&IsHDRToggleEnabled),
 		};
 	}

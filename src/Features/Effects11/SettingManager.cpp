@@ -416,41 +416,10 @@ bool SettingManager::IsCategoryExteriorOnly(const std::string& category) const
 	return it->second.exteriorOnly;
 }
 
-std::map<std::string, std::vector<std::string>> SettingManager::GetCategorizedSettings() const
+std::vector<std::string> SettingManager::GetCategories() const
 {
 	std::shared_lock lock(mutex);
-	std::map<std::string, std::vector<std::string>> result;
-	result["Main"] = {};
-	result["Weather"] = {};
-	result["Debug"] = {};
-
-	for (const auto& catName : categoryOrder) {
-		auto it = categories.find(catName);
-		if (it == categories.end())
-			continue;
-
-		if (it->second.tab == "Debug") {
-			result["Debug"].push_back(catName);
-			continue;
-		}
-
-		bool hasNonTod = false;
-		bool hasTod = false;
-		for (const auto& [key, id] : it->second.settings) {
-			auto type = allSettings[id].type;
-			if (type == SettingType::TimeOfDay || type == SettingType::ColorTimeOfDay)
-				hasTod = true;
-			else
-				hasNonTod = true;
-		}
-
-		if (hasNonTod)
-			result["Main"].push_back(catName);
-		if (hasTod)
-			result["Weather"].push_back(catName);
-	}
-
-	return result;
+	return categoryOrder;
 }
 
 void SettingManager::SetCategoryDependency(const std::string& category, const std::string& dependsOnKey, const std::string& dependsOnCategory)
@@ -461,6 +430,15 @@ void SettingManager::SetCategoryDependency(const std::string& category, const st
 		it->second.dependsOnKey = dependsOnKey;
 		it->second.dependsOnCategory = dependsOnCategory;
 	}
+}
+
+std::pair<std::string, std::string> SettingManager::GetCategoryDependency(const std::string& category) const
+{
+	std::shared_lock lock(mutex);
+	auto it = categories.find(category);
+	if (it == categories.end())
+		return {};
+	return { it->second.dependsOnKey, it->second.dependsOnCategory };
 }
 
 void SettingManager::SetSettingDependency(const std::string& key, const std::string& category, const std::string& dependsOnKey, const std::string& dependsOnCategory)
@@ -514,6 +492,12 @@ void SettingManager::SetSettingLegacyKey(const std::string& key, const std::stri
 	auto& legacyKeys = allSettings[id].legacyKeys;
 	if (std::find(legacyKeys.begin(), legacyKeys.end(), legacyKey) == legacyKeys.end())
 		legacyKeys.push_back(legacyKey);
+}
+
+bool SettingManager::IsWeatherSystemEnabled() const
+{
+	std::shared_lock lock(mutex);
+	return IsWeatherSystemEnabledInternal();
 }
 
 void SettingManager::SetWeatherBlendFactors(uint32_t newCurrentWeatherID, uint32_t newLastWeatherID, float blendFactor)

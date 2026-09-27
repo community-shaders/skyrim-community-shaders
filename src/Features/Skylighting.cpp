@@ -40,6 +40,8 @@ void Skylighting::ResetSkylighting()
 	float clrf[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
 	context->ClearUnorderedAccessViewFloat(texShadowVisibility->uav.get(), clrf);
 
+	// Grid bottom is stale until the next in-world buffer update, so don't cull this frame
+	probeGridBottomZ = -FLT_MAX;
 	queuedResetSkylighting = false;
 }
 
@@ -204,6 +206,7 @@ Skylighting::SkylightingCB Skylighting::GetCommonBufferData(bool a_inWorld)
 	auto cellID = eyePos / cellSize;
 	cellID = { round(cellID.x), round(cellID.y), round(cellID.z) };
 	auto cellOrigin = cellID * cellSize;
+	probeGridBottomZ = cellOrigin.z - cellSize.z * probeArrayDims[2] * .5f;
 	float3 cellIDDiff = prevCellID - cellID;
 	prevCellID = cellID;
 
@@ -416,6 +419,10 @@ RE::BSShaderProperty::RenderPassArray* Skylighting::BSLightingShaderProperty_Get
 		return precipitationOcclusionMapRenderPassList;
 
 	if (skylighting.inOcclusion) {
+		// Only occluders above a probe lie on its ray to the sky
+		if (geometry->worldBound.center.z + geometry->worldBound.radius < skylighting.probeGridBottomZ - OCCLUSION_BELOW_GRID_MARGIN)
+			return precipitationOcclusionMapRenderPassList;
+
 		if (auto userData = geometry->GetUserData()) {
 			RE::BSFadeNode* fadeNode = nullptr;
 
@@ -426,7 +433,8 @@ RE::BSShaderProperty::RenderPassArray* Skylighting::BSLightingShaderProperty_Get
 			}
 
 			if (fadeNode) {
-				if (auto extraData = fadeNode->GetExtraData("BSX")) {
+				static const RE::BSFixedString bsxKey{ "BSX" };
+				if (auto extraData = fadeNode->GetExtraData(bsxKey)) {
 					auto bsxFlags = (RE::BSXFlags*)extraData;
 					auto value = static_cast<int32_t>(bsxFlags->value);
 

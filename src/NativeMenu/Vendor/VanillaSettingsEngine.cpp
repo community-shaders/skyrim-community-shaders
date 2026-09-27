@@ -187,36 +187,33 @@ namespace NativeMenu::Vendor::VanillaSettingsEngine
 				const auto id = static_cast<std::uint32_t>(a_params[0].GetNumber());
 				if (id >= kIdBase) {
 					const auto idx = id - kIdBase;
-					const auto value = a_params[1].IsNumber() ? a_params[1].GetNumber() : -1.0;
+					// Audio rows use FormIDs; ESL / late-load IDs overlap kIdBase.
+					// Only swallow the event when the index is a real CS row.
 					if (idx < g_settings.size()) {
-						logger::debug("VanillaSettingsEngine: OptionChange '{}' in '{}' = {} (id={})",
-							g_settings[idx].type == Type::kLabel ? "(label)" : g_settings[idx].label.c_str(),
-							g_settings[idx].tab, value, id);
-					} else {
-						logger::warn("VanillaSettingsEngine: OptionChange for unknown id {} (idx {})", id, idx);
-					}
-					// Vanilla doesn't block input on a greyed row, so drop the change here instead.
-					if (idx < g_settings.size() && a_params[1].IsNumber() &&
-						(!g_settings[idx].isEnabled || g_settings[idx].isEnabled())) {
-						// A press arrives as 1; vanilla's reset-to-defaults
-						// dispatches the default instead, 0 for a button, which
-						// must not fire the action.
-						const auto toggles = g_settings[idx].type == Type::kButton ||
-							g_settings[idx].type == Type::kCheckbox;
-						if (toggles && !ClaimToggle(static_cast<int>(idx)))
-							return;
+						const auto value = a_params[1].IsNumber() ? a_params[1].GetNumber() : -1.0;
+						// Vanilla doesn't block input on a greyed row, so drop the change here instead.
+						if (a_params[1].IsNumber() &&
+							(!g_settings[idx].isEnabled || g_settings[idx].isEnabled())) {
+							// A press arrives as 1; vanilla's reset-to-defaults
+							// dispatches the default instead, 0 for a button, which
+							// must not fire the action.
+							const auto toggles = g_settings[idx].type == Type::kButton ||
+								g_settings[idx].type == Type::kCheckbox;
+							if (toggles && !ClaimToggle(static_cast<int>(idx)))
+								return;
 
-						if (g_settings[idx].type == Type::kButton) {
-							if (g_settings[idx].onPress && value != 0.0) {
-								g_settings[idx].flashTicks = kButtonFlashTicks;
-								g_settings[idx].onPress();
+							if (g_settings[idx].type == Type::kButton) {
+								if (g_settings[idx].onPress && value != 0.0) {
+									g_settings[idx].flashTicks = kButtonFlashTicks;
+									g_settings[idx].onPress();
+								}
+							} else if (g_settings[idx].onChange) {
+								g_settings[idx].onChange(static_cast<float>(value));
+								QueueCommit(g_settings[idx], static_cast<float>(value));
 							}
-						} else if (g_settings[idx].onChange) {
-							g_settings[idx].onChange(static_cast<float>(value));
-							QueueCommit(g_settings[idx], static_cast<float>(value));
 						}
+						return;
 					}
-					return;
 				}
 			}
 

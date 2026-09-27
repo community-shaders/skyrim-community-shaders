@@ -86,6 +86,10 @@ void MessageHandler(SKSE::MessagingInterface::Message* message)
 				EngineFix::InstallOnPostPostLoadFixes();
 				FrameAnnotations::OnPostPostLoad();
 
+				globals::state->flatWorldMapLoaded = GetModuleHandleW(L"FlatMapMarkersSSE.dll") != nullptr;
+				if (globals::state->flatWorldMapLoaded)
+					logger::info("FlatMapMarkersSSE detected, treating the world map as flat art");
+
 				auto shaderCache = globals::shaderCache;
 
 				// Run feature PostPostLoad() first so features can disable themselves if needed

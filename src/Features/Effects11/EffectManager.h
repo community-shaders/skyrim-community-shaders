@@ -87,8 +87,6 @@ public:
 	void CreateCopyShaders();
 	void CreateColorCorrectionShader();
 
-	void RenderEffectsList();
-
 	// Common variable data (updated once, applied to all effects)
 	struct CommonVariableData
 	{
@@ -104,6 +102,9 @@ public:
 		float tempInfo2[4];
 		float lightParameters[4];
 	} commonData;
+	/** @brief Effective weather IDs; commonData.weather mirrors them as floats, which can't hold every form ID exactly. */
+	uint32_t currentWeatherID = 0;
+	uint32_t previousWeatherID = 0;
 	uint32_t frameCount = 0;
 
 	void UpdateCommonData();
@@ -130,6 +131,8 @@ public:
 	} ids;
 
 	const CommonVariableData& GetCommonData() const { return commonData; }
+	/** @brief The weather that dominates the current blend; weather-separated edits are written to it. */
+	uint32_t GetDominantWeatherID() const { return commonData.weather[2] > 0.5f ? currentWeatherID : previousWeatherID; }
 
 	bool IsInitialized() const { return initialized; }
 

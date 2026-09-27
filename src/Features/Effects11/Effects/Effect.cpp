@@ -126,6 +126,49 @@ void Effect::CaptureBaseValue(UIVariable& uiVar)
 	std::copy(std::begin(uiVar.vectorValue), std::end(uiVar.vectorValue), std::begin(uiVar.baseVectorValue));
 }
 
+void Effect::CaptureDefaultValue(UIVariable& uiVar)
+{
+	// #define-backed values are read from the preset ini while preprocessing, so they have no shader default
+	if (uiVar.isLabel || uiVar.isDefine || !uiVar.effectVariable)
+		return;
+	switch (uiVar.type) {
+	case UIVariableType::Float:
+		uiVar.defaultFloatValue = uiVar.floatValue;
+		break;
+	case UIVariableType::Int:
+		uiVar.defaultIntValue = uiVar.intValue;
+		break;
+	case UIVariableType::Bool:
+		uiVar.defaultBoolValue = uiVar.boolValue;
+		break;
+	default:
+		std::copy(std::begin(uiVar.vectorValue), std::end(uiVar.vectorValue), std::begin(uiVar.defaultVectorValue));
+		break;
+	}
+	uiVar.hasDefaultValue = true;
+}
+
+bool Effect::RestoreDefaultValue(UIVariable& uiVar)
+{
+	if (!uiVar.hasDefaultValue)
+		return false;
+	switch (uiVar.type) {
+	case UIVariableType::Float:
+		uiVar.floatValue = uiVar.defaultFloatValue;
+		break;
+	case UIVariableType::Int:
+		uiVar.intValue = uiVar.defaultIntValue;
+		break;
+	case UIVariableType::Bool:
+		uiVar.boolValue = uiVar.defaultBoolValue;
+		break;
+	default:
+		std::copy(std::begin(uiVar.defaultVectorValue), std::end(uiVar.defaultVectorValue), std::begin(uiVar.vectorValue));
+		break;
+	}
+	return true;
+}
+
 void Effect::CaptureBaseValues()
 {
 	for (auto& uiVar : uiVariables)
@@ -740,6 +783,7 @@ void Effect::LoadUIVariables()
 		UIVariable uiVar = {};
 		if (ENBExtender::CreateUIVariable(uiVar, variable, varDesc, typeDesc, groupStack, *this)) {
 			LoadUIVariableValue(uiVar);
+			CaptureDefaultValue(uiVar);
 			uiVariables.push_back(std::move(uiVar));
 		}
 	}

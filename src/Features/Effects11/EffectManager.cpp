@@ -1,6 +1,7 @@
 #include "EffectManager.h"
 
 #include "D3D11StateBackup.h"
+#include "Editor/Effects11Editor.h"
 #include "Features/Effects11.h"
 #include "Globals.h"
 #include "Menu.h"
@@ -328,9 +329,7 @@ void EffectManager::ExecuteEffect(EffectBase& a_effect, uint32_t enableSettingID
 
 	a_effect.profiler = globals::profiler;
 #ifdef ENABLE_ENB_EXTENDER
-	a_effect.ApplyWeatherBlending(commonData.weather[2],
-		static_cast<uint32_t>(commonData.weather[0]),
-		static_cast<uint32_t>(commonData.weather[1]));
+	a_effect.ApplyWeatherBlending(commonData.weather[2], currentWeatherID, previousWeatherID);
 	a_effect.ApplyTimeOfDayInterpolation();
 #endif
 	UpdateCommonVariablesForEffect(a_effect);
@@ -621,6 +620,7 @@ void EffectManager::CreateColorCorrectionShader()
 void EffectManager::UpdateCommonData()
 {
 	commonData = {};
+	currentWeatherID = previousWeatherID = 0;
 
 	auto sky = globals::game::sky;
 
@@ -663,16 +663,15 @@ void EffectManager::UpdateCommonData()
 			uint32_t currentID = sky->currentWeather ? stripPluginIndex(sky->currentWeather->formID) : 0;
 			uint32_t lastID = lastWeather ? stripPluginIndex(lastWeather->formID) : 0;
 
-			uint32_t effectiveCurrentID = weatherManager.GetEffectiveWeatherID(currentID);
-			uint32_t effectiveLastID = weatherManager.GetEffectiveWeatherID(lastID);
-
-			commonData.weather[0] = static_cast<float>(effectiveCurrentID);
-			commonData.weather[1] = static_cast<float>(effectiveLastID);
+			currentWeatherID = weatherManager.GetEffectiveWeatherID(currentID);
+			previousWeatherID = weatherManager.GetEffectiveWeatherID(lastID);
+			commonData.weather[0] = static_cast<float>(currentWeatherID);
+			commonData.weather[1] = static_cast<float>(previousWeatherID);
 			commonData.weather[2] = sky->currentWeatherPct;
 			commonData.weather[3] = sky->currentGameHour;
 
-			commonData.enbWeather[0] = static_cast<float>(weatherManager.GetWeatherIndex(effectiveCurrentID));
-			commonData.enbWeather[1] = static_cast<float>(weatherManager.GetWeatherIndex(effectiveLastID));
+			commonData.enbWeather[0] = static_cast<float>(weatherManager.GetWeatherIndex(currentWeatherID));
+			commonData.enbWeather[1] = static_cast<float>(weatherManager.GetWeatherIndex(previousWeatherID));
 			commonData.enbWeather[2] = commonData.weather[2];
 			commonData.enbWeather[3] = commonData.weather[3];
 		}
@@ -819,8 +818,10 @@ void EffectManager::UpdateCursorData()
 	commonData.tempInfo1[0] = cursorPosition[0];
 	commonData.tempInfo1[1] = cursorPosition[1];
 
+	// Shaders get the cursor while a UI that shows it is open, e.g. for click-to-focus depth of field
 	auto* menu = globals::menu;
-	if (menu && menu->IsEnabled && ImGui::GetCurrentContext()) {
+	const bool cursorVisible = (menu && menu->IsEnabled) || Effects11Editor::GetSingleton().IsOpen();
+	if (cursorVisible && ImGui::GetCurrentContext()) {
 		const auto& io = ImGui::GetIO();
 		if (io.DisplaySize.x > 0.0f && io.DisplaySize.y > 0.0f) {
 			cursorPosition[0] = std::clamp(io.MousePos.x / io.DisplaySize.x, 0.0f, 1.0f);
@@ -1100,41 +1101,4 @@ void EffectManager::ReloadShaders()
 	colorCorrectionConstantBuffer = nullptr;
 	CreateCopyShaders();
 	CreateColorCorrectionShader();
-}
-
-void EffectManager::RenderEffectsList()
-{
-	Effect* allEffects[] = { &enbBloom, &enbLens, &enbAdaptation, &enbEffect, &enbEffectPostPass };
-
-	std::vector<Effect*> compiledEffects;
-	for (auto* effect : allEffects)
-		if (effect->IsCompiled())
-			compiledEffects.push_back(effect);
-
-#ifdef ENABLE_ENB_EXTENDER
-	if (!compiledEffects.empty())
-		ExtendedEffect::RenderMergedUI(compiledEffects, UITree::FilterMode::TopLevelOnly);
-#endif
-
-	for (auto* effect : compiledEffects) {
-		if (ImGui::TreeNodeEx(effect->GetName().c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
-#ifdef ENABLE_ENB_EXTENDER
-			Effect* self = effect;
-			ExtendedEffect::RenderMergedUI({ &self, 1 }, UITree::FilterMode::NonTopLevelOnly);
-#else
-			effect->RenderImGui();
-#endif
-			ImGui::TreePop();
-		}
-	}
-
-	for (auto* effect : allEffects) {
-		if (!effect->IsFilePresent())
-			continue;
-		if (!effect->GetErrors().empty()) {
-			ImGui::TextColored(globals::menu->GetSettings().Theme.StatusPalette.Error, "%s:", effect->GetName().c_str());
-			for (const auto& err : effect->GetErrors())
-				ImGui::TextWrapped("%s", err.c_str());
-		}
-	}
 }

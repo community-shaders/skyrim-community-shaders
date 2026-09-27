@@ -403,6 +403,12 @@ void SettingsTabRenderer::RenderKeybindingsTab(
 			state.settingEffects11ToggleKey,
 			"Change##Effects11Toggle");
 
+		Util::InputComboWidget(
+			T("menu.settings.effects11_editor_key", "Effects 11 Editor Key:"),
+			settings.Effects11EditorKey,
+			state.settingEffects11EditorKey,
+			"Change##Effects11Editor");
+
 		ImGui::EndTabItem();
 	}
 }

@@ -207,7 +207,8 @@ PS_OUTPUT main(PS_INPUT input)
 	if (isGeometryDepth || exponentialHeightFogEnabled) {
 		float fogFade = exponentialHeightFogEnabled ? ExponentialHeightFog::GetVanillaFogFade(FogNearColor.w) : FogNearColor.w;
 		float3 fogSource = exponentialHeightFogEnabled && !isGeometryDepth ? composedColor.xyz : fogFade * composedColor.xyz;
-		if (exponentialHeightFogEnabled && !ExponentialHeightFog::ShouldDisableVanillaFog()) {
+		// Vanilla fog only ever applies to geometry; sky pixels take height fog alone.
+		if (exponentialHeightFogEnabled && isGeometryDepth && !ExponentialHeightFog::ShouldDisableVanillaFog()) {
 			// Apply vanilla fog first, then exp fog on top
 			composedColor.xyz = lerp(fogSource, fogFade * fogColor, Color::FogAlpha(fogFactor));
 			composedColor.xyz = lerp(composedColor.xyz, fogFade * exponentialHeightFog.xyz, exponentialHeightFog.w);

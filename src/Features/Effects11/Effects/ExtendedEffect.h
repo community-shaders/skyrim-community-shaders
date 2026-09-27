@@ -21,7 +21,11 @@ public:
 
 	// Rendering
 	void RenderImGui() override;
-	static void RenderMergedUI(std::span<Effect*> effects, UITree::FilterMode filter = UITree::FilterMode::All);
+	/**
+	 * @brief Draws the parameters of several effects as one annotation-ordered tree.
+	 * @param options Search and time-period filters; also reports whether anything changed. May be null.
+	 */
+	static void RenderMergedUI(std::span<Effect*> effects, UITree::FilterMode filter = UITree::FilterMode::All, UITree::ViewOptions* options = nullptr);
 
 private:
 	using WeatherValues = std::unordered_map<std::string, std::string>;

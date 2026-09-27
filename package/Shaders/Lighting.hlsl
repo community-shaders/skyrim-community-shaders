@@ -981,7 +981,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	endif
 
 #	if defined(TERRAIN_VARIATION_MESH) && !defined(LANDSCAPE)
-#		define MESH_TV_SAMPLE(DEST, TEX, SAMP, UV)                      \
+#		define MESH_TV_SAMPLE(DEST, TEX, SAMP, UV)                     \
 			{                                                           \
 				[branch] if (applyMeshTV)                               \
 				{                                                       \
@@ -992,7 +992,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 					DEST = TEX.Sample(SAMP, UV);                        \
 				}                                                       \
 			}
-#		define MESH_TV_SAMPLE_BIAS(DEST, TEX, SAMP, UV)                   \
+#		define MESH_TV_SAMPLE_BIAS(DEST, TEX, SAMP, UV)                  \
 			{                                                             \
 				[branch] if (applyMeshTV)                                 \
 				{                                                         \
@@ -1003,7 +1003,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 					DEST = TEX.SampleBias(SAMP, UV, SharedData::MipBias); \
 				}                                                         \
 			}
-#		define MESH_TV_HEIGHT(DEST, TEX, SAMP, UV, MIP, CHANNEL)                             \
+#		define MESH_TV_HEIGHT(DEST, TEX, SAMP, UV, MIP, CHANNEL)                            \
 			{                                                                                \
 				[branch] if (applyMeshTV)                                                    \
 				{                                                                            \
@@ -2206,6 +2206,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	endif
 
 	float dirDetailedShadow = 1.0;
+	float dirTransmissionContactShadow = 1.0;
 
 	if ((Permutation::PixelShaderDescriptor & Permutation::LightingFlags::DefShadow) && (Permutation::PixelShaderDescriptor & Permutation::LightingFlags::ShadowDir)) {
 		dirDetailedShadow *= shadowColor.x;
@@ -2221,8 +2222,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	endif
 
 #	if defined(SCREEN_SPACE_SHADOWS) && defined(DEFERRED)
-	if (!SharedData::InInterior && dirLightAngle >= 0.0)
-		dirDetailedShadow *= ScreenSpaceShadows::GetScreenSpaceShadow(input.Position.xyz, screenUV, screenNoise);
+	if (!SharedData::InInterior) {
+		float2 screenSpaceShadows = ScreenSpaceShadows::GetScreenSpaceShadows(input.Position.xyz, screenUV, screenNoise);
+		if (dirLightAngle >= 0.0)
+			dirDetailedShadow *= screenSpaceShadows.x;
+		dirTransmissionContactShadow = dirLightAngle >= 0.0 ? screenSpaceShadows.x : screenSpaceShadows.y;
+	}
 #	endif
 
 #	if defined(EMAT) && (defined(SKINNED) || !defined(MODELSPACENORMALS))
@@ -2292,6 +2297,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float2 uvOriginal_ddx = ddx(uvOriginal);
 	float2 uvOriginal_ddy = ddy(uvOriginal);
 	EvaluateLighting(dirLightContext, material, tbnTr, uvOriginal, uvOriginal_ddx, uvOriginal_ddy, dirLightOutput);
+	dirLightOutput.transmission *= dirTransmissionContactShadow;
 #	if defined(WETNESS_EFFECTS)
 	if (waterRoughnessSpecular < 1)
 		EvaluateWetnessLighting(wetnessNormal, dirLightContext, waterRoughnessSpecular, dirLightOutput);

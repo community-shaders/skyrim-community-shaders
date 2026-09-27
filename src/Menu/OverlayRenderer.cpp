@@ -13,6 +13,7 @@
 #include "CSEditor/EditorWindow.h"
 #include "Feature.h"
 #include "FeatureIssues.h"
+#include "Features/Effects11/Editor/Effects11Editor.h"
 #include "Features/Effects11/EffectManager.h"
 #include "Features/RenderDoc.h"
 #include "Globals.h"
@@ -173,6 +174,12 @@ void OverlayRenderer::RenderOverlay(
 			editorWindow->ExitPreviewMode();
 	}
 	editorWindow->UpdateOpenState();
+
+	// The Effects 11 editor, the CS Editor and the Community Shaders menu are exclusive
+	auto& effects11Editor = Effects11Editor::GetSingleton();
+	if (effects11Editor.IsOpen() && (editorWindow->open || menu.IsEnabled))
+		effects11Editor.Close(false);
+
 	if (editorWindow->open) {
 		bool flying = editorWindow->IsPreviewFlying();
 		auto& io = ImGui::GetIO();
@@ -180,6 +187,9 @@ void OverlayRenderer::RenderOverlay(
 		if (flying)
 			io.MousePos = { -FLT_MAX, -FLT_MAX };  // prevent hover/tooltips during active flying
 		editorWindow->Draw();
+	} else if (effects11Editor.IsOpen()) {
+		ImGui::GetIO().MouseDrawCursor = true;
+		effects11Editor.Draw();
 	} else if (menu.IsEnabled || HomePageRenderer::ShouldShowFirstTimeSetup()) {
 		ImGui::GetIO().MouseDrawCursor = true;
 		if (menu.IsEnabled) {
@@ -209,6 +219,7 @@ bool OverlayRenderer::ShouldSkipRendering()
 	return !(shaderCache->IsCompiling() ||
 			 Menu::GetSingleton()->IsEnabled ||
 			 EditorWindow::GetSingleton()->open ||
+			 Effects11Editor::GetSingleton().IsOpen() ||
 			 abTestingManager->IsEnabled() ||
 			 (failed && !hide) ||
 			 effectFailed ||
@@ -251,6 +262,7 @@ void OverlayRenderer::InitializeImGuiFrame(Menu& menu)
 			menu.lastDisplaySize.x, menu.lastDisplaySize.y, currentDisplaySize.x, currentDisplaySize.y);
 		menu.resetLayout = true;
 		EditorWindow::GetSingleton()->resetLayout = true;
+		Effects11Editor::GetSingleton().RequestLayoutReset();
 	}
 	menu.lastDisplaySize = currentDisplaySize;
 

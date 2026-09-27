@@ -1,6 +1,5 @@
 #pragma once
 
-#include <map>
 #include <optional>
 #include <shared_mutex>
 
@@ -146,15 +145,20 @@ public:
 	void SetCategoryExteriorOnly(const std::string& category, bool exteriorOnly);
 	bool IsCategoryExteriorOnly(const std::string& category) const;
 
-	std::map<std::string, std::vector<std::string>> GetCategorizedSettings() const;
+	/** @brief Every category in registration order. */
+	std::vector<std::string> GetCategories() const;
 
 	void SetCategoryDependency(const std::string& category, const std::string& dependsOnKey, const std::string& dependsOnCategory);
+	/** @brief The {key, category} of the bool setting that switches a category on, or empty strings when it has none. */
+	std::pair<std::string, std::string> GetCategoryDependency(const std::string& category) const;
 	void SetSettingDependency(const std::string& key, const std::string& category, const std::string& dependsOnKey, const std::string& dependsOnCategory);
 	void SetSettingLegacyKey(const std::string& key, const std::string& category, const std::string& legacyKey);
 	bool IsCategoryEnabled(const std::string& category);
 	bool IsSettingEnabled(const std::string& key, const std::string& category);
 
 	// Weather integration
+	/** @brief True when EnableMultipleWeathers is on, so weather-aware settings read and write the weather files. */
+	bool IsWeatherSystemEnabled() const;
 	void SetWeatherBlendFactors(uint32_t currentWeatherID, uint32_t lastWeatherID, float blendFactor);
 	void LoadWeatherSettings(const std::vector<uint32_t>& weatherIDs, const std::string& filePath);
 	void SaveWeatherSettings(const std::string& weatherKey, const std::string& filePath);
@@ -183,7 +187,6 @@ private:
 	{
 		std::unordered_map<std::string, uint32_t> settings;  // key -> ID
 		std::vector<std::string> settingOrder;
-		std::string tab = "Main";
 		bool ignoreWeatherSystem = false;
 		bool ignoreWeatherSystemInterior = true;
 		bool lastSavedIgnoreWeatherSystem = false;
