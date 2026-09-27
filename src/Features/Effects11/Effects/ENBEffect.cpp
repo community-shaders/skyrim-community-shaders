@@ -1,5 +1,6 @@
 #include "ENBEffect.h"
 
+#include "../EffectManager.h"
 #include "../SettingManager.h"
 #include "../TextureManager.h"
 #include "Globals.h"
@@ -29,6 +30,9 @@ void ENBEffect::Execute()
 
 	if (executed && !inOutput) {
 		textureManager.SwapTextures("TextureSDRTemp", "TextureSDRTemp2");
+	} else if (!executed) {
+		// Side-target-only sequences leave TextureSDRTemp holding an earlier frame, so fall back to this one
+		EffectManager::GetSingleton().CopyTexture(textureOriginal.SRV, textureSDRTemp->rtv.get(), false);
 	}
 }
 
