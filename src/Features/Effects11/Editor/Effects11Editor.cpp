@@ -575,7 +575,7 @@ void Effects11Editor::DrawStatus()
 		auto weatherName = [&](uint32_t a_id) -> std::string {
 			if (auto* entry = weatherManager.FindWeatherEntry(a_id))
 				return entry->fileName;
-			return I18n::GetSingleton()->Format(TKEY("weather_no_file"), { { "id", std::format("0x{:06X}", a_id) } }, "{id} (no weather file)");
+			return I18n::GetSingleton()->Format(TKEY("weather_no_file"), { { "id", std::format("0x{:08X}", a_id) } }, "{id} (no weather file)");
 		};
 		const auto current = effectManager.currentWeatherID;
 		const auto previous = effectManager.previousWeatherID;

@@ -651,19 +651,15 @@ void EffectManager::UpdateCommonData()
 
 	// Update weather
 	{
-		// Strip plugin index (2 leftmost digits) from form IDs
-		auto stripPluginIndex = [](uint32_t formID) -> uint32_t {
-			return formID & 0x00FFFFFF;  // Keep only the lower 6 hex digits
-		};
-
 		if (sky) {
 			if (sky->lastWeather)
 				cachedLastWeather = sky->lastWeather;
 			auto* lastWeather = sky->lastWeather ? sky->lastWeather : cachedLastWeather;
 
 			auto& weatherManager = WeatherManager::GetSingleton();
-			uint32_t currentID = sky->currentWeather ? stripPluginIndex(sky->currentWeather->formID) : 0;
-			uint32_t lastID = lastWeather ? stripPluginIndex(lastWeather->formID) : 0;
+			// Full form IDs, so same-numbered weathers from different plugins stay distinct
+			uint32_t currentID = sky->currentWeather ? sky->currentWeather->formID : 0;
+			uint32_t lastID = lastWeather ? lastWeather->formID : 0;
 
 			currentWeatherID = weatherManager.GetEffectiveWeatherID(currentID);
 			previousWeatherID = weatherManager.GetEffectiveWeatherID(lastID);

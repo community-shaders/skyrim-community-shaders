@@ -136,9 +136,7 @@ uint32_t WeatherManager::ParseHexID(const std::string& hexStr)
 		return 0;
 	}
 
-	// Runtime form IDs are compared without their load-order index (see EffectManager::UpdateCommonData),
-	// so drop it here too; otherwise any ID written with a non-zero mod index never matches
-	return static_cast<uint32_t>(std::stoul(hexStr, nullptr, 16)) & 0x00FFFFFF;
+	return static_cast<uint32_t>(std::stoul(hexStr, nullptr, 16));
 }
 
 void WeatherManager::LoadLocationWeather()
@@ -169,7 +167,7 @@ void WeatherManager::LoadLocationWeather()
 
 		uint32_t worldSpaceID = 0;
 		try {
-			worldSpaceID = ParseHexID(sectionName);
+			worldSpaceID = ParseHexID(sectionName) & LocalFormIDMask;
 		} catch (...) {
 			continue;
 		}
@@ -199,7 +197,7 @@ void WeatherManager::LoadLocationWeather()
 			std::string weatherStr = entry.substr(eqPos + 1);
 
 			try {
-				uint32_t locationID = ParseHexID(locationStr);
+				uint32_t locationID = ParseHexID(locationStr) & LocalFormIDMask;
 				uint32_t fakeWeatherID = ParseHexID(weatherStr);
 				if (locationID != 0 && fakeWeatherID != 0) {
 					locationWeatherMap[worldSpaceID][locationID] = fakeWeatherID;
@@ -245,11 +243,11 @@ uint32_t WeatherManager::GetEffectiveWeatherID(uint32_t actualWeatherID)
 
 	try {
 		if (auto worldSpace = parentCell->GetRuntimeData().worldSpace) {
-			worldSpaceID = worldSpace->GetFormID() & 0x00FFFFFF;
+			worldSpaceID = worldSpace->GetFormID() & LocalFormIDMask;
 		}
 
 		if (auto location = parentCell->GetLocation()) {
-			locationID = location->GetFormID() & 0x00FFFFFF;
+			locationID = location->GetFormID() & LocalFormIDMask;
 		}
 	} catch (...) {
 		return actualWeatherID;

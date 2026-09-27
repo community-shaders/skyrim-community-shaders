@@ -36,6 +36,9 @@ public:
 	std::unordered_map<std::string, std::string> GetWeatherFiles() const;
 
 private:
+	/** @brief Drops the load-order index; location weather keys are matched without it. */
+	static constexpr uint32_t LocalFormIDMask = 0x00FFFFFF;
+
 	std::unordered_map<std::string, WeatherEntry> weatherEntries;
 	std::unordered_map<uint32_t, std::string> weatherIDMap;
 
