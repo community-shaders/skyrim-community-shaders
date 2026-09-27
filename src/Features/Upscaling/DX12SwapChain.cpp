@@ -286,6 +286,9 @@ HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT Flags)
 	if (SyncInterval == 0)
 		upscaling.FrameLimiter();
 
+	// The next frame decides frame generation again in Main_PostProcessing.
+	upscaling.frameGenerationPrepared = false;
+
 	return S_OK;
 }
 

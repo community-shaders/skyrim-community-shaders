@@ -115,8 +115,10 @@ namespace stl
 		T::func = vtable[idx];
 		LONG result = DetourTransactionBegin();
 		if (result == NO_ERROR) {
-			DetourUpdateThread(GetCurrentThread());
-			result = DetourAttach(reinterpret_cast<PVOID*>(&T::func), reinterpret_cast<PVOID>(T::thunk));
+			// A failed thread update must abort too, or the transaction commits and skips the fallback.
+			result = DetourUpdateThread(GetCurrentThread());
+			if (result == NO_ERROR)
+				result = DetourAttach(reinterpret_cast<PVOID*>(&T::func), reinterpret_cast<PVOID>(T::thunk));
 			if (result == NO_ERROR)
 				result = DetourTransactionCommit();
 			else

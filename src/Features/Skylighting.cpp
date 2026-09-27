@@ -159,7 +159,7 @@ void Skylighting::ClearShaderCache()
 	};
 
 	for (auto shader : shaderPtrs)
-		shader = nullptr;
+		*shader = nullptr;
 
 	CompileComputeShaders();
 }
@@ -261,8 +261,8 @@ void Skylighting::Prepass()
 			comparisonSampler.get()
 		};
 
-		// Update probe array
-		{
+		// Update probe array (skipped if the compute shader failed to compile)
+		if (probeUpdateCompute) {
 			context->CSSetSamplers(0, (uint)samplers.size(), samplers.data());
 			context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
 			context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);

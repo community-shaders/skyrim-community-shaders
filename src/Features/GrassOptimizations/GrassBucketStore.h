@@ -347,6 +347,7 @@ private:
 	float cachedComplexThreshold = -1.0f;
 
 	ID3D11ComputeShader* detectCS = nullptr;
+	bool detectCSFailed = false;  // Latches a failed compile until ClearShaderCache(), like cullCSFailed.
 	std::unique_ptr<Buffer> detectResult;
 	std::unique_ptr<Buffer> detectStaging;
 };

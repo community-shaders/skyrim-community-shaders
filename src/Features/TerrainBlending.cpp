@@ -413,5 +413,9 @@ void TerrainBlending::RenderTerrainBlendingPasses()
 
 	auto& mainDepth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
 	mainDepth.depthSRV = depthSRVBackup;
+	// Point the prepass copy back at its own texture: Deferred copies the final depth into it,
+	// and everything after this pass (water included) should read that rather than blended prepass depth.
+	auto& zPrepassCopy = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
+	zPrepassCopy.depthSRV = prepassSRVBackup;
 }
 #undef I18N_KEY_PREFIX

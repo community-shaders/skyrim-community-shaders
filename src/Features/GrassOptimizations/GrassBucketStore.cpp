@@ -37,14 +37,17 @@ void GrassBucketStore::ClearShaderCache()
 	if (detectCS)
 		detectCS->Release();
 	detectCS = nullptr;
+	detectCSFailed = false;
 }
 
 ID3D11ComputeShader* GrassBucketStore::GetDetectCS()
 {
-	if (!detectCS) {
+	if (!detectCS && !detectCSFailed) {
 		detectCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\GrassOptimizations\\DetectComplexCS.hlsl", {}, "cs_5_0"));
-		if (!detectCS)
+		if (!detectCS) {
+			detectCSFailed = true;
 			logger::error("[GRASS OPTIMIZATIONS] detect CS load failed — complex detection disabled");
+		}
 	}
 	return detectCS;
 }

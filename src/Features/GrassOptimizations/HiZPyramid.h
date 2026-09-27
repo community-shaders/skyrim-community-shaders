@@ -76,6 +76,9 @@ private:
 
 	ID3D11ComputeShader* baseCS = nullptr;
 	ID3D11ComputeShader* spdCS = nullptr;
+	// Latch failed compiles until ClearShaderCache() so the per-frame build doesn't retry and re-log.
+	bool baseCSFailed = false;
+	bool spdCSFailed = false;
 
 	uint32_t width = 0;
 	uint32_t height = 0;

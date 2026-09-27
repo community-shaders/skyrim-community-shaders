@@ -320,6 +320,8 @@ void EffectManager::RegisterSettings()
 
 	ids.brightness = settingManager.GetSettingID("Brightness", "COLORCORRECTION");
 	ids.gammaCurve = settingManager.GetSettingID("GammaCurve", "COLORCORRECTION");
+
+	ids.enableRain = settingManager.GetSettingID("Enable", "RAIN");
 }
 
 void EffectManager::ExecuteEffect(EffectBase& a_effect, uint32_t enableSettingID)

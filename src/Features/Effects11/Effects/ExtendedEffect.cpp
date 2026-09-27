@@ -10,18 +10,24 @@
 #include "../WeatherManager.h"
 #include "Globals.h"
 
-/** @brief ExteriorWeather vars take their preset value indoors, so they neither read nor save time-of-day or weather values there. */
-static bool IsExteriorWeatherIndoors(const std::string& separation)
-{
-	return separation == "ExteriorWeather" && EffectManager::GetSingleton().GetCommonData().eInteriorFactor > 0.0f;
-}
-
 void ExtendedEffect::Unload()
 {
 	weatherData.clear();
 	dirtyWeatherFiles.clear();
 	bindingCache.clear();
+	weatherVarSlots.clear();
+	weatherSlotOfVariable.clear();
+	parsedWeatherData.clear();
+	timeOfDayGroups.clear();
 	Effect::Unload();
+}
+
+/** @brief Component count of a Float or FloatN variable. */
+static int GetComponentCount(Effect::UIVariableType type)
+{
+	return type == Effect::UIVariableType::Float ? 1 : type == Effect::UIVariableType::Float2 ? 2 :
+	                                               type == Effect::UIVariableType::Float3     ? 3 :
+	                                                                                            4;
 }
 
 // Technique evaluation
@@ -72,73 +78,91 @@ bool ExtendedEffect::IsTechniqueEnabled(TechniqueInfo& info)
 
 // Time-of-day interpolation
 
-float ExtendedEffect::GetPeriodWeight(const std::string& period)
+/** @brief Time period names, in the order of the weight table built in ApplyTimeOfDayInterpolation. */
+static constexpr std::string_view PeriodNames[] = { "Dawn", "Sunrise", "Day", "Sunset", "Dusk", "Night", "Interior" };
+
+int ExtendedEffect::GetPeriodIndex(const std::string& period)
 {
-	auto& cd = EffectManager::GetSingleton().commonData;
-	if (period == "Dawn") return cd.timeOfDay1[static_cast<int>(TimeOfDay1Index::Dawn)];
-	if (period == "Sunrise") return cd.timeOfDay1[static_cast<int>(TimeOfDay1Index::Sunrise)];
-	if (period == "Day") return cd.timeOfDay1[static_cast<int>(TimeOfDay1Index::Day)];
-	if (period == "Sunset") return cd.timeOfDay1[static_cast<int>(TimeOfDay1Index::Sunset)];
-	if (period == "Dusk") return cd.timeOfDay2[static_cast<int>(TimeOfDay2Index::Dusk)];
-	if (period == "Night") return cd.timeOfDay2[static_cast<int>(TimeOfDay2Index::Night)];
-	if (period == "Interior") return cd.eInteriorFactor;
-	return 0.0f;
+	const auto it = std::ranges::find(PeriodNames, period);
+	return it != std::end(PeriodNames) ? static_cast<int>(it - std::begin(PeriodNames)) : -1;
 }
 
-void ExtendedEffect::ApplyTimeOfDayInterpolation()
+void ExtendedEffect::RebuildTimeOfDayGroups()
 {
-	struct PeriodVar
-	{
-		size_t index;
-		float weight;
-	};
-	std::unordered_map<std::string, std::vector<PeriodVar>> baseGroups;
+	timeOfDayGroups.clear();
+
+	// The first variable seen for a base decides the group's type and separation
+	std::unordered_map<std::string, size_t> groupOfBase;
 
 	for (size_t i = 0; i < uiVariables.size(); ++i) {
 		auto& uiVar = uiVariables[i];
 		if (uiVar.timePeriod.empty() || !uiVar.effectVariable)
 			continue;
-		auto& name = uiVar.name;
-		auto& period = uiVar.timePeriod;
+		const auto& name = uiVar.name;
+		const auto& period = uiVar.timePeriod;
 		if (name.size() <= period.size() || name.compare(name.size() - period.size(), period.size(), period) != 0)
 			continue;
-		baseGroups[name.substr(0, name.size() - period.size())].push_back({ i, GetPeriodWeight(period) });
+
+		std::string baseName = name.substr(0, name.size() - period.size());
+		auto groupIt = groupOfBase.find(baseName);
+		if (groupIt == groupOfBase.end()) {
+			auto baseVarIt = variables.find(baseName);
+			if (baseVarIt == variables.end())
+				continue;
+			auto* baseVar = baseVarIt->second.get();
+			if (!baseVar || !baseVar->IsValid())
+				continue;
+
+			groupIt = groupOfBase.emplace(std::move(baseName), timeOfDayGroups.size()).first;
+			timeOfDayGroups.push_back({ baseVar, GetComponentCount(uiVar.type), uiVar.separation == "ExteriorWeather", {} });
+		}
+		timeOfDayGroups[groupIt->second].entries.push_back({ i, GetPeriodIndex(period) });
 	}
+}
 
-	for (auto& [baseName, entries] : baseGroups) {
-		auto baseVarIt = variables.find(baseName);
-		if (baseVarIt == variables.end())
-			continue;
-		auto* baseVar = baseVarIt->second.get();
-		if (!baseVar || !baseVar->IsValid())
-			continue;
+void ExtendedEffect::ApplyTimeOfDayInterpolation()
+{
+	if (timeOfDayGroups.empty())
+		return;
 
-		if (IsExteriorWeatherIndoors(uiVariables[entries[0].index].separation))
+	const auto& cd = EffectManager::GetSingleton().commonData;
+	const float periodWeights[] = {
+		cd.timeOfDay1[static_cast<int>(TimeOfDay1Index::Dawn)],
+		cd.timeOfDay1[static_cast<int>(TimeOfDay1Index::Sunrise)],
+		cd.timeOfDay1[static_cast<int>(TimeOfDay1Index::Day)],
+		cd.timeOfDay1[static_cast<int>(TimeOfDay1Index::Sunset)],
+		cd.timeOfDay2[static_cast<int>(TimeOfDay2Index::Dusk)],
+		cd.timeOfDay2[static_cast<int>(TimeOfDay2Index::Night)],
+		cd.eInteriorFactor
+	};
+	static_assert(std::extent_v<decltype(periodWeights)> == std::size(PeriodNames));
+	auto weightOf = [&](const TimeOfDayEntry& entry) { return entry.period >= 0 ? periodWeights[entry.period] : 0.0f; };
+	const bool interior = cd.eInteriorFactor > 0.0f;
+
+	for (const auto& group : timeOfDayGroups) {
+		if (interior && group.exteriorWeather)
 			continue;
 
 		float totalWeight = 0.0f;
-		for (auto& e : entries)
-			totalWeight += e.weight;
+		for (const auto& entry : group.entries)
+			totalWeight += weightOf(entry);
 		if (totalWeight <= 0.0f)
 			continue;
 
-		auto& firstVar = uiVariables[entries[0].index];
-
-		if (firstVar.type == UIVariableType::Float) {
-			float result = 0.0f;
-			for (auto& e : entries)
-				result += uiVariables[e.index].floatValue * (e.weight / totalWeight);
-			baseVar->AsScalar()->SetFloat(result);
-		} else {
-			int comps = (firstVar.type == UIVariableType::Float2) ? 2 : (firstVar.type == UIVariableType::Float3) ? 3 : 4;
-			float result[4] = {};
-			for (auto& e : entries) {
-				float w = e.weight / totalWeight;
-				for (int c = 0; c < comps; ++c)
-					result[c] += uiVariables[e.index].vectorValue[c] * w;
-			}
-			baseVar->AsVector()->SetFloatVector(result);
+		float result[4] = {};
+		for (const auto& entry : group.entries) {
+			const float weight = weightOf(entry) / totalWeight;
+			const auto& uiVar = uiVariables[entry.index];
+			if (group.components == 1)
+				result[0] += uiVar.floatValue * weight;
+			else
+				for (int c = 0; c < group.components; ++c)
+					result[c] += uiVar.vectorValue[c] * weight;
 		}
+		if (group.components == 1)
+			group.baseVariable->AsScalar()->SetFloat(result[0]);
+		else
+			group.baseVariable->AsVector()->SetFloatVector(result);
 	}
 }
 
@@ -183,7 +207,7 @@ void ExtendedEffect::LoadWeatherData()
 
 			if (IsPerComponentVector(uiVar)) {
 				static const char* suffixes[] = { "X", "Y", "Z", "W" };
-				int comps = (uiVar.type == UIVariableType::Float2) ? 2 : (uiVar.type == UIVariableType::Float3) ? 3 : 4;
+				int comps = GetComponentCount(uiVar.type);
 				for (int c = 0; c < comps; ++c) {
 					std::string compKey = iniKey + suffixes[c];
 					char buffer[256];
@@ -207,100 +231,116 @@ void ExtendedEffect::LoadWeatherData()
 
 	if (!weatherData.empty())
 		logger::info("[ExtendedEffect] Loaded weather data for '{}' ({} weathers)", GetName(), weatherData.size());
+
+	RebuildWeatherCaches();
+	RebuildTimeOfDayGroups();
 }
 
-void ExtendedEffect::ApplyWeatherBlending(float blendFactor, uint32_t currentWeatherID, uint32_t lastWeatherID)
+void ExtendedEffect::RebuildWeatherCaches()
 {
-	const WeatherValues* currentValues = nullptr;
-	const WeatherValues* lastValues = nullptr;
-	if (!weatherData.empty() && IsMultipleWeathersEnabled()) {
-		if (auto it = weatherData.find(currentWeatherID); it != weatherData.end())
-			currentValues = &it->second;
-		if (auto it = weatherData.find(lastWeatherID); it != weatherData.end())
-			lastValues = &it->second;
-	}
+	weatherVarSlots.clear();
+	weatherSlotOfVariable.assign(uiVariables.size(), -1);
+	parsedWeatherData.clear();
 
-	auto safeStof = [](const std::string& s, float fallback) -> float {
-		try { return std::stof(s); } catch (...) { return fallback; }
-	};
-
-	for (auto& uiVar : uiVariables) {
+	for (size_t i = 0; i < uiVariables.size(); ++i) {
+		const auto& uiVar = uiVariables[i];
 		if (uiVar.isLabel)
 			continue;
 		if (!uiVar.effectVariable && !uiVar.isDefine)
 			continue;
 		if (!IsWeatherSeparated(uiVar))
 			continue;
+		if (uiVar.type != UIVariableType::Float && uiVar.type != UIVariableType::Float2 && uiVar.type != UIVariableType::Float3 && uiVar.type != UIVariableType::Float4)
+			continue;
 
 		std::string iniKey = GetVariableIniKey(uiVar);
 		if (iniKey.empty())
 			continue;
 
-		// Still written indoors, to undo any weather value
-		const bool useWeather = !IsExteriorWeatherIndoors(uiVar.separation);
-		const WeatherValues* varCurrentValues = useWeather ? currentValues : nullptr;
-		const WeatherValues* varLastValues = useWeather ? lastValues : nullptr;
+		weatherSlotOfVariable[i] = static_cast<int>(weatherVarSlots.size());
+		weatherVarSlots.push_back({ i, std::move(iniKey), GetComponentCount(uiVar.type), IsPerComponentVector(uiVar), uiVar.separation == "ExteriorWeather" });
+	}
 
-		switch (uiVar.type) {
-		case UIVariableType::Float:
-			{
-				auto getVal = [&](const WeatherValues* vals) -> float {
-					if (!vals) return uiVar.baseFloatValue;
-					auto it = vals->find(iniKey);
-					if (it == vals->end()) return uiVar.baseFloatValue;
-					return safeStof(it->second, uiVar.baseFloatValue);
-				};
+	for (const auto& [weatherID, values] : weatherData) {
+		auto& parsed = parsedWeatherData[weatherID];
+		parsed.resize(weatherVarSlots.size());
+		for (size_t slotIndex = 0; slotIndex < weatherVarSlots.size(); ++slotIndex)
+			ParseWeatherValue(values, weatherVarSlots[slotIndex], parsed[slotIndex]);
+	}
+}
 
-				float currentVal = getVal(varCurrentValues);
-				float lastVal = getVal(varLastValues);
-				uiVar.floatValue = lastVal + blendFactor * (currentVal - lastVal);
-				if (uiVar.effectVariable)
-					uiVar.effectVariable->AsScalar()->SetFloat(uiVar.floatValue);
-				break;
-			}
-		case UIVariableType::Float2:
-		case UIVariableType::Float3:
-		case UIVariableType::Float4:
-			{
-				int comps = (uiVar.type == UIVariableType::Float2) ? 2 : (uiVar.type == UIVariableType::Float3) ? 3 : 4;
-				bool perComp = IsPerComponentVector(uiVar);
+void ExtendedEffect::ParseWeatherValue(const WeatherValues& values, const WeatherVarSlot& slot, ParsedWeatherValue& out)
+{
+	out = {};
 
-				auto parseVec = [&](const WeatherValues* vals, float* out) {
-					memcpy(out, uiVar.baseVectorValue, sizeof(float) * comps);
-					if (!vals)
-						return;
-					if (perComp) {
-						static const char* suffixes[] = { "X", "Y", "Z", "W" };
-						for (int c = 0; c < comps; ++c) {
-							auto it = vals->find(iniKey + suffixes[c]);
-							if (it != vals->end())
-								out[c] = safeStof(it->second, uiVar.baseVectorValue[c]);
-						}
-					} else {
-						auto it = vals->find(iniKey);
-						if (it != vals->end()) {
-							std::stringstream ss(it->second);
-							std::string item;
-							for (int c = 0; c < comps && std::getline(ss, item, ','); ++c)
-								out[c] = safeStof(item, uiVar.baseVectorValue[c]);
-						}
-					}
-				};
-
-				float currentVals[4] = {}, lastVals[4] = {};
-				parseVec(varCurrentValues, currentVals);
-				parseVec(varLastValues, lastVals);
-
-				for (int c = 0; c < comps; ++c)
-					uiVar.vectorValue[c] = lastVals[c] + blendFactor * (currentVals[c] - lastVals[c]);
-
-				if (uiVar.effectVariable)
-					uiVar.effectVariable->AsVector()->SetFloatVector(uiVar.vectorValue);
-				break;
-			}
-		default:
-			break;
+	auto parseComponent = [&](const std::string& text, int component) {
+		try {
+			out.values[component] = std::stof(text);
+			out.definedMask |= static_cast<uint8_t>(1u << component);
+		} catch (...) {
 		}
+	};
+
+	if (slot.perComponent) {
+		static const char* suffixes[] = { "X", "Y", "Z", "W" };
+		for (int c = 0; c < slot.components; ++c) {
+			if (auto it = values.find(slot.iniKey + suffixes[c]); it != values.end())
+				parseComponent(it->second, c);
+		}
+		return;
+	}
+
+	auto it = values.find(slot.iniKey);
+	if (it == values.end())
+		return;
+	std::stringstream ss(it->second);
+	std::string item;
+	for (int c = 0; c < slot.components && std::getline(ss, item, ','); ++c)
+		parseComponent(item, c);
+}
+
+void ExtendedEffect::ApplyWeatherBlending(float blendFactor, uint32_t currentWeatherID, uint32_t lastWeatherID)
+{
+	const std::vector<ParsedWeatherValue>* currentValues = nullptr;
+	const std::vector<ParsedWeatherValue>* lastValues = nullptr;
+	if (!parsedWeatherData.empty() && IsMultipleWeathersEnabled()) {
+		if (auto it = parsedWeatherData.find(currentWeatherID); it != parsedWeatherData.end())
+			currentValues = &it->second;
+		if (auto it = parsedWeatherData.find(lastWeatherID); it != parsedWeatherData.end())
+			lastValues = &it->second;
+	}
+	assert(!currentValues || currentValues->size() == weatherVarSlots.size());
+	assert(!lastValues || lastValues->size() == weatherVarSlots.size());
+
+	// Undefined components fall back to the base value, as an absent or unparsable key did
+	auto pick = [](const std::vector<ParsedWeatherValue>* parsed, size_t slotIndex, int c, float fallback) {
+		return parsed && ((*parsed)[slotIndex].definedMask & (1u << c)) ? (*parsed)[slotIndex].values[c] : fallback;
+	};
+	const bool interior = EffectManager::GetSingleton().GetCommonData().eInteriorFactor > 0.0f;
+
+	for (size_t slotIndex = 0; slotIndex < weatherVarSlots.size(); ++slotIndex) {
+		const auto& slot = weatherVarSlots[slotIndex];
+		auto& uiVar = uiVariables[slot.index];
+		float* blended = slot.components == 1 ? &uiVar.floatValue : uiVar.vectorValue;
+		const float* base = slot.components == 1 ? &uiVar.baseFloatValue : uiVar.baseVectorValue;
+
+		// Still written indoors, to undo any weather value
+		const bool useWeather = !(interior && slot.exteriorWeather);
+		const auto* slotCurrentValues = useWeather ? currentValues : nullptr;
+		const auto* slotLastValues = useWeather ? lastValues : nullptr;
+
+		for (int c = 0; c < slot.components; ++c) {
+			const float currentVal = pick(slotCurrentValues, slotIndex, c, base[c]);
+			const float lastVal = pick(slotLastValues, slotIndex, c, base[c]);
+			blended[c] = lastVal + blendFactor * (currentVal - lastVal);
+		}
+
+		if (!uiVar.effectVariable)
+			continue;
+		if (slot.components == 1)
+			uiVar.effectVariable->AsScalar()->SetFloat(uiVar.floatValue);
+		else
+			uiVar.effectVariable->AsVector()->SetFloatVector(uiVar.vectorValue);
 	}
 }
 
@@ -315,7 +355,8 @@ void ExtendedEffect::SyncWeatherVarFromUI(size_t index, uint32_t weatherID)
 		return;
 
 	// Must match ApplyWeatherBlending: with weather overrides off, edits belong to the base value
-	const bool usesWeather = IsWeatherSeparated(uiVar) && IsMultipleWeathersEnabled() && !IsExteriorWeatherIndoors(uiVar.separation);
+	const bool exteriorWeatherIndoors = uiVar.separation == "ExteriorWeather" && EffectManager::GetSingleton().GetCommonData().eInteriorFactor > 0.0f;
+	const bool usesWeather = IsWeatherSeparated(uiVar) && IsMultipleWeathersEnabled() && !exteriorWeatherIndoors;
 	auto* entry = usesWeather ? WeatherManager::GetSingleton().FindWeatherEntry(weatherID) : nullptr;
 	std::string iniKey = GetVariableIniKey(uiVar);
 	if (!entry || iniKey.empty()) {
@@ -327,7 +368,7 @@ void ExtendedEffect::SyncWeatherVarFromUI(size_t index, uint32_t weatherID)
 	if (uiVar.type == UIVariableType::Float) {
 		updates.emplace_back(iniKey, std::to_string(uiVar.floatValue));
 	} else {
-		int comps = (uiVar.type == UIVariableType::Float2) ? 2 : (uiVar.type == UIVariableType::Float3) ? 3 : 4;
+		int comps = GetComponentCount(uiVar.type);
 		if (IsPerComponentVector(uiVar)) {
 			static const char* suffixes[] = { "X", "Y", "Z", "W" };
 			for (int c = 0; c < comps; ++c)
@@ -342,10 +383,19 @@ void ExtendedEffect::SyncWeatherVarFromUI(size_t index, uint32_t weatherID)
 		}
 	}
 
+	// Empty when the effect failed to load, since LoadWeatherData only runs on compiled effects
+	const int slotIndex = index < weatherSlotOfVariable.size() ? weatherSlotOfVariable[index] : -1;
+
 	for (uint32_t linkedID : entry->weatherIDs) {
 		auto& values = weatherData[linkedID];
 		for (const auto& [key, value] : updates)
 			values[key] = value;
+
+		if (slotIndex >= 0) {
+			auto& parsed = parsedWeatherData[linkedID];
+			parsed.resize(weatherVarSlots.size());
+			ParseWeatherValue(values, weatherVarSlots[slotIndex], parsed[slotIndex]);
+		}
 	}
 
 	auto& dirtyKeys = dirtyWeatherFiles[entry->fileName];

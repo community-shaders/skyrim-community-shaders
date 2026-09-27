@@ -17,6 +17,8 @@ void HiZPyramid::ClearShaderCache()
 	if (spdCS)
 		spdCS->Release();
 	spdCS = nullptr;
+	baseCSFailed = false;
+	spdCSFailed = false;
 }
 
 ID3D11ShaderResourceView* HiZPyramid::GetSourceDepthSRV()
@@ -153,19 +155,24 @@ bool HiZPyramid::Build(ID3D11Device* device, ID3D11DeviceContext* ctx)
 
 	// One variant only, since the only source is the game's R24_UNORM_X8_TYPELESS prepass copy.
 	if (!baseCS) {
+		if (baseCSFailed)
+			return false;
 		baseCS = static_cast<ID3D11ComputeShader*>(
 			Util::CompileShader(L"Data\\Shaders\\GrassOptimizations\\GrassHiZCS.hlsl", {}, "cs_5_0"));
 		if (!baseCS) {
+			baseCSFailed = true;
 			logger::error("[GRASS OPTIMIZATIONS] HiZ CS load failed — occlusion culling disabled");
 			return false;
 		}
 	}
 
-	if (!spdCS) {
+	if (!spdCS && !spdCSFailed) {
 		spdCS = static_cast<ID3D11ComputeShader*>(
 			Util::CompileShader(L"Data\\Shaders\\GrassOptimizations\\SPD\\SPD.hlsl", {}, "cs_5_0"));
-		if (!spdCS)
+		if (!spdCS) {
+			spdCSFailed = true;
 			logger::error("[GRASS OPTIMIZATIONS] SPD load failed — large instances will not be occlusion culled");
+		}
 	}
 
 	// Threads past the rendered sub-rect read beyond it, so the base pass's out-of-bounds guard writes 1.0 there and neither the padding nor the unrendered margin can cull.

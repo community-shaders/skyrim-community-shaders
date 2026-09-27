@@ -5,6 +5,10 @@
 #include <memory>
 #include <winrt/base.h>
 
+// C4324: the aligned PerFrame cache member pads the struct
+#pragma warning(push)
+#pragma warning(disable: 4324)
+
 struct Effects11 : Feature
 {
 public:
@@ -132,4 +136,10 @@ private:
 		float desaturation = 0.0f;
 		float intensity = 1.0f;
 	} pointLighting;
+
+	// The feature buffer is rebuilt several times per frame, so GetCommonBufferData's lookups are replayed from here
+	PerFrame perFrameCache{};
+	Util::FrameChecker perFrameCacheChecker;
 };
+
+#pragma warning(pop)

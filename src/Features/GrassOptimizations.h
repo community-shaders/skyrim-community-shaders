@@ -172,6 +172,9 @@ public:
 	ID3D11DeviceContext1* ctx1 = nullptr;
 
 	ID3D11ComputeShader* cullCS = nullptr;
+	// Set on a failed GetCullCS() compile so the per-frame caller doesn't retry the compile and
+	// re-log the failure every frame; cleared by ClearShaderCache() to allow a retry.
+	bool cullCSFailed = false;
 
 	std::unique_ptr<ConstantBuffer> cullParamsCB;
 	// Slotted per-bucket constants bound via CSSetConstantBuffers1: one 256-byte slot per visible

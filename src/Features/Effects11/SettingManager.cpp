@@ -100,6 +100,16 @@ void SettingManager::RegisterSettingInternal(Setting& setting)
 		} else {
 			logger::warn("[SettingManager] Setting {}:{} re-registered with a different type, resetting to default", setting.category, setting.key);
 			setting.lastSavedValue = setting.currentValue;
+			// Cached weather buckets would otherwise keep the old-typed variant at this ID, and
+			// safeGet<T>() would silently return T{} instead of falling back to the new default.
+			for (auto& [weatherID, data] : weatherData) {
+				if (existingID < data.size())
+					data[existingID] = setting.currentValue;
+			}
+			for (auto& [weatherID, data] : lastSavedWeatherData) {
+				if (existingID < data.size())
+					data[existingID] = setting.currentValue;
+			}
 		}
 		allSettings[existingID] = setting;
 	}
@@ -261,7 +271,7 @@ void SettingManager::RegisterColorTimeOfDaySetting(const std::string& key, const
 }
 
 template <typename T>
-T SettingManager::GetValue(const std::string& key, const std::string& category, bool rawValue)
+T SettingManager::GetValue(std::string_view key, std::string_view category, bool rawValue)
 {
 	std::shared_lock lock(mutex);
 	uint32_t id = GetSettingIDInternal(key, category);
@@ -383,13 +393,13 @@ void SettingManager::SetValueInternal(uint32_t id, const T& value)
 	setting.currentValue = value;
 }
 
-uint32_t SettingManager::GetSettingID(const std::string& key, const std::string& category) const
+uint32_t SettingManager::GetSettingID(std::string_view key, std::string_view category) const
 {
 	std::shared_lock lock(mutex);
 	return GetSettingIDInternal(key, category);
 }
 
-uint32_t SettingManager::GetSettingIDInternal(const std::string& key, const std::string& category) const
+uint32_t SettingManager::GetSettingIDInternal(std::string_view key, std::string_view category) const
 {
 	auto catIt = categories.find(category);
 	if (catIt != categories.end()) {
@@ -401,7 +411,7 @@ uint32_t SettingManager::GetSettingIDInternal(const std::string& key, const std:
 	return 0xFFFFFFFF;
 }
 
-float SettingManager::GetInterpolatedTimeOfDayValue(const std::string& key, const std::string& category)
+float SettingManager::GetInterpolatedTimeOfDayValue(std::string_view key, std::string_view category)
 {
 	std::shared_lock lock(mutex);
 	uint32_t id = GetSettingIDInternal(key, category);
@@ -411,7 +421,7 @@ float SettingManager::GetInterpolatedTimeOfDayValue(const std::string& key, cons
 	return ComputeTimeOfDayInterpolation(timeOfDayValue);
 }
 
-float3 SettingManager::GetInterpolatedColorTimeOfDayValue(const std::string& key, const std::string& category)
+float3 SettingManager::GetInterpolatedColorTimeOfDayValue(std::string_view key, std::string_view category)
 {
 	std::shared_lock lock(mutex);
 	uint32_t id = GetSettingIDInternal(key, category);
@@ -421,7 +431,7 @@ float3 SettingManager::GetInterpolatedColorTimeOfDayValue(const std::string& key
 	return ComputeColorTimeOfDayInterpolation(colorTimeOfDayValue);
 }
 
-const Setting* SettingManager::GetSettingInfo(const std::string& key, const std::string& category) const
+const Setting* SettingManager::GetSettingInfo(std::string_view key, std::string_view category) const
 {
 	std::shared_lock lock(mutex);
 	uint32_t id = GetSettingIDInternal(key, category);
@@ -1168,10 +1178,10 @@ void SettingManager::Save()
 }
 
 // Explicit template instantiations
-template bool SettingManager::GetValue<bool>(const std::string& key, const std::string& category, bool rawValue);
-template float SettingManager::GetValue<float>(const std::string& key, const std::string& category, bool rawValue);
-template TimeOfDayValue SettingManager::GetValue<TimeOfDayValue>(const std::string& key, const std::string& category, bool rawValue);
-template ColorTimeOfDayValue SettingManager::GetValue<ColorTimeOfDayValue>(const std::string& key, const std::string& category, bool rawValue);
+template bool SettingManager::GetValue<bool>(std::string_view key, std::string_view category, bool rawValue);
+template float SettingManager::GetValue<float>(std::string_view key, std::string_view category, bool rawValue);
+template TimeOfDayValue SettingManager::GetValue<TimeOfDayValue>(std::string_view key, std::string_view category, bool rawValue);
+template ColorTimeOfDayValue SettingManager::GetValue<ColorTimeOfDayValue>(std::string_view key, std::string_view category, bool rawValue);
 
 template bool SettingManager::GetValue<bool>(uint32_t id, bool rawValue);
 template float SettingManager::GetValue<float>(uint32_t id, bool rawValue);

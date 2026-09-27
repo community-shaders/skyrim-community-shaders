@@ -525,7 +525,7 @@ bool TerrainShadows::UpdateShadow(bool a_refreshImmediately)
 		invScale.z = cachedHeightmap->zRange.y - cachedHeightmap->zRange.x;
 		float2 dirLightPxDir = { dirLightDir.x / invScale.x * width, dirLightDir.y / invScale.y * height };
 		if (dirLightPxDir.x == 0.f && dirLightPxDir.y == 0.f)
-			dirLightPxDir = { 1.f, 0.f };
+			dirLightPxDir = float2(1.f, 0.f);
 
 		if (abs(dirLightPxDir.x) >= abs(dirLightPxDir.y)) {
 			edgePxCoord = dirLightPxDir.x > 0 ? 0 : (width - 1);

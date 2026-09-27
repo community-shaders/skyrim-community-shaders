@@ -451,7 +451,28 @@ list(TRANSFORM FEATURE_PATHS_SLASH APPEND /)
 
 # Install logic for AIO package
 # To copy AIO package at a folder do `${CMAKE_COMMAND} --install ${CMAKE_BINARY_DIR} --prefix ${AIO_DIR}`
-install(CODE "file(REMOVE_RECURSE \${CMAKE_INSTALL_PREFIX})")
+# The AIO staging folder is wiped before a fresh install so removed files don't linger. Any other
+# --prefix (e.g. a live Skyrim Data folder) is installed over in place and never deleted: a
+# recursive delete there would take every other mod with it.
+install(CODE "set(_cs_aio_dir \"${AIO_DIR}\")")
+install(
+    CODE
+        [[
+    cmake_path(ABSOLUTE_PATH CMAKE_INSTALL_PREFIX NORMALIZE OUTPUT_VARIABLE _cs_prefix)
+    cmake_path(ABSOLUTE_PATH _cs_aio_dir NORMALIZE OUTPUT_VARIABLE _cs_aio)
+    string(REGEX REPLACE "/$" "" _cs_prefix "${_cs_prefix}")
+    string(REGEX REPLACE "/$" "" _cs_aio "${_cs_aio}")
+    if(CMAKE_HOST_WIN32)
+        string(TOLOWER "${_cs_prefix}" _cs_prefix)
+        string(TOLOWER "${_cs_aio}" _cs_aio)
+    endif()
+    if(_cs_prefix STREQUAL _cs_aio)
+        file(REMOVE_RECURSE "${_cs_aio_dir}")
+    else()
+        message(STATUS "Installing over ${CMAKE_INSTALL_PREFIX} without cleaning it (only ${_cs_aio_dir} is cleaned first)")
+    endif()
+]]
+)
 install(TARGETS ${PROJECT_NAME} RUNTIME DESTINATION SKSE/Plugins COMPONENT SKSE)
 install(
     FILES $<TARGET_PDB_FILE:${PROJECT_NAME}>
