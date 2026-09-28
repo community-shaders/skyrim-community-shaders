@@ -323,7 +323,8 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.Normal = float4(0.5, 0.5, 0, psout.Color.w);
 
 #	if defined(CLOUD_SHADOWS) && defined(CLOUDS) && !defined(DEFERRED)
-	psout.CloudShadows = psout.Color.w;
+	// A broadcast alpha would square coverage under SRC_ALPHA blending.
+	psout.CloudShadows = float4(1, 1, 1, psout.Color.w);
 
 	// Keep sun behind scene depth to prevent halo leaks through geometry.
 	float depth = TexDepthSampler.Load(int3(input.Position.xy, 0));
