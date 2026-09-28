@@ -160,16 +160,11 @@ void CloudShadows::SkyShaderHacks()
 
 		int fromLayer = std::max(prevLayer, 0);
 
-		context->CopyResource(texSelfShadowCopy->resource.get(), texCloudShadowLayers[layer]->resource.get());
-
 		if (layer > 0) {
 			context->CopySubresourceRegion(
 				texCloudShadowLayers[layer]->resource.get(), subresource, 0, 0, 0,
 				texCloudShadowLayers[fromLayer]->resource.get(), subresource, nullptr);
 		}
-
-		ID3D11ShaderResourceView* selfShadowSrv = texSelfShadowCopy->srv.get();
-		context->PSSetShaderResources(26, 1, &selfShadowSrv);
 
 		rtvs[3] = cloudShadowLayerRTVs[layer][side];
 		context->OMSetRenderTargets(4, rtvs, nullptr);
@@ -227,10 +222,6 @@ void CloudShadows::ModifySky(RE::BSRenderPass* Pass)
 	if (cubeMapRenderTarget == RE::RENDER_TARGETS_CUBEMAP::kREFLECTIONS) {
 		currentLayerForDraw = layer;
 		overrideSky = true;
-	} else {
-		auto context = globals::d3d::context;
-		ID3D11ShaderResourceView* srv = texCloudShadowLayers[layer]->srv.get();
-		context->PSSetShaderResources(26, 1, &srv);
 	}
 }
 
@@ -283,7 +274,6 @@ void CloudShadows::SetupResources()
 			char name[64];
 			snprintf(name, sizeof(name), "CloudShadows::Layer[%d]", layer);
 			texCloudShadowLayers[layer] = new Texture2D(texDesc, name);
-			texCloudShadowLayers[layer]->CreateSRV(srvDesc);
 
 			for (int face = 0; face < 6; ++face) {
 				reflections.cubeSideRTV[face]->GetDesc(&rtvDesc);
@@ -295,9 +285,6 @@ void CloudShadows::SetupResources()
 
 		texCubemapCloudOccCopy = new Texture2D(texDesc, "CloudShadows::CubemapCloudOccCopy");
 		texCubemapCloudOccCopy->CreateSRV(srvDesc);
-
-		texSelfShadowCopy = new Texture2D(texDesc, "CloudShadows::SelfShadowCopy");
-		texSelfShadowCopy->CreateSRV(srvDesc);
 	}
 	{
 		D3D11_BLEND_DESC blendDesc = {};

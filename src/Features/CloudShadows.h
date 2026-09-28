@@ -46,7 +46,6 @@ public:
 	Texture2D* texCloudShadowLayers[kMaxCloudLayers] = {};
 	ID3D11RenderTargetView* cloudShadowLayerRTVs[kMaxCloudLayers][6] = {};
 	Texture2D* texCubemapCloudOccCopy = nullptr;
-	Texture2D* texSelfShadowCopy = nullptr;
 
 	UINT cubemapMipLevels = 1;
 	int currentLayerForDraw = 0;
