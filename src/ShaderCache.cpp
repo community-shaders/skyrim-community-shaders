@@ -2076,6 +2076,7 @@ namespace SIE
 			hlslToShaderMap.clear();
 		}
 		compilationSet.Clear();
+		Util::ClearShaderCompileFailures();
 		globals::deferred->ClearShaderCache();
 		for (auto* feature : Feature::GetFeatureList()) {
 			if (feature->loaded) {

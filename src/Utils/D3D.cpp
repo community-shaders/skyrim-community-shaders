@@ -9,6 +9,7 @@
 #include <DirectXTex.h>
 #include <d3dcompiler.h>
 #include <mutex>
+#include <unordered_set>
 
 namespace Util
 {
@@ -146,6 +147,19 @@ namespace Util
 		}
 	};
 
+	// Per-frame getters would otherwise retry a failed compile every frame.
+	namespace
+	{
+		std::mutex shaderCompileFailuresMutex;
+		std::unordered_set<std::string> shaderCompileFailures;
+	}
+
+	void ClearShaderCompileFailures()
+	{
+		std::lock_guard lock(shaderCompileFailuresMutex);
+		shaderCompileFailures.clear();
+	}
+
 	ID3D11DeviceChild* CompileShader(const wchar_t* FilePath, const std::vector<std::pair<const char*, const char*>>& Defines, const char* ProgramType, const char* Program)
 	{
 		auto device = globals::d3d::device;
@@ -210,13 +224,26 @@ namespace Util
 		ID3DBlob* shaderBlob;
 		ID3DBlob* shaderErrors;
 
+		const auto failureKey = std::format("{}|{}|{}|{}|{}", str, ProgramType, Program, flags, DefinesToString(macros));
+		{
+			std::lock_guard lock(shaderCompileFailuresMutex);
+			if (shaderCompileFailures.contains(failureKey))
+				return nullptr;
+		}
+		const auto recordFailure = [&]() {
+			std::lock_guard lock(shaderCompileFailuresMutex);
+			shaderCompileFailures.insert(failureKey);
+		};
+
 		if (!std::filesystem::exists(FilePath)) {
 			logger::error("Failed to compile shader; {} does not exist", str);
+			recordFailure();
 			return nullptr;
 		}
 		logger::debug("Compiling {} with {}", str, DefinesToString(macros));
 		if (FAILED(D3DCompileFromFile(FilePath, macros.data(), &include, Program, ProgramType, flags, 0, &shaderBlob, &shaderErrors))) {
 			logger::warn("Shader compilation failed:\n\n{}", shaderErrors ? static_cast<char*>(shaderErrors->GetBufferPointer()) : "Unknown error");
+			recordFailure();
 			return nullptr;
 		}
 		if (shaderErrors)
