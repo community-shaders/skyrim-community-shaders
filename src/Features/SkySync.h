@@ -91,13 +91,6 @@ public:
 	 */
 	RE::NiPoint3 GetCelestialDirection(const RE::Sky* sky, Caster caster) const;
 
-	/**
-	 * @brief Gets the world-space direction towards the current shadow caster, without the minimum shadow elevation clamp.
-	 * @param sky The sky whose root rotation maps Sky Sync's directions into world space.
-	 * @return The unit direction, or nullopt if Sky Sync did not update the caster this frame.
-	 */
-	std::optional<RE::NiPoint3> GetCelestialLightDirection(const RE::Sky* sky) const;
-
 private:
 	enum class CellFlagExt : uint16_t
 	{
@@ -128,8 +121,6 @@ private:
 	{
 		RE::NiPoint3 currentDir = { 0.0f, 0.0f, 1.0f };
 		RE::NiPoint3 startDir = { 0.0f, 0.0f, 1.0f };
-		RE::NiPoint3 celestialDir = { 0.0f, 0.0f, 1.0f };  // currentDir before elevation locking
-		RE::NiPoint3 startCelestialDir = { 0.0f, 0.0f, 1.0f };
 		Caster target = Caster::Sun;
 		Caster previousTarget = Caster::Sun;
 		float fadeTimer = 0.0f;
@@ -147,8 +138,6 @@ private:
 		static void SetElevation(RE::NiPoint3& dir, float elevRadians);
 		static void ClampDirection(RE::NiPoint3& dir);
 		static float ComputeVLFactor(const RE::NiPoint3& current, const RE::NiPoint3& target);
-		/** @brief Linearly interpolates two directions by @p t and renormalizes the result. */
-		static RE::NiPoint3 LerpDirection(const RE::NiPoint3& from, const RE::NiPoint3& to, float t);
 		void Reset();
 	};
 
