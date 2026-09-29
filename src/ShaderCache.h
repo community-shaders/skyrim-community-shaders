@@ -455,7 +455,8 @@ namespace SIE
 		enum class ClaimResult
 		{
 			CacheHit,  // Already compiled; use the returned blob
-			Claimed    // Claimed as Pending; caller must compile and call AddCompletedShader
+			Claimed,   // Claimed as Pending; caller must compile and call AddCompletedShader
+			Failed     // Previous attempt failed; skipped until invalidation drops the entry
 		};
 		std::pair<ClaimResult, ID3DBlob*> ClaimCompilation(const std::string& key);
 		void ResolvePendingFailure(const std::string& key);
