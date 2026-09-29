@@ -3623,6 +3623,8 @@ namespace SIE
 					if (fileDone)
 						continue;
 				}
+				// Feature shaders are not dependency-tracked, so any edit may fix a failed compile.
+				Util::ClearShaderCompileFailures();
 				if (clearCache) {
 					cache->DeleteDiskCache();
 					cache->Clear();
