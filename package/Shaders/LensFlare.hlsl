@@ -49,8 +49,10 @@ PS_OUTPUT main(PS_INPUT input)
 	uint visibleSamples = 0;
 	[unroll] for (uint i = 0; i < FlareOcclusion::SampleCount; i++)
 	{
-		float2 sampleUV = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(light.xy + FlareOcclusion::GetSampleOffset(i));
-		visibleSamples += DepthTex.Sample(DepthSampler, sampleUV).x >= light.z;
+		// Off-screen taps count as visible, matching the sun glare
+		float2 sampleUV = light.xy + FlareOcclusion::GetSampleOffset(i);
+		visibleSamples += FrameBuffer::IsOutsideFrame(sampleUV) ||
+		                  DepthTex.Sample(DepthSampler, FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(sampleUV)).x >= light.z;
 	}
 	psout.Visibility = FlareOcclusion::GetVisibility(visibleSamples);
 	return psout;
