@@ -1358,7 +1358,7 @@ namespace SIE
 			std::string::size_type pos = a_key.find(':');
 			if (pos != std::string::npos)
 				type = a_key.substr(0, pos);
-			if (type.starts_with("IS") || type == "ReflectionsRayTracing")
+			if (type.starts_with("IS") || type == "ReflectionsRayTracing" || type == "LensFlareVisibility")
 				type = "ImageSpace";  // fix type for image space shaders
 			return type;
 		}
@@ -1763,6 +1763,7 @@ namespace SIE
 					RE::ImageSpaceManager::GetCurrentIndex(ISCompositeLensFlare) },
 				{ "BSImagespaceShaderISCompositeLensFlareVolumetricLighting",
 					RE::ImageSpaceManager::GetCurrentIndex(ISCompositeLensFlareVolumetricLighting) },
+				{ "BGSLensFlareVisibilityPass", RE::ImageSpaceManager::GetCurrentIndex(ISLensFlareVisibility) },
 				// { "BSImagespaceShaderISDebugSnow", RE::ImageSpaceManager::GetCurrentIndex(ISDebugSnow) },
 				{ "BSImagespaceShaderDepthOfField", RE::ImageSpaceManager::GetCurrentIndex(ISDepthOfField) },
 				{ "BSImagespaceShaderDepthOfFieldFogged",

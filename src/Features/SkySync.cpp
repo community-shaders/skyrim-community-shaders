@@ -194,6 +194,9 @@ void SkySync::DataLoaded()
 	const auto data = RE::TESDataHandler::GetSingleton();
 	if (data && (data->LookupLoadedModByName("DVLaSS.esp"sv) || data->LookupLoadedLightModByName("DVLaSS.esp"sv)))
 		DisableOnConflict("DVLaSS");
+
+	if (const auto collection = globals::game::gameSettingCollection)
+		gSunAlphaTransTime = collection->GetSetting("fSunAlphaTransTime");
 }
 
 void SkySync::GameLoaded()
@@ -430,11 +433,36 @@ void SkySync::ProcessSun(const RE::Sky* sky, RE::NiPoint3 dirs[], float intensit
 		CalculateSunDirectionAndDistance(sun, dir, dist);
 
 	SetSunPosition(sun, dir, dist);
+	HideSunOutsideFadeWindow(sky);
 
 	dirs[static_cast<int>(Caster::Sun)] = dir;
 
 	if (const auto prop = skyrim_cast<RE::BSSkyShaderProperty*>(sun->sunBase->GetGeometryRuntimeData().shaderProperty.get()))
 		intensities[static_cast<int>(Caster::Sun)] = prop->kBlendColor.alpha;
+}
+
+void SkySync::HideSunOutsideFadeWindow(const RE::Sky* sky)
+{
+	if (!gSunAlphaTransTime)
+		return;
+
+	// Same float ops as Sun::Update so the bounds match its exactly, but made inclusive
+	constexpr float HoursPerTimingUnit = 1.0f / 6.0f;
+	auto middleHour = [](const RE::TESClimate::Timing::Interval& interval) {
+		return (interval.end * HoursPerTimingUnit + interval.begin * HoursPerTimingUnit) * 0.5f;
+	};
+	const auto& timing = sky->currentClimate->timing;
+	const float halfTransition = gSunAlphaTransTime->GetFloat() * 0.5f;
+	const float fadeInStart = middleHour(timing.sunrise) - halfTransition;
+	const float fadeOutEnd = middleHour(timing.sunset) + halfTransition;
+	const float hour = sky->currentGameHour;
+	if (hour > fadeInStart && hour < fadeOutEnd)
+		return;
+
+	for (const auto& geometry : { sky->sun->sunBase, sky->sun->sunGlare }) {
+		if (const auto prop = geometry ? skyrim_cast<RE::BSSkyShaderProperty*>(geometry->GetGeometryRuntimeData().shaderProperty.get()) : nullptr)
+			prop->kBlendColor.alpha = 0.0f;
+	}
 }
 
 void SkySync::ProcessMoon(const RE::Sky* sky, const Caster type, RE::NiPoint3 dirs[], float intensities[])
@@ -477,6 +505,18 @@ RE::NiPoint3 SkySync::GetCelestialDirection(const RE::Sky* sky, const Caster cas
 
 	if (dir.Unitize() <= FLT_EPSILON)
 		return { 0.0f, 0.0f, 1.0f };
+	return dir;
+}
+
+std::optional<RE::NiPoint3> SkySync::GetCelestialLightDirection(const RE::Sky* sky) const
+{
+	// The sun direction is only zero when Update bailed before running the shadow fader this frame
+	if (!sky || !sky->root || rawDirections[static_cast<size_t>(Caster::Sun)].SqrLength() == 0.0f)
+		return std::nullopt;
+
+	RE::NiPoint3 dir = sky->root->world.rotate * shadowFader.celestialDir;
+	if (dir.Unitize() <= FLT_EPSILON)
+		return std::nullopt;
 	return dir;
 }
 
@@ -555,18 +595,20 @@ void SkySync::ShadowFader::Update(const RE::Sky* sky, RE::NiPoint3 dirs[], float
 		best = Caster::Sun;
 	}
 
-	LockSunElevation(dirs);
-
 	// No valid caster points straight up so shadows fall directly down.
 	auto casterDir = [&](Caster c) {
 		return c == Caster::None ? RE::NiPoint3{ 0.0f, 0.0f, 1.0f } : dirs[static_cast<int>(c)];
 	};
+
+	const RE::NiPoint3 celestialTargetDir = casterDir(best);
+	LockSunElevation(dirs);
 
 	// If best source changed, begin a new transition
 	if (best != target) {
 		previousTarget = target;
 		target = best;
 		startDir = currentDir;
+		startCelestialDir = celestialDir;
 		fadeTimer = 0.0f;
 		transitioning = true;
 	}
@@ -575,6 +617,7 @@ void SkySync::ShadowFader::Update(const RE::Sky* sky, RE::NiPoint3 dirs[], float
 
 	if (!transitioning) {
 		currentDir = targetDir;
+		celestialDir = celestialTargetDir;
 		vlIntensityFactor = target == Caster::None ? 0.0f : 1.0f;
 		if (target != Caster::None)
 			immediateTransitionRemaining = 0.0f;
@@ -586,15 +629,12 @@ void SkySync::ShadowFader::Update(const RE::Sky* sky, RE::NiPoint3 dirs[], float
 	fadeTimer = std::min(fadeTimer + effectiveFadeAdvance, fadeDuration);
 	const float t = fadeDuration > 0.0f ? fadeTimer / fadeDuration : 1.0f;
 
-	currentDir = {
-		std::lerp(startDir.x, targetDir.x, t),
-		std::lerp(startDir.y, targetDir.y, t),
-		std::lerp(startDir.z, targetDir.z, t)
-	};
-	currentDir.Unitize();
+	currentDir = LerpDirection(startDir, targetDir, t);
+	celestialDir = LerpDirection(startCelestialDir, celestialTargetDir, t);
 
 	if (t >= 1.0f) {
 		currentDir = targetDir;
+		celestialDir = celestialTargetDir;
 		transitioning = false;
 	}
 
@@ -671,6 +711,17 @@ float SkySync::ShadowFader::ComputeVLFactor(const RE::NiPoint3& current, const R
 	const float angle = DirectX::XMConvertToDegrees(DirectX::XMScalarACosEst(dot));
 
 	return std::clamp((VLFadeEndAngle - angle) / (VLFadeEndAngle - VLFadeStartAngle), 0.0f, 1.0f);
+}
+
+RE::NiPoint3 SkySync::ShadowFader::LerpDirection(const RE::NiPoint3& from, const RE::NiPoint3& to, float t)
+{
+	RE::NiPoint3 dir = {
+		std::lerp(from.x, to.x, t),
+		std::lerp(from.y, to.y, t),
+		std::lerp(from.z, to.z, t)
+	};
+	dir.Unitize();
+	return dir;
 }
 
 inline void SkySync::ShadowFader::ClampDirection(RE::NiPoint3& dir)
