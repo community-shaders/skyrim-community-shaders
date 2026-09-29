@@ -1122,23 +1122,6 @@ void State::UpdateSharedData([[maybe_unused]] bool a_inWorld, [[maybe_unused]] b
 
 		data.HDRData = globals::features::hdrDisplay.GetSharedDataHDR();
 
-		// The map has no weather: keep the scene lighting from before it opened
-		if (isMapMenuOpen) {
-			data.DirLightDirection = preMapSharedData.DirLightDirection;
-			data.DirLightColor = preMapSharedData.DirLightColor;
-			data.SunDirection = preMapSharedData.SunDirection;
-			data.SunColor = preMapSharedData.SunColor;
-			data.MasserDirection = preMapSharedData.MasserDirection;
-			data.MasserColor = preMapSharedData.MasserColor;
-			data.SecundaDirection = preMapSharedData.SecundaDirection;
-			data.SecundaColor = preMapSharedData.SecundaColor;
-			data.AmbientSHR = preMapSharedData.AmbientSHR;
-			data.AmbientSHG = preMapSharedData.AmbientSHG;
-			data.AmbientSHB = preMapSharedData.AmbientSHB;
-		} else {
-			preMapSharedData = data;
-		}
-
 		sharedDataCB->Update(data);
 	}
 

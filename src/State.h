@@ -370,8 +370,6 @@ public:
 
 	ConstantBuffer* sharedDataCB = nullptr;
 	ConstantBuffer* featureDataCB = nullptr;
-	/** @brief Last shared data built outside the map; its scene lighting is kept while the map is open. */
-	SharedDataCB preMapSharedData{};
 
 	PermutationCB permutationData{};
 	PermutationCB permutationDataPrevious{};
