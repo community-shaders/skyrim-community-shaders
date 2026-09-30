@@ -7,6 +7,8 @@
 #include "Utils/D3D.h"
 #include "Utils/VersionedRelocation.h"
 
+#include <numbers>
+
 #define I18N_KEY_PREFIX "feature.skylighting."
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
@@ -18,6 +20,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 void Skylighting::LoadSettings(json& o_json)
 {
 	settings = o_json;
+	// A negative or non-finite zenith turns the probe sample disc radius into NaN
+	settings.MaxZenith = std::isfinite(settings.MaxZenith) ? std::clamp(settings.MaxZenith, 0.0f, std::numbers::pi_v<float> / 2.0f) : Settings{}.MaxZenith;
 }
 
 void Skylighting::SaveSettings(json& o_json)
@@ -59,7 +63,7 @@ void Skylighting::DrawSettings()
 	if (auto _tt = Util::HoverTooltipWrapper())
 		ImGui::Text("%s", T(TKEY("rebuild_tooltip"), "Changes below require rebuilding, a loading screen, or moving away from the current location to apply."));
 
-	ImGui::SliderAngle(T(TKEY("max_zenith"), "Max Zenith Angle"), &settings.MaxZenith, 0, 90);
+	ImGui::SliderAngle(T(TKEY("max_zenith"), "Max Zenith Angle"), &settings.MaxZenith, 0, 90, "%.0f deg", ImGuiSliderFlags_AlwaysClamp);
 	if (auto _tt = Util::HoverTooltipWrapper())
 		ImGui::Text("%s", T(TKEY("max_zenith_tooltip"), "Smaller angles creates more focused top-down shadow."));
 }
