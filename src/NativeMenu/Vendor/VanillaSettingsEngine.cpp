@@ -35,8 +35,7 @@ namespace NativeMenu::Vendor::VanillaSettingsEngine
 			std::string                             description;
 			// kLabel only.
 			Align align = Align::kLeft;
-			// kButton only: ticks left to keep the box checked after a press,
-			// so the click is actually seen before it springs back.
+			// kButton only: ticks left to keep the box checked after a press.
 			int flashTicks = 0;
 			// kSlider only.
 			bool                                   commitPending = false;
@@ -65,9 +64,7 @@ namespace NativeMenu::Vendor::VanillaSettingsEngine
 		// Backstop for the arrows and the gamepad, which never touch the thumb.
 		constexpr auto kCommitSettleTime = std::chrono::milliseconds(250);
 
-		// A deque, not a vector: the passes below call into mod code while
-		// holding a reference to a row, and that code is allowed to register
-		// one in turn.
+		// A deque so references stay valid if mod code registers a row mid-pass.
 		std::deque<Setting> g_settings;
 
 		int g_pendingCommits = 0;
@@ -108,10 +105,8 @@ namespace NativeMenu::Vendor::VanillaSettingsEngine
 			a_setting.commitDeadline = std::chrono::steady_clock::now() + kCommitSettleTime;
 		}
 
-		// Registration normally happens at load, but nothing stops a caller
-		// calling Add* later or off the menu thread. Recursive because the
-		// tick calls into caller code while holding it, and that code may
-		// register something in turn.
+		// Add* may be called later or off the menu thread. Recursive because Tick calls
+		// back into caller code that may register more.
 		std::recursive_mutex g_settingsMutex;
 
 		constexpr const char* kNativeTabs[] = { "Gameplay", "Display", "Audio" };
@@ -144,8 +139,7 @@ namespace NativeMenu::Vendor::VanillaSettingsEngine
 			g_haveCustomTab = true;
 		}
 
-		// Category entries carry a translated label, not the tab name, so
-		// position is what identifies them going back the other way.
+		// Category entries carry a translated label, so they are identified by position.
 		std::string TabAt(int a_index)
 		{
 			if (a_index < 0)
@@ -173,9 +167,8 @@ namespace NativeMenu::Vendor::VanillaSettingsEngine
 		// Tick() re-injecting its rows over the custom tab.
 		bool                          g_showingCustomTab = false;
 
-		// Captured once per menu open, before anything is widened. Not
-		// re-read live: a clip's _width follows its children, so the two
-		// would feed each other and grow without bound.
+		// Captured once per menu open, before widening; re-reading live would feed back
+		// (a clip's _width follows its children) and grow without bound.
 		double g_rowWidth = 0.0;
 		double g_textFieldWidth = 0.0;
 
@@ -194,9 +187,8 @@ namespace NativeMenu::Vendor::VanillaSettingsEngine
 						// Vanilla doesn't block input on a greyed row, so drop the change here instead.
 						if (a_params[1].IsNumber() &&
 							(!g_settings[idx].isEnabled || g_settings[idx].isEnabled())) {
-							// A press arrives as 1; vanilla's reset-to-defaults
-							// dispatches the default instead, 0 for a button, which
-							// must not fire the action.
+							// A press arrives as 1; vanilla's reset-to-defaults sends 0 for a button,
+							// which must not fire it.
 							const auto toggles = g_settings[idx].type == Type::kButton ||
 								g_settings[idx].type == Type::kCheckbox;
 							if (toggles && !ClaimToggle(static_cast<int>(idx)))
@@ -221,8 +213,7 @@ namespace NativeMenu::Vendor::VanillaSettingsEngine
 				g_originalOptionChange(a_params);
 		}
 
-		// Fires when the player picks a native tab - forwarded to the real
-		// handler, and tells us which tab is on screen.
+		// Records the selected native tab, then forwards to vanilla.
 		void OnRequestGameplayOptions(const RE::FxDelegateArgs& a_params)
 		{
 			g_currentTab = "Gameplay";
@@ -281,8 +272,7 @@ namespace NativeMenu::Vendor::VanillaSettingsEngine
 			logger::debug("VanillaSettingsEngine: OptionChange/Request*Options hooked");
 		}
 
-		// A Scaleform write costs far more than a read, and these run on
-		// every row of every tick.
+		// Scaleform writes cost far more than reads, and this runs per row per tick.
 		void SetIfChanged(RE::GFxValue& a_object, const char* a_member, double a_value, double a_epsilon = 0.0001)
 		{
 			RE::GFxValue current;
@@ -300,10 +290,9 @@ namespace NativeMenu::Vendor::VanillaSettingsEngine
 			a_object.SetMember(a_member, RE::GFxValue(a_value));
 		}
 
-		// BSScrollingList takes its scrollbar from a timeline child named
-		// "scrollbar", which the Settings lists were never given. Attaching
-		// one and filling in ListScrollbar hands the job back to vanilla: it
-		// sizes, moves and hides the bar as it does for its own lists.
+		// BSScrollingList takes its scrollbar from a child named "scrollbar", which the
+		// Settings lists lack. Attaching one and filling in ListScrollbar lets vanilla
+		// size, move and hide it.
 		void EnsureScrollbar(RE::GFxValue& a_list)
 		{
 			RE::GFxValue shownV, maxScrollV, row, rowW, rowH, rowY, rowX;
@@ -317,15 +306,12 @@ namespace NativeMenu::Vendor::VanillaSettingsEngine
 
 			RE::GFxValue bar;
 			if (!a_list.GetMember("ListScrollbar", &bar) || !bar.IsObject()) {
-				// JournalScrollBar, not SettingsScrollbar: despite the name
-				// the latter is the slider inside a settings row, and its
-				// thumb has no scaling grid, so stretching it draws a
-				// spindle. This is what the other lists on this page attach.
+				// JournalScrollBar, not SettingsScrollbar: that one is the slider inside a
+				// settings row, and its thumb has no scaling grid.
 				const RE::GFxValue attach[3] = { RE::GFxValue("JournalScrollBar"),
 					RE::GFxValue("__cs_scrollbar"), RE::GFxValue(22000.0) };
 				if (!a_list.Invoke("attachMovie", &bar, attach, 3) || !bar.IsObject()) {
-					// A replacer interface may not export it. Leave the list
-					// as vanilla built it, arrows included.
+					// A replacer interface may not export it; leave the list as vanilla built it.
 					static bool loggedOnce = false;
 					if (!loggedOnce) {
 						loggedOnce = true;
@@ -360,8 +346,7 @@ namespace NativeMenu::Vendor::VanillaSettingsEngine
 				// until the frame after attachMovie.
 				RE::GFxValue barW;
 				if (bar.GetMember("_width", &barW) && barW.IsNumber() && barW.GetNumber() > 0.0) {
-					// The border frames the list at a fixed width; a row's own
-					// is its content's, so it shifts with the label.
+					// The border's width is fixed; a row's own follows its label.
 					double       edge = rowW.GetNumber();
 					RE::GFxValue border, borderW;
 					if (a_list.GetMember("border", &border) && border.IsObject() &&
@@ -381,10 +366,8 @@ namespace NativeMenu::Vendor::VanillaSettingsEngine
 					}
 				}
 
-				// pageSize is rows on screen, not iMaxItemsShown, which counts
-				// clips - more are created than fit, and the thumb would come out
-				// sized as if nothing scrolled. Read before writing:
-				// setScrollProperties redraws the thumb on every call.
+				// pageSize is rows on screen, not iMaxItemsShown (which counts clips). Read
+				// before writing: setScrollProperties redraws the thumb on every call.
 				RE::GFxValue pageSize, maxPosition;
 				if (!bar.GetMember("pageSize", &pageSize) || !pageSize.IsNumber() ||
 					!bar.GetMember("maxPosition", &maxPosition) || !maxPosition.IsNumber() ||
@@ -466,8 +449,7 @@ namespace NativeMenu::Vendor::VanillaSettingsEngine
 			return false;
 		}
 
-		// The field lives on the list every tab shares, so a native tab with
-		// none of our rows would otherwise keep showing the last one's text.
+		// The field lives on the list every tab shares, so clear it on tabs without our rows.
 		void ClearDescription(RE::GFxValue& a_list)
 		{
 			RE::GFxValue field, text;
@@ -478,13 +460,11 @@ namespace NativeMenu::Vendor::VanillaSettingsEngine
 			field.SetMember("text", RE::GFxValue(""));
 		}
 
-		// Vanilla shows no description for a setting, so this adds one: a text
-		// field under the rows, following whatever is selected. Built once per
-		// menu open; its position is refreshed every tick because each tab
+		// Vanilla has no setting descriptions, so add a text field under the rows that
+		// follows the selection. Built once per menu open, repositioned every tick.
 		// shows a different number of rows.
 		void RefreshDescription(RE::GFxValue& a_list)
 		{
-			// None of our rows are on screen, so there is nothing to look up.
 			if (!g_optionsListTouched && !g_showingCustomTab) {
 				ClearDescription(a_list);
 				return;
@@ -495,9 +475,7 @@ namespace NativeMenu::Vendor::VanillaSettingsEngine
 				!a_list.GetMember("iSelectedIndex", &selectedIdx) || !selectedIdx.IsNumber())
 				return;
 
-			// Ours by ID; anything else (vanilla's own rows) gets no
-			// description - upstream's per-vanilla-row description table isn't
-			// carried over here.
+			// Only our rows have descriptions; vanilla's own get none.
 			std::string description;
 			const auto  index = selectedIdx.GetNumber();
 			if (index >= 0.0 && index < static_cast<double>(entries.GetArraySize())) {
@@ -511,20 +489,14 @@ namespace NativeMenu::Vendor::VanillaSettingsEngine
 				}
 			}
 
-			// Nothing to lay out until there is something to say.
 			if (description.empty()) {
 				ClearDescription(a_list);
 				return;
 			}
 
-			// Sits in the band between the last row and the panel's border,
-			// clear of the scroll chevron above it. Expressed as a fraction of
-			// a row rather than in pixels, so it holds whatever row height the
-			// interface uses.
-			//
-			// Recomputed rather than stored: every tab shows a different
-			// number of rows, so a position fixed at creation would sit wrong
-			// on all the others.
+			// Sits between the last row and the panel border, in row-height fractions so it
+			// holds for any interface. Recomputed each tick: every tab shows a different
+			// number of rows.
 			RE::GFxValue entry0, rowX, rowY, rowH, rowW, shownV;
 			if (!a_list.GetMember("Entry0", &entry0) || !entry0.IsObject() ||
 				!entry0.GetMember("_x", &rowX) || !rowX.IsNumber() ||
@@ -537,16 +509,15 @@ namespace NativeMenu::Vendor::VanillaSettingsEngine
 			const auto y = rowY.GetNumber() + rowH.GetNumber() * (shownV.GetNumber() + kDescriptionGap);
 			const auto height = rowH.GetNumber() * kDescriptionRows;
 
-			// Rows indent their own label, so the row's origin is not where the
-			// text starts.
+			// Rows indent their own label, so start at the label's x.
 			auto         x = rowX.GetNumber();
 			RE::GFxValue label, labelX;
 			if (entry0.GetMember("textField", &label) && label.IsObject() &&
 				label.GetMember("_x", &labelX) && labelX.IsNumber())
 				x += labelX.GetNumber();
 
-			// The border frames the list at a fixed width; a label's own is its
-			// text, so it would wrap differently on every tab.
+			// Use the border's fixed width; a label's own follows its text and would wrap
+			// differently on every tab.
 			auto         width = rowW.GetNumber();
 			RE::GFxValue border, borderW;
 			if (a_list.GetMember("border", &border) && border.IsObject() &&
@@ -556,7 +527,6 @@ namespace NativeMenu::Vendor::VanillaSettingsEngine
 
 			RE::GFxValue field;
 			if (!a_list.GetMember("__cs_description", &field) || !field.IsObject()) {
-				// Two rows tall, so a sentence can wrap.
 				const RE::GFxValue args[6] = { RE::GFxValue("__cs_description"), RE::GFxValue(23000.0),
 					RE::GFxValue(x), RE::GFxValue(y), RE::GFxValue(width), RE::GFxValue(height) };
 				a_list.Invoke("createTextField", nullptr, args, 6);
@@ -570,23 +540,18 @@ namespace NativeMenu::Vendor::VanillaSettingsEngine
 				field.SetMember("multiline", RE::GFxValue(true));
 				field.SetMember("wordWrap", RE::GFxValue(true));
 
-				// Shrinks to fit rather than losing its last line, as vanilla
-				// does on its own labels: a translation runs well past the
-				// English an author writes against.
+				// Shrink to fit like vanilla's labels; translations run longer than English.
 				field.SetMember("textAutoSize", RE::GFxValue("shrink"));
 				field.SetMember("_alpha", RE::GFxValue(100.0));
 
-				// Same font as the rows - the engine default renders as boxes.
-				// Forced left: a row label's own alignment would leave wrapped
-				// lines hanging off the right edge.
+				// Same font as the rows (the engine default renders as boxes), forced left so
+				// wrapped lines don't hang off the right edge.
 				RE::GFxValue sourceText, format;
 				if (entry0.GetMember("textField", &sourceText) && sourceText.IsObject() &&
 					sourceText.Invoke("getTextFormat", &format) && format.IsObject()) {
 					format.SetMember("align", RE::GFxValue("left"));
 
-					// A notch under the rows it explains, and it buys room in
-					// the same box. Relative to the row so it follows whatever
-					// font the interface uses.
+					// A notch smaller than the rows, relative to the row's own font.
 					RE::GFxValue size;
 					if (format.GetMember("size", &size) && size.IsNumber())
 						format.SetMember("size", RE::GFxValue(std::floor(size.GetNumber() * 0.85)));
@@ -602,8 +567,7 @@ namespace NativeMenu::Vendor::VanillaSettingsEngine
 			field.SetMember("text", Text::MakeGFxString(description));
 		}
 
-		// Which of our settings a clip is showing, if any - vanilla's own
-		// rows keep their small IDs and stay out of everything below.
+		// Which of our settings a clip is showing, if any.
 		constexpr std::size_t kNoSetting = static_cast<std::size_t>(-1);
 
 		std::size_t SettingForClip(RE::GFxValue& a_clip)
@@ -618,13 +582,10 @@ namespace NativeMenu::Vendor::VanillaSettingsEngine
 			return id - kIdBase;
 		}
 
-		// The owning code is the source of truth, so its value is pulled back
-		// whenever the clip disagrees - a widget replaying frames can come
-		// back stale, and a click on a blocked row still moves it before
-		// OptionChange is dispatched. Player edits reach the backend
-		// synchronously, so this never fights input.
-		//
-		// Runs before anything else reads the clip, or the arrow pass below
+		// The owning code is the source of truth: pull its value back whenever the clip
+		// disagrees (stale replayed frames, clicks on blocked rows). Player edits reach
+		// the backend synchronously, so this never fights input. Runs first so later
+		// passes read the right position.
 		// would be drawn from a stale position.
 		void SyncRowValue(RE::GFxValue& a_clip, const Setting& a_setting)
 		{
@@ -656,14 +617,10 @@ namespace NativeMenu::Vendor::VanillaSettingsEngine
 				SetIfChanged(nextBtn, "_visible", current < count - 1);
 		}
 
-		// Label rows bind no widget, so the whole row is theirs; every other
-		// row keeps the narrow field vanilla gave it. Both directions are
-		// needed because clips are reused as the player changes tab - a field
-		// widened for a label would otherwise stay wide under a slider.
-		//
-		// Alignment goes with the width: the field aligns right by default,
-		// which only shows once it is wider than its text - so a label has to
-		// say where it wants its text, every time the width changes.
+		// Label rows own the whole row; others keep vanilla's narrow field. Both
+		// directions are needed because clips are reused across tabs. Alignment goes
+		// with the width: the field aligns right by default, which only shows once it
+		// is wider than its text.
 		constexpr const char* kAlignNames[] = { "left", "center", "right" };
 
 		void ApplyTextFieldWidth(RE::GFxValue& a_clip, const Setting* a_setting)
@@ -682,10 +639,8 @@ namespace NativeMenu::Vendor::VanillaSettingsEngine
 				std::abs(current.GetNumber() - width) > 0.5)
 				textField.SetMember("_width", RE::GFxValue(width));
 
-			// Set on every row, not just the labels: clips are reused, so a
-			// row that states no alignment inherits whatever the last label
-			// left. Checked apart from the width for the same reason - a clip
-			// reused at the same width would keep the old alignment for good.
+			// Set on every row: reused clips inherit the last label's alignment. Checked
+			// apart from the width, since a clip reused at the same width keeps the old one.
 			const auto*  wanted = isLabel ? kAlignNames[static_cast<int>(a_setting->align)] : kAlignNames[0];
 			RE::GFxValue format, align;
 			if (!textField.Invoke("getTextFormat", &format) || !format.IsObject())
@@ -699,8 +654,8 @@ namespace NativeMenu::Vendor::VanillaSettingsEngine
 			textField.Invoke("setTextFormat", nullptr, &format, 1);
 		}
 
-		// Applied to every row we own, guarded or not: styling only the
-		// guarded ones left the rest looking disabled by comparison. A row
+		// Applied to every row we own, guarded or not, so unguarded rows don't look
+		// disabled by comparison.
 		// without an isEnabled is simply always usable.
 		void ApplyRowState(RE::GFxValue& a_clip, const Setting& a_setting)
 		{
@@ -711,12 +666,10 @@ namespace NativeMenu::Vendor::VanillaSettingsEngine
 			if (a_clip.GetMember("textField", &textField) && textField.IsObject())
 				SetIfChanged(textField, "textColor", enabled ? 0xFFFFFF : 0x606060, 0.5);
 
-			// Dimmed with _alpha, not CLIK's "disabled": that one calls
-			// gotoAndPlay, and ScrollBar only repositions its thumb when
-			// position changes - so the thumb never recovers.
-			//
-			// SettingsOptionItem already drives _alpha for selection, so this
-			// extends that rule: full brightness only when the row is both
+			// Dimmed with _alpha, not CLIK's "disabled": that calls gotoAndPlay, and
+			// ScrollBar only repositions its thumb when position changes, so the thumb never
+			// recovers. Full brightness only when the row is both selected and usable,
+			// extending SettingsOptionItem's own _alpha rule.
 			// selected and usable.
 			const char* widgetField = a_setting.type == Type::kSlider ? "ScrollBar_mc" :
 			                          a_setting.type == Type::kDropdown ? "OptionStepper_mc" :
@@ -731,9 +684,8 @@ namespace NativeMenu::Vendor::VanillaSettingsEngine
 		{
 			switch (a_setting.type) {
 			case Type::kSlider:
-				// The label keeps vanilla's textAutoSize "shrink": the field
-				// has a fixed width, so pinning the font size would only trade
-				// a resize for a clipped label.
+				// The label keeps vanilla's textAutoSize "shrink": the field has a fixed
+				// width, so pinning the font size would only clip the label.
 				if (a_setting.formatValue) {
 					RE::GFxValue value;
 					if (a_clip.GetMember("value", &value) && value.IsNumber())
@@ -747,8 +699,7 @@ namespace NativeMenu::Vendor::VanillaSettingsEngine
 				break;
 
 			case Type::kButton: {
-				// Held checked for a few ticks so the click is seen; clearing
-				// it at once gives no feedback, leaving it reads as a toggle.
+				// Held checked for a few ticks so the click is seen.
 				const bool holding = a_setting.flashTicks > 0;
 				if (holding)
 					--a_setting.flashTicks;
@@ -791,9 +742,8 @@ namespace NativeMenu::Vendor::VanillaSettingsEngine
 
 			const auto selected = SelectedSettingIndex(a_list);
 			const auto now = std::chrono::steady_clock::now();
-			// By index: Commit calls owning code that may register a row, and
-			// a deque keeps its references across a push_back but not
-			// iterators.
+			// By index: Commit may register a row, which a deque tolerates for references
+			// but not for iterators.
 			for (std::size_t i = 0; i < g_settings.size() && g_pendingCommits > 0; ++i) {
 				auto& setting = g_settings[i];
 				if (!setting.commitPending)
@@ -825,9 +775,8 @@ namespace NativeMenu::Vendor::VanillaSettingsEngine
 				scrollBar.GetMember("isDragging", &dragging) && dragging.IsBool() && dragging.GetBool();
 		}
 
-		// None of this is automatic in vanilla, so it reruns every tick.
-		// Walks live clips rather than entry data: OptionsList::SetEntry
-		// never calls SetEntryText, so textColor is set directly here.
+		// None of this is automatic in vanilla, so it reruns every tick. Walks live
+		// clips because OptionsList::SetEntry never calls SetEntryText.
 		void RefreshRowAppearance(RE::GFxValue& a_list)
 		{
 			RE::GFxValue maxShownV;
@@ -835,8 +784,7 @@ namespace NativeMenu::Vendor::VanillaSettingsEngine
 				return;
 			const auto clipCount = static_cast<std::uint32_t>(maxShownV.GetNumber());
 
-			// Captured before anything is widened, so the original width is
-			// still there to restore.
+			// Captured before widening, so the original width can be restored.
 			if (g_rowWidth <= 0.0) {
 				RE::GFxValue entry0, width, textField, textWidth;
 				if (a_list.GetMember("Entry0", &entry0) && entry0.IsObject() &&
@@ -875,8 +823,7 @@ namespace NativeMenu::Vendor::VanillaSettingsEngine
 			}
 		}
 
-		// Native tab (Gameplay/Display/Audio) already showing vanilla's own
-		// entries - append ours to what's already there.
+		// Appends our rows to a native tab already showing vanilla's entries.
 		void InjectNativeTab(RE::GFxMovie* a_view, RE::GFxValue& a_list, const std::string& a_tab)
 		{
 			RE::GFxValue entryList;
@@ -901,10 +848,8 @@ namespace NativeMenu::Vendor::VanillaSettingsEngine
 			// Vanilla only recalculates for its own rows - without this,
 			// scrolling stops short of the ones appended here.
 			a_list.Invoke("CalculateMaxScrollPosition");
-			// CalculateMaxScrollPosition measures entries by writing them into
-			// Entry0 and never puts it back. Vanilla never sees that because
-			// InvalidateData ends in UpdateList - calling it afterwards means
-			// repairing the row here.
+			// CalculateMaxScrollPosition measures entries by writing them into Entry0 and
+			// never puts it back; UpdateList repairs the row.
 			a_list.Invoke("UpdateList");
 			RefreshRowAppearance(a_list);
 			g_optionsListTouched = true;
@@ -921,10 +866,9 @@ namespace NativeMenu::Vendor::VanillaSettingsEngine
 				bar.SetMember("position", RE::GFxValue(0.0));
 		}
 
-		// Room on screen, measured from the stage: the list's distance to the
-		// bottom minus the margin it has at the top, which is how the page
-		// centres it. The panel's own _height measures content, not space, so
-		// it grows with every entry. -1 when it can't be worked out.
+		// Room on screen: the list's distance to the bottom minus its top margin, which
+		// is how the page centres it. The panel's _height measures content, not space.
+		// -1 when it can't be worked out.
 		double AvailableListHeight(RE::GFxMovieView* a_view, RE::GFxValue& a_list)
 		{
 			if (!a_view)
@@ -955,14 +899,12 @@ namespace NativeMenu::Vendor::VanillaSettingsEngine
 				return;
 			}
 
-			// onSettingsCategoryPress's switch only handles native tabs 0-2;
-			// its default fallthrough clears EntriesA, so run it first and
-			// populate after, not before.
+			// onSettingsCategoryPress only handles native tabs 0-2 and clears EntriesA
+			// otherwise, so run it first and populate after.
 			a_page.Invoke("onSettingsCategoryPress");
 
-			// EntriesA, not entryList (that's the category list's field), and
-			// mutated in place - the list holds a reference to the array it
-			// was first bound to, so replacing it here wouldn't reach it.
+			// EntriesA, not entryList (the category list's field), mutated in place because
+			// the list holds a reference to the array it was first bound to.
 			RE::GFxValue entryList;
 			if (!list.GetMember("EntriesA", &entryList) || !entryList.IsArray()) {
 				a_view->CreateArray(&entryList);
@@ -992,9 +934,8 @@ namespace NativeMenu::Vendor::VanillaSettingsEngine
 			logger::info("VanillaSettingsEngine: showing custom tab '{}' ({} setting(s))", a_tab, count);
 		}
 
-		// Pressing a row in the Settings category list toggles which tab's
-		// rows OptionsList shows - forwarded to vanilla's own handler for a
-		// native tab, or to ShowCustomTab for the custom one.
+		// Toggles which tab's rows OptionsList shows: vanilla's handler for a native
+		// tab, ShowCustomTab for ours.
 		class SettingsPressHandler : public RE::GFxFunctionHandler
 		{
 		public:
@@ -1039,9 +980,8 @@ namespace NativeMenu::Vendor::VanillaSettingsEngine
 		};
 		SettingsPressHandler g_settingsPressHandler;
 
-		// Appends the custom tab to the Settings category list, once it has
-		// been populated with vanilla's own Gameplay/Display/Audio entries -
-		// mirrors InjectNativeTab, but for the list of tabs itself rather
+		// Appends the custom tab to the Settings category list once vanilla's own
+		// entries are populated.
 		// than a tab's rows.
 		void InjectSettingsList(RE::GFxMovieView* a_view, RE::GFxValue& a_page)
 		{
@@ -1072,14 +1012,10 @@ namespace NativeMenu::Vendor::VanillaSettingsEngine
 
 			ListRows::Ensure(list, entryList.GetArraySize(), "SettingsList");
 
-			// border._height, not List_mc's own, caps how many rows render
-			// without scrolling, and it is sized off Entry0._height - the
-			// figure UpdateList accumulates against.
-			//
-			// Capped at what the screen can show: past that, rows are laid out
-			// off screen and CalculateMaxScrollPosition, measuring against the
-			// same height, reports nothing to scroll - leaving the tab both
-			// invisible and unreachable.
+			// border._height, sized off Entry0._height, caps how many rows render without
+			// scrolling. Cap it at what the screen can show: past that, rows lay out off
+			// screen and CalculateMaxScrollPosition reports nothing to scroll, leaving the
+			// tab invisible and unreachable.
 			RE::GFxValue entry0, border;
 			if (list.GetMember("Entry0", &entry0) && list.GetMember("border", &border) && border.IsObject()) {
 				RE::GFxValue rowHeight, curHeight, panelHeight;
@@ -1087,9 +1023,8 @@ namespace NativeMenu::Vendor::VanillaSettingsEngine
 					border.GetMember("_height", &curHeight) && curHeight.IsNumber() &&
 					panel.GetMember("_height", &panelHeight) && panelHeight.IsNumber() &&
 					panelHeight.GetNumber() > 0.0) {
-					// The slack absorbs Flash rounding the height to twips,
-					// which otherwise puts an exact fit just over UpdateList's
-					// "iItemHeightSum <= fListHeight" and drops the last row.
+					// The slack absorbs Flash rounding the height to twips, which would put an
+					// exact fit over UpdateList's "iItemHeightSum <= fListHeight" and drop the last row.
 					auto       grown = rowHeight.GetNumber() * static_cast<double>(entryList.GetArraySize()) + 0.5;
 					const auto available = AvailableListHeight(a_view, list);
 					if (available > rowHeight.GetNumber() && grown > available)
@@ -1155,10 +1090,9 @@ namespace NativeMenu::Vendor::VanillaSettingsEngine
 				mouseY.GetNumber() >= yMin.GetNumber() && mouseY.GetNumber() <= yMax.GetNumber();
 		}
 
-		// Handed to the widget's own ToggleCheckbox, which moves the frame,
-		// dispatches OptionChange and writes the entry back. Setting the
-		// entry directly wouldn't show: OptionsList::SetEntry only pushes a
-		// value onto a clip whose ID changed. movieType 2 is the checkbox.
+		// Handed to the widget's own ToggleCheckbox, which moves the frame, dispatches
+		// OptionChange and writes the entry back; setting the entry directly wouldn't
+		// show. movieType 2 is the checkbox.
 		void ToggleVanillaCheckbox(RE::GFxValue& a_list)
 		{
 			RE::GFxValue entries, selectedIdx, entry, typeVal;
