@@ -466,12 +466,30 @@ namespace NativeMenu::Vendor::VanillaSettingsEngine
 			return false;
 		}
 
+		// The field lives on the list every tab shares, so a native tab with
+		// none of our rows would otherwise keep showing the last one's text.
+		void ClearDescription(RE::GFxValue& a_list)
+		{
+			RE::GFxValue field, text;
+			if (!a_list.GetMember("__cs_description", &field) || !field.IsObject())
+				return;
+			if (field.GetMember("text", &text) && text.IsString() && text.GetString()[0] == '\0')
+				return;
+			field.SetMember("text", RE::GFxValue(""));
+		}
+
 		// Vanilla shows no description for a setting, so this adds one: a text
 		// field under the rows, following whatever is selected. Built once per
 		// menu open; its position is refreshed every tick because each tab
 		// shows a different number of rows.
 		void RefreshDescription(RE::GFxValue& a_list)
 		{
+			// None of our rows are on screen, so there is nothing to look up.
+			if (!g_optionsListTouched && !g_showingCustomTab) {
+				ClearDescription(a_list);
+				return;
+			}
+
 			RE::GFxValue entries, selectedIdx;
 			if (!a_list.GetMember("EntriesA", &entries) || !entries.IsArray() ||
 				!a_list.GetMember("iSelectedIndex", &selectedIdx) || !selectedIdx.IsNumber())
@@ -491,6 +509,12 @@ namespace NativeMenu::Vendor::VanillaSettingsEngine
 					if (idx < g_settings.size())
 						description = g_settings[idx].description;
 				}
+			}
+
+			// Nothing to lay out until there is something to say.
+			if (description.empty()) {
+				ClearDescription(a_list);
+				return;
 			}
 
 			// Sits in the band between the last row and the panel's border,
@@ -532,10 +556,6 @@ namespace NativeMenu::Vendor::VanillaSettingsEngine
 
 			RE::GFxValue field;
 			if (!a_list.GetMember("__cs_description", &field) || !field.IsObject()) {
-				// Nothing to build until there is something to say.
-				if (description.empty())
-					return;
-
 				// Two rows tall, so a sentence can wrap.
 				const RE::GFxValue args[6] = { RE::GFxValue("__cs_description"), RE::GFxValue(23000.0),
 					RE::GFxValue(x), RE::GFxValue(y), RE::GFxValue(width), RE::GFxValue(height) };
@@ -1263,9 +1283,11 @@ namespace NativeMenu::Vendor::VanillaSettingsEngine
 
 		if (haveList && (g_optionsListTouched || g_showingCustomTab)) {
 			RefreshRowAppearance(list);
-			RefreshDescription(list);
 			EnsureScrollbar(list);
 		}
+
+		if (haveList)
+			RefreshDescription(list);
 
 		if (g_pendingCommits > 0)
 			CommitSettled(list, haveList);
