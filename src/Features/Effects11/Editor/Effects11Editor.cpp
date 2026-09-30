@@ -67,6 +67,7 @@ namespace
 		{ "PARTICLE", Group::Lighting },
 		{ "LIGHTSPRITE", Group::Lighting },
 		{ "FIRE", Group::Lighting },
+		{ "WATER", Group::Lighting },
 		{ "SKY", Group::Sky },
 		{ "PROCEDURALSUN", Group::Sky },
 		{ "SUNGLARE", Group::Sky },
@@ -75,6 +76,7 @@ namespace
 		{ "VOLUMETRICRAYS", Group::Atmosphere },
 		{ "GAMEVOLUMETRICRAYS", Group::Atmosphere },
 		{ "ADAPTATION", Group::Camera },
+		{ "DEPTHOFFIELD", Group::Camera },
 		{ "BLOOM", Group::Camera },
 		{ "LENS", Group::Camera },
 		{ "RAIN", Group::Rain },
@@ -135,6 +137,8 @@ namespace
 			return { T("feature.effects11.category.lightsprite", "Light Sprites"), T("feature.effects11.category.lightsprite_desc", "Brightness of glow sprites around light sources.") };
 		if (a_category == "FIRE")
 			return { T("feature.effects11.category.fire", "Fire"), T("feature.effects11.category.fire_desc", "Brightness and contrast of fire.") };
+		if (a_category == "WATER")
+			return { T("feature.effects11.category.water", "Water"), T("feature.effects11.category.water_desc", "Water color, waves, fresnel, sun response and reflections.") };
 		if (a_category == "SKY")
 			return { T("feature.effects11.category.sky", "Sky"), T("feature.effects11.category.sky_desc", "Sky gradient, clouds, sun, moon and stars.") };
 		if (a_category == "PROCEDURALSUN")
@@ -151,6 +155,8 @@ namespace
 			return { T("feature.effects11.category.gamevolumetricrays", "Game Volumetric Rays"), T("feature.effects11.category.gamevolumetricrays_desc", "Adjustments to the game's own god rays.") };
 		if (a_category == "ADAPTATION")
 			return { T("feature.effects11.category.adaptation", "Adaptation"), T("feature.effects11.category.adaptation_desc", "Eye adaptation: how fast and how far exposure follows scene brightness.") };
+		if (a_category == "DEPTHOFFIELD")
+			return { T("feature.effects11.category.depthoffield", "Depth of Field"), T("feature.effects11.category.depthoffield_desc", "How fast focus and aperture follow the scene.") };
 		if (a_category == "BLOOM")
 			return { T("feature.effects11.category.bloom", "Bloom"), T("feature.effects11.category.bloom_desc", "Overall bloom amount handed to the shaders.") };
 		if (a_category == "LENS")
@@ -220,6 +226,8 @@ namespace
 		if (a_setting.category != "EFFECT")
 			return nullptr;
 		auto& effectManager = EffectManager::GetSingleton();
+		if (a_setting.key == "EnableDepthOfField")
+			return &effectManager.enbDepthOfField;
 		if (a_setting.key == "EnableBloom")
 			return &effectManager.enbBloom;
 		if (a_setting.key == "EnableLens")
@@ -245,6 +253,7 @@ namespace
 		const auto& ids = effectManager.ids;
 		return {
 			{ &effectManager.enbEffect, kInvalidSettingID, T("feature.effects11.editor.file_effect", "Main Effect") },
+			{ &effectManager.enbDepthOfField, ids.useDepthOfField, T("feature.effects11.editor.file_depthoffield", "Depth of Field") },
 			{ &effectManager.enbBloom, ids.useBloom, T("feature.effects11.editor.file_bloom", "Bloom") },
 			{ &effectManager.enbLens, ids.useLens, T("feature.effects11.editor.file_lens", "Lens") },
 			{ &effectManager.enbAdaptation, ids.useAdaptation, T("feature.effects11.editor.file_adaptation", "Adaptation") },
