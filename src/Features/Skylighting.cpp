@@ -439,7 +439,6 @@ RE::BSShaderProperty::RenderPassArray* Skylighting::BSLightingShaderProperty_Get
 					auto value = static_cast<int32_t>(bsxFlags->value);
 
 					if (value & (static_cast<int32_t>(RE::BSXFlags::Flag::kRagdoll) |
-									static_cast<int32_t>(RE::BSXFlags::Flag::kEditorMarker) |
 									static_cast<int32_t>(RE::BSXFlags::Flag::kDynamic) |
 									static_cast<int32_t>(RE::BSXFlags::Flag::kAddon) |
 									static_cast<int32_t>(RE::BSXFlags::Flag::kNeedsTransformUpdate) |
