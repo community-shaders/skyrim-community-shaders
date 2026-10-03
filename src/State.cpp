@@ -52,6 +52,7 @@ void State::UpdateLightingShaderPermutation(RE::BSRenderPass* a_pass)
 void State::UpdateSkyShaderPermutation(RE::BSRenderPass* a_pass)
 {
 	permutationData.ExtraShaderDescriptor &= ~static_cast<uint32_t>(State::ExtraShaderDescriptors::IsSun);
+	permutationData.ExtraShaderDescriptor &= ~static_cast<uint32_t>(State::ExtraShaderDescriptors::IsMoon);
 
 	if (!a_pass || !a_pass->shaderProperty)
 		return;
@@ -60,6 +61,9 @@ void State::UpdateSkyShaderPermutation(RE::BSRenderPass* a_pass)
 	if (skyProperty->uiSkyObjectType == RE::BSSkyShaderProperty::SkyObject::SO_SUN ||
 		skyProperty->uiSkyObjectType == RE::BSSkyShaderProperty::SkyObject::SO_SUN_GLARE) {
 		permutationData.ExtraShaderDescriptor |= static_cast<uint32_t>(State::ExtraShaderDescriptors::IsSun);
+	}
+	if (skyProperty->uiSkyObjectType == RE::BSSkyShaderProperty::SkyObject::SO_MOON) {
+		permutationData.ExtraShaderDescriptor |= static_cast<uint32_t>(State::ExtraShaderDescriptors::IsMoon);
 	}
 
 	// The glare VS fades itself by scene depth coverage around the sun
@@ -70,6 +74,28 @@ void State::UpdateSkyShaderPermutation(RE::BSRenderPass* a_pass)
 		// The sky draws with the z-prepass copy as its DSV, which would null an SRV of it; kMAIN holds the same depth
 		auto* depthSRV = globals::game::renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN].depthSRV;
 		context->VSSetShaderResources(17, 1, &depthSRV);
+	}
+}
+
+void State::UpdateEffectShaderPermutation(RE::BSRenderPass* a_pass)
+{
+	constexpr auto isAurora = static_cast<uint32_t>(ExtraShaderDescriptors::IsAurora);
+	permutationData.ExtraShaderDescriptor &= ~isAurora;
+
+	if (!a_pass || !a_pass->geometry)
+		return;
+	if (!(currentVertexDescriptor & static_cast<uint32_t>(SIE::ShaderCache::EffectShaderFlags::SkyObject)))
+		return;
+
+	const auto sky = globals::game::sky;
+	if (!sky || !sky->auroraRoot)
+		return;
+
+	for (const RE::NiAVObject* node = a_pass->geometry; node; node = node->parent) {
+		if (node == sky->auroraRoot.get()) {
+			permutationData.ExtraShaderDescriptor |= isAurora;
+			return;
+		}
 	}
 }
 

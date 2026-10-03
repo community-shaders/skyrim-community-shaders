@@ -13,10 +13,130 @@
 #include "Deferred.h"
 #include "IBL.h"
 #include "ShaderCache.h"
+#include "SkySync.h"
 #include "State.h"
 #include "TerrainShadows.h"
 #include "Utils/D3D.h"
 #include "Utils/Game.h"
+
+namespace
+{
+	/** @brief Angular half-size of a sky billboard as seen from the viewer, as tan(angle); a_fallback when it has no usable bound. */
+	float GetBillboardHalfTan(const RE::NiAVObject* a_billboard, const RE::NiPoint3& a_viewer, float a_fallback)
+	{
+		if (!a_billboard)
+			return a_fallback;
+
+		const auto& bound = a_billboard->worldBound;
+		const float distance = bound.center.GetDistance(a_viewer);
+		if (bound.radius <= 0.0f || distance <= bound.radius)
+			return a_fallback;
+
+		// The bound sphere encloses the square billboard, so its half-width is radius / sqrt(2)
+		return bound.radius * 0.70710678f / distance;
+	}
+}
+
+void Effects11::UpdateSkyScattering(PerFrame& a_data)
+{
+	auto& settingManager = SettingManager::GetSingleton();
+	auto timeOfDay = [&](const char* a_key, const char* a_category = "SKYSCATTERING") {
+		return settingManager.GetInterpolatedTimeOfDayValue(a_key, a_category);
+	};
+
+	auto sky = globals::game::sky;
+	const bool sunVisible = sky && EffectManager::GetSunVisibility(sky->sun) > 0.0f;
+
+	// Keep the last direction while the sun is hidden above the horizon (e.g. by a weather), so
+	// the scattering does not jump; once it sets, keep tracking it so the twilight follows it down.
+	// The first direction is always taken, so a game loaded under a sun-hiding weather does not
+	// scatter from the zenith placeholder.
+	if (sky && sky->sun) {
+		const auto direction = globals::features::skySync.GetCelestialDirection(sky, SkySync::Caster::Sun);
+		const float length = direction.Length();
+		if (length > 1e-6f && (sunVisible || direction.z < 0.0f || !hasScatteringSunDirection)) {
+			scatteringSunDirection = { direction.x / length, direction.y / length, direction.z / length };
+			hasScatteringSunDirection = true;
+		}
+	}
+
+	const float sunHeight = scatteringSunDirection.z;
+	const float sunFade = std::sqrt(std::clamp(1.0f + 2.0f * sunHeight, 0.0f, 1.0f));
+
+	const float colorFromSun = timeOfDay("ColorFromSun");
+	const auto scatteringColor = settingManager.GetInterpolatedColorTimeOfDayValue("ScatteringColor", "SKYSCATTERING");
+	const float3 color = {
+		(1.0f + (scatteringSunColor.x - 1.0f) * colorFromSun) * scatteringColor.x * sunFade,
+		(1.0f + (scatteringSunColor.y - 1.0f) * colorFromSun) * scatteringColor.y * sunFade,
+		(1.0f + (scatteringSunColor.z - 1.0f) * colorFromSun) * scatteringColor.z * sunFade
+	};
+	a_data.SkyScatteringColor = color;
+
+	// Dust absorbs the channels the scattering color is weakest in, reddening the horizon band
+	const float colorPeak = std::max({ color.x, color.y, color.z, 1e-6f });
+	const float dustDensity = timeOfDay("DustDensity");
+	const float dustTint = 2.0f * dustDensity * dustDensity;
+	a_data.SkyScatteringDustTint = {
+		std::max(0.0f, 1.0f - color.x / colorPeak) * dustTint,
+		std::max(0.0f, 1.0f - color.y / colorPeak) * dustTint,
+		std::max(0.0f, 1.0f - color.z / colorPeak) * dustTint
+	};
+
+	const float dustVolume = timeOfDay("DustVolume");
+	const float horizonRange = timeOfDay("HorizonRange");
+	const float atmosphereThickness = timeOfDay("AtmosphereThickness");
+	const float airGlowRange = timeOfDay("AirGlowRange");
+	const float sunGlowRange = timeOfDay("SunGlowRange");
+	const float moonGlowRange = timeOfDay("MoonGlowRange");
+	const float amount = timeOfDay("Amount");
+
+	a_data.SkyScatteringIntensity = timeOfDay("Intensity");
+	a_data.SkyScatteringShadowAmount = std::clamp(timeOfDay("ShadowAmount"), 0.0f, 1.0f);
+	a_data.SkyScatteringAmount = amount * amount;
+	a_data.SkyScatteringDustDarkening = timeOfDay("DustDarkening");
+	a_data.SkyScatteringDustVolume = 0.02f / std::max(dustVolume * dustVolume, 1e-7f);
+	a_data.SkyScatteringSunDirection = scatteringSunDirection;
+	a_data.SkyScatteringSunVisibility = std::clamp((sunHeight + 0.1f) * 5.0f, 0.0f, 1.0f);
+	a_data.SkyScatteringHorizonRange = 1.0f / std::max(horizonRange * horizonRange * horizonRange, 1e-6f);
+	a_data.SkyScatteringAtmosphereThickness = 100.0f / std::max(atmosphereThickness * atmosphereThickness, 1e-6f);
+	a_data.SkyScatteringAirGlowIntensity = timeOfDay("AirGlowIntensity");
+	a_data.SkyScatteringAirGlowRange = 1.0f / std::max(airGlowRange * airGlowRange, 1e-6f);
+	a_data.SkyScatteringSunGlowIntensity = sunVisible ? timeOfDay("SunGlowIntensity") : 0.0f;
+	a_data.SkyScatteringSunGlowRange = 10.0f / std::max(sunGlowRange * sunGlowRange, 1e-6f);
+	a_data.SkyScatteringMoonGlowAmount = timeOfDay("MoonGlowAmount");
+	a_data.SkyScatteringMoonGlowRange = 10.0f / std::max(moonGlowRange * moonGlowRange, 1e-6f);
+	a_data.SkyScatteringSunIntensity = timeOfDay("SunIntensity", "SKY");
+
+	const float cloudsIntensity = timeOfDay("CloudsIntensity", "SKY");
+	const auto cloudsColorFilter = settingManager.GetInterpolatedColorTimeOfDayValue("CloudsColorFilter", "SKY");
+	a_data.CloudsIntensity = cloudsIntensity;
+	a_data.CloudsColorFilter = { cloudsColorFilter.x, cloudsColorFilter.y, cloudsColorFilter.z };
+	a_data.CloudsVertexAlphaBoost = timeOfDay("CloudsVertexAlphaBoost", "SKY");
+	a_data.CloudsEdgeClamp = settingManager.GetValue<float>("CloudsEdgeClamp", "SKY");
+	a_data.CloudsEdgeFadePower = 64.0f - 60.0f * settingManager.GetValue<float>("CloudsEdgeFadeRange", "SKY");
+
+	a_data.CloudsLightingSunIntensity = cloudsIntensity * timeOfDay("CloudsLightingSunMultiplier") + timeOfDay("CloudsLightingSunMinIntensity");
+	a_data.CloudsLightingMoonIntensity = timeOfDay("CloudsLightingMoonIntensity");
+	a_data.EnableCloudsLightingFromMoon = settingManager.GetValue<bool>("EnableCloudsLightingFromMoon", "SKYSCATTERING");
+	a_data.CalculateCloudsEdgeFromScattering = settingManager.GetValue<bool>("CalculateCloudsEdgeFromScattering", "SKYSCATTERING");
+	a_data.CloudsLightingDesaturation = std::clamp(timeOfDay("CloudsLightingDesaturation"), -1.0f, 1.0f);
+	a_data.CloudsLightingForwardScattering = std::max(0.0f, timeOfDay("CloudsLightingForwardScattering"));
+	a_data.CloudsLightingDensity = std::max(0.0f, timeOfDay("CloudsLightingDensity"));
+
+	// Fallback sun size matches the vanilla sun billboard; moons without a bound get no rim or glow
+	a_data.SunBillboardTan = 425.0f / 400.0f;
+	a_data.MasserBillboardTan = 0.0f;
+	a_data.SecundaBillboardTan = 0.0f;
+	if (sky && sky->root) {
+		const auto& viewer = sky->root->world.translate;
+		if (sky->sun && sky->sun->sunBase)
+			a_data.SunBillboardTan = GetBillboardHalfTan(sky->sun->sunBase.get(), viewer, a_data.SunBillboardTan);
+		if (sky->masser && sky->masser->moonMesh)
+			a_data.MasserBillboardTan = GetBillboardHalfTan(sky->masser->moonMesh.get(), viewer, 0.0f);
+		if (sky->secunda && sky->secunda->moonMesh)
+			a_data.SecundaBillboardTan = GetBillboardHalfTan(sky->secunda->moonMesh.get(), viewer, 0.0f);
+	}
+}
 
 Effects11::PerFrame Effects11::GetCommonBufferData()
 {
@@ -38,6 +158,18 @@ Effects11::PerFrame Effects11::GetCommonBufferData()
 	data.CloudsDesaturation = settingManager.GetInterpolatedTimeOfDayValue("CloudsDesaturation", "SKY");
 	data.CloudsEdgeIntensity = settingManager.GetValue<float>("CloudsEdgeIntensity", "SKY");
 	data.CloudsEdgeMoonMultiplier = settingManager.GetInterpolatedTimeOfDayValue("CloudsEdgeMoonMultiplier", "SKY");
+
+	// StarsCurve 1..4 maps to a 0..1 blend from linear stars toward stars^4
+	data.StarsCurve = std::max((settingManager.GetInterpolatedTimeOfDayValue("StarsCurve", "SKY") - 1.0f) / 3.0f, 0.0f);
+	data.StarsIntensity = settingManager.GetInterpolatedTimeOfDayValue("StarsIntensity", "SKY");
+	data.MoonCurve = settingManager.GetInterpolatedTimeOfDayValue("MoonCurve", "SKY");
+	data.EnableAnimatedStars = settingManager.GetValue<bool>("EnableAnimatedStars", "SKY");
+	data.StarsAnimationTime = settingManager.GetValue<float>("StarsAnimationTime", "SKY");
+	data.StarsAnimationDensity = settingManager.GetValue<float>("StarsAnimationDensity", "SKY");
+	data.StarsAnimationIntensity = settingManager.GetValue<float>("StarsAnimationIntensity", "SKY");
+	data.AuroraIntensity = settingManager.GetInterpolatedTimeOfDayValue("AuroraBorealisIntensity", "SKY");
+	data.AuroraCurve = settingManager.GetInterpolatedTimeOfDayValue("AuroraBorealisCurve", "SKY");
+	data.FixBlackCrush = settingManager.GetValue<bool>("FixBlackCrush", "SKY");
 
 	data.VolumetricRaysDesaturation = settingManager.GetInterpolatedTimeOfDayValue("Desaturation", "GAMEVOLUMETRICRAYS");
 	auto colorFilter = settingManager.GetInterpolatedColorTimeOfDayValue("ColorFilter", "GAMEVOLUMETRICRAYS");
@@ -61,6 +193,9 @@ Effects11::PerFrame Effects11::GetCommonBufferData()
 		data.VolumetricRaysExtinction = 0.000003f / density;
 	}
 	data.VolumetricRaysSkyColorAmount = settingManager.GetInterpolatedTimeOfDayValue("SkyColorAmount", "VOLUMETRICRAYS");
+
+	data.EnableCloudsScattering = enableEffect && settingManager.GetValue<bool>("EnableCloudsScattering", "EFFECT");
+	UpdateSkyScattering(data);
 
 	data.EnableRain = IsRainEnabled();
 	data.RainMotionStretch = settingManager.GetInterpolatedTimeOfDayValue("MotionStretch", "RAIN");
@@ -362,6 +497,12 @@ void Effects11::OverrideWeather(RE::Sky* a_sky)
 
 			sunColorF3 = Desaturation(sunColorF3, settingManager.GetInterpolatedTimeOfDayValue("SunDesaturation", "SKY"));
 			sunColorF3 = ColorFilter(sunColorF3, settingManager.GetInterpolatedColorTimeOfDayValue("SunColorFilter", "SKY"), 0.0f);
+
+			// Normalized only when brighter than 1: a dim sun (e.g. at dusk) keeps the scattering dim.
+			// SunIntensity is left out, as it only scales the sun itself.
+			const float sunColorPeak = std::max({ sunColorF3.x, sunColorF3.y, sunColorF3.z, 1.0f });
+			scatteringSunColor = { std::max(sunColorF3.x, 0.0f) / sunColorPeak, std::max(sunColorF3.y, 0.0f) / sunColorPeak, std::max(sunColorF3.z, 0.0f) / sunColorPeak };
+
 			sunColorF3 = Intensity(sunColorF3, settingManager.GetInterpolatedTimeOfDayValue("SunIntensity", "SKY"));
 
 			sunColor = F3ToNi(sunColorF3);
@@ -372,22 +513,12 @@ void Effects11::OverrideWeather(RE::Sky* a_sky)
 
 			auto moonColorF3 = NiToF3(moonColor);
 
+			moonColorF3 = Curve(moonColorF3, settingManager.GetInterpolatedTimeOfDayValue("MoonCurve", "SKY"));
 			moonColorF3 = Desaturation(moonColorF3, settingManager.GetInterpolatedTimeOfDayValue("MoonDesaturation", "SKY"));
 			moonColorF3 = ColorFilter(moonColorF3, settingManager.GetInterpolatedColorTimeOfDayValue("MoonColorFilter", "SKY"), 0.0f);
 			moonColorF3 = Intensity(moonColorF3, settingManager.GetInterpolatedTimeOfDayValue("MoonIntensity", "SKY"));
 
 			moonColor = F3ToNi(moonColorF3);
-		}
-
-		{
-			auto& starsColor = colors[(uint)RE::TESWeather::ColorTypes::kStars];
-
-			auto starsColorF3 = NiToF3(starsColor);
-
-			starsColorF3 = Curve(starsColorF3, settingManager.GetInterpolatedTimeOfDayValue("StarsCurve", "SKY"));
-			starsColorF3 = Intensity(starsColorF3, settingManager.GetInterpolatedTimeOfDayValue("StarsIntensity", "SKY"));
-
-			starsColor = F3ToNi(starsColorF3);
 		}
 
 		{
@@ -451,17 +582,12 @@ void Effects11::OverrideWeather(RE::Sky* a_sky)
 			upperColor = F3ToNi(upperColorF3);
 		}
 
+		// CloudsIntensity and CloudsColorFilter are applied by the sky shader, after CloudsCurve
 		if (auto clouds = a_sky->clouds) {
-			auto cloudsColorFilter = settingManager.GetInterpolatedColorTimeOfDayValue("CloudsColorFilter", "SKY");
-			auto cloudsIntensity = settingManager.GetInterpolatedTimeOfDayValue("CloudsIntensity", "SKY");
 			auto cloudsOpacity = settingManager.GetInterpolatedTimeOfDayValue("CloudsOpacity", "SKY");
 
-			for (uint16_t i = 0; i < clouds->numLayers; i++) {
-				auto cloudColorF3 = NiToF3(clouds->colors[i]);
-				cloudColorF3 *= cloudsColorFilter * cloudsIntensity;
-				clouds->colors[i] = F3ToNi(cloudColorF3);
+			for (uint16_t i = 0; i < clouds->numLayers; i++)
 				clouds->alphas[i] *= cloudsOpacity;
-			}
 		}
 	}
 
@@ -603,7 +729,6 @@ void Effects11::ModifyParticle(RE::BSRenderPass* Pass)
 	ID3D11Buffer* cbs[] = { globals::state->sharedDataCB->CB(), globals::state->featureDataCB->CB() };
 	context->VSSetConstantBuffers(5, 2, cbs);
 }
-
 
 void Effects11::ParticleShaderHacks()
 {

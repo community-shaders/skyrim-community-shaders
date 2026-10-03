@@ -90,7 +90,6 @@ void EffectManager::Initialize()
 	} else {
 		initialized = true;
 	}
-
 }
 
 void EffectManager::LogPresetStatus() const
@@ -166,6 +165,7 @@ void EffectManager::RegisterSettings()
 	settingManager.RegisterBoolSetting("EnablePostPassShader", "EFFECT", false, false);
 	settingManager.RegisterBoolSetting("EnableProceduralSun", "EFFECT", false, false);
 	settingManager.RegisterBoolSetting("EnableCloudShadows", "EFFECT", false, false);
+	settingManager.RegisterBoolSetting("EnableCloudsScattering", "EFFECT", false, false);
 	settingManager.RegisterBoolSetting("EnableImageBasedLighting", "EFFECT", false, false);
 	settingManager.RegisterBoolSetting("EnableVolumetricRays", "EFFECT", false, false);
 
@@ -216,6 +216,7 @@ void EffectManager::RegisterSettings()
 	settingManager.RegisterTimeOfDaySetting("ColorPow", "ENVIRONMENT", 1.0f, 1.0f, 2.2f, 0.01f, true);
 
 	settingManager.RegisterBoolSetting("DisableWrongSkyMath", "SKY", false, false);
+	settingManager.RegisterBoolSetting("FixBlackCrush", "SKY", false, false);
 	settingManager.RegisterTimeOfDaySetting("GradientIntensity", "SKY", 1.0f, 0.0f, 30000.0f, 0.01f, true);
 	settingManager.RegisterTimeOfDaySetting("GradientDesaturation", "SKY", 0.0f, -1.0f, 1.0f, 0.01f, true);
 	settingManager.RegisterTimeOfDaySetting("GradientTopIntensity", "SKY", 1.0f, 0.0f, 30000.0f, 0.01f, true);
@@ -238,10 +239,20 @@ void EffectManager::RegisterSettings()
 	settingManager.RegisterTimeOfDaySetting("MoonIntensity", "SKY", 1.0f, 0.0f, 30000.0f, 0.01f, true);
 	settingManager.RegisterTimeOfDaySetting("MoonDesaturation", "SKY", 0.0f, -1.0f, 1.0f, 0.01f, true);
 	settingManager.RegisterColorTimeOfDaySetting("MoonColorFilter", "SKY", { 1.0f, 1.0f, 1.0f }, true);
+	settingManager.RegisterTimeOfDaySetting("MoonCurve", "SKY", 1.0f, 1.0f, 3.0f, 0.01f, true);
 	settingManager.RegisterTimeOfDaySetting("StarsIntensity", "SKY", 1.0f, 0.0f, 30000.0f, 0.01f, true);
-	settingManager.RegisterTimeOfDaySetting("StarsCurve", "SKY", 1.0f, 0.1f, 8.0f, 0.01f, true);
-	settingManager.RegisterFloatSetting("CloudsEdgeIntensity", "SKY", 2.0f, 0.0f, 10.0f, 0.01f, false);
-	settingManager.RegisterTimeOfDaySetting("CloudsEdgeMoonMultiplier", "SKY", 0.0f, 0.0f, 10.0f, 0.01f, true);
+	settingManager.RegisterTimeOfDaySetting("StarsCurve", "SKY", 1.0f, 1.0f, 4.0f, 0.01f, true);
+	settingManager.RegisterBoolSetting("EnableAnimatedStars", "SKY", false, false);
+	settingManager.RegisterFloatSetting("StarsAnimationTime", "SKY", 0.3f, 0.0f, 1.0f, 0.01f, false);
+	settingManager.RegisterFloatSetting("StarsAnimationDensity", "SKY", 10.0f, 0.0f, 10.0f, 0.01f, false);
+	settingManager.RegisterFloatSetting("StarsAnimationIntensity", "SKY", 10.0f, 0.0f, 10.0f, 0.01f, false);
+	settingManager.RegisterTimeOfDaySetting("AuroraBorealisIntensity", "SKY", 1.0f, 0.0f, 30000.0f, 0.01f, true);
+	settingManager.RegisterTimeOfDaySetting("AuroraBorealisCurve", "SKY", 1.0f, 0.1f, 8.0f, 0.01f, true);
+	settingManager.RegisterTimeOfDaySetting("CloudsVertexAlphaBoost", "SKY", 0.0f, 0.0f, 2.0f, 0.01f, true);
+	settingManager.RegisterFloatSetting("CloudsEdgeClamp", "SKY", 0.5f, 0.05f, 8.0f, 0.01f, false);
+	settingManager.RegisterFloatSetting("CloudsEdgeIntensity", "SKY", 2.0f, 0.0f, 30000.0f, 0.01f, false);
+	settingManager.RegisterFloatSetting("CloudsEdgeFadeRange", "SKY", 1.0f, 0.0f, 1.0f, 0.01f, false);
+	settingManager.RegisterTimeOfDaySetting("CloudsEdgeMoonMultiplier", "SKY", 2.0f, 0.0f, 100.0f, 0.01f, true);
 	settingManager.RegisterBoolSetting("UseProceduralGradientWeights", "SKY", false, false);
 	settingManager.RegisterTimeOfDaySetting("ProceduralGradientWeightCurve", "SKY", 4.0f, 1.0f, 32.0f, 0.01f, true);
 
@@ -249,6 +260,31 @@ void EffectManager::RegisterSettings()
 	settingManager.RegisterFloatSetting("EdgeSoftness", "PROCEDURALSUN", 0.4f, 0.0f, 1.0f, 0.01f, false);
 	settingManager.RegisterTimeOfDaySetting("GlowIntensity", "PROCEDURALSUN", 0.4f, 0.0f, 30000.0f, 0.01f, true);
 	settingManager.RegisterTimeOfDaySetting("GlowCurve", "PROCEDURALSUN", 10.0f, 0.0f, 100.0f, 0.01f, true);
+
+	settingManager.RegisterBoolSetting("EnableCloudsLightingFromMoon", "SKYSCATTERING", true, false);
+	settingManager.RegisterBoolSetting("CalculateCloudsEdgeFromScattering", "SKYSCATTERING", false, false);
+	settingManager.RegisterTimeOfDaySetting("AtmosphereThickness", "SKYSCATTERING", 1.0f, 0.05f, 100.0f, 0.01f, true);
+	settingManager.RegisterTimeOfDaySetting("HorizonRange", "SKYSCATTERING", 0.5f, 0.0f, 1.0f, 0.01f, true);
+	settingManager.RegisterTimeOfDaySetting("Intensity", "SKYSCATTERING", 1.0f, 0.0f, 30000.0f, 0.01f, true);
+	settingManager.RegisterTimeOfDaySetting("Amount", "SKYSCATTERING", 0.0f, 0.0f, 1.0f, 0.01f, true);
+	settingManager.RegisterTimeOfDaySetting("DustVolume", "SKYSCATTERING", 0.2f, 0.0f, 1.0f, 0.01f, true);
+	settingManager.RegisterTimeOfDaySetting("DustDensity", "SKYSCATTERING", 0.2f, 0.0f, 1.0f, 0.01f, true);
+	settingManager.RegisterTimeOfDaySetting("DustDarkening", "SKYSCATTERING", 0.0f, 0.0f, 1.0f, 0.01f, true);
+	settingManager.RegisterTimeOfDaySetting("ShadowAmount", "SKYSCATTERING", 0.3f, 0.0f, 1.0f, 0.01f, true);
+	settingManager.RegisterTimeOfDaySetting("ColorFromSun", "SKYSCATTERING", 0.0f, 0.0f, 1.0f, 0.01f, true);
+	settingManager.RegisterColorTimeOfDaySetting("ScatteringColor", "SKYSCATTERING", { 1.0f, 1.0f, 1.0f }, true);
+	settingManager.RegisterTimeOfDaySetting("AirGlowIntensity", "SKYSCATTERING", 0.0f, 0.0f, 30000.0f, 0.01f, true);
+	settingManager.RegisterTimeOfDaySetting("AirGlowRange", "SKYSCATTERING", 0.2f, 0.05f, 1.0f, 0.01f, true);
+	settingManager.RegisterTimeOfDaySetting("SunGlowIntensity", "SKYSCATTERING", 0.0f, 0.0f, 30000.0f, 0.01f, true);
+	settingManager.RegisterTimeOfDaySetting("SunGlowRange", "SKYSCATTERING", 0.2f, 0.05f, 1.0f, 0.01f, true);
+	settingManager.RegisterTimeOfDaySetting("MoonGlowAmount", "SKYSCATTERING", 0.0f, 0.0f, 1.0f, 0.01f, true);
+	settingManager.RegisterTimeOfDaySetting("MoonGlowRange", "SKYSCATTERING", 0.2f, 0.1f, 1.0f, 0.01f, true);
+	settingManager.RegisterTimeOfDaySetting("CloudsLightingSunMultiplier", "SKYSCATTERING", 0.0f, 0.0f, 100.0f, 0.01f, true);
+	settingManager.RegisterTimeOfDaySetting("CloudsLightingSunMinIntensity", "SKYSCATTERING", 0.1f, 0.0f, 100.0f, 0.01f, true);
+	settingManager.RegisterTimeOfDaySetting("CloudsLightingMoonIntensity", "SKYSCATTERING", 0.0f, 0.0f, 30000.0f, 0.01f, true);
+	settingManager.RegisterTimeOfDaySetting("CloudsLightingDensity", "SKYSCATTERING", 1.0f, 0.0f, 10.0f, 0.01f, true);
+	settingManager.RegisterTimeOfDaySetting("CloudsLightingDesaturation", "SKYSCATTERING", 0.0f, -1.0f, 1.0f, 0.01f, true);
+	settingManager.RegisterTimeOfDaySetting("CloudsLightingForwardScattering", "SKYSCATTERING", 0.0f, 0.0f, 5.0f, 0.01f, true);
 
 	settingManager.RegisterTimeOfDaySetting("Intensity", "VOLUMETRICFOG", 1.0f, 0.0f, 30000.0f, 0.01f, true);
 	settingManager.RegisterTimeOfDaySetting("Curve", "VOLUMETRICFOG", 1.0f, 0.1f, 8.0f, 0.01f, true);
@@ -286,19 +322,23 @@ void EffectManager::RegisterSettings()
 	settingManager.SetCategoryDependency("ADAPTATION", "EnableAdaptation", "EFFECT");
 	settingManager.SetCategoryDependency("PROCEDURALSUN", "EnableProceduralSun", "EFFECT");
 	settingManager.SetCategoryDependency("CLOUDSHADOWS", "EnableCloudShadows", "EFFECT");
+	settingManager.SetCategoryDependency("SKYSCATTERING", "EnableCloudsScattering", "EFFECT");
 	settingManager.SetCategoryDependency("IMAGEBASEDLIGHTING", "EnableImageBasedLighting", "EFFECT");
 	settingManager.SetCategoryDependency("VOLUMETRICRAYS", "EnableVolumetricRays", "EFFECT");
 
 	settingManager.SetSettingDependency("ProceduralGradientWeightCurve", "SKY", "UseProceduralGradientWeights", "SKY");
+	settingManager.SetSettingDependency("StarsAnimationTime", "SKY", "EnableAnimatedStars", "SKY");
+	settingManager.SetSettingDependency("StarsAnimationDensity", "SKY", "EnableAnimatedStars", "SKY");
+	settingManager.SetSettingDependency("StarsAnimationIntensity", "SKY", "EnableAnimatedStars", "SKY");
 	settingManager.SetSettingDependency("AdaptationMin", "ADAPTATION", "ForceMinMaxValues", "ADAPTATION");
 	settingManager.SetSettingDependency("AdaptationMax", "ADAPTATION", "ForceMinMaxValues", "ADAPTATION");
-
 
 	settingManager.SetCategoryExteriorOnly("RAIN", true);
 	settingManager.SetCategoryExteriorOnly("SKYLIGHTING", true);
 	settingManager.SetCategoryExteriorOnly("CLOUDSHADOWS", true);
 	settingManager.SetCategoryExteriorOnly("IMAGEBASEDLIGHTING", true);
 	settingManager.SetCategoryExteriorOnly("VOLUMETRICRAYS", true);
+	settingManager.SetCategoryExteriorOnly("SKYSCATTERING", true);
 	settingManager.SetCategoryExteriorOnly("VOLUMETRICFOG", true);
 	settingManager.SetCategoryExteriorOnly("GAMEVOLUMETRICRAYS", true);
 
@@ -848,10 +888,9 @@ void EffectManager::UpdateCursorData()
 	commonData.tempInfo2[3] = lastRightClick[1];
 }
 
-/** @brief Sun disc visibility in [0, 1] from its sky shader blend alpha; 0 when the sun is hidden. */
-static float GetSunVisibility(const RE::Sun* a_sun)
+float EffectManager::GetSunVisibility(const RE::Sun* a_sun)
 {
-	if (!a_sun->sunBaseNode || !a_sun->sunBase)
+	if (!a_sun || !a_sun->root || !a_sun->sunBaseNode || !a_sun->sunBase)
 		return 0.0f;
 	if (a_sun->root->GetFlags().any(RE::NiAVObject::Flag::kHidden) || a_sun->sunBaseNode->GetFlags().any(RE::NiAVObject::Flag::kHidden))
 		return 0.0f;
