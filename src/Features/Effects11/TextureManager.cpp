@@ -6,6 +6,41 @@
 #include "Globals.h"
 #include "State.h"
 
+namespace
+{
+	struct CommonTextureSpec
+	{
+		std::string_view name;
+		uint32_t size;
+		DXGI_FORMAT format;
+	};
+
+	constexpr CommonTextureSpec CommonTextureSpecs[] = {
+		{ "TextureHDRTemp", 0, DXGI_FORMAT_R16G16B16A16_FLOAT },
+		{ "TextureHDRTemp2", 0, DXGI_FORMAT_R16G16B16A16_FLOAT },
+		{ "RenderTargetRGBA32", 0, DXGI_FORMAT_R8G8B8A8_UNORM },
+		{ "RenderTargetRGBA64", 0, DXGI_FORMAT_R16G16B16A16_UNORM },
+		{ "RenderTargetRGBA64F", 0, DXGI_FORMAT_R16G16B16A16_FLOAT },
+		{ "RenderTargetR16F", 0, DXGI_FORMAT_R16_FLOAT },
+		{ "RenderTargetR32F", 0, DXGI_FORMAT_R32_FLOAT },
+		{ "RenderTargetRGB32F", 0, DXGI_FORMAT_R11G11B10_FLOAT },
+		{ "TextureSDRTemp", 0, DXGI_FORMAT_R10G10B10A2_UNORM },
+		{ "TextureSDRTemp2", 0, DXGI_FORMAT_R10G10B10A2_UNORM },
+		{ "TextureBloom", 1024, DXGI_FORMAT_R16G16B16A16_FLOAT },
+		{ "TextureLens", 0, DXGI_FORMAT_R16G16B16A16_FLOAT },
+		{ "TextureBloomTemp", 1024, DXGI_FORMAT_R16G16B16A16_FLOAT },
+		{ "TextureAdaptation", 1, DXGI_FORMAT_R32_FLOAT },
+		{ "TextureAdaptationSwap", 1, DXGI_FORMAT_R32_FLOAT },
+		{ "RenderTarget1024", 1024, DXGI_FORMAT_R16G16B16A16_FLOAT },
+		{ "RenderTarget512", 512, DXGI_FORMAT_R16G16B16A16_FLOAT },
+		{ "RenderTarget256", 256, DXGI_FORMAT_R16G16B16A16_FLOAT },
+		{ "RenderTarget128", 128, DXGI_FORMAT_R16G16B16A16_FLOAT },
+		{ "RenderTarget64", 64, DXGI_FORMAT_R16G16B16A16_FLOAT },
+		{ "RenderTarget32", 32, DXGI_FORMAT_R16G16B16A16_FLOAT },
+		{ "RenderTarget16", 16, DXGI_FORMAT_R16G16B16A16_FLOAT },
+	};
+}
+
 TextureManager& TextureManager::GetSingleton()
 {
 	static TextureManager instance;
@@ -14,15 +49,26 @@ TextureManager& TextureManager::GetSingleton()
 
 void TextureManager::Initialize()
 {
-	CreateCommonTextures();
 	CreateDownsampleResources();
+}
+
+TextureManager::Texture* TextureManager::FindCommonTexture(const std::string& name)
+{
+	auto it = commonTextureCache.find(name);
+	return it != commonTextureCache.end() ? &it->second : nullptr;
 }
 
 TextureManager::Texture* TextureManager::GetCommonTexture(const std::string& name)
 {
-	auto it = commonTextureCache.find(name);
-	if (it != commonTextureCache.end()) {
-		return &it->second;
+	if (auto* texture = FindCommonTexture(name))
+		return texture;
+
+	for (const auto& spec : CommonTextureSpecs) {
+		if (spec.name != name)
+			continue;
+		const uint32_t width = spec.size ? spec.size : globals::game::graphicsState->screenWidth;
+		const uint32_t height = spec.size ? spec.size : globals::game::graphicsState->screenHeight;
+		return &commonTextureCache.emplace(name, CreateTexture(width, height, spec.format, "TextureManager::" + name)).first->second;
 	}
 	return nullptr;
 }
@@ -33,48 +79,6 @@ void TextureManager::SwapTextures(const std::string& name1, const std::string& n
 	auto it2 = commonTextureCache.find(name2);
 	if (it1 != commonTextureCache.end() && it2 != commonTextureCache.end()) {
 		std::swap(it1->second, it2->second);
-	}
-}
-
-void TextureManager::CreateCommonTextures()
-{
-	UINT screenWidth = globals::game::graphicsState->screenWidth;
-	UINT screenHeight = globals::game::graphicsState->screenHeight;
-
-	commonTextureCache.insert({ "TextureHDRTemp", CreateTexture(screenWidth, screenHeight, DXGI_FORMAT_R16G16B16A16_FLOAT, "TextureManager::TextureHDRTemp") });
-	commonTextureCache.insert({ "TextureHDRTemp2", CreateTexture(screenWidth, screenHeight, DXGI_FORMAT_R16G16B16A16_FLOAT, "TextureManager::TextureHDRTemp2") });
-
-	commonTextureCache.insert({ "RenderTargetRGBA32", CreateTexture(screenWidth, screenHeight, DXGI_FORMAT_R8G8B8A8_UNORM, "TextureManager::RenderTargetRGBA32") });
-	commonTextureCache.insert({ "RenderTargetRGBA64", CreateTexture(screenWidth, screenHeight, DXGI_FORMAT_R16G16B16A16_UNORM, "TextureManager::RenderTargetRGBA64") });
-	commonTextureCache.insert({ "RenderTargetRGBA64F", CreateTexture(screenWidth, screenHeight, DXGI_FORMAT_R16G16B16A16_FLOAT, "TextureManager::RenderTargetRGBA64F") });
-	commonTextureCache.insert({ "RenderTargetR16F", CreateTexture(screenWidth, screenHeight, DXGI_FORMAT_R16_FLOAT, "TextureManager::RenderTargetR16F") });
-	commonTextureCache.insert({ "RenderTargetR32F", CreateTexture(screenWidth, screenHeight, DXGI_FORMAT_R32_FLOAT, "TextureManager::RenderTargetR32F") });
-	commonTextureCache.insert({ "RenderTargetRGB32F", CreateTexture(screenWidth, screenHeight, DXGI_FORMAT_R11G11B10_FLOAT, "TextureManager::RenderTargetRGB32F") });
-
-	commonTextureCache.insert({ "TextureSDRTemp", CreateTexture(screenWidth, screenHeight, DXGI_FORMAT_R10G10B10A2_UNORM, "TextureManager::TextureSDRTemp") });
-	commonTextureCache.insert({ "TextureSDRTemp2", CreateTexture(screenWidth, screenHeight, DXGI_FORMAT_R10G10B10A2_UNORM, "TextureManager::TextureSDRTemp2") });
-
-	commonTextureCache.insert({ "TextureBloom", CreateTexture(1024, 1024, DXGI_FORMAT_R16G16B16A16_FLOAT, "TextureManager::TextureBloom") });
-	commonTextureCache.insert({ "TextureLens", CreateTexture(screenWidth, screenHeight, DXGI_FORMAT_R16G16B16A16_FLOAT, "TextureManager::TextureLens") });
-
-	commonTextureCache.insert({ "TextureBloomTemp", CreateTexture(1024, 1024, DXGI_FORMAT_R16G16B16A16_FLOAT, "TextureManager::TextureBloomTemp") });
-
-	commonTextureCache.insert({ "TextureAdaptation", CreateTexture(1, 1, DXGI_FORMAT_R32_FLOAT, "TextureManager::TextureAdaptation") });
-	commonTextureCache.insert({ "TextureAdaptationSwap", CreateTexture(1, 1, DXGI_FORMAT_R32_FLOAT, "TextureManager::TextureAdaptationSwap") });
-
-	// Create fixed-size render targets for bloom/lens
-	std::vector<std::pair<std::string, UINT>> fixedSizes = {
-		{ "RenderTarget1024", 1024 },
-		{ "RenderTarget512", 512 },
-		{ "RenderTarget256", 256 },
-		{ "RenderTarget128", 128 },
-		{ "RenderTarget64", 64 },
-		{ "RenderTarget32", 32 },
-		{ "RenderTarget16", 16 }
-	};
-
-	for (auto& [name, size] : fixedSizes) {
-		commonTextureCache[name] = CreateTexture(size, size, DXGI_FORMAT_R16G16B16A16_FLOAT, "TextureManager::" + name);
 	}
 }
 

@@ -27,7 +27,10 @@ public:
 	static TextureManager& GetSingleton();
 
 	void Initialize();
+	/** @brief Returns the named common texture, creating it on first use. Null for unknown names. */
 	Texture* GetCommonTexture(const std::string& name);
+	/** @brief Returns the named common texture only if it was already created, without allocating it. */
+	Texture* FindCommonTexture(const std::string& name);
 
 	void SwapTextures(const std::string& name1, const std::string& name2);
 
@@ -41,7 +44,6 @@ public:
 	void IncrementTextureSwap() { textureSwap++; }
 
 private:
-	void CreateCommonTextures();
 	void CreateDownsampleResources();
 	static Texture CreateTexture(uint32_t width, uint32_t height, DXGI_FORMAT format, const std::string& debugName);
 	static DownsampleTexture CreateDownsampleTexture(DXGI_FORMAT format);

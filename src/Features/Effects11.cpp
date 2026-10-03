@@ -3,7 +3,6 @@
 #include <DirectXTex.h>
 
 #include "Effects11/D3D11StateBackup.h"
-#include "Effects11/ENBHelper.h"
 #include "Effects11/Editor/Effects11Editor.h"
 #include "Effects11/EffectManager.h"
 #include "Effects11/PresetManager.h"
@@ -348,7 +347,7 @@ void Effects11::OverrideWeather(RE::Sky* a_sky)
 
 	{
 		auto fogAmountMultiplier = settingManager.GetInterpolatedTimeOfDayValue("FogAmountMultiplier", "ENVIRONMENT");
-		fogAmountMultiplier = std::max(fogAmountMultiplier, FLT_MIN);
+		fogAmountMultiplier = std::max(fogAmountMultiplier, 1e-4f);
 
 		a_sky->fogNear /= fogAmountMultiplier;
 		a_sky->fogFar /= fogAmountMultiplier;
@@ -476,8 +475,6 @@ void Effects11::CheckCommonData()
 {
 	static Util::FrameChecker checker;
 	if (checker.IsNewFrame()) {
-		ENBHelper::Update();
-
 		auto& settingManager = SettingManager::GetSingleton();
 		auto& effectManager = EffectManager::GetSingleton();
 
@@ -505,21 +502,12 @@ void Effects11::OverridePointLightColor(float3& a_color)
 void Effects11::OverrideAmbientLighting(DirectionalAmbientColors& DirectionalAmbientColors)
 {
 	auto& settingManager = SettingManager::GetSingleton();
+	const float desaturation = settingManager.GetInterpolatedTimeOfDayValue("AmbientLightingDesaturation", "ENVIRONMENT");
+	const float intensity = settingManager.GetInterpolatedTimeOfDayValue("AmbientLightingIntensity", "ENVIRONMENT");
 
-	for (int i = 0; i < 3; i++) {
-		for (int j = 0; j < 2; j++) {
-			auto& ambientLightingColor = DirectionalAmbientColors.directionalAmbientColors[i][j];
-
-			float3 ambientLightingColorF3 = NiToF3(ambientLightingColor);
-
-			int currentSide = i * 2 + j;
-			if (currentSide == 3)
-				ambientLightingColorF3 = Desaturation(ambientLightingColorF3, settingManager.GetInterpolatedTimeOfDayValue("AmbientLightingDesaturation", "ENVIRONMENT"));
-
-			ambientLightingColorF3 = Intensity(ambientLightingColorF3, settingManager.GetInterpolatedTimeOfDayValue("AmbientLightingIntensity", "ENVIRONMENT"));
-
-			ambientLightingColor = F3ToNi(ambientLightingColorF3);
-		}
+	for (auto& axis : DirectionalAmbientColors.directionalAmbientColors) {
+		for (auto& ambientLightingColor : axis)
+			ambientLightingColor = F3ToNi(Intensity(Desaturation(NiToF3(ambientLightingColor), desaturation), intensity));
 	}
 }
 
@@ -630,11 +618,14 @@ void Effects11::ParticleShaderHacks()
 		blendDesc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_INV_SRC_ALPHA;
 		blendDesc.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
 		blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
-		globals::d3d::device->CreateBlendState(&blendDesc, alphaBlendState.put());
+		if (FAILED(globals::d3d::device->CreateBlendState(&blendDesc, alphaBlendState.put())))
+			return;
+		Util::SetResourceName(alphaBlendState.get(), "Effects11::RainAlphaBlendState");
 	}
 
 	float blendFactor[4] = { 0, 0, 0, 0 };
 	context->OMSetBlendState(alphaBlendState.get(), blendFactor, 0xFFFFFFFF);
+	globals::game::stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_ALPHA_BLEND);
 }
 
 void Effects11::DrawVolumetricRays()

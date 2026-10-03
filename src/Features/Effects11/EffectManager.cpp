@@ -3,6 +3,7 @@
 #include "D3D11StateBackup.h"
 #include "Editor/Effects11Editor.h"
 #include "Features/Effects11.h"
+#include "Features/HDRDisplay.h"
 #include "Globals.h"
 #include "Menu.h"
 #include "State.h"
@@ -20,6 +21,38 @@
 namespace
 {
 	using namespace Effects11Util;
+
+	/** Smallest representable step of a UNORM render target format, or 0 for float formats. */
+	float GetQuantizationStep(DXGI_FORMAT a_format)
+	{
+		switch (a_format) {
+		case DXGI_FORMAT_R8G8B8A8_TYPELESS:
+		case DXGI_FORMAT_R8G8B8A8_UNORM:
+		case DXGI_FORMAT_R8G8B8A8_UNORM_SRGB:
+		case DXGI_FORMAT_B8G8R8A8_TYPELESS:
+		case DXGI_FORMAT_B8G8R8A8_UNORM:
+		case DXGI_FORMAT_B8G8R8A8_UNORM_SRGB:
+		case DXGI_FORMAT_B8G8R8X8_UNORM:
+		case DXGI_FORMAT_B8G8R8X8_UNORM_SRGB:
+			return 1.0f / 255.0f;
+		case DXGI_FORMAT_R10G10B10A2_TYPELESS:
+		case DXGI_FORMAT_R10G10B10A2_UNORM:
+			return 1.0f / 1023.0f;
+		default:
+			return 0.0f;
+		}
+	}
+
+	/** Dither amplitude for the final copy: the coarser of the target's and the display's quantization step. */
+	float GetOutputDitherAmplitude(ID3D11RenderTargetView* a_destination)
+	{
+		D3D11_RENDER_TARGET_VIEW_DESC rtvDesc{};
+		a_destination->GetDesc(&rtvDesc);
+		const auto& hdrDisplay = globals::features::hdrDisplay;
+		const bool hdrOutput = hdrDisplay.loaded && hdrDisplay.settings.enableHDR;
+		const float displayStep = hdrOutput ? 1.0f / 1023.0f : 1.0f / 255.0f;
+		return std::max(GetQuantizationStep(rtvDesc.Format), displayStep);
+	}
 }
 
 EffectManager& EffectManager::GetSingleton()
@@ -137,9 +170,13 @@ void EffectManager::Apply()
 
 void EffectManager::Load()
 {
-	Effect* allEffects[] = { &enbBloom, &enbLens, &enbAdaptation, &enbEffect, &enbEffectPostPass };
+	EffectBase* allEffects[] = { &enbBloom, &enbLens, &enbAdaptation, &enbEffect, &enbEffectPostPass };
 	for (auto* effect : allEffects) {
 		effect->Load();
+#ifdef ENABLE_ENB_EXTENDER
+		if (effect->IsCompiled())
+			effect->LoadWeatherData();
+#endif
 		effect->UpdateUIVariables();
 	}
 }
@@ -877,8 +914,8 @@ void EffectManager::UpdateLightParameters()
 	if (clip.w <= 0.0f)
 		return;
 
-	commonData.lightParameters[0] = clip.x / clip.w * 0.5f + 0.5f;
-	commonData.lightParameters[1] = clip.y / clip.w * -0.5f + 0.5f;
+	commonData.lightParameters[0] = clip.x / clip.w;
+	commonData.lightParameters[1] = clip.y / clip.w;
 	commonData.lightParameters[3] = visibility;
 }
 
@@ -897,32 +934,22 @@ void EffectManager::UpdateCommonVariablesForEffect(Effect& effect)
 	effect.SetShaderResourceVariable("TextureDepth",
 		renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN].depthSRV);
 
-	static const char* const formatTargets[] = {
+	static const std::string renderTargets[] = {
 		"RenderTargetRGBA32", "RenderTargetRGBA64", "RenderTargetRGBA64F",
-		"RenderTargetR16F", "RenderTargetR32F", "RenderTargetRGB32F"
-	};
-
-	for (const auto& targetName : formatTargets) {
-		auto* texture = effect.GetCachedCommonTexture(targetName);
-		if (texture) {
-			effect.SetShaderResourceVariable(targetName, texture->srv.get());
-		}
-	}
-
-	static const char* const fixedSizeTargets[] = {
+		"RenderTargetR16F", "RenderTargetR32F", "RenderTargetRGB32F",
 		"RenderTarget1024", "RenderTarget512", "RenderTarget256", "RenderTarget128",
 		"RenderTarget64", "RenderTarget32", "RenderTarget16"
 	};
 
-	for (const auto& targetName : fixedSizeTargets) {
-		auto* texture = effect.GetCachedCommonTexture(targetName);
-		if (texture) {
+	auto& textureManager = TextureManager::GetSingleton();
+	for (const auto& targetName : renderTargets) {
+		if (auto* texture = textureManager.FindCommonTexture(targetName))
 			effect.SetShaderResourceVariable(targetName, texture->srv.get());
-		}
 	}
 
 	effect.SetVectorVariable("Timer", commonData.timer, sizeof(commonData.timer));
 	effect.SetVectorVariable("Weather", commonData.enbWeather, sizeof(commonData.enbWeather));
+	effect.SetVectorVariable("WeatherAndTime", commonData.enbWeather, sizeof(commonData.enbWeather));
 	effect.SetVectorVariable("TimeOfDay1", commonData.timeOfDay1, sizeof(commonData.timeOfDay1));
 	effect.SetVectorVariable("TimeOfDay2", commonData.timeOfDay2, sizeof(commonData.timeOfDay2));
 	effect.SetVectorVariable("ENightDayFactor", &commonData.eNightDayFactor, sizeof(commonData.eNightDayFactor));
@@ -931,6 +958,9 @@ void EffectManager::UpdateCommonVariablesForEffect(Effect& effect)
 	effect.SetVectorVariable("tempInfo1", commonData.tempInfo1, sizeof(commonData.tempInfo1));
 	effect.SetVectorVariable("tempInfo2", commonData.tempInfo2, sizeof(commonData.tempInfo2));
 	effect.SetVectorVariable("LightParameters", commonData.lightParameters, sizeof(commonData.lightParameters));
+
+	static constexpr float adaptiveQuality = 0.0f;
+	effect.SetVectorVariable("AdaptiveQuality", &adaptiveQuality, sizeof(adaptiveQuality));
 
 	static constexpr float tempF[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
 	effect.SetVectorVariable("tempF1", tempF, sizeof(tempF));
@@ -994,7 +1024,7 @@ bool EffectManager::CopyTexture(ID3D11ShaderResourceView* a_source, ID3D11Render
 
 	// Update dither frame count
 	if (ditherConstantBuffer) {
-		const float ditherAmplitude = a_dither ? 1.0f / 255.0f : 0.0f;
+		const float ditherAmplitude = a_dither ? GetOutputDitherAmplitude(a_dest) : 0.0f;
 
 		D3D11_MAPPED_SUBRESOURCE mapped;
 		if (SUCCEEDED(context->Map(ditherConstantBuffer.get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped))) {
@@ -1034,6 +1064,8 @@ void EffectManager::ApplyColorCorrection(ID3D11UnorderedAccessView* textureUAV)
 
 	auto brightness = settingManager.GetValue<float>(ids.brightness);
 	auto gammaCurve = settingManager.GetValue<float>(ids.gammaCurve);
+	if (brightness == 1.0f && gammaCurve == 1.0f)
+		return;
 
 	auto context = globals::d3d::context;
 
@@ -1049,13 +1081,9 @@ void EffectManager::ApplyColorCorrection(ID3D11UnorderedAccessView* textureUAV)
 		{
 			float brightness;
 			float gammaCurve;
-			uint32_t frameCount;
-			uint32_t pad;
+			float pad[2];
 		};
-		auto* cbData = static_cast<ColorCorrectionCB*>(mapped.pData);
-		cbData->brightness = brightness;
-		cbData->gammaCurve = gammaCurve;
-		cbData->frameCount = frameCount;
+		*static_cast<ColorCorrectionCB*>(mapped.pData) = { brightness, gammaCurve, { 0.0f, 0.0f } };
 		context->Unmap(colorCorrectionConstantBuffer.get(), 0);
 	}
 

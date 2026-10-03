@@ -166,7 +166,7 @@ private:
 
 	/** @brief Fills ENB tempInfo1 (cursor position, menu flag, button mask) and tempInfo2 (last left/right click). */
 	void UpdateCursorData();
-	/** @brief Fills ENB LightParameters with the sun's screen UV (xy) and visibility (w). */
+	/** @brief Fills ENB LightParameters with the sun's NDC position (xy) and visibility (w). */
 	void UpdateLightParameters();
 	/** @brief True if the effect is compiled and its enable setting (if any) is on. */
 	bool WillEffectRun(EffectBase& effect, uint32_t enableSettingID);
