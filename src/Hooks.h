@@ -2,6 +2,7 @@
 
 namespace Hooks
 {
+
 	/** @brief Hook for BSShader::BeginTechnique that intercepts shader selection to substitute custom-compiled shaders from the shader cache. */
 	struct BSShader_BeginTechnique
 	{

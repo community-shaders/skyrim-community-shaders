@@ -1,8 +1,8 @@
-
 #ifndef DYNAMIC_CUBEMAPS_CAPTURE_COMMON_HLSLI
 #define DYNAMIC_CUBEMAPS_CAPTURE_COMMON_HLSLI
 
 #include "Common/Color.hlsli"
+#include "Common/ColorManagement.hlsli"
 #include "Common/FrameBuffer.hlsli"
 #include "Common/SharedData.hlsli"
 
@@ -95,7 +95,7 @@ bool SampleCapture(uint3 texel, out float3 position, out float3 color, out float
 
 	float4 positionCS = mul(FrameBuffer::CameraViewProjInverse, float4(uv * float2(2.0, -2.0) + float2(-1.0, 1.0), depth, 1.0));
 	position = positionCS.xyz / positionCS.w * 0.001;
-	color = Color::IrradianceToLinear(ColorTexture.SampleLevel(LinearSampler, sampleUV, 0).rgb);
+	color = ColorManagement::SceneToLinear(ColorTexture.SampleLevel(LinearSampler, sampleUV, 0).rgb);
 	if (!all(isfinite(position)) || !all(isfinite(color)))
 		return false;
 	color = clamp(color, 0.0, 65504.0);

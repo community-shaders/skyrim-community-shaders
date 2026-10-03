@@ -5,9 +5,17 @@
 #include <cassert>
 
 #include "I18n/I18n.h"
+#include "LinearLighting.h"
 #include "ShaderCache.h"
 #include "State.h"
 #include "Utils/D3D.h"
+
+DynamicCubemaps::Settings DynamicCubemaps::GetCommonBufferData() const
+{
+	auto data = settings;
+	globals::features::linearLighting.SRGBToWorking(&data.CubemapColor.x);
+	return data;
+}
 
 #define I18N_KEY_PREFIX "feature.dynamic_cubemaps."
 

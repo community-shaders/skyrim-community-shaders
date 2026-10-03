@@ -14,6 +14,11 @@
 #	if defined(TRUE_PBR)
 namespace LandscapeLayers
 {
+#		if defined(ENABLE_LL)
+	static const bool LinearLighting = true;
+#		else
+	static const bool LinearLighting = false;
+#		endif
 	inline bool PbrTileUsesFullPBR(uint tileIndex)
 	{
 		return (PBRFlags & (1u << tileIndex)) != 0;
@@ -30,14 +35,14 @@ namespace LandscapeLayers
 			[branch] if ((WEIGHT) > 0.01)                                                                                                                          \
 			{                                                                                                                                                      \
 				float weight = WEIGHT;                                                                                                                             \
-				float4 landColor = SampleTerrain(COLOR_TEX, COLOR_SAMP, uv, sharedOffset);                                                                          \
+				float4 landColor = SampleTerrainColor(COLOR_TEX, COLOR_SAMP, uv, sharedOffset, LandscapeLayers::PbrTileUsesFullPBR(TILE));                         \
 				float3 landColorRGB = landColor.rgb;                                                                                                               \
-				[branch] if (!LandscapeLayers::PbrTileUsesFullPBR(TILE))                                                                                           \
+				[branch] if (!LandscapeLayers::PbrTileUsesFullPBR(TILE) && !LandscapeLayers::LinearLighting)                                                       \
 				{                                                                                                                                                  \
-					landColorRGB = Color::SrgbToLinear(landColorRGB / Color::PBRLightingScale);                                                                    \
+					landColorRGB = TransferFunctions::Gamma22ToLinear(landColorRGB / Color::PBRLightingScale);                                                     \
 				}                                                                                                                                                  \
 				float landAlpha = landColor.a;                                                                                                                     \
-				float4 landNormal = SampleTerrain(NORM_TEX, NORM_SAMP, uv, sharedOffset);                                                                           \
+				float4 landNormal = SampleTerrain(NORM_TEX, NORM_SAMP, uv, sharedOffset);                                                                          \
 				float3 landNormalRGB = landNormal.rgb;                                                                                                             \
 				float landNormalAlpha = landNormal.a;                                                                                                              \
 				float4 landRMAOS;                                                                                                                                  \
@@ -67,20 +72,20 @@ namespace LandscapeLayers
 #			define LIGHTING_LAND_SNOW_ACCUM(SNOW_COMPONENT)
 #		endif
 #		define LIGHTING_LANDSCAPE_BLEND_ONE_LAYER(TILE, COLOR_TEX, COLOR_SAMP, NORM_TEX, NORM_SAMP, WEIGHT, SNOW_COMPONENT) \
-			[branch] if ((WEIGHT) > 0.01)                                                                              \
-			{                                                                                                          \
-				float weight = WEIGHT;                                                                                 \
-				float4 landColor = SampleTerrain(COLOR_TEX, COLOR_SAMP, uv, sharedOffset);                             \
-				float3 landColorRGB = landColor.rgb;                                                                   \
-				float landAlpha = landColor.a;                                                                         \
-				float4 landNormal = SampleTerrain(NORM_TEX, NORM_SAMP, uv, sharedOffset);                              \
-				float3 landNormalRGB = landNormal.rgb;                                                                 \
-				float landNormalAlpha = landNormal.a;                                                                  \
-				blendedRGB += landColorRGB * weight;                                                                   \
-				blendedAlpha += landAlpha * weight;                                                                    \
-				blendedNormalRGB += landNormalRGB * weight;                                                            \
-				blendedNormalAlpha += landNormalAlpha * weight;                                                        \
-				LIGHTING_LAND_SNOW_ACCUM(SNOW_COMPONENT)                                                               \
+			[branch] if ((WEIGHT) > 0.01)                                                                                    \
+			{                                                                                                                \
+				float weight = WEIGHT;                                                                                       \
+				float4 landColor = SampleTerrainColor(COLOR_TEX, COLOR_SAMP, uv, sharedOffset, false);                       \
+				float3 landColorRGB = landColor.rgb;                                                                         \
+				float landAlpha = landColor.a;                                                                               \
+				float4 landNormal = SampleTerrain(NORM_TEX, NORM_SAMP, uv, sharedOffset);                                    \
+				float3 landNormalRGB = landNormal.rgb;                                                                       \
+				float landNormalAlpha = landNormal.a;                                                                        \
+				blendedRGB += landColorRGB * weight;                                                                         \
+				blendedAlpha += landAlpha * weight;                                                                          \
+				blendedNormalRGB += landNormalRGB * weight;                                                                  \
+				blendedNormalAlpha += landNormalAlpha * weight;                                                              \
+				LIGHTING_LAND_SNOW_ACCUM(SNOW_COMPONENT)                                                                     \
 			}
 #	endif
 

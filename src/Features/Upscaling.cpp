@@ -18,6 +18,8 @@
 #include <directx/d3dx12.h>
 #include <format>
 
+#include "Features/PostProcessing.h"
+
 #define I18N_KEY_PREFIX "feature.upscaling."
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
@@ -1683,13 +1685,18 @@ void Upscaling::MenuManagerDrawInterfaceStartHook::thunk(int64_t a1)
 
 void Upscaling::Main_PostProcessing::thunk(RE::ImageSpaceManager* a_this, uint32_t a3, RE::RENDER_TARGET a_target, void* a_4, bool a_5)
 {
+	auto& postProcessing = globals::features::postProcessing;
+	if (postProcessing.loaded) {
+		postProcessing.DrawBeforeUpscaling();
+	}
+
 	auto& upscaling = globals::features::upscaling;
 	auto upscaleMethod = upscaling.GetUpscaleMethod();
 
-	// Decide frame generation once per frame, here, and hold that decision through Present.
-	// Re-evaluating at Present let loading transitions flip the answer in between, so Present
-	// interpolated with inputs that were never copied and flashed a stale frame.
-	upscaling.frameGenerationPrepared = upscaling.ShouldPrepareFrameGeneration() && upscaling.CopySharedD3D12Resources();
+	const bool prepareFrameGeneration = upscaling.ShouldPrepareFrameGeneration();
+	if (prepareFrameGeneration && postProcessing.loaded)
+		postProcessing.ClearBorderMotionVectorsForFrameGen();
+	upscaling.frameGenerationPrepared = prepareFrameGeneration && upscaling.CopySharedD3D12Resources();
 
 	if (upscaleMethod != UpscaleMethod::kNONE && upscaleMethod != UpscaleMethod::kTAA)
 		upscaling.PerformUpscaling();

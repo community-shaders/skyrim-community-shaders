@@ -13,6 +13,8 @@
 #	include <Tracy/TracyD3D11.hpp>
 #endif
 
+struct SharedLighting;
+
 struct Feature
 {
 	// For global settings search
@@ -35,12 +37,12 @@ struct Feature
  * @param jsonKey The JSON key identifying which boot value to retrieve.
  * @returns A pointer to the boot configuration value, or nullptr if not defined.
  */
-virtual const void* GetBootValue(std::string_view /*jsonKey*/) const { return nullptr; }
+	virtual const void* GetBootValue(std::string_view /*jsonKey*/) const { return nullptr; }
 	/**
  * Retrieves the raw settings data blob.
  * @return Pointer to the settings blob data, or nullptr if unavailable.
  */
-virtual const void* GetSettingsBlob() const { return nullptr; }
+	virtual const void* GetSettingsBlob() const { return nullptr; }
 	virtual size_t GetSettingsBlobSize() const { return 0; }
 
 	// Nexus Mods base URL for Skyrim Special Edition
@@ -61,6 +63,8 @@ virtual const void* GetSettingsBlob() const { return nullptr; }
 
 	/** @brief Gets additional shader define key-value pairs for this feature. */
 	virtual std::vector<std::pair<std::string_view, std::string_view>> GetShaderDefineOptions() { return {}; }
+	// Names and values must outlive queued compilations; explicit caller defines take precedence.
+	virtual std::vector<std::pair<std::string_view, std::string_view>> GetCommonShaderDefines() { return {}; }
 
 protected:
 	/** @brief Builds a full Nexus Mods URL from a numeric mod ID. */
@@ -166,6 +170,9 @@ public:
 
 	/** @brief Allocates GPU resources (textures, buffers) needed by this feature. */
 	virtual void SetupResources() {}
+	// All loaded features have finished allocating resources.
+	virtual void PostSetupResources() {}
+	virtual void ModifySharedLighting(SharedLighting&) {}
 
 	/** @brief Releases and recreates transient state (e.g. on resolution change). */
 	virtual void Reset() {}

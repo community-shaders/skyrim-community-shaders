@@ -1,3 +1,4 @@
+#include "Common/ColorManagement.hlsli"
 #include "Common/GBuffer.hlsli"
 #include "Common/Game.hlsli"
 #include "Common/Math.hlsli"
@@ -62,6 +63,8 @@ float4 BurleyNormalizedSS(uint2 DTid, float2 texCoord, float sssAmount, bool hum
 	float3 originalIrradiance = centerColor.xyz;
 
 	float4 diffuseMeanFreePath = humanProfile ? MeanFreePathHuman : MeanFreePathBase;
+	// MFP channels are defined relative to color space primaries; convert to working gamut
+	diffuseMeanFreePath.xyz = Color::LinearSRGBToWorking(diffuseMeanFreePath.xyz);
 	diffuseMeanFreePath.xyz = float3(max(diffuseMeanFreePath.x, 1e-5f), max(diffuseMeanFreePath.y, 1e-5f), max(diffuseMeanFreePath.z, 1e-5f));
 	diffuseMeanFreePath *= sssAmount;
 
@@ -132,8 +135,8 @@ float4 BurleyNormalizedSS(uint2 DTid, float2 texCoord, float sssAmount, bool hum
 	colorSum *= any(weightSum == 0.0f) ? 0.0f : (1.0f / weightSum);
 	colorSum = lerp(colorSum, originalIrradiance, saturate(centerWeight));
 
-	float3 color = SSSApplyAlbedo(colorSum, Color::IrradianceToLinear(originalSceneColor.rgb), surfaceAlbedo, SSS_SCATTER_MODE_POST);
-	color = Color::IrradianceToGamma(color);
+	float3 color = SSSApplyAlbedo(colorSum, ColorManagement::SceneToLinear(originalSceneColor.rgb), surfaceAlbedo, SSS_SCATTER_MODE_POST);
+	color = ColorManagement::LinearToScene(color);
 
 	float4 outColor = float4(color, originalSceneColor.w);
 	return outColor;

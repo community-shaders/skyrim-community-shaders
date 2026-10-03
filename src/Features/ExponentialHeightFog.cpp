@@ -6,6 +6,7 @@
 #include "Features/CloudShadows.h"
 #include "Features/IBL.h"
 #include "Features/LightLimitFix.h"
+#include "Features/LinearLighting.h"
 #include "Features/Skylighting.h"
 #include "Features/TerrainShadows.h"
 #include "Globals.h"
@@ -88,8 +89,15 @@ void ExponentialHeightFog::SaveSettings(json& o_json)
 ExponentialHeightFog::Settings ExponentialHeightFog::GetCommonBufferData() const
 {
 	Settings data = settings;
+	auto& linearLighting = globals::features::linearLighting;
+	linearLighting.SRGBToWorking(&data.inscatteringTint.x);
+	linearLighting.SRGBToWorking(&data.fogInscatteringColor.x);
+	linearLighting.SRGBToWorking(&data.volumetricFogAlbedo.x);
+	linearLighting.SRGBToWorking(&data.volumetricFogEmissive.x);
+
 	if (IsSuppressed())
 		data.enabled = 0;
+
 	return data;
 }
 

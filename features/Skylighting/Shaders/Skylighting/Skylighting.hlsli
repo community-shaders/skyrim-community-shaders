@@ -1,6 +1,7 @@
 #ifndef __SKYLIGHTING_DEPENDENCY_HLSL__
 #define __SKYLIGHTING_DEPENDENCY_HLSL__
 
+#include "Common/ColorManagement.hlsli"
 #include "Common/Math.hlsli"
 #include "Common/Shading.hlsli"
 #include "Common/SharedData.hlsli"
@@ -79,9 +80,8 @@ namespace Skylighting
 
 		diffuseColor = max(0.0, diffuseColor - directionalAmbientColor);
 
-		float3 linAmbient = Color::IrradianceToLinear(directionalAmbientColor);
 		float3 multiBounceSkylighting = MultiBounceAO(albedo, skylightingDiffuse);
-		directionalAmbientColor = Color::IrradianceToGamma(linAmbient * multiBounceSkylighting);
+		directionalAmbientColor = ColorManagement::SceneColor::ScaleByLinear(directionalAmbientColor, multiBounceSkylighting);
 
 		diffuseColor += directionalAmbientColor;
 	}
@@ -89,16 +89,17 @@ namespace Skylighting
 
 #if defined(PSHADER) || defined(SKYLIGHTING_PROBE_REGISTER)
 	sh2 Sample(float3 positionMS, float3 normalWS
-#if defined(SKYLIGHTING_SHADOW_VIS)
-		, out float shadowVisibility
-#endif
+#	if defined(SKYLIGHTING_SHADOW_VIS)
+		,
+		out float shadowVisibility
+#	endif
 	)
 	{
 		sh2 scaledUnitSH = UNIT_SH / 1e-10;
 
-#if defined(SKYLIGHTING_SHADOW_VIS)
+#	if defined(SKYLIGHTING_SHADOW_VIS)
 		shadowVisibility = 1.0;
-#endif
+#	endif
 
 		if (SharedData::InInterior)
 			return scaledUnitSH;
@@ -117,10 +118,10 @@ namespace Skylighting
 
 		sh2 shSum = 0;
 		float shWsum = 0;
-#if defined(SKYLIGHTING_SHADOW_VIS)
+#	if defined(SKYLIGHTING_SHADOW_VIS)
 		float shadowSum = 0;
 		float shadowWsum = 0;
-#endif
+#	endif
 
 		for (int i = 0; i < 2; i++)
 			for (int j = 0; j < 2; j++)
@@ -145,16 +146,16 @@ namespace Skylighting
 					shSum = SphericalHarmonics::Add(shSum, SphericalHarmonics::Scale(SkylightingProbeArray[cellTexID], shW));
 					shWsum += shW;
 
-#if defined(SKYLIGHTING_SHADOW_VIS)
+#	if defined(SKYLIGHTING_SHADOW_VIS)
 					shadowSum += ShadowVisibilityProbeArray[cellTexID] * triW;
 					shadowWsum += triW;
-#endif
+#	endif
 				}
 
-#if defined(SKYLIGHTING_SHADOW_VIS)
+#	if defined(SKYLIGHTING_SHADOW_VIS)
 		float fadeOut = GetFadeOutFactor(positionMS);
 		shadowVisibility = lerp(1.0, shadowSum / max(shadowWsum, EPSILON_WEIGHT_SUM), fadeOut);
-#endif
+#	endif
 
 		return SphericalHarmonics::Scale(shSum, rcp(shWsum + EPSILON_WEIGHT_SUM));
 	}
@@ -165,9 +166,7 @@ namespace Skylighting
 			return 1.0;
 
 		float3 candidateNormal = float3(evalNormal.xy, max(0.0, evalNormal.z));
-		float3 biasedNormal = dot(candidateNormal, candidateNormal) > 1e-6
-			? normalize(candidateNormal)
-			: float3(0, 0, 1);
+		float3 biasedNormal = dot(candidateNormal, candidateNormal) > 1e-6 ? normalize(candidateNormal) : float3(0, 0, 1);
 		float fadeOutFactor = GetFadeOutFactor(positionMS);
 		float skylightingDiffuse = EvaluateDiffuse(skylightingSH, biasedNormal, fadeOutFactor);
 

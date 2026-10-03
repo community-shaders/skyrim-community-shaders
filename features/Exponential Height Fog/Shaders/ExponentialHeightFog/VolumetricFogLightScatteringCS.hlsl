@@ -292,8 +292,7 @@ float3 AccumulateLocalLightScattering(
 		float3 L = toLight * rsqrt(distanceSqr);
 		float phase = ExponentialHeightFog::HenyeyGreenstein(dot(L, -viewDirection), phaseG);
 
-		const bool isPointLightLinear = light.lightFlags & LightLimitFix::LightFlags::Linear;
-		float3 lightColor = Color::PointLight(light.color.xyz, isPointLightLinear) * attenuation * light.fade;
+		float3 lightColor = Color::PointLight(light.color.xyz) * attenuation * light.fade;
 		localScattering += lightColor * phase;
 	}
 
