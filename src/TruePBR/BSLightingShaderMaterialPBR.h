@@ -1,7 +1,9 @@
 #pragma once
 
+#include "PBRTextureSlots.h"
 #include "TruePBR.h"
 
+/** @brief Material capabilities stored in the PBR v1 payload. */
 enum class PBRFlags : uint32_t
 {
 	Subsurface = 1 << 0,
@@ -11,8 +13,10 @@ enum class PBRFlags : uint32_t
 	CoatNormal = 1 << 4,
 	Fuzz = 1 << 5,
 	HairMarschner = 1 << 6,
+	Glint = 1 << 7,
 };
 
+/** @brief GPU capability bits in the existing PBR constant-buffer layout. */
 enum class PBRShaderFlags : uint32_t
 {
 	HasEmissive = 1 << 0,
@@ -30,200 +34,154 @@ enum class PBRShaderFlags : uint32_t
 	ProjectedGlint = 1 << 12,
 };
 
+/** @brief Independent PBR surface parameters, in linear space and authoring units. */
+struct PBRParameters
+{
+	float roughnessScale = 1.f;                    ///< Base roughness multiplier.
+	float specularLevel = .04f;                    ///< Dielectric reflectance in [0, 1].
+	float displacementScale = 1.f;                 ///< Displacement multiplier.
+	RE::NiColor subsurfaceColor{ 1.f, 1.f, 1.f };  ///< Linear subsurface RGB multiplier.
+	float subsurfaceOpacity = 0.f;                 ///< Subsurface thickness multiplier in [0, 1].
+	RE::NiColor coatColor{ 1.f, 1.f, 1.f };        ///< Linear coat RGB multiplier.
+	float coatStrength = 1.f;                      ///< Coat strength in [0, 1].
+	float coatRoughness = 1.f;                     ///< Coat roughness in [0, 1].
+	float coatSpecularLevel = .04f;                ///< Coat dielectric reflectance in [0, 1].
+	RE::NiColor fuzzColor{ 1.f, 1.f, 1.f };        ///< Linear fuzz RGB multiplier.
+	float fuzzWeight = 0.f;                        ///< Fuzz weight in [0, 1].
+	float glintScreenSpaceScale = 1.5f;            ///< Glint screen-space scale, at least 1.
+	float glintLogMicrofacetDensity = 40.f;        ///< Authoring log density in [1, 40]; inverted only during GPU upload.
+	float glintMicrofacetRoughness = .015f;        ///< Glint roughness in [0.005, 0.3].
+	float glintDensityRandomization = 2.f;         ///< Glint density randomization in [0, 5].
+
+	/** @brief Returns the 21 scalar values in PBR v1 wire order, without structure padding. */
+	std::array<float, 21> Values() const;
+	/** @brief Assigns scalar values in PBR v1 wire order. */
+	void SetValues(const std::array<float, 21>& values);
+	/** @brief Checks all parameter ranges, including inactive layers and finite values. */
+	bool IsValid() const;
+};
+
 /**
- * @brief PBR material class for standard (non-landscape) meshes.
+ * @brief Lighting material with an independent NIF type and PBR parameter payload.
  *
- * Extends BSLightingShaderMaterialBase with physically-based rendering properties
- * including roughness/metallic/AO textures, emissive, displacement, subsurface
- * scattering, clearcoat, fuzz, and glint parameters. Also supports projected
- * material (MATO) overlays for decal-like PBR effects.
+ * Feature 21 identifies the material throughout loading, pooling, cloning, and rendering.
+ * Common UV, alpha, refraction, and clamp fields retain the lighting-base ABI.
  */
 class BSLightingShaderMaterialPBR : public RE::BSLightingShaderMaterialBase
 {
 public:
+	/** @brief Runtime record bindings; these do not identify the material. */
 	struct MaterialExtensions
 	{
 		TruePBR::PBRTextureSetData* textureSetData = nullptr;
 		TruePBR::PBRMaterialObjectData* materialObjectData = nullptr;
-		/**
-		 * FormID of the TESObjectREFR whose Clone3D call last wrote MATO data to this
-		 * material.  Used by the fork-before-write check to detect when a pooled material
-		 * instance would be overwritten by a different ref, triggering a clone instead.
-		 */
-		RE::FormID lastOwnerRefFormID = 0;
 	};
 
-	inline static constexpr auto FEATURE = static_cast<RE::BSShaderMaterial::Feature>(32);
+	inline static constexpr auto FEATURE = static_cast<RE::BSShaderMaterial::Feature>(21);
+	inline static constexpr uint32_t Version = 1;
+	inline static constexpr uint32_t PayloadSize = 92;
+	inline static constexpr auto RmaosTexture = PBRTextureIndex(PBRTextureSlot::Rmaos);
+	inline static constexpr auto EmissiveTexture = PBRTextureIndex(PBRTextureSlot::Emissive);
+	inline static constexpr auto DisplacementTexture = PBRTextureIndex(PBRTextureSlot::Displacement);
+	inline static constexpr auto FeaturesTexture0 = PBRTextureIndex(PBRTextureSlot::Features0);
+	inline static constexpr auto FeaturesTexture1 = PBRTextureIndex(PBRTextureSlot::Features1);
 
-	inline static constexpr auto RmaosTexture = static_cast<RE::BSTextureSet::Texture>(5);
-	inline static constexpr auto EmissiveTexture = static_cast<RE::BSTextureSet::Texture>(2);
-	inline static constexpr auto DisplacementTexture = static_cast<RE::BSTextureSet::Texture>(3);
-	inline static constexpr auto FeaturesTexture0 = static_cast<RE::BSTextureSet::Texture>(7);
-	inline static constexpr auto FeaturesTexture1 = static_cast<RE::BSTextureSet::Texture>(6);
+	/** @brief Initializes an unpooled material with deterministic defaults. */
+	BSLightingShaderMaterialPBR();
+	/** @brief Removes extension tracking before the material is destroyed. */
+	~BSLightingShaderMaterialPBR() override;
+	/** @brief Allocates a game-heap material for the engine material pool. */
+	RE::BSShaderMaterial* Create() override;
+	/** @brief Copies render state and extension bindings from a PBR source; pool ownership is not copied. */
+	void CopyMembers(RE::BSShaderMaterial* that) override;
+	/** @brief Compares every render-affecting field after checking the source type. */
+	bool DoIsCopy(RE::BSShaderMaterial* that) override;
+	/** @brief Hashes the equality key and the engine's uniqueness seed, without padding or diagnostic paths. */
+	uint32_t ComputeCRC32(uint32_t srcHash) override;
+	/** @brief Returns the process-lifetime default PBR material. */
+	RE::BSShaderMaterial* GetDefault() override;
+	/** @brief Returns the independent PBR feature, 21. */
+	Feature GetFeature() const override;
+	/** @brief Loads the seven PBR texture roles and applies a matching TXST override. */
+	void OnLoadTextureSet(uint64_t arg1, RE::BSTextureSet* inTextureSet) override;
+	/** @brief Releases common and PBR texture references. */
+	void ClearTextures() override;
+	/** @brief Supplies neutral textures for unbound PBR resources. */
+	void ReceiveValuesFromRootMaterial(bool skinned, bool rimLighting, bool softLighting, bool backLighting, bool MSN) override;
+	/** @brief Enumerates the material's bound textures for engine visitors. */
+	uint32_t GetTextures(RE::NiSourceTexture** textures) override;
+	/** @brief Writes the common material scalars and complete PBR v1 payload. */
+	void SaveBinary(RE::NiStream& stream) override;
+	/** @brief Reads the common material scalars and complete PBR v1 payload. */
+	void LoadBinary(RE::NiStream& stream) override;
 
-	/** @brief Destructor that removes this material from the global tracking map. */
-	~BSLightingShaderMaterialPBR();
-
-	// override (BSLightingShaderMaterialBase)
-	/**
-	 * @brief Creates a heap-allocated canonical copy for the shader material hash map.
-	 *
-	 * MUST use regular heap (new), NOT Make()/scrap heap. BSLightingShaderProperty::LinkObject
-	 * calls ScrapHeap::Free() immediately after Link -- a scrap-heap canonical would be popped
-	 * off the stack and freed while property->material still points to it (use-after-free).
-	 *
-	 * @return A new heap-allocated BSLightingShaderMaterialPBR instance.
-	 */
-	RE::BSShaderMaterial* Create() override;                                                                                      // 01
-	/**
-	 * @brief Copies all PBR-specific members from another material, including textures and extensions.
-	 * @param that Source material to copy from (must be BSLightingShaderMaterialPBR).
-	 */
-	void CopyMembers(RE::BSShaderMaterial* that) override;                                                                        // 02
-	/**
-	 * @brief Computes a CRC32 hash incorporating all PBR-specific fields and texture paths.
-	 * @param srcHash Initial hash seed.
-	 * @return Combined CRC32 hash for material deduplication.
-	 */
-	std::uint32_t ComputeCRC32(uint32_t srcHash) override;                                                                        // 04
-	/**
-	 * @brief Returns the material feature type.
-	 * @return Always returns kDefault to integrate with the vanilla shader dispatch.
-	 */
-	Feature GetFeature() const override;                                                                                          // 06
-	/**
-	 * @brief Loads PBR textures (RMAOS, emissive, displacement, features) from a texture set.
-	 *
-	 * Also looks up and applies PBR texture set data configuration if available.
-	 *
-	 * @param arg1 Unused argument passed through from the base class.
-	 * @param inTextureSet The texture set to load PBR textures from.
-	 */
-	void OnLoadTextureSet(std::uint64_t arg1, RE::BSTextureSet* inTextureSet) override;                                           // 08
-	/** @brief Releases all PBR texture references in addition to base class textures. */
-	void ClearTextures() override;                                                                                                // 09
-	/**
-	 * @brief Assigns default textures to any PBR texture slots that are still null.
-	 * @param skinned Whether the mesh is skinned.
-	 * @param rimLighting Whether rim lighting is enabled.
-	 * @param softLighting Whether soft lighting is enabled.
-	 * @param backLighting Whether back lighting is enabled.
-	 * @param MSN Whether model-space normals are used.
-	 */
-	void ReceiveValuesFromRootMaterial(bool skinned, bool rimLighting, bool softLighting, bool backLighting, bool MSN) override;  // 0A
-	/**
-	 * @brief Writes all non-null textures (base + PBR) into the output array.
-	 * @param textures Output array to fill with texture pointers.
-	 * @return The number of textures written.
-	 */
-	uint32_t GetTextures(RE::NiSourceTexture** textures) override;                                                                // 0B
-	/**
-	 * @brief Deserializes PBR-specific parameters (coat, fuzz, glint) from a NiStream.
-	 * @param stream The binary stream to read from.
-	 */
-	void LoadBinary(RE::NiStream& stream) override;                                                                               // 0D
-
-	/**
-	 * @brief Allocates a scrap-heap temporary for use during BSLightingShaderProperty::LoadBinary.
-	 *
-	 * The temp is direct-assigned to property->material so that BSLightingShaderProperty::LinkObject
-	 * (NiStream link phase) can find it, call BSShaderMaterialHashMap::Link to produce the canonical,
-	 * then ScrapHeap::Free() to pop this temp. Never use Make() as the Create() implementation.
-	 *
-	 * @return A scrap-heap-allocated PBR material, or nullptr on allocation failure.
-	 */
+	/** @brief Checks both Lighting family and PBR feature before downcasting. */
+	static bool IsPBR(const RE::BSShaderMaterial* material);
+	/** @brief Checks known capability bits and combinations supported by the GPU layout. */
+	static bool ValidFeatures(uint32_t features);
+	/** @brief Allocates a scrap-heap load temporary; the engine links, destroys, and frees it. */
 	static BSLightingShaderMaterialPBR* Make();
-
-	/**
-	 * @brief Applies PBR texture set parameters (roughness, specular, subsurface, coat, fuzz, glint) to this material.
-	 * @param textureSetData The texture set configuration to apply.
-	 */
-	void ApplyTextureSetData(const TruePBR::PBRTextureSetData& textureSetData);
-	/**
-	 * @brief Applies projected material object parameters (base color scale, roughness, specular, glint) to this material.
-	 * @param materialObjectData The material object configuration to apply.
-	 */
-	void ApplyMaterialObjectData(const TruePBR::PBRMaterialObjectData& materialObjectData);
-	/**
-	 * @brief Resets all projected-material fields to their default values.
-	 *
-	 * Called on references that carry no MATO (or no PBR config for their MATO) to
-	 * prevent stale data copied in by CopyMembers from persisting on the material.
-	 */
+	/** @brief Checks required texture paths, reserved slots, and feature dependencies. */
+	bool ValidateTextureSet() const;
+	/** @brief Applies a valid TXST override as a whole; invalid overrides leave the material unchanged. */
+	void ApplyTextureSetData(const TruePBR::PBRTextureSetData& data);
+	/** @brief Applies a valid projected MATO override as a whole. */
+	void ApplyMaterialObjectData(const TruePBR::PBRMaterialObjectData& data);
+	/** @brief Restores neutral projected-material parameters. */
 	void ClearMaterialObjectData();
 
-	/** @brief Returns the roughness scale factor (stored in specularColorScale). */
-	float GetRoughnessScale() const;
-	/** @brief Returns the non-metal specular reflectance level (stored in specularPower). */
-	float GetSpecularLevel() const;
+	/** @brief Returns the PBR roughness multiplier. */
+	float GetRoughnessScale() const { return parameters.roughnessScale; }
+	/** @brief Returns the dielectric specular reflectance. */
+	float GetSpecularLevel() const { return parameters.specularLevel; }
+	/** @brief Returns the PBR displacement multiplier. */
+	float GetDisplacementScale() const { return parameters.displacementScale; }
+	/** @brief Returns the linear subsurface color. */
+	const RE::NiColor& GetSubsurfaceColor() const { return parameters.subsurfaceColor; }
+	/** @brief Returns the subsurface thickness multiplier. */
+	float GetSubsurfaceOpacity() const { return parameters.subsurfaceOpacity; }
+	/** @brief Returns the linear coat color. */
+	const RE::NiColor& GetCoatColor() const { return parameters.coatColor; }
+	/** @brief Returns the coat layer strength. */
+	float GetCoatStrength() const { return parameters.coatStrength; }
+	/** @brief Returns the coat roughness. */
+	float GetCoatRoughness() const { return parameters.coatRoughness; }
+	/** @brief Returns the coat dielectric reflectance. */
+	float GetCoatSpecularLevel() const { return parameters.coatSpecularLevel; }
+	/** @brief Returns the linear fuzz color. */
+	const RE::NiColor& GetFuzzColor() const { return parameters.fuzzColor; }
+	/** @brief Returns the fuzz layer weight. */
+	float GetFuzzWeight() const { return parameters.fuzzWeight; }
+	/** @brief Returns base-surface glint parameters and the PBR capability's enabled state. */
+	GlintParameters GetGlintParameters() const;
+	/** @brief Returns the projected material's linear RGB multiplier. */
+	const std::array<float, 3>& GetProjectedMaterialBaseColorScale() const { return projectedMaterialBaseColorScale; }
+	/** @brief Returns the projected material's roughness. */
+	float GetProjectedMaterialRoughness() const { return projectedMaterialRoughness; }
+	/** @brief Returns the projected material's dielectric reflectance. */
+	float GetProjectedMaterialSpecularLevel() const { return projectedMaterialSpecularLevel; }
+	/** @brief Returns projected glint parameters. */
+	const GlintParameters& GetProjectedMaterialGlintParameters() const { return projectedMaterialGlintParameters; }
 
-	/** @brief Returns the displacement/parallax scale factor (stored in rimLightPower). */
-	float GetDisplacementScale() const;
-
-	/** @brief Returns the subsurface scattering color (stored in specularColor). */
-	const RE::NiColor& GetSubsurfaceColor() const;
-	/** @brief Returns the subsurface scattering opacity (stored in subSurfaceLightRolloff). */
-	float GetSubsurfaceOpacity() const;
-
-	/** @brief Returns the clearcoat layer color (stored in specularColor). */
-	const RE::NiColor& GetCoatColor() const;
-	/** @brief Returns the clearcoat layer strength (stored in subSurfaceLightRolloff). */
-	float GetCoatStrength() const;
-	/** @brief Returns the clearcoat layer roughness. */
-	float GetCoatRoughness() const;
-	/** @brief Returns the clearcoat layer specular level. */
-	float GetCoatSpecularLevel() const;
-
-	/** @brief Returns the RGB base color scale for the projected (MATO) material. */
-	const std::array<float, 3>& GetProjectedMaterialBaseColorScale() const;
-	/** @brief Returns the roughness value for the projected (MATO) material. */
-	float GetProjectedMaterialRoughness() const;
-	/** @brief Returns the specular level for the projected (MATO) material. */
-	float GetProjectedMaterialSpecularLevel() const;
-	/** @brief Returns the glint parameters for the projected (MATO) material. */
-	const GlintParameters& GetProjectedMaterialGlintParameters() const;
-
-	/** @brief Returns the fuzz layer color. */
-	const RE::NiColor& GetFuzzColor() const;
-	/** @brief Returns the fuzz layer weight/intensity. */
-	float GetFuzzWeight() const;
-
-	/** @brief Returns the glint rendering parameters for this material's base surface. */
-	const GlintParameters& GetGlintParameters() const;
-
+	/** @brief Record bindings for live TXST and MATO updates. */
 	inline static std::unordered_map<BSLightingShaderMaterialPBR*, MaterialExtensions> All;
-
-	// members
-	RE::BSShaderMaterial::Feature loadedWithFeature = RE::BSShaderMaterial::Feature::kDefault;
-
-	stl::enumeration<PBRFlags> pbrFlags;
-
-	float coatRoughness = 1.f;
-	float coatSpecularLevel = 0.04f;
-
-	RE::NiColor fuzzColor;
-	float fuzzWeight = 0.f;
-
-	GlintParameters glintParameters;
-
-	// Roughness in r, metallic in g, AO in b, nonmetal reflectance in a
-	RE::NiPointer<RE::NiSourceTexture> rmaosTexture;
-
-	// Emission color in rgb
-	RE::NiPointer<RE::NiSourceTexture> emissiveTexture;
-
-	// Displacement in r
-	RE::NiPointer<RE::NiSourceTexture> displacementTexture;
-
-	// Subsurface map (subsurface color in rgb, thickness in a) / Coat map (coat color in rgb, coat strength in a)
-	RE::NiPointer<RE::NiSourceTexture> featuresTexture0;
-
-	// Fuzz map (fuzz color in rgb, fuzz weight in a) / Coat normal map (coat normal in rgb, coat roughness in a)
-	RE::NiPointer<RE::NiSourceTexture> featuresTexture1;
-
-	std::array<float, 3> projectedMaterialBaseColorScale = { 1.f, 1.f, 1.f };
+	/** @brief Protects extension tracking during asynchronous model loading. */
+	inline static std::mutex AllLock;
+	stl::enumeration<PBRFlags> pbrFlags;                     ///< PBR capabilities; never aliases of BSShaderProperty flags.
+	PBRParameters parameters;                                ///< Independent base-surface parameters.
+	RE::NiPointer<RE::NiSourceTexture> rmaosTexture;         ///< Roughness, metallic, AO, and specular channels.
+	RE::NiPointer<RE::NiSourceTexture> emissiveTexture;      ///< Linear emission RGB.
+	RE::NiPointer<RE::NiSourceTexture> displacementTexture;  ///< Displacement height.
+	RE::NiPointer<RE::NiSourceTexture> featuresTexture0;     ///< Subsurface color/thickness or coat color/strength.
+	RE::NiPointer<RE::NiSourceTexture> featuresTexture1;     ///< Fuzz color/weight or coat normal/roughness.
+	std::array<float, 3> projectedMaterialBaseColorScale{ 1.f, 1.f, 1.f };
 	float projectedMaterialRoughness = 1.f;
-	float projectedMaterialSpecularLevel = 0.04f;
+	float projectedMaterialSpecularLevel = .04f;
 	GlintParameters projectedMaterialGlintParameters;
-	std::string inputFilePath = "";
+	std::string inputFilePath;  ///< Diagnostic source path, excluded from material identity.
+	bool valid = true;          ///< False for rejected input; all rendering passes must reject this material.
+
+private:
+	/** @brief Builds a canonical key shared by equality and hashing. */
+	std::vector<uint8_t> MaterialKey() const;
 };
