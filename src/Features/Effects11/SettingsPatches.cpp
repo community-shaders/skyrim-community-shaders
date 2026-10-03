@@ -128,6 +128,7 @@ namespace Util::SettingsPatches
 
 					if (patched) {
 						uiVar.isReadOnly = true;
+						uiVar.isPatched = true;
 						logger::debug("[SettingsPatches] Patched '{}' in '{}' to '{}'",
 							patch.variable, effect.GetName(), patch.value);
 					}
