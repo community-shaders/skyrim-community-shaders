@@ -543,7 +543,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 				float attenuation = 1 - distanceFactor * distanceFactor;
 #					endif
 				float3 lightColor = Color::PointLight(light.color.xyz) * attenuation * light.fade;
-				float lightShadow = (light.lightFlags & LightLimitFix::LightFlags::Shadow) ? shadowColor[light.shadowLightIndex] : 1.0;
+				float lightShadow = 1.0;
+				[branch] if (light.lightFlags & LightLimitFix::LightFlags::LocalShadow)
+					lightShadow = LightLimitFix::GetLocalShadow(LinearSampler, light.localShadowIndex, input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust.xyz, float3(0.0, 0.0, 0.0), false, screenNoise);
+				else if (light.lightFlags & LightLimitFix::LightFlags::Shadow)
+					lightShadow = shadowColor[light.shadowLightIndex];
 				float3 lightDirection = lightVector / max(lightDist, EPSILON_DIVISION);
 				DirectContext pointContext = CreateDirectLightingContext(normal, normal, vertexNormal, viewDirection, viewDirection,
 					lightDirection, lightDirection, lightColor, lightShadow, lightShadow);
@@ -809,7 +813,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 				float lightShadow = 1.0;
 
 				float shadowComponent = 1.0;
-				if (light.lightFlags & LightLimitFix::LightFlags::Shadow) {
+				[branch] if (light.lightFlags & LightLimitFix::LightFlags::LocalShadow)
+				{
+					shadowComponent = LightLimitFix::GetLocalShadow(LinearSampler, light.localShadowIndex, input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust.xyz, float3(0.0, 0.0, 0.0), false, screenNoise);
+					lightShadow *= shadowComponent;
+				}
+				else if (light.lightFlags & LightLimitFix::LightFlags::Shadow)
+				{
 					shadowComponent = shadowColor[light.shadowLightIndex];
 					lightShadow *= shadowComponent;
 				}
@@ -993,7 +1003,13 @@ PS_OUTPUT main(PS_INPUT input)
 				float lightShadow = 1.0;
 
 				float shadowComponent = 1.0;
-				if (light.lightFlags & LightLimitFix::LightFlags::Shadow) {
+				[branch] if (light.lightFlags & LightLimitFix::LightFlags::LocalShadow)
+				{
+					shadowComponent = LightLimitFix::GetLocalShadow(LinearSampler, light.localShadowIndex, input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust.xyz, float3(0.0, 0.0, 0.0), false, screenNoise);
+					lightShadow *= shadowComponent;
+				}
+				else if (light.lightFlags & LightLimitFix::LightFlags::Shadow)
+				{
 					shadowComponent = shadowColor[light.shadowLightIndex];
 					lightShadow *= shadowComponent;
 				}
