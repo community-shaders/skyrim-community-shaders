@@ -159,6 +159,18 @@ Effects11::PerFrame Effects11::GetCommonBufferData()
 	data.CloudsEdgeIntensity = settingManager.GetValue<float>("CloudsEdgeIntensity", "SKY");
 	data.CloudsEdgeMoonMultiplier = settingManager.GetInterpolatedTimeOfDayValue("CloudsEdgeMoonMultiplier", "SKY");
 
+	// StarsCurve 1..4 maps to a 0..1 blend from linear stars toward stars^4
+	data.StarsCurve = std::max((settingManager.GetInterpolatedTimeOfDayValue("StarsCurve", "SKY") - 1.0f) / 3.0f, 0.0f);
+	data.StarsIntensity = settingManager.GetInterpolatedTimeOfDayValue("StarsIntensity", "SKY");
+	data.MoonCurve = settingManager.GetInterpolatedTimeOfDayValue("MoonCurve", "SKY");
+	data.EnableAnimatedStars = settingManager.GetValue<bool>("EnableAnimatedStars", "SKY");
+	data.StarsAnimationTime = settingManager.GetValue<float>("StarsAnimationTime", "SKY");
+	data.StarsAnimationDensity = settingManager.GetValue<float>("StarsAnimationDensity", "SKY");
+	data.StarsAnimationIntensity = settingManager.GetValue<float>("StarsAnimationIntensity", "SKY");
+	data.AuroraIntensity = settingManager.GetInterpolatedTimeOfDayValue("AuroraBorealisIntensity", "SKY");
+	data.AuroraCurve = settingManager.GetInterpolatedTimeOfDayValue("AuroraBorealisCurve", "SKY");
+	data.FixBlackCrush = settingManager.GetValue<bool>("FixBlackCrush", "SKY");
+
 	data.VolumetricRaysDesaturation = settingManager.GetInterpolatedTimeOfDayValue("Desaturation", "GAMEVOLUMETRICRAYS");
 	auto colorFilter = settingManager.GetInterpolatedColorTimeOfDayValue("ColorFilter", "GAMEVOLUMETRICRAYS");
 	data.VolumetricRaysColorFilter = { colorFilter.x, colorFilter.y, colorFilter.z };
@@ -500,22 +512,12 @@ void Effects11::OverrideWeather(RE::Sky* a_sky)
 
 			auto moonColorF3 = NiToF3(moonColor);
 
+			moonColorF3 = Curve(moonColorF3, settingManager.GetInterpolatedTimeOfDayValue("MoonCurve", "SKY"));
 			moonColorF3 = Desaturation(moonColorF3, settingManager.GetInterpolatedTimeOfDayValue("MoonDesaturation", "SKY"));
 			moonColorF3 = ColorFilter(moonColorF3, settingManager.GetInterpolatedColorTimeOfDayValue("MoonColorFilter", "SKY"), 0.0f);
 			moonColorF3 = Intensity(moonColorF3, settingManager.GetInterpolatedTimeOfDayValue("MoonIntensity", "SKY"));
 
 			moonColor = F3ToNi(moonColorF3);
-		}
-
-		{
-			auto& starsColor = colors[(uint)RE::TESWeather::ColorTypes::kStars];
-
-			auto starsColorF3 = NiToF3(starsColor);
-
-			starsColorF3 = Curve(starsColorF3, settingManager.GetInterpolatedTimeOfDayValue("StarsCurve", "SKY"));
-			starsColorF3 = Intensity(starsColorF3, settingManager.GetInterpolatedTimeOfDayValue("StarsIntensity", "SKY"));
-
-			starsColor = F3ToNi(starsColorF3);
 		}
 
 		{

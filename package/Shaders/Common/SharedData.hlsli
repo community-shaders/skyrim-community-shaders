@@ -337,6 +337,20 @@ namespace SharedData
 		float MasserBillboardTan;
 		float SecundaBillboardTan;
 		float2 SkyScatteringPad0;
+
+		float StarsCurve;
+		float StarsIntensity;
+		float MoonCurve;
+		uint EnableAnimatedStars;
+
+		float StarsAnimationTime;
+		float StarsAnimationDensity;
+		float StarsAnimationIntensity;
+		float AuroraIntensity;
+
+		float AuroraCurve;
+		uint FixBlackCrush;
+		float2 NightSkyPad0;
 	};
 	struct TerrainBlendingSettings
 	{
