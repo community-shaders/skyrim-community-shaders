@@ -68,6 +68,7 @@ namespace
 		{ "LIGHTSPRITE", Group::Lighting },
 		{ "FIRE", Group::Lighting },
 		{ "SKY", Group::Sky },
+		{ "SKYSCATTERING", Group::Sky },
 		{ "PROCEDURALSUN", Group::Sky },
 		{ "SUNGLARE", Group::Sky },
 		{ "CLOUDSHADOWS", Group::Sky },
@@ -137,8 +138,10 @@ namespace
 			return { T("feature.effects11.category.fire", "Fire"), T("feature.effects11.category.fire_desc", "Brightness and contrast of fire.") };
 		if (a_category == "SKY")
 			return { T("feature.effects11.category.sky", "Sky"), T("feature.effects11.category.sky_desc", "Sky gradient, clouds, sun, moon and stars.") };
+		if (a_category == "SKYSCATTERING")
+			return { T("feature.effects11.category.skyscattering", "Sky Scattering"), T("feature.effects11.category.skyscattering_desc", "Atmospheric scattering for the sky and cloud lighting.") };
 		if (a_category == "PROCEDURALSUN")
-			return { T("feature.effects11.category.proceduralsun", "Procedural Sun"), T("feature.effects11.category.proceduralsun_desc", "Size, edge and glow of the procedural sun disk.") };
+			return { T("feature.effects11.category.proceduralsun", "Procedural Sun"), T("feature.effects11.category.proceduralsun_desc", "Size, edge, glow and brightness of the procedural sun disc, how much clouds dim it, and whether eye adaptation ignores it.") };
 		if (a_category == "SUNGLARE")
 			return { T("feature.effects11.category.sunglare", "Sun Glare"), T("feature.effects11.category.sunglare_desc", "Glow around the sun.") };
 		if (a_category == "CLOUDSHADOWS")

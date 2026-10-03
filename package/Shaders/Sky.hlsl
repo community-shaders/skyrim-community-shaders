@@ -144,7 +144,7 @@ VS_OUTPUT main(VS_INPUT input)
 #		if defined(DITHER) && defined(TEX)
 	vsout.Color.w *= GetSunGlareVisibility();
 #		endif
-#	endif      // OCCLUSION MOONMASK HORIZFADE
+#	endif  // OCCLUSION MOONMASK HORIZFADE
 
 	vsout.Position = mul(WorldViewProj, inputPosition).xyww;
 	vsout.WorldPosition = mul(World, inputPosition);
@@ -189,6 +189,31 @@ cbuffer AlphaTestRefCB : register(b11)
 #	include "Common/MotionBlur.hlsli"
 #	include "Common/SharedData.hlsli"
 
+// Sun, moons and stars dimmed and reddened by the atmosphere they are seen through
+#	if defined(EFFECTS11) && (defined(HORIZFADE) || (defined(TEX) && !defined(DITHER) && !defined(CLOUDS) && !defined(MOONMASK)))
+#		define EFFECTS11_CELESTIAL_EXTINCTION
+#	endif
+
+#	if defined(EFFECTS11) && defined(DITHER) && !defined(TEX)
+#		define EFFECTS11_SKY_GRADIENT
+#	endif
+
+#	if defined(EFFECTS11) && (defined(CLOUDS) || defined(EFFECTS11_CELESTIAL_EXTINCTION) || defined(EFFECTS11_SKY_GRADIENT))
+#		include "Effects11/SkyScattering.hlsli"
+#	endif
+
+#	if defined(CLOUD_SHADOWS)
+#		include "CloudShadows/CloudShadows.hlsli"
+#	endif
+
+// Effects 11 procedural sun: the disc replaces the sun texture, and clouds dim it and its glare
+#	if defined(EFFECTS11) && defined(TEX) && !defined(CLOUDS) && !defined(MOONMASK)
+#		include "Effects11/ProceduralSun.hlsli"
+#		if !defined(DITHER)
+#			define EFFECTS11_PROCEDURAL_SUN
+#		endif
+#	endif
+
 #	if defined(EXP_HEIGHT_FOG)
 #		define SampColorSampler SampBaseSampler
 #		include "ExponentialHeightFog/ExponentialHeightFog.hlsli"
@@ -199,21 +224,6 @@ cbuffer AlphaTestRefCB : register(b11)
 #	endif
 
 Texture2D<float> TexDepthSampler : register(t17);
-
-#	if defined(EFFECTS11)
-float ComputeProceduralSun(float2 uv)
-{
-	float2 p = uv * 2.0 - 1.0;
-	float dist = dot(p, p) - SharedData::enbSettings.ProceduralSunDiskRadiusSq;
-
-	float c = saturate(dist * SharedData::enbSettings.ProceduralSunCoronaScale);
-	float corona = (1.0 - c) * rcp(SharedData::enbSettings.ProceduralSunCoronaFalloff * c + 1.0) * SharedData::enbSettings.ProceduralSunGlowIntensity;
-
-	float disk = saturate(-dist * SharedData::enbSettings.ProceduralSunDiskEdgeScale);
-
-	return corona + disk;
-}
-#	endif
 
 PS_OUTPUT main(PS_INPUT input)
 {
@@ -237,17 +247,71 @@ PS_OUTPUT main(PS_INPUT input)
 	baseColor = PParams.xxxx * (-baseColor + blendColor) + baseColor;
 #		endif
 
+#		if defined(EFFECTS11_PROCEDURAL_SUN)
+	bool proceduralSunActive = SharedData::enbSettings.EnableProceduralSun && (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsSun);
+	[branch] if (proceduralSunActive)
+	{
+		float3 viewDirection = normalize(input.WorldPosition.xyz);
+		float cosTheta = clamp(dot(viewDirection, SharedData::SunDirection.xyz), -1.0, 1.0);
+
+		float influenceCos = ProceduralSun::GetInfluenceCos(
+			SharedData::enbSettings.ProceduralSunDiskCos,
+			true,
+			SharedData::enbSettings.ProceduralSunHaloCos,
+			SharedData::enbSettings.ProceduralSunHaloIntensity);
+
+		float3 proceduralSunColor = 0.0;
+		float sunCoverage = 0.0;
+
+		[branch] if (cosTheta > influenceCos)
+		{
+			float3 limbDarkening;
+			float discCoverage;
+			ProceduralSun::EvaluateDisc(
+				cosTheta,
+				SharedData::enbSettings.ProceduralSunDiskCos,
+				SharedData::enbSettings.ProceduralSunEdgeSoftness,
+				limbDarkening,
+				discCoverage);
+
+			float haloProfile = ProceduralSun::EvaluateHalo(
+				cosTheta,
+				SharedData::enbSettings.ProceduralSunDiskCos,
+				SharedData::enbSettings.ProceduralSunHaloCos,
+				SharedData::enbSettings.ProceduralSunHaloFalloff);
+
+			ProceduralSun::ComposeDiscAndHalo(
+				limbDarkening,
+				discCoverage,
+				SharedData::enbSettings.ProceduralSunDiskIntensity,
+				haloProfile,
+				SharedData::enbSettings.ProceduralSunHaloIntensity,
+				proceduralSunColor,
+				sunCoverage);
+
+#			if defined(CLOUD_SHADOWS)
+			float cloudExtinction = SharedData::enbSettings.ProceduralSunCloudExtinction * sunCoverage;
+			[branch] if (cloudExtinction > 0.0)
+			{
+				float capturedCloudOcclusion = CloudShadows::CloudShadowsTexture.SampleLevel(SampBaseSampler, viewDirection, 0).x;
+				proceduralSunColor *= ProceduralSun::GetCloudTransmission(capturedCloudOcclusion, cloudExtinction);
+			}
+#			endif
+		}
+
+		// A sun texture that is transparent at its center hides the sun, so it hides the disc too
+		float sunTextureAlpha = saturate(TexBaseSampler.SampleLevel(SampBaseSampler, 0.5, 0).w);
+
+		baseColor.xyz = proceduralSunColor;
+		baseColor.w = sunCoverage * sunTextureAlpha;
+
+		skyScale = 0.0;
+	}
+#		endif
+
 #		if defined(HDR_OUTPUT)
 	float hdrSunGain = HDRSun::GetHdrSunGain(input.TexCoord0.xy, baseColor);
 	baseColor.xyz *= hdrSunGain;
-#		endif
-
-#		if defined(TEX) && defined(EFFECTS11)
-	if (SharedData::enbSettings.EnableProceduralSun && (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsSun)) {
-		baseColor.xyz = ComputeProceduralSun(input.TexCoord0.xy);
-		baseColor.w = input.Color.w;
-		skyScale = 0.0;
-	}
 #		endif
 
 #		if defined(DITHER)
@@ -259,16 +323,26 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.Color.xyz = Color::Sky(input.Color.xyz) * baseColor.xyz + skyScale;
 	psout.Color.xyz *= 1.0 + noiseGrad;
 	psout.Color.w = baseColor.w * input.Color.w;
+
+#				if defined(EFFECTS11) && defined(CLOUD_SHADOWS)
+	// Sun glare: fade it with the clouds in front of the sun, as the procedural disc is
+	if (SharedData::enbSettings.EnableProceduralSun && SharedData::enbSettings.ProceduralSunCloudExtinction > 0.0) {
+		float capturedCloudOcclusion = CloudShadows::CloudShadowsTexture.SampleLevel(SampBaseSampler, SharedData::SunDirection.xyz, 0).x;
+		psout.Color.w *= ProceduralSun::GetGlareCloudTransmission(capturedCloudOcclusion, SharedData::enbSettings.ProceduralSunCloudExtinction);
+	}
+#				endif
 #			else
 	float3 skyGradientColor = input.Color.xyz;
 
-#if defined(EFFECTS11)
+#				if defined(EFFECTS11)
 	float3 viewDirection = normalize(input.WorldPosition.xyz);
 	if (SharedData::enbSettings.UseProceduralGradientWeights) {
 		float gradientPosition = pow(1.0 - saturate(viewDirection.z), SharedData::enbSettings.ProceduralGradientWeightCurve);
 		skyGradientColor = lerp(input.SkyBlendColor2.xyz, input.SkyBlendColor0.xyz, gradientPosition);
 	}
-#endif
+	[branch] if (SharedData::enbSettings.EnableCloudsScattering)
+		skyGradientColor = SkyScattering::ApplySkyScattering(skyGradientColor, input.SkyBlendColor2.xyz, viewDirection) + SkyScattering::GetMoonGlow(viewDirection);
+#				endif
 	psout.Color.xyz = Color::Sky(skyGradientColor) + skyScale;
 
 	psout.Color.xyz *= 1.0 + noiseGrad;
@@ -287,43 +361,33 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.Color.w = input.TexCoord2.x * (baseColor.w * input.Color.w);
 #		else
 
-#		if defined(CLOUDS) && defined(EFFECTS11)
-	if (SharedData::enbSettings.Enable)
-		baseColor.xyz = pow(abs(baseColor.xyz), SharedData::enbSettings.CloudsCurve);
-#		endif
-
 	psout.Color.w = input.Color.w * baseColor.w;
 	psout.Color.xyz = Color::Sky(input.Color.xyz) * baseColor.xyz + skyScale;
 
+#			if defined(EFFECTS11_PROCEDURAL_SUN)
+	[branch] if (proceduralSunActive)
+		psout.Color = ProceduralSun::ToAdditiveBlend(psout.Color, SharedData::enbSettings.ProceduralSunRadianceLimit);
+#			endif
+
 #			if defined(CLOUDS) && defined(EFFECTS11)
-	if (SharedData::enbSettings.Enable) {
-		float3 cloudColor = psout.Color.xyz;
+	[branch] if (SharedData::enbSettings.Enable)
+	{
 		float3 viewDirection = normalize(input.WorldPosition.xyz);
+		float cloudTextureAlpha = saturate(baseColor.w);
+		float cloudTextureGray = pow(max(dot(baseColor.xyz, 1.0 / 3.0), 0.0), SharedData::enbSettings.CloudsCurve);
 
-		cloudColor.xyz = lerp(abs(cloudColor.xyz), dot(cloudColor.xyz, 1.0 / 3.0), SharedData::enbSettings.CloudsDesaturation);
+		float3 cloudColor = pow(max(Color::Sky(input.Color.xyz) * baseColor.xyz, 0.0), SharedData::enbSettings.CloudsCurve);
+		cloudColor = lerp(cloudColor, dot(cloudColor, 1.0 / 3.0), SharedData::enbSettings.CloudsDesaturation) * SharedData::enbSettings.CloudsIntensity * SharedData::enbSettings.CloudsColorFilter;
 
-		float cloudLuminance = dot(cloudColor.xyz, 1.0 / 3.0);
-
-		float sunLighting = saturate(dot(viewDirection, SharedData::SunDirection.xyz) * 0.5 + 0.5);
-		float masserLighting = saturate(dot(viewDirection, SharedData::MasserDirection.xyz) * 0.5 + 0.5);
-		float secundaLighting = saturate(dot(viewDirection, SharedData::SecundaDirection.xyz) * 0.5 + 0.5);
-
-		if (SharedData::enbSettings.CloudsEdgeIntensity > 0.0) {
-			float cloudsEdgeAlpha = saturate(1.0 - baseColor.w);
-			
-			float3 sunPhase = pow(sunLighting, 32.0) * SharedData::SunColor.xyz * cloudsEdgeAlpha;
-			float3 masserPhase = pow(masserLighting, 32.0) * SharedData::MasserColor.xyz * SharedData::enbSettings.CloudsEdgeMoonMultiplier * cloudsEdgeAlpha;
-			float3 secundaPhase = pow(secundaLighting, 32.0) * SharedData::SecundaColor.xyz * SharedData::enbSettings.CloudsEdgeMoonMultiplier * cloudsEdgeAlpha;
-
-			float3 cloudsScatter = (sunPhase + masserPhase + secundaPhase) * SharedData::enbSettings.CloudsEdgeIntensity;
-
-			cloudColor += cloudLuminance * cloudsScatter;
-		}
-
-		psout.Color.xyz = cloudColor;
-		psout.Color.w = saturate(psout.Color.w);
+		psout.Color.xyz = SkyScattering::ShadeCloud(cloudColor, cloudTextureAlpha, cloudTextureGray, viewDirection, SampBaseSampler) + skyScale * min(SharedData::enbSettings.CloudsIntensity, 1.0);
+		psout.Color.w = saturate(input.Color.w * baseColor.w * (1.0 + baseColor.w * SharedData::enbSettings.CloudsVertexAlphaBoost));
 	}
 #			endif
+#		endif
+
+#		if defined(EFFECTS11_CELESTIAL_EXTINCTION)
+	[branch] if (SharedData::enbSettings.EnableCloudsScattering && !(Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsSun))
+		psout.Color *= SkyScattering::GetCelestialExtinction(normalize(input.WorldPosition.xyz));
 #		endif
 
 #	else

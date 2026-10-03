@@ -169,6 +169,9 @@ namespace Util
 
 	bool IsInterior();
 
+	/** @brief Sun disc visibility in [0, 1] from its sky shader blend alpha; 0 when the sun is missing or hidden. */
+	float GetSunVisibility(const RE::Sun* a_sun);
+
 	/**
 	 * @brief Converts a 2D world position to cell coordinates.
 	 *

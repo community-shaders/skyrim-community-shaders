@@ -386,6 +386,17 @@ namespace Util
 		return textureSet;
 	}
 
+	float GetSunVisibility(const RE::Sun* a_sun)
+	{
+		if (!a_sun || !a_sun->root || !a_sun->sunBaseNode || !a_sun->sunBase)
+			return 0.0f;
+		if (a_sun->root->GetFlags().any(RE::NiAVObject::Flag::kHidden) || a_sun->sunBaseNode->GetFlags().any(RE::NiAVObject::Flag::kHidden))
+			return 0.0f;
+
+		const auto property = skyrim_cast<RE::BSSkyShaderProperty*>(a_sun->sunBase->GetGeometryRuntimeData().shaderProperty.get());
+		return property ? std::clamp(property->kBlendColor.alpha, 0.0f, 1.0f) : 0.0f;
+	}
+
 	bool IsInterior()
 	{
 		auto tes = RE::TES::GetSingleton();
