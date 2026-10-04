@@ -508,9 +508,14 @@ void Effects11::OverrideAmbientLighting(DirectionalAmbientColors& DirectionalAmb
 	const float desaturation = settingManager.GetInterpolatedTimeOfDayValue("AmbientLightingDesaturation", "ENVIRONMENT");
 	const float intensity = settingManager.GetInterpolatedTimeOfDayValue("AmbientLightingIntensity", "ENVIRONMENT");
 
-	for (auto& axis : DirectionalAmbientColors.directionalAmbientColors) {
+	auto& colors = DirectionalAmbientColors.directionalAmbientColors;
+	// ENB desaturates only side 3 (Y-), not the whole cube
+	auto& desaturatedSide = colors[1][1];
+	desaturatedSide = F3ToNi(Desaturation(NiToF3(desaturatedSide), desaturation));
+
+	for (auto& axis : colors) {
 		for (auto& ambientLightingColor : axis)
-			ambientLightingColor = F3ToNi(Intensity(Desaturation(NiToF3(ambientLightingColor), desaturation), intensity));
+			ambientLightingColor = F3ToNi(Intensity(NiToF3(ambientLightingColor), intensity));
 	}
 }
 
