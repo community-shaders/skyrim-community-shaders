@@ -137,9 +137,13 @@ void EffectManager::Apply()
 
 void EffectManager::Load()
 {
-	Effect* allEffects[] = { &enbBloom, &enbLens, &enbAdaptation, &enbEffect, &enbEffectPostPass };
+	EffectBase* allEffects[] = { &enbBloom, &enbLens, &enbAdaptation, &enbEffect, &enbEffectPostPass };
 	for (auto* effect : allEffects) {
 		effect->Load();
+#ifdef ENABLE_ENB_EXTENDER
+		if (effect->IsCompiled())
+			effect->LoadWeatherData();
+#endif
 		effect->UpdateUIVariables();
 	}
 }
@@ -877,8 +881,8 @@ void EffectManager::UpdateLightParameters()
 	if (clip.w <= 0.0f)
 		return;
 
-	commonData.lightParameters[0] = clip.x / clip.w * 0.5f + 0.5f;
-	commonData.lightParameters[1] = clip.y / clip.w * -0.5f + 0.5f;
+	commonData.lightParameters[0] = clip.x / clip.w;
+	commonData.lightParameters[1] = clip.y / clip.w;
 	commonData.lightParameters[3] = visibility;
 }
 
@@ -897,32 +901,22 @@ void EffectManager::UpdateCommonVariablesForEffect(Effect& effect)
 	effect.SetShaderResourceVariable("TextureDepth",
 		renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN].depthSRV);
 
-	static const char* const formatTargets[] = {
+	static const std::string renderTargets[] = {
 		"RenderTargetRGBA32", "RenderTargetRGBA64", "RenderTargetRGBA64F",
-		"RenderTargetR16F", "RenderTargetR32F", "RenderTargetRGB32F"
-	};
-
-	for (const auto& targetName : formatTargets) {
-		auto* texture = effect.GetCachedCommonTexture(targetName);
-		if (texture) {
-			effect.SetShaderResourceVariable(targetName, texture->srv.get());
-		}
-	}
-
-	static const char* const fixedSizeTargets[] = {
+		"RenderTargetR16F", "RenderTargetR32F", "RenderTargetRGB32F",
 		"RenderTarget1024", "RenderTarget512", "RenderTarget256", "RenderTarget128",
 		"RenderTarget64", "RenderTarget32", "RenderTarget16"
 	};
 
-	for (const auto& targetName : fixedSizeTargets) {
-		auto* texture = effect.GetCachedCommonTexture(targetName);
-		if (texture) {
+	auto& textureManager = TextureManager::GetSingleton();
+	for (const auto& targetName : renderTargets) {
+		if (auto* texture = textureManager.FindCommonTexture(targetName))
 			effect.SetShaderResourceVariable(targetName, texture->srv.get());
-		}
 	}
 
 	effect.SetVectorVariable("Timer", commonData.timer, sizeof(commonData.timer));
 	effect.SetVectorVariable("Weather", commonData.enbWeather, sizeof(commonData.enbWeather));
+	effect.SetVectorVariable("WeatherAndTime", commonData.enbWeather, sizeof(commonData.enbWeather));
 	effect.SetVectorVariable("TimeOfDay1", commonData.timeOfDay1, sizeof(commonData.timeOfDay1));
 	effect.SetVectorVariable("TimeOfDay2", commonData.timeOfDay2, sizeof(commonData.timeOfDay2));
 	effect.SetVectorVariable("ENightDayFactor", &commonData.eNightDayFactor, sizeof(commonData.eNightDayFactor));
@@ -931,6 +925,9 @@ void EffectManager::UpdateCommonVariablesForEffect(Effect& effect)
 	effect.SetVectorVariable("tempInfo1", commonData.tempInfo1, sizeof(commonData.tempInfo1));
 	effect.SetVectorVariable("tempInfo2", commonData.tempInfo2, sizeof(commonData.tempInfo2));
 	effect.SetVectorVariable("LightParameters", commonData.lightParameters, sizeof(commonData.lightParameters));
+
+	static constexpr float adaptiveQuality = 0.0f;
+	effect.SetVectorVariable("AdaptiveQuality", &adaptiveQuality, sizeof(adaptiveQuality));
 
 	static constexpr float tempF[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
 	effect.SetVectorVariable("tempF1", tempF, sizeof(tempF));

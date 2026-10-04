@@ -187,7 +187,7 @@ void Effect::Save()
 	std::transform(section.begin(), section.end(), section.begin(), ::toupper);
 
 	for (const auto& uiVar : uiVariables) {
-		if (uiVar.isLabel)
+		if (uiVar.isLabel || uiVar.isPatched)
 			continue;
 		if (!uiVar.effectVariable && !uiVar.isDefine)
 			continue;
@@ -284,6 +284,11 @@ bool Effect::Apply()
 	}
 
 	CreateEffectTextures();
+
+	for (const auto& entry : techniques)
+		for (const auto& info : entry.second)
+			if (!info.renderTargetName.empty() && !effectTextureCache.contains(info.renderTargetName))
+				GetCachedCommonTexture(info.renderTargetName);
 
 	logger::info("[EFFECTS11] Successfully applied effect '{}'", GetName());
 	return true;

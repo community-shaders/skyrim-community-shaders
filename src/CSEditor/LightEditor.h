@@ -1,5 +1,5 @@
 #pragma once
-#include "../Features/InverseSquareLighting/Common.h"
+#include "../Features/LightLimitFix/Common.h"
 #include "LightPicker.h"
 #include <chrono>
 #include <nlohmann/json.hpp>
@@ -32,7 +32,7 @@ struct LightEditor
 	 * @param runtimeData The runtime light data extension to modify.
 	 * @return True if the light should be rendered, false if it should be suppressed.
 	 */
-	bool ApplyOverrides(RE::NiLight* niLight, ISLCommon::RuntimeLightDataExt* runtimeData) const;
+	bool ApplyOverrides(RE::NiLight* niLight, LLFCommon::RuntimeLightDataExt* runtimeData) const;
 
 private:
 	struct LightInfo
@@ -69,8 +69,8 @@ private:
 
 	struct LightSettings
 	{
-		stl::enumeration<ISLCommon::TES_LIGHT_FLAGS_EXT, uint32_t> tesFlags;
-		ISLCommon::RuntimeLightDataExt data = {};
+		stl::enumeration<LLFCommon::TES_LIGHT_FLAGS_EXT, uint32_t> tesFlags;
+		LLFCommon::RuntimeLightDataExt data = {};
 		RE::NiPoint3 pos = {};
 	};
 
@@ -266,7 +266,7 @@ private:
 	/** @brief Applies the LP flag set to the current runtime light flags. */
 	void SyncLPFlagsToRuntime();
 	/** @brief Mirrors the InverseSquare/Linear falloff bits of an LP flag set onto a runtime light's flags. */
-	static void ApplyLPFalloffFlags(ISLCommon::RuntimeLightDataExt& data, const std::set<std::string>& lpFlagSet);
+	static void ApplyLPFalloffFlags(LLFCommon::RuntimeLightDataExt& data, const std::set<std::string>& lpFlagSet);
 
 	/** @brief Snapshots and tracks the selected light each frame, applying editor edits and LP state. */
 	void UpdateSelectedLight(RE::TESObjectREFR* refr, RE::TESObjectLIGH* ligh, RE::NiLight* niLight, RE::BSLight* bsLight);

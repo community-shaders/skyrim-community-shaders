@@ -1,7 +1,7 @@
 ﻿#pragma once
 #include "Features/LightLimitFix.h"
 
-struct ISLCommon
+struct LLFCommon
 {
 	enum class TES_LIGHT_FLAGS_EXT
 	{

@@ -71,12 +71,8 @@ struct MaterialProperties
 	float Shininess;
 	float Glossiness;
 	float3 SpecularColor;
-#	if (defined(RIM_LIGHTING) || defined(SOFT_LIGHTING))
 	float3 rimSoftLightColor;
-#	endif
-#	if defined(BACK_LIGHTING)
 	float3 backLightColor;
-#	endif
 	float Roughness;
 	float3 F0;
 #	if defined(CS_SKIN_SHADING)

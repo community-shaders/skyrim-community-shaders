@@ -198,7 +198,7 @@ public:
 	/** @brief Returns whether the debug overlay should be displayed. */
 	virtual bool IsOverlayVisible() const override { return settings.EnableLightsVisualisation; }
 
-	/** @brief Installs shader setup geometry hooks for lighting, effect, and water shaders. */
+	/** @brief Installs shader setup geometry hooks and the inverse-square light creation and luminance hooks. */
 	virtual void PostPostLoad() override;
 	/** @brief Unlocks the vanilla magic light limit on data load. */
 	virtual void DataLoaded() override;
@@ -321,7 +321,61 @@ public:
 
 	virtual bool IsCore() const override { return true; }
 
+	/**
+	 * @brief Calculates the effective radius of an inverse-square light based on its intensity and cutoff.
+	 * @param intensity The light's intensity value.
+	 * @param shadowCaster Whether the light casts shadows (uses a tighter cutoff).
+	 * @param cutoffOverride Per-light cutoff override from the light form data.
+	 * @param size The physical size of the light source.
+	 * @return The computed light radius in game units.
+	 */
+	static float CalculateRadius(float intensity, bool shadowCaster, float cutoffOverride, float size);
+
+	/**
+	 * @brief Builds the LightData for a light from its runtime data, applying inverse-square parameters when flagged.
+	 * @param bsLight The game's BSLight instance.
+	 * @param niLight The underlying NiLight with runtime extension data.
+	 * @return The populated LightData.
+	 */
+	LightData ProcessLight(RE::BSLight* bsLight, RE::NiLight* niLight) const;
+
+	/**
+	 * @brief Computes the inverse-square attenuation at a given distance with smooth fade-out.
+	 * @param distance Distance from the light source.
+	 * @param radius The effective light radius.
+	 * @param size The physical size of the light source.
+	 * @return The attenuation factor in [0, 1].
+	 */
+	static float GetAttenuation(float distance, float radius, float size);
+
+	/** @brief Hook that intercepts point light creation to inject inverse-square light extension data. */
+	struct CreatePointLight
+	{
+		static RE::NiPointLight* thunk(RE::TESObjectLIGH* ligh, RE::TESObjectREFR* refr, RE::NiAVObject* root, bool forceDynamic, bool useLightRadius, bool affectRequesterOnly);
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	/** @brief Hook that overrides BSLight luminance calculation to use inverse-square attenuation. */
+	struct BSLight_GetLuminance
+	{
+		static float thunk(RE::BSLight* bsLight, RE::NiPoint3* targetPosition, RE::NiLight* refLight);
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
 private:
+	static constexpr float DefaultCutoff = 0.05f;
+	static constexpr float DefaultShadowCasterCutoff = 0.022f;
+
+	static constexpr float Scale = 0.8f;
+	static constexpr float MetresToUnits = 70.f;
+	static constexpr float MetresToUnitsSq = MetresToUnits * MetresToUnits;
+	static constexpr float ScaledUnitsSq = Scale * MetresToUnitsSq;
+	static constexpr float FadeZoneBase = 4.5f * Scale * MetresToUnits;
+
+	static void SetExtLightData(RE::NiLight* niLight, const RE::TESObjectLIGH* ligh);
+
+	static inline float SmoothStep(float edge0, float edge1, float x);
+
 	VertexColorCacheEntry GetParticleLightConfig(RE::BSRenderPass* a_pass);
 	bool QueueParticleLight(RE::BSRenderPass* a_pass, VertexColorCacheEntry& a_reference);
 };

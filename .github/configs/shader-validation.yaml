@@ -17,7 +17,6 @@ file_common_defines:
             - TERRAIN_SHADOWS
             - WETNESS_EFFECTS
             - LOD_BLENDING
-            - ISL
             - CLOUD_SHADOWS
             - WATER_EFFECTS
             - SSS
@@ -30,7 +29,6 @@ file_common_defines:
             - TERRAIN_SHADOWS
             - WETNESS_EFFECTS
             - LOD_BLENDING
-            - ISL
             - CLOUD_SHADOWS
             - WATER_EFFECTS
             - SSS
@@ -46,7 +44,6 @@ file_common_defines:
             - WETNESS_EFFECTS
             - LOD_BLENDING
             - SSGI
-            - ISL
             - CLOUD_SHADOWS
             - WATER_EFFECTS
             - SSS
@@ -60,7 +57,6 @@ file_common_defines:
             - WETNESS_EFFECTS
             - LOD_BLENDING
             - SSGI
-            - ISL
             - CLOUD_SHADOWS
             - WATER_EFFECTS
             - SSS
@@ -78,7 +74,6 @@ file_common_defines:
             - WETNESS_EFFECTS
             - LOD_BLENDING
             - SSGI
-            - ISL
             - CLOUD_SHADOWS
             - GRASS_COLLISION
             - WATER_EFFECTS
@@ -94,7 +89,6 @@ file_common_defines:
             - TERRAIN_SHADOWS
             - WETNESS_EFFECTS
             - LOD_BLENDING
-            - ISL
             - CLOUD_SHADOWS
             - WATER_EFFECTS
             - SSS
@@ -107,7 +101,6 @@ file_common_defines:
             - TERRAIN_SHADOWS
             - WETNESS_EFFECTS
             - LOD_BLENDING
-            - ISL
             - CLOUD_SHADOWS
             - WATER_EFFECTS
             - SSS
@@ -122,7 +115,6 @@ file_common_defines:
             - TERRAIN_SHADOWS
             - WETNESS_EFFECTS
             - LOD_BLENDING
-            - ISL
             - CLOUD_SHADOWS
             - WATER_EFFECTS
             - SSS
@@ -135,7 +127,6 @@ file_common_defines:
             - TERRAIN_SHADOWS
             - WETNESS_EFFECTS
             - LOD_BLENDING
-            - ISL
             - CLOUD_SHADOWS
             - WATER_EFFECTS
             - SSS
@@ -150,7 +141,6 @@ file_common_defines:
             - TERRAIN_SHADOWS
             - WETNESS_EFFECTS
             - LOD_BLENDING
-            - ISL
             - CLOUD_SHADOWS
             - WATER_EFFECTS
             - SSS
@@ -163,7 +153,6 @@ file_common_defines:
             - TERRAIN_SHADOWS
             - WETNESS_EFFECTS
             - LOD_BLENDING
-            - ISL
             - CLOUD_SHADOWS
             - WATER_EFFECTS
             - SSS
@@ -185,7 +174,6 @@ file_common_defines:
             - WETNESS_EFFECTS
             - LOD_BLENDING
             - SSGI
-            - ISL
             - EXTENDED_MATERIALS
             - EXTENDED_TRANSLUCENCY
         VSHADER:
@@ -203,7 +191,6 @@ file_common_defines:
             - WETNESS_EFFECTS
             - LOD_BLENDING
             - SSGI
-            - ISL
             - EXTENDED_MATERIALS
             - EXTENDED_TRANSLUCENCY
         CSHADER: []
@@ -218,7 +205,6 @@ file_common_defines:
             - WETNESS_EFFECTS
             - LOD_BLENDING
             - WATER
-            - ISL
             - FOG
             - CLOUD_SHADOWS
             - WATER_EFFECTS
@@ -233,7 +219,6 @@ file_common_defines:
             - WETNESS_EFFECTS
             - LOD_BLENDING
             - WATER
-            - ISL
             - FOG
             - CLOUD_SHADOWS
             - WATER_EFFECTS
@@ -2051,7 +2036,6 @@ shaders:
                   - TERRAIN_SHADOWS
                   - WETNESS_EFFECTS
                   - LOD_BLENDING
-                  - ISL
                   - CLOUD_SHADOWS
                   - WATER_EFFECTS
                   - SSS
@@ -2075,7 +2059,6 @@ shaders:
                   - TERRAIN_SHADOWS
                   - WETNESS_EFFECTS
                   - LOD_BLENDING
-                  - ISL
                   - CLOUD_SHADOWS
                   - WATER_EFFECTS
                   - SSS
@@ -2102,7 +2085,6 @@ shaders:
                   - WETNESS_EFFECTS
                   - LOD_BLENDING
                   - SSGI
-                  - ISL
                   - CLOUD_SHADOWS
                   - WATER_EFFECTS
                   - SSS
@@ -2140,7 +2122,6 @@ shaders:
                   - WETNESS_EFFECTS
                   - LOD_BLENDING
                   - SSGI
-                  - ISL
                   - CLOUD_SHADOWS
                   - WATER_EFFECTS
                   - SSS
@@ -2172,7 +2153,6 @@ shaders:
                   - WETNESS_EFFECTS
                   - LOD_BLENDING
                   - SSGI
-                  - ISL
                   - CLOUD_SHADOWS
                   - GRASS_COLLISION
                   - WATER_EFFECTS
@@ -2199,7 +2179,6 @@ shaders:
                   - TERRAIN_SHADOWS
                   - WETNESS_EFFECTS
                   - LOD_BLENDING
-                  - ISL
                   - CLOUD_SHADOWS
                   - WATER_EFFECTS
                   - SSS
@@ -2290,7 +2269,6 @@ shaders:
                   - TERRAIN_SHADOWS
                   - WETNESS_EFFECTS
                   - LOD_BLENDING
-                  - ISL
                   - CLOUD_SHADOWS
                   - WATER_EFFECTS
                   - SSS
@@ -2344,7 +2322,6 @@ shaders:
                   - TERRAIN_SHADOWS
                   - WETNESS_EFFECTS
                   - LOD_BLENDING
-                  - ISL
                   - CLOUD_SHADOWS
                   - WATER_EFFECTS
                   - SSS
@@ -2382,7 +2359,6 @@ shaders:
                   - TERRAIN_SHADOWS
                   - WETNESS_EFFECTS
                   - LOD_BLENDING
-                  - ISL
                   - CLOUD_SHADOWS
                   - WATER_EFFECTS
                   - SSS
@@ -2422,7 +2398,6 @@ shaders:
                   - TERRAIN_SHADOWS
                   - WETNESS_EFFECTS
                   - LOD_BLENDING
-                  - ISL
                   - CLOUD_SHADOWS
                   - WATER_EFFECTS
                   - SSS
@@ -9647,7 +9622,6 @@ shaders:
                   - TERRAIN_SHADOWS
                   - WETNESS_EFFECTS
                   - LOD_BLENDING
-                  - ISL
                   - CLOUD_SHADOWS
                   - WATER_EFFECTS
                   - SSS
@@ -14210,7 +14184,6 @@ shaders:
                   - WETNESS_EFFECTS
                   - LOD_BLENDING
                   - SSGI
-                  - ISL
                   - EXTENDED_MATERIALS
                   - EXTENDED_TRANSLUCENCY
               entries:
@@ -17065,7 +17038,6 @@ shaders:
                   - WETNESS_EFFECTS
                   - LOD_BLENDING
                   - SSGI
-                  - ISL
                   - EXTENDED_MATERIALS
                   - EXTENDED_TRANSLUCENCY
               entries:
@@ -17216,7 +17188,6 @@ shaders:
                   - WETNESS_EFFECTS
                   - LOD_BLENDING
                   - WATER
-                  - ISL
                   - FOG
                   - CLOUD_SHADOWS
                   - WATER_EFFECTS
@@ -19461,7 +19432,6 @@ shaders:
                   - WETNESS_EFFECTS
                   - LOD_BLENDING
                   - WATER
-                  - ISL
                   - FOG
                   - CLOUD_SHADOWS
                   - WATER_EFFECTS

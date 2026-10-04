@@ -244,7 +244,7 @@ void ExtendedEffect::RebuildWeatherCaches()
 
 	for (size_t i = 0; i < uiVariables.size(); ++i) {
 		const auto& uiVar = uiVariables[i];
-		if (uiVar.isLabel)
+		if (uiVar.isLabel || uiVar.isPatched)
 			continue;
 		if (!uiVar.effectVariable && !uiVar.isDefine)
 			continue;

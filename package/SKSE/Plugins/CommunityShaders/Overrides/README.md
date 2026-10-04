@@ -100,7 +100,6 @@ To create feature-specific overrides, you need to use the correct feature short 
 -   `LightLimitFix` - Light Limit Fix
 -   `LODBlending` - LOD Blending
 -   `InteriorSun` - Interior Sun
--   `InverseSquareLighting` - Inverse Square Lighting
 -   `ScreenSpaceGI` - Screen Space Global Illumination
 -   `ScreenSpaceShadows` - Screen-Space Shadows
 -   `Skylighting` - Skylighting
