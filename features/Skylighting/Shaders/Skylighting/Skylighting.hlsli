@@ -90,7 +90,7 @@ namespace Skylighting
 #if defined(PSHADER) || defined(SKYLIGHTING_PROBE_REGISTER)
 	sh2 Sample(float3 positionMS, float3 normalWS
 #if defined(SKYLIGHTING_SHADOW_VIS)
-		, out float shadowVisibility
+		, out float shadowVisibility, bool sampleShadowVisibility = true
 #endif
 	)
 	{
@@ -146,8 +146,11 @@ namespace Skylighting
 					shWsum += shW;
 
 #if defined(SKYLIGHTING_SHADOW_VIS)
-					shadowSum += ShadowVisibilityProbeArray[cellTexID] * triW;
-					shadowWsum += triW;
+					[branch] if (sampleShadowVisibility)
+					{
+						shadowSum += ShadowVisibilityProbeArray[cellTexID] * triW;
+						shadowWsum += triW;
+					}
 #endif
 				}
 
