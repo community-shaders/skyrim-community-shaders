@@ -1143,7 +1143,9 @@ void Upscaling::FrameLimiter()
 		HANDLE waitableObject = GetFrameLatencyWaitableObject();
 
 		// Wait for the next frame presentation slot
-		WaitForSingleObject(waitableObject, INFINITE);
+		// (bounded so a lost swapchain cannot block the render thread forever)
+		static constexpr DWORD kFrameLatencyWaitTimeoutMs = 1000;
+		WaitForSingleObject(waitableObject, kFrameLatencyWaitTimeoutMs);
 
 		if (settings.frameLimitMode) {
 			static constexpr int64_t kNanosecondsPerSecond = 1000000000LL;
