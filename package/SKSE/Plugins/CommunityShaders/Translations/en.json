@@ -949,6 +949,7 @@
     "feature.hdr_display.advanced": "Advanced",
     "feature.hdr_display.advanced_tooltip_enable_windows_hdr": "Enable Windows HDR instead of forcing it here.",
     "feature.hdr_display.advanced_tooltip_force_enable": "Force enable HDR even without detection (not recommended).",
+    "feature.hdr_display.auto_hdr_peak_cap": "Effects11 AutoHDR is active: peak brightness is capped at %u nits.",
     "feature.hdr_display.cancel": "Cancel",
     "feature.hdr_display.capable_display_windows_hdr_off": "HDR Capable Display (Windows HDR is off)",
     "feature.hdr_display.capable_display_windows_hdr_off_tooltip_0": "Your monitor supports HDR, but Windows HDR is currently disabled.",

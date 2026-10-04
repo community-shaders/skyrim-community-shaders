@@ -223,7 +223,8 @@ namespace DisplayMapping
 	{
 		float SDRRatio = average(SDRColor);
 
-		float AutoHDRMaxWhite = max(min(MaxPeakWhiteNits / sRGB_WhiteLevelNits, 500 / PaperWhiteNits), 1.f);
+		// Relative to paper white, which the PQ encode applies afterwards
+		float AutoHDRMaxWhite = max(MaxPeakWhiteNits / PaperWhiteNits, 1.f);
 
 		float AutoHDRExtraRatio = pow(saturate(SDRRatio), ShoulderPow) * (AutoHDRMaxWhite - 1.f);
 		float AutoHDRTotalRatio = SDRRatio + AutoHDRExtraRatio;

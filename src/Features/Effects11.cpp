@@ -546,7 +546,8 @@ bool Effects11::HandleTonemapRender(RE::RENDER_TARGET a_input, RE::RENDER_TARGET
 		auto& renderTargets = globals::game::renderer->GetRuntimeData().renderTargets;
 		// Only claim the tonemap pass if the effect chain actually wrote the output
 		if (effectManager.ExecuteEffects(renderTargets[a_input], renderTargets[a_output])) {
-			tonemapReplacedFrame = globals::state->frameCount;
+			// State::Reset bumps frameCount at the start of Present, before HDR Display composites this output
+			tonemapReplacedFrame = globals::state->frameCount + 1;
 			return true;
 		}
 	}
