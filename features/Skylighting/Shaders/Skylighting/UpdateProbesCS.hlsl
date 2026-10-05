@@ -103,13 +103,14 @@ static const float3 noise3D[32] = {
 
 	// Only a valid projection advances the history. Clamping an out-of-range one would sample the
 	// shadow map border into the history, and the jitter can cross the camera near plane.
-	uint bitIndex = SharedData::FrameCountAlwaysActive % 32;
+	// The history is a shift register of the last 32 accepted samples, so a rejected sample leaves no stale bit.
+	uint jitterIndex = SharedData::FrameCountAlwaysActive % 32;
 	bool advanceShadowHistory = false;
 	float shadowSample = 1.0;
 	if (onScreen) {
 		DirectionalShadowLightData shadowData = DirectionalShadowLights[0];
 
-		float3 jitteredMS = cellCentreMS + noise3D[bitIndex] * 128;
+		float3 jitteredMS = cellCentreMS + noise3D[jitterIndex] * 128;
 		float4 jitteredCS = mul(FrameBuffer::CameraViewProj, float4(jitteredMS, 1));
 
 		if (jitteredCS.w > 0) {
@@ -124,10 +125,16 @@ static const float3 noise3D[32] = {
 					float3 positionWS = jitteredMS + FrameBuffer::CameraPosAdjust.xyz;
 
 					uint cascadeIndex = (linearDepth > shadowData.EndSplitDistances.x) ? 1u : 0u;
-
 					float3 positionLS = mul(shadowData.ShadowProj[cascadeIndex], float4(positionWS, 1)).xyz;
+					bool inCascade = all(positionLS.xy > 0) && all(positionLS.xy < 1) && positionLS.z > 0 && positionLS.z < 1;
+					// The jitter can leave cascade 0's footprint; cascade 1 covers a wider area, so try it next.
+					if (!inCascade && cascadeIndex == 0) {
+						cascadeIndex = 1;
+						positionLS = mul(shadowData.ShadowProj[1], float4(positionWS, 1)).xyz;
+						inCascade = all(positionLS.xy > 0) && all(positionLS.xy < 1) && positionLS.z > 0 && positionLS.z < 1;
+					}
 
-					if (all(positionLS.xy > 0) && all(positionLS.xy < 1) && positionLS.z > 0 && positionLS.z < 1) {
+					if (inCascade) {
 						float cascadeShadow = ShadowCascadeMap.SampleCmpLevelZero(comparisonSampler, float3(positionLS.xy, cascadeIndex), positionLS.z);
 						float esramShadow = ESRAMShadow.SampleCmpLevelZero(comparisonSampler, float3(positionLS.xy, cascadeIndex), positionLS.z);
 						shadowSample = min(cascadeShadow, esramShadow);
@@ -145,9 +152,7 @@ static const float3 noise3D[32] = {
 	if (advanceShadowHistory) {
 		// Unseeded history starts fully lit to match the cleared visibility of 1.0
 		uint bitmask = isValid ? outShadowBitmask[dtid] : 0xFFFFFFFFu;
-		bitmask &= ~(1u << bitIndex);
-		if (shadowSample > 0.5)
-			bitmask |= (1u << bitIndex);
+		bitmask = (bitmask << 1) | (shadowSample > 0.5 ? 1u : 0u);
 
 		outShadowBitmask[dtid] = bitmask;
 
