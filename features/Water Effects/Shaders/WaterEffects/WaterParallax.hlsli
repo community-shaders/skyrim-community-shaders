@@ -69,8 +69,8 @@ namespace WaterEffects
 
 		float stepSize = rcp(16.0);
 		float currBound = 0.0;
-		float currHeight = 1.0;
-		float prevHeight = 1.0;
+		float currHeight = GetHeight(input, 0.0.xx, normalScalesRcp, mipLevels);
+		float prevHeight = currHeight;
 
 		[loop] while (currHeight > currBound)
 		{
@@ -130,8 +130,9 @@ namespace WaterEffects
 		float stepSize = rcp((float)numSteps);
 
 		float currBound = 0.0;
-		float currHeight = 1.0;
-		float prevHeight = 1.0;
+		float2 cellBlend0 = 0.5 + -(-0.5 + abs(frac(input.TexCoord2.zw * (64 * flowmapDims)) * 2 - 1));
+		float currHeight = 1.0 - GetFlowmapBlendedHeight(input, cellBlend0, uvShiftPx, 0);
+		float prevHeight = currHeight;
 
 		[loop] for (int i = 0; i < numSteps && currHeight > currBound; i++)
 		{
@@ -171,8 +172,8 @@ namespace WaterEffects
 
 		float stepSize = rcp(16.0);
 		float currBound = 0.0;
-		float currHeight = 1.0;
-		float prevHeight = 1.0;
+		float currHeight = GetFlowmapParallaxHeight(input, 0.0.xx, normalScalesRcp, mipLevel);
+		float prevHeight = currHeight;
 
 		[loop] while (currHeight > currBound)
 		{
