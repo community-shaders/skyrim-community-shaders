@@ -604,7 +604,7 @@ void Skylighting::RenderOcclusion()
 					}
 
 					// disc transformation
-					vPoint.x = sqrt(vPoint.x * sin(settings.MaxZenith));
+					vPoint.x = sqrt(vPoint.x) * sin(settings.MaxZenith);
 					vPoint.y *= 6.28318530718f;
 
 					vPoint = { vPoint.x * cos(vPoint.y), vPoint.x * sin(vPoint.y) };
