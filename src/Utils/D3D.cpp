@@ -222,6 +222,40 @@ namespace Util
 		}
 	}
 
+	namespace
+	{
+		// Creates the shader object for a CompileShader target. Targets without a creation path return S_OK and no shader.
+		HRESULT CreateShaderObject(ID3D11Device* device, const char* programType, ID3DBlob* blob, ID3D11DeviceChild** shader)
+		{
+			*shader = nullptr;
+			const void* code = blob->GetBufferPointer();
+			const SIZE_T size = blob->GetBufferSize();
+			HRESULT result = S_OK;
+			if (!_stricmp(programType, "ps_5_0")) {
+				ID3D11PixelShader* regShader = nullptr;
+				result = device->CreatePixelShader(code, size, nullptr, &regShader);
+				*shader = regShader;
+			} else if (!_stricmp(programType, "vs_5_0")) {
+				ID3D11VertexShader* regShader = nullptr;
+				result = device->CreateVertexShader(code, size, nullptr, &regShader);
+				*shader = regShader;
+			} else if (!_stricmp(programType, "hs_5_0")) {
+				ID3D11HullShader* regShader = nullptr;
+				result = device->CreateHullShader(code, size, nullptr, &regShader);
+				*shader = regShader;
+			} else if (!_stricmp(programType, "ds_5_0")) {
+				ID3D11DomainShader* regShader = nullptr;
+				result = device->CreateDomainShader(code, size, nullptr, &regShader);
+				*shader = regShader;
+			} else if (!_stricmp(programType, "cs_5_0") || !_stricmp(programType, "cs_4_0")) {
+				ID3D11ComputeShader* regShader = nullptr;
+				result = device->CreateComputeShader(code, size, nullptr, &regShader);
+				*shader = regShader;
+			}
+			return result;
+		}
+	}
+
 	ID3D11DeviceChild* CompileShader(const wchar_t* FilePath, const std::vector<std::pair<const char*, const char*>>& Defines, const char* ProgramType, const char* Program)
 	{
 		auto device = globals::d3d::device;
@@ -308,46 +342,33 @@ namespace Util
 
 		shaderBlob = diskPath ? SIE::SShaderCache::ReadIntactBlob(*diskPath).detach() : nullptr;
 		if (shaderBlob) {
-			logger::debug("Loaded {} from {}", str, Util::WStringToString(*diskPath));
-		} else {
-			logger::debug("Compiling {} with {}", str, DefinesToString(macros));
-			if (FAILED(D3DCompileFromFile(FilePath, macros.data(), &include, Program, ProgramType, flags, 0, &shaderBlob, &shaderErrors))) {
-				logger::warn("Shader compilation failed:\n\n{}", shaderErrors ? static_cast<char*>(shaderErrors->GetBufferPointer()) : "Unknown error");
-				recordFailure();
-				return nullptr;
+			ID3D11DeviceChild* shader = nullptr;
+			if (SUCCEEDED(CreateShaderObject(device, ProgramType, shaderBlob, &shader))) {
+				logger::debug("Loaded {} from {}", str, Util::WStringToString(*diskPath));
+				return shader;
 			}
-			if (shaderErrors)
-				logger::debug("Shader logs:\n{}", static_cast<char*>(shaderErrors->GetBufferPointer()));
-			if (diskPath)
-				CompileShaderCache::Store(*diskPath, shaderBlob);
-		}
-		if (!_stricmp(ProgramType, "ps_5_0")) {
-			ID3D11PixelShader* regShader;
-			DX::ThrowIfFailed(device->CreatePixelShader(shaderBlob->GetBufferPointer(), shaderBlob->GetBufferSize(), nullptr, &regShader));
-			return regShader;
-		} else if (!_stricmp(ProgramType, "vs_5_0")) {
-			ID3D11VertexShader* regShader;
-			DX::ThrowIfFailed(device->CreateVertexShader(shaderBlob->GetBufferPointer(), shaderBlob->GetBufferSize(), nullptr, &regShader));
-			return regShader;
-		} else if (!_stricmp(ProgramType, "hs_5_0")) {
-			ID3D11HullShader* regShader;
-			DX::ThrowIfFailed(device->CreateHullShader(shaderBlob->GetBufferPointer(), shaderBlob->GetBufferSize(), nullptr, &regShader));
-			return regShader;
-		} else if (!_stricmp(ProgramType, "ds_5_0")) {
-			ID3D11DomainShader* regShader;
-			DX::ThrowIfFailed(device->CreateDomainShader(shaderBlob->GetBufferPointer(), shaderBlob->GetBufferSize(), nullptr, &regShader));
-			return regShader;
-		} else if (!_stricmp(ProgramType, "cs_5_0")) {
-			ID3D11ComputeShader* regShader;
-			DX::ThrowIfFailed(device->CreateComputeShader(shaderBlob->GetBufferPointer(), shaderBlob->GetBufferSize(), nullptr, &regShader));
-			return regShader;
-		} else if (!_stricmp(ProgramType, "cs_4_0")) {
-			ID3D11ComputeShader* regShader;
-			DX::ThrowIfFailed(device->CreateComputeShader(shaderBlob->GetBufferPointer(), shaderBlob->GetBufferSize(), nullptr, &regShader));
-			return regShader;
+			// An intact container can still hold bytecode the runtime rejects; drop the entry and compile from source.
+			logger::warn("Discarding cached shader {} rejected by the device", Util::WStringToString(*diskPath));
+			std::error_code ec;
+			std::filesystem::remove(*diskPath, ec);
+			shaderBlob->Release();
+			shaderBlob = nullptr;
 		}
 
-		return nullptr;
+		logger::debug("Compiling {} with {}", str, DefinesToString(macros));
+		if (FAILED(D3DCompileFromFile(FilePath, macros.data(), &include, Program, ProgramType, flags, 0, &shaderBlob, &shaderErrors))) {
+			logger::warn("Shader compilation failed:\n\n{}", shaderErrors ? static_cast<char*>(shaderErrors->GetBufferPointer()) : "Unknown error");
+			recordFailure();
+			return nullptr;
+		}
+		if (shaderErrors)
+			logger::debug("Shader logs:\n{}", static_cast<char*>(shaderErrors->GetBufferPointer()));
+		if (diskPath)
+			CompileShaderCache::Store(*diskPath, shaderBlob);
+
+		ID3D11DeviceChild* shader = nullptr;
+		DX::ThrowIfFailed(CreateShaderObject(device, ProgramType, shaderBlob, &shader));
+		return shader;
 	}
 
 	// RAII wrapper for D3D mapped resources
