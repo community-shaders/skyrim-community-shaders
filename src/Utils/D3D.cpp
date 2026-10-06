@@ -7,8 +7,11 @@
 #include "Utils/Format.h"
 #include <DDSTextureLoader.h>
 #include <DirectXTex.h>
+#include <bcrypt.h>
 #include <d3dcompiler.h>
+#include <fstream>
 #include <mutex>
+#include <optional>
 #include <unordered_set>
 
 namespace Util
@@ -160,6 +163,65 @@ namespace Util
 		shaderCompileFailures.clear();
 	}
 
+	// Disk cache for shaders compiled through CompileShader (feature compute and post-process shaders), which the
+	// main shader cache does not cover. The key is a SHA-256 of the preprocessed source (includes and defines
+	// expanded), the entry point, the target and the compile flags, so any change to those misses the cache.
+	// Entries get their own folder because Data/ShaderCache/Utility already holds the vanilla Utility shader class,
+	// and they are removed with the rest of the disk cache.
+	namespace CompileShaderCache
+	{
+		std::optional<std::wstring> GetDiskPath(const wchar_t* filePath, const D3D_SHADER_MACRO* macros, ID3DInclude* include, const char* program, const char* programType, uint32_t flags)
+		{
+			std::ifstream file(filePath, std::ios::binary);
+			if (!file.is_open())
+				return std::nullopt;
+			const std::string source{ std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>() };
+
+			ID3DBlob* preprocessed = nullptr;
+			ID3DBlob* errors = nullptr;
+			const auto sourceName = Util::WStringToString(filePath);
+			const HRESULT result = D3DPreprocess(source.data(), source.size(), sourceName.c_str(), macros, include, &preprocessed, &errors);
+			if (errors)
+				errors->Release();
+			if (FAILED(result) || !preprocessed)
+				return std::nullopt;
+
+			std::string keyData(static_cast<const char*>(preprocessed->GetBufferPointer()), preprocessed->GetBufferSize());
+			preprocessed->Release();
+			keyData += std::format("|{}|{}|{:X}|{}", program, programType, flags, D3D_COMPILER_VERSION);
+
+			static const BCRYPT_ALG_HANDLE sha256 = [] {
+				BCRYPT_ALG_HANDLE handle = nullptr;
+				return BCRYPT_SUCCESS(BCryptOpenAlgorithmProvider(&handle, BCRYPT_SHA256_ALGORITHM, nullptr, 0)) ? handle : nullptr;
+			}();
+			if (!sha256)
+				return std::nullopt;
+
+			std::array<uint8_t, 32> digest{};
+			BCRYPT_HASH_HANDLE hash = nullptr;
+			const bool hashed = BCRYPT_SUCCESS(BCryptCreateHash(sha256, &hash, nullptr, 0, nullptr, 0, 0)) &&
+			                    BCRYPT_SUCCESS(BCryptHashData(hash, reinterpret_cast<PUCHAR>(keyData.data()), static_cast<ULONG>(keyData.size()), 0)) &&
+			                    BCRYPT_SUCCESS(BCryptFinishHash(hash, digest.data(), static_cast<ULONG>(digest.size()), 0));
+			if (hash)
+				BCryptDestroyHash(hash);
+			if (!hashed)
+				return std::nullopt;
+
+			std::wstring name;
+			for (const auto byte : digest)
+				name += std::format(L"{:02x}", byte);
+			return std::format(L"Data/ShaderCache/CompileShader/{}.cso", name);
+		}
+
+		void Store(const std::wstring& diskPath, ID3DBlob* blob)
+		{
+			std::error_code ec;
+			std::filesystem::create_directories(std::filesystem::path(diskPath).parent_path(), ec);
+			if (ec || !SIE::SShaderCache::WriteBlobAtomic(diskPath, blob))
+				logger::debug("Failed to write utility shader cache entry {}", Util::WStringToString(diskPath));
+		}
+	}
+
 	ID3D11DeviceChild* CompileShader(const wchar_t* FilePath, const std::vector<std::pair<const char*, const char*>>& Defines, const char* ProgramType, const char* Program)
 	{
 		auto device = globals::d3d::device;
@@ -240,14 +302,25 @@ namespace Util
 			recordFailure();
 			return nullptr;
 		}
-		logger::debug("Compiling {} with {}", str, DefinesToString(macros));
-		if (FAILED(D3DCompileFromFile(FilePath, macros.data(), &include, Program, ProgramType, flags, 0, &shaderBlob, &shaderErrors))) {
-			logger::warn("Shader compilation failed:\n\n{}", shaderErrors ? static_cast<char*>(shaderErrors->GetBufferPointer()) : "Unknown error");
-			recordFailure();
-			return nullptr;
+		std::optional<std::wstring> diskPath;
+		if (globals::shaderCache->IsDiskCache())
+			diskPath = CompileShaderCache::GetDiskPath(FilePath, macros.data(), &include, Program, ProgramType, flags);
+
+		shaderBlob = diskPath ? SIE::SShaderCache::ReadIntactBlob(*diskPath).detach() : nullptr;
+		if (shaderBlob) {
+			logger::debug("Loaded {} from {}", str, Util::WStringToString(*diskPath));
+		} else {
+			logger::debug("Compiling {} with {}", str, DefinesToString(macros));
+			if (FAILED(D3DCompileFromFile(FilePath, macros.data(), &include, Program, ProgramType, flags, 0, &shaderBlob, &shaderErrors))) {
+				logger::warn("Shader compilation failed:\n\n{}", shaderErrors ? static_cast<char*>(shaderErrors->GetBufferPointer()) : "Unknown error");
+				recordFailure();
+				return nullptr;
+			}
+			if (shaderErrors)
+				logger::debug("Shader logs:\n{}", static_cast<char*>(shaderErrors->GetBufferPointer()));
+			if (diskPath)
+				CompileShaderCache::Store(*diskPath, shaderBlob);
 		}
-		if (shaderErrors)
-			logger::debug("Shader logs:\n{}", static_cast<char*>(shaderErrors->GetBufferPointer()));
 		if (!_stricmp(ProgramType, "ps_5_0")) {
 			ID3D11PixelShader* regShader;
 			DX::ThrowIfFailed(device->CreatePixelShader(shaderBlob->GetBufferPointer(), shaderBlob->GetBufferSize(), nullptr, &regShader));
