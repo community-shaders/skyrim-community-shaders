@@ -1089,14 +1089,16 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	endif
 
 #	if defined(LANDSCAPE)
-#		if defined(EMAT)
-	float mipLevels[6];
-	float terrainShadowMipLevels[6];
+#		if defined(TERRAIN_VARIATION) || defined(EMAT)
 #			if defined(TERRAIN_VARIATION)
 	StochasticOffsets sharedOffset = ComputeStochasticOffsets(input.TexCoord0.zw);
 #			else
 	StochasticOffsets sharedOffset = (StochasticOffsets)0;
 #			endif
+#		endif
+#		if defined(EMAT)
+	float mipLevels[6];
+	float terrainShadowMipLevels[6];
 	float cachedDirectionalTerrainParallaxShadow = 1.0;
 	bool hasCachedDirectionalTerrainParallaxShadow = false;
 	bool hasCachedTerrainShadowBaseHeight = false;
