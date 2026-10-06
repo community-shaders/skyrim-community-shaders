@@ -82,14 +82,32 @@ namespace stl
 		write_vfunc<F, 0, T>();
 	}
 
+	inline LONG detour_attach(PVOID* a_target, PVOID a_thunk)
+	{
+		LONG result = DetourTransactionBegin();
+		if (result != NO_ERROR)
+			return result;
+		// A failed thread update must abort too, or the transaction commits and skips the fallback.
+		result = DetourUpdateThread(GetCurrentThread());
+		if (result == NO_ERROR)
+			result = DetourAttach(a_target, a_thunk);
+		if (result == NO_ERROR)
+			result = DetourTransactionCommit();
+		else
+			DetourTransactionAbort();
+		return result;
+	}
+
 	template <class T>
 	void detour_thunk(std::uintptr_t a_address)
 	{
 		T::func = a_address;
-		DetourTransactionBegin();
-		DetourUpdateThread(GetCurrentThread());
-		DetourAttach(reinterpret_cast<PVOID*>(&T::func), reinterpret_cast<PVOID>(T::thunk));
-		DetourTransactionCommit();
+		const auto result = detour_attach(reinterpret_cast<PVOID*>(&T::func), reinterpret_cast<PVOID>(T::thunk));
+		if (result != NO_ERROR) {
+			SKSE::log::error("Detour attach failed at 0x{:X} (error {})", a_address, result);
+			// Leave func null so callers checking it see the hook is not installed.
+			T::func = 0;
+		}
 	}
 
 	template <class T>
@@ -102,10 +120,8 @@ namespace stl
 	void detour_thunk_ignore_func(REL::RelocationID a_relId)
 	{
 		auto target = reinterpret_cast<PVOID>(a_relId.address());
-		DetourTransactionBegin();
-		DetourUpdateThread(GetCurrentThread());
-		DetourAttach(&target, reinterpret_cast<PVOID>(T::thunk));
-		DetourTransactionCommit();
+		if (const auto result = detour_attach(&target, reinterpret_cast<PVOID>(T::thunk)); result != NO_ERROR)
+			SKSE::log::error("Detour attach failed at 0x{:X} (error {})", a_relId.address(), result);
 	}
 
 	template <std::size_t idx, class T>
@@ -113,17 +129,7 @@ namespace stl
 	{
 		auto vtable = *reinterpret_cast<uintptr_t**>(target);
 		T::func = vtable[idx];
-		LONG result = DetourTransactionBegin();
-		if (result == NO_ERROR) {
-			// A failed thread update must abort too, or the transaction commits and skips the fallback.
-			result = DetourUpdateThread(GetCurrentThread());
-			if (result == NO_ERROR)
-				result = DetourAttach(reinterpret_cast<PVOID*>(&T::func), reinterpret_cast<PVOID>(T::thunk));
-			if (result == NO_ERROR)
-				result = DetourTransactionCommit();
-			else
-				DetourTransactionAbort();
-		}
+		const auto result = detour_attach(reinterpret_cast<PVOID*>(&T::func), reinterpret_cast<PVOID>(T::thunk));
 		if (result != NO_ERROR)
 			T::func = Util::VTableHookFallback(target, idx, reinterpret_cast<PVOID>(T::thunk), result);
 	}
