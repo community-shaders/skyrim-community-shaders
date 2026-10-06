@@ -4,6 +4,7 @@
 #include <atomic>
 #include <efsw/efsw.hpp>
 #include <vector>
+#include <winrt/base.h>
 
 #include "Utils/WinApi.h"
 
@@ -325,6 +326,15 @@ namespace SIE
 		system_clock::time_point compileTime = system_clock::now();
 		bool loadedFromDisk = false;  /**< true when the shader blob was read from the disk cache rather than compiled */
 	};
+
+	namespace SShaderCache
+	{
+		/** @brief Reads a cached blob, deleting the file and returning null when it is unreadable or not intact DXBC. */
+		winrt::com_ptr<ID3DBlob> ReadIntactBlob(const std::wstring& diskPath);
+
+		/** @brief Writes through a sibling temp file and a rename, so a crash mid-write cannot leave a torn blob at diskPath. */
+		bool WriteBlobAtomic(const std::wstring& diskPath, ID3DBlob* blob);
+	}
 
 	class UpdateListener;
 

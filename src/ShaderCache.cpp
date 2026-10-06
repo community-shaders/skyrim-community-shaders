@@ -1376,8 +1376,7 @@ namespace SIE
 			return std::memcmp(bytes, "DXBC", 4) == 0 && totalSize == blob->GetBufferSize();
 		}
 
-		/** @brief Reads a cached blob, deleting the file and returning null when it is unreadable or not intact DXBC. */
-		static winrt::com_ptr<ID3DBlob> ReadIntactBlob(const std::wstring& diskPath)
+		winrt::com_ptr<ID3DBlob> ReadIntactBlob(const std::wstring& diskPath)
 		{
 			winrt::com_ptr<ID3DBlob> blob;
 			if (FAILED(D3DReadFileToBlob(diskPath.c_str(), blob.put())))
@@ -1390,8 +1389,7 @@ namespace SIE
 			return nullptr;
 		}
 
-		/** @brief Writes through a sibling temp file and a rename, so a crash mid-write cannot leave a torn blob at diskPath. */
-		static bool WriteBlobAtomic(const std::wstring& diskPath, ID3DBlob* blob)
+		bool WriteBlobAtomic(const std::wstring& diskPath, ID3DBlob* blob)
 		{
 			const std::wstring tempPath = diskPath + L".tmp";
 			std::error_code ec;
