@@ -1466,7 +1466,7 @@ void Effects11Editor::DrawLauncher()
 {
 	auto& effectManager = EffectManager::GetSingleton();
 	auto& settingManager = SettingManager::GetSingleton();
-	const auto& menuSettings = globals::menu->GetSettings();
+	auto& menuSettings = globals::menu->GetSettings();
 	const bool presetLoaded = effectManager.IsPresetLoaded();
 
 	if (presetLoaded)
@@ -1486,7 +1486,7 @@ void Effects11Editor::DrawLauncher()
 		Open(true);
 	if (!menuSettings.Effects11EditorKey.empty()) {
 		ImGui::SameLine();
-		ImGui::AlignTextToFramePadding();
+		ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (buttonSize.y - ImGui::GetTextLineHeight()) * 0.5f);
 		const auto hotkey = I18n::GetSingleton()->Format(TKEY("editor_hotkey"),
 			{ { "key", Util::Input::KeyIdToString(menuSettings.Effects11EditorKey) } }, "Hotkey: {key}");
 		Util::TextUnformattedDisabled(hotkey.c_str());
@@ -1522,6 +1522,12 @@ void Effects11Editor::DrawLauncher()
 		if (Util::SuccessButton(T(TKEY("save"), "Save")))
 			Save();
 	}
+
+	ImGui::SeparatorText(T("menu.settings.tab_keybindings", "Keybindings"));
+	Util::InputComboWidget(T("menu.settings.effects11_editor_key", "Effects 11 Editor Key:"), menuSettings.Effects11EditorKey,
+		globals::menu->settingEffects11EditorKey, "Change##Effects11EditorKey");
+	Util::InputComboWidget(T("menu.settings.effects11_toggle_key", "Effects 11 Toggle Key:"), menuSettings.Effects11ToggleKey,
+		globals::menu->settingEffects11ToggleKey, "Change##Effects11ToggleKey");
 
 	if (!effectManager.enbEffect.IsFilePresent())
 		return;
