@@ -2,6 +2,8 @@
 
 #include "TruePBR/BSLightingShaderMaterialPBR.h"
 #include "TruePBR/BSLightingShaderMaterialPBRLandscape.h"
+#include "TruePBR/PBRControllers.h"
+#include "TruePBR/PBRNif.h"
 
 #include "Features/InteriorSun.h"
 #include "Hooks.h"
@@ -193,13 +195,13 @@ void TruePBR::DrawSettings()
 					wasEdited = true;
 				}
 				if (selectedPbrTextureSet->glintParameters.enabled) {
-					if (ImGui::SliderFloat(T(TKEY("screenspace_scale"), "Screenspace Scale"), &selectedPbrTextureSet->glintParameters.screenSpaceScale, 0.f, 3.f, "%.3f")) {
+					if (ImGui::SliderFloat(T(TKEY("screenspace_scale"), "Screenspace Scale"), &selectedPbrTextureSet->glintParameters.screenSpaceScale, 1.f, 3.f, "%.3f")) {
 						wasEdited = true;
 					}
-					if (ImGui::SliderFloat(T(TKEY("log_microfacet_density"), "Log Microfacet Density"), &selectedPbrTextureSet->glintParameters.logMicrofacetDensity, 0.f, 40.f, "%.3f")) {
+					if (ImGui::SliderFloat(T(TKEY("log_microfacet_density"), "Log Microfacet Density"), &selectedPbrTextureSet->glintParameters.logMicrofacetDensity, 1.f, 40.f, "%.3f")) {
 						wasEdited = true;
 					}
-					if (ImGui::SliderFloat(T(TKEY("microfacet_roughness"), "Microfacet Roughness"), &selectedPbrTextureSet->glintParameters.microfacetRoughness, 0.f, 1.f, "%.3f")) {
+					if (ImGui::SliderFloat(T(TKEY("microfacet_roughness"), "Microfacet Roughness"), &selectedPbrTextureSet->glintParameters.microfacetRoughness, .005f, .3f, "%.3f")) {
 						wasEdited = true;
 					}
 					if (ImGui::SliderFloat(T(TKEY("density_randomization"), "Density Randomization"), &selectedPbrTextureSet->glintParameters.densityRandomization, 0.f, 5.f, "%.3f")) {
@@ -209,6 +211,7 @@ void TruePBR::DrawSettings()
 				ImGui::TreePop();
 			}
 			if (wasEdited) {
+				const std::scoped_lock lock(BSLightingShaderMaterialPBR::AllLock, BSLightingShaderMaterialPBRLandscape::AllLock);
 				for (auto& [material, extensions] : BSLightingShaderMaterialPBR::All) {
 					if (extensions.textureSetData == selectedPbrTextureSet) {
 						material->ApplyTextureSetData(*extensions.textureSetData);
@@ -307,13 +310,13 @@ void TruePBR::DrawSettings()
 					wasEdited = true;
 				}
 				if (selectedPbrMaterialObject->glintParameters.enabled) {
-					if (ImGui::SliderFloat(T(TKEY("material_screenspace_scale"), "Screenspace Scale"), &selectedPbrMaterialObject->glintParameters.screenSpaceScale, 0.f, 3.f, "%.3f")) {
+					if (ImGui::SliderFloat(T(TKEY("material_screenspace_scale"), "Screenspace Scale"), &selectedPbrMaterialObject->glintParameters.screenSpaceScale, 1.f, 3.f, "%.3f")) {
 						wasEdited = true;
 					}
-					if (ImGui::SliderFloat(T(TKEY("material_log_microfacet_density"), "Log Microfacet Density"), &selectedPbrMaterialObject->glintParameters.logMicrofacetDensity, 0.f, 40.f, "%.3f")) {
+					if (ImGui::SliderFloat(T(TKEY("material_log_microfacet_density"), "Log Microfacet Density"), &selectedPbrMaterialObject->glintParameters.logMicrofacetDensity, 1.f, 40.f, "%.3f")) {
 						wasEdited = true;
 					}
-					if (ImGui::SliderFloat(T(TKEY("material_microfacet_roughness"), "Microfacet Roughness"), &selectedPbrMaterialObject->glintParameters.microfacetRoughness, 0.f, 1.f, "%.3f")) {
+					if (ImGui::SliderFloat(T(TKEY("material_microfacet_roughness"), "Microfacet Roughness"), &selectedPbrMaterialObject->glintParameters.microfacetRoughness, .005f, .3f, "%.3f")) {
 						wasEdited = true;
 					}
 					if (ImGui::SliderFloat(T(TKEY("material_density_randomization"), "Density Randomization"), &selectedPbrMaterialObject->glintParameters.densityRandomization, 0.f, 5.f, "%.3f")) {
@@ -323,6 +326,7 @@ void TruePBR::DrawSettings()
 				ImGui::TreePop();
 			}
 			if (wasEdited) {
+				const std::lock_guard lock(BSLightingShaderMaterialPBR::AllLock);
 				for (auto& [material, extensions] : BSLightingShaderMaterialPBR::All) {
 					if (extensions.materialObjectData == selectedPbrMaterialObject) {
 						material->ApplyMaterialObjectData(*extensions.materialObjectData);
@@ -474,8 +478,7 @@ void TruePBR::SetupTextureSetData()
 		} catch (const std::exception& e) {
 			logger::error("Failed to deserialize config for {}: {}.", editorId, e.what());
 			return false;
-		}
-	}, enableVerboseJsonLogging);
+		} }, enableVerboseJsonLogging);
 }
 
 void TruePBR::ReloadTextureSetData()
@@ -493,12 +496,19 @@ void TruePBR::ReloadTextureSetData()
 		} catch (const std::exception& e) {
 			logger::error("Failed to deserialize config for {}: {}.", editorId, e.what());
 			return false;
-		}
-	}, enableVerboseJsonLogging);
+		} }, enableVerboseJsonLogging);
 
+	const std::scoped_lock lock(BSLightingShaderMaterialPBR::AllLock, BSLightingShaderMaterialPBRLandscape::AllLock);
+	for (const auto& [material, extensions] : BSLightingShaderMaterialPBR::All) {
+		if (extensions.textureSetData) {
+			material->ApplyTextureSetData(*extensions.textureSetData);
+		}
+	}
 	for (const auto& [material, textureSets] : BSLightingShaderMaterialPBRLandscape::All) {
 		for (uint32_t textureSetIndex = 0; textureSetIndex < BSLightingShaderMaterialPBRLandscape::NumTiles; ++textureSetIndex) {
-			SetupPBRLandscapeTextureParameters(*material, *textureSets[textureSetIndex], textureSetIndex);
+			if (textureSets[textureSetIndex]) {
+				SetupPBRLandscapeTextureParameters(*material, *textureSets[textureSetIndex], textureSetIndex);
+			}
 		}
 	}
 }
@@ -536,8 +546,7 @@ void TruePBR::SetupMaterialObjectData()
 		} catch (const std::exception& e) {
 			logger::error("Failed to deserialize config for {}: {}.", editorId, e.what());
 			return false;
-		}
-	}, enableVerboseJsonLogging);
+		} }, enableVerboseJsonLogging);
 }
 
 TruePBR::PBRMaterialObjectData* TruePBR::GetPBRMaterialObjectData(const RE::TESForm* materialObject)
@@ -663,102 +672,61 @@ struct ExtendedRendererState
 	}
 } extendedRendererState;
 
+struct BSLightingShaderMaterial_Create
+{
+	static RE::BSLightingShaderMaterialBase* thunk(RE::BSShaderMaterial::Feature feature)
+	{
+		if (feature == BSLightingShaderMaterialPBR::FEATURE) {
+			return BSLightingShaderMaterialPBR::Make();
+		}
+		if (feature == BSLightingShaderMaterialPBRLandscape::FEATURE) {
+			return BSLightingShaderMaterialPBRLandscape::Make();
+		}
+		return func(feature);
+	}
+	static inline REL::Relocation<decltype(thunk)> func;
+};
+
 struct BSLightingShaderProperty_LoadBinary
 {
 	static void thunk(RE::BSLightingShaderProperty* property, RE::NiStream& stream)
 	{
-		using enum RE::BSShaderProperty::EShaderPropertyFlag;
+		PBRNif::Load(property, stream, func.get());
+	}
+	static inline REL::Relocation<decltype(thunk)> func;
+};
 
-		RE::BSShaderMaterial::Feature feature = RE::BSShaderMaterial::Feature::kDefault;
-		stream.iStr->read(&feature, 1);
-
-		{
-			auto vtable = REL::Relocation<void***>(RE::NiShadeProperty::VTABLE[0]);
-			auto baseMethod = reinterpret_cast<void (*)(RE::NiShadeProperty*, RE::NiStream&)>((vtable.get()[0x18]));
-			baseMethod(property, stream);
-		}
-
-		stream.iStr->read(&property->flags, 1);
-
-		bool isPbr = false;
-		{
-			RE::BSLightingShaderMaterialBase* material = nullptr;
-			if (property->flags.any(kMenuScreen)) {
-				auto* pbrMaterial = BSLightingShaderMaterialPBR::Make();
-				pbrMaterial->inputFilePath = stream.inputFilePath;
-				pbrMaterial->loadedWithFeature = feature;
-				material = pbrMaterial;
-				isPbr = true;
-			} else {
-				material = RE::BSLightingShaderMaterialBase::CreateMaterial(feature);
-			}
-			property->SetMaterial(nullptr, false);
-			property->material = material;
-		}
-
-		{
-			stream.iStr->read(&property->material->texCoordOffset[0].x, 1);
-			stream.iStr->read(&property->material->texCoordOffset[0].y, 1);
-			stream.iStr->read(&property->material->texCoordScale[0].x, 1);
-			stream.iStr->read(&property->material->texCoordScale[0].y, 1);
-
-			property->material->texCoordOffset[1] = property->material->texCoordOffset[0];
-			property->material->texCoordScale[1] = property->material->texCoordScale[0];
-		}
-
-		stream.LoadLinkID();
-
-		{
-			RE::NiColor emissiveColor{};
-			stream.iStr->read(&emissiveColor.red, 1);
-			stream.iStr->read(&emissiveColor.green, 1);
-			stream.iStr->read(&emissiveColor.blue, 1);
-
-			if (property->emissiveColor != nullptr && property->flags.any(kOwnEmit)) {
-				*property->emissiveColor = emissiveColor;
+struct BSLightingShaderProperty_LinkObject
+{
+	static void thunk(RE::BSLightingShaderProperty* property, RE::NiStream& stream)
+	{
+		func(property, stream);
+		if (BSLightingShaderMaterialPBR::IsPBR(property->material)) {
+			auto* material = static_cast<BSLightingShaderMaterialPBR*>(property->material);
+			if (material->valid && !material->ValidateTextureSet()) {
+				material->valid = false;
+				logger::error("[TruePBR] rejected texture set in {}", stream.inputFilePath);
 			}
 		}
+	}
+	static inline REL::Relocation<decltype(thunk)> func;
+};
 
-		stream.iStr->read(&property->emissiveMult, 1);
+template <size_t Slot>
+struct PBR_GetAuxiliaryPasses
+{
+	static RE::BSShaderProperty::RenderPassArray* thunk(RE::BSLightingShaderProperty* property, RE::BSGeometry* geometry, uint32_t renderFlags, RE::BSShaderAccumulator* accumulator)
+	{
+		return PBRNif::CanRender(property) ? func(property, geometry, renderFlags, accumulator) : nullptr;
+	}
+	static inline REL::Relocation<decltype(thunk)> func;
+};
 
-		static_cast<RE::BSLightingShaderMaterialBase*>(property->material)->LoadBinary(stream);
-
-		if (isPbr) {
-			auto pbrMaterial = static_cast<BSLightingShaderMaterialPBR*>(property->material);
-			if (property->flags.any(kMultiLayerParallax)) {
-				pbrMaterial->pbrFlags.set(PBRFlags::TwoLayer);
-				if (property->flags.any(kSoftLighting)) {
-					pbrMaterial->pbrFlags.set(PBRFlags::InterlayerParallax);
-				}
-				if (property->flags.any(kBackLighting)) {
-					pbrMaterial->pbrFlags.set(PBRFlags::CoatNormal);
-				}
-				if (property->flags.any(kEffectLighting)) {
-					pbrMaterial->pbrFlags.set(PBRFlags::ColoredCoat);
-				}
-			} else if (property->flags.any(kBackLighting)) {
-				pbrMaterial->pbrFlags.set(PBRFlags::HairMarschner);
-			} else {
-				if (property->flags.any(kRimLighting)) {
-					pbrMaterial->pbrFlags.set(PBRFlags::Subsurface);
-				}
-				if (property->flags.any(kSoftLighting)) {
-					pbrMaterial->pbrFlags.set(PBRFlags::Fuzz);
-				} else if (property->flags.any(kFitSlope)) {
-					pbrMaterial->glintParameters.enabled = true;
-				}
-			}
-
-			// It was a bad idea originally to use kMenuScreen flag to enable PBR since it's actually used for world map
-			// meshes. But it was too late to move to use different flag so internally we use kVertexLighting instead
-			// as it's not used for Lighting shader.
-			property->flags.set(kVertexLighting);
-
-			property->flags.reset(kMenuScreen, kSpecular, kGlowMap, kEnvMap, kMultiLayerParallax, kSoftLighting, kRimLighting, kBackLighting, kAnisotropicLighting, kEffectLighting, kFitSlope);
-		} else {
-			// There are some modded non-PBR meshes with kVertexLighting enabled.
-			property->flags.reset(kVertexLighting);
-		}
+struct PBR_GetDepthPass
+{
+	static RE::BSRenderPass* thunk(RE::BSLightingShaderProperty* property, RE::BSGeometry* geometry)
+	{
+		return PBRNif::CanRender(property) ? func(property, geometry) : nullptr;
 	}
 	static inline REL::Relocation<decltype(thunk)> func;
 };
@@ -767,6 +735,9 @@ struct BSLightingShaderProperty_GetRenderPasses
 {
 	static RE::BSShaderProperty::RenderPassArray* thunk(RE::BSLightingShaderProperty* property, RE::BSGeometry* geometry, std::uint32_t renderFlags, RE::BSShaderAccumulator* accumulator)
 	{
+		if (!PBRNif::CanRender(property)) {
+			return nullptr;
+		}
 		auto renderPasses = func(property, geometry, renderFlags, accumulator);
 		if (renderPasses == nullptr) {
 			return renderPasses;
@@ -774,11 +745,8 @@ struct BSLightingShaderProperty_GetRenderPasses
 
 		const auto issEnabledAndInteriorWithSun = globals::features::interiorSun.loaded && globals::features::interiorSun.isInteriorWithSun;
 
-		bool isPbr = false;
-
-		if (property->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kVertexLighting) && (property->material->GetFeature() == RE::BSShaderMaterial::Feature::kDefault || property->material->GetFeature() == RE::BSShaderMaterial::Feature::kMultiTexLandLODBlend)) {
-			isPbr = true;
-		}
+		const bool isPbr = BSLightingShaderMaterialPBR::IsPBR(property->material) ||
+		                   BSLightingShaderMaterialPBRLandscape::IsPBR(property->material);
 
 		auto currentPass = renderPasses->head;
 		while (currentPass != nullptr) {
@@ -790,15 +758,22 @@ struct BSLightingShaderProperty_GetRenderPasses
 				lightingFlags &= ~0b111000u;
 				if (isPbr) {
 					lightingFlags |= static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::TruePbr);
-					lightingFlags &= ~static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::Specular);
-					if (property->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kMultiTextureLandscape)) {
+					lightingFlags &= ~(static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::Specular) |
+									   static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::SoftLighting) |
+									   static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::RimLighting) |
+									   static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::BackLighting) |
+									   static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::AnisoLighting));
+					if (BSLightingShaderMaterialPBRLandscape::IsPBR(property->material)) {
 						auto* material = static_cast<BSLightingShaderMaterialPBRLandscape*>(property->material);
 						if (material->HasGlint()) {
 							lightingFlags |= static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::AnisoLighting);
 						}
 					} else {
 						auto* material = static_cast<BSLightingShaderMaterialPBR*>(property->material);
-						if (material->glintParameters.enabled || (property->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kProjectedUV) && material->projectedMaterialGlintParameters.enabled)) {
+						const bool projectedGlint = property->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kProjectedUV) &&
+						                            material->projectedMaterialGlintParameters.enabled &&
+						                            material->pbrFlags.none(PBRFlags::TwoLayer, PBRFlags::Fuzz, PBRFlags::HairMarschner);
+						if (material->pbrFlags.any(PBRFlags::Glint) || projectedGlint) {
 							lightingFlags |= static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::AnisoLighting);
 						}
 					}
@@ -820,13 +795,11 @@ struct BSLightingShaderProperty_GetRenderPasses
 
 bool TruePBR::BSLightingShader_SetupMaterial(RE::BSLightingShader* shader, RE::BSLightingShaderMaterialBase const* material)
 {
-	using enum SIE::ShaderCache::LightingShaderTechniques;
-
 	const auto& lightingPSConstants = ShaderConstants::LightingPS::Get();
 
 	auto lightingFlags = shader->currentRawTechnique & ~(~0u << 24);
-	auto lightingType = static_cast<SIE::ShaderCache::LightingShaderTechniques>((shader->currentRawTechnique >> 24) & 0x3F);
-	if (!(lightingType == LODLand || lightingType == LODLandNoise) && (lightingFlags & static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::TruePbr))) {
+	if ((BSLightingShaderMaterialPBR::IsPBR(material) || BSLightingShaderMaterialPBRLandscape::IsPBR(material)) &&
+		(lightingFlags & static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::TruePbr))) {
 		auto shadowState = globals::game::shadowState;
 		auto renderer = globals::game::renderer;
 		auto graphicsState = globals::game::graphicsState;
@@ -835,7 +808,7 @@ bool TruePBR::BSLightingShader_SetupMaterial(RE::BSLightingShader* shader, RE::B
 		RE::BSGraphics::Renderer::PrepareVSConstantGroup(RE::BSGraphics::ConstantGroupLevel::PerMaterial);
 		RE::BSGraphics::Renderer::PreparePSConstantGroup(RE::BSGraphics::ConstantGroupLevel::PerMaterial);
 
-		if (lightingType == MTLand || lightingType == MTLandLODBlend) {
+		if (BSLightingShaderMaterialPBRLandscape::IsPBR(material)) {
 			auto* pbrMaterial = static_cast<const BSLightingShaderMaterialPBRLandscape*>(material);
 
 			constexpr size_t NormalStartIndex = 7;
@@ -899,7 +872,7 @@ bool TruePBR::BSLightingShader_SetupMaterial(RE::BSLightingShader* shader, RE::B
 					PBRParams[2] = pbrMaterial->specularLevels[textureIndex];
 					shadowState->SetPSConstant(PBRParams, RE::BSGraphics::ConstantGroupLevel::PerMaterial, PBRParamsStartIndex + textureIndex);
 
-					std::array<float, 4> glintParameters;
+					std::array<float, 4> glintParameters{};
 					glintParameters[0] = pbrMaterial->glintParameters[textureIndex].screenSpaceScale;
 					glintParameters[1] = 40.f - pbrMaterial->glintParameters[textureIndex].logMicrofacetDensity;
 					glintParameters[2] = pbrMaterial->glintParameters[textureIndex].microfacetRoughness;
@@ -909,14 +882,14 @@ bool TruePBR::BSLightingShader_SetupMaterial(RE::BSLightingShader* shader, RE::B
 			}
 
 			{
-				std::array<float, 4> lodTexParams;
+				std::array<float, 4> lodTexParams{};
 				lodTexParams[0] = pbrMaterial->terrainTexOffsetX;
 				lodTexParams[1] = pbrMaterial->terrainTexOffsetY;
 				lodTexParams[2] = 1.f;
 				lodTexParams[3] = pbrMaterial->terrainTexFade;
 				shadowState->SetPSConstant(lodTexParams, RE::BSGraphics::ConstantGroupLevel::PerMaterial, lightingPSConstants.LODTexParams);
 			}
-		} else if (lightingType == None || lightingType == TreeAnim) {
+		} else {
 			auto* pbrMaterial = static_cast<const BSLightingShaderMaterialPBR*>(material);
 			CHECK_PBR_TEXTURE(diffuseTexture);
 			CHECK_PBR_TEXTURE(normalTexture);
@@ -950,14 +923,14 @@ bool TruePBR::BSLightingShader_SetupMaterial(RE::BSLightingShader* shader, RE::B
 					shaderFlags.set(PBRShaderFlags::ColoredCoat);
 				}
 
-				std::array<float, 4> PBRParams2;
+				std::array<float, 4> PBRParams2{};
 				PBRParams2[0] = pbrMaterial->GetCoatColor().red;
 				PBRParams2[1] = pbrMaterial->GetCoatColor().green;
 				PBRParams2[2] = pbrMaterial->GetCoatColor().blue;
 				PBRParams2[3] = pbrMaterial->GetCoatStrength();
 				shadowState->SetPSConstant(PBRParams2, RE::BSGraphics::ConstantGroupLevel::PerMaterial, lightingPSConstants.PBRParams2);
 
-				std::array<float, 4> PBRParams3;
+				std::array<float, 4> PBRParams3{};
 				PBRParams3[0] = pbrMaterial->GetCoatRoughness();
 				PBRParams3[1] = pbrMaterial->GetCoatSpecularLevel();
 				shadowState->SetPSConstant(PBRParams3, RE::BSGraphics::ConstantGroupLevel::PerMaterial, lightingPSConstants.MultiLayerParallaxData);
@@ -967,7 +940,7 @@ bool TruePBR::BSLightingShader_SetupMaterial(RE::BSLightingShader* shader, RE::B
 				if (pbrMaterial->pbrFlags.any(PBRFlags::Subsurface)) {
 					shaderFlags.set(PBRShaderFlags::Subsurface);
 
-					std::array<float, 4> PBRParams2;
+					std::array<float, 4> PBRParams2{};
 					PBRParams2[0] = pbrMaterial->GetSubsurfaceColor().red;
 					PBRParams2[1] = pbrMaterial->GetSubsurfaceColor().green;
 					PBRParams2[2] = pbrMaterial->GetSubsurfaceColor().blue;
@@ -977,7 +950,7 @@ bool TruePBR::BSLightingShader_SetupMaterial(RE::BSLightingShader* shader, RE::B
 				if (pbrMaterial->pbrFlags.any(PBRFlags::Fuzz)) {
 					shaderFlags.set(PBRShaderFlags::Fuzz);
 
-					std::array<float, 4> PBRParams3;
+					std::array<float, 4> PBRParams3{};
 					PBRParams3[0] = pbrMaterial->GetFuzzColor().red;
 					PBRParams3[1] = pbrMaterial->GetFuzzColor().green;
 					PBRParams3[2] = pbrMaterial->GetFuzzColor().blue;
@@ -987,7 +960,7 @@ bool TruePBR::BSLightingShader_SetupMaterial(RE::BSLightingShader* shader, RE::B
 					if (pbrMaterial->GetGlintParameters().enabled) {
 						shaderFlags.set(PBRShaderFlags::Glint);
 
-						std::array<float, 4> GlintParameters;
+						std::array<float, 4> GlintParameters{};
 						GlintParameters[0] = pbrMaterial->GetGlintParameters().screenSpaceScale;
 						GlintParameters[1] = 40.f - pbrMaterial->GetGlintParameters().logMicrofacetDensity;
 						GlintParameters[2] = pbrMaterial->GetGlintParameters().microfacetRoughness;
@@ -997,7 +970,7 @@ bool TruePBR::BSLightingShader_SetupMaterial(RE::BSLightingShader* shader, RE::B
 					if ((lightingFlags & static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::ProjectedUV)) != 0 && pbrMaterial->GetProjectedMaterialGlintParameters().enabled) {
 						shaderFlags.set(PBRShaderFlags::ProjectedGlint);
 
-						std::array<float, 4> ProjectedGlintParameters;
+						std::array<float, 4> ProjectedGlintParameters{};
 						ProjectedGlintParameters[0] = pbrMaterial->GetProjectedMaterialGlintParameters().screenSpaceScale;
 						ProjectedGlintParameters[1] = 40.f - pbrMaterial->GetProjectedMaterialGlintParameters().logMicrofacetDensity;
 						ProjectedGlintParameters[2] = pbrMaterial->GetProjectedMaterialGlintParameters().microfacetRoughness;
@@ -1008,13 +981,13 @@ bool TruePBR::BSLightingShader_SetupMaterial(RE::BSLightingShader* shader, RE::B
 			}
 
 			{
-				std::array<float, 4> PBRProjectedUVParams1;
+				std::array<float, 4> PBRProjectedUVParams1{};
 				PBRProjectedUVParams1[0] = pbrMaterial->GetProjectedMaterialBaseColorScale()[0];
 				PBRProjectedUVParams1[1] = pbrMaterial->GetProjectedMaterialBaseColorScale()[1];
 				PBRProjectedUVParams1[2] = pbrMaterial->GetProjectedMaterialBaseColorScale()[2];
 				shadowState->SetPSConstant(PBRProjectedUVParams1, RE::BSGraphics::ConstantGroupLevel::PerMaterial, lightingPSConstants.MaterialObjectRGBScale);
 
-				std::array<float, 4> PBRProjectedUVParams2;
+				std::array<float, 4> PBRProjectedUVParams2{};
 				PBRProjectedUVParams2[0] = pbrMaterial->GetProjectedMaterialRoughness();
 				PBRProjectedUVParams2[1] = pbrMaterial->GetProjectedMaterialSpecularLevel();
 				shadowState->SetPSConstant(PBRProjectedUVParams2, RE::BSGraphics::ConstantGroupLevel::PerMaterial, lightingPSConstants.ParallaxOccData);
@@ -1038,7 +1011,7 @@ bool TruePBR::BSLightingShader_SetupMaterial(RE::BSLightingShader* shader, RE::B
 				shaderFlags.set(PBRShaderFlags::HasDisplacement);
 			}
 
-			const bool hasFeaturesTexture0 = pbrMaterial->featuresTexture0 != nullptr && pbrMaterial->featuresTexture0 != graphicsState->GetRuntimeData().defaultTextureWhite;
+			const bool hasFeaturesTexture0 = pbrMaterial->pbrFlags.any(PBRFlags::Subsurface, PBRFlags::TwoLayer) && pbrMaterial->featuresTexture0 != nullptr && pbrMaterial->featuresTexture0 != graphicsState->GetRuntimeData().defaultTextureWhite;
 			if (hasFeaturesTexture0) {
 				shadowState->SetPSTexture(12, pbrMaterial->featuresTexture0->rendererTexture);
 				shadowState->SetPSTextureAddressMode(12, static_cast<RE::BSGraphics::TextureAddressMode>(pbrMaterial->textureClampMode));
@@ -1047,7 +1020,7 @@ bool TruePBR::BSLightingShader_SetupMaterial(RE::BSLightingShader* shader, RE::B
 				shaderFlags.set(PBRShaderFlags::HasFeaturesTexture0);
 			}
 
-			const bool hasFeaturesTexture1 = pbrMaterial->featuresTexture1 != nullptr && pbrMaterial->featuresTexture1 != graphicsState->GetRuntimeData().defaultTextureWhite;
+			const bool hasFeaturesTexture1 = pbrMaterial->pbrFlags.any(PBRFlags::Fuzz, PBRFlags::TwoLayer) && pbrMaterial->featuresTexture1 != nullptr && pbrMaterial->featuresTexture1 != graphicsState->GetRuntimeData().defaultTextureWhite;
 			if (hasFeaturesTexture1) {
 				shadowState->SetPSTexture(9, pbrMaterial->featuresTexture1->rendererTexture);
 				shadowState->SetPSTextureAddressMode(9, static_cast<RE::BSGraphics::TextureAddressMode>(pbrMaterial->textureClampMode));
@@ -1072,7 +1045,7 @@ bool TruePBR::BSLightingShader_SetupMaterial(RE::BSLightingShader* shader, RE::B
 		{
 			const uint32_t bufferIndex = smState->textureTransformCurrentBuffer;
 
-			std::array<float, 4> texCoordOffsetScale;
+			std::array<float, 4> texCoordOffsetScale{};
 			texCoordOffsetScale[0] = material->texCoordOffset[bufferIndex].x;
 			texCoordOffsetScale[1] = material->texCoordOffset[bufferIndex].y;
 			texCoordOffsetScale[2] = material->texCoordScale[bufferIndex].x;
@@ -1145,6 +1118,18 @@ struct BSLightingShader_GetPixelTechnique
 
 void SetupPBRLandscapeTextureParameters(BSLightingShaderMaterialPBRLandscape& material, const TruePBR::PBRTextureSetData& textureSetData, uint32_t textureIndex)
 {
+	PBRParameters parameters;
+	parameters.displacementScale = textureSetData.displacementScale;
+	parameters.roughnessScale = textureSetData.roughnessScale;
+	parameters.specularLevel = textureSetData.specularLevel;
+	parameters.glintScreenSpaceScale = textureSetData.glintParameters.screenSpaceScale;
+	parameters.glintLogMicrofacetDensity = textureSetData.glintParameters.logMicrofacetDensity;
+	parameters.glintMicrofacetRoughness = textureSetData.glintParameters.microfacetRoughness;
+	parameters.glintDensityRandomization = textureSetData.glintParameters.densityRandomization;
+	if (textureIndex >= BSLightingShaderMaterialPBRLandscape::NumTiles || !parameters.IsValid()) {
+		logger::error("[TruePBR] rejected invalid landscape TXST parameters");
+		return;
+	}
 	material.displacementScales[textureIndex] = textureSetData.displacementScale;
 	material.roughnessScales[textureIndex] = textureSetData.roughnessScale;
 	material.specularLevels[textureIndex] = textureSetData.specularLevel;
@@ -1246,7 +1231,7 @@ bool TruePBR::TESObjectLAND_SetupMaterial(RE::TESObjectLAND* land)
 				material->landscapeRMAOSTextures[textureIndex] = stateData.defaultTextureWhite;
 			}
 
-			auto& textureSets = BSLightingShaderMaterialPBRLandscape::All[material];
+			std::array<TruePBR::PBRTextureSetData*, BSLightingShaderMaterialPBRLandscape::NumTiles> textureSets{};
 
 			if (auto defTexture = land->loadedData->defQuadTextures[quadIndex]) {
 				SetupLandscapeTexture(*material, *defTexture, 0, textureSets);
@@ -1257,6 +1242,10 @@ bool TruePBR::TESObjectLAND_SetupMaterial(RE::TESObjectLAND* land)
 				if (auto landTexture = land->loadedData->quadTextures[quadIndex][textureIndex]) {
 					SetupLandscapeTexture(*material, *landTexture, textureIndex + 1, textureSets);
 				}
+			}
+			{
+				const std::lock_guard lock(BSLightingShaderMaterialPBRLandscape::AllLock);
+				BSLightingShaderMaterialPBRLandscape::All[material] = textureSets;
 			}
 
 			if (globals::game::bEnableLandFade->GetBool()) {
@@ -1277,8 +1266,6 @@ bool TruePBR::TESObjectLAND_SetupMaterial(RE::TESObjectLAND* land)
 			shaderProperty->SetFlags(RE::BSShaderProperty::EShaderPropertyFlag8::kCastShadows, true);
 			shaderProperty->SetFlags(RE::BSShaderProperty::EShaderPropertyFlag8::kNoLODLandBlend, noLODLandBlend);
 
-			shaderProperty->SetFlags(RE::BSShaderProperty::EShaderPropertyFlag8::kVertexLighting, true);
-
 			const auto& children = land->loadedData->mesh[quadIndex]->GetChildren();
 			auto geometry = children.empty() ? nullptr : static_cast<RE::BSGeometry*>(children[0].get());
 			shaderProperty->SetupGeometry(geometry);
@@ -1298,7 +1285,7 @@ bool TruePBR::TESObjectLAND_SetupMaterial(RE::TESObjectLAND* land)
 void TruePBR::SetupGrassMaterial(RE::BSLightingShaderProperty* sourceProperty, RE::BSLightingShaderProperty* grassProperty)
 {
 	if (!loaded || sourceProperty == nullptr || grassProperty == nullptr ||
-		!sourceProperty->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kVertexLighting)) {
+		!BSLightingShaderMaterialPBR::IsPBR(sourceProperty->material) || !PBRNif::CanRender(sourceProperty)) {
 		return;
 	}
 
@@ -1329,7 +1316,6 @@ void TruePBR::SetupGrassMaterial(RE::BSLightingShaderProperty* sourceProperty, R
 	}
 
 	grassProperty->SetMaterial(&grassMaterial, true);
-	grassProperty->SetFlags(RE::BSShaderProperty::EShaderPropertyFlag8::kMenuScreen, true);
 }
 
 struct TESForm_GetFormEditorID
@@ -1386,8 +1372,6 @@ struct BSTempEffectSimpleDecal_SetupGeometry
 				shaderProperty->SetFlags(kGlowMap, false);
 				shaderProperty->SetFlags(kEnvMap, false);
 				shaderProperty->SetFlags(kSpecular, false);
-
-				shaderProperty->SetFlags(kVertexLighting, true);
 			}
 		}
 	}
@@ -1425,8 +1409,6 @@ struct BSTempEffectGeometryDecal_Initialize
 				shaderProperty->SetFlags(kDynamicDecal, true);
 				shaderProperty->SetFlags(kZBufferTest, true);
 				shaderProperty->SetFlags(kZBufferWrite, false);
-
-				shaderProperty->SetFlags(kVertexLighting, true);
 			}
 
 			if (auto* alphaProperty = static_cast<RE::NiAlphaProperty*>(decal->decal->GetGeometryRuntimeData().alphaProperty.get())) {
@@ -1444,8 +1426,11 @@ struct BSGrassShaderProperty_GetRenderPasses
 {
 	static RE::BSShaderProperty::RenderPassArray* thunk(RE::BSLightingShaderProperty* property, RE::BSGeometry* geometry, std::uint32_t renderFlags, RE::BSShaderAccumulator* accumulator)
 	{
+		if (!PBRNif::CanRender(property)) {
+			return nullptr;
+		}
 		auto* renderPasses = func(property, geometry, renderFlags, accumulator);
-		if (renderPasses == nullptr || !property->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kMenuScreen)) {
+		if (renderPasses == nullptr || !BSLightingShaderMaterialPBR::IsPBR(property->material)) {
 			return renderPasses;
 		}
 
@@ -1502,7 +1487,7 @@ struct BSGrassShader_SetupMaterial
 	static void thunk(RE::BSShader* shader, RE::BSLightingShaderMaterialBase const* material)
 	{
 		const auto technique = static_cast<SIE::ShaderCache::GrassShaderTechniques>(globals::state->currentPixelDescriptor & 0b1111);
-		if (technique != SIE::ShaderCache::GrassShaderTechniques::TruePbr) {
+		if (technique != SIE::ShaderCache::GrassShaderTechniques::TruePbr || !BSLightingShaderMaterialPBR::IsPBR(material)) {
 			func(shader, material);
 			return;
 		}
@@ -1528,7 +1513,7 @@ struct BSGrassShader_SetupMaterial
 		if (pbrMaterial->pbrFlags.any(PBRFlags::Subsurface)) {
 			shaderFlags.set(PBRShaderFlags::Subsurface);
 		}
-		const bool hasFeaturesTexture0 = pbrMaterial->featuresTexture0 != nullptr &&
+		const bool hasFeaturesTexture0 = pbrMaterial->pbrFlags.any(PBRFlags::Subsurface) && pbrMaterial->featuresTexture0 != nullptr &&
 		                                 pbrMaterial->featuresTexture0 != globals::game::graphicsState->GetRuntimeData().defaultTextureWhite;
 		if (hasFeaturesTexture0) {
 			shadowState->SetPSTexture(4, pbrMaterial->featuresTexture0->rendererTexture);
@@ -1558,63 +1543,30 @@ struct TESBoundObject_Clone3D
 {
 	static RE::NiAVObject* thunk(RE::TESBoundObject* object, RE::TESObjectREFR* ref, bool arg3)
 	{
-		auto truePBR = &globals::features::truePBR;
 		auto* result = func(object, ref, arg3);
-		if (result != nullptr && ref != nullptr && ref->data.objectReference != nullptr && ref->data.objectReference->formType == RE::FormType::Static) {
+		if (result && ref && ref->data.objectReference && ref->data.objectReference->formType == RE::FormType::Static) {
 			auto* stat = static_cast<RE::TESObjectSTAT*>(ref->data.objectReference);
-			RE::BGSMaterialObject* currentMato = stat->data.materialObj;
-
-			// Resolve PBR MATO data: non-null applies MATO to geometries with
-			// fork-before-write protection; null means no PBR config and is a no-op.
-			auto* pbrData = (currentMato != nullptr && currentMato->directionalData.singlePass) ? truePBR->GetPBRMaterialObjectData(currentMato) : nullptr;
-
-			if (pbrData != nullptr) {
-				RE::BSVisit::TraverseScenegraphGeometries(result, [pbrData, ref](RE::BSGeometry* geometry) {
-					if (auto* shaderProperty = static_cast<RE::BSShaderProperty*>(geometry->GetGeometryRuntimeData().shaderProperty.get())) {
-						if (shaderProperty->GetMaterialType() == RE::BSShaderMaterial::Type::kLighting &&
-							shaderProperty->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kVertexLighting)) {
-							if (auto* material = static_cast<BSLightingShaderMaterialPBR*>(shaderProperty->material)) {
-								auto& ext = BSLightingShaderMaterialPBR::All[material];
-								const auto prevOwnerRefID = ext.lastOwnerRefFormID;
-
-								// Fork-before-write: if this material instance is already owned
-								// by a different ref whose MATO payload differs from the incoming
-								// one, clone it so we don't contaminate the previous owner's
-								// geometry.  Use pointer identity: GetPBRMaterialObjectData
-								// returns stable addresses into pbrMaterialObjects, so two
-								// different MATOs always produce different pointers regardless of
-								// whether their individual fields (baseColorScale, roughness,
-								// specularLevel, glint) happen to match.
-								const bool wouldContaminate =
-									(prevOwnerRefID != 0) &&
-									(prevOwnerRefID != ref->GetFormID()) &&
-									(ext.materialObjectData != pbrData);
-
-								BSLightingShaderMaterialPBR* targetMat = material;
-
-								if (wouldContaminate) {
-									auto* freshMat = BSLightingShaderMaterialPBR::Make();
-									if (freshMat) {
-										freshMat->CopyMembers(material);
-										shaderProperty->material = freshMat;
-										targetMat = freshMat;
-									} else {
-										logger::warn("[TruePBR] failed to clone PBR material for ref {:08X}; skipping to avoid contamination", ref->GetFormID());
-										return RE::BSVisit::BSVisitControl::kContinue;
-									}
-								}
-
-								targetMat->ApplyMaterialObjectData(*pbrData);
-								auto& targetExt = BSLightingShaderMaterialPBR::All[targetMat];
-								targetExt.materialObjectData = pbrData;
-								targetExt.lastOwnerRefFormID = ref->GetFormID();
-							}
-						}
+			auto* mato = stat->data.materialObj;
+			auto* data = mato && mato->directionalData.singlePass ? globals::features::truePBR.GetPBRMaterialObjectData(mato) : nullptr;
+			RE::BSVisit::TraverseScenegraphGeometries(result, [data](RE::BSGeometry* geometry) {
+				auto* property = static_cast<RE::BSShaderProperty*>(geometry->GetGeometryRuntimeData().shaderProperty.get());
+				if (property && BSLightingShaderMaterialPBR::IsPBR(property->material)) {
+					auto* source = static_cast<BSLightingShaderMaterialPBR*>(property->material);
+					BSLightingShaderMaterialPBR material;
+					material.CopyMembers(source);
+					material.ClearMaterialObjectData();
+					if (data) {
+						material.ApplyMaterialObjectData(*data);
 					}
-
-					return RE::BSVisit::BSVisitControl::kContinue;
-				});
-			}
+					{
+						const std::lock_guard lock(BSLightingShaderMaterialPBR::AllLock);
+						BSLightingShaderMaterialPBR::All[&material].materialObjectData = data;
+					}
+					property->SetMaterial(&material, true);
+					property->DoClearRenderPasses();
+				}
+				return RE::BSVisit::BSVisitControl::kContinue;
+			});
 		}
 		return result;
 	}
@@ -1626,9 +1578,10 @@ struct BGSTextureSet_ToShaderTextureSet
 	static RE::BSShaderTextureSet* thunk(RE::BGSTextureSet* textureSet)
 	{
 		auto truePBR = &globals::features::truePBR;
+		auto* result = func(textureSet);
 		truePBR->currentTextureSet = textureSet;
-
-		return func(textureSet);
+		truePBR->currentShaderTextureSet = RE::NiPointer(result);
+		return result;
 	}
 	static inline REL::Relocation<decltype(thunk)> func;
 };
@@ -1637,10 +1590,17 @@ struct BSLightingShaderProperty_OnLoadTextureSet
 {
 	static void thunk(RE::BSLightingShaderProperty* property, void* a2)
 	{
+		if (BSLightingShaderMaterialPBR::IsPBR(property->material)) {
+			BSLightingShaderMaterialPBR material;
+			material.CopyMembers(property->material);
+			property->SetMaterial(&material, true);
+			property->DoClearRenderPasses();
+		}
 		func(property, a2);
 
 		auto truePBR = &globals::features::truePBR;
 		truePBR->currentTextureSet = nullptr;
+		truePBR->currentShaderTextureSet.reset();
 	}
 	static inline REL::Relocation<decltype(thunk)> func;
 };
@@ -1680,11 +1640,19 @@ struct PBR_BSLightingShader_SetupMaterial
 
 void TruePBR::PostPostLoad()
 {
+	PBRControllers::Install();
 	logger::info("[TruePBR] Hooking BGSTextureSet");
 	stl::detour_thunk<BGSTextureSet_ToShaderTextureSet>(REL::RelocationID(20905, 21361));
 
+	stl::detour_thunk<BSLightingShaderMaterial_Create>(REL::RelocationID(100016, 106723));
+
 	logger::info("[TruePBR] Hooking BSLightingShaderProperty");
 	stl::write_vfunc<0x18, BSLightingShaderProperty_LoadBinary>(RE::VTABLE_BSLightingShaderProperty[0]);
+	stl::write_vfunc<0x19, BSLightingShaderProperty_LinkObject>(RE::VTABLE_BSLightingShaderProperty[0]);
+	stl::write_vfunc<0x2B, PBR_GetAuxiliaryPasses<0x2B>>(RE::VTABLE_BSLightingShaderProperty[0]);
+	stl::write_vfunc<0x2C, PBR_GetAuxiliaryPasses<0x2C>>(RE::VTABLE_BSLightingShaderProperty[0]);
+	stl::write_vfunc<0x2D, PBR_GetAuxiliaryPasses<0x2D>>(RE::VTABLE_BSLightingShaderProperty[0]);
+	stl::write_vfunc<0x2F, PBR_GetDepthPass>(RE::VTABLE_BSLightingShaderProperty[0]);
 	stl::write_vfunc<0x2A, BSLightingShaderProperty_GetRenderPasses>(RE::VTABLE_BSLightingShaderProperty[0]);
 	stl::detour_thunk<BSLightingShaderProperty_OnLoadTextureSet>(REL::RelocationID(99865, 106510));
 
