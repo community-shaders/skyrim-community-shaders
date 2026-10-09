@@ -85,8 +85,11 @@ namespace stl
 	inline LONG detour_attach(PVOID* a_target, PVOID a_thunk)
 	{
 		LONG result = DetourTransactionBegin();
-		if (result != NO_ERROR)
+		if (result != NO_ERROR) {
+			// Begin can claim the transaction before failing; release it for later hooks.
+			DetourTransactionAbort();
 			return result;
+		}
 		// A failed thread update must abort too, or the transaction commits and skips the fallback.
 		result = DetourUpdateThread(GetCurrentThread());
 		if (result == NO_ERROR)
