@@ -163,13 +163,18 @@ namespace Util
 		shaderCompileFailures.clear();
 	}
 
-	// Disk cache for shaders compiled through CompileShader (feature compute and post-process shaders), which the
-	// main shader cache does not cover. The key is a SHA-256 of the preprocessed source (includes and defines
-	// expanded), the entry point, the target and the compile flags, so any change to those misses the cache.
-	// Entries get their own folder because Data/ShaderCache/Utility already holds the vanilla Utility shader class,
-	// and they are removed with the rest of the disk cache.
-	namespace CompileShaderCache
+	// Disk cache for CompileShader's shaders, which the main shader cache does not cover (Data/ShaderCache/CompileShader).
+	namespace
 	{
+		/**
+		 * @brief Returns the cache entry path for one compile: a SHA-256 of the preprocessed source (includes and
+		 *        defines expanded), the entry point, the target, the flags and D3D_COMPILER_VERSION.
+		 *
+		 * D3D_COMPILER_VERSION is the d3dcompiler header's API generation, not the build of the loaded DLL. Entries are
+		 * named by content and never replaced, so editing a shader leaves its old entries behind until the disk cache is
+		 * cleared (Clear Shader Cache, or a plugin version change).
+		 * @return The path, or nullopt when the source cannot be read or preprocessed.
+		 */
 		std::optional<std::wstring> GetDiskPath(const wchar_t* filePath, const D3D_SHADER_MACRO* macros, ID3DInclude* include, const char* program, const char* programType, uint32_t flags)
 		{
 			std::ifstream file(filePath, std::ios::binary);
@@ -213,6 +218,7 @@ namespace Util
 			return std::format(L"Data/ShaderCache/CompileShader/{}.cso", name);
 		}
 
+		/** @brief Writes a compiled shader to its cache entry; a failure only costs the next launch a compile. */
 		void Store(const std::wstring& diskPath, ID3DBlob* blob)
 		{
 			std::error_code ec;
@@ -220,11 +226,20 @@ namespace Util
 			if (ec || !SIE::SShaderCache::WriteBlobAtomic(diskPath, blob))
 				logger::debug("Failed to write utility shader cache entry {}", Util::WStringToString(diskPath));
 		}
-	}
 
-	namespace
-	{
-		// Creates the shader object for a CompileShader target. Targets without a creation path return S_OK and no shader.
+		/** @brief True for the targets CreateShaderObject can turn into a shader: only those are read from or written to the cache. */
+		bool IsCacheableTarget(const char* programType)
+		{
+			for (const auto* target : { "ps_5_0", "vs_5_0", "hs_5_0", "ds_5_0", "cs_5_0", "cs_4_0" })
+				if (!_stricmp(programType, target))
+					return true;
+			return false;
+		}
+
+		/**
+		 * @brief Creates the shader object for a CompileShader target.
+		 * @return The device's result; a target without a creation path returns S_OK and no shader.
+		 */
 		HRESULT CreateShaderObject(ID3D11Device* device, const char* programType, ID3DBlob* blob, ID3D11DeviceChild** shader)
 		{
 			*shader = nullptr;
@@ -337,13 +352,12 @@ namespace Util
 			return nullptr;
 		}
 		std::optional<std::wstring> diskPath;
-		if (globals::shaderCache->IsDiskCache())
-			diskPath = CompileShaderCache::GetDiskPath(FilePath, macros.data(), &include, Program, ProgramType, flags);
+		if (globals::shaderCache->IsDiskCache() && IsCacheableTarget(ProgramType))
+			diskPath = GetDiskPath(FilePath, macros.data(), &include, Program, ProgramType, flags);
 
-		shaderBlob = diskPath ? SIE::SShaderCache::ReadIntactBlob(*diskPath).detach() : nullptr;
-		if (shaderBlob) {
+		if (const auto cachedBlob = diskPath ? SIE::SShaderCache::ReadIntactBlob(*diskPath) : nullptr) {
 			ID3D11DeviceChild* shader = nullptr;
-			if (SUCCEEDED(CreateShaderObject(device, ProgramType, shaderBlob, &shader))) {
+			if (SUCCEEDED(CreateShaderObject(device, ProgramType, cachedBlob.get(), &shader))) {
 				logger::debug("Loaded {} from {}", str, Util::WStringToString(*diskPath));
 				return shader;
 			}
@@ -351,8 +365,6 @@ namespace Util
 			logger::warn("Discarding cached shader {} rejected by the device", Util::WStringToString(*diskPath));
 			std::error_code ec;
 			std::filesystem::remove(*diskPath, ec);
-			shaderBlob->Release();
-			shaderBlob = nullptr;
 		}
 
 		logger::debug("Compiling {} with {}", str, DefinesToString(macros));
@@ -364,7 +376,7 @@ namespace Util
 		if (shaderErrors)
 			logger::debug("Shader logs:\n{}", static_cast<char*>(shaderErrors->GetBufferPointer()));
 		if (diskPath)
-			CompileShaderCache::Store(*diskPath, shaderBlob);
+			Store(*diskPath, shaderBlob);
 
 		ID3D11DeviceChild* shader = nullptr;
 		DX::ThrowIfFailed(CreateShaderObject(device, ProgramType, shaderBlob, &shader));
