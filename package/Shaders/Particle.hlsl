@@ -364,13 +364,16 @@ if (SharedData::enbSettings.EnableRain) {
 			{
 				uint clusteredLightIndex = LightLimitFix::lightList[lightOffset + i];
 				LightLimitFix::Light light = LightLimitFix::lights[clusteredLightIndex];
-				if (LightLimitFix::IsLightIgnored(light) || light.lightFlags & LightLimitFix::LightFlags::Shadow) {
+				if (LightLimitFix::IsLightIgnored(light)) {
 					continue;
 				}
 				float3 lightDirection = light.positionWS.xyz - positionWS.xyz;
 				float lightDist = length(lightDirection);
+				lightDirection /= max(lightDist, 1e-5);
 
-				float intensityMultiplier = LightLimitFix::GetAttenuation(lightDist, light);
+				float intensityMultiplier = LightLimitFix::GetAttenuation(lightDist, light) * light.fade;
+				[branch] if (intensityMultiplier > 1e-5 && (light.lightFlags & LightLimitFix::LightFlags::LocalShadow))
+					intensityMultiplier *= LightLimitFix::GetLocalShadow(LinearSampler, light.localShadowIndex, positionWS.xyz, FrameBuffer::CameraPosAdjust.xyz, lightDirection, false, 0.0);
 
 				float3 lightColor = light.color.xyz * intensityMultiplier;
 				propertyColor += lightColor;
