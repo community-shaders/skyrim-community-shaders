@@ -37,8 +37,8 @@ RE_VERSION = re.compile(r"(?i)version\s*=\s*([0-9]+)-([0-9]+)-([0-9]+)")
 RE_BUMP_SUGGESTION = re.compile(r"- \*\*(.+?)\.ini\*\*: bump to `([\d-]+)`.*\[link\]\([^)]+\) ?(?:\(([^)]+)\))?")
 
 # Release-stage flags (parsed from the feature .ini [Info] section). Alpha wins over Beta.
-RE_STAGE_ALPHA = re.compile(r"(?im)^[ \t]*alpha[ \t]*=[ \t]*(\w+)")
-RE_STAGE_BETA = re.compile(r"(?im)^[ \t]*beta[ \t]*=[ \t]*(\w+)")
+RE_STAGE_ALPHA = re.compile(r"(?m)^[ \t]*[Aa]lpha[ \t]*=[ \t]*([A-Za-z0-9]+)")
+RE_STAGE_BETA = re.compile(r"(?m)^[ \t]*[Bb]eta[ \t]*=[ \t]*([A-Za-z0-9]+)")
 STAGE_TRUTHY = {"true", "1", "yes", "on"}
 STAGE_RELEASE = "release"
 STAGE_BETA = "beta"
@@ -186,7 +186,7 @@ def get_feature_ini_metadata(feature_dir_or_ini_path):
         return {}
     parser = configparser.ConfigParser()
     try:
-        parser.read(ini_path, encoding='utf-8')
+        parser.read(ini_path, encoding='utf-8-sig')
     except Exception:
         return {}
 

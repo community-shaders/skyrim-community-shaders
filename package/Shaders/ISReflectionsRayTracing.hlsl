@@ -31,6 +31,9 @@ static const int iterations = 64.0;
 static const int binaryIterations = ceil(log2(iterations));
 
 static const float rayLength = 1.0;
+#	ifndef UNIFIED_WATER
+static const float maxValidDepth = 0.9999;
+#	endif
 
 float2 ConvertRaySample(float2 raySample)
 {
@@ -59,6 +62,10 @@ float4 GetReflectionColor(
 			return 0.0;
 
 		float iterationDepth = DepthTex.SampleLevel(DepthSampler, ConvertRaySample(sampleUV), 0).x;
+#	ifndef UNIFIED_WATER
+		if (iterationDepth > maxValidDepth)
+			continue;
+#	endif
 
 		if (saturate((raySample.z - iterationDepth) / SSRParams.y) > 0.0) {
 			float3 binaryMinRaySample = prevRaySample;
@@ -71,6 +78,16 @@ float4 GetReflectionColor(
 
 				sampleUV = binaryRaySample.xy;
 				iterationDepth = DepthTex.SampleLevel(DepthSampler, ConvertRaySample(sampleUV), 0).x;
+#	ifndef UNIFIED_WATER
+				if (iterationDepth > maxValidDepth) {
+					if (iterationDepth < binaryRaySample.z)
+						binaryMaxRaySample = binaryRaySample;
+					else
+						binaryMinRaySample = binaryRaySample;
+					depthThicknessFactor = 0.0;
+					continue;
+				}
+#	endif
 
 				// Compute expected depth vs actual depth
 				depthThicknessFactor = 1.0 - saturate(abs(binaryRaySample.z - iterationDepth) / SSRParams.y);
@@ -148,6 +165,12 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 viewNormal = DefaultNormal;
 
 	float depth = DepthTex.SampleLevel(DepthSampler, screenPosition, 0).x;
+#	ifndef UNIFIED_WATER
+	[branch] if (depth > maxValidDepth)
+	{
+		return psout;
+	}
+#	endif
 
 	float4 positionVS = float4(float2(uv.x, 1.0 - uv.y) * 2.0 - 1.0, depth, 1.0);
 	positionVS = mul(FrameBuffer::CameraProjInverse, positionVS);
@@ -163,13 +186,16 @@ PS_OUTPUT main(PS_INPUT input)
 		return psout;
 	}
 
-	float4 reflectionPosition = float4(viewPosition + reflectionDirection, 1.0);
-	float4 projReflectionPosition = mul(FrameBuffer::CameraProj, reflectionPosition);
-	projReflectionPosition /= projReflectionPosition.w;
-	projReflectionPosition.xy = projReflectionPosition.xy * float2(0.5, -0.5) + float2(0.5, 0.5);
+	float4 clipReflectionDirection = mul(FrameBuffer::CameraProj, float4(reflectionDirection, 0.0));
+	float3 ndcPosition = float3(uv * float2(2.0, -2.0) + float2(-1.0, 1.0), depth);
+	float3 projReflectionDirection = clipReflectionDirection.xyz - ndcPosition * clipReflectionDirection.w;
+	projReflectionDirection.xy *= float2(0.5, -0.5);
+	float directionLengthSquared = dot(projReflectionDirection, projReflectionDirection);
+	if (directionLengthSquared <= 0.0)
+		return psout;
+	projReflectionDirection *= rsqrt(directionLengthSquared) * rayLength;
 
 	float3 projPosition = float3(uv, depth);
-	float3 projReflectionDirection = normalize(projReflectionPosition.xyz - projPosition) * rayLength;
 
 	psout.Color = GetReflectionColor(projReflectionDirection, projPosition);
 

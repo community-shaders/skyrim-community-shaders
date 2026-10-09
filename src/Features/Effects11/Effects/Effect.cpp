@@ -566,16 +566,17 @@ Effect::TechniqueSequenceResult Effect::ExecuteTechniqueSequence(const std::stri
 	return { wroteChain, targetInOutput, targetInTemp };
 }
 
-void Effect::ExecuteTechnique(const std::string& techniqueName, TextureManager::Texture& output)
+bool Effect::ExecuteTechnique(const std::string& techniqueName, TextureManager::Texture& output)
 {
 	if (!IsCompiled() || !effect)
-		return;
+		return false;
 
 	auto technique = effect->GetTechniqueByName(techniqueName.c_str());
 	if (!technique || !technique->IsValid())
-		return;
+		return false;
 
 	RenderPasses(technique, output.rtv.get());
+	return true;
 }
 
 void Effect::SetupCustomTextures()

@@ -222,6 +222,15 @@ public:
 	// Atomic: written from the UI thread, read from compilation pool workers.
 	std::atomic_bool enableAvoidFlowControl{ false };
 
+	// Keep compiled shaders in Data/ShaderCache/ContentStore, keyed by their preprocessed source and
+	// compile inputs, so a cache wipe or plugin update restores unchanged shaders instead of recompiling.
+	// Atomic: written from the UI thread, read from compilation pool workers.
+	std::atomic_bool enableContentStore{ false };
+	/// Size limit of the persistent shader store in MB; least recently used shaders beyond it are evicted.
+	std::atomic<uint32_t> contentStoreMaxMB{ 4096 };
+	static constexpr uint32_t kContentStoreMinMB = 512;
+	static constexpr uint32_t kContentStoreMaxMB = 32768;
+
 	uint lastVertexDescriptor = 0;
 	uint lastPixelDescriptor = 0;
 	uint modifiedVertexDescriptor = 0;

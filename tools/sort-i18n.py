@@ -134,11 +134,15 @@ def main():
             with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
         except json.JSONDecodeError as e:
-            print(f"  {path.name}: SKIP (invalid JSON: {e})")
+            print(f"  {path.name}: SKIP (invalid JSON: {e})", file=sys.stderr)
+            if args.check:
+                sys.exit(1)
             continue
 
         if not isinstance(data, dict):
-            print(f"  {path.name}: SKIP (root is not a JSON object)")
+            print(f"  {path.name}: SKIP (root is not a JSON object)", file=sys.stderr)
+            if args.check:
+                sys.exit(1)
             continue
 
         extra_keys = get_extra_keys(data, en_key_order)

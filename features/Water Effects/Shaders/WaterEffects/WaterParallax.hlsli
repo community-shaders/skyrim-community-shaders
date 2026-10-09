@@ -41,19 +41,55 @@ namespace WaterEffects
 		return mipLevel;
 	}
 
-	float GetHeight(PS_INPUT input, float2 currentOffset, float3 normalScalesRcp, float3 mipLevels)
+	// Caps the ray march so large amplitude multipliers cannot drive unbounded per-pixel work
+	static const uint MaxParallaxSteps = 64;
+
+	/** @brief Intersects the last marched segment with the height field, or returns the last bound if the march hit MaxParallaxSteps. */
+	float GetParallaxAmount(float currBound, float currHeight, float prevHeight, float stepSize)
+	{
+		if (currHeight > currBound)
+			return currBound;
+
+		float prevBound = currBound - stepSize;
+		float delta2 = prevBound - prevHeight;
+		float delta1 = currBound - currHeight;
+		return (currBound * delta2 - prevBound * delta1) / (delta2 - delta1);
+	}
+
+	float GetHeight(PS_INPUT input, float2 currentOffset, float3 normalsAmplitude, float3 normalScalesRcp, float3 mipLevels)
 	{
 		float3 heights;
 		heights.x = Normals01Tex.SampleLevel(Normals01Sampler, input.TexCoord1.xy + currentOffset * normalScalesRcp.x, mipLevels.x).w;
 		heights.y = Normals02Tex.SampleLevel(Normals02Sampler, input.TexCoord1.zw + currentOffset * normalScalesRcp.y, mipLevels.y).w;
 		heights.z = Normals03Tex.SampleLevel(Normals03Sampler, input.TexCoord2.xy + currentOffset * normalScalesRcp.z, mipLevels.z).w;
 		heights = 1.0 - heights;
-		heights *= NormalsAmplitude.xyz;
+		heights *= normalsAmplitude;
 		return heights.x + heights.y + heights.z;
 	}
 
-	float2 GetParallaxOffset(PS_INPUT input, float3 normalScalesRcp)
+	float GetMeanAlpha(Texture2D<float4> tex, SamplerState samp)
 	{
+		uint width, height, levels;
+		tex.GetDimensions(0, width, height, levels);
+		return tex.SampleLevel(samp, 0.0.xx, levels - 1).w;
+	}
+
+	float GetMeanHeight(float3 normalsAmplitude)
+	{
+		float3 heights;
+		heights.x = GetMeanAlpha(Normals01Tex, Normals01Sampler);
+		heights.y = GetMeanAlpha(Normals02Tex, Normals02Sampler);
+		heights.z = GetMeanAlpha(Normals03Tex, Normals03Sampler);
+		heights = 1.0 - heights;
+		heights *= normalsAmplitude;
+		return heights.x + heights.y + heights.z;
+	}
+
+	float2 GetParallaxOffset(PS_INPUT input, float3 normalsAmplitude, float3 normalScalesRcp)
+	{
+		if (!any(normalsAmplitude))
+			return 0;
+
 		float3 viewDirection = normalize(input.WPosition.xyz);
 		float2 parallaxOffsetTS = viewDirection.xy / -viewDirection.z;
 
@@ -67,26 +103,22 @@ namespace WaterEffects
 		mipLevels.y = GetMipLevel(input.TexCoord1.zw, Normals02Tex, screenNoise);
 		mipLevels.z = GetMipLevel(input.TexCoord2.xy, Normals03Tex, screenNoise);
 
+		// The water plane is the mean surface, so march relative to the mean height
+		float meanHeight = GetMeanHeight(normalsAmplitude);
+
 		float stepSize = rcp(16.0);
 		float currBound = 0.0;
-		float currHeight = GetHeight(input, 0.0.xx, normalScalesRcp, mipLevels);
+		float currHeight = GetHeight(input, -meanHeight * parallaxOffsetTS.xy, normalsAmplitude, normalScalesRcp, mipLevels);
 		float prevHeight = currHeight;
 
-		[loop] while (currHeight > currBound)
+		[loop] for (uint i = 0; i < MaxParallaxSteps && currHeight > currBound; i++)
 		{
 			prevHeight = currHeight;
 			currBound += stepSize;
-			currHeight = GetHeight(input, currBound * parallaxOffsetTS.xy, normalScalesRcp, mipLevels);
+			currHeight = GetHeight(input, (currBound - meanHeight) * parallaxOffsetTS.xy, normalsAmplitude, normalScalesRcp, mipLevels);
 		}
 
-		float prevBound = currBound - stepSize;
-
-		float delta2 = prevBound - prevHeight;
-		float delta1 = currBound - currHeight;
-		float denominator = delta2 - delta1;
-		float parallaxAmount = (currBound * delta2 - prevBound * delta1) / denominator;
-
-		return parallaxOffsetTS.xy * parallaxAmount;
+		return parallaxOffsetTS.xy * (GetParallaxAmount(currBound, currHeight, prevHeight, stepSize) - meanHeight);
 	}
 
 #if defined(FLOWMAP)
@@ -129,9 +161,13 @@ namespace WaterEffects
 		int numSteps = (int)lerp(32.0, 8.0, viewDotUp);
 		float stepSize = rcp((float)numSteps);
 
+		float meanHeight = 1.0 - GetMeanAlpha(FlowMapNormalsTex, FlowMapNormalsSampler);
+
 		float currBound = 0.0;
+		PS_INPUT startInput = input;
+		startInput.TexCoord3.xy = input.TexCoord3.xy - meanHeight * parallaxDir;
 		float2 cellBlend0 = 0.5 + -(-0.5 + abs(frac(input.TexCoord2.zw * (64 * flowmapDims)) * 2 - 1));
-		float currHeight = 1.0 - GetFlowmapBlendedHeight(input, cellBlend0, uvShiftPx, 0);
+		float currHeight = 1.0 - GetFlowmapBlendedHeight(startInput, cellBlend0, uvShiftPx, 0);
 		float prevHeight = currHeight;
 
 		[loop] for (int i = 0; i < numSteps && currHeight > currBound; i++)
@@ -140,7 +176,7 @@ namespace WaterEffects
 			currBound += stepSize;
 
 			PS_INPUT offsetInput = input;
-			offsetInput.TexCoord3.xy = input.TexCoord3.xy + currBound * parallaxDir;
+			offsetInput.TexCoord3.xy = input.TexCoord3.xy + (currBound - meanHeight) * parallaxDir;
 
 			float2 cellBlend = 0.5 + -(-0.5 + abs(frac(offsetInput.TexCoord2.zw * (64 * flowmapDims)) * 2 - 1));
 			currHeight = 1.0 - GetFlowmapBlendedHeight(offsetInput, cellBlend, uvShiftPx, 0);
@@ -151,49 +187,48 @@ namespace WaterEffects
 		float delta1 = currBound - currHeight;
 		float denominator = delta2 - delta1;
 
-		return denominator != 0.0 ? (currBound * delta2 - prevBound * delta1) / denominator : currBound;
+		return (denominator != 0.0 ? (currBound * delta2 - prevBound * delta1) / denominator : currBound) - meanHeight;
 	}
 
-	float GetFlowmapParallaxHeight(PS_INPUT input, float2 currentOffset, float3 normalScalesRcp, float mipLevel)
+	float GetFlowmapParallaxHeight(PS_INPUT input, float2 currentOffset, float normalsAmplitude, float3 normalScalesRcp, float mipLevel)
 	{
 		float height = Normals01Tex.SampleLevel(Normals01Sampler, input.TexCoord1.xy + currentOffset * normalScalesRcp.x, mipLevel).w;
 		height = 1.0 - height;
-		height *= NormalsAmplitude.x;
+		height *= normalsAmplitude;
 		return height;
 	}
 
-	float2 GetFlowmapParallaxUVOffset(PS_INPUT input, float3 viewDirection, float3 normalScalesRcp)
+	float2 GetFlowmapParallaxUVOffset(PS_INPUT input, float3 viewDirection, float normalsAmplitude, float3 normalScalesRcp)
 	{
+		if (normalsAmplitude == 0.0)
+			return 0;
+
 		float2 parallaxOffsetTS = viewDirection.xy / -viewDirection.z;
 		parallaxOffsetTS *= 80.0;
 
 		float screenNoise = Random::InterleavedGradientNoise(input.HPosition.xy, SharedData::FrameCount);
 		float mipLevel = GetMipLevel(input.TexCoord1.xy, Normals01Tex, screenNoise);
 
+		float meanHeight = (1.0 - GetMeanAlpha(Normals01Tex, Normals01Sampler)) * normalsAmplitude;
+
 		float stepSize = rcp(16.0);
 		float currBound = 0.0;
-		float currHeight = GetFlowmapParallaxHeight(input, 0.0.xx, normalScalesRcp, mipLevel);
+		float currHeight = GetFlowmapParallaxHeight(input, -meanHeight * parallaxOffsetTS.xy, normalsAmplitude, normalScalesRcp, mipLevel);
 		float prevHeight = currHeight;
 
-		[loop] while (currHeight > currBound)
+		[loop] for (uint i = 0; i < MaxParallaxSteps && currHeight > currBound; i++)
 		{
 			prevHeight = currHeight;
 			currBound += stepSize;
-			currHeight = GetFlowmapParallaxHeight(input, currBound * parallaxOffsetTS.xy, normalScalesRcp, mipLevel);
+			currHeight = GetFlowmapParallaxHeight(input, (currBound - meanHeight) * parallaxOffsetTS.xy, normalsAmplitude, normalScalesRcp, mipLevel);
 		}
 
-		float prevBound = currBound - stepSize;
-		float delta2 = prevBound - prevHeight;
-		float delta1 = currBound - currHeight;
-		float denominator = delta2 - delta1;
-		float parallaxAmount = (currBound * delta2 - prevBound * delta1) / denominator;
-
-		return parallaxOffsetTS.xy * parallaxAmount;
+		return parallaxOffsetTS.xy * (GetParallaxAmount(currBound, currHeight, prevHeight, stepSize) - meanHeight);
 	}
 
-	float2 GetFlowmapParallaxOffset(PS_INPUT input, float2 flowmapDimensions, float3 viewDirection, float3 normalScalesRcp)
+	float2 GetFlowmapParallaxOffset(PS_INPUT input, float2 flowmapDimensions, float3 viewDirection, float normalsAmplitude, float3 normalScalesRcp)
 	{
-		return GetFlowmapParallaxUVOffset(input, viewDirection, normalScalesRcp);
+		return GetFlowmapParallaxUVOffset(input, viewDirection, normalsAmplitude, normalScalesRcp);
 	}
 #endif
 }

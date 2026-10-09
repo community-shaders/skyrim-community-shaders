@@ -112,6 +112,9 @@ public:
 	/** @brief Builds the per-frame constant buffer data including weather state and settings. */
 	PerFrame GetCommonBufferData() const;
 
+	/** @brief Advances the rain animation clock; runs once per frame, however often the feature buffer is rebuilt. */
+	virtual void Reset() override;
+
 	/** @brief Updates wetness state and binds the per-frame constant buffer. */
 	virtual void Prepass() override;
 	/** @brief Detects Splashes of Storms mod presence for compatibility handling. */
@@ -175,6 +178,7 @@ public:
 private:
 	void DrawWeatherAnalysis() const;
 
+	size_t rainTimer = 0;  // milliseconds; size_t for precision
 	bool splashesOfStormsLoaded = false;
 
 	// Weather wetness calculation result for debug display

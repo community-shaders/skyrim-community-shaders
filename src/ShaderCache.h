@@ -263,6 +263,8 @@ namespace SIE
 		std::atomic<uint64_t> failedTasks = 0;
 		std::atomic<uint64_t> cacheHitTasks = 0;            // number of compiles of a previously seen shader combo
 		std::atomic<uint64_t> diskHitTasks = 0;             // tasks resolved from disk cache rather than compiled
+		std::atomic<uint64_t> contentDedupeTasks = 0;       // compiles skipped because identical preprocessed code had already compiled this session
+		std::atomic<uint64_t> contentStoreHitTasks = 0;     // compiles skipped because the persistent shader store held an identical blob
 		std::atomic<uint64_t> diskHitPriorityWeight = 0;    // cumulative priority weight of disk-hit tasks
 		LARGE_INTEGER compilationPhaseStart = { 0 };        // time of first non-disk-hit task dispatch
 		std::atomic<bool> compilationPhaseStarted = false;  // set when first actual compilation begins
@@ -392,8 +394,11 @@ namespace SIE
 		bool IsDiskCache() const;
 		/** Sets whether the persistent disk cache is enabled. */
 		void SetDiskCache(bool value);
-		/** @brief Deletes the entire on-disk shader cache directory. */
-		void DeleteDiskCache();
+		/**
+		 * @brief Deletes the on-disk shader cache directory.
+		 * @param a_keepContentStore Keep the persistent shader store, whose blobs stay valid because they are keyed by their own inputs.
+		 */
+		void DeleteDiskCache(bool a_keepContentStore = false);
 		/** @brief Validates disk cache integrity against current shader sources and feature set. */
 		void ValidateDiskCache();
 		/** @brief Writes cache metadata (version, feature list) to the disk cache directory. */
@@ -505,7 +510,27 @@ namespace SIE
 		uint64_t GetCurrentFailedCount();
 		uint64_t GetTotalTasks();
 		uint64_t GetDiskHitTasks();
+		uint64_t GetContentDedupeTasks();
 		void IncCacheHitTasks();
+		void IncContentDedupeTasks();
+		/** @brief Number of compiles satisfied by the persistent shader store in the current batch. */
+		uint64_t GetContentStoreHitTasks();
+		/** @brief Counts a compile satisfied by the persistent shader store. */
+		void IncContentStoreHitTasks();
+		/** @brief Deletes every blob in the persistent shader store, whether or not the setting is on. */
+		void ClearContentStore();
+		/** @brief Applies the store size limit setting now, evicting least recently used shaders if it was lowered. */
+		void ApplyContentStoreLimit();
+		/** @brief Where the persistent shader store lives and how much it holds. */
+		struct ContentStoreUsage
+		{
+			std::string path;  ///< Absolute, UTF-8
+			uint64_t blobs = 0;
+			uint64_t bytes = 0;
+			uint64_t maxBytes = 0;
+		};
+		/** @brief Measures the persistent shader store on disk; usable while the setting is off. */
+		ContentStoreUsage GetContentStoreUsage();
 		void ToggleErrorMessages();
 		void DisableShaderBlocking();
 		void IterateShaderBlock(bool a_forward = true);

@@ -1480,6 +1480,9 @@ struct BSGrassShader_SetupTechnique
 			return false;
 		}
 
+		// Match vanilla grass depth sampling so the alpha tests cover the same pixels.
+		shadowState->SetPSTextureFilterMode(0, RE::BSGraphics::TextureFilterMode::kTrilinear);
+
 		static auto fogMethod = REL::Relocation<void (*)()>(REL::RelocationID(100000, 106707));
 		fogMethod();
 
@@ -1501,9 +1504,11 @@ struct BSGrassShader_SetupMaterial
 {
 	static void thunk(RE::BSShader* shader, RE::BSLightingShaderMaterialBase const* material)
 	{
+		// Let vanilla bind the diffuse texture and clamp addressing, so it matches the depth pass
+		func(shader, material);
+
 		const auto technique = static_cast<SIE::ShaderCache::GrassShaderTechniques>(globals::state->currentPixelDescriptor & 0b1111);
 		if (technique != SIE::ShaderCache::GrassShaderTechniques::TruePbr) {
-			func(shader, material);
 			return;
 		}
 
@@ -1514,9 +1519,6 @@ struct BSGrassShader_SetupMaterial
 
 		RE::BSGraphics::Renderer::PreparePSConstantGroup(RE::BSGraphics::ConstantGroupLevel::PerMaterial);
 
-		shadowState->SetPSTexture(0, pbrMaterial->diffuseTexture->rendererTexture);
-		shadowState->SetPSTextureAddressMode(0, clampMode);
-		shadowState->SetPSTextureFilterMode(0, RE::BSGraphics::TextureFilterMode::kAnisotropic);
 		shadowState->SetPSTexture(2, pbrMaterial->normalTexture->rendererTexture);
 		shadowState->SetPSTextureAddressMode(2, clampMode);
 		shadowState->SetPSTextureFilterMode(2, RE::BSGraphics::TextureFilterMode::kAnisotropic);

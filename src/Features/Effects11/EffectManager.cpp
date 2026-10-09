@@ -31,7 +31,7 @@ EffectManager& EffectManager::GetSingleton()
 uint32_t EffectManager::GetFailedEffectCount() const
 {
 	uint32_t count = 0;
-	const Effect* allEffects[] = { &enbBloom, &enbLens, &enbAdaptation, &enbEffect, &enbEffectPostPass };
+	const Effect* allEffects[] = { &enbDepthOfField, &enbBloom, &enbLens, &enbAdaptation, &enbEffect, &enbEffectPostPass };
 	for (const auto* effect : allEffects)
 		if (effect->IsFilePresent() && !effect->GetErrors().empty())
 			count++;
@@ -41,7 +41,7 @@ uint32_t EffectManager::GetFailedEffectCount() const
 std::vector<std::string> EffectManager::GetAllErrors() const
 {
 	std::vector<std::string> result;
-	const Effect* allEffects[] = { &enbBloom, &enbLens, &enbAdaptation, &enbEffect, &enbEffectPostPass };
+	const Effect* allEffects[] = { &enbDepthOfField, &enbBloom, &enbLens, &enbAdaptation, &enbEffect, &enbEffectPostPass };
 	for (const auto* effect : allEffects)
 		if (effect->IsFilePresent() && !effect->GetErrors().empty())
 			for (const auto& err : effect->GetErrors())
@@ -118,6 +118,7 @@ void EffectManager::Apply()
 {
 	globals::features::effects11.LoadRaindropTexture();
 
+	enbDepthOfField.Apply();
 	enbBloom.Apply();
 	enbLens.Apply();
 	enbAdaptation.Apply();
@@ -125,7 +126,7 @@ void EffectManager::Apply()
 	enbEffectPostPass.Apply();
 
 #ifdef ENABLE_ENB_EXTENDER
-	EffectBase* allEffects[] = { &enbBloom, &enbLens, &enbAdaptation, &enbEffect, &enbEffectPostPass };
+	EffectBase* allEffects[] = { &enbDepthOfField, &enbBloom, &enbLens, &enbAdaptation, &enbEffect, &enbEffectPostPass };
 	for (auto* effect : allEffects) {
 		if (effect->IsCompiled())
 			effect->LoadWeatherData();
@@ -137,7 +138,7 @@ void EffectManager::Apply()
 
 void EffectManager::Load()
 {
-	EffectBase* allEffects[] = { &enbBloom, &enbLens, &enbAdaptation, &enbEffect, &enbEffectPostPass };
+	EffectBase* allEffects[] = { &enbDepthOfField, &enbBloom, &enbLens, &enbAdaptation, &enbEffect, &enbEffectPostPass };
 	for (auto* effect : allEffects) {
 		effect->Load();
 #ifdef ENABLE_ENB_EXTENDER
@@ -150,6 +151,7 @@ void EffectManager::Load()
 
 void EffectManager::Save()
 {
+	enbDepthOfField.Save();
 	enbBloom.Save();
 	enbLens.Save();
 	enbAdaptation.Save();
@@ -172,6 +174,8 @@ void EffectManager::RegisterSettings()
 	settingManager.RegisterBoolSetting("EnableCloudShadows", "EFFECT", false, false);
 	settingManager.RegisterBoolSetting("EnableImageBasedLighting", "EFFECT", false, false);
 	settingManager.RegisterBoolSetting("EnableVolumetricRays", "EFFECT", false, false);
+	settingManager.RegisterBoolSetting("EnableDepthOfField", "EFFECT", false, false);
+	settingManager.RegisterBoolSetting("EnableWater", "EFFECT", false, false);
 
 	settingManager.RegisterFloatSetting("Brightness", "COLORCORRECTION", 1.0f, 0.0f, 10000.0f, 0.01f, false);
 	settingManager.RegisterFloatSetting("GammaCurve", "COLORCORRECTION", 1.0f, 1.0f, 2.2f, 0.01f, false);
@@ -191,6 +195,19 @@ void EffectManager::RegisterSettings()
 	settingManager.RegisterBoolSetting("ForceMinMaxValues", "ADAPTATION", false, false);
 	settingManager.RegisterFloatSetting("AdaptationMin", "ADAPTATION", 0.1f, 0.0f, 65536.0f, 0.01f, false);
 	settingManager.RegisterFloatSetting("AdaptationMax", "ADAPTATION", 10.0f, 0.0f, 65536.0f, 0.01f, false);
+
+	settingManager.RegisterFloatSetting("FocusingTime", "DEPTHOFFIELD", 1.0f, 0.1f, 10.0f, 0.01f, false);
+	settingManager.RegisterFloatSetting("ApertureTime", "DEPTHOFFIELD", 1.0f, 0.1f, 10.0f, 0.01f, false);
+
+	settingManager.RegisterTimeOfDaySetting("Brightness", "WATER", 1.0f, 0.0f, 10.0f, 0.01f, true);
+	settingManager.RegisterTimeOfDaySetting("WavesAmplitude", "WATER", 1.0f, 0.0f, 10.0f, 0.01f, true);
+	settingManager.RegisterFloatSetting("Muddiness", "WATER", 1.0f, 0.0f, 1.0f, 0.01f, false);
+	settingManager.RegisterFloatSetting("SunLightingMultiplier", "WATER", 0.0f, 0.0f, 1.0f, 0.01f, false);
+	settingManager.RegisterFloatSetting("SunSpecularMultiplier", "WATER", 1.0f, 0.0f, 1.0f, 0.01f, false);
+	settingManager.RegisterFloatSetting("FresnelMin", "WATER", 0.0f, 0.0f, 1.0f, 0.01f, false);
+	settingManager.RegisterFloatSetting("FresnelMax", "WATER", 1.0f, 0.0f, 1.0f, 0.01f, false);
+	settingManager.RegisterFloatSetting("FresnelMultiplier", "WATER", 1.0f, 0.0f, 4.0f, 0.01f, false);
+	settingManager.RegisterFloatSetting("ReflectionAmount", "WATER", 1.0f, 0.0f, 1.0f, 0.01f, false);
 
 	settingManager.RegisterTimeOfDaySetting("Intensity", "FIRE", 1.0f, 0.0f, 30000.0f, 0.01f, true);
 	settingManager.RegisterTimeOfDaySetting("Curve", "FIRE", 1.0f, 0.1f, 8.0f, 0.01f, true);
@@ -311,6 +328,7 @@ void EffectManager::RegisterSettings()
 	ids.useLens = settingManager.GetSettingID("EnableLens", "EFFECT");
 	ids.useAdaptation = settingManager.GetSettingID("EnableAdaptation", "EFFECT");
 	ids.usePostPass = settingManager.GetSettingID("EnablePostPassShader", "EFFECT");
+	ids.useDepthOfField = settingManager.GetSettingID("EnableDepthOfField", "EFFECT");
 
 	ids.enableMultipleWeathers = settingManager.GetSettingID("EnableMultipleWeathers", "WEATHER");
 	ids.enableLocationWeather = settingManager.GetSettingID("EnableLocationWeather", "WEATHER");
@@ -368,20 +386,8 @@ bool EffectManager::ExecuteEffects(RE::BSGraphics::RenderTargetData& a_input, RE
 
 	// Effects sample kMAIN as TextureOriginal, so mirror any other input into it
 	auto& textureOriginal = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
-	if (&a_input != &textureOriginal && a_input.SRV && textureOriginal.RTV) {
-		D3D11_TEXTURE2D_DESC srcDesc{}, dstDesc{};
-		if (a_input.texture && textureOriginal.texture) {
-			a_input.texture->GetDesc(&srcDesc);
-			textureOriginal.texture->GetDesc(&dstDesc);
-		}
-		if (a_input.texture && textureOriginal.texture && srcDesc.Format == dstDesc.Format && srcDesc.Width == dstDesc.Width && srcDesc.Height == dstDesc.Height && srcDesc.SampleDesc.Count == dstDesc.SampleDesc.Count) {
-			context->CopyResource(textureOriginal.texture, a_input.texture);
-		} else {
-			CopyTexture(a_input.SRV, textureOriginal.RTV, false);
-			ID3D11RenderTargetView* nullRTV = nullptr;
-			context->OMSetRenderTargets(1, &nullRTV, nullptr);
-		}
-	}
+	if (&a_input != &textureOriginal && a_input.SRV && textureOriginal.RTV)
+		CopyToTarget(a_input.texture, a_input.SRV, textureOriginal.texture, textureOriginal.RTV);
 
 	// Set our render state
 	context->RSSetState(rasterizerState.get());
@@ -400,6 +406,8 @@ bool EffectManager::ExecuteEffects(RE::BSGraphics::RenderTargetData& a_input, RE
 	globals::profiler->EndPass();
 
 	auto& textureManager = TextureManager::GetSingleton();
+
+	ExecuteEffect(enbDepthOfField, ids.useDepthOfField);
 
 	if (WillEffectRun(enbBloom, ids.useBloom) || WillEffectRun(enbLens, ids.useLens) || WillEffectRun(enbAdaptation, ids.useAdaptation))
 		textureManager.UpdateDownsampledTexture(textureOriginal.SRV);
@@ -936,6 +944,31 @@ void EffectManager::UpdateCommonVariablesForEffect(Effect& effect)
 
 	static constexpr float bloomSize[4] = { 1024.0f, 1.0f / 1024.0f, 1.0f, 1.0f };
 	effect.SetVectorVariable("BloomSize", bloomSize, sizeof(bloomSize));
+
+	if (&effect != &enbDepthOfField)
+		effect.SetShaderResourceVariable("TextureAperture", enbDepthOfField.GetApertureSRV());
+}
+
+void EffectManager::CopyToTarget(ID3D11Texture2D* a_source, ID3D11ShaderResourceView* a_sourceSRV, ID3D11Texture2D* a_dest, ID3D11RenderTargetView* a_destRTV)
+{
+	auto context = globals::d3d::context;
+
+	const bool distinct = a_source && a_dest && a_source != a_dest;
+	D3D11_TEXTURE2D_DESC srcDesc{}, dstDesc{};
+	if (distinct) {
+		a_source->GetDesc(&srcDesc);
+		a_dest->GetDesc(&dstDesc);
+	}
+	const bool layoutsMatch = srcDesc.Format == dstDesc.Format && srcDesc.Width == dstDesc.Width && srcDesc.Height == dstDesc.Height &&
+	                          srcDesc.MipLevels == dstDesc.MipLevels && srcDesc.ArraySize == dstDesc.ArraySize &&
+	                          srcDesc.SampleDesc.Count == dstDesc.SampleDesc.Count && srcDesc.SampleDesc.Quality == dstDesc.SampleDesc.Quality;
+	if (distinct && layoutsMatch)
+		context->CopyResource(a_dest, a_source);
+	else
+		CopyTexture(a_sourceSRV, a_destRTV, false);
+
+	ID3D11RenderTargetView* nullRTV = nullptr;
+	context->OMSetRenderTargets(1, &nullRTV, nullptr);
 }
 
 bool EffectManager::CopyTexture(ID3D11ShaderResourceView* a_source, ID3D11RenderTargetView* a_dest, bool a_dither)
