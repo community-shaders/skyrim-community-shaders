@@ -1393,7 +1393,11 @@ namespace SIE
 
 		bool WriteBlobAtomic(const std::wstring& diskPath, ID3DBlob* blob)
 		{
-			const std::wstring tempPath = diskPath + L".tmp";
+			// A temp name per call: two compiles of one key (two threads, or two game instances) must not
+			// write or delete each other's temp file. Both renames carry the same bytes, so either may win.
+			static std::atomic<uint32_t> tempCounter{ 0 };
+			const std::wstring tempPath = std::format(L"{}.{}-{}-{}.tmp", diskPath, GetCurrentProcessId(), GetCurrentThreadId(),
+				tempCounter.fetch_add(1, std::memory_order_relaxed));
 			std::error_code ec;
 			if (SUCCEEDED(D3DWriteBlobToFile(blob, tempPath.c_str(), true))) {
 				std::filesystem::rename(tempPath, diskPath, ec);
