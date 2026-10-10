@@ -709,9 +709,9 @@ void EffectManager::UpdateCommonData()
 			auto* lastWeather = sky->lastWeather ? sky->lastWeather : cachedLastWeather;
 
 			auto& weatherManager = WeatherManager::GetSingleton();
-			// Full form IDs, so same-numbered weathers from different plugins stay distinct
-			uint32_t currentID = sky->currentWeather ? sky->currentWeather->formID : 0;
-			uint32_t lastID = lastWeather ? lastWeather->formID : 0;
+			constexpr auto localMask = WeatherManager::LocalFormIDMask;
+			uint32_t currentID = sky->currentWeather ? sky->currentWeather->formID & localMask : 0;
+			uint32_t lastID = lastWeather ? lastWeather->formID & localMask : 0;
 
 			currentWeatherID = weatherManager.GetEffectiveWeatherID(currentID);
 			previousWeatherID = weatherManager.GetEffectiveWeatherID(lastID);
