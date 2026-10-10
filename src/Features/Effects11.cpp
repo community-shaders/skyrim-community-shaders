@@ -45,19 +45,13 @@ void Effects11::UpdateSkyScattering(PerFrame& a_data)
 	};
 
 	auto sky = globals::game::sky;
-	const bool sunVisible = sky && EffectManager::GetSunVisibility(sky->sun) > 0.0f;
 
-	// Keep the last direction while the sun is hidden above the horizon (e.g. by a weather), so
-	// the scattering does not jump; once it sets, keep tracking it so the twilight follows it down.
-	// The first direction is always taken, so a game loaded under a sun-hiding weather does not
-	// scatter from the zenith placeholder.
+	// Mirror the direction below the horizon while the sun is hidden (e.g. by a weather)
 	if (sky && sky->sun) {
-		const auto direction = globals::features::skySync.GetCelestialDirection(sky, SkySync::Caster::Sun);
-		const float length = direction.Length();
-		if (length > 1e-6f && (sunVisible || direction.z < 0.0f || !hasScatteringSunDirection)) {
-			scatteringSunDirection = { direction.x / length, direction.y / length, direction.z / length };
-			hasScatteringSunDirection = true;
-		}
+		auto direction = globals::features::skySync.GetCelestialDirection(sky, SkySync::Caster::Sun);
+		if (EffectManager::GetSunVisibility(sky->sun) <= 0.0f && direction.z > 0.0f)
+			direction.z = -direction.z;
+		scatteringSunDirection = { direction.x, direction.y, direction.z };
 	}
 
 	const float sunHeight = scatteringSunDirection.z;
@@ -101,7 +95,7 @@ void Effects11::UpdateSkyScattering(PerFrame& a_data)
 	a_data.SkyScatteringAtmosphereThickness = 100.0f / std::max(atmosphereThickness * atmosphereThickness, 1e-6f);
 	a_data.SkyScatteringAirGlowIntensity = timeOfDay("AirGlowIntensity");
 	a_data.SkyScatteringAirGlowRange = 1.0f / std::max(airGlowRange * airGlowRange, 1e-6f);
-	a_data.SkyScatteringSunGlowIntensity = sunVisible ? timeOfDay("SunGlowIntensity") : 0.0f;
+	a_data.SkyScatteringSunGlowIntensity = timeOfDay("SunGlowIntensity");
 	a_data.SkyScatteringSunGlowRange = 10.0f / std::max(sunGlowRange * sunGlowRange, 1e-6f);
 	a_data.SkyScatteringMoonGlowAmount = timeOfDay("MoonGlowAmount");
 	a_data.SkyScatteringMoonGlowRange = 10.0f / std::max(moonGlowRange * moonGlowRange, 1e-6f);
