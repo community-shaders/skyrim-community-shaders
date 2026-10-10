@@ -85,13 +85,20 @@ private:
 	static inline float cachedMaxP99Ms = 0.0f;
 	static inline std::vector<GroupEntry> cachedGroups;
 
-	static inline ImGuiUtils::ProfilerGraph gpuGraph{ Profiler::kHistorySize };
-
-	struct FeatureGraphState
+	struct GraphState
 	{
-		ImGuiUtils::ProfilerGraph graph{ Profiler::kHistorySize };
+		ImGuiUtils::ProfilerGraph graph;
+		Util::GraphSampleGate gate;
+
+		// User-provided so the static members below can default-construct it in-class.
+		GraphState() :
+			graph(Profiler::kHistorySize) {}
+
+		/** @brief Records this frame's tasks (if the gate allows) and renders the graph. */
+		void Render(const std::vector<legit::ProfilerTask>& tasks, float baseLegendWidth, float baseHeight, float minFrameTimeSec);
 	};
-	static inline std::unordered_map<std::string, FeatureGraphState> featureGraphs;
+	static inline GraphState gpuGraph;
+	static inline std::unordered_map<std::string, GraphState> featureGraphs;
 
 	static inline std::unordered_map<std::string, ImU32> groupColorMap;
 	static inline size_t nextColorIndex = 0;

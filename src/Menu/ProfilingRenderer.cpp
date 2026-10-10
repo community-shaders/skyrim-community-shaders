@@ -217,18 +217,19 @@ void ProfilingRenderer::RenderGraph()
 		accumulated += timeMs;
 	}
 
-	if (tasks.empty())
-		return;
+	if (!tasks.empty())
+		gpuGraph.Render(tasks, kMainGraphLegendWidth, kMainGraphHeight, kMainGraphMinFrameTimeSec);
+}
 
-	gpuGraph.LoadFrameData(tasks.data(), tasks.size());
+void ProfilingRenderer::GraphState::Render(const std::vector<legit::ProfilerTask>& tasks, float baseLegendWidth, float baseHeight, float minFrameTimeSec)
+{
+	if (gate.ShouldSample())
+		graph.LoadFrameData(tasks.data(), tasks.size());
 
-	float maxFrameTimeSec = gpuGraph.GetPeakFrameTime() * kGraphHeadroomScale;
-	if (maxFrameTimeSec < kMainGraphMinFrameTimeSec)
-		maxFrameTimeSec = kMainGraphMinFrameTimeSec;
+	const float maxFrameTimeSec = std::max(graph.GetPeakFrameTime() * kGraphHeadroomScale, minFrameTimeSec);
+	const auto layout = GetGraphLayout(ImGui::GetContentRegionAvail().x, baseLegendWidth, baseHeight);
 
-	const auto layout = GetGraphLayout(ImGui::GetContentRegionAvail().x, kMainGraphLegendWidth, kMainGraphHeight);
-
-	gpuGraph.RenderTimings(layout.graphWidth, layout.legendWidth, layout.height, 0, maxFrameTimeSec, layout.uiScale);
+	graph.RenderTimings(layout.graphWidth, layout.legendWidth, layout.height, 0, maxFrameTimeSec, layout.uiScale);
 
 	ImGui::Spacing();
 }
@@ -442,8 +443,6 @@ void ProfilingRenderer::RenderFeatureTimers(const std::string& featurePrefix)
 		return;
 	}
 
-	auto& state = featureGraphs[featurePrefix];
-
 	std::vector<legit::ProfilerTask> tasks;
 	double accumulated = 0.0;
 	for (const auto& e : entries) {
@@ -456,18 +455,7 @@ void ProfilingRenderer::RenderFeatureTimers(const std::string& featurePrefix)
 		accumulated += e.timeMs;
 	}
 
-	if (!tasks.empty()) {
-		state.graph.LoadFrameData(tasks.data(), tasks.size());
-
-		float maxFrameTimeSec = state.graph.GetPeakFrameTime() * kGraphHeadroomScale;
-		if (maxFrameTimeSec < kFeatureGraphMinFrameTimeSec)
-			maxFrameTimeSec = kFeatureGraphMinFrameTimeSec;
-
-		const auto layout = GetGraphLayout(ImGui::GetContentRegionAvail().x, kFeatureGraphLegendWidth, kFeatureGraphHeight);
-
-		state.graph.RenderTimings(layout.graphWidth, layout.legendWidth, layout.height, 0, maxFrameTimeSec, layout.uiScale);
-		ImGui::Spacing();
-	}
+	featureGraphs[featurePrefix].Render(tasks, kFeatureGraphLegendWidth, kFeatureGraphHeight, kFeatureGraphMinFrameTimeSec);
 
 	if (ImGui::BeginTable("##FeatureTimers", 4, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_PadOuterX | ImGuiTableFlags_Sortable | ImGuiTableFlags_SortTristate)) {
 		SetupTimingTableColumns(false);
