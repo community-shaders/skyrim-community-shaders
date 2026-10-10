@@ -818,6 +818,10 @@ float GetSnowParameterY(float texProjTmp, float alpha)
 #		include "Common/PBR.hlsli"
 #	endif
 
+#	if defined(LANDSCAPE) && defined(LANDSCAPE_SEAMS)
+#		include "Common/LandscapeSeams.hlsli"
+#	endif
+
 #	if defined(EMAT)
 #		include "ExtendedMaterials/ExtendedMaterials.hlsli"
 #	endif
@@ -990,9 +994,16 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #	endif  // defined (SKINNED) || !defined (MODELSPACENORMALS)
 
+#	if defined(LANDSCAPE) && defined(LANDSCAPE_SEAMS)
+	LandscapeSeams::Load(input.WorldPosition.xy + FrameBuffer::CameraPosAdjust.xy, input.LandBlendWeights1, input.LandBlendWeights2);
+#	endif
+
 #	if !defined(TRUE_PBR)
 #		if defined(LANDSCAPE)
 	float shininess = dot(input.LandBlendWeights1, LandscapeTexture1to4IsSpecPower) + input.LandBlendWeights2.x * LandscapeTexture5to6IsSpecPower.x + input.LandBlendWeights2.y * LandscapeTexture5to6IsSpecPower.y;
+#			if defined(LANDSCAPE_SEAMS)
+	shininess += dot(LandscapeSeams::ExtraWeights, LandscapeSeams::Data.SpecPower);
+#			endif
 #		else
 	float shininess = HasSpecular() ? SpecularColor.w : 0.0;
 #		endif  // defined (LANDSCAPE)
@@ -1298,6 +1309,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	// Normalise blend weights
 	float totalWeight = input.LandBlendWeights1.x + input.LandBlendWeights1.y + input.LandBlendWeights1.z +
 	                    input.LandBlendWeights1.w + input.LandBlendWeights2.x + input.LandBlendWeights2.y;
+#		if defined(LANDSCAPE_SEAMS)
+	totalWeight += dot(LandscapeSeams::ExtraWeights, 1.0);
+	if (totalWeight > 0.0)
+		LandscapeSeams::ExtraWeights /= totalWeight;
+#		endif
 	if (totalWeight > 0.0) {
 		input.LandBlendWeights1 /= totalWeight;
 		input.LandBlendWeights2.xy /= totalWeight;
@@ -1356,6 +1372,15 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 			input.LandBlendWeights1.w = weights[3];
 			input.LandBlendWeights2.x = weights[4];
 			input.LandBlendWeights2.y = weights[5];
+#			if defined(LANDSCAPE_SEAMS)
+			// Height blending covers only the engine layers; scale them back to their share beside the borrowed ones.
+			const float engineWeight = dot(input.LandBlendWeights1, 1.0) + input.LandBlendWeights2.x + input.LandBlendWeights2.y;
+			if (engineWeight > 0.0) {
+				const float engineScale = saturate(1.0 - dot(LandscapeSeams::ExtraWeights, 1.0)) / engineWeight;
+				input.LandBlendWeights1 *= engineScale;
+				input.LandBlendWeights2.xy *= engineScale;
+			}
+#			endif
 		}
 		hasTerrainParallaxShadow =
 			viewPosition.z < ExtendedMaterials::ParallaxCheapDistance &&
@@ -1429,6 +1454,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	LIGHTING_LANDSCAPE_BLEND_ONE_LAYER(3, TexLandColor4Sampler, SampLandColor4Sampler, TexLandNormal4Sampler, SampLandNormal4Sampler, input.LandBlendWeights1.w, LandscapeTexture1to4IsSnow.w)
 	LIGHTING_LANDSCAPE_BLEND_ONE_LAYER(4, TexLandColor5Sampler, SampLandColor5Sampler, TexLandNormal5Sampler, SampLandNormal5Sampler, input.LandBlendWeights2.x, LandscapeTexture5to6IsSnow.x)
 	LIGHTING_LANDSCAPE_BLEND_ONE_LAYER(5, TexLandColor6Sampler, SampLandColor6Sampler, TexLandNormal6Sampler, SampLandNormal6Sampler, input.LandBlendWeights2.y, LandscapeTexture5to6IsSnow.y)
+#		endif
+#		if defined(LANDSCAPE_SEAMS)
+	LANDSCAPE_SEAMS_BLEND_EXTRAS
 #		endif
 #		undef SampleTerrain
 

@@ -1,6 +1,7 @@
 ﻿#include "EngineFix.h"
 
 #include "EngineFixes/EffectShaderNoDecalsFix.h"
+#include "EngineFixes/LandscapeSeamsFix.h"
 #include "EngineFixes/ShadowmapCascadeCullingFix.h"
 #include "EngineFixes/ShadowmapCascadeRasterizerFix.h"
 #include "EngineFixes/WaterReflectionCubemapFix.h"
@@ -14,6 +15,7 @@ const std::vector<EngineFix*>& EngineFix::GetOnPostPostLoadFixesList()
 
 	static std::vector<EngineFix*> fixes = {
 		&effectShaderNoDecalsFix,
+		&LandscapeSeamsFix::GetInstance(),
 		&shadowmapCascadeCullingFix,
 		&shadowmapRasterizerFix,
 		&waterReflectionCubemapFix

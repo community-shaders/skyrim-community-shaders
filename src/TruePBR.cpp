@@ -474,8 +474,7 @@ void TruePBR::SetupTextureSetData()
 		} catch (const std::exception& e) {
 			logger::error("Failed to deserialize config for {}: {}.", editorId, e.what());
 			return false;
-		}
-	}, enableVerboseJsonLogging);
+		} }, enableVerboseJsonLogging);
 }
 
 void TruePBR::ReloadTextureSetData()
@@ -493,8 +492,7 @@ void TruePBR::ReloadTextureSetData()
 		} catch (const std::exception& e) {
 			logger::error("Failed to deserialize config for {}: {}.", editorId, e.what());
 			return false;
-		}
-	}, enableVerboseJsonLogging);
+		} }, enableVerboseJsonLogging);
 
 	for (const auto& [material, textureSets] : BSLightingShaderMaterialPBRLandscape::All) {
 		for (uint32_t textureSetIndex = 0; textureSetIndex < BSLightingShaderMaterialPBRLandscape::NumTiles; ++textureSetIndex) {
@@ -536,8 +534,7 @@ void TruePBR::SetupMaterialObjectData()
 		} catch (const std::exception& e) {
 			logger::error("Failed to deserialize config for {}: {}.", editorId, e.what());
 			return false;
-		}
-	}, enableVerboseJsonLogging);
+		} }, enableVerboseJsonLogging);
 }
 
 TruePBR::PBRMaterialObjectData* TruePBR::GetPBRMaterialObjectData(const RE::TESForm* materialObject)
@@ -787,7 +784,7 @@ struct BSLightingShaderProperty_GetRenderPasses
 				auto lightingTechnique = currentPass->passEnum - LightingTechniqueStart;
 				auto lightingFlags = lightingTechnique & ~(~0u << 24);
 				auto lightingType = static_cast<SIE::ShaderCache::LightingShaderTechniques>((lightingTechnique >> 24) & 0x3F);
-				lightingFlags &= ~0b111000u;
+				lightingFlags &= ~(static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::TruePbr) | static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::Deferred));
 				if (isPbr) {
 					lightingFlags |= static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::TruePbr);
 					lightingFlags &= ~static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::Specular);
@@ -1189,37 +1186,35 @@ RE::TESLandTexture* GetDefaultLandTexture()
 	return *defaultLandTextureAddress;
 }
 
-bool TruePBR::TESObjectLAND_SetupMaterial(RE::TESObjectLAND* land)
+bool TruePBR::IsPBRLand(const RE::TESObjectLAND* land)
 {
-	if (land == nullptr) {
+	if (land == nullptr || land->loadedData == nullptr) {
 		return false;
 	}
 
-	auto singleton = &globals::features::truePBR;
-
-	bool isPbr = false;
-	if (land->loadedData != nullptr) {
-		for (uint32_t quadIndex = 0; quadIndex < 4; ++quadIndex) {
-			if (land->loadedData->defQuadTextures[quadIndex] != nullptr) {
-				if (singleton->IsPBRTextureSet(Util::GetSeasonalSwap(land->loadedData->defQuadTextures[quadIndex]->textureSet))) {
-					isPbr = true;
-					break;
-				}
-			} else if (singleton->defaultPbrLandTextureSet != nullptr) {
-				isPbr = true;
+	for (uint32_t quadIndex = 0; quadIndex < 4; ++quadIndex) {
+		if (land->loadedData->defQuadTextures[quadIndex] != nullptr) {
+			if (IsPBRTextureSet(Util::GetSeasonalSwap(land->loadedData->defQuadTextures[quadIndex]->textureSet))) {
+				return true;
 			}
-			for (uint32_t textureIndex = 0; textureIndex < 6; ++textureIndex) {
-				if (land->loadedData->quadTextures[quadIndex][textureIndex] != nullptr) {
-					if (singleton->IsPBRTextureSet(Util::GetSeasonalSwap(land->loadedData->quadTextures[quadIndex][textureIndex]->textureSet))) {
-						isPbr = true;
-						break;
-					}
+		} else if (defaultPbrLandTextureSet != nullptr) {
+			return true;
+		}
+		for (uint32_t textureIndex = 0; textureIndex < 6; ++textureIndex) {
+			if (land->loadedData->quadTextures[quadIndex][textureIndex] != nullptr) {
+				if (IsPBRTextureSet(Util::GetSeasonalSwap(land->loadedData->quadTextures[quadIndex][textureIndex]->textureSet))) {
+					return true;
 				}
 			}
 		}
 	}
 
-	if (!isPbr) {
+	return false;
+}
+
+bool TruePBR::TESObjectLAND_SetupMaterial(RE::TESObjectLAND* land)
+{
+	if (!IsPBRLand(land)) {
 		return false;
 	}
 

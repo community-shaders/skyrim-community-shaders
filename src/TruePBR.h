@@ -101,6 +101,8 @@ public:
 	 * @return True if PBR materials were applied, false if no PBR texture sets were found.
 	 */
 	bool TESObjectLAND_SetupMaterial(RE::TESObjectLAND* land);
+	/** @brief True when TESObjectLAND_SetupMaterial gives this land PBR materials, i.e. any of its quads uses a PBR texture set. */
+	bool IsPBRLand(const RE::TESObjectLAND* land);
 	/**
 	 * @brief Configures per-material shader constants and textures for PBR rendering.
 	 *
