@@ -1527,28 +1527,54 @@ struct BSGrassShader_SetupMaterial
 		shadowState->SetPSTextureFilterMode(3, RE::BSGraphics::TextureFilterMode::kAnisotropic);
 
 		stl::enumeration<PBRShaderFlags> shaderFlags;
-		if (pbrMaterial->pbrFlags.any(PBRFlags::Subsurface)) {
-			shaderFlags.set(PBRShaderFlags::Subsurface);
+		const bool hasEmissive = pbrMaterial->emissiveTexture != nullptr &&
+		                         pbrMaterial->emissiveTexture != globals::game::graphicsState->GetRuntimeData().defaultTextureBlack;
+		if (hasEmissive) {
+			shadowState->SetPSTexture(6, pbrMaterial->emissiveTexture->rendererTexture);
+			shadowState->SetPSTextureAddressMode(6, clampMode);
+			shadowState->SetPSTextureFilterMode(6, RE::BSGraphics::TextureFilterMode::kAnisotropic);
+			shaderFlags.set(PBRShaderFlags::HasEmissive);
 		}
-		const bool hasFeaturesTexture0 = pbrMaterial->featuresTexture0 != nullptr &&
-		                                 pbrMaterial->featuresTexture0 != globals::game::graphicsState->GetRuntimeData().defaultTextureWhite;
-		if (hasFeaturesTexture0) {
-			shadowState->SetPSTexture(4, pbrMaterial->featuresTexture0->rendererTexture);
-			shadowState->SetPSTextureAddressMode(4, clampMode);
-			shadowState->SetPSTextureFilterMode(4, RE::BSGraphics::TextureFilterMode::kAnisotropic);
-			shaderFlags.set(PBRShaderFlags::HasFeaturesTexture0);
+		const bool hasSubsurface = pbrMaterial->pbrFlags.any(PBRFlags::Subsurface) &&
+		                           !pbrMaterial->pbrFlags.any(PBRFlags::TwoLayer) &&
+		                           !pbrMaterial->pbrFlags.any(PBRFlags::HairMarschner);
+		std::array<float, 4> pbrParams2{ 0.0f, 0.0f, 0.0f, 1.0f };
+		if (hasSubsurface) {
+			shaderFlags.set(PBRShaderFlags::Subsurface);
+			pbrParams2 = { pbrMaterial->GetSubsurfaceColor().red, pbrMaterial->GetSubsurfaceColor().green,
+				pbrMaterial->GetSubsurfaceColor().blue, pbrMaterial->GetSubsurfaceOpacity() };
+			const bool hasFeaturesTexture0 = pbrMaterial->featuresTexture0 != nullptr &&
+			                                 pbrMaterial->featuresTexture0 != globals::game::graphicsState->GetRuntimeData().defaultTextureWhite;
+			if (hasFeaturesTexture0) {
+				shadowState->SetPSTexture(4, pbrMaterial->featuresTexture0->rendererTexture);
+				shadowState->SetPSTextureAddressMode(4, clampMode);
+				shadowState->SetPSTextureFilterMode(4, RE::BSGraphics::TextureFilterMode::kAnisotropic);
+				shaderFlags.set(PBRShaderFlags::HasFeaturesTexture0);
+			}
+		}
+		const bool hasFuzz = pbrMaterial->pbrFlags.any(PBRFlags::Fuzz) &&
+		                     !pbrMaterial->pbrFlags.any(PBRFlags::TwoLayer) &&
+		                     !pbrMaterial->pbrFlags.any(PBRFlags::HairMarschner);
+		std::array<float, 4> pbrParams3{};
+		if (hasFuzz) {
+			shaderFlags.set(PBRShaderFlags::Fuzz);
+			pbrParams3 = { pbrMaterial->GetFuzzColor().red, pbrMaterial->GetFuzzColor().green,
+				pbrMaterial->GetFuzzColor().blue, pbrMaterial->GetFuzzWeight() };
+			const bool hasFeaturesTexture1 = pbrMaterial->featuresTexture1 != nullptr &&
+			                                 pbrMaterial->featuresTexture1 != globals::game::graphicsState->GetRuntimeData().defaultTextureWhite;
+			if (hasFeaturesTexture1) {
+				shadowState->SetPSTexture(5, pbrMaterial->featuresTexture1->rendererTexture);
+				shadowState->SetPSTextureAddressMode(5, clampMode);
+				shadowState->SetPSTextureFilterMode(5, RE::BSGraphics::TextureFilterMode::kAnisotropic);
+				shaderFlags.set(PBRShaderFlags::HasFeaturesTexture1);
+			}
 		}
 
 		shadowState->SetPSConstant(shaderFlags, RE::BSGraphics::ConstantGroupLevel::PerMaterial, grassPSConstants.PBRFlags);
 		std::array<float, 3> pbrParams1{ pbrMaterial->GetRoughnessScale(), pbrMaterial->GetSpecularLevel(), 0.0f };
 		shadowState->SetPSConstant(pbrParams1, RE::BSGraphics::ConstantGroupLevel::PerMaterial, grassPSConstants.PBRParams1);
-		std::array<float, 4> pbrParams2{
-			pbrMaterial->GetSubsurfaceColor().red,
-			pbrMaterial->GetSubsurfaceColor().green,
-			pbrMaterial->GetSubsurfaceColor().blue,
-			pbrMaterial->GetSubsurfaceOpacity()
-		};
 		shadowState->SetPSConstant(pbrParams2, RE::BSGraphics::ConstantGroupLevel::PerMaterial, grassPSConstants.PBRParams2);
+		shadowState->SetPSConstant(pbrParams3, RE::BSGraphics::ConstantGroupLevel::PerMaterial, grassPSConstants.PBRParams3);
 
 		RE::BSGraphics::Renderer::FlushPSConstantGroup(RE::BSGraphics::ConstantGroupLevel::PerMaterial);
 		RE::BSGraphics::Renderer::ApplyPSConstantGroup(RE::BSGraphics::ConstantGroupLevel::PerMaterial);

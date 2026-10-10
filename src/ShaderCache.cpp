@@ -924,6 +924,7 @@ namespace SIE
 				{ "PBRFlags", grassPSConstants.PBRFlags },
 				{ "PBRParams1", grassPSConstants.PBRParams1 },
 				{ "PBRParams2", grassPSConstants.PBRParams2 },
+				{ "PBRParams3", grassPSConstants.PBRParams3 },
 			};
 
 			auto& particleVS = result[static_cast<size_t>(RE::BSShader::Type::Particle)]

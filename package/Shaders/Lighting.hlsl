@@ -1897,6 +1897,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 			material.Thickness *= sampledSubsurfaceProperties.w;
 		}
+#			if defined(TREE_ANIM)
+		else
+		{
+			material.SubsurfaceColor *= material.BaseColor;
+		}
+#			endif
 		material.Thickness = lerp(material.Thickness, 1, projectedMaterialWeight);
 	}
 	else if ((PBRFlags & PBR::Flags::TwoLayer) != 0)
@@ -2756,6 +2762,23 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	color.xyz += indirectLobeWeights.diffuse * directionalAmbientColor;
 	color.xyz += transmissionColor;
 
+#	if defined(TRUE_PBR) && defined(TREE_ANIM)
+	float3 transmittedAmbientColor = 0.0f;
+	[branch] if (any(indirectLobeWeights.transmission > 0.0f))
+	{
+		float3 backAmbientColor = Color::Ambient(max(0, mul(DirectionalAmbient, float4(-ambientNormal, 1.0))));
+		color.xyz += GetFoliageTransmissionLighting(backAmbientColor, indirectLobeWeights.transmission, -ambientNormal,
+			input.WorldPosition.xyz, vertexAO, transmittedAmbientColor
+#		if defined(IBL)
+			, SampColorSampler, SharedData::iblSettings.UseStaticIBL && !inWorld && !inReflection
+#		endif
+#		if defined(SKYLIGHTING)
+			, skylightingSH
+#		endif
+		);
+	}
+#	endif
+
 	color.xyz *= vertexColor;
 
 #	if defined(SNOW)
@@ -3047,7 +3070,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	psout.Parameters.w = psout.Diffuse.w;
 #		endif
 
+#		if defined(TRUE_PBR) && defined(TREE_ANIM)
+	float masksZ = Color::RGBToYCoCg(directionalAmbientColor + transmittedAmbientColor * Color::PBRLightingScale * vertexColor).x;
+#		else
 	float masksZ = Color::RGBToYCoCg(directionalAmbientColor).x;
+#		endif
 
 #		if defined(SSS) && defined(SKIN)
 	psout.Masks = float4(saturate(baseColor.a), !(Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsBeastRace), masksZ, psout.Diffuse.w);

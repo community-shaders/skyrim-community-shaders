@@ -8,6 +8,40 @@
 #	include "Common/PBR.hlsli"
 #endif
 
+#if defined(TRUE_PBR) && (defined(TREE_ANIM) || defined(GRASS_LIGHTING))
+float3 GetFoliageTransmissionLighting(float3 ambientColor, float3 transmissionWeight, float3 backNormal,
+	float3 worldPosition, float vertexAO, out float3 transmittedAmbientColor
+#	if defined(IBL) && defined(LIGHTING)
+	, SamplerState iblSampler, bool useStaticIBL
+#	endif
+#	if defined(SKYLIGHTING)
+	, sh2 skylightingSH
+#	endif
+)
+{
+#	if defined(IBL)
+	if (SharedData::iblSettings.EnableIBL) {
+#		if defined(LIGHTING)
+		if (useStaticIBL)
+			ambientColor = ImageBasedLighting::GetStaticDiffuseIBL(backNormal, iblSampler);
+		else
+#		endif
+			ambientColor = ImageBasedLighting::GetDiffuseIBL(ambientColor, -backNormal);
+	}
+#	endif
+	transmittedAmbientColor = transmissionWeight * ambientColor;
+	float3 diffuseColor = transmittedAmbientColor;
+#	if defined(SKYLIGHTING)
+	// The ordinary diffuse helper biases downward normals upward; transmission needs the actual back hemisphere.
+	float skylightingDiffuse = SharedData::InInterior ? 1.0f :
+		saturate(Skylighting::EvaluateDiffuse(skylightingSH, backNormal, Skylighting::GetFadeOutFactor(worldPosition)) /
+			max(vertexAO, EPSILON_DIVISION));
+	Skylighting::ApplySkylighting(diffuseColor, transmittedAmbientColor, transmissionWeight, skylightingDiffuse);
+#	endif
+	return diffuseColor;
+}
+#endif
+
 #if defined(TRUE_PBR)
 DirectContext CreateDirectLightingContext(float3 worldNormal, float3 coatWorldNormal, float3 vertexNormal, float3 viewDir, float3 coatViewDir, float3 lightDir, float3 coatLightDir, float3 lightColor, float detailedShadow, float softShadow)
 #else
@@ -213,6 +247,9 @@ void EvaluateWetnessLighting(float3 wetnessNormal, DirectContext context, float 
 
 	lightingOutput.diffuse *= 1 - wetnessF;
 	lightingOutput.specular *= 1 - wetnessF;
+#if defined(TRUE_PBR) && defined(TREE_ANIM)
+	lightingOutput.transmission *= 1 - wetnessF;
+#endif
 	lightingOutput.specular += wetnessSpecular;
 }
 
@@ -232,6 +269,9 @@ float3 GetWetnessIndirectLobeWeights(inout IndirectLobeWeights lobeWeights, floa
 
 	lobeWeights.diffuse *= 1 - specularLobeWeight;
 	lobeWeights.specular *= 1 - specularLobeWeight;
+#if defined(TRUE_PBR) && defined(TREE_ANIM)
+	lobeWeights.transmission *= 1 - specularLobeWeight;
+#endif
 
 	return specularLobeWeight;
 }
