@@ -111,6 +111,8 @@ void GrassCollision::QueueCollisions()
 			});
 
 			BoundingBoxPacked boundingBox;
+			boundingBox.MinExtent = { FLT_MAX, FLT_MAX };
+			boundingBox.MaxExtent = { -FLT_MAX, -FLT_MAX };
 
 			boundingBox.IndexStart = collisionIndexExtent;
 			boundingBox.IndexEnd = collisionIndexExtent;

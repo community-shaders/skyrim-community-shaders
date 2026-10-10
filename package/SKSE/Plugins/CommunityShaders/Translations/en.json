@@ -1349,7 +1349,7 @@
     "feature.renderdoc.refresh_list": "Refresh List",
     "feature.renderdoc.restart_to_disable": "Requires restart to disable RenderDoc capture, performance will be severely impacted.",
     "feature.renderdoc.restart_to_enable": "Requires restart to enable RenderDoc capture.",
-    "feature.renderdoc.space_required": "At least {} MB of free space is required.",
+    "feature.renderdoc.space_required": "At least %llu MB of free space is required.",
     "feature.renderdoc.yes_delete": "Yes, Delete All",
     "feature.screen_space_gi.ao_only": "AO only",
     "feature.screen_space_gi.ao_power": "AO Power",

@@ -323,12 +323,15 @@ void EncodeP1(inout uint4 block, inout float blockMSLE, float3 texels[16])
 	if (all(blockCoord < TextureSizeInBlocks)) {
 		int2 texelBase = int2(blockCoord) * 4;
 
+		uint mipWidth, mipHeight, elements, levels;
+		SrcTexture.GetDimensions(MipLevel, mipWidth, mipHeight, elements, levels);
+		int2 maxTexel = int2(mipWidth, mipHeight) - 1;
+
 		float3 texels[16];
 		[unroll] for (int i = 0; i < 16; i++)
 		{
-			int tx = i % 4;
-			int ty = i / 4;
-			texels[i] = SrcTexture.Load(int4(texelBase.x + tx, texelBase.y + ty, int(faceIndex), int(MipLevel))).rgb;
+			int2 texel = min(texelBase + int2(i % 4, i / 4), maxTexel);
+			texels[i] = SrcTexture.Load(int4(texel, int(faceIndex), int(MipLevel))).rgb;
 		}
 
 		uint4 block = uint4(0, 0, 0, 0);

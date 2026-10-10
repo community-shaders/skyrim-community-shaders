@@ -32,7 +32,7 @@ public:
 	 * @param outputUAV UAV to write sharpened result to.
 	 * @param sharpness Sharpening strength (0.0 = no sharpening, higher = more sharp).
 	 */
-	void ApplySharpen(ID3D11ShaderResourceView* inputTexture, ID3D11UnorderedAccessView* outputUAV, float sharpness);
+	bool ApplySharpen(ID3D11ShaderResourceView* inputTexture, ID3D11UnorderedAccessView* outputUAV, float sharpness);
 
 private:
 	void CreateComputeShader();

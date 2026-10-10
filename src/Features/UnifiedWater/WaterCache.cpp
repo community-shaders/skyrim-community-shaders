@@ -914,6 +914,13 @@ bool WaterCache::TryReadCacheFromFile(const std::string& name, WorldSpaceHeader&
 		return false;
 	}
 
+	std::error_code ec;
+	const auto fileSize = fs::file_size(path, ec);
+	if (ec || fileSize < sizeof(header) || header.dataCount < 0 || static_cast<std::uintmax_t>(header.dataCount) > (fileSize - sizeof(header)) / sizeof(T)) {
+		logger::error("[Unified Water] [Cache] Payload size mismatch for '{}'", path.string());
+		return false;
+	}
+
 	vec.resize(header.dataCount);
 	if (!vec.empty()) {
 		ifs.read(reinterpret_cast<char*>(vec.data()), vec.size() * sizeof(T));

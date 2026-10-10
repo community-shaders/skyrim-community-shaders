@@ -249,8 +249,12 @@ void GrassOptimizations::UpdateGrass()
 
 	if (!GetCullCS() || !ctx1 || !cullParamsCB) {
 		// Without a cull dispatch, the args buffers are never written. Skip drawing grass this frame to avoid drawing stale data. 
-		for (auto& [key, b] : bucketStore.buckets)
+		for (auto& [key, b] : bucketStore.buckets) {
 			b.ResetCullState();
+			b.ReleaseResources();
+			for (auto& s : b.slices)
+				s.bufferOffset = UINT32_MAX;
+		}
 		bucketStore.DiscardPending();
 		return;
 	}

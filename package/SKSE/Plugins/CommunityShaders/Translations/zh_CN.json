@@ -991,7 +991,7 @@
     "feature.renderdoc.refresh_list": "刷新列表",
     "feature.renderdoc.restart_to_disable": "需要重启才能禁用RenderDoc捕获，性能将受到严重影响。",
     "feature.renderdoc.restart_to_enable": "需要重启才能启用RenderDoc捕获。",
-    "feature.renderdoc.space_required": "至少需要{} MB的可用空间。",
+    "feature.renderdoc.space_required": "至少需要%llu MB的可用空间。",
     "feature.renderdoc.yes_delete": "是，全部删除",
     "feature.screen_space_gi.ao_only": "仅AO",
     "feature.screen_space_gi.ao_power": "AO强度",

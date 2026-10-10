@@ -865,10 +865,8 @@ WetnessEffects::PerFrame WetnessEffects::GetCommonBufferData() const
 						if (!precipObject) {
 							precipObject = precip->lastPrecip;
 						}
-						if (precipObject) {
-							auto& effect = precipObject->GetGeometryRuntimeData().shaderProperty;
-							auto shaderProp = effect.get();
-							auto particleShaderProperty = netimmerse_cast<RE::BSParticleShaderProperty*>(shaderProp);
+						auto particleShaderProperty = precipObject ? netimmerse_cast<RE::BSParticleShaderProperty*>(precipObject->GetGeometryRuntimeData().shaderProperty.get()) : nullptr;
+						if (particleShaderProperty && particleShaderProperty->particleEmitter) {
 							auto rain = (RE::BSParticleShaderRainEmitter*)(particleShaderProperty->particleEmitter);
 							data.OcclusionViewProj = rain->occlusionProjection;
 						}

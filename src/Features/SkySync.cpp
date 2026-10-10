@@ -218,7 +218,7 @@ void SkySync::OnSkyUpdateColors(RE::Sky* sky)
 	if (!settings.Enabled || !sky)
 		return;
 
-	if (settings.DimSunlightUnderHorizon && currentDim > 0.0f && currentDim < 1.0f) {
+	if (settings.DimSunlightUnderHorizon && currentDim < 1.0f) {
 		auto& dirLight = sky->skyColor[static_cast<uint>(RE::TESWeather::ColorTypes::kSunlight)];
 		dirLight.red *= currentDim;
 		dirLight.green *= currentDim;

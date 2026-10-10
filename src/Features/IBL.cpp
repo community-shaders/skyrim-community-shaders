@@ -264,8 +264,8 @@ void IBL::ReflectionsPrepass()
 			std::array<ID3D11ShaderResourceView*, 4> srvs = {
 				sceneDisabled ? nullptr : envIBLTexture->srv.get(),
 				sceneDisabled ? nullptr : skyIBLTexture->srv.get(),
-				staticDiffuseIBLTexture->srv.get(),
-				staticSpecularIBLTexture->srv.get()
+				staticDiffuseIBLTexture ? staticDiffuseIBLTexture->srv.get() : nullptr,
+				staticSpecularIBLTexture ? staticSpecularIBLTexture->srv.get() : nullptr
 			};
 			context->PSSetShaderResources(76, 4, srvs.data());
 		}

@@ -220,7 +220,11 @@ void ProfilingRenderer::RenderGraph()
 	if (tasks.empty())
 		return;
 
-	gpuGraph.LoadFrameData(tasks.data(), tasks.size());
+	static int lastLoadedFrame = -1;
+	if (lastLoadedFrame != ImGui::GetFrameCount()) {
+		lastLoadedFrame = ImGui::GetFrameCount();
+		gpuGraph.LoadFrameData(tasks.data(), tasks.size());
+	}
 
 	float maxFrameTimeSec = gpuGraph.GetPeakFrameTime() * kGraphHeadroomScale;
 	if (maxFrameTimeSec < kMainGraphMinFrameTimeSec)

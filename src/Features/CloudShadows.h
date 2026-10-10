@@ -56,6 +56,8 @@ public:
 	uint32_t renderedLayersMask[6] = {};
 	uint32_t globalRenderedMask = 0;
 	int previouslyRenderedSide = -1;
+	/** @brief Set once the occlusion has been cleared for a weather without cloud layers. */
+	bool occlusionClearedWithoutClouds = false;
 
 	ID3D11BlendState* cloudShadowBlendState = nullptr;
 

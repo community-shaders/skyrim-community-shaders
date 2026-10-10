@@ -302,7 +302,7 @@ void FidelityFX::CreateFSRResources()
 
 void FidelityFX::DestroyFSRResources()
 {
-	if (ffxFsr3ContextDestroy(&fsrContext[0]) != FFX_OK)
+	if (fsrScratchBuffer && ffxFsr3ContextDestroy(&fsrContext[0]) != FFX_OK)
 		logger::critical("[FidelityFX] Failed to destroy FSR3 context!");
 
 	// Free the scratch buffer to prevent memory leak

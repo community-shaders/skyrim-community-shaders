@@ -199,6 +199,7 @@
 	{
 		[branch] if (quality > 0.0)
 		{
+			sh0 = AdjustDisplacementNormalized(sh0, params);
 			uint tapCount = ParallaxShadowTapCount(quality);
 			float shadowStrength = ShadowIntensity * (4.0 / tapCount);
 			float2 rayDir = L.xy * 0.1 * params.HeightScale;

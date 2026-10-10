@@ -367,27 +367,29 @@ void SettingManager::SetValueInternal(uint32_t id, const T& value)
 		auto& weatherManager = WeatherManager::GetSingleton();
 		auto* entry = weatherManager.FindWeatherEntry(targetWeatherID);
 
-		if (entry) {
-			// Only the periods the edit changed become weather-defined; the rest keep following enbseries.ini
-			const uint8_t editedPeriods = ChangedPeriods(ResolveWeatherValue(targetWeatherID, id), value);
-			for (uint32_t linkedID : entry->weatherIDs) {
-				auto& data = weatherData[linkedID];
-				if (data.size() < allSettings.size()) {
-					auto oldSize = data.size();
-					data.resize(allSettings.size());
-					for (size_t i = oldSize; i < allSettings.size(); ++i) {
-						data[i] = allSettings[i].currentValue;
-					}
-				}
-				data[id] = value;
+		// A weather missing from the weather list still scopes the edit to itself instead of the global value
+		const std::vector<uint32_t> fallbackIDs{ targetWeatherID };
+		const auto& linkedIDs = entry ? entry->weatherIDs : fallbackIDs;
 
-				auto& defined = weatherDefined[linkedID];
-				if (defined.size() < allSettings.size())
-					defined.resize(allSettings.size(), 0);
-				defined[id] |= editedPeriods;
+		// Only the periods the edit changed become weather-defined; the rest keep following enbseries.ini
+		const uint8_t editedPeriods = ChangedPeriods(ResolveWeatherValue(targetWeatherID, id), value);
+		for (uint32_t linkedID : linkedIDs) {
+			auto& data = weatherData[linkedID];
+			if (data.size() < allSettings.size()) {
+				auto oldSize = data.size();
+				data.resize(allSettings.size());
+				for (size_t i = oldSize; i < allSettings.size(); ++i) {
+					data[i] = allSettings[i].currentValue;
+				}
 			}
-			return;
+			data[id] = value;
+
+			auto& defined = weatherDefined[linkedID];
+			if (defined.size() < allSettings.size())
+				defined.resize(allSettings.size(), 0);
+			defined[id] |= editedPeriods;
 		}
+		return;
 	}
 
 	setting.currentValue = value;

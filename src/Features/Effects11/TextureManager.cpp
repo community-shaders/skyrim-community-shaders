@@ -283,6 +283,11 @@ void TextureManager::DownsampleToFixed(ID3D11ShaderResourceView* source, Downsam
 	viewport.MaxDepth = 1.0f;
 	context->RSSetViewports(1, &viewport);
 
+	auto& effectManager = EffectManager::GetSingleton();
+	context->RSSetState(effectManager.rasterizerState.get());
+	context->OMSetBlendState(effectManager.blendState.get(), nullptr, 0xFFFFFFFF);
+	context->OMSetDepthStencilState(nullptr, 0);
+
 	context->VSSetShader(downsampleVS.get(), nullptr, 0);
 
 	ID3D11SamplerState* samplerArray[] = { linearSampler.get() };

@@ -765,10 +765,8 @@ spdlog::level::level_enum State::GetLogLevel()
 
 void State::SetDefines(std::string a_defines)
 {
-	shaderDefines.clear();
+	std::vector<std::pair<std::string, std::string>> parsedDefines;
 	shaderDefinesString = "";
-	std::string name = "";
-	std::string definition = "";
 	auto defines = pystring::split(a_defines, ";");
 	for (const auto& define : defines) {
 		auto cleanedDefine = pystring::strip(define);
@@ -779,20 +777,23 @@ void State::SetDefines(std::string a_defines)
 			logger::warn("Define string has too many '='; ignoring {}", define);
 			continue;
 		}
-		name = pystring::strip(token[0]);
-		if (token.size() == 2) {
-			definition = pystring::strip(token[1]);
-		}
+		std::string name = pystring::strip(token[0]);
+		std::string definition = token.size() == 2 ? pystring::strip(token[1]) : std::string{};
 		shaderDefinesString += pystring::strip(define) + ";";
-		shaderDefines.push_back(std::pair(name, definition));
+		parsedDefines.emplace_back(std::move(name), std::move(definition));
 	}
 	shaderDefinesString = shaderDefinesString.substr(0, shaderDefinesString.size() - 1);
+	{
+		std::scoped_lock lock(shaderDefinesMutex);
+		shaderDefines = std::make_shared<const std::vector<std::pair<std::string, std::string>>>(std::move(parsedDefines));
+	}
 	logger::debug("Shader Defines set to {}", shaderDefinesString);
 }
 
-std::vector<std::pair<std::string, std::string>>* State::GetDefines()
+std::shared_ptr<const std::vector<std::pair<std::string, std::string>>> State::GetDefines()
 {
-	return &shaderDefines;
+	std::scoped_lock lock(shaderDefinesMutex);
+	return shaderDefines;
 }
 
 bool State::ShaderEnabled(const RE::BSShader::Type a_type)

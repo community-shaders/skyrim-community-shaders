@@ -32,7 +32,7 @@ void RCAS::CreateComputeShader()
 	rcasComputeShader.attach((ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\Upscaling\\RCAS\\RCAS.hlsl", defines, "cs_5_0"));
 }
 
-void RCAS::ApplySharpen(ID3D11ShaderResourceView* inputSRV, ID3D11UnorderedAccessView* outputUAV, float sharpness)
+bool RCAS::ApplySharpen(ID3D11ShaderResourceView* inputSRV, ID3D11UnorderedAccessView* outputUAV, float sharpness)
 {
 	ZoneScoped;
 	TracyD3D11Zone(globals::state->tracyCtx, "RCAS Sharpening");
@@ -42,7 +42,7 @@ void RCAS::ApplySharpen(ID3D11ShaderResourceView* inputSRV, ID3D11UnorderedAcces
 
 	if (!rcasComputeShader) {
 		logger::warn("[RCAS] Compute shader not compiled");
-		return;
+		return false;
 	}
 
 	globals::profiler->BeginPass("Upscaling::RCAS");
@@ -80,4 +80,5 @@ void RCAS::ApplySharpen(ID3D11ShaderResourceView* inputSRV, ID3D11UnorderedAcces
 
 	globals::profiler->EndPass();
 	state->EndPerfEvent();
+	return true;
 }

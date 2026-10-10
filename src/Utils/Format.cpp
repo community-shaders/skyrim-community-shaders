@@ -215,15 +215,10 @@ namespace Util
 	std::string FormatDeltaWithPercent(float a, float b, float threshold)
 	{
 		float delta = b - a;
-		float percentDelta = 0.0f;
-		if (a < b && a > 0.0f) {
-			percentDelta = 100.0f * (b - a) / a;
-		} else if (b < a && b > 0.0f) {
-			percentDelta = 100.0f * (a - b) / b;
-		}
+		const float percentDelta = a > 0.0f ? 100.0f * delta / a : 0.0f;
 		char buffer[64];
-		if (percentDelta >= threshold) {
-			sprintf_s(buffer, " (+%.1f%%)", (b < a ? -percentDelta : percentDelta));
+		if (std::abs(percentDelta) >= threshold) {
+			sprintf_s(buffer, " (%+.1f%%)", percentDelta);
 		} else {
 			buffer[0] = '\0';
 		}

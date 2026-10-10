@@ -311,6 +311,10 @@ void FeatureListRenderer::RenderFeatureList(
 {
 	ImGui::BeginChild("Menus Table", ImVec2(0, -footerHeight));
 
+	// A search filter could hide the feature being navigated to
+	if (!pendingFeatureSelection.empty())
+		featureSearch.clear();
+
 	auto menuList = BuildMenuList(featureSearch, categoryExpansionStates, drawGeneralSettings, drawAdvancedSettings);
 
 	HandlePendingFeatureSelection(pendingFeatureSelection, menuList, selectedMenu);
@@ -923,7 +927,7 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureSettings(Feature* feat, 
 	if (hasFailedMessage && feat->DrawFailLoadMessage() && !FeatureIssues::IsObsoleteFeature(feat->GetShortName())) {
 		ImGui::Spacing();
 		SeparatorTextWithFont(T("menu.features.error_header", "Error"), Menu::FontRole::Subheading);
-		ImGui::TextColored(themeSettings.StatusPalette.Error, feat->failedLoadedMessage.c_str());
+		ImGui::TextColored(themeSettings.StatusPalette.Error, "%s", feat->failedLoadedMessage.c_str());
 	}
 }
 
@@ -991,6 +995,7 @@ void FeatureListRenderer::DrawMenuVisitor::RenderReactiveConstraintWarningDialog
 		ImGui::Separator();
 		ImGui::Spacing();
 
+		bool navigated = false;
 		// Table columns: Impacted Feature | Setting | Constrained By | Forced To
 		if (ImGui::BeginTable("##ReactiveConstraintTable", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp)) {
 			ImGui::TableSetupColumn(T("menu.features.col_impacted_feature", "Impacted Feature"), ImGuiTableColumnFlags_WidthStretch);
@@ -1016,10 +1021,8 @@ void FeatureListRenderer::DrawMenuVisitor::RenderReactiveConstraintWarningDialog
 					}
 					if (ImGui::Selectable(fmt::format("{}##imp{}", targetDisplayName, rowIndex).c_str())) {
 						pendingFeatureSelection = settingId.featureShortName;
-						ImGui::CloseCurrentPopup();
-						g_reactiveWarningShow = false;
-						g_reactiveWarningConstraints.clear();
-						return;
+						navigated = true;
+						break;
 					}
 					if (auto _tt = Util::HoverTooltipWrapper()) {
 						ImGui::Text(T("menu.features.click_to_navigate", "Click to navigate to %s"), targetDisplayName.c_str());
@@ -1035,10 +1038,8 @@ void FeatureListRenderer::DrawMenuVisitor::RenderReactiveConstraintWarningDialog
 				if (!result.sources.empty()) {
 					if (ImGui::Selectable(fmt::format("{}##src{}", result.sources[0].featureName, rowIndex).c_str())) {
 						pendingFeatureSelection = result.sources[0].featureShortName;
-						ImGui::CloseCurrentPopup();
-						g_reactiveWarningShow = false;
-						g_reactiveWarningConstraints.clear();
-						return;
+						navigated = true;
+						break;
 					}
 					if (auto _tt = Util::HoverTooltipWrapper()) {
 						ImGui::Text(T("menu.features.click_to_navigate", "Click to navigate to %s"), result.sources[0].featureName.c_str());
@@ -1061,6 +1062,14 @@ void FeatureListRenderer::DrawMenuVisitor::RenderReactiveConstraintWarningDialog
 			}
 
 			ImGui::EndTable();
+		}
+
+		if (navigated) {
+			ImGui::CloseCurrentPopup();
+			g_reactiveWarningShow = false;
+			g_reactiveWarningConstraints.clear();
+			ImGui::EndPopup();
+			return;
 		}
 
 		ImGui::Spacing();

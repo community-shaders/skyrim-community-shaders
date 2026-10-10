@@ -965,7 +965,7 @@
     "feature.renderdoc.refresh_list": "Обновить список",
     "feature.renderdoc.restart_to_disable": "Для отключения захвата RenderDoc требуется перезапуск; производительность будет серьёзно снижена.",
     "feature.renderdoc.restart_to_enable": "Для включения захвата RenderDoc требуется перезапуск.",
-    "feature.renderdoc.space_required": "Требуется не менее {} МБ свободного места.",
+    "feature.renderdoc.space_required": "Требуется не менее %llu МБ свободного места.",
     "feature.renderdoc.yes_delete": "Да, удалить всё",
     "feature.screen_space_gi.ao_only": "Только AO",
     "feature.screen_space_gi.ao_power": "Мощность AO",

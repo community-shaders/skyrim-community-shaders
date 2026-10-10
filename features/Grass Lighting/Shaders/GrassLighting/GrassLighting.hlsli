@@ -26,7 +26,8 @@ namespace GrassLighting
 	float3 GetLightSpecularInput(float3 L, float3 V, float3 N, float3 lightColor, float shininess)
 	{
 		float3 H = normalize(V + L);
-		float HdotN = saturate(dot(H, N));
+		// log2(0) times a zero shininess is NaN
+		float HdotN = max(saturate(dot(H, N)), 1e-6);
 
 		float lightColorMultiplier = exp2(shininess * log2(HdotN));
 		return lightColor * lightColorMultiplier.xxx;

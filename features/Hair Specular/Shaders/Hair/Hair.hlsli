@@ -200,7 +200,7 @@ namespace Hair
 		dirDiffuse = 0;
 		dirSpecular = 0;
 		dirTransmission = 0;
-		const float roughness = 1 - saturate(shininess * 0.01);
+		const float roughness = max(1 - saturate(shininess * 0.01), 0.01);
 
 		if (SharedData::hairSpecularSettings.EnableTangentShift) {
 			const float shift = TexTangentShift.SampleLevel(SampColorSampler, uv, 0).x - 0.5;

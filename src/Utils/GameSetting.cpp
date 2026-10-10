@@ -217,7 +217,7 @@ namespace Util
 				hover = std::format("{}\n\nNOTE: CS cannot save this game setting directly. Setting {} '{}' might be able to be saved manually in the ini. Use the Copy button to export to clipboard.", settingData.description, collectionName, settingName);
 			else
 				hover = settingData.description;
-			ImGui::Text(hover.c_str());
+			ImGui::TextUnformatted(hover.c_str());
 		}
 		if (settingData.offset != 0) {
 			ImGui::SameLine();
