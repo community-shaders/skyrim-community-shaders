@@ -156,6 +156,43 @@ namespace Util
 	};
 
 	/**
+	 * @brief Limits a graph to one sample per frame. Graphs only sample while drawn, so
+	 * after a skipped frame the next samples carry the hidden gap and the open hitch;
+	 * the first kWarmupFrames are dropped so they don't dominate the graph's scale.
+	 */
+	class GraphSampleGate
+	{
+	private:
+		uint32_t lastFrame = UINT32_MAX;
+		uint32_t warmupFrames = 0;
+
+	public:
+		// Covers the open hitch plus the profiler's 3-frame readback latency.
+		static constexpr uint32_t kWarmupFrames = 10;
+
+		/**
+		 * @brief Whether the graph should record a sample this frame.
+		 * @param frame Current frame number.
+		 * @return False for repeat calls within a frame and while warming up after a skipped frame.
+		 */
+		bool ShouldSample(uint32_t frame)
+		{
+			if (frame == lastFrame)
+				return false;
+			if (frame != lastFrame + 1)
+				warmupFrames = kWarmupFrames;
+			lastFrame = frame;
+			if (warmupFrames == 0)
+				return true;
+			warmupFrames--;
+			return false;
+		}
+
+		/** @brief ShouldSample() for the current render frame. */
+		bool ShouldSample();
+	};
+
+	/**
      * @brief Retrieves the seasonal texture swap for a given texture set, if available.
      *
      * This function checks if a given texture set has been swapped by Seasons of Skyrim.
