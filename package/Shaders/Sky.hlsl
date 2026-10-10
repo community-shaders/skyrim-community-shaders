@@ -203,6 +203,18 @@ cbuffer AlphaTestRefCB : register(b11)
 #		include "Effects11/SkyScattering.hlsli"
 #	endif
 
+#	if defined(CLOUD_SHADOWS)
+#		include "CloudShadows/CloudShadows.hlsli"
+#	endif
+
+// Effects 11 procedural sun: the disc replaces the sun texture, and clouds dim it and its glare
+#	if defined(EFFECTS11) && defined(TEX) && !defined(CLOUDS) && !defined(MOONMASK)
+#		include "Effects11/ProceduralSun.hlsli"
+#		if !defined(DITHER)
+#			define EFFECTS11_PROCEDURAL_SUN
+#		endif
+#	endif
+
 #	if defined(EXP_HEIGHT_FOG)
 #		define SampColorSampler SampBaseSampler
 #		include "ExponentialHeightFog/ExponentialHeightFog.hlsli"
@@ -235,21 +247,6 @@ float3 ShadeStars(float4 starTexel, float2 uv)
 	float3 squared = color * color;
 	color = lerp(color, squared * squared, SharedData::enbSettings.StarsCurve);
 	return max(color, 0.0) * SharedData::enbSettings.StarsIntensity;
-}
-#	endif
-
-#	if defined(EFFECTS11)
-float ComputeProceduralSun(float2 uv)
-{
-	float2 p = uv * 2.0 - 1.0;
-	float dist = dot(p, p) - SharedData::enbSettings.ProceduralSunDiskRadiusSq;
-
-	float c = saturate(dist * SharedData::enbSettings.ProceduralSunCoronaScale);
-	float corona = (1.0 - c) * rcp(SharedData::enbSettings.ProceduralSunCoronaFalloff * c + 1.0) * SharedData::enbSettings.ProceduralSunGlowIntensity;
-
-	float disk = saturate(-dist * SharedData::enbSettings.ProceduralSunDiskEdgeScale);
-
-	return corona + disk;
 }
 #	endif
 
@@ -288,17 +285,71 @@ PS_OUTPUT main(PS_INPUT input)
 	baseColor = PParams.xxxx * (-baseColor + blendColor) + baseColor;
 #		endif
 
+#		if defined(EFFECTS11_PROCEDURAL_SUN)
+	bool proceduralSunActive = SharedData::enbSettings.EnableProceduralSun && (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsSun);
+	[branch] if (proceduralSunActive)
+	{
+		float3 viewDirection = normalize(input.WorldPosition.xyz);
+		float cosTheta = clamp(dot(viewDirection, SharedData::SunDirection.xyz), -1.0, 1.0);
+
+		float influenceCos = ProceduralSun::GetInfluenceCos(
+			SharedData::enbSettings.ProceduralSunDiskCos,
+			true,
+			SharedData::enbSettings.ProceduralSunHaloCos,
+			SharedData::enbSettings.ProceduralSunHaloIntensity);
+
+		float3 proceduralSunColor = 0.0;
+		float sunCoverage = 0.0;
+
+		[branch] if (cosTheta > influenceCos)
+		{
+			float3 limbDarkening;
+			float discCoverage;
+			ProceduralSun::EvaluateDisc(
+				cosTheta,
+				SharedData::enbSettings.ProceduralSunDiskCos,
+				SharedData::enbSettings.ProceduralSunEdgeSoftness,
+				limbDarkening,
+				discCoverage);
+
+			float haloProfile = ProceduralSun::EvaluateHalo(
+				cosTheta,
+				SharedData::enbSettings.ProceduralSunDiskCos,
+				SharedData::enbSettings.ProceduralSunHaloCos,
+				SharedData::enbSettings.ProceduralSunHaloFalloff);
+
+			ProceduralSun::ComposeDiscAndHalo(
+				limbDarkening,
+				discCoverage,
+				SharedData::enbSettings.ProceduralSunDiskIntensity,
+				haloProfile,
+				SharedData::enbSettings.ProceduralSunHaloIntensity,
+				proceduralSunColor,
+				sunCoverage);
+
+#			if defined(CLOUD_SHADOWS)
+			float cloudExtinction = SharedData::enbSettings.ProceduralSunCloudExtinction * sunCoverage;
+			[branch] if (cloudExtinction > 0.0)
+			{
+				float capturedCloudOcclusion = CloudShadows::CloudShadowsTexture.SampleLevel(SampBaseSampler, viewDirection, 0).x;
+				proceduralSunColor *= ProceduralSun::GetCloudTransmission(capturedCloudOcclusion, cloudExtinction);
+			}
+#			endif
+		}
+
+		// A sun texture that is transparent at its center hides the sun, so it hides the disc too
+		float sunTextureAlpha = saturate(TexBaseSampler.SampleLevel(SampBaseSampler, 0.5, 0).w);
+
+		baseColor.xyz = proceduralSunColor;
+		baseColor.w = sunCoverage * sunTextureAlpha;
+
+		skyScale = 0.0;
+	}
+#		endif
+
 #		if defined(HDR_OUTPUT)
 	float hdrSunGain = HDRSun::GetHdrSunGain(input.TexCoord0.xy, baseColor);
 	baseColor.xyz *= hdrSunGain;
-#		endif
-
-#		if defined(TEX) && defined(EFFECTS11)
-	if (SharedData::enbSettings.EnableProceduralSun && (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsSun)) {
-		baseColor.xyz = ComputeProceduralSun(input.TexCoord0.xy);
-		baseColor.w = input.Color.w;
-		skyScale = 0.0;
-	}
 #		endif
 
 #		if defined(DITHER)
@@ -310,6 +361,14 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.Color.xyz = Color::Sky(input.Color.xyz) * baseColor.xyz + skyScale;
 	psout.Color.xyz *= 1.0 + noiseGrad;
 	psout.Color.w = baseColor.w * input.Color.w;
+
+#				if defined(EFFECTS11) && defined(CLOUD_SHADOWS)
+	// Sun glare: fade it with the clouds in front of the sun, as the procedural disc is
+	if (SharedData::enbSettings.EnableProceduralSun && SharedData::enbSettings.ProceduralSunCloudExtinction > 0.0) {
+		float capturedCloudOcclusion = CloudShadows::CloudShadowsTexture.SampleLevel(SampBaseSampler, SharedData::SunDirection.xyz, 0).x;
+		psout.Color.w *= ProceduralSun::GetGlareCloudTransmission(capturedCloudOcclusion, SharedData::enbSettings.ProceduralSunCloudExtinction);
+	}
+#				endif
 #			else
 	float3 skyGradientColor = input.Color.xyz;
 
@@ -360,6 +419,11 @@ PS_OUTPUT main(PS_INPUT input)
 
 	psout.Color.w = input.Color.w * baseColor.w;
 	psout.Color.xyz = Color::Sky(input.Color.xyz) * baseColor.xyz + skyScale;
+
+#			if defined(EFFECTS11_PROCEDURAL_SUN)
+	[branch] if (proceduralSunActive)
+		psout.Color = ProceduralSun::ToAdditiveBlend(psout.Color, SharedData::enbSettings.ProceduralSunRadianceLimit);
+#			endif
 
 #			if defined(CLOUDS) && defined(EFFECTS11)
 	[branch] if (SharedData::enbSettings.Enable)
@@ -418,8 +482,9 @@ PS_OUTPUT main(PS_INPUT input)
 #	elif !defined(DITHER) || !defined(TEX)
 	// Even without cloud shadows enabled, sun disc should be occluded by scene depth (clouds, terrain, etc.)
 	// The sun glare pass (DITHER + TEX) is skipped: it fades by depth coverage in the VS instead,
-	// and the per-pixel reject made the glare disappear.
-	if ((Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsSun)) {
+	// and the per-pixel reject made the glare disappear. Reflections skip it: t17 does not hold the reflection face's depth.
+	[branch] if ((Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsSun) && !(Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InReflection) && psout.Color.w > 0.0)
+	{
 		float depth = TexDepthSampler.Load(int3(input.Position.xy, 0));
 		if (depth < input.Position.z)
 			psout.Color.w = 0;

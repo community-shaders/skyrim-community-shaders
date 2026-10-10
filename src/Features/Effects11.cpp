@@ -35,6 +35,26 @@ namespace
 		// The bound sphere encloses the square billboard, so its half-width is radius / sqrt(2)
 		return bound.radius * 0.70710678f / distance;
 	}
+
+	/** @brief Largest radiance the main render target can hold; the procedural sun is encoded below it for alpha blending. */
+	float GetMainTargetRadianceLimit()
+	{
+		const auto renderer = globals::game::renderer;
+		const auto rtv = renderer ? renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN].RTV : nullptr;
+		if (!rtv)
+			return 1.0f;
+
+		D3D11_RENDER_TARGET_VIEW_DESC desc{};
+		rtv->GetDesc(&desc);
+		switch (desc.Format) {
+		case DXGI_FORMAT_R16G16B16A16_FLOAT:
+		case DXGI_FORMAT_R32G32B32A32_FLOAT:
+		case DXGI_FORMAT_R11G11B10_FLOAT:
+			return 4096.0f;
+		default:
+			return 1.0f;
+		}
+	}
 }
 
 void Effects11::UpdateSkyScattering(PerFrame& a_data)
@@ -45,7 +65,7 @@ void Effects11::UpdateSkyScattering(PerFrame& a_data)
 	};
 
 	auto sky = globals::game::sky;
-	const bool sunVisible = sky && EffectManager::GetSunVisibility(sky->sun) > 0.0f;
+	const bool sunVisible = sky && Util::GetSunVisibility(sky->sun) > 0.0f;
 
 	// Keep the last direction while the sun is hidden above the horizon (e.g. by a weather), so
 	// the scattering does not jump; once it sets, keep tracking it so the twilight follows it down.
@@ -217,22 +237,27 @@ Effects11::PerFrame Effects11::GetCommonBufferData()
 	data.WaterReflectionAmount = settingManager.GetValue<float>("ReflectionAmount", "WATER");
 
 	{
-		float size = settingManager.GetValue<float>("Size", "PROCEDURALSUN");
-		float edgeSoftness = settingManager.GetValue<float>("EdgeSoftness", "PROCEDURALSUN");
-		float glowCurve = std::max(FLT_MIN, settingManager.GetInterpolatedTimeOfDayValue("GlowCurve", "PROCEDURALSUN"));
+		// The ENB keys describe a disc drawn across the sun billboard: Size is its radius as a share of
+		// the billboard (0.04 per unit) and the glow fades out at the billboard edge. They are mapped to
+		// the angular disc and halo through the billboard's measured angular size, so presets keep their sun.
+		const float billboardTan = std::max(data.SunBillboardTan, 1e-4f);
+		const float size = std::max(settingManager.GetValue<float>("Size", "PROCEDURALSUN"), 0.0f);
+		const float edgeSoftness = settingManager.GetValue<float>("EdgeSoftness", "PROCEDURALSUN");
+		const float glowCurve = std::max(FLT_MIN, settingManager.GetInterpolatedTimeOfDayValue("GlowCurve", "PROCEDURALSUN"));
 
-		float scaledSize = size * 0.04f;
-		float diskSq = scaledSize * scaledSize;
-		float outerSpan = std::max(1.0f - diskSq, FLT_MIN);
-		float softSq = std::max(edgeSoftness * edgeSoftness, FLT_MIN);
+		const float diskRadius = std::min(size * 0.04f, 1.0f);
+		proceduralSunAngularRadius = std::atan(diskRadius * billboardTan);
 
-		data.ProceduralSunDiskRadiusSq = diskSq;
-		data.ProceduralSunCoronaScale = 1.0f / outerSpan;
-		data.ProceduralSunDiskEdgeScale = 1.0f / (std::max(diskSq, FLT_MIN) * softSq);
-		data.ProceduralSunCoronaFalloff = 100.0f / (outerSpan * glowCurve);
+		data.ProceduralSunDiskCos = std::cos(proceduralSunAngularRadius);
+		data.ProceduralSunHaloCos = 1.0f / std::sqrt(1.0f + billboardTan * billboardTan);
+		// The old edge spanned softness^2 of the disc's squared radius, and the disc profile works in the same space
+		data.ProceduralSunEdgeSoftness = std::clamp(edgeSoftness * edgeSoftness, 0.01f, 1.0f);
+		data.ProceduralSunHaloFalloff = 100.0f / (std::max(1.0f - diskRadius * diskRadius, FLT_MIN) * glowCurve);
+		data.ProceduralSunHaloIntensity = std::max(settingManager.GetInterpolatedTimeOfDayValue("GlowIntensity", "PROCEDURALSUN"), 0.0f);
+		data.ProceduralSunDiskIntensity = std::max(settingManager.GetInterpolatedTimeOfDayValue("DiskIntensity", "PROCEDURALSUN"), 0.0f);
+		data.ProceduralSunCloudExtinction = std::max(settingManager.GetValue<float>("CloudExtinction", "PROCEDURALSUN"), 0.0f);
+		data.ProceduralSunRadianceLimit = GetMainTargetRadianceLimit();
 	}
-
-	data.ProceduralSunGlowIntensity = settingManager.GetInterpolatedTimeOfDayValue("GlowIntensity", "PROCEDURALSUN");
 
 	perFrameCache = data;
 	return data;
@@ -356,7 +381,9 @@ void Effects11::ClearShaderCache()
 		blurVCS = nullptr;
 	}
 
-	EffectManager::GetSingleton().ReloadShaders();
+	auto& effectManager = EffectManager::GetSingleton();
+	effectManager.enbAdaptation.ClearShaderCache();
+	effectManager.ReloadShaders();
 }
 
 void Effects11::Prepass()

@@ -593,7 +593,7 @@
     "feature.effects11.category.particle": "Particles",
     "feature.effects11.category.particle_desc": "Particle brightness and how much scene lighting affects particles.",
     "feature.effects11.category.proceduralsun": "Procedural Sun",
-    "feature.effects11.category.proceduralsun_desc": "Size, edge and glow of the procedural sun disk.",
+    "feature.effects11.category.proceduralsun_desc": "Size, edge, glow and brightness of the procedural sun disc, how much clouds dim it, and whether eye adaptation ignores it.",
     "feature.effects11.category.rain": "Rain",
     "feature.effects11.category.rain_desc": "Motion stretch and transparency of rain drops.",
     "feature.effects11.category.sky": "Sky",
