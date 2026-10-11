@@ -572,7 +572,7 @@ void WeatherWidget::SetWeatherValues()
 	data.thunderLightningBeginFadeIn = static_cast<uint8_t>(weatherProps["Thunder Lightning Begin Fade In"]);
 	data.thunderLightningEndFadeOut = static_cast<uint8_t>(weatherProps["Thunder Lightning End Fade Out"]);
 	auto& thunderFrequency = weatherProps["Thunder Lightning Frequency"];
-	thunderFrequency = std::max(thunderFrequency, kMinThunderLightningFrequency);
+	thunderFrequency = std::clamp(thunderFrequency, kMinThunderLightningFrequency, static_cast<int>(UINT8_MAX));
 	data.thunderLightningFrequency = static_cast<int8_t>(static_cast<uint8_t>(thunderFrequency));
 	Float3ToColor(weatherColors["Lightning Color"], weather->data.lightningColor);
 
