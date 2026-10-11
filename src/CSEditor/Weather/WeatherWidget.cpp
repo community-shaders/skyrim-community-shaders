@@ -62,6 +62,9 @@ namespace
 		constexpr const char* kDirectionalZMin = "Directional -Z";
 	}
 
+	// Sky::Update divides by the thunder frequency when rolling for a strike
+	constexpr int kMinThunderLightningFrequency = 1;
+
 	namespace WeatherRecord
 	{
 		constexpr const char* kImageSpace = "ImageSpace";
@@ -568,7 +571,9 @@ void WeatherWidget::SetWeatherValues()
 	// Lightning
 	data.thunderLightningBeginFadeIn = static_cast<uint8_t>(weatherProps["Thunder Lightning Begin Fade In"]);
 	data.thunderLightningEndFadeOut = static_cast<uint8_t>(weatherProps["Thunder Lightning End Fade Out"]);
-	data.thunderLightningFrequency = static_cast<int8_t>(static_cast<uint8_t>(weatherProps["Thunder Lightning Frequency"]));
+	auto& thunderFrequency = weatherProps["Thunder Lightning Frequency"];
+	thunderFrequency = std::max(thunderFrequency, kMinThunderLightningFrequency);
+	data.thunderLightningFrequency = static_cast<int8_t>(static_cast<uint8_t>(thunderFrequency));
 	Float3ToColor(weatherColors["Lightning Color"], weather->data.lightningColor);
 
 	// Visual Effects
