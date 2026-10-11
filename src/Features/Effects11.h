@@ -49,17 +49,19 @@ public:
 		float CloudsEdgeMoonMultiplier;
 
 		uint EnableProceduralSun;
-		float ProceduralSunDiskRadiusSq;
-		float ProceduralSunDiskEdgeScale;
-		float ProceduralSunGlowIntensity;
+		float ProceduralSunDiskCos;
+		float ProceduralSunDiskIntensity;
+		float ProceduralSunEdgeSoftness;
 
-		float ProceduralSunCoronaFalloff;
-		float ProceduralSunCoronaScale;
+		float ProceduralSunHaloCos;
+		float ProceduralSunHaloIntensity;
 		uint UseProceduralGradientWeights;
 		float ProceduralGradientWeightCurve;
 
 		float LightSpriteCurve;
-		float pad1[3];
+		float ProceduralSunHaloFalloff;
+		float ProceduralSunCloudExtinction;
+		float ProceduralSunRadianceLimit;
 
 		float ParticleIntensity;
 		float ParticleLightingInfluence;
@@ -184,6 +186,8 @@ public:
 	/** @brief Last sun direction used for sky scattering; held while the sun disc is hidden above the horizon. */
 	float3 scatteringSunDirection = { 0.0f, 0.0f, 1.0f };
 	bool hasScatteringSunDirection = false;
+	/** @brief Angular radius of the [PROCEDURALSUN] disc, in radians; the adaptation sun mask covers it. */
+	float proceduralSunAngularRadius = 0.0f;
 
 	PerFrame GetCommonBufferData();
 	/** @brief Fills the [SKYSCATTERING] and cloud lighting fields of the per-frame buffer. */

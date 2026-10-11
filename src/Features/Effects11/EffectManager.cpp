@@ -6,6 +6,7 @@
 #include "Globals.h"
 #include "Menu.h"
 #include "State.h"
+#include "Utils/Game.h"
 
 #include "PresetManager.h"
 #include "SettingManager.h"
@@ -281,6 +282,9 @@ void EffectManager::RegisterSettings()
 	settingManager.RegisterFloatSetting("EdgeSoftness", "PROCEDURALSUN", 0.4f, 0.0f, 1.0f, 0.01f, false);
 	settingManager.RegisterTimeOfDaySetting("GlowIntensity", "PROCEDURALSUN", 0.4f, 0.0f, 30000.0f, 0.01f, true);
 	settingManager.RegisterTimeOfDaySetting("GlowCurve", "PROCEDURALSUN", 10.0f, 0.0f, 100.0f, 0.01f, true);
+	settingManager.RegisterTimeOfDaySetting("DiskIntensity", "PROCEDURALSUN", 1.0f, 0.0f, 20.0f, 0.01f, true);
+	settingManager.RegisterFloatSetting("CloudExtinction", "PROCEDURALSUN", 4.0f, 0.0f, 16.0f, 0.1f, false);
+	settingManager.RegisterBoolSetting("ExcludeFromAdaptation", "PROCEDURALSUN", true, false);
 
 	settingManager.RegisterBoolSetting("EnableCloudsLightingFromMoon", "SKYSCATTERING", true, false);
 	settingManager.RegisterBoolSetting("CalculateCloudsEdgeFromScattering", "SKYSCATTERING", false, false);
@@ -900,24 +904,13 @@ void EffectManager::UpdateCursorData()
 	commonData.tempInfo2[3] = lastRightClick[1];
 }
 
-float EffectManager::GetSunVisibility(const RE::Sun* a_sun)
-{
-	if (!a_sun || !a_sun->root || !a_sun->sunBaseNode || !a_sun->sunBase)
-		return 0.0f;
-	if (a_sun->root->GetFlags().any(RE::NiAVObject::Flag::kHidden) || a_sun->sunBaseNode->GetFlags().any(RE::NiAVObject::Flag::kHidden))
-		return 0.0f;
-
-	const auto property = skyrim_cast<RE::BSSkyShaderProperty*>(a_sun->sunBase->GetGeometryRuntimeData().shaderProperty.get());
-	return property ? std::clamp(property->kBlendColor.alpha, 0.0f, 1.0f) : 0.0f;
-}
-
 void EffectManager::UpdateLightParameters()
 {
 	auto sky = globals::game::sky;
 	if (!sky || !sky->sun || !sky->sun->root || !sky->root)
 		return;
 
-	const float visibility = GetSunVisibility(sky->sun);
+	const float visibility = Util::GetSunVisibility(sky->sun);
 	if (visibility <= 0.0f)
 		return;
 

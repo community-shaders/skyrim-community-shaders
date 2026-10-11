@@ -267,17 +267,19 @@ namespace SharedData
 		float CloudsEdgeMoonMultiplier;
 
 		uint EnableProceduralSun;
-		float ProceduralSunDiskRadiusSq;
-		float ProceduralSunDiskEdgeScale;
-		float ProceduralSunGlowIntensity;
+		float ProceduralSunDiskCos;
+		float ProceduralSunDiskIntensity;
+		float ProceduralSunEdgeSoftness;
 
-		float ProceduralSunCoronaFalloff;
-		float ProceduralSunCoronaScale;
+		float ProceduralSunHaloCos;
+		float ProceduralSunHaloIntensity;
 		uint UseProceduralGradientWeights;
 		float ProceduralGradientWeightCurve;
 
 		float LightSpriteCurve;
-		float3 pad1;
+		float ProceduralSunHaloFalloff;
+		float ProceduralSunCloudExtinction;
+		float ProceduralSunRadianceLimit;
 
 		float ParticleIntensity;
 		float ParticleLightingInfluence;

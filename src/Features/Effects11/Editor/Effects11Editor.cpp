@@ -145,7 +145,7 @@ namespace
 		if (a_category == "SKYSCATTERING")
 			return { T("feature.effects11.category.skyscattering", "Sky Scattering"), T("feature.effects11.category.skyscattering_desc", "Atmospheric scattering for the sky and cloud lighting.") };
 		if (a_category == "PROCEDURALSUN")
-			return { T("feature.effects11.category.proceduralsun", "Procedural Sun"), T("feature.effects11.category.proceduralsun_desc", "Size, edge and glow of the procedural sun disk.") };
+			return { T("feature.effects11.category.proceduralsun", "Procedural Sun"), T("feature.effects11.category.proceduralsun_desc", "Size, edge, glow and brightness of the procedural sun disc, how much clouds dim it, and whether eye adaptation ignores it.") };
 		if (a_category == "SUNGLARE")
 			return { T("feature.effects11.category.sunglare", "Sun Glare"), T("feature.effects11.category.sunglare_desc", "Glow around the sun.") };
 		if (a_category == "CLOUDSHADOWS")
