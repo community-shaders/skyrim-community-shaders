@@ -1,8 +1,10 @@
 #pragma once
 
+#include <array>
 #include <d3d11.h>
 #include <functional>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 #include <winrt/base.h>
@@ -41,6 +43,7 @@ public:
 			if (count < kHistorySize)
 				count++;
 			lastMs = ms;
+			sortedDirty = true;
 		}
 
 		/** @brief Gets the arithmetic mean of all buffered samples. */
@@ -51,6 +54,11 @@ public:
 		 * @param p Percentile in [0, 100].
 		 */
 		float GetPercentile(float p) const;
+
+	private:
+		// Reuse one sorted snapshot for every percentile until the next sample arrives.
+		mutable std::array<float, kHistorySize> sorted{};
+		mutable bool sortedDirty = true;
 	};
 
 	/** @brief Snapshot of GPU/CPU timing data for a single named pass. */
@@ -58,6 +66,7 @@ public:
 	{
 		std::string name;
 		float gpuTimeMs = 0.0f;
+		// Rolling statistics, filled in only by GetStatistics.
 		float avgMs = 0.0f;
 		float p95Ms = 0.0f;
 		float p99Ms = 0.0f;
@@ -119,8 +128,15 @@ public:
 	/** @brief Ends the current profiling frame and advances the ring buffer write cursor. */
 	void EndFrame();
 
-	/** @brief Gets the per-pass timing results from the last collected frame. */
+	/** @brief Gets the live timings and history from the last collected frame. Rolling statistics are left at zero; see GetStatistics. */
 	const std::vector<TimerResult>& GetResults() const { return results; }
+
+	/**
+	 * @brief Computes the rolling CPU and GPU statistics of every tracked pass.
+	 * Re-sorts every history that gained samples since the last call, so callers should throttle it.
+	 * @param timerPrefix Includes only passes starting with this prefix, or all passes when empty.
+	 */
+	std::vector<TimerResult> GetStatistics(std::string_view timerPrefix = {}) const;
 
 	/** @brief Gets the total GPU time in milliseconds for the last collected frame. */
 	float GetTotalTimeMs() const { return totalTimeMs; }

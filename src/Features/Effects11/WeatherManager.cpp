@@ -136,7 +136,7 @@ uint32_t WeatherManager::ParseHexID(const std::string& hexStr)
 		return 0;
 	}
 
-	return static_cast<uint32_t>(std::stoul(hexStr, nullptr, 16));
+	return static_cast<uint32_t>(std::stoul(hexStr, nullptr, 16)) & LocalFormIDMask;
 }
 
 void WeatherManager::LoadLocationWeather()

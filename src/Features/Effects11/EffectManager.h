@@ -84,6 +84,8 @@ public:
 	winrt::com_ptr<ID3D11Buffer> colorCorrectionConstantBuffer;
 
 	static std::string LoadShaderFile(const char* path);
+	/** @brief Sun disc visibility in [0, 1] from its sky shader blend alpha; 0 when the sun is missing or hidden. */
+	static float GetSunVisibility(const RE::Sun* a_sun);
 	void CreateQuadGeometry();
 	void CreateRenderStates();
 	void CreateCopyShaders();

@@ -1,3 +1,4 @@
+#include "Common/Color.hlsli"
 #include "Common/FrameBuffer.hlsli"
 #include "Common/LodLandscape.hlsli"
 #include "Common/Math.hlsli"
@@ -693,6 +694,9 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.Color = float4(DebugColor.xyz, 1);
 #	elif defined(RENDER_BASE_TEXTURE)
 	psout.Color.xyzw = baseColor;
+#		if defined(TRUE_PBR)
+	psout.Color.xyz = Color::LinearToSrgb(baseColor.xyz);
+#		endif
 #	elif defined(LOCALMAP_FOGOFWAR)
 	psout.Color = float4(0, 0, 0, input.Alpha);
 #	elif defined(GRAYSCALE_MASK)

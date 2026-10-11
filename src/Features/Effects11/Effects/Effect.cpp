@@ -8,10 +8,10 @@
 #include "../ENBExtender.h"
 #include "../PresetManager.h"
 #include "../TextureManager.h"
-#include "Globals.h"
-#include "State.h"
 #include "Features/Effects11/SettingsPatches.h"
 #include "Features/Effects11/ShaderPatches.h"
+#include "Globals.h"
+#include "State.h"
 
 std::filesystem::path Effect::GetFilePath() const
 {
@@ -75,11 +75,13 @@ bool Effect::Load()
 		bool isPerComponent = IsPerComponentVector(uiVar);
 		if (isPerComponent) {
 			static const char* suffixes[] = { "X", "Y", "Z", "W" };
-			int numComponents = (uiVar.type == UIVariableType::Float2) ? 2 : (uiVar.type == UIVariableType::Float3) ? 3 : 4;
+			int numComponents = (uiVar.type == UIVariableType::Float2) ? 2 : (uiVar.type == UIVariableType::Float3) ? 3 :
+			                                                                                                          4;
 			for (int i = 0; i < numComponents; ++i) {
 				std::string compKey = iniKey + suffixes[i];
 				auto* realKey = findIniKey(compKey);
-				if (!realKey) realKey = &compKey;
+				if (!realKey)
+					realKey = &compKey;
 				std::vector<char> valueBuffer(1024);
 				DWORD result = GetPrivateProfileStringA(section.c_str(), realKey->c_str(), "", valueBuffer.data(), 1024, iniPath.string().c_str());
 				if (result > 0) {
@@ -92,7 +94,8 @@ bool Effect::Load()
 				uiVar.effectVariable->AsVector()->SetFloatVector(uiVar.vectorValue);
 		} else {
 			auto* realKey = findIniKey(iniKey);
-			if (!realKey) realKey = &iniKey;
+			if (!realKey)
+				realKey = &iniKey;
 			std::vector<char> valueBuffer(1024);
 			DWORD result = GetPrivateProfileStringA(section.c_str(), realKey->c_str(), "", valueBuffer.data(), 1024, iniPath.string().c_str());
 			if (result > 0) {
@@ -215,7 +218,8 @@ void Effect::Save()
 		case UIVariableType::Float4:
 			if (IsPerComponentVector(uiVar)) {
 				static const char* suffixes[] = { "X", "Y", "Z", "W" };
-				int numComponents = (uiVar.type == UIVariableType::Float2) ? 2 : (uiVar.type == UIVariableType::Float3) ? 3 : 4;
+				int numComponents = (uiVar.type == UIVariableType::Float2) ? 2 : (uiVar.type == UIVariableType::Float3) ? 3 :
+				                                                                                                          4;
 				for (int i = 0; i < numComponents; ++i) {
 					std::string compKey = iniKey + suffixes[i];
 					std::string compValue = std::to_string(vectorValue[i]);
@@ -226,7 +230,8 @@ void Effect::Save()
 				continue;
 			} else {
 				std::ostringstream oss;
-				int numComponents = (uiVar.type == UIVariableType::Float2) ? 2 : (uiVar.type == UIVariableType::Float3) ? 3 : 4;
+				int numComponents = (uiVar.type == UIVariableType::Float2) ? 2 : (uiVar.type == UIVariableType::Float3) ? 3 :
+				                                                                                                          4;
 
 				std::copy(vectorValue, vectorValue + numComponents - 1,
 					std::ostream_iterator<float>(oss, ", "));
@@ -352,7 +357,7 @@ bool Effect::LoadFXFile()
 	if (ENBExtender::IsEncryptedSource(sourceCode)) {
 		uiDefines.clear();
 		std::string error;
-		if (!ENBExtender::CreateEncryptedEffect(GetName(), effect, error)) {
+		if (!ENBExtender::CreateEncryptedEffect(filePath, effect, error)) {
 			errors.push_back(error);
 			return false;
 		}
@@ -402,13 +407,14 @@ bool Effect::LoadFXFile()
 	auto preprocess = [&](const std::string& source, ID3DInclude* include) -> std::string {
 		winrt::com_ptr<ID3DBlob> blob, err;
 		if (FAILED(D3DPreprocess(source.c_str(), source.size(), filePathStr.c_str(),
-				nullptr, include, blob.put(), err.put())) || !blob)
+				nullptr, include, blob.put(), err.put())) ||
+			!blob)
 			return {};
 		return { static_cast<const char*>(blob->GetBufferPointer()), blob->GetBufferSize() };
 	};
 
 	auto tryPreprocessAndCompile = [&](const std::string& source, ID3DInclude* include,
-		const std::vector<std::string>& extraStringifyMacros = {}) -> bool {
+									   const std::vector<std::string>& extraStringifyMacros = {}) -> bool {
 		auto pp = preprocess(source, include);
 		if (pp.empty())
 			return false;
@@ -748,7 +754,6 @@ void Effect::LoadUITechniques()
 		selectedTechniqueIndex = defaultIndex;
 }
 
-
 ID3D11RenderTargetView* Effect::GetRenderTargetView(const std::string& renderTargetName, ID3D11RenderTargetView* fallback)
 {
 	if (renderTargetName.empty())
@@ -834,10 +839,29 @@ static std::string ReadAnnotationValue(ID3DX11EffectVariable* annotation)
 		D3DX11_EFFECT_TYPE_DESC typeDesc;
 		if (annType && SUCCEEDED(annType->GetDesc(&typeDesc))) {
 			switch (typeDesc.Type) {
-			case D3D_SVT_INT: { int v; if (SUCCEEDED(scalarVar->GetInt(&v))) return std::to_string(v); break; }
-			case D3D_SVT_FLOAT: { float v; if (SUCCEEDED(scalarVar->GetFloat(&v))) return std::to_string(v); break; }
-			case D3D_SVT_BOOL: { bool v; if (SUCCEEDED(scalarVar->GetBool(&v))) return std::to_string(v ? 1 : 0); break; }
-			default: break;
+			case D3D_SVT_INT:
+				{
+					int v;
+					if (SUCCEEDED(scalarVar->GetInt(&v)))
+						return std::to_string(v);
+					break;
+				}
+			case D3D_SVT_FLOAT:
+				{
+					float v;
+					if (SUCCEEDED(scalarVar->GetFloat(&v)))
+						return std::to_string(v);
+					break;
+				}
+			case D3D_SVT_BOOL:
+				{
+					bool v;
+					if (SUCCEEDED(scalarVar->GetBool(&v)))
+						return std::to_string(v ? 1 : 0);
+					break;
+				}
+			default:
+				break;
 			}
 		}
 		int intValue;
@@ -894,7 +918,7 @@ std::string Effect::GetGroupAnnotation(ID3DX11EffectGroup* group, const std::str
 bool Effect::IsPerComponentVector(const UIVariable& uiVar)
 {
 	return (uiVar.type == UIVariableType::Float2 || uiVar.type == UIVariableType::Float3 || uiVar.type == UIVariableType::Float4) &&
-		uiVar.widgetType != UIWidgetType::Color;
+	       uiVar.widgetType != UIWidgetType::Color;
 }
 
 std::string Effect::GetVariableIniKey(const UIVariable& uiVar)
@@ -957,7 +981,8 @@ void Effect::LoadVariableFromString(UIVariable& uiVar, const std::string& value)
 		case UIVariableType::Float4:
 			{
 				std::istringstream ss(value);
-				int numComponents = (uiVar.type == UIVariableType::Float2) ? 2 : (uiVar.type == UIVariableType::Float3) ? 3 : 4;
+				int numComponents = (uiVar.type == UIVariableType::Float2) ? 2 : (uiVar.type == UIVariableType::Float3) ? 3 :
+				                                                                                                          4;
 				for (int i = 0; i < numComponents; ++i) {
 					char sep;
 					ss >> uiVar.vectorValue[i];
@@ -997,7 +1022,6 @@ void Effect::UpdateUIVariables()
 			break;
 		}
 	}
-
 }
 
 void Effect::RenderImGui()

@@ -623,6 +623,9 @@ namespace SIE
 			if (descriptor & static_cast<uint32_t>(LocalMapFogOfWar)) {
 				defines[lastIndex++] = { "LOCALMAP_FOGOFWAR", nullptr };
 			}
+			if (descriptor & static_cast<uint32_t>(TruePbr)) {
+				defines[lastIndex++] = { "TRUE_PBR", nullptr };
+			}
 
 			if (hasShadowMask) {
 				auto shaderFilter = (descriptor >> 17) & 0xFu;
@@ -1378,8 +1381,7 @@ namespace SIE
 			return std::memcmp(bytes, "DXBC", 4) == 0 && totalSize == blob->GetBufferSize();
 		}
 
-		/** @brief Reads a cached blob, deleting the file and returning null when it is unreadable or not intact DXBC. */
-		static winrt::com_ptr<ID3DBlob> ReadIntactBlob(const std::wstring& diskPath)
+		winrt::com_ptr<ID3DBlob> ReadIntactBlob(const std::wstring& diskPath)
 		{
 			winrt::com_ptr<ID3DBlob> blob;
 			if (FAILED(D3DReadFileToBlob(diskPath.c_str(), blob.put())))
@@ -1392,10 +1394,13 @@ namespace SIE
 			return nullptr;
 		}
 
-		/** @brief Writes through a sibling temp file and a rename, so a crash mid-write cannot leave a torn blob at diskPath. */
-		static bool WriteBlobAtomic(const std::wstring& diskPath, ID3DBlob* blob)
+		bool WriteBlobAtomic(const std::wstring& diskPath, ID3DBlob* blob)
 		{
-			const std::wstring tempPath = diskPath + L".tmp";
+			// A temp name per call: two compiles of one key (two threads, or two game instances) must not
+			// write or delete each other's temp file. Both renames carry the same bytes, so either may win.
+			static std::atomic<uint32_t> tempCounter{ 0 };
+			const std::wstring tempPath = std::format(L"{}.{}-{}-{}.tmp", diskPath, GetCurrentProcessId(), GetCurrentThreadId(),
+				tempCounter.fetch_add(1, std::memory_order_relaxed));
 			std::error_code ec;
 			if (SUCCEEDED(D3DWriteBlobToFile(blob, tempPath.c_str(), true))) {
 				std::filesystem::rename(tempPath, diskPath, ec);

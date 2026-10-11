@@ -85,6 +85,7 @@ private:
 	static inline float cachedMaxP99Ms = 0.0f;
 	static inline std::vector<GroupEntry> cachedGroups;
 
+
 	struct GraphState
 	{
 		ImGuiUtils::ProfilerGraph graph;
@@ -96,6 +97,25 @@ private:
 
 		/** @brief Records this frame's tasks (if the gate allows) and renders the graph. */
 		void Render(const std::vector<legit::ProfilerTask>& tasks, float baseLegendWidth, float baseHeight, float minFrameTimeSec);
+
+	static inline ImGuiUtils::ProfilerGraph gpuGraph{ Profiler::kHistorySize };
+
+	struct PassStatistics
+	{
+		float avgMs;
+		float p95Ms;
+		float p99Ms;
+		float cpuAvgMs;
+		float cpuP95Ms;
+		float cpuP99Ms;
+	};
+
+	struct FeatureGraphState
+	{
+		ImGuiUtils::ProfilerGraph graph{ Profiler::kHistorySize };
+		double lastStatisticsUpdate = -1.0;
+		std::unordered_map<std::string, PassStatistics> statistics;
+
 	};
 	static inline GraphState gpuGraph;
 	static inline std::unordered_map<std::string, GraphState> featureGraphs;

@@ -26,6 +26,7 @@ cbuffer VolumetricFogCB : register(b0)
 #	define VOLUMETRIC_FOG_NEAR_FADE_INV VolumetricFogFarInvGridSizeAndNearFade.w
 #	define EXP_HEIGHT_FOG_GRID_SIZE_Z VolumetricFogFarGridSizeAndFlags.z
 #	define EXP_HEIGHT_FOG_GRID_Z_PARAMS VolumetricFogFarGridZParams.xyz
+#	define VOLUMETRIC_FOG_HISTORY_WEIGHT VolumetricFogHistoryParameters.z
 #else
 #	define VOLUMETRIC_FOG_FLAGS VolumetricFogGridSizeAndFlags.w
 #	define VOLUMETRIC_FOG_GRID_SIZE VolumetricFogGridSizeAndFlags.xyz
@@ -33,6 +34,7 @@ cbuffer VolumetricFogCB : register(b0)
 #	define VOLUMETRIC_FOG_NEAR_FADE_INV VolumetricFogInvGridSizeAndNearFade.w
 #	define EXP_HEIGHT_FOG_GRID_SIZE_Z VolumetricFogGridSizeAndFlags.z
 #	define EXP_HEIGHT_FOG_GRID_Z_PARAMS VolumetricFogGridZParams.xyz
+#	define VOLUMETRIC_FOG_HISTORY_WEIGHT VolumetricFogHistoryParameters.x
 #endif
 
 #define VolumetricFogGridSize VOLUMETRIC_FOG_GRID_SIZE
@@ -44,7 +46,7 @@ cbuffer VolumetricFogCB : register(b0)
 #define VolumetricFogHasLocalLights ((VOLUMETRIC_FOG_FLAGS & 32u) != 0u)
 #define VolumetricFogInvGridSize VOLUMETRIC_FOG_INV_GRID_SIZE
 #define VolumetricFogNearFadeInDistanceInv VOLUMETRIC_FOG_NEAR_FADE_INV
-#define VolumetricFogHistoryWeight VolumetricFogHistoryParameters.x
+#define VolumetricFogHistoryWeight VOLUMETRIC_FOG_HISTORY_WEIGHT
 #define VolumetricFogHistoryMissSampleCount max(1u, min(16u, (uint)(VolumetricFogHistoryParameters.y + 0.5f)))
 #define VolumetricFogSampleJitterMultiplier VolumetricFogJitterParameters.x
 #define VolumetricFogStateFrameIndexMod8 ((uint)(VolumetricFogJitterParameters.y + 0.5f))

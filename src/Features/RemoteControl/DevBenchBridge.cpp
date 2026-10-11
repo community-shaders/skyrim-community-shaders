@@ -351,7 +351,7 @@ namespace
 				if (!profiler)
 					return json{ { "error", "profiler unavailable" } };
 				json passes = json::array();
-				for (const auto& r : profiler->GetResults()) {
+				for (const auto& r : profiler->GetStatistics()) {
 					if (!r.valid)
 						continue;
 					if (!filter.empty() && r.name.find(filter) == std::string::npos)
@@ -669,7 +669,7 @@ namespace DevBenchBridge
  * inspection, shader caching, capture operations, and settings persistence.
  * If DevBench is unavailable, no action is taken.
  */
-void Install() {}  // inert until built with DEVBENCH_BRIDGE_ENABLED
+	void Install() {}  // inert until built with DEVBENCH_BRIDGE_ENABLED
 }
 
 #endif

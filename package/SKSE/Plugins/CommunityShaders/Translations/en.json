@@ -598,6 +598,8 @@
     "feature.effects11.category.rain_desc": "Motion stretch and transparency of rain drops.",
     "feature.effects11.category.sky": "Sky",
     "feature.effects11.category.sky_desc": "Sky gradient, clouds, sun, moon and stars.",
+    "feature.effects11.category.skyscattering": "Sky Scattering",
+    "feature.effects11.category.skyscattering_desc": "Atmospheric scattering for the sky and cloud lighting.",
     "feature.effects11.category.sunglare": "Sun Glare",
     "feature.effects11.category.sunglare_desc": "Glow around the sun.",
     "feature.effects11.category.timeofday": "Time of Day",
