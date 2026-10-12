@@ -1,5 +1,7 @@
 #include "GrassBucketStore.h"
 
+#include <algorithm>
+
 
 void GrassBucketStore::SetupResources()
 {
@@ -63,6 +65,13 @@ void GrassBucketStore::ApplyPending(ID3D11Device* device, ID3D11DeviceContext* c
 	}
 
 	ApplyRemovals(rems);
+	// A shape can be captured and unloaded in the same frame. Removals run
+	// first, but ApplyCaptures would still touch the dead shape.
+	if (!rems.empty()) {
+		std::erase_if(caps, [&](const PendingCapture& pc) {
+			return std::find(rems.begin(), rems.end(), pc.shape) != rems.end();
+		});
+	}
 	ApplyCaptures(caps);
 	UploadDirtyBuckets(device, ctx);
 }
@@ -201,7 +210,7 @@ void GrassBucketStore::ApplyCaptures(std::vector<PendingCapture>& captures)
 
 	for (auto& pc : captures) {
 		const uint32_t meshId = meshLibrary.ResolveMeshId(pc.shape);
-		const uint32_t triCount = meshId ? 0u : (uint32_t)pc.shape->GetTrishapeRuntimeData().triangleCount;
+		const uint32_t triCount = meshId ? 0u : pc.triCount;
 		const BucketKey bk{ meshId, pc.material, meshId ? nullptr : pc.diffuseTexture, triCount, meshId ? 0u : pc.descVal };
 		auto& b = buckets[bk];
 		b.meshId = meshId;
@@ -211,7 +220,7 @@ void GrassBucketStore::ApplyCaptures(std::vector<PendingCapture>& captures)
 			b.firstNewSlice = (uint32_t)b.slices.size();
 
 		if (!b.typeParamsValid) {
-			CacheBucketTypeParams(b, pc.shape);
+			CacheBucketTypeParams(b, pc.wavePeriod, pc.boundCenter, pc.modelRadius, pc.triCount);
 			b.isComplex = DetectComplexGrass(pc.diffuseTexture, ctx);
 		}
 		if (frameParams.enableMeshLOD)
@@ -389,13 +398,20 @@ bool GrassBucketStore::StageCapture(RE::BSMultiStreamInstanceTriShape* shape, co
 	auto shaderProperty = shape->GetGeometryRuntimeData().shaderProperty;
 	if (!shaderProperty || shaderProperty->GetRTTI() != globals::rtti::BSGrassShaderPropertyRTTI.get())
 		return false;
-	auto* material = static_cast<RE::BSGrassShaderProperty*>(shaderProperty.get())->material;
+	auto* grassProp = static_cast<RE::BSGrassShaderProperty*>(shaderProperty.get());
+	auto* material = grassProp->material;
 	if (!material)
 		return false;
+
+	const auto& bound = shape->GetModelData().modelBound;
 
 	PendingCapture pc;
 	pc.shape = shape;
 	pc.material = material;
+	pc.wavePeriod = grassProp->wavePeriod;
+	pc.boundCenter = bound.center;
+	pc.modelRadius = bound.radius;
+	pc.triCount = static_cast<uint32_t>(shape->GetTrishapeRuntimeData().triangleCount);
 	pc.descVal = descVal;
 	pc.diffuseTexture = tex;
 	pc.count = count;
@@ -430,19 +446,16 @@ bool GrassBucketStore::StageCapture(RE::BSMultiStreamInstanceTriShape* shape, co
 	return true;
 }
 
-void GrassBucketStore::CacheBucketTypeParams(GrassBucket& b, RE::BSMultiStreamInstanceTriShape* shape)
+void GrassBucketStore::CacheBucketTypeParams(GrassBucket& b, float wavePeriod, const RE::NiPoint3& boundCenter, float modelRadius, uint32_t triCount)
 {
-	if (b.typeParamsValid || !shape)
+	if (b.typeParamsValid)
 		return;
 
-	if (auto* prop = static_cast<RE::BSGrassShaderProperty*>(shape->GetGeometryRuntimeData().shaderProperty.get()))
-		b.wavePeriod = prop->wavePeriod;
+	b.wavePeriod = wavePeriod;
+	b.boundCenter = boundCenter;
+	b.modelRadius = modelRadius;
 
-	const auto& bound = shape->GetModelData().modelBound;
-	b.boundCenter = bound.center;
-	b.modelRadius = bound.radius;
-
-	const float tris = (float)shape->GetTrishapeRuntimeData().triangleCount;
+	const float tris = (float)triCount;
 	const float cost = std::max(1.0f, tris / 8.0f);
 	const float w = std::sqrt(cost);
 	b.distScale = 1.0f / w;
