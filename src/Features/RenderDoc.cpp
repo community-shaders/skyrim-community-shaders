@@ -33,6 +33,13 @@ RenderDoc* RenderDoc::GetSingleton()
 	return &globals::features::renderDoc;
 }
 
+bool RenderDoc::IsLoaded()
+{
+	// Cached on first use, which is after Load(); RenderDoc cannot attach later anyway
+	static const bool loaded = GetModuleHandleW(L"renderdoc.dll") != nullptr;
+	return loaded;
+}
+
 void RenderDoc::Load()
 {
 	// Only load RenderDoc if the user has enabled capture

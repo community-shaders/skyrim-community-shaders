@@ -35,6 +35,8 @@ public:
 
 	// Core RenderDoc functionality
 	bool IsAvailable() const { return renderDocApi != nullptr; }
+	/** @brief True when renderdoc.dll is in the process, whether loaded by CS or injected by the RenderDoc UI. */
+	static bool IsLoaded();
 	void TriggerCapture();
 	void TriggerMultiFrameCapture(uint32_t a_frameCount);
 	bool HandleCaptureHotkey(uint32_t a_vkKey);

@@ -1770,6 +1770,7 @@
     "feature.upscaling.frame_generation_restart_note": "Toggling this setting requires a restart to work correctly",
     "feature.upscaling.frame_generation_tech": "Uses AMD FSR Frame Generation technology",
     "feature.upscaling.frame_limit_vrr": "Frame Limit (Variable Refresh Rate)",
+    "feature.upscaling.fsr_renderdoc_fallback": "AMD FSR is unavailable while RenderDoc is loaded, using TAA.",
     "feature.upscaling.key_feature_1": "DLSS (Deep Learning Super Sampling) support",
     "feature.upscaling.key_feature_2": "FSR (FidelityFX Super Resolution) support",
     "feature.upscaling.key_feature_3": "TAA (Temporal Anti-Aliasing) support",
