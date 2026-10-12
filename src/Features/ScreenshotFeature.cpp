@@ -181,8 +181,8 @@ namespace
 				sourceImage.GetImages(),
 				sourceImage.GetImageCount(),
 				sourceImage.GetMetadata(),
-				DXGI_FORMAT_B8G8R8X8_UNORM,
-				DirectX::TEX_FILTER_DEFAULT,
+				DXGI_FORMAT_B8G8R8X8_UNORM_SRGB,
+				DirectX::TEX_FILTER_SRGB,
 				0.0f,
 				convertedImage))) {
 			return convertedImage.GetImage(0, 0, 0);
