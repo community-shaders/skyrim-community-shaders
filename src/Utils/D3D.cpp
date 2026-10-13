@@ -16,6 +16,37 @@
 
 namespace Util
 {
+	namespace
+	{
+		std::mutex multithreadScopeMutex;
+		int multithreadScopeHolders = 0;
+		BOOL multithreadScopePriorProtection = FALSE;
+	}
+
+	MultithreadScope::MultithreadScope(ID3D11DeviceContext* context)
+	{
+		if (!context || FAILED(context->QueryInterface(multithread.put()))) {
+			multithread = nullptr;
+			return;
+		}
+		{
+			std::lock_guard lock(multithreadScopeMutex);
+			const BOOL prior = multithread->SetMultithreadProtected(TRUE);
+			if (multithreadScopeHolders++ == 0)
+				multithreadScopePriorProtection = prior;
+		}
+		multithread->Enter();
+	}
+
+	MultithreadScope::~MultithreadScope()
+	{
+		if (!multithread)
+			return;
+		multithread->Leave();
+		std::lock_guard lock(multithreadScopeMutex);
+		if (--multithreadScopeHolders == 0)
+			multithread->SetMultithreadProtected(multithreadScopePriorProtection);
+	}
 
 	ID3D11ShaderResourceView* GetCurrentSceneDepthSRV(bool prefer16bit)
 	{

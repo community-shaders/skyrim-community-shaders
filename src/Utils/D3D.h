@@ -41,6 +41,25 @@ namespace Util
 	void SetResourceName(ID3D11DeviceChild* Resource, const char* Format, ...);
 
 	/**
+	 * @brief Enables D3D11 multithread protection and holds the immediate context's lock for the scope.
+	 * Scopes are reference counted, and the protection state from before the first scope is restored when the last one ends.
+	 */
+	class MultithreadScope
+	{
+	public:
+		explicit MultithreadScope(ID3D11DeviceContext* context);
+		~MultithreadScope();
+		MultithreadScope(const MultithreadScope&) = delete;
+		MultithreadScope& operator=(const MultithreadScope&) = delete;
+
+		/** @brief True when the lock is held; false when ID3D11Multithread is unavailable. */
+		explicit operator bool() const { return multithread != nullptr; }
+
+	private:
+		winrt::com_ptr<REX::W32::ID3D11Multithread> multithread;
+	};
+
+	/**
 	 * @brief Compile an HLSL shader from file and create the appropriate D3D11 shader object.
 	 * @param FilePath Path to the HLSL source file.
 	 * @param Defines Preprocessor macro name/value pairs to pass to the compiler.
