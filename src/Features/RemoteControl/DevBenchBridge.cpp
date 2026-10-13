@@ -467,13 +467,18 @@ namespace
 		RunHandler(&BuildShadercacheResult, a_argsJson, a_sink, a_write);
 	}
 
+	const char* CaptureDeviceName(RenderDoc::CaptureDevice a_device)
+	{
+		return a_device == RenderDoc::CaptureDevice::D3D12 ? "d3d12" : "d3d11";
+	}
+
 	/**
 	 * @brief Builds a JSON response for a capture request.
 	 *
 	 * Processes RenderDoc or screenshot capture operations based on the `kind` parameter.
 	 * Validates feature availability and queues the capture on the main thread.
 	 *
-	 * @param a_args JSON object containing `kind` (required) and optional `frames` for RenderDoc.
+	 * @param a_args JSON object containing `kind` (required) and optional `frames` and `device` for RenderDoc.
 	 * @return JSON response indicating queued state or error details.
 	 */
 
@@ -485,13 +490,15 @@ namespace
 		const uint frame = EnqueuedFrame();
 
 		if (kind == "renderdoc") {
+			const std::string deviceName = a_args.value("device", std::string("d3d11"));
+			if (deviceName != "d3d11" && deviceName != "d3d12")
+				return json{ { "error", "unknown device" }, { "device", deviceName }, { "supported", json::array({ "d3d11", "d3d12" }) } };
+			const auto device = deviceName == "d3d12" ? RenderDoc::CaptureDevice::D3D12 : RenderDoc::CaptureDevice::D3D11;
 			uint32_t frameCount = 1;
 			if (a_args.contains("frames") && a_args["frames"].is_number())
 				frameCount = static_cast<uint32_t>(std::clamp(a_args["frames"].get<int>(), 1, 120));
-			// All on the main thread: Feature::loaded is mutated by queued toggle tasks there,
-			// and TriggerCapture invalidates RenderDoc's non-atomic capture-list cache the
-			// UI/render thread reads.
-			return RunOnMainThread([frameCount, frame]() -> json {
+			// Main thread: Feature::loaded is mutated by queued toggle tasks there.
+			return RunOnMainThread([device, frameCount, frame]() -> json {
 				auto* renderDoc = &globals::features::renderDoc;
 				if (!renderDoc->loaded)
 					return json{ { "error", "RenderDoc feature is not loaded" }, { "hint", "communityshaders.feature(action='list') shows RenderDoc.loaded" } };
@@ -499,9 +506,9 @@ namespace
 					return json{ { "error", "RenderDoc API not available — attach RenderDoc or load the in-app DLL" } };
 				RenderDoc::RequestId requestId;
 				std::string error;
-				if (!renderDoc->RequestCapture(RenderDoc::CaptureDevice::D3D11, frameCount, requestId, error))
+				if (!renderDoc->RequestCapture(device, frameCount, requestId, error))
 					return json{ { "error", error } };
-				return json{ { "queued", true }, { "kind", "renderdoc" }, { "frames", frameCount }, { "enqueued_at_frame", frame } };
+				return json{ { "queued", true }, { "requestId", requestId }, { "kind", "renderdoc" }, { "device", CaptureDeviceName(device) }, { "frames", frameCount }, { "enqueued_at_frame", frame } };
 			});
 		}
 
@@ -819,8 +826,26 @@ namespace DevBenchBridge
 		dvb->RegisterTool("communityshaders.shadercache", shadercacheDesc, &ShadercacheToolHandler, nullptr);
 
 		static constexpr const char* captureDesc =
-			R"({"description":"Trigger a frame capture on the next render. Kind-dispatched. kind=renderdoc: RenderDoc multi-frame capture via the in-app API, honors frames (1-120, default 1); RenderDoc must be attached/loaded (check communityshaders.feature list for RenderDoc.loaded). kind=screenshot: lossless screenshot via the Screenshot feature; frames is ignored. Fire-and-forget — no artifact path is returned synchronously.","inputSchema":{"type":"object","properties":{"kind":{"type":"string","enum":["renderdoc","screenshot"]},"frames":{"type":"number"}},"required":["kind"]}})";
+			R"({"description":"Trigger a frame capture on the next render. Kind-dispatched. kind=renderdoc: RenderDoc capture of 'frames' frames (1-120, default 1), one .rdc per frame, on the chosen 'device' (d3d11 default; d3d12 is the Frame Generation proxy device, available only while the D3D12 swap chain is active); RenderDoc must be attached/loaded (check communityshaders.feature list for RenderDoc.loaded). Returns {queued,requestId,kind,device,frames,enqueued_at_frame}; the event communityshaders.capture.completed carries {requestId,device,frames,captures:[{path,bytes}]} once the files are written, or {requestId,device,error}. One capture runs at a time. kind=screenshot: lossless screenshot via the Screenshot feature; frames and device are ignored; fire-and-forget.","inputSchema":{"type":"object","properties":{"kind":{"type":"string","enum":["renderdoc","screenshot"]},"frames":{"type":"number"},"device":{"type":"string","enum":["d3d11","d3d12"]}},"required":["kind"]}})";
 		dvb->RegisterTool("communityshaders.capture", captureDesc, &CaptureToolHandler, nullptr);
+		globals::features::renderDoc.SetCompletionCallback([](const RenderDoc::CaptureCompletion& a_result) {
+			json payload{ { "requestId", a_result.id }, { "device", CaptureDeviceName(a_result.device) } };
+			if (a_result.error.empty()) {
+				json captures = json::array();
+				for (const auto& file : a_result.captures) {
+					const auto path = file.fullPath.u8string();
+					captures.push_back({ { "path", std::string(path.begin(), path.end()) }, { "bytes", file.fileSize } });
+				}
+				payload["frames"] = a_result.frames;
+				payload["captures"] = std::move(captures);
+			} else {
+				payload["error"] = a_result.error;
+			}
+			if (auto* host = DevBenchAPI::GetDevBenchInterface001()) {
+				const std::string dumped = payload.dump();
+				host->EmitEvent("communityshaders.capture.completed", dumped.c_str());
+			}
+		});
 
 		static constexpr const char* nvperfDesc =
 			R"({"description":"NVIDIA Nsight Perf GPU hardware counters per render pass (D3D11; builds with NVPERF_SUPPORT, NVIDIA GPUs only). Ranges are the perf events Community Shaders emits (engine passes need Frame Annotations enabled at startup). Action-dispatched. status -> {built,available,gpuSupported,device,chip,deviceError,library,capture:{state,captureId,sample,samples,pass,passes,error}}. metrics -> {defaults:[{metric,label}],kinds}. capture: optional metrics (array of name[:counter|ratio|throughput|active|elapsed|percycle] strings, default the defaults), ranges (array of names, trailing * = prefix; default every outermost range), samples (1-64, default 1), delayFrames (default 0), nestingLevels (1-8, default 1; each level multiplies the passes) -> {queued,captureId}; runs over the next frames, one profiler pass per frame. cancel: stop the running capture. result: optional captureId (default latest), detail (boolean: include every range of every sample) -> {pending,capture} while running, else {captureId,success,error,chip,startFrame,endFrame,samples,passesPerSample,metrics:[{metric,label}],unsupportedMetrics,summary:[{range,perFrame,incomplete,values:{label:value}}],csvPath}. Summary values are per frame: counters summed (gpu__time_duration in ns), rates weighted by range time. Event communityshaders.nvperf.completed {captureId,success,error} fires when a capture ends.","inputSchema":{"type":"object","properties":{"action":{"type":"string","enum":["status","metrics","capture","cancel","result"]},"metrics":{"type":"array","items":{"type":"string"}},"ranges":{"type":"array","items":{"type":"string"}},"samples":{"type":"number"},"delayFrames":{"type":"number"},"nestingLevels":{"type":"number"},"captureId":{"type":"number"},"detail":{"type":"boolean"}},"required":["action"]}})";
