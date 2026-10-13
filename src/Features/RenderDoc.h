@@ -1,9 +1,12 @@
 #pragma once
 
 #include "Feature.h"
+#include <chrono>
 #include <filesystem>
+#include <functional>
 #include <mutex>
 #include <nlohmann/json.hpp>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -33,12 +36,35 @@ class RenderDoc : public Feature
 public:
 	static RenderDoc* GetSingleton();
 
+	enum class CaptureDevice
+	{
+		D3D11,
+		D3D12
+	};
+
+	using RequestId = uint64_t;
+
+	struct CaptureCompletion
+	{
+		RequestId id = 0;
+		CaptureDevice device = CaptureDevice::D3D11;
+		uint32_t frames = 0;
+		std::vector<CaptureFileInfo> captures;
+		std::string error;
+	};
+
 	// Core RenderDoc functionality
 	bool IsAvailable() const { return renderDocApi != nullptr; }
 	/** @brief True when renderdoc.dll is in the process, whether loaded by CS or injected by the RenderDoc UI. */
 	static bool IsLoaded();
-	void TriggerCapture();
-	void TriggerMultiFrameCapture(uint32_t a_frameCount);
+
+	/** @brief Queues a capture, one .rdc per frame; returns false with an error if refused. */
+	bool RequestCapture(CaptureDevice a_device, uint32_t a_frames, RequestId& o_id, std::string& o_error);
+	/** @brief Called on the render thread when a request finishes or fails. */
+	void SetCompletionCallback(std::function<void(const CaptureCompletion&)> a_callback);
+	/** @brief Advances bracketing and completion; call after each game Present. */
+	void OnPresent();
+
 	bool HandleCaptureHotkey(uint32_t a_vkKey);
 	void SetCaptureFilePathTemplate(const std::string& a_template);
 	std::string GetCapturesDirectory() const;
@@ -94,11 +120,12 @@ public:
 	std::string GetOverlayWarningMessage() const;
 
 private:
-	bool TriggerConfiguredCapture(bool a_checkDiskSpace = true);
 	uint32_t GetCaptureFrameCount() const;
 	void SetCaptureFrameCount(uint32_t a_frameCount);
-	uint64_t GetRequiredCaptureSpaceBytes() const;
-	bool HasSufficientDiskSpaceForConfiguredCapture(uint64_t* a_requiredSpaceBytes = nullptr) const;
+	uint64_t GetRequiredCaptureSpaceBytes(uint32_t a_frames) const;
+	bool HasSufficientDiskSpace(uint32_t a_frames) const;
+
+	void* GetCaptureDevice(CaptureDevice a_device) const;
 
 	// Cache management for capture files
 	void RefreshCaptureFileCache();
@@ -145,4 +172,32 @@ public:
 	static constexpr size_t kCommentsBufferSize = 1024;                             // Size of comments input buffer
 	static constexpr uint32_t kMinCaptureFrameCount = 1;
 	static constexpr uint32_t kMaxCaptureFrameCount = 120;
+
+private:
+	enum class CapturePhase
+	{
+		Bracketing,
+		AwaitingFiles
+	};
+
+	struct CaptureState
+	{
+		CapturePhase phase = CapturePhase::Bracketing;
+		RequestId id = 0;
+		CaptureDevice device = CaptureDevice::D3D11;
+		uint32_t frames = 0;
+		uint32_t countBefore = 0;
+		uint32_t remaining = 0;
+		bool started = false;
+		std::vector<CaptureFileInfo> files;
+		std::chrono::steady_clock::time_point lastChange;
+	};
+
+	static constexpr std::chrono::milliseconds kCaptureFileStableFor{ 500 };
+	static constexpr std::chrono::seconds kCaptureFileTimeout{ 60 };  // Inactivity, reset when a file grows
+
+	std::mutex captureMutex;
+	std::optional<CaptureState> capture;
+	std::function<void(const CaptureCompletion&)> completionCallback;
+	RequestId lastRequestId = 0;
 };

@@ -1,6 +1,7 @@
 // RenderDoc feature implementation providing in-application graphics debugging capabilities
 #include "Features/RenderDoc.h"
 
+#include "Features/Upscaling.h"
 #include "Globals.h"
 #include "Utils/FileSystem.h"
 #include "Utils/Format.h"
@@ -221,14 +222,16 @@ void RenderDoc::DrawSettings()
 				if (ImGui::SliderInt(T(TKEY("capture_frames"), "Capture Frames"), &captureFrameCountUI, static_cast<int>(kMinCaptureFrameCount), static_cast<int>(kMaxCaptureFrameCount), "%d", ImGuiSliderFlags_AlwaysClamp)) {
 					SetCaptureFrameCount(static_cast<uint32_t>(captureFrameCountUI));
 				}
-				Util::AddTooltip(T(TKEY("capture_frames_tooltip"), "Number of consecutive frames to capture. 1 uses a normal RenderDoc capture; higher values use TriggerMultiFrameCapture."));
+				Util::AddTooltip(T(TKEY("capture_frames_tooltip"), "Number of consecutive frames to capture. Each frame is saved as its own capture file."));
 
 				if (ImGui::Button(T(TKEY("create_capture"), "Create Capture"))) {
 					// Check available disk space before allowing capture
 					try {
-						if (!HasSufficientDiskSpaceForConfiguredCapture()) {
+						RequestId requestId;
+						std::string requestError;
+						if (!HasSufficientDiskSpace(GetCaptureFrameCount())) {
 							ImGui::OpenPopup("Not enough disk space##RenderDoc");
-						} else {
+						} else if (RequestCapture(CaptureDevice::D3D11, GetCaptureFrameCount(), requestId, requestError)) {
 							// Set comments if provided
 							if (strlen(commentsBuffer) > 0) {
 								// Build complete comments with automatic metadata plus user input
@@ -240,9 +243,9 @@ void RenderDoc::DrawSettings()
 								memset(commentsBuffer, 0, sizeof(commentsBuffer));  // Clear the buffer
 							}
 
-							// Actual capture logic
-							logger::info("[RenderDoc] Manual capture triggered by user");
-							TriggerConfiguredCapture(false);
+							logger::info("[RenderDoc] Manual capture {} triggered by user", requestId);
+						} else {
+							logger::warn("[RenderDoc] Manual capture refused: {}", requestError);
 						}
 					} catch (const std::exception& e) {
 						logger::error("[RenderDoc] Exception during capture logic: {}", e.what());
@@ -251,7 +254,7 @@ void RenderDoc::DrawSettings()
 
 				if (ImGui::BeginPopup("Not enough disk space##RenderDoc")) {
 					ImGui::Text("%s", T(TKEY("not_enough_space"), "Not enough free disk space to create a capture."));
-					ImGui::Text(T(TKEY("space_required"), "At least %llu MB of free space is required."), static_cast<unsigned long long>(GetRequiredCaptureSpaceBytes() / (1024 * 1024)));
+					ImGui::Text(T(TKEY("space_required"), "At least %llu MB of free space is required."), static_cast<unsigned long long>(GetRequiredCaptureSpaceBytes(GetCaptureFrameCount()) / (1024 * 1024)));
 					if (ImGui::Button(T(TKEY("ok"), "OK"))) {
 						ImGui::CloseCurrentPopup();
 					}
@@ -673,58 +676,132 @@ void RenderDoc::InvalidateCaptureCache()
 	cacheLastUpdate = std::chrono::steady_clock::time_point::min();
 }
 
-void RenderDoc::TriggerCapture()
+void* RenderDoc::GetCaptureDevice(CaptureDevice a_device) const
 {
-	if (!renderDocApi) {
-		logger::warn("[RenderDoc] Cannot trigger capture - RenderDoc API not available");
-		return;
+	if (a_device == CaptureDevice::D3D12) {
+		return globals::features::upscaling.GetProxyD3D12Device();
 	}
-
-	logger::info("[RenderDoc] Triggering immediate capture");
-	renderDocApi->TriggerCapture();
-
-	// Invalidate cache so it refreshes when next accessed (capture should appear in list)
-	InvalidateCaptureCache();
+	return globals::d3d::device;
 }
 
-void RenderDoc::TriggerMultiFrameCapture(uint32_t a_frameCount)
+bool RenderDoc::RequestCapture(CaptureDevice a_device, uint32_t a_frames, RequestId& o_id, std::string& o_error)
 {
 	if (!renderDocApi) {
-		logger::warn("[RenderDoc] Cannot trigger multi-frame capture - RenderDoc API not available");
-		return;
+		o_error = "RenderDoc API not available";
+		return false;
 	}
-
-	const uint32_t frameCount = std::clamp(a_frameCount, kMinCaptureFrameCount, kMaxCaptureFrameCount);
-	logger::info("[RenderDoc] Triggering multi-frame capture for {} frame(s)", frameCount);
-	renderDocApi->TriggerMultiFrameCapture(frameCount);
-
-	// Invalidate cache so it refreshes when next accessed (capture should appear in list)
-	InvalidateCaptureCache();
-}
-
-bool RenderDoc::TriggerConfiguredCapture(bool a_checkDiskSpace)
-{
-	if (!renderDocApi) {
-		logger::warn("[RenderDoc] Cannot trigger configured capture - RenderDoc API not available");
+	if (!GetCaptureDevice(a_device)) {
+		o_error = a_device == CaptureDevice::D3D12 ?
+		              "D3D12 capture device unavailable: it exists only when the D3D12 swap-chain proxy was created at startup" :
+		              "capture device unavailable";
 		return false;
 	}
 
-	if (a_checkDiskSpace) {
-		uint64_t requiredSpace = 0;
-		if (!HasSufficientDiskSpaceForConfiguredCapture(&requiredSpace)) {
-			logger::warn("[RenderDoc] Not enough free disk space to create a capture. At least {} MB required.", requiredSpace / (1024 * 1024));
-			return false;
-		}
+	const uint32_t frames = std::clamp(a_frames, kMinCaptureFrameCount, kMaxCaptureFrameCount);
+	if (!HasSufficientDiskSpace(frames)) {
+		o_error = std::format("at least {} MB of free disk space required", GetRequiredCaptureSpaceBytes(frames) / (1024 * 1024));
+		return false;
 	}
 
-	const uint32_t frameCount = GetCaptureFrameCount();
-	if (frameCount > 1) {
-		TriggerMultiFrameCapture(frameCount);
-	} else {
-		TriggerCapture();
+	std::lock_guard lock(captureMutex);
+	if (capture) {
+		o_error = "another capture is still in flight";
+		return false;
 	}
 
+	capture = CaptureState{ .id = ++lastRequestId, .device = a_device, .frames = frames, .remaining = frames };
+	o_id = capture->id;
 	return true;
+}
+
+void RenderDoc::SetCompletionCallback(std::function<void(const CaptureCompletion&)> a_callback)
+{
+	std::lock_guard lock(captureMutex);
+	completionCallback = std::move(a_callback);
+}
+
+void RenderDoc::OnPresent()
+{
+	if (!renderDocApi) {
+		return;
+	}
+
+	CaptureCompletion done;
+	std::function<void(const CaptureCompletion&)> callback;
+	{
+		std::lock_guard lock(captureMutex);
+		if (!capture) {
+			return;
+		}
+
+		auto& state = *capture;
+		done = { state.id, state.device, state.frames, {}, {} };
+		void* device = GetCaptureDevice(state.device);
+		const auto now = std::chrono::steady_clock::now();
+
+		bool finished = false;
+
+		if (state.phase == CapturePhase::Bracketing) {
+			if (!device) {
+				done.error = "capture device went away";
+				finished = true;
+			} else if (!state.started) {
+				state.started = true;
+				state.countBefore = renderDocApi->GetNumCaptures();
+				renderDocApi->StartFrameCapture(device, nullptr);  // Null window: RenderDoc matches any swap chain of the device
+			} else if (!renderDocApi->EndFrameCapture(device, nullptr)) {
+				done.error = "RenderDoc could not end the capture";
+				finished = true;
+			} else if (--state.remaining > 0) {
+				// One file per frame, as the multi-frame hotkey has always produced
+				renderDocApi->StartFrameCapture(device, nullptr);
+			} else {
+				state.phase = CapturePhase::AwaitingFiles;
+				state.files.resize(state.frames);
+				state.lastChange = now;
+			}
+		} else {
+			const uint32_t listed = renderDocApi->GetNumCaptures();
+			bool allWritten = true;
+			for (uint32_t i = 0; i < state.files.size(); ++i) {
+				auto& file = state.files[i];
+				if (file.fullPath.empty() && listed > state.countBefore + i) {
+					const auto utf8 = GetCapturePath(state.countBefore + i);
+					file.fullPath = std::filesystem::path(std::u8string(utf8.begin(), utf8.end()));
+					state.lastChange = now;
+				}
+				std::error_code ec;
+				const uint64_t bytes = file.fullPath.empty() ? 0 : std::filesystem::file_size(file.fullPath, ec);
+				if (!ec && bytes != file.fileSize) {
+					file.fileSize = bytes;
+					state.lastChange = now;
+				}
+				allWritten = allWritten && file.fileSize > 0;
+			}
+
+			if (allWritten && now - state.lastChange >= kCaptureFileStableFor) {
+				done.captures = std::move(state.files);
+				finished = true;
+			} else if (now - state.lastChange >= kCaptureFileTimeout) {
+				done.error = allWritten ? "capture files did not finish writing" : "RenderDoc did not report every capture file";
+				finished = true;
+			}
+		}
+
+		if (!finished) {
+			return;
+		}
+		capture.reset();
+		callback = completionCallback;
+	}
+
+	if (!done.error.empty()) {
+		logger::warn("[RenderDoc] Capture {} failed: {}", done.id, done.error);
+	}
+	InvalidateCaptureCache();
+	if (callback) {
+		callback(done);
+	}
 }
 
 bool RenderDoc::HandleCaptureHotkey(uint32_t a_vkKey)
@@ -746,8 +823,13 @@ bool RenderDoc::HandleCaptureHotkey(uint32_t a_vkKey)
 		return false;
 	}
 
-	logger::info("[RenderDoc] Capture hotkey triggered");
-	TriggerConfiguredCapture();
+	RequestId requestId;
+	std::string requestError;
+	if (RequestCapture(CaptureDevice::D3D11, GetCaptureFrameCount(), requestId, requestError)) {
+		logger::info("[RenderDoc] Capture {} triggered by hotkey", requestId);
+	} else {
+		logger::warn("[RenderDoc] Capture hotkey refused: {}", requestError);
+	}
 	return true;
 }
 
@@ -761,19 +843,14 @@ void RenderDoc::SetCaptureFrameCount(uint32_t a_frameCount)
 	captureFrameCount = std::clamp(a_frameCount, kMinCaptureFrameCount, kMaxCaptureFrameCount);
 }
 
-uint64_t RenderDoc::GetRequiredCaptureSpaceBytes() const
+uint64_t RenderDoc::GetRequiredCaptureSpaceBytes(uint32_t a_frames) const
 {
-	const uint64_t estimated = kObservedPerFrameBytes * GetCaptureFrameCount();
+	const uint64_t estimated = kObservedPerFrameBytes * std::clamp(a_frames, kMinCaptureFrameCount, kMaxCaptureFrameCount);
 	return std::max(estimated, kMinCaptureSpaceBytes);
 }
 
-bool RenderDoc::HasSufficientDiskSpaceForConfiguredCapture(uint64_t* a_requiredSpaceBytes) const
+bool RenderDoc::HasSufficientDiskSpace(uint32_t a_frames) const
 {
-	const uint64_t requiredSpace = GetRequiredCaptureSpaceBytes();
-	if (a_requiredSpaceBytes) {
-		*a_requiredSpaceBytes = requiredSpace;
-	}
-
 	try {
 		auto capturesDir = GetCapturesDirectory();
 		std::error_code ec;
@@ -783,7 +860,7 @@ bool RenderDoc::HasSufficientDiskSpaceForConfiguredCapture(uint64_t* a_requiredS
 			return false;
 		}
 
-		return freeSpace >= requiredSpace;
+		return freeSpace >= GetRequiredCaptureSpaceBytes(a_frames);
 	} catch (const std::exception& e) {
 		logger::error("[RenderDoc] Exception while checking capture disk space: {}", e.what());
 		return false;

@@ -228,6 +228,7 @@ public:
 	void CreateProxySwapChain(IDXGIAdapter* adapter, DXGI_SWAP_CHAIN_DESC swapChainDesc);
 	void CreateProxyInterop();
 	IDXGISwapChain* GetProxySwapChain();
+	ID3D12Device* GetProxyD3D12Device() const { return d3d12SwapChainActive ? dx12SwapChain.d3d12Device.get() : nullptr; }
 
 	using BlurResources = DX12SwapChain::BlurResources;
 

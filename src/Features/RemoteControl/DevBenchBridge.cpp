@@ -497,10 +497,10 @@ namespace
 					return json{ { "error", "RenderDoc feature is not loaded" }, { "hint", "communityshaders.feature(action='list') shows RenderDoc.loaded" } };
 				if (!renderDoc->IsAvailable())
 					return json{ { "error", "RenderDoc API not available — attach RenderDoc or load the in-app DLL" } };
-				if (frameCount == 1)
-					renderDoc->TriggerCapture();
-				else
-					renderDoc->TriggerMultiFrameCapture(frameCount);
+				RenderDoc::RequestId requestId;
+				std::string error;
+				if (!renderDoc->RequestCapture(RenderDoc::CaptureDevice::D3D11, frameCount, requestId, error))
+					return json{ { "error", error } };
 				return json{ { "queued", true }, { "kind", "renderdoc" }, { "frames", frameCount }, { "enqueued_at_frame", frame } };
 			});
 		}
