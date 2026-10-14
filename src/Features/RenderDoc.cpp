@@ -810,15 +810,6 @@ void RenderDoc::SetCaptureFilePathTemplate(const std::string& a_template)
 	logger::info("[RenderDoc] Set capture file path template to: {}", a_template);
 }
 
-bool RenderDoc::IsCapturing() const
-{
-	if (!renderDocApi)
-		return false;
-
-	// RenderDoc API doesn't have a direct IsCapturing method, but we can check if captures are enabled
-	return enableRenderDocCapture && renderDocApi != nullptr;
-}
-
 std::string RenderDoc::GetCapturePath(uint32_t a_index)
 {
 	if (!renderDocApi) {

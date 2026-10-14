@@ -42,7 +42,6 @@ public:
 	bool HandleCaptureHotkey(uint32_t a_vkKey);
 	void SetCaptureFilePathTemplate(const std::string& a_template);
 	std::string GetCapturesDirectory() const;
-	bool IsCapturing() const;
 	std::string GetCapturePath(uint32_t a_index);
 	uint32_t GetNumCaptures() const;
 	uint32_t CalculateCapturesDiskUsage();
