@@ -5,6 +5,7 @@
 #include "Utils/ExternalEmittance.h"
 #include "Utils/VersionedRelocation.h"
 
+#include "EngineFix.h"
 #include "Feature.h"
 #include "Globals.h"
 #include "Menu.h"
@@ -110,6 +111,7 @@ struct BSShader_LoadShaders
 				Feature::ForEachLoadedFeature("GenerateShaderPermutations", [shader](Feature* feature) {
 					feature->GenerateShaderPermutations(shader);
 				});
+				EngineFix::GenerateAllShaderPermutations(shader);
 			}
 
 			for (const auto& entry : shader->vertexShaders) {

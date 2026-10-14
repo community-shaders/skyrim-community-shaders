@@ -50,3 +50,9 @@ void EngineFix::InstallOnDataLoadedFixes()
 {
 	InstallFixes(GetOnDataLoadedFixesList());
 }
+
+void EngineFix::GenerateAllShaderPermutations(RE::BSShader* a_shader)
+{
+	for (const auto fix : GetOnPostPostLoadFixesList())
+		fix->GenerateShaderPermutations(a_shader);
+}

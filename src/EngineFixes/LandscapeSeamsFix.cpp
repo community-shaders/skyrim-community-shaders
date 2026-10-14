@@ -2,6 +2,7 @@
 
 #include "Globals.h"
 #include "ShaderCache.h"
+#include "State.h"
 #include "TruePBR.h"
 #include "Utils/D3D.h"
 #include "Utils/Game.h"
@@ -679,10 +680,10 @@ struct LandscapeSeamsFix::Hooks
 		static RE::BSShaderProperty::RenderPassArray* thunk(RE::BSLightingShaderProperty* a_property, RE::BSGeometry* a_geometry, std::uint32_t a_renderFlags, RE::BSShaderAccumulator* a_accumulator)
 		{
 			auto* renderPasses = func(a_property, a_geometry, a_renderFlags, a_accumulator);
-			if (renderPasses == nullptr || !a_property->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kMultiTextureLandscape))
+			if (renderPasses == nullptr)
 				return renderPasses;
 
-			const bool blended = GetInstance().IsBlended(a_geometry);
+			const bool blended = a_property->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kMultiTextureLandscape) && GetInstance().IsBlended(a_geometry);
 
 			for (auto* pass = renderPasses->head; pass != nullptr; pass = pass->next) {
 				if (pass->shader->shaderType.get() != RE::BSShader::Type::Lighting)
@@ -690,12 +691,12 @@ struct LandscapeSeamsFix::Hooks
 
 				auto technique = pass->passEnum - LightingTechniqueStart;
 				const auto type = static_cast<SIE::ShaderCache::LightingShaderTechniques>((technique >> 24) & 0x3F);
-				if (type != SIE::ShaderCache::LightingShaderTechniques::MTLand && type != SIE::ShaderCache::LightingShaderTechniques::MTLandLODBlend)
-					continue;
+				const bool landscape = type == SIE::ShaderCache::LightingShaderTechniques::MTLand || type == SIE::ShaderCache::LightingShaderTechniques::MTLandLODBlend;
 
+				// Vanilla packs a light count into the seams bit, so it is cleared on every other lighting pass.
 				// Only the seams bit is added: BeginTechnique's fallback clears just this bit, so it must
 				// leave the quad's own permutation. Borrowed glint layers glint only on quads that already use GLINT.
-				if (blended)
+				if (blended && landscape)
 					technique |= SeamsFlag;
 				else
 					technique &= ~SeamsFlag;
@@ -740,4 +741,25 @@ void LandscapeSeamsFix::Install()
 	}
 
 	Hooks::Install();
+}
+
+void LandscapeSeamsFix::GenerateShaderPermutations(RE::BSShader* a_shader)
+{
+	if (!globals::features::truePBR.loaded || a_shader->shaderType.get() != RE::BSShader::Type::Lighting)
+		return;
+
+	auto state = globals::state;
+	auto shaderCache = globals::shaderCache;
+	for (const auto& entry : a_shader->pixelShaders) {
+		const auto type = static_cast<SIE::ShaderCache::LightingShaderTechniques>((entry->id >> 24) & 0x3F);
+		if (type != SIE::ShaderCache::LightingShaderTechniques::MTLand && type != SIE::ShaderCache::LightingShaderTechniques::MTLandLODBlend)
+			continue;
+
+		auto vertexShaderDescriptor = entry->id;
+		auto pixelShaderDescriptor = entry->id | SeamsFlag;
+		state->ModifyShaderLookup(*a_shader, vertexShaderDescriptor, pixelShaderDescriptor);
+		std::ignore = shaderCache->GetPixelShader(*a_shader, pixelShaderDescriptor);
+		state->ModifyShaderLookup(*a_shader, vertexShaderDescriptor, pixelShaderDescriptor, true);
+		std::ignore = shaderCache->GetPixelShader(*a_shader, pixelShaderDescriptor);
+	}
 }
