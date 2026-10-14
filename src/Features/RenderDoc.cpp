@@ -951,31 +951,23 @@ void RenderDoc::ApplyAutomaticCommentsToNewCaptures()
 		return;  // No new captures
 	}
 
-	// Check for pending user comments and apply them to the first new capture
-	std::string userComments;
-	{
-		std::lock_guard<std::mutex> lock(pendingCommentsMutex);
-		if (!pendingCaptureComments.empty()) {
-			userComments = std::move(pendingCaptureComments);
-			pendingCaptureComments.clear();
-		}
-	}
-
 	// Build automatic comments for new captures
 	std::string automaticComments = BuildAutomaticCaptureComments("");
 
 	// Apply comments to new captures: user comments to first capture, automatic to others
+	std::lock_guard<std::mutex> lock(pendingCommentsMutex);
 	for (uint32_t i = lastCaptureCount; i < numCaptures; ++i) {
 		std::string capturePath = GetCapturePath(i);
-		if (!capturePath.empty()) {
-			// Use user comments for the first new capture, automatic for subsequent ones
-			const std::string& commentsToApply = (i == lastCaptureCount && !userComments.empty()) ? userComments : automaticComments;
-			renderDocApi->SetCaptureFileComments(capturePath.c_str(), commentsToApply.c_str());
-			logger::info("[RenderDoc] Applied comments to capture {}: {}", i, commentsToApply);
+		if (capturePath.empty()) {
+			break;
 		}
-	}
 
-	lastCaptureCount = numCaptures;
+		const std::string& commentsToApply = !pendingCaptureComments.empty() ? pendingCaptureComments : automaticComments;
+		renderDocApi->SetCaptureFileComments(capturePath.c_str(), commentsToApply.c_str());
+		logger::info("[RenderDoc] Applied comments to capture {}: {}", i, commentsToApply);
+		pendingCaptureComments.clear();
+		lastCaptureCount = i + 1;
+	}
 }
 
 std::string RenderDoc::GetOverlayWarningMessage() const
