@@ -650,22 +650,27 @@ void PerformanceOverlay::DrawABTestStatisticalValidity(const Menu::ThemeSettings
 	float totalDuration = aggregator.GetTotalTestDuration();
 	int totalFrames = aggregator.GetTotalFrameCount();
 	int excludedFrames = 0;
+	bool hasSamplesA = false;
+	bool hasSamplesB = false;
 	for (const auto& interval : aggregator.GetIntervals()) {
 		excludedFrames += interval.excludedFrames;
+		hasSamplesA = hasSamplesA || (interval.variant == ABVariant::A && !interval.frameRows.empty());
+		hasSamplesB = hasSamplesB || (interval.variant == ABVariant::B && !interval.frameRows.empty());
 	}
 	int validFrames = totalFrames;
 	int totalWithExcluded = totalFrames + excludedFrames;
 	float validPercent = (totalWithExcluded > 0) ? (100.0f * validFrames / totalWithExcluded) : 100.0f;
 
+	bool hasBothVariants = hasSamplesA && hasSamplesB;
 	bool hasEnoughSamples = validFrames >= kMinimumSamplesForValidity;
 	bool hasGoodDuration = totalDuration >= kMinimumTestDuration;
 	bool hasLowExclusionRate = validPercent >= kMinimumValidFramesPercent;
-	bool isStatisticallyValid = hasEnoughSamples && hasGoodDuration && hasLowExclusionRate;
+	bool isStatisticallyValid = hasBothVariants && hasEnoughSamples && hasGoodDuration && hasLowExclusionRate;
 
 	ImVec4 validityColor = theme.Palette.Text;
 	if (isStatisticallyValid) {
 		validityColor = theme.StatusPalette.SuccessColor;
-	} else if (validFrames >= kMinimumSamplesForMarginal && totalDuration >= kMinimumDurationForMarginal) {
+	} else if (hasBothVariants && validFrames >= kMinimumSamplesForMarginal && totalDuration >= kMinimumDurationForMarginal) {
 		validityColor = theme.StatusPalette.Warning;
 	} else {
 		validityColor = theme.StatusPalette.Error;
