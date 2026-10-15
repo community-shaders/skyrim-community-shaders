@@ -234,10 +234,7 @@ void TerrainShadows::DrawSettings()
 
 void TerrainShadows::ClearShaderCache()
 {
-	if (shadowUpdateProgram) {
-		shadowUpdateProgram->Release();
-		shadowUpdateProgram = nullptr;
-	}
+	shadowUpdateProgram = nullptr;
 
 	CompileComputeShaders();
 }
