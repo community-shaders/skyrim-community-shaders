@@ -384,11 +384,11 @@ void SubsurfaceScattering::SetupResources()
 		D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
 		main.UAV->GetDesc(&uavDesc);
 
-		blurHorizontalTemp = new Texture2D(texDesc);
+		blurHorizontalTemp = new Texture2D(texDesc, "SSS::BlurHorizontalTemp");
 		blurHorizontalTemp->CreateSRV(srvDesc);
 		blurHorizontalTemp->CreateUAV(uavDesc);
 
-		diffuseNoAlbedoTex = new Texture2D(texDesc);
+		diffuseNoAlbedoTex = new Texture2D(texDesc, "SSS::DiffuseNoAlbedo");
 		diffuseNoAlbedoTex->CreateSRV(srvDesc);
 		diffuseNoAlbedoTex->CreateUAV(uavDesc);
 	}

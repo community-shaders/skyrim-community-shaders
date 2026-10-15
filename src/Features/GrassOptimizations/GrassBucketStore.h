@@ -335,15 +335,12 @@ private:
 	std::unordered_map<RE::BSMultiStreamInstanceTriShape*, GrassBucket*> shapeBucketId;
 	mutable std::shared_mutex shapeBucketMutex;
 
-	// Keyed by raw pointer with each entry holding a strong reference to the texture so it is not released while the cache is valid.
 	struct ComplexEntry
 	{
-		RE::NiPointer<RE::NiSourceTexture> keepAlive;
-		ID3D11ShaderResourceView* resourceView = nullptr;
 		float normalLength = 0.0f;
 		bool complex = false;
 	};
-	std::unordered_map<RE::NiSourceTexture*, ComplexEntry> complexCache;
+	std::unordered_map<std::string, ComplexEntry> complexCache;
 	float cachedComplexThreshold = -1.0f;
 
 	ID3D11ComputeShader* detectCS = nullptr;

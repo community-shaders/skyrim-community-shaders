@@ -1263,6 +1263,10 @@ bool TruePBR::TESObjectLAND_SetupMaterial(RE::TESObjectLAND* land)
 	if (land->loadedData != nullptr && land->loadedData->mesh[0] != nullptr) {
 		land->data.flags.set(static_cast<RE::OBJ_LAND::Flag>(8));
 		for (uint32_t quadIndex = 0; quadIndex < 4; ++quadIndex) {
+			auto* quadMesh = land->loadedData->mesh[quadIndex];
+			if (quadMesh == nullptr || quadMesh->GetChildren().empty() || quadMesh->GetChildren()[0] == nullptr)
+				continue;
+
 			auto shaderProperty = static_cast<RE::BSLightingShaderProperty*>(memoryManager->Allocate(sizeof(RE::BSLightingShaderProperty), 0, false));
 			shaderProperty->Ctor();
 
@@ -1314,12 +1318,9 @@ bool TruePBR::TESObjectLAND_SetupMaterial(RE::TESObjectLAND* land)
 
 			shaderProperty->SetFlags(RE::BSShaderProperty::EShaderPropertyFlag8::kVertexLighting, true);
 
-			const auto& children = land->loadedData->mesh[quadIndex]->GetChildren();
-			auto geometry = children.empty() ? nullptr : static_cast<RE::BSGeometry*>(children[0].get());
+			auto geometry = static_cast<RE::BSGeometry*>(quadMesh->GetChildren()[0].get());
 			shaderProperty->SetupGeometry(geometry);
-			if (geometry != nullptr) {
-				geometry->GetGeometryRuntimeData().shaderProperty = RE::NiPointer(shaderProperty);
-			}
+			geometry->GetGeometryRuntimeData().shaderProperty = RE::NiPointer(shaderProperty);
 
 			globals::game::smState->shadowSceneNode[0]->AttachObject(geometry);
 		}
@@ -1630,12 +1631,13 @@ struct TESBoundObject_Clone3D
 								BSLightingShaderMaterialPBR* targetMat = material;
 
 								if (wouldContaminate) {
-									auto* freshMat = BSLightingShaderMaterialPBR::Make();
-									if (freshMat) {
-										freshMat->CopyMembers(material);
-										shaderProperty->material = freshMat;
-										targetMat = freshMat;
-									} else {
+									{
+										BSLightingShaderMaterialPBR srcMaterial;
+										srcMaterial.CopyMembers(material);
+										shaderProperty->SetMaterial(&srcMaterial, true);
+									}
+									targetMat = static_cast<BSLightingShaderMaterialPBR*>(shaderProperty->material);
+									if (!targetMat) {
 										logger::warn("[TruePBR] failed to clone PBR material for ref {:08X}; skipping to avoid contamination", ref->GetFormID());
 										return RE::BSVisit::BSVisitControl::kContinue;
 									}
