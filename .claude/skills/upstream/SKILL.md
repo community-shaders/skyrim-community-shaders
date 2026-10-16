@@ -82,7 +82,7 @@ pip install -q git+https://github.com/alandtse/hlslkit.git   # buffer-scan only;
 
     A commit can appear in both logs, so deduplicate by SHA before triage. Triage `fix(sync)` and `refactor(sync)` commits like any other commit. `chore(sync): bump ...` version bumps are not relevant to upstream; mark them so.
 
--   Drop only the `chore(sync): merge upstream` commits themselves from triage, but first extract their **sync residue**: fork-side changes that rode along with the sync. Let `P` be the sync's first parent and `U` the upstream commit it pulled in (the second parent, or for a squash-style sync the commit named in its message, else `git rev-list -1 --before=<sync date> upstream/dev`). The expected result is the clean merge of the two, so the residue is what the sync changed beyond it:
+-   Drop only the `chore(sync): merge upstream` commits themselves from triage, but first extract their **sync residue**: fork-side changes that rode along with the sync. Let `P` be the sync's first parent and `U` the upstream commit it pulled in (the second parent, or for a squash-style sync the commit named in its message). If a squash-style sync names no upstream commit, review the whole sync by hand instead of inferring `U` from commit dates. The expected result is the clean merge of the two, so the residue is what the sync changed beyond it:
 
     ```bash
     tree=$(git merge-tree --write-tree <P> <U>)   # exit 1 = conflicts: review the whole sync by hand; any other non-zero exit is a git error (bad ref?): stop and report it
