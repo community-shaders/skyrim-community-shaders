@@ -4,13 +4,13 @@
 #if defined(LANDSCAPE)
 float2 GetParallaxCoords(PS_INPUT input, float distance, float2 coords, float mipLevels[6], float maxTexDim, float3 viewDir, float3x3 tbn, float noise, DisplacementParams params[6],
 	StochasticOffsets sharedOffset,
-	out float pixelOffset,
+	out float2 surfaceHeight,
 	out float weights[6])
 #else
-float2 GetParallaxCoords(float distance, float2 coords, float mipLevel, float3 viewDir, float3x3 tbn, float noise, Texture2D<float4> tex, SamplerState texSampler, uint channel, DisplacementParams params, bool applyMeshTV, StochasticOffsets meshOffset, out float pixelOffset)
+float2 GetParallaxCoords(float distance, float2 coords, float mipLevel, float3 viewDir, float3x3 tbn, float noise, Texture2D<float4> tex, SamplerState texSampler, uint channel, DisplacementParams params, bool applyMeshTV, StochasticOffsets meshOffset, out float2 surfaceHeight)
 #endif
 {
-	pixelOffset = 0.0;
+	surfaceHeight = float2(0.5, 0.0);
 #if defined(LANDSCAPE)
 	maxTexDim = maxTexDim;
 #endif
@@ -176,7 +176,7 @@ float2 GetParallaxCoords(float distance, float2 coords, float mipLevel, float3 v
 #endif
 			nearBlendToFar *= nearBlendToFar;
 		float offset = (1.0 - parallaxAmount) * -maxHeight + minHeight;
-		pixelOffset = saturate(lerp(parallaxAmount, 0.5, nearBlendToFar));
+		surfaceHeight = float2(saturate(parallaxAmount), contactRefinement ? (1.0 - nearBlendToFar) * smoothstep(0.0, 0.01, scale) : 0.0);
 		resultCoords = lerp(viewDirTS.xy * offset + coords.xy, coords, nearBlendToFar);
 	} else {
 #if defined(LANDSCAPE)
@@ -187,7 +187,7 @@ float2 GetParallaxCoords(float distance, float2 coords, float mipLevel, float3 v
 		weights[4] = input.LandBlendWeights2.x;
 		weights[5] = input.LandBlendWeights2.y;
 #endif
-		pixelOffset = 0.0;
+		surfaceHeight = float2(0.5, 0.0);
 	}
 
 	return resultCoords;

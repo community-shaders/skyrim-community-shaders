@@ -20,6 +20,7 @@ namespace Permutation
 	namespace LightingTechnique
 	{
 		static const uint Glowmap = 2;
+		static const uint TreeAnim = 12;
 	}
 
 	namespace LightingFlags

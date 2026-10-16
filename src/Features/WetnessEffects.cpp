@@ -33,7 +33,33 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	RippleStrength,
 	RippleRadius,
 	RippleBreadth,
-	RippleLifetime)
+	RippleLifetime,
+	WallRainDensity,
+	WallRainDropSize,
+	WallRainSpeed,
+	WallRainLayering,
+	WallRainNormalStrength,
+	WallRainWetness,
+	WallRainDarkening,
+	EnableWallRain,
+	WallRainTrailLength)
+
+static void SanitizeWallRainSettings(WetnessEffects::Settings& settings)
+{
+	const WetnessEffects::Settings defaults;
+	auto clamp = [](float value, float fallback, float minimum, float maximum) {
+		return std::isfinite(value) ? std::clamp(value, minimum, maximum) : fallback;
+	};
+	settings.EnableWallRain = settings.EnableWallRain != 0;
+	settings.WallRainDensity = clamp(settings.WallRainDensity, defaults.WallRainDensity, 0.0f, 3.0f);
+	settings.WallRainDropSize = clamp(settings.WallRainDropSize, defaults.WallRainDropSize, 0.5f, 2.0f);
+	settings.WallRainTrailLength = clamp(settings.WallRainTrailLength, defaults.WallRainTrailLength, 0.25f, 2.0f);
+	settings.WallRainSpeed = clamp(settings.WallRainSpeed, defaults.WallRainSpeed, 0.0f, 2.0f);
+	settings.WallRainLayering = clamp(settings.WallRainLayering, defaults.WallRainLayering, 0.0f, 2.0f);
+	settings.WallRainNormalStrength = clamp(settings.WallRainNormalStrength, defaults.WallRainNormalStrength, 0.0f, 4.0f);
+	settings.WallRainWetness = clamp(settings.WallRainWetness, defaults.WallRainWetness, 0.0f, 2.0f);
+	settings.WallRainDarkening = clamp(settings.WallRainDarkening, defaults.WallRainDarkening, 0.0f, 1.5f);
+}
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	WetnessEffects::DebugSettings,
@@ -559,6 +585,49 @@ void WetnessEffects::DrawSettings()
 			ImGui::TreePop();
 		}
 
+		if (ImGui::TreeNodeEx(T(TKEY("wall_rain_flow"), "Surface Rain Flow"))) {
+			bool enableWallRain = settings.EnableWallRain != 0;
+			if (ImGui::Checkbox(T(TKEY("wall_rain_enabled"), "Enable Surface Rain Flow"), &enableWallRain))
+				settings.EnableWallRain = enableWallRain;
+			if (auto _tt = Util::HoverTooltipWrapper())
+				ImGui::Text("%s", T(TKEY("wall_rain_enabled_tooltip"), "Raised water beads and narrow streams on exposed surfaces outside puddles. Beads rest on level surfaces and flow more on steeper slopes. Uses Enable Raindrop Effects and Effect Range; excludes grass."));
+
+			auto disabled = Util::DisableGuard(!settings.EnableWallRain);
+			ImGui::SliderFloat(T(TKEY("wall_rain_density"), "Density"), &settings.WallRainDensity, 0.0f, 3.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+			if (auto _tt = Util::HoverTooltipWrapper())
+				ImGui::Text("%s", T(TKEY("wall_rain_density_tooltip"), "Number of new drops and independent streams across the surface. Higher density and heavier rain produce more frequent, overlapping drops without shrinking them."));
+
+			ImGui::SliderFloat(T(TKEY("wall_rain_drop_size"), "Drop Size"), &settings.WallRainDropSize, 0.5f, 2.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+			if (auto _tt = Util::HoverTooltipWrapper())
+				ImGui::Text("%s", T(TKEY("wall_rain_drop_size_tooltip"), "Overall drop size. Smaller beads tend to stay round and attached; mobile drops elongate as they slide. Short trails and long streaks remain narrower."));
+
+			ImGui::SliderFloat(T(TKEY("wall_rain_trail_length"), "Trail Length"), &settings.WallRainTrailLength, 0.25f, 2.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+			if (auto _tt = Util::HoverTooltipWrapper())
+				ImGui::Text("%s", T(TKEY("wall_rain_trail_length_tooltip"), "Length of the independent wet streaks and short drop trails. Drop trails remain limited by actual travel; long streaks persist between impacts."));
+
+			ImGui::SliderFloat(T(TKEY("wall_rain_flow_speed"), "Flow Speed"), &settings.WallRainSpeed, 0.0f, 2.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+			if (auto _tt = Util::HoverTooltipWrapper())
+				ImGui::Text("%s", T(TKEY("wall_rain_flow_speed_tooltip"), "Downhill speed of released drops and stream heads. Flow increases with slope; level surfaces retain resting beads. Zero stops sliding and stretching; new drops still form."));
+
+			ImGui::SliderFloat(T(TKEY("wall_rain_layering"), "Long Streaks"), &settings.WallRainLayering, 0.0f, 2.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+			if (auto _tt = Util::HoverTooltipWrapper())
+				ImGui::Text("%s", T(TKEY("wall_rain_layering_tooltip"), "Strength of independent narrow streams with moving heads and lingering wet tracks. Increases with slope. Zero leaves only beads and their short trails."));
+
+			ImGui::SliderFloat(T(TKEY("wall_rain_normal_strength"), "Surface Relief"), &settings.WallRainNormalStrength, 0.0f, 4.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+			if (auto _tt = Util::HoverTooltipWrapper())
+				ImGui::Text("%s", T(TKEY("wall_rain_normal_strength_tooltip"), "Curvature of rounded water drops and their steep contact edges, plus streak relief. Fine relief fades out with distance."));
+
+			ImGui::SliderFloat(T(TKEY("wall_rain_wet_look"), "Water Gloss"), &settings.WallRainWetness, 0.0f, 2.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+			if (auto _tt = Util::HoverTooltipWrapper())
+				ImGui::Text("%s", T(TKEY("wall_rain_wet_look_tooltip"), "Extra gloss on moving water and its narrow trails. Does not change the base rain wetness."));
+
+			ImGui::SliderFloat(T(TKEY("wall_rain_darkening"), "Trail Darkening"), &settings.WallRainDarkening, 0.0f, 1.5f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+			if (auto _tt = Util::HoverTooltipWrapper())
+				ImGui::Text("%s", T(TKEY("wall_rain_darkening_tooltip"), "Darkening of short drop marks and independent long wet streaks. Material porosity still controls the response."));
+
+			ImGui::TreePop();
+		}
+
 		ImGui::EndDisabled();
 
 		ImGui::TreePop();
@@ -735,9 +804,7 @@ float WetnessEffects::GetRainIntensity(RE::NiPointer<RE::BSGeometry> precipObjec
 		return 0.0f;
 	}
 
-	auto maxDensity = weather->precipitationData->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kParticleDensity).f;  // Use weather particle density as authoritative source for rain intensity
-	// This provides consistent intensity scaling based on weather type (1-3 scale)
-	// Note: rain->density equals maxDensity when fully active
+	auto maxDensity = weather->precipitationData->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kParticleDensity).f;
 	return (maxDensity > 0.0f) ? std::min(1.0f, maxDensity / MAX_RAIN_PARTICLE_DENSITY) : 0.0f;
 }
 
@@ -935,6 +1002,7 @@ WetnessEffects::PerFrame WetnessEffects::GetCommonBufferData() const
 	data.Time = rainTimer / 1000.f;
 
 	data.settings = settings;
+	SanitizeWallRainSettings(data.settings);
 	data.settings.MaxShoreWetness = settings.EnableWetnessEffects ? settings.MaxShoreWetness : 0.0f;
 	data.settings.RaindropChance *= data.Raining * data.Raining;
 	data.settings.RaindropGridSize = 1.0f / settings.RaindropGridSize;
@@ -957,6 +1025,7 @@ void WetnessEffects::Prepass()
 void WetnessEffects::LoadSettings(json& o_json)
 {
 	settings = o_json;
+	SanitizeWallRainSettings(settings);
 
 	// Auto-detect which preset matches the loaded settings
 	DetectCurrentPreset();
