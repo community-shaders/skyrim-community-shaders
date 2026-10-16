@@ -2188,6 +2188,7 @@ shaders:
                   - CLOUD_SHADOWS
                   - WATER_EFFECTS
                   - SSS
+                  - PROCEDURAL_AURORA
               entries:
                   - entry: Sky:Pixel:8
                     defines:
@@ -2278,6 +2279,7 @@ shaders:
                   - CLOUD_SHADOWS
                   - WATER_EFFECTS
                   - SSS
+                  - PROCEDURAL_AURORA
               entries:
                   - entry: Sky:Vertex:8
                     defines:
@@ -2409,6 +2411,7 @@ shaders:
                   - CLOUD_SHADOWS
                   - WATER_EFFECTS
                   - SSS
+                  - PROCEDURAL_AURORA
               entries:
                   - entry: Effect:Pixel:400
                     defines:
@@ -9633,6 +9636,7 @@ shaders:
                   - CLOUD_SHADOWS
                   - WATER_EFFECTS
                   - SSS
+                  - PROCEDURAL_AURORA
               entries:
                   - entry: Effect:Vertex:400
                     defines:
