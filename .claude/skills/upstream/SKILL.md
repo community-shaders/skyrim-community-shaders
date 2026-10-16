@@ -77,7 +77,7 @@ pip install -q git+https://github.com/alandtse/hlslkit.git   # buffer-scan only;
 -   Also collect every `(sync)` commit, merges included, because `--first-parent` misses the follow-ups and any sync merge that sits on a side branch a `chore(sync)` merge brought in:
 
     ```bash
-    git log --grep='(sync)' --since="$cutoff" <remote/branch>
+    git log --grep='(sync)' --since-as-filter="$cutoff" <remote/branch>
     ```
 
     A commit can appear in both logs, so deduplicate by SHA before triage. Triage `fix(sync)` and `refactor(sync)` commits like any other commit. `chore(sync): bump ...` version bumps are not relevant to upstream; mark them so.
