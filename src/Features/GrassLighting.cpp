@@ -69,33 +69,22 @@ void GrassLighting::DrawSettings()
 								  "This was the default in Community Shaders < 0.7.0"));
 		}
 		ImGui::Spacing();
-		ImGui::Spacing();
-		ImGui::TextWrapped("%s", T(TKEY("basic_grass"), "Basic Grass"));
 		ImGui::SliderFloat(T(TKEY("brightness"), "Brightness"), &settings.BasicGrassBrightness, 0.0f, 1.0f);
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text("%s", T(TKEY("brightness_tooltip"), "Darkens the grass textures to look better with the new lighting"));
 		}
 
 		if (globals::features::grassOptimizations.loaded) {
-			ImGui::Spacing();
-			ImGui::TextWrapped("%s", T(TKEY("mid_lod_grass"), "Middle LOD Grass"));
-			ImGui::PushID("midlod");
-			ImGui::SliderFloat(T(TKEY("lod_brightness"), "Brightness"), &settings.MidLODBrightness, 0.0f, 2.0f, "%.2f");
+			ImGui::SliderFloat(T(TKEY("mid_lod_brightness"), "Middle LOD Brightness"), &settings.MidLODBrightness, 0.0f, 2.0f, "%.2f");
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::Text("%s", T(TKEY("mid_lod_brightness_tooltip"),
 									  "Raise or lower until middle-distance LOD grass matches the full-detail grass around it. Requires Grass Optimizations with Middle LOD enabled."));
 			}
-			ImGui::PopID();
-
-			ImGui::Spacing();
-			ImGui::TextWrapped("%s", T(TKEY("far_lod_grass"), "Far LOD Grass"));
-			ImGui::PushID("farlod");
-			ImGui::SliderFloat(T(TKEY("lod_brightness"), "Brightness"), &settings.FarLODBrightness, 0.0f, 2.0f, "%.2f");
+			ImGui::SliderFloat(T(TKEY("far_lod_brightness"), "Far LOD Brightness"), &settings.FarLODBrightness, 0.0f, 2.0f, "%.2f");
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::Text("%s", T(TKEY("far_lod_brightness_tooltip"),
 									  "Raise or lower until the most distant LOD grass matches the middle LOD grass in front of it. Requires Grass Optimizations with Far LOD enabled."));
 			}
-			ImGui::PopID();
 		}
 
 		ImGui::TreePop();

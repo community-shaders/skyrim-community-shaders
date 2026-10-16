@@ -1,307 +1,316 @@
-#include "Common/FrameBuffer.hlsli"
+#include "Common/GrassInstance.hlsli"
 #include "Common/Math.hlsli"
 #include "Common/Random.hlsli"
 
 cbuffer CullParams : register(b0)
 {
-    float4 FrustumPlanes[6];
+	float4 FrustumPlanes[6];
 
-    float MinPixelSize;
-    float FullDetailPixelSize;
-    float LODMinKeep;
-    float LODFadeBand;
+	// PerFrame uses the light's camera during shadow passes, so retain the main camera's projection here.
+	float4 CameraViewProj[4];
+	float4 CameraPos;
 
-    float MeshCostBias;
-    float ProjScale;
-    float MaxDistSq;
-    float EdgeFadeStart;
+	float MinPixelSize;
+	float FullDetailPixelSize;
+	float LODMinKeep;
+	float LODFadeBand;
 
-    float AlphaParam1;
-    float AlphaParam2;
-    float FadeNow;
-    float FadeInTimeRcp;
+	float MeshCostBias;
+	float ProjScale;
+	float MaxDistSq;
+	float EdgeFadeStart;
 
-    float InvisibleFadeCull;
-    float SimpleShadingPixelSize;
-    float CollisionDistSq;
-    float MidLODPixelSize;
+	float AlphaParam1;
+	float AlphaParam2;
+	float FadeNow;
+	float FadeInTimeRcp;
 
-    float MeshLODBandPx;
-    float HiZEnabled;
-    float2 HiZSize;
+	float InvisibleFadeCull;
+	float SimpleShadingPixelSize;
+	float CollisionDistSq;
+	float MidLODPixelSize;
 
-    float HiZTexelPixels;
-    float HiZMipCount;
-    float OcclusionBias;
-    float CostBiasStartDist;
+	float MeshLODBandPx;
+	float HiZEnabled;
+	float2 HiZSize;
 
-    float FarLODPixelSize;
-    float3 _pad0;
+	float ProjectionWLength;
+	float HiZMipCount;
+	float OcclusionBias;
+	float CostBiasStartDist;
+
+	float FarLODPixelSize;
+	float3 _pad0;
 };
 
 cbuffer CullBucket : register(b1)
 {
-    uint InstanceCount;
-    float WavePeriod;
-    float TimeBase;
-    float PrevTimeBase;
-    float3 BoundCenter;
-    float ModelRadius;
-    float DistScale;
-    float MinPixelScale;
-    float IsComplex;
-    float MidLODEnabled;
-    // The dispatch covers the instances referenced by this slice range.
-    uint SliceTableOffset;
-    uint SliceCount;
-    float FarLODEnabled;
-    float _pad2;
+	uint GroupCount;
+	// SliceTable maps dispatched groups to visible source runs.
+	uint SliceTableOffset;
+	uint SliceCount;
+	// Split large buckets across rows to stay within the 65,535-group dispatch limit.
+	uint DispatchWidth;
+
+	// Each LOD tier occupies TierStride records in Compacted.
+	uint TierStride;
+	uint OutputOffset;
+	uint ArgsOffset;
+	uint _bucketPad0;
+
+	float BoundExtent;
+	float ModelRadius;
+	float DistScale;
+	float MinPixelScale;
+
+	float MidLODEnabled;
+	float FarLODEnabled;
+	float ComplexThreshold;
+	float _bucketPad1;
+
+	float WavePeriod;
+	float TimeBase;
+	float PrevTimeBase;
+	float _bucketPad2;
 };
 
 ByteAddressBuffer Instances : register(t0);
-StructuredBuffer<float4> Origins : register(t1);
-// Scene-depth max pyramid; see GrassHiZCS.hlsl.
+// Source groups contain instance ranges and cell origins.
+StructuredBuffer<GrassInstance::CullGroup> Groups : register(t1);
 Texture2D<float> HiZ : register(t2);
-// .x is the first source instance; .y is the compacted start index.
+// Each entry stores the run's first source group in .x and its first dispatch-group index in .y.
 StructuredBuffer<uint2> SliceTable : register(t3);
 
+// RunGrass resolves each output record against its source instance and group.
 RWByteAddressBuffer Compacted : register(u0);
-RWStructuredBuffer<float4> Extras : register(u1);
-RWByteAddressBuffer Counter : register(u2);
+// Each tier has DrawIndexedInstanced arguments with its instance count in the second DWORD.
+RWByteAddressBuffer Args : register(u1);
 
-RWByteAddressBuffer MidLODCompacted : register(u3);
-RWStructuredBuffer<float4> MidLODExtras : register(u4);
+// Tiers select the full, middle and far meshes.
+static const uint TierCount = 3;
+static const uint ArgsStride = 20;
+static const uint TierCulled = TierCount;
 
-RWByteAddressBuffer FarLODCompacted : register(u5);
-RWStructuredBuffer<float4> FarLODExtras : register(u6);
-// Both LOD counts share one UAV so the shader stays within D3D11's eight-UAV limit.
-RWByteAddressBuffer LODCounters : register(u7);
-
-static const uint MiddleLODCountOffset = 0;
-static const uint FarLODCountOffset = 4;
+// Aggregate survivors within each group to issue one global atomic per occupied tier.
+groupshared uint GroupTierCount[TierCount];
+groupshared uint GroupTierBase[TierCount];
 
 // Convert hashed bits to a uniform value in [0, 1).
 float RandFloat(uint bits)
 {
-    const uint mantissaMask = 0x007FFFFFu;
-    const uint one = 0x3F800000u;
+	const uint mantissaMask = 0x007FFFFFu;
+	const uint one = 0x3F800000u;
 
-    bits &= mantissaMask;
-    bits |= one;
-    
-    return asfloat(bits) - 1.0;
+	bits &= mantissaMask;
+	bits |= one;
+
+	return asfloat(bits) - 1.0;
 }
 
-// Precompute the per-instance wind term used by the vertex shader.
-float WindScalar(float basis, float timer)
+float4 ProjectDirection(float3 v)
 {
-    const float a = 0.4 * (basis + timer);
-    float sa, ca;
-    sincos(a, sa, ca);
-    const float t3 = 0.2 * cos(Math::PI * ca);
-    const float t1 = sin(Math::PI * sa);
-    const float t2 = sin(Math::TAU * sa);
-    return (t1 + t2) * 0.3 + t3;
+	return float4(dot(CameraViewProj[0].xyz, v), dot(CameraViewProj[1].xyz, v), dot(CameraViewProj[2].xyz, v), dot(CameraViewProj[3].xyz, v));
 }
 
-[numthreads(64, 1, 1)] void main(uint3 tid : SV_DispatchThreadID)
+// Return the LOD tier or TierCulled and populate the output record for surviving instances.
+uint CullInstance(uint idx, GrassInstance::CullGroup group, out float2 wind, out float fade, out uint flags)
 {
-    const uint compactIdx = tid.x;
-    if (compactIdx >= InstanceCount || SliceCount == 0)
-        return;
+	wind = 0.0;
+	fade = 0.0;
+	flags = 0;
 
-    // Find the source slice containing this compacted index.
-    uint lo = 0;
-    uint hi = SliceCount - 1;
-    [loop] while (lo < hi)
-    {
-        const uint mid = (lo + hi + 1) >> 1;
-        if (SliceTable[SliceTableOffset + mid].y <= compactIdx)
-            lo = mid;
-        else
-            hi = mid - 1;
-    }
-    const uint2 slice = SliceTable[SliceTableOffset + lo];
+	float4 data1, data2, data3, data4;
+	GrassInstance::Decode(Instances.Load4(idx * GrassInstance::Stride), data1, data2, data3, data4);
 
-    // Use the source index to keep dither decisions stable across slice changes.
-    const uint idx = slice.x + (compactIdx - slice.y);
+	const float2 localXY = data1.xy;
+	const float localZ = data1.z;
 
-    // Generate independent density and LOD dither values with one hash.
-    const uint2 rand = Random::pcg2d(uint2(idx, 0u));
+	const float3 world = float3(localXY, localZ) + group.Origin;
 
-    const uint base = idx * 32;
-    const uint4 raw0 = Instances.Load4(base);
-    const uint4 raw1 = Instances.Load4(base + 16);
+	const float3 dv = world - CameraPos.xyz;
+	const float distSq = dot(dv, dv);
 
-    const float2 localXY = float2(f16tof32(raw0.x & 0xFFFF), f16tof32(raw0.x >> 16));
-    const float localZ = f16tof32(raw0.y & 0xFFFF);
+	const float dist = sqrt(distSq);
 
-    const float4 og = Origins[idx];
-    const float3 world = float3(localXY, localZ) + og.xyz;
+	const float costRamp = saturate((dist - CostBiasStartDist) / max(CostBiasStartDist, 1e-4));
+	const float effCostBias = MeshCostBias * costRamp;
 
-    const float3 dv = world - FrameBuffer::CameraPosAdjust.xyz;
-    const float distSq = dot(dv, dv);
+	const float dScale = lerp(1.0, DistScale, effCostBias);
+	const float effMaxDistSq = MaxDistSq * dScale * dScale;
+	if (distSq > effMaxDistSq)
+		return TierCulled;
 
-    const float dist = sqrt(distSq);
+	// Bounds include the mesh's offset from its root, scale variation and deformation padding.
+	const float sizeVariance = data4.y;
+	const float boundsRadius = BoundExtent * max(1.0, abs(1.0 + sizeVariance)) + 128.0;
+	[unroll] for (uint p = 0; p < 6; ++p)
+	{
+		if (dot(FrustumPlanes[p].xyz, world) - FrustumPlanes[p].w < -boundsRadius)
+			return TierCulled;
+	}
 
-    // Ramp the mesh-cost bias in beyond CostBiasStartDist.
-    const float costRamp = saturate((dist - CostBiasStartDist) / max(CostBiasStartDist, 1e-4));
-    const float effCostBias = MeshCostBias * costRamp;
+	// Conservatively approximate the vertex shader's ScaleMask-based size variation.
+	const float instanceRadius = ModelRadius * (1.0 + max(sizeVariance, 0.0));
 
-    const float dScale = lerp(1.0, DistScale, effCostBias);
-    const float effMaxDistSq = MaxDistSq * dScale * dScale;
-    if (distSq > effMaxDistSq)
-        return;
+	const float projPx = (instanceRadius / dist) * ProjScale;
+	const float pxScale = lerp(1.0, MinPixelScale, effCostBias);
+	const float effMinPx = MinPixelSize * pxScale;
+	if (projPx < effMinPx)
+		return TierCulled;
 
-	[unroll]
-    for (uint p = 0; p < 6; ++p)
-    {
-        if (dot(FrustumPlanes[p].xyz, world) - FrustumPlanes[p].w < 0.0)
-            return;
-    }
+	// Hash world positions so compaction preserves density and LOD choices.
+	const uint2 rand = Random::pcg2d(asuint(world.xy) ^ asuint(world.z));
 
-    // Conservatively approximate the vertex shader's ScaleMask-based size variation.
-    const float sizeVariance = f16tof32(raw1.z >> 16);
-    const float instanceRadius = ModelRadius * (1.0 + max(sizeVariance, 0.0));
+	float lodFade = 1.0;
+	const float effFullPx = FullDetailPixelSize * pxScale;
+	if (projPx < effFullPx) {
+		const float t = saturate((effFullPx - projPx) / max(effFullPx - effMinPx, 1e-4));
+		const float keep = lerp(1.0, LODMinKeep, t);
+		const float h = RandFloat(rand.x);
+		if (h > keep + LODFadeBand)
+			return TierCulled;
+		lodFade = saturate((keep + LODFadeBand - h) / LODFadeBand);
+	}
 
-    const float projPx = (instanceRadius / dist) * ProjScale;
-    const float pxScale = lerp(1.0, MinPixelScale, effCostBias);
-    const float effMinPx = MinPixelSize * pxScale;
-    if (projPx < effMinPx)
-        return;
+	const float maxDist = sqrt(effMaxDistSq);
+	const float edgeStart = maxDist * EdgeFadeStart;
+	const float edgeFade = saturate((maxDist - dist) / max(maxDist - edgeStart, 1e-4));
 
-    if (HiZEnabled > 0.5)
-    {
-        // Transform the model-space bounding-sphere center into instance space.
-        const float3 rot0 = float3(f16tof32(raw0.z & 0xFFFF), f16tof32(raw0.z >> 16), f16tof32(raw0.w & 0xFFFF));
-        const float3 rot1 = float3(f16tof32(raw1.x & 0xFFFF), f16tof32(raw1.x >> 16), f16tof32(raw1.y & 0xFFFF));
-        const float3 rot2 = float3(f16tof32(raw1.z & 0xFFFF), f16tof32(raw0.w >> 16), f16tof32(raw1.y >> 16));
+	const float4 clipOffset = float4(CameraViewProj[0].w, CameraViewProj[1].w, CameraViewProj[2].w, CameraViewProj[3].w);
+	const float4 clip = ProjectDirection(dv) + clipOffset;
+	const float distFade = 1.0 - saturate((length(clip.xyz) - AlphaParam1) / AlphaParam2);
+	const float spawnFade = saturate((FadeNow - group.FadeStart) * FadeInTimeRcp);
 
-        const float3 msCentre = BoundCenter * (1.0 + max(sizeVariance, 0.0));
-        const float3 dvC = dv + float3(dot(rot0, msCentre), dot(rot1, msCentre), dot(rot2, msCentre));
+	fade = distFade * spawnFade * lodFade * edgeFade;
+	if (fade <= InvisibleFadeCull)
+		return TierCulled;
 
-        const float occRadius = instanceRadius + length(BoundCenter) * abs(sizeVariance);
-        const float distC = max(length(dvC), 1e-4);
-        const float projPxOcc = (occRadius / distC) * ProjScale;
+	// Apply density and fade rejection before sampling depth.
+	if (HiZEnabled > 0.5) {
+		const float occRadius = boundsRadius;
+		const float4 clipC = clip;
+		const float minW = clipC.w - occRadius * ProjectionWLength;
 
-        const float4 clipC = mul(FrameBuffer::CameraViewProj, float4(dvC, 1.0));
-        if (clipC.w > 0.0)
-        {
-            const float2 uv = (clipC.xy / clipC.w) * float2(0.5, -0.5) + 0.5;
-            const float2 tc = uv * HiZSize;
-            // Projected radius in level-0 Hi-Z texels.
-            const float rT = projPxOcc / HiZTexelPixels;
+		// A sphere crossing the camera plane has no finite projected bounds.
+		[branch] if (minW > 1e-4)
+		{
+			const float3 ndc = clipC.xyz / clipC.w;
+			// Bound the NDC change by the sphere radius times the projection gradient, divided by the minimum positive W.
+			const float gradientX = length(CameraViewProj[0].xyz - ndc.x * CameraViewProj[3].xyz);
+			const float gradientY = length(CameraViewProj[1].xyz - ndc.y * CameraViewProj[3].xyz);
+			const float gradientZ = length(CameraViewProj[2].xyz - ndc.z * CameraViewProj[3].xyz);
 
-            // Select a mip coarse enough for the 3x3 footprint to cover the sphere.
-            const float wantLevel = ceil(log2(max(2.0 * rT, 1.0)));
+			const float3 extent = (occRadius / minW) * float3(gradientX, gradientY, gradientZ);
+			const float3 ndcLo = ndc - extent - 1e-5;
+			const float3 ndcHi = ndc + extent + 1e-5;
+			const float2 tcLo = saturate(float2(ndcLo.x, -ndcHi.y) * 0.5 + 0.5) * HiZSize;
+			const float2 tcHi = saturate(float2(ndcHi.x, -ndcLo.y) * 0.5 + 0.5) * HiZSize;
 
-            // Skip occlusion when no available mip can cover the sphere safely.
-            [branch] if (wantLevel <= HiZMipCount - 1.0)
-            {
-            const int level = (int)wantLevel;
-            const float scale = exp2((float)level);
-            const float2 tcL = tc / scale;
-            const float rTL = rT / scale;
-            const int2 dimL = max(int2(ceil(HiZSize / scale)), int2(1, 1));
+			float wantLevel = ceil(log2(max(max(tcHi.x - tcLo.x, tcHi.y - tcLo.y), 1.0)));
+			float scale = exp2(wantLevel);
+			int2 t0 = int2(floor(tcLo / scale));
+			int2 t1 = int2(floor(tcHi / scale));
 
-            const int2 t0 = int2(floor(tcL - rTL));
-            const int2 t1 = int2(floor(tcL + rTL));
+			[branch] if (any(t1 - t0 > 1))
+			{
+				wantLevel += 1.0;
+				scale *= 2.0;
+				t0 = int2(floor(tcLo / scale));
+				t1 = int2(floor(tcHi / scale));
+			}
 
-            // Test the sphere's nearest point; a camera inside it yields a non-occluded depth.
-            const float3 dvNear = dvC * (max(distC - occRadius, 0.0) / distC);
-            const float4 clipN = mul(FrameBuffer::CameraViewProj, float4(dvNear, 1.0));
-            const float nearZ = clipN.z / max(clipN.w, 1e-4);
+			// Near-plane intersections and footprints beyond the available pyramid remain visible.
+			[branch] if (ndcLo.z > 0.0 && wantLevel <= HiZMipCount - 1.0)
+			{
+				const int level = (int)wantLevel;
+				const int2 dimL = max(int2(ceil(HiZSize / scale)), int2(1, 1));
+				const int2 lo = clamp(t0, int2(0, 0), dimL - 1);
+				const int2 hi = clamp(t1, int2(0, 0), dimL - 1);
+				const float tileMax = max(max(HiZ.Load(int3(lo, level)), HiZ.Load(int3(hi.x, lo.y, level))),
+					max(HiZ.Load(int3(lo.x, hi.y, level)), HiZ.Load(int3(hi, level))));
 
-            float tileMax = 0.0;
-			[unroll] for (int y = 0; y < 3; ++y)
-            {
-				[unroll] for (int x = 0; x < 3; ++x)
-                {
-                    if (t0.x + x <= t1.x && t0.y + y <= t1.y)
-                    {
-                        const int2 t = clamp(t0 + int2(x, y), int2(0, 0), dimL - 1);
-                        tileMax = max(tileMax, HiZ.Load(int3(t, level)));
-                    }
-                }
-            }
+				if (ndcLo.z > tileMax + OcclusionBias)
+					return TierCulled;
+			}
+		}
+	}
 
-            // Cull only when the sphere is behind every sampled tile, allowing for depth error.
-            if (nearZ > tileMax + OcclusionBias)
-                return;
-            }
-        }
-    }
+	// Dither both LOD transitions with the same value to keep tier changes gradual and ordered.
+	const float h = RandFloat(rand.y);
+	const float halfBand = MeshLODBandPx * 0.5;
+	const float bandRcp = 1.0 / max(MeshLODBandPx, 1e-4);
 
-    float lodFade = 1.0;
-    const float effFullPx = FullDetailPixelSize * pxScale;
-    if (projPx < effFullPx)
-    {
-        const float t = saturate((effFullPx - projPx) / max(effFullPx - effMinPx, 1e-4));
-        const float keep = lerp(1.0, LODMinKeep, t);
-        const float h = RandFloat(rand.x);
-        if (h > keep + LODFadeBand)
-            return;
-        lodFade = saturate((keep + LODFadeBand - h) / LODFadeBand);
-    }
+	uint tier = 0;
+	if (MidLODEnabled > 0.5 && h < saturate((MidLODPixelSize + halfBand - projPx) * bandRcp))
+		tier = 1;
+	if (FarLODEnabled > 0.5 && h < saturate((FarLODPixelSize + halfBand - projPx) * bandRcp))
+		tier = 2;
 
-    const float maxDist = sqrt(effMaxDistSq);
-    const float edgeStart = maxDist * EdgeFadeStart;
-    const float edgeFade = saturate((maxDist - dist) / max(maxDist - edgeStart, 1e-4));
+	flags = tier << GrassInstance::FlagTierShift;
+	if (distSq < CollisionDistSq)
+		flags |= GrassInstance::FlagCollision;
+	if (SimpleShadingPixelSize > 0.0 && projPx < SimpleShadingPixelSize)
+		flags |= GrassInstance::FlagSimpleShading;
 
-    const float4 clip = mul(FrameBuffer::CameraViewProj, float4(dv, 1.0));
-    const float distFade = 1.0 - saturate((length(clip.xyz) - AlphaParam1) / AlphaParam2);
-    const float spawnFade = saturate((FadeNow - og.w) * FadeInTimeRcp);
-    
-    const float fade = distFade * spawnFade * lodFade * edgeFade;
-    if (fade <= InvisibleFadeCull)
-        return;
+	wind = float2(GrassInstance::WindScalar(localXY, TimeBase * WavePeriod), GrassInstance::WindScalar(localXY, PrevTimeBase * WavePeriod));
 
-    const float basis = (localXY.x + localXY.y) * -0.0078125;
+	return tier;
+}
 
-    const float4 e0 = float4(og.xyz, IsComplex);
-    
-    const float collisionFlag = (distSq < CollisionDistSq) ? 1.0 : 0.0;
-    const float farFlag = (SimpleShadingPixelSize > 0.0 && projPx < SimpleShadingPixelSize) ? 2.0 : 0.0;
+[numthreads(64, 1, 1)] void main(uint3 groupId : SV_GroupID, uint threadIdx : SV_GroupIndex) {
 
-    const float4 e1 = float4(WindScalar(basis, TimeBase * WavePeriod), WindScalar(basis, PrevTimeBase * WavePeriod), fade, collisionFlag + farFlag);
+	if (threadIdx < TierCount)
+		GroupTierCount[threadIdx] = 0;
 
-    // Dither both LOD transitions with the same value to keep tier changes gradual and ordered.
-    const float h = RandFloat(rand.y);
-    const float halfBand = MeshLODBandPx * 0.5;
-    const float bandRcp = 1.0 / max(MeshLODBandPx, 1e-4);
+	GroupMemoryBarrierWithGroupSync();
 
-    uint tier = 0;
-    if (MidLODEnabled > 0.5 && h < saturate((MidLODPixelSize + halfBand - projPx) * bandRcp))
-        tier = 1;
-    if (FarLODEnabled > 0.5 && h < saturate((FarLODPixelSize + halfBand - projPx) * bandRcp))
-        tier = 2;
+	uint tier = TierCulled;
+	uint groupIndex = 0;
+	float2 wind = 0.0;
+	float fade = 0.0;
+	uint flags = 0;
 
-    // Store the tier above the two low flag bits in e1.w.
-    const float4 e1Tier = float4(e1.xyz, e1.w + 4.0 * (float)tier);
+	const uint groupIdx = groupId.y * DispatchWidth + groupId.x;
+	if (groupIdx < GroupCount) {
+		// Every thread in the group follows the same search for its visible source run.
+		uint lo = 0;
+		uint hi = SliceCount - 1;
+		[loop] while (lo < hi)
+		{
+			const uint mid = (lo + hi + 1) >> 1;
+			if (SliceTable[SliceTableOffset + mid].y <= groupIdx)
+				lo = mid;
+			else
+				hi = mid - 1;
+		}
 
-    uint slot;
-    if (tier == 2)
-    {
-        LODCounters.InterlockedAdd(FarLODCountOffset, 1, slot);
-        FarLODCompacted.Store4(slot * 32, raw0);
-        FarLODCompacted.Store4(slot * 32 + 16, raw1);
-        FarLODExtras[slot * 2 + 0] = e0;
-        FarLODExtras[slot * 2 + 1] = e1Tier;
-    }
-    else if (tier == 1)
-    {
-        LODCounters.InterlockedAdd(MiddleLODCountOffset, 1, slot);
-        MidLODCompacted.Store4(slot * 32, raw0);
-        MidLODCompacted.Store4(slot * 32 + 16, raw1);
-        MidLODExtras[slot * 2 + 0] = e0;
-        MidLODExtras[slot * 2 + 1] = e1Tier;
-    }
-    else
-    {
-        Counter.InterlockedAdd(0, 1, slot);
-        Compacted.Store4(slot * 32, raw0);
-        Compacted.Store4(slot * 32 + 16, raw1);
-        Extras[slot * 2 + 0] = e0;
-        Extras[slot * 2 + 1] = e1;
-    }
+		const uint2 run = SliceTable[SliceTableOffset + lo];
+		groupIndex = run.x + (groupIdx - run.y);
+		const GrassInstance::CullGroup group = Groups[groupIndex];
+
+		if (threadIdx < group.Count)
+			tier = CullInstance(group.SourceStart + threadIdx, group, wind, fade, flags);
+	}
+
+	uint localSlot = 0;
+	if (tier != TierCulled)
+		InterlockedAdd(GroupTierCount[tier], 1, localSlot);
+
+	GroupMemoryBarrierWithGroupSync();
+
+	if (threadIdx < TierCount && GroupTierCount[threadIdx] != 0) {
+		uint base;
+		Args.InterlockedAdd(ArgsOffset + threadIdx * ArgsStride + 4, GroupTierCount[threadIdx], base);
+		GroupTierBase[threadIdx] = base;
+	}
+
+	GroupMemoryBarrierWithGroupSync();
+
+	if (tier == TierCulled)
+		return;
+
+	const uint slot = OutputOffset + tier * TierStride + GroupTierBase[tier] + localSlot;
+	const uint sourceIndex = Groups[groupIndex].SourceStart + threadIdx;
+	const uint4 record = uint4(sourceIndex, GrassInstance::PackRecord(groupIndex, fade, flags), asuint(wind));
+	Compacted.Store4(slot * GrassInstance::RecordStride, record);
 }

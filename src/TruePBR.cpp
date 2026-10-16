@@ -1368,6 +1368,49 @@ void TruePBR::SetupGrassMaterial(RE::BSLightingShaderProperty* sourceProperty, R
 	grassProperty->SetFlags(RE::BSShaderProperty::EShaderPropertyFlag8::kMenuScreen, true);
 }
 
+static bool HasGrassFeaturesTexture0(const BSLightingShaderMaterialPBR* material)
+{
+	return material->featuresTexture0 != nullptr &&
+	       material->featuresTexture0 != globals::game::graphicsState->GetRuntimeData().defaultTextureWhite;
+}
+
+void TruePBR::SetGrassPBRTextures(const BSLightingShaderMaterialPBR* material)
+{
+	auto* shadowState = globals::game::shadowState;
+	const auto clampMode = static_cast<RE::BSGraphics::TextureAddressMode>(material->textureClampMode);
+
+	shadowState->SetPSTexture(2, material->normalTexture->rendererTexture);
+	shadowState->SetPSTextureAddressMode(2, clampMode);
+	shadowState->SetPSTextureFilterMode(2, RE::BSGraphics::TextureFilterMode::kAnisotropic);
+	shadowState->SetPSTexture(3, material->rmaosTexture->rendererTexture);
+	shadowState->SetPSTextureAddressMode(3, clampMode);
+	shadowState->SetPSTextureFilterMode(3, RE::BSGraphics::TextureFilterMode::kAnisotropic);
+
+	if (HasGrassFeaturesTexture0(material)) {
+		shadowState->SetPSTexture(4, material->featuresTexture0->rendererTexture);
+		shadowState->SetPSTextureAddressMode(4, clampMode);
+		shadowState->SetPSTextureFilterMode(4, RE::BSGraphics::TextureFilterMode::kAnisotropic);
+	}
+}
+
+TruePBR::GrassPBRConstants TruePBR::GetGrassPBRConstants(const BSLightingShaderMaterialPBR* material)
+{
+	stl::enumeration<PBRShaderFlags> shaderFlags;
+	if (material->pbrFlags.any(PBRFlags::Subsurface)) {
+		shaderFlags.set(PBRShaderFlags::Subsurface);
+	}
+	if (HasGrassFeaturesTexture0(material)) {
+		shaderFlags.set(PBRShaderFlags::HasFeaturesTexture0);
+	}
+
+	const auto& subsurfaceColor = material->GetSubsurfaceColor();
+	return {
+		shaderFlags.underlying(),
+		{ material->GetRoughnessScale(), material->GetSpecularLevel(), 0.0f },
+		{ subsurfaceColor.red, subsurfaceColor.green, subsurfaceColor.blue, material->GetSubsurfaceOpacity() }
+	};
+}
+
 struct TESForm_GetFormEditorID
 {
 	static const char* thunk(const RE::TESForm* form)
@@ -1550,40 +1593,17 @@ struct BSGrassShader_SetupMaterial
 
 		auto* shadowState = globals::game::shadowState;
 		auto* pbrMaterial = static_cast<const BSLightingShaderMaterialPBR*>(material);
-		const auto clampMode = static_cast<RE::BSGraphics::TextureAddressMode>(pbrMaterial->textureClampMode);
 		const auto& grassPSConstants = ShaderConstants::GrassPS::Get();
 
 		RE::BSGraphics::Renderer::PreparePSConstantGroup(RE::BSGraphics::ConstantGroupLevel::PerMaterial);
 
-		shadowState->SetPSTexture(2, pbrMaterial->normalTexture->rendererTexture);
-		shadowState->SetPSTextureAddressMode(2, clampMode);
-		shadowState->SetPSTextureFilterMode(2, RE::BSGraphics::TextureFilterMode::kAnisotropic);
-		shadowState->SetPSTexture(3, pbrMaterial->rmaosTexture->rendererTexture);
-		shadowState->SetPSTextureAddressMode(3, clampMode);
-		shadowState->SetPSTextureFilterMode(3, RE::BSGraphics::TextureFilterMode::kAnisotropic);
+		TruePBR::SetGrassPBRTextures(pbrMaterial);
 
-		stl::enumeration<PBRShaderFlags> shaderFlags;
-		if (pbrMaterial->pbrFlags.any(PBRFlags::Subsurface)) {
-			shaderFlags.set(PBRShaderFlags::Subsurface);
-		}
-		const bool hasFeaturesTexture0 = pbrMaterial->featuresTexture0 != nullptr &&
-		                                 pbrMaterial->featuresTexture0 != globals::game::graphicsState->GetRuntimeData().defaultTextureWhite;
-		if (hasFeaturesTexture0) {
-			shadowState->SetPSTexture(4, pbrMaterial->featuresTexture0->rendererTexture);
-			shadowState->SetPSTextureAddressMode(4, clampMode);
-			shadowState->SetPSTextureFilterMode(4, RE::BSGraphics::TextureFilterMode::kAnisotropic);
-			shaderFlags.set(PBRShaderFlags::HasFeaturesTexture0);
-		}
-
-		shadowState->SetPSConstant(shaderFlags, RE::BSGraphics::ConstantGroupLevel::PerMaterial, grassPSConstants.PBRFlags);
-		std::array<float, 3> pbrParams1{ pbrMaterial->GetRoughnessScale(), pbrMaterial->GetSpecularLevel(), 0.0f };
+		const TruePBR::GrassPBRConstants constants = TruePBR::GetGrassPBRConstants(pbrMaterial);
+		shadowState->SetPSConstant(constants.flags, RE::BSGraphics::ConstantGroupLevel::PerMaterial, grassPSConstants.PBRFlags);
+		std::array<float, 3> pbrParams1{ constants.params1[0], constants.params1[1], constants.params1[2] };
 		shadowState->SetPSConstant(pbrParams1, RE::BSGraphics::ConstantGroupLevel::PerMaterial, grassPSConstants.PBRParams1);
-		std::array<float, 4> pbrParams2{
-			pbrMaterial->GetSubsurfaceColor().red,
-			pbrMaterial->GetSubsurfaceColor().green,
-			pbrMaterial->GetSubsurfaceColor().blue,
-			pbrMaterial->GetSubsurfaceOpacity()
-		};
+		std::array<float, 4> pbrParams2{ constants.params2[0], constants.params2[1], constants.params2[2], constants.params2[3] };
 		shadowState->SetPSConstant(pbrParams2, RE::BSGraphics::ConstantGroupLevel::PerMaterial, grassPSConstants.PBRParams2);
 
 		RE::BSGraphics::Renderer::FlushPSConstantGroup(RE::BSGraphics::ConstantGroupLevel::PerMaterial);

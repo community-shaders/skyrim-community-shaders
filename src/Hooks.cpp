@@ -16,6 +16,7 @@
 #include "Util.h"
 
 #include "Features/Effects11.h"
+#include "Features/GrassOptimizations.h"
 #include "Features/HDRDisplay.h"
 #include "Features/InteriorSun.h"
 #include "Features/LightLimitFix.h"
@@ -296,8 +297,11 @@ namespace GrassExtensions
 	{
 		static void thunk(RE::BSShader* shader, RE::BSRenderPass* pass, uint32_t renderFlags)
 		{
-			func(shader, pass, renderFlags);
-			LegacyGraphicsCompatibility::BindLegacyGrassPerGeometryToPixelShader();
+			// Replace vanilla setup and pixel constants for passes handled by Grass Optimizations.
+			if (!globals::features::grassOptimizations.SetupGrassPass(shader, pass)) {
+				func(shader, pass, renderFlags);
+				LegacyGraphicsCompatibility::BindLegacyGrassPerGeometryToPixelShader();
+			}
 
 			auto state = globals::state;
 
