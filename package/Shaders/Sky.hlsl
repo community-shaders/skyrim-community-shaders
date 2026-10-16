@@ -332,7 +332,7 @@ PS_OUTPUT main(PS_INPUT input)
 	// Drawn on the sky dome so stars, moons and clouds still draw over it. The gradient is taken outside the branch.
 	const float3 auroraDirection = normalize(input.WorldPosition.xyz);
 	const float auroraPixelAngle = length(fwidth(auroraDirection));
-	[branch] if (SharedData::proceduralAuroraSettings.Enabled && SharedData::proceduralAuroraSettings.Atmosphere.x > 0.0)
+	[branch] if (SharedData::proceduralAuroraSettings.Enabled && SharedData::proceduralAuroraSettings.Atmosphere.x > 0.0 && auroraDirection.z > -0.03)
 	{
 		float3 aurora = Color::Sky(ProceduralAurora::Render(auroraDirection, auroraPixelAngle));
 #					if defined(EFFECTS11)

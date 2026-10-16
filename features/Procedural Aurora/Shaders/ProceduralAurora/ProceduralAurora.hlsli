@@ -87,7 +87,7 @@ namespace ProceduralAurora
 			float lod = saturate(1.5 - pixelWidth * scale * 1.5);
 			float ridge = 1.0 - abs(Noise(float2(x * scale + 11.3 * i, t * octaveSpeed[i])) * 2.0 - 1.0);
 			float sharpness = octaveSharpness[i] * sharpnessScale;
-			rays += octaveWeight[i] * lerp(1.0 / (sharpness + 1.0), pow(ridge, sharpness), lod);
+			rays += octaveWeight[i] * lerp(1.0 / (sharpness + 1.0), pow(saturate(ridge), sharpness), lod);
 		}
 		return rays * 2.2;
 	}
@@ -161,59 +161,62 @@ namespace ProceduralAurora
 		float meander = smoothstep(0.25, 0.75, Fbm2(float2(u * 0.4 + rseed * 2.3, t * 0.005)));
 		float edge = 0.04 + 0.12 * Noise(float2(xs * 1.3 + rseed, t * 0.015)) + 0.4 * meander * saturate(SharedData::proceduralAuroraSettings.FoldStrength);
 		float border = smoothstep(-0.12 - 0.08 * softness, 0.04 + 0.04 * softness, h - edge + (saturate(gas) - 0.5) * lerp(0.3, 0.42, softness));
-		[branch] if (border <= 0.0)
-			return 0.0;
-		float hp = max(h - edge, 0.0);
+		float3 shaded = 0.0;
+		[branch] if (border > 0.0)
+		{
+			float hp = max(h - edge, 0.0);
 
-		// Ragged fade toward the ribbon ends
-		mask = pow(mask, 1.0 + softness);
-		[branch] if (mask < 1.0)
-			mask *= lerp(Noise(float2(u * 3.0 + rseed, h * 2.0 - t * 0.03)), 1.0, mask * mask);
+			// Ragged fade toward the ribbon ends
+			mask = pow(saturate(mask), 1.0 + softness);
+			[branch] if (mask < 1.0)
+				mask *= lerp(Noise(float2(u * 3.0 + rseed, h * 2.0 - t * 0.03)), 1.0, mask * mask);
 
-		// Rays bend a little with the gas and come in groups
-		float rayFrequency = 28.0 * SharedData::proceduralAuroraSettings.RayDetail;
-		float rayCoord = (xs + (q.x - 0.5) * 0.05 * saturate(h)) * rayFrequency + rseed * 3.0;
-		float rays = Rays(rayCoord, t, uWidth * rayFrequency * max(compression, 0.05), lerp(0.5, 0.3, softness));
-		rays *= 0.3 + 1.4 * smoothstep(0.3, 0.8, Noise(float2(rayCoord / 7.0 + 3.1, t * 0.03)));
-		const float rayStrength = SharedData::proceduralAuroraSettings.RayStrength * lerp(0.7, 1.15, storm);
+			// Rays bend a little with the gas and come in groups
+			float rayFrequency = 28.0 * SharedData::proceduralAuroraSettings.RayDetail;
+			float rayCoord = (xs + (q.x - 0.5) * 0.05 * saturate(h)) * rayFrequency + rseed * 3.0;
+			float rays = Rays(rayCoord, t, uWidth * rayFrequency * max(compression, 0.05), lerp(0.5, 0.3, softness));
+			rays *= 0.3 + 1.4 * smoothstep(0.3, 0.8, Noise(float2(rayCoord / 7.0 + 3.1, t * 0.03)));
+			const float rayStrength = SharedData::proceduralAuroraSettings.RayStrength * lerp(0.7, 1.15, storm);
 
-		// Rays carry the light higher up the curtain
-		float decay = (1.7 - 0.7 * saturate(rays * rayStrength) * (0.4 + 0.6 * smoke)) * lerp(1.0, 1.15, softness);
-		// Ends below the h < 1.2 cut-off in Render
-		float curtainTop = (1.0 - smoothstep(0.35 - 0.1 * softness, 0.85, hp + (saturate(gas) - 0.5) * 0.3)) * (1.0 - smoothstep(0.85, 1.1, h));
-		float curtain = exp(-hp * decay) * curtainTop * (0.25 + 0.75 * smoke) * 1.4 * (lerp(0.75, 0.65, softness) + rayStrength * 0.5 * rays);
-		// Bright lower edge
-		float band = exp(-hp * 9.0) * (0.35 + 0.65 * smoke) * (0.8 + 0.2 * saturate(rays)) * 1.8;
-		float glow = exp(-hp * 1.1) * curtainTop * (0.35 + 0.65 * smoke) * haze * 0.35;
-		// Top color glow
-		const float crownStart = SharedData::proceduralAuroraSettings.CrownColor.w;
-		float crown = smoothstep(crownStart * 0.5, crownStart + 0.35, hp) * (1.0 - smoothstep(0.6, 1.05, hp + (saturate(gas) - 0.5) * 0.3)) * (1.0 - smoothstep(0.9, 1.15, h)) * smoke * nebula * lerp(0.6, 1.2, storm);
+			// Rays carry the light higher up the curtain
+			float decay = (1.7 - 0.7 * saturate(rays * rayStrength) * (0.4 + 0.6 * smoke)) * lerp(1.0, 1.15, softness);
+			// Ends below the h < 1.2 cut-off in Render
+			float curtainTop = (1.0 - smoothstep(0.35 - 0.1 * softness, 0.85, hp + (saturate(gas) - 0.5) * 0.3)) * (1.0 - smoothstep(0.85, 1.1, h));
+			float curtain = exp(-hp * decay) * curtainTop * (0.25 + 0.75 * smoke) * 1.4 * (lerp(0.75, 0.65, softness) + rayStrength * 0.5 * rays);
+			// Bright lower edge
+			float band = exp(-hp * 9.0) * (0.35 + 0.65 * smoke) * (0.8 + 0.2 * saturate(rays)) * 1.8;
+			float glow = exp(-hp * 1.1) * curtainTop * (0.35 + 0.65 * smoke) * haze * 0.35;
+			// Top color glow
+			const float crownStart = SharedData::proceduralAuroraSettings.CrownColor.w;
+			float crown = smoothstep(crownStart * 0.5, crownStart + 0.35, hp) * (1.0 - smoothstep(0.6, 1.05, hp + (saturate(gas) - 0.5) * 0.3)) * (1.0 - smoothstep(0.9, 1.15, h)) * smoke * nebula * lerp(0.6, 1.2, storm);
 
-		// A fainter sheet behind the curtain gives it depth
-		float hk = h - edge - 0.1 - 0.12 * Noise(float2(xs * 0.9 + rseed + 7.0, t * 0.012));
-		float backGas = Noise(float2(xs * 7.0 + rseed + 19.0, h * 1.4 - t * 0.03));
-		float back = smoothstep(-0.25, 0.25, hk) * exp(-max(hk, 0.0) * 2.2) * curtainTop * (0.25 + 0.75 * backGas) * 0.21;
+			// A fainter sheet behind the curtain gives it depth
+			float hk = h - edge - 0.1 - 0.12 * Noise(float2(xs * 0.9 + rseed + 7.0, t * 0.012));
+			float backGas = Noise(float2(xs * 7.0 + rseed + 19.0, h * 1.4 - t * 0.03));
+			float back = smoothstep(-0.25, 0.25, hk) * exp(-max(hk, 0.0) * 2.2) * curtainTop * (0.25 + 0.75 * backGas) * 0.21;
 
-		// Patches of activity along the ribbon, wider on stormy nights
-		float activity = smoothstep(lerp(0.45, 0.05, storm), lerp(0.85, 0.55, storm), Fbm2(float2(u * 0.5 + rseed * 1.7, t * 0.008)));
-		activity = 0.5 + 0.5 * activity * sqrt(activity);
-		float pulse = 0.85 + 0.15 * Noise(float2(xs * 2.5 + rseed, t * 0.12));
-		float intensity = border * activity * pulse * foldGlow * ribbonStrength * lerp(1.0, 0.7, zenith) * brightness;
+			// Patches of activity along the ribbon, wider on stormy nights
+			float activity = smoothstep(lerp(0.45, 0.05, storm), lerp(0.85, 0.55, storm), Fbm2(float2(u * 0.5 + rseed * 1.7, t * 0.008)));
+			activity = 0.5 + 0.5 * activity * sqrt(activity);
+			float pulse = 0.85 + 0.15 * Noise(float2(xs * 2.5 + rseed, t * 0.12));
+			float intensity = border * activity * pulse * foldGlow * ribbonStrength * lerp(1.0, 0.7, zenith) * brightness;
 
-		// The top color is added as its own light rather than blended through the hue range, which would show
-		// rainbow stripes between distant hues
-		float fringe = saturate((1.0 - smoothstep(0.02, 0.2, hp + (gas - 0.5) * 0.1)) * SharedData::proceduralAuroraSettings.FringeColor.w * lerp(0.45, 1.25, storm) * Noise(float2(xs * 0.9 + rseed + 5.0, t * 0.02)));
-		float up = smoothstep(crownStart, crownStart + 0.5, hp);
-		float lowerLight = curtain + band + back + glow * (1.0 - 0.6 * up);
-		float upperLight = crown + glow * 0.6 * up;
-		float3 lch = lerp(SharedData::proceduralAuroraSettings.BodyColor.xyz, SharedData::proceduralAuroraSettings.FringeColor.xyz, fringe);
-		float3 color = (OkLabToDisplay(LchToLab(lch)) * lowerLight + OkLabToDisplay(LchToLab(SharedData::proceduralAuroraSettings.CrownColor.xyz)) * upperLight) * intensity;
+			// The top color is added as its own light rather than blended through the hue range, which would show
+			// rainbow stripes between distant hues
+			float fringe = saturate((1.0 - smoothstep(0.02, 0.2, hp + (gas - 0.5) * 0.1)) * SharedData::proceduralAuroraSettings.FringeColor.w * lerp(0.45, 1.25, storm) * Noise(float2(xs * 0.9 + rseed + 5.0, t * 0.02)));
+			float up = smoothstep(crownStart, crownStart + 0.5, hp);
+			float lowerLight = curtain + band + back + glow * (1.0 - 0.6 * up);
+			float upperLight = crown + glow * 0.6 * up;
+			float3 lch = lerp(SharedData::proceduralAuroraSettings.BodyColor.xyz, SharedData::proceduralAuroraSettings.FringeColor.xyz, fringe);
+			float3 color = (OkLabToDisplay(LchToLab(lch)) * lowerLight + OkLabToDisplay(LchToLab(SharedData::proceduralAuroraSettings.CrownColor.xyz)) * upperLight) * intensity;
 
-		// Soft limit so bright folds keep their hue instead of clipping to white
-		float peak = max(color.r, max(color.g, color.b));
-		color /= 1.0 + peak * 0.8;
+			// Soft limit so bright folds keep their hue instead of clipping to white
+			float peak = max(color.r, max(color.g, color.b));
+			color /= 1.0 + peak * 0.8;
 
-		return color * (mask * lerp(1.0, 0.8, softness));
+			shaded = color * (mask * lerp(1.0, 0.8, softness));
+		}
+		return shaded;
 	}
 	// Ribbon layout traced from the vanilla aurora meshes (meshes\sky\skyrimaurora*.nif). Each ribbon runs one way
 	// around the sky, so its edges are stored as elevations sampled evenly by azimuth: one lookup per ribbon, no seams.
@@ -321,12 +324,10 @@ namespace ProceduralAurora
 	}
 
 	// dir: normalized world-space view direction. pixelAngle: length(fwidth(dir)), taken by the caller in uniform
-	// control flow. Returns display-space color to add onto the sky.
+	// control flow; the caller skips directions below the horizon (dir.z <= -0.03). Returns display-space color to add
+	// onto the sky.
 	float3 Render(float3 dir, float pixelAngle)
 	{
-		[branch] if (dir.z <= -0.03)
-			return 0.0;
-
 		const float fade = SharedData::proceduralAuroraSettings.Atmosphere.x;  // vanilla aurora visibility, 0..1
 
 		const float uWidth = UPerRadian * PatternScale * pixelAngle;
