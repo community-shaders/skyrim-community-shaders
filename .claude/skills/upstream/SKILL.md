@@ -22,16 +22,24 @@ Any maintainer can run this skill. Branches are always pushed to **the invoking 
 Work in a clone of `community-shaders/skyrim-community-shaders`. Don't assume what `origin` points to, because maintainers clone either upstream or their fork. Add explicit remotes:
 
 ```bash
-ensure_remote() {  # name url: add the remote, or stop if the name already points elsewhere
-    if url=$(git remote get-url "$1" 2>/dev/null); then
-        [ "${url%.git}" = "$2" ] || { echo "remote $1 is $url, expected $2" >&2; return 1; }
-    else
-        git remote add "$1" "$2"
-    fi
+# Reads "name url" lines on stdin: adds each remote, or fails if the name already points elsewhere.
+# Named variables only: the skill loader replaces positional parameters with the invocation's arguments.
+ensure_remotes() {
+    local name want url rc=0
+    while read -r name want; do
+        if url=$(git remote get-url "$name" 2>/dev/null); then
+            [ "${url%.git}" = "$want" ] || { echo "remote $name is $url, expected $want" >&2; rc=1; }
+        else
+            git remote add "$name" "$want" || rc=1
+        fi
+    done
+    return "$rc"
 }
-ensure_remote upstream https://github.com/community-shaders/skyrim-community-shaders &&
-ensure_remote open     https://github.com/alandtse/open-shaders &&
-ensure_remote bottle   https://github.com/InTheBottle/Bottled-Shaders &&
+ensure_remotes <<'EOF' &&
+upstream https://github.com/community-shaders/skyrim-community-shaders
+open     https://github.com/alandtse/open-shaders
+bottle   https://github.com/InTheBottle/Bottled-Shaders
+EOF
 git fetch upstream dev && git fetch open dev && git fetch bottle Bottle-Compendium
 ```
 
@@ -51,7 +59,7 @@ git worktree add --detach "$SCRATCH/upstream-dev" upstream/dev   # $SCRATCH: a t
     - an existing git remote whose URL owner is the login, or
     - `gh api repos/community-shaders/skyrim-community-shaders/forks --paginate --jq '.[] | select(.owner.login=="<login>") | .full_name'`, or
     - the GitHub MCP `search_repositories` with `fork:true user:<login> skyrim-community-shaders`.
-3. Add it with `ensure_remote fork https://github.com/<login>/<fork-repo>` and remember that exact URL as `FORK_URL`.
+3. Add it with `echo "fork https://github.com/<login>/<fork-repo>" | ensure_remotes` and remember that exact URL as `FORK_URL`.
 4. If no fork exists, stop and ask whether to create one. Never fall back to pushing to upstream.
 5. **Guard:** before every push, check that every URL from `git remote get-url --push --all fork` equals `FORK_URL` (ignoring a trailing `.git`) and that each URL's owner is the login. A `pushurl` can differ from the fetch URL and a remote can hold several, so check them all. Stop on any mismatch.
 
