@@ -14,7 +14,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	BasicGrassBrightness,
 	ComplexGrassThreshold,
 	MidLODBrightness,
-	FarLODBrightness)
+	FarLODBrightness,
+	PBRWrappedLightingAmount)
 
 void GrassLighting::DrawSettings()
 {
@@ -50,11 +51,20 @@ void GrassLighting::DrawSettings()
 								  "Subsurface Scattering (SSS) amount. "
 								  "Soft lighting controls how evenly lit an object is. "
 								  "Back lighting illuminates the back face of an object. "
-								  "Combined to model the transport of light through the surface."));
+								  "Combined to model the transport of light through the surface. "
+								  "Applies to non-PBR grass. PBR subsurface scattering is controlled by the material and its texture."));
 		}
 
 		ImGui::Spacing();
 		ImGui::Spacing();
+		ImGui::TreePop();
+	}
+
+	if (ImGui::TreeNodeEx(T(TKEY("pbr_grass"), "PBR Grass"), ImGuiTreeNodeFlags_DefaultOpen)) {
+		ImGui::SliderFloat(T(TKEY("pbr_wrapped_lighting_amount"), "PBR Wrapped Lighting Amount"), &settings.PBRWrappedLightingAmount, 0.0f, 1.0f);
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::TextWrapped("%s", T(TKEY("pbr_wrapped_lighting_tooltip"), "Softens lighting around the edges of PBR grass. Zero uses Lambert reflection and transmission on opposite sides of the blade. Higher values broaden reflection while preserving its energy. Transmission remains on the backlit side."));
+		}
 		ImGui::TreePop();
 	}
 

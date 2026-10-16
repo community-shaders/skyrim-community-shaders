@@ -51,6 +51,9 @@ struct IndirectLobeWeights
 {
 	float3 diffuse;
 	float3 specular;
+#if defined(TRUE_PBR) && defined(TREE_ANIM)
+	float3 transmission;
+#endif
 };
 
 #if defined(TRUE_PBR)
