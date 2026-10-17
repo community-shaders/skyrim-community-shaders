@@ -80,7 +80,6 @@ namespace Permutation
 		static const uint IsAurora = (1 << 7);
 		static const uint IsMoon = (1 << 8);
 		static const uint NoSkyScattering = (1 << 9);
-		static const uint IsAuroraRibbon = (1 << 10);
 	}
 
 	namespace ExtraFeatureFlags

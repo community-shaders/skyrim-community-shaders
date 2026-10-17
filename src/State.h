@@ -262,8 +262,7 @@ public:
 		AdditiveLighting = 1 << 6,
 		IsAurora = 1 << 7,
 		IsMoon = 1 << 8,
-		NoSkyScattering = 1 << 9,  ///< Cloud layer drawn without Effects11 cloud scattering
-		IsAuroraRibbon = 1 << 10   ///< Vanilla aurora ribbon (shape named "Aurora*"); skipped while Procedural Aurora draws its own
+		NoSkyScattering = 1 << 9  ///< Cloud layer drawn without Effects11 cloud scattering
 	};
 
 	/** @brief Bitflags describing extra feature-specific properties related to terrain displacement and material models. */

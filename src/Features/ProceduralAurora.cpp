@@ -258,10 +258,10 @@ ProceduralAurora::CommonBufferData ProceduralAurora::GetCommonBufferData()
 	data.RayDetail = settings.RayDetail;
 	data.Softness = settings.Softness;
 	// Ease toward the vanilla visibility so the aurora never pops, even where vanilla only switches it on or off.
-	// On the first frame after enabling, start at the vanilla value: Effect.hlsl already hides the vanilla ribbons.
-	const float vanillaVisibility = GetVanillaAuroraVisibility();
+	// On the first frame after enabling, start at the vanilla value, as the vanilla ribbons are culled from then on.
+	const float vanilla = vanillaVisibility.load(std::memory_order_relaxed);
 	const float visibilityStep = static_cast<float>(std::clamp(delta, 0.0, 0.1)) * 0.5f;
-	auroraVisibility = firstFrame ? vanillaVisibility : auroraVisibility + std::clamp(vanillaVisibility - auroraVisibility, -visibilityStep, visibilityStep);
+	auroraVisibility = firstFrame ? vanilla : auroraVisibility + std::clamp(vanilla - auroraVisibility, -visibilityStep, visibilityStep);
 	data.Atmosphere = { auroraVisibility, settings.Haze, settings.Nebula };
 	data.FoldStrength = settings.FoldStrength;
 	data.RayStrength = settings.RayStrength;
@@ -282,25 +282,32 @@ uint32_t ProceduralAurora::GetNightIndex()
 	return static_cast<uint32_t>(std::max(std::floor(globals::game::calendar->GetDaysPassed() + 0.5f), 0.0f));
 }
 
-float ProceduralAurora::GetVanillaAuroraVisibility()
+void ProceduralAurora::OnSkyUpdate(RE::Sky* a_sky)
 {
 	ZoneScoped;
-	const auto sky = globals::game::sky;
-	if (!sky || sky->mode.get() != RE::Sky::Mode::kFull)
-		return 0.0f;
-	const auto root = sky->auroraRoot.get();
-	if (!root || root->GetAppCulled())
-		return 0.0f;
+	const bool hideRibbons = loaded && settings.Enabled;
+	if (!hideRibbons && !ribbonsCulled)
+		return;
 
+	// The game fades its aurora in and out through the material alpha of its ribbons; culling them leaves that alpha
+	// untouched, so it can still be read while the ribbons are hidden.
 	float visibility = 0.0f;
-	RE::BSVisit::TraverseScenegraphGeometries(root, [&](RE::BSGeometry* a_geometry) {
-		if (IsVanillaAuroraRibbon(a_geometry->name.c_str()) && !a_geometry->GetAppCulled()) {
-			if (auto effect = netimmerse_cast<RE::BSEffectShaderProperty*>(a_geometry->GetGeometryRuntimeData().shaderProperty.get()))
-				visibility = std::max(visibility, effect->QMaterialAlpha());
-		}
-		return RE::BSVisit::BSVisitControl::kContinue;
-	});
-	return std::clamp(visibility, 0.0f, 1.0f);
+	const auto root = a_sky ? a_sky->auroraRoot.get() : nullptr;
+	if (root) {
+		const bool showing = a_sky->mode.get() == RE::Sky::Mode::kFull && !root->GetAppCulled();
+		RE::BSVisit::TraverseScenegraphGeometries(root, [&](RE::BSGeometry* a_geometry) {
+			if (IsVanillaAuroraRibbon(a_geometry->name.c_str())) {
+				a_geometry->SetAppCulled(hideRibbons);
+				if (showing) {
+					if (auto effect = netimmerse_cast<RE::BSEffectShaderProperty*>(a_geometry->GetGeometryRuntimeData().shaderProperty.get()))
+						visibility = std::max(visibility, effect->QMaterialAlpha());
+				}
+			}
+			return RE::BSVisit::BSVisitControl::kContinue;
+		});
+	}
+	ribbonsCulled = hideRibbons;
+	vanillaVisibility.store(std::clamp(visibility, 0.0f, 1.0f), std::memory_order_relaxed);
 }
 
 ProceduralAurora::Night ProceduralAurora::GetNight() const

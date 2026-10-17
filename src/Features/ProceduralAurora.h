@@ -2,6 +2,7 @@
 
 #include "Buffer.h"
 
+#include <atomic>
 #include <chrono>
 
 struct ProceduralAurora : Feature
@@ -21,10 +22,10 @@ public:
 				T("feature.procedural_aurora.key_feature_4", "Color presets plus color, brightness and motion controls") } };
 	}
 
-	/** @brief Sky draws the aurora into the sky dome; Effect skips the vanilla aurora ribbons it replaces. */
+	/** @brief Only the sky shader draws the aurora; the vanilla ribbons are culled on the CPU instead. */
 	virtual bool HasShaderDefine(RE::BSShader::Type shaderType) override
 	{
-		return shaderType == RE::BSShader::Type::Sky || shaderType == RE::BSShader::Type::Effect;
+		return shaderType == RE::BSShader::Type::Sky;
 	}
 
 	/** @brief True for vanilla aurora ribbons ("Aurora:N", "AuroraGB:N", ...); other models in the aurora slot (Sovngarde, Blood Moon) use other names. */
@@ -70,6 +71,12 @@ public:
 	STATIC_ASSERT_ALIGNAS_16(CommonBufferData);
 	static_assert(sizeof(CommonBufferData) == 96, "ProceduralAurora::CommonBufferData must match ProceduralAuroraSettings in SharedData.hlsli");
 
+	/**
+	 * @brief Culls the vanilla aurora ribbons while the feature is enabled (restoring them when it is not) and reads
+	 * their fade. Runs on the main thread after Sky::UpdateColors.
+	 */
+	void OnSkyUpdate(RE::Sky* a_sky);
+
 	/** @brief Packs the settings for the shared feature constant buffer (SharedData::proceduralAuroraSettings). */
 	CommonBufferData GetCommonBufferData();
 
@@ -99,16 +106,15 @@ private:
 	/** @brief In-game night number; it rolls over at noon so a night keeps its look past midnight. */
 	static uint32_t GetNightIndex();
 
-	/** @brief How visible the vanilla aurora is right now, 0 to 1: the game fades it through its ribbons' material alpha. */
-	static float GetVanillaAuroraVisibility();
-
 	/** @brief Index of the color preset the current colors match, or -1 for custom colors. */
 	int MatchPreset() const;
 
 	/** @brief Copies a color preset into the settings. */
 	void ApplyPreset(int index);
 
-	float auroraVisibility = 0.0f;  // last value sent to the shader, shown in the menu
+	float auroraVisibility = 0.0f;                 // last value sent to the shader, shown in the menu
+	std::atomic<float> vanillaVisibility{ 0.0f };  // vanilla fade read in OnSkyUpdate: the ribbons' material alpha, 0 to 1
+	bool ribbonsCulled = false;                    // whether OnSkyUpdate last culled the vanilla ribbons
 
 	// Animation clock, advanced on the CPU so speed changes never make the pattern jump
 	double animationTime = 0.0;

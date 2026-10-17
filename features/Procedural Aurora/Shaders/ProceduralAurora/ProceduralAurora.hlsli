@@ -2,7 +2,7 @@
 #define __PROCEDURAL_AURORA_DEPENDENCY_HLSL__
 
 // Procedural aurora, drawn into the sky dome by Sky.hlsl. Each sky pixel finds where it falls on the aurora ribbons
-// (see Render) and shades the curtain there. Effect.hlsl skips the vanilla ribbons while the feature is on.
+// (see Render) and shades the curtain there. The vanilla ribbons are culled on the CPU while the feature is on.
 
 namespace ProceduralAurora
 {

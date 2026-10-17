@@ -17,7 +17,6 @@
 #include "Features/HDRDisplay.h"
 #include "Features/InteriorSun.h"
 #include "Features/PerformanceOverlay.h"
-#include "Features/ProceduralAurora.h"
 #include "Features/RainRefraction.h"
 #include "Features/RemoteControl/NvPerf.h"
 #include "Features/Skin.h"
@@ -96,8 +95,7 @@ void State::UpdateSkyShaderPermutation(RE::BSRenderPass* a_pass)
 void State::UpdateEffectShaderPermutation(RE::BSRenderPass* a_pass)
 {
 	constexpr auto isAurora = static_cast<uint32_t>(ExtraShaderDescriptors::IsAurora);
-	constexpr auto isAuroraRibbon = static_cast<uint32_t>(ExtraShaderDescriptors::IsAuroraRibbon);
-	permutationData.ExtraShaderDescriptor &= ~(isAurora | isAuroraRibbon);
+	permutationData.ExtraShaderDescriptor &= ~isAurora;
 
 	if (!a_pass || !a_pass->geometry)
 		return;
@@ -111,9 +109,6 @@ void State::UpdateEffectShaderPermutation(RE::BSRenderPass* a_pass)
 	for (const RE::NiAVObject* node = a_pass->geometry; node; node = node->parent) {
 		if (node == sky->auroraRoot.get()) {
 			permutationData.ExtraShaderDescriptor |= isAurora;
-
-			if (ProceduralAurora::IsVanillaAuroraRibbon(a_pass->geometry->name.c_str()))
-				permutationData.ExtraShaderDescriptor |= isAuroraRibbon;
 			return;
 		}
 	}

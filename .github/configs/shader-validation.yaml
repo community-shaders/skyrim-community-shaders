@@ -148,7 +148,6 @@ file_common_defines:
             - CLOUD_SHADOWS
             - WATER_EFFECTS
             - SSS
-            - PROCEDURAL_AURORA
         VSHADER:
             - IBL
             - SCREEN_SPACE_SHADOWS
@@ -161,7 +160,6 @@ file_common_defines:
             - CLOUD_SHADOWS
             - WATER_EFFECTS
             - SSS
-            - PROCEDURAL_AURORA
         CSHADER: []
     Lighting.hlsl:
         PSHADER:
@@ -2411,7 +2409,6 @@ shaders:
                   - CLOUD_SHADOWS
                   - WATER_EFFECTS
                   - SSS
-                  - PROCEDURAL_AURORA
               entries:
                   - entry: Effect:Pixel:400
                     defines:
@@ -9636,7 +9633,6 @@ shaders:
                   - CLOUD_SHADOWS
                   - WATER_EFFECTS
                   - SSS
-                  - PROCEDURAL_AURORA
               entries:
                   - entry: Effect:Vertex:400
                     defines:

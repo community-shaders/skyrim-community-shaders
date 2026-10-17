@@ -615,14 +615,6 @@ PS_OUTPUT main(PS_INPUT input)
 {
 	PS_OUTPUT psout = (PS_OUTPUT)0;
 
-#	if defined(PROCEDURAL_AURORA) && !defined(MOTIONVECTORS_NORMALS)
-	// The procedural aurora is drawn into the sky dome (Sky.hlsl); skip the vanilla aurora ribbons it replaces
-	[branch] if (SharedData::proceduralAuroraSettings.Enabled && (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsAuroraRibbon))
-	{
-		discard;
-	}
-#	endif
-
 	float4 fogMul = 1;
 #	if !defined(MULTBLEND)
 	fogMul.xyz = input.FogAlpha;

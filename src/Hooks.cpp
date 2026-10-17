@@ -19,6 +19,7 @@
 #include "Features/HDRDisplay.h"
 #include "Features/InteriorSun.h"
 #include "Features/LightLimitFix.h"
+#include "Features/ProceduralAurora.h"
 #include "Features/RainRefraction.h"
 #include "Features/RemoteControl/NvPerf.h"
 #include "Features/RenderDoc.h"
@@ -347,6 +348,7 @@ namespace WeatherExtensions
 			if (globals::features::effects11.loaded)
 				globals::features::effects11.OnSkyUpdateColors(sky);
 			globals::features::skySync.OnSkyUpdateColors(sky);
+			globals::features::proceduralAurora.OnSkyUpdate(sky);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
