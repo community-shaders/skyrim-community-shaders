@@ -23,6 +23,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	NewPatternEachNight,
 	GreatStormChance,
 	ColorVariety,
+	CurtainCount,
+	CurtainSize,
 	FringeColor,
 	BodyColor,
 	CrownColor)
@@ -70,6 +72,8 @@ namespace
 			return T(TKEY("preset_custom"), "Custom");
 		}
 	}
+
+	constexpr int kMaxCurtains = 7;  // RibbonCount + DistantCount in ProceduralAurora.hlsli
 
 	bool SameColor(const std::array<float, 3>& a, const std::array<float, 3>& b)
 	{
@@ -185,18 +189,26 @@ void ProceduralAurora::DrawSettings()
 		ImGui::Text("%s", T(TKEY("colors_tooltip"), "Changing a color switches to a custom preset."));
 	}
 
-	ImGui::SliderFloat(T(TKEY("brightness"), "Brightness"), &settings.Brightness, 0.0f, 3.0f, "%.2f");
-	ImGui::SliderFloat(T(TKEY("softness"), "Softness"), &settings.Softness, 0.0f, 1.0f, "%.2f");
+	ImGui::SliderFloat(T(TKEY("brightness"), "Brightness"), &settings.Brightness, 0.0f, 3.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+	ImGui::SliderFloat(T(TKEY("softness"), "Softness"), &settings.Softness, 0.0f, 1.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("%s", T(TKEY("softness_tooltip"), "Higher makes the edges softer and more see-through."));
 	}
-	ImGui::SliderFloat(T(TKEY("haze"), "Haze"), &settings.Haze, 0.0f, 1.0f, "%.2f");
+	ImGui::SliderFloat(T(TKEY("haze"), "Haze"), &settings.Haze, 0.0f, 1.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("%s", T(TKEY("haze_tooltip"), "A soft glow around the curtains."));
 	}
-	ImGui::SliderFloat(T(TKEY("nebula"), "Nebula Glow"), &settings.Nebula, 0.0f, 1.0f, "%.2f");
+	ImGui::SliderFloat(T(TKEY("nebula"), "Nebula Glow"), &settings.Nebula, 0.0f, 1.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("%s", T(TKEY("nebula_tooltip"), "A glow in the top color above the curtains."));
+	}
+	ImGui::SliderInt(T(TKEY("curtain_count"), "Curtains"), &settings.CurtainCount, 1, kMaxCurtains, "%d", ImGuiSliderFlags_AlwaysClamp);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("%s", T(TKEY("curtain_count_tooltip"), "How many curtains fill the sky. The faint ones near the horizon go first."));
+	}
+	ImGui::SliderFloat(T(TKEY("curtain_size"), "Curtain Size"), &settings.CurtainSize, 0.5f, 2.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("%s", T(TKEY("curtain_size_tooltip"), "Higher makes each curtain taller and wider, with fewer, larger folds."));
 	}
 
 	ImGui::Checkbox(T(TKEY("new_pattern_each_night"), "Different Aurora Each Night"), &settings.NewPatternEachNight);
@@ -206,15 +218,15 @@ void ProceduralAurora::DrawSettings()
 
 	ImGui::Spacing();
 	if (ImGui::CollapsingHeader(T(TKEY("section_advanced"), "Advanced"))) {
-		ImGui::SliderFloat(T(TKEY("ray_detail"), "Ray Detail"), &settings.RayDetail, 0.25f, 3.0f, "%.2f");
-		ImGui::SliderFloat(T(TKEY("ray_strength"), "Ray Strength"), &settings.RayStrength, 0.0f, 2.0f, "%.2f");
-		ImGui::SliderFloat(T(TKEY("fold_strength"), "Curtain Folds"), &settings.FoldStrength, 0.0f, 1.5f, "%.2f");
-		ImGui::SliderFloat(T(TKEY("speed"), "Speed"), &settings.Speed, 0.0f, 4.0f, "%.2f");
-		ImGui::SliderFloat(T(TKEY("crown_start"), "Top Color Height"), &settings.CrownStart, 0.0f, 1.0f, "%.2f");
-		ImGui::SliderFloat(T(TKEY("fringe_amount"), "Lower Edge Amount"), &settings.FringeAmount, 0.0f, 1.0f, "%.2f");
+		ImGui::SliderFloat(T(TKEY("ray_detail"), "Ray Detail"), &settings.RayDetail, 0.25f, 3.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+		ImGui::SliderFloat(T(TKEY("ray_strength"), "Ray Strength"), &settings.RayStrength, 0.0f, 2.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+		ImGui::SliderFloat(T(TKEY("fold_strength"), "Curtain Folds"), &settings.FoldStrength, 0.0f, 1.5f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+		ImGui::SliderFloat(T(TKEY("speed"), "Speed"), &settings.Speed, 0.0f, 4.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+		ImGui::SliderFloat(T(TKEY("crown_start"), "Top Color Height"), &settings.CrownStart, 0.0f, 1.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+		ImGui::SliderFloat(T(TKEY("fringe_amount"), "Lower Edge Amount"), &settings.FringeAmount, 0.0f, 1.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
 		if (settings.NewPatternEachNight) {
-			ImGui::SliderFloat(T(TKEY("great_storm_chance"), "Great Storm Chance"), &settings.GreatStormChance, 0.0f, 1.0f, "%.2f");
-			ImGui::SliderFloat(T(TKEY("color_variety"), "Random Preset Chance"), &settings.ColorVariety, 0.0f, 1.0f, "%.2f");
+			ImGui::SliderFloat(T(TKEY("great_storm_chance"), "Great Storm Chance"), &settings.GreatStormChance, 0.0f, 1.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+			ImGui::SliderFloat(T(TKEY("color_variety"), "Random Preset Chance"), &settings.ColorVariety, 0.0f, 1.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
 		}
 	}
 }
@@ -245,6 +257,10 @@ ProceduralAurora::CommonBufferData ProceduralAurora::GetCommonBufferData()
 	const bool firstFrame = lastClockUpdate.time_since_epoch().count() == 0;
 	double delta = firstFrame ? 0.0 : std::chrono::duration<double>(now - lastClockUpdate).count();
 	lastClockUpdate = now;
+	// Curtains fade in or out at one per second when the setting changes, also while the game is paused
+	const float targetCurtains = static_cast<float>(std::clamp(settings.CurtainCount, 1, kMaxCurtains));
+	const float curtainStep = static_cast<float>(std::clamp(delta, 0.0, 0.1));
+	curtainCount = firstFrame ? targetCurtains : curtainCount + std::clamp(targetCurtains - curtainCount, -curtainStep, curtainStep);
 	const auto ui = RE::UI::GetSingleton();
 	if (ui && ui->GameIsPaused())
 		delta = 0.0;
@@ -263,6 +279,8 @@ ProceduralAurora::CommonBufferData ProceduralAurora::GetCommonBufferData()
 	const float visibilityStep = static_cast<float>(std::clamp(delta, 0.0, 0.1)) * 0.5f;
 	auroraVisibility = firstFrame ? vanilla : auroraVisibility + std::clamp(vanilla - auroraVisibility, -visibilityStep, visibilityStep);
 	data.Atmosphere = { auroraVisibility, settings.Haze, settings.Nebula };
+	data.CurtainSize = std::clamp(settings.CurtainSize, 0.5f, 2.0f);
+	data.CurtainCount = curtainCount;
 	data.FoldStrength = settings.FoldStrength;
 	data.RayStrength = settings.RayStrength;
 	data.Enabled = 1;
@@ -369,6 +387,8 @@ void ProceduralAurora::LoadSettings(json& o_json)
 	sanitize(s.CrownStart, defaults.CrownStart, 0.0f, 1.0f);
 	sanitize(s.GreatStormChance, defaults.GreatStormChance, 0.0f, 1.0f);
 	sanitize(s.ColorVariety, defaults.ColorVariety, 0.0f, 1.0f);
+	sanitize(s.CurtainSize, defaults.CurtainSize, 0.5f, 2.0f);
+	s.CurtainCount = std::clamp(s.CurtainCount, 1, kMaxCurtains);
 	const std::array colors{ std::pair{ &s.FringeColor, &defaults.FringeColor }, std::pair{ &s.BodyColor, &defaults.BodyColor }, std::pair{ &s.CrownColor, &defaults.CrownColor } };
 	for (const auto& [color, fallback] : colors)
 		for (size_t i = 0; i < color->size(); ++i)

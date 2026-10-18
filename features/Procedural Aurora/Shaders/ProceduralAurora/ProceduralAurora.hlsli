@@ -171,8 +171,9 @@ namespace ProceduralAurora
 			[branch] if (mask < 1.0)
 				mask *= lerp(Noise(float2(u * 3.0 + rseed, h * 2.0 - t * 0.03)), 1.0, mask * mask);
 
-			// Rays bend a little with the gas and come in groups
-			float rayFrequency = 28.0 * SharedData::proceduralAuroraSettings.RayDetail;
+			// Rays bend a little with the gas and come in groups. Scaled with the curtain size, so bigger curtains keep
+			// rays as fine as before.
+			float rayFrequency = 28.0 * SharedData::proceduralAuroraSettings.RayDetail * SharedData::proceduralAuroraSettings.CurtainSize;
 			float rayCoord = (xs + (q.x - 0.5) * 0.05 * saturate(h)) * rayFrequency + rseed * 3.0;
 			float rays = Rays(rayCoord, t, uWidth * rayFrequency * max(compression, 0.05), lerp(0.5, 0.3, softness));
 			rays *= 0.3 + 1.4 * smoothstep(0.3, 0.8, Noise(float2(rayCoord / 7.0 + 3.1, t * 0.03)));
@@ -280,6 +281,8 @@ namespace ProceduralAurora
 		float4(1.0, 3.14159, 0.42, 6.0),
 		float4(4.0, 3.14159, 0.42, 7.0)
 	};
+	// Curtains in the order the Curtains setting adds them: the large ribbons first, the faint distant arcs last
+	static const uint CurtainOrder[RibbonCount + DistantCount] = { 0, 3, 1, 4, 2, 5, 6 };
 	static const float DistantPatternScale = 1.6;
 	static const float DistantBrightness = 0.6;
 	static const float WaveAmplitude = 0.1;  // radians
@@ -290,11 +293,21 @@ namespace ProceduralAurora
 		return 0.5 * (2.0 * p1 + (p2 - p0) * t + (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * t * t + (3.0 * (p1 - p2) + p3 - p0) * t * t * t);
 	}
 
+	// Elevation bounds of a ribbon whose curtains are grown by size. RibbonRange covers size 1: from the wisps 0.4 below
+	// the lower edge to h 1.2, so a size above 1 widens the bounds by the extra height, a third of it below.
+	float2 RibbonBounds(float4 range, float size)
+	{
+		const float growth = (range.w - range.z) * max(size - 1.0, 0.0);
+		return float2(range.z - growth / 3.0, min(range.w + growth, 1.5708));
+	}
+
+	// size: curtain height relative to the default.
 	// Returns x: u, y: h (0 lower edge .. 1 upper edge, may run past either), z: fade toward the ends (0 off the ribbon)
-	float3 LookupRibbon(uint i, float azimuth, float elevation)
+	float3 LookupRibbon(uint i, float azimuth, float elevation, float size)
 	{
 		const float4 range = RibbonRange[i];
-		if (elevation < range.z || elevation > range.w)
+		const float2 bounds = RibbonBounds(range, size);
+		if (elevation < bounds.x || elevation > bounds.y)
 			return 0.0;
 		float a = azimuth - range.x;
 		a -= 6.2831853 * floor(a / 6.2831853);
@@ -312,7 +325,7 @@ namespace ProceduralAurora
 		const float3 p3 = RibbonTable[base + min(k + 2, RibbonPoints - 1)];
 		const float lower = CatmullRom(p0.x, p1.x, p2.x, p3.x, t);
 		const float vanillaUpper = CatmullRom(p0.y, p1.y, p2.y, p3.y, t);
-		const float upper = min(lower + (vanillaUpper - lower) * HeightScale, max(vanillaUpper, TopCap));
+		const float upper = min(lower + (vanillaUpper - lower) * HeightScale * size, max(vanillaUpper, TopCap));
 		const float h = (elevation - lower) / max(upper - lower, 0.02);
 		const float ends = smoothstep(0.0, 0.07, s) * (1.0 - smoothstep(0.93, 1.0, s));
 		return float3(lerp(p1.z, p2.z, t) * PatternScale, h, ends);
@@ -340,25 +353,33 @@ namespace ProceduralAurora
 		const float waveScale = WaveAmplitude * saturate(SharedData::proceduralAuroraSettings.FoldStrength) * (1.0 - smoothstep(1.2, 1.45, elevation));
 		const float t = SharedData::proceduralAuroraSettings.Time;
 		const float seed = SharedData::proceduralAuroraSettings.Seed;
+		// Bigger curtains stretch the pattern along the ribbon too, so fewer, wider folds fill the same length
+		const float size = SharedData::proceduralAuroraSettings.CurtainSize;
+		const float curtainCount = clamp(SharedData::proceduralAuroraSettings.CurtainCount, 0.0, (float)(RibbonCount + DistantCount));
+		const uint curtainLoops = (uint)ceil(curtainCount);
 
 		float3 color = 0.0;
 		// One loop for ribbons and distant arcs, so Shade is only inlined once
-		[loop] for (uint j = 0; j < RibbonCount + DistantCount; j++)
+		[loop] for (uint k = 0; k < curtainLoops; k++)
 		{
+			const uint j = CurtainOrder[k];
 			const bool distant = j >= RibbonCount;
 			const float4 arc = distant ? DistantArcs[distant ? j - RibbonCount : 0] : float4((float)j, 0.0, 1.0, (float)j);
 			const float ribbonElevation = elevation / arc.z;
 			const float4 range = RibbonRange[(uint)arc.x];
-			[branch] if (ribbonElevation < range.z - WaveAmplitude || ribbonElevation > range.w + WaveAmplitude)
+			const float2 bounds = RibbonBounds(range, size);
+			[branch] if (ribbonElevation < bounds.x - WaveAmplitude || ribbonElevation > bounds.y + WaveAmplitude)
 				continue;
 			const float waveSeed = frac(seed * 0.0713 + arc.w * 0.317) * 64.0;
 			const float wave = (Fbm2(ring + float2(waveSeed, waveSeed * 0.37 + t * 0.004)) - 0.5) * 2.0 * waveScale;
-			const float3 hit = LookupRibbon((uint)arc.x, azimuth - arc.y, ribbonElevation - wave);
+			const float3 hit = LookupRibbon((uint)arc.x, azimuth - arc.y, ribbonElevation - wave, size);
 			[branch] if (hit.z > 0.001 && hit.y > -0.4 && hit.y < 1.2)
 			{
 				// Squeezed toward the horizon, distant arcs need the extra softness of an overhead curtain
-				const float patternScale = distant ? DistantPatternScale : 1.0;
-				color += Shade(hit.x * patternScale, uWidth * patternScale, arc.w, hit.y, hit.z, distant ? max(zenith, 0.5) : zenith) * (distant ? DistantBrightness : 1.0);
+				const float patternScale = (distant ? DistantPatternScale : 1.0) / size;
+				// The last curtain fades with the fraction of the count while it changes
+				const float weight = (distant ? DistantBrightness : 1.0) * saturate(curtainCount - (float)k);
+				color += Shade(hit.x * patternScale, uWidth * patternScale, arc.w, hit.y, hit.z, distant ? max(zenith, 0.5) : zenith) * weight;
 			}
 		}
 

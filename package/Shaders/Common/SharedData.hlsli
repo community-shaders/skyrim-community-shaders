@@ -493,7 +493,9 @@ namespace SharedData
 		float Seed;
 		uint Enabled;
 		float3 Atmosphere;  // x: vanilla aurora visibility (0..1), y: haze amount, z: nebula glow
-		float pad0;
+		float CurtainSize;  // curtain width and height relative to the default
+		float CurtainCount;  // curtains drawn, 1 .. 7; a fraction fades the last one in or out
+		float3 pad0;
 	};
 
 	cbuffer FeatureData : register(b6)

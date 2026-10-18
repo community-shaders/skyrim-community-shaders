@@ -47,6 +47,8 @@ public:
 		bool NewPatternEachNight = true;
 		float GreatStormChance = 0.2f;
 		float ColorVariety = 0.5f;
+		int CurtainCount = 7;
+		float CurtainSize = 1.0f;
 		std::array<float, 3> FringeColor = { 0.70f, 1.00f, 0.50f };
 		std::array<float, 3> BodyColor = { 0.15f, 1.00f, 0.45f };
 		std::array<float, 3> CrownColor = { 1.00f, 0.28f, 0.42f };
@@ -66,10 +68,12 @@ public:
 		float Seed;
 		uint Enabled;
 		float3 Atmosphere;  // x: vanilla aurora visibility, y: haze, z: nebula glow
-		float pad0;
+		float CurtainSize;
+		float CurtainCount;
+		float3 pad0;
 	};
 	STATIC_ASSERT_ALIGNAS_16(CommonBufferData);
-	static_assert(sizeof(CommonBufferData) == 96, "ProceduralAurora::CommonBufferData must match ProceduralAuroraSettings in SharedData.hlsli");
+	static_assert(sizeof(CommonBufferData) == 112, "ProceduralAurora::CommonBufferData must match ProceduralAuroraSettings in SharedData.hlsli");
 
 	/**
 	 * @brief Culls the vanilla aurora ribbons while the feature is enabled (restoring them when it is not) and reads
@@ -115,6 +119,7 @@ private:
 	float auroraVisibility = 0.0f;                 // last value sent to the shader, shown in the menu
 	std::atomic<float> vanillaVisibility{ 0.0f };  // vanilla fade read in OnSkyUpdate: the ribbons' material alpha, 0 to 1
 	bool ribbonsCulled = false;                    // whether OnSkyUpdate last culled the vanilla ribbons
+	float curtainCount = 0.0f;                     // curtains sent to the shader, eased toward the setting so they fade
 
 	// Animation clock, advanced on the CPU so speed changes never make the pattern jump
 	double animationTime = 0.0;
