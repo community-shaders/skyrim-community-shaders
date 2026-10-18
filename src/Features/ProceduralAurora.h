@@ -70,7 +70,7 @@ public:
 		float3 Atmosphere;  // x: vanilla aurora visibility, y: haze, z: nebula glow
 		float CurtainSize;
 		float CurtainCount;
-		float3 pad0;
+		float3 BodyDisplayColor;
 	};
 	STATIC_ASSERT_ALIGNAS_16(CommonBufferData);
 	static_assert(sizeof(CommonBufferData) == 112, "ProceduralAurora::CommonBufferData must match ProceduralAuroraSettings in SharedData.hlsli");

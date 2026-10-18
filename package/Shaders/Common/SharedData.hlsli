@@ -483,7 +483,7 @@ namespace SharedData
 	{
 		float4 FringeColor;  // xyz: lower edge color, w: lower edge amount
 		float4 BodyColor;    // xyz: main curtain color, w: storm level of the current night (0..1)
-		float4 CrownColor;   // xyz: top color, w: height where the top color starts
+		float4 CrownColor;   // xyz: top color in display space, w: height where the top color starts
 		float Brightness;
 		float Time;  // animation clock (speed and night strength already applied)
 		float RayDetail;
@@ -495,7 +495,7 @@ namespace SharedData
 		float3 Atmosphere;  // x: vanilla aurora visibility (0..1), y: haze amount, z: nebula glow
 		float CurtainSize;  // curtain width and height relative to the default
 		float CurtainCount;  // curtains drawn, 1 .. 7; a fraction fades the last one in or out
-		float3 pad0;
+		float3 BodyDisplayColor;  // main curtain color in display space
 	};
 
 	cbuffer FeatureData : register(b6)

@@ -102,6 +102,23 @@ namespace
 		return { lightness, std::hypot(labA, labB), std::atan2(labB, labA) };
 	}
 
+	// Display-space color of an OKLCh color, as OkLabToDisplay(LchToLab()) in ProceduralAurora.hlsli computes it
+	std::array<float, 3> LchToDisplay(const std::array<float, 3>& lch)
+	{
+		const float labA = lch[1] * std::cos(lch[2]);
+		const float labB = lch[1] * std::sin(lch[2]);
+		const float l = lch[0] + 0.3963377774f * labA + 0.2158037573f * labB;
+		const float m = lch[0] - 0.1055613458f * labA - 0.0638541728f * labB;
+		const float s = lch[0] - 0.0894841775f * labA - 1.2914855480f * labB;
+		const float l3 = l * l * l;
+		const float m3 = m * m * m;
+		const float s3 = s * s * s;
+		auto toDisplay = [](float linear) { return std::pow(std::max(linear, 0.0f), 1.0f / 2.2f); };
+		return { toDisplay(4.0767416621f * l3 - 3.3077115913f * m3 + 0.2309699292f * s3),
+			toDisplay(-1.2684380046f * l3 + 2.6097574011f * m3 - 0.3413193965f * s3),
+			toDisplay(-0.0041960863f * l3 - 0.7034186147f * m3 + 1.7076147010f * s3) };
+	}
+
 	// Unwraps hue relative to reference along the shorter way round, unless that crosses yellow while neither end is
 	// warm; then the other way, through cyan and blue, as real auroras shade
 	float RouteHue(float reference, float hue)
@@ -241,15 +258,17 @@ ProceduralAurora::CommonBufferData ProceduralAurora::GetCommonBufferData()
 
 	const auto night = GetNight();
 	CommonBufferData data{};
-	// Colors go to the shader as OKLCh, hues unwrapped relative to the middle color so the shader can blend them
+	// The middle and lower edge colors go to the shader as OKLCh, the lower hue unwrapped relative to the middle one so
+	// the shader can blend them. Colors used as they are go in display space, so each pixel skips the conversion.
 	const auto middle = ToAuroraLch(night.body);
 	auto lower = ToAuroraLch(night.fringe);
-	auto top = ToAuroraLch(night.crown);
 	lower[2] = RouteHue(middle[2], lower[2]);
-	top[2] = RouteHue(middle[2], top[2]);
+	const auto middleDisplay = LchToDisplay(middle);
+	const auto topDisplay = LchToDisplay(ToAuroraLch(night.crown));
 	data.FringeColor = { lower[0], lower[1], lower[2], night.fringeAmount };
 	data.BodyColor = { middle[0], middle[1], middle[2], night.storm };
-	data.CrownColor = { top[0], top[1], top[2], night.crownStart };
+	data.CrownColor = { topDisplay[0], topDisplay[1], topDisplay[2], night.crownStart };
+	data.BodyDisplayColor = { middleDisplay[0], middleDisplay[1], middleDisplay[2] };
 	data.Brightness = settings.Brightness;
 
 	// Advance the animation clock by real time, paused while the game is paused; it restarts each in-game night
