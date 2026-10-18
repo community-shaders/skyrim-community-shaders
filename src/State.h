@@ -478,6 +478,8 @@ public:
 	bool SetFeatureDisabled(const std::string& featureName, bool isDisabled);
 	bool IsFeatureDisabled(const std::string& featureName);
 	std::unordered_map<std::string, bool>& GetDisabledFeatures();
+	void SetFeatureFavorite(const std::string& featureName, bool isFavorite);
+	bool IsFeatureFavorite(const std::string& featureName);
 
 	bool useFrameAnnotations = false;
 
@@ -535,6 +537,7 @@ public:
 	}
 
 	std::unordered_map<std::string, bool> disabledFeatures;
+	std::unordered_map<std::string, bool> favoriteFeatures;
 	std::mutex m_mutex;
 
 	inline ~State()

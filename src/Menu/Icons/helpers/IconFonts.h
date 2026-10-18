@@ -66,19 +66,19 @@ namespace Icons
 
 	[[nodiscard]] inline ImFont* GetFont(GlyphRef glyph) { return GetFont(glyph.family); }
 
-	/** @brief Push the glyph's standalone icon font for the enclosing scope. */
+	/** @brief Push the glyph's standalone icon font for the enclosing scope, optionally scaled from its loaded size. */
 	class FontGuard
 	{
 	public:
-		explicit FontGuard(Family family)
+		explicit FontGuard(Family family, float scale = 1.0f)
 		{
 			if (ImFont* font = GetFont(family)) {
-				ImGui::PushFont(font, font->LegacySize);
+				ImGui::PushFont(font, font->LegacySize * scale);
 				pushed_ = true;
 			}
 		}
-		explicit FontGuard(GlyphRef glyph) :
-			FontGuard(glyph.family)
+		explicit FontGuard(GlyphRef glyph, float scale = 1.0f) :
+			FontGuard(glyph.family, scale)
 		{}
 		~FontGuard()
 		{

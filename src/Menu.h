@@ -528,7 +528,6 @@ private:
 	void DrawAdvancedSettings();
 	void DrawDisableAtBootSettings();
 	void DrawFooter();
-	void BuildCategoryCounts();
 
 	void addToEventQueue(KeyEvent e);
 	void ProcessInputEventQueue();

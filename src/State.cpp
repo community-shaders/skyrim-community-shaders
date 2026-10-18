@@ -676,6 +676,7 @@ void State::SaveCoreToJson(json& settings)
 		disabledFeaturesJson[featureName] = isDisabled;
 	}
 	settings["Disable at Boot"] = disabledFeaturesJson;
+	settings["Favorites"] = favoriteFeatures;
 
 	settings["Version"] = Plugin::VERSION.string();
 }
@@ -797,6 +798,14 @@ void State::LoadFromJson(nlohmann::json& settings)
 				logger::warn("Invalid entry for shader class '{}', using current value", name);
 			}
 		});
+	}
+
+	if (settings.contains("Favorites") && settings["Favorites"].is_object()) {
+		favoriteFeatures.clear();
+		for (auto& [featureName, isFavorite] : settings["Favorites"].items()) {
+			if (isFavorite.is_boolean() && isFavorite.get<bool>())
+				favoriteFeatures[featureName] = true;
+		}
 	}
 
 	// Load feature settings (only for already-loaded features)
@@ -1535,6 +1544,20 @@ bool State::IsFeatureDisabled(const std::string& featureName)
 std::unordered_map<std::string, bool>& State::GetDisabledFeatures()
 {
 	return disabledFeatures;
+}
+
+void State::SetFeatureFavorite(const std::string& featureName, bool isFavorite)
+{
+	if (isFavorite)
+		favoriteFeatures[featureName] = true;
+	else
+		favoriteFeatures.erase(featureName);  // only favorites are stored
+}
+
+bool State::IsFeatureFavorite(const std::string& featureName)
+{
+	const auto found = favoriteFeatures.find(featureName);
+	return found != favoriteFeatures.end() && found->second;
 }
 
 // --- Utility Method Implementations ---

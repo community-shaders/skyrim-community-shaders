@@ -733,8 +733,6 @@ void Menu::Init()
 		logger::warn("Menu::Init() - Failed to initialize background blur system");
 	}
 
-	BuildCategoryCounts();
-
 	// Detours must land before any feature draws, and this is the first guaranteed render-thread
 	// point; Install logs its own failure and leaves the interceptor inert.
 	SceneWidgetInterceptor::Install();
@@ -1411,25 +1409,4 @@ void Menu::DrawWeatherDetailsWindow()
 	auto& weather = globals::features::csEditor;
 	bool* p_open = &globals::features::csEditor.WeatherDetailsWindow.Enabled;
 	weather.RenderWeatherDetailsWindow(p_open, !globals::features::performanceOverlay.settings.ShowWeatherPicker);
-}
-
-/**
- * @brief Builds category counts for feature organization and display
- *
- * Iterates through all loaded features and counts how many features belong to each
- * category. This information is used for UI organization and displaying category
- * statistics in the feature navigation interface.
- *
- * @note Only counts features that are both loaded and configured to appear in the menu.
- */
-void Menu::BuildCategoryCounts()
-{
-	const std::vector<Feature*>& features = Feature::GetFeatureList();
-	// Get the category of each feature, and increment the count for that category
-	for (auto& feature : features) {
-		if (feature->IsInMenu() && feature->loaded) {
-			std::string_view category = feature->GetCategory();
-			categoryCounts[std::string(category)]++;
-		}
-	}
 }

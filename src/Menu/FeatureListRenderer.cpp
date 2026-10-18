@@ -394,9 +394,12 @@ void FeatureListRenderer::RenderFeatureList(
 {
 	ImGui::BeginChild("Menus Table", ImVec2(0, -footerHeight));
 
-	// A search filter could hide the feature being navigated to
-	if (!pendingFeatureSelection.empty())
+	// A search filter or a collapsed category could hide the feature being navigated to
+	if (!pendingFeatureSelection.empty()) {
 		featureSearch.clear();
+		if (const auto* feature = Feature::FindFeatureByShortName(pendingFeatureSelection))
+			categoryExpansionStates[std::string(feature->GetCategory())] = true;
+	}
 
 	auto menuList = BuildMenuList(featureSearch, categoryExpansionStates, drawGeneralSettings, drawAdvancedSettings);
 
@@ -465,11 +468,25 @@ std::vector<FeatureListRenderer::MenuFuncInfo> FeatureListRenderer::BuildMenuLis
 	// persist correctly. This is acceptable since the list is small and built
 	// infrequently, but could be optimized if performance becomes an issue.
 
+	const auto isFavorite = [](Feature* feat) {
+		return feat->IsInMenu() && feat->loaded && globals::state->IsFeatureFavorite(feat->GetShortName());
+	};
+
+	// Favorites leave their category's count; recounted here since they change at runtime
+	Menu::categoryCounts.clear();
+	for (Feature* feat : featureList) {
+		if (feat->IsInMenu() && feat->loaded && !isFavorite(feat))
+			Menu::categoryCounts[std::string(feat->GetCategory())]++;
+	}
+
+	// Favorites are pinned above the rest, outside any category
+	std::ranges::copy(sortedFeatureList | std::ranges::views::filter(isFavorite), std::back_inserter(menuList));
+
 	// Group features by category, or list them flat when sorting alphabetically
 	const auto sortMode = globals::menu->GetSettings().FeatureListSort;
 	std::map<std::string, std::vector<Feature*>> categorizedFeatures;
 	for (Feature* feat : sortedFeatureList) {
-		if (feat->IsInMenu() && feat->loaded) {
+		if (feat->IsInMenu() && feat->loaded && !isFavorite(feat)) {
 			switch (sortMode) {
 			case Menu::FeatureSortMode::Alphabetical:
 				menuList.push_back(feat);  // already in display-name order
@@ -750,6 +767,19 @@ void FeatureListRenderer::ListMenuVisitor::operator()(Feature* feat)
 	}
 	ImGui::PopStyleColor();
 
+	// Favorites are pinned at the top of the list, marked by a pin attached to the name (its label ends in a space)
+	if (isLoaded && globals::state->IsFeatureFavorite(featureName)) {
+		ImGui::SameLine(0.0f, 0.0f);
+		const Icons::GlyphRef pin = Icons::LC(ICON_LC_PIN);
+		const float lineHeight = ImGui::GetTextLineHeight();
+		const ImVec2 origin = ImGui::GetCursorScreenPos();
+		Icons::FontGuard pinFont(pin, 0.75f);
+		const ImVec2 pinBox(ImGui::CalcTextSize(pin.utf8).x, lineHeight);
+		ImGui::Dummy(pinBox);
+		ImGui::GetWindowDrawList()->AddText(Icons::GetCenteredGlyphPos(origin, pinBox, pin.utf8),
+			ImGui::GetColorU32(Util::Colors::GetAccent()), pin.utf8);
+	}
+
 	// Display the stage marker behind the name, regardless of loaded state
 	if (const auto stage = feat->GetReleaseStage(); stage != Feature::ReleaseStage::Release) {
 		ImGui::SameLine();
@@ -838,6 +868,7 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureHeader(Feature* feat, bo
 	float buttonSpacing = ThemeManager::Constants::BUTTON_SPACING;
 
 	float bootToggleWidth = ImGui::GetFrameHeight() * 1.6f;
+	float bootToggleHeight = ImGui::GetFrameHeight() * 0.8f;
 	const float exportIconSize = ImGui::GetFrameHeight();
 
 	const bool canExport = !isDisabled && isLoaded && FeatureOverwritesPanel::HasExportableSettings(feat);
@@ -849,6 +880,9 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureHeader(Feature* feat, bo
 	const bool canUseBaselines = canRestore && globals::state->HasEditsUnderBaselines(feat);
 
 	float totalButtonWidth = bootToggleWidth;
+	if (isLoaded) {
+		totalButtonWidth += exportIconSize + buttonSpacing;
+	}
 	if (canRestore) {
 		totalButtonWidth += exportIconSize + buttonSpacing;
 	}
@@ -902,6 +936,11 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureHeader(Feature* feat, bo
 		ImGui::SameLine();
 	}
 
+	if (isLoaded) {
+		RenderFavoriteButton(feat);
+		ImGui::SameLine();
+	}
+
 	// Enable/Disable at boot toggle
 	bool bootEnabled = !isDisabled;
 
@@ -910,6 +949,8 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureHeader(Feature* feat, bo
 		ImGui::PushStyleColor(ImGuiCol_Text, themeSettings.StatusPalette.Error);
 	}
 
+	// The toggle is shorter than the icon buttons; centre it on them instead of aligning the tops
+	ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (buttonHeight - bootToggleHeight) * 0.5f);
 	if (Util::FeatureToggle("##BootToggle", &bootEnabled)) {
 		bool newState = feat->ToggleAtBootSetting();
 		logger::info("{}: {} at boot.", featureName, newState ? "Enabled" : "Disabled");
@@ -1053,6 +1094,26 @@ void FeatureListRenderer::DrawMenuVisitor::RenderRestoreDefaultsButton(Feature* 
 
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("%s", T("menu.features.restore_defaults_tooltip", "Restore defaults: clears your edits to this feature, back to what defaults and your Baseline presets set"));
+	}
+}
+
+void FeatureListRenderer::DrawMenuVisitor::RenderFavoriteButton(Feature* feat)
+{
+	const auto featureName = feat->GetShortName();
+	const bool isFavorite = globals::state->IsFeatureFavorite(featureName);
+	const float size = ImGui::GetFrameHeight();
+	{
+		auto style = Util::TransparentIconButtonStyle();
+		if (Icons::Button("###Favorite", Icons::LC(isFavorite ? ICON_LC_PIN_OFF : ICON_LC_PIN), ImVec2(size, size))) {
+			globals::state->SetFeatureFavorite(featureName, !isFavorite);
+			globals::state->CheckCoreSettingsChanged();
+			// The favorites list shifts the menu; keep this feature selected
+			globals::menu->SelectFeatureMenu(featureName);
+		}
+	}
+
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("%s", isFavorite ? T("menu.features.remove_from_favorites_tooltip", "Remove from favorites: moves this feature back into the main list") : T("menu.features.add_to_favorites_tooltip", "Add to favorites: lists this feature at the top of the feature list"));
 	}
 }
 

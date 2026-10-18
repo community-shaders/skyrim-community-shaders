@@ -106,6 +106,7 @@ private:
 		/** @brief Drops the feature's edits to settings its Baseline packs set. */
 		static void RenderUseBaselinesButton(Feature* feat);
 		static void RenderRestoreDefaultsButton(Feature* feat);
+		static void RenderFavoriteButton(Feature* feat);
 	};
 
 	static std::vector<MenuFuncInfo> BuildMenuList(

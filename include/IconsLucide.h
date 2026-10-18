@@ -15,7 +15,9 @@
 #define ICON_LC_SHARE "\xee\x85\x95"	// U+e155
 #define ICON_LC_SNOWFLAKE "\xee\x85\xa5"	// U+e165
 #define ICON_LC_CLOUD_FOG "\xee\x88\x94"	// U+e214
+#define ICON_LC_PIN "\xee\x89\x99"	// U+e259
 #define ICON_LC_SUN_DIM "\xee\x8a\x99"	// U+e299
+#define ICON_LC_PIN_OFF "\xee\x8a\xb6"	// U+e2b6
 #define ICON_LC_CLOUD_COG "\xee\x8c\x8a"	// U+e30a
 #define ICON_LC_CASTLE "\xee\x8f\xa0"	// U+e3e0
 #define ICON_LC_STARS "\xee\x90\x92"	// U+e412
@@ -32,7 +34,9 @@ inline constexpr unsigned short ICON_LC_GLYPH_RANGES[] = {
 	0xe155, 0xe155,
 	0xe165, 0xe165,
 	0xe214, 0xe214,
+	0xe259, 0xe259,
 	0xe299, 0xe299,
+	0xe2b6, 0xe2b6,
 	0xe30a, 0xe30a,
 	0xe3e0, 0xe3e0,
 	0xe412, 0xe412,
