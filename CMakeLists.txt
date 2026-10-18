@@ -542,7 +542,7 @@ install(CODE "file(REMOVE \${CMAKE_INSTALL_PREFIX}/Core)" COMPONENT Shaders)
 
 # The rest of the Licenses folder lives in package/; these two sit at the repo root for GitHub.
 set(LICENSES_DESTINATION SKSE/Plugins/CommunityShaders/Licenses)
-set(ROOT_LICENSE_FILES "${CMAKE_SOURCE_DIR}/COPYING" "${CMAKE_SOURCE_DIR}/EXCEPTIONS.md")
+set(ROOT_LICENSE_FILES "${CMAKE_SOURCE_DIR}/COPYING.txt" "${CMAKE_SOURCE_DIR}/EXCEPTIONS.md")
 install(
     FILES ${ROOT_LICENSE_FILES}
     DESTINATION ${LICENSES_DESTINATION}

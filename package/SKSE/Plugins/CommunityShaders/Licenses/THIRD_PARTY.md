@@ -1,6 +1,6 @@
 # Licenses and credits
 
-Community Shaders is GPL-3.0 (see COPYING) WITH the Modding Exception and GPL-3.0 Linking Exception (see EXCEPTIONS.md), except for the third-party code below. A LICENSE file or header applies only to the code it names, not to the whole directory or to later modifications.
+Community Shaders is GPL-3.0 (see COPYING.txt) WITH the Modding Exception and GPL-3.0 Linking Exception (see EXCEPTIONS.md), except for the third-party code below. A LICENSE file or header applies only to the code it names, not to the whole directory or to later modifications.
 
 ## Third-party code
 

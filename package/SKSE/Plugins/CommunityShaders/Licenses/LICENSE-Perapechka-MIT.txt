@@ -3,7 +3,7 @@ first imported into this repository (BloodSplatter, DistantTree, Effect,
 Lighting, Particle, RunGrass, Sky and Water .hlsl). BloodSplatter.hlsl is
 unchanged apart from formatting and remains MIT. In the other files,
 modifications and additions made by Community Shaders contributors are licensed
-under GPL-3.0 with the Modding Exception (see COPYING and EXCEPTIONS.md). The
+under GPL-3.0 with the Modding Exception (see COPYING.txt and EXCEPTIONS.md). The
 notice below must be retained in copies of the original code. See
 THIRD_PARTY.md for other third-party files.
 
