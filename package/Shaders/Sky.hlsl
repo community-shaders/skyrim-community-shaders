@@ -1,5 +1,5 @@
-// SPDX-License-Identifier: MIT AND GPL-3.0-or-later
-// Original code Copyright (c) 2022 Ilya Perapechka (MIT), modifications GPL-3.0-or-later
+// SPDX-License-Identifier: MIT AND GPL-3.0-only
+// Original code Copyright (c) 2022 Ilya Perapechka (MIT), modifications GPL-3.0 with Modding Exception (see EXCEPTIONS.md)
 
 #include "Common/Color.hlsli"
 #include "Common/FlareOcclusion.hlsli"
