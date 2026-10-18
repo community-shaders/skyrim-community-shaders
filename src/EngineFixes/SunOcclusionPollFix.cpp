@@ -1,3 +1,4 @@
+// Inspired by "Hitch Hunter and Fixes - SKSE" by Zzyxzz: https://www.nexusmods.com/skyrimspecialedition/mods/194231
 #include "SunOcclusionPollFix.h"
 
 #include "Utils/VersionedRelocation.h"

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT AND GPL-3.0-or-later
+// Original code Copyright (c) 2022 Ilya Perapechka (MIT), modifications GPL-3.0-or-later
+
 #include "Common/Color.hlsli"
 #include "Common/FrameBuffer.hlsli"
 #include "Common/GBuffer.hlsli"
@@ -31,7 +34,6 @@ struct VS_OUTPUT
 	float4 PreviousWorldPosition: POSITION2;
 #endif  // RENDER_DEPTH
 	float4 ViewPosition: POSITION3;
-
 };
 
 #ifdef VSHADER

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT AND GPL-3.0-or-later
+// Original code Copyright (c) 2022 Ilya Perapechka (MIT), modifications GPL-3.0-or-later
+
 #if defined(HORIZON_FIX)
 namespace HorizonFix
 {

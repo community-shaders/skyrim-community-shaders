@@ -1,5 +1,5 @@
 [![Latest Release](https://img.shields.io/github/v/release/community-shaders/skyrim-community-shaders)](https://github.com/community-shaders/skyrim-community-shaders/releases)
-[![License](https://img.shields.io/github/license/community-shaders/skyrim-community-shaders)](./LICENSE)
+[![License](https://img.shields.io/github/license/community-shaders/skyrim-community-shaders)](./COPYING)
 [![Last Commit](https://img.shields.io/github/last-commit/community-shaders/skyrim-community-shaders)](https://github.com/community-shaders/skyrim-community-shaders/commits)
 [![Build Status](https://img.shields.io/github/actions/workflow/status/community-shaders/skyrim-community-shaders/release-build.yaml?event=release)](https://github.com/community-shaders/skyrim-community-shaders/actions)
 [![Discord](https://img.shields.io/discord/1080142797870485606?label=discord&logo=discord&color=5865F2)](https://discord.com/invite/nkrQybAsyy)
@@ -215,7 +215,7 @@ AI-based training, scraping, and other automated or human reuse do not waive the
 
 ### Shaders
 
-See LICENSE within each directory; if none, it's [Default](#default)
+Shaders are [GPL-3.0-or-later with exceptions](#default) unless a file carries its own license header or is listed in [THIRD_PARTY.md](package/Shaders/THIRD_PARTY.md). A LICENSE file in a directory applies only to the third-party code it names, not to the whole directory or to later modifications, which are GPL.
 
 -   [Features Shaders](features)
 -   [Package Shaders](package/Shaders/)
