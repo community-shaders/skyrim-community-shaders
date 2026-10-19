@@ -462,7 +462,7 @@ add_custom_command(
         "${CMAKE_CURRENT_SOURCE_DIR}/cmake/generate_scene_settings_catalog.py"
         --source-dir "${CMAKE_CURRENT_SOURCE_DIR}" --out-dir
         "${SCENE_SETTINGS_CATALOG_DIR}" --min-entries 645 --min-controllable 538
-        --min-controllable-features 30 --feature-floors
+        --min-controllable-features 31 --feature-floors
         "${SCENE_SETTINGS_CATALOG_FLOORS}" --stamp
         "${SCENE_SETTINGS_CATALOG_STAMP}"
     DEPENDS
