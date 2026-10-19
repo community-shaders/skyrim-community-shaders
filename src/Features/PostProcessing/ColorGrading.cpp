@@ -17,6 +17,7 @@
 #include <DirectXTex.h>
 
 #include "IconsFontAwesome5.h"
+#include "IconsTabler.h"
 #include "Menu/Icons/helpers/IconFonts.h"
 
 #define I18N_KEY_PREFIX "feature.post_processing.color_grading."
@@ -84,7 +85,7 @@ void drawHDRStatus()
 {
 	auto& hdr = globals::features::hdrDisplay;
 	if (hdr.loaded && hdr.settings.enableHDR) {
-		Icons::Text(Icons::FA(ICON_FA_CHECK));
+		Icons::Text(Icons::TI(ICON_TI_CHECK));
 		ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x);
 		ImGui::TextColored(Util::Colors::GetSuccess(), "%s",
 			T("feature.post_processing.color_grading.hdr_output_active", "HDR Output Active"));

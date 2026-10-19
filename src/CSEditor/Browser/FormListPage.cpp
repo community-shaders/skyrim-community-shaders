@@ -8,7 +8,7 @@
 #include "BrowserWidgets.h"
 #include "Features/CSEditor.h"
 #include "Globals.h"
-#include "IconsFontAwesome5.h"
+#include "IconsTabler.h"
 #include "Menu.h"
 #include "Menu/Icons/helpers/WeatherTypeIcons.h"
 #include "Utils/UI.h"
@@ -452,7 +452,7 @@ namespace
 			Util::AddTooltip(T(TKEY("active_chip_tooltip"), "Click to find it in its list. Double-click to open its editor."));
 
 			ImGui::SameLine(0.0f, 0.0f);
-			if (BrowserUI::IconButton("##open", Icons::FA(ICON_FA_EXTERNAL_LINK_ALT), T(TKEY("open_editor_tooltip"), "Open its editor window.")))
+			if (BrowserUI::IconButton("##open", Icons::TI(ICON_TI_EXTERNAL_LINK), T(TKEY("open_editor_tooltip"), "Open its editor window.")))
 				record.open();
 			ImGui::PopID();
 		}
@@ -533,7 +533,7 @@ namespace
 				T(TKEY("flagged"), "Flagged")))
 			state.onlyFlagged = !state.onlyFlagged;
 		ImGui::SameLine();
-		if (BrowserUI::ToggleChip("##OnlySaved", BrowserUI::GlyphIcon(Icons::FA(ICON_FA_SAVE)), state.savedCount, state.onlySaved,
+		if (BrowserUI::ToggleChip("##OnlySaved", BrowserUI::GlyphIcon(Icons::TI(ICON_TI_DEVICE_FLOPPY)), state.savedCount, state.onlySaved,
 				Util::Colors::GetInfo(), T(TKEY("filter_saved_tooltip"), "Saved: has a JSON override on disk")))
 			state.onlySaved = !state.onlySaved;
 		ImGui::SameLine();
@@ -541,7 +541,7 @@ namespace
 				T(TKEY("filter_unsaved_tooltip"), "Unsaved: edited since it was last saved")))
 			state.onlyUnsaved = !state.onlyUnsaved;
 		ImGui::SameLine();
-		if (BrowserUI::ToggleChip("##OnlyPreset", BrowserUI::GlyphIcon(Icons::FA(ICON_FA_LAYER_GROUP)), state.presetCount, state.onlyPreset,
+		if (BrowserUI::ToggleChip("##OnlyPreset", BrowserUI::GlyphIcon(Icons::TI(ICON_TI_STACK_2)), state.presetCount, state.onlyPreset,
 				Util::Colors::GetInfo(), T(TKEY("filter_preset_tooltip"), "Preset: the active preset ships a file for it")))
 			state.onlyPreset = !state.onlyPreset;
 	}
@@ -705,14 +705,14 @@ namespace
 		};
 
 		const bool open = row.widget->IsOpen();
-		slot(open, BrowserUI::GlyphIcon(Icons::FA(ICON_FA_EXTERNAL_LINK_ALT)), ImGui::GetColorU32(Util::Colors::GetAccent()),
+		slot(open, BrowserUI::GlyphIcon(Icons::TI(ICON_TI_EXTERNAL_LINK)), ImGui::GetColorU32(Util::Colors::GetAccent()),
 			T(TKEY("state_open_tooltip"), "Its editor window is open"));
 		// Checked live rather than from the cached row, so the dot follows edits, saves and undo at once.
 		slot(row.widget->HasUnsavedChanges(), BrowserUI::DotIcon(), ImGui::GetColorU32(Util::Colors::GetUnsaved()),
 			T(TKEY("state_unsaved_tooltip"), "Edited since it was last saved"));
-		slot(row.hasSavedFile, BrowserUI::GlyphIcon(Icons::FA(ICON_FA_SAVE)), ImGui::GetColorU32(Util::Colors::GetSecondary()),
+		slot(row.hasSavedFile, BrowserUI::GlyphIcon(Icons::TI(ICON_TI_DEVICE_FLOPPY)), ImGui::GetColorU32(Util::Colors::GetSecondary()),
 			T(TKEY("state_saved_tooltip"), "Has a JSON override on disk"));
-		slot(row.fromPack, BrowserUI::GlyphIcon(Icons::FA(ICON_FA_LAYER_GROUP)), ImGui::GetColorU32(row.packBadgeColor),
+		slot(row.fromPack, BrowserUI::GlyphIcon(Icons::TI(ICON_TI_STACK_2)), ImGui::GetColorU32(row.packBadgeColor),
 			row.packBadgeTooltip.c_str());
 	}
 
@@ -939,7 +939,7 @@ namespace
 		ImGui::AlignTextToFramePadding();
 		BrowserUI::MetaText(std::format("{} \xC2\xB7 {}", formId, widget.GetFilename()).c_str(), std::max(1.0f, ImGui::GetContentRegionAvail().x - button - spacing));
 		BrowserUI::RightAlign(button);
-		if (BrowserUI::IconButton("##CopyFormId", Icons::FA(ICON_FA_COPY), T(TKEY("copy_form_id"), "Copy form ID")))
+		if (BrowserUI::IconButton("##CopyFormId", Icons::TI(ICON_TI_COPY), T(TKEY("copy_form_id"), "Copy form ID")))
 			ImGui::SetClipboardText(std::format("0x{}", formId).c_str());
 
 		// State badges
@@ -1135,19 +1135,19 @@ namespace
 		const std::string fileName = std::filesystem::path(path).filename().string();
 		ImGui::AlignTextToFramePadding();
 		{
-			Icons::FontGuard font(Icons::FA(ICON_FA_SAVE));
-			Util::Text::Secondary("%s", ICON_FA_SAVE);
+			Icons::FontGuard font(Icons::TI(ICON_TI_DEVICE_FLOPPY));
+			Util::Text::Secondary("%s", ICON_TI_DEVICE_FLOPPY);
 		}
 		ImGui::SameLine();
 		BrowserUI::MetaText(fileName.c_str());
 		Util::AddTooltip(path.c_str());
 
-		if (Icons::LabeledButton("##RevealSaved", Icons::FA(ICON_FA_FOLDER_OPEN), T(TKEY("show_in_folder"), "Show in folder")))
+		if (Icons::LabeledButton("##RevealSaved", Icons::TI(ICON_TI_FOLDER_OPEN), T(TKEY("show_in_folder"), "Show in folder")))
 			RevealInExplorer(path);
 		ImGui::SameLine();
 		{
 			auto _style = Util::StatusTextButtonStyle(Util::Colors::GetError());
-			if (Icons::LabeledButton("##DeleteSaved", Icons::FA(ICON_FA_TRASH_ALT), T(TKEY("delete"), "Delete")))
+			if (Icons::LabeledButton("##DeleteSaved", Icons::TI(ICON_TI_TRASH), T(TKEY("delete"), "Delete")))
 				context.requestDeleteSavedFile(&widget);
 		}
 		Util::AddTooltip(T(TKEY("delete_json_file"), "Delete JSON file"));
@@ -1162,7 +1162,7 @@ namespace
 
 		{
 			auto _style = Util::StatusButtonStyle(Util::Colors::GetAccent());
-			if (Icons::LabeledButton("##OpenEditor", Icons::FA(ICON_FA_EXTERNAL_LINK_ALT), T(TKEY("open_editor"), "Open editor"),
+			if (Icons::LabeledButton("##OpenEditor", Icons::TI(ICON_TI_EXTERNAL_LINK), T(TKEY("open_editor"), "Open editor"),
 					ImVec2(ImGui::GetContentRegionAvail().x - lockWidth, 0.0f)))
 				OpenWidget(editor, context.category, widget);
 		}
@@ -1273,7 +1273,7 @@ namespace
 
 			ImGui::Spacing();
 			auto _style = Util::StatusButtonStyle(Util::Colors::GetAccent());
-			if (Icons::LabeledButton("##OpenCellLighting", Icons::FA(ICON_FA_EXTERNAL_LINK_ALT), T(TKEY("open_editor"), "Open editor")))
+			if (Icons::LabeledButton("##OpenCellLighting", Icons::TI(ICON_TI_EXTERNAL_LINK), T(TKEY("open_editor"), "Open editor")))
 				editor.OpenCellLighting(cell, true);
 		}
 		ImGui::EndChild();
@@ -1329,7 +1329,7 @@ void FormListPage::Draw(Browser::FormListState& state, const Context& context)
 			"Right-click a row to mark it, copy its IDs or manage its saved JSON.\n"
 			"Right-click a column header to show Form ID or Status."));
 		ImGui::SameLine();
-		if (BrowserUI::IconButton("##InspectorToggle", Icons::FA(ICON_FA_COLUMNS), T(TKEY("inspector_toggle_tooltip"), "Show or hide the inspector"),
+		if (BrowserUI::IconButton("##InspectorToggle", Icons::TI(ICON_TI_LAYOUT_COLUMNS), T(TKEY("inspector_toggle_tooltip"), "Show or hide the inspector"),
 				editor.settings.browserShowInspector)) {
 			editor.settings.browserShowInspector = !editor.settings.browserShowInspector;
 			editor.Save();

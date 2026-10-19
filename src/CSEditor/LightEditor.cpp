@@ -6,7 +6,7 @@
 #include "../Utils/UI.h"
 #include "Browser/BrowserWidgets.h"
 #include "EditorWindow.h"
-#include "IconsFontAwesome5.h"
+#include "IconsTabler.h"
 #include "RE/B/BSLight.h"
 #include "RE/B/BSShadowLight.h"
 #include "RE/E/ExtraEmittanceSource.h"
@@ -496,7 +496,7 @@ void LightEditor::DrawSettings()
 	const std::string subtitle = I18n::GetSingleton()->Format(TKEY("light_counts"),
 		{ { "total", std::to_string(totalLightCount) }, { "shadow", std::to_string(activeShadowLightCount) } },
 		"{total} lights \xC2\xB7 {shadow} casting shadows");
-	BrowserUI::PageHeader(Icons::FA(ICON_FA_LIGHTBULB), T(TKEY("header"), "Light Editor"), subtitle.c_str());
+	BrowserUI::PageHeader(Icons::TI(ICON_TI_BULB), T(TKEY("header"), "Light Editor"), subtitle.c_str());
 
 	const bool isAttaching = (attachPhase != AttachPhase::Idle);
 	if (isAttaching) {
@@ -525,7 +525,7 @@ void LightEditor::DrawToolbar()
 	ImGui::Checkbox(disableInvSqLabel, &disableInvSqLights);
 
 	const char* toggleAllLabel = T(TKEY("toggle_all_lp_lights"), "Toggle All LP Lights");
-	if (Icons::LabeledButton("##ToggleAllLP", Icons::FA(ICON_FA_LIGHTBULB), toggleAllLabel)) {
+	if (Icons::LabeledButton("##ToggleAllLP", Icons::TI(ICON_TI_BULB), toggleAllLabel)) {
 		ScheduleConsoleCommand("tlp 0");
 	}
 	if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -533,8 +533,8 @@ void LightEditor::DrawToolbar()
 	}
 
 	const char* markersLabel = T(TKEY("toggle_lp_markers"), "Toggle LP Markers");
-	SameLineIfFits(Icons::MeasureLabeledButton(Icons::FA(ICON_FA_EYE), markersLabel));
-	if (Icons::LabeledButton("##ToggleMarkers", Icons::FA(ICON_FA_EYE), markersLabel)) {
+	SameLineIfFits(Icons::MeasureLabeledButton(Icons::TI(ICON_TI_EYE), markersLabel));
+	if (Icons::LabeledButton("##ToggleMarkers", Icons::TI(ICON_TI_EYE), markersLabel)) {
 		ScheduleConsoleCommand("tlp 1");
 	}
 	if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -542,8 +542,8 @@ void LightEditor::DrawToolbar()
 	}
 
 	const char* reloadLabel = T(TKEY("reload_lp"), "Reload LP");
-	SameLineIfFits(Icons::MeasureLabeledButton(Icons::FA(ICON_FA_SYNC), reloadLabel));
-	if (Icons::LabeledButton("##ReloadLP", Icons::FA(ICON_FA_SYNC), reloadLabel)) {
+	SameLineIfFits(Icons::MeasureLabeledButton(Icons::TI(ICON_TI_REFRESH), reloadLabel));
+	if (Icons::LabeledButton("##ReloadLP", Icons::TI(ICON_TI_REFRESH), reloadLabel)) {
 		QueueReselectCurrentLP();  // capture before RestoreOriginal clears lpInfo/activeRefr
 		RestoreOriginal();
 		previous = {};
@@ -765,8 +765,8 @@ void LightEditor::DrawInspector(const ImVec2& size)
 	// Title: the light, what kind it is, and whether it is placed by Light Placer or casts shadows
 	ImGui::AlignTextToFramePadding();
 	{
-		Icons::FontGuard font(Icons::FA(ICON_FA_LIGHTBULB));
-		ImGui::TextColored(Util::Colors::GetWarning(), "%s", ICON_FA_LIGHTBULB);
+		Icons::FontGuard font(Icons::TI(ICON_TI_BULB));
+		ImGui::TextColored(Util::Colors::GetWarning(), "%s", ICON_TI_BULB);
 	}
 	ImGui::SameLine();
 	BrowserUI::EllipsizedText(selected.name.empty() ? T(TKEY("unnamed_light"), "(unnamed)") : selected.name.c_str(), 0.0f,

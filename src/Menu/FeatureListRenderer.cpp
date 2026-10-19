@@ -20,8 +20,7 @@
 #include "Fonts.h"
 #include "Globals.h"
 #include "I18n/I18n.h"
-#include "IconsFontAwesome5.h"
-#include "IconsLucide.h"
+#include "IconsTabler.h"
 #include "Menu.h"
 #include "Menu/HomePageRenderer.h"
 #include "Menu/IconLoader.h"
@@ -69,10 +68,10 @@ namespace
 	{
 		switch (mode) {
 		case Menu::FeatureSortMode::Alphabetical:
-			return Icons::LC(ICON_LC_ARROW_DOWN_A_Z);
+			return Icons::TI(ICON_TI_SORT_ASCENDING_LETTERS);
 		case Menu::FeatureSortMode::Category:
 		default:  // unknown values from a hand-edited config fall back to categories
-			return Icons::LC(ICON_LC_LIST_SORT_ASCENDING);
+			return Icons::TI(ICON_TI_CATEGORY);
 		}
 	}
 
@@ -770,7 +769,7 @@ void FeatureListRenderer::ListMenuVisitor::operator()(Feature* feat)
 	// Favorites are pinned at the top of the list, marked by a pin attached to the name (its label ends in a space)
 	if (isLoaded && globals::state->IsFeatureFavorite(featureName)) {
 		ImGui::SameLine(0.0f, 0.0f);
-		const Icons::GlyphRef pin = Icons::LC(ICON_LC_PIN);
+		const Icons::GlyphRef pin = Icons::TI(ICON_TI_PIN);
 		const float lineHeight = ImGui::GetTextLineHeight();
 		const ImVec2 origin = ImGui::GetCursorScreenPos();
 		Icons::FontGuard pinFont(pin, 0.75f);
@@ -1070,7 +1069,7 @@ void FeatureListRenderer::DrawMenuVisitor::RenderUseBaselinesButton(Feature* fea
 	const float size = ImGui::GetFrameHeight();
 	{
 		auto style = Util::TransparentIconButtonStyle();
-		if (Icons::Button("##UseBaselines", Icons::FA(ICON_FA_LAYER_GROUP), ImVec2(size, size)))
+		if (Icons::Button("##UseBaselines", Icons::TI(ICON_TI_STACK_2), ImVec2(size, size)))
 			globals::state->ClearFeatureEditsUnderBaselines(feat);
 	}
 
@@ -1086,7 +1085,7 @@ void FeatureListRenderer::DrawMenuVisitor::RenderRestoreDefaultsButton(Feature* 
 	const float size = ImGui::GetFrameHeight();
 	{
 		auto style = Util::TransparentIconButtonStyle();
-		if (Icons::Button("##RestoreDefaults", Icons::FA(ICON_FA_UNDO), ImVec2(size, size))) {
+		if (Icons::Button("##RestoreDefaults", Icons::TI(ICON_TI_RESTORE), ImVec2(size, size))) {
 			// Clears the user's edits, so the feature shows what defaults and Baseline packs set.
 			globals::state->RestoreFeatureLayers(feat);
 		}
@@ -1104,7 +1103,7 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFavoriteButton(Feature* feat)
 	const float size = ImGui::GetFrameHeight();
 	{
 		auto style = Util::TransparentIconButtonStyle();
-		if (Icons::Button("###Favorite", Icons::LC(isFavorite ? ICON_LC_PIN_OFF : ICON_LC_PIN), ImVec2(size, size))) {
+		if (Icons::Button("###Favorite", Icons::TI(isFavorite ? ICON_TI_PINNED_OFF : ICON_TI_PIN), ImVec2(size, size))) {
 			globals::state->SetFeatureFavorite(featureName, !isFavorite);
 			globals::state->CheckCoreSettingsChanged();
 			// The favorites list shifts the menu; keep this feature selected

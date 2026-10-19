@@ -2,7 +2,7 @@
 
 /**
  * @file LocationTargetIcons.h
- * @brief Resolve a Scene Manager location target to a single FA / Lucide glyph.
+ * @brief Resolve a Scene Manager location target to a single icon glyph.
  *
  * Prefers a LocType keyword icon when the target is (or resolves to) a location
  * type; otherwise falls back to the category glyph from LocationCategoryIcons.

@@ -109,7 +109,7 @@ using json = nlohmann::json;
  *
  * Each role can have different font family, style, and size scale.
  * UI fonts live under Data\Interface\CommunityShaders\Fonts\
- * Icon fonts (FA / Lucide / Tabler / Game Icons) are standalone ImFonts under Icons\glyphs\
+ * Icon fonts (FA / Tabler / Game Icons) are standalone ImFonts under Icons\glyphs\
  * (see Icons::FA / LC / TI helpers); they are not merged into UI role fonts.
  *
  * BLUR SHADER SYSTEM:

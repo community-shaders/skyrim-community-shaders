@@ -8,7 +8,7 @@
 #include "Feature.h"
 #include "FeatureCategories.h"
 #include "Globals.h"
-#include "IconsLucide.h"
+#include "IconsTabler.h"
 #include "Menu.h"
 #include "Menu/FeatureListRenderer.h"
 #include "Menu/Fonts.h"
@@ -78,7 +78,7 @@ namespace
 			drawList->ChannelsSetCurrent(1);
 
 			// Right-aligned so the name and its dot keep their place.
-			const Icons::GlyphRef star = Icons::LC(ICON_LC_STARS);
+			const Icons::GlyphRef star = Icons::TI(ICON_TI_PIN);
 			const ImVec2 starSize = Icons::CalcGlyphSize(star);
 			Icons::DrawCenteredGlyph(drawList,
 				ImVec2(rowMax.x - starSize.x - ImGui::GetStyle().FramePadding.x, rowMin.y),

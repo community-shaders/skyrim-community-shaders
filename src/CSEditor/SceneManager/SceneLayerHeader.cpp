@@ -11,7 +11,7 @@
 #include "../EditorWindow.h"
 #include "Features/Effects11.h"
 #include "Globals.h"
-#include "IconsFontAwesome5.h"
+#include "IconsTabler.h"
 #include "Menu/Icons/helpers/IconFonts.h"
 #include "Presets/UnifiedPresetCatalog.h"
 #include "SceneSettingsUI.h"
@@ -200,7 +200,7 @@ namespace
 	{
 		const auto& style = ImGui::GetStyle();
 		const ImVec4 accent = Util::Colors::GetAccent();
-		const Icons::GlyphRef separator = Icons::FA(ICON_FA_ANGLE_RIGHT);
+		const Icons::GlyphRef separator = Icons::TI(ICON_TI_CHEVRON_RIGHT);
 
 		ImGui::PushID("SceneLayerStack");
 		bool first = true;

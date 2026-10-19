@@ -21,7 +21,7 @@
 #include "../Browser/BrowserWidgets.h"
 #include "../EditorWindow.h"
 #include "Features/CSEditor.h"
-#include "IconsFontAwesome5.h"
+#include "IconsTabler.h"
 #include "Menu/Icons/helpers/LocationTargetIcons.h"
 #include "Menu/Icons/helpers/WeatherTypeIcons.h"
 #include "SceneSettingsContextRules.h"
@@ -264,13 +264,13 @@ namespace
 	{
 		switch (type) {
 		case SceneContextType::Interior:
-			return Icons::FA(ICON_FA_HOME);
+			return Icons::TI(ICON_TI_HOME);
 		case SceneContextType::Weather:
 			return WeatherTypeIcons::kCloudy;
 		case SceneContextType::Location:
-			return Icons::FA(ICON_FA_MAP_MARKER_ALT);
+			return Icons::TI(ICON_TI_MAP_PIN);
 		default:
-			return Icons::FA(ICON_FA_CLOCK);
+			return Icons::TI(ICON_TI_CLOCK);
 		}
 	}
 
@@ -356,11 +356,11 @@ namespace
 	{
 		switch (outcome) {
 		case CopyOutcome::Copy:
-			return { Icons::FA(ICON_FA_CHECK), Util::Colors::GetSuccess() };
+			return { Icons::TI(ICON_TI_CHECK), Util::Colors::GetSuccess() };
 		case CopyOutcome::AlreadySet:
-			return { Icons::FA(ICON_FA_SYNC_ALT), Util::Colors::GetInfo() };
+			return { Icons::TI(ICON_TI_REFRESH), Util::Colors::GetInfo() };
 		default:
-			return { Icons::FA(ICON_FA_TIMES), Util::Colors::GetWarning() };
+			return { Icons::TI(ICON_TI_X), Util::Colors::GetWarning() };
 		}
 	}
 
@@ -705,7 +705,7 @@ namespace
 		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(0.0f, ImGui::GetContentRegionAvail().x - width));
 		const auto tooltip = std::format("{}\n{}", T(TKEY("scene_copy_authored_only"), "Authored only"),
 			T(TKEY("scene_copy_authored_only_tooltip"), "Hides weathers and locations that hold no settings yet."));
-		if (BrowserUI::ToggleChip("##authoredOnly", BrowserUI::GlyphIcon(Icons::FA(ICON_FA_PEN)), authoredCount,
+		if (BrowserUI::ToggleChip("##authoredOnly", BrowserUI::GlyphIcon(Icons::TI(ICON_TI_PENCIL)), authoredCount,
 				!session.showUnauthored, Util::Colors::GetInfo(), tooltip.c_str()))
 			session.showUnauthored = !session.showUnauthored;
 	}
@@ -932,13 +932,13 @@ namespace
 		auto sceneCount = scenes.size();
 		return { std::vformat(T(TKEY("scene_copy_contexts_in_scenes"), "{} contexts in {} scenes"),
 					 std::make_format_args(contextCount, sceneCount)),
-			{ Icons::FA(ICON_FA_LAYER_GROUP), Util::Colors::GetSecondary() } };
+			{ Icons::TI(ICON_TI_STACK_2), Util::Colors::GetSecondary() } };
 	}
 
 	/** @brief The dimmed arrow pointing from what a copy reads to what it writes. */
 	void DrawArrow()
 	{
-		const Icons::GlyphRef arrow = Icons::FA(ICON_FA_ANGLE_RIGHT);
+		const Icons::GlyphRef arrow = Icons::TI(ICON_TI_CHEVRON_RIGHT);
 		Icons::FontGuard font(arrow);
 		Util::Text::Disabled("%s", arrow.utf8);
 	}
@@ -1000,7 +1000,7 @@ namespace
 		ImGui::SetCursorPosY(top + (cardHeight - swapSize) * 0.5f);
 		const auto tooltip = std::format("{}\n{}", T(TKEY("scene_copy_swap"), "Swap direction"),
 			T(TKEY("scene_copy_swap_tooltip"), "Switches between copying out of this page and copying into it. Starts the picks over."));
-		if (BrowserUI::IconButton("##swap", Icons::FA(ICON_FA_EXCHANGE_ALT), tooltip.c_str(), false,
+		if (BrowserUI::IconButton("##swap", Icons::TI(ICON_TI_ARROWS_EXCHANGE), tooltip.c_str(), false,
 				ImGui::GetColorU32(ImGuiCol_Text)))
 			session.swapPending = true;
 

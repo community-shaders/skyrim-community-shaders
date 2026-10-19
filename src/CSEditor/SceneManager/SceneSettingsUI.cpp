@@ -17,7 +17,7 @@
 #include "../FeatureListPicker.h"
 #include "../Weather/WeatherWidget.h"
 #include "Features/CSEditor.h"
-#include "IconsFontAwesome5.h"
+#include "IconsTabler.h"
 #include "Menu/Icons/helpers/IconFonts.h"
 #include "Menu/Icons/helpers/LocationTargetIcons.h"
 #include "Menu/Icons/helpers/SceneActionIcons.h"
@@ -638,7 +638,7 @@ namespace
 			return;
 		}
 
-		const Icons::GlyphRef separator = Icons::FA(ICON_FA_ANGLE_RIGHT);
+		const Icons::GlyphRef separator = Icons::TI(ICON_TI_CHEVRON_RIGHT);
 		const float separatorWidth = Icons::CalcGlyphSize(separator).x + ImGui::GetStyle().ItemSpacing.x;
 		const ImVec4 added = Util::Colors::GetSuccess();
 		const ImVec4 iconColor = Util::Colors::GetSecondary();
@@ -844,7 +844,7 @@ namespace
 
 					ImGui::TableNextColumn();
 					ImGui::SetNextItemAllowOverlap();
-					if (BrowserUI::IconButton("##edit", Icons::FA(ICON_FA_PEN), T(TKEY("location_edit_tooltip"), "Edit its settings"), opened))
+					if (BrowserUI::IconButton("##edit", Icons::TI(ICON_TI_PENCIL), T(TKEY("location_edit_tooltip"), "Edit its settings"), opened))
 						OpenLocationWindow(target);
 					ImGui::SameLine(0.0f, ImGui::GetStyle().ItemSpacing.x);
 					ImGui::SetNextItemAllowOverlap();

@@ -32,7 +32,6 @@ namespace MenuFonts
 		mutable std::array<ImFont*, kFontRoleCount> loadedFontRoles = {};
 		/** Standalone icon typefaces, not MergeMode; PUA ranges overlap across families. */
 		mutable ImFont* fontAwesomeIconFont = nullptr;
-		mutable ImFont* lucideIconFont = nullptr;
 		mutable ImFont* tablerIconFont = nullptr;
 		mutable ImFont* gameIconsFont = nullptr;
 
@@ -45,7 +44,6 @@ namespace MenuFonts
 		}
 
 		[[nodiscard]] ImFont* GetFontAwesomeIconFont() const { return fontAwesomeIconFont; }
-		[[nodiscard]] ImFont* GetLucideIconFont() const { return lucideIconFont; }
 		[[nodiscard]] ImFont* GetTablerIconFont() const { return tablerIconFont; }
 		[[nodiscard]] ImFont* GetGameIconsFont() const { return gameIconsFont; }
 	};

@@ -4,7 +4,7 @@
 #include "CSEditor/Browser/BrowserWidgets.h"
 #include "Feature.h"
 #include "I18n/I18n.h"
-#include "IconsFontAwesome5.h"
+#include "IconsTabler.h"
 #include "Presets/UnifiedPresetCatalog.h"
 #include "SceneSettingsManager.h"
 #include "Utils/SettingsCatalog.h"
@@ -69,7 +69,7 @@ namespace
 	/** @brief Export button, and a chip narrowing the table to files that are not applied. */
 	void DrawToolbar(const std::vector<OverwriteRow>& rows)
 	{
-		if (Icons::LabeledButton("##export", Icons::FA(ICON_FA_FILE_EXPORT), T(TKEY("export.button"), "Export Settings")))
+		if (Icons::LabeledButton("##export", Icons::TI(ICON_TI_FILE_EXPORT), T(TKEY("export.button"), "Export Settings")))
 			FeatureOverwritesPanel::BeginExport();
 		Util::AddTooltip(T(TKEY("export.toolbar_tooltip"),
 			"Writes settings of one or more features to a Baseline preset pack, applied from the Presets page. "
@@ -83,7 +83,7 @@ namespace
 		const auto label = std::vformat(T(TKEY("not_applied_count"), "{} not applied"), std::make_format_args(count));
 		const ImVec4 warning = Util::Colors::GetWarning();
 		BrowserUI::RightAlign(BrowserUI::MeasureChip(label.c_str(), true));
-		if (BrowserUI::Chip("##notApplied", label.c_str(), Icons::FA(ICON_FA_TIMES), &warning, notAppliedOnly ? &warning : nullptr))
+		if (BrowserUI::Chip("##notApplied", label.c_str(), Icons::TI(ICON_TI_X), &warning, notAppliedOnly ? &warning : nullptr))
 			notAppliedOnly = !notAppliedOnly;
 		Util::AddTooltip(notAppliedOnly ? T("cs_editor.scene_copy_filter_clear_tooltip", "Click to list every setting again.") :
 										  T(TKEY("not_applied_tooltip"), "These name settings their feature does not have, so they are skipped. Click to list only them."));
@@ -114,11 +114,11 @@ namespace
 		const bool editable = feature && FeatureOverwritesPanel::HasExportableSettings(feature);
 		{
 			const Util::DisableGuard notEditable(!editable);
-			if (BrowserUI::IconButton("##edit", Icons::FA(ICON_FA_PEN), T(TKEY("edit_tooltip"), "Edit: opens the export on this file with its settings ticked.")))
+			if (BrowserUI::IconButton("##edit", Icons::TI(ICON_TI_PENCIL), T(TKEY("edit_tooltip"), "Edit: opens the export on this file with its settings ticked.")))
 				FeatureOverwritesPanel::BeginExportInto(feature, row.packId);
 		}
 		ImGui::SameLine();
-		if (BrowserUI::IconButton("##folder", Icons::FA(ICON_FA_FOLDER_OPEN),
+		if (BrowserUI::IconButton("##folder", Icons::TI(ICON_TI_FOLDER_OPEN),
 				T(TKEY("open_pack_tooltip"), "Open the pack folder. Remove the pack from the Presets page.")))
 			UnifiedPresetCatalog::GetSingleton().OpenPackFolder(row.packId);
 	}
