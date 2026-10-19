@@ -321,6 +321,8 @@ void EffectManager::RegisterSettings()
 	settingManager.RegisterColorTimeOfDaySetting("ColorFilter", "VOLUMETRICFOG", { 1.0f, 1.0f, 1.0f }, true);
 
 	settingManager.RegisterTimeOfDaySetting("MultiplicativeAmount", "IMAGEBASEDLIGHTING", 0.0f, 0.0f, 10.0f, 0.01f, true);
+	settingManager.RegisterTimeOfDaySetting("AdditiveAmount", "IMAGEBASEDLIGHTING", 0.0f, 0.0f, 0.5f, 0.01f, true);
+	settingManager.RegisterTimeOfDaySetting("ReflectiveAmount", "IMAGEBASEDLIGHTING", 0.0f, 0.0f, 4.0f, 0.01f, true);
 
 	settingManager.RegisterTimeOfDaySetting("GlowIntensity", "SUNGLARE", 1.0f, 0.0f, 1000.0f, 0.01f, true);
 

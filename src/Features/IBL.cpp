@@ -222,6 +222,8 @@ IBL::PerFrame IBL::GetCommonBufferData() const
 		data.EnableIBL = Util::IsInterior() ? 0u : 1u;
 		data.EnvIBLScale = 0.0f;
 		data.SkyIBLScale = settingManager.GetInterpolatedTimeOfDayValue("MultiplicativeAmount", "IMAGEBASEDLIGHTING");
+		data.AdditiveAmount = settingManager.GetInterpolatedTimeOfDayValue("AdditiveAmount", "IMAGEBASEDLIGHTING");
+		data.ReflectiveAmount = settingManager.GetInterpolatedTimeOfDayValue("ReflectiveAmount", "IMAGEBASEDLIGHTING");
 		data.DALCAmount = 1.0f;
 		data.EnvIBLSaturation = 1.0f;
 		data.SkyIBLSaturation = 1.0f;

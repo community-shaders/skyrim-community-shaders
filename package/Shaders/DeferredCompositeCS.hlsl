@@ -291,6 +291,33 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, inout float ao, out float3 il,
 
 #endif
 
+#if defined(IBL) && defined(EFFECTS11_SKY_IBL)
+	// Effects 11 [IMAGEBASEDLIGHTING] AdditiveAmount/ReflectiveAmount: sky-only IBL (reflections cubemap minus environment)
+	// added as diffuse light and as a rim reflection. Both stay zero unless Effects 11 manages IBL.
+	[branch] if (SharedData::iblSettings.EnableIBL && depth != 1.0 && (SharedData::iblSettings.AdditiveAmount > 0.0 || SharedData::iblSettings.ReflectiveAmount > 0.0))
+	{
+		static const float skyIBLMip = 5.0;
+		float3 viewWS = -normalize(positionWS.xyz);
+		float3 reflectionWS = reflect(-viewWS, normalWS);
+
+		float skyOcclusion = 1.0;
+#	if defined(SSGI)
+		skyOcclusion = ssgiAo;
+#	endif
+#	if defined(SKYLIGHTING)
+		skyOcclusion *= Skylighting::EvaluateDiffuse(Skylighting::Sample(positionWS.xyz, normalWS), normalWS);
+#	endif
+
+		float3 skyDiffuse = max(0, EnvReflectionsTexture.SampleLevel(LinearSampler, normalWS, skyIBLMip) - EnvTexture.SampleLevel(LinearSampler, normalWS, skyIBLMip));
+		skyDiffuse = Color::IrradianceToLinear(skyDiffuse) * saturate(normalWS.z * 0.5001 + 0.501);
+
+		float3 skyReflection = max(0, EnvReflectionsTexture.SampleLevel(LinearSampler, reflectionWS, skyIBLMip) - EnvTexture.SampleLevel(LinearSampler, reflectionWS, skyIBLMip));
+		skyReflection = Color::IrradianceToLinear(skyReflection) * saturate(1.1 - abs(dot(viewWS, normalWS))) * saturate(reflectionWS.z);
+
+		color += (skyDiffuse * SharedData::iblSettings.AdditiveAmount + skyReflection * SharedData::iblSettings.ReflectiveAmount) * skyOcclusion;
+	}
+#endif
+
 	color = Color::IrradianceToGamma(color);
 
 #if defined(DEBUG)

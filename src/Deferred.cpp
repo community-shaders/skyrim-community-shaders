@@ -614,6 +614,10 @@ ID3D11ComputeShader* Deferred::GetComputeMainComposite()
 		if (globals::features::ibl.loaded)
 			defines.push_back({ "IBL", nullptr });
 
+		// Effects 11 sky IBL terms; not EFFECTS11 itself, which would also switch the shared IBL helpers to their ENB path.
+		if (globals::features::effects11.loaded)
+			defines.push_back({ "EFFECTS11_SKY_IBL", nullptr });
+
 		// TERRAIN_BLENDING flips DepthTexture's HLSL type from `Texture2D<unorm float>`
 		// (R24_UNORM_X8_TYPELESS game depth) to `Texture2D<float>` (R32_FLOAT blendedDepth).
 		if (globals::features::terrainBlending.loaded)
