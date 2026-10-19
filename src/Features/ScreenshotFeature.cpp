@@ -875,8 +875,13 @@ void ScreenshotFeature::ProcessPendingReadbacks()
 		if (FAILED(hr)) {
 			logger::error("Failed to map screenshot staging texture.");
 		} else {
-			EnsureWorkerThread();
-			EnqueueScreenshot(std::move(screenshot));
+			// Throwing out of the predicate would leave moved-from entries in pendingReadbacks.
+			try {
+				EnsureWorkerThread();
+				EnqueueScreenshot(std::move(screenshot));
+			} catch (const std::exception& e) {
+				logger::error("Screenshot failed: could not hand off to worker thread: {}", e.what());
+			}
 		}
 		return true;
 	});
