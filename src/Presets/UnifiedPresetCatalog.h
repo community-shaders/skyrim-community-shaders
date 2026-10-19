@@ -178,7 +178,7 @@ public:
 
 	/** @brief Moves an enabled Baseline pack one step in the layering order and reapplies the layers.
 	 *  @param raise True moves it later, so it wins conflicts against the pack it passes; false moves it earlier.
-	 *  @return False when the pack is not enabled or is already at that end. */
+	 *  @return False when the pack is not enabled, is already at that end, or the new order could not be saved. */
 	bool MoveBaseline(const std::string& id, bool raise);
 
 	/** @brief Sets the Effects 11 handoff flags from the active pack's manifest sceneControl, overlaid with the
@@ -219,8 +219,9 @@ private:
 
 	/** @brief Reads the persisted active pack state from SettingsUser.json, clearing it when missing or bad. */
 	void LoadActiveState();
-	/** @brief Writes the active pack state into its SettingsUser.json section, leaving the rest of the file alone. */
-	void SaveActiveState() const;
+	/** @brief Writes the active pack state into its SettingsUser.json section, leaving the rest of the file alone.
+	 *  @return False when the user config could not be read or written. */
+	bool SaveActiveState() const;
 
 	/** @brief Enables a pack's Baseline overwrites as the last layer and reapplies them to the loaded features. */
 	void EnableBaseline(const PackInfo& pack);

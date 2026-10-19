@@ -373,7 +373,7 @@ json UnifiedPresetCatalog::SerializeActiveState() const
 	return state;
 }
 
-void UnifiedPresetCatalog::SaveActiveState() const
+bool UnifiedPresetCatalog::SaveActiveState() const
 {
 	// Only this section is written now; the rest of the user config waits for Save Settings.
 	const auto path = Util::PathHelpers::GetSettingsUserPath();
@@ -382,20 +382,21 @@ void UnifiedPresetCatalog::SaveActiveState() const
 	                                                    std::optional<json>(json::object());
 	if (!document) {
 		logger::warn("[Presets] Active pack state not saved: {} could not be read", Util::PathHelpers::ToUtf8(path));
-		return;
+		return false;
 	}
 	try {
 		(*document)[kUserSettingsKey] = SerializeActiveState();
 		if (!Util::FileHelpers::WriteJsonAtomically(path, *document, kUserSettingsIndent, "user config")) {
 			logger::warn("[Presets] Failed to save active pack state to {}", Util::PathHelpers::ToUtf8(path));
-			return;
+			return false;
 		}
 	} catch (const std::exception& e) {
 		logger::warn("[Presets] Failed to save active pack state: {}", e.what());
-		return;
+		return false;
 	}
 	// Left behind, the old file would come back as the state the next time the user config goes missing.
 	std::filesystem::remove(Util::PathHelpers::GetUnifiedPresetsRealPath() / kLegacyActiveStateFileName, ec);
+	return true;
 }
 
 void UnifiedPresetCatalog::SetActivePackId(const std::string& id)
@@ -857,8 +858,13 @@ bool UnifiedPresetCatalog::MoveBaseline(const std::string& id, bool raise)
 	const auto index = static_cast<size_t>(found - baselinePackIds.begin());
 	if (raise ? index + 1 >= baselinePackIds.size() : index == 0)
 		return false;
-	std::swap(baselinePackIds[index], baselinePackIds[raise ? index + 1 : index - 1]);
-	SaveActiveState();
+	const size_t target = raise ? index + 1 : index - 1;
+	std::swap(baselinePackIds[index], baselinePackIds[target]);
+	// An order that is not saved would revert at the next start, so keep showing the one on disk.
+	if (!SaveActiveState()) {
+		std::swap(baselinePackIds[index], baselinePackIds[target]);
+		return false;
+	}
 
 	BaselineManager::GetSingleton()->Refresh();
 	globals::state->ReapplySettingsLayers();
