@@ -1,4 +1,7 @@
-﻿#pragma once
+#pragma once
+#include <array>
+#include <optional>
+
 #include "RE/M/Moon.h"
 
 #include "Utils/Moon.h"
@@ -149,8 +152,8 @@ private:
 		/** @brief Fraction of the current transition completed, 0 to 1. */
 		float Progress(float fadeDuration) const { return fadeDuration > 0.0f ? fadeTimer / fadeDuration : 1.0f; }
 
-		void Update(const RE::Sky* sky, RE::NiPoint3 dirs[], float intensities[], float fadeDuration, float fadeAdvance, bool a_immediateTransition);
-		static void SetLighting(const RE::Sky* sky, RE::NiPoint3 dir);
+		void Update(const RE::Sky* sky, RE::NiPoint3 dirs[], float intensities[], std::optional<std::array<RE::NiColor, 3>> colors, float fadeDuration, float fadeAdvance, bool a_immediateTransition);
+		static void SetLighting(const RE::Sky* sky, RE::NiPoint3 dir, float intensity, std::optional<RE::NiColor> color);
 		static void SetDirection(RE::NiPoint3& dir, float headingRadians, float elevRadians);
 		static void SetElevation(RE::NiPoint3& dir, float elevRadians);
 		static void ClampDirection(RE::NiPoint3& dir);
@@ -199,6 +202,7 @@ private:
 	float4 colors[BodyCount] = {};
 	RE::NiPoint3 rawDirections[BodyCount] = {};  // sky-local, before shadow elevation locking; zero when not computed this frame
 	float currentDim = 1.0f;
+	std::optional<std::array<RE::NiColor, 3>> workingLightColors = {};
 	float moonlightFade = 0.0f;
 	float twilightCap = 0.0f;
 	float moonNightWeight = 0.0f;

@@ -2,6 +2,7 @@
 #include "../I18n/I18n.h"
 #include "RE/B/BSVolumetricLightingRenderData.h"
 
+#include "LinearLighting.h"
 #include "Utils/Game.h"
 
 #define I18N_KEY_PREFIX "feature.sky_sync."
@@ -394,6 +395,8 @@ void SkySync::Sky_Update::thunk(RE::Sky* sky)
 {
 	func(sky);
 	auto& skySync = globals::features::skySync;
+	if (sky && sky->sun)
+		globals::features::linearLighting.ClearSunlightColor(sky->sun->light.get());
 	skySync.PreparePendingTransitions();
 	if (skySync.Update(sky))
 		Util::CompleteCelestialTransition();
@@ -490,7 +493,7 @@ bool SkySync::Update(const RE::Sky* sky)
 	lastGameHour = hour;
 
 	const bool transitionCompleted = std::exchange(immediateTransitionReady, false);
-	shadowFader.Update(sky, directions, intensities, settings.ShadowTransitionDuration, fadeAdvance, transitionCompleted || resetTransition);
+	shadowFader.Update(sky, directions, intensities, workingLightColors, settings.ShadowTransitionDuration, fadeAdvance, transitionCompleted || resetTransition);
 
 	twilightCap = GetTwilightCap(climate->timing, hour, sunHeight);
 	UpdateMoonlightFade(fadeAdvance / SecondsPerGameHour, transitionCompleted);
@@ -701,8 +704,8 @@ void SkySync::ProcessMoon(const RE::Sky* sky, const Caster type, RE::NiPoint3 di
 
 	dirs[idx] = Util::Moon::GetFacingAxis(moon->root->local.rotate);
 
-	const float4& baseColor = type == Caster::Masser ? Util::Moon::MasserBaseColor : Util::Moon::SecundaBaseColor;
-	float4 color = Util::Moon::GetBlendColor(moon, baseColor, settings.NewMoonIntensity, settings.CrescentMoonIntensity, settings.FullMoonIntensity);
+	const auto& baseColor = type == Caster::Masser ? Util::Moon::MasserBaseColor : Util::Moon::SecundaBaseColor;
+	float4 color = Util::Moon::GetLightColor(moon, baseColor, settings.NewMoonIntensity, settings.CrescentMoonIntensity, settings.FullMoonIntensity).GetColor();
 	colors[idx] = color;
 
 	const auto src = static_cast<MoonLightSource>(settings.MoonLightSource);
@@ -779,7 +782,7 @@ void SkySync::ShadowFader::Reset()
 	vlFade = startVlFade = 1.0f;
 }
 
-void SkySync::ShadowFader::Update(const RE::Sky* sky, RE::NiPoint3 dirs[], float intensities[], float fadeDuration, float fadeAdvance, bool a_immediateTransition)
+void SkySync::ShadowFader::Update(const RE::Sky* sky, RE::NiPoint3 dirs[], float intensities[], std::optional<std::array<RE::NiColor, 3>> colors, float fadeDuration, float fadeAdvance, bool a_immediateTransition)
 {
 	auto isValidDir = [](const RE::NiPoint3& d) { return d.x != 0.0f || d.y != 0.0f || d.z != 0.0f; };
 
@@ -821,6 +824,15 @@ void SkySync::ShadowFader::Update(const RE::Sky* sky, RE::NiPoint3 dirs[], float
 	}
 
 	const RE::NiPoint3 targetDir = casterDir(target);
+	auto applyLighting = [&]() {
+		const bool hasCaster = target != Caster::Zenith;
+		const int targetIdx = static_cast<int>(target);
+		const float intensity = hasCaster ? intensities[targetIdx] : 0.0f;
+		std::optional<RE::NiColor> color = std::nullopt;
+		if (colors)
+			color = hasCaster ? (*colors)[targetIdx] : RE::NiColor{ 0.0f, 0.0f, 0.0f };
+		SetLighting(sky, currentDir, intensity * intensityFactor, color);
+	};
 	const float targetVlFade = target == Caster::Zenith ? 0.0f : 1.0f;
 
 	if (!transitioning) {
@@ -828,7 +840,7 @@ void SkySync::ShadowFader::Update(const RE::Sky* sky, RE::NiPoint3 dirs[], float
 		intensityFactor = 1.0f;
 		vlFade = targetVlFade;
 		immediateTransitionRemaining = 0.0f;
-		SetLighting(sky, currentDir);
+		applyLighting();
 		return;
 	}
 
@@ -855,10 +867,10 @@ void SkySync::ShadowFader::Update(const RE::Sky* sky, RE::NiPoint3 dirs[], float
 	const float fadeOut = startIntensityFactor * ComputeAlignmentFactor(currentDir, startDir);
 	intensityFactor = std::max(fadeOut, ComputeAlignmentFactor(currentDir, targetDir));
 	vlFade = std::lerp(startVlFade, targetVlFade, t);
-	SetLighting(sky, currentDir);
+	applyLighting();
 }
 
-void SkySync::ShadowFader::SetLighting(const RE::Sky* sky, RE::NiPoint3 dir)
+void SkySync::ShadowFader::SetLighting(const RE::Sky* sky, RE::NiPoint3 dir, float intensity, std::optional<RE::NiColor> color)
 {
 	// Steer towards the strike for as long as the flash outshines the caster
 	if (const float flashWeight = globals::features::skySync.flashWeight; flashWeight > 0.0f) {
@@ -872,6 +884,13 @@ void SkySync::ShadowFader::SetLighting(const RE::Sky* sky, RE::NiPoint3 dir)
 	m.entry[0][0] = -dir.x;
 	m.entry[1][0] = -dir.y;
 	m.entry[2][0] = -dir.z;
+
+	if (color.has_value()) {
+		*color *= intensity;
+		globals::features::linearLighting.SetSunlightColor(sky->sun->light.get(), *color);
+	} else {
+		globals::features::linearLighting.ClearSunlightColor(sky->sun->light.get());
+	}
 
 	RE::NiUpdateData updateData;
 	sky->sun->light->Update(updateData);

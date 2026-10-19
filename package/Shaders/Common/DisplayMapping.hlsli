@@ -103,7 +103,7 @@ namespace DisplayMapping
 
 	float3 ConvertGameToPQ(float3 gammaColor)
 	{
-		float3 linearColor = Color::GammaToLinearSafe(gammaColor);
+		float3 linearColor = TransferFunctions::SignedGamma22ToLinear(gammaColor);
 		linearColor = Color::BT709ToBT2020(linearColor);
 		return LinearToPQ(linearColor, 10000.0);
 	}
@@ -112,7 +112,7 @@ namespace DisplayMapping
 	{
 		float3 linearColor = PQtoLinear(pqColor, 10000.0);
 		linearColor = Color::BT2020ToBT709(linearColor);
-		return Color::LinearToGammaSafe(linearColor);
+		return TransferFunctions::LinearToSignedGamma22(linearColor);
 	}
 
 	// RGB with sRGB/Rec.709 primaries to CIE XYZ

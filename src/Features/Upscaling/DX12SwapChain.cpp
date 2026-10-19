@@ -4,6 +4,7 @@
 #include <dxgi1_6.h>
 
 #include "../HDRDisplay.h"
+#include "../ScreenshotFeature.h"
 #include "../Upscaling.h"
 #include "FidelityFX.h"
 #include "Streamline.h"
@@ -225,6 +226,8 @@ HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT Flags)
 	auto* hdr = globals::features::hdrDisplay.loaded ? &globals::features::hdrDisplay : nullptr;
 	if (hdr)
 		hdr->ScaleUIBrightnessForFG();
+
+	globals::features::screenshotFeature.ProcessCaptureRequest();
 
 	bool isHDR = hdr && hdr->settings.enableHDR;
 

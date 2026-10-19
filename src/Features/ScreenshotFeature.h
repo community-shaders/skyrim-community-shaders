@@ -5,10 +5,13 @@
 #include <atomic>
 #include <condition_variable>
 #include <filesystem>
+#include <memory>
 #include <mutex>
 #include <queue>
 #include <string>
 #include <thread>
+
+class Texture2D;
 
 struct ScreenshotFeature : public Feature
 {
@@ -26,6 +29,8 @@ struct ScreenshotFeature : public Feature
 	virtual void DrawSettings() override;
 	virtual void LoadSettings(json& a_json) override;
 	virtual void SaveSettings(json& a_json) override;
+	/** @brief Releases the screenshot compositor shader. */
+	virtual void ClearShaderCache() override;
 	/** @brief Resets transient state (no-op for this feature). */
 	virtual void Reset() override;
 	/** @brief Called after all features are loaded (no-op for this feature). */
@@ -41,7 +46,8 @@ struct ScreenshotFeature : public Feature
 	std::string screenshotPath = "Screenshots";
 	// HDR PNG quantization (7-16); used when HDR Display captures the back buffer.
 	unsigned int hdrPngBitDepth = 11;
-	// SDR output (HDR captures always use PNG).
+	bool hdrUseAvif = false;
+	// SDR output.
 	bool sdrUsePng = true;
 	// After save, put the file path on the clipboard (CF_HDROP).
 	bool copyToClipboard = false;
@@ -57,6 +63,7 @@ private:
 		uint32_t height = 0;
 		std::filesystem::path outputPath;
 		bool saveAsHdrPng = false;
+		bool saveAsHdrAvif = false;
 		bool saveAsSdrPng = false;
 		int hdrPngBitDepth = 11;
 		bool copyToClipboard = false;
@@ -73,11 +80,14 @@ private:
 	// directly (kFRAMEBUFFER on flat aliases the swap-chain backbuffer).
 	winrt::com_ptr<ID3D11Texture2D> previewCacheTexture;
 	winrt::com_ptr<ID3D11ShaderResourceView> previewCacheSRV;
+	std::unique_ptr<Texture2D> compositeTexture;
+	winrt::com_ptr<ID3D11ComputeShader> compositeCS;
 
 	void EnsureWorkerThread();
 	void StopWorkerThread();
 	void EnqueueScreenshot(PendingScreenshot&& screenshot);
 	void ScreenshotWorkerLoop();
 	void EnsurePreviewCache(ID3D11Texture2D* sourceTexture);
+	ID3D11Texture2D* CompositeCapture(ID3D11Texture2D* sourceTexture, ID3D11ShaderResourceView* sceneSRV, ID3D11ShaderResourceView* uiSRV);
 	static void ShowInGameNotification(std::string message);
 };

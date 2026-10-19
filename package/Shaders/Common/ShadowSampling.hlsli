@@ -1,7 +1,7 @@
 #ifndef __SHADOW_SAMPLING_DEPENDENCY_HLSL__
 #define __SHADOW_SAMPLING_DEPENDENCY_HLSL__
 
-#include "Common/Color.hlsli"
+#include "Common/ColorManagement.hlsli"
 #include "Common/Math.hlsli"
 #include "Common/Random.hlsli"
 #include "Common/SharedData.hlsli"
@@ -39,7 +39,6 @@ StructuredBuffer<DirectionalShadowLightData> DirectionalShadowLights : register(
 
 namespace ShadowSampling
 {
-	static const float MinDirectionalLightMultiplier = 1e-5;
 	static const float3 LightingSampleNormal = float3(0, 0, 1);
 	static const float3 ImageBasedLightingNormal = float3(0, 0, -1);
 
@@ -154,8 +153,7 @@ namespace ShadowSampling
 
 	float3 GetDirectionalLighting()
 	{
-		float llDirLightMult = (SharedData::linearLightingSettings.enableLinearLighting && !SharedData::linearLightingSettings.isDirLightLinear) ? SharedData::linearLightingSettings.dirLightMult : 1.0f;
-		return Color::DirectionalLight(SharedData::DirLightColor.xyz / max(llDirLightMult, MinDirectionalLightMultiplier), SharedData::linearLightingSettings.isDirLightLinear) * llDirLightMult;
+		return Color::DirectionalLight(SharedData::DirLightColor.xyz);
 	}
 
 	float3 GetSceneLightingColor()

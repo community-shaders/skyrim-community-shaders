@@ -62,7 +62,11 @@ set(NVPERF_SDK_ROOT
     CACHE PATH
     "Nsight Perf SDK directory (the one holding include/nvperf_host.h)"
 )
-option(ENABLE_ENB_EXTENDER "Enable ENBExtender reimplementation (weather blending, time-of-day, technique bindings)" ON)
+option(
+    ENABLE_ENB_EXTENDER
+    "Enable ENBExtender reimplementation (weather blending, time-of-day, technique bindings)"
+    ON
+)
 message("\tAuto plugin deployment: ${AUTO_PLUGIN_DEPLOYMENT}")
 message("\tZip to dist: ${ZIP_TO_DIST}")
 message("\tAIO Zip to dist: ${AIO_ZIP_TO_DIST}")
@@ -102,6 +106,7 @@ find_package(imgui CONFIG REQUIRED)
 find_package(EASTL CONFIG REQUIRED)
 find_package(directxtk CONFIG REQUIRED)
 find_package(directxtex CONFIG REQUIRED)
+find_package(libavif 1.4.1 EXACT CONFIG REQUIRED)
 find_path(CLIB_UTIL_INCLUDE_DIRS "ClibUtil/utils.hpp")
 find_package(pystring CONFIG REQUIRED)
 find_package(cppwinrt CONFIG REQUIRED)
@@ -150,10 +155,7 @@ target_include_directories(
         ${DETOURS_INCLUDE_DIRS}
 )
 
-target_compile_definitions(
-    ${PROJECT_NAME}
-    PRIVATE SK_HDR_PNG_COMMUNITY_SHADERS
-)
+target_compile_definitions(${PROJECT_NAME} PRIVATE SK_HDR_PNG_COMMUNITY_SHADERS)
 
 target_link_libraries(
     ${PROJECT_NAME}
@@ -166,6 +168,7 @@ target_link_libraries(
         EASTL
         Microsoft::DirectXTK
         Microsoft::DirectXTex
+        avif
         pystring::pystring
         unordered_dense::unordered_dense
         efsw::efsw
@@ -308,11 +311,19 @@ foreach(FEATURE_PATH ${FEATURE_CONFIG_FILES})
     # retains its prior value (the version major, above) when a REGEX MATCH misses.
     set(_STAGE_ALPHA "")
     set(_STAGE_BETA "")
-    string(REGEX MATCH "(^|[\r\n])[ \t]*[Aa]lpha[ \t]*=[ \t]*([A-Za-z0-9]+)" _STAGE_ALPHA_MATCH "${CONFIG_VALUE}")
+    string(
+        REGEX MATCH "(^|[\r\n])[ \t]*[Aa]lpha[ \t]*=[ \t]*([A-Za-z0-9]+)"
+        _STAGE_ALPHA_MATCH
+        "${CONFIG_VALUE}"
+    )
     if(_STAGE_ALPHA_MATCH)
         string(TOLOWER "${CMAKE_MATCH_2}" _STAGE_ALPHA)
     endif()
-    string(REGEX MATCH "(^|[\r\n])[ \t]*[Bb]eta[ \t]*=[ \t]*([A-Za-z0-9]+)" _STAGE_BETA_MATCH "${CONFIG_VALUE}")
+    string(
+        REGEX MATCH "(^|[\r\n])[ \t]*[Bb]eta[ \t]*=[ \t]*([A-Za-z0-9]+)"
+        _STAGE_BETA_MATCH
+        "${CONFIG_VALUE}"
+    )
     if(_STAGE_BETA_MATCH)
         string(TOLOWER "${CMAKE_MATCH_2}" _STAGE_BETA)
     endif()
@@ -325,7 +336,11 @@ foreach(FEATURE_PATH ${FEATURE_CONFIG_FILES})
     # Detect the Unreleased flag, which gates UI visibility independently of the
     # release stage above. Same line anchoring and CMAKE_MATCH_2 guard.
     set(_STAGE_UNRELEASED "")
-    string(REGEX MATCH "(^|[\r\n])[ \t]*[Uu]nreleased[ \t]*=[ \t]*([A-Za-z0-9]+)" _STAGE_UNRELEASED_MATCH "${CONFIG_VALUE}")
+    string(
+        REGEX MATCH "(^|[\r\n])[ \t]*[Uu]nreleased[ \t]*=[ \t]*([A-Za-z0-9]+)"
+        _STAGE_UNRELEASED_MATCH
+        "${CONFIG_VALUE}"
+    )
     if(_STAGE_UNRELEASED_MATCH)
         string(TOLOWER "${CMAKE_MATCH_2}" _STAGE_UNRELEASED)
     endif()
@@ -757,7 +772,9 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
     list(FILTER _package_shaders EXCLUDE REGEX "/Tests/")
     set(_shader_copy_cmds)
 
-    set(_feature_shader_paths_file "${CMAKE_CURRENT_BINARY_DIR}/feature_shader_paths.txt")
+    set(_feature_shader_paths_file
+        "${CMAKE_CURRENT_BINARY_DIR}/feature_shader_paths.txt"
+    )
     file(WRITE "${_feature_shader_paths_file}" "")
     foreach(_fpath IN LISTS FEATURE_PATHS)
         if(EXISTS "${_fpath}/Shaders")
@@ -1018,7 +1035,9 @@ if(NOT DEFINED ENV{CommunityShadersOutputDir})
     )
 endif()
 
-find_program(SEVENZ_EXECUTABLE NAMES 7z 7za
+find_program(
+    SEVENZ_EXECUTABLE
+    NAMES 7z 7za
     PATHS "C:/Program Files/7-Zip" "C:/Program Files (x86)/7-Zip"
     DOC "7-Zip archiver for compressed packages"
 )
@@ -1129,7 +1148,8 @@ if(AIO_ZIP_TO_DIST)
     if(SEVENZ_EXECUTABLE)
         add_custom_command(
             OUTPUT ${AIO_ZIP_STAMP}
-            COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_SOURCE_DIR}/dist"
+            COMMAND
+                ${CMAKE_COMMAND} -E make_directory "${CMAKE_SOURCE_DIR}/dist"
             COMMAND ${CMAKE_COMMAND} -E rm -f "${AIO_ARCHIVE}"
             COMMAND "${SEVENZ_EXECUTABLE}" ${SEVENZ_AIO_ARGS} "${AIO_ARCHIVE}" *
             COMMAND ${CMAKE_COMMAND} -E touch ${AIO_ZIP_STAMP}
@@ -1141,7 +1161,8 @@ if(AIO_ZIP_TO_DIST)
         message(WARNING "7z not found; AIO archive will use uncompressed zip")
         add_custom_command(
             OUTPUT ${AIO_ZIP_STAMP}
-            COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_SOURCE_DIR}/dist"
+            COMMAND
+                ${CMAKE_COMMAND} -E make_directory "${CMAKE_SOURCE_DIR}/dist"
             COMMAND ${CMAKE_COMMAND} -E tar cf ${AIO_ARCHIVE} --format=zip -- .
             COMMAND ${CMAKE_COMMAND} -E touch ${AIO_ZIP_STAMP}
             WORKING_DIRECTORY ${AIO_DIR}
@@ -1171,10 +1192,7 @@ set(CORE_PACKAGE "${DIST_PATH}/${PROJECT_NAME}-${UTC_NOW}.zip")
 # CORE_SOURCES = all content copied to the AIO directory + the SKSE plugin dll.
 # No CONFIGURE_DEPENDS: packaging runs from a fresh CI configure, and omitting
 # it keeps these globs out of the VS generator's per-build VerifyGlobs walk.
-file(
-    GLOB_RECURSE CORE_SOURCES
-    "${CMAKE_SOURCE_DIR}/package/*"
-)
+file(GLOB_RECURSE CORE_SOURCES "${CMAKE_SOURCE_DIR}/package/*")
 # Add SKSE plugin dll as dependency (use target-file generator expression so CMake
 # knows the actual output path of the target at build time)
 list(APPEND CORE_SOURCES "$<TARGET_FILE:${PROJECT_NAME}>")
@@ -1196,8 +1214,8 @@ add_custom_command(
     OUTPUT ${CORE_PACKAGE}
     DEPENDS ${PROJECT_NAME} ${CORE_SOURCES}
     COMMAND
-        ${CMAKE_COMMAND} --install ${CMAKE_BINARY_DIR} --config $<CONFIG> --prefix ${FEATURE_PATH}
-        --component SKSE
+        ${CMAKE_COMMAND} --install ${CMAKE_BINARY_DIR} --config $<CONFIG>
+        --prefix ${FEATURE_PATH} --component SKSE
     COMMAND
         ${CMAKE_COMMAND} -E copy_directory ${CORE_FEATURE_PATHS} ${FEATURE_PATH}
     COMMAND ${CMAKE_COMMAND} -E rm -f -- ${FEATURE_PATH}/Core
@@ -1223,8 +1241,7 @@ foreach(FEATURE_PATH ${FEATURE_PATHS})
 
     add_custom_command(
         OUTPUT ${FEATURE_PACKAGE}
-        COMMAND
-            ${CMAKE_COMMAND} -E tar cfv ${FEATURE_PACKAGE} --format=zip -- .
+        COMMAND ${CMAKE_COMMAND} -E tar cfv ${FEATURE_PACKAGE} --format=zip -- .
         WORKING_DIRECTORY "${FEATURE_PATH}"
         DEPENDS ${FEATURE_SOURCES}
         COMMENT "Creating ${FEATURE} zip package"
@@ -1241,15 +1258,15 @@ endforeach()
 if(TARGET PREPARE_AIO)
     add_custom_target(
         "AIO"
-        DEPENDS
-            ${CMAKE_CURRENT_BINARY_DIR}/prepare_aio.stamp
-            copy_shaders.stamp
+        DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/prepare_aio.stamp copy_shaders.stamp
     )
 else()
     add_custom_command(
         OUTPUT ${AIO_DIR}/SKSE/Plugins/${PROJECT_NAME}.dll
         DEPENDS ${PROJECT_NAME} ${CORE_SOURCES}
-        COMMAND ${CMAKE_COMMAND} --install ${CMAKE_BINARY_DIR} --config $<CONFIG> --prefix ${AIO_DIR}
+        COMMAND
+            ${CMAKE_COMMAND} --install ${CMAKE_BINARY_DIR} --config $<CONFIG>
+            --prefix ${AIO_DIR}
         COMMENT "Installing to AIO folder"
     )
     add_custom_target("AIO" DEPENDS ${AIO_DIR}/SKSE/Plugins/${PROJECT_NAME}.dll)
@@ -1293,18 +1310,30 @@ else()
     # SEVENZ_EXECUTABLE too or it emits a deflate zip wearing a .7z extension.
     if(SEVENZ_EXECUTABLE)
         set(AIO_ARCHIVE_COMMAND
-            "${SEVENZ_EXECUTABLE}" ${SEVENZ_AIO_ARGS} "${AIO_PACKAGE}" *
+            "${SEVENZ_EXECUTABLE}"
+            ${SEVENZ_AIO_ARGS}
+            "${AIO_PACKAGE}"
+            *
         )
     else()
         set(AIO_ARCHIVE_COMMAND
-            ${CMAKE_COMMAND} -E tar cfv ${AIO_PACKAGE} --format=zip -- .
+            ${CMAKE_COMMAND}
+            -E
+            tar
+            cfv
+            ${AIO_PACKAGE}
+            --format=zip
+            --
+            .
         )
     endif()
     add_custom_command(
         OUTPUT ${AIO_PACKAGE}
         DEPENDS ${PROJECT_NAME} ${CORE_SOURCES}
         COMMAND ${CMAKE_COMMAND} -E make_directory ${AIO_DIR}
-        COMMAND ${CMAKE_COMMAND} --install ${CMAKE_BINARY_DIR} --config $<CONFIG> --prefix ${AIO_DIR}
+        COMMAND
+            ${CMAKE_COMMAND} --install ${CMAKE_BINARY_DIR} --config $<CONFIG>
+            --prefix ${AIO_DIR}
         COMMAND ${CMAKE_COMMAND} -E make_directory "${DIST_PATH}"
         COMMAND ${CMAKE_COMMAND} -E rm -f "${AIO_PACKAGE}"
         COMMAND ${CMAKE_COMMAND} -E chdir ${AIO_DIR} ${AIO_ARCHIVE_COMMAND}
@@ -1316,7 +1345,9 @@ add_custom_target("Package-AIO-Manual" DEPENDS ${AIO_PACKAGE})
 
 message("*************************************************************")
 message("Community Shaders configuration complete")
-message("To prepare a package of AIO (.7z when 7-Zip is found), Core, or Features")
+message(
+    "To prepare a package of AIO (.7z when 7-Zip is found), Core, or Features"
+)
 message("  Build cmake targets:")
 message("    - Package-Core: Core package")
 message("    - Package-AIO-Manual: AIO package (manual)")

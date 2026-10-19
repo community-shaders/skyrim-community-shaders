@@ -77,7 +77,7 @@ struct VS_OUTPUT
 cbuffer PerTechnique : register(b0)
 {
 	float4 HighDetailRange : packoffset(c0);  // loaded cells center in xy, size in zw
-	float2 ParabolaParam : packoffset(c1);       // inverse radius in x, y is 1 for forward hemisphere or -1 for backward hemisphere
+	float2 ParabolaParam : packoffset(c1);    // inverse radius in x, y is 1 for forward hemisphere or -1 for backward hemisphere
 };
 
 cbuffer PerMaterial : register(b1)
@@ -697,7 +697,7 @@ PS_OUTPUT main(PS_INPUT input)
 #	elif defined(RENDER_BASE_TEXTURE)
 	psout.Color.xyzw = baseColor;
 #		if defined(TRUE_PBR)
-	psout.Color.xyz = Color::LinearToSrgb(baseColor.xyz);
+	psout.Color.xyz = TransferFunctions::LinearToGamma22(baseColor.xyz);
 #		endif
 #	elif defined(LOCALMAP_FOGOFWAR)
 	psout.Color = float4(0, 0, 0, input.Alpha);
