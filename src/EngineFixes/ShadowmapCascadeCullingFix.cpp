@@ -1,4 +1,5 @@
-﻿#include "ShadowmapCascadeCullingFix.h"
+﻿// Inspired by "Shadow Fixes - SKSE" by Zzyxzz: https://www.nexusmods.com/skyrimspecialedition/mods/195345
+#include "ShadowmapCascadeCullingFix.h"
 
 #include "Utils/VersionedRelocation.h"
 

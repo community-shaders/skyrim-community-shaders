@@ -554,6 +554,15 @@ install(
     PATTERN "Tests" EXCLUDE
 )
 install(CODE "file(REMOVE \${CMAKE_INSTALL_PREFIX}/Core)" COMPONENT Shaders)
+
+# The rest of the Licenses folder lives in package/; these two sit at the repo root for GitHub.
+set(LICENSES_DESTINATION SKSE/Plugins/CommunityShaders/Licenses)
+set(ROOT_LICENSE_FILES "${CMAKE_SOURCE_DIR}/COPYING.txt" "${CMAKE_SOURCE_DIR}/EXCEPTIONS.md")
+install(
+    FILES ${ROOT_LICENSE_FILES}
+    DESTINATION ${LICENSES_DESTINATION}
+    COMPONENT SKSE
+)
 if(NVPERF_SUPPORT)
     install(
         FILES "${NVPERF_DLL}"
@@ -610,6 +619,7 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
         list(FILTER _tmp EXCLUDE REGEX "/Shaders/")
         list(APPEND _AIO_PACKAGE_FILES ${_tmp})
     endforeach()
+    list(APPEND _AIO_PACKAGE_FILES ${ROOT_LICENSE_FILES})
 
     # Prepare AIO by copying files only when different. This avoids updating
     # timestamps for unchanged files and prevents downstream incremental
@@ -658,6 +668,7 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
     list(FILTER _AIO_PACKAGE_SOURCE_FILES EXCLUDE REGEX "/Tests/")
     list(FILTER _AIO_PACKAGE_SOURCE_FILES EXCLUDE REGEX "/Shaders/")
     append_copy_if_different(_prepare_aio_cmds _AIO_PACKAGE_SOURCE_FILES "${CMAKE_SOURCE_DIR}/package" "${AIO_DIR}")
+    append_copy_if_different(_prepare_aio_cmds ROOT_LICENSE_FILES "${CMAKE_SOURCE_DIR}" "${AIO_DIR}/${LICENSES_DESTINATION}")
 
     # Copy feature folders (only files, preserve existing files in AIO).
     # Shader files are excluded - copy_shaders.stamp owns the Shaders/ subdir
@@ -1049,6 +1060,9 @@ if(ZIP_TO_DIST)
         COMMAND
             ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/package
             "${ZIP_DIR}"
+        COMMAND
+            ${CMAKE_COMMAND} -E copy ${ROOT_LICENSE_FILES}
+            "${ZIP_DIR}/${LICENSES_DESTINATION}/"
         COMMAND
             ${CMAKE_COMMAND} -E copy $<TARGET_FILE:${PROJECT_NAME}>
             "${ZIP_DIR}/SKSE/Plugins/"
