@@ -126,7 +126,7 @@ public:
 	}
 
 	/** @brief Cache the editor ID and save key from the form for fast subsequent lookups. */
-	void CacheFormData()
+	void CacheFormData(Util::FormEditorIDIndex* editorIDs = nullptr)
 	{
 		if (!form) {
 			cachedEditorID = "Invalid";
@@ -139,7 +139,7 @@ public:
 		cachedSaveKey = Util::GetFormFileKey(form);
 
 		// Try to resolve EditorID via shared utility
-		std::string editorId = Util::GetFormEditorID(form);
+		std::string editorId = Util::GetFormEditorID(form, editorIDs);
 		if (!editorId.empty()) {
 			cachedEditorID = editorId;
 			isFallbackEditorID = false;

@@ -25,6 +25,9 @@ namespace BackgroundBlur
 	 */
 	void Cleanup();
 
+	/** @brief Drops the cached source view and texture pointer; the caller must guarantee exclusion. */
+	void ReleaseSourceCache();
+
 	void SetEnabled(bool enable);
 
 	/** @brief When true, a single fullscreen blur replaces per-window blur (CS editor mode). */

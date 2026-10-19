@@ -48,7 +48,9 @@ RWTexture2D<half4> outGiSpecular : register(u3);
 	float ao;
 	float4 y;
 	float2 coCg;
+#ifdef GI_SPECULAR
 	float4 giSpecular;
+#endif
 
 	[branch] if (d_edge)
 	{
@@ -62,7 +64,9 @@ RWTexture2D<half4> outGiSpecular : register(u3);
 		ao = BLEND_WEIGHT(srcAo[px00], srcAo[px01], srcAo[px10], srcAo[px11], w, sumw);
 		y = BLEND_WEIGHT(srcIlY[px00], srcIlY[px01], srcIlY[px10], srcIlY[px11], w, sumw);
 		coCg = BLEND_WEIGHT(srcIlCoCg[px00], srcIlCoCg[px01], srcIlCoCg[px10], srcIlCoCg[px11], w, sumw);
+#ifdef GI_SPECULAR
 		giSpecular = BLEND_WEIGHT(srcGiSpecular[px00], srcGiSpecular[px01], srcGiSpecular[px10], srcGiSpecular[px11], w, sumw);
+#endif
 	}
 	else
 	{
@@ -70,11 +74,15 @@ RWTexture2D<half4> outGiSpecular : register(u3);
 		ao = srcAo.SampleLevel(samplerLinearClamp, uv, 0);
 		y = srcIlY.SampleLevel(samplerLinearClamp, uv, 0);
 		coCg = srcIlCoCg.SampleLevel(samplerLinearClamp, uv, 0);
+#ifdef GI_SPECULAR
 		giSpecular = srcGiSpecular.SampleLevel(samplerLinearClamp, uv, 0);
+#endif
 	}
 
 	outAo[dtid] = ao;
 	outIlY[dtid] = y;
 	outIlCoCg[dtid] = coCg;
+#ifdef GI_SPECULAR
 	outGiSpecular[dtid] = giSpecular;
+#endif
 }

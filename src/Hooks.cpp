@@ -5,20 +5,26 @@
 #include "Utils/ExternalEmittance.h"
 #include "Utils/VersionedRelocation.h"
 
+#include "EngineFix.h"
 #include "Feature.h"
 #include "Globals.h"
 #include "Menu.h"
+#include "Menu/BackgroundBlur.h"
 #include "ShaderCache.h"
 #include "State.h"
 #include "TruePBR.h"
 #include "Util.h"
+#include "Utils/ShaderDescriptor.h"
 
 #include "Features/Effects11.h"
+#include "Features/GrassOptimizations.h"
 #include "Features/HDRDisplay.h"
 #include "Features/InteriorSun.h"
 #include "Features/LightLimitFix.h"
 #include "Features/PostProcessing.h"
+#include "Features/RainRefraction.h"
 #include "Features/RemoteControl/NvPerf.h"
+#include "Features/RenderDoc.h"
 #include "Features/ScreenshotFeature.h"
 #include "Features/Skin.h"
 #include "Features/SkySync.h"
@@ -110,6 +116,7 @@ struct BSShader_LoadShaders
 				Feature::ForEachLoadedFeature("GenerateShaderPermutations", [shader](Feature* feature) {
 					feature->GenerateShaderPermutations(shader);
 				});
+				EngineFix::GenerateAllShaderPermutations(shader);
 			}
 
 			for (const auto& entry : shader->vertexShaders) {
@@ -192,7 +199,7 @@ bool Hooks::BSShader_BeginTechnique::thunk(RE::BSShader* shader, uint32_t vertex
 	state->ModifyShaderLookup(*shader, state->modifiedVertexDescriptor, state->modifiedPixelDescriptor);
 
 	// Only check against non-shader bits
-	state->permutationData.PixelShaderDescriptor &= ~state->modifiedPixelDescriptor;
+	state->permutationData.PixelShaderDescriptor = Util::ShaderDescriptor::UploadedPixelDescriptor(state->permutationData.PixelShaderDescriptor, state->modifiedPixelDescriptor, State::GetRuntimePixelBits(*shader));
 
 	state->customVertexShader = nullptr;
 	state->customPixelShader = nullptr;
@@ -298,8 +305,11 @@ namespace GrassExtensions
 	{
 		static void thunk(RE::BSShader* shader, RE::BSRenderPass* pass, uint32_t renderFlags)
 		{
-			func(shader, pass, renderFlags);
-			LegacyGraphicsCompatibility::BindLegacyGrassPerGeometryToPixelShader();
+			// Replace vanilla setup and pixel constants for passes handled by Grass Optimizations.
+			if (!globals::features::grassOptimizations.SetupGrassPass(shader, pass)) {
+				func(shader, pass, renderFlags);
+				LegacyGraphicsCompatibility::BindLegacyGrassPerGeometryToPixelShader();
+			}
 
 			auto state = globals::state;
 
@@ -406,12 +416,33 @@ namespace PostProcessingExtensions
 		static void thunk(RE::BSShader* This, RE::BSRenderPass* Pass, uint32_t RenderFlags)
 		{
 			func(This, Pass, RenderFlags);
-			if (globals::features::effects11.loaded)
-				globals::features::effects11.ModifyParticle(Pass);
+			if (globals::features::rainRefraction.loaded)
+				globals::features::rainRefraction.ModifyParticle();
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 }
+
+// DXGI rejects ResizeBuffers while any view of the back buffer is alive, leaving the old buffers in place.
+struct IDXGISwapChain_ResizeBuffers
+{
+	static HRESULT WINAPI thunk(IDXGISwapChain* This, UINT BufferCount, UINT Width, UINT Height, DXGI_FORMAT NewFormat, UINT SwapChainFlags)
+	{
+		BackgroundBlur::ReleaseSourceCache();
+
+		const HRESULT hr = func(This, BufferCount, Width, Height, NewFormat, SwapChainFlags);
+		if (FAILED(hr)) {
+			logger::warn("IDXGISwapChain::ResizeBuffers({}x{}) failed (HRESULT: 0x{:08X})", Width, Height, static_cast<uint32_t>(hr));
+		} else {
+			DXGI_SWAP_CHAIN_DESC desc{};
+			This->GetDesc(&desc);
+			logger::info("Swap chain resized to {}x{}", desc.BufferDesc.Width, desc.BufferDesc.Height);
+		}
+
+		return hr;
+	}
+	static inline REL::Relocation<decltype(thunk)> func;
+};
 
 struct IDXGISwapChain_Present
 {
@@ -543,6 +574,19 @@ struct ID3D11Device_CreateSamplerState
 	static inline REL::Relocation<decltype(thunk)> func;
 };
 
+/** @brief Nulls the output buffer on failure like the native runtime; RenderDoc leaves it untouched and the game uses it unchecked (e.g. zero-triangle skin partitions). */
+struct ID3D11Device_CreateBuffer
+{
+	static HRESULT STDMETHODCALLTYPE thunk(ID3D11Device* This, const D3D11_BUFFER_DESC* pDesc, const D3D11_SUBRESOURCE_DATA* pInitialData, ID3D11Buffer** ppBuffer)
+	{
+		const HRESULT hr = func(This, pDesc, pInitialData, ppBuffer);
+		if (FAILED(hr) && ppBuffer)
+			*ppBuffer = nullptr;
+		return hr;
+	}
+	static inline REL::Relocation<decltype(thunk)> func;
+};
+
 struct BSShaderRenderTargets_Create
 {
 	/**
@@ -621,6 +665,7 @@ namespace Hooks
 			globals::ReInit();
 
 			logger::info("Detouring virtual function tables");
+			stl::detour_vfunc<13, IDXGISwapChain_ResizeBuffers>(globals::d3d::swapChain);
 			// InstallSwapChainPresentHooks installs SwapChainPresentBottom (suppression) and OMSetBlendState first.
 			// IDXGISwapChain_Present is installed last so it sits at the top of the Detours chain and fires first.
 			HDRDisplay::InstallSwapChainPresentHooks(globals::d3d::swapChain);
@@ -633,6 +678,9 @@ namespace Hooks
 			}
 
 			stl::detour_vfunc<23, ID3D11Device_CreateSamplerState>(globals::d3d::device);
+
+			if (RenderDoc::IsLoaded())
+				stl::detour_vfunc<3, ID3D11Device_CreateBuffer>(globals::d3d::device);
 
 			globals::InstallD3DHooks(globals::d3d::context);
 

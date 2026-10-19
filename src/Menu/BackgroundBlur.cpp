@@ -511,6 +511,12 @@ namespace BackgroundBlur
 			originalRS->Release();
 	}
 
+	void ReleaseSourceCache()
+	{
+		cachedSourceSRV = nullptr;
+		cachedSourceTexture = nullptr;
+	}
+
 	void Cleanup()
 	{
 		std::lock_guard<std::mutex> lock(resourceMutex);
@@ -529,8 +535,7 @@ namespace BackgroundBlur
 
 		ReleaseBlurTextures();
 
-		cachedSourceSRV = nullptr;
-		cachedSourceTexture = nullptr;
+		ReleaseSourceCache();
 
 		enabled = false;
 		initialized = false;

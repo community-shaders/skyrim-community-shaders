@@ -11,7 +11,6 @@
 #include "ShaderCache.h"
 #include "State.h"
 
-
 #define DLLEXPORT __declspec(dllexport)
 
 std::list<std::string> errors;
@@ -191,7 +190,9 @@ bool Load()
 		L"Data/SKSE/Plugins/NVIDIA_Reflex.dll",
 		L"Data/SKSE/Plugins/MARA.dll",
 		L"Data/SKSE/Plugins/NativeWaterLightStabilizer.dll",
-	    L"Data/SKSE/Plugins/DynamicWetness.dll"
+		L"Data/SKSE/Plugins/DynamicWetness.dll",
+		L"Data/SKSE/Plugins/NMN_DeformableTerrain.dll",
+		L"Data/SKSE/Plugins/ShadowFixes.dll"
 	};
 
 	for (const auto dll : incompatibleDLLs) {

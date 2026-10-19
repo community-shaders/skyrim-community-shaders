@@ -35,12 +35,13 @@ public:
 
 	// Core RenderDoc functionality
 	bool IsAvailable() const { return renderDocApi != nullptr; }
+	/** @brief True when renderdoc.dll is in the process, whether loaded by CS or injected by the RenderDoc UI. */
+	static bool IsLoaded();
 	void TriggerCapture();
 	void TriggerMultiFrameCapture(uint32_t a_frameCount);
 	bool HandleCaptureHotkey(uint32_t a_vkKey);
 	void SetCaptureFilePathTemplate(const std::string& a_template);
 	std::string GetCapturesDirectory() const;
-	bool IsCapturing() const;
 	std::string GetCapturePath(uint32_t a_index);
 	uint32_t GetNumCaptures() const;
 	uint32_t CalculateCapturesDiskUsage();

@@ -171,6 +171,7 @@ void OverlayRenderer::RenderOverlay(
 		io.ClearInputKeys();
 		io.ClearEventsQueue();
 		s_windowOverlapAlpha.clear();
+		EditorWindow::GetSingleton()->UpdateOpenState();
 		return;
 	}
 

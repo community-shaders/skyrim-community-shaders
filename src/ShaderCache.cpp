@@ -1391,7 +1391,7 @@ namespace SIE
 
 			std::array<D3D_SHADER_MACRO, 64> defines{};
 			GetShaderDefines(shader, descriptor, std::span{ defines });
-			const auto suffixNarrow = Util::GetShaderDefinesSuffix(globals::state->shaderDefinesString + ";" + MergeDefinesString(defines, true));
+			const auto suffixNarrow = Util::GetShaderDefinesSuffix(globals::state->GetDefinesString() + ";" + MergeDefinesString(defines, true));
 			const std::wstring suffix(suffixNarrow.begin(), suffixNarrow.end());
 
 			const std::wstring wname(name.begin(), name.end());
@@ -2835,7 +2835,7 @@ namespace SIE
 						c = '_';
 				}
 				const std::wstring entryPointW(entryPoint.begin(), entryPoint.end());
-				const auto globalDefinesSuffixNarrow = Util::GetShaderDefinesSuffix(state->shaderDefinesString);
+				const auto globalDefinesSuffixNarrow = Util::GetShaderDefinesSuffix(state->GetDefinesString());
 				const std::wstring globalDefinesSuffix(globalDefinesSuffixNarrow.begin(), globalDefinesSuffixNarrow.end());
 				const std::wstring defineSlugW(defineSlug.begin(), defineSlug.end());
 				const std::wstring diskPath = defineSlug.empty() ?
@@ -3248,9 +3248,11 @@ namespace SIE
 					newShader->shader->Release();
 				}
 			} else {
-				return vertexShaders[static_cast<size_t>(shader.shaderType.get())]
-				    .insert_or_assign(descriptor, std::move(newShader))
-				    .first->second.get();
+				auto& entry = vertexShaders[static_cast<size_t>(shader.shaderType.get())][descriptor];
+				if (entry && entry->shader)
+					entry->shader->Release();
+				entry = std::move(newShader);
+				return entry.get();
 			}
 		}
 		return nullptr;
@@ -3277,9 +3279,11 @@ namespace SIE
 					newShader->shader->Release();
 				}
 			} else {
-				return pixelShaders[static_cast<size_t>(shader.shaderType.get())]
-				    .insert_or_assign(descriptor, std::move(newShader))
-				    .first->second.get();
+				auto& entry = pixelShaders[static_cast<size_t>(shader.shaderType.get())][descriptor];
+				if (entry && entry->shader)
+					entry->shader->Release();
+				entry = std::move(newShader);
+				return entry.get();
 			}
 		}
 		return nullptr;
@@ -3306,9 +3310,11 @@ namespace SIE
 					newShader->shader->Release();
 				}
 			} else {
-				return computeShaders[static_cast<size_t>(shader.shaderType.get())]
-				    .insert_or_assign(descriptor, std::move(newShader))
-				    .first->second.get();
+				auto& entry = computeShaders[static_cast<size_t>(shader.shaderType.get())][descriptor];
+				if (entry && entry->shader)
+					entry->shader->Release();
+				entry = std::move(newShader);
+				return entry.get();
 			}
 		}
 		return nullptr;

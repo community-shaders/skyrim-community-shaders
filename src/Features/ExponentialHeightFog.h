@@ -108,7 +108,7 @@ private:
 		float4x4 clipToWorld = {};
 		float4 frameJitterOffsets[16] = {};
 		float4 historyParameters = {};  // x = near weight, y = miss sample count, z = far weight, w = unused
-		float4 jitterParameters = {};  // x = LightScatteringSampleJitterMultiplier, y = StateFrameIndexMod8, zw = unused
+		float4 jitterParameters = {};   // x = LightScatteringSampleJitterMultiplier, y = StateFrameIndexMod8, zw = unused
 		// Far volume grid (starts where the near volume ends, runs to volumetricFogDistance).
 		DirectX::XMUINT4 farGridSizeAndFlags = {};
 		float4 farInvGridSizeAndNearFade = {};
@@ -122,6 +122,7 @@ private:
 	void EnsureVolumetricResources();
 	void ReleaseVolumetricResources();
 	void BindIntegratedLightScattering();
+	ID3D11ShaderResourceView* UpdateEngineLocalShadowData();
 	ID3D11ComputeShader* GetMaterialSetupCS();
 	ID3D11ComputeShader* GetFarMaterialSetupCS();
 	ID3D11ComputeShader* GetConservativeDepthCS();
@@ -144,6 +145,7 @@ private:
 	std::unique_ptr<Texture3D> integratedLightScattering;
 	std::unique_ptr<Texture3D> integratedLightScatteringFar;
 	std::unique_ptr<ConstantBuffer> volumetricFogCB;
+	std::unique_ptr<ConstantBuffer> engineLocalShadowCB;
 	winrt::com_ptr<ID3D11SamplerState> linearSampler;
 	winrt::com_ptr<ID3D11SamplerState> shadowSampler;
 	winrt::com_ptr<ID3D11ShaderResourceView> directionalShadowMap;

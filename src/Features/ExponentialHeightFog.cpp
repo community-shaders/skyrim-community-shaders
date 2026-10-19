@@ -347,13 +347,13 @@ void ExponentialHeightFog::EnsureVolumetricResources()
 	currentGridSize = gridSize;
 	currentFarGridSize = farGridSize;
 
-	auto make3D = [this](const DirectX::XMUINT4& a_size, const char* a_name) {
+	auto make3D = [this](const DirectX::XMUINT4& a_size, const char* a_name, DXGI_FORMAT a_format = DXGI_FORMAT_R16G16B16A16_FLOAT) {
 		D3D11_TEXTURE3D_DESC texDesc{};
 		texDesc.Width = a_size.x;
 		texDesc.Height = a_size.y;
 		texDesc.Depth = a_size.z;
 		texDesc.MipLevels = 1;
-		texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+		texDesc.Format = a_format;
 		texDesc.Usage = D3D11_USAGE_DEFAULT;
 		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
 
@@ -403,7 +403,7 @@ void ExponentialHeightFog::EnsureVolumetricResources()
 
 	vBufferA = make3D(gridSize, "ExponentialHeightFog::VBufferA");
 	conservativeDepth = make2D(gridSize, "ExponentialHeightFog::ConservativeDepth");
-	lightScattering = make3D(gridSize, "ExponentialHeightFog::LightScattering");
+	lightScattering = make3D(gridSize, "ExponentialHeightFog::LightScattering", DXGI_FORMAT_R32G32B32A32_FLOAT);
 	integratedLightScattering = make3D(gridSize, "ExponentialHeightFog::IntegratedLightScattering");
 
 	conservativeDepthHistory = std::make_unique<Texture2D>(conservativeDepth->desc, "ExponentialHeightFog::ConservativeDepthHistory");
@@ -426,7 +426,7 @@ void ExponentialHeightFog::EnsureVolumetricResources()
 
 	vBufferAFar = make3D(farGridSize, "ExponentialHeightFog::VBufferAFar");
 	conservativeDepthFar = make2D(farGridSize, "ExponentialHeightFog::ConservativeDepthFar");
-	lightScatteringFar = make3D(farGridSize, "ExponentialHeightFog::LightScatteringFar");
+	lightScatteringFar = make3D(farGridSize, "ExponentialHeightFog::LightScatteringFar", DXGI_FORMAT_R32G32B32A32_FLOAT);
 	integratedLightScatteringFar = make3D(farGridSize, "ExponentialHeightFog::IntegratedLightScatteringFar");
 
 	conservativeDepthFarHistory = std::make_unique<Texture2D>(conservativeDepthFar->desc, "ExponentialHeightFog::ConservativeDepthFarHistory");
@@ -468,6 +468,7 @@ void ExponentialHeightFog::ReleaseVolumetricResources()
 	lightScatteringFarHistory.reset();
 	integratedLightScattering.reset();
 	integratedLightScatteringFar.reset();
+	engineLocalShadowCB.reset();
 	currentGridSize = {};
 	currentFarGridSize = {};
 	hasLightScatteringHistory = false;
@@ -486,6 +487,83 @@ void ExponentialHeightFog::BindIntegratedLightScattering()
 	globals::d3d::context->PSSetShaderResources(19, 1, &srv);
 	ID3D11ShaderResourceView* farSrv = integratedLightScatteringFar ? integratedLightScatteringFar->srv.get() : nullptr;
 	globals::d3d::context->PSSetShaderResources(22, 1, &farSrv);
+}
+
+ID3D11ShaderResourceView* ExponentialHeightFog::UpdateEngineLocalShadowData()
+{
+	auto* renderer = globals::game::renderer;
+	auto* smState = globals::game::smState;
+	if (!renderer || !smState || !smState->shadowSceneNode[0])
+		return nullptr;
+	auto* shadowSceneNode = smState->shadowSceneNode[0];
+	auto& depthStencil = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kSHADOWMAPS];
+	if (!depthStencil.texture || !depthStencil.depthSRV)
+		return nullptr;
+
+	D3D11_TEXTURE2D_DESC textureDesc{};
+	depthStencil.texture->GetDesc(&textureDesc);
+	D3D11_SHADER_RESOURCE_VIEW_DESC viewDesc{};
+	depthStencil.depthSRV->GetDesc(&viewDesc);
+	if (viewDesc.ViewDimension != D3D11_SRV_DIMENSION_TEXTURE2DARRAY || textureDesc.Width != textureDesc.Height)
+		return nullptr;
+	const uint32_t firstSlice = viewDesc.Texture2DArray.FirstArraySlice;
+	const uint32_t sliceCount = std::min(textureDesc.ArraySize, LightLimitFix::ENGINE_SHADOW_MAP_SLICES);
+	const float texel = 1.0f / static_cast<float>(std::max(textureDesc.Width >> viewDesc.Texture2DArray.MostDetailedMip, 1u));
+	std::array<RE::BSShadowLight*, LightLimitFix::SHADOW_MASK_CHANNEL_COUNT> shadowLights{};
+	std::array<uint32_t, LightLimitFix::SHADOW_MASK_CHANNEL_COUNT> maskClaims{};
+	std::array<uint32_t, LightLimitFix::ENGINE_SHADOW_MAP_SLICES> sliceClaims{};
+	const auto& runtimeData = shadowSceneNode->GetRuntimeData();
+	for (const auto& entry : runtimeData.activeShadowLights) {
+		auto* light = entry.get();
+		if (!light || light == runtimeData.sunShadowDirLight || !light->light || !LightLimitFix::IsShadowMapRendered(shadowSceneNode, light))
+			continue;
+		const auto& lightData = light->GetRuntimeData();
+		if (lightData.shadowmapDescriptors.empty())
+			continue;
+		const auto& descriptor = lightData.shadowmapDescriptors[0];
+		const uint32_t slice = descriptor.shadowmapIndex;
+		if (descriptor.renderTarget != RE::RENDER_TARGETS_DEPTHSTENCIL::kSHADOWMAPS || slice >= sliceCount ||
+			slice < firstSlice || slice - firstSlice >= viewDesc.Texture2DArray.ArraySize)
+			continue;
+		shadowLights[lightData.maskIndex] = light;
+		maskClaims[lightData.maskIndex]++;
+		sliceClaims[slice]++;
+	}
+
+	std::array<LightLimitFix::LocalShadowData, LightLimitFix::SHADOW_MASK_CHANNEL_COUNT> shadows{};
+	const auto& eye = globals::game::frameBufferCached.GetCameraPosAdjust();
+	for (uint32_t i = 0; i < shadows.size(); i++) {
+		auto* light = shadowLights[i];
+		if (!light || maskClaims[i] != 1)
+			continue;
+		const auto& lightData = light->GetRuntimeData();
+		const auto& descriptor = lightData.shadowmapDescriptors[0];
+		if (sliceClaims[descriptor.shadowmapIndex] != 1)
+			continue;
+		uint32_t type = LightLimitFix::LOCAL_SHADOW_TYPE_SPOT;
+		float falloff = LightLimitFix::LOCAL_SHADOW_DEFAULT_SPOT_FALLOFF;
+		if (light->GetIsParabolicLight()) {
+			type = light->shadowMapCount == 2 ? LightLimitFix::LOCAL_SHADOW_TYPE_OMNI : LightLimitFix::LOCAL_SHADOW_TYPE_HEMISPHERE;
+		} else if (light->GetIsFrustumLight()) {
+			const float spotFalloff = static_cast<RE::BSShadowFrustumLight*>(light)->GetShadowFrustumLightRuntimeData().falloff;
+			if (std::isfinite(spotFalloff) && spotFalloff > 0.0f)
+				falloff = spotFalloff;
+		} else {
+			continue;
+		}
+		auto& data = shadows[i];
+		static_assert(sizeof(data.ShadowProj) == sizeof(descriptor.lightTransform));
+		std::memcpy(&data.ShadowProj, &descriptor.lightTransform, sizeof(data.ShadowProj));
+		for (int column = 0; column < 4; column++)
+			data.ShadowProj.m[3][column] = static_cast<float>(static_cast<double>(eye.x) * data.ShadowProj.m[0][column] + static_cast<double>(eye.y) * data.ShadowProj.m[1][column] + static_cast<double>(eye.z) * data.ShadowProj.m[2][column] + static_cast<double>(data.ShadowProj.m[3][column]));
+		data.Params = { static_cast<float>(type), light->light->GetLightRuntimeData().radius.x, lightData.shadowBiasScale * LightLimitFix::LOCAL_SHADOW_DEPTH_BIAS, 1.0f };
+		data.Params2 = { falloff, 0.0f, static_cast<float>(descriptor.shadowmapIndex - firstSlice), texel };
+		data.Origin = { eye.x, eye.y, eye.z, 0.0f };
+	}
+	if (!engineLocalShadowCB)
+		engineLocalShadowCB = std::make_unique<ConstantBuffer>(ConstantBufferDesc<decltype(shadows)>(), "ExponentialHeightFog::EngineLocalShadows");
+	engineLocalShadowCB->Update(shadows);
+	return depthStencil.depthSRV;
 }
 
 ID3D11ComputeShader* ExponentialHeightFog::GetMaterialSetupCS()
@@ -596,6 +674,8 @@ void ExponentialHeightFog::Prepass()
 		lightLimitFix.lights &&
 		lightLimitFix.lightIndexList &&
 		lightLimitFix.lightGrid;
+	const bool hasLocalShadowData = hasLocalLightData && lightLimitFix.IsLocalShadowCacheActive() && lightLimitFix.localShadowBuffer;
+	ID3D11ShaderResourceView* engineLocalShadowMap = hasLocalLightData ? UpdateEngineLocalShadowData() : nullptr;
 	auto* depthSrv = Util::GetCurrentSceneDepthSRV(true);
 	auto& ibl = globals::features::ibl;
 	auto& skylighting = globals::features::skylighting;
@@ -654,7 +734,9 @@ void ExponentialHeightFog::Prepass()
 			(hasIBL ? 4u : 0u) |
 			(hasSkylighting ? 8u : 0u) |
 			(depthSrv && temporalHistoryValid && hasConservativeDepthHistory ? 16u : 0u) |
-			(hasLocalLightData ? 32u : 0u)
+			(hasLocalLightData ? 32u : 0u) |
+			(hasLocalShadowData ? 64u : 0u) |
+			(engineLocalShadowMap ? 128u : 0u)
 	};
 	cb.invGridSizeAndNearFade = {
 		1.0f / static_cast<float>(currentGridSize.x),
@@ -711,6 +793,8 @@ void ExponentialHeightFog::Prepass()
 	auto context = globals::d3d::context;
 	ID3D11Buffer* cbuffers[1]{ volumetricFogCB->CB() };
 	context->CSSetConstantBuffers(0, 1, cbuffers);
+	ID3D11Buffer* localShadowBuffer = engineLocalShadowMap ? engineLocalShadowCB->CB() : nullptr;
+	context->CSSetConstantBuffers(1, 1, &localShadowBuffer);
 
 	ID3D11Buffer* sharedBuffers[2]{ globals::state->sharedDataCB->CB(), globals::state->featureDataCB->CB() };
 	context->CSSetConstantBuffers(5, 2, sharedBuffers);
@@ -729,6 +813,12 @@ void ExponentialHeightFog::Prepass()
 	};
 	context->CSSetShaderResources(50, 1, &skylightingSrv);
 	context->CSSetShaderResources(76, 2, iblSrvs);
+	ID3D11ShaderResourceView* localShadowSrvs[2]{
+		hasLocalShadowData ? lightLimitFix.localShadowBuffer->srv.get() : nullptr,
+		hasLocalShadowData ? lightLimitFix.localShadowCache->srv.get() : nullptr
+	};
+	context->CSSetShaderResources(5, 1, &engineLocalShadowMap);
+	context->CSSetShaderResources(102, 2, localShadowSrvs);
 
 	struct VolumetricPassDesc
 	{
@@ -853,14 +943,17 @@ void ExponentialHeightFog::Prepass()
 	ID3D11SamplerState* nullSamplers[2]{ nullptr, nullptr };
 	ID3D11Buffer* nullCb[1]{ nullptr };
 	context->CSSetShaderResources(0, 5, nullSrvs);
+	context->CSSetShaderResources(5, 1, nullSrvs);
 	context->CSSetShaderResources(17, 1, nullDepthSrv);
 	context->CSSetShaderResources(35, 3, nullSrvs);
 	context->CSSetShaderResources(50, 1, nullDepthSrv);
 	context->CSSetShaderResources(76, 2, nullSrvs);
 	context->CSSetShaderResources(98, 1, nullSrvs);
+	context->CSSetShaderResources(102, 2, nullSrvs);
 	context->CSSetUnorderedAccessViews(0, 1, nullUav, nullptr);
 	context->CSSetSamplers(0, 2, nullSamplers);
 	context->CSSetConstantBuffers(0, 1, nullCb);
+	context->CSSetConstantBuffers(1, 1, nullCb);
 	context->CSSetShader(nullptr, nullptr, 0);
 
 	if (temporalReprojection) {
@@ -905,13 +998,14 @@ void ExponentialHeightFog::RegisterWeatherVariables()
 		}
 	}
 
+	const Settings defaults{};
 	auto* registry = WeatherVariables::GlobalWeatherRegistry::GetSingleton()->GetOrCreateFeatureRegistry(GetShortName());
 	registry->RegisterVariable(std::make_shared<WeatherVariables::FloatVariable>(
 		"Start Distance",
 		"startDistance",
 		"Start distance of the fog, from the camera",
 		&settings.startDistance,
-		0.0f,
+		defaults.startDistance,
 		0.0f, 100000.0f));
 
 	registry->RegisterVariable(std::make_shared<WeatherVariables::FloatVariable>(
@@ -919,7 +1013,7 @@ void ExponentialHeightFog::RegisterWeatherVariables()
 		"fogHeight",
 		"Base height of the fog effect",
 		&settings.fogHeight,
-		0.0f,
+		defaults.fogHeight,
 		-22000.0f, 22000.0f));
 
 	registry->RegisterVariable(std::make_shared<WeatherVariables::FloatVariable>(
@@ -927,7 +1021,7 @@ void ExponentialHeightFog::RegisterWeatherVariables()
 		"fogHeightFalloff",
 		"Height density factor controls how the density increases as height decreases",
 		&settings.fogHeightFalloff,
-		0.2f,
+		defaults.fogHeightFalloff,
 		0.001f, 2.0f));
 
 	registry->RegisterVariable(std::make_shared<WeatherVariables::Float4Variable>(
@@ -935,14 +1029,14 @@ void ExponentialHeightFog::RegisterWeatherVariables()
 		"fogInscatteringColor",
 		"Color added to the fog inscattering contribution",
 		&settings.fogInscatteringColor,
-		float4{ 0.0f, 0.0f, 0.0f, 1.0f }));
+		defaults.fogInscatteringColor));
 
 	registry->RegisterVariable(std::make_shared<WeatherVariables::FloatVariable>(
 		"Original Fog Color Amount",
 		"originalFogColorAmount",
 		"Amount of the original fog color added to fog inscattering",
 		&settings.originalFogColorAmount,
-		1.0f,
+		defaults.originalFogColorAmount,
 		0.0f, 1.0f));
 
 	registry->RegisterVariable(std::make_shared<WeatherVariables::FloatVariable>(
@@ -950,7 +1044,7 @@ void ExponentialHeightFog::RegisterWeatherVariables()
 		"fogDensity",
 		"Overall density of the fog",
 		&settings.fogDensity,
-		0.02f,
+		defaults.fogDensity,
 		0.0f, 1.0f));
 
 	registry->RegisterVariable(std::make_shared<WeatherVariables::FloatVariable>(
@@ -958,7 +1052,7 @@ void ExponentialHeightFog::RegisterWeatherVariables()
 		"fogHeight2",
 		"Base height of the second fog layer",
 		&settings.fogHeight2,
-		0.0f,
+		defaults.fogHeight2,
 		-22000.0f, 22000.0f));
 
 	registry->RegisterVariable(std::make_shared<WeatherVariables::FloatVariable>(
@@ -966,7 +1060,7 @@ void ExponentialHeightFog::RegisterWeatherVariables()
 		"fogHeightFalloff2",
 		"Height density factor of the second fog layer controlling how the density increases as height decreases",
 		&settings.fogHeightFalloff2,
-		0.2f,
+		defaults.fogHeightFalloff2,
 		0.001f, 2.0f));
 
 	registry->RegisterVariable(std::make_shared<WeatherVariables::FloatVariable>(
@@ -974,7 +1068,7 @@ void ExponentialHeightFog::RegisterWeatherVariables()
 		"fogDensity2",
 		"Overall density of the second fog layer",
 		&settings.fogDensity2,
-		0.0f,
+		defaults.fogDensity2,
 		0.0f, 1.0f));
 
 	registry->RegisterVariable(std::make_shared<WeatherVariables::FloatVariable>(
@@ -982,7 +1076,7 @@ void ExponentialHeightFog::RegisterWeatherVariables()
 		"directionalInscatteringMultiplier",
 		"Multiplier for directional light inscattering",
 		&settings.directionalInscatteringMultiplier,
-		1.0f,
+		defaults.directionalInscatteringMultiplier,
 		0.0f, 10.0f));
 
 	registry->RegisterVariable(std::make_shared<WeatherVariables::FloatVariable>(
@@ -990,7 +1084,7 @@ void ExponentialHeightFog::RegisterWeatherVariables()
 		"sunlightAttenuationAmount",
 		"Amount of fog attenuation applied to direct sunlight",
 		&settings.sunlightAttenuationAmount,
-		1.0f,
+		defaults.sunlightAttenuationAmount,
 		0.0f, 1.0f));
 
 	registry->RegisterVariable(std::make_shared<WeatherVariables::FloatVariable>(
@@ -998,7 +1092,7 @@ void ExponentialHeightFog::RegisterWeatherVariables()
 		"directionalInscatteringAnisotropy",
 		"Henyey-Greenstein asymmetry parameter. Positive = forward scattering, 0 = isotropic, negative = back scattering.",
 		&settings.directionalInscatteringAnisotropy,
-		0.2f,
+		defaults.directionalInscatteringAnisotropy,
 		-0.99f, 0.99f));
 
 	registry->RegisterVariable(std::make_shared<WeatherVariables::Float4Variable>(
@@ -1006,14 +1100,14 @@ void ExponentialHeightFog::RegisterWeatherVariables()
 		"inscatteringTint",
 		"RGB tint for the inscattering cubemap with alpha for intensity",
 		&settings.inscatteringTint,
-		float4{ 1.0f, 1.0f, 1.0f, 1.0f }));
+		defaults.inscatteringTint));
 
 	registry->RegisterVariable(std::make_shared<WeatherVariables::WeatherVariable<bool>>(
 		"respectVanillaFogFade",
 		"Apply Vanilla Fade",
 		"Apply vanilla fade brightness to exponential height fog",
 		(bool*)&settings.respectVanillaFogFade,
-		false,
+		defaults.respectVanillaFogFade != 0,
 		[](const bool& from, const bool& to, float factor) {
 			return factor > 0.5f ? to : from;
 		}));
@@ -1023,7 +1117,7 @@ void ExponentialHeightFog::RegisterWeatherVariables()
 		"Disable Vanilla Fog",
 		"Disables vanilla fog entirely, only exponential height fog is applied",
 		(bool*)&settings.disableVanillaFog,
-		false,
+		defaults.disableVanillaFog != 0,
 		[](const bool& from, const bool& to, float factor) {
 			return factor > 0.5f ? to : from;
 		}));
@@ -1033,7 +1127,7 @@ void ExponentialHeightFog::RegisterWeatherVariables()
 		"Enable Volumetric Fog",
 		"Enables froxel-based volumetric fog for exponential height fog",
 		(bool*)&settings.volumetricFogEnabled,
-		false,
+		defaults.volumetricFogEnabled != 0,
 		[](const bool& from, const bool& to, float factor) {
 			return factor > 0.5f ? to : from;
 		}));
@@ -1043,7 +1137,7 @@ void ExponentialHeightFog::RegisterWeatherVariables()
 		"volumetricFogDistance",
 		"Maximum distance covered by exponential height volumetric fog",
 		&settings.volumetricFogDistance,
-		60000.0f,
+		defaults.volumetricFogDistance,
 		1000.0f, 200000.0f));
 
 	registry->RegisterVariable(std::make_shared<WeatherVariables::FloatVariable>(
@@ -1051,7 +1145,7 @@ void ExponentialHeightFog::RegisterWeatherVariables()
 		"volumetricNearGridDistance",
 		"Distance covered by the full-resolution near volume; a quarter-lattice far volume covers the rest",
 		&settings.volumetricNearGridDistance,
-		8000.0f,
+		defaults.volumetricNearGridDistance,
 		256.0f, 50000.0f));
 
 	registry->RegisterVariable(std::make_shared<WeatherVariables::FloatVariable>(
@@ -1059,7 +1153,7 @@ void ExponentialHeightFog::RegisterWeatherVariables()
 		"volumetricFogNoiseScale",
 		"Spatial frequency of the volumetric fog noise field (0 = disabled)",
 		&settings.volumetricFogNoiseScale,
-		0.0f,
+		defaults.volumetricFogNoiseScale,
 		0.0f, 0.01f));
 
 	registry->RegisterVariable(std::make_shared<WeatherVariables::FloatVariable>(
@@ -1067,7 +1161,7 @@ void ExponentialHeightFog::RegisterWeatherVariables()
 		"volumetricFogNoiseThreshold",
 		"Soft cutoff that carves clumps out of the volumetric fog noise field",
 		&settings.volumetricFogNoiseThreshold,
-		0.5f,
+		defaults.volumetricFogNoiseThreshold,
 		0.0f, 1.0f));
 
 	registry->RegisterVariable(std::make_shared<WeatherVariables::Float3Variable>(
@@ -1075,14 +1169,14 @@ void ExponentialHeightFog::RegisterWeatherVariables()
 		"volumetricFogNoiseVelocity",
 		"Animation drift of the volumetric fog noise field",
 		&settings.volumetricFogNoiseVelocity,
-		float3{ 0.0f, 0.0f, 0.0f }));
+		defaults.volumetricFogNoiseVelocity));
 
 	registry->RegisterVariable(std::make_shared<WeatherVariables::FloatVariable>(
 		"Volumetric Start Distance",
 		"volumetricFogStartDistance",
 		"Start distance of volumetric fog from the camera",
 		&settings.volumetricFogStartDistance,
-		0.0f,
+		defaults.volumetricFogStartDistance,
 		0.0f, 200000.0f));
 
 	registry->RegisterVariable(std::make_shared<WeatherVariables::FloatVariable>(
@@ -1090,7 +1184,7 @@ void ExponentialHeightFog::RegisterWeatherVariables()
 		"volumetricFogNearFadeInDistance",
 		"Distance over which volumetric fog fades in near the camera",
 		&settings.volumetricFogNearFadeInDistance,
-		1000.0f,
+		defaults.volumetricFogNearFadeInDistance,
 		0.0f, 20000.0f));
 
 	registry->RegisterVariable(std::make_shared<WeatherVariables::FloatVariable>(
@@ -1098,7 +1192,7 @@ void ExponentialHeightFog::RegisterWeatherVariables()
 		"volumetricFogExtinctionScale",
 		"Scale applied to volumetric fog extinction",
 		&settings.volumetricFogExtinctionScale,
-		1.0f,
+		defaults.volumetricFogExtinctionScale,
 		0.0f, 10.0f));
 
 	registry->RegisterVariable(std::make_shared<WeatherVariables::FloatVariable>(
@@ -1106,7 +1200,7 @@ void ExponentialHeightFog::RegisterWeatherVariables()
 		"volumetricFogScatteringDistribution",
 		"Henyey-Greenstein scattering distribution for volumetric fog",
 		&settings.volumetricFogScatteringDistribution,
-		0.2f,
+		defaults.volumetricFogScatteringDistribution,
 		-0.9f, 0.9f));
 
 	registry->RegisterVariable(std::make_shared<WeatherVariables::FloatVariable>(
@@ -1114,7 +1208,7 @@ void ExponentialHeightFog::RegisterWeatherVariables()
 		"volumetricDirectionalScatteringIntensity",
 		"Scale applied to volumetric fog directional light scattering",
 		&settings.volumetricDirectionalScatteringIntensity,
-		1.0f,
+		defaults.volumetricDirectionalScatteringIntensity,
 		0.0f, 10.0f));
 
 	registry->RegisterVariable(std::make_shared<WeatherVariables::Float4Variable>(
@@ -1122,21 +1216,21 @@ void ExponentialHeightFog::RegisterWeatherVariables()
 		"volumetricFogAlbedo",
 		"Volumetric fog albedo color",
 		&settings.volumetricFogAlbedo,
-		float4{ 1.0f, 1.0f, 1.0f, 1.0f }));
+		defaults.volumetricFogAlbedo));
 
 	registry->RegisterVariable(std::make_shared<WeatherVariables::Float4Variable>(
 		"Volumetric Emissive",
 		"volumetricFogEmissive",
 		"Volumetric fog emissive color",
 		&settings.volumetricFogEmissive,
-		float4{ 0.0f, 0.0f, 0.0f, 0.0f }));
+		defaults.volumetricFogEmissive));
 
 	registry->RegisterVariable(std::make_shared<WeatherVariables::FloatVariable>(
 		"Volumetric Sky Lighting Intensity",
 		"volumetricSkyLightingIntensity",
 		"Scale applied to volumetric fog sky lighting",
 		&settings.volumetricSkyLightingIntensity,
-		1.0f,
+		defaults.volumetricSkyLightingIntensity,
 		0.0f, 10.0f));
 
 	registry->RegisterVariable(std::make_shared<WeatherVariables::FloatVariable>(
@@ -1144,7 +1238,7 @@ void ExponentialHeightFog::RegisterWeatherVariables()
 		"volumetricLocalLightScatteringIntensity",
 		"Scale applied to volumetric fog local light scattering",
 		&settings.volumetricLocalLightScatteringIntensity,
-		1.0f,
+		defaults.volumetricLocalLightScatteringIntensity,
 		0.0f, 100.0f));
 }
 #undef I18N_KEY_PREFIX
