@@ -2,6 +2,7 @@
 
 #include "Feature.h"
 #include "Utils/Subrect.h"
+#include <DirectXTex.h>
 #include <atomic>
 #include <condition_variable>
 #include <filesystem>
@@ -10,6 +11,7 @@
 #include <queue>
 #include <string>
 #include <thread>
+#include <vector>
 
 class Texture2D;
 
@@ -38,7 +40,7 @@ struct ScreenshotFeature : public Feature
 
 	/** @brief Captures a screenshot from the current back buffer and enqueues it for async encoding and save. */
 	void Capture();
-	/** @brief Checks for a pending capture request and executes Capture() if one is pending. Should be called before the wrapped buffers are cleared. */
+	/** @brief Hands finished GPU readbacks to the worker, then executes Capture() if one is pending. Render thread only; call before the wrapped buffers are cleared. */
 	void ProcessCaptureRequest();
 	bool applyCropToScreenshot = true;
 
@@ -58,6 +60,7 @@ private:
 	struct PendingScreenshot
 	{
 		winrt::com_ptr<ID3D11Texture2D> stagingTexture;
+		DirectX::ScratchImage image;
 		DXGI_FORMAT format = DXGI_FORMAT_UNKNOWN;
 		uint32_t width = 0;
 		uint32_t height = 0;
@@ -74,6 +77,8 @@ private:
 	std::queue<PendingScreenshot> screenshotQueue;
 	std::thread screenshotWorker;
 	bool screenshotWorkerRunning = false;
+	// Render thread only: the worker never touches the immediate context.
+	std::vector<PendingScreenshot> pendingReadbacks;
 	Util::Subrect::Controller subrect;
 
 	// SRV-readable copy used when the capture source's own SRV can't be sampled
@@ -83,6 +88,8 @@ private:
 	std::unique_ptr<Texture2D> compositeTexture;
 	winrt::com_ptr<ID3D11ComputeShader> compositeCS;
 
+	/** @brief Polls in-flight staging copies without stalling and enqueues the finished ones for encoding. */
+	void ProcessPendingReadbacks();
 	void EnsureWorkerThread();
 	void StopWorkerThread();
 	void EnqueueScreenshot(PendingScreenshot&& screenshot);

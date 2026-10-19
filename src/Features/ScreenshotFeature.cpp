@@ -1,5 +1,5 @@
 // Screenshot Feature
-// Non-blocking screenshot tool. GPU copy runs on the
+// Non-blocking screenshot tool. GPU copy and readback run on the
 // render thread; encoding and disk I/O run on a dedicated worker thread so
 // capture does not stall the frame.
 
@@ -93,7 +93,11 @@ namespace
 		}
 	};
 
-	bool PopulateScratchImageFromStagingTexture(
+	/**
+	 * @brief Copies a staging texture into `image` without stalling on the GPU. Render thread only.
+	 * @return DXGI_ERROR_WAS_STILL_DRAWING while the GPU copy is in flight, S_OK on success, E_FAIL otherwise.
+	 */
+	HRESULT PopulateScratchImageFromStagingTexture(
 		ID3D11DeviceContext* context,
 		ID3D11Texture2D* stagingTexture,
 		DXGI_FORMAT format,
@@ -101,33 +105,31 @@ namespace
 		uint32_t height,
 		DirectX::ScratchImage& image)
 	{
-		Util::MultithreadScope guard(context);
-
 		D3D11_MAPPED_SUBRESOURCE mapped{};
-		if (FAILED(context->Map(stagingTexture, 0, D3D11_MAP_READ, 0, &mapped))) {
-			return false;
+		if (const HRESULT mapHr = context->Map(stagingTexture, 0, D3D11_MAP_READ, D3D11_MAP_FLAG_DO_NOT_WAIT, &mapped); FAILED(mapHr)) {
+			return mapHr == DXGI_ERROR_WAS_STILL_DRAWING ? mapHr : E_FAIL;
 		}
 		if (!mapped.pData || mapped.RowPitch == 0) {
 			context->Unmap(stagingTexture, 0);
-			return false;
+			return E_FAIL;
 		}
 
 		const HRESULT initHr = image.Initialize2D(format, width, height, 1, 1);
 		if (FAILED(initHr)) {
 			context->Unmap(stagingTexture, 0);
-			return false;
+			return E_FAIL;
 		}
 
 		const auto* destImage = image.GetImage(0, 0, 0);
 		if (!destImage) {
 			context->Unmap(stagingTexture, 0);
-			return false;
+			return E_FAIL;
 		}
 
 		// Driver-mapped region can be smaller than height * mapped.RowPitch
 		// (alignment quirks, partial mappings). Cap by mapped.DepthPitch and
 		// clamp each row's copy to whichever of source/dest pitches is smaller -
-		// stepping past either side hits unmapped memory and the worker crashes
+		// stepping past either side hits unmapped memory and the copy crashes
 		// inside rep movsb (see crash 2026-05-19).
 		const size_t bytesPerRow = std::min<size_t>(destImage->rowPitch, mapped.RowPitch);
 		const size_t mappedDepth = mapped.DepthPitch != 0 ? mapped.DepthPitch :
@@ -153,7 +155,7 @@ namespace
 		}
 
 		context->Unmap(stagingTexture, 0);
-		return true;
+		return S_OK;
 	}
 
 	const DirectX::Image* PrepareSdrImage(const DirectX::ScratchImage& sourceImage, DirectX::ScratchImage& convertedImage)
@@ -844,6 +846,7 @@ void ScreenshotFeature::Reset()
 
 void ScreenshotFeature::ProcessCaptureRequest()
 {
+	ProcessPendingReadbacks();
 	if (captureRequested.exchange(false)) {
 		try {
 			Capture();
@@ -853,6 +856,30 @@ void ScreenshotFeature::ProcessCaptureRequest()
 			logger::error("Screenshot capture failed with an unknown exception.");
 		}
 	}
+}
+
+void ScreenshotFeature::ProcessPendingReadbacks()
+{
+	std::erase_if(pendingReadbacks, [this](PendingScreenshot& screenshot) {
+		const HRESULT hr = PopulateScratchImageFromStagingTexture(
+			globals::d3d::context,
+			screenshot.stagingTexture.get(),
+			screenshot.format,
+			screenshot.width,
+			screenshot.height,
+			screenshot.image);
+		if (hr == DXGI_ERROR_WAS_STILL_DRAWING) {
+			return false;
+		}
+		screenshot.stagingTexture = nullptr;
+		if (FAILED(hr)) {
+			logger::error("Failed to map screenshot staging texture.");
+		} else {
+			EnsureWorkerThread();
+			EnqueueScreenshot(std::move(screenshot));
+		}
+		return true;
+	});
 }
 
 void ScreenshotFeature::EnsureWorkerThread()
@@ -890,7 +917,6 @@ void ScreenshotFeature::EnqueueScreenshot(PendingScreenshot&& screenshot)
 void ScreenshotFeature::ScreenshotWorkerLoop()
 {
 	CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-	auto* context = globals::d3d::context;
 	while (true) {
 		PendingScreenshot screenshot;
 		{
@@ -907,22 +933,10 @@ void ScreenshotFeature::ScreenshotWorkerLoop()
 			screenshotQueue.pop();
 		}
 
-		DirectX::ScratchImage image;
-		if (!PopulateScratchImageFromStagingTexture(
-				context,
-				screenshot.stagingTexture.get(),
-				screenshot.format,
-				screenshot.width,
-				screenshot.height,
-				image)) {
-			logger::error("Failed to map screenshot staging texture.");
-			continue;
-		}
-
 		Util::FileHelpers::EnsureDirectoryExists(screenshot.outputPath.parent_path());
 
 		const bool saveOk = SaveScreenshotToDisk(
-			image,
+			screenshot.image,
 			screenshot.outputPath,
 			screenshot.format,
 			screenshot.hdrPngBitDepth,
@@ -1037,7 +1051,6 @@ void ScreenshotFeature::Capture()
 	const bool saveAsHdrAvif = flatHdrCapture && hdrUseAvif;
 	const bool saveAsSdrPng = !flatHdrCapture && sdrUsePng;
 
-	EnsureWorkerThread();
 	PendingScreenshot screenshot;
 	screenshot.stagingTexture = std::move(stagingTexture);
 	screenshot.format = srcDesc.Format;
@@ -1049,6 +1062,6 @@ void ScreenshotFeature::Capture()
 	screenshot.hdrPngBitDepth = static_cast<int>(hdrPngBitDepth);
 	screenshot.outputPath = BuildScreenshotPath(screenshotPath, saveAsHdrAvif ? ".avif" : (saveAsHdrPng || saveAsSdrPng ? ".png" : ".bmp"));
 	screenshot.copyToClipboard = copyToClipboard;
-	EnqueueScreenshot(std::move(screenshot));
+	pendingReadbacks.push_back(std::move(screenshot));
 }
 #undef I18N_KEY_PREFIX
