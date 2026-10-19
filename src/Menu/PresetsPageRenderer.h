@@ -37,6 +37,8 @@ public:
 private:
 	/** @brief Search box and backend filter chips. */
 	static void RenderToolbar();
+	/** @brief The enabled Baseline packs, highest priority first, with arrows to reorder them. Hidden below two packs. */
+	static void RenderBaselineOrder();
 	/** @brief The filtered pack list. */
 	static void RenderList(float width);
 	/** @brief The selected pack's artwork, metadata and actions. */

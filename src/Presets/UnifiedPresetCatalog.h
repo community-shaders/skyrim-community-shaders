@@ -176,6 +176,11 @@ public:
 	 *  @return False when the pack was not enabled. */
 	bool RemoveBaseline(const std::string& id);
 
+	/** @brief Moves an enabled Baseline pack one step in the layering order and reapplies the layers.
+	 *  @param raise True moves it later, so it wins conflicts against the pack it passes; false moves it earlier.
+	 *  @return False when the pack is not enabled or is already at that end. */
+	bool MoveBaseline(const std::string& id, bool raise);
+
 	/** @brief Sets the Effects 11 handoff flags from the active pack's manifest sceneControl, overlaid with the
 	 *  user's choices for that pack; no active pack hands nothing off. */
 	void LoadSceneControl() const;

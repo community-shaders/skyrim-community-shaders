@@ -111,12 +111,19 @@ size_t BaselineManager::DiscoverDirectory(const std::filesystem::path& directory
 	size_t maxFilesToProcess = 1000;  // Prevent processing too many files
 
 	try {
+		// Sorted by name so a pack's files layer in the same order on every machine; a later file wins conflicts.
+		std::vector<std::filesystem::directory_entry> entries;
 		for (const auto& entry : std::filesystem::directory_iterator(directory)) {
 			// Safety check to prevent infinite loops or DoS
-			if (filesProcessed >= maxFilesToProcess) {
+			if (entries.size() >= maxFilesToProcess) {
 				logger::info("Reached maximum file processing limit ({}), stopping discovery", maxFilesToProcess);
 				break;
 			}
+			entries.push_back(entry);
+		}
+		std::ranges::sort(entries, {}, [](const auto& entry) { return entry.path().filename(); });
+
+		for (const auto& entry : entries) {
 			filesProcessed++;
 
 			// Skip if not a regular file or not a JSON file

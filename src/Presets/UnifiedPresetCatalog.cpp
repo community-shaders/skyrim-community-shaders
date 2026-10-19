@@ -849,6 +849,23 @@ bool UnifiedPresetCatalog::RemoveBaseline(const std::string& id)
 	return true;
 }
 
+bool UnifiedPresetCatalog::MoveBaseline(const std::string& id, bool raise)
+{
+	const auto found = std::ranges::find(baselinePackIds, id);
+	if (found == baselinePackIds.end())
+		return false;
+	const auto index = static_cast<size_t>(found - baselinePackIds.begin());
+	if (raise ? index + 1 >= baselinePackIds.size() : index == 0)
+		return false;
+	std::swap(baselinePackIds[index], baselinePackIds[raise ? index + 1 : index - 1]);
+	SaveActiveState();
+
+	BaselineManager::GetSingleton()->Refresh();
+	globals::state->ReapplySettingsLayers();
+	logger::info("[Presets] Moved Baseline pack '{}' {}", id, raise ? "up" : "down");
+	return true;
+}
+
 bool UnifiedPresetCatalog::EnsureBaselineManifest(const std::filesystem::path& packRoot, const std::string& displayName)
 {
 	const auto manifestPath = GetPackManifestPath(packRoot);

@@ -353,6 +353,59 @@ void PresetsPageRenderer::DrawOpenCSEditorButton(const char* id)
 	Util::AddTooltip(T("menu.presets.open_cs_editor_tooltip", "Open the CS Editor for weather, lighting, and scene editing."));
 }
 
+void PresetsPageRenderer::RenderBaselineOrder()
+{
+	auto& catalog = UnifiedPresetCatalog::GetSingleton();
+	const auto& ids = catalog.GetBaselinePackIds();
+	if (ids.size() < 2)
+		return;
+
+	const bool open = ImGui::CollapsingHeader(T("menu.presets.baseline_order", "Baseline Load Order"), ImGuiTreeNodeFlags_DefaultOpen);
+	Util::AddTooltip(T("menu.presets.baseline_order_tooltip",
+		"Enabled Baseline packs, highest priority first. A pack wins any setting it shares with the packs below it; your own edits still win over all of them."));
+	if (!open)
+		return;
+
+	// Highest priority first, like a datapack list. Moves apply after the loop so the list is not edited mid-draw.
+	std::string moveId;
+	bool moveRaise = false;
+	for (size_t row = 0; row < ids.size(); ++row) {
+		const auto& id = ids[ids.size() - 1 - row];
+		ImGui::PushID(id.c_str());
+
+		ImGui::BeginDisabled(row == 0);
+		if (ImGui::ArrowButton("##up", ImGuiDir_Up)) {
+			moveId = id;
+			moveRaise = true;
+		}
+		ImGui::EndDisabled();
+		ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x);
+		ImGui::BeginDisabled(row + 1 == ids.size());
+		if (ImGui::ArrowButton("##down", ImGuiDir_Down)) {
+			moveId = id;
+			moveRaise = false;
+		}
+		ImGui::EndDisabled();
+
+		ImGui::SameLine();
+		const auto* pack = catalog.FindPack(id);
+		const std::string label = std::format("{}. {}", row + 1, pack && !pack->name.empty() ? pack->name : id);
+		if (ImGui::Selectable(label.c_str(), selectedPackId == id)) {
+			selectedPackId = id;
+			lightboxPackId.clear();
+			lightboxImageIndex = -1;
+			lightboxSuppressClose = false;
+		}
+
+		ImGui::PopID();
+	}
+	if (!moveId.empty())
+		catalog.MoveBaseline(moveId, moveRaise);
+
+	ImGui::Spacing();
+	ImGui::Separator();
+}
+
 void PresetsPageRenderer::RenderList(float width)
 {
 	auto& catalog = UnifiedPresetCatalog::GetSingleton();
@@ -362,6 +415,7 @@ void PresetsPageRenderer::RenderList(float width)
 	const auto indices = catalog.Query(typeFilter, searchBuffer);
 
 	ImGui::BeginChild("##PresetList", ImVec2(width, 0), true);
+	RenderBaselineOrder();
 	{
 		MenuFonts::FontRoleGuard heading(Menu::FontRole::Subheading);
 		ImGui::TextUnformatted(T("menu.presets.installed", "Installed"));

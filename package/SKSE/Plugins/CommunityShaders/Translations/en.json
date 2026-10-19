@@ -3358,6 +3358,8 @@
     "menu.presets.baseline_feature_unavailable": "(not available)",
     "menu.presets.baseline_features": "Baseline feature settings",
     "menu.presets.baseline_layer_note": "Baseline settings are feature defaults applied beneath the Scene Manager, independent of the active pack. They win over saved settings until you change a value yourself.",
+    "menu.presets.baseline_order": "Baseline Load Order",
+    "menu.presets.baseline_order_tooltip": "Enabled Baseline packs, highest priority first. A pack wins any setting it shares with the packs below it; your own edits still win over all of them.",
     "menu.presets.compat_apply_anyway": "Apply it anyway?",
     "menu.presets.compat_apply_title": "Compatibility warning",
     "menu.presets.compat_cs_major": "Made for Community Shaders {required}. This build ({current}) is a major version behind and may not work correctly.",
