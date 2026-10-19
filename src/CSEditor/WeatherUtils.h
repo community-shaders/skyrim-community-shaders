@@ -190,9 +190,10 @@ namespace WidgetFactory
 	 * @tparam WidgetType The widget class to instantiate per form.
 	 * @tparam FormType   The game form type to enumerate.
 	 * @param  widgets    The container to append new widget instances to.
+	 * @param  editorIDs  The editor-ID index shared by this initialization batch.
 	 */
 	template <typename WidgetType, typename FormType>
-	void PopulateWidgets(std::vector<std::unique_ptr<Widget>>& widgets)
+	void PopulateWidgets(std::vector<std::unique_ptr<Widget>>& widgets, Util::FormEditorIDIndex& editorIDs)
 	{
 		auto dataHandler = RE::TESDataHandler::GetSingleton();
 		if (!dataHandler)
@@ -204,7 +205,7 @@ namespace WidgetFactory
 		for (auto form : formArray) {
 			if (form) {
 				auto widget = std::make_unique<WidgetType>(form);
-				widget->CacheFormData();
+				widget->CacheFormData(&editorIDs);
 				widget->Load(false);
 				widgets.push_back(std::move(widget));
 			}
@@ -215,9 +216,10 @@ namespace WidgetFactory
 	 * @brief Populate a widget container with SimpleFormWidget instances for cache-only purposes.
 	 * @tparam FormType The game form type to enumerate.
 	 * @param  widgets  The container to append new SimpleFormWidget instances to.
+	 * @param  editorIDs The editor-ID index shared by this initialization batch.
 	 */
 	template <typename FormType>
-	void PopulateSimpleWidgets(std::vector<std::unique_ptr<Widget>>& widgets)
+	void PopulateSimpleWidgets(std::vector<std::unique_ptr<Widget>>& widgets, Util::FormEditorIDIndex& editorIDs)
 	{
 		auto dataHandler = RE::TESDataHandler::GetSingleton();
 		if (!dataHandler)
@@ -230,7 +232,7 @@ namespace WidgetFactory
 			if (form) {
 				auto widget = std::make_unique<SimpleFormWidget>();
 				widget->form = form;
-				widget->CacheFormData();
+				widget->CacheFormData(&editorIDs);
 				widgets.push_back(std::move(widget));
 			}
 		}

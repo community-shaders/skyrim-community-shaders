@@ -6,16 +6,18 @@
 #include "Common/Random.hlsli"
 #include "Common/SharedData.hlsli"
 
+#if defined(VSHADER)
 struct VS_INPUT
 {
 	float4 Position: POSITION0;
 
-#if defined(TEX) || defined(HORIZFADE)
+#	if defined(TEX) || defined(HORIZFADE)
 	float2 TexCoord: TEXCOORD0;
-#endif
+#	endif
 
 	float4 Color: COLOR0;
 };
+#endif
 
 struct VS_OUTPUT
 {

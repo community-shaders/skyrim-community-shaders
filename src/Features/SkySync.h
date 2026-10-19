@@ -107,6 +107,12 @@ public:
 	 */
 	RE::NiPoint3 GetCelestialDirection(const RE::Sky* sky, Caster caster) const;
 
+	/**
+	 * @brief Moon selected by the "Moon light source" setting, when it is currently visible.
+	 * @return Caster::Masser or Caster::Secunda, or Caster::Zenith when the chosen moon is hidden or faded out.
+	 */
+	Caster GetMoonLightCaster(const RE::Sky* sky) const;
+
 private:
 	enum class CellFlagExt : uint16_t
 	{

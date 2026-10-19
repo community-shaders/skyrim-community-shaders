@@ -347,13 +347,13 @@ void ExponentialHeightFog::EnsureVolumetricResources()
 	currentGridSize = gridSize;
 	currentFarGridSize = farGridSize;
 
-	auto make3D = [this](const DirectX::XMUINT4& a_size, const char* a_name) {
+	auto make3D = [this](const DirectX::XMUINT4& a_size, const char* a_name, DXGI_FORMAT a_format = DXGI_FORMAT_R16G16B16A16_FLOAT) {
 		D3D11_TEXTURE3D_DESC texDesc{};
 		texDesc.Width = a_size.x;
 		texDesc.Height = a_size.y;
 		texDesc.Depth = a_size.z;
 		texDesc.MipLevels = 1;
-		texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+		texDesc.Format = a_format;
 		texDesc.Usage = D3D11_USAGE_DEFAULT;
 		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
 
@@ -403,7 +403,7 @@ void ExponentialHeightFog::EnsureVolumetricResources()
 
 	vBufferA = make3D(gridSize, "ExponentialHeightFog::VBufferA");
 	conservativeDepth = make2D(gridSize, "ExponentialHeightFog::ConservativeDepth");
-	lightScattering = make3D(gridSize, "ExponentialHeightFog::LightScattering");
+	lightScattering = make3D(gridSize, "ExponentialHeightFog::LightScattering", DXGI_FORMAT_R32G32B32A32_FLOAT);
 	integratedLightScattering = make3D(gridSize, "ExponentialHeightFog::IntegratedLightScattering");
 
 	conservativeDepthHistory = std::make_unique<Texture2D>(conservativeDepth->desc, "ExponentialHeightFog::ConservativeDepthHistory");
@@ -426,7 +426,7 @@ void ExponentialHeightFog::EnsureVolumetricResources()
 
 	vBufferAFar = make3D(farGridSize, "ExponentialHeightFog::VBufferAFar");
 	conservativeDepthFar = make2D(farGridSize, "ExponentialHeightFog::ConservativeDepthFar");
-	lightScatteringFar = make3D(farGridSize, "ExponentialHeightFog::LightScatteringFar");
+	lightScatteringFar = make3D(farGridSize, "ExponentialHeightFog::LightScatteringFar", DXGI_FORMAT_R32G32B32A32_FLOAT);
 	integratedLightScatteringFar = make3D(farGridSize, "ExponentialHeightFog::IntegratedLightScatteringFar");
 
 	conservativeDepthFarHistory = std::make_unique<Texture2D>(conservativeDepthFar->desc, "ExponentialHeightFog::ConservativeDepthFarHistory");
@@ -468,6 +468,7 @@ void ExponentialHeightFog::ReleaseVolumetricResources()
 	lightScatteringFarHistory.reset();
 	integratedLightScattering.reset();
 	integratedLightScatteringFar.reset();
+	engineLocalShadowCB.reset();
 	currentGridSize = {};
 	currentFarGridSize = {};
 	hasLightScatteringHistory = false;
@@ -486,6 +487,83 @@ void ExponentialHeightFog::BindIntegratedLightScattering()
 	globals::d3d::context->PSSetShaderResources(19, 1, &srv);
 	ID3D11ShaderResourceView* farSrv = integratedLightScatteringFar ? integratedLightScatteringFar->srv.get() : nullptr;
 	globals::d3d::context->PSSetShaderResources(22, 1, &farSrv);
+}
+
+ID3D11ShaderResourceView* ExponentialHeightFog::UpdateEngineLocalShadowData()
+{
+	auto* renderer = globals::game::renderer;
+	auto* smState = globals::game::smState;
+	if (!renderer || !smState || !smState->shadowSceneNode[0])
+		return nullptr;
+	auto* shadowSceneNode = smState->shadowSceneNode[0];
+	auto& depthStencil = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kSHADOWMAPS];
+	if (!depthStencil.texture || !depthStencil.depthSRV)
+		return nullptr;
+
+	D3D11_TEXTURE2D_DESC textureDesc{};
+	depthStencil.texture->GetDesc(&textureDesc);
+	D3D11_SHADER_RESOURCE_VIEW_DESC viewDesc{};
+	depthStencil.depthSRV->GetDesc(&viewDesc);
+	if (viewDesc.ViewDimension != D3D11_SRV_DIMENSION_TEXTURE2DARRAY || textureDesc.Width != textureDesc.Height)
+		return nullptr;
+	const uint32_t firstSlice = viewDesc.Texture2DArray.FirstArraySlice;
+	const uint32_t sliceCount = std::min(textureDesc.ArraySize, LightLimitFix::ENGINE_SHADOW_MAP_SLICES);
+	const float texel = 1.0f / static_cast<float>(std::max(textureDesc.Width >> viewDesc.Texture2DArray.MostDetailedMip, 1u));
+	std::array<RE::BSShadowLight*, LightLimitFix::SHADOW_MASK_CHANNEL_COUNT> shadowLights{};
+	std::array<uint32_t, LightLimitFix::SHADOW_MASK_CHANNEL_COUNT> maskClaims{};
+	std::array<uint32_t, LightLimitFix::ENGINE_SHADOW_MAP_SLICES> sliceClaims{};
+	const auto& runtimeData = shadowSceneNode->GetRuntimeData();
+	for (const auto& entry : runtimeData.activeShadowLights) {
+		auto* light = entry.get();
+		if (!light || light == runtimeData.sunShadowDirLight || !light->light || !LightLimitFix::IsShadowMapRendered(shadowSceneNode, light))
+			continue;
+		const auto& lightData = light->GetRuntimeData();
+		if (lightData.shadowmapDescriptors.empty())
+			continue;
+		const auto& descriptor = lightData.shadowmapDescriptors[0];
+		const uint32_t slice = descriptor.shadowmapIndex;
+		if (descriptor.renderTarget != RE::RENDER_TARGETS_DEPTHSTENCIL::kSHADOWMAPS || slice >= sliceCount ||
+			slice < firstSlice || slice - firstSlice >= viewDesc.Texture2DArray.ArraySize)
+			continue;
+		shadowLights[lightData.maskIndex] = light;
+		maskClaims[lightData.maskIndex]++;
+		sliceClaims[slice]++;
+	}
+
+	std::array<LightLimitFix::LocalShadowData, LightLimitFix::SHADOW_MASK_CHANNEL_COUNT> shadows{};
+	const auto& eye = globals::game::frameBufferCached.GetCameraPosAdjust();
+	for (uint32_t i = 0; i < shadows.size(); i++) {
+		auto* light = shadowLights[i];
+		if (!light || maskClaims[i] != 1)
+			continue;
+		const auto& lightData = light->GetRuntimeData();
+		const auto& descriptor = lightData.shadowmapDescriptors[0];
+		if (sliceClaims[descriptor.shadowmapIndex] != 1)
+			continue;
+		uint32_t type = LightLimitFix::LOCAL_SHADOW_TYPE_SPOT;
+		float falloff = LightLimitFix::LOCAL_SHADOW_DEFAULT_SPOT_FALLOFF;
+		if (light->GetIsParabolicLight()) {
+			type = light->shadowMapCount == 2 ? LightLimitFix::LOCAL_SHADOW_TYPE_OMNI : LightLimitFix::LOCAL_SHADOW_TYPE_HEMISPHERE;
+		} else if (light->GetIsFrustumLight()) {
+			const float spotFalloff = static_cast<RE::BSShadowFrustumLight*>(light)->GetShadowFrustumLightRuntimeData().falloff;
+			if (std::isfinite(spotFalloff) && spotFalloff > 0.0f)
+				falloff = spotFalloff;
+		} else {
+			continue;
+		}
+		auto& data = shadows[i];
+		static_assert(sizeof(data.ShadowProj) == sizeof(descriptor.lightTransform));
+		std::memcpy(&data.ShadowProj, &descriptor.lightTransform, sizeof(data.ShadowProj));
+		for (int column = 0; column < 4; column++)
+			data.ShadowProj.m[3][column] = static_cast<float>(static_cast<double>(eye.x) * data.ShadowProj.m[0][column] + static_cast<double>(eye.y) * data.ShadowProj.m[1][column] + static_cast<double>(eye.z) * data.ShadowProj.m[2][column] + static_cast<double>(data.ShadowProj.m[3][column]));
+		data.Params = { static_cast<float>(type), light->light->GetLightRuntimeData().radius.x, lightData.shadowBiasScale * LightLimitFix::LOCAL_SHADOW_DEPTH_BIAS, 1.0f };
+		data.Params2 = { falloff, 0.0f, static_cast<float>(descriptor.shadowmapIndex - firstSlice), texel };
+		data.Origin = { eye.x, eye.y, eye.z, 0.0f };
+	}
+	if (!engineLocalShadowCB)
+		engineLocalShadowCB = std::make_unique<ConstantBuffer>(ConstantBufferDesc<decltype(shadows)>(), "ExponentialHeightFog::EngineLocalShadows");
+	engineLocalShadowCB->Update(shadows);
+	return depthStencil.depthSRV;
 }
 
 ID3D11ComputeShader* ExponentialHeightFog::GetMaterialSetupCS()
@@ -596,6 +674,8 @@ void ExponentialHeightFog::Prepass()
 		lightLimitFix.lights &&
 		lightLimitFix.lightIndexList &&
 		lightLimitFix.lightGrid;
+	const bool hasLocalShadowData = hasLocalLightData && lightLimitFix.IsLocalShadowCacheActive() && lightLimitFix.localShadowBuffer;
+	ID3D11ShaderResourceView* engineLocalShadowMap = hasLocalLightData ? UpdateEngineLocalShadowData() : nullptr;
 	auto* depthSrv = Util::GetCurrentSceneDepthSRV(true);
 	auto& ibl = globals::features::ibl;
 	auto& skylighting = globals::features::skylighting;
@@ -654,7 +734,9 @@ void ExponentialHeightFog::Prepass()
 			(hasIBL ? 4u : 0u) |
 			(hasSkylighting ? 8u : 0u) |
 			(depthSrv && temporalHistoryValid && hasConservativeDepthHistory ? 16u : 0u) |
-			(hasLocalLightData ? 32u : 0u)
+			(hasLocalLightData ? 32u : 0u) |
+			(hasLocalShadowData ? 64u : 0u) |
+			(engineLocalShadowMap ? 128u : 0u)
 	};
 	cb.invGridSizeAndNearFade = {
 		1.0f / static_cast<float>(currentGridSize.x),
@@ -711,6 +793,8 @@ void ExponentialHeightFog::Prepass()
 	auto context = globals::d3d::context;
 	ID3D11Buffer* cbuffers[1]{ volumetricFogCB->CB() };
 	context->CSSetConstantBuffers(0, 1, cbuffers);
+	ID3D11Buffer* localShadowBuffer = engineLocalShadowMap ? engineLocalShadowCB->CB() : nullptr;
+	context->CSSetConstantBuffers(1, 1, &localShadowBuffer);
 
 	ID3D11Buffer* sharedBuffers[2]{ globals::state->sharedDataCB->CB(), globals::state->featureDataCB->CB() };
 	context->CSSetConstantBuffers(5, 2, sharedBuffers);
@@ -729,6 +813,12 @@ void ExponentialHeightFog::Prepass()
 	};
 	context->CSSetShaderResources(50, 1, &skylightingSrv);
 	context->CSSetShaderResources(76, 2, iblSrvs);
+	ID3D11ShaderResourceView* localShadowSrvs[2]{
+		hasLocalShadowData ? lightLimitFix.localShadowBuffer->srv.get() : nullptr,
+		hasLocalShadowData ? lightLimitFix.localShadowCache->srv.get() : nullptr
+	};
+	context->CSSetShaderResources(5, 1, &engineLocalShadowMap);
+	context->CSSetShaderResources(102, 2, localShadowSrvs);
 
 	struct VolumetricPassDesc
 	{
@@ -853,14 +943,17 @@ void ExponentialHeightFog::Prepass()
 	ID3D11SamplerState* nullSamplers[2]{ nullptr, nullptr };
 	ID3D11Buffer* nullCb[1]{ nullptr };
 	context->CSSetShaderResources(0, 5, nullSrvs);
+	context->CSSetShaderResources(5, 1, nullSrvs);
 	context->CSSetShaderResources(17, 1, nullDepthSrv);
 	context->CSSetShaderResources(35, 3, nullSrvs);
 	context->CSSetShaderResources(50, 1, nullDepthSrv);
 	context->CSSetShaderResources(76, 2, nullSrvs);
 	context->CSSetShaderResources(98, 1, nullSrvs);
+	context->CSSetShaderResources(102, 2, nullSrvs);
 	context->CSSetUnorderedAccessViews(0, 1, nullUav, nullptr);
 	context->CSSetSamplers(0, 2, nullSamplers);
 	context->CSSetConstantBuffers(0, 1, nullCb);
+	context->CSSetConstantBuffers(1, 1, nullCb);
 	context->CSSetShader(nullptr, nullptr, 0);
 
 	if (temporalReprojection) {

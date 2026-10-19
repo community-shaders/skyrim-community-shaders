@@ -134,6 +134,7 @@ public:
 	/**
 	 * @brief Computes the rolling CPU and GPU statistics of every tracked pass.
 	 * Re-sorts every history that gained samples since the last call, so callers should throttle it.
+	 * Not synchronized: call it only on the thread that calls EndFrame, like GetResults.
 	 * @param timerPrefix Includes only passes starting with this prefix, or all passes when empty.
 	 */
 	std::vector<TimerResult> GetStatistics(std::string_view timerPrefix = {}) const;

@@ -44,14 +44,22 @@ void Profiler::Initialize(ID3D11Device* device, ID3D11DeviceContext* a_context)
 	for (auto& frame : frames) {
 		D3D11_QUERY_DESC disjointDesc{};
 		disjointDesc.Query = D3D11_QUERY_TIMESTAMP_DISJOINT;
-		device->CreateQuery(&disjointDesc, frame.disjoint.put());
+		if (FAILED(device->CreateQuery(&disjointDesc, frame.disjoint.put()))) {
+			Release();
+			logger::warn("Profiler disabled: failed to create timestamp disjoint query");
+			return;
+		}
 
 		frame.timers.resize(kMaxTimers);
 		for (auto& timer : frame.timers) {
 			D3D11_QUERY_DESC tsDesc{};
 			tsDesc.Query = D3D11_QUERY_TIMESTAMP;
-			device->CreateQuery(&tsDesc, timer.begin.put());
-			device->CreateQuery(&tsDesc, timer.end.put());
+			if (FAILED(device->CreateQuery(&tsDesc, timer.begin.put())) ||
+				FAILED(device->CreateQuery(&tsDesc, timer.end.put()))) {
+				Release();
+				logger::warn("Profiler disabled: failed to create timestamp query");
+				return;
+			}
 		}
 		frame.activeCount = 0;
 		frame.inFlight = false;
@@ -78,6 +86,7 @@ void Profiler::Release()
 	totalTimeMs = 0.0f;
 	cpuTotalTimeMs = 0.0f;
 	initialized = false;
+	frameActive = false;
 	context = nullptr;
 }
 
@@ -252,9 +261,6 @@ std::vector<Profiler::TimerResult> Profiler::GetStatistics(std::string_view time
 		result.cpuAvgMs = known.cpu.GetAverage();
 		result.cpuP95Ms = known.cpu.GetPercentile(95.0f);
 		result.cpuP99Ms = known.cpu.GetPercentile(99.0f);
-		result.historyBuffer = known.gpu.history;
-		result.historyHead = known.gpu.head;
-		result.historyCount = known.gpu.count;
 		snapshot.push_back(std::move(result));
 	}
 	return snapshot;

@@ -74,7 +74,9 @@ public:
 		float FogAmount;
 		uint DALCMode;
 		uint ENBSkyFalloff;
-		float pad0;
+		float AdditiveAmount;    ///< Effects 11 sky IBL diffuse term; zero unless IsManagedByENB().
+		float ReflectiveAmount;  ///< Effects 11 sky IBL reflection term; zero unless IsManagedByENB().
+		float pad0[3];
 	};
 	STATIC_ASSERT_ALIGNAS_16(PerFrame);
 

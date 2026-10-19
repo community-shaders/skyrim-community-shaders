@@ -733,6 +733,33 @@ RE::NiPoint3 SkySync::GetCelestialDirection(const RE::Sky* sky, const Caster cas
 	return dir;
 }
 
+SkySync::Caster SkySync::GetMoonLightCaster(const RE::Sky* sky) const
+{
+	if (!sky)
+		return Caster::Zenith;
+
+	auto visibility = [](const RE::Moon* moon) {
+		if (!moon || !moon->root || !moon->moonMesh || moon->root->GetFlags().any(RE::NiAVObject::Flag::kHidden))
+			return 0.0f;
+		const auto prop = skyrim_cast<RE::BSSkyShaderProperty*>(moon->moonMesh->GetGeometryRuntimeData().shaderProperty.get());
+		return prop ? prop->kBlendColor.alpha : 0.0f;
+	};
+
+	const float masser = visibility(sky->masser);
+	const float secunda = visibility(sky->secunda);
+
+	switch (static_cast<MoonLightSource>(settings.MoonLightSource)) {
+	case MoonLightSource::Masser:
+		return masser > 0.0f ? Caster::Masser : Caster::Zenith;
+	case MoonLightSource::Secunda:
+		return secunda > 0.0f ? Caster::Secunda : Caster::Zenith;
+	default:
+		if (masser <= 0.0f && secunda <= 0.0f)
+			return Caster::Zenith;
+		return secunda > masser ? Caster::Secunda : Caster::Masser;
+	}
+}
+
 inline void SkySync::SetSunPosition(const RE::Sun* sun, const RE::NiPoint3& dir, const float distance)
 {
 	const auto position = dir * distance;

@@ -194,10 +194,9 @@ SettingValue SettingManager::ResolveWeatherValue(uint32_t weatherID, uint32_t se
 		base);
 }
 
-void SettingManager::RegisterBoolSetting(const std::string& key, const std::string& category,
-	bool defaultValue, bool hasWeatherSupport)
+/** @brief A bool setting ready for RegisterSettingInternal. */
+static Setting MakeBoolSetting(const std::string& key, const std::string& category, bool defaultValue, bool hasWeatherSupport)
 {
-	std::unique_lock lock(mutex);
 	Setting setting;
 	setting.key = key;
 	setting.category = category;
@@ -205,7 +204,14 @@ void SettingManager::RegisterBoolSetting(const std::string& key, const std::stri
 	setting.hasWeatherSupport = hasWeatherSupport;
 	setting.defaultValue = defaultValue;
 	setting.currentValue = defaultValue;
+	return setting;
+}
 
+void SettingManager::RegisterBoolSetting(const std::string& key, const std::string& category,
+	bool defaultValue, bool hasWeatherSupport)
+{
+	std::unique_lock lock(mutex);
+	Setting setting = MakeBoolSetting(key, category, defaultValue, hasWeatherSupport);
 	RegisterSettingInternal(setting);
 }
 
@@ -268,6 +274,11 @@ void SettingManager::RegisterColorTimeOfDaySetting(const std::string& key, const
 	setting.currentValue = colorTimeOfDayDefault;
 
 	RegisterSettingInternal(setting);
+
+	// ENB gives every colour filter its own HDRWeighting switch
+	Setting hdrWeighting = MakeBoolSetting(key + "HDRWeighting", category, false, hasWeatherSupport);
+	RegisterSettingInternal(hdrWeighting);
+	allSettings[setting.id].hdrWeightingID = hdrWeighting.id;
 }
 
 template <typename T>
@@ -430,7 +441,7 @@ float3 SettingManager::GetInterpolatedColorTimeOfDayValue(std::string_view key, 
 	if (id == 0xFFFFFFFF)
 		return {};
 	ColorTimeOfDayValue colorTimeOfDayValue = GetValueInternal<ColorTimeOfDayValue>(id);
-	return ComputeColorTimeOfDayInterpolation(colorTimeOfDayValue);
+	return ComputeColorTimeOfDayInterpolation(colorTimeOfDayValue, GetValueInternal<bool>(allSettings[id].hdrWeightingID));
 }
 
 const Setting* SettingManager::GetSettingInfo(std::string_view key, std::string_view category) const
@@ -904,16 +915,21 @@ float SettingManager::ComputeTimeOfDayInterpolation(const TimeOfDayValue& value)
 	       timeOfDay2[3] * value.values[TimeOfDayValue::InteriorNight];
 }
 
-float3 SettingManager::ComputeColorTimeOfDayInterpolation(const ColorTimeOfDayValue& value) const
+float3 SettingManager::ComputeColorTimeOfDayInterpolation(const ColorTimeOfDayValue& value, bool hdrWeighting) const
 {
-	return timeOfDay1[0] * value.values[ColorTimeOfDayValue::Dawn] +
-	       timeOfDay1[1] * value.values[ColorTimeOfDayValue::Sunrise] +
-	       timeOfDay1[2] * value.values[ColorTimeOfDayValue::Day] +
-	       timeOfDay1[3] * value.values[ColorTimeOfDayValue::Sunset] +
-	       timeOfDay2[0] * value.values[ColorTimeOfDayValue::Dusk] +
-	       timeOfDay2[1] * value.values[ColorTimeOfDayValue::Night] +
-	       timeOfDay2[2] * value.values[ColorTimeOfDayValue::InteriorDay] +
-	       timeOfDay2[3] * value.values[ColorTimeOfDayValue::InteriorNight];
+	static const float3 rec709Luminance{ 0.2126f, 0.7152f, 0.0722f };
+	const float periodWeights[ColorTimeOfDayValue::Total] = { timeOfDay1[0], timeOfDay1[1], timeOfDay1[2], timeOfDay1[3],
+		timeOfDay2[0], timeOfDay2[1], timeOfDay2[2], timeOfDay2[3] };
+
+	float3 blended{};
+	float weightSum = 0.0f;
+	for (int i = 0; i < ColorTimeOfDayValue::Total; ++i) {
+		const float weight = periodWeights[i] * (hdrWeighting ? value.values[i].Dot(rec709Luminance) : 1.0f);
+		blended += value.values[i] * weight;
+		weightSum += weight;
+	}
+	// Brighter filters take a larger share of the transition, so a dim tinted period fades out sooner
+	return hdrWeighting && weightSum > 0.0f ? blended / weightSum : blended;
 }
 
 /** @brief Reads a raw ini value; returns false if the key is missing or empty. */

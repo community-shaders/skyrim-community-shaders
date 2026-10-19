@@ -38,7 +38,7 @@ namespace Util
 	{
 		if (v.empty())
 			return 0.0f;
-		return std::accumulate(v.begin(), v.end(), 0.0f) / v.size();
+		return std::accumulate(v.begin(), v.end(), 0.0f) / static_cast<float>(v.size());
 	}
 
 	/**

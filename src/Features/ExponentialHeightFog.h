@@ -120,6 +120,7 @@ private:
 	void EnsureVolumetricResources();
 	void ReleaseVolumetricResources();
 	void BindIntegratedLightScattering();
+	ID3D11ShaderResourceView* UpdateEngineLocalShadowData();
 	ID3D11ComputeShader* GetMaterialSetupCS();
 	ID3D11ComputeShader* GetFarMaterialSetupCS();
 	ID3D11ComputeShader* GetConservativeDepthCS();
@@ -142,6 +143,7 @@ private:
 	std::unique_ptr<Texture3D> integratedLightScattering;
 	std::unique_ptr<Texture3D> integratedLightScatteringFar;
 	std::unique_ptr<ConstantBuffer> volumetricFogCB;
+	std::unique_ptr<ConstantBuffer> engineLocalShadowCB;
 	winrt::com_ptr<ID3D11SamplerState> linearSampler;
 	winrt::com_ptr<ID3D11SamplerState> shadowSampler;
 	winrt::com_ptr<ID3D11ShaderResourceView> directionalShadowMap;

@@ -20,31 +20,33 @@
 #	undef IBL
 #endif
 
+#if defined(VSHADER)
 struct VS_INPUT
 {
 	float4 Position: POSITION0;
-#if defined(TEXCOORD)
-#	if defined(STRIP_PARTICLES)
+#	if defined(TEXCOORD)
+#		if defined(STRIP_PARTICLES)
 	float3
-#	else
+#		else
 	float2
-#	endif
+#		endif
 		TexCoord0: TEXCOORD0;
-#endif
-#if defined(NORMALS) || defined(MOTIONVECTORS_NORMALS)
+#	endif
+#	if defined(NORMALS) || defined(MOTIONVECTORS_NORMALS)
 	float4 Normal: NORMAL0;
-#endif
-#if defined(BINORMAL_TANGENT)
+#	endif
+#	if defined(BINORMAL_TANGENT)
 	float4 Bitangent: BINORMAL0;
-#endif
-#if defined(VC)
+#	endif
+#	if defined(VC)
 	float4 Color: COLOR0;
-#endif
-#if defined(SKINNED)
+#	endif
+#	if defined(SKINNED)
 	float4 BoneWeights: BLENDWEIGHT0;
 	float4 BoneIndices: BLENDINDICES0;
-#endif
+#	endif
 };
+#endif
 
 struct VS_OUTPUT
 {
@@ -558,20 +560,13 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float2 screenPo
 	return color;
 }
 #	else
-float3 GetLightingShadow(float3 color, float3 worldPosition, float2 screenPosition, float depth, inout float shadowVariance)
+/** @brief Average sun shadow along the view ray through the particle, 1 outside the world or in interiors. */
+float GetViewRayShadow(float3 worldPosition, float2 screenPosition, float depth)
 {
-	float3 dirColor;
-	float3 ambientColor;
-	ShadowSampling::ExtractLighting(color, dirColor, ambientColor);
-
 	static const uint sampleCount = 8;
 	static const float rcpSampleCount = 1.0 / float(sampleCount);
 
 	float noise = Random::InterleavedGradientNoise(screenPosition, SharedData::FrameCount);
-	float noiseTransform = noise * 2.0 - 1.0;
-	float2 rotation;
-	sincos(Math::TAU * noise, rotation.y, rotation.x);
-	float2x2 rotationMatrix = float2x2(rotation.x, rotation.y, -rotation.y, rotation.x);
 
 	// Enough for sky statics
 	float maxDistance = max(0, SharedData::GetScreenDepth(depth));
@@ -593,6 +588,17 @@ float3 GetLightingShadow(float3 color, float3 worldPosition, float2 screenPositi
 		}
 		shadow *= rcpSampleCount;
 	}
+
+	return shadow;
+}
+
+float3 GetLightingShadow(float3 color, float3 worldPosition, float2 screenPosition, float depth, inout float shadowVariance)
+{
+	float3 dirColor;
+	float3 ambientColor;
+	ShadowSampling::ExtractLighting(color, dirColor, ambientColor);
+
+	float shadow = GetViewRayShadow(worldPosition, screenPosition, depth);
 
 	shadowVariance = 1.0 - sqrt(saturate(fwidth(shadow)));
 
@@ -670,6 +676,11 @@ PS_OUTPUT main(PS_INPUT input)
 #		endif
 #	endif
 
+#	if defined(EFFECTS11) && defined(IS_VOLUMETRIC_FOG)
+	const bool isEnbVolumetricFog = SharedData::enbSettings.Enable && !(Permutation::VertexShaderDescriptor & Permutation::EffectFlags::SkyObject) &&
+	                                (Permutation::PixelShaderDescriptor & Permutation::EffectFlags::GrayscaleToAlpha) && !(Permutation::PixelShaderDescriptor & Permutation::EffectFlags::GrayscaleToColor);
+#	endif
+
 #	if defined(LIGHTING)
 	propertyColor = GetLightingColor(input.MSPosition.xyz, input.WorldPosition.xyz, input.Position.xy, shadowVariance);
 
@@ -694,7 +705,7 @@ PS_OUTPUT main(PS_INPUT input)
 		{
 			uint clusteredLightIndex = LightLimitFix::lightList[lightOffset + i];
 			LightLimitFix::Light light = LightLimitFix::lights[clusteredLightIndex];
-			if (LightLimitFix::IsLightIgnored(light) || light.lightFlags & LightLimitFix::LightFlags::Shadow) {
+			if (LightLimitFix::IsLightIgnored(light) || light.lightFlags & LightLimitFix::LightFlags::ShadowCaster) {
 				continue;
 			}
 			float3 lightDirection = light.positionWS.xyz - input.WorldPosition.xyz;
@@ -802,6 +813,31 @@ PS_OUTPUT main(PS_INPUT input)
 		baseColor.xyz = baseColorScale * ColorManagement::TextureToWorking(TexGrayscaleSampler.Sample(SampGrayscaleSampler, grayscaleToColorUv).xyz);
 	}
 
+#	if defined(EFFECTS11) && defined(IS_VOLUMETRIC_FOG)
+	[branch] if (isEnbVolumetricFog)
+	{
+		alpha = saturate(alpha * SharedData::enbSettings.VolumetricFogOpacity);
+		float volumetricFogShadow = 1.0;
+		[branch] if (SharedData::enbSettings.VolumetricFogEnableShadows)
+			volumetricFogShadow = GetViewRayShadow(input.WorldPosition.xyz, input.Position.xy, depth);
+		float3 volumetricFogScale = SharedData::enbSettings.VolumetricFogIntensity * SharedData::enbSettings.VolumetricFogColorFilter;
+		[branch] if (SharedData::enbSettings.VolumetricFogEnableLighting)
+		{
+			// The vertex tint only colours the fog here; brightness comes from the scene lighting
+			float3 volumetricFogTint = Color::Effect(BaseColor.xyz);
+			volumetricFogTint /= max(max(max(volumetricFogTint.x, volumetricFogTint.y), volumetricFogTint.z), 1.0);
+			float3 volumetricFogLight = ShadowSampling::GetDirectionalLighting() * volumetricFogShadow + ShadowSampling::GetAmbientLighting();
+			baseColor.xyz = pow(max(volumetricFogTint * baseTexColor.xyz, 0.0), SharedData::enbSettings.VolumetricFogCurve) * volumetricFogLight * volumetricFogScale * 0.5;
+			lightingInfluence = 0.0;
+		}
+		else
+		{
+			float volumetricFogShade = lerp(1.0 - SharedData::enbSettings.VolumetricFogShadowAmount, 1.0, volumetricFogShadow);
+			baseColor.xyz = pow(max(baseColor.xyz, 0.0), SharedData::enbSettings.VolumetricFogCurve) * volumetricFogShade * volumetricFogScale;
+		}
+	}
+#	endif
+
 	float3 lightColor = lerp(baseColor.xyz, propertyColor * baseColor.xyz, lightingInfluence);
 
 #	if !defined(MOTIONVECTORS_NORMALS)
@@ -819,7 +855,12 @@ PS_OUTPUT main(PS_INPUT input)
 #	endif
 
 #	if !defined(LIGHTING) && defined(VC) && defined(TEXCOORD) && defined(NORMALS) && defined(TEXTURE) && defined(FALLOFF) && defined(SOFT)
-	if (Permutation::PixelShaderDescriptor & Permutation::EffectFlags::GrayscaleToAlpha && lightingInfluence == 1.0)
+	bool applyViewRayShadow = Permutation::PixelShaderDescriptor & Permutation::EffectFlags::GrayscaleToAlpha && lightingInfluence == 1.0;
+#		if defined(EFFECTS11) && defined(IS_VOLUMETRIC_FOG)
+	// The fog block above already shadowed it
+	applyViewRayShadow = applyViewRayShadow && !isEnbVolumetricFog;
+#		endif
+	if (applyViewRayShadow)
 		lightColor = GetLightingShadow(lightColor, input.WorldPosition.xyz, input.Position.xy, depth, shadowVariance);
 #	endif
 

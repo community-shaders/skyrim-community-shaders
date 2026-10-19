@@ -29,30 +29,32 @@
 #	define LOD
 #endif
 
+#if defined(VSHADER)
 struct VS_INPUT
 {
 	float4 Position: POSITION0;
 	float2 TexCoord0: TEXCOORD0;
-#if !defined(MODELSPACENORMALS)
+#	if !defined(MODELSPACENORMALS)
 	float4 Normal: NORMAL0;
 	float4 Bitangent: BINORMAL0;
-#endif  // !MODELSPACENORMALS
+#	endif  // !MODELSPACENORMALS
 
-#if defined(VC)
+#	if defined(VC)
 	float4 Color: COLOR0;
-#	if defined(LANDSCAPE)
+#		if defined(LANDSCAPE)
 	float4 LandBlendWeights1: TEXCOORD2;
 	float4 LandBlendWeights2: TEXCOORD3;
-#	endif  // LANDSCAPE
-#endif      // VC
-#if defined(SKINNED)
+#		endif  // LANDSCAPE
+#	endif      // VC
+#	if defined(SKINNED)
 	float4 BoneWeights: BLENDWEIGHT0;
 	float4 BoneIndices: BLENDINDICES0;
-#endif  // SKINNED
-#if defined(EYE)
+#	endif  // SKINNED
+#	if defined(EYE)
 	float EyeParameter: TEXCOORD2;
-#endif  // EYE
+#	endif  // EYE
 };
+#endif
 
 struct VS_OUTPUT
 {
@@ -2497,6 +2499,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		lightOffset = LightLimitFix::lightGrid[clusterIndex].offset;
 	}
 
+#			if defined(SKINNED)
+	const bool localShadowSkinned = true;
+#			else
+	const bool localShadowSkinned = false;
+#			endif
+
 	[loop] for (uint lightIndex = 0; lightIndex < totalLightCount; lightIndex++)
 	{
 		LightLimitFix::Light light;
@@ -2519,16 +2527,23 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 		float3 lightColor = Color::PointLight(light.color.xyz) * intensityMultiplier * light.fade;
 		float lightShadow = 1.0;
+		float3 normalizedLightDirection = normalize(lightDirection);
 
 		float shadowComponent = 1.0;
-		if (Permutation::PixelShaderDescriptor & Permutation::LightingFlags::DefShadow) {
+		[branch] if (light.lightFlags & LightLimitFix::LightFlags::LocalShadow)
+		{
+			const float3 localShadowEye = LightLimitFix::FirstPerson ? LightLimitFix::WorldEyePosition.xyz : FrameBuffer::CameraPosAdjust.xyz;
+			shadowComponent = LightLimitFix::GetLocalShadow(LinearSampler, light.localShadowIndex, input.WorldPosition.xyz, localShadowEye, normalizedLightDirection, localShadowSkinned, screenNoise);
+			lightShadow *= shadowComponent;
+		}
+		else if (Permutation::PixelShaderDescriptor & Permutation::LightingFlags::DefShadow)
+		{
 			if (light.lightFlags & LightLimitFix::LightFlags::Shadow) {
 				shadowComponent = shadowColor[light.shadowLightIndex];
 				lightShadow *= shadowComponent;
 			}
 		}
 
-		float3 normalizedLightDirection = normalize(lightDirection);
 		float lightAngle = dot(worldNormal.xyz, normalizedLightDirection.xyz);
 
 		float3 refractedLightDirection = normalizedLightDirection;

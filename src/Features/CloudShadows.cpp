@@ -229,6 +229,7 @@ void CloudShadows::ModifySky(RE::BSRenderPass* Pass)
 		return;
 
 	currentLayerForDraw = layer;
+	occlusionClearedWithoutClouds = false;
 	if (cubeMapRenderTarget == RE::RENDER_TARGETS_CUBEMAP::kREFLECTIONS)
 		overrideSky = true;
 	else

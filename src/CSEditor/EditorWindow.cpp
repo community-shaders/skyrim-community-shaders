@@ -1522,15 +1522,16 @@ void EditorWindow::SetupResources()
 
 	// Widgets load their saves as they are made, and saved form references resolve through the
 	// collections of the forms they name, so those are populated first.
-	WidgetFactory::PopulateSimpleWidgets<RE::BGSArtObject>(artObjectWidgets);
-	WidgetFactory::PopulateSimpleWidgets<RE::TESEffectShader>(effectShaderWidgets);
-	WidgetFactory::PopulateWidgets<ImageSpaceWidget, RE::TESImageSpace>(imageSpaceWidgets);
-	WidgetFactory::PopulateWidgets<VolumetricLightingWidget, RE::BGSVolumetricLighting>(volumetricLightingWidgets);
-	WidgetFactory::PopulateWidgets<PrecipitationWidget, RE::BGSShaderParticleGeometryData>(precipitationWidgets);
-	WidgetFactory::PopulateWidgets<LensFlareWidget, RE::BGSLensFlare>(lensFlareWidgets);
-	WidgetFactory::PopulateWidgets<ReferenceEffectWidget, RE::BGSReferenceEffect>(referenceEffectWidgets);
-	WidgetFactory::PopulateWidgets<LightingTemplateWidget, RE::BGSLightingTemplate>(lightingTemplateWidgets);
-	WidgetFactory::PopulateWidgets<WeatherWidget, RE::TESWeather>(weatherWidgets);
+	Util::FormEditorIDIndex editorIDs;
+	WidgetFactory::PopulateSimpleWidgets<RE::BGSArtObject>(artObjectWidgets, editorIDs);
+	WidgetFactory::PopulateSimpleWidgets<RE::TESEffectShader>(effectShaderWidgets, editorIDs);
+	WidgetFactory::PopulateWidgets<ImageSpaceWidget, RE::TESImageSpace>(imageSpaceWidgets, editorIDs);
+	WidgetFactory::PopulateWidgets<VolumetricLightingWidget, RE::BGSVolumetricLighting>(volumetricLightingWidgets, editorIDs);
+	WidgetFactory::PopulateWidgets<PrecipitationWidget, RE::BGSShaderParticleGeometryData>(precipitationWidgets, editorIDs);
+	WidgetFactory::PopulateWidgets<LensFlareWidget, RE::BGSLensFlare>(lensFlareWidgets, editorIDs);
+	WidgetFactory::PopulateWidgets<ReferenceEffectWidget, RE::BGSReferenceEffect>(referenceEffectWidgets, editorIDs);
+	WidgetFactory::PopulateWidgets<LightingTemplateWidget, RE::BGSLightingTemplate>(lightingTemplateWidgets, editorIDs);
+	WidgetFactory::PopulateWidgets<WeatherWidget, RE::TESWeather>(weatherWidgets, editorIDs);
 }
 
 void EditorWindow::ReloadFormEdits(const FormEditSources::FormKeySet& keys)
@@ -1606,6 +1607,11 @@ void EditorWindow::UpdateOpenState()
 				std::vformat(T(TKEY("weather_still_locked"), "Weather is still locked: {}"), std::make_format_args(weatherName)),
 				Util::Colors::GetWarning(), kLongNotificationDuration);
 		}
+		delete tempTexture;
+		tempTexture = nullptr;
+		for (auto& widget : weatherWidgets)
+			if (auto* weatherWidget = dynamic_cast<WeatherWidget*>(widget.get()))
+				weatherWidget->cloudTextureCache.clear();
 	}
 
 	if (overlayWeatherLockPending)
@@ -1660,7 +1666,7 @@ void EditorWindow::Draw()
 						D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc{};
 						framebuffer.SRV->GetDesc(&srvDesc);
 
-						tempTexture = new Texture2D(texDesc);
+						tempTexture = new Texture2D(texDesc, "CSEditor::ViewportCopy");
 						tempTexture->CreateSRV(srvDesc);
 					}
 

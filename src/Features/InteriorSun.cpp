@@ -85,6 +85,11 @@ void InteriorSun::PostPostLoad()
 void InteriorSun::EarlyPrepass()
 {
 	isInteriorWithSun = IsInteriorWithSun(RE::TES::GetSingleton()->interiorCell);
+	if (!isInteriorWithSun && !arraysCleared) {
+		ClearArrays();
+		currentCell = nullptr;
+		currentPortalGraph = nullptr;
+	}
 }
 
 inline bool InteriorSun::IsInteriorWithSun(const RE::TESObjectCELL* cell)

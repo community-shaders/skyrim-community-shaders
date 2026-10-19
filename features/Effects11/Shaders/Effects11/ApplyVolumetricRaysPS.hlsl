@@ -1,9 +1,5 @@
+#include "Common/ColorManagement.hlsli"
 #include "Common/SharedData.hlsli"
-
-#if defined(IBL)
-#	define IBL_DEFERRED
-#	include "IBL/IBL.hlsli"
-#endif
 
 Texture2D<float> BlurredShadowTexture : register(t0);
 Texture2D<float> RaymarchDepthTexture : register(t1);
@@ -17,8 +13,8 @@ cbuffer VLData : register(b1)
 
 struct VS_OUTPUT_POST
 {
-	float4 pos : SV_POSITION;
-	float2 txcoord0 : TEXCOORD0;
+	float4 pos: SV_POSITION;
+	float2 txcoord0: TEXCOORD0;
 };
 
 // Joint bilateral upsample of the half-res scattering: four bilinear taps weighted by
@@ -40,8 +36,8 @@ float UpsampleScattering(float2 fullResPixel, float fullResDepth)
 
 	float weightedSum = 0.0;
 	float weightSum = 0.0;
-	[unroll]
-	for (uint i = 0; i < 4; i++) {
+	[unroll] for (uint i = 0; i < 4; i++)
+	{
 		int2 tap = clamp(basePixel + offsets[i], int2(0, 0), ScreenSizeMin1);
 		float tapDepth = RaymarchDepthTexture[tap];
 		float relativeDelta = abs(referenceDepth - tapDepth) / max(referenceDepth, 1e-4);
@@ -52,29 +48,26 @@ float UpsampleScattering(float2 fullResPixel, float fullResDepth)
 	return weightedSum / weightSum;
 }
 
+/** @brief Shapes the ray visibility: Density above 1 thins the rays, below 1 thickens them. */
+float ApplyDensity(float visibility)
+{
+	float density = SharedData::enbSettings.VolumetricRaysDensity;
+	if (density >= 1.0)
+		return pow(visibility, density);
+	return 1.0 - pow(1.0 - visibility, rcp(max(density, 0.001)));
+}
+
 float4 main(VS_OUTPUT_POST input) : SV_Target0
 {
-	float2 uv = input.txcoord0;
+	float depth = SharedData::GetDepth(input.txcoord0);
+	float rays = ApplyDensity(saturate(UpsampleScattering(input.pos.xy, depth)));
 
-	float depth = SharedData::GetDepth(uv);
-	float volumetricShadow = UpsampleScattering(input.pos.xy, depth);
+	// SunColor is already premultiplied by the sun's visibility
+	float3 sunColor = max(SharedData::SunColor.xyz, 0.0);
+	float sunPeak = max(max(max(sunColor.x, sunColor.y), sunColor.z), 1e-5);
+	float3 skyColor = max(SharedData::enbSettings.VolumetricRaysSkyColor, 0.0) * (sunColor + 1e-5) / sunPeak;
+	float skyAmount = SharedData::enbSettings.VolumetricRaysSkyColorAmount * saturate(dot(sunColor, 1.0) * 3.0);
 
-	float4 positionCS = float4(2 * float2(uv.x, -uv.y + 1) - 1, depth, 1);
-	float4 positionMS = mul(FrameBuffer::CameraViewProjInverse, positionCS);
-	positionMS.xyz /= positionMS.w;
-
-	float3 viewDirection = normalize(positionMS.xyz);
-
-	float phase = dot(viewDirection, SharedData::SunDirection.xyz) * 0.5 + 0.5;
-	float3 lightColor = SharedData::SunColor.xyz * phase;
-
-#if defined(IBL)
-	float3 ibl = ImageBasedLighting::GetSkyIBL(float3(0, 0, -1));
-	ibl = lerp(dot(ibl, 1.0 / 3.0), ibl, 2.0);
-	lightColor += ibl * SharedData::enbSettings.VolumetricRaysSkyColorAmount;
-#endif
-
-	float3 volumetricColor = volumetricShadow * lightColor * SharedData::enbSettings.VolumetricRaysIntensity * SharedData::SunColor.w;
-
-	return float4(volumetricColor, 0);
+	float3 lightColor = sunColor + ColorManagement::SRGBToWorking(skyColor) * skyAmount;
+	return float4(rays * lightColor * SharedData::enbSettings.VolumetricRaysIntensity, 0);
 }

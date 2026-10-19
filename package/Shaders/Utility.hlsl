@@ -9,26 +9,28 @@
 #	define RENDER_SHADOWMASK_ANY
 #endif
 
+#if defined(VSHADER)
 struct VS_INPUT
 {
 	float4 PositionMS: POSITION0;
 
-#if defined(TEXTURE)
+#	if defined(TEXTURE)
 	float2 TexCoord: TEXCOORD0;
-#endif
+#	endif
 
-#if defined(NORMALS)
+#	if defined(NORMALS)
 	float4 Normal: NORMAL0;
 	float4 Bitangent: BINORMAL0;
-#endif
-#if defined(VC)
+#	endif
+#	if defined(VC)
 	float4 Color: COLOR0;
-#endif
-#if defined(SKINNED)
+#	endif
+#	if defined(SKINNED)
 	float4 BoneWeights: BLENDWEIGHT0;
 	float4 BoneIndices: BLENDINDICES0;
-#endif
+#	endif
 };
+#endif
 
 struct VS_OUTPUT
 {

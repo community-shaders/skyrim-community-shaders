@@ -13,6 +13,7 @@
 #include "Globals.h"
 #include "I18n/I18n.h"
 #include "Menu.h"
+#include "Utils/D3D.h"
 #include "Utils/FileSystem.h"
 
 #define I18N_KEY_PREFIX "feature.screenshot."
@@ -92,23 +93,6 @@ namespace
 		}
 	};
 
-	struct D3D11MultithreadGuard
-	{
-		winrt::com_ptr<REX::W32::ID3D11Multithread> multithread;
-
-		explicit D3D11MultithreadGuard(ID3D11DeviceContext* context)
-		{
-			if (context && SUCCEEDED(context->QueryInterface(multithread.put())))
-				multithread->Enter();
-		}
-
-		~D3D11MultithreadGuard()
-		{
-			if (multithread)
-				multithread->Leave();
-		}
-	};
-
 	bool PopulateScratchImageFromStagingTexture(
 		ID3D11DeviceContext* context,
 		ID3D11Texture2D* stagingTexture,
@@ -117,7 +101,7 @@ namespace
 		uint32_t height,
 		DirectX::ScratchImage& image)
 	{
-		D3D11MultithreadGuard guard(context);
+		Util::MultithreadScope guard(context);
 
 		D3D11_MAPPED_SUBRESOURCE mapped{};
 		if (FAILED(context->Map(stagingTexture, 0, D3D11_MAP_READ, 0, &mapped))) {
@@ -852,6 +836,10 @@ void ScreenshotFeature::EnsurePreviewCache(ID3D11Texture2D* sourceTexture)
 
 void ScreenshotFeature::Reset()
 {
+	if (previewCacheTexture && !Menu::GetSingleton()->IsEnabled) {
+		previewCacheSRV = nullptr;
+		previewCacheTexture = nullptr;
+	}
 }
 
 void ScreenshotFeature::ProcessCaptureRequest()
@@ -1061,8 +1049,6 @@ void ScreenshotFeature::Capture()
 	screenshot.hdrPngBitDepth = static_cast<int>(hdrPngBitDepth);
 	screenshot.outputPath = BuildScreenshotPath(screenshotPath, saveAsHdrAvif ? ".avif" : (saveAsHdrPng || saveAsSdrPng ? ".png" : ".bmp"));
 	screenshot.copyToClipboard = copyToClipboard;
-	if (winrt::com_ptr<REX::W32::ID3D11Multithread> multithread; SUCCEEDED(context->QueryInterface(multithread.put())))
-		multithread->SetMultithreadProtected(TRUE);
 	EnqueueScreenshot(std::move(screenshot));
 }
 #undef I18N_KEY_PREFIX
