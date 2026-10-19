@@ -1919,18 +1919,5 @@
     "ui.copy": "Копировать",
     "ui.dont_ask_again": "Больше не спрашивать",
     "ui.search": "Поиск...",
-    "ui.search_features": "Поиск функций...",
-    "cs_editor.editor_id_label": "EditorID: %s",
-    "cs_editor.file_label": "Файл: %s",
-    "cs_editor.form_id_label": "FormID: %08X",
-    "cs_editor.form_reference_note": "На эту форму ссылаются записи погоды. Чтобы изменить используемую форму, отредактируйте вкладку «Записи» в виджете погоды.",
-    "cs_editor.no_open_widgets": "Нет открытых виджетов",
-    "cs_editor.save_to_file": "Сохранить в файл",
-    "cs_editor.save_widget": "Сохранить {}",
-    "cs_editor.unsaved_changes_tooltip": "Есть несохранённые изменения — нажмите «Сохранить»",
-    "feature.light_editor.save_to_light_placer": "Сохранить в Light Placer",
-    "menu.features.apply_override": "Применить переопределение",
-    "menu.features.restore_override_tooltip": "Восстанавливает исходные настройки переопределения из файлов мода.\nЭто отменит ваши настройки и вернёт к\nрекомендованным автором мода параметрам.",
-    "menu.issues.override_failures_desc": "Следующие файлы переопределений не удалось загрузить или применить. Проверьте формат и содержимое файла.",
-    "menu.issues.override_failures_header": "Ошибки переопределений"
+    "ui.search_features": "Поиск функций..."
 }
