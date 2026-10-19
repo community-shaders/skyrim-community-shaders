@@ -151,6 +151,9 @@ namespace SIE
 					defines[lastIndex++] = { "GLINT", nullptr };
 				}
 			}
+			if ((descriptor & static_cast<uint32_t>(ShaderCache::LightingShaderFlags::LandscapeSeams)) != 0) {
+				defines[lastIndex++] = { "LANDSCAPE_SEAMS", nullptr };
+			}
 
 			for (auto* feature : Feature::GetFeatureList()) {
 				if (feature->loaded && feature->HasShaderDefine(RE::BSShader::Type::Lighting)) {
@@ -622,6 +625,9 @@ namespace SIE
 			}
 			if (descriptor & static_cast<uint32_t>(LocalMapFogOfWar)) {
 				defines[lastIndex++] = { "LOCALMAP_FOGOFWAR", nullptr };
+			}
+			if (descriptor & static_cast<uint32_t>(TruePbr)) {
+				defines[lastIndex++] = { "TRUE_PBR", nullptr };
 			}
 
 			if (hasShadowMask) {
@@ -1326,7 +1332,7 @@ namespace SIE
 				descriptor = (descriptor & ~0b1111u) | static_cast<uint32_t>(ShaderCache::GrassShaderTechniques::RenderDepth);
 			}
 
-			const auto suffixNarrow = Util::GetShaderDefinesSuffix(globals::state->shaderDefinesString);
+			const auto suffixNarrow = Util::GetShaderDefinesSuffix(globals::state->GetDefinesString());
 			const std::wstring suffix(suffixNarrow.begin(), suffixNarrow.end());
 
 			const auto wname = std::wstring(name.begin(), name.end());
@@ -1378,8 +1384,7 @@ namespace SIE
 			return std::memcmp(bytes, "DXBC", 4) == 0 && totalSize == blob->GetBufferSize();
 		}
 
-		/** @brief Reads a cached blob, deleting the file and returning null when it is unreadable or not intact DXBC. */
-		static winrt::com_ptr<ID3DBlob> ReadIntactBlob(const std::wstring& diskPath)
+		winrt::com_ptr<ID3DBlob> ReadIntactBlob(const std::wstring& diskPath)
 		{
 			winrt::com_ptr<ID3DBlob> blob;
 			if (FAILED(D3DReadFileToBlob(diskPath.c_str(), blob.put())))
@@ -1392,10 +1397,13 @@ namespace SIE
 			return nullptr;
 		}
 
-		/** @brief Writes through a sibling temp file and a rename, so a crash mid-write cannot leave a torn blob at diskPath. */
-		static bool WriteBlobAtomic(const std::wstring& diskPath, ID3DBlob* blob)
+		bool WriteBlobAtomic(const std::wstring& diskPath, ID3DBlob* blob)
 		{
-			const std::wstring tempPath = diskPath + L".tmp";
+			// A temp name per call: two compiles of one key (two threads, or two game instances) must not
+			// write or delete each other's temp file. Both renames carry the same bytes, so either may win.
+			static std::atomic<uint32_t> tempCounter{ 0 };
+			const std::wstring tempPath = std::format(L"{}.{}-{}-{}.tmp", diskPath, GetCurrentProcessId(), GetCurrentThreadId(),
+				tempCounter.fetch_add(1, std::memory_order_relaxed));
 			std::error_code ec;
 			if (SUCCEEDED(D3DWriteBlobToFile(blob, tempPath.c_str(), true))) {
 				std::filesystem::rename(tempPath, diskPath, ec);
@@ -1758,8 +1766,10 @@ namespace SIE
 				cache.AddCompletedShader(shaderClass, shader, descriptor, nullptr);
 				return nullptr;
 			}
-			if (errorBlob)
+			if (errorBlob) {
 				logger::debug("Shader logs:\n{}", static_cast<char*>(errorBlob->GetBufferPointer()));
+				errorBlob->Release();
+			}
 			logger::debug("Compiled shader {}:{}:{:X}", magic_enum::enum_name(type), magic_enum::enum_name(shaderClass), descriptor);
 
 #ifdef TRACY_ENABLE
@@ -2861,9 +2871,11 @@ namespace SIE
 					newShader->shader->Release();
 				}
 			} else {
-				return vertexShaders[static_cast<size_t>(shader.shaderType.get())]
-				    .insert_or_assign(descriptor, std::move(newShader))
-				    .first->second.get();
+				auto& entry = vertexShaders[static_cast<size_t>(shader.shaderType.get())][descriptor];
+				if (entry && entry->shader)
+					entry->shader->Release();
+				entry = std::move(newShader);
+				return entry.get();
 			}
 		}
 		return nullptr;
@@ -2890,9 +2902,11 @@ namespace SIE
 					newShader->shader->Release();
 				}
 			} else {
-				return pixelShaders[static_cast<size_t>(shader.shaderType.get())]
-				    .insert_or_assign(descriptor, std::move(newShader))
-				    .first->second.get();
+				auto& entry = pixelShaders[static_cast<size_t>(shader.shaderType.get())][descriptor];
+				if (entry && entry->shader)
+					entry->shader->Release();
+				entry = std::move(newShader);
+				return entry.get();
 			}
 		}
 		return nullptr;
@@ -2919,9 +2933,11 @@ namespace SIE
 					newShader->shader->Release();
 				}
 			} else {
-				return computeShaders[static_cast<size_t>(shader.shaderType.get())]
-				    .insert_or_assign(descriptor, std::move(newShader))
-				    .first->second.get();
+				auto& entry = computeShaders[static_cast<size_t>(shader.shaderType.get())][descriptor];
+				if (entry && entry->shader)
+					entry->shader->Release();
+				entry = std::move(newShader);
+				return entry.get();
 			}
 		}
 		return nullptr;

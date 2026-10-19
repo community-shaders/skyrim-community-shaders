@@ -34,4 +34,14 @@ namespace Util::VersionedRelocation
 		}
 		return REL::RelocationID(a_se, a_ae).address();
 	}
+
+	/** @brief True if a_callSite holds a rel32 CALL to a_target, i.e. no other plugin or runtime change owns it. */
+	[[nodiscard]] inline bool IsCallTo(std::uintptr_t a_callSite, std::uintptr_t a_target) noexcept
+	{
+		if (!REL::verify_code(a_callSite, REL::make_pattern<"E8 ?? ?? ?? ??">()))
+			return false;
+		std::int32_t displacement{};
+		std::memcpy(std::addressof(displacement), reinterpret_cast<const void*>(a_callSite + 1), sizeof(displacement));
+		return a_callSite + 5 + displacement == a_target;
+	}
 }

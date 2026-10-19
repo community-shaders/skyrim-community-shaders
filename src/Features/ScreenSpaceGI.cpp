@@ -155,13 +155,13 @@ void ScreenSpaceGI::DrawSettings()
 		}
 
 		if (showAdvanced) {
-			ImGui::SliderInt(T(TKEY("slices"), "Slices"), (int*)&settings.NumSlices, 1, 10);
+			ImGui::SliderInt(T(TKEY("slices"), "Slices"), (int*)&settings.NumSlices, 1, 10, "%d", ImGuiSliderFlags_AlwaysClamp);
 			if (auto _tt = Util::HoverTooltipWrapper())
 				ImGui::Text("%s", T(TKEY("slices_tooltip"),
 									  "How many directions do the samples take.\n"
 									  "Controls noise."));
 
-			ImGui::SliderInt(T(TKEY("steps_per_slice"), "Steps Per Slice"), (int*)&settings.NumSteps, 1, 20);
+			ImGui::SliderInt(T(TKEY("steps_per_slice"), "Steps Per Slice"), (int*)&settings.NumSteps, 1, 20, "%d", ImGuiSliderFlags_AlwaysClamp);
 			if (auto _tt = Util::HoverTooltipWrapper())
 				ImGui::Text("%s", T(TKEY("steps_per_slice_tooltip"),
 									  "How many samples does it take in one direction.\n"
@@ -345,6 +345,8 @@ void ScreenSpaceGI::LoadSettings(json& o_json)
 {
 	settings = o_json;
 	settings.ResolutionMode = std::clamp(settings.ResolutionMode, 0, 2);
+	settings.NumSlices = std::clamp(settings.NumSlices, 1u, 10u);
+	settings.NumSteps = std::clamp(settings.NumSteps, 1u, 20u);
 
 	recompileFlag = true;
 }

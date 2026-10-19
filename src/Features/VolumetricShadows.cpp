@@ -174,6 +174,14 @@ void VolumetricShadows::CopyShadowLightData()
 				ID3D11Texture2D* shadowTexture = nullptr;
 				shadowResource->QueryInterface(__uuidof(ID3D11Texture2D), reinterpret_cast<void**>(&shadowTexture));
 
+				if (shadowTexture && !(downsampleShadowMip0CS && downsampleShadowMip1CS && blurShadowHorizontalCS && blurShadowVerticalCS)) {
+					const float lit[4] = { 1.0f, 1.0f, 0.0f, 0.0f };
+					context->ClearUnorderedAccessViewFloat(shadowCopyMip0UAV, lit);
+					context->ClearUnorderedAccessViewFloat(shadowCopyMip1UAV, lit);
+					shadowTexture->Release();
+					shadowTexture = nullptr;
+				}
+
 				if (shadowTexture) {
 					D3D11_TEXTURE2D_DESC srcDesc;
 					shadowTexture->GetDesc(&srcDesc);

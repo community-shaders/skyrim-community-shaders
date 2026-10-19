@@ -4,6 +4,7 @@
 #include <atomic>
 #include <efsw/efsw.hpp>
 #include <vector>
+#include <winrt/base.h>
 
 #include "Utils/WinApi.h"
 
@@ -328,6 +329,15 @@ namespace SIE
 		bool loadedFromDisk = false;  /**< true when the shader blob was read from the disk cache rather than compiled */
 	};
 
+	namespace SShaderCache
+	{
+		/** @brief Reads a cached blob, deleting the file and returning null when it is unreadable or not intact DXBC. */
+		winrt::com_ptr<ID3DBlob> ReadIntactBlob(const std::wstring& diskPath);
+
+		/** @brief Writes through a sibling temp file and a rename, so a crash mid-write cannot leave a torn blob at diskPath. */
+		bool WriteBlobAtomic(const std::wstring& diskPath, ID3DBlob* blob);
+	}
+
 	class UpdateListener;
 
 	class ShaderCache
@@ -604,6 +614,7 @@ namespace SIE
 			// Community Shaders start
 			TruePbr = 1 << 3,
 			Deferred = 1 << 4,
+			LandscapeSeams = 1 << 5,
 			// Community Shaders end
 			Specular = 1 << 9,
 			SoftLighting = 1 << 10,
@@ -761,6 +772,7 @@ namespace SIE
 			LodObject = 1 << 27,
 			LocalMapFogOfWar = 1 << 28,
 			OpaqueEffect = 1 << 29,
+			TruePbr = 1 << 30,
 		};
 
 		// Shader blocking data for developer mode

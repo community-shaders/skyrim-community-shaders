@@ -2,6 +2,7 @@
 
 #include "WeatherVariableRegistry.h"
 #include <map>
+#include <set>
 #include <string>
 
 using json = nlohmann::json;
@@ -115,6 +116,8 @@ private:
 
 	// Track last known weather state to detect changes
 	CurrentWeathers lastKnownWeather;
+
+	std::set<std::string> featuresWithAppliedOverride;
 
 	// Cached last weather - sky->lastWeather can be cleared before currentWeatherPct reaches 1.0
 	RE::TESWeather* cachedLastWeather = nullptr;

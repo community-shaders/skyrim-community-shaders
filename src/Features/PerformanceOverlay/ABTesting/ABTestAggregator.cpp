@@ -1,5 +1,6 @@
 #include "ABTestAggregator.h"
 #include "Features/PerformanceOverlay.h"
+#include "Utils/PerfUtils.h"
 #include <algorithm>
 #include <map>
 #include <numeric>
@@ -7,6 +8,7 @@
 void ABTestAggregator::OnABSwitch(ABVariant variant)
 {
 	auto now = std::chrono::steady_clock::now();
+	cachedResults.reset();
 
 	// End the current interval if it exists
 	if (currentInterval) {
@@ -60,7 +62,9 @@ void ABTestAggregator::OnFrame(const std::vector<DrawCallRow>& rows)
 
 	// Only add frame if it's not an outlier
 	if (!isOutlier) {
-		currentInterval->frameRows.push_back(rows);
+		auto& stored = currentInterval->frameRows.emplace_back(rows);
+		for (auto& row : stored)
+			std::string().swap(row.tooltip);
 	}
 }
 
@@ -68,6 +72,7 @@ void ABTestAggregator::OnTestEnd()
 {
 	auto now = std::chrono::steady_clock::now();
 	testEndTime = now;
+	cachedResults.reset();
 
 	if (currentInterval) {
 		currentInterval->endTime = now;
@@ -80,18 +85,12 @@ void ABTestAggregator::Clear()
 {
 	intervals.clear();
 	currentInterval.reset();
+	cachedResults.reset();
 	recentFrameTimes.clear();
 	hasSettingsA = false;
 	hasSettingsB = false;
 	settingsA.clear();
 	settingsB.clear();
-}
-
-static float mean(const std::vector<float>& v)
-{
-	if (v.empty())
-		return 0.0f;
-	return std::accumulate(v.begin(), v.end(), 0.0f) / v.size();
 }
 
 static float median(std::vector<float> v)
@@ -104,6 +103,9 @@ static float median(std::vector<float> v)
 
 std::vector<AggregatedDrawCallStats> ABTestAggregator::GetAggregatedResults() const
 {
+	if (cachedResults)
+		return *cachedResults;
+
 	// Map: shaderType -> label
 	std::map<int, std::string> labelMap;
 	// Map: shaderType -> all frameTimes/costPerCall for A and B
@@ -130,8 +132,8 @@ std::vector<AggregatedDrawCallStats> ABTestAggregator::GetAggregatedResults() co
 		AggregatedDrawCallStats stats;
 		stats.label = label;
 		stats.shaderType = shaderType;
-		stats.meanA = mean(aFrameTimes[shaderType]);
-		stats.meanB = mean(bFrameTimes[shaderType]);
+		stats.meanA = Util::Mean(aFrameTimes[shaderType]);
+		stats.meanB = Util::Mean(bFrameTimes[shaderType]);
 		stats.medianA = median(aFrameTimes[shaderType]);
 		stats.medianB = median(bFrameTimes[shaderType]);
 		stats.delta = stats.meanB - stats.meanA;
@@ -181,6 +183,7 @@ std::vector<AggregatedDrawCallStats> ABTestAggregator::GetAggregatedResults() co
 		otherStat.shaderType = -2;
 		result.push_back(otherStat);
 	}
+	cachedResults = result;
 	return result;
 }
 

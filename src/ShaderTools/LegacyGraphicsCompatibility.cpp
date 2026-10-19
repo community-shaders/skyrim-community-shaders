@@ -1,6 +1,7 @@
 #include "LegacyGraphicsCompatibility.h"
 
 #include "Globals.h"
+#include "Utils/VersionedRelocation.h"
 
 #include <bit>
 #include <mutex>
@@ -28,13 +29,6 @@ namespace LegacyGraphicsCompatibility
 		};
 
 		thread_local CameraProjectionSnapshot cameraProjectionSnapshot;
-
-		[[nodiscard]] std::uintptr_t ReadRelativeCallTarget(std::uintptr_t a_callSite) noexcept
-		{
-			std::int32_t displacement{};
-			std::memcpy(std::addressof(displacement), reinterpret_cast<const void*>(a_callSite + 1), sizeof(displacement));
-			return a_callSite + 5 + displacement;
-		}
 
 		struct AlphaBlend_SetViewport
 		{
@@ -475,8 +469,7 @@ namespace LegacyGraphicsCompatibility
 		{
 			const auto callSite = REL::RelocationID(100950, 107732).address() + REL::Relocate(0x151, 0x148);
 			const auto expectedTarget = REL::RelocationID(75564, 77365).address();
-			constexpr auto callPattern = REL::make_pattern<"E8 ?? ?? ?? ??">();
-			if (!REL::verify_code(callSite, callPattern) || ReadRelativeCallTarget(callSite) != expectedTarget) {
+			if (!Util::VersionedRelocation::IsCallTo(callSite, expectedTarget)) {
 				logger::error("Legacy AlphaBlend viewport call does not match the verified 1.5.97/1.6.1170 binary; adapter not installed");
 				return;
 			}
@@ -490,8 +483,7 @@ namespace LegacyGraphicsCompatibility
 		{
 			const auto callSite = REL::RelocationID(100979, 107762).address() + REL::Relocate(0x3B5, 0x360);
 			const auto expectedTarget = REL::RelocationID(75564, 77365).address();
-			constexpr auto callPattern = REL::make_pattern<"E8 ?? ?? ?? ??">();
-			if (!REL::verify_code(callSite, callPattern) || ReadRelativeCallTarget(callSite) != expectedTarget) {
+			if (!Util::VersionedRelocation::IsCallTo(callSite, expectedTarget)) {
 				logger::error("Legacy shadow bounds viewport call does not match the verified 1.5.97/1.6.1170 binary; adapter not installed");
 				return;
 			}

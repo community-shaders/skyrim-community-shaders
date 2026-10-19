@@ -35,11 +35,14 @@ public:
 	virtual inline bool HasShaderDefine(RE::BSShader::Type) override { return true; }
 
 	bool overrideSky = false;
+	/** @brief Set for a cloud layer drawn outside the reflections capture, which binds that layer's occlusion at t26. */
+	bool bindLayerSelfShadow = false;
 	/**
 	 * @brief Applies sky shader render state overrides for cloud shadow capture.
 	 *
 	 * When overrideSky is set, redirects rendering to the cloud occlusion cubemap
-	 * and configures the appropriate blend state and depth resources.
+	 * and configures the appropriate blend state and depth resources. For every
+	 * cloud layer it also binds the cloud occlusion read by cloud self shadowing (t26).
 	 */
 	void SkyShaderHacks();
 
@@ -53,6 +56,8 @@ public:
 	uint32_t renderedLayersMask[6] = {};
 	uint32_t globalRenderedMask = 0;
 	int previouslyRenderedSide = -1;
+	/** @brief Set once the occlusion has been cleared for a weather without cloud layers. */
+	bool occlusionClearedWithoutClouds = false;
 
 	ID3D11BlendState* cloudShadowBlendState = nullptr;
 

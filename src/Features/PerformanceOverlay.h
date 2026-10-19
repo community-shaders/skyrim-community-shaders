@@ -215,6 +215,7 @@ struct PerformanceOverlay : OverlayFeature
 		// Frame time history buffers
 		CircularBuffer<float> frameTimeHistory;
 		CircularBuffer<float> postFGFrameTimeHistory;
+		Util::GraphSampleGate graphSampleGate;
 
 		// State flags
 		bool isFrameGenerationActive = false;

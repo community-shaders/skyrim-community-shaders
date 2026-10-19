@@ -149,7 +149,10 @@ void WeatherManager::UpdateFeatures()
 
 				// No weather overrides on either side: keep in-memory settings unchanged
 				if (!hasAnyWeatherOverride) {
-					globalRegistry->EndFeatureTransition(featureName);
+					if (featuresWithAppliedOverride.erase(featureName))
+						RestoreFeatureUserSettings(globalRegistry, featureName);
+					else
+						globalRegistry->EndFeatureTransition(featureName);
 					continue;
 				}
 
@@ -157,9 +160,13 @@ void WeatherManager::UpdateFeatures()
 				if (currentWeathers.lerpFactor >= 1.0f && !hasNextOverride) {
 					// Transition complete, no override on destination - reset to user settings
 					RestoreFeatureUserSettings(globalRegistry, featureName);
+					featuresWithAppliedOverride.erase(featureName);
 				} else {
 					// In transition or has override - interpolate
 					globalRegistry->UpdateFeatureFromWeathers(featureName, currWeatherSettings, nextWeatherSettings, currentWeathers.lerpFactor);
+					// A paused feature keeps its values, so there is no override to undo later
+					if (!globalRegistry->IsFeaturePaused(featureName))
+						featuresWithAppliedOverride.insert(featureName);
 					if (transitionEnding) {
 						globalRegistry->EndFeatureTransition(featureName);
 					}
@@ -282,9 +289,13 @@ bool WeatherManager::LoadSettingsFromWeather(RE::TESWeather* weather, const std:
 		auto featureIt = weatherIt->second.find(featureName);
 		if (featureIt != weatherIt->second.end()) {
 			const json& featureJson = featureIt->second;
+			if (!featureJson.is_object()) {
+				return false;
+			}
 
 			// Check if weather-specific overrides are enabled
-			bool enabled = featureJson.value("__enabled", false);
+			const auto enabledIt = featureJson.find("__enabled");
+			const bool enabled = enabledIt != featureJson.end() && enabledIt->is_boolean() && enabledIt->get<bool>();
 			if (!enabled) {
 				// Settings exist but are disabled, return empty
 				return false;

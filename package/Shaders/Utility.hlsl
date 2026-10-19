@@ -1,3 +1,4 @@
+#include "Common/Color.hlsli"
 #include "Common/FrameBuffer.hlsli"
 #include "Common/LodLandscape.hlsli"
 #include "Common/Math.hlsli"
@@ -8,26 +9,28 @@
 #	define RENDER_SHADOWMASK_ANY
 #endif
 
+#if defined(VSHADER)
 struct VS_INPUT
 {
 	float4 PositionMS: POSITION0;
 
-#if defined(TEXTURE)
+#	if defined(TEXTURE)
 	float2 TexCoord: TEXCOORD0;
-#endif
+#	endif
 
-#if defined(NORMALS)
+#	if defined(NORMALS)
 	float4 Normal: NORMAL0;
 	float4 Bitangent: BINORMAL0;
-#endif
-#if defined(VC)
+#	endif
+#	if defined(VC)
 	float4 Color: COLOR0;
-#endif
-#if defined(SKINNED)
+#	endif
+#	if defined(SKINNED)
 	float4 BoneWeights: BLENDWEIGHT0;
 	float4 BoneIndices: BLENDINDICES0;
-#endif
+#	endif
 };
+#endif
 
 struct VS_OUTPUT
 {
@@ -693,6 +696,9 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.Color = float4(DebugColor.xyz, 1);
 #	elif defined(RENDER_BASE_TEXTURE)
 	psout.Color.xyzw = baseColor;
+#		if defined(TRUE_PBR)
+	psout.Color.xyz = Color::LinearToSrgb(baseColor.xyz);
+#		endif
 #	elif defined(LOCALMAP_FOGOFWAR)
 	psout.Color = float4(0, 0, 0, input.Alpha);
 #	elif defined(GRAYSCALE_MASK)

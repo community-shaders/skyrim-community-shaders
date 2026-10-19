@@ -139,8 +139,10 @@ public:
 	Texture2D* envTextureBC6H = nullptr;
 	Texture2D* envReflectionsTextureBC6H = nullptr;
 	Texture2D* bc6hScratchTexture = nullptr;
+	Texture2D* bc6hTailScratchTexture = nullptr;
 
 	uint32_t bc6hMipLevels = 0;
+	uint32_t bc6hScratchMipLevels = 0;
 
 	ID3D11UnorderedAccessView* bc6hScratchUAVs[9] = {};
 

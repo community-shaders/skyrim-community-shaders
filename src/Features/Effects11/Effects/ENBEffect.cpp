@@ -99,11 +99,12 @@ void ENBEffect::UpdateEffectVariables()
 		SetShaderResourceVariable(shaderVar, srv);
 	};
 
-	bindTextureIfEnabled(idEnableBloom, "TextureBloom", "TextureBloom");
-	bindTextureIfEnabled(idEnableLens, "TextureLens", "TextureLens");
+	auto& effectManager = EffectManager::GetSingleton();
+	bindTextureIfEnabled(effectManager.enbBloom.IsCompiled() ? idEnableBloom : 0xFFFFFFFF, "TextureBloom", "TextureBloom");
+	bindTextureIfEnabled(effectManager.enbLens.IsCompiled() ? idEnableLens : 0xFFFFFFFF, "TextureLens", "TextureLens");
 
 	const char* adaptationTexName = (textureManager.GetTextureSwap() & 1) ? "TextureAdaptation" : "TextureAdaptationSwap";
-	bindTextureIfEnabled(idEnableAdaptation, "TextureAdaptation", adaptationTexName);
+	bindTextureIfEnabled(effectManager.enbAdaptation.IsCompiled() ? idEnableAdaptation : 0xFFFFFFFF, "TextureAdaptation", adaptationTexName);
 
 	SetShaderResourceVariable("TextureOriginal", globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN].SRV);
 }

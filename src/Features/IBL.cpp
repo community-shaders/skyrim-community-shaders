@@ -222,6 +222,8 @@ IBL::PerFrame IBL::GetCommonBufferData() const
 		data.EnableIBL = Util::IsInterior() ? 0u : 1u;
 		data.EnvIBLScale = 0.0f;
 		data.SkyIBLScale = settingManager.GetInterpolatedTimeOfDayValue("MultiplicativeAmount", "IMAGEBASEDLIGHTING");
+		data.AdditiveAmount = settingManager.GetInterpolatedTimeOfDayValue("AdditiveAmount", "IMAGEBASEDLIGHTING");
+		data.ReflectiveAmount = settingManager.GetInterpolatedTimeOfDayValue("ReflectiveAmount", "IMAGEBASEDLIGHTING");
 		data.DALCAmount = 1.0f;
 		data.EnvIBLSaturation = 1.0f;
 		data.SkyIBLSaturation = 1.0f;
@@ -264,8 +266,8 @@ void IBL::ReflectionsPrepass()
 			std::array<ID3D11ShaderResourceView*, 4> srvs = {
 				sceneDisabled ? nullptr : envIBLTexture->srv.get(),
 				sceneDisabled ? nullptr : skyIBLTexture->srv.get(),
-				staticDiffuseIBLTexture->srv.get(),
-				staticSpecularIBLTexture->srv.get()
+				staticDiffuseIBLTexture ? staticDiffuseIBLTexture->srv.get() : nullptr,
+				staticSpecularIBLTexture ? staticSpecularIBLTexture->srv.get() : nullptr
 			};
 			context->PSSetShaderResources(76, 4, srvs.data());
 		}

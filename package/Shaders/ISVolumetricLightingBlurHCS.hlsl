@@ -1,3 +1,5 @@
+#include "Common/SharedData.hlsli"
+
 Texture2D<float> InVLTexture : register(t0);
 Texture2D<float> DepthTexture : register(t1);
 SamplerState LinearSampler : register(s0);
@@ -24,6 +26,12 @@ cbuffer VLData : register(b1)
 	int2 screenSizeMin1;
 }
 
+static const int TapOffsets[5] = { -12, -6, 0, 6, 12 };
+static const float TapWeights[5] = { 0.178400, 0.210431, 0.222338, 0.210431, 0.178400 };
+// Relative linear-depth difference range over which a tap fades out, so rejection is the same near and far.
+static const float DepthRejectStart = 0.1;
+static const float DepthRejectEnd = 0.3;
+
 groupshared float vl[TG_DIM];
 groupshared float depth[TG_DIM];
 
@@ -38,20 +46,26 @@ groupshared float depth[TG_DIM];
 	int2 pix = clamp(int2(x, y), 0, screenSizeMin1.xy);
 	float vlValue = InVLTexture[pix];
 	vl[idx] = vlValue;
-	float depthValue = DepthTexture[pix];
+	float depthValue = SharedData::GetScreenDepth(DepthTexture[pix]);
 	depth[idx] = depthValue;
 
 	GroupMemoryBarrierWithGroupSync();
 
 	if (base >= 0 && base < TG_DIM - WINDOW * 2 && all(int2(x, y) <= screenSizeMin1.xy)) {
-		int min12 = idx - 12;
-		int min6 = idx - 6;
-		int plus6 = idx + 6;
-		int plus12 = idx + 12;
+		float rcpCenterDepth = rcp(max(depthValue, 1e-4));
 
-		float diff = depthValue * 4 - depth[min12] - depth[min6] - depth[plus6] - depth[plus12];
-		vlValue = abs(diff) <= 0.002f ? vl[min12] * 0.178400f + vl[min6] * 0.210431f + vlValue * 0.222338f + vl[plus6] * 0.210431f + vl[plus12] * 0.178400f : vlValue;
+		// The center tap always has full weight, so weightSum is never zero.
+		float weightedSum = 0.0;
+		float weightSum = 0.0;
+		[unroll] for (uint i = 0; i < 5; i++)
+		{
+			int tap = idx + TapOffsets[i];
+			float relativeDelta = abs(depth[tap] - depthValue) * rcpCenterDepth;
+			float weight = TapWeights[i] * (1.0 - smoothstep(DepthRejectStart, DepthRejectEnd, relativeDelta));
+			weightedSum += weight * vl[tap];
+			weightSum += weight;
+		}
 
-		OutVLTexture[int2(x, y)] = vlValue;
+		OutVLTexture[int2(x, y)] = weightedSum / weightSum;
 	}
 }

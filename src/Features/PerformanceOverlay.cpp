@@ -187,7 +187,7 @@ void PerformanceOverlay::DrawSettings()
 		ImGui::Checkbox(T(TKEY("show_border"), "Show Border"), &this->settings.ShowBorder);
 		ImGui::SliderFloat(T(TKEY("update_interval"), "Update Interval"), &this->settings.UpdateInterval, 0.001f, PerformanceOverlay::Settings::kMaxUpdateInterval, "%.2f seconds");
 		ImGui::SliderInt(T(TKEY("frame_history_size"), "Frame History Size"), &this->settings.FrameHistorySize,
-			this->settings.kMinFrameHistorySize, this->settings.kMaxFrameHistorySize);
+			this->settings.kMinFrameHistorySize, this->settings.kMaxFrameHistorySize, "%d", ImGuiSliderFlags_AlwaysClamp);
 
 		ImGui::Separator();
 		ImGui::Text("%s", T(TKEY("position"), "Position:"));
@@ -259,9 +259,6 @@ void PerformanceOverlay::DrawOverlay()
 		return;
 	}
 	if (!menu->overlayVisible) {
-		return;
-	}
-	if (this->settings.ShowVRAM && (!menu->GetDXGIAdapter3())) {
 		return;
 	}
 	if (!ImGui::GetCurrentContext()) {
@@ -653,22 +650,27 @@ void PerformanceOverlay::DrawABTestStatisticalValidity(const Menu::ThemeSettings
 	float totalDuration = aggregator.GetTotalTestDuration();
 	int totalFrames = aggregator.GetTotalFrameCount();
 	int excludedFrames = 0;
+	bool hasSamplesA = false;
+	bool hasSamplesB = false;
 	for (const auto& interval : aggregator.GetIntervals()) {
 		excludedFrames += interval.excludedFrames;
+		hasSamplesA = hasSamplesA || (interval.variant == ABVariant::A && !interval.frameRows.empty());
+		hasSamplesB = hasSamplesB || (interval.variant == ABVariant::B && !interval.frameRows.empty());
 	}
 	int validFrames = totalFrames;
 	int totalWithExcluded = totalFrames + excludedFrames;
 	float validPercent = (totalWithExcluded > 0) ? (100.0f * validFrames / totalWithExcluded) : 100.0f;
 
+	bool hasBothVariants = hasSamplesA && hasSamplesB;
 	bool hasEnoughSamples = validFrames >= kMinimumSamplesForValidity;
 	bool hasGoodDuration = totalDuration >= kMinimumTestDuration;
 	bool hasLowExclusionRate = validPercent >= kMinimumValidFramesPercent;
-	bool isStatisticallyValid = hasEnoughSamples && hasGoodDuration && hasLowExclusionRate;
+	bool isStatisticallyValid = hasBothVariants && hasEnoughSamples && hasGoodDuration && hasLowExclusionRate;
 
 	ImVec4 validityColor = theme.Palette.Text;
 	if (isStatisticallyValid) {
 		validityColor = theme.StatusPalette.SuccessColor;
-	} else if (validFrames >= kMinimumSamplesForMarginal && totalDuration >= kMinimumDurationForMarginal) {
+	} else if (hasBothVariants && validFrames >= kMinimumSamplesForMarginal && totalDuration >= kMinimumDurationForMarginal) {
 		validityColor = theme.StatusPalette.Warning;
 	} else {
 		validityColor = theme.StatusPalette.Error;
@@ -1942,6 +1944,9 @@ void PerformanceOverlay::UpdateGraphValues()
 	float deltaTime = (now.QuadPart - state.lastUpdateTime.QuadPart) /
 	                  static_cast<float>(state.overlayTimingFrequency.QuadPart);
 	state.lastUpdateTime = now;
+
+	if (!state.graphSampleGate.ShouldSample())
+		return;
 
 	// Insert latest frame time into circular buffer
 	float oldFrameTime = state.frameTimeHistory.GetData()[state.frameTimeHistory.GetHeadIdx()];  // what is the point of oldFrameTime?

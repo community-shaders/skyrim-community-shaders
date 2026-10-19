@@ -471,8 +471,19 @@ void SceneSettingsManager::ApplySettingToFeature(const SettingEntry& entry)
 		return;
 	}
 
+	json previous = settings;
 	settings[entry.settingKey] = entry.value;
-	feature->LoadSettings(settings);
+	try {
+		feature->LoadSettings(settings);
+	} catch (const std::exception& e) {
+		logger::warn("[SceneSettings] Failed to apply setting '{}' to feature '{}': {}", entry.settingKey, entry.featureShortName, e.what());
+		try {
+			feature->LoadSettings(previous);
+		} catch (const std::exception& rollbackError) {
+			logger::error("[SceneSettings] Rollback failed for feature '{}': {}", entry.featureShortName, rollbackError.what());
+		}
+		return;
+	}
 
 	// Round-trip verification: check if the feature clamped the value
 	json verify;

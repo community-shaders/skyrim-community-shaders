@@ -3,6 +3,7 @@
 #include "Feature.h"
 
 #include <string>
+#include <vector>
 
 // Status panel for the devbench bridge. The plugin's tools are registered into the external
 // devbench host via DevBenchBridge (see src/Features/RemoteControl/DevBenchBridge.cpp); this feature surfaces, in the
@@ -45,9 +46,10 @@ public:
 		return {
 			"Expose Community Shaders to AI assistants through the external devbench host.",
 			{
-				"Registers feature, inspect, shadercache, capture, and settings tools",
+				"Registers feature, inspect, shadercache, capture, nvperf, and settings tools",
 				"Drivable over MCP and REST from the shared devbench bench",
 				"No in-game server — install the devbench plugin to enable",
+				"Nsight Perf GPU counters per render pass (NVIDIA, builds with NVPERF_SUPPORT)",
 			}
 		};
 	}
@@ -64,4 +66,22 @@ public:
 	RemoteControl& operator=(const RemoteControl&) = delete;
 	RemoteControl(RemoteControl&&) = delete;
 	RemoteControl& operator=(RemoteControl&&) = delete;
+
+private:
+	/**
+	 * Renders the Nsight Perf section: GPU support, the capture's metrics and ranges, and the latest result.
+	 */
+	void DrawNvPerfSection();
+
+	// The Nsight Perf section's inputs. UI state only: nothing here is saved.
+	struct NvPerfPanel
+	{
+		std::vector<char> defaultMetricEnabled;  // per NvPerf::DefaultMetrics() entry
+		std::string extraMetrics;                // comma-separated name[:kind]
+		std::string ranges;                      // comma-separated range filters
+		int samples = 1;
+		int delayFrames = 0;
+		int nestingLevels = 1;
+		std::string requestError;
+	} nvperfPanel;
 };

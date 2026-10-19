@@ -15,6 +15,7 @@
 #include "Features/Effects11/ShaderPatches.h"
 #include "Features/Effects11/UITree.h"
 #include "Features/Effects11/WeatherManager.h"
+#include "Features/RainRefraction.h"
 #include "Globals.h"
 #include "I18n/I18n.h"
 #include "Menu.h"
@@ -69,11 +70,13 @@ namespace
 		{ "FIRE", Group::Lighting },
 		{ "WATER", Group::Lighting },
 		{ "SKY", Group::Sky },
+		{ "SKYSCATTERING", Group::Sky },
 		{ "PROCEDURALSUN", Group::Sky },
 		{ "SUNGLARE", Group::Sky },
 		{ "CLOUDSHADOWS", Group::Sky },
 		{ "VOLUMETRICFOG", Group::Atmosphere },
 		{ "VOLUMETRICRAYS", Group::Atmosphere },
+		{ "RAYS", Group::Atmosphere },
 		{ "GAMEVOLUMETRICRAYS", Group::Atmosphere },
 		{ "ADAPTATION", Group::Camera },
 		{ "DEPTHOFFIELD", Group::Camera },
@@ -141,6 +144,8 @@ namespace
 			return { T("feature.effects11.category.water", "Water"), T("feature.effects11.category.water_desc", "Water color, waves, fresnel, sun response and reflections.") };
 		if (a_category == "SKY")
 			return { T("feature.effects11.category.sky", "Sky"), T("feature.effects11.category.sky_desc", "Sky gradient, clouds, sun, moon and stars.") };
+		if (a_category == "SKYSCATTERING")
+			return { T("feature.effects11.category.skyscattering", "Sky Scattering"), T("feature.effects11.category.skyscattering_desc", "Atmospheric scattering for the sky and cloud lighting.") };
 		if (a_category == "PROCEDURALSUN")
 			return { T("feature.effects11.category.proceduralsun", "Procedural Sun"), T("feature.effects11.category.proceduralsun_desc", "Size, edge and glow of the procedural sun disk.") };
 		if (a_category == "SUNGLARE")
@@ -148,9 +153,11 @@ namespace
 		if (a_category == "CLOUDSHADOWS")
 			return { T("feature.effects11.category.cloudshadows", "Cloud Shadows"), T("feature.effects11.category.cloudshadows_desc", "Strength of the shadows clouds cast on the ground.") };
 		if (a_category == "VOLUMETRICFOG")
-			return { T("feature.effects11.category.volumetricfog", "Volumetric Fog"), T("feature.effects11.category.volumetricfog_desc", "Brightness and color of volumetric fog.") };
+			return { T("feature.effects11.category.volumetricfog", "Volumetric Fog"), T("feature.effects11.category.volumetricfog_desc", "Brightness, color, opacity and shadowing of fog volume effects.") };
 		if (a_category == "VOLUMETRICRAYS")
 			return { T("feature.effects11.category.volumetricrays", "Volumetric Rays"), T("feature.effects11.category.volumetricrays_desc", "Effects 11 sun rays.") };
+		if (a_category == "RAYS")
+			return { T("feature.effects11.category.rays", "Sun Rays"), T("feature.effects11.category.rays_desc", "Screen-space light shafts streaming from the sun, or from a moon at night.") };
 		if (a_category == "GAMEVOLUMETRICRAYS")
 			return { T("feature.effects11.category.gamevolumetricrays", "Game Volumetric Rays"), T("feature.effects11.category.gamevolumetricrays_desc", "Adjustments to the game's own god rays.") };
 		if (a_category == "ADAPTATION")
@@ -796,12 +803,16 @@ void Effects11Editor::DrawCategory(const std::string& a_category, const char* a_
 		}
 	}
 
-	// Rain needs enbraindrops.png; without it the section cannot do anything
-	const auto& raindropStatus = globals::features::effects11.raindropStatus;
-	const bool usable = a_category != "RAIN" || raindropStatus.empty();
+	// Rain is drawn by Rain Refraction, which needs a raindrop texture from the preset or its own default
+	const auto& rainRefraction = globals::features::rainRefraction;
+	const bool usable = a_category != "RAIN" || (rainRefraction.loaded && rainRefraction.GetRaindropSRV());
 	if (!usable) {
-		const auto unavailable = I18n::GetSingleton()->Format(TKEY("rain_unavailable"), { { "reason", raindropStatus } }, "Rain is unavailable: {reason}");
+		const std::string reason = rainRefraction.loaded ? rainRefraction.defaultRaindrops.status : T(TKEY("rain_refraction_disabled"), "Rain Refraction is disabled");
+		const auto unavailable = I18n::GetSingleton()->Format(TKEY("rain_unavailable"), { { "reason", reason } }, "Rain is unavailable: {reason}");
 		Util::Text::WrappedWarning("%s", unavailable.c_str());
+	} else if (a_category == "RAIN" && !rainRefraction.presetRaindrops.status.empty()) {
+		const auto fallback = I18n::GetSingleton()->Format(TKEY("rain_bundled_texture"), { { "reason", rainRefraction.presetRaindrops.status } }, "Using the bundled raindrop texture: {reason}");
+		Util::Text::WrappedInfo("%s", fallback.c_str());
 	}
 
 	if (weatherAware)
@@ -1401,6 +1412,7 @@ void Effects11Editor::Revert()
 	}
 	EffectManager::GetSingleton().Load();
 	dirty = false;
+	shaderReloadNeeded = false;
 }
 
 void Effects11Editor::ReloadShaders()

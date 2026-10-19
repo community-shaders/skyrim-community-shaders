@@ -35,7 +35,7 @@ namespace Util::CompileDedupe
 		return ContentHash::CombineHashes(hash, ContentHash::HashBytes(&flags, sizeof(flags)));
 	}
 
-	/// Removes `#line` directives, which only affect debug info.
+	/// Removes `#line` directives and blank lines, which only affect debug info.
 	inline std::string StripLineDirectives(std::string_view a_text)
 	{
 		std::string out;
@@ -45,7 +45,8 @@ namespace Util::CompileDedupe
 			const size_t end = a_text.find('\n', pos);
 			const size_t next = end == std::string_view::npos ? a_text.size() : end + 1;
 			const auto line = a_text.substr(pos, next - pos);
-			if (!line.starts_with("#line"))
+			const bool blank = line.find_first_not_of(" \t\r\n") == std::string_view::npos;
+			if (!blank && !line.starts_with("#line"))
 				out.append(line);
 			pos = next;
 		}

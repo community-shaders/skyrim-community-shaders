@@ -115,7 +115,7 @@ namespace UITree
 				item.type = Item::Type::Variable;
 				item.var = { effect, i };
 				item.ordering = var.ordering;
-				item.sourceOrder = var.sourceOrder + offset;
+				item.sourceOrder = var.sourceOrder == INT_MAX ? INT_MAX : var.sourceOrder + offset;
 				node->items.push_back(std::move(item));
 			}
 
@@ -134,7 +134,7 @@ namespace UITree
 
 				Item item;
 				item.type = Item::Type::Separator;
-				item.sourceOrder = sep.sourceOrder + offset;
+				item.sourceOrder = sep.sourceOrder == INT_MAX ? INT_MAX : sep.sourceOrder + offset;
 				item.ordering = sep.ordering;
 				item.hasOrdering = sep.hasOrdering;
 				node->items.push_back(std::move(item));

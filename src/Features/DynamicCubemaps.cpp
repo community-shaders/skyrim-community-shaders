@@ -549,7 +549,14 @@ void DynamicCubemaps::CompressToBC6H(bool a_reflections)
 
 	globals::profiler->BeginPass(a_reflections ? "DynamicCubemaps::PublishReflections" : "DynamicCubemaps::Publish");
 	auto dst = a_reflections ? envReflectionsTextureBC6H : envTextureBC6H;
-	context->CopyResource(dst->resource.get(), bc6hScratchTexture->resource.get());
+	for (std::uint32_t level = 0; level < bc6hMipLevels; ++level) {
+		for (std::uint32_t face = 0; face < 6; ++face) {
+			const bool tail = level >= bc6hScratchMipLevels;
+			ID3D11Resource* src = tail ? bc6hTailScratchTexture->resource.get() : bc6hScratchTexture->resource.get();
+			UINT srcSubresource = tail ? D3D11CalcSubresource(0, (level - bc6hScratchMipLevels) * 6 + face, 1) : D3D11CalcSubresource(level, face, bc6hScratchMipLevels);
+			context->CopySubresourceRegion(dst->resource.get(), D3D11CalcSubresource(level, face, bc6hMipLevels), 0, 0, 0, src, srcSubresource, nullptr);
+		}
+	}
 	context->CopyResource((a_reflections ? envReflectionsTexture : envTexture)->resource.get(), envFilteredTexture->resource.get());
 	cubemapValid[a_reflections ? 1 : 0] = true;
 	globals::profiler->EndPass();
@@ -766,21 +773,20 @@ void DynamicCubemaps::SetupResources()
 		envInferredTexture->CreateUAV(uavDesc);
 
 		// BC6H scratch: R32G32B32A32_UINT at quarter-resolution, 6-face array.
-		// Encoded directly into here via UAV, then CopyResource'd to the BC6H texture.
-		// Mip count must match the BC6H target so block-equivalent dimensions align.
+		// Encoded directly into here via UAV, then copied per subresource to the BC6H texture.
+		// Mips below 4x4 still take one block each, so they are encoded into a 1x1 tail array.
 		{
 			std::uint32_t scratchBase = std::max(1u, texDesc.Width / 4);
-			bc6hMipLevels = 0;
+			bc6hMipLevels = std::min<std::uint32_t>(MIPLEVELS, static_cast<std::uint32_t>(std::size(bc6hScratchUAVs)));
+			bc6hScratchMipLevels = 0;
 			for (std::uint32_t d = scratchBase; d > 0; d >>= 1)
-				++bc6hMipLevels;
-			// Clamp: must not exceed envTexture's mip count (source reads) or the UAV array size.
-			bc6hMipLevels = std::min<std::uint32_t>(bc6hMipLevels, MIPLEVELS);
-			bc6hMipLevels = std::min<std::uint32_t>(bc6hMipLevels, static_cast<std::uint32_t>(std::size(bc6hScratchUAVs)));
+				++bc6hScratchMipLevels;
+			bc6hScratchMipLevels = std::min(bc6hScratchMipLevels, bc6hMipLevels);
 
 			D3D11_TEXTURE2D_DESC scratchDesc = {};
 			scratchDesc.Width = scratchBase;
 			scratchDesc.Height = std::max(1u, texDesc.Height / 4);
-			scratchDesc.MipLevels = bc6hMipLevels;
+			scratchDesc.MipLevels = bc6hScratchMipLevels;
 			scratchDesc.ArraySize = 6;
 			scratchDesc.Format = DXGI_FORMAT_R32G32B32A32_UINT;
 			scratchDesc.SampleDesc.Count = 1;
@@ -794,10 +800,26 @@ void DynamicCubemaps::SetupResources()
 			scratchUAVDesc.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2DARRAY;
 			scratchUAVDesc.Texture2DArray.FirstArraySlice = 0;
 			scratchUAVDesc.Texture2DArray.ArraySize = 6;
-			for (std::uint32_t level = 0; level < bc6hMipLevels; ++level) {
+			for (std::uint32_t level = 0; level < bc6hScratchMipLevels; ++level) {
 				scratchUAVDesc.Texture2DArray.MipSlice = level;
 				DX::ThrowIfFailed(device->CreateUnorderedAccessView(bc6hScratchTexture->resource.get(), &scratchUAVDesc, &bc6hScratchUAVs[level]));
 				Util::SetResourceName(bc6hScratchUAVs[level], "DynamicCubemaps::BC6HScratch UAV mip%u", level);
+			}
+
+			if (bc6hMipLevels > bc6hScratchMipLevels) {
+				D3D11_TEXTURE2D_DESC tailDesc = scratchDesc;
+				tailDesc.Width = 1;
+				tailDesc.Height = 1;
+				tailDesc.MipLevels = 1;
+				tailDesc.ArraySize = 6 * (bc6hMipLevels - bc6hScratchMipLevels);
+				bc6hTailScratchTexture = new Texture2D(tailDesc, "DynamicCubemaps::BC6HTailScratch");
+
+				scratchUAVDesc.Texture2DArray.MipSlice = 0;
+				for (std::uint32_t level = bc6hScratchMipLevels; level < bc6hMipLevels; ++level) {
+					scratchUAVDesc.Texture2DArray.FirstArraySlice = 6 * (level - bc6hScratchMipLevels);
+					DX::ThrowIfFailed(device->CreateUnorderedAccessView(bc6hTailScratchTexture->resource.get(), &scratchUAVDesc, &bc6hScratchUAVs[level]));
+					Util::SetResourceName(bc6hScratchUAVs[level], "DynamicCubemaps::BC6HTailScratch UAV mip%u", level);
+				}
 			}
 		}
 

@@ -14,6 +14,7 @@ namespace FeatureIssues
 
 	// Static storage for feature issues
 	static std::vector<FeatureIssueInfo> s_featureIssues;
+	static std::string s_pendingIssueRemoval;
 
 	// Cache for feature lookup to avoid repeated iterations
 	struct FeatureLookupCache
@@ -339,6 +340,11 @@ namespace FeatureIssues
 
 	void DrawFeatureIssuesUI()
 	{
+		if (!s_pendingIssueRemoval.empty()) {
+			std::erase_if(s_featureIssues, [](const FeatureIssueInfo& i) { return i.shortName == s_pendingIssueRemoval; });
+			s_pendingIssueRemoval.clear();
+		}
+
 		// Get theme colors from Menu system
 		const auto menu = Menu::GetSingleton();
 		const auto& theme = menu->GetTheme();
@@ -759,11 +765,7 @@ namespace FeatureIssues
 
 				if (ImGui::Button(T("menu.issues.delete", "Delete"), ImVec2(120, 0))) {
 					if (DeleteFeatureFiles(issue)) {
-						// Remove from issues list after successful deletion
-						auto& issues = const_cast<std::vector<FeatureIssueInfo>&>(GetFeatureIssues());
-						issues.erase(std::remove_if(issues.begin(), issues.end(),
-										 [&issue](const FeatureIssueInfo& i) { return i.shortName == issue.shortName; }),
-							issues.end());
+						s_pendingIssueRemoval = issue.shortName;
 					}
 					ImGui::CloseCurrentPopup();
 				}

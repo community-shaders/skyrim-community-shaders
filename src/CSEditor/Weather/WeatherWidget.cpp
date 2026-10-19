@@ -62,6 +62,9 @@ namespace
 		constexpr const char* kDirectionalZMin = "Directional -Z";
 	}
 
+	// Sky::Update divides by the thunder frequency when rolling for a strike
+	constexpr int kMinThunderLightningFrequency = 1;
+
 	namespace WeatherRecord
 	{
 		constexpr const char* kImageSpace = "ImageSpace";
@@ -132,16 +135,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(WeatherWidget::Settings,
 	dalc,
 	clouds,
 	featureSettings)
-
-WeatherWidget::~WeatherWidget()
-{
-	for (auto& [layerIndex, srv] : cloudTextureCache) {
-		if (srv) {
-			srv->Release();
-		}
-	}
-	cloudTextureCache.clear();
-}
 
 void WeatherWidget::DrawWidget()
 {
@@ -568,7 +561,9 @@ void WeatherWidget::SetWeatherValues()
 	// Lightning
 	data.thunderLightningBeginFadeIn = static_cast<uint8_t>(weatherProps["Thunder Lightning Begin Fade In"]);
 	data.thunderLightningEndFadeOut = static_cast<uint8_t>(weatherProps["Thunder Lightning End Fade Out"]);
-	data.thunderLightningFrequency = static_cast<int8_t>(static_cast<uint8_t>(weatherProps["Thunder Lightning Frequency"]));
+	auto& thunderFrequency = weatherProps["Thunder Lightning Frequency"];
+	thunderFrequency = std::clamp(thunderFrequency, kMinThunderLightningFrequency, static_cast<int>(UINT8_MAX));
+	data.thunderLightningFrequency = static_cast<int8_t>(static_cast<uint8_t>(thunderFrequency));
 	Float3ToColor(weatherColors["Lightning Color"], weather->data.lightningColor);
 
 	// Visual Effects
@@ -2122,8 +2117,8 @@ std::vector<Widget::SearchResult> WeatherWidget::CollectSearchableSettings() con
 
 ID3D11ShaderResourceView* WeatherWidget::GetCloudTexture(int layerIndex)
 {
-	if (cloudTextureCache.contains(layerIndex)) {
-		return cloudTextureCache[layerIndex];
+	if (auto it = cloudTextureCache.find(layerIndex); it != cloudTextureCache.end()) {
+		return it->second.get();
 	}
 
 	const auto& texturePath = settings.clouds[layerIndex].texturePath;
@@ -2139,7 +2134,7 @@ ID3D11ShaderResourceView* WeatherWidget::GetCloudTexture(int layerIndex)
 	ImVec2 textureSize;
 
 	if (Util::LoadDDSTextureFromFile(globals::d3d::device, resourcePath.c_str(), &srv, textureSize)) {
-		cloudTextureCache[layerIndex] = srv;
+		cloudTextureCache[layerIndex].attach(srv);
 		return srv;
 	}
 

@@ -16,10 +16,15 @@ struct EngineFix
 	/** @brief Applies the engine fix. Override in subclasses to perform patching. */
 	virtual void Install() {}
 
+	/** @brief Requests shader permutations this fix selects at draw time, so they precompile with the rest. */
+	virtual void GenerateShaderPermutations(RE::BSShader*) {}
+
 	/** @brief Installs all fixes registered for the post-post-load stage. */
 	static void InstallOnPostPostLoadFixes();
 	/** @brief Installs all fixes registered for the data-loaded stage. */
 	static void InstallOnDataLoadedFixes();
+	/** @brief Generates shader permutations for all fixes installed before shaders load. */
+	static void GenerateAllShaderPermutations(RE::BSShader* a_shader);
 
 private:
 	static const std::vector<EngineFix*>& GetOnPostPostLoadFixesList();

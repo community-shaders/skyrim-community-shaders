@@ -2,6 +2,8 @@
 
 #include "Feature.h"
 
+class BSLightingShaderMaterialPBR;
+
 struct GlintParameters
 {
 	bool enabled = false;
@@ -101,6 +103,8 @@ public:
 	 * @return True if PBR materials were applied, false if no PBR texture sets were found.
 	 */
 	bool TESObjectLAND_SetupMaterial(RE::TESObjectLAND* land);
+	/** @brief True when TESObjectLAND_SetupMaterial gives this land PBR materials, i.e. any of its quads uses a PBR texture set. */
+	bool IsPBRLand(const RE::TESObjectLAND* land);
 	/**
 	 * @brief Configures per-material shader constants and textures for PBR rendering.
 	 *
@@ -119,6 +123,22 @@ public:
 	 * @param grassProperty Generated grass property to update.
 	 */
 	void SetupGrassMaterial(RE::BSLightingShaderProperty* sourceProperty, RE::BSLightingShaderProperty* grassProperty);
+
+	/** @brief Match the PBR PerMaterial layout at b1 in RunGrass.hlsl. */
+	struct GrassPBRConstants
+	{
+		uint32_t flags;
+		float params1[3];
+		float params2[4];
+		bool operator==(const GrassPBRConstants&) const = default;
+	};
+	static_assert(sizeof(GrassPBRConstants) == 32);
+
+	/** @brief Set the renderer's textures and samplers for a PBR grass material. */
+	static void SetGrassPBRTextures(const BSLightingShaderMaterialPBR* material);
+
+	/** @brief Return a PBR grass material's PerMaterial constants. */
+	static GrassPBRConstants GetGrassPBRConstants(const BSLightingShaderMaterialPBR* material);
 
 	/**
 	 * @brief Binds extended PBR shader resources (displacement, RMAOS textures) to the device context.

@@ -109,9 +109,7 @@ public:
 	Settings vanillaSettings;
 
 	// Cloud texture cache (layer index -> SRV)
-	std::map<int, ID3D11ShaderResourceView*> cloudTextureCache;
-
-	~WeatherWidget();
+	std::map<int, winrt::com_ptr<ID3D11ShaderResourceView>> cloudTextureCache;
 
 	/** @brief Renders the full weather editor UI with tabs for properties, DALC, atmosphere, clouds, fog, records, and features. */
 	void DrawWidget() override;
