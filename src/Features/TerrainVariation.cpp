@@ -110,9 +110,7 @@ void TerrainVariation::DataLoaded()
 		}
 
 		auto canonical = CanonicaliseTexturePath(path);
-		if (IsInLandscapeDirectory(canonical)) {
-			landscapeDiffuseFileNames.emplace(GetFileName(canonical));
-		}
+		landscapeDiffuseFileNames.emplace(GetFileName(canonical));
 		landscapeDiffusePaths.insert(std::move(canonical));
 	};
 
