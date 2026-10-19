@@ -7,6 +7,9 @@
 #if defined(TRUE_PBR)
 #	include "Common/PBR.hlsli"
 #endif
+#if defined(WETNESS_EFFECTS)
+#	include "WetnessEffects/WetnessEffects.hlsli"
+#endif
 
 #if defined(TRUE_PBR)
 DirectContext CreateDirectLightingContext(float3 worldNormal, float3 coatWorldNormal, float3 vertexNormal, float3 viewDir, float3 coatViewDir, float3 lightDir, float3 coatLightDir, float3 lightColor, float detailedShadow, float softShadow)
@@ -179,61 +182,25 @@ void GetIndirectLobeWeights(out IndirectLobeWeights lobeWeights, IndirectContext
 #if defined(WETNESS_EFFECTS)
 void EvaluateWetnessLighting(float3 wetnessNormal, DirectContext context, float roughness, inout DirectLightingOutput lightingOutput)
 {
-	const float wetnessStrength = saturate(1 - roughness);
 #	if defined(TRUE_PBR)
 	const float3 lightColor = context.coatLightColor;
+	const float specularScale = 1.0;
 #	else
-	const float3 lightColor = context.lightColor * context.detailedShadow;
+	const float3 lightColor = context.lightColor;
+	const float specularScale = context.detailedShadow * Color::PBRLightingCompensation * Color::PBRLightingScale;
 #	endif
 
-	const float wetnessF0 = 0.02;
+	WetnessEffects::SurfaceWetnessState wetnessState = WetnessEffects::InitSurfaceWetnessState(wetnessNormal, roughness);
 
-	const float3 N = wetnessNormal;
-	const float3 V = context.viewDir;
-	const float3 L = context.lightDir;
-	const float3 H = context.halfVector;
-
-	float NdotL = clamp(dot(N, L), EPSILON_DOT_CLAMP, 1);
-	float NdotV = saturate(abs(dot(N, V)) + EPSILON_DOT_CLAMP);
-	float NdotH = saturate(dot(N, H));
-	float VdotH = saturate(dot(V, H));
-
-	float D = BRDF::D_GGX(roughness, NdotH);
-	float G = BRDF::Vis_SmithJointApprox(roughness, NdotV, NdotL);
-	float3 F = BRDF::F_Schlick(wetnessF0, VdotH);
-
-	// Separate physical Fresnel from effective contribution weighted by strength
-	float3 wetnessF = F * wetnessStrength;
-
-	float3 wetnessSpecular = D * G * wetnessF * NdotL * lightColor;
-
-#	if !defined(TRUE_PBR)
-	wetnessSpecular *= Color::PBRLightingCompensation * Color::PBRLightingScale;  // Compensate for GGX on traditional specular
-#	endif
-
-	lightingOutput.diffuse *= 1 - wetnessF;
-	lightingOutput.specular *= 1 - wetnessF;
+	float3 wetnessSpecular = 0;
+	WetnessEffects::ApplySurfaceWetnessDirectLighting(wetnessState, context.viewDir, context.lightDir, lightColor, specularScale, lightingOutput.diffuse, lightingOutput.specular, wetnessSpecular);
 	lightingOutput.specular += wetnessSpecular;
 }
 
 float3 GetWetnessIndirectLobeWeights(inout IndirectLobeWeights lobeWeights, float3 wetnessNormal, float roughness, IndirectContext context)
 {
-	const float wetnessF0 = 0.02;
-	const float wetnessStrength = saturate(1 - roughness);
-
-	const float3 N = wetnessNormal;
-	const float3 V = context.viewDir;
-
-	float NdotV = saturate(abs(dot(N, V)) + EPSILON_DOT_CLAMP);
-	float2 specularBRDF = BRDF::EnvBRDF(roughness, NdotV);
-	float3 specularLobeWeight = wetnessF0 * specularBRDF.x + specularBRDF.y;
-
-	specularLobeWeight *= wetnessStrength;
-
-	lobeWeights.diffuse *= 1 - specularLobeWeight;
-	lobeWeights.specular *= 1 - specularLobeWeight;
-
-	return specularLobeWeight;
+	WetnessEffects::SurfaceWetnessState wetnessState = WetnessEffects::InitSurfaceWetnessState(wetnessNormal, roughness);
+	return WetnessEffects::ApplySurfaceWetnessIndirectLobeWeights(lobeWeights.diffuse, lobeWeights.specular, wetnessState, context.viewDir);
 }
 #endif
 #endif
