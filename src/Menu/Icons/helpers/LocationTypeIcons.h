@@ -30,7 +30,7 @@ namespace LocationTypeIcons
 	};
 
 	// Settlements & holds
-	inline constexpr Entry kCity{ "LocTypeCity", Icons::FA(ICON_FA_CITY), "City" };
+	inline constexpr Entry kCity{ "LocTypeCity", Icons::GI(ICON_GI_VILLAGE), "City" };  // Game Icons: village by Delapouite
 	inline constexpr Entry kTown{ "LocTypeTown", Icons::FA(ICON_FA_HOME), "Town" };
 	inline constexpr Entry kSettlement{ "LocTypeSettlement", Icons::FA(ICON_FA_USERS), "Settlement" };
 	inline constexpr Entry kHabitation{ "LocTypeHabitation", Icons::FA(ICON_FA_HOME), "Habitation" };
