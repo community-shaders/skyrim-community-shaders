@@ -680,12 +680,14 @@ void LightEditor::DrawLightTable(const ImVec2& size)
 				if (search.empty() || Util::StringMatchesSearch(GetLightName(lights[i]), search))
 					visible.push_back(i);
 
-			if (selected.isSelected) {
+			// Arrow keys select as they move (SelectOnNav), so pinning then would yank each row away from the cursor.
+			const bool navigating = ImGui::GetIO().NavVisible && ImGui::IsWindowFocused();
+			if (selected.isSelected && !navigating) {
 				const auto pinned = std::ranges::find_if(visible, [&](size_t i) { return lights[i] == selected; });
 				if (pinned != visible.end())
 					std::rotate(visible.begin(), pinned, pinned + 1);
 			}
-			if (!(selected == pinnedLight)) {
+			if (!navigating && !(selected == pinnedLight)) {
 				pinnedLight = selected;
 				ImGui::SetScrollY(0.0f);
 			}
