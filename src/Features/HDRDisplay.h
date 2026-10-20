@@ -138,8 +138,9 @@ public:
 	/**
 	 * @brief Installs swap chain Present vtable hooks and OMSetBlendState detour for HDR pipeline.
 	 * @param swapChain The DXGI swap chain to hook.
+	 * @param originalPresent Present before other plugins patched its vtable slot.
 	 */
-	static void InstallSwapChainPresentHooks(IDXGISwapChain* swapChain);
+	static void InstallSwapChainPresentHooks(IDXGISwapChain* swapChain, std::uintptr_t originalPresent);
 	/**
 	 * @brief Handles the swap chain Present call, drawing ImGui overlay and running HDR compositing.
 	 * @param swapChain The DXGI swap chain.

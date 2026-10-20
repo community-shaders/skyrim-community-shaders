@@ -389,6 +389,7 @@ namespace BackgroundBlur
 
 		auto downsampleRTVPtr = downsampleRTV.get();
 		context->OMSetRenderTargets(1, &downsampleRTVPtr, nullptr);
+		context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 		context->VSSetShader(vertexShader.get(), nullptr, 0);
 		context->PSSetShader(horizontalPixelShader.get(), nullptr, 0);
 		context->PSSetSamplers(0, 1, &samplerStatePtr);

@@ -694,6 +694,10 @@ namespace Hooks
 	{
 		static void thunk()
 		{
+			// Detour the pre-call Present so plugins hooking it during this call run before our HDR composite.
+			const auto swapChain = RE::BSGraphics::Renderer::GetSingleton()->GetRuntimeData().renderWindows->swapChain;
+			const auto originalPresent = (*reinterpret_cast<std::uintptr_t**>(swapChain))[8];
+
 			logger::info("Calling original Init3D");
 
 			func();
@@ -704,9 +708,9 @@ namespace Hooks
 			logger::info("Detouring virtual function tables");
 			stl::detour_vfunc<13, IDXGISwapChain_ResizeBuffers>(globals::d3d::swapChain);
 			// InstallSwapChainPresentHooks installs SwapChainPresentBottom (suppression) and OMSetBlendState first.
-			// IDXGISwapChain_Present is installed last so it sits at the top of the Detours chain and fires first.
-			HDRDisplay::InstallSwapChainPresentHooks(globals::d3d::swapChain);
-			stl::detour_vfunc<8, IDXGISwapChain_Present>(globals::d3d::swapChain);
+			// IDXGISwapChain_Present is installed last so it sits above SwapChainPresentBottom and fires first of the two.
+			HDRDisplay::InstallSwapChainPresentHooks(globals::d3d::swapChain, originalPresent);
+			stl::detour_vfunc<8, IDXGISwapChain_Present>(globals::d3d::swapChain, originalPresent);
 
 			auto shaderCache = globals::shaderCache;
 			if (shaderCache->IsDump()) {
