@@ -108,8 +108,11 @@ namespace BrowserUI
 	 */
 	bool Link(const char* id, const char* label, float maxWidth = 0.0f);
 
-	/** @brief Small muted label followed by a rule to the right edge, heading a group of controls. */
-	void SectionLabel(const char* label);
+	/**
+	 * @brief Small muted label followed by a rule to the right edge, heading a group of controls.
+	 * @param alignRight Puts the label at the right edge, with the rule running to it from the left.
+	 */
+	void SectionLabel(const char* label, bool alignRight = false);
 
 	/** @brief Centred hint for a page or list with nothing to show. */
 	void EmptyState(const char* title, const char* hint = nullptr);
@@ -191,6 +194,13 @@ namespace BrowserUI
 		/// List share of the height in the stacked layout, restored by the editor's layout reset.
 		float defaultStackedRatio;
 	};
+
+	/**
+	 * @brief A top pane above a bottom pane, split by a draggable divider; the bottom pane fills the rest.
+	 * @param topRatio Top share of the height; the caller keeps it and the divider updates it.
+	 * @param defaultTopRatio What the editor's layout reset restores topRatio to.
+	 */
+	void StackedSplit(const char* id, float& topRatio, float defaultTopRatio, const PaneDrawer& drawTop, const PaneDrawer& drawBottom);
 
 	/**
 	 * @brief A list pane next to or, when narrow, above a detail pane, with a draggable divider either way.

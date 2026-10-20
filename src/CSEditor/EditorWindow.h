@@ -435,6 +435,8 @@ public:
 		bool browserShowInspector = true;
 		/// Browser category sidebar collapsed to icons.
 		bool browserSidebarCompact = false;
+		/// A tool's unwritten changes are discarded without asking when switching or closing.
+		bool skipToolDiscardPrompt = false;
 
 		// Per-widget-type window sizes (serialized as JSON for persistence)
 		json widgetTypeSizes;

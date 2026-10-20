@@ -189,7 +189,7 @@ namespace
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(EditorWindow::Settings::PaletteColorEntry, r, g, b, useCount, lastUsedTime, isFavorite)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(EditorWindow::Settings::PaletteValueEntry, name, value, useCount, lastUsedTime, isFavorite)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(EditorWindow::Settings::PaletteFavoriteColor, hasValue, r, g, b)
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(EditorWindow::Settings, recordMarkers, markedRecords, autoApplyChanges, useTextButtons, enableInheritFromParent, showFeatureDebug, editorUIScale, favoriteWidgets, recentWidgets, maxRecentWidgets, showViewport, showFeaturesWindow, selectedCategory, browserShowInspector, browserSidebarCompact, widgetTypeSizes, paletteColors, paletteValues, paletteFavorites)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(EditorWindow::Settings, recordMarkers, markedRecords, autoApplyChanges, useTextButtons, enableInheritFromParent, showFeatureDebug, editorUIScale, favoriteWidgets, recentWidgets, maxRecentWidgets, showViewport, showFeaturesWindow, selectedCategory, browserShowInspector, browserSidebarCompact, skipToolDiscardPrompt, widgetTypeSizes, paletteColors, paletteValues, paletteFavorites)
 
 void DrawIconStar(ImVec2 center, float radius, ImU32 color, bool filled)
 {
@@ -1777,6 +1777,10 @@ void EditorWindow::ShowSettingsWindow()
 			ImGui::Checkbox(T(TKEY("enable_inherit_feature"), "Enable 'Inherit From Parent' feature"), &settings.enableInheritFromParent);
 			Util::AddTooltip(T(TKEY("enable_inherit_feature_tooltip"), "Show checkboxes to copy settings from parent weather (editor-only feature)"));
 
+			if (ImGui::Checkbox(T(TKEY("skip_tool_discard_prompt"), "Discard unwritten tool changes without asking"), &settings.skipToolDiscardPrompt))
+				Save();
+			Util::AddTooltip(T(TKEY("skip_tool_discard_prompt_tooltip"), "Switching lights or closing the editor discards Light Editor changes not written to Light Placer, without asking first"));
+
 			ImGui::Separator();
 			ImGui::TextUnformatted(T(TKEY("ui_scale"), "UI Scale"));
 
@@ -2822,13 +2826,21 @@ void EditorWindow::RequestToolPrompt(ExternalTool& tool, ToolPromptReason reason
 	}
 	toolPrompt.alternateLabel = T(TKEY("tool_close_discard"), "Discard");
 	toolPrompt.cancelLabel = T(TKEY("cancel"), "Cancel");
+	toolPrompt.showDontAskAgain = true;
+	toolPrompt.dontAskAgainLabel = T(TKEY("tool_dont_ask_discard"), "Don't ask me again (always discard)");
+	toolPrompt.dontAskAgainPersist = &settings.skipToolDiscardPrompt;
+	toolPrompt.rememberedChoice = Util::ConfirmationPopup::Choice::Alternate;
 	toolPrompt.Request();
 }
 
 void EditorWindow::DrawToolPrompt()
 {
 	using Choice = Util::ConfirmationPopup::Choice;
-	switch (toolPrompt.DrawChoice()) {
+	const bool wasSkipping = settings.skipToolDiscardPrompt;
+	const auto choice = toolPrompt.DrawChoice();
+	if (settings.skipToolDiscardPrompt != wasSkipping)
+		Save();
+	switch (choice) {
 	case Choice::Confirm:
 		// A failed write leaves things as they were; the tool has already said why.
 		if (!promptedTool || !promptedTool->WriteChanges())

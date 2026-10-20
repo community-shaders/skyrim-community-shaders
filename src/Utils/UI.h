@@ -356,6 +356,10 @@ namespace Util
 		Focus focus = Focus::None;
 		bool showDontAskAgain = false;
 		bool* dontAskAgainPersist = nullptr;  // Optional external bool to persist preference
+		/// Empty uses the default "Don't ask me again".
+		std::string dontAskAgainLabel;
+		/// The button a ticked "Don't ask again" remembers; later requests answer with it without showing.
+		Choice rememberedChoice = Choice::Confirm;
 
 		ConfirmationPopup() = default;
 		ConfirmationPopup(std::string title, std::string message, std::string confirmLabel = "Confirm", std::string cancelLabel = "Cancel") :
@@ -370,7 +374,8 @@ namespace Util
 
 	private:
 		bool show = false;
-		bool confirmed = false;
+		/// The remembered answer to a request that skipped the popup, returned by the next DrawChoice.
+		Choice pendingChoice = Choice::None;
 		bool dontAskCheckbox = false;
 	};
 

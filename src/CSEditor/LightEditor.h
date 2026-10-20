@@ -218,15 +218,27 @@ private:
 	static constexpr float kDefaultStackedTableRatio = 0.45f;
 	/// User-dragged table share of the page height in the stacked layout.
 	float stackedTableRatio = kDefaultStackedTableRatio;
+	/// Share of the page height the table and inspector keep above the adjustments pane.
+	static constexpr float kDefaultTopPaneRatio = 0.5f;
+	/// User-dragged share of the page height above the adjustments pane.
+	float topPaneRatio = kDefaultTopPaneRatio;
+	/// The light the table last pinned and scrolled to.
+	LightInfo pinnedLight = {};
 
 	/** @brief Sorts the gathered light list by the active sort option and direction. */
 	void SortLights();
 	/** @brief Global toggles and Light Placer actions above the light table. */
 	void DrawToolbar();
-	/** @brief Sortable, searchable table of the gathered lights; selecting a row selects the light. */
+	/** @brief Sortable, searchable table of the gathered lights, the selected one pinned first; selecting a row selects the light. */
 	void DrawLightTable(const ImVec2& size);
-	/** @brief Details and editing controls for the selected light, grouped into collapsible sections. */
+	/** @brief Identity, actions and Light Placer state of the selected light. */
 	void DrawInspector(const ImVec2& size);
+	/** @brief Appearance and position sliders of the selected light, then its flags. */
+	void DrawAdjustments(const ImVec2& size);
+	/** @brief Light Placer and light flag grids of the selected light (nothing without a transform). */
+	void DrawFlags();
+	/** @brief Whether the selected light has a position and flags to edit. */
+	bool HasTransform() const { return !selected.isOther && current.data.lighFormId != 0 && selected.hasPosition; }
 	/** @brief Restores the active light to its snapshotted original state. */
 	void RestoreOriginal();
 	/** @brief Writes shadowDepthBias to the active shadow light's runtime data. */

@@ -467,6 +467,8 @@ namespace
 	constexpr float kLightSearchWidth = 220.0f;
 	constexpr float kInspectorBgAlpha = 0.5f;
 	constexpr int kFlagGridColumns = 3;
+	/// Position units per dragged pixel; Shift and Alt speed it up and slow it down.
+	constexpr float kPositionDragSpeed = 0.25f;
 
 	enum LightColumn : ImGuiID
 	{
@@ -477,10 +479,24 @@ namespace
 		LightColPlaced
 	};
 
-	/// Collapsible inspector group, open until the user folds it.
-	bool Section(const char* label)
+	/** @brief Heading of an inspector group, its label at the right edge. */
+	void Section(const char* label)
 	{
-		return ImGui::CollapsingHeader(label, ImGuiTreeNodeFlags_DefaultOpen);
+		BrowserUI::SectionLabel(label, true);
+	}
+
+	/** @brief Opens a tinted, scrollable inspector panel; always pair with ImGui::EndChild. @return Whether it is visible. */
+	bool BeginPanel(const char* id, const ImVec2& size)
+	{
+		const auto& style = ImGui::GetStyle();
+		ImVec4 background = style.Colors[ImGuiCol_FrameBg];
+		background.w *= kInspectorBgAlpha;
+		ImGui::PushStyleColor(ImGuiCol_ChildBg, background);
+		ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, style.FrameRounding);
+		const bool visible = ImGui::BeginChild(id, size, ImGuiChildFlags_AlwaysUseWindowPadding);
+		ImGui::PopStyleVar();
+		ImGui::PopStyleColor();
+		return visible;
 	}
 
 	using BrowserUI::SameLineIfFits;
@@ -497,6 +513,11 @@ void LightEditor::DrawSettings()
 		{ { "total", std::to_string(totalLightCount) }, { "shadow", std::to_string(activeShadowLightCount) } },
 		"{total} lights \xC2\xB7 {shadow} casting shadows");
 	BrowserUI::PageHeader(Icons::FA(ICON_FA_LIGHTBULB), T(TKEY("header"), "Light Editor"), subtitle.c_str());
+	ImGui::SameLine();
+	ImGui::Checkbox(T(TKEY("log_mode"), "Log Mode"), &extendedLogMode);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("%s", T(TKEY("log_mode_tooltip"), "Extend slider ranges and use a logarithmic scale."));
+	}
 
 	const bool isAttaching = (attachPhase != AttachPhase::Idle);
 	if (isAttaching) {
@@ -510,7 +531,13 @@ void LightEditor::DrawSettings()
 	DrawToolbar();
 	ImGui::Spacing();
 
-	BrowserUI::SplitPane({ "##LightSplit", kLightInspectorBesideMinWidth, kLightInspectorWidth, kDefaultStackedTableRatio }, stackedTableRatio, [this](const ImVec2& size) { DrawLightTable(size); }, [this](const ImVec2& size) { DrawInspector(size); });
+	const auto drawTop = [this](const ImVec2& topSize) {
+		// Bounds the split pane, which sizes itself to the space left.
+		if (ImGui::BeginChild("##LightTop", topSize, ImGuiChildFlags_None, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse))
+			BrowserUI::SplitPane({ "##LightSplit", kLightInspectorBesideMinWidth, kLightInspectorWidth, kDefaultStackedTableRatio }, stackedTableRatio, [this](const ImVec2& size) { DrawLightTable(size); }, [this](const ImVec2& size) { DrawInspector(size); });
+		ImGui::EndChild();
+	};
+	BrowserUI::StackedSplit("##LightAdjustSplit", topPaneRatio, kDefaultTopPaneRatio, drawTop, [this](const ImVec2& size) { DrawAdjustments(size); });
 
 	if (isAttaching)
 		ImGui::EndDisabled();
@@ -653,6 +680,16 @@ void LightEditor::DrawLightTable(const ImVec2& size)
 				if (search.empty() || Util::StringMatchesSearch(GetLightName(lights[i]), search))
 					visible.push_back(i);
 
+			if (selected.isSelected) {
+				const auto pinned = std::ranges::find_if(visible, [&](size_t i) { return lights[i] == selected; });
+				if (pinned != visible.end())
+					std::rotate(visible.begin(), pinned, pinned + 1);
+			}
+			if (!(selected == pinnedLight)) {
+				pinnedLight = selected;
+				ImGui::SetScrollY(0.0f);
+			}
+
 			const auto* player = RE::PlayerCharacter::GetSingleton();
 			const RE::NiPoint3 playerPos = player ? player->GetPosition() : RE::NiPoint3{};
 			ImGuiListClipper clipper;
@@ -743,15 +780,7 @@ void LightEditor::DrawLightTable(const ImVec2& size)
 
 void LightEditor::DrawInspector(const ImVec2& size)
 {
-	const auto& style = ImGui::GetStyle();
-	ImVec4 background = style.Colors[ImGuiCol_FrameBg];
-	background.w *= kInspectorBgAlpha;
-	ImGui::PushStyleColor(ImGuiCol_ChildBg, background);
-	ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, style.FrameRounding);
-	const bool visible = ImGui::BeginChild("##LightInspector", size, ImGuiChildFlags_AlwaysUseWindowPadding);
-	ImGui::PopStyleVar();
-	ImGui::PopStyleColor();
-	if (!visible) {
+	if (!BeginPanel("##LightInspector", size)) {
 		ImGui::EndChild();
 		return;
 	}
@@ -817,28 +846,22 @@ void LightEditor::DrawInspector(const ImVec2& size)
 			ImGui::Text("%s", T(TKEY("toggle_light_tooltip"), "Toggle this light on/off."));
 	}
 
-	ImGui::SameLine();
-	ImGui::Checkbox(T(TKEY("log_mode"), "Log Mode"), &extendedLogMode);
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("%s", T(TKEY("log_mode_tooltip"), "Extend slider ranges and use a logarithmic scale."));
+	Section(T(TKEY("section_identity"), "Identity"));
+	if (selected.isRef || selected.isAttached) {
+		ImGui::Text(T(TKEY("owner"), "Owner: 0x%08X | %s"), selected.id, displayInfo.ownerEditorId.c_str());
+		ImGui::Text(T(TKEY("owner_last_edited_by"), "Owner last edited by: %s"), displayInfo.ownerLastEditedBy.c_str());
+		ImGui::Text(T(TKEY("base_object"), "Base Object: 0x%08X | %s"), displayInfo.baseObjectFormId, selected.name.c_str());
+		ImGui::Text(T(TKEY("ligh"), "LIGH: 0x%08X | %s"), displayInfo.lighFormId, displayInfo.lighEditorId.c_str());
+		ImGui::Text(T(TKEY("cell"), "Cell: 0x%08X | %s"), displayInfo.cellFormId, displayInfo.cellEditorId.c_str());
+		if (lpInfo.isLPLight)
+			ImGui::Text(T(TKEY("config"), "Config: Data\\LightPlacer\\%s.json"), lpInfo.configPath.c_str());
+	} else {
+		ImGui::Text(T(TKEY("memory_address"), "Memory Address: %p"), selected.ptr);
+		ImGui::Text(T(TKEY("ni_light_name"), "NiLight Name: %s"), selected.name.c_str());
 	}
 
-	if (Section(T(TKEY("section_identity"), "Identity"))) {
-		if (selected.isRef || selected.isAttached) {
-			ImGui::Text(T(TKEY("owner"), "Owner: 0x%08X | %s"), selected.id, displayInfo.ownerEditorId.c_str());
-			ImGui::Text(T(TKEY("owner_last_edited_by"), "Owner last edited by: %s"), displayInfo.ownerLastEditedBy.c_str());
-			ImGui::Text(T(TKEY("base_object"), "Base Object: 0x%08X | %s"), displayInfo.baseObjectFormId, selected.name.c_str());
-			ImGui::Text(T(TKEY("ligh"), "LIGH: 0x%08X | %s"), displayInfo.lighFormId, displayInfo.lighEditorId.c_str());
-			ImGui::Text(T(TKEY("cell"), "Cell: 0x%08X | %s"), displayInfo.cellFormId, displayInfo.cellEditorId.c_str());
-			if (lpInfo.isLPLight)
-				ImGui::Text(T(TKEY("config"), "Config: Data\\LightPlacer\\%s.json"), lpInfo.configPath.c_str());
-		} else {
-			ImGui::Text(T(TKEY("memory_address"), "Memory Address: %p"), selected.ptr);
-			ImGui::Text(T(TKEY("ni_light_name"), "NiLight Name: %s"), selected.name.c_str());
-		}
-	}
-
-	if (lpInfo.isLPLight && Section(T(TKEY("section_light_placer"), "Light Placer"))) {
+	if (lpInfo.isLPLight) {
+		Section(T(TKEY("section_light_placer"), "Light Placer"));
 		{
 			auto _style = Util::StatusButtonStyle(lpMatchFound ? Util::Colors::GetSuccess() : Util::Colors::GetError());
 			if (ImGui::Button(T(TKEY("write_to_light_placer"), "Write to Light Placer")))
@@ -904,188 +927,201 @@ void LightEditor::DrawInspector(const ImVec2& size)
 			ImGui::Text(T(TKEY("save_as_separate_entry_tooltip"), "Fork this bulb into a new whitelist entry for %s with the current edits, and blacklist it from the shared entry so the edits apply only to this reference.\nReload LP to apply."),
 				FormatOwnerFormEntry(activeRefr).c_str());
 		}
-	}
-	// Outside the section so the confirmation survives the section being folded while it is open.
-	if (lpInfo.isLPLight)
 		DrawDeleteConfirmation();
+	}
 
-	if (Section(T(TKEY("section_appearance"), "Appearance"))) {
-		if (selected.isAttached) {
-			EnsureLighFormListBuilt();
-			const char* kOriginalLabel = T(TKEY("original"), "(Original)");
-			const char* previewEdid = kOriginalLabel;
-			if (const auto* edid = LighEdidPtrForFormId(current.data.lighFormId))
-				previewEdid = edid->c_str();
+	ImGui::EndChild();
+}
 
-			static constexpr const char* kLighOverrideId = "LighFormOverride";
-			const auto bulbTypeLabel = fmt::format("{}##combo", T(TKEY("bulb_type"), "Bulb type"));
-			if (ImGui::BeginCombo(bulbTypeLabel.c_str(), previewEdid)) {
-				auto searchText = Util::DrawComboSearchInput(kLighOverrideId);
-				if (searchText.empty() || Util::StringMatchesSearch(kOriginalLabel, searchText)) {
-					if (ImGui::Selectable(kOriginalLabel, current.data.lighFormId == original.data.lighFormId)) {
-						current.data = original.data;
-						Util::ClearComboSearch(kLighOverrideId);
-					}
-					if (current.data.lighFormId == original.data.lighFormId)
-						ImGui::SetItemDefaultFocus();
-				}
-				for (auto& [edid, ligh] : s_lighFormList) {
-					if (!searchText.empty() && !Util::StringMatchesSearch(edid, searchText))
-						continue;
-					const bool isCurrent = ligh->GetFormID() == current.data.lighFormId;
-					if (ImGui::Selectable(edid.c_str(), isCurrent)) {
-						// Swap the LIGH form but keep the user's edited fade/radius/size/cutoff.
-						const float savedFade = current.data.fade;
-						const float savedRadius = current.data.radius;
-						const float savedSize = current.data.size;
-						const float savedCutoff = current.data.cutoffOverride;
-						ApplyLighFormData(ligh);
-						current.data.fade = savedFade;
-						current.data.radius = savedRadius;
-						current.data.size = savedSize;
-						current.data.cutoffOverride = savedCutoff;
-						Util::ClearComboSearch(kLighOverrideId);
-					}
-					if (isCurrent)
-						ImGui::SetItemDefaultFocus();
-				}
-				ImGui::EndCombo();
-			} else {
-				Util::ClearComboSearch(kLighOverrideId);
-			}
-		}
+void LightEditor::DrawFlags()
+{
+	if (!HasTransform())
+		return;
 
-		// External emittance applies to any reference-backed bulb, so it lives outside the attached-only block.
-		DrawExternalEmittanceCombo();
+	auto* flags = reinterpret_cast<uint32_t*>(&current.tesFlags);
+	auto* runtimeFlags = reinterpret_cast<uint32_t*>(&current.data.flags);
 
-		WeatherUtils::DrawColorEdit(T(TKEY("color"), "Color"), reinterpret_cast<float3&>(current.data.diffuse));
-		if (lpInfo.isLPLight) {
-			ImGui::SameLine();
-			const auto saveColorLabel = fmt::format("{}##color", T(TKEY("save_color"), "Save"));
-			ImGui::Checkbox(saveColorLabel.c_str(), &saveColorToLP);
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("%s", T(TKEY("save_color_tooltip"), "Include color when saving to Light Placer.\nWhen unchecked, the light falls back to the LIGH form color."));
-			}
-		}
-
-		// Logarithmic+extended or normal slider per extendedLogMode. Log scale requires min > 0, so
-		// extended mins are nudged above zero where needed.
-		auto drawSlider = [&](const char* label, float& value,
-							  float normalMin, float normalMax,
-							  float extMin, float extMax,
-							  const char* format) -> bool {
-			if (extendedLogMode)
-				return ImGui::SliderFloat(label, &value, extMin, extMax, format, ImGuiSliderFlags_Logarithmic);
-			return static_cast<bool>(WeatherUtils::DrawSliderFloat(label, value, normalMin, normalMax, nullptr, format));
+	if (lpInfo.isLPLight) {
+		Section(T(TKEY("lp_flags"), "LP Flags"));
+		static constexpr const char* kLPFlagNames[] = {
+			"NoExternalEmittance", "PortalStrict", "IgnoreScale",
+			"InverseSquare", "Flicker", "Linear", "Shadow",
+			"RandomAnimStart", "SyncAddonNodes", "UpdateOnCellTransition", "UpdateOnWaiting"
 		};
-
-		const auto isInvSq = current.data.flags.any(LightLimitFix::LightFlags::InverseSquare);
-
-		// "Intensity" is only meaningful for Inverse Square bulbs; otherwise this value is the light's fade.
-		const char* fadeLabel = isInvSq ? T(TKEY("intensity"), "Intensity") : T(TKEY("fade"), "Fade");
-		drawSlider(fadeLabel, current.data.fade, 0.01f, 16.f, 0.01f, 1024.f, "%.3f");
-
-		if (isInvSq)
-			ImGui::BeginDisabled();
-		drawSlider(T(TKEY("radius"), "Radius"), current.data.radius, 2.f, 8096.f, 2.f, 65536.f, "%.0f");
-		if (isInvSq)
-			ImGui::EndDisabled();
-
-		if (isInvSq) {
-			drawSlider(T(TKEY("size"), "Size"), current.data.size, 0.01f, 10.0f, 0.001f, 100.f, "%.3f");
-			WeatherUtils::DrawSliderFloat(T(TKEY("cutoff"), "Cutoff"), current.data.cutoffOverride, 0.01f, 1.f, nullptr, "%.3f");
-		}
-
-		if (HasShadowFlags(current.tesFlags.underlying())) {
-			if (drawSlider(T(TKEY("shadow_depth_bias"), "Shadow Depth Bias"), shadowDepthBias, 0.0f, 50.0f, 0.01f, 50.f, "%.2f"))
-				ApplyShadowDepthBias();
-		}
-	}
-
-	const bool hasTransform = !selected.isOther && current.data.lighFormId != 0 && selected.hasPosition;
-	if (hasTransform && Section(T(TKEY("section_position"), "Position"))) {
-		ImGui::Text(T(TKEY("position_format"), "X: %.2f, Y: %.2f, Z: %.2f"), displayInfo.pos.x, displayInfo.pos.y, displayInfo.pos.z);
-		ImGui::SliderFloat3(T(TKEY("position"), "Position"), &current.pos.x, -1000.f, 1000.f, "%.0f");
-	}
-
-	if (hasTransform && Section(T(TKEY("section_flags"), "Flags"))) {
-		auto* flags = reinterpret_cast<uint32_t*>(&current.tesFlags);
-		auto* runtimeFlags = reinterpret_cast<uint32_t*>(&current.data.flags);
-
-		if (lpInfo.isLPLight) {
-			BrowserUI::SectionLabel(T(TKEY("lp_flags"), "LP Flags"));
-			static constexpr const char* kLPFlagNames[] = {
-				"NoExternalEmittance", "PortalStrict", "IgnoreScale",
-				"InverseSquare", "Flicker", "Linear", "Shadow",
-				"RandomAnimStart", "SyncAddonNodes", "UpdateOnCellTransition", "UpdateOnWaiting"
-			};
-			if (ImGui::BeginTable("##LPFlags", kFlagGridColumns, ImGuiTableFlags_SizingStretchSame)) {
-				for (const char* flagName : kLPFlagNames) {
-					ImGui::TableNextColumn();
-					const bool isInvSqEntry = (std::string_view(flagName) == "InverseSquare");
-					const bool disabled = isInvSqEntry && selected.isSpotlight;
-					if (disabled)
-						ImGui::BeginDisabled();
-					bool inSet = lpFlagSet.contains(flagName);
-					if (ImGui::Checkbox(flagName, &inSet)) {
-						if (inSet)
-							lpFlagSet.insert(flagName);
-						else
-							lpFlagSet.erase(flagName);
-						// NoExternalEmittance and an emittance source are mutually exclusive: enabling the
-						// flag clears the source (combo shows None; the source line is dropped on save).
-						if (inSet && std::string_view(flagName) == "NoExternalEmittance")
-							ClearExternalEmittance();
-						SyncLPFlagsToRuntime();
-					}
-					if (disabled)
-						ImGui::EndDisabled();
+		if (ImGui::BeginTable("##LPFlags", kFlagGridColumns, ImGuiTableFlags_SizingStretchSame)) {
+			for (const char* flagName : kLPFlagNames) {
+				ImGui::TableNextColumn();
+				const bool isInvSqEntry = (std::string_view(flagName) == "InverseSquare");
+				const bool disabled = isInvSqEntry && selected.isSpotlight;
+				if (disabled)
+					ImGui::BeginDisabled();
+				bool inSet = lpFlagSet.contains(flagName);
+				if (ImGui::Checkbox(flagName, &inSet)) {
+					if (inSet)
+						lpFlagSet.insert(flagName);
+					else
+						lpFlagSet.erase(flagName);
+					// NoExternalEmittance and an emittance source are mutually exclusive: enabling the
+					// flag clears the source (combo shows None; the source line is dropped on save).
+					if (inSet && std::string_view(flagName) == "NoExternalEmittance")
+						ClearExternalEmittance();
+					SyncLPFlagsToRuntime();
 				}
-				ImGui::EndTable();
-			}
-		}
-
-		BrowserUI::SectionLabel(T(TKEY("light_flags"), "Light Flags"));
-		ImGui::BeginDisabled(lpInfo.isLPLight);
-		if (ImGui::BeginTable("##LightFlags", kFlagGridColumns, ImGuiTableFlags_SizingStretchSame)) {
-			if (!lpInfo.isLPLight) {
-				// Inverse Square is disabled for spotlights since they have their own falloff model.
-				ImGui::TableNextColumn();
-				ImGui::BeginDisabled(selected.isSpotlight);
-				ImGui::CheckboxFlags(T(TKEY("inverse_square"), "Inverse Square"), runtimeFlags, static_cast<uint32_t>(LightLimitFix::LightFlags::InverseSquare));
-				ImGui::EndDisabled();
-				ImGui::TableNextColumn();
-				ImGui::CheckboxFlags(T(TKEY("linear"), "Linear"), runtimeFlags, static_cast<uint32_t>(LightLimitFix::LightFlags::Linear));
-			}
-
-			// Dynamic and Negative are always shown; Flicker/OmniShadow/PortalStrict are hidden for LP lights.
-			ImGui::TableNextColumn();
-			ImGui::CheckboxFlags(T(TKEY("tes_flag_dynamic"), "Dynamic"), flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kDynamic));
-			ImGui::TableNextColumn();
-			ImGui::CheckboxFlags(T(TKEY("tes_flag_negative"), "Negative"), flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kNegative));
-			if (!lpInfo.isLPLight) {
-				ImGui::TableNextColumn();
-				ImGui::CheckboxFlags(T(TKEY("tes_flag_flicker"), "Flicker"), flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kFlicker));
-			}
-			ImGui::TableNextColumn();
-			ImGui::CheckboxFlags(T(TKEY("tes_flag_flicker_slow"), "Flicker Slow"), flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kFlickerSlow));
-			ImGui::TableNextColumn();
-			ImGui::CheckboxFlags(T(TKEY("tes_flag_pulse"), "Pulse"), flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPulse));
-			ImGui::TableNextColumn();
-			ImGui::CheckboxFlags(T(TKEY("tes_flag_pulse_slow"), "Pulse Slow"), flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPulseSlow));
-			ImGui::TableNextColumn();
-			ImGui::CheckboxFlags(T(TKEY("tes_flag_hemi_shadow"), "Hemi Shadow"), flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kHemiShadow));
-			if (!lpInfo.isLPLight) {
-				ImGui::TableNextColumn();
-				ImGui::CheckboxFlags(T(TKEY("tes_flag_omni_shadow"), "Omni Shadow"), flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kOmniShadow));
-				ImGui::TableNextColumn();
-				ImGui::CheckboxFlags(T(TKEY("tes_flag_portal_strict"), "Portal Strict"), flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPortalStrict));
+				if (disabled)
+					ImGui::EndDisabled();
 			}
 			ImGui::EndTable();
 		}
-		ImGui::EndDisabled();
 	}
 
+	Section(T(TKEY("light_flags"), "Light Flags"));
+	ImGui::BeginDisabled(lpInfo.isLPLight);
+	if (ImGui::BeginTable("##LightFlags", kFlagGridColumns, ImGuiTableFlags_SizingStretchSame)) {
+		if (!lpInfo.isLPLight) {
+			// Inverse Square is disabled for spotlights since they have their own falloff model.
+			ImGui::TableNextColumn();
+			ImGui::BeginDisabled(selected.isSpotlight);
+			ImGui::CheckboxFlags(T(TKEY("inverse_square"), "Inverse Square"), runtimeFlags, static_cast<uint32_t>(LightLimitFix::LightFlags::InverseSquare));
+			ImGui::EndDisabled();
+			ImGui::TableNextColumn();
+			ImGui::CheckboxFlags(T(TKEY("linear"), "Linear"), runtimeFlags, static_cast<uint32_t>(LightLimitFix::LightFlags::Linear));
+		}
+
+		// Dynamic and Negative are always shown; Flicker/OmniShadow/PortalStrict are hidden for LP lights.
+		ImGui::TableNextColumn();
+		ImGui::CheckboxFlags(T(TKEY("tes_flag_dynamic"), "Dynamic"), flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kDynamic));
+		ImGui::TableNextColumn();
+		ImGui::CheckboxFlags(T(TKEY("tes_flag_negative"), "Negative"), flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kNegative));
+		if (!lpInfo.isLPLight) {
+			ImGui::TableNextColumn();
+			ImGui::CheckboxFlags(T(TKEY("tes_flag_flicker"), "Flicker"), flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kFlicker));
+		}
+		ImGui::TableNextColumn();
+		ImGui::CheckboxFlags(T(TKEY("tes_flag_flicker_slow"), "Flicker Slow"), flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kFlickerSlow));
+		ImGui::TableNextColumn();
+		ImGui::CheckboxFlags(T(TKEY("tes_flag_pulse"), "Pulse"), flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPulse));
+		ImGui::TableNextColumn();
+		ImGui::CheckboxFlags(T(TKEY("tes_flag_pulse_slow"), "Pulse Slow"), flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPulseSlow));
+		ImGui::TableNextColumn();
+		ImGui::CheckboxFlags(T(TKEY("tes_flag_hemi_shadow"), "Hemi Shadow"), flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kHemiShadow));
+		if (!lpInfo.isLPLight) {
+			ImGui::TableNextColumn();
+			ImGui::CheckboxFlags(T(TKEY("tes_flag_omni_shadow"), "Omni Shadow"), flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kOmniShadow));
+			ImGui::TableNextColumn();
+			ImGui::CheckboxFlags(T(TKEY("tes_flag_portal_strict"), "Portal Strict"), flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPortalStrict));
+		}
+		ImGui::EndTable();
+	}
+	ImGui::EndDisabled();
+}
+
+void LightEditor::DrawAdjustments(const ImVec2& size)
+{
+	if (!BeginPanel("##LightAdjustments", size) || !selected.isSelected) {
+		ImGui::EndChild();
+		return;
+	}
+
+	Section(T(TKEY("section_appearance"), "Appearance"));
+	if (selected.isAttached) {
+		EnsureLighFormListBuilt();
+		const char* kOriginalLabel = T(TKEY("original"), "(Original)");
+		const char* previewEdid = kOriginalLabel;
+		if (const auto* edid = LighEdidPtrForFormId(current.data.lighFormId))
+			previewEdid = edid->c_str();
+
+		static constexpr const char* kLighOverrideId = "LighFormOverride";
+		const auto bulbTypeLabel = fmt::format("{}##combo", T(TKEY("bulb_type"), "Bulb type"));
+		if (ImGui::BeginCombo(bulbTypeLabel.c_str(), previewEdid)) {
+			auto searchText = Util::DrawComboSearchInput(kLighOverrideId);
+			if (searchText.empty() || Util::StringMatchesSearch(kOriginalLabel, searchText)) {
+				if (ImGui::Selectable(kOriginalLabel, current.data.lighFormId == original.data.lighFormId)) {
+					current.data = original.data;
+					Util::ClearComboSearch(kLighOverrideId);
+				}
+				if (current.data.lighFormId == original.data.lighFormId)
+					ImGui::SetItemDefaultFocus();
+			}
+			for (auto& [edid, ligh] : s_lighFormList) {
+				if (!searchText.empty() && !Util::StringMatchesSearch(edid, searchText))
+					continue;
+				const bool isCurrent = ligh->GetFormID() == current.data.lighFormId;
+				if (ImGui::Selectable(edid.c_str(), isCurrent)) {
+					// Swap the LIGH form but keep the user's edited fade/radius/size/cutoff.
+					const float savedFade = current.data.fade;
+					const float savedRadius = current.data.radius;
+					const float savedSize = current.data.size;
+					const float savedCutoff = current.data.cutoffOverride;
+					ApplyLighFormData(ligh);
+					current.data.fade = savedFade;
+					current.data.radius = savedRadius;
+					current.data.size = savedSize;
+					current.data.cutoffOverride = savedCutoff;
+					Util::ClearComboSearch(kLighOverrideId);
+				}
+				if (isCurrent)
+					ImGui::SetItemDefaultFocus();
+			}
+			ImGui::EndCombo();
+		} else {
+			Util::ClearComboSearch(kLighOverrideId);
+		}
+	}
+
+	// External emittance applies to any reference-backed bulb, so it lives outside the attached-only block.
+	DrawExternalEmittanceCombo();
+
+	WeatherUtils::DrawColorEdit(T(TKEY("color"), "Color"), reinterpret_cast<float3&>(current.data.diffuse));
+	if (lpInfo.isLPLight) {
+		ImGui::SameLine();
+		const auto saveColorLabel = fmt::format("{}##color", T(TKEY("save_color"), "Save"));
+		ImGui::Checkbox(saveColorLabel.c_str(), &saveColorToLP);
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("%s", T(TKEY("save_color_tooltip"), "Include color when saving to Light Placer.\nWhen unchecked, the light falls back to the LIGH form color."));
+		}
+	}
+
+	// Logarithmic+extended or normal slider per extendedLogMode. Log scale requires min > 0, so
+	// extended mins are nudged above zero where needed.
+	auto drawSlider = [&](const char* label, float& value,
+						  float normalMin, float normalMax,
+						  float extMin, float extMax,
+						  const char* format) -> bool {
+		if (extendedLogMode)
+			return ImGui::SliderFloat(label, &value, extMin, extMax, format, ImGuiSliderFlags_Logarithmic);
+		return static_cast<bool>(WeatherUtils::DrawSliderFloat(label, value, normalMin, normalMax, nullptr, format));
+	};
+
+	const auto isInvSq = current.data.flags.any(LightLimitFix::LightFlags::InverseSquare);
+
+	// "Intensity" is only meaningful for Inverse Square bulbs; otherwise this value is the light's fade.
+	const char* fadeLabel = isInvSq ? T(TKEY("intensity"), "Intensity") : T(TKEY("fade"), "Fade");
+	drawSlider(fadeLabel, current.data.fade, 0.01f, 16.f, 0.01f, 1024.f, "%.3f");
+
+	if (isInvSq)
+		ImGui::BeginDisabled();
+	drawSlider(T(TKEY("radius"), "Radius"), current.data.radius, 2.f, 8096.f, 2.f, 65536.f, "%.0f");
+	if (isInvSq)
+		ImGui::EndDisabled();
+
+	if (isInvSq) {
+		drawSlider(T(TKEY("size"), "Size"), current.data.size, 0.01f, 10.0f, 0.001f, 100.f, "%.3f");
+		WeatherUtils::DrawSliderFloat(T(TKEY("cutoff"), "Cutoff"), current.data.cutoffOverride, 0.01f, 1.f, nullptr, "%.3f");
+	}
+
+	if (HasShadowFlags(current.tesFlags.underlying())) {
+		if (drawSlider(T(TKEY("shadow_depth_bias"), "Shadow Depth Bias"), shadowDepthBias, 0.0f, 50.0f, 0.01f, 50.f, "%.2f"))
+			ApplyShadowDepthBias();
+	}
+
+	if (HasTransform()) {
+		Section(T(TKEY("section_position"), "Position"));
+		ImGui::Text(T(TKEY("position_format"), "X: %.2f, Y: %.2f, Z: %.2f"), displayInfo.pos.x, displayInfo.pos.y, displayInfo.pos.z);
+		// A drag, not a slider: a ref's position is in world units, far outside any fixed range.
+		ImGui::DragFloat3(T(TKEY("position"), "Position"), &current.pos.x, kPositionDragSpeed, 0.0f, 0.0f, "%.0f");
+	}
+
+	DrawFlags();
 	ImGui::EndChild();
 }
 

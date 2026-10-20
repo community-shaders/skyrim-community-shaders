@@ -818,12 +818,13 @@ namespace Util
 
 	void ConfirmationPopup::Request()
 	{
+		assert(rememberedChoice == Choice::Confirm || rememberedChoice == Choice::Alternate);
 		if (dontAskAgainPersist && *dontAskAgainPersist) {
-			confirmed = true;
+			pendingChoice = rememberedChoice;
 			return;
 		}
 		show = true;
-		confirmed = false;
+		pendingChoice = Choice::None;
 		dontAskCheckbox = false;
 	}
 
@@ -834,10 +835,8 @@ namespace Util
 
 	ConfirmationPopup::Choice ConfirmationPopup::DrawChoice()
 	{
-		if (confirmed) {
-			confirmed = false;
-			return Choice::Confirm;
-		}
+		if (pendingChoice != Choice::None)
+			return std::exchange(pendingChoice, Choice::None);
 		if (!show)
 			return Choice::None;
 
@@ -851,7 +850,7 @@ namespace Util
 			ImGui::Spacing();
 
 			if (showDontAskAgain)
-				ImGui::Checkbox(T("ui.dont_ask_again", "Don't ask me again"), &dontAskCheckbox);
+				ImGui::Checkbox(dontAskAgainLabel.empty() ? T("ui.dont_ask_again", "Don't ask me again") : dontAskAgainLabel.c_str(), &dontAskCheckbox);
 
 			const ImVec2 buttonSize(ThemeManager::Constants::POPUP_BUTTON_WIDTH, 0.0f);
 			const int buttonCount = 1 + !confirmLabel.empty() + !alternateLabel.empty();
@@ -862,17 +861,16 @@ namespace Util
 				ImGui::SetCursorPosX(offset);
 
 			const auto pick = [&](Choice choice) {
+				if (choice == rememberedChoice && showDontAskAgain && dontAskCheckbox && dontAskAgainPersist)
+					*dontAskAgainPersist = true;
 				result = choice;
 				show = false;
 				ImGui::CloseCurrentPopup();
 			};
 
 			if (!confirmLabel.empty()) {
-				if (primaryConfirm ? SuccessButton(confirmLabel.c_str(), buttonSize) : ImGui::Button(confirmLabel.c_str(), buttonSize)) {
-					if (showDontAskAgain && dontAskCheckbox && dontAskAgainPersist)
-						*dontAskAgainPersist = true;
+				if (primaryConfirm ? SuccessButton(confirmLabel.c_str(), buttonSize) : ImGui::Button(confirmLabel.c_str(), buttonSize))
 					pick(Choice::Confirm);
-				}
 				if (focus == Focus::Confirm)
 					ImGui::SetItemDefaultFocus();
 				ImGui::SameLine();
