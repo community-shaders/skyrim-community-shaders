@@ -195,6 +195,7 @@ public:
 	Texture2D* uiTexture = nullptr;            // Separate UI render target for proper compositing
 	Texture2D* cleanSceneCapture = nullptr;    // Pre-blur copy of hdrTexture for clean captures
 	uint cleanSceneCaptureFrame = UINT32_MAX;  // frameCount when cleanSceneCapture was last refreshed
+	uint movieDrawnFrame = UINT32_MAX;         // frameCount when a Bink movie was last drawn into the UI buffer
 
 	ID3D11ComputeShader* hdrOutputCS = nullptr;
 	/** @brief Returns the HDR output compute shader, compiling it on first use. */

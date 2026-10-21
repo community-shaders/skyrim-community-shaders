@@ -244,6 +244,25 @@ namespace
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
+
+	// Bink movies draw into kFRAMEBUFFER outside both redirects, so ApplyHDR would overwrite them.
+	// Route the draw into the UI buffer like the interface; the Present path undoes it.
+	struct HDR_Movie_Draw
+	{
+		static void thunk(void* a_movie)
+		{
+			auto& hdr = globals::features::hdrDisplay;
+			if (hdr.settings.enableHDR && !hdr.framebufferRedirected && hdr.hdrTexture && hdr.hdrTexture->rtv) {
+				const float clearColor[4]{};
+				globals::d3d::context->ClearRenderTargetView(hdr.hdrTexture->rtv.get(), clearColor);
+				hdr.movieDrawnFrame = globals::state->frameCount;
+				hdr.SetUIBuffer();
+			}
+
+			func(a_movie);
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
 }
 
 bool HDRDisplay::isHDRMonitor = false;
@@ -618,6 +637,8 @@ void HDRDisplay::PostPostLoad()
 		stl::detour_thunk<HDR_MenuManagerDrawInterfaceStartHook>(REL::RelocationID(79947, 82084));
 		stl::write_thunk_call<HDR_Main_PostProcessing>(REL::RelocationID(100430, 107148).address() + REL::Relocate(0x1F0, 0x1E7));
 	}
+
+	stl::detour_thunk<HDR_Movie_Draw>(REL::RelocationID(87907, 90279));
 }
 
 void HDRDisplay::SetupResources()
@@ -1619,7 +1640,7 @@ float4 HDRDisplay::GetSharedDataHDR() const
 
 HDRDisplay::HDRDataCB HDRDisplay::BuildHDRData() const
 {
-	bool isMainOrLoadingMenu = globals::state->IsMainOrLoadingMenuOpen();
+	bool isMainOrLoadingMenu = globals::state->IsMainOrLoadingMenuOpen() || movieDrawnFrame == globals::state->frameCount;
 	auto* ui = globals::game::ui;
 	bool skipUIComposite = IsFGCompositingThisFrame();
 
