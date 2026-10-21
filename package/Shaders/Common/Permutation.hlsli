@@ -82,6 +82,7 @@ namespace Permutation
 		static const uint NoSkyScattering = (1 << 9);
 		static const uint IsAurora = (1 << 10);
 		static const uint IsMoon = (1 << 11);
+		static const uint ProjectedTextureIsSRGB = (1 << 12);
 	}
 
 	namespace ExtraFeatureFlags

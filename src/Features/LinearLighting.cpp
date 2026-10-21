@@ -1,5 +1,6 @@
 #include "LinearLighting.h"
 
+#include <DirectXTex.h>
 #include <cmath>
 
 #include "../I18n/I18n.h"
@@ -351,6 +352,19 @@ namespace
 			auto* previous = std::exchange(geometryPass, pass);
 			const SKSE::stl::scope_exit restore([previous]() noexcept { geometryPass = previous; });
 			func(shader, pass, renderFlags);
+			if constexpr (Type == RE::BSShader::Type::Lighting) {
+				constexpr auto projectedTextureIsSRGB = static_cast<uint>(State::ExtraShaderDescriptors::ProjectedTextureIsSRGB);
+				auto& descriptor = globals::state->permutationData.ExtraShaderDescriptor;
+				descriptor &= ~projectedTextureIsSRGB;
+				if (globals::state->currentPixelDescriptor & static_cast<uint>(SIE::ShaderCache::LightingShaderFlags::ProjectedUV)) {
+					if (auto* srv = globals::game::shadowState->GetRuntimeData().PSTexture[3]) {
+						D3D11_SHADER_RESOURCE_VIEW_DESC desc{};
+						srv->GetDesc(&desc);
+						if (DirectX::IsSRGB(desc.Format))
+							descriptor |= projectedTextureIsSRGB;
+					}
+				}
+			}
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
