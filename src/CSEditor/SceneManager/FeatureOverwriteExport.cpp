@@ -5,7 +5,7 @@
 #include "CSEditor/EditorWindow.h"
 #include "Feature.h"
 #include "I18n/I18n.h"
-#include "IconsFontAwesome5.h"
+#include "IconsTabler.h"
 #include "Presets/UnifiedPresetCatalog.h"
 #include "SceneSettingsManager.h"
 #include "Utils/FileSystem.h"
@@ -357,7 +357,7 @@ namespace
 		const auto tooltip = std::format("{}\n{}", T(TKEY("export.in_file_only"), "In file only"),
 			T(TKEY("export.in_file_only_tooltip"), "Lists only the settings the destination file already holds."));
 		const Util::DisableGuard empty(count == 0 && !session.inFileOnly);
-		if (BrowserUI::ToggleChip("##inFile", BrowserUI::GlyphIcon(Icons::FA(ICON_FA_FILE_EXPORT)), count,
+		if (BrowserUI::ToggleChip("##inFile", BrowserUI::GlyphIcon(Icons::TI(ICON_TI_FILE_EXPORT)), count,
 				session.inFileOnly, Util::Colors::GetInfo(), tooltip.c_str()))
 			session.inFileOnly = !session.inFileOnly;
 	}
@@ -677,7 +677,7 @@ void FeatureOverwritesPanel::DrawExportButton(Feature* feature, const char* id)
 	const float size = ImGui::GetFrameHeight();
 	{
 		auto style = Util::TransparentIconButtonStyle();
-		if (Icons::Button(id, Icons::FA(ICON_FA_FILE_EXPORT), ImVec2(size, size)))
+		if (Icons::Button(id, Icons::TI(ICON_TI_FILE_EXPORT), ImVec2(size, size)))
 			BeginExport(feature);
 	}
 	const auto tooltip = std::format("{}\n{}", T(TKEY("export.button_title"), "Export Feature Overwrite..."),

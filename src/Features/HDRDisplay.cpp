@@ -963,9 +963,9 @@ namespace
 	};
 }
 
-void HDRDisplay::InstallSwapChainPresentHooks(IDXGISwapChain* swapChain)
+void HDRDisplay::InstallSwapChainPresentHooks(IDXGISwapChain* swapChain, std::uintptr_t originalPresent)
 {
-	stl::detour_vfunc<8, SwapChainPresentBottom>(swapChain);
+	stl::detour_vfunc<8, SwapChainPresentBottom>(swapChain, originalPresent);
 	stl::detour_vfunc<35, ID3D11DeviceContext_OMSetBlendState>(globals::d3d::context);
 }
 

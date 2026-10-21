@@ -1871,7 +1871,10 @@ namespace SIE
 					try {
 						std::filesystem::create_directories(directoryPath);
 					} catch (std::filesystem::filesystem_error const& ex) {
-						logger::error("Failed to create folder: {}", ex.what());
+						// Concurrent compiles of one shader type race here; the folder existing afterwards is success.
+						std::error_code statusError;
+						if (!std::filesystem::is_directory(directoryPath, statusError) || statusError)
+							logger::error("Failed to create folder: {}", ex.what());
 					}
 				}
 
@@ -2834,13 +2837,14 @@ namespace SIE
 					if (!std::isalnum(static_cast<unsigned char>(c)) && c != '_' && c != '=')
 						c = '_';
 				}
-				const std::wstring entryPointW(entryPoint.begin(), entryPoint.end());
+				// The source stem keeps shaders that share a folder and entry point from sharing one cache blob.
+				const std::wstring cacheName = std::format(L"{}_{}", srcPath.stem().wstring(), std::wstring(entryPoint.begin(), entryPoint.end()));
 				const auto globalDefinesSuffixNarrow = Util::GetShaderDefinesSuffix(state->GetDefinesString());
 				const std::wstring globalDefinesSuffix(globalDefinesSuffixNarrow.begin(), globalDefinesSuffixNarrow.end());
 				const std::wstring defineSlugW(defineSlug.begin(), defineSlug.end());
 				const std::wstring diskPath = defineSlug.empty() ?
-			                                      std::format(L"{}/{}{}{}", GetStandaloneComputeCacheDir(srcPath), entryPointW, globalDefinesSuffix, cacheExt) :
-			                                      std::format(L"{}/{}_{}{}{}", GetStandaloneComputeCacheDir(srcPath), entryPointW, defineSlugW, globalDefinesSuffix, cacheExt);
+			                                      std::format(L"{}/{}{}{}", GetStandaloneComputeCacheDir(srcPath), cacheName, globalDefinesSuffix, cacheExt) :
+			                                      std::format(L"{}/{}_{}{}{}", GetStandaloneComputeCacheDir(srcPath), cacheName, defineSlugW, globalDefinesSuffix, cacheExt);
 
 				ID3D11DeviceChild* shader = nullptr;
 				bool diskCacheOutdated = true;
@@ -2971,7 +2975,7 @@ namespace SIE
 						const auto cacheDir = GetStandaloneComputeCacheDir(srcPath);
 						std::error_code ec;
 						std::filesystem::create_directories(cacheDir, ec);
-						if (FAILED(D3DWriteBlobToFile(shaderBlob, diskPath.c_str(), true))) {
+						if (!SIE::SShaderCache::WriteBlobAtomic(diskPath, shaderBlob)) {
 							logger::error("Failed to save standalone {} shader to {}", stageName, Util::WStringToString(diskPath));
 						} else {
 							logger::debug("Saved standalone {} shader {}:{} to {}", stageName, srcPathStr, entryPoint, Util::WStringToString(diskPath));
@@ -3887,7 +3891,7 @@ namespace SIE
 		auto shaderCache = globals::shaderCache;
 		if (!conditionVariable.wait(
 				lock, stoken,
-				[this, &shaderCache]() { return (!availableTasks.empty() || !pendingAuxTasks.empty()) &&
+				[this, &shaderCache]() { return (!availableTasks.empty() || !demandedTasks.empty() || !pendingAuxTasks.empty()) &&
 			                                    // Count matrix and auxiliary tasks; ReleaseDispatchSlot()
 			                                    // decrements under this mutex before notifying the waiter.
 			                                    static_cast<int32_t>(dispatchedTasksInFlight.load(std::memory_order_relaxed)) <
@@ -3905,13 +3909,15 @@ namespace SIE
 
 		// Matrix tasks are checked before aux so queued shader work always wins
 		// admission over standalone compute-shader work when both are ready.
-		if (!availableTasks.empty()) {
+		if (!availableTasks.empty() || !demandedTasks.empty()) {
 			// Startup policy: keep dispatching the hardest queued work first.
 			// This preserves the existing priority score while preventing light tasks
 			// from bypassing queued heavy shaders and stretching the tail.
-			auto bestIt = std::prev(availableTasks.end());
+			// Shaders the game is already drawing with go first, or they stay black behind the heavy tail.
+			auto& queue = demandedTasks.empty() ? availableTasks : demandedTasks;
+			auto bestIt = std::prev(queue.end());
 			ShaderCompilationTask task = *bestIt;
-			availableTasks.erase(bestIt);
+			queue.erase(bestIt);
 
 			if (task.GetPriority() >= kHeavyPriorityThreshold) {
 				heavyTasksInFlight.fetch_add(1, std::memory_order_relaxed);
@@ -3956,12 +3962,23 @@ namespace SIE
 		std::unique_lock lock(compilationMutex);
 		auto inProgressIt = tasksInProgress.find(task);
 		auto processedIt = processedTasks.find(task);
-		if (inProgressIt == tasksInProgress.end() && processedIt == processedTasks.end() && !globals::shaderCache->GetCompletedShader(task)) {
+		if (inProgressIt == tasksInProgress.end() && processedIt == processedTasks.end() && !demandedTasks.contains(task) && !globals::shaderCache->GetCompletedShader(task)) {
 			LARGE_INTEGER now;
 			QueryPerformanceCounter(&now);
 			auto queuedTask = task;
 			queuedTask.SetEnqueuedQpc(now.QuadPart);
-			auto [_, wasAdded] = availableTasks.insert(queuedTask);
+			bool wasAdded;
+			if (globals::shaderCache->backgroundCompilation) {
+				// Only the game's own draw requests reach Add, so anything queued now is demanded.
+				if (auto queued = availableTasks.extract(queuedTask)) {
+					demandedTasks.insert(std::move(queued));
+					wasAdded = false;
+				} else {
+					wasAdded = demandedTasks.insert(queuedTask).second;
+				}
+			} else {
+				wasAdded = availableTasks.insert(queuedTask).second;
+			}
 			if (wasAdded) {
 				// Increment counters inside the lock so that TryTakeNext, which reads
 				// IsCompiling() after waking up, sees the updated totalTasks and
@@ -4120,6 +4137,7 @@ namespace SIE
 	{
 		std::scoped_lock lock(compilationMutex);
 		availableTasks.clear();
+		demandedTasks.clear();
 		pendingAuxTasks.clear();
 		tasksInProgress.clear();
 		processedTasks.clear();

@@ -68,7 +68,7 @@ namespace Util
 		std::filesystem::path GetIconsPath();
 
 		/**
-		 * Gets the deployed icon-font directory (FA / Lucide / Tabler / Game Icons + licenses).
+		 * Gets the deployed icon-font directory (FA / Tabler / Game Icons + licenses).
 		 * Kept under Icons so it stays out of the user Fonts catalog.
 		 * @return Icons / "glyphs"
 		 */

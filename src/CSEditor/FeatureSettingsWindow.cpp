@@ -17,7 +17,7 @@
 #include "FeatureListPicker.h"
 #include "Features/PostProcessing.h"
 #include "Globals.h"
-#include "IconsFontAwesome5.h"
+#include "IconsTabler.h"
 #include "Menu.h"
 #include "Menu/FeatureListRenderer.h"
 #include "Menu/Fonts.h"
@@ -237,7 +237,7 @@ namespace
 			};
 			clicked = BrowserUI::PaintedIconButton("##FeatureSaveSettings", paint, ImGui::GetColorU32(Util::GetIconTint()), tooltip);
 		} else {
-			clicked = BrowserUI::IconButton("##FeatureSaveSettings", Icons::FA(ICON_FA_SAVE), tooltip);
+			clicked = BrowserUI::IconButton("##FeatureSaveSettings", Icons::TI(ICON_TI_DEVICE_FLOPPY), tooltip);
 		}
 		if (clicked)
 			SaveManager::SaveAll();

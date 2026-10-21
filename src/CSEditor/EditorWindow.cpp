@@ -10,8 +10,6 @@
 #include "Features/HDRDisplay.h"
 #include "Features/Upscaling.h"
 #include "Globals.h"
-#include "IconsFontAwesome5.h"
-#include "IconsLucide.h"
 #include "IconsTabler.h"
 #include "Menu.h"
 #include "Menu/BackgroundBlur.h"
@@ -332,7 +330,7 @@ void EditorWindow::DrawActiveWeatherIndicator(bool drawTrailer)
 		openWeatherEditor();
 	Util::AddTooltip(std::format("{} (0x{:08X})", T(TKEY("open_active_weather_tooltip"), "Open this weather's editor window."), id).c_str());
 	ImGui::SameLine(0.0f, 0.0f);
-	if (BrowserUI::IconButton("##active_weather_indicator", Icons::FA(ICON_FA_EXTERNAL_LINK_ALT),
+	if (BrowserUI::IconButton("##active_weather_indicator", Icons::TI(ICON_TI_EXTERNAL_LINK),
 			T(TKEY("open_active_weather_tooltip"), "Open this weather's editor window.")))
 		openWeatherEditor();
 	if (drawTrailer)
@@ -364,17 +362,17 @@ namespace
 	std::array<BrowserCategory, 11> GetBrowserCategories()
 	{
 		return { {
-			{ "Weather", T(TKEY("category_weather"), "Weather"), Icons::FA(ICON_FA_CLOUD), kGroupForms },
-			{ "ImageSpace", T(TKEY("category_imagespace"), "ImageSpace"), Icons::LC(ICON_LC_APERTURE), kGroupForms },
-			{ "Lighting Template", T(TKEY("category_lighting_template"), "Lighting Template"), Icons::LC(ICON_LC_SUN_DIM), kGroupForms },
-			{ "Cell Lighting", T(TKEY("category_cell_lighting"), "Cell Lighting"), Icons::FA(ICON_FA_BORDER_ALL), kGroupForms },
-			{ "Volumetric Lighting", T(TKEY("category_volumetric_lighting"), "Volumetric Lighting"), Icons::LC(ICON_LC_CLOUD_FOG), kGroupForms },
-			{ "Shader Particle Geometry", T(TKEY("category_shader_particle"), "Shader Particle Geometry"), Icons::LC(ICON_LC_BUBBLES), kGroupForms },
-			{ "Lens Flare", T(TKEY("category_lens_flare"), "Lens Flare"), Icons::LC(ICON_LC_ECLIPSE), kGroupForms },
-			{ "Visual Effect", T(TKEY("category_visual_effect"), "Visual Effect"), Icons::LC(ICON_LC_STARS), kGroupForms },
-			{ "Locations", T(TKEY("category_locations"), "Locations"), Icons::FA(ICON_FA_MAP_MARKER_ALT), kGroupScene },
-			{ "Scene Manager", T(TKEY("category_scene_manager"), "Scene Manager"), Icons::FA(ICON_FA_LAYER_GROUP), kGroupScene },
-			{ "Light Editor", T(TKEY("category_lighting_editor"), "Light Editor"), Icons::FA(ICON_FA_LIGHTBULB), kGroupTools },
+			{ "Weather", T(TKEY("category_weather"), "Weather"), Icons::TI(ICON_TI_CLOUD), kGroupForms },
+			{ "ImageSpace", T(TKEY("category_imagespace"), "ImageSpace"), Icons::TI(ICON_TI_APERTURE), kGroupForms },
+			{ "Lighting Template", T(TKEY("category_lighting_template"), "Lighting Template"), Icons::TI(ICON_TI_SUN_LOW), kGroupForms },
+			{ "Cell Lighting", T(TKEY("category_cell_lighting"), "Cell Lighting"), Icons::TI(ICON_TI_BORDER_ALL), kGroupForms },
+			{ "Volumetric Lighting", T(TKEY("category_volumetric_lighting"), "Volumetric Lighting"), Icons::TI(ICON_TI_CLOUD_FOG), kGroupForms },
+			{ "Shader Particle Geometry", T(TKEY("category_shader_particle"), "Shader Particle Geometry"), Icons::TI(ICON_TI_CHART_BUBBLE), kGroupForms },
+			{ "Lens Flare", T(TKEY("category_lens_flare"), "Lens Flare"), Icons::TI(ICON_TI_NORTH_STAR), kGroupForms },
+			{ "Visual Effect", T(TKEY("category_visual_effect"), "Visual Effect"), Icons::TI(ICON_TI_SPARKLES), kGroupForms },
+			{ "Locations", T(TKEY("category_locations"), "Locations"), Icons::TI(ICON_TI_MAP_PIN), kGroupScene },
+			{ "Scene Manager", T(TKEY("category_scene_manager"), "Scene Manager"), Icons::TI(ICON_TI_STACK_2), kGroupScene },
+			{ "Light Editor", T(TKEY("category_lighting_editor"), "Light Editor"), Icons::TI(ICON_TI_BULB), kGroupTools },
 		} };
 	}
 
@@ -486,7 +484,7 @@ void EditorWindow::DrawBrowserSidebar(bool compact)
 	const float button = BrowserUI::IconButtonSize();
 	ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(0.0f, ImGui::GetContentRegionAvail().x - button) * (compact ? 0.5f : 1.0f));
 	ImGui::BeginDisabled(sceneManager);
-	if (BrowserUI::IconButton("##SidebarCompact", Icons::FA(compact ? ICON_FA_ANGLE_RIGHT : ICON_FA_ANGLE_LEFT),
+	if (BrowserUI::IconButton("##SidebarCompact", Icons::TI(compact ? ICON_TI_CHEVRON_RIGHT : ICON_TI_CHEVRON_LEFT),
 			sceneManager ? T(TKEY("sidebar_compact_scene_manager"), "Scene Manager keeps the full sidebar for its feature list.") :
 						   (compact ? T(TKEY("sidebar_expand"), "Expand the sidebar") : T(TKEY("sidebar_collapse"), "Collapse the sidebar to icons")))) {
 		settings.browserSidebarCompact = !settings.browserSidebarCompact;
@@ -1164,7 +1162,7 @@ void EditorWindow::RenderUI()
 
 			ImGui::SameLine();
 
-			// Undo and redo: FA glyphs (not theme PNGs)
+			// Undo and redo: Tabler glyphs (not theme PNGs)
 			const auto drawHistoryButton = [&](const char* id, const char* glyph, bool enabled, const std::string& tooltip, auto&& action) {
 				ImGui::SetCursorScreenPos(ImVec2(ImGui::GetCursorScreenPos().x, iconY));
 				ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
@@ -1178,20 +1176,20 @@ void EditorWindow::RenderUI()
 					ImVec4 color = enabled ? textColor : statusPalette.Disable;
 					if (!enabled)
 						color.w = 0.5f;
-					Icons::DrawCenteredGlyph(ImGui::GetWindowDrawList(), bb.Min, bb.GetSize(), Icons::FA(glyph), ImGui::GetColorU32(color));
+					Icons::DrawCenteredGlyph(ImGui::GetWindowDrawList(), bb.Min, bb.GetSize(), Icons::TI(glyph), ImGui::GetColorU32(color));
 				}
 				ImGui::PopStyleVar(2);
 				Util::AddTooltip(tooltip.c_str());
 			};
 			{
 				const bool canUndo = undoHistory.CanUndo();
-				drawHistoryButton("##GlobalUndo", ICON_FA_UNDO, canUndo,
+				drawHistoryButton("##GlobalUndo", ICON_TI_ARROW_BACK_UP, canUndo,
 					canUndo ? I18n::GetSingleton()->Format(TKEY("undo_states"), { { "count", std::to_string(undoHistory.GetUndoCount()) } }, "Undo (Ctrl+Z) - {count} states") :
 							  T(TKEY("undo_no_changes"), "Undo (Ctrl+Z) - No changes to undo"),
 					[this] { PerformUndo(); });
 				ImGui::SameLine(0.0f, style.ItemSpacing.x);
 				const bool canRedo = undoHistory.CanRedo();
-				drawHistoryButton("##GlobalRedo", ICON_FA_REDO, canRedo,
+				drawHistoryButton("##GlobalRedo", ICON_TI_ARROW_FORWARD_UP, canRedo,
 					canRedo ? I18n::GetSingleton()->Format(TKEY("redo_states"), { { "count", std::to_string(undoHistory.GetRedoCount()) } }, "Redo (Ctrl+Y) - {count} states") :
 							  T(TKEY("redo_no_changes"), "Redo (Ctrl+Y) - Nothing to redo"),
 					[this] { PerformRedo(); });
@@ -1379,21 +1377,21 @@ void EditorWindow::RenderUI()
 				ImGui::TextUnformatted(periodBuf);
 			}
 
-			// Toggle-style FA/Lucide/Tabler glyph button: same chrome as the old image toggles.
+			// Toggle-style FA/Tabler glyph button: same chrome as the old image toggles.
 			auto PlaceToggleIconButton = [&](const char* id, Icons::GlyphRef glyph, bool isActive, float posX, const ImVec4& activeColor) -> bool {
 				ImGui::SetCursorScreenPos(ImVec2(posX, iconY));
 				return DrawToggleIconButton(id, glyph, isActive, activeColor, iconButtonSize, ImGui::GetColorU32(textColor));
 			};
 
 			// Sits right of the centered cluster so toggling never shifts the status text.
-			if (PlaceToggleIconButton("##ToggleWidgets", Icons::FA(widgetsHidden ? ICON_FA_ANGLE_DOWN : ICON_FA_ANGLE_UP), false,
+			if (PlaceToggleIconButton("##ToggleWidgets", Icons::TI(widgetsHidden ? ICON_TI_CHEVRON_DOWN : ICON_TI_CHEVRON_UP), false,
 					centerClusterX + centerClusterW + itemSpacing, enabledColor))
 				widgetsHidden = !widgetsHidden;
 			Util::AddTooltip(widgetsHidden ? T(TKEY("show_widgets"), "Show Widgets") : T(TKEY("hide_widgets"), "Hide Widgets"));
 
 			{
 				bool isActive = previewMode == PreviewMode::FreeCamera || previewMode == PreviewMode::FreeCameraLocked;
-				if (PlaceToggleIconButton("##FreeCamera", Icons::LC(ICON_LC_SCAN_EYE), isActive, freeCameraX, enabledColor)) {
+				if (PlaceToggleIconButton("##FreeCamera", Icons::TI(ICON_TI_SCAN_EYE), isActive, freeCameraX, enabledColor)) {
 					if (isActive)
 						ExitPreviewMode();
 					else
@@ -1405,7 +1403,7 @@ void EditorWindow::RenderUI()
 			}
 			{
 				bool isActive = previewMode == PreviewMode::PlayMode;
-				if (PlaceToggleIconButton("##PlayMode", Icons::FA(ICON_FA_WALKING), isActive, playModeX, enabledColor)) {
+				if (PlaceToggleIconButton("##PlayMode", Icons::TI(ICON_TI_WALK), isActive, playModeX, enabledColor)) {
 					if (isActive)
 						ExitPreviewMode();
 					else
@@ -1437,7 +1435,7 @@ void EditorWindow::RenderUI()
 			{
 				const bool unsaved = HasUnsavedChanges();
 				ImGui::SetCursorScreenPos(ImVec2(saveButtonX, iconY));
-				if (DrawToggleIconButton("##ActionBarSave", Icons::FA(ICON_FA_SAVE), false, enabledColor, iconButtonSize,
+				if (DrawToggleIconButton("##ActionBarSave", Icons::TI(ICON_TI_DEVICE_FLOPPY), false, enabledColor, iconButtonSize,
 						ImGui::GetColorU32(unsaved ? Util::Colors::GetUnsaved() : textColor)))
 					SaveManager::SaveEditor(SaveManager::Trigger::User);
 				Util::AddTooltip(SaveManager::GetEditorSaveTooltip(unsaved));
@@ -1453,7 +1451,7 @@ void EditorWindow::RenderUI()
 				if (ImGui::IsItemHovered())
 					Util::DrawRoundedButtonHighlight(closeBb, true, ImGui::IsItemActive(), ImGui::GetWindowDrawList());
 				Icons::DrawCenteredGlyph(ImGui::GetWindowDrawList(), closeBb.Min, closeBb.GetSize(),
-					Icons::FA(ICON_FA_TIMES), ImGui::GetColorU32(textColor));
+					Icons::TI(ICON_TI_X), ImGui::GetColorU32(textColor));
 				if (closeClicked)
 					open = false;
 			}
@@ -1791,7 +1789,7 @@ void EditorWindow::ShowSettingsWindow()
 				ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
 				ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0.0f, 0.0f));
 				auto _style = Util::TransparentIconButtonStyle();
-				if (Icons::Button("##ResetUIScale", Icons::FA(ICON_FA_UNDO))) {
+				if (Icons::Button("##ResetUIScale", Icons::TI(ICON_TI_RESTORE))) {
 					settings.editorUIScale = 1.0f;
 					Save();
 				}
@@ -1877,7 +1875,7 @@ void EditorWindow::ShowSettingsWindow()
 						ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
 						ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0.0f, 0.0f));
 						auto _style = Util::TransparentIconButtonStyle();
-						if (Icons::Button(std::format("##{}", recordMarker.first).c_str(), Icons::FA(ICON_FA_TRASH_ALT))) {
+						if (Icons::Button(std::format("##{}", recordMarker.first).c_str(), Icons::TI(ICON_TI_TRASH))) {
 							markerToDelete = recordMarker.first;
 						}
 						ImGui::PopStyleVar(2);
@@ -2564,7 +2562,7 @@ void EditorWindow::DrawTimeControls()
 	ImGui::SameLine();
 	{
 		auto _style = Util::TransparentIconButtonStyle();
-		if (Icons::Button("##FeatureResetSpeed", Icons::FA(ICON_FA_UNDO), ImVec2(iconSize, iconSize)))
+		if (Icons::Button("##FeatureResetSpeed", Icons::TI(ICON_TI_RESTORE), ImVec2(iconSize, iconSize)))
 			ResetTimeScale();
 	}
 	if (auto _tt = Util::HoverTooltipWrapper())

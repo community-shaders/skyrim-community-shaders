@@ -16,8 +16,7 @@
  * Glyphs are family-tagged GlyphRefs from open-source icon fonts under Icons/glyphs.
  */
 
-#include "IconsFontAwesome5.h"
-#include "IconsLucide.h"
+#include "IconsTabler.h"
 #include "Menu/Icons/helpers/Custom/imgui_cloud_sun_icon.h"
 #include "Menu/Icons/helpers/IconFonts.h"
 
@@ -35,17 +34,17 @@
 
 namespace WeatherTypeIcons
 {
-	inline constexpr Icons::GlyphRef kRain = Icons::FA(ICON_FA_CLOUD_RAIN);
-	inline constexpr Icons::GlyphRef kStorm = Icons::LC(ICON_LC_CLOUD_LIGHTNING);
-	inline constexpr Icons::GlyphRef kSnow = Icons::LC(ICON_LC_SNOWFLAKE);
-	inline constexpr Icons::GlyphRef kCloudy = Icons::FA(ICON_FA_CLOUD);
-	inline constexpr Icons::GlyphRef kFog = Icons::LC(ICON_LC_CLOUD_FOG);
-	inline constexpr Icons::GlyphRef kAsh = Icons::FA(ICON_FA_SMOG);
-	inline constexpr Icons::GlyphRef kAurora = Icons::LC(ICON_LC_STARS);
-	inline constexpr Icons::GlyphRef kEclipse = Icons::LC(ICON_LC_ECLIPSE);
-	inline constexpr Icons::GlyphRef kPleasant = Icons::LC(ICON_LC_SUN_DIM);
+	inline constexpr Icons::GlyphRef kRain = Icons::TI(ICON_TI_CLOUD_RAIN);
+	inline constexpr Icons::GlyphRef kStorm = Icons::TI(ICON_TI_CLOUD_STORM);
+	inline constexpr Icons::GlyphRef kSnow = Icons::TI(ICON_TI_SNOWFLAKE);
+	inline constexpr Icons::GlyphRef kCloudy = Icons::TI(ICON_TI_CLOUD);
+	inline constexpr Icons::GlyphRef kFog = Icons::TI(ICON_TI_CLOUD_FOG);
+	inline constexpr Icons::GlyphRef kAsh = Icons::TI(ICON_TI_VOLCANO);
+	inline constexpr Icons::GlyphRef kAurora = Icons::TI(ICON_TI_SPARKLES);
+	inline constexpr Icons::GlyphRef kEclipse = Icons::TI(ICON_TI_MOON_2);
+	inline constexpr Icons::GlyphRef kPleasant = Icons::TI(ICON_TI_SUN);
 	/// Unclassified engine-support weathers (world map, windows, scripted utility weathers).
-	inline constexpr Icons::GlyphRef kSystem = Icons::LC(ICON_LC_CLOUD_COG);
+	inline constexpr Icons::GlyphRef kSystem = Icons::TI(ICON_TI_CLOUD_COG);
 
 	/** @brief True when a weather carries none of the class flags, the editor's "None" category. */
 	[[nodiscard]] inline bool IsUnclassified(const RE::TESWeather* weather) noexcept

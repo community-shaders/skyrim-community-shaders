@@ -2,7 +2,7 @@
 
 #include "../../I18n/I18n.h"
 #include "../EditorWindow.h"
-#include "IconsFontAwesome5.h"
+#include "IconsTabler.h"
 #include "Menu/Fonts.h"
 #include "Utils/UI.h"
 #include "imgui_internal.h"
@@ -144,7 +144,7 @@ namespace BrowserUI
 			if (hovered)
 				ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
 			Icons::DrawCenteredGlyph(ImGui::GetWindowDrawList(), clearMin, ImVec2(frameHeight, frameHeight),
-				Icons::FA(ICON_FA_TIMES), ImGui::GetColorU32(hovered ? ImGuiCol_Text : ImGuiCol_TextDisabled));
+				Icons::TI(ICON_TI_X), ImGui::GetColorU32(hovered ? ImGuiCol_Text : ImGuiCol_TextDisabled));
 			Util::AddTooltip(T(TKEY("search_clear"), "Clear search"));
 			ImGui::GetCurrentContext()->LastItemData = inputItem;
 		}
@@ -534,7 +534,7 @@ namespace BrowserUI
 											 std::make_format_args(selected, hidden));
 		const ImVec4 accent = Util::Colors::GetAccent();
 		RightAlign(MeasureChip(label.c_str(), true));
-		if (Chip("##clearTicks", label.c_str(), Icons::FA(ICON_FA_TIMES), nullptr, &accent))
+		if (Chip("##clearTicks", label.c_str(), Icons::TI(ICON_TI_X), nullptr, &accent))
 			action = SelectionAction::Clear;
 		Util::AddTooltip(clearTooltip);
 		return action;

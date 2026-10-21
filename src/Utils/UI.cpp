@@ -5,7 +5,7 @@
 #include "CSEditor/SceneManager/SceneWidgetInterceptor.h"
 #include "D3D.h"
 #include "FileSystem.h"
-#include "IconsFontAwesome5.h"
+#include "IconsTabler.h"
 #include "Menu.h"
 #include "Menu/Fonts.h"
 #include "Menu/IconLoader.h"
@@ -510,7 +510,7 @@ namespace Util
 		const ImVec2 padding{ 12.0f * scale, 8.0f * scale };
 		const float gap = 8.0f * scale;
 		const float width = ImGui::GetContentRegionAvail().x;
-		const Icons::GlyphRef icon = Icons::FA(a_icon);
+		const Icons::GlyphRef icon = Icons::TI(a_icon);
 		const float iconWidth = Icons::CalcGlyphSize(icon).x;
 		const float wrapWidth = std::max(1.0f, width - padding.x * 2.0f - iconWidth - gap);
 		const ImVec2 textSize = ImGui::CalcTextSize(a_message, nullptr, false, wrapWidth);
@@ -541,8 +541,8 @@ namespace Util
 	float GetLockStatusBadgeSize()
 	{
 		const float scale = GetUIScale();
-		const char* icon = ICON_FA_LOCK;
-		const ImVec2 iconSize = Icons::CalcGlyphSize(Icons::FA(icon));
+		const char* icon = ICON_TI_LOCK;
+		const ImVec2 iconSize = Icons::CalcGlyphSize(Icons::TI(icon));
 		constexpr float kPad = 3.0f;
 		return std::max(iconSize.x, iconSize.y) + kPad * 2.0f * scale;
 	}
@@ -553,7 +553,7 @@ namespace Util
 			a_drawList = ImGui::GetWindowDrawList();
 
 		const float size = GetLockStatusBadgeSize();
-		const char* icon = a_locked ? ICON_FA_LOCK : ICON_FA_UNLOCK;
+		const char* icon = a_locked ? ICON_TI_LOCK : ICON_TI_LOCK_OPEN_2;
 		const auto& statusPalette = Menu::GetSingleton()->GetTheme().StatusPalette;
 		const ImVec4 statusColor = a_locked ? statusPalette.SuccessColor : statusPalette.Error;
 		ImVec4 fill = statusColor;
@@ -566,7 +566,7 @@ namespace Util
 		a_drawList->AddRectFilled(a_min, max, ImGui::GetColorU32(fill), rounding);
 		a_drawList->AddRect(a_min, max, ImGui::GetColorU32(border), rounding);
 		Icons::DrawCenteredGlyph(a_drawList, a_min, ImVec2(size, size),
-			Icons::FA(icon), ImGui::GetColorU32(statusColor));
+			Icons::TI(icon), ImGui::GetColorU32(statusColor));
 	}
 
 	bool LockStatusBadgeButton(const char* a_id, bool a_locked, const char* a_tooltip)
@@ -672,7 +672,7 @@ namespace Util
 	{
 		if (!m_locked)
 			return;
-		const bool clicked = StatusBanner(ICON_FA_LOCK, a_message, Colors::GetWarning());
+		const bool clicked = StatusBanner(ICON_TI_LOCK, a_message, Colors::GetWarning());
 		if (a_outBannerClicked && clicked)
 			*a_outBannerClicked = true;
 		ImGui::Spacing();
@@ -902,7 +902,8 @@ namespace Util
 
 		float percentageData = (*data) * kPercentageScale;
 		bool retval = ImGui::SliderFloat(label, &percentageData, lb, ub, format, flags);
-		if (!SceneWidgetInterceptor::IsArmed())
+		// Only on an edit: the scaled round trip is not exact in float, so an idle write-back drifts the member.
+		if (retval && !SceneWidgetInterceptor::IsArmed())
 			(*data) = percentageData / kPercentageScale;
 		return retval;
 	}

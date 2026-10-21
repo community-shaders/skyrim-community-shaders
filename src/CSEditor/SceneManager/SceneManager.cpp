@@ -5,7 +5,7 @@
 #include "../EditorWindow.h"
 #include "FeatureOverwritesPanel.h"
 #include "Features/CSEditor.h"
-#include "IconsFontAwesome5.h"
+#include "IconsTabler.h"
 #include "Menu/Icons/helpers/IconFonts.h"
 #include "Menu/Icons/helpers/SceneActionIcons.h"
 #include "Menu/PresetsPageRenderer.h"
@@ -415,14 +415,14 @@ namespace
 	/** @brief Buttons into the CS Editor pages that author scene settings, which only open in game. */
 	void DrawEditorShortcuts()
 	{
-		if (Icons::LabeledButton("##SceneManagerOpenEditor", Icons::FA(ICON_FA_PAINT_BRUSH),
+		if (Icons::LabeledButton("##SceneManagerOpenEditor", Icons::TI(ICON_TI_BRUSH),
 				T("feature.scene_manager.open_editor", "Open Scene Manager")))
 			SceneSettingsUI::OpenSceneManagerPage();
 		Util::AddTooltip(T("feature.scene_manager.open_editor_tooltip",
 			"Open the CS Editor's Scene Manager page, to author time of day and interior settings."));
 
 		ImGui::SameLine();
-		if (Icons::LabeledButton("##SceneManagerOpenLocations", Icons::FA(ICON_FA_MAP_MARKER_ALT),
+		if (Icons::LabeledButton("##SceneManagerOpenLocations", Icons::TI(ICON_TI_MAP_PIN),
 				T("feature.scene_manager.open_locations", "Locations")))
 			SceneSettingsUI::OpenLocationsPage();
 		Util::AddTooltip(T("feature.scene_manager.open_locations_tooltip", "Open the CS Editor's Locations page, to add places to override."));

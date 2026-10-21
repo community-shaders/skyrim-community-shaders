@@ -2,11 +2,13 @@
 
 /**
  * @file IconFonts.h
- * @brief Standalone FA / Lucide / Tabler / Game Icons fonts + family-tagged glyph helpers.
+ * @brief Standalone FA / Tabler / Game Icons fonts + family-tagged glyph helpers.
  *
  * Icon typefaces are loaded as separate ImFonts (not MergeMode) so overlapping
- * PUA codepoints never steal each other's glyphs. Pass Icons::FA / LC / TI / GI
+ * PUA codepoints never steal each other's glyphs. Pass Icons::FA / TI / GI
  * wrappers (or GlyphRef) into the draw helpers so the right face is pushed.
+ *
+ * Use Tabler for UI. FA and Game Icons are for game-world icons (places, creatures, lore).
  */
 
 #include "Menu/FontAtlasState.h"
@@ -22,7 +24,6 @@ namespace Icons
 	enum class Family : uint8_t
 	{
 		FontAwesome,
-		Lucide,
 		Tabler,
 		GameIcons
 	};
@@ -44,7 +45,6 @@ namespace Icons
 	};
 
 	[[nodiscard]] constexpr GlyphRef FA(const char* utf8) noexcept { return { Family::FontAwesome, utf8 }; }
-	[[nodiscard]] constexpr GlyphRef LC(const char* utf8) noexcept { return { Family::Lucide, utf8 }; }
 	[[nodiscard]] constexpr GlyphRef TI(const char* utf8) noexcept { return { Family::Tabler, utf8 }; }
 	[[nodiscard]] constexpr GlyphRef GI(const char* utf8) noexcept { return { Family::GameIcons, utf8 }; }
 
@@ -54,8 +54,6 @@ namespace Icons
 		switch (family) {
 		case Family::FontAwesome:
 			return atlas.GetFontAwesomeIconFont();
-		case Family::Lucide:
-			return atlas.GetLucideIconFont();
 		case Family::Tabler:
 			return atlas.GetTablerIconFont();
 		case Family::GameIcons:
@@ -101,34 +99,31 @@ namespace Icons
 		return ImGui::CalcTextSize(glyph.utf8);
 	}
 
-	/** @brief Top-left pos for AddText so glyph ink is centred in boxMin+boxSize (current font). */
+	/**
+	 * @brief Top-left pos for AddText that centres the glyph in boxMin+boxSize (current font), pixel-snapped.
+	 * Centres the glyph quad; on an axis where the quad starts at the origin (some icon fonts store bounds anchored
+	 * there), the advance / line box is centred instead.
+	 */
 	[[nodiscard]] inline ImVec2 GetCenteredGlyphPos(ImVec2 boxMin, ImVec2 boxSize, const char* utf8Glyph)
 	{
-		ImFontBaked* baked = ImGui::GetFontBaked();
-		const float fontSize = ImGui::GetFontSize();
-		const float scale = (baked && baked->Size > 0.0f) ? (fontSize / baked->Size) : 1.0f;
-
 		unsigned int c = 0;
 		if (utf8Glyph && utf8Glyph[0] != '\0')
 			ImTextCharFromUtf8(&c, utf8Glyph, nullptr);
-
-		if (c != 0 && baked) {
-			if (const ImFontGlyph* g = baked->FindGlyph(static_cast<ImWchar>(c))) {
-				const float inkMinX = g->X0 * scale;
-				const float inkMaxX = g->X1 * scale;
-				const float inkMinY = g->Y0 * scale;
-				const float inkMaxY = g->Y1 * scale;
-				return ImVec2(
-					boxMin.x + (boxSize.x - (inkMaxX - inkMinX)) * 0.5f - inkMinX,
-					boxMin.y + (boxSize.y - (inkMaxY - inkMinY)) * 0.5f - inkMinY);
-			}
-		}
-
-		const ImVec2 advance = utf8Glyph ? ImGui::CalcTextSize(utf8Glyph) : ImVec2(0.0f, fontSize);
-		const float unusedBelow = baked ? (fontSize - baked->Ascent) : 0.0f;
-		return ImVec2(
-			boxMin.x + (boxSize.x - advance.x) * 0.5f,
-			boxMin.y + (boxSize.y - fontSize) * 0.5f + unusedBelow * 0.5f);
+		ImFontBaked* baked = ImGui::GetFontBaked();
+		if (c == 0 || !baked)
+			return boxMin;
+		const ImFontGlyph* g = baked->FindGlyph(static_cast<ImWchar>(c));  // never null: falls back to the fallback glyph
+		const float fontSize = ImGui::GetFontSize();
+		const float scale = fontSize / baked->Size;
+		// Half-pixel tolerance covers sub-pixel raster offsets.
+		const bool anchoredX = ImFabs(g->X0) < 0.5f;
+		const bool anchoredY = ImFabs(g->Y1 - IM_ROUND(baked->Ascent)) < 0.5f;  // quad bottom on the baseline
+		const float x = anchoredX ? boxMin.x + (boxSize.x - g->AdvanceX * scale) * 0.5f :
+		                            boxMin.x + (boxSize.x - (g->X1 - g->X0) * scale) * 0.5f - g->X0 * scale;
+		const float y = anchoredY ? boxMin.y + (boxSize.y - fontSize) * 0.5f :
+		                            boxMin.y + (boxSize.y - (g->Y1 - g->Y0) * scale) * 0.5f - g->Y0 * scale;
+		// ImFont::RenderText truncates the position; round here so the glyph isn't biased up-left.
+		return ImVec2(ImFloor(x + 0.5f), ImFloor(y + 0.5f));
 	}
 
 	inline void DrawCenteredGlyph(ImDrawList* drawList, ImVec2 boxMin, ImVec2 boxSize,

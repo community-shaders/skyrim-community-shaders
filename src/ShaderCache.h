@@ -336,6 +336,8 @@ namespace SIE
 	private:
 		/** Tasks awaiting dispatch, ordered by cached priority and task id. */
 		std::set<ShaderCompilationTask, TaskPriorityLess> availableTasks;
+		/** Queued tasks the game asked for during background compilation; dispatched before availableTasks. */
+		std::set<ShaderCompilationTask, TaskPriorityLess> demandedTasks;
 		std::set<ShaderCompilationTask, TaskPriorityLess> tasksInProgress;
 		std::set<ShaderCompilationTask, TaskPriorityLess> processedTasks;  // completed or failed
 		std::deque<std::function<void()>> pendingAuxTasks;                 // see EnqueueAux/TryTakeNext

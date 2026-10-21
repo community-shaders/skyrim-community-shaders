@@ -9,7 +9,7 @@
 
 #include "../I18n/I18n.h"
 #include "EditorWindow.h"
-#include "IconsFontAwesome5.h"
+#include "IconsTabler.h"
 #include "Menu/Icons/helpers/IconFonts.h"
 #include "Menu/Icons/helpers/WeatherTypeIcons.h"
 #include "SaveManager.h"
@@ -148,8 +148,8 @@ void Widget::DrawPackSourceBadge() const
 		return;
 	ImGui::SameLine();
 	{
-		Icons::FontGuard font(Icons::Family::FontAwesome);
-		ImGui::TextColored(packBadge->color, "%s", ICON_FA_LAYER_GROUP);
+		Icons::FontGuard font(Icons::Family::Tabler);
+		ImGui::TextColored(packBadge->color, "%s", ICON_TI_STACK_2);
 	}
 	Util::AddTooltip(packBadge->tooltip.c_str());
 }
@@ -288,7 +288,7 @@ namespace
 		enum class Kind
 		{
 			Icon,      ///< Texture icon (theme PNG)
-			FaIcon,    ///< Font Awesome glyph
+			Glyph,     ///< Icon-font glyph
 			Text,      ///< Framed text button
 			LockBadge  ///< Pale green/red lock/unlock chip
 		};
@@ -296,10 +296,10 @@ namespace
 		std::string id;
 		Kind kind = Kind::Text;
 		ImTextureRef texture;
-		const char* faIcon = nullptr;  ///< FaIcon kind
+		Icons::GlyphRef glyph;  ///< Glyph kind
 		std::string label;
 		const char* tooltip = "";
-		std::optional<ImVec4> textColor;  ///< Text/FaIcon colour override
+		std::optional<ImVec4> textColor;  ///< Text/Glyph colour override
 		std::optional<ImVec4> fillColor;  ///< Text kind: persistent fill colour override
 		bool destructive = false;         ///< Hover highlight uses the error colour
 		bool startsGroup = false;         ///< Leave a wider gap before this action
@@ -342,11 +342,11 @@ bool Widget::DrawTitleBarActions(bool showApply, bool showSaveLoadRevert, bool s
 		action.onClick = std::move(onClick);
 		return actions.emplace_back(std::move(action));
 	};
-	auto addFaIcon = [&](const char* id, const char* faIcon, const char* tooltip, std::function<void()> onClick) -> TitleBarAction& {
+	auto addGlyph = [&](const char* id, Icons::GlyphRef glyph, const char* tooltip, std::function<void()> onClick) -> TitleBarAction& {
 		TitleBarAction action;
 		action.id = id;
-		action.kind = Kind::FaIcon;
-		action.faIcon = faIcon;
+		action.kind = Kind::Glyph;
+		action.glyph = glyph;
 		action.tooltip = tooltip;
 		action.onClick = std::move(onClick);
 		return actions.emplace_back(std::move(action));
@@ -406,7 +406,7 @@ bool Widget::DrawTitleBarActions(bool showApply, bool showSaveLoadRevert, bool s
 		if (unsaved)
 			unsavedColor = Util::Colors::GetUnsaved();
 		if (useIcons) {
-			auto& action = addFaIcon("##TitleSave", ICON_FA_SAVE, saveTooltip, saveClick);
+			auto& action = addGlyph("##TitleSave", Icons::TI(ICON_TI_DEVICE_FLOPPY), saveTooltip, saveClick);
 			action.textColor = unsavedColor;
 		} else {
 			auto& action = addText("##TitleSave", T(TKEY("save"), "Save"), saveTooltip, saveClick);
@@ -416,14 +416,14 @@ bool Widget::DrawTitleBarActions(bool showApply, bool showSaveLoadRevert, bool s
 		const char* loadTooltip = T(TKEY("load_saved_file"), "Load saved file, else the active preset's values, else vanilla");
 		auto loadClick = [this]() { Load(); };
 		if (useIcons)
-			addFaIcon("##TitleLoad", ICON_FA_FOLDER_OPEN, loadTooltip, loadClick);
+			addGlyph("##TitleLoad", Icons::TI(ICON_TI_FOLDER_OPEN), loadTooltip, loadClick);
 		else
 			addText("##TitleLoad", T(TKEY("load"), "Load"), loadTooltip, loadClick);
 
 		const char* revertTooltip = T(TKEY("revert_to_original"), "Revert to original game values");
 		auto revertClick = [this]() { RevertChanges(); };
 		if (useIcons) {
-			auto& action = addFaIcon("##TitleRevert", ICON_FA_UNDO, revertTooltip, revertClick);
+			auto& action = addGlyph("##TitleRevert", Icons::TI(ICON_TI_RESTORE), revertTooltip, revertClick);
 			action.textColor = statusPalette.Warning;
 		} else {
 			auto& action = addText("##TitleRevert", T(TKEY("revert"), "Revert"), revertTooltip, revertClick);
@@ -435,7 +435,7 @@ bool Widget::DrawTitleBarActions(bool showApply, bool showSaveLoadRevert, bool s
 			auto deleteClick = []() { ImGui::OpenPopup("DeleteConfirmation"); };
 			TitleBarAction* deleteAction = nullptr;
 			if (useIcons) {
-				deleteAction = &addFaIcon("##TitleDelete", ICON_FA_TRASH_ALT, deleteTooltip, deleteClick);
+				deleteAction = &addGlyph("##TitleDelete", Icons::TI(ICON_TI_TRASH), deleteTooltip, deleteClick);
 				deleteAction->textColor = statusPalette.Error;
 			} else {
 				deleteAction = &addText("##TitleDelete", T(TKEY("delete"), "Delete"), deleteTooltip, deleteClick);
@@ -445,7 +445,7 @@ bool Widget::DrawTitleBarActions(bool showApply, bool showSaveLoadRevert, bool s
 		}
 
 		if (packBadge) {
-			auto& action = addFaIcon("##TitlePackSource", ICON_FA_LAYER_GROUP, packBadge->tooltip.c_str(), []() {});
+			auto& action = addGlyph("##TitlePackSource", Icons::TI(ICON_TI_STACK_2), packBadge->tooltip.c_str(), []() {});
 			action.textColor = packBadge->color;
 		}
 
@@ -502,7 +502,7 @@ bool Widget::DrawTitleBarActions(bool showApply, bool showSaveLoadRevert, bool s
 		else if (action.kind == Kind::LockBadge)
 			action.width = lockBadgeSize;
 		else
-			action.width = buttonHeight;  // Icon / FaIcon
+			action.width = buttonHeight;  // Icon / Glyph
 		if (i > 0)
 			actionsWidth += action.startsGroup ? groupGap : gap;
 		actionsWidth += action.width;
@@ -596,7 +596,7 @@ bool Widget::DrawTitleBarActions(bool showApply, bool showSaveLoadRevert, bool s
 					ImVec2(0, 0), ImVec2(1, 1), ImGui::GetColorU32(iconTint));
 				break;
 			}
-		case Kind::FaIcon:
+		case Kind::Glyph:
 			{
 				if (hovered || held) {
 					if (action.destructive) {
@@ -607,9 +607,9 @@ bool Widget::DrawTitleBarActions(bool showApply, bool showSaveLoadRevert, bool s
 						Util::DrawRoundedButtonHighlight(bb, hovered, held, drawList);
 					}
 				}
-				if (action.faIcon) {
+				if (action.glyph) {
 					const ImU32 col = action.textColor ? ImGui::GetColorU32(*action.textColor) : textCol;
-					Icons::DrawCenteredGlyph(drawList, bb.Min, bb.GetSize(), Icons::FA(action.faIcon), col);
+					Icons::DrawCenteredGlyph(drawList, bb.Min, bb.GetSize(), action.glyph, col);
 				}
 				break;
 			}
@@ -742,7 +742,7 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 			ImGui::SameLine();
 			if (unsaved)
 				ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetUnsaved());
-			if (Icons::Button(std::format("{}##_Save", searchId ? searchId : "").c_str(), Icons::FA(ICON_FA_SAVE)))
+			if (Icons::Button(std::format("{}##_Save", searchId ? searchId : "").c_str(), Icons::TI(ICON_TI_DEVICE_FLOPPY)))
 				saveAll();
 			if (unsaved)
 				ImGui::PopStyleColor();
@@ -754,8 +754,8 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 				Util::ToolbarDivider(false);
 				ImGui::SameLine();
 				{
-					Icons::FontGuard font(Icons::Family::FontAwesome);
-					if (Util::ErrorTextButton(std::format("{}{}_Delete", ICON_FA_TRASH_ALT, searchId).c_str()))
+					Icons::FontGuard font(Icons::Family::Tabler);
+					if (Util::ErrorTextButton(std::format("{}{}_Delete", ICON_TI_TRASH, searchId).c_str()))
 						ImGui::OpenPopup("DeleteConfirmation");
 				}
 				Util::AddTooltip(T(TKEY("delete_saved_file_tooltip"), "Delete saved file"));

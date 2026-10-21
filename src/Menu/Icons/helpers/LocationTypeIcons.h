@@ -16,7 +16,6 @@
 
 #include "IconsFontAwesome5.h"
 #include "IconsGameIcons.h"
-#include "IconsLucide.h"
 #include "Menu/Icons/helpers/IconFonts.h"
 
 #include <string_view>
@@ -31,7 +30,7 @@ namespace LocationTypeIcons
 	};
 
 	// Settlements & holds
-	inline constexpr Entry kCity{ "LocTypeCity", Icons::LC(ICON_LC_CASTLE), "City" };
+	inline constexpr Entry kCity{ "LocTypeCity", Icons::GI(ICON_GI_VILLAGE), "City" };  // Game Icons: village by Delapouite
 	inline constexpr Entry kTown{ "LocTypeTown", Icons::FA(ICON_FA_HOME), "Town" };
 	inline constexpr Entry kSettlement{ "LocTypeSettlement", Icons::FA(ICON_FA_USERS), "Settlement" };
 	inline constexpr Entry kHabitation{ "LocTypeHabitation", Icons::FA(ICON_FA_HOME), "Habitation" };
@@ -48,12 +47,12 @@ namespace LocationTypeIcons
 	inline constexpr Entry kStewardsDwelling{ "LocTypeStewardsDwelling", Icons::FA(ICON_FA_HOME), "Steward's Dwelling" };
 	inline constexpr Entry kInn{ "LocTypeInn", Icons::FA(ICON_FA_BED), "Inn" };
 	inline constexpr Entry kStore{ "LocTypeStore", Icons::FA(ICON_FA_STORE), "Store" };
-	inline constexpr Entry kTemple{ "LocTypeTemple", Icons::FA(ICON_FA_CHURCH), "Temple" };
+	inline constexpr Entry kTemple{ "LocTypeTemple", Icons::FA(ICON_FA_PLACE_OF_WORSHIP), "Temple" };
 	inline constexpr Entry kGuild{ "LocTypeGuild", Icons::FA(ICON_FA_UNIVERSITY), "Guild" };
 	inline constexpr Entry kCastle{ "LocTypeCastle", Icons::FA(ICON_FA_CHESS_ROOK), "Castle" };
 	inline constexpr Entry kBarracks{ "LocTypeBarracks", Icons::FA(ICON_FA_SHIELD_ALT), "Barracks" };
-	inline constexpr Entry kJail{ "LocTypeJail", Icons::GI(ICON_GI_HANDCUFFS), "Jail" };  // Game Icons: handcuffs by Lorc
-	inline constexpr Entry kCemetery{ "LocTypeCemetery", Icons::FA(ICON_FA_CROSS), "Cemetery" };
+	inline constexpr Entry kJail{ "LocTypeJail", Icons::FA(ICON_FA_HANDCUFFS), "Jail" };
+	inline constexpr Entry kCemetery{ "LocTypeCemetery", Icons::GI(ICON_GI_TOMBSTONE), "Cemetery" };  // Game Icons: tombstone by Lorc
 
 	// Work sites & military
 	inline constexpr Entry kFarm{ "LocTypeFarm", Icons::FA(ICON_FA_CARROT), "Farm" };
@@ -83,7 +82,7 @@ namespace LocationTypeIcons
 	inline constexpr Entry kOrcStronghold{ "LocTypeOrcStronghold", Icons::FA(ICON_FA_CHESS_ROOK), "Orc Stronghold" };
 
 	// Waterborne
-	inline constexpr Entry kShip{ "LocTypeShip", Icons::GI(ICON_GI_SAILBOAT), "Ship" };                   // Game Icons: sailboat by Delapouite
+	inline constexpr Entry kShip{ "LocTypeShip", Icons::FA(ICON_FA_SAILBOAT), "Ship" };
 	inline constexpr Entry kShipwreck{ "LocTypeShipwreck", Icons::GI(ICON_GI_SHIP_WRECK), "Shipwreck" };  // Game Icons: ship-wreck by Delapouite
 
 	/** @brief Fallback when the keyword isn't a known LocType (or is mod-added). */

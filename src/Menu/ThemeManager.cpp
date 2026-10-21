@@ -8,7 +8,6 @@
 #include "I18n/I18n.h"
 #include "IconsFontAwesome5.h"
 #include "IconsGameIcons.h"
-#include "IconsLucide.h"
 #include "IconsTabler.h"
 
 #include <algorithm>
@@ -155,7 +154,7 @@ namespace
 
 	/**
 	 * Loads an icon typeface as a standalone ImFont (full glyph range, no MergeMode).
-	 * FA / Lucide / Tabler / Game Icons share PUA codepoints; keeping them separate avoids collisions.
+	 * FA / Tabler / Game Icons share PUA codepoints; keeping them separate avoids collisions.
 	 */
 	ImFont* LoadStandaloneIconFont(ImFontAtlas* atlas, float fontSize,
 		const char* fileName, const ImWchar* glyphRanges, const char* label)
@@ -181,7 +180,6 @@ namespace
 	void ClearStandaloneIconFonts(MenuFonts::AtlasState& atlas)
 	{
 		atlas.fontAwesomeIconFont = nullptr;
-		atlas.lucideIconFont = nullptr;
 		atlas.tablerIconFont = nullptr;
 		atlas.gameIconsFont = nullptr;
 	}
@@ -195,8 +193,6 @@ namespace
 
 		state.fontAwesomeIconFont = LoadStandaloneIconFont(atlas, fontSize, FONT_ICON_FILE_NAME_FAS,
 			reinterpret_cast<const ImWchar*>(ICON_FA_GLYPH_RANGES), "Font Awesome 5");
-		state.lucideIconFont = LoadStandaloneIconFont(atlas, fontSize, FONT_ICON_FILE_NAME_LC,
-			reinterpret_cast<const ImWchar*>(ICON_LC_GLYPH_RANGES), "Lucide");
 		state.tablerIconFont = LoadStandaloneIconFont(atlas, fontSize, FONT_ICON_FILE_NAME_TI,
 			reinterpret_cast<const ImWchar*>(ICON_TI_GLYPH_RANGES), "Tabler");
 		state.gameIconsFont = LoadStandaloneIconFont(atlas, fontSize, FONT_ICON_FILE_NAME_GI,
