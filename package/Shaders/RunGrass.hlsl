@@ -418,6 +418,10 @@ cbuffer AlphaTestRefCB : register(b11)
 #		include "ExponentialHeightFog/ExponentialHeightFog.hlsli"
 #	endif
 
+#	if defined(WATER_EFFECTS)
+#		include "WaterEffects/WaterCaustics.hlsli"
+#	endif
+
 #	define LinearSampler SampBaseSampler
 
 #	include "Common/ShadowSampling.hlsli"
@@ -526,6 +530,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #				endif
 	if (!SharedData::InInterior)
 		dirLightColor *= ShadowSampling::GetWorldShadow(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust.xyz);
+#				if defined(WATER_EFFECTS)
+	dirLightColor *= WaterEffects::ComputeCaustics(SharedData::GetWaterData(input.WorldPosition.xyz), input.WorldPosition.xyz);
+#				endif
 
 	float4 shadowColor = TexShadowMaskSampler.Load(int3(input.HPosition.xy, 0));
 	float dirDetailedShadow = SharedData::InInterior ? 1.0 : shadowColor.x;
@@ -543,6 +550,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float skylightingShadowVisibility = 1.0;
 #				if defined(SKYLIGHTING)
 	sh2 skylightingSH = Skylighting::Sample(input.WorldPosition.xyz, normal, skylightingShadowVisibility);
+	if (!SharedData::InInterior)
+		dirSoftShadow = skylightingShadowVisibility;
 #				endif
 	dirDetailedShadow *= screenSpaceShadows.x;
 	dirSoftShadow *= dot(normal, SharedData::DirLightDirection.xyz) >= 0.0 ? screenSpaceShadows.x : screenSpaceShadows.y;
@@ -748,12 +757,16 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	// Apply world shadow (terrain shadows, cloud shadows) directly to light color
 	if (!SharedData::InInterior)
 		dirLightColor *= ShadowSampling::GetWorldShadow(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust.xyz);
+#				if defined(WATER_EFFECTS)
+	dirLightColor *= WaterEffects::ComputeCaustics(SharedData::GetWaterData(input.WorldPosition.xyz), input.WorldPosition.xyz);
+#				endif
 
 	float dirDetailedShadow = 1.0;
 
 	if (!SharedData::InInterior)
 		dirDetailedShadow *= shadowColor.x;
-	float dirTransmissionShadow = dirDetailedShadow;
+	float dirTransmissionShadow = 1.0;
+	float dirTransmissionShadowMask = dirDetailedShadow;
 
 #				if defined(SCREEN_SPACE_SHADOWS)
 #					ifdef GRASS_OPTIMIZATIONS
@@ -792,13 +805,17 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #					endif
 	);
 	float skylightingDiffuse = Skylighting::GetSkylightingDiffuse(skylightingSH, positionMSSkylight, normal, vertexAO);
+#					if defined(SKYLIGHTING_SHADOW_VIS)
+	if (!SharedData::InInterior)
+		dirTransmissionShadowMask = skylightingShadowVisibility;
+#					endif
 #				endif  // SKYLIGHTING
 
 	float3 albedo = baseColor.xyz * vertexColor;
 	float3 transmissionTint = GrassLighting::GetTransmissionTint(albedo);
 
 	float dirVdotL = dot(viewDirection, SharedData::DirLightDirection.xyz);
-	float3 transmissionRadiance = dirLightColor * dirTransmissionShadow *
+	float3 transmissionRadiance = dirLightColor * dirTransmissionShadow * dirTransmissionShadowMask *
 	                              GrassLighting::GetTransmissionFactor(dirNdotL, dirVdotL, SharedData::grassLightingSettings.SubsurfaceScatteringAmount) *
 	                              Color::BRDFScale;
 
@@ -972,6 +989,9 @@ PS_OUTPUT main(PS_INPUT input)
 	// Apply world shadow (terrain shadows, cloud shadows) directly to light color
 	if (!SharedData::InInterior)
 		dirLightColor *= ShadowSampling::GetWorldShadow(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust.xyz);
+#			if defined(WATER_EFFECTS)
+	dirLightColor *= WaterEffects::ComputeCaustics(SharedData::GetWaterData(input.WorldPosition.xyz), input.WorldPosition.xyz);
+#			endif
 
 	float dirDetailedShadow = 1.0;
 
@@ -1053,7 +1073,7 @@ PS_OUTPUT main(PS_INPUT input)
 	sh2 skylightingSH = Skylighting::Sample(positionMSSkylight, normal
 #				if defined(SKYLIGHTING_SHADOW_VIS)
 		,
-		skylightingShadowVisibility
+		skylightingShadowVisibility, false
 #				endif
 	);
 	float skylightingDiffuse = Skylighting::GetSkylightingDiffuse(skylightingSH, positionMSSkylight, normal, vertexAO);
