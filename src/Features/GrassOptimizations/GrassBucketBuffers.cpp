@@ -58,12 +58,11 @@ bool GrassOptimizations::UploadCullBucketConstants(ID3D11DeviceContext* ctx)
 	// SetupTechnique has already populated the fog color used at c16 in PerGeometry.
 	static const auto* fogNearColor = reinterpret_cast<const float*>(REL::RelocationID(527805, 414756).address() + 0x100);
 	static const auto* grassWindAmount = reinterpret_cast<const float*>(REL::RelocationID(527802, 414753).address());
-	static const auto* grassWindAmountMax = reinterpret_cast<const float*>(REL::RelocationID(504665, 373550).address());
 	static const auto* windGrassMultiplier = reinterpret_cast<const float*>(REL::RelocationID(513337, 391112).address());
 
 	GrassPerGeometry geometry{};
 	std::memcpy(geometry.fogNearColor, fogNearColor, sizeof(geometry.fogNearColor));
-	geometry.windVector[2] = std::min(*grassWindAmount, *grassWindAmountMax) * *windGrassMultiplier;
+	geometry.windVector[2] = std::min(*grassWindAmount, 60.0f) * *windGrassMultiplier;
 	geometry.scaleMask[2] = 1.0f;
 
 	if (auto* sunLight = GetSunLight()) {
