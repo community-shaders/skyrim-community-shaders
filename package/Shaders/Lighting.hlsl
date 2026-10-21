@@ -1840,7 +1840,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			endif
 #			if defined(TRUE_PBR)
 #				if defined(ENABLE_LL)
-		projBaseColor *= ProjectedUVParams2.xyz * TransferFunctions::Gamma22ToLinear(max(0, MaterialObjectRGBScale));
+		projBaseColor *= ProjectedUVParams2.xyz * max(0, MaterialObjectRGBScale);
 		projBaseColor = Color::LinearSRGBToWorking(max(0, projBaseColor));
 #				else
 		projBaseColor *= Color::LinearSRGBToWorking(ProjectedUVParams2.xyz);
