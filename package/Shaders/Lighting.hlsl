@@ -1848,7 +1848,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			if defined(LOD_BLENDING) && (defined(LODOBJECTS) || defined(LODOBJECTSHD))
 		projBaseColor.xyz = pow(abs(projBaseColor.xyz), SharedData::lodBlendingSettings.LODObjectSnowGamma) * SharedData::lodBlendingSettings.LODObjectSnowBrightness;
 #			endif  // LOD_BLENDING
-		normal.xyz = lerp(normal.xyz, finalProjNormal, projectedMaterialWeight);
+		float3 projectedWorldNormal = normalize(mul(transpose(tbnTr), finalProjNormal));
+		worldNormal = normalize(lerp(worldNormal, projectedWorldNormal, projectedMaterialWeight));
 		baseColor.xyz = lerp(baseColor.xyz, projBaseColor, projectedMaterialWeight);
 
 #			if defined(SNOW)
@@ -2634,7 +2635,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	if !defined(LANDSCAPE) && !defined(LODLANDSCAPE)
 	bool hasEmissive = (0x3F & (Permutation::PixelShaderDescriptor >> 24)) == Permutation::LightingTechnique::Glowmap;
 #		if defined(TRUE_PBR)
-	hasEmissive = hasEmissive || (PBRFlags & PBR::Flags::HasEmissive != 0);
+	hasEmissive = hasEmissive || ((PBRFlags & PBR::Flags::HasEmissive) != 0);
 #		endif
 	[branch] if (hasEmissive)
 	{
@@ -2673,8 +2674,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float mlpBlendFactor = saturate(viewNormalAngle) * (1.0 - baseColor.w);
 
 	material.BaseColor = lerp(material.BaseColor, layerColor, mlpBlendFactor);
-
-	indirectLobeWeights.diffuse *= 1.0 - mlpBlendFactor;
 #	endif  // MULTI_LAYER_PARALLAX
 
 	float3 ambientNormal = worldNormal.xyz;
