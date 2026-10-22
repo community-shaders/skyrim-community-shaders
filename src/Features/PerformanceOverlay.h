@@ -6,6 +6,7 @@
 #include "Utils/PerfUtils.h"
 #include <nlohmann/json.hpp>
 #include <optional>
+#include <string_view>
 #include <unordered_map>
 #include <variant>
 
@@ -117,6 +118,8 @@ public:
 
 struct PerformanceOverlay : OverlayFeature
 {
+	static constexpr std::string_view kWindowId = "###PerformanceOverlay";
+
 	// ============================================================================
 	// VIRTUAL OVERRIDES (Feature.h interface)
 	// ============================================================================

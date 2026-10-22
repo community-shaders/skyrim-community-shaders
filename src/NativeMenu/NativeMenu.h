@@ -153,14 +153,12 @@ namespace NativeMenu
 		template <class Tag>
 		struct HeadingSlot
 		{
-			static inline const char* text = "";
-			static void __stdcall GetText(char* buffer, int size) { std::snprintf(buffer, size, "%s", text); }
+			static void __stdcall GetText(char* buffer, int size) { std::snprintf(buffer, size, "%s", Tag{}()); }
 		};
 
 		template <class Tag>
-		Row MakeHeading(const char* text)
+		Row MakeHeading(Tag)
 		{
-			HeadingSlot<Tag>::text = text;
 			Row row;
 			row.type = RowType::kHeading;
 			row.getText = &HeadingSlot<Tag>::GetText;
@@ -168,7 +166,7 @@ namespace NativeMenu
 		}
 	}
 
-#define NATIVE_MENU_HEADING(text) ::NativeMenu::detail::MakeHeading<decltype([] {})>(text)
+#define NATIVE_MENU_HEADING(text) ::NativeMenu::detail::MakeHeading([] { return (text); })
 
 	inline Row Button(const char* label, ButtonPress onPress, const char* description = nullptr,
 		SettingIsEnabled isEnabled = nullptr)

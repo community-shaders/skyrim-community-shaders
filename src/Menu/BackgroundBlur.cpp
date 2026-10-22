@@ -4,6 +4,7 @@
 
 #include "BackgroundBlur.h"
 #include "../Features/HDRDisplay.h"
+#include "../Features/PerformanceOverlay.h"
 #include "../Features/Upscaling.h"
 #include "../Globals.h"
 #include "../ShaderCache.h"
@@ -693,7 +694,7 @@ namespace BackgroundBlur
 			}
 
 			// Skip Performance Overlay window (no blur)
-			if (window->Name && std::string_view(window->Name) == "Performance Overlay") {
+			if (window->Name && std::string_view(window->Name).ends_with(PerformanceOverlay::kWindowId)) {
 				continue;
 			}
 
