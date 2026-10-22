@@ -68,14 +68,13 @@ namespace BSShaderHooks
 				} else if (fileStr.ends_with(".ps")) {
 					techniqueIDStr = fileStr.substr(0, fileStr.length() - 3);
 					techniqueId = std::strtoul(techniqueIDStr.c_str(), nullptr, 16);
-					continue;
 				} else {
 					continue;
 				}
 
 				logger::info("found shader technique id {:08x} with path {}", techniqueId, entry.path().generic_string());
 				foundCount++;
-				techniqueFileMap.insert(std::make_pair(techniqueId, absolute(entry.path()).wstring()));
+				techniqueFileMap.insert_or_assign(techniqueId, absolute(entry.path()).wstring());
 			}
 
 			for (const auto& entry : bsShader->pixelShaders) {

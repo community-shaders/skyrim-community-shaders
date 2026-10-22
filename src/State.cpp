@@ -1176,7 +1176,8 @@ void State::SetupResources()
 	D3D11_TEXTURE2D_DESC texDesc{};
 	renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN].texture->GetDesc(&texDesc);
 
-	globals::d3d::context->QueryInterface(__uuidof(pPerf), reinterpret_cast<void**>(&pPerf));
+	pPerf = nullptr;
+	globals::d3d::context->QueryInterface(__uuidof(ID3DUserDefinedAnnotation), pPerf.put_void());
 
 	featureLevel = globals::d3d::device->GetFeatureLevel();
 

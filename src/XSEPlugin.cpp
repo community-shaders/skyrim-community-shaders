@@ -191,7 +191,7 @@ bool Load()
 	};
 
 	for (const auto dll : incompatibleDLLs) {
-		if (LoadLibrary(dll)) {
+		if (std::filesystem::exists(dll)) {
 			auto errorMessage = std::format("Incompatible DLL {} detected", stl::utf16_to_utf8(dll).value_or("<unicode conversion error>"s));
 			logger::error("{}", errorMessage);
 			errors.push_back(errorMessage);
