@@ -63,7 +63,6 @@ CloudShadows::Settings CloudShadows::GetCommonBufferData()
 
 void CloudShadows::CheckResourcesSide(int side)
 {
-	static Util::FrameChecker frame_checker[6];
 	if (!frame_checker[side].IsNewFrame())
 		return;
 
@@ -238,7 +237,6 @@ void CloudShadows::ModifySky(RE::BSRenderPass* Pass)
 
 void CloudShadows::ReflectionsPrepass()
 {
-	Util::FrameChecker frameChecker;
 	if (frameChecker.IsNewFrame()) {
 		if ((globals::game::sky->mode.get() != RE::Sky::Mode::kFull) ||
 			!globals::game::sky->currentClimate)

@@ -1,6 +1,8 @@
 #ifndef DYNAMIC_CUBEMAPS_CAPTURE_COMMON_HLSLI
 #define DYNAMIC_CUBEMAPS_CAPTURE_COMMON_HLSLI
 
+#include "CubemapCommon.hlsli"
+
 #include "Common/Color.hlsli"
 #include "Common/ColorManagement.hlsli"
 #include "Common/FrameBuffer.hlsli"
@@ -49,30 +51,7 @@ float3 GetSamplingVector(uint3 texel)
 {
 	uint width, height, faces;
 	DynamicCubemap.GetDimensions(width, height, faces);
-	float2 st = (texel.xy + 0.5) / float2(width, height);
-	float2 uv = 2.0 * float2(st.x, 1.0 - st.y) - 1.0;
-	float3 direction = 0.0;
-	switch (texel.z) {
-	case 0:
-		direction = float3(1.0, uv.y, -uv.x);
-		break;
-	case 1:
-		direction = float3(-1.0, uv.y, uv.x);
-		break;
-	case 2:
-		direction = float3(uv.x, 1.0, -uv.y);
-		break;
-	case 3:
-		direction = float3(uv.x, -1.0, uv.y);
-		break;
-	case 4:
-		direction = float3(uv.x, uv.y, 1.0);
-		break;
-	case 5:
-		direction = float3(-uv.x, uv.y, -1.0);
-		break;
-	}
-	return normalize(direction);
+	return GetCubemapSamplingVector(texel, float2(width, height));
 }
 
 bool SampleCapture(uint3 texel, out float3 position, out float3 color, out float2 uv)

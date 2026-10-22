@@ -14,7 +14,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 
 void ExtendedMaterials::DataLoaded()
 {
-	if (&settings.EnableTerrain) {
+	if (settings.EnableTerrain) {
 		if (auto bLandSpecular = globals::game::iniSettingCollection->GetSetting("bLandSpecular:Landscape"); bLandSpecular) {
 			if (!bLandSpecular->data.b) {
 				logger::info("[CPM] Changing bLandSpecular from {} to {} to support Terrain Parallax", bLandSpecular->data.b, true);
