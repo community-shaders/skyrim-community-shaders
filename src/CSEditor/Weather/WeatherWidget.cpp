@@ -30,6 +30,16 @@ namespace
 
 	namespace WeatherSetting
 	{
+		std::string CloudLayerId(int index)
+		{
+			return std::format("Cloud Layer {}", index);
+		}
+
+		std::string CloudLayerLabel(int index)
+		{
+			return std::vformat(T(TKEY("cloud_layer"), "Cloud Layer {}"), std::make_format_args(index));
+		}
+
 		constexpr const char* kSpecular = "Specular";
 		constexpr const char* kFresnelPower = "Fresnel Power";
 		constexpr const char* kDirectionalXMax = "Directional X Max";
@@ -996,7 +1006,7 @@ void WeatherWidget::DrawCloudSettings()
 
 	for (int i = 0; i < TESWeather::kTotalLayers; i++) {
 		std::string layer = std::format("Layer {}", i);
-		std::string layerId = std::format("Cloud {}", layer);
+		std::string layerId = WeatherSetting::CloudLayerId(i);
 		if (!MatchesSearch(layerId))
 			continue;
 
@@ -1019,7 +1029,8 @@ void WeatherWidget::DrawCloudSettings()
 			ImGui::PushStyleColor(ImGuiCol_HeaderHovered, targetHeaderColor);
 			ImGui::PushStyleColor(ImGuiCol_HeaderActive, targetHeaderColor);
 		}
-		bool layerOpen = ImGui::CollapsingHeader(layer.c_str(), flags);
+		const auto layerLabel = WeatherSetting::CloudLayerLabel(i);
+		bool layerOpen = ImGui::CollapsingHeader(std::format("{}###{}", layerLabel, layerId).c_str(), flags);
 		if (isTarget) {
 			ImGui::PopStyleColor(3);
 			if (scrollToHighlighted) {
@@ -1575,8 +1586,7 @@ std::vector<Widget::SearchResult> WeatherWidget::CollectSearchableSettings() con
 	}
 
 	for (int i = 0; i < TESWeather::kTotalLayers; i++) {
-		std::string layerId = std::vformat(T(TKEY("cloud_layer"), "Cloud Layer {}"), std::make_format_args(i));
-		results.push_back({ layerId, WeatherTab::kClouds, layerId });
+		results.push_back({ WeatherSetting::CloudLayerLabel(i), WeatherTab::kClouds, WeatherSetting::CloudLayerId(i) });
 	}
 
 	// Records tab: one entry per time-of-day slot for each form-picker section
@@ -1623,10 +1633,6 @@ void WeatherWidget::NavigateToSearchResult(const SearchResult& result)
 
 ID3D11ShaderResourceView* WeatherWidget::GetCloudTexture(int layerIndex)
 {
-	if (auto it = cloudTextureCache.find(layerIndex); it != cloudTextureCache.end()) {
-		return it->second.get();
-	}
-
 	const auto& texturePath = settings.clouds[layerIndex].texturePath;
 	if (texturePath.empty()) {
 		return nullptr;
@@ -1634,13 +1640,16 @@ ID3D11ShaderResourceView* WeatherWidget::GetCloudTexture(int layerIndex)
 
 #undef I18N_KEY_PREFIX
 
-	std::string resourcePath = WeatherUtils::TexturePath::BuildResourcePath(texturePath);
+	const auto resourcePath = WeatherUtils::TexturePath::Normalize(WeatherUtils::TexturePath::BuildResourcePath(texturePath));
+	auto [entry, inserted] = cloudTextureCache.try_emplace(resourcePath);
+	if (!inserted)
+		return entry->second.get();
 
 	ID3D11ShaderResourceView* srv = nullptr;
 	ImVec2 textureSize;
 
 	if (Util::LoadDDSTextureFromFile(globals::d3d::device, resourcePath.c_str(), &srv, textureSize)) {
-		cloudTextureCache[layerIndex].attach(srv);
+		entry->second.attach(srv);
 		return srv;
 	}
 
