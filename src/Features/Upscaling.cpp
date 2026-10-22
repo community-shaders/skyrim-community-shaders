@@ -582,7 +582,9 @@ struct FaceGen_CopyRenderTarget
 			return nullptr;
 		}
 
-		const auto& properties = RE::BSGraphics::RenderTargetManager::GetSingleton()->renderTargetData[a_target];
+		// CommonLib's GetSingleton() wrongly dereferences this global: the manager is stored inline, not behind a pointer
+		static REL::Relocation<RE::BSGraphics::RenderTargetManager*> renderTargetManager{ REL::RelocationID(524970, 411451) };
+		const auto& properties = renderTargetManager->renderTargetData[a_target];
 		using CreateTexture = RE::NiTexture::RendererData*(RE::BSGraphics::Renderer*, uint32_t, uint32_t, const void*, D3D11_USAGE, DXGI_FORMAT, bool);
 		static REL::Relocation<CreateTexture> createTexture{ REL::RelocationID(75511, 77303) };
 		auto texture = createTexture(a_renderer, properties.width, properties.height, nullptr, a_usage, DXGI_FORMAT_R8G8B8A8_UNORM, false);
