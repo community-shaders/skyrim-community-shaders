@@ -239,9 +239,7 @@ void SubsurfaceScattering::DrawSSS()
 
 		blurCBData.BurleySamples = settings.BurleySamples;
 		// Burley always does full albedo removal/reapply; scatter mode only applies to Separable SSS.
-		blurCBData.ScatterMode = (settings.SSMode == 0)
-		                             ? (uint)std::clamp(settings.ScatterMode, (int)kPreScatter, (int)kPreAndPostScatter)
-		                             : (uint)kPostScatter;
+		blurCBData.ScatterMode = (settings.SSMode == 0) ? (uint)std::clamp(settings.ScatterMode, (int)kPreScatter, (int)kPreAndPostScatter) : (uint)kPostScatter;
 
 		blurCBData.MeanFreePathBase = settings.MeanFreePathBase;
 		blurCBData.MeanFreePathHuman = settings.MeanFreePathHuman;
@@ -257,7 +255,8 @@ void SubsurfaceScattering::DrawSSS()
 		context->CSSetConstantBuffers(1, 1, buffer);
 		context->CSSetSamplers(0, 1, &globals::deferred->pointSampler);
 
-		auto main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
+		// Consume the same active forward color target that SSGI composites into.
+		auto main = renderer->GetRuntimeData().renderTargets[globals::deferred->forwardRenderTargets[0]];
 
 		auto mask = renderer->GetRuntimeData().renderTargets[MASKS];
 		auto albedo = renderer->GetRuntimeData().renderTargets[ALBEDO];

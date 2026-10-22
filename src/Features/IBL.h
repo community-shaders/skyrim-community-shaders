@@ -56,9 +56,15 @@ public:
 		float EnvIBLSaturation = 1.0f;
 		float SkyIBLSaturation = 1.0f;
 		float FogAmount = 0.0f;
-		uint DALCMode = 2;  // 0: Luminance Ratio, 1: Color Ratio, 2: DALC + Sky, 3: DALC + Sky (Directional)
+		uint DALCMode = 2;  // 0: Luminance Ratio, 1: Color Ratio, 2: DALC + Sky
+		uint SkylightingAffectsEnv = 0;
 		bool DisableInWorldMap = true;
 		bool DisableInLoadingScreen = true;
+		uint EffectNormalization = 0;
+		float EffectNormalizationMult = 5.0f;
+		float MinEffectMult = 1.0f;
+		uint EnableReflectionFallback = 1;
+		float ReflectionFallbackDistance = 1024.0f;
 	} settings;
 
 	struct alignas(16) PerFrame
@@ -73,8 +79,16 @@ public:
 		float SkyIBLSaturation;
 		float FogAmount;
 		uint DALCMode;
+		uint EffectNormalization = 0;
+		float EffectNormalizationMult = 5.0f;
+		float MinEffectMult = 1.0f;
+		uint SkylightingAffectsEnv;
+		uint EnableReflectionFallback;
+		float ReflectionFallbackDistance;
 		uint ENBSkyFalloff;
 		float pad0;
+		float pad1;
+		float pad2;
 	};
 	STATIC_ASSERT_ALIGNAS_16(PerFrame);
 
@@ -83,7 +97,7 @@ public:
 
 	/** @brief Builds the GPU constant-buffer data, forcing EnableIBL off when IsDisabledForCurrentScene(). */
 	PerFrame GetCommonBufferData() const;
-	/** @brief Returns true when IBL should be suppressed in the current scene per the DisableIn* toggles (loading screens, world map). */
+	/** @brief Returns true when IBL should be suppressed in the current scene per the DisableIn* toggles (loading screens, world map, interiors). */
 	bool IsDisabledForCurrentScene() const;
 	/** @brief Returns true when Effects 11 owns IBL (not handed off to CS) with its own image based lighting enabled, overriding these settings. */
 	bool IsManagedByENB() const;

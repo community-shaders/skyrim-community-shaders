@@ -27,6 +27,8 @@ RWTexture2D<float> outDepth4 : register(u4);
 // is required to be non-linear (i.e. very large outdoors environments).
 float ClampDepth(float depth)
 {
+	if (depth >= 1.0 - 1e-6)
+		return 0.0;
 	depth = ScreenToViewDepth(depth);
 	return clamp(depth, 0.0, 3.402823466e+38);
 }

@@ -49,10 +49,8 @@ namespace DynamicCubemaps
 		if (!useStaticIBL) {
 #		if defined(SKYLIGHTING)
 			float skylightingSpecular = 0.0;
-			float skylightingVisibility = 1.0;
 			if (!SharedData::InInterior) {
 				skylightingSpecular = Skylighting::EvaluateSpecular(skylighting, SphericalHarmonics::FauxSpecularLobe(N, V, roughness));
-				skylightingVisibility = Skylighting::EvaluateVisibility(skylighting);
 			}
 #		endif
 
@@ -64,23 +62,19 @@ namespace DynamicCubemaps
 				float3 skySpecular = 0.0;
 
 				if (SharedData::iblSettings.DALCMode >= 2) {
-					// Mode 2/3: DALC-normalized env scaled by DALCAmount + sky overlay
+					// Mode 2: DALC-normalized env scaled by DALCAmount + sky overlay
 					float envLum = Color::RGBToLuminance(EnvTexture.SampleLevel(SampColorSampler, R, 15));
 					envSpecular = ColorManagement::SceneToLinear((envSample / max(envLum, 0.001)) * directionalAmbientColorSpecular) * SharedData::iblSettings.DALCAmount;
 					skySpecular = ColorManagement::SceneToLinear(max(0, fullSample - envSample)) * SharedData::iblSettings.SkyIBLScale;
-#			if defined(SKYLIGHTING)
-					envSpecular *= (SharedData::iblSettings.DALCMode == 3) ? skylightingVisibility : 1.0;
-					skySpecular *= skylightingSpecular;
-#			endif
 				} else {
 					// Mode 0/1: IBL ratio-based
 					float3 ratio = ImageBasedLighting::GetIBLRatio();
 					envSpecular = ColorManagement::SceneToLinear(envSample * ratio) * SharedData::iblSettings.EnvIBLScale;
 					skySpecular = ColorManagement::SceneToLinear(max(0, fullSample - envSample)) * SharedData::iblSettings.SkyIBLScale;
-#			if defined(SKYLIGHTING)
-					skySpecular *= skylightingSpecular;
-#			endif
 				}
+#			if defined(SKYLIGHTING)
+				skySpecular *= skylightingSpecular;
+#			endif
 				if (SharedData::InInterior) {
 					skySpecular = 0;
 				}

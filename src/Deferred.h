@@ -53,6 +53,26 @@ public:
 	/** @brief Dispatches the deferred composite compute shader and post-deferred feature passes. */
 	void DeferredPasses();
 
+	/** @brief Debug view modes for the deferred composite (developer only). */
+	enum class DebugView : uint
+	{
+		Off = 0,
+		Albedo,
+		Reflectance,
+		Normal,
+		Roughness,
+		Mask,
+		Diffuse,
+		Specular,
+		SSGI,
+		SSR,
+		DynamicCubemaps,
+		Count
+	};
+
+	/** @brief Draws the developer-only deferred debug view selector. */
+	void DrawSettings();
+
 	/** @brief Ends deferred rendering, restores forward targets, and triggers DeferredPasses. */
 	void EndDeferred();
 
@@ -92,6 +112,18 @@ public:
 
 	// Directional shadow structured buffer (t98): cascade splits and projections.
 	Buffer* directionalShadowLights = nullptr;
+
+	// Deferred composite debug view (developer only). 0 = off; compiled into the
+	// composite shader only when a non-zero mode is selected.
+	DebugView debugView = DebugView::Off;
+
+	struct alignas(16) DebugViewCB
+	{
+		uint mode;
+		float3 pad;
+	};
+	STATIC_ASSERT_ALIGNAS_16(DebugViewCB);
+	ConstantBuffer* debugViewCB = nullptr;
 
 	bool deferredPass = false;
 

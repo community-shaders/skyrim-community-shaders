@@ -1,6 +1,3 @@
-// SPDX-License-Identifier: MIT AND (LicenseRef-GPL-3.0-with-Modding-Exception WITH GPL-3.0-linking-source-exception)
-// Original code Copyright (c) 2022 Ilya Perapechka (MIT), modifications GPL-3.0 with Modding Exception (see EXCEPTIONS.md)
-
 #include "Common/ColorManagement.hlsli"
 #include "Common/FrameBuffer.hlsli"
 #include "Common/SharedData.hlsli"
@@ -9,22 +6,20 @@
 #	undef IBL
 #endif
 
-#if defined(VSHADER)
 struct VS_INPUT
 {
 	float4 Position: POSITION0;
-#	if !defined(ENVCUBE)
+#if !defined(ENVCUBE)
 	float4 Normal: NORMAL0;
-#	endif
+#endif
 	float4 TexCoord0: TEXCOORD0;
-#	if defined(ENVCUBE)
+#if defined(ENVCUBE)
 	float4
-#	else
+#else
 	int4
-#	endif
+#endif
 		TexCoord1: TEXCOORD1;
 };
-#endif
 
 struct VS_OUTPUT
 {
@@ -400,15 +395,15 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		if (dot(refractDir, refractDir) < 1e-4)
 			refractDir = -V;
 
-		float3 reflectColor = ColorManagement::SceneToLinear(DynamicCubemaps::EnvReflectionsTexture.SampleLevel(SampSourceTexture, reflectDir, 0).xyz);
-		float3 refractColor = ColorManagement::SceneToLinear(DynamicCubemaps::EnvReflectionsTexture.SampleLevel(SampSourceTexture, refractDir, 0).xyz);
+		float3 workingReflection = DynamicCubemaps::EnvReflectionsTexture.SampleLevel(SampSourceTexture, reflectDir, 0).xyz;
+		float3 workingRefraction = DynamicCubemaps::EnvReflectionsTexture.SampleLevel(SampSourceTexture, refractDir, 0).xyz;
 
 		// The env cubemap only carries faint bounce light, so lights are shaded on the drop directly
 		ParticleSurface drop = { true, normalWS, V, refractDir };
 		float3 directLighting = ShadeLight(drop, GetDirLightColor(posWS.xyz), SharedData::DirLightDirection.xyz);
 		AddPointLighting(posWS.xyz, drop, directLighting);
 
-		psout.Color.xyz = ColorManagement::LinearToScene(lerp(refractColor, reflectColor, fresnel) + directLighting);
+		psout.Color.xyz = ColorManagement::LinearToScene(lerp(ColorManagement::SceneToLinear(workingRefraction), ColorManagement::SceneToLinear(workingReflection), fresnel) + directLighting);
 		psout.Color.w = alpha;
 		psout.Normal = float4(0, 1, 0, alpha);
 		return psout;
@@ -446,7 +441,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float3 ambientColor = max(0, SharedData::GetAmbient(float3(0, 0, 1)));
 #	if defined(IBL)
 	if (SharedData::iblSettings.EnableIBL) {
-		ambientColor = ImageBasedLighting::GetDiffuseIBL(ambientColor, float3(0, 0, -1));
+		ambientColor = ImageBasedLighting::GetDiffuseIBL(ambientColor, float3(0, 0, -1), positionWS.xyz);
 	}
 #	endif
 

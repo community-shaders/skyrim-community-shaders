@@ -138,7 +138,17 @@ namespace SharedData
 		float RippleRadius;
 		float RippleBreadth;
 		float RippleLifetimeRcp;
-		float pad0;
+		float WallRainDensity;
+
+		float WallRainDropSize;
+		float WallRainSpeed;
+		float WallRainLayering;
+		float WallRainNormalStrength;
+
+		float WallRainWetness;
+		float WallRainDarkening;
+		bool EnableWallRain;
+		float WallRainTrailLength;
 	};
 
 	struct SkylightingSettings
@@ -214,9 +224,17 @@ namespace SharedData
 		float EnvIBLSaturation;
 		float SkyIBLSaturation;
 		float FogAmount;
-		uint DALCMode;       // 0: Luminance Ratio, 1: Color Ratio, 2: DALC + Sky, 3: DALC + Sky (Directional)
-		uint ENBSkyFalloff;  // Effects 11 owns IBL: darken sky irradiance from below
+		uint DALCMode;  // 0: Luminance Ratio, 1: Color Ratio, 2: full-environment DALC + Sky
+		uint EffectNormalization;
+		float EffectNormalizationMult;
+		float MinEffectMult;
+		uint SkylightingAffectsEnv;
+		uint EnableReflectionFallback;
+		float ReflectionFallbackDistance;
+		uint ENBSkyFalloff;
 		float pad0;
+		float pad1;
+		float pad2;
 	};
 
 	struct ExtendedTranslucencySettings
@@ -285,7 +303,7 @@ namespace SharedData
 
 		uint EnableVolumetricRays;
 		float VolumetricRaysIntensity;
-		float VolumetricRaysDensity;
+		float VolumetricRaysExtinction;
 		float VolumetricRaysSkyColorAmount;
 
 		float VolumetricRaysDesaturation;
@@ -365,32 +383,27 @@ namespace SharedData
 		float AuroraCurve;
 		uint FixBlackCrush;
 		float2 NightSkyPad0;
-
-		float3 VolumetricFogColorFilter;
-		float VolumetricFogIntensity;
-
-		float VolumetricFogCurve;
-		float VolumetricFogOpacity;
-		float VolumetricFogShadowAmount;
-		uint VolumetricFogEnableLighting;
-
-		float3 VolumetricRaysSkyColor;
-		uint VolumetricFogEnableShadows;
-
-		uint VolumetricRaysSampleCount;
-		uint GameVolumetricRaysDisableDithering;
-		float2 GameVolumetricRaysPad0;
-
-		float3 GameVolumetricRaysLightScale;
-		float GameVolumetricRaysCustomContribution;
-
-		float3 GameVolumetricRaysCustomColor;
-		float GameVolumetricRaysPad1;
 	};
 	struct TerrainBlendingSettings
 	{
 		uint Enabled;
 		uint3 _padding;
+	};
+
+	struct SSGISettings
+	{
+		uint Enabled;
+		uint EnableIL;
+		uint DebugMode;
+		float AOPower;
+	};
+
+	struct SSRSettings
+	{
+		uint Enabled;
+		float SpecularMult;
+		float SpecCubemapMult;
+		uint pad0;
 	};
 
 	struct ExponentialHeightFogSettings
@@ -462,10 +475,116 @@ namespace SharedData
 		float4 wetParams;
 	};
 
+	struct SSPLSSettings
+	{
+		uint Enable;
+		float Strength;
+		uint StepLimit;
+		float RayLength;
+		float CompareToleranceScale;
+		float MaxDistance;
+		uint EnableSoftShadows;
+		float SoftShadowScale;
+	};
+
+	struct VanillaFresnelSettings
+	{
+		uint Enable;
+		uint EnableGGX;
+		uint EnableGGXOnGrass;
+		uint EnableDynamicCubemapsConversion;
+		uint EnableEyeSpecialHandling;
+		float RoughnessMultiplier;
+		float SpecularRoughnessBlend;
+		float BaseF0Multiplier;
+		float MinF0;
+		float CubemapToF0Multiplier;
+		float ComplexMaterialF0Multiplier;
+		float pad;
+	};
+
 	struct HorizonFixSettings
 	{
 		float farWaterDistance;
 		float3 pad;
+	};
+
+	struct PhysSkyData
+	{
+		// DYNAMIC
+		float2 texDim;
+		float2 rcpTexDim;  //
+		float2 frameDim;
+		float2 rcpFrameDim;  //
+
+		float zCameraPlanet;
+		float3 sunDir;  //
+		float3 sunlightColor;
+		float trMix;  //
+		float3 masserDir;
+		float apLumMix;  //
+		float3 masserColor;
+		float apTrMix;  //
+		float3 secundaDir;
+		float sunDiskCos;  //
+		float3 secundaColor;
+
+		// GENERAL
+		uint enabled;  //
+		float pad;
+		float vanillaMix;
+
+		// WORLD
+		float zBottom;
+		float rPlanet;  //
+		float rAtmosphere;
+		float3 groundAlbedo;  //
+
+		// ATMOSPHERE
+		float2 cloudShadowRemapRange;
+
+		float aerosolFalloff;
+		float aerosolPhaseG;  //
+		float3 aerosolScatter;
+		uint halfResApShadow;  //
+		float3 aerosolAbsorption;
+
+		float rayleighFalloff;
+		float3 rayleighScatter;  //
+
+		float ozoneAltitude;  //
+		float ozoneThickness;
+		float3 ozoneAbsorption;  //
+
+		// CLOUDS (VANILLA)
+		uint enableVanillaClouds;
+		float cloudRelightMix;
+		float cloudOriginalMix;
+		float silverLiningMix;  //
+		float silverLiningSpread;
+
+		// VOLUMETRIC CLOUDS
+		uint enableVolumetricClouds;
+		float shadowVolumeRange;
+		float lowestCloudAltitude;  //
+		float highestCloudAltitude;
+		float3 volCloudScatter;  //
+		uint volCloudUseSun;
+		float3 volCloudAbsorption;  //
+		float volCloudLowBottom;
+		float volCloudLowThickness;
+
+		// SETTINGS
+		uint lightSkyStatics;
+		float skyStaticsBrightness;  //
+	};
+
+	struct PseudoSunBounceSettings
+	{
+		float3 groundAlbedo;
+		float intensity;
+		float3 wallAlbedo;
+		float windowWidth;
 	};
 
 	struct RainRefractionSettings
@@ -496,8 +615,14 @@ namespace SharedData
 		TerrainBlendingSettings terrainBlendingSettings;
 		ExponentialHeightFogSettings exponentialHeightFogSettings;
 		TruePBRSettings truePBRSettings;
+		SSGISettings ssgiSettings;
+		SSRSettings ssrSettings;
 		SkinData skinData;
+		SSPLSSettings ssplsSettings;
+		VanillaFresnelSettings vanillaFresnelSettings;
 		HorizonFixSettings horizonFixSettings;
+		PhysSkyData physSkyData;
+		PseudoSunBounceSettings pseudoSunBounceSettings;
 		RainRefractionSettings rainRefractionSettings;
 	};
 

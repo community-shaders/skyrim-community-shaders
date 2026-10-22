@@ -21,12 +21,17 @@
 #include "Features/LODBlending.h"
 #include "Features/LightLimitFix.h"
 #include "Features/LinearLighting.h"
+#include "Features/NRD.h"
 #include "Features/PerformanceOverlay.h"
+#include "Features/PhysicalSky.h"
 #include "Features/PostProcessing.h"
+#include "Features/PseudoSunBounce.h"
 #include "Features/RainRefraction.h"
 #include "Features/RemoteControl.h"
 #include "Features/RenderDoc.h"
 #include "Features/ScreenSpaceGI.h"
+#include "Features/ScreenSpacePointLightShadows.h"
+#include "Features/ScreenSpaceReflections.h"
 #include "Features/ScreenSpaceShadows.h"
 #include "Features/ScreenshotFeature.h"
 #include "Features/Skin.h"
@@ -39,11 +44,13 @@
 #include "Features/TerrainVariation.h"
 #include "Features/UnifiedWater.h"
 #include "Features/Upscaling.h"
+#include "Features/VanillaFresnel.h"
 #include "Features/VolumetricLighting.h"
 #include "Features/VolumetricShadows.h"
 #include "Features/WaterEffects.h"
 #include "Features/WetnessEffects.h"
 #include "Menu.h"
+#include "Profiler.h"
 #include "ShaderCache.h"
 #include "State.h"
 #include "TruePBR.h"
@@ -74,8 +81,12 @@ namespace globals
 		HairSpecular hairSpecular{};
 		HorizonFix horizonFix{};
 		InteriorSun interiorSun{};
+		NRD nrd{};
+		PhysicalSky physicalSky{};
 		RainRefraction rainRefraction{};
 		ScreenSpaceGI screenSpaceGI{};
+		ScreenSpaceReflections screenSpaceReflections{};
+		ScreenSpacePointLightShadows screenSpacePointLightShadows{};
 		ScreenSpaceShadows screenSpaceShadows{};
 		Skylighting skylighting{};
 		TerrainVariation terrainVariation{};
@@ -85,6 +96,7 @@ namespace globals
 		TerrainHelper terrainHelper{};
 		TerrainShadows terrainShadows{};
 		UnifiedWater unifiedWater{};
+		VanillaFresnel vanillaFresnel{};
 		VolumetricLighting volumetricLighting{};
 		WaterEffects waterEffects{};
 		PerformanceOverlay performanceOverlay{};
@@ -99,9 +111,10 @@ namespace globals
 		CSEditor csEditor{};
 		ExponentialHeightFog exponentialHeightFog{};
 		TruePBR truePBR{};
-		Skin skin{};
 		SceneManager sceneManager{};
 		PostProcessing postProcessing{};
+		Skin skin{};
+		PseudoSunBounce pseudoSunBounce{};
 
 		namespace llf
 		{
@@ -236,6 +249,7 @@ namespace globals
 		using namespace game;
 		RefreshTES();
 		player = RE::PlayerCharacter::GetSingleton();
+		tes = RE::TES::GetSingleton();
 		sky = RE::Sky::GetSingleton();
 		utilityShader = RE::BSUtilityShader::GetSingleton();
 		imageSpaceManager = RE::ImageSpaceManager::GetSingleton();

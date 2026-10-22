@@ -122,6 +122,17 @@ if(DEVBENCH_BRIDGE)
 endif()
 add_subdirectory(${CMAKE_SOURCE_DIR}/cmake/Streamline)
 
+# NRD — NVIDIA Real-time Denoisers (DX11 via embedded DXBC shaders, no NRI)
+set(NRD_STATIC_LIBRARY ON CACHE BOOL "" FORCE)
+set(NRD_NRI OFF CACHE BOOL "" FORCE)
+set(NRD_EMBEDS_SPIRV_SHADERS OFF CACHE BOOL "" FORCE)
+set(NRD_EMBEDS_DXIL_SHADERS OFF CACHE BOOL "" FORCE)
+set(NRD_EMBEDS_DXBC_SHADERS ON CACHE BOOL "" FORCE)
+set(NRD_NORMAL_ENCODING "2" CACHE STRING "" FORCE)
+set(NRD_ROUGHNESS_ENCODING "1" CACHE STRING "" FORCE)
+set(REBLUR_PERFORMANCE_MODE ON CACHE BOOL "" FORCE)
+add_subdirectory(${CMAKE_SOURCE_DIR}/extern/NRD EXCLUDE_FROM_ALL)
+
 find_path(DETOURS_INCLUDE_DIRS "detours/detours.h")
 find_library(DETOURS_LIBRARY detours REQUIRED)
 include(FidelityFX-SDK)
@@ -153,6 +164,7 @@ target_include_directories(
         "${CMAKE_SOURCE_DIR}/package/Shaders"
         "${CMAKE_SOURCE_DIR}/extern/sk_hdr_png/include"
         ${DETOURS_INCLUDE_DIRS}
+        "${CMAKE_SOURCE_DIR}/extern/NRD/Include"
 )
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE SK_HDR_PNG_COMMUNITY_SHADERS)
@@ -175,6 +187,7 @@ target_link_libraries(
         xxHash::xxhash
         Tracy::TracyClient
         Streamline
+        NRD
         d3d12.lib
         bcrypt.lib
         Microsoft::DirectX-Headers
@@ -182,6 +195,7 @@ target_link_libraries(
         Microsoft::Effects11
         windowsapp
         windowscodecs
+        comdlg32
 )
 
 # devbench bridge: opt-out via -DDEVBENCH_BRIDGE=OFF. When off, the port isn't required
@@ -418,8 +432,7 @@ target_sources(
 # # Scene settings catalog
 # #######################################################################################################################
 
-# The generator's annotations (`str | None`) need 3.10.
-find_package(Python3 3.10 COMPONENTS Interpreter REQUIRED)
+find_package(Python3 COMPONENTS Interpreter REQUIRED)
 set(SCENE_SETTINGS_PYTHON_EXECUTABLE "${Python3_EXECUTABLE}")
 
 set(SCENE_SETTINGS_CATALOG_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
@@ -432,12 +445,6 @@ set(SCENE_SETTINGS_CATALOG_SOURCE
 set(SCENE_SETTINGS_ADAPTERS_SOURCE
     "${SCENE_SETTINGS_CATALOG_DIR}/FeatureSceneSettingsAdapters.generated.cpp"
 )
-set(SCENE_SETTINGS_CATALOG_STAMP
-    "${SCENE_SETTINGS_CATALOG_DIR}/SceneSettingsCatalog.stamp"
-)
-set(SCENE_SETTINGS_CATALOG_FLOORS
-    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/scene_settings_catalog_floors.json"
-)
 
 file(
     GLOB_RECURSE SCENE_SETTINGS_CATALOG_INPUTS
@@ -449,11 +456,8 @@ file(
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cxx"
 )
 
-# The generator rewrites only outputs whose text changed, so their objects survive an unrelated edit. The
-# stamp is the output instead, or MSBuild would see them older than the sources and rerun every build.
 add_custom_command(
-    OUTPUT "${SCENE_SETTINGS_CATALOG_STAMP}"
-    BYPRODUCTS
+    OUTPUT
         "${SCENE_SETTINGS_CATALOG_HEADER}"
         "${SCENE_SETTINGS_CATALOG_SOURCE}"
         "${SCENE_SETTINGS_ADAPTERS_SOURCE}"
@@ -462,12 +466,9 @@ add_custom_command(
         "${CMAKE_CURRENT_SOURCE_DIR}/cmake/generate_scene_settings_catalog.py"
         --source-dir "${CMAKE_CURRENT_SOURCE_DIR}" --out-dir
         "${SCENE_SETTINGS_CATALOG_DIR}" --min-entries 645 --min-controllable 538
-        --min-controllable-features 31 --feature-floors
-        "${SCENE_SETTINGS_CATALOG_FLOORS}" --stamp
-        "${SCENE_SETTINGS_CATALOG_STAMP}"
+        --min-controllable-features 30
     DEPENDS
         "${CMAKE_CURRENT_SOURCE_DIR}/cmake/generate_scene_settings_catalog.py"
-        "${SCENE_SETTINGS_CATALOG_FLOORS}"
         ${SCENE_SETTINGS_CATALOG_INPUTS}
     COMMENT "Generating scene settings catalog"
     VERBATIM
@@ -481,7 +482,6 @@ target_include_directories(
 target_sources(
     "${PROJECT_NAME}"
     PRIVATE
-        "${SCENE_SETTINGS_CATALOG_STAMP}"
         "${SCENE_SETTINGS_CATALOG_HEADER}"
         "${SCENE_SETTINGS_CATALOG_SOURCE}"
         "${SCENE_SETTINGS_ADAPTERS_SOURCE}"
@@ -643,18 +643,6 @@ install(
     COMPONENT Shaders
 )
 install(CODE "file(REMOVE \${CMAKE_INSTALL_PREFIX}/Core)" COMPONENT Shaders)
-
-# The rest of the Licenses folder lives in package/; these two sit at the repo root for GitHub.
-set(LICENSES_DESTINATION SKSE/Plugins/CommunityShaders/Licenses)
-set(ROOT_LICENSE_FILES
-    "${CMAKE_SOURCE_DIR}/COPYING.txt"
-    "${CMAKE_SOURCE_DIR}/EXCEPTIONS.md"
-)
-install(
-    FILES ${ROOT_LICENSE_FILES}
-    DESTINATION ${LICENSES_DESTINATION}
-    COMPONENT SKSE
-)
 if(NVPERF_SUPPORT)
     install(
         FILES "${NVPERF_DLL}"
@@ -712,7 +700,6 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
         list(APPEND _AIO_PACKAGE_FILES ${_tmp})
     endforeach()
     list(APPEND _AIO_PACKAGE_FILES ${CS_ICON_FONT_FILES})
-    list(APPEND _AIO_PACKAGE_FILES ${ROOT_LICENSE_FILES})
 
     # Prepare AIO by copying files only when different. This avoids updating
     # timestamps for unchanged files and prevents downstream incremental
@@ -761,7 +748,6 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
     list(FILTER _AIO_PACKAGE_SOURCE_FILES EXCLUDE REGEX "/Tests/")
     list(FILTER _AIO_PACKAGE_SOURCE_FILES EXCLUDE REGEX "/Shaders/")
     append_copy_if_different(_prepare_aio_cmds _AIO_PACKAGE_SOURCE_FILES "${CMAKE_SOURCE_DIR}/package" "${AIO_DIR}")
-    append_copy_if_different(_prepare_aio_cmds ROOT_LICENSE_FILES "${CMAKE_SOURCE_DIR}" "${AIO_DIR}/${LICENSES_DESTINATION}")
 
     # Icon fonts are sourced from src/Menu/Icons/glyphs (CS_ICON_FONT_FILES glob).
     list(
@@ -917,6 +903,7 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
             file(
                 GLOB_RECURSE _feat_shaders
                 LIST_DIRECTORIES FALSE
+                CONFIGURE_DEPENDS
                 "${_fpath}/Shaders/*"
             )
             list(FILTER _feat_shaders EXCLUDE REGEX "/Tests/")
@@ -1175,9 +1162,6 @@ if(ZIP_TO_DIST)
         COMMAND
             ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/package
             "${ZIP_DIR}"
-        COMMAND
-            ${CMAKE_COMMAND} -E copy ${ROOT_LICENSE_FILES}
-            "${ZIP_DIR}/${LICENSES_DESTINATION}/"
         COMMAND
             ${CMAKE_COMMAND} -E copy $<TARGET_FILE:${PROJECT_NAME}>
             "${ZIP_DIR}/SKSE/Plugins/"
