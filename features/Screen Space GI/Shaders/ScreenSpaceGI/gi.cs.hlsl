@@ -82,6 +82,12 @@ float GetVisibilityFunctionSmithJointApprox(float roughness, float NdotV, float 
 	return vis > 0 ? (0.5 / vis) : 0;
 }
 
+uint HorizonBitmask(float2 angleRange)
+{
+	uint2 bitsRange = uint2(round(angleRange.x * 32u), round((angleRange.y - angleRange.x) * 32u));
+	return (bitsRange.y >= 32u ? 0xFFFFFFFFu : ((1u << bitsRange.y) - 1u)) << bitsRange.x;
+}
+
 void CalculateGI(
 	uint2 dtid, float2 uv, float viewspaceZ, float3 viewspaceNormal,
 	out float o_ao, out sh2 o_currY, out float2 o_currCoCg, out float4 o_currGIAOSpecular)
@@ -218,8 +224,7 @@ void CalculateGI(
 				// Using smoothstep for cos: https://discord.com/channels/586242553746030596/586245736413528082/1102228968247144570
 				angleRange = smoothstep(0, 1, (angleRange + n) * Math::INV_PI + .5);
 
-				uint2 bitsRange = uint2(round(angleRange.x * 32u), round((angleRange.y - angleRange.x) * 32u));
-				uint maskedBits = s < AORadius ? ((1 << bitsRange.y) - 1) << bitsRange.x : 0;
+				uint maskedBits = s < AORadius ? HorizonBitmask(angleRange) : 0;
 
 #ifdef GI
 				// Back-side horizon vector for GI-radius sampling depth (~300 units).
@@ -231,16 +236,14 @@ void CalculateGI(
 				float coneHalfAngles = max(5e-2, specularLobeHalfAngle(roughness));  // not too small
 				float2 angleRangeSpecular = clamp((angleRangeGI + nDom) * 0.5 / coneHalfAngles, -1, 1) * 0.5 + 0.5;
 
-				uint2 bitsRangeGISpecular = uint2(round(angleRangeSpecular.x * 32u), round((angleRangeSpecular.y - angleRangeSpecular.x) * 32u));
-				uint maskedBitsGISpecular = s < GIRadius ? ((1 << bitsRangeGISpecular.y) - 1) << bitsRangeGISpecular.x : 0;
+				uint maskedBitsGISpecular = s < GIRadius ? HorizonBitmask(angleRangeSpecular) : 0;
 #	endif
 
 				// The math: https://www.desmos.com/calculator/je4y5ved2j
 				// Using smoothstep for cos: https://discord.com/channels/586242553746030596/586245736413528082/1102228968247144570
 				angleRangeGI = smoothstep(0, 1, (angleRangeGI + n) * Math::INV_PI + .5);
 
-				uint2 bitsRangeGI = uint2(round(angleRangeGI.x * 32u), round((angleRangeGI.y - angleRangeGI.x) * 32u));
-				uint maskedBitsGI = s < GIRadius ? ((1 << bitsRangeGI.y) - 1) << bitsRangeGI.x : 0;
+				uint maskedBitsGI = s < GIRadius ? HorizonBitmask(angleRangeGI) : 0;
 
 				uint validBits = maskedBitsGI & ~bitmaskGI;
 				bool checkGI = validBits;
