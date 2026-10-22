@@ -5,6 +5,7 @@
 #	include <sstream>
 
 #	include "../EffectManager.h"
+#	include "../IniSerialization.h"
 #	include "../PresetManager.h"
 #	include "../SettingManager.h"
 #	include "../WeatherManager.h"
@@ -373,21 +374,15 @@ void ExtendedEffect::SyncWeatherVarFromUI(size_t index, uint32_t weatherID)
 
 	std::vector<std::pair<std::string, std::string>> updates;
 	if (uiVar.type == UIVariableType::Float) {
-		updates.emplace_back(iniKey, std::to_string(uiVar.floatValue));
+		updates.emplace_back(iniKey, Effects11Util::Ini::FormatFloat(uiVar.floatValue));
 	} else {
 		int comps = GetComponentCount(uiVar.type);
 		if (IsPerComponentVector(uiVar)) {
 			static const char* suffixes[] = { "X", "Y", "Z", "W" };
 			for (int c = 0; c < comps; ++c)
-				updates.emplace_back(iniKey + suffixes[c], std::to_string(uiVar.vectorValue[c]));
+				updates.emplace_back(iniKey + suffixes[c], Effects11Util::Ini::FormatFloat(uiVar.vectorValue[c]));
 		} else {
-			std::string val;
-			for (int c = 0; c < comps; ++c) {
-				if (c > 0)
-					val += ", ";
-				val += std::to_string(uiVar.vectorValue[c]);
-			}
-			updates.emplace_back(iniKey, val);
+			updates.emplace_back(iniKey, Effects11Util::Ini::FormatFloatList({ uiVar.vectorValue, static_cast<size_t>(comps) }));
 		}
 	}
 
