@@ -7,7 +7,7 @@
 #include "Common/Color.hlsli"
 #include "Common/ColorManagement.hlsli"
 #include "Common/Math.hlsli"
-#include "CubemapCommon.hlsli"
+#include "DynamicCubemaps/CubemapCommon.hlsli"
 
 static const float Epsilon = 0.00001;
 
