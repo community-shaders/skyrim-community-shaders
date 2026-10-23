@@ -1329,7 +1329,7 @@
     "feature.perf_overlay.position": "位置：",
     "feature.perf_overlay.post_fg_calculated": "帧生成后：计算计时（2倍帧生成前）",
     "feature.perf_overlay.post_fg_fps": "帧生成后FPS：",
-    "feature.perf_overlay.post_fg_graph_tooltip": "FSR帧生成使用计算计时数据（2倍帧生成前）。\nDLSS帧生成提供测量计时数据。",
+    "feature.perf_overlay.post_fg_graph_tooltip": "帧生成使用计算计时数据（2倍帧生成前）。",
     "feature.perf_overlay.raw_fps": "原始FPS：",
     "feature.perf_overlay.reset_position": "重置位置",
     "feature.perf_overlay.restore_defaults": "恢复默认值",

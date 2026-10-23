@@ -180,7 +180,7 @@ void PerformanceOverlay::DrawSettings()
 			ImGui::Checkbox(T(TKEY("show_post_fg_graph"), "Show Post-FG Frametime Graph"), &this->settings.ShowPostFGFrameTimeGraph);
 			if (ImGui::IsItemHovered()) {
 				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("%s", T(TKEY("post_fg_graph_tooltip"), "FSR Frame Generation uses calculated timing data (2x Pre-FG).\nDLSS Frame Generation provides measured timing data."));
+					ImGui::Text("%s", T(TKEY("post_fg_graph_tooltip"), "Frame Generation uses calculated timing data (2x Pre-FG)."));
 				}
 			}
 		} else if (this->settings.ShowFPS) {

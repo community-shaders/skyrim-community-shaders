@@ -774,7 +774,7 @@
     "feature.perf_overlay.position": "Позиция:",
     "feature.perf_overlay.post_fg_calculated": "Post-FG: расчётное время (2x Pre-FG)",
     "feature.perf_overlay.post_fg_fps": "Post-FG FPS:",
-    "feature.perf_overlay.post_fg_graph_tooltip": "FSR Frame Generation использует расчётные временны́е данные (2x Pre-FG).\nDLSS Frame Generation предоставляет измеренные временны́е данные.",
+    "feature.perf_overlay.post_fg_graph_tooltip": "Frame Generation использует расчётные временны́е данные (2x Pre-FG).",
     "feature.perf_overlay.raw_fps": "Исходный FPS:",
     "feature.perf_overlay.reset_position": "Сбросить позицию",
     "feature.perf_overlay.restore_defaults": "Восстановить значения по умолчанию",

@@ -1588,7 +1588,7 @@
     "feature.perf_overlay.position": "Position:",
     "feature.perf_overlay.post_fg_calculated": "Post-FG: Calculated timing (2x Pre-FG)",
     "feature.perf_overlay.post_fg_fps": "Post-FG FPS:",
-    "feature.perf_overlay.post_fg_graph_tooltip": "FSR Frame Generation uses calculated timing data (2x Pre-FG).\nDLSS Frame Generation provides measured timing data.",
+    "feature.perf_overlay.post_fg_graph_tooltip": "Frame Generation uses calculated timing data (2x Pre-FG).",
     "feature.perf_overlay.raw_fps": "Raw FPS:",
     "feature.perf_overlay.reset_position": "Reset Position",
     "feature.perf_overlay.restore_defaults": "Restore Defaults",
