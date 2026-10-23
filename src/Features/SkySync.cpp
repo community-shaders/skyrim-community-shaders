@@ -862,9 +862,14 @@ void SkySync::ShadowFader::Update(const RE::Sky* sky, RE::NiPoint3 dirs[], float
 		immediateTransitionRemaining = 0.0f;
 	}
 
-	// The zenith is only a stand-in, so a swing to or from it is dimmed by the real caster's elevation
-	dimDir = target == Caster::Zenith ? startDir : source == Caster::Zenith ? targetDir :
-	                                                                          currentDir;
+	// The zenith is only a stand-in, so a swing to or from it is dimmed by the real caster's elevation;
+	// startDir is only a fallback for a hidden source, as it is mid-swing when a transition was interrupted
+	if (target == Caster::Zenith) {
+		const RE::NiPoint3 sourceDir = casterDir(source);
+		dimDir = isValidDir(sourceDir) ? sourceDir : startDir;
+	} else {
+		dimDir = source == Caster::Zenith ? targetDir : currentDir;
+	}
 
 	// Fade out as the direction leaves the old caster and back in as it reaches the new one
 	const float fadeOut = startIntensityFactor * ComputeAlignmentFactor(currentDir, startDir);
