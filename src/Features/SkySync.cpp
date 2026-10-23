@@ -790,8 +790,10 @@ void SkySync::ShadowFader::Update(const RE::Sky* sky, RE::NiPoint3 dirs[], float
 	Caster best;
 
 	if (globals::features::skySync.sunBelowHorizon) {
-		bool masserValid = isValidDir(dirs[static_cast<int>(Caster::Masser)]);
-		bool secundaValid = isValidDir(dirs[static_cast<int>(Caster::Secunda)]);
+		// A moon that gives no light (wrong source, below the horizon) must not hold off the zenith fallback
+		auto isLit = [&](Caster moon) { return isValidDir(dirs[static_cast<int>(moon)]) && intensities[static_cast<int>(moon)] > 0.0f; };
+		const bool masserValid = isLit(Caster::Masser);
+		const bool secundaValid = isLit(Caster::Secunda);
 
 		if (!masserValid && !secundaValid)
 			best = Caster::Zenith;
