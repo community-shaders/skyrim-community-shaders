@@ -2,9 +2,6 @@
 #define __COLOR_MANAGEMENT_DEPENDENCY_HLSL__
 
 #include "Common/Color.hlsli"
-#if defined(PSHADER)
-#	include "Common/Permutation.hlsli"
-#endif
 
 #if defined(PSHADER) || defined(CSHADER) || defined(COMPUTESHADER)
 namespace Color
