@@ -374,6 +374,9 @@ public:
 	/** @brief The widget editing this form, the cell lighting widget included, or null. */
 	Widget* FindWidget(const FormEditSources::FormKey& key);
 
+	/** @brief Remembers the focused widget by form key, not object lifetime. */
+	void SetFocusedWidget(const Widget& widget) { lastFocusedWidgetKey = widget.GetFormKey(); }
+
 	/** @brief Steps the newest change back and says what it undid. */
 	void PerformUndo();
 
@@ -513,7 +516,7 @@ private:
 	std::string settingsSelectedCategory = "Flags";
 
 	// Widget focus tracking for Ctrl+W
-	Widget* lastFocusedWidget = nullptr;
+	std::optional<FormEditSources::FormKey> lastFocusedWidgetKey;
 
 	/** @brief Locks the current weather once any in-progress transition finishes, unless the user already locked one. */
 	void LockWeatherForOverlay();
