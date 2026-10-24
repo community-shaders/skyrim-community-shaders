@@ -3671,7 +3671,7 @@
     "menu.toggle_error_message": "切换错误消息",
     "menu.toggle_error_message_tooltip": "隐藏或显示着色器失败消息。您的安装已损坏，游戏中可能会看到错误。请仔细检查是否已更新所有功能以及加载顺序是否正确。请参阅CommunityShaders.log了解详情，并查看Nexus Mods页面或Discord服务器。",
     "menu.window_title": "Community Shaders {version}",
-    "menu.window_title_dev": "Community Shaders {version} [{build}]",
+    "menu.window_title_dev": "Community Shaders {version} {build}",
     "native_menu.graphics.heading": "Community Shaders",
     "native_menu.graphics.open_menu": "打开 Community Shaders 菜单",
     "native_menu.graphics.open_menu_desc": "打开完整的 Community Shaders 设置窗口。",

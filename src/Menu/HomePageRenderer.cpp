@@ -81,8 +81,9 @@ void HomePageRenderer::RenderWelcomeSection()
 	ImGui::SetWindowFontScale(1.0f);
 
 	if (Plugin::BUILD_DESCRIBE != expectedTag) {
-		ImGui::SetCursorPosX(std::max((windowSize.x - ImGui::CalcTextSize(Plugin::BUILD_DESCRIBE.data()).x) * 0.5f, ImGui::GetCursorPosX()));
-		Util::Text::WrappedDisabled("%s", Plugin::BUILD_DESCRIBE.data());
+		const auto buildLabel = Util::GetBuildLabel();
+		ImGui::SetCursorPosX(std::max((windowSize.x - ImGui::CalcTextSize(buildLabel.c_str()).x) * 0.5f, ImGui::GetCursorPosX()));
+		Util::Text::WrappedDisabled("%s", buildLabel.c_str());
 	}
 
 	ImGui::Spacing();

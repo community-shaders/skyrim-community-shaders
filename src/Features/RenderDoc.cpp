@@ -901,7 +901,7 @@ std::string RenderDoc::BuildAutomaticCaptureComments(const std::string& userComm
 	// Plugin version
 	auto pluginVersion = Util::GetFormattedVersion(Plugin::VERSION);
 	if (Plugin::BUILD_DESCRIBE != std::format("v{}", pluginVersion))
-		pluginVersion += std::format(" [{}]", Plugin::BUILD_DESCRIBE);
+		pluginVersion += " " + Util::GetBuildLabel();
 	comments += std::format("Community Shaders {}\n", pluginVersion);
 
 	// Enabled features

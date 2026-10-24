@@ -31,9 +31,9 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, bool canShow
 	auto title = std::format("Community Shaders {}", versionStr);
 	auto actionIcons = BuildActionIcons(canShowIcons, uiIcons);
 
-	// Dev builds: smaller muted git describe tag after the title, vertically centered on it
+	// Dev builds: muted build label after the title
 	const bool showBuildTag = Plugin::BUILD_DESCRIBE != expectedTag;
-	const auto buildTag = std::format("[{}]", Plugin::BUILD_DESCRIBE);
+	const auto buildTag = Util::GetBuildLabel();
 	const float buildTagWidth = showBuildTag ? ImGui::GetStyle().ItemSpacing.x + ImGui::CalcTextSize(buildTag.c_str()).x : 0.0f;
 	auto drawBuildTag = [&]() {
 		if (!showBuildTag)
