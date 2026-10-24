@@ -7,6 +7,9 @@ namespace Util
 {
 	std::string GetFormattedVersion(const REL::Version& version);
 
+	/** @brief Dev build label: "[branch][describe]". */
+	std::string GetBuildLabel();
+
 	std::string DefinesToString(const std::vector<std::pair<const char*, const char*>>& defines);
 	std::string DefinesToString(const std::vector<D3D_SHADER_MACRO>& defines);
 

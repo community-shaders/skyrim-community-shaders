@@ -50,8 +50,9 @@ extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Load(const SKSE::LoadInterface* a_s
 	while (!REX::W32::IsDebuggerPresent()) {};
 #endif
 	InitializeLog();
-	logger::info("Loaded {} {}", Plugin::NAME, Plugin::VERSION.string());
 	SKSE::Init(a_skse);
+	if (Plugin::BUILD_DESCRIBE != std::format("v{}", Util::GetFormattedVersion(Plugin::VERSION)))
+		logger::info("Build {}", Util::GetBuildLabel());
 	SKSE::AllocTrampoline(1 << 10);
 	return Load();
 }

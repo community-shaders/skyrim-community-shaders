@@ -28,8 +28,21 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, bool canShow
 
 	auto versionStr = Util::GetFormattedVersion(Plugin::VERSION);
 	auto expectedTag = std::format("v{}", versionStr);
-	auto title = Plugin::BUILD_DESCRIBE == expectedTag ? std::format("Community Shaders {}", versionStr) : std::format("Community Shaders {} [{}]", versionStr, Plugin::BUILD_DESCRIBE);
+	auto title = std::format("Community Shaders {}", versionStr);
 	auto actionIcons = BuildActionIcons(canShowIcons, uiIcons);
+
+	// Dev builds: muted build label after the title
+	const bool showBuildTag = Plugin::BUILD_DESCRIBE != expectedTag;
+	const auto buildTag = Util::GetBuildLabel();
+	const float buildTagWidth = showBuildTag ? ImGui::GetStyle().ItemSpacing.x + ImGui::CalcTextSize(buildTag.c_str()).x : 0.0f;
+	auto drawBuildTag = [&]() {
+		if (!showBuildTag)
+			return;
+		const float titleHeight = ImGui::GetItemRectSize().y;
+		ImGui::SameLine();
+		ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (titleHeight - ImGui::GetTextLineHeight()) * 0.5f);
+		ImGui::TextDisabled("%s", buildTag.c_str());
+	};
 
 	if (isDocked) {
 		// When docked, draw logo as a background watermark if available
@@ -73,8 +86,10 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, bool canShow
 					contentWidth += ImGui::CalcTextSize(title.c_str()).x;
 					ImGui::SetWindowFontScale(1.0f);
 				}
+				contentWidth += buildTagWidth;
 
-				float offset = Util::GetCenterOffsetForContent(contentWidth);
+				// Slide left rather than clip into the icon column
+				float offset = std::min(Util::GetCenterOffsetForContent(contentWidth), ImGui::GetContentRegionAvail().x - contentWidth);
 				if (offset > 0.0f) {
 					ImGui::SetCursorPosX(ImGui::GetCursorPosX() + offset);
 				}
@@ -114,6 +129,7 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, bool canShow
 				}
 				ImGui::PopStyleVar();
 			}
+			drawBuildTag();
 
 			// Buttons on the right
 			ImGui::TableNextColumn();
@@ -127,11 +143,11 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, bool canShow
 
 			if (centerHeader) {
 				// Calculate text width for centering
-				float textWidth = 0.0f;
+				float textWidth = buildTagWidth;
 				{
 					RoleFontGuard titleFont(Menu::FontRole::Title);
 					ImGui::SetWindowFontScale(textScaleFactor);
-					textWidth = ImGui::CalcTextSize(title.c_str()).x;
+					textWidth += ImGui::CalcTextSize(title.c_str()).x;
 					ImGui::SetWindowFontScale(1.0f);
 				}
 
@@ -148,6 +164,7 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, bool canShow
 				ImGui::TextUnformatted(title.c_str());
 			}
 			ImGui::SetWindowFontScale(1.0f);
+			drawBuildTag();
 		}
 	}
 

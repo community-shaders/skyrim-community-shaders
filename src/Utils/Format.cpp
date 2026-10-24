@@ -15,6 +15,13 @@ namespace Util
 		return v.substr(0, v.find_last_of("."));
 	}
 
+	std::string GetBuildLabel()
+	{
+		if (Plugin::BUILD_BRANCH.empty())
+			return std::format("[{}]", Plugin::BUILD_DESCRIBE);
+		return std::format("[{}][{}]", Plugin::BUILD_BRANCH, Plugin::BUILD_DESCRIBE);
+	}
+
 	std::string DefinesToString(const std::vector<std::pair<const char*, const char*>>& defines)
 	{
 		std::string result;

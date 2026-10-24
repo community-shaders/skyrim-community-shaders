@@ -67,10 +67,10 @@ void HomePageRenderer::RenderWelcomeSection()
 	auto versionStr = Util::GetFormattedVersion(Plugin::VERSION);
 	auto expectedTag = std::format("v{}", versionStr);
 	auto* i18n = I18n::GetSingleton();
-	std::string titleWithVersion = Plugin::BUILD_DESCRIBE == expectedTag ? i18n->Format("menu.home.welcome", { { "version", versionStr } }, "Welcome to Community Shaders {version}") : i18n->Format("menu.home.welcome_dev", { { "version", versionStr }, { "build", std::string(Plugin::BUILD_DESCRIBE) } }, "Welcome to Community Shaders {version} [{build}]");
+	std::string titleWithVersion = i18n->Format("menu.home.welcome", { { "version", versionStr } }, "Welcome to Community Shaders {version}");
 	ImVec2 titleSize = ImGui::CalcTextSize(titleWithVersion.c_str());
-	ImGui::SetCursorPosX((windowSize.x - titleSize.x) * 0.5f);
-	ImGui::Text("%s", titleWithVersion.c_str());
+	ImGui::SetCursorPosX(std::max((windowSize.x - titleSize.x) * 0.5f, ImGui::GetCursorPosX()));
+	ImGui::TextWrapped("%s", titleWithVersion.c_str());
 
 	// Only pop font if we pushed one
 	if (titleFont) {
@@ -80,6 +80,12 @@ void HomePageRenderer::RenderWelcomeSection()
 	// Reset text scale back to normal
 	ImGui::SetWindowFontScale(1.0f);
 
+	if (Plugin::BUILD_DESCRIBE != expectedTag) {
+		const auto buildLabel = Util::GetBuildLabel();
+		ImGui::SetCursorPosX(std::max((windowSize.x - ImGui::CalcTextSize(buildLabel.c_str()).x) * 0.5f, ImGui::GetCursorPosX()));
+		Util::Text::WrappedDisabled("%s", buildLabel.c_str());
+	}
+
 	ImGui::Spacing();
 
 	// Intro text - centered
@@ -88,7 +94,7 @@ void HomePageRenderer::RenderWelcomeSection()
 		"This comprehensive collection of features brings modern rendering techniques\n"
 		"to enhance your visual experience.");
 	ImVec2 introSize = ImGui::CalcTextSize(introText);
-	ImGui::SetCursorPosX((windowSize.x - introSize.x) * 0.5f);
+	ImGui::SetCursorPosX(std::max((windowSize.x - introSize.x) * 0.5f, ImGui::GetCursorPosX()));
 	ImGui::TextWrapped("%s", introText);
 
 	ImGui::Spacing();
