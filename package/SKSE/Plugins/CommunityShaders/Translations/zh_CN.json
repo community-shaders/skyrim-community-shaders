@@ -3668,7 +3668,6 @@
     "menu.setup.new_install_line1": "这似乎是一个新的安装、更新，或",
     "menu.setup.new_install_line2": "重新安装Community Shaders。",
     "menu.setup.press_any_key": "按下任意键设置为切换键...",
-    "menu.setup.press_to_close": "按Escape或Enter继续",
     "menu.toggle_error_message": "切换错误消息",
     "menu.toggle_error_message_tooltip": "隐藏或显示着色器失败消息。您的安装已损坏，游戏中可能会看到错误。请仔细检查是否已更新所有功能以及加载顺序是否正确。请参阅CommunityShaders.log了解详情，并查看Nexus Mods页面或Discord服务器。",
     "menu.window_title": "Community Shaders {version}",

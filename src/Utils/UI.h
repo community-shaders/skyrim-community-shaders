@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <functional>
 #include <imgui.h>
+#include <optional>
 #include <string>
 #include <vector>
 #include <windows.h>  // For WPARAM and virtual key constants
@@ -1140,13 +1141,14 @@ namespace Util
 	void DrawModalBackground(uint8_t alpha = 160);
 
 	/**
-	 * @brief Draws text with a breathing/pulsing alpha animation using theme text color.
+	 * @brief Draws text with a breathing/pulsing alpha animation.
 	 * @param text The text to display
+	 * @param color Base color (default: theme text color)
 	 * @param speed Animation speed multiplier (default: 2.5f)
 	 * @param minAlpha Minimum alpha value (default: 0.7f)
 	 * @param maxAlpha Maximum alpha value (default: 1.0f)
 	 */
-	void DrawBreathingText(const char* text, float speed = 2.5f, float minAlpha = 0.7f, float maxAlpha = 1.0f);
+	void DrawBreathingText(const char* text, std::optional<ImVec4> color = std::nullopt, float speed = 2.5f, float minAlpha = 0.7f, float maxAlpha = 1.0f);
 
 	/**
 	 * @brief Returns a color with pulsing brightness animation applied.

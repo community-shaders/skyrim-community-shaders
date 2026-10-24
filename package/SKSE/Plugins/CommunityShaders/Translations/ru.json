@@ -1903,7 +1903,6 @@
     "menu.setup.new_install_line1": "Похоже, это новая установка, обновление или",
     "menu.setup.new_install_line2": "переустановка Community Shaders.",
     "menu.setup.press_any_key": "Нажмите любую клавишу для назначения...",
-    "menu.setup.press_to_close": "Нажмите Escape или Enter для продолжения",
     "menu.toggle_error_message": "Переключить сообщение об ошибке",
     "menu.toggle_error_message_tooltip": "Скрыть или показать сообщение об ошибке шейдера. Установка неисправна. Проверьте обновления и порядок загрузки. Подробности в CommunityShaders.log и на странице Nexus Mods или Discord.",
     "menu.window_title": "Community Shaders {version}",

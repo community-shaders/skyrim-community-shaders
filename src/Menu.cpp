@@ -1074,8 +1074,6 @@ void Menu::ProcessInputEventQueue()
 				key = MapVirtualKeyEx(event.keyCode, MAPVK_VSC_TO_VK_EX, GetKeyboardLayout(0));
 
 			const bool wasCapturingHotkey = IsCapturingHotkeyInput();
-			const bool allowSetupCloseKey = wasCapturingHotkey && HomePageRenderer::ShouldShowFirstTimeSetup() &&
-			                                (key == VK_RETURN || key == VK_ESCAPE);
 
 			// Dispatch bound hotkey actions for `key`. Combo bindings (modifier + key)
 			// fire on key-down for responsiveness; single-key bindings fire on key-up.
@@ -1093,6 +1091,8 @@ void Menu::ProcessInputEventQueue()
 							 IsEnabled = !IsEnabled;
 							 if (IsEnabled)
 								 ImGui::GetIO().ClearInputKeys();  // Prevent toggle key from remaining "held" in ImGui after open.
+						 } else if (HomePageRenderer::ShouldShowFirstTimeSetup()) {
+							 HomePageRenderer::MarkFirstTimeSetupComplete();
 						 }
 					 } },
 					{ settings.SkipCompilationKey, [this, shaderCache]() { if (!ShouldSwallowInput() && shaderCache->IsCompiling()) shaderCache->SetBackgroundCompilation(true); } },
@@ -1143,12 +1143,6 @@ void Menu::ProcessInputEventQueue()
 			};
 
 			if (!event.IsPressed()) {
-				// Skip key release if it was used to close the first-time setup dialog
-				if (HomePageRenderer::ShouldSkipKeyRelease(key)) {
-					io.AddKeyEvent(Util::Input::VirtualKeyToImGuiKey(key), event.IsPressed());
-					continue;
-				}
-
 				struct HotkeyAction
 				{
 					std::vector<InputCombo>* settingKey;
@@ -1175,11 +1169,9 @@ void Menu::ProcessInputEventQueue()
 				bool handled = false;
 				for (auto& h : hotkeyActions) {
 					if (*(h.settingFlag)) {
-						// During first-time setup, don't capture Enter or Escape as hotkeys
-						// These keys are reserved for closing the dialog, unless we are recording a modifier
+						// During first-time setup, don't capture Enter or Escape as hotkeys;
+						// they cancel capture instead
 						if (HomePageRenderer::ShouldShowFirstTimeSetup() && (key == VK_RETURN || key == VK_ESCAPE)) {
-							// Do not stop capture here, just let it pass through to the UI
-							// The UI code in HomePageRenderer checks for Enter/Escape and completes setup
 							*(h.settingFlag) = false;  // Cancel hotkey capture mode
 							handled = true;
 							break;
@@ -1270,10 +1262,9 @@ void Menu::ProcessInputEventQueue()
 			bool isHotkey = ShouldSwallowInput() && std::any_of(std::begin(hotkeys), std::end(hotkeys),
 														[key](const auto* combo) { return InputCombo::MatchesKeyboardCombo(*combo, key); });
 
-			// Always forward key-up events. Suppress key-down during active hotkeys,
-			// and during hotkey capture except setup close keys (Enter/Escape).
+			// Always forward key-up events. Suppress key-down during active hotkeys and hotkey capture.
 			const bool isKeyDown = event.IsPressed();
-			const bool suppressForwarding = isKeyDown && (isHotkey || (wasCapturingHotkey && !allowSetupCloseKey));
+			const bool suppressForwarding = isKeyDown && (isHotkey || wasCapturingHotkey);
 			if (!suppressForwarding) {
 				// DirectInput loses key-up events after alt-tab; validate against OS state.
 				bool pressed = isKeyDown && (GetAsyncKeyState(key) & Constants::KEY_PRESSED_MASK);

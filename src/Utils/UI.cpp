@@ -1924,13 +1924,12 @@ namespace Util
 			IM_COL32(0, 0, 0, alpha));
 	}
 
-	void DrawBreathingText(const char* text, float speed, float minAlpha, float maxAlpha)
+	void DrawBreathingText(const char* text, std::optional<ImVec4> color, float speed, float minAlpha, float maxAlpha)
 	{
 		float alphaRange = maxAlpha - minAlpha;
 		float breathe = minAlpha + alphaRange * 0.5f * (1.0f + sinf((float)ImGui::GetTime() * speed));
-		auto& theme = globals::menu->GetTheme().Palette;
-		ImVec4 color = ImVec4(theme.Text.x, theme.Text.y, theme.Text.z, breathe);
-		ImGui::TextColored(color, "%s", text);
+		const ImVec4 base = color.value_or(globals::menu->GetTheme().Palette.Text);
+		ImGui::TextColored(ImVec4(base.x, base.y, base.z, breathe), "%s", text);
 	}
 
 	ImVec4 GetPulsingColor(const ImVec4& baseColor, float speed, float minBrightness, float maxBrightness)
