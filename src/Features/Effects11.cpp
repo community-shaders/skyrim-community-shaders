@@ -473,6 +473,9 @@ void Effects11::Reset()
 		// UseEffect with no compiled preset has nothing to run, so fall back to the game's own post processing.
 		PostProcessingMode::Set(PostProcessingMode::Mode::Vanilla);
 	}
+	// CheckCommonData only clears this when a hook calls it, which may not happen outside the world.
+	if (!presetActive)
+		enableEffect = false;
 }
 
 void Effects11::ClearShaderCache()

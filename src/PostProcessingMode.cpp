@@ -134,6 +134,11 @@ namespace PostProcessingMode
 		a_general[kPackRevisionKey] = UnifiedPresetCatalog::GetSingleton().GetPipelineRevision();
 	}
 
+	bool IsVanillaPending()
+	{
+		return pendingMode == Mode::Vanilla && !detectPreset;
+	}
+
 	void ApplyPending()
 	{
 		if (!pendingMode)

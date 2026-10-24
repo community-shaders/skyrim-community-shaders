@@ -24,6 +24,9 @@ namespace PostProcessingMode
 	/** @brief Writes the chosen mode into the user settings "General" section once it is known, even while its pipeline cannot run. */
 	void Save(json& a_general);
 
+	/** @brief Whether the mode read by Load() will apply as Vanilla; known before Effects 11 is ready, since only an explicit Vanilla choice resolves to it. */
+	bool IsVanillaPending();
+
 	/** @brief Applies a mode read by Load() once Effects 11 is ready, running the installed default while its pipeline cannot. */
 	void ApplyPending();
 

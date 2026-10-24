@@ -93,9 +93,12 @@ void PostProcessing::DrawSettings()
 
 	ImGui::Separator();
 
-	// Effects 11 discards the pipeline output, so its controls would do nothing.
-	const Util::LockedSection effects11Lock(PostProcessingMode::Get() == PostProcessingMode::Mode::Effects11,
-		T("common.settings_managed_by_enb", "This setting is managed by Effects 11."));
+	// The pipeline only runs in its own mode, so its controls would do nothing in the others.
+	const auto mode = PostProcessingMode::Get();
+	const Util::LockedSection modeLock(mode != PostProcessingMode::Mode::PostProcessing,
+		mode == PostProcessingMode::Mode::Effects11 ?
+			T("common.settings_managed_by_enb", "This setting is managed by Effects 11.") :
+			T("feature.post_processing.off_in_vanilla", "Vanilla mode is active. Select Post Processing above to use these settings."));
 
 	{
 		auto& cam = cinematicCamera;
@@ -533,11 +536,6 @@ void PostProcessing::Reset()
 	// tonemap (or the pipeline is bypassed) PreProcess never runs, and a stale flag would
 	// make the next frame we do run read from the wrong buffer.
 	isrefraction = false;
-
-	for (auto& pipe : pipeline) {
-		if (pipe)
-			pipe->Reset();
-	}
 }
 
 void PostProcessing::CopyToRenderTarget(
@@ -622,7 +620,7 @@ void PostProcessing::DrawFeature(PostProcessFeature& feature, PostProcessFeature
 
 void PostProcessing::DrawBeforeUpscaling()
 {
-	if (bypass || IsTonemapOwnedByEffects11())
+	if (!IsPipelineRunning())
 		return;
 
 	auto& upscaling = globals::features::upscaling;
@@ -741,14 +739,13 @@ void PostProcessing::PreProcess(RE::RENDER_TARGET a_input)
 
 void PostProcessing::ClearBorderMotionVectorsForFrameGen()
 {
-	// Effects11 owns the image, so no letterbox is drawn and zeroing its motion vectors
-	// would hand frame generation a band of static pixels over live scene content.
-	if (bypass || IsTonemapOwnedByEffects11())
+	// Without a drawn letterbox, zeroed motion vectors would hand frame generation static pixels over live scene content.
+	if (!IsPipelineRunning())
 		return;
 
 	auto borderIdx = static_cast<size_t>(FeaturePipelineIndex::Border);
 	auto& pipe = pipeline[borderIdx];
-	if (pipe && pipe->enabled) {
+	if (pipe && pipe->IsActive() && !(globals::state->IsMainOrLoadingMenuOpen() && pipe->DisableInMainLoadingMenu())) {
 		auto* border = static_cast<Border*>(pipe.get());
 		border->ClearMotionVectorsForFrameGen();
 	}
@@ -761,9 +758,9 @@ bool PostProcessing::WantsTonemapOwnership() const
 	return !bypass;
 }
 
-bool PostProcessing::IsTonemapOwnedByEffects11() const
+bool PostProcessing::IsPipelineRunning() const
 {
-	return globals::state->GetTonemapOwner() == State::TonemapOwner::kEffects11;
+	return !bypass && globals::state->GetTonemapOwner() == State::TonemapOwner::kPostProcessing;
 }
 
 bool PostProcessing::WantsAutoHDR() const
@@ -830,7 +827,7 @@ void PostProcessing::Prepass()
 		const float aspect = graphicsState && graphicsState->screenHeight > 0 ?
 		                         (float)graphicsState->screenWidth / (float)graphicsState->screenHeight :
 		                         16.0f / 9.0f;
-		const bool runnable = !bypass && !IsTonemapOwnedByEffects11() && !globals::state->IsMainOrLoadingMenuOpen();
+		const bool runnable = IsPipelineRunning() && !globals::state->IsMainOrLoadingMenuOpen();
 		cinematicCamera.Update(runnable, aspect);
 	}
 

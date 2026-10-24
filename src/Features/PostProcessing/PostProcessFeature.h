@@ -128,6 +128,4 @@ struct PostProcessFeature : public std::enable_shared_from_this<PostProcessFeatu
 		ID3D11ShaderResourceView* srv = nullptr;
 	};
 	virtual void Draw(TextureInfo& inout_tex) = 0;  // read from last pass, do the thing, and replace it with output texture
-
-	virtual inline void Reset() {};
 };
