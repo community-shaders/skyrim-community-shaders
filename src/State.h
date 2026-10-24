@@ -457,7 +457,8 @@ public:
 		float EffectRadius;
 		uint BaseTextureIsWorking;
 		uint RenderToUI;
-		uint pad;
+		// Model-space height of the grass mesh being drawn, for root-to-tip canopy occlusion.
+		float GrassCanopyHeight;
 
 		bool operator==(const PermutationCB& other) const
 		{
@@ -465,7 +466,8 @@ public:
 			       PixelShaderDescriptor == other.PixelShaderDescriptor &&
 			       ExtraShaderDescriptor == other.ExtraShaderDescriptor &&
 			       ExtraFeatureDescriptor == other.ExtraFeatureDescriptor &&
-			       EffectRadius == other.EffectRadius && BaseTextureIsWorking == other.BaseTextureIsWorking && RenderToUI == other.RenderToUI;
+			       EffectRadius == other.EffectRadius && BaseTextureIsWorking == other.BaseTextureIsWorking && RenderToUI == other.RenderToUI &&
+			       GrassCanopyHeight == other.GrassCanopyHeight;
 		}
 	};
 	STATIC_ASSERT_ALIGNAS_16(PermutationCB);

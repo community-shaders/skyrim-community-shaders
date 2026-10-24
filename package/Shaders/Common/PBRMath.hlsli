@@ -2,6 +2,7 @@
 #define __PBR_MATH_HLSL__
 
 #include "Common/BRDF.hlsli"
+#include "Common/ColorManagement.hlsli"
 #include "Common/Math.hlsli"
 
 namespace PBR
@@ -33,6 +34,29 @@ namespace PBR
 		static const uint HairMarschner = (1 << 10);
 		static const uint Glint = (1 << 11);
 		static const uint ProjectedGlint = (1 << 12);
+		static const uint Foliage = (1 << 13);
+		static const uint ThinSurface = (1 << 14);
+	}
+
+	bool IsFoliageMaterial(uint flags)
+	{
+#if defined(LANDSCAPE) || defined(LODLANDSCAPE)
+		return false;
+#elif defined(TREE_ANIM)
+		return (flags & (Flags::Foliage | Flags::Subsurface)) != 0;
+#else
+		return (flags & Flags::Foliage) != 0;
+#endif
+	}
+
+	// Foliage is a thin surface with canopy-specific approximations on top.
+	bool IsThinSurfaceMaterial(uint flags)
+	{
+#if defined(LANDSCAPE) || defined(LODLANDSCAPE)
+		return false;
+#else
+		return IsFoliageMaterial(flags) || (flags & Flags::ThinSurface) != 0;
+#endif
 	}
 
 	namespace TerrainFlags
@@ -90,6 +114,163 @@ namespace PBR
 		float3 F = BRDF::F_Schlick(F0, VdotH);
 
 		return D * G * F;
+	}
+
+	/// @brief Directional albedo of a GGX specular lobe from the split-sum environment BRDF
+	/// @param F0 Reflectance at normal incidence
+	/// @param roughness Perceptual roughness [0,1]
+	/// @param NdotV Dot product of normal and view direction
+	/// @return Fraction of light the lobe reflects toward the viewer, used for OpenPBR albedo scaling of the layers below
+	float3 SpecularDirectionalAlbedo(float3 F0, float roughness, float NdotV)
+	{
+		float2 specularBRDF = BRDF::EnvBRDF(roughness, NdotV);
+		return F0 * specularBRDF.x + specularBRDF.y;
+	}
+
+	float3 GetThinSurfaceNormal(float3 N, float3 V)
+	{
+		return dot(N, V) < 0.0f ? -N : N;
+	}
+
+	// Bent vertex normals do not identify the visible face. Derivatives require uniform control flow.
+	float3 GetThinSurfaceFaceNormal(float3 worldPosition, float3 V, float3 fallbackNormal)
+	{
+		float3 faceNormal = cross(ddx(worldPosition), ddy(worldPosition));
+		float lengthSq = dot(faceNormal, faceNormal);
+		faceNormal = lengthSq > 1e-12f ? faceNormal * rsqrt(lengthSq) : fallbackNormal;
+		return GetThinSurfaceNormal(faceNormal, V);
+	}
+
+	void GetThinSurfaceSubsurfaceAlbedos(float3 baseColor, float3 scatteringColor, float opacity, float balance,
+		out float reflectionWeight, out float3 frontTransmissionAlbedo, out float3 backTransmissionAlbedo)
+	{
+		float subsurfaceShare = 1.0f - saturate(opacity);
+		float backShare = saturate(balance);
+		// Light scattered inside the sheet is no longer available for surface reflection.
+		float3 weights = float3(subsurfaceShare * (1.0f - backShare), subsurfaceShare * backShare, 1.0f - subsurfaceShare);
+		float3 litFaceAlbedo = weights.z * baseColor + weights.x * scatteringColor;
+#if defined(TRUE_PBR) && (defined(TREE_ANIM) || defined(LIGHTING) || defined(GRASS_LIGHTING))
+		// Subsurface share and balance are linear energy shares, not gamma-encoded material colors.
+#	if !defined(GRASS_LIGHTING)
+		if (IsThinSurfaceMaterial(PBRFlags))
+#	endif
+		{
+			// Both lit-face lobes leave the same side, so they must sum before encoding.
+			litFaceAlbedo = Color::LinearToPBRMaterial(weights.z * Color::PBRMaterialToLinear(baseColor) + weights.x * Color::PBRMaterialToLinear(scatteringColor));
+			weights = Color::LinearToPBRMaterial(weights);
+		}
+#endif
+		reflectionWeight = weights.z;
+		frontTransmissionAlbedo = saturate(litFaceAlbedo - baseColor * weights.z);
+		backTransmissionAlbedo = saturate(scatteringColor * weights.y);
+	}
+
+	// Light crossing a sheet exits away from a face turned toward the light, whatever its bent normal says.
+	float GetThinSurfaceBackTransmissionVisibility(float3 faceNormal, float3 L)
+	{
+		return 1.0f - saturate(4.0f * dot(faceNormal, L));
+	}
+
+	// The squared denominator preserves lobe energy as wrap broadens the terminator.
+	float2 GetThinSurfaceDiffuseCosines(float NdotL, float wrap)
+	{
+		float normalization = 1.0f / ((1.0f + wrap) * (1.0f + wrap));
+		return float2(saturate((NdotL + wrap) * normalization), saturate((wrap - NdotL) * normalization));
+	}
+
+	/** @brief Evaluates thin-surface diffuse lobes with separate reflection and transmission shadows. */
+	void GetThinSurfaceDirectScattering(float3 reflectionAlbedo, float3 transmissionAlbedo, float3 irradiance,
+		float NdotL, float wrap, float reflectionShadow, float transmissionShadow,
+		out float3 reflection, out float3 transmission)
+	{
+		float2 diffuseCosines = GetThinSurfaceDiffuseCosines(NdotL, wrap);
+		reflection = reflectionAlbedo * diffuseCosines.x * irradiance * reflectionShadow;
+		transmission = transmissionAlbedo * diffuseCosines.y * irradiance * transmissionShadow;
+	}
+
+	void GetThinSurfaceDirectScattering(float3 reflectionAlbedo, float3 frontTransmissionAlbedo, float3 backTransmissionAlbedo,
+		float3 shineThroughAlbedo, float opacity, float3 irradiance, float NdotL, float wrap, float reflectionShadow, float2 transmissionShadows,
+		out float3 reflection, out float3 transmission)
+	{
+		float3 transmittance = (1.0f - saturate(opacity)).xxx;
+#if defined(TRUE_PBR) && (defined(TREE_ANIM) || defined(LIGHTING) || defined(GRASS_LIGHTING))
+#	if !defined(GRASS_LIGHTING)
+		if (IsThinSurfaceMaterial(PBRFlags))
+#	endif
+			transmittance = Color::LinearToPBRMaterial(transmittance);
+#endif
+		// Share the wrapped shading response so flat sheet boundaries do not split the transmission lobe.
+		float3 transmissionAlbedo = saturate(shineThroughAlbedo * transmittance + backTransmissionAlbedo);
+		GetThinSurfaceDirectScattering(reflectionAlbedo, transmissionAlbedo, irradiance,
+			NdotL, wrap, reflectionShadow, transmissionShadows.y, reflection, transmission);
+		transmission += frontTransmissionAlbedo * saturate(NdotL) * irradiance * transmissionShadows.x;
+	}
+
+	// Normal-variance filtering from Tokuyoshi and Kaplanyan (2019).
+	float FilterFoliageRoughness(float roughness, float3 normalDx, float3 normalDy)
+	{
+		float variance = 0.25f * (dot(normalDx, normalDx) + dot(normalDy, normalDy));
+		float kernelRoughnessSq = min(2.0f * variance, 0.18f);
+		float roughnessSq = roughness * roughness;
+		return sqrt(sqrt(saturate(roughnessSq * roughnessSq + kernelRoughnessSq)));
+	}
+
+	// Approximate canopy transmission using receiver opacity when occluder material is unavailable.
+	float GetFoliageShadowVisibility(float shadow, float opacity)
+	{
+		return lerp(1.0f - saturate(opacity), 1.0f, saturate(shadow));
+	}
+
+	/// @brief Directional albedo of the OpenPBR fuzz layer (Zeltner et al. 2022 sheen)
+	/// @param NdotV Dot product of normal and view direction
+	/// @param roughness Fuzz roughness [0.01,1]: low is fibre-like, high is dusty
+	/// @return Fraction of light the fuzz reflects; the layers below receive the rest
+	/// @note Rational fits from the MaterialX reference implementation (mx_microfacet_sheen.glsl).
+	float FuzzDirectionalAlbedo(float NdotV, float roughness)
+	{
+		float s = roughness * (0.0206607 + 1.58491 * roughness) / (0.0379424 + roughness * (1.32227 + roughness));
+		float m = roughness * (-0.193854 + roughness * (-1.14885 + roughness * (1.7932 - 0.95943 * roughness * roughness))) / (0.046391 + roughness);
+		float o = roughness * (0.000654023 + (-0.0207818 + 0.119681 * roughness) * roughness) / (1.26264 + roughness * (-1.92021 + roughness));
+		float d = (NdotV - m) / s;
+		return exp(-0.5 * d * d) / (s * sqrt(Math::TAU)) + o;
+	}
+
+	/// @brief Evaluate the OpenPBR fuzz lobe (Zeltner et al. 2022 sheen) as a linearly transformed cosine
+	/// @param L Light direction
+	/// @param V View direction
+	/// @param N Surface normal, facing the viewer
+	/// @param NdotV Dot product of normal and view direction
+	/// @param roughness Fuzz roughness [0.01,1]
+	/// @return Normalized lobe value with the cosine included; scale by FuzzDirectionalAlbedo for the reflection
+	/// @note Rational fits from the MaterialX reference implementation (mx_microfacet_sheen.glsl).
+	float FuzzLobe(float3 L, float3 V, float3 N, float NdotV, float roughness)
+	{
+		float3 X = V - N * NdotV;
+		float lengthSquared = dot(X, X);
+		X = lengthSquared > 1e-8 ? X * rsqrt(lengthSquared) : normalize(abs(N.z) < 0.999 ? cross(float3(0, 0, 1), N) : float3(1, 0, 0));
+		float3 Y = cross(N, X);
+		float3 w = float3(dot(L, X), dot(L, Y), dot(L, N));
+
+		float aInv = (2.58126 * NdotV + 0.813703 * roughness) * roughness / (1.0 + 0.310327 * NdotV * NdotV + 2.60994 * NdotV * roughness);
+		float bInv = sqrt(1.0 - NdotV) * (roughness - 1.0) * roughness * roughness * roughness /
+		             (0.0000254053 + 1.71228 * NdotV - 1.71506 * NdotV * roughness + 1.34174 * roughness * roughness);
+		float3 wo = float3(aInv * w.x + bInv * w.z, aInv * w.y, w.z);
+		float scale = aInv / dot(wo, wo);
+		return max(wo.z, 0.0) * Math::INV_PI * scale * scale;
+	}
+
+	/// @brief Evaluate the fuzz lobe on the viewer-side face of a thin-walled surface lit from behind
+	/// @param L Light direction, behind the surface
+	/// @param V View direction
+	/// @param N Surface normal, facing the viewer
+	/// @param NdotV Dot product of normal and view direction
+	/// @param roughness Fuzz roughness [0.01,1]
+	/// @return Lobe value as FuzzLobe, zero for light in front; scale by the transmitted share of the light
+	/// @note OpenPBR thin-walled surfaces carry fuzz on both faces. Light transmitted through the surface reaches the
+	///       viewer-side fuzz continuing from the light, so that face sees it from the light's mirror image.
+	float FuzzLobeTransmitted(float3 L, float3 V, float3 N, float NdotV, float roughness)
+	{
+		return FuzzLobe(reflect(L, N), V, N, NdotV, roughness);
 	}
 
 	/// @brief Calculate index of refraction for hair using Marschner model

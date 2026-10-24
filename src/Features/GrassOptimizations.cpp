@@ -317,7 +317,7 @@ void GrassOptimizations::DrawBucket(GrassBucket& b)
 	}
 
 	// Batch material texture bindings instead of letting SetDirtyStates bind each slot separately.
-	constexpr uint32_t kMaterialTextureBits = 0x1F;
+	constexpr uint32_t kMaterialTextureBits = 0x7F;
 	const uint32_t materialTextures = shadowState.PSResourceModifiedBits & kMaterialTextureBits;
 	shadowState.PSResourceModifiedBits &= ~kMaterialTextureBits;
 	SetDirtyStates(0);

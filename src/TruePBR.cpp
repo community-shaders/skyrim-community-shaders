@@ -4,6 +4,7 @@
 #include "TruePBR/BSLightingShaderMaterialPBRLandscape.h"
 
 #include "Features/InteriorSun.h"
+#include "Features/LinearLighting.h"
 #include "Hooks.h"
 #include "I18n/I18n.h"
 #include "ShaderCache.h"
@@ -27,6 +28,12 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	specularLevel,
 	subsurfaceColor,
 	subsurfaceOpacity,
+	subsurfaceBalance,
+	thinSurface,
+	foliage,
+	thinSurfaceSpecularWeight,
+	thinSurfaceBackSpecularWeight,
+	thinSurfaceBackRoughnessScale,
 	coatColor,
 	coatStrength,
 	coatRoughness,
@@ -148,7 +155,32 @@ void TruePBR::DrawSettings()
 				if (ImGui::SliderFloat(T(TKEY("subsurface_opacity"), "Subsurface Opacity"), &selectedPbrTextureSet->subsurfaceOpacity, 0.f, 1.f, "%.3f")) {
 					wasEdited = true;
 				}
+				if (auto _tt = Util::HoverTooltipWrapper())
+					ImGui::Text("%s", T(TKEY("subsurface_opacity_tooltip"), "Controls subsurface thickness. For thin surfaces, including trees and grass, 0 allows full subsurface scattering and 1 blocks it. Multiplied by subsurface texture alpha; does not control mesh alpha transparency."));
+				if (ImGui::SliderFloat(T(TKEY("subsurface_balance"), "Subsurface Balance"), &selectedPbrTextureSet->subsurfaceBalance, 0.f, 1.f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
+					wasEdited = true;
+				}
+				if (auto _tt = Util::HoverTooltipWrapper())
+					ImGui::Text("%s", T(TKEY("subsurface_balance_tooltip"), "For thin surfaces, including trees and grass, the share of subsurface light sent to the side facing away from the light, shining through; the lit side receives the rest. 0 keeps it on the lit side, 0.5 splits it equally and 1 sends all of it through. Default 0.75 favors the side facing away. Affects direct and ambient lighting without changing reflected light or the total subsurface strength."));
 
+				ImGui::TreePop();
+			}
+			if (ImGui::TreeNodeEx(T(TKEY("thin_surface"), "Thin Surface"))) {
+				if (ImGui::Checkbox(T(TKEY("thin_surface_enabled"), "Thin Surface"), &selectedPbrTextureSet->thinSurface)) {
+					wasEdited = true;
+				}
+				if (auto _tt = Util::HoverTooltipWrapper())
+					ImGui::Text("%s", T(TKEY("thin_surface_enabled_tooltip"), "Lights the material as a thin two-sided sheet, such as leaves, paper or cloth. Each side is shaded from its own face, and subsurface light passes through to the side facing away from a light. Does not apply to landscape, coat or hair materials. The NIF Anisotropic Lighting flag also enables this independently of this checkbox."));
+				if (ImGui::Checkbox(T(TKEY("foliage_enabled"), "Foliage"), &selectedPbrTextureSet->foliage)) {
+					wasEdited = true;
+				}
+				if (auto _tt = Util::HoverTooltipWrapper())
+					ImGui::Text("%s", T(TKEY("foliage_enabled_tooltip"), "Thin surface lighting with foliage approximations: shadows and sky occlusion assume nearby occluders are leaves that pass some light, and normal-map roughness is filtered for leaf cards. Implies Thin Surface. Grass and trees with subsurface use it automatically. The NIF Effect Lighting flag also enables this independently of this checkbox, except on coat or hair materials."));
+				wasEdited |= ImGui::SliderFloat(T(TKEY("thin_surface_specular_weight"), "Front Specular Weight"), &selectedPbrTextureSet->thinSurfaceSpecularWeight, 0.f, 1.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+				wasEdited |= ImGui::SliderFloat(T(TKEY("thin_surface_back_specular_weight"), "Back Specular Weight"), &selectedPbrTextureSet->thinSurfaceBackSpecularWeight, 0.f, 1.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+				wasEdited |= ImGui::SliderFloat(T(TKEY("thin_surface_back_roughness_scale"), "Back Roughness Scale"), &selectedPbrTextureSet->thinSurfaceBackRoughnessScale, 0.f, 3.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+				if (auto _tt = Util::HoverTooltipWrapper())
+					ImGui::Text("%s", T(TKEY("thin_surface_tooltip"), "For thin surfaces, specular weights scale the complete surface reflection of each side, including grazing angles, for direct and indirect lighting. Roughness scale applies to back faces. Defaults: 0.5, 0.5, 1.0. Front and back follow mesh winding."));
 				ImGui::TreePop();
 			}
 			if (ImGui::TreeNodeEx(T(TKEY("coat"), "Coat"))) {
@@ -475,6 +507,11 @@ void TruePBR::ReloadTextureSetData()
 			return false;
 		} }, enableVerboseJsonLogging);
 
+	for (const auto& [material, extensions] : BSLightingShaderMaterialPBR::All) {
+		if (extensions.textureSetData != nullptr) {
+			material->ApplyTextureSetData(*extensions.textureSetData);
+		}
+	}
 	for (const auto& [material, textureSets] : BSLightingShaderMaterialPBRLandscape::All) {
 		for (uint32_t textureSetIndex = 0; textureSetIndex < BSLightingShaderMaterialPBRLandscape::NumTiles; ++textureSetIndex) {
 			SetupPBRLandscapeTextureParameters(*material, *textureSets[textureSetIndex], textureSetIndex);
@@ -731,6 +768,15 @@ struct BSLightingShaderProperty_LoadBinary
 			} else if (property->flags.any(kBackLighting)) {
 				pbrMaterial->pbrFlags.set(PBRFlags::HairMarschner);
 			} else {
+				// These NIF flags select thin-surface behavior only outside coat and hair materials.
+				if (property->flags.any(kAnisotropicLighting)) {
+					pbrMaterial->nifThinSurfaceFlags.set(PBRFlags::ThinSurface);
+				}
+				if (property->flags.any(kEffectLighting)) {
+					pbrMaterial->nifThinSurfaceFlags.set(PBRFlags::Foliage);
+				}
+				pbrMaterial->pbrFlags.set(pbrMaterial->nifThinSurfaceFlags.get());
+
 				if (property->flags.any(kRimLighting)) {
 					pbrMaterial->pbrFlags.set(PBRFlags::Subsurface);
 				}
@@ -759,6 +805,45 @@ static bool IsPBRShaderProperty(const RE::BSShaderProperty* property)
 {
 	return property->material != nullptr && property->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kVertexLighting) && (property->material->GetFeature() == RE::BSShaderMaterial::Feature::kDefault || property->material->GetFeature() == RE::BSShaderMaterial::Feature::kMultiTexLandLODBlend);
 }
+
+struct BSLightingShaderProperty_PostLinkObject
+{
+	static void thunk(RE::BSLightingShaderProperty* property, RE::NiStream& stream)
+	{
+		func(property, stream);
+		if (!IsPBRShaderProperty(property)) {
+			return;
+		}
+
+		const auto* extra = property->GetExtraData("PBRThinSurface");
+		if (!extra) {
+			return;
+		}
+		const auto* parameters = netimmerse_cast<const RE::NiFloatsExtraData*>(extra);
+		if (!parameters || parameters->size != 4 || !parameters->value) {
+			logger::warn("[TruePBR] {} has invalid PBRThinSurface extra data, expected four floats", stream.inputFilePath);
+			return;
+		}
+
+		auto* material = static_cast<BSLightingShaderMaterialPBR*>(property->material);
+		if (material->pbrFlags.any(PBRFlags::TwoLayer, PBRFlags::HairMarschner)) {
+			return;
+		}
+
+		// Per-NIF values must not modify a material shared by another shader property.
+		BSLightingShaderMaterialPBR source;
+		source.CopyMembers(material);
+		if (!source.ApplyNifThinSurfaceParameters({ parameters->value, parameters->size })) {
+			logger::warn("[TruePBR] {} has non-finite PBRThinSurface parameters", stream.inputFilePath);
+			return;
+		}
+		if (const auto* textureSetData = BSLightingShaderMaterialPBR::All[&source].textureSetData) {
+			source.ApplyTextureSetData(*textureSetData);
+		}
+		property->SetMaterial(&source, true);
+	}
+	static inline REL::Relocation<decltype(thunk)> func;
+};
 
 struct BSLightingShaderProperty_GetRenderPasses
 {
@@ -956,6 +1041,17 @@ bool TruePBR::BSLightingShader_SetupMaterial(RE::BSLightingShader* shader, RE::B
 			shadowState->SetPSTextureFilterMode(5, RE::BSGraphics::TextureFilterMode::kAnisotropic);
 
 			stl::enumeration<PBRShaderFlags> shaderFlags;
+			if (!pbrMaterial->pbrFlags.any(PBRFlags::TwoLayer, PBRFlags::HairMarschner)) {
+				if (pbrMaterial->pbrFlags.any(PBRFlags::ThinSurface)) {
+					shaderFlags.set(PBRShaderFlags::ThinSurface);
+				}
+				if (pbrMaterial->pbrFlags.any(PBRFlags::Foliage)) {
+					shaderFlags.set(PBRShaderFlags::Foliage);
+				}
+			}
+			const auto& thinSurfaceParams = pbrMaterial->GetThinSurfaceParameters();
+			std::array<float, 4> lightingEffectParams{ pbrMaterial->GetSubsurfaceBalance(), thinSurfaceParams[0], thinSurfaceParams[1], thinSurfaceParams[2] };
+			shadowState->SetPSConstant(lightingEffectParams, RE::BSGraphics::ConstantGroupLevel::PerMaterial, lightingPSConstants.LightingEffectParams);
 			if (pbrMaterial->pbrFlags.any(PBRFlags::TwoLayer)) {
 				shaderFlags.set(PBRShaderFlags::TwoLayer);
 				if (pbrMaterial->pbrFlags.any(PBRFlags::InterlayerParallax)) {
@@ -1355,6 +1451,18 @@ static bool HasGrassFeaturesTexture0(const BSLightingShaderMaterialPBR* material
 	       material->featuresTexture0 != globals::game::graphicsState->GetRuntimeData().defaultTextureWhite;
 }
 
+static bool HasGrassFeaturesTexture1(const BSLightingShaderMaterialPBR* material)
+{
+	return material->featuresTexture1 != nullptr &&
+	       material->featuresTexture1 != globals::game::graphicsState->GetRuntimeData().defaultTextureWhite;
+}
+
+static bool HasGrassEmissive(const BSLightingShaderMaterialPBR* material)
+{
+	return material->emissiveTexture != nullptr &&
+	       material->emissiveTexture != globals::game::graphicsState->GetRuntimeData().defaultTextureBlack;
+}
+
 void TruePBR::SetGrassPBRTextures(const BSLightingShaderMaterialPBR* material)
 {
 	auto* shadowState = globals::game::shadowState;
@@ -1372,23 +1480,55 @@ void TruePBR::SetGrassPBRTextures(const BSLightingShaderMaterialPBR* material)
 		shadowState->SetPSTextureAddressMode(4, clampMode);
 		shadowState->SetPSTextureFilterMode(4, RE::BSGraphics::TextureFilterMode::kAnisotropic);
 	}
+	if (HasGrassFeaturesTexture1(material)) {
+		shadowState->SetPSTexture(5, material->featuresTexture1->rendererTexture);
+		shadowState->SetPSTextureAddressMode(5, clampMode);
+		shadowState->SetPSTextureFilterMode(5, RE::BSGraphics::TextureFilterMode::kAnisotropic);
+	}
+	if (HasGrassEmissive(material)) {
+		shadowState->SetPSTexture(6, material->emissiveTexture->rendererTexture);
+		shadowState->SetPSTextureAddressMode(6, clampMode);
+		shadowState->SetPSTextureFilterMode(6, RE::BSGraphics::TextureFilterMode::kAnisotropic);
+	}
 }
 
 TruePBR::GrassPBRConstants TruePBR::GetGrassPBRConstants(const BSLightingShaderMaterialPBR* material)
 {
 	stl::enumeration<PBRShaderFlags> shaderFlags;
-	if (material->pbrFlags.any(PBRFlags::Subsurface)) {
+	const bool hasSubsurface = material->pbrFlags.any(PBRFlags::Subsurface) &&
+	                           !material->pbrFlags.any(PBRFlags::TwoLayer) &&
+	                           !material->pbrFlags.any(PBRFlags::HairMarschner);
+	if (hasSubsurface) {
 		shaderFlags.set(PBRShaderFlags::Subsurface);
+		if (HasGrassFeaturesTexture0(material)) {
+			shaderFlags.set(PBRShaderFlags::HasFeaturesTexture0);
+		}
 	}
-	if (HasGrassFeaturesTexture0(material)) {
-		shaderFlags.set(PBRShaderFlags::HasFeaturesTexture0);
+	const bool hasFuzz = material->pbrFlags.any(PBRFlags::Fuzz) &&
+	                     !material->pbrFlags.any(PBRFlags::TwoLayer) &&
+	                     !material->pbrFlags.any(PBRFlags::HairMarschner);
+	if (hasFuzz) {
+		shaderFlags.set(PBRShaderFlags::Fuzz);
+		if (HasGrassFeaturesTexture1(material)) {
+			shaderFlags.set(PBRShaderFlags::HasFeaturesTexture1);
+		}
+	}
+	if (HasGrassEmissive(material)) {
+		shaderFlags.set(PBRShaderFlags::HasEmissive);
 	}
 
 	const auto& subsurfaceColor = material->GetSubsurfaceColor();
+	const auto& fuzzColor = material->GetFuzzColor();
+	const auto& thinSurfaceParams = material->GetThinSurfaceParameters();
+	const auto& linearLighting = globals::features::linearLighting;
 	return {
 		shaderFlags.underlying(),
-		{ material->GetRoughnessScale(), material->GetSpecularLevel(), 0.0f },
-		{ subsurfaceColor.red, subsurfaceColor.green, subsurfaceColor.blue, material->GetSubsurfaceOpacity() }
+		{ material->GetRoughnessScale(), material->GetSpecularLevel(), linearLighting.IsLinearLightingActive() ? linearLighting.settings.emitColorMult : 1.0f },
+		{ hasSubsurface ? subsurfaceColor.red : 0.0f, hasSubsurface ? subsurfaceColor.green : 0.0f,
+			hasSubsurface ? subsurfaceColor.blue : 0.0f, hasSubsurface ? material->GetSubsurfaceOpacity() : 1.0f },
+		{ hasFuzz ? fuzzColor.red : 0.0f, hasFuzz ? fuzzColor.green : 0.0f,
+			hasFuzz ? fuzzColor.blue : 0.0f, hasFuzz ? material->GetFuzzWeight() : 0.0f },
+		{ material->GetSubsurfaceBalance(), thinSurfaceParams[0], thinSurfaceParams[1], thinSurfaceParams[2] }
 	};
 }
 
@@ -1585,7 +1725,11 @@ struct BSGrassShader_SetupMaterial
 		std::array<float, 3> pbrParams1{ constants.params1[0], constants.params1[1], constants.params1[2] };
 		shadowState->SetPSConstant(pbrParams1, RE::BSGraphics::ConstantGroupLevel::PerMaterial, grassPSConstants.PBRParams1);
 		std::array<float, 4> pbrParams2{ constants.params2[0], constants.params2[1], constants.params2[2], constants.params2[3] };
+		std::array<float, 4> pbrParams3{ constants.params3[0], constants.params3[1], constants.params3[2], constants.params3[3] };
+		std::array<float, 4> pbrParams4{ constants.params4[0], constants.params4[1], constants.params4[2], constants.params4[3] };
 		shadowState->SetPSConstant(pbrParams2, RE::BSGraphics::ConstantGroupLevel::PerMaterial, grassPSConstants.PBRParams2);
+		shadowState->SetPSConstant(pbrParams3, RE::BSGraphics::ConstantGroupLevel::PerMaterial, grassPSConstants.PBRParams3);
+		shadowState->SetPSConstant(pbrParams4, RE::BSGraphics::ConstantGroupLevel::PerMaterial, grassPSConstants.PBRParams4);
 
 		RE::BSGraphics::Renderer::FlushPSConstantGroup(RE::BSGraphics::ConstantGroupLevel::PerMaterial);
 		RE::BSGraphics::Renderer::ApplyPSConstantGroup(RE::BSGraphics::ConstantGroupLevel::PerMaterial);
@@ -1725,6 +1869,7 @@ void TruePBR::PostPostLoad()
 
 	logger::info("[TruePBR] Hooking BSLightingShaderProperty");
 	stl::write_vfunc<0x18, BSLightingShaderProperty_LoadBinary>(RE::VTABLE_BSLightingShaderProperty[0]);
+	stl::write_vfunc<0x1E, BSLightingShaderProperty_PostLinkObject>(RE::VTABLE_BSLightingShaderProperty[0]);
 	stl::write_vfunc<0x2A, BSLightingShaderProperty_GetRenderPasses>(RE::VTABLE_BSLightingShaderProperty[0]);
 	stl::write_vfunc<0x2C, BSLightingShaderProperty_GetRenderPasses_LocalMap>(RE::VTABLE_BSLightingShaderProperty[0]);
 	stl::detour_thunk<BSLightingShaderProperty_OnLoadTextureSet>(REL::RelocationID(99865, 106510));

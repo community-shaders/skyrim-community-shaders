@@ -130,7 +130,7 @@ struct GrassDrawParams
 /** @brief Captures the material values consumed by grass drawing. */
 struct GrassMaterialKey
 {
-	std::array<RE::NiSourceTexture*, 4> textures{};
+	std::array<RE::NiSourceTexture*, 6> textures{};
 	uint32_t clampMode = 0;
 	TruePBR::GrassPBRConstants constants{};
 	bool operator==(const GrassMaterialKey&) const = default;
@@ -168,6 +168,10 @@ struct BucketKeyHash
 		for (float value : m.constants.params1)
 			combine(value);
 		for (float value : m.constants.params2)
+			combine(value);
+		for (float value : m.constants.params3)
+			combine(value);
+		for (float value : m.constants.params4)
 			combine(value);
 
 		combine(k.draw.wavePeriod);

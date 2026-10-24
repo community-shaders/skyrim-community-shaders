@@ -20,6 +20,7 @@ struct DirectContext
 	float detailedShadow;
 	float softShadow;
 #if defined(TRUE_PBR)
+	float backTransmissionVisibility;
 	float3 coatWorldNormal;
 	float3 coatViewDir;
 	float3 coatLightDir;
@@ -51,6 +52,10 @@ struct IndirectLobeWeights
 {
 	float3 diffuse;
 	float3 specular;
+#if defined(TRUE_PBR)
+	float3 frontTransmission;
+	float3 backTransmission;
+#endif
 };
 
 #if defined(TRUE_PBR)
@@ -93,6 +98,8 @@ struct MaterialProperties
 	float3 F0;
 	float3 SubsurfaceColor;
 	float Thickness;
+	float SubsurfaceBalance;
+	float ThinSurfaceSpecularWeight;
 	float3 CoatColor;
 	float CoatStrength;
 	float CoatRoughness;
