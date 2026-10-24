@@ -1524,6 +1524,7 @@
     "feature.light_limit_fix.local_shadows": "Local Light Shadows",
     "feature.light_limit_fix.local_shadows_restart_to_enable": "Requires restart to enable Local Light Shadows.",
     "feature.light_limit_fix.name": "Light Limit Fix",
+    "feature.light_limit_fix.particle_light_count": "Particle Lights : {}",
     "feature.light_limit_fix.shadow_cache_stats": "Shadow Cache : {} x {}x{}, {} MB",
     "feature.light_limit_fix.shadow_casters_stats": "Shadow Casters : {} tracked, {} cached, {} rendered this frame",
     "feature.light_limit_fix.statistics": "Statistics",

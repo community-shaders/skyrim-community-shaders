@@ -99,6 +99,7 @@ void LightLimitFix::DrawSettings()
 
 	if (ImGui::TreeNodeEx(T(TKEY("statistics"), "Statistics"), ImGuiTreeNodeFlags_DefaultOpen)) {
 		ImGui::Text(std::format("Clustered Light Count : {}", lightCount).c_str());
+		ImGui::Text("%s", std::vformat(T(TKEY("particle_light_count"), "Particle Lights : {}"), std::make_format_args(particleLightCount)).c_str());
 		if (IsLocalShadowsEnabled()) {
 			ImGui::Text("%s", std::vformat(T(TKEY("shadow_casters_stats"), "Shadow Casters : {} tracked, {} cached, {} rendered this frame"),
 								  std::make_format_args(localShadowStatTracked, localShadowStatCached, localShadowStatRendered))
@@ -859,6 +860,27 @@ namespace
 		std::transform(stem.begin(), stem.end(), stem.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
 		return stem;
 	}
+
+	/** @brief Finds the one call to BSBatchRenderer::RenderPassImmediately in BSShaderAccumulator::RenderPersistentPassList; 0 if not exactly one. */
+	std::uintptr_t FindPersistentPassListDrawCall()
+	{
+		constexpr std::size_t scanBytes = 0x200;
+		constexpr std::size_t callSize = 5;
+		const auto function = REL::RelocationID(100840, 107630).address();
+		const auto target = REL::RelocationID(100854, 107644).address();
+
+		std::uintptr_t found = 0;
+		for (auto site = function; site + callSize <= function + scanBytes; ++site) {
+			if (*reinterpret_cast<const std::uint8_t*>(site) != 0xE8)
+				continue;
+			if (site + callSize + *reinterpret_cast<const std::int32_t*>(site + 1) != target)
+				continue;
+			if (found)
+				return 0;
+			found = site;
+		}
+		return found;
+	}
 }
 
 void LightLimitFix::ParticleLightConfigStore::Load()
@@ -1063,6 +1085,7 @@ bool LightLimitFix::CheckParticleLights(RE::BSRenderPass* a_pass, uint32_t)
 
 void LightLimitFix::AddParticleLightsToBuffer(eastl::vector<LightData>& a_lightsData)
 {
+	particleLightCount = 0;
 	if (!settings.EnableParticleLights)
 		return;
 
@@ -1111,6 +1134,7 @@ void LightLimitFix::AddParticleLightsToBuffer(eastl::vector<LightData>& a_lights
 		if ((light.color.x + light.color.y + light.color.z) * light.fade > 1e-4 && light.radius > 1e-4) {
 			light.invRadius = 1.f / light.radius;
 			a_lightsData.push_back(light);
+			particleLightCount++;
 		}
 	}
 }
@@ -1955,6 +1979,13 @@ void LightLimitFix::Hooks::Install()
 	stl::write_thunk_call<RenderPass1>(REL::RelocationID(100877, 107673).address() + REL::Relocate(0x1E5, 0x1EE));
 	stl::write_thunk_call<RenderPass2>(REL::RelocationID(100852, 107642).address() + REL::Relocate(0x29E, 0x28F));
 	stl::write_thunk_call<RenderPass3>(REL::RelocationID(100871, 107667).address() + REL::Relocate(0xEE, 0xED));
+	// SE's RenderPersistentPassList calls the RenderPass3 function; only AE inlines the draw loop.
+	if (REL::Module::IsAE()) {
+		if (const auto persistentPassCall = FindPersistentPassListDrawCall(); persistentPassCall && SKSE::GetTrampoline().free_size() >= 14)
+			stl::write_thunk_call<RenderPass4>(persistentPassCall);
+		else
+			logger::warn("[LLF] Persistent pass list hook not installed; particle lights inside alpha groups will not be detected");
+	}
 	stl::detour_thunk<BSGeometry_Destroy>(REL::RelocationID(69535, 70936));
 
 	logger::info("[LLF] Installed hooks");
