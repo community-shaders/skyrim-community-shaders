@@ -38,19 +38,16 @@ public:
 	 *
 	 * @return A new heap-allocated BSLightingShaderMaterialPBRLandscape instance.
 	 */
-	RE::BSShaderMaterial* Create() override;                                                                                      // 01
-	/**
-	 * @brief Copies all landscape PBR members (textures, per-tile parameters, terrain data) to the target material.
-	 * @param that Target material to copy into (must be BSLightingShaderMaterialPBRLandscape).
-	 */
-	void CopyMembers(RE::BSShaderMaterial* that) override;                                                                        // 02
+	RE::BSShaderMaterial* Create() override;  // 01
+	/// @brief Copies from another PBR landscape material into this instance.
+	void CopyMembers(RE::BSShaderMaterial* that) override;  // 02
 	/**
 	 * @brief Returns the material feature type.
 	 * @return Always returns kMultiTexLandLODBlend to integrate with the vanilla landscape shader dispatch.
 	 */
-	Feature GetFeature() const override;                                                                                          // 06
+	Feature GetFeature() const override;  // 06
 	/** @brief Releases all landscape texture references (base color, normal, displacement, RMAOS, overlay, noise). */
-	void ClearTextures() override;                                                                                                // 09
+	void ClearTextures() override;  // 09
 	/**
 	 * @brief Assigns default textures to any landscape texture slots that are still null.
 	 * @param skinned Whether the mesh is skinned.
@@ -65,7 +62,7 @@ public:
 	 * @param textures Output array to fill with texture pointers.
 	 * @return The number of textures written.
 	 */
-	uint32_t GetTextures(RE::NiSourceTexture** textures) override;                                                                // 0B
+	uint32_t GetTextures(RE::NiSourceTexture** textures) override;  // 0B
 
 	/**
 	 * @brief Allocates a scrap-heap temporary for use during BSLightingShaderProperty::LoadBinary.
