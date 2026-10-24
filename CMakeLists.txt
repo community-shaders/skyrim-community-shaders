@@ -92,24 +92,16 @@ if(GIT_FOUND)
         OUTPUT_STRIP_TRAILING_WHITESPACE
         ERROR_QUIET
     )
-    if(NOT GIT_BRANCH STREQUAL "")
-        # Mark builds that differ from what is on a remote
-        execute_process(
-            COMMAND ${GIT_EXECUTABLE} branch -r --contains HEAD
-            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-            OUTPUT_VARIABLE GIT_REMOTE_CONTAINS
-            OUTPUT_STRIP_TRAILING_WHITESPACE
-            ERROR_QUIET
-        )
-        if(GIT_DESCRIBE MATCHES "-dirty$" OR GIT_REMOTE_CONTAINS STREQUAL "")
-            string(APPEND GIT_BRANCH "*")
-        endif()
-    elseif(NOT "$ENV{GITHUB_HEAD_REF}" STREQUAL "")
-        # CI PR checkouts are detached, so use the PR's source branch
+    # CI PR checkouts are detached, so use the PR's source branch
+    if(GIT_BRANCH STREQUAL "" AND NOT "$ENV{GITHUB_HEAD_REF}" STREQUAL "")
         set(GIT_BRANCH "$ENV{GITHUB_HEAD_REF}")
     endif()
     # Untrusted (PR authors pick it) and lands in a C++ string literal
-    string(REGEX REPLACE "[^A-Za-z0-9._/*-]" "_" GIT_BRANCH "${GIT_BRANCH}")
+    string(REGEX REPLACE "[^A-Za-z0-9._/-]" "_" GIT_BRANCH "${GIT_BRANCH}")
+    # Only CI artifacts are official builds
+    if(NOT GIT_BRANCH STREQUAL "" AND NOT "$ENV{CI}" STREQUAL "true")
+        string(APPEND GIT_BRANCH "*")
+    endif()
 else()
     set(GIT_DESCRIBE "unknown")
 endif()
