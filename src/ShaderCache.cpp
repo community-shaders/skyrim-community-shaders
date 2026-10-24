@@ -42,7 +42,8 @@ namespace SIE
 				// Normalize path to reduce duplicates (weakly_canonical may throw)
 				std::error_code ec;
 				auto canonical = std::filesystem::weakly_canonical(includePath, ec);
-				std::string pathStr = (ec ? includePath.string() : canonical.string());
+				std::string openPath = (ec ? includePath.string() : canonical.string());
+				std::string pathStr = openPath;
 				// On Windows, normalize to lowercase for comparison
 #ifdef _WIN32
 				std::transform(pathStr.begin(), pathStr.end(), pathStr.begin(), [](unsigned char c) { return std::tolower(c); });
@@ -50,7 +51,7 @@ namespace SIE
 				includes.push_back(pathStr);
 
 				// Read file into owned buffer
-				std::ifstream ifs(pathStr, std::ios::binary | std::ios::ate);
+				std::ifstream ifs(openPath, std::ios::binary | std::ios::ate);
 				if (!ifs)
 					return E_FAIL;
 				std::streamsize size = ifs.tellg();
