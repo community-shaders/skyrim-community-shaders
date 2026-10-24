@@ -143,6 +143,17 @@ namespace
 		for (auto it = s_windowOverlapAlpha.begin(); it != s_windowOverlapAlpha.end();)
 			it->second < C::OVERLAP_ALPHA_EPSILON ? it = s_windowOverlapAlpha.erase(it) : ++it;
 	}
+
+	/** @brief Blur strength this frame: the editor's fullscreen blur follows its widgets, other windows follow the menu fade. */
+	float GetBlurFade()
+	{
+		auto* editorWindow = EditorWindow::GetSingleton();
+		if (editorWindow->open)
+			return editorWindow->IsViewportActive() ? editorWindow->widgetsFade : 1.0f;
+
+		const float menuFade = Menu::GetSingleton()->openFade;
+		return menuFade > 0.0f ? menuFade : 1.0f;
+	}
 }  // namespace
 
 void OverlayRenderer::RenderOverlay(
@@ -180,6 +191,7 @@ void OverlayRenderer::RenderOverlay(
 			editorWindow->ExitPreviewMode();
 	}
 	editorWindow->UpdateOpenState();
+	menu.UpdateOpenFade(io.DeltaTime);
 
 	if (ShouldSkipRendering()) {
 		io.ClearInputKeys();
@@ -209,9 +221,9 @@ void OverlayRenderer::RenderOverlay(
 	} else if (effects11Editor.IsOpen()) {
 		ImGui::GetIO().MouseDrawCursor = true;
 		effects11Editor.Draw();
-	} else if (menu.IsEnabled || HomePageRenderer::ShouldShowFirstTimeSetup()) {
-		ImGui::GetIO().MouseDrawCursor = true;
-		if (menu.IsEnabled) {
+	} else if (menu.IsEnabled || menu.openFade > 0.0f || HomePageRenderer::ShouldShowFirstTimeSetup()) {
+		ImGui::GetIO().MouseDrawCursor = menu.IsEnabled || HomePageRenderer::ShouldShowFirstTimeSetup();
+		if (menu.IsEnabled || menu.openFade > 0.0f) {
 			const auto& context = *ImGui::GetCurrentContext();
 			const bool editedBefore = context.ActiveIdHasBeenEditedThisFrame;
 			drawSettings();
@@ -251,6 +263,7 @@ bool OverlayRenderer::ShouldSkipRendering()
 
 	return !(shaderCache->IsCompiling() ||
 			 Menu::GetSingleton()->IsEnabled ||
+			 Menu::GetSingleton()->openFade > 0.0f ||
 			 HomePageRenderer::ShouldShowFirstTimeSetup() ||
 			 EditorWindow::GetSingleton()->open ||
 			 EditorWindow::GetSingleton()->HasNotifications() ||
@@ -443,6 +456,8 @@ void OverlayRenderer::FinalizeImGuiFrame()
 	}
 
 	ImGui::Render();
+
+	BackgroundBlur::SetFade(GetBlurFade());
 
 	// Apply background blur behind ImGui windows before rendering them
 	BackgroundBlur::RenderBackgroundBlur();

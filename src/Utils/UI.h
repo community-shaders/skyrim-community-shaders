@@ -16,6 +16,8 @@
 // Forward declarations
 struct ID3D11Device;
 struct ID3D11ShaderResourceView;
+struct ImGuiContext;
+struct ImGuiWindow;
 struct ImRect;
 struct ImVec2;
 class Menu;
@@ -170,6 +172,25 @@ namespace Util
 
 	/** @brief False while a HideDebugSectionsGuard hides them; gate each feature's Debug header on this. */
 	bool ShowDebugSections();
+
+	/** @brief Eases fade toward 1 (visible) or 0 (hidden) over ThemeManager::Constants::UI_FADE_SECONDS. */
+	void StepFade(float& fade, bool visible, float deltaTime);
+
+	/** @brief Scales ImGui alpha by fade while alive; below 1 it also hides the mouse from windows drawn in scope. */
+	class FadeScope
+	{
+	public:
+		explicit FadeScope(float fade);
+		~FadeScope();
+
+		FadeScope(const FadeScope&) = delete;
+		FadeScope& operator=(const FadeScope&) = delete;
+
+	private:
+		ImGuiContext& context;
+		ImGuiWindow* hoveredWindow;
+		ImGuiWindow* hoveredWindowUnderMoving;
+	};
 
 	/**
 	 * Renders text using the disabled text color.

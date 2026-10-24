@@ -30,6 +30,9 @@ namespace BackgroundBlur
 
 	void SetEnabled(bool enable);
 
+	/** @brief Scales blur strength from 0 (hidden) to 1 (full); set each frame before RenderBackgroundBlur(). */
+	void SetFade(float newFade);
+
 	/** @brief When true, a single fullscreen blur replaces per-window blur (CS editor mode). */
 	void SetCSEditorActive(bool active);
 	bool IsCSEditorActive();

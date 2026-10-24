@@ -49,6 +49,7 @@ namespace BackgroundBlur
 		std::mutex resourceMutex;
 		bool enabled = false;
 		bool csEditorActive = false;
+		float fade = 1.0f;
 
 		// DirectX resources (RAII managed)
 		winrt::com_ptr<ID3D11VertexShader> vertexShader;
@@ -64,6 +65,9 @@ namespace BackgroundBlur
 
 		// Blend state for compositing UI over game world (alpha blending)
 		winrt::com_ptr<ID3D11BlendState> compositeBlendState;
+
+		// Scales the UI buffer by (1 - clear alpha), so a faded blur only partly clears the HUD
+		winrt::com_ptr<ID3D11BlendState> clearBlendState;
 
 		// Downsampled textures for blur (1/8 res for performance)
 		winrt::com_ptr<ID3D11Texture2D> downsampleTexture;
@@ -102,7 +106,8 @@ namespace BackgroundBlur
 		struct WindowConstants
 		{
 			float windowRect[4];    // x = minX, y = minY, z = maxX, w = maxY (in pixels)
-			float windowParams[4];  // x = cornerRadius, y = screenWidth, z = screenHeight, w = unused
+			float windowParams[4];  // x = cornerRadius, y = screenWidth, z = screenHeight, w = fullscreen
+			float fadeParams[4];    // x = fade
 		};
 
 		struct UIBufferViews
@@ -284,6 +289,12 @@ namespace BackgroundBlur
 		if (!checkCreate(device->CreateBlendState(&blendDesc, compositeBlendState.put()), "composite blend state"))
 			return false;
 		Util::SetResourceName(compositeBlendState.get(), "BackgroundBlur::CompositeBlendState");
+
+		blendDesc.RenderTarget[0].SrcBlend = D3D11_BLEND_ZERO;
+		blendDesc.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ZERO;
+		if (!checkCreate(device->CreateBlendState(&blendDesc, clearBlendState.put()), "clear blend state"))
+			return false;
+		Util::SetResourceName(clearBlendState.get(), "BackgroundBlur::ClearBlendState");
 
 		// Create scissor-enabled rasterizer state
 		D3D11_RASTERIZER_DESC rsDesc = {};
@@ -472,6 +483,7 @@ namespace BackgroundBlur
 			windowConstants.windowParams[1] = static_cast<float>(sourceDesc.Width);
 			windowConstants.windowParams[2] = static_cast<float>(sourceDesc.Height);
 			windowConstants.windowParams[3] = csEditorActive ? 1.0f : 0.0f;
+			windowConstants.fadeParams[0] = fade;
 			context->UpdateSubresource(windowConstantBuffer.get(), 0, nullptr, &windowConstants, 0, 0);
 			auto windowConstantBufferPtr = windowConstantBuffer.get();
 			context->PSSetConstantBuffers(1, 1, &windowConstantBufferPtr);
@@ -490,7 +502,7 @@ namespace BackgroundBlur
 		// Clear UI buffer where blur was drawn (prevents HUD showing through)
 		if (uiBufferRTV) {
 			context->OMSetRenderTargets(1, &uiBufferRTV, nullptr);
-			context->OMSetBlendState(nullptr, nullptr, 0xFFFFFFFF);
+			context->OMSetBlendState(clearBlendState.get(), nullptr, 0xFFFFFFFF);
 
 			// Clear with same rounded shape - window constants already bound
 			context->PSSetShader(clearPixelShader.get(), nullptr, 0);
@@ -533,6 +545,7 @@ namespace BackgroundBlur
 		samplerState = nullptr;
 		blendState = nullptr;
 		compositeBlendState = nullptr;
+		clearBlendState = nullptr;
 		scissorRasterizerState = nullptr;
 
 		ReleaseBlurTextures();
@@ -549,6 +562,11 @@ namespace BackgroundBlur
 		enabled = enable;
 	}
 
+	void SetFade(float newFade)
+	{
+		fade = std::clamp(newFade, 0.0f, 1.0f);
+	}
+
 	void SetCSEditorActive(bool active)
 	{
 		csEditorActive = active;
@@ -561,7 +579,7 @@ namespace BackgroundBlur
 
 	void RenderBackgroundBlur()
 	{
-		if (!enabled) {
+		if (!enabled || fade <= 0.0f) {
 			return;
 		}
 

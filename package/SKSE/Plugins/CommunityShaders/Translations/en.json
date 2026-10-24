@@ -3563,6 +3563,8 @@
     "menu.settings.language_tooltip": "Select the display language for the Community Shaders interface.",
     "menu.settings.last_shader_cache_duration": "Last shader cache build duration: %s",
     "menu.settings.log_slider_deadzone": "Log Slider Deadzone",
+    "menu.settings.menu_fade": "Menu Fade",
+    "menu.settings.menu_fade_tooltip": "Fades the menu and its background blur in and out when it is opened or closed.",
     "menu.settings.no_families": "No families",
     "menu.settings.no_font_families_available": "No font families available",
     "menu.settings.no_fonts_found": "No fonts found. Place .ttf files in Interface/CommunityShaders/Fonts/",

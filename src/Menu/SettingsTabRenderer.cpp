@@ -556,6 +556,11 @@ void SettingsTabRenderer::RenderBehaviorTab()
 			ImGui::Text("%s", T("menu.settings.background_blur_tooltip", "Applies a blur effect to the background behind the menu window."));
 		}
 
+		ImGui::Checkbox(T("menu.settings.menu_fade", "Menu Fade"), &themeSettings.MenuFadeEnabled);
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("%s", T("menu.settings.menu_fade_tooltip", "Fades the menu and its background blur in and out when it is opened or closed."));
+		}
+
 		MenuFonts::EndTabItem();
 	}
 }

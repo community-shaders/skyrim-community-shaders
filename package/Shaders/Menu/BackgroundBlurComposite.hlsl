@@ -5,6 +5,7 @@ cbuffer WindowBuffer : register(b1)
 {
 	float4 WindowRect;    // x = minX, y = minY, z = maxX, w = maxY (in pixels)
 	float4 WindowParams;  // x = cornerRadius, y = screenWidth, z = screenHeight, w = fullscreen (1.0 = skip SDF)
+	float4 FadeParams;    // x = fade (0 = hidden, 1 = fully shown)
 };
 
 SamplerState LinearSampler : register(s0);
@@ -134,13 +135,13 @@ float4 PS_Main(VS_OUTPUT input) :
 
 	// Apply rounded corner mask to alpha
 	// The blur strength is applied via blend state, so just use the rounded mask here
-	blurColor.a = alpha;
+	blurColor.a = alpha * FadeParams.x;
 
 	return blurColor;
 }
 
-// Clear shader entry point - outputs transparent black inside rounded rect only
-// Used to clear UI buffer (HUD) in the exact same shape as the blur
+// Clear shader entry point - outputs black inside rounded rect with the fade as alpha
+// Used with a ZERO/INV_SRC_ALPHA blend to clear the UI buffer (HUD) in the exact same shape as the blur
 float4 PS_Clear(VS_OUTPUT input) :
 	SV_TARGET
 {
@@ -150,5 +151,5 @@ float4 PS_Clear(VS_OUTPUT input) :
 	// Discard pixels outside rounded rect to preserve HUD in corners
 	clip(-sdf - CLIP_EPSILON);
 
-	return float4(0.0f, 0.0f, 0.0f, 0.0f);
+	return float4(0.0f, 0.0f, 0.0f, FadeParams.x);
 }

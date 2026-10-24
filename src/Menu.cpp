@@ -168,6 +168,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	CenterHeader,
 	TooltipHoverDelay,
 	BackgroundBlurEnabled,
+	MenuFadeEnabled,
 	UseCustomCursor,
 	Cursor,
 	ScrollbarOpacity,
@@ -763,6 +764,9 @@ void Menu::DrawSettings()
 	// Apply theme styling with universal contrast enhancement
 	ThemeManager::SetupImGuiStyle(*this);
 
+	// After the style setup, which overwrites the whole style including Alpha.
+	const Util::FadeScope fadeScope(openFade);
+
 	ImGui::DockSpaceOverViewport(0, NULL, ImGuiDockNodeFlags_PassthruCentralNode);
 
 	const auto layoutCond = resetLayout ? ImGuiCond_Always : ImGuiCond_FirstUseEver;
@@ -1349,6 +1353,14 @@ void Menu::ProcessInputEvents(RE::InputEvent* const* a_events)
 			addToEventQueue(KeyEvent(static_cast<RE::ThumbstickEvent*>(it)));
 		}
 	}
+}
+
+void Menu::UpdateOpenFade(float deltaTime)
+{
+	if (settings.Theme.MenuFadeEnabled)
+		Util::StepFade(openFade, IsEnabled, deltaTime);
+	else
+		openFade = IsEnabled ? 1.0f : 0.0f;
 }
 
 bool Menu::ShouldSwallowInput()

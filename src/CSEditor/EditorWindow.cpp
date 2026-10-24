@@ -53,36 +53,6 @@ namespace
 	constexpr float kHelpNoteWrapFontScale = 30.0f;
 	/// Slack when matching dock node edges, which are sums of split sizes and drift by float error.
 	constexpr float kDockEdgeTolerance = 1.0f;
-	/// Time for the hide/show widgets fade to run end to end.
-	constexpr float kWidgetsFadeSeconds = 0.15f;
-
-	/** @brief Scales ImGui alpha by fade while alive; below 1 it also hides the mouse from windows drawn in scope. */
-	class WidgetFadeScope
-	{
-	public:
-		explicit WidgetFadeScope(float fade) :
-			context(*ImGui::GetCurrentContext()),
-			hoveredWindow(context.HoveredWindow),
-			hoveredWindowUnderMoving(context.HoveredWindowUnderMovingWindow)
-		{
-			ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * fade);
-			if (fade < 1.0f)
-				context.HoveredWindow = context.HoveredWindowUnderMovingWindow = nullptr;
-		}
-		~WidgetFadeScope()
-		{
-			context.HoveredWindow = hoveredWindow;
-			context.HoveredWindowUnderMovingWindow = hoveredWindowUnderMoving;
-			ImGui::PopStyleVar();
-		}
-		WidgetFadeScope(const WidgetFadeScope&) = delete;
-		WidgetFadeScope& operator=(const WidgetFadeScope&) = delete;
-
-	private:
-		ImGuiContext& context;
-		ImGuiWindow* hoveredWindow;
-		ImGuiWindow* hoveredWindowUnderMoving;
-	};
 
 	Util::ConfirmationPopup deleteSceneChangesConfirmation;
 
@@ -733,7 +703,7 @@ void EditorWindow::ShowViewportWindow()
 	if (tempTexture && tempTexture->srv) {
 		// tempTexture is a raw copy of the framebuffer RT; its alpha is not guaranteed to be 1,
 		// so a plain ImGui::Image can show the dimmed backdrop through as a transparency cutout.
-		drawList->AddRectFilled(imageRect.Min, imageRect.Max, IM_COL32_BLACK);
+		drawList->AddRectFilled(imageRect.Min, imageRect.Max, ImGui::GetColorU32(IM_COL32_BLACK));
 		ImGui::Image((void*)tempTexture->srv.get(), imageSize);
 	} else {
 		drawList->AddRectFilled(imageRect.Min, imageRect.Max, ImGui::GetColorU32(ImGuiCol_WindowBg));
@@ -893,8 +863,7 @@ void EditorWindow::RenderUI()
 	ImGui::GetStyle().FontScaleMain = settings.editorUIScale;
 	const EditorChromeScope chrome;
 
-	const float fadeStep = io.DeltaTime / kWidgetsFadeSeconds;
-	widgetsFade = std::clamp(widgetsFade + (widgetsHidden ? -fadeStep : fadeStep), 0.0f, 1.0f);
+	Util::StepFade(widgetsFade, !widgetsHidden, io.DeltaTime);
 
 	if (IsViewportActive() && widgetsFade > 0.0f) {
 		ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * widgetsFade);
@@ -1470,7 +1439,7 @@ void EditorWindow::RenderUI()
 	dockSpaceId = ImGui::DockSpaceOverViewport(0, nullptr, ImGuiDockNodeFlags_PassthruCentralNode);
 
 	if (widgetsFade > 0.0f) {
-		const WidgetFadeScope fadeScope(widgetsFade);
+		const Util::FadeScope fadeScope(widgetsFade);
 		DrawEditorWindows(scale, actionBarBottom);
 	}
 
