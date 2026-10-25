@@ -20,6 +20,7 @@
 #include "IconsTabler.h"
 #include "Menu.h"
 #include "Menu/FeatureListRenderer.h"
+#include "Menu/FeatureUndo.h"
 #include "Menu/Fonts.h"
 #include "Menu/IconLoader.h"
 #include "Menu/Icons/helpers/IconFonts.h"
@@ -68,28 +69,6 @@ namespace
 				return feature;
 		}
 		return nullptr;
-	}
-
-	/** @brief An undo target for a feature's own settings, read and written with the scene layer suspended. */
-	UndoHistory::Target MakeFeatureUndoTarget(Feature* feature)
-	{
-		UndoHistory::Target target{ .key = "feature:" + feature->GetShortName(), .label = feature->GetName() };
-		target.capture = [feature]() -> UndoHistory::SnapshotPtr {
-			if (!feature->loaded)
-				return nullptr;
-			SceneSettingsManager::SceneLayerGuard sceneLayerGuard;
-			nlohmann::json values;
-			feature->SaveSettings(values);
-			return UndoHistory::Capture(std::move(values));
-		};
-		target.restore = [feature](const UndoHistory::Snapshot& snapshot) {
-			SceneSettingsManager::SceneLayerGuard sceneLayerGuard;
-			nlohmann::json values = UndoHistory::Get<nlohmann::json>(snapshot);
-			feature->LoadSettings(values);
-			globals::state->MarkSettingsChanged();
-			globals::state->InvalidateEditsUnderBaselines(feature);
-		};
-		return target;
 	}
 
 	/** @brief Boot enable pill only (label lives in the tooltip). Returns false when not drawn. */
@@ -154,7 +133,7 @@ namespace
 			auto* editor = EditorWindow::GetSingleton();
 			Util::HideDebugSectionsGuard hideDebug(!editor->settings.showFeatureDebug);
 			if (feature->UsesMainSettings())
-				editor->undoHistory.Watch(MakeFeatureUndoTarget(feature));
+				editor->undoHistory.Watch(FeatureUndo::MakeTarget(feature));
 			FeatureListRenderer::DrawFeatureBody(feature);
 		}
 		ImGui::EndChild();
