@@ -1,5 +1,6 @@
 #include "WeatherUtils.h"
 #include "../I18n/I18n.h"
+#include "Browser/BrowserWidgets.h"
 #include "EditorWindow.h"
 #include "PaletteWindow.h"
 #include "Utils/Climate.h"
@@ -688,6 +689,16 @@ namespace TOD
 		ImGui::Text("%s", label);
 	}
 
+	static bool DrawInheritCheckboxAndLabel(const char* label, bool& inheritFlag)
+	{
+		const bool clicked = ImGui::Checkbox((std::string("##inherit_") + label).c_str(), &inheritFlag);
+		Util::AddTooltip(T(TKEY("inherit_from_parent_weather"), "Inherit from parent weather"));
+		ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x);
+		ImGui::AlignTextToFramePadding();
+		BrowserUI::EllipsizedText(label, ImGui::GetContentRegionAvail().x, ImGui::GetStyleColorVec4(ImGuiCol_Text));
+		return clicked;
+	}
+
 	static bool PushTODHighlight(const char* label)
 	{
 		return g_currentWidget && g_currentWidget->PushHighlightIfNeeded(label);
@@ -746,8 +757,11 @@ namespace TOD
 		bool changed = false;
 		const bool highlighted = PushTODHighlight(label);
 
+		const float buttonSize = ImGui::GetFrameHeight() * 1.5f;
+
 		ImGui::TableNextRow();
 		ImGui::TableSetColumnIndex(0);
+		ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (buttonSize - ImGui::GetFrameHeight()) * 0.5f);
 
 		// Only highlight the title text based on active time of day
 		bool anyActive = false;
@@ -771,9 +785,6 @@ namespace TOD
 		float spacing = ImGui::GetStyle().ItemSpacing.x;
 		// Match the header calculation exactly
 		float columnWidth = (totalWidth - 3 * spacing) / 4.0f;
-
-		// Use a fixed button size
-		const float buttonSize = ImGui::GetFrameHeight() * 1.5f;
 
 		for (int i = 0; i < Count; ++i) {
 			if (i > 0)
@@ -938,14 +949,16 @@ namespace TOD
 
 	bool DrawTODColorRow(const char* label, float3 colors[4], bool& inheritFlag, const float3 parentColors[4])
 	{
-		const float scale = Util::GetUIScale();
 		float factors[4];
 		GetTimeOfDayFactors(factors);
 		bool changed = false;
 		const bool highlighted = PushTODHighlight(label);
 
+		const float buttonSize = ImGui::GetFrameHeight() * 1.5f;
+
 		ImGui::TableNextRow();
 		ImGui::TableSetColumnIndex(0);
+		ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (buttonSize - ImGui::GetFrameHeight()) * 0.5f);
 
 		bool anyActive = false;
 		for (int i = 0; i < Count; ++i) {
@@ -957,32 +970,15 @@ namespace TOD
 		if (!anyActive)
 			ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 0.5f);
 
-		// Draw label text
-		DrawCenteredLabel(label);
-
-		// Draw inherit checkbox right under the label
 		if (parentColors) {
-			ImGui::SameLine();
-			ImGui::PushStyleColor(ImGuiCol_FrameBg, WidgetUI::kInheritCheckboxFrameBg);
-			ImGui::PushStyleColor(ImGuiCol_CheckMark, WidgetUI::kInheritCheckboxMark);
-			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2 * scale, 2 * scale));
-
-			std::string inheritId = std::string("##inherit_") + label;
-			if (ImGui::Checkbox(inheritId.c_str(), &inheritFlag)) {
-				if (inheritFlag) {
-					// Copy all parent values
-					for (int i = 0; i < Count; ++i) {
-						colors[i] = parentColors[i];
-					}
-					changed = true;
+			if (DrawInheritCheckboxAndLabel(label, inheritFlag) && inheritFlag) {
+				for (int i = 0; i < Count; ++i) {
+					colors[i] = parentColors[i];
 				}
-				// Allow unchecking
+				changed = true;
 			}
-
-			ImGui::PopStyleVar();
-			ImGui::PopStyleColor(2);
-
-			Util::AddTooltip(T(TKEY("inherit_from_parent_weather"), "Inherit from parent weather"));
+		} else {
+			DrawCenteredLabel(label);
 		}
 
 		if (!anyActive)
@@ -993,7 +989,6 @@ namespace TOD
 		float totalWidth = ImGui::GetContentRegionAvail().x;
 		float spacing = ImGui::GetStyle().ItemSpacing.x;
 		float columnWidth = (totalWidth - 3 * spacing) / 4.0f;
-		const float buttonSize = ImGui::GetFrameHeight() * 1.5f;
 
 		for (int i = 0; i < Count; ++i) {
 			if (i > 0)
@@ -1125,36 +1120,21 @@ namespace TOD
 
 	bool DrawTODFloatRow(const char* label, float values[4], bool& inheritFlag, const float parentValues[4], float minValue, float maxValue, const char* format)
 	{
-		const float scale = Util::GetUIScale();
 		bool changed = false;
 		const bool highlighted = PushTODHighlight(label);
 
 		ImGui::TableNextRow();
 		ImGui::TableSetColumnIndex(0);
 
-		DrawCenteredLabel(label);
-
-		// Draw inherit checkbox
 		if (parentValues) {
-			ImGui::SameLine();
-			ImGui::PushStyleColor(ImGuiCol_FrameBg, WidgetUI::kInheritCheckboxFrameBg);
-			ImGui::PushStyleColor(ImGuiCol_CheckMark, WidgetUI::kInheritCheckboxMark);
-			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2 * scale, 2 * scale));
-
-			std::string inheritId = std::string("##inherit_") + label;
-			if (ImGui::Checkbox(inheritId.c_str(), &inheritFlag)) {
-				if (inheritFlag) {
-					for (int i = 0; i < Count; ++i) {
-						values[i] = parentValues[i];
-					}
-					changed = true;
+			if (DrawInheritCheckboxAndLabel(label, inheritFlag) && inheritFlag) {
+				for (int i = 0; i < Count; ++i) {
+					values[i] = parentValues[i];
 				}
+				changed = true;
 			}
-
-			ImGui::PopStyleVar();
-			ImGui::PopStyleColor(2);
-
-			Util::AddTooltip(T(TKEY("inherit_from_parent_weather"), "Inherit from parent weather"));
+		} else {
+			DrawCenteredLabel(label);
 		}
 
 		ImGui::TableSetColumnIndex(1);

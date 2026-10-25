@@ -571,12 +571,21 @@ namespace Util
 		return std::max(iconSize.x, iconSize.y) + kPad * 2.0f * scale;
 	}
 
-	void DrawLockStatusBadge(ImVec2 a_min, bool a_locked, ImDrawList* a_drawList)
+	static float GetLockStatusBadgeRounding(float size)
+	{
+		return std::min(ImGui::GetStyle().FrameRounding, size * 0.35f);
+	}
+
+	void DrawLockStatusBadge(ImVec2 a_min, bool a_locked, ImDrawList* a_drawList, bool a_hovered, bool a_held)
 	{
 		if (!a_drawList)
 			a_drawList = ImGui::GetWindowDrawList();
 
 		const float size = GetLockStatusBadgeSize();
+		{
+			auto _style = TransparentIconButtonStyle();
+			DrawRoundedButtonHighlight(a_min, ImVec2(a_min.x + size, a_min.y + size), a_hovered, a_held, GetLockStatusBadgeRounding(size), a_drawList);
+		}
 		const char* icon = a_locked ? ICON_TI_LOCK : ICON_TI_LOCK_OPEN_2;
 		const auto& statusPalette = Menu::GetSingleton()->GetTheme().StatusPalette;
 		const ImVec4 statusColor = a_locked ? statusPalette.SuccessColor : statusPalette.Error;
@@ -586,7 +595,7 @@ namespace Util
 		border.w = 0.55f;
 
 		const ImVec2 max(a_min.x + size, a_min.y + size);
-		const float rounding = std::min(ImGui::GetStyle().FrameRounding, size * 0.35f);
+		const float rounding = GetLockStatusBadgeRounding(size);
 		a_drawList->AddRectFilled(a_min, max, ImGui::GetColorU32(fill), rounding);
 		a_drawList->AddRect(a_min, max, ImGui::GetColorU32(border), rounding);
 		Icons::DrawCenteredGlyph(a_drawList, a_min, ImVec2(size, size),
@@ -610,7 +619,7 @@ namespace Util
 		bool hovered = false;
 		bool held = false;
 		const bool clicked = ImGui::ButtonBehavior(bb, id, &hovered, &held);
-		DrawLockStatusBadge(min, a_locked);
+		DrawLockStatusBadge(min, a_locked, nullptr, hovered, held);
 		if (a_tooltip)
 			AddTooltip(a_tooltip);
 		return clicked;
@@ -1381,10 +1390,10 @@ namespace Util
 
 	float GetEditorChromeTextCursorOffsetY(float rowHeight)
 	{
-		// ImGui's text cursor is the top of the FontSize line box. Capitals occupy ~[0, Ascent],
-		// so centre that ink band in the row: offset = rowHeight/2 - Ascent/2.
-		const float ascent = ImGui::GetFontBaked()->Ascent;
-		return rowHeight * 0.5f - ascent * 0.5f;
+		// Centre capital-letter ink, measured from 'H' since cap height and ascent vary per font.
+		const ImFontGlyph* glyph = ImGui::GetFontBaked()->FindGlyph('H');
+		const float inkCenter = glyph ? (glyph->Y0 + glyph->Y1) * 0.5f : ImGui::GetFontSize() * 0.5f;
+		return rowHeight * 0.5f - inkCenter;
 	}
 
 	// Draws the custom floating header: the title (also the drag handle), an optional

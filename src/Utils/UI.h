@@ -274,8 +274,10 @@ namespace Util
 	 * @param a_min Top-left of the badge in screen space.
 	 * @param a_locked True draws a lock in SuccessColor; false draws unlock in Error.
 	 * @param a_drawList Optional; defaults to the current window draw list.
+	 * @param a_hovered Draws the transparent-icon-button hover overlay under the badge.
+	 * @param a_held Draws the pressed overlay instead.
 	 */
-	void DrawLockStatusBadge(ImVec2 a_min, bool a_locked, ImDrawList* a_drawList = nullptr);
+	void DrawLockStatusBadge(ImVec2 a_min, bool a_locked, ImDrawList* a_drawList = nullptr, bool a_hovered = false, bool a_held = false);
 
 	/**
 	 * @brief Interactive lock badge that toggles via ButtonBehavior.

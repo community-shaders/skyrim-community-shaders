@@ -21,7 +21,6 @@
 #include "Menu.h"
 #include "Menu/FeatureListRenderer.h"
 #include "Menu/Fonts.h"
-#include "Menu/IconLoader.h"
 #include "Menu/Icons/helpers/IconFonts.h"
 #include "Menu/Icons/helpers/SceneActionIcons.h"
 #include "SaveManager.h"
@@ -222,24 +221,15 @@ namespace
 			ScenePresetExport::OpenBaseline(selectedFeature);
 	}
 
-	/** @brief The main menu's Save Settings, drawn with its icon so it reads apart from the editor's own save. */
+	/** @brief The main menu's Save Settings. */
 	void DrawSaveSettingsButton()
 	{
 		ImGui::SameLine();
+		// SameLine snaps to the title's line, not the re-centred export button beside it.
+		ImGui::SetCursorScreenPos(ImVec2(ImGui::GetCursorScreenPos().x, ImGui::GetItemRectMin().y));
 		const char* tooltip = T(TKEY("features_save_settings_tooltip"),
 			"Save Settings: saves feature settings and everything in the CS editor.");
-		bool clicked = false;
-		if (auto* texture = Util::IconLoader::GetIcons().saveSettings.texture) {
-			const auto paint = [texture](ImDrawList* drawList, ImVec2 center, float size, ImU32 color) {
-				const float half = size * 0.5f;
-				drawList->AddImage(texture, ImVec2(center.x - half, center.y - half), ImVec2(center.x + half, center.y + half),
-					ImVec2(0, 0), ImVec2(1, 1), color);
-			};
-			clicked = BrowserUI::PaintedIconButton("##FeatureSaveSettings", paint, ImGui::GetColorU32(Util::GetIconTint()), tooltip);
-		} else {
-			clicked = BrowserUI::IconButton("##FeatureSaveSettings", Icons::TI(ICON_TI_DEVICE_FLOPPY), tooltip);
-		}
-		if (clicked)
+		if (BrowserUI::IconButton("##FeatureSaveSettings", Icons::TI(ICON_TI_DEVICE_FLOPPY), tooltip))
 			SaveManager::SaveAll();
 	}
 
@@ -252,6 +242,7 @@ namespace
 		const auto title = std::format("{}###CSEditorFeatures", T(TKEY("base_settings_window"), "Base Settings"));
 		const bool visible = Util::BeginWithCustomHeader(title.c_str(), &open, [] {
 			// Follows the title, so the previous item is the title text and gives the row's centre.
+			ImGui::SetCursorScreenPos(ImVec2(ImGui::GetCursorScreenPos().x + ImGui::GetStyle().ItemSpacing.x * 2.0f, ImGui::GetCursorScreenPos().y));
 			DrawBaselineExportButton((ImGui::GetItemRectMin().y + ImGui::GetItemRectMax().y) * 0.5f);
 			DrawSaveSettingsButton();
 		});

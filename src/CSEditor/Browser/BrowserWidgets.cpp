@@ -29,7 +29,6 @@ namespace
 	constexpr float kTintedChipFillHoveredAlpha = 0.22f;
 	constexpr float kTintedChipBorderAlpha = 0.5f;
 	constexpr float kStripeWidth = 3.0f;
-	constexpr float kStripeInsetY = 3.0f;
 	/// Floor for the alternating row tint, so long lists stay scannable under themes that leave it clear.
 	constexpr float kMinRowShadeAlpha = 0.04f;
 	constexpr float kStarRadiusScale = 0.5f;
@@ -427,12 +426,9 @@ namespace BrowserUI
 		ImGuiTable* table = ImGui::GetCurrentTable();
 		if (!table)
 			return;
-		const float scale = Util::GetUIScale();
 		const float x0 = ImGui::TableGetCellBgRect(table, table->CurrentColumn).Min.x;
-		const float y0 = table->RowPosY1 + kStripeInsetY * scale;
-		const float y1 = table->RowPosY1 + rowHeight - kStripeInsetY * scale;
-		const float width = kStripeWidth * scale;
-		ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(x0, y0), ImVec2(x0 + width, y1), color, width * 0.5f);
+		ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(x0, table->RowPosY1),
+			ImVec2(x0 + kStripeWidth * Util::GetUIScale(), table->RowPosY1 + rowHeight), color);
 	}
 
 	namespace
