@@ -582,25 +582,28 @@ can be scripted. Use the imgui MCP for widget-tree assertions when it connects.
 Tick items as they land on `feat/menu-ux`. Put the commit SHA after each item.
 
 **Setup**
-- [ ] Worktree + `feat/menu-ux` off `upstream/dev`; build dir; dev-cycle pointed at it
+- [x] Worktree + `feat/menu-ux` off `upstream/dev`; build dir; dev-cycle pointed at it (`Github-Fork/mux`)
 - [ ] Baseline screenshots of every current page (en + de) for before/after
 
-**PR A: fixes**
-- [ ] A1 localized feature search
-- [ ] A2 canonical page IDs
-- [ ] A3 remove dead "Display" entry
-- [ ] A4 Feature Issues placement
-- [ ] A5 Restore confirmation
-- [ ] A6 short icon tooltips
-- [ ] A7 FAQ wording
-- [ ] A8 Disable at Boot display names
+**PR A: fixes** (merged into `feat/menu-ux`; in-game check pending)
+
+Rule added 2026-10-25: a PR that removes en.json keys also prunes them from the other locales (`sort-i18n.py --write --prune-extra`) so CI's sort check passes; translations still wait for PR E.
+
+- [x] A1 localized feature search `96244a9a7`
+- [x] A2 canonical page IDs `73bbd7862`
+- [x] A3 remove dead "Display" entry `73bbd7862`
+- [x] A4 Feature Issues placement `73bbd7862`
+- [x] A5 Restore confirmation `b92136a38`
+- [x] A6 short icon tooltips `b92136a38`
+- [x] A7 FAQ wording `1fb24f2e2`
+- [x] A8 Disable at Boot display names `266128eb5` (+ locale prune `af3418ba5`)
 - [ ] Split, build, i18n, open PR A
 
 **PR B: shell**
-- [ ] B0 decouple `BrowserUI` from `EditorWindow`
-- [ ] B0 `Util::Notifications`
-- [ ] B0 `FeatureUndo` extraction
-- [ ] B4 `Menu::ConsumeEscape` (needed by B6)
+- [x] B0 decouple `BrowserUI` from `EditorWindow` `9a42f1dbc`
+- [x] B0 `Util::Notifications` `79e6055e9`
+- [x] B0 `FeatureUndo` extraction `8776579f3`
+- [x] B4 `Menu::ConsumeEscape` (needed by B6) `abbb1a13b`
 - [ ] B1 header: drop text-button fallback + `ShowActionIcons` UI, glyph fallback, shortcut tooltips
 - [ ] B1 `?` popover (shortcuts, FAQ modal, links, About)
 - [ ] B2 status bar (status left, GPU/runtime/D3D12 right)
