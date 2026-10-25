@@ -34,10 +34,10 @@
 
 namespace
 {
-	// Core built-in menu names that always appear first in the menu list
-	// These are canonical identifiers used for logic — NOT translated
-	constexpr std::array<const char*, 7> CORE_MENU_NAMES = {
-		"Home", "Presets", "General", "Advanced", "Profiling", "CS Editor", "Display"
+	// Built-in pages drawn in the top group, above the Features header and search bar
+	constexpr std::array CORE_MENU_IDS = {
+		MenuPageIds::kFeatureIssues, MenuPageIds::kHome, MenuPageIds::kPresets, MenuPageIds::kGeneral,
+		MenuPageIds::kAdvanced, MenuPageIds::kProfiling, MenuPageIds::kCSEditor
 	};
 
 	/** @brief Draws a full-width Selectable with a rounded accent pill that also carries its hover/selected state. @return True when clicked. */
@@ -75,28 +75,9 @@ namespace
 		}
 	}
 
-	const char* GetCoreMenuDisplayName(const char* canonicalName)
+	bool IsCoreMenu(std::string_view menuId)
 	{
-		if (std::strcmp(canonicalName, "Home") == 0)
-			return T("menu.features.home", "Home");
-		if (std::strcmp(canonicalName, "Presets") == 0)
-			return T("menu.features.presets", "Presets");
-		if (std::strcmp(canonicalName, "General") == 0)
-			return T("menu.features.general", "General");
-		if (std::strcmp(canonicalName, "Advanced") == 0)
-			return T("menu.features.advanced", "Advanced");
-		if (std::strcmp(canonicalName, "Profiling") == 0)
-			return T("menu.features.profiling", "Profiling");
-		if (std::strcmp(canonicalName, "CS Editor") == 0)
-			return T("menu.features.cs_editor", "CS Editor");
-		if (std::strcmp(canonicalName, "Display") == 0)
-			return T("menu.features.display", "Display");
-		return canonicalName;
-	}
-
-	bool IsCoreMenu(const std::string& menuName)
-	{
-		return std::find(CORE_MENU_NAMES.begin(), CORE_MENU_NAMES.end(), menuName) != CORE_MENU_NAMES.end();
+		return std::ranges::find(CORE_MENU_IDS, menuId) != CORE_MENU_IDS.end();
 	}
 
 	/**
@@ -457,12 +438,12 @@ std::vector<FeatureListRenderer::MenuFuncInfo> FeatureListRenderer::BuildMenuLis
 	}
 
 	auto menuList = std::vector<MenuFuncInfo>{
-		BuiltInMenu{ T("menu.features.home", "Home"), []() { HomePageRenderer::RenderHomePage(); } },
-		BuiltInMenu{ T("menu.features.presets", "Presets"), []() { PresetsPageRenderer::Render(); } },
-		BuiltInMenu{ T("menu.features.general", "General"), drawGeneralSettings },
-		BuiltInMenu{ T("menu.features.advanced", "Advanced"), drawAdvancedSettings },
-		BuiltInMenu{ T("menu.features.profiling", "Profiling"), []() { ProfilingRenderer::RenderStatistics(); } },
-		BuiltInMenu{ T("menu.features.cs_editor", "CS Editor"), []() { globals::features::csEditor.DrawSettings(); } }
+		BuiltInMenu{ MenuPageIds::kHome, T("menu.features.home", "Home"), []() { HomePageRenderer::RenderHomePage(); } },
+		BuiltInMenu{ MenuPageIds::kPresets, T("menu.features.presets", "Presets"), []() { PresetsPageRenderer::Render(); } },
+		BuiltInMenu{ MenuPageIds::kGeneral, T("menu.features.general", "General"), drawGeneralSettings },
+		BuiltInMenu{ MenuPageIds::kAdvanced, T("menu.features.advanced", "Advanced"), drawAdvancedSettings },
+		BuiltInMenu{ MenuPageIds::kProfiling, T("menu.features.profiling", "Profiling"), []() { ProfilingRenderer::RenderStatistics(); } },
+		BuiltInMenu{ MenuPageIds::kCSEditor, T("menu.features.cs_editor", "CS Editor"), []() { globals::features::csEditor.DrawSettings(); } }
 	};  // NOTE: The menu list is rebuilt every frame, so category expansion states
 	// persist correctly. This is acceptable since the list is small and built
 	// infrequently, but could be optimized if performance becomes an issue.
@@ -551,7 +532,7 @@ std::vector<FeatureListRenderer::MenuFuncInfo> FeatureListRenderer::BuildMenuLis
 	}
 	// Add top section for feature issues (rejected features, obsolete info, etc.)
 	if (FeatureIssues::HasFeatureIssues()) {
-		menuList.insert(menuList.begin(), BuiltInMenu{ T("menu.features.feature_issues", "Feature Issues"), []() {
+		menuList.insert(menuList.begin(), BuiltInMenu{ MenuPageIds::kFeatureIssues, T("menu.features.feature_issues", "Feature Issues"), []() {
 														  FeatureIssues::DrawFeatureIssuesUI();
 													  } });
 	}
@@ -564,24 +545,33 @@ void FeatureListRenderer::HandlePendingFeatureSelection(
 	const std::vector<MenuFuncInfo>& menuList,
 	size_t& selectedMenu)
 {
-	if (!pendingFeatureSelection.empty()) {
-		for (size_t i = 0; i < menuList.size(); ++i) {
-			if (std::holds_alternative<Feature*>(menuList[i])) {
-				Feature* feature = std::get<Feature*>(menuList[i]);
-				if (feature->GetShortName() == pendingFeatureSelection) {
-					selectedMenu = i;
-					logger::info("Navigated to {} feature menu", pendingFeatureSelection);
-					break;
-				}
-			} else if (const auto* page = std::get_if<BuiltInMenu>(&menuList[i]); page && page->name == pendingFeatureSelection) {
-				// Built-in pages such as Presets are addressed by their display name.
-				selectedMenu = i;
-				logger::info("Navigated to {} page", pendingFeatureSelection);
-				break;
-			}
-		}
-		pendingFeatureSelection.clear();  // Clear after processing
-	}
+	if (pendingFeatureSelection.empty())
+		return;
+
+	// Feature short names first, then canonical page IDs, then page display names for callers that pass a label
+	const auto select = [&](auto&& matches, const char* kind) {
+		const auto it = std::ranges::find_if(menuList, matches);
+		if (it == menuList.end())
+			return false;
+		selectedMenu = static_cast<size_t>(std::distance(menuList.begin(), it));
+		logger::info("Navigated to {} {}", pendingFeatureSelection, kind);
+		return true;
+	};
+	const auto isFeature = [&](const MenuFuncInfo& item) {
+		const auto* feature = std::get_if<Feature*>(&item);
+		return feature && (*feature)->GetShortName() == pendingFeatureSelection;
+	};
+	const auto isPageId = [&](const MenuFuncInfo& item) {
+		const auto* page = std::get_if<BuiltInMenu>(&item);
+		return page && page->id == pendingFeatureSelection;
+	};
+	const auto isPageName = [&](const MenuFuncInfo& item) {
+		const auto* page = std::get_if<BuiltInMenu>(&item);
+		return page && page->name == pendingFeatureSelection;
+	};
+	if (!select(isFeature, "feature menu") && !select(isPageId, "page"))
+		select(isPageName, "page");
+	pendingFeatureSelection.clear();  // Clear after processing
 }
 
 void FeatureListRenderer::RenderLeftColumn(
@@ -595,27 +585,10 @@ void FeatureListRenderer::RenderLeftColumn(
 	ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
 	ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4());
 	if (ImGui::BeginListBox("##MenusList", { -FLT_MIN, -FLT_MIN })) {
-		// Find where core built-in menus end (Home, General, Advanced, Display)
-		size_t coreMenuCount = 0;
+		// First render the built-in pages, in list order (Feature Issues leads when present)
 		for (size_t i = 0; i < menuList.size(); i++) {
-			if (std::holds_alternative<BuiltInMenu>(menuList[i])) {
-				const BuiltInMenu& menu = std::get<BuiltInMenu>(menuList[i]);
-				if (IsCoreMenu(menu.name)) {
-					coreMenuCount++;
-				}
-			}
-		}
-
-		// First render the core built-in menus (Home, General, Advanced, Display)
-		size_t renderedCoreMenus = 0;
-		for (size_t i = 0; i < menuList.size() && renderedCoreMenus < CORE_MENU_NAMES.size(); i++) {
-			if (std::holds_alternative<BuiltInMenu>(menuList[i])) {
-				const BuiltInMenu& menu = std::get<BuiltInMenu>(menuList[i]);
-				if (IsCoreMenu(menu.name)) {
-					std::visit(ListMenuVisitor{ i, selectedMenu, categoryExpansionStates }, menuList[i]);
-					renderedCoreMenus++;
-				}
-			}
+			if (const auto* menu = std::get_if<BuiltInMenu>(&menuList[i]); menu && IsCoreMenu(menu->id))
+				std::visit(ListMenuVisitor{ i, selectedMenu, categoryExpansionStates }, menuList[i]);
 		}
 
 		Util::DrawSectionHeader(T("menu.features.features", "Features"), true);
@@ -646,12 +619,8 @@ void FeatureListRenderer::RenderLeftColumn(
 
 		// Then render the rest (features and categories, but skip already rendered core menus)
 		for (size_t i = 0; i < menuList.size(); i++) {
-			if (std::holds_alternative<BuiltInMenu>(menuList[i])) {
-				const BuiltInMenu& menu = std::get<BuiltInMenu>(menuList[i]);
-				if (IsCoreMenu(menu.name)) {
-					continue;  // Skip, already rendered
-				}
-			}
+			if (const auto* menu = std::get_if<BuiltInMenu>(&menuList[i]); menu && IsCoreMenu(menu->id))
+				continue;  // Skip, already rendered
 			std::visit(ListMenuVisitor{ i, selectedMenu, categoryExpansionStates }, menuList[i]);
 		}
 
@@ -680,9 +649,9 @@ void FeatureListRenderer::ListMenuVisitor::operator()(const BuiltInMenu& menu)
 	MenuFonts::FontRoleGuard fontGuard(Menu::FontRole::Subheading);
 
 	// Use error color for Feature Issues menu item
-	bool isFeatureIssues = (menu.name == T("menu.features.feature_issues", "Feature Issues"));
-	bool isCSEditor = (menu.name == T("menu.features.cs_editor", "CS Editor"));
-	bool isPresets = (menu.name == T("menu.features.presets", "Presets"));
+	const bool isFeatureIssues = menu.id == MenuPageIds::kFeatureIssues;
+	const bool isCSEditor = menu.id == MenuPageIds::kCSEditor;
+	const bool isPresets = menu.id == MenuPageIds::kPresets;
 
 	if (isFeatureIssues) {
 		auto& themeSettings = globals::menu->GetSettings().Theme;
@@ -819,7 +788,7 @@ void FeatureListRenderer::DrawMenuVisitor::operator()(const BuiltInMenu& menu)
 {
 	if (ImGui::BeginChild("##FeatureConfigFrame", { 0, 0 }, true)) {
 		// Add spacing only for Home menu
-		if (menu.name == T("menu.features.home", "Home")) {
+		if (menu.id == MenuPageIds::kHome) {
 			ImGui::Dummy(ImVec2(0, ThemeManager::Constants::BUTTON_SPACING));
 		}
 		menu.func();

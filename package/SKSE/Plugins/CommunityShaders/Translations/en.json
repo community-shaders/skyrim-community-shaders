@@ -3258,7 +3258,6 @@
     "menu.features.constraints_explanation": "These settings are disabled in their respective feature menus while the constraints are active. Adjust the constraining features to remove them.",
     "menu.features.cs_editor": "CS Editor",
     "menu.features.disabled": "Disabled",
-    "menu.features.display": "Display",
     "menu.features.dont_show_warning": "Don't show this warning again",
     "menu.features.download_link": "Click here to download this feature ({})",
     "menu.features.download_tooltip": "Download the feature from the mod page.",

@@ -11,6 +11,7 @@
 #include "I18n/I18n.h"
 #include "IconsTabler.h"
 #include "Menu.h"
+#include "Menu/FeatureListRenderer.h"
 #include "Menu/Icons/helpers/IconFonts.h"
 #include "Presets/PresetCompatibility.h"
 #include "Presets/UnifiedPresetCatalog.h"
@@ -734,8 +735,7 @@ void PresetsPageRenderer::Open()
 	if (!menu)
 		return;
 	menu->IsEnabled = true;
-	// Addressed by display name, the same translation the left panel draws.
-	menu->SelectFeatureMenu(T("menu.features.presets", "Presets"));
+	menu->SelectFeatureMenu(std::string(MenuPageIds::kPresets));
 }
 
 float PresetsPageRenderer::MeasureOpenButton()

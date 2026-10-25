@@ -10,6 +10,23 @@
 struct Feature;
 
 /**
+ * @brief Canonical, untranslated IDs of the built-in menu pages.
+ *
+ * Page logic compares these rather than the translated labels, so it works in every locale. Pass one to
+ * Menu::SelectFeatureMenu() to open that page.
+ */
+namespace MenuPageIds
+{
+	inline constexpr std::string_view kHome = "Home";
+	inline constexpr std::string_view kPresets = "Presets";
+	inline constexpr std::string_view kGeneral = "General";
+	inline constexpr std::string_view kAdvanced = "Advanced";
+	inline constexpr std::string_view kProfiling = "Profiling";
+	inline constexpr std::string_view kCSEditor = "CS Editor";
+	inline constexpr std::string_view kFeatureIssues = "Feature Issues";
+}
+
+/**
  * @brief Renders the two-column feature list and settings panel in the main menu.
  *
  * The left column shows a searchable, categorized list of built-in pages and
@@ -19,10 +36,11 @@ struct Feature;
 class FeatureListRenderer
 {
 public:
-	/** @brief Describes a built-in (non-feature) menu page with a name and draw callback. */
+	/** @brief Describes a built-in (non-feature) menu page with an ID, a display name and a draw callback. */
 	struct BuiltInMenu
 	{
-		std::string name;
+		std::string_view id;  ///< Canonical page ID from MenuPageIds, used for all page logic
+		std::string name;     ///< Translated label shown in the list
 		std::function<void()> func;
 	};
 
@@ -45,7 +63,8 @@ public:
 	 * @param footerHeight Height reserved for the footer area below the list.
 	 * @param selectedMenu Index of the currently selected menu item (updated on selection change).
 	 * @param featureSearch Current search filter string (updated by the search input).
-	 * @param pendingFeatureSelection Name of a feature to auto-select (cleared after processing).
+	 * @param pendingFeatureSelection Feature short name or page ID (MenuPageIds) to auto-select; a page display
+	 *        name is accepted as a fallback. Cleared after processing.
 	 * @param categoryExpansionStates Map of category name to expanded/collapsed state.
 	 * @param drawGeneralSettings Callback that renders the General settings page content.
 	 * @param drawAdvancedSettings Callback that renders the Advanced settings page content.
