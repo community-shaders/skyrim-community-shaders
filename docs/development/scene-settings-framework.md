@@ -66,7 +66,7 @@ when, and only when, a second TU needs it.
 ## How the catalog is built
 
 `CMakeLists.txt` runs the generator as a custom command before compiling, with
-`--min-entries 645 --min-controllable 538 --min-controllable-features 30` as a regression gate. The two
+`--min-entries 645 --min-controllable 538 --min-controllable-features 32` as a regression gate. The two
 controllable floors are the ones that matter: a parser change that stops binding a control does not
 remove the entry, it silently drops its `SceneControllable` flag. Keep them just under the real numbers.
 `--feature-floors cmake/scene_settings_catalog_floors.json` adds a floor per feature, which the totals
@@ -92,7 +92,7 @@ This makes the framework **feature-agnostic**: a feature exposes scene-controlla
 persisting them and drawing them with a recognized ImGui call. There is no registration API and no
 per-feature code to write. This is what replaced the deleted `WeatherVariableRegistry`.
 
-Current catalog on this fork: **660 entries**, 551 of them scene-controllable across 30 features.
+Current catalog on this fork: **733 entries**, 628 of them scene-controllable across 32 features.
 
 A non-primitive member persisted under its own JSON key fails the build unless its type is listed in
 `UNCATALOGED_PERSISTED_AGGREGATE_TYPES`. Generic type names are qualified there (`PostProcessing::Settings`,
@@ -392,7 +392,7 @@ are **blocked** rather than clobbering it, and unknown fields on an entry are pr
     -   `ScreenSpaceGI`'s `ResolutionMode`, `EnableGI`, `EnableTemporalDenoiser` and
         `EnableExperimentalSpecularGI`: each is a shader define, so a change recompiles every SSGI compute
         shader on the render thread and a location transition would hitch.
--   `kLocationFeatureWhitelist` (6) and `kTimeOfDayFeatureWhitelist` (10): which features those scene types
+-   `kLocationFeatureWhitelist` (7) and `kTimeOfDayFeatureWhitelist` (10): which features those scene types
     may target.
 
 `PostProcessing` defers its load: `LoadSettings` stores the JSON and `ProcessSettings` applies it in
@@ -522,7 +522,7 @@ The generator can be run standalone to inspect its output:
 
 ```bash
 python cmake/generate_scene_settings_catalog.py --source-dir . --out-dir /tmp/catalog --min-entries 645 \
-    --min-controllable 538 --min-controllable-features 30 \
+    --min-controllable 538 --min-controllable-features 32 \
     --feature-floors cmake/scene_settings_catalog_floors.json
 ```
 

@@ -11,6 +11,7 @@
         "GrassOptimizations": 18,
         "HDRDisplay": 1,
         "HairSpecular": 17,
+        "HorizonFix": 5,
         "ImageBasedLighting": 12,
         "InteriorSun": 2,
         "LODBlending": 7,
