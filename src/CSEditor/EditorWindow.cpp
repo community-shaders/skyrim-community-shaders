@@ -26,6 +26,7 @@
 #include "Utils/Climate.h"
 #include "Utils/FileSystem.h"
 #include "Utils/Game.h"
+#include "Utils/Notifications.h"
 #include "Utils/UI.h"
 #include "Weather/LightingTemplateWidget.h"
 #include "WeatherPickerWindow.h"
@@ -1407,7 +1408,7 @@ void EditorWindow::RenderUI()
 	undoHistory.EndFrame();
 
 	// Render notifications on top of everything
-	RenderNotifications();
+	Util::Notifications::Draw();
 
 	// Restore previous font scale
 	ImGui::GetStyle().FontScaleMain = previousScale;
@@ -2514,9 +2515,7 @@ void EditorWindow::WarnOpeningBlocked()
 {
 	const std::string message = T(TKEY("open_blocked"), "Wait! You cannot open the editor in a loading screen or menu.");
 	// A repeated hotkey press while the card is still up would only stack copies of it.
-	if (std::ranges::any_of(notifications, [&message](const Notification& notification) { return notification.message == message; }))
-		return;
-	ShowNotification(message, Util::Colors::GetWarning(), 3.0f);
+	Util::Notifications::ShowOnce(message, Util::Colors::GetWarning(), 3.0f);
 }
 
 void EditorWindow::HideGameMenus()
@@ -2696,18 +2695,7 @@ void EditorWindow::DiscardAllWidgetChanges()
 
 void EditorWindow::ShowNotification(const std::string& message, const ImVec4& color, float duration)
 {
-	// Guard against calls before ImGui is initialized
-	if (!ImGui::GetCurrentContext()) {
-		logger::warn("ShowNotification called before ImGui initialization: {}", message);
-		return;
-	}
-
-	Notification notif;
-	notif.message = message;
-	notif.color = color;
-	notif.startTime = static_cast<float>(ImGui::GetTime());
-	notif.duration = duration;
-	notifications.push_back(notif);
+	Util::Notifications::Show(message, color, duration);
 }
 
 void EditorWindow::RequestToolPrompt(ExternalTool& tool, ToolPromptReason reason, std::function<void()> proceed)
@@ -2767,81 +2755,6 @@ void EditorWindow::DrawToolPrompt()
 	}
 	if (auto proceed = std::exchange(toolPromptProceed, nullptr))
 		proceed();
-}
-
-void EditorWindow::RenderNotifications()
-{
-	// Guard against calls before ImGui is initialized
-	if (!ImGui::GetCurrentContext()) {
-		return;
-	}
-
-	const float currentTime = static_cast<float>(ImGui::GetTime());
-	const float scale = Util::GetUIScale();
-	constexpr float kFadeIn = 0.18f;
-	constexpr float kFadeOut = 0.55f;
-
-	notifications.erase(
-		std::remove_if(notifications.begin(), notifications.end(),
-			[currentTime](const Notification& n) { return currentTime - n.startTime > n.duration; }),
-		notifications.end());
-
-	const ImGuiViewport* viewport = ImGui::GetMainViewport();
-	const float maxTextWidth = std::min(380.0f * scale, viewport->WorkSize.x * 0.5f);
-	float stackUp = 0.0f;
-
-	for (auto& notif : notifications) {
-		const float elapsed = currentTime - notif.startTime;
-		const float remaining = notif.duration - elapsed;
-		float alpha = 1.0f;
-		if (elapsed < kFadeIn)
-			alpha = elapsed / kFadeIn;
-		else if (remaining < kFadeOut)
-			alpha = std::max(0.0f, remaining / kFadeOut);
-
-		const ImVec2 textSize = ImGui::CalcTextSize(notif.message.c_str(), nullptr, false, maxTextWidth);
-		const ImVec2 pad{ 16.0f * scale, 12.0f * scale };
-		const ImVec2 cardSize{ textSize.x + pad.x * 2.0f, textSize.y + pad.y * 2.0f };
-		const float x = viewport->WorkPos.x + (viewport->WorkSize.x - cardSize.x) * 0.5f;
-		const float y = viewport->WorkPos.y + viewport->WorkSize.y - cardSize.y - (32.0f * scale + stackUp);
-
-		ImGui::SetNextWindowPos(ImVec2(x, y), ImGuiCond_Always);
-		ImGui::SetNextWindowSize(cardSize, ImGuiCond_Always);
-		ImGui::SetNextWindowBgAlpha(0.0f);
-
-		ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, ImGui::GetStyle().FrameRounding * 1.25f);
-		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, pad);
-		ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-
-		if (ImGui::Begin(std::format("##Notification{}", (void*)&notif).c_str(), nullptr,
-				ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
-					ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoDocking |
-					ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoScrollbar)) {
-			ImDrawList* draw = ImGui::GetWindowDrawList();
-			const ImVec2 p0 = ImGui::GetWindowPos();
-			const ImVec2 p1{ p0.x + cardSize.x, p0.y + cardSize.y };
-			const float rounding = ImGui::GetStyle().WindowRounding;
-			draw->AddRectFilled(p0, p1,
-				ImGui::ColorConvertFloat4ToU32(ImVec4(0.08f, 0.09f, 0.11f, 0.90f * alpha)), rounding);
-			const ImU32 accent = ImGui::ColorConvertFloat4ToU32(
-				ImVec4(notif.color.x, notif.color.y, notif.color.z, 0.65f * alpha));
-			draw->AddRect(p0, p1, accent, rounding, 0, 1.15f * scale);
-			draw->AddRectFilled(p0, ImVec2(p0.x + 3.0f * scale, p1.y), accent, rounding,
-				ImDrawFlags_RoundCornersLeft);
-
-			ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + maxTextWidth);
-			ImVec4 colorWithAlpha = notif.color;
-			colorWithAlpha.w *= alpha;
-			ImGui::PushStyleColor(ImGuiCol_Text, colorWithAlpha);
-			ImGui::TextWrapped("%s", notif.message.c_str());
-			ImGui::PopStyleColor();
-			ImGui::PopTextWrapPos();
-		}
-		ImGui::End();
-		ImGui::PopStyleVar(3);
-
-		stackUp += cardSize.y + 8.0f * scale;
-	}
 }
 
 void EditorWindow::RefreshJsonAttachmentCache(const std::vector<Widget*>& widgets)

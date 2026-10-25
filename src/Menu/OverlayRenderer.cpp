@@ -25,6 +25,7 @@
 #include "ShaderCache.h"
 #include "State.h"
 #include "Util.h"
+#include "Utils/Notifications.h"
 
 #include "Features/PerformanceOverlay.h"
 #include "Features/PerformanceOverlay/ABTesting/ABTesting.h"
@@ -239,10 +240,10 @@ void OverlayRenderer::RenderOverlay(
 	if (editorWindow->open || menu.IsEnabled)
 		UnifiedPresetCatalog::GetSingleton().DrawBaselineOverlapPrompt();
 
-	// The editor draws its own notifications; while it is closed they still need a host, e.g. the
-	// "cannot open in a loading screen" warning raised by the toggle hotkey.
+	// The editor draws the notifications in its own frame; while it is closed they still need a host,
+	// e.g. the "cannot open in a loading screen" warning raised by the toggle hotkey.
 	if (!editorWindow->open)
-		editorWindow->RenderNotifications();
+		Util::Notifications::Draw();
 
 	RenderFeatureOverlays();
 	RenderFirstTimeSetupOverlay();
@@ -266,7 +267,7 @@ bool OverlayRenderer::ShouldSkipRendering()
 			 Menu::GetSingleton()->openFade > 0.0f ||
 			 HomePageRenderer::ShouldShowFirstTimeSetup() ||
 			 EditorWindow::GetSingleton()->open ||
-			 EditorWindow::GetSingleton()->HasNotifications() ||
+			 Util::Notifications::HasAny() ||
 			 Effects11Editor::GetSingleton().IsOpen() ||
 			 abTestingManager->IsEnabled() ||
 			 (failed && !hide) ||

@@ -340,9 +340,6 @@ public:
 	/** @brief Shows the "cannot open here" warning card, once per press rather than stacking repeats. */
 	void WarnOpeningBlocked();
 
-	/** @brief True while a notification card is still on screen. */
-	bool HasNotifications() const { return !notifications.empty(); }
-
 	/** @brief Shows the Base Settings window on a feature and brings it to the front. */
 	void OpenBaseSettings(const std::string& featureShortName);
 
@@ -389,26 +386,13 @@ public:
 	/** @brief Discards every widget's unsaved changes. Undoable, one step per widget. */
 	void DiscardAllWidgetChanges();
 
-	// Notification system
-	struct Notification
-	{
-		std::string message;
-		ImVec4 color;
-		float startTime;
-		float duration;
-	};
-	std::vector<Notification> notifications;
-
 	/**
-	 * @brief Display a temporary on-screen notification message.
+	 * @brief Display a temporary on-screen notification message through Util::Notifications.
 	 * @param message The text to display.
 	 * @param color   Text color (defaults to error red).
 	 * @param duration How long the notification remains visible, in seconds.
 	 */
 	void ShowNotification(const std::string& message, const ImVec4& color = Util::Colors::GetError(), float duration = kNotificationDuration);
-
-	/** @brief Draw all active notifications and expire old ones. */
-	void RenderNotifications();
 
 	struct Settings
 	{
