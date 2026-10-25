@@ -1109,7 +1109,8 @@ namespace Util
 	// Search functionality
 	/**
 	 * @brief Checks if a feature matches the search query.
-	 * Searches both the feature's short name and display name.
+	 * Case-insensitively (ASCII) searches the short name, English name, translated display name and
+	 * translated category label.
 	 * @param feat The feature to check
 	 * @param searchQuery The search query string
 	 * @return True if the feature matches the search query

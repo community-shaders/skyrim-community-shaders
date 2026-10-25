@@ -7,6 +7,7 @@
 #include "FileSystem.h"
 #include "IconsTabler.h"
 #include "Menu.h"
+#include "Menu/FeatureListRenderer.h"
 #include "Menu/Fonts.h"
 #include "Menu/IconLoader.h"
 #include "Menu/Icons/helpers/IconFonts.h"
@@ -1908,19 +1909,17 @@ namespace Util
 		if (searchQuery.empty())
 			return true;
 
-		// Get both short name and display name
-		std::string shortName = feat->GetShortName();
-		std::string displayName = feat->GetName();
-		std::string query = searchQuery;
+		// ASCII-only folding: UTF-8 continuation bytes are left untouched, so localized names still match byte-for-byte
+		const auto lowerAscii = [](char c) { return (c >= 'A' && c <= 'Z') ? static_cast<char>(c - 'A' + 'a') : c; };
+		const auto contains = [&](std::string_view text) {
+			return std::ranges::search(text, searchQuery, {}, lowerAscii, lowerAscii).begin() != text.end();
+		};
 
-		// Convert all to lowercase for case-insensitive search
-		std::transform(shortName.begin(), shortName.end(), shortName.begin(), [](unsigned char c) { return static_cast<char>(::tolower(c)); });
-		std::transform(displayName.begin(), displayName.end(), displayName.begin(), [](unsigned char c) { return static_cast<char>(::tolower(c)); });
-		std::transform(query.begin(), query.end(), query.begin(), [](unsigned char c) { return static_cast<char>(::tolower(c)); });
-
-		// Search in both short name and display name
-		return shortName.find(query) != std::string::npos ||
-		       displayName.find(query) != std::string::npos;
+		// The list shows the (possibly translated) display name and category label, so match those as well as the English names
+		return contains(feat->GetShortName()) ||
+		       contains(feat->GetName()) ||
+		       contains(feat->GetDisplayName()) ||
+		       contains(FeatureListRenderer::TranslateCategory(feat->GetCategory()));
 	}
 
 	bool StringMatchesSearch(const std::string& text, const std::string& searchQuery)
