@@ -27,10 +27,15 @@ public:
 	static void RenderAdvancedSettings(
 		const std::function<void()>& drawDisableAtBootSettings);
 
-private:
+	/** @brief Log level, shader defines, compiler threads, and the log and ini dump buttons. */
 	static void RenderLoggingSection();
+	/** @brief Shader dump and replacement toggles, shader blocking and the active shader list. */
 	static void RenderShaderDebugSection();
-	static void RenderDisableAtBootSection(const std::function<void()>& drawDisableAtBootSettings);
+	/** @brief Developer mode, file watcher, compiler flags, the content store and build statistics. */
 	static void RenderDeveloperSection();
+	/** @brief A/B testing controls. */
 	static void RenderTestingSection();
+
+private:
+	static void RenderDisableAtBootSection(const std::function<void()>& drawDisableAtBootSettings);
 };

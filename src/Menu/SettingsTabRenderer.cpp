@@ -221,6 +221,13 @@ void SettingsTabRenderer::RenderShadersTab()
 {
 	auto tabLabel = std::format("{}##{}", T("menu.settings.tab_shaders", "Shaders"), "GeneralShadersTab");
 	if (BeginTabItemWithFont(tabLabel.c_str(), Menu::FontRole::Heading)) {
+		RenderShadersSection();
+		MenuFonts::EndTabItem();
+	}
+}
+
+void SettingsTabRenderer::RenderShadersSection()
+{
 		auto shaderCache = globals::shaderCache;
 
 		bool useCustomShaders = shaderCache->IsEnabled();
@@ -350,9 +357,6 @@ void SettingsTabRenderer::RenderShadersTab()
 					(int)Util::GetPerformanceCoreCount());
 			}
 		}
-
-		MenuFonts::EndTabItem();
-	}
 }
 
 void SettingsTabRenderer::RenderKeybindingsTab(
@@ -360,6 +364,13 @@ void SettingsTabRenderer::RenderKeybindingsTab(
 {
 	auto tabLabel = std::format("{}##{}", T("menu.settings.tab_keybindings", "Keybindings"), "GeneralKeybindingsTab");
 	if (BeginTabItemWithFont(tabLabel.c_str(), Menu::FontRole::Heading)) {
+		RenderKeybindingsSection(state);
+		MenuFonts::EndTabItem();
+	}
+}
+
+void SettingsTabRenderer::RenderKeybindingsSection(SettingsState& state)
+{
 		auto& settings = globals::menu->GetSettings();
 
 		Util::InputComboWidget(
@@ -409,9 +420,6 @@ void SettingsTabRenderer::RenderKeybindingsTab(
 			settings.Effects11EditorKey,
 			state.settingEffects11EditorKey,
 			"Change##Effects11Editor");
-
-		MenuFonts::EndTabItem();
-	}
 }
 
 void SettingsTabRenderer::RenderInterfaceTab()
@@ -434,6 +442,13 @@ void SettingsTabRenderer::RenderBehaviorTab()
 {
 	auto tabLabel = std::format("{}##{}", T("menu.settings.tab_behavior", "Behavior"), "InterfaceBehaviorTab");
 	if (BeginTabItemWithFont(tabLabel.c_str(), Menu::FontRole::Heading)) {
+		RenderBehaviorSection();
+		MenuFonts::EndTabItem();
+	}
+}
+
+void SettingsTabRenderer::RenderBehaviorSection()
+{
 		auto& themeSettings = globals::menu->GetSettings().Theme;
 		RenderSaveInfoText();
 
@@ -551,15 +566,19 @@ void SettingsTabRenderer::RenderBehaviorTab()
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text("%s", T("menu.settings.menu_fade_tooltip", "Fades the menu and its background blur in and out when it is opened or closed."));
 		}
-
-		MenuFonts::EndTabItem();
-	}
 }
 
 void SettingsTabRenderer::RenderThemesTab()
 {
 	auto tabLabel = std::format("{}##{}", T("menu.settings.tab_themes", "Themes"), "InterfaceThemesTab");
 	if (BeginTabItemWithFont(tabLabel.c_str(), Menu::FontRole::Heading)) {
+		RenderThemesSection();
+		MenuFonts::EndTabItem();
+	}
+}
+
+void SettingsTabRenderer::RenderThemesSection()
+{
 		auto& themeSettings = globals::menu->GetSettings().Theme;
 
 		// Static variables for popup state and new theme creation
@@ -932,15 +951,24 @@ void SettingsTabRenderer::RenderThemesTab()
 				logger::warn("Failed to delete theme '{}': {}", currentThemePreset, result.errorMessage);
 			}
 		}
-
-		MenuFonts::EndTabItem();
-	}
 }
 
 void SettingsTabRenderer::RenderFontsTab()
 {
 	auto tabLabel = std::format("{}##{}", T("menu.settings.tab_fonts", "Fonts"), "InterfaceFontsTab");
 	if (BeginTabItemWithFont(tabLabel.c_str(), Menu::FontRole::Heading)) {
+		RenderFontsSection();
+		MenuFonts::EndTabItem();
+	} else if (MenuFonts::GetAtlasState().wantsFontPreviewAtlas) {
+		// Fonts tab not active: drop the preview-font atlas so it is not rebaked into every
+		// later atlas rebuild for the rest of the session.
+		MenuFonts::GetAtlasState().wantsFontPreviewAtlas = false;
+		MenuFonts::GetAtlasState().pendingFontReload = true;
+	}
+}
+
+void SettingsTabRenderer::RenderFontsSection()
+{
 		auto* menuInstance = globals::menu;
 		auto& themeSettings = menuInstance->GetSettings().Theme;
 		RenderSaveInfoText();
@@ -1015,20 +1043,19 @@ void SettingsTabRenderer::RenderFontsTab()
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::TextUnformatted(T("menu.settings.refresh_font_families_tooltip", "Rescan the Fonts directory after adding or removing font files."));
 		}
-
-		MenuFonts::EndTabItem();
-	} else if (MenuFonts::GetAtlasState().wantsFontPreviewAtlas) {
-		// Fonts tab not active: drop the preview-font atlas so it is not rebaked into every
-		// later atlas rebuild for the rest of the session.
-		MenuFonts::GetAtlasState().wantsFontPreviewAtlas = false;
-		MenuFonts::GetAtlasState().pendingFontReload = true;
-	}
 }
 
 void SettingsTabRenderer::RenderStylingTab()
 {
 	auto tabLabel = std::format("{}##{}", T("menu.settings.tab_styling", "Styling"), "InterfaceStylingTab");
 	if (BeginTabItemWithFont(tabLabel.c_str(), Menu::FontRole::Heading)) {
+		RenderStylingSection();
+		MenuFonts::EndTabItem();
+	}
+}
+
+void SettingsTabRenderer::RenderStylingSection()
+{
 		auto& themeSettings = globals::menu->GetSettings().Theme;
 		auto& style = themeSettings.Style;
 		RenderSaveInfoText();
@@ -1110,15 +1137,19 @@ void SettingsTabRenderer::RenderStylingTab()
 
 		SeparatorTextWithFont(T("menu.settings.section_docking", "Docking"), Menu::FontRole::Subheading);
 		ImGui::SliderFloat(T("menu.settings.docking_splitter_size", "Docking Splitter Size"), &style.DockingSeparatorSize, 0.0f, 12.0f, "%.0f");
-
-		MenuFonts::EndTabItem();
-	}
 }
 
 void SettingsTabRenderer::RenderColorsTab()
 {
 	auto tabLabel = std::format("{}##{}", T("menu.settings.tab_colors", "Colors"), "InterfaceColorsTab");
 	if (BeginTabItemWithFont(tabLabel.c_str(), Menu::FontRole::Heading)) {
+		RenderColorsSection();
+		MenuFonts::EndTabItem();
+	}
+}
+
+void SettingsTabRenderer::RenderColorsSection()
+{
 		auto& themeSettings = globals::menu->GetSettings().Theme;
 		auto& colors = themeSettings.FullPalette;
 		RenderSaveInfoText();
@@ -1201,7 +1232,4 @@ void SettingsTabRenderer::RenderColorsTab()
 			}
 			ImGui::TreePop();
 		}
-
-		MenuFonts::EndTabItem();
-	}
 }

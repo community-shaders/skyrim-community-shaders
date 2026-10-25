@@ -25,16 +25,16 @@ public:
 	 */
 	struct SettingsState
 	{
-		bool& settingToggleKey;               /**< @brief True while capturing a new menu toggle key. */
-		bool& settingsEffectsToggle;          /**< @brief True while capturing a new effects toggle key. */
-		bool& settingSkipCompilationKey;      /**< @brief True while capturing a new skip-compilation key. */
-		bool& settingOverlayToggleKey;        /**< @brief True while capturing a new overlay toggle key. */
-		bool& settingShaderBlockPrevKey;      /**< @brief True while capturing a new shader-block-previous key. */
-		bool& settingShaderBlockNextKey;      /**< @brief True while capturing a new shader-block-next key. */
-		bool& settingCSEditorToggleKey;       /**< @brief True while capturing a new CS Editor toggle key. */
-		bool& settingScreenshotKey;           /**< @brief True while capturing a new screenshot key. */
-		bool& settingEffects11ToggleKey;      /**< @brief True while capturing a new Effects 11 toggle key. */
-		bool& settingEffects11EditorKey;      /**< @brief True while capturing a new Effects 11 editor key. */
+		bool& settingToggleKey;          /**< @brief True while capturing a new menu toggle key. */
+		bool& settingsEffectsToggle;     /**< @brief True while capturing a new effects toggle key. */
+		bool& settingSkipCompilationKey; /**< @brief True while capturing a new skip-compilation key. */
+		bool& settingOverlayToggleKey;   /**< @brief True while capturing a new overlay toggle key. */
+		bool& settingShaderBlockPrevKey; /**< @brief True while capturing a new shader-block-previous key. */
+		bool& settingShaderBlockNextKey; /**< @brief True while capturing a new shader-block-next key. */
+		bool& settingCSEditorToggleKey;  /**< @brief True while capturing a new CS Editor toggle key. */
+		bool& settingScreenshotKey;      /**< @brief True while capturing a new screenshot key. */
+		bool& settingEffects11ToggleKey; /**< @brief True while capturing a new Effects 11 toggle key. */
+		bool& settingEffects11EditorKey; /**< @brief True while capturing a new Effects 11 editor key. */
 	};
 
 	/**
@@ -48,6 +48,25 @@ public:
 	 */
 	static void RenderGeneralSettings(
 		SettingsState& state);
+
+	/** @brief Shader cache options and the last build's compilation breakdown. */
+	static void RenderShadersSection();
+	/**
+	 * @brief Rebinding rows for the menu hotkeys.
+	 * @param state References to the key-capture state flags for all rebindable hotkeys.
+	 */
+	static void RenderKeybindingsSection(
+		SettingsState& state);
+	/** @brief Language, UI behaviour and visual effect options. */
+	static void RenderBehaviorSection();
+	/** @brief Theme preset picker with save, save-as and delete. */
+	static void RenderThemesSection();
+	/** @brief Font size and per-role font pickers. Requests the font preview atlas while drawn. */
+	static void RenderFontsSection();
+	/** @brief Global scale and the ImGui style sliders. */
+	static void RenderStylingSection();
+	/** @brief Simple palette and the full ImGui color list. */
+	static void RenderColorsSection();
 
 private:
 	static void RenderShadersTab();
