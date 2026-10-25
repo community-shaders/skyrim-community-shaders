@@ -904,23 +904,20 @@ void Menu::DrawDisableAtBootSettings()
 	ImGui::Spacing();
 
 	if (ImGui::CollapsingHeader(T("menu.features", "Features"), ImGuiTreeNodeFlags_DefaultOpen)) {
-		// Prepare a sorted list of feature pointers
-		auto featureList = Feature::GetFeatureList();
-		std::sort(featureList.begin(), featureList.end(), [](Feature* a, Feature* b) {
-			return a->GetShortName() < b->GetShortName();
-		});
+		// Label by the (translated) display name the feature list shows; the short name keys the setting and the widget ID
+		std::vector<std::pair<std::string, std::string>> entries;  // display name, short name
+		for (auto* feature : Feature::GetFeatureList()) {
+			if (!feature->IsHiddenUnreleased())
+				entries.emplace_back(feature->GetDisplayName(), feature->GetShortName());
+		}
+		std::ranges::sort(entries);
 
-		// Display sorted features
-		for (auto* feature : featureList) {
-			if (feature->IsHiddenUnreleased())
-				continue;
+		for (const auto& [displayName, shortName] : entries) {
+			bool isDisabled = disabledFeatures.contains(shortName) && disabledFeatures[shortName];
 
-			const std::string featureName = feature->GetShortName();
-			bool isDisabled = disabledFeatures.contains(featureName) && disabledFeatures[featureName];
-
-			if (ImGui::Checkbox(featureName.c_str(), &isDisabled)) {
+			if (ImGui::Checkbox(std::format("{}##{}", displayName, shortName).c_str(), &isDisabled)) {
 				// Update the disabledFeatures map based on user interaction
-				disabledFeatures[featureName] = isDisabled;
+				disabledFeatures[shortName] = isDisabled;
 			}
 		}
 	}
