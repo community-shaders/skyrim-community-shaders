@@ -417,7 +417,7 @@ namespace
 	void DrawActiveStrip(FormListState& state, const Context& context, const std::vector<ActiveRecord>& records)
 	{
 		EditorWindow& editor = *context.editor;
-		const float buttonGap = ImGui::GetStyle().ItemInnerSpacing.x;
+		const float spacing = ImGui::GetStyle().ItemInnerSpacing.x;
 		const ImVec4 live = Util::Colors::GetSuccess();
 
 		ImGui::AlignTextToFramePadding();
@@ -436,7 +436,7 @@ namespace
 				iconColor = CSEditor::GetWeatherTypeColor(weather);
 			}
 
-			const float width = BrowserUI::MeasureChip(label.c_str(), icon.IsValid()) + buttonGap + BrowserUI::IconButtonSize();
+			const float width = BrowserUI::MeasureChip(label.c_str(), icon.IsValid()) + spacing + BrowserUI::IconButtonSize();
 			ImGui::SameLine();
 			if (ImGui::GetContentRegionAvail().x < width)
 				ImGui::NewLine();
@@ -451,7 +451,7 @@ namespace
 				record.open();
 			Util::AddTooltip(T(TKEY("active_chip_tooltip"), "Click to find it in its list. Double-click to open its editor."));
 
-			ImGui::SameLine(0.0f, buttonGap);
+			ImGui::SameLine(0.0f, spacing);
 			if (BrowserUI::IconButton("##open", Icons::TI(ICON_TI_EXTERNAL_LINK), T(TKEY("open_editor_tooltip"), "Open its editor window.")))
 				record.open();
 			ImGui::PopID();

@@ -571,21 +571,12 @@ namespace Util
 		return std::max(iconSize.x, iconSize.y) + kPad * 2.0f * scale;
 	}
 
-	static float GetLockStatusBadgeRounding(float size)
-	{
-		return std::min(ImGui::GetStyle().FrameRounding, size * 0.35f);
-	}
-
 	void DrawLockStatusBadge(ImVec2 a_min, bool a_locked, ImDrawList* a_drawList, bool a_hovered, bool a_held)
 	{
 		if (!a_drawList)
 			a_drawList = ImGui::GetWindowDrawList();
 
 		const float size = GetLockStatusBadgeSize();
-		{
-			auto _style = TransparentIconButtonStyle();
-			DrawRoundedButtonHighlight(a_min, ImVec2(a_min.x + size, a_min.y + size), a_hovered, a_held, GetLockStatusBadgeRounding(size), a_drawList);
-		}
 		const char* icon = a_locked ? ICON_TI_LOCK : ICON_TI_LOCK_OPEN_2;
 		const auto& statusPalette = Menu::GetSingleton()->GetTheme().StatusPalette;
 		const ImVec4 statusColor = a_locked ? statusPalette.SuccessColor : statusPalette.Error;
@@ -595,7 +586,9 @@ namespace Util
 		border.w = 0.55f;
 
 		const ImVec2 max(a_min.x + size, a_min.y + size);
-		const float rounding = GetLockStatusBadgeRounding(size);
+		const float rounding = std::min(ImGui::GetStyle().FrameRounding, size * 0.35f);
+		auto _style = TransparentIconButtonStyle();
+		DrawRoundedButtonHighlight(a_min, max, a_hovered, a_held, rounding, a_drawList);
 		a_drawList->AddRectFilled(a_min, max, ImGui::GetColorU32(fill), rounding);
 		a_drawList->AddRect(a_min, max, ImGui::GetColorU32(border), rounding);
 		Icons::DrawCenteredGlyph(a_drawList, a_min, ImVec2(size, size),

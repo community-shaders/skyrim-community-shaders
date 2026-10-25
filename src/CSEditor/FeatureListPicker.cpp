@@ -73,6 +73,7 @@ namespace
 		const ImVec4 accent = Util::Colors::GetAccent();
 		const float barWidth = kPinnedBarWidth * Util::GetUIScale();
 		const float edgeInset = std::max(style.FramePadding.x, barWidth) + style.ItemInnerSpacing.x;
+		float textMaxX = rowMax.x - edgeInset;
 		if (pinned)
 			drawList->AddRectFilled(rowMin, rowMax,
 				ImGui::GetColorU32(ImVec4(accent.x, accent.y, accent.z, isSelected ? kPinnedSelectedTintAlpha : kPinnedTintAlpha)),
@@ -87,20 +88,25 @@ namespace
 
 			const Icons::GlyphRef star = Icons::TI(ICON_TI_PIN);
 			const ImVec2 starSize = Icons::CalcGlyphSize(star);
-			Icons::DrawCenteredGlyph(drawList, ImVec2(rowMax.x - starSize.x - edgeInset, rowMin.y), ImVec2(starSize.x, rowMax.y - rowMin.y), star,
+			const float starX = rowMax.x - starSize.x - edgeInset;
+			Icons::DrawCenteredGlyph(drawList, ImVec2(starX, rowMin.y), ImVec2(starSize.x, rowMax.y - rowMin.y), star,
 				ImGui::GetColorU32(accent));
+			textMaxX = starX - style.ItemSpacing.x;
 		}
 
 		const float lineHeight = ImGui::GetTextLineHeight();
 		const ImVec2 textPos(rowMin.x + edgeInset, rowMin.y + (rowMax.y - rowMin.y - lineHeight) * 0.5f);
-		drawList->AddText(textPos, ImGui::GetColorU32(color), name.c_str());
+		const ImVec2 nameSize = ImGui::CalcTextSize(name.c_str());
+		ImGui::PushStyleColor(ImGuiCol_Text, color);
+		ImGui::RenderTextEllipsis(drawList, textPos, ImVec2(textMaxX, textPos.y + nameSize.y), textMaxX, name.c_str(), nullptr, &nameSize);
+		ImGui::PopStyleColor();
 
 		const Marker marker = options.marker ? options.marker(*feature) : Marker::None;
 		if (marker == Marker::None)
 			return;
 
 		const float radius = lineHeight * ThemeManager::Constants::SCENE_INDICATOR_RADIUS_RATIO;
-		const ImVec2 center(textPos.x + ImGui::CalcTextSize(name.c_str()).x + style.ItemSpacing.x + radius, (rowMin.y + rowMax.y) * 0.5f);
+		const ImVec2 center(std::min(textPos.x + nameSize.x, textMaxX) + style.ItemSpacing.x + radius, (rowMin.y + rowMax.y) * 0.5f);
 		Util::DrawIconCircle(center, radius, ImGui::GetColorU32(Util::Colors::GetInfo()), marker == Marker::Filled);
 
 		if (options.markerTooltip && ImGui::IsItemHovered() &&

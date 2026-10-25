@@ -593,7 +593,7 @@ namespace
 		const char* clearLabel = T(TKEY("scene_export_clear"), "Clear");
 		const float buttonsWidth = ImGui::CalcTextSize(browseLabel).x + ImGui::CalcTextSize(clearLabel).x +
 		                           style.FramePadding.x * 4.0f + style.ItemInnerSpacing.x;
-		BrowserUI::EllipsizedText(status.c_str(), ImGui::GetContentRegionAvail().x - buttonsWidth - style.ItemSpacing.x,
+		BrowserUI::EllipsizedText(status.c_str(), std::max(1.0f, ImGui::GetContentRegionAvail().x - buttonsWidth - style.ItemSpacing.x),
 			ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
 		ImGui::SameLine(0.0f, style.ItemSpacing.x);
 		if (ImGui::SmallButton(std::format("{}##Browse{}", browseLabel, label).c_str())) {
