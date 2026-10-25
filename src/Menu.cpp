@@ -845,6 +845,7 @@ void Menu::DrawSettings()
 
 		// Draw global popups (needs to be called once per frame)
 		Util::DrawClearShaderCacheConfirmation();
+		Util::DrawRestoreSavedSettingsConfirmation();
 	}
 	ImGui::End();
 }

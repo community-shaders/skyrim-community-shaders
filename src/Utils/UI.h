@@ -344,6 +344,15 @@ namespace Util
 	void DrawClearShaderCacheConfirmation();
 
 	/**
+	 * @brief Reloads the saved settings, first asking for confirmation when there are unsaved changes.
+	 * Pair with DrawRestoreSavedSettingsConfirmation(), called every frame while the menu is open.
+	 */
+	void RequestRestoreSavedSettingsConfirmation();
+
+	/** @brief Draws the restore confirmation requested by RequestRestoreSavedSettingsConfirmation() and restores on confirm. */
+	void DrawRestoreSavedSettingsConfirmation();
+
+	/**
 	 * Reusable confirmation popup. Call RequestConfirmation() to trigger, DrawConfirmationPopup() each frame.
 	 * Returns true on the frame the user confirms. Supports optional "Don't ask again" checkbox.
 	 */

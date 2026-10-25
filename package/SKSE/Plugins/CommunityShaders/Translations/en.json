@@ -3724,6 +3724,7 @@
     "ui.clear_cache": "Clear Cache",
     "ui.clear_cache_confirm": "Are you sure you want to clear the shader cache?",
     "ui.clear_cache_desc": "This will clear all compiled shaders from memory and disk cache (if enabled). Shaders will be recompiled when the game next encounters them.",
+    "ui.clear_cache_explainer": "The shader cache is the collection of compiled shaders that replace the vanilla shaders at runtime. The disk cache is a copy of those compiled shaders kept on disk.",
     "ui.clear_cache_store_note": "This also deletes the persistent shader store ({count} shaders, {size} MB).",
     "ui.clear_shader_cache": "Clear Shader Cache?",
     "ui.copy": "Copy",
@@ -3732,6 +3733,9 @@
     "ui.post_processing_mode.post_processing": "Post Processing",
     "ui.post_processing_mode.tooltip": "Only one pipeline runs at a time. Vanilla uses the game's original post processing.",
     "ui.post_processing_mode.vanilla": "Vanilla",
+    "ui.restore": "Restore",
+    "ui.restore_saved_settings_confirm": "You have unsaved changes. Restoring the saved settings will discard them. This cannot be undone.",
+    "ui.restore_saved_settings_title": "Restore Saved Settings?",
     "ui.search": "Search...",
     "ui.search_features": "Search Features..."
 }

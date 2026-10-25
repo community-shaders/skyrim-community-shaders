@@ -14,6 +14,7 @@
 #include "Menu/ThemeManager.h"
 #include "PerfUtils.h"
 #include "ShaderCache.h"
+#include "State.h"
 
 #ifndef DIRECTINPUT_VERSION
 #	define DIRECTINPUT_VERSION 0x0800
@@ -785,6 +786,11 @@ namespace Util
 				"%s", T("ui.clear_cache_desc",
 						  "This will clear all compiled shaders from memory and disk cache (if enabled). "
 						  "Shaders will be recompiled when the game next encounters them."));
+			ImGui::Spacing();
+			ImGui::TextWrapped(
+				"%s", T("ui.clear_cache_explainer",
+						  "The shader cache is the collection of compiled shaders that replace the vanilla shaders at runtime. "
+						  "The disk cache is a copy of those compiled shaders kept on disk."));
 			if (globals::shaderCache) {
 				// Measured once when the popup opens, since it walks the store directory.
 				static std::optional<SIE::ShaderCache::ContentStoreUsage> storeUsage;
@@ -836,6 +842,43 @@ namespace Util
 				showClearCacheConfirmation = false;
 				ImGui::CloseCurrentPopup();
 			}
+		}
+	}
+
+	// Shared by the header icon and the text button, drawn once per frame from Menu::DrawSettings
+	static ConfirmationPopup restoreSavedSettingsPopup;
+
+	void RequestRestoreSavedSettingsConfirmation()
+	{
+		auto* state = globals::state;
+		if (!state)
+			return;
+
+		// Nothing to lose: restore straight away
+		if (!state->HasUnsavedChanges()) {
+			state->Load();
+			return;
+		}
+
+		restoreSavedSettingsPopup.Request();
+	}
+
+	void DrawRestoreSavedSettingsConfirmation()
+	{
+		if (!restoreSavedSettingsPopup.IsOpen())
+			return;
+
+		// Refreshed every frame so a language switch while open updates the text; the ### id keeps the popup open
+		restoreSavedSettingsPopup.title = std::format("{}###RestoreSavedSettingsConfirmation", T("ui.restore_saved_settings_title", "Restore Saved Settings?"));
+		restoreSavedSettingsPopup.message = T("ui.restore_saved_settings_confirm",
+			"You have unsaved changes. Restoring the saved settings will discard them. This cannot be undone.");
+		restoreSavedSettingsPopup.confirmLabel = T("ui.restore", "Restore");
+		restoreSavedSettingsPopup.cancelLabel = T("ui.cancel", "Cancel");
+		restoreSavedSettingsPopup.focus = ConfirmationPopup::Focus::Cancel;
+
+		if (restoreSavedSettingsPopup.Draw()) {
+			if (auto* state = globals::state)
+				state->Load();
 		}
 	}
 

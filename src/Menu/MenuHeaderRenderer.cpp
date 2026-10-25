@@ -193,7 +193,7 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, bool canShow
 			// Restore Saved Settings Button
 			ImGui::TableNextColumn();
 			if (ImGui::Button(T("menu.restore_settings", "Restore Saved Settings"), { -1, 0 })) {
-				globals::state->Load();
+				Util::RequestRestoreSavedSettingsConfirmation();
 			}
 
 			// Clear Shader Cache Button
@@ -277,16 +277,12 @@ std::vector<MenuHeaderRenderer::ActionIcon> MenuHeaderRenderer::BuildActionIcons
 		actionIcons.push_back({ uiIcons.loadSettings.texture,
 			T("menu.restore_settings", "Restore Saved Settings"),
 			[]() {
-				globals::state->Load();
+				Util::RequestRestoreSavedSettingsConfirmation();
 			} });
 	}
 	if (uiIcons.clearCache.texture) {
 		actionIcons.push_back({ uiIcons.clearCache.texture,
-			T("menu.clear_shader_cache_tooltip",
-				"Clears the shader cache and disk cache (if enabled). "
-				"The Shader Cache is the collection of compiled shaders which replace the vanilla shaders at runtime. "
-				"The Disk Cache is a collection of compiled shaders on disk. "
-				"Clearing will mean that shaders are recompiled only when the game re-encounters them."),
+			T("menu.clear_shader_cache", "Clear Shader Cache"),  // the confirmation dialog explains what is cleared
 			[]() {
 				Util::RequestClearShaderCacheConfirmation();
 			} });
