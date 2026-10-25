@@ -53,6 +53,16 @@ public:
 	/** @brief Variant type representing any entry in the menu list. */
 	using MenuFuncInfo = std::variant<BuiltInMenu, std::string, CategoryHeader, Feature*>;
 
+	/** @brief Main-menu state the list and settings panel read and report back, passed in by Menu each frame. */
+	struct Hooks
+	{
+		/// In: moves the selection to the previous (< 0) or next (> 0) feature in the visible list, skipping
+		/// category headers, labels and built-in pages. Reset to 0 once applied.
+		int featureStep = 0;
+		/// Called with the feature whose page is about to be drawn this frame, before its header.
+		std::function<void(Feature*)> onFeatureShown;
+	};
+
 	/**
 	 * @brief Renders the full two-column feature list and settings panel.
 	 *
@@ -68,6 +78,7 @@ public:
 	 * @param categoryExpansionStates Map of category name to expanded/collapsed state.
 	 * @param drawGeneralSettings Callback that renders the General settings page content.
 	 * @param drawAdvancedSettings Callback that renders the Advanced settings page content.
+	 * @param hooks Requests from the menu and callbacks into it; requests are reset once applied.
 	 */
 	static void RenderFeatureList(
 		float footerHeight,
@@ -76,7 +87,15 @@ public:
 		std::string& pendingFeatureSelection,
 		std::map<std::string, bool>& categoryExpansionStates,
 		const std::function<void()>& drawGeneralSettings,
-		const std::function<void()>& drawAdvancedSettings);
+		const std::function<void()>& drawAdvancedSettings,
+		Hooks& hooks);
+
+	/**
+	 * @brief Pins a loaded feature to the top of the list, or unpins it, keeping it selected. This is what the
+	 * feature page's pin button does.
+	 * @param feat A loaded feature.
+	 */
+	static void ToggleFavorite(Feature* feat);
 
 	/**
 	 * @brief Draws a loaded feature's settings under the baseline interceptor scope and queues new constraint warnings.
@@ -108,8 +127,8 @@ private:
 
 	struct DrawMenuVisitor
 	{
-		explicit DrawMenuVisitor(std::string& pendingFeatureSelectionRef) :
-			pendingFeatureSelection(pendingFeatureSelectionRef) {}
+		DrawMenuVisitor(std::string& pendingFeatureSelectionRef, const Hooks& hooksRef) :
+			pendingFeatureSelection(pendingFeatureSelectionRef), hooks(hooksRef) {}
 
 		void operator()(const BuiltInMenu& menu);
 		void operator()(const std::string&);
@@ -118,6 +137,7 @@ private:
 
 	private:
 		std::string& pendingFeatureSelection;
+		const Hooks& hooks;
 
 		// Helper methods for Feature rendering
 		void RenderFeatureHeader(Feature* feat, bool isDisabled, bool isLoaded);
@@ -148,5 +168,6 @@ private:
 	static void RenderRightColumn(
 		const std::vector<MenuFuncInfo>& menuList,
 		size_t selectedMenu,
-		std::string& pendingFeatureSelection);
+		std::string& pendingFeatureSelection,
+		const Hooks& hooks);
 };

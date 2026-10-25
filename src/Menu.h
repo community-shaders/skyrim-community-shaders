@@ -3,6 +3,7 @@
 #include "Feature.h"
 #include "Menu/FontAtlasState.h"
 #include "Menu/IconLoader.h"
+#include "Menu/MenuShortcuts.h"
 #include "Menu/ThemeManager.h"
 #include "Utils/Input.h"
 #include "Utils/Serialize.h"
@@ -525,6 +526,11 @@ private:
 
 	// Menu navigation
 	std::string pendingFeatureSelection;  // Feature to select on next frame
+	int pendingFeatureStep = 0;           // Ctrl+PgUp / Ctrl+PgDn request, applied by the feature list this frame
+	Feature* shownFeature = nullptr;      // Feature whose page the right column drew; read by shortcuts the frame after
+
+	// Keyboard shortcuts, built on the first DrawSettings and dispatched once per frame
+	std::vector<MenuShortcuts::Shortcut> shortcuts;
 
 	// Input event handling
 	std::vector<KeyEvent> _keyEventQueue;
@@ -552,6 +558,10 @@ private:
 	void DrawAdvancedSettings();
 	void DrawDisableAtBootSettings();
 	void DrawFooter();
+	/** @brief Binds the shortcut table's actions to this menu's state. */
+	MenuShortcuts::Actions MakeShortcutActions();
+	/** @brief Runs pressed shortcuts unless typing, capturing a hotkey, a modal or the CS Editor should have the keys. */
+	void DispatchShortcuts();
 
 	void addToEventQueue(KeyEvent e);
 	void ProcessInputEventQueue();

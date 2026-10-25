@@ -80,6 +80,28 @@ namespace
 		return std::ranges::find(CORE_MENU_IDS, menuId) != CORE_MENU_IDS.end();
 	}
 
+	/// Set when a shortcut moved the selection, so the list scrolls the newly selected row into view.
+	bool g_scrollToSelection = false;
+
+	/**
+	 * @brief Moves the selection to the nearest feature entry in a direction, skipping category headers,
+	 * labels and built-in pages. Nothing changes when there is no feature that way.
+	 * @param direction -1 for the previous feature, +1 for the next.
+	 * @return True when the selection moved.
+	 */
+	bool StepFeatureSelection(const std::vector<FeatureListRenderer::MenuFuncInfo>& menuList, size_t& selectedMenu, int direction)
+	{
+		const auto count = static_cast<std::ptrdiff_t>(menuList.size());
+		auto index = selectedMenu < menuList.size() ? static_cast<std::ptrdiff_t>(selectedMenu) : (direction > 0 ? -1 : count);
+		for (index += direction; index >= 0 && index < count; index += direction) {
+			if (std::holds_alternative<Feature*>(menuList[static_cast<size_t>(index)])) {
+				selectedMenu = static_cast<size_t>(index);
+				return true;
+			}
+		}
+		return false;
+	}
+
 	/**
 	 * @brief Determines if the left feature panel should be visible based on auto-hide settings and mouse position
 	 * @return true if panel should be visible, false if it should be hidden
@@ -370,7 +392,8 @@ void FeatureListRenderer::RenderFeatureList(
 	std::string& pendingFeatureSelection,
 	std::map<std::string, bool>& categoryExpansionStates,
 	const std::function<void()>& drawGeneralSettings,
-	const std::function<void()>& drawAdvancedSettings)
+	const std::function<void()>& drawAdvancedSettings,
+	Hooks& hooks)
 {
 	ImGui::BeginChild("Menus Table", ImVec2(0, -footerHeight));
 
@@ -384,6 +407,11 @@ void FeatureListRenderer::RenderFeatureList(
 	auto menuList = BuildMenuList(featureSearch, categoryExpansionStates, drawGeneralSettings, drawAdvancedSettings);
 
 	HandlePendingFeatureSelection(pendingFeatureSelection, menuList, selectedMenu);
+
+	if (hooks.featureStep != 0) {
+		g_scrollToSelection = StepFeatureSelection(menuList, selectedMenu, hooks.featureStep > 0 ? 1 : -1);
+		hooks.featureStep = 0;
+	}
 
 	// Determine if left panel should be visible based on auto-hide settings
 	bool leftPanelVisible = ShouldShowLeftPanel();
@@ -404,15 +432,16 @@ void FeatureListRenderer::RenderFeatureList(
 				menuList = BuildMenuList(featureSearch, categoryExpansionStates, drawGeneralSettings, drawAdvancedSettings);
 				HandlePendingFeatureSelection(reselect, menuList, selectedMenu);
 			}
-			RenderRightColumn(menuList, selectedMenu, pendingFeatureSelection);
+			RenderRightColumn(menuList, selectedMenu, pendingFeatureSelection, hooks);
 		} else {
 			// When left panel is hidden, right column takes full width
 			ImGui::TableSetupColumn("##MenuConfig", 0, 1);
-			RenderRightColumn(menuList, selectedMenu, pendingFeatureSelection);
+			RenderRightColumn(menuList, selectedMenu, pendingFeatureSelection, hooks);
 		}
 
 		ImGui::EndTable();
 	}
+	g_scrollToSelection = false;  // a hidden list drops the request rather than scrolling later
 
 	ImGui::EndChild();
 }
@@ -633,12 +662,13 @@ void FeatureListRenderer::RenderLeftColumn(
 void FeatureListRenderer::RenderRightColumn(
 	const std::vector<MenuFuncInfo>& menuList,
 	size_t selectedMenu,
-	std::string& pendingFeatureSelection)
+	std::string& pendingFeatureSelection,
+	const Hooks& hooks)
 {
 	ImGui::TableNextColumn();
 
 	if (selectedMenu < menuList.size()) {
-		std::visit(DrawMenuVisitor{ pendingFeatureSelection }, menuList[selectedMenu]);
+		std::visit(DrawMenuVisitor{ pendingFeatureSelection, hooks }, menuList[selectedMenu]);
 	} else {
 		ImGui::TextDisabled("%s", T("menu.features.select_item_left", "Please select an item on the left."));
 	}
@@ -734,6 +764,8 @@ void FeatureListRenderer::ListMenuVisitor::operator()(Feature* feat)
 		selectedMenuRef = listId;
 	}
 	ImGui::PopStyleColor();
+	if (g_scrollToSelection && selectedMenuRef == listId && !ImGui::IsItemVisible())
+		ImGui::SetScrollHereY();
 
 	// Favorites are pinned at the top of the list, marked by a pin attached to the name (its label ends in a space)
 	if (isLoaded && globals::state->IsFeatureFavorite(featureName)) {
@@ -814,6 +846,9 @@ void FeatureListRenderer::DrawMenuVisitor::operator()(Feature* feat)
 	bool isDisabled = globals::state->IsFeatureDisabled(featureName);
 	bool isLoaded = feat->loaded;
 	bool hasFailedMessage = !feat->failedLoadedMessage.empty();
+
+	if (hooks.onFeatureShown)
+		hooks.onFeatureShown(feat);
 
 	if (ImGui::BeginChild("##FeatureConfigFrame", { 0, 0 }, true)) {
 		// Render feature header with integrated action buttons
@@ -1065,19 +1100,23 @@ void FeatureListRenderer::DrawMenuVisitor::RenderRestoreDefaultsButton(Feature* 
 	}
 }
 
-void FeatureListRenderer::DrawMenuVisitor::RenderFavoriteButton(Feature* feat)
+void FeatureListRenderer::ToggleFavorite(Feature* feat)
 {
 	const auto featureName = feat->GetShortName();
-	const bool isFavorite = globals::state->IsFeatureFavorite(featureName);
+	globals::state->SetFeatureFavorite(featureName, !globals::state->IsFeatureFavorite(featureName));
+	globals::state->CheckCoreSettingsChanged();
+	// The favorites list shifts the menu; keep this feature selected
+	globals::menu->SelectFeatureMenu(featureName);
+}
+
+void FeatureListRenderer::DrawMenuVisitor::RenderFavoriteButton(Feature* feat)
+{
+	const bool isFavorite = globals::state->IsFeatureFavorite(feat->GetShortName());
 	const float size = ImGui::GetFrameHeight();
 	{
 		auto style = Util::TransparentIconButtonStyle();
-		if (Icons::Button("###Favorite", Icons::TI(isFavorite ? ICON_TI_PINNED_OFF : ICON_TI_PIN), ImVec2(size, size))) {
-			globals::state->SetFeatureFavorite(featureName, !isFavorite);
-			globals::state->CheckCoreSettingsChanged();
-			// The favorites list shifts the menu; keep this feature selected
-			globals::menu->SelectFeatureMenu(featureName);
-		}
+		if (Icons::Button("###Favorite", Icons::TI(isFavorite ? ICON_TI_PINNED_OFF : ICON_TI_PIN), ImVec2(size, size)))
+			ToggleFavorite(feat);
 	}
 
 	if (auto _tt = Util::HoverTooltipWrapper()) {

@@ -34,10 +34,12 @@
 #include "Menu/HomePageRenderer.h"
 #include "Menu/IconLoader.h"
 #include "Menu/MenuHeaderRenderer.h"
+#include "Menu/MenuShortcuts.h"
 #include "Menu/OverlayRenderer.h"
 #include "Menu/PresetsPageRenderer.h"
 #include "Menu/SettingsTabRenderer.h"
 #include "Menu/ThemeManager.h"
+#include "SaveManager.h"
 #include "ShaderCache.h"
 #include "State.h"
 #include "Util.h"
@@ -796,6 +798,9 @@ void Menu::DrawSettings()
 		bool isDocked = ImGui::IsWindowDocked();
 		wasDocked = isDocked;
 
+		// Before anything draws, so a shortcut's request reaches the header and feature list this frame.
+		DispatchShortcuts();
+
 		float globalScale = settings.Theme.GlobalScale;
 
 		// Use default global scale (0.0) for built-in themes when GlobalScale equals the default
@@ -827,6 +832,11 @@ void Menu::DrawSettings()
 		static std::map<std::string, bool> categoryExpansionStates;
 
 		// Render feature list using extracted component
+		shownFeature = nullptr;
+		FeatureListRenderer::Hooks listHooks{
+			.featureStep = std::exchange(pendingFeatureStep, 0),
+			.onFeatureShown = [this](Feature* feat) { shownFeature = feat; },
+		};
 		FeatureListRenderer::RenderFeatureList(
 			footer_height,
 			selectedMenu,
@@ -834,7 +844,8 @@ void Menu::DrawSettings()
 			pendingFeatureSelection,
 			categoryExpansionStates,
 			[&]() { DrawGeneralSettings(); },
-			[&]() { DrawAdvancedSettings(); });
+			[&]() { DrawAdvancedSettings(); },
+			listHooks);
 
 		if (settings.Theme.ShowFooter) {
 			ImGui::Spacing();
@@ -848,6 +859,34 @@ void Menu::DrawSettings()
 		Util::DrawRestoreSavedSettingsConfirmation();
 	}
 	ImGui::End();
+}
+
+MenuShortcuts::Actions Menu::MakeShortcutActions()
+{
+	return {
+		.save = [] { SaveManager::SaveAll(); },
+		.stepFeature = [this](int step) { pendingFeatureStep = step; },
+		.canTogglePin = [this] { return shownFeature && shownFeature->loaded; },
+		.togglePin = [this] { FeatureListRenderer::ToggleFavorite(shownFeature); },
+		.openPage = [this](std::string_view pageId) { SelectFeatureMenu(std::string(pageId)); },
+		.canOpenEditor = [] { return EditorWindow::CanBeOpen(); },
+		.openEditor = [] { CSEditor::OpenEditorWindow(); },
+	};
+}
+
+void Menu::DispatchShortcuts()
+{
+	if (shortcuts.empty())
+		shortcuts = MenuShortcuts::BuildTable(MakeShortcutActions());
+
+	// The CS Editor has its own Ctrl+Z / Ctrl+S, a focused text field owns its keys, a hotkey capture
+	// records the next chord as a binding, and a modal (confirmation, FAQ) must be answered first.
+	const auto* editorWindow = EditorWindow::GetSingleton();
+	const bool allowed = IsEnabled && !ImGui::GetIO().WantTextInput && !IsCapturingHotkeyInput() &&
+	                     !(editorWindow && editorWindow->open) && !ImGui::GetTopMostPopupModal() &&
+	                     !HomePageRenderer::ShouldShowFirstTimeSetup();
+	if (allowed)
+		MenuShortcuts::Dispatch(shortcuts);
 }
 
 /**
