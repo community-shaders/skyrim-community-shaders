@@ -2681,10 +2681,8 @@ void EditorWindow::AdjustFlySpeed(float scrollDelta)
 
 bool EditorWindow::ShouldHandleEscapeKey()
 {
-	if (suppressNextEditorEscape) {
-		suppressNextEditorEscape = false;
+	if (Menu::GetSingleton()->TakeConsumedEscape())
 		return false;
-	}
 	return !ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
 }
 
@@ -2693,7 +2691,7 @@ bool EditorWindow::ClosePopupOnEscape()
 	if (!ImGui::IsKeyPressed(ImGuiKey_Escape))
 		return false;
 	// The menu or editor ignores Escape only while a popup is open, which this close is about to end.
-	GetSingleton()->suppressNextEditorEscape = true;
+	Menu::GetSingleton()->ConsumeEscape();
 	ImGui::CloseCurrentPopup();
 	return true;
 }

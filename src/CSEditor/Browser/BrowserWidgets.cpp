@@ -3,6 +3,7 @@
 #include "../../I18n/I18n.h"
 #include "../EditorWindow.h"
 #include "IconsTabler.h"
+#include "Menu.h"
 #include "Menu/Fonts.h"
 #include "Utils/UI.h"
 #include "imgui_internal.h"
@@ -123,9 +124,9 @@ namespace BrowserUI
 		ImGui::PopStyleVar();
 		const ImGuiLastItemData inputItem = ImGui::GetCurrentContext()->LastItemData;
 
-		// Escape here belongs to the field; without this the same press would also close the editor.
+		// Escape here belongs to the field; without this the same press would also close the editor or menu.
 		if ((ImGui::IsItemActive() || ImGui::IsItemDeactivated()) && ImGui::IsKeyPressed(ImGuiKey_Escape, false))
-			EditorWindow::GetSingleton()->suppressNextEditorEscape = true;
+			Menu::GetSingleton()->ConsumeEscape();
 
 		const ImVec2 min = ImGui::GetItemRectMin();
 		const ImVec2 max = ImGui::GetItemRectMax();

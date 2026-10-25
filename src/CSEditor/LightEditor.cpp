@@ -1751,7 +1751,7 @@ void LightEditor::DrawAddLightPopup()
 
 		if (ImGui::Button(T(TKEY("close"), "Close")) || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
 			if (ImGui::IsKeyPressed(ImGuiKey_Escape))
-				EditorWindow::GetSingleton()->suppressNextEditorEscape = true;
+				Menu::GetSingleton()->ConsumeEscape();
 			SavePopupPrefs();
 			ImGui::CloseCurrentPopup();
 		}

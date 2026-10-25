@@ -1237,9 +1237,7 @@ void Menu::ProcessInputEventQueue()
 						if (effects11Editor.ShouldHandleEscapeKey())
 							effects11Editor.Close();
 					} else if (IsEnabled && (!editorWindow || !editorWindow->open)) {
-						if (editorWindow && editorWindow->suppressNextEditorEscape)
-							editorWindow->suppressNextEditorEscape = false;
-						else
+						if (!TakeConsumedEscape())
 							IsEnabled = false;
 					}
 				}

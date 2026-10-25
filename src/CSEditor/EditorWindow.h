@@ -328,9 +328,6 @@ public:
 	/** @brief Returns true if ESC should close the editor (no popup open and none just consumed ESC this frame). */
 	bool ShouldHandleEscapeKey();
 
-	/** @brief Set by popup close-on-ESC to suppress the same key-up from also closing the editor. */
-	bool suppressNextEditorEscape = false;
-
 	/** @brief Closes the current popup on ESC without letting the same press close the editor. @return True if it closed. */
 	static bool ClosePopupOnEscape();
 

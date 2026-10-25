@@ -17,6 +17,7 @@
 #include <string_view>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 #include <winrt/base.h>
 
@@ -167,6 +168,17 @@ public:
 	void SyncVanityCamera();
 	/** @brief Returns true if the free camera preview is in flying mode */
 	bool IsPreviewFlying();
+	/**
+	 * @brief Claims the Escape press ImGui reports this frame for a widget, such as a search field
+	 * clearing its text or a popup closing, so the same press does not also close the CS Editor or
+	 * this menu when the key is released.
+	 */
+	void ConsumeEscape() { escapeConsumed = true; }
+	/**
+	 * @brief Reads and clears the claim made by ConsumeEscape().
+	 * @return True when a widget claimed the Escape press being released.
+	 */
+	bool TakeConsumedEscape() { return std::exchange(escapeConsumed, false); }
 	/**
 	 * @brief Builds a deterministic string signature from current font configuration.
 	 * @param baseFontSize The base pixel size before per-role scaling.
@@ -523,6 +535,12 @@ private:
 	// suppressed so a shared single-key binding (e.g. End) doesn't also fire once
 	// the modifier is released first.
 	std::unordered_set<uint32_t> _comboFiredKeys;
+
+	// Escape closes the menu or editor on key-up in ProcessInputEventQueue, which runs before
+	// ImGui::NewFrame. The key-down reached ImGui through an earlier frame's queue, so widgets see
+	// IsKeyPressed(Escape) and call ConsumeEscape() at least one frame before the release is
+	// handled; the claim waits here until that release reads it with TakeConsumedEscape().
+	bool escapeConsumed = false;
 
 	// Skyrim AFK vanity camera: delayed spin while idle. Held off while any CS UI is open.
 	bool vanityCameraDisabled = false;
