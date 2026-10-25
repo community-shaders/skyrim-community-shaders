@@ -209,6 +209,12 @@ public:
 		static constexpr float AUTOHIDE_EXPAND_DELAY = 0.25f;           // Delay before expanding panel (seconds)
 		static constexpr float AUTOHIDE_PANEL_WIDTH_RATIO = 0.2f;       // Ratio of window width for panel (2/10)
 
+		// Settings page constants (sizes are 1080p baseline, scaled by Util::GetUIScale())
+		static constexpr float SETTINGS_NAV_WIDTH = 230.0f;        // Width of the section sub-nav column
+		static constexpr float SETTINGS_NAV_GROUP_SPACING = 6.0f;  // Gap above each group label after the first
+		static constexpr float SETTINGS_TITLE_SCALE_MIN = 1.0f;    // Section title scale range, as on feature pages
+		static constexpr float SETTINGS_TITLE_SCALE_MAX = 3.0f;
+
 		// Scene settings panel constants
 		static constexpr float SCENE_VALUE_INPUT_WIDTH = 240.0f;       // Width for float/int value inputs
 		static constexpr float SCENE_DELETE_BUTTON_WIDTH = 40.0f;      // Width for delete (X) buttons

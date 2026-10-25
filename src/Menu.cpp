@@ -28,7 +28,6 @@
 #include "Features/RenderDoc.h"
 #include "Features/Upscaling.h"
 #include "I18n/I18n.h"
-#include "Menu/AdvancedSettingsRenderer.h"
 #include "Menu/BackgroundBlur.h"
 #include "Menu/CursorLoader.h"
 #include "Menu/FeatureListRenderer.h"
@@ -39,7 +38,7 @@
 #include "Menu/MenuShortcuts.h"
 #include "Menu/OverlayRenderer.h"
 #include "Menu/PresetsPageRenderer.h"
-#include "Menu/SettingsTabRenderer.h"
+#include "Menu/SettingsPageRenderer.h"
 #include "Menu/StatusBarRenderer.h"
 #include "Menu/ThemeManager.h"
 #include "SaveManager.h"
@@ -867,8 +866,7 @@ void Menu::DrawSettings()
 			featureSearch,
 			pendingFeatureSelection,
 			categoryExpansionStates,
-			[&]() { DrawGeneralSettings(); },
-			[&]() { DrawAdvancedSettings(); },
+			[&]() { DrawSettingsPage(); },
 			listHooks);
 
 		if (settings.Theme.ShowFooter)
@@ -937,16 +935,16 @@ void Menu::DispatchShortcuts()
 }
 
 /**
- * @brief Renders the General settings tab content
+ * @brief Renders the Settings page content
  *
- * Delegates rendering to SettingsTabRenderer for the general configuration panel,
- * which includes Shaders, Keybindings, and Interface sub-tabs. This method provides
- * the callback for key-to-string conversion while maintaining separation of concerns.
+ * Delegates rendering to SettingsPageRenderer, passing the key-capture flags and
+ * selected section it updates, and a callback for the private disable-at-boot list.
  */
-void Menu::DrawGeneralSettings()
+void Menu::DrawSettingsPage()
 {
-	// Prepare settings state for the renderer
-	SettingsTabRenderer::SettingsState state{
+	SettingsPageRenderer::PageState state{
+		.section = settings.LastSettingsSection,
+		.keys = {
 		.settingToggleKey = settingToggleKey,
 		.settingsEffectsToggle = settingsEffectsToggle,
 		.settingSkipCompilationKey = settingSkipCompilationKey,
@@ -956,24 +954,11 @@ void Menu::DrawGeneralSettings()
 		.settingCSEditorToggleKey = settingCSEditorToggleKey,
 		.settingScreenshotKey = settingScreenshotKey,
 		.settingEffects11ToggleKey = settingEffects11ToggleKey,
-		.settingEffects11EditorKey = settingEffects11EditorKey
+			.settingEffects11EditorKey = settingEffects11EditorKey },
+		.drawDisableAtBoot = [this]() { DrawDisableAtBootSettings(); }
 	};
 
-	// Render settings using extracted component
-	SettingsTabRenderer::RenderGeneralSettings(state);
-}
-
-/**
- * @brief Renders the Advanced settings tab content
- *
- * Delegates rendering to AdvancedSettingsRenderer for developer and advanced user
- * settings. Uses lambda callbacks to access private Menu methods while maintaining
- * encapsulation and proper separation of concerns.
- */
-void Menu::DrawAdvancedSettings()
-{
-	AdvancedSettingsRenderer::RenderAdvancedSettings(
-		[this]() { DrawDisableAtBootSettings(); });
+	SettingsPageRenderer::Render(state);
 }
 
 void Menu::DrawDisableAtBootSettings()

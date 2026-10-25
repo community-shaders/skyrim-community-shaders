@@ -8,11 +8,7 @@
 class Menu;
 
 /**
- * @brief Renders the General Settings page with Shaders, Keybindings, and Interface tabs.
- *
- * The Shaders tab shows shader compilation options. The Keybindings tab allows
- * rebinding hotkeys for menu toggle, effects toggle, and other actions. The
- * Interface tab provides theme, font, styling, color, and behavior configuration.
+ * @brief Draws the General and Appearance sections of the Settings page (see SettingsPageRenderer).
  */
 class SettingsTabRenderer
 {
@@ -37,18 +33,6 @@ public:
 		bool& settingEffects11EditorKey; /**< @brief True while capturing a new Effects 11 editor key. */
 	};
 
-	/**
-	 * @brief Renders the General Settings page with tabbed sub-sections.
-	 *
-	 * Draws a tab bar containing Shaders, Keybindings, and Interface tabs.
-	 * The Interface tab further contains sub-tabs for Behavior, Themes, Fonts,
-	 * Styling, and Colors.
-	 *
-	 * @param state References to the key-capture state flags for all rebindable hotkeys.
-	 */
-	static void RenderGeneralSettings(
-		SettingsState& state);
-
 	/** @brief Shader cache options and the last build's compilation breakdown. */
 	static void RenderShadersSection();
 	/**
@@ -67,17 +51,4 @@ public:
 	static void RenderStylingSection();
 	/** @brief Simple palette and the full ImGui color list. */
 	static void RenderColorsSection();
-
-private:
-	static void RenderShadersTab();
-	static void RenderKeybindingsTab(
-		SettingsState& state);
-	static void RenderInterfaceTab();
-
-	// Interface sub-tabs
-	static void RenderBehaviorTab();
-	static void RenderThemesTab();
-	static void RenderFontsTab();
-	static void RenderStylingTab();
-	static void RenderColorsTab();
 };

@@ -443,6 +443,7 @@ public:
 		bool UseResolutionFont = true;                                                                                       // When true, runtime font size scales with screen resolution; when persisted to theme files, FontSize is zeroed for backward compatibility
 		ThemeSettings Theme;
 		std::string SelectedThemePreset = "";  // Currently selected theme preset (empty = custom/user theme)
+		std::string LastSettingsSection;       // Settings page section shown last (SettingsSectionIds); unknown = first section
 	};
 	/** @brief Gets the current theme settings */
 	const ThemeSettings& GetTheme() const { return settings.Theme; }
@@ -570,8 +571,7 @@ private:
 
 	Menu() = default;
 
-	void DrawGeneralSettings();
-	void DrawAdvancedSettings();
+	void DrawSettingsPage();
 	void DrawDisableAtBootSettings();
 	/** @brief Applies a queued undo or redo before anything draws, and reports it with a toast. */
 	void ApplyPendingUndo();

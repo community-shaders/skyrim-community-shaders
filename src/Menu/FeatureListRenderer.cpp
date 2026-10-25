@@ -28,6 +28,7 @@
 #include "Menu/Icons/helpers/IconFonts.h"
 #include "Menu/PresetsPageRenderer.h"
 #include "Menu/ProfilingRenderer.h"
+#include "Menu/SettingsPageRenderer.h"
 #include "Menu/ThemeManager.h"
 #include "State.h"
 #include "Util.h"
@@ -37,8 +38,8 @@ namespace
 {
 	// Built-in pages drawn in the top group, above the Features header and search bar
 	constexpr std::array CORE_MENU_IDS = {
-		MenuPageIds::kFeatureIssues, MenuPageIds::kHome, MenuPageIds::kPresets, MenuPageIds::kGeneral,
-		MenuPageIds::kAdvanced, MenuPageIds::kProfiling, MenuPageIds::kCSEditor
+		MenuPageIds::kFeatureIssues, MenuPageIds::kHome, MenuPageIds::kPresets, MenuPageIds::kSettings,
+		MenuPageIds::kProfiling, MenuPageIds::kCSEditor
 	};
 
 	/** @brief Draws a full-width Selectable with a rounded accent pill that also carries its hover/selected state. @return True when clicked. */
@@ -392,8 +393,7 @@ void FeatureListRenderer::RenderFeatureList(
 	std::string& featureSearch,
 	std::string& pendingFeatureSelection,
 	std::map<std::string, bool>& categoryExpansionStates,
-	const std::function<void()>& drawGeneralSettings,
-	const std::function<void()>& drawAdvancedSettings,
+	const std::function<void()>& drawSettings,
 	Hooks& hooks)
 {
 	ImGui::BeginChild("Menus Table", ImVec2(0, -footerHeight));
@@ -405,7 +405,7 @@ void FeatureListRenderer::RenderFeatureList(
 			categoryExpansionStates[std::string(feature->GetCategory())] = true;
 	}
 
-	auto menuList = BuildMenuList(featureSearch, categoryExpansionStates, drawGeneralSettings, drawAdvancedSettings);
+	auto menuList = BuildMenuList(featureSearch, categoryExpansionStates, drawSettings);
 
 	HandlePendingFeatureSelection(pendingFeatureSelection, menuList, selectedMenu);
 
@@ -430,7 +430,7 @@ void FeatureListRenderer::RenderFeatureList(
 				std::string reselect;
 				if (const auto* feat = selectedMenu < menuList.size() ? std::get_if<Feature*>(&menuList[selectedMenu]) : nullptr)
 					reselect = (*feat)->GetShortName();
-				menuList = BuildMenuList(featureSearch, categoryExpansionStates, drawGeneralSettings, drawAdvancedSettings);
+				menuList = BuildMenuList(featureSearch, categoryExpansionStates, drawSettings);
 				HandlePendingFeatureSelection(reselect, menuList, selectedMenu);
 			}
 			RenderRightColumn(menuList, selectedMenu, pendingFeatureSelection, hooks);
@@ -450,8 +450,7 @@ void FeatureListRenderer::RenderFeatureList(
 std::vector<FeatureListRenderer::MenuFuncInfo> FeatureListRenderer::BuildMenuList(
 	const std::string& featureSearch,
 	std::map<std::string, bool>& categoryExpansionStates,
-	const std::function<void()>& drawGeneralSettings,
-	const std::function<void()>& drawAdvancedSettings)
+	const std::function<void()>& drawSettings)
 {
 	// Build the menu list
 	auto& featureList = Feature::GetFeatureList();
@@ -470,8 +469,7 @@ std::vector<FeatureListRenderer::MenuFuncInfo> FeatureListRenderer::BuildMenuLis
 	auto menuList = std::vector<MenuFuncInfo>{
 		BuiltInMenu{ MenuPageIds::kHome, T("menu.features.home", "Home"), []() { HomePageRenderer::RenderHomePage(); } },
 		BuiltInMenu{ MenuPageIds::kPresets, T("menu.features.presets", "Presets"), []() { PresetsPageRenderer::Render(); } },
-		BuiltInMenu{ MenuPageIds::kGeneral, T("menu.features.general", "General"), drawGeneralSettings },
-		BuiltInMenu{ MenuPageIds::kAdvanced, T("menu.features.advanced", "Advanced"), drawAdvancedSettings },
+		BuiltInMenu{ MenuPageIds::kSettings, T("menu.features.settings", "Settings"), drawSettings },
 		BuiltInMenu{ MenuPageIds::kProfiling, T("menu.features.profiling", "Profiling"), []() { ProfilingRenderer::RenderStatistics(); } },
 		BuiltInMenu{ MenuPageIds::kCSEditor, T("menu.features.cs_editor", "CS Editor"), []() { globals::features::csEditor.DrawSettings(); } }
 	};  // NOTE: The menu list is rebuilt every frame, so category expansion states
@@ -577,6 +575,12 @@ void FeatureListRenderer::HandlePendingFeatureSelection(
 {
 	if (pendingFeatureSelection.empty())
 		return;
+
+	// General and Advanced are sections of Settings now: their page IDs open it at the matching section
+	if (const auto section = SettingsPageRenderer::GetAliasSection(pendingFeatureSelection)) {
+		globals::menu->GetSettings().LastSettingsSection = std::string(*section);
+		pendingFeatureSelection = std::string(MenuPageIds::kSettings);
+	}
 
 	// Feature short names first, then canonical page IDs, then page display names for callers that pass a label
 	const auto select = [&](auto&& matches, const char* kind) {

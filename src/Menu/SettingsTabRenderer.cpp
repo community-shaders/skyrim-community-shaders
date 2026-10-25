@@ -179,11 +179,6 @@ namespace
 		SeparatorTextWithFont(text.c_str(), role);
 	}
 
-	bool BeginTabItemWithFont(const char* label, Menu::FontRole role, ImGuiTabItemFlags flags = ImGuiTabItemFlags_None)
-	{
-		return MenuFonts::BeginTabItemWithFont(label, role, flags);
-	}
-
 	bool ComboWithFont(const char* label, int* currentItem, const char* const items[], int itemCount, Menu::FontRole role)
 	{
 		FontRoleGuard guard(role);
@@ -204,25 +199,6 @@ namespace
 									 "Theme changes are not saved with the global \"Save Settings\" button. Use the Themes tab to save changes to this theme."));
 		ImGui::PopStyleColor();
 		ImGui::Spacing();
-	}
-}
-
-void SettingsTabRenderer::RenderGeneralSettings(SettingsState& state)
-{
-	if (Util::BeginPillTabBar("##GeneralTabBar")) {
-		RenderShadersTab();
-		RenderKeybindingsTab(state);
-		RenderInterfaceTab();
-		Util::EndPillTabBar();
-	}
-}
-
-void SettingsTabRenderer::RenderShadersTab()
-{
-	auto tabLabel = std::format("{}##{}", T("menu.settings.tab_shaders", "Shaders"), "GeneralShadersTab");
-	if (BeginTabItemWithFont(tabLabel.c_str(), Menu::FontRole::Heading)) {
-		RenderShadersSection();
-		MenuFonts::EndTabItem();
 	}
 }
 
@@ -359,16 +335,6 @@ void SettingsTabRenderer::RenderShadersSection()
 		}
 }
 
-void SettingsTabRenderer::RenderKeybindingsTab(
-	SettingsState& state)
-{
-	auto tabLabel = std::format("{}##{}", T("menu.settings.tab_keybindings", "Keybindings"), "GeneralKeybindingsTab");
-	if (BeginTabItemWithFont(tabLabel.c_str(), Menu::FontRole::Heading)) {
-		RenderKeybindingsSection(state);
-		MenuFonts::EndTabItem();
-	}
-}
-
 void SettingsTabRenderer::RenderKeybindingsSection(SettingsState& state)
 {
 		auto& settings = globals::menu->GetSettings();
@@ -420,31 +386,6 @@ void SettingsTabRenderer::RenderKeybindingsSection(SettingsState& state)
 			settings.Effects11EditorKey,
 			state.settingEffects11EditorKey,
 			"Change##Effects11Editor");
-}
-
-void SettingsTabRenderer::RenderInterfaceTab()
-{
-	auto tabLabel = std::format("{}##{}", T("menu.settings.tab_interface", "Interface"), "GeneralInterfaceTab");
-	if (BeginTabItemWithFont(tabLabel.c_str(), Menu::FontRole::Heading)) {
-		if (Util::BeginPillTabBar("##tabs")) {
-			RenderBehaviorTab();
-			RenderThemesTab();
-			RenderFontsTab();
-			RenderStylingTab();
-			RenderColorsTab();
-			Util::EndPillTabBar();
-		}
-		MenuFonts::EndTabItem();
-	}
-}
-
-void SettingsTabRenderer::RenderBehaviorTab()
-{
-	auto tabLabel = std::format("{}##{}", T("menu.settings.tab_behavior", "Behavior"), "InterfaceBehaviorTab");
-	if (BeginTabItemWithFont(tabLabel.c_str(), Menu::FontRole::Heading)) {
-		RenderBehaviorSection();
-		MenuFonts::EndTabItem();
-	}
 }
 
 void SettingsTabRenderer::RenderBehaviorSection()
@@ -566,15 +507,6 @@ void SettingsTabRenderer::RenderBehaviorSection()
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text("%s", T("menu.settings.menu_fade_tooltip", "Fades the menu and its background blur in and out when it is opened or closed."));
 		}
-}
-
-void SettingsTabRenderer::RenderThemesTab()
-{
-	auto tabLabel = std::format("{}##{}", T("menu.settings.tab_themes", "Themes"), "InterfaceThemesTab");
-	if (BeginTabItemWithFont(tabLabel.c_str(), Menu::FontRole::Heading)) {
-		RenderThemesSection();
-		MenuFonts::EndTabItem();
-	}
 }
 
 void SettingsTabRenderer::RenderThemesSection()
@@ -953,20 +885,6 @@ void SettingsTabRenderer::RenderThemesSection()
 		}
 }
 
-void SettingsTabRenderer::RenderFontsTab()
-{
-	auto tabLabel = std::format("{}##{}", T("menu.settings.tab_fonts", "Fonts"), "InterfaceFontsTab");
-	if (BeginTabItemWithFont(tabLabel.c_str(), Menu::FontRole::Heading)) {
-		RenderFontsSection();
-		MenuFonts::EndTabItem();
-	} else if (MenuFonts::GetAtlasState().wantsFontPreviewAtlas) {
-		// Fonts tab not active: drop the preview-font atlas so it is not rebaked into every
-		// later atlas rebuild for the rest of the session.
-		MenuFonts::GetAtlasState().wantsFontPreviewAtlas = false;
-		MenuFonts::GetAtlasState().pendingFontReload = true;
-	}
-}
-
 void SettingsTabRenderer::RenderFontsSection()
 {
 		auto* menuInstance = globals::menu;
@@ -1043,15 +961,6 @@ void SettingsTabRenderer::RenderFontsSection()
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::TextUnformatted(T("menu.settings.refresh_font_families_tooltip", "Rescan the Fonts directory after adding or removing font files."));
 		}
-}
-
-void SettingsTabRenderer::RenderStylingTab()
-{
-	auto tabLabel = std::format("{}##{}", T("menu.settings.tab_styling", "Styling"), "InterfaceStylingTab");
-	if (BeginTabItemWithFont(tabLabel.c_str(), Menu::FontRole::Heading)) {
-		RenderStylingSection();
-		MenuFonts::EndTabItem();
-	}
 }
 
 void SettingsTabRenderer::RenderStylingSection()
@@ -1137,15 +1046,6 @@ void SettingsTabRenderer::RenderStylingSection()
 
 		SeparatorTextWithFont(T("menu.settings.section_docking", "Docking"), Menu::FontRole::Subheading);
 		ImGui::SliderFloat(T("menu.settings.docking_splitter_size", "Docking Splitter Size"), &style.DockingSeparatorSize, 0.0f, 12.0f, "%.0f");
-}
-
-void SettingsTabRenderer::RenderColorsTab()
-{
-	auto tabLabel = std::format("{}##{}", T("menu.settings.tab_colors", "Colors"), "InterfaceColorsTab");
-	if (BeginTabItemWithFont(tabLabel.c_str(), Menu::FontRole::Heading)) {
-		RenderColorsSection();
-		MenuFonts::EndTabItem();
-	}
 }
 
 void SettingsTabRenderer::RenderColorsSection()

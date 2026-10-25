@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <format>
+#include <functional>
 #include <future>
 #include <imgui.h>
 #include <imgui_stdlib.h>
@@ -77,54 +78,6 @@ namespace
 								  "the next compile rebuilds the store from scratch. Shaders already in the shader cache are kept."));
 		}
 		ImGui::Unindent();
-	}
-}
-
-void AdvancedSettingsRenderer::RenderAdvancedSettings(
-	const std::function<void()>& drawDisableAtBootSettings)
-{
-	if (Util::BeginPillTabBar("##AdvancedSettingsTabs")) {
-		if (MenuFonts::BeginTabItemWithFont(T("menu.advanced.tab_developer", "Developer"), Menu::FontRole::Subheading)) {
-			if (ImGui::BeginChild("##DeveloperContent", ImVec2(0, 0), false)) {
-				RenderDeveloperSection();
-			}
-			ImGui::EndChild();
-			MenuFonts::EndTabItem();
-		}
-
-		if (MenuFonts::BeginTabItemWithFont(T("menu.advanced.tab_disable_at_boot", "Disable at Boot"), Menu::FontRole::Subheading)) {
-			if (ImGui::BeginChild("##DisableAtBootContent", ImVec2(0, 0), false)) {
-				RenderDisableAtBootSection(drawDisableAtBootSettings);
-			}
-			ImGui::EndChild();
-			MenuFonts::EndTabItem();
-		}
-
-		if (MenuFonts::BeginTabItemWithFont(T("menu.advanced.tab_logging", "Logging"), Menu::FontRole::Subheading)) {
-			if (ImGui::BeginChild("##LoggingContent", ImVec2(0, 0), false)) {
-				RenderLoggingSection();
-			}
-			ImGui::EndChild();
-			MenuFonts::EndTabItem();
-		}
-
-		if (MenuFonts::BeginTabItemWithFont(T("menu.advanced.tab_shader_debug", "Shader Debug"), Menu::FontRole::Subheading)) {
-			if (ImGui::BeginChild("##ShaderDebugContent", ImVec2(0, 0), false)) {
-				RenderShaderDebugSection();
-			}
-			ImGui::EndChild();
-			MenuFonts::EndTabItem();
-		}
-
-		if (MenuFonts::BeginTabItemWithFont(T("menu.advanced.tab_testing", "Testing"), Menu::FontRole::Subheading)) {
-			if (ImGui::BeginChild("##Testing", ImVec2(0, 0), false)) {
-				RenderTestingSection();
-			}
-			ImGui::EndChild();
-			MenuFonts::EndTabItem();
-		}
-
-		Util::EndPillTabBar();
 	}
 }
 
@@ -564,11 +517,6 @@ void AdvancedSettingsRenderer::RenderShaderDebugSection()
 		filterText[sizeof(filterText) - 1] = '\0';
 		searchColumn = filterState.searchColumn;
 	}
-}
-
-void AdvancedSettingsRenderer::RenderDisableAtBootSection(const std::function<void()>& drawDisableAtBootSettings)
-{
-	drawDisableAtBootSettings();
 }
 
 void AdvancedSettingsRenderer::RenderDeveloperSection()

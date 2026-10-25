@@ -19,7 +19,10 @@ namespace MenuPageIds
 {
 	inline constexpr std::string_view kHome = "Home";
 	inline constexpr std::string_view kPresets = "Presets";
+	inline constexpr std::string_view kSettings = "Settings";
+	/// Alias: opens Settings at its first General section (General and Advanced are part of Settings)
 	inline constexpr std::string_view kGeneral = "General";
+	/// Alias: opens Settings at its first Advanced section
 	inline constexpr std::string_view kAdvanced = "Advanced";
 	inline constexpr std::string_view kProfiling = "Profiling";
 	inline constexpr std::string_view kCSEditor = "CS Editor";
@@ -81,8 +84,7 @@ public:
 	 * @param pendingFeatureSelection Feature short name or page ID (MenuPageIds) to auto-select; a page display
 	 *        name is accepted as a fallback. Cleared after processing.
 	 * @param categoryExpansionStates Map of category name to expanded/collapsed state.
-	 * @param drawGeneralSettings Callback that renders the General settings page content.
-	 * @param drawAdvancedSettings Callback that renders the Advanced settings page content.
+	 * @param drawSettings Callback that renders the Settings page content.
 	 * @param hooks Requests from the menu and callbacks into it; requests are reset once applied.
 	 */
 	static void RenderFeatureList(
@@ -91,8 +93,7 @@ public:
 		std::string& featureSearch,
 		std::string& pendingFeatureSelection,
 		std::map<std::string, bool>& categoryExpansionStates,
-		const std::function<void()>& drawGeneralSettings,
-		const std::function<void()>& drawAdvancedSettings,
+		const std::function<void()>& drawSettings,
 		Hooks& hooks);
 
 	/**
@@ -158,8 +159,7 @@ private:
 	static std::vector<MenuFuncInfo> BuildMenuList(
 		const std::string& featureSearch,
 		std::map<std::string, bool>& categoryExpansionStates,
-		const std::function<void()>& drawGeneralSettings,
-		const std::function<void()>& drawAdvancedSettings);
+		const std::function<void()>& drawSettings);
 
 	static void HandlePendingFeatureSelection(
 		std::string& pendingFeatureSelection,
