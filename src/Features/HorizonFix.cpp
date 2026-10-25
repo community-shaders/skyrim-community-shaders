@@ -76,8 +76,8 @@ void HorizonFix::DrawSettings()
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text("%s", T(TKEY("water_skirt_radius_tooltip"),
-								  "How far the water horizon reaches, in game units. Larger costs more, "
-								  "and every change rebuilds the whole water skirt. Replaces HorizonFix.ini's fWaterSkirtRadius while overriding."));
+								  "How far the water horizon reaches, in game units. Larger costs more. "
+								  "Replaces HorizonFix.ini's fWaterSkirtRadius while overriding."));
 		}
 	}
 
@@ -89,7 +89,7 @@ void HorizonFix::DrawSettings()
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text("%s", T(TKEY("water_skirt_rim_quality_tooltip"),
 								  "How finely the water skirt's circular outer edge is tessellated. Each step halves the edge's stair steps "
-								  "and roughly doubles its draw calls; useful only if blend band is disabled. "
+								  "and roughly doubles its draw calls. Useful only if blend band is disabled. "
 								  "Replaces HorizonFix.ini's iWaterSkirtRimQuality while overriding."));
 		}
 	}
