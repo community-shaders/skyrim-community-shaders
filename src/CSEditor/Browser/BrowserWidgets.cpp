@@ -1,7 +1,6 @@
 #include "BrowserWidgets.h"
 
 #include "../../I18n/I18n.h"
-#include "../EditorWindow.h"
 #include "IconsTabler.h"
 #include "Menu.h"
 #include "Menu/Fonts.h"
@@ -10,6 +9,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cmath>
 #include <cstdio>
 #include <format>
 #include <utility>
@@ -66,6 +66,61 @@ namespace
 		ImGui::RenderTextEllipsis(drawList, pos, ImVec2(pos.x + width, pos.y + size.y), pos.x + width, text, nullptr, &size);
 		ImGui::PopStyleColor();
 	}
+}
+
+void DrawIconStar(ImVec2 center, float radius, ImU32 color, bool filled)
+{
+	auto* drawList = ImGui::GetWindowDrawList();
+	constexpr int numPoints = 5;
+	const float angleStep = IM_PI / numPoints;
+	ImVec2 points[10];
+
+	for (int i = 0; i < numPoints * 2; i++) {
+		float angle = -IM_PI * 0.5f + i * angleStep;
+		float r = (i % 2 == 0) ? radius : radius * 0.38f;
+		points[i] = ImVec2(center.x + cosf(angle) * r, center.y + sinf(angle) * r);
+	}
+
+	if (filled) {
+		// Disable AA fill temporarily — ImGui adds a 1px fringe around each filled shape
+		// that creates visible seams at the pentagon/triangle boundaries.
+		ImDrawListFlags oldFlags = drawList->Flags;
+		drawList->Flags &= ~ImDrawListFlags_AntiAliasedFill;
+
+		ImVec2 innerPentagon[5];
+		for (int i = 0; i < 5; i++) {
+			innerPentagon[i] = points[i * 2 + 1];  // inner points
+		}
+		drawList->AddConvexPolyFilled(innerPentagon, 5, color);
+		for (int i = 0; i < 5; i++) {
+			drawList->AddTriangleFilled(points[i * 2], points[i * 2 + 1], points[(i * 2 + 9) % 10], color);
+		}
+
+		drawList->Flags = oldFlags;
+
+		// Draw an AA polyline over the outer perimeter to restore smooth edges
+		drawList->AddPolyline(points, 10, color, ImDrawFlags_Closed, 1.5f);
+	} else {
+		drawList->AddPolyline(points, 10, color, ImDrawFlags_Closed, 1.5f);
+	}
+}
+
+// Pennant on a pole. The icon font only ships a solid flag, so the outline state is drawn by hand.
+void DrawIconFlag(ImVec2 center, float height, ImU32 color, bool filled)
+{
+	auto* drawList = ImGui::GetWindowDrawList();
+	const float width = height * 0.9f;
+	const float thickness = std::max(1.0f, height * 0.1f);
+	const ImVec2 top(center.x - width * 0.4f, center.y - height * 0.5f);
+	const ImVec2 bottom(top.x, center.y + height * 0.5f);
+	const ImVec2 tip(top.x + width, top.y + height * 0.25f);
+	const ImVec2 hoist(top.x, top.y + height * 0.5f);
+
+	drawList->AddLine(top, bottom, color, thickness);
+	if (filled)
+		drawList->AddTriangleFilled(top, tip, hoist, color);
+	else
+		drawList->AddTriangle(top, tip, hoist, color, thickness);
 }
 
 namespace BrowserUI
@@ -546,13 +601,14 @@ namespace BrowserUI
 		return ImGui::GetFrameHeight() + ImGui::GetStyle().CellPadding.y * 2.0f;
 	}
 
-	void StackedSplit(const char* id, float& topRatio, float defaultTopRatio, const PaneDrawer& drawTop, const PaneDrawer& drawBottom)
+	void StackedSplit(const char* id, float& topRatio, float defaultTopRatio, bool resetLayout, const PaneDrawer& drawTop,
+		const PaneDrawer& drawBottom)
 	{
 		constexpr float kSplitterThickness = 6.0f;
 		constexpr float kMinPaneHeight = 80.0f;
 
 		const float scale = Util::GetUIScale();
-		if (EditorWindow::GetSingleton()->resetLayout)
+		if (resetLayout)
 			topRatio = defaultTopRatio;
 		const ImVec2 avail = ImGui::GetContentRegionAvail();
 		const float thickness = kSplitterThickness * scale;
@@ -575,11 +631,10 @@ namespace BrowserUI
 	void SplitPane(const SplitPaneSpec& spec, float& stackedRatio, const PaneDrawer& drawList, const PaneDrawer& drawDetail)
 	{
 		const float scale = Util::GetUIScale();
-		const bool resetLayout = EditorWindow::GetSingleton()->resetLayout;
 		const ImVec2 avail = ImGui::GetContentRegionAvail();
 
 		if (avail.x < spec.besideMinWidth * scale) {
-			StackedSplit(spec.id, stackedRatio, spec.defaultStackedRatio, drawList, drawDetail);
+			StackedSplit(spec.id, stackedRatio, spec.defaultStackedRatio, spec.resetLayout, drawList, drawDetail);
 			return;
 		}
 
@@ -593,7 +648,7 @@ namespace BrowserUI
 		ImGui::TableSetupColumn("##List", ImGuiTableColumnFlags_WidthStretch);
 		ImGui::TableSetupColumn("##Detail", ImGuiTableColumnFlags_WidthFixed, spec.detailWidth * scale);
 		// Must precede TableNextRow: the first row locks the layout, after which widths are ignored.
-		if (resetLayout)
+		if (spec.resetLayout)
 			ImGui::TableSetColumnWidth(1, spec.detailWidth * scale);
 		ImGui::TableNextRow();
 		ImGui::TableSetColumnIndex(0);

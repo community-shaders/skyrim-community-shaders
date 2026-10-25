@@ -7,10 +7,10 @@
 #include <optional>
 #include <string>
 
-/** @brief Hand-drawn five-point star (the icon font has no outline star). Defined in EditorWindow.cpp. */
+/** @brief Hand-drawn five-point star (the icon font has no outline star). */
 void DrawIconStar(ImVec2 center, float radius, ImU32 color, bool filled);
 
-/** @brief Hand-drawn pennant (the icon font only ships a solid flag). Defined in EditorWindow.cpp. */
+/** @brief Hand-drawn pennant (the icon font only ships a solid flag). */
 void DrawIconFlag(ImVec2 center, float height, ImU32 color, bool filled);
 
 /**
@@ -191,16 +191,20 @@ namespace BrowserUI
 		float besideMinWidth;
 		/// Initial detail width of the side-by-side layout.
 		float detailWidth;
-		/// List share of the height in the stacked layout, restored by the editor's layout reset.
+		/// List share of the height in the stacked layout, restored by a layout reset.
 		float defaultStackedRatio;
+		/// Puts the detail width and stacked ratio back to their defaults this frame (Reset Window Layout).
+		bool resetLayout = false;
 	};
 
 	/**
 	 * @brief A top pane above a bottom pane, split by a draggable divider; the bottom pane fills the rest.
 	 * @param topRatio Top share of the height; the caller keeps it and the divider updates it.
-	 * @param defaultTopRatio What the editor's layout reset restores topRatio to.
+	 * @param defaultTopRatio What a layout reset restores topRatio to.
+	 * @param resetLayout Restores topRatio to defaultTopRatio this frame (Reset Window Layout).
 	 */
-	void StackedSplit(const char* id, float& topRatio, float defaultTopRatio, const PaneDrawer& drawTop, const PaneDrawer& drawBottom);
+	void StackedSplit(const char* id, float& topRatio, float defaultTopRatio, bool resetLayout, const PaneDrawer& drawTop,
+		const PaneDrawer& drawBottom);
 
 	/**
 	 * @brief A list pane next to or, when narrow, above a detail pane, with a draggable divider either way.

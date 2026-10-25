@@ -1353,7 +1353,7 @@ void FormListPage::Draw(Browser::FormListState& state, const Context& context)
 		DrawList(state, context, ImGui::GetContentRegionAvail(), active);
 		return;
 	}
-	BrowserUI::SplitPane({ "##FormListSplit", kInspectorBesideMinWidth, kInspectorWidth, Browser::FormListState::kDefaultStackedRatio }, state.stackedRatio, [&](const ImVec2& size) { DrawList(state, context, size, active); }, [&](const ImVec2& size) { DrawInspector(state, context, size, active); });
+	BrowserUI::SplitPane({ "##FormListSplit", kInspectorBesideMinWidth, kInspectorWidth, Browser::FormListState::kDefaultStackedRatio, editor.resetLayout }, state.stackedRatio, [&](const ImVec2& size) { DrawList(state, context, size, active); }, [&](const ImVec2& size) { DrawInspector(state, context, size, active); });
 }
 
 #undef I18N_KEY_PREFIX

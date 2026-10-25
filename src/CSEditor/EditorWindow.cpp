@@ -159,61 +159,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(EditorWindow::Settings::PaletteV
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(EditorWindow::Settings::PaletteFavoriteColor, hasValue, r, g, b)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(EditorWindow::Settings, recordMarkers, markedRecords, autoApplyChanges, useTextButtons, enableInheritFromParent, showFeatureDebug, editorUIScale, favoriteWidgets, recentWidgets, maxRecentWidgets, showViewport, showFeaturesWindow, selectedCategory, browserShowInspector, browserSidebarCompact, skipToolDiscardPrompt, widgetTypeSizes, paletteColors, paletteValues, paletteFavorites)
 
-void DrawIconStar(ImVec2 center, float radius, ImU32 color, bool filled)
-{
-	auto* drawList = ImGui::GetWindowDrawList();
-	constexpr int numPoints = 5;
-	const float angleStep = IM_PI / numPoints;
-	ImVec2 points[10];
-
-	for (int i = 0; i < numPoints * 2; i++) {
-		float angle = -IM_PI * 0.5f + i * angleStep;
-		float r = (i % 2 == 0) ? radius : radius * 0.38f;
-		points[i] = ImVec2(center.x + cosf(angle) * r, center.y + sinf(angle) * r);
-	}
-
-	if (filled) {
-		// Disable AA fill temporarily — ImGui adds a 1px fringe around each filled shape
-		// that creates visible seams at the pentagon/triangle boundaries.
-		ImDrawListFlags oldFlags = drawList->Flags;
-		drawList->Flags &= ~ImDrawListFlags_AntiAliasedFill;
-
-		ImVec2 innerPentagon[5];
-		for (int i = 0; i < 5; i++) {
-			innerPentagon[i] = points[i * 2 + 1];  // inner points
-		}
-		drawList->AddConvexPolyFilled(innerPentagon, 5, color);
-		for (int i = 0; i < 5; i++) {
-			drawList->AddTriangleFilled(points[i * 2], points[i * 2 + 1], points[(i * 2 + 9) % 10], color);
-		}
-
-		drawList->Flags = oldFlags;
-
-		// Draw an AA polyline over the outer perimeter to restore smooth edges
-		drawList->AddPolyline(points, 10, color, ImDrawFlags_Closed, 1.5f);
-	} else {
-		drawList->AddPolyline(points, 10, color, ImDrawFlags_Closed, 1.5f);
-	}
-}
-
-// Pennant on a pole. The icon font only ships a solid flag, so the outline state is drawn by hand.
-void DrawIconFlag(ImVec2 center, float height, ImU32 color, bool filled)
-{
-	auto* drawList = ImGui::GetWindowDrawList();
-	const float width = height * 0.9f;
-	const float thickness = std::max(1.0f, height * 0.1f);
-	const ImVec2 top(center.x - width * 0.4f, center.y - height * 0.5f);
-	const ImVec2 bottom(top.x, center.y + height * 0.5f);
-	const ImVec2 tip(top.x + width, top.y + height * 0.25f);
-	const ImVec2 hoist(top.x, top.y + height * 0.5f);
-
-	drawList->AddLine(top, bottom, color, thickness);
-	if (filled)
-		drawList->AddTriangleFilled(top, tip, hoist, color);
-	else
-		drawList->AddTriangle(top, tip, hoist, color, thickness);
-}
-
 namespace
 {
 	// The editor can draw before globals are cached, so this falls back to the singleton.
