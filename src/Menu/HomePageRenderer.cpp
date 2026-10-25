@@ -195,31 +195,32 @@ void HomePageRenderer::RenderFAQSection()
 	}
 
 	if (ImGui::CollapsingHeader(T("menu.faq.q2", "How do I configure features?"))) {
-		ImGui::TextWrapped("%s", T("menu.faq.a2",
-									 "Each feature can be found in the left sidebar menu. Click on any feature to access its "
-									 "settings. Most features include presets and detailed tooltips to help you understand "
-									 "what each setting does."));
+		ImGui::TextWrapped("%s", T("menu.faq.a2_v2",
+									 "Each feature can be found in the left sidebar menu. Click on any feature "
+									 "to access its settings. Most settings have detailed tooltips to help you understand what they do, "
+									 "and the Presets page applies ready-made settings across many features at once."));
 	}
 
 	if (ImGui::CollapsingHeader(T("menu.faq.q3", "Why are some features not loading?"))) {
-		ImGui::TextWrapped("%s", T("menu.faq.a3",
+		ImGui::TextWrapped("%s", T("menu.faq.a3_v2",
 									 "Features may fail to load due to hardware incompatibility, missing dependencies, or "
-									 "conflicts with other mods. Check the 'Feature Issues' tab for detailed information "
-									 "about any problematic features."));
+									 "conflicts with other mods. When there are problems, a 'Feature Issues' entry appears at the top "
+									 "of the left sidebar with detailed information about each problematic feature."));
 	}
 
 	if (ImGui::CollapsingHeader(T("menu.faq.q4", "I have \"Failed Shaders\" when compiling?"))) {
-		ImGui::TextWrapped("%s", T("menu.faq.a4",
+		ImGui::TextWrapped("%s", T("menu.faq.a4_v2",
 									 "Failed shaders are usually caused by mixed file versions. Ensure all features are up to date "
-									 "and avoid mixing files from test builds or outdated versions. Please review the 'Feature Issues' tab "
-									 "and/or Wiki for more information. Update your features and remove any obsolete features."));
+									 "and avoid mixing files from test builds or outdated versions. Please review the 'Feature Issues' entry "
+									 "in the left sidebar (shown when there are problems) and/or the Wiki for more information. "
+									 "Update your features and remove any obsolete features."));
 	}
 
 	if (ImGui::CollapsingHeader(T("menu.faq.q5", "How do I improve performance?"))) {
-		ImGui::TextWrapped("%s", T("menu.faq.a5",
+		ImGui::TextWrapped("%s", T("menu.faq.a5_v2",
 									 "Start by enabling the Performance Overlay to monitor your FPS. Consider disabling "
-									 "expensive features like Screen Space GI or reducing quality settings. The 'Display' "
-									 "tab also includes upscaling options that can improve performance."));
+									 "expensive features like Screen Space GI or reducing quality settings. The Upscaling feature "
+									 "(in the Display category) can also improve performance by rendering at a lower resolution."));
 	}
 
 	if (ImGui::CollapsingHeader(T("menu.faq.q6", "Is Community Shaders compatible with ENB?"))) {
