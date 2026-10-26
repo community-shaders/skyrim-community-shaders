@@ -177,6 +177,8 @@ public:
 	 * this menu when the key is released.
 	 */
 	void ConsumeEscape() { escapeConsumed = true; }
+	/** @brief Drops the main menu's undo history, so reloaded saved settings cannot be undone into stale edits. */
+	void ClearUndoHistory() { undoHistory.Forget(""); }
 	/**
 	 * @brief Reads and clears the claim made by ConsumeEscape().
 	 * @return True when a widget claimed the Escape press being released.

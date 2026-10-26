@@ -857,6 +857,7 @@ namespace Util
 		// Nothing to lose: restore straight away
 		if (!state->HasUnsavedChanges()) {
 			state->Load();
+			globals::menu->ClearUndoHistory();
 			return;
 		}
 
@@ -877,8 +878,10 @@ namespace Util
 		restoreSavedSettingsPopup.focus = ConfirmationPopup::Focus::Cancel;
 
 		if (restoreSavedSettingsPopup.Draw()) {
-			if (auto* state = globals::state)
+			if (auto* state = globals::state) {
 				state->Load();
+				globals::menu->ClearUndoHistory();
+			}
 		}
 	}
 
