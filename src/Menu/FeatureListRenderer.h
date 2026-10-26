@@ -68,7 +68,6 @@ public:
 		Plain,     ///< An ordinary row
 		Accent,    ///< Accent-tinted icon, for the page most users want first (Presets)
 		Launcher,  ///< Accent-tinted icon and a trailing external-open glyph: opens a window rather than a page (CS Editor)
-		Alert,     ///< Error-coloured row, for problems that need attention
 	};
 
 	/** @brief Describes a built-in (non-feature) menu page with an ID, a display name and a draw callback. */

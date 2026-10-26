@@ -29,7 +29,6 @@
 #include "Menu/HomePageRenderer.h"
 #include "Menu/IconLoader.h"
 #include "Menu/Icons/helpers/IconFonts.h"
-#include "Menu/IssuesPageRenderer.h"
 #include "Menu/MenuIcons.h"
 #include "Menu/PresetsPageRenderer.h"
 #include "Menu/ProfilingRenderer.h"
@@ -73,7 +72,6 @@ namespace
 		std::string locale;
 		std::uint64_t userEditsRevision = 0;
 		std::uint64_t sceneRevision = 0;
-		std::size_t issueCount = 0;
 		bool developerMode = false;
 
 		bool operator==(const MenuListKey&) const = default;
@@ -153,9 +151,7 @@ namespace
 		auto* drawList = ImGui::GetWindowDrawList();
 		ImVec4 textColor = ImGui::GetStyleColorVec4(disabled ? ImGuiCol_TextDisabled : ImGuiCol_Text);
 		ImVec4 iconColor = textColor;
-		if (!disabled && menu.style == NavStyle::Alert)
-			textColor = iconColor = Util::Colors::GetError();
-		else if (!disabled && menu.style != NavStyle::Plain)
+		if (!disabled && menu.style != NavStyle::Plain)
 			iconColor = Util::Colors::GetAccent();
 
 		float textRight = right - padX;
@@ -493,7 +489,6 @@ bool FeatureListRenderer::UpdateMenuList(
 		.locale = I18n::GetSingleton()->GetCurrentLocale(),
 		.userEditsRevision = globals::state->GetUserEditsRevision(),
 		.sceneRevision = globals::sceneSettingsManager ? globals::sceneSettingsManager->GetEntryPresentationRevision() : 0,
-		.issueCount = IssuesPageRenderer::GetIssueCount(),
 		.developerMode = globals::state->IsDeveloperMode(),
 	};
 
@@ -534,13 +529,6 @@ std::vector<FeatureListRenderer::MenuFuncInfo> FeatureListRenderer::BuildMenuLis
 		BuiltInMenu{ MenuPageIds::kCSEditor, T("menu.features.cs_editor", "CS Editor"), []() { globals::features::csEditor.DrawSettings(); },
 			Icons::TI(MenuIcons::kCSEditor), NavStyle::Launcher, {}, true },
 	};
-	// Problems loading features (rejected, obsolete, ...)
-	// Issues page (feature issues and active constraints), listed only while it has content
-	if (const auto issueCount = IssuesPageRenderer::GetIssueCount()) {
-		menuList.push_back(BuiltInMenu{ MenuPageIds::kIssues,
-			I18n::GetSingleton()->Format("menu.issues.nav_label", { { "count", std::to_string(issueCount) } }, "Issues ({count})"),
-			[]() { IssuesPageRenderer::Render(); }, Icons::TI(MenuIcons::kIssues), NavStyle::Alert });
-	}
 	menuList.push_back(BuiltInMenu{ MenuPageIds::kSettings, T("menu.features.settings", "Settings"), drawSettings, Icons::TI(MenuIcons::kSettings) });
 	menuList.push_back(BuiltInMenu{ MenuPageIds::kProfiling, T("menu.features.profiling", "Profiling"), []() { ProfilingRenderer::RenderStatistics(); },
 		Icons::TI(MenuIcons::kProfiling), NavStyle::Plain, T("menu.features.profiling_hint", "What each feature costs per frame"), true });
@@ -637,6 +625,10 @@ void FeatureListRenderer::HandlePendingFeatureSelection(
 {
 	if (pendingFeatureSelection.empty())
 		return;
+
+	// Issues live on the Home page now
+	if (pendingFeatureSelection == MenuPageIds::kIssues)
+		pendingFeatureSelection = std::string(MenuPageIds::kHome);
 
 	// General and Advanced are sections of Settings now: their page IDs open it at the matching section
 	if (const auto section = SettingsPageRenderer::GetAliasSection(pendingFeatureSelection)) {

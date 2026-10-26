@@ -3412,7 +3412,6 @@
     "menu.issues.issue_label": "Issue: %s",
     "menu.issues.last_modified": "Last Modified:",
     "menu.issues.minimum_required": "Minimum Required: %s",
-    "menu.issues.nav_label": "Issues ({count})",
     "menu.issues.no_issues": "No feature issues found!",
     "menu.issues.obsolete_compilation_failure": "This obsolete feature modified core shader files and is causing compilation failures. It must be uninstalled via mod manager.",
     "menu.issues.obsolete_features_desc": "The following features are obsolete and disabled automatically. These features have been removed or replaced in this CS version but do not modify core shaders.",
