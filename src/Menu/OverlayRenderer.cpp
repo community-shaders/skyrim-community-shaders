@@ -38,6 +38,44 @@ namespace
 
 	bool IsMainWindow(ImGuiWindow* win) { return win->Name && strncmp(win->Name, MAIN_WINDOW_PREFIX, strlen(MAIN_WINDOW_PREFIX)) == 0; }
 
+	/**
+	 * @brief Begins the top-left status window in the toast card style: themed WindowBg at OVERLAP_MIN_ALPHA,
+	 * no frame, with the accent border and left stripe drawn by EndOverlayCard.
+	 * @return False when the window is collapsed or clipped; EndOverlayCard must still be called.
+	 */
+	bool BeginOverlayCard(const ImVec2& position)
+	{
+		using Constants = ThemeManager::Constants;
+		const float scale = Util::GetUIScale();
+		ImGui::SetNextWindowPos(position);
+		ImGui::SetNextWindowBgAlpha(Constants::OVERLAP_MIN_ALPHA);
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, ImGui::GetStyle().FrameRounding * Constants::TOAST_ROUNDING_SCALE);
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,
+			ImVec2((Constants::TOAST_PADDING_X + Constants::TOAST_STRIPE_WIDTH) * scale, Constants::TOAST_PADDING_Y * scale));
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+		return ImGui::Begin("ShaderCompilationInfo", nullptr,
+			ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings);
+	}
+
+	/** @brief Draws the card's thin accent border and left stripe, then ends the window begun by BeginOverlayCard. */
+	void EndOverlayCard(const ImVec4& accentColor)
+	{
+		using Constants = ThemeManager::Constants;
+		const float scale = Util::GetUIScale();
+		ImDrawList* draw = ImGui::GetWindowDrawList();
+		const ImVec2 p0 = ImGui::GetWindowPos();
+		const ImVec2 size = ImGui::GetWindowSize();
+		const ImVec2 p1(p0.x + size.x, p0.y + size.y);
+		const float rounding = ImGui::GetStyle().WindowRounding;
+		const ImU32 accent = ImGui::ColorConvertFloat4ToU32(ImVec4(accentColor.x, accentColor.y, accentColor.z, Constants::TOAST_ACCENT_ALPHA));
+		draw->AddRect(p0, p1, accent, rounding, 0, Constants::TOAST_BORDER_THICKNESS * scale);
+		draw->PushClipRect(p0, ImVec2(p0.x + Constants::TOAST_STRIPE_WIDTH * scale, p1.y), true);
+		draw->AddRectFilled(p0, p1, accent, rounding);
+		draw->PopClipRect();
+		ImGui::End();
+		ImGui::PopStyleVar(3);
+	}
+
 	void DrawShaderCompilationFailures(uint64_t failed, const Menu::ThemeSettings& themeSettings)
 	{
 		if (failed) {
@@ -345,10 +383,14 @@ void OverlayRenderer::RenderShaderCompilationStatus(const std::function<const ch
 
 	uint32_t effectFailed = EffectManager::GetSingleton().IsInitialized() ? EffectManager::GetSingleton().GetFailedEffectCount() : 0;
 
+	// Card accent: errors win, then the RenderDoc warning, else plain progress
+	const ImVec4 accent = ((failed && !hide) || effectFailed) ? themeSettings.StatusPalette.Error :
+	                      renderDocAvailable                  ? themeSettings.StatusPalette.Warning :
+	                                                            themeSettings.StatusPalette.InfoColor;
+
 	if (shaderCache->IsCompiling()) {
-		ImGui::SetNextWindowPos(ImVec2(pos, pos));
-		if (!ImGui::Begin("ShaderCompilationInfo", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings)) {
-			ImGui::End();
+		if (!BeginOverlayCard(ImVec2(pos, pos))) {
+			EndOverlayCard(accent);
 			return;
 		}
 		ImGui::TextUnformatted(progressTitle.c_str());
@@ -384,14 +426,13 @@ void OverlayRenderer::RenderShaderCompilationStatus(const std::function<const ch
 		if (renderDocAvailable)
 			ImGui::TextColored(themeSettings.StatusPalette.Warning, "%s", renderDocInformation.c_str());
 
-		ImGui::End();
+		EndOverlayCard(accent);
 		return;
 	}
 
 	if ((failed && !hide) || effectFailed) {
-		ImGui::SetNextWindowPos(ImVec2(pos, pos));
-		if (!ImGui::Begin("ShaderCompilationInfo", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings)) {
-			ImGui::End();
+		if (!BeginOverlayCard(ImVec2(pos, pos))) {
+			EndOverlayCard(accent);
 			return;
 		}
 
@@ -401,15 +442,14 @@ void OverlayRenderer::RenderShaderCompilationStatus(const std::function<const ch
 		if (renderDocAvailable)
 			ImGui::TextColored(themeSettings.StatusPalette.Warning, "%s", renderDocInformation.c_str());
 
-		ImGui::End();
+		EndOverlayCard(accent);
 	} else if (renderDocAvailable) {
-		ImGui::SetNextWindowPos(ImVec2(pos, pos));
-		if (!ImGui::Begin("ShaderCompilationInfo", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings)) {
-			ImGui::End();
+		if (!BeginOverlayCard(ImVec2(pos, pos))) {
+			EndOverlayCard(accent);
 			return;
 		}
 		ImGui::TextColored(themeSettings.StatusPalette.Warning, "%s", renderDocInformation.c_str());
-		ImGui::End();
+		EndOverlayCard(accent);
 	}
 }
 
