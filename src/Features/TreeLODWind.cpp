@@ -48,6 +48,8 @@ void TreeLODWind::DrawSettings()
 	ImGui::Text("%s", std::vformat(T(TKEY("status"), "Weather wind {:.2f}   storminess {:.2f}   gust strength {:.2f}"),
 						  std::make_format_args(statusWind, statusStorminess, statusGust))
 						  .c_str());
+	const size_t shapeCount = bendWeights.Count();
+	ImGui::Text("%s", std::vformat(T(TKEY("status_shapes"), "Tree LOD shapes with bend data: {}"), std::make_format_args(shapeCount)).c_str());
 
 	ImGui::SeparatorText(T(TKEY("presets"), "Presets"));
 	if (ImGui::Button(T(TKEY("preset_gentle"), "Gentle")))
@@ -171,6 +173,58 @@ void TreeLODWind::ApplyPreset(Preset a_preset)
 	}
 }
 
+struct TreeLODWind::Hooks
+{
+	struct BSLightingShader_SetupGeometry
+	{
+		static void thunk(RE::BSShader* This, RE::BSRenderPass* Pass, uint32_t RenderFlags)
+		{
+			func(This, Pass, RenderFlags);
+			globals::features::treeLODWind.BeginDraw(Pass);
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	struct BSLightingShader_RestoreGeometry
+	{
+		static void thunk(RE::BSShader* This, RE::BSRenderPass* Pass, uint32_t RenderFlags)
+		{
+			globals::features::treeLODWind.EndDraw();
+			func(This, Pass, RenderFlags);
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	struct BSUtilityShader_SetupGeometry
+	{
+		static void thunk(RE::BSShader* This, RE::BSRenderPass* Pass, uint32_t RenderFlags)
+		{
+			func(This, Pass, RenderFlags);
+			globals::features::treeLODWind.BeginDraw(Pass);
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	struct BSUtilityShader_RestoreGeometry
+	{
+		static void thunk(RE::BSShader* This, RE::BSRenderPass* Pass, uint32_t RenderFlags)
+		{
+			globals::features::treeLODWind.EndDraw();
+			func(This, Pass, RenderFlags);
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	static void Install()
+	{
+		stl::write_vfunc<0x6, BSLightingShader_SetupGeometry>(RE::VTABLE_BSLightingShader[0]);
+		stl::write_vfunc<0x7, BSLightingShader_RestoreGeometry>(RE::VTABLE_BSLightingShader[0]);
+		stl::write_vfunc<0x6, BSUtilityShader_SetupGeometry>(RE::VTABLE_BSUtilityShader[0]);
+		stl::write_vfunc<0x7, BSUtilityShader_RestoreGeometry>(RE::VTABLE_BSUtilityShader[0]);
+		logger::info("[Tree LOD Wind] Installed hooks - BSLightingShader and BSUtilityShader Setup/RestoreGeometry");
+	}
+};
+
 void TreeLODWind::PostPostLoad()
 {
 	if (GetModuleHandleW(L"K747_LodWind.dll")) {
@@ -178,7 +232,20 @@ void TreeLODWind::PostPostLoad()
 		failedLoadedMessage = T(TKEY("old_plugin_installed"),
 			"The Windswept Tree LOD plugin (K747_LodWind.dll) is installed. This feature replaces it: remove Windswept Tree LOD to use it.");
 		logger::warn("[Tree LOD Wind] {}", failedLoadedMessage);
+		return;
 	}
+	Hooks::Install();
+}
+
+void TreeLODWind::BeginDraw(RE::BSRenderPass* a_pass)
+{
+	const auto kind = TreeShapes::Classify(a_pass);
+	drawBendWeights = kind == TreeShapes::Kind::None ? nullptr : bendWeights.Get(a_pass->geometry, kind, globals::state->frameCount);
+}
+
+void TreeLODWind::EndDraw()
+{
+	drawBendWeights = nullptr;
 }
 
 void TreeLODWind::SetupResources()
@@ -251,6 +318,9 @@ void TreeLODWind::Reset()
 
 	data.Params.z = 0.0f;
 	windOffCB->Update(data);
+
+	if (globals::state->frameCount % 300 == 0)
+		bendWeights.Evict(globals::state->frameCount);
 }
 
 void TreeLODWind::SetShaderResources(ID3D11DeviceContext* a_context)
@@ -263,8 +333,10 @@ void TreeLODWind::SetShaderResources(ID3D11DeviceContext* a_context)
 	if (type != RE::BSShader::Type::Lighting && type != RE::BSShader::Type::Utility)
 		return;
 
-	ID3D11Buffer* buffer = windOffCB->CB();
+	ID3D11Buffer* buffer = drawBendWeights ? windOnCB->CB() : windOffCB->CB();
 	a_context->VSSetConstantBuffers(3, 1, &buffer);
+	if (drawBendWeights)
+		a_context->VSSetShaderResources(120, 1, &drawBendWeights);
 }
 
 #undef I18N_KEY_PREFIX

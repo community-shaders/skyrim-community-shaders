@@ -2,6 +2,7 @@
 
 #include "Buffer.h"
 #include "Feature.h"
+#include "TreeLODWind/TreeShapes.h"
 
 /**
  * @brief Wind sway for DynDOLOD tree LOD.
@@ -92,10 +93,16 @@ public:
 	/** @brief Advances the wind clock and uploads the on and off buffers, once per frame. */
 	virtual void Reset() override;
 
-	/** @brief Binds the wind buffer for the current Lighting or Utility draw. Called from State::Draw. */
+	/** @brief Binds the wind buffer, and the bend data for a tree LOD draw, for the current Lighting or Utility draw. Called from State::Draw. */
 	void SetShaderResources(ID3D11DeviceContext* a_context);
 
 	void ApplyPreset(Preset a_preset);
+
+	/** @brief Picks out the tree LOD draws between SetupGeometry and RestoreGeometry of the Lighting and Utility shaders. */
+	void BeginDraw(RE::BSRenderPass* a_pass);
+	void EndDraw();
+
+	struct Hooks;
 
 private:
 	/** @brief How stormy a weather is, 0 calm to 1 storm: the larger of its type and its own wind speed. */
@@ -103,6 +110,10 @@ private:
 
 	std::unique_ptr<ConstantBuffer> windOnCB;
 	std::unique_ptr<ConstantBuffer> windOffCB;
+
+	TreeShapes::BendWeights bendWeights;
+	// Bend data of the tree LOD shape being drawn, nullptr for every other draw
+	ID3D11ShaderResourceView* drawBendWeights = nullptr;
 
 	double phase = 0.0;
 	double prevPhase = 0.0;

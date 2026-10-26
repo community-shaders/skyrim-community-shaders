@@ -2824,6 +2824,7 @@
     "feature.tree_lod_wind.presets": "Presets",
     "feature.tree_lod_wind.presets_tooltip": "Set the sway, speed, flutter and gust values. Distances and weather thresholds stay as they are.",
     "feature.tree_lod_wind.status": "Weather wind {:.2f}   storminess {:.2f}   gust strength {:.2f}",
+    "feature.tree_lod_wind.status_shapes": "Tree LOD shapes with bend data: {}",
     "feature.tree_lod_wind.sway": "Sway",
     "feature.tree_lod_wind.tree_spread": "Tree Individuality",
     "feature.tree_lod_wind.tree_spread_tooltip": "0 = neighbouring trees move together. Higher = each tree on its own timing.",
