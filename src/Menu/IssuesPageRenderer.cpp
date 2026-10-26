@@ -14,6 +14,7 @@
 #include "I18n/I18n.h"
 #include "IconsTabler.h"
 #include "Menu.h"
+#include "Menu/HomePageRenderer.h"
 #include "Menu/MenuIcons.h"
 #include "Menu/ThemeManager.h"
 #include "Util.h"
@@ -35,10 +36,9 @@ namespace
 		return constraints;
 	}
 
-	/** @brief The Active Setting Constraints table; each "Constrained By" cell opens the first source feature. */
-	void RenderConstraintsSection(const ConstraintList& constraints)
+	/** @brief The constraints table; each "Constrained By" cell opens the first source feature. */
+	void RenderConstraintsTable(const ConstraintList& constraints)
 	{
-		BrowserUI::SectionLabel(T("menu.home.active_constraints", "Active Setting Constraints"));
 		ImGui::TextWrapped("%s", T("menu.home.constraints_desc", "Some settings are constrained by other features. Hover over rows for details."));
 		ImGui::Spacing();
 
@@ -142,27 +142,14 @@ namespace IssuesPageRenderer
 		return GetIssueCount() > 0;
 	}
 
+	void RenderConstraintsSection()
+	{
+		BrowserUI::SectionLabel(T("menu.home.active_constraints", "Active Setting Constraints"));
+		RenderConstraintsTable(GetActiveConstraints());
+	}
+
 	void Render()
 	{
-		BrowserUI::PageHeader(Icons::TI(MenuIcons::kIssues), T("menu.issues.page_title", "Issues"),
-			T("menu.issues.page_subtitle", "Problems to fix in your install and settings"));
-		ImGui::Spacing();
-
-		const bool hasFeatureIssues = FeatureIssues::HasFeatureIssues();
-		const auto& constraints = GetActiveConstraints();
-		if (!hasFeatureIssues && constraints.empty()) {
-			BrowserUI::EmptyState(T("menu.issues.all_clear", "No issues found"),
-				T("menu.issues.all_clear_hint", "Feature files load cleanly and no setting is constrained by another feature."));
-			return;
-		}
-
-		if (hasFeatureIssues) {
-			BrowserUI::SectionLabel(T("menu.features.feature_issues", "Feature Issues"));
-			FeatureIssues::DrawFeatureIssuesUI();
-			ImGui::Spacing();
-		}
-
-		if (!constraints.empty())
-			RenderConstraintsSection(constraints);
+		HomePageRenderer::RenderHomePage();
 	}
 }

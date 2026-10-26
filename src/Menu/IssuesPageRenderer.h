@@ -3,11 +3,11 @@
 #include <cstddef>
 
 /**
- * @brief The Issues page: feature issues (rejected, obsolete or mismatched feature files, failed Baselines)
- * and the setting constraints features currently force on each other.
+ * @brief Collects the issues the Home page's Needs Attention card shows: feature issues (rejected, obsolete or
+ * mismatched feature files, failed Baselines) and the setting constraints features currently force on each other.
  *
- * Counts are refreshed at most every ThemeManager::Constants::ISSUES_REFRESH_SECONDS, so the nav entry and
- * the Home dashboard can ask for them every frame.
+ * Counts are refreshed at most every ThemeManager::Constants::ISSUES_REFRESH_SECONDS, so the header, footer and
+ * Home dashboard can ask for them every frame.
  */
 namespace IssuesPageRenderer
 {
@@ -17,12 +17,15 @@ namespace IssuesPageRenderer
 	/** @brief Number of settings another feature currently constrains. */
 	size_t GetConstraintCount();
 
-	/** @brief Feature issues plus active constraints: the count the nav entry shows. */
+	/** @brief Feature issues plus active constraints. */
 	size_t GetIssueCount();
 
-	/** @brief True when either section of the page has something to show, which is when its nav entry appears. */
+	/** @brief True when there are feature issues or active constraints. */
 	bool HasIssues();
 
-	/** @brief Draws the page: a header, the feature issues, then the active setting constraints table. */
+	/** @brief Draws the Active Setting Constraints label, description and table; each "Constrained By" cell opens its first source feature. */
+	void RenderConstraintsSection();
+
+	/** @brief Draws Home: the Issues page ID now resolves there, so a leftover nav entry still lands on the dashboard. */
 	void Render();
 }

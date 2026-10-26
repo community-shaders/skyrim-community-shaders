@@ -7,8 +7,7 @@
  * @brief Renders the Home page of the in-game menu and the first-time setup dialog.
  *
  * Home is a status dashboard: a card grid with the active preset, the scene and CS Editor, the shader
- * cache, what needs attention, quick access to features and the community links. The FAQ entries are
- * drawn for the header's help popover. Also manages the first-time setup dialog shown on initial launch.
+ * cache, what needs attention, quick access to features and the community links. Also manages the first-time setup dialog shown on initial launch.
  */
 class HomePageRenderer
 {
@@ -30,6 +29,21 @@ public:
 	/** @brief True while the Home dashboard was drawn this frame or the last, for the header's Home button highlight. */
 	static bool IsShowing();
 
+	/** @brief Opens the keyboard shortcuts and help popover on the next Home frame (F1). */
+	static void RequestHelpPopover();
+
+	/**
+	 * @brief Opens Home scrolled to the Needs Attention card and outlines it briefly.
+	 * Used by the header and footer issues indicators and by the Issues page ID.
+	 */
+	static void FocusNeedsAttention();
+
+	/** @brief True while the Needs Attention outline from FocusNeedsAttention is still showing. */
+	static bool IsAttentionFocused();
+
+	/** @brief Seconds left on the Needs Attention outline; zero or negative when it is over. */
+	static double GetAttentionFocusRemaining();
+
 	/** @brief Renders the Home dashboard: an unsaved-changes banner when needed, then the card grid. */
 	static void RenderHomePage();
 
@@ -43,11 +57,15 @@ public:
 	/** @brief Dismisses the first-time setup dialog and persists completion. Called by the menu toggle key. */
 	static void MarkFirstTimeSetupComplete();
 
-	/** @brief Draws the FAQ questions as collapsible answers, without the section title. The header's help popover shows them in a modal. */
-	static void RenderFAQEntries();
-
 private:
+	/** @brief Draws the top-right ? button and its shortcuts popover. */
+	static void RenderHelpButton();
+	static void RenderHelpPopover();
+
 	// State
 	static bool isFirstTimeSetupShown;
 	static int lastShownFrame;
+	static bool helpPopoverRequested;
+	static bool attentionScrollPending;
+	static double attentionFocusUntil;
 };

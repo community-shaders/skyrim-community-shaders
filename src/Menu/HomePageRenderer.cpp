@@ -27,6 +27,7 @@
 #include "Menu/MenuHeaderRenderer.h"
 #include "Menu/MenuIcons.h"
 #include "Menu/MenuLinks.h"
+#include "Menu/MenuShortcuts.h"
 #include "Menu/PresetsPageRenderer.h"
 #include "Menu/ShaderCacheStatusWidget.h"
 #include "Menu/ThemeManager.h"
@@ -38,10 +39,15 @@
 // Static member definitions
 bool HomePageRenderer::isFirstTimeSetupShown = false;
 int HomePageRenderer::lastShownFrame = -1000;
+bool HomePageRenderer::helpPopoverRequested = false;
+bool HomePageRenderer::attentionScrollPending = false;
+double HomePageRenderer::attentionFocusUntil = 0.0;
 
 namespace
 {
 	using Constants = ThemeManager::Constants;
+
+	constexpr const char* kHelpPopupId = "##HomeHelpPopover";
 
 	/** @brief One dashboard card: a bordered, auto-height child with an icon and a section-label title. */
 	class Card
@@ -305,7 +311,16 @@ namespace
 		}
 	}
 
-	/** @brief Feature issues, active constraints and features waiting on a restart, or a compact all-clear. */
+	/** @brief True when the Needs Attention card has anything to show. */
+	bool NeedsAttention()
+	{
+		return IssuesPageRenderer::HasIssues() || !GetRestartPendingFeatures().empty();
+	}
+
+	/**
+	 * @brief Everything that needs a look: feature issues with their details and actions, the settings other features
+	 * constrain, and features waiting on a restart. A compact all-clear when there is none.
+	 */
 	void RenderAttentionCard()
 	{
 		const size_t issueCount = IssuesPageRenderer::GetFeatureIssueCount();
@@ -314,8 +329,10 @@ namespace
 		const bool allClear = issueCount == 0 && constraintCount == 0 && restartPending.empty();
 
 		const ImVec4 warning = Util::Colors::GetWarning();
+		const ImVec4 error = Util::Colors::GetError();
+		const ImVec4 border = issueCount > 0 ? error : warning;
 		Card card("##HomeAttention", Icons::TI(MenuIcons::kIssues), T("menu.home.attention_title", "Needs Attention"),
-			allClear ? nullptr : &warning);
+			allClear ? nullptr : &border);
 
 		if (allClear) {
 			ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetSuccess());
@@ -327,13 +344,20 @@ namespace
 		}
 
 		auto* i18n = I18n::GetSingleton();
-		if (issueCount > 0)
-			ImGui::TextColored(Util::Colors::GetError(), "%s",
+
+		// Feature issues: the rejected, obsolete or mismatched feature files and failed Baselines, with their actions
+		if (issueCount > 0) {
+			ImGui::PushStyleColor(ImGuiCol_Text, error);
+			Icons::Text(Icons::TI(MenuIcons::kIssues));
+			ImGui::SameLine();
+			ImGui::TextUnformatted(
 				i18n->Format("menu.status.feature_issues", { { "count", std::to_string(issueCount) } }, "Feature issues: {count}").c_str());
-		if (constraintCount > 0)
-			ImGui::TextColored(warning, "%s",
-				i18n->Format("menu.home.constraints_count", { { "count", std::to_string(constraintCount) } }, "Active setting constraints: {count}")
-					.c_str());
+			ImGui::PopStyleColor();
+			FeatureIssues::DrawFeatureIssuesUI();
+			ImGui::Spacing();
+		}
+
+		// Restart pending
 		if (!restartPending.empty()) {
 			ImGui::TextColored(globals::menu->GetTheme().StatusPalette.RestartNeeded, "%s",
 				i18n->Format("menu.home.restart_pending", { { "count", std::to_string(restartPending.size()) } }, "Restart needed for {count} features")
@@ -341,12 +365,22 @@ namespace
 			Util::AddTooltip(T("menu.home.restart_pending_tooltip",
 				"These features were installed, or had Load at boot changed, since the game started. The change applies at the next start."));
 			BrowserUI::MetaText(JoinNames(restartPending).c_str());
+			ImGui::Spacing();
 		}
 
-		if (IssuesPageRenderer::HasIssues()) {
-			BeginActions();
-			if (Action("##HomeOpenIssues", Icons::TI(MenuIcons::kIssues), T("menu.home.open_issues", "Open Issues"), true))
-				globals::menu->SelectFeatureMenu(std::string(MenuPageIds::kIssues));
+		// Setting constraints
+		if (constraintCount > 0) {
+			IssuesPageRenderer::RenderConstraintsSection();
+		}
+
+		// Brief outline after a click on the header or footer issues indicator
+		if (HomePageRenderer::IsAttentionFocused()) {
+			const float fade = static_cast<float>(std::min(1.0, (HomePageRenderer::GetAttentionFocusRemaining()) / Constants::ATTENTION_FOCUS_FADE_SECONDS));
+			ImVec4 outline = border;
+			outline.w *= fade;
+			ImGui::GetWindowDrawList()->AddRect(ImGui::GetWindowPos(),
+				ImVec2(ImGui::GetWindowPos().x + ImGui::GetWindowSize().x, ImGui::GetWindowPos().y + ImGui::GetWindowSize().y),
+				ImGui::GetColorU32(outline), ImGui::GetStyle().ChildRounding, 0, Constants::ATTENTION_FOCUS_THICKNESS * Util::GetUIScale());
 		}
 	}
 
@@ -452,19 +486,132 @@ bool HomePageRenderer::IsShowing()
 	return ImGui::GetFrameCount() - lastShownFrame <= 1;
 }
 
+void HomePageRenderer::RequestHelpPopover()
+{
+	helpPopoverRequested = true;
+}
+
+void HomePageRenderer::FocusNeedsAttention()
+{
+	attentionScrollPending = true;
+	attentionFocusUntil = ImGui::GetTime() + ThemeManager::Constants::ATTENTION_FOCUS_SECONDS;
+	globals::menu->SelectFeatureMenu(std::string(MenuPageIds::kHome));
+}
+
+bool HomePageRenderer::IsAttentionFocused()
+{
+	return GetAttentionFocusRemaining() > 0.0;
+}
+
+double HomePageRenderer::GetAttentionFocusRemaining()
+{
+	return attentionFocusUntil - ImGui::GetTime();
+}
+
+void HomePageRenderer::RenderHelpButton()
+{
+	if (std::exchange(helpPopoverRequested, false))
+		ImGui::OpenPopup(kHelpPopupId);
+
+	// Anchored to the top-right of the page
+	const float box = IconBoxSize();
+	const float width = box + ImGui::GetStyle().FramePadding.x * 2.0f;
+	ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(0.0f, ImGui::GetContentRegionAvail().x - width));
+	const auto tooltip = I18n::GetSingleton()->Format("menu.header.help_tooltip",
+		{ { "shortcut", MenuShortcuts::GetHint(globals::menu->GetShortcuts(), MenuShortcuts::Ids::kHelp) } },
+		"Shortcuts and help ({shortcut})");
+	if (MenuHeaderRenderer::GlyphIconButton("##HomeHelp", Icons::TI(MenuIcons::kHelp), box, tooltip.c_str()))
+		ImGui::OpenPopup(kHelpPopupId);
+
+	RenderHelpPopover();
+}
+
+void HomePageRenderer::RenderHelpPopover()
+{
+	if (!ImGui::BeginPopup(kHelpPopupId))
+		return;
+
+	// Escape closes the popover, not the menu
+	if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
+		globals::menu->ConsumeEscape();
+		ImGui::CloseCurrentPopup();
+	}
+
+	{
+		MenuFonts::FontRoleGuard heading(Menu::FontRole::Subheading);
+		ImGui::SeparatorText(T("menu.help.shortcuts", "Keyboard Shortcuts"));
+	}
+	if (ImGui::BeginTable("##HelpShortcuts", 2, ImGuiTableFlags_SizingFixedFit)) {
+		for (const auto& row : MenuShortcuts::BuildHelpRows(globals::menu->GetShortcuts())) {
+			ImGui::TableNextRow();
+			ImGui::TableNextColumn();
+			ImGui::TextUnformatted(row.label);
+			ImGui::TableNextColumn();
+			ImGui::TextDisabled("%s", row.chords.c_str());
+		}
+		ImGui::EndTable();
+	}
+
+	{
+		MenuFonts::FontRoleGuard heading(Menu::FontRole::Subheading);
+		ImGui::SeparatorText(T("menu.help.help", "Help"));
+	}
+	for (size_t i = 0; i < MenuLinks::kAll.size(); ++i) {
+		const auto link = MenuLinks::kAll[i];
+		if (i > 0) {
+			ImGui::SameLine();
+			ImGui::TextDisabled("%s", "\xC2\xB7");  // middle dot
+			ImGui::SameLine();
+		}
+		ImGui::PushID(static_cast<int>(link));
+		if (ImGui::TextLink(MenuLinks::GetLabel(link)))
+			MenuLinks::Open(link);
+		ImGui::PopID();
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::TextUnformatted(MenuLinks::GetUrl(link));
+	}
+
+	{
+		MenuFonts::FontRoleGuard heading(Menu::FontRole::Subheading);
+		ImGui::SeparatorText(T("menu.help.about", "About"));
+	}
+	const auto buildTag = MenuHeaderRenderer::GetBuildTagText();
+	const auto title = MenuHeaderRenderer::GetTitleText();
+	ImGui::TextUnformatted(buildTag.empty() ? title.c_str() : std::format("{} {}", title, buildTag).c_str());
+	ImGui::TextUnformatted(MenuHeaderRenderer::GetGameVersionText().c_str());
+	ImGui::TextUnformatted(MenuHeaderRenderer::GetGpuText().c_str());
+	ImGui::TextUnformatted(MenuHeaderRenderer::GetSwapChainText().c_str());
+
+	ImGui::EndPopup();
+}
+
 void HomePageRenderer::RenderHomePage()
 {
 	lastShownFrame = ImGui::GetFrameCount();
 	ImGui::BeginChild("HomePage", ImVec2(0, 0), ImGuiChildFlags_NavFlattened);
 
+	if (std::exchange(attentionScrollPending, false))
+		ImGui::SetScrollY(0.0f);
+
+	RenderHelpButton();
 	RenderUnsavedBanner();
+
+	// Problems get a full-width card up top; the compact all-clear stays in the grid
+	const bool attentionOnTop = NeedsAttention();
+	if (attentionOnTop) {
+		RenderAttentionCard();
+		ImGui::Dummy(ImVec2(0.0f, Constants::HOME_CARD_SPACING * Util::GetUIScale()));
+	}
 
 	// Two columns once each card gets about 30 characters of room, else one
 	const float charWidth = ImGui::CalcTextSize("0").x;
 	const int columns = ImGui::GetContentRegionAvail().x >= Constants::HOME_TWO_COLUMN_MIN_CHARS * charWidth ? 2 : 1;
 	if (ImGui::BeginTable("##HomeGrid", columns, ImGuiTableFlags_SizingStretchSame)) {
-		const std::array cards = { &RenderPresetCard, &RenderSceneCard, &RenderShadersCard, &RenderAttentionCard,
-			&RenderQuickAccessCard, &RenderCommunityCard };
+		std::vector<void (*)()> cards = { &RenderPresetCard, &RenderSceneCard, &RenderShadersCard };
+		if (!attentionOnTop)
+			cards.push_back(&RenderAttentionCard);
+		cards.push_back(&RenderQuickAccessCard);
+		cards.push_back(&RenderCommunityCard);
 		for (auto* card : cards) {
 			ImGui::TableNextColumn();
 			card();
@@ -474,76 +621,6 @@ void HomePageRenderer::RenderHomePage()
 	}
 
 	ImGui::EndChild();
-}
-
-void HomePageRenderer::RenderFAQEntries()
-{
-	// FAQ items with collapsible headers
-	if (ImGui::CollapsingHeader(T("menu.faq.q1", "What is Community Shaders?"))) {
-		ImGui::TextWrapped("%s", T("menu.faq.a1",
-									 "Community Shaders is a comprehensive graphics enhancement framework for Skyrim that "
-									 "provides advanced lighting, materials, and visual effects. It's designed to be modular, "
-									 "allowing you to enable only the features you want while maintaining good performance."));
-	}
-
-	if (ImGui::CollapsingHeader(T("menu.faq.q2", "How do I configure features?"))) {
-		ImGui::TextWrapped("%s", T("menu.faq.a2_v2",
-									 "Each feature can be found in the left sidebar menu. Click on any feature "
-									 "to access its settings. Most settings have detailed tooltips to help you understand what they do, "
-									 "and the Presets page applies ready-made settings across many features at once."));
-	}
-
-	if (ImGui::CollapsingHeader(T("menu.faq.q3", "Why are some features not loading?"))) {
-		ImGui::TextWrapped("%s", T("menu.faq.a3_v2",
-									 "Features may fail to load due to hardware incompatibility, missing dependencies, or "
-									 "conflicts with other mods. When there are problems, a 'Feature Issues' entry appears at the top "
-									 "of the left sidebar with detailed information about each problematic feature."));
-	}
-
-	if (ImGui::CollapsingHeader(T("menu.faq.q4", "I have \"Failed Shaders\" when compiling?"))) {
-		ImGui::TextWrapped("%s", T("menu.faq.a4_v2",
-									 "Failed shaders are usually caused by mixed file versions. Ensure all features are up to date "
-									 "and avoid mixing files from test builds or outdated versions. Please review the 'Feature Issues' entry "
-									 "in the left sidebar (shown when there are problems) and/or the Wiki for more information. "
-									 "Update your features and remove any obsolete features."));
-	}
-
-	if (ImGui::CollapsingHeader(T("menu.faq.q5", "How do I improve performance?"))) {
-		ImGui::TextWrapped("%s", T("menu.faq.a5_v2",
-									 "Start by enabling the Performance Overlay to monitor your FPS. Consider disabling "
-									 "expensive features like Screen Space GI or reducing quality settings. The Upscaling feature "
-									 "(in the Display category) can also improve performance by rendering at a lower resolution."));
-	}
-
-	if (ImGui::CollapsingHeader(T("menu.faq.q6", "Is Community Shaders compatible with ENB?"))) {
-		ImGui::TextWrapped("%s", T("menu.faq.a6",
-									 "No, Community Shaders is not compatible with ENB. Community Shaders will automatically "
-									 "disable itself if ENB is detected."));
-	}
-
-	if (ImGui::CollapsingHeader(T("menu.faq.q7", "The menu hotkey isn't working!"))) {
-		ImGui::TextWrapped("%s", T("menu.faq.a7",
-									 "By default, Community Shaders uses the END key to open this menu. If your keyboard "
-									 "doesn't have an END key or it's not working, you can change it in the General > Keybindings tab. "
-									 "You can also edit the hotkey in the JSON configuration files."));
-	}
-
-	if (ImGui::CollapsingHeader(T("menu.faq.q8", "I would like to help develop Community Shaders."))) {
-		ImGui::TextWrapped("%s", T("menu.faq.a8",
-									 "We're always looking for talented developers to join the team! Check out our GitHub wiki "
-									 "for contribution guidelines and join our Discord server to connect with the development team. "
-									 "Whether you're interested in shader programming, C++ development, or documentation, there's "
-									 "always something to contribute."));
-	}
-
-	if (ImGui::CollapsingHeader(T("menu.faq.q9", "Is Community Shaders open source?"))) {
-		ImGui::TextWrapped("%s", T("menu.faq.a9",
-									 "Yes! Community Shaders is completely open source and available on GitHub. You can view "
-									 "the source code, report issues, suggest features, and contribute to the project. "
-									 "The project is licensed under GPL, ensuring it remains free and open for everyone."
-									 " Branding materials and assets (icons, nexus branding, typography, etc) are not covered by the GPL Licence."
-									 " Any included assets may not be used without explicit permission."));
-	}
 }
 
 void HomePageRenderer::RenderFirstTimeSetupDialog()
