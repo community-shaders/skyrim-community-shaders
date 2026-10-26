@@ -52,7 +52,7 @@ namespace
 		// Language
 		{ Ids::kLanguage, "menu.settings.language", "Language" },
 		// Behavior
-		{ Ids::kBehavior, "menu.settings.show_footer", "Show Footer" },
+		{ Ids::kBehavior, "menu.settings.show_status_bar", "Show Status Bar" },
 		{ Ids::kBehavior, "menu.settings.auto_hide_feature_list", "Auto-hide Feature List" },
 		{ Ids::kBehavior, "menu.settings.feature_list_order", "Feature List Order" },
 		{ Ids::kBehavior, "menu.settings.require_shift_to_dock", "Require Shift to Dock" },
@@ -89,7 +89,6 @@ namespace
 		{ Ids::kStyling, "menu.settings.section_tables", "Tables" },
 		{ Ids::kStyling, "menu.settings.section_docking", "Docking" },
 		// Header & Effects
-		{ Ids::kHeaderEffects, "menu.settings.show_icon_buttons_in_header", "Show Icon Buttons in Header" },
 		{ Ids::kHeaderEffects, "menu.settings.use_monochrome_icons", "Use Monochrome Icons" },
 		{ Ids::kHeaderEffects, "menu.settings.use_monochrome_cs_logo", "Use Monochrome CS Logo" },
 		{ Ids::kHeaderEffects, "menu.settings.center_header_title", "Center Header Title" },
