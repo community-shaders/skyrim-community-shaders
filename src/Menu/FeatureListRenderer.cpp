@@ -691,7 +691,7 @@ void FeatureListRenderer::RenderLeftColumn(
 	if (ImGui::BeginChild("##FeatureListScroll", ImVec2(0.0f, -g_bottomGroupHeight))) {
 		for (size_t i = 0; i < menuList.size(); i++) {
 			if (!builtInAt(i))
-				std::visit(ListMenuVisitor{ i, selectedMenu, categoryExpansionStates }, menuList[i]);
+				std::visit(ListMenuVisitor{ i, selectedMenu, categoryExpansionStates, hooks }, menuList[i]);
 		}
 	}
 	ImGui::EndChild();
@@ -800,6 +800,7 @@ void FeatureListRenderer::ListMenuVisitor::operator()(Feature* feat)
 	MenuFonts::FontRoleGuard fontGuard(Menu::FontRole::Subheading);
 
 	const auto featureName = feat->GetShortName();
+	ImGui::PushID(featureName.c_str());
 	bool isDisabled = globals::state->IsFeatureDisabled(featureName);
 	bool isLoaded = feat->loaded;
 	bool hasFailedMessage = !feat->failedLoadedMessage.empty();
@@ -820,14 +821,18 @@ void FeatureListRenderer::ListMenuVisitor::operator()(Feature* feat)
 		textColor = feat->installed ? themeSettings.StatusPalette.RestartNeeded : themeSettings.StatusPalette.Disable;
 	}
 
-	// Create selectable item with semantic color
+	// Create selectable item with semantic color; the ID comes from the short name, so it survives a language change
 	ImGui::PushStyleColor(ImGuiCol_Text, textColor);
-	if (ImGui::Selectable(fmt::format(" {} ", feat->GetDisplayName()).c_str(), selectedMenuRef == listId, ImGuiSelectableFlags_SpanAllColumns)) {
+	if (ImGui::Selectable(std::format(" {} ###Row", feat->GetDisplayName()).c_str(), selectedMenuRef == listId, ImGuiSelectableFlags_SpanAllColumns)) {
 		selectedMenuRef = listId;
 	}
 	ImGui::PopStyleColor();
 	if (g_scrollToSelection && selectedMenuRef == listId && !ImGui::IsItemVisible())
 		ImGui::SetScrollHereY();
+	const ImVec2 rowMin = ImGui::GetItemRectMin();
+	const ImVec2 rowMax = ImGui::GetItemRectMax();
+	const bool rowHovered = ImGui::IsItemHovered();
+	RenderRowContextMenu(feat);
 
 	// Favorites are pinned at the top of the list, marked by a pin attached to the name (its label ends in a space)
 	if (isLoaded && globals::state->IsFeatureFavorite(featureName)) {
@@ -842,10 +847,11 @@ void FeatureListRenderer::ListMenuVisitor::operator()(Feature* feat)
 			ImGui::GetColorU32(Util::Colors::GetAccent()), pin.utf8);
 	}
 
-	// Display the stage marker behind the name, regardless of loaded state
+	// The stage badge sits behind the name, regardless of loaded state
 	if (const auto stage = feat->GetReleaseStage(); stage != Feature::ReleaseStage::Release) {
-		ImGui::SameLine();
-		ImGui::TextColored(Feature::GetReleaseStageColor(stage), "%s", Feature::GetReleaseStageTag(stage).c_str());
+		MenuFonts::FontRoleGuard badgeFont(Menu::FontRole::Subtext);
+		BrowserUI::InlineBadge(stage == Feature::ReleaseStage::Alpha ? T("menu.features.badge_alpha", "Alpha") : T("menu.features.badge_beta", "Beta"),
+			Feature::GetReleaseStageColor(stage), rowMax.y - rowMin.y);
 	}
 
 	// A feature only authored for other scenes still gets a hollow dot, so its settings stay discoverable.
@@ -869,13 +875,64 @@ void FeatureListRenderer::ListMenuVisitor::operator()(Feature* feat)
 		}
 	}
 
-	// Display version if loaded
-	if (isLoaded) {
-		ImGui::SameLine();
-		std::string formattedVersion = feat->version;
-		std::replace(formattedVersion.begin(), formattedVersion.end(), '-', '.');
-		ImGui::TextDisabled(fmt::format("({})", formattedVersion).c_str());
+	// Modified: a small dot at the row's right edge, painted so it never pushes the row wider
+	if (isLoaded && globals::state->HasUserEdits(feat)) {
+		const float lineHeight = ImGui::GetTextLineHeight();
+		const float radius = lineHeight * ThemeManager::Constants::FEATURE_ROW_MODIFIED_DOT_RATIO;
+		const ImVec2 center(rowMax.x - ImGui::GetStyle().FramePadding.x - radius, (rowMin.y + rowMax.y) * 0.5f);
+		Util::DrawIconCircle(center, radius, ImGui::GetColorU32(Util::Colors::GetWarning()), true);
+		const float half = lineHeight * 0.5f;
+		if (rowHovered && ImGui::IsMouseHoveringRect(ImVec2(center.x - half, rowMin.y), ImVec2(center.x + half, rowMax.y)))
+			ImGui::SetTooltip("%s", T("menu.features.modified_tooltip", "Modified: differs from defaults and your Baseline presets"));
 	}
+	ImGui::PopID();
+}
+
+void FeatureListRenderer::ListMenuVisitor::RenderRowContextMenu(Feature* feat) const
+{
+	if (!ImGui::BeginPopupContextItem("##RowMenu"))
+		return;
+
+	MenuFonts::FontRoleGuard menuFont(Menu::FontRole::Body);
+	auto* state = globals::state;
+	const auto featureName = feat->GetShortName();
+	const bool isLoaded = feat->loaded;
+	const bool isDisabled = state->IsFeatureDisabled(featureName);
+
+	const bool isFavorite = state->IsFeatureFavorite(featureName);
+	if (ImGui::MenuItem(isFavorite ? T("menu.features.unpin", "Unpin") : T("menu.features.pin", "Pin to Top"), nullptr, false, isLoaded))
+		ToggleFavorite(feat);
+	if (!isLoaded)
+		Util::AddTooltip(T("menu.features.pin_needs_loaded", "Only loaded features can be pinned"), Util::kTooltipWhenDisabled);
+
+	// The same condition as the feature page's Restore Defaults, plus something to restore
+	const bool canRestore = isLoaded && !isDisabled && feat->UsesMainSettings();
+	if (ImGui::MenuItem(T("menu.features.restore_defaults", "Restore Defaults"), nullptr, false, canRestore && state->HasUserEdits(feat))) {
+		const auto restore = [feat] {
+			globals::state->RestoreFeatureLayers(feat);
+			// The scene layer's cached apply document must take the restored values before anything replays it
+			globals::sceneSettingsManager->CaptureExternalFeatureChanges(feat, true);
+		};
+		if (hooks.runFeatureCommand)
+			hooks.runFeatureCommand(feat, restore);
+		else
+			restore();
+	}
+	Util::AddTooltip(canRestore ? T("menu.features.restore_defaults_tooltip", "Restore defaults: clears your edits to this feature, back to what defaults and your Baseline presets set") :
+								  T("menu.features.restore_unavailable", "Only loaded features that keep their settings in the user config can be restored"),
+		Util::kTooltipWhenDisabled);
+
+	if (ImGui::MenuItem(T("menu.features.load_at_boot", "Load at Boot"), nullptr, !isDisabled)) {
+		const bool enabled = feat->ToggleAtBootSetting();
+		logger::info("{}: {} at boot.", featureName, enabled ? "Enabled" : "Disabled");
+	}
+	Util::AddTooltip(T("menu.features.load_at_boot_tooltip", "Whether the game loads this feature at startup. Takes effect after a restart."));
+
+	ImGui::Separator();
+	if (ImGui::MenuItem(T("menu.features.copy_name", "Copy Name")))
+		ImGui::SetClipboardText(feat->GetDisplayName().c_str());
+
+	ImGui::EndPopup();
 }
 
 void FeatureListRenderer::DrawMenuVisitor::operator()(const BuiltInMenu& menu)

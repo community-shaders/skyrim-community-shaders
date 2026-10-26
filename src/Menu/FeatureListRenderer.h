@@ -141,11 +141,16 @@ private:
 		size_t listId;
 		size_t& selectedMenuRef;
 		std::map<std::string, bool>& categoryExpansionStates;
+		const Hooks& hooks;
 
 		void operator()(const BuiltInMenu& menu);
 		void operator()(const std::string& label);
 		void operator()(const CategoryHeader& header);
 		void operator()(Feature* feat);
+
+	private:
+		/** @brief Right-click menu of a feature row: pin, restore defaults, load at boot, copy name. */
+		void RenderRowContextMenu(Feature* feat) const;
 	};
 
 	struct DrawMenuVisitor

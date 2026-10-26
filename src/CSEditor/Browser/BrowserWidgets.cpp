@@ -309,7 +309,7 @@ namespace BrowserUI
 			ImGui::NewLine();
 	}
 
-	void InlineBadge(const char* label, const ImVec4& tint)
+	void InlineBadge(const char* label, const ImVec4& tint, float height)
 	{
 		ImGui::SameLine();
 		const ImVec4 text = ImGui::GetStyleColorVec4(ImGuiCol_Text);
@@ -317,7 +317,8 @@ namespace BrowserUI
 		const ImVec4 fg(tint.x + (text.x - tint.x) * kInlineBadgeLabelTowardText,
 			tint.y + (text.y - tint.y) * kInlineBadgeLabelTowardText,
 			tint.z + (text.z - tint.z) * kInlineBadgeLabelTowardText, 1.0f);
-		const float height = ImGui::GetFrameHeight();
+		if (height <= 0.0f)
+			height = ImGui::GetFrameHeight();
 		const float width = Util::DrawBadgeAt(ImGui::GetCursorScreenPos(), height, label, bg, fg);
 		ImGui::Dummy(ImVec2(width, height));
 	}

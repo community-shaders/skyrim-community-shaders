@@ -205,15 +205,16 @@ public:
 		static constexpr float VERSION_TEXT_OPACITY = 0.6f;         // Opacity for version text next to feature title
 
 		// Main menu feature list pane (sizes are 1080p baseline, scaled by Util::GetUIScale())
-		static constexpr float FEATURE_LIST_STRIP_WIDTH = 30.0f;    // Width of the strip a collapsed pane leaves
-		static constexpr float NAV_ROW_PADDING_Y = 4.0f;            // Vertical padding inside a page row of the top and bottom groups
-		static constexpr float NAV_ROW_ICON_GAP = 8.0f;             // Gap between a page row's icon and its label
-		static constexpr float NAV_GROUP_SPACING = 4.0f;            // Gap above and below the rule between pane regions
-		static constexpr float NAV_ACCENT_IDLE_ALPHA = 0.18f;       // Presets row fill, as a share of the info colour's opacity
-		static constexpr float NAV_ACCENT_HOVERED_ALPHA = 0.28f;    // ... while hovered
-		static constexpr float NAV_ACCENT_SELECTED_ALPHA = 0.35f;   // ... while its page is shown
-		static constexpr float NAV_LAUNCHER_BORDER_ALPHA = 0.55f;   // CS Editor row outline
-		static constexpr float NAV_LAUNCHER_HOVERED_ALPHA = 0.14f;  // CS Editor row fill while hovered
+		static constexpr float FEATURE_LIST_STRIP_WIDTH = 30.0f;        // Width of the strip a collapsed pane leaves
+		static constexpr float NAV_ROW_PADDING_Y = 4.0f;                // Vertical padding inside a page row of the top and bottom groups
+		static constexpr float NAV_ROW_ICON_GAP = 8.0f;                 // Gap between a page row's icon and its label
+		static constexpr float NAV_GROUP_SPACING = 4.0f;                // Gap above and below the rule between pane regions
+		static constexpr float NAV_ACCENT_IDLE_ALPHA = 0.18f;           // Presets row fill, as a share of the info colour's opacity
+		static constexpr float NAV_ACCENT_HOVERED_ALPHA = 0.28f;        // ... while hovered
+		static constexpr float NAV_ACCENT_SELECTED_ALPHA = 0.35f;       // ... while its page is shown
+		static constexpr float NAV_LAUNCHER_BORDER_ALPHA = 0.55f;       // CS Editor row outline
+		static constexpr float NAV_LAUNCHER_HOVERED_ALPHA = 0.14f;      // CS Editor row fill while hovered
+		static constexpr float FEATURE_ROW_MODIFIED_DOT_RATIO = 0.18f;  // Modified dot radius relative to the text line height
 
 		// Settings page constants (sizes are 1080p baseline, scaled by Util::GetUIScale())
 		static constexpr float SETTINGS_NAV_WIDTH = 230.0f;        // Width of the section sub-nav column

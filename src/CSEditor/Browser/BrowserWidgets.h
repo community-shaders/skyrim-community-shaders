@@ -75,8 +75,11 @@ namespace BrowserUI
 	/** @brief Stays on the current line when `width` more pixels fit, else wraps to the next. */
 	void SameLineIfFits(float width);
 
-	/** @brief Tinted badge on the current line, frame-high so it sits level with AlignTextToFramePadding'd text. */
-	void InlineBadge(const char* label, const ImVec4& tint);
+	/**
+	 * @brief Tinted badge on the current line, frame-high so it sits level with AlignTextToFramePadding'd text.
+	 * @param height Badge height; 0 uses the frame height. Pass the text line height for a row of plain text.
+	 */
+	void InlineBadge(const char* label, const ImVec4& tint, float height = 0.0f);
 
 	/** @brief Square size of IconButton. */
 	float IconButtonSize();
