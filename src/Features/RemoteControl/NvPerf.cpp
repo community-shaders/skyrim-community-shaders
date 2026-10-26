@@ -1,8 +1,5 @@
 #include "Features/RemoteControl/NvPerf.h"
-
-#include "Globals.h"
-#include "State.h"
-#include "Utils/FileSystem.h"
+#include "Features/RemoteControl/NvPerfHost.h"
 
 #include <algorithm>
 #include <array>
@@ -138,13 +135,19 @@ namespace NvPerf
 
 	std::filesystem::path CsvPath()
 	{
-		return Util::PathHelpers::GetLogPath().parent_path() / "CommunityShaders-NvPerf.csv";
+		return Host::LogDirectory() / "CommunityShaders-NvPerf.csv";
 	}
 
 #ifdef NVPERF_ENABLED
 
 	namespace
 	{
+		std::string ToUtf8(const std::filesystem::path& a_path)
+		{
+			const auto text = a_path.u8string();
+			return { reinterpret_cast<const char*>(text.data()), text.size() };
+		}
+
 		bool IsSummed(const MetricRequest& a_metric)
 		{
 			return a_metric.metricType == kCounter && a_metric.rollupOp == kRollupSum;
@@ -273,7 +276,7 @@ namespace NvPerf
 			const bool header = !std::filesystem::exists(a_result.csvPath, ec) || std::filesystem::file_size(a_result.csvPath, ec) == 0;
 			std::ofstream csv(a_result.csvPath, std::ios::app);
 			if (!csv) {
-				logger::warn("[NvPerf] could not write {}", Util::PathHelpers::ToUtf8(a_result.csvPath));
+				logger::warn("[NvPerf] could not write {}", ToUtf8(a_result.csvPath));
 				return;
 			}
 			// Metric columns change between captures, so each capture repeats its header when it differs from a new file's.
@@ -373,7 +376,7 @@ namespace NvPerf
 
 		ID3D11DeviceContext* Context()
 		{
-			return globals::d3d::context;
+			return Host::Context();
 		}
 
 		// Loads and initializes the library and identifies the device. Caller holds the mutex.
@@ -382,16 +385,16 @@ namespace NvPerf
 			auto& device = a_profiler.device;
 			if (device.probed)
 				return device.gpuSupported;
-			if (!globals::d3d::device) {
+			if (!Host::Device()) {
 				device.error = "the D3D11 device is not created yet";
 				return false;
 			}
 			device.probed = true;
-			device.libraryPath = Util::PathHelpers::GetCommunityShaderPath() / "NvPerf" / "nvperf_grfx_host.dll";
+			device.libraryPath = Host::DataDirectory() / "NvPerf" / "nvperf_grfx_host.dll";
 			// The import is delay-loaded: it must be loaded by path before the first NVPW call, which would otherwise
 			// raise rather than fail.
 			if (!::GetModuleHandleW(L"nvperf_grfx_host.dll") && !::LoadLibraryW(device.libraryPath.c_str())) {
-				device.error = std::format("could not load {}", Util::PathHelpers::ToUtf8(device.libraryPath));
+				device.error = std::format("could not load {}", ToUtf8(device.libraryPath));
 				logger::info("[NvPerf] {}", device.error);
 				return false;
 			}
@@ -405,7 +408,7 @@ namespace NvPerf
 			}
 			device.available = true;
 			NVPW_D3D11_Device_GetDeviceIndex_Params index{ NVPW_D3D11_Device_GetDeviceIndex_Params_STRUCT_SIZE };
-			index.pDevice = globals::d3d::device;
+			index.pDevice = Host::Device();
 			if (Failed(NVPW_D3D11_Device_GetDeviceIndex(&index), "NVPW_D3D11_Device_GetDeviceIndex")) {
 				device.error = "the D3D11 device is not an NVIDIA GPU the profiler knows";
 				return false;
@@ -861,10 +864,10 @@ namespace NvPerf
 		{
 			auto& capture = *a_profiler.capture;
 			EndSession(a_profiler, capture);
-			globals::state->frameAnnotations = capture.previousFrameAnnotations;
+			Host::SetFrameAnnotations(capture.previousFrameAnnotations);
 
 			auto& result = capture.result;
-			result.endFrame = globals::state->frameCount;
+			result.endFrame = Host::FrameCount();
 			result.samples = capture.sample;
 			result.passesPerSample = capture.passesPerSample;
 			result.metrics.clear();
@@ -903,16 +906,16 @@ namespace NvPerf
 			capture.id = a_id;
 			capture.configuration = std::move(a_configuration);
 			capture.delayFrames = capture.configuration.delayFrames;
-			capture.previousFrameAnnotations = globals::state->frameAnnotations;
+			capture.previousFrameAnnotations = Host::FrameAnnotations();
 			// Perf events are the ranges, and most are only emitted with annotations on.
-			globals::state->frameAnnotations = true;
+			Host::SetFrameAnnotations(true);
 			a_profiler.rangeStack.clear();
 			a_profiler.unbalancedRanges = 0;
 
 			auto& result = capture.result;
 			result.id = a_id;
 			result.ranges = capture.configuration.ranges;
-			result.startFrame = globals::state->frameCount;
+			result.startFrame = Host::FrameCount();
 			result.csvPath = CsvPath();
 
 			std::string chipName;
