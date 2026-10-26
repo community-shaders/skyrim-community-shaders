@@ -349,7 +349,7 @@ namespace
 		ImGui::PopID();
 	}
 
-	/** @brief Pinned features, one click away. */
+	/** @brief Pinned features, then the recently opened ones that are not pinned, one click away. */
 	void RenderQuickAccessCard()
 	{
 		Card card("##HomeQuickAccess", Icons::TI(ICON_TI_PIN), T("menu.home.quick_access_title", "Quick Access"));
@@ -365,11 +365,23 @@ namespace
 		for (auto* feature : pinnedFeatures)
 			pinned.push_back(feature->GetShortName());
 
-		if (pinned.empty()) {
-			Util::Text::WrappedDisabled("%s", T("menu.home.quick_access_empty", "Pin a feature from its page to list it here."));
+		std::vector<std::string> recent;
+		for (const auto& shortName : globals::menu->GetSettings().RecentFeatures) {
+			const auto* feature = Feature::FindFeatureByShortName(shortName);
+			if (feature && feature->IsInMenu() && std::ranges::find(pinned, shortName) == pinned.end())
+				recent.push_back(shortName);
+		}
+
+		if (pinned.empty() && recent.empty()) {
+			Util::Text::WrappedDisabled("%s", T("menu.home.quick_access_hint", "Pinned and recently opened features show here."));
 			return;
 		}
 		RenderFeatureChips("##Pinned", pinned, Icons::TI(ICON_TI_PIN));
+		if (!recent.empty()) {
+			ImGui::Spacing();
+			Util::Text::Disabled("%s", T("menu.home.recent", "Recently opened"));
+			RenderFeatureChips("##Recent", recent, Icons::TI(ICON_TI_CLOCK));
+		}
 	}
 
 	/** @brief A smaller Discord banner with chips for the other project links. */

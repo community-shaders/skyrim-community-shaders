@@ -446,9 +446,12 @@ public:
 		bool RequireShiftToDock = true;                                                                                      // Require holding Shift to dock windows
 		bool UseResolutionFont = true;                                                                                       // When true, runtime font size scales with screen resolution; when persisted to theme files, FontSize is zeroed for backward compatibility
 		ThemeSettings Theme;
-		std::string SelectedThemePreset = "";  // Currently selected theme preset (empty = custom/user theme)
-		std::string LastSettingsSection;       // Settings page section shown last (SettingsSectionIds); unknown = first section
+		std::string SelectedThemePreset = "";     // Currently selected theme preset (empty = custom/user theme)
+		std::string LastSettingsSection;          // Settings page section shown last (SettingsSectionIds); unknown = first section
+		std::vector<std::string> RecentFeatures;  // Short names of the features opened last, newest first, at most MAX_RECENT_FEATURES
 	};
+	/** @brief Cap on Settings::RecentFeatures, the recently opened features Home lists. */
+	static constexpr size_t MAX_RECENT_FEATURES = 6;
 	/** @brief Gets the current theme settings */
 	const ThemeSettings& GetTheme() const { return settings.Theme; }
 	/** @brief Gets the mutable menu settings */
@@ -584,6 +587,8 @@ private:
 	void DrawDisableAtBootSettings();
 	/** @brief Applies a queued undo or redo before anything draws, and reports it with a toast. */
 	void ApplyPendingUndo();
+	/** @brief Moves a feature to the front of Settings::RecentFeatures, dropping the oldest past the cap. */
+	void RecordRecentFeature(const std::string& shortName);
 	/** @brief Binds the shortcut table's actions to this menu's state. */
 	MenuShortcuts::Actions MakeShortcutActions();
 	/** @brief Runs pressed shortcuts unless typing, capturing a hotkey, a modal or the CS Editor should have the keys. */

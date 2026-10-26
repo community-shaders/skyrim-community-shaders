@@ -481,6 +481,20 @@ void Menu::Load(json& o_json)
 	if (const auto it = o_json.find("FeatureListFilter"); it != o_json.end() && it->is_number_integer() && it->get<std::int64_t>() >= 0)
 		settings.FeatureListFilter = static_cast<std::uint32_t>(it->get<std::int64_t>() & FeatureListFilter::kKnown);
 
+	// Recently opened features: known short names only, without repeats, capped; malformed entries are dropped
+	settings.RecentFeatures.clear();
+	if (const auto it = o_json.find("RecentFeatures"); it != o_json.end() && it->is_array()) {
+		for (const auto& entry : *it) {
+			if (settings.RecentFeatures.size() >= MAX_RECENT_FEATURES)
+				break;
+			if (!entry.is_string())
+				continue;
+			auto name = entry.get<std::string>();
+			if (Feature::FindFeatureByShortName(name) && std::ranges::find(settings.RecentFeatures, name) == settings.RecentFeatures.end())
+				settings.RecentFeatures.push_back(std::move(name));
+		}
+	}
+
 	// Legacy support: If old config has Theme data and no SelectedThemePreset, load it
 	if (o_json.contains("Theme") && o_json["Theme"].is_object() && settings.SelectedThemePreset.empty()) {
 		bool hasFontRoles = o_json["Theme"].contains("FontRoles");
@@ -554,6 +568,7 @@ void Menu::Save(json& o_json)
 	o_json["LastSettingsSection"] = settings.LastSettingsSection;
 	o_json["FeatureListCollapsed"] = settings.FeatureListCollapsed;
 	o_json["FeatureListFilter"] = settings.FeatureListFilter;
+	o_json["RecentFeatures"] = settings.RecentFeatures;
 }
 
 void Menu::LoadTheme(json& o_json)
@@ -878,6 +893,8 @@ void Menu::DrawSettings()
 			.focusSearch = std::exchange(pendingSearchFocus, false),
 			.onFeatureShown = [this](Feature* feat) {
 				shownFeature = feat;
+				if (feat->IsInMenu())
+					RecordRecentFeature(feat->GetShortName());
 				// Watched before the header, so its Restore / Use Baselines clicks and the body's edits are both seen
 				if (feat->loaded && feat->UsesMainSettings() && !globals::state->IsFeatureDisabled(feat->GetShortName()))
 					undoHistory.Watch(MakeMenuFeatureUndoTarget(feat)); },
@@ -1477,6 +1494,17 @@ bool Menu::IsPreviewFlying()
 {
 	auto editorWindow = EditorWindow::GetSingleton();
 	return editorWindow && editorWindow->IsPreviewFlying();
+}
+
+void Menu::RecordRecentFeature(const std::string& shortName)
+{
+	auto& recent = settings.RecentFeatures;
+	if (!recent.empty() && recent.front() == shortName)
+		return;  // the common case: the same page drawn again
+	std::erase(recent, shortName);
+	recent.insert(recent.begin(), shortName);
+	if (recent.size() > MAX_RECENT_FEATURES)
+		recent.resize(MAX_RECENT_FEATURES);
 }
 
 void Menu::SelectFeatureMenu(const std::string& featureName)
