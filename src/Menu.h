@@ -1,5 +1,6 @@
 
 #pragma once
+#include "CSEditor/UndoHistory.h"
 #include "Feature.h"
 #include "Menu/FontAtlasState.h"
 #include "Menu/IconLoader.h"
@@ -536,6 +537,16 @@ private:
 	// Header help popover (? icon, F1) and the FAQ modal it opens
 	MenuHeaderRenderer::HelpState helpState;
 
+	// Undo / redo of feature settings edited in this menu; a separate history from the CS Editor's
+	enum class UndoRequest : std::uint8_t
+	{
+		None,
+		Undo,
+		Redo
+	};
+	UndoHistory undoHistory;
+	UndoRequest pendingUndo = UndoRequest::None;  // Set by Ctrl+Z / Ctrl+Y, applied at the start of the next DrawSettings
+
 	// Input event handling
 	std::vector<KeyEvent> _keyEventQueue;
 	mutable std::shared_mutex _inputEventMutex;
@@ -561,6 +572,8 @@ private:
 	void DrawGeneralSettings();
 	void DrawAdvancedSettings();
 	void DrawDisableAtBootSettings();
+	/** @brief Applies a queued undo or redo before anything draws, and reports it with a toast. */
+	void ApplyPendingUndo();
 	/** @brief Binds the shortcut table's actions to this menu's state. */
 	MenuShortcuts::Actions MakeShortcutActions();
 	/** @brief Runs pressed shortcuts unless typing, capturing a hotkey, a modal or the CS Editor should have the keys. */

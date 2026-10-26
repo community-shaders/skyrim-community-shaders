@@ -61,6 +61,9 @@ public:
 		int featureStep = 0;
 		/// Called with the feature whose page is about to be drawn this frame, before its header.
 		std::function<void(Feature*)> onFeatureShown;
+		/// Runs a header command that rewrites a feature's settings (Restore Defaults, Use Baseline Values) so it can
+		/// be undone. When empty the command just runs.
+		std::function<void(Feature*, const std::function<void()>&)> runFeatureCommand;
 	};
 
 	/**
@@ -143,8 +146,10 @@ private:
 		void RenderFeatureHeader(Feature* feat, bool isDisabled, bool isLoaded);
 		void RenderFeatureSettings(Feature* feat, bool isDisabled, bool isLoaded, bool hasFailedMessage);
 		/** @brief Drops the feature's edits to settings its Baseline packs set. */
-		static void RenderUseBaselinesButton(Feature* feat);
-		static void RenderRestoreDefaultsButton(Feature* feat);
+		void RenderUseBaselinesButton(Feature* feat);
+		void RenderRestoreDefaultsButton(Feature* feat);
+		/** @brief Runs a command that rewrites the feature's settings through Hooks::runFeatureCommand. */
+		void RunFeatureCommand(Feature* feat, const std::function<void()>& command) const;
 		static void RenderFavoriteButton(Feature* feat);
 	};
 

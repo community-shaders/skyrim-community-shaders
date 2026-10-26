@@ -1068,13 +1068,21 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureSettings(Feature* feat, 
 	}
 }
 
+void FeatureListRenderer::DrawMenuVisitor::RunFeatureCommand(Feature* feat, const std::function<void()>& command) const
+{
+	if (hooks.runFeatureCommand)
+		hooks.runFeatureCommand(feat, command);
+	else
+		command();
+}
+
 void FeatureListRenderer::DrawMenuVisitor::RenderUseBaselinesButton(Feature* feat)
 {
 	const float size = ImGui::GetFrameHeight();
 	{
 		auto style = Util::TransparentIconButtonStyle();
 		if (Icons::Button("##UseBaselines", Icons::TI(ICON_TI_STACK_2), ImVec2(size, size)))
-			globals::state->ClearFeatureEditsUnderBaselines(feat);
+			RunFeatureCommand(feat, [feat] { globals::state->ClearFeatureEditsUnderBaselines(feat); });
 	}
 
 	if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -1091,7 +1099,7 @@ void FeatureListRenderer::DrawMenuVisitor::RenderRestoreDefaultsButton(Feature* 
 		auto style = Util::TransparentIconButtonStyle();
 		if (Icons::Button("##RestoreDefaults", Icons::TI(ICON_TI_RESTORE), ImVec2(size, size))) {
 			// Clears the user's edits, so the feature shows what defaults and Baseline packs set.
-			globals::state->RestoreFeatureLayers(feat);
+			RunFeatureCommand(feat, [feat] { globals::state->RestoreFeatureLayers(feat); });
 		}
 	}
 

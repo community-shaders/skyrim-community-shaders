@@ -186,6 +186,7 @@ public:
 		static constexpr float FAQ_MODAL_WIDTH_RATIO = 0.5f;     // FAQ modal opened from the help popover, as a share of the viewport
 		static constexpr float FAQ_MODAL_HEIGHT_RATIO = 0.6f;
 		static constexpr float STATUS_BAR_SEGMENT_GAP_SCALE = 3.0f;  // Gap between status bar parts, in item spacings
+		static constexpr float UNDO_TOAST_SECONDS = 2.0f;            // How long the main menu's undo / redo toast stays
 
 		// UI Layout constants
 		static constexpr float BUTTON_PADDING = 16.0f;

@@ -1,5 +1,7 @@
 #include "Menu.h"
+#include "Menu/FeatureUndo.h"
 #include "Menu/FontAtlasState.h"
+#include "Utils/Notifications.h"
 
 #ifndef DIRECTINPUT_VERSION
 #	define DIRECTINPUT_VERSION 0x0800
@@ -47,6 +49,7 @@
 #include "Utils/UI.h"
 
 #include "CSEditor/EditorWindow.h"
+#include "CSEditor/SceneManager/SceneSettingsManager.h"
 #include "CSEditor/SceneManager/SceneWidgetInterceptor.h"
 #include "Features/CSEditor.h"
 #include "Features/Effects11.h"
@@ -201,6 +204,24 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	SelectedThemePreset)
 
 bool IsEnabled = false;
+
+namespace
+{
+	/**
+	 * @brief FeatureUndo's target for a feature, plus the bookkeeping DrawFeatureBody does after a settings
+	 * rewrite. Its restore already marks the settings changed and drops the cached baseline-edits answer;
+	 * the scene layer's cached apply document must also take the restored values before anything replays it.
+	 */
+	UndoHistory::Target MakeMenuFeatureUndoTarget(Feature* feature)
+	{
+		auto target = FeatureUndo::MakeTarget(feature);
+		target.restore = [restore = std::move(target.restore), feature](const UndoHistory::Snapshot& snapshot) {
+			restore(snapshot);
+			globals::sceneSettingsManager->CaptureExternalFeatureChanges(feature, true);
+		};
+		return target;
+	}
+}
 std::unordered_map<std::string, int> Menu::categoryCounts;
 
 namespace
@@ -764,6 +785,9 @@ void Menu::DrawSettings()
 		focusChanged = false;
 	}
 
+	// Outside the feature body and its baseline interceptor scope, before anything reads the settings this frame
+	ApplyPendingUndo();
+
 	// Apply theme styling with universal contrast enhancement
 	ThemeManager::SetupImGuiStyle(*this);
 
@@ -829,7 +853,12 @@ void Menu::DrawSettings()
 		shownFeature = nullptr;
 		FeatureListRenderer::Hooks listHooks{
 			.featureStep = std::exchange(pendingFeatureStep, 0),
-			.onFeatureShown = [this](Feature* feat) { shownFeature = feat; },
+			.onFeatureShown = [this](Feature* feat) {
+				shownFeature = feat;
+				// Watched before the header, so its Restore / Use Baselines clicks and the body's edits are both seen
+				if (feat->loaded && feat->UsesMainSettings() && !globals::state->IsFeatureDisabled(feat->GetShortName()))
+					undoHistory.Watch(MakeMenuFeatureUndoTarget(feat)); },
+			.runFeatureCommand = [this](Feature* feat, const std::function<void()>& command) { undoHistory.Change(MakeMenuFeatureUndoTarget(feat), command); },
 		};
 		FeatureListRenderer::RenderFeatureList(
 			footer_height,
@@ -849,12 +878,37 @@ void Menu::DrawSettings()
 		Util::DrawRestoreSavedSettingsConfirmation();
 	}
 	ImGui::End();
+
+	// After every watched feature has drawn; records the change an interaction that ended this frame made
+	undoHistory.EndFrame();
+	// The overlay also hosts the toasts; Draw() only draws once per frame
+	Util::Notifications::Draw();
+}
+
+void Menu::ApplyPendingUndo()
+{
+	const auto request = std::exchange(pendingUndo, UndoRequest::None);
+	if (request == UndoRequest::None)
+		return;
+
+	const bool undo = request == UndoRequest::Undo;
+	auto* i18n = I18n::GetSingleton();
+	if (const auto label = undo ? undoHistory.Undo() : undoHistory.Redo()) {
+		const auto message = undo ? i18n->Format("menu.shortcuts.undid", { { "name", *label } }, "Undid: {name}") :
+		                            i18n->Format("menu.shortcuts.redid", { { "name", *label } }, "Redid: {name}");
+		Util::Notifications::Show(message, Util::Colors::GetInfo(), ThemeManager::Constants::UNDO_TOAST_SECONDS);
+	} else {
+		Util::Notifications::ShowOnce(undo ? T("menu.shortcuts.nothing_to_undo", "Nothing to undo") : T("menu.shortcuts.nothing_to_redo", "Nothing to redo"),
+			settings.Theme.StatusPalette.Disable, ThemeManager::Constants::UNDO_TOAST_SECONDS);
+	}
 }
 
 MenuShortcuts::Actions Menu::MakeShortcutActions()
 {
 	return {
 		.save = [] { SaveManager::SaveAll(); },
+		.undo = [this] { pendingUndo = UndoRequest::Undo; },
+		.redo = [this] { pendingUndo = UndoRequest::Redo; },
 		.stepFeature = [this](int step) { pendingFeatureStep = step; },
 		.canTogglePin = [this] { return shownFeature && shownFeature->loaded; },
 		.togglePin = [this] { FeatureListRenderer::ToggleFavorite(shownFeature); },
