@@ -27,6 +27,7 @@
 #define ICON_TI_COPY "\xee\xa9\xba"	// U+ea7a
 #define ICON_TI_EXTERNAL_LINK "\xee\xaa\x99"	// U+ea99
 #define ICON_TI_EYE "\xee\xaa\x9a"	// U+ea9a
+#define ICON_TI_HELP "\xee\xaa\xbf"	// U+eabf
 #define ICON_TI_HOME "\xee\xab\x81"	// U+eac1
 #define ICON_TI_LAYOUT_COLUMNS "\xee\xab\x94"	// U+ead4
 #define ICON_TI_LOCK "\xee\xab\xa2"	// U+eae2
@@ -86,6 +87,7 @@ inline constexpr unsigned short ICON_TI_GLYPH_RANGES[] = {
 	0xea7a, 0xea7a,
 	0xea99, 0xea99,
 	0xea9a, 0xea9a,
+	0xeabf, 0xeabf,
 	0xeac1, 0xeac1,
 	0xead4, 0xead4,
 	0xeae2, 0xeae2,

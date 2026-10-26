@@ -4,9 +4,14 @@
 #include <imgui.h>
 #include <imgui_internal.h>
 
+#include "Features/Upscaling.h"
 #include "Fonts.h"
 #include "Globals.h"
 #include "I18n/I18n.h"
+#include "IconsTabler.h"
+#include "Menu.h"
+#include "Menu/HomePageRenderer.h"
+#include "Menu/MenuLinks.h"
 #include "Plugin.h"
 #include "SaveManager.h"
 #include "ShaderCache.h"
@@ -17,23 +22,70 @@
 namespace
 {
 	using RoleFontGuard = MenuFonts::FontRoleGuard;
+
+	constexpr const char* kHelpPopupId = "##MenuHelpPopover";
+	constexpr const char* kFaqModalId = "###MenuFaqModal";
+
+	/** @brief Draws an icon glyph centred in a square, sized to match the texture icons. */
+	void DrawIconGlyph(ImDrawList* drawList, ImVec2 min, float size, Icons::GlyphRef glyph, ImU32 color)
+	{
+		ImFont* font = Icons::GetFont(glyph);
+		if (!font || !glyph)
+			return;
+		// PushFont takes a size before the style and window font scales; undo them so the glyph matches the textures
+		const ImGuiContext& context = *ImGui::GetCurrentContext();
+		const float fontScale = context.FontSizeBase > 0.0f ? context.FontSize / context.FontSizeBase : 1.0f;
+		ImGui::PushFont(font, size * ThemeManager::Constants::HEADER_GLYPH_ICON_SCALE / std::max(fontScale, 0.01f));
+		drawList->AddText(Icons::GetCenteredGlyphPos(min, ImVec2(size, size), glyph.utf8), color, glyph.utf8);
+		ImGui::PopFont();
+	}
 }
 
-void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, bool canShowIcons, float uiScale, const Util::IconLoader::UIIcons& uiIcons)
+std::string MenuHeaderRenderer::GetTitleText()
+{
+	return std::format("Community Shaders {}", Util::GetFormattedVersion(Plugin::VERSION));
+}
+
+std::string MenuHeaderRenderer::GetBuildTagText()
+{
+	const auto expectedTag = std::format("v{}", Util::GetFormattedVersion(Plugin::VERSION));
+	return Plugin::BUILD_DESCRIBE != expectedTag ? Util::GetBuildLabel() : std::string();
+}
+
+std::string MenuHeaderRenderer::GetGameVersionText()
+{
+	return I18n::GetSingleton()->Format("menu.footer.game_version",
+		{ { "runtime", std::string(magic_enum::enum_name(REL::Module::GetRuntime())) },
+			{ "version", Util::GetFormattedVersion(REL::Module::get().version()) } },
+		"Game Version: {runtime} {version}");
+}
+
+std::string MenuHeaderRenderer::GetSwapChainText()
+{
+	return I18n::GetSingleton()->Format("menu.footer.d3d12_swap_chain",
+		{ { "status", globals::features::upscaling.d3d12SwapChainActive ? std::string(T("common.active", "Active")) : std::string(T("common.inactive", "Inactive")) } },
+		"D3D12 Swap Chain: {status}");
+}
+
+std::string MenuHeaderRenderer::GetGpuText()
+{
+	return I18n::GetSingleton()->Format("menu.footer.gpu", { { "name", globals::state->adapterDescription } }, "GPU: {name}");
+}
+
+void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, float uiScale, const Util::IconLoader::UIIcons& uiIcons,
+	const std::vector<MenuShortcuts::Shortcut>& shortcuts, HelpState& help)
 {
 	if (!globals::menu) {
 		logger::error("MenuHeaderRenderer::RenderHeader: globals::menu is null, cannot render header");
 		return;
 	}
 
-	auto versionStr = Util::GetFormattedVersion(Plugin::VERSION);
-	auto expectedTag = std::format("v{}", versionStr);
-	auto title = std::format("Community Shaders {}", versionStr);
-	auto actionIcons = BuildActionIcons(canShowIcons, uiIcons);
+	const auto title = GetTitleText();
+	auto actionIcons = BuildActionIcons(uiIcons, shortcuts, help);
 
 	// Dev builds: muted build label after the title
-	const bool showBuildTag = Plugin::BUILD_DESCRIBE != expectedTag;
-	const auto buildTag = Util::GetBuildLabel();
+	const auto buildTag = GetBuildTagText();
+	const bool showBuildTag = !buildTag.empty();
 	const float buildTagWidth = showBuildTag ? ImGui::GetStyle().ItemSpacing.x + ImGui::CalcTextSize(buildTag.c_str()).x : 0.0f;
 	auto drawBuildTag = [&]() {
 		if (!showBuildTag)
@@ -56,7 +108,7 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, bool canShow
 		// When not docked, show the custom header
 		bool centerHeader = globals::menu->GetTheme().CenterHeader;
 
-		if ((showLogo || canShowIcons) && ImGui::BeginTable("##HeaderLayout", 2, ImGuiTableFlags_SizingStretchProp)) {
+		if (ImGui::BeginTable("##HeaderLayout", 2, ImGuiTableFlags_SizingStretchProp)) {
 			ImGui::TableSetupColumn("Title", ImGuiTableColumnFlags_WidthStretch);
 			ImGui::TableSetupColumn("Buttons", ImGuiTableColumnFlags_WidthFixed);
 			ImGui::TableNextColumn();  // Title on the left with logo
@@ -136,107 +188,18 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, bool canShow
 			RenderUndockedIcons(actionIcons, uiScale);
 
 			ImGui::EndTable();
-		} else if (!(showLogo || canShowIcons)) {
-			// No icons available - show just the title without the table layout
-			const float baseTextScale = ThemeManager::Constants::HEADER_FALLBACK_TEXT_SCALE;
-			const float textScaleFactor = baseTextScale * uiScale;  // Apply UI scale
-
-			if (centerHeader) {
-				// Calculate text width for centering
-				float textWidth = buildTagWidth;
-				{
-					RoleFontGuard titleFont(Menu::FontRole::Title);
-					ImGui::SetWindowFontScale(textScaleFactor);
-					textWidth += ImGui::CalcTextSize(title.c_str()).x;
-					ImGui::SetWindowFontScale(1.0f);
-				}
-
-				// Use helper to get centering offset
-				float offset = Util::GetCenterOffsetForContent(textWidth);
-				if (offset > 0.0f) {
-					ImGui::SetCursorPosX(ImGui::GetCursorPosX() + offset);
-				}
-			}
-
-			ImGui::SetWindowFontScale(textScaleFactor);
-			{
-				RoleFontGuard titleFont(Menu::FontRole::Title);
-				ImGui::TextUnformatted(title.c_str());
-			}
-			ImGui::SetWindowFontScale(1.0f);
-			drawBuildTag();
 		}
 	}
 
-	// Add separators - no separator needed for docked mode since icons are in title bar
+	// No separator needed for docked mode since icons are in title bar
 	if (!isDocked) {
-		// First separator - always shown when not docked
 		ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal, ThemeManager::Constants::SEPARATOR_THICKNESS);
 		ImGui::Spacing();
 	}
 
-	// If icons are disabled or missing, show action buttons as text between separators (only when not docked)
+	// If there are failed tasks, show the error toggle button under the header (not when docked)
 	auto shaderCache = globals::shaderCache;
-	if (!canShowIcons && !isDocked) {
-		if (ImGui::BeginTable("##ActionButtons", 4, ImGuiTableFlags_SizingStretchSame)) {
-			// Save Settings Button
-			ImGui::TableNextColumn();
-			const bool unsaved = globals::state->HasUnsavedChanges();
-			if (unsaved)
-				ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetUnsaved());
-			if (Util::ButtonWithFlash(T("menu.save_settings", "Save Settings"), { -1, 0 })) {
-				SaveManager::SaveAll();
-			}
-			if (unsaved)
-				ImGui::PopStyleColor();
-
-			// Restore Saved Settings Button
-			ImGui::TableNextColumn();
-			if (ImGui::Button(T("menu.restore_settings", "Restore Saved Settings"), { -1, 0 })) {
-				Util::RequestRestoreSavedSettingsConfirmation();
-			}
-
-			// Clear Shader Cache Button
-			ImGui::TableNextColumn();
-			if (ImGui::Button(T("menu.clear_shader_cache", "Clear Shader Cache"), { -1, 0 })) {
-				Util::RequestClearShaderCacheConfirmation();
-			}
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("%s", T("menu.clear_shader_cache_tooltip",
-									  "Clears the shader cache and disk cache (if enabled). "
-									  "The Shader Cache is the collection of compiled shaders which replace the vanilla shaders at runtime. "
-									  "The Disk Cache is a collection of compiled shaders on disk. "
-									  "Clearing will mean that shaders are recompiled only when the game re-encounters them."));
-			}
-
-			// Error message toggle if needed
-			if (shaderCache->GetFailedTasks()) {
-				ImGui::TableNextRow();
-				ImGui::TableNextColumn();
-				if (ImGui::Button(T("menu.toggle_error_message", "Toggle Error Message"), { -1, 0 })) {
-					shaderCache->ToggleErrorMessages();
-				}
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("%s", T("menu.toggle_error_message_tooltip",
-										  "Hide or show the shader failure message. "
-										  "Your installation is broken and will likely see errors in game. "
-										  "Please double check you have updated all features and that your load order is correct. "
-										  "See CommunityShaders.log for details and check the Nexus Mods page or Discord server."));
-				}
-			}
-
-			ImGui::EndTable();
-		}
-
-		// Second separator - only shown if icons are disabled/missing or if there are failed tasks (and not docked)
-		if (!isDocked) {
-			ImGui::Spacing();
-			ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal, ThemeManager::Constants::SEPARATOR_THICKNESS);
-			ImGui::Spacing();
-		}
-	} else if (shaderCache->GetFailedTasks() && !isDocked) {
-		// If icons are enabled but there are failed tasks, show error toggle button
-		// and add the second separator (only when not docked)
+	if (shaderCache->GetFailedTasks() && !isDocked) {
 		if (ImGui::Button(T("menu.toggle_error_message", "Toggle Error Message"), { -1, 0 })) {
 			shaderCache->ToggleErrorMessages();
 		}
@@ -248,56 +211,52 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, bool canShow
 								  "See CommunityShaders.log for details and check the Nexus Mods page or Discord server."));
 		}
 
-		// Add second separator when showing error button
 		ImGui::Spacing();
 		ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal, ThemeManager::Constants::SEPARATOR_THICKNESS);
 		ImGui::Spacing();
 	}
+
+	// At window level, where the ? icon and F1 both open it
+	if (std::exchange(help.openPopover, false))
+		ImGui::OpenPopup(kHelpPopupId);
+	RenderHelpPopover(shortcuts, help);
+	RenderFaqModal(help);
 }
 
-std::vector<MenuHeaderRenderer::ActionIcon> MenuHeaderRenderer::BuildActionIcons(bool canShowIcons, const Util::IconLoader::UIIcons& uiIcons)
+std::vector<MenuHeaderRenderer::ActionIcon> MenuHeaderRenderer::BuildActionIcons(const Util::IconLoader::UIIcons& uiIcons,
+	const std::vector<MenuShortcuts::Shortcut>& shortcuts, HelpState& help)
 {
+	// In display order. An icon whose texture failed to load falls back to its glyph.
 	std::vector<ActionIcon> actionIcons;
 
-	if (!canShowIcons) {
-		return actionIcons;
-	}
-
-	// Build list of available action icons (in display order)
-	if (uiIcons.saveSettings.texture) {
-		const bool unsaved = globals::state->HasUnsavedChanges();
-		actionIcons.push_back({ uiIcons.saveSettings.texture,
-			unsaved ? T("menu.save_settings_unsaved", "Save Settings (unsaved changes)") : T("menu.save_settings", "Save Settings"),
-			[]() {
-				SaveManager::SaveAll();
-			},
-			unsaved });
-	}
-	if (uiIcons.loadSettings.texture) {
-		actionIcons.push_back({ uiIcons.loadSettings.texture,
-			T("menu.restore_settings", "Restore Saved Settings"),
-			[]() {
-				Util::RequestRestoreSavedSettingsConfirmation();
-			} });
-	}
-	if (uiIcons.clearCache.texture) {
-		actionIcons.push_back({ uiIcons.clearCache.texture,
-			T("menu.clear_shader_cache", "Clear Shader Cache"),  // the confirmation dialog explains what is cleared
-			[]() {
-				Util::RequestClearShaderCacheConfirmation();
-			} });
-	}
+	// Tooltips name the action's shortcut, e.g. "Save settings (Ctrl+S)"
+	auto* i18n = I18n::GetSingleton();
+	const bool unsaved = globals::state->HasUnsavedChanges();
+	const std::unordered_map<std::string, std::string> saveHint{ { "shortcut", MenuShortcuts::GetHint(shortcuts, MenuShortcuts::Ids::kSave) } };
+	actionIcons.push_back({ uiIcons.saveSettings.texture, Icons::TI(ICON_TI_DEVICE_FLOPPY),
+		unsaved ? i18n->Format("menu.header.save_unsaved_tooltip", saveHint, "Save unsaved changes ({shortcut})") :
+				  i18n->Format("menu.header.save_tooltip", saveHint, "Save settings ({shortcut})"),
+		[]() {
+			SaveManager::SaveAll();
+		},
+		unsaved });
+	actionIcons.push_back({ uiIcons.loadSettings.texture, Icons::TI(ICON_TI_REFRESH),
+		T("menu.restore_settings", "Restore Saved Settings"),
+		[]() {
+			Util::RequestRestoreSavedSettingsConfirmation();
+		} });
+	actionIcons.push_back({ uiIcons.clearCache.texture, Icons::TI(ICON_TI_TRASH),
+		T("menu.clear_shader_cache", "Clear Shader Cache"),  // the confirmation dialog explains what is cleared
+		[]() {
+			Util::RequestClearShaderCacheConfirmation();
+		} });
+	actionIcons.push_back({ nullptr, Icons::TI(ICON_TI_HELP),
+		i18n->Format("menu.header.help_tooltip", { { "shortcut", MenuShortcuts::GetHint(shortcuts, MenuShortcuts::Ids::kHelp) } }, "Help, shortcuts and FAQ ({shortcut})"),
+		[&help]() {
+			help.openPopover = true;
+		} });
 
 	return actionIcons;
-}
-
-void MenuHeaderRenderer::RenderActionIcons(const std::vector<ActionIcon>& actionIcons, bool isDocked, float uiScale)
-{
-	if (isDocked) {
-		RenderDockedIcons(actionIcons, uiScale);
-	} else {
-		RenderUndockedIcons(actionIcons, uiScale);
-	}
 }
 
 void MenuHeaderRenderer::RenderDockedIcons(const std::vector<ActionIcon>& actionIcons, float uiScale)
@@ -339,25 +298,25 @@ void MenuHeaderRenderer::RenderDockedIcons(const std::vector<ActionIcon>& action
 		const bool isHovered = ImGui::IsMouseHoveringRect(interactionRect.Min, interactionRect.Max, false);
 		Util::DrawRoundedButtonHighlight(interactionRect, isHovered, isHovered && ImGui::IsMouseDown(ImGuiMouseButton_Left), fgDrawList);
 
-		// Only render if texture is valid
-		if (it->texture) {
-			// Draw icon with hover effect, using reduced area to minimize padding
-			ImU32 tintColor;
-			if (globals::menu->GetSettings().Theme.UseMonochromeIcons) {
-				// Use theme text color for monochrome icons
-				ImVec4 textColor = globals::menu->GetSettings().Theme.Palette.Text;
-				if (!isHovered) {
-					textColor.w *= 0.85f;  // Slightly reduce alpha when not hovered
-				}
-				tintColor = ImGui::GetColorU32(textColor);
-			} else {
-				// Use white/gray tint for colored icons
-				tintColor = isHovered ? IM_COL32(255, 255, 255, 255) : IM_COL32(220, 220, 220, 220);
+		// Draw icon with hover effect, using reduced area to minimize padding
+		ImU32 tintColor;
+		if (globals::menu->GetSettings().Theme.UseMonochromeIcons) {
+			// Use theme text color for monochrome icons
+			ImVec4 textColor = globals::menu->GetSettings().Theme.Palette.Text;
+			if (!isHovered) {
+				textColor.w *= 0.85f;  // Slightly reduce alpha when not hovered
 			}
-			if (it->unsaved)
-				tintColor = ImGui::GetColorU32(Util::Colors::GetUnsaved());
-			fgDrawList->AddImage(it->texture, iconMin, iconMax, ImVec2(0, 0), ImVec2(1, 1), tintColor);
+			tintColor = ImGui::GetColorU32(textColor);
+		} else {
+			// Use white/gray tint for colored icons
+			tintColor = isHovered ? IM_COL32(255, 255, 255, 255) : IM_COL32(220, 220, 220, 220);
 		}
+		if (it->unsaved)
+			tintColor = ImGui::GetColorU32(Util::Colors::GetUnsaved());
+		if (it->texture)
+			fgDrawList->AddImage(it->texture, iconMin, iconMax, ImVec2(0, 0), ImVec2(1, 1), tintColor);
+		else
+			DrawIconGlyph(fgDrawList, iconMin, iconMax.x - iconMin.x, it->glyph, tintColor);
 
 		// Handle interaction
 		if (isHovered) {
@@ -366,7 +325,7 @@ void MenuHeaderRenderer::RenderDockedIcons(const std::vector<ActionIcon>& action
 			}
 
 			// Set tooltip manually since we're drawing outside normal ImGui flow
-			ImGui::SetTooltip("%s", it->tooltip);
+			ImGui::SetTooltip("%s", it->tooltip.c_str());
 		}
 	}
 }
@@ -381,7 +340,6 @@ void MenuHeaderRenderer::RenderUndockedIcons(const std::vector<ActionIcon>& acti
 	const float baseIconSize = currentFontSize * ThemeManager::Constants::HEADER_BASE_ICON_MULTIPLIER;
 	const float iconSize = baseIconSize * uiScale;
 	const float paddingReduction = ThemeManager::Constants::UNDOCKED_ICON_PADDING_REDUCTION * uiScale;
-	const ImVec2 buttonSize(iconSize, iconSize);
 	const ImVec2 imageSize(iconSize - paddingReduction, iconSize - paddingReduction);
 
 	// Setup button styling for transparent background with hover effects
@@ -396,24 +354,32 @@ void MenuHeaderRenderer::RenderUndockedIcons(const std::vector<ActionIcon>& acti
 		tintColor = globals::menu->GetSettings().Theme.Palette.Text;
 	}
 
-	// Draw action icons as ImageButtons
+	// Same size as an ImageButton, which pads the image by FramePadding on each side
+	const ImVec2 framePadding = ImGui::GetStyle().FramePadding;
+	const ImVec2 glyphButtonSize(imageSize.x + framePadding.x * 2.0f, imageSize.y + framePadding.y * 2.0f);
+
+	// Draw action icons as ImageButtons, or glyph buttons where the texture is missing
 	for (size_t i = 0; i < actionIcons.size(); ++i) {
 		const auto& icon = actionIcons[i];
-
-		// Skip if texture is null
-		if (!icon.texture) {
-			continue;
-		}
+		const ImVec4 iconTint = icon.unsaved ? Util::Colors::GetUnsaved() : tintColor;
 
 		std::string buttonId = std::format("##ActionBtn{}", i);
 
-		// Use ImageButton with reduced image size to minimize padding
-		if (ImGui::ImageButton(buttonId.c_str(), icon.texture, imageSize, ImVec2(0, 0), ImVec2(1, 1), ImVec4(0, 0, 0, 0),
-				icon.unsaved ? Util::Colors::GetUnsaved() : tintColor)) {
+		bool clicked;
+		if (icon.texture) {
+			// Use ImageButton with reduced image size to minimize padding
+			clicked = ImGui::ImageButton(buttonId.c_str(), icon.texture, imageSize, ImVec2(0, 0), ImVec2(1, 1), ImVec4(0, 0, 0, 0), iconTint);
+		} else {
+			clicked = ImGui::Button(buttonId.c_str(), glyphButtonSize);
+			const ImVec2 min = ImGui::GetItemRectMin();
+			DrawIconGlyph(ImGui::GetWindowDrawList(), ImVec2(min.x + framePadding.x, min.y + framePadding.y), imageSize.x, icon.glyph,
+				ImGui::GetColorU32(iconTint));
+		}
+		if (clicked) {
 			icon.callback();
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("%s", icon.tooltip);
+			ImGui::Text("%s", icon.tooltip.c_str());
 		}
 
 		// Add SameLine except for the last button
@@ -464,4 +430,94 @@ void MenuHeaderRenderer::RenderWatermarkLogo(const Util::IconLoader::UIIcons& ui
 	}
 
 	drawList->AddImage(uiIcons.logo.texture, logoMin, logoMax, ImVec2(0, 0), ImVec2(1, 1), watermarkColor);
+}
+
+void MenuHeaderRenderer::RenderHelpPopover(const std::vector<MenuShortcuts::Shortcut>& shortcuts, HelpState& help)
+{
+	if (!ImGui::BeginPopup(kHelpPopupId))
+		return;
+
+	// Escape closes the popover, not the menu
+	if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
+		globals::menu->ConsumeEscape();
+		ImGui::CloseCurrentPopup();
+	}
+
+	{
+		RoleFontGuard heading(Menu::FontRole::Subheading);
+		ImGui::SeparatorText(T("menu.help.shortcuts", "Keyboard Shortcuts"));
+	}
+	if (ImGui::BeginTable("##HelpShortcuts", 2, ImGuiTableFlags_SizingFixedFit)) {
+		for (const auto& row : MenuShortcuts::BuildHelpRows(shortcuts)) {
+			ImGui::TableNextRow();
+			ImGui::TableNextColumn();
+			ImGui::TextUnformatted(row.label);
+			ImGui::TableNextColumn();
+			ImGui::TextDisabled("%s", row.chords.c_str());
+		}
+		ImGui::EndTable();
+	}
+
+	{
+		RoleFontGuard heading(Menu::FontRole::Subheading);
+		ImGui::SeparatorText(T("menu.help.help", "Help"));
+	}
+	if (ImGui::Button(T("menu.help.faq", "FAQ..."))) {
+		help.openFaq = true;
+		ImGui::CloseCurrentPopup();
+	}
+	ImGui::Spacing();
+	for (size_t i = 0; i < MenuLinks::kAll.size(); ++i) {
+		const auto link = MenuLinks::kAll[i];
+		if (i > 0) {
+			ImGui::SameLine();
+			ImGui::TextDisabled("%s", "\xC2\xB7");  // middle dot
+			ImGui::SameLine();
+		}
+		ImGui::PushID(static_cast<int>(link));
+		if (ImGui::TextLink(MenuLinks::GetLabel(link)))
+			MenuLinks::Open(link);
+		ImGui::PopID();
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::TextUnformatted(MenuLinks::GetUrl(link));
+	}
+
+	{
+		RoleFontGuard heading(Menu::FontRole::Subheading);
+		ImGui::SeparatorText(T("menu.help.about", "About"));
+	}
+	const auto buildTag = GetBuildTagText();
+	ImGui::TextUnformatted(buildTag.empty() ? GetTitleText().c_str() : std::format("{} {}", GetTitleText(), buildTag).c_str());
+	ImGui::TextUnformatted(GetGameVersionText().c_str());
+	ImGui::TextUnformatted(GetGpuText().c_str());
+	ImGui::TextUnformatted(GetSwapChainText().c_str());
+
+	ImGui::EndPopup();
+}
+
+void MenuHeaderRenderer::RenderFaqModal(HelpState& help)
+{
+	if (std::exchange(help.openFaq, false)) {
+		ImGui::OpenPopup(kFaqModalId);
+		help.faqOpen = true;
+	}
+
+	const ImGuiViewport* viewport = ImGui::GetMainViewport();
+	ImGui::SetNextWindowPos(viewport->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+	ImGui::SetNextWindowSize(ImVec2(viewport->Size.x * ThemeManager::Constants::FAQ_MODAL_WIDTH_RATIO,
+								 viewport->Size.y * ThemeManager::Constants::FAQ_MODAL_HEIGHT_RATIO),
+		ImGuiCond_Appearing);
+
+	const auto title = std::format("{}{}", T("menu.faq.title", "Frequently Asked Questions"), kFaqModalId);
+	if (!Util::BeginPopupModalWithRoundedClose(title.c_str(), &help.faqOpen))
+		return;
+
+	// Escape closes the FAQ, not the menu
+	if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
+		globals::menu->ConsumeEscape();
+		help.faqOpen = false;
+		ImGui::CloseCurrentPopup();
+	}
+	HomePageRenderer::RenderFAQEntries();
+	ImGui::EndPopup();
 }

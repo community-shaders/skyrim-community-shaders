@@ -37,7 +37,7 @@ using json = nlohmann::json;
  *     ],
  *
  *     "TooltipHoverDelay": 0.5,            // Seconds before tooltip appears
- *     "ShowActionIcons": true,             // Show icons on action buttons
+ *     "ShowActionIcons": true,             // Obsolete: still read, ignored (header icons always show)
  *     "UseCustomCursor": false,
  *     "Cursor": {
  *       "Scale": 1.0,
@@ -176,13 +176,15 @@ public:
 		// Header rendering constants
 		static constexpr float HEADER_BASE_TEXT_SCALE = 1.7f;
 		static constexpr float HEADER_BASE_ICON_MULTIPLIER = 1.85f;
-		static constexpr float HEADER_FALLBACK_TEXT_SCALE = 1.5f;
 		static constexpr float DOCKED_ICON_SIZE_MULTIPLIER = 1.5f;
 		static constexpr float DOCKED_ICON_SPACING = 8.0f;
 		static constexpr float DOCKED_RIGHT_MARGIN = 45.0f;
 		static constexpr float WATERMARK_HEIGHT_PERCENT = 0.50f;
 		static constexpr float UNDOCKED_ICON_PADDING_REDUCTION = 4.0f;
 		static constexpr float DOCKED_ICON_PADDING_REDUCTION = 2.0f;
+		static constexpr float HEADER_GLYPH_ICON_SCALE = 0.85f;  // Glyph size relative to the icon box, for actions drawn from the icon font
+		static constexpr float FAQ_MODAL_WIDTH_RATIO = 0.5f;     // FAQ modal opened from the help popover, as a share of the viewport
+		static constexpr float FAQ_MODAL_HEIGHT_RATIO = 0.6f;
 
 		// UI Layout constants
 		static constexpr float BUTTON_PADDING = 16.0f;

@@ -326,7 +326,7 @@ bool Widget::DrawTitleBarActions(bool showApply, bool showSaveLoadRevert, bool s
 
 	const auto& style = ImGui::GetStyle();
 	const auto& statusPalette = menu->GetTheme().StatusPalette;
-	const bool useIcons = !editorWindow->settings.useTextButtons && menu->GetSettings().Theme.ShowActionIcons;
+	const bool useIcons = !editorWindow->settings.useTextButtons;
 	const float scale = Util::GetUIScale();
 	using Kind = TitleBarAction::Kind;
 
@@ -652,7 +652,7 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 {
 	auto editorWindow = EditorWindow::GetSingleton();
 	auto menu = globals::menu;
-	bool useIcons = !editorWindow->settings.useTextButtons && menu && menu->GetSettings().Theme.ShowActionIcons;
+	bool useIcons = !editorWindow->settings.useTextButtons;
 	const float scale = Util::GetUIScale();
 	if (navigatedFromSearch) {
 		ClearSearchState(true);

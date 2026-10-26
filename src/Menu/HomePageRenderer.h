@@ -14,7 +14,6 @@ class HomePageRenderer
 {
 public:
 	// Constants
-	static constexpr const char* DISCORD_URL = "https://discord.com/invite/nkrQybAsyy";
 	static constexpr float TITLE_FONT_SCALE = 2.0f;
 	static constexpr float HOTKEY_TEXT_SCALE = 1.6f;
 	static constexpr float HOTKEY_TEXT_SCALE_CAPTURING = 2.0f;
@@ -47,6 +46,9 @@ public:
 
 	/** @brief Dismisses the first-time setup dialog and persists completion. Called by the menu toggle key. */
 	static void MarkFirstTimeSetupComplete();
+
+	/** @brief Draws the FAQ questions as collapsible answers, without the section title. The header's help popover shows them in a modal. */
+	static void RenderFAQEntries();
 
 private:
 	static void RenderWelcomeSection();

@@ -809,17 +809,12 @@ void Menu::DrawSettings()
 		}
 
 		const float uiScale = exp2(globalScale);  // User's manual GlobalScale for header icons
-		// Check if we can show icons - require setting enabled and at least some icons loaded (for undocked)
-		// For docked mode, always show icons if textures are available
+		// Action icons always show; one whose texture is missing falls back to its glyph
 		auto& uiIcons = Util::IconLoader::GetIcons();
-		bool canShowIcons = settings.Theme.ShowActionIcons &&
-		                    (uiIcons.saveSettings.texture ||
-								uiIcons.loadSettings.texture ||
-								uiIcons.clearCache.texture);  // Always show logo if available, regardless of action icons setting
 		bool showLogo = uiIcons.logo.texture != nullptr;
 
 		// Render header using extracted component
-		MenuHeaderRenderer::RenderHeader(isDocked, showLogo, canShowIcons, uiScale, uiIcons);
+		MenuHeaderRenderer::RenderHeader(isDocked, showLogo, uiScale, uiIcons, shortcuts, helpState);
 
 		// Main content starts here - no additional separator needed as it's already handled in the conditions above
 
@@ -871,6 +866,7 @@ MenuShortcuts::Actions Menu::MakeShortcutActions()
 		.openPage = [this](std::string_view pageId) { SelectFeatureMenu(std::string(pageId)); },
 		.canOpenEditor = [] { return EditorWindow::CanBeOpen(); },
 		.openEditor = [] { CSEditor::OpenEditorWindow(); },
+		.openHelp = [this] { helpState.openPopover = true; },
 	};
 }
 
@@ -964,21 +960,11 @@ void Menu::DrawDisableAtBootSettings()
 
 void Menu::DrawFooter()
 {
-	ImGui::BulletText("%s", I18n::GetSingleton()->Format("menu.footer.game_version",
-													{ { "runtime", std::string(magic_enum::enum_name(REL::Module::GetRuntime())) },
-														{ "version", Util::GetFormattedVersion(REL::Module::get().version()) } },
-													"Game Version: {runtime} {version}")
-								.c_str());
+	ImGui::BulletText("%s", MenuHeaderRenderer::GetGameVersionText().c_str());
 	ImGui::SameLine();
-	ImGui::BulletText("%s", I18n::GetSingleton()->Format("menu.footer.d3d12_swap_chain",
-													{ { "status", globals::features::upscaling.d3d12SwapChainActive ? std::string(T("common.active", "Active")) : std::string(T("common.inactive", "Inactive")) } },
-													"D3D12 Swap Chain: {status}")
-								.c_str());
+	ImGui::BulletText("%s", MenuHeaderRenderer::GetSwapChainText().c_str());
 	ImGui::SameLine();
-	ImGui::BulletText("%s", I18n::GetSingleton()->Format("menu.footer.gpu",
-													{ { "name", globals::state->adapterDescription } },
-													"GPU: {name}")
-								.c_str());
+	ImGui::BulletText("%s", MenuHeaderRenderer::GetGpuText().c_str());
 }
 
 /**

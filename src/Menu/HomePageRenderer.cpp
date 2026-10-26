@@ -8,6 +8,7 @@
 #include "I18n/I18n.h"
 #include "Menu.h"
 #include "Menu/IconLoader.h"
+#include "Menu/MenuLinks.h"
 #include "Plugin.h"
 #include "State.h"
 
@@ -121,7 +122,7 @@ void HomePageRenderer::RenderWelcomeSection()
 		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.2f, 0.2f, 0.2f, 0.5f));   // Subtle click
 
 		if (ImGui::ImageButton("##DiscordButton", Util::IconLoader::GetIcons().discord.texture, iconSize)) {
-			ShellExecuteA(NULL, "open", DISCORD_URL, NULL, NULL, SW_SHOWNORMAL);
+			MenuLinks::Open(MenuLinks::Link::Discord);
 		}
 
 		// Pop the style changes
@@ -134,7 +135,7 @@ void HomePageRenderer::RenderWelcomeSection()
 		float buttonWidth = DISCORD_BANNER_MIN_WIDTH * scale;
 		ImGui::SetCursorPosX((windowSize.x - buttonWidth) * 0.5f);
 		if (ImGui::Button(T("menu.home.join_discord", "Join our Discord"), ImVec2(buttonWidth, 0))) {
-			ShellExecuteA(NULL, "open", DISCORD_URL, NULL, NULL, SW_SHOWNORMAL);
+			MenuLinks::Open(MenuLinks::Link::Discord);
 		}
 		Util::AddTooltip(T("menu.home.join_discord", "Join our Discord"));
 	}
@@ -154,23 +155,13 @@ void HomePageRenderer::RenderQuickLinksSection()
 	ImGui::Columns(4, nullptr, false);
 
 	// External links in a row
-	if (ImGui::Button(T("menu.home.nexus_mods", "Nexus Mods"), ImVec2(-1, 0))) {
-		ShellExecuteA(NULL, "open", "https://www.nexusmods.com/skyrimspecialedition/mods/86492", NULL, NULL, SW_SHOWNORMAL);
-	}
-
-	ImGui::NextColumn();
-	if (ImGui::Button(T("menu.home.github", "GitHub"), ImVec2(-1, 0))) {
-		ShellExecuteA(NULL, "open", "https://github.com/community-shaders/skyrim-community-shaders", NULL, NULL, SW_SHOWNORMAL);
-	}
-
-	ImGui::NextColumn();
-	if (ImGui::Button(T("menu.home.wiki", "Wiki"), ImVec2(-1, 0))) {
-		ShellExecuteA(NULL, "open", "https://modding.wiki/en/skyrim/developers/community-shaders", NULL, NULL, SW_SHOWNORMAL);
-	}
-
-	ImGui::NextColumn();
-	if (ImGui::Button(T("menu.home.dev_wiki", "Developer Wiki"), ImVec2(-1, 0))) {
-		ShellExecuteA(NULL, "open", "https://github.com/community-shaders/skyrim-community-shaders/wiki", NULL, NULL, SW_SHOWNORMAL);
+	using MenuLinks::Link;
+	constexpr std::array quickLinks = { Link::NexusMods, Link::GitHub, Link::Wiki, Link::DeveloperWiki };
+	for (size_t i = 0; i < quickLinks.size(); ++i) {
+		if (i > 0)
+			ImGui::NextColumn();
+		if (ImGui::Button(MenuLinks::GetLabel(quickLinks[i]), ImVec2(-1, 0)))
+			MenuLinks::Open(quickLinks[i]);
 	}
 
 	ImGui::Columns(1);
@@ -186,6 +177,11 @@ void HomePageRenderer::RenderFAQSection()
 	ImGui::Text("%s", faqTitle);
 	ImGui::Separator();
 
+	RenderFAQEntries();
+}
+
+void HomePageRenderer::RenderFAQEntries()
+{
 	// FAQ items with collapsible headers
 	if (ImGui::CollapsingHeader(T("menu.faq.q1", "What is Community Shaders?"))) {
 		ImGui::TextWrapped("%s", T("menu.faq.a1",

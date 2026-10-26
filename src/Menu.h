@@ -3,6 +3,7 @@
 #include "Feature.h"
 #include "Menu/FontAtlasState.h"
 #include "Menu/IconLoader.h"
+#include "Menu/MenuHeaderRenderer.h"
 #include "Menu/MenuShortcuts.h"
 #include "Menu/ThemeManager.h"
 #include "Utils/Input.h"
@@ -250,7 +251,7 @@ public:
 		}();
 
 		bool UseSimplePalette = false;      // DEPRECATED: No longer affects behavior. UI now shows both Simple and Advanced controls.
-		bool ShowActionIcons = true;        // whether to show action buttons as icons
+		bool ShowActionIcons = true;        // obsolete: still read from JSON so old configs load, but ignored; header icons always show
 		bool UseMonochromeIcons = false;    // whether to use monochrome (white) action icons with text color tinting
 		bool UseMonochromeLogo = false;     // whether to use monochrome CS logo
 		bool ShowFooter = true;             // whether to show the footer with game version/GPU info
@@ -531,6 +532,9 @@ private:
 
 	// Keyboard shortcuts, built on the first DrawSettings and dispatched once per frame
 	std::vector<MenuShortcuts::Shortcut> shortcuts;
+
+	// Header help popover (? icon, F1) and the FAQ modal it opens
+	MenuHeaderRenderer::HelpState helpState;
 
 	// Input event handling
 	std::vector<KeyEvent> _keyEventQueue;
