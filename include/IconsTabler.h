@@ -8,10 +8,11 @@
 
 #define FONT_ICON_FILE_NAME_TI "tabler-icons.ttf"
 
-#define ICON_MIN_TI 0xea19
+#define ICON_MIN_TI 0xea06
 #define ICON_MAX_16_TI 0xfea8
 #define ICON_MAX_TI 0xfea8
 
+#define ICON_TI_ALERT_TRIANGLE "\xee\xa8\x86"	// U+ea06
 #define ICON_TI_ARROW_LEFT "\xee\xa8\x99"	// U+ea19
 #define ICON_TI_BORDER_ALL "\xee\xa8\xbb"	// U+ea3b
 #define ICON_TI_BULB "\xee\xa9\x91"	// U+ea51
@@ -20,6 +21,7 @@
 #define ICON_TI_CHEVRON_LEFT "\xee\xa9\xa0"	// U+ea60
 #define ICON_TI_CHEVRON_RIGHT "\xee\xa9\xa1"	// U+ea61
 #define ICON_TI_CHEVRON_UP "\xee\xa9\xa2"	// U+ea62
+#define ICON_TI_CIRCLE_X "\xee\xa9\xaa"	// U+ea6a
 #define ICON_TI_CLOCK "\xee\xa9\xb0"	// U+ea70
 #define ICON_TI_CLOUD_RAIN "\xee\xa9\xb2"	// U+ea72
 #define ICON_TI_CLOUD_STORM "\xee\xa9\xb4"	// U+ea74
@@ -60,6 +62,7 @@
 #define ICON_TI_ARROWS_EXCHANGE "\xef\x87\xb4"	// U+f1f4
 #define ICON_TI_CATEGORY "\xef\x87\xb6"	// U+f1f6
 #define ICON_TI_SCAN_EYE "\xef\x87\xbf"	// U+f1ff
+#define ICON_TI_LOADER_2 "\xef\x88\xa6"	// U+f226
 #define ICON_TI_SUN_LOW "\xef\x88\xb7"	// U+f237
 #define ICON_TI_CLOCK_PAUSE "\xef\x95\x88"	// U+f548
 #define ICON_TI_SPARKLES "\xef\x9b\x97"	// U+f6d7
@@ -72,6 +75,7 @@
 
 // Inclusive [min,max] pairs for ImFontAtlas::AddFontFromFileTTF glyphRanges (0-terminated).
 inline constexpr unsigned short ICON_TI_GLYPH_RANGES[] = {
+	0xea06, 0xea06,
 	0xea19, 0xea19,
 	0xea3b, 0xea3b,
 	0xea51, 0xea51,
@@ -80,6 +84,7 @@ inline constexpr unsigned short ICON_TI_GLYPH_RANGES[] = {
 	0xea60, 0xea60,
 	0xea61, 0xea61,
 	0xea62, 0xea62,
+	0xea6a, 0xea6a,
 	0xea70, 0xea70,
 	0xea72, 0xea72,
 	0xea74, 0xea74,
@@ -120,6 +125,7 @@ inline constexpr unsigned short ICON_TI_GLYPH_RANGES[] = {
 	0xf1f4, 0xf1f4,
 	0xf1f6, 0xf1f6,
 	0xf1ff, 0xf1ff,
+	0xf226, 0xf226,
 	0xf237, 0xf237,
 	0xf548, 0xf548,
 	0xf6d7, 0xf6d7,

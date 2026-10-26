@@ -197,25 +197,6 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, float uiScal
 		ImGui::Spacing();
 	}
 
-	// If there are failed tasks, show the error toggle button under the header (not when docked)
-	auto shaderCache = globals::shaderCache;
-	if (shaderCache->GetFailedTasks() && !isDocked) {
-		if (ImGui::Button(T("menu.toggle_error_message", "Toggle Error Message"), { -1, 0 })) {
-			shaderCache->ToggleErrorMessages();
-		}
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("%s", T("menu.toggle_error_message_tooltip",
-								  "Hide or show the shader failure message. "
-								  "Your installation is broken and will likely see errors in game. "
-								  "Please double check you have updated all features and that your load order is correct. "
-								  "See CommunityShaders.log for details and check the Nexus Mods page or Discord server."));
-		}
-
-		ImGui::Spacing();
-		ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal, ThemeManager::Constants::SEPARATOR_THICKNESS);
-		ImGui::Spacing();
-	}
-
 	// At window level, where the ? icon and F1 both open it
 	if (std::exchange(help.openPopover, false))
 		ImGui::OpenPopup(kHelpPopupId);

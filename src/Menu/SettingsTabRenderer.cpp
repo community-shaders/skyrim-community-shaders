@@ -490,9 +490,11 @@ void SettingsTabRenderer::RenderBehaviorTab()
 			ImGui::Text("%s", T("menu.settings.use_monochrome_cs_logo_tooltip", "Uses monochrome version of the Community Shaders logo"));
 		}
 
-		ImGui::Checkbox(T("menu.settings.show_footer", "Show Footer"), &themeSettings.ShowFooter);
+		ImGui::Checkbox(T("menu.settings.show_status_bar", "Show Status Bar"), &themeSettings.ShowFooter);
 		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("%s", T("menu.settings.show_footer_tooltip", "Shows the footer with game version, swap chain, and GPU information at the bottom of the window"));
+			ImGui::Text("%s", T("menu.settings.show_status_bar_tooltip",
+								  "Shows a bar at the bottom of the window with unsaved changes, shader compilation, "
+								  "failed shaders and feature issues, plus the GPU, game version and swap chain"));
 		}
 
 		ImGui::Checkbox(T("menu.settings.center_header_title", "Center Header Title"), &themeSettings.CenterHeader);

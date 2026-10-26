@@ -185,6 +185,7 @@ public:
 		static constexpr float HEADER_GLYPH_ICON_SCALE = 0.85f;  // Glyph size relative to the icon box, for actions drawn from the icon font
 		static constexpr float FAQ_MODAL_WIDTH_RATIO = 0.5f;     // FAQ modal opened from the help popover, as a share of the viewport
 		static constexpr float FAQ_MODAL_HEIGHT_RATIO = 0.6f;
+		static constexpr float STATUS_BAR_SEGMENT_GAP_SCALE = 3.0f;  // Gap between status bar parts, in item spacings
 
 		// UI Layout constants
 		static constexpr float BUTTON_PADDING = 16.0f;

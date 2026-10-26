@@ -254,7 +254,7 @@ public:
 		bool ShowActionIcons = true;        // obsolete: still read from JSON so old configs load, but ignored; header icons always show
 		bool UseMonochromeIcons = false;    // whether to use monochrome (white) action icons with text color tinting
 		bool UseMonochromeLogo = false;     // whether to use monochrome CS logo
-		bool ShowFooter = true;             // whether to show the footer with game version/GPU info
+		bool ShowFooter = true;             // whether to show the status bar (status, GPU, game version) at the bottom
 		bool CenterHeader = false;          // whether to center the header title and logo
 		float TooltipHoverDelay = 0.5f;     // tooltip hover delay in seconds
 		bool BackgroundBlurEnabled = true;  // enable background blur effect
@@ -561,7 +561,6 @@ private:
 	void DrawGeneralSettings();
 	void DrawAdvancedSettings();
 	void DrawDisableAtBootSettings();
-	void DrawFooter();
 	/** @brief Binds the shortcut table's actions to this menu's state. */
 	MenuShortcuts::Actions MakeShortcutActions();
 	/** @brief Runs pressed shortcuts unless typing, capturing a hotkey, a modal or the CS Editor should have the keys. */

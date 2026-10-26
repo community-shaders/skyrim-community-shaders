@@ -38,6 +38,7 @@
 #include "Menu/OverlayRenderer.h"
 #include "Menu/PresetsPageRenderer.h"
 #include "Menu/SettingsTabRenderer.h"
+#include "Menu/StatusBarRenderer.h"
 #include "Menu/ThemeManager.h"
 #include "SaveManager.h"
 #include "ShaderCache.h"
@@ -818,9 +819,7 @@ void Menu::DrawSettings()
 
 		// Main content starts here - no additional separator needed as it's already handled in the conditions above
 
-		float footer_height = settings.Theme.ShowFooter ?
-		                          (ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y * 3) :
-		                          0.0f;
+		float footer_height = settings.Theme.ShowFooter ? StatusBarRenderer::GetHeight() : 0.0f;
 
 		// Static storage for menu state - must persist across frames
 		static size_t selectedMenu = 0;
@@ -842,12 +841,8 @@ void Menu::DrawSettings()
 			[&]() { DrawAdvancedSettings(); },
 			listHooks);
 
-		if (settings.Theme.ShowFooter) {
-			ImGui::Spacing();
-			ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal, ThemeManager::Constants::SEPARATOR_THICKNESS);
-			ImGui::Spacing();
-			DrawFooter();
-		}
+		if (settings.Theme.ShowFooter)
+			StatusBarRenderer::Render(shortcuts);
 
 		// Draw global popups (needs to be called once per frame)
 		Util::DrawClearShaderCacheConfirmation();
@@ -956,15 +951,6 @@ void Menu::DrawDisableAtBootSettings()
 			}
 		}
 	}
-}
-
-void Menu::DrawFooter()
-{
-	ImGui::BulletText("%s", MenuHeaderRenderer::GetGameVersionText().c_str());
-	ImGui::SameLine();
-	ImGui::BulletText("%s", MenuHeaderRenderer::GetSwapChainText().c_str());
-	ImGui::SameLine();
-	ImGui::BulletText("%s", MenuHeaderRenderer::GetGpuText().c_str());
 }
 
 /**
