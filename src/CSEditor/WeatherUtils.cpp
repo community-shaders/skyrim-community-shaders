@@ -1,21 +1,23 @@
 #include "WeatherUtils.h"
 #include "../I18n/I18n.h"
+#include "Browser/BrowserWidgets.h"
 #include "EditorWindow.h"
 #include "PaletteWindow.h"
+#include "Utils/Climate.h"
+#include "Utils/Format.h"
 #include "Utils/UI.h"
 
 #define I18N_KEY_PREFIX "cs_editor."
 
 #include <algorithm>
 #include <cassert>
+#include <charconv>
 
 namespace WeatherUtils::TexturePath
 {
 	std::string Normalize(std::string_view path)
 	{
-		std::string result(path);
-		std::transform(result.begin(), result.end(), result.begin(),
-			[](unsigned char c) { return std::tolower(c); });
+		auto result = Util::ToLower(std::string(path));
 		std::replace(result.begin(), result.end(), '/', '\\');
 		return result;
 	}
@@ -75,6 +77,26 @@ namespace WeatherUtils
 				return w->GetEditorID();
 		return "";
 	}
+
+	RE::TESForm* ReadFormRef(const json& saved, const std::string& key, const std::vector<std::unique_ptr<Widget>>& widgets,
+		RE::TESForm* fallback)
+	{
+		const auto it = saved.find(key);
+		if (it == saved.end() || !it->is_string())
+			return fallback;
+		const auto& id = it->get_ref<const std::string&>();
+		if (id.empty())
+			return nullptr;
+		if (auto* form = FindFormByEditorID(id, widgets))
+			return form;
+		// Visual effects once saved the load-order form ID in hex, with zero for none.
+		constexpr size_t kHexFormIdDigits = 8;
+		RE::FormID formId = 0;
+		const auto* end = id.data() + id.size();
+		if (id.size() == kHexFormIdDigits && std::from_chars(id.data(), end, formId, 16).ptr == end)
+			return formId ? RE::TESForm::LookupByID(formId) : nullptr;
+		return fallback;
+	}
 }
 
 // Global widget context for undo tracking
@@ -87,7 +109,7 @@ auto DrawWithWidgetHighlight(Widget* widget, const std::string& settingId, DrawF
 }
 
 // Compose a per-widget-scoped key so global static maps in this file
-// (color caches, popup-open trackers, debounced trackers) don't collide
+// (color caches, popup-open trackers) don't collide
 // when two widgets share a label string (e.g. "Specular", "Fresnel Power").
 constexpr std::string_view kScopeSep = "::";
 
@@ -236,6 +258,15 @@ const char* WeatherUtils::TranslateControlLabel(std::string_view label)
 	return T(std::string(label).c_str(), std::string(label).c_str());
 }
 
+std::vector<Widget::SearchResult> WeatherUtils::LabelSearchResults(const SearchTabs& tabs)
+{
+	std::vector<Widget::SearchResult> results;
+	for (const auto& [tab, ids] : tabs)
+		for (const auto& id : ids)
+			results.push_back({ TranslateControlLabel(id), tab, id });
+	return results;
+}
+
 static std::string BuildLocalizedControlLabel(const std::string& label)
 {
 	if (label.starts_with("##"))
@@ -298,18 +329,12 @@ void SetWidgetTypeSizesFromJson(const json& j)
 
 void PushInheritedStyle()
 {
-	const auto w = Util::Colors::GetWarning();
-	ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(w.x, w.y, w.z, 0.25f));
-	ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(w.x, w.y, w.z, 0.35f));
-	ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(w.x, w.y, w.z, 0.45f));
-	ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
-	ImGui::PushStyleColor(ImGuiCol_Border, w);
+	Util::PushTintedFrameStyle(Util::Colors::GetWarning());
 }
 
 void PopInheritedStyle()
 {
-	ImGui::PopStyleColor(4);
-	ImGui::PopStyleVar();
+	Util::PopTintedFrameStyle();
 }
 
 bool ContainsStringIgnoreCase(const std::string_view a_string, const std::string_view a_substring)
@@ -461,47 +486,16 @@ namespace WeatherUtils
 		g_currentWidget = widget;
 	}
 
-	// Static debounced trackers for undo and palette tracking
-	static DebouncedTracker<int> s_int8Tracker;
-	static DebouncedTracker<float> s_floatTracker;
-
 	bool DrawSliderInt8(const std::string& label, int& property)
 	{
-		const double debounceDelay = 2.0;
-		double currentTime = ImGui::GetTime();
 		const auto displayLabel = BuildLocalizedControlLabel(label);
-
-		bool changed = DrawWithWidgetHighlight(g_currentWidget, label, [&]() {
+		return DrawWithWidgetHighlight(g_currentWidget, label, [&]() {
 			return ImGui::SliderInt(displayLabel.c_str(), &property, -127, 127);
 		});
-		bool isNowActive = ImGui::IsItemActive();
-
-		const std::string trackerKey = ScopedKey(label);
-
-		// Push undo state when slider becomes active
-		if (s_int8Tracker.UpdateActiveState(trackerKey, isNowActive, currentTime, debounceDelay)) {
-			if (g_currentWidget) {
-				EditorWindow::GetSingleton()->PushUndoState(g_currentWidget);
-			}
-		}
-
-		if (changed) {
-			s_int8Tracker.OnValueChanged(trackerKey, property, currentTime);
-		}
-
-		// Track completed values to palette (strip widget prefix from palette key)
-		auto completed = s_int8Tracker.GetCompletedEntries(currentTime, debounceDelay);
-		for (const auto& [key, value] : completed) {
-			PaletteWindow::GetSingleton()->TrackValueUsage(std::string(UnscopeKey(key)), static_cast<float>(value));
-		}
-
-		return changed;
 	}
 
 	bool DrawColorEdit(const std::string& l, float3& property, Widget* widget)
 	{
-		static std::map<std::string, float3> colorCache;
-		static std::string activeColorId;
 		static std::map<std::string, bool> wasPickerOpen;
 
 		// Strip leading "##" so hidden-id callers still match highlight/search ids.
@@ -517,27 +511,6 @@ namespace WeatherUtils
 		const auto displayLabel = BuildLocalizedControlLabel(l);
 		bool isActive = ImGui::IsPopupOpen(displayLabel.c_str(), ImGuiPopupFlags_AnyPopupId);
 		bool wasActive = wasPickerOpen[cacheId];
-
-		// Cache the original color and push undo state when picker is first activated
-		if (isActive && activeColorId != cacheId) {
-			colorCache[cacheId] = property;
-			activeColorId = cacheId;
-			// Push undo state before change
-			if (effectiveWidget) {
-				EditorWindow::GetSingleton()->PushUndoState(effectiveWidget);
-			}
-		} else if (!isActive && activeColorId == cacheId) {
-			activeColorId.clear();
-		}
-
-		// Check for Ctrl+Z while picker is active
-		if (isActive && ImGui::IsKeyDown(ImGuiKey_LeftCtrl) && ImGui::IsKeyPressed(ImGuiKey_Z)) {
-			if (colorCache.contains(cacheId)) {
-				property = colorCache[cacheId];
-				wasPickerOpen[cacheId] = isActive;
-				return true;
-			}
-		}
 
 		bool changed = DrawWithWidgetHighlight(effectiveWidget, hid, [&]() {
 			return ImGui::ColorEdit3(displayLabel.c_str(), (float*)&property);
@@ -583,9 +556,6 @@ namespace WeatherUtils
 
 	bool DrawSliderFloat(const std::string& label, float& property, float min, float max, Widget* widget, const char* format)
 	{
-		const double debounceDelay = 2.0;
-		double currentTime = ImGui::GetTime();
-
 		// Strip leading "##" so hidden-label sliders still match highlight/search ids.
 		std::string hid = label.starts_with("##") ? label.substr(2) : label;
 		const auto displayLabel = BuildLocalizedControlLabel(label);
@@ -593,33 +563,9 @@ namespace WeatherUtils
 		if (w && !w->MatchesSearch(hid))
 			return false;
 
-		bool changed = DrawWithWidgetHighlight(w, hid, [&]() {
+		return DrawWithWidgetHighlight(w, hid, [&]() {
 			return ImGui::SliderFloat(displayLabel.c_str(), &property, min, max, format);
 		});
-		bool isNowActive = ImGui::IsItemActive();
-
-		const std::string trackerKey = w ?
-		                                   std::format("{}{}{}", static_cast<const void*>(w), kScopeSep, hid) :
-		                                   hid;
-
-		// Push undo state when slider becomes active
-		if (s_floatTracker.UpdateActiveState(trackerKey, isNowActive, currentTime, debounceDelay)) {
-			if (w) {
-				EditorWindow::GetSingleton()->PushUndoState(w);
-			}
-		}
-
-		if (changed) {
-			s_floatTracker.OnValueChanged(trackerKey, property, currentTime);
-		}
-
-		// Track completed values to palette (strip widget prefix from palette key)
-		auto completed = s_floatTracker.GetCompletedEntries(currentTime, debounceDelay);
-		for (const auto& [key, value] : completed) {
-			PaletteWindow::GetSingleton()->TrackValueUsage(std::string(UnscopeKey(key)), value);
-		}
-
-		return changed;
 	}
 
 	bool DrawCheckbox(const std::string& label, bool& value, Widget* widget)
@@ -666,38 +612,16 @@ namespace TOD
 
 	void GetTimeOfDayFactors(float outFactors[4])
 	{
-		// Initialize all to 0
-		for (int i = 0; i < 4; ++i)
-			outFactors[i] = 0.0f;
-
-		float currentTime = GetCurrentGameTime();
-
-		// Simplified time periods (matching Skyrim's 4-period system)
-		// Sunrise: 5-9, Day: 9-17, Sunset: 17-21, Night: 21-5
-		const float sunriseStart = 5.0f;
-		const float sunriseEnd = 9.0f;
-		const float dayStart = 9.0f;
-		const float dayEnd = 17.0f;
-		const float sunsetStart = 17.0f;
-		const float sunsetEnd = 21.0f;
-
-		if (currentTime >= sunriseStart && currentTime < sunriseEnd) {
-			// Sunrise period
-			float t = (currentTime - sunriseStart) / (sunriseEnd - sunriseStart);
-			outFactors[Sunrise] = 1.0f - t;
-			outFactors[Day] = t;
-		} else if (currentTime >= dayStart && currentTime < dayEnd) {
-			// Day period
-			outFactors[Day] = 1.0f;
-		} else if (currentTime >= sunsetStart && currentTime < sunsetEnd) {
-			// Sunset period
-			float t = (currentTime - sunsetStart) / (sunsetEnd - sunsetStart);
-			outFactors[Day] = 1.0f - t;
-			outFactors[Sunset] = t;
-		} else if (currentTime >= sunsetEnd || currentTime < sunriseStart) {
-			// Night period
-			outFactors[Night] = 1.0f;
-		}
+		using ColorTime = RE::TESWeather::ColorTime;
+		static_assert(Sunrise == static_cast<int>(ColorTime::kSunrise) && Day == static_cast<int>(ColorTime::kDay) &&
+					  Sunset == static_cast<int>(ColorTime::kSunset) && Night == static_cast<int>(ColorTime::kNight));
+		const auto sky = globals::game::sky;
+		Util::Climate::ColorTimeWeights weights{};
+		if (sky && sky->currentClimate)
+			weights = Util::Climate::GetColorTimeWeights(*sky->currentClimate, GetCurrentGameTime());
+		else
+			weights[Day] = 1.0f;
+		std::ranges::copy(weights, outFactors);
 	}
 
 	int GetActivePeriod()
@@ -754,9 +678,6 @@ namespace TOD
 		}
 	}
 
-	// Static debounced tracker for TOD slider rows
-	static DebouncedTracker<float> s_todSliderTracker;
-
 	static void DrawCenteredLabel(const char* label)
 	{
 		ImGui::AlignTextToFramePadding();
@@ -766,6 +687,16 @@ namespace TOD
 		if (offset > 0.0f)
 			ImGui::SetCursorPosX(ImGui::GetCursorPosX() + offset);
 		ImGui::Text("%s", label);
+	}
+
+	static bool DrawInheritCheckboxAndLabel(const char* label, bool& inheritFlag)
+	{
+		const bool clicked = ImGui::Checkbox((std::string("##inherit_") + label).c_str(), &inheritFlag);
+		Util::AddTooltip(T(TKEY("inherit_from_parent_weather"), "Inherit from parent weather"));
+		ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x);
+		ImGui::AlignTextToFramePadding();
+		BrowserUI::EllipsizedText(label, ImGui::GetContentRegionAvail().x, ImGui::GetStyleColorVec4(ImGuiCol_Text));
+		return clicked;
 	}
 
 	static bool PushTODHighlight(const char* label)
@@ -781,9 +712,6 @@ namespace TOD
 
 	bool DrawTODSliderRow(const char* label, float values[4], float minValue, float maxValue, const char* format)
 	{
-		const double debounceDelay = 2.0;
-		double currentTime = ImGui::GetTime();
-
 		float factors[4];
 		GetTimeOfDayFactors(factors);
 		bool changed = false;
@@ -807,24 +735,15 @@ namespace TOD
 
 			ImGui::PushItemWidth(sliderWidth);
 			std::string id = std::string("##") + label + std::to_string(i);
-			std::string valueName = std::string(label) + " " + GetPeriodName(i);
-			std::string trackerKey = ScopedKey(valueName);
 
-			if (ImGui::SliderFloat(id.c_str(), &values[i], minValue, maxValue, format)) {
+			if (ImGui::SliderFloat(id.c_str(), &values[i], minValue, maxValue, format))
 				changed = true;
-				s_todSliderTracker.OnValueChanged(trackerKey, values[i], currentTime);
-			}
 
 			Util::AddTooltip(std::format("{:.0f}%", factors[i] * 100.0f).c_str());
 			ImGui::PopItemWidth();
 
 			if (!isActive)
 				ImGui::PopStyleVar();
-		}
-
-		// Track completed entries to palette
-		for (const auto& [key, value] : s_todSliderTracker.GetCompletedEntries(currentTime, debounceDelay)) {
-			PaletteWindow::GetSingleton()->TrackValueUsage(std::string(UnscopeKey(key)), value);
 		}
 
 		PopTODHighlight(label, highlighted);
@@ -838,8 +757,11 @@ namespace TOD
 		bool changed = false;
 		const bool highlighted = PushTODHighlight(label);
 
+		const float buttonSize = ImGui::GetFrameHeight() * 1.5f;
+
 		ImGui::TableNextRow();
 		ImGui::TableSetColumnIndex(0);
+		ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (buttonSize - ImGui::GetFrameHeight()) * 0.5f);
 
 		// Only highlight the title text based on active time of day
 		bool anyActive = false;
@@ -863,9 +785,6 @@ namespace TOD
 		float spacing = ImGui::GetStyle().ItemSpacing.x;
 		// Match the header calculation exactly
 		float columnWidth = (totalWidth - 3 * spacing) / 4.0f;
-
-		// Use a fixed button size
-		const float buttonSize = ImGui::GetFrameHeight() * 1.5f;
 
 		for (int i = 0; i < Count; ++i) {
 			if (i > 0)
@@ -918,22 +837,7 @@ namespace TOD
 			bool isPopupOpen = ImGui::BeginPopup(id.c_str());
 			bool wasOpen = wasPopupOpen[scopedId];
 
-			// Push undo state when popup first opens
-			if (isPopupOpen && !wasOpen) {
-				if (g_currentWidget) {
-					EditorWindow::GetSingleton()->PushUndoState(g_currentWidget);
-				}
-			}
-
 			if (isPopupOpen) {
-				// Check for Ctrl+Z while picker is active
-				if (ImGui::IsKeyDown(ImGuiKey_LeftCtrl) && ImGui::IsKeyPressed(ImGuiKey_Z)) {
-					if (colorCache.contains(scopedId)) {
-						colors[i] = colorCache[scopedId];
-						changed = true;
-					}
-				}
-
 				// Use ColorPicker4 with ref_col to show original color preview
 				float col4[4] = { colors[i].x, colors[i].y, colors[i].z, 1.0f };
 				float refCol[4] = { colorCache[scopedId].x, colorCache[scopedId].y, colorCache[scopedId].z, 1.0f };
@@ -962,14 +866,8 @@ namespace TOD
 		return changed;
 	}
 
-	// Static debounced tracker for TOD slider rows with inheritance
-	static DebouncedTracker<float> s_todSliderInheritTracker;
-
 	bool DrawTODSliderRow(const char* label, float values[4], bool inheritFlags[4], const float parentValues[4], float minValue, float maxValue, const char* format)
 	{
-		const double debounceDelay = 2.0;
-		double currentTime = ImGui::GetTime();
-
 		float factors[4];
 		GetTimeOfDayFactors(factors);
 		bool changed = false;
@@ -1023,23 +921,12 @@ namespace TOD
 
 			ImGui::PushItemWidth(sliderWidth);
 			std::string id = std::string("##") + label + std::to_string(i);
-			std::string itemKey = ScopedKey(std::string(label) + "_slider_" + std::to_string(i));
 
 			ImGui::BeginDisabled(isInherited);
 			if (ImGui::SliderFloat(id.c_str(), &values[i], minValue, maxValue, format)) {
 				changed = true;
 				if (inheritFlags)
 					inheritFlags[i] = false;
-				std::string valueName = ScopedKey(std::string(label) + " " + GetPeriodName(i));
-				s_todSliderInheritTracker.OnValueChanged(valueName, values[i], currentTime);
-			}
-
-			// Push undo state when slider becomes active
-			bool isNowActive = ImGui::IsItemActive();
-			if (s_todSliderInheritTracker.UpdateActiveState(itemKey, isNowActive, currentTime, debounceDelay)) {
-				if (g_currentWidget) {
-					EditorWindow::GetSingleton()->PushUndoState(g_currentWidget);
-				}
 			}
 
 			ImGui::EndDisabled();
@@ -1056,25 +943,22 @@ namespace TOD
 			ImGui::EndGroup();
 		}
 
-		// Track completed entries to palette
-		for (const auto& [key, value] : s_todSliderInheritTracker.GetCompletedEntries(currentTime, debounceDelay)) {
-			PaletteWindow::GetSingleton()->TrackValueUsage(std::string(UnscopeKey(key)), value);
-		}
-
 		PopTODHighlight(label, highlighted);
 		return changed;
 	}
 
 	bool DrawTODColorRow(const char* label, float3 colors[4], bool& inheritFlag, const float3 parentColors[4])
 	{
-		const float scale = Util::GetUIScale();
 		float factors[4];
 		GetTimeOfDayFactors(factors);
 		bool changed = false;
 		const bool highlighted = PushTODHighlight(label);
 
+		const float buttonSize = ImGui::GetFrameHeight() * 1.5f;
+
 		ImGui::TableNextRow();
 		ImGui::TableSetColumnIndex(0);
+		ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (buttonSize - ImGui::GetFrameHeight()) * 0.5f);
 
 		bool anyActive = false;
 		for (int i = 0; i < Count; ++i) {
@@ -1086,32 +970,15 @@ namespace TOD
 		if (!anyActive)
 			ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 0.5f);
 
-		// Draw label text
-		DrawCenteredLabel(label);
-
-		// Draw inherit checkbox right under the label
 		if (parentColors) {
-			ImGui::SameLine();
-			ImGui::PushStyleColor(ImGuiCol_FrameBg, WidgetUI::kInheritCheckboxFrameBg);
-			ImGui::PushStyleColor(ImGuiCol_CheckMark, WidgetUI::kInheritCheckboxMark);
-			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2 * scale, 2 * scale));
-
-			std::string inheritId = std::string("##inherit_") + label;
-			if (ImGui::Checkbox(inheritId.c_str(), &inheritFlag)) {
-				if (inheritFlag) {
-					// Copy all parent values
-					for (int i = 0; i < Count; ++i) {
-						colors[i] = parentColors[i];
-					}
-					changed = true;
+			if (DrawInheritCheckboxAndLabel(label, inheritFlag) && inheritFlag) {
+				for (int i = 0; i < Count; ++i) {
+					colors[i] = parentColors[i];
 				}
-				// Allow unchecking
+				changed = true;
 			}
-
-			ImGui::PopStyleVar();
-			ImGui::PopStyleColor(2);
-
-			Util::AddTooltip(T(TKEY("inherit_from_parent_weather"), "Inherit from parent weather"));
+		} else {
+			DrawCenteredLabel(label);
 		}
 
 		if (!anyActive)
@@ -1122,7 +989,6 @@ namespace TOD
 		float totalWidth = ImGui::GetContentRegionAvail().x;
 		float spacing = ImGui::GetStyle().ItemSpacing.x;
 		float columnWidth = (totalWidth - 3 * spacing) / 4.0f;
-		const float buttonSize = ImGui::GetFrameHeight() * 1.5f;
 
 		for (int i = 0; i < Count; ++i) {
 			if (i > 0)
@@ -1182,18 +1048,7 @@ namespace TOD
 			}
 
 			// Color picker popup
-			static std::map<std::string, bool> wasPopupOpenInherit;
-			bool isPopupOpen = ImGui::BeginPopup(id.c_str());
-			bool wasOpen = wasPopupOpenInherit[scopedId];
-
-			// Push undo state when popup first opens
-			if (isPopupOpen && !wasOpen) {
-				if (g_currentWidget) {
-					EditorWindow::GetSingleton()->PushUndoState(g_currentWidget);
-				}
-			}
-
-			if (isPopupOpen) {
+			if (ImGui::BeginPopup(id.c_str())) {
 				if (colorCache.find(scopedId) == colorCache.end()) {
 					colorCache[scopedId] = colors[i];
 				}
@@ -1219,7 +1074,6 @@ namespace TOD
 				}
 			}
 
-			wasPopupOpenInherit[scopedId] = isPopupOpen;
 			ImGui::EndDisabled();
 
 			if (inheritFlag) {
@@ -1234,13 +1088,8 @@ namespace TOD
 		return changed;
 	}
 
-	// Static debounced tracker for TOD float rows
-	static DebouncedTracker<float> s_todFloatTracker;
-
 	bool DrawTODFloatRow(const char* label, float values[4], float minValue, float maxValue, const char* format)
 	{
-		const double debounceDelay = 2.0;
-		double currentTime = ImGui::GetTime();
 		bool changed = false;
 		const bool highlighted = PushTODHighlight(label);
 
@@ -1258,20 +1107,9 @@ namespace TOD
 				ImGui::SameLine();
 			ImGui::PushID(i);
 
-			std::string itemId = ScopedKey(std::string(label) + "_" + std::to_string(i));
-
 			ImGui::SetNextItemWidth(columnWidth);
-			if (ImGui::SliderFloat("##value", &values[i], minValue, maxValue, format)) {
+			if (ImGui::SliderFloat("##value", &values[i], minValue, maxValue, format))
 				changed = true;
-			}
-
-			// Push undo state when slider becomes active
-			bool isNowActive = ImGui::IsItemActive();
-			if (s_todFloatTracker.UpdateActiveState(itemId, isNowActive, currentTime, debounceDelay)) {
-				if (g_currentWidget) {
-					EditorWindow::GetSingleton()->PushUndoState(g_currentWidget);
-				}
-			}
 
 			ImGui::PopID();
 		}
@@ -1282,36 +1120,21 @@ namespace TOD
 
 	bool DrawTODFloatRow(const char* label, float values[4], bool& inheritFlag, const float parentValues[4], float minValue, float maxValue, const char* format)
 	{
-		const float scale = Util::GetUIScale();
 		bool changed = false;
 		const bool highlighted = PushTODHighlight(label);
 
 		ImGui::TableNextRow();
 		ImGui::TableSetColumnIndex(0);
 
-		DrawCenteredLabel(label);
-
-		// Draw inherit checkbox
 		if (parentValues) {
-			ImGui::SameLine();
-			ImGui::PushStyleColor(ImGuiCol_FrameBg, WidgetUI::kInheritCheckboxFrameBg);
-			ImGui::PushStyleColor(ImGuiCol_CheckMark, WidgetUI::kInheritCheckboxMark);
-			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2 * scale, 2 * scale));
-
-			std::string inheritId = std::string("##inherit_") + label;
-			if (ImGui::Checkbox(inheritId.c_str(), &inheritFlag)) {
-				if (inheritFlag) {
-					for (int i = 0; i < Count; ++i) {
-						values[i] = parentValues[i];
-					}
-					changed = true;
+			if (DrawInheritCheckboxAndLabel(label, inheritFlag) && inheritFlag) {
+				for (int i = 0; i < Count; ++i) {
+					values[i] = parentValues[i];
 				}
+				changed = true;
 			}
-
-			ImGui::PopStyleVar();
-			ImGui::PopStyleColor(2);
-
-			Util::AddTooltip(T(TKEY("inherit_from_parent_weather"), "Inherit from parent weather"));
+		} else {
+			DrawCenteredLabel(label);
 		}
 
 		ImGui::TableSetColumnIndex(1);

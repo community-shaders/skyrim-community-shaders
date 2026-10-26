@@ -22,16 +22,24 @@ Any maintainer can run this skill. Branches are always pushed to **the invoking 
 Work in a clone of `community-shaders/skyrim-community-shaders`. Don't assume what `origin` points to, because maintainers clone either upstream or their fork. Add explicit remotes:
 
 ```bash
-ensure_remote() {  # name url: add the remote, or stop if the name already points elsewhere
-    if url=$(git remote get-url "$1" 2>/dev/null); then
-        [ "${url%.git}" = "$2" ] || { echo "remote $1 is $url, expected $2" >&2; return 1; }
-    else
-        git remote add "$1" "$2"
-    fi
+# Reads "name url" lines on stdin: adds each remote, or fails if the name already points elsewhere.
+# Named variables only: the skill loader replaces positional parameters with the invocation's arguments.
+ensure_remotes() {
+    local name want url rc=0
+    while read -r name want; do
+        if url=$(git remote get-url "$name" 2>/dev/null); then
+            [ "${url%.git}" = "$want" ] || { echo "remote $name is $url, expected $want" >&2; rc=1; }
+        else
+            git remote add "$name" "$want" || rc=1
+        fi
+    done
+    return "$rc"
 }
-ensure_remote upstream https://github.com/community-shaders/skyrim-community-shaders &&
-ensure_remote open     https://github.com/alandtse/open-shaders &&
-ensure_remote bottle   https://github.com/InTheBottle/Bottled-Shaders &&
+ensure_remotes <<'EOF' &&
+upstream https://github.com/community-shaders/skyrim-community-shaders
+open     https://github.com/alandtse/open-shaders
+bottle   https://github.com/InTheBottle/Bottled-Shaders
+EOF
 git fetch upstream dev && git fetch open dev && git fetch bottle Bottle-Compendium
 ```
 
@@ -51,7 +59,7 @@ git worktree add --detach "$SCRATCH/upstream-dev" upstream/dev   # $SCRATCH: a t
     - an existing git remote whose URL owner is the login, or
     - `gh api repos/community-shaders/skyrim-community-shaders/forks --paginate --jq '.[] | select(.owner.login=="<login>") | .full_name'`, or
     - the GitHub MCP `search_repositories` with `fork:true user:<login> skyrim-community-shaders`.
-3. Add it with `ensure_remote fork https://github.com/<login>/<fork-repo>` and remember that exact URL as `FORK_URL`.
+3. Add it with `echo "fork https://github.com/<login>/<fork-repo>" | ensure_remotes` and remember that exact URL as `FORK_URL`.
 4. If no fork exists, stop and ask whether to create one. Never fall back to pushing to upstream.
 5. **Guard:** before every push, check that every URL from `git remote get-url --push --all fork` equals `FORK_URL` (ignoring a trailing `.git`) and that each URL's owner is the login. A `pushurl` can differ from the fetch URL and a remote can hold several, so check them all. Stop on any mismatch.
 
@@ -74,7 +82,23 @@ pip install -q git+https://github.com/alandtse/hlslkit.git   # buffer-scan only;
     git log --first-parent --since="$cutoff" <remote/branch>
     ```
 
--   Drop `chore(sync)`, `fix(sync)` and upstream-merge commits.
+-   Also collect every `(sync)` commit, merges included, because `--first-parent` misses the follow-ups and any sync merge that sits on a side branch a `chore(sync)` merge brought in:
+
+    ```bash
+    git log --grep='(sync)' --since-as-filter="$cutoff" <remote/branch>
+    ```
+
+    A commit can appear in both logs, so deduplicate by SHA before triage. Triage `fix(sync)` and `refactor(sync)` commits like any other commit. `chore(sync): bump ...` version bumps are not relevant to upstream; mark them so.
+
+-   Drop only the `chore(sync): merge upstream` commits themselves from triage, but first extract their **sync residue**: fork-side changes that rode along with the sync. Let `P` be the sync's first parent and `U` the upstream commit it pulled in (the second parent, or for a squash-style sync the commit named in its message). If a squash-style sync names no upstream commit, review the whole sync by hand instead of inferring `U` from commit dates. The expected result is the clean merge of the two, so the residue is what the sync changed beyond it:
+
+    ```bash
+    tree=$(git merge-tree --write-tree <P> <U>)   # exit 1 = conflicts: review the whole sync by hand; any other non-zero exit is a git error (bad ref?): stop and report it
+    git diff "$tree" <sync-sha>                   # empty = clean sync, nothing to triage
+    ```
+
+    A non-empty diff is one candidate (source `sync <sha>`), triaged like any other commit. If `merge-tree` exits 1 (conflicts), the sync was not a clean merge, so its residue cannot be computed: review that merge's whole diff by hand (`git diff <sha>^1 <sha>`), as was needed for `9a0c2a67`. A very large diff means `U` is probably wrong: try the neighbouring upstream commit, else report it and move on.
+
 -   For a remaining merge commit (more than one parent), use its first-parent diff everywhere below: `git diff <sha>^1 <sha>` instead of `git show <sha>`, because `git show` prints a combined diff that can hide changes. A clean merge port uses `git cherry-pick -m 1 <sha>`.
 -   After filtering, group non-merge commits only when they are adjacent in the original first-parent history and touch the same area (e.g. "opt pass" + "opt fixes"). A filtered-out commit or a merge commit always ends a group, so a group's `git diff A^ B` never contains anything that was not selected. Record each group as its exact list of SHAs and triage its **combined** diff.
 

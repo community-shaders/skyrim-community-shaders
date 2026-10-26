@@ -301,10 +301,8 @@ inline float TerrainMaxWeightedHeightScale(PS_INPUT input, DisplacementParams pa
 	return TerrainMaxWeightedHeightScaleW(input.LandBlendWeights1, input.LandBlendWeights2.xy, params);
 }
 
-inline uint TerrainDirectionalShadowTapCount(float quality)
-{
-	return quality > 0.0 ? 1u : 0u;
-}
+// Point lights run once per light, so they keep a single tap.
+static const uint TerrainPointShadowTapCount = 1;
 
 bool ComputeTerrainParallaxShadowBaseHeight(PS_INPUT input, float2 coords, float mipLevels[6], float quality, float noise, DisplacementParams params[6], StochasticOffsets sharedOffset, out float sh0)
 {
@@ -317,29 +315,39 @@ bool ComputeTerrainParallaxShadowBaseHeight(PS_INPUT input, float2 coords, float
 	return true;
 }
 
-// Soft shadow along light L. Strength matches the 4/tapCount object-shadow scale.
+// Soft shadow along light L, marched like the object path: up to four taps toward the
+// light, summed with the same 4/tapCount strength so terrain and meshes match.
+float TerrainParallaxSoftShadow(PS_INPUT input, float2 coords, float mipLevels[6], float3 L, float sh0, uint tapCount, float noise, DisplacementParams params[6], StochasticOffsets sharedOffset)
+{
+	float shadowStrength = ShadowIntensity * (4.0 / tapCount);
+	float2 rayDir = L.xy * 0.1;
+	float4 multipliers = rcp(float4(1, 2, 3, 4) + noise);
+	float occlusion = 0.0;
+	[unroll] for (uint i = 0; i < 4; i++)
+	{
+		[branch] if (i < tapCount)
+		{
+			float heights[6] = { 0, 0, 0, 0, 0, 0 };
+			float shi = TERRAIN_HEIGHT_AT(coords + rayDir * multipliers[i], mipLevels, 1.0, heights);
+			occlusion += max(0, shi - sh0);
+		}
+	}
+	return 1.0 - saturate(occlusion * shadowStrength);
+}
+
 float GetParallaxSoftShadowMultiplierTerrain(PS_INPUT input, float2 coords, float mipLevel[6], float3 L, float sh0, float quality, float noise, DisplacementParams params[6], StochasticOffsets sharedOffset)
 {
-	if (quality > 0.0) {
-		float shadowStrength = ShadowIntensity * 4.0;
-		float heights[6] = { 0, 0, 0, 0, 0, 0 };
-		float2 rayDir = L.xy * 0.1;
-		float shi = TERRAIN_HEIGHT_AT(coords + rayDir * rcp(1.0 + noise), mipLevel, quality, heights);
-		return 1.0 - saturate(max(0, shi - sh0) * shadowStrength);
-	}
+	if (quality > 0.0)
+		return TerrainParallaxSoftShadow(input, coords, mipLevel, L, sh0, TerrainPointShadowTapCount, noise, params, sharedOffset);
 	return 1.0;
 }
 
+// Directional shadow is evaluated once per pixel, so it uses the full object-path tap count.
 float EvaluateTerrainDirectionalParallaxShadowMultiplier(PS_INPUT input, float2 coords, float mipLevels[6], float3 lightDirection, float quality, float noise, DisplacementParams params[6], StochasticOffsets sharedOffset, float sh0)
 {
-	if (TerrainDirectionalShadowTapCount(quality) == 0)
-		return 1.0;
-	float shadowStrength = ShadowIntensity * 2.0;
-
-	float heights[6] = { 0, 0, 0, 0, 0, 0 };
-	float2 rayDir = lightDirection.xy * 0.1;
-	float shi = TERRAIN_HEIGHT_AT(coords + rayDir * rcp(1.0 + noise), mipLevels, quality, heights);
-	return 1.0 - saturate(max(0, shi - sh0) * shadowStrength);
+	if (quality > 0.0)
+		return TerrainParallaxSoftShadow(input, coords, mipLevels, lightDirection, sh0, ParallaxShadowTapCount(quality), noise, params, sharedOffset);
+	return 1.0;
 }
 
 #undef TERRAIN_HEIGHT_AT

@@ -2,6 +2,25 @@
 
 #include "../Widget.h"
 
+/** @brief The BGSShaderParticleGeometryData fields a PrecipitationWidget edits. */
+struct PrecipitationSettings
+{
+	float gravityVelocity = 0.0f;
+	float rotationVelocity = 0.0f;
+	float particleSizeX = 1.0f;
+	float particleSizeY = 1.0f;
+	float centerOffsetMin = 0.0f;
+	float centerOffsetMax = 0.0f;
+	float startRotationRange = 0.0f;
+	uint32_t numSubtexturesX = 1;
+	uint32_t numSubtexturesY = 1;
+	uint32_t particleType = 0;  // 0 = Rain, 1 = Snow
+	uint32_t boxSize = 1;
+	float particleDensity = 1.0f;
+	std::string particleTexture = "";
+	bool operator==(const PrecipitationSettings&) const = default;
+};
+
 /**
  * @brief Widget for editing precipitation particle geometry data (rain/snow).
  *
@@ -9,7 +28,7 @@
  * particle texture path. Requires manual apply because texture swaps
  * trigger a weather reinit.
  */
-class PrecipitationWidget : public Widget
+class PrecipitationWidget : public SettingsWidget<PrecipitationSettings>
 {
 public:
 	/**
@@ -22,8 +41,7 @@ public:
 		form = a_precipitation;
 		if (precipitation) {
 			LoadFromGameSettings();
-			vanillaSettings = settings;
-			originalSettings = settings;
+			CaptureVanillaSettings();
 			strncpy_s(textureBuffer, sizeof(textureBuffer), settings.particleTexture.c_str(), _TRUNCATE);
 		}
 	}
@@ -51,9 +69,6 @@ public:
 	/** @brief Reverts settings to vanilla values, clears texture caches, and re-applies. */
 	void RevertChanges() override;
 
-	/** @brief Returns true if the current settings differ from the last saved state. */
-	bool HasUnsavedChanges() const override;
-
 	/** @brief Collects all searchable precipitation settings for the search dropdown. */
 	std::vector<SearchResult> CollectSearchableSettings() const override;
 
@@ -66,27 +81,6 @@ private:
 	// Needed because updating BGSShaderParticleGeometryData::particleTexture.textureName alone doesn't reload the GPU texture.
 	void ApplyLiveParticleTexture(const std::string& path);
 
-	struct Settings
-	{
-		float gravityVelocity = 0.0f;
-		float rotationVelocity = 0.0f;
-		float particleSizeX = 1.0f;
-		float particleSizeY = 1.0f;
-		float centerOffsetMin = 0.0f;
-		float centerOffsetMax = 0.0f;
-		float startRotationRange = 0.0f;
-		uint32_t numSubtexturesX = 1;
-		uint32_t numSubtexturesY = 1;
-		uint32_t particleType = 0;  // 0 = Rain, 1 = Snow
-		float boxSize = 1.0f;
-		float particleDensity = 1.0f;
-		std::string particleTexture = "";
-		bool operator==(const Settings&) const = default;
-	};
-
-	Settings settings;
-	Settings vanillaSettings;
-	Settings originalSettings;
 	char textureBuffer[256] = {};
 	std::string lastAppliedTexture;
 	std::string lastInvalidTexture;

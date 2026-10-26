@@ -15,6 +15,7 @@
 #include "Globals.h"
 #include "I18n/I18n.h"
 #include "Menu.h"
+#include "Utils/FileSystem.h"
 #include "Utils/UI.h"
 
 #include <imgui.h>
@@ -203,7 +204,7 @@ void RemoteControl::DrawNvPerfSection()
 	}
 	if (!device.gpuSupported) {
 		ImGui::TextColored(theme.Warning, T(TKEY("unavailable"), "Nsight Perf is unavailable: %s"), device.error.c_str());
-		ImGui::TextDisabled(T(TKEY("library_path"), "Library: %s"), device.libraryPath.string().c_str());
+		ImGui::TextDisabled(T(TKEY("library_path"), "Library: %s"), Util::PathHelpers::ToUtf8(device.libraryPath).c_str());
 		return;
 	}
 	ImGui::TextColored(theme.SuccessColor, T(TKEY("device"), "%s (chip %s)"), device.deviceName.c_str(), device.chipName.c_str());
@@ -328,10 +329,10 @@ void RemoteControl::DrawNvPerfSection()
 			ImGui::EndTable();
 		}
 	}
-	ImGui::TextDisabled(T(TKEY("csv_path"), "Every range of every sample: %s"), result->csvPath.string().c_str());
+	ImGui::TextDisabled(T(TKEY("csv_path"), "Every range of every sample: %s"), Util::PathHelpers::ToUtf8(result->csvPath).c_str());
 	ImGui::SameLine();
 	if (ImGui::SmallButton(T(TKEY("copy_path"), "Copy path")))
-		ImGui::SetClipboardText(result->csvPath.string().c_str());
+		ImGui::SetClipboardText(Util::PathHelpers::ToUtf8(result->csvPath).c_str());
 }
 
 #undef I18N_KEY_PREFIX

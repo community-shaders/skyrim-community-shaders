@@ -16,9 +16,10 @@ public:
 	/** @brief Describes a clickable action icon shown in the header bar. */
 	struct ActionIcon
 	{
-		ID3D11ShaderResourceView* texture;  /**< @brief GPU texture for the icon image. */
-		const char* tooltip;                /**< @brief Tooltip text shown on hover. */
-		std::function<void()> callback;     /**< @brief Action invoked when the icon is clicked. */
+		ID3D11ShaderResourceView* texture; /**< @brief GPU texture for the icon image. */
+		const char* tooltip;               /**< @brief Tooltip text shown on hover. */
+		std::function<void()> callback;    /**< @brief Action invoked when the icon is clicked. */
+		bool unsaved = false;              /**< @brief Tints the icon as a save with unsaved changes. */
 	};
 
 	/**
@@ -33,12 +34,12 @@ public:
 	 * @param uiScale Current UI scale factor for sizing icon buttons.
 	 * @param uiIcons Reference to the loaded icon textures and sizes.
 	 */
-	static void RenderHeader(bool isDocked, bool showLogo, bool canShowIcons, float uiScale, const Menu::UIIcons& uiIcons);
+	static void RenderHeader(bool isDocked, bool showLogo, bool canShowIcons, float uiScale, const Util::IconLoader::UIIcons& uiIcons);
 
 private:
-	static std::vector<ActionIcon> BuildActionIcons(bool canShowIcons, const Menu::UIIcons& uiIcons);
+	static std::vector<ActionIcon> BuildActionIcons(bool canShowIcons, const Util::IconLoader::UIIcons& uiIcons);
 	static void RenderActionIcons(const std::vector<ActionIcon>& actionIcons, bool isDocked, float uiScale);
 	static void RenderDockedIcons(const std::vector<ActionIcon>& actionIcons, float uiScale);
 	static void RenderUndockedIcons(const std::vector<ActionIcon>& actionIcons, float uiScale);
-	static void RenderWatermarkLogo(const Menu::UIIcons& uiIcons);
+	static void RenderWatermarkLogo(const Util::IconLoader::UIIcons& uiIcons);
 };

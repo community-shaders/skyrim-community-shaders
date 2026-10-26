@@ -105,6 +105,7 @@ static std::tuple<float, float, float> CalculateSummaryData(float smoothedFrameT
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	PerformanceOverlay::Settings,
 	ShowInOverlay,
+	ShowWeatherPicker,
 	ShowDrawCalls,
 	ShowVRAM,
 	ShowCSPasses,
@@ -140,9 +141,20 @@ void PerformanceOverlay::DrawSettings()
 	auto menu = Menu::GetSingleton();
 	const auto& themeSettings = menu->GetTheme();
 	const auto& menuSettings = menu->GetSettings();
-	ImGui::Checkbox(T(TKEY("show_in_overlay"), "Show in Overlay"), &this->settings.ShowInOverlay);
+	ImGui::Checkbox(T(TKEY("show_in_overlay"), "Enable Performance Overlay"), &this->settings.ShowInOverlay);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("%s", T(TKEY("show_in_overlay_tooltip"), "Opens performance overlay in a separate window that stays open\neven when the main menu is closed. "));
+		ImGui::Text("%s", T(TKEY("toggle_with"), "Toggle with "));
+		ImGui::SameLine();
+		ImGui::TextColored(themeSettings.StatusPalette.CurrentHotkey, "%s",
+			Util::Input::KeyIdToString(menuSettings.OverlayToggleKey).c_str());
+	}
+
+	// Independent of the performance overlay: works with the overlay above switched off.
+	ImGui::SameLine();
+	ImGui::Checkbox(T(TKEY("show_weather_picker"), "Enable Weather Picker Widget"), &this->settings.ShowWeatherPicker);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("%s", T(TKEY("show_weather_picker_tooltip"), "Opens the weather picker, with weather details and rain & wetness analysis,\nin a separate window that stays open even when the main menu is closed."));
 		ImGui::Text("%s", T(TKEY("toggle_with"), "Toggle with "));
 		ImGui::SameLine();
 		ImGui::TextColored(themeSettings.StatusPalette.CurrentHotkey, "%s",
@@ -168,7 +180,7 @@ void PerformanceOverlay::DrawSettings()
 			ImGui::Checkbox(T(TKEY("show_post_fg_graph"), "Show Post-FG Frametime Graph"), &this->settings.ShowPostFGFrameTimeGraph);
 			if (ImGui::IsItemHovered()) {
 				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("%s", T(TKEY("post_fg_graph_tooltip"), "FSR Frame Generation uses calculated timing data (2x Pre-FG).\nDLSS Frame Generation provides measured timing data."));
+					ImGui::Text("%s", T(TKEY("post_fg_graph_tooltip"), "Frame Generation uses calculated timing data (2x Pre-FG)."));
 				}
 			}
 		} else if (this->settings.ShowFPS) {
@@ -340,7 +352,7 @@ void PerformanceOverlay::DrawOverlay()
 	}
 
 	// Create the window
-	Util::BeginWithRoundedClose(T(TKEY("overlay_title"), "Performance Overlay"), nullptr, windowFlags);
+	Util::BeginWithRoundedClose(std::format("{}{}", T(TKEY("overlay_title"), "Performance Overlay"), kWindowId).c_str(), nullptr, windowFlags);
 
 	// Remember window position for next frame
 	if (ImGui::IsWindowAppearing()) {
@@ -475,18 +487,7 @@ void PerformanceOverlay::DrawFPS()
 
 	// Show Post-FG frametime graph if enabled
 	if (this->settings.ShowPostFGFrameTimeGraph && this->state.isFrameGenerationActive) {
-		// Check if FSR frame generation is active (FSR doesn't provide timing data)
-		bool isFrameGenActive = globals::features::upscaling.IsFrameGenerationActive();
-
-		if (isFrameGenActive) {
-			// Show note that FSR uses calculated data
-			Util::Text::Warning("%s", T(TKEY("post_fg_calculated"), "Post-FG: Calculated timing (2x Pre-FG)"));
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("AMD FSR Frame Generation uses calculated timing data (2x Pre-FG).\nNVIDIA DLSS Frame Generation provides measured timing data.");
-			}
-		}
-
-		// Show post-FG graph for both DLSS and FSR (FSR uses calculated data)
+		Util::Text::Warning("%s", T(TKEY("post_fg_calculated"), "Post-FG: Calculated timing (2x Pre-FG)"));
 		this->DrawPostFGFrameTimeGraph();
 	}
 }
@@ -1211,15 +1212,11 @@ void PerformanceOverlay::DrawABTestSection(const std::vector<DrawCallRow>& allRo
 		// --- Settings diff section (inline, toggled) ---
 		if (showSettingsDiff) {
 			if (!this->settingsDiffLoaded) {
-				// Use cached memory data from ABTestingManager instead of loading from disk
-				if (abTestingManager && abTestingManager->HasCachedSnapshots()) {
-					// Pull structured diff entries directly from ABTestingManager (in-memory snapshots)
+				// Diff the in-memory snapshots ABTestingManager keeps of both configs
+				if (abTestingManager && abTestingManager->HasCachedSnapshots())
 					this->settingsDiff = abTestingManager->GetConfigDiffEntries();
-				} else {
-					this->settingsDiff = Util::FileSystem::LoadJsonDiff(
-						Util::PathHelpers::GetSettingsUserPath(),
-						Util::PathHelpers::GetSettingsTestPath());
-				}
+				else
+					this->settingsDiff.clear();
 				this->settingsDiffLoaded = true;
 			}
 			ImGui::TextUnformatted("Differences between USER (A) and TEST (B) configs:");
@@ -1945,22 +1942,22 @@ void PerformanceOverlay::UpdateGraphValues()
 	                  static_cast<float>(state.overlayTimingFrequency.QuadPart);
 	state.lastUpdateTime = now;
 
-	if (!state.graphSampleGate.ShouldSample())
-		return;
+	const bool sampleGraph = state.graphSampleGate.ShouldSample();
 
-	// Insert latest frame time into circular buffer
-	float oldFrameTime = state.frameTimeHistory.GetData()[state.frameTimeHistory.GetHeadIdx()];  // what is the point of oldFrameTime?
-	state.frameTimeHistory.Push(state.frameTimeMs);
+	if (sampleGraph) {
+		const float oldFrameTime = state.frameTimeHistory.GetData()[state.frameTimeHistory.GetHeadIdx()];
+		state.frameTimeHistory.Push(state.frameTimeMs);
 
-	// Maintain instantaneous min/max tracking
-	if (state.frameTimeMs > state.maxFrameTime) {
-		state.maxFrameTime = state.frameTimeMs;
-	} else if (state.frameTimeMs < state.minFrameTime) {
-		state.minFrameTime = state.frameTimeMs;
-	} else if (oldFrameTime == state.minFrameTime) {
-		state.minFrameTime = *std::ranges::min_element(state.frameTimeHistory.GetData());
-	} else if (oldFrameTime == state.maxFrameTime) {
-		state.maxFrameTime = *std::ranges::max_element(state.frameTimeHistory.GetData());
+		// Maintain instantaneous min/max tracking
+		if (state.frameTimeMs > state.maxFrameTime) {
+			state.maxFrameTime = state.frameTimeMs;
+		} else if (state.frameTimeMs < state.minFrameTime) {
+			state.minFrameTime = state.frameTimeMs;
+		} else if (oldFrameTime == state.minFrameTime) {
+			state.minFrameTime = *std::ranges::min_element(state.frameTimeHistory.GetData());
+		} else if (oldFrameTime == state.maxFrameTime) {
+			state.maxFrameTime = *std::ranges::max_element(state.frameTimeHistory.GetData());
+		}
 	}
 
 	float avgFrameTime = kDefaultFrameTimeMs,
@@ -1992,28 +1989,12 @@ void PerformanceOverlay::UpdateGraphValues()
 	state.smoothedMaxFrameTime = state.smoothedMaxFrameTime + Settings::kSmoothingFactor * (graphMax - state.smoothedMaxFrameTime);
 
 	if (state.isFrameGenerationActive) {
-		// Get frametime directly from the Frame Generation system
-		float fgDeltaTime = globals::features::upscaling.GetFrameGenerationFrameTime();
-
-		// Check if FSR frame generation is active (FSR doesn't provide timing data)
-		bool isFrameGenActive = globals::features::upscaling.IsFrameGenerationActive();
-		if (fgDeltaTime > 0.0f && !isFrameGenActive) {
-			state.postFGFrameTimeMs = fgDeltaTime * 1000.0f;
-			state.postFGFps = 1000.0f / state.postFGFrameTimeMs;
-		} else {
-			// Fallback if FG time is not available
-			state.postFGFrameTimeMs = state.frameTimeMs / Settings::kFrameGenerationMultiplier;
-			state.postFGFps = state.fps * Settings::kFrameGenerationMultiplier;
-		}
-
-		// Update post-FG smooth values when timer elapses
-		if (state.updateTimer <= 0.0f) {
-			state.postFGSmoothFps = state.postFGFps;
-			state.postFGSmoothFrameTimeMs = state.postFGFrameTimeMs;
-		}
+		state.postFGFrameTimeMs = state.frameTimeMs / Settings::kFrameGenerationMultiplier;
+		state.postFGFps = state.fps * Settings::kFrameGenerationMultiplier;
 
 		// Update post-FG frametime history
-		state.postFGFrameTimeHistory.Push(state.postFGFrameTimeMs);
+		if (sampleGraph)
+			state.postFGFrameTimeHistory.Push(state.postFGFrameTimeMs);
 	}
 
 	// Update smooth values with user-specified interval
@@ -2021,6 +2002,10 @@ void PerformanceOverlay::UpdateGraphValues()
 	if (state.updateTimer >= settings.UpdateInterval) {
 		state.smoothFps = state.fps;  // Sampling white noise won't give you smoothed noise. This is useless.
 		state.smoothFrameTimeMs = state.frameTimeMs;
+		if (state.isFrameGenerationActive) {
+			state.postFGSmoothFps = state.postFGFps;
+			state.postFGSmoothFrameTimeMs = state.postFGFrameTimeMs;
+		}
 		state.updateTimer = 0.0f;
 	}
 }

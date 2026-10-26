@@ -90,9 +90,8 @@ ImageSpaceWidget::~ImageSpaceWidget()
 void ImageSpaceWidget::DrawWidget()
 {
 	WeatherUtils::SetCurrentWidget(this);
-	auto editorWindow = EditorWindow::GetSingleton();
 
-	if (BeginWidgetWindow()) {
+	if (BeginWidgetWindow(false, true, false, nullptr, "##ImageSpaceSearch")) {
 		DrawWidgetHeader("##ImageSpaceSearch", false, true);
 		DrawSearchDropdown();
 	}
@@ -149,9 +148,7 @@ void ImageSpaceWidget::DrawWidget()
 
 			PropertyDrawer::EndTable();
 
-			if (changed && editorWindow->settings.autoApplyChanges) {
-				ApplyChanges();
-			}
+			AutoApply(changed);
 		}
 	}
 	EndScrollableContent();
@@ -160,18 +157,10 @@ void ImageSpaceWidget::DrawWidget()
 
 void ImageSpaceWidget::LoadSettings()
 {
-	try {
-		if (!js.empty() && js.contains("Settings") && js["Settings"].is_object()) {
-			settings = js["Settings"];
-		} else {
-			settings = vanillaSettings;
-		}
-	} catch (const std::exception& e) {
-		logger::error("Failed to load ImageSpace settings for {}: {}", GetEditorID(), e.what());
-		settings = vanillaSettings;
-	}
-	originalSettings = settings;
-	ApplyChanges();
+	LoadSavedSettings([this] {
+		if (const auto saved = js.find("Settings"); saved != js.end() && saved->is_object())
+			settings = *saved;
+	});
 }
 
 void ImageSpaceWidget::SaveSettings()
@@ -256,17 +245,6 @@ void ImageSpaceWidget::LoadFromGameSettings()
 void ImageSpaceWidget::ApplyChanges()
 {
 	SetImageSpaceValues();
-}
-
-void ImageSpaceWidget::RevertChanges()
-{
-	settings = vanillaSettings;
-	ApplyChanges();
-}
-
-bool ImageSpaceWidget::HasUnsavedChanges() const
-{
-	return !(settings == originalSettings);
 }
 
 std::vector<Widget::SearchResult> ImageSpaceWidget::CollectSearchableSettings() const

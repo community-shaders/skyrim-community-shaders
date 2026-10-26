@@ -273,7 +273,7 @@ namespace NvPerf
 			const bool header = !std::filesystem::exists(a_result.csvPath, ec) || std::filesystem::file_size(a_result.csvPath, ec) == 0;
 			std::ofstream csv(a_result.csvPath, std::ios::app);
 			if (!csv) {
-				logger::warn("[NvPerf] could not write {}", a_result.csvPath.string());
+				logger::warn("[NvPerf] could not write {}", Util::PathHelpers::ToUtf8(a_result.csvPath));
 				return;
 			}
 			// Metric columns change between captures, so each capture repeats its header when it differs from a new file's.
@@ -391,7 +391,7 @@ namespace NvPerf
 			// The import is delay-loaded: it must be loaded by path before the first NVPW call, which would otherwise
 			// raise rather than fail.
 			if (!::GetModuleHandleW(L"nvperf_grfx_host.dll") && !::LoadLibraryW(device.libraryPath.c_str())) {
-				device.error = std::format("could not load {}", device.libraryPath.string());
+				device.error = std::format("could not load {}", Util::PathHelpers::ToUtf8(device.libraryPath));
 				logger::info("[NvPerf] {}", device.error);
 				return false;
 			}

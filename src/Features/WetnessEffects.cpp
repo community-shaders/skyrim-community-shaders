@@ -1,7 +1,10 @@
 #include "WetnessEffects.h"
 #include "CSEditor.h"
+#include "CSEditor/SceneManager/SceneWidgetInterceptor.h"
 #include "I18n/I18n.h"
 #include "Menu.h"
+#include "PerformanceOverlay.h"
+#include "State.h"
 
 #define I18N_KEY_PREFIX "feature.wetness_effects."
 
@@ -618,20 +621,26 @@ void WetnessEffects::DrawSettings()
 		ImGui::TreePop();
 	}
 
+	// The weather picker and debug overrides have no scene-context meaning, so hide them while a
+	// Scene Manager replica is borrowing this panel to author overrides.
+	if (SceneWidgetInterceptor::IsArmed())
+		return;
+
 	ImGui::Spacing();
 	ImGui::Spacing();
 	auto& csEditor = globals::features::csEditor;
 	if (csEditor.loaded) {
+		// The picker is a standalone widget now; the CS Editor feature has no menu page to open.
 		if (ImGui::SmallButton(T(TKEY("open_weather_picker"), "Open Weather Picker"))) {
-			// Navigate to the replacement feature in the menu
-			Menu::GetSingleton()->SelectFeatureMenu(csEditor.GetShortName());
+			globals::features::performanceOverlay.settings.ShowWeatherPicker = true;
+			globals::state->MarkSettingsChanged();
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("%s", T(TKEY("open_weather_picker_tooltip"), "Open the Weather Picker in CS Utility"));
+			ImGui::Text("%s", T(TKEY("open_weather_picker_tooltip"), "Open the Weather Picker widget, which stays open when the main menu is closed"));
 		}
 	}
 
-	if (ImGui::TreeNodeEx(T(TKEY("debug"), "Debug"), ImGuiTreeNodeFlags_DefaultOpen)) {
+	if (Util::ShowDebugSections() && ImGui::TreeNodeEx(T(TKEY("debug"), "Debug"), ImGuiTreeNodeFlags_DefaultOpen)) {
 		ImGui::Checkbox(T(TKEY("enable_wetness_override"), "Enable Wetness Override"), &debugSettings.EnableWetnessOverride);
 		ImGui::Checkbox(T(TKEY("enable_puddle_override"), "Enable Puddle Override"), &debugSettings.EnablePuddleOverride);
 		ImGui::Checkbox(T(TKEY("enable_rain_override"), "Enable Rain Override"), &debugSettings.EnableRainOverride);

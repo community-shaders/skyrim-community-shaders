@@ -41,8 +41,6 @@ public:
 	virtual void LoadSettings(json& o_json) override;
 	virtual void SaveSettings(json& o_json) override;
 
-	/** @brief Registers all fog parameters as weather-interpolatable variables. */
-	void RegisterWeatherVariables() override;
 	/** @brief Captures the current directional shadow map SRV for use in volumetric fog light scattering. */
 	void CaptureDirectionalShadowMap();
 
@@ -117,7 +115,7 @@ private:
 	};
 	STATIC_ASSERT_ALIGNAS_16(VolumetricFogCB);
 
-	/** @brief Shaders see height fog as disabled: an ENB preset replaces it, or the flat world map is open. */
+	/** @brief Shaders see height fog as disabled: an ENB preset replaces it without handing it back to CS, or the flat world map is open. */
 	bool IsSuppressed() const;
 	void EnsureVolumetricResources();
 	void ReleaseVolumetricResources();

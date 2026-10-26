@@ -1,7 +1,7 @@
 #ifndef __IBL_HLSLI__
 #define __IBL_HLSLI__
 
-#include "Common/Color.hlsli"
+#include "Common/ColorManagement.hlsli"
 #include "Common/Math.hlsli"
 #include "Common/Random.hlsli"
 #include "Common/SharedData.hlsli"
@@ -110,7 +110,7 @@ namespace ImageBasedLighting
 			linSky = GetSkyIBLColor(rayDir);
 		}
 #if defined(EFFECTS11)
-		if (SharedData::enbSettings.Enable)
+		if (SharedData::iblSettings.ENBSkyFalloff)
 			linSky *= saturate(-rayDir.z * 0.65 + 0.35);
 #endif
 		return linEnv + linSky;

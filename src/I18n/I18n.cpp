@@ -1,7 +1,6 @@
 #include "I18n.h"
 
 #include <Windows.h>
-#include <fstream>
 #include <regex>
 
 #include "Utils/FileSystem.h"
@@ -214,18 +213,11 @@ void I18n::DiscoverLocales()
 		std::string displayName = locale;  // default to code
 
 		// Try to read _meta.language for a friendly display name
-		try {
-			std::ifstream f(entry.path());
-			if (f.is_open()) {
-				nlohmann::json j;
-				f >> j;
-				if (j.contains("_meta") && j["_meta"].contains("language")) {
-					displayName = j["_meta"]["language"].get<std::string>();
-				}
+		if (const auto document = Util::FileHelpers::ReadJsonObject(entry.path(), "locale file")) {
+			if (const auto meta = document->find("_meta"); meta != document->end() && meta->is_object()) {
+				if (const auto language = meta->find("language"); language != meta->end() && language->is_string())
+					displayName = language->get<std::string>();
 			}
-		} catch (const std::exception& e) {
-			logger::warn("[I18n] Error reading metadata from {}: {}",
-				entry.path().string(), e.what());
 		}
 
 		availableLocales_.emplace_back(locale, displayName);
@@ -255,42 +247,27 @@ bool I18n::LoadLocaleInto(const std::string& locale,
 {
 	auto filePath = GetLocaleFilePath(locale);
 
-	std::ifstream f(filePath);
-	if (!f.is_open()) {
-		logger::info("[I18n] Locale file not found: {}", filePath.string());
+	std::string error;
+	const auto document = Util::FileHelpers::ReadJsonObject(filePath, "locale file", 0, &error);
+	if (!document) {
+		if (error.empty())
+			logger::info("[I18n] Locale file not found: {}", filePath.string());
 		return false;
 	}
 
-	try {
-		nlohmann::json j;
-		f >> j;
+	size_t count = 0;
+	for (const auto& [key, value] : document->items()) {
+		if (key == "_meta")
+			continue;
 
-		if (!j.is_object()) {
-			logger::warn("[I18n] Locale file is not a JSON object: {}", filePath.string());
-			return false;
+		if (value.is_string()) {
+			target[key] = value.get<std::string>();
+			++count;
 		}
-
-		size_t count = 0;
-		for (auto& [key, value] : j.items()) {
-			// Skip the metadata block
-			if (key == "_meta")
-				continue;
-
-			if (value.is_string()) {
-				target[key] = value.get<std::string>();
-				++count;
-			}
-		}
-
-		logger::info("[I18n] Loaded {} keys from '{}'", count, filePath.string());
-		return true;
-	} catch (const nlohmann::json::parse_error& e) {
-		logger::error("[I18n] JSON parse error in {}: {}", filePath.string(), e.what());
-		return false;
-	} catch (const std::exception& e) {
-		logger::error("[I18n] Error loading {}: {}", filePath.string(), e.what());
-		return false;
 	}
+
+	logger::info("[I18n] Loaded {} keys from '{}'", count, filePath.string());
+	return true;
 }
 
 std::filesystem::path I18n::GetLocaleFilePath(const std::string& locale) const

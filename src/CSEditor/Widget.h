@@ -1,6 +1,8 @@
 
 #pragma once
 
+#include "FormEditSources.h"
+#include "UndoHistory.h"
 #include "Util.h"
 #include "Utils/Form.h"
 #include <array>
@@ -17,7 +19,6 @@ namespace WidgetUI
 	constexpr float kSearchBarWidth = 200.0f;
 	constexpr float kSearchDropdownWidth = 300.0f;
 	constexpr size_t kSearchDropdownMaxResults = 5;
-	constexpr float kSearchDropdownBgGray = 0.16f;
 
 	// Search-result highlight pulse
 	constexpr float kHighlightDurationSeconds = 2.0f;
@@ -25,17 +26,9 @@ namespace WidgetUI
 	constexpr ImVec4 kHighlightFrameBg = ImVec4(0.3f, 0.6f, 1.0f, 1.0f);
 	constexpr ImVec4 kHighlightFrameBgHovered = ImVec4(0.4f, 0.7f, 1.0f, 1.0f);
 
-	// "Force Weather" lock button colors
-	constexpr ImVec4 kLockButtonColor = ImVec4(0.2f, 0.8f, 0.2f, 1.0f);
-	constexpr ImVec4 kLockButtonHoverColor = ImVec4(0.3f, 0.9f, 0.3f, 1.0f);
-
-	// Inherit checkbox styling (dark frame, grey mark)
-	constexpr ImVec4 kInheritCheckboxFrameBg = ImVec4(0.2f, 0.2f, 0.2f, 1.0f);
-	constexpr ImVec4 kInheritCheckboxMark = ImVec4(0.6f, 0.6f, 0.6f, 1.0f);
-
 	// Transparent icon button styling
 	constexpr ImVec4 kIconButtonTransparent = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
-	constexpr ImVec4 kIconButtonHover = ImVec4(0.8f, 0.8f, 0.8f, 0.25f);
+	constexpr float kIconButtonHoverAlpha = 0.25f;
 
 	// Category section header text (light teal-blue)
 	constexpr ImVec4 kCategoryHeaderColor = ImVec4(0.7f, 0.9f, 1.0f, 1.0f);
@@ -70,6 +63,7 @@ public:
 	static constexpr std::string_view kPrecipitationFolderName = "Precipitation";
 	static constexpr std::string_view kVisualEffectsFolderName = "Visual Effects";
 	static constexpr std::string_view kCellLightingFolderName = "Cell Lighting";
+	static constexpr std::string_view kLensFlareFolderName = "Lens Flares";
 	static constexpr std::string_view kOtherEditorWidgetsFolderName = "Other Editor Widgets";
 
 	static constexpr std::array kSaveFolderNames = {
@@ -80,6 +74,7 @@ public:
 		kPrecipitationFolderName,
 		kVisualEffectsFolderName,
 		kCellLightingFolderName,
+		kLensFlareFolderName,
 		kOtherEditorWidgetsFolderName
 	};
 
@@ -98,6 +93,13 @@ public:
 		return cachedEditorID;
 	}
 
+	/** @brief True when the form has no editor ID and GetEditorID() returns the type-prefixed save key instead. */
+	bool HasFallbackEditorID() const
+	{
+		GetEditorID();  // retries the real editor ID, clearing the flag once one exists
+		return isFallbackEditorID;
+	}
+
 	/** @brief SPID-based key for file save/load operations (load-order-portable). */
 	std::string GetSaveKey() const
 	{
@@ -106,6 +108,9 @@ public:
 
 	/** @brief Full path to this widget's save file. */
 	std::string GetSaveFilePath() const;
+
+	/** @brief Save folder and save key, the form's identity in user and pack form edit folders. */
+	FormEditSources::FormKey GetFormKey() const { return { GetFolderName(), GetSaveKey() }; }
 
 	/** @brief Get the form ID as an 8-character hex string. */
 	virtual std::string GetFormID() const
@@ -126,7 +131,7 @@ public:
 	}
 
 	/** @brief Cache the editor ID and save key from the form for fast subsequent lookups. */
-	void CacheFormData()
+	void CacheFormData(Util::FormEditorIDIndex* editorIDs = nullptr)
 	{
 		if (!form) {
 			cachedEditorID = "Invalid";
@@ -139,7 +144,7 @@ public:
 		cachedSaveKey = Util::GetFormFileKey(form);
 
 		// Try to resolve EditorID via shared utility
-		std::string editorId = Util::GetFormEditorID(form);
+		std::string editorId = Util::GetFormEditorID(form, editorIDs);
 		if (!editorId.empty()) {
 			cachedEditorID = editorId;
 			isFallbackEditorID = false;
@@ -173,8 +178,15 @@ public:
 	/** @brief Type name for widget-type-level state sharing (window size, etc.). */
 	virtual const char* GetWidgetTypeName() const = 0;
 
-	/** @brief Call instead of SetupWidgetWindowDefaults + ImGui::Begin. Tracks per-type window size. */
-	bool BeginWidgetWindow();
+	/**
+	 * @brief Call instead of SetupWidgetWindowDefaults + ImGui::Begin. Tracks per-type window size.
+	 *
+	 * Action-button flags are consumed by the floating custom header (via drawExtras) when they
+	 * fit beside the title; otherwise DrawWidgetHeader falls back to an inline row. Docked windows
+	 * skip the custom header and place actions in the native title bar from DrawWidgetHeader.
+	 * When searchId is set, the search field is drawn in the title bar between the title and actions.
+	 */
+	bool BeginWidgetWindow(bool showApply = true, bool showSaveLoadRevert = false, bool showForceWeather = false, RE::TESWeather* weather = nullptr, const char* searchId = nullptr);
 
 	/** @brief Queue focus for the next BeginWidgetWindow call (use instead of SetWindowFocus on a not-yet-drawn window). */
 	void RequestFocus() { m_pendingFocus = true; }
@@ -196,10 +208,10 @@ public:
 		open = state;
 	}
 
-	/** @brief Returns a window title with unique ImGui ID: "EditorID###FormID". */
+	/** @brief Returns a window title with unique ImGui ID: "EditorID###FormID", marked with a dot while unsaved. */
 	std::string GetWindowTitle() const
 	{
-		return std::format("{}###{}", GetEditorID(), GetFormID());
+		return std::format("{}{}###{}", HasUnsavedChanges() ? "\xE2\x80\xA2 " : "", GetEditorID(), GetFormID());
 	}
 
 	/** @brief Save the widget's current settings to its JSON file on disk. */
@@ -217,6 +229,17 @@ public:
 	/** @brief Delete this widget's saved JSON file from disk. */
 	virtual void Delete();
 
+	/** @brief Colour and tooltip of the badge marking a form the active preset pack supplies. */
+	struct PackBadge
+	{
+		ImVec4 color;
+		std::string tooltip;
+	};
+	/** @brief The pack badge for this form, or nullopt when the active pack has no file for it. */
+	std::optional<PackBadge> GetPackBadge() const;
+	/** @brief Draws the pack badge on the current line; nothing when the active pack has no file for this form. */
+	void DrawPackSourceBadge() const;
+
 	/** @brief Load widget-specific settings from the internal JSON object. Must be implemented by subclasses. */
 	virtual void LoadSettings() = 0;
 
@@ -232,6 +255,12 @@ public:
 	/** @brief Returns true if the widget has unsaved modifications relative to its saved file. */
 	virtual bool HasUnsavedChanges() const { return false; }
 
+	/** @brief The settings being edited, for undo; null for a widget with nothing to undo. */
+	virtual UndoHistory::SnapshotPtr CaptureEdits() const { return nullptr; }
+
+	/** @brief Puts back settings CaptureEdits returned, and applies them to the form. */
+	virtual void RestoreEdits(const UndoHistory::Snapshot&) {}
+
 	/**
 	 * @brief Reinitialize a weather form to apply form references that are only read at load time.
 	 * @param weather The weather form to reinitialize.
@@ -245,12 +274,22 @@ public:
 	virtual bool RequiresManualApply() const { return false; }
 
 	/**
+	 * @brief Draw action buttons inside the native title bar (docked windows) or the floating
+	 *        custom header row (when called from BeginWithCustomHeader's drawExtras).
+	 *
+	 * Returns false when there is no host row or the row is too narrow; the caller should then
+	 * draw the actions inline beside the search bar.
+	 * @param customHeaderRow True when drawing inside BeginWithCustomHeader's drawExtras callback.
+	 * @param searchId When non-null, draws the search field centred between the title and actions.
+	 */
+	bool DrawTitleBarActions(bool showApply, bool showSaveLoadRevert, bool showForceWeather, RE::TESWeather* weather, bool customHeaderRow = false, const char* searchId = nullptr);
+
+	/**
 	 * @brief Draw the common widget header with search bar and action buttons.
-	 * @param searchId         ImGui ID for the search input.
-	 * @param showApply        If true, show the Apply button.
-	 * @param showSaveLoadRevert If true, show Save/Load/Revert buttons.
-	 * @param showForceWeather If true, show the Force Weather lock button.
-	 * @param weather          The weather form for the Force Weather button (required when showForceWeather is true).
+	 *
+	 * Action buttons and search are placed in the title/custom header when BeginWidgetWindow
+	 * already drew them, or in the native title bar when docked; otherwise they sit inline.
+	 * Flags must match the values passed to BeginWidgetWindow.
 	 */
 	void DrawWidgetHeader(const char* searchId, bool showApply = true, bool showSaveLoadRevert = false, bool showForceWeather = false, RE::TESWeather* weather = nullptr);
 
@@ -343,6 +382,17 @@ public:
 
 	/** @brief Returns true if a search is active or the user navigated from search, indicating sections should be expanded. */
 	bool ShouldOpenSearchSection() const { return searchBuffer[0] != '\0' || navigatedFromSearch; }
+
+	/** @brief Applies the edits at once when they changed and the editor is set to apply changes as they are made. */
+	void AutoApply(bool changed);
+
+	/** @brief Default-open collapsing header, forced open while a search drives the view. @return Whether it is open. */
+	bool SearchHeader(const char* label) const
+	{
+		if (ShouldOpenSearchSection())
+			ImGui::SetNextItemOpen(true, ImGuiCond_Always);
+		return ImGui::CollapsingHeader(label, ImGuiTreeNodeFlags_DefaultOpen);
+	}
 
 	/**
 	 * @brief Check if the given setting is currently highlighted by search navigation.
@@ -444,9 +494,93 @@ protected:
 	// while the buffer is unchanged.
 	std::string searchResultsForQuery;
 	bool m_pendingFocus = false;
+	bool m_customHeaderActionsDrawn = false;
+	bool m_titleBarSearchDrawn = false;
 
 	void ClearSearchState(bool clearBuffer);
-	void NavigateToSearchResult(const SearchResult& result);
+	virtual void NavigateToSearchResult(const SearchResult& result);
+};
+
+/**
+ * @brief A widget that edits a copy of its form's fields: compared against the last saved copy for unsaved
+ *        changes, handed to the undo history, and reverted to the form's vanilla values.
+ * @tparam TSettings The edited fields; needs operator==.
+ */
+template <class TSettings>
+class SettingsWidget : public Widget
+{
+public:
+	using Settings = TSettings;
+
+	/** @brief Puts the vanilla values back and applies them to the form. */
+	void RevertChanges() override
+	{
+		settings = vanillaSettings;
+		ApplyChanges();
+	}
+	bool HasUnsavedChanges() const override { return !(settings == originalSettings); }
+	UndoHistory::SnapshotPtr CaptureEdits() const override { return UndoHistory::Capture(settings); }
+	void RestoreEdits(const UndoHistory::Snapshot& snapshot) override
+	{
+		settings = UndoHistory::Get<Settings>(snapshot);
+		ApplyChanges();
+	}
+
+protected:
+	/** @brief Records the form's current settings as both its vanilla and its saved state. Call once the
+	 *  constructor has read them from the game. */
+	void CaptureVanillaSettings() { vanillaSettings = originalSettings = settings; }
+
+	/**
+	 * @brief Resets settings to vanilla, lets readSaved overlay the saved js on them, records the result as saved
+	 * and applies it. A save that makes readSaved throw is dropped for vanilla.
+	 */
+	template <class ReadSaved>
+	void LoadSavedSettings(ReadSaved&& readSaved)
+	{
+		settings = vanillaSettings;
+		if (!js.empty()) {
+			try {
+				readSaved();
+			} catch (const std::exception& e) {
+				logger::error("{} {}: Failed to load from JSON: {}", GetWidgetTypeName(), GetEditorID(), e.what());
+				settings = vanillaSettings;
+			}
+		}
+		originalSettings = settings;
+		ApplyChanges();
+	}
+
+	/** @brief LoadSavedSettings for Settings with JSON serializers: saved keys override vanilla, missing ones keep it. */
+	void LoadSavedSettings()
+	{
+		LoadSavedSettings([this] {
+			json merged = vanillaSettings;
+			merged.update(js, true);
+			settings = merged.template get<Settings>();
+		});
+	}
+
+	/** @brief Reads js[key] into field when the save has that key, for LoadSavedSettings callbacks. */
+	template <class T>
+	void ReadSaved(const char* key, T& field) const
+	{
+		if (const auto it = js.find(key); it != js.end())
+			it->get_to(field);
+	}
+
+	/** @brief Stores settings in js through their JSON serializers and records them as saved. */
+	void SaveSettingsToJson()
+	{
+		js = settings;
+		originalSettings = settings;
+	}
+
+	Settings settings;
+	/// The last loaded or saved state.
+	Settings originalSettings;
+	/// The form's values before any edit was applied.
+	Settings vanillaSettings;
 };
 
 /** @brief Lightweight widget for caching form data without full editing functionality. */

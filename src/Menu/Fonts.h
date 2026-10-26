@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../Menu.h"
+#include "FontAtlasState.h"
 #include <algorithm>
 #include <cstring>
 #include <filesystem>
@@ -72,11 +73,12 @@ namespace MenuFonts
 	 * Usage:
 	 *   {
 	 *       MenuFonts::TabBarPaddingGuard tabGuard(Menu::FontRole::Subheading);
-	 *       if (ImGui::BeginTabBar("##MyTabs")) {
+	 *       if (Util::BeginPillTabBar("##MyTabs")) {
 	 *           // Tab items...
-	 *           ImGui::EndTabBar();
+	 *           Util::EndPillTabBar();
 	 *       }
 	 *   } // Padding automatically restored here
+	 *   Prefer Util::BeginPillTabBar for new UI; TabBarPaddingGuard only affects classic ImGui tabs.
 	 */
 	class TabBarPaddingGuard
 	{
@@ -93,17 +95,20 @@ namespace MenuFonts
 	};
 
 	/**
-	 * @brief Begins an ImGui tab item with the specified font role
+	 * @brief Begins a tab item with the specified font role for the label.
 	 *
-	 * Convenience wrapper that combines FontRoleGuard with ImGui::BeginTabItem.
-	 * The font is automatically managed and will be popped when the tab ends.
+	 * Inside a Util::BeginPillTabBar, routes to Util::BeginPillTabItem (pill strip uses Body).
+	 * Otherwise falls back to ImGui::BeginTabItem with a temporary FontRoleGuard on the label.
 	 *
 	 * @param label Tab label text
-	 * @param role Font role to use for the tab
+	 * @param role Font role to use for classic ImGui tab labels
 	 * @param flags ImGui tab item flags
 	 * @return true if the tab is selected and visible, false otherwise
 	 */
 	bool BeginTabItemWithFont(const char* label, FontRole role, ImGuiTabItemFlags flags = ImGuiTabItemFlags_None);
+
+	/** @brief Ends a tab item opened via BeginTabItemWithFont / BeginPillTabItem / BeginTabItem. */
+	void EndTabItem();
 
 	/**
 	 * @brief Loads catalog fonts into the current ImGui atlas for selector previews.

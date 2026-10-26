@@ -5,6 +5,7 @@ cbuffer WindowBuffer : register(b1)
 {
 	float4 WindowRect;    // x = minX, y = minY, z = maxX, w = maxY (in pixels)
 	float4 WindowParams;  // x = cornerRadius, y = screenWidth, z = screenHeight, w = fullscreen (1.0 = skip SDF)
+	float4 FadeParams;    // x = fade (0 = hidden, 1 = fully shown)
 };
 
 SamplerState LinearSampler : register(s0);
@@ -14,6 +15,9 @@ static const float TWO_PI = 6.28318530718f;
 static const int NUM_JITTER_SAMPLES = 4;
 static const float DOWNSAMPLE_FACTOR = 8.0f;
 static const float CLIP_EPSILON = 0.001f;
+// Soft-knee: leave dark/mid backdrop alone, compress bright peaks under UI windows
+static const float BRIGHT_KNEE = 0.25f;
+static const float BRIGHT_COMPRESS = 4.0f;
 
 struct VS_OUTPUT
 {
@@ -123,15 +127,21 @@ float4 PS_Main(VS_OUTPUT input) :
 	// Sample with soft dithering to hide blocky pixels from the downsampled blur
 	float4 blurColor = SampleWithSoftening(input.TexCoord, pixelPos, blurTexelSize);
 
+	// Soft-knee bright peaks (sun / HDR highlights) so they don't wash out transparent UI text.
+	// Dark/mid backdrop stays largely unchanged; only high peak values are compressed.
+	float peak = max(blurColor.r, max(blurColor.g, blurColor.b));
+	float brightExcess = max(peak - BRIGHT_KNEE, 0.0f);
+	blurColor.rgb *= rcp(1.0f + brightExcess * BRIGHT_COMPRESS);
+
 	// Apply rounded corner mask to alpha
 	// The blur strength is applied via blend state, so just use the rounded mask here
-	blurColor.a = alpha;
+	blurColor.a = alpha * FadeParams.x;
 
 	return blurColor;
 }
 
-// Clear shader entry point - outputs transparent black inside rounded rect only
-// Used to clear UI buffer (HUD) in the exact same shape as the blur
+// Clear shader entry point - outputs black inside rounded rect with the fade as alpha
+// Used with a ZERO/INV_SRC_ALPHA blend to clear the UI buffer (HUD) in the exact same shape as the blur
 float4 PS_Clear(VS_OUTPUT input) :
 	SV_TARGET
 {
@@ -141,5 +151,5 @@ float4 PS_Clear(VS_OUTPUT input) :
 	// Discard pixels outside rounded rect to preserve HUD in corners
 	clip(-sdf - CLIP_EPSILON);
 
-	return float4(0.0f, 0.0f, 0.0f, 0.0f);
+	return float4(0.0f, 0.0f, 0.0f, FadeParams.x);
 }

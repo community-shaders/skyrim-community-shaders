@@ -2,6 +2,9 @@
 
 #include "Buffer.h"
 
+#include "Browser/BrowserState.h"
+#include "FormEditSources.h"
+#include "LightEditor.h"
 #include "Weather/CellLightingWidget.h"
 #include "Weather/ImageSpaceWidget.h"
 #include "Weather/LensFlareWidget.h"
@@ -10,10 +13,10 @@
 #include "Weather/ReferenceEffectWidget.h"
 #include "Weather/VolumetricLightingWidget.h"
 #include "Weather/WeatherWidget.h"
-#include "LightEditor.h"
 #include "WeatherUtils.h"
 #include "Widget.h"
 
+#include <optional>
 #include <unordered_map>
 
 class EditorWindow
@@ -36,6 +39,9 @@ public:
 	};
 
 	bool open = false;
+	bool showWeatherDebug = false;  // optional Weather Debug window, off by default (not persisted)
+	bool widgetsHidden = false;     // action bar toggle: hides every window except the bar (not persisted)
+	float widgetsFade = 1.0f;       // 1 = widgets shown, 0 = hidden; eased toward widgetsHidden each frame
 	PreviewMode previewMode = PreviewMode::None;
 	const static int maxRecordMarkers = 10;
 
@@ -59,6 +65,27 @@ public:
 			&volumetricLightingWidgets, &precipitationWidgets, &lensFlareWidgets,
 			&referenceEffectWidgets };
 	}
+
+	/** @brief Calls fn on every editable widget, the cell lighting widget included. */
+	template <typename Fn>
+	void ForEachWidget(Fn&& fn)
+	{
+		for (auto* collection : GetWidgetCollections())
+			for (auto& widget : *collection)
+				fn(*widget);
+		if (currentCellLightingWidget)
+			fn(*currentCellLightingWidget);
+	}
+
+	/** @brief Saves every widget with unsaved changes; clean widgets are left untouched. */
+	void SaveUnsavedWidgets();
+
+	/**
+	 * @brief Returns true if any widget, or Scene Manager, has unsaved changes.
+	 * @details Open widgets are checked every call since they are the ones being edited; the full
+	 *          pass, which catches closed widgets changed by Load or Undo, runs on a short interval.
+	 */
+	bool HasUnsavedChanges();
 	std::vector<std::unique_ptr<Widget>> artObjectWidgets;
 	std::vector<std::unique_ptr<Widget>> effectShaderWidgets;
 
@@ -67,11 +94,33 @@ public:
 
 	LightEditor lightEditor;
 
+	/** @brief Tools that write into other mods' files; the editor's save never writes them. */
+	std::array<ExternalTool*, 1> GetExternalTools() { return { &lightEditor }; }
+
+	/** @brief Why a tool's unwritten changes need an answer. */
+	enum class ToolPromptReason
+	{
+		Close,   ///< The editor is closing.
+		Switch,  ///< The tool is moving on to something else, such as another light.
+	};
+
+	/**
+	 * @brief Asks whether to write or discard a tool's unwritten changes before an action that would lose them.
+	 * @param proceed The action; runs once the changes are written or discarded, and not on Cancel.
+	 */
+	void RequestToolPrompt(ExternalTool& tool, ToolPromptReason reason, std::function<void()> proceed);
+
 	/** @brief When true, resets all window positions/sizes on next frame (auto-cleared). */
 	bool resetLayout = false;
 
 	/** @brief Bottom Y of the viewport window, set during layout for palette positioning. */
 	float viewportBottomY = 0.0f;
+
+	/** @brief Editor dockspace ID from the last frame, read by the action bar to find nodes docked against it. */
+	ImGuiID dockSpaceId = 0;
+
+	/** @brief Last frame's viewport collapse state, so Draw() can skip the framebuffer copy. */
+	bool viewportCollapsed = false;
 
 	// Time control constants
 	static constexpr float kVanillaTimeScale = 20.0f;
@@ -79,6 +128,10 @@ public:
 	static constexpr float kTimeScaleMin = 0.1f;
 	static constexpr float kTimeScaleMax = 4000.0f;
 	static constexpr float kMenuBarSliderWidth = 400.0f;
+
+	// Notification durations, in seconds; the long one suits messages that explain what to do next.
+	static constexpr float kNotificationDuration = 3.0f;
+	static constexpr float kLongNotificationDuration = 4.0f;
 
 	// Preview mode constants
 	static constexpr float kDefaultFlySpeed = 10.0f;
@@ -122,15 +175,22 @@ public:
 	 */
 	void AdjustFlySpeed(float scrollDelta);
 
-	// Vanity camera control
-	bool vanityCameraDisabled = false;
-	float savedVanityCameraDelay = 180.0f;
-
 	// Game HUD hiding (tm equivalent)
 	bool gameMenusHidden = false;
 
 	/** @brief Draw the Objects browser window listing all editable form widgets. */
 	void ShowObjectsWindow();
+
+	/**
+	 * @brief Open the Cell Lighting editor for a cell, reusing the open one when it is the same cell.
+	 * @param cell The interior cell to edit.
+	 * @param notify Show the "loaded" notification when a saved file is read.
+	 */
+	void OpenCellLighting(RE::TESObjectCELL* cell, bool notify);
+
+	/** @brief Draw a compact "Active: <weather>" line matching the indicator atop other object categories.
+	 *  @param drawTrailer Follow with a separator; pass false to keep adding to the same row. */
+	void DrawActiveWeatherIndicator(bool drawTrailer = true);
 
 	/** @brief Draw the game viewport preview window with render target display. */
 	void ShowViewportWindow();
@@ -138,11 +198,17 @@ public:
 	/** @brief Draw all currently open widget editing windows. */
 	void ShowWidgetWindow();
 
+	/** @brief Lays out and draws every editor window below the action bar; skipped once the hide fade finishes. */
+	void DrawEditorWindows(float scale, float actionBarBottom);
+
 	/** @brief Render the full editor UI including menu bar, windows, and overlays. */
 	void RenderUI();
 
 	/** @brief Create widget instances for all game forms and load saved settings. */
 	void SetupResources();
+
+	/** @brief Reloads every built widget whose form is in @p keys from its resolved file, then refreshes the JSON markers. */
+	void ReloadFormEdits(const FormEditSources::FormKeySet& keys);
 
 	/** @brief Top-level draw entry point called once per frame when the editor is open. */
 	void Draw();
@@ -161,6 +227,21 @@ public:
 
 	/** @brief Returns the currently locked weather form, or nullptr if none. */
 	RE::TESWeather* GetLockedWeather() const;
+
+	/**
+	 * @brief Returns true if the user explicitly locked the weather.
+	 * @details The editor silently locks weather while open; that implicit lock does not count.
+	 */
+	bool IsWeatherLockedByUser() const;
+
+	/**
+	 * @brief Lock a weather on the user's behalf; unlike the editor's implicit lock it survives closing the editor.
+	 * @param weather The weather form to lock.
+	 */
+	void LockWeatherForUser(RE::TESWeather* weather);
+
+	/** @brief Release the user's lock: while the editor is open it falls back to the implicit lock, otherwise it unlocks. */
+	void ReleaseUserWeatherLock();
 
 	/** @brief Redirect the engine's weather-change call sites to the locked weather. Call once during plugin init. */
 	static void InstallWeatherLockHooks();
@@ -212,8 +293,37 @@ public:
 	 */
 	bool DrawGameHourSlider(const char* label = "Game Time", const char* format = "%.2f");
 
+	/**
+	 * @brief Game-hour slider with paused overlay format and error-colored text when time is paused.
+	 * @param id Hidden ImGui id (e.g. "##FeatureGameTime").
+	 * @return True if the game calendar is valid and the slider was drawn.
+	 */
+	bool DrawPausedAwareGameHourSlider(const char* id);
+
+	/**
+	 * @brief Shared pause/resume icon toggle (clock-pause glyph, red chrome when paused).
+	 * @param id Hidden ImGui id.
+	 * @param size Button size; (0,0) uses the current frame height.
+	 * @return True if the button was clicked (pause state is toggled on click).
+	 */
+	bool DrawTimePauseToggle(const char* id, const ImVec2& size = ImVec2(0, 0));
+
+	/** @brief Logarithmic time-scale slider synced to the calendar, disabled while time is paused. */
+	void DrawTimeScaleSlider(const char* id, RE::Calendar* calendar);
+
 	/** @brief Draw the full time controls panel (pause, game time, timescale). */
 	void DrawTimeControls();
+
+	/** @brief Which time periods the game-time slider segments. */
+	enum class TimePeriodSet : std::uint8_t
+	{
+		None,
+		Weather,  ///< Four sky colour times.
+		Scene     ///< Six scene periods.
+	};
+
+	/** @brief Sets the slider's periods when the current window is focused; the last focused editor surface wins. */
+	void ClaimTimePeriodSet(TimePeriodSet periodSet);
 
 	/** @brief Returns true if ESC should close the editor (no popup open and none just consumed ESC this frame). */
 	bool ShouldHandleEscapeKey();
@@ -221,14 +331,30 @@ public:
 	/** @brief Set by popup close-on-ESC to suppress the same key-up from also closing the editor. */
 	bool suppressNextEditorEscape = false;
 
+	/** @brief Closes the current popup on ESC without letting the same press close the editor. @return True if it closed. */
+	static bool ClosePopupOnEscape();
+
 	/** @brief Returns true if the editor can be opened (game is loaded and not in main menu). */
 	static bool CanBeOpen();
 
-	/** @brief Disable Skyrim's vanity camera to prevent auto-rotation while editing. */
-	void DisableVanityCamera();
+	/** @brief True while a loading screen or a game menu is up; the editor breaks if it opens over one. */
+	static bool IsOpeningBlocked();
 
-	/** @brief Restore vanity camera to its previous delay setting. */
-	void RestoreVanityCamera();
+	/** @brief Shows the "cannot open here" warning card, once per press rather than stacking repeats. */
+	void WarnOpeningBlocked();
+
+	/** @brief True while a notification card is still on screen. */
+	bool HasNotifications() const { return !notifications.empty(); }
+
+	/** @brief Shows the Base Settings window on a feature and brings it to the front. */
+	void OpenBaseSettings(const std::string& featureShortName);
+
+	/** @brief Shows a category in the objects window, by its stable English ID, and brings that window to the front. */
+	void SelectCategory(std::string category)
+	{
+		m_selectedCategory = std::move(category);
+		m_focusBrowser = true;
+	}
 
 	/** @brief Hide the game HUD and menus (equivalent to the 'tm' console command). */
 	void HideGameMenus();
@@ -239,27 +365,32 @@ public:
 	/** @brief Call every frame from the overlay renderer to track open/close transitions. */
 	void UpdateOpenState();
 
-	// Undo system
-	struct UndoState
-	{
-		Widget* widget;
-		json settings;
-		std::string widgetId;
-	};
-	std::vector<UndoState> undoStack;
-	static const size_t maxUndoStates = 50;
+	/// Undo and redo for everything edited in the editor.
+	UndoHistory undoHistory;
 
-	/**
-	 * @brief Capture the current settings of a widget and push them onto the undo stack.
-	 * @param widget The widget whose settings to snapshot.
-	 */
-	void PushUndoState(Widget* widget);
+	/** @brief An undo target for a widget, found again by form key so its entries outlive the widget object. */
+	UndoHistory::Target MakeUndoTarget(const Widget& widget);
 
-	/** @brief Pop the most recent undo state and restore its widget settings. */
+	/** @brief The widget editing this form, the cell lighting widget included, or null. */
+	Widget* FindWidget(const FormEditSources::FormKey& key);
+
+	/** @brief Remembers the focused widget by form key, not object lifetime. */
+	void SetFocusedWidget(const Widget& widget) { lastFocusedWidgetKey = widget.GetFormKey(); }
+
+	/** @brief Steps the newest change back and says what it undid. */
 	void PerformUndo();
 
-	/** @brief Returns true if the undo stack contains at least one entry. */
-	bool CanUndo() const { return !undoStack.empty(); }
+	/** @brief Reapplies the newest undone change and says what it redid. */
+	void PerformRedo();
+
+	/**
+	 * @brief Discards a widget's unsaved changes by reloading its saved file (vanilla values when it
+	 *        has none). Undoable.
+	 */
+	void DiscardWidgetChanges(Widget& widget);
+
+	/** @brief Discards every widget's unsaved changes. Undoable, one step per widget. */
+	void DiscardAllWidgetChanges();
 
 	// Notification system
 	struct Notification
@@ -277,7 +408,7 @@ public:
 	 * @param color   Text color (defaults to error red).
 	 * @param duration How long the notification remains visible, in seconds.
 	 */
-	void ShowNotification(const std::string& message, const ImVec4& color = Util::Colors::GetError(), float duration = 3.0f);
+	void ShowNotification(const std::string& message, const ImVec4& color = Util::Colors::GetError(), float duration = kNotificationDuration);
 
 	/** @brief Draw all active notifications and expire old ones. */
 	void RenderNotifications();
@@ -293,12 +424,22 @@ public:
 		bool autoApplyChanges = true;
 		bool useTextButtons = false;
 		bool enableInheritFromParent = false;
+		/// When false (default), Debug TreeNode / CollapsingHeader sections are hidden in the Features editor.
+		bool showFeatureDebug = false;
 		float editorUIScale = 1.0f;
 		std::vector<std::string> favoriteWidgets;
 		std::map<std::string, std::vector<std::string>> recentWidgets;
 		int maxRecentWidgets = 10;
 		bool showViewport = true;
+		/// Base Settings window; the key predates the rename from Features.
+		bool showFeaturesWindow = false;
 		std::string selectedCategory = "Weather";
+		/// Browser form pages show the inspector beside (or under) the list.
+		bool browserShowInspector = true;
+		/// Browser category sidebar collapsed to icons.
+		bool browserSidebarCompact = false;
+		/// A tool's unwritten changes are discarded without asking when switching or closing.
+		bool skipToolDiscardPrompt = false;
 
 		// Per-widget-type window sizes (serialized as JSON for persistence)
 		json widgetTypeSizes;
@@ -353,21 +494,18 @@ public:
 	 */
 	bool IsFavorite(const std::string& widgetId) const;
 
-	/**
-	 * @brief Navigate to and highlight a specific feature setting within a weather widget.
-	 * @param weather     The weather form to open.
-	 * @param featureName The feature tab name to select.
-	 * @param settingName The setting ID to scroll to and highlight.
-	 */
-	void OpenWeatherFeatureSetting(RE::TESWeather* weather, const std::string& featureName, const std::string& settingName);
-
 	/** @brief Destructor. Releases owned textures and widget resources. */
 	~EditorWindow();
 
 private:
 	friend class Widget;
 
-	void SaveAll();
+	/// Seconds between full unsaved-change passes over every widget.
+	static constexpr double kUnsavedScanInterval = 0.5;
+	/// ImGui time of the last full pass; reset after a save so the indicator clears at once.
+	double lastUnsavedScan = -kUnsavedScanInterval;
+	bool anyWidgetUnsaved = false;
+
 	void SaveSettings();
 	void LoadSettings();
 	void ShowSettingsWindow();
@@ -378,7 +516,30 @@ private:
 	std::string settingsSelectedCategory = "Flags";
 
 	// Widget focus tracking for Ctrl+W
-	Widget* lastFocusedWidget = nullptr;
+	std::optional<FormEditSources::FormKey> lastFocusedWidgetKey;
+
+	/** @brief Locks the current weather once any in-progress transition finishes, unless the user already locked one. */
+	void LockWeatherForOverlay();
+
+	/// True while the lock belongs to the overlay, so closing it only releases what it took.
+	bool weatherLockedByOverlay = false;
+	/** @brief The main menu was open when the editor opened, so closing the editor reopens it. */
+	bool returnToMenu = false;
+
+	/// Asks what to do with a tool's unwritten changes before an action that would lose them.
+	Util::ConfirmationPopup toolPrompt;
+	ExternalTool* promptedTool = nullptr;
+	/// What the prompted action does once the changes are written or discarded.
+	std::function<void()> toolPromptProceed;
+	/// The next close goes ahead without asking: the prompt was just answered.
+	bool skipToolPrompt = false;
+	/** @brief Acts on the answer to toolPrompt. */
+	void DrawToolPrompt();
+
+	/// True from overlay open until its weather lock engages or the overlay closes.
+	bool overlayWeatherLockPending = false;
+	/// Sky region at lock time, restored on unlock since ForceWeather clears it.
+	RE::TESRegion* regionBeforeLock = nullptr;
 
 	// Time control state
 	bool timePaused = false;
@@ -391,19 +552,6 @@ private:
 	double lastGameHourScrubRefreshTime = 0.0;
 	bool gameHourScrubRefreshIssued = false;
 
-	// Sorting state
-	enum class SortColumn
-	{
-		None,
-		EditorID,
-		FormID,
-		File,
-		Status,
-		JsonAttachment
-	};
-	SortColumn currentSortColumn = SortColumn::None;
-	bool sortAscending = true;
-
 	Widget* pendingDeleteWidget = nullptr;
 	bool pendingDeletePopupRequested = false;
 
@@ -413,23 +561,19 @@ private:
 	bool HasCachedJsonAttachment(Widget* widget) const;
 	void InvalidateJsonAttachmentCache(Widget* widget = nullptr);
 
-	// Objects window filter state
-	enum class FilterColumn : int
-	{
-		All = 0,
-		EditorID,
-		FormID,
-		File,
-		Status,
-		Count_  // Sentinel – must equal IM_ARRAYSIZE(kFilterColumnNames)
-	};
+	// Objects window (CS Editor Browser) state
 	std::string m_selectedCategory = "Weather";
+	TimePeriodSet timePeriodSet = TimePeriodSet::Weather;
 	std::string m_previousSelectedCategory = "Weather";
-	char m_filterBuffer[256] = {};
-	bool m_showOnlyFlagged = false;
-	bool m_showOnlyFavorites = false;
-	FilterColumn m_currentFilterColumn = FilterColumn::All;
-	void ResetObjectsFilter();
-	bool MatchesObjectFilter(Widget* w) const;
+	/// Set by SelectCategory; the objects window takes focus on its next Begin.
+	bool m_focusBrowser = false;
+	/// Filters, sort, cached rows and selection of the form-list pages.
+	Browser::FormListState m_formList;
+	/// Compact state the sidebar column was last sized for; unset until the first frame sizes it.
+	std::optional<bool> m_sidebarWasCompact;
+	/// Width the user had dragged the expanded sidebar to, restored when it expands again.
+	float m_sidebarExpandedWidth = 0.0f;
+	void DrawBrowserSidebar(bool compact);
+	void DrawBrowserPage();
 	static std::string ResolveEditorId(RE::TESForm* form, const WidgetVec& widgets);
 };

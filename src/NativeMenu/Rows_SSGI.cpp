@@ -92,6 +92,11 @@ namespace
 		s.EnableGI = preset.enableGI;
 		globals::features::screenSpaceGI.recompileFlag = true;
 	}
+
+	bool __stdcall IsSSGIEditable()
+	{
+		return NativeMenu::IsFeatureEditable(globals::features::screenSpaceGI.GetShortName());
+	}
 }
 
 namespace NativeMenu
@@ -105,7 +110,8 @@ namespace NativeMenu
 			Dropdown(T(TKEY("name"), "Screen Space GI"), SSGIQualityOptions(), &GetSSGIQuality, &SetSSGIQuality,
 				SSGIOption(Settings{}),
 				T(TKEY("description"),
-					"Screen Space Global Illumination adds realistic indirect lighting and ambient occlusion to the game. This technique simulates how light bounces off surfaces to illuminate other objects naturally.")),
+					"Screen Space Global Illumination adds realistic indirect lighting and ambient occlusion to the game. This technique simulates how light bounces off surfaces to illuminate other objects naturally."),
+				&IsSSGIEditable),
 		};
 	}
 }

@@ -19,9 +19,11 @@
 #include "Globals.h"
 #include "I18n/I18n.h"
 #include "Menu.h"
+#include "Menu/CursorLoader.h"
+#include "Menu/FontAtlasState.h"
+#include "Presets/UnifiedPresetCatalog.h"
 #include "ShaderCache.h"
 #include "State.h"
-#include "Menu/CursorLoader.h"
 #include "Util.h"
 
 #include "Features/PerformanceOverlay.h"
@@ -141,6 +143,17 @@ namespace
 		for (auto it = s_windowOverlapAlpha.begin(); it != s_windowOverlapAlpha.end();)
 			it->second < C::OVERLAP_ALPHA_EPSILON ? it = s_windowOverlapAlpha.erase(it) : ++it;
 	}
+
+	/** @brief Blur strength this frame: the editor's fullscreen blur follows its widgets, other windows follow the menu fade. */
+	float GetBlurFade()
+	{
+		auto* editorWindow = EditorWindow::GetSingleton();
+		if (editorWindow->open)
+			return editorWindow->IsViewportActive() ? editorWindow->widgetsFade : 1.0f;
+
+		const float menuFade = Menu::GetSingleton()->openFade;
+		return menuFade > 0.0f ? menuFade : 1.0f;
+	}
 }  // namespace
 
 void OverlayRenderer::RenderOverlay(
@@ -151,6 +164,9 @@ void OverlayRenderer::RenderOverlay(
 	float& cachedFontSize,
 	float currentFontSize)
 {
+	// Always sync, including frames that skip drawing, so closing the last CS UI restores vanity.
+	menu.SyncVanityCamera();
+
 	processInputEventQueue();
 
 	// ImGui only takes game input while a CS window owns it. Otherwise status overlays
@@ -167,10 +183,21 @@ void OverlayRenderer::RenderOverlay(
 		ImGui::ClearActiveID();
 	}
 
+	// Before the skip check so the editor's close edge is never missed.
+	auto* editorWindow = EditorWindow::GetSingleton();
+	if (editorWindow->open && !EditorWindow::CanBeOpen()) {
+		editorWindow->open = false;
+		if (editorWindow->IsInPreviewMode())
+			editorWindow->ExitPreviewMode();
+	}
+	editorWindow->UpdateOpenState();
+	menu.UpdateOpenFade(io.DeltaTime);
+
 	if (ShouldSkipRendering()) {
 		io.ClearInputKeys();
 		io.ClearEventsQueue();
 		s_windowOverlapAlpha.clear();
+		EditorWindow::GetSingleton()->UpdateOpenState();
 		return;
 	}
 
@@ -180,17 +207,9 @@ void OverlayRenderer::RenderOverlay(
 	RenderShaderCompilationStatus(keyIdToString);
 	RenderShaderBlockingStatus();
 
-	auto* editorWindow = EditorWindow::GetSingleton();
-	if (editorWindow->open && !EditorWindow::CanBeOpen()) {
-		editorWindow->open = false;
-		if (editorWindow->IsInPreviewMode())
-			editorWindow->ExitPreviewMode();
-	}
-	editorWindow->UpdateOpenState();
-
-	// The Effects 11 editor, the CS Editor and the Community Shaders menu are exclusive
+	// The Effects 11 editor and the Community Shaders menu are exclusive; the CS Editor hosts it.
 	auto& effects11Editor = Effects11Editor::GetSingleton();
-	if (effects11Editor.IsOpen() && (editorWindow->open || menu.IsEnabled))
+	if (effects11Editor.IsOpen() && menu.IsEnabled)
 		effects11Editor.Close(false);
 
 	if (editorWindow->open) {
@@ -202,14 +221,28 @@ void OverlayRenderer::RenderOverlay(
 	} else if (effects11Editor.IsOpen()) {
 		ImGui::GetIO().MouseDrawCursor = true;
 		effects11Editor.Draw();
-	} else if (menu.IsEnabled || HomePageRenderer::ShouldShowFirstTimeSetup()) {
-		ImGui::GetIO().MouseDrawCursor = true;
-		if (menu.IsEnabled) {
+	} else if (menu.IsEnabled || menu.openFade > 0.0f || HomePageRenderer::ShouldShowFirstTimeSetup()) {
+		ImGui::GetIO().MouseDrawCursor = menu.IsEnabled || HomePageRenderer::ShouldShowFirstTimeSetup();
+		if (menu.IsEnabled || menu.openFade > 0.0f) {
+			const auto& context = *ImGui::GetCurrentContext();
+			const bool editedBefore = context.ActiveIdHasBeenEditedThisFrame;
 			drawSettings();
+			// Only frames that edited something pay for the check; search boxes edit too, so it compares.
+			if (!editedBefore && context.ActiveIdHasBeenEditedThisFrame)
+				globals::state->CheckCoreSettingsChanged();
 		}
 	} else {
 		ImGui::GetIO().MouseDrawCursor = false;
 	}
+
+	// Enabling a Baseline pack can happen from either the menu or the CS editor, and the answer outlives the page.
+	if (editorWindow->open || menu.IsEnabled)
+		UnifiedPresetCatalog::GetSingleton().DrawBaselineOverlapPrompt();
+
+	// The editor draws its own notifications; while it is closed they still need a host, e.g. the
+	// "cannot open in a loading screen" warning raised by the toggle hotkey.
+	if (!editorWindow->open)
+		editorWindow->RenderNotifications();
 
 	RenderFeatureOverlays();
 	RenderFirstTimeSetupOverlay();
@@ -230,13 +263,16 @@ bool OverlayRenderer::ShouldSkipRendering()
 
 	return !(shaderCache->IsCompiling() ||
 			 Menu::GetSingleton()->IsEnabled ||
+			 Menu::GetSingleton()->openFade > 0.0f ||
 			 HomePageRenderer::ShouldShowFirstTimeSetup() ||
 			 EditorWindow::GetSingleton()->open ||
+			 EditorWindow::GetSingleton()->HasNotifications() ||
 			 Effects11Editor::GetSingleton().IsOpen() ||
 			 abTestingManager->IsEnabled() ||
 			 (failed && !hide) ||
 			 effectFailed ||
 			 globals::features::performanceOverlay.settings.ShowInOverlay ||
+			 globals::features::performanceOverlay.settings.ShowWeatherPicker ||
 			 renderDoc->IsAvailable());
 }
 
@@ -244,7 +280,7 @@ void OverlayRenderer::HandleFontReload(Menu& menu, float& cachedFontSize, float 
 {
 	bool fontSizeChanged = std::abs(cachedFontSize - currentFontSize) > ThemeManager::Constants::FONT_CACHE_EPSILON;
 	std::string desiredSignature = menu.BuildFontSignature(currentFontSize);
-	bool signatureChanged = desiredSignature != menu.cachedFontSignature;
+	bool signatureChanged = desiredSignature != MenuFonts::GetAtlasState().cachedFontSignature;
 
 	if (fontSizeChanged || signatureChanged) {
 		if (!ThemeManager::ReloadFont(menu, cachedFontSize)) {
@@ -421,11 +457,12 @@ void OverlayRenderer::FinalizeImGuiFrame()
 
 	ImGui::Render();
 
+	BackgroundBlur::SetFade(GetBlurFade());
+
 	// Apply background blur behind ImGui windows before rendering them
 	BackgroundBlur::RenderBackgroundBlur();
 
 	ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
-
 }
 
 void OverlayRenderer::RenderFirstTimeSetupOverlay()

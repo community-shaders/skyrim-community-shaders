@@ -1,4 +1,5 @@
 #include "MenuHeaderRenderer.h"
+#include "Menu/IconLoader.h"
 
 #include <imgui.h>
 #include <imgui_internal.h>
@@ -7,6 +8,7 @@
 #include "Globals.h"
 #include "I18n/I18n.h"
 #include "Plugin.h"
+#include "SaveManager.h"
 #include "ShaderCache.h"
 #include "State.h"
 #include "ThemeManager.h"
@@ -17,7 +19,7 @@ namespace
 	using RoleFontGuard = MenuFonts::FontRoleGuard;
 }
 
-void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, bool canShowIcons, float uiScale, const Menu::UIIcons& uiIcons)
+void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, bool canShowIcons, float uiScale, const Util::IconLoader::UIIcons& uiIcons)
 {
 	if (!globals::menu) {
 		logger::error("MenuHeaderRenderer::RenderHeader: globals::menu is null, cannot render header");
@@ -26,8 +28,21 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, bool canShow
 
 	auto versionStr = Util::GetFormattedVersion(Plugin::VERSION);
 	auto expectedTag = std::format("v{}", versionStr);
-	auto title = Plugin::BUILD_DESCRIBE == expectedTag ? std::format("Community Shaders {}", versionStr) : std::format("Community Shaders {} [{}]", versionStr, Plugin::BUILD_DESCRIBE);
+	auto title = std::format("Community Shaders {}", versionStr);
 	auto actionIcons = BuildActionIcons(canShowIcons, uiIcons);
+
+	// Dev builds: muted build label after the title
+	const bool showBuildTag = Plugin::BUILD_DESCRIBE != expectedTag;
+	const auto buildTag = Util::GetBuildLabel();
+	const float buildTagWidth = showBuildTag ? ImGui::GetStyle().ItemSpacing.x + ImGui::CalcTextSize(buildTag.c_str()).x : 0.0f;
+	auto drawBuildTag = [&]() {
+		if (!showBuildTag)
+			return;
+		const float titleHeight = ImGui::GetItemRectSize().y;
+		ImGui::SameLine();
+		ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (titleHeight - ImGui::GetTextLineHeight()) * 0.5f);
+		ImGui::TextDisabled("%s", buildTag.c_str());
+	};
 
 	if (isDocked) {
 		// When docked, draw logo as a background watermark if available
@@ -71,8 +86,10 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, bool canShow
 					contentWidth += ImGui::CalcTextSize(title.c_str()).x;
 					ImGui::SetWindowFontScale(1.0f);
 				}
+				contentWidth += buildTagWidth;
 
-				float offset = Util::GetCenterOffsetForContent(contentWidth);
+				// Slide left rather than clip into the icon column
+				float offset = std::min(Util::GetCenterOffsetForContent(contentWidth), ImGui::GetContentRegionAvail().x - contentWidth);
 				if (offset > 0.0f) {
 					ImGui::SetCursorPosX(ImGui::GetCursorPosX() + offset);
 				}
@@ -112,6 +129,7 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, bool canShow
 				}
 				ImGui::PopStyleVar();
 			}
+			drawBuildTag();
 
 			// Buttons on the right
 			ImGui::TableNextColumn();
@@ -125,11 +143,11 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, bool canShow
 
 			if (centerHeader) {
 				// Calculate text width for centering
-				float textWidth = 0.0f;
+				float textWidth = buildTagWidth;
 				{
 					RoleFontGuard titleFont(Menu::FontRole::Title);
 					ImGui::SetWindowFontScale(textScaleFactor);
-					textWidth = ImGui::CalcTextSize(title.c_str()).x;
+					textWidth += ImGui::CalcTextSize(title.c_str()).x;
 					ImGui::SetWindowFontScale(1.0f);
 				}
 
@@ -146,6 +164,7 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, bool canShow
 				ImGui::TextUnformatted(title.c_str());
 			}
 			ImGui::SetWindowFontScale(1.0f);
+			drawBuildTag();
 		}
 	}
 
@@ -162,9 +181,14 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, bool canShow
 		if (ImGui::BeginTable("##ActionButtons", 4, ImGuiTableFlags_SizingStretchSame)) {
 			// Save Settings Button
 			ImGui::TableNextColumn();
+			const bool unsaved = globals::state->HasUnsavedChanges();
+			if (unsaved)
+				ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetUnsaved());
 			if (Util::ButtonWithFlash(T("menu.save_settings", "Save Settings"), { -1, 0 })) {
-				globals::state->Save();
+				SaveManager::SaveAll();
 			}
+			if (unsaved)
+				ImGui::PopStyleColor();
 
 			// Restore Saved Settings Button
 			ImGui::TableNextColumn();
@@ -231,7 +255,7 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, bool canShow
 	}
 }
 
-std::vector<MenuHeaderRenderer::ActionIcon> MenuHeaderRenderer::BuildActionIcons(bool canShowIcons, const Menu::UIIcons& uiIcons)
+std::vector<MenuHeaderRenderer::ActionIcon> MenuHeaderRenderer::BuildActionIcons(bool canShowIcons, const Util::IconLoader::UIIcons& uiIcons)
 {
 	std::vector<ActionIcon> actionIcons;
 
@@ -241,11 +265,13 @@ std::vector<MenuHeaderRenderer::ActionIcon> MenuHeaderRenderer::BuildActionIcons
 
 	// Build list of available action icons (in display order)
 	if (uiIcons.saveSettings.texture) {
+		const bool unsaved = globals::state->HasUnsavedChanges();
 		actionIcons.push_back({ uiIcons.saveSettings.texture,
-			T("menu.save_settings", "Save Settings"),
+			unsaved ? T("menu.save_settings_unsaved", "Save Settings (unsaved changes)") : T("menu.save_settings", "Save Settings"),
 			[]() {
-				globals::state->Save();
-			} });
+				SaveManager::SaveAll();
+			},
+			unsaved });
 	}
 	if (uiIcons.loadSettings.texture) {
 		actionIcons.push_back({ uiIcons.loadSettings.texture,
@@ -332,6 +358,8 @@ void MenuHeaderRenderer::RenderDockedIcons(const std::vector<ActionIcon>& action
 				// Use white/gray tint for colored icons
 				tintColor = isHovered ? IM_COL32(255, 255, 255, 255) : IM_COL32(220, 220, 220, 220);
 			}
+			if (it->unsaved)
+				tintColor = ImGui::GetColorU32(Util::Colors::GetUnsaved());
 			fgDrawList->AddImage(it->texture, iconMin, iconMax, ImVec2(0, 0), ImVec2(1, 1), tintColor);
 		}
 
@@ -384,7 +412,8 @@ void MenuHeaderRenderer::RenderUndockedIcons(const std::vector<ActionIcon>& acti
 		std::string buttonId = std::format("##ActionBtn{}", i);
 
 		// Use ImageButton with reduced image size to minimize padding
-		if (ImGui::ImageButton(buttonId.c_str(), icon.texture, imageSize, ImVec2(0, 0), ImVec2(1, 1), ImVec4(0, 0, 0, 0), tintColor)) {
+		if (ImGui::ImageButton(buttonId.c_str(), icon.texture, imageSize, ImVec2(0, 0), ImVec2(1, 1), ImVec4(0, 0, 0, 0),
+				icon.unsaved ? Util::Colors::GetUnsaved() : tintColor)) {
 			icon.callback();
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -402,7 +431,7 @@ void MenuHeaderRenderer::RenderUndockedIcons(const std::vector<ActionIcon>& acti
 	ImGui::PopStyleColor(2);  // Pop both style colors: Button and ButtonHovered
 }
 
-void MenuHeaderRenderer::RenderWatermarkLogo(const Menu::UIIcons& uiIcons)
+void MenuHeaderRenderer::RenderWatermarkLogo(const Util::IconLoader::UIIcons& uiIcons)
 {
 	// Get current window's drawable area (excluding title bar)
 	ImVec2 windowPos = ImGui::GetWindowPos();

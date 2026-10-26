@@ -76,11 +76,11 @@ namespace LandscapeSeams
 		[branch] if ((WEIGHT) > 0.01)                                                                                                                                                      \
 		{                                                                                                                                                                                  \
 			float weight = WEIGHT;                                                                                                                                                         \
-			float4 landColor = SampleTerrain(COLOR_TEX, SampColorSampler, uv, sharedOffset);                                                                                               \
+			float4 landColor = SampleTerrainColor(COLOR_TEX, SampColorSampler, uv, sharedOffset, LandscapeSeams::HasFlag(LandscapeSeams::FlagPbr, INDEX));                                 \
 			float3 landColorRGB = landColor.rgb;                                                                                                                                           \
-			[branch] if (!LandscapeSeams::HasFlag(LandscapeSeams::FlagPbr, INDEX))                                                                                                         \
+			[branch] if (!LandscapeSeams::HasFlag(LandscapeSeams::FlagPbr, INDEX) && !LandscapeLayers::LinearLighting)                                                                     \
 			{                                                                                                                                                                              \
-				landColorRGB = Color::SrgbToLinear(landColorRGB / Color::PBRLightingScale);                                                                                                \
+				landColorRGB = TransferFunctions::Gamma22ToLinear(landColorRGB / Color::PBRLightingScale);                                                                                 \
 			}                                                                                                                                                                              \
 			float landAlpha = landColor.a;                                                                                                                                                 \
 			float4 landNormal = SampleTerrain(NORM_TEX, SampColorSampler, uv, sharedOffset);                                                                                               \

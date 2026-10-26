@@ -29,7 +29,8 @@ struct LightLimitFix : OverlayFeature
 	struct VertexColorCacheEntry
 	{
 		bool valid = false;
-		bool applyEffectMaterialTint = true;
+		bool colorManagementEnabled = false;
+		bool acescgEnabled = false;
 		ParticleLightConfig config{};
 		RE::NiColorA baseColor{ 1.0f, 1.0f, 1.0f, 1.0f };
 	};
@@ -281,6 +282,7 @@ public:
 	eastl::unique_ptr<Buffer> lightGrid = nullptr;
 
 	std::uint32_t lightCount = 0;
+	std::uint32_t particleLightCount = 0;
 	float lightsNear = 1;
 	float lightsFar = 16384;
 
@@ -519,6 +521,7 @@ public:
 		using RenderPass1 = BSBatchRenderer_RenderPassImmediately<1>;
 		using RenderPass2 = BSBatchRenderer_RenderPassImmediately<2>;
 		using RenderPass3 = BSBatchRenderer_RenderPassImmediately<3>;
+		using RenderPass4 = BSBatchRenderer_RenderPassImmediately<4>;
 
 		struct BSGeometry_Destroy
 		{

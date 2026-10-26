@@ -142,6 +142,7 @@ float2 GetParallaxCoords(float distance, float2 coords, float mipLevel, float3 v
 					contactRefinement = true;
 					prevOffset = outOffset;
 					prevBound = pt2.x;
+					prevHeight = pt2.y;
 					numSteps = numStepsTemp;
 					stepSize /= (float)numSteps;
 					offsetPerStep /= (float)numSteps;

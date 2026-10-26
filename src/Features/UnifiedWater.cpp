@@ -127,7 +127,7 @@ namespace
 
 void UnifiedWater::DrawSettings()
 {
-	if (ImGui::TreeNodeEx(T(TKEY("debug"), "Debug"), ImGuiTreeNodeFlags_DefaultOpen)) {
+	if (Util::ShowDebugSections() && ImGui::TreeNodeEx(T(TKEY("debug"), "Debug"), ImGuiTreeNodeFlags_DefaultOpen)) {
 		if (ImGui::Button(T(TKEY("regenerate_flowmap"), "Regenerate Flowmap")) && flowmap) {
 			if (flowmap->RegenerateAndLoadFlowmap())
 				SetFlowmapTex();

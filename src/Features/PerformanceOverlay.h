@@ -6,6 +6,7 @@
 #include "Utils/PerfUtils.h"
 #include <nlohmann/json.hpp>
 #include <optional>
+#include <string_view>
 #include <unordered_map>
 #include <variant>
 
@@ -117,6 +118,8 @@ public:
 
 struct PerformanceOverlay : OverlayFeature
 {
+	static constexpr std::string_view kWindowId = "###PerformanceOverlay";
+
 	// ============================================================================
 	// VIRTUAL OVERRIDES (Feature.h interface)
 	// ============================================================================
@@ -277,7 +280,8 @@ struct PerformanceOverlay : OverlayFeature
 		static constexpr int kMinFrameHistorySize = 120;             // 2s @ 60fps, 0.5s @ 240fps
 		static constexpr int kMaxFrameHistorySize = 1800;            // 30s @ 60fps, 7.5s @ 240fps
 
-		bool ShowInOverlay = true;  // was: Enabled
+		bool ShowInOverlay = true;       // was: Enabled
+		bool ShowWeatherPicker = false;  // standalone weather picker window, independent of the overlay above
 		bool ShowDrawCalls = true;
 		bool ShowCSPasses = true;
 		bool ShowVRAM = true;

@@ -111,6 +111,7 @@ Versioning (enforced by `tools/feature_version_audit.py`):
 -   Give repeated or empty-label widgets unique IDs with `PushID`/`PopID` or a `##suffix` (`"##AdvancedSettingsTabs"`). Widgets built in loops (per feature, per row) should push an ID derived from a stable key rather than the loop index when the list can reorder.
 -   Prefer the RAII guards over raw Push/Pop for state: `Util::DisableGuard` (`src/Utils/UI.h`), `MenuFonts::FontRoleGuard`, `MenuFonts::ImFontGuard`, `MenuFonts::TabBarPaddingGuard` (`src/Menu/Fonts.h`).
 -   Spacing, padding and colors come from `ThemeManager::Constants`, not literals. Scale sizes by the font/global scale rather than hardcoding pixels.
+-   Icons: use Tabler (`Icons::TI`) for UI. FA and Game-Icons are for game-world icons (places, creatures, lore), e.g. `LocationTypeIcons.h`. Glyphs above U+FFFF can't load.
 
 ## Internationalization (i18n)
 

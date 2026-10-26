@@ -6,6 +6,7 @@
 #include <DirectXTex.h>
 
 #include "../ENBExtender.h"
+#include "../IniSerialization.h"
 #include "../PresetManager.h"
 #include "../TextureManager.h"
 #include "Features/Effects11/SettingsPatches.h"
@@ -205,7 +206,7 @@ void Effect::Save()
 
 		switch (uiVar.type) {
 		case UIVariableType::Float:
-			value = std::to_string(useBase ? uiVar.baseFloatValue : uiVar.floatValue);
+			value = Effects11Util::Ini::FormatFloat(useBase ? uiVar.baseFloatValue : uiVar.floatValue);
 			break;
 		case UIVariableType::Int:
 			value = std::to_string(uiVar.intValue);
@@ -222,22 +223,16 @@ void Effect::Save()
 				                                                                                                          4;
 				for (int i = 0; i < numComponents; ++i) {
 					std::string compKey = iniKey + suffixes[i];
-					std::string compValue = std::to_string(vectorValue[i]);
+					std::string compValue = Effects11Util::Ini::FormatFloat(vectorValue[i]);
 					BOOL compResult = WritePrivateProfileStringA(section.c_str(), compKey.c_str(), compValue.c_str(), iniPath.string().c_str());
 					if (!compResult)
 						logger::warn("[EFFECTS11] Failed to write key '{}' to ini file '{}'", compKey, iniPath.string());
 				}
 				continue;
 			} else {
-				std::ostringstream oss;
 				int numComponents = (uiVar.type == UIVariableType::Float2) ? 2 : (uiVar.type == UIVariableType::Float3) ? 3 :
 				                                                                                                          4;
-
-				std::copy(vectorValue, vectorValue + numComponents - 1,
-					std::ostream_iterator<float>(oss, ", "));
-				oss << vectorValue[numComponents - 1];
-
-				value = oss.str();
+				value = Effects11Util::Ini::FormatFloatList({ vectorValue, static_cast<size_t>(numComponents) });
 			}
 			break;
 		}
@@ -1133,30 +1128,7 @@ bool Effect::SetVectorVariable(const std::string& variableName, const void* data
 
 TextureManager::Texture Effect::CreateTexture(uint32_t width, uint32_t height, DXGI_FORMAT format, const std::string& debugName)
 {
-	auto device = globals::d3d::device;
-
-	D3D11_TEXTURE2D_DESC texDesc = {};
-	texDesc.Width = width;
-	texDesc.Height = height;
-	texDesc.MipLevels = 1;
-	texDesc.ArraySize = 1;
-	texDesc.Format = format;
-	texDesc.SampleDesc.Count = 1;
-	texDesc.Usage = D3D11_USAGE_DEFAULT;
-	texDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
-
-	TextureManager::Texture texture{};
-	DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, texture.texture.put()));
-	DX::ThrowIfFailed(device->CreateRenderTargetView(texture.texture.get(), nullptr, texture.rtv.put()));
-	DX::ThrowIfFailed(device->CreateShaderResourceView(texture.texture.get(), nullptr, texture.srv.put()));
-
-	if (!debugName.empty()) {
-		Util::SetResourceName(texture.texture.get(), (debugName).c_str());
-		Util::SetResourceName(texture.rtv.get(), (debugName + " RTV").c_str());
-		Util::SetResourceName(texture.srv.get(), (debugName + " SRV").c_str());
-	}
-
-	return texture;
+	return TextureManager::CreateTexture(width, height, format, debugName);
 }
 
 std::string Effect::GetSelectedTechnique() const

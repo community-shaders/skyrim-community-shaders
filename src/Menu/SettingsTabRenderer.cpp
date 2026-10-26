@@ -6,17 +6,19 @@
 #include <windows.h>
 
 #include "BackgroundBlur.h"
+#include "CursorLoader.h"
 #include "Features/ScreenshotFeature.h"
+#include "FontAtlasState.h"
 #include "FontSelector.h"
 #include "Fonts.h"
 #include "Globals.h"
 #include "I18n/I18n.h"
-#include "CursorLoader.h"
 #include "IconLoader.h"
 #include "Menu.h"
 #include "ShaderCache.h"
 #include "State.h"
 #include "ThemeManager.h"
+#include "Utils/UI.h"
 
 using json = nlohmann::json;
 
@@ -207,12 +209,11 @@ namespace
 
 void SettingsTabRenderer::RenderGeneralSettings(SettingsState& state)
 {
-	MenuFonts::TabBarPaddingGuard tabPaddingGuard(Menu::FontRole::Heading);
-	if (ImGui::BeginTabBar("##GeneralTabBar", ImGuiTabBarFlags_None)) {
+	if (Util::BeginPillTabBar("##GeneralTabBar")) {
 		RenderShadersTab();
 		RenderKeybindingsTab(state);
 		RenderInterfaceTab();
-		ImGui::EndTabBar();
+		Util::EndPillTabBar();
 	}
 }
 
@@ -350,7 +351,7 @@ void SettingsTabRenderer::RenderShadersTab()
 			}
 		}
 
-		ImGui::EndTabItem();
+		MenuFonts::EndTabItem();
 	}
 }
 
@@ -409,7 +410,7 @@ void SettingsTabRenderer::RenderKeybindingsTab(
 			state.settingEffects11EditorKey,
 			"Change##Effects11Editor");
 
-		ImGui::EndTabItem();
+		MenuFonts::EndTabItem();
 	}
 }
 
@@ -417,16 +418,15 @@ void SettingsTabRenderer::RenderInterfaceTab()
 {
 	auto tabLabel = std::format("{}##{}", T("menu.settings.tab_interface", "Interface"), "GeneralInterfaceTab");
 	if (BeginTabItemWithFont(tabLabel.c_str(), Menu::FontRole::Heading)) {
-		MenuFonts::TabBarPaddingGuard tabPaddingGuard(Menu::FontRole::Subheading);
-		if (ImGui::BeginTabBar("##tabs", ImGuiTabBarFlags_None)) {
+		if (Util::BeginPillTabBar("##tabs")) {
 			RenderBehaviorTab();
 			RenderThemesTab();
 			RenderFontsTab();
 			RenderStylingTab();
 			RenderColorsTab();
-			ImGui::EndTabBar();
+			Util::EndPillTabBar();
 		}
-		ImGui::EndTabItem();
+		MenuFonts::EndTabItem();
 	}
 }
 
@@ -460,7 +460,7 @@ void SettingsTabRenderer::RenderBehaviorTab()
 					ImGui::PushID(code.c_str());
 					if (ImGui::Selectable(displayName.c_str(), isSelected)) {
 						i18n->SetLocale(code);
-						globals::menu->pendingFontReload = true;
+						MenuFonts::GetAtlasState().pendingFontReload = true;
 					}
 					if (isSelected) {
 						ImGui::SetItemDefaultFocus();
@@ -486,14 +486,14 @@ void SettingsTabRenderer::RenderBehaviorTab()
 		if (themeSettings.ShowActionIcons) {
 			ImGui::Indent();
 			if (ImGui::Checkbox(T("menu.settings.use_monochrome_icons", "Use Monochrome Icons"), &themeSettings.UseMonochromeIcons)) {
-				globals::menu->pendingIconReload = true;
+				Util::IconLoader::PendingReload() = true;
 			}
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::Text("%s", T("menu.settings.use_monochrome_icons_tooltip", "Uses white monochrome icons that adapt to your theme's text color"));
 			}
 			ImGui::SameLine();
 			if (ImGui::Checkbox(T("menu.settings.use_monochrome_cs_logo", "Use Monochrome CS Logo"), &themeSettings.UseMonochromeLogo)) {
-				globals::menu->pendingIconReload = true;
+				Util::IconLoader::PendingReload() = true;
 			}
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::Text("%s", T("menu.settings.use_monochrome_cs_logo_tooltip", "Uses monochrome version of the Community Shaders logo"));
@@ -533,9 +533,9 @@ void SettingsTabRenderer::RenderBehaviorTab()
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text("%s", T("menu.settings.use_custom_cursor_tooltip",
-				"Loads cursor PNGs from the active theme folder (Themes/<preset>/).\n"
-				"Supported files include cursor.png (arrow), cursor_text.png (typing), cursor_resize_ew.png, cursor_resize_ns.png, and more.\n"
-				"Missing types fall back to the default ImGui cursor. Configure per-type hotspots in theme JSON."));
+								  "Loads cursor PNGs from the active theme folder (Themes/<preset>/).\n"
+								  "Supported files include cursor.png (arrow), cursor_text.png (typing), cursor_resize_ew.png, cursor_resize_ns.png, and more.\n"
+								  "Missing types fall back to the default ImGui cursor. Configure per-type hotspots in theme JSON."));
 		}
 
 		if (themeSettings.UseCustomCursor) {
@@ -556,7 +556,12 @@ void SettingsTabRenderer::RenderBehaviorTab()
 			ImGui::Text("%s", T("menu.settings.background_blur_tooltip", "Applies a blur effect to the background behind the menu window."));
 		}
 
-		ImGui::EndTabItem();
+		ImGui::Checkbox(T("menu.settings.menu_fade", "Menu Fade"), &themeSettings.MenuFadeEnabled);
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("%s", T("menu.settings.menu_fade_tooltip", "Fades the menu and its background blur in and out when it is opened or closed."));
+		}
+
+		MenuFonts::EndTabItem();
 	}
 }
 
@@ -937,7 +942,7 @@ void SettingsTabRenderer::RenderThemesTab()
 			}
 		}
 
-		ImGui::EndTabItem();
+		MenuFonts::EndTabItem();
 	}
 }
 
@@ -958,7 +963,7 @@ void SettingsTabRenderer::RenderFontsTab()
 				float effective = ThemeManager::ResolveFontSize(*menuInstance);
 				themeSettings.FontSize = std::clamp(effective, ThemeManager::Constants::MIN_FONT_SIZE, ThemeManager::Constants::MAX_FONT_SIZE);
 			}
-			menuInstance->pendingFontReload = true;
+			MenuFonts::GetAtlasState().pendingFontReload = true;
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::TextUnformatted(T("menu.settings.use_resolution_based_font_size_tooltip", "When enabled, the UI font size scales with your screen resolution. Disable to set a fixed size."));
@@ -966,7 +971,7 @@ void SettingsTabRenderer::RenderFontsTab()
 
 		ImGui::BeginDisabled(useAutoFont);
 		if (ImGui::SliderFloat(T("menu.settings.base_font_size", "Base Font Size"), &themeSettings.FontSize, ThemeManager::Constants::MIN_FONT_SIZE, ThemeManager::Constants::MAX_FONT_SIZE, "%.0f")) {
-			menuInstance->pendingFontReload = true;
+			MenuFonts::GetAtlasState().pendingFontReload = true;
 		}
 		ImGui::EndDisabled();
 
@@ -979,9 +984,9 @@ void SettingsTabRenderer::RenderFontsTab()
 			fontCatalog = Util::Fonts::DiscoverFontCatalog(forceRescan);
 		};
 
-		if (!menuInstance->wantsFontPreviewAtlas) {
-			menuInstance->wantsFontPreviewAtlas = true;
-			menuInstance->pendingFontReload = true;
+		if (!MenuFonts::GetAtlasState().wantsFontPreviewAtlas) {
+			MenuFonts::GetAtlasState().wantsFontPreviewAtlas = true;
+			MenuFonts::GetAtlasState().pendingFontReload = true;
 		}
 
 		if (!catalogInitialized) {
@@ -1014,18 +1019,18 @@ void SettingsTabRenderer::RenderFontsTab()
 
 		if (ImGui::Button(T("menu.settings.refresh_font_families", "Refresh Font Families"))) {
 			refreshFontCatalog(true);
-			menuInstance->pendingFontReload = true;
+			MenuFonts::GetAtlasState().pendingFontReload = true;
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::TextUnformatted(T("menu.settings.refresh_font_families_tooltip", "Rescan the Fonts directory after adding or removing font files."));
 		}
 
-		ImGui::EndTabItem();
-	} else if (auto* menuInstance = globals::menu; menuInstance->wantsFontPreviewAtlas) {
+		MenuFonts::EndTabItem();
+	} else if (MenuFonts::GetAtlasState().wantsFontPreviewAtlas) {
 		// Fonts tab not active: drop the preview-font atlas so it is not rebaked into every
 		// later atlas rebuild for the rest of the session.
-		menuInstance->wantsFontPreviewAtlas = false;
-		menuInstance->pendingFontReload = true;
+		MenuFonts::GetAtlasState().wantsFontPreviewAtlas = false;
+		MenuFonts::GetAtlasState().pendingFontReload = true;
 	}
 }
 
@@ -1115,7 +1120,7 @@ void SettingsTabRenderer::RenderStylingTab()
 		SeparatorTextWithFont(T("menu.settings.section_docking", "Docking"), Menu::FontRole::Subheading);
 		ImGui::SliderFloat(T("menu.settings.docking_splitter_size", "Docking Splitter Size"), &style.DockingSeparatorSize, 0.0f, 12.0f, "%.0f");
 
-		ImGui::EndTabItem();
+		MenuFonts::EndTabItem();
 	}
 }
 
@@ -1206,6 +1211,6 @@ void SettingsTabRenderer::RenderColorsTab()
 			ImGui::TreePop();
 		}
 
-		ImGui::EndTabItem();
+		MenuFonts::EndTabItem();
 	}
 }

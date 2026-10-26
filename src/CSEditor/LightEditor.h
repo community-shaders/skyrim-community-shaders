@@ -1,6 +1,8 @@
 #pragma once
 #include "../Features/LightLimitFix/Common.h"
+#include "ExternalTool.h"
 #include "LightPicker.h"
+#include "UndoHistory.h"
 #include <chrono>
 #include <nlohmann/json.hpp>
 #include <set>
@@ -11,7 +13,7 @@ namespace RE
 	class BSLight;
 }
 
-struct LightEditor
+struct LightEditor : ExternalTool
 {
 	bool disableInvSqLights = false;
 	bool disableRegularLights = false;
@@ -19,6 +21,9 @@ struct LightEditor
 
 	/** @brief Draw the light editor ImGui settings panel. */
 	void DrawSettings();
+
+	/** @brief Number of lights in the current list (after the type and shadow filters). */
+	size_t GetLightCount() const { return lights.size(); }
 
 	/** @brief Gather all active scene lights into the internal list for display and editing. */
 	void GatherLights();
@@ -34,6 +39,19 @@ struct LightEditor
 	 */
 	bool ApplyOverrides(RE::NiLight* niLight, LLFCommon::RuntimeLightDataExt* runtimeData) const;
 
+	const char* GetTargetName() const override { return "Light Placer"; }
+	std::string DescribeChanges() const override { return selected.name; }
+	/** @brief Whether the selected light differs from its state at selection, in anything Reset would put back. */
+	bool HasUnwrittenChanges() const override;
+	/** @brief A Light Placer light with a matching JSON entry; other lights' edits are previews only. */
+	bool CanWriteChanges() const override { return lpInfo.isLPLight && lpMatchFound; }
+	/** @brief Writes the selected light to its Light Placer entry, as Write to Light Placer does. */
+	bool WriteChanges() override;
+	void DiscardChanges() override { ResetOverrides(); }
+
+	/** @brief The undo target for the selected light's edits; it lapses once another light is selected. */
+	UndoHistory::Target MakeUndoTarget();
+
 private:
 	struct LightInfo
 	{
@@ -47,6 +65,10 @@ private:
 		bool isOther = false;
 		bool isSpotlight = false;
 		bool hasPosition = false;
+		/// Its LIGH form casts shadows (hemi, omni or spot).
+		bool isShadow = false;
+		/// Placed by Light Placer (the NiLight is named "LP_Light[...]").
+		bool isLP = false;
 		RE::NiPoint3 position;
 
 		bool operator==(const LightInfo& other) const noexcept
@@ -72,7 +94,34 @@ private:
 		stl::enumeration<LLFCommon::TES_LIGHT_FLAGS_EXT, uint32_t> tesFlags;
 		LLFCommon::RuntimeLightDataExt data = {};
 		RE::NiPoint3 pos = {};
+
+		/// Compares what the editor changes and Reset puts back; the rest of data is the game's.
+		bool operator==(const LightSettings& other) const;
 	};
+
+	/** @brief Everything the editor changes on the selected light, as a whole. */
+	struct LightEdits
+	{
+		LightSettings settings;
+		std::set<std::string> lpFlags;
+		float shadowDepthBias = 0.0f;
+		RE::TESForm* emittanceSource = nullptr;
+		std::string emittanceEdid;
+		bool useExternalEmittance = false;
+		/// Light Placer flags only count for a Light Placer light.
+		bool isLPLight = false;
+
+		bool operator==(const LightEdits& other) const;
+	};
+
+	/** @brief The selected light's edits as they stand. */
+	LightEdits GetEdits() const;
+	/** @brief The selected light's state when it was selected. */
+	LightEdits GetOriginalEdits() const;
+	/** @brief Puts edits back on the selected light; the per-frame update carries them to the game. */
+	void SetEdits(const LightEdits& edits);
+	/** @brief Selects a light, first asking about the selected light's unwritten changes. */
+	void RequestSelect(const LightInfo& light);
 
 	bool extendedLogMode = false;
 	bool saveColorToLP = false;
@@ -107,6 +156,9 @@ private:
 
 	FilterOption filterOption = FilterOption::RefLights;
 	SortOption sortOption = SortOption::Distance;
+	bool sortDescending = false;
+	/// Text filter over the light table (matches the display name).
+	char lightSearch[128] = {};
 
 	std::vector<LightInfo> lights = {};
 	std::unordered_map<RE::TESObjectREFR*, uint32_t> lightsAttached = {};
@@ -162,8 +214,31 @@ private:
 	float originalShadowDepthBias = 0.0f;
 	float cachedFadeBeforeToggle = 0.0f;
 
-	/** @brief Sorts the gathered light list by the active sort option. */
+	/// Share of the page height the table keeps when the inspector sits under it.
+	static constexpr float kDefaultStackedTableRatio = 0.45f;
+	/// User-dragged table share of the page height in the stacked layout.
+	float stackedTableRatio = kDefaultStackedTableRatio;
+	/// Share of the page height the table and inspector keep above the adjustments pane.
+	static constexpr float kDefaultTopPaneRatio = 0.5f;
+	/// User-dragged share of the page height above the adjustments pane.
+	float topPaneRatio = kDefaultTopPaneRatio;
+	/// The light the table last pinned and scrolled to.
+	LightInfo pinnedLight = {};
+
+	/** @brief Sorts the gathered light list by the active sort option and direction. */
 	void SortLights();
+	/** @brief Global toggles and Light Placer actions above the light table. */
+	void DrawToolbar();
+	/** @brief Sortable, searchable table of the gathered lights, the selected one pinned first; selecting a row selects the light. */
+	void DrawLightTable(const ImVec2& size);
+	/** @brief Identity, actions and Light Placer state of the selected light. */
+	void DrawInspector(const ImVec2& size);
+	/** @brief Appearance and position sliders of the selected light, then its flags. */
+	void DrawAdjustments(const ImVec2& size);
+	/** @brief Light Placer and light flag grids of the selected light (nothing without a transform). */
+	void DrawFlags();
+	/** @brief Whether the selected light has a position and flags to edit. */
+	bool HasTransform() const { return !selected.isOther && current.data.lighFormId != 0 && selected.hasPosition; }
 	/** @brief Restores the active light to its snapshotted original state. */
 	void RestoreOriginal();
 	/** @brief Writes shadowDepthBias to the active shadow light's runtime data. */

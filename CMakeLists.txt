@@ -62,7 +62,11 @@ set(NVPERF_SDK_ROOT
     CACHE PATH
     "Nsight Perf SDK directory (the one holding include/nvperf_host.h)"
 )
-option(ENABLE_ENB_EXTENDER "Enable ENBExtender reimplementation (weather blending, time-of-day, technique bindings)" ON)
+option(
+    ENABLE_ENB_EXTENDER
+    "Enable ENBExtender reimplementation (weather blending, time-of-day, technique bindings)"
+    ON
+)
 message("\tAuto plugin deployment: ${AUTO_PLUGIN_DEPLOYMENT}")
 message("\tZip to dist: ${ZIP_TO_DIST}")
 message("\tAIO Zip to dist: ${AIO_ZIP_TO_DIST}")
@@ -81,10 +85,28 @@ if(GIT_FOUND)
         OUTPUT_STRIP_TRAILING_WHITESPACE
         ERROR_QUIET
     )
+    execute_process(
+        COMMAND ${GIT_EXECUTABLE} branch --show-current
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        OUTPUT_VARIABLE GIT_BRANCH
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
+    # CI PR checkouts are detached, so use the PR's source branch
+    if(GIT_BRANCH STREQUAL "" AND NOT "$ENV{GITHUB_HEAD_REF}" STREQUAL "")
+        set(GIT_BRANCH "$ENV{GITHUB_HEAD_REF}")
+    endif()
+    # Untrusted (PR authors pick it) and lands in a C++ string literal
+    string(REGEX REPLACE "[^A-Za-z0-9._/-]" "_" GIT_BRANCH "${GIT_BRANCH}")
+    # Only CI artifacts are official builds
+    if(NOT GIT_BRANCH STREQUAL "" AND NOT "$ENV{CI}" STREQUAL "true")
+        string(APPEND GIT_BRANCH "*")
+    endif()
 else()
     set(GIT_DESCRIBE "unknown")
 endif()
 message("\tBuild version: ${GIT_DESCRIBE}")
+message("\tBuild branch: ${GIT_BRANCH}")
 
 # #######################################################################################################################
 # # Add CMake features
@@ -102,6 +124,7 @@ find_package(imgui CONFIG REQUIRED)
 find_package(EASTL CONFIG REQUIRED)
 find_package(directxtk CONFIG REQUIRED)
 find_package(directxtex CONFIG REQUIRED)
+find_package(libavif 1.4.1 EXACT CONFIG REQUIRED)
 find_path(CLIB_UTIL_INCLUDE_DIRS "ClibUtil/utils.hpp")
 find_package(pystring CONFIG REQUIRED)
 find_package(cppwinrt CONFIG REQUIRED)
@@ -150,10 +173,7 @@ target_include_directories(
         ${DETOURS_INCLUDE_DIRS}
 )
 
-target_compile_definitions(
-    ${PROJECT_NAME}
-    PRIVATE SK_HDR_PNG_COMMUNITY_SHADERS
-)
+target_compile_definitions(${PROJECT_NAME} PRIVATE SK_HDR_PNG_COMMUNITY_SHADERS)
 
 target_link_libraries(
     ${PROJECT_NAME}
@@ -166,6 +186,7 @@ target_link_libraries(
         EASTL
         Microsoft::DirectXTK
         Microsoft::DirectXTex
+        avif
         pystring::pystring
         unordered_dense::unordered_dense
         efsw::efsw
@@ -308,11 +329,19 @@ foreach(FEATURE_PATH ${FEATURE_CONFIG_FILES})
     # retains its prior value (the version major, above) when a REGEX MATCH misses.
     set(_STAGE_ALPHA "")
     set(_STAGE_BETA "")
-    string(REGEX MATCH "(^|[\r\n])[ \t]*[Aa]lpha[ \t]*=[ \t]*([A-Za-z0-9]+)" _STAGE_ALPHA_MATCH "${CONFIG_VALUE}")
+    string(
+        REGEX MATCH "(^|[\r\n])[ \t]*[Aa]lpha[ \t]*=[ \t]*([A-Za-z0-9]+)"
+        _STAGE_ALPHA_MATCH
+        "${CONFIG_VALUE}"
+    )
     if(_STAGE_ALPHA_MATCH)
         string(TOLOWER "${CMAKE_MATCH_2}" _STAGE_ALPHA)
     endif()
-    string(REGEX MATCH "(^|[\r\n])[ \t]*[Bb]eta[ \t]*=[ \t]*([A-Za-z0-9]+)" _STAGE_BETA_MATCH "${CONFIG_VALUE}")
+    string(
+        REGEX MATCH "(^|[\r\n])[ \t]*[Bb]eta[ \t]*=[ \t]*([A-Za-z0-9]+)"
+        _STAGE_BETA_MATCH
+        "${CONFIG_VALUE}"
+    )
     if(_STAGE_BETA_MATCH)
         string(TOLOWER "${CMAKE_MATCH_2}" _STAGE_BETA)
     endif()
@@ -325,7 +354,11 @@ foreach(FEATURE_PATH ${FEATURE_CONFIG_FILES})
     # Detect the Unreleased flag, which gates UI visibility independently of the
     # release stage above. Same line anchoring and CMAKE_MATCH_2 guard.
     set(_STAGE_UNRELEASED "")
-    string(REGEX MATCH "(^|[\r\n])[ \t]*[Uu]nreleased[ \t]*=[ \t]*([A-Za-z0-9]+)" _STAGE_UNRELEASED_MATCH "${CONFIG_VALUE}")
+    string(
+        REGEX MATCH "(^|[\r\n])[ \t]*[Uu]nreleased[ \t]*=[ \t]*([A-Za-z0-9]+)"
+        _STAGE_UNRELEASED_MATCH
+        "${CONFIG_VALUE}"
+    )
     if(_STAGE_UNRELEASED_MATCH)
         string(TOLOWER "${CMAKE_MATCH_2}" _STAGE_UNRELEASED)
     endif()
@@ -397,6 +430,79 @@ configure_file(
 target_sources(
     "${PROJECT_NAME}"
     PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/cmake/ThemePresets.h
+)
+
+# #######################################################################################################################
+# # Scene settings catalog
+# #######################################################################################################################
+
+# The generator's annotations (`str | None`) need 3.10.
+find_package(Python3 3.10 COMPONENTS Interpreter REQUIRED)
+set(SCENE_SETTINGS_PYTHON_EXECUTABLE "${Python3_EXECUTABLE}")
+
+set(SCENE_SETTINGS_CATALOG_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
+set(SCENE_SETTINGS_CATALOG_HEADER
+    "${SCENE_SETTINGS_CATALOG_DIR}/SceneSettingsCatalog.generated.h"
+)
+set(SCENE_SETTINGS_CATALOG_SOURCE
+    "${SCENE_SETTINGS_CATALOG_DIR}/SceneSettingsCatalog.generated.cpp"
+)
+set(SCENE_SETTINGS_ADAPTERS_SOURCE
+    "${SCENE_SETTINGS_CATALOG_DIR}/FeatureSceneSettingsAdapters.generated.cpp"
+)
+set(SCENE_SETTINGS_CATALOG_STAMP
+    "${SCENE_SETTINGS_CATALOG_DIR}/SceneSettingsCatalog.stamp"
+)
+set(SCENE_SETTINGS_CATALOG_FLOORS
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/scene_settings_catalog_floors.json"
+)
+
+file(
+    GLOB_RECURSE SCENE_SETTINGS_CATALOG_INPUTS
+    LIST_DIRECTORIES false
+    CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.hpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cxx"
+)
+
+# The generator rewrites only outputs whose text changed, so their objects survive an unrelated edit. The
+# stamp is the output instead, or MSBuild would see them older than the sources and rerun every build.
+add_custom_command(
+    OUTPUT "${SCENE_SETTINGS_CATALOG_STAMP}"
+    BYPRODUCTS
+        "${SCENE_SETTINGS_CATALOG_HEADER}"
+        "${SCENE_SETTINGS_CATALOG_SOURCE}"
+        "${SCENE_SETTINGS_ADAPTERS_SOURCE}"
+    COMMAND
+        ${SCENE_SETTINGS_PYTHON_EXECUTABLE}
+        "${CMAKE_CURRENT_SOURCE_DIR}/cmake/generate_scene_settings_catalog.py"
+        --source-dir "${CMAKE_CURRENT_SOURCE_DIR}" --out-dir
+        "${SCENE_SETTINGS_CATALOG_DIR}" --min-entries 645 --min-controllable 538
+        --min-controllable-features 32 --feature-floors
+        "${SCENE_SETTINGS_CATALOG_FLOORS}" --stamp
+        "${SCENE_SETTINGS_CATALOG_STAMP}"
+    DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/cmake/generate_scene_settings_catalog.py"
+        "${SCENE_SETTINGS_CATALOG_FLOORS}"
+        ${SCENE_SETTINGS_CATALOG_INPUTS}
+    COMMENT "Generating scene settings catalog"
+    VERBATIM
+)
+
+target_include_directories(
+    "${PROJECT_NAME}"
+    PRIVATE "${SCENE_SETTINGS_CATALOG_DIR}"
+)
+
+target_sources(
+    "${PROJECT_NAME}"
+    PRIVATE
+        "${SCENE_SETTINGS_CATALOG_STAMP}"
+        "${SCENE_SETTINGS_CATALOG_HEADER}"
+        "${SCENE_SETTINGS_CATALOG_SOURCE}"
+        "${SCENE_SETTINGS_ADAPTERS_SOURCE}"
 )
 
 # #######################################################################################################################
@@ -538,7 +644,35 @@ install(
     COMPONENT Shaders
     PATTERN "Tests" EXCLUDE
 )
+# Icon fonts + licenses live under src/Menu/Icons/glyphs; deploy under Icons/glyphs (not Fonts).
+# CONFIGURE_DEPENDS picks up new TTFs / LICENSE files without editing this list.
+set(CS_ICON_FONT_SRC_DIR "${CMAKE_SOURCE_DIR}/src/Menu/Icons/glyphs")
+set(CS_ICON_FONT_DST_REL "Interface/CommunityShaders/Icons/glyphs")
+file(
+    GLOB CS_ICON_FONT_FILES
+    CONFIGURE_DEPENDS
+    LIST_DIRECTORIES FALSE
+    "${CS_ICON_FONT_SRC_DIR}/*.ttf"
+    "${CS_ICON_FONT_SRC_DIR}/*LICENSE*.txt"
+)
+install(
+    FILES ${CS_ICON_FONT_FILES}
+    DESTINATION ${CS_ICON_FONT_DST_REL}
+    COMPONENT Shaders
+)
 install(CODE "file(REMOVE \${CMAKE_INSTALL_PREFIX}/Core)" COMPONENT Shaders)
+
+# The rest of the Licenses folder lives in package/; these two sit at the repo root for GitHub.
+set(LICENSES_DESTINATION SKSE/Plugins/CommunityShaders/Licenses)
+set(ROOT_LICENSE_FILES
+    "${CMAKE_SOURCE_DIR}/COPYING.txt"
+    "${CMAKE_SOURCE_DIR}/EXCEPTIONS.md"
+)
+install(
+    FILES ${ROOT_LICENSE_FILES}
+    DESTINATION ${LICENSES_DESTINATION}
+    COMPONENT SKSE
+)
 if(NVPERF_SUPPORT)
     install(
         FILES "${NVPERF_DLL}"
@@ -595,6 +729,8 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
         list(FILTER _tmp EXCLUDE REGEX "/Shaders/")
         list(APPEND _AIO_PACKAGE_FILES ${_tmp})
     endforeach()
+    list(APPEND _AIO_PACKAGE_FILES ${CS_ICON_FONT_FILES})
+    list(APPEND _AIO_PACKAGE_FILES ${ROOT_LICENSE_FILES})
 
     # Prepare AIO by copying files only when different. This avoids updating
     # timestamps for unchanged files and prevents downstream incremental
@@ -643,6 +779,29 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
     list(FILTER _AIO_PACKAGE_SOURCE_FILES EXCLUDE REGEX "/Tests/")
     list(FILTER _AIO_PACKAGE_SOURCE_FILES EXCLUDE REGEX "/Shaders/")
     append_copy_if_different(_prepare_aio_cmds _AIO_PACKAGE_SOURCE_FILES "${CMAKE_SOURCE_DIR}/package" "${AIO_DIR}")
+    append_copy_if_different(_prepare_aio_cmds ROOT_LICENSE_FILES "${CMAKE_SOURCE_DIR}" "${AIO_DIR}/${LICENSES_DESTINATION}")
+
+    # Icon fonts are sourced from src/Menu/Icons/glyphs (CS_ICON_FONT_FILES glob).
+    list(
+        APPEND _prepare_aio_cmds
+        COMMAND
+        ${CMAKE_COMMAND}
+        -E
+        make_directory
+        "${AIO_DIR}/${CS_ICON_FONT_DST_REL}"
+    )
+    foreach(_icon_font_src IN LISTS CS_ICON_FONT_FILES)
+        get_filename_component(_icon_font_name "${_icon_font_src}" NAME)
+        list(
+            APPEND _prepare_aio_cmds
+            COMMAND
+            ${CMAKE_COMMAND}
+            -E
+            copy_if_different
+            "${_icon_font_src}"
+            "${AIO_DIR}/${CS_ICON_FONT_DST_REL}/${_icon_font_name}"
+        )
+    endforeach()
 
     # Copy feature folders (only files, preserve existing files in AIO).
     # Shader files are excluded - copy_shaders.stamp owns the Shaders/ subdir
@@ -746,7 +905,9 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
     list(FILTER _package_shaders EXCLUDE REGEX "/Tests/")
     set(_shader_copy_cmds)
 
-    set(_feature_shader_paths_file "${CMAKE_CURRENT_BINARY_DIR}/feature_shader_paths.txt")
+    set(_feature_shader_paths_file
+        "${CMAKE_CURRENT_BINARY_DIR}/feature_shader_paths.txt"
+    )
     file(WRITE "${_feature_shader_paths_file}" "")
     foreach(_fpath IN LISTS FEATURE_PATHS)
         if(EXISTS "${_fpath}/Shaders")
@@ -1007,7 +1168,9 @@ if(NOT DEFINED ENV{CommunityShadersOutputDir})
     )
 endif()
 
-find_program(SEVENZ_EXECUTABLE NAMES 7z 7za
+find_program(
+    SEVENZ_EXECUTABLE
+    NAMES 7z 7za
     PATHS "C:/Program Files/7-Zip" "C:/Program Files (x86)/7-Zip"
     DOC "7-Zip archiver for compressed packages"
 )
@@ -1030,6 +1193,9 @@ if(ZIP_TO_DIST)
         COMMAND
             ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/package
             "${ZIP_DIR}"
+        COMMAND
+            ${CMAKE_COMMAND} -E copy ${ROOT_LICENSE_FILES}
+            "${ZIP_DIR}/${LICENSES_DESTINATION}/"
         COMMAND
             ${CMAKE_COMMAND} -E copy $<TARGET_FILE:${PROJECT_NAME}>
             "${ZIP_DIR}/SKSE/Plugins/"
@@ -1115,7 +1281,8 @@ if(AIO_ZIP_TO_DIST)
     if(SEVENZ_EXECUTABLE)
         add_custom_command(
             OUTPUT ${AIO_ZIP_STAMP}
-            COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_SOURCE_DIR}/dist"
+            COMMAND
+                ${CMAKE_COMMAND} -E make_directory "${CMAKE_SOURCE_DIR}/dist"
             COMMAND ${CMAKE_COMMAND} -E rm -f "${AIO_ARCHIVE}"
             COMMAND "${SEVENZ_EXECUTABLE}" ${SEVENZ_AIO_ARGS} "${AIO_ARCHIVE}" *
             COMMAND ${CMAKE_COMMAND} -E touch ${AIO_ZIP_STAMP}
@@ -1127,7 +1294,8 @@ if(AIO_ZIP_TO_DIST)
         message(WARNING "7z not found; AIO archive will use uncompressed zip")
         add_custom_command(
             OUTPUT ${AIO_ZIP_STAMP}
-            COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_SOURCE_DIR}/dist"
+            COMMAND
+                ${CMAKE_COMMAND} -E make_directory "${CMAKE_SOURCE_DIR}/dist"
             COMMAND ${CMAKE_COMMAND} -E tar cf ${AIO_ARCHIVE} --format=zip -- .
             COMMAND ${CMAKE_COMMAND} -E touch ${AIO_ZIP_STAMP}
             WORKING_DIRECTORY ${AIO_DIR}
@@ -1157,10 +1325,7 @@ set(CORE_PACKAGE "${DIST_PATH}/${PROJECT_NAME}-${UTC_NOW}.zip")
 # CORE_SOURCES = all content copied to the AIO directory + the SKSE plugin dll.
 # No CONFIGURE_DEPENDS: packaging runs from a fresh CI configure, and omitting
 # it keeps these globs out of the VS generator's per-build VerifyGlobs walk.
-file(
-    GLOB_RECURSE CORE_SOURCES
-    "${CMAKE_SOURCE_DIR}/package/*"
-)
+file(GLOB_RECURSE CORE_SOURCES "${CMAKE_SOURCE_DIR}/package/*")
 # Add SKSE plugin dll as dependency (use target-file generator expression so CMake
 # knows the actual output path of the target at build time)
 list(APPEND CORE_SOURCES "$<TARGET_FILE:${PROJECT_NAME}>")
@@ -1182,8 +1347,8 @@ add_custom_command(
     OUTPUT ${CORE_PACKAGE}
     DEPENDS ${PROJECT_NAME} ${CORE_SOURCES}
     COMMAND
-        ${CMAKE_COMMAND} --install ${CMAKE_BINARY_DIR} --config $<CONFIG> --prefix ${FEATURE_PATH}
-        --component SKSE
+        ${CMAKE_COMMAND} --install ${CMAKE_BINARY_DIR} --config $<CONFIG>
+        --prefix ${FEATURE_PATH} --component SKSE
     COMMAND
         ${CMAKE_COMMAND} -E copy_directory ${CORE_FEATURE_PATHS} ${FEATURE_PATH}
     COMMAND ${CMAKE_COMMAND} -E rm -f -- ${FEATURE_PATH}/Core
@@ -1209,8 +1374,7 @@ foreach(FEATURE_PATH ${FEATURE_PATHS})
 
     add_custom_command(
         OUTPUT ${FEATURE_PACKAGE}
-        COMMAND
-            ${CMAKE_COMMAND} -E tar cfv ${FEATURE_PACKAGE} --format=zip -- .
+        COMMAND ${CMAKE_COMMAND} -E tar cfv ${FEATURE_PACKAGE} --format=zip -- .
         WORKING_DIRECTORY "${FEATURE_PATH}"
         DEPENDS ${FEATURE_SOURCES}
         COMMENT "Creating ${FEATURE} zip package"
@@ -1227,15 +1391,15 @@ endforeach()
 if(TARGET PREPARE_AIO)
     add_custom_target(
         "AIO"
-        DEPENDS
-            ${CMAKE_CURRENT_BINARY_DIR}/prepare_aio.stamp
-            copy_shaders.stamp
+        DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/prepare_aio.stamp copy_shaders.stamp
     )
 else()
     add_custom_command(
         OUTPUT ${AIO_DIR}/SKSE/Plugins/${PROJECT_NAME}.dll
         DEPENDS ${PROJECT_NAME} ${CORE_SOURCES}
-        COMMAND ${CMAKE_COMMAND} --install ${CMAKE_BINARY_DIR} --config $<CONFIG> --prefix ${AIO_DIR}
+        COMMAND
+            ${CMAKE_COMMAND} --install ${CMAKE_BINARY_DIR} --config $<CONFIG>
+            --prefix ${AIO_DIR}
         COMMENT "Installing to AIO folder"
     )
     add_custom_target("AIO" DEPENDS ${AIO_DIR}/SKSE/Plugins/${PROJECT_NAME}.dll)
@@ -1279,18 +1443,30 @@ else()
     # SEVENZ_EXECUTABLE too or it emits a deflate zip wearing a .7z extension.
     if(SEVENZ_EXECUTABLE)
         set(AIO_ARCHIVE_COMMAND
-            "${SEVENZ_EXECUTABLE}" ${SEVENZ_AIO_ARGS} "${AIO_PACKAGE}" *
+            "${SEVENZ_EXECUTABLE}"
+            ${SEVENZ_AIO_ARGS}
+            "${AIO_PACKAGE}"
+            *
         )
     else()
         set(AIO_ARCHIVE_COMMAND
-            ${CMAKE_COMMAND} -E tar cfv ${AIO_PACKAGE} --format=zip -- .
+            ${CMAKE_COMMAND}
+            -E
+            tar
+            cfv
+            ${AIO_PACKAGE}
+            --format=zip
+            --
+            .
         )
     endif()
     add_custom_command(
         OUTPUT ${AIO_PACKAGE}
         DEPENDS ${PROJECT_NAME} ${CORE_SOURCES}
         COMMAND ${CMAKE_COMMAND} -E make_directory ${AIO_DIR}
-        COMMAND ${CMAKE_COMMAND} --install ${CMAKE_BINARY_DIR} --config $<CONFIG> --prefix ${AIO_DIR}
+        COMMAND
+            ${CMAKE_COMMAND} --install ${CMAKE_BINARY_DIR} --config $<CONFIG>
+            --prefix ${AIO_DIR}
         COMMAND ${CMAKE_COMMAND} -E make_directory "${DIST_PATH}"
         COMMAND ${CMAKE_COMMAND} -E rm -f "${AIO_PACKAGE}"
         COMMAND ${CMAKE_COMMAND} -E chdir ${AIO_DIR} ${AIO_ARCHIVE_COMMAND}
@@ -1302,7 +1478,9 @@ add_custom_target("Package-AIO-Manual" DEPENDS ${AIO_PACKAGE})
 
 message("*************************************************************")
 message("Community Shaders configuration complete")
-message("To prepare a package of AIO (.7z when 7-Zip is found), Core, or Features")
+message(
+    "To prepare a package of AIO (.7z when 7-Zip is found), Core, or Features"
+)
 message("  Build cmake targets:")
 message("    - Package-Core: Core package")
 message("    - Package-AIO-Manual: AIO package (manual)")

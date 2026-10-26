@@ -1,4 +1,7 @@
-#include "Common/Color.hlsli"
+// SPDX-License-Identifier: MIT AND (LicenseRef-GPL-3.0-with-Modding-Exception WITH GPL-3.0-linking-source-exception)
+// Original code Copyright (c) 2022 Ilya Perapechka (MIT), modifications GPL-3.0 with Modding Exception (see EXCEPTIONS.md)
+
+#include "Common/ColorManagement.hlsli"
 #include "Common/FrameBuffer.hlsli"
 #include "Common/SharedData.hlsli"
 
@@ -6,20 +9,22 @@
 #	undef IBL
 #endif
 
+#if defined(VSHADER)
 struct VS_INPUT
 {
 	float4 Position: POSITION0;
-#if !defined(ENVCUBE)
+#	if !defined(ENVCUBE)
 	float4 Normal: NORMAL0;
-#endif
+#	endif
 	float4 TexCoord0: TEXCOORD0;
-#if defined(ENVCUBE)
+#	if defined(ENVCUBE)
 	float4
-#else
+#	else
 	int4
-#endif
+#	endif
 		TexCoord1: TEXCOORD1;
 };
+#endif
 
 struct VS_OUTPUT
 {
@@ -184,6 +189,10 @@ VS_OUTPUT main(VS_INPUT input)
 		colorTmp1 = 0;
 		colorTmp2 = fVars1.x;
 	}
+#		if !defined(GRAYSCALE_TO_COLOR)
+	color1.rgb = ColorManagement::SRGBToWorking(color1.rgb);
+	color2.rgb = ColorManagement::SRGBToWorking(color2.rgb);
+#		endif
 	float colorParam = (tmp1 - colorTmp1) / (colorTmp2 - colorTmp1);
 	float4 color = lerp(color1, color2, colorParam);
 
@@ -292,7 +301,7 @@ float3 ShadeLight(ParticleSurface surface, float3 lightColor, float3 L)
 		float transmissionLobe = pow(saturate(dot(surface.refractDir, L)), Raindrop::TransmissionExponent) * (Raindrop::TransmissionExponent + 2.0) / Math::TAU;
 		float3 transmission = transmissionLobe * (1.0 - BRDF::F_Schlick(Raindrop::WaterF0, NdotV));
 
-		return Color::IrradianceToLinear(lightColor) * (specular + transmission);
+		return ColorManagement::SceneToLinear(lightColor) * (specular + transmission);
 	}
 #	endif
 	return lightColor;
@@ -391,15 +400,15 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		if (dot(refractDir, refractDir) < 1e-4)
 			refractDir = -V;
 
-		float3 reflectColor = Color::IrradianceToLinear(DynamicCubemaps::EnvReflectionsTexture.SampleLevel(SampSourceTexture, reflectDir, 0).xyz);
-		float3 refractColor = Color::IrradianceToLinear(DynamicCubemaps::EnvReflectionsTexture.SampleLevel(SampSourceTexture, refractDir, 0).xyz);
+		float3 reflectColor = ColorManagement::SceneToLinear(DynamicCubemaps::EnvReflectionsTexture.SampleLevel(SampSourceTexture, reflectDir, 0).xyz);
+		float3 refractColor = ColorManagement::SceneToLinear(DynamicCubemaps::EnvReflectionsTexture.SampleLevel(SampSourceTexture, refractDir, 0).xyz);
 
 		// The env cubemap only carries faint bounce light, so lights are shaded on the drop directly
 		ParticleSurface drop = { true, normalWS, V, refractDir };
 		float3 directLighting = ShadeLight(drop, GetDirLightColor(posWS.xyz), SharedData::DirLightDirection.xyz);
 		AddPointLighting(posWS.xyz, drop, directLighting);
 
-		psout.Color.xyz = Color::IrradianceToGamma(lerp(refractColor, reflectColor, fresnel) + directLighting);
+		psout.Color.xyz = ColorManagement::LinearToScene(lerp(refractColor, reflectColor, fresnel) + directLighting);
 		psout.Color.w = alpha;
 		psout.Normal = float4(0, 1, 0, alpha);
 		return psout;
@@ -407,12 +416,17 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	endif
 
 	float4 sourceColor = TexSourceTexture.Sample(SampSourceTexture, input.TexCoord0);
-	float4 baseColor = input.Color * sourceColor;
-	baseColor.xyz = Color::Diffuse(baseColor.xyz);
+	float4 baseColor;
+#	if defined(GRAYSCALE_TO_COLOR)
+	baseColor = input.Color * sourceColor;
+#	else
+	baseColor.xyz = input.Color.xyz * Color::Albedo(ColorManagement::TextureToWorking(sourceColor.xyz));
+	baseColor.w = input.Color.w * sourceColor.w;
+#	endif
 #	if defined(GRAYSCALE_TO_COLOR)
 	float3 grayScaleColor =
 		TexGrayscaleTexture.Sample(SampGrayscaleTexture, float2(sourceColor.y, input.Color.x)).xyz;
-	baseColor.xyz = grayScaleColor;
+	baseColor.xyz = ColorManagement::TextureToWorking(grayScaleColor);
 #	endif
 #	if defined(GRAYSCALE_TO_ALPHA)
 	float grayScaleAlpha =
@@ -446,6 +460,16 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	psout.Normal.w = baseColor.w;
 	psout.Normal.xyz = float3(0, 1, 0);
 
+#	if defined(ENABLE_LL)
+	if (!Permutation::RenderToUI || (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InReflection)) {
+#		if !defined(ENVCUBE)
+		if (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::SourceAlphaBlend)
+#		endif
+			psout.Color.w = pow(saturate(psout.Color.w), TransferFunctions::GAME_GAMMA);
+	}
+	if (Permutation::RenderToUI && !(Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InReflection))
+		psout.Color.rgb = ColorManagement::WorkingToUI(psout.Color.rgb);
+#	endif
 	return psout;
 }
 #endif

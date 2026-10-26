@@ -19,7 +19,7 @@ class Profiler
 {
 public:
 	static constexpr uint32_t kMaxTimers = 128;
-	static constexpr uint32_t kFrameLatency = 3;
+	static constexpr uint32_t kFrameLatency = 6;
 	static constexpr uint32_t kHistorySize = 300;
 	// Must exceed the longest legitimate gap between samples of a still-running pass;
 	// the DynamicCubemaps state machine spreads its passes over 6 frames.
@@ -113,7 +113,7 @@ public:
 		endPerfEvent = std::move(endCb);
 	}
 
-	/** @brief Begins a new profiling frame; collects results from the oldest in-flight frame. */
+	/** @brief Collects resolved frames; begins one unless the ring is full. */
 	void BeginFrame();
 
 	/**
@@ -183,7 +183,6 @@ private:
 		};
 		std::vector<TimerPair> timers;
 		uint32_t activeCount = 0;
-		bool inFlight = false;
 	};
 
 	ID3D11DeviceContext* context = nullptr;
@@ -191,9 +190,12 @@ private:
 	FrameQueries frames[kFrameLatency];
 	uint32_t writeFrame = 0;
 	uint32_t readFrame = 0;
-	uint32_t framesSinceInit = 0;
+	// Ended frames awaiting collection, oldest at readFrame.
+	uint32_t pendingFrames = 0;
 	bool initialized = false;
 	bool frameActive = false;
+	// Ring was full at BeginFrame; the whole frame is unprofiled.
+	bool frameSkipped = false;
 	double cpuTicksToMs = 0.0;
 
 	PerfEventCallback beginPerfEvent;

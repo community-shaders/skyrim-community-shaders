@@ -14,11 +14,16 @@
 #include "State.h"
 #include "TruePBR.h"
 #include "Util.h"
+#include "Utils/ShaderDescriptor.h"
+#include "VanillaBinding.h"
 
+#include "CSEditor/SceneManager/WeatherTransition.h"
 #include "Features/Effects11.h"
+#include "Features/GrassOptimizations.h"
 #include "Features/HDRDisplay.h"
 #include "Features/InteriorSun.h"
 #include "Features/LightLimitFix.h"
+#include "Features/PostProcessing.h"
 #include "Features/ProceduralAurora.h"
 #include "Features/RainRefraction.h"
 #include "Features/RemoteControl/NvPerf.h"
@@ -197,11 +202,15 @@ bool Hooks::BSShader_BeginTechnique::thunk(RE::BSShader* shader, uint32_t vertex
 	state->ModifyShaderLookup(*shader, state->modifiedVertexDescriptor, state->modifiedPixelDescriptor);
 
 	// Only check against non-shader bits
-	state->permutationData.PixelShaderDescriptor &= ~state->modifiedPixelDescriptor;
+	state->permutationData.PixelShaderDescriptor = Util::ShaderDescriptor::UploadedPixelDescriptor(state->permutationData.PixelShaderDescriptor, state->modifiedPixelDescriptor, State::GetRuntimePixelBits(*shader));
 
+	state->customVertexShader = nullptr;
+	state->customPixelShader = nullptr;
 	bool shaderFound = func(shader, vertexDescriptor, pixelDescriptor, skipPixelShader);
 
-	if (!shaderFound && shader->shaderType.get() != RE::BSShader::Type::Effect) {
+	const auto type = shader->shaderType.get();
+	if (!shaderFound && shaderCache->IsEnabled() && type > 0 && type < RE::BSShader::Type::Total &&
+		state->enabledClasses[type - 1] && type != RE::BSShader::Type::Effect) {
 		RE::BSGraphics::VertexShader* vertexShader = shaderCache->GetVertexShader(*shader, state->modifiedVertexDescriptor);
 		RE::BSGraphics::PixelShader* pixelShader = shaderCache->GetPixelShader(*shader, state->modifiedPixelDescriptor);
 		if (vertexShader == nullptr || (!skipPixelShader && pixelShader == nullptr)) {
@@ -209,12 +218,14 @@ bool Hooks::BSShader_BeginTechnique::thunk(RE::BSShader* shader, uint32_t vertex
 		} else {
 			state->settingCustomShader = true;
 			globals::d3d::context->VSSetShader(reinterpret_cast<ID3D11VertexShader*>(vertexShader->shader), NULL, NULL);
+			state->customVertexShader = vertexShader;
 			*globals::game::currentVertexShader = vertexShader;
 			globals::game::stateUpdateFlags->set(RE::BSGraphics::DIRTY_VERTEX_DESC);
 			if (skipPixelShader) {
 				pixelShader = nullptr;
 			}
 			*globals::game::currentPixelShader = pixelShader;
+			state->customPixelShader = pixelShader;
 			if (pixelShader)
 				globals::d3d::context->PSSetShader(reinterpret_cast<ID3D11PixelShader*>(pixelShader->shader), NULL, NULL);
 			state->settingCustomShader = false;
@@ -263,6 +274,7 @@ namespace SkyExtensions
 		static void thunk(RE::BSShader* shader, RE::BSRenderPass* pass, uint32_t renderFlags)
 		{
 			globals::state->UpdateSkyShaderPermutation(pass);
+			VanillaBinding::BindSkyResources(pass);
 			if (globals::features::effects11.loaded)
 				globals::features::effects11.ModifySky(pass);
 			func(shader, pass, renderFlags);
@@ -297,12 +309,19 @@ namespace GrassExtensions
 	{
 		static void thunk(RE::BSShader* shader, RE::BSRenderPass* pass, uint32_t renderFlags)
 		{
-			func(shader, pass, renderFlags);
-			LegacyGraphicsCompatibility::BindLegacyGrassPerGeometryToPixelShader();
+			// Replace vanilla setup and pixel constants for passes handled by Grass Optimizations.
+			if (!globals::features::grassOptimizations.SetupGrassPass(shader, pass)) {
+				func(shader, pass, renderFlags);
+				LegacyGraphicsCompatibility::BindLegacyGrassPerGeometryToPixelShader();
+			}
 
 			auto state = globals::state;
 
 			state->permutationData.ExtraShaderDescriptor &= ~static_cast<uint32_t>(State::ExtraShaderDescriptors::GrassSphereNormal);
+
+			// Grass meshes are rooted at the model origin, so the model bound's center sits about halfway up the mesh.
+			const auto& bound = pass->geometry->GetModelData().modelBound;
+			state->permutationData.GrassCanopyHeight = bound.center.z > 1.0f ? 2.0f * bound.center.z : std::max(bound.center.z + bound.radius, 1.0f);
 
 			if (auto* shaderProperty = static_cast<RE::BSShaderProperty*>(pass->geometry->GetGeometryRuntimeData().shaderProperty.get())) {
 				if (shaderProperty->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kEffectLighting)) {
@@ -338,6 +357,31 @@ namespace WaterBlendHistory
 
 namespace WeatherExtensions
 {
+	void DetachRetiredPrecipitation(const RE::NiPointer<RE::BSGeometry>& geometry, const RE::Precipitation* precipitation)
+	{
+		if (!geometry || (precipitation && (geometry == precipitation->currentPrecip || geometry == precipitation->lastPrecip)))
+			return;
+		if (auto* parent = geometry->parent) {
+			parent->DetachChild(geometry.get());
+			logger::warn("[Precipitation] Detached retired geometry {:X} from parent {:X}",
+				reinterpret_cast<std::uintptr_t>(geometry.get()), reinterpret_cast<std::uintptr_t>(parent));
+		}
+	}
+
+	struct Precipitation_Restore
+	{
+		static void thunk(RE::NiPointer<RE::BSGeometry>* geometry, RE::BGSShaderParticleGeometryData* data, float* cubeSize, float* density)
+		{
+			const auto previous = *geometry;
+			func(geometry, data, cubeSize, density);
+			if (previous != *geometry) {
+				auto* sky = RE::Sky::GetSingleton();
+				DetachRetiredPrecipitation(previous, sky ? sky->precip : nullptr);
+			}
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
 	struct Sky_UpdateColors
 	{
 		static void thunk(RE::Sky* sky, float a_delta)
@@ -349,6 +393,17 @@ namespace WeatherExtensions
 				globals::features::effects11.OnSkyUpdateColors(sky);
 			globals::features::skySync.OnSkyUpdateColors(sky);
 			globals::features::proceduralAurora.OnSkyUpdate(sky);
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	struct Sky_UpdateWeather
+	{
+		static void thunk(RE::Sky* sky)
+		{
+			WeatherTransition::BeforeUpdate(sky);
+			func(sky);
+			WeatherTransition::AfterUpdate(sky);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
@@ -368,6 +423,7 @@ namespace WeatherExtensions
 					return;
 				}
 			}
+
 			func(DirectionalAmbientColors, AmbientSpecularTint, AmbientSpecularFresnel);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
@@ -380,11 +436,21 @@ namespace PostProcessingExtensions
 	{
 		static void thunk(RE::ImageSpaceManager* a1, RE::ImageSpaceEffect* a2, uint32_t a3, uint32_t a4, RE::ImageSpaceShaderParam* a5)
 		{
-			if (!globals::state->IsMainOrLoadingMenuOpen() &&
-				globals::state->HandlePostProcessing(
-					static_cast<RE::RENDER_TARGET>(a3),
-					static_cast<RE::RENDER_TARGET>(a4)))
+			auto* state = globals::state;
+			const auto input = static_cast<RE::RENDER_TARGET>(a3);
+			const auto output = static_cast<RE::RENDER_TARGET>(a4);
+
+			// Effects11 replaces the pass outright; when it does, the vanilla call is skipped
+			// and HandlePostProcessing fixes up the render-target state the pass would have set.
+			if (state->HandlePostProcessing(input, output))
 				return;
+
+			// Post Processing runs its pipeline into kMAIN/kMAIN_COPY, then lets the vanilla
+			// pass run so ISHDR can take its POSTPROCESS passthrough branch.
+			auto& postProcessing = globals::features::postProcessing;
+			if (postProcessing.loaded)
+				postProcessing.PreProcess(input);
+
 			func(a1, a2, a3, a4, a5);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
@@ -430,8 +496,6 @@ struct IDXGISwapChain_Present
 		// Nsight Perf passes span one frame's rendering: ended before the overlay and Present, begun after.
 		NvPerf::OnPresentBegin();
 
-		globals::state->Reset();
-
 		HRESULT retval = globals::features::hdrDisplay.HandleSwapChainPresent(
 			This,
 			SyncInterval,
@@ -440,7 +504,7 @@ struct IDXGISwapChain_Present
 				return func(swapChain, syncInterval, presentFlags);
 			});
 
-		globals::features::screenshotFeature.ProcessCaptureRequest();
+		globals::state->Reset();
 
 		NvPerf::OnPresentEnd();
 
@@ -513,6 +577,8 @@ void Hooks::BSGraphics_SetDirtyStates::thunk(bool isCompute)
 {
 	func(isCompute);
 	globals::state->Draw();
+	if (!isCompute)
+		VanillaBinding::BindDrawResources();
 }
 
 struct ID3D11Device_CreateVertexShader
@@ -638,6 +704,10 @@ namespace Hooks
 	{
 		static void thunk()
 		{
+			// Detour the pre-call Present so plugins hooking it during this call run before our HDR composite.
+			const auto swapChain = RE::BSGraphics::Renderer::GetSingleton()->GetRuntimeData().renderWindows->swapChain;
+			const auto originalPresent = (*reinterpret_cast<std::uintptr_t**>(swapChain))[8];
+
 			logger::info("Calling original Init3D");
 
 			func();
@@ -648,9 +718,9 @@ namespace Hooks
 			logger::info("Detouring virtual function tables");
 			stl::detour_vfunc<13, IDXGISwapChain_ResizeBuffers>(globals::d3d::swapChain);
 			// InstallSwapChainPresentHooks installs SwapChainPresentBottom (suppression) and OMSetBlendState first.
-			// IDXGISwapChain_Present is installed last so it sits at the top of the Detours chain and fires first.
-			HDRDisplay::InstallSwapChainPresentHooks(globals::d3d::swapChain);
-			stl::detour_vfunc<8, IDXGISwapChain_Present>(globals::d3d::swapChain);
+			// IDXGISwapChain_Present is installed last so it sits above SwapChainPresentBottom and fires first of the two.
+			HDRDisplay::InstallSwapChainPresentHooks(globals::d3d::swapChain, originalPresent);
+			stl::detour_vfunc<8, IDXGISwapChain_Present>(globals::d3d::swapChain, originalPresent);
 
 			auto shaderCache = globals::shaderCache;
 			if (shaderCache->IsDump()) {
@@ -831,6 +901,7 @@ namespace Hooks
 						RE::BSGraphics::VertexShader* vertexShader = shaderCache->GetVertexShader(*currentShader, state->modifiedVertexDescriptor);
 						if (vertexShader) {
 							globals::d3d::context->VSSetShader(reinterpret_cast<ID3D11VertexShader*>(vertexShader->shader), NULL, NULL);
+							state->customVertexShader = vertexShader;
 							*globals::game::currentVertexShader = a_vertexShader;
 							globals::game::stateUpdateFlags->set(RE::BSGraphics::DIRTY_VERTEX_DESC);
 							return;
@@ -841,6 +912,7 @@ namespace Hooks
 
 			globals::game::stateUpdateFlags->set(RE::BSGraphics::DIRTY_VERTEX_DESC);
 
+			state->customVertexShader = nullptr;
 			*globals::game::currentVertexShader = a_vertexShader;
 			globals::d3d::context->VSSetShader(reinterpret_cast<ID3D11VertexShader*>(a_vertexShader->shader), NULL, NULL);
 		}
@@ -862,6 +934,7 @@ namespace Hooks
 						RE::BSGraphics::PixelShader* pixelShader = shaderCache->GetPixelShader(*currentShader, state->modifiedPixelDescriptor);
 						if (pixelShader) {
 							globals::d3d::context->PSSetShader(reinterpret_cast<ID3D11PixelShader*>(pixelShader->shader), NULL, NULL);
+							state->customPixelShader = pixelShader;
 							*globals::game::currentPixelShader = a_pixelShader;
 							return;
 						}
@@ -870,6 +943,7 @@ namespace Hooks
 			}
 
 			*globals::game::currentPixelShader = a_pixelShader;
+			state->customPixelShader = nullptr;
 
 			if (a_pixelShader)
 				globals::d3d::context->PSSetShader(reinterpret_cast<ID3D11PixelShader*>(a_pixelShader->shader), NULL, NULL);
@@ -977,7 +1051,7 @@ namespace Hooks
 				auto shaderCache = globals::shaderCache;
 				auto& vl = globals::features::volumetricLighting;
 
-				if (state->ShaderEnabled(RE::BSShader::Type::ImageSpace)) {
+				if (shaderCache->IsEnabled() && state->ShaderEnabled(RE::BSShader::Type::ImageSpace)) {
 					RE::BSImagespaceShader* isShader = CurrentlyDispatchedShader;
 					uint32_t techniqueId = CurrentComputeShaderTechniqueId;
 					if (vl.loaded) {
@@ -1130,7 +1204,9 @@ namespace Hooks
 		stl::write_thunk_call<TESWaterReflections_Update_Actor_GetLOSPosition>(REL::RelocationID(31373, 32160).address() + REL::Relocate(0x1AD, 0x1CA));
 
 		logger::info("Hooking weather extensions");
+		stl::detour_thunk<WeatherExtensions::Precipitation_Restore>(REL::RelocationID(25640, 26181));
 		stl::detour_thunk<WeatherExtensions::Sky_UpdateColors>(REL::RelocationID(25686, 26233));
+		stl::detour_thunk<WeatherExtensions::Sky_UpdateWeather>(REL::RelocationID(25684, 26231));
 		stl::detour_thunk<WeatherExtensions::Sky_SetDirectionalAmbientColors>(REL::RelocationID(98989, 105643));
 
 		logger::info("Hooking MenuManager::DrawInterfaceStart for menu TAA");

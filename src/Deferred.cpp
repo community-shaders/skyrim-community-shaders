@@ -5,6 +5,7 @@
 #include "ShaderCache.h"
 #include "State.h"
 #include "Utils/D3D.h"
+#include "VanillaBinding.h"
 
 #include "Features/CSEditor.h"
 #include "Features/DynamicCubemaps.h"
@@ -732,11 +733,5 @@ void Deferred::Hooks::Main_RenderFirstPersonView::thunk(bool a1, bool a2)
 void Deferred::Hooks::Renderer_ResetState::thunk(void* This)
 {
 	func(This);
-
-	auto* const state = globals::state;
-	auto* const context = globals::d3d::context;
-
-	ID3D11Buffer* buffers[3] = { state->permutationCB->CB(), state->sharedDataCB->CB(), state->featureDataCB->CB() };
-	context->PSSetConstantBuffers(4, 3, buffers);
-	context->CSSetConstantBuffers(5, 2, buffers + 1);
+	VanillaBinding::BindSharedConstantBuffers();
 }

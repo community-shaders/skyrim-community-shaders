@@ -81,6 +81,45 @@ namespace Util
 
 namespace Util::IconLoader
 {
+	UIIcons& GetIcons()
+	{
+		static UIIcons icons;
+		return icons;
+	}
+
+	bool& PendingReload()
+	{
+		static bool pending = false;
+		return pending;
+	}
+
+	void UIIcons::ReleaseAll()
+	{
+		saveSettings.Release();
+		loadSettings.Release();
+		deleteSettings.Release();
+		clearCache.Release();
+		logo.Release();
+		search.Release();
+		featureSettingRevert.Release();
+		applyToGame.Release();
+		pauseTime.Release();
+		undo.Release();
+		freeCamera.Release();
+		playMode.Release();
+		discord.Release();
+		characters.Release();
+		display.Release();
+		grass.Release();
+		lighting.Release();
+		sky.Release();
+		landscape.Release();
+		water.Release();
+		debug.Release();
+		materials.Release();
+		postProcessing.Release();
+	}
+
 	struct IconDefinition
 	{
 		std::string filename;
@@ -90,35 +129,36 @@ namespace Util::IconLoader
 
 	std::vector<IconDefinition> GetIconDefinitions(Menu* menu)
 	{
+		auto& icons = GetIcons();
 		const bool useMonochrome = menu->GetSettings().Theme.UseMonochromeIcons;
 		const bool useMonochromeLogo = menu->GetSettings().Theme.UseMonochromeLogo;
 		const char* iconFolder = useMonochrome ? "Action Icons\\Monochrome" : "Action Icons";
 		const char* logoPath = useMonochromeLogo ? "Community Shaders Logo\\Monochrome\\cs-logo.png" : "Community Shaders Logo\\cs-logo.png";
 
 		return {
-			{ std::string(iconFolder) + "\\save-settings.png", &menu->uiIcons.saveSettings.texture, &menu->uiIcons.saveSettings.size },
-			{ std::string(iconFolder) + "\\load-settings.png", &menu->uiIcons.loadSettings.texture, &menu->uiIcons.loadSettings.size },
-			{ std::string(iconFolder) + "\\clear-cache.png", &menu->uiIcons.clearCache.texture, &menu->uiIcons.clearCache.size },
-			{ std::string(iconFolder) + "\\delete.png", &menu->uiIcons.deleteSettings.texture, &menu->uiIcons.deleteSettings.size },
-			{ logoPath, &menu->uiIcons.logo.texture, &menu->uiIcons.logo.size },
-			{ std::string(iconFolder) + "\\restore-settings.png", &menu->uiIcons.featureSettingRevert.texture, &menu->uiIcons.featureSettingRevert.size },
-			{ std::string(iconFolder) + "\\discord.png", &menu->uiIcons.discord.texture, &menu->uiIcons.discord.size },
-			{ std::string(iconFolder) + "\\apply-to-game.png", &menu->uiIcons.applyToGame.texture, &menu->uiIcons.applyToGame.size },
-			{ std::string(iconFolder) + "\\pause.png", &menu->uiIcons.pauseTime.texture, &menu->uiIcons.pauseTime.size },
-			{ std::string(iconFolder) + "\\undo.png", &menu->uiIcons.undo.texture, &menu->uiIcons.undo.size },
-			{ std::string(iconFolder) + "\\free-camera.png", &menu->uiIcons.freeCamera.texture, &menu->uiIcons.freeCamera.size },
-			{ std::string(iconFolder) + "\\play-mode.png", &menu->uiIcons.playMode.texture, &menu->uiIcons.playMode.size },
+			{ std::string(iconFolder) + "\\save-settings.png", &icons.saveSettings.texture, &icons.saveSettings.size },
+			{ std::string(iconFolder) + "\\load-settings.png", &icons.loadSettings.texture, &icons.loadSettings.size },
+			{ std::string(iconFolder) + "\\clear-cache.png", &icons.clearCache.texture, &icons.clearCache.size },
+			{ std::string(iconFolder) + "\\delete.png", &icons.deleteSettings.texture, &icons.deleteSettings.size },
+			{ logoPath, &icons.logo.texture, &icons.logo.size },
+			{ std::string(iconFolder) + "\\restore-settings.png", &icons.featureSettingRevert.texture, &icons.featureSettingRevert.size },
+			{ std::string(iconFolder) + "\\discord.png", &icons.discord.texture, &icons.discord.size },
+			{ std::string(iconFolder) + "\\apply-to-game.png", &icons.applyToGame.texture, &icons.applyToGame.size },
+			{ std::string(iconFolder) + "\\pause.png", &icons.pauseTime.texture, &icons.pauseTime.size },
+			{ std::string(iconFolder) + "\\undo.png", &icons.undo.texture, &icons.undo.size },
+			{ std::string(iconFolder) + "\\free-camera.png", &icons.freeCamera.texture, &icons.freeCamera.size },
+			{ std::string(iconFolder) + "\\play-mode.png", &icons.playMode.texture, &icons.playMode.size },
 
-			{ "Categories\\characters.png", &menu->uiIcons.characters.texture, &menu->uiIcons.characters.size },
-			{ "Categories\\display.png", &menu->uiIcons.display.texture, &menu->uiIcons.display.size },
-			{ "Categories\\grass.png", &menu->uiIcons.grass.texture, &menu->uiIcons.grass.size },
-			{ "Categories\\lighting.png", &menu->uiIcons.lighting.texture, &menu->uiIcons.lighting.size },
-			{ "Categories\\sky.png", &menu->uiIcons.sky.texture, &menu->uiIcons.sky.size },
-			{ "Categories\\landscape.png", &menu->uiIcons.landscape.texture, &menu->uiIcons.landscape.size },
-			{ "Categories\\water.png", &menu->uiIcons.water.texture, &menu->uiIcons.water.size },
-			{ "Categories\\debug.png", &menu->uiIcons.debug.texture, &menu->uiIcons.debug.size },
-			{ "Categories\\materials.png", &menu->uiIcons.materials.texture, &menu->uiIcons.materials.size },
-			{ "Categories\\post-processing.png", &menu->uiIcons.postProcessing.texture, &menu->uiIcons.postProcessing.size }
+			{ "Categories\\characters.png", &icons.characters.texture, &icons.characters.size },
+			{ "Categories\\display.png", &icons.display.texture, &icons.display.size },
+			{ "Categories\\grass.png", &icons.grass.texture, &icons.grass.size },
+			{ "Categories\\lighting.png", &icons.lighting.texture, &icons.lighting.size },
+			{ "Categories\\sky.png", &icons.sky.texture, &icons.sky.size },
+			{ "Categories\\landscape.png", &icons.landscape.texture, &icons.landscape.size },
+			{ "Categories\\water.png", &icons.water.texture, &icons.water.size },
+			{ "Categories\\debug.png", &icons.debug.texture, &icons.debug.size },
+			{ "Categories\\materials.png", &icons.materials.texture, &icons.materials.size },
+			{ "Categories\\post-processing.png", &icons.postProcessing.texture, &icons.postProcessing.size }
 		};
 	}
 
@@ -197,18 +237,7 @@ namespace Util::IconLoader
 
 		auto iconDefs = GetIconDefinitions(menu);
 
-		// Release all existing textures using the same definitions list (avoids stale hardcoded list)
-		for (const auto& iconDef : iconDefs) {
-			if (*iconDef.texture) {
-				(*iconDef.texture)->Release();
-				*iconDef.texture = nullptr;
-			}
-		}
-		// Also release search icon (not in iconDefs)
-		if (menu->uiIcons.search.texture) {
-			menu->uiIcons.search.texture->Release();
-			menu->uiIcons.search.texture = nullptr;
-		}
+		GetIcons().ReleaseAll();
 
 		bool anyIconLoaded = false;
 		int iconsLoaded = 0;

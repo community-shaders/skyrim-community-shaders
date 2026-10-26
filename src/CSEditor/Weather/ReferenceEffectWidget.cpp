@@ -2,6 +2,7 @@
 #include "../../I18n/I18n.h"
 #include "../EditorWindow.h"
 #include "../WeatherUtils.h"
+#include "Globals.h"
 
 #include <format>
 
@@ -22,7 +23,7 @@ namespace
 void ReferenceEffectWidget::DrawWidget()
 {
 	WeatherUtils::SetCurrentWidget(this);
-	if (BeginWidgetWindow()) {
+	if (BeginWidgetWindow(true, true, false, nullptr, "##ReferenceEffectSearch")) {
 		DrawWidgetHeader("##ReferenceEffectSearch", true, true);
 		DrawSearchDropdown();
 		BeginScrollableContent("##REScroll");
@@ -68,10 +69,7 @@ void ReferenceEffectWidget::DrawWidget()
 					changed = true;
 			}
 
-			if (changed && editorWindow->settings.autoApplyChanges) {
-				editorWindow->PushUndoState(this);
-				ApplyChanges();
-			}
+			AutoApply(changed);
 		}
 		EndScrollableContent();
 	}
@@ -85,43 +83,14 @@ void ReferenceEffectWidget::LoadSettings()
 	if (!referenceEffect)
 		return;
 
-	if (!js.empty()) {
-		settings = vanillaSettings;
-		try {
-			if (js.contains("artObject")) {
-				std::string formIDStr = js["artObject"].get<std::string>();
-				if (formIDStr != "00000000") {
-					uint32_t formID = std::stoul(formIDStr, nullptr, 16);
-					settings.artObject = RE::TESForm::LookupByID<RE::BGSArtObject>(formID);
-				} else {
-					settings.artObject = nullptr;
-				}
-			}
-			if (js.contains("effectShader")) {
-				std::string formIDStr = js["effectShader"].get<std::string>();
-				if (formIDStr != "00000000") {
-					uint32_t formID = std::stoul(formIDStr, nullptr, 16);
-					settings.effectShader = RE::TESForm::LookupByID<RE::TESEffectShader>(formID);
-				} else {
-					settings.effectShader = nullptr;
-				}
-			}
-			if (js.contains("faceTarget"))
-				settings.faceTarget = js["faceTarget"];
-			if (js.contains("attachToCamera"))
-				settings.attachToCamera = js["attachToCamera"];
-			if (js.contains("inheritRotation"))
-				settings.inheritRotation = js["inheritRotation"];
-		} catch (const std::exception& e) {
-			logger::error("ReferenceEffect {}: Failed to load from JSON: {}", GetEditorID(), e.what());
-			settings = vanillaSettings;
-		}
-	} else {
-		settings = vanillaSettings;
-	}
-
-	originalSettings = settings;
-	ApplyChanges();
+	LoadSavedSettings([this] {
+		const auto* editorWindow = EditorWindow::GetSingleton();
+		settings.artObject = WeatherUtils::ReadFormRef(js, "artObject", editorWindow->artObjectWidgets, settings.artObject);
+		settings.effectShader = WeatherUtils::ReadFormRef(js, "effectShader", editorWindow->effectShaderWidgets, settings.effectShader);
+		ReadSaved("faceTarget", settings.faceTarget);
+		ReadSaved("attachToCamera", settings.attachToCamera);
+		ReadSaved("inheritRotation", settings.inheritRotation);
+	});
 }
 
 void ReferenceEffectWidget::LoadFromGameSettings()
@@ -137,8 +106,9 @@ void ReferenceEffectWidget::LoadFromGameSettings()
 
 void ReferenceEffectWidget::SaveSettings()
 {
-	js["artObject"] = settings.artObject ? std::format("{:08X}", settings.artObject->GetFormID()) : "00000000";
-	js["effectShader"] = settings.effectShader ? std::format("{:08X}", settings.effectShader->GetFormID()) : "00000000";
+	const auto* editorWindow = EditorWindow::GetSingleton();
+	js["artObject"] = WeatherUtils::FindEditorIDByForm(settings.artObject, editorWindow->artObjectWidgets);
+	js["effectShader"] = WeatherUtils::FindEditorIDByForm(settings.effectShader, editorWindow->effectShaderWidgets);
 	js["faceTarget"] = settings.faceTarget;
 	js["attachToCamera"] = settings.attachToCamera;
 	js["inheritRotation"] = settings.inheritRotation;
@@ -150,38 +120,43 @@ void ReferenceEffectWidget::ApplyChanges()
 	if (!referenceEffect)
 		return;
 
-	referenceEffect->data.artObject = settings.artObject;
-	referenceEffect->data.effectShader = settings.effectShader;
+	auto& data = referenceEffect->data;
+	const auto previous = data;
+	data.artObject = settings.artObject;
+	data.effectShader = settings.effectShader;
 
-	referenceEffect->data.flags.reset();
+	data.flags.reset();
 	if (settings.faceTarget)
-		referenceEffect->data.flags.set(RE::BGSReferenceEffect::Flag::kFaceTarget);
+		data.flags.set(RE::BGSReferenceEffect::Flag::kFaceTarget);
 	if (settings.attachToCamera)
-		referenceEffect->data.flags.set(RE::BGSReferenceEffect::Flag::kAttachToCamera);
+		data.flags.set(RE::BGSReferenceEffect::Flag::kAttachToCamera);
 	if (settings.inheritRotation)
-		referenceEffect->data.flags.set(RE::BGSReferenceEffect::Flag::kInheritRotation);
+		data.flags.set(RE::BGSReferenceEffect::Flag::kInheritRotation);
 
-	Widget::ForceCurrentWeatherReinit();
+	RestartStaleSkyEffect(previous.artObject != data.artObject || previous.effectShader != data.effectShader ||
+						  previous.flags.underlying() != data.flags.underlying());
 }
 
-void ReferenceEffectWidget::RevertChanges()
+void ReferenceEffectWidget::RestartStaleSkyEffect(bool a_recordChanged) const
 {
-	settings = vanillaSettings;
-	ApplyChanges();
-}
+	auto* sky = globals::game::sky;
+	if (!sky || !sky->currentWeather || sky->currentWeather->referenceEffect != referenceEffect)
+		return;
 
-bool ReferenceEffectWidget::HasUnsavedChanges() const
-{
-	return !(settings == originalSettings);
+	// The live effect was built from the record, so a shader or flag edit needs a restart as much as new art does.
+	auto& liveEffect = sky->currentReferenceEffect;
+	const auto* modelEffect = netimmerse_cast<RE::ModelReferenceEffect*>(liveEffect.get());
+	if (!modelEffect || (!a_recordChanged && modelEffect->artObject == settings.artObject))
+		return;
+
+	// Mirrors the engine teardown: a controller-less effect plays stopEffect, then Sky::Update spawns one with the new art.
+	liveEffect->controller = nullptr;
+	liveEffect.reset();
 }
 
 std::vector<Widget::SearchResult> ReferenceEffectWidget::CollectSearchableSettings() const
 {
-	return {
-		{ WeatherUtils::TranslateControlLabel(ReferenceEffectSetting::kArtObject), "", ReferenceEffectSetting::kArtObject },
-		{ WeatherUtils::TranslateControlLabel(ReferenceEffectSetting::kEffectShader), "", ReferenceEffectSetting::kEffectShader },
-		{ WeatherUtils::TranslateControlLabel(ReferenceEffectSetting::kFaceTarget), "", ReferenceEffectSetting::kFaceTarget },
-		{ WeatherUtils::TranslateControlLabel(ReferenceEffectSetting::kAttachToCamera), "", ReferenceEffectSetting::kAttachToCamera },
-		{ WeatherUtils::TranslateControlLabel(ReferenceEffectSetting::kInheritRotation), "", ReferenceEffectSetting::kInheritRotation },
-	};
+	return WeatherUtils::LabelSearchResults({ { "", { ReferenceEffectSetting::kArtObject, ReferenceEffectSetting::kEffectShader,
+														ReferenceEffectSetting::kFaceTarget, ReferenceEffectSetting::kAttachToCamera,
+														ReferenceEffectSetting::kInheritRotation } } });
 }
