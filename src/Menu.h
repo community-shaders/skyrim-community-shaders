@@ -565,7 +565,8 @@ private:
 	// handled; the claim waits here until that release reads it with TakeConsumedEscape().
 	bool escapeConsumed = false;
 
-	// Settings page: Disable at Boot list filter
+	// Settings page: in-page search and the Disable at Boot list filter
+	std::array<char, 128> settingsSearch{};
 	std::array<char, 128> disableAtBootSearch{};
 	bool disableAtBootDisabledOnly = false;
 

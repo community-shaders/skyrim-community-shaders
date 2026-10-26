@@ -4,6 +4,7 @@
 
 #include <functional>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 
@@ -21,6 +22,7 @@ public:
 	struct PageState
 	{
 		std::string& section;                     ///< Selected section ID (SettingsSectionIds)
+		std::span<char> search;                   ///< In-page search text, null-terminated
 		SettingsTabRenderer::SettingsState keys;  ///< Key-capture flags for the Keybindings section
 		std::function<void()> drawDisableAtBoot;  ///< Draws Menu's disable-at-boot list
 	};

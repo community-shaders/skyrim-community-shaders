@@ -23,6 +23,40 @@
 
 namespace
 {
+	namespace Ids = SettingsSectionIds;
+
+	// Setting labels the Settings page search matches, per section; keep in step with the widgets below
+	constexpr SettingsSearchEntry kSearchIndex[] = {
+		// Shaders & Cache (compiler controls)
+		{ Ids::kShadersCache, "menu.advanced.compiler_threads", "Compiler Threads" },
+		{ Ids::kShadersCache, "menu.advanced.background_compiler_threads", "Background Compiler Threads" },
+		{ Ids::kShadersCache, "menu.advanced.dump_shaders", "Dump Shaders" },
+		{ Ids::kShadersCache, "menu.advanced.clear_shader_cache", "Clear Shader Cache" },
+		// Developer
+		{ Ids::kDeveloper, "menu.advanced.enable_developer_mode", "Enable Developer Mode" },
+		{ Ids::kDeveloper, "menu.advanced.enable_file_watcher", "Enable File Watcher" },
+		{ Ids::kDeveloper, "menu.advanced.dump_feature_defaults", "Dump All Feature Defaults to JSON" },
+		{ Ids::kDeveloper, "menu.advanced.statistics", "Statistics" },
+		{ Ids::kDeveloper, "menu.advanced.frame_annotations", "Frame Annotations" },
+		{ Ids::kDeveloper, "menu.advanced.half_precision", "Half Precision (Partial Precision)" },
+		{ Ids::kDeveloper, "menu.advanced.content_store", "Persistent Shader Store (Developers/Testers)" },
+		{ Ids::kDeveloper, "menu.advanced.content_store_limit", "Store Size Limit" },
+		{ Ids::kDeveloper, "menu.advanced.avoid_flow_control", "Avoid Flow Control" },
+		// Logging
+		{ Ids::kLogging, "menu.advanced.log_level", "Log Level" },
+		{ Ids::kLogging, "menu.advanced.shader_defines", "Shader Defines" },
+		{ Ids::kLogging, "menu.advanced.dump_ini_settings", "Dump Ini Settings" },
+		{ Ids::kLogging, "menu.advanced.open_logs", "Open Logs" },
+		// Shader Debug
+		{ Ids::kShaderDebug, "menu.advanced.replace_original_shaders", "Replace Original Shaders" },
+		{ Ids::kShaderDebug, "menu.advanced.enable_shader_blocking", "Enable Shader Blocking" },
+		{ Ids::kShaderDebug, "menu.advanced.active_shaders", "Active Shaders" },
+		// Testing (the A/B testing label is not translated)
+		{ Ids::kTesting, nullptr, "A/B Test Interval" },
+		// Disable at Boot
+		{ Ids::kDisableAtBoot, "menu.settings.disabled_only", "Disabled only" },
+	};
+
 	constexpr double kStoreUsageRefreshSeconds = 5.0;
 	constexpr double kBytesPerMB = 1024.0 * 1024.0;
 
@@ -79,6 +113,11 @@ namespace
 		}
 		ImGui::Unindent();
 	}
+}
+
+std::span<const SettingsSearchEntry> AdvancedSettingsRenderer::GetSearchIndex()
+{
+	return kSearchIndex;
 }
 
 void AdvancedSettingsRenderer::RenderCompilerSection()

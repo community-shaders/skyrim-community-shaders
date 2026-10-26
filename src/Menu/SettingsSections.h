@@ -28,3 +28,14 @@ namespace SettingsSectionIds
 	inline constexpr std::string_view kTesting = "Testing";
 	inline constexpr std::string_view kDisableAtBoot = "DisableAtBoot";
 }
+
+/**
+ * @brief One searchable setting label of a Settings section. Each section renderer declares a static index of
+ * these next to its draw functions; the page's search resolves the labels through T(), so it works in every locale.
+ */
+struct SettingsSearchEntry
+{
+	std::string_view sectionId;  ///< SettingsSectionIds value of the section that draws the setting
+	const char* labelKey;        ///< Translation key of the label, or nullptr when the label is not translated
+	const char* fallback;        ///< English label, also matched so English guides keep working in other locales
+};

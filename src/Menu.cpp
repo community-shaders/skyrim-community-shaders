@@ -955,6 +955,7 @@ void Menu::DrawSettingsPage()
 {
 	SettingsPageRenderer::PageState state{
 		.section = settings.LastSettingsSection,
+		.search = settingsSearch,
 		.keys = {
 		.settingToggleKey = settingToggleKey,
 		.settingsEffectsToggle = settingsEffectsToggle,

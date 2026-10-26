@@ -1,5 +1,9 @@
 #pragma once
 
+#include "Menu/SettingsSections.h"
+
+#include <span>
+
 // Forward declaration
 class Menu;
 
@@ -10,6 +14,9 @@ class Menu;
 class AdvancedSettingsRenderer
 {
 public:
+	/** @brief Searchable setting labels of the sections drawn here. */
+	static std::span<const SettingsSearchEntry> GetSearchIndex();
+
 	/** @brief Compiler thread counts, Dump Shaders and Clear Shader Cache, drawn in the Shaders & Cache section. */
 	static void RenderCompilerSection();
 	/** @brief Log level, shader defines, and the log and ini dump buttons. */

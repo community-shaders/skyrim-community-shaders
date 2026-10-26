@@ -28,6 +28,76 @@ namespace
 {
 	using FontRoleGuard = MenuFonts::FontRoleGuard;  // Convenience alias
 
+	namespace Ids = SettingsSectionIds;
+
+	// Setting labels the Settings page search matches, per section; keep in step with the widgets below
+	constexpr SettingsSearchEntry kSearchIndex[] = {
+		// Shaders & Cache
+		{ Ids::kShadersCache, "menu.settings.use_custom_shaders", "Use Custom Shaders" },
+		{ Ids::kShadersCache, "menu.settings.enable_disk_cache", "Enable Disk Cache" },
+		{ Ids::kShadersCache, "menu.settings.skip_unchanged_shaders", "Skip Unchanged Shaders" },
+		{ Ids::kShadersCache, "menu.settings.enable_async", "Enable Async" },
+		{ Ids::kShadersCache, "menu.settings.skip_clear_cache_dialogue", "Skip Clear Cache Dialogue" },
+		// Keybindings
+		{ Ids::kKeybindings, "menu.settings.toggle_key", "Toggle Key:" },
+		{ Ids::kKeybindings, "menu.settings.cs_editor_toggle_key", "CS Editor Toggle Key:" },
+		{ Ids::kKeybindings, "menu.settings.effects11_editor_key", "Effects 11 Editor Key:" },
+		{ Ids::kKeybindings, "menu.settings.overlay_toggle_key", "Overlay Toggle Key:" },
+		{ Ids::kKeybindings, "menu.settings.screenshot_key", "Screenshot Key:" },
+		{ Ids::kKeybindings, "menu.settings.effect_toggle_key", "Effect Toggle Key:" },
+		{ Ids::kKeybindings, "menu.settings.effects11_toggle_key", "Effects 11 Toggle Key:" },
+		{ Ids::kKeybindings, "menu.settings.skip_compilation_key", "Skip Compilation Key:" },
+		{ Ids::kKeybindings, "menu.settings.shader_block_prev_key", "Shader Block Previous Key:" },
+		{ Ids::kKeybindings, "menu.settings.shader_block_next_key", "Shader Block Next Key:" },
+		// Language
+		{ Ids::kLanguage, "menu.settings.language", "Language" },
+		// Behavior
+		{ Ids::kBehavior, "menu.settings.show_footer", "Show Footer" },
+		{ Ids::kBehavior, "menu.settings.auto_hide_feature_list", "Auto-hide Feature List" },
+		{ Ids::kBehavior, "menu.settings.feature_list_order", "Feature List Order" },
+		{ Ids::kBehavior, "menu.settings.require_shift_to_dock", "Require Shift to Dock" },
+		{ Ids::kBehavior, "menu.settings.tooltip_hover_delay", "Tooltip Hover Delay" },
+		{ Ids::kBehavior, "menu.settings.warn_forced_settings", "Warn When Settings Are Forced" },
+		{ Ids::kBehavior, "menu.settings.reset_window_layout", "Reset Window Layout" },
+		// Theme
+		{ Ids::kTheme, "menu.settings.theme_preset", "Theme Preset" },
+		{ Ids::kTheme, "menu.settings.open_themes_folder", "Open Themes Folder" },
+		{ Ids::kTheme, "menu.settings.save_theme", "Save Theme" },
+		{ Ids::kTheme, "menu.settings.save_as_new_theme", "Save As New Theme" },
+		{ Ids::kTheme, "menu.settings.delete_theme", "Delete" },
+		// Fonts
+		{ Ids::kFonts, "menu.settings.use_resolution_based_font_size", "Use resolution-based font size" },
+		{ Ids::kFonts, "menu.settings.base_font_size", "Base Font Size" },
+		{ Ids::kFonts, "menu.settings.font_roles", "Font Roles" },
+		{ Ids::kFonts, "menu.settings.refresh_font_families", "Refresh Font Families" },
+		// Colors
+		{ Ids::kColors, "menu.settings.color_background", "Background" },
+		{ Ids::kColors, "menu.settings.color_text", "Text" },
+		{ Ids::kColors, "menu.settings.borders_and_separators", "Borders & Separators" },
+		{ Ids::kColors, "menu.settings.feature_headings", "Feature Headings" },
+		{ Ids::kColors, "menu.settings.status", "Status" },
+		{ Ids::kColors, "menu.settings.full_palette", "Full Palette" },
+		// Styling
+		{ Ids::kStyling, "menu.settings.global_scale", "Global Scale" },
+		{ Ids::kStyling, "menu.settings.scrollbar_opacity", "Scrollbar Opacity" },
+		{ Ids::kStyling, "menu.settings.advanced_styling", "Advanced styling" },
+		{ Ids::kStyling, "menu.settings.window_padding", "Window Padding" },
+		{ Ids::kStyling, "menu.settings.frame_padding", "Frame Padding" },
+		{ Ids::kStyling, "menu.settings.item_spacing", "Item Spacing" },
+		{ Ids::kStyling, "menu.settings.section_borders", "Borders" },
+		{ Ids::kStyling, "menu.settings.section_rounding", "Rounding" },
+		{ Ids::kStyling, "menu.settings.section_tables", "Tables" },
+		{ Ids::kStyling, "menu.settings.section_docking", "Docking" },
+		// Header & Effects
+		{ Ids::kHeaderEffects, "menu.settings.show_icon_buttons_in_header", "Show Icon Buttons in Header" },
+		{ Ids::kHeaderEffects, "menu.settings.use_monochrome_icons", "Use Monochrome Icons" },
+		{ Ids::kHeaderEffects, "menu.settings.use_monochrome_cs_logo", "Use Monochrome CS Logo" },
+		{ Ids::kHeaderEffects, "menu.settings.center_header_title", "Center Header Title" },
+		{ Ids::kHeaderEffects, "menu.settings.background_blur", "Background Blur" },
+		{ Ids::kHeaderEffects, "menu.settings.menu_fade", "Menu Fade" },
+		{ Ids::kHeaderEffects, "menu.settings.use_custom_cursor", "Use Custom Theme Cursor" },
+	};
+
 	std::string GetLocaleDisplayLabel(std::string_view localeCode, std::string_view metadataName)
 	{
 		if (!metadataName.empty()) {
@@ -206,6 +276,11 @@ namespace
 		std::string selected = globals::menu->GetSettings().SelectedThemePreset;
 		return !selected.empty() && ThemeManager::GetSingleton()->IsPresetTheme(selected);
 	}
+}
+
+std::span<const SettingsSearchEntry> SettingsTabRenderer::GetSearchIndex()
+{
+	return kSearchIndex;
 }
 
 void SettingsTabRenderer::RenderThemeSaveNote()

@@ -1,7 +1,9 @@
 #pragma once
 
+#include "Menu/SettingsSections.h"
 #include "Utils/Input.h"
 #include <functional>
+#include <span>
 #include <vector>
 
 // Forward declarations
@@ -32,6 +34,9 @@ public:
 		bool& settingEffects11ToggleKey; /**< @brief True while capturing a new Effects 11 toggle key. */
 		bool& settingEffects11EditorKey; /**< @brief True while capturing a new Effects 11 editor key. */
 	};
+
+	/** @brief Searchable setting labels of the sections drawn here. */
+	static std::span<const SettingsSearchEntry> GetSearchIndex();
 
 	/** @brief The one line explaining how theme edits and the theme selection are saved. */
 	static void RenderThemeSaveNote();
