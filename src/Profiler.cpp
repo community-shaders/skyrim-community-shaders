@@ -222,15 +222,18 @@ void Profiler::CollectResults()
 			activeTotalMs += ms;
 			activeCpuTotalMs += timer.cpuMs;
 
-			auto [it, inserted] = knownTimerIndex.try_emplace(timer.name, knownTimers.size());
-			if (inserted) {
+			if (knownTimerIndex.try_emplace(timer.name, knownTimers.size()).second) {
 				KnownTimer kt;
 				kt.name = timer.name;
 				knownTimers.push_back(std::move(kt));
 			}
-			auto& known = knownTimers[it->second];
-			known.gpu.PushSample(ms);
-			known.cpu.PushSample(timer.cpuMs);
+		}
+
+		// A name timed several times in one frame is one sample: its frame total.
+		for (const auto& [name, data] : activeTimers) {
+			auto& known = knownTimers[knownTimerIndex.at(name)];
+			known.gpu.PushSample(data.gpuMs);
+			known.cpu.PushSample(data.cpuMs);
 			known.lastSampleFrame = collectedFrames;
 		}
 	}
