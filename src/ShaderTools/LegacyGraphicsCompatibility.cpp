@@ -496,6 +496,8 @@ namespace LegacyGraphicsCompatibility
 		void InstallStateCameraProjectionAdapter()
 		{
 			const auto updateJitter = REL::RelocationID(75709, 77518).address();
+			// `UpdateJitter` starts with a RIP-relative load that a Detours trampoline may be too far to reach, so hook its only call instead
+			const auto updateJitterCallSite = REL::RelocationID(75460, 77245).address() + REL::Relocate(0xE5, 0xE2);
 			const auto setCameraData = REL::RelocationID(75694, 77503).address();
 			const bool updateJitterVerified = REL::Module::IsSE() ?
 			                                      REL::verify_code(
@@ -515,14 +517,14 @@ namespace LegacyGraphicsCompatibility
 													   setCameraData,
 													   REL::make_pattern<
 														   "48 89 5C 24 08 48 89 6C 24 10 48 89 74 24 18 57 48 83 EC 20">());
-			if (!updateJitterVerified || !setCameraDataVerified) {
+			if (!updateJitterVerified || !setCameraDataVerified || !Util::VersionedRelocation::IsCallTo(updateJitterCallSite, updateJitter)) {
 				logger::error("Legacy jitter/SetCameraData functions do not match the verified 1.5.97/1.6.1170 binaries; camera-projection adapters not installed");
 				return;
 			}
 
 			Main_UpdateJitter::func = updateJitter;
 			State_SetCameraData::func = setCameraData;
-			stl::detour_thunk<Main_UpdateJitter>(updateJitter);
+			SKSE::GetTrampoline().write_call<5>(updateJitterCallSite, Main_UpdateJitter::thunk);
 			stl::detour_thunk<State_SetCameraData>(setCameraData);
 			logger::info("Installed legacy jitter-preservation and State::SetCameraData adapters");
 		}
