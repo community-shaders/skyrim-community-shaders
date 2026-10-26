@@ -14,7 +14,6 @@
 #include "I18n/I18n.h"
 #include "IconsTabler.h"
 #include "Menu.h"
-#include "Menu/HomePageRenderer.h"
 #include "Menu/MenuIcons.h"
 #include "Menu/ThemeManager.h"
 #include "Util.h"
@@ -146,10 +145,5 @@ namespace IssuesPageRenderer
 	{
 		BrowserUI::SectionLabel(T("menu.home.active_constraints", "Active Setting Constraints"));
 		RenderConstraintsTable(GetActiveConstraints());
-	}
-
-	void Render()
-	{
-		HomePageRenderer::RenderHomePage();
 	}
 }

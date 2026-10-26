@@ -25,7 +25,4 @@ namespace IssuesPageRenderer
 
 	/** @brief Draws the Active Setting Constraints label, description and table; each "Constrained By" cell opens its first source feature. */
 	void RenderConstraintsSection();
-
-	/** @brief Draws Home: the Issues page ID now resolves there, so a leftover nav entry still lands on the dashboard. */
-	void Render();
 }
