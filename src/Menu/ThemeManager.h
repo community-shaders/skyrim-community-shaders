@@ -225,6 +225,26 @@ public:
 		static constexpr float SHADER_BREAKDOWN_BAR_HEIGHT = 14.0f;  // Shader compile breakdown bar (ShaderCacheStatusWidget)
 		static constexpr float ISSUES_REFRESH_SECONDS = 0.5f;        // How often the Issues nav entry and Home recount active constraints
 
+		// "Go to..." palette and header search pill (sizes are 1080p baseline, scaled by Util::GetUIScale())
+		static constexpr float PALETTE_WIDTH_RATIO = 0.42f;       // Palette width as a share of the viewport
+		static constexpr float PALETTE_HEIGHT_RATIO = 0.6f;       // Palette height as a share of the viewport
+		static constexpr size_t PALETTE_MAX_RESULTS = 50;         // Results listed for a query
+		static constexpr size_t PALETTE_RECENT_COUNT = 8;         // Recent picks remembered for the empty query
+		static constexpr float PALETTE_BADGE_PAD_X = 6.0f;        // Horizontal padding inside a type badge
+		static constexpr float PALETTE_BADGE_ROUNDING = 4.0f;     // Type badge corner radius
+		static constexpr float PALETTE_BADGE_FILL_ALPHA = 0.22f;  // Type badge fill opacity
+		static constexpr float PALETTE_ROW_PAD_Y = 4.0f;          // Vertical padding of a result row
+		static constexpr float PALETTE_PILL_PAD_X = 10.0f;        // Horizontal padding inside the header search pill
+		static constexpr float PALETTE_PILL_GAP = 12.0f;          // Minimum gap between the pill and the title or icons
+		static constexpr float PALETTE_PILL_HEIGHT_SCALE = 1.1f;  // Pill height relative to the frame height
+		static constexpr float PALETTE_PILL_FILL_ALPHA = 0.55f;   // Pill background opacity
+		static constexpr float PALETTE_TOAST_SECONDS = 4.0f;      // How long the "Look under" toast stays
+		static constexpr float REVEAL_HIGHLIGHT_SECONDS = 1.0f;   // How long a revealed setting stays outlined
+		static constexpr float REVEAL_EXPIRY_SECONDS = 3.0f;      // A reveal request older than this is dropped
+		static constexpr float REVEAL_SCROLL_RATIO = 0.3f;        // Where in the view a revealed control lands (0 top, 1 bottom)
+		static constexpr float REVEAL_OUTLINE_THICKNESS = 2.0f;   // Reveal outline stroke
+		static constexpr float REVEAL_OUTLINE_PADDING = 3.0f;     // Reveal outline margin around the control
+
 		// Home dashboard (sizes are 1080p baseline, scaled by Util::GetUIScale())
 		static constexpr float HOME_TWO_COLUMN_MIN_CHARS = 60.0f;                           // Content width, in average character widths, for two card columns
 		static constexpr float HOME_CARD_ACTION_GAP = 4.0f;                                 // Extra gap above a card's action buttons

@@ -1,4 +1,5 @@
 #include "SceneWidgetBinding.h"
+#include "Menu/SettingReveal.h"
 
 #include <algorithm>
 #include <cassert>
@@ -1572,6 +1573,10 @@ bool SceneWidgetBinding::Guard::Finish(bool a_changed)
 		disabledOpened = false;
 	}
 	PopCompensatedItemWidth();
+
+	// The main menu's pending "Go to" reveal; inert unless one is waiting
+	if (metadata && state == State::Baseline)
+		SettingReveal::NotifyControl(*metadata);
 
 	if (state == State::Unsupported) {
 		// An untracked edit (e.g. a sub-feature's enabled toggle) still rewrites the base, so the cached apply

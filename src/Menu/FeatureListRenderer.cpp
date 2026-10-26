@@ -1,4 +1,5 @@
 #include "FeatureListRenderer.h"
+#include "Menu/SettingReveal.h"
 
 #include <algorithm>
 #include <cassert>
@@ -1272,7 +1273,9 @@ void FeatureListRenderer::DrawFeatureBody(Feature* feat)
 		// Buttons that rewrite settings (a reset, a preset) raise no flag, so a finished click is checked instead.
 		const auto& context = *ImGui::GetCurrentContext();
 		const bool editedBefore = context.ActiveIdHasBeenEditedThisFrame;
+		SettingReveal::BeginFeatureBody(feat);
 		feat->DrawSettings();
+		SettingReveal::EndFeatureBody();
 		if (feat->UsesMainSettings()) {
 			auto* state = globals::state;
 			const bool edited = !editedBefore && context.ActiveIdHasBeenEditedThisFrame;
