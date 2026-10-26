@@ -225,6 +225,14 @@ public:
 		static constexpr float SHADER_BREAKDOWN_BAR_HEIGHT = 14.0f;  // Shader compile breakdown bar (ShaderCacheStatusWidget)
 		static constexpr float ISSUES_REFRESH_SECONDS = 0.5f;        // How often the Issues nav entry and Home recount active constraints
 
+		// Home dashboard (sizes are 1080p baseline, scaled by Util::GetUIScale())
+		static constexpr float HOME_TWO_COLUMN_MIN_CHARS = 60.0f;                           // Content width, in average character widths, for two card columns
+		static constexpr float HOME_CARD_ACTION_GAP = 4.0f;                                 // Extra gap above a card's action buttons
+		static constexpr float HOME_PRESET_THUMB_SIZE = 64.0f;                              // Active preset thumbnail edge
+		static constexpr float HOME_DISCORD_BANNER_MAX_WIDTH = 600.0f;                      // Discord banner width cap (half the old Home banner's)
+		static constexpr ImVec4 HOME_DISCORD_BANNER_HOVER_COLOR{ 0.1f, 0.1f, 0.1f, 0.3f };  // Subtle hover behind the transparent banner button
+		static constexpr ImVec4 HOME_DISCORD_BANNER_ACTIVE_COLOR{ 0.2f, 0.2f, 0.2f, 0.5f };
+
 		// Scene settings panel constants
 		static constexpr float SCENE_VALUE_INPUT_WIDTH = 240.0f;       // Width for float/int value inputs
 		static constexpr float SCENE_DELETE_BUTTON_WIDTH = 40.0f;      // Width for delete (X) buttons

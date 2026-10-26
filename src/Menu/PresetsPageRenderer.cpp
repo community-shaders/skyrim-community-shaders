@@ -859,17 +859,23 @@ void PresetsPageRenderer::RenderScreenshotLightbox()
 	ImGui::PopStyleVar(3);
 }
 
+void PresetsPageRenderer::EnsureDiscovered()
+{
+	if (discovered)
+		return;
+	auto& catalog = UnifiedPresetCatalog::GetSingleton();
+	catalog.Discover();
+	discovered = true;
+	if (selectedPackId.empty() && !catalog.GetActivePackId().empty())
+		selectedPackId = catalog.GetActivePackId();
+	else if (selectedPackId.empty() && !catalog.GetPacks().empty())
+		selectedPackId = catalog.GetPacks().front().id;
+}
+
 void PresetsPageRenderer::Render()
 {
 	auto& catalog = UnifiedPresetCatalog::GetSingleton();
-	if (!discovered) {
-		catalog.Discover();
-		discovered = true;
-		if (selectedPackId.empty() && !catalog.GetActivePackId().empty())
-			selectedPackId = catalog.GetActivePackId();
-		else if (selectedPackId.empty() && !catalog.GetPacks().empty())
-			selectedPackId = catalog.GetPacks().front().id;
-	}
+	EnsureDiscovered();
 
 	ImGui::BeginChild("PresetsPage", ImVec2(0, 0), false);
 

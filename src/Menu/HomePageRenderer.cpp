@@ -3,178 +3,439 @@
 
 #include <imgui.h>
 
+#include <algorithm>
+#include <array>
+#include <string>
+#include <vector>
+
+#include "CSEditor/Browser/BrowserWidgets.h"
+#include "CSEditor/EditorWindow.h"
+#include "CSEditor/SceneManager/SceneLayerHeader.h"
+#include "CSEditor/SceneManager/SceneSettingsUI.h"
+#include "Feature.h"
+#include "FeatureIssues.h"
+#include "Features/CSEditor.h"
 #include "Globals.h"
 #include "I18n/I18n.h"
+#include "IconsTabler.h"
 #include "Menu.h"
+#include "Menu/FeatureListRenderer.h"
+#include "Menu/Fonts.h"
 #include "Menu/IconLoader.h"
+#include "Menu/IssuesPageRenderer.h"
 #include "Menu/MenuLinks.h"
-#include "Plugin.h"
+#include "Menu/PresetsPageRenderer.h"
+#include "Menu/ShaderCacheStatusWidget.h"
+#include "Menu/ThemeManager.h"
+#include "Presets/UnifiedPresetCatalog.h"
+#include "SaveManager.h"
+#include "ShaderCache.h"
 #include "State.h"
 
 // Static member definitions
 bool HomePageRenderer::isFirstTimeSetupShown = false;
 
+namespace
+{
+	using Constants = ThemeManager::Constants;
+
+	/** @brief One dashboard card: a bordered, auto-height child with an icon and a section-label title. */
+	class Card
+	{
+	public:
+		/**
+		 * @param id Stable child id.
+		 * @param icon Tabler glyph before the title.
+		 * @param title Translated title; null leaves the icon on an open line for the caller's content.
+		 * @param border Border and icon colour; null keeps the theme border and the accent icon.
+		 */
+		Card(const char* id, Icons::GlyphRef icon, const char* title, const ImVec4* border = nullptr)
+		{
+			if (border)
+				ImGui::PushStyleColor(ImGuiCol_Border, *border);
+			ImGui::BeginChild(id, ImVec2(0.0f, 0.0f),
+				ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY | ImGuiChildFlags_NavFlattened,
+				ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+			if (border)
+				ImGui::PopStyleColor();
+
+			ImGui::AlignTextToFramePadding();
+			{
+				Icons::FontGuard font(icon);
+				ImGui::PushStyleColor(ImGuiCol_Text, border ? *border : Util::Colors::GetAccent());
+				ImGui::TextUnformatted(icon.utf8);
+				ImGui::PopStyleColor();
+			}
+			if (title) {
+				ImGui::SameLine();
+				BrowserUI::SectionLabel(title);
+				ImGui::Spacing();
+			}
+		}
+
+		~Card() { ImGui::EndChild(); }
+
+		Card(const Card&) = delete;
+		Card& operator=(const Card&) = delete;
+	};
+
+	/** @brief Gap above a card's action row. */
+	void BeginActions()
+	{
+		ImGui::Dummy(ImVec2(0.0f, Constants::HOME_CARD_ACTION_GAP * Util::GetUIScale()));
+	}
+
+	/** @brief A card action: a labelled icon button, kept on the line of the previous one when it fits. */
+	bool Action(const char* id, Icons::GlyphRef icon, const char* label, bool first)
+	{
+		if (!first)
+			BrowserUI::SameLineIfFits(Icons::MeasureLabeledButton(icon, label));
+		return Icons::LabeledButton(id, icon, label);
+	}
+
+	/** @brief Comma-separated list of names, for one ellipsized line. */
+	std::string JoinNames(const std::vector<std::string>& names)
+	{
+		std::string joined;
+		for (const auto& name : names) {
+			if (!joined.empty())
+				joined += ", ";
+			joined += name;
+		}
+		return joined;
+	}
+
+	/** @brief Display name of a feature short name, or the short name when no such feature exists. */
+	std::string FeatureDisplayName(const std::string& shortName)
+	{
+		auto* feature = Feature::FindFeatureByShortName(shortName);
+		return feature ? feature->GetDisplayName() : shortName;
+	}
+
+	/** @brief Features whose state changes at the next start: installed but not loaded, or loaded but now disabled at boot. */
+	std::vector<std::string> GetRestartPendingFeatures()
+	{
+		std::vector<std::string> names;
+		for (auto* feature : Feature::GetFeatureList()) {
+			if (!feature->IsInMenu() || feature->IsHiddenUnreleased() || !feature->failedLoadedMessage.empty())
+				continue;
+			const bool disabledAtBoot = globals::state->IsFeatureDisabled(feature->GetShortName());
+			const bool pendingLoad = !feature->loaded && feature->installed && !disabledAtBoot &&
+			                         !FeatureIssues::IsObsoleteFeature(feature->GetShortName());
+			const bool pendingUnload = feature->loaded && disabledAtBoot;
+			if (pendingLoad || pendingUnload)
+				names.push_back(feature->GetDisplayName());
+		}
+		std::ranges::sort(names);
+		return names;
+	}
+
+	/** @brief Full-width notice while settings are unsaved, with Save and Restore. */
+	void RenderUnsavedBanner()
+	{
+		if (!globals::state->HasUnsavedChanges())
+			return;
+
+		const ImVec4 unsavedColor = Util::Colors::GetUnsaved();
+		Card card("##HomeUnsaved", Icons::TI(ICON_TI_DEVICE_FLOPPY), nullptr, &unsavedColor);
+		ImGui::SameLine();
+		ImGui::TextColored(unsavedColor, "%s", T("menu.home.unsaved_text", "You have unsaved changes."));
+
+		const char* saveLabel = T("menu.status.save", "Save");
+		const char* restoreLabel = T("menu.home.restore", "Restore...");
+		const Icons::GlyphRef saveIcon = Icons::TI(ICON_TI_DEVICE_FLOPPY);
+		const Icons::GlyphRef restoreIcon = Icons::TI(ICON_TI_RESTORE);
+		BrowserUI::SameLineIfFits(Icons::MeasureLabeledButton(saveIcon, saveLabel));
+		if (Icons::LabeledButton("##HomeSave", saveIcon, saveLabel))
+			SaveManager::SaveAll();
+		if (Action("##HomeRestore", restoreIcon, restoreLabel, false))
+			Util::RequestRestoreSavedSettingsConfirmation();
+		Util::AddTooltip(T("menu.restore_settings", "Restore Saved Settings"));
+	}
+
+	/** @brief The active preset pack and the enabled Baselines, or an invitation to browse presets. */
+	void RenderPresetCard()
+	{
+		PresetsPageRenderer::EnsureDiscovered();
+		auto& catalog = UnifiedPresetCatalog::GetSingleton();
+		const std::string& activeId = catalog.GetActivePackId();
+
+		const ImVec4 accent = Util::Colors::GetAccent();
+		Card card("##HomePreset", Icons::TI(ICON_TI_STACK_2), T("menu.home.preset_title", "Preset"), &accent);
+
+		if (activeId.empty()) {
+			ImGui::TextWrapped("%s", T("menu.home.preset_none", "No preset active."));
+			Util::Text::WrappedDisabled("%s", T("menu.home.preset_none_hint", "Browse presets to apply a ready-made look across many features at once."));
+		} else {
+			const auto* pack = catalog.FindPack(activeId);
+			// Artwork is only shown once the Presets page has loaded it: loading it here would decode every screenshot
+			if (pack && pack->artworkLoaded && pack->logoSRV) {
+				const float thumb = Constants::HOME_PRESET_THUMB_SIZE * Util::GetUIScale();
+				ImGui::Dummy(ImVec2(thumb, thumb));
+				ImGui::GetWindowDrawList()->AddImageRounded(reinterpret_cast<ImTextureID>(pack->logoSRV.get()),
+					ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f), IM_COL32_WHITE,
+					ImGui::GetStyle().FrameRounding);
+				ImGui::SameLine();
+			}
+			ImGui::BeginGroup();
+			{
+				MenuFonts::FontRoleGuard heading(Menu::FontRole::Subheading);
+				BrowserUI::EllipsizedText(pack ? pack->name.c_str() : activeId.c_str(), 0.0f, ImGui::GetStyleColorVec4(ImGuiCol_Text));
+			}
+			if (pack)
+				PresetsPageRenderer::DrawBackendBadges(pack->IsE11(), pack->IsCS(), pack->IsBaseline(), true);
+			ImGui::EndGroup();
+		}
+
+		// Baselines layer under the active pack and can be enabled without one
+		const auto& baselineIds = catalog.GetBaselinePackIds();
+		ImGui::Spacing();
+		if (baselineIds.empty()) {
+			Util::Text::Disabled("%s", T("menu.home.baselines_none", "No Baselines enabled"));
+		} else {
+			std::vector<std::string> names;
+			names.reserve(baselineIds.size());
+			for (const auto& id : baselineIds) {
+				const auto* pack = catalog.FindPack(id);
+				names.push_back(pack ? pack->name : id);
+			}
+			ImGui::TextUnformatted(I18n::GetSingleton()->Format("menu.home.baselines_count",
+														   { { "count", std::to_string(baselineIds.size()) } }, "Baselines enabled: {count}")
+					.c_str());
+			BrowserUI::MetaText(JoinNames(names).c_str());
+		}
+
+		BeginActions();
+		if (Action("##HomeBrowsePresets", Icons::TI(ICON_TI_FOLDER_OPEN), T("menu.home.browse_presets", "Browse Presets"), true))
+			globals::menu->SelectFeatureMenu(std::string(MenuPageIds::kPresets));
+		if (!activeId.empty()) {
+			if (Action("##HomeDisablePreset", Icons::TI(ICON_TI_CIRCLE_X), T("menu.presets.disable", "Disable Preset"), false))
+				catalog.DisableActivePack();
+			Util::AddTooltip(T("menu.presets.disable_tooltip",
+				"Turns this preset off. Scene settings and form edits fall back to your own, and an Effects 11 preset switches to Vanilla."));
+		}
+	}
+
+	/** @brief What the Scene Manager applies where the player is, with links into the CS Editor. */
+	void RenderSceneCard()
+	{
+		const ImVec4 accent = Util::Colors::GetAccent();
+		Card card("##HomeScene", Icons::TI(ICON_TI_BRUSH), T("menu.home.scene_title", "Scene & CS Editor"), &accent);
+
+		const bool inGame = EditorWindow::CanBeOpen();
+		if (inGame)
+			SceneLayerHeader::DrawSummary();
+		else
+			Util::Text::WrappedDisabled("%s",
+				T("feature.scene_manager.not_in_game", "Load a save to see what applies here and to open the CS Editor."));
+
+		BeginActions();
+		Util::DisableGuard disable(!inGame);
+		if (Action("##HomeOpenEditor", Icons::TI(ICON_TI_EXTERNAL_LINK), T("menu.home.open_cs_editor", "Open CS Editor"), true))
+			CSEditor::OpenEditorWindow();
+		Util::AddTooltip(T("menu.presets.open_cs_editor_tooltip", "Open the CS Editor for weather, lighting, and scene editing."),
+			Util::kTooltipWhenDisabled);
+		if (Action("##HomeOpenLocations", Icons::TI(ICON_TI_MAP_PIN), T("feature.scene_manager.open_locations", "Locations"), false))
+			SceneSettingsUI::OpenLocationsPage();
+		Util::AddTooltip(T("feature.scene_manager.open_locations_tooltip", "Open the CS Editor's Locations page, to add places to override."),
+			Util::kTooltipWhenDisabled);
+	}
+
+	/** @brief The last shader build: compile breakdown, duration and failures. */
+	void RenderShadersCard()
+	{
+		Card card("##HomeShaders", Icons::TI(ICON_TI_APERTURE), T("menu.home.shaders_title", "Shaders"));
+
+		auto* shaderCache = globals::shaderCache;
+		auto* i18n = I18n::GetSingleton();
+		const uint64_t failed = shaderCache->GetFailedTasks();
+		if (shaderCache->IsCompiling()) {
+			ImGui::TextColored(Util::Colors::GetInfo(), "%s",
+				i18n->Format("menu.status.compiling",
+						{ { "done", std::to_string(shaderCache->GetCompletedTasks()) }, { "total", std::to_string(shaderCache->GetTotalTasks()) } },
+						"Compiling shaders {done}/{total}")
+					.c_str());
+		} else if (shaderCache->GetTotalTasks() == 0) {
+			Util::Text::Disabled("%s", T("menu.home.shaders_none", "No shaders compiled yet"));
+		} else {
+			ImGui::TextUnformatted(i18n->Format("menu.home.shaders_build_time",
+										   { { "time", shaderCache->GetShaderStatsString(true, true) } }, "Last build: {time}")
+					.c_str());
+		}
+		if (failed > 0)
+			ImGui::TextColored(Util::Colors::GetError(), "%s",
+				i18n->Format("menu.status.failed_shaders", { { "count", std::to_string(failed) } }, "Failed shaders: {count}").c_str());
+		else if (shaderCache->GetTotalTasks() > 0)
+			Util::Text::Success("%s", T("menu.home.shaders_no_failures", "No failed shaders"));
+
+		ShaderCacheStatusWidget::DrawBreakdownBar();
+
+		BeginActions();
+		if (Action("##HomeClearCache", Icons::TI(ICON_TI_TRASH), T("menu.home.clear_cache", "Clear Cache..."), true))
+			Util::RequestClearShaderCacheConfirmation();
+		if (failed > 0) {
+			const char* errorsLabel = shaderCache->IsHideErrors() ? T("menu.home.show_errors", "Show Errors") :
+			                                                        T("menu.home.hide_errors", "Hide Errors");
+			if (Action("##HomeShaderErrors", Icons::TI(ICON_TI_EYE), errorsLabel, false))
+				shaderCache->ToggleErrorMessages();
+			Util::AddTooltip(T("menu.toggle_error_message_tooltip",
+				"Hide or show the shader failure message. "
+				"Your installation is broken and will likely see errors in game. "
+				"Please double check you have updated all features and that your load order is correct. "
+				"See CommunityShaders.log for details and check the Nexus Mods page or Discord server."));
+		}
+	}
+
+	/** @brief Feature issues, active constraints and features waiting on a restart, or a compact all-clear. */
+	void RenderAttentionCard()
+	{
+		const size_t issueCount = IssuesPageRenderer::GetFeatureIssueCount();
+		const size_t constraintCount = IssuesPageRenderer::GetConstraintCount();
+		const auto restartPending = GetRestartPendingFeatures();
+		const bool allClear = issueCount == 0 && constraintCount == 0 && restartPending.empty();
+
+		const ImVec4 warning = Util::Colors::GetWarning();
+		Card card("##HomeAttention", Icons::TI(ICON_TI_ALERT_TRIANGLE), T("menu.home.attention_title", "Needs Attention"),
+			allClear ? nullptr : &warning);
+
+		if (allClear) {
+			ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetSuccess());
+			Icons::Text(Icons::TI(ICON_TI_CHECK));
+			ImGui::SameLine();
+			ImGui::TextUnformatted(T("menu.home.all_good", "All good: no issues, constraints or pending restarts."));
+			ImGui::PopStyleColor();
+			return;
+		}
+
+		auto* i18n = I18n::GetSingleton();
+		if (issueCount > 0)
+			ImGui::TextColored(Util::Colors::GetError(), "%s",
+				i18n->Format("menu.status.feature_issues", { { "count", std::to_string(issueCount) } }, "Feature issues: {count}").c_str());
+		if (constraintCount > 0)
+			ImGui::TextColored(warning, "%s",
+				i18n->Format("menu.home.constraints_count", { { "count", std::to_string(constraintCount) } }, "Active setting constraints: {count}")
+					.c_str());
+		if (!restartPending.empty()) {
+			ImGui::TextColored(globals::menu->GetTheme().StatusPalette.RestartNeeded, "%s",
+				i18n->Format("menu.home.restart_pending", { { "count", std::to_string(restartPending.size()) } }, "Restart needed for {count} features")
+					.c_str());
+			Util::AddTooltip(T("menu.home.restart_pending_tooltip",
+				"These features were installed, or had Load at boot changed, since the game started. The change applies at the next start."));
+			BrowserUI::MetaText(JoinNames(restartPending).c_str());
+		}
+
+		if (IssuesPageRenderer::HasIssues()) {
+			BeginActions();
+			if (Action("##HomeOpenIssues", Icons::TI(ICON_TI_CHEVRON_RIGHT), T("menu.home.open_issues", "Open Issues"), true))
+				globals::menu->SelectFeatureMenu(std::string(MenuPageIds::kIssues));
+		}
+	}
+
+	/** @brief Feature chips that open the feature's page. */
+	void RenderFeatureChips(const char* idPrefix, const std::vector<std::string>& shortNames, Icons::GlyphRef icon)
+	{
+		ImGui::PushID(idPrefix);
+		bool first = true;
+		for (const auto& shortName : shortNames) {
+			const std::string label = FeatureDisplayName(shortName);
+			if (!first)
+				BrowserUI::SameLineIfFits(BrowserUI::MeasureChip(label.c_str(), true));
+			first = false;
+			ImGui::PushID(shortName.c_str());
+			if (BrowserUI::Chip("##chip", label.c_str(), icon))
+				globals::menu->SelectFeatureMenu(shortName);
+			ImGui::PopID();
+		}
+		ImGui::PopID();
+	}
+
+	/** @brief Pinned features, one click away. */
+	void RenderQuickAccessCard()
+	{
+		Card card("##HomeQuickAccess", Icons::TI(ICON_TI_PIN), T("menu.home.quick_access_title", "Quick Access"));
+
+		std::vector<Feature*> pinnedFeatures;
+		for (auto* feature : Feature::GetFeatureList()) {
+			if (feature->IsInMenu() && feature->loaded && globals::state->IsFeatureFavorite(feature->GetShortName()))
+				pinnedFeatures.push_back(feature);
+		}
+		std::ranges::sort(pinnedFeatures, [](Feature* a, Feature* b) { return a->GetDisplayName() < b->GetDisplayName(); });
+		std::vector<std::string> pinned;
+		pinned.reserve(pinnedFeatures.size());
+		for (auto* feature : pinnedFeatures)
+			pinned.push_back(feature->GetShortName());
+
+		if (pinned.empty()) {
+			Util::Text::WrappedDisabled("%s", T("menu.home.quick_access_empty", "Pin a feature from its page to list it here."));
+			return;
+		}
+		RenderFeatureChips("##Pinned", pinned, Icons::TI(ICON_TI_PIN));
+	}
+
+	/** @brief A smaller Discord banner with chips for the other project links. */
+	void RenderCommunityCard()
+	{
+		Card card("##HomeCommunity", Icons::TI(ICON_TI_SHARE_2), T("menu.home.community_title", "Community"));
+
+		const float scale = Util::GetUIScale();
+		const auto& discord = Util::IconLoader::GetIcons().discord;
+		const float avail = ImGui::GetContentRegionAvail().x;
+		if (discord.texture && discord.size.x > 0.0f && discord.size.y > 0.0f) {
+			const float maxWidth = Constants::HOME_DISCORD_BANNER_MAX_WIDTH * scale;
+			const float width = std::max(1.0f, std::min(avail, maxWidth));
+			const ImVec2 size(width, width * discord.size.y / discord.size.x);
+
+			ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
+			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0.0f, 0.0f));
+			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, Constants::HOME_DISCORD_BANNER_HOVER_COLOR);
+			ImGui::PushStyleColor(ImGuiCol_ButtonActive, Constants::HOME_DISCORD_BANNER_ACTIVE_COLOR);
+			if (ImGui::ImageButton("##DiscordButton", discord.texture, size))
+				MenuLinks::Open(MenuLinks::Link::Discord);
+			ImGui::PopStyleColor(3);
+			ImGui::PopStyleVar(2);
+		} else if (ImGui::Button(T("menu.home.join_discord", "Join our Discord"))) {
+			MenuLinks::Open(MenuLinks::Link::Discord);
+		}
+		Util::AddTooltip(T("menu.home.join_discord", "Join our Discord"));
+
+		ImGui::Spacing();
+		using MenuLinks::Link;
+		constexpr std::array links = { Link::NexusMods, Link::GitHub, Link::Wiki };
+		const Icons::GlyphRef linkIcon = Icons::TI(ICON_TI_EXTERNAL_LINK);
+		for (size_t i = 0; i < links.size(); ++i) {
+			const char* label = MenuLinks::GetLabel(links[i]);
+			if (i > 0)
+				BrowserUI::SameLineIfFits(BrowserUI::MeasureChip(label, true));
+			ImGui::PushID(static_cast<int>(links[i]));
+			if (BrowserUI::Chip("##link", label, linkIcon))
+				MenuLinks::Open(links[i]);
+			ImGui::PopID();
+			Util::AddTooltip(MenuLinks::GetUrl(links[i]));
+		}
+	}
+}
+
 void HomePageRenderer::RenderHomePage()
 {
-	ImGui::BeginChild("HomePage", ImVec2(0, 0), false);
+	ImGui::BeginChild("HomePage", ImVec2(0, 0), ImGuiChildFlags_NavFlattened);
 
-	RenderWelcomeSection();
-	ImGui::Spacing();
+	RenderUnsavedBanner();
 
-	RenderQuickLinksSection();
-	ImGui::Spacing();
-
-	RenderFAQSection();
+	// Two columns once each card gets about 30 characters of room, else one
+	const float charWidth = ImGui::CalcTextSize("0").x;
+	const int columns = ImGui::GetContentRegionAvail().x >= Constants::HOME_TWO_COLUMN_MIN_CHARS * charWidth ? 2 : 1;
+	if (ImGui::BeginTable("##HomeGrid", columns, ImGuiTableFlags_SizingStretchSame)) {
+		const std::array cards = { &RenderPresetCard, &RenderSceneCard, &RenderShadersCard, &RenderAttentionCard,
+			&RenderQuickAccessCard, &RenderCommunityCard };
+		for (auto* card : cards) {
+			ImGui::TableNextColumn();
+			card();
+		}
+		ImGui::EndTable();
+	}
 
 	ImGui::EndChild();
-}
-
-void HomePageRenderer::RenderWelcomeSection()
-{
-	float scale = Util::GetUIScale();
-	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8 * scale, 8 * scale));
-
-	// Main title - centered with safe font handling
-	ImGuiIO& io = ImGui::GetIO();
-	ImFont* titleFont = nullptr;
-
-	// Safely check if we have multiple fonts and the second one is valid
-	if (io.Fonts && io.Fonts->Fonts.Size > 1 && io.Fonts->Fonts[1] != nullptr) {
-		titleFont = io.Fonts->Fonts[1];
-	}
-
-	// Scale the text to make it larger (2.0x size)
-	ImGui::SetWindowFontScale(TITLE_FONT_SCALE);
-
-	// Only push font if we have a valid one, otherwise use default scaled
-	if (titleFont) {
-		ImGui::PushFont(titleFont, titleFont->LegacySize);
-	}
-
-	ImVec2 windowSize = ImGui::GetWindowSize();
-	auto versionStr = Util::GetFormattedVersion(Plugin::VERSION);
-	auto expectedTag = std::format("v{}", versionStr);
-	auto* i18n = I18n::GetSingleton();
-	std::string titleWithVersion = i18n->Format("menu.home.welcome", { { "version", versionStr } }, "Welcome to Community Shaders {version}");
-	ImVec2 titleSize = ImGui::CalcTextSize(titleWithVersion.c_str());
-	ImGui::SetCursorPosX(std::max((windowSize.x - titleSize.x) * 0.5f, ImGui::GetCursorPosX()));
-	ImGui::TextWrapped("%s", titleWithVersion.c_str());
-
-	// Only pop font if we pushed one
-	if (titleFont) {
-		ImGui::PopFont();
-	}
-
-	// Reset text scale back to normal
-	ImGui::SetWindowFontScale(1.0f);
-
-	if (Plugin::BUILD_DESCRIBE != expectedTag) {
-		const auto buildLabel = Util::GetBuildLabel();
-		ImGui::SetCursorPosX(std::max((windowSize.x - ImGui::CalcTextSize(buildLabel.c_str()).x) * 0.5f, ImGui::GetCursorPosX()));
-		Util::Text::WrappedDisabled("%s", buildLabel.c_str());
-	}
-
-	ImGui::Spacing();
-
-	// Intro text - centered
-	const char* introText = T("menu.home.intro",
-		"Community Shaders provides advanced graphics enhancements for Skyrim.\n"
-		"This comprehensive collection of features brings modern rendering techniques\n"
-		"to enhance your visual experience.");
-	ImVec2 introSize = ImGui::CalcTextSize(introText);
-	ImGui::SetCursorPosX(std::max((windowSize.x - introSize.x) * 0.5f, ImGui::GetCursorPosX()));
-	ImGui::TextWrapped("%s", introText);
-
-	ImGui::Spacing();
-
-	// Discord banner - centered with proper error checking
-	auto menu = Menu::GetSingleton();
-	bool discordIconAvailable = false;
-
-	// Check if menu exists, has icons, and Discord icon is loaded
-	if (menu && Util::IconLoader::GetIcons().discord.texture != nullptr &&
-		Util::IconLoader::GetIcons().discord.size.x > 0 && Util::IconLoader::GetIcons().discord.size.y > 0) {
-		discordIconAvailable = true;
-	}
-
-	if (discordIconAvailable) {
-		// Calculate scaled icon size based on window width, with min/max constraints
-		ImVec2 originalSize = ImVec2(Util::IconLoader::GetIcons().discord.size.x, Util::IconLoader::GetIcons().discord.size.y);
-
-		// Compute width based on window size with constraints and padding (handles very small windows)
-		float ratioWidth = windowSize.x * DISCORD_BANNER_TARGET_WIDTH_RATIO;
-		float aspectRatio = originalSize.y / originalSize.x;
-		float maxAllowed = std::max(1.0f, windowSize.x - DISCORD_BANNER_PADDING_MARGIN);
-		float upperBound = std::min(DISCORD_BANNER_MAX_WIDTH, maxAllowed);
-		float lowerBound = std::min(DISCORD_BANNER_MIN_WIDTH, upperBound);
-		float targetWidth = std::clamp(ratioWidth, lowerBound, upperBound);
-
-		ImVec2 iconSize = ImVec2(targetWidth, targetWidth * aspectRatio);
-		ImGui::SetCursorPosX((windowSize.x - iconSize.x) * 0.5f);
-
-		// Push style to remove border
-		ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
-		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));                     // Transparent background
-		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.1f, 0.1f, 0.1f, 0.3f));  // Subtle hover
-		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.2f, 0.2f, 0.2f, 0.5f));   // Subtle click
-
-		if (ImGui::ImageButton("##DiscordButton", Util::IconLoader::GetIcons().discord.texture, iconSize)) {
-			MenuLinks::Open(MenuLinks::Link::Discord);
-		}
-
-		// Pop the style changes
-		ImGui::PopStyleColor(3);
-		ImGui::PopStyleVar();
-
-		Util::AddTooltip(T("menu.home.join_discord", "Join our Discord"));
-	} else {
-		// Fallback button when Discord icon is not available
-		float buttonWidth = DISCORD_BANNER_MIN_WIDTH * scale;
-		ImGui::SetCursorPosX((windowSize.x - buttonWidth) * 0.5f);
-		if (ImGui::Button(T("menu.home.join_discord", "Join our Discord"), ImVec2(buttonWidth, 0))) {
-			MenuLinks::Open(MenuLinks::Link::Discord);
-		}
-		Util::AddTooltip(T("menu.home.join_discord", "Join our Discord"));
-	}
-
-	ImGui::PopStyleVar();
-}
-
-void HomePageRenderer::RenderQuickLinksSection()
-{
-	// Quick Links title - centered
-	ImVec2 windowSize = ImGui::GetWindowSize();
-	const char* quickLinksTitle = T("menu.home.quick_links", "Quick Links");
-	ImVec2 titleSize = ImGui::CalcTextSize(quickLinksTitle);
-	ImGui::SetCursorPosX((windowSize.x - titleSize.x) * 0.5f);
-	ImGui::Text("%s", quickLinksTitle);
-
-	ImGui::Columns(4, nullptr, false);
-
-	// External links in a row
-	using MenuLinks::Link;
-	constexpr std::array quickLinks = { Link::NexusMods, Link::GitHub, Link::Wiki, Link::DeveloperWiki };
-	for (size_t i = 0; i < quickLinks.size(); ++i) {
-		if (i > 0)
-			ImGui::NextColumn();
-		if (ImGui::Button(MenuLinks::GetLabel(quickLinks[i]), ImVec2(-1, 0)))
-			MenuLinks::Open(quickLinks[i]);
-	}
-
-	ImGui::Columns(1);
-}
-
-void HomePageRenderer::RenderFAQSection()
-{
-	// FAQ title - centered
-	ImVec2 windowSize = ImGui::GetWindowSize();
-	const char* faqTitle = T("menu.faq.title", "Frequently Asked Questions");
-	ImVec2 titleSize = ImGui::CalcTextSize(faqTitle);
-	ImGui::SetCursorPosX((windowSize.x - titleSize.x) * 0.5f);
-	ImGui::Text("%s", faqTitle);
-	ImGui::Separator();
-
-	RenderFAQEntries();
 }
 
 void HomePageRenderer::RenderFAQEntries()

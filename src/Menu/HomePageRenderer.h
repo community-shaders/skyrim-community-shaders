@@ -4,16 +4,16 @@
 #include <string>
 
 /**
- * @brief Renders the Home page of the in-game menu with welcome info, FAQ, and first-time setup.
+ * @brief Renders the Home page of the in-game menu and the first-time setup dialog.
  *
- * Displays a welcome banner, quick links (Discord, etc.) and a FAQ section. Also manages the first-time setup dialog
- * shown on initial launch.
+ * Home is a status dashboard: a card grid with the active preset, the scene and CS Editor, the shader
+ * cache, what needs attention, quick access to features and the community links. The FAQ entries are
+ * drawn for the header's help popover. Also manages the first-time setup dialog shown on initial launch.
  */
 class HomePageRenderer
 {
 public:
 	// Constants
-	static constexpr float TITLE_FONT_SCALE = 2.0f;
 	static constexpr float HOTKEY_TEXT_SCALE = 1.6f;
 	static constexpr float HOTKEY_TEXT_SCALE_CAPTURING = 2.0f;
 	static constexpr float HOTKEY_HOVER_DIM_FACTOR = 0.7f;
@@ -27,13 +27,7 @@ public:
 	static constexpr float DIALOG_CORNER_ROUNDING = 6.0f;
 	static constexpr float DIALOG_LINE_TIGHTEN = 3.0f;
 
-	// Discord banner scaling constants
-	static constexpr float DISCORD_BANNER_TARGET_WIDTH_RATIO = 0.85f;
-	static constexpr float DISCORD_BANNER_MIN_WIDTH = 150.0f;
-	static constexpr float DISCORD_BANNER_MAX_WIDTH = 1200.0f;
-	static constexpr float DISCORD_BANNER_PADDING_MARGIN = 40.0f;
-
-	/** @brief Renders the full Home page including welcome, quick links and FAQ sections. */
+	/** @brief Renders the Home dashboard: an unsaved-changes banner when needed, then the card grid. */
 	static void RenderHomePage();
 
 	// First-time setup management
@@ -50,10 +44,6 @@ public:
 	static void RenderFAQEntries();
 
 private:
-	static void RenderWelcomeSection();
-	static void RenderQuickLinksSection();
-	static void RenderFAQSection();
-
 	// State
 	static bool isFirstTimeSetupShown;
 };

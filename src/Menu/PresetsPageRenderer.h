@@ -12,6 +12,9 @@ public:
 	/** @brief Draws the page, discovering packs and picking an initial selection on first use. */
 	static void Render();
 
+	/** @brief Scans the packs and picks the page's initial selection, once per session; later calls do nothing. */
+	static void EnsureDiscovered();
+
 	/** @brief Closes the screenshot lightbox if open. @return True if it consumed the request. */
 	static bool CloseLightboxIfOpen();
 
