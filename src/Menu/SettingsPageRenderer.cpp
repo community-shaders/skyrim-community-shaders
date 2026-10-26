@@ -207,8 +207,10 @@ namespace
 			ImGui::GetColorU32(ImGuiCol_TextDisabled), text.c_str());
 	}
 
-	void RenderNav(PageState& state)
+	void RenderNav(PageState& state, bool focusSearch)
 	{
+		if (focusSearch)
+			ImGui::SetKeyboardFocusHere();
 		const bool searchChanged = BrowserUI::SearchField("##SettingsSearch", state.search.data(), state.search.size(),
 			T("menu.settings.search_hint", "Search settings..."), ImGui::GetContentRegionAvail().x, false);
 		const auto matches = FindMatches(state.search.data());
@@ -293,18 +295,20 @@ void SettingsPageRenderer::Render(PageState& state)
 		atlas.pendingFontReload = true;
 	}
 
-	const float navWidth = ThemeManager::Constants::SETTINGS_NAV_WIDTH * Util::GetUIScale();
-	if (ImGui::BeginChild("##SettingsNav", ImVec2(navWidth, 0.0f), ImGuiChildFlags_None))
-		RenderNav(state);
-	ImGui::EndChild();
-
-	ImGui::SameLine();
-
-	// The nav may have changed the selection this frame
+	// The section list in the left pane may have changed the selection this frame
 	const Section* section = FindSection(state.section);
 	if (ImGui::BeginChild("##SettingsContent", ImVec2(0.0f, 0.0f), ImGuiChildFlags_None) && section)
 		RenderContent(state, *section);
 	ImGui::EndChild();
+}
+
+void SettingsPageRenderer::RenderSectionList(PageState& state, bool focusSearch)
+{
+	if (!IsKnownSection(state.section))
+		state.section = std::string(GetFirstSection());
+	if (!state.search.empty())
+		state.search.back() = '\0';  // the search text is read as a C string
+	RenderNav(state, focusSearch);
 }
 
 std::vector<SettingsPageRenderer::SectionInfo> SettingsPageRenderer::GetSections()

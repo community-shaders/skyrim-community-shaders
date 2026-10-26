@@ -36,9 +36,9 @@ namespace MenuPageIds
 }
 
 /**
- * @brief Filter chips of the main menu's feature list, stored as a bitmask in Menu::Settings::FeatureListFilter.
+ * @brief Filters of the main menu's feature list, stored as a bitmask in Menu::Settings::FeatureListFilter.
  *
- * Chips combine with AND, and the search text applies on top. Without kUnloaded only loaded features are listed;
+ * Filters combine with AND, and the search text applies on top. Without kUnloaded only loaded features are listed;
  * with it, only the ones that are not.
  */
 namespace FeatureListFilter
@@ -48,7 +48,7 @@ namespace FeatureListFilter
 	inline constexpr std::uint32_t kScene = 1u << 2;       ///< Has Scene Manager settings
 	inline constexpr std::uint32_t kPreRelease = 1u << 3;  ///< Alpha or beta
 	inline constexpr std::uint32_t kUnloaded = 1u << 4;    ///< Not loaded: missing, failed, or disabled at boot
-	/// Every chip; a saved mask is cut to these bits.
+	/// Every filter; a saved mask is cut to these bits.
 	inline constexpr std::uint32_t kKnown = kFavorites | kModified | kScene | kPreRelease | kUnloaded;
 }
 
@@ -66,8 +66,8 @@ public:
 	enum class NavStyle : std::uint8_t
 	{
 		Plain,     ///< An ordinary row
-		Accent,    ///< Filled pill in the info colour, for the page most users want first (Presets)
-		Launcher,  ///< Outlined pill with an external-open glyph: opens a window rather than a page (CS Editor)
+		Accent,    ///< Accent-tinted icon, for the page most users want first (Presets)
+		Launcher,  ///< Accent-tinted icon and a trailing external-open glyph: opens a window rather than a page (CS Editor)
 		Alert,     ///< Error-coloured row, for problems that need attention
 	};
 
@@ -79,7 +79,7 @@ public:
 		std::function<void()> func;
 		Icons::GlyphRef icon{};  ///< Glyph leading the row and the page header; none leaves the space empty
 		NavStyle style = NavStyle::Plain;
-		std::string hint;         ///< Muted line under an Accent or Launcher row's label, and the page header's subtitle
+		std::string hint;         ///< The page header's subtitle
 		bool showHeader = false;  ///< Draws a BrowserUI::PageHeader above the page; off for pages with their own title
 	};
 
@@ -105,11 +105,12 @@ public:
 		/// Runs a header command that rewrites a feature's settings (Restore Defaults, Use Baseline Values) so it can
 		/// be undone. When empty the command just runs.
 		std::function<void(Feature*, const std::function<void()>&)> runFeatureCommand;
-		/// In: the chord that collapses and expands the list (Ctrl+B), for tooltips; empty when unbound.
-		std::string toggleListShortcut;
+		/// Draws the Settings section list (search field and sections) in place of the feature list while the Settings
+		/// page is open. The argument focuses the settings search field this frame.
+		std::function<void(bool focusSearch)> drawSettingsNav;
 	};
 
-	/** @brief How many features each filter chip would list on its own, ignoring the search and other chips. */
+	/** @brief How many features each filter would list on its own, ignoring the search and other filters. */
 	struct FilterCounts
 	{
 		int favorites = 0;
@@ -117,7 +118,7 @@ public:
 		int scene = 0;
 		int preRelease = 0;
 		int unloaded = 0;
-		/// Features the current search and chips list, pinned ones included.
+		/// Features the current search and filters list, pinned ones included.
 		int shown = 0;
 	};
 
@@ -216,8 +217,8 @@ private:
 	};
 
 	/**
-	 * @brief Builds the list from the built-in pages and the features the search and filter chips pass.
-	 * @param counts Receives each chip's count and the number of features listed.
+	 * @brief Builds the list from the built-in pages and the features the search and filters pass.
+	 * @param counts Receives each filter's count and the number of features listed.
 	 */
 	static std::vector<MenuFuncInfo> BuildMenuList(
 		const std::string& featureSearch,
@@ -226,7 +227,7 @@ private:
 		FilterCounts& counts);
 
 	/**
-	 * @brief Rebuilds the cached list when something it depends on changed: the search, chips, sort order,
+	 * @brief Rebuilds the cached list when something it depends on changed: the search, filters, sort order,
 	 * language, favorites, a category's expansion, feature edits, scene entries, or the menu was closed.
 	 * @return True when the list was rebuilt, so the caller can re-find the selected entry.
 	 */
@@ -235,15 +236,15 @@ private:
 		std::map<std::string, bool>& categoryExpansionStates,
 		const std::function<void()>& drawSettings);
 
-	/** @brief Draws the filter chips under the search field and handles their clicks. */
-	static void RenderFilterChips(const FilterCounts& counts);
+	/** @brief Draws the sort button's popup: sort order, the filters with their counts, and Clear filters. */
+	static void RenderSortPopup(const FilterCounts& counts);
 
 	static void HandlePendingFeatureSelection(
 		std::string& pendingFeatureSelection,
 		const std::vector<MenuFuncInfo>& menuList,
 		size_t& selectedMenu);
 
-	/** @brief Draws the expanded list: fixed top pages, the searchable feature list, then fixed bottom pages. */
+	/** @brief Draws the list: top pages, the searchable feature list (or the Settings sections), then the bottom page buttons. */
 	static void RenderLeftColumn(
 		const std::vector<MenuFuncInfo>& menuList,
 		size_t& selectedMenu,
@@ -251,8 +252,19 @@ private:
 		std::map<std::string, bool>& categoryExpansionStates,
 		Hooks& hooks);
 
-	/** @brief Draws the thin strip a collapsed list leaves; clicking it expands the list. */
-	static void RenderCollapsedStrip(const Hooks& hooks);
+	/**
+	 * @brief Draws the page at full width with the list as a drawer sliding over its left edge (Auto-hide Feature List).
+	 *
+	 * The drawer opens after the cursor rests on the left edge, stays while the cursor, a focused field or a popup is
+	 * in it, and closes shortly after they leave. Its slide is time-based, so it looks the same at any frame rate.
+	 */
+	static void RenderAutoHidePane(
+		const std::vector<MenuFuncInfo>& menuList,
+		size_t& selectedMenu,
+		std::string& featureSearch,
+		std::string& pendingFeatureSelection,
+		std::map<std::string, bool>& categoryExpansionStates,
+		Hooks& hooks);
 
 	/** @brief Draws a built-in page's row; the CS Editor row opens its window instead of selecting the page. */
 	static void RenderBuiltInRow(const BuiltInMenu& menu, size_t listId, size_t& selectedMenu);

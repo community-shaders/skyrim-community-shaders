@@ -211,20 +211,20 @@ public:
 		static constexpr float VERSION_TEXT_OPACITY = 0.6f;         // Opacity for version text next to feature title
 
 		// Main menu feature list pane (sizes are 1080p baseline, scaled by Util::GetUIScale())
-		static constexpr float FEATURE_LIST_STRIP_WIDTH = 30.0f;        // Width of the strip a collapsed pane leaves
-		static constexpr float NAV_ROW_PADDING_Y = 4.0f;                // Vertical padding inside a page row of the top and bottom groups
 		static constexpr float NAV_ROW_ICON_GAP = 8.0f;                 // Gap between a page row's icon and its label
-		static constexpr float NAV_GROUP_SPACING = 4.0f;                // Gap above and below the rule between pane regions
-		static constexpr float NAV_ACCENT_IDLE_ALPHA = 0.18f;           // Presets row fill, as a share of the info colour's opacity
-		static constexpr float NAV_ACCENT_HOVERED_ALPHA = 0.28f;        // ... while hovered
-		static constexpr float NAV_ACCENT_SELECTED_ALPHA = 0.35f;       // ... while its page is shown
-		static constexpr float NAV_LAUNCHER_BORDER_ALPHA = 0.55f;       // CS Editor row outline
-		static constexpr float NAV_LAUNCHER_HOVERED_ALPHA = 0.14f;      // CS Editor row fill while hovered
-		static constexpr float FILTER_CHIP_DOT_RATIO = 0.32f;           // Scene chip's ring radius relative to the chip's icon box
+		static constexpr float SORT_FILTER_DOT_RATIO = 0.12f;           // Radius of the sort button's active-filter dot relative to the button height
+		static constexpr float AUTOHIDE_PANEL_WIDTH_RATIO = 0.2f;       // Auto-hide list width as a share of the pane (the pinned list's column ratio)
+		static constexpr float AUTOHIDE_PANEL_MIN_WIDTH = 240.0f;       // ... never narrower than this
+		static constexpr float AUTOHIDE_ACTIVATION_ZONE_WIDTH = 28.0f;  // Width of the left edge strip that reveals the auto-hide list
+		static constexpr float AUTOHIDE_OPEN_DELAY = 0.12f;             // Seconds the cursor must rest on the edge before the list opens
+		static constexpr float AUTOHIDE_CLOSE_DELAY = 0.4f;             // Seconds the cursor must be away before the list closes
+		static constexpr float AUTOHIDE_ANIM_SPEED = 16.0f;             // Slide smoothing rate per second (higher is snappier)
+		static constexpr float AUTOHIDE_ANIM_EPSILON = 0.003f;          // Slide progress within this of its target snaps to it
+		static constexpr float AUTOHIDE_GRIP_WIDTH = 3.0f;              // Width of the grip drawn on the edge while the list is hidden
+		static constexpr float AUTOHIDE_GRIP_ALPHA = 0.5f;              // Grip opacity as a share of the secondary text colour
 		static constexpr float FEATURE_ROW_MODIFIED_DOT_RATIO = 0.18f;  // Modified dot radius relative to the text line height
 
 		// Settings page constants (sizes are 1080p baseline, scaled by Util::GetUIScale())
-		static constexpr float SETTINGS_NAV_WIDTH = 230.0f;        // Width of the section sub-nav column
 		static constexpr float SETTINGS_NAV_GROUP_SPACING = 6.0f;  // Gap above each group label after the first
 		static constexpr float SETTINGS_TITLE_SCALE_MIN = 1.0f;    // Section title scale range, as on feature pages
 		static constexpr float SETTINGS_TITLE_SCALE_MAX = 3.0f;

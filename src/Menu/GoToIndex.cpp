@@ -273,8 +273,6 @@ namespace GoToIndex
 				if (!logFolder.empty())
 					ShellExecuteA(nullptr, "open", logFolder.string().c_str(), nullptr, nullptr, SW_SHOWNORMAL);
 			});
-			addCommand("toggle_list", T("menu.palette.cmd_toggle_list", "Show or hide the feature list"), {},
-				hint(Ids::kToggleFeatureList), Ids::kToggleFeatureList);
 			addCommand("help", T("menu.palette.cmd_help", "Keyboard shortcuts and help"), {}, hint(Ids::kHelp), Ids::kHelp);
 		}
 

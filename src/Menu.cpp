@@ -472,12 +472,7 @@ void Menu::Load(json& o_json)
 			settings.LastSettingsSection = std::move(section);
 	}
 
-	// The saved collapsed state, unless AutoHideFeatureList asks for the list to start collapsed
-	settings.FeatureListCollapsed = settings.AutoHideFeatureList;
-	if (const auto it = o_json.find("FeatureListCollapsed"); it != o_json.end() && it->is_boolean())
-		settings.FeatureListCollapsed = settings.AutoHideFeatureList || it->get<bool>();
-
-	// Filter chips; bits from a newer or hand-edited config that no chip uses are dropped
+	// Feature list filters; bits from a newer or hand-edited config that no chip uses are dropped
 	settings.FeatureListFilter = 0;
 	if (const auto it = o_json.find("FeatureListFilter"); it != o_json.end() && it->is_number_integer() && it->get<std::int64_t>() >= 0)
 		settings.FeatureListFilter = static_cast<std::uint32_t>(it->get<std::int64_t>() & FeatureListFilter::kKnown);
@@ -567,7 +562,6 @@ void Menu::Save(json& o_json)
 	InputCombo::ComboList::to_json(o_json["Effects11EditorKey"], settings.Effects11EditorKey);
 
 	o_json["LastSettingsSection"] = settings.LastSettingsSection;
-	o_json["FeatureListCollapsed"] = settings.FeatureListCollapsed;
 	o_json["FeatureListFilter"] = settings.FeatureListFilter;
 	o_json["RecentFeatures"] = settings.RecentFeatures;
 }
@@ -904,7 +898,7 @@ void Menu::DrawSettings()
 				if (feat->loaded && feat->UsesMainSettings() && !globals::state->IsFeatureDisabled(feat->GetShortName()))
 					undoHistory.Watch(MakeMenuFeatureUndoTarget(feat)); },
 			.runFeatureCommand = [this](Feature* feat, const std::function<void()>& command) { undoHistory.Change(MakeMenuFeatureUndoTarget(feat), command); },
-			.toggleListShortcut = MenuShortcuts::GetHint(shortcuts, MenuShortcuts::Ids::kToggleFeatureList),
+			.drawSettingsNav = [this](bool focusSearch) { DrawSettingsPage(true, focusSearch); },
 		};
 		FeatureListRenderer::RenderFeatureList(
 			footer_height,
@@ -912,7 +906,7 @@ void Menu::DrawSettings()
 			featureSearch,
 			pendingFeatureSelection,
 			categoryExpansionStates,
-			[&]() { DrawSettingsPage(); },
+			[&]() { DrawSettingsPage(false, false); },
 			listHooks);
 
 		if (settings.Theme.ShowFooter)
@@ -956,7 +950,6 @@ MenuShortcuts::Actions Menu::MakeShortcutActions()
 		.redo = [this] { pendingUndo = UndoRequest::Redo; },
 		.openGoTo = [] { GoToPalette::Open(); },
 		.focusSearch = [this] { pendingSearchFocus = true; },
-		.toggleFeatureList = [this] { settings.FeatureListCollapsed = !settings.FeatureListCollapsed; },
 		.stepFeature = [this](int step) { pendingFeatureStep = step; },
 		.canTogglePin = [this] { return shownFeature && shownFeature->loaded; },
 		.togglePin = [this] { FeatureListRenderer::ToggleFavorite(shownFeature); },
@@ -988,7 +981,7 @@ void Menu::DispatchShortcuts()
  * Delegates rendering to SettingsPageRenderer, passing the key-capture flags and
  * selected section it updates, and a callback for the private disable-at-boot list.
  */
-void Menu::DrawSettingsPage()
+void Menu::DrawSettingsPage(bool navOnly, bool focusSearch)
 {
 	SettingsPageRenderer::PageState state{
 		.section = settings.LastSettingsSection,
@@ -1007,7 +1000,10 @@ void Menu::DrawSettingsPage()
 		.drawDisableAtBoot = [this]() { DrawDisableAtBootSettings(); }
 	};
 
-	SettingsPageRenderer::Render(state);
+	if (navOnly)
+		SettingsPageRenderer::RenderSectionList(state, focusSearch);
+	else
+		SettingsPageRenderer::Render(state);
 }
 
 void Menu::DrawDisableAtBootSettings()

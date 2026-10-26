@@ -12,9 +12,9 @@
 /**
  * @brief Renders the Settings page of the main menu.
  *
- * A fixed-width sub-nav on the left lists the sections under General, Appearance and Advanced group labels;
- * the selected section draws in a scrolling pane on the right. The page has one navigation level only:
- * sections use labels for their parts, never tab bars.
+ * The main menu's left pane lists the sections under General, Appearance and Advanced group labels, below the
+ * settings search (RenderSectionList), in place of the feature list; the selected section draws in the page
+ * pane (Render). The page has one navigation level only: sections use labels for their parts, never tab bars.
  */
 class SettingsPageRenderer
 {
@@ -29,10 +29,18 @@ public:
 	};
 
 	/**
-	 * @brief Draws the sub-nav and the selected section.
+	 * @brief Draws the selected section.
 	 * @param state Menu state; an unknown section ID is replaced by the first section.
 	 */
 	static void Render(PageState& state);
+
+	/**
+	 * @brief Draws the settings search field and the section list, for the main menu's left pane. Selecting a
+	 * section updates state.section.
+	 * @param state Menu state; an unknown section ID is replaced by the first section.
+	 * @param focusSearch Focuses the search field this frame.
+	 */
+	static void RenderSectionList(PageState& state, bool focusSearch);
 
 	/** @brief A section's ID with its translated title and group label, for lists outside the page. */
 	struct SectionInfo

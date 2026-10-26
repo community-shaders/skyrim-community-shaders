@@ -24,7 +24,6 @@ namespace MenuShortcuts
 		inline constexpr std::string_view kRedo = "menu.redo";
 		inline constexpr std::string_view kGoTo = "menu.go_to";
 		inline constexpr std::string_view kFocusSearch = "menu.focus_search";
-		inline constexpr std::string_view kToggleFeatureList = "menu.toggle_feature_list";
 		inline constexpr std::string_view kPreviousFeature = "menu.previous_feature";
 		inline constexpr std::string_view kNextFeature = "menu.next_feature";
 		inline constexpr std::string_view kTogglePin = "menu.toggle_pin";
@@ -54,8 +53,7 @@ namespace MenuShortcuts
 		std::function<void()> redo;
 		std::function<void()> openGoTo;  ///< Opens the "Go to..." palette
 		std::function<void()> focusSearch;
-		std::function<void()> toggleFeatureList;  ///< Collapses the feature list to a thin strip, or expands it
-		std::function<void(int)> stepFeature;     ///< -1 for the previous feature in the list, +1 for the next
+		std::function<void(int)> stepFeature;  ///< -1 for the previous feature in the list, +1 for the next
 		std::function<bool()> canTogglePin;
 		std::function<void()> togglePin;
 		std::function<void(std::string_view)> openPage;  ///< Takes a MenuPageIds page ID
