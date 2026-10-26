@@ -698,6 +698,7 @@ void State::MarkSettingsSaved()
 
 void State::CheckFeatureSettingsChanged(Feature* feature)
 {
+	InvalidateEditsUnderBaselines(feature);
 	if (settingsChanged || !feature->loaded || !feature->UsesMainSettings())
 		return;
 	const auto name = feature->GetName();
@@ -812,6 +813,7 @@ void State::LoadFromJson(nlohmann::json& settings)
 			feature->Load(settings);
 		}
 	}
+	InvalidateEditsUnderBaselines();
 }
 
 void State::Save()
@@ -969,10 +971,48 @@ bool State::HasEditsUnderBaselines(Feature* feature)
 
 void State::InvalidateEditsUnderBaselines(Feature* feature)
 {
-	if (feature)
-		editsUnderBaselines.erase(feature->GetName());
-	else
+	if (feature) {
+		const auto name = feature->GetName();
+		editsUnderBaselines.erase(name);
+		userEdits.erase(name);
+	} else {
 		editsUnderBaselines.clear();
+		userEdits.clear();
+	}
+	++userEditsRevision;
+}
+
+bool State::HasUserEdits(Feature* feature)
+{
+	const auto name = feature->GetName();
+	if (const auto found = userEdits.find(name); found != userEdits.end())
+		return found->second;
+	bool edited = false;
+	if (feature->loaded && feature->UsesMainSettings()) {
+		if (const auto* base = GetFeatureBase(name)) {
+			SceneSettingsManager::SceneLayerGuard sceneLayerGuard;
+			json current;
+			feature->SaveSettings(current);
+			edited = !DiffFromBase(current, *base).empty();
+		}
+	}
+	userEdits[name] = edited;
+	return edited;
+}
+
+void State::PrimeUserEdits()
+{
+	const auto stale = [this](Feature* feature) {
+		return feature->loaded && feature->UsesMainSettings() && !userEdits.contains(feature->GetName());
+	};
+	if (std::ranges::none_of(Feature::GetFeatureList(), stale))
+		return;
+	// One suspension for the lot; the guards HasUserEdits takes inside it only nest
+	SceneSettingsManager::SceneLayerGuard sceneLayerGuard;
+	for (auto* feature : Feature::GetFeatureList()) {
+		if (stale(feature))
+			HasUserEdits(feature);
+	}
 }
 
 void State::ClearFeatureEditsUnderBaselines(Feature* feature)
