@@ -1,11 +1,14 @@
 #pragma once
 
+#include <cstdint>
 #include <functional>
 #include <map>
 #include <string>
 #include <string_view>
 #include <variant>
 #include <vector>
+
+#include "Menu/Icons/helpers/IconFonts.h"
 
 struct Feature;
 
@@ -39,12 +42,24 @@ namespace MenuPageIds
 class FeatureListRenderer
 {
 public:
+	/** @brief How a built-in page's row stands out in the list. */
+	enum class NavStyle : std::uint8_t
+	{
+		Plain,     ///< An ordinary row
+		Accent,    ///< Filled pill in the info colour, for the page most users want first (Presets)
+		Launcher,  ///< Outlined pill with an external-open glyph: opens a window rather than a page (CS Editor)
+		Alert,     ///< Error-coloured row, for problems that need attention
+	};
+
 	/** @brief Describes a built-in (non-feature) menu page with an ID, a display name and a draw callback. */
 	struct BuiltInMenu
 	{
 		std::string_view id;  ///< Canonical page ID from MenuPageIds, used for all page logic
 		std::string name;     ///< Translated label shown in the list
 		std::function<void()> func;
+		Icons::GlyphRef icon{};  ///< Glyph leading the row; none leaves the space empty
+		NavStyle style = NavStyle::Plain;
+		std::string hint;  ///< Muted line under an Accent or Launcher row's label; empty for none
 	};
 
 	/** @brief Represents a collapsible category header in the feature list. */
@@ -69,6 +84,8 @@ public:
 		/// Runs a header command that rewrites a feature's settings (Restore Defaults, Use Baseline Values) so it can
 		/// be undone. When empty the command just runs.
 		std::function<void(Feature*, const std::function<void()>&)> runFeatureCommand;
+		/// In: the chord that collapses and expands the list (Ctrl+B), for tooltips; empty when unbound.
+		std::string toggleListShortcut;
 	};
 
 	/**
@@ -166,12 +183,19 @@ private:
 		const std::vector<MenuFuncInfo>& menuList,
 		size_t& selectedMenu);
 
+	/** @brief Draws the expanded list: fixed top pages, the searchable feature list, then fixed bottom pages. */
 	static void RenderLeftColumn(
 		const std::vector<MenuFuncInfo>& menuList,
 		size_t& selectedMenu,
 		std::string& featureSearch,
 		std::map<std::string, bool>& categoryExpansionStates,
-		bool focusSearch);
+		Hooks& hooks);
+
+	/** @brief Draws the thin strip a collapsed list leaves; clicking it expands the list. */
+	static void RenderCollapsedStrip(const Hooks& hooks);
+
+	/** @brief Draws a built-in page's row; the CS Editor row opens its window instead of selecting the page. */
+	static void RenderBuiltInRow(const BuiltInMenu& menu, size_t listId, size_t& selectedMenu);
 
 	static void RenderRightColumn(
 		const std::vector<MenuFuncInfo>& menuList,

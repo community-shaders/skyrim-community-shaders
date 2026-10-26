@@ -438,7 +438,8 @@ public:
 		bool EnableShaderBlocking = false;                                                                                   // Enable shader blocking hotkeys for debugging
 		bool FirstTimeSetupCompleted = false;                                                                                // Track if first-time setup has been completed
 		bool SkipClearCacheConfirmation = false;                                                                             // Skip confirmation dialog when clearing shader cache
-		bool AutoHideFeatureList = false;                                                                                    // Auto-hide left feature list panel, show on hover
+		bool AutoHideFeatureList = false;                                                                                    // Start with the feature list collapsed (the key is kept from the old hover-to-reveal option)
+		bool FeatureListCollapsed = false;                                                                                   // Feature list collapsed to a thin strip (Ctrl+B); read in Load with a type check
 		FeatureSortMode FeatureListSort = FeatureSortMode::Category;                                                         // Feature list order in the left menu column
 		bool SkipConstraintWarning = false;                                                                                  // Skip popup when a setting change creates new constraints
 		bool RequireShiftToDock = true;                                                                                      // Require holding Shift to dock windows

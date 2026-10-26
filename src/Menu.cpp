@@ -471,6 +471,11 @@ void Menu::Load(json& o_json)
 			settings.LastSettingsSection = std::move(section);
 	}
 
+	// The saved collapsed state, unless AutoHideFeatureList asks for the list to start collapsed
+	settings.FeatureListCollapsed = settings.AutoHideFeatureList;
+	if (const auto it = o_json.find("FeatureListCollapsed"); it != o_json.end() && it->is_boolean())
+		settings.FeatureListCollapsed = settings.AutoHideFeatureList || it->get<bool>();
+
 	// Legacy support: If old config has Theme data and no SelectedThemePreset, load it
 	if (o_json.contains("Theme") && o_json["Theme"].is_object() && settings.SelectedThemePreset.empty()) {
 		bool hasFontRoles = o_json["Theme"].contains("FontRoles");
@@ -542,6 +547,7 @@ void Menu::Save(json& o_json)
 	InputCombo::ComboList::to_json(o_json["Effects11EditorKey"], settings.Effects11EditorKey);
 
 	o_json["LastSettingsSection"] = settings.LastSettingsSection;
+	o_json["FeatureListCollapsed"] = settings.FeatureListCollapsed;
 }
 
 void Menu::LoadTheme(json& o_json)
@@ -870,6 +876,7 @@ void Menu::DrawSettings()
 				if (feat->loaded && feat->UsesMainSettings() && !globals::state->IsFeatureDisabled(feat->GetShortName()))
 					undoHistory.Watch(MakeMenuFeatureUndoTarget(feat)); },
 			.runFeatureCommand = [this](Feature* feat, const std::function<void()>& command) { undoHistory.Change(MakeMenuFeatureUndoTarget(feat), command); },
+			.toggleListShortcut = MenuShortcuts::GetHint(shortcuts, MenuShortcuts::Ids::kToggleFeatureList),
 		};
 		FeatureListRenderer::RenderFeatureList(
 			footer_height,
@@ -920,6 +927,7 @@ MenuShortcuts::Actions Menu::MakeShortcutActions()
 		.undo = [this] { pendingUndo = UndoRequest::Undo; },
 		.redo = [this] { pendingUndo = UndoRequest::Redo; },
 		.focusSearch = [this] { pendingSearchFocus = true; },
+		.toggleFeatureList = [this] { settings.FeatureListCollapsed = !settings.FeatureListCollapsed; },
 		.stepFeature = [this](int step) { pendingFeatureStep = step; },
 		.canTogglePin = [this] { return shownFeature && shownFeature->loaded; },
 		.togglePin = [this] { FeatureListRenderer::ToggleFavorite(shownFeature); },
@@ -957,15 +965,15 @@ void Menu::DrawSettingsPage()
 		.section = settings.LastSettingsSection,
 		.search = settingsSearch,
 		.keys = {
-		.settingToggleKey = settingToggleKey,
-		.settingsEffectsToggle = settingsEffectsToggle,
-		.settingSkipCompilationKey = settingSkipCompilationKey,
-		.settingOverlayToggleKey = settingOverlayToggleKey,
-		.settingShaderBlockPrevKey = settingShaderBlockPrevKey,
-		.settingShaderBlockNextKey = settingShaderBlockNextKey,
-		.settingCSEditorToggleKey = settingCSEditorToggleKey,
-		.settingScreenshotKey = settingScreenshotKey,
-		.settingEffects11ToggleKey = settingEffects11ToggleKey,
+			.settingToggleKey = settingToggleKey,
+			.settingsEffectsToggle = settingsEffectsToggle,
+			.settingSkipCompilationKey = settingSkipCompilationKey,
+			.settingOverlayToggleKey = settingOverlayToggleKey,
+			.settingShaderBlockPrevKey = settingShaderBlockPrevKey,
+			.settingShaderBlockNextKey = settingShaderBlockNextKey,
+			.settingCSEditorToggleKey = settingCSEditorToggleKey,
+			.settingScreenshotKey = settingScreenshotKey,
+			.settingEffects11ToggleKey = settingEffects11ToggleKey,
 			.settingEffects11EditorKey = settingEffects11EditorKey },
 		.drawDisableAtBoot = [this]() { DrawDisableAtBootSettings(); }
 	};
@@ -999,30 +1007,30 @@ void Menu::DrawDisableAtBootSettings()
 
 	ImGui::Spacing();
 
-		// Label by the (translated) display name the feature list shows; the short name keys the setting and the widget ID
+	// Label by the (translated) display name the feature list shows; the short name keys the setting and the widget ID
 	const std::string query(disableAtBootSearch.data());
-		std::vector<std::pair<std::string, std::string>> entries;  // display name, short name
-		for (auto* feature : Feature::GetFeatureList()) {
+	std::vector<std::pair<std::string, std::string>> entries;  // display name, short name
+	for (auto* feature : Feature::GetFeatureList()) {
 		if (feature->IsHiddenUnreleased() || !Util::FeatureMatchesSearch(feature, query))
 			continue;
 		const std::string shortName(feature->GetShortName());
 		if (disableAtBootDisabledOnly && !(disabledFeatures.contains(shortName) && disabledFeatures[shortName]))
 			continue;
 		entries.emplace_back(feature->GetDisplayName(), shortName);
-		}
-		std::ranges::sort(entries);
+	}
+	std::ranges::sort(entries);
 
 	if (entries.empty())
 		ImGui::TextDisabled("%s", T("menu.settings.disable_at_boot_no_match", "No features match."));
 
-		for (const auto& [displayName, shortName] : entries) {
-			bool isDisabled = disabledFeatures.contains(shortName) && disabledFeatures[shortName];
+	for (const auto& [displayName, shortName] : entries) {
+		bool isDisabled = disabledFeatures.contains(shortName) && disabledFeatures[shortName];
 
-			if (ImGui::Checkbox(std::format("{}##{}", displayName, shortName).c_str(), &isDisabled)) {
-				// Update the disabledFeatures map based on user interaction
-				disabledFeatures[shortName] = isDisabled;
-			}
+		if (ImGui::Checkbox(std::format("{}##{}", displayName, shortName).c_str(), &isDisabled)) {
+			// Update the disabledFeatures map based on user interaction
+			disabledFeatures[shortName] = isDisabled;
 		}
+	}
 }
 
 /**
