@@ -577,11 +577,11 @@ std::vector<FeatureListRenderer::MenuFuncInfo> FeatureListRenderer::BuildMenuLis
 	// then the bottom group (kBottomMenuIds)
 	auto menuList = std::vector<MenuFuncInfo>{
 		BuiltInMenu{ MenuPageIds::kHome, T("menu.features.home", "Home"), []() { HomePageRenderer::RenderHomePage(); },
-			Icons::TI(ICON_TI_HOME) },
+			Icons::TI(ICON_TI_HOME), NavStyle::Plain, T("menu.features.home_hint", "Your setup at a glance"), true },
 		BuiltInMenu{ MenuPageIds::kPresets, T("menu.features.presets", "Presets"), []() { PresetsPageRenderer::Render(); },
-			Icons::TI(ICON_TI_PALETTE), NavStyle::Accent, T("menu.features.presets_hint", "Apply look presets") },
+			Icons::TI(ICON_TI_PALETTE), NavStyle::Accent, T("menu.features.presets_hint", "Apply look presets"), true },
 		BuiltInMenu{ MenuPageIds::kCSEditor, T("menu.features.cs_editor", "CS Editor"), []() { globals::features::csEditor.DrawSettings(); },
-			Icons::TI(ICON_TI_ADJUSTMENTS_HORIZONTAL), NavStyle::Launcher, T("menu.features.cs_editor_hint", "Edit weather, lighting & scenes") },
+			Icons::TI(ICON_TI_ADJUSTMENTS_HORIZONTAL), NavStyle::Launcher, T("menu.features.cs_editor_hint", "Edit weather, lighting & scenes"), true },
 	};
 	// Problems loading features (rejected, obsolete, ...)
 	if (FeatureIssues::HasFeatureIssues()) {
@@ -590,7 +590,7 @@ std::vector<FeatureListRenderer::MenuFuncInfo> FeatureListRenderer::BuildMenuLis
 	}
 	menuList.push_back(BuiltInMenu{ MenuPageIds::kSettings, T("menu.features.settings", "Settings"), drawSettings, Icons::TI(ICON_TI_SETTINGS) });
 	menuList.push_back(BuiltInMenu{ MenuPageIds::kProfiling, T("menu.features.profiling", "Profiling"), []() { ProfilingRenderer::RenderStatistics(); },
-		Icons::TI(ICON_TI_CHART_BAR) });
+		Icons::TI(ICON_TI_CHART_BAR), NavStyle::Plain, T("menu.features.profiling_hint", "What each feature costs per frame"), true });
 
 	auto* state = globals::state;
 	auto* sceneManager = globals::sceneSettingsManager;
@@ -926,7 +926,7 @@ void FeatureListRenderer::RenderRightColumn(
 	} else if (g_detachedFeature) {
 		DrawMenuVisitor{ pendingFeatureSelection, hooks }(g_detachedFeature);
 	} else {
-		ImGui::TextDisabled("%s", T("menu.features.select_item_left", "Please select an item on the left."));
+		BrowserUI::EmptyState(T("menu.features.select_item_left", "Please select an item on the left."));
 	}
 }
 
@@ -1105,9 +1105,10 @@ void FeatureListRenderer::ListMenuVisitor::RenderRowContextMenu(Feature* feat) c
 void FeatureListRenderer::DrawMenuVisitor::operator()(const BuiltInMenu& menu)
 {
 	if (ImGui::BeginChild("##FeatureConfigFrame", { 0, 0 }, true)) {
-		// Add spacing only for Home menu
-		if (menu.id == MenuPageIds::kHome) {
-			ImGui::Dummy(ImVec2(0, ThemeManager::Constants::BUTTON_SPACING));
+		if (menu.showHeader) {
+			BrowserUI::PageHeader(menu.icon, menu.name.c_str(), menu.hint.c_str());
+			ImGui::Separator();
+			ImGui::Spacing();
 		}
 		menu.func();
 	}
@@ -1123,7 +1124,7 @@ void FeatureListRenderer::DrawMenuVisitor::operator()(const std::string&)
 void FeatureListRenderer::DrawMenuVisitor::operator()(const CategoryHeader&)
 {
 	// Category headers are not selectable in the right panel
-	ImGui::TextDisabled("%s", T("menu.features.select_feature_left", "Please select a feature from the left."));
+	BrowserUI::EmptyState(T("menu.features.select_feature_left", "Please select a feature from the left."));
 }
 
 void FeatureListRenderer::DrawMenuVisitor::operator()(Feature* feat)
@@ -1152,41 +1153,35 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureHeader(Feature* feat, bo
 {
 	auto& themeSettings = globals::menu->GetSettings().Theme;
 	const auto featureName = feat->GetShortName();
+	const ImGuiStyle& style = ImGui::GetStyle();
 
-	// Calculate action button widths
-	float buttonSpacing = ThemeManager::Constants::BUTTON_SPACING;
-
-	float bootToggleWidth = ImGui::GetFrameHeight() * 1.6f;
-	float bootToggleHeight = ImGui::GetFrameHeight() * 0.8f;
-	const float exportIconSize = ImGui::GetFrameHeight();
+	const float buttonSpacing = ThemeManager::Constants::BUTTON_SPACING;
+	const float iconSize = ImGui::GetFrameHeight();
+	const float bootToggleWidth = iconSize * 1.6f;
+	const float bootToggleHeight = iconSize * 0.8f;
 
 	const bool canExport = !isDisabled && isLoaded && FeatureOverwritesPanel::HasExportableSettings(feat);
-
 	// Restore clears the user's edits in the user config, which a feature with its own store does not use.
 	const bool canRestore = !isDisabled && isLoaded && feat->UsesMainSettings();
-
 	// Offered while the user's edits hide values one of their Baseline packs sets.
 	const bool canUseBaselines = canRestore && globals::state->HasEditsUnderBaselines(feat);
 
-	float totalButtonWidth = bootToggleWidth;
-	if (isLoaded) {
-		totalButtonWidth += exportIconSize + buttonSpacing;
+	// The boot toggle is labelled so it does not read as an on/off switch for the effect itself
+	const char* bootLabel = T("menu.features.load_at_boot", "Load at Boot");
+	float bootLabelWidth = 0.0f;
+	{
+		MenuFonts::FontRoleGuard subtext(Menu::FontRole::Subtext);
+		bootLabelWidth = ImGui::CalcTextSize(bootLabel).x;
 	}
-	if (canRestore) {
-		totalButtonWidth += exportIconSize + buttonSpacing;
-	}
-	if (canUseBaselines) {
-		totalButtonWidth += exportIconSize + buttonSpacing;
-	}
-	if (canExport) {
-		totalButtonWidth += exportIconSize + buttonSpacing;
-	}
+
+	// Right side: pin, overflow menu, then the labelled boot toggle
+	float totalButtonWidth = bootLabelWidth + style.ItemInnerSpacing.x + bootToggleWidth;
+	if (isLoaded)
+		totalButtonWidth += (iconSize + buttonSpacing) * 2.0f;
 
 	// Get available content width for positioning
-	float availableWidth = ImGui::GetContentRegionAvail().x;
-
-	// Save position before drawing title
-	ImVec2 titleStartPos = ImGui::GetCursorScreenPos();
+	const float availableWidth = ImGui::GetContentRegionAvail().x;
+	const ImVec2 titleStartPos = ImGui::GetCursorScreenPos();
 
 	// Get feature description for subtitle
 	auto [description, keyFeatures] = feat->GetFeatureSummary();
@@ -1196,58 +1191,52 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureHeader(Feature* feat, bo
 	// Returns title-only height for button alignment
 	const auto stage = feat->GetReleaseStage();
 	const std::string stageTag = Feature::GetReleaseStageTag(stage);  // empty for Release; color unused when tag is empty
-	float titleOnlyHeight = DrawFeatureHeader(feat->GetDisplayName(), isLoaded ? feat->version : "", description, stageTag, Feature::GetReleaseStageColor(stage));
+	const float titleOnlyHeight = DrawFeatureHeader(feat->GetDisplayName(), isLoaded ? feat->version : "", description, stageTag, Feature::GetReleaseStageColor(stage));
 
 	// Save cursor position after header (for restoring after buttons are drawn)
-	ImVec2 cursorPosAfterHeader = ImGui::GetCursorScreenPos();
+	const ImVec2 cursorPosAfterHeader = ImGui::GetCursorScreenPos();
 
-	// Position action buttons to the right of the header, middle-aligned with title only
-	float buttonHeight = ImGui::GetFrameHeight();
-
-	// Calculate Y position to middle-align buttons with title text only (not description)
-	float buttonY = titleStartPos.y + (titleOnlyHeight - buttonHeight) * 0.5f;
-
-	ImGui::SetCursorScreenPos(ImVec2(titleStartPos.x + availableWidth - totalButtonWidth, buttonY));
-
-	// Export overwrite (icon) sits left of the boot toggle
-	if (canExport) {
-		FeatureOverwritesPanel::DrawExportButton(feat, "##ExportOverwrite");
-		ImGui::SameLine();
-	}
-
-	if (canUseBaselines) {
-		RenderUseBaselinesButton(feat);
-		ImGui::SameLine();
-	}
-
-	if (canRestore) {
-		RenderRestoreDefaultsButton(feat);
-		ImGui::SameLine();
-	}
+	// Controls sit middle-aligned with the title line only (not the description)
+	const float rowY = titleStartPos.y + (titleOnlyHeight - iconSize) * 0.5f;
+	float x = titleStartPos.x + availableWidth - totalButtonWidth;
 
 	if (isLoaded) {
+		ImGui::SetCursorScreenPos(ImVec2(x, rowY));
 		RenderFavoriteButton(feat);
-		ImGui::SameLine();
+		x += iconSize + buttonSpacing;
+
+		ImGui::SetCursorScreenPos(ImVec2(x, rowY));
+		RenderActionsMenu(feat, canExport, canRestore, canUseBaselines);
+		x += iconSize + buttonSpacing;
 	}
 
-	// Enable/Disable at boot toggle
+	// Enable/Disable at boot toggle, with its label; one tooltip covers both
 	bool bootEnabled = !isDisabled;
+	ImGui::BeginGroup();
+	{
+		MenuFonts::FontRoleGuard subtext(Menu::FontRole::Subtext);
+		ImGui::SetCursorScreenPos(ImVec2(x, rowY + (iconSize - ImGui::GetTextLineHeight()) * 0.5f));
+		ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetSecondary());
+		ImGui::TextUnformatted(bootLabel);
+		ImGui::PopStyleColor();
+	}
+	x += bootLabelWidth + style.ItemInnerSpacing.x;
 
 	// Apply disabled styling if feature has failed to load
-	if (!feat->failedLoadedMessage.empty()) {
+	const bool failed = !feat->failedLoadedMessage.empty();
+	if (failed)
 		ImGui::PushStyleColor(ImGuiCol_Text, themeSettings.StatusPalette.Error);
-	}
 
 	// The toggle is shorter than the icon buttons; centre it on them instead of aligning the tops
-	ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (buttonHeight - bootToggleHeight) * 0.5f);
+	ImGui::SetCursorScreenPos(ImVec2(x, rowY + (iconSize - bootToggleHeight) * 0.5f));
 	if (Util::FeatureToggle("##BootToggle", &bootEnabled)) {
 		bool newState = feat->ToggleAtBootSetting();
 		logger::info("{}: {} at boot.", featureName, newState ? "Enabled" : "Disabled");
 	}
 
-	if (!feat->failedLoadedMessage.empty()) {
+	if (failed)
 		ImGui::PopStyleColor();
-	}
+	ImGui::EndGroup();
 
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text(
@@ -1303,9 +1292,8 @@ void FeatureListRenderer::DrawFeatureBody(Feature* feat)
 	const float cursorEpsilon = 0.1f;
 	bool cursorMoved = (std::abs(cursorPosAfter.x - cursorPosBefore.x) > cursorEpsilon ||
 						std::abs(cursorPosAfter.y - cursorPosBefore.y) > cursorEpsilon);
-	if (!cursorMoved) {
-		ImGui::TextColored(globals::menu->GetSettings().Theme.StatusPalette.Disable, "%s", T("menu.features.no_settings_available", "There are no settings available for this feature."));
-	}
+	if (!cursorMoved)
+		BrowserUI::EmptyState(T("menu.features.no_settings_available", "There are no settings available for this feature."));
 }
 
 void FeatureListRenderer::DrawMenuVisitor::RenderFeatureSettings(Feature* feat, bool isDisabled, bool isLoaded, bool hasFailedMessage)
@@ -1313,9 +1301,7 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureSettings(Feature* feat, 
 	auto& themeSettings = globals::menu->GetSettings().Theme;
 
 	if (isDisabled) {
-		ImGui::TextColored(themeSettings.StatusPalette.Disable, "%s", T("menu.features.settings_hidden_disabled", "Feature settings are hidden because this feature is disabled at boot."));
-		ImGui::Spacing();
-		ImGui::Text("%s", T("menu.features.enable_to_access_config", "Enable the feature above to access its configuration options."));
+		RenderDisabledAtBootNotice(feat);
 	} else {
 		if (isLoaded) {
 			DrawFeatureBody(feat);
@@ -1362,35 +1348,62 @@ void FeatureListRenderer::DrawMenuVisitor::RunFeatureCommand(Feature* feat, cons
 		command();
 }
 
-void FeatureListRenderer::DrawMenuVisitor::RenderUseBaselinesButton(Feature* feat)
+void FeatureListRenderer::DrawMenuVisitor::RenderActionsMenu(Feature* feat, bool canExport, bool canRestore, bool canUseBaselines)
 {
 	const float size = ImGui::GetFrameHeight();
 	{
 		auto style = Util::TransparentIconButtonStyle();
-		if (Icons::Button("##UseBaselines", Icons::TI(ICON_TI_STACK_2), ImVec2(size, size)))
-			RunFeatureCommand(feat, [feat] { globals::state->ClearFeatureEditsUnderBaselines(feat); });
+		if (Icons::Button("##FeatureActions", Icons::TI(ICON_TI_DOTS), ImVec2(size, size)))
+			ImGui::OpenPopup("##FeatureActionsMenu");
 	}
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::TextUnformatted(T("menu.features.actions_tooltip", "More actions"));
 
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("%s", T("menu.features.use_baselines_tooltip",
-							  "Use Baseline preset values: your changes override settings your Baseline presets set. "
-							  "Click to drop those changes and use the presets' values. Your other changes stay."));
+	if (!ImGui::BeginPopup("##FeatureActionsMenu"))
+		return;
+	MenuFonts::FontRoleGuard menuFont(Menu::FontRole::Body);
+
+	if (ImGui::MenuItem(T("feature.scene_manager.overwrites.export.button_title", "Export Feature Overwrite..."), nullptr, false, canExport))
+		FeatureOverwritesPanel::BeginExport(feat);
+	Util::AddTooltip(canExport ? T("feature.scene_manager.overwrites.export.button_tooltip",
+									 "Writes this feature's settings into a Baseline preset pack, applied from the Presets page. "
+									 "Scene layers are left out.\n"
+									 "For a full preset with scene layers, use Export Preset in the CS Editor (Ctrl+Shift+S).") :
+								 T("menu.features.export_unavailable", "Only loaded features with settings an overwrite can carry can be exported"),
+		Util::kTooltipWhenDisabled);
+
+	if (ImGui::MenuItem(T("menu.features.use_baselines", "Use Baseline Values"), nullptr, false, canUseBaselines))
+		RunFeatureCommand(feat, [feat] { globals::state->ClearFeatureEditsUnderBaselines(feat); });
+	Util::AddTooltip(canUseBaselines ? T("menu.features.use_baselines_tooltip",
+										   "Use Baseline preset values: your changes override settings your Baseline presets set. "
+										   "Click to drop those changes and use the presets' values. Your other changes stay.") :
+									   T("menu.features.use_baselines_unavailable", "None of your changes here override a setting your Baseline presets set"),
+		Util::kTooltipWhenDisabled);
+
+	const bool hasEdits = canRestore && globals::state->HasUserEdits(feat);
+	if (ImGui::MenuItem(T("menu.features.restore_defaults", "Restore Defaults"), nullptr, false, hasEdits)) {
+		// Clears the user's edits, so the feature shows what defaults and Baseline packs set.
+		RunFeatureCommand(feat, [feat] { globals::state->RestoreFeatureLayers(feat); });
 	}
+	Util::AddTooltip(hasEdits   ? T("menu.features.restore_defaults_tooltip", "Restore defaults: clears your edits to this feature, back to what defaults and your Baseline presets set") :
+					 canRestore ? T("menu.features.restore_nothing", "Nothing to restore: this feature already matches its defaults and your Baseline presets") :
+								  T("menu.features.restore_unavailable", "Only loaded features that keep their settings in the user config can be restored"),
+		Util::kTooltipWhenDisabled);
+
+	ImGui::EndPopup();
 }
 
-void FeatureListRenderer::DrawMenuVisitor::RenderRestoreDefaultsButton(Feature* feat)
+void FeatureListRenderer::DrawMenuVisitor::RenderDisabledAtBootNotice(Feature* feat)
 {
-	const float size = ImGui::GetFrameHeight();
-	{
-		auto style = Util::TransparentIconButtonStyle();
-		if (Icons::Button("##RestoreDefaults", Icons::TI(ICON_TI_RESTORE), ImVec2(size, size))) {
-			// Clears the user's edits, so the feature shows what defaults and Baseline packs set.
-			RunFeatureCommand(feat, [feat] { globals::state->RestoreFeatureLayers(feat); });
-		}
-	}
-
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("%s", T("menu.features.restore_defaults_tooltip", "Restore defaults: clears your edits to this feature, back to what defaults and your Baseline presets set"));
+	BrowserUI::EmptyState(T("menu.features.settings_hidden_disabled", "Feature settings are hidden because this feature is disabled at boot."),
+		T("menu.features.enable_at_boot_hint", "Load it at boot to use it the next time the game starts."));
+	ImGui::Spacing();
+	const char* label = T("menu.features.enable_at_boot", "Enable at Boot");
+	const float width = ImGui::CalcTextSize(label).x + ImGui::GetStyle().FramePadding.x * 2.0f;
+	ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(0.0f, (ImGui::GetContentRegionAvail().x - width) * 0.5f));
+	if (ImGui::Button(label)) {
+		const bool enabled = feat->ToggleAtBootSetting();
+		logger::info("{}: {} at boot.", feat->GetShortName(), enabled ? "Enabled" : "Disabled");
 	}
 }
 

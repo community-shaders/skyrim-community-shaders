@@ -3211,7 +3211,6 @@
     "menu.features.dont_show_warning": "不再显示此警告",
     "menu.features.download_link": "点击此处下载此功能（{}）",
     "menu.features.download_tooltip": "从模组页面下载功能。",
-    "menu.features.enable_to_access_config": "启用在上述功能以访问其配置选项。",
     "menu.features.enabled": "启用",
     "menu.features.error_header": "错误",
     "menu.features.feature_issues": "功能问题",

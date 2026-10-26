@@ -74,9 +74,10 @@ public:
 		std::string_view id;  ///< Canonical page ID from MenuPageIds, used for all page logic
 		std::string name;     ///< Translated label shown in the list
 		std::function<void()> func;
-		Icons::GlyphRef icon{};  ///< Glyph leading the row; none leaves the space empty
+		Icons::GlyphRef icon{};  ///< Glyph leading the row and the page header; none leaves the space empty
 		NavStyle style = NavStyle::Plain;
-		std::string hint;  ///< Muted line under an Accent or Launcher row's label; empty for none
+		std::string hint;         ///< Muted line under an Accent or Launcher row's label, and the page header's subtitle
+		bool showHeader = false;  ///< Draws a BrowserUI::PageHeader above the page; off for pages with their own title
 	};
 
 	/** @brief Represents a collapsible category header in the feature list. */
@@ -199,9 +200,13 @@ private:
 		// Helper methods for Feature rendering
 		void RenderFeatureHeader(Feature* feat, bool isDisabled, bool isLoaded);
 		void RenderFeatureSettings(Feature* feat, bool isDisabled, bool isLoaded, bool hasFailedMessage);
-		/** @brief Drops the feature's edits to settings its Baseline packs set. */
-		void RenderUseBaselinesButton(Feature* feat);
-		void RenderRestoreDefaultsButton(Feature* feat);
+		/**
+		 * @brief The header's overflow menu: Export Overwrite, Use Baseline Values and Restore Defaults. Entries
+		 * that cannot run stay listed, greyed, with a tooltip saying why.
+		 */
+		void RenderActionsMenu(Feature* feat, bool canExport, bool canRestore, bool canUseBaselines);
+		/** @brief Centred "disabled at boot" notice with a button that turns Load at Boot back on. */
+		static void RenderDisabledAtBootNotice(Feature* feat);
 		/** @brief Runs a command that rewrites the feature's settings through Hooks::runFeatureCommand. */
 		void RunFeatureCommand(Feature* feat, const std::function<void()>& command) const;
 		static void RenderFavoriteButton(Feature* feat);

@@ -1523,7 +1523,6 @@
     "menu.features.dont_show_warning": "Больше не показывать это предупреждение",
     "menu.features.download_link": "Нажмите здесь для загрузки этой функции ({})",
     "menu.features.download_tooltip": "Загрузить функцию со страницы мода.",
-    "menu.features.enable_to_access_config": "Включите функцию выше для доступа к её параметрам конфигурации.",
     "menu.features.enabled": "Включено",
     "menu.features.error_header": "Ошибка",
     "menu.features.feature_issues": "Проблемы с функциями",
