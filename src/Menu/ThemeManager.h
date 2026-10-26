@@ -186,7 +186,13 @@ public:
 		static constexpr float FAQ_MODAL_WIDTH_RATIO = 0.5f;     // FAQ modal opened from the help popover, as a share of the viewport
 		static constexpr float FAQ_MODAL_HEIGHT_RATIO = 0.6f;
 		static constexpr float STATUS_BAR_SEGMENT_GAP_SCALE = 3.0f;  // Gap between status bar parts, in item spacings
-		static constexpr float UNDO_TOAST_SECONDS = 2.0f;            // How long the main menu's undo / redo toast stays
+
+		// Menu UX: header Home button, status bar, Home card rhythm
+		static constexpr float HEADER_HOME_IDLE_ALPHA = 0.85f;          // Home button opacity while neither hovered nor current
+		static constexpr float STATUS_BAR_GRIP_CLEARANCE_SCALE = 1.6f;  // Right margin kept clear of the window resize grip, in font sizes
+		static constexpr float HOME_CARD_SPACING = 8.0f;                // Vertical gap below each Home card (1080p baseline)
+		static constexpr float HOME_CARD_ICON_BOX_SCALE = 1.2f;         // Card icon button glyph box, in font sizes
+		static constexpr float UNDO_TOAST_SECONDS = 2.0f;               // How long the main menu's undo / redo toast stays
 
 		// UI Layout constants
 		static constexpr float BUTTON_PADDING = 16.0f;
@@ -287,18 +293,18 @@ public:
 		static constexpr float OVERLAP_ALPHA_EPSILON = 0.005f;  // Below this alpha is clamped to zero
 
 		// Toast notification cards (Util::Notifications); sizes are 1080p baseline, scaled by the UI scale
-		static constexpr float TOAST_MAX_TEXT_WIDTH = 380.0f;                          // Text wrap width
-		static constexpr float TOAST_MAX_TEXT_WIDTH_VIEWPORT_RATIO = 0.5f;             // Wrap width cap as a share of the viewport width
-		static constexpr float TOAST_PADDING_X = 16.0f;                                // Horizontal text padding inside the card
-		static constexpr float TOAST_PADDING_Y = 12.0f;                                // Vertical text padding inside the card
-		static constexpr float TOAST_BOTTOM_MARGIN = 32.0f;                            // Gap between the lowest card and the viewport bottom
-		static constexpr float TOAST_STACK_SPACING = 8.0f;                             // Gap between stacked cards
-		static constexpr float TOAST_FADE_IN_SECONDS = 0.18f;                          // Fade-in time after a card appears
-		static constexpr float TOAST_FADE_OUT_SECONDS = 0.55f;                         // Fade-out time before a card expires
-		static constexpr float TOAST_ROUNDING_SCALE = 1.25f;                           // Card corner radius relative to FrameRounding
-		static constexpr float TOAST_ACCENT_ALPHA = 0.65f;                             // Alpha of the message-coloured border and stripe
-		static constexpr float TOAST_BORDER_THICKNESS = 1.15f;                         // Card outline thickness
-		static constexpr float TOAST_STRIPE_WIDTH = 3.0f;                              // Accent stripe on the card's left edge
+		static constexpr float TOAST_MAX_TEXT_WIDTH = 380.0f;               // Text wrap width
+		static constexpr float TOAST_MAX_TEXT_WIDTH_VIEWPORT_RATIO = 0.5f;  // Wrap width cap as a share of the viewport width
+		static constexpr float TOAST_PADDING_X = 16.0f;                     // Horizontal text padding inside the card
+		static constexpr float TOAST_PADDING_Y = 12.0f;                     // Vertical text padding inside the card
+		static constexpr float TOAST_BOTTOM_MARGIN = 32.0f;                 // Gap between the lowest card and the viewport bottom
+		static constexpr float TOAST_STACK_SPACING = 8.0f;                  // Gap between stacked cards
+		static constexpr float TOAST_FADE_IN_SECONDS = 0.18f;               // Fade-in time after a card appears
+		static constexpr float TOAST_FADE_OUT_SECONDS = 0.55f;              // Fade-out time before a card expires
+		static constexpr float TOAST_ROUNDING_SCALE = 1.25f;                // Card corner radius relative to FrameRounding
+		static constexpr float TOAST_ACCENT_ALPHA = 0.65f;                  // Alpha of the message-coloured border and stripe
+		static constexpr float TOAST_BORDER_THICKNESS = 1.15f;              // Card outline thickness
+		static constexpr float TOAST_STRIPE_WIDTH = 3.0f;                   // Accent stripe on the card's left edge
 
 		// Tinted control frame: marks where a value comes from (inherited, or a scene override's winning layer)
 		static constexpr float TINTED_FRAME_BG_ALPHA = 0.25f;

@@ -27,6 +27,9 @@ public:
 	static constexpr float DIALOG_CORNER_ROUNDING = 6.0f;
 	static constexpr float DIALOG_LINE_TIGHTEN = 3.0f;
 
+	/** @brief True while the Home dashboard was drawn this frame or the last, for the header's Home button highlight. */
+	static bool IsShowing();
+
 	/** @brief Renders the Home dashboard: an unsaved-changes banner when needed, then the card grid. */
 	static void RenderHomePage();
 
@@ -46,4 +49,5 @@ public:
 private:
 	// State
 	static bool isFirstTimeSetupShown;
+	static int lastShownFrame;
 };

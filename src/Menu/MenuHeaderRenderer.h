@@ -23,11 +23,10 @@ public:
 	/** @brief Describes a clickable action icon shown in the header bar. */
 	struct ActionIcon
 	{
-		ID3D11ShaderResourceView* texture; /**< @brief GPU texture for the icon image; null draws the glyph instead. */
-		Icons::GlyphRef glyph;             /**< @brief Font glyph drawn when the texture is missing. */
-		std::string tooltip;               /**< @brief Tooltip text shown on hover. */
-		std::function<void()> callback;    /**< @brief Action invoked when the icon is clicked. */
-		bool unsaved = false;              /**< @brief Tints the icon as a save with unsaved changes. */
+		Icons::GlyphRef glyph;          /**< @brief Tabler glyph drawn for the icon. */
+		std::string tooltip;            /**< @brief Tooltip text shown on hover. */
+		std::function<void()> callback; /**< @brief Action invoked when the icon is clicked. */
+		bool unsaved = false;           /**< @brief Tints the icon as a save with unsaved changes. */
 	};
 
 	/** @brief Help popover and FAQ modal state, owned by Menu and passed in each frame. */
@@ -55,6 +54,17 @@ public:
 	static void RenderHeader(bool isDocked, bool showLogo, float uiScale, const Util::IconLoader::UIIcons& uiIcons,
 		const std::vector<MenuShortcuts::Shortcut>& shortcuts, HelpState& help);
 
+	/**
+	 * @brief A transparent glyph button in the header's icon style, for use outside the header (Home cards).
+	 * @param id ImGui id, e.g. "##HomeSave".
+	 * @param glyph The Tabler glyph, from MenuIcons.
+	 * @param glyphBox Edge of the square the glyph is drawn in; the button adds frame padding around it.
+	 * @param tooltip Hover tooltip; null for none.
+	 * @param active Draws the button as the current selection, in the accent colour.
+	 * @return True when clicked.
+	 */
+	static bool GlyphIconButton(const char* id, Icons::GlyphRef glyph, float glyphBox, const char* tooltip, bool active = false);
+
 	/** @brief "Community Shaders <version>", as the header title shows it. */
 	static std::string GetTitleText();
 
@@ -71,8 +81,15 @@ public:
 	static std::string GetGpuText();
 
 private:
-	static std::vector<ActionIcon> BuildActionIcons(const Util::IconLoader::UIIcons& uiIcons,
-		const std::vector<MenuShortcuts::Shortcut>& shortcuts, HelpState& help);
+	/**
+	 * @brief Draws the Home button, which opens the Home page and highlights while that page is showing.
+	 * @param docked True in the docked title bar (foreground draw list, manual hit test).
+	 * @param min Screen position of the button's top-left corner.
+	 * @param size Edge of the square button.
+	 * @return True when clicked.
+	 */
+	static bool RenderHomeButton(bool docked, ImVec2 min, float size);
+	static std::vector<ActionIcon> BuildActionIcons(const std::vector<MenuShortcuts::Shortcut>& shortcuts, HelpState& help);
 	/** @return The x of the leftmost icon's left edge, or the window's right edge when there are no icons. */
 	static float RenderDockedIcons(const std::vector<ActionIcon>& actionIcons, float uiScale);
 	/**

@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <array>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -23,6 +24,8 @@
 #include "Menu/Fonts.h"
 #include "Menu/IconLoader.h"
 #include "Menu/IssuesPageRenderer.h"
+#include "Menu/MenuHeaderRenderer.h"
+#include "Menu/MenuIcons.h"
 #include "Menu/MenuLinks.h"
 #include "Menu/PresetsPageRenderer.h"
 #include "Menu/ShaderCacheStatusWidget.h"
@@ -34,6 +37,7 @@
 
 // Static member definitions
 bool HomePageRenderer::isFirstTimeSetupShown = false;
+int HomePageRenderer::lastShownFrame = -1000;
 
 namespace
 {
@@ -48,8 +52,10 @@ namespace
 		 * @param icon Tabler glyph before the title.
 		 * @param title Translated title; null leaves the icon on an open line for the caller's content.
 		 * @param border Border and icon colour; null keeps the theme border and the accent icon.
+		 * @param trailing Drawn on the title row after the title (e.g. a right-aligned icon button); empty for none.
 		 */
-		Card(const char* id, Icons::GlyphRef icon, const char* title, const ImVec4* border = nullptr)
+		Card(const char* id, Icons::GlyphRef icon, const char* title, const ImVec4* border = nullptr,
+			const std::function<void()>& trailing = {})
 		{
 			if (border)
 				ImGui::PushStyleColor(ImGuiCol_Border, *border);
@@ -69,6 +75,8 @@ namespace
 			if (title) {
 				ImGui::SameLine();
 				BrowserUI::SectionLabel(title);
+				if (trailing)
+					trailing();
 				ImGui::Spacing();
 			}
 		}
@@ -78,6 +86,12 @@ namespace
 		Card(const Card&) = delete;
 		Card& operator=(const Card&) = delete;
 	};
+
+	/** @brief Glyph box edge for the cards' icon buttons. */
+	float IconBoxSize()
+	{
+		return ImGui::GetFontSize() * Constants::HOME_CARD_ICON_BOX_SCALE;
+	}
 
 	/** @brief Gap above a card's action row. */
 	void BeginActions()
@@ -137,20 +151,17 @@ namespace
 			return;
 
 		const ImVec4 unsavedColor = Util::Colors::GetUnsaved();
-		Card card("##HomeUnsaved", Icons::TI(ICON_TI_DEVICE_FLOPPY), nullptr, &unsavedColor);
+		Card card("##HomeUnsaved", Icons::TI(MenuIcons::kSave), nullptr, &unsavedColor);
 		ImGui::SameLine();
 		ImGui::TextColored(unsavedColor, "%s", T("menu.home.unsaved_text", "You have unsaved changes."));
 
-		const char* saveLabel = T("menu.status.save", "Save");
-		const char* restoreLabel = T("menu.home.restore", "Restore...");
-		const Icons::GlyphRef saveIcon = Icons::TI(ICON_TI_DEVICE_FLOPPY);
-		const Icons::GlyphRef restoreIcon = Icons::TI(ICON_TI_RESTORE);
-		BrowserUI::SameLineIfFits(Icons::MeasureLabeledButton(saveIcon, saveLabel));
-		if (Icons::LabeledButton("##HomeSave", saveIcon, saveLabel))
+		const float box = IconBoxSize();
+		ImGui::SameLine();
+		if (MenuHeaderRenderer::GlyphIconButton("##HomeSave", Icons::TI(MenuIcons::kSave), box, T("menu.status.save", "Save")))
 			SaveManager::SaveAll();
-		if (Action("##HomeRestore", restoreIcon, restoreLabel, false))
+		ImGui::SameLine();
+		if (MenuHeaderRenderer::GlyphIconButton("##HomeRestore", Icons::TI(MenuIcons::kRestore), box, T("menu.restore_settings", "Restore Saved Settings")))
 			Util::RequestRestoreSavedSettingsConfirmation();
-		Util::AddTooltip(T("menu.restore_settings", "Restore Saved Settings"));
 	}
 
 	/** @brief The active preset pack and the enabled Baselines, or an invitation to browse presets. */
@@ -161,7 +172,7 @@ namespace
 		const std::string& activeId = catalog.GetActivePackId();
 
 		const ImVec4 accent = Util::Colors::GetAccent();
-		Card card("##HomePreset", Icons::TI(ICON_TI_STACK_2), T("menu.home.preset_title", "Preset"), &accent);
+		Card card("##HomePreset", Icons::TI(MenuIcons::kPresets), T("menu.home.preset_title", "Preset"), &accent);
 
 		if (activeId.empty()) {
 			ImGui::TextWrapped("%s", T("menu.home.preset_none", "No preset active."));
@@ -206,7 +217,7 @@ namespace
 		}
 
 		BeginActions();
-		if (Action("##HomeBrowsePresets", Icons::TI(ICON_TI_FOLDER_OPEN), T("menu.home.browse_presets", "Browse Presets"), true))
+		if (Action("##HomeBrowsePresets", Icons::TI(MenuIcons::kPresets), T("menu.home.browse_presets", "Browse Presets"), true))
 			globals::menu->SelectFeatureMenu(std::string(MenuPageIds::kPresets));
 		if (!activeId.empty()) {
 			if (Action("##HomeDisablePreset", Icons::TI(ICON_TI_CIRCLE_X), T("menu.presets.disable", "Disable Preset"), false))
@@ -220,7 +231,7 @@ namespace
 	void RenderSceneCard()
 	{
 		const ImVec4 accent = Util::Colors::GetAccent();
-		Card card("##HomeScene", Icons::TI(ICON_TI_BRUSH), T("menu.home.scene_title", "Scene & CS Editor"), &accent);
+		Card card("##HomeScene", Icons::TI(MenuIcons::kCSEditor), T("menu.home.scene_title", "CS Editor"), &accent);
 
 		const bool inGame = EditorWindow::CanBeOpen();
 		if (inGame)
@@ -231,11 +242,11 @@ namespace
 
 		BeginActions();
 		Util::DisableGuard disable(!inGame);
-		if (Action("##HomeOpenEditor", Icons::TI(ICON_TI_EXTERNAL_LINK), T("menu.home.open_cs_editor", "Open CS Editor"), true))
+		if (Action("##HomeOpenEditor", Icons::TI(MenuIcons::kCSEditor), T("menu.home.open_cs_editor", "Open CS Editor"), true))
 			CSEditor::OpenEditorWindow();
 		Util::AddTooltip(T("menu.presets.open_cs_editor_tooltip", "Open the CS Editor for weather, lighting, and scene editing."),
 			Util::kTooltipWhenDisabled);
-		if (Action("##HomeOpenLocations", Icons::TI(ICON_TI_MAP_PIN), T("feature.scene_manager.open_locations", "Locations"), false))
+		if (Action("##HomeOpenLocations", Icons::TI(MenuIcons::kLocations), T("feature.scene_manager.open_locations", "Locations"), false))
 			SceneSettingsUI::OpenLocationsPage();
 		Util::AddTooltip(T("feature.scene_manager.open_locations_tooltip", "Open the CS Editor's Locations page, to add places to override."),
 			Util::kTooltipWhenDisabled);
@@ -244,7 +255,17 @@ namespace
 	/** @brief The last shader build: compile breakdown, duration and failures. */
 	void RenderShadersCard()
 	{
-		Card card("##HomeShaders", Icons::TI(ICON_TI_APERTURE), T("menu.home.shaders_title", "Shaders"));
+		// Clear Cache lives on the title row, right-aligned
+		const auto clearCache = []() {
+			const ImGuiStyle& style = ImGui::GetStyle();
+			const float box = IconBoxSize();
+			ImGui::SameLine();
+			ImGui::SetCursorPosX(ImGui::GetWindowWidth() - style.WindowPadding.x - box - style.FramePadding.x * 2.0f);
+			if (MenuHeaderRenderer::GlyphIconButton("##HomeClearCache", Icons::TI(MenuIcons::kClearCache), box,
+					T("menu.home.clear_cache_tooltip", "Clear shader cache...")))
+				Util::RequestClearShaderCacheConfirmation();
+		};
+		Card card("##HomeShaders", Icons::TI(MenuIcons::kShaders), T("menu.home.shaders_title", "Shaders"), nullptr, clearCache);
 
 		auto* shaderCache = globals::shaderCache;
 		auto* i18n = I18n::GetSingleton();
@@ -270,13 +291,11 @@ namespace
 
 		ShaderCacheStatusWidget::DrawBreakdownBar();
 
-		BeginActions();
-		if (Action("##HomeClearCache", Icons::TI(ICON_TI_TRASH), T("menu.home.clear_cache", "Clear Cache..."), true))
-			Util::RequestClearShaderCacheConfirmation();
 		if (failed > 0) {
+			BeginActions();
 			const char* errorsLabel = shaderCache->IsHideErrors() ? T("menu.home.show_errors", "Show Errors") :
 			                                                        T("menu.home.hide_errors", "Hide Errors");
-			if (Action("##HomeShaderErrors", Icons::TI(ICON_TI_EYE), errorsLabel, false))
+			if (Action("##HomeShaderErrors", Icons::TI(ICON_TI_EYE), errorsLabel, true))
 				shaderCache->ToggleErrorMessages();
 			Util::AddTooltip(T("menu.toggle_error_message_tooltip",
 				"Hide or show the shader failure message. "
@@ -295,7 +314,7 @@ namespace
 		const bool allClear = issueCount == 0 && constraintCount == 0 && restartPending.empty();
 
 		const ImVec4 warning = Util::Colors::GetWarning();
-		Card card("##HomeAttention", Icons::TI(ICON_TI_ALERT_TRIANGLE), T("menu.home.attention_title", "Needs Attention"),
+		Card card("##HomeAttention", Icons::TI(MenuIcons::kIssues), T("menu.home.attention_title", "Needs Attention"),
 			allClear ? nullptr : &warning);
 
 		if (allClear) {
@@ -326,7 +345,7 @@ namespace
 
 		if (IssuesPageRenderer::HasIssues()) {
 			BeginActions();
-			if (Action("##HomeOpenIssues", Icons::TI(ICON_TI_CHEVRON_RIGHT), T("menu.home.open_issues", "Open Issues"), true))
+			if (Action("##HomeOpenIssues", Icons::TI(MenuIcons::kIssues), T("menu.home.open_issues", "Open Issues"), true))
 				globals::menu->SelectFeatureMenu(std::string(MenuPageIds::kIssues));
 		}
 	}
@@ -352,7 +371,7 @@ namespace
 	/** @brief Pinned features, then the recently opened ones that are not pinned, one click away. */
 	void RenderQuickAccessCard()
 	{
-		Card card("##HomeQuickAccess", Icons::TI(ICON_TI_PIN), T("menu.home.quick_access_title", "Quick Access"));
+		Card card("##HomeQuickAccess", Icons::TI(MenuIcons::kPin), T("menu.home.quick_access_title", "Quick Access"));
 
 		std::vector<Feature*> pinnedFeatures;
 		for (auto* feature : Feature::GetFeatureList()) {
@@ -376,7 +395,7 @@ namespace
 			Util::Text::WrappedDisabled("%s", T("menu.home.quick_access_hint", "Pinned and recently opened features show here."));
 			return;
 		}
-		RenderFeatureChips("##Pinned", pinned, Icons::TI(ICON_TI_PIN));
+		RenderFeatureChips("##Pinned", pinned, Icons::TI(MenuIcons::kPin));
 		if (!recent.empty()) {
 			ImGui::Spacing();
 			Util::Text::Disabled("%s", T("menu.home.recent", "Recently opened"));
@@ -414,7 +433,7 @@ namespace
 		ImGui::Spacing();
 		using MenuLinks::Link;
 		constexpr std::array links = { Link::NexusMods, Link::GitHub, Link::Wiki };
-		const Icons::GlyphRef linkIcon = Icons::TI(ICON_TI_EXTERNAL_LINK);
+		const Icons::GlyphRef linkIcon = Icons::TI(MenuIcons::kExternal);
 		for (size_t i = 0; i < links.size(); ++i) {
 			const char* label = MenuLinks::GetLabel(links[i]);
 			if (i > 0)
@@ -428,8 +447,14 @@ namespace
 	}
 }
 
+bool HomePageRenderer::IsShowing()
+{
+	return ImGui::GetFrameCount() - lastShownFrame <= 1;
+}
+
 void HomePageRenderer::RenderHomePage()
 {
+	lastShownFrame = ImGui::GetFrameCount();
 	ImGui::BeginChild("HomePage", ImVec2(0, 0), ImGuiChildFlags_NavFlattened);
 
 	RenderUnsavedBanner();
@@ -443,6 +468,7 @@ void HomePageRenderer::RenderHomePage()
 		for (auto* card : cards) {
 			ImGui::TableNextColumn();
 			card();
+			ImGui::Dummy(ImVec2(0.0f, Constants::HOME_CARD_SPACING * Util::GetUIScale()));
 		}
 		ImGui::EndTable();
 	}
