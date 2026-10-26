@@ -59,6 +59,8 @@ public:
 		/// In: moves the selection to the previous (< 0) or next (> 0) feature in the visible list, skipping
 		/// category headers, labels and built-in pages. Reset to 0 once applied.
 		int featureStep = 0;
+		/// In: focuses the feature search field this frame (Ctrl+F). Reset once applied.
+		bool focusSearch = false;
 		/// Called with the feature whose page is about to be drawn this frame, before its header.
 		std::function<void(Feature*)> onFeatureShown;
 		/// Runs a header command that rewrites a feature's settings (Restore Defaults, Use Baseline Values) so it can
@@ -168,7 +170,8 @@ private:
 		const std::vector<MenuFuncInfo>& menuList,
 		size_t& selectedMenu,
 		std::string& featureSearch,
-		std::map<std::string, bool>& categoryExpansionStates);
+		std::map<std::string, bool>& categoryExpansionStates,
+		bool focusSearch);
 
 	static void RenderRightColumn(
 		const std::vector<MenuFuncInfo>& menuList,

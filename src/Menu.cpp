@@ -853,6 +853,7 @@ void Menu::DrawSettings()
 		shownFeature = nullptr;
 		FeatureListRenderer::Hooks listHooks{
 			.featureStep = std::exchange(pendingFeatureStep, 0),
+			.focusSearch = std::exchange(pendingSearchFocus, false),
 			.onFeatureShown = [this](Feature* feat) {
 				shownFeature = feat;
 				// Watched before the header, so its Restore / Use Baselines clicks and the body's edits are both seen
@@ -909,6 +910,7 @@ MenuShortcuts::Actions Menu::MakeShortcutActions()
 		.save = [] { SaveManager::SaveAll(); },
 		.undo = [this] { pendingUndo = UndoRequest::Undo; },
 		.redo = [this] { pendingUndo = UndoRequest::Redo; },
+		.focusSearch = [this] { pendingSearchFocus = true; },
 		.stepFeature = [this](int step) { pendingFeatureStep = step; },
 		.canTogglePin = [this] { return shownFeature && shownFeature->loaded; },
 		.togglePin = [this] { FeatureListRenderer::ToggleFavorite(shownFeature); },

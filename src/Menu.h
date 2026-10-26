@@ -529,6 +529,7 @@ private:
 	// Menu navigation
 	std::string pendingFeatureSelection;  // Feature to select on next frame
 	int pendingFeatureStep = 0;           // Ctrl+PgUp / Ctrl+PgDn request, applied by the feature list this frame
+	bool pendingSearchFocus = false;      // Ctrl+F request, applied by the feature list this frame
 	Feature* shownFeature = nullptr;      // Feature whose page the right column drew; read by shortcuts the frame after
 
 	// Keyboard shortcuts, built on the first DrawSettings and dispatched once per frame

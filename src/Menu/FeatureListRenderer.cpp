@@ -10,6 +10,7 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#include "CSEditor/Browser/BrowserWidgets.h"
 #include "CSEditor/SceneManager/FeatureOverwritesPanel.h"
 #include "CSEditor/SceneManager/SceneSettingsManager.h"
 #include "CSEditor/SceneManager/SceneWidgetInterceptor.h"
@@ -423,7 +424,7 @@ void FeatureListRenderer::RenderFeatureList(
 			ImGui::TableSetupColumn("##ListOfMenus", 0, 2);
 			ImGui::TableSetupColumn("##MenuConfig", 0, 8);
 			const auto previousSort = globals::menu->GetSettings().FeatureListSort;
-			RenderLeftColumn(menuList, selectedMenu, featureSearch, categoryExpansionStates);
+			RenderLeftColumn(menuList, selectedMenu, featureSearch, categoryExpansionStates, std::exchange(hooks.focusSearch, false));
 			if (globals::menu->GetSettings().FeatureListSort != previousSort) {
 				// Sort order changed: rebuild now and re-select the same feature
 				std::string reselect;
@@ -607,7 +608,8 @@ void FeatureListRenderer::RenderLeftColumn(
 	const std::vector<MenuFuncInfo>& menuList,
 	size_t& selectedMenu,
 	std::string& featureSearch,
-	std::map<std::string, bool>& categoryExpansionStates)
+	std::map<std::string, bool>& categoryExpansionStates,
+	bool focusSearch)
 {
 	ImGui::TableNextColumn();
 	// Draw the feature list
@@ -622,7 +624,18 @@ void FeatureListRenderer::RenderLeftColumn(
 
 		Util::DrawSectionHeader(T("menu.features.features", "Features"), true);
 		const float sortButtonWidth = ImGui::GetFrameHeight();
-		Util::DrawFeatureSearchBar(featureSearch, ImGui::GetContentRegionAvail().x - sortButtonWidth - ImGui::GetStyle().ItemSpacing.x);
+		{
+			// The field edits a C buffer; the menu keeps the text as a string, so copy it in and take changes back.
+			// While the field is active ImGui edits its own copy, so the per-frame copy never fights the typing.
+			char searchBuffer[256];
+			strncpy_s(searchBuffer, featureSearch.c_str(), _TRUNCATE);
+			if (focusSearch)
+				ImGui::SetKeyboardFocusHere();
+			// Ctrl+F comes from the menu's shortcut table (focusSearch), so the field's own Ctrl+F stays off
+			if (BrowserUI::SearchField("##FeatureSearch", searchBuffer, sizeof(searchBuffer), T("ui.search_features", "Search Features..."),
+					ImGui::GetContentRegionAvail().x - sortButtonWidth - ImGui::GetStyle().ItemSpacing.x, false))
+				featureSearch = searchBuffer;
+		}
 		const float searchBarHeight = ImGui::GetItemRectSize().y;
 		ImGui::SameLine();
 
