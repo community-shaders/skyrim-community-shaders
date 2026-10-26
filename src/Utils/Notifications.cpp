@@ -108,14 +108,15 @@ namespace Util::Notifications
 				const ImVec2 p0 = ImGui::GetWindowPos();
 				const ImVec2 p1{ p0.x + cardSize.x, p0.y + cardSize.y };
 				const float rounding = ImGui::GetStyle().WindowRounding;
-				const ImVec4& background = Constants::TOAST_BACKGROUND_COLOR;
-				draw->AddRectFilled(p0, p1,
-					ImGui::ColorConvertFloat4ToU32(ImVec4(background.x, background.y, background.z, background.w * alpha)), rounding);
+				ImVec4 cardBg = ImGui::GetStyleColorVec4(ImGuiCol_WindowBg);
+				cardBg.w = Constants::OVERLAP_MIN_ALPHA * alpha;
+				draw->AddRectFilled(p0, p1, ImGui::ColorConvertFloat4ToU32(cardBg), rounding);
 				const ImU32 accent = ImGui::ColorConvertFloat4ToU32(
 					ImVec4(notif.color.x, notif.color.y, notif.color.z, Constants::TOAST_ACCENT_ALPHA * alpha));
 				draw->AddRect(p0, p1, accent, rounding, 0, Constants::TOAST_BORDER_THICKNESS * scale);
-				draw->AddRectFilled(p0, ImVec2(p0.x + Constants::TOAST_STRIPE_WIDTH * scale, p1.y), accent, rounding,
-					ImDrawFlags_RoundCornersLeft);
+				draw->PushClipRect(p0, ImVec2(p0.x + Constants::TOAST_STRIPE_WIDTH * scale, p1.y), true);
+				draw->AddRectFilled(p0, p1, accent, rounding);
+				draw->PopClipRect();
 
 				ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + maxTextWidth);
 				ImVec4 colorWithAlpha = notif.color;

@@ -878,7 +878,6 @@ void Menu::DrawSettings()
 
 		// Render header using extracted component
 		MenuHeaderRenderer::RenderHeader(isDocked, showLogo, uiScale, uiIcons, shortcuts, helpState);
-		MenuHeaderRenderer::RenderHeader(isDocked, showLogo, canShowIcons, uiScale, uiIcons);
 		Util::DrawRecacheBanner();
 
 		// A modal, so it is drawn at window level next to the header's popovers

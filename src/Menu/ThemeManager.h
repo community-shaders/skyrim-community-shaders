@@ -296,7 +296,6 @@ public:
 		static constexpr float TOAST_FADE_IN_SECONDS = 0.18f;                          // Fade-in time after a card appears
 		static constexpr float TOAST_FADE_OUT_SECONDS = 0.55f;                         // Fade-out time before a card expires
 		static constexpr float TOAST_ROUNDING_SCALE = 1.25f;                           // Card corner radius relative to FrameRounding
-		static constexpr ImVec4 TOAST_BACKGROUND_COLOR{ 0.08f, 0.09f, 0.11f, 0.90f };  // Card fill, before the fade
 		static constexpr float TOAST_ACCENT_ALPHA = 0.65f;                             // Alpha of the message-coloured border and stripe
 		static constexpr float TOAST_BORDER_THICKNESS = 1.15f;                         // Card outline thickness
 		static constexpr float TOAST_STRIPE_WIDTH = 3.0f;                              // Accent stripe on the card's left edge
