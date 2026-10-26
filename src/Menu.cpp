@@ -32,6 +32,7 @@
 #include "Menu/CursorLoader.h"
 #include "Menu/FeatureListRenderer.h"
 #include "Menu/Fonts.h"
+#include "Menu/GoToPalette.h"
 #include "Menu/HomePageRenderer.h"
 #include "Menu/IconLoader.h"
 #include "Menu/MenuHeaderRenderer.h"
@@ -880,6 +881,9 @@ void Menu::DrawSettings()
 		MenuHeaderRenderer::RenderHeader(isDocked, showLogo, canShowIcons, uiScale, uiIcons);
 		Util::DrawRecacheBanner();
 
+		// A modal, so it is drawn at window level next to the header's popovers
+		GoToPalette::Draw(shortcuts);
+
 		// Main content starts here - no additional separator needed as it's already handled in the conditions above
 
 		float footer_height = settings.Theme.ShowFooter ? StatusBarRenderer::GetHeight() : 0.0f;
@@ -951,6 +955,7 @@ MenuShortcuts::Actions Menu::MakeShortcutActions()
 		.save = [] { SaveManager::SaveAll(); },
 		.undo = [this] { pendingUndo = UndoRequest::Undo; },
 		.redo = [this] { pendingUndo = UndoRequest::Redo; },
+		.openGoTo = [] { GoToPalette::Open(); },
 		.focusSearch = [this] { pendingSearchFocus = true; },
 		.toggleFeatureList = [this] { settings.FeatureListCollapsed = !settings.FeatureListCollapsed; },
 		.stepFeature = [this](int step) { pendingFeatureStep = step; },

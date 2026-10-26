@@ -38,6 +38,7 @@ namespace MenuShortcuts
 		add(Ids::kUndo, ImGuiMod_Ctrl | ImGuiKey_Z, [] { return T("menu.shortcuts.undo", "Undo"); }, {}, actions.undo);
 		add(Ids::kRedo, ImGuiMod_Ctrl | ImGuiKey_Y, [] { return T("menu.shortcuts.redo", "Redo"); }, {}, actions.redo);
 		add(Ids::kRedo, ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_Z, [] { return T("menu.shortcuts.redo", "Redo"); }, {}, actions.redo);
+		add(Ids::kGoTo, ImGuiMod_Ctrl | ImGuiKey_K, [] { return T("menu.shortcuts.go_to", "Go to..."); }, {}, actions.openGoTo);
 		add(Ids::kFocusSearch, ImGuiMod_Ctrl | ImGuiKey_F, [] { return T("menu.shortcuts.focus_search", "Search features"); }, {}, actions.focusSearch);
 		add(Ids::kToggleFeatureList, ImGuiMod_Ctrl | ImGuiKey_B, [] { return T("menu.shortcuts.toggle_feature_list", "Show or hide the feature list"); }, {}, actions.toggleFeatureList);
 
