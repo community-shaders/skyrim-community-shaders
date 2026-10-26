@@ -15,6 +15,7 @@
 #include "Menu.h"
 #include "Menu/FeatureListRenderer.h"
 #include "Menu/MenuHeaderRenderer.h"
+#include "Menu/MenuIcons.h"
 #include "Menu/ThemeManager.h"
 #include "SaveManager.h"
 #include "ShaderCache.h"
@@ -119,20 +120,37 @@ namespace StatusBarRenderer
 			nextSegment();
 			const auto label = i18n->Format("menu.status.feature_issues",
 				{ { "count", std::to_string(FeatureIssues::GetFeatureIssues().size()) } }, "Feature issues: {count}");
-			if (Segment("##StatusIssues", Icons::TI(ICON_TI_ALERT_TRIANGLE), label.c_str(), Util::Colors::GetWarning(),
+			if (Segment("##StatusIssues", Icons::TI(MenuIcons::kIssues), label.c_str(), Util::Colors::GetWarning(),
 					T("menu.issues.open_tooltip", "Open the Issues page")))
 				globals::menu->SelectFeatureMenu(std::string(MenuPageIds::kIssues));
 		}
 
+		// Nothing needs attention: say so, so the left side is never empty
+		if (first) {
+			nextSegment();
+			Icons::Text(Icons::TI(MenuIcons::kSave));
+			ImGui::SameLine();
+			ImGui::TextDisabled("%s", T("menu.status.all_saved", "All changes saved"));
+		}
+
 		// GPU, runtime and swap chain on the right, in whatever room the left side leaves
-		const auto info = std::format("{}  \xC2\xB7  {} {}  \xC2\xB7  {}",
-			globals::state->adapterDescription,
-			magic_enum::enum_name(REL::Module::GetRuntime()),
-			Util::GetFormattedVersion(REL::Module::get().version()),
-			MenuHeaderRenderer::GetSwapChainText());
-		if (!first)
-			ImGui::SameLine(0.0f, gap);
-		const float available = ImGui::GetContentRegionAvail().x;
+		std::string info;
+		const auto addPart = [&info](const std::string& part) {
+			if (part.empty())
+				return;
+			if (!info.empty())
+				info += "  Â·  ";
+			info += part;
+		};
+		addPart(globals::state->adapterDescription);
+		addPart(std::format("{} {}", magic_enum::enum_name(REL::Module::GetRuntime()),
+			Util::GetFormattedVersion(REL::Module::get().version())));
+		addPart(MenuHeaderRenderer::GetSwapChainText());
+
+		ImGui::SameLine(0.0f, gap);
+		// Keep clear of the window's bottom-right resize grip
+		const float gripClearance = ImGui::GetFontSize() * ThemeManager::Constants::STATUS_BAR_GRIP_CLEARANCE_SCALE;
+		const float available = ImGui::GetContentRegionAvail().x - gripClearance;
 		const float width = std::min(ImGui::CalcTextSize(info.c_str()).x, available);
 		if (width >= ImGui::GetFontSize()) {
 			ImGui::SetCursorPosX(ImGui::GetCursorPosX() + available - width);
