@@ -17,6 +17,7 @@
 #include "Menu/Icons/helpers/IconFonts.h"
 #include "Menu/Icons/helpers/SceneActionIcons.h"
 #include "Menu/Icons/helpers/WeatherTypeIcons.h"
+#include "Menu/MenuIcons.h"
 #include "PaletteWindow.h"
 #include "SaveManager.h"
 #include "SceneManager/ScenePresetExport.h"
@@ -285,7 +286,7 @@ namespace
 			{ "Shader Particle Geometry", T(TKEY("category_shader_particle"), "Shader Particle Geometry"), Icons::TI(ICON_TI_CHART_BUBBLE), kGroupForms },
 			{ "Lens Flare", T(TKEY("category_lens_flare"), "Lens Flare"), Icons::TI(ICON_TI_NORTH_STAR), kGroupForms },
 			{ "Visual Effect", T(TKEY("category_visual_effect"), "Visual Effect"), Icons::TI(ICON_TI_SPARKLES), kGroupForms },
-			{ "Locations", T(TKEY("category_locations"), "Locations"), Icons::TI(ICON_TI_MAP_PIN), kGroupScene },
+			{ "Locations", T(TKEY("category_locations"), "Locations"), Icons::TI(MenuIcons::kLocations), kGroupScene },
 			{ "Scene Manager", T(TKEY("category_scene_manager"), "Scene Manager"), Icons::TI(ICON_TI_STACK_2), kGroupScene },
 			{ "Light Editor", T(TKEY("category_lighting_editor"), "Light Editor"), Icons::TI(ICON_TI_BULB), kGroupTools },
 		} };
@@ -1359,7 +1360,7 @@ void EditorWindow::RenderUI()
 			{
 				const bool unsaved = HasUnsavedChanges();
 				ImGui::SetCursorScreenPos(ImVec2(saveButtonX, iconY));
-				if (DrawToggleIconButton("##ActionBarSave", Icons::TI(ICON_TI_DEVICE_FLOPPY), false, enabledColor, iconButtonSize,
+				if (DrawToggleIconButton("##ActionBarSave", Icons::TI(MenuIcons::kSave), false, enabledColor, iconButtonSize,
 						ImGui::GetColorU32(unsaved ? Util::Colors::GetUnsaved() : textColor)))
 					SaveManager::SaveEditor(SaveManager::Trigger::User);
 				Util::AddTooltip(SaveManager::GetEditorSaveTooltip(unsaved));
@@ -1710,7 +1711,7 @@ void EditorWindow::ShowSettingsWindow()
 			ImGui::AlignTextToFramePadding();
 			ImGui::TextUnformatted(T(TKEY("editor_ui_scale"), "Editor UI Scale"));
 			ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x);
-			if (BrowserUI::IconButton("##ResetUIScale", Icons::TI(ICON_TI_RESTORE), T(TKEY("reset_ui_scale_tooltip"), "Reset UI scale to default (100%)"))) {
+			if (BrowserUI::IconButton("##ResetUIScale", Icons::TI(MenuIcons::kRestore), T(TKEY("reset_ui_scale_tooltip"), "Reset UI scale to default (100%)"))) {
 				settings.editorUIScale = 1.0f;
 				Save();
 			}
@@ -2479,7 +2480,7 @@ void EditorWindow::DrawTimeControls()
 	ImGui::SameLine();
 	{
 		auto _style = Util::TransparentIconButtonStyle();
-		if (Icons::Button("##FeatureResetSpeed", Icons::TI(ICON_TI_RESTORE), ImVec2(iconSize, iconSize)))
+		if (Icons::Button("##FeatureResetSpeed", Icons::TI(MenuIcons::kRestore), ImVec2(iconSize, iconSize)))
 			ResetTimeScale();
 	}
 	if (auto _tt = Util::HoverTooltipWrapper())

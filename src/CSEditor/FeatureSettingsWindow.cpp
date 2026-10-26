@@ -24,6 +24,7 @@
 #include "Menu/Fonts.h"
 #include "Menu/Icons/helpers/IconFonts.h"
 #include "Menu/Icons/helpers/SceneActionIcons.h"
+#include "Menu/MenuIcons.h"
 #include "SaveManager.h"
 #include "SceneManager/FeatureOverwritesPanel.h"
 #include "SceneManager/SceneLayerHeader.h"
@@ -208,7 +209,7 @@ namespace
 		ImGui::SetCursorScreenPos(ImVec2(ImGui::GetCursorScreenPos().x, ImGui::GetItemRectMin().y));
 		const char* tooltip = T(TKEY("features_save_settings_tooltip"),
 			"Save Settings: saves feature settings and everything in the CS editor.");
-		if (BrowserUI::IconButton("##FeatureSaveSettings", Icons::TI(ICON_TI_DEVICE_FLOPPY), tooltip))
+		if (BrowserUI::IconButton("##FeatureSaveSettings", Icons::TI(MenuIcons::kSave), tooltip))
 			SaveManager::SaveAll();
 	}
 

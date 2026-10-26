@@ -13,6 +13,7 @@
 #include "Menu.h"
 #include "Menu/FeatureListRenderer.h"
 #include "Menu/Icons/helpers/IconFonts.h"
+#include "Menu/MenuIcons.h"
 #include "Presets/PresetCompatibility.h"
 #include "Presets/UnifiedPresetCatalog.h"
 #include "Util.h"
@@ -347,7 +348,7 @@ void PresetsPageRenderer::RenderToolbar()
 void PresetsPageRenderer::DrawOpenCSEditorButton(const char* id)
 {
 	const char* title = T("menu.presets.open_cs_editor", "CS Editor");
-	const Icons::GlyphRef brush = Icons::TI(ICON_TI_BRUSH);
+	const Icons::GlyphRef brush = Icons::TI(MenuIcons::kCSEditor);
 	BrowserUI::RightAlign(Icons::MeasureLabeledButton(brush, title));
 	if (Icons::LabeledButton(id, brush, title))
 		CSEditor::OpenEditorWindow();
@@ -740,12 +741,12 @@ void PresetsPageRenderer::Open()
 
 float PresetsPageRenderer::MeasureOpenButton()
 {
-	return Icons::MeasureLabeledButton(Icons::TI(ICON_TI_STACK_2), T("menu.presets.open_presets", "Presets"));
+	return Icons::MeasureLabeledButton(Icons::TI(MenuIcons::kPresets), T("menu.presets.open_presets", "Presets"));
 }
 
 void PresetsPageRenderer::DrawOpenButton(const char* id, const char* tooltip)
 {
-	if (Icons::LabeledButton(id, Icons::TI(ICON_TI_STACK_2), T("menu.presets.open_presets", "Presets")))
+	if (Icons::LabeledButton(id, Icons::TI(MenuIcons::kPresets), T("menu.presets.open_presets", "Presets")))
 		Open();
 	Util::AddTooltip(tooltip);
 }

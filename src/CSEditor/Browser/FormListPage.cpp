@@ -11,6 +11,7 @@
 #include "IconsTabler.h"
 #include "Menu.h"
 #include "Menu/Icons/helpers/WeatherTypeIcons.h"
+#include "Menu/MenuIcons.h"
 #include "Utils/UI.h"
 #include "imgui_internal.h"
 
@@ -533,7 +534,7 @@ namespace
 				T(TKEY("flagged"), "Flagged")))
 			state.onlyFlagged = !state.onlyFlagged;
 		ImGui::SameLine();
-		if (BrowserUI::ToggleChip("##OnlySaved", BrowserUI::GlyphIcon(Icons::TI(ICON_TI_DEVICE_FLOPPY)), state.savedCount, state.onlySaved,
+		if (BrowserUI::ToggleChip("##OnlySaved", BrowserUI::GlyphIcon(Icons::TI(MenuIcons::kSave)), state.savedCount, state.onlySaved,
 				Util::Colors::GetInfo(), T(TKEY("filter_saved_tooltip"), "Saved: has a JSON override on disk")))
 			state.onlySaved = !state.onlySaved;
 		ImGui::SameLine();
@@ -541,7 +542,7 @@ namespace
 				T(TKEY("filter_unsaved_tooltip"), "Unsaved: edited since it was last saved")))
 			state.onlyUnsaved = !state.onlyUnsaved;
 		ImGui::SameLine();
-		if (BrowserUI::ToggleChip("##OnlyPreset", BrowserUI::GlyphIcon(Icons::TI(ICON_TI_STACK_2)), state.presetCount, state.onlyPreset,
+		if (BrowserUI::ToggleChip("##OnlyPreset", BrowserUI::GlyphIcon(Icons::TI(MenuIcons::kPresets)), state.presetCount, state.onlyPreset,
 				Util::Colors::GetInfo(), T(TKEY("filter_preset_tooltip"), "Preset: the active preset ships a file for it")))
 			state.onlyPreset = !state.onlyPreset;
 	}
@@ -710,9 +711,9 @@ namespace
 		// Checked live rather than from the cached row, so the dot follows edits, saves and undo at once.
 		slot(row.widget->HasUnsavedChanges(), BrowserUI::DotIcon(), ImGui::GetColorU32(Util::Colors::GetUnsaved()),
 			T(TKEY("state_unsaved_tooltip"), "Edited since it was last saved"));
-		slot(row.hasSavedFile, BrowserUI::GlyphIcon(Icons::TI(ICON_TI_DEVICE_FLOPPY)), ImGui::GetColorU32(Util::Colors::GetSecondary()),
+		slot(row.hasSavedFile, BrowserUI::GlyphIcon(Icons::TI(MenuIcons::kSave)), ImGui::GetColorU32(Util::Colors::GetSecondary()),
 			T(TKEY("state_saved_tooltip"), "Has a JSON override on disk"));
-		slot(row.fromPack, BrowserUI::GlyphIcon(Icons::TI(ICON_TI_STACK_2)), ImGui::GetColorU32(row.packBadgeColor),
+		slot(row.fromPack, BrowserUI::GlyphIcon(Icons::TI(MenuIcons::kPresets)), ImGui::GetColorU32(row.packBadgeColor),
 			row.packBadgeTooltip.c_str());
 	}
 
@@ -1136,8 +1137,8 @@ namespace
 		const std::string fileName = std::filesystem::path(path).filename().string();
 		ImGui::AlignTextToFramePadding();
 		{
-			Icons::FontGuard font(Icons::TI(ICON_TI_DEVICE_FLOPPY));
-			Util::Text::Secondary("%s", ICON_TI_DEVICE_FLOPPY);
+			Icons::FontGuard font(Icons::TI(MenuIcons::kSave));
+			Util::Text::Secondary("%s", MenuIcons::kSave);
 		}
 		ImGui::SameLine();
 		BrowserUI::MetaText(fileName.c_str());

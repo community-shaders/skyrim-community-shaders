@@ -12,6 +12,7 @@
 #include "IconsTabler.h"
 #include "Menu/Icons/helpers/IconFonts.h"
 #include "Menu/Icons/helpers/WeatherTypeIcons.h"
+#include "Menu/MenuIcons.h"
 #include "SaveManager.h"
 #include "State.h"
 #include "Util.h"
@@ -149,7 +150,7 @@ void Widget::DrawPackSourceBadge() const
 	ImGui::SameLine();
 	{
 		Icons::FontGuard font(Icons::Family::Tabler);
-		ImGui::TextColored(packBadge->color, "%s", ICON_TI_STACK_2);
+		ImGui::TextColored(packBadge->color, "%s", MenuIcons::kPresets);
 	}
 	Util::AddTooltip(packBadge->tooltip.c_str());
 }
@@ -408,7 +409,7 @@ bool Widget::DrawTitleBarActions(bool showApply, bool showSaveLoadRevert, bool s
 		if (unsaved)
 			unsavedColor = Util::Colors::GetUnsaved();
 		if (useIcons) {
-			auto& action = addGlyph("##TitleSave", Icons::TI(ICON_TI_DEVICE_FLOPPY), saveTooltip, saveClick);
+			auto& action = addGlyph("##TitleSave", Icons::TI(MenuIcons::kSave), saveTooltip, saveClick);
 			action.textColor = unsavedColor;
 		} else {
 			auto& action = addText("##TitleSave", T(TKEY("save"), "Save"), saveTooltip, saveClick);
@@ -425,7 +426,7 @@ bool Widget::DrawTitleBarActions(bool showApply, bool showSaveLoadRevert, bool s
 		const char* revertTooltip = T(TKEY("revert_to_original"), "Revert to original game values");
 		auto revertClick = [this]() { RevertChanges(); };
 		if (useIcons) {
-			auto& action = addGlyph("##TitleRevert", Icons::TI(ICON_TI_RESTORE), revertTooltip, revertClick);
+			auto& action = addGlyph("##TitleRevert", Icons::TI(MenuIcons::kRestore), revertTooltip, revertClick);
 			action.textColor = statusPalette.Warning;
 		} else {
 			auto& action = addText("##TitleRevert", T(TKEY("revert"), "Revert"), revertTooltip, revertClick);
@@ -447,7 +448,7 @@ bool Widget::DrawTitleBarActions(bool showApply, bool showSaveLoadRevert, bool s
 		}
 
 		if (packBadge) {
-			auto& action = addGlyph("##TitlePackSource", Icons::TI(ICON_TI_STACK_2), packBadge->tooltip.c_str(), []() {});
+			auto& action = addGlyph("##TitlePackSource", Icons::TI(MenuIcons::kPresets), packBadge->tooltip.c_str(), []() {});
 			action.textColor = packBadge->color;
 		}
 
@@ -746,7 +747,7 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 			ImGui::SameLine();
 			if (unsaved)
 				ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetUnsaved());
-			if (Icons::Button(std::format("{}##_Save", searchId ? searchId : "").c_str(), Icons::TI(ICON_TI_DEVICE_FLOPPY)))
+			if (Icons::Button(std::format("{}##_Save", searchId ? searchId : "").c_str(), Icons::TI(MenuIcons::kSave)))
 				saveAll();
 			if (unsaved)
 				ImGui::PopStyleColor();

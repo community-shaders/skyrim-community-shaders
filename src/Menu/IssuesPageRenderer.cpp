@@ -14,6 +14,7 @@
 #include "I18n/I18n.h"
 #include "IconsTabler.h"
 #include "Menu.h"
+#include "Menu/MenuIcons.h"
 #include "Menu/ThemeManager.h"
 #include "Util.h"
 
@@ -143,7 +144,7 @@ namespace IssuesPageRenderer
 
 	void Render()
 	{
-		BrowserUI::PageHeader(Icons::TI(ICON_TI_ALERT_TRIANGLE), T("menu.issues.page_title", "Issues"),
+		BrowserUI::PageHeader(Icons::TI(MenuIcons::kIssues), T("menu.issues.page_title", "Issues"),
 			T("menu.issues.page_subtitle", "Problems to fix in your install and settings"));
 		ImGui::Spacing();
 

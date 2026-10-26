@@ -6,6 +6,7 @@
 #include "Globals.h"
 #include "IconsTabler.h"
 #include "Menu/Icons/helpers/IconFonts.h"
+#include "Menu/MenuIcons.h"
 #include "Menu/ThemeManager.h"
 #include "PaletteWindow.h"
 #include "Utils/Game.h"
@@ -160,7 +161,7 @@ void WeatherPickerWindow::DrawContents()
 	ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0.0f, 0.0f));
 	{
 		auto _style = Util::TransparentIconButtonStyle();
-		if (Icons::Button("##WeatherPickerWindowReset", Icons::TI(ICON_TI_RESTORE), ImVec2(iconSize, iconSize)))
+		if (Icons::Button("##WeatherPickerWindowReset", Icons::TI(MenuIcons::kRestore), ImVec2(iconSize, iconSize)))
 			CSEditor::ResetWeatherToDefault(sky);
 	}
 	ImGui::PopStyleVar();
