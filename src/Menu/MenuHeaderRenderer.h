@@ -73,7 +73,22 @@ public:
 private:
 	static std::vector<ActionIcon> BuildActionIcons(const Util::IconLoader::UIIcons& uiIcons,
 		const std::vector<MenuShortcuts::Shortcut>& shortcuts, HelpState& help);
-	static void RenderDockedIcons(const std::vector<ActionIcon>& actionIcons, float uiScale);
+	/** @return The x of the leftmost icon's left edge, or the window's right edge when there are no icons. */
+	static float RenderDockedIcons(const std::vector<ActionIcon>& actionIcons, float uiScale);
+	/**
+	 * @brief Draws the centred "Search... Ctrl+K" pill, which opens the Go to palette.
+	 * The pill sits at the centre of centerX when it fits between left and right, is nudged aside when the title
+	 * or icons are in the way, shrinks to an icon-only button when the room is tight and is left out when even that does not fit.
+	 * @param docked True in the docked title bar, where the pill is drawn on the foreground list like the icons.
+	 * @param left Right edge of the title, in screen space.
+	 * @param right Left edge of the icons, in screen space.
+	 * @param centerX Screen x the pill centres on.
+	 * @param top Screen y of the row the pill is centred in.
+	 * @param rowHeight Height of that row.
+	 * @param shortcutHint The palette's chord, e.g. "Ctrl+K"; empty when unbound.
+	 */
+	static void RenderSearchPill(bool docked, float left, float right, float centerX, float top, float rowHeight, float uiScale,
+		const std::string& shortcutHint);
 	static void RenderUndockedIcons(const std::vector<ActionIcon>& actionIcons, float uiScale);
 	static void RenderWatermarkLogo(const Util::IconLoader::UIIcons& uiIcons);
 	static void RenderHelpPopover(const std::vector<MenuShortcuts::Shortcut>& shortcuts, HelpState& help);
