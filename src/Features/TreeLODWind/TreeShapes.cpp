@@ -100,7 +100,8 @@ namespace TreeShapes
 			return a_out.count > 0;
 		}
 
-		// Connected pieces of a shape from its CPU index copy: the root vertex of each vertex's piece
+		// Connected pieces of a shape from its CPU index copy: the root vertex of each vertex's piece.
+		// Without an index copy every vertex is its own piece.
 		std::vector<uint32_t> PieceRoots(const uint16_t* a_indices, uint32_t a_triangleCount, uint32_t a_vertexCount)
 		{
 			std::vector<uint32_t> parent(a_vertexCount);
@@ -112,7 +113,7 @@ namespace TreeShapes
 				}
 				return a;
 			};
-			for (uint32_t t = 0; t < a_triangleCount; ++t) {
+			for (uint32_t t = 0; a_indices && t < a_triangleCount; ++t) {
 				const uint32_t a = a_indices[t * 3], b = a_indices[t * 3 + 1], c = a_indices[t * 3 + 2];
 				if (a >= a_vertexCount || b >= a_vertexCount || c >= a_vertexCount)
 					continue;
@@ -171,6 +172,53 @@ namespace TreeShapes
 			return best;
 		}
 
+		// Nearest card within a_maxDistance model units, or nullptr: a piece far from any trunk card stays still
+		const BendWeights::TrunkCard* NearestCardWithin(const BendWeights::Block& a_block, float a_x, float a_y, float a_maxDistance)
+		{
+			const int cx = CellOf(a_x), cy = CellOf(a_y);
+			const int reach = static_cast<int>(std::ceil(a_maxDistance / kCellSize));
+			const BendWeights::TrunkCard* best = nullptr;
+			float bestDistance = a_maxDistance * a_maxDistance;
+			for (int dy = -reach; dy <= reach; ++dy) {
+				for (int dx = -reach; dx <= reach; ++dx) {
+					const auto it = a_block.grid.find(CellKey(cx + dx, cy + dy));
+					if (it == a_block.grid.end())
+						continue;
+					for (const int i : it->second) {
+						const auto& card = a_block.cards[i];
+						const float distance = (a_x - card.x) * (a_x - card.x) + (a_y - card.y) * (a_y - card.y);
+						if (distance < bestDistance) {
+							bestDistance = distance;
+							best = &card;
+						}
+					}
+				}
+			}
+			return best;
+		}
+
+		// Is a_vertices[a_first .. a_first + 3] a trunk card? Two corners at the bottom and two at the top, the top
+		// centred over the bottom and no wider, taller than wide. Used where tree mods merge the cards with 3D trunks
+		// and stumps into one shape, so the shape is not all quads.
+		bool IsCardQuad(const VertexView& a_vertices, uint32_t a_first)
+		{
+			RE::NiPoint3 p[4];
+			for (uint32_t k = 0; k < 4; ++k)
+				p[k] = a_vertices(a_first + k);
+			// Trees are placed tilted by up to ~11 degrees, so sort by height: the two lowest corners are the bottom
+			std::sort(std::begin(p), std::end(p), [](const RE::NiPoint3& a, const RE::NiPoint3& b) { return a.z < b.z; });
+			const RE::NiPoint3* low = p;
+			const RE::NiPoint3* high = p + 2;
+			const float height = (high[0].z + high[1].z - low[0].z - low[1].z) * 0.5f;
+			if (height < 32.0f || low[1].z - low[0].z > 0.1f * height || high[1].z - high[0].z > 0.1f * height)
+				return false;
+			const float widthLow = std::hypot(low[0].x - low[1].x, low[0].y - low[1].y);
+			const float widthHigh = std::hypot(high[0].x - high[1].x, high[0].y - high[1].y);
+			const float offsetX = (low[0].x + low[1].x - high[0].x - high[1].x) * 0.5f;
+			const float offsetY = (low[0].y + low[1].y - high[0].y - high[1].y) * 0.5f;
+			return widthLow > 0.5f && widthLow < height && widthHigh <= widthLow * 1.5f + 1.0f && std::hypot(offsetX, offsetY) < 0.25f * height + 1.0f;
+		}
+
 		struct QuadBounds
 		{
 			float base = FLT_MAX, top = -FLT_MAX, cx = 0.0f, cy = 0.0f;
@@ -190,7 +238,7 @@ namespace TreeShapes
 		}
 	}
 
-	Kind Classify(const RE::BSRenderPass* a_pass)
+	Kind Classify(const RE::BSRenderPass* a_pass, bool a_treeModSupport)
 	{
 		const auto property = a_pass ? a_pass->shaderProperty : nullptr;
 		const auto geometry = a_pass ? a_pass->geometry : nullptr;
@@ -213,14 +261,22 @@ namespace TreeShapes
 		if (property->flags.all(Flag::kTwoSided) && property->flags.any(Flag::kRimLighting, Flag::kSoftLighting))
 			return Kind::Crown;
 
-		// 3D LOD trunks are flat crossed cards: quads only, which rocks and buildings with the same flags are not
-		if (property->flags.none(Flag::kTwoSided, Flag::kRimLighting, Flag::kSoftLighting) && IsAllQuads(geometry))
-			return Kind::Trunk;
+		const bool allQuads = IsAllQuads(geometry);
+		if (property->flags.none(Flag::kTwoSided, Flag::kRimLighting, Flag::kSoftLighting)) {
+			// 3D LOD trunks are flat crossed cards: quads only, which rocks and buildings with the same flags are not.
+			// Tree mods merge the cards with 3D trunks and stumps; the bend data then looks for the cards.
+			return allQuads || (a_treeModSupport && geometry->AsTriShape()) ? Kind::Trunk : Kind::None;
+		}
+
+		// Tree-mod crowns: two-sided without rim or soft lighting, never all quads, and only in the LOD4 ring;
+		// at LOD8 and LOD16 the tree-mod trees are billboards and these shapes are not trees
+		if (a_treeModSupport && geometry->AsTriShape() && !allQuads && property->flags.all(Flag::kTwoSided) && geometry->world.scale < 6.0f)
+			return Kind::Crown;
 
 		return Kind::None;
 	}
 
-	ID3D11ShaderResourceView* BendWeights::Get(RE::BSGeometry* a_geometry, Kind a_kind, uint a_frame)
+	ID3D11ShaderResourceView* BendWeights::Get(RE::BSGeometry* a_geometry, Kind a_kind, uint a_frame, bool a_treeModSupport)
 	{
 		VertexView vertices;
 		if (!a_geometry || a_kind == Kind::None || !GetVertices(a_geometry, vertices))
@@ -229,17 +285,41 @@ namespace TreeShapes
 		const auto firstVertex = vertices(0);
 		if (auto it = entries.find(vertices.vertexBuffer); it != entries.end()) {
 			auto& entry = it->second;
-			if (entry.vertexCount == vertices.count && entry.firstVertex[0] == firstVertex.x && entry.firstVertex[1] == firstVertex.y && entry.firstVertex[2] == firstVertex.z) {
+			// Tree-mod crowns rebuild when their block gains trunk cards
+			const bool stale = a_treeModSupport && entry.crown && [&] {
+				const auto blockIt = blocks.find(entry.blockKey);
+				return blockIt != blocks.end() && blockIt->second.generation != entry.generation;
+			}();
+			if (!stale && entry.vertexCount == vertices.count && entry.firstVertex[0] == firstVertex.x && entry.firstVertex[1] == firstVertex.y && entry.firstVertex[2] == firstVertex.z) {
 				entry.lastFrame = a_frame;
 				return entry.srv.get();
 			}
-			// The vertex buffer address was reused by another shape
+			// Stale, or the vertex buffer address was reused by another shape
 			entries.erase(it);
 		}
 
-		auto& block = blocks[BlockKey(a_geometry)];
+		const uint64_t blockKey = BlockKey(a_geometry);
+		auto& block = blocks[blockKey];
 		const float worldScale = a_geometry->world.scale;
 		const bool allQuads = IsAllQuads(a_geometry);
+		const auto indices = a_geometry->GetGeometryRuntimeData().rendererData->rawIndexData;
+		const uint32_t triangleCount = a_geometry->AsTriShape()->GetTrishapeRuntimeData().triangleCount;
+
+		Entry entry;
+		entry.vertexCount = vertices.count;
+		entry.firstVertex[0] = firstVertex.x;
+		entry.firstVertex[1] = firstVertex.y;
+		entry.firstVertex[2] = firstVertex.z;
+		entry.lastFrame = a_frame;
+		entry.blockKey = blockKey;
+		entry.crown = a_kind == Kind::Crown;
+
+		// Remembers a shape with nothing to sway, so it is not scanned again
+		const auto keepStill = [&]() -> ID3D11ShaderResourceView* {
+			entry.generation = block.generation;
+			entries.insert_or_assign(vertices.vertexBuffer, std::move(entry));
+			return nullptr;
+		};
 
 		// Per vertex: bend weight (0 base, 1 top), tree random, tree sway scale, distance from the trunk (0 trunk, 1 crown edge)
 		std::vector<uint16_t> data(static_cast<size_t>(vertices.count) * 4, 0);
@@ -251,12 +331,103 @@ namespace TreeShapes
 		};
 
 		if (a_kind == Kind::Trunk) {
-			// Each card bends from its own foot and registers its tree for the crowns of this block
-			const bool newShape = block.trunkShapes.insert(vertices.vertexBuffer).second;
-			for (uint32_t c = 0; c + 3 < vertices.count; c += 4) {
-				const auto q = GetQuadBounds(vertices, c);
-				if (newShape)
+			// First vertex of each trunk card
+			std::vector<uint32_t> cardStarts;
+			if (allQuads) {
+				for (uint32_t c = 0; c + 3 < vertices.count; c += 4)
+					cardStarts.push_back(c);
+			} else {
+				// Tree mods: find the cards among 3D trunks and stumps. A tree's cards cross at one centre, so a lone
+				// tall quad (a pillar face, a post) without a partner is skipped.
+				std::vector<uint32_t> candidates;
+				for (uint32_t i = 0; i + 3 < vertices.count;) {
+					if (IsCardQuad(vertices, i)) {
+						candidates.push_back(i);
+						i += 4;
+					} else {
+						++i;
+					}
+				}
+				std::vector<QuadBounds> bounds;
+				for (const auto c : candidates)
+					bounds.push_back(GetQuadBounds(vertices, c));
+				for (size_t a = 0; a < candidates.size(); ++a) {
+					for (size_t b = 0; b < candidates.size(); ++b) {
+						if (a != b && std::hypot(bounds[a].cx - bounds[b].cx, bounds[a].cy - bounds[b].cy) < 8.0f) {
+							cardStarts.push_back(candidates[a]);
+							break;
+						}
+					}
+				}
+			}
+
+			// Tree mods: trees with a real 3D trunk instead of cards. A tall, narrow piece of a mixed shape is such a
+			// trunk: it registers as its tree's card, so the crown follows it, and bends from its foot.
+			std::vector<BendWeights::TrunkCard> trunks;
+			std::vector<uint32_t> roots;
+			std::unordered_map<uint32_t, size_t> trunkOfPiece;
+			if (!allQuads && indices) {
+				const float crownRadius = kCrownRadius * 4.0f / std::max(worldScale, 0.01f);
+				std::vector<bool> onCard(vertices.count, false);
+				for (const auto c : cardStarts)
+					for (uint32_t k = 0; k < 4; ++k)
+						onCard[c + k] = true;
+				roots = PieceRoots(indices, triangleCount, vertices.count);
+				struct Box
+				{
+					float sumX = 0.0f, sumY = 0.0f, minX = FLT_MAX, maxX = -FLT_MAX, minY = FLT_MAX, maxY = -FLT_MAX, minZ = FLT_MAX, maxZ = -FLT_MAX;
+					int count = 0;
+					bool card = false;
+				};
+				std::unordered_map<uint32_t, Box> boxes;
+				for (uint32_t i = 0; i < vertices.count; ++i) {
+					const auto p = vertices(i);
+					auto& box = boxes[roots[i]];
+					box.sumX += p.x;
+					box.sumY += p.y;
+					box.minX = std::min(box.minX, p.x);
+					box.maxX = std::max(box.maxX, p.x);
+					box.minY = std::min(box.minY, p.y);
+					box.maxY = std::max(box.maxY, p.y);
+					box.minZ = std::min(box.minZ, p.z);
+					box.maxZ = std::max(box.maxZ, p.z);
+					box.card = box.card || onCard[i];
+					++box.count;
+				}
+				for (const auto& [root, box] : boxes) {
+					const float width = std::max(box.maxX - box.minX, box.maxY - box.minY);
+					const float height = box.maxZ - box.minZ;
+					if (!box.card && box.count >= 6 && width < 0.6f * crownRadius && height > 64.0f && height > 3.0f * width) {
+						trunkOfPiece[root] = trunks.size();
+						trunks.push_back({ box.sumX / box.count, box.sumY / box.count, box.minZ, box.maxZ });
+					}
+				}
+			}
+
+			// Each trunk registers its tree for the crowns of this block, once per shape
+			if (block.trunkShapes.insert(vertices.vertexBuffer).second && (!cardStarts.empty() || !trunks.empty())) {
+				++block.generation;
+				for (const auto& trunk : trunks)
+					AddCard(block, trunk, worldScale);
+				for (const auto c : cardStarts) {
+					const auto q = GetQuadBounds(vertices, c);
 					AddCard(block, { q.cx, q.cy, q.base, q.top }, worldScale);
+				}
+			}
+			if (cardStarts.empty() && trunks.empty())
+				return keepStill();
+
+			for (uint32_t i = 0; i < vertices.count && !trunks.empty(); ++i) {
+				const auto it = trunkOfPiece.find(roots[i]);
+				if (it == trunkOfPiece.end())
+					continue;
+				const auto& trunk = trunks[it->second];
+				const auto* card = NearestCard(block, trunk.x, trunk.y);
+				put(i, (vertices(i).z - trunk.base) / std::max(trunk.top - trunk.base, 1.0f), card ? card->random : 0.5f, card ? card->scale : 1.0f, 0.0f);
+			}
+			// Each card bends from its own foot, with its tree's random and scale
+			for (const auto c : cardStarts) {
+				const auto q = GetQuadBounds(vertices, c);
 				const auto* card = NearestCard(block, q.cx, q.cy);
 				const float height = std::max(q.top - q.base, 1.0f);
 				for (uint32_t k = 0; k < 4; ++k)
@@ -277,10 +448,9 @@ namespace TreeShapes
 		} else if (IsTreeShapeName(a_geometry)) {
 			// A 'treepassthru' shape that is not all quads (external billboards, LOD tree models): each connected
 			// piece bends from its own foot, and the pieces of one tree share the random through their rounded centre
-			const auto indices = a_geometry->GetGeometryRuntimeData().rendererData->rawIndexData;
 			if (!indices)
-				return nullptr;
-			const auto roots = PieceRoots(indices, a_geometry->AsTriShape()->GetTrishapeRuntimeData().triangleCount, vertices.count);
+				return keepStill();
+			const auto roots = PieceRoots(indices, triangleCount, vertices.count);
 			struct Piece
 			{
 				float sumX = 0.0f, sumY = 0.0f, base = FLT_MAX, top = -FLT_MAX, random = 0.5f, scale = 1.0f;
@@ -307,6 +477,75 @@ namespace TreeShapes
 				// Flat bits stay still
 				put(i, height > 8.0f ? (vertices(i).z - piece.base) / height : 0.0f, piece.random, piece.scale, 0.6f);
 			}
+		} else if (a_treeModSupport) {
+			// Tree-mod crowns: each connected piece (a branch, a leaf cluster) follows the ONE trunk card nearest its
+			// centre, so a piece never tears between two trees; a piece with no card near stays still (full 3D LOD trees
+			// with real trunks). In the far rings tree-mod billboards are not plain quads and have no trunk cards, so
+			// each piece there bends from its own foot.
+			const bool farRing = worldScale >= 6.0f;
+			if (block.cards.empty() && !farRing)
+				return nullptr;
+			const float crownRadius = kCrownRadius * 4.0f / std::max(worldScale, 0.01f);
+			const float maxDistance = 1.2f * crownRadius;
+			const auto roots = PieceRoots(indices, triangleCount, vertices.count);
+			struct Piece
+			{
+				float sumX = 0.0f, sumY = 0.0f, minX = FLT_MAX, maxX = -FLT_MAX, minY = FLT_MAX, maxY = -FLT_MAX, minZ = FLT_MAX, maxZ = -FLT_MAX;
+				int count = 0;
+				bool ownFoot = false;
+				bool perVertex = false;  // one piece spans several trees: nearest card per vertex
+				const BendWeights::TrunkCard* card = nullptr;
+			};
+			std::unordered_map<uint32_t, Piece> pieces;
+			for (uint32_t i = 0; i < vertices.count; ++i) {
+				const auto p = vertices(i);
+				auto& piece = pieces[roots[i]];
+				piece.sumX += p.x;
+				piece.sumY += p.y;
+				piece.minX = std::min(piece.minX, p.x);
+				piece.maxX = std::max(piece.maxX, p.x);
+				piece.minY = std::min(piece.minY, p.y);
+				piece.maxY = std::max(piece.maxY, p.y);
+				piece.minZ = std::min(piece.minZ, p.z);
+				piece.maxZ = std::max(piece.maxZ, p.z);
+				++piece.count;
+			}
+			uint64_t matched = 0;
+			for (auto& [root, piece] : pieces) {
+				const float cx = piece.sumX / piece.count, cy = piece.sumY / piece.count;
+				if (farRing) {
+					piece.card = block.cards.empty() ? nullptr : NearestCardWithin(block, cx, cy, maxDistance);
+					piece.ownFoot = !piece.card && piece.maxZ - piece.minZ > 8.0f;
+					matched += piece.card || piece.ownFoot;
+					continue;
+				}
+				if (piece.maxX - piece.minX > 4.0f * crownRadius || piece.maxY - piece.minY > 4.0f * crownRadius) {
+					piece.perVertex = true;
+					continue;
+				}
+				piece.card = NearestCardWithin(block, cx, cy, maxDistance);
+				matched += piece.card != nullptr;
+			}
+			for (uint32_t i = 0; i < vertices.count; ++i) {
+				const auto p = vertices(i);
+				const auto& piece = pieces[roots[i]];
+				if (piece.ownFoot) {
+					const float height = std::max(piece.maxZ - piece.minZ, 1.0f);
+					const float rx = std::round(piece.sumX / piece.count / 8.0f), ry = std::round(piece.sumY / piece.count / 8.0f);
+					put(i, (p.z - piece.minZ) / height, Hash01(rx, ry), TreeScale(height, worldScale, Hash01(ry * 1.37f + 11.0f, rx * 0.71f - 5.0f)), 0.6f);
+					continue;
+				}
+				const auto* card = piece.perVertex ? NearestCardWithin(block, p.x, p.y, maxDistance) : piece.card;
+				if (piece.perVertex && card)
+					++matched;
+				if (card) {
+					const float height = std::max(card->top - card->base, 1.0f);
+					const float radial = std::sqrt((p.x - card->x) * (p.x - card->x) + (p.y - card->y) * (p.y - card->y)) / crownRadius;
+					put(i, (p.z - card->base) / height, card->random, card->scale, radial);
+				}
+			}
+			if (matched == 0)
+				return keepStill();
 		} else {
 			// 3D crowns follow the nearest trunk card of their block; until those trunks are drawn, the crown stays still
 			if (block.cards.empty())
@@ -324,7 +563,6 @@ namespace TreeShapes
 			}
 		}
 
-		Entry entry;
 		D3D11_BUFFER_DESC bufferDesc{};
 		bufferDesc.ByteWidth = static_cast<UINT>(data.size() * sizeof(uint16_t));
 		bufferDesc.Usage = D3D11_USAGE_IMMUTABLE;
@@ -342,12 +580,14 @@ namespace TreeShapes
 			return nullptr;
 		Util::SetResourceName(entry.srv.get(), "TreeLODWind::BendWeights SRV");
 
-		entry.vertexCount = vertices.count;
-		entry.firstVertex[0] = firstVertex.x;
-		entry.firstVertex[1] = firstVertex.y;
-		entry.firstVertex[2] = firstVertex.z;
-		entry.lastFrame = a_frame;
+		entry.generation = block.generation;
 		return entries.insert_or_assign(vertices.vertexBuffer, std::move(entry)).first->second.srv.get();
+	}
+
+	void BendWeights::Clear()
+	{
+		entries.clear();
+		blocks.clear();
 	}
 
 	void BendWeights::Evict(uint a_frame)

@@ -30,7 +30,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	GustWindStorm,
 	GustRainy,
 	GustSnow,
-	GustCloudy)
+	GustCloudy,
+	TreeModSupport)
 
 namespace
 {
@@ -97,6 +98,13 @@ void TreeLODWind::DrawSettings()
 		T(TKEY("gust_strength_storm_tooltip"), "Extra sway during a gust in rain or snow."));
 	SliderWithTooltip(T(TKEY("gust_rarity_storm"), "Gust Rarity, Storms"), &settings.GustRarityStorm, 2.0f, 60.0f, "%.0f",
 		T(TKEY("gust_rarity_storm_tooltip"), "Higher = rarer, shorter gusts in storms."));
+
+	ImGui::SeparatorText(T(TKEY("tree_mods"), "Tree Mods"));
+	ImGui::Checkbox(T(TKEY("tree_mod_support"), "Tree Mod Support"), &settings.TreeModSupport);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("%s", T(TKEY("tree_mod_support_tooltip"),
+							  "Also sways 3D tree LOD from tree mods built differently from DynDOLOD's own models, such as Happy Little Trees, Nature of the Wild Lands and Ulvenwald."));
+	}
 
 	if (ImGui::CollapsingHeader(T(TKEY("advanced"), "Advanced: Distances and Weather Types"))) {
 		SliderWithTooltip(T(TKEY("near_scale"), "Near-Band Sway"), &settings.NearScale, 0.0f, 1.0f, "%.2f",
@@ -239,8 +247,8 @@ void TreeLODWind::PostPostLoad()
 
 void TreeLODWind::BeginDraw(RE::BSRenderPass* a_pass)
 {
-	const auto kind = TreeShapes::Classify(a_pass);
-	drawBendWeights = kind == TreeShapes::Kind::None ? nullptr : bendWeights.Get(a_pass->geometry, kind, globals::state->frameCount);
+	const auto kind = TreeShapes::Classify(a_pass, settings.TreeModSupport);
+	drawBendWeights = kind == TreeShapes::Kind::None ? nullptr : bendWeights.Get(a_pass->geometry, kind, globals::state->frameCount, settings.TreeModSupport);
 }
 
 void TreeLODWind::EndDraw()
@@ -319,8 +327,12 @@ void TreeLODWind::Reset()
 	data.Params.z = 0.0f;
 	windOffCB->Update(data);
 
-	if (globals::state->frameCount % 300 == 0)
+	if (bendWeightsTreeModSupport != settings.TreeModSupport) {
+		bendWeights.Clear();
+		bendWeightsTreeModSupport = settings.TreeModSupport;
+	} else if (globals::state->frameCount % 300 == 0) {
 		bendWeights.Evict(globals::state->frameCount);
+	}
 }
 
 void TreeLODWind::SetShaderResources(ID3D11DeviceContext* a_context)

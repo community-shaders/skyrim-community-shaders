@@ -41,6 +41,7 @@ public:
 		float GustRainy = 1.0f;
 		float GustSnow = 0.85f;
 		float GustCloudy = 0.35f;
+		bool TreeModSupport = true;
 	};
 
 	/** @brief Mirrors TreeLODWindCB in TreeLODWind.hlsli. */
@@ -122,4 +123,7 @@ private:
 	float statusWind = 0.0f;
 	float statusStorminess = 0.0f;
 	float statusGust = 0.0f;
+
+	// Bend data built with the other tree-mod setting is freed
+	bool bendWeightsTreeModSupport = true;
 };
