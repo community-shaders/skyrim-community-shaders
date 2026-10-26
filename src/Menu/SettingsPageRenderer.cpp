@@ -35,23 +35,32 @@ namespace
 	{
 		std::string_view id;
 		Group group;
+		bool editsTheme;  ///< Edits values stored in the theme file, so the theme save note is shown above it
 		void (*draw)(PageState& state);
 	};
 
 	// Sub-nav order. Each group's sections are contiguous; the first section is the fallback for unknown IDs.
 	constexpr std::array kSections = {
-		Section{ Ids::kShadersCache, Group::General, [](PageState&) { SettingsTabRenderer::RenderShadersSection(); } },
-		Section{ Ids::kKeybindings, Group::General, [](PageState& state) { SettingsTabRenderer::RenderKeybindingsSection(state.keys); } },
-		Section{ Ids::kBehavior, Group::General, [](PageState&) { SettingsTabRenderer::RenderBehaviorSection(); } },
-		Section{ Ids::kTheme, Group::Appearance, [](PageState&) { SettingsTabRenderer::RenderThemesSection(); } },
-		Section{ Ids::kFonts, Group::Appearance, [](PageState&) { SettingsTabRenderer::RenderFontsSection(); } },
-		Section{ Ids::kColors, Group::Appearance, [](PageState&) { SettingsTabRenderer::RenderColorsSection(); } },
-		Section{ Ids::kStyling, Group::Appearance, [](PageState&) { SettingsTabRenderer::RenderStylingSection(); } },
-		Section{ Ids::kDeveloper, Group::Advanced, [](PageState&) { AdvancedSettingsRenderer::RenderDeveloperSection(); } },
-		Section{ Ids::kLogging, Group::Advanced, [](PageState&) { AdvancedSettingsRenderer::RenderLoggingSection(); } },
-		Section{ Ids::kShaderDebug, Group::Advanced, [](PageState&) { AdvancedSettingsRenderer::RenderShaderDebugSection(); } },
-		Section{ Ids::kTesting, Group::Advanced, [](PageState&) { AdvancedSettingsRenderer::RenderTestingSection(); } },
-		Section{ Ids::kDisableAtBoot, Group::Advanced, [](PageState& state) { if (state.drawDisableAtBoot) state.drawDisableAtBoot(); } },
+		Section{ Ids::kShadersCache, Group::General, false, [](PageState&) {
+					SettingsTabRenderer::RenderShadersSection();
+					AdvancedSettingsRenderer::RenderCompilerSection();
+				} },
+		Section{ Ids::kKeybindings, Group::General, false, [](PageState& state) { SettingsTabRenderer::RenderKeybindingsSection(state.keys); } },
+		Section{ Ids::kLanguage, Group::General, false, [](PageState&) { SettingsTabRenderer::RenderLanguageSection(); } },
+		Section{ Ids::kBehavior, Group::General, true, [](PageState&) { SettingsTabRenderer::RenderBehaviorSection(); } },
+		Section{ Ids::kTheme, Group::Appearance, true, [](PageState&) { SettingsTabRenderer::RenderThemesSection(); } },
+		Section{ Ids::kFonts, Group::Appearance, true, [](PageState&) { SettingsTabRenderer::RenderFontsSection(); } },
+		Section{ Ids::kColors, Group::Appearance, true, [](PageState&) { SettingsTabRenderer::RenderColorsSection(); } },
+		Section{ Ids::kStyling, Group::Appearance, true, [](PageState&) { SettingsTabRenderer::RenderStylingSection(); } },
+		Section{ Ids::kHeaderEffects, Group::Appearance, true, [](PageState&) { SettingsTabRenderer::RenderHeaderEffectsSection(); } },
+		Section{ Ids::kDeveloper, Group::Advanced, false, [](PageState&) { AdvancedSettingsRenderer::RenderDeveloperSection(); } },
+		Section{ Ids::kLogging, Group::Advanced, false, [](PageState&) { AdvancedSettingsRenderer::RenderLoggingSection(); } },
+		Section{ Ids::kShaderDebug, Group::Advanced, false, [](PageState&) { AdvancedSettingsRenderer::RenderShaderDebugSection(); } },
+		Section{ Ids::kTesting, Group::Advanced, false, [](PageState&) { AdvancedSettingsRenderer::RenderTestingSection(); } },
+		Section{ Ids::kDisableAtBoot, Group::Advanced, false, [](PageState& state) {
+					if (state.drawDisableAtBoot)
+						state.drawDisableAtBoot();
+				} },
 	};
 
 	const Section* FindSection(std::string_view id)
@@ -84,6 +93,8 @@ namespace
 			return T("menu.settings.nav_shaders_cache", "Shaders & Cache");
 		if (id == Ids::kKeybindings)
 			return T("menu.settings.tab_keybindings", "Keybindings");
+		if (id == Ids::kLanguage)
+			return T("menu.settings.section_language", "Language");
 		if (id == Ids::kBehavior)
 			return T("menu.settings.tab_behavior", "Behavior");
 		if (id == Ids::kTheme)
@@ -94,6 +105,8 @@ namespace
 			return T("menu.settings.tab_colors", "Colors");
 		if (id == Ids::kStyling)
 			return T("menu.settings.tab_styling", "Styling");
+		if (id == Ids::kHeaderEffects)
+			return T("menu.settings.nav_header_effects", "Header & Effects");
 		if (id == Ids::kDeveloper)
 			return T("menu.advanced.tab_developer", "Developer");
 		if (id == Ids::kLogging)
@@ -151,6 +164,8 @@ namespace
 	void RenderContent(PageState& state, const Section& section)
 	{
 		DrawSectionHeader(section);
+		if (section.editsTheme)
+			SettingsTabRenderer::RenderThemeSaveNote();
 
 		ImGui::PushID(section.id.data(), section.id.data() + section.id.size());
 		section.draw(state);

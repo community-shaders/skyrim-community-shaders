@@ -47,6 +47,7 @@
 #include "Util.h"
 #include "Utils/UI.h"
 
+#include "CSEditor/Browser/BrowserWidgets.h"
 #include "CSEditor/EditorWindow.h"
 #include "CSEditor/SceneManager/SceneSettingsManager.h"
 #include "CSEditor/SceneManager/SceneWidgetInterceptor.h"
@@ -966,22 +967,42 @@ void Menu::DrawDisableAtBootSettings()
 	auto state = globals::state;
 	auto& disabledFeatures = state->GetDisabledFeatures();
 
-	ImGui::Text("%s",
+	ImGui::TextWrapped("%s",
 		T("menu.disable_at_boot_desc",
 			"Select features to disable at boot. "
 			"This is the same as deleting a feature.ini file. "
 			"Restart will be required to reenable."));
+	ImGui::PushStyleColor(ImGuiCol_Text, settings.Theme.StatusPalette.RestartNeeded);
+	ImGui::TextWrapped("%s", T("menu.settings.disable_at_boot_restart", "Changes here take effect the next time the game starts."));
+	ImGui::PopStyleColor();
 
 	ImGui::Spacing();
 
-	if (ImGui::CollapsingHeader(T("menu.features", "Features"), ImGuiTreeNodeFlags_DefaultOpen)) {
+	const char* disabledOnlyLabel = T("menu.settings.disabled_only", "Disabled only");
+	const float chipWidth = BrowserUI::MeasureChip(disabledOnlyLabel, false);
+	const float searchWidth = std::max(ImGui::GetFrameHeight() * 4.0f, ImGui::GetContentRegionAvail().x - chipWidth - ImGui::GetStyle().ItemSpacing.x);
+	BrowserUI::SearchField("##DisableAtBootSearch", disableAtBootSearch.data(), disableAtBootSearch.size(), T("ui.search", "Search..."), searchWidth, false);
+	BrowserUI::SameLineIfFits(chipWidth);
+	if (BrowserUI::FilterChip("##DisabledOnly", { disabledOnlyLabel }, disableAtBootDisabledOnly))
+		disableAtBootDisabledOnly = !disableAtBootDisabledOnly;
+
+	ImGui::Spacing();
+
 		// Label by the (translated) display name the feature list shows; the short name keys the setting and the widget ID
+	const std::string query(disableAtBootSearch.data());
 		std::vector<std::pair<std::string, std::string>> entries;  // display name, short name
 		for (auto* feature : Feature::GetFeatureList()) {
-			if (!feature->IsHiddenUnreleased())
-				entries.emplace_back(feature->GetDisplayName(), feature->GetShortName());
+		if (feature->IsHiddenUnreleased() || !Util::FeatureMatchesSearch(feature, query))
+			continue;
+		const std::string shortName(feature->GetShortName());
+		if (disableAtBootDisabledOnly && !(disabledFeatures.contains(shortName) && disabledFeatures[shortName]))
+			continue;
+		entries.emplace_back(feature->GetDisplayName(), shortName);
 		}
 		std::ranges::sort(entries);
+
+	if (entries.empty())
+		ImGui::TextDisabled("%s", T("menu.settings.disable_at_boot_no_match", "No features match."));
 
 		for (const auto& [displayName, shortName] : entries) {
 			bool isDisabled = disabledFeatures.contains(shortName) && disabledFeatures[shortName];
@@ -991,7 +1012,6 @@ void Menu::DrawDisableAtBootSettings()
 				disabledFeatures[shortName] = isDisabled;
 			}
 		}
-	}
 }
 
 /**

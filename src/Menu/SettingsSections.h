@@ -13,12 +13,14 @@ namespace SettingsSectionIds
 	// General
 	inline constexpr std::string_view kShadersCache = "ShadersCache";
 	inline constexpr std::string_view kKeybindings = "Keybindings";
+	inline constexpr std::string_view kLanguage = "Language";
 	inline constexpr std::string_view kBehavior = "Behavior";
 	// Appearance
 	inline constexpr std::string_view kTheme = "Theme";
 	inline constexpr std::string_view kFonts = "Fonts";
 	inline constexpr std::string_view kColors = "Colors";
 	inline constexpr std::string_view kStyling = "Styling";
+	inline constexpr std::string_view kHeaderEffects = "HeaderEffects";
 	// Advanced
 	inline constexpr std::string_view kDeveloper = "Developer";
 	inline constexpr std::string_view kLogging = "Logging";

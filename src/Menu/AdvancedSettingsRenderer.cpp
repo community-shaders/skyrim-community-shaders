@@ -81,6 +81,49 @@ namespace
 	}
 }
 
+void AdvancedSettingsRenderer::RenderCompilerSection()
+{
+	auto shaderCache = globals::shaderCache;
+
+	{
+		MenuFonts::FontRoleGuard headingFont(Menu::FontRole::Subheading);
+		ImGui::SeparatorText(T("menu.settings.section_compiler", "Compiler"));
+	}
+
+	// Compiler Thread controls
+	ImGui::SliderInt(T("menu.advanced.compiler_threads", "Compiler Threads"), &shaderCache->compilationThreadCount, 1, static_cast<int32_t>(std::thread::hardware_concurrency()), "%d", ImGuiSliderFlags_AlwaysClamp);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("%s", T("menu.advanced.compiler_threads_tooltip",
+							  "Number of threads used to compile shaders at startup. "
+							  "Defaults to all logical cores minus one for OS headroom (E-cores included). "
+							  "Higher values finish compilation faster but may make the system less responsive."));
+	}
+	ImGui::SliderInt(T("menu.advanced.background_compiler_threads", "Background Compiler Threads"), &shaderCache->backgroundCompilationThreadCount, 1, static_cast<int32_t>(std::thread::hardware_concurrency()), "%d", ImGuiSliderFlags_AlwaysClamp);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("%s", T("menu.advanced.background_compiler_threads_tooltip",
+							  "Number of threads used to compile shaders during gameplay. "
+							  "Defaults to half of performance cores to avoid impacting the render thread. "
+							  "Higher values finish compilation faster but may cause stuttering."));
+	}
+
+	// Dump Shaders option
+	bool useDump = shaderCache->IsDump();
+	if (ImGui::Checkbox(T("menu.advanced.dump_shaders", "Dump Shaders"), &useDump)) {
+		shaderCache->SetDump(useDump);
+	}
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("%s", T("menu.advanced.dump_shaders_tooltip", "Dump shaders at startup. This should be used only when reversing shaders. Normal users don't need this."));
+	}
+
+	// Clear Shader Cache button
+	if (ImGui::Button(T("menu.advanced.clear_shader_cache", "Clear Shader Cache"), { -1, 0 })) {
+		shaderCache->Clear();
+	}
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("%s", T("menu.advanced.clear_shader_cache_tooltip", "Clear all compiled shaders from memory. Forces recompilation of all shaders on next use."));
+	}
+}
+
 void AdvancedSettingsRenderer::RenderLoggingSection()
 {
 	auto shaderCache = globals::shaderCache;
@@ -123,22 +166,6 @@ void AdvancedSettingsRenderer::RenderLoggingSection()
 
 	ImGui::Spacing();
 
-	// Compiler Thread controls
-	ImGui::SliderInt(T("menu.advanced.compiler_threads", "Compiler Threads"), &shaderCache->compilationThreadCount, 1, static_cast<int32_t>(std::thread::hardware_concurrency()), "%d", ImGuiSliderFlags_AlwaysClamp);
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("%s", T("menu.advanced.compiler_threads_tooltip",
-							  "Number of threads used to compile shaders at startup. "
-							  "Defaults to all logical cores minus one for OS headroom (E-cores included). "
-							  "Higher values finish compilation faster but may make the system less responsive."));
-	}
-	ImGui::SliderInt(T("menu.advanced.background_compiler_threads", "Background Compiler Threads"), &shaderCache->backgroundCompilationThreadCount, 1, static_cast<int32_t>(std::thread::hardware_concurrency()), "%d", ImGuiSliderFlags_AlwaysClamp);
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("%s", T("menu.advanced.background_compiler_threads_tooltip",
-							  "Number of threads used to compile shaders during gameplay. "
-							  "Defaults to half of performance cores to avoid impacting the render thread. "
-							  "Higher values finish compilation faster but may cause stuttering."));
-	}
-
 	ImGui::Columns(2, nullptr, false);
 
 	// Dump Ini Settings button
@@ -161,27 +188,6 @@ void AdvancedSettingsRenderer::RenderShaderDebugSection()
 {
 	auto shaderCache = globals::shaderCache;
 	auto state = globals::state;
-
-	// Dump Shaders option
-	bool useDump = shaderCache->IsDump();
-	if (ImGui::Checkbox(T("menu.advanced.dump_shaders", "Dump Shaders"), &useDump)) {
-		shaderCache->SetDump(useDump);
-	}
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("%s", T("menu.advanced.dump_shaders_tooltip", "Dump shaders at startup. This should be used only when reversing shaders. Normal users don't need this."));
-	}
-
-	// Clear Shader Cache button
-	if (ImGui::Button(T("menu.advanced.clear_shader_cache", "Clear Shader Cache"), { -1, 0 })) {
-		shaderCache->Clear();
-	}
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("%s", T("menu.advanced.clear_shader_cache_tooltip", "Clear all compiled shaders from memory. Forces recompilation of all shaders on next use."));
-	}
-
-	ImGui::Spacing();
-	ImGui::Separator();
-	ImGui::Spacing();
 
 	// Shader Replacement section
 	Util::DrawSectionHeader(T("menu.advanced.replace_original_shaders", "Replace Original Shaders"));
@@ -301,9 +307,7 @@ void AdvancedSettingsRenderer::RenderShaderDebugSection()
 
 	// Shader Debug section
 	if (ImGui::CollapsingHeader(T("menu.advanced.shader_debug_header", "Shader Debug"))) {
-		auto menu = globals::menu;
-		auto& menuSettings = menu->GetSettings();
-		auto& themeSettings = menuSettings.Theme;
+		auto& menuSettings = globals::menu->GetSettings();
 
 		if (ImGui::Checkbox(T("menu.advanced.enable_shader_blocking", "Enable Shader Blocking"), &menuSettings.EnableShaderBlocking)) {
 			// Setting saved automatically on next save
@@ -314,39 +318,7 @@ void AdvancedSettingsRenderer::RenderShaderDebugSection()
 
 		if (menuSettings.EnableShaderBlocking) {
 			ImGui::Indent();
-
-			// Shader Block Previous Key
-			if (menu->settingShaderBlockPrevKey) {
-				ImGui::Text("%s", T("menu.advanced.press_key_shader_block_prev", "Press any key for Shader Block Previous..."));
-			} else {
-				ImGui::AlignTextToFramePadding();
-				ImGui::Text("%s", T("menu.advanced.block_previous", "Block Previous:"));
-				ImGui::SameLine();
-				ImGui::AlignTextToFramePadding();
-				ImGui::TextColored(themeSettings.StatusPalette.CurrentHotkey, "%s",
-					Util::Input::KeyIdToString(menuSettings.ShaderBlockPrevKey).c_str());
-				ImGui::SameLine();
-				if (ImGui::Button(T("menu.advanced.change_shader_block_prev", "Change##ShaderBlockPrev"))) {
-					menu->settingShaderBlockPrevKey = true;
-				}
-			}
-
-			// Shader Block Next Key
-			if (menu->settingShaderBlockNextKey) {
-				ImGui::Text("%s", T("menu.advanced.press_key_shader_block_next", "Press any key for Shader Block Next..."));
-			} else {
-				ImGui::AlignTextToFramePadding();
-				ImGui::Text("%s", T("menu.advanced.block_next", "Block Next:"));
-				ImGui::SameLine();
-				ImGui::AlignTextToFramePadding();
-				ImGui::TextColored(themeSettings.StatusPalette.CurrentHotkey, "%s",
-					Util::Input::KeyIdToString(menuSettings.ShaderBlockNextKey).c_str());
-				ImGui::SameLine();
-				if (ImGui::Button(T("menu.advanced.change_shader_block_next", "Change##ShaderBlockNext"))) {
-					menu->settingShaderBlockNextKey = true;
-				}
-			}
-
+			ImGui::TextDisabled("%s", T("menu.advanced.shader_block_keys_moved", "Set the Block Previous and Block Next keys under Keybindings."));
 			ImGui::Unindent();
 		}
 	}

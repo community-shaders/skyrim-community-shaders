@@ -33,6 +33,9 @@ public:
 		bool& settingEffects11EditorKey; /**< @brief True while capturing a new Effects 11 editor key. */
 	};
 
+	/** @brief The one line explaining how theme edits and the theme selection are saved. */
+	static void RenderThemeSaveNote();
+
 	/** @brief Shader cache options and the last build's compilation breakdown. */
 	static void RenderShadersSection();
 	/**
@@ -41,13 +44,17 @@ public:
 	 */
 	static void RenderKeybindingsSection(
 		SettingsState& state);
-	/** @brief Language, UI behaviour and visual effect options. */
+	/** @brief Interface language picker. */
+	static void RenderLanguageSection();
+	/** @brief Menu behaviour options and the Reset Window Layout button. */
 	static void RenderBehaviorSection();
+	/** @brief Header title and icon options, background blur, menu fade and the theme cursor. */
+	static void RenderHeaderEffectsSection();
 	/** @brief Theme preset picker with save, save-as and delete. */
 	static void RenderThemesSection();
 	/** @brief Font size and per-role font pickers. Requests the font preview atlas while drawn. */
 	static void RenderFontsSection();
-	/** @brief Global scale and the ImGui style sliders. */
+	/** @brief Global scale and scrollbar opacity, with the raw ImGui style sliders in a collapsed fold. */
 	static void RenderStylingSection();
 	/** @brief Simple palette and the full ImGui color list. */
 	static void RenderColorsSection();

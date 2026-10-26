@@ -565,6 +565,10 @@ private:
 	// handled; the claim waits here until that release reads it with TakeConsumedEscape().
 	bool escapeConsumed = false;
 
+	// Settings page: Disable at Boot list filter
+	std::array<char, 128> disableAtBootSearch{};
+	bool disableAtBootDisabledOnly = false;
+
 	// Skyrim AFK vanity camera: delayed spin while idle. Held off while any CS UI is open.
 	bool vanityCameraDisabled = false;
 	float savedVanityCameraDelay = 180.0f;
