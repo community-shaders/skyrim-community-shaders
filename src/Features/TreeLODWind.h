@@ -1,24 +1,66 @@
 #pragma once
 
+#include "Buffer.h"
 #include "Feature.h"
 
 /**
- * @brief Core feature enabling wind sway on DynDOLOD billboard tree LOD for the Windswept Tree LOD plugin.
+ * @brief Wind sway for DynDOLOD tree LOD.
  *
- * Windswept Tree LOD (an SKSE plugin, K747_LodWind.dll) sways the distant billboard trees. It picks
- * out the tree LOD draws itself and binds the wind state (b13) and per-vertex weights (t120) to the
- * vertex shader for those draws only. The TREE_LOD_WIND define adds the matching vertex offset to
- * Lighting.hlsl and Utility.hlsl, so the colour, depth and shadow passes all move together.
- *
- * It self-disables in PostPostLoad when the plugin is absent or reports a different interface version, so
- * the define is off and the shaders are unchanged without it; regular feature validation recompiles them
- * when the plugin is added or removed.
+ * Keeps a wind clock that follows the weather and binds it to the vertex shader (b3) for Lighting and
+ * Utility draws. The TREE_LOD_WIND define adds the matching vertex offset to Lighting.hlsl and Utility.hlsl,
+ * so the colour, depth and shadow passes move together. The object LOD vertex shaders cannot tell tree
+ * LOD apart at compile time, so each draw gets either the swaying (on) or the still (off) buffer.
  */
 struct TreeLODWind : Feature
 {
-	/** @brief b13 cbuffer layout and t120 buffer version the shaders expect; the plugin must report the same. */
-	static constexpr std::uint32_t kInterfaceVersion = 1;
+private:
 	static constexpr std::string_view MOD_ID = "195280";
+
+public:
+	struct Settings
+	{
+		bool Enabled = true;
+		float Amplitude = 80.0f;
+		float BaseSpeed = 0.6f;
+		float WindSpeedGain = 1.4f;
+		float BendExponent = 1.5f;
+		float TreeSpread = 2.5f;
+		float Flutter = 0.25f;
+		float FlutterShare = 0.6f;
+		float FlutterSpeed = 7.0f;
+		float MinDistance = 10000.0f;
+		float NearScale = 0.6f;
+		float NearRampEnd = 40000.0f;
+		float GustStrengthCalm = 1.0f;
+		float GustRarityCalm = 40.0f;
+		float GustStrengthStorm = 4.0f;
+		float GustRarityStorm = 4.0f;
+		float GustWindCalm = 0.15f;
+		float GustWindStorm = 0.6f;
+		float GustRainy = 1.0f;
+		float GustSnow = 0.85f;
+		float GustCloudy = 0.35f;
+	};
+
+	/** @brief Mirrors TreeLODWindCB in TreeLODWind.hlsli. */
+	struct alignas(16) WindCB
+	{
+		float4 Wind;    // phase, previous phase, wind speed 0-1, wind angle (radians)
+		float4 Params;  // amplitude, near distance, enabled, unused
+		float4 Shape;   // bend exponent, use bend weights, flutter strength, per-tree phase spread
+		float4 Detail;  // flutter share, flutter speed, near scale, near ramp end
+		float4 Gusts;   // gust strength, gust rarity, unused, unused
+	};
+	static_assert(sizeof(WindCB) % 16 == 0);
+
+	enum class Preset
+	{
+		Gentle,
+		Default,
+		Windy
+	};
+
+	Settings settings;
 
 	virtual inline std::string GetName() override { return "Tree LOD Wind"; }
 	virtual inline std::string GetDisplayName() override { return T("feature.tree_lod_wind.name", "Tree LOD Wind"); }
@@ -31,21 +73,42 @@ struct TreeLODWind : Feature
 	virtual std::string_view GetCategory() const override { return FeatureCategories::kLandscapeAndTextures; }
 	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
 
-	/** @brief Returns a summary description for the UI. */
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
-		return { T("feature.tree_lod_wind.description", "Lets the distant DynDOLOD billboard trees sway in the wind, in support of the Windswept Tree LOD plugin."),
-			{ T("feature.tree_lod_wind.key_feature_1", "Active only while the Windswept Tree LOD SKSE plugin is installed."),
-				T("feature.tree_lod_wind.key_feature_2", "Without the plugin, tree LOD is drawn exactly as before.") } };
+		return { T("feature.tree_lod_wind.description", "Lets the distant DynDOLOD tree LOD sway in the wind."),
+			{ T("feature.tree_lod_wind.key_feature_1", "Sway follows the weather: gentle in clear skies, strong gusts in storms."),
+				T("feature.tree_lod_wind.key_feature_2", "Each tree bends from its base and keeps its own timing.") } };
 	}
 
 	virtual void DrawSettings() override;
+	virtual void LoadSettings(json& o_json) override;
+	virtual void SaveSettings(json& o_json) override;
+	virtual void RestoreDefaultSettings() override;
 
-	/** @brief Disables the feature when the Windswept Tree LOD plugin is not installed. */
+	/** @brief Stands down when the old Windswept Tree LOD plugin is installed, which sways the same trees. */
 	virtual void PostPostLoad() override;
+	virtual void SetupResources() override;
 
-	virtual bool IsCore() const override { return true; }
+	/** @brief Advances the wind clock and uploads the on and off buffers, once per frame. */
+	virtual void Reset() override;
 
-	/** @brief Listed in the menu only when the plugin is installed. */
-	virtual bool IsInMenu() const override { return GetModuleHandleW(L"K747_LodWind.dll") != nullptr; }
+	/** @brief Binds the wind buffer for the current Lighting or Utility draw. Called from State::Draw. */
+	void SetShaderResources(ID3D11DeviceContext* a_context);
+
+	void ApplyPreset(Preset a_preset);
+
+private:
+	/** @brief How stormy a weather is, 0 calm to 1 storm: the larger of its type and its own wind speed. */
+	float GetStorminess(const RE::TESWeather* a_weather) const;
+
+	std::unique_ptr<ConstantBuffer> windOnCB;
+	std::unique_ptr<ConstantBuffer> windOffCB;
+
+	double phase = 0.0;
+	double prevPhase = 0.0;
+
+	// Shown on the settings page
+	float statusWind = 0.0f;
+	float statusStorminess = 0.0f;
+	float statusGust = 0.0f;
 };
