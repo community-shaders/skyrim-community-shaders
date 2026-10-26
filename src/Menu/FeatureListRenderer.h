@@ -33,6 +33,23 @@ namespace MenuPageIds
 }
 
 /**
+ * @brief Filter chips of the main menu's feature list, stored as a bitmask in Menu::Settings::FeatureListFilter.
+ *
+ * Chips combine with AND, and the search text applies on top. Without kUnloaded only loaded features are listed;
+ * with it, only the ones that are not.
+ */
+namespace FeatureListFilter
+{
+	inline constexpr std::uint32_t kFavorites = 1u << 0;   ///< Pinned features
+	inline constexpr std::uint32_t kModified = 1u << 1;    ///< Settings differ from defaults and Baseline presets
+	inline constexpr std::uint32_t kScene = 1u << 2;       ///< Has Scene Manager settings
+	inline constexpr std::uint32_t kPreRelease = 1u << 3;  ///< Alpha or beta
+	inline constexpr std::uint32_t kUnloaded = 1u << 4;    ///< Not loaded: missing, failed, or disabled at boot
+	/// Every chip; a saved mask is cut to these bits.
+	inline constexpr std::uint32_t kKnown = kFavorites | kModified | kScene | kPreRelease | kUnloaded;
+}
+
+/**
  * @brief Renders the two-column feature list and settings panel in the main menu.
  *
  * The left column shows a searchable, categorized list of built-in pages and
@@ -86,6 +103,18 @@ public:
 		std::function<void(Feature*, const std::function<void()>&)> runFeatureCommand;
 		/// In: the chord that collapses and expands the list (Ctrl+B), for tooltips; empty when unbound.
 		std::string toggleListShortcut;
+	};
+
+	/** @brief How many features each filter chip would list on its own, ignoring the search and other chips. */
+	struct FilterCounts
+	{
+		int favorites = 0;
+		int modified = 0;
+		int scene = 0;
+		int preRelease = 0;
+		int unloaded = 0;
+		/// Features the current search and chips list, pinned ones included.
+		int shown = 0;
 	};
 
 	/**
@@ -178,10 +207,28 @@ private:
 		static void RenderFavoriteButton(Feature* feat);
 	};
 
+	/**
+	 * @brief Builds the list from the built-in pages and the features the search and filter chips pass.
+	 * @param counts Receives each chip's count and the number of features listed.
+	 */
 	static std::vector<MenuFuncInfo> BuildMenuList(
 		const std::string& featureSearch,
 		std::map<std::string, bool>& categoryExpansionStates,
+		const std::function<void()>& drawSettings,
+		FilterCounts& counts);
+
+	/**
+	 * @brief Rebuilds the cached list when something it depends on changed: the search, chips, sort order,
+	 * language, favorites, a category's expansion, feature edits, scene entries, or the menu was closed.
+	 * @return True when the list was rebuilt, so the caller can re-find the selected entry.
+	 */
+	static bool UpdateMenuList(
+		const std::string& featureSearch,
+		std::map<std::string, bool>& categoryExpansionStates,
 		const std::function<void()>& drawSettings);
+
+	/** @brief Draws the filter chips under the search field and handles their clicks. */
+	static void RenderFilterChips(const FilterCounts& counts);
 
 	static void HandlePendingFeatureSelection(
 		std::string& pendingFeatureSelection,

@@ -1538,7 +1538,6 @@
     "menu.features.setting_change_warning_title": "Предупреждение об изменении настройки",
     "menu.features.settings_adjusted_warning": "Некоторые из ваших настроек были автоматически скорректированы из-за несовместимости функций.",
     "menu.features.settings_hidden_disabled": "Настройки функции скрыты, поскольку эта функция отключена при загрузке.",
-    "menu.features.unloaded_features": "Незагруженные функции",
     "menu.footer.d3d12_swap_chain": "D3D12 Swap Chain: {status}",
     "menu.footer.game_version": "Версия игры: {runtime} {version}",
     "menu.footer.gpu": "GPU: {name}",

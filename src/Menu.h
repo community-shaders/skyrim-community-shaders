@@ -440,6 +440,7 @@ public:
 		bool SkipClearCacheConfirmation = false;                                                                             // Skip confirmation dialog when clearing shader cache
 		bool AutoHideFeatureList = false;                                                                                    // Start with the feature list collapsed (the key is kept from the old hover-to-reveal option)
 		bool FeatureListCollapsed = false;                                                                                   // Feature list collapsed to a thin strip (Ctrl+B); read in Load with a type check
+		std::uint32_t FeatureListFilter = 0;                                                                                 // Feature list filter chips (FeatureListFilter bits); read in Load, unknown bits dropped
 		FeatureSortMode FeatureListSort = FeatureSortMode::Category;                                                         // Feature list order in the left menu column
 		bool SkipConstraintWarning = false;                                                                                  // Skip popup when a setting change creates new constraints
 		bool RequireShiftToDock = true;                                                                                      // Require holding Shift to dock windows

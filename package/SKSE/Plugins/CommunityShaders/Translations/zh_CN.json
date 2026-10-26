@@ -3236,7 +3236,6 @@
     "menu.features.sort_tooltip": "排序功能",
     "menu.features.tag_alpha": "[ALPHA]",
     "menu.features.tag_beta": "[BETA]",
-    "menu.features.unloaded_features": "已卸载的功能",
     "menu.features.use_baselines_tooltip": "使用基础预设值：你的更改会覆盖基础预设设置的数值。点击以放弃这些更改并使用预设值。你的其他更改会保留。",
     "menu.footer.d3d12_swap_chain": "D3D12 交换链：{status}",
     "menu.footer.game_version": "游戏版本：{runtime} {version}",

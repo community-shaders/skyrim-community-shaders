@@ -476,6 +476,11 @@ void Menu::Load(json& o_json)
 	if (const auto it = o_json.find("FeatureListCollapsed"); it != o_json.end() && it->is_boolean())
 		settings.FeatureListCollapsed = settings.AutoHideFeatureList || it->get<bool>();
 
+	// Filter chips; bits from a newer or hand-edited config that no chip uses are dropped
+	settings.FeatureListFilter = 0;
+	if (const auto it = o_json.find("FeatureListFilter"); it != o_json.end() && it->is_number_integer() && it->get<std::int64_t>() >= 0)
+		settings.FeatureListFilter = static_cast<std::uint32_t>(it->get<std::int64_t>() & FeatureListFilter::kKnown);
+
 	// Legacy support: If old config has Theme data and no SelectedThemePreset, load it
 	if (o_json.contains("Theme") && o_json["Theme"].is_object() && settings.SelectedThemePreset.empty()) {
 		bool hasFontRoles = o_json["Theme"].contains("FontRoles");
@@ -548,6 +553,7 @@ void Menu::Save(json& o_json)
 
 	o_json["LastSettingsSection"] = settings.LastSettingsSection;
 	o_json["FeatureListCollapsed"] = settings.FeatureListCollapsed;
+	o_json["FeatureListFilter"] = settings.FeatureListFilter;
 }
 
 void Menu::LoadTheme(json& o_json)

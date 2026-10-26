@@ -6,6 +6,7 @@
 #include <format>
 #include <imgui.h>
 #include <imgui_internal.h>
+#include <limits>
 #include <ranges>
 #include <unordered_map>
 #include <unordered_set>
@@ -47,6 +48,70 @@ namespace
 
 	/// Height the bottom group took last frame, so the feature list above it can leave exactly that much room.
 	float g_bottomGroupHeight = 0.0f;
+
+	/// What the cached menu list was built from; any difference rebuilds it.
+	struct MenuListKey
+	{
+		std::string search;
+		std::uint32_t filter = 0;
+		Menu::FeatureSortMode sort = Menu::FeatureSortMode::Category;
+		std::string locale;
+		std::uint64_t userEditsRevision = 0;
+		std::uint64_t sceneRevision = 0;
+		bool hasFeatureIssues = false;
+		bool developerMode = false;
+
+		bool operator==(const MenuListKey&) const = default;
+	};
+
+	/// The menu list, built only when its inputs change rather than every frame.
+	struct MenuListCache
+	{
+		std::vector<FeatureListRenderer::MenuFuncInfo> list;
+		MenuListKey key;
+		bool valid = false;
+		int lastFrame = -1;
+	};
+	MenuListCache g_menuList;
+
+	/// Set by changes the key does not see: a category expanded or collapsed, a feature pinned or unpinned.
+	bool g_menuListDirty = true;
+
+	/// Chip counts from the last rebuild; they only change when the list does.
+	FeatureListRenderer::FilterCounts g_filterCounts;
+
+	/// The selected feature while the search, a chip or a collapsed category leaves it out of the list, so its
+	/// page stays open. Only read while the selection index is outside the list.
+	Feature* g_detachedFeature = nullptr;
+
+	/** @brief Stable identity of a list entry, to find it again after a rebuild; empty for labels. */
+	std::string GetEntryKey(const FeatureListRenderer::MenuFuncInfo& entry)
+	{
+		if (const auto* feature = std::get_if<Feature*>(&entry))
+			return "feature:" + (*feature)->GetShortName();
+		if (const auto* page = std::get_if<FeatureListRenderer::BuiltInMenu>(&entry))
+			return "page:" + std::string(page->id);
+		if (const auto* header = std::get_if<FeatureListRenderer::CategoryHeader>(&entry))
+			return "category:" + header->name;
+		return {};
+	}
+
+	/**
+	 * @brief Selects the entry with this key in the rebuilt list. A feature that is no longer listed stays open
+	 * as the detached feature; anything else that vanished clears the selection.
+	 */
+	void ReselectEntry(const std::string& key, const std::vector<FeatureListRenderer::MenuFuncInfo>& menuList, size_t& selectedMenu)
+	{
+		const auto it = std::ranges::find_if(menuList, [&](const auto& entry) { return GetEntryKey(entry) == key; });
+		if (it != menuList.end()) {
+			selectedMenu = static_cast<size_t>(std::distance(menuList.begin(), it));
+			return;
+		}
+		selectedMenu = std::numeric_limits<size_t>::max();
+		constexpr std::string_view featurePrefix = "feature:";
+		if (key.starts_with(featurePrefix))
+			g_detachedFeature = Feature::FindFeatureByShortName(key.substr(featurePrefix.size()));
+	}
 
 	/**
 	 * @brief Draws one row of the top or bottom page group: icon, label, an optional muted hint line and an
@@ -418,9 +483,17 @@ void FeatureListRenderer::RenderFeatureList(
 		featureSearch.clear();
 		if (const auto* feature = Feature::FindFeatureByShortName(pendingFeatureSelection))
 			categoryExpansionStates[std::string(feature->GetCategory())] = true;
+		g_menuListDirty = true;
 	}
 
-	auto menuList = BuildMenuList(featureSearch, categoryExpansionStates, drawSettings);
+	// The entry selected in the list as it stood, so a rebuild keeps the same one selected (and a detached
+	// feature the rebuilt list shows again takes its row back)
+	const std::string selectedKey = selectedMenu < g_menuList.list.size() ? GetEntryKey(g_menuList.list[selectedMenu]) :
+	                                g_detachedFeature                     ? "feature:" + g_detachedFeature->GetShortName() :
+	                                                                        std::string();
+	if (UpdateMenuList(featureSearch, categoryExpansionStates, drawSettings) && !selectedKey.empty())
+		ReselectEntry(selectedKey, g_menuList.list, selectedMenu);
+	const auto& menuList = g_menuList.list;
 
 	HandlePendingFeatureSelection(pendingFeatureSelection, menuList, selectedMenu);
 
@@ -428,6 +501,8 @@ void FeatureListRenderer::RenderFeatureList(
 		g_scrollToSelection = StepFeatureSelection(menuList, selectedMenu, hooks.featureStep > 0 ? 1 : -1);
 		hooks.featureStep = 0;
 	}
+	if (selectedMenu < menuList.size())
+		g_detachedFeature = nullptr;
 
 	auto& menuSettings = globals::menu->GetSettings();
 	// Ctrl+F needs the search field
@@ -442,16 +517,8 @@ void FeatureListRenderer::RenderFeatureList(
 		ImGui::TableSetupColumn("##ListOfMenus", 0, 2);
 		ImGui::TableSetupColumn("##MenuConfig", 0, 8);
 		ImGui::TableNextColumn();
-		const auto previousSort = menuSettings.FeatureListSort;
+		// Changes made here (search, chips, sort, a category, a pin) rebuild the list next frame
 		RenderLeftColumn(menuList, selectedMenu, featureSearch, categoryExpansionStates, hooks);
-		if (menuSettings.FeatureListSort != previousSort) {
-			// Sort order changed: rebuild now and re-select the same feature
-			std::string reselect;
-			if (const auto* feat = selectedMenu < menuList.size() ? std::get_if<Feature*>(&menuList[selectedMenu]) : nullptr)
-				reselect = (*feat)->GetShortName();
-			menuList = BuildMenuList(featureSearch, categoryExpansionStates, drawSettings);
-			HandlePendingFeatureSelection(reselect, menuList, selectedMenu);
-		}
 		ImGui::TableNextColumn();
 		RenderRightColumn(menuList, selectedMenu, pendingFeatureSelection, hooks);
 		ImGui::EndTable();
@@ -462,25 +529,50 @@ void FeatureListRenderer::RenderFeatureList(
 	ImGui::EndChild();
 }
 
-std::vector<FeatureListRenderer::MenuFuncInfo> FeatureListRenderer::BuildMenuList(
+bool FeatureListRenderer::UpdateMenuList(
 	const std::string& featureSearch,
 	std::map<std::string, bool>& categoryExpansionStates,
 	const std::function<void()>& drawSettings)
 {
-	// Build the menu list
-	auto& featureList = Feature::GetFeatureList();
-	auto sortedFeatureList{ featureList };  // need a copy so the load order is not lost
-	std::ranges::sort(sortedFeatureList, [](Feature* a, Feature* b) {
-		return a->GetDisplayName() < b->GetDisplayName();
-	});
+	const auto& menuSettings = globals::menu->GetSettings();
+	MenuListKey key{
+		.search = featureSearch,
+		.filter = menuSettings.FeatureListFilter & FeatureListFilter::kKnown,
+		.sort = menuSettings.FeatureListSort,
+		.locale = I18n::GetSingleton()->GetCurrentLocale(),
+		.userEditsRevision = globals::state->GetUserEditsRevision(),
+		.sceneRevision = globals::sceneSettingsManager ? globals::sceneSettingsManager->GetEntryPresentationRevision() : 0,
+		.hasFeatureIssues = FeatureIssues::HasFeatureIssues(),
+		.developerMode = globals::state->IsDeveloperMode(),
+	};
 
-	// Filter features by search string
-	if (!featureSearch.empty()) {
-		auto it = std::remove_if(sortedFeatureList.begin(), sortedFeatureList.end(),
-			[&featureSearch](Feature* feat) { return !Util::FeatureMatchesSearch(feat, featureSearch); });
-		sortedFeatureList.erase(it, sortedFeatureList.end());
+	// A gap in frames means the menu was closed: anything could have changed meanwhile
+	const int frame = ImGui::GetFrameCount();
+	const bool reopened = frame != g_menuList.lastFrame + 1;
+	g_menuList.lastFrame = frame;
+
+	if (g_menuList.valid && !g_menuListDirty && !reopened && key == g_menuList.key) {
+		// The Settings page draws through a callback the menu makes each frame
+		for (auto& entry : g_menuList.list) {
+			if (auto* page = std::get_if<BuiltInMenu>(&entry); page && page->id == MenuPageIds::kSettings)
+				page->func = drawSettings;
+		}
+		return false;
 	}
 
+	g_menuList.list = BuildMenuList(featureSearch, categoryExpansionStates, drawSettings, g_filterCounts);
+	g_menuList.key = std::move(key);
+	g_menuList.valid = true;
+	g_menuListDirty = false;
+	return true;
+}
+
+std::vector<FeatureListRenderer::MenuFuncInfo> FeatureListRenderer::BuildMenuList(
+	const std::string& featureSearch,
+	std::map<std::string, bool>& categoryExpansionStates,
+	const std::function<void()>& drawSettings,
+	FilterCounts& counts)
+{
 	// Built-in pages, in list order: the top group (Home, Presets, CS Editor, then any page added after them),
 	// then the bottom group (kBottomMenuIds)
 	auto menuList = std::vector<MenuFuncInfo>{
@@ -500,83 +592,88 @@ std::vector<FeatureListRenderer::MenuFuncInfo> FeatureListRenderer::BuildMenuLis
 	menuList.push_back(BuiltInMenu{ MenuPageIds::kProfiling, T("menu.features.profiling", "Profiling"), []() { ProfilingRenderer::RenderStatistics(); },
 		Icons::TI(ICON_TI_CHART_BAR) });
 
-	const auto isFavorite = [](Feature* feat) {
-		return feat->IsInMenu() && feat->loaded && globals::state->IsFeatureFavorite(feat->GetShortName());
-	};
+	auto* state = globals::state;
+	auto* sceneManager = globals::sceneSettingsManager;
+	const auto filter = globals::menu->GetSettings().FeatureListFilter & FeatureListFilter::kKnown;
+	const bool showUnloaded = (filter & FeatureListFilter::kUnloaded) != 0;
+	const bool developerMode = state->IsDeveloperMode();
+	// The Modified answers for every feature at once, under one scene layer suspension
+	state->PrimeUserEdits();
 
-	// Favorites leave their category's count; recounted here since they change at runtime
-	Menu::categoryCounts.clear();
-	for (Feature* feat : featureList) {
-		if (feat->IsInMenu() && feat->loaded && !isFavorite(feat))
-			Menu::categoryCounts[std::string(feat->GetCategory())]++;
+	// Display-name order; the names are translated, so they are taken once here rather than in the sort
+	std::vector<std::pair<std::string, Feature*>> named;
+	for (Feature* feat : Feature::GetFeatureList()) {
+		if (feat->IsInMenu())
+			named.emplace_back(feat->GetDisplayName(), feat);
+	}
+	std::ranges::sort(named, {}, &std::pair<std::string, Feature*>::first);
+
+	counts = {};
+	std::vector<Feature*> favorites;
+	std::vector<Feature*> listed;  // passed every filter, favorites excluded
+	for (const auto& [name, feat] : named) {
+		const auto shortName = feat->GetShortName();
+		const bool unloadedListed = !feat->loaded && !feat->IsHiddenUnreleased() &&
+		                            (!FeatureIssues::IsObsoleteFeature(shortName) || developerMode);
+		if (unloadedListed)
+			counts.unloaded++;
+		// Without the Unloaded chip only loaded features are listed; with it, only the unloaded ones
+		if (showUnloaded ? !unloadedListed : !feat->loaded)
+			continue;
+
+		const bool favorite = feat->loaded && state->IsFeatureFavorite(shortName);
+		const bool modified = state->HasUserEdits(feat);
+		const bool scene = sceneManager && sceneManager->HasAnySceneEntriesForFeature(shortName);
+		const bool preRelease = feat->GetReleaseStage() != Feature::ReleaseStage::Release;
+		counts.favorites += favorite;
+		counts.modified += modified;
+		counts.scene += scene;
+		counts.preRelease += preRelease;
+
+		const bool passes = (!(filter & FeatureListFilter::kFavorites) || favorite) &&
+		                    (!(filter & FeatureListFilter::kModified) || modified) &&
+		                    (!(filter & FeatureListFilter::kScene) || scene) &&
+		                    (!(filter & FeatureListFilter::kPreRelease) || preRelease) &&
+		                    (featureSearch.empty() || Util::FeatureMatchesSearch(feat, featureSearch));
+		if (!passes)
+			continue;
+		counts.shown++;
+		(favorite ? favorites : listed).push_back(feat);
 	}
 
 	// Favorites are pinned above the rest, outside any category
-	std::ranges::copy(sortedFeatureList | std::ranges::views::filter(isFavorite), std::back_inserter(menuList));
+	std::ranges::copy(favorites, std::back_inserter(menuList));
 
 	// Group features by category, or list them flat when sorting alphabetically
-	const auto sortMode = globals::menu->GetSettings().FeatureListSort;
-	std::map<std::string, std::vector<Feature*>> categorizedFeatures;
-	for (Feature* feat : sortedFeatureList) {
-		if (feat->IsInMenu() && feat->loaded && !isFavorite(feat)) {
-			switch (sortMode) {
-			case Menu::FeatureSortMode::Alphabetical:
-				menuList.push_back(feat);  // already in display-name order
-				break;
-			case Menu::FeatureSortMode::Category:
-			default:  // unknown values from a hand-edited config fall back to categories
-				categorizedFeatures[std::string(feat->GetCategory())].push_back(feat);
-				break;
-			}
-		}
+	if (globals::menu->GetSettings().FeatureListSort == Menu::FeatureSortMode::Alphabetical) {
+		std::ranges::copy(listed, std::back_inserter(menuList));  // already in display-name order
+		return menuList;
 	}
+	std::map<std::string, std::vector<Feature*>> categorizedFeatures;  // unknown sort values fall back to categories
+	for (Feature* feat : listed)
+		categorizedFeatures[std::string(feat->GetCategory())].push_back(feat);
 
-	// Sort features within each category
-	for (auto& [category, features] : categorizedFeatures) {
-		std::ranges::sort(features, [](Feature* a, Feature* b) {
-			return a->GetDisplayName() < b->GetDisplayName();
-		});
-	}
+	// Each header counts the features it lists
+	Menu::categoryCounts.clear();
+	for (const auto& [category, features] : categorizedFeatures)
+		Menu::categoryCounts[category] = static_cast<int>(features.size());
 
 	// Categories start expanded, except Utility (debug and developer tools)
-	const auto isExpanded = [&](const std::string& category) {
-		return categoryExpansionStates.try_emplace(category, category != FeatureCategories::kUtility).first->second;
+	const auto addCategory = [&](const std::string& category, const std::vector<Feature*>& features) {
+		menuList.push_back(CategoryHeader{ category });
+		if (categoryExpansionStates.try_emplace(category, category != FeatureCategories::kUtility).first->second)
+			std::ranges::copy(features, std::back_inserter(menuList));
 	};
-
-	// Add categorized features to menu with collapsible headers
 	for (const auto categoryName : FeatureCategories::kMainMenuOrder) {
-		const std::string category(categoryName);
-		if (categorizedFeatures.find(category) != categorizedFeatures.end() && !categorizedFeatures[category].empty()) {
-			// Add category header
-			menuList.push_back(CategoryHeader{ category });
-
-			// Add features only if category is expanded
-			if (isExpanded(category)) {
-				std::ranges::copy(categorizedFeatures[category], std::back_inserter(menuList));
-			}
-		}
+		if (const auto it = categorizedFeatures.find(std::string(categoryName)); it != categorizedFeatures.end())
+			addCategory(it->first, it->second);
 	}
-
-	// Add any categories not in the predefined order
+	// Then any category not in the predefined order
 	for (const auto& [category, features] : categorizedFeatures) {
-		if (std::ranges::find(FeatureCategories::kMainMenuOrder, std::string_view(category)) == FeatureCategories::kMainMenuOrder.end() && !features.empty()) {
-			// Add category header
-			menuList.push_back(CategoryHeader{ category });
-
-			// Add features only if category is expanded
-			if (isExpanded(category)) {
-				std::ranges::copy(features, std::back_inserter(menuList));
-			}
-		}
+		if (std::ranges::find(FeatureCategories::kMainMenuOrder, std::string_view(category)) == FeatureCategories::kMainMenuOrder.end())
+			addCategory(category, features);
 	}
 
-	auto unloadedFeatures = sortedFeatureList | std::ranges::views::filter([](Feature* feat) {
-		return !feat->loaded && feat->IsInMenu() && !feat->IsHiddenUnreleased() && (!FeatureIssues::IsObsoleteFeature(feat->GetShortName()) || globals::state->IsDeveloperMode());
-	});
-	if (std::ranges::distance(unloadedFeatures) != 0) {
-		menuList.push_back(T("menu.features.unloaded_features", "Unloaded Features"));
-		std::ranges::copy(unloadedFeatures, std::back_inserter(menuList));
-	}
 	return menuList;
 }
 
@@ -615,8 +712,14 @@ void FeatureListRenderer::HandlePendingFeatureSelection(
 		const auto* page = std::get_if<BuiltInMenu>(&item);
 		return page && page->name == pendingFeatureSelection;
 	};
-	if (!select(isFeature, "feature menu") && !select(isPageId, "page"))
-		select(isPageName, "page");
+	if (!select(isFeature, "feature menu") && !select(isPageId, "page") && !select(isPageName, "page")) {
+		// A feature the filter chips leave out still opens, without changing the user's filters
+		if (auto* feature = Feature::FindFeatureByShortName(pendingFeatureSelection)) {
+			selectedMenu = std::numeric_limits<size_t>::max();
+			g_detachedFeature = feature;
+			logger::info("Navigated to {} feature menu (not listed)", pendingFeatureSelection);
+		}
+	}
 	pendingFeatureSelection.clear();  // Clear after processing
 }
 
@@ -671,6 +774,8 @@ void FeatureListRenderer::RenderLeftColumn(
 		}
 	}
 
+	RenderFilterChips(g_filterCounts);
+
 	if (ImGui::BeginPopup("##FeatureSortPopup")) {
 		using enum Menu::FeatureSortMode;
 		auto& sort = globals::menu->GetSettings().FeatureListSort;
@@ -693,6 +798,18 @@ void FeatureListRenderer::RenderLeftColumn(
 			if (!builtInAt(i))
 				std::visit(ListMenuVisitor{ i, selectedMenu, categoryExpansionStates, hooks }, menuList[i]);
 		}
+		auto& filter = globals::menu->GetSettings().FeatureListFilter;
+		if (g_filterCounts.shown == 0 && (filter != 0 || !featureSearch.empty())) {
+			BrowserUI::EmptyState(T("menu.features.no_matches", "No features match"),
+				T("menu.features.no_matches_hint", "Try another search, or turn off a filter."));
+			const char* clearLabel = T("menu.features.clear_filters", "Clear search and filters");
+			const float clearWidth = ImGui::CalcTextSize(clearLabel).x;
+			ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(0.0f, (ImGui::GetContentRegionAvail().x - clearWidth) * 0.5f));
+			if (BrowserUI::Link("##ClearFilters", clearLabel)) {
+				filter = 0;
+				featureSearch.clear();
+			}
+		}
 	}
 	ImGui::EndChild();
 
@@ -704,6 +821,56 @@ void FeatureListRenderer::RenderLeftColumn(
 			RenderBuiltInRow(*menu, i, selectedMenu);
 	}
 	g_bottomGroupHeight = ImGui::GetCursorPosY() - bottomStart;
+}
+
+void FeatureListRenderer::RenderFilterChips(const FilterCounts& counts)
+{
+	auto& filter = globals::menu->GetSettings().FeatureListFilter;
+	const ImVec4 accent = Util::Colors::GetAccent();
+	const BrowserUI::IconPainter sceneIcon = [](ImDrawList*, ImVec2 center, float size, ImU32 color) {
+		Util::DrawIconCircle(center, size * ThemeManager::Constants::FILTER_CHIP_DOT_RATIO, color, false);
+	};
+
+	struct Chip
+	{
+		std::uint32_t bit;
+		BrowserUI::IconPainter icon;
+		int count;
+		ImVec4 tint;
+		const char* tooltip;
+	};
+	const Chip chips[] = {
+		{ FeatureListFilter::kFavorites, BrowserUI::GlyphIcon(Icons::TI(ICON_TI_PIN)), counts.favorites, accent,
+			T("menu.features.filter_favorites", "Pinned features") },
+		{ FeatureListFilter::kModified, BrowserUI::DotIcon(), counts.modified, Util::Colors::GetWarning(),
+			T("menu.features.filter_modified", "Modified: settings differ from defaults and your Baseline presets") },
+		{ FeatureListFilter::kScene, sceneIcon, counts.scene, Util::Colors::GetInfo(),
+			T("menu.features.filter_scene", "Scene: has Scene Manager settings") },
+		{ FeatureListFilter::kPreRelease, BrowserUI::GlyphIcon(Icons::TI(ICON_TI_FLASK)), counts.preRelease,
+			Feature::GetReleaseStageColor(Feature::ReleaseStage::Beta), T("menu.features.filter_pre_release", "Pre-release: alpha and beta features") },
+		{ FeatureListFilter::kUnloaded, BrowserUI::GlyphIcon(Icons::TI(ICON_TI_PLUG_OFF)), counts.unloaded, accent,
+			T("menu.features.filter_unloaded", "Unloaded: missing, failed, or disabled at boot. Only these are listed while it is on") },
+	};
+
+	// A chip with nothing to show stays hidden unless it is on, so it can still be turned off
+	bool first = true;
+	for (const auto& chip : chips) {
+		const bool active = (filter & chip.bit) != 0;
+		if (chip.count == 0 && !active)
+			continue;
+		if (!first)
+			BrowserUI::SameLineIfFits(BrowserUI::MeasureToggleChip(chip.count));
+		first = false;
+		ImGui::PushID(static_cast<int>(chip.bit));
+		if (BrowserUI::ToggleChip("##FilterChip", chip.icon, chip.count, active, chip.tint, chip.tooltip))
+			filter ^= chip.bit;
+		ImGui::PopID();
+	}
+	if (filter != 0) {
+		BrowserUI::SameLineIfFits(BrowserUI::IconButtonSize());
+		if (BrowserUI::IconButton("##ClearFilterChips", Icons::TI(ICON_TI_X), T("menu.features.clear_filter_chips", "Turn off all filters")))
+			filter = 0;
+	}
 }
 
 void FeatureListRenderer::RenderCollapsedStrip(const Hooks& hooks)
@@ -756,6 +923,8 @@ void FeatureListRenderer::RenderRightColumn(
 {
 	if (selectedMenu < menuList.size()) {
 		std::visit(DrawMenuVisitor{ pendingFeatureSelection, hooks }, menuList[selectedMenu]);
+	} else if (g_detachedFeature) {
+		DrawMenuVisitor{ pendingFeatureSelection, hooks }(g_detachedFeature);
 	} else {
 		ImGui::TextDisabled("%s", T("menu.features.select_item_left", "Please select an item on the left."));
 	}
@@ -768,13 +937,8 @@ void FeatureListRenderer::ListMenuVisitor::operator()(const BuiltInMenu& menu)
 
 void FeatureListRenderer::ListMenuVisitor::operator()(const std::string& label)
 {
-	// Style "Unloaded Features" to match category headers
-	if (label == T("menu.features.unloaded_features", "Unloaded Features")) {
-		Util::DrawSectionHeader(label.c_str(), true);
-	} else {
-		// Use default separator text for other labels - should be themed via ImGuiCol_Separator
-		SeparatorTextWithFont(label, Menu::FontRole::Subheading);
-	}
+	// Themed via ImGuiCol_Separator
+	SeparatorTextWithFont(label, Menu::FontRole::Subheading);
 }
 
 void FeatureListRenderer::ListMenuVisitor::operator()(const CategoryHeader& header)
@@ -791,8 +955,11 @@ void FeatureListRenderer::ListMenuVisitor::operator()(const CategoryHeader& head
 		Util::DrawCategoryHeader(header.name.c_str(), categoryLabel.c_str(), isExpanded, count);
 	}
 
-	// Update expansion state
-	categoryExpansionStates[header.name] = isExpanded;
+	// Update expansion state; the list adds or drops the category's features on its next rebuild
+	if (isExpanded != categoryExpansionStates[header.name]) {
+		categoryExpansionStates[header.name] = isExpanded;
+		g_menuListDirty = true;
+	}
 }
 
 void FeatureListRenderer::ListMenuVisitor::operator()(Feature* feat)
@@ -1232,8 +1399,8 @@ void FeatureListRenderer::ToggleFavorite(Feature* feat)
 	const auto featureName = feat->GetShortName();
 	globals::state->SetFeatureFavorite(featureName, !globals::state->IsFeatureFavorite(featureName));
 	globals::state->CheckCoreSettingsChanged();
-	// The favorites list shifts the menu; keep this feature selected
-	globals::menu->SelectFeatureMenu(featureName);
+	// The favorites move rows around; the rebuild keeps whatever is selected selected
+	g_menuListDirty = true;
 }
 
 void FeatureListRenderer::DrawMenuVisitor::RenderFavoriteButton(Feature* feat)
