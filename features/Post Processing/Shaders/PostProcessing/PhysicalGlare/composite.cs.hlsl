@@ -82,49 +82,45 @@ cbuffer GlareCB : register(b1)
 	float _pad11;
 };
 
-// ---------------------------------------------------------------------------
-// Catmull-Rom bicubic upsample (9 bilinear taps → 16-texel footprint).
-// Dramatically reduces blocky artifacts when upsampling from FFT resolution
-// while the packed RGB source lets every tap filter all channels together.
-// Ref: Jimenez, "Filmic SMAA" (SIGGRAPH 2012), bicubic with HW bilinear.
-// ---------------------------------------------------------------------------
-float3 CatmullRomSampleRGB(Texture2D<float4> tex, SamplerState samp, float2 uv, float2 texSize)
+groupshared float3 GlareTile[256];
+
+float4 CatmullRomWeights(float fraction)
 {
-	float2 samplePos = uv * texSize;
-	float2 texPos1 = floor(samplePos - 0.5) + 0.5;
-	float2 f = samplePos - texPos1;
-
-	// Catmull-Rom weights for the 4 taps (2 negative lobes + 2 positive)
-	float2 w0 = f * (-0.5 + f * (1.0 - 0.5 * f));
-	float2 w1 = 1.0 + f * f * (-2.5 + 1.5 * f);
-	float2 w2 = f * (0.5 + f * (2.0 - 1.5 * f));
-	float2 w3 = f * f * (-0.5 + 0.5 * f);
-
-	// Combine the centre pairs for 9 bilinear taps instead of 16 point samples
-	float2 w12 = w1 + w2;
-	float2 offset12 = w2 / max(w12, 1e-6);
-
-	float2 texPos0 = (texPos1 - 1.0) / texSize;
-	float2 texPos3 = (texPos1 + 2.0) / texSize;
-	float2 texPos12 = (texPos1 + offset12) / texSize;
-
-	float3 result = 0.0;
-	result += tex.SampleLevel(samp, float2(texPos0.x, texPos0.y), 0).rgb * w0.x * w0.y;
-	result += tex.SampleLevel(samp, float2(texPos12.x, texPos0.y), 0).rgb * w12.x * w0.y;
-	result += tex.SampleLevel(samp, float2(texPos3.x, texPos0.y), 0).rgb * w3.x * w0.y;
-
-	result += tex.SampleLevel(samp, float2(texPos0.x, texPos12.y), 0).rgb * w0.x * w12.y;
-	result += tex.SampleLevel(samp, float2(texPos12.x, texPos12.y), 0).rgb * w12.x * w12.y;
-	result += tex.SampleLevel(samp, float2(texPos3.x, texPos12.y), 0).rgb * w3.x * w12.y;
-
-	result += tex.SampleLevel(samp, float2(texPos0.x, texPos3.y), 0).rgb * w0.x * w3.y;
-	result += tex.SampleLevel(samp, float2(texPos12.x, texPos3.y), 0).rgb * w12.x * w3.y;
-	result += tex.SampleLevel(samp, float2(texPos3.x, texPos3.y), 0).rgb * w3.x * w3.y;
-
-	return result;
+	float w0 = fraction * (-0.5 + fraction * (1.0 - 0.5 * fraction));
+	float w1 = 1.0 + fraction * fraction * (-2.5 + 1.5 * fraction);
+	float w2 = fraction * (0.5 + fraction * (2.0 - 1.5 * fraction));
+	float w3 = fraction * fraction * (-0.5 + 0.5 * fraction);
+	return float4(w0, w1, w2, w3);
 }
 
-[numthreads(8, 8, 1)] void CS_Composite(uint2 tid : SV_DispatchThreadID) {
+float3 LoadGlare(int2 position)
+{
+	return TexIFFT_RGB.Load(int3(clamp(position, 0, int(FFTResolution) - 1), 0)).rgb;
+}
+
+[numthreads(8, 8, 1)] void CS_Composite(
+	uint2 tid : SV_DispatchThreadID,
+	uint2 groupID : SV_GroupID,
+	uint groupIndex : SV_GroupIndex) {
+	float2 screenSize = float2(ScreenWidth, ScreenHeight);
+	float sceneScale = 1.0 - 2.0 * PaddingRatio;
+	uint2 firstPixel = groupID * 8;
+	float2 firstUV = (float2(firstPixel) + 0.5) / screenSize;
+	float2 lastUV = (min(float2(firstPixel + 7), screenSize - 1.0) + 0.5) / screenSize;
+	int2 tileStart = int2(floor((firstUV * sceneScale + PaddingRatio) * float(FFTResolution) - 0.5)) - 1;
+	int2 tileEnd = int2(floor((lastUV * sceneScale + PaddingRatio) * float(FFTResolution) - 0.5)) + 2;
+	uint2 tileSize = uint2(tileEnd - tileStart + 1);
+	bool cached = all(tileSize <= 16);
+
+	[branch] if (cached)
+	{
+		for (uint index = groupIndex; index < tileSize.x * tileSize.y; index += 64) {
+			int2 position = tileStart + int2(index % tileSize.x, index / tileSize.x);
+			GlareTile[index] = LoadGlare(position);
+		}
+		GroupMemoryBarrierWithGroupSync();
+	}
+
 	if (tid.x >= (uint)ScreenWidth || tid.y >= (uint)ScreenHeight)
 		return;
 
@@ -133,13 +129,36 @@ float3 CatmullRomSampleRGB(Texture2D<float4> tex, SamplerState samp, float2 uv, 
 	// Map screen UV [0,1] → IFFT UV [P, 1-P], reading only the centre
 	// region that contained the original scene within the zero-padded
 	// texture [1, section 2.5].
-	float sceneScale = 1.0 - 2.0 * PaddingRatio;
-	float2 uv = (float2(tid) + 0.5) / float2(ScreenWidth, ScreenHeight);
-	float2 ifftUV = uv * sceneScale + PaddingRatio;
+	float2 uv = (float2(tid) + 0.5) / screenSize;
+	float2 samplePos = (uv * sceneScale + PaddingRatio) * float(FFTResolution) - 0.5;
+	int2 base = int2(floor(samplePos));
+	float2 fraction = samplePos - float2(base);
+	float4 weightsX = CatmullRomWeights(fraction.x);
+	float4 weightsY = CatmullRomWeights(fraction.y);
+	int2 offset = base - 1 - tileStart;
+	float3 glare = 0;
 
-	// Bicubic (Catmull-Rom) upsample — eliminates blocky artifacts at high upscale ratios
-	float2 texSize = float2(FFTResolution, FFTResolution);
-	float3 glare = max(0, CatmullRomSampleRGB(TexIFFT_RGB, LinearSampler, ifftUV, texSize));
+	[branch] if (cached)
+	{
+		[unroll] for (uint row = 0; row < 4; ++row)
+		{
+			float3 filteredRow = 0;
+			[unroll] for (uint column = 0; column < 4; ++column)
+				filteredRow += GlareTile[(offset.y + row) * tileSize.x + offset.x + column] * weightsX[column];
+			glare += filteredRow * weightsY[row];
+		}
+	}
+	else
+	{
+		[unroll] for (uint row = 0; row < 4; ++row)
+		{
+			float3 filteredRow = 0;
+			[unroll] for (uint column = 0; column < 4; ++column)
+				filteredRow += LoadGlare(base - 1 + int2(column, row)) * weightsX[column];
+			glare += filteredRow * weightsY[row];
+		}
+	}
+	glare = max(0, glare);
 
 	// Sanitize extreme values
 	glare = min(glare, 65000.0);

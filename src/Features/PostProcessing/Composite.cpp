@@ -54,11 +54,12 @@ void Composite::SetupResources()
 		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
 		texDesc.MiscFlags = 0;
 
-		texOutput = eastl::make_unique<Texture2D>(texDesc);
+		texOutput = eastl::make_unique<Texture2D>(texDesc, "Composite Output");
 		texOutput->CreateSRV(srvDesc);
 		texOutput->CreateRTV(rtvDesc);
 	}
 
+	compositeCB = std::make_unique<ConstantBuffer>(ConstantBufferDesc<CompositeCB>(), "Composite Parameters");
 	CompileRasterShaders();
 }
 
@@ -115,10 +116,10 @@ void Composite::Draw(TextureInfo& inout_tex)
 	auto* localExposure = owner->GetPipelineFeature<LocalExposure>(PostProcessing::FeaturePipelineIndex::LocalExposure);
 
 	bool hasBloom = bloom && bloom->enabled && bloom->GetBloomOutput().srv;
-	bool hasFlare = flare && flare->enabled && flare->GetFlareOutput().srv;
+	bool hasFlare = flare && flare->enabled && flare->GetGhostHaloOutput().srv;
 	bool hasGlare = glare && glare->enabled && glare->GetGlareOutput().srv;
 	bool hasExposure = exposure && exposure->IsActive() && exposure->GetAdaptationSRV();
-	bool hasLocalExposure = localExposure && localExposure->enabled && localExposure->GetBaseLuminanceSRV();
+	bool hasLocalExposure = localExposure && localExposure->enabled && localExposure->GetLogLuminanceSRV();
 
 	uint flags = (hasBloom ? BLOOM : 0) | (hasFlare ? FLARE : 0) | (hasGlare ? GLARE : 0) | (hasExposure ? EXPOSURE : 0) | (hasLocalExposure ? LOCAL_EXPOSURE : 0);
 	if (flags == NONE)
@@ -140,15 +141,19 @@ void Composite::Draw(TextureInfo& inout_tex)
 
 	// Bind resources:
 	//   t0 = main color (inout_tex)
-	//   t1 = bloom texture (if available)
-	//   t2 = flare texture (if available)
+	//   t1 = accumulated bloom mip 1 (if available)
+	//   t2 = half-resolution ghosts and halo (if available)
 	//   t3 = glare texture (if available)
 	//   t4 = adaptation buffer (if exposure enabled)
-	//   t5 = local exposure base luminance (if local exposure enabled)
+	//   t5 = original scene log luminance (if local exposure enabled)
+	//   t6 = edge-aware luminance grid
+	//   t7 = blurred luminance
 	//   rtv0 = output
 	//   b1 = auto exposure constant buffer (if exposure enabled)
 	//   b2 = local exposure constant buffer (if local exposure enabled)
-	std::array<ID3D11ShaderResourceView*, 6> srvs = { nullptr };
+	//   b3 = final bloom/flare sampling parameters
+	//   s0 = linear clamp (local exposure and flare), s1 = linear border (bloom)
+	std::array<ID3D11ShaderResourceView*, 8> srvs = { nullptr };
 
 	srvs[0] = inout_tex.srv;
 
@@ -157,7 +162,7 @@ void Composite::Draw(TextureInfo& inout_tex)
 		srvs[1] = bloomOutput.srv;
 	}
 	if (hasFlare) {
-		auto flareOutput = flare->GetFlareOutput();
+		auto flareOutput = flare->GetGhostHaloOutput();
 		srvs[2] = flareOutput.srv;
 	}
 	if (hasGlare) {
@@ -168,11 +173,32 @@ void Composite::Draw(TextureInfo& inout_tex)
 		srvs[4] = exposure->GetAdaptationSRV();
 	}
 	if (hasLocalExposure) {
-		srvs[5] = localExposure->GetBaseLuminanceSRV();
+		srvs[5] = localExposure->GetLogLuminanceSRV();
+		srvs[6] = localExposure->GetLuminanceGridSRV();
+		srvs[7] = localExposure->GetBlurredLuminanceSRV();
 	}
 
 	uint width = texOutput->desc.Width;
 	uint height = texOutput->desc.Height;
+
+	CompositeCB cbData = {};
+	cbData.OutputSize[0] = (float)width;
+	cbData.OutputSize[1] = (float)height;
+	if (hasBloom) {
+		cbData.BloomRadius = bloom->settings.UpsampleRadius;
+		cbData.BloomIntensity = bloom->settings.BlendFactor;
+	}
+	if (hasFlare) {
+		cbData.FlareSize[0] = (float)flare->texGhostHalo->desc.Width;
+		cbData.FlareSize[1] = (float)flare->texGhostHalo->desc.Height;
+		std::copy(flare->settings.Tint.begin(), flare->settings.Tint.end(), cbData.FlareTint);
+		cbData.FlareIntensity = flare->settings.Intensity;
+	}
+	compositeCB->Update(cbData);
+	std::array<ID3D11SamplerState*, 2> samplers = {
+		hasLocalExposure ? localExposure->linearSampler.get() : (hasFlare ? flare->colorSampler.get() : nullptr),
+		hasBloom ? bloom->colorSampler.get() : nullptr
+	};
 
 	{
 		PostProcessingRaster::RasterPass pass(context);
@@ -185,6 +211,9 @@ void Composite::Draw(TextureInfo& inout_tex)
 			ID3D11Buffer* cb = localExposure->GetConstantBuffer();
 			context->PSSetConstantBuffers(2, 1, &cb);
 		}
+		ID3D11Buffer* cb = compositeCB->CB();
+		context->PSSetConstantBuffers(3, 1, &cb);
+		context->PSSetSamplers(0, (uint)samplers.size(), samplers.data());
 		context->PSSetShaderResources(0, (uint)srvs.size(), srvs.data());
 		pass.SetTargets({ texOutput->rtv.get() }, (float)width, (float)height);
 		pass.SetShaders(owner->GetFullscreenVS(), shader);

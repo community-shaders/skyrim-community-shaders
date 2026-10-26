@@ -7,7 +7,8 @@ void GrassOptimizations::CullGrass(const RE::NiCamera* camera)
 	auto* ctx = globals::d3d::context;
 
 	RE::NiFrustumPlanes frustum{};
-	ComputeFrustumPlanes(frustum, camera->GetRuntimeData2().viewFrustum, camera->world);
+	constexpr float frustumEdgePadding = 128.0f;
+	Util::ComputeFrustumPlanes(frustum, camera->GetRuntimeData2().viewFrustum, camera->world, frustumEdgePadding);
 
 	const RE::NiPoint3 cameraTranslation = camera->world.translate;
 	const __m128 cameraPosition = _mm_setr_ps(cameraTranslation.x, cameraTranslation.y, cameraTranslation.z, 0.0f);
@@ -144,57 +145,6 @@ bool GrassOptimizations::IsMainCameraPerFrame(const RE::NiPoint3& mainCameraPos)
 bool GrassOptimizations::HasCurrentCull() const
 {
 	return lastFrame == globals::game::graphicsState->frameCount;
-}
-
-void GrassOptimizations::ComputeFrustumPlanes(RE::NiFrustumPlanes& out, const RE::NiFrustum& viewFrustum, const RE::NiTransform& transform)
-{
-	const __m128 forward = _mm_set_ps(0.0f, transform.rotate.entry[2][0], transform.rotate.entry[1][0], transform.rotate.entry[0][0]);
-	const __m128 up = _mm_set_ps(0.0f, transform.rotate.entry[2][1], transform.rotate.entry[1][1], transform.rotate.entry[0][1]);
-	const __m128 right = _mm_set_ps(0.0f, transform.rotate.entry[2][2], transform.rotate.entry[1][2], transform.rotate.entry[0][2]);
-	const __m128 translation = _mm_set_ps(0.0f, transform.translate.z, transform.translate.y, transform.translate.x);
-
-	const __m128 nearPoint = _mm_add_ps(translation, _mm_mul_ps(forward, _mm_set1_ps(viewFrustum.fNear)));
-	const __m128 farPoint = _mm_add_ps(translation, _mm_mul_ps(forward, _mm_set1_ps(viewFrustum.fFar)));
-
-	auto setPlane = [&](int planeIndex, __m128 normal, __m128 point) {
-		alignas(16) float components[4];
-		_mm_store_ps(components, normal);
-		out.cullingPlanes[planeIndex].normal = { components[0], components[1], components[2] };
-		out.cullingPlanes[planeIndex].constant = _mm_cvtss_f32(_mm_dp_ps(normal, point, 0x71));
-	};
-
-	setPlane(0, forward, nearPoint);
-	const __m128 backward = _mm_xor_ps(forward, _mm_set1_ps(-0.0f));
-	setPlane(1, backward, farPoint);
-
-	if (viewFrustum.bOrtho) {
-		setPlane(2, right, _mm_add_ps(translation, _mm_mul_ps(right, _mm_set1_ps(viewFrustum.fLeft))));
-		setPlane(3, _mm_xor_ps(right, _mm_set1_ps(-0.0f)), _mm_add_ps(translation, _mm_mul_ps(right, _mm_set1_ps(viewFrustum.fRight))));
-		setPlane(4, _mm_xor_ps(up, _mm_set1_ps(-0.0f)), _mm_add_ps(translation, _mm_mul_ps(up, _mm_set1_ps(viewFrustum.fTop))));
-		setPlane(5, up, _mm_add_ps(translation, _mm_mul_ps(up, _mm_set1_ps(viewFrustum.fBottom))));
-	} else {
-		// Normalize each side plane from the camera axis and frustum slope.
-		auto setSidePlane = [&](int planeIndex, __m128 axis, float slope, float forwardSign, float axisSign) {
-			const float inverseLength = 1.0f / std::sqrt(slope * slope + 1.0f);
-			const __m128 normal = _mm_add_ps(
-				_mm_mul_ps(forward, _mm_set1_ps(forwardSign * slope * inverseLength)),
-				_mm_mul_ps(axis, _mm_set1_ps(axisSign * inverseLength)));
-			setPlane(planeIndex, normal, translation);
-		};
-
-		setSidePlane(2, right, viewFrustum.fLeft, -1.0f, +1.0f);
-		setSidePlane(3, right, viewFrustum.fRight, +1.0f, -1.0f);
-		setSidePlane(4, up, viewFrustum.fTop, +1.0f, -1.0f);
-		setSidePlane(5, up, viewFrustum.fBottom, -1.0f, +1.0f);
-	}
-
-	out.activePlanes = RE::NiFrustumPlanes::ActivePlane(0x3F);
-
-	constexpr float edgePadding = 128.0f;
-	out.cullingPlanes[2].constant -= edgePadding;
-	out.cullingPlanes[3].constant -= edgePadding;
-	out.cullingPlanes[4].constant -= edgePadding;
-	out.cullingPlanes[5].constant -= edgePadding;
 }
 
 void GrassOptimizations::BuildFrustumSoA(FrustumSoA& out, const RE::NiFrustumPlanes& frustum)

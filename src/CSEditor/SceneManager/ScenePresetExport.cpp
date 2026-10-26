@@ -589,9 +589,14 @@ namespace
 			status = T(TKEY("scene_export_artwork_none"), "None");
 		}
 
-		ImGui::TextDisabled("%s", status.c_str());
+		const char* browseLabel = T(TKEY("scene_export_browse"), "Browse");
+		const char* clearLabel = T(TKEY("scene_export_clear"), "Clear");
+		const float buttonsWidth = ImGui::CalcTextSize(browseLabel).x + ImGui::CalcTextSize(clearLabel).x +
+		                           style.FramePadding.x * 4.0f + style.ItemInnerSpacing.x;
+		BrowserUI::EllipsizedText(status.c_str(), std::max(1.0f, ImGui::GetContentRegionAvail().x - buttonsWidth - style.ItemSpacing.x),
+			ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
 		ImGui::SameLine(0.0f, style.ItemSpacing.x);
-		if (ImGui::SmallButton(std::format("{}##Browse{}", T(TKEY("scene_export_browse"), "Browse"), label).c_str())) {
+		if (ImGui::SmallButton(std::format("{}##Browse{}", browseLabel, label).c_str())) {
 			std::vector<std::filesystem::path> picked;
 			if (BrowseImageFiles(multi, picked)) {
 				cleared = false;
@@ -603,7 +608,7 @@ namespace
 			}
 		}
 		ImGui::SameLine(0.0f, style.ItemInnerSpacing.x);
-		if (ImGui::SmallButton(std::format("{}##Clear{}", T(TKEY("scene_export_clear"), "Clear"), label).c_str())) {
+		if (ImGui::SmallButton(std::format("{}##Clear{}", clearLabel, label).c_str())) {
 			if (multi)
 				form.screenshotSources.clear();
 			else if (singleSource)

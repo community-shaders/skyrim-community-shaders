@@ -230,7 +230,7 @@ void State::Debug()
 		drawCalls[magic_enum::enum_integer(RE::BSShader::Type::Total)]++;
 	}
 
-	if (currentShader && updateShader && frameAnnotations) {
+	if (currentShader && updateShader && AnnotateDraws()) {
 		BeginPerfEvent(std::format("Draw: CS {}::{:x}::{}", magic_enum::enum_name(currentShader->shaderType.get()), permutationData.PixelShaderDescriptor, currentShader->fxpFilename));
 		SetPerfMarker(std::format("Defines: {}", SIE::ShaderCache::GetDefinesString(*currentShader, permutationData.PixelShaderDescriptor)));
 		EndPerfEvent();
@@ -1216,7 +1216,8 @@ void State::SetupResources()
 	D3D11_TEXTURE2D_DESC texDesc{};
 	renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN].texture->GetDesc(&texDesc);
 
-	globals::d3d::context->QueryInterface(__uuidof(pPerf), reinterpret_cast<void**>(&pPerf));
+	pPerf = nullptr;
+	globals::d3d::context->QueryInterface(__uuidof(ID3DUserDefinedAnnotation), pPerf.put_void());
 
 	featureLevel = globals::d3d::device->GetFeatureLevel();
 
@@ -1355,6 +1356,15 @@ uint32_t State::GetRuntimePixelBits(const RE::BSShader& a_shader)
 {
 	// Water's pixel stage branches on Wading at runtime; losing the bit skips the wading displacement without any error.
 	return a_shader.shaderType.get() == RE::BSShader::Type::Water ? static_cast<uint32_t>(SIE::ShaderCache::WaterShaderFlags::Wading) : 0u;
+}
+
+bool State::PerfEventsConsumed() const
+{
+#ifdef TRACY_ENABLE
+	return true;
+#else
+	return (pPerf && pPerf->GetStatus()) || NvPerf::RangesActive();
+#endif
 }
 
 void State::BeginPerfEvent(std::string_view title)

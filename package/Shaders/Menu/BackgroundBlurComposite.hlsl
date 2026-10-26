@@ -140,8 +140,8 @@ float4 PS_Main(VS_OUTPUT input) :
 	return blurColor;
 }
 
-// Clear shader entry point - outputs black inside rounded rect with the fade as alpha
-// Used with a ZERO/INV_SRC_ALPHA blend to clear the UI buffer (HUD) in the exact same shape as the blur
+// Clear shader entry point - outputs transparent black inside rounded rect
+// Used to clear UI buffer (HUD) in the exact same shape as the blur
 float4 PS_Clear(VS_OUTPUT input) :
 	SV_TARGET
 {
@@ -151,5 +151,5 @@ float4 PS_Clear(VS_OUTPUT input) :
 	// Discard pixels outside rounded rect to preserve HUD in corners
 	clip(-sdf - CLIP_EPSILON);
 
-	return float4(0.0f, 0.0f, 0.0f, FadeParams.x);
+	return float4(0.0f, 0.0f, 0.0f, 0.0f);
 }

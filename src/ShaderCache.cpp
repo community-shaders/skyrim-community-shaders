@@ -1578,7 +1578,7 @@ namespace SIE
 		/** @brief What preprocessing a task and joining any identical compile produced. */
 		struct SharedCompile
 		{
-			ID3DBlob* blob = nullptr;                           ///< A finished blob for identical code.
+			winrt::com_ptr<ID3DBlob> blob;                      ///< A finished blob for identical code.
 			std::optional<Util::CompileDedupe::Ticket> ticket;  ///< Set when this task must compile.
 			std::optional<Util::ContentHash::Hash128> key;      ///< The dedupe key; set when preprocessing succeeded.
 			std::string source;                                 ///< The preprocessed code the key was built from; empty if preprocessing failed.
@@ -1613,7 +1613,7 @@ namespace SIE
 				if (const auto* store = GetContentStore()) {
 					if (auto stored = ReadStoredBlob(*store, *result.key)) {
 						acquired.ticket->Publish(stored->GetBufferPointer(), stored->GetBufferSize());
-						result.blob = stored.detach();
+						result.blob = std::move(stored);
 						result.fromStore = true;
 						return result;
 					}
@@ -1621,7 +1621,7 @@ namespace SIE
 				result.ticket.emplace(std::move(*acquired.ticket));
 				return result;
 			}
-			if (SUCCEEDED(D3DCreateBlob(acquired.blob->size(), &result.blob)))
+			if (SUCCEEDED(D3DCreateBlob(acquired.blob->size(), result.blob.put())))
 				std::memcpy(result.blob->GetBufferPointer(), acquired.blob->data(), acquired.blob->size());
 			return result;
 		}
@@ -1639,7 +1639,7 @@ namespace SIE
 		 *
 		 * @return Compiled shader blob, or nullptr if compilation failed or source file not found.
 		 */
-		static ID3DBlob* CompileShader(ShaderClass shaderClass, const RE::BSShader& shader, uint32_t descriptor, bool useDiskCache, ShaderFileDependencyTracker* dependencyTracker)
+		static winrt::com_ptr<ID3DBlob> CompileShader(ShaderClass shaderClass, const RE::BSShader& shader, uint32_t descriptor, bool useDiskCache, ShaderFileDependencyTracker* dependencyTracker)
 		{
 			if (!SShaderCache::ResolveImageSpaceDescriptor(shader, descriptor)) {
 				return nullptr;
@@ -1666,7 +1666,7 @@ namespace SIE
 
 			// check diskcache
 			auto diskPath = GetDiskPath(shader, descriptor, shaderClass);
-			ID3DBlob* shaderBlob = nullptr;
+			winrt::com_ptr<ID3DBlob> shaderBlob;
 
 			// A failed filesystem probe is a cache miss, not a failed compilation task.
 			std::error_code diskCacheProbeError;
@@ -1715,7 +1715,7 @@ namespace SIE
 				} else if (auto intactBlob = ReadIntactBlob(diskPath); !intactBlob) {
 					logger::error("Failed to load {} shader {}::{:X}", magic_enum::enum_name(shaderClass), magic_enum::enum_name(type), descriptor);
 				} else {
-					shaderBlob = intactBlob.detach();
+					shaderBlob = std::move(intactBlob);
 					logger::debug("Loaded shader from {}", Util::WStringToString(diskPath));
 					cache.AddCompletedShader(shaderClass, shader, descriptor, shaderBlob, /*fromDisk=*/true);
 					return shaderBlob;
@@ -1757,7 +1757,7 @@ namespace SIE
 			logger::debug("Compiling {} {}:{}:{:X} to {}", pathString, magic_enum::enum_name(type), magic_enum::enum_name(shaderClass), descriptor, MergeDefinesString(defines));
 
 			// compile shaders — match Utils/D3D.cpp CompileShader flag policy (strictness, optional toggles, validation).
-			ID3DBlob* errorBlob = nullptr;
+			winrt::com_ptr<ID3DBlob> errorBlob;
 			uint32_t flags = !globals::state->IsDeveloperMode() ? (D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_OPTIMIZATION_LEVEL3) : D3DCOMPILE_DEBUG;
 			if (globals::state->enablePartialPrecision.load(std::memory_order_relaxed)) {
 				flags |= D3DCOMPILE_PARTIAL_PRECISION;
@@ -1773,7 +1773,7 @@ namespace SIE
 			TrackingIncludeHandler includeHandler(std::filesystem::path(path).parent_path());
 			TrackingIncludeHandler preprocessHandler(std::filesystem::path(path).parent_path());
 			auto shared = AcquireSharedCompile(shaderClass, path, pathString, defines.data(), flags, preprocessHandler);
-			shaderBlob = shared.blob;
+			shaderBlob = std::move(shared.blob);
 			auto& dedupeTicket = shared.ticket;
 			const bool dedupeHit = shaderBlob != nullptr;
 			if (shared.fromStore)
@@ -1786,9 +1786,9 @@ namespace SIE
 			const HRESULT compileResult = shared.compileFailed ? E_FAIL :
 			                              dedupeHit            ? S_OK :
 			                              fromSnapshot         ? D3DCompile(shared.source.data(), shared.source.size(), pathString.c_str(), nullptr, nullptr, "main",
-																	 GetShaderProfile(shaderClass), flags, 0, &shaderBlob, &errorBlob) :
+																	 GetShaderProfile(shaderClass), flags, 0, shaderBlob.put(), errorBlob.put()) :
 			                                                     D3DCompileFromFile(path.c_str(), defines.data(), &includeHandler, "main",
-																	 GetShaderProfile(shaderClass), flags, 0, &shaderBlob, &errorBlob);
+																	 GetShaderProfile(shaderClass), flags, 0, shaderBlob.put(), errorBlob.put());
 			const auto& capturedIncludes = fromSnapshot ? preprocessHandler.includes : includeHandler.includes;
 			// If the include handler captured any includes, register them so the watcher
 			// can invalidate dependents even if this compilation fails. Do NOT clear
@@ -1805,13 +1805,9 @@ namespace SIE
 					logger::error("Failed to compile {} shader {}::{:X}:\n{}",
 						magic_enum::enum_name(shaderClass), magic_enum::enum_name(type), descriptor,
 						static_cast<char*>(errorBlob->GetBufferPointer()));
-					errorBlob->Release();
 				} else {
 					logger::error("Failed to compile {} shader {}::{:X}",
 						magic_enum::enum_name(shaderClass), magic_enum::enum_name(type), descriptor);
-				}
-				if (shaderBlob != nullptr) {
-					shaderBlob->Release();
 				}
 
 #ifdef TRACY_ENABLE
@@ -1830,7 +1826,6 @@ namespace SIE
 			}
 			if (errorBlob) {
 				logger::debug("Shader logs:\n{}", static_cast<char*>(errorBlob->GetBufferPointer()));
-				errorBlob->Release();
 			}
 			logger::debug("Compiled shader {}:{}:{:X}", magic_enum::enum_name(type), magic_enum::enum_name(shaderClass), descriptor);
 
@@ -1847,15 +1842,14 @@ namespace SIE
 
 			// strip debug info
 			if (!globals::state->IsDeveloperMode() && !dedupeHit) {
-				ID3DBlob* strippedShaderBlob = nullptr;
+				winrt::com_ptr<ID3DBlob> strippedShaderBlob;
 
 				const uint32_t stripFlags = D3DCOMPILER_STRIP_DEBUG_INFO |
 				                            D3DCOMPILER_STRIP_TEST_BLOBS |
 				                            D3DCOMPILER_STRIP_PRIVATE_DATA;
 
-				D3DStripShader(shaderBlob->GetBufferPointer(), shaderBlob->GetBufferSize(), stripFlags, &strippedShaderBlob);
-				std::swap(shaderBlob, strippedShaderBlob);
-				strippedShaderBlob->Release();
+				if (SUCCEEDED(D3DStripShader(shaderBlob->GetBufferPointer(), shaderBlob->GetBufferSize(), stripFlags, strippedShaderBlob.put())))
+					shaderBlob = std::move(strippedShaderBlob);
 			}
 
 			if (dedupeTicket)
@@ -1881,7 +1875,7 @@ namespace SIE
 					}
 				}
 
-				if (!WriteBlobAtomic(diskPath, shaderBlob)) {
+				if (!WriteBlobAtomic(diskPath, shaderBlob.get())) {
 					logger::error("Failed to save shader to {}", Util::WStringToString(diskPath));
 				} else {
 					logger::debug("Saved shader to {}", Util::WStringToString(diskPath));
@@ -1891,7 +1885,7 @@ namespace SIE
 			return shaderBlob;
 		}
 
-		std::unique_ptr<RE::BSGraphics::VertexShader> CreateVertexShader(ID3DBlob& shaderData,
+		VertexShaderPtr CreateVertexShader(ID3DBlob& shaderData,
 			const RE::BSShader& shader, uint32_t descriptor)
 		{
 			static const auto perTechniqueBuffersArray =
@@ -1907,7 +1901,7 @@ namespace SIE
 			auto shaderPtr = new (rawPtr) RE::BSGraphics::VertexShader;
 			memcpy(rawPtr + sizeof(RE::BSGraphics::VertexShader), shaderData.GetBufferPointer(),
 				shaderData.GetBufferSize());
-			std::unique_ptr<RE::BSGraphics::VertexShader> newShader{ shaderPtr };
+			VertexShaderPtr newShader{ shaderPtr };
 			newShader->byteCodeSize = (uint32_t)shaderData.GetBufferSize();
 			newShader->id = descriptor;
 			newShader->vertexDesc = 0;
@@ -2535,12 +2529,12 @@ namespace SIE
 		compilationSet.Clear();
 	}
 
-	bool ShaderCache::AddCompletedShader(ShaderClass shaderClass, const RE::BSShader& shader, uint32_t descriptor, ID3DBlob* a_blob, bool fromDisk)
+	bool ShaderCache::AddCompletedShader(ShaderClass shaderClass, const RE::BSShader& shader, uint32_t descriptor, winrt::com_ptr<ID3DBlob> a_blob, bool fromDisk)
 	{
 		auto key = SIE::SShaderCache::GetShaderString(shaderClass, shader, descriptor, true);
 		auto keyWithDescriptor = SIE::SShaderCache::GetShaderString(shaderClass, shader, descriptor, false);
 		auto status = a_blob ? ShaderCompilationTask::Status::Completed : ShaderCompilationTask::Status::Failed;
-		logger::debug("Adding {} shader to map: {}", magic_enum ::enum_name(status), keyWithDescriptor);
+		logger::debug("Adding {} shader to map: {}", magic_enum::enum_name(status), keyWithDescriptor);
 		{
 			std::unique_lock lockM{ mapMutex };
 			shaderMap.insert_or_assign(key, ShaderCacheResult{ a_blob, status, system_clock::now(), fromDisk });
@@ -2582,7 +2576,7 @@ namespace SIE
 		return a_blob != nullptr;
 	}
 
-	std::pair<ShaderCache::ClaimResult, ID3DBlob*> ShaderCache::ClaimCompilation(const std::string& key)
+	std::pair<ShaderCache::ClaimResult, winrt::com_ptr<ID3DBlob>> ShaderCache::ClaimCompilation(const std::string& key)
 	{
 		std::unique_lock lockM{ mapMutex };
 
@@ -2629,7 +2623,7 @@ namespace SIE
 		}
 	}
 
-	ID3DBlob* ShaderCache::GetCompletedShader(const std::string& a_key)
+	winrt::com_ptr<ID3DBlob> ShaderCache::GetCompletedShader(const std::string& a_key)
 	{
 		std::string type = SIE::SShaderCache::GetTypeFromShaderString(a_key);
 		UpdateShaderModifiedTime(type);
@@ -2649,14 +2643,14 @@ namespace SIE
 		return nullptr;
 	}
 
-	ID3DBlob* ShaderCache::GetCompletedShader(ShaderClass shaderClass, const RE::BSShader& shader,
+	winrt::com_ptr<ID3DBlob> ShaderCache::GetCompletedShader(ShaderClass shaderClass, const RE::BSShader& shader,
 		uint32_t descriptor)
 	{
 		auto key = SIE::SShaderCache::GetShaderString(shaderClass, shader, descriptor, true);
 		return GetCompletedShader(key);
 	}
 
-	ID3DBlob* ShaderCache::GetCompletedShader(const ShaderCompilationTask& a_task)
+	winrt::com_ptr<ID3DBlob> ShaderCache::GetCompletedShader(const ShaderCompilationTask& a_task)
 	{
 		auto key = a_task.GetString();
 		return GetCompletedShader(key);
@@ -2846,8 +2840,8 @@ namespace SIE
 				const std::wstring globalDefinesSuffix(globalDefinesSuffixNarrow.begin(), globalDefinesSuffixNarrow.end());
 				const std::wstring defineSlugW(defineSlug.begin(), defineSlug.end());
 				const std::wstring diskPath = defineSlug.empty() ?
-			                                      std::format(L"{}/{}{}{}", GetStandaloneComputeCacheDir(srcPath), cacheName, globalDefinesSuffix, cacheExt) :
-			                                      std::format(L"{}/{}_{}{}{}", GetStandaloneComputeCacheDir(srcPath), cacheName, defineSlugW, globalDefinesSuffix, cacheExt);
+				                                  std::format(L"{}/{}{}{}", GetStandaloneComputeCacheDir(srcPath), cacheName, globalDefinesSuffix, cacheExt) :
+				                                  std::format(L"{}/{}_{}{}{}", GetStandaloneComputeCacheDir(srcPath), cacheName, defineSlugW, globalDefinesSuffix, cacheExt);
 
 				ID3D11DeviceChild* shader = nullptr;
 				bool diskCacheOutdated = true;
@@ -2898,16 +2892,15 @@ namespace SIE
 				}
 
 				if (!diskCacheOutdated) {
-					ID3DBlob* blob = nullptr;
-					if (SUCCEEDED(D3DReadFileToBlob(diskPath.c_str(), &blob)) && blob) {
-						HRESULT hr = createShader(blob);
+					winrt::com_ptr<ID3DBlob> blob;
+					if (SUCCEEDED(D3DReadFileToBlob(diskPath.c_str(), blob.put())) && blob) {
+						HRESULT hr = createShader(blob.get());
 						if (SUCCEEDED(hr)) {
 							Util::SetResourceName(shader, "%s:%s", srcPathStr.c_str(), entryPoint.c_str());
 							logger::debug("Loaded standalone {} shader {}:{} from {}", stageName, srcPathStr, entryPoint, Util::WStringToString(diskPath));
 						} else {
 							logger::warn("Failed to create {} shader from cached blob for {}:{}", stageName, srcPathStr, entryPoint);
 						}
-						blob->Release();
 					} else {
 						logger::warn("Failed to read cached {} shader {}", stageName, Util::WStringToString(diskPath));
 					}
@@ -2948,27 +2941,21 @@ namespace SIE
 					if (IsDiskCache())
 						flags |= D3DCOMPILE_SKIP_VALIDATION;
 
-					ID3DBlob* shaderBlob = nullptr;
-					ID3DBlob* errorBlob = nullptr;
-					if (FAILED(D3DCompileFromFile(srcPath.c_str(), macros.data(), &include, entryPoint.c_str(), profile, flags, 0, &shaderBlob, &errorBlob))) {
+					winrt::com_ptr<ID3DBlob> shaderBlob;
+					winrt::com_ptr<ID3DBlob> errorBlob;
+					if (FAILED(D3DCompileFromFile(srcPath.c_str(), macros.data(), &include, entryPoint.c_str(), profile, flags, 0, shaderBlob.put(), errorBlob.put()))) {
 						logger::warn("Standalone {} shader compilation failed for {}:{}:\n{}",
 							stageName, srcPathStr, entryPoint, errorBlob ? static_cast<char*>(errorBlob->GetBufferPointer()) : "Unknown error");
-						if (errorBlob)
-							errorBlob->Release();
-						if (shaderBlob)
-							shaderBlob->Release();
 						onReady(nullptr);
 						return;
 					}
 					if (errorBlob) {
 						logger::debug("Shader logs:\n{}", static_cast<char*>(errorBlob->GetBufferPointer()));
-						errorBlob->Release();
 					}
 
-					HRESULT hr = createShader(shaderBlob);
+					HRESULT hr = createShader(shaderBlob.get());
 					if (FAILED(hr)) {
 						logger::warn("Failed to create {} shader for {}:{}", stageName, srcPathStr, entryPoint);
-						shaderBlob->Release();
 						onReady(nullptr);
 						return;
 					}
@@ -2978,13 +2965,12 @@ namespace SIE
 						const auto cacheDir = GetStandaloneComputeCacheDir(srcPath);
 						std::error_code ec;
 						std::filesystem::create_directories(cacheDir, ec);
-						if (!SIE::SShaderCache::WriteBlobAtomic(diskPath, shaderBlob)) {
+						if (!SIE::SShaderCache::WriteBlobAtomic(diskPath, shaderBlob.get())) {
 							logger::error("Failed to save standalone {} shader to {}", stageName, Util::WStringToString(diskPath));
 						} else {
 							logger::debug("Saved standalone {} shader {}:{} to {}", stageName, srcPathStr, entryPoint, Util::WStringToString(diskPath));
 						}
 					}
-					shaderBlob->Release();
 				}
 
 				onReady(shader);
@@ -3176,11 +3162,10 @@ namespace SIE
 		useFileWatcher = false;
 		if (fileWatcher) {
 			fileWatcher->removeWatch(watchID);
+			delete fileWatcher;
 			fileWatcher = nullptr;
 		}
 		if (listener) {
-			// ~jthread() calls request_stop() + join(); processQueue() exits when
-			// UseFileWatcher() returns false (set above).
 			delete listener;
 			listener = nullptr;
 		}
@@ -4374,7 +4359,9 @@ namespace SIE
 	void UpdateListener::handleFileAction(efsw::WatchID watchid, const std::string& dir, const std::string& filename, efsw::Action action, std::string oldFilename)
 	{
 		std::lock_guard lock(actionMutex);
-		if (queue.empty() || (queue.back().action != action && queue.back().filename != filename)) {
+		if (queue.empty() || queue.back().action != action ||
+			queue.back().filename != filename || queue.back().dir != dir ||
+			queue.back().oldFilename != oldFilename || queue.back().watchID != watchid) {
 			// only add if not a duplicate; esfw is very spammy
 			queue.push_back({ watchid, dir, filename, action, oldFilename });
 		}

@@ -538,11 +538,13 @@ namespace
 	void DrawLocationDetailColumns(const SceneSettingsManager::LocationTarget& target)
 	{
 		ImGui::TableNextColumn();
+		ImGui::AlignTextToFramePadding();
 		Util::Text::Secondary("%s", GetLocationIdentityText(target).c_str());
 		if (target.editorId.empty())
 			Util::AddTooltip(T(TKEY("location_form_key_tooltip"), "The game exposes no editor ID for this place, so its form key is shown."));
 
 		ImGui::TableNextColumn();
+		ImGui::AlignTextToFramePadding();
 		Util::Text::Secondary("%s", GetLocationTypeLabel(target.type));
 	}
 
@@ -561,7 +563,7 @@ namespace
 		const float width = Icons::CalcGlyphSize(icon).x + padding * 2.0f;
 		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(0.0f, ImGui::GetContentRegionAvail().x - width));
 
-		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, { padding, 0.0f });
+		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, { padding, ImGui::GetStyle().FramePadding.y });
 		ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
 		auto _style = Util::TransparentIconButtonStyle();
 		ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetSecondary());
@@ -610,6 +612,7 @@ namespace
 		ImGui::PushID(target.formKey.c_str());
 
 		ImGui::TableNextColumn();
+		ImGui::AlignTextToFramePadding();
 		DrawLocationTypeIcon(target);
 		ImGui::TextUnformatted(target.name.c_str());
 		DrawLocationDetailColumns(target);
@@ -647,7 +650,8 @@ namespace
 			ImGui::PushID(static_cast<int>(i));
 			const bool authored = manager->IsLocationTargetAuthored(target.type, target.formKey);
 			const Icons::GlyphRef icon = GetLocationTargetIcon(target);
-			const float width = BrowserUI::MeasureChip(target.name.c_str(), icon.IsValid()) + BrowserUI::IconButtonSize();
+			const float width = BrowserUI::MeasureChip(target.name.c_str(), icon.IsValid()) + ImGui::GetStyle().ItemInnerSpacing.x +
+			                    BrowserUI::IconButtonSize();
 
 			// The separator only sits between chips that share a line.
 			if (i > 0) {
@@ -675,7 +679,7 @@ namespace
 						   T(TKEY("location_add_tooltip"), "Add to your locations"))
 					.c_str());
 
-			ImGui::SameLine(0.0f, 0.0f);
+			ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x);
 			ImGui::BeginDisabled(authored);
 			if (BrowserUI::IconButton("##add", authored ? SceneActionIcons::kAdded : SceneActionIcons::kAdd,
 					GetLocationAddTooltip(authored),
@@ -829,15 +833,20 @@ namespace
 					const bool opened = std::ranges::any_of(locationWindows, [&](const auto& window) {
 						return window.open && IsSameLocationTarget(window.target, target);
 					});
-					DrawLocationTypeIcon(target);
-					if (Util::TableRowSelectable(target.name.c_str(), opened,
+					const ImVec2 cellStart = ImGui::GetCursorScreenPos();
+					if (Util::TableRowSelectable("##row", opened,
 							ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowDoubleClick | ImGuiSelectableFlags_AllowOverlap) &&
 						ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
 						OpenLocationWindow(target);
+					ImGui::SetCursorScreenPos(cellStart);
+					ImGui::AlignTextToFramePadding();
+					DrawLocationTypeIcon(target);
+					ImGui::TextUnformatted(target.name.c_str());
 					DrawLocationDetailColumns(target);
 
 					ImGui::TableNextColumn();
 					if (std::ranges::any_of(here, [&](const auto& link) { return IsSameLocationTarget(link, target); })) {
+						ImGui::SetCursorPosY(ImGui::GetCursorPosY() + ImGui::GetStyle().FramePadding.y);
 						Util::DrawInlineIndicatorDot(ImGui::GetColorU32(Util::Colors::GetSuccess()), true);
 						Util::AddTooltip(T(TKEY("location_here_tooltip"), "You are here: its settings apply now."));
 					}

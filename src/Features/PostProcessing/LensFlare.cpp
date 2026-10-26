@@ -223,7 +223,6 @@ void LensFlare::DrawSettings()
 		ImGui::SliderFloat(T("feature.post_processing.lens_flare.view_resize", "View Resize"), &debugRescale, 0.f, 1.f);
 		BUFFER_VIEWER_NODE_TITLE(texThreshold, "Threshold (half-res)", debugRescale);
 		BUFFER_VIEWER_NODE_TITLE(texGhostHalo, "Ghost + Halo (half-res)", debugRescale);
-		BUFFER_VIEWER_NODE_TITLE(texFlare, "Final Flare Output", debugRescale);
 		BUFFER_VIEWER_NODE_TITLE(texBlurTemp, "Blur Temp (quarter-res)", debugRescale);
 		if (settings.GhostModeInt >= (int)GhostMode::Quality) {
 			BUFFER_VIEWER_NODE_TITLE(texFFTResult, "FFT Convolution Result", debugRescale);
@@ -295,7 +294,6 @@ void LensFlare::SetupResources()
 		uint quarterW = std::max(fullW / 4, 1u);
 		uint quarterH = std::max(fullH / 4, 1u);
 
-		createTex(texFlare, fullW, fullH);           // full resolution (final output)
 		createTex(texThreshold, halfW, halfH);       // half resolution
 		createTex(texGhostHalo, halfW, halfH);       // half resolution
 		createTex(texBlurTemp, quarterW, quarterH);  // quarter resolution
@@ -400,7 +398,7 @@ void LensFlare::ClearShaderCache()
 	outputReady = false;
 	BumpShaderGeneration();
 	const auto shaderPtrs = std::array{
-		&thresholdCS, &ghostHaloCS, &blurDownCS, &blurUpCS, &mixCS,
+		&thresholdCS, &ghostHaloCS, &blurDownCS, &blurUpCS,
 		&fftMultiplyCS,
 		&bokehPrepareCS, &fftThresholdCS, &fftGhostComposeCS
 	};
@@ -434,7 +432,6 @@ void LensFlare::CompileComputeShaders()
 		{ &ghostHaloCS, "lensflare.cs.hlsl", {}, "CSGhostHalo" },
 		{ &blurDownCS, "lensflare.cs.hlsl", {}, "CSFlareDown" },
 		{ &blurUpCS, "lensflare.cs.hlsl", {}, "CSFlareUp" },
-		{ &mixCS, "lensflare.cs.hlsl", {}, "CSMix" },
 		// FFT ghost pipeline shaders
 		{ &bokehPrepareCS, "lensflare_fft.cs.hlsl", {}, "CSBokehPrepare" },
 		{ &fftThresholdCS, "lensflare_fft.cs.hlsl", {}, "CSFFTThreshold" },
@@ -790,7 +787,7 @@ void LensFlare::DrawQuality(TextureInfo& inout_tex, LensFlareCB& data)
 
 void LensFlare::Draw(TextureInfo& inout_tex)
 {
-	if (!AllShadersReady({ &thresholdCS, &ghostHaloCS, &blurDownCS, &blurUpCS, &mixCS }))
+	if (!AllShadersReady({ &thresholdCS, &ghostHaloCS, &blurDownCS, &blurUpCS }))
 		return;
 
 	auto state = globals::state;
@@ -799,8 +796,10 @@ void LensFlare::Draw(TextureInfo& inout_tex)
 	globals::profiler->BeginPass("PostProcessing::LensFlare");
 	state->BeginPerfEvent("Lens Flare");
 
-	uint fullW = texFlare->desc.Width;
-	uint fullH = texFlare->desc.Height;
+	D3D11_TEXTURE2D_DESC inputDesc;
+	inout_tex.tex->GetDesc(&inputDesc);
+	uint fullW = inputDesc.Width;
+	uint fullH = inputDesc.Height;
 	uint halfW = texThreshold->desc.Width;
 	uint halfH = texThreshold->desc.Height;
 
@@ -896,25 +895,6 @@ void LensFlare::Draw(TextureInfo& inout_tex)
 		DrawFast(inout_tex, data);
 	}
 
-	// === Pass 4: Mix ghost+halo → full res output ===
-	if (AllShadersReady({ &mixCS })) {
-		data.OutputWidth = (float)fullW;
-		data.OutputHeight = (float)fullH;
-		data.InputWidth = (float)halfW;
-		data.InputHeight = (float)halfH;
-		lensFlareCB->Update(data);
-		auto cb = lensFlareCB->CB();
-		context->CSSetConstantBuffers(1, 1, &cb);
-
-		srvs.at(0) = texGhostHalo->srv.get();
-		uavs.at(0) = texFlare->uav.get();
-		context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
-		context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
-		context->CSSetShader(mixCS.get(), nullptr, 0);
-		context->Dispatch((fullW + 7) >> 3, (fullH + 7) >> 3, 1);
-		resetViews();
-	}
-
 	// Cleanup
 	resetViews();
 	auto nullCB = (ID3D11Buffer*)nullptr;
@@ -923,7 +903,7 @@ void LensFlare::Draw(TextureInfo& inout_tex)
 	context->CSSetSamplers(0, (uint)samplers.size(), samplers.data());
 	context->CSSetShader(nullptr, nullptr, 0);
 
-	inout_tex = { texFlare->resource.get(), texFlare->srv.get() };
+	inout_tex = { texGhostHalo->resource.get(), texGhostHalo->srv.get() };
 	state->EndPerfEvent();
 	globals::profiler->EndPass();
 	outputReady = true;

@@ -1,7 +1,6 @@
 /// Local Exposure luminance analysis
-/// Builds an edge-aware base in log-luminance space. The tonal remapping is
-/// evaluated later by Composite so it uses the same global exposure as the
-/// final scene color.
+/// Builds the luminance pyramid and edge-aware grid. Composite resolves the
+/// base layer and evaluates tonal remapping using the final global exposure.
 
 #include "Common/Color.hlsli"
 
@@ -118,8 +117,10 @@ float BlurLogLuminance(uint2 tid, float2 direction)
 	RWTexOutput[tid] = BlurLogLuminance(tid, float2(0.0, 1.0));
 }
 
-groupshared uint ThreadGridWeights[GRID_DEPTH][GRID_THREAD_SIZE * GRID_THREAD_SIZE];
-groupshared uint ThreadGridLogSums[GRID_DEPTH][GRID_THREAD_SIZE * GRID_THREAD_SIZE];
+// Adjacent lanes access adjacent bins during reduction; the extra column also
+// avoids a power-of-two stride when each lane updates its own histogram.
+groupshared uint ThreadGridWeights[GRID_THREAD_SIZE * GRID_THREAD_SIZE][GRID_DEPTH + 1];
+groupshared uint ThreadGridLogSums[GRID_THREAD_SIZE * GRID_THREAD_SIZE][GRID_DEPTH + 1];
 
 [numthreads(GRID_THREAD_SIZE, GRID_THREAD_SIZE, 1)] void CSBuildLuminanceGrid(
 	uint3 groupID : SV_GroupID,
@@ -127,8 +128,8 @@ groupshared uint ThreadGridLogSums[GRID_DEPTH][GRID_THREAD_SIZE * GRID_THREAD_SI
 	uint groupIndex : SV_GroupIndex) {
 	[unroll] for (uint bin = 0; bin < GRID_DEPTH; bin++)
 	{
-		ThreadGridWeights[bin][groupIndex] = 0;
-		ThreadGridLogSums[bin][groupIndex] = 0;
+		ThreadGridWeights[groupIndex][bin] = 0;
+		ThreadGridLogSums[groupIndex][bin] = 0;
 	}
 
 	const float inverseLogRange = rcp(LogLuminanceMax - LogLuminanceMin);
@@ -147,10 +148,10 @@ groupshared uint ThreadGridLogSums[GRID_DEPTH][GRID_THREAD_SIZE * GRID_THREAD_SI
 				uint upperWeight = (uint)(frac(binPosition) * GRID_QUANTIZATION + 0.5);
 				uint lowerWeight = GRID_QUANTIZATION - upperWeight;
 
-				ThreadGridWeights[lowerBin][groupIndex] += lowerWeight;
-				ThreadGridLogSums[lowerBin][groupIndex] += (uint)(normalizedLog * lowerWeight + 0.5);
-				ThreadGridWeights[upperBin][groupIndex] += upperWeight;
-				ThreadGridLogSums[upperBin][groupIndex] += (uint)(normalizedLog * upperWeight + 0.5);
+				ThreadGridWeights[groupIndex][lowerBin] += lowerWeight;
+				ThreadGridLogSums[groupIndex][lowerBin] += (uint)(normalizedLog * lowerWeight + 0.5);
+				ThreadGridWeights[groupIndex][upperBin] += upperWeight;
+				ThreadGridLogSums[groupIndex][upperBin] += (uint)(normalizedLog * upperWeight + 0.5);
 			}
 		}
 	}
@@ -161,35 +162,11 @@ groupshared uint ThreadGridLogSums[GRID_DEPTH][GRID_THREAD_SIZE * GRID_THREAD_SI
 		uint gridLogSum = 0;
 		[unroll] for (uint threadIndex = 0; threadIndex < GRID_THREAD_SIZE * GRID_THREAD_SIZE; threadIndex++)
 		{
-			gridWeight += ThreadGridWeights[groupIndex][threadIndex];
-			gridLogSum += ThreadGridLogSums[groupIndex][threadIndex];
+			gridWeight += ThreadGridWeights[threadIndex][groupIndex];
+			gridLogSum += ThreadGridLogSums[threadIndex][groupIndex];
 		}
 
 		const float decodeScale = rcp((float)GRID_QUANTIZATION);
 		RWTexLuminanceGrid[uint3(groupID.xy, groupIndex)] = float2(gridLogSum, gridWeight) * decodeScale;
 	}
-}
-
-	[numthreads(8, 8, 1)] void CSResolveBaseLuminance(uint2 tid : SV_DispatchThreadID)
-{
-	if (tid.x >= InputWidth || tid.y >= InputHeight)
-		return;
-
-	float logLuminance = TexLogLuminance.Load(int3(tid, 0));
-	float normalizedLog = saturate((logLuminance - LogLuminanceMin) / (LogLuminanceMax - LogLuminanceMin));
-	float2 uv = (float2(tid) + 0.5) / float2(InputWidth, InputHeight);
-
-	uint gridWidth, gridHeight, gridDepth;
-	TexLuminanceGrid.GetDimensions(gridWidth, gridHeight, gridDepth);
-	float3 gridUV;
-	gridUV.xy = (float2(tid) + 0.5) / (GRID_TILE_SIZE * float2(gridWidth, gridHeight));
-	gridUV.z = (normalizedLog * (gridDepth - 1) + 0.5) / gridDepth;
-
-	float2 gridMoments = TexLuminanceGrid.SampleLevel(LinearSampler, gridUV, 0);
-	float broadBase = TexBlurredLuminance.SampleLevel(LinearSampler, uv, 0);
-	float bilateralBase = broadBase;
-	if (gridMoments.y >= 0.001)
-		bilateralBase = lerp(LogLuminanceMin, LogLuminanceMax, gridMoments.x / gridMoments.y);
-
-	RWTexOutput[tid] = lerp(bilateralBase, broadBase, BaseBlend);
 }

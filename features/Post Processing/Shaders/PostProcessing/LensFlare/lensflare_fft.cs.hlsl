@@ -311,11 +311,10 @@ float2 FisheyeUV(float2 uv, float compression, float zoom)
 {
 	float2 negPosUV = 2.0f * uv - 1.0f;
 	float scale = compression * atan(rcp(compression));
-	float radiusDist = length(negPosUV) * scale;
+	float radius = length(negPosUV);
+	float radiusDist = radius * scale;
 	float radiusDir = compression * tan(radiusDist / compression) * zoom;
-	float phi = atan2(negPosUV.y, negPosUV.x);
-	float2 newUV = float2(radiusDir * cos(phi) + 1.0f, radiusDir * sin(phi) + 1.0f) * 0.5f;
-	return newUV;
+	return (negPosUV * (radiusDir / max(radius, EPSILON)) + 1.0f) * 0.5f;
 }
 
 float DiscMask(float2 screenPos)
@@ -357,6 +356,7 @@ float DiscMask(float2 screenPos)
 				float mask1 = smoothstep(0.5, 0.9, distanceMask);
 				float mask2 = smoothstep(0.75, 1.0, distanceMask) * 0.95 + 0.05;
 				weight = mask1 * mask2;
+				[branch] if (weight == 0.0) continue;
 			} else {
 				weight = distanceMask;
 			}
@@ -373,11 +373,19 @@ float DiscMask(float2 screenPos)
 			float2 uvB = ghostUV - pixelOffset;
 
 			// Convert to FFT space (aspect + pad corrected) and sample IFFT result
-			float sR = InputTexture.SampleLevel(BokehSampler, ScreenToFFT(uvR), 0).x;
-			float sG = InputTexture.SampleLevel(BokehSampler, ScreenToFFT(uvG), 0).x;
-			float sB = InputTexture.SampleLevel(BokehSampler, ScreenToFFT(uvB), 0).x;
+			float3 ghostSample;
+			[branch] if (GhostChromaShift == 0.0)
+			{
+				ghostSample = InputTexture.SampleLevel(BokehSampler, ScreenToFFT(uvG), 0).xxx;
+			}
+			else
+			{
+				ghostSample.r = InputTexture.SampleLevel(BokehSampler, ScreenToFFT(uvR), 0).x;
+				ghostSample.g = InputTexture.SampleLevel(BokehSampler, ScreenToFFT(uvG), 0).x;
+				ghostSample.b = InputTexture.SampleLevel(BokehSampler, ScreenToFFT(uvB), 0).x;
+			}
 
-			color += float3(sR, sG, sB) * ghostColor.rgb * ghostColor.a * weight;
+			color += ghostSample * ghostColor.rgb * ghostColor.a * weight;
 		}
 
 		// Screen border mask

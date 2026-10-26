@@ -1840,7 +1840,7 @@
     "feature.post_processing.color_grading.tonemapper.lottes_filmic.description": "Timothy Lottes 的电影曲线，见其 GDC 演讲“Advanced Techniques and Optimization of HDR Color Pipelines”。也称为“AMD 曲线”。",
     "feature.post_processing.color_grading.tonemapper.melon.description": "TripleMelon 设计的色调映射器，用于修复 ACES 中高强度颜色偏移的问题。",
     "feature.post_processing.color_grading.tonemapper.neutwo.description": "Carlos Lopez 制作的 Neutwo 色调映射器，来自 RenoDX。",
-    "feature.post_processing.color_grading.tonemapper.psychov.description": "Carlos Lopez 制作的 PsychoV 17 色调映射器，来自 RenoDX。",
+    "feature.post_processing.color_grading.tonemapper.psychov.description": "Carlos Lopez 制作的 PsychoV 30 色调映射器，来自 RenoDX。",
     "feature.post_processing.color_grading.tonemapper.reinhard.description": "Reinhard 等人在 2002 年的《Photographic Tone Reproduction for Digital Images》中提出的映射。",
     "feature.post_processing.color_grading.tonemapper.reinhard_extended.description": "Reinhard 等人在 2002 年的《Photographic Tone Reproduction for Digital Images》中提出的扩展映射。额外的用户参数指定映射为 1 的最小亮度，从而允许高亮度区域过曝。",
     "feature.post_processing.color_grading.tonemapper.uchimura_filmic.description": "Hajime Uchimura 的电影曲线，见其 CEDEC 演讲“HDR Theory and Practice”。其特点是中间的线性区段，也称为“Gran Turismo 曲线”。",

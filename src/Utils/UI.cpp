@@ -573,7 +573,7 @@ namespace Util
 		return std::max(iconSize.x, iconSize.y) + kPad * 2.0f * scale;
 	}
 
-	void DrawLockStatusBadge(ImVec2 a_min, bool a_locked, ImDrawList* a_drawList)
+	void DrawLockStatusBadge(ImVec2 a_min, bool a_locked, ImDrawList* a_drawList, bool a_hovered, bool a_held)
 	{
 		if (!a_drawList)
 			a_drawList = ImGui::GetWindowDrawList();
@@ -589,6 +589,8 @@ namespace Util
 
 		const ImVec2 max(a_min.x + size, a_min.y + size);
 		const float rounding = std::min(ImGui::GetStyle().FrameRounding, size * 0.35f);
+		auto _style = TransparentIconButtonStyle();
+		DrawRoundedButtonHighlight(a_min, max, a_hovered, a_held, rounding, a_drawList);
 		a_drawList->AddRectFilled(a_min, max, ImGui::GetColorU32(fill), rounding);
 		a_drawList->AddRect(a_min, max, ImGui::GetColorU32(border), rounding);
 		Icons::DrawCenteredGlyph(a_drawList, a_min, ImVec2(size, size),
@@ -612,7 +614,7 @@ namespace Util
 		bool hovered = false;
 		bool held = false;
 		const bool clicked = ImGui::ButtonBehavior(bb, id, &hovered, &held);
-		DrawLockStatusBadge(min, a_locked);
+		DrawLockStatusBadge(min, a_locked, nullptr, hovered, held);
 		if (a_tooltip)
 			AddTooltip(a_tooltip);
 		return clicked;
@@ -751,7 +753,21 @@ namespace Util
 				shaderCache->DeleteDiskCache();
 			}
 			shaderCache->ClearContentStore();
+			shaderCache->SetRecachePending(true);
 		}
+	}
+
+	void DrawRecacheBanner()
+	{
+		auto* shaderCache = globals::shaderCache;
+		if (!shaderCache || !shaderCache->IsRecachePending())
+			return;
+		if (StatusBanner(ICON_TI_REFRESH,
+				T("ui.recache_banner",
+					"A full shader recache is pending and will run on the next game restart. Click to dismiss."),
+				Colors::GetWarning()))
+			shaderCache->SetRecachePending(false);
+		ImGui::Spacing();
 	}
 
 	void RequestClearShaderCacheConfirmation()
@@ -1428,10 +1444,10 @@ namespace Util
 
 	float GetEditorChromeTextCursorOffsetY(float rowHeight)
 	{
-		// ImGui's text cursor is the top of the FontSize line box. Capitals occupy ~[0, Ascent],
-		// so centre that ink band in the row: offset = rowHeight/2 - Ascent/2.
-		const float ascent = ImGui::GetFontBaked()->Ascent;
-		return rowHeight * 0.5f - ascent * 0.5f;
+		// Centre capital-letter ink, measured from 'H' since cap height and ascent vary per font.
+		const ImFontGlyph* glyph = ImGui::GetFontBaked()->FindGlyph('H');
+		const float inkCenter = glyph ? (glyph->Y0 + glyph->Y1) * 0.5f : ImGui::GetFontSize() * 0.5f;
+		return rowHeight * 0.5f - inkCenter;
 	}
 
 	// Draws the custom floating header: the title (also the drag handle), an optional

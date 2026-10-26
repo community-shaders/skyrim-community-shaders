@@ -7,6 +7,7 @@
 #include "Globals.h"
 #include "I18n/I18n.h"
 #include "Presets/UnifiedPresetCatalog.h"
+#include "ShaderCache.h"
 #include "State.h"
 #include "Utils/UI.h"
 
@@ -183,6 +184,8 @@ namespace PostProcessingMode
 		// Re-clicking the active mode must not undo a manual Linear Lighting opt-out.
 		if (Util::SegmentedControl("PostProcessingMode", labels.data(), count, selected) && modes[selected] != current) {
 			Set(modes[selected]);
+			// Every pipeline change reloads the shader cache.
+			globals::shaderCache->SetRecachePending(true);
 			// The segmented control does not flag an ImGui edit, so the overlay's check never sees this change.
 			globals::state->CheckCoreSettingsChanged();
 			// Set() may have turned Linear Lighting on, which the host page's own feature check does not cover.

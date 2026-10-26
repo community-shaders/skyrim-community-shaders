@@ -255,9 +255,6 @@ private:
 	/** @brief Test a coarse AABB and return the planes its children still need to test. */
 	static bool ClassifyAabb(const FrustumSoA& f, __m128 lo, __m128 hi, uint32_t& intersectingPlanes);
 
-	/** @brief Derives world-space frustum planes from the camera frustum and transform. */
-	static void ComputeFrustumPlanes(RE::NiFrustumPlanes& out, const RE::NiFrustum& viewFrustum, const RE::NiTransform& transform);
-
 	/** @brief Uploads admitted data and culls grass once per frame using the validated main camera. */
 	void UpdateGrass(const RE::NiCamera* cam);
 

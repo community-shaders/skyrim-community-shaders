@@ -76,7 +76,6 @@ void LocalExposure::DrawSettings()
 	if (Util::ShowDebugSections() && ImGui::CollapsingHeader(T("feature.post_processing.local_exposure.debug", "Debug"))) {
 		static float debugRescale = .3f;
 		ImGui::SliderFloat(T("feature.post_processing.local_exposure.view_resize", "View Resize"), &debugRescale, 0.f, 1.f);
-		BUFFER_VIEWER_NODE_TITLE(texBaseLuminance, "Edge-aware Base Log Luminance", debugRescale);
 		BUFFER_VIEWER_NODE_TITLE(texLogLuminance, "Scene Log Luminance", debugRescale);
 	}
 }
@@ -227,34 +226,6 @@ void LocalExposure::SetupResources()
 		createBlurTexture(texBlurredLuminance, "LocalExposure Blurred Luminance");
 	}
 
-	// Create output base-luminance texture (full resolution, R16F)
-	{
-		D3D11_TEXTURE2D_DESC texDesc = {};
-		texDesc.Width = fullW;
-		texDesc.Height = fullH;
-		texDesc.MipLevels = 1;
-		texDesc.ArraySize = 1;
-		texDesc.Format = DXGI_FORMAT_R16_FLOAT;
-		texDesc.SampleDesc.Count = 1;
-		texDesc.Usage = D3D11_USAGE_DEFAULT;
-		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
-
-		texBaseLuminance = eastl::make_unique<Texture2D>(texDesc, "LocalExposure Base Luminance");
-
-		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-		srvDesc.Format = DXGI_FORMAT_R16_FLOAT;
-		srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
-		srvDesc.Texture2D.MostDetailedMip = 0;
-		srvDesc.Texture2D.MipLevels = 1;
-		texBaseLuminance->CreateSRV(srvDesc);
-
-		D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
-		uavDesc.Format = DXGI_FORMAT_R16_FLOAT;
-		uavDesc.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D;
-		uavDesc.Texture2D.MipSlice = 0;
-		texBaseLuminance->CreateUAV(uavDesc);
-	}
-
 	// Create linear sampler
 	{
 		D3D11_SAMPLER_DESC sampDesc = {};
@@ -283,7 +254,7 @@ void LocalExposure::ClearShaderCache()
 	outputReady = false;
 	BumpShaderGeneration();
 	const auto shaderPtrs = std::array{
-		&setupCS, &downsampleCS, &blurHorizontalCS, &blurVerticalCS, &gridCS, &resolveCS
+		&setupCS, &downsampleCS, &blurHorizontalCS, &blurVerticalCS, &gridCS
 	};
 
 	{
@@ -307,7 +278,6 @@ void LocalExposure::CompileComputeShaders()
 		{ &blurHorizontalCS, "localexposure.cs.hlsl", {}, "CSBlurHorizontal" },
 		{ &blurVerticalCS, "localexposure.cs.hlsl", {}, "CSBlurVertical" },
 		{ &gridCS, "localexposure.cs.hlsl", {}, "CSBuildLuminanceGrid" },
-		{ &resolveCS, "localexposure.cs.hlsl", {}, "CSResolveBaseLuminance" },
 	};
 
 	CompileComputeShadersAsync(L"Data\\Shaders\\PostProcessing\\LocalExposure", shaderInfos);
@@ -318,7 +288,7 @@ void LocalExposure::Draw(TextureInfo& inout_tex)
 	auto context = globals::d3d::context;
 	auto state = globals::state;
 
-	if (!AllShadersReady({ &setupCS, &downsampleCS, &blurHorizontalCS, &blurVerticalCS, &gridCS, &resolveCS }))
+	if (!AllShadersReady({ &setupCS, &downsampleCS, &blurHorizontalCS, &blurVerticalCS, &gridCS }))
 		return;
 
 	state->BeginPerfEvent("Local Exposure");
@@ -460,25 +430,6 @@ void LocalExposure::Draw(TextureInfo& inout_tex)
 		globals::profiler->EndPass();
 	}
 
-	// === Pass 5: Resolve the base layer ===
-	{
-		globals::profiler->BeginPass("PostProcessing::LocalExposure::Resolve");
-		state->BeginPerfEvent("Resolve Base Luminance");
-
-		srvs[1] = texLogLuminance->srv.get();
-		srvs[2] = texLuminanceGrid->srv.get();
-		srvs[3] = texBlurredLuminance->srv.get();
-		uavs[0] = texBaseLuminance->uav.get();
-		context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
-		context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
-		context->CSSetShader(resolveCS.get(), nullptr, 0);
-		context->Dispatch((fullW + 7) >> 3, (fullH + 7) >> 3, 1);
-
-		resetViews();
-		state->EndPerfEvent();
-		globals::profiler->EndPass();
-	}
-
 	// Cleanup
 	context->CSSetShader(nullptr, nullptr, 0);
 	cb = nullptr;
@@ -486,7 +437,7 @@ void LocalExposure::Draw(TextureInfo& inout_tex)
 	samplers.fill(nullptr);
 	context->CSSetSamplers(0, (uint)samplers.size(), samplers.data());
 
-	// NOTE: We do not modify inout_tex. Composite consumes the base luminance map.
+	// NOTE: We do not modify inout_tex. Composite resolves the base from these analysis textures.
 	state->EndPerfEvent();
 	outputReady = true;
 }

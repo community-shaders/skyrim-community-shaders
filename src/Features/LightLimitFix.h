@@ -106,13 +106,15 @@ public:
 	static constexpr uint32_t ENGINE_SHADOW_MAP_SLICES = 8;
 	static constexpr uint32_t MIN_LOCAL_SHADOW_SLOTS = 4;
 	static constexpr uint32_t MAX_LOCAL_SHADOW_SLOTS = 64;
-	static constexpr uint64_t LOCAL_SHADOW_MAX_CACHE_BYTES = 512ull * 1024ull * 1024ull;
 	/** @brief Frames to wait before retrying a cache allocation that failed. */
 	static constexpr uint32_t LOCAL_SHADOW_ALLOC_RETRY_FRAMES = 600;
 	static constexpr uint32_t LOCAL_SHADOW_SWEEP_INTERVAL = 30;
 	static constexpr uint32_t LOCAL_SHADOW_EVICT_AGE = 120;
 	static constexpr uint32_t LOCAL_SHADOW_REJECT_MAX_FRAMES = 120;
 	static constexpr uint32_t LOCAL_SHADOW_CAMERA_HOLD_FRAMES = 60;
+	/** @brief Frames a caster stays on screen after its light sphere leaves the view frustum. */
+	static constexpr uint32_t LOCAL_SHADOW_SCREEN_HOLD_FRAMES = 30;
+	static constexpr float LOCAL_SHADOW_FADE_IN_FRAMES = 10.0f;
 	static constexpr uint32_t LOCAL_SHADOW_STATIC_STARVE_FRAMES = 60;
 	static constexpr float LOCAL_SHADOW_AGE_URGENCY = 64.0f;
 	static constexpr float LOCAL_SHADOW_ACTOR_SCORE = 1000.0f;
@@ -183,6 +185,11 @@ public:
 		uint32_t lastEvaluatedFrame = 0;
 		uint32_t lastEligibleFrame = 0;
 		uint32_t lastRenderedFrame = 0;
+		uint32_t lastOnScreenFrame = 0;
+		/** @brief First render into the current slice, which starts the light's fade-in. */
+		uint32_t shadowReadyFrame = 0;
+		/** @brief Frame the engine rendered this caster but no cache slice was available, which is not an engine rejection. */
+		uint32_t slotDeniedFrame = 0;
 		uint32_t rejectUntilFrame = 0;
 		uint32_t rejectStreak = 0;
 		RE::NiPoint3 position{};
@@ -357,7 +364,6 @@ public:
 	bool localShadowHooksInstalled = false;
 	/** @brief True inside the first-person pass, which rebases posAdjust, so shaders take the world eye from WorldEyePosition. */
 	bool localShadowFirstPersonPass = false;
-	bool shadowDistanceRaised = false;
 	uint32_t localShadowFrame = 0;
 	uint32_t localShadowEngineBudget = SHADOW_MASK_CHANNEL_COUNT - 1;
 	RE::NiPoint3 localShadowCameraPosition{};
@@ -393,8 +399,12 @@ public:
 	bool EnsureLocalShadowCopyShader();
 	/** @brief True when the engine found the caster in range within the camera hold window. */
 	static bool IsLocalShadowCasterInView(const LocalShadowCaster& a_caster, uint32_t a_frame);
-	/** @brief Texel size of the cache format, which is always R16_UNORM or R32_FLOAT. */
-	static uint32_t GetLocalShadowBytesPerTexel(DXGI_FORMAT a_format) { return a_format == DXGI_FORMAT_R16_UNORM ? 2 : 4; }
+	/** @brief True when the caster's light sphere touched the view frustum within the screen hold window. */
+	static bool IsLocalShadowCasterOnScreen(const LocalShadowCaster& a_caster, uint32_t a_frame) { return a_frame - a_caster.lastOnScreenFrame <= LOCAL_SHADOW_SCREEN_HOLD_FRAMES; }
+	/** @brief Video memory of one cache slice; the cache format is always R16_UNORM or R32_FLOAT. */
+	static uint64_t GetLocalShadowSlotBytes(uint32_t a_resolution, DXGI_FORMAT a_format) { return static_cast<uint64_t>(a_resolution) * a_resolution * (a_format == DXGI_FORMAT_R16_UNORM ? 2 : 4); }
+	/** @brief Ramps from near 0 to 1 over LOCAL_SHADOW_FADE_IN_FRAMES after the caster's slot was first filled. */
+	static float GetLocalShadowFadeIn(const LocalShadowCaster& a_caster, uint32_t a_frame) { return std::min(static_cast<float>(a_frame - a_caster.shadowReadyFrame + 1) / LOCAL_SHADOW_FADE_IN_FRAMES, 1.0f); }
 
 	/**
 	 * @brief Picks which shadow casters the engine may render this frame so the cache covers every caster over time.
@@ -403,8 +413,6 @@ public:
 	void ScheduleLocalShadowCasters();
 	/** @brief Point/spot shadow maps the engine can render this frame: every mask channel, minus one when the sun takes a shadow map. */
 	static uint32_t GetEngineLocalShadowBudget();
-	/** @brief Raises the engine's point/spot shadow cull distance to the light fade distance, or restores it when disabled. */
-	void MatchShadowDistanceToLightFade(bool a_enable);
 	/**
 	 * @brief Records the engine's own range test for a caster and hides casters not scheduled this frame.
 	 * @param a_light The shadow light being evaluated by the engine.
@@ -432,6 +440,11 @@ public:
 	static uint32_t GetShadowMaskIndex(RE::BSShadowLight* a_shadowLight);
 	/** @brief True when the engine rendered this light's shadow map this frame; maskIndex alone goes stale once a light is removed. */
 	static bool IsShadowMapRendered(RE::ShadowSceneNode* a_shadowSceneNode, RE::BSShadowLight* a_shadowLight);
+	/**
+	 * @brief Engine light LOD fade (fLightLODStartFade to its end distance) for a light.
+	 * @param a_distanceSquared Squared camera distance minus the light's squared radius, as the engine measures it.
+	 */
+	static float GetLightLODDimmer(float a_distanceSquared);
 
 	/** @brief Adjusts the saturation of an RGB color value. */
 	static inline float3 Saturation(float3 color, float saturation);

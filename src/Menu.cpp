@@ -877,6 +877,8 @@ void Menu::DrawSettings()
 
 		// Render header using extracted component
 		MenuHeaderRenderer::RenderHeader(isDocked, showLogo, uiScale, uiIcons, shortcuts, helpState);
+		MenuHeaderRenderer::RenderHeader(isDocked, showLogo, canShowIcons, uiScale, uiIcons);
+		Util::DrawRecacheBanner();
 
 		// Main content starts here - no additional separator needed as it's already handled in the conditions above
 

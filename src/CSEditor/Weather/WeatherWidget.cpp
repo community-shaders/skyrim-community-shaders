@@ -1216,8 +1216,6 @@ void WeatherWidget::DrawFogRow(bool matches, const char* inheritKey, const char*
 	if (!matches)
 		return;
 
-	const float scale = Util::GetUIScale();
-
 	const char* highlightId = nullptr;
 	if (PushHighlightIfNeeded(dayPropKey))
 		highlightId = dayPropKey;
@@ -1227,9 +1225,6 @@ void WeatherWidget::DrawFogRow(bool matches, const char* inheritKey, const char*
 	ImGui::TableNextRow();
 	ImGui::TableSetColumnIndex(0);
 	if (hasParent) {
-		ImGui::PushStyleColor(ImGuiCol_FrameBg, WidgetUI::kInheritCheckboxFrameBg);
-		ImGui::PushStyleColor(ImGuiCol_CheckMark, WidgetUI::kInheritCheckboxMark);
-		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2.0f * scale, 2.0f * scale));
 		ImGui::Checkbox(std::format("##Fog{}", label).c_str(), &settings.inheritFlags[inheritKey]);
 		if (parentWidget && settings.inheritFlags[inheritKey]) {
 			const float parentDay = parentWidget->settings.fogProperties[dayPropKey];
@@ -1240,8 +1235,6 @@ void WeatherWidget::DrawFogRow(bool matches, const char* inheritKey, const char*
 				changed = true;
 			}
 		}
-		ImGui::PopStyleVar();
-		ImGui::PopStyleColor(2);
 		ImGui::SameLine();
 	}
 	ImGui::AlignTextToFramePadding();

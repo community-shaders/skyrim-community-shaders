@@ -154,6 +154,7 @@ float DiscMask(float2 screenPos)
 				float mask1 = smoothstep(0.5f, 0.9f, distanceMask);
 				float mask2 = smoothstep(0.75f, 1.0f, distanceMask) * 0.95f + 0.05f;
 				weight = mask1 * mask2;
+				[branch] if (weight == 0.0) continue;
 			} else {
 				weight = distanceMask;
 			}
@@ -244,60 +245,4 @@ float DiscMask(float2 screenPos)
 	color += InputTexture.SampleLevel(ColorSampler, uv + float2(0, -halfPixel.y), 0) * 2.0f;
 
 	OutputTexture[DTid.xy] = color / 12.0f;
-}
-
-// ============================================================
-// ============================================================
-// Pass 4: CSMix — combine ghost+halo, apply tint & gradient
-// Input: ghost+halo (t0), Output: full-res final flare (u0)
-// Uses InputWidth/InputHeight for sampling half-res inputs
-// Bicubic Catmull-Rom upsampling for sharper ghost reproduction
-// ============================================================
-
-float3 SampleBicubicCatmullRom(Texture2D<float4> tex, SamplerState samp, float2 uv, float2 texSize)
-{
-	float2 samplePos = uv * texSize;
-	float2 tc = floor(samplePos - 0.5) + 0.5;
-	float2 f = samplePos - tc;
-	float2 f2 = f * f;
-	float2 f3 = f2 * f;
-
-	// Catmull-Rom weights
-	float2 w0 = f2 - 0.5 * (f3 + f);
-	float2 w1 = 1.5 * f3 - 2.5 * f2 + 1.0;
-	float2 w2 = -1.5 * f3 + 2.0 * f2 + 0.5 * f;
-	float2 w3 = 0.5 * (f3 - f2);
-
-	// Collapse to 4 bilinear taps
-	float2 w12 = w1 + w2;
-	float2 tc0 = (tc - 1.0) / texSize;
-	float2 tc12 = (tc + w2 / w12) / texSize;
-	float2 tc3 = (tc + 2.0) / texSize;
-
-	float3 result =
-		tex.SampleLevel(samp, float2(tc12.x, tc0.y), 0).rgb * (w12.x * w0.y) +
-		tex.SampleLevel(samp, float2(tc0.x, tc12.y), 0).rgb * (w0.x * w12.y) +
-		tex.SampleLevel(samp, float2(tc12.x, tc12.y), 0).rgb * (w12.x * w12.y) +
-		tex.SampleLevel(samp, float2(tc3.x, tc12.y), 0).rgb * (w3.x * w12.y) +
-		tex.SampleLevel(samp, float2(tc12.x, tc3.y), 0).rgb * (w12.x * w3.y);
-
-	// The 4 corner taps have very small weights, skip for performance
-	return max(result, 0.0);
-}
-
-[numthreads(8, 8, 1)] void CSMix(uint3 DTid : SV_DispatchThreadID) {
-	if (DTid.x >= (uint)OutputWidth || DTid.y >= (uint)OutputHeight)
-		return;
-
-	float2 uv = (DTid.xy + 0.5f) / float2(OutputWidth, OutputHeight);
-
-	float3 flares = SampleBicubicCatmullRom(InputTexture, ColorSampler, uv, float2(InputWidth, InputHeight));
-
-	// Procedural radial gradient based on distance from center
-	float gradientT = saturate(distance(uv, 0.5f) * 2.0f);
-	float3 gradient = lerp(1.0f, Tint, gradientT);
-
-	float3 result = flares * gradient * Intensity;
-
-	OutputTexture[DTid.xy] = float4(result, 1.0f);
 }

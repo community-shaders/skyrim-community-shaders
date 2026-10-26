@@ -28,7 +28,9 @@ StructuredBuffer<float> TexAdaptation : register(t4);
 #endif
 
 #ifdef HAS_LOCAL_EXPOSURE
-Texture2D<float> TexLocalExposureBase : register(t5);
+Texture2D<float> TexLocalExposureLog : register(t5);
+Texture3D<float2> TexLuminanceGrid : register(t6);
+Texture2D<float> TexBlurredLuminance : register(t7);
 
 cbuffer LocalExposureCB : register(b2)
 {
@@ -37,11 +39,14 @@ cbuffer LocalExposureCB : register(b2)
 	float HighlightContrast : packoffset(c0.z);
 	float ShadowContrast : packoffset(c0.w);
 	float DetailStrength : packoffset(c1.x);
+	float BaseBlend : packoffset(c1.y);
 	float MiddleGreyBias : packoffset(c1.w);
 	float HighlightThreshold : packoffset(c2.x);
 	float ShadowThreshold : packoffset(c2.y);
 	float HighlightThresholdStrength : packoffset(c2.z);
 	float ShadowThresholdStrength : packoffset(c2.w);
+	uint InputWidth : packoffset(c3.x);
+	uint InputHeight : packoffset(c3.y);
 	float LogLuminanceMin : packoffset(c4.x);
 	float LogLuminanceMax : packoffset(c4.y);
 };
@@ -69,17 +74,20 @@ float RemapBaseContrast(float centeredBase)
 
 float ComputeLocalExposure(float3 sceneColor, float baseLogLuminance, float globalExposure, float middleGreyCompensation)
 {
-	float sceneLuminance = Color::RGBToLuminance(max(sceneColor, 0.0));
-	float sceneLogLuminance = clamp(log2(max(sceneLuminance, exp2(LogLuminanceMin))), LogLuminanceMin, LogLuminanceMax);
 	float logGlobalExposure = log2(max(globalExposure, 1e-5));
-	float exposedLogLuminance = sceneLogLuminance + logGlobalExposure;
 	float exposedBase = baseLogLuminance + logGlobalExposure;
-	float detail = exposedLogLuminance - exposedBase;
 	float middleGrey = log2(0.18 * middleGreyCompensation) + MiddleGreyBias;
-	float remappedBase = middleGrey + RemapBaseContrast(exposedBase - middleGrey);
-	float targetLogLuminance = remappedBase + detail * DetailStrength;
-	float logAdjustment = (targetLogLuminance - exposedLogLuminance) * Strength;
-	return exp2(clamp(logAdjustment, -8.0, 8.0));
+	float centeredBase = exposedBase - middleGrey;
+	float logAdjustment = RemapBaseContrast(centeredBase) - centeredBase;
+
+	[branch] if (DetailStrength != 1.0)
+	{
+		float sceneLuminance = Color::RGBToLuminance(max(sceneColor, 0.0));
+		float sceneLogLuminance = clamp(log2(max(sceneLuminance, exp2(LogLuminanceMin))), LogLuminanceMin, LogLuminanceMax);
+		logAdjustment += (sceneLogLuminance - baseLogLuminance) * (DetailStrength - 1.0);
+	}
+
+	return exp2(clamp(logAdjustment * Strength, -8.0, 8.0));
 }
 #endif
 
@@ -163,6 +171,99 @@ float3 PurkinjeShift(float3 c, float nightAdaptation)
 }
 #endif  // HAS_EXPOSURE
 
+// The final upsample/mix/resolve run here to avoid full-resolution intermediates.
+SamplerState LinearSampler : register(s0);
+SamplerState BloomSampler : register(s1);
+cbuffer CompositeCB : register(b3)
+{
+	float2 OutputSize;
+	float2 FlareSize;
+	float3 FlareTint;
+	float FlareIntensity;
+	float BloomRadius;
+	float BloomIntensity;
+	float2 CompositePadding;
+};
+
+#ifdef HAS_BLOOM
+float3 SampleBloom(float2 uv, float2 pixelSize)
+{
+	float3 result = 0;
+	for (int x = -1; x <= 1; ++x)
+		for (int y = -1; y <= 1; ++y)
+			result += (1 << (!x + !y)) * 0.0625 * TexBloom.SampleLevel(BloomSampler, uv + float2(x, y) * pixelSize * BloomRadius, 0).rgb;
+	return f16tof32(f32tof16(result * BloomIntensity));
+}
+#endif
+
+#ifdef HAS_LENS_FLARE
+float3 SampleBicubicCatmullRom(Texture2D<float4> tex, SamplerState samp, float2 uv, float2 texSize)
+{
+	float2 samplePos = uv * texSize;
+	float2 tc = floor(samplePos - 0.5) + 0.5;
+	float2 f = samplePos - tc;
+	float2 f2 = f * f;
+	float2 f3 = f2 * f;
+
+	// Catmull-Rom weights
+	float2 w0 = f2 - 0.5 * (f3 + f);
+	float2 w1 = 1.5 * f3 - 2.5 * f2 + 1.0;
+	float2 w2 = -1.5 * f3 + 2.0 * f2 + 0.5 * f;
+	float2 w3 = 0.5 * (f3 - f2);
+
+	// Collapse the center weights; retain the existing five-tap approximation.
+	float2 w12 = w1 + w2;
+	float2 tc0 = (tc - 1.0) / texSize;
+	float2 tc12 = (tc + w2 / w12) / texSize;
+	float2 tc3 = (tc + 2.0) / texSize;
+
+	float3 result =
+		tex.SampleLevel(samp, float2(tc12.x, tc0.y), 0).rgb * (w12.x * w0.y) +
+		tex.SampleLevel(samp, float2(tc0.x, tc12.y), 0).rgb * (w0.x * w12.y) +
+		tex.SampleLevel(samp, float2(tc12.x, tc12.y), 0).rgb * (w12.x * w12.y) +
+		tex.SampleLevel(samp, float2(tc3.x, tc12.y), 0).rgb * (w3.x * w12.y) +
+		tex.SampleLevel(samp, float2(tc12.x, tc3.y), 0).rgb * (w12.x * w3.y);
+
+	// The 4 corner taps have very small weights, skip for performance
+	return max(result, 0.0);
+}
+
+float3 SampleFlare(uint2 tid)
+{
+	float2 uv = (float2(tid) + 0.5) / OutputSize;
+	float3 flares = SampleBicubicCatmullRom(TexFlare, LinearSampler, uv, FlareSize);
+	float gradientT = saturate(distance(uv, 0.5) * 2.0);
+	float3 gradient = lerp(1.0, FlareTint, gradientT);
+	// Preserve the former RGBA16F mix output.
+	return f16tof32(f32tof16(flares * gradient * FlareIntensity));
+}
+#endif
+
+#ifdef HAS_LOCAL_EXPOSURE
+float ResolveBaseLuminance(uint2 tid)
+{
+	float logLuminance = TexLocalExposureLog.Load(int3(tid, 0));
+	float normalizedLog = saturate((logLuminance - LogLuminanceMin) / (LogLuminanceMax - LogLuminanceMin));
+	float2 uv = (float2(tid) + 0.5) / float2(InputWidth, InputHeight);
+
+	uint gridWidth, gridHeight, gridDepth;
+	TexLuminanceGrid.GetDimensions(gridWidth, gridHeight, gridDepth);
+	float3 gridUV;
+	gridUV.xy = (float2(tid) + 0.5) / (64 * float2(gridWidth, gridHeight));
+	gridUV.z = (normalizedLog * (gridDepth - 1) + 0.5) / gridDepth;
+
+	float2 gridMoments = TexLuminanceGrid.SampleLevel(LinearSampler, gridUV, 0);
+	float broadBase = TexBlurredLuminance.SampleLevel(LinearSampler, uv, 0);
+	float bilateralBase = broadBase;
+	if (gridMoments.y >= 0.001)
+		bilateralBase = lerp(LogLuminanceMin, LogLuminanceMax, gridMoments.x / gridMoments.y);
+
+	// Preserve the former R16F base-luminance store.
+	return f16tof32(f32tof16(lerp(bilateralBase, broadBase, BaseBlend)));
+}
+
+#endif
+
 float4 PSComposite(FullscreenTriangleVSOutput input) : SV_Target
 {
 	uint2 tid = uint2(input.Position.xy);
@@ -173,11 +274,11 @@ float4 PSComposite(FullscreenTriangleVSOutput input) : SV_Target
 	float3 bloomContrib = 0;
 
 #ifdef HAS_BLOOM
-	bloomContrib += TexBloom[tid].rgb;
+	bloomContrib += SampleBloom(input.TexCoord, fwidth(input.TexCoord));
 #endif
 
 #ifdef HAS_LENS_FLARE
-	bloomContrib += TexFlare[tid].rgb;
+	bloomContrib += SampleFlare(tid);
 #endif
 
 #ifdef HAS_GLARE
@@ -192,7 +293,7 @@ float4 PSComposite(FullscreenTriangleVSOutput input) : SV_Target
 	// Formula: SceneColor * GlobalExposure * LocalExposure + Bloom * GlobalExposure
 	// LocalExposure multiplier derived from the base luminance pass (1.0 if not enabled)
 #	ifdef HAS_LOCAL_EXPOSURE
-	float baseLogLuminance = TexLocalExposureBase[tid];
+	float baseLogLuminance = ResolveBaseLuminance(tid);
 	float localExposure = ComputeLocalExposure(sceneColor, baseLogLuminance, globalExposure, ExposureCompensation);
 #	else
 	float localExposure = 1.0;
@@ -212,7 +313,7 @@ float4 PSComposite(FullscreenTriangleVSOutput input) : SV_Target
 #else
 	// No global exposure
 #	ifdef HAS_LOCAL_EXPOSURE
-	float baseLogLuminance = TexLocalExposureBase[tid];
+	float baseLogLuminance = ResolveBaseLuminance(tid);
 	float localExposure = ComputeLocalExposure(sceneColor, baseLogLuminance, ManualExposure, 1.0);
 	float3 result = (sceneColor * localExposure + bloomContrib) * ManualExposure;
 #	else

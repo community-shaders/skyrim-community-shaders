@@ -612,10 +612,21 @@ float3 PsychoVTonemap(float3 color)
 
 	// PsychoV expects scene-linear BT.709 input. The surrounding Color Grading
 	// pipeline converts into this native space before invoking the tonemapper.
-	if (enableHDR)
-		return renodx::tonemap::psycho::HDR(color, HDRPeakRatio());
-	else
-		return renodx::tonemap::psycho::SDR(color);
+	const float linearGrey = 0.18f;
+	return renodx::tonemap::psychov::psychotm_test30(
+		color,
+		enableHDR ? HDRPeakRatio() : 1.0f,
+		1.0f,                 // exposure, applied above
+		tonemapParams[0].y,   // highlights
+		tonemapParams[0].z,   // shadows
+		tonemapParams[0].w,   // contrast
+		tonemapParams[1].x,   // purity
+		tonemapParams[1].y,   // cone response
+		linearGrey,           // adaptation anchor
+		linearGrey,           // output background anchor
+		tonemapParams[1].z,   // gamut compression strength
+		enableHDR ? 1 : 0,    // target gamut: BT.2020 for HDR, BT.709 for SDR
+		tonemapParams[1].w);  // compression power, 0 = auto
 }
 
 float3 NeutwoTonemap(float3 color)

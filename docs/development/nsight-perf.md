@@ -103,6 +103,9 @@ capture ends. For example:
     -   It configures the metrics (metrics evaluator → raw counters → config image), runs the D3D11
         session and passes, decodes and evaluates the ranges, and publishes the result.
     -   Every profiler call runs on the render thread. Requests and results cross threads under a mutex.
+-   `src/Features/RemoteControl/NvPerfHost.{h,cpp}`: what the profiler needs from the plugin (device, frame
+    counter, annotations, paths). Beyond these, `NvPerf.cpp` needs only the precompiled header's
+    `logger` namespace, which another host must also provide.
 -   `src/Hooks.cpp` (`IDXGISwapChain_Present`): `NvPerf::OnPresentBegin` / `OnPresentEnd`.
 -   `src/State.cpp` (`BeginPerfEvent` / `EndPerfEvent`): `NvPerf::PushRange` / `PopRange`, behind
     one atomic check when no pass is open.

@@ -423,7 +423,8 @@ namespace FeatureIssues
 		// Baseline preset failures
 		if (auto section = Util::SectionWrapper(T("menu.issues.baseline_failures_header", "Baseline Preset Failures"),
 				T("menu.issues.baseline_failures_desc",
-					"These Baseline preset files failed to load or apply. Check the file format and content."),
+					"These Baseline preset files failed to load or apply. Old-format feature overrides are not compatible anymore "
+					"and must be updated to the new Baseline format. Check the file format and content."),
 				theme.StatusPalette.Error, !baselineIssues.empty())) {
 			for (const auto* issue : baselineIssues) {
 				DrawFeatureIssue(*issue, theme.StatusPalette.Error);
@@ -708,6 +709,8 @@ namespace FeatureIssues
 		// 1. Features that don't modify shader directories (safe to delete)
 		// 2. Obsolete features with replacements (user can install replacement after deletion)
 		bool canSafelyDelete = (!issue.ModifiedShaderDirectory() || (issue.IsObsolete() && !issue.replacementFeature.empty())) && !IsVersionMismatchForCoreFeature(issue);
+		// The legacy Overrides row has no file of its own, so Delete would only hide it.
+		canSafelyDelete &= !issue.IsBaselineFailed() || issue.fileInfo.hasINI;
 		if (canSafelyDelete) {
 			ImGui::SameLine();
 			std::string deleteButtonId = "Delete##" + issue.shortName;
@@ -776,6 +779,11 @@ namespace FeatureIssues
 					ImGui::CloseCurrentPopup();
 				}
 			}
+		}
+		if (issue.IsBaselineFailed()) {
+			ImGui::Indent();
+			ImGui::TextWrapped("%s", issue.rejectionReason.c_str());
+			ImGui::Unindent();
 		}
 		ImGui::PopID();
 	}

@@ -5,7 +5,7 @@
 #include "PostProcessing/ColorGrading/Include/renodx/tonemap/frostbite.hlsl"
 #include "PostProcessing/ColorGrading/Include/renodx/tonemap/hermite_spline.hlsl"
 #include "PostProcessing/ColorGrading/Include/renodx/tonemap/neutwo.hlsl"
-#include "PostProcessing/ColorGrading/Include/renodx/tonemap/psychov_17.hlsl"
+#include "PostProcessing/ColorGrading/Include/renodx/tonemap/psychov_30.hlsl"
 
 namespace renodx
 {

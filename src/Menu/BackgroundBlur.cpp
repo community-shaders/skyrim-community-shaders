@@ -66,9 +66,6 @@ namespace BackgroundBlur
 		// Blend state for compositing UI over game world (alpha blending)
 		winrt::com_ptr<ID3D11BlendState> compositeBlendState;
 
-		// Scales the UI buffer by (1 - clear alpha), so a faded blur only partly clears the HUD
-		winrt::com_ptr<ID3D11BlendState> clearBlendState;
-
 		// Downsampled textures for blur (1/8 res for performance)
 		winrt::com_ptr<ID3D11Texture2D> downsampleTexture;
 		winrt::com_ptr<ID3D11RenderTargetView> downsampleRTV;
@@ -290,12 +287,6 @@ namespace BackgroundBlur
 			return false;
 		Util::SetResourceName(compositeBlendState.get(), "BackgroundBlur::CompositeBlendState");
 
-		blendDesc.RenderTarget[0].SrcBlend = D3D11_BLEND_ZERO;
-		blendDesc.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ZERO;
-		if (!checkCreate(device->CreateBlendState(&blendDesc, clearBlendState.put()), "clear blend state"))
-			return false;
-		Util::SetResourceName(clearBlendState.get(), "BackgroundBlur::ClearBlendState");
-
 		// Create scissor-enabled rasterizer state
 		D3D11_RASTERIZER_DESC rsDesc = {};
 		rsDesc.FillMode = D3D11_FILL_SOLID;
@@ -419,7 +410,9 @@ namespace BackgroundBlur
 
 		// Step 2: Blend UI buffer at downsampled resolution (pre-multiplied alpha)
 		// Small HUD elements may be slightly softened but this is much faster
-		if (uiBufferSRV && compositeBlendState) {
+		// The HUD is only blurred and cleared at full strength; while fading it stays sharp, so it never pops
+		const bool blurHud = fade >= 1.0f;
+		if (blurHud && uiBufferSRV && compositeBlendState) {
 			context->OMSetBlendState(compositeBlendState.get(), nullptr, 0xFFFFFFFF);
 			context->PSSetShaderResources(0, 1, &uiBufferSRV);
 			context->Draw(FULLSCREEN_TRIANGLE_VERTICES, 0);
@@ -500,9 +493,10 @@ namespace BackgroundBlur
 		context->PSSetShaderResources(0, 1, &nullSRV);
 
 		// Clear UI buffer where blur was drawn (prevents HUD showing through)
-		if (uiBufferRTV) {
+		if (blurHud && uiBufferRTV) {
 			context->OMSetRenderTargets(1, &uiBufferRTV, nullptr);
-			context->OMSetBlendState(clearBlendState.get(), nullptr, 0xFFFFFFFF);
+			// Unblended on purpose: a fade-scaled blend blacked out and flickered the D3D12 UI buffer
+			context->OMSetBlendState(nullptr, nullptr, 0xFFFFFFFF);
 
 			// Clear with same rounded shape - window constants already bound
 			context->PSSetShader(clearPixelShader.get(), nullptr, 0);
@@ -545,7 +539,6 @@ namespace BackgroundBlur
 		samplerState = nullptr;
 		blendState = nullptr;
 		compositeBlendState = nullptr;
-		clearBlendState = nullptr;
 		scissorRasterizerState = nullptr;
 
 		ReleaseBlurTextures();

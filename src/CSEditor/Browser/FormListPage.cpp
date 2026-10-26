@@ -417,7 +417,7 @@ namespace
 	void DrawActiveStrip(FormListState& state, const Context& context, const std::vector<ActiveRecord>& records)
 	{
 		EditorWindow& editor = *context.editor;
-		const float spacing = ImGui::GetStyle().ItemSpacing.x;
+		const float spacing = ImGui::GetStyle().ItemInnerSpacing.x;
 		const ImVec4 live = Util::Colors::GetSuccess();
 
 		ImGui::AlignTextToFramePadding();
@@ -451,7 +451,7 @@ namespace
 				record.open();
 			Util::AddTooltip(T(TKEY("active_chip_tooltip"), "Click to find it in its list. Double-click to open its editor."));
 
-			ImGui::SameLine(0.0f, 0.0f);
+			ImGui::SameLine(0.0f, spacing);
 			if (BrowserUI::IconButton("##open", Icons::TI(ICON_TI_EXTERNAL_LINK), T(TKEY("open_editor_tooltip"), "Open its editor window.")))
 				record.open();
 			ImGui::PopID();
@@ -735,6 +735,7 @@ namespace
 		// The star stays out of keyboard navigation so the arrow keys walk the rows.
 		ImGui::PushItemFlag(ImGuiItemFlags_NoNav, true);
 		const ImU32 starColor = row.favorite ? ImGui::GetColorU32(FavoriteColor()) : ImGui::GetColorU32(ImGuiCol_TextDisabled);
+		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetStyle().CellPadding.x);
 		if (BrowserUI::PaintedIconButton("##fav", BrowserUI::StarIcon(row.favorite), starColor, T(TKEY("toggle_favorite"), "Favourite")))
 			editor.ToggleFavorite(row.editorId);
 		ImGui::PopItemFlag();
@@ -815,7 +816,7 @@ namespace
 			ImGui::CalcTextSize(stateLabel).x + ImGui::GetFontSize());
 		ImGui::TableSetupScrollFreeze(0, 1);
 		ImGui::TableSetupColumn("##fav", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoSort | ImGuiTableColumnFlags_NoHide | ImGuiTableColumnFlags_NoResize,
-			ImGui::GetFrameHeight(), ColFav);
+			ImGui::GetFrameHeight() + style.CellPadding.x, ColFav);
 		ImGui::TableSetupColumn(T(TKEY("editor_id"), "Editor ID"), ImGuiTableColumnFlags_WidthStretch | ImGuiTableColumnFlags_NoHide, 3.0f, ColName);
 		ImGui::TableSetupColumn(T(TKEY("file"), "File"), ImGuiTableColumnFlags_WidthStretch, 1.4f, ColFile);
 		ImGui::TableSetupColumn(T(TKEY("form_id"), "Form ID"), ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_DefaultHide,
@@ -1244,7 +1245,6 @@ namespace
 		ImGui::Spacing();
 		if (BeginCard("##CellCard", ImVec2(0.0f, 0.0f), ImGuiChildFlags_AutoResizeY)) {
 			const char* cellName = cell->GetName();
-			ImGui::AlignTextToFramePadding();
 			{
 				Icons::FontGuard font(context.icon);
 				ImGui::TextColored(Util::Colors::GetAccent(), "%s", context.icon.utf8);
