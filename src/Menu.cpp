@@ -871,7 +871,7 @@ void Menu::DrawSettings()
 		bool showLogo = uiIcons.logo.texture != nullptr;
 
 		// Render header using extracted component
-		MenuHeaderRenderer::RenderHeader(isDocked, showLogo, uiScale, uiIcons, shortcuts, helpState);
+		MenuHeaderRenderer::RenderHeader(isDocked, showLogo, uiScale, uiIcons, shortcuts);
 		Util::DrawRecacheBanner();
 
 		// A modal, so it is drawn at window level next to the header's popovers
@@ -956,7 +956,9 @@ MenuShortcuts::Actions Menu::MakeShortcutActions()
 		.openPage = [this](std::string_view pageId) { SelectFeatureMenu(std::string(pageId)); },
 		.canOpenEditor = [] { return EditorWindow::CanBeOpen(); },
 		.openEditor = [] { CSEditor::OpenEditorWindow(); },
-		.openHelp = [this] { helpState.openPopover = true; },
+		.openHelp = [this] {
+			SelectFeatureMenu(std::string(MenuPageIds::kHome));
+			HomePageRenderer::RequestHelpPopover(); },
 	};
 }
 
@@ -966,7 +968,7 @@ void Menu::DispatchShortcuts()
 		shortcuts = MenuShortcuts::BuildTable(MakeShortcutActions());
 
 	// The CS Editor has its own Ctrl+Z / Ctrl+S, a focused text field owns its keys, a hotkey capture
-	// records the next chord as a binding, and a modal (confirmation, FAQ) must be answered first.
+	// records the next chord as a binding, and a modal (confirmation) must be answered first.
 	const auto* editorWindow = EditorWindow::GetSingleton();
 	const bool allowed = IsEnabled && !ImGui::GetIO().WantTextInput && !IsCapturingHotkeyInput() &&
 	                     !(editorWindow && editorWindow->open) && !ImGui::GetTopMostPopupModal() &&
@@ -1511,6 +1513,11 @@ void Menu::RecordRecentFeature(const std::string& shortName)
 
 void Menu::SelectFeatureMenu(const std::string& featureName)
 {
+	// Issues live in Home's Needs Attention card
+	if (featureName == MenuPageIds::kIssues) {
+		HomePageRenderer::FocusNeedsAttention();
+		return;
+	}
 	pendingFeatureSelection = featureName;
 	logger::info("Queued navigation to {} feature menu", featureName);
 }

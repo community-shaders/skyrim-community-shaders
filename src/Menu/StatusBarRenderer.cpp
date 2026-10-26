@@ -14,6 +14,7 @@
 #include "IconsTabler.h"
 #include "Menu.h"
 #include "Menu/FeatureListRenderer.h"
+#include "Menu/HomePageRenderer.h"
 #include "Menu/MenuHeaderRenderer.h"
 #include "Menu/MenuIcons.h"
 #include "Menu/ThemeManager.h"
@@ -67,6 +68,16 @@ namespace StatusBarRenderer
 			first = false;
 		};
 
+		// Feature issues come first, in the error colour; clicking opens Needs Attention on Home
+		if (FeatureIssues::HasFeatureIssues()) {
+			nextSegment();
+			const auto label = i18n->Format("menu.status.feature_issues",
+				{ { "count", std::to_string(FeatureIssues::GetFeatureIssues().size()) } }, "Feature issues: {count}");
+			if (Segment("##StatusIssues", Icons::TI(MenuIcons::kIssues), label.c_str(), Util::Colors::GetError(),
+					T("menu.status.issues_tooltip", "Show the issues on Home")))
+				HomePageRenderer::FocusNeedsAttention();
+		}
+
 		// Unsaved changes, with a Save link
 		if (globals::state->HasUnsavedChanges()) {
 			nextSegment();
@@ -113,16 +124,6 @@ namespace StatusBarRenderer
 						"Please double check you have updated all features and that your load order is correct. "
 						"See CommunityShaders.log for details and check the Nexus Mods page or Discord server.")))
 				shaderCache->ToggleErrorMessages();
-		}
-
-		// Feature issues; clicking opens their page
-		if (FeatureIssues::HasFeatureIssues()) {
-			nextSegment();
-			const auto label = i18n->Format("menu.status.feature_issues",
-				{ { "count", std::to_string(FeatureIssues::GetFeatureIssues().size()) } }, "Feature issues: {count}");
-			if (Segment("##StatusIssues", Icons::TI(MenuIcons::kIssues), label.c_str(), Util::Colors::GetWarning(),
-					T("menu.issues.open_tooltip", "Open the Issues page")))
-				globals::menu->SelectFeatureMenu(std::string(MenuPageIds::kIssues));
 		}
 
 		// Nothing needs attention: say so, so the left side is never empty

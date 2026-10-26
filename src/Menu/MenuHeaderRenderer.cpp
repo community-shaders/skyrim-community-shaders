@@ -13,6 +13,7 @@
 #include "Menu/FeatureListRenderer.h"
 #include "Menu/GoToPalette.h"
 #include "Menu/HomePageRenderer.h"
+#include "Menu/IssuesPageRenderer.h"
 #include "Menu/MenuIcons.h"
 #include "Menu/MenuLinks.h"
 #include "Plugin.h"
@@ -25,9 +26,6 @@
 namespace
 {
 	using RoleFontGuard = MenuFonts::FontRoleGuard;
-
-	constexpr const char* kHelpPopupId = "##MenuHelpPopover";
-	constexpr const char* kFaqModalId = "###MenuFaqModal";
 
 	/** @brief Draws an icon glyph centred in a square, sized to match the texture icons. */
 	void DrawIconGlyph(ImDrawList* drawList, ImVec2 min, float size, Icons::GlyphRef glyph, ImU32 color)
@@ -68,10 +66,9 @@ bool MenuHeaderRenderer::GlyphIconButton(const char* id, Icons::GlyphRef glyph, 
 	return clicked;
 }
 
-bool MenuHeaderRenderer::RenderHomeButton(bool docked, ImVec2 min, float size)
+bool MenuHeaderRenderer::RenderNavButton(bool docked, ImVec2 min, float size, const char* id, Icons::GlyphRef glyph, const char* tooltip,
+	bool current, const ImVec4* tintOverride, const std::function<void()>& onClick)
 {
-	const bool current = HomePageRenderer::IsShowing();
-	const char* tooltip = T("menu.header.home_tooltip", "Home");
 	const ImRect rect(min, ImVec2(min.x + size, min.y + size));
 
 	bool hovered;
@@ -85,7 +82,7 @@ bool MenuHeaderRenderer::RenderHomeButton(bool docked, ImVec2 min, float size)
 	} else {
 		const ImVec2 saved = ImGui::GetCursorScreenPos();
 		ImGui::SetCursorScreenPos(min);
-		clicked = ImGui::InvisibleButton("##HeaderHome", ImVec2(size, size));
+		clicked = ImGui::InvisibleButton(id, ImVec2(size, size));
 		hovered = ImGui::IsItemHovered();
 		down = ImGui::IsItemActive();
 		ImGui::SetCursorScreenPos(saved);
@@ -95,18 +92,39 @@ bool MenuHeaderRenderer::RenderHomeButton(bool docked, ImVec2 min, float size)
 	Util::DrawRoundedButtonHighlight(rect, hovered || current, down, drawList);
 
 	ImVec4 tint = globals::menu->GetSettings().Theme.UseMonochromeIcons ? globals::menu->GetSettings().Theme.Palette.Text : ImVec4(1, 1, 1, 1);
-	if (current)
+	if (tintOverride)
+		tint = *tintOverride;
+	else if (current)
 		tint = Util::Colors::GetAccent();
-	else if (!hovered)
+	if (!current && !hovered)
 		tint.w *= ThemeManager::Constants::HEADER_HOME_IDLE_ALPHA;
 	const float pad = ThemeManager::Constants::DOCKED_ICON_PADDING_REDUCTION;
-	DrawIconGlyph(drawList, ImVec2(min.x + pad, min.y + pad), size - pad * 2.0f, Icons::TI(MenuIcons::kHome), ImGui::GetColorU32(tint));
+	DrawIconGlyph(drawList, ImVec2(min.x + pad, min.y + pad), size - pad * 2.0f, glyph, ImGui::GetColorU32(tint));
 
 	if (hovered)
 		ImGui::SetTooltip("%s", tooltip);
 	if (clicked)
-		globals::menu->SelectFeatureMenu(std::string(MenuPageIds::kHome));
+		onClick();
 	return clicked;
+}
+
+float MenuHeaderRenderer::RenderNavButtons(bool docked, ImVec2 min, float size, float gap)
+{
+	float x = min.x;
+	RenderNavButton(docked, ImVec2(x, min.y), size, "##HeaderHome", Icons::TI(MenuIcons::kHome), T("menu.header.home_tooltip", "Home"),
+		HomePageRenderer::IsShowing() && !HomePageRenderer::IsAttentionFocused(), nullptr,
+		[]() { globals::menu->SelectFeatureMenu(std::string(MenuPageIds::kHome)); });
+	x += size + gap;
+
+	if (const auto issues = IssuesPageRenderer::GetFeatureIssueCount()) {
+		const ImVec4 error = Util::Colors::GetError();
+		const auto tooltip = I18n::GetSingleton()->Format("menu.header.issues_tooltip", { { "count", std::to_string(issues) } },
+			"{count} feature issue(s) - click to view");
+		RenderNavButton(docked, ImVec2(x, min.y), size, "##HeaderIssues", Icons::TI(MenuIcons::kIssues), tooltip.c_str(), false, &error,
+			[]() { HomePageRenderer::FocusNeedsAttention(); });
+		x += size + gap;
+	}
+	return x - min.x;
 }
 
 std::string MenuHeaderRenderer::GetTitleText()
@@ -141,7 +159,7 @@ std::string MenuHeaderRenderer::GetGpuText()
 }
 
 void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, float uiScale, const Util::IconLoader::UIIcons& uiIcons,
-	const std::vector<MenuShortcuts::Shortcut>& shortcuts, HelpState& help)
+	const std::vector<MenuShortcuts::Shortcut>& shortcuts)
 {
 	if (!globals::menu) {
 		logger::error("MenuHeaderRenderer::RenderHeader: globals::menu is null, cannot render header");
@@ -149,7 +167,7 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, float uiScal
 	}
 
 	const auto title = GetTitleText();
-	auto actionIcons = BuildActionIcons(shortcuts, help);
+	auto actionIcons = BuildActionIcons(shortcuts);
 
 	// Dev builds: muted build label after the title
 	const auto buildTag = GetBuildTagText();
@@ -180,8 +198,8 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, float uiScal
 		// The tab hugs the window's left edge, so Home sits right after it
 		const float homeSize = ImGui::GetFontSize() * ThemeManager::Constants::DOCKED_ICON_SIZE_MULTIPLIER * uiScale;
 		const float homeLeft = titleRight + ThemeManager::Constants::DOCKED_ICON_SPACING * uiScale;
-		RenderHomeButton(true, ImVec2(homeLeft, windowPos.y + (titleBarHeight - homeSize) * 0.5f), homeSize);
-		titleRight = homeLeft + homeSize;
+		titleRight = homeLeft + RenderNavButtons(true, ImVec2(homeLeft, windowPos.y + (titleBarHeight - homeSize) * 0.5f), homeSize,
+									ThemeManager::Constants::DOCKED_ICON_SPACING * uiScale);
 		RenderSearchPill(true, titleRight, iconsLeft, windowPos.x + ImGui::GetWindowSize().x * 0.5f, windowPos.y, titleBarHeight, uiScale,
 			MenuShortcuts::GetHint(shortcuts, MenuShortcuts::Ids::kGoTo));
 	} else {
@@ -208,10 +226,12 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, float uiScal
 
 			// Home button at the column's left edge, centred on the title row; the title makes room for it
 			const float homeSize = logoSize;
-			const float homeReserve = homeSize + ImGui::GetStyle().ItemSpacing.x;
+			const float navGap = ImGui::GetStyle().ItemSpacing.x;
+			const size_t navCount = IssuesPageRenderer::GetFeatureIssueCount() > 0 ? 2 : 1;
+			const float homeReserve = static_cast<float>(navCount) * (homeSize + navGap);
 			const ImVec2 columnStart = ImGui::GetCursorScreenPos();
 			const float estimatedRowHeight = std::max(logoSize, ImGui::GetFontSize() * textScaleFactor);
-			RenderHomeButton(false, ImVec2(columnStart.x, columnStart.y + (estimatedRowHeight - homeSize) * 0.5f), homeSize);
+			RenderNavButtons(false, ImVec2(columnStart.x, columnStart.y + (estimatedRowHeight - homeSize) * 0.5f), homeSize, navGap);
 
 			if (centerHeader) {
 				// Calculate the width of the content
@@ -292,16 +312,10 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, float uiScal
 		ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal, ThemeManager::Constants::SEPARATOR_THICKNESS);
 		ImGui::Spacing();
 	}
-
-	// At window level, where the ? icon and F1 both open it
-	if (std::exchange(help.openPopover, false))
-		ImGui::OpenPopup(kHelpPopupId);
-	RenderHelpPopover(shortcuts, help);
-	RenderFaqModal(help);
 }
 
 std::vector<MenuHeaderRenderer::ActionIcon> MenuHeaderRenderer::BuildActionIcons(
-	const std::vector<MenuShortcuts::Shortcut>& shortcuts, HelpState& help)
+	const std::vector<MenuShortcuts::Shortcut>& shortcuts)
 {
 	// In display order, all Tabler glyphs from MenuIcons.
 	std::vector<ActionIcon> actionIcons;
@@ -327,12 +341,6 @@ std::vector<MenuHeaderRenderer::ActionIcon> MenuHeaderRenderer::BuildActionIcons
 		[]() {
 			Util::RequestClearShaderCacheConfirmation();
 		} });
-	actionIcons.push_back({ Icons::TI(MenuIcons::kHelp),
-		i18n->Format("menu.header.help_tooltip", { { "shortcut", MenuShortcuts::GetHint(shortcuts, MenuShortcuts::Ids::kHelp) } }, "Help, shortcuts and FAQ ({shortcut})"),
-		[&help]() {
-			help.openPopover = true;
-		} });
-
 	return actionIcons;
 }
 
@@ -571,94 +579,4 @@ void MenuHeaderRenderer::RenderWatermarkLogo(const Util::IconLoader::UIIcons& ui
 	}
 
 	drawList->AddImage(uiIcons.logo.texture, logoMin, logoMax, ImVec2(0, 0), ImVec2(1, 1), watermarkColor);
-}
-
-void MenuHeaderRenderer::RenderHelpPopover(const std::vector<MenuShortcuts::Shortcut>& shortcuts, HelpState& help)
-{
-	if (!ImGui::BeginPopup(kHelpPopupId))
-		return;
-
-	// Escape closes the popover, not the menu
-	if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
-		globals::menu->ConsumeEscape();
-		ImGui::CloseCurrentPopup();
-	}
-
-	{
-		RoleFontGuard heading(Menu::FontRole::Subheading);
-		ImGui::SeparatorText(T("menu.help.shortcuts", "Keyboard Shortcuts"));
-	}
-	if (ImGui::BeginTable("##HelpShortcuts", 2, ImGuiTableFlags_SizingFixedFit)) {
-		for (const auto& row : MenuShortcuts::BuildHelpRows(shortcuts)) {
-			ImGui::TableNextRow();
-			ImGui::TableNextColumn();
-			ImGui::TextUnformatted(row.label);
-			ImGui::TableNextColumn();
-			ImGui::TextDisabled("%s", row.chords.c_str());
-		}
-		ImGui::EndTable();
-	}
-
-	{
-		RoleFontGuard heading(Menu::FontRole::Subheading);
-		ImGui::SeparatorText(T("menu.help.help", "Help"));
-	}
-	if (ImGui::Button(T("menu.help.faq", "FAQ..."))) {
-		help.openFaq = true;
-		ImGui::CloseCurrentPopup();
-	}
-	ImGui::Spacing();
-	for (size_t i = 0; i < MenuLinks::kAll.size(); ++i) {
-		const auto link = MenuLinks::kAll[i];
-		if (i > 0) {
-			ImGui::SameLine();
-			ImGui::TextDisabled("%s", "\xC2\xB7");  // middle dot
-			ImGui::SameLine();
-		}
-		ImGui::PushID(static_cast<int>(link));
-		if (ImGui::TextLink(MenuLinks::GetLabel(link)))
-			MenuLinks::Open(link);
-		ImGui::PopID();
-		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::TextUnformatted(MenuLinks::GetUrl(link));
-	}
-
-	{
-		RoleFontGuard heading(Menu::FontRole::Subheading);
-		ImGui::SeparatorText(T("menu.help.about", "About"));
-	}
-	const auto buildTag = GetBuildTagText();
-	ImGui::TextUnformatted(buildTag.empty() ? GetTitleText().c_str() : std::format("{} {}", GetTitleText(), buildTag).c_str());
-	ImGui::TextUnformatted(GetGameVersionText().c_str());
-	ImGui::TextUnformatted(GetGpuText().c_str());
-	ImGui::TextUnformatted(GetSwapChainText().c_str());
-
-	ImGui::EndPopup();
-}
-
-void MenuHeaderRenderer::RenderFaqModal(HelpState& help)
-{
-	if (std::exchange(help.openFaq, false)) {
-		ImGui::OpenPopup(kFaqModalId);
-		help.faqOpen = true;
-	}
-
-	const ImGuiViewport* viewport = ImGui::GetMainViewport();
-	ImGui::SetNextWindowPos(viewport->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-	ImGui::SetNextWindowSize(ImVec2(viewport->Size.x * ThemeManager::Constants::FAQ_MODAL_WIDTH_RATIO,
-								 viewport->Size.y * ThemeManager::Constants::FAQ_MODAL_HEIGHT_RATIO),
-		ImGuiCond_Appearing);
-
-	const auto title = std::format("{}{}", T("menu.faq.title", "Frequently Asked Questions"), kFaqModalId);
-	if (!Util::BeginPopupModalWithRoundedClose(title.c_str(), &help.faqOpen))
-		return;
-
-	// Escape closes the FAQ, not the menu
-	if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
-		globals::menu->ConsumeEscape();
-		help.faqOpen = false;
-		ImGui::CloseCurrentPopup();
-	}
-	HomePageRenderer::RenderFAQEntries();
-	ImGui::EndPopup();
 }

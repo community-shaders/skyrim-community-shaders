@@ -182,15 +182,16 @@ public:
 		static constexpr float WATERMARK_HEIGHT_PERCENT = 0.50f;
 		static constexpr float UNDOCKED_ICON_PADDING_REDUCTION = 4.0f;
 		static constexpr float DOCKED_ICON_PADDING_REDUCTION = 2.0f;
-		static constexpr float HEADER_GLYPH_ICON_SCALE = 0.85f;  // Glyph size relative to the icon box, for actions drawn from the icon font
-		static constexpr float FAQ_MODAL_WIDTH_RATIO = 0.5f;     // FAQ modal opened from the help popover, as a share of the viewport
-		static constexpr float FAQ_MODAL_HEIGHT_RATIO = 0.6f;
+		static constexpr float HEADER_GLYPH_ICON_SCALE = 0.85f;      // Glyph size relative to the icon box, for actions drawn from the icon font
 		static constexpr float STATUS_BAR_SEGMENT_GAP_SCALE = 3.0f;  // Gap between status bar parts, in item spacings
 
 		// Menu UX: header Home button, status bar, Home card rhythm
 		static constexpr float HEADER_HOME_IDLE_ALPHA = 0.85f;          // Home button opacity while neither hovered nor current
 		static constexpr float STATUS_BAR_GRIP_CLEARANCE_SCALE = 1.6f;  // Right margin kept clear of the window resize grip, in font sizes
 		static constexpr float HOME_CARD_SPACING = 8.0f;                // Vertical gap below each Home card (1080p baseline)
+		static constexpr float ATTENTION_FOCUS_SECONDS = 2.5f;          // How long the Needs Attention card stays outlined after a click-through
+		static constexpr float ATTENTION_FOCUS_FADE_SECONDS = 0.8f;     // Outline fade-out time at the end of that window
+		static constexpr float ATTENTION_FOCUS_THICKNESS = 2.0f;        // Outline thickness (1080p baseline)
 		static constexpr float HOME_CARD_ICON_BOX_SCALE = 1.2f;         // Card icon button glyph box, in font sizes
 		static constexpr float UNDO_TOAST_SECONDS = 2.0f;               // How long the main menu's undo / redo toast stays
 

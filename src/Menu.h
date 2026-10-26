@@ -473,6 +473,9 @@ public:
 	 *  @param featureName Feature short name, or a built-in page ID from MenuPageIds (FeatureListRenderer.h) such as
 	 *  "Presets". A page's display name still works as a fallback. */
 	void SelectFeatureMenu(const std::string& featureName);
+
+	/** @brief The menu's keyboard shortcut table; empty until the first frame is drawn. */
+	const std::vector<MenuShortcuts::Shortcut>& GetShortcuts() const { return shortcuts; }
 	static std::unordered_map<std::string, int> categoryCounts;  // Number of features in each feature category
 
 	bool overlayVisible = false;
@@ -541,9 +544,6 @@ private:
 
 	// Keyboard shortcuts, built on the first DrawSettings and dispatched once per frame
 	std::vector<MenuShortcuts::Shortcut> shortcuts;
-
-	// Header help popover (? icon, F1) and the FAQ modal it opens
-	MenuHeaderRenderer::HelpState helpState;
 
 	// Undo / redo of feature settings edited in this menu; a separate history from the CS Editor's
 	enum class UndoRequest : std::uint8_t

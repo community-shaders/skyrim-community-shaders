@@ -14,8 +14,7 @@
  * Supports both docked and undocked window layouts, adapting the header
  * presentation accordingly. In docked mode the logo is drawn as a watermark
  * and action icons appear in the title bar; in undocked mode a full custom
- * header row is rendered. A help icon after the actions opens a popover with
- * the keyboard shortcuts, the FAQ, links and build information.
+ * header row is rendered.
  */
 class MenuHeaderRenderer
 {
@@ -29,30 +28,20 @@ public:
 		bool unsaved = false;           /**< @brief Tints the icon as a save with unsaved changes. */
 	};
 
-	/** @brief Help popover and FAQ modal state, owned by Menu and passed in each frame. */
-	struct HelpState
-	{
-		bool openPopover = false; /**< @brief Request: open the help popover this frame (the ? icon, F1). */
-		bool openFaq = false;     /**< @brief Request: open the FAQ modal this frame. */
-		bool faqOpen = false;     /**< @brief The FAQ modal is showing; its close button clears it. */
-	};
-
 	/**
 	 * @brief Renders the complete menu header area.
 	 *
 	 * Draws the title text, optional logo, and action icon buttons. The layout
-	 * adapts based on whether the window is docked or floating. Also draws the
-	 * help popover and FAQ modal while they are open.
+	 * adapts based on whether the window is docked or floating.
 	 *
 	 * @param isDocked True if the menu window is docked into a tab bar.
 	 * @param showLogo True if the Community Shaders logo should be displayed.
 	 * @param uiScale Current UI scale factor for sizing icon buttons.
 	 * @param uiIcons Reference to the loaded icon textures and sizes.
-	 * @param shortcuts The menu's shortcut table, for tooltip hints and the help list.
-	 * @param help Help popover and FAQ modal state; its requests are cleared once handled.
+	 * @param shortcuts The menu's shortcut table, for tooltip hints.
 	 */
 	static void RenderHeader(bool isDocked, bool showLogo, float uiScale, const Util::IconLoader::UIIcons& uiIcons,
-		const std::vector<MenuShortcuts::Shortcut>& shortcuts, HelpState& help);
+		const std::vector<MenuShortcuts::Shortcut>& shortcuts);
 
 	/**
 	 * @brief A transparent glyph button in the header's icon style, for use outside the header (Home cards).
@@ -82,14 +71,26 @@ public:
 
 private:
 	/**
-	 * @brief Draws the Home button, which opens the Home page and highlights while that page is showing.
+	 * @brief Draws one square nav button in the header (Home, issues).
 	 * @param docked True in the docked title bar (foreground draw list, manual hit test).
 	 * @param min Screen position of the button's top-left corner.
 	 * @param size Edge of the square button.
+	 * @param id Unique ImGui id for the undocked hit area.
+	 * @param glyph The Tabler glyph.
+	 * @param tooltip Hover tooltip.
+	 * @param current Draws the button as the current page, in the accent colour.
+	 * @param tintOverride Fixed icon colour (e.g. the error colour); null for the theme tint.
+	 * @param onClick Invoked on click.
 	 * @return True when clicked.
 	 */
-	static bool RenderHomeButton(bool docked, ImVec2 min, float size);
-	static std::vector<ActionIcon> BuildActionIcons(const std::vector<MenuShortcuts::Shortcut>& shortcuts, HelpState& help);
+	static bool RenderNavButton(bool docked, ImVec2 min, float size, const char* id, Icons::GlyphRef glyph, const char* tooltip,
+		bool current, const ImVec4* tintOverride, const std::function<void()>& onClick);
+	/**
+	 * @brief Draws the Home button and, while feature issues exist, the red issues button after it.
+	 * @return The total width taken, including the gaps after each button.
+	 */
+	static float RenderNavButtons(bool docked, ImVec2 min, float size, float gap);
+	static std::vector<ActionIcon> BuildActionIcons(const std::vector<MenuShortcuts::Shortcut>& shortcuts);
 	/** @return The x of the leftmost icon's left edge, or the window's right edge when there are no icons. */
 	static float RenderDockedIcons(const std::vector<ActionIcon>& actionIcons, float uiScale);
 	/**
@@ -108,6 +109,4 @@ private:
 		const std::string& shortcutHint);
 	static void RenderUndockedIcons(const std::vector<ActionIcon>& actionIcons, float uiScale);
 	static void RenderWatermarkLogo(const Util::IconLoader::UIIcons& uiIcons);
-	static void RenderHelpPopover(const std::vector<MenuShortcuts::Shortcut>& shortcuts, HelpState& help);
-	static void RenderFaqModal(HelpState& help);
 };
