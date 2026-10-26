@@ -463,6 +463,14 @@ void Menu::Load(json& o_json)
 	loadComboList(o_json, "Effects11ToggleKey", settings.Effects11ToggleKey);
 	loadComboList(o_json, "Effects11EditorKey", settings.Effects11EditorKey);
 
+	// Unknown or malformed values (hand-edited config, a section that no longer exists) open the first section
+	settings.LastSettingsSection = std::string(SettingsPageRenderer::GetFirstSection());
+	if (const auto it = o_json.find("LastSettingsSection"); it != o_json.end() && it->is_string()) {
+		auto section = it->get<std::string>();
+		if (SettingsPageRenderer::IsKnownSection(section))
+			settings.LastSettingsSection = std::move(section);
+	}
+
 	// Legacy support: If old config has Theme data and no SelectedThemePreset, load it
 	if (o_json.contains("Theme") && o_json["Theme"].is_object() && settings.SelectedThemePreset.empty()) {
 		bool hasFontRoles = o_json["Theme"].contains("FontRoles");
@@ -532,6 +540,8 @@ void Menu::Save(json& o_json)
 	InputCombo::ComboList::to_json(o_json["ScreenshotKey"], settings.ScreenshotKey);
 	InputCombo::ComboList::to_json(o_json["Effects11ToggleKey"], settings.Effects11ToggleKey);
 	InputCombo::ComboList::to_json(o_json["Effects11EditorKey"], settings.Effects11EditorKey);
+
+	o_json["LastSettingsSection"] = settings.LastSettingsSection;
 }
 
 void Menu::LoadTheme(json& o_json)
