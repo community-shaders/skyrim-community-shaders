@@ -3,7 +3,6 @@
 
 #include <imgui.h>
 
-#include "FeatureConstraints.h"
 #include "Globals.h"
 #include "I18n/I18n.h"
 #include "Menu.h"
@@ -21,8 +20,6 @@ void HomePageRenderer::RenderHomePage()
 
 	RenderWelcomeSection();
 	ImGui::Spacing();
-
-	RenderActiveConstraintsSection();
 
 	RenderQuickLinksSection();
 	ImGui::Spacing();
@@ -248,114 +245,6 @@ void HomePageRenderer::RenderFAQEntries()
 									 " Branding materials and assets (icons, nexus branding, typography, etc) are not covered by the GPL Licence."
 									 " Any included assets may not be used without explicit permission."));
 	}
-}
-
-void HomePageRenderer::RenderActiveConstraintsSection()
-{
-	auto constraints = FeatureConstraints::GetAllActiveConstraints();
-	if (constraints.empty()) {
-		return;  // Don't show section if there are no active constraints
-	}
-
-	ImGui::Spacing();
-
-	// Use warning color for the header to draw attention
-	ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetWarning());
-	bool headerOpen = ImGui::CollapsingHeader(T("menu.home.active_constraints", "Active Setting Constraints"), ImGuiTreeNodeFlags_None);
-	ImGui::PopStyleColor();
-
-	if (headerOpen) {
-		ImGui::TextWrapped("%s", T("menu.home.constraints_desc", "Some settings are constrained by other features. Hover over rows for details."));
-
-		ImGui::Spacing();
-
-		// Prepare data for table
-		struct ConstraintRow
-		{
-			std::string setting;
-			std::string forcedTo;
-			std::string constrainedBy;
-			std::string firstSourceShortName;  // For "navigate to feature" on click
-			std::string tooltip;
-		};
-
-		std::vector<ConstraintRow> rows;
-		for (const auto& [settingId, result] : constraints) {
-			ConstraintRow row;
-			row.setting = std::format("{}.{}", settingId.featureShortName, settingId.settingPath);
-			row.forcedTo = FeatureConstraints::FormatConstraintValue(result.forcedValue);
-			for (size_t i = 0; i < result.sources.size(); ++i) {
-				if (i > 0)
-					row.constrainedBy += ", ";
-				row.constrainedBy += result.sources[i].featureName;
-			}
-			if (!result.sources.empty()) {
-				row.firstSourceShortName = result.sources[0].featureShortName;
-			}
-			// Build tooltip
-			for (const auto& src : result.sources) {
-				if (!row.tooltip.empty())
-					row.tooltip += "\n";
-				row.tooltip += std::format("{}: {}", src.featureName, src.reason);
-				if (src.recommendDisableAtBoot) {
-					row.tooltip += std::string("\n") + T("menu.home.consider_disabling_at_boot", "Consider disabling at boot.");
-				}
-			}
-			rows.push_back(row);
-		}
-
-		// Define headers
-		std::vector<std::string> headers = { T("menu.home.constraint_header_setting", "Setting"), T("menu.home.constraint_header_forced_to", "Forced To"), T("menu.home.constraint_header_constrained_by", "Constrained By") };
-
-		// Custom sorts (string comparators for each column)
-		std::vector<std::function<bool(const ConstraintRow&, const ConstraintRow&, bool)>> customSorts = {
-			[](const ConstraintRow& a, const ConstraintRow& b, bool asc) { return Util::StringSortComparator(a.setting, b.setting, asc); },
-			[](const ConstraintRow& a, const ConstraintRow& b, bool asc) { return Util::StringSortComparator(a.forcedTo, b.forcedTo, asc); },
-			[](const ConstraintRow& a, const ConstraintRow& b, bool asc) { return Util::StringSortComparator(a.constrainedBy, b.constrainedBy, asc); }
-		};
-
-		// Cell render -- column 2 ("Constrained By") is clickable to navigate
-		// to the first source feature's settings page.
-		auto cellRender = [](int rowIdx, int colIdx, const ConstraintRow& row) {
-			if (colIdx == 0) {
-				Util::RenderTableCell(row.setting, "", "", nullptr, ImVec4(1, 1, 1, 1), true, Util::Colors::GetWarning());
-			} else if (colIdx == 1) {
-				Util::RenderTableCell(row.forcedTo, "", "", nullptr, ImVec4(1, 1, 1, 1), true);
-			} else if (colIdx == 2) {
-				if (!row.firstSourceShortName.empty()) {
-					if (ImGui::Selectable(std::format("{}##nav{}", row.constrainedBy, rowIdx).c_str())) {
-						if (auto* menu = Menu::GetSingleton()) {
-							menu->SelectFeatureMenu(row.firstSourceShortName);
-						}
-					}
-					if (auto _tt = Util::HoverTooltipWrapper()) {
-						ImGui::Text("%s", I18n::GetSingleton()->Format("menu.home.click_to_navigate",
-																  { { "feature", row.constrainedBy } },
-																  "Click to navigate to {feature}")
-											  .c_str());
-						if (!row.tooltip.empty()) {
-							ImGui::Separator();
-							ImGui::Text("%s", row.tooltip.c_str());
-						}
-					}
-				} else {
-					Util::RenderTableCell(row.constrainedBy, "", row.tooltip, nullptr, ImVec4(1, 1, 1, 1), true);
-				}
-			}
-		};
-
-		// Render table
-		Util::ShowSortedStringTableCustom<ConstraintRow>(
-			"ConstraintsTable",
-			headers,
-			rows,
-			0,     // sortColumn
-			true,  // ascending
-			customSorts,
-			cellRender);
-	}
-
-	ImGui::Spacing();
 }
 
 void HomePageRenderer::RenderFirstTimeSetupDialog()

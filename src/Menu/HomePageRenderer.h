@@ -6,8 +6,7 @@
 /**
  * @brief Renders the Home page of the in-game menu with welcome info, FAQ, and first-time setup.
  *
- * Displays a welcome banner, quick links (Discord, etc.), active constraint
- * warnings, and a FAQ section. Also manages the first-time setup dialog
+ * Displays a welcome banner, quick links (Discord, etc.) and a FAQ section. Also manages the first-time setup dialog
  * shown on initial launch.
  */
 class HomePageRenderer
@@ -34,7 +33,7 @@ public:
 	static constexpr float DISCORD_BANNER_MAX_WIDTH = 1200.0f;
 	static constexpr float DISCORD_BANNER_PADDING_MARGIN = 40.0f;
 
-	/** @brief Renders the full Home page including welcome, quick links, constraints, and FAQ sections. */
+	/** @brief Renders the full Home page including welcome, quick links and FAQ sections. */
 	static void RenderHomePage();
 
 	// First-time setup management
@@ -54,7 +53,6 @@ private:
 	static void RenderWelcomeSection();
 	static void RenderQuickLinksSection();
 	static void RenderFAQSection();
-	static void RenderActiveConstraintsSection();
 
 	// State
 	static bool isFirstTimeSetupShown;

@@ -28,6 +28,7 @@
 #include "Menu/HomePageRenderer.h"
 #include "Menu/IconLoader.h"
 #include "Menu/Icons/helpers/IconFonts.h"
+#include "Menu/IssuesPageRenderer.h"
 #include "Menu/PresetsPageRenderer.h"
 #include "Menu/ProfilingRenderer.h"
 #include "Menu/SettingsPageRenderer.h"
@@ -58,7 +59,7 @@ namespace
 		std::string locale;
 		std::uint64_t userEditsRevision = 0;
 		std::uint64_t sceneRevision = 0;
-		bool hasFeatureIssues = false;
+		std::size_t issueCount = 0;
 		bool developerMode = false;
 
 		bool operator==(const MenuListKey&) const = default;
@@ -542,7 +543,7 @@ bool FeatureListRenderer::UpdateMenuList(
 		.locale = I18n::GetSingleton()->GetCurrentLocale(),
 		.userEditsRevision = globals::state->GetUserEditsRevision(),
 		.sceneRevision = globals::sceneSettingsManager ? globals::sceneSettingsManager->GetEntryPresentationRevision() : 0,
-		.hasFeatureIssues = FeatureIssues::HasFeatureIssues(),
+		.issueCount = IssuesPageRenderer::GetIssueCount(),
 		.developerMode = globals::state->IsDeveloperMode(),
 	};
 
@@ -584,9 +585,11 @@ std::vector<FeatureListRenderer::MenuFuncInfo> FeatureListRenderer::BuildMenuLis
 			Icons::TI(ICON_TI_ADJUSTMENTS_HORIZONTAL), NavStyle::Launcher, T("menu.features.cs_editor_hint", "Edit weather, lighting & scenes"), true },
 	};
 	// Problems loading features (rejected, obsolete, ...)
-	if (FeatureIssues::HasFeatureIssues()) {
-		menuList.push_back(BuiltInMenu{ MenuPageIds::kFeatureIssues, T("menu.features.feature_issues", "Feature Issues"),
-			[]() { FeatureIssues::DrawFeatureIssuesUI(); }, Icons::TI(ICON_TI_ALERT_TRIANGLE), NavStyle::Alert });
+	// Issues page (feature issues and active constraints), listed only while it has content
+	if (const auto issueCount = IssuesPageRenderer::GetIssueCount()) {
+		menuList.push_back(BuiltInMenu{ MenuPageIds::kIssues,
+			I18n::GetSingleton()->Format("menu.issues.nav_label", { { "count", std::to_string(issueCount) } }, "Issues ({count})"),
+			[]() { IssuesPageRenderer::Render(); }, Icons::TI(ICON_TI_ALERT_TRIANGLE), NavStyle::Alert });
 	}
 	menuList.push_back(BuiltInMenu{ MenuPageIds::kSettings, T("menu.features.settings", "Settings"), drawSettings, Icons::TI(ICON_TI_SETTINGS) });
 	menuList.push_back(BuiltInMenu{ MenuPageIds::kProfiling, T("menu.features.profiling", "Profiling"), []() { ProfilingRenderer::RenderStatistics(); },

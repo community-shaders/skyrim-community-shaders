@@ -120,8 +120,8 @@ namespace StatusBarRenderer
 			const auto label = i18n->Format("menu.status.feature_issues",
 				{ { "count", std::to_string(FeatureIssues::GetFeatureIssues().size()) } }, "Feature issues: {count}");
 			if (Segment("##StatusIssues", Icons::TI(ICON_TI_ALERT_TRIANGLE), label.c_str(), Util::Colors::GetWarning(),
-					T("menu.status.feature_issues_tooltip", "Open the Feature Issues page")))
-				globals::menu->SelectFeatureMenu(std::string(MenuPageIds::kFeatureIssues));
+					T("menu.issues.open_tooltip", "Open the Issues page")))
+				globals::menu->SelectFeatureMenu(std::string(MenuPageIds::kIssues));
 		}
 
 		// GPU, runtime and swap chain on the right, in whatever room the left side leaves

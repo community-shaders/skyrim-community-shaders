@@ -29,7 +29,10 @@ namespace MenuPageIds
 	inline constexpr std::string_view kAdvanced = "Advanced";
 	inline constexpr std::string_view kProfiling = "Profiling";
 	inline constexpr std::string_view kCSEditor = "CS Editor";
-	inline constexpr std::string_view kFeatureIssues = "Feature Issues";
+	/// Feature issues and active setting constraints; listed only while either has content
+	inline constexpr std::string_view kIssues = "Issues";
+	/// Alias of kIssues: Feature Issues is a section of the Issues page
+	inline constexpr std::string_view kFeatureIssues = kIssues;
 }
 
 /**

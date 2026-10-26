@@ -223,6 +223,7 @@ public:
 		static constexpr float SETTINGS_TITLE_SCALE_MIN = 1.0f;    // Section title scale range, as on feature pages
 		static constexpr float SETTINGS_TITLE_SCALE_MAX = 3.0f;
 		static constexpr float SHADER_BREAKDOWN_BAR_HEIGHT = 14.0f;  // Shader compile breakdown bar (ShaderCacheStatusWidget)
+		static constexpr float ISSUES_REFRESH_SECONDS = 0.5f;        // How often the Issues nav entry and Home recount active constraints
 
 		// Scene settings panel constants
 		static constexpr float SCENE_VALUE_INPUT_WIDTH = 240.0f;       // Width for float/int value inputs
