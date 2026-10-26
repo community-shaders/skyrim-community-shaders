@@ -307,6 +307,15 @@ void SettingsPageRenderer::Render(PageState& state)
 	ImGui::EndChild();
 }
 
+std::vector<SettingsPageRenderer::SectionInfo> SettingsPageRenderer::GetSections()
+{
+	std::vector<SectionInfo> sections;
+	sections.reserve(kSections.size());
+	for (const auto& section : kSections)
+		sections.push_back({ section.id, GetSectionTitle(section.id), GetGroupLabel(section.group) });
+	return sections;
+}
+
 bool SettingsPageRenderer::IsKnownSection(std::string_view id)
 {
 	return FindSection(id) != nullptr;

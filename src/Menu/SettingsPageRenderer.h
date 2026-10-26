@@ -7,6 +7,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <vector>
 
 /**
  * @brief Renders the Settings page of the main menu.
@@ -32,6 +33,17 @@ public:
 	 * @param state Menu state; an unknown section ID is replaced by the first section.
 	 */
 	static void Render(PageState& state);
+
+	/** @brief A section's ID with its translated title and group label, for lists outside the page. */
+	struct SectionInfo
+	{
+		std::string_view id;  ///< SettingsSectionIds value
+		const char* title;    ///< Translated section title
+		const char* group;    ///< Translated group label (General, Appearance, Advanced)
+	};
+
+	/** @brief Every section in sub-nav order. */
+	static std::vector<SectionInfo> GetSections();
 
 	/** @brief True when id names a Settings section. */
 	static bool IsKnownSection(std::string_view id);
