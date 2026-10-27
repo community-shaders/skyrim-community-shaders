@@ -206,7 +206,7 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, float uiScal
 		const float titleBarHeight = ImGui::GetFrameHeight();
 		float titleRight = windowPos.x + ImGui::CalcTextSize(title.c_str()).x + titleBarHeight * 2.0f + ImGui::GetStyle().FramePadding.x * 2.0f;
 		// The tab hugs the window's left edge, so Home sits right after it, then the search pill
-		const float homeSize = ImGui::GetFontSize() * ThemeManager::Constants::HEADER_NAV_BUTTON_FONT_RATIO * uiScale;
+		const float homeSize = GetHeaderIconSize(true, uiScale);
 		const float homeLeft = titleRight + ThemeManager::Constants::DOCKED_ICON_SPACING * uiScale;
 		titleRight = homeLeft + RenderNavButtons(true, ImVec2(homeLeft, windowPos.y + (titleBarHeight - homeSize) * 0.5f), homeSize,
 									ThemeManager::Constants::DOCKED_ICON_SPACING * uiScale);
@@ -231,7 +231,7 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, float uiScal
 			const float logoSize = baseIconSize * uiScale;  // Match action icon size
 
 			// Home button at the column's left edge, centred on the title row; the title makes room for it
-			const float homeSize = ImGui::GetFontSize() * ThemeManager::Constants::HEADER_NAV_BUTTON_FONT_RATIO * uiScale;
+			const float homeSize = GetHeaderIconSize(false, uiScale);
 			const float navGap = ImGui::GetStyle().ItemSpacing.x;
 			const size_t navCount = IssuesPageRenderer::GetFeatureIssueCount() > 0 ? 2 : 1;
 			const float homeReserve = static_cast<float>(navCount) * (homeSize + navGap);
@@ -355,14 +355,20 @@ std::vector<MenuHeaderRenderer::ActionIcon> MenuHeaderRenderer::BuildActionIcons
 	return actionIcons;
 }
 
+float MenuHeaderRenderer::GetHeaderIconSize(bool docked, float uiScale)
+{
+	using Constants = ThemeManager::Constants;
+	const float multiplier = docked ? Constants::DOCKED_ICON_SIZE_MULTIPLIER : Constants::HEADER_BASE_ICON_MULTIPLIER;
+	return ImGui::GetFontSize() * multiplier * Constants::HEADER_ICON_SCALE * uiScale;
+}
+
 float MenuHeaderRenderer::RenderDockedIcons(const std::vector<ActionIcon>& actionIcons, float uiScale)
 {
 	if (actionIcons.empty())
 		return ImGui::GetWindowPos().x + ImGui::GetWindowSize().x;
 
 	// Docked: Draw larger icons in the title bar using foreground draw list
-	const float currentFontSize = ImGui::GetFontSize();
-	const float iconSize = currentFontSize * ThemeManager::Constants::DOCKED_ICON_SIZE_MULTIPLIER * uiScale;
+	const float iconSize = GetHeaderIconSize(true, uiScale);
 	const float iconSpacing = ThemeManager::Constants::DOCKED_ICON_SPACING * uiScale;
 	const float rightMargin = ThemeManager::Constants::DOCKED_RIGHT_MARGIN * uiScale;
 
@@ -432,7 +438,7 @@ float MenuHeaderRenderer::RenderSearchPill(bool docked, float left, float right,
 {
 	using Constants = ThemeManager::Constants;
 	// Same size as the Home / issues buttons it sits beside
-	const float size = std::min(rowHeight, ImGui::GetFontSize() * Constants::HEADER_NAV_BUTTON_FONT_RATIO * uiScale);
+	const float size = GetHeaderIconSize(docked, uiScale);
 	const float gap = Constants::DOCKED_ICON_SPACING * uiScale;
 	if (size <= 0.0f || right - gap - left < size)
 		return left;
@@ -450,9 +456,7 @@ void MenuHeaderRenderer::RenderUndockedIcons(const std::vector<ActionIcon>& acti
 		return;
 
 	// Undocked: Draw icons as ImageButtons in a table column
-	const float currentFontSize = ImGui::GetFontSize();
-	const float baseIconSize = currentFontSize * ThemeManager::Constants::HEADER_BASE_ICON_MULTIPLIER;
-	const float iconSize = baseIconSize * uiScale;
+	const float iconSize = GetHeaderIconSize(false, uiScale);
 	const float paddingReduction = ThemeManager::Constants::UNDOCKED_ICON_PADDING_REDUCTION * uiScale;
 	const ImVec2 imageSize(iconSize - paddingReduction, iconSize - paddingReduction);
 

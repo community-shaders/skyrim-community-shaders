@@ -90,6 +90,8 @@ private:
 	 * @brief Draws the Home button and, while feature issues exist, the red issues button after it.
 	 * @return The total width taken, including the gaps after each button.
 	 */
+	/** @brief Edge of every header icon button: the action icons, Home, issues and Go to all share it. */
+	static float GetHeaderIconSize(bool docked, float uiScale);
 	static float RenderNavButtons(bool docked, ImVec2 min, float size, float gap);
 	static std::vector<ActionIcon> BuildActionIcons(const Util::IconLoader::UIIcons& uiIcons, const std::vector<MenuShortcuts::Shortcut>& shortcuts);
 	/** @return The x of the leftmost icon's left edge, or the window's right edge when there are no icons. */
