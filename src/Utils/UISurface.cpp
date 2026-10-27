@@ -212,6 +212,8 @@ namespace Util::Surface
 			drawList->PopClipRect();
 		}
 
+		// A window's inner clip rect trims its left and right edges, so the surface takes its own rect as the clip
+		drawList->PushClipRect(min, max, false);
 		drawList->AddRectFilled(min, max, FillColor(s, options.alpha), rounding);
 		if (s.border) {
 			ImU32 color;
@@ -223,5 +225,22 @@ namespace Util::Surface
 				color = IM_COL32(255, 255, 255, static_cast<int>(255.0f * s.borderAlpha * options.alpha));
 			drawList->AddRect(min, max, color, rounding);
 		}
+		drawList->PopClipRect();
+	}
+
+	void DrawAccentFrame(ImDrawList* drawList, const ImVec2& min, const ImVec2& max, ImU32 color, float rounding, float borderThickness,
+		float stripeWidth)
+	{
+		drawList->PushClipRect(min, max, false);
+		// A stroke is centred on its path, so the path is inset by half the thickness to keep the whole stroke inside
+		const float half = borderThickness * 0.5f;
+		drawList->AddRect(ImVec2(min.x + half, min.y + half), ImVec2(max.x - half, max.y - half), color, std::max(0.0f, rounding - half), 0,
+			borderThickness);
+		if (stripeWidth > 0.0f) {
+			drawList->PushClipRect(min, ImVec2(min.x + stripeWidth, max.y), true);
+			drawList->AddRectFilled(min, max, color, rounding);
+			drawList->PopClipRect();
+		}
+		drawList->PopClipRect();
 	}
 }

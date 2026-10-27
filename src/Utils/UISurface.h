@@ -76,6 +76,14 @@ namespace Util::Surface
 		ImU32 borderColor = 0;  /**< @brief Border colour override (e.g. a card's status colour); 0 uses the role's. */
 	};
 
+	/**
+	 * @brief Draws an accent frame inside [min, max]: a border of even thickness on every side plus a thicker stripe
+	 * down the left edge. Drawn inside the rect and unclipped by the owning window's inner clip rect (which trims
+	 * the left and right edges by half the window padding), so all four sides come out the same.
+	 */
+	void DrawAccentFrame(ImDrawList* drawList, const ImVec2& min, const ImVec2& max, ImU32 color, float rounding, float borderThickness,
+		float stripeWidth);
+
 	/** @brief Fill colour of a role: the window colour lifted by the role's fill lift, with an alpha multiplier. */
 	ImU32 FillColor(const RoleSettings& settings, float alpha = 1.0f);
 

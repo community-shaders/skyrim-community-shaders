@@ -116,10 +116,8 @@ namespace Util::Notifications
 				Util::Surface::Draw(draw, p0, p1, Util::Surface::Role::Toast, surface);
 				const ImU32 accent = ImGui::ColorConvertFloat4ToU32(
 					ImVec4(notif.color.x, notif.color.y, notif.color.z, Constants::TOAST_ACCENT_ALPHA * alpha));
-				draw->AddRect(p0, p1, accent, rounding, 0, Constants::TOAST_BORDER_THICKNESS * scale);
-				draw->PushClipRect(p0, ImVec2(p0.x + Constants::TOAST_STRIPE_WIDTH * scale, p1.y), true);
-				draw->AddRectFilled(p0, p1, accent, rounding);
-				draw->PopClipRect();
+				Util::Surface::DrawAccentFrame(draw, p0, p1, accent, rounding, Constants::TOAST_BORDER_THICKNESS * scale,
+					Constants::TOAST_STRIPE_WIDTH * scale);
 
 				ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + maxTextWidth);
 				ImVec4 colorWithAlpha = notif.color;

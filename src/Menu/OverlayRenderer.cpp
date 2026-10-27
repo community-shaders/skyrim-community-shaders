@@ -103,10 +103,7 @@ namespace
 		const ImVec2 p1(p0.x + size.x, p0.y + size.y);
 		const float rounding = ImGui::GetStyle().WindowRounding;
 		const ImU32 accent = ImGui::ColorConvertFloat4ToU32(ImVec4(accentColor.x, accentColor.y, accentColor.z, Constants::TOAST_ACCENT_ALPHA));
-		draw->AddRect(p0, p1, accent, rounding, 0, Constants::TOAST_BORDER_THICKNESS * scale);
-		draw->PushClipRect(p0, ImVec2(p0.x + Constants::TOAST_STRIPE_WIDTH * scale, p1.y), true);
-		draw->AddRectFilled(p0, p1, accent, rounding);
-		draw->PopClipRect();
+		Util::Surface::DrawAccentFrame(draw, p0, p1, accent, rounding, Constants::TOAST_BORDER_THICKNESS * scale, Constants::TOAST_STRIPE_WIDTH * scale);
 		ImGui::End();
 		ImGui::PopStyleVar(3);
 	}
