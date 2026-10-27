@@ -507,8 +507,10 @@ void MenuHeaderRenderer::RenderUndockedIcons(const std::vector<ActionIcon>& acti
 		const auto& icon = actionIcons[i];
 		const ImVec4 iconTint = tintColor;
 		if (icon.unsaved) {
-			const ImVec2 boxMin = ImGui::GetCursorScreenPos();
-			DrawUnsavedBox(ImGui::GetWindowDrawList(), boxMin, ImVec2(boxMin.x + glyphButtonSize.x, boxMin.y + glyphButtonSize.y));
+			// The box hugs the image, not the button's frame padding around it
+			const ImVec2 cursor = ImGui::GetCursorScreenPos();
+			const ImVec2 boxMin(cursor.x + framePadding.x, cursor.y + framePadding.y);
+			DrawUnsavedBox(ImGui::GetWindowDrawList(), boxMin, ImVec2(boxMin.x + imageSize.x, boxMin.y + imageSize.y));
 		}
 
 		std::string buttonId = std::format("##ActionBtn{}", i);

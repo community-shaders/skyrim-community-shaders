@@ -37,6 +37,7 @@ namespace GoToPalette
 
 		struct State
 		{
+			int openedFrame = 0;  // Frame the palette opened on, so the click that opened it does not close it
 			std::array<char, 256> query{};
 			std::string lastQuery;
 			GoToIndex::Results results;
@@ -556,6 +557,7 @@ namespace GoToPalette
 			GoToIndex::Refresh(shortcuts);
 			g_state = {};
 			g_state.scope = g_openScope;
+			g_state.openedFrame = ImGui::GetFrameCount();
 			ImGui::OpenPopup(kPopupId);
 		}
 
@@ -596,6 +598,13 @@ namespace GoToPalette
 		if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
 			globals::menu->ConsumeEscape();
 			close = !sortOpen;
+		}
+		// A click outside the panel closes it; while the sort popup is open that click belongs to the popup
+		if (!sortOpen && ImGui::GetFrameCount() > g_state.openedFrame && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+			const ImVec2 panelMin = ImGui::GetWindowPos();
+			const ImVec2 panelMax(panelMin.x + ImGui::GetWindowSize().x, panelMin.y + ImGui::GetWindowSize().y);
+			if (!ImGui::IsMouseHoveringRect(panelMin, panelMax, false))
+				close = true;
 		}
 		if (!sortOpen && ImGui::IsKeyPressed(ImGuiKey_Tab, false)) {
 			const int step = ImGui::GetIO().KeyShift ? -1 : 1;
