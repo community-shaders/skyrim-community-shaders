@@ -367,7 +367,7 @@ public:
 		static constexpr float ANIM_SLIDER_RATE = 22.0f;                  // How fast a slider's grab glides to its value when not held, per second
 		static constexpr float ANIM_SLIDER_DRAG_RATE = 50.0f;             // The same while the slider is held, so a drag still feels direct
 		static constexpr float ANIM_TOGGLE_RATE = 14.0f;                  // How fast a toggle's knob slides, per second
-		static constexpr float ANIM_CHECK_RATE = 22.0f;                   // How fast a check mark fades in and out, per second
+		static constexpr float ANIM_CHECK_RATE = 33.0f;                   // How fast a check mark fades in and out, per second
 		static constexpr float ANIM_CHECK_POP_FROM = 0.7f;                // Check mark size, as a share of full, at the start of its fade-in
 		static constexpr float TOGGLE_TRACK_HEIGHT_RATIO = 0.62f;         // Toggle track thickness, as a share of the knob's diameter (Material: 16 of 21)
 		static constexpr float TOGGLE_TRACK_INSET_RATIO = 0.35f;          // How far the track stops short of each end, in knob radii, so the knob overhangs it
