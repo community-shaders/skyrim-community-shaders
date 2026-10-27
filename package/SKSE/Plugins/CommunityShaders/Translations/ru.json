@@ -1344,8 +1344,6 @@
     "feature.wetness_effects.min_rain_wetness": "Минимальная влажность от дождя",
     "feature.wetness_effects.min_rain_wetness_tooltip": "Минимальная степень намокания объекта под дождём.",
     "feature.wetness_effects.name": "Эффекты влажности",
-    "feature.wetness_effects.open_weather_picker": "Открыть выбор погоды",
-    "feature.wetness_effects.open_weather_picker_tooltip": "Открыть выбор погоды в CS Utility",
     "feature.wetness_effects.portion_of_grid_size": "Как доля размера сетки.",
     "feature.wetness_effects.puddle_max_angle": "Максимальный угол луж",
     "feature.wetness_effects.puddle_max_angle_tooltip": "Насколько ровной должна быть поверхность для образования луж.",

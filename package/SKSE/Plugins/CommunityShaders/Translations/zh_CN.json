@@ -3204,8 +3204,6 @@
     "feature.wetness_effects.min_rain_wetness": "最小降雨湿润度",
     "feature.wetness_effects.min_rain_wetness_tooltip": "物体因雨水变湿的最小程度。",
     "feature.wetness_effects.name": "湿润效果",
-    "feature.wetness_effects.open_weather_picker": "打开天气选择器",
-    "feature.wetness_effects.open_weather_picker_tooltip": "在 CS 实用工具中打开天气选择器",
     "feature.wetness_effects.portion_of_grid_size": "作为网格尺寸的比例。",
     "feature.wetness_effects.puddle_max_angle": "积水最大角度",
     "feature.wetness_effects.puddle_max_angle_tooltip": "表面需要多平才能形成积水。",

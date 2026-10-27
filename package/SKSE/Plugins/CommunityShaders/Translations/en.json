@@ -3273,8 +3273,6 @@
     "feature.wetness_effects.min_rain_wetness": "Min Rain Wetness",
     "feature.wetness_effects.min_rain_wetness_tooltip": "The minimum amount an object gets wet from rain.",
     "feature.wetness_effects.name": "Wetness Effects",
-    "feature.wetness_effects.open_weather_picker": "Open Weather Picker",
-    "feature.wetness_effects.open_weather_picker_tooltip": "Open the Weather Picker widget, which stays open when the main menu is closed",
     "feature.wetness_effects.portion_of_grid_size": "As portion of grid size.",
     "feature.wetness_effects.puddle_max_angle": "Puddle Max Angle",
     "feature.wetness_effects.puddle_max_angle_tooltip": "How flat a surface needs to be for puddles to form on it.",
