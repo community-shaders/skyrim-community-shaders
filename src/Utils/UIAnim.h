@@ -145,12 +145,6 @@ namespace Util::Anim
 		PageFade& operator=(const PageFade&) = delete;
 	};
 
-	/**
-	 * @brief Counter that advances whenever the content pane changes page. Widgets that ease their values drop their
-	 * state when it changes, so a different page's controls never animate from the previous page's values.
-	 */
-	std::uint32_t PageEpoch();
-
 	/** @brief Signature of ImGui::SliderScalar, which every slider widget funnels into. */
 	using SliderScalarFn = bool (*)(const char*, ImGuiDataType, void*, const void*, const void*, const char*, ImGuiSliderFlags);
 

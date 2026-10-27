@@ -18,6 +18,18 @@ namespace Util::Anim
 {
 	using Constants = ThemeManager::Constants;
 
+	namespace
+	{
+		/// True when `frameKey` was not touched last frame (a new visit); marks it touched this frame.
+		bool FirstFrameOfVisit(ImGuiStorage* storage, ImGuiID frameKey)
+		{
+			const int frame = ImGui::GetFrameCount();
+			const bool fresh = storage->GetInt(frameKey, -10) < frame - 1;
+			storage->SetInt(frameKey, frame);
+			return fresh;
+		}
+	}
+
 	bool ReducedMotion()
 	{
 		return globals::menu && globals::menu->GetSettings().ReduceUIAnimations;
@@ -80,11 +92,8 @@ namespace Util::Anim
 		ImGuiStorage* storage = ImGui::GetStateStorage();
 		const ImGuiID frameKey = key + 1;
 		const ImGuiID startKey = key + 2;
-		const int frame = ImGui::GetFrameCount();
-		// Not asked for last frame: a new visit
-		if (storage->GetInt(frameKey, -10) < frame - 1)
+		if (FirstFrameOfVisit(storage, frameKey))
 			storage->SetFloat(startKey, static_cast<float>(ImGui::GetTime()));
-		storage->SetInt(frameKey, frame);
 		const float elapsed = static_cast<float>(ImGui::GetTime()) - storage->GetFloat(startKey, 0.0f) - delay;
 		return EaseOutCubic(elapsed * Speed() / duration);
 	}
@@ -96,10 +105,7 @@ namespace Util::Anim
 		ImGuiStorage* storage = ImGui::GetStateStorage();
 		const ImVec2 origin(ImGui::GetWindowPos().x - ImGui::GetScrollX(), ImGui::GetWindowPos().y - ImGui::GetScrollY());
 		const float target[4] = { targetMin.x - origin.x, targetMin.y - origin.y, targetMax.x - origin.x, targetMax.y - origin.y };
-		const ImGuiID frameKey = listId + 5;
-		const int frame = ImGui::GetFrameCount();
-		const bool fresh = storage->GetInt(frameKey, -10) < frame - 1;
-		storage->SetInt(frameKey, frame);
+		const bool fresh = FirstFrameOfVisit(storage, listId + 5);
 
 		float value[4];
 		for (ImGuiID n = 0; n < 4; ++n) {
@@ -175,18 +181,11 @@ namespace Util::Anim
 		{
 			const ImGuiID frameKey = id ^ salt;
 			const ImGuiID epochKey = id ^ (salt * 31u + 7u);
-			const int frame = ImGui::GetFrameCount();
 			const int epoch = static_cast<int>(g_pageEpoch);
-			const bool fresh = storage->GetInt(frameKey, -10) < frame - 1 || storage->GetInt(epochKey, -1) != epoch;
-			storage->SetInt(frameKey, frame);
+			const bool newEpoch = storage->GetInt(epochKey, -1) != epoch;
 			storage->SetInt(epochKey, epoch);
-			return fresh;
+			return FirstFrameOfVisit(storage, frameKey) || newEpoch;
 		}
-	}
-
-	std::uint32_t PageEpoch()
-	{
-		return g_pageEpoch;
 	}
 
 	bool EasedSliderScalar(SliderScalarFn real, const char* label, ImGuiDataType dataType, void* data, const void* min,

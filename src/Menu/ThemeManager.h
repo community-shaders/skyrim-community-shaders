@@ -405,6 +405,18 @@ public:
 		static constexpr float BUTTON_ACTIVE_BRIGHTEN = 0.3f;
 		static constexpr float BUTTON_STATUS_TEXT_HOVER_ALPHA = 0.8f;
 		static constexpr float BUTTON_STATUS_TEXT_ACTIVE_ALPHA = 1.0f;
+
+		// --- UI utils ---
+		static constexpr float BUTTON_TRANSPARENT_HOVER_ALPHA = 0.25f;              // Hover/active fill of the transparent icon button
+		static constexpr float STATUS_BANNER_FILL_ALPHA = 0.16f;                    // Status banner fill, as a share of the status colour's alpha
+		static constexpr float LOCK_BUTTON_FILL_ALPHA = 0.22f;                      // Lock toggle button fill
+		static constexpr float LOCK_BUTTON_BORDER_ALPHA = 0.55f;                    // Lock toggle button border
+		static constexpr float LOCK_BUTTON_ROUNDING_RATIO = 0.35f;                  // Lock toggle button corner radius per button size
+		static constexpr float TOOLTIP_WRAP_FONT_SIZES = 35.0f;                     // Wrapped tooltip width in font sizes
+		static constexpr ImVec4 BADGE_HDR_BG = ImVec4(0.40f, 0.58f, 0.78f, 0.30f);  // HDR badge background
+		static constexpr ImVec4 BADGE_HDR_FG = ImVec4(0.72f, 0.86f, 1.00f, 0.95f);  // HDR badge text
+		static constexpr ImVec4 BADGE_SDR_BG = ImVec4(0.78f, 0.42f, 0.42f, 0.30f);  // SDR badge background
+		static constexpr ImVec4 BADGE_SDR_FG = ImVec4(1.00f, 0.72f, 0.72f, 0.95f);  // SDR badge text
 	};
 
 	static ThemeManager* GetSingleton()

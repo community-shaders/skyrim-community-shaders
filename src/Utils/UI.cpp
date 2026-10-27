@@ -101,7 +101,7 @@ namespace Util
 		hovered = ImGui::IsItemHovered(kTooltipWhenDisabled);
 		if (hovered) {
 			ImGui::BeginTooltip();
-			ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
+			ImGui::PushTextWrapPos(ImGui::GetFontSize() * ThemeManager::Constants::TOOLTIP_WRAP_FONT_SIZES);
 			// Apply Subtext font for consistent tooltip styling
 			if (auto* menu = globals::menu) {
 				if (auto* subtextFont = menu->GetFont(Menu::FontRole::Subtext)) {
@@ -540,7 +540,7 @@ namespace Util
 
 		const ImVec2 min = ImGui::GetCursorScreenPos();
 		ImVec4 fill = a_color;
-		fill.w *= 0.16f;
+		fill.w *= ThemeManager::Constants::STATUS_BANNER_FILL_ALPHA;
 		auto* drawList = ImGui::GetWindowDrawList();
 		drawList->AddRectFilled(min, { min.x + width, min.y + height }, ImGui::GetColorU32(fill), ImGui::GetStyle().FrameRounding);
 		Icons::DrawCenteredGlyph(drawList, { min.x + padding.x, min.y + padding.y },
@@ -579,12 +579,12 @@ namespace Util
 		const auto& statusPalette = Menu::GetSingleton()->GetTheme().StatusPalette;
 		const ImVec4 statusColor = a_locked ? statusPalette.SuccessColor : statusPalette.Error;
 		ImVec4 fill = statusColor;
-		fill.w = 0.22f;
+		fill.w = ThemeManager::Constants::LOCK_BUTTON_FILL_ALPHA;
 		ImVec4 border = statusColor;
-		border.w = 0.55f;
+		border.w = ThemeManager::Constants::LOCK_BUTTON_BORDER_ALPHA;
 
 		const ImVec2 max(a_min.x + size, a_min.y + size);
-		const float rounding = std::min(ImGui::GetStyle().FrameRounding, size * 0.35f);
+		const float rounding = std::min(ImGui::GetStyle().FrameRounding, size * ThemeManager::Constants::LOCK_BUTTON_ROUNDING_RATIO);
 		auto _style = TransparentIconButtonStyle();
 		DrawRoundedButtonHighlight(a_min, max, a_hovered, a_held, rounding, a_drawList);
 		a_drawList->AddRectFilled(a_min, max, ImGui::GetColorU32(fill), rounding);
@@ -674,11 +674,11 @@ namespace Util
 		                        T("ui.badge.sdr", "SDR");
 
 		const ImVec4 bg = a_supportsHDR ?
-		                      ImVec4(0.40f, 0.58f, 0.78f, 0.30f) :
-		                      ImVec4(0.78f, 0.42f, 0.42f, 0.30f);
+		                      ThemeManager::Constants::BADGE_HDR_BG :
+		                      ThemeManager::Constants::BADGE_SDR_BG;
 		const ImVec4 fg = a_supportsHDR ?
-		                      ImVec4(0.72f, 0.86f, 1.00f, 0.95f) :
-		                      ImVec4(1.00f, 0.72f, 0.72f, 0.95f);
+		                      ThemeManager::Constants::BADGE_HDR_FG :
+		                      ThemeManager::Constants::BADGE_SDR_FG;
 
 		DrawBadgeAt(a_min, a_rowHeight, label, bg, fg, a_drawList);
 	}
@@ -1079,24 +1079,6 @@ namespace Util
 		return ImVec2(endPos.x - startPos.x, endPos.y - startPos.y);
 	}
 
-	float GetCenterOffsetForContent(float contentWidth)
-	{
-		// Get full window width for true centering
-		float fullWindowWidth = ImGui::GetWindowWidth();
-		float windowPaddingX = ImGui::GetStyle().WindowPadding.x;
-		float availableFullWidth = fullWindowWidth - (windowPaddingX * 2.0f);
-
-		// Calculate center position
-		float centerOffset = (availableFullWidth - contentWidth) * 0.5f;
-
-		// Adjust for current cursor position
-		float currentX = ImGui::GetCursorPosX();
-		float targetX = windowPaddingX + centerOffset;
-		float offset = targetX - currentX;
-
-		return offset > 0.0f ? offset : 0.0f;
-	}
-
 	// StyledButtonWrapper implementation
 	StyledButtonWrapper::StyledButtonWrapper(const ImVec4& normalColor, const ImVec4& hoveredColor, const ImVec4& activeColor) :
 		m_pushedStyles(0)
@@ -1133,13 +1115,6 @@ namespace Util
 		{
 			return ImVec4(color.x, color.y, color.z, alpha);
 		}
-
-		template <typename StyleFn, typename ButtonFn>
-		bool InvokeStyledButton(StyleFn styleProvider, ButtonFn buttonCall)
-		{
-			auto _style = styleProvider();
-			return buttonCall();
-		}
 	}
 
 	StyledButtonWrapper StatusButtonStyle(const ImVec4& color)
@@ -1156,12 +1131,14 @@ namespace Util
 
 	bool ErrorButton(const char* label, const ImVec2& size)
 	{
-		return ButtonHelpers::InvokeStyledButton(DestructiveButtonStyle, [&] { return ImGui::Button(label, size); });
+		auto _style = DestructiveButtonStyle();
+		return ImGui::Button(label, size);
 	}
 
 	bool ErrorButtonWithFlash(const char* label, const ImVec2& size, int flashDurationMs)
 	{
-		return ButtonHelpers::InvokeStyledButton(DestructiveButtonStyle, [&] { return ButtonWithFlash(label, size, flashDurationMs); });
+		auto _style = DestructiveButtonStyle();
+		return ButtonWithFlash(label, size, flashDurationMs);
 	}
 
 	StyledButtonWrapper StatusTextButtonStyle(const ImVec4& color)
@@ -1183,26 +1160,26 @@ namespace Util
 
 	bool SuccessButton(const char* label, const ImVec2& size)
 	{
-		return ButtonHelpers::InvokeStyledButton(SuccessButtonStyle, [&] { return ImGui::Button(label, size); });
+		auto _style = SuccessButtonStyle();
+		return ImGui::Button(label, size);
 	}
 
 	bool WarningButton(const char* label, const ImVec2& size)
 	{
-		return ButtonHelpers::InvokeStyledButton(WarningButtonStyle, [&] { return ImGui::Button(label, size); });
+		auto _style = WarningButtonStyle();
+		return ImGui::Button(label, size);
 	}
 
 	bool ErrorTextButton(const char* label, const ImVec2& size)
 	{
-		return ButtonHelpers::InvokeStyledButton(
-			[] { return StatusTextButtonStyle(Menu::GetSingleton()->GetTheme().StatusPalette.Error); },
-			[&] { return ImGui::Button(label, size); });
+		auto _style = StatusTextButtonStyle(Menu::GetSingleton()->GetTheme().StatusPalette.Error);
+		return ImGui::Button(label, size);
 	}
 
 	StyledButtonWrapper TransparentIconButtonStyle()
 	{
-		constexpr float kHoverAlpha = 0.25f;
 		auto hoverColor = Menu::GetSingleton()->GetTheme().Palette.Text;
-		hoverColor.w = kHoverAlpha;
+		hoverColor.w = ThemeManager::Constants::BUTTON_TRANSPARENT_HOVER_ALPHA;
 		return StyledButtonWrapper(ImVec4(0, 0, 0, 0), hoverColor, hoverColor);
 	}
 
@@ -1325,11 +1302,6 @@ namespace Util
 		if (blend.press > 0.0f)
 			drawList->AddRectFilled(rect.Min, rect.Max, Anim::ScaleAlphaU32(ImGui::GetColorU32(ImGuiCol_ButtonActive), blend.press), rounding);
 		return true;
-	}
-
-	bool DrawCurrentItemRoundedButtonHighlight(ImDrawList* drawList)
-	{
-		return DrawRoundedButtonHighlight(ImRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax()), ImGui::IsItemHovered(), ImGui::IsItemActive(), drawList);
 	}
 
 	void DrawIconCircle(ImVec2 center, float radius, ImU32 color, bool filled)
@@ -2052,15 +2024,6 @@ namespace Util
 		return lowerText.find(lowerQuery) != std::string::npos;
 	}
 
-	void DrawModalBackground(uint8_t alpha)
-	{
-		auto& io = ImGui::GetIO();
-		ImGui::GetBackgroundDrawList()->AddRectFilled(
-			ImVec2(0, 0),
-			io.DisplaySize,
-			IM_COL32(0, 0, 0, alpha));
-	}
-
 	void DrawBreathingText(const char* text, std::optional<ImVec4> color, float speed, float minAlpha, float maxAlpha)
 	{
 		float alphaRange = maxAlpha - minAlpha;
@@ -2298,21 +2261,6 @@ namespace Util
 	// Theme-aware color accessor functions
 	namespace Colors
 	{
-		ImVec4 GetTimerGood()
-		{
-			return globals::menu->GetTheme().StatusPalette.SuccessColor;
-		}
-
-		ImVec4 GetTimerWarning()
-		{
-			return globals::menu->GetTheme().StatusPalette.Warning;
-		}
-
-		ImVec4 GetTimerCritical()
-		{
-			return globals::menu->GetTheme().StatusPalette.Error;
-		}
-
 		ImVec4 GetDefault()
 		{
 			return globals::menu->GetTheme().Palette.Text;
@@ -2406,7 +2354,6 @@ namespace Util
 		UTIL_TEXT(Error, GetError)
 		UTIL_TEXT_WRAPPED(WrappedError, GetError)
 		UTIL_TEXT(Success, GetSuccess)
-		UTIL_TEXT_WRAPPED(WrappedSuccess, GetSuccess)
 		UTIL_TEXT(Info, GetInfo)
 		UTIL_TEXT_WRAPPED(WrappedInfo, GetInfo)
 		UTIL_TEXT(Disabled, GetDisabled)
@@ -3018,7 +2965,7 @@ namespace Util
 					return;
 
 				ImGui::BeginTooltip();
-				ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
+				ImGui::PushTextWrapPos(ImGui::GetFontSize() * ThemeManager::Constants::TOOLTIP_WRAP_FONT_SIZES);
 				Util::Text::Warning("Setting Constrained");
 				ImGui::Text("This setting is constrained by:");
 				ImGui::Spacing();

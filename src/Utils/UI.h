@@ -529,25 +529,6 @@ namespace Util
 	/** Draws a destructive theme error-colored button for delete, clear, remove, or irreversible actions. */
 	bool ErrorButton(const char* label, const ImVec2& size = ImVec2(0, 0));
 
-	/**
-	 * Draws a destructive icon/image button using the theme error color for button chrome.
-	 * Use for destructive image-only controls such as delete icons.
-	 * id must be unique per ImGui element to prevent ID collisions.
-	 */
-	template <class TextureID>
-	bool ErrorImageButton(
-		const char* id,
-		TextureID textureId,
-		const ImVec2& imageSize,
-		const ImVec2& uv0 = ImVec2(0, 0),
-		const ImVec2& uv1 = ImVec2(1, 1),
-		const ImVec4& bgCol = ImVec4(0, 0, 0, 0),
-		const ImVec4& tintCol = ImVec4(1, 1, 1, 1))
-	{
-		auto _style = DestructiveButtonStyle();
-		return ImGui::ImageButton(id, textureId, imageSize, uv0, uv1, bgCol, tintCol);
-	}
-
 	/** Draws a destructive button with ButtonWithFlash click feedback. */
 	bool ErrorButtonWithFlash(const char* label, const ImVec2& size = ImVec2(0, 0), int flashDurationMs = 200);
 
@@ -573,9 +554,6 @@ namespace Util
 	 * @return True when anything was drawn.
 	 */
 	bool DrawAnimatedButtonHighlight(const ImRect& rect, ImGuiID id, bool hovered, bool held, bool current, ImDrawList* drawList = nullptr);
-
-	/** @brief Draws the rounded hover/active fill for the last submitted item. */
-	bool DrawCurrentItemRoundedButtonHighlight(ImDrawList* drawList = nullptr);
 
 	/** @brief Draws a circle icon, filled or outlined, on the window draw list. */
 	void DrawIconCircle(ImVec2 center, float radius, ImU32 color, bool filled);
@@ -767,13 +745,6 @@ namespace Util
 	// These functions modify ImGui rendering state and should be called within ImGui context
 	ImVec2 DrawSharpText(const char* text, bool alignToPixelGrid = true, float scale = 1.0f);
 	ImVec2 DrawAlignedTextWithLogo(ID3D11ShaderResourceView* logoTexture, const ImVec2& logoSize, const char* text, float textScale = DefaultHeaderTextScale, ImU32 logoTint = IM_COL32_WHITE);
-
-	/**
-	 * Calculates the horizontal offset needed to center content within the full window width
-	 * @param contentWidth The width of the content to center
-	 * @return The offset to add to cursor X position to center the content
-	 */
-	float GetCenterOffsetForContent(float contentWidth);
 
 	/**
 	 * Constraint-aware UI helpers
@@ -1041,129 +1012,6 @@ namespace Util
 	}
 
 	/**
-	 * Renders a sortable and filterable ImGui table for custom row types.
-	 * Extends ShowSortedStringTableCustom with filtering capabilities including
-	 * substring highlighting and column-specific search.
-	 * @tparam T The row type. Must be copyable and compatible with the provided functions.
-	 * @param table_id Unique ImGui table ID.
-	 * @param headers Column headers.
-	 * @param originalRows Original table data (not modified - filtering creates a copy).
-	 * @param sortColumn Default sort column index.
-	 * @param ascending Default sort direction.
-	 * @param customSorts Vector of custom comparator functions, one per column.
-	 *        Each function should compare two rows and return true if the first should come before the second.
-	 * @param cellRender Function to render a cell: (rowIdx, colIdx, const T& row, const std::string& filterText).
-	 *        The filterText parameter enables substring highlighting in the cell renderer.
-	 * @param filterText Reference to filter text string (modified by the input field).
-	 * @param searchColumn Reference to search column index (0 = All Columns, 1+ = specific column).
-	 * @param getFilterableFields Function that extracts filterable strings from a row for each column.
-	 *        Should return a vector of strings, one per column, used for filtering.
-	 * @param scrollOnFilterChange If true, scrolls to top when filter changes (default: true).
-	 */
-	template <typename T>
-	void ShowFilteredStringTableCustom(
-		const char* table_id,
-		const std::vector<std::string>& headers,
-		const std::vector<T>& originalRows,
-		size_t sortColumn,
-		bool ascending,
-		const std::vector<std::function<bool(const T&, const T&, bool)>>& customSorts,
-		std::function<void(int, int, const T&, const std::string&)> cellRender,
-		std::string& filterText,
-		int& searchColumn,
-		std::function<std::vector<std::string>(const T&)> getFilterableFields,
-		bool scrollOnFilterChange = true)
-	{
-		// Filter controls
-		static std::string previousFilterText = "";
-		char filterBuffer[256] = { 0 };
-		strncpy_s(filterBuffer, filterText.c_str(), sizeof(filterBuffer) - 1);
-
-		ImGui::InputText("Filter", filterBuffer, IM_ARRAYSIZE(filterBuffer));
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Filter shaders by the selected column. Case-insensitive.");
-		}
-
-		// Create search column options
-		std::vector<std::string> searchOptions = { "All Columns" };
-		for (const auto& col : headers) {
-			searchOptions.push_back(col);
-		}
-		std::vector<const char*> searchOptionsCStr;
-		for (const auto& option : searchOptions) {
-			searchOptionsCStr.push_back(option.c_str());
-		}
-
-		ImGui::Combo("Search In", &searchColumn, searchOptionsCStr.data(), static_cast<int>(searchOptionsCStr.size()));
-
-		// Filter rows based on search column and filter text
-		std::vector<T> filteredRows;
-		std::string currentFilterText(filterBuffer);
-		filterText = currentFilterText;  // Update the reference
-
-		if (currentFilterText.empty()) {
-			filteredRows = originalRows;
-		} else {
-			std::string filterLower = currentFilterText;
-			std::transform(filterLower.begin(), filterLower.end(), filterLower.begin(), ::tolower);
-
-			for (const auto& row : originalRows) {
-				bool passesFilter = false;
-				auto filterableFields = getFilterableFields(row);
-
-				if (searchColumn == 0) {  // All Columns
-					for (const auto& field : filterableFields) {
-						std::string fieldLower = field;
-						std::transform(fieldLower.begin(), fieldLower.end(), fieldLower.begin(), ::tolower);
-						if (fieldLower.find(filterLower) != std::string::npos) {
-							passesFilter = true;
-							break;
-						}
-					}
-				} else {  // Specific column (searchColumn is 1-indexed for columns)
-					int columnIndex = searchColumn - 1;
-					if (columnIndex >= 0 && static_cast<size_t>(columnIndex) < filterableFields.size()) {
-						std::string fieldLower = filterableFields[columnIndex];
-						std::transform(fieldLower.begin(), fieldLower.end(), fieldLower.begin(), ::tolower);
-						passesFilter = fieldLower.find(filterLower) != std::string::npos;
-					}
-				}
-
-				if (passesFilter) {
-					filteredRows.push_back(row);
-				}
-			}
-		}
-
-		// Handle filter change scrolling
-		bool filterChanged = (currentFilterText != previousFilterText);
-		if (filterChanged && scrollOnFilterChange) {
-			ImGui::SetScrollHereY(0.5f);  // Keep the table visible when filter changes
-			previousFilterText = currentFilterText;
-		}
-
-		// Constrain table height to prevent infinite scrolling appearance
-		ImGui::BeginChild("ShaderTableContainer", ImVec2(0, 400), true, ImGuiWindowFlags_HorizontalScrollbar);
-		ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2(4, 2));  // Tighter cell padding for better fit
-
-		// Use the existing sorted table function
-		ShowSortedStringTableCustom<T>(
-			table_id,
-			headers,
-			filteredRows,
-			sortColumn,
-			ascending,
-			customSorts,
-			[&cellRender, &currentFilterText](int rowIdx, int colIdx, const T& row) {
-				if (cellRender) {
-					cellRender(rowIdx, colIdx, row, currentFilterText);
-				}
-			});
-
-		ImGui::PopStyleVar();  // CellPadding
-		ImGui::EndChild();
-	}
-	/**
 	 * @brief Compares two version strings (e.g., "1.2.3") numerically.
 	 * @param a First version string.
 	 * @param b Second version string.
@@ -1227,12 +1075,6 @@ namespace Util
 	void ClearComboSearch(const char* id);
 
 	/**
-	 * @brief Draws a semi-transparent dark overlay behind modal dialogs for depth.
-	 * @param alpha The alpha value for the overlay (0-255, default: 160)
-	 */
-	void DrawModalBackground(uint8_t alpha = 160);
-
-	/**
 	 * @brief Draws text with a breathing/pulsing alpha animation.
 	 * @param text The text to display
 	 * @param color Base color (default: theme text color)
@@ -1273,14 +1115,6 @@ namespace Util
 	namespace Colors
 	{
 		/**
-		 * Get theme-appropriate colors for timer/countdown displays.
-		 * @return Theme colors: Good=SuccessColor, Warning=Warning, Critical=Error
-		 */
-		ImVec4 GetTimerGood();      // Green - good/safe status (from theme SuccessColor)
-		ImVec4 GetTimerWarning();   // Orange - warning status (from theme Warning)
-		ImVec4 GetTimerCritical();  // Red - critical/error status (from theme Error)
-
-		/**
 		 * Get standard theme UI colors for consistent theming.
 		 * @return Theme colors from StatusPalette
 		 */
@@ -1307,7 +1141,6 @@ namespace Util
 		void Error(const char* fmt, ...) IM_FMTARGS(1);
 		void WrappedError(const char* fmt, ...) IM_FMTARGS(1);
 		void Success(const char* fmt, ...) IM_FMTARGS(1);
-		void WrappedSuccess(const char* fmt, ...) IM_FMTARGS(1);
 		void Info(const char* fmt, ...) IM_FMTARGS(1);
 		void WrappedInfo(const char* fmt, ...) IM_FMTARGS(1);
 		void Disabled(const char* fmt, ...) IM_FMTARGS(1);
