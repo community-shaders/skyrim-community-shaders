@@ -26,6 +26,7 @@
 #include "State.h"
 #include "Util.h"
 #include "Utils/Notifications.h"
+#include "Utils/UIGlass.h"
 
 #include "Features/PerformanceOverlay.h"
 #include "Features/PerformanceOverlay/ABTesting/ABTesting.h"
@@ -39,6 +40,29 @@ namespace
 	bool IsMainWindow(ImGuiWindow* win) { return win->Name && strncmp(win->Name, MAIN_WINDOW_PREFIX, strlen(MAIN_WINDOW_PREFIX)) == 0; }
 
 	/**
+	 * @brief Keeps a status card from covering the menu: when the main menu window is displayed behind the card, the
+	 * card is moved just behind it. Z-order follows the window wherever it is moved or undocked, unlike a fixed position.
+	 */
+	void KeepBehindMainWindow(ImGuiWindow* card)
+	{
+		ImGuiContext& g = *ImGui::GetCurrentContext();
+		ImGuiWindow* menu = nullptr;
+		int cardIndex = -1;
+		int menuIndex = -1;
+		for (int i = 0; i < g.Windows.Size; i++) {
+			ImGuiWindow* win = g.Windows[i];
+			if (win == card)
+				cardIndex = i;
+			else if (!menu && !win->ParentWindow && win->WasActive && IsMainWindow(win)) {
+				menu = win;
+				menuIndex = i;
+			}
+		}
+		if (menu && cardIndex > menuIndex)
+			ImGui::BringWindowToDisplayBehind(card, menu);
+	}
+
+	/**
 	 * @brief Begins the top-left status window in the toast card style: themed WindowBg at OVERLAP_MIN_ALPHA,
 	 * no frame, with the accent border and left stripe drawn by EndOverlayCard.
 	 * @return False when the window is collapsed or clipped; EndOverlayCard must still be called.
@@ -48,13 +72,24 @@ namespace
 		using Constants = ThemeManager::Constants;
 		const float scale = Util::GetUIScale();
 		ImGui::SetNextWindowPos(position);
-		ImGui::SetNextWindowBgAlpha(Constants::OVERLAP_MIN_ALPHA);
+		ImGui::SetNextWindowBgAlpha(0.0f);  // The glass surface is drawn by EndOverlayCard
 		ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, ImGui::GetStyle().FrameRounding * Constants::TOAST_ROUNDING_SCALE);
 		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,
 			ImVec2((Constants::TOAST_PADDING_X + Constants::TOAST_STRIPE_WIDTH) * scale, Constants::TOAST_PADDING_Y * scale));
 		ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-		return ImGui::Begin("ShaderCompilationInfo", nullptr,
+		const bool visible = ImGui::Begin("ShaderCompilationInfo", nullptr,
 			ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings);
+		KeepBehindMainWindow(ImGui::GetCurrentWindow());
+		if (visible) {
+			// Glass backing, drawn before the content. The card auto-sizes, so it uses last frame's rect.
+			Util::Glass::Style glass;
+			glass.rounding = ImGui::GetStyle().WindowRounding;
+			glass.shadow = true;
+			const ImVec2 p0 = ImGui::GetWindowPos();
+			const ImVec2 size = ImGui::GetWindowSize();
+			Util::Glass::Draw(ImGui::GetWindowDrawList(), p0, ImVec2(p0.x + size.x, p0.y + size.y), glass);
+		}
+		return visible;
 	}
 
 	/** @brief Draws the card's thin accent border and left stripe, then ends the window begun by BeginOverlayCard. */
