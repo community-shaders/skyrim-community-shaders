@@ -266,91 +266,94 @@ namespace Util::IconLoader
 		postProcessing.Release();
 	}
 
-	struct IconDefinition
+	namespace
 	{
-		std::string filename;
-		ID3D11ShaderResourceView** texture;
-		ImVec2* size;
-	};
-
-	std::vector<IconDefinition> GetIconDefinitions(Menu* menu)
-	{
-		auto& icons = GetIcons();
-		const bool useMonochrome = menu->GetSettings().Theme.UseMonochromeIcons;
-		const bool useMonochromeLogo = menu->GetSettings().Theme.UseMonochromeLogo;
-		const char* iconFolder = useMonochrome ? "Action Icons\\Monochrome" : "Action Icons";
-		const char* logoPath = useMonochromeLogo ? "Community Shaders Logo\\Monochrome\\cs-logo.png" : "Community Shaders Logo\\cs-logo.png";
-
-		return {
-			{ std::string(iconFolder) + "\\save-settings.png", &icons.saveSettings.texture, &icons.saveSettings.size },
-			{ std::string(iconFolder) + "\\load-settings.png", &icons.loadSettings.texture, &icons.loadSettings.size },
-			{ std::string(iconFolder) + "\\clear-cache.png", &icons.clearCache.texture, &icons.clearCache.size },
-			{ std::string(iconFolder) + "\\delete.png", &icons.deleteSettings.texture, &icons.deleteSettings.size },
-			{ logoPath, &icons.logo.texture, &icons.logo.size },
-			{ std::string(iconFolder) + "\\restore-settings.png", &icons.featureSettingRevert.texture, &icons.featureSettingRevert.size },
-			{ std::string(iconFolder) + "\\discord.png", &icons.discord.texture, &icons.discord.size },
-			{ std::string(iconFolder) + "\\apply-to-game.png", &icons.applyToGame.texture, &icons.applyToGame.size },
-			{ std::string(iconFolder) + "\\pause.png", &icons.pauseTime.texture, &icons.pauseTime.size },
-			{ std::string(iconFolder) + "\\undo.png", &icons.undo.texture, &icons.undo.size },
-			{ std::string(iconFolder) + "\\free-camera.png", &icons.freeCamera.texture, &icons.freeCamera.size },
-			{ std::string(iconFolder) + "\\play-mode.png", &icons.playMode.texture, &icons.playMode.size },
-
-			{ "Categories\\characters.png", &icons.characters.texture, &icons.characters.size },
-			{ "Categories\\display.png", &icons.display.texture, &icons.display.size },
-			{ "Categories\\grass.png", &icons.grass.texture, &icons.grass.size },
-			{ "Categories\\lighting.png", &icons.lighting.texture, &icons.lighting.size },
-			{ "Categories\\sky.png", &icons.sky.texture, &icons.sky.size },
-			{ "Categories\\landscape.png", &icons.landscape.texture, &icons.landscape.size },
-			{ "Categories\\water.png", &icons.water.texture, &icons.water.size },
-			{ "Categories\\debug.png", &icons.debug.texture, &icons.debug.size },
-			{ "Categories\\materials.png", &icons.materials.texture, &icons.materials.size },
-			{ "Categories\\post-processing.png", &icons.postProcessing.texture, &icons.postProcessing.size }
+		struct IconDefinition
+		{
+			std::string filename;
+			ID3D11ShaderResourceView** texture;
+			ImVec2* size;
 		};
-	}
 
-	void LoadThemeSpecificIcons(Menu* menu, ID3D11Device* device, const std::vector<IconDefinition>& iconDefs)
-	{
-		const auto& selectedTheme = menu->GetSettings().SelectedThemePreset;
-		if (selectedTheme.empty()) {
-			return;
+		std::vector<IconDefinition> GetIconDefinitions(Menu* menu)
+		{
+			auto& icons = GetIcons();
+			const bool useMonochrome = menu->GetSettings().Theme.UseMonochromeIcons;
+			const bool useMonochromeLogo = menu->GetSettings().Theme.UseMonochromeLogo;
+			const std::string iconFolder = useMonochrome ? "Action Icons\\Monochrome\\" : "Action Icons\\";
+			const char* logoPath = useMonochromeLogo ? "Community Shaders Logo\\Monochrome\\cs-logo.png" : "Community Shaders Logo\\cs-logo.png";
+
+			return {
+				{ iconFolder + "save-settings.png", &icons.saveSettings.texture, &icons.saveSettings.size },
+				{ iconFolder + "load-settings.png", &icons.loadSettings.texture, &icons.loadSettings.size },
+				{ iconFolder + "clear-cache.png", &icons.clearCache.texture, &icons.clearCache.size },
+				{ iconFolder + "delete.png", &icons.deleteSettings.texture, &icons.deleteSettings.size },
+				{ logoPath, &icons.logo.texture, &icons.logo.size },
+				{ iconFolder + "restore-settings.png", &icons.featureSettingRevert.texture, &icons.featureSettingRevert.size },
+				{ iconFolder + "discord.png", &icons.discord.texture, &icons.discord.size },
+				{ iconFolder + "apply-to-game.png", &icons.applyToGame.texture, &icons.applyToGame.size },
+				{ iconFolder + "pause.png", &icons.pauseTime.texture, &icons.pauseTime.size },
+				{ iconFolder + "undo.png", &icons.undo.texture, &icons.undo.size },
+				{ iconFolder + "free-camera.png", &icons.freeCamera.texture, &icons.freeCamera.size },
+				{ iconFolder + "play-mode.png", &icons.playMode.texture, &icons.playMode.size },
+
+				{ "Categories\\characters.png", &icons.characters.texture, &icons.characters.size },
+				{ "Categories\\display.png", &icons.display.texture, &icons.display.size },
+				{ "Categories\\grass.png", &icons.grass.texture, &icons.grass.size },
+				{ "Categories\\lighting.png", &icons.lighting.texture, &icons.lighting.size },
+				{ "Categories\\sky.png", &icons.sky.texture, &icons.sky.size },
+				{ "Categories\\landscape.png", &icons.landscape.texture, &icons.landscape.size },
+				{ "Categories\\water.png", &icons.water.texture, &icons.water.size },
+				{ "Categories\\debug.png", &icons.debug.texture, &icons.debug.size },
+				{ "Categories\\materials.png", &icons.materials.texture, &icons.materials.size },
+				{ "Categories\\post-processing.png", &icons.postProcessing.texture, &icons.postProcessing.size }
+			};
 		}
 
-		std::filesystem::path themeIconsPath = Util::PathHelpers::GetThemesPath() / selectedTheme;
-		if (!std::filesystem::exists(themeIconsPath) || !std::filesystem::is_directory(themeIconsPath)) {
-			logger::debug("LoadThemeSpecificIcons: Theme folder does not exist: {}", themeIconsPath.string());
-			return;
-		}
+		void LoadThemeSpecificIcons(Menu* menu, ID3D11Device* device, const std::vector<IconDefinition>& iconDefs)
+		{
+			const auto& selectedTheme = menu->GetSettings().SelectedThemePreset;
+			if (selectedTheme.empty()) {
+				return;
+			}
 
-		logger::info("LoadThemeSpecificIcons: Checking for custom icons in theme '{}' at path: {}", selectedTheme, themeIconsPath.string());
+			std::filesystem::path themeIconsPath = Util::PathHelpers::GetThemesPath() / selectedTheme;
+			if (!std::filesystem::exists(themeIconsPath) || !std::filesystem::is_directory(themeIconsPath)) {
+				logger::debug("LoadThemeSpecificIcons: Theme folder does not exist: {}", themeIconsPath.string());
+				return;
+			}
 
-		ID3D11DeviceContext* context = globals::d3d::context;
-		if (context)
-			context->Flush();
+			logger::info("LoadThemeSpecificIcons: Checking for custom icons in theme '{}' at path: {}", selectedTheme, themeIconsPath.string());
 
-		int iconsOverridden = 0;
+			ID3D11DeviceContext* context = globals::d3d::context;
+			if (context)
+				context->Flush();
 
-		for (const auto& iconDef : iconDefs) {
-			std::filesystem::path iconPath = themeIconsPath / std::filesystem::path(iconDef.filename).filename();
+			int iconsOverridden = 0;
 
-			logger::trace("LoadThemeSpecificIcons: Checking for icon: {}", iconPath.string());
+			for (const auto& iconDef : iconDefs) {
+				std::filesystem::path iconPath = themeIconsPath / std::filesystem::path(iconDef.filename).filename();
 
-			if (std::filesystem::exists(iconPath)) {
-				if (*iconDef.texture) {
-					(*iconDef.texture)->Release();
-					*iconDef.texture = nullptr;
-				}
+				logger::trace("LoadThemeSpecificIcons: Checking for icon: {}", iconPath.string());
 
-				if (Util::LoadTextureFromFile(device, iconPath.string().c_str(), iconDef.texture, *iconDef.size)) {
-					logger::debug("LoadThemeSpecificIcons: Loaded custom icon: {}", iconPath.filename().string());
-					iconsOverridden++;
+				if (std::filesystem::exists(iconPath)) {
+					if (*iconDef.texture) {
+						(*iconDef.texture)->Release();
+						*iconDef.texture = nullptr;
+					}
+
+					if (Util::LoadTextureFromFile(device, iconPath.string().c_str(), iconDef.texture, *iconDef.size)) {
+						logger::debug("LoadThemeSpecificIcons: Loaded custom icon: {}", iconPath.filename().string());
+						iconsOverridden++;
+					}
 				}
 			}
-		}
 
-		if (iconsOverridden > 0) {
-			logger::info("LoadThemeSpecificIcons: Loaded {} custom icon(s) from theme '{}'", iconsOverridden, selectedTheme);
+			if (iconsOverridden > 0) {
+				logger::info("LoadThemeSpecificIcons: Loaded {} custom icon(s) from theme '{}'", iconsOverridden, selectedTheme);
+			}
 		}
-	}
+	}  // namespace
 
 	bool InitializeMenuIcons(Menu* menu)
 	{
@@ -395,12 +398,10 @@ namespace Util::IconLoader
 				anyIconLoaded = true;
 			} else {
 				// If monochrome icon failed to load, try fallback to colored version
-				if (fullPath.find("Monochrome") != std::string::npos) {
-					std::string fallbackPath = fullPath;
-					size_t pos = fallbackPath.find("\\Monochrome");
-					if (pos != std::string::npos) {
-						fallbackPath.erase(pos, 11);  // Remove "\Monochrome"
-					}
+				std::string fallbackPath = fullPath;
+				const size_t pos = fallbackPath.find("\\Monochrome");
+				if (pos != std::string::npos) {
+					fallbackPath.erase(pos, 11);  // Remove "\Monochrome"
 					if (Util::LoadTextureFromFile(device, fallbackPath.c_str(), iconDef.texture, *iconDef.size)) {
 						iconsLoaded++;
 						anyIconLoaded = true;

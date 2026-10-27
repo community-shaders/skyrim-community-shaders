@@ -451,7 +451,7 @@ namespace BackgroundBlur
 		context->Draw(FULLSCREEN_TRIANGLE_VERTICES, 0);
 		context->PSSetShaderResources(0, 1, &nullSRV);
 
-		// Final composition: upscale from quarter-res with rounded corner mask
+		// Final composition: upscale from eighth-res with rounded corner mask
 		context->RSSetViewports(1, &originalViewport);
 
 		// Expand scissor rect slightly for anti-aliased rounded corner edges
@@ -563,11 +563,6 @@ namespace BackgroundBlur
 	void SetCSEditorActive(bool active)
 	{
 		csEditorActive = active;
-	}
-
-	bool IsCSEditorActive()
-	{
-		return csEditorActive;
 	}
 
 	void RenderBackgroundBlur()
