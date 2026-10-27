@@ -197,6 +197,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	FirstTimeSetupCompleted,
 	SkipClearCacheConfirmation,
 	AutoHideFeatureList,
+	ReduceUIAnimations,
 	FeatureListSort,
 	SkipConstraintWarning,
 	RequireShiftToDock,

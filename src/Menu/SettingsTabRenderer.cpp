@@ -55,6 +55,7 @@ namespace
 		// Behavior
 		{ Ids::kBehavior, "menu.settings.show_status_bar", "Show Status Bar" },
 		{ Ids::kBehavior, "menu.settings.auto_hide_feature_list", "Auto-hide Feature List" },
+		{ Ids::kBehavior, "menu.settings.reduce_ui_animations", "Reduce UI animations" },
 		{ Ids::kBehavior, "menu.settings.feature_list_order", "Feature List Order" },
 		{ Ids::kBehavior, "menu.settings.require_shift_to_dock", "Require Shift to Dock" },
 		{ Ids::kBehavior, "menu.settings.tooltip_hover_delay", "Tooltip Hover Delay" },
@@ -447,6 +448,11 @@ void SettingsTabRenderer::RenderBehaviorSection()
 	ImGui::Checkbox(T("menu.settings.auto_hide_feature_list", "Auto-hide Feature List"), &globals::menu->GetSettings().AutoHideFeatureList);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("%s", T("menu.settings.auto_hide_feature_list_tooltip", "Automatically hides the left feature list panel. Move cursor to the left edge to show it."));
+	}
+
+	ImGui::Checkbox(T("menu.settings.reduce_ui_animations", "Reduce UI animations"), &globals::menu->GetSettings().ReduceUIAnimations);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("%s", T("menu.settings.reduce_ui_animations_tooltip", "Turns off menu motion: hover fades, slide-ins, the pulsing issues icon and the expanding search field all snap instead of easing."));
 	}
 
 	{
