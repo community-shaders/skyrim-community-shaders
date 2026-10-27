@@ -15,6 +15,7 @@
 #include "PerfUtils.h"
 #include "ShaderCache.h"
 #include "State.h"
+#include "Utils/UIAnim.h"
 
 #ifndef DIRECTINPUT_VERSION
 #	define DIRECTINPUT_VERSION 0x0800
@@ -1043,12 +1044,11 @@ namespace Util
 		// Save current cursor position
 		ImVec2 startPos = ImGui::GetCursorPos();
 
-		// Calculate scaled text height
-		float fontHeight = ImGui::GetFontSize() * textScale;
+		// Centre the logo on the title's capital-letter ink (not its line box), so both read as one row
 		float logoHeight = logoSize.y;
-
-		// Calculate vertical offset to center align logo with text
-		float verticalOffset = (fontHeight - logoHeight) * 0.5f;
+		ImGui::SetWindowFontScale(textScale);
+		float verticalOffset = GetTextInkCenterY() - logoHeight * 0.5f;
+		ImGui::SetWindowFontScale(1.0f);
 
 		// Position cursor for logo with vertical alignment
 		ImGui::SetCursorPos(ImVec2(startPos.x, startPos.y + verticalOffset));
@@ -1253,6 +1253,20 @@ namespace Util
 		return true;
 	}
 
+	bool DrawAnimatedButtonHighlight(const ImRect& rect, ImGuiID id, bool hovered, bool held, bool current, ImDrawList* drawList)
+	{
+		const auto blend = Anim::ItemBlend(id, hovered || current, held, false);
+		if (blend.hover <= 0.0f && blend.press <= 0.0f)
+			return false;
+		if (!drawList)
+			drawList = ImGui::GetWindowDrawList();
+		const float rounding = GetThemedButtonHighlightRounding(rect.Min, rect.Max);
+		drawList->AddRectFilled(rect.Min, rect.Max, Anim::ScaleAlphaU32(ImGui::GetColorU32(ImGuiCol_ButtonHovered), blend.hover), rounding);
+		if (blend.press > 0.0f)
+			drawList->AddRectFilled(rect.Min, rect.Max, Anim::ScaleAlphaU32(ImGui::GetColorU32(ImGuiCol_ButtonActive), blend.press), rounding);
+		return true;
+	}
+
 	bool DrawCurrentItemRoundedButtonHighlight(ImDrawList* drawList)
 	{
 		return DrawRoundedButtonHighlight(ImRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax()), ImGui::IsItemHovered(), ImGui::IsItemActive(), drawList);
@@ -1444,10 +1458,19 @@ namespace Util
 
 	float GetEditorChromeTextCursorOffsetY(float rowHeight)
 	{
-		// Centre capital-letter ink, measured from 'H' since cap height and ascent vary per font.
+		return rowHeight * 0.5f - GetTextInkCenterY();
+	}
+
+	float GetTextInkCenterY()
+	{
+		// Measured from 'H' since cap height and ascent vary per font.
 		const ImFontGlyph* glyph = ImGui::GetFontBaked()->FindGlyph('H');
-		const float inkCenter = glyph ? (glyph->Y0 + glyph->Y1) * 0.5f : ImGui::GetFontSize() * 0.5f;
-		return rowHeight * 0.5f - inkCenter;
+		return glyph ? (glyph->Y0 + glyph->Y1) * 0.5f : ImGui::GetFontSize() * 0.5f;
+	}
+
+	float CenterTextTopY(float rowTop, float rowHeight)
+	{
+		return rowTop + rowHeight * 0.5f - GetTextInkCenterY();
 	}
 
 	// Draws the custom floating header: the title (also the drag handle), an optional
@@ -1594,33 +1617,38 @@ namespace Util
 		return m_shouldDraw;
 	}
 
-	bool DrawCategoryHeader(const char* categoryKey, const char* displayName, bool& isExpanded, int categoryCount)
+	ID3D11ShaderResourceView* GetCategoryIcon(const char* categoryKey)
 	{
-		// Get the appropriate icon for this category
-		ID3D11ShaderResourceView* categoryIcon = nullptr;
 		auto& icons = Util::IconLoader::GetIcons();
 
 		if (strcmp(categoryKey, "Characters") == 0) {
-			categoryIcon = icons.characters.texture;
+			return icons.characters.texture;
 		} else if (strcmp(categoryKey, "Display") == 0) {
-			categoryIcon = icons.display.texture;
+			return icons.display.texture;
 		} else if (strcmp(categoryKey, "Grass") == 0) {
-			categoryIcon = icons.grass.texture;
+			return icons.grass.texture;
 		} else if (strcmp(categoryKey, "Lighting") == 0) {
-			categoryIcon = icons.lighting.texture;
+			return icons.lighting.texture;
 		} else if (strcmp(categoryKey, "Sky") == 0) {
-			categoryIcon = icons.sky.texture;
+			return icons.sky.texture;
 		} else if (strcmp(categoryKey, "Landscape & Textures") == 0) {
-			categoryIcon = icons.landscape.texture;
+			return icons.landscape.texture;
 		} else if (strcmp(categoryKey, "Water") == 0) {
-			categoryIcon = icons.water.texture;
+			return icons.water.texture;
 		} else if (strcmp(categoryKey, "Utility") == 0) {
-			categoryIcon = icons.debug.texture;
+			return icons.debug.texture;
 		} else if (strcmp(categoryKey, "Materials") == 0) {
-			categoryIcon = icons.materials.texture;
+			return icons.materials.texture;
 		} else if (strcmp(categoryKey, "Post-Processing") == 0) {
-			categoryIcon = icons.postProcessing.texture;
+			return icons.postProcessing.texture;
 		}
+		return nullptr;
+	}
+
+	bool DrawCategoryHeader(const char* categoryKey, const char* displayName, bool& isExpanded, int categoryCount)
+	{
+		// Get the appropriate icon for this category
+		ID3D11ShaderResourceView* categoryIcon = GetCategoryIcon(categoryKey);
 
 		// Keep icon lookup on the stable category key and render the translated label separately.
 		std::string headerText = std::format("{} ({})", displayName, categoryCount);

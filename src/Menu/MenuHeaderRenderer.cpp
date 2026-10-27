@@ -22,6 +22,8 @@
 #include "State.h"
 #include "ThemeManager.h"
 #include "Util.h"
+#include "Utils/UIAnim.h"
+#include "Utils/UIGlass.h"
 
 namespace
 {
@@ -48,16 +50,23 @@ bool MenuHeaderRenderer::GlyphIconButton(const char* id, Icons::GlyphRef glyph, 
 	const ImVec2 buttonSize(glyphBox + framePadding.x * 2.0f, glyphBox + framePadding.y * 2.0f);
 
 	ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
-	ImGui::PushStyleColor(ImGuiCol_Button, active ? ImGui::GetStyleColorVec4(ImGuiCol_ButtonHovered) : ImVec4(0, 0, 0, 0));
-	ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.8f, 0.8f, 0.25f));
+	// The button itself is invisible; its fill is drawn from the eased hover / press / active blend
+	ImGui::PushStyleColor(ImGuiCol_Button, IM_COL32_BLACK_TRANS);
+	ImGui::PushStyleColor(ImGuiCol_ButtonHovered, IM_COL32_BLACK_TRANS);
+	ImGui::PushStyleColor(ImGuiCol_ButtonActive, IM_COL32_BLACK_TRANS);
 	const bool clicked = ImGui::Button(id, buttonSize);
 	const ImVec2 min = ImGui::GetItemRectMin();
-	ImGui::PopStyleColor(2);
+	const ImVec2 max = ImGui::GetItemRectMax();
+	ImGui::PopStyleColor(3);
 	ImGui::PopStyleVar();
+	const auto blend = Util::Anim::ItemBlend(ImGui::GetItemID(), ImGui::IsItemHovered(), ImGui::IsItemActive(), active);
+	if (const float fill = std::max(blend.hover * ThemeManager::Constants::HEADER_ICON_HOVER_ALPHA, blend.selected); fill > 0.0f)
+		ImGui::GetWindowDrawList()->AddRectFilled(min, max,
+			Util::Anim::ScaleAlphaU32(ImGui::GetColorU32(blend.selected > blend.hover ? ImGuiCol_ButtonHovered : ImGuiCol_FrameBgHovered), fill),
+			ImGui::GetStyle().FrameRounding);
 
 	ImVec4 tint = globals::menu->GetSettings().Theme.UseMonochromeIcons ? globals::menu->GetSettings().Theme.Palette.Text : ImVec4(1, 1, 1, 1);
-	if (active)
-		tint = Util::Colors::GetAccent();
+	tint = Util::Anim::Lerp(tint, Util::Colors::GetAccent(), blend.selected);
 	DrawIconGlyph(ImGui::GetWindowDrawList(), ImVec2(min.x + framePadding.x, min.y + framePadding.y), glyphBox, glyph, ImGui::GetColorU32(tint));
 	if (tooltip) {
 		if (auto _tt = Util::HoverTooltipWrapper())
@@ -89,7 +98,7 @@ bool MenuHeaderRenderer::RenderNavButton(bool docked, ImVec2 min, float size, co
 	}
 
 	ImDrawList* drawList = docked ? ImGui::GetForegroundDrawList() : ImGui::GetWindowDrawList();
-	Util::DrawRoundedButtonHighlight(rect, hovered || current, down, drawList);
+	Util::DrawAnimatedButtonHighlight(rect, ImGui::GetID(id), hovered, down, current, drawList);
 
 	ImVec4 tint = globals::menu->GetSettings().Theme.UseMonochromeIcons ? globals::menu->GetSettings().Theme.Palette.Text : ImVec4(1, 1, 1, 1);
 	if (tintOverride)
@@ -98,6 +107,8 @@ bool MenuHeaderRenderer::RenderNavButton(bool docked, ImVec2 min, float size, co
 		tint = Util::Colors::GetAccent();
 	if (!current && !hovered)
 		tint.w *= ThemeManager::Constants::HEADER_HOME_IDLE_ALPHA;
+	if (tintOverride)  // The issues icon breathes gently to draw the eye
+		tint.w *= 1.0f - ThemeManager::Constants::ANIM_PULSE_AMPLITUDE * Util::Anim::Pulse();
 	const float pad = ThemeManager::Constants::DOCKED_ICON_PADDING_REDUCTION;
 	DrawIconGlyph(drawList, ImVec2(min.x + pad, min.y + pad), size - pad * 2.0f, glyph, ImGui::GetColorU32(tint));
 
@@ -167,18 +178,18 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, float uiScal
 	}
 
 	const auto title = GetTitleText();
-	auto actionIcons = BuildActionIcons(shortcuts);
+	auto actionIcons = BuildActionIcons(uiIcons, shortcuts);
 
 	// Dev builds: muted build label after the title
 	const auto buildTag = GetBuildTagText();
 	const bool showBuildTag = !buildTag.empty();
 	const float buildTagWidth = showBuildTag ? ImGui::GetStyle().ItemSpacing.x + ImGui::CalcTextSize(buildTag.c_str()).x : 0.0f;
+	float titleInkScreenY = 0.0f;  // Screen y of the title's ink centre; the build label centres on it
 	auto drawBuildTag = [&]() {
 		if (!showBuildTag)
 			return;
-		const float titleHeight = ImGui::GetItemRectSize().y;
 		ImGui::SameLine();
-		ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (titleHeight - ImGui::GetTextLineHeight()) * 0.5f);
+		ImGui::SetCursorScreenPos(ImVec2(ImGui::GetCursorScreenPos().x, titleInkScreenY - Util::GetTextInkCenterY()));
 		ImGui::TextDisabled("%s", buildTag.c_str());
 	};
 
@@ -195,20 +206,16 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, float uiScal
 		const ImVec2 windowPos = ImGui::GetWindowPos();
 		const float titleBarHeight = ImGui::GetFrameHeight();
 		float titleRight = windowPos.x + ImGui::CalcTextSize(title.c_str()).x + titleBarHeight * 2.0f + ImGui::GetStyle().FramePadding.x * 2.0f;
-		// The tab hugs the window's left edge, so Home sits right after it
-		const float homeSize = ImGui::GetFontSize() * ThemeManager::Constants::DOCKED_ICON_SIZE_MULTIPLIER * uiScale;
+		// The tab hugs the window's left edge, so Home sits right after it, then the search pill
+		const float homeSize = ImGui::GetFontSize() * ThemeManager::Constants::HEADER_NAV_BUTTON_FONT_RATIO * uiScale;
 		const float homeLeft = titleRight + ThemeManager::Constants::DOCKED_ICON_SPACING * uiScale;
 		titleRight = homeLeft + RenderNavButtons(true, ImVec2(homeLeft, windowPos.y + (titleBarHeight - homeSize) * 0.5f), homeSize,
 									ThemeManager::Constants::DOCKED_ICON_SPACING * uiScale);
-		RenderSearchPill(true, titleRight, iconsLeft, windowPos.x + ImGui::GetWindowSize().x * 0.5f, windowPos.y, titleBarHeight, uiScale,
+		RenderSearchPill(true, titleRight, iconsLeft, windowPos.y, titleBarHeight, uiScale,
 			MenuShortcuts::GetHint(shortcuts, MenuShortcuts::Ids::kGoTo));
 	} else {
 		// When not docked, show the custom header
 		bool centerHeader = globals::menu->GetTheme().CenterHeader;
-		const ImVec2 headerTop = ImGui::GetCursorScreenPos();
-		float titleRight = headerTop.x;
-		float iconsLeft = headerTop.x + ImGui::GetContentRegionAvail().x;
-		float rowHeight = 0.0f;
 
 		if (ImGui::BeginTable("##HeaderLayout", 2, ImGuiTableFlags_SizingStretchProp)) {
 			ImGui::TableSetupColumn("Title", ImGuiTableColumnFlags_WidthStretch);
@@ -225,7 +232,7 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, float uiScal
 			const float logoSize = baseIconSize * uiScale;  // Match action icon size
 
 			// Home button at the column's left edge, centred on the title row; the title makes room for it
-			const float homeSize = logoSize;
+			const float homeSize = ImGui::GetFontSize() * ThemeManager::Constants::HEADER_NAV_BUTTON_FONT_RATIO * uiScale;
 			const float navGap = ImGui::GetStyle().ItemSpacing.x;
 			const size_t navCount = IssuesPageRenderer::GetFeatureIssueCount() > 0 ? 2 : 1;
 			const float homeReserve = static_cast<float>(navCount) * (homeSize + navGap);
@@ -233,31 +240,42 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, float uiScal
 			const float estimatedRowHeight = std::max(logoSize, ImGui::GetFontSize() * textScaleFactor);
 			RenderNavButtons(false, ImVec2(columnStart.x, columnStart.y + (estimatedRowHeight - homeSize) * 0.5f), homeSize, navGap);
 
+			// Width of the title block (logo, text and build label)
+			float contentWidth = 0.0f;
+			if (showLogo) {
+				float logoAspectRatio = uiIcons.logo.size.x / uiIcons.logo.size.y;
+				contentWidth = (logoSize * logoAspectRatio) + ImGui::GetStyle().ItemSpacing.x;
+			}
+			{
+				RoleFontGuard titleFont(Menu::FontRole::Title);
+				ImGui::SetWindowFontScale(textScaleFactor);
+				contentWidth += ImGui::CalcTextSize(title.c_str()).x;
+				ImGui::SetWindowFontScale(1.0f);
+			}
+			contentWidth += buildTagWidth;
+
+			// The search pill follows the nav buttons; the title takes the room that is left
+			const float columnWidth = ImGui::GetContentRegionAvail().x;
+			const float pillEnd = RenderSearchPill(false, columnStart.x + homeReserve, columnStart.x + columnWidth - contentWidth, columnStart.y,
+				estimatedRowHeight, uiScale, MenuShortcuts::GetHint(shortcuts, MenuShortcuts::Ids::kGoTo));
+			const float reserve = std::max(homeReserve, pillEnd - columnStart.x);
+
 			if (centerHeader) {
-				// Calculate the width of the content
-				float contentWidth = 0.0f;
-
-				if (showLogo) {
-					float logoAspectRatio = uiIcons.logo.size.x / uiIcons.logo.size.y;
-					contentWidth = (logoSize * logoAspectRatio) + ImGui::GetStyle().ItemSpacing.x;
-				}
-
-				// Calculate text width
-				{
-					RoleFontGuard titleFont(Menu::FontRole::Title);
-					ImGui::SetWindowFontScale(textScaleFactor);
-					contentWidth += ImGui::CalcTextSize(title.c_str()).x;
-					ImGui::SetWindowFontScale(1.0f);
-				}
-				contentWidth += buildTagWidth;
-
-				// Slide left rather than clip into the icon column
-				float offset = std::min(Util::GetCenterOffsetForContent(contentWidth), ImGui::GetContentRegionAvail().x - contentWidth);
-				offset = std::max(offset, homeReserve);
+				// Centred in the space right of the pill; slides left rather than clip into the icon column
+				const float offset = reserve + std::max(0.0f, (columnWidth - reserve - contentWidth) * 0.5f);
 				ImGui::SetCursorPosX(ImGui::GetCursorPosX() + offset);
 			} else {
 				// Add padding for left-aligned layout
-				ImGui::SetCursorPosX(ImGui::GetCursorPosX() + homeReserve + ThemeManager::Constants::CURSOR_POSITION_PADDING);
+				ImGui::SetCursorPosX(ImGui::GetCursorPosX() + reserve + ThemeManager::Constants::CURSOR_POSITION_PADDING);
+			}
+
+			// Centre the title's ink (not its line box) on the row the nav buttons and pill are centred on
+			{
+				RoleFontGuard titleFont(Menu::FontRole::Title);
+				ImGui::SetWindowFontScale(textScaleFactor);
+				ImGui::SetCursorScreenPos(ImVec2(ImGui::GetCursorScreenPos().x, Util::CenterTextTopY(columnStart.y, estimatedRowHeight)));
+				titleInkScreenY = ImGui::GetCursorScreenPos().y + Util::GetTextInkCenterY();
+				ImGui::SetWindowFontScale(1.0f);
 			}
 
 			// Always display logo if texture is available
@@ -292,18 +310,12 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, float uiScal
 				ImGui::PopStyleVar();
 			}
 			drawBuildTag();
-			titleRight = ImGui::GetItemRectMax().x;
-			rowHeight = std::max(ImGui::GetItemRectSize().y, logoSize);
 
 			// Buttons on the right
 			ImGui::TableNextColumn();
-			iconsLeft = ImGui::GetCursorScreenPos().x;
 			RenderUndockedIcons(actionIcons, uiScale);
 
 			ImGui::EndTable();
-			RenderSearchPill(false, titleRight, iconsLeft, ImGui::GetWindowPos().x + ImGui::GetWindowSize().x * 0.5f,
-				headerTop.y + ImGui::GetStyle().CellPadding.y, rowHeight, uiScale,
-				MenuShortcuts::GetHint(shortcuts, MenuShortcuts::Ids::kGoTo));
 		}
 	}
 
@@ -314,29 +326,29 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, float uiScal
 	}
 }
 
-std::vector<MenuHeaderRenderer::ActionIcon> MenuHeaderRenderer::BuildActionIcons(
+std::vector<MenuHeaderRenderer::ActionIcon> MenuHeaderRenderer::BuildActionIcons(const Util::IconLoader::UIIcons& uiIcons,
 	const std::vector<MenuShortcuts::Shortcut>& shortcuts)
 {
-	// In display order, all Tabler glyphs from MenuIcons.
+	// In display order. An icon whose texture failed to load falls back to its glyph.
 	std::vector<ActionIcon> actionIcons;
 
 	// Tooltips name the action's shortcut, e.g. "Save settings (Ctrl+S)"
 	auto* i18n = I18n::GetSingleton();
 	const bool unsaved = globals::state->HasUnsavedChanges();
 	const std::unordered_map<std::string, std::string> saveHint{ { "shortcut", MenuShortcuts::GetHint(shortcuts, MenuShortcuts::Ids::kSave) } };
-	actionIcons.push_back({ Icons::TI(MenuIcons::kSave),
+	actionIcons.push_back({ uiIcons.saveSettings.texture, Icons::TI(MenuIcons::kSave),
 		unsaved ? i18n->Format("menu.header.save_unsaved_tooltip", saveHint, "Save unsaved changes ({shortcut})") :
 				  i18n->Format("menu.header.save_tooltip", saveHint, "Save settings ({shortcut})"),
 		[]() {
 			SaveManager::SaveAll();
 		},
 		unsaved });
-	actionIcons.push_back({ Icons::TI(MenuIcons::kRestore),
+	actionIcons.push_back({ uiIcons.loadSettings.texture, Icons::TI(MenuIcons::kRestore),
 		T("menu.restore_settings", "Restore Saved Settings"),
 		[]() {
 			Util::RequestRestoreSavedSettingsConfirmation();
 		} });
-	actionIcons.push_back({ Icons::TI(MenuIcons::kClearCache),
+	actionIcons.push_back({ uiIcons.clearCache.texture, Icons::TI(MenuIcons::kClearCache),
 		T("menu.clear_shader_cache", "Clear Shader Cache"),  // the confirmation dialog explains what is cleared
 		[]() {
 			Util::RequestClearShaderCacheConfirmation();
@@ -381,7 +393,7 @@ float MenuHeaderRenderer::RenderDockedIcons(const std::vector<ActionIcon>& actio
 
 		// Check mouse interaction against full area
 		const bool isHovered = ImGui::IsMouseHoveringRect(interactionRect.Min, interactionRect.Max, false);
-		Util::DrawRoundedButtonHighlight(interactionRect, isHovered, isHovered && ImGui::IsMouseDown(ImGuiMouseButton_Left), fgDrawList);
+		Util::DrawAnimatedButtonHighlight(interactionRect, ImGui::GetID(it->tooltip.c_str()), isHovered, isHovered && ImGui::IsMouseDown(ImGuiMouseButton_Left), false, fgDrawList);
 
 		// Draw icon with hover effect, using reduced area to minimize padding
 		ImU32 tintColor;
@@ -398,7 +410,10 @@ float MenuHeaderRenderer::RenderDockedIcons(const std::vector<ActionIcon>& actio
 		}
 		if (it->unsaved)
 			tintColor = ImGui::GetColorU32(Util::Colors::GetUnsaved());
-		DrawIconGlyph(fgDrawList, iconMin, iconMax.x - iconMin.x, it->glyph, tintColor);
+		if (it->texture)
+			fgDrawList->AddImage(it->texture, iconMin, iconMax, ImVec2(0, 0), ImVec2(1, 1), tintColor);
+		else
+			DrawIconGlyph(fgDrawList, iconMin, iconMax.x - iconMin.x, it->glyph, tintColor);
 
 		// Handle interaction
 		if (isHovered) {
@@ -413,14 +428,14 @@ float MenuHeaderRenderer::RenderDockedIcons(const std::vector<ActionIcon>& actio
 	return iconX;
 }
 
-void MenuHeaderRenderer::RenderSearchPill(bool docked, float left, float right, float centerX, float top, float rowHeight, float uiScale,
+float MenuHeaderRenderer::RenderSearchPill(bool docked, float left, float right, float top, float rowHeight, float uiScale,
 	const std::string& shortcutHint)
 {
 	using Constants = ThemeManager::Constants;
 	const char* label = T("ui.search", "Search...");
 	const float height = std::min(rowHeight, ImGui::GetFrameHeight() * Constants::PALETTE_PILL_HEIGHT_SCALE * uiScale);
 	if (height <= 0.0f)
-		return;
+		return left;
 
 	const float pad = Constants::PALETTE_PILL_PAD_X * uiScale;
 	const float gap = Constants::PALETTE_PILL_GAP * uiScale;
@@ -429,15 +444,13 @@ void MenuHeaderRenderer::RenderSearchPill(bool docked, float left, float right, 
 	const float hintWidth = shortcutHint.empty() ? 0.0f : ImGui::CalcTextSize(shortcutHint.c_str()).x;
 	const float fullWidth = pad + glyphSize + pad * 0.5f + labelWidth + (hintWidth > 0.0f ? gap + hintWidth : 0.0f) + pad;
 
-	// Centred when it fits; nudged out of the title's and icons' way; icon-only when tight; dropped when even that does not fit
-	const float roomLeft = left + gap;
-	const float roomRight = right - gap;
-	const float room = roomRight - roomLeft;
+	// Full pill when it fits; icon-only when tight; dropped when even that does not fit
+	const float room = right - gap - left;
 	const bool iconOnly = room < fullWidth;
 	const float width = iconOnly ? height : fullWidth;
 	if (room < width)
-		return;
-	const float x = std::clamp(centerX - width * 0.5f, roomLeft, roomRight - width);
+		return left;
+	const float x = left;
 	const ImVec2 min(x, top + (rowHeight - height) * 0.5f);
 	const ImVec2 max(min.x + width, min.y + height);
 
@@ -459,17 +472,18 @@ void MenuHeaderRenderer::RenderSearchPill(bool docked, float left, float right, 
 	}
 
 	ImDrawList* drawList = docked ? ImGui::GetForegroundDrawList() : ImGui::GetWindowDrawList();
-	ImVec4 fill = ImGui::GetStyle().Colors[ImGuiCol_FrameBg];
-	fill.w *= Constants::PALETTE_PILL_FILL_ALPHA;
-	drawList->AddRectFilled(min, max, ImGui::GetColorU32(fill), height * 0.5f);
-	drawList->AddRect(min, max, ImGui::GetColorU32(hovered ? ImGuiCol_Text : ImGuiCol_Border, down ? 1.0f : 0.6f), height * 0.5f);
+	Util::Glass::Style glass;
+	glass.rounding = height * 0.5f;
+	// Brightens toward the hovered state instead of snapping
+	glass.alpha = 1.0f + Util::Anim::ItemBlend(ImGui::GetID("##GoToPill"), hovered, down, false).hover * Constants::PALETTE_PILL_HOVER_BOOST;
+	Util::Glass::Draw(drawList, min, max, glass);
 
 	const ImU32 textColor = ImGui::GetColorU32(ImGuiCol_TextDisabled);
 	if (iconOnly) {
 		Icons::DrawCenteredGlyph(drawList, min, ImVec2(width, height), Icons::TI(MenuIcons::kSearch), ImGui::GetColorU32(ImGuiCol_Text));
 	} else {
 		Icons::DrawCenteredGlyph(drawList, ImVec2(min.x + pad, min.y), ImVec2(glyphSize, height), Icons::TI(MenuIcons::kSearch), textColor);
-		const float textY = min.y + (height - ImGui::GetTextLineHeight()) * 0.5f;
+		const float textY = Util::CenterTextTopY(min.y, height);
 		const float labelX = min.x + pad + glyphSize + pad * 0.5f;
 		drawList->AddText(ImVec2(labelX, textY), textColor, label);
 		if (hintWidth > 0.0f)
@@ -483,6 +497,7 @@ void MenuHeaderRenderer::RenderSearchPill(bool docked, float left, float right, 
 	}
 	if (clicked)
 		GoToPalette::Open();
+	return x + width + gap;
 }
 
 void MenuHeaderRenderer::RenderUndockedIcons(const std::vector<ActionIcon>& actionIcons, float uiScale)
@@ -513,17 +528,23 @@ void MenuHeaderRenderer::RenderUndockedIcons(const std::vector<ActionIcon>& acti
 	const ImVec2 framePadding = ImGui::GetStyle().FramePadding;
 	const ImVec2 glyphButtonSize(imageSize.x + framePadding.x * 2.0f, imageSize.y + framePadding.y * 2.0f);
 
-	// Draw action icons as glyph buttons
+	// Draw action icons as ImageButtons, or glyph buttons where the texture is missing
 	for (size_t i = 0; i < actionIcons.size(); ++i) {
 		const auto& icon = actionIcons[i];
 		const ImVec4 iconTint = icon.unsaved ? Util::Colors::GetUnsaved() : tintColor;
 
 		std::string buttonId = std::format("##ActionBtn{}", i);
 
-		const bool clicked = ImGui::Button(buttonId.c_str(), glyphButtonSize);
-		const ImVec2 min = ImGui::GetItemRectMin();
-		DrawIconGlyph(ImGui::GetWindowDrawList(), ImVec2(min.x + framePadding.x, min.y + framePadding.y), imageSize.x, icon.glyph,
-			ImGui::GetColorU32(iconTint));
+		bool clicked;
+		if (icon.texture) {
+			// Use ImageButton with reduced image size to minimize padding
+			clicked = ImGui::ImageButton(buttonId.c_str(), icon.texture, imageSize, ImVec2(0, 0), ImVec2(1, 1), ImVec4(0, 0, 0, 0), iconTint);
+		} else {
+			clicked = ImGui::Button(buttonId.c_str(), glyphButtonSize);
+			const ImVec2 min = ImGui::GetItemRectMin();
+			DrawIconGlyph(ImGui::GetWindowDrawList(), ImVec2(min.x + framePadding.x, min.y + framePadding.y), imageSize.x, icon.glyph,
+				ImGui::GetColorU32(iconTint));
+		}
 		if (clicked) {
 			icon.callback();
 		}

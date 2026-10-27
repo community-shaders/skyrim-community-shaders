@@ -564,6 +564,16 @@ namespace Util
 	bool DrawRoundedButtonHighlight(const ImVec2& min, const ImVec2& max, bool hovered, bool active, ImDrawList* drawList = nullptr);
 	bool DrawRoundedButtonHighlight(const ImVec2& min, const ImVec2& max, bool hovered, bool active, float rounding, ImDrawList* drawList);
 
+	/**
+	 * @brief DrawRoundedButtonHighlight with the fill easing in and out (Util::Anim) instead of switching on and off.
+	 * For buttons hit-tested by hand, where there is no ImGui item whose id could key the animation.
+	 * @param id Stable key for this button (e.g. ImGui::GetID("##Home")).
+	 * @param held True while the button is pressed; draws the stronger fill.
+	 * @param current Keeps the hover fill, for the button of the current page.
+	 * @return True when anything was drawn.
+	 */
+	bool DrawAnimatedButtonHighlight(const ImRect& rect, ImGuiID id, bool hovered, bool held, bool current, ImDrawList* drawList = nullptr);
+
 	/** @brief Draws the rounded hover/active fill for the last submitted item. */
 	bool DrawCurrentItemRoundedButtonHighlight(ImDrawList* drawList = nullptr);
 
@@ -602,6 +612,20 @@ namespace Util
 	 * Uses FontBaked::Ascent (line-box top → bottom of 'A'), not the full FontSize em-box.
 	 */
 	float GetEditorChromeTextCursorOffsetY(float rowHeight);
+
+	/**
+	 * @brief Distance from the top of a text line to the vertical centre of capital-letter ink in the current font
+	 * (at its current size, window font scale included). ImGui lays a line out as ascent + descent, so the line box's
+	 * centre sits below the ink's: text centred by its line box looks too high, and a glyph or image centred in the
+	 * same row looks too low next to it. Centre by ink instead; this is the one place that measures it.
+	 */
+	float GetTextInkCenterY();
+
+	/**
+	 * @brief Screen y at which to draw a line of text (cursor / AddText position) so its ink is centred in a row.
+	 * Boxes (images, icon buttons, pills) are centred by their rect as usual; text goes through this.
+	 */
+	float CenterTextTopY(float rowTop, float rowHeight);
 
 	/**
 	 * Button with simple flash feedback (matches action icon hover effect style)
@@ -763,6 +787,9 @@ namespace Util
 	 * @param categoryCount Number of features in the category
 	 * @return true if the expansion state was toggled
 	 */
+	/** @brief The icon texture of a feature category (its stable key, e.g. "Lighting"); null when it has none. */
+	ID3D11ShaderResourceView* GetCategoryIcon(const char* categoryKey);
+
 	bool DrawCategoryHeader(const char* categoryKey, const char* displayName, bool& isExpanded, int categoryCount);
 
 	/**

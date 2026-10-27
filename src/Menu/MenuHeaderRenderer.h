@@ -22,10 +22,11 @@ public:
 	/** @brief Describes a clickable action icon shown in the header bar. */
 	struct ActionIcon
 	{
-		Icons::GlyphRef glyph;          /**< @brief Tabler glyph drawn for the icon. */
-		std::string tooltip;            /**< @brief Tooltip text shown on hover. */
-		std::function<void()> callback; /**< @brief Action invoked when the icon is clicked. */
-		bool unsaved = false;           /**< @brief Tints the icon as a save with unsaved changes. */
+		ID3D11ShaderResourceView* texture; /**< @brief GPU texture for the icon image; null draws the glyph instead. */
+		Icons::GlyphRef glyph;             /**< @brief Font glyph drawn when the texture is missing. */
+		std::string tooltip;               /**< @brief Tooltip text shown on hover. */
+		std::function<void()> callback;    /**< @brief Action invoked when the icon is clicked. */
+		bool unsaved = false;              /**< @brief Tints the icon as a save with unsaved changes. */
 	};
 
 	/**
@@ -90,22 +91,22 @@ private:
 	 * @return The total width taken, including the gaps after each button.
 	 */
 	static float RenderNavButtons(bool docked, ImVec2 min, float size, float gap);
-	static std::vector<ActionIcon> BuildActionIcons(const std::vector<MenuShortcuts::Shortcut>& shortcuts);
+	static std::vector<ActionIcon> BuildActionIcons(const Util::IconLoader::UIIcons& uiIcons, const std::vector<MenuShortcuts::Shortcut>& shortcuts);
 	/** @return The x of the leftmost icon's left edge, or the window's right edge when there are no icons. */
 	static float RenderDockedIcons(const std::vector<ActionIcon>& actionIcons, float uiScale);
 	/**
 	 * @brief Draws the centred "Search... Ctrl+K" pill, which opens the Go to palette.
-	 * The pill sits at the centre of centerX when it fits between left and right, is nudged aside when the title
-	 * or icons are in the way, shrinks to an icon-only button when the room is tight and is left out when even that does not fit.
+	 * The pill starts at `left`, right after the Home and issues buttons, and shrinks to an icon-only button when the
+	 * room up to `right` is tight; it is left out when even that does not fit.
 	 * @param docked True in the docked title bar, where the pill is drawn on the foreground list like the icons.
-	 * @param left Right edge of the title, in screen space.
-	 * @param right Left edge of the icons, in screen space.
-	 * @param centerX Screen x the pill centres on.
+	 * @param left Screen x the pill starts at (the right edge of the nav buttons).
+	 * @param right Screen x the pill must stay left of.
 	 * @param top Screen y of the row the pill is centred in.
 	 * @param rowHeight Height of that row.
 	 * @param shortcutHint The palette's chord, e.g. "Ctrl+K"; empty when unbound.
+	 * @return The pill's right edge plus the gap after it, or `left` when nothing was drawn.
 	 */
-	static void RenderSearchPill(bool docked, float left, float right, float centerX, float top, float rowHeight, float uiScale,
+	static float RenderSearchPill(bool docked, float left, float right, float top, float rowHeight, float uiScale,
 		const std::string& shortcutHint);
 	static void RenderUndockedIcons(const std::vector<ActionIcon>& actionIcons, float uiScale);
 	static void RenderWatermarkLogo(const Util::IconLoader::UIIcons& uiIcons);

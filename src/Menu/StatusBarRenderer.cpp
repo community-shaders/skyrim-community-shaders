@@ -151,12 +151,19 @@ namespace StatusBarRenderer
 		ImGui::SameLine(0.0f, gap);
 		// Keep clear of the window's bottom-right resize grip
 		const float gripClearance = ImGui::GetFontSize() * ThemeManager::Constants::STATUS_BAR_GRIP_CLEARANCE_SCALE;
-		const float available = ImGui::GetContentRegionAvail().x - gripClearance;
+		const float helpWidth = HomePageRenderer::GetHelpButtonWidth();
+		const float rowRight = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - gripClearance;
+		const float available = ImGui::GetContentRegionAvail().x - gripClearance - helpWidth - ImGui::GetStyle().ItemSpacing.x;
 		const float width = std::min(ImGui::CalcTextSize(info.c_str()).x, available);
 		if (width >= ImGui::GetFontSize()) {
 			ImGui::SetCursorPosX(ImGui::GetCursorPosX() + available - width);
 			BrowserUI::EllipsizedText(info.c_str(), width, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
 		}
+
+		// Help sits at the right end, clear of the resize grip
+		ImGui::SameLine(0.0f, 0.0f);
+		ImGui::SetCursorPosX(rowRight - helpWidth);
+		HomePageRenderer::RenderHelpButton();
 
 		ImGui::PopID();
 	}
