@@ -69,7 +69,7 @@ namespace
 		std::string search;
 		std::uint32_t filter = 0;
 		Menu::FeatureSortMode sort = Menu::FeatureSortMode::Category;
-		std::string locale;
+		std::uint64_t i18nGeneration = 0;
 		std::uint64_t userEditsRevision = 0;
 		std::uint64_t sceneRevision = 0;
 		bool developerMode = false;
@@ -486,7 +486,7 @@ bool FeatureListRenderer::UpdateMenuList(
 		.search = featureSearch,
 		.filter = menuSettings.FeatureListFilter & FeatureListFilter::kKnown,
 		.sort = menuSettings.FeatureListSort,
-		.locale = I18n::GetSingleton()->GetCurrentLocale(),
+		.i18nGeneration = I18n::GetSingleton()->GetGeneration(),
 		.userEditsRevision = globals::state->GetUserEditsRevision(),
 		.sceneRevision = globals::sceneSettingsManager ? globals::sceneSettingsManager->GetEntryPresentationRevision() : 0,
 		.developerMode = globals::state->IsDeveloperMode(),

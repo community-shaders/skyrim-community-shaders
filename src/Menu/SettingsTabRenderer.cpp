@@ -422,6 +422,12 @@ void SettingsTabRenderer::RenderLanguageSection()
 		}
 		ImGui::EndCombo();
 	}
+	if (const int coverage = i18n->GetCoveragePercent(); coverage < 100) {
+		ImGui::TextDisabled("%s", i18n->Format("menu.settings.language_coverage",
+										  { { "percent", std::to_string(coverage) } },
+										  "Only {percent}% of the interface is translated in this language; the rest stays in English.")
+									  .c_str());
+	}
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("%s", T("menu.settings.language_tooltip", "Select the display language for the Community Shaders interface."));
 	}

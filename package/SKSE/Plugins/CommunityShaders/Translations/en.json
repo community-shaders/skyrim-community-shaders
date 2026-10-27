@@ -3670,6 +3670,7 @@
     "menu.settings.keys_menus_editors": "Menus & Editors",
     "menu.settings.keys_overlays_capture": "Overlays & Capture",
     "menu.settings.language": "Language",
+    "menu.settings.language_coverage": "Only {percent}% of the interface is translated in this language; the rest stays in English.",
     "menu.settings.language_tooltip": "Select the display language for the Community Shaders interface.",
     "menu.settings.last_shader_cache_duration": "Last shader cache build duration: %s",
     "menu.settings.log_slider_deadzone": "Log Slider Deadzone",
