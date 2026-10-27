@@ -317,7 +317,6 @@ public:
 	/** @brief Which time periods the game-time slider segments. */
 	enum class TimePeriodSet : std::uint8_t
 	{
-		None,
 		Weather,  ///< Four sky colour times.
 		Scene     ///< Six scene periods.
 	};

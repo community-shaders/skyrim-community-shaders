@@ -424,9 +424,8 @@ void EditorWindow::DrawBrowserPage()
 	}
 
 	const std::string id = category->id;
-	ClaimTimePeriodSet(id == "Weather"                            ? TimePeriodSet::Weather :
-					   id == "Locations" || id == "Scene Manager" ? TimePeriodSet::Scene :
-																	TimePeriodSet::None);
+	// The Time slider's period strip shows the scene periods on the scene pages and the sky's four times everywhere else
+	ClaimTimePeriodSet(id == "Locations" || id == "Scene Manager" ? TimePeriodSet::Scene : TimePeriodSet::Weather);
 	if (id == "Light Editor") {
 		lightEditor.DrawSettings();
 		return;
