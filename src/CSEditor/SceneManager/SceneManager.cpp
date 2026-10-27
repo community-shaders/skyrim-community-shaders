@@ -75,31 +75,10 @@ namespace
 		return std::format("{:.4f} ({:02d}:{:02d})", hour, wholeHours, minutes);
 	}
 
-	/// Localised display name of a time-of-day period (the manager's own names stay English for serialization).
-	const char* PeriodLabel(int period)
-	{
-		switch (period) {
-		case 0:
-			return T("cs_editor.debug.period_dawn", "Dawn");
-		case 1:
-			return T("cs_editor.debug.period_sunrise", "Sunrise");
-		case 2:
-			return T("cs_editor.debug.period_day", "Day");
-		case 3:
-			return T("cs_editor.debug.period_sunset", "Sunset");
-		case 4:
-			return T("cs_editor.debug.period_dusk", "Dusk");
-		case 5:
-			return T("cs_editor.debug.period_night", "Night");
-		default:
-			return T("cs_editor.debug.unknown", "Unknown");
-		}
-	}
-
 	void DrawPeriodHeaders()
 	{
 		for (int period = 0; period < SceneSettingsManager::kPeriodCount; ++period)
-			ImGui::TableSetupColumn(PeriodLabel(period));
+			ImGui::TableSetupColumn(SceneSettingsManager::GetPeriodDisplayName(static_cast<SceneSettingsManager::TimeOfDayPeriod>(period)));
 		ImGui::TableHeadersRow();
 	}
 
@@ -150,7 +129,8 @@ namespace
 
 		for (const auto& entry : entries) {
 			ImGui::TableNextRow();
-			for (const auto* column : { &entry.feature, &entry.path, &entry.key, &entry.value, &entry.period }) {
+			const std::string featureLabel = SceneSettingsManager::GetFeatureDisplayName(entry.feature);
+			for (const auto* column : { &featureLabel, &entry.path, &entry.key, &entry.value, &entry.period }) {
 				ImGui::TableNextColumn();
 				ImGui::TextUnformatted(column->empty() ? kMissingValue : column->c_str());
 			}
@@ -203,7 +183,7 @@ namespace
 			return;
 		}
 		for (const auto& name : names)
-			ImGui::BulletText("%s", name.c_str());
+			ImGui::BulletText("%s", SceneSettingsManager::GetFeatureDisplayName(name).c_str());
 	}
 
 	void DrawSceneContext(const DebugSnapshot& snapshot)
@@ -233,7 +213,7 @@ namespace
 			for (const auto& target : snapshot.locationTargets) {
 				ImGui::TableNextRow();
 				ImGui::TableNextColumn();
-				ImGui::TextUnformatted(SceneSettingsManager::GetLocationTargetTypeName(target.type));
+				ImGui::TextUnformatted(SceneSettingsManager::GetLocationTargetTypeDisplayName(target.type));
 				for (const auto* column : { &target.name, &target.formKey, &target.cocCode }) {
 					ImGui::TableNextColumn();
 					ImGui::TextUnformatted(column->empty() ? kMissingValue : column->c_str());
@@ -247,7 +227,7 @@ namespace
 	{
 		if (BeginFieldTable("TimeOfDay")) {
 			DrawField(T("cs_editor.debug.game_hour", "Game hour"), FormatGameHour(snapshot.gameHour));
-			DrawField(T("cs_editor.debug.current_period", "Current period"), PeriodLabel(static_cast<int>(snapshot.period)));
+			DrawField(T("cs_editor.debug.current_period", "Current period"), SceneSettingsManager::GetPeriodDisplayName(snapshot.period));
 			DrawField(T("cs_editor.debug.hour_at_last_resolve", "Hour at last resolve"),
 				snapshot.lastHour < 0.0f ? std::string(kMissingValue) : FormatGameHour(snapshot.lastHour));
 			ImGui::EndTable();
@@ -332,7 +312,8 @@ namespace
 			ImGui::TableHeadersRow();
 			for (const auto& transition : snapshot.locationTransitions) {
 				ImGui::TableNextRow();
-				for (const auto* column : { &transition.feature, &transition.path, &transition.key }) {
+				const std::string featureLabel = SceneSettingsManager::GetFeatureDisplayName(transition.feature);
+				for (const auto* column : { &featureLabel, &transition.path, &transition.key }) {
 					ImGui::TableNextColumn();
 					ImGui::TextUnformatted(column->empty() ? kMissingValue : column->c_str());
 				}
@@ -387,7 +368,7 @@ namespace
 			const auto& setting = snapshot.resolvedSettings[index];
 			ImGui::PushID(static_cast<int>(index));
 			const auto header = std::format("{}{}.{}: {} (base {})",
-				setting.feature,
+				SceneSettingsManager::GetFeatureDisplayName(setting.feature),
 				setting.path.empty() ? "" : std::format(".{}", setting.path),
 				setting.key, setting.applied, setting.baseline);
 			if (ImGui::TreeNode(header.c_str())) {

@@ -118,13 +118,6 @@ static std::string ScopedKey(std::string_view label)
 	return std::format("{}{}{}", static_cast<const void*>(g_currentWidget), kScopeSep, label);
 }
 
-// Recover the original label from a scoped key for use as a palette/UI key.
-static std::string_view UnscopeKey(std::string_view key)
-{
-	const auto pos = key.find(kScopeSep);
-	return pos == std::string_view::npos ? key : key.substr(pos + kScopeSep.size());
-}
-
 const char* WeatherUtils::TranslateControlLabel(std::string_view label)
 {
 	if (label == "Ambient Color")
@@ -348,19 +341,9 @@ bool ContainsStringIgnoreCase(const std::string_view a_string, const std::string
 	return !it.empty();
 }
 
-float Int8ToFloat(const int8_t& value)
-{
-	return ((float)(value + 128) / 255.0f);
-}
-
 float Uint8ToFloat(const uint8_t& value)
 {
 	return ((float)(value) / 255.0f);
-}
-
-int8_t FloatToInt8(const float& value)
-{
-	return (int8_t)std::lerp(-128, 127, std::clamp(value, 0.0f, 1.0f));
 }
 
 uint8_t FloatToUint8(const float& value)
@@ -1174,46 +1157,6 @@ namespace TOD
 		return changed;
 	}
 
-	bool DrawTODInt8Row(const char* label, int values[4])
-	{
-		float factors[4];
-		GetTimeOfDayFactors(factors);
-		bool changed = false;
-		const bool highlighted = PushTODHighlight(label);
-
-		ImGui::TableNextRow();
-		ImGui::TableSetColumnIndex(0);
-		DrawCenteredLabel(label);
-		ImGui::TableSetColumnIndex(1);
-
-		float totalWidth = ImGui::GetContentRegionAvail().x;
-		float sliderWidth = (totalWidth - 3 * ImGui::GetStyle().ItemSpacing.x) / 4.0f;
-
-		for (int i = 0; i < Count; ++i) {
-			if (i > 0)
-				ImGui::SameLine();
-
-			bool isActive = factors[i] > 0.0f;
-			if (!isActive)
-				ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 0.5f);
-
-			ImGui::PushItemWidth(sliderWidth);
-			std::string id = std::string("##") + label + std::to_string(i);
-			if (ImGui::SliderInt(id.c_str(), &values[i], -127, 127))
-				changed = true;
-
-			Util::AddTooltip(std::format("{:.0f}%", factors[i] * 100.0f).c_str());
-
-			ImGui::PopItemWidth();
-
-			if (!isActive)
-				ImGui::PopStyleVar();
-		}
-
-		PopTODHighlight(label, highlighted);
-		return changed;
-	}
-
 	bool BeginTODTable(const char* tableId, float paramColumnWidth)
 	{
 		if (paramColumnWidth <= 0.0f)
@@ -1294,17 +1237,6 @@ namespace PropertyDrawer
 		std::string id = std::string("##") + label;
 		return DrawWithWidgetHighlight(g_currentWidget, label, [&]() {
 			return ImGui::SliderFloat(id.c_str(), &value, minVal, maxVal, format);
-		});
-	}
-
-	bool DrawInt(const char* label, int& value, int minVal, int maxVal)
-	{
-		if (!MatchesCurrentWidgetSearch(label))
-			return false;
-		DrawLabel(label);
-		std::string id = std::string("##") + label;
-		return DrawWithWidgetHighlight(g_currentWidget, label, [&]() {
-			return ImGui::SliderInt(id.c_str(), &value, minVal, maxVal);
 		});
 	}
 

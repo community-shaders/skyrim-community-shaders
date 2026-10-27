@@ -1602,7 +1602,7 @@ std::vector<Widget::SearchResult> WeatherWidget::CollectSearchableSettings() con
 		for (const auto& entry : sceneManager->GetContextEntries(context)) {
 			std::string displayName = std::format("{}: {}", SceneSettingsManager::GetFeatureDisplayName(entry.featureShortName), entry.displayName);
 			if (entry.period != SceneSettingsManager::TimeOfDayPeriod::Count)
-				displayName = std::format("{} ({})", displayName, SceneSettingsManager::kPeriodNames[static_cast<int>(entry.period)]);
+				displayName = std::format("{} ({})", displayName, SceneSettingsManager::GetPeriodDisplayName(entry.period));
 			results.push_back({ std::move(displayName), WeatherTab::kSceneManager, entry.featureShortName });
 		}
 	}
