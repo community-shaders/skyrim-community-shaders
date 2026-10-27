@@ -937,7 +937,6 @@
     "feature.screenshot.hdr_bit_depth_tooltip": "Квантование для 48 bpp RGB PNG. 11-бит — хорошее значение по умолчанию; большие значения увеличивают размер файла с убывающей отдачей.",
     "feature.screenshot.hdr_note": "HDR включён: сохраняет отображаемый кадр в формате PNG с метаданными HDR10 (48 bpp RGB, cICP/cLLi). Используйте HDR-совместимый просмотрщик, например Windows Photos (HDR включён) или Special K SKIF.",
     "feature.screenshot.hotkey": "Горячая клавиша",
-    "feature.screenshot.hotkey_collision": "Эта горячая клавиша конфликтует с ванильным PrintScreen; оба сохранения будут выполнены. Установите bAllowScreenShot=0 в Skyrim.ini для отключения ванильного, или выберите другую горячую клавишу.",
     "feature.screenshot.name": "Скриншот",
     "feature.screenshot.open": "Открыть",
     "feature.screenshot.output": "Вывод",

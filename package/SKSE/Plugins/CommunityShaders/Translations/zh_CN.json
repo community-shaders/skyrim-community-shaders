@@ -2573,7 +2573,6 @@
     "feature.screenshot.hdr_note": "HDR 已启用：将显示帧保存为带有 HDR10 元数据的 PNG（48 bpp RGB，cICP/cLLi）。请使用支持 HDR 的查看器，如 Windows 照片（HDR 开启）或 Special K SKIF。",
     "feature.screenshot.hdr_png": "HDR PNG",
     "feature.screenshot.hotkey": "热键",
-    "feature.screenshot.hotkey_collision": "此热键与原版PrintScreen冲突；两者都会触发保存。在Skyrim.ini中设置bAllowScreenShot=0以抑制原版，或在上方选择不同的热键。",
     "feature.screenshot.name": "截图",
     "feature.screenshot.open": "打开",
     "feature.screenshot.output": "输出",
