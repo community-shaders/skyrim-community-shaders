@@ -46,6 +46,10 @@ private:
 	static void RenderList(float width);
 	/** @brief The selected pack's artwork, metadata and actions. */
 	static void RenderDetail();
+	/** @brief The menu themes, each with its CS logo in the theme's accent, while the UI chip is on. */
+	static void RenderThemeList(float width);
+	/** @brief The selected theme's logo, description, Apply Theme and Open Theme Folder. */
+	static void RenderThemeDetail();
 	/** @brief Full-viewport screenshot lightbox when a filmstrip thumb is selected. */
 	static void RenderScreenshotLightbox();
 	/** @brief Forgets the open screenshot and its pack. */

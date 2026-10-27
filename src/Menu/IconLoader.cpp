@@ -246,6 +246,7 @@ namespace Util::IconLoader
 		deleteSettings.Release();
 		clearCache.Release();
 		logo.Release();
+		logoMonochrome.Release();
 		search.Release();
 		featureSettingRevert.Release();
 		applyToGame.Release();
@@ -289,6 +290,7 @@ namespace Util::IconLoader
 				{ iconFolder + "clear-cache.png", &icons.clearCache.texture, &icons.clearCache.size },
 				{ iconFolder + "delete.png", &icons.deleteSettings.texture, &icons.deleteSettings.size },
 				{ logoPath, &icons.logo.texture, &icons.logo.size },
+				{ "Community Shaders Logo\\Monochrome\\cs-logo.png", &icons.logoMonochrome.texture, &icons.logoMonochrome.size },
 				{ iconFolder + "restore-settings.png", &icons.featureSettingRevert.texture, &icons.featureSettingRevert.size },
 				{ iconFolder + "discord.png", &icons.discord.texture, &icons.discord.size },
 				{ iconFolder + "apply-to-game.png", &icons.applyToGame.texture, &icons.applyToGame.size },

@@ -41,7 +41,7 @@
         ],
         "UseSimplePalette": false,
         "ShowActionIcons": true,
-        "UseMonochromeIcons": false,
+        "UseMonochromeIcons": true,
         "CenterHeader": true,
         "TooltipHoverDelay": 0.5,
         "BackgroundBlurEnabled": true,

@@ -33,6 +33,7 @@ namespace Util
 			UIIcon deleteSettings;
 			UIIcon clearCache;
 			UIIcon logo;
+			UIIcon logoMonochrome;  ///< Always the monochrome logo, tinted per theme on the Presets page
 			UIIcon search;
 			UIIcon featureSettingRevert;
 			UIIcon applyToGame;

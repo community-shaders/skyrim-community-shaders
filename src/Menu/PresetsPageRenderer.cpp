@@ -12,11 +12,14 @@
 #include "IconsTabler.h"
 #include "Menu.h"
 #include "Menu/FeatureListRenderer.h"
+#include "Menu/IconLoader.h"
 #include "Menu/Icons/helpers/IconFonts.h"
 #include "Menu/MenuIcons.h"
+#include "Menu/ThemeManager.h"
 #include "Presets/PresetCompatibility.h"
 #include "Presets/UnifiedPresetCatalog.h"
 #include "Util.h"
+#include "Utils/Format.h"
 #include "Utils/UI.h"
 
 #include <algorithm>
@@ -124,9 +127,33 @@ namespace
 		applyConfirmation.Request();
 	}
 
-	void DrawRoundedImage(ImDrawList* dl, ImTextureID texture, const ImVec2& p0, const ImVec2& p1, float rounding)
+	void DrawRoundedImage(ImDrawList* dl, ImTextureID texture, const ImVec2& p0, const ImVec2& p1, float rounding, ImU32 tint = IM_COL32_WHITE)
 	{
-		dl->AddImageRounded(texture, p0, p1, ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f), IM_COL32_WHITE, rounding);
+		dl->AddImageRounded(texture, p0, p1, ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f), tint, rounding);
+	}
+
+	/// The UI chip lists the menu themes instead of the packs; the theme picked in that list.
+	bool g_showThemes = false;
+	std::string g_selectedTheme;
+
+	/** @brief A theme's accent (its header colour), the tint of its CS logo. */
+	ImVec4 ThemeAccent(const ThemeManager::ThemeInfo& info)
+	{
+		std::array<ImVec4, ImGuiCol_COUNT> palette{};
+		Menu::PaletteFromJson(info.themeData.contains("Theme") ? info.themeData["Theme"] : info.themeData, palette);
+		ImVec4 accent = palette[ImGuiCol_Header];
+		accent.w = 1.0f;
+		return accent;
+	}
+
+	/** @brief The monochrome CS logo in the theme's accent, in a square: the theme's icon, marking it as one CS ships. */
+	void DrawThemeLogo(const ThemeManager::ThemeInfo& info, float size)
+	{
+		ImGui::Dummy(ImVec2(size, size));
+		const auto& logo = Util::IconLoader::GetIcons().logoMonochrome;
+		if (logo.texture)
+			DrawRoundedImage(ImGui::GetWindowDrawList(), reinterpret_cast<ImTextureID>(logo.texture), ImGui::GetItemRectMin(), ImGui::GetItemRectMax(),
+				0.0f, ImGui::GetColorU32(ThemeAccent(info)));
 	}
 
 	/** @brief Circular translucent arrow button centered on center; returns true when clicked. */
@@ -204,6 +231,41 @@ namespace
 		return ImGui::CalcTextSize(label).x + ImGui::GetStyle().FramePadding.x * 2.0f;
 	}
 
+	/** @brief The page's primary Apply button, in the info colour as a pill. */
+	bool ApplyButton(const char* label, bool enabled)
+	{
+		const ImVec4& info = globals::menu->GetTheme().StatusPalette.InfoColor;
+		const float lift = ThemeManager::Constants::PRESET_BUTTON_HOVER_LIFT;
+		const ImVec4 infoHovered(std::min(1.0f, info.x + lift), std::min(1.0f, info.y + lift), std::min(1.0f, info.z + lift), 1.0f);
+		ImGui::BeginDisabled(!enabled);
+		ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, ThemeManager::Constants::PILL_ROUNDING);
+		ImGui::PushStyleColor(ImGuiCol_Button, info);
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, infoHovered);
+		ImGui::PushStyleColor(ImGuiCol_ButtonActive, info);
+		ImGui::PushStyleColor(ImGuiCol_Text, ThemeManager::Constants::PRESET_APPLY_TEXT_COLOR);
+		const bool clicked = Util::ButtonWithFlash(label);
+		ImGui::PopStyleColor(4);
+		ImGui::PopStyleVar();
+		ImGui::EndDisabled();
+		return clicked;
+	}
+
+	/** @brief Borderless folder icon after the Apply button, wrapping to a new row when the pane is narrow. */
+	bool FolderButton(const char* id, const char* tooltip)
+	{
+		const Icons::GlyphRef folderIcon = Icons::TI(MenuIcons::kFolder);
+		BrowserUI::SameLineIfFits(Icons::CalcGlyphSize(folderIcon).x + ImGui::GetStyle().FramePadding.x * 2.0f);
+		bool clicked = false;
+		{
+			auto _style = Util::TransparentIconButtonStyle();
+			ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
+			clicked = Icons::Button(id, folderIcon);
+			ImGui::PopStyleVar();
+		}
+		Util::AddTooltip(tooltip);
+		return clicked;
+	}
+
 	/** @brief Apply, open-folder, remove-baseline and disable buttons, then a line saying how the pack is active. */
 	void DrawPackActions(UnifiedPresetCatalog& catalog, const UnifiedPresetCatalog::PackInfo& pack)
 	{
@@ -212,31 +274,10 @@ namespace
 		const bool baselineEnabled = catalog.IsBaselineEnabled(pack.id);
 
 		// Each button after the first wraps to a new row when the pane is too narrow to hold it.
-		ImGui::BeginDisabled(!CanApplyPack(pack));
-		ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, ThemeManager::Constants::PILL_ROUNDING);
-		const ImVec4& info = theme.StatusPalette.InfoColor;
-		const float lift = ThemeManager::Constants::PRESET_BUTTON_HOVER_LIFT;
-		const ImVec4 infoHovered(std::min(1.0f, info.x + lift), std::min(1.0f, info.y + lift), std::min(1.0f, info.z + lift), 1.0f);
-		ImGui::PushStyleColor(ImGuiCol_Button, info);
-		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, infoHovered);
-		ImGui::PushStyleColor(ImGuiCol_ButtonActive, info);
-		ImGui::PushStyleColor(ImGuiCol_Text, ThemeManager::Constants::PRESET_APPLY_TEXT_COLOR);
-		if (Util::ButtonWithFlash(T("menu.presets.apply", "Apply Preset")))
+		if (ApplyButton(T("menu.presets.apply", "Apply Preset"), CanApplyPack(pack)))
 			RequestApplyPack(pack);
-		ImGui::PopStyleColor(4);
-		ImGui::PopStyleVar();
-		ImGui::EndDisabled();
-
-		const Icons::GlyphRef folderIcon = Icons::TI(ICON_TI_FOLDER_OPEN);
-		BrowserUI::SameLineIfFits(Icons::CalcGlyphSize(folderIcon).x + ImGui::GetStyle().FramePadding.x * 2.0f);
-		{
-			auto _style = Util::TransparentIconButtonStyle();
-			ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
-			if (Icons::Button("##OpenPack", folderIcon))
-				catalog.OpenPackFolder(pack.id);
-			ImGui::PopStyleVar();
-		}
-		Util::AddTooltip(T("menu.presets.open_pack", "Open Preset Folder"));
+		if (FolderButton("##OpenPack", T("menu.presets.open_pack", "Open Preset Folder")))
+			catalog.OpenPackFolder(pack.id);
 
 		if (baselineEnabled) {
 			const char* removeLabel = T("menu.presets.remove_baseline", "Remove Baseline");
@@ -312,8 +353,10 @@ void PresetsPageRenderer::RenderToolbar()
 	using PresetType = UnifiedPresetCatalog::PresetType;
 	const auto typeChip = [](const char* label, std::optional<PresetType> type) {
 		ImGui::PushID(type ? static_cast<int>(*type) : -1);
-		if (BrowserUI::FilterChip("##type", { label }, typeFilter == type))
+		if (BrowserUI::FilterChip("##type", { label }, !g_showThemes && typeFilter == type)) {
 			typeFilter = type;
+			g_showThemes = false;
+		}
 		ImGui::PopID();
 	};
 	typeChip(T("menu.presets.filter_all", "All"), std::nullopt);
@@ -323,6 +366,11 @@ void PresetsPageRenderer::RenderToolbar()
 	typeChip(T("menu.presets.filter_cs", "CS"), PresetType::CS);
 	ImGui::SameLine();
 	typeChip(T("menu.presets.filter_baseline", "Baseline"), PresetType::Baseline);
+	ImGui::SameLine();
+	// The menu's UI themes: listed only while this chip is on, so they stay out of the way of the presets
+	if (BrowserUI::FilterChip("##ui", { T("menu.presets.filter_ui", "UI") }, g_showThemes))
+		g_showThemes = !g_showThemes;
+	Util::AddTooltip(T("menu.presets.filter_ui_tooltip", "Menu themes: colours, fonts and the look of this window."));
 
 	// A small divider keeps these maintenance actions from reading as more filter chips.
 	Util::ToolbarDivider();
@@ -876,6 +924,100 @@ void PresetsPageRenderer::EnsureDiscovered()
 		selectedPackId = catalog.GetPacks().front().id;
 }
 
+void PresetsPageRenderer::RenderThemeList(float width)
+{
+	auto* themeManager = ThemeManager::GetSingleton();
+	const auto& selectedPreset = globals::menu->GetSettings().SelectedThemePreset;
+	const float scale = Util::GetUIScale();
+	const float rowPad = ThemeManager::Constants::PRESET_ROW_PADDING * scale;
+	const float rowInset = ThemeManager::Constants::PRESET_ROW_INSET * scale;
+	const float logoSize = ThemeManager::Constants::PRESET_ROW_LOGO_SIZE * scale;
+	const std::string query = Util::FoldForSearch(searchBuffer);
+
+	ImGui::BeginChild("##ThemeList", ImVec2(width, 0), true);
+	{
+		MenuFonts::FontRoleGuard heading(Menu::FontRole::Subheading);
+		ImGui::TextUnformatted(T("menu.presets.themes", "UI Themes"));
+	}
+	ImGui::Separator();
+
+	if (g_selectedTheme.empty())
+		g_selectedTheme = selectedPreset;
+	for (const auto& info : themeManager->GetThemes()) {
+		if (!info.isValid || (!query.empty() && Util::FoldForSearch(info.displayName).find(query) == std::string::npos))
+			continue;
+		ImGui::PushID(info.name.c_str());
+		const ImVec2 rowOrigin = ImGui::GetCursorScreenPos();
+		const float rowHeight = logoSize + rowPad * 2.0f;
+		if (Util::Selectable("##row", g_selectedTheme == info.name, ImGuiSelectableFlags_AllowOverlap | ImGuiSelectableFlags_AllowDoubleClick, ImVec2(0, rowHeight))) {
+			g_selectedTheme = info.name;
+			if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+				globals::menu->LoadThemePreset(info.name);
+		}
+		ImGui::SetCursorScreenPos(ImVec2(rowOrigin.x + rowInset, rowOrigin.y + rowPad));
+		DrawThemeLogo(info, logoSize);
+		ImGui::SameLine(0.0f, rowInset);
+		ImGui::BeginGroup();
+		ImGui::TextUnformatted(info.displayName.c_str());
+		if (info.name == selectedPreset) {
+			ImGui::SameLine(0.0f, ThemeManager::Constants::PRESET_ROW_STATUS_GAP * scale);
+			ImGui::TextColored(globals::menu->GetTheme().StatusPalette.SuccessColor, "%s", T("menu.presets.active", "Active"));
+		}
+		{
+			MenuFonts::FontRoleGuard sub(Menu::FontRole::Subtext);
+			ImGui::TextDisabled("%s", info.author.c_str());
+		}
+		ImGui::EndGroup();
+		ImGui::SetCursorScreenPos(ImVec2(rowOrigin.x, rowOrigin.y + rowHeight + ImGui::GetStyle().ItemSpacing.y));
+		ImGui::Dummy(ImVec2(0, 0));
+		ImGui::PopID();
+	}
+	ImGui::EndChild();
+}
+
+void PresetsPageRenderer::RenderThemeDetail()
+{
+	auto* themeManager = ThemeManager::GetSingleton();
+	ImGui::BeginChild("##ThemeDetail", ImVec2(0, 0), true);
+	const auto* info = themeManager->GetThemeInfo(g_selectedTheme);
+	if (!info) {
+		ImGui::TextDisabled("%s", T("menu.presets.select_theme_prompt", "Select a theme from the list to view details."));
+		ImGui::EndChild();
+		return;
+	}
+
+	const float posterSize = ImGui::GetFrameHeight() * ThemeManager::Constants::PRESET_POSTER_HEIGHT_FRAMES;
+	DrawThemeLogo(*info, posterSize);
+	ImGui::SameLine();
+	ImGui::BeginGroup();
+	{
+		MenuFonts::FontRoleGuard title(Menu::FontRole::Heading);
+		ImGui::TextUnformatted(info->displayName.c_str());
+	}
+	{
+		MenuFonts::FontRoleGuard sub(Menu::FontRole::Subtext);
+		const std::string meta = info->version.empty() ? info->author : std::format("{} \xC2\xB7 v{}", info->author, info->version);
+		ImGui::TextDisabled("%s", meta.c_str());
+	}
+	ImGui::EndGroup();
+
+	ImGui::Spacing();
+	if (!info->description.empty())
+		ImGui::TextWrapped("%s", info->description.c_str());
+	ImGui::Spacing();
+
+	const bool active = globals::menu->GetSettings().SelectedThemePreset == info->name;
+	if (ApplyButton(T("menu.presets.apply_theme", "Apply Theme"), !active))
+		globals::menu->LoadThemePreset(info->name);
+	if (FolderButton("##OpenThemes", T("menu.presets.open_theme_folder", "Open Theme Folder")))
+		ShellExecuteW(nullptr, L"open", themeManager->GetThemesDirectory().wstring().c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+	if (active) {
+		MenuFonts::FontRoleGuard sub(Menu::FontRole::Subtext);
+		ImGui::TextColored(globals::menu->GetTheme().StatusPalette.SuccessColor, "%s", T("menu.presets.active_theme", "This is the current menu theme."));
+	}
+	ImGui::EndChild();
+}
+
 void PresetsPageRenderer::Render()
 {
 	auto& catalog = UnifiedPresetCatalog::GetSingleton();
@@ -890,9 +1032,15 @@ void PresetsPageRenderer::Render()
 
 	const float scale = Util::GetUIScale();
 	const float listWidth = std::clamp(ImGui::GetContentRegionAvail().x * ThemeManager::Constants::PRESET_LIST_WIDTH_RATIO, ThemeManager::Constants::PRESET_LIST_MIN_WIDTH * scale, ThemeManager::Constants::PRESET_LIST_MAX_WIDTH * scale);
-	RenderList(listWidth);
-	ImGui::SameLine();
-	RenderDetail();
+	if (g_showThemes) {
+		RenderThemeList(listWidth);
+		ImGui::SameLine();
+		RenderThemeDetail();
+	} else {
+		RenderList(listWidth);
+		ImGui::SameLine();
+		RenderDetail();
+	}
 
 	ImGui::EndChild();
 
