@@ -497,7 +497,8 @@ namespace FeatureIssues
 
 		ImGui::PushID(issue.shortName.c_str());
 
-		// Show feature name with appropriate color
+		// Show feature name with appropriate color, on the same line height as the row's buttons
+		ImGui::AlignTextToFramePadding();
 		ImGui::Bullet();
 		ImGui::SameLine();
 		ImGui::TextColored(color, "%s",
