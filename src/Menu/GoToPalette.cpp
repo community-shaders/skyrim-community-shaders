@@ -47,9 +47,6 @@ namespace GoToPalette
 			int selected = 0;
 			bool refresh = true;
 			bool resetScroll = false;
-			float pillX = std::numeric_limits<float>::quiet_NaN();  ///< Scope pill, relative to the track
-			float pillWidth = 0.0f;
-			float barY = std::numeric_limits<float>::quiet_NaN();  ///< Selected-row highlight, relative to the list
 		};
 		State g_state;
 
@@ -465,16 +462,11 @@ namespace GoToPalette
 
 			// The pill eases to the chosen scope, in width too, as the labels differ
 			const auto& active = *std::ranges::find(slots, g_state.scope, &Slot::scope);
-			if (std::isnan(g_state.pillX)) {
-				g_state.pillX = active.x;
-				g_state.pillWidth = active.width;
-			} else {
-				g_state.pillX = Util::Anim::Smooth(g_state.pillX, active.x, Constants::PALETTE_PILL_RATE);
-				g_state.pillWidth = Util::Anim::Smooth(g_state.pillWidth, active.width, Constants::PALETTE_PILL_RATE);
-			}
 			const ImVec4 accent = Util::Colors::GetAccent();
-			const ImVec2 pillMin(trackMin.x + g_state.pillX, trackMin.y + trackPad);
-			const ImVec2 pillMax(pillMin.x + g_state.pillWidth, pillMin.y + itemHeight);
+			const auto pill = Util::Anim::SelectionGlide(ImGui::GetID("##scopePill"), ImVec2(trackMin.x + active.x, trackMin.y + trackPad),
+				ImVec2(trackMin.x + active.x + active.width, trackMin.y + trackPad + itemHeight), Constants::PALETTE_PILL_RATE);
+			const ImVec2 pillMin = pill.min;
+			const ImVec2 pillMax = pill.max;
 			const float pillRounding = std::max(0.0f, trackRounding - trackPad);
 			drawList->AddRectFilled(pillMin, pillMax, ImGui::GetColorU32(Util::Anim::ScaleAlpha(accent, Constants::PALETTE_PILL_FILL_ALPHA)), pillRounding);
 			drawList->AddRect(pillMin, pillMax, ImGui::GetColorU32(Util::Anim::ScaleAlpha(accent, Constants::PALETTE_PILL_BORDER_ALPHA)), pillRounding,
@@ -667,12 +659,13 @@ namespace GoToPalette
 				}
 
 				// The highlight is one shape that glides from row to row
-				g_state.barY = std::isnan(g_state.barY) ? selectedY : Util::Anim::Smooth(g_state.barY, selectedY, Constants::PALETTE_ROW_RATE);
 				ImDrawList* drawList = ImGui::GetWindowDrawList();
 				const ImVec4 accent = Util::Colors::GetAccent();
 				const float rowRounding = Constants::PALETTE_ROW_ROUNDING * scale;
-				const ImVec2 barMin(origin.x, origin.y + g_state.barY);
-				const ImVec2 barMax(origin.x + width, barMin.y + rowHeight);
+				const auto bar = Util::Anim::SelectionGlide(ImGui::GetID("##rowGlide"), ImVec2(origin.x, origin.y + selectedY),
+					ImVec2(origin.x + width, origin.y + selectedY + rowHeight), Constants::PALETTE_ROW_RATE);
+				const ImVec2 barMin = bar.min;
+				const ImVec2 barMax = bar.max;
 				drawList->AddRectFilled(barMin, barMax, ImGui::GetColorU32(Util::Anim::ScaleAlpha(accent, Constants::PALETTE_SELECT_FILL_ALPHA)), rowRounding);
 				const float barWidth = Constants::ANIM_SELECTED_BAR_WIDTH * scale;
 				drawList->AddRectFilled(ImVec2(barMin.x, barMin.y + rowHeight * 0.2f), ImVec2(barMin.x + barWidth, barMax.y - rowHeight * 0.2f),

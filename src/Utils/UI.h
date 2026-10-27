@@ -637,6 +637,49 @@ namespace Util
 	bool ButtonWithFlash(const char* label, const ImVec2& size = ImVec2(0, 0), int flashDurationMs = 200);
 
 	/**
+	 * @brief Lets a fill be drawn beneath the widgets submitted while the scope is alive, by drawing them on a
+	 * foreground channel of the window's draw list. Inactive (the fill then lands on top) when the list is already
+	 * split, as inside a table.
+	 */
+	class UnderlayScope
+	{
+	public:
+		UnderlayScope();
+		~UnderlayScope();
+		UnderlayScope(const UnderlayScope&) = delete;
+		UnderlayScope& operator=(const UnderlayScope&) = delete;
+
+		/** @brief Switches to the background channel, drawn first, and returns the window's draw list. */
+		ImDrawList* Background();
+
+	private:
+		ImDrawList* list;
+		bool split = false;
+	};
+
+	/**
+	 * @brief Drop-in for ImGui::Button whose hover and press colours ease in and out. Colours come from the style
+	 * stack, so pushed overrides still apply; behaviour is otherwise identical to ImGui::Button.
+	 */
+	bool Button(const char* label, const ImVec2& size = ImVec2(0, 0));
+
+	/**
+	 * @brief Drop-in for ImGui::Selectable whose hover, press and selected fills ease in and out instead of
+	 * switching. Behaviour is otherwise identical to ImGui::Selectable.
+	 */
+	bool Selectable(const char* label, bool selected = false, ImGuiSelectableFlags flags = 0, const ImVec2& size = ImVec2(0, 0));
+	/** @brief Selectable() overload that toggles `*selected` when clicked, like its ImGui counterpart. */
+	bool Selectable(const char* label, bool* selected, ImGuiSelectableFlags flags = 0, const ImVec2& size = ImVec2(0, 0));
+
+	/**
+	 * @brief Row of a navigation list (feature list, Settings sections): eased hover and press fills, and a selected
+	 * highlight that is one shape gliding between the list's rows (Anim::SelectionGlide), in the nav-selected
+	 * surface style.
+	 * @param listKey Stable name of the list; every row of the list passes the same one.
+	 */
+	bool NavSelectable(const char* listKey, const char* label, bool selected, ImGuiSelectableFlags flags = 0, const ImVec2& size = ImVec2(0, 0));
+
+	/**
 	 * Clean, minimalist toggle switch for feature enable/disable state
 	 * @param label Label text to display next to the toggle
 	 * @param enabled Reference to the boolean state to toggle

@@ -5,14 +5,17 @@
 
 /**
  * @brief Small UI animation toolkit: per-ID animated floats kept in ImGui's state storage, easing curves, a
- * hover / press / selected blend for items and colour helpers. Every function honours the "Reduce UI animations"
- * setting by snapping to the target. Values are stored in the current window's state storage, so call
+ * hover / press / selected blend for items and colour helpers. Every function honours the "UI animations" setting
+ * by snapping to the target, and the animation speed setting by scaling rates and durations. Values are stored in the current window's state storage, so call
  * the same helper with the same ID from the same window each frame.
  */
 namespace Util::Anim
 {
-	/** @brief True when the user asked for no UI motion (Settings > Behavior > Reduce UI animations). */
+	/** @brief True when the user turned UI animations off (Settings > Behavior > UI animations). */
 	bool ReducedMotion();
+
+	/** @brief The user's animation speed multiplier, clamped to the supported range; scales every rate and duration here. */
+	float Speed();
 
 	/** @brief Cubic ease-out of t in [0, 1]: quick start, soft landing. */
 	float EaseOutCubic(float t);
@@ -64,6 +67,45 @@ namespace Util::Anim
 	 */
 	float EnterProgress(ImGuiID key, float delay = 0.0f, float duration = 0.0f);
 
+	/** @brief Animated rectangle of a selection highlight, in screen space. */
+	struct GlideRect
+	{
+		ImVec2 min;
+		ImVec2 max;
+	};
+
+	/**
+	 * @brief One highlight shape that eases between the rectangles of a list's selected items, so a changed selection
+	 * glides instead of jumping. Call once per frame, with the selected item's rect, while the list is shown; it
+	 * snaps to the target on the first call and after any frame without a call, and under reduced motion. The shape
+	 * is stored relative to the window's scrolled content, so scrolling does not drag it.
+	 * @param listId Stable id of the list (build it with ImGui::GetID in the list's window).
+	 * @param rate Approach speed per second; 0 uses the standard glide rate.
+	 */
+	GlideRect SelectionGlide(ImGuiID listId, const ImVec2& targetMin, const ImVec2& targetMax, float rate = 0.0f);
+
+	/**
+	 * @brief Staggered entrance for a group of siblings (cards, sections): each Next() returns the eased 0..1
+	 * progress of the next member, which starts a stagger step after the previous one and restarts every time the
+	 * group is shown again.
+	 */
+	class EnterGroup
+	{
+	public:
+		/**
+		 * @param groupId Stable id of the group.
+		 * @param stagger Seconds between members; 0 uses the standard card stagger.
+		 */
+		explicit EnterGroup(ImGuiID groupId, float stagger = 0.0f);
+		/** @brief Progress of the next member; `memberId` must be stable for it (e.g. its child id). */
+		float Next(ImGuiID memberId);
+
+	private:
+		ImGuiID groupId;
+		float stagger;
+		int index = 0;
+	};
+
 	/** @brief Slow 0..1 sine pulse for drawing attention; stays 0 under reduced motion. */
 	float Pulse(float periodSeconds = 0.0f);
 
@@ -77,10 +119,43 @@ namespace Util::Anim
 	ImU32 ScaleAlphaU32(ImU32 color, float alpha);
 
 	/**
-	 * @brief Pushes ImGuiStyleVar_Alpha for a popup fading in, restarting each time `key` appears.
+	 * @brief Pushes ImGuiStyleVar_Alpha for something fading in, restarting each time `key` appears.
+	 * @param duration Seconds to run; 0 uses the popup time.
+	 * @param fromAlpha Alpha factor at the start; 0 fades in from nothing.
 	 * @return The eased progress, for scaling a panel as well.
 	 */
-	float BeginFadeIn(ImGuiID key);
+	float BeginFadeIn(ImGuiID key, float duration = 0.0f, float fromAlpha = 0.0f);
 	/** @brief Pops what BeginFadeIn pushed. */
 	void EndFadeIn();
+
+	/**
+	 * @brief Fades a page in whenever it is opened: a short fade from a partial alpha, with no movement, so layout
+	 * and input are untouched. Scope it around the page's drawing.
+	 */
+	class PageFade
+	{
+	public:
+		/** @param pageId Stable id of the page; a different id starts a new fade. */
+		explicit PageFade(ImGuiID pageId);
+		~PageFade();
+		PageFade(const PageFade&) = delete;
+		PageFade& operator=(const PageFade&) = delete;
+	};
+
+	/**
+	 * @brief Fades a popup in while it is open. Declare it before BeginPopup (which may return false); it pushes
+	 * nothing while the popup is closed, and pops when it leaves scope.
+	 */
+	class PopupFade
+	{
+	public:
+		/** @param popupId The id string given to BeginPopup, in the same ID scope. */
+		explicit PopupFade(const char* popupId);
+		~PopupFade();
+		PopupFade(const PopupFade&) = delete;
+		PopupFade& operator=(const PopupFade&) = delete;
+
+	private:
+		bool pushed = false;
+	};
 }

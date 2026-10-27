@@ -50,8 +50,8 @@ namespace
 
 	constexpr const char* kHelpPopupId = "##HomeHelpPopover";
 
-	/// Index of the card being drawn this frame, for the staggered fade-in.
-	int cardIndex = 0;
+	/// The cards drawn this frame, for the staggered fade-in; rebuilt at the top of the page.
+	Util::Anim::EnterGroup pageCards(0);
 
 	/** @brief One dashboard card: a bordered, auto-height child with an icon and a section-label title. */
 	class Card
@@ -68,7 +68,7 @@ namespace
 			const std::function<void()>& trailing = {})
 		{
 			// Cards fade in one after another each time the page is opened
-			const float enter = Util::Anim::EnterProgress(ImGui::GetID(id), Constants::ANIM_CARD_STAGGER_SECONDS * static_cast<float>(cardIndex++));
+			const float enter = pageCards.Next(ImGui::GetID(id));
 			ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * enter);
 			const auto& cardSurface = Util::Surface::Get(Util::Surface::Role::HomeCard);
 			const float pad = cardSurface.padding * Util::GetUIScale();
@@ -528,7 +528,7 @@ namespace
 				MenuLinks::Open(MenuLinks::Link::Discord);
 			ImGui::PopStyleColor(3);
 			ImGui::PopStyleVar(2);
-		} else if (ImGui::Button(T("menu.home.join_discord", "Join our Discord"), ImVec2(avail, 0.0f))) {
+		} else if (Util::Button(T("menu.home.join_discord", "Join our Discord"), ImVec2(avail, 0.0f))) {
 			MenuLinks::Open(MenuLinks::Link::Discord);
 		}
 		Util::AddTooltip(T("menu.home.join_discord", "Join our Discord"));
@@ -604,6 +604,7 @@ void HomePageRenderer::RenderHelpButton()
 
 void HomePageRenderer::RenderHelpPopover()
 {
+	Util::Anim::PopupFade fade(kHelpPopupId);
 	if (!ImGui::BeginPopup(kHelpPopupId))
 		return;
 
@@ -666,7 +667,7 @@ void HomePageRenderer::RenderHomePage()
 	lastShownFrame = ImGui::GetFrameCount();
 	ImGui::BeginChild("HomePage", ImVec2(0, 0), ImGuiChildFlags_NavFlattened);
 
-	cardIndex = 0;
+	pageCards = Util::Anim::EnterGroup(ImGui::GetID("HomeCards"));
 	// Cards scroll above; the Discord banner and links stay pinned below them
 	const float stripReserve = g_stripHeight > 0.0f ? g_stripHeight : ImGui::GetFrameHeight() * Constants::HOME_STRIP_FIRST_FRAME_FRAMES;
 	ImGui::BeginChild("##HomeCards", ImVec2(0.0f, -stripReserve), ImGuiChildFlags_NavFlattened);

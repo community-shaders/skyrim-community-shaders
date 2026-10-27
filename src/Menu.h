@@ -439,6 +439,7 @@ public:
 		bool FirstTimeSetupCompleted = false;                                                                                // Track if first-time setup has been completed
 		bool SkipClearCacheConfirmation = false;                                                                             // Skip confirmation dialog when clearing shader cache
 		bool AutoHideFeatureList = false;                                                                                    // Auto-hide left feature list panel, show on hover
+		float AnimationSpeed = 1.0f;                                                                                         // Menu animation speed multiplier (Util::Anim::Speed clamps it to the supported range)
 		bool ReduceUIAnimations = false;                                                                                     // Snap menu animations (hover fades, slides, expanding search) instead of easing
 		std::uint32_t FeatureListFilter = 0;                                                                                 // Feature list filters (FeatureListFilter bits); read in Load, unknown bits dropped
 		FeatureSortMode FeatureListSort = FeatureSortMode::Category;                                                         // Feature list order in the left menu column

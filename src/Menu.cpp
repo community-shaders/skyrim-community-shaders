@@ -199,6 +199,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	SkipClearCacheConfirmation,
 	AutoHideFeatureList,
 	ReduceUIAnimations,
+	AnimationSpeed,
 	FeatureListSort,
 	SkipConstraintWarning,
 	RequireShiftToDock,

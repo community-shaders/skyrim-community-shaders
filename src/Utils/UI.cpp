@@ -17,6 +17,7 @@
 #include "ShaderCache.h"
 #include "State.h"
 #include "Utils/UIAnim.h"
+#include "Utils/UISurface.h"
 
 #ifndef DIRECTINPUT_VERSION
 #	define DIRECTINPUT_VERSION 0x0800
@@ -413,15 +414,29 @@ namespace Util
 			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, { padX, (palette.segmentHeight - ImGui::GetFontSize()) * 0.5f });
 			ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, std::max(0.0f, palette.rounding - palette.inset));
 
+			// The selected pill is one shape that glides to the chosen tab; the buttons themselves stay clear.
+			// Its rectangle follows from the label widths, since the buttons are laid out in a row.
+			if (selected >= 0 && selected < static_cast<int>(labels.size())) {
+				float selectedX = trackMin.x + palette.inset;
+				for (int i = 0; i < selected; ++i)
+					selectedX += ImGui::CalcTextSize(labels[static_cast<size_t>(i)].c_str()).x + padX * 2.0f + palette.inset;
+				const float selectedWidth = ImGui::CalcTextSize(labels[static_cast<size_t>(selected)].c_str()).x + padX * 2.0f;
+				const auto pill = Anim::SelectionGlide(ImGui::GetID("pillGlide"), ImVec2(selectedX, trackMin.y + palette.inset),
+					ImVec2(selectedX + selectedWidth, trackMin.y + palette.inset + palette.segmentHeight));
+				drawList->AddRectFilled(pill.min, pill.max, ImGui::GetColorU32(palette.selectedFill), std::max(0.0f, palette.rounding - palette.inset));
+			}
+			ImVec4 clearFill = palette.hoverFill;
+			clearFill.w = 0.0f;
+
 			bool changed = false;
 			for (int i = 0; i < static_cast<int>(labels.size()); ++i) {
 				if (i > 0)
 					ImGui::SameLine();
 				const bool isSelected = i == selected;
 				ImGui::PushID(i);
-				ImGui::PushStyleColor(ImGuiCol_Button, isSelected ? palette.selectedFill : ImVec4());
-				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, isSelected ? palette.selectedFill : palette.hoverFill);
-				ImGui::PushStyleColor(ImGuiCol_ButtonActive, palette.selectedFill);
+				ImGui::PushStyleColor(ImGuiCol_Button, clearFill);
+				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, isSelected ? clearFill : palette.hoverFill);
+				ImGui::PushStyleColor(ImGuiCol_ButtonActive, clearFill);
 				ImGui::PushStyleColor(ImGuiCol_Text, isSelected ? palette.selectedText : palette.idleText);
 				if (ImGui::Button(labels[i].c_str())) {
 					selected = i;
@@ -1253,6 +1268,142 @@ namespace Util
 
 		drawList->AddRectFilled(min, max, ImGui::GetColorU32(active ? ImGuiCol_ButtonActive : ImGuiCol_ButtonHovered), rounding);
 		return true;
+	}
+
+	UnderlayScope::UnderlayScope() :
+		list(ImGui::GetWindowDrawList())
+	{
+		split = list->_Splitter._Count <= 1 && !ImGui::GetCurrentTable();
+		if (split) {
+			list->ChannelsSplit(2);
+			list->ChannelsSetCurrent(1);
+		}
+	}
+
+	UnderlayScope::~UnderlayScope()
+	{
+		if (split)
+			list->ChannelsMerge();
+	}
+
+	ImDrawList* UnderlayScope::Background()
+	{
+		if (split)
+			list->ChannelsSetCurrent(0);
+		return list;
+	}
+
+	namespace
+	{
+		/// The eased state an item reached by the end of the last frame, read before the item is submitted so its
+		/// colours can be set first. Items that are not interactive this frame (disabled) ease back to rest.
+		Anim::Blend PendingBlend(ImGuiID id, bool selected)
+		{
+			const ImGuiContext& g = *ImGui::GetCurrentContext();
+			const bool enabled = (g.CurrentItemFlags & ImGuiItemFlags_Disabled) == 0;
+			return Anim::ItemBlend(id, enabled && g.HoveredIdPreviousFrame == id, enabled && g.ActiveId == id, selected);
+		}
+
+		/// The rectangle ImGui::Selectable fills for an item: its rect grown by half the item spacing.
+		ImRect SelectableFillRect(ImGuiSelectableFlags flags)
+		{
+			const ImGuiStyle& style = ImGui::GetStyle();
+			const float spacingX = (flags & ImGuiSelectableFlags_SpanAllColumns) ? 0.0f : style.ItemSpacing.x;
+			const float left = std::floor(spacingX * 0.5f);
+			const float top = std::floor(style.ItemSpacing.y * 0.5f);
+			return ImRect(ImVec2(ImGui::GetItemRectMin().x - left, ImGui::GetItemRectMin().y - top),
+				ImVec2(ImGui::GetItemRectMax().x + (spacingX - left), ImGui::GetItemRectMax().y + (style.ItemSpacing.y - top)));
+		}
+
+		/// Selectable with ImGui's own fills hidden and eased ones drawn beneath its label; `glideId` set draws the
+		/// selected state as a gliding nav highlight instead of an eased fill.
+		bool EasedSelectable(const char* label, bool selected, ImGuiSelectableFlags flags, const ImVec2& size, const char* listKey)
+		{
+			const ImGuiID id = ImGui::GetID(label);
+			const ImGuiID glideId = listKey ? ImHashStr(listKey) : 0;
+			const auto blend = PendingBlend(id, glideId == 0 && selected);
+			const ImU32 hoverColor = ImGui::GetColorU32(ImGuiCol_HeaderHovered);
+			const ImU32 pressColor = ImGui::GetColorU32(ImGuiCol_HeaderActive);
+			const ImU32 selectedColor = ImGui::GetColorU32(ImGuiCol_Header);
+
+			bool clicked = false;
+			UnderlayScope underlay;
+			{
+				ImGui::PushStyleColor(ImGuiCol_Header, IM_COL32_BLACK_TRANS);
+				ImGui::PushStyleColor(ImGuiCol_HeaderHovered, IM_COL32_BLACK_TRANS);
+				ImGui::PushStyleColor(ImGuiCol_HeaderActive, IM_COL32_BLACK_TRANS);
+				clicked = ImGui::Selectable(label, selected, flags, size);
+				ImGui::PopStyleColor(3);
+			}
+			if (!ImGui::IsItemVisible())
+				return clicked;
+
+			const bool glides = glideId != 0 && selected;
+			if (blend.Highlight() <= 0.0f && !glides)
+				return clicked;
+
+			const ImRect rect = SelectableFillRect(flags);
+			ImDrawList* drawList = underlay.Background();
+			if (blend.selected > 0.0f)
+				drawList->AddRectFilled(rect.Min, rect.Max, Anim::ScaleAlphaU32(selectedColor, blend.selected));
+			if (blend.hover > 0.0f)
+				drawList->AddRectFilled(rect.Min, rect.Max, Anim::ScaleAlphaU32(hoverColor, blend.hover));
+			if (blend.press > 0.0f)
+				drawList->AddRectFilled(rect.Min, rect.Max, Anim::ScaleAlphaU32(pressColor, blend.press));
+
+			if (glides) {
+				const auto& navSurface = Surface::Get(Surface::Role::NavSelected);
+				if (navSurface.enabled) {
+					const auto glide = Anim::SelectionGlide(glideId, rect.Min, rect.Max);
+					const float rounding = ImGui::GetStyle().FrameRounding;
+					if (navSurface.fillAlpha > 0.0f)
+						drawList->AddRectFilled(glide.min, glide.max, ImGui::GetColorU32(Anim::ScaleAlpha(Colors::GetAccent(), navSurface.fillAlpha)), rounding);
+					const float barWidth = navSurface.accentBarWidth * GetUIScale();
+					if (navSurface.accentBar && barWidth > 0.0f) {
+						const float inset = (glide.max.y - glide.min.y) * ThemeManager::Constants::NAV_SELECTED_BAR_INSET;
+						drawList->AddRectFilled(ImVec2(glide.min.x, glide.min.y + inset), ImVec2(glide.min.x + barWidth, glide.max.y - inset),
+							ImGui::GetColorU32(Colors::GetAccent()), barWidth * 0.5f);
+					}
+				}
+			}
+			return clicked;
+		}
+	}  // namespace
+
+	bool Button(const char* label, const ImVec2& size)
+	{
+		if (Anim::ReducedMotion())
+			return ImGui::Button(label, size);
+		const auto blend = PendingBlend(ImGui::GetID(label), false);
+		const ImVec4 rest = ImGui::GetStyleColorVec4(ImGuiCol_Button);
+		const ImVec4 hovered = ImGui::GetStyleColorVec4(ImGuiCol_ButtonHovered);
+		const ImVec4 active = ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive);
+		// Every state shows the eased colour, so the instant hover / press swap of ImGui is replaced by the blend
+		const ImVec4 eased = Anim::Lerp(Anim::Lerp(rest, hovered, blend.hover), active, blend.press);
+		ImGui::PushStyleColor(ImGuiCol_Button, eased);
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, eased);
+		ImGui::PushStyleColor(ImGuiCol_ButtonActive, eased);
+		const bool clicked = ImGui::Button(label, size);
+		ImGui::PopStyleColor(3);
+		return clicked;
+	}
+
+	bool Selectable(const char* label, bool selected, ImGuiSelectableFlags flags, const ImVec2& size)
+	{
+		return EasedSelectable(label, selected, flags, size, nullptr);
+	}
+
+	bool Selectable(const char* label, bool* selected, ImGuiSelectableFlags flags, const ImVec2& size)
+	{
+		if (!EasedSelectable(label, *selected, flags, size, nullptr))
+			return false;
+		*selected = !*selected;
+		return true;
+	}
+
+	bool NavSelectable(const char* listKey, const char* label, bool selected, ImGuiSelectableFlags flags, const ImVec2& size)
+	{
+		return EasedSelectable(label, selected, flags, size, listKey);
 	}
 
 	bool DrawAnimatedButtonHighlight(const ImRect& rect, ImGuiID id, bool hovered, bool held, bool current, ImDrawList* drawList)

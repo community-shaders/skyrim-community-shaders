@@ -352,12 +352,16 @@ public:
 		static constexpr float ANIM_POPUP_SCALE_FROM = 0.97f;      // Palette panel scale at the start of its fade-in
 		static constexpr float ANIM_PAGE_ENTER_SECONDS = 0.18f;    // Page and Home card fade-in time
 		static constexpr float ANIM_CARD_STAGGER_SECONDS = 0.04f;  // Delay added per Home card
-		static constexpr float ANIM_CARD_SLIDE = 8.0f;             // Home card rise distance during its fade-in (1080p baseline)
-		static constexpr float ANIM_PULSE_PERIOD = 2.6f;           // Seconds per attention pulse
-		static constexpr float ANIM_PULSE_AMPLITUDE = 0.25f;       // Attention pulse swing, as a share of full alpha
-		static constexpr float ANIM_SEARCH_RATE = 22.0f;           // Expanding search field open / close speed
-		static constexpr float NAV_SELECTED_BAR_INSET = 0.2f;      // Accent bar inset from the row's top and bottom, as a share of its height
-		static constexpr float ANIM_SELECTED_BAR_WIDTH = 3.0f;     // Accent bar on the left of the selected nav row (1080p baseline)
+		static constexpr float ANIM_PAGE_FADE_SECONDS = 0.14f;     // Fade-in when a page or feature is opened
+		static constexpr float ANIM_PAGE_FADE_FROM = 0.4f;         // Page alpha at the start of that fade (never fully hidden, so there is no flash)
+		static constexpr float ANIM_GLIDE_RATE = 26.0f;            // How fast a selection highlight glides to the newly selected item, per second
+		static constexpr float ANIM_SPEED_MIN = 0.5f;              // Animation speed multiplier range (Settings > Behavior)
+		static constexpr float ANIM_SPEED_MAX = 2.0f;
+		static constexpr float ANIM_PULSE_PERIOD = 2.6f;        // Seconds per attention pulse
+		static constexpr float ANIM_PULSE_AMPLITUDE = 0.25f;    // Attention pulse swing, as a share of full alpha
+		static constexpr float ANIM_SEARCH_RATE = 22.0f;        // Expanding search field open / close speed
+		static constexpr float NAV_SELECTED_BAR_INSET = 0.2f;   // Accent bar inset from the row's top and bottom, as a share of its height
+		static constexpr float ANIM_SELECTED_BAR_WIDTH = 3.0f;  // Accent bar on the left of the selected nav row (1080p baseline)
 
 		// Flat surfaces (Util::Surface): one subtle step above the window colour, a hairline border, one soft shadow when floating
 		static constexpr float SURFACE_FILL_LIFT = 0.04f;        // Window colour lifted toward white so cards read above the page
