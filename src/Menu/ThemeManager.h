@@ -347,16 +347,19 @@ public:
 		static constexpr float TOAST_STRIPE_WIDTH = 3.0f;                   // Accent stripe on the card's left edge
 
 		// UI animation (Util::Anim): rates are per second for 1 - exp(-rate * dt) approach, durations in seconds
-		static constexpr float ANIM_HOVER_RATE = 18.0f;            // Hover / press colour blend speed
-		static constexpr float ANIM_SELECT_RATE = 14.0f;           // Selection highlight blend speed
-		static constexpr float ANIM_EPSILON = 0.002f;              // Blend within this of its target snaps to it
-		static constexpr float ANIM_POPUP_SECONDS = 0.14f;         // Popup and palette fade / scale-in time
-		static constexpr float ANIM_POPUP_SCALE_FROM = 0.97f;      // Palette panel scale at the start of its fade-in
-		static constexpr float ANIM_PAGE_ENTER_SECONDS = 0.18f;    // Page, feature page and Home card fade-in time
-		static constexpr float ANIM_CARD_STAGGER_SECONDS = 0.04f;  // Delay added per Home card
-		static constexpr float ANIM_PAGE_FADE_FROM = 0.4f;         // Page alpha at the start of that fade (never fully hidden, so there is no flash)
-		static constexpr float ANIM_GLIDE_RATE = 26.0f;            // How fast a selection highlight glides to the newly selected item, per second
-		static constexpr float ANIM_SPEED_MIN = 0.5f;              // Animation speed multiplier range (Settings > Behavior)
+		static constexpr float ANIM_HOVER_RATE = 18.0f;                   // Hover / press colour blend speed
+		static constexpr float ANIM_SELECT_RATE = 14.0f;                  // Selection highlight blend speed
+		static constexpr float ANIM_EPSILON = 0.002f;                     // Blend within this of its target snaps to it
+		static constexpr float ANIM_POPUP_SECONDS = 0.14f;                // Popup and palette fade / scale-in time
+		static constexpr float ANIM_POPUP_GHOST_MAX_GAP_SECONDS = 0.15f;  // A closed popup only fades out if it was open this recently, so hiding the whole menu leaves no ghost
+		static constexpr float ANIM_POPUP_SCALE_FROM = 0.97f;             // Palette panel scale at the start of its fade-in
+		static constexpr float ANIM_PAGE_ENTER_SECONDS = 0.18f;           // Page, feature page and Home card fade-in time
+		static constexpr float ANIM_CARD_STAGGER_SECONDS = 0.04f;         // Delay added per Home card
+		static constexpr float ANIM_PAGE_FADE_FROM = 0.4f;                // Page alpha at the start of that fade (never fully hidden, so there is no flash)
+		static constexpr float ANIM_GLIDE_RATE = 26.0f;                   // How fast a selection highlight glides to the newly selected item, per second
+		static constexpr float ANIM_SLIDER_RATE = 16.0f;                  // How fast a slider eases to a value changed from outside, per second
+		static constexpr float ANIM_SLIDER_SNAP_FRACTION = 0.002f;        // A slider within this share of its range of the target snaps to it
+		static constexpr float ANIM_SPEED_MIN = 0.5f;                     // Animation speed multiplier range (Settings > Behavior)
 		static constexpr float ANIM_SPEED_MAX = 2.0f;
 		static constexpr float ANIM_PULSE_PERIOD = 2.6f;        // Seconds per attention pulse
 		static constexpr float ANIM_PULSE_AMPLITUDE = 0.25f;    // Attention pulse swing, as a share of full alpha

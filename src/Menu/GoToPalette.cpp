@@ -37,7 +37,8 @@ namespace GoToPalette
 
 		struct State
 		{
-			int openedFrame = 0;  // Frame the palette opened on, so the click that opened it does not close it
+			double closeStartedAt = -1.0;  // Set while the panel fades out; it closes once the fade ends
+			int openedFrame = 0;           // Frame the palette opened on, so the click that opened it does not close it
 			std::array<char, 256> query{};
 			std::string lastQuery;
 			GoToIndex::Results results;
@@ -564,11 +565,17 @@ namespace GoToPalette
 		const ImGuiViewport* viewport = ImGui::GetMainViewport();
 		// Fades in and grows slightly from the centre each time it opens
 		const float enter = ImGui::IsPopupOpen(kPopupId) ? Util::Anim::EnterProgress(ImGui::GetID(kPopupId), 0.0f, Constants::ANIM_POPUP_SECONDS) : 1.0f;
-		const float grow = Constants::ANIM_POPUP_SCALE_FROM + (1.0f - Constants::ANIM_POPUP_SCALE_FROM) * enter;
+		// Like the menu itself, it keeps drawing while it fades out and closes once the fade is done
+		const bool closing = g_state.closeStartedAt >= 0.0;
+		const float exitProgress = closing ? std::min(1.0f, static_cast<float>(ImGui::GetTime() - g_state.closeStartedAt) * Util::Anim::Speed() /
+																Constants::ANIM_POPUP_SECONDS) :
+		                                     0.0f;
+		const float visibility = enter * (1.0f - Util::Anim::EaseOutCubic(exitProgress));
+		const float grow = Constants::ANIM_POPUP_SCALE_FROM + (1.0f - Constants::ANIM_POPUP_SCALE_FROM) * visibility;
 		ImGui::SetNextWindowPos(viewport->GetCenter(), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
 		ImGui::SetNextWindowSize(ImVec2(viewport->Size.x * Constants::PALETTE_WIDTH_RATIO * grow, viewport->Size.y * Constants::PALETTE_HEIGHT_RATIO * grow),
 			ImGuiCond_Always);
-		ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * enter);
+		ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * visibility);
 		ImGui::PushStyleColor(ImGuiCol_PopupBg, IM_COL32_BLACK_TRANS);
 
 		// No nav inputs: Tab and the arrows belong to the palette, not to ImGui's focus movement
@@ -711,13 +718,18 @@ namespace GoToPalette
 
 		DrawFooter(scale);
 
-		if (chosen || close) {
-			ImGui::CloseCurrentPopup();
+		if ((chosen || close) && !closing) {
+			if (Util::Anim::ReducedMotion())
+				ImGui::CloseCurrentPopup();
+			else
+				g_state.closeStartedAt = ImGui::GetTime();
 			if (chosen) {
 				GoToIndex::RecordPick(*chosen);
 				GoToIndex::Execute(*chosen, shortcuts);
 			}
 		}
+		if (closing && exitProgress >= 1.0f)
+			ImGui::CloseCurrentPopup();
 		ImGui::EndPopup();
 		ImGui::PopStyleVar();
 	}

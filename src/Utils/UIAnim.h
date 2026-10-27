@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <imgui.h>
 #include <limits>
 
@@ -143,8 +144,51 @@ namespace Util::Anim
 	};
 
 	/**
-	 * @brief Fades a popup in while it is open. Declare it before BeginPopup (which may return false); it pushes
-	 * nothing while the popup is closed, and pops when it leaves scope.
+	 * @brief Counter that advances whenever the content pane changes page. Widgets that ease their values drop their
+	 * state when it changes, so a different page's controls never animate from the previous page's values.
+	 */
+	std::uint32_t PageEpoch();
+
+	/** @brief Signature of ImGui::SliderScalar, which every slider widget funnels into. */
+	using SliderScalarFn = bool (*)(const char*, ImGuiDataType, void*, const void*, const void*, const char*, ImGuiSliderFlags);
+
+	/**
+	 * @brief Slider body with automatic easing. When the bound value changes from outside (a preset, restore, undo,
+	 * paste), the slider's grab and number ease to the new value instead of jumping. Direct edits are never delayed:
+	 * while the user holds the slider, or when the value is at rest, @p real runs on the caller's value untouched.
+	 * Hooked into ImGui::SliderScalar, so every slider variant gets it with no per-widget opt-in. Float and int
+	 * sliders ease; other data types, and everything while UI animations are off, pass straight through.
+	 */
+	bool EasedSliderScalar(SliderScalarFn real, const char* label, ImGuiDataType dataType, void* data, const void* min,
+		const void* max, const char* format, ImGuiSliderFlags flags);
+
+	/**
+	 * @brief Fades a popup out after it closes. ImGui drops a popup's window the frame it closes, so while the popup is
+	 * open this keeps a copy of what it drew, and once it closes the copy is replayed over the screen, fading away.
+	 * Declare it before BeginPopup / BeginPopupModal in the same ID scope, every frame, whether or not the popup is
+	 * open. PopupFade includes it; use it alone for a popup that animates its own entrance.
+	 */
+	class PopupGhost
+	{
+	public:
+		/**
+		 * @param popupId The id string given to BeginPopup / BeginPopupModal.
+		 * @param modal True for BeginPopupModal, whose window is named by the string itself rather than by its id.
+		 */
+		explicit PopupGhost(const char* popupId, bool modal = false);
+		~PopupGhost();
+		PopupGhost(const PopupGhost&) = delete;
+		PopupGhost& operator=(const PopupGhost&) = delete;
+
+	private:
+		ImGuiID id = 0;
+		bool modal = false;
+		const char* popupId = nullptr;
+	};
+
+	/**
+	 * @brief Fades a popup in while it is open, and out once it closes. Declare it before BeginPopup (which may
+	 * return false); it pushes nothing while the popup is closed, and pops when it leaves scope.
 	 */
 	class PopupFade
 	{
@@ -156,6 +200,7 @@ namespace Util::Anim
 		PopupFade& operator=(const PopupFade&) = delete;
 
 	private:
+		PopupGhost ghost;
 		bool pushed = false;
 	};
 }

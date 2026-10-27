@@ -4,8 +4,12 @@
 #include "Menu.h"
 #include "Menu/ThemeManager.h"
 
+#include <imgui_internal.h>
+
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
+#include <unordered_map>
 
 namespace Util::Anim
 {
@@ -156,8 +160,78 @@ namespace Util::Anim
 		ImGui::PopStyleVar();
 	}
 
+	namespace
+	{
+		std::uint32_t g_pageEpoch = 0;
+		ImGuiID g_lastPageId = 0;
+	}
+
+	std::uint32_t PageEpoch()
+	{
+		return g_pageEpoch;
+	}
+
+	bool EasedSliderScalar(SliderScalarFn real, const char* label, ImGuiDataType dataType, void* data, const void* min,
+		const void* max, const char* format, ImGuiSliderFlags flags)
+	{
+		const bool isFloat = dataType == ImGuiDataType_Float;
+		const bool isInt = dataType == ImGuiDataType_S32;
+		if (ReducedMotion() || (!isFloat && !isInt))
+			return real(label, dataType, data, min, max, format, flags);
+
+		const auto read = [&](const void* value) {
+			return isFloat ? *static_cast<const float*>(value) : static_cast<float>(*static_cast<const int*>(value));
+		};
+		const ImGuiID id = ImGui::GetID(label);
+		ImGuiStorage* storage = ImGui::GetStateStorage();
+		const ImGuiID shownKey = id ^ 0xA5A5A5A5u;
+		const ImGuiID frameKey = id ^ 0x3C3C3C3Cu;
+		const ImGuiID epochKey = id ^ 0x7E7E7E7Eu;
+
+		const float target = read(data);
+		// A slider that was not drawn last frame, or that belongs to a page that was just opened, starts at rest
+		const int frame = ImGui::GetFrameCount();
+		const int epoch = static_cast<int>(g_pageEpoch);
+		const bool fresh = storage->GetInt(frameKey, -10) < frame - 1 || storage->GetInt(epochKey, -1) != epoch;
+		storage->SetInt(frameKey, frame);
+		storage->SetInt(epochKey, epoch);
+
+		float shown = target;
+		if (!fresh && ImGui::GetActiveID() != id) {
+			shown = Smooth(storage->GetFloat(shownKey, target), target, Constants::ANIM_SLIDER_RATE);
+			const float snap = std::max(isInt ? 0.5f : 0.0f, std::abs(read(max) - read(min)) * Constants::ANIM_SLIDER_SNAP_FRACTION);
+			if (std::abs(shown - target) <= snap)
+				shown = target;
+		}
+
+		if (shown == target) {
+			storage->SetFloat(shownKey, target);
+			return real(label, dataType, data, min, max, format, flags);
+		}
+
+		// Easing: the widget draws a copy, and only a real edit is written back
+		float easedFloat = shown;
+		int easedInt = static_cast<int>(std::lround(shown));
+		void* eased = isFloat ? static_cast<void*>(&easedFloat) : static_cast<void*>(&easedInt);
+		const bool changed = real(label, dataType, eased, min, max, format, flags);
+		if (changed) {
+			if (isFloat)
+				*static_cast<float*>(data) = easedFloat;
+			else
+				*static_cast<int*>(data) = easedInt;
+			storage->SetFloat(shownKey, read(data));
+		} else {
+			storage->SetFloat(shownKey, shown);
+		}
+		return changed;
+	}
+
 	PageFade::PageFade(ImGuiID pageId)
 	{
+		if (pageId != g_lastPageId) {
+			g_lastPageId = pageId;
+			++g_pageEpoch;
+		}
 		BeginFadeIn(pageId, Constants::ANIM_PAGE_ENTER_SECONDS, Constants::ANIM_PAGE_FADE_FROM);
 	}
 
@@ -166,7 +240,97 @@ namespace Util::Anim
 		EndFadeIn();
 	}
 
-	PopupFade::PopupFade(const char* popupId)
+	namespace
+	{
+		/// What a popup drew while it was open, and when it closed, so it can fade out over the screen.
+		struct PopupSnapshot
+		{
+			ImDrawList* list = nullptr;
+			bool wasOpen = false;
+			double lastOpenTime = 0.0;
+			double closedAt = -1.0;
+		};
+
+		std::unordered_map<ImGuiID, PopupSnapshot> g_popupSnapshots;
+
+		/// Replays a snapshot into the foreground list with every vertex alpha scaled; vertices are written unindexed,
+		/// which is fine for a popup that only lives on screen for a moment.
+		void DrawSnapshot(const ImDrawList& src, float alpha)
+		{
+			ImDrawList* dst = ImGui::GetForegroundDrawList();
+			for (const ImDrawCmd& cmd : src.CmdBuffer) {
+				if (cmd.UserCallback || cmd.ElemCount == 0 || cmd.ElemCount > 60000)
+					continue;
+				dst->PushClipRect(ImVec2(cmd.ClipRect.x, cmd.ClipRect.y), ImVec2(cmd.ClipRect.z, cmd.ClipRect.w), false);
+				dst->PushTexture(cmd.TexRef);
+				dst->PrimReserve(static_cast<int>(cmd.ElemCount), static_cast<int>(cmd.ElemCount));
+				const ImDrawIdx base = static_cast<ImDrawIdx>(dst->_VtxCurrentIdx);
+				for (unsigned int i = 0; i < cmd.ElemCount; ++i) {
+					const ImDrawVert& vertex = src.VtxBuffer[cmd.VtxOffset + src.IdxBuffer[cmd.IdxOffset + i]];
+					const ImU32 faded = (vertex.col & ~IM_COL32_A_MASK) |
+					                    (static_cast<ImU32>(static_cast<float>(vertex.col >> IM_COL32_A_SHIFT) * alpha) << IM_COL32_A_SHIFT);
+					dst->PrimWriteVtx(vertex.pos, vertex.uv, faded);
+					dst->PrimWriteIdx(static_cast<ImDrawIdx>(base + i));
+				}
+				dst->PopTexture();
+				dst->PopClipRect();
+			}
+		}
+	}
+
+	PopupGhost::PopupGhost(const char* popupId, bool modal) :
+		id(ImGui::GetID(popupId)),
+		modal(modal),
+		popupId(popupId)
+	{
+		if (ReducedMotion())
+			return;
+		PopupSnapshot& snapshot = g_popupSnapshots[id];
+		const double now = ImGui::GetTime();
+		if (ImGui::IsPopupOpen(popupId)) {
+			snapshot.wasOpen = true;
+			snapshot.lastOpenTime = now;
+			snapshot.closedAt = -1.0;
+			return;
+		}
+		// Closed since last frame: start the fade, unless the menu itself was hidden in between
+		if (snapshot.wasOpen) {
+			snapshot.wasOpen = false;
+			if (now - snapshot.lastOpenTime < Constants::ANIM_POPUP_GHOST_MAX_GAP_SECONDS)
+				snapshot.closedAt = now;
+		}
+		if (snapshot.closedAt >= 0.0 && snapshot.list) {
+			const float t = static_cast<float>(now - snapshot.closedAt) * Speed() / Constants::ANIM_POPUP_SECONDS;
+			if (t >= 1.0f)
+				snapshot.closedAt = -1.0;
+			else
+				DrawSnapshot(*snapshot.list, 1.0f - EaseOutCubic(t));
+		}
+	}
+
+	PopupGhost::~PopupGhost()
+	{
+		if (ReducedMotion() || !ImGui::IsPopupOpen(popupId))
+			return;
+		// Still open after its contents were drawn: remember them for when it closes
+		char name[64];
+		if (modal)
+			ImFormatString(name, IM_ARRAYSIZE(name), "%s", popupId);
+		else
+			ImFormatString(name, IM_ARRAYSIZE(name), "##Popup_%08x", id);
+		const ImGuiWindow* window = ImGui::FindWindowByName(name);
+		if (!window || !window->WasActive)
+			return;
+		PopupSnapshot& snapshot = g_popupSnapshots[id];
+		if (!snapshot.list)
+			snapshot.list = IM_NEW(ImDrawList)(ImGui::GetDrawListSharedData());
+		snapshot.list->CmdBuffer = window->DrawList->CmdBuffer;
+		snapshot.list->IdxBuffer = window->DrawList->IdxBuffer;
+		snapshot.list->VtxBuffer = window->DrawList->VtxBuffer;
+	}
+
+	PopupFade::PopupFade(const char* popupId) :
+		ghost(popupId)
 	{
 		const ImGuiID id = ImGui::GetID(popupId);
 		pushed = ImGui::IsPopupOpen(popupId);
