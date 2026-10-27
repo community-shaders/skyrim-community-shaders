@@ -478,7 +478,7 @@ namespace CinematicCamera
 			};
 			ImGui::Combo(T("feature.post_processing.cinematic_camera.gate_fit", "Gate Fit"), &fb.GateFit, gateFitNames, (int)std::size(gateFitNames));
 			if (auto _tt = Util::HoverTooltipWrapper())
-				ImGui::Text(T("feature.post_processing.cinematic_camera.gate_fit_desc",
+				ImGui::TextUnformatted(T("feature.post_processing.cinematic_camera.gate_fit_desc",
 					"Which sensor dimension maps to the game FOV. Horizontal keeps the horizontal angle of view; Vertical keeps the vertical angle and derives the horizontal FOV from the viewport aspect."));
 		}
 

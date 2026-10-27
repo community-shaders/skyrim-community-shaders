@@ -574,7 +574,7 @@ void AdvancedSettingsRenderer::RenderDeveloperSection()
 				ImGui::Text(T("menu.advanced.infinite_core_efficiency_metric", "Infinite-core efficiency (S/T_p): %.1f%%"), 100.0 * p.infiniteCoreEfficiency);
 				Util::HoverTip(T("menu.advanced.infinite_core_efficiency_tooltip_1", "How close runtime is to the infinite-core lower bound."));
 				// Passed as the format on purpose: the translated strings carry an escaped percent sign
-				ImGui::Text(T("menu.advanced.infinite_core_efficiency_tooltip_2", "100%% means T_p == S."));
+				ImGui::TextUnformatted(T("menu.advanced.infinite_core_efficiency_tooltip_2", "100% means T_p == S."));
 				ImGui::Text(T("menu.advanced.infinite_core_gap_metric", "Infinite-core gap: %.1f%%"), p.infiniteCoreGapPercent);
 				Util::HoverTip(T("menu.advanced.infinite_core_gap_tooltip_1", "Distance from ideal infinite-core time."));
 				ImGui::Text("%s", T("menu.advanced.infinite_core_gap_tooltip_2", "Defined as 100 * (1 - S / T_p). Lower is better."));

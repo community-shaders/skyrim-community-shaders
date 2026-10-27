@@ -50,7 +50,7 @@ namespace
 		}
 
 		if (lut.LutType == -1)
-			ImGui::Text(T("feature.post_processing.lut.loaded_texture_none", "Loaded Texture: None"));
+			ImGui::TextUnformatted(T("feature.post_processing.lut.loaded_texture_none", "Loaded Texture: None"));
 		else
 			ImGui::Text(T("feature.post_processing.lut.loaded_texture", "Loaded Texture: %s"), lut.settings.LutPath.c_str());
 	}

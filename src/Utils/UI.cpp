@@ -5,6 +5,7 @@
 #include "CSEditor/SceneManager/SceneWidgetInterceptor.h"
 #include "D3D.h"
 #include "FileSystem.h"
+#include "Format.h"
 #include "IconsTabler.h"
 #include "Menu.h"
 #include "Menu/FeatureListRenderer.h"
@@ -2021,14 +2022,8 @@ namespace Util
 		if (searchQuery.empty())
 			return true;
 
-		std::string lowerText = text;
-		std::string lowerQuery = searchQuery;
-
-		// Convert all to lowercase for case-insensitive search
-		std::transform(lowerText.begin(), lowerText.end(), lowerText.begin(), ::tolower);
-		std::transform(lowerQuery.begin(), lowerQuery.end(), lowerQuery.begin(), ::tolower);
-
-		return lowerText.find(lowerQuery) != std::string::npos;
+		// Case-insensitive in every language, not only ASCII
+		return FoldForSearch(text).find(FoldForSearch(searchQuery)) != std::string::npos;
 	}
 
 	void DrawBreathingText(const char* text, std::optional<ImVec4> color, float speed, float minAlpha, float maxAlpha)

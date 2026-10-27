@@ -438,7 +438,7 @@ void PerformanceOverlay::DrawFPS()
 
 		if (this->state.isFrameGenerationActive) {
 			ImGui::TableNextColumn();
-			ImGui::Text(T(TKEY("post_fg_fps"), "Post-FG FPS:"));
+			ImGui::TextUnformatted(T(TKEY("post_fg_fps"), "Post-FG FPS:"));
 			ImGui::TableNextColumn();
 			ImGui::Text("%.1f (%.2f ms)", this->state.postFGSmoothFps, this->state.postFGSmoothFrameTimeMs);
 		}
@@ -510,7 +510,7 @@ void PerformanceOverlay::DrawVRAM()
 		float percent = currentGpuUsage / totalGpuMemory;
 
 		// Center the VRAM text
-		ImGui::Text(T(TKEY("vram_usage"), "VRAM Usage:"));
+		ImGui::TextUnformatted(T(TKEY("vram_usage"), "VRAM Usage:"));
 
 		// Use a centered text format for the numeric values
 		std::string vramText = std::format("{:.2f}GB/{:.2f}GB ({:.1f}%)", currentGpuUsage, totalGpuMemory, 100 * percent);

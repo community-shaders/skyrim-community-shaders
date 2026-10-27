@@ -39,6 +39,7 @@ public:
 	// Feature overrides — see Feature.h for contracts. Only members that differ from the base
 	// defaults are overridden (the feature has no settings, shaders, or per-frame state).
 	std::string GetName() override { return "Remote Control"; }
+	std::string GetDisplayName() override { return T("feature.remote_control.name", "Remote Control"); }
 	std::string GetShortName() override { return "RemoteControl"; }
 	std::string_view GetCategory() const override { return FeatureCategories::kUtility; }
 	std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override

@@ -50,9 +50,28 @@ namespace GoToIndex
 
 		std::vector<std::string> g_recent;  ///< Entry IDs, newest first
 
-		char Fold(char c)
+		/// The next code point of `text` at `pos`, case-folded, so matching ignores case in every language.
+		char32_t NextFolded(std::string_view text, size_t& pos)
 		{
-			return (c >= 'A' && c <= 'Z') ? static_cast<char>(c - 'A' + 'a') : c;
+			return Util::FoldCodepoint(Util::NextCodepoint(text, pos));
+		}
+
+		/// Where `word` first appears in `target`, ignoring case, as a byte range starting on a code point.
+		std::optional<std::pair<size_t, size_t>> FindFolded(std::string_view target, std::string_view word)
+		{
+			for (size_t start = 0; start < target.size(); Util::NextCodepoint(target, start)) {
+				size_t t = start;
+				size_t w = 0;
+				bool same = true;
+				while (same && w < word.size()) {
+					if (t >= target.size())
+						return std::nullopt;
+					same = NextFolded(target, t) == NextFolded(word, w);
+				}
+				if (same)
+					return std::pair{ start, t };
+			}
+			return std::nullopt;
 		}
 
 		bool IsAlnum(char c)
@@ -167,7 +186,8 @@ namespace GoToIndex
 				entry.id = "feature:" + shortName;
 				entry.title = feature->GetDisplayName();
 				entry.breadcrumb = category;
-				entry.haystack = shortName + " " + category;
+				// The English name too, so English guides keep working in other locales
+				entry.haystack = shortName + " " + category + " " + feature->GetName();
 				entry.filterBits = FeatureListRenderer::GetFilterBits(feature);
 				if (!feature->loaded) {
 					entry.dimmed = true;
@@ -352,8 +372,8 @@ namespace GoToIndex
 		const int lengthBonus = std::max(0, kLengthBonusCap - static_cast<int>(target.size()));
 
 		// Substring first: the strongest signal, and cheap
-		if (const auto hit = std::ranges::search(target, word, {}, Fold, Fold); !hit.empty()) {
-			const size_t pos = static_cast<size_t>(hit.begin() - target.begin());
+		if (const auto hit = FindFolded(target, word)) {
+			const size_t pos = hit->first;
 			int score = kSubstring - static_cast<int>(pos) + lengthBonus;
 			if (pos == 0)
 				score += kPrefix;
@@ -366,12 +386,12 @@ namespace GoToIndex
 		int score = kBase + lengthBonus;
 		size_t ti = 0;
 		bool previousMatched = false;
-		for (const char q : word) {
-			const char folded = Fold(q);
+		for (size_t wi = 0; wi < word.size();) {
+			const char32_t folded = NextFolded(word, wi);
 			bool found = false;
 			while (ti < target.size()) {
-				const size_t at = ti++;
-				if (Fold(target[at]) != folded) {
+				const size_t at = ti;
+				if (NextFolded(target, ti) != folded) {
 					previousMatched = false;
 					continue;
 				}
@@ -405,23 +425,25 @@ namespace GoToIndex
 		for (const auto word : SplitWords(query)) {
 			if (word.size() > title.size())
 				continue;
-			if (const auto hit = std::ranges::search(title, word, {}, Fold, Fold); !hit.empty()) {
-				const size_t begin = static_cast<size_t>(hit.begin() - title.begin());
-				for (size_t i = 0; i < word.size(); ++i)
-					positions.push_back(begin + i);
+			if (const auto hit = FindFolded(title, word)) {
+				for (size_t i = hit->first; i < hit->second; ++i)
+					positions.push_back(i);
 				continue;
 			}
 			// The same greedy subsequence walk ScoreWord scores
 			size_t at = 0;
 			std::vector<size_t> found;
-			for (const char q : word) {
-				while (at < title.size() && Fold(title[at]) != Fold(q))
-					++at;
+			for (size_t wi = 0; wi < word.size();) {
+				const char32_t q = NextFolded(word, wi);
+				size_t next = at;
+				while (at < title.size() && NextFolded(title, next) != q)
+					at = next;
 				if (at == title.size()) {
 					found.clear();
 					break;
 				}
-				found.push_back(at++);
+				found.push_back(at);
+				at = next;
 			}
 			positions.insert(positions.end(), found.begin(), found.end());
 		}

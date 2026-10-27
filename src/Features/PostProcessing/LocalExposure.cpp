@@ -28,47 +28,47 @@ void LocalExposure::DrawSettings()
 	if (!exposure || !exposure->IsActive()) {
 		ImGui::SliderFloat(T("feature.post_processing.local_exposure.exposure", "Exposure"), &settings.Exposure, 0.f, 4.f, "%.2f");
 		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text(T("feature.post_processing.local_exposure.manual_brightness_normalization_used_when_histogram_auto_exposure", "Manual brightness normalization used when Histogram Auto Exposure is disabled. Higher values make the scene behave brighter."));
+			ImGui::TextUnformatted(T("feature.post_processing.local_exposure.manual_brightness_normalization_used_when_histogram_auto_exposure", "Manual brightness normalization used when Histogram Auto Exposure is disabled. Higher values make the scene behave brighter."));
 	}
 
 	ImGui::SliderFloat(T("feature.post_processing.local_exposure.strength", "Strength"), &settings.Strength, 0.f, 1.f, "%.2f");
 	if (auto _tt = Util::HoverTooltipWrapper())
-		ImGui::Text(T("feature.post_processing.local_exposure.strength_tooltip", "Blends the local adjustment with the globally exposed image."));
+		ImGui::TextUnformatted(T("feature.post_processing.local_exposure.strength_tooltip", "Blends the local adjustment with the globally exposed image."));
 
 	ImGui::SliderFloat(T("feature.post_processing.local_exposure.highlight_contrast", "Highlight Contrast"), &settings.HighlightContrast, 0.f, 1.f, "%.2f");
 	if (auto _tt = Util::HoverTooltipWrapper())
-		ImGui::Text(T("feature.post_processing.local_exposure.highlight_contrast_tooltip", "Controls base-layer contrast above middle grey. Lower values recover more highlight range."));
+		ImGui::TextUnformatted(T("feature.post_processing.local_exposure.highlight_contrast_tooltip", "Controls base-layer contrast above middle grey. Lower values recover more highlight range."));
 
 	ImGui::SliderFloat(T("feature.post_processing.local_exposure.shadow_contrast", "Shadow Contrast"), &settings.ShadowContrast, 0.f, 1.f, "%.2f");
 	if (auto _tt = Util::HoverTooltipWrapper())
-		ImGui::Text(T("feature.post_processing.local_exposure.shadow_contrast_tooltip", "Controls base-layer contrast below middle grey. Lower values lift shadows more strongly."));
+		ImGui::TextUnformatted(T("feature.post_processing.local_exposure.shadow_contrast_tooltip", "Controls base-layer contrast below middle grey. Lower values lift shadows more strongly."));
 
 	ImGui::SliderFloat(T("feature.post_processing.local_exposure.detail_strength", "Detail Strength"), &settings.DetailStrength, 0.f, 2.f, "%.2f");
 	if (auto _tt = Util::HoverTooltipWrapper())
-		ImGui::Text(T("feature.post_processing.local_exposure.detail_strength_tooltip", "Preserves or boosts fine luminance detail separated from the base layer. 1.0 keeps the original detail contrast."));
+		ImGui::TextUnformatted(T("feature.post_processing.local_exposure.detail_strength_tooltip", "Preserves or boosts fine luminance detail separated from the base layer. 1.0 keeps the original detail contrast."));
 
 	ImGui::SliderFloat(T("feature.post_processing.local_exposure.base_blend", "Soft Base Blend"), &settings.BaseBlend, 0.f, 1.f, "%.2f");
 	if (auto _tt = Util::HoverTooltipWrapper())
-		ImGui::Text(T("feature.post_processing.local_exposure.base_blend_tooltip", "Blends the edge-aware base with a broad smooth base. Higher values reduce halos and keep large highlights natural."));
+		ImGui::TextUnformatted(T("feature.post_processing.local_exposure.base_blend_tooltip", "Blends the edge-aware base with a broad smooth base. Higher values reduce halos and keep large highlights natural."));
 
 	ImGui::SliderFloat(T("feature.post_processing.local_exposure.blurred_luminance_kernel_size", "Blurred Luminance Kernel Size"), &settings.BlurredLuminanceKernelSize, 0.f, 100.f, "%.1f%%", ImGuiSliderFlags_AlwaysClamp);
 	if (auto _tt = Util::HoverTooltipWrapper())
-		ImGui::Text(T("feature.post_processing.local_exposure.blurred_luminance_kernel_size_tooltip", "Sets the broad luminance blur diameter as a percentage of screen width."));
+		ImGui::TextUnformatted(T("feature.post_processing.local_exposure.blurred_luminance_kernel_size_tooltip", "Sets the broad luminance blur diameter as a percentage of screen width."));
 
 	if (ImGui::TreeNodeEx(T("feature.post_processing.local_exposure.advanced", "Advanced"), ImGuiTreeNodeFlags_DefaultOpen)) {
 		ImGui::SliderFloat(T("feature.post_processing.local_exposure.middle_grey_bias", "Middle Grey Bias"), &settings.MiddleGreyBias, -4.f, 4.f, "%+.2f EV");
 		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text(T("feature.post_processing.local_exposure.middle_grey_bias_tooltip", "Moves the tonal pivot used to separate highlight and shadow adjustments."));
+			ImGui::TextUnformatted(T("feature.post_processing.local_exposure.middle_grey_bias_tooltip", "Moves the tonal pivot used to separate highlight and shadow adjustments."));
 
 		ImGui::SliderFloat(T("feature.post_processing.local_exposure.highlight_threshold", "Highlight Threshold"), &settings.HighlightThreshold, 0.f, 4.f, "%.2f EV");
 		ImGui::SliderFloat(T("feature.post_processing.local_exposure.highlight_threshold_strength", "Highlight Threshold Strength"), &settings.HighlightThresholdStrength, 0.f, 1.f, "%.2f");
 		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text(T("feature.post_processing.local_exposure.highlight_threshold_tooltip", "Protects tones near middle grey before highlight compression begins."));
+			ImGui::TextUnformatted(T("feature.post_processing.local_exposure.highlight_threshold_tooltip", "Protects tones near middle grey before highlight compression begins."));
 
 		ImGui::SliderFloat(T("feature.post_processing.local_exposure.shadow_threshold", "Shadow Threshold"), &settings.ShadowThreshold, 0.f, 4.f, "%.2f EV");
 		ImGui::SliderFloat(T("feature.post_processing.local_exposure.shadow_threshold_strength", "Shadow Threshold Strength"), &settings.ShadowThresholdStrength, 0.f, 1.f, "%.2f");
 		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text(T("feature.post_processing.local_exposure.shadow_threshold_tooltip", "Protects tones near middle grey before shadow lifting begins."));
+			ImGui::TextUnformatted(T("feature.post_processing.local_exposure.shadow_threshold_tooltip", "Protects tones near middle grey before shadow lifting begins."));
 
 		ImGui::TreePop();
 	}
