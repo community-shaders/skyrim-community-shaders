@@ -4,9 +4,6 @@
 
 #include <span>
 
-// Forward declaration
-class Menu;
-
 /**
  * @brief Draws the Advanced sections of the Settings page (see SettingsPageRenderer): developer tools,
  * logging, shader debugging and A/B testing, plus the compiler controls of Shaders & Cache.

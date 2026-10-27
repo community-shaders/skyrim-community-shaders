@@ -4,7 +4,6 @@
 
 #include <functional>
 #include <optional>
-#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -12,8 +11,8 @@
 /**
  * @brief Renders the Settings page of the main menu.
  *
- * The main menu's left pane lists the sections under General, Appearance and Advanced group labels (RenderSectionList), in place of the feature list;
- * the selected section draws in the page
+ * The main menu's left pane lists the sections under General, Appearance and Advanced group labels (RenderSectionList),
+ * in place of the feature list; the selected section draws in the page
  * pane (Render). The page has one navigation level only: sections use labels for their parts, never tab bars.
  */
 class SettingsPageRenderer

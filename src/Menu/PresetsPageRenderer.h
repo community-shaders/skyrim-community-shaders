@@ -48,6 +48,8 @@ private:
 	static void RenderDetail();
 	/** @brief Full-viewport screenshot lightbox when a filmstrip thumb is selected. */
 	static void RenderScreenshotLightbox();
+	/** @brief Forgets the open screenshot and its pack. */
+	static void ResetLightbox();
 	/** @brief Width DrawBackendBadges will take, for right-aligning it. */
 	static float MeasureBackendBadgesWidth(bool hasE11, bool hasCSPresets, bool hasBaseline, bool compact);
 

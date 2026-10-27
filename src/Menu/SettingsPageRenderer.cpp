@@ -4,7 +4,6 @@
 #include <array>
 #include <cmath>
 #include <imgui.h>
-#include <span>
 #include <vector>
 
 #include "AdvancedSettingsRenderer.h"

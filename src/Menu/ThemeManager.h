@@ -462,6 +462,25 @@ public:
 		static constexpr ImVec4 PRESET_VIEWER_ARROW_COLOR{ 0.0f, 0.0f, 0.0f, 0.45f };         // Viewer arrow button fill
 		static constexpr ImVec4 PRESET_VIEWER_ARROW_HOVER_COLOR{ 0.0f, 0.0f, 0.0f, 0.7f };    // Viewer arrow button hover
 		static constexpr ImVec4 PRESET_VIEWER_ARROW_ACTIVE_COLOR{ 0.0f, 0.0f, 0.0f, 0.85f };  // Viewer arrow button pressed
+
+		// --- Cleanup: settings / overlay / profiling ---
+		static constexpr float FONT_ROLE_SCALE_MIN = 0.5f;  // Per-role font scale slider range (Settings > Fonts)
+		static constexpr float FONT_ROLE_SCALE_MAX = 2.5f;
+		static constexpr float PILL_ROUNDING = 999.0f;                                         // Frame rounding that turns a button into a full pill
+		static constexpr float PRESET_SEARCH_WIDTH = 220.0f;                                   // Presets search field width, at 1080p
+		static constexpr float PRESET_BUTTON_HOVER_LIFT = 0.1f;                                // Per-channel brighten of the Apply button on hover
+		static constexpr ImVec4 PRESET_APPLY_TEXT_COLOR{ 0.05f, 0.07f, 0.1f, 1.0f };           // Apply button label (dark on the accent fill)
+		static constexpr float PRESET_BADGE_INFO_ALPHA = 0.9f;                                 // Effects 11 badge fill at rest
+		static constexpr float PRESET_BADGE_ALPHA = 0.85f;                                     // CS Presets and Baseline badge fill at rest
+		static constexpr ImVec4 PRESET_BADGE_INFO_TEXT{ 0.05f, 0.05f, 0.08f, 1.0f };           // Label over the Effects 11 badge
+		static constexpr ImVec4 PRESET_BADGE_WARNING_TEXT{ 0.08f, 0.06f, 0.02f, 1.0f };        // Label over the CS Presets badge
+		static constexpr ImVec4 PRESET_BADGE_SUCCESS_TEXT{ 0.02f, 0.08f, 0.04f, 1.0f };        // Label over the Baseline badge
+		static constexpr ImVec4 PRESET_LOGO_PLACEHOLDER_COLOR{ 0.15f, 0.15f, 0.18f, 1.0f };    // Row logo fill when a pack has none
+		static constexpr ImVec4 PRESET_POSTER_PLACEHOLDER_COLOR{ 0.12f, 0.12f, 0.14f, 1.0f };  // Detail poster fill when a pack has no cover
+		static constexpr float PRESET_POSTER_HEIGHT_FRAMES = 6.0f;                             // Detail poster height, in frame heights
+		static constexpr float PRESET_POSTER_ASPECT = 2.0f / 3.0f;                             // Detail poster width over height (portrait)
+		static constexpr float PRESET_THUMB_HEIGHT_FRAMES = 4.0f;                              // Screenshot thumbnail width, in frame heights
+		static constexpr float SCREENSHOT_ASPECT = 16.0f / 9.0f;                               // Screenshot width over height
 	};
 
 	static ThemeManager* GetSingleton()

@@ -60,6 +60,29 @@ namespace
 		{ Ids::kDisableAtBoot, "menu.settings.disabled_only", "Disabled only" },
 	};
 
+	/** @brief Hover tooltip for the item just drawn. */
+	void Tip(const char* text)
+	{
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::TextUnformatted(text);
+	}
+
+	/** @brief Clipboard text describing an active shader: type, class, descriptor, key and cache path. */
+	std::string DescribeShader(const SIE::ShaderCache::ActiveShaderInfo& shader)
+	{
+		std::string diskPath;
+		diskPath.reserve(shader.diskPath.size());
+		for (wchar_t wc : shader.diskPath)
+			diskPath += static_cast<char>(wc);
+
+		return std::format("Type: {}\nClass: {}\nDescriptor: 0x{:X}\nKey: {}\nCache Path: {}",
+			magic_enum::enum_name(shader.shaderType).data(),
+			magic_enum::enum_name(shader.shaderClass).data(),
+			shader.descriptor,
+			shader.key,
+			diskPath);
+	}
+
 	constexpr double kStoreUsageRefreshSeconds = 5.0;
 	constexpr double kBytesPerMB = 1024.0 * 1024.0;
 
@@ -99,21 +122,17 @@ namespace
 			a_cache->ApplyContentStoreLimit();
 			lastRefresh = -kStoreUsageRefreshSeconds;
 		}
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("%s", T("menu.advanced.content_store_limit_tooltip",
-								  "Least recently used shaders are deleted once the store exceeds this. "
-								  "A full build stores about 120 MB, or about 1.1 GB in Developer Mode, "
-								  "so keep several builds' worth if you switch branches."));
-		}
+		Tip(T("menu.advanced.content_store_limit_tooltip",
+			"Least recently used shaders are deleted once the store exceeds this. "
+			"A full build stores about 120 MB, or about 1.1 GB in Developer Mode, "
+			"so keep several builds' worth if you switch branches."));
 		if (Util::Button(T("menu.advanced.content_store_clear", "Clear Store"))) {
 			a_cache->ClearContentStore();
 			lastRefresh = -kStoreUsageRefreshSeconds;
 		}
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("%s", T("menu.advanced.content_store_clear_tooltip",
-								  "Deletes every stored shader. Use this if a shader looks wrong after being restored; "
-								  "the next compile rebuilds the store from scratch. Shaders already in the shader cache are kept."));
-		}
+		Tip(T("menu.advanced.content_store_clear_tooltip",
+			"Deletes every stored shader. Use this if a shader looks wrong after being restored; "
+			"the next compile rebuilds the store from scratch. Shaders already in the shader cache are kept."));
 		ImGui::Unindent();
 	}
 }
@@ -134,36 +153,28 @@ void AdvancedSettingsRenderer::RenderCompilerSection()
 
 	// Compiler Thread controls
 	ImGui::SliderInt(T("menu.advanced.compiler_threads", "Compiler Threads"), &shaderCache->compilationThreadCount, 1, static_cast<int32_t>(std::thread::hardware_concurrency()), "%d", ImGuiSliderFlags_AlwaysClamp);
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("%s", T("menu.advanced.compiler_threads_tooltip",
-							  "Number of threads used to compile shaders at startup. "
-							  "Defaults to all logical cores minus one for OS headroom (E-cores included). "
-							  "Higher values finish compilation faster but may make the system less responsive."));
-	}
+	Tip(T("menu.advanced.compiler_threads_tooltip",
+		"Number of threads used to compile shaders at startup. "
+		"Defaults to all logical cores minus one for OS headroom (E-cores included). "
+		"Higher values finish compilation faster but may make the system less responsive."));
 	ImGui::SliderInt(T("menu.advanced.background_compiler_threads", "Background Compiler Threads"), &shaderCache->backgroundCompilationThreadCount, 1, static_cast<int32_t>(std::thread::hardware_concurrency()), "%d", ImGuiSliderFlags_AlwaysClamp);
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("%s", T("menu.advanced.background_compiler_threads_tooltip",
-							  "Number of threads used to compile shaders during gameplay. "
-							  "Defaults to half of performance cores to avoid impacting the render thread. "
-							  "Higher values finish compilation faster but may cause stuttering."));
-	}
+	Tip(T("menu.advanced.background_compiler_threads_tooltip",
+		"Number of threads used to compile shaders during gameplay. "
+		"Defaults to half of performance cores to avoid impacting the render thread. "
+		"Higher values finish compilation faster but may cause stuttering."));
 
 	// Dump Shaders option
 	bool useDump = shaderCache->IsDump();
 	if (ImGui::Checkbox(T("menu.advanced.dump_shaders", "Dump Shaders"), &useDump)) {
 		shaderCache->SetDump(useDump);
 	}
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("%s", T("menu.advanced.dump_shaders_tooltip", "Dump shaders at startup. This should be used only when reversing shaders. Normal users don't need this."));
-	}
+	Tip(T("menu.advanced.dump_shaders_tooltip", "Dump shaders at startup. This should be used only when reversing shaders. Normal users don't need this."));
 
 	// Clear Shader Cache button
 	if (Util::Button(T("menu.advanced.clear_shader_cache", "Clear Shader Cache"), { -1, 0 })) {
 		shaderCache->Clear();
 	}
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("%s", T("menu.advanced.clear_shader_cache_tooltip", "Clear all compiled shaders from memory. Forces recompilation of all shaders on next use."));
-	}
+	Tip(T("menu.advanced.clear_shader_cache_tooltip", "Clear all compiled shaders from memory. Forces recompilation of all shaders on next use."));
 }
 
 void AdvancedSettingsRenderer::RenderLoggingSection()
@@ -186,9 +197,7 @@ void AdvancedSettingsRenderer::RenderLoggingSection()
 		ImGui::SameLine();
 		globals::state->SetLogLevel(static_cast<spdlog::level::level_enum>(item_current));
 	}
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("%s", T("menu.advanced.log_level_tooltip", "Log level. Trace is most verbose. Default is info. Debug and Trace also enable Developer Mode."));
-	}
+	Tip(T("menu.advanced.log_level_tooltip", "Log level. Trace is most verbose. Default is info. Debug and Trace also enable Developer Mode."));
 
 	// Shader Defines input
 	// SetDefines normalizes the string, so the buffer is only reloaded while the input is idle.
@@ -202,9 +211,7 @@ void AdvancedSettingsRenderer::RenderLoggingSection()
 		globals::state->SetDefines(shaderDefines);
 		shaderCache->Clear();
 	}
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("%s", T("menu.advanced.shader_defines_tooltip", "Defines for Shader Compiler. Semicolon \";\" separated. Clear with space. Rebuild shaders after making change. Compute Shaders require a restart to recompile."));
-	}
+	Tip(T("menu.advanced.shader_defines_tooltip", "Defines for Shader Compiler. Semicolon \";\" separated. Clear with space. Rebuild shaders after making change. Compute Shaders require a restart to recompile."));
 
 	ImGui::Spacing();
 
@@ -247,28 +254,22 @@ void AdvancedSettingsRenderer::RenderShaderDebugSection()
 		});
 		if (state->IsDeveloperMode()) {
 			ImGui::Checkbox(T("menu.advanced.vertex", "Vertex"), &state->enableVShaders);
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("%s", T("menu.advanced.vertex_tooltip",
-									  "Replace Vertex Shaders. "
-									  "When false, will disable the custom Vertex Shaders for the types above. "
-									  "For developers to test whether CS shaders match vanilla behavior. "));
-			}
+			Tip(T("menu.advanced.vertex_tooltip",
+				"Replace Vertex Shaders. "
+				"When false, will disable the custom Vertex Shaders for the types above. "
+				"For developers to test whether CS shaders match vanilla behavior. "));
 
 			ImGui::Checkbox(T("menu.advanced.pixel", "Pixel"), &state->enablePShaders);
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("%s", T("menu.advanced.pixel_tooltip",
-									  "Replace Pixel Shaders. "
-									  "When false, will disable the custom Pixel Shaders for the types above. "
-									  "For developers to test whether CS shaders match vanilla behavior. "));
-			}
+			Tip(T("menu.advanced.pixel_tooltip",
+				"Replace Pixel Shaders. "
+				"When false, will disable the custom Pixel Shaders for the types above. "
+				"For developers to test whether CS shaders match vanilla behavior. "));
 
 			ImGui::Checkbox(T("menu.advanced.compute", "Compute"), &state->enableCShaders);
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("%s", T("menu.advanced.compute_tooltip",
-									  "Replace Compute Shaders. "
-									  "When false, will disable the custom Compute Shaders for the types above. "
-									  "For developers to test whether CS shaders match vanilla behavior. "));
-			}
+			Tip(T("menu.advanced.compute_tooltip",
+				"Replace Compute Shaders. "
+				"When false, will disable the custom Compute Shaders for the types above. "
+				"For developers to test whether CS shaders match vanilla behavior. "));
 		}
 		ImGui::EndTable();
 	}
@@ -315,25 +316,11 @@ void AdvancedSettingsRenderer::RenderShaderDebugSection()
 					ImGui::PushID(shader.key.c_str());
 					auto copyInfoLabel = std::format("{}##BlockedShader", T("menu.advanced.copy_info", "Copy Info"));
 					if (ImGui::SmallButton(copyInfoLabel.c_str())) {
-						std::string diskPathStr;
-						diskPathStr.reserve(shader.diskPath.size());
-						for (wchar_t wc : shader.diskPath) {
-							diskPathStr += static_cast<char>(wc);
-						}
-
-						std::string fullInfo = std::format("Type: {}\nClass: {}\nDescriptor: 0x{:X}\nKey: {}\nCache Path: {}",
-							magic_enum::enum_name(shader.shaderType).data(),
-							magic_enum::enum_name(shader.shaderClass).data(),
-							shader.descriptor,
-							shader.key,
-							diskPathStr);
-						ImGui::SetClipboardText(fullInfo.c_str());
+						ImGui::SetClipboardText(DescribeShader(shader).c_str());
 					}
 					ImGui::PopID();
 					if (ImGui::IsItemHovered()) {
-						if (auto _tt = Util::HoverTooltipWrapper()) {
-							ImGui::Text("%s", T("menu.advanced.copy_info_tooltip", "Copy complete shader information including cache path to clipboard"));
-						}
+						Tip(T("menu.advanced.copy_info_tooltip", "Copy complete shader information including cache path to clipboard"));
 					}
 
 					break;
@@ -342,8 +329,7 @@ void AdvancedSettingsRenderer::RenderShaderDebugSection()
 		}
 		ImGui::EndChild();
 
-		ImGui::PopStyleVar();    // ChildRounding
-		ImGui::PopStyleVar();    // WindowBorderSize
+		ImGui::PopStyleVar(2);   // ChildRounding, ChildBorderSize
 		ImGui::PopStyleColor();  // ChildBg
 	}
 
@@ -351,12 +337,8 @@ void AdvancedSettingsRenderer::RenderShaderDebugSection()
 	if (ImGui::CollapsingHeader(T("menu.advanced.shader_debug_header", "Shader Debug"))) {
 		auto& menuSettings = globals::menu->GetSettings();
 
-		if (ImGui::Checkbox(T("menu.advanced.enable_shader_blocking", "Enable Shader Blocking"), &menuSettings.EnableShaderBlocking)) {
-			// Setting saved automatically on next save
-		}
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("%s", T("menu.advanced.enable_shader_blocking_tooltip", "Enables hotkeys to cycle through and block individual shaders for debugging purposes."));
-		}
+		ImGui::Checkbox(T("menu.advanced.enable_shader_blocking", "Enable Shader Blocking"), &menuSettings.EnableShaderBlocking);
+		Tip(T("menu.advanced.enable_shader_blocking_tooltip", "Enables hotkeys to cycle through and block individual shaders for debugging purposes."));
 
 		if (menuSettings.EnableShaderBlocking) {
 			ImGui::Indent();
@@ -368,12 +350,10 @@ void AdvancedSettingsRenderer::RenderShaderDebugSection()
 	// Active shaders list
 	if (ImGui::CollapsingHeader(T("menu.advanced.active_shaders", "Active Shaders"), ImGuiTreeNodeFlags_DefaultOpen)) {
 		ImGui::Text("%s", T("menu.advanced.active_shaders_used_recently", "Active Shaders (Used Recently)"));
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("%s", T("menu.advanced.active_shaders_tooltip",
-								  "List of shaders that have been used in recent frames. "
-								  "Enable Shader Blocking above to use hotkeys to cycle through and block shaders for debugging. "
-								  "Shaders not used for ~1 second are removed from this list."));
-		}
+		Tip(T("menu.advanced.active_shaders_tooltip",
+			"List of shaders that have been used in recent frames. "
+			"Enable Shader Blocking above to use hotkeys to cycle through and block shaders for debugging. "
+			"Shaders not used for ~1 second are removed from this list."));
 
 		// Get fresh active shaders data for accurate count and table
 		auto activeShaders = shaderCache->GetActiveShaders();
@@ -386,7 +366,8 @@ void AdvancedSettingsRenderer::RenderShaderDebugSection()
 		static char filterText[256] = "";
 		static int searchColumn = 0;        // 0 = All Columns, 1 = Type, 2 = Class, 3 = Descriptor, 4 = Draw Calls, 5 = Key
 		static size_t sortColumn = 4;       // Default sort by Frame % (draw calls)
-		static bool sortAscending = false;  // Descending by default (highest usage first)		// Create shader rows for the table utility (simplified - no filter data needed)
+		static bool sortAscending = false;  // Descending by default (highest usage first)
+
 		struct ShaderRow
 		{
 			SIE::ShaderCache::ActiveShaderInfo shader;
@@ -423,27 +404,13 @@ void AdvancedSettingsRenderer::RenderShaderDebugSection()
 			if (row.shader.key == shaderCache->blockedKey) {
 				shaderCache->DisableShaderBlocking();
 			} else {
-				// Block this shader - use IterateShaderBlock to find and block it
-				// Or set blockedKey directly (simpler for click-to-block)
 				shaderCache->blockedKey = row.shader.key;
 				logger::info("Blocking shader: {}", row.shader.key);
 			}
 		};
 
 		auto onRowRightClick = [shaderCache](const ShaderRow& row) {
-			std::string diskPathStr;
-			diskPathStr.reserve(row.shader.diskPath.size());
-			for (wchar_t wc : row.shader.diskPath) {
-				diskPathStr += static_cast<char>(wc);
-			}
-
-			std::string fullInfo = std::format("Type: {}\nClass: {}\nDescriptor: 0x{:X}\nKey: {}\nCache Path: {}",
-				magic_enum::enum_name(row.shader.shaderType).data(),
-				magic_enum::enum_name(row.shader.shaderClass).data(),
-				row.shader.descriptor,
-				row.shader.key,
-				diskPathStr);
-			ImGui::SetClipboardText(fullInfo.c_str());
+			ImGui::SetClipboardText(DescribeShader(row.shader).c_str());
 		};
 		auto getRowTooltip = [shaderCache](const ShaderRow& row) {
 			std::string clickAction = (row.shader.key == shaderCache->blockedKey) ? T("menu.advanced.click_to_unblock", "Left-click to unblock this shader") : T("menu.advanced.click_to_block", "Left-click to block this shader");
@@ -541,12 +508,10 @@ void AdvancedSettingsRenderer::RenderDeveloperSection()
 	if (ImGui::Checkbox(T("menu.advanced.enable_developer_mode", "Enable Developer Mode"), &state->enableDeveloperMode)) {
 		logger::info("Developer Mode {}", state->enableDeveloperMode ? "enabled" : "disabled");
 	}
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("%s", T("menu.advanced.enable_developer_mode_tooltip",
-							  "Unlocks developer-only options and tooling. "
-							  "Also enabled automatically when Log Level is debug or trace. "
-							  "Use at your own risk."));
-	}
+	Tip(T("menu.advanced.enable_developer_mode_tooltip",
+		"Unlocks developer-only options and tooling. "
+		"Also enabled automatically when Log Level is debug or trace. "
+		"Use at your own risk."));
 	if (!state->enableDeveloperMode && state->GetLogLevel() <= spdlog::level::debug) {
 		ImGui::TextDisabled("%s", T("menu.advanced.developer_mode_via_log_level",
 									  "Currently active because Log Level is debug/trace."));
@@ -559,21 +524,17 @@ void AdvancedSettingsRenderer::RenderDeveloperSection()
 	if (ImGui::Checkbox(T("menu.advanced.enable_file_watcher", "Enable File Watcher"), &useFileWatcher)) {
 		shaderCache->SetFileWatcher(useFileWatcher);
 	}
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("%s", T("menu.advanced.enable_file_watcher_tooltip",
-							  "Automatically recompile shaders on file change. "
-							  "Intended for developing."));
-	}
+	Tip(T("menu.advanced.enable_file_watcher_tooltip",
+		"Automatically recompile shaders on file change. "
+		"Intended for developing."));
 
 	if (Util::Button(T("menu.advanced.dump_feature_defaults", "Dump All Feature Defaults to JSON"), { -1, 0 })) {
 		if (const auto path = state->DumpFeatureDefaults(); !path.empty())
 			Util::FileHelpers::OpenWithShell(path);
 	}
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("%s", T("menu.advanced.dump_feature_defaults_tooltip",
-							  "Writes every feature's built-in default settings to FeatureDefaults.json and opens it. "
-							  "Defaults come from the running build; Baseline packs and your edits are not included."));
-	}
+	Tip(T("menu.advanced.dump_feature_defaults_tooltip",
+		"Writes every feature's built-in default settings to FeatureDefaults.json and opens it. "
+		"Defaults come from the running build; Baseline packs and your edits are not included."));
 
 	// Debug addresses section (moved from Advanced/Logging)
 	if (ImGui::TreeNodeEx(T("menu.advanced.addresses", "Addresses"))) {
@@ -599,47 +560,31 @@ void AdvancedSettingsRenderer::RenderDeveloperSection()
 				const auto& p = parallelism.value();
 				ImGui::Spacing();
 				ImGui::TextDisabled(T("menu.advanced.parallelism_header", "Parallelism (derived from %zu compiled tasks)"), p.sampleCount);
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("%s", T("menu.advanced.parallelism_tooltip_1", "Computed lazily from the last completed build."));
-					ImGui::Text("%s", T("menu.advanced.parallelism_tooltip_2", "Only evaluated when this Statistics section is open."));
-				}
+				Tip(T("menu.advanced.parallelism_tooltip_1", "Computed lazily from the last completed build."));
+				ImGui::Text("%s", T("menu.advanced.parallelism_tooltip_2", "Only evaluated when this Statistics section is open."));
 				ImGui::Text(T("menu.advanced.work_metric", "Work (W, sum of task wall times): %s"), Util::FormatDuration(p.workMs).c_str());
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("%s", T("menu.advanced.work_tooltip_1", "Total compile work: sum of all per-shader wall-clock compile times."));
-					ImGui::Text("%s", T("menu.advanced.work_tooltip_2", "This is not CPU time; it is accumulated task elapsed time."));
-					ImGui::Text("%s", T("menu.advanced.work_tooltip_3", "Equivalent serial time on one worker if overhead stayed the same."));
-				}
+				Tip(T("menu.advanced.work_tooltip_1", "Total compile work: sum of all per-shader wall-clock compile times."));
+				ImGui::Text("%s", T("menu.advanced.work_tooltip_2", "This is not CPU time; it is accumulated task elapsed time."));
+				ImGui::Text("%s", T("menu.advanced.work_tooltip_3", "Equivalent serial time on one worker if overhead stayed the same."));
 				ImGui::Text(T("menu.advanced.span_metric", "Span (S, longest): %s"), Util::FormatDuration(p.spanMs).c_str());
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("%s", T("menu.advanced.span_tooltip_1", "Critical-path lower bound, approximated by the single slowest shader."));
-					ImGui::Text("%s", T("menu.advanced.span_tooltip_2", "Even infinite cores cannot finish faster than this."));
-				}
+				Tip(T("menu.advanced.span_tooltip_1", "Critical-path lower bound, approximated by the single slowest shader."));
+				ImGui::Text("%s", T("menu.advanced.span_tooltip_2", "Even infinite cores cannot finish faster than this."));
 				ImGui::Text(T("menu.advanced.makespan_metric", "Makespan (T_p): %s"), Util::FormatDuration(p.makespanMs).c_str());
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("%s", T("menu.advanced.makespan_tooltip", "Observed wall-clock duration for the full shader build."));
-				}
+				Tip(T("menu.advanced.makespan_tooltip", "Observed wall-clock duration for the full shader build."));
 				ImGui::Text(T("menu.advanced.queue_wait_metric", "Queue wait (avg/max): %s / %s"),
 					Util::FormatDuration(p.avgQueueWaitMs).c_str(),
 					Util::FormatDuration(p.maxQueueWaitMs).c_str());
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("%s", T("menu.advanced.queue_wait_tooltip_1", "Time spent waiting in the ready queue before a worker started compilation."));
-					ImGui::Text("%s", T("menu.advanced.queue_wait_tooltip_2", "Useful for identifying scheduler-induced delay separate from compile cost."));
-				}
+				Tip(T("menu.advanced.queue_wait_tooltip_1", "Time spent waiting in the ready queue before a worker started compilation."));
+				ImGui::Text("%s", T("menu.advanced.queue_wait_tooltip_2", "Useful for identifying scheduler-induced delay separate from compile cost."));
 				ImGui::Text(T("menu.advanced.avg_parallelism_metric", "Average parallelism (W/S): %.2fx"), p.avgParallelism);
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("%s", T("menu.advanced.avg_parallelism_tooltip_1", "Average useful concurrency in this workload."));
-					ImGui::Text("%s", T("menu.advanced.avg_parallelism_tooltip_2", "Roughly the worker count where adding more cores gives diminishing returns."));
-				}
+				Tip(T("menu.advanced.avg_parallelism_tooltip_1", "Average useful concurrency in this workload."));
+				ImGui::Text("%s", T("menu.advanced.avg_parallelism_tooltip_2", "Roughly the worker count where adding more cores gives diminishing returns."));
 				ImGui::Text(T("menu.advanced.infinite_core_efficiency_metric", "Infinite-core efficiency (S/T_p): %.1f%%"), 100.0 * p.infiniteCoreEfficiency);
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("%s", T("menu.advanced.infinite_core_efficiency_tooltip_1", "How close runtime is to the infinite-core lower bound."));
-					ImGui::Text("%s", T("menu.advanced.infinite_core_efficiency_tooltip_2", "100%% means T_p == S."));
-				}
+				Tip(T("menu.advanced.infinite_core_efficiency_tooltip_1", "How close runtime is to the infinite-core lower bound."));
+				ImGui::Text("%s", T("menu.advanced.infinite_core_efficiency_tooltip_2", "100%% means T_p == S."));
 				ImGui::Text(T("menu.advanced.infinite_core_gap_metric", "Infinite-core gap: %.1f%%"), p.infiniteCoreGapPercent);
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("%s", T("menu.advanced.infinite_core_gap_tooltip_1", "Distance from ideal infinite-core time."));
-					ImGui::Text("%s", T("menu.advanced.infinite_core_gap_tooltip_2", "Defined as 100 * (1 - S / T_p). Lower is better."));
-				}
+				Tip(T("menu.advanced.infinite_core_gap_tooltip_1", "Distance from ideal infinite-core time."));
+				ImGui::Text("%s", T("menu.advanced.infinite_core_gap_tooltip_2", "Defined as 100 * (1 - S / T_p). Lower is better."));
 
 				ImGui::Spacing();
 				ImGui::TextDisabled("%s", T("menu.advanced.infinite_core_efficiency", "Infinite-core efficiency"));
@@ -697,9 +642,7 @@ void AdvancedSettingsRenderer::RenderDeveloperSection()
 
 	// Frame annotations toggle (moved from Advanced/Logging)
 	ImGui::Checkbox(T("menu.advanced.frame_annotations", "Frame Annotations"), &globals::state->frameAnnotations);
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("%s", T("menu.advanced.frame_annotations_tooltip", "Enable detailed frame annotations for debugging render passes and draw calls."));
-	}
+	Tip(T("menu.advanced.frame_annotations_tooltip", "Enable detailed frame annotations for debugging render passes and draw calls."));
 
 	// Half-precision (partial precision) shader compile flag
 	bool partialPrecision = globals::state->enablePartialPrecision.load(std::memory_order_relaxed);
@@ -708,29 +651,25 @@ void AdvancedSettingsRenderer::RenderDeveloperSection()
 		// Force a recompile so the flag actually takes effect on subsequent shader builds.
 		globals::shaderCache->Clear();
 	}
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("%s", T("menu.advanced.half_precision_tooltip",
-							  "Adds D3DCOMPILE_PARTIAL_PRECISION to the shader compiler flags.\n"
-							  "Lets fxc downgrade unmarked float ops to FP16 where it can prove safety, "
-							  "on top of the existing min16float type hints.\n"
-							  "On FP16-capable GPUs (Pascal+ / GCN+ / Skylake+) this can halve register "
-							  "pressure and double ALU throughput, but it can also introduce minor visual "
-							  "differences in shaders that haven't been audited for precision sensitivity.\n"
-							  "Toggling this clears the shader cache and triggers a full recompile."));
-	}
+	Tip(T("menu.advanced.half_precision_tooltip",
+		"Adds D3DCOMPILE_PARTIAL_PRECISION to the shader compiler flags.\n"
+		"Lets fxc downgrade unmarked float ops to FP16 where it can prove safety, "
+		"on top of the existing min16float type hints.\n"
+		"On FP16-capable GPUs (Pascal+ / GCN+ / Skylake+) this can halve register "
+		"pressure and double ALU throughput, but it can also introduce minor visual "
+		"differences in shaders that haven't been audited for precision sensitivity.\n"
+		"Toggling this clears the shader cache and triggers a full recompile."));
 
 	bool contentStore = globals::state->enableContentStore.load(std::memory_order_relaxed);
 	if (ImGui::Checkbox(T("menu.advanced.content_store", "Persistent Shader Store (Developers/Testers)"), &contentStore))
 		globals::state->enableContentStore.store(contentStore, std::memory_order_relaxed);
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("%s", T("menu.advanced.content_store_tooltip",
-							  "Keeps every compiled shader keyed by its preprocessed source and compiler flags. "
-							  "After a cache wipe, a plugin update or a feature change, shaders already compiled "
-							  "for the same code are restored instead of recompiled.\n"
-							  "Costs one preprocess per shader (tens of milliseconds) and disk space in "
-							  "Data/ShaderCache/ContentStore, trimmed to the least recently used. "
-							  "Takes effect for shaders compiled from now on."));
-	}
+	Tip(T("menu.advanced.content_store_tooltip",
+		"Keeps every compiled shader keyed by its preprocessed source and compiler flags. "
+		"After a cache wipe, a plugin update or a feature change, shaders already compiled "
+		"for the same code are restored instead of recompiled.\n"
+		"Costs one preprocess per shader (tens of milliseconds) and disk space in "
+		"Data/ShaderCache/ContentStore, trimmed to the least recently used. "
+		"Takes effect for shaders compiled from now on."));
 	DrawContentStoreDetails(globals::shaderCache, contentStore);
 
 	// Avoid flow control compiler flag (transient — not saved to config because the
@@ -741,16 +680,14 @@ void AdvancedSettingsRenderer::RenderDeveloperSection()
 		// Force a recompile so the flag actually takes effect on subsequent shader builds.
 		globals::shaderCache->Clear();
 	}
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("%s", T("menu.advanced.avoid_flow_control_tooltip",
-							  "Adds D3DCOMPILE_AVOID_FLOW_CONTROL to the shader compiler flags.\n"
-							  "Forces fxc to flatten branches into predicated ops rather than emitting "
-							  "dynamic flow control. Often a win for short branch bodies and uniformly-"
-							  "taken branches; usually a loss for long divergent branches that vanilla "
-							  "flow control would skip entirely.\n"
-							  "Resets every launch. Toggling this clears the shader cache and triggers a "
-							  "full recompile."));
-	}
+	Tip(T("menu.advanced.avoid_flow_control_tooltip",
+		"Adds D3DCOMPILE_AVOID_FLOW_CONTROL to the shader compiler flags.\n"
+		"Forces fxc to flatten branches into predicated ops rather than emitting "
+		"dynamic flow control. Often a win for short branch bodies and uniformly-"
+		"taken branches; usually a loss for long divergent branches that vanilla "
+		"flow control would skip entirely.\n"
+		"Resets every launch. Toggling this clears the shader cache and triggers a "
+		"full recompile."));
 }
 
 void AdvancedSettingsRenderer::RunTestConditions()

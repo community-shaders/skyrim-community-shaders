@@ -8,7 +8,8 @@
 #include <imgui_impl_dx11.h>
 #include <imgui_impl_win32.h>
 #include <imgui_internal.h>
-#include <winrt/base.h>
+#include <unordered_map>
+#include <unordered_set>
 
 #include "CSEditor/EditorWindow.h"
 #include "Feature.h"
@@ -108,12 +109,20 @@ namespace
 		ImGui::PopStyleVar(3);
 	}
 
+	/** @brief Effects 11 effects that failed to compile, or 0 while the effect manager is not up. */
+	uint32_t GetFailedEffectCount()
+	{
+		auto& effectManager = EffectManager::GetSingleton();
+		return effectManager.IsInitialized() ? effectManager.GetFailedEffectCount() : 0;
+	}
+
 	void DrawShaderCompilationFailures(uint64_t failed, const Menu::ThemeSettings& themeSettings)
 	{
 		if (failed) {
-			ImGui::TextColored(themeSettings.StatusPalette.Error,
-				"ERROR: %llu shaders failed to compile. Check installation and CommunityShaders.log",
-				static_cast<unsigned long long>(failed));
+			ImGui::TextColored(themeSettings.StatusPalette.Error, "%s",
+				I18n::GetSingleton()->Format("overlay.shaders_failed", { { "count", std::to_string(failed) } },
+										"ERROR: {count} shaders failed to compile. Check installation and CommunityShaders.log")
+					.c_str());
 
 			if (FeatureIssues::HasPotentialShaderModifyingFeatures()) {
 				ImGui::TextColored(themeSettings.StatusPalette.Error, "%s", T("overlay.modified_features", "Features that may have modified shaders detected. Check Feature Issues in the Menu."));
@@ -123,16 +132,13 @@ namespace
 
 	void DrawEffects11Errors(const Menu::ThemeSettings& themeSettings)
 	{
-		auto& effectManager = EffectManager::GetSingleton();
-		if (!effectManager.IsInitialized())
-			return;
-
-		uint32_t effectFailed = effectManager.GetFailedEffectCount();
+		const uint32_t effectFailed = GetFailedEffectCount();
 		if (effectFailed) {
-			ImGui::TextColored(themeSettings.StatusPalette.Error,
-				"ERROR: %u effect(s) failed to compile",
-				effectFailed);
-			for (const auto& err : effectManager.GetAllErrors())
+			ImGui::TextColored(themeSettings.StatusPalette.Error, "%s",
+				I18n::GetSingleton()->Format("overlay.effects_failed", { { "count", std::to_string(effectFailed) } },
+										"ERROR: {count} effect(s) failed to compile")
+					.c_str());
+			for (const auto& err : EffectManager::GetSingleton().GetAllErrors())
 				ImGui::TextColored(themeSettings.StatusPalette.Error, "  %s", err.c_str());
 		}
 	}
@@ -330,7 +336,7 @@ bool OverlayRenderer::ShouldSkipRendering()
 	auto* abTestingManager = ABTestingManager::GetSingleton();
 	auto* renderDoc = RenderDoc::GetSingleton();
 
-	uint32_t effectFailed = EffectManager::GetSingleton().IsInitialized() ? EffectManager::GetSingleton().GetFailedEffectCount() : 0;
+	const uint32_t effectFailed = GetFailedEffectCount();
 
 	return !(shaderCache->IsCompiling() ||
 			 Menu::GetSingleton()->IsEnabled ||
@@ -407,24 +413,30 @@ void OverlayRenderer::RenderShaderCompilationStatus(const std::function<const ch
 	bool renderDocAvailable = renderDoc->IsAvailable();
 	const auto renderDocInformation = renderDoc->GetOverlayWarningMessage();
 
-	auto progressTitle = fmt::format("{}Compiling Shaders: {}",
-		shaderCache->backgroundCompilation ? "Background " : "",
-		shaderCache->GetShaderStatsString(!state->IsDeveloperMode()).c_str());
+	const std::unordered_map<std::string, std::string> statsArg{ { "stats", shaderCache->GetShaderStatsString(!state->IsDeveloperMode()) } };
+	const auto progressTitle = shaderCache->backgroundCompilation ?
+	                               I18n::GetSingleton()->Format("overlay.compiling_shaders_background", statsArg, "Background Compiling Shaders: {stats}") :
+	                               I18n::GetSingleton()->Format("overlay.compiling_shaders", statsArg, "Compiling Shaders: {stats}");
 	auto percent = (float)compiledShaders / (float)totalShaders;
 	auto progressOverlay = fmt::format("{}/{} ({:2.1f}%)", compiledShaders, totalShaders, 100 * percent);
 
-	uint32_t effectFailed = EffectManager::GetSingleton().IsInitialized() ? EffectManager::GetSingleton().GetFailedEffectCount() : 0;
+	const uint32_t effectFailed = GetFailedEffectCount();
+	const bool showFailures = (failed && !hide) || effectFailed;
+	const bool compiling = shaderCache->IsCompiling();
+	if (!compiling && !showFailures && !renderDocAvailable)
+		return;
 
 	// Card accent: errors win, then the RenderDoc warning, else plain progress
-	const ImVec4 accent = ((failed && !hide) || effectFailed) ? themeSettings.StatusPalette.Error :
-	                      renderDocAvailable                  ? themeSettings.StatusPalette.Warning :
-	                                                            themeSettings.StatusPalette.InfoColor;
+	const ImVec4 accent = showFailures       ? themeSettings.StatusPalette.Error :
+	                      renderDocAvailable ? themeSettings.StatusPalette.Warning :
+	                                           themeSettings.StatusPalette.InfoColor;
 
-	if (shaderCache->IsCompiling()) {
-		if (!BeginOverlayCard(ImVec2(pos, pos))) {
-			EndOverlayCard(accent);
-			return;
-		}
+	if (!BeginOverlayCard(ImVec2(pos, pos))) {
+		EndOverlayCard(accent);
+		return;
+	}
+
+	if (compiling) {
 		ImGui::TextUnformatted(progressTitle.c_str());
 		ImGui::ProgressBar(percent, ImVec2(0.0f, 0.0f), progressOverlay.c_str());
 		if (state->IsDeveloperMode()) {
@@ -445,44 +457,23 @@ void OverlayRenderer::RenderShaderCompilationStatus(const std::function<const ch
 			}
 		}
 		if (!shaderCache->backgroundCompilation && shaderCache->menuLoaded) {
-			auto skipShadersText = fmt::format(
-				"Press {} to proceed without completing shader compilation. ",
-				keyIdToString(Menu::GetSingleton()->GetSettings().SkipCompilationKey));
+			const auto skipShadersText = I18n::GetSingleton()->Format("overlay.skip_compilation",
+				{ { "key", keyIdToString(Menu::GetSingleton()->GetSettings().SkipCompilationKey) } },
+				"Press {key} to proceed without completing shader compilation.");
 			ImGui::TextUnformatted(skipShadersText.c_str());
 			ImGui::TextUnformatted(T("overlay.uncompiled_warning", "WARNING: Uncompiled shaders will have visual errors or cause stuttering when loading."));
 		}
-		if (failed && !hide)
-			DrawShaderCompilationFailures(failed, themeSettings);
-		DrawEffects11Errors(themeSettings);
-
-		if (renderDocAvailable)
-			ImGui::TextColored(themeSettings.StatusPalette.Warning, "%s", renderDocInformation.c_str());
-
-		EndOverlayCard(accent);
-		return;
 	}
 
-	if ((failed && !hide) || effectFailed) {
-		if (!BeginOverlayCard(ImVec2(pos, pos))) {
-			EndOverlayCard(accent);
-			return;
-		}
-
-		DrawShaderCompilationFailures(failed, themeSettings);
+	if (showFailures) {
+		DrawShaderCompilationFailures(hide ? 0 : failed, themeSettings);
 		DrawEffects11Errors(themeSettings);
+	}
 
-		if (renderDocAvailable)
-			ImGui::TextColored(themeSettings.StatusPalette.Warning, "%s", renderDocInformation.c_str());
-
-		EndOverlayCard(accent);
-	} else if (renderDocAvailable) {
-		if (!BeginOverlayCard(ImVec2(pos, pos))) {
-			EndOverlayCard(accent);
-			return;
-		}
+	if (renderDocAvailable)
 		ImGui::TextColored(themeSettings.StatusPalette.Warning, "%s", renderDocInformation.c_str());
-		EndOverlayCard(accent);
-	}
+
+	EndOverlayCard(accent);
 }
 
 void OverlayRenderer::RenderFeatureOverlays()
