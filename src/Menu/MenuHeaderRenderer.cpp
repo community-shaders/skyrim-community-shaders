@@ -359,21 +359,19 @@ namespace
 {
 	/**
 	 * @brief Draws the unsaved-changes box behind an action icon: the status colour at low alpha with a thin border, in
-	 * the style of the CS Editor's lock badge. The icon keeps its own colours; tinting it turned its blue purple.
+	 * the style of the CS Editor's lock badge. The box is the icon's hover rect; the icon keeps its own colours, since
+	 * tinting it turned its blue purple.
 	 */
 	void DrawUnsavedBox(ImDrawList* drawList, ImVec2 min, ImVec2 max)
 	{
 		using Constants = ThemeManager::Constants;
-		const float pad = (max.x - min.x) * Constants::HEADER_UNSAVED_BOX_PAD_RATIO;
-		const ImVec2 boxMin(min.x - pad, min.y - pad);
-		const ImVec2 boxMax(max.x + pad, max.y + pad);
-		const float rounding = std::min(ImGui::GetStyle().FrameRounding, (boxMax.x - boxMin.x) * 0.35f);
+		const float rounding = std::min(ImGui::GetStyle().FrameRounding, (max.x - min.x) * 0.35f);
 		ImVec4 fill = Util::Colors::GetUnsaved();
 		fill.w = Constants::HEADER_UNSAVED_BOX_FILL_ALPHA;
 		ImVec4 border = Util::Colors::GetUnsaved();
 		border.w = Constants::HEADER_UNSAVED_BOX_BORDER_ALPHA;
-		drawList->AddRectFilled(boxMin, boxMax, ImGui::GetColorU32(fill), rounding);
-		drawList->AddRect(boxMin, boxMax, ImGui::GetColorU32(border), rounding);
+		drawList->AddRectFilled(min, max, ImGui::GetColorU32(fill), rounding);
+		drawList->AddRect(min, max, ImGui::GetColorU32(border), rounding);
 	}
 }
 
@@ -436,7 +434,7 @@ float MenuHeaderRenderer::RenderDockedIcons(const std::vector<ActionIcon>& actio
 			tintColor = isHovered ? IM_COL32(255, 255, 255, 255) : IM_COL32(220, 220, 220, 220);
 		}
 		if (it->unsaved)
-			DrawUnsavedBox(fgDrawList, iconMin, iconMax);
+			DrawUnsavedBox(fgDrawList, interactionRect.Min, interactionRect.Max);
 		if (it->texture) {
 			// Whole-pixel rect, and the mip level nearest this size, so the PNG edges stay crisp
 			const ImVec2 snappedMin = Util::IconLoader::SnapToPixel(iconMin);
@@ -507,10 +505,9 @@ void MenuHeaderRenderer::RenderUndockedIcons(const std::vector<ActionIcon>& acti
 		const auto& icon = actionIcons[i];
 		const ImVec4 iconTint = tintColor;
 		if (icon.unsaved) {
-			// The box hugs the image, not the button's frame padding around it
-			const ImVec2 cursor = ImGui::GetCursorScreenPos();
-			const ImVec2 boxMin(cursor.x + framePadding.x, cursor.y + framePadding.y);
-			DrawUnsavedBox(ImGui::GetWindowDrawList(), boxMin, ImVec2(boxMin.x + imageSize.x, boxMin.y + imageSize.y));
+			// The button's whole frame, which is what its hover highlight covers
+			const ImVec2 boxMin = ImGui::GetCursorScreenPos();
+			DrawUnsavedBox(ImGui::GetWindowDrawList(), boxMin, ImVec2(boxMin.x + glyphButtonSize.x, boxMin.y + glyphButtonSize.y));
 		}
 
 		std::string buttonId = std::format("##ActionBtn{}", i);

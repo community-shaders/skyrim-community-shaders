@@ -158,7 +158,7 @@ namespace Util::Anim
 
 	PageFade::PageFade(ImGuiID pageId)
 	{
-		BeginFadeIn(pageId, Constants::ANIM_PAGE_FADE_SECONDS, Constants::ANIM_PAGE_FADE_FROM);
+		BeginFadeIn(pageId, Constants::ANIM_PAGE_ENTER_SECONDS, Constants::ANIM_PAGE_FADE_FROM);
 	}
 
 	PageFade::~PageFade()

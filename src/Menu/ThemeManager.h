@@ -190,7 +190,6 @@ public:
 		static constexpr float ICON_MIP_SELECT_BIAS = 0.3f;              // Added to log2(downscale) when picking an icon mip: higher keeps a larger, crisper level
 		static constexpr float HEADER_UNSAVED_BOX_FILL_ALPHA = 0.22f;    // Fill of the box behind the save icon while changes are unsaved
 		static constexpr float HEADER_UNSAVED_BOX_BORDER_ALPHA = 0.55f;  // Its border
-		static constexpr float HEADER_UNSAVED_BOX_PAD_RATIO = 0.0f;      // How far the box extends past the icon, as a fraction of its size
 		static constexpr float HEADER_ICON_HOVER_ALPHA = 0.6f;           // Hover fill strength of header glyph buttons at full blend
 		static constexpr float HEADER_HOME_IDLE_ALPHA = 0.85f;           // Home button opacity while neither hovered nor current
 		static constexpr float STATUS_BAR_GRIP_CLEARANCE_SCALE = 1.6f;   // Right margin kept clear of the window resize grip, in font sizes
@@ -353,9 +352,8 @@ public:
 		static constexpr float ANIM_EPSILON = 0.002f;              // Blend within this of its target snaps to it
 		static constexpr float ANIM_POPUP_SECONDS = 0.14f;         // Popup and palette fade / scale-in time
 		static constexpr float ANIM_POPUP_SCALE_FROM = 0.97f;      // Palette panel scale at the start of its fade-in
-		static constexpr float ANIM_PAGE_ENTER_SECONDS = 0.18f;    // Page and Home card fade-in time
+		static constexpr float ANIM_PAGE_ENTER_SECONDS = 0.18f;    // Page, feature page and Home card fade-in time
 		static constexpr float ANIM_CARD_STAGGER_SECONDS = 0.04f;  // Delay added per Home card
-		static constexpr float ANIM_PAGE_FADE_SECONDS = 0.14f;     // Fade-in when a page or feature is opened
 		static constexpr float ANIM_PAGE_FADE_FROM = 0.4f;         // Page alpha at the start of that fade (never fully hidden, so there is no flash)
 		static constexpr float ANIM_GLIDE_RATE = 26.0f;            // How fast a selection highlight glides to the newly selected item, per second
 		static constexpr float ANIM_SPEED_MIN = 0.5f;              // Animation speed multiplier range (Settings > Behavior)
