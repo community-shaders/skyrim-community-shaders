@@ -35,6 +35,8 @@
 #include "SaveManager.h"
 #include "ShaderCache.h"
 #include "State.h"
+#include "Utils/UIAnim.h"
+#include "Utils/UIGlass.h"
 
 // Static member definitions
 bool HomePageRenderer::isFirstTimeSetupShown = false;
@@ -48,6 +50,9 @@ namespace
 	using Constants = ThemeManager::Constants;
 
 	constexpr const char* kHelpPopupId = "##HomeHelpPopover";
+
+	/// Index of the card being drawn this frame, for the staggered fade-in.
+	int cardIndex = 0;
 
 	/** @brief One dashboard card: a bordered, auto-height child with an icon and a section-label title. */
 	class Card
@@ -63,13 +68,25 @@ namespace
 		Card(const char* id, Icons::GlyphRef icon, const char* title, const ImVec4* border = nullptr,
 			const std::function<void()>& trailing = {})
 		{
+			// Cards fade in one after another each time the page is opened
+			const float enter = Util::Anim::EnterProgress(ImGui::GetID(id), Constants::ANIM_CARD_STAGGER_SECONDS * static_cast<float>(cardIndex++));
+			ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * enter);
 			if (border)
 				ImGui::PushStyleColor(ImGuiCol_Border, *border);
+			ImGui::PushStyleColor(ImGuiCol_ChildBg, IM_COL32_BLACK_TRANS);
 			ImGui::BeginChild(id, ImVec2(0.0f, 0.0f),
 				ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY | ImGuiChildFlags_NavFlattened,
 				ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-			if (border)
-				ImGui::PopStyleColor();
+			ImGui::PopStyleColor(border ? 2 : 1);
+			// Glass backing, drawn first so the content sits on it
+			Util::Glass::Style glass;
+			glass.rounding = ImGui::GetStyle().ChildRounding;
+			if (border) {
+				glass.tint = ImGui::GetColorU32(*border);
+				glass.tintAmount = Constants::HOME_CARD_TINT_AMOUNT;
+			}
+			Util::Glass::Draw(ImGui::GetWindowDrawList(), ImGui::GetWindowPos(),
+				ImVec2(ImGui::GetWindowPos().x + ImGui::GetWindowSize().x, ImGui::GetWindowPos().y + ImGui::GetWindowSize().y), glass);
 
 			ImGui::AlignTextToFramePadding();
 			{
@@ -87,7 +104,11 @@ namespace
 			}
 		}
 
-		~Card() { ImGui::EndChild(); }
+		~Card()
+		{
+			ImGui::EndChild();
+			ImGui::PopStyleVar();
+		}
 
 		Card(const Card&) = delete;
 		Card& operator=(const Card&) = delete;
@@ -258,20 +279,37 @@ namespace
 			Util::kTooltipWhenDisabled);
 	}
 
+	/**
+	 * @brief The header's clear-cache icon (its PNG, or the glyph if the texture is missing), right-aligned on the
+	 * current line: the Shaders card's status row. Opens the clear-cache confirmation.
+	 */
+	void DrawClearCacheButton()
+	{
+		const ImGuiStyle& style = ImGui::GetStyle();
+		const float box = IconBoxSize();
+		ImGui::SameLine();
+		ImGui::SetCursorPosX(ImGui::GetWindowWidth() - style.WindowPadding.x - box - style.FramePadding.x * 2.0f);
+		const char* tooltip = T("menu.home.clear_cache_tooltip", "Clear shader cache...");
+		bool clicked;
+		if (auto* texture = globals::menu->GetUIIcons().clearCache.texture) {
+			ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
+			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.8f, 0.8f, 0.25f));
+			clicked = ImGui::ImageButton("##HomeClearCache", texture, ImVec2(box, box));
+			ImGui::PopStyleColor(2);
+			ImGui::PopStyleVar();
+			Util::AddTooltip(tooltip);
+		} else {
+			clicked = MenuHeaderRenderer::GlyphIconButton("##HomeClearCache", Icons::TI(MenuIcons::kClearCache), box, tooltip);
+		}
+		if (clicked)
+			Util::RequestClearShaderCacheConfirmation();
+	}
+
 	/** @brief The last shader build: compile breakdown, duration and failures. */
 	void RenderShadersCard()
 	{
-		// Clear Cache lives on the title row, right-aligned
-		const auto clearCache = []() {
-			const ImGuiStyle& style = ImGui::GetStyle();
-			const float box = IconBoxSize();
-			ImGui::SameLine();
-			ImGui::SetCursorPosX(ImGui::GetWindowWidth() - style.WindowPadding.x - box - style.FramePadding.x * 2.0f);
-			if (MenuHeaderRenderer::GlyphIconButton("##HomeClearCache", Icons::TI(MenuIcons::kClearCache), box,
-					T("menu.home.clear_cache_tooltip", "Clear shader cache...")))
-				Util::RequestClearShaderCacheConfirmation();
-		};
-		Card card("##HomeShaders", Icons::TI(MenuIcons::kShaders), T("menu.home.shaders_title", "Shaders"), nullptr, clearCache);
+		Card card("##HomeShaders", Icons::TI(MenuIcons::kShaders), T("menu.home.shaders_title", "Shaders"));
 
 		auto* shaderCache = globals::shaderCache;
 		auto* i18n = I18n::GetSingleton();
@@ -289,6 +327,7 @@ namespace
 										   { { "time", shaderCache->GetShaderStatsString(true, true) } }, "Last build: {time}")
 					.c_str());
 		}
+		DrawClearCacheButton();
 		if (failed > 0)
 			ImGui::TextColored(Util::Colors::GetError(), "%s",
 				i18n->Format("menu.status.failed_shaders", { { "count", std::to_string(failed) } }, "Failed shaders: {count}").c_str());
@@ -375,9 +414,8 @@ namespace
 
 		// Brief outline after a click on the header or footer issues indicator
 		if (HomePageRenderer::IsAttentionFocused()) {
-			const float fade = static_cast<float>(std::min(1.0, (HomePageRenderer::GetAttentionFocusRemaining()) / Constants::ATTENTION_FOCUS_FADE_SECONDS));
-			ImVec4 outline = border;
-			outline.w *= fade;
+			const float fade = Util::Anim::EaseOutCubic(static_cast<float>(HomePageRenderer::GetAttentionFocusRemaining() / Constants::ATTENTION_FOCUS_FADE_SECONDS));
+			const ImVec4 outline = Util::Anim::ScaleAlpha(border, fade);
 			ImGui::GetWindowDrawList()->AddRect(ImGui::GetWindowPos(),
 				ImVec2(ImGui::GetWindowPos().x + ImGui::GetWindowSize().x, ImGui::GetWindowPos().y + ImGui::GetWindowSize().y),
 				ImGui::GetColorU32(outline), ImGui::GetStyle().ChildRounding, 0, Constants::ATTENTION_FOCUS_THICKNESS * Util::GetUIScale());
@@ -437,18 +475,26 @@ namespace
 		}
 	}
 
-	/** @brief A smaller Discord banner with chips for the other project links. */
-	void RenderCommunityCard()
-	{
-		Card card("##HomeCommunity", Icons::TI(ICON_TI_SHARE_2), T("menu.home.community_title", "Community"));
+	/// Height of the pinned bottom strip as measured last frame, so the card area above leaves exactly that much.
+	float g_stripHeight = 0.0f;
 
+	/**
+	 * @brief The Discord banner and the project link chips, pinned to the bottom of the Home page across its full
+	 * width. The banner grows with the width up to a height cap, keeping its aspect ratio; the links sit in a row below.
+	 */
+	void RenderBottomStrip()
+	{
 		const float scale = Util::GetUIScale();
+		const float startY = ImGui::GetCursorPosY();
+		ImGui::Separator();
+
 		const auto& discord = Util::IconLoader::GetIcons().discord;
 		const float avail = ImGui::GetContentRegionAvail().x;
 		if (discord.texture && discord.size.x > 0.0f && discord.size.y > 0.0f) {
-			const float maxWidth = Constants::HOME_DISCORD_BANNER_MAX_WIDTH * scale;
-			const float width = std::max(1.0f, std::min(avail, maxWidth));
-			const ImVec2 size(width, width * discord.size.y / discord.size.x);
+			const float aspect = discord.size.x / discord.size.y;
+			const float width = std::max(1.0f, std::min(avail, Constants::HOME_DISCORD_BANNER_MAX_HEIGHT * scale * aspect));
+			const ImVec2 size(width, width / aspect);
+			ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (avail - width) * 0.5f);
 
 			ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
 			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0.0f, 0.0f));
@@ -459,15 +505,20 @@ namespace
 				MenuLinks::Open(MenuLinks::Link::Discord);
 			ImGui::PopStyleColor(3);
 			ImGui::PopStyleVar(2);
-		} else if (ImGui::Button(T("menu.home.join_discord", "Join our Discord"))) {
+		} else if (ImGui::Button(T("menu.home.join_discord", "Join our Discord"), ImVec2(avail, 0.0f))) {
 			MenuLinks::Open(MenuLinks::Link::Discord);
 		}
 		Util::AddTooltip(T("menu.home.join_discord", "Join our Discord"));
 
-		ImGui::Spacing();
 		using MenuLinks::Link;
 		constexpr std::array links = { Link::NexusMods, Link::GitHub, Link::Wiki };
 		const Icons::GlyphRef linkIcon = Icons::TI(MenuIcons::kExternal);
+		// The row is centred under the banner
+		float rowWidth = ImGui::GetStyle().ItemSpacing.x * static_cast<float>(links.size() - 1);
+		for (const auto link : links)
+			rowWidth += BrowserUI::MeasureChip(MenuLinks::GetLabel(link), true);
+		if (rowWidth < avail)
+			ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (avail - rowWidth) * 0.5f);
 		for (size_t i = 0; i < links.size(); ++i) {
 			const char* label = MenuLinks::GetLabel(links[i]);
 			if (i > 0)
@@ -478,6 +529,7 @@ namespace
 			ImGui::PopID();
 			Util::AddTooltip(MenuLinks::GetUrl(links[i]));
 		}
+		g_stripHeight = ImGui::GetCursorPosY() - startY + ImGui::GetStyle().ItemSpacing.y;
 	}
 }
 
@@ -508,19 +560,20 @@ double HomePageRenderer::GetAttentionFocusRemaining()
 	return attentionFocusUntil - ImGui::GetTime();
 }
 
+float HomePageRenderer::GetHelpButtonWidth()
+{
+	return ImGui::GetFontSize() + ImGui::GetStyle().FramePadding.x * 2.0f;
+}
+
 void HomePageRenderer::RenderHelpButton()
 {
 	if (std::exchange(helpPopoverRequested, false))
 		ImGui::OpenPopup(kHelpPopupId);
 
-	// Anchored to the top-right of the page
-	const float box = IconBoxSize();
-	const float width = box + ImGui::GetStyle().FramePadding.x * 2.0f;
-	ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(0.0f, ImGui::GetContentRegionAvail().x - width));
 	const auto tooltip = I18n::GetSingleton()->Format("menu.header.help_tooltip",
 		{ { "shortcut", MenuShortcuts::GetHint(globals::menu->GetShortcuts(), MenuShortcuts::Ids::kHelp) } },
 		"Shortcuts and help ({shortcut})");
-	if (MenuHeaderRenderer::GlyphIconButton("##HomeHelp", Icons::TI(MenuIcons::kHelp), box, tooltip.c_str()))
+	if (MenuHeaderRenderer::GlyphIconButton("##StatusHelp", Icons::TI(MenuIcons::kHelp), ImGui::GetFontSize(), tooltip.c_str()))
 		ImGui::OpenPopup(kHelpPopupId);
 
 	RenderHelpPopover();
@@ -590,10 +643,12 @@ void HomePageRenderer::RenderHomePage()
 	lastShownFrame = ImGui::GetFrameCount();
 	ImGui::BeginChild("HomePage", ImVec2(0, 0), ImGuiChildFlags_NavFlattened);
 
+	cardIndex = 0;
+	// Cards scroll above; the Discord banner and links stay pinned below them
+	const float stripReserve = g_stripHeight > 0.0f ? g_stripHeight : ImGui::GetFrameHeight() * Constants::HOME_STRIP_FIRST_FRAME_FRAMES;
+	ImGui::BeginChild("##HomeCards", ImVec2(0.0f, -stripReserve), ImGuiChildFlags_NavFlattened);
 	if (std::exchange(attentionScrollPending, false))
 		ImGui::SetScrollY(0.0f);
-
-	RenderHelpButton();
 	RenderUnsavedBanner();
 
 	// Problems get a full-width card up top; the compact all-clear stays in the grid
@@ -611,7 +666,6 @@ void HomePageRenderer::RenderHomePage()
 		if (!attentionOnTop)
 			cards.push_back(&RenderAttentionCard);
 		cards.push_back(&RenderQuickAccessCard);
-		cards.push_back(&RenderCommunityCard);
 		for (auto* card : cards) {
 			ImGui::TableNextColumn();
 			card();
@@ -619,6 +673,9 @@ void HomePageRenderer::RenderHomePage()
 		}
 		ImGui::EndTable();
 	}
+
+	ImGui::EndChild();
+	RenderBottomStrip();
 
 	ImGui::EndChild();
 }

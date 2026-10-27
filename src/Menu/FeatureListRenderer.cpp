@@ -1,5 +1,7 @@
 #include "FeatureListRenderer.h"
 #include "Menu/SettingReveal.h"
+#include "Utils/UIAnim.h"
+#include "Utils/UIGlass.h"
 
 #include <algorithm>
 #include <cassert>
@@ -37,6 +39,7 @@
 #include "State.h"
 #include "Util.h"
 #include "Utils/UI.h"
+#include "Utils/UIAnim.h"
 
 namespace
 {
@@ -126,6 +129,75 @@ namespace
 			g_detachedFeature = Feature::FindFeatureByShortName(key.substr(featurePrefix.size()));
 	}
 
+	/// The entry that was selected before the Settings page opened, so "Features" can go back to it.
+	std::string g_backKey;
+	/// Selection index g_backKey was last captured for.
+	size_t g_backTrackedIndex = std::numeric_limits<size_t>::max() - 1;
+
+	/** @brief Remembers the current non-Settings selection (only recomputed when the selection changes). */
+	void TrackBackTarget(const std::vector<FeatureListRenderer::MenuFuncInfo>& menuList, size_t selectedMenu)
+	{
+		if (selectedMenu == g_backTrackedIndex && selectedMenu < menuList.size())
+			return;
+		g_backTrackedIndex = selectedMenu;
+		g_backKey = selectedMenu < menuList.size() ? GetEntryKey(menuList[selectedMenu]) :
+		            g_detachedFeature              ? "feature:" + g_detachedFeature->GetShortName() :
+		                                             std::string();
+	}
+
+	/** @brief Leaves the Settings page for the page selected before it, or Home when that is unknown. */
+	void LeaveSettings(const std::vector<FeatureListRenderer::MenuFuncInfo>& menuList, size_t& selectedMenu)
+	{
+		const std::string key = g_backKey.empty() ? "page:" + std::string(MenuPageIds::kHome) : g_backKey;
+		ReselectEntry(key, menuList, selectedMenu);
+		g_backTrackedIndex = std::numeric_limits<size_t>::max() - 1;
+	}
+
+	/** @brief "< Features" row heading the Settings section list. @return True when clicked. */
+	bool DrawBackRow()
+	{
+		MenuFonts::FontRoleGuard labelFont(Menu::FontRole::Subheading);
+		const float lineHeight = ImGui::GetTextLineHeight();
+		const float padX = ImGui::CalcTextSize(" ").x;
+		const ImVec2 pos = ImGui::GetCursorScreenPos();
+		const bool clicked = ImGui::Selectable("##BackToFeatures", false, ImGuiSelectableFlags_None, ImVec2(0.0f, lineHeight));
+		auto* drawList = ImGui::GetWindowDrawList();
+		Icons::DrawCenteredGlyph(drawList, ImVec2(pos.x + padX, pos.y), ImVec2(lineHeight, lineHeight), Icons::TI(ICON_TI_CHEVRON_LEFT),
+			ImGui::GetColorU32(Util::Colors::GetSecondary()));
+		drawList->AddText(ImVec2(pos.x + padX + lineHeight + ThemeManager::Constants::NAV_ROW_ICON_GAP * Util::GetUIScale(), pos.y),
+			ImGui::GetColorU32(ImGuiCol_Text), T("menu.features.back_to_features", "Features"));
+		return clicked;
+	}
+
+	/**
+	 * @brief Eased hover / press / selected fill for the item just submitted, as a row of the left pane: the hover
+	 * fill fades in, the selected row gets a glass-tinted fill and a short accent bar on its left.
+	 */
+	void DrawRowHighlight(ImDrawList* drawList, bool selected, bool disabled)
+	{
+		using Constants = ThemeManager::Constants;
+		const auto blend = Util::Anim::ItemBlend(ImGui::GetItemID(), ImGui::IsItemHovered() && !disabled, ImGui::IsItemActive(), selected);
+		const ImVec2 min = ImGui::GetItemRectMin();
+		const ImVec2 max = ImGui::GetItemRectMax();
+		const float rounding = ImGui::GetStyle().FrameRounding;
+		if (blend.hover > 0.0f)
+			drawList->AddRectFilled(min, max, Util::Anim::ScaleAlphaU32(ImGui::GetColorU32(ImGuiCol_HeaderHovered), blend.hover), rounding);
+		if (blend.press > 0.0f)
+			drawList->AddRectFilled(min, max, Util::Anim::ScaleAlphaU32(ImGui::GetColorU32(ImGuiCol_HeaderActive), blend.press), rounding);
+		if (blend.selected > 0.0f) {
+			Util::Glass::Style glass;
+			glass.rounding = rounding;
+			glass.alpha = blend.selected;
+			glass.tint = ImGui::GetColorU32(Util::Colors::GetAccent());
+			glass.tintAmount = Constants::NAV_SELECTED_TINT_AMOUNT;
+			Util::Glass::Draw(drawList, min, max, glass);
+			const float barWidth = Constants::ANIM_SELECTED_BAR_WIDTH * Util::GetUIScale();
+			const float inset = (max.y - min.y) * Constants::NAV_SELECTED_BAR_INSET;
+			drawList->AddRectFilled(ImVec2(min.x, min.y + inset), ImVec2(min.x + barWidth, max.y - inset),
+				Util::Anim::ScaleAlphaU32(ImGui::GetColorU32(Util::Colors::GetAccent()), blend.selected), barWidth * 0.5f);
+		}
+	}
+
 	/**
 	 * @brief Draws one row of the top page group: an icon column, then the label, with the same left padding and
 	 * height as a feature row. An Accent row tints its icon, a Launcher row ends in an external-open glyph.
@@ -145,10 +217,15 @@ namespace
 		bool clicked = false;
 		{
 			Util::DisableGuard disable(disabled);
-			clicked = ImGui::Selectable("##NavRow", selected, ImGuiSelectableFlags_None, ImVec2(0.0f, lineHeight));
+			// The row's fill is drawn below from the eased blend, so the built-in highlight is made invisible
+			ImGui::PushStyleColor(ImGuiCol_Header, IM_COL32_BLACK_TRANS);
+			ImGui::PushStyleColor(ImGuiCol_HeaderHovered, IM_COL32_BLACK_TRANS);
+			ImGui::PushStyleColor(ImGuiCol_HeaderActive, IM_COL32_BLACK_TRANS);
+			clicked = ImGui::Selectable("##NavRow", false, ImGuiSelectableFlags_None, ImVec2(0.0f, lineHeight));
+			ImGui::PopStyleColor(3);
 		}
-
 		auto* drawList = ImGui::GetWindowDrawList();
+		DrawRowHighlight(drawList, selected, disabled);
 		ImVec4 textColor = ImGui::GetStyleColorVec4(disabled ? ImGuiCol_TextDisabled : ImGuiCol_Text);
 		ImVec4 iconColor = textColor;
 		if (!disabled && menu.style != NavStyle::Plain)
@@ -458,7 +535,10 @@ void FeatureListRenderer::RenderFeatureList(
 	if (selectedMenu < menuList.size())
 		g_detachedFeature = nullptr;
 
-	if (globals::menu->GetSettings().AutoHideFeatureList) {
+	// The Settings page keeps its section list pinned: auto-hiding it would leave no way to move between sections
+	const auto* openPage = selectedMenu < menuList.size() ? std::get_if<BuiltInMenu>(&menuList[selectedMenu]) : nullptr;
+	const bool settingsOpen = openPage && openPage->id == MenuPageIds::kSettings && hooks.drawSettingsNav;
+	if (globals::menu->GetSettings().AutoHideFeatureList && !settingsOpen) {
 		RenderAutoHidePane(menuList, selectedMenu, featureSearch, pendingFeatureSelection, categoryExpansionStates, hooks);
 	} else if (ImGui::BeginTable("Menus Table", 2, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_Resizable)) {
 		ImGui::TableSetupColumn("##ListOfMenus", 0, 2);
@@ -691,9 +771,21 @@ void FeatureListRenderer::RenderLeftColumn(
 	if (g_bottomGroupHeight <= 0.0f)
 		g_bottomGroupHeight = BrowserUI::IconButtonSize() + ImGui::GetStyle().ItemSpacing.y * 2.0f + 1.0f;
 
+	if (!settingsOpen)
+		TrackBackTarget(menuList, selectedMenu);
+
 	if (settingsOpen) {
-		if (ImGui::BeginChild("##SettingsNavScroll", ImVec2(0.0f, -g_bottomGroupHeight)))
+		if (DrawBackRow())
+			LeaveSettings(menuList, selectedMenu);
+		if (ImGui::BeginChild("##SettingsNavScroll", ImVec2(0.0f, -g_bottomGroupHeight))) {
 			hooks.drawSettingsNav(hooks.focusSearch);
+			// Escape with nothing being typed goes back to the features
+			if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && !ImGui::IsAnyItemActive() &&
+				ImGui::GetCurrentContext()->ActiveIdPreviousFrame == 0 && ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
+				Menu::GetSingleton()->ConsumeEscape();
+				LeaveSettings(menuList, selectedMenu);
+			}
+		}
 		ImGui::EndChild();
 	} else {
 		// Search and sort stay put, the features scroll
@@ -703,11 +795,9 @@ void FeatureListRenderer::RenderLeftColumn(
 			// While the field is active ImGui edits its own copy, so the per-frame copy never fights the typing.
 			char searchBuffer[256];
 			strncpy_s(searchBuffer, featureSearch.c_str(), _TRUNCATE);
-			if (hooks.focusSearch)
-				ImGui::SetKeyboardFocusHere();
-			// Ctrl+F comes from the menu's shortcut table (focusSearch), so the field's own Ctrl+F stays off
-			if (BrowserUI::SearchField("##FeatureSearch", searchBuffer, sizeof(searchBuffer), T("ui.search_features", "Search Features..."),
-					ImGui::GetContentRegionAvail().x - (iconButtonWidth + ImGui::GetStyle().ItemSpacing.x), false))
+			// Ctrl+F comes from the menu's shortcut table (focusSearch); the field opens from the icon, that shortcut or Ctrl+F
+			if (BrowserUI::ExpandingSearchField("##FeatureSearch", searchBuffer, sizeof(searchBuffer), T("ui.search_features", "Search Features..."),
+					ImGui::GetContentRegionAvail().x - (iconButtonWidth + ImGui::GetStyle().ItemSpacing.x), hooks.focusSearch))
 				featureSearch = searchBuffer;
 		}
 		const float searchBarHeight = ImGui::GetItemRectSize().y;
@@ -715,7 +805,9 @@ void FeatureListRenderer::RenderLeftColumn(
 		auto& filter = globals::menu->GetSettings().FeatureListFilter;
 		{
 			auto style = Util::TransparentIconButtonStyle();
+			// The sort button stays pinned to the right edge while the search field opens and closes
 			ImGui::SameLine();
+			ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(0.0f, ImGui::GetContentRegionAvail().x - iconButtonWidth));
 			if (Icons::Button("###FeatureSort", GetSortButtonIcon(), ImVec2(iconButtonWidth, searchBarHeight)))
 				ImGui::OpenPopup("##FeatureSortPopup");
 			// A dot on the button while any filter narrows the list
@@ -761,8 +853,13 @@ void FeatureListRenderer::RenderLeftColumn(
 			ImGui::SameLine();
 		first = false;
 		ImGui::PushID(menu->id.data(), menu->id.data() + menu->id.size());
-		if (BrowserUI::IconButton("##BottomPage", menu->icon, menu->name.c_str(), selectedMenu == i))
-			selectedMenu = i;
+		if (BrowserUI::IconButton("##BottomPage", menu->icon, menu->name.c_str(), selectedMenu == i)) {
+			// Settings toggles: a second click goes back to where it was opened from
+			if (menu->id == MenuPageIds::kSettings && selectedMenu == i)
+				LeaveSettings(menuList, selectedMenu);
+			else
+				selectedMenu = i;
+		}
 		ImGui::PopID();
 	}
 	g_bottomGroupHeight = ImGui::GetCursorPosY() - bottomStart;
@@ -837,8 +934,12 @@ void FeatureListRenderer::RenderAutoHidePane(
 	const ImVec2 avail = ImGui::GetContentRegionAvail();
 	const float drawerWidth = std::max(avail.x * Constants::AUTOHIDE_PANEL_WIDTH_RATIO, Constants::AUTOHIDE_PANEL_MIN_WIDTH * scale);
 
-	// The page takes the full width, so it never reflows while the list slides over its left edge
+	// The page takes the full width, so it never reflows while the list slides over its left edge. It keeps the
+	// gutter a table cell would give it, which is also where the grip sits.
+	const float gutter = ImGui::GetStyle().CellPadding.x;
+	ImGui::Indent(gutter);
 	RenderRightColumn(menuList, selectedMenu, pendingFeatureSelection, hooks);
+	ImGui::Unindent(gutter);
 
 	auto& drawer = g_drawer;
 	const double now = ImGui::GetTime();
@@ -870,9 +971,7 @@ void FeatureListRenderer::RenderAutoHidePane(
 
 	// Exponential smoothing: frame-rate independent, fast at first and settling softly
 	const float target = drawer.open ? 1.0f : 0.0f;
-	drawer.progress += (target - drawer.progress) * (1.0f - std::exp(-ImGui::GetIO().DeltaTime * Constants::AUTOHIDE_ANIM_SPEED));
-	if (std::abs(target - drawer.progress) < Constants::AUTOHIDE_ANIM_EPSILON)
-		drawer.progress = target;
+	drawer.progress = Util::Anim::Smooth(drawer.progress, target, Constants::AUTOHIDE_ANIM_SPEED);
 
 	if (drawer.progress <= 0.0f) {
 		// A thin grip on the edge hints that the list is there
@@ -988,11 +1087,25 @@ void FeatureListRenderer::ListMenuVisitor::operator()(Feature* feat)
 	}
 
 	// Create selectable item with semantic color; the ID comes from the short name, so it survives a language change
+	// Alphabetical order has no category headers, so each row carries its category icon in a fixed column left of the name
+	const bool showCategoryIcon = globals::menu->GetSettings().FeatureListSort == Menu::FeatureSortMode::Alphabetical;
+	const float iconColumn = ImGui::GetTextLineHeight() * ThemeManager::Constants::FEATURE_ROW_CATEGORY_ICON_SCALE;
+	const float spaceWidth = ImGui::CalcTextSize(" ").x;
+	const std::string iconPad = showCategoryIcon ? std::string(static_cast<size_t>(std::ceil((iconColumn + spaceWidth) / spaceWidth)), ' ') : std::string();
 	ImGui::PushStyleColor(ImGuiCol_Text, textColor);
-	if (ImGui::Selectable(std::format(" {} ###Row", feat->GetDisplayName()).c_str(), selectedMenuRef == listId, ImGuiSelectableFlags_SpanAllColumns)) {
+	if (ImGui::Selectable(std::format(" {}{} ###Row", iconPad, feat->GetDisplayName()).c_str(), selectedMenuRef == listId, ImGuiSelectableFlags_SpanAllColumns)) {
 		selectedMenuRef = listId;
 	}
 	ImGui::PopStyleColor();
+	if (showCategoryIcon) {
+		if (auto* texture = Util::GetCategoryIcon(std::string(feat->GetCategory()).c_str())) {
+			const ImVec2 itemMin = ImGui::GetItemRectMin();
+			const float pad = (ImGui::GetItemRectSize().y - iconColumn) * 0.5f;
+			ImGui::GetWindowDrawList()->AddImage(texture, ImVec2(itemMin.x + spaceWidth, itemMin.y + pad),
+				ImVec2(itemMin.x + spaceWidth + iconColumn, itemMin.y + pad + iconColumn), ImVec2(0, 0), ImVec2(1, 1),
+				IM_COL32(255, 255, 255, static_cast<int>(255.0f * ThemeManager::Constants::FEATURE_ROW_CATEGORY_ICON_ALPHA)));
+		}
+	}
 	if (g_scrollToSelection && selectedMenuRef == listId && !ImGui::IsItemVisible())
 		ImGui::SetScrollHereY();
 	const ImVec2 rowMin = ImGui::GetItemRectMin();

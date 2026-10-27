@@ -29,8 +29,17 @@ public:
 	/** @brief True while the Home dashboard was drawn this frame or the last, for the header's Home button highlight. */
 	static bool IsShowing();
 
-	/** @brief Opens the keyboard shortcuts and help popover on the next Home frame (F1). */
+	/** @brief Opens the keyboard shortcuts and help popover on the next frame it is drawn (F1). */
 	static void RequestHelpPopover();
+
+	/** @brief Width the status bar's help button takes, for laying out the row around it. */
+	static float GetHelpButtonWidth();
+
+	/**
+	 * @brief Draws the small ? button at the cursor, plus the shortcuts and help popover it opens. The status bar
+	 * calls it at the right end of its row; F1 opens the popover through it too.
+	 */
+	static void RenderHelpButton();
 
 	/**
 	 * @brief Opens Home scrolled to the Needs Attention card and outlines it briefly.
@@ -58,8 +67,6 @@ public:
 	static void MarkFirstTimeSetupComplete();
 
 private:
-	/** @brief Draws the top-right ? button and its shortcuts popover. */
-	static void RenderHelpButton();
 	static void RenderHelpPopover();
 
 	// State
