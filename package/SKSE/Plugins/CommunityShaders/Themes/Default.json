@@ -109,6 +109,20 @@
             "MouseCursorScale": 1.0,
             "TableAngledHeadersAngle": 0.611
         },
+        "Cursor": {
+            "Scale": 1.0,
+            "Types": {
+                "Arrow": { "HotspotX": 4.0, "HotspotY": 3.0 },
+                "TextInput": { "HotspotX": 16.0, "HotspotY": 16.0 },
+                "ResizeAll": { "HotspotX": 16.0, "HotspotY": 16.0 },
+                "ResizeNS": { "HotspotX": 16.0, "HotspotY": 16.0 },
+                "ResizeEW": { "HotspotX": 16.0, "HotspotY": 16.0 },
+                "ResizeNESW": { "HotspotX": 16.0, "HotspotY": 16.0 },
+                "ResizeNWSE": { "HotspotX": 16.0, "HotspotY": 16.0 },
+                "Hand": { "HotspotX": 14.0, "HotspotY": 3.0 },
+                "NotAllowed": { "HotspotX": 16.0, "HotspotY": 16.0 }
+            }
+        },
         "FullPalette": [
             [0.93, 0.94, 0.96, 1.0],
             [0.494, 0.501, 0.519, 1.0],

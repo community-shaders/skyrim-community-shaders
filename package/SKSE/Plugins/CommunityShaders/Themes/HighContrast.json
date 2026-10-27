@@ -93,6 +93,20 @@
             "SeparatorTextPadding": [16.0, 3.0],
             "SeparatorTextAlign": [0.0, 0.5]
         },
+        "Cursor": {
+            "Scale": 1.0,
+            "Types": {
+                "Arrow": { "HotspotX": 4.0, "HotspotY": 3.0 },
+                "TextInput": { "HotspotX": 16.0, "HotspotY": 16.0 },
+                "ResizeAll": { "HotspotX": 16.0, "HotspotY": 16.0 },
+                "ResizeNS": { "HotspotX": 16.0, "HotspotY": 16.0 },
+                "ResizeEW": { "HotspotX": 16.0, "HotspotY": 16.0 },
+                "ResizeNESW": { "HotspotX": 16.0, "HotspotY": 16.0 },
+                "ResizeNWSE": { "HotspotX": 16.0, "HotspotY": 16.0 },
+                "Hand": { "HotspotX": 14.0, "HotspotY": 3.0 },
+                "NotAllowed": { "HotspotX": 16.0, "HotspotY": 16.0 }
+            }
+        },
         "FullPalette": [
             [1.0, 1.0, 1.0, 1.0],
             [0.47, 0.47, 0.47, 1.0],
