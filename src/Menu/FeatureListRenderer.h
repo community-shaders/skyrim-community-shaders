@@ -147,6 +147,19 @@ public:
 		Hooks& hooks);
 
 	/**
+	 * @brief Opens a built-in page on the next frame; asking for Settings while it is open goes back to the page it
+	 * was opened from. This is what the status bar's Settings and Profiling buttons call.
+	 * @param pageId A MenuPageIds value.
+	 */
+	static void RequestPage(std::string_view pageId);
+
+	/**
+	 * @brief Whether a built-in page is the one shown, as of the last frame.
+	 * @param pageId A MenuPageIds value.
+	 */
+	static bool IsPageOpen(std::string_view pageId);
+
+	/**
 	 * @brief Pins a loaded feature to the top of the list, or unpins it, keeping it selected. This is what the
 	 * feature page's pin button does.
 	 * @param feat A loaded feature.

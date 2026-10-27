@@ -43,7 +43,7 @@
 
 namespace
 {
-	// Built-in pages pinned to the bottom of the list; every other built-in page sits in the top group
+	// Built-in pages reached from the status bar's icon buttons rather than a list row
 	constexpr std::array kBottomMenuIds = { MenuPageIds::kSettings, MenuPageIds::kProfiling };
 
 	bool IsBottomMenu(std::string_view menuId)
@@ -63,8 +63,10 @@ namespace
 	};
 	AutoHideDrawer g_drawer;
 
-	/// Height the bottom group took last frame, so the feature list above it can leave exactly that much room.
-	float g_bottomGroupHeight = 0.0f;
+	/// Page ID the status bar's Settings / Profiling buttons asked to open (or toggle) this frame; empty when none.
+	std::string g_requestedPage;
+	/// ID of the built-in page open as of the last frame; empty while a feature or detached page is shown.
+	std::string g_openPageId;
 
 	/// What the cached menu list was built from; any difference rebuilds it.
 	struct MenuListKey
@@ -528,6 +530,25 @@ void FeatureListRenderer::RenderFeatureList(
 
 	HandlePendingFeatureSelection(pendingFeatureSelection, menuList, selectedMenu);
 
+	// A status bar page button: Settings toggles, a second click goes back to where it was opened from
+	if (!g_requestedPage.empty()) {
+		const auto page = std::exchange(g_requestedPage, std::string());
+		for (size_t i = 0; i < menuList.size(); i++) {
+			const auto* menu = std::get_if<BuiltInMenu>(&menuList[i]);
+			if (!menu || menu->id != page)
+				continue;
+			if (menu->id == MenuPageIds::kSettings && selectedMenu == i)
+				LeaveSettings(menuList, selectedMenu);
+			else
+				selectedMenu = i;
+			break;
+		}
+	}
+	{
+		const auto* open = selectedMenu < menuList.size() ? std::get_if<BuiltInMenu>(&menuList[selectedMenu]) : nullptr;
+		g_openPageId = open ? std::string(open->id) : std::string();
+	}
+
 	if (hooks.featureStep != 0) {
 		g_scrollToSelection = StepFeatureSelection(menuList, selectedMenu, hooks.featureStep > 0 ? 1 : -1);
 		hooks.featureStep = 0;
@@ -767,17 +788,13 @@ void FeatureListRenderer::RenderLeftColumn(
 	}
 	ImGui::Separator();
 
-	// The bottom group's height from last frame; the first frame estimates it from its buttons
-	if (g_bottomGroupHeight <= 0.0f)
-		g_bottomGroupHeight = BrowserUI::IconButtonSize() + ImGui::GetStyle().ItemSpacing.y * 2.0f + 1.0f;
-
 	if (!settingsOpen)
 		TrackBackTarget(menuList, selectedMenu);
 
 	if (settingsOpen) {
 		if (DrawBackRow())
 			LeaveSettings(menuList, selectedMenu);
-		if (ImGui::BeginChild("##SettingsNavScroll", ImVec2(0.0f, -g_bottomGroupHeight))) {
+		if (ImGui::BeginChild("##SettingsNavScroll", ImVec2(0.0f, 0.0f))) {
 			hooks.drawSettingsNav(hooks.focusSearch);
 			// Escape with nothing being typed goes back to the features
 			if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && !ImGui::IsAnyItemActive() &&
@@ -821,7 +838,7 @@ void FeatureListRenderer::RenderLeftColumn(
 		}
 		RenderSortPopup(g_filterCounts);
 
-		if (ImGui::BeginChild("##FeatureListScroll", ImVec2(0.0f, -g_bottomGroupHeight))) {
+		if (ImGui::BeginChild("##FeatureListScroll", ImVec2(0.0f, 0.0f))) {
 			for (size_t i = 0; i < menuList.size(); i++) {
 				if (!builtInAt(i))
 					std::visit(ListMenuVisitor{ i, selectedMenu, categoryExpansionStates, hooks }, menuList[i]);
@@ -840,29 +857,16 @@ void FeatureListRenderer::RenderLeftColumn(
 		}
 		ImGui::EndChild();
 	}
+}
 
-	// Bottom group: icon-only page buttons, measured so next frame's list leaves exactly its height
-	const float bottomStart = ImGui::GetCursorPosY();
-	ImGui::Separator();
-	bool first = true;
-	for (size_t i = 0; i < menuList.size(); i++) {
-		const auto* menu = builtInAt(i);
-		if (!menu || !IsBottomMenu(menu->id))
-			continue;
-		if (!first)
-			ImGui::SameLine();
-		first = false;
-		ImGui::PushID(menu->id.data(), menu->id.data() + menu->id.size());
-		if (BrowserUI::IconButton("##BottomPage", menu->icon, menu->name.c_str(), selectedMenu == i)) {
-			// Settings toggles: a second click goes back to where it was opened from
-			if (menu->id == MenuPageIds::kSettings && selectedMenu == i)
-				LeaveSettings(menuList, selectedMenu);
-			else
-				selectedMenu = i;
-		}
-		ImGui::PopID();
-	}
-	g_bottomGroupHeight = ImGui::GetCursorPosY() - bottomStart;
+void FeatureListRenderer::RequestPage(std::string_view pageId)
+{
+	g_requestedPage = std::string(pageId);
+}
+
+bool FeatureListRenderer::IsPageOpen(std::string_view pageId)
+{
+	return g_openPageId == pageId;
 }
 
 void FeatureListRenderer::RenderSortPopup(const FilterCounts& counts)

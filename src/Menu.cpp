@@ -880,7 +880,8 @@ void Menu::DrawSettings()
 
 		// Main content starts here - no additional separator needed as it's already handled in the conditions above
 
-		float footer_height = settings.Theme.ShowFooter ? StatusBarRenderer::GetHeight() : 0.0f;
+		// The footer always exists: with the status turned off it keeps just the Settings and Profiling buttons
+		float footer_height = StatusBarRenderer::GetHeight();
 
 		// Static storage for menu state - must persist across frames
 		static size_t selectedMenu = 0;
@@ -910,8 +911,7 @@ void Menu::DrawSettings()
 			[&]() { DrawSettingsPage(false, false); },
 			listHooks);
 
-		if (settings.Theme.ShowFooter)
-			StatusBarRenderer::Render(shortcuts);
+		StatusBarRenderer::Render(shortcuts, settings.Theme.ShowFooter);
 
 		// Draw global popups (needs to be called once per frame)
 		Util::DrawClearShaderCacheConfirmation();

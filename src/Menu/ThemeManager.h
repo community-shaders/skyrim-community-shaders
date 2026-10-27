@@ -186,16 +186,19 @@ public:
 		static constexpr float STATUS_BAR_SEGMENT_GAP_SCALE = 3.0f;  // Gap between status bar parts, in item spacings
 
 		// Menu UX: header Home button, status bar, Home card rhythm
-		static constexpr float HEADER_NAV_BUTTON_FONT_RATIO = 1.15f;    // Home and issues button edge, in font sizes (before UI scale)
-		static constexpr float HEADER_ICON_HOVER_ALPHA = 0.6f;          // Hover fill strength of header glyph buttons at full blend
-		static constexpr float HEADER_HOME_IDLE_ALPHA = 0.85f;          // Home button opacity while neither hovered nor current
-		static constexpr float STATUS_BAR_GRIP_CLEARANCE_SCALE = 1.6f;  // Right margin kept clear of the window resize grip, in font sizes
-		static constexpr float HOME_CARD_SPACING = 8.0f;                // Vertical gap below each Home card (1080p baseline)
-		static constexpr float ATTENTION_FOCUS_SECONDS = 2.5f;          // How long the Needs Attention card stays outlined after a click-through
-		static constexpr float ATTENTION_FOCUS_FADE_SECONDS = 0.8f;     // Outline fade-out time at the end of that window
-		static constexpr float ATTENTION_FOCUS_THICKNESS = 2.0f;        // Outline thickness (1080p baseline)
-		static constexpr float HOME_CARD_ICON_BOX_SCALE = 1.2f;         // Card icon button glyph box, in font sizes
-		static constexpr float UNDO_TOAST_SECONDS = 2.0f;               // How long the main menu's undo / redo toast stays
+		static constexpr float HEADER_NAV_BUTTON_FONT_RATIO = 1.15f;     // Home and issues button edge, in font sizes (before UI scale)
+		static constexpr float HEADER_ICON_HOVER_ALPHA = 0.6f;           // Hover fill strength of header glyph buttons at full blend
+		static constexpr float HEADER_HOME_IDLE_ALPHA = 0.85f;           // Home button opacity while neither hovered nor current
+		static constexpr float STATUS_BAR_GRIP_CLEARANCE_SCALE = 1.6f;   // Right margin kept clear of the window resize grip, in font sizes
+		static constexpr float STATUS_BAR_NAV_BUTTON_FONT_RATIO = 1.8f;  // Settings / Profiling button edge in the status bar, in font sizes
+		static constexpr float STATUS_BAR_NAV_GLYPH_FONT_RATIO = 1.35f;  // Their glyph size, in font sizes (the save glyph is 1.0)
+		static constexpr float STATUS_BAR_DIVIDER_FONT_RATIO = 1.0f;     // Height of the thin dividers between status bar groups, in font sizes
+		static constexpr float HOME_CARD_SPACING = 8.0f;                 // Vertical gap below each Home card (1080p baseline)
+		static constexpr float ATTENTION_FOCUS_SECONDS = 2.5f;           // How long the Needs Attention card stays outlined after a click-through
+		static constexpr float ATTENTION_FOCUS_FADE_SECONDS = 0.8f;      // Outline fade-out time at the end of that window
+		static constexpr float ATTENTION_FOCUS_THICKNESS = 2.0f;         // Outline thickness (1080p baseline)
+		static constexpr float HOME_CARD_ICON_BOX_SCALE = 1.2f;          // Card icon button glyph box, in font sizes
+		static constexpr float UNDO_TOAST_SECONDS = 2.0f;                // How long the main menu's undo / redo toast stays
 
 		// UI Layout constants
 		static constexpr float BUTTON_PADDING = 16.0f;
