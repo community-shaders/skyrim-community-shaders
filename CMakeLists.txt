@@ -92,6 +92,25 @@ if(GIT_FOUND)
         OUTPUT_STRIP_TRAILING_WHITESPACE
         ERROR_QUIET
     )
+    execute_process(
+        COMMAND ${GIT_EXECUTABLE} rev-parse --short=9 HEAD
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        OUTPUT_VARIABLE GIT_HASH
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
+    execute_process(
+        COMMAND ${GIT_EXECUTABLE} status --porcelain --untracked-files=no
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        OUTPUT_VARIABLE _git_status
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
+    if(_git_status STREQUAL "")
+        set(GIT_DIRTY "false")
+    else()
+        set(GIT_DIRTY "true")
+    endif()
     # CI PR checkouts are detached, so use the PR's source branch
     if(GIT_BRANCH STREQUAL "" AND NOT "$ENV{GITHUB_HEAD_REF}" STREQUAL "")
         set(GIT_BRANCH "$ENV{GITHUB_HEAD_REF}")
@@ -104,6 +123,8 @@ if(GIT_FOUND)
     endif()
 else()
     set(GIT_DESCRIBE "unknown")
+    set(GIT_HASH "")
+    set(GIT_DIRTY "false")
 endif()
 message("\tBuild version: ${GIT_DESCRIBE}")
 message("\tBuild branch: ${GIT_BRANCH}")
