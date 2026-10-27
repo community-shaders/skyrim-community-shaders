@@ -1056,9 +1056,10 @@ namespace Util
 
 		// Render logo using draw list with tint color support
 		ImVec2 logoPos = ImGui::GetCursorScreenPos();
-		ImVec2 logoMin = logoPos;
-		ImVec2 logoMax = ImVec2(logoPos.x + logoSize.x, logoPos.y + logoSize.y);
-		ImGui::GetWindowDrawList()->AddImage(logoTexture, logoMin, logoMax, ImVec2(0, 0), ImVec2(1, 1), logoTint);
+		const ImVec2 logoMin = IconLoader::SnapToPixel(logoPos);
+		const ImVec2 snappedSize = IconLoader::SnapToPixel(logoSize);
+		const ImVec2 logoMax = ImVec2(logoMin.x + snappedSize.x, logoMin.y + snappedSize.y);
+		ImGui::GetWindowDrawList()->AddImage(IconLoader::ViewForSize(logoTexture, snappedSize), logoMin, logoMax, ImVec2(0, 0), ImVec2(1, 1), logoTint);
 
 		// Advance cursor past logo
 		ImGui::Dummy(logoSize);

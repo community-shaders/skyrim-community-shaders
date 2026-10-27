@@ -415,9 +415,13 @@ float MenuHeaderRenderer::RenderDockedIcons(const std::vector<ActionIcon>& actio
 		}
 		if (it->unsaved)
 			tintColor = ImGui::GetColorU32(Util::Colors::GetUnsaved());
-		if (it->texture)
-			fgDrawList->AddImage(it->texture, iconMin, iconMax, ImVec2(0, 0), ImVec2(1, 1), tintColor);
-		else
+		if (it->texture) {
+			// Whole-pixel rect, and the mip level nearest this size, so the PNG edges stay crisp
+			const ImVec2 snappedMin = Util::IconLoader::SnapToPixel(iconMin);
+			const ImVec2 snappedSize = Util::IconLoader::SnapToPixel(ImVec2(iconMax.x - iconMin.x, iconMax.y - iconMin.y));
+			fgDrawList->AddImage(Util::IconLoader::ViewForSize(it->texture, snappedSize), snappedMin,
+				ImVec2(snappedMin.x + snappedSize.x, snappedMin.y + snappedSize.y), ImVec2(0, 0), ImVec2(1, 1), tintColor);
+		} else
 			DrawIconGlyph(fgDrawList, iconMin, iconMax.x - iconMin.x, it->glyph, tintColor);
 
 		// Handle interaction
@@ -486,7 +490,9 @@ void MenuHeaderRenderer::RenderUndockedIcons(const std::vector<ActionIcon>& acti
 		bool clicked;
 		if (icon.texture) {
 			// Use ImageButton with reduced image size to minimize padding
-			clicked = ImGui::ImageButton(buttonId.c_str(), icon.texture, imageSize, ImVec2(0, 0), ImVec2(1, 1), ImVec4(0, 0, 0, 0), iconTint);
+			const ImVec2 snappedSize = Util::IconLoader::SnapToPixel(imageSize);
+			clicked = ImGui::ImageButton(buttonId.c_str(), Util::IconLoader::ViewForSize(icon.texture, snappedSize), snappedSize, ImVec2(0, 0),
+				ImVec2(1, 1), ImVec4(0, 0, 0, 0), iconTint);
 		} else {
 			clicked = ImGui::Button(buttonId.c_str(), glyphButtonSize);
 			const ImVec2 min = ImGui::GetItemRectMin();
@@ -547,5 +553,8 @@ void MenuHeaderRenderer::RenderWatermarkLogo(const Util::IconLoader::UIIcons& ui
 		watermarkColor = IM_COL32(255, 255, 255, 45);
 	}
 
-	drawList->AddImage(uiIcons.logo.texture, logoMin, logoMax, ImVec2(0, 0), ImVec2(1, 1), watermarkColor);
+	const ImVec2 logoDrawMin = Util::IconLoader::SnapToPixel(logoMin);
+	const ImVec2 logoDrawSize = Util::IconLoader::SnapToPixel(ImVec2(logoMax.x - logoMin.x, logoMax.y - logoMin.y));
+	drawList->AddImage(Util::IconLoader::ViewForSize(uiIcons.logo.texture, logoDrawSize), logoDrawMin,
+		ImVec2(logoDrawMin.x + logoDrawSize.x, logoDrawMin.y + logoDrawSize.y), ImVec2(0, 0), ImVec2(1, 1), watermarkColor);
 }

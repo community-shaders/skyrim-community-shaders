@@ -516,7 +516,7 @@ namespace
 		if (discord.texture && discord.size.x > 0.0f && discord.size.y > 0.0f) {
 			const float aspect = discord.size.x / discord.size.y;
 			const float width = std::max(1.0f, std::min(avail, Constants::HOME_DISCORD_BANNER_MAX_HEIGHT * scale * aspect));
-			const ImVec2 size(width, width / aspect);
+			const ImVec2 size = Util::IconLoader::SnapToPixel(ImVec2(width, width / aspect));
 			ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (avail - width) * 0.5f);
 
 			ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
@@ -524,7 +524,7 @@ namespace
 			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
 			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, Constants::HOME_DISCORD_BANNER_HOVER_COLOR);
 			ImGui::PushStyleColor(ImGuiCol_ButtonActive, Constants::HOME_DISCORD_BANNER_ACTIVE_COLOR);
-			if (ImGui::ImageButton("##DiscordButton", discord.texture, size))
+			if (ImGui::ImageButton("##DiscordButton", Util::IconLoader::ViewForSize(discord.texture, size), size))
 				MenuLinks::Open(MenuLinks::Link::Discord);
 			ImGui::PopStyleColor(3);
 			ImGui::PopStyleVar(2);

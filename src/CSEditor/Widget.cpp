@@ -595,7 +595,11 @@ bool Widget::DrawTitleBarActions(bool showApply, bool showSaveLoadRevert, bool s
 					}
 				}
 				const float iconInset = std::max(1.0f, buttonHeight * 0.1f);
-				drawList->AddImage(action.texture, ImVec2(bb.Min.x + iconInset, bb.Min.y + iconInset), ImVec2(bb.Max.x - iconInset, bb.Max.y - iconInset),
+				const ImVec2 iconMin = Util::IconLoader::SnapToPixel(ImVec2(bb.Min.x + iconInset, bb.Min.y + iconInset));
+				const ImVec2 iconSize = Util::IconLoader::SnapToPixel(ImVec2(bb.GetWidth() - iconInset * 2.0f, bb.GetHeight() - iconInset * 2.0f));
+				// The action holds the texture as an ImGui reference; its id is the icon's full view
+				auto* fullView = reinterpret_cast<ID3D11ShaderResourceView*>(action.texture.GetTexID());
+				drawList->AddImage(Util::IconLoader::ViewForSize(fullView, iconSize), iconMin, ImVec2(iconMin.x + iconSize.x, iconMin.y + iconSize.y),
 					ImVec2(0, 0), ImVec2(1, 1), ImGui::GetColorU32(iconTint));
 				break;
 			}

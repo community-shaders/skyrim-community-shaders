@@ -187,6 +187,7 @@ public:
 
 		// Menu UX: header Home button, status bar, Home card rhythm
 		static constexpr float HEADER_ICON_SCALE = 0.92f;                // Shrinks every header icon button (actions, Home, issues, Go to) alike; the logo keeps its size
+		static constexpr float ICON_MIP_SELECT_BIAS = 0.3f;  // Added to log2(downscale) when picking an icon mip: higher keeps a larger, crisper level
 		static constexpr float HEADER_ICON_HOVER_ALPHA = 0.6f;           // Hover fill strength of header glyph buttons at full blend
 		static constexpr float HEADER_HOME_IDLE_ALPHA = 0.85f;           // Home button opacity while neither hovered nor current
 		static constexpr float STATUS_BAR_GRIP_CLEARANCE_SCALE = 1.6f;   // Right margin kept clear of the window resize grip, in font sizes
