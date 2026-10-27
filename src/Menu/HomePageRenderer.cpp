@@ -418,8 +418,8 @@ namespace
 		if (issueCount > 0) {
 			IconLine(error, Icons::TI(MenuIcons::kIssues),
 				i18n->Format("menu.status.feature_issues", { { "count", std::to_string(issueCount) } }, "Feature issues: {count}").c_str());
+			BrowserUI::HelpMarkerRight(FeatureIssues::GetCleanupGuide().c_str());
 			FeatureIssues::DrawFeatureIssuesUI();
-			ImGui::Spacing();
 		}
 
 		// Restart pending
@@ -678,7 +678,6 @@ void HomePageRenderer::RenderHomePage()
 	CenteredWrappedText(T("menu.home.intro",
 		"Community Shaders is the open-source, next-generation graphics framework for Skyrim: modern lighting, materials, "
 		"shader effects and post processing, built in the open and shaped by the community."));
-	ImGui::Dummy(ImVec2(0.0f, Constants::HOME_CARD_SPACING * Util::GetUIScale()));
 
 	// Needs Attention always heads the page, across its full width
 	RenderAttentionCard();

@@ -3490,7 +3490,6 @@
     "menu.issues.cancel": "取消",
     "menu.issues.cannot_be_undone": "此操作无法撤销！",
     "menu.issues.check_modified_files": "检查Data/Shaders/中的修改文件（不在功能子文件夹中）",
-    "menu.issues.cleanup_actions": "清理操作：",
     "menu.issues.clear_issue_list": "清除问题列表",
     "menu.issues.clear_issue_list_tooltip": "清除此问题列表（清理后有用）。",
     "menu.issues.compilation_breaking_desc": "以下功能修改了核心着色器文件，必须通过模组管理器完全卸载。如果核心着色器被修改，仅删除INI文件不会修复编译错误。",

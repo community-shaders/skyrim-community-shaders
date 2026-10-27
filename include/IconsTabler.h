@@ -63,6 +63,7 @@
 #define ICON_TI_PLAYER_PAUSE "\xee\xb5\x85"	// U+ed45
 #define ICON_TI_PLAYER_PLAY "\xee\xb5\x86"	// U+ed46
 #define ICON_TI_PINNED_OFF "\xee\xb5\x9f"	// U+ed5f
+#define ICON_TI_FILE_TEXT "\xee\xaa\xa2"	// U+eaa2
 #define ICON_TI_FILE_EXPORT "\xee\xb7\xa9"	// U+ede9
 #define ICON_TI_STACK_2 "\xee\xbb\xb7"	// U+eef7
 #define ICON_TI_SORT_ASCENDING_LETTERS "\xee\xbc\x98"	// U+ef18
@@ -105,6 +106,7 @@ inline constexpr unsigned short ICON_TI_GLYPH_RANGES[] = {
 	0xea95, 0xea95,
 	0xea99, 0xea99,
 	0xea9a, 0xea9a,
+	0xeaa2, 0xeaa2,
 	0xeabf, 0xeabf,
 	0xeac1, 0xeac1,
 	0xead4, 0xead4,

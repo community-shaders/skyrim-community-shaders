@@ -1532,7 +1532,6 @@
     "menu.issues.cancel": "Отмена",
     "menu.issues.cannot_be_undone": "Это действие нельзя отменить!",
     "menu.issues.check_modified_files": "Проверить изменённые файлы в Data/Shaders/ (не в подпапках функций)",
-    "menu.issues.cleanup_actions": "Действия по очистке:",
     "menu.issues.clear_issue_list": "Очистить список проблем",
     "menu.issues.clear_issue_list_tooltip": "Очищает этот список проблем (полезно после очистки).",
     "menu.issues.compilation_breaking_desc": "Следующие функции изменили базовые файлы шейдеров и должны быть полностью удалены через менеджер модов. Удаление только INI-файла не исправит ошибки компиляции, если базовые шейдеры были изменены.",

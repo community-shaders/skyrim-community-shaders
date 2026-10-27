@@ -1638,13 +1638,10 @@ namespace Util
 			return;
 		}
 
+		// Title, description and content sit tight; sections are separated by the rule below
 		ImGui::TextColored(titleColor, "%s", title);
-		ImGui::Spacing();
-
-		if (description && strlen(description) > 0) {
+		if (description && strlen(description) > 0)
 			ImGui::TextWrapped("%s", description);
-			ImGui::Spacing();
-		}
 	}
 
 	SectionWrapper::~SectionWrapper()

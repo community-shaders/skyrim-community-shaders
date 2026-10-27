@@ -213,7 +213,7 @@ void AdvancedSettingsRenderer::RenderLoggingSection()
 		Util::DumpSettingsOptions();
 	if (const auto logPath = Util::PathHelpers::GetLogPath(); !logPath.empty()) {
 		ImGui::SameLine();
-		if (Icons::LabeledButton("##OpenLogs", Icons::TI(ICON_TI_FOLDER_OPEN), T("menu.advanced.open_logs", "Open Logs")))
+		if (Icons::LabeledButton("##OpenLogs", Icons::TI(MenuIcons::kLogs), T("menu.advanced.open_logs", "Open Logs")))
 			ShellExecuteA(NULL, "open", logPath.string().c_str(), NULL, NULL, SW_SHOWNORMAL);
 	}
 }

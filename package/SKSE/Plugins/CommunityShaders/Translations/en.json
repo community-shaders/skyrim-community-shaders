@@ -3570,7 +3570,6 @@
     "menu.issues.cancel": "Cancel",
     "menu.issues.cannot_be_undone": "This action cannot be undone!",
     "menu.issues.check_modified_files": "Check for modified files in Data/Shaders/ (not in feature subfolders)",
-    "menu.issues.cleanup_actions": "Cleanup Actions:",
     "menu.issues.clear_issue_list": "Clear Issue List",
     "menu.issues.clear_issue_list_tooltip": "Clears this issue list (useful after cleanup).",
     "menu.issues.compilation_breaking_desc": "The following features modified core shader files and must be completely uninstalled via your mod manager. Deleting just the INI file will not fix compilation errors if core shaders were modified.",

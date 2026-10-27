@@ -26,4 +26,6 @@ namespace MenuIcons
 	inline constexpr const char* kHelp = ICON_TI_HELP;
 	inline constexpr const char* kPin = ICON_TI_PIN;
 	inline constexpr const char* kExternal = ICON_TI_EXTERNAL_LINK;
+	inline constexpr const char* kFolder = ICON_TI_FOLDER_OPEN;
+	inline constexpr const char* kLogs = ICON_TI_FILE_TEXT;
 }
