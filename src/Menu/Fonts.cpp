@@ -164,37 +164,6 @@ namespace MenuFonts
 		}
 	}
 
-	TabBarPaddingGuard::TabBarPaddingGuard(FontRole tabFontRole)
-	{
-		// Get the font that will be used for tabs
-		ImFont* tabFont = globals::menu->GetFont(tabFontRole);
-		ImFont* bodyFont = globals::menu->GetFont(FontRole::Body);
-
-		if (tabFont && bodyFont) {
-			float fontScale = tabFont->LegacySize / bodyFont->LegacySize;
-
-			// Only scale if the tab font is noticeably larger
-			if (fontScale > 1.05f) {
-				ImGuiStyle& style = ImGui::GetStyle();
-				originalPadding_ = style.FramePadding;
-
-				// Scale padding proportionally to font size
-				style.FramePadding.x *= fontScale;
-				style.FramePadding.y *= fontScale;
-
-				scaled_ = true;
-			}
-		}
-	}
-
-	TabBarPaddingGuard::~TabBarPaddingGuard()
-	{
-		if (scaled_) {
-			ImGuiStyle& style = ImGui::GetStyle();
-			style.FramePadding = originalPadding_;
-		}
-	}
-
 	bool BeginTabItemWithFont(const char* label, FontRole role, ImGuiTabItemFlags flags)
 	{
 		if (Util::IsInsidePillTabBar())
@@ -202,14 +171,6 @@ namespace MenuFonts
 
 		FontRoleGuard guard(role);
 		return ImGui::BeginTabItem(label, nullptr, flags);
-	}
-
-	void EndTabItem()
-	{
-		if (Util::IsInsidePillTabBar())
-			Util::EndPillTabItem();
-		else
-			ImGui::EndTabItem();
 	}
 
 	namespace
@@ -403,6 +364,27 @@ namespace Util
 			return std::find(widthVariants.begin(), widthVariants.end(), lower) != widthVariants.end();
 		}
 
+		/// Splits a font file stem on '-', '_' and ' ', dropping empty tokens.
+		std::vector<std::string> SplitFontTokens(const std::string& stem)
+		{
+			std::vector<std::string> tokens;
+			std::string token;
+			for (char c : stem) {
+				if (c == '-' || c == '_' || c == ' ') {
+					if (!token.empty()) {
+						tokens.push_back(std::move(token));
+						token.clear();
+					}
+				} else {
+					token += c;
+				}
+			}
+			if (!token.empty()) {
+				tokens.push_back(std::move(token));
+			}
+			return tokens;
+		}
+
 		std::string ExtractFamilyName(const std::filesystem::path& relativePath)
 		{
 			if (relativePath.has_parent_path()) {
@@ -414,21 +396,7 @@ namespace Util
 			auto stem = relativePath.stem().string();
 
 			// Split by delimiters and take tokens before width variants
-			std::vector<std::string> tokens;
-			std::string token;
-			for (char c : stem) {
-				if (c == '-' || c == '_' || c == ' ') {
-					if (!token.empty()) {
-						tokens.push_back(token);
-						token.clear();
-					}
-				} else {
-					token += c;
-				}
-			}
-			if (!token.empty()) {
-				tokens.push_back(token);
-			}
+			const auto tokens = SplitFontTokens(stem);
 
 			// Find first width variant and take everything before it
 			std::string family;
@@ -472,27 +440,13 @@ namespace Util
 			}
 
 			// Parse remaining tokens and build style
-			std::vector<std::string> tokens;
-			std::string token;
-			for (char c : stem) {
-				if (c == '-' || c == '_' || c == ' ') {
-					if (!token.empty()) {
-						tokens.push_back(token);
-						token.clear();
-					}
-				} else {
-					token += c;
-				}
-			}
-			if (!token.empty()) {
-				tokens.push_back(token);
-			}
+			const auto tokens = SplitFontTokens(stem);
 
 			// Build style from all tokens
 			std::string style;
 			for (const auto& t : tokens) {
 				if (!style.empty()) {
-					style += " ";
+					style += ' ';
 				}
 				style += t;
 			}
@@ -529,33 +483,6 @@ namespace Util
 				display[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(display[0])));
 			}
 			return display;
-		}
-
-		// Helper function to format any font filename into a user-friendly display name
-		std::string FormatFontDisplayName(const std::string& filename)
-		{
-			if (filename.empty()) {
-				return "Unknown";
-			}
-
-			std::filesystem::path filePath(filename);
-			std::string stem = filePath.stem().string();
-
-			if (stem.empty()) {
-				return "Unknown";
-			}
-
-			// Remove common font file prefixes if present
-			std::vector<std::string> prefixes = { "Font-", "Font_", "TTF-", "TTF_" };
-			for (const auto& prefix : prefixes) {
-				if (stem.size() > prefix.size() &&
-					Util::ToLower(stem.substr(0, prefix.size())) == Util::ToLower(prefix)) {
-					stem = stem.substr(prefix.size());
-					break;
-				}
-			}
-
-			return ToDisplayLabel(stem);
 		}
 
 		int StyleRank(const std::string& style)
@@ -757,18 +684,6 @@ namespace Util
 			return &family.styles[family.styles.size() / 2];
 		}
 	}  // namespace Fonts
-
-	std::vector<std::string> DiscoverFonts()
-	{
-		std::vector<std::string> fonts;
-		auto catalog = Fonts::DiscoverFontCatalog();
-		for (const auto& family : catalog.families) {
-			for (const auto& style : family.styles) {
-				fonts.push_back(style.file);
-			}
-		}
-		return fonts;
-	}
 
 	bool ValidateFont(const std::string& fontName)
 	{

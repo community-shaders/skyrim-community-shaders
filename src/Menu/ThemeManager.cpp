@@ -39,12 +39,6 @@ namespace
 	// Theme System Constants
 	// ======================
 
-	// Text Contrast and Opacity
-	// -------------------------
-	// Disabled text alpha: Makes inactive UI elements visually distinct but still readable
-	// Value calibrated for accessibility - too low = invisible, too high = looks enabled
-	constexpr float DISABLED_TEXT_ALPHA = 0.3f;  // 30% opacity for disabled elements
-
 	// Resize grip hover alpha: Subtle hover effect to avoid visual clutter
 	// Low value maintains minimalist aesthetic while providing hover feedback
 	constexpr float RESIZE_GRIP_HOVER_ALPHA = 0.1f;  // 10% opacity for hover state
@@ -278,16 +272,9 @@ void ThemeManager::SetupImGuiStyle(const Menu& menu)
 	colors[ImGuiCol_Separator] = themeSettings.Palette.Separator;
 	colors[ImGuiCol_ResizeGrip] = themeSettings.Palette.ResizeGrip;
 
-	// Apply frame border to UI elements with frames/borders
+	// Frame fill comes from the simple palette. Check mark, slider grab and disabled text come from the full
+	// palette, so a theme can give them an accent colour and a readable disabled-text contrast.
 	colors[ImGuiCol_FrameBg] = themeSettings.Palette.FrameBorder;
-	colors[ImGuiCol_CheckMark] = themeSettings.Palette.Text;
-	colors[ImGuiCol_SliderGrab] = themeSettings.Palette.FrameBorder;
-	colors[ImGuiCol_SliderGrabActive] = themeSettings.Palette.FrameBorder;
-
-	// Apply derived colors based on simple palette
-	ImVec4 textDisabled = themeSettings.Palette.Text;
-	textDisabled.w = DISABLED_TEXT_ALPHA;
-	colors[ImGuiCol_TextDisabled] = textDisabled;
 
 	ImVec4 resizeGripHovered = themeSettings.Palette.ResizeGrip;
 	resizeGripHovered.w = RESIZE_GRIP_HOVER_ALPHA;
@@ -1023,23 +1010,15 @@ std::unique_ptr<ThemeManager::ThemeInfo> ThemeManager::LoadThemeFile(const std::
 	const json& data = *document;
 	themeInfo->themeData = data;
 
-	if (data.contains("DisplayName") && data["DisplayName"].is_string()) {
-		themeInfo->displayName = data["DisplayName"].get<std::string>();
-	} else {
-		themeInfo->displayName = themeInfo->name;
-	}
-
-	if (data.contains("Description") && data["Description"].is_string()) {
-		themeInfo->description = data["Description"].get<std::string>();
-	}
-
-	if (data.contains("Version") && data["Version"].is_string()) {
-		themeInfo->version = data["Version"].get<std::string>();
-	}
-
-	if (data.contains("Author") && data["Author"].is_string()) {
-		themeInfo->author = data["Author"].get<std::string>();
-	}
+	const auto readString = [&data](const char* key, std::string& out) {
+		if (data.contains(key) && data[key].is_string())
+			out = data[key].get<std::string>();
+	};
+	themeInfo->displayName = themeInfo->name;  // Fallback when the file has no DisplayName
+	readString("DisplayName", themeInfo->displayName);
+	readString("Description", themeInfo->description);
+	readString("Version", themeInfo->version);
+	readString("Author", themeInfo->author);
 
 	themeInfo->isValid = true;
 	return themeInfo;

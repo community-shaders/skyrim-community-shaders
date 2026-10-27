@@ -361,6 +361,8 @@ public:
 
 	/** @brief Persisted name of a period, also its overwrite subdirectory. */
 	static const char* GetPeriodName(TimeOfDayPeriod period);
+	/** @brief Localised period name for display; GetPeriodName stays the serialization key. */
+	static const char* GetPeriodDisplayName(TimeOfDayPeriod period);
 	/** @brief Inverse of GetPeriodName; Count when the name matches no period. */
 	static TimeOfDayPeriod GetPeriodFromName(const std::string& name);
 	/** @brief Game hour in [0, 24), read from the calendar first since the sky lags while time is paused. */
@@ -504,6 +506,8 @@ public:
 
 	/// Persisted "type" discriminator, also used as the overwrite metadata targetType.
 	static const char* GetLocationTargetTypeName(LocationTargetType type);
+	/** @brief Localised target type name for display; GetLocationTargetTypeName stays the persisted key. */
+	static const char* GetLocationTargetTypeDisplayName(LocationTargetType type);
 
 	/** @brief One link of a location chain, identified by type and form key. */
 	struct LocationTarget
@@ -668,9 +672,6 @@ public:
 	/// Inspect the settings and conflicts in a proposed copy without mutating state.
 	std::vector<CopyCandidate> GetCopyCandidates(const SceneContextId& source,
 		const SceneContextId& destination) const;
-	/// Copy settings as one validated mutation and one save/reapply operation.
-	CopyResult CopySettings(const SceneContextId& source, const SceneContextId& destination,
-		CopyConflictPolicy conflictPolicy);
 	/// Copy one source into several destinations as one mutation: one revision bump, one save, one reapply.
 	CopyResult CopySettingsBatch(const SceneContextId& source, std::span<const SceneContextId> destinations,
 		CopyConflictPolicy conflictPolicy);

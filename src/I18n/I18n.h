@@ -1,5 +1,7 @@
 #pragma once
 
+#include <atomic>
+#include <cstdint>
 #include <deque>
 #include <filesystem>
 #include <mutex>
@@ -104,6 +106,18 @@ public:
 	 */
 	std::vector<std::pair<std::string, std::string>> GetAvailableLocales() const;
 
+	/**
+	 * Monotonic counter bumped whenever the active strings change (SetLocale, Reload).
+	 * Caches built from translated text should key on this rather than the locale code.
+	 */
+	std::uint64_t GetGeneration() const { return generation_.load(std::memory_order_relaxed); }
+
+	/**
+	 * @return Percentage (0-100) of English keys that have a non-empty translation in the
+	 *         current locale. 100 for English.
+	 */
+	int GetCoveragePercent() const;
+
 	/** Reload translation files from disk (useful during development). */
 	void Reload();
 
@@ -142,6 +156,7 @@ private:
 	mutable std::shared_mutex mutex_;
 
 	std::string currentLocale_ = "en";
+	std::atomic<std::uint64_t> generation_{ 1 };
 
 	// Current locale strings (may be empty for "en" — we just use fallback_)
 	std::unordered_map<std::string, std::string> strings_;

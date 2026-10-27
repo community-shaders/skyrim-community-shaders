@@ -5,7 +5,6 @@
 #include "Globals.h"
 #include "RE/B/BSShaderManager.h"
 #include "RE/N/NiSourceTexture.h"
-#include "Utils/Game.h"
 #include "Utils/UI.h"
 
 #include <cmath>

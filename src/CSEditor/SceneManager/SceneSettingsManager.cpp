@@ -2,6 +2,7 @@
 
 #include "Feature.h"
 #include "Globals.h"
+#include "I18n/I18n.h"
 #include "Presets/UnifiedPresetCatalog.h"
 #include "SceneSettingsCatalog.generated.h"
 #include "SceneSettingsInternal.h"
@@ -263,6 +264,26 @@ bool SceneSettingsManager::IsValidPresetVersion(std::string_view version)
 }
 
 // --- Time of Day Period Helpers ---
+
+const char* SceneSettingsManager::GetPeriodDisplayName(TimeOfDayPeriod period)
+{
+	switch (period) {
+	case TimeOfDayPeriod::Dawn:
+		return T("cs_editor.period.dawn", "Dawn");
+	case TimeOfDayPeriod::Sunrise:
+		return T("cs_editor.period.sunrise", "Sunrise");
+	case TimeOfDayPeriod::Day:
+		return T("cs_editor.period.day", "Day");
+	case TimeOfDayPeriod::Sunset:
+		return T("cs_editor.period.sunset", "Sunset");
+	case TimeOfDayPeriod::Dusk:
+		return T("cs_editor.period.dusk", "Dusk");
+	case TimeOfDayPeriod::Night:
+		return T("cs_editor.period.night", "Night");
+	default:
+		return T("cs_editor.period.unknown", "Unknown");
+	}
+}
 
 const char* SceneSettingsManager::GetPeriodName(TimeOfDayPeriod period)
 {

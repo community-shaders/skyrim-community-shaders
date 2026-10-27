@@ -175,8 +175,24 @@ public:
 	 */
 	bool HasEditsUnderBaselines(Feature* feature);
 
-	/** @brief Forgets the cached HasEditsUnderBaselines answer for one feature, or every feature when null. */
+	/**
+	 * @brief Forgets the cached HasEditsUnderBaselines and HasUserEdits answers for one feature, or every
+	 *        feature when null. Call after anything rewrites a feature's settings or its base.
+	 */
 	void InvalidateEditsUnderBaselines(Feature* feature = nullptr);
+
+	/**
+	 * @brief Whether a feature's settings differ from defaults with the enabled Baseline packs applied: the
+	 *        edits Restore Defaults clears. Saving does not change the answer.
+	 * @details Cached per feature; InvalidateEditsUnderBaselines marks the answer stale.
+	 */
+	bool HasUserEdits(Feature* feature);
+
+	/** @brief Fills the HasUserEdits cache for every loaded feature under one scene layer suspension. */
+	void PrimeUserEdits();
+
+	/** @brief Bumped whenever a cached HasUserEdits answer may have changed, so callers can tell when to recount. */
+	std::uint64_t GetUserEditsRevision() const { return userEditsRevision; }
 
 	/** @brief Drops the user's edits to every setting an enabled Baseline pack sets on one feature. */
 	void ClearFeatureEditsUnderBaselines(Feature* feature);
@@ -587,6 +603,10 @@ private:
 	std::unordered_map<std::string, nlohmann::json> featureBases;
 	/// Per feature: the cached HasEditsUnderBaselines answer.
 	std::unordered_map<std::string, bool> editsUnderBaselines;
+	/// Per feature: the cached HasUserEdits answer.
+	std::unordered_map<std::string, bool> userEdits;
+	/// See GetUserEditsRevision().
+	std::uint64_t userEditsRevision = 0;
 	/// Per feature: the edits SettingsUser.json holds, kept for features that are not loaded so a save
 	/// carries them over untouched.
 	std::unordered_map<std::string, nlohmann::json> userFeatureEdits;

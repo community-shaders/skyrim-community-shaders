@@ -45,15 +45,14 @@ class Feature;
 	ImGui::BulletText(#a_value);                    \
 	ImGui::Image(a_value->srv.get(), { a_value->desc.Width * a_scale, a_value->desc.Height * a_scale });
 
-#define ADDRESS_NODE(a_value)                                                                        \
-	if (ImGui::Button(#a_value)) {                                                                   \
-		ImGui::SetClipboardText(std::format("{0:x}", reinterpret_cast<uintptr_t>(a_value)).c_str()); \
-	}                                                                                                \
-	if (ImGui::IsItemHovered())                                                                      \
-		ImGui::SetTooltip(std::format("Copy {} Address to Clipboard", #a_value).c_str());
+#define ADDRESS_NODE(a_value) Util::AddressButton(#a_value, reinterpret_cast<uintptr_t>(a_value))
 
 namespace Util
 {
+	/** @brief Button labelled `a_name` that copies `a_address` to the clipboard as hex, with a tooltip saying so. */
+	void AddressButton(const char* a_name, uintptr_t a_address);
+
+	/** @brief Feeds ImGui the display size and the mouse position, mapped from window to render-target pixels. */
 	void UpdateImGuiInput(HWND hwnd, float bufferWidth, float bufferHeight);
 	/**
 	 * Represents a single line and its color for any colored text rendering (tooltips, legends, etc.).
@@ -72,6 +71,7 @@ namespace Util
 	// Theme style values and pixel constants are designed for this size.
 	constexpr float kBaselineFontSize = ThemeManager::Constants::DEFAULT_SCREEN_HEIGHT * ThemeManager::Constants::DEFAULT_FONT_RATIO;
 
+	/** @brief Font size relative to a baseline font size, the factor pixel sizes are scaled by. */
 	inline float GetUIScaleForBaseline(float baselineFontSize) { return ImGui::GetFontSize() / baselineFontSize; }
 
 	/** @brief Returns a scale factor relative to the 1080p baseline font size. */
@@ -231,6 +231,29 @@ namespace Util
 	 */
 	void AddTooltip(const char* a_desc, ImGuiHoveredFlags a_flags = ImGuiHoveredFlags_DelayNormal);
 
+	/** @brief Plain-text hover tooltip (HoverTooltipWrapper styling) for the item just drawn. */
+	inline void HoverTip(const char* a_text)
+	{
+		if (auto _tt = HoverTooltipWrapper())
+			ImGui::TextUnformatted(a_text);
+	}
+
+	/** @brief Checkbox followed by a hover tooltip; returns true when the value changed. */
+	inline bool CheckboxTip(const char* a_label, bool* a_value, const char* a_tooltip)
+	{
+		const bool changed = ImGui::Checkbox(a_label, a_value);
+		HoverTip(a_tooltip);
+		return changed;
+	}
+
+	/** @brief Float slider followed by a hover tooltip; returns true when the value changed. */
+	inline bool SliderFloatTip(const char* a_label, float* a_value, float a_min, float a_max, const char* a_format, const char* a_tooltip, ImGuiSliderFlags a_flags = 0)
+	{
+		const bool changed = ImGui::SliderFloat(a_label, a_value, a_min, a_max, a_format, a_flags);
+		HoverTip(a_tooltip);
+		return changed;
+	}
+
 	/** @brief Text HelpMarker draws, exposed so callers can measure it. */
 	inline constexpr const char* kHelpMarkerLabel = "(?)";
 
@@ -343,9 +366,19 @@ namespace Util
 	 * The popup respects the "don't ask me again" setting.
 	 */
 	void RequestClearShaderCacheConfirmation();
+	/** @brief Renders the shader-cache clear confirmation popup; call every frame. */
 	void DrawClearShaderCacheConfirmation();
 	/** @brief Draws the banner telling the user that shaders were cleared and will be fully recompiled; click dismisses it. */
 	void DrawRecacheBanner();
+
+	/**
+	 * @brief Reloads the saved settings, first asking for confirmation when there are unsaved changes.
+	 * Pair with DrawRestoreSavedSettingsConfirmation(), called every frame while the menu is open.
+	 */
+	void RequestRestoreSavedSettingsConfirmation();
+
+	/** @brief Draws the restore confirmation requested by RequestRestoreSavedSettingsConfirmation() and restores on confirm. */
+	void DrawRestoreSavedSettingsConfirmation();
 
 	/**
 	 * Reusable confirmation popup. Call RequestConfirmation() to trigger, DrawConfirmationPopup() each frame.
@@ -373,8 +406,9 @@ namespace Util
 		std::string title;
 		std::string message;
 		/// Empty hides the button.
-		std::string confirmLabel = "Confirm";
-		std::string cancelLabel = "Cancel";
+		std::string confirmLabel;
+		/// Empty falls back to the translated "Cancel".
+		std::string cancelLabel;
 		/// Optional destructive button between Confirm and Cancel; empty hides it.
 		std::string alternateLabel;
 		/// Styles Confirm as the primary action rather than a plain button.
@@ -388,14 +422,17 @@ namespace Util
 		Choice rememberedChoice = Choice::Confirm;
 
 		ConfirmationPopup() = default;
-		ConfirmationPopup(std::string title, std::string message, std::string confirmLabel = "Confirm", std::string cancelLabel = "Cancel") :
+		ConfirmationPopup(std::string title, std::string message, std::string confirmLabel, std::string cancelLabel) :
 			title(std::move(title)), message(std::move(message)), confirmLabel(std::move(confirmLabel)), cancelLabel(std::move(cancelLabel)) {}
 
+		/** @brief Opens the popup on the next Draw, or resolves it at once when the user chose not to be asked again. */
 		void Request();
-		bool Draw();  // Returns true on confirm frame
+		/** @brief Draws the popup while requested. @return True on the frame the user confirms. */
+		bool Draw();
 		/** @brief Draws the popup while requested. @return The button pressed this frame, else Choice::None. */
 		Choice DrawChoice();
 
+		/** @brief True while the popup is requested or showing. */
 		bool IsOpen() const { return show; }
 
 	private:
@@ -520,25 +557,6 @@ namespace Util
 	/** Draws a destructive theme error-colored button for delete, clear, remove, or irreversible actions. */
 	bool ErrorButton(const char* label, const ImVec2& size = ImVec2(0, 0));
 
-	/**
-	 * Draws a destructive icon/image button using the theme error color for button chrome.
-	 * Use for destructive image-only controls such as delete icons.
-	 * id must be unique per ImGui element to prevent ID collisions.
-	 */
-	template <class TextureID>
-	bool ErrorImageButton(
-		const char* id,
-		TextureID textureId,
-		const ImVec2& imageSize,
-		const ImVec2& uv0 = ImVec2(0, 0),
-		const ImVec2& uv1 = ImVec2(1, 1),
-		const ImVec4& bgCol = ImVec4(0, 0, 0, 0),
-		const ImVec4& tintCol = ImVec4(1, 1, 1, 1))
-	{
-		auto _style = DestructiveButtonStyle();
-		return ImGui::ImageButton(id, textureId, imageSize, uv0, uv1, bgCol, tintCol);
-	}
-
 	/** Draws a destructive button with ButtonWithFlash click feedback. */
 	bool ErrorButtonWithFlash(const char* label, const ImVec2& size = ImVec2(0, 0), int flashDurationMs = 200);
 
@@ -555,8 +573,15 @@ namespace Util
 	bool DrawRoundedButtonHighlight(const ImVec2& min, const ImVec2& max, bool hovered, bool active, ImDrawList* drawList = nullptr);
 	bool DrawRoundedButtonHighlight(const ImVec2& min, const ImVec2& max, bool hovered, bool active, float rounding, ImDrawList* drawList);
 
-	/** @brief Draws the rounded hover/active fill for the last submitted item. */
-	bool DrawCurrentItemRoundedButtonHighlight(ImDrawList* drawList = nullptr);
+	/**
+	 * @brief DrawRoundedButtonHighlight with the fill easing in and out (Util::Anim) instead of switching on and off.
+	 * For buttons hit-tested by hand, where there is no ImGui item whose id could key the animation.
+	 * @param id Stable key for this button (e.g. ImGui::GetID("##Home")).
+	 * @param held True while the button is pressed; draws the stronger fill.
+	 * @param current Keeps the hover fill, for the button of the current page.
+	 * @return True when anything was drawn.
+	 */
+	bool DrawAnimatedButtonHighlight(const ImRect& rect, ImGuiID id, bool hovered, bool held, bool current, ImDrawList* drawList = nullptr);
 
 	/** @brief Draws a circle icon, filled or outlined, on the window draw list. */
 	void DrawIconCircle(ImVec2 center, float radius, ImU32 color, bool filled);
@@ -595,6 +620,20 @@ namespace Util
 	float GetEditorChromeTextCursorOffsetY(float rowHeight);
 
 	/**
+	 * @brief Distance from the top of a text line to the vertical centre of capital-letter ink in the current font
+	 * (at its current size, window font scale included). ImGui lays a line out as ascent + descent, so the line box's
+	 * centre sits below the ink's: text centred by its line box looks too high, and a glyph or image centred in the
+	 * same row looks too low next to it. Centre by ink instead; this is the one place that measures it.
+	 */
+	float GetTextInkCenterY();
+
+	/**
+	 * @brief Screen y at which to draw a line of text (cursor / AddText position) so its ink is centred in a row.
+	 * Boxes (images, icon buttons, pills) are centred by their rect as usual; text goes through this.
+	 */
+	float CenterTextTopY(float rowTop, float rowHeight);
+
+	/**
 	 * Button with simple flash feedback (matches action icon hover effect style)
 	 * @param label Button text
 	 * @param size Button size (optional)
@@ -604,7 +643,45 @@ namespace Util
 	bool ButtonWithFlash(const char* label, const ImVec2& size = ImVec2(0, 0), int flashDurationMs = 200);
 
 	/**
-	 * Clean, minimalist toggle switch for feature enable/disable state
+	 * @brief Lets a fill be drawn beneath the widgets submitted while the scope is alive, by drawing them on a
+	 * foreground channel of the window's draw list. Inactive (the fill then lands on top) when the list is already
+	 * split, as inside a table.
+	 */
+	class UnderlayScope
+	{
+	public:
+		UnderlayScope();
+		~UnderlayScope();
+		UnderlayScope(const UnderlayScope&) = delete;
+		UnderlayScope& operator=(const UnderlayScope&) = delete;
+
+		/** @brief Switches to the background channel, drawn first, and returns the window's draw list. */
+		ImDrawList* Background();
+
+	private:
+		ImDrawList* list;
+		bool split = false;
+	};
+
+	/**
+	 * @brief Drop-in for ImGui::Button whose hover and press colours ease in and out. Colours come from the style
+	 * stack, so pushed overrides still apply; behaviour is otherwise identical to ImGui::Button.
+	 */
+	bool Button(const char* label, const ImVec2& size = ImVec2(0, 0));
+
+	/**
+	 * @brief ImGui::Selectable. Every Selectable is hooked (UIHooks, Anim::GlideSelectable), so rows of any list get
+	 * the gliding hover / selected highlight whichever way they are called; these exist for call sites that prefer
+	 * the Util namespace.
+	 */
+	bool Selectable(const char* label, bool selected = false, ImGuiSelectableFlags flags = 0, const ImVec2& size = ImVec2(0, 0));
+	/** @brief Selectable() overload that toggles `*selected` when clicked, like its ImGui counterpart. */
+	bool Selectable(const char* label, bool* selected, ImGuiSelectableFlags flags = 0, const ImVec2& size = ImVec2(0, 0));
+
+	/**
+	 * Animated toggle switch in the Material style (after cmdwtf/imgui_toggle's Material preset): a thin pill track
+	 * with a larger round knob that overhangs its ends and slides between the two states. Colours come from the theme's
+	 * accent; animations follow the UI animation settings.
 	 * @param label Label text to display next to the toggle
 	 * @param enabled Reference to the boolean state to toggle
 	 * @param size Toggle size (optional, defaults to automatic sizing)
@@ -650,6 +727,7 @@ namespace Util
 		bool m_treeNodeOpened;
 	};
 
+	/** @brief Slider that shows a 0..1 member as a percentage (lb..ub) and writes back only on edit. */
 	bool PercentageSlider(const char* label, float* data, float lb = 0.f, float ub = 100.f, const char* format = "%.1f %%", ImGuiSliderFlags flags = 0);
 
 	/**
@@ -676,6 +754,7 @@ namespace Util
 			return ImGui::SliderFloat4(label, v, v_min, v_max, format, flags);
 	}
 
+	/** @brief Main viewport size multiplied by scale. */
 	ImVec2 GetNativeViewportSizeScaled(float scale);
 
 	// Icon loading functions
@@ -685,24 +764,20 @@ namespace Util
 		ID3D11ShaderResourceView** out_srv,
 		ImVec2& out_size);
 
+	/** @brief Loads a DDS file into a shader resource view; same ownership rules as LoadTextureFromFile. */
 	bool LoadDDSTextureFromFile(ID3D11Device* device,
 		const char* filename,
 		ID3D11ShaderResourceView** out_srv,
 		ImVec2& out_size);
 
+	/** @brief Loads the menu icon textures; forwards to IconLoader. */
 	bool InitializeMenuIcons(Menu* menu);
 
 	// Text rendering helpers for clearer title text
 	// These functions modify ImGui rendering state and should be called within ImGui context
 	ImVec2 DrawSharpText(const char* text, bool alignToPixelGrid = true, float scale = 1.0f);
+	/** @brief Draws a logo followed by text on one line. @return Size of the drawn row. */
 	ImVec2 DrawAlignedTextWithLogo(ID3D11ShaderResourceView* logoTexture, const ImVec2& logoSize, const char* text, float textScale = DefaultHeaderTextScale, ImU32 logoTint = IM_COL32_WHITE);
-
-	/**
-	 * Calculates the horizontal offset needed to center content within the full window width
-	 * @param contentWidth The width of the content to center
-	 * @return The offset to add to cursor X position to center the content
-	 */
-	float GetCenterOffsetForContent(float contentWidth);
 
 	/**
 	 * Constraint-aware UI helpers
@@ -754,6 +829,10 @@ namespace Util
 	 * @param categoryCount Number of features in the category
 	 * @return true if the expansion state was toggled
 	 */
+	/** @brief The icon texture of a feature category (its stable key, e.g. "Lighting"); null when it has none. */
+	ID3D11ShaderResourceView* GetCategoryIcon(const char* categoryKey);
+
+	/** @brief Draws a feature-category header with its icon and count; a click toggles isExpanded. @return True when clicked. */
 	bool DrawCategoryHeader(const char* categoryKey, const char* displayName, bool& isExpanded, int categoryCount);
 
 	/**
@@ -967,129 +1046,6 @@ namespace Util
 	}
 
 	/**
-	 * Renders a sortable and filterable ImGui table for custom row types.
-	 * Extends ShowSortedStringTableCustom with filtering capabilities including
-	 * substring highlighting and column-specific search.
-	 * @tparam T The row type. Must be copyable and compatible with the provided functions.
-	 * @param table_id Unique ImGui table ID.
-	 * @param headers Column headers.
-	 * @param originalRows Original table data (not modified - filtering creates a copy).
-	 * @param sortColumn Default sort column index.
-	 * @param ascending Default sort direction.
-	 * @param customSorts Vector of custom comparator functions, one per column.
-	 *        Each function should compare two rows and return true if the first should come before the second.
-	 * @param cellRender Function to render a cell: (rowIdx, colIdx, const T& row, const std::string& filterText).
-	 *        The filterText parameter enables substring highlighting in the cell renderer.
-	 * @param filterText Reference to filter text string (modified by the input field).
-	 * @param searchColumn Reference to search column index (0 = All Columns, 1+ = specific column).
-	 * @param getFilterableFields Function that extracts filterable strings from a row for each column.
-	 *        Should return a vector of strings, one per column, used for filtering.
-	 * @param scrollOnFilterChange If true, scrolls to top when filter changes (default: true).
-	 */
-	template <typename T>
-	void ShowFilteredStringTableCustom(
-		const char* table_id,
-		const std::vector<std::string>& headers,
-		const std::vector<T>& originalRows,
-		size_t sortColumn,
-		bool ascending,
-		const std::vector<std::function<bool(const T&, const T&, bool)>>& customSorts,
-		std::function<void(int, int, const T&, const std::string&)> cellRender,
-		std::string& filterText,
-		int& searchColumn,
-		std::function<std::vector<std::string>(const T&)> getFilterableFields,
-		bool scrollOnFilterChange = true)
-	{
-		// Filter controls
-		static std::string previousFilterText = "";
-		char filterBuffer[256] = { 0 };
-		strncpy_s(filterBuffer, filterText.c_str(), sizeof(filterBuffer) - 1);
-
-		ImGui::InputText("Filter", filterBuffer, IM_ARRAYSIZE(filterBuffer));
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Filter shaders by the selected column. Case-insensitive.");
-		}
-
-		// Create search column options
-		std::vector<std::string> searchOptions = { "All Columns" };
-		for (const auto& col : headers) {
-			searchOptions.push_back(col);
-		}
-		std::vector<const char*> searchOptionsCStr;
-		for (const auto& option : searchOptions) {
-			searchOptionsCStr.push_back(option.c_str());
-		}
-
-		ImGui::Combo("Search In", &searchColumn, searchOptionsCStr.data(), static_cast<int>(searchOptionsCStr.size()));
-
-		// Filter rows based on search column and filter text
-		std::vector<T> filteredRows;
-		std::string currentFilterText(filterBuffer);
-		filterText = currentFilterText;  // Update the reference
-
-		if (currentFilterText.empty()) {
-			filteredRows = originalRows;
-		} else {
-			std::string filterLower = currentFilterText;
-			std::transform(filterLower.begin(), filterLower.end(), filterLower.begin(), ::tolower);
-
-			for (const auto& row : originalRows) {
-				bool passesFilter = false;
-				auto filterableFields = getFilterableFields(row);
-
-				if (searchColumn == 0) {  // All Columns
-					for (const auto& field : filterableFields) {
-						std::string fieldLower = field;
-						std::transform(fieldLower.begin(), fieldLower.end(), fieldLower.begin(), ::tolower);
-						if (fieldLower.find(filterLower) != std::string::npos) {
-							passesFilter = true;
-							break;
-						}
-					}
-				} else {  // Specific column (searchColumn is 1-indexed for columns)
-					int columnIndex = searchColumn - 1;
-					if (columnIndex >= 0 && static_cast<size_t>(columnIndex) < filterableFields.size()) {
-						std::string fieldLower = filterableFields[columnIndex];
-						std::transform(fieldLower.begin(), fieldLower.end(), fieldLower.begin(), ::tolower);
-						passesFilter = fieldLower.find(filterLower) != std::string::npos;
-					}
-				}
-
-				if (passesFilter) {
-					filteredRows.push_back(row);
-				}
-			}
-		}
-
-		// Handle filter change scrolling
-		bool filterChanged = (currentFilterText != previousFilterText);
-		if (filterChanged && scrollOnFilterChange) {
-			ImGui::SetScrollHereY(0.5f);  // Keep the table visible when filter changes
-			previousFilterText = currentFilterText;
-		}
-
-		// Constrain table height to prevent infinite scrolling appearance
-		ImGui::BeginChild("ShaderTableContainer", ImVec2(0, 400), true, ImGuiWindowFlags_HorizontalScrollbar);
-		ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2(4, 2));  // Tighter cell padding for better fit
-
-		// Use the existing sorted table function
-		ShowSortedStringTableCustom<T>(
-			table_id,
-			headers,
-			filteredRows,
-			sortColumn,
-			ascending,
-			customSorts,
-			[&cellRender, &currentFilterText](int rowIdx, int colIdx, const T& row) {
-				if (cellRender) {
-					cellRender(rowIdx, colIdx, row, currentFilterText);
-				}
-			});
-
-		ImGui::PopStyleVar();  // CellPadding
-		ImGui::EndChild();
-	}
-	/**
 	 * @brief Compares two version strings (e.g., "1.2.3") numerically.
 	 * @param a First version string.
 	 * @param b Second version string.
@@ -1105,6 +1061,7 @@ namespace Util
 
 	// A standard string comparator for use with ShowSortedStringTable
 	bool StringSortComparator(const std::string& a, const std::string& b, bool ascending);
+	/** @brief Draws text with case-insensitive matches of searchTerm drawn in highlightColor. */
 	void RenderTextWithHighlights(const std::string& text, const std::string& searchTerm, ImVec4 highlightColor = ImVec4(1.0f, 1.0f, 0.0f, 1.0f));
 
 	// Performance overlay formatting and color helpers
@@ -1113,7 +1070,8 @@ namespace Util
 	// Search functionality
 	/**
 	 * @brief Checks if a feature matches the search query.
-	 * Searches both the feature's short name and display name.
+	 * Case-insensitively (ASCII) searches the short name, English name, translated display name and
+	 * translated category label.
 	 * @param feat The feature to check
 	 * @param searchQuery The search query string
 	 * @return True if the feature matches the search query
@@ -1127,14 +1085,6 @@ namespace Util
 	 * @return True if the text matches the search query (case-insensitive)
 	 */
 	bool StringMatchesSearch(const std::string& text, const std::string& searchQuery);
-
-	/**
-	 * @brief Draws a search icon (magnifying glass) at the specified position.
-	 * @param position The screen position where the icon should be drawn
-	 * @param size The size of the icon (default: 20.0f)
-	 * @param alpha Alpha multiplier for the icon color (default: 0.7f for subtle appearance)
-	 */
-	void DrawSearchIcon(const ImVec2& position, float size = ThemeManager::Constants::SEARCH_ICON_SIZE, float alpha = ThemeManager::Constants::SEARCH_ICON_ALPHA);
 
 	/**
 	 * @brief Draws a search input field with icon inside a combo dropdown.
@@ -1158,12 +1108,6 @@ namespace Util
 	 * @param id The same ID passed to DrawComboSearchInput
 	 */
 	void ClearComboSearch(const char* id);
-
-	/**
-	 * @brief Draws a semi-transparent dark overlay behind modal dialogs for depth.
-	 * @param alpha The alpha value for the overlay (0-255, default: 160)
-	 */
-	void DrawModalBackground(uint8_t alpha = 160);
 
 	/**
 	 * @brief Draws text with a breathing/pulsing alpha animation.
@@ -1206,14 +1150,6 @@ namespace Util
 	namespace Colors
 	{
 		/**
-		 * Get theme-appropriate colors for timer/countdown displays.
-		 * @return Theme colors: Good=SuccessColor, Warning=Warning, Critical=Error
-		 */
-		ImVec4 GetTimerGood();      // Green - good/safe status (from theme SuccessColor)
-		ImVec4 GetTimerWarning();   // Orange - warning status (from theme Warning)
-		ImVec4 GetTimerCritical();  // Red - critical/error status (from theme Error)
-
-		/**
 		 * Get standard theme UI colors for consistent theming.
 		 * @return Theme colors from StatusPalette
 		 */
@@ -1232,6 +1168,14 @@ namespace Util
 
 	}
 
+	/**
+	 * @brief Glyph colour of a quiet (transparent) icon button: secondary text, brightening to the text colour on
+	 * hover and shifting to the accent while selected.
+	 * @param hover Eased hover amount, 0-1.
+	 * @param selected Eased selected amount, 0-1.
+	 */
+	ImU32 QuietIconColor(float hover, float selected);
+
 	/** Theme-colored text rendering — self-contained push/text/pop per call. */
 	namespace Text
 	{
@@ -1240,7 +1184,6 @@ namespace Util
 		void Error(const char* fmt, ...) IM_FMTARGS(1);
 		void WrappedError(const char* fmt, ...) IM_FMTARGS(1);
 		void Success(const char* fmt, ...) IM_FMTARGS(1);
-		void WrappedSuccess(const char* fmt, ...) IM_FMTARGS(1);
 		void Info(const char* fmt, ...) IM_FMTARGS(1);
 		void WrappedInfo(const char* fmt, ...) IM_FMTARGS(1);
 		void Disabled(const char* fmt, ...) IM_FMTARGS(1);

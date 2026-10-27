@@ -1,7 +1,6 @@
 #include "SceneSettingsOverwrites.h"
 
 #include "Feature.h"
-#include "Menu/Fonts.h"
 #include "Utils/FileSystem.h"
 
 #include <algorithm>

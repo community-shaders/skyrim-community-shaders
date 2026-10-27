@@ -32,7 +32,7 @@ namespace
 
 		ImGui::BeginGroup();
 		ImGui::BeginDisabled(!allowed);
-		if (ImGui::Button(T("feature.post_processing.lut.load", "Load"))) {
+		if (Util::Button(T("feature.post_processing.lut.load", "Load"))) {
 			lut.errMsg = LUT::ValidateLutFile(UnifiedPresetCatalog::GetSingleton().ResolveActivePackPath(lut.tempPath));
 			if (lut.errMsg.empty()) {
 				// A tombstoned entry holds no value; clear it so Load's write lands on a live entry.
@@ -49,7 +49,7 @@ namespace
 		}
 		ImGui::SameLine();
 		ImGui::BeginDisabled(!isLive(entryIndex));
-		if (ImGui::Button(T("feature.post_processing.lut.clear", "Clear")))
+		if (Util::Button(T("feature.post_processing.lut.clear", "Clear")))
 			manager->RemoveContextSetting(context, *entryIndex);
 		ImGui::EndDisabled();
 		ImGui::EndDisabled();

@@ -2,6 +2,20 @@
 
 #include "WeatherUtils.h"
 
+namespace CSEditorWindows
+{
+	/// Chrome shared by the floating, auto-sized editor panels (palette and weather picker): no title bar, not resizable or scrollable.
+	inline constexpr ImGuiWindowFlags kFloatingPanelFlags =
+		ImGuiWindowFlags_NoTitleBar |
+		ImGuiWindowFlags_NoFocusOnAppearing |
+		ImGuiWindowFlags_AlwaysAutoResize |
+		ImGuiWindowFlags_NoResize |
+		ImGuiWindowFlags_NoScrollbar |
+		ImGuiWindowFlags_NoScrollWithMouse |
+		ImGuiWindowFlags_NoSavedSettings |
+		ImGuiWindowFlags_NoCollapse;
+}
+
 class PaletteWindow
 {
 public:
@@ -42,9 +56,6 @@ private:
 	// Favorites - fixed slots that users can drag colors into
 	static constexpr int maxFavoriteSlots = 10;
 	std::array<std::optional<float3>, maxFavoriteSlots> favoriteColors;
-
-	float3 copiedColor = { 0.0f, 0.0f, 0.0f };
-	bool hasColorInClipboard = false;
 
 	void DrawContents();
 	std::vector<ColorEntry*> GetRecentColors(int count);

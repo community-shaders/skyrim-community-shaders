@@ -8,7 +8,8 @@
 #include <imgui_impl_dx11.h>
 #include <imgui_impl_win32.h>
 #include <imgui_internal.h>
-#include <winrt/base.h>
+#include <unordered_map>
+#include <unordered_set>
 
 #include "CSEditor/EditorWindow.h"
 #include "Feature.h"
@@ -25,6 +26,8 @@
 #include "ShaderCache.h"
 #include "State.h"
 #include "Util.h"
+#include "Utils/Notifications.h"
+#include "Utils/UISurface.h"
 
 #include "Features/PerformanceOverlay.h"
 #include "Features/PerformanceOverlay/ABTesting/ABTesting.h"
@@ -37,12 +40,89 @@ namespace
 
 	bool IsMainWindow(ImGuiWindow* win) { return win->Name && strncmp(win->Name, MAIN_WINDOW_PREFIX, strlen(MAIN_WINDOW_PREFIX)) == 0; }
 
+	/**
+	 * @brief Keeps a status card from covering the menu: when the main menu window is displayed behind the card, the
+	 * card is moved just behind it. Z-order follows the window wherever it is moved or undocked, unlike a fixed position.
+	 */
+	void KeepBehindMainWindow(ImGuiWindow* card)
+	{
+		ImGuiContext& g = *ImGui::GetCurrentContext();
+		ImGuiWindow* menu = nullptr;
+		int cardIndex = -1;
+		int menuIndex = -1;
+		for (int i = 0; i < g.Windows.Size; i++) {
+			ImGuiWindow* win = g.Windows[i];
+			if (win == card)
+				cardIndex = i;
+			else if (!menu && !win->ParentWindow && win->WasActive && IsMainWindow(win)) {
+				menu = win;
+				menuIndex = i;
+			}
+		}
+		if (menu && cardIndex > menuIndex)
+			ImGui::BringWindowToDisplayBehind(card, menu);
+	}
+
+	/**
+	 * @brief Begins the top-left status window in the toast card style: themed WindowBg at OVERLAP_MIN_ALPHA,
+	 * no frame, with the accent border and left stripe drawn by EndOverlayCard.
+	 * @return False when the window is collapsed or clipped; EndOverlayCard must still be called.
+	 */
+	bool BeginOverlayCard(const ImVec2& position)
+	{
+		using Constants = ThemeManager::Constants;
+		const float scale = Util::GetUIScale();
+		ImGui::SetNextWindowPos(position);
+		ImGui::SetNextWindowBgAlpha(0.0f);  // The surface is drawn by EndOverlayCard
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, ImGui::GetStyle().FrameRounding * Constants::TOAST_ROUNDING_SCALE);
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,
+			ImVec2((Constants::TOAST_PADDING_X + Constants::TOAST_STRIPE_WIDTH) * scale, Constants::TOAST_PADDING_Y * scale));
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+		const bool visible = ImGui::Begin("ShaderCompilationInfo", nullptr,
+			ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings);
+		KeepBehindMainWindow(ImGui::GetCurrentWindow());
+		if (visible) {
+			// Surface backing, drawn before the content. The card auto-sizes, so it uses last frame's rect.
+			Util::Surface::Options surface;
+			surface.rounding = ImGui::GetStyle().WindowRounding;
+			const ImVec2 p0 = ImGui::GetWindowPos();
+			const ImVec2 size = ImGui::GetWindowSize();
+			Util::Surface::Draw(ImGui::GetWindowDrawList(), p0, ImVec2(p0.x + size.x, p0.y + size.y),
+				Util::Surface::Role::OverlayCard, surface);
+		}
+		return visible;
+	}
+
+	/** @brief Draws the card's thin accent border and left stripe, then ends the window begun by BeginOverlayCard. */
+	void EndOverlayCard(const ImVec4& accentColor)
+	{
+		using Constants = ThemeManager::Constants;
+		const float scale = Util::GetUIScale();
+		ImDrawList* draw = ImGui::GetWindowDrawList();
+		const ImVec2 p0 = ImGui::GetWindowPos();
+		const ImVec2 size = ImGui::GetWindowSize();
+		const ImVec2 p1(p0.x + size.x, p0.y + size.y);
+		const float rounding = ImGui::GetStyle().WindowRounding;
+		const ImU32 accent = ImGui::ColorConvertFloat4ToU32(ImVec4(accentColor.x, accentColor.y, accentColor.z, Constants::TOAST_ACCENT_ALPHA));
+		Util::Surface::DrawAccentFrame(draw, p0, p1, accent, rounding, Constants::TOAST_BORDER_THICKNESS * scale, Constants::TOAST_STRIPE_WIDTH * scale);
+		ImGui::End();
+		ImGui::PopStyleVar(3);
+	}
+
+	/** @brief Effects 11 effects that failed to compile, or 0 while the effect manager is not up. */
+	uint32_t GetFailedEffectCount()
+	{
+		auto& effectManager = EffectManager::GetSingleton();
+		return effectManager.IsInitialized() ? effectManager.GetFailedEffectCount() : 0;
+	}
+
 	void DrawShaderCompilationFailures(uint64_t failed, const Menu::ThemeSettings& themeSettings)
 	{
 		if (failed) {
-			ImGui::TextColored(themeSettings.StatusPalette.Error,
-				"ERROR: %llu shaders failed to compile. Check installation and CommunityShaders.log",
-				static_cast<unsigned long long>(failed));
+			ImGui::TextColored(themeSettings.StatusPalette.Error, "%s",
+				I18n::GetSingleton()->Format("overlay.shaders_failed", { { "count", std::to_string(failed) } },
+										"ERROR: {count} shaders failed to compile. Check installation and CommunityShaders.log")
+					.c_str());
 
 			if (FeatureIssues::HasPotentialShaderModifyingFeatures()) {
 				ImGui::TextColored(themeSettings.StatusPalette.Error, "%s", T("overlay.modified_features", "Features that may have modified shaders detected. Check Feature Issues in the Menu."));
@@ -52,16 +132,13 @@ namespace
 
 	void DrawEffects11Errors(const Menu::ThemeSettings& themeSettings)
 	{
-		auto& effectManager = EffectManager::GetSingleton();
-		if (!effectManager.IsInitialized())
-			return;
-
-		uint32_t effectFailed = effectManager.GetFailedEffectCount();
+		const uint32_t effectFailed = GetFailedEffectCount();
 		if (effectFailed) {
-			ImGui::TextColored(themeSettings.StatusPalette.Error,
-				"ERROR: %u effect(s) failed to compile",
-				effectFailed);
-			for (const auto& err : effectManager.GetAllErrors())
+			ImGui::TextColored(themeSettings.StatusPalette.Error, "%s",
+				I18n::GetSingleton()->Format("overlay.effects_failed", { { "count", std::to_string(effectFailed) } },
+										"ERROR: {count} effect(s) failed to compile")
+					.c_str());
+			for (const auto& err : EffectManager::GetSingleton().GetAllErrors())
 				ImGui::TextColored(themeSettings.StatusPalette.Error, "  %s", err.c_str());
 		}
 	}
@@ -239,10 +316,10 @@ void OverlayRenderer::RenderOverlay(
 	if (editorWindow->open || menu.IsEnabled)
 		UnifiedPresetCatalog::GetSingleton().DrawBaselineOverlapPrompt();
 
-	// The editor draws its own notifications; while it is closed they still need a host, e.g. the
-	// "cannot open in a loading screen" warning raised by the toggle hotkey.
+	// The editor draws the notifications in its own frame; while it is closed they still need a host,
+	// e.g. the "cannot open in a loading screen" warning raised by the toggle hotkey.
 	if (!editorWindow->open)
-		editorWindow->RenderNotifications();
+		Util::Notifications::Draw();
 
 	RenderFeatureOverlays();
 	RenderFirstTimeSetupOverlay();
@@ -259,14 +336,14 @@ bool OverlayRenderer::ShouldSkipRendering()
 	auto* abTestingManager = ABTestingManager::GetSingleton();
 	auto* renderDoc = RenderDoc::GetSingleton();
 
-	uint32_t effectFailed = EffectManager::GetSingleton().IsInitialized() ? EffectManager::GetSingleton().GetFailedEffectCount() : 0;
+	const uint32_t effectFailed = GetFailedEffectCount();
 
 	return !(shaderCache->IsCompiling() ||
 			 Menu::GetSingleton()->IsEnabled ||
 			 Menu::GetSingleton()->openFade > 0.0f ||
 			 HomePageRenderer::ShouldShowFirstTimeSetup() ||
 			 EditorWindow::GetSingleton()->open ||
-			 EditorWindow::GetSingleton()->HasNotifications() ||
+			 Util::Notifications::HasAny() ||
 			 Effects11Editor::GetSingleton().IsOpen() ||
 			 abTestingManager->IsEnabled() ||
 			 (failed && !hide) ||
@@ -336,20 +413,30 @@ void OverlayRenderer::RenderShaderCompilationStatus(const std::function<const ch
 	bool renderDocAvailable = renderDoc->IsAvailable();
 	const auto renderDocInformation = renderDoc->GetOverlayWarningMessage();
 
-	auto progressTitle = fmt::format("{}Compiling Shaders: {}",
-		shaderCache->backgroundCompilation ? "Background " : "",
-		shaderCache->GetShaderStatsString(!state->IsDeveloperMode()).c_str());
+	const std::unordered_map<std::string, std::string> statsArg{ { "stats", shaderCache->GetShaderStatsString(!state->IsDeveloperMode()) } };
+	const auto progressTitle = shaderCache->backgroundCompilation ?
+	                               I18n::GetSingleton()->Format("overlay.compiling_shaders_background", statsArg, "Background Compiling Shaders: {stats}") :
+	                               I18n::GetSingleton()->Format("overlay.compiling_shaders", statsArg, "Compiling Shaders: {stats}");
 	auto percent = (float)compiledShaders / (float)totalShaders;
 	auto progressOverlay = fmt::format("{}/{} ({:2.1f}%)", compiledShaders, totalShaders, 100 * percent);
 
-	uint32_t effectFailed = EffectManager::GetSingleton().IsInitialized() ? EffectManager::GetSingleton().GetFailedEffectCount() : 0;
+	const uint32_t effectFailed = GetFailedEffectCount();
+	const bool showFailures = (failed && !hide) || effectFailed;
+	const bool compiling = shaderCache->IsCompiling();
+	if (!compiling && !showFailures && !renderDocAvailable)
+		return;
 
-	if (shaderCache->IsCompiling()) {
-		ImGui::SetNextWindowPos(ImVec2(pos, pos));
-		if (!ImGui::Begin("ShaderCompilationInfo", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings)) {
-			ImGui::End();
-			return;
-		}
+	// Card accent: errors win, then the RenderDoc warning, else plain progress
+	const ImVec4 accent = showFailures       ? themeSettings.StatusPalette.Error :
+	                      renderDocAvailable ? themeSettings.StatusPalette.Warning :
+	                                           themeSettings.StatusPalette.InfoColor;
+
+	if (!BeginOverlayCard(ImVec2(pos, pos))) {
+		EndOverlayCard(accent);
+		return;
+	}
+
+	if (compiling) {
 		ImGui::TextUnformatted(progressTitle.c_str());
 		ImGui::ProgressBar(percent, ImVec2(0.0f, 0.0f), progressOverlay.c_str());
 		if (state->IsDeveloperMode()) {
@@ -359,57 +446,34 @@ void OverlayRenderer::RenderShaderCompilationStatus(const std::function<const ch
 			int heavyLimit = static_cast<int>(Util::GetPerformanceCoreCount());
 			uint64_t slow = shaderCache->GetSlowTasks();
 			uint64_t verySlow = shaderCache->GetVerySlowTasks();
-			ImGui::Text("Threads: %d / %d limit | Heavy: %d / %d P-cores | %d workers",
+			ImGui::Text(T("overlay.compile_threads", "Threads: %d / %d limit | Heavy: %d / %d P-cores | %d workers"),
 				compilationRunning,
 				threadLimit,
 				heavyInFlight,
 				heavyLimit,
 				(int)shaderCache->compilationPool.get_thread_count());
 			if (slow > 0) {
-				ImGui::Text("Slow shaders: %llu (very slow: %llu)", slow, verySlow);
+				ImGui::Text(T("overlay.slow_shaders", "Slow shaders: %llu (very slow: %llu)"), slow, verySlow);
 			}
 		}
 		if (!shaderCache->backgroundCompilation && shaderCache->menuLoaded) {
-			auto skipShadersText = fmt::format(
-				"Press {} to proceed without completing shader compilation. ",
-				keyIdToString(Menu::GetSingleton()->GetSettings().SkipCompilationKey));
+			const auto skipShadersText = I18n::GetSingleton()->Format("overlay.skip_compilation",
+				{ { "key", keyIdToString(Menu::GetSingleton()->GetSettings().SkipCompilationKey) } },
+				"Press {key} to proceed without completing shader compilation.");
 			ImGui::TextUnformatted(skipShadersText.c_str());
 			ImGui::TextUnformatted(T("overlay.uncompiled_warning", "WARNING: Uncompiled shaders will have visual errors or cause stuttering when loading."));
 		}
-		if (failed && !hide)
-			DrawShaderCompilationFailures(failed, themeSettings);
-		DrawEffects11Errors(themeSettings);
-
-		if (renderDocAvailable)
-			ImGui::TextColored(themeSettings.StatusPalette.Warning, "%s", renderDocInformation.c_str());
-
-		ImGui::End();
-		return;
 	}
 
-	if ((failed && !hide) || effectFailed) {
-		ImGui::SetNextWindowPos(ImVec2(pos, pos));
-		if (!ImGui::Begin("ShaderCompilationInfo", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings)) {
-			ImGui::End();
-			return;
-		}
-
-		DrawShaderCompilationFailures(failed, themeSettings);
+	if (showFailures) {
+		DrawShaderCompilationFailures(hide ? 0 : failed, themeSettings);
 		DrawEffects11Errors(themeSettings);
+	}
 
-		if (renderDocAvailable)
-			ImGui::TextColored(themeSettings.StatusPalette.Warning, "%s", renderDocInformation.c_str());
-
-		ImGui::End();
-	} else if (renderDocAvailable) {
-		ImGui::SetNextWindowPos(ImVec2(pos, pos));
-		if (!ImGui::Begin("ShaderCompilationInfo", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings)) {
-			ImGui::End();
-			return;
-		}
+	if (renderDocAvailable)
 		ImGui::TextColored(themeSettings.StatusPalette.Warning, "%s", renderDocInformation.c_str());
-		ImGui::End();
-	}
+
+	EndOverlayCard(accent);
 }
 
 void OverlayRenderer::RenderFeatureOverlays()
@@ -504,7 +568,7 @@ void OverlayRenderer::RenderShaderBlockingStatus()
 	}
 
 	Util::Text::Error(T("overlay.shader_blocking_active", "Shader Blocking Active"));
-	ImGui::Text("Blocked: %s", shaderCache->blockedKey.c_str());
+	ImGui::Text(T("overlay.blocked_shader", "Blocked: %s"), shaderCache->blockedKey.c_str());
 
 	// Try to get more details from active shaders
 	auto activeShaders = shaderCache->GetActiveShaders();
@@ -521,14 +585,14 @@ void OverlayRenderer::RenderShaderBlockingStatus()
 	}
 
 	if (foundBlocked) {
-		ImGui::Text("Index: %zu/%zu", blockedIndex, activeShaders.size());
+		ImGui::Text(T("overlay.blocked_index", "Index: %zu/%zu"), blockedIndex, activeShaders.size());
 	} else {
-		ImGui::Text("Index: N/A (%zu active)", activeShaders.size());
+		ImGui::Text(T("overlay.blocked_index_unknown", "Index: N/A (%zu active)"), activeShaders.size());
 	}
 
 	for (const auto& shader : activeShaders) {
 		if (shader.key == shaderCache->blockedKey) {
-			ImGui::Text("Type: %s | Class: %s | Descriptor: 0x%X",
+			ImGui::Text(T("overlay.blocked_details", "Type: %s | Class: %s | Descriptor: 0x%X"),
 				magic_enum::enum_name(shader.shaderType).data(),
 				magic_enum::enum_name(shader.shaderClass).data(),
 				shader.descriptor);

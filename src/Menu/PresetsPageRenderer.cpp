@@ -11,7 +11,9 @@
 #include "I18n/I18n.h"
 #include "IconsTabler.h"
 #include "Menu.h"
+#include "Menu/FeatureListRenderer.h"
 #include "Menu/Icons/helpers/IconFonts.h"
+#include "Menu/MenuIcons.h"
 #include "Presets/PresetCompatibility.h"
 #include "Presets/UnifiedPresetCatalog.h"
 #include "Util.h"
@@ -75,13 +77,14 @@ namespace
 	template <typename Visitor>
 	void ForEachBackendBadge(bool hasE11, bool hasCSPresets, bool hasBaseline, bool compact, Visitor&& visit)
 	{
+		using C = ThemeManager::Constants;
 		const auto& palette = globals::menu->GetTheme().StatusPalette;
 		if (hasE11)
-			visit(BackendBadge{ BackendLabelE11(compact), palette.InfoColor, 0.9f, ImVec4(0.05f, 0.05f, 0.08f, 1.0f) });
+			visit(BackendBadge{ BackendLabelE11(compact), palette.InfoColor, C::PRESET_BADGE_INFO_ALPHA, C::PRESET_BADGE_INFO_TEXT });
 		if (hasCSPresets)
-			visit(BackendBadge{ BackendLabelCS(compact), palette.Warning, 0.85f, ImVec4(0.08f, 0.06f, 0.02f, 1.0f) });
+			visit(BackendBadge{ BackendLabelCS(compact), palette.Warning, C::PRESET_BADGE_ALPHA, C::PRESET_BADGE_WARNING_TEXT });
 		if (hasBaseline)
-			visit(BackendBadge{ BackendLabelBaseline(compact), palette.SuccessColor, 0.85f, ImVec4(0.02f, 0.08f, 0.04f, 1.0f) });
+			visit(BackendBadge{ BackendLabelBaseline(compact), palette.SuccessColor, C::PRESET_BADGE_ALPHA, C::PRESET_BADGE_SUCCESS_TEXT });
 	}
 
 	bool CanApplyPack(const UnifiedPresetCatalog::PackInfo& pack)
@@ -133,9 +136,9 @@ namespace
 		ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, diameter * 0.5f);
 		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0.0f, 0.0f));
 		ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, ImVec2(0.5f, 0.5f));
-		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0f, 0.0f, 0.0f, 0.45f));
-		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.0f, 0.0f, 0.0f, 0.7f));
-		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.0f, 0.0f, 0.0f, 0.85f));
+		ImGui::PushStyleColor(ImGuiCol_Button, ThemeManager::Constants::PRESET_VIEWER_ARROW_COLOR);
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ThemeManager::Constants::PRESET_VIEWER_ARROW_HOVER_COLOR);
+		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ThemeManager::Constants::PRESET_VIEWER_ARROW_ACTIVE_COLOR);
 
 		const bool clicked = ImGui::InvisibleButton(id, ImVec2(diameter, diameter));
 		const ImVec2 p0 = ImGui::GetItemRectMin();
@@ -190,7 +193,6 @@ namespace
 		}
 	}
 
-	constexpr float kHoverLift = 0.1f;
 	/// Floor for a list row's name width, in font sizes, so badges cannot squeeze it to nothing.
 	constexpr float kMinRowNameFontSizes = 5.0f;
 	/// Narrowest the detail title column may get, in font sizes, before the badges move beneath it.
@@ -211,13 +213,14 @@ namespace
 
 		// Each button after the first wraps to a new row when the pane is too narrow to hold it.
 		ImGui::BeginDisabled(!CanApplyPack(pack));
-		ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 999.0f);
+		ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, ThemeManager::Constants::PILL_ROUNDING);
 		const ImVec4& info = theme.StatusPalette.InfoColor;
-		const ImVec4 infoHovered(std::min(1.0f, info.x + kHoverLift), std::min(1.0f, info.y + kHoverLift), std::min(1.0f, info.z + kHoverLift), 1.0f);
+		const float lift = ThemeManager::Constants::PRESET_BUTTON_HOVER_LIFT;
+		const ImVec4 infoHovered(std::min(1.0f, info.x + lift), std::min(1.0f, info.y + lift), std::min(1.0f, info.z + lift), 1.0f);
 		ImGui::PushStyleColor(ImGuiCol_Button, info);
 		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, infoHovered);
 		ImGui::PushStyleColor(ImGuiCol_ButtonActive, info);
-		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.05f, 0.07f, 0.1f, 1.0f));
+		ImGui::PushStyleColor(ImGuiCol_Text, ThemeManager::Constants::PRESET_APPLY_TEXT_COLOR);
 		if (Util::ButtonWithFlash(T("menu.presets.apply", "Apply Preset")))
 			RequestApplyPack(pack);
 		ImGui::PopStyleColor(4);
@@ -238,7 +241,7 @@ namespace
 		if (baselineEnabled) {
 			const char* removeLabel = T("menu.presets.remove_baseline", "Remove Baseline");
 			BrowserUI::SameLineIfFits(MeasureButtonWidth(removeLabel));
-			if (ImGui::Button(removeLabel))
+			if (Util::Button(removeLabel))
 				catalog.RemoveBaseline(pack.id);
 			Util::AddTooltip(T("menu.presets.remove_baseline_tooltip",
 				"Stops applying this pack's baseline settings. Its features go back to what defaults and your other Baseline packs set; your own edits are kept."));
@@ -247,7 +250,7 @@ namespace
 		if (packActive) {
 			const char* disableLabel = T("menu.presets.disable", "Disable Preset");
 			BrowserUI::SameLineIfFits(MeasureButtonWidth(disableLabel));
-			if (ImGui::Button(disableLabel))
+			if (Util::Button(disableLabel))
 				catalog.DisableActivePack();
 			Util::AddTooltip(T("menu.presets.disable_tooltip",
 				"Turns this preset off. Scene settings and form edits fall back to your own, and an Effects 11 preset switches to Vanilla."));
@@ -279,7 +282,7 @@ void PresetsPageRenderer::DrawBackendBadges(bool hasE11, bool hasCSPresets, bool
 {
 	const float gap = BadgeGap();
 
-	ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 999.0f);
+	ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, ThemeManager::Constants::PILL_ROUNDING);
 	ImGui::BeginGroup();
 	bool needGap = false;
 	ForEachBackendBadge(hasE11, hasCSPresets, hasBaseline, compact, [&](const BackendBadge& badge) {
@@ -303,7 +306,7 @@ void PresetsPageRenderer::RenderToolbar()
 	const float scale = Util::GetUIScale();
 
 	BrowserUI::SearchField("##PresetSearch", searchBuffer, IM_ARRAYSIZE(searchBuffer),
-		T("menu.presets.search", "Search presets..."), 220.0f * scale, true);
+		T("menu.presets.search", "Search presets..."), ThemeManager::Constants::PRESET_SEARCH_WIDTH * scale, true);
 
 	ImGui::SameLine();
 	using PresetType = UnifiedPresetCatalog::PresetType;
@@ -346,7 +349,7 @@ void PresetsPageRenderer::RenderToolbar()
 void PresetsPageRenderer::DrawOpenCSEditorButton(const char* id)
 {
 	const char* title = T("menu.presets.open_cs_editor", "CS Editor");
-	const Icons::GlyphRef brush = Icons::TI(ICON_TI_BRUSH);
+	const Icons::GlyphRef brush = Icons::TI(MenuIcons::kCSEditor);
 	BrowserUI::RightAlign(Icons::MeasureLabeledButton(brush, title));
 	if (Icons::LabeledButton(id, brush, title))
 		CSEditor::OpenEditorWindow();
@@ -390,11 +393,9 @@ void PresetsPageRenderer::RenderBaselineOrder()
 		ImGui::SameLine();
 		const auto* pack = catalog.FindPack(id);
 		const std::string label = std::format("{}. {}", row + 1, pack && !pack->name.empty() ? pack->name : id);
-		if (ImGui::Selectable(label.c_str(), selectedPackId == id)) {
+		if (Util::Selectable(label.c_str(), selectedPackId == id)) {
 			selectedPackId = id;
-			lightboxPackId.clear();
-			lightboxImageIndex = -1;
-			lightboxSuppressClose = false;
+			ResetLightbox();
 		}
 
 		ImGui::PopID();
@@ -426,11 +427,11 @@ void PresetsPageRenderer::RenderList(float width)
 		ImGui::TextDisabled("%s", T("menu.presets.empty", "No presets found. Drop packs into the Presets folder, install Effects 11 presets, or export from Scene Manager."));
 	}
 
-	const float rowPad = 6.0f * scale;
-	const float logoSize = 40.0f * scale;
+	const float rowPad = ThemeManager::Constants::PRESET_ROW_PADDING * scale;
+	const float logoSize = ThemeManager::Constants::PRESET_ROW_LOGO_SIZE * scale;
 	const float rowGap = ImGui::GetStyle().ItemSpacing.y;
-	const float rowInset = 8.0f * scale;
-	const float statusGap = 6.0f * scale;
+	const float rowInset = ThemeManager::Constants::PRESET_ROW_INSET * scale;
+	const float statusGap = ThemeManager::Constants::PRESET_ROW_STATUS_GAP * scale;
 
 	for (size_t idx : indices) {
 		const auto& packId = catalog.GetPacks()[idx].id;
@@ -452,12 +453,10 @@ void PresetsPageRenderer::RenderList(float width)
 
 		const ImVec2 rowOrigin = ImGui::GetCursorScreenPos();
 		const float textWidth = ImGui::GetContentRegionAvail().x - logoSize - rowInset * 3.0f;
-		const bool clicked = ImGui::Selectable("##row", selected, ImGuiSelectableFlags_AllowOverlap | ImGuiSelectableFlags_AllowDoubleClick, ImVec2(0, rowHeight));
+		const bool clicked = Util::Selectable("##row", selected, ImGuiSelectableFlags_AllowOverlap | ImGuiSelectableFlags_AllowDoubleClick, ImVec2(0, rowHeight));
 		if (clicked) {
 			selectedPackId = pack.id;
-			lightboxPackId.clear();
-			lightboxImageIndex = -1;
-			lightboxSuppressClose = false;
+			ResetLightbox();
 			if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && CanApplyPack(pack))
 				RequestApplyPack(pack);
 		}
@@ -476,7 +475,7 @@ void PresetsPageRenderer::RenderList(float width)
 			if (pack.logoSRV)
 				DrawRoundedImage(dl, reinterpret_cast<ImTextureID>(pack.logoSRV.get()), p0, p1, rounding);
 			else
-				dl->AddRectFilled(p0, p1, ImGui::ColorConvertFloat4ToU32(ImVec4(0.15f, 0.15f, 0.18f, 1.0f)), rounding);
+				dl->AddRectFilled(p0, p1, ImGui::ColorConvertFloat4ToU32(ThemeManager::Constants::PRESET_LOGO_PLACEHOLDER_COLOR), rounding);
 		}
 
 		ImGui::SameLine(0.0f, rowInset);
@@ -556,9 +555,8 @@ void PresetsPageRenderer::RenderDetail()
 	catalog.EnsureArtwork(*pack);
 
 	if (lightboxPackId != pack->id) {
+		ResetLightbox();
 		lightboxPackId = pack->id;
-		lightboxImageIndex = -1;
-		lightboxSuppressClose = false;
 	}
 	if (lightboxImageIndex >= static_cast<int>(pack->screenshotSRVs.size())) {
 		lightboxImageIndex = -1;
@@ -566,8 +564,8 @@ void PresetsPageRenderer::RenderDetail()
 	}
 
 	const float badgesWidth = MeasureBackendBadgesWidth(pack->IsE11(), pack->IsCS(), pack->IsBaseline(), false);
-	const float posterH = ImGui::GetFrameHeight() * 6.0f;
-	const float posterW = posterH * (2.0f / 3.0f);  // movie-poster portrait
+	const float posterH = ImGui::GetFrameHeight() * ThemeManager::Constants::PRESET_POSTER_HEIGHT_FRAMES;
+	const float posterW = posterH * ThemeManager::Constants::PRESET_POSTER_ASPECT;
 
 	// A narrow pane would leave the title no room beside the badges, so they drop beneath it instead.
 	const bool badgesBesideTitle = ImGui::GetContentRegionAvail().x - posterW - badgesWidth - style.ItemSpacing.x * 2.0f >=
@@ -595,13 +593,13 @@ void PresetsPageRenderer::RenderDetail()
 				DrawRoundedImage(dl, reinterpret_cast<ImTextureID>(poster), origin, p1, rounding);
 			} else {
 				dl->AddRectFilled(origin, p1,
-					ImGui::ColorConvertFloat4ToU32(ImVec4(0.12f, 0.12f, 0.14f, 1.0f)), rounding);
+					ImGui::ColorConvertFloat4ToU32(ThemeManager::Constants::PRESET_POSTER_PLACEHOLDER_COLOR), rounding);
 			}
 		}
 
 		// Top-aligned rather than centred in the poster's full height: the actions below now live
 		// here too, so this column fills most of the row instead of floating in its middle.
-		const float titleTopPad = 2.0f * Util::GetUIScale();
+		const float titleTopPad = ThemeManager::Constants::PRESET_TITLE_TOP_PAD * Util::GetUIScale();
 
 		ImGui::TableSetColumnIndex(1);
 		{
@@ -612,7 +610,7 @@ void PresetsPageRenderer::RenderDetail()
 				const std::string stageTag = Feature::GetReleaseStageTag(stage);
 
 				MenuFonts::FontRoleGuard title(Menu::FontRole::Heading);
-				ImGui::SetWindowFontScale(1.35f);
+				ImGui::SetWindowFontScale(ThemeManager::Constants::PRESET_TITLE_FONT_SCALE);
 				ImGui::TextWrapped("%s", pack->name.c_str());
 				if (!stageTag.empty()) {
 					MenuFonts::FontRoleGuard body(Menu::FontRole::Body);
@@ -658,7 +656,7 @@ void PresetsPageRenderer::RenderDetail()
 			ImGui::TableSetColumnIndex(2);
 			// Aligned to the title line rather than centred in the whole poster height, now that
 			// the title column reads top-down (title, author, actions) instead of floating in the middle.
-			const float titleLineH = ImGui::GetTextLineHeight() * 1.35f;
+			const float titleLineH = ImGui::GetTextLineHeight() * ThemeManager::Constants::PRESET_TITLE_FONT_SCALE;
 			const float badgeH = ImGui::GetFrameHeight();
 			ImGui::SetCursorPosY(ImGui::GetCursorPosY() + titleTopPad + std::max(0.0f, (titleLineH - badgeH) * 0.5f));
 			DrawBackendBadges(pack->IsE11(), pack->IsCS(), pack->IsBaseline(), false);
@@ -693,8 +691,8 @@ void PresetsPageRenderer::RenderDetail()
 	if (!pack->screenshotSRVs.empty()) {
 		ImGui::Spacing();
 		ImGui::SeparatorText(T("menu.presets.screenshots", "Screenshots"));
-		const float thumb = ImGui::GetFrameHeight() * 4.0f;
-		const float thumbH = thumb * (9.0f / 16.0f);
+		const float thumb = ImGui::GetFrameHeight() * ThemeManager::Constants::PRESET_THUMB_HEIGHT_FRAMES;
+		const float thumbH = thumb / ThemeManager::Constants::SCREENSHOT_ASPECT;
 		for (size_t i = 0; i < pack->screenshotSRVs.size(); ++i) {
 			if (i > 0)
 				ImGui::SameLine(0.0f, style.ItemSpacing.x);
@@ -734,20 +732,26 @@ void PresetsPageRenderer::Open()
 	if (!menu)
 		return;
 	menu->IsEnabled = true;
-	// Addressed by display name, the same translation the left panel draws.
-	menu->SelectFeatureMenu(T("menu.features.presets", "Presets"));
+	menu->SelectFeatureMenu(std::string(MenuPageIds::kPresets));
 }
 
 float PresetsPageRenderer::MeasureOpenButton()
 {
-	return Icons::MeasureLabeledButton(Icons::TI(ICON_TI_STACK_2), T("menu.presets.open_presets", "Presets"));
+	return Icons::MeasureLabeledButton(Icons::TI(MenuIcons::kPresets), T("menu.presets.open_presets", "Presets"));
 }
 
 void PresetsPageRenderer::DrawOpenButton(const char* id, const char* tooltip)
 {
-	if (Icons::LabeledButton(id, Icons::TI(ICON_TI_STACK_2), T("menu.presets.open_presets", "Presets")))
+	if (Icons::LabeledButton(id, Icons::TI(MenuIcons::kPresets), T("menu.presets.open_presets", "Presets")))
 		Open();
 	Util::AddTooltip(tooltip);
+}
+
+void PresetsPageRenderer::ResetLightbox()
+{
+	lightboxPackId.clear();
+	lightboxImageIndex = -1;
+	lightboxSuppressClose = false;
 }
 
 bool PresetsPageRenderer::CloseLightboxIfOpen()
@@ -785,7 +789,7 @@ void PresetsPageRenderer::RenderScreenshotLightbox()
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
-	ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.02f, 0.02f, 0.04f, 0.72f));
+	ImGui::PushStyleColor(ImGuiCol_WindowBg, ThemeManager::Constants::PRESET_VIEWER_BG_COLOR);
 
 	constexpr ImGuiWindowFlags kFlags =
 		ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
@@ -799,13 +803,13 @@ void PresetsPageRenderer::RenderScreenshotLightbox()
 		return;
 	}
 
-	const float maxW = viewport->Size.x * 0.8f;
-	const float maxH = viewport->Size.y * 0.8f;
+	const float maxW = viewport->Size.x * ThemeManager::Constants::PRESET_VIEWER_MAX_SIZE_RATIO;
+	const float maxH = viewport->Size.y * ThemeManager::Constants::PRESET_VIEWER_MAX_SIZE_RATIO;
 	float imgW = maxW;
-	float imgH = imgW * (9.0f / 16.0f);
+	float imgH = imgW / ThemeManager::Constants::SCREENSHOT_ASPECT;
 	if (imgH > maxH) {
 		imgH = maxH;
-		imgW = imgH * (16.0f / 9.0f);
+		imgW = imgH * ThemeManager::Constants::SCREENSHOT_ASPECT;
 	}
 
 	const ImVec2 imgOrigin(
@@ -829,7 +833,7 @@ void PresetsPageRenderer::RenderScreenshotLightbox()
 
 	bool navigated = false;
 	if (shotCount > 1) {
-		const float arrowBtn = ImGui::GetFrameHeight() * 1.35f;
+		const float arrowBtn = ImGui::GetFrameHeight() * ThemeManager::Constants::PRESET_VIEWER_ARROW_SCALE;
 		const float midY = imgOrigin.y + imgH * 0.5f;
 		const float inset = style.ItemSpacing.x * 2.0f;
 		if (DrawCarouselArrow("##LightboxPrev", Icons::TI(ICON_TI_CHEVRON_LEFT),
@@ -859,17 +863,23 @@ void PresetsPageRenderer::RenderScreenshotLightbox()
 	ImGui::PopStyleVar(3);
 }
 
+void PresetsPageRenderer::EnsureDiscovered()
+{
+	if (discovered)
+		return;
+	auto& catalog = UnifiedPresetCatalog::GetSingleton();
+	catalog.Discover();
+	discovered = true;
+	if (selectedPackId.empty() && !catalog.GetActivePackId().empty())
+		selectedPackId = catalog.GetActivePackId();
+	else if (selectedPackId.empty() && !catalog.GetPacks().empty())
+		selectedPackId = catalog.GetPacks().front().id;
+}
+
 void PresetsPageRenderer::Render()
 {
 	auto& catalog = UnifiedPresetCatalog::GetSingleton();
-	if (!discovered) {
-		catalog.Discover();
-		discovered = true;
-		if (selectedPackId.empty() && !catalog.GetActivePackId().empty())
-			selectedPackId = catalog.GetActivePackId();
-		else if (selectedPackId.empty() && !catalog.GetPacks().empty())
-			selectedPackId = catalog.GetPacks().front().id;
-	}
+	EnsureDiscovered();
 
 	ImGui::BeginChild("PresetsPage", ImVec2(0, 0), false);
 
@@ -879,7 +889,7 @@ void PresetsPageRenderer::Render()
 	ImGui::Spacing();
 
 	const float scale = Util::GetUIScale();
-	const float listWidth = std::clamp(ImGui::GetContentRegionAvail().x * 0.34f, 260.0f * scale, 380.0f * scale);
+	const float listWidth = std::clamp(ImGui::GetContentRegionAvail().x * ThemeManager::Constants::PRESET_LIST_WIDTH_RATIO, ThemeManager::Constants::PRESET_LIST_MIN_WIDTH * scale, ThemeManager::Constants::PRESET_LIST_MAX_WIDTH * scale);
 	RenderList(listWidth);
 	ImGui::SameLine();
 	RenderDetail();
