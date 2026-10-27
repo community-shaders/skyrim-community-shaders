@@ -100,8 +100,6 @@ namespace
 		"D50",
 	};
 
-	const char* const kSurroundLabels[] = { "Dark", "Dim", "Bright" };
-
 	int ClampIndex(int value, int count)
 	{
 		if (value < 0) {
@@ -863,6 +861,12 @@ void OpenDRTDrawSettings(OpenDRTSettings& s, bool hdrActive, float hdrPaperWhite
 {
 	static OpenDRTPresetSelection presets{};
 
+	const char* const surroundLabels[] = {
+		T("feature.post_processing.open_drt.surround_dark", "Dark"),
+		T("feature.post_processing.open_drt.surround_dim", "Dim"),
+		T("feature.post_processing.open_drt.surround_bright", "Bright"),
+	};
+
 	if (ImGui::CollapsingHeader(T("feature.post_processing.open_drt.built_in_presets", "Built-in Presets"), ImGuiTreeNodeFlags_DefaultOpen)) {
 		ComboEnum(T("feature.post_processing.open_drt.look_preset", "Look Preset"), presets.lookPreset, kLookPresetLabels);
 		ComboEnum(T("feature.post_processing.open_drt.tonescale_preset", "Tonescale Preset"), presets.tonescalePreset, kTonescalePresetLabels);
@@ -917,7 +921,7 @@ void OpenDRTDrawSettings(OpenDRTSettings& s, bool hdrActive, float hdrPaperWhite
 				T("feature.post_processing.open_drt.display_luminance_for_middle_grey_0_18_in",
 					"Display luminance for middle grey (0.18) in nits.\n"
 					"Sets the target value for middle grey within the available luminance range of the display device."));
-		ComboInt(T("feature.post_processing.open_drt.surround", "Surround"), s.tn_su, kSurroundLabels, IM_ARRAYSIZE(kSurroundLabels));
+		ComboInt(T("feature.post_processing.open_drt.surround", "Surround"), s.tn_su, surroundLabels, IM_ARRAYSIZE(surroundLabels));
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::Text(
 				T("feature.post_processing.open_drt.opendrt_includes_a_simple_surround_compensation_model_dci",

@@ -76,7 +76,7 @@ void LocalExposure::DrawSettings()
 	if (Util::ShowDebugSections() && ImGui::CollapsingHeader(T("feature.post_processing.local_exposure.debug", "Debug"))) {
 		static float debugRescale = .3f;
 		ImGui::SliderFloat(T("feature.post_processing.local_exposure.view_resize", "View Resize"), &debugRescale, 0.f, 1.f);
-		BUFFER_VIEWER_NODE_TITLE(texLogLuminance, "Scene Log Luminance", debugRescale);
+		BUFFER_VIEWER_NODE_TITLE(texLogLuminance, T("feature.post_processing.local_exposure.buffer_scene_log_luminance", "Scene Log Luminance"), debugRescale);
 	}
 }
 

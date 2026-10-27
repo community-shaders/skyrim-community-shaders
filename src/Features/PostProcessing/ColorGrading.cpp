@@ -343,7 +343,12 @@ void ColorGrading::DrawSettings()
 				settings.invertLog = invertLog;
 			ImGui::EndDisabled();
 		}
-		ImGui::Combo(T(TKEY("log_type"), "Log Type"), (int*)&settings.logType, "ACEScct\0ARRILogC4\0SonySLog3\0");
+		const char* logTypes[] = {
+			T(TKEY("log_type_acescct"), "ACEScct"),
+			T(TKEY("log_type_arrilogc4"), "ARRILogC4"),
+			T(TKEY("log_type_sonyslog3"), "SonySLog3"),
+		};
+		ImGui::Combo(T(TKEY("log_type"), "Log Type"), (int*)&settings.logType, logTypes, IM_ARRAYSIZE(logTypes));
 	}
 
 	ImGui::SeparatorText(T(TKEY("color_grading"), "Color Grading"));

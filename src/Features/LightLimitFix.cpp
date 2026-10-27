@@ -1071,13 +1071,16 @@ bool LightLimitFix::QueueParticleLight(RE::BSRenderPass* a_pass, VertexColorCach
 
 bool LightLimitFix::CheckParticleLights(RE::BSRenderPass* a_pass, uint32_t)
 {
-	if (!a_pass || !a_pass->geometry || !a_pass->shaderProperty)
-		return true;
-
 	using Flag = RE::BSShaderProperty::EShaderPropertyFlag;
-	if (!a_pass->shaderProperty->flags.all(Flag::kSoftEffect, Flag::kZBufferTest))
+	if (!settings.EnableParticleLights || !a_pass || !a_pass->geometry || !a_pass->shaderProperty ||
+		!a_pass->shaderProperty->flags.all(Flag::kSoftEffect, Flag::kZBufferTest))
 		return true;
 
+	return CheckParticleLightPass(a_pass);
+}
+
+bool LightLimitFix::CheckParticleLightPass(RE::BSRenderPass* a_pass)
+{
 	auto* alphaProperty = static_cast<RE::NiAlphaProperty*>(a_pass->geometry->GetGeometryRuntimeData().alphaProperty.get());
 	if (!alphaProperty || alphaProperty->alphaFlags != 4109)
 		return true;
