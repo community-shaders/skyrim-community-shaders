@@ -574,6 +574,22 @@ bool ScreenshotFeature::IsInMenu() const
 
 void ScreenshotFeature::PostPostLoad()
 {
+	ApplyVanillaScreenshotSetting();
+}
+
+void ScreenshotFeature::ApplyVanillaScreenshotSetting()
+{
+	// Toggles the in-memory value only; Skyrim.ini on disk is never rewritten.
+	auto* setting = RE::GetINISetting("bAllowScreenShot:Display");
+	if (!setting || setting->GetType() != RE::Setting::Type::kBool)
+		return;
+	if (!vanillaScreenshotDefault)
+		vanillaScreenshotDefault = setting->GetBool();
+	const bool allow = disableVanillaScreenshot ? false : *vanillaScreenshotDefault;
+	if (setting->GetBool() != allow) {
+		setting->data.b = allow;
+		logger::info("[Screenshot] Vanilla screenshots {}", allow ? "enabled" : "disabled");
+	}
 }
 
 void ScreenshotFeature::ClearShaderCache()
@@ -595,8 +611,11 @@ void ScreenshotFeature::LoadSettings(json& a_json)
 		sdrUsePng = a_json["SdrUsePng"];
 	if (a_json.contains("CopyToClipboard"))
 		copyToClipboard = a_json["CopyToClipboard"];
+	if (a_json.contains("DisableVanillaScreenshot") && a_json["DisableVanillaScreenshot"].is_boolean())
+		disableVanillaScreenshot = a_json["DisableVanillaScreenshot"];
 
 	subrect.LoadSettings(a_json);
+	ApplyVanillaScreenshotSetting();
 }
 
 void ScreenshotFeature::SaveSettings(json& a_json)
@@ -607,6 +626,7 @@ void ScreenshotFeature::SaveSettings(json& a_json)
 	a_json["HdrUseAvif"] = hdrUseAvif;
 	a_json["SdrUsePng"] = sdrUsePng;
 	a_json["CopyToClipboard"] = copyToClipboard;
+	a_json["DisableVanillaScreenshot"] = disableVanillaScreenshot;
 	subrect.SaveSettings(a_json);
 }
 
@@ -705,11 +725,18 @@ void ScreenshotFeature::DrawSettings()
 		Menu::GetSingleton()->settingScreenshotKey,
 		"Change##ScreenshotFeature");
 
-	if (HotkeyCollidesWithVanilla()) {
+	if (ImGui::Checkbox(T(TKEY("disable_vanilla"), "Disable vanilla screenshots"), &disableVanillaScreenshot))
+		ApplyVanillaScreenshotSetting();
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::Text("%s", T(TKEY("disable_vanilla_tooltip"),
+							  "Suppresses Skyrim's built-in PrintScreen capture while the game is running.\n"
+							  "Skyrim.ini is not modified; unchecking restores its bAllowScreenShot value."));
+
+	if (!disableVanillaScreenshot && vanillaScreenshotDefault.value_or(false) && HotkeyCollidesWithVanilla()) {
 		Util::Text::WrappedWarning(
-			T(TKEY("hotkey_collision"),
+			T(TKEY("hotkey_collision_vanilla"),
 				"This hotkey collides with vanilla PrintScreen; both saves will fire. "
-				"Set bAllowScreenShot=0 in Skyrim.ini to suppress vanilla, or pick a different hotkey above."));
+				"Enable \"Disable vanilla screenshots\" above, or pick a different hotkey."));
 	}
 
 	ImGui::SeparatorText(T(TKEY("crop"), "Crop"));

@@ -4,7 +4,7 @@
 
 -   **[VSCode Setup](./vscode-setup.md)** - IDE configuration, extensions, and auto-deploy
 -   **[Shader Workflow](./shader-workflow.md)** - Fast shader iteration and deployment
--   **[Nsight Perf](./nsight-perf.md)** - GPU hardware counters per render pass (Remote Control, `NVPERF_SUPPORT`)
+-   **[Nsight Perf](./nsight-perf.md)** - GPU hardware counters per render pass (Developer Tools, `NVPERF_SUPPORT`)
 
 ## Subsystems
 

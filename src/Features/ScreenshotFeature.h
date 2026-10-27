@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <queue>
 #include <string>
 #include <thread>
@@ -53,6 +54,8 @@ struct ScreenshotFeature : public Feature
 	bool sdrUsePng = true;
 	// After save, put the file path on the clipboard (CF_HDROP).
 	bool copyToClipboard = false;
+	// Suppress the game's own PrintScreen capture by clearing bAllowScreenShot in memory.
+	bool disableVanillaScreenshot = true;
 
 	std::atomic<bool> captureRequested{ false };
 
@@ -70,6 +73,8 @@ private:
 		bool saveAsSdrPng = false;
 		int hdrPngBitDepth = 11;
 		bool copyToClipboard = false;
+		// Suppress the game's own PrintScreen capture by clearing bAllowScreenShot in memory.
+		bool disableVanillaScreenshot = true;
 	};
 
 	std::mutex screenshotQueueMutex;
@@ -80,6 +85,8 @@ private:
 	// Render thread only: the worker never touches the immediate context.
 	std::vector<PendingScreenshot> pendingReadbacks;
 	Util::Subrect::Controller subrect;
+	// bAllowScreenShot as loaded from Skyrim.ini, captured before we first override it.
+	std::optional<bool> vanillaScreenshotDefault;
 
 	// SRV-readable copy used when the capture source's own SRV can't be sampled
 	// directly (kFRAMEBUFFER on flat aliases the swap-chain backbuffer).
@@ -90,6 +97,8 @@ private:
 
 	/** @brief Polls in-flight staging copies without stalling and enqueues the finished ones for encoding. */
 	void ProcessPendingReadbacks();
+	/** @brief Writes bAllowScreenShot:Display in memory from disableVanillaScreenshot, restoring the ini value when off. */
+	void ApplyVanillaScreenshotSetting();
 	void EnsureWorkerThread();
 	void StopWorkerThread();
 	void EnqueueScreenshot(PendingScreenshot&& screenshot);

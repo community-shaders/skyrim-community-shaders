@@ -80,7 +80,10 @@ void PhysicalGlare::DrawSettings()
 		ImGui::Text(T("feature.post_processing.physical_glare.overall_glare_intensity", "Overall glare intensity."));
 
 	{
-		const char* modeNames[] = { "Lens (N-polygon)", "Pupil (Circle)" };
+		const char* modeNames[] = {
+			T("feature.post_processing.physical_glare.aperture_mode_lens", "Lens (N-polygon)"),
+			T("feature.post_processing.physical_glare.aperture_mode_pupil", "Pupil (Circle)")
+		};
 		ImGui::Combo(T("feature.post_processing.physical_glare.aperture_mode", "Aperture Mode"), &settings.ApertureMode, modeNames, 2);
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::Text(T("feature.post_processing.physical_glare.lens_camera_lens_polygon_starburst_pupil_circular_human", "Lens: camera lens polygon starburst. Pupil: circular human eye aperture."));

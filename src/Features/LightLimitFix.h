@@ -44,6 +44,9 @@ struct LightLimitFix : OverlayFeature
 
 	bool CheckParticleLights(RE::BSRenderPass* a_pass, uint32_t a_technique);
 
+	/** @brief Queues or culls a candidate particle light pass. Kept out of line so other passes skip its vector register saves. */
+	[[msvc::noinline]] bool CheckParticleLightPass(RE::BSRenderPass* a_pass);
+
 public:
 	virtual inline std::string GetName() override { return "Light Limit Fix"; }
 	virtual std::string GetDisplayName() override { return T("feature.light_limit_fix.name", "Light Limit Fix"); }

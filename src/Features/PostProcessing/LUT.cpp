@@ -162,17 +162,18 @@ std::string LUT::ValidateLutFile(const std::filesystem::path& resolvedPath)
 {
 	const auto extension = GetLowercaseExtension(resolvedPath);
 	if (extension != ".dds" && extension != ".png" && extension != ".bmp")
-		return std::format("Invalid extension: {}! Only dds/png/bmp are supported.", resolvedPath.extension().string());
+		return I18n::GetSingleton()->Format(
+			"feature.post_processing.lut.invalid_extension",
+			{ { "extension", resolvedPath.extension().string() } },
+			"Invalid extension: {extension}! Only dds/png/bmp are supported.");
 	std::error_code ec;
 	if (!std::filesystem::exists(resolvedPath, ec))
-		return "The file does not exist.";
+		return T("feature.post_processing.lut.file_does_not_exist", "The file does not exist.");
 	return {};
 }
 
 void LUT::ReadTexture(std::string requestedPath)
 {
-	constexpr auto comErrMsg = "Failed to create texture! Error: {}";
-
 	auto device = globals::d3d::device;
 	auto& catalog = UnifiedPresetCatalog::GetSingleton();
 
@@ -195,8 +196,11 @@ void LUT::ReadTexture(std::string requestedPath)
 		try {
 			DX::ThrowIfFailed(DirectX::CreateDDSTextureFromFile(device, path.c_str(), &pRsrc, &pSrv));
 		} catch (std::runtime_error& e) {
-			errMsg = std::format(comErrMsg, e.what());
-			logger::warn(comErrMsg, e.what());
+			errMsg = I18n::GetSingleton()->Format(
+				"feature.post_processing.lut.failed_to_create_texture",
+				{ { "error", e.what() } },
+				"Failed to create texture! Error: {error}");
+			logger::warn("Failed to create texture! Error: {}", e.what());
 			return;
 		}
 
@@ -211,7 +215,10 @@ void LUT::ReadTexture(std::string requestedPath)
 			texLUT3D->srv.attach(pSrv);
 			LutType = 3;
 		} else {
-			errMsg = std::format("Invalid texture dimension: {}! Only 2D/3D textures are supported.", magic_enum::enum_name(texType));
+			errMsg = I18n::GetSingleton()->Format(
+				"feature.post_processing.lut.invalid_texture_dimension",
+				{ { "dimension", std::string(magic_enum::enum_name(texType)) } },
+				"Invalid texture dimension: {dimension}! Only 2D/3D textures are supported.");
 			logger::warn("Invalid texture dimension: {}! Only 2D/3D textures are supported.", magic_enum::enum_name(texType));
 			return;
 		}
@@ -220,8 +227,11 @@ void LUT::ReadTexture(std::string requestedPath)
 		try {
 			DX::ThrowIfFailed(DirectX::LoadFromWICFile(path.c_str(), DirectX::WIC_FLAGS_NONE, nullptr, image));
 		} catch (std::runtime_error& e) {
-			errMsg = std::format(comErrMsg, e.what());
-			logger::warn(comErrMsg, e.what());
+			errMsg = I18n::GetSingleton()->Format(
+				"feature.post_processing.lut.failed_to_create_texture",
+				{ { "error", e.what() } },
+				"Failed to create texture! Error: {error}");
+			logger::warn("Failed to create texture! Error: {}", e.what());
 			return;
 		}
 
@@ -229,8 +239,11 @@ void LUT::ReadTexture(std::string requestedPath)
 		try {
 			DX::ThrowIfFailed(CreateTexture(device, image.GetImages(), image.GetImageCount(), image.GetMetadata(), &pRsrc));
 		} catch (std::runtime_error& e) {
-			errMsg = std::format(comErrMsg, e.what());
-			logger::warn(comErrMsg, e.what());
+			errMsg = I18n::GetSingleton()->Format(
+				"feature.post_processing.lut.failed_to_create_texture",
+				{ { "error", e.what() } },
+				"Failed to create texture! Error: {error}");
+			logger::warn("Failed to create texture! Error: {}", e.what());
 			return;
 		}
 

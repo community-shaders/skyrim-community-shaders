@@ -46,6 +46,7 @@ struct SceneManager;
 class State;
 class Deferred;
 struct TruePBR;
+struct DeveloperTools;
 class RenderDoc;
 class RemoteControl;
 class Menu;
@@ -126,6 +127,8 @@ namespace globals
 		extern Upscaling upscaling;
 		extern HDRDisplay hdrDisplay;
 		extern Effects11 effects11;
+		extern DeveloperTools developerTools;
+		// Developer Tools components, not features: driven by developerTools.
 		extern RenderDoc renderDoc;
 		extern RemoteControl remoteControl;
 		extern ScreenshotFeature screenshotFeature;

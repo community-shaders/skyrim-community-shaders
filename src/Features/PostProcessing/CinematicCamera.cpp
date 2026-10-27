@@ -409,14 +409,14 @@ namespace CinematicCamera
 	{
 		switch ((FilmbackPreset)settings.Filmback.Preset) {
 		case FilmbackPreset::Super35:
-			return "Super 35";
+			return T("feature.post_processing.cinematic_camera.preset_super_35", "Super 35");
 		case FilmbackPreset::APSC:
-			return "APS-C";
+			return T("feature.post_processing.cinematic_camera.preset_aps_c", "APS-C");
 		case FilmbackPreset::Custom:
 			return T("feature.post_processing.cinematic_camera.custom", "Custom");
 		case FilmbackPreset::FullFrame:
 		default:
-			return "Full Frame";
+			return T("feature.post_processing.cinematic_camera.preset_full_frame", "Full Frame");
 		}
 	}
 
