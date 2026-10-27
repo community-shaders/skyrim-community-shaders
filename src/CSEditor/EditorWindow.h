@@ -5,6 +5,7 @@
 #include "Browser/BrowserState.h"
 #include "FormEditSources.h"
 #include "LightEditor.h"
+#include "Utils/Notifications.h"
 #include "Weather/CellLightingWidget.h"
 #include "Weather/ImageSpaceWidget.h"
 #include "Weather/LensFlareWidget.h"
@@ -128,8 +129,7 @@ public:
 	static constexpr float kTimeScaleMin = 0.1f;
 	static constexpr float kTimeScaleMax = 4000.0f;
 
-	// Notification durations, in seconds; the long one suits messages that explain what to do next.
-	static constexpr float kNotificationDuration = 3.0f;
+	// Long notification duration, in seconds; it suits messages that explain what to do next.
 	static constexpr float kLongNotificationDuration = 4.0f;
 
 	// Preview mode constants
@@ -396,7 +396,7 @@ public:
 	 * @param color   Text color (defaults to error red).
 	 * @param duration How long the notification remains visible, in seconds.
 	 */
-	void ShowNotification(const std::string& message, const ImVec4& color = Util::Colors::GetError(), float duration = kNotificationDuration);
+	void ShowNotification(const std::string& message, const ImVec4& color = Util::Colors::GetError(), float duration = Util::Notifications::kDefaultDuration);
 
 	struct Settings
 	{

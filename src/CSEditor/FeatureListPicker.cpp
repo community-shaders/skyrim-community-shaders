@@ -58,7 +58,7 @@ namespace
 		BrowserUI::InsetRowRect(rowMin, rowMax);
 
 		const ImVec4 accent = Util::Colors::GetAccent();
-		const float barWidth = ThemeManager::Constants::CSE_ROW_ACCENT_WIDTH * Util::GetUIScale();
+		const float barWidth = ThemeManager::Constants::ANIM_SELECTED_BAR_WIDTH * Util::GetUIScale();
 		const float edgeInset = std::max(style.FramePadding.x, barWidth) + style.ItemInnerSpacing.x;
 		float textMaxX = rowMax.x - edgeInset;
 		if (pinned) {

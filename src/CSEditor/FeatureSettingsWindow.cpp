@@ -77,7 +77,7 @@ namespace
 		const auto featureName = feature->GetShortName();
 		bool bootEnabled = !globals::state->IsFeatureDisabled(featureName);
 
-		if (Util::FeatureToggle("##BootToggle", &bootEnabled, ImVec2(ImGui::GetFrameHeight() * ThemeManager::Constants::CSE_BOOT_TOGGLE_WIDTH_RATIO, 0.0f))) {
+		if (Util::FeatureToggle("##BootToggle", &bootEnabled, ImVec2(ImGui::GetFrameHeight() * ThemeManager::Constants::FEATURE_TOGGLE_WIDTH_RATIO, 0.0f))) {
 			const bool nowDisabled = feature->ToggleAtBootSetting();
 			logger::info("[CSEditor] {}: {} at boot.", featureName, nowDisabled ? "Disabled" : "Enabled");
 		}

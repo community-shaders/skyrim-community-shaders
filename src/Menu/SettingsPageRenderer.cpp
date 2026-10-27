@@ -122,10 +122,7 @@ namespace
 	/** @brief Section title in the feature page title style, with its group as a muted breadcrumb below. */
 	void DrawSectionHeader(const Section& section)
 	{
-		float titleScale = globals::menu->GetTheme().FeatureHeading.FeatureTitleScale;
-		if (!std::isfinite(titleScale))
-			titleScale = ThemeManager::Constants::DEFAULT_FEATURE_TITLE_SCALE;
-		titleScale = std::clamp(titleScale, ThemeManager::Constants::SETTINGS_TITLE_SCALE_MIN, ThemeManager::Constants::SETTINGS_TITLE_SCALE_MAX);
+		const float titleScale = globals::menu->GetFeatureTitleScale();
 
 		{
 			MenuFonts::FontRoleGuard titleFont(Menu::FontRole::Title);

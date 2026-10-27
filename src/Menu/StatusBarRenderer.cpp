@@ -58,13 +58,6 @@ namespace
 		void Advance(float gap) { x = ImGui::GetItemRectMax().x + gap; }
 	};
 
-	/** @brief Fills a rect with a style colour at the given eased strength; nothing when it is zero. */
-	void FillLayer(ImDrawList* drawList, const ImVec2& min, const ImVec2& max, float rounding, ImGuiCol color, float strength)
-	{
-		if (strength > 0.0f)
-			drawList->AddRectFilled(min, max, Util::Anim::ScaleAlphaU32(ImGui::GetColorU32(color), strength), rounding);
-	}
-
 	/** @brief A clickable status part: a glyph and a label in one colour, both centred on the row. */
 	bool Segment(Row& row, const char* id, Icons::GlyphRef icon, const char* label, const ImVec4& color, const char* tooltip)
 	{
@@ -103,12 +96,9 @@ namespace
 		const ImVec2 min = ImGui::GetItemRectMin();
 		const ImVec2 max = ImGui::GetItemRectMax();
 		const float rounding = ImGui::GetStyle().FrameRounding;
-		FillLayer(drawList, min, max, rounding, ImGuiCol_FrameBgHovered, blend.hover);
-		FillLayer(drawList, min, max, rounding, ImGuiCol_ButtonActive, blend.press);
-		FillLayer(drawList, min, max, rounding, ImGuiCol_Header, blend.selected);
-		const ImVec4 resting = Util::Anim::Lerp(Util::Colors::GetSecondary(), ImGui::GetStyleColorVec4(ImGuiCol_Text), blend.hover);
-		const ImU32 color = ImGui::GetColorU32(Util::Anim::Lerp(resting, Util::Colors::GetAccent(), blend.selected));
-		MenuHeaderRenderer::DrawCenteredGlyph(drawList, min, size, ImGui::GetFontSize() * Constants::STATUS_BAR_NAV_GLYPH_FONT_RATIO, glyph, color);
+		Util::Anim::FillBlend(drawList, min, max, rounding, blend);
+		const ImU32 color = Util::QuietIconColor(blend.hover, blend.selected);
+		Icons::DrawCenteredGlyph(drawList, min, ImVec2(size, size), ImGui::GetFontSize() * Constants::STATUS_BAR_NAV_GLYPH_FONT_RATIO, glyph, color);
 		if (tooltip)
 			Util::AddTooltip(tooltip, Util::kTooltipWhenDisabled);
 		row.Advance(0.0f);

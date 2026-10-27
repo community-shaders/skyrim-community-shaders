@@ -45,15 +45,13 @@ class Feature;
 	ImGui::BulletText(#a_value);                    \
 	ImGui::Image(a_value->srv.get(), { a_value->desc.Width * a_scale, a_value->desc.Height * a_scale });
 
-#define ADDRESS_NODE(a_value)                                                                        \
-	if (ImGui::Button(#a_value)) {                                                                   \
-		ImGui::SetClipboardText(std::format("{0:x}", reinterpret_cast<uintptr_t>(a_value)).c_str()); \
-	}                                                                                                \
-	if (ImGui::IsItemHovered())                                                                      \
-		ImGui::SetTooltip(std::format("Copy {} Address to Clipboard", #a_value).c_str());
+#define ADDRESS_NODE(a_value) Util::AddressButton(#a_value, reinterpret_cast<uintptr_t>(a_value))
 
 namespace Util
 {
+	/** @brief Button labelled `a_name` that copies `a_address` to the clipboard as hex, with a tooltip saying so. */
+	void AddressButton(const char* a_name, uintptr_t a_address);
+
 	/** @brief Feeds ImGui the display size and the mouse position, mapped from window to render-target pixels. */
 	void UpdateImGuiInput(HWND hwnd, float bufferWidth, float bufferHeight);
 	/**
@@ -233,6 +231,29 @@ namespace Util
 	 */
 	void AddTooltip(const char* a_desc, ImGuiHoveredFlags a_flags = ImGuiHoveredFlags_DelayNormal);
 
+	/** @brief Plain-text hover tooltip (HoverTooltipWrapper styling) for the item just drawn. */
+	inline void HoverTip(const char* a_text)
+	{
+		if (auto _tt = HoverTooltipWrapper())
+			ImGui::TextUnformatted(a_text);
+	}
+
+	/** @brief Checkbox followed by a hover tooltip; returns true when the value changed. */
+	inline bool CheckboxTip(const char* a_label, bool* a_value, const char* a_tooltip)
+	{
+		const bool changed = ImGui::Checkbox(a_label, a_value);
+		HoverTip(a_tooltip);
+		return changed;
+	}
+
+	/** @brief Float slider followed by a hover tooltip; returns true when the value changed. */
+	inline bool SliderFloatTip(const char* a_label, float* a_value, float a_min, float a_max, const char* a_format, const char* a_tooltip, ImGuiSliderFlags a_flags = 0)
+	{
+		const bool changed = ImGui::SliderFloat(a_label, a_value, a_min, a_max, a_format, a_flags);
+		HoverTip(a_tooltip);
+		return changed;
+	}
+
 	/** @brief Text HelpMarker draws, exposed so callers can measure it. */
 	inline constexpr const char* kHelpMarkerLabel = "(?)";
 
@@ -385,8 +406,9 @@ namespace Util
 		std::string title;
 		std::string message;
 		/// Empty hides the button.
-		std::string confirmLabel = "Confirm";
-		std::string cancelLabel = "Cancel";
+		std::string confirmLabel;
+		/// Empty falls back to the translated "Cancel".
+		std::string cancelLabel;
 		/// Optional destructive button between Confirm and Cancel; empty hides it.
 		std::string alternateLabel;
 		/// Styles Confirm as the primary action rather than a plain button.
@@ -400,7 +422,7 @@ namespace Util
 		Choice rememberedChoice = Choice::Confirm;
 
 		ConfirmationPopup() = default;
-		ConfirmationPopup(std::string title, std::string message, std::string confirmLabel = "Confirm", std::string cancelLabel = "Cancel") :
+		ConfirmationPopup(std::string title, std::string message, std::string confirmLabel, std::string cancelLabel) :
 			title(std::move(title)), message(std::move(message)), confirmLabel(std::move(confirmLabel)), cancelLabel(std::move(cancelLabel)) {}
 
 		/** @brief Opens the popup on the next Draw, or resolves it at once when the user chose not to be asked again. */
@@ -1145,6 +1167,14 @@ namespace Util
 		ImVec4 GetUnsaved();
 
 	}
+
+	/**
+	 * @brief Glyph colour of a quiet (transparent) icon button: secondary text, brightening to the text colour on
+	 * hover and shifting to the accent while selected.
+	 * @param hover Eased hover amount, 0-1.
+	 * @param selected Eased selected amount, 0-1.
+	 */
+	ImU32 QuietIconColor(float hover, float selected);
 
 	/** Theme-colored text rendering — self-contained push/text/pop per call. */
 	namespace Text

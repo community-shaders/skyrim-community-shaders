@@ -446,14 +446,14 @@ void OverlayRenderer::RenderShaderCompilationStatus(const std::function<const ch
 			int heavyLimit = static_cast<int>(Util::GetPerformanceCoreCount());
 			uint64_t slow = shaderCache->GetSlowTasks();
 			uint64_t verySlow = shaderCache->GetVerySlowTasks();
-			ImGui::Text("Threads: %d / %d limit | Heavy: %d / %d P-cores | %d workers",
+			ImGui::Text(T("overlay.compile_threads", "Threads: %d / %d limit | Heavy: %d / %d P-cores | %d workers"),
 				compilationRunning,
 				threadLimit,
 				heavyInFlight,
 				heavyLimit,
 				(int)shaderCache->compilationPool.get_thread_count());
 			if (slow > 0) {
-				ImGui::Text("Slow shaders: %llu (very slow: %llu)", slow, verySlow);
+				ImGui::Text(T("overlay.slow_shaders", "Slow shaders: %llu (very slow: %llu)"), slow, verySlow);
 			}
 		}
 		if (!shaderCache->backgroundCompilation && shaderCache->menuLoaded) {
@@ -568,7 +568,7 @@ void OverlayRenderer::RenderShaderBlockingStatus()
 	}
 
 	Util::Text::Error(T("overlay.shader_blocking_active", "Shader Blocking Active"));
-	ImGui::Text("Blocked: %s", shaderCache->blockedKey.c_str());
+	ImGui::Text(T("overlay.blocked_shader", "Blocked: %s"), shaderCache->blockedKey.c_str());
 
 	// Try to get more details from active shaders
 	auto activeShaders = shaderCache->GetActiveShaders();
@@ -585,14 +585,14 @@ void OverlayRenderer::RenderShaderBlockingStatus()
 	}
 
 	if (foundBlocked) {
-		ImGui::Text("Index: %zu/%zu", blockedIndex, activeShaders.size());
+		ImGui::Text(T("overlay.blocked_index", "Index: %zu/%zu"), blockedIndex, activeShaders.size());
 	} else {
-		ImGui::Text("Index: N/A (%zu active)", activeShaders.size());
+		ImGui::Text(T("overlay.blocked_index_unknown", "Index: N/A (%zu active)"), activeShaders.size());
 	}
 
 	for (const auto& shader : activeShaders) {
 		if (shader.key == shaderCache->blockedKey) {
-			ImGui::Text("Type: %s | Class: %s | Descriptor: 0x%X",
+			ImGui::Text(T("overlay.blocked_details", "Type: %s | Class: %s | Descriptor: 0x%X"),
 				magic_enum::enum_name(shader.shaderType).data(),
 				magic_enum::enum_name(shader.shaderClass).data(),
 				shader.descriptor);

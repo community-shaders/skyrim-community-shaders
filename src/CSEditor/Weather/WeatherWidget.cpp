@@ -8,6 +8,7 @@
 #include "../../I18n/I18n.h"
 #include "../EditorWindow.h"
 #include "../SceneManager/SceneSettingsUI.h"
+#include "Utils/Notifications.h"
 #include "Utils/UI.h"
 
 #define I18N_KEY_PREFIX "cs_editor."
@@ -464,7 +465,7 @@ void WeatherWidget::LoadSettings()
 			EditorWindow::GetSingleton()->ShowNotification(
 				std::vformat(T(TKEY("values_failed_to_load"), "Some values failed to load for {}"), std::make_format_args(editorId)),
 				Util::Colors::GetError(),
-				EditorWindow::kNotificationDuration);
+				Util::Notifications::kDefaultDuration);
 			return;
 		}
 	} else {

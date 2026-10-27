@@ -135,6 +135,24 @@ namespace Icons
 		drawList->AddText(GetCenteredGlyphPos(boxMin, boxSize, glyph.utf8), col, glyph.utf8);
 	}
 
+	/**
+	 * @brief DrawCenteredGlyph at an explicit font size (pixels as rendered), regardless of the style and window
+	 * font scales, so a glyph can be matched to a texture icon of a known size.
+	 */
+	inline void DrawCenteredGlyph(ImDrawList* drawList, ImVec2 boxMin, ImVec2 boxSize,
+		float fontSize, GlyphRef glyph, ImU32 col)
+	{
+		ImFont* font = GetFont(glyph);
+		if (!drawList || !font || !glyph)
+			return;
+		// PushFont takes a size before the style and window font scales; undo them
+		const ImGuiContext& context = *ImGui::GetCurrentContext();
+		const float fontScale = context.FontSizeBase > 0.0f ? context.FontSize / context.FontSizeBase : 1.0f;
+		ImGui::PushFont(font, fontSize / ImMax(fontScale, 0.01f));
+		drawList->AddText(GetCenteredGlyphPos(boxMin, boxSize, glyph.utf8), col, glyph.utf8);
+		ImGui::PopFont();
+	}
+
 	/** @brief Icon-only text using the glyph's typeface. */
 	inline void Text(GlyphRef glyph)
 	{

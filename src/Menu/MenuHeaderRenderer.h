@@ -55,17 +55,6 @@ public:
 	 */
 	static bool GlyphIconButton(const char* id, Icons::GlyphRef glyph, float glyphBox, const char* tooltip, bool active = false);
 
-	/**
-	 * @brief Draws an icon-font glyph centred in a square box.
-	 * @param drawList Target draw list.
-	 * @param min Top-left of the box.
-	 * @param box Edge of the box.
-	 * @param fontSize Glyph size, in the current font-size units (before style and window scaling).
-	 * @param glyph The Tabler glyph.
-	 * @param color Glyph colour.
-	 */
-	static void DrawCenteredGlyph(ImDrawList* drawList, ImVec2 min, float box, float fontSize, Icons::GlyphRef glyph, ImU32 color);
-
 	/** @brief "Community Shaders <version>", as the header title shows it. */
 	static std::string GetTitleText();
 

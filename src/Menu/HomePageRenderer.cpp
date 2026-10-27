@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <array>
 #include <functional>
+#include <ranges>
 #include <string>
 #include <vector>
 
@@ -177,13 +178,7 @@ namespace
 	/** @brief Comma-separated list of names, for one ellipsized line. */
 	std::string JoinNames(const std::vector<std::string>& names)
 	{
-		std::string joined;
-		for (const auto& name : names) {
-			if (!joined.empty())
-				joined += ", ";
-			joined += name;
-		}
-		return joined;
+		return names | std::views::join_with(std::string_view(", ")) | std::ranges::to<std::string>();
 	}
 
 	/** @brief Display name of a feature short name, or the short name when no such feature exists. */
@@ -331,8 +326,7 @@ namespace
 		if (auto* texture = globals::menu->GetUIIcons().clearCache.texture) {
 			ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
 			ImGui::PushStyleColor(ImGuiCol_Button, IM_COL32_BLACK_TRANS);
-			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(Constants::HEADER_UNDOCKED_HOVER_GREY, Constants::HEADER_UNDOCKED_HOVER_GREY, Constants::HEADER_UNDOCKED_HOVER_GREY,
-															  Constants::HEADER_UNDOCKED_HOVER_ALPHA));
+			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, Constants::HEADER_UNDOCKED_HOVER_COLOR);
 			clicked = ImGui::ImageButton("##HomeClearCache", texture, ImVec2(box, box));
 			ImGui::PopStyleColor(2);
 			ImGui::PopStyleVar();
@@ -651,8 +645,7 @@ void HomePageRenderer::RenderHelpPopover()
 		if (ImGui::TextLink(MenuLinks::GetLabel(link)))
 			MenuLinks::Open(link);
 		ImGui::PopID();
-		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::TextUnformatted(MenuLinks::GetUrl(link));
+		Util::HoverTip(MenuLinks::GetUrl(link));
 	}
 
 	{

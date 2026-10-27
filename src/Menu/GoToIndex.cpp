@@ -25,6 +25,7 @@
 #include <algorithm>
 #include <cctype>
 #include <format>
+#include <ranges>
 #include <set>
 #include <shellapi.h>
 #include <span>
@@ -72,13 +73,7 @@ namespace GoToIndex
 
 		std::string Join(const std::vector<std::string>& parts)
 		{
-			std::string joined;
-			for (const auto& part : parts) {
-				if (!joined.empty())
-					joined += kSeparator;
-				joined += part;
-			}
-			return joined;
+			return parts | std::views::join_with(std::string_view(kSeparator)) | std::ranges::to<std::string>();
 		}
 
 		/// Drops the ':' keybinding labels end in, and any trailing space.

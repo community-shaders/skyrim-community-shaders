@@ -157,6 +157,20 @@ namespace Util::Anim
 		return ImGui::ColorConvertFloat4ToU32(c);
 	}
 
+	void FillLayer(ImDrawList* drawList, const ImVec2& min, const ImVec2& max, float rounding, ImGuiCol color, float strength)
+	{
+		if (strength > 0.0f)
+			drawList->AddRectFilled(min, max, ScaleAlphaU32(ImGui::GetColorU32(color), strength), rounding);
+	}
+
+	void FillBlend(ImDrawList* drawList, const ImVec2& min, const ImVec2& max, float rounding, const Blend& blend,
+		ImGuiCol hoverColor, ImGuiCol pressColor, ImGuiCol selectedColor)
+	{
+		FillLayer(drawList, min, max, rounding, hoverColor, blend.hover);
+		FillLayer(drawList, min, max, rounding, pressColor, blend.press);
+		FillLayer(drawList, min, max, rounding, selectedColor, blend.selected);
+	}
+
 	float BeginFadeIn(ImGuiID key, float duration, float fromAlpha)
 	{
 		const float t = EnterProgress(key, 0.0f, duration > 0.0f ? duration : Constants::ANIM_POPUP_SECONDS);

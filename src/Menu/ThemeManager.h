@@ -186,23 +186,27 @@ public:
 		static constexpr float STATUS_BAR_SEGMENT_GAP_SCALE = 3.0f;  // Gap between status bar parts, in item spacings
 
 		// Menu UX: header Home button, status bar, Home card rhythm
-		static constexpr float HEADER_ICON_SCALE = 0.92f;                // Shrinks every header icon button (actions, Home, issues, Go to) alike; the logo keeps its size
-		static constexpr float ICON_MIP_SELECT_BIAS = 0.3f;              // Added to log2(downscale) when picking an icon mip: higher keeps a larger, crisper level
-		static constexpr float HEADER_UNSAVED_BOX_FILL_ALPHA = 0.22f;    // Fill of the box behind the save icon while changes are unsaved
-		static constexpr float HEADER_UNSAVED_BOX_BORDER_ALPHA = 0.55f;  // Its border
-		static constexpr float HEADER_ICON_HOVER_ALPHA = 0.6f;           // Hover fill strength of header glyph buttons at full blend
-		static constexpr float HEADER_HOME_IDLE_ALPHA = 0.85f;           // Home button opacity while neither hovered nor current
-		static constexpr float STATUS_BAR_GRIP_CLEARANCE_SCALE = 1.6f;   // Right margin kept clear of the window resize grip, in font sizes
-		static constexpr float STATUS_BAR_NAV_BUTTON_FONT_RATIO = 1.8f;  // Settings / Profiling button edge in the status bar, in font sizes
-		static constexpr float STATUS_BAR_NAV_GLYPH_FONT_RATIO = 1.35f;  // Their glyph size, in font sizes (the save glyph is 1.0)
-		static constexpr float STATUS_BAR_DIVIDER_FONT_RATIO = 1.0f;     // Height of the thin dividers between status bar groups, in font sizes
-		static constexpr float HOME_CARD_PADDING = 12.0f;                // Inner padding on every side of a Home card (1080p baseline)
-		static constexpr float HOME_CARD_SPACING = 8.0f;                 // Vertical gap below each Home card (1080p baseline)
-		static constexpr float ATTENTION_FOCUS_SECONDS = 2.5f;           // How long the Needs Attention card stays outlined after a click-through
-		static constexpr float ATTENTION_FOCUS_FADE_SECONDS = 0.8f;      // Outline fade-out time at the end of that window
-		static constexpr float ATTENTION_FOCUS_THICKNESS = 2.0f;         // Outline thickness (1080p baseline)
-		static constexpr float HOME_CARD_ICON_BOX_SCALE = 1.2f;          // Card icon button glyph box, in font sizes
-		static constexpr float UNDO_TOAST_SECONDS = 2.0f;                // How long the main menu's undo / redo toast stays
+		static constexpr float HEADER_ICON_SCALE = 0.92f;                                // Shrinks every header icon button (actions, Home, issues, Go to) alike; the logo keeps its size
+		static constexpr float ICON_MIP_SELECT_BIAS = 0.3f;                              // Added to log2(downscale) when picking an icon mip: higher keeps a larger, crisper level
+		static constexpr float HEADER_UNSAVED_BOX_FILL_ALPHA = 0.22f;                    // Fill of the box behind the save icon while changes are unsaved
+		static constexpr float HEADER_UNSAVED_BOX_BORDER_ALPHA = 0.55f;                  // Its border
+		static constexpr float HEADER_ICON_HOVER_ALPHA = 0.6f;                           // Hover fill strength of header glyph buttons at full blend
+		static constexpr ImVec4 HEADER_UNDOCKED_HOVER_COLOR{ 0.8f, 0.8f, 0.8f, 0.25f };  // Undocked action icon hover fill
+		static constexpr float WATERMARK_MONO_ALPHA = 0.18f;                             // Monochrome watermark logo opacity
+		static constexpr ImU32 HEADER_COLOR_ICON_IDLE = IM_COL32(220, 220, 220, 220);    // Docked colour icon tint while not hovered
+		static constexpr ImU32 WATERMARK_COLOR = IM_COL32(255, 255, 255, 45);            // Full-colour watermark logo tint
+		static constexpr float HEADER_ICON_IDLE_ALPHA = 0.85f;                           // Header icon opacity while neither hovered nor current (docked monochrome icons, Home button)
+		static constexpr float STATUS_BAR_GRIP_CLEARANCE_SCALE = 1.6f;                   // Right margin kept clear of the window resize grip, in font sizes
+		static constexpr float STATUS_BAR_NAV_BUTTON_FONT_RATIO = 1.8f;                  // Settings / Profiling button edge in the status bar, in font sizes
+		static constexpr float STATUS_BAR_NAV_GLYPH_FONT_RATIO = 1.35f;                  // Their glyph size, in font sizes (the save glyph is 1.0)
+		static constexpr float STATUS_BAR_DIVIDER_FONT_RATIO = 1.0f;                     // Height of the thin dividers between status bar groups, in font sizes
+		static constexpr float HOME_CARD_PADDING = 12.0f;                                // Inner padding on every side of a Home card (1080p baseline)
+		static constexpr float HOME_CARD_SPACING = 8.0f;                                 // Vertical gap below each Home card (1080p baseline)
+		static constexpr float ATTENTION_FOCUS_SECONDS = 2.5f;                           // How long the Needs Attention card stays outlined after a click-through
+		static constexpr float ATTENTION_FOCUS_FADE_SECONDS = 0.8f;                      // Outline fade-out time at the end of that window
+		static constexpr float ATTENTION_FOCUS_THICKNESS = 2.0f;                         // Outline thickness (1080p baseline)
+		static constexpr float HOME_CARD_ICON_BOX_SCALE = 1.2f;                          // Card icon button glyph box, in font sizes
+		static constexpr float UNDO_TOAST_SECONDS = 2.0f;                                // How long the main menu's undo / redo toast stays
 
 		// UI Layout constants
 		static constexpr float BUTTON_SPACING = 8.0f;
@@ -234,7 +238,7 @@ public:
 		static constexpr float LIST_HIGHLIGHT_PRESS_DARKEN = 0.85f;      // Extra colour multiplier while the row is pressed
 		static constexpr float LIST_HIGHLIGHT_PRESS_BOOST = 1.5f;        // Strength multiplier while pressed
 		static constexpr float LIST_HIGHLIGHT_SNAP_ROWS = 6.0f;          // A move of more rows than this appears at the target instead of gliding
-		static constexpr float SEGMENT_SELECTED_FILL_ALPHA = 0.22f;      // ... selected pill accent fill alpha
+		static constexpr float SEGMENT_SELECTED_FILL_ALPHA = 0.22f;      // ... selected pill accent fill alpha (page switcher and palette scope pill)
 		static constexpr float SEGMENT_SELECTED_OUTLINE_ALPHA = 0.7f;    // ... selected pill accent outline alpha
 		static constexpr float SEGMENT_LAUNCHER_GAP = 4.0f;              // ... gap between a launcher label and its external-open glyph
 		static constexpr float SORT_FILTER_DOT_RATIO = 0.12f;            // Radius of the sort button's active-filter dot relative to the button height
@@ -246,15 +250,15 @@ public:
 		static constexpr float AUTOHIDE_ANIM_SPEED = 16.0f;              // Slide smoothing rate per second (higher is snappier)
 		static constexpr float AUTOHIDE_GRIP_WIDTH = 3.0f;               // Width of the grip drawn on the edge while the list is hidden
 		static constexpr float AUTOHIDE_GRIP_ALPHA = 0.5f;               // Grip opacity as a share of the secondary text colour
+		static constexpr float AUTOHIDE_EDGE_SLOP = 2.0f;                // Auto-hide edge zone also catches a cursor this far outside the pane
 		static constexpr float FEATURE_ROW_CATEGORY_ICON_SCALE = 0.95f;  // Category icon edge in the Alphabetical list, relative to the line height
 		static constexpr float FEATURE_ROW_CATEGORY_ICON_ALPHA = 0.55f;  // ... and its dimming
+		static constexpr float FEATURE_ROW_PIN_SCALE = 0.75f;            // Pin glyph beside a pinned feature's name, as a share of the font size
 
 		// Settings page constants (sizes are 1080p baseline, scaled by Util::GetUIScale())
 		static constexpr float SETTINGS_NAV_GROUP_SPACING = 6.0f;  // Gap above each group label after the first
 		static constexpr float SETTINGS_TITLE_SCALE_MIN = 1.0f;    // Section title scale range, as on feature pages
 		static constexpr float SETTINGS_TITLE_SCALE_MAX = 3.0f;
-		static constexpr float SHADER_BREAKDOWN_BAR_HEIGHT = 14.0f;  // Shader compile breakdown bar (ShaderCacheStatusWidget)
-		static constexpr float ISSUES_REFRESH_SECONDS = 0.5f;        // How often the Issues nav entry and Home recount active constraints
 
 		// "Go to..." palette and header search pill (sizes are 1080p baseline, scaled by Util::GetUIScale())
 		static constexpr float PALETTE_WIDTH_RATIO = 0.42f;         // Palette width as a share of the viewport
@@ -310,9 +314,12 @@ public:
 		static constexpr float HOME_CARD_ACTION_GAP = 4.0f;                                 // Extra gap above a card's action buttons
 		static constexpr float HOME_PRESET_THUMB_SIZE = 64.0f;                              // Active preset thumbnail edge
 		static constexpr float HOME_DISCORD_BANNER_MAX_HEIGHT = 110.0f;                     // Discord banner height cap; its width follows the aspect ratio
+		static constexpr float ISSUES_REFRESH_SECONDS = 0.5f;                               // How often the Issues nav entry and Home recount active constraints
 		static constexpr float HOME_STRIP_FIRST_FRAME_FRAMES = 4.0f;                        // Bottom strip height guess for the first frame, in frame heights
 		static constexpr ImVec4 HOME_DISCORD_BANNER_HOVER_COLOR{ 0.1f, 0.1f, 0.1f, 0.3f };  // Subtle hover behind the transparent banner button
 		static constexpr ImVec4 HOME_DISCORD_BANNER_ACTIVE_COLOR{ 0.2f, 0.2f, 0.2f, 0.5f };
+		static constexpr float HOME_SETUP_WATERMARK_MONO_ALPHA = 0.24f;                   // First-time setup dialog logo watermark opacity, monochrome logo
+		static constexpr ImU32 HOME_SETUP_WATERMARK_COLOR = IM_COL32(255, 255, 255, 60);  // ... and its tint, full-colour logo
 
 		static constexpr float SCENE_INDICATOR_RADIUS_RATIO = 0.25f;  // Scene indicator dot radius relative to the text line height
 
@@ -363,7 +370,7 @@ public:
 		static constexpr float ANIM_PAGE_ENTER_SECONDS = 0.18f;           // Page, feature page and Home card fade-in time
 		static constexpr float ANIM_CARD_STAGGER_SECONDS = 0.04f;         // Delay added per Home card
 		static constexpr float ANIM_PAGE_FADE_FROM = 0.4f;                // Page alpha at the start of that fade (never fully hidden, so there is no flash)
-		static constexpr float ANIM_GLIDE_RATE = 26.0f;                   // How fast a selection highlight glides to the newly selected item, per second
+		static constexpr float ANIM_GLIDE_RATE = 26.0f;                   // How fast a selection highlight glides to the newly selected item (nav, palette rows), per second
 		static constexpr float ANIM_SLIDER_RATE = 22.0f;                  // How fast a slider's grab glides to its value when not held, per second
 		static constexpr float ANIM_SLIDER_DRAG_RATE = 50.0f;             // The same while the slider is held, so a drag still feels direct
 		static constexpr float ANIM_TOGGLE_RATE = 14.0f;                  // How fast a toggle's knob slides, per second
@@ -380,8 +387,8 @@ public:
 		static constexpr float ANIM_SPEED_MAX = 2.0f;
 		static constexpr float ANIM_PULSE_PERIOD = 2.6f;        // Seconds per attention pulse
 		static constexpr float ANIM_PULSE_AMPLITUDE = 0.25f;    // Attention pulse swing, as a share of full alpha
-		static constexpr float NAV_SELECTED_BAR_INSET = 0.2f;   // Accent bar inset from the row's top and bottom, as a share of its height
-		static constexpr float ANIM_SELECTED_BAR_WIDTH = 3.0f;  // Accent bar on the left of the selected nav row (1080p baseline)
+		static constexpr float NAV_SELECTED_BAR_INSET = 0.2f;   // Accent bar inset from the row's top and bottom, as a share of its height (nav and palette rows)
+		static constexpr float ANIM_SELECTED_BAR_WIDTH = 3.0f;  // Accent bar on the left edge of a selected row: nav, palette, editor lists (1080p baseline)
 
 		// Flat surfaces (Util::Surface): one subtle step above the window colour, a hairline border, one soft shadow when floating
 		static constexpr float SURFACE_FILL_LIFT = 0.04f;        // Window colour lifted toward white so cards read above the page
@@ -389,7 +396,7 @@ public:
 		static constexpr float SURFACE_SHADOW_SPREAD = 6.0f;     // Floating surfaces' shadow growth (1080p baseline)
 		static constexpr float SURFACE_SHADOW_ALPHA = 0.22f;     // Shadow opacity (black)
 		static constexpr float SURFACE_SHADOW_OFFSET_Y = 2.0f;   // Shadow drop (1080p baseline)
-		static constexpr float NAV_SELECTED_FILL_ALPHA = 0.14f;  // Accent fill behind the selected nav row
+		static constexpr float NAV_SELECTED_FILL_ALPHA = 0.14f;  // Accent fill behind a selected nav or palette row
 
 		// Tinted control frame: marks where a value comes from (inherited, or a scene override's winning layer)
 		static constexpr float TINTED_FRAME_BG_ALPHA = 0.25f;
@@ -405,75 +412,83 @@ public:
 		static constexpr float BUTTON_STATUS_TEXT_HOVER_ALPHA = 0.8f;
 		static constexpr float BUTTON_STATUS_TEXT_ACTIVE_ALPHA = 1.0f;
 
-		// --- UI utils ---
-		static constexpr float BUTTON_TRANSPARENT_HOVER_ALPHA = 0.25f;                      // Hover/active fill of the transparent icon button
-		static constexpr float STATUS_BANNER_FILL_ALPHA = 0.16f;                            // Status banner fill, as a share of the status colour's alpha
-		static constexpr float LOCK_BUTTON_FILL_ALPHA = 0.22f;                              // Lock toggle button fill
-		static constexpr float LOCK_BUTTON_BORDER_ALPHA = 0.55f;                            // Lock toggle button border
-		static constexpr float LOCK_BUTTON_ROUNDING_RATIO = 0.35f;                          // Lock toggle button corner radius per button size
-		static constexpr float TOOLTIP_WRAP_FONT_SIZES = 35.0f;                             // Wrapped tooltip width in font sizes
-		static constexpr ImVec4 BADGE_HDR_BG = ImVec4(0.40f, 0.58f, 0.78f, 0.30f);          // HDR badge background
-		static constexpr ImVec4 BADGE_HDR_FG = ImVec4(0.72f, 0.86f, 1.00f, 0.95f);          // HDR badge text
-		static constexpr ImVec4 BADGE_SDR_BG = ImVec4(0.78f, 0.42f, 0.42f, 0.30f);          // SDR badge background
-		static constexpr ImVec4 BADGE_SDR_FG = ImVec4(1.00f, 0.72f, 0.72f, 0.95f);          // SDR badge text
-		static constexpr float GLASS_TRACK_IDLE_ALPHA = 0.07f;                              // Segmented control track when the frame colour is transparent
-		static constexpr float GLASS_TRACK_FRAME_MIX = 0.35f;                               // Share of the frame colour mixed into the white track
-		static constexpr float GLASS_TRACK_ALPHA_SCALE = 0.45f;                             // Track alpha per unit of frame alpha
-		static constexpr float GLASS_TRACK_ALPHA_MIN = 0.06f;                               // Track alpha floor (also its additive base)
-		static constexpr float GLASS_TRACK_ALPHA_MAX = 0.22f;                               // Track alpha ceiling
-		static constexpr float GLASS_SELECTED_ALPHA_FLOOR = 0.35f;                          // Minimum header alpha before scaling the selected fill
-		static constexpr float GLASS_SELECTED_ALPHA_SCALE = 0.85f;                          // Selected fill alpha scale
-		static constexpr float GLASS_SELECTED_ALPHA_MIN = 0.28f;                            // Selected fill alpha floor
-		static constexpr float GLASS_SELECTED_ALPHA_MAX = 0.55f;                            // Selected fill alpha ceiling
-		static constexpr float GLASS_HOVER_ALPHA_SCALE = 0.45f;                             // Hover fill alpha relative to the selected fill
-		static constexpr float GLASS_MUTED_SELECTED_SCALE = 0.4f;                           // Selected fill alpha scale in muted mode
-		static constexpr float GLASS_MUTED_TEXT_SCALE = 0.75f;                              // Idle text alpha scale in muted mode
-		static constexpr float GLASS_SEGMENT_MIN_PAD_X = 8.0f;                              // Minimum horizontal segment padding (px at baseline scale)
-		static constexpr float GLASS_SEGMENT_PAD_X_SCALE = 1.35f;                           // Segment padding per unit of frame padding
-		static constexpr float GLASS_MARK_MIN_RADIUS = 1.5f;                                // Marked-segment dot minimum radius (px)
-		static constexpr float GLASS_MARK_RADIUS_RATIO = 0.1f;                              // Marked-segment dot radius per font size
-		static constexpr float STATUS_BANNER_GAP = 8.0f;                                    // Gap between status banner icon and text (px at baseline scale)
-		static constexpr float LOGO_TEXT_GAP = 8.0f;                                        // Gap between a logo and the text beside it (px at baseline scale)
-		static constexpr float EDITOR_CHROME_PAD_FACTOR = 4.0f;                             // Editor header height: frame paddings above and below plus outer air
-		static constexpr float SECTION_ICON_SCALE = 1.2f;                                   // Section header icon size per font size
-		static constexpr float SECTION_ICON_SPACING_SCALE = 0.3f;                           // Section header icon spacing per font size
-		static constexpr float SECTION_HEADER_GAP = 8.0f;                                   // Gap below a centred section header (px at baseline scale)
+		// Shared widgets: buttons and banners (Util::Button, Util::StatusBanner, lock and flash effects)
+		static constexpr float BUTTON_TRANSPARENT_HOVER_ALPHA = 0.25f;  // Hover/active fill of the transparent icon button
+		static constexpr float PILL_ROUNDING = 999.0f;                  // Frame rounding that turns a button into a full pill
+		static constexpr float STATUS_BANNER_FILL_ALPHA = 0.16f;        // Status banner fill, as a share of the status colour's alpha
+		static constexpr float STATUS_BANNER_GAP = 8.0f;                // Gap between status banner icon and text (px at baseline scale)
+		static constexpr float LOCK_BUTTON_FILL_ALPHA = 0.22f;          // Lock toggle button fill
+		static constexpr float LOCK_BUTTON_BORDER_ALPHA = 0.55f;        // Lock toggle button border
+		static constexpr float LOCK_BUTTON_ROUNDING_RATIO = 0.35f;      // Lock toggle button corner radius per button size
+		static constexpr float UNSAVED_ALPHA = 0.75f;                   // Alpha of the unsaved-changes colour
+		static constexpr float FLASH_BRIGHTEN = 0.2f;                   // Button brighten while a click flash plays
+		static constexpr float FLASH_HOVER_SCALE = 1.1f;                // Flash colour scale when hovered
+		static constexpr float FLASH_ACTIVE_SCALE = 0.9f;               // Flash colour scale when pressed
+
+		// Shared widgets: feature toggle (Util::FeatureToggle; also the Load at Boot toggles)
 		static constexpr ImVec4 FEATURE_TOGGLE_ACTIVE_BG = ImVec4(0.3f, 0.3f, 0.3f, 0.9f);  // Active frame of the feature toggle row
-		static constexpr float UNSAVED_ALPHA = 0.75f;                                       // Alpha of the unsaved-changes colour
-		static constexpr float FLASH_BRIGHTEN = 0.2f;                                       // Button brighten while a click flash plays
-		static constexpr float FLASH_HOVER_SCALE = 1.1f;                                    // Flash colour scale when hovered
-		static constexpr float FLASH_ACTIVE_SCALE = 0.9f;                                   // Flash colour scale when pressed
 		static constexpr float FEATURE_TOGGLE_WIDTH_RATIO = 1.6f;                           // Feature toggle width per frame height
 		static constexpr float FEATURE_TOGGLE_HEIGHT_RATIO = 0.8f;                          // Feature toggle height per frame height
-		// --- Settings / presets / advanced pages ---
-		static constexpr float THEME_DESC_BOX_WIDTH = 400.0f;                                 // Create-theme popup description box width, at 1080p
-		static constexpr float THEME_DESC_BOX_HEIGHT = 80.0f;                                 // Create-theme popup description box height, at 1080p
-		static constexpr float INVALID_INPUT_BORDER_SIZE = 2.0f;                              // Border width on an input with a validation error
-		static constexpr float SURFACE_PREVIEW_MARGIN = 14.0f;                                // Margin around the surface preview sample, at 1080p
-		static constexpr float SURFACE_PREVIEW_MAX_WIDTH_FONT_SIZES = 18.0f;                  // Surface preview width cap, in font sizes
-		static constexpr float BLOCKED_SHADER_BOX_ROUNDING = 8.0f;                            // Corner radius of the blocked-shader info box, at 1080p
-		static constexpr float BLOCKED_SHADER_BOX_BG_ALPHA = 0.15f;                           // Error-tinted background opacity of that box
-		static constexpr float BLOCKED_SHADER_BOX_MAX_HEIGHT_RATIO = 0.3f;                    // Max box height as a share of the space left, keeping Active Shaders visible
-		static constexpr float PRESET_ROW_PADDING = 6.0f;                                     // Vertical padding inside a preset pack row, at 1080p
-		static constexpr float PRESET_ROW_LOGO_SIZE = 40.0f;                                  // Preset pack logo edge, at 1080p
-		static constexpr float PRESET_ROW_INSET = 8.0f;                                       // Horizontal inset of preset row content, at 1080p
-		static constexpr float PRESET_ROW_STATUS_GAP = 6.0f;                                  // Gap before a preset row's status badge, at 1080p
-		static constexpr float PRESET_TITLE_TOP_PAD = 2.0f;                                   // Space above the preset detail title, at 1080p
-		static constexpr float PRESET_TITLE_FONT_SCALE = 1.35f;                               // Preset detail title size relative to the heading font
-		static constexpr float PRESET_VIEWER_ARROW_SCALE = 1.35f;                             // Screenshot viewer arrow button size, in frame heights
-		static constexpr float PRESET_VIEWER_MAX_SIZE_RATIO = 0.8f;                           // Screenshot viewer max size as a share of the viewport
-		static constexpr float PRESET_LIST_WIDTH_RATIO = 0.34f;                               // Preset list column share of the page width
-		static constexpr float PRESET_LIST_MIN_WIDTH = 260.0f;                                // Preset list column minimum width, at 1080p
-		static constexpr float PRESET_LIST_MAX_WIDTH = 380.0f;                                // Preset list column maximum width, at 1080p
-		static constexpr ImVec4 PRESET_VIEWER_BG_COLOR{ 0.02f, 0.02f, 0.04f, 0.72f };         // Screenshot viewer backdrop
-		static constexpr ImVec4 PRESET_VIEWER_ARROW_COLOR{ 0.0f, 0.0f, 0.0f, 0.45f };         // Viewer arrow button fill
-		static constexpr ImVec4 PRESET_VIEWER_ARROW_HOVER_COLOR{ 0.0f, 0.0f, 0.0f, 0.7f };    // Viewer arrow button hover
-		static constexpr ImVec4 PRESET_VIEWER_ARROW_ACTIVE_COLOR{ 0.0f, 0.0f, 0.0f, 0.85f };  // Viewer arrow button pressed
 
-		// --- Cleanup: settings / overlay / profiling ---
+		// Shared widgets: tooltips, badges, section headers and editor chrome
+		static constexpr float TOOLTIP_WRAP_FONT_SIZES = 35.0f;                     // Wrapped tooltip width in font sizes
+		static constexpr ImVec4 BADGE_HDR_BG = ImVec4(0.40f, 0.58f, 0.78f, 0.30f);  // HDR badge background
+		static constexpr ImVec4 BADGE_HDR_FG = ImVec4(0.72f, 0.86f, 1.00f, 0.95f);  // HDR badge text
+		static constexpr ImVec4 BADGE_SDR_BG = ImVec4(0.78f, 0.42f, 0.42f, 0.30f);  // SDR badge background
+		static constexpr ImVec4 BADGE_SDR_FG = ImVec4(1.00f, 0.72f, 0.72f, 0.95f);  // SDR badge text
+		static constexpr float LOGO_TEXT_GAP = 8.0f;                                // Gap between a logo and the text beside it (px at baseline scale)
+		static constexpr float EDITOR_CHROME_PAD_FACTOR = 4.0f;                     // Editor header height: frame paddings above and below plus outer air
+		static constexpr float SECTION_ICON_SCALE = 1.2f;                           // Section header icon size per font size
+		static constexpr float SECTION_ICON_SPACING_SCALE = 0.3f;                   // Section header icon spacing per font size
+		static constexpr float SECTION_HEADER_GAP = 8.0f;                           // Gap below a centred section header (px at baseline scale)
+		static constexpr float INVALID_INPUT_BORDER_SIZE = 2.0f;                    // Border width on an input with a validation error
+
+		// Shared widgets: segmented control glass look (Util::SegmentedControl)
+		static constexpr float GLASS_TRACK_IDLE_ALPHA = 0.07f;      // Segmented control track when the frame colour is transparent
+		static constexpr float GLASS_TRACK_FRAME_MIX = 0.35f;       // Share of the frame colour mixed into the white track
+		static constexpr float GLASS_TRACK_ALPHA_SCALE = 0.45f;     // Track alpha per unit of frame alpha
+		static constexpr float GLASS_TRACK_ALPHA_MIN = 0.06f;       // Track alpha floor (also its additive base)
+		static constexpr float GLASS_TRACK_ALPHA_MAX = 0.22f;       // Track alpha ceiling
+		static constexpr float GLASS_SELECTED_ALPHA_FLOOR = 0.35f;  // Minimum header alpha before scaling the selected fill
+		static constexpr float GLASS_SELECTED_ALPHA_SCALE = 0.85f;  // Selected fill alpha scale
+		static constexpr float GLASS_SELECTED_ALPHA_MIN = 0.28f;    // Selected fill alpha floor
+		static constexpr float GLASS_SELECTED_ALPHA_MAX = 0.55f;    // Selected fill alpha ceiling
+		static constexpr float GLASS_HOVER_ALPHA_SCALE = 0.45f;     // Hover fill alpha relative to the selected fill
+		static constexpr float GLASS_MUTED_SELECTED_SCALE = 0.4f;   // Selected fill alpha scale in muted mode
+		static constexpr float GLASS_MUTED_TEXT_SCALE = 0.75f;      // Idle text alpha scale in muted mode
+		static constexpr float GLASS_SEGMENT_MIN_PAD_X = 8.0f;      // Minimum horizontal segment padding (px at baseline scale)
+		static constexpr float GLASS_SEGMENT_PAD_X_SCALE = 1.35f;   // Segment padding per unit of frame padding
+		static constexpr float GLASS_MARK_MIN_RADIUS = 1.5f;        // Marked-segment dot minimum radius (px)
+		static constexpr float GLASS_MARK_RADIUS_RATIO = 0.1f;      // Marked-segment dot radius per font size
+
+		// Settings, Advanced and Presets pages (sizes are 1080p baseline unless noted)
 		static constexpr float FONT_ROLE_SCALE_MIN = 0.5f;  // Per-role font scale slider range (Settings > Fonts)
 		static constexpr float FONT_ROLE_SCALE_MAX = 2.5f;
-		static constexpr float PILL_ROUNDING = 999.0f;                                         // Frame rounding that turns a button into a full pill
+		static constexpr float THEME_DESC_BOX_WIDTH = 400.0f;                 // Create-theme popup description box width, at 1080p
+		static constexpr float THEME_DESC_BOX_HEIGHT = 80.0f;                 // Create-theme popup description box height, at 1080p
+		static constexpr float SURFACE_PREVIEW_MARGIN = 14.0f;                // Margin around the surface preview sample, at 1080p
+		static constexpr float SURFACE_PREVIEW_MAX_WIDTH_FONT_SIZES = 18.0f;  // Surface preview width cap, in font sizes
+		static constexpr float DISABLE_AT_BOOT_MIN_SEARCH_FRAMES = 4.0f;      // Disable at Boot search field never narrower than this many frame heights
+		static constexpr float BLOCKED_SHADER_BOX_ROUNDING = 8.0f;            // Corner radius of the blocked-shader info box, at 1080p
+		static constexpr float BLOCKED_SHADER_BOX_BG_ALPHA = 0.15f;           // Error-tinted background opacity of that box
+		static constexpr float BLOCKED_SHADER_BOX_MAX_HEIGHT_RATIO = 0.3f;    // Max box height as a share of the space left, keeping Active Shaders visible
+
+		// Presets page
+		static constexpr float PRESET_ROW_PADDING = 6.0f;                                      // Vertical padding inside a preset pack row, at 1080p
+		static constexpr float PRESET_ROW_LOGO_SIZE = 40.0f;                                   // Preset pack logo edge, at 1080p
+		static constexpr float PRESET_ROW_INSET = 8.0f;                                        // Horizontal inset of preset row content, at 1080p
+		static constexpr float PRESET_ROW_STATUS_GAP = 6.0f;                                   // Gap before a preset row's status badge, at 1080p
+		static constexpr float PRESET_TITLE_TOP_PAD = 2.0f;                                    // Space above the preset detail title, at 1080p
+		static constexpr float PRESET_TITLE_FONT_SCALE = 1.35f;                                // Preset detail title size relative to the heading font
+		static constexpr float PRESET_VIEWER_ARROW_SCALE = 1.35f;                              // Screenshot viewer arrow button size, in frame heights
+		static constexpr float PRESET_VIEWER_MAX_SIZE_RATIO = 0.8f;                            // Screenshot viewer max size as a share of the viewport
+		static constexpr float PRESET_LIST_WIDTH_RATIO = 0.34f;                                // Preset list column share of the page width
+		static constexpr float PRESET_LIST_MIN_WIDTH = 260.0f;                                 // Preset list column minimum width, at 1080p
+		static constexpr float PRESET_LIST_MAX_WIDTH = 380.0f;                                 // Preset list column maximum width, at 1080p
+		static constexpr ImVec4 PRESET_VIEWER_BG_COLOR{ 0.02f, 0.02f, 0.04f, 0.72f };          // Screenshot viewer backdrop
+		static constexpr ImVec4 PRESET_VIEWER_ARROW_COLOR{ 0.0f, 0.0f, 0.0f, 0.45f };          // Viewer arrow button fill
+		static constexpr ImVec4 PRESET_VIEWER_ARROW_HOVER_COLOR{ 0.0f, 0.0f, 0.0f, 0.7f };     // Viewer arrow button hover
+		static constexpr ImVec4 PRESET_VIEWER_ARROW_ACTIVE_COLOR{ 0.0f, 0.0f, 0.0f, 0.85f };   // Viewer arrow button pressed
 		static constexpr float PRESET_SEARCH_WIDTH = 220.0f;                                   // Presets search field width, at 1080p
 		static constexpr float PRESET_BUTTON_HOVER_LIFT = 0.1f;                                // Per-channel brighten of the Apply button on hover
 		static constexpr ImVec4 PRESET_APPLY_TEXT_COLOR{ 0.05f, 0.07f, 0.1f, 1.0f };           // Apply button label (dark on the accent fill)
@@ -488,15 +503,9 @@ public:
 		static constexpr float PRESET_POSTER_ASPECT = 2.0f / 3.0f;                             // Detail poster width over height (portrait)
 		static constexpr float PRESET_THUMB_HEIGHT_FRAMES = 4.0f;                              // Screenshot thumbnail width, in frame heights
 		static constexpr float SCREENSHOT_ASPECT = 16.0f / 9.0f;                               // Screenshot width over height
-		// --- Shell cleanup (header icons, watermark) ---
-		static constexpr float HEADER_DOCKED_IDLE_ALPHA = 0.85f;                       // Docked title-bar action icons: opacity while not hovered (monochrome icons)
-		static constexpr float HEADER_UNDOCKED_HOVER_GREY = 0.8f;                      // Undocked action icon hover fill: grey level
-		static constexpr float HEADER_UNDOCKED_HOVER_ALPHA = 0.25f;                    // ... and its alpha
-		static constexpr float WATERMARK_MONO_ALPHA = 0.18f;                           // Monochrome watermark logo opacity
-		static constexpr ImU32 HEADER_COLOR_ICON_IDLE = IM_COL32(220, 220, 220, 220);  // Docked colour icon tint while not hovered
-		static constexpr ImU32 WATERMARK_COLOR = IM_COL32(255, 255, 255, 45);          // Full-colour watermark logo tint
 
-		// --- Shader compile breakdown bar ---
+		// Shader compile breakdown bar (ShaderCacheStatusWidget)
+		static constexpr float SHADER_BREAKDOWN_BAR_HEIGHT = 14.0f;  // Bar height, 1080p baseline
 		static constexpr ImU32 SHADER_BAR_BACKGROUND = IM_COL32(40, 40, 40, 255);
 		static constexpr ImU32 SHADER_BAR_DEDUPLICATED = IM_COL32(120, 120, 120, 255);
 		static constexpr ImU32 SHADER_BAR_DISK_CACHE = IM_COL32(70, 130, 200, 255);
@@ -505,19 +514,7 @@ public:
 		static constexpr ImU32 SHADER_BAR_VERY_SLOW = IM_COL32(220, 60, 60, 255);
 		static constexpr ImU32 SHADER_BAR_FAILED = IM_COL32(160, 30, 30, 255);
 
-		// --- Menu window ---
-		static constexpr float DISABLE_AT_BOOT_MIN_SEARCH_FRAMES = 4.0f;  // Disable at Boot search field never narrower than this many frame heights
-
-		// --- Feature list and page header ---
-		static constexpr float AUTOHIDE_EDGE_SLOP = 2.0f;                // Auto-hide edge zone also catches a cursor this far outside the pane
-		static constexpr float FEATURE_ROW_PIN_SCALE = 0.75f;            // Pin glyph beside a pinned feature's name, as a share of the font size
-		static constexpr float FEATURE_BOOT_TOGGLE_WIDTH_RATIO = 1.6f;   // Load at Boot toggle width as a multiple of the frame height
-		static constexpr float FEATURE_BOOT_TOGGLE_HEIGHT_RATIO = 0.8f;  // Load at Boot toggle height as a multiple of the frame height
-
-		// --- First-time setup dialog ---
-		static constexpr float HOME_SETUP_WATERMARK_MONO_ALPHA = 0.24f;                   // Dialog logo watermark opacity, monochrome logo
-		static constexpr ImU32 HOME_SETUP_WATERMARK_COLOR = IM_COL32(255, 255, 255, 60);  // Dialog logo watermark tint, full-colour logo
-		// --- CS Editor ---
+		// CS Editor (sizes are before UI scale unless noted)
 		static constexpr float CSE_PALETTE_BUTTON_SIZE = 24.0f;                                // Palette swatch button edge, before UI scale
 		static constexpr float CSE_PALETTE_SPACING = 4.0f;                                     // Gap between palette swatches, before UI scale
 		static constexpr float CSE_PALETTE_STAR_RATIO = 0.4f;                                  // Empty-favourite star size as a share of the swatch
@@ -547,7 +544,6 @@ public:
 		static constexpr float CSE_DISABLED_ICON_ALPHA = 0.5f;                                 // Glyph alpha of a disabled action bar icon
 		static constexpr float CSE_UI_SCALE_MIN = 0.5f;                                        // Editor UI scale slider range
 		static constexpr float CSE_UI_SCALE_MAX = 2.0f;
-		static constexpr float CSE_UNDO_NOTIFICATION_SECONDS = 2.0f;    // How long the undone / redone notice stays
 		static constexpr float CSE_TIME_SLIDER_MIN_WIDTH = 40.0f;       // Narrowest a time control slider shrinks to, before UI scale
 		static constexpr float CSE_ADD_LIGHT_POPUP_WIDTH = 520.0f;      // Add-light dialog width, before UI scale
 		static constexpr float CSE_CARD_BG_ALPHA = 0.5f;                // Share of the frame colour's alpha kept by detail cards (Browser inspector, Light Editor panels)
@@ -564,10 +560,8 @@ public:
 		static constexpr float CSE_FORM_LIST_NAME_WEIGHT = 3.0f;        // Browser list: Editor ID column stretch weight
 		static constexpr float CSE_FORM_LIST_FILE_WEIGHT = 1.4f;        // Browser list: File column stretch weight
 		static constexpr float CSE_USAGE_SLOTS_MAX_RATIO = 0.45f;       // Inspector usage row: most of the width the slot names may take
-		static constexpr float CSE_ROW_ACCENT_WIDTH = 3.0f;             // Accent bar on the edge of a list row (Browser stripe, sidebar, pinned feature), before UI scale
 		static constexpr float CSE_PINNED_TINT_ALPHA = 0.14f;           // Tint behind a pinned feature row, as a share of the accent's opacity
 		static constexpr float CSE_PINNED_SELECTED_TINT_ALPHA = 0.26f;  // ... while that row is selected
-		static constexpr float CSE_BOOT_TOGGLE_WIDTH_RATIO = 1.6f;      // Boot enable toggle width as a multiple of a frame height
 		static constexpr float CSE_ADD_LIGHT_POPUP_TOP_RATIO = 0.1f;    // Add-light dialog top edge as a share of the display, so combos open below it
 	};
 

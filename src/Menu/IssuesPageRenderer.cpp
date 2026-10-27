@@ -4,6 +4,7 @@
 
 #include <format>
 #include <functional>
+#include <ranges>
 #include <string>
 #include <vector>
 
@@ -54,11 +55,7 @@ namespace
 			ConstraintRow row;
 			row.setting = std::format("{}.{}", settingId.featureShortName, settingId.settingPath);
 			row.forcedTo = FeatureConstraints::FormatConstraintValue(result.forcedValue);
-			for (size_t i = 0; i < result.sources.size(); ++i) {
-				if (i > 0)
-					row.constrainedBy += ", ";
-				row.constrainedBy += result.sources[i].featureName;
-			}
+			row.constrainedBy = result.sources | std::views::transform([](const auto& source) -> const std::string& { return source.featureName; }) | std::views::join_with(std::string_view(", ")) | std::ranges::to<std::string>();
 			if (!result.sources.empty())
 				row.firstSourceShortName = result.sources[0].featureShortName;
 			for (const auto& src : result.sources) {

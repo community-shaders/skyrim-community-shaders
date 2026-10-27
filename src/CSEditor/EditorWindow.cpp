@@ -159,8 +159,7 @@ namespace
 		const float fillAlpha = restAlpha * blend.selected + (hoverAlpha - restAlpha * blend.selected) * blend.hover;
 		if (fillAlpha > 0.0f)
 			drawList->AddRectFilled(bb.Min, bb.Max, ImGui::GetColorU32(ImVec4(tint.x, tint.y, tint.z, fillAlpha)), rounding);
-		if (blend.press > 0.0f)
-			drawList->AddRectFilled(bb.Min, bb.Max, Util::Anim::ScaleAlphaU32(ImGui::GetColorU32(ImGuiCol_ButtonActive), blend.press), rounding);
+		Util::Anim::FillLayer(drawList, bb.Min, bb.Max, rounding, ImGuiCol_ButtonActive, blend.press);
 		Icons::DrawCenteredGlyph(drawList, bb.Min, bb.GetSize(), glyph, glyphColor);
 		return clicked;
 	}
@@ -369,7 +368,7 @@ void EditorWindow::DrawBrowserSidebar(bool compact)
 				if (hovered)
 					ImGui::SetTooltip("%s", category.label);
 			} else {
-				const float edgeInset = std::max(style.FramePadding.x, ThemeManager::Constants::CSE_ROW_ACCENT_WIDTH * scale);
+				const float edgeInset = std::max(style.FramePadding.x, ThemeManager::Constants::ANIM_SELECTED_BAR_WIDTH * scale);
 				const float iconX = min.x + edgeInset;
 				Icons::DrawCenteredGlyph(drawList, ImVec2(iconX, iconY), ImVec2(iconBox, iconBox), category.icon, iconColor);
 
@@ -1304,18 +1303,8 @@ void EditorWindow::RenderUI()
 
 			// Close: white cross, no red fill
 			ImGui::SetCursorScreenPos(ImVec2(xButtonX, iconY));
-			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0.0f, 0.0f));
-			{
-				auto _style = Util::TransparentIconButtonStyle();
-				const bool closeClicked = ImGui::InvisibleButton("##ActionBarClose", iconButtonSize);
-				const ImRect closeBb(ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
-				Util::DrawAnimatedButtonHighlight(closeBb, ImGui::GetItemID(), ImGui::IsItemHovered(), ImGui::IsItemActive(), false);
-				Icons::DrawCenteredGlyph(ImGui::GetWindowDrawList(), closeBb.Min, closeBb.GetSize(),
-					Icons::TI(ICON_TI_X), ImGui::GetColorU32(textColor));
-				if (closeClicked)
-					open = false;
-			}
-			ImGui::PopStyleVar();
+			if (DrawBarIconButton("##ActionBarClose", Icons::TI(ICON_TI_X), true, textColor, textColor, iconButtonSize))
+				open = false;
 			Util::AddTooltip(T(TKEY("close_cs_editor"), "Close CS Editor (Esc)"));
 
 			barWindow->DC.LayoutType = barLayoutBackup;
@@ -2420,13 +2409,11 @@ void EditorWindow::DrawTimeControls()
 
 	ImGui::SetNextItemWidth(sliderWidth);
 	DrawPausedAwareGameHourSlider("##FeatureGameTime");
-	if (auto _tt = Util::HoverTooltipWrapper())
-		ImGui::Text("%s", T(TKEY("game_time_tooltip"), "Adjust the current game time"));
+	Util::HoverTip(T(TKEY("game_time_tooltip"), "Adjust the current game time"));
 
 	ImGui::SameLine();
 	DrawTimePauseToggle("##FeaturePauseTime", ImVec2(iconSize, iconSize));
-	if (auto _tt = Util::HoverTooltipWrapper())
-		ImGui::Text("%s", T(TKEY("pause_time_tooltip"), "Pause or resume game time progression"));
+	Util::HoverTip(T(TKEY("pause_time_tooltip"), "Pause or resume game time progression"));
 
 	ImGui::SameLine();
 	ImGui::SetNextItemWidth(sliderWidth);
@@ -2474,7 +2461,7 @@ void EditorWindow::WarnOpeningBlocked()
 {
 	const std::string message = T(TKEY("open_blocked"), "Wait! You cannot open the editor in a loading screen or menu.");
 	// A repeated hotkey press while the card is still up would only stack copies of it.
-	Util::Notifications::ShowOnce(message, Util::Colors::GetWarning(), kNotificationDuration);
+	Util::Notifications::ShowOnce(message, Util::Colors::GetWarning());
 }
 
 void EditorWindow::HideGameMenus()
@@ -2628,14 +2615,14 @@ void EditorWindow::PerformUndo()
 {
 	if (const auto label = undoHistory.Undo())
 		ShowNotification(std::vformat(T(TKEY("undone_changes_to"), "Undone changes to {}"), std::make_format_args(*label)),
-			Util::Colors::GetInfo(), ThemeManager::Constants::CSE_UNDO_NOTIFICATION_SECONDS);
+			Util::Colors::GetInfo(), ThemeManager::Constants::UNDO_TOAST_SECONDS);
 }
 
 void EditorWindow::PerformRedo()
 {
 	if (const auto label = undoHistory.Redo())
 		ShowNotification(std::vformat(T(TKEY("redone_changes_to"), "Redone changes to {}"), std::make_format_args(*label)),
-			Util::Colors::GetInfo(), ThemeManager::Constants::CSE_UNDO_NOTIFICATION_SECONDS);
+			Util::Colors::GetInfo(), ThemeManager::Constants::UNDO_TOAST_SECONDS);
 }
 
 void EditorWindow::DiscardWidgetChanges(Widget& widget)

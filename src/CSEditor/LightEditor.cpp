@@ -482,9 +482,7 @@ void LightEditor::DrawSettings()
 	BrowserUI::PageHeader(Icons::TI(ICON_TI_BULB), T(TKEY("header"), "Light Editor"), subtitle.c_str());
 	ImGui::SameLine();
 	ImGui::Checkbox(T(TKEY("log_mode"), "Log Mode"), &extendedLogMode);
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("%s", T(TKEY("log_mode_tooltip"), "Extend slider ranges and use a logarithmic scale."));
-	}
+	Util::HoverTip(T(TKEY("log_mode_tooltip"), "Extend slider ranges and use a logarithmic scale."));
 
 	const bool isAttaching = (attachPhase != AttachPhase::Idle);
 	if (isAttaching) {
@@ -522,18 +520,14 @@ void LightEditor::DrawToolbar()
 	if (Icons::LabeledButton("##ToggleAllLP", Icons::TI(ICON_TI_BULB), toggleAllLabel)) {
 		ScheduleConsoleCommand("tlp 0");
 	}
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("%s", T(TKEY("toggle_all_lp_lights_tooltip"), "Toggle all Light Placer lights on/off (tlp 0)."));
-	}
+	Util::HoverTip(T(TKEY("toggle_all_lp_lights_tooltip"), "Toggle all Light Placer lights on/off (tlp 0)."));
 
 	const char* markersLabel = T(TKEY("toggle_lp_markers"), "Toggle LP Markers");
 	SameLineIfFits(Icons::MeasureLabeledButton(Icons::TI(ICON_TI_EYE), markersLabel));
 	if (Icons::LabeledButton("##ToggleMarkers", Icons::TI(ICON_TI_EYE), markersLabel)) {
 		ScheduleConsoleCommand("tlp 1");
 	}
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("%s", T(TKEY("toggle_lp_markers_tooltip"), "Toggle Light Placer debug markers (tlp 1)."));
-	}
+	Util::HoverTip(T(TKEY("toggle_lp_markers_tooltip"), "Toggle Light Placer debug markers (tlp 1)."));
 
 	const char* reloadLabel = T(TKEY("reload_lp"), "Reload LP");
 	SameLineIfFits(Icons::MeasureLabeledButton(Icons::TI(ICON_TI_REFRESH), reloadLabel));
@@ -545,9 +539,7 @@ void LightEditor::DrawToolbar()
 		ScheduleConsoleCommand("reloadlp");
 		EditorWindow::GetSingleton()->ShowNotification(T(TKEY("reloading_lp_configs"), "Reloading Light Placer configs..."), Util::Colors::GetInfo());
 	}
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("%s", T(TKEY("reload_lp_tooltip"), "Reload all Light Placer JSON configs in-game (reloadlp)."));
-	}
+	Util::HoverTip(T(TKEY("reload_lp_tooltip"), "Reload all Light Placer JSON configs in-game (reloadlp)."));
 
 	SameLineIfFits(ImGui::CalcTextSize(T(TKEY("select_mesh"), "Select Mesh")).x + ImGui::GetStyle().FramePadding.x * 2.0f);
 	DrawAddLightButton();
@@ -577,9 +569,7 @@ void LightEditor::DrawToolbar()
 	const char* shadowsOnlyLabel = T(TKEY("shadows_only"), "Shadows Only");
 	SameLineIfFits(CheckboxWidth(shadowsOnlyLabel));
 	ImGui::Checkbox(shadowsOnlyLabel, &shadowsOnly);
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("%s", T(TKEY("shadows_only_tooltip"), "Only show lights with HemiShadow or OmniShadow flags."));
-	}
+	Util::HoverTip(T(TKEY("shadows_only_tooltip"), "Only show lights with HemiShadow or OmniShadow flags."));
 }
 
 void LightEditor::DrawLightTable(const ImVec2& size)
@@ -846,9 +836,7 @@ void LightEditor::DrawInspector(const ImVec2& size)
 		ImGui::SameLine();
 		if (Util::ErrorButton(T(TKEY("delete_entry"), "Delete")))
 			deleteConfirmPopupRequested = true;
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("%s", T(TKEY("delete_entry_tooltip"), "Delete this light entry from the Light Placer JSON.\nIf it is the only light in its entry, the whole models/formIDs entry is removed too."));
-		}
+		Util::HoverTip(T(TKEY("delete_entry_tooltip"), "Delete this light entry from the Light Placer JSON.\nIf it is the only light in its entry, the whole models/formIDs entry is removed too."));
 
 		auto doFilterButton = [&](bool isWhiteList) {
 			bool& inList = isWhiteList ? lpInWhitelist : lpInBlacklist;
@@ -1027,9 +1015,7 @@ void LightEditor::DrawAdjustments(const ImVec2& size)
 		ImGui::SameLine();
 		const auto saveColorLabel = fmt::format("{}##color", T(TKEY("save_color"), "Save"));
 		ImGui::Checkbox(saveColorLabel.c_str(), &saveColorToLP);
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("%s", T(TKEY("save_color_tooltip"), "Include color when saving to Light Placer.\nWhen unchecked, the light falls back to the LIGH form color."));
-		}
+		Util::HoverTip(T(TKEY("save_color_tooltip"), "Include color when saving to Light Placer.\nWhen unchecked, the light falls back to the LIGH form color."));
 	}
 
 	// Logarithmic+extended or normal slider per extendedLogMode. Log scale requires min > 0, so
@@ -1122,9 +1108,7 @@ void LightEditor::DrawAddLightButton()
 	if (Util::Button(T(TKEY("select_mesh"), "Select Mesh"))) {
 		picker.BeginPick();
 	}
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("%s", T(TKEY("select_mesh_tooltip"), "Click a mesh in the world to attach a new bulb, edit an existing bulb, or whitelist/blacklist this reference."));
-	}
+	Util::HoverTip(T(TKEY("select_mesh_tooltip"), "Click a mesh in the world to attach a new bulb, edit an existing bulb, or whitelist/blacklist this reference."));
 
 	if (picker.IsPicking()) {
 		int pm = static_cast<int>(picker.pickMode);

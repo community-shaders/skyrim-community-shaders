@@ -10,8 +10,10 @@
 #include "Utils/Input.h"
 #include "Utils/Serialize.h"
 #include "Utils/UISurface.h"
+#include <algorithm>
 #include <array>
 #include <atomic>
+#include <cmath>
 #include <cstdint>
 #include <dxgi1_4.h>
 #include <nlohmann/json.hpp>
@@ -455,6 +457,15 @@ public:
 	static constexpr size_t MAX_RECENT_FEATURES = 6;
 	/** @brief Gets the current theme settings */
 	const ThemeSettings& GetTheme() const { return settings.Theme; }
+
+	/** @brief Feature title scale from the theme, defaulted when malformed and clamped to the UI slider range. */
+	float GetFeatureTitleScale() const
+	{
+		float scale = settings.Theme.FeatureHeading.FeatureTitleScale;
+		if (!std::isfinite(scale))
+			scale = ThemeManager::Constants::DEFAULT_FEATURE_TITLE_SCALE;
+		return std::clamp(scale, ThemeManager::Constants::SETTINGS_TITLE_SCALE_MIN, ThemeManager::Constants::SETTINGS_TITLE_SCALE_MAX);
+	}
 	/** @brief Gets the mutable menu settings */
 	Settings& GetSettings() { return settings; }
 	/** @brief Gets the menu settings */

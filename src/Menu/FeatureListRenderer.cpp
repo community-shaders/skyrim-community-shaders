@@ -51,6 +51,22 @@ namespace
 		return std::ranges::find(kBottomMenuIds, menuId) != kBottomMenuIds.end();
 	}
 
+	/**
+	 * @brief Clears a feature's user edits through the menu's undo hook, so it shows what defaults and Baseline packs set.
+	 * The scene layer's cached apply document takes the restored values too, or the next scene apply would replay the old ones.
+	 */
+	void RestoreFeatureDefaults(const FeatureListRenderer::Hooks& hooks, Feature* feat)
+	{
+		const auto restore = [feat] {
+			globals::state->RestoreFeatureLayers(feat);
+			globals::sceneSettingsManager->CaptureExternalFeatureChanges(feat, true);
+		};
+		if (hooks.runFeatureCommand)
+			hooks.runFeatureCommand(feat, restore);
+		else
+			restore();
+	}
+
 	/// State of the auto-hide feature list (Menu::Settings::AutoHideFeatureList): whether it is meant to be shown,
 	/// how far it has slid in, and the timers that keep it from flickering.
 	struct AutoHideDrawer
@@ -203,10 +219,8 @@ namespace
 		const ImVec2 max = ImGui::GetItemRectMax();
 		const float rounding = ImGui::GetStyle().FrameRounding;
 		const auto blend = Util::Anim::ItemBlend(ImGui::GetItemID(), ImGui::IsItemHovered() && !disabled, ImGui::IsItemActive(), selected);
-		if (blend.hover > 0.0f)
-			drawList->AddRectFilled(min, max, Util::Anim::ScaleAlphaU32(ImGui::GetColorU32(ImGuiCol_HeaderHovered), blend.hover), rounding);
-		if (blend.press > 0.0f)
-			drawList->AddRectFilled(min, max, Util::Anim::ScaleAlphaU32(ImGui::GetColorU32(ImGuiCol_HeaderActive), blend.press), rounding);
+		Util::Anim::FillLayer(drawList, min, max, rounding, ImGuiCol_HeaderHovered, blend.hover);
+		Util::Anim::FillLayer(drawList, min, max, rounding, ImGuiCol_HeaderActive, blend.press);
 		if (selected || blend.selected > 0.0f) {
 			// The selected pill is one shape that glides between the pills; one that was just left fades out in place
 			const auto pill = selected ? Util::Anim::SelectionGlide(ImHashStr("NavPillGlide"), min, max) : Util::Anim::GlideRect{ min, max };
@@ -298,11 +312,7 @@ namespace
 		const auto& themeSettings = globals::menu->GetTheme();
 		const ImVec4 textColor = themeSettings.Palette.Text;
 
-		// Clamped to the UI slider range so a malformed theme cannot destabilise the layout
-		float titleScale = themeSettings.FeatureHeading.FeatureTitleScale;
-		if (!std::isfinite(titleScale))
-			titleScale = ThemeManager::Constants::DEFAULT_FEATURE_TITLE_SCALE;
-		titleScale = std::clamp(titleScale, 1.0f, 3.0f);
+		const float titleScale = globals::menu->GetFeatureTitleScale();
 
 		// Size and draw text in a font role at the title scale
 		const auto scaledSize = [titleScale](Menu::FontRole role, const char* text) {
@@ -1109,19 +1119,17 @@ void FeatureListRenderer::ListMenuVisitor::operator()(Feature* feat)
 		const bool applying = sceneManager->IsFeatureOverridingBase(featureName);
 		ImGui::SameLine();
 		Util::DrawInlineIndicatorDot(ImGui::GetColorU32(Util::Colors::GetInfo()), applying);
-		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::TextUnformatted(applying ?
-									   T("menu.features.scene_indicator_overriding",
-										   "Scene Manager is overriding settings here. Blue settings show its values.") :
-									   T("menu.features.scene_indicator_configured",
-										   "Has Scene Manager settings for other times, weathers or locations."));
+		Util::HoverTip(applying ?
+						   T("menu.features.scene_indicator_overriding",
+							   "Scene Manager is overriding settings here. Blue settings show its values.") :
+						   T("menu.features.scene_indicator_configured",
+							   "Has Scene Manager settings for other times, weathers or locations."));
 
 		if (sceneManager->HasSketches(featureName)) {
 			ImGui::SameLine();
 			Util::DrawInlineIndicatorDot(ImGui::GetColorU32(Util::Colors::GetSuccess()), true);
-			if (auto _tt = Util::HoverTooltipWrapper())
-				ImGui::TextUnformatted(T("menu.features.scene_indicator_sketched",
-					"Has settings sketched over the Scene Manager's values. They revert once you leave this feature."));
+			Util::HoverTip(T("menu.features.scene_indicator_sketched",
+				"Has settings sketched over the Scene Manager's values. They revert once you leave this feature."));
 		}
 	}
 
@@ -1148,15 +1156,7 @@ void FeatureListRenderer::ListMenuVisitor::RenderRowContextMenu(Feature* feat) c
 	// The same condition as the feature page's Restore Defaults, plus something to restore
 	const bool canRestore = isLoaded && !isDisabled && feat->UsesMainSettings();
 	if (ImGui::MenuItem(T("menu.features.restore_defaults", "Restore Defaults"), nullptr, false, canRestore && state->HasUserEdits(feat))) {
-		const auto restore = [feat] {
-			globals::state->RestoreFeatureLayers(feat);
-			// The scene layer's cached apply document must take the restored values before anything replays it
-			globals::sceneSettingsManager->CaptureExternalFeatureChanges(feat, true);
-		};
-		if (hooks.runFeatureCommand)
-			hooks.runFeatureCommand(feat, restore);
-		else
-			restore();
+		RestoreFeatureDefaults(hooks, feat);
 	}
 	Util::AddTooltip(canRestore ? T("menu.features.restore_defaults_tooltip", "Restore defaults: clears your edits to this feature, back to what defaults and your Baseline presets set") :
 								  T("menu.features.restore_unavailable", "Only loaded features that keep their settings in the user config can be restored"),
@@ -1224,8 +1224,8 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureHeader(Feature* feat, bo
 
 	const float buttonSpacing = ThemeManager::Constants::BUTTON_SPACING;
 	const float iconSize = ImGui::GetFrameHeight();
-	const float bootToggleWidth = iconSize * ThemeManager::Constants::FEATURE_BOOT_TOGGLE_WIDTH_RATIO;
-	const float bootToggleHeight = iconSize * ThemeManager::Constants::FEATURE_BOOT_TOGGLE_HEIGHT_RATIO;
+	const float bootToggleWidth = iconSize * ThemeManager::Constants::FEATURE_TOGGLE_WIDTH_RATIO;
+	const float bootToggleHeight = iconSize * ThemeManager::Constants::FEATURE_TOGGLE_HEIGHT_RATIO;
 
 	const bool canExport = !isDisabled && isLoaded && FeatureOverwritesPanel::HasExportableSettings(feat);
 	// Restore clears the user's edits in the user config, which a feature with its own store does not use.
@@ -1269,8 +1269,7 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureHeader(Feature* feat, bo
 			restore = BrowserUI::Chip("##FeatureModified", T("menu.features.modified_chip", "Modified"), Icons::TI(ICON_TI_PENCIL), &secondary);
 			ImGui::PopStyleColor();
 		}
-		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::TextUnformatted(T("menu.features.modified_chip_tooltip", "Differs from the defaults and your Baseline presets. Click to restore defaults."));
+		Util::HoverTip(T("menu.features.modified_chip_tooltip", "Differs from the defaults and your Baseline presets. Click to restore defaults."));
 		if (restore)
 			RestoreDefaults(feat);
 	}
@@ -1404,8 +1403,7 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureSettings(Feature* feat, 
 						T("menu.features.download_link", "Click here to download this feature ({})"), std::make_format_args(featureModLink));
 					if (Util::Selectable(downloadText.c_str()))
 						ShellExecuteA(nullptr, "open", featureModLink.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
-					if (auto _tt = Util::HoverTooltipWrapper())
-						ImGui::Text("%s", T("menu.features.download_tooltip", "Download the feature from the mod page."));
+					Util::HoverTip(T("menu.features.download_tooltip", "Download the feature from the mod page."));
 				}
 			}
 		}
@@ -1428,8 +1426,7 @@ void FeatureListRenderer::DrawMenuVisitor::RunFeatureCommand(Feature* feat, cons
 
 void FeatureListRenderer::DrawMenuVisitor::RestoreDefaults(Feature* feat) const
 {
-	// Clears the user's edits, so the feature shows what defaults and Baseline packs set.
-	RunFeatureCommand(feat, [feat] { globals::state->RestoreFeatureLayers(feat); });
+	RestoreFeatureDefaults(hooks, feat);
 }
 
 void FeatureListRenderer::DrawMenuVisitor::RenderActionsMenu(Feature* feat, bool canExport, bool canRestore, bool canUseBaselines)
@@ -1440,8 +1437,7 @@ void FeatureListRenderer::DrawMenuVisitor::RenderActionsMenu(Feature* feat, bool
 		if (Icons::Button("##FeatureActions", Icons::TI(ICON_TI_DOTS), ImVec2(size, size)))
 			ImGui::OpenPopup("##FeatureActionsMenu");
 	}
-	if (auto _tt = Util::HoverTooltipWrapper())
-		ImGui::TextUnformatted(T("menu.features.actions_tooltip", "More actions"));
+	Util::HoverTip(T("menu.features.actions_tooltip", "More actions"));
 
 	if (!ImGui::BeginPopup("##FeatureActionsMenu"))
 		return;
@@ -1510,9 +1506,7 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFavoriteButton(Feature* feat)
 			ToggleFavorite(feat);
 	}
 
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("%s", isFavorite ? T("menu.features.remove_from_favorites_tooltip", "Remove from favorites: moves this feature back into the main list") : T("menu.features.add_to_favorites_tooltip", "Add to favorites: lists this feature at the top of the feature list"));
-	}
+	Util::HoverTip(isFavorite ? T("menu.features.remove_from_favorites_tooltip", "Remove from favorites: moves this feature back into the main list") : T("menu.features.add_to_favorites_tooltip", "Add to favorites: lists this feature at the top of the feature list"));
 }
 
 void FeatureListRenderer::DrawConstraintWarningDialog(std::string& pendingFeatureSelection)

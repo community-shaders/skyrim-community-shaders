@@ -38,21 +38,8 @@ namespace
 	/** @brief Draws an icon glyph centred in a square, sized to match the texture icons. */
 	void DrawIconGlyph(ImDrawList* drawList, ImVec2 min, float size, Icons::GlyphRef glyph, ImU32 color)
 	{
-		MenuHeaderRenderer::DrawCenteredGlyph(drawList, min, size, size * ThemeManager::Constants::HEADER_GLYPH_ICON_SCALE, glyph, color);
+		Icons::DrawCenteredGlyph(drawList, min, ImVec2(size, size), size * ThemeManager::Constants::HEADER_GLYPH_ICON_SCALE, glyph, color);
 	}
-}
-
-void MenuHeaderRenderer::DrawCenteredGlyph(ImDrawList* drawList, ImVec2 min, float box, float fontSize, Icons::GlyphRef glyph, ImU32 color)
-{
-	ImFont* font = Icons::GetFont(glyph);
-	if (!font || !glyph)
-		return;
-	// PushFont takes a size before the style and window font scales; undo them so the glyph matches the textures
-	const ImGuiContext& context = *ImGui::GetCurrentContext();
-	const float fontScale = context.FontSizeBase > 0.0f ? context.FontSize / context.FontSizeBase : 1.0f;
-	ImGui::PushFont(font, fontSize / std::max(fontScale, 0.01f));
-	drawList->AddText(Icons::GetCenteredGlyphPos(min, ImVec2(box, box), glyph.utf8), color, glyph.utf8);
-	ImGui::PopFont();
 }
 
 bool MenuHeaderRenderer::GlyphIconButton(const char* id, Icons::GlyphRef glyph, float glyphBox, const char* tooltip, bool active)
@@ -80,8 +67,7 @@ bool MenuHeaderRenderer::GlyphIconButton(const char* id, Icons::GlyphRef glyph, 
 	tint = Util::Anim::Lerp(tint, Util::Colors::GetAccent(), blend.selected);
 	DrawIconGlyph(ImGui::GetWindowDrawList(), ImVec2(min.x + framePadding.x, min.y + framePadding.y), glyphBox, glyph, ImGui::GetColorU32(tint));
 	if (tooltip) {
-		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::TextUnformatted(tooltip);
+		Util::HoverTip(tooltip);
 	}
 	return clicked;
 }
@@ -117,7 +103,7 @@ bool MenuHeaderRenderer::RenderNavButton(bool docked, ImVec2 min, float size, co
 	else if (current)
 		tint = Util::Colors::GetAccent();
 	if (!current && !hovered)
-		tint.w *= ThemeManager::Constants::HEADER_HOME_IDLE_ALPHA;
+		tint.w *= ThemeManager::Constants::HEADER_ICON_IDLE_ALPHA;
 	if (tintOverride)  // The issues icon breathes gently to draw the eye
 		tint.w *= 1.0f - ThemeManager::Constants::ANIM_PULSE_AMPLITUDE * Util::Anim::Pulse();
 	const float pad = ThemeManager::Constants::DOCKED_ICON_PADDING_REDUCTION;
@@ -438,7 +424,7 @@ float MenuHeaderRenderer::RenderDockedIcons(const std::vector<ActionIcon>& actio
 			// Use theme text color for monochrome icons
 			ImVec4 textColor = globals::menu->GetSettings().Theme.Palette.Text;
 			if (!isHovered) {
-				textColor.w *= ThemeManager::Constants::HEADER_DOCKED_IDLE_ALPHA;
+				textColor.w *= ThemeManager::Constants::HEADER_ICON_IDLE_ALPHA;
 			}
 			tintColor = ImGui::GetColorU32(textColor);
 		} else {
@@ -500,7 +486,7 @@ void MenuHeaderRenderer::RenderUndockedIcons(const std::vector<ActionIcon>& acti
 	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(ThemeManager::Constants::UNDOCKED_ICON_ITEM_SPACING, 0.0f));  // Slightly increased spacing
 	ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);                                                           // Remove button borders
 	ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));                                                         // Transparent button background
-	ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(ThemeManager::Constants::HEADER_UNDOCKED_HOVER_GREY, ThemeManager::Constants::HEADER_UNDOCKED_HOVER_GREY, ThemeManager::Constants::HEADER_UNDOCKED_HOVER_GREY, ThemeManager::Constants::HEADER_UNDOCKED_HOVER_ALPHA));
+	ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ThemeManager::Constants::HEADER_UNDOCKED_HOVER_COLOR);
 
 	// Get tint color for monochrome icons
 	const ImVec4 tintColor = BaseIconTint();
@@ -535,9 +521,7 @@ void MenuHeaderRenderer::RenderUndockedIcons(const std::vector<ActionIcon>& acti
 		if (clicked) {
 			icon.callback();
 		}
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("%s", icon.tooltip.c_str());
-		}
+		Util::HoverTip(icon.tooltip.c_str());
 
 		// Add SameLine except for the last button
 		if (i < actionIcons.size() - 1) {

@@ -967,7 +967,7 @@ namespace Util
 				ImGui::SameLine();
 			}
 
-			if (ImGui::Button(cancelLabel.c_str(), buttonSize))
+			if (ImGui::Button(cancelLabel.empty() ? T("ui.cancel", "Cancel") : cancelLabel.c_str(), buttonSize))
 				pick(Choice::Cancel);
 			if (focus == Focus::Cancel)
 				ImGui::SetItemDefaultFocus();
@@ -1292,6 +1292,22 @@ namespace Util
 		return ImGui::Selectable(label, selected, flags, size);
 	}
 
+	void AddressButton(const char* a_name, uintptr_t a_address)
+	{
+		if (ImGui::Button(a_name))
+			ImGui::SetClipboardText(std::format("{0:x}", a_address).c_str());
+		if (ImGui::IsItemHovered()) {
+			const auto tooltip = I18n::GetSingleton()->Format("ui.copy_address_tooltip", { { "name", a_name } }, "Copy {name} Address to Clipboard");
+			ImGui::SetTooltip("%s", tooltip.c_str());
+		}
+	}
+
+	ImU32 QuietIconColor(float hover, float selected)
+	{
+		const ImVec4 resting = Anim::Lerp(Colors::GetSecondary(), ImGui::GetStyleColorVec4(ImGuiCol_Text), hover);
+		return ImGui::GetColorU32(Anim::Lerp(resting, Colors::GetAccent(), selected));
+	}
+
 	bool DrawAnimatedButtonHighlight(const ImRect& rect, ImGuiID id, bool hovered, bool held, bool current, ImDrawList* drawList)
 	{
 		const auto blend = Anim::ItemBlend(id, hovered || current, held, false);
@@ -1300,9 +1316,8 @@ namespace Util
 		if (!drawList)
 			drawList = ImGui::GetWindowDrawList();
 		const float rounding = GetThemedButtonHighlightRounding(rect.Min, rect.Max);
-		drawList->AddRectFilled(rect.Min, rect.Max, Anim::ScaleAlphaU32(ImGui::GetColorU32(ImGuiCol_ButtonHovered), blend.hover), rounding);
-		if (blend.press > 0.0f)
-			drawList->AddRectFilled(rect.Min, rect.Max, Anim::ScaleAlphaU32(ImGui::GetColorU32(ImGuiCol_ButtonActive), blend.press), rounding);
+		Anim::FillLayer(drawList, rect.Min, rect.Max, rounding, ImGuiCol_ButtonHovered, blend.hover);
+		Anim::FillLayer(drawList, rect.Min, rect.Max, rounding, ImGuiCol_ButtonActive, blend.press);
 		return true;
 	}
 
@@ -1862,9 +1877,7 @@ namespace Util
 
 		// Add tooltip if provided
 		if (config.tooltipText) {
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("%s", config.tooltipText);
-			}
+			Util::HoverTip(config.tooltipText);
 		}
 	}
 

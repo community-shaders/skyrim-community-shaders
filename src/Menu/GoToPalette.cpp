@@ -411,8 +411,7 @@ namespace GoToPalette
 				const float radius = ImGui::GetFrameHeight() * Constants::SORT_FILTER_DOT_RATIO;
 				Util::DrawIconCircle(ImVec2(buttonMax.x - radius * 1.5f, buttonMin.y + radius * 1.5f), radius, ImGui::GetColorU32(Util::Colors::GetAccent()), true);
 			}
-			if (auto _tt = Util::HoverTooltipWrapper())
-				ImGui::Text("%s", T("menu.palette.sort_tooltip", "Sort and filter features"));
+			Util::HoverTip(T("menu.palette.sort_tooltip", "Sort and filter features"));
 			if (pressed)
 				ImGui::OpenPopup(kSortPopupId);
 			ImGui::SetNextWindowPos(ImVec2(buttonMax.x, buttonMax.y + style.ItemSpacing.y), ImGuiCond_Always, ImVec2(1.0f, 0.0f));
@@ -467,7 +466,7 @@ namespace GoToPalette
 			const ImVec2 pillMin = pill.min;
 			const ImVec2 pillMax = pill.max;
 			const float pillRounding = std::max(0.0f, trackRounding - trackPad);
-			drawList->AddRectFilled(pillMin, pillMax, ImGui::GetColorU32(Util::Anim::ScaleAlpha(accent, Constants::PALETTE_PILL_FILL_ALPHA)), pillRounding);
+			drawList->AddRectFilled(pillMin, pillMax, ImGui::GetColorU32(Util::Anim::ScaleAlpha(accent, Constants::SEGMENT_SELECTED_FILL_ALPHA)), pillRounding);
 			drawList->AddRect(pillMin, pillMax, ImGui::GetColorU32(Util::Anim::ScaleAlpha(accent, Constants::PALETTE_PILL_BORDER_ALPHA)), pillRounding,
 				ImDrawFlags_None, scale);
 
@@ -490,7 +489,7 @@ namespace GoToPalette
 				const float countWidth = ImGui::CalcTextSize(slot.count.c_str()).x + countPadX * 2.0f;
 				const ImVec2 chipMin(itemMin.x + slot.width - itemPadX - countWidth, itemMin.y + (itemHeight - lineHeight) * 0.5f);
 				const ImVec4 chipFill = Util::Anim::Lerp(Util::Anim::ScaleAlpha(textColor, Constants::PALETTE_COUNT_FILL_ALPHA),
-					Util::Anim::ScaleAlpha(accent, Constants::PALETTE_PILL_FILL_ALPHA * 2.0f), chosen);
+					Util::Anim::ScaleAlpha(accent, Constants::SEGMENT_SELECTED_FILL_ALPHA * 2.0f), chosen);
 				drawList->AddRectFilled(chipMin, ImVec2(chipMin.x + countWidth, chipMin.y + lineHeight), ImGui::GetColorU32(chipFill),
 					Constants::PALETTE_BADGE_ROUNDING * scale);
 				drawList->AddText(ImVec2(chipMin.x + countPadX, chipMin.y), ImGui::GetColorU32(labelColor), slot.count.c_str());
@@ -578,12 +577,12 @@ namespace GoToPalette
 				const ImVec4 accent = Util::Colors::GetAccent();
 				const float rowRounding = Constants::PALETTE_ROW_ROUNDING * scale;
 				const auto bar = Util::Anim::SelectionGlide(ImGui::GetID("##rowGlide"), ImVec2(origin.x, origin.y + selectedY),
-					ImVec2(origin.x + width, origin.y + selectedY + rowHeight), Constants::PALETTE_ROW_RATE);
+					ImVec2(origin.x + width, origin.y + selectedY + rowHeight), Constants::ANIM_GLIDE_RATE);
 				const ImVec2 barMin = bar.min;
 				const ImVec2 barMax = bar.max;
-				drawList->AddRectFilled(barMin, barMax, ImGui::GetColorU32(Util::Anim::ScaleAlpha(accent, Constants::PALETTE_SELECT_FILL_ALPHA)), rowRounding);
+				drawList->AddRectFilled(barMin, barMax, ImGui::GetColorU32(Util::Anim::ScaleAlpha(accent, Constants::NAV_SELECTED_FILL_ALPHA)), rowRounding);
 				const float barWidth = Constants::ANIM_SELECTED_BAR_WIDTH * scale;
-				drawList->AddRectFilled(ImVec2(barMin.x, barMin.y + rowHeight * Constants::PALETTE_SELECT_BAR_INSET), ImVec2(barMin.x + barWidth, barMax.y - rowHeight * Constants::PALETTE_SELECT_BAR_INSET),
+				drawList->AddRectFilled(ImVec2(barMin.x, barMin.y + rowHeight * Constants::NAV_SELECTED_BAR_INSET), ImVec2(barMin.x + barWidth, barMax.y - rowHeight * Constants::NAV_SELECTED_BAR_INSET),
 					ImGui::GetColorU32(accent), barWidth * 0.5f);
 
 				const bool mouseMoved = ImGui::GetIO().MouseDelta.x != 0.0f || ImGui::GetIO().MouseDelta.y != 0.0f;

@@ -121,6 +121,13 @@ namespace Util::Anim
 	/** @brief `color` with its alpha multiplied by `alpha`, packed. */
 	ImU32 ScaleAlphaU32(ImU32 color, float alpha);
 
+	/** @brief Fills a rect with a style colour at `strength` (a 0-1 alpha multiplier); draws nothing at zero. */
+	void FillLayer(ImDrawList* drawList, const ImVec2& min, const ImVec2& max, float rounding, ImGuiCol color, float strength);
+
+	/** @brief The hover / press / selected layers of a Blend as three stacked fills, each in its own style colour. */
+	void FillBlend(ImDrawList* drawList, const ImVec2& min, const ImVec2& max, float rounding, const Blend& blend,
+		ImGuiCol hoverColor = ImGuiCol_FrameBgHovered, ImGuiCol pressColor = ImGuiCol_ButtonActive, ImGuiCol selectedColor = ImGuiCol_Header);
+
 	/**
 	 * @brief Pushes ImGuiStyleVar_Alpha for something fading in, restarting each time `key` appears.
 	 * @param duration Seconds to run; 0 uses the popup time.

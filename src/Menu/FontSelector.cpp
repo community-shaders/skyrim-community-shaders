@@ -208,11 +208,7 @@ namespace MenuFonts::Selector
 				ThemeManager::Constants::SETTINGS_TITLE_SCALE_MAX,
 				"%.1fx",
 				ImGuiSliderFlags_AlwaysClamp);
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text(
-					"%s",
-					T("menu.settings.feature_header_scale_tooltip", "Scale multiplier for feature title text in the Settings tab."));
-			}
+			Util::HoverTip(T("menu.settings.feature_header_scale_tooltip", "Scale multiplier for feature title text in the Settings tab."));
 			ImGui::SameLine();
 			const std::string resetBtnLabel = std::format("{}##FeatureHeaderScale", T("menu.settings.reset", "Reset"));
 			if (Util::Button(resetBtnLabel.c_str())) {

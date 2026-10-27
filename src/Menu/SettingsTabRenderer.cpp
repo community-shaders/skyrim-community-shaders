@@ -270,24 +270,6 @@ namespace
 		return ImGui::Combo(label, currentItem, items, itemCount);
 	}
 
-	/** @brief Checkbox with a hover tooltip; returns true when the value changed. */
-	bool CheckboxTip(const char* label, bool* value, const char* tooltip)
-	{
-		const bool changed = ImGui::Checkbox(label, value);
-		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::TextUnformatted(tooltip);
-		return changed;
-	}
-
-	/** @brief Float slider with a hover tooltip; returns true when the value changed. */
-	bool SliderFloatTip(const char* label, float* value, float lo, float hi, const char* format, const char* tooltip, ImGuiSliderFlags flags = 0)
-	{
-		const bool changed = ImGui::SliderFloat(label, value, lo, hi, format, flags);
-		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::TextUnformatted(tooltip);
-		return changed;
-	}
-
 	/** @brief Rebinding row; while the binding differs from its default, a reset button follows it. */
 	void KeybindingRow(const char* label, std::vector<InputCombo>& combo, const std::vector<InputCombo>& defaultCombo, bool& capturing, const char* id)
 	{
@@ -330,12 +312,12 @@ void SettingsTabRenderer::RenderShadersSection()
 	auto shaderCache = globals::shaderCache;
 
 	bool useCustomShaders = shaderCache->IsEnabled();
-	if (CheckboxTip(T("menu.settings.use_custom_shaders", "Use Custom Shaders"), &useCustomShaders, T("menu.settings.use_custom_shaders_tooltip", "Disabling this effectively disables all features."))) {
+	if (Util::CheckboxTip(T("menu.settings.use_custom_shaders", "Use Custom Shaders"), &useCustomShaders, T("menu.settings.use_custom_shaders_tooltip", "Disabling this effectively disables all features."))) {
 		shaderCache->SetEnabled(useCustomShaders);
 	}
 
 	bool useDiskCache = shaderCache->IsDiskCache();
-	if (CheckboxTip(T("menu.settings.enable_disk_cache", "Enable Disk Cache"), &useDiskCache, T("menu.settings.enable_disk_cache_tooltip", "Disables loading shaders from disk and prevents saving compiled shaders to disk cache."))) {
+	if (Util::CheckboxTip(T("menu.settings.enable_disk_cache", "Enable Disk Cache"), &useDiskCache, T("menu.settings.enable_disk_cache_tooltip", "Disables loading shaders from disk and prevents saving compiled shaders to disk cache."))) {
 		shaderCache->SetDiskCache(useDiskCache);
 	}
 
@@ -345,25 +327,23 @@ void SettingsTabRenderer::RenderShadersSection()
 		shaderCache->SetSkipUnchangedShaders(skipUnchanged);
 	}
 	ImGui::EndDisabled();
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("%s", T("menu.settings.skip_unchanged_shaders_tooltip",
-							  "When enabled, each shader is recompiled from source only if its .hlsl file "
-							  "is newer than the cached .bin on disk. "
-							  "Shaders whose source has not changed are loaded directly from the disk cache, "
-							  "avoiding the full startup compilation cost. "
-							  "Useful for iterative testing: change a shader file and only that shader is rebuilt. "
-							  "Requires 'Enable Disk Cache' to be active."));
-	}
+	Util::HoverTip(T("menu.settings.skip_unchanged_shaders_tooltip",
+		"When enabled, each shader is recompiled from source only if its .hlsl file "
+		"is newer than the cached .bin on disk. "
+		"Shaders whose source has not changed are loaded directly from the disk cache, "
+		"avoiding the full startup compilation cost. "
+		"Useful for iterative testing: change a shader file and only that shader is rebuilt. "
+		"Requires 'Enable Disk Cache' to be active."));
 
 	bool useAsync = shaderCache->IsAsync();
-	if (CheckboxTip(T("menu.settings.enable_async", "Enable Async"), &useAsync, T("menu.settings.enable_async_tooltip", "Skips a shader being replaced if it hasn't been compiled yet. Also makes compilation blazingly fast!"))) {
+	if (Util::CheckboxTip(T("menu.settings.enable_async", "Enable Async"), &useAsync, T("menu.settings.enable_async_tooltip", "Skips a shader being replaced if it hasn't been compiled yet. Also makes compilation blazingly fast!"))) {
 		shaderCache->SetAsync(useAsync);
 	}
 
 	// Skip confirmation when clearing shader cache
 	auto& menuSettings = globals::menu->GetSettings();
 	bool skipConfirmation = menuSettings.SkipClearCacheConfirmation;
-	if (CheckboxTip(T("menu.settings.skip_clear_cache_dialogue", "Skip Clear Cache Dialogue"), &skipConfirmation, T("menu.settings.skip_clear_cache_dialogue_tooltip", "When checked, the shader cache will be cleared immediately without asking for confirmation."))) {
+	if (Util::CheckboxTip(T("menu.settings.skip_clear_cache_dialogue", "Skip Clear Cache Dialogue"), &skipConfirmation, T("menu.settings.skip_clear_cache_dialogue_tooltip", "When checked, the shader cache will be cleared immediately without asking for confirmation."))) {
 		menuSettings.SkipClearCacheConfirmation = skipConfirmation;
 	}
 
@@ -447,9 +427,7 @@ void SettingsTabRenderer::RenderLanguageSection()
 										  "Only {percent}% of the interface is translated in this language; the rest stays in English.")
 									  .c_str());
 	}
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("%s", T("menu.settings.language_tooltip", "Select the display language for the Community Shaders interface."));
-	}
+	Util::HoverTip(T("menu.settings.language_tooltip", "Select the display language for the Community Shaders interface."));
 }
 
 void SettingsTabRenderer::RenderInterfaceOptions()
@@ -462,16 +440,16 @@ void SettingsTabRenderer::RenderInterfaceOptions()
 	// animation speed option keep their meaning
 	auto& menuSettings = globals::menu->GetSettings();
 	bool animationsOn = !menuSettings.ReduceUIAnimations;
-	if (CheckboxTip(T("menu.settings.ui_animations", "UI animations"), &animationsOn, T("menu.settings.ui_animations_tooltip", "Hover fades, sliding highlights and fade-ins in the menu. Turn off to make every change snap instead of easing.")))
+	if (Util::CheckboxTip(T("menu.settings.ui_animations", "UI animations"), &animationsOn, T("menu.settings.ui_animations_tooltip", "Hover fades, sliding highlights and fade-ins in the menu. Turn off to make every change snap instead of easing.")))
 		menuSettings.ReduceUIAnimations = !animationsOn;
 	{
 		Util::DisableGuard disable(!animationsOn);
-		SliderFloatTip(T("menu.settings.animation_speed", "Animation speed"), &menuSettings.AnimationSpeed, ThemeManager::Constants::ANIM_SPEED_MIN, ThemeManager::Constants::ANIM_SPEED_MAX, "%.2fx", T("menu.settings.animation_speed_tooltip", "How fast menu animations run: 0.5x is slower, 2x is quicker. 1x is the default."), ImGuiSliderFlags_AlwaysClamp);
+		Util::SliderFloatTip(T("menu.settings.animation_speed", "Animation speed"), &menuSettings.AnimationSpeed, ThemeManager::Constants::ANIM_SPEED_MIN, ThemeManager::Constants::ANIM_SPEED_MAX, "%.2fx", T("menu.settings.animation_speed_tooltip", "How fast menu animations run: 0.5x is slower, 2x is quicker. 1x is the default."), ImGuiSliderFlags_AlwaysClamp);
 	}
 
 	SeparatorTextWithFont(T("menu.settings.section_window_layout", "Window & Layout"), Menu::FontRole::Subheading);
 
-	CheckboxTip(T("menu.settings.auto_hide_feature_list", "Auto-hide Feature List"), &globals::menu->GetSettings().AutoHideFeatureList, T("menu.settings.auto_hide_feature_list_tooltip", "Automatically hides the left feature list panel. Move cursor to the left edge to show it."));
+	Util::CheckboxTip(T("menu.settings.auto_hide_feature_list", "Auto-hide Feature List"), &globals::menu->GetSettings().AutoHideFeatureList, T("menu.settings.auto_hide_feature_list_tooltip", "Automatically hides the left feature list panel. Move cursor to the left edge to show it."));
 
 	{
 		FontRoleGuard comboFont(Menu::FontRole::Body);
@@ -488,20 +466,18 @@ void SettingsTabRenderer::RenderInterfaceOptions()
 
 	if (Util::Button(T("menu.settings.reset_window_layout", "Reset Window Layout")))
 		globals::menu->resetLayout = true;
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("%s", T("menu.settings.reset_window_layout_tooltip", "Moves the menu window back to the centre of the screen at its default size."));
-	}
+	Util::HoverTip(T("menu.settings.reset_window_layout_tooltip", "Moves the menu window back to the centre of the screen at its default size."));
 
-	if (CheckboxTip(T("menu.settings.require_shift_to_dock", "Require Shift to Dock"), &globals::menu->GetSettings().RequireShiftToDock, T("menu.settings.require_shift_to_dock_tooltip", "When enabled, you must hold Shift while dragging to dock/snap windows. Prevents accidental docking."))) {
+	if (Util::CheckboxTip(T("menu.settings.require_shift_to_dock", "Require Shift to Dock"), &globals::menu->GetSettings().RequireShiftToDock, T("menu.settings.require_shift_to_dock_tooltip", "When enabled, you must hold Shift while dragging to dock/snap windows. Prevents accidental docking."))) {
 		ImGui::GetIO().ConfigDockingWithShift = globals::menu->GetSettings().RequireShiftToDock;
 	}
 
 	SeparatorTextWithFont(T("menu.settings.section_tooltips_warnings", "Tooltips & Warnings"), Menu::FontRole::Subheading);
 
-	SliderFloatTip(T("menu.settings.tooltip_hover_delay", "Tooltip Hover Delay"), &themeSettings.TooltipHoverDelay, 0.0f, 2.0f, "%.2f s", T("menu.settings.tooltip_hover_delay_tooltip", "Time in seconds to wait before a tooltip appears when hovering over an item."), ImGuiSliderFlags_AlwaysClamp);
+	Util::SliderFloatTip(T("menu.settings.tooltip_hover_delay", "Tooltip Hover Delay"), &themeSettings.TooltipHoverDelay, 0.0f, 2.0f, "%.2f s", T("menu.settings.tooltip_hover_delay_tooltip", "Time in seconds to wait before a tooltip appears when hovering over an item."), ImGuiSliderFlags_AlwaysClamp);
 
 	bool warnForcedSettings = !globals::menu->GetSettings().SkipConstraintWarning;
-	if (CheckboxTip(T("menu.settings.warn_forced_settings", "Warn When Settings Are Forced"), &warnForcedSettings, T("menu.settings.warn_forced_settings_tooltip", "Shows a popup when a setting change makes another feature force one of its settings to a fixed value.")))
+	if (Util::CheckboxTip(T("menu.settings.warn_forced_settings", "Warn When Settings Are Forced"), &warnForcedSettings, T("menu.settings.warn_forced_settings_tooltip", "Shows a popup when a setting change makes another feature force one of its settings to a fixed value.")))
 		globals::menu->GetSettings().SkipConstraintWarning = !warnForcedSettings;
 }
 
@@ -511,32 +487,32 @@ void SettingsTabRenderer::RenderHeaderEffectsSection()
 
 	SeparatorTextWithFont(T("menu.settings.section_header", "Header"), Menu::FontRole::Subheading);
 
-	if (CheckboxTip(T("menu.settings.use_monochrome_icons", "Use Monochrome Icons"), &themeSettings.UseMonochromeIcons, T("menu.settings.use_monochrome_icons_tooltip", "Uses white monochrome icons that adapt to your theme's text color"))) {
+	if (Util::CheckboxTip(T("menu.settings.use_monochrome_icons", "Use Monochrome Icons"), &themeSettings.UseMonochromeIcons, T("menu.settings.use_monochrome_icons_tooltip", "Uses white monochrome icons that adapt to your theme's text color"))) {
 		Util::IconLoader::PendingReload() = true;
 	}
 	ImGui::SameLine();
-	if (CheckboxTip(T("menu.settings.use_monochrome_cs_logo", "Use Monochrome CS Logo"), &themeSettings.UseMonochromeLogo, T("menu.settings.use_monochrome_cs_logo_tooltip", "Uses monochrome version of the Community Shaders logo"))) {
+	if (Util::CheckboxTip(T("menu.settings.use_monochrome_cs_logo", "Use Monochrome CS Logo"), &themeSettings.UseMonochromeLogo, T("menu.settings.use_monochrome_cs_logo_tooltip", "Uses monochrome version of the Community Shaders logo"))) {
 		Util::IconLoader::PendingReload() = true;
 	}
 
-	CheckboxTip(T("menu.settings.center_header_title", "Center Header Title"), &themeSettings.CenterHeader, T("menu.settings.center_header_title_tooltip", "Centers the Community Shaders title and logo in the header title bar"));
+	Util::CheckboxTip(T("menu.settings.center_header_title", "Center Header Title"), &themeSettings.CenterHeader, T("menu.settings.center_header_title_tooltip", "Centers the Community Shaders title and logo in the header title bar"));
 
-	CheckboxTip(T("menu.settings.show_status_bar", "Show Status Bar"), &themeSettings.ShowFooter, T("menu.settings.show_status_bar_tooltip",
-																									  "Shows a bar at the bottom of the window with unsaved changes, shader compilation, "
-																									  "failed shaders and feature issues, plus the GPU, game version and swap chain"));
+	Util::CheckboxTip(T("menu.settings.show_status_bar", "Show Status Bar"), &themeSettings.ShowFooter, T("menu.settings.show_status_bar_tooltip",
+																											"Shows a bar at the bottom of the window with unsaved changes, shader compilation, "
+																											"failed shaders and feature issues, plus the GPU, game version and swap chain"));
 
 	SeparatorTextWithFont(T("menu.settings.visual_effects", "Visual Effects"), Menu::FontRole::Subheading);
 
-	if (CheckboxTip(T("menu.settings.background_blur", "Background Blur"), &themeSettings.BackgroundBlurEnabled, T("menu.settings.background_blur_tooltip", "Applies a blur effect to the background behind the menu window."))) {
+	if (Util::CheckboxTip(T("menu.settings.background_blur", "Background Blur"), &themeSettings.BackgroundBlurEnabled, T("menu.settings.background_blur_tooltip", "Applies a blur effect to the background behind the menu window."))) {
 		BackgroundBlur::SetEnabled(themeSettings.BackgroundBlurEnabled);
 	}
 
-	CheckboxTip(T("menu.settings.menu_fade", "Menu Fade"), &themeSettings.MenuFadeEnabled, T("menu.settings.menu_fade_tooltip", "Fades the menu and its background blur in and out when it is opened or closed."));
+	Util::CheckboxTip(T("menu.settings.menu_fade", "Menu Fade"), &themeSettings.MenuFadeEnabled, T("menu.settings.menu_fade_tooltip", "Fades the menu and its background blur in and out when it is opened or closed."));
 
-	if (CheckboxTip(T("menu.settings.use_custom_cursor", "Use Custom Theme Cursor"), &themeSettings.UseCustomCursor, T("menu.settings.use_custom_cursor_tooltip",
-																														 "Loads cursor PNGs from the active theme folder (Themes/<preset>/).\n"
-																														 "Supported files include cursor.png (arrow), cursor_text.png (typing), cursor_resize_ew.png, cursor_resize_ns.png, and more.\n"
-																														 "Missing types fall back to the default ImGui cursor. Configure per-type hotspots in theme JSON."))) {
+	if (Util::CheckboxTip(T("menu.settings.use_custom_cursor", "Use Custom Theme Cursor"), &themeSettings.UseCustomCursor, T("menu.settings.use_custom_cursor_tooltip",
+																															   "Loads cursor PNGs from the active theme folder (Themes/<preset>/).\n"
+																															   "Supported files include cursor.png (arrow), cursor_text.png (typing), cursor_resize_ew.png, cursor_resize_ns.png, and more.\n"
+																															   "Missing types fall back to the default ImGui cursor. Configure per-type hotspots in theme JSON."))) {
 		globals::menu->pendingCursorReload = true;
 	}
 
@@ -655,9 +631,7 @@ void SettingsTabRenderer::RenderThemesSection()
 		std::filesystem::path themesPath = Util::PathHelpers::GetThemesRealPath();
 		ShellExecuteA(NULL, "open", themesPath.string().c_str(), NULL, NULL, SW_SHOWNORMAL);
 	}
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("%s", T("menu.settings.open_themes_folder_tooltip", "Opens the Themes folder where you can add custom theme files."));
-	}
+	Util::HoverTip(T("menu.settings.open_themes_folder_tooltip", "Opens the Themes folder where you can add custom theme files."));
 
 	// Selected theme section: name + description
 	ImGui::Spacing();
@@ -838,9 +812,7 @@ void SettingsTabRenderer::RenderThemesSection()
 			}
 		}
 
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("%s", T("menu.settings.theme_name_tooltip", "File name for the theme (without .json extension)"));
-		}
+		Util::HoverTip(T("menu.settings.theme_name_tooltip", "File name for the theme (without .json extension)"));
 
 		// Highlight the input field if invalid and validation error is shown
 		if (isDuplicateDisplayName && showValidationError) {
@@ -856,17 +828,13 @@ void SettingsTabRenderer::RenderThemesSection()
 			ImGui::TextColored(themeSettings.StatusPalette.Error, "%s", T("menu.settings.display_name_duplicate", "A theme with this display name already exists"));
 		}
 
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("%s", T("menu.settings.display_name_tooltip", "Human-readable name shown in the dropdown"));
-		}
+		Util::HoverTip(T("menu.settings.display_name_tooltip", "Human-readable name shown in the dropdown"));
 
 		{
 			float scale = Util::GetUIScale();
 			ImGui::InputTextMultiline(T("menu.settings.description", "Description"), newThemeDescription, sizeof(newThemeDescription), ImVec2(ThemeManager::Constants::THEME_DESC_BOX_WIDTH * scale, ThemeManager::Constants::THEME_DESC_BOX_HEIGHT * scale));
 		}
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("%s", T("menu.settings.description_tooltip", "Optional description for the theme"));
-		}
+		Util::HoverTip(T("menu.settings.description_tooltip", "Optional description for the theme"));
 
 		ImGui::Separator();
 
@@ -929,7 +897,7 @@ void SettingsTabRenderer::RenderFontsSection()
 	SeparatorTextWithFont(T("menu.settings.font", "Font"), Menu::FontRole::Subheading);
 
 	bool& useAutoFont = menuInstance->GetSettings().UseResolutionFont;
-	if (CheckboxTip(T("menu.settings.use_resolution_based_font_size", "Use resolution-based font size"), &useAutoFont, T("menu.settings.use_resolution_based_font_size_tooltip", "When enabled, the UI font size scales with your screen resolution. Disable to set a fixed size."))) {
+	if (Util::CheckboxTip(T("menu.settings.use_resolution_based_font_size", "Use resolution-based font size"), &useAutoFont, T("menu.settings.use_resolution_based_font_size_tooltip", "When enabled, the UI font size scales with your screen resolution. Disable to set a fixed size."))) {
 		if (!useAutoFont) {
 			// Seed the fixed-size slider with the current effective size so it doesn't jump
 			float effective = ThemeManager::ResolveFontSize(*menuInstance);
@@ -990,9 +958,7 @@ void SettingsTabRenderer::RenderFontsSection()
 		refreshFontCatalog(true);
 		MenuFonts::GetAtlasState().pendingFontReload = true;
 	}
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::TextUnformatted(T("menu.settings.refresh_font_families_tooltip", "Rescan the Fonts directory after adding or removing font files."));
-	}
+	Util::HoverTip(T("menu.settings.refresh_font_families_tooltip", "Rescan the Fonts directory after adding or removing font files."));
 }
 
 void SettingsTabRenderer::RenderStylingSection()
@@ -1007,10 +973,10 @@ void SettingsTabRenderer::RenderStylingSection()
 				ImGui::GetStyle().FontScaleMain = exp2(themeSettings.GlobalScale);
 			RenderInterfaceOptions();
 			SeparatorTextWithFont(T("menu.settings.scrollbar_opacity", "Scrollbar Opacity"), Menu::FontRole::Subheading);
-			SliderFloatTip(T("menu.settings.track_opacity", "Track Opacity"), &themeSettings.ScrollbarOpacity.Background, 0.0f, 1.0f, "%.2f", T("menu.settings.track_opacity_tooltip", "Controls the opacity of the scrollbar track/channel (the background area behind the scrollbar)."));
-			SliderFloatTip(T("menu.settings.thumb_opacity", "Thumb Opacity"), &themeSettings.ScrollbarOpacity.Thumb, 0.0f, 1.0f, "%.2f", T("menu.settings.thumb_opacity_tooltip", "Controls the opacity of the scrollbar thumb (the draggable part)."));
-			SliderFloatTip(T("menu.settings.thumb_hovered_opacity", "Thumb Hovered Opacity"), &themeSettings.ScrollbarOpacity.ThumbHovered, 0.0f, 1.0f, "%.2f", T("menu.settings.thumb_hovered_opacity_tooltip", "Controls the opacity of the scrollbar thumb when hovered."));
-			SliderFloatTip(T("menu.settings.thumb_active_opacity", "Thumb Active Opacity"), &themeSettings.ScrollbarOpacity.ThumbActive, 0.0f, 1.0f, "%.2f", T("menu.settings.thumb_active_opacity_tooltip", "Controls the opacity of the scrollbar thumb when being dragged."));
+			Util::SliderFloatTip(T("menu.settings.track_opacity", "Track Opacity"), &themeSettings.ScrollbarOpacity.Background, 0.0f, 1.0f, "%.2f", T("menu.settings.track_opacity_tooltip", "Controls the opacity of the scrollbar track/channel (the background area behind the scrollbar)."));
+			Util::SliderFloatTip(T("menu.settings.thumb_opacity", "Thumb Opacity"), &themeSettings.ScrollbarOpacity.Thumb, 0.0f, 1.0f, "%.2f", T("menu.settings.thumb_opacity_tooltip", "Controls the opacity of the scrollbar thumb (the draggable part)."));
+			Util::SliderFloatTip(T("menu.settings.thumb_hovered_opacity", "Thumb Hovered Opacity"), &themeSettings.ScrollbarOpacity.ThumbHovered, 0.0f, 1.0f, "%.2f", T("menu.settings.thumb_hovered_opacity_tooltip", "Controls the opacity of the scrollbar thumb when hovered."));
+			Util::SliderFloatTip(T("menu.settings.thumb_active_opacity", "Thumb Active Opacity"), &themeSettings.ScrollbarOpacity.ThumbActive, 0.0f, 1.0f, "%.2f", T("menu.settings.thumb_active_opacity_tooltip", "Controls the opacity of the scrollbar thumb when being dragged."));
 			SeparatorTextWithFont(T("menu.settings.section_scrollbar", "Scrollbar"), Menu::FontRole::Subheading);
 			ImGui::SliderFloat(T("menu.settings.scrollbar_size", "Scrollbar Size"), &style.ScrollbarSize, 1.0f, 20.0f, "%.0f");
 			ImGui::SliderFloat(T("menu.settings.grab_min_size", "Grab Min Size"), &style.GrabMinSize, 1.0f, 20.0f, "%.0f");
@@ -1059,11 +1025,9 @@ void SettingsTabRenderer::RenderStylingSection()
 				}
 			}
 			ImGui::SliderFloat2(T("menu.settings.button_text_align", "Button Text Align"), (float*)&style.ButtonTextAlign, 0.0f, 1.0f, "%.2f");
-			if (auto _tt = Util::HoverTooltipWrapper())
-				ImGui::Text("%s", T("menu.settings.button_text_align_tooltip", "Alignment applies when a button is larger than its text content."));
+			Util::HoverTip(T("menu.settings.button_text_align_tooltip", "Alignment applies when a button is larger than its text content."));
 			ImGui::SliderFloat2(T("menu.settings.selectable_text_align", "Selectable Text Align"), (float*)&style.SelectableTextAlign, 0.0f, 1.0f, "%.2f");
-			if (auto _tt = Util::HoverTooltipWrapper())
-				ImGui::Text("%s", T("menu.settings.selectable_text_align_tooltip", "Alignment applies when a selectable is larger than its text content."));
+			Util::HoverTip(T("menu.settings.selectable_text_align_tooltip", "Alignment applies when a selectable is larger than its text content."));
 			ImGui::SliderFloat(T("menu.settings.separator_text_border_size", "Separator Text Border Size"), &style.SeparatorTextBorderSize, 0.0f, 10.0f, "%.0f");
 			ImGui::SliderFloat2(T("menu.settings.separator_text_align", "Separator Text Align"), (float*)&style.SeparatorTextAlign, 0.0f, 1.0f, "%.2f");
 			ImGui::SliderFloat2(T("menu.settings.separator_text_padding", "Separator Text Padding"), (float*)&style.SeparatorTextPadding, 0.0f, 40.0f, "%.0f");
@@ -1159,55 +1123,54 @@ namespace
 	/** @brief The controls of one surface role. */
 	void DrawSurfaceRoleControls(SurfaceRole role, Util::Surface::RoleSettings& s)
 	{
-		CheckboxTip(T("menu.settings.surface_enabled", "Enabled"), &s.enabled, T("menu.settings.surface_enabled_tooltip", "Draw this surface. When off, the content still shows, just without the backing."));
+		Util::CheckboxTip(T("menu.settings.surface_enabled", "Enabled"), &s.enabled, T("menu.settings.surface_enabled_tooltip", "Draw this surface. When off, the content still shows, just without the backing."));
 		DrawSurfacePreview(role, s);
 
 		Util::DisableGuard disabled(!s.enabled);
 
 		if (role == SurfaceRole::NavSelected) {
-			SliderFloatTip(T("menu.settings.surface_nav_fill_opacity", "Fill Opacity"), &s.fillAlpha, 0.0f, 1.0f, "%.2f", T("menu.settings.surface_nav_fill_opacity_tooltip", "Opacity of the accent colour fill behind the selected row."));
-			CheckboxTip(T("menu.settings.surface_accent_bar", "Accent Bar"), &s.accentBar, T("menu.settings.surface_accent_bar_tooltip", "Draw a short accent bar on the left edge of the selected row."));
+			Util::SliderFloatTip(T("menu.settings.surface_nav_fill_opacity", "Fill Opacity"), &s.fillAlpha, 0.0f, 1.0f, "%.2f", T("menu.settings.surface_nav_fill_opacity_tooltip", "Opacity of the accent colour fill behind the selected row."));
+			Util::CheckboxTip(T("menu.settings.surface_accent_bar", "Accent Bar"), &s.accentBar, T("menu.settings.surface_accent_bar_tooltip", "Draw a short accent bar on the left edge of the selected row."));
 			{
 				Util::DisableGuard barDisabled(!s.accentBar);
-				SliderFloatTip(T("menu.settings.surface_accent_bar_width", "Accent Bar Width"), &s.accentBarWidth, 0.0f, 12.0f, "%.1f", T("menu.settings.surface_accent_bar_width_tooltip", "Width of the accent bar in pixels at 1080p."));
+				Util::SliderFloatTip(T("menu.settings.surface_accent_bar_width", "Accent Bar Width"), &s.accentBarWidth, 0.0f, 12.0f, "%.1f", T("menu.settings.surface_accent_bar_width_tooltip", "Width of the accent bar in pixels at 1080p."));
 			}
 			return;
 		}
 
 		if (role == SurfaceRole::HomeCard) {
-			SliderFloatTip(T("menu.settings.surface_padding", "Inner Padding"), &s.padding, 0.0f, 48.0f, "%.0f", T("menu.settings.surface_padding_tooltip", "Space between the card edge and its content, in pixels at 1080p. Applies even when the surface is disabled."));
+			Util::SliderFloatTip(T("menu.settings.surface_padding", "Inner Padding"), &s.padding, 0.0f, 48.0f, "%.0f", T("menu.settings.surface_padding_tooltip", "Space between the card edge and its content, in pixels at 1080p. Applies even when the surface is disabled."));
 		}
 
 		SeparatorTextWithFont(T("menu.settings.surface_fill", "Fill"), Menu::FontRole::Subheading);
-		SliderFloatTip(T("menu.settings.surface_fill_lift", "Fill Lift"), &s.fillLift, 0.0f, 0.5f, "%.3f", T("menu.settings.surface_fill_lift_tooltip", "How far the window colour is lightened toward white to make the surface read above the page."));
-		SliderFloatTip(T("menu.settings.surface_fill_opacity", "Fill Opacity"), &s.fillAlpha, 0.0f, 1.0f, "%.2f", T("menu.settings.surface_fill_opacity_tooltip", "Multiplier on the fill opacity."));
+		Util::SliderFloatTip(T("menu.settings.surface_fill_lift", "Fill Lift"), &s.fillLift, 0.0f, 0.5f, "%.3f", T("menu.settings.surface_fill_lift_tooltip", "How far the window colour is lightened toward white to make the surface read above the page."));
+		Util::SliderFloatTip(T("menu.settings.surface_fill_opacity", "Fill Opacity"), &s.fillAlpha, 0.0f, 1.0f, "%.2f", T("menu.settings.surface_fill_opacity_tooltip", "Multiplier on the fill opacity."));
 
 		bool useStyleRounding = s.rounding < 0.0f;
-		if (CheckboxTip(T("menu.settings.surface_use_style_rounding", "Use Style Rounding"), &useStyleRounding, T("menu.settings.surface_use_style_rounding_tooltip", "Follow the corner rounding from the Styling section instead of a custom radius.")))
+		if (Util::CheckboxTip(T("menu.settings.surface_use_style_rounding", "Use Style Rounding"), &useStyleRounding, T("menu.settings.surface_use_style_rounding_tooltip", "Follow the corner rounding from the Styling section instead of a custom radius.")))
 			s.rounding = useStyleRounding ? -1.0f : std::clamp(ImGui::GetStyle().ChildRounding, 0.0f, 24.0f);
 		if (!useStyleRounding)
-			SliderFloatTip(T("menu.settings.surface_rounding", "Corner Radius"), &s.rounding, 0.0f, 24.0f, "%.0f", T("menu.settings.surface_rounding_tooltip", "Corner radius in pixels at 1080p."));
+			Util::SliderFloatTip(T("menu.settings.surface_rounding", "Corner Radius"), &s.rounding, 0.0f, 24.0f, "%.0f", T("menu.settings.surface_rounding_tooltip", "Corner radius in pixels at 1080p."));
 
 		SeparatorTextWithFont(T("menu.settings.surface_border", "Border"), Menu::FontRole::Subheading);
-		CheckboxTip(T("menu.settings.surface_border_enabled", "Border"), &s.border, T("menu.settings.surface_border_enabled_tooltip", "Draw a hairline border around the surface."));
+		Util::CheckboxTip(T("menu.settings.surface_border_enabled", "Border"), &s.border, T("menu.settings.surface_border_enabled_tooltip", "Draw a hairline border around the surface."));
 		{
 			Util::DisableGuard borderDisabled(!s.border);
-			SliderFloatTip(T("menu.settings.surface_border_opacity", "Border Opacity"), &s.borderAlpha, 0.0f, 1.0f, "%.2f", T("menu.settings.surface_border_opacity_tooltip", "Opacity of the default white hairline."));
-			CheckboxTip(T("menu.settings.surface_border_use_color", "Custom Border Colour"), &s.useBorderColor, T("menu.settings.surface_border_use_color_tooltip", "Use your own border colour instead of the white hairline. Cards that signal a status keep their status colour."));
+			Util::SliderFloatTip(T("menu.settings.surface_border_opacity", "Border Opacity"), &s.borderAlpha, 0.0f, 1.0f, "%.2f", T("menu.settings.surface_border_opacity_tooltip", "Opacity of the default white hairline."));
+			Util::CheckboxTip(T("menu.settings.surface_border_use_color", "Custom Border Colour"), &s.useBorderColor, T("menu.settings.surface_border_use_color_tooltip", "Use your own border colour instead of the white hairline. Cards that signal a status keep their status colour."));
 			if (s.useBorderColor) {
 				ImGui::ColorEdit4(T("menu.settings.surface_border_color", "Border Colour"), reinterpret_cast<float*>(&s.borderColor));
-				if (auto _tt = Util::HoverTooltipWrapper())
-					ImGui::TextUnformatted(T("menu.settings.surface_border_color_tooltip", "Colour and opacity of the border."));
+				Util::HoverTip(T("menu.settings.surface_border_color_tooltip", "Colour and opacity of the border."));
 			}
 		}
 
 		SeparatorTextWithFont(T("menu.settings.surface_shadow", "Shadow"), Menu::FontRole::Subheading);
-		CheckboxTip(T("menu.settings.surface_shadow_enabled", "Shadow"), &s.shadow, T("menu.settings.surface_shadow_enabled_tooltip", "Draw a soft drop shadow behind the surface."));
+		Util::CheckboxTip(T("menu.settings.surface_shadow_enabled", "Shadow"), &s.shadow, T("menu.settings.surface_shadow_enabled_tooltip", "Draw a soft drop shadow behind the surface."));
 		{
 			Util::DisableGuard shadowDisabled(!s.shadow);
-			SliderFloatTip(T("menu.settings.surface_shadow_spread", "Shadow Spread"), &s.shadowSpread, 0.0f, 32.0f, "%.0f", T("menu.settings.surface_shadow_spread_tooltip", "How far the shadow grows past the surface edge, in pixels at 1080p."));
-			SliderFloatTip(T("menu.settings.surface_shadow_opacity", "Shadow Opacity"), &s.shadowAlpha, 0.0f, 1.0f, "%.2f", T("menu.settings.surface_shadow_opacity_tooltip", "Opacity of the black shadow."));
-			SliderFloatTip(T("menu.settings.surface_shadow_offset", "Shadow Drop"), &s.shadowOffsetY, -16.0f, 16.0f, "%.0f", T("menu.settings.surface_shadow_offset_tooltip", "Vertical shadow offset in pixels at 1080p. Positive values drop it below the surface."));
+			Util::SliderFloatTip(T("menu.settings.surface_shadow_spread", "Shadow Spread"), &s.shadowSpread, 0.0f, 32.0f, "%.0f", T("menu.settings.surface_shadow_spread_tooltip", "How far the shadow grows past the surface edge, in pixels at 1080p."));
+			Util::SliderFloatTip(T("menu.settings.surface_shadow_opacity", "Shadow Opacity"), &s.shadowAlpha, 0.0f, 1.0f, "%.2f", T("menu.settings.surface_shadow_opacity_tooltip", "Opacity of the black shadow."));
+			Util::SliderFloatTip(T("menu.settings.surface_shadow_offset", "Shadow Drop"), &s.shadowOffsetY, -16.0f, 16.0f, "%.0f", T("menu.settings.surface_shadow_offset_tooltip", "Vertical shadow offset in pixels at 1080p. Positive values drop it below the surface."));
 		}
 	}
 }
@@ -1219,16 +1182,14 @@ void SettingsTabRenderer::RenderSurfacesSection()
 	ImGui::TextWrapped("%s", T("menu.settings.surfaces_intro", "Backing, border and shadow of the menu cards and highlights. Changes apply immediately and are saved with the theme."));
 	if (Util::Button(T("menu.settings.reset_surfaces", "Reset surfaces to theme defaults")))
 		surfaces = Util::Surface::Settings{};
-	if (auto _tt = Util::HoverTooltipWrapper())
-		ImGui::TextUnformatted(T("menu.settings.reset_surfaces_tooltip", "Restores every surface below to its built-in look. Save the theme to keep it."));
+	Util::HoverTip(T("menu.settings.reset_surfaces_tooltip", "Restores every surface below to its built-in look. Save the theme to keep it."));
 
 	for (size_t i = 0; i < static_cast<size_t>(SurfaceRole::Count); ++i) {
 		const auto role = static_cast<SurfaceRole>(i);
 		ImGui::PushID(Util::Surface::RoleKey(role));
 		const auto label = std::format("{}###Surface{}", GetSurfaceRoleTitle(role), Util::Surface::RoleKey(role));
 		const bool open = ImGui::CollapsingHeader(label.c_str(), role == SurfaceRole::HomeCard ? ImGuiTreeNodeFlags_DefaultOpen : 0);
-		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::TextUnformatted(GetSurfaceRoleHint(role));
+		Util::HoverTip(GetSurfaceRoleHint(role));
 		if (open)
 			DrawSurfaceRoleControls(role, surfaces.roles[i]);
 		ImGui::PopID();

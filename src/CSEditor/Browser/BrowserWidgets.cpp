@@ -352,12 +352,7 @@ namespace BrowserUI
 			const ImVec2 min = ImGui::GetItemRectMin();
 			const ImVec2 max = ImGui::GetItemRectMax();
 			const float rounding = ImGui::GetStyle().FrameRounding;
-			if (blend.hover > 0.0f)
-				drawList->AddRectFilled(min, max, Util::Anim::ScaleAlphaU32(ImGui::GetColorU32(ImGuiCol_FrameBgHovered), blend.hover), rounding);
-			if (blend.press > 0.0f)
-				drawList->AddRectFilled(min, max, Util::Anim::ScaleAlphaU32(ImGui::GetColorU32(ImGuiCol_ButtonActive), blend.press), rounding);
-			if (blend.selected > 0.0f)
-				drawList->AddRectFilled(min, max, Util::Anim::ScaleAlphaU32(ImGui::GetColorU32(ImGuiCol_Header), blend.selected), rounding);
+			Util::Anim::FillBlend(drawList, min, max, rounding, blend);
 			return { clicked, blend };
 		}
 	}
@@ -367,9 +362,7 @@ namespace BrowserUI
 		const auto [clicked, blend] = QuietButton(id, active);
 		ImU32 glyphColor = color;
 		if (!glyphColor) {
-			// Secondary -> text on hover, then -> accent while selected
-			const ImVec4 resting = Util::Anim::Lerp(Util::Colors::GetSecondary(), ImGui::GetStyleColorVec4(ImGuiCol_Text), blend.hover);
-			glyphColor = ImGui::GetColorU32(Util::Anim::Lerp(resting, Util::Colors::GetAccent(), blend.selected));
+			glyphColor = Util::QuietIconColor(blend.hover, blend.selected);
 		}
 		const float size = IconButtonSize();
 		Icons::DrawCenteredGlyph(ImGui::GetWindowDrawList(), ImGui::GetItemRectMin(), ImVec2(size, size), glyph, glyphColor);
@@ -514,7 +507,7 @@ namespace BrowserUI
 			return;
 		const float x0 = ImGui::TableGetCellBgRect(table, table->CurrentColumn).Min.x;
 		ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(x0, table->RowPosY1),
-			ImVec2(x0 + ThemeManager::Constants::CSE_ROW_ACCENT_WIDTH * Util::GetUIScale(), table->RowPosY1 + rowHeight), color);
+			ImVec2(x0 + ThemeManager::Constants::ANIM_SELECTED_BAR_WIDTH * Util::GetUIScale(), table->RowPosY1 + rowHeight), color);
 	}
 
 	namespace
