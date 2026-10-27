@@ -357,6 +357,7 @@ public:
 		static constexpr float ANIM_SELECT_RATE = 14.0f;                  // Selection highlight blend speed
 		static constexpr float ANIM_EPSILON = 0.002f;                     // Blend within this of its target snaps to it
 		static constexpr float ANIM_POPUP_SECONDS = 0.14f;                // Popup and palette fade / scale-in time
+		static constexpr float ANIM_POPUP_MIN_VISIBILITY = 0.002f;        // Floor for a fading popup's alpha, so it is still submitted on the frame that closes it
 		static constexpr float ANIM_POPUP_GHOST_MAX_GAP_SECONDS = 0.15f;  // A closed popup only fades out if it was open this recently, so hiding the whole menu leaves no ghost
 		static constexpr float ANIM_POPUP_SCALE_FROM = 0.97f;             // Palette panel scale at the start of its fade-in
 		static constexpr float ANIM_PAGE_ENTER_SECONDS = 0.18f;           // Page, feature page and Home card fade-in time

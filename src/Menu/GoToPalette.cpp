@@ -33,6 +33,7 @@ namespace GoToPalette
 
 		bool g_openRequested = false;
 		bool g_open = false;
+		ImGuiID g_refocusParentId = 0;  // The window to focus again on the frame after the palette closed
 		Scope g_openScope = Scope::All;
 
 		struct State
@@ -563,8 +564,13 @@ namespace GoToPalette
 		}
 
 		// A click outside the panel makes ImGui drop window focus, and closing a popup only restores focus that is
-		// still on it, so the menu that opened the palette gets it back by hand when the palette goes
-		ImGuiWindow* const parentWindow = ImGui::GetCurrentWindow();
+		// still on it, so the menu that opened the palette gets it back by hand once the palette is gone
+		if (g_refocusParentId != 0 && !ImGui::IsPopupOpen(kPopupId)) {
+			if (ImGuiWindow* parent = ImGui::FindWindowByID(g_refocusParentId))
+				ImGui::FocusWindow(parent);
+			g_refocusParentId = 0;
+		}
+		const ImGuiID parentWindowId = ImGui::GetCurrentWindow()->ID;
 
 		const ImGuiViewport* viewport = ImGui::GetMainViewport();
 		// Fades in and grows slightly from the centre each time it opens
@@ -574,7 +580,8 @@ namespace GoToPalette
 		const float exitProgress = closing ? std::min(1.0f, static_cast<float>(ImGui::GetTime() - g_state.closeStartedAt) * Util::Anim::Speed() /
 																Constants::ANIM_POPUP_SECONDS) :
 		                                     0.0f;
-		const float visibility = enter * (1.0f - Util::Anim::EaseOutCubic(exitProgress));
+		// Never exactly zero: a window drawn at zero alpha may not be submitted, and the close below has to run inside it
+		const float visibility = std::max(Constants::ANIM_POPUP_MIN_VISIBILITY, enter * (1.0f - Util::Anim::EaseOutCubic(exitProgress)));
 		const float grow = Constants::ANIM_POPUP_SCALE_FROM + (1.0f - Constants::ANIM_POPUP_SCALE_FROM) * visibility;
 		ImGui::SetNextWindowPos(viewport->GetCenter(), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
 		ImGui::SetNextWindowSize(ImVec2(viewport->Size.x * Constants::PALETTE_WIDTH_RATIO * grow, viewport->Size.y * Constants::PALETTE_HEIGHT_RATIO * grow),
@@ -725,7 +732,7 @@ namespace GoToPalette
 		if ((chosen || close) && !closing) {
 			if (Util::Anim::ReducedMotion()) {
 				ImGui::CloseCurrentPopup();
-				ImGui::FocusWindow(parentWindow);
+				g_refocusParentId = parentWindowId;
 			} else
 				g_state.closeStartedAt = ImGui::GetTime();
 			if (chosen) {
@@ -735,7 +742,7 @@ namespace GoToPalette
 		}
 		if (closing && exitProgress >= 1.0f) {
 			ImGui::CloseCurrentPopup();
-			ImGui::FocusWindow(parentWindow);
+			g_refocusParentId = parentWindowId;
 		}
 		ImGui::EndPopup();
 		ImGui::PopStyleVar();
