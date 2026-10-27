@@ -554,19 +554,11 @@ SceneWidgetBinding::Guard::Guard(const char* a_label, const Value& a_value, Gutt
 		ImGui::PushItemFlag(ImGuiItemFlags_MixedValue, true);
 		mixedFlagPushed = true;
 	}
-
-	// The control itself carries the provenance too, so a slider reads without tracing back to its gutter.
-	if (const auto tint = ResolveProvenanceColor()) {
-		Util::PushTintedFrameStyle(*tint);
-		tintPushed = true;
-	}
 }
 
 SceneWidgetBinding::Guard::~Guard()
 {
 	// Finish always runs on the happy path; this only closes scopes an exception skipped.
-	if (tintPushed)
-		Util::PopTintedFrameStyle();
 	if (mixedFlagPushed)
 		ImGui::PopItemFlag();
 	if (disabledOpened)
@@ -656,11 +648,6 @@ void SceneWidgetBinding::Guard::BindBaseline()
 		DrawBaselineGutter();
 	}
 	PushCompensatedItemWidth();
-
-	if (const auto tint = ResolveBaselineColor()) {
-		Util::PushTintedFrameStyle(*tint);
-		tintPushed = true;
-	}
 }
 
 SceneWidgetBinding::BaselineLayer SceneWidgetBinding::Guard::ResolveBaselineLayer(std::string& a_packId) const
@@ -698,6 +685,7 @@ std::optional<ImVec4> SceneWidgetBinding::Guard::ResolveBaselineColor() const
 	case BaselineLayer::Pack:
 		return Util::Colors::GetWarning();
 	case BaselineLayer::Edited:
+		return Util::Colors::GetSecondary();
 	case BaselineLayer::Sketch:
 		return Util::Colors::GetSuccess();
 	case BaselineLayer::Scene:
@@ -757,6 +745,41 @@ void SceneWidgetBinding::Guard::DrawBaselineGutter()
 
 	ImGui::PopID();
 	ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x);
+}
+
+bool SceneWidgetBinding::Guard::DrawBaselineMarker() const
+{
+	// Edited and pack-supplied values get a slim bar left of the control, like an editor's changed-line
+	// marker, so the control itself keeps its normal look
+	if (baselineLayer != BaselineLayer::Edited && baselineLayer != BaselineLayer::Pack)
+		return false;
+	using Constants = ThemeManager::Constants;
+	const ImVec2 itemMin = ImGui::GetItemRectMin();
+	const ImVec2 itemMax = ImGui::GetItemRectMax();
+	const float gap = ImGui::GetStyle().ItemInnerSpacing.x;
+	const float width = Constants::BASELINE_MARKER_WIDTH * Util::GetUIScale();
+	const float inset = (itemMax.y - itemMin.y) * Constants::NAV_SELECTED_BAR_INSET;
+	const ImVec2 barMin(itemMin.x - gap - width, itemMin.y + inset);
+	const ImVec2 barMax(itemMin.x - gap, itemMax.y - inset);
+	// The hit area spans the whole gap, so the thin bar is easy to point at
+	const bool hovered = ImGui::IsWindowHovered() && ImGui::IsMouseHoveringRect(ImVec2(barMin.x - gap, itemMin.y), ImVec2(itemMin.x, itemMax.y));
+	ImVec4 color = *ResolveBaselineColor();
+	if (!hovered)
+		color.w *= Constants::BASELINE_MARKER_IDLE_ALPHA;
+
+	// The bar can sit in the window padding, outside the item clip rect
+	ImGuiWindow* window = ImGui::GetCurrentWindow();
+	window->DrawList->PushClipRect(window->Rect().Min, window->Rect().Max, false);
+	window->DrawList->AddRectFilled(barMin, barMax, ImGui::GetColorU32(color), width * 0.5f);
+	window->DrawList->PopClipRect();
+
+	if (!hovered)
+		return false;
+	const bool resettable = baselineLayer == BaselineLayer::Edited;
+	if (resettable)
+		ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+	ImGui::SetTooltip("%s", ResolveBaselineTooltip().c_str());
+	return resettable && ImGui::IsMouseClicked(ImGuiMouseButton_Left);
 }
 
 void SceneWidgetBinding::Guard::ResolveState()
@@ -1255,16 +1278,22 @@ bool SceneWidgetBinding::Guard::TryEnableOverrideFromGesture()
 bool SceneWidgetBinding::Guard::TryResetFromGesture()
 {
 	assert(state == State::Baseline);
+	const bool markerClicked = DrawBaselineMarker();
 	// An active item still owns its value (InputText keeps its own buffer), and MarkItemEdited expects none.
-	if (ImGui::IsAnyItemActive() || !ImGui::IsItemHovered() || !ImGui::IsMouseClicked(ImGuiMouseButton_Middle))
+	if (ImGui::IsAnyItemActive())
+		return false;
+	if (!markerClicked && !(ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Middle)))
 		return false;
 
+	// Back to what lies beneath the edit: the Baseline pack's value, else the default
 	bool reset = false;
 	for (const auto& component : components) {
-		const auto* defaultValue = FindStateLayerValue(*component.setting, &::State::GetFeatureDefaults);
-		if (!defaultValue || SceneSettingsManager::AppliedValuesEqual(*defaultValue, ReadEditedValue(component)))
+		std::string packId;
+		const auto* packValue = FindBaselineValue(*component.setting, packId);
+		const auto* beneath = packValue ? packValue : FindLayeredBaseValue(*component.setting);
+		if (!beneath || SceneSettingsManager::AppliedValuesEqual(*beneath, ReadEditedValue(component)))
 			continue;
-		WriteComponent(value.data, component, *defaultValue);
+		WriteComponent(value.data, component, *beneath);
 		reset = true;
 	}
 	if (!reset)
@@ -1560,10 +1589,6 @@ void SceneWidgetBinding::Guard::SetTombstoned(bool a_tombstoned)
 
 bool SceneWidgetBinding::Guard::Finish(bool a_changed)
 {
-	if (tintPushed) {
-		Util::PopTintedFrameStyle();
-		tintPushed = false;
-	}
 	if (mixedFlagPushed) {
 		ImGui::PopItemFlag();
 		mixedFlagPushed = false;
@@ -1593,7 +1618,7 @@ bool SceneWidgetBinding::Guard::Finish(bool a_changed)
 				manager->RecordBaselineEdit(ComponentIdentity(component), ReadEditedValue(component));
 		}
 		if (auto tooltip = ResolveBaselineTooltip(); !tooltip.empty()) {
-			tooltip.append("\n").append(T(TKEY("baseline_reset_hint"), "Middle-click to restore the default."));
+			tooltip.append("\n").append(T(TKEY("baseline_reset_hint"), "Click the bar at its left, or middle-click, to restore it."));
 			Util::AddTooltip(tooltip.c_str(), Util::kTooltipWhenDisabled);
 		}
 		return a_changed;

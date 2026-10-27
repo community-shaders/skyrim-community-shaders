@@ -140,6 +140,8 @@ namespace SceneWidgetBinding
 		BaselineLayer ResolveBaselineLayer(std::string& a_packId) const;
 		/** @brief Tint for baselineLayer, nothing for Base. */
 		std::optional<ImVec4> ResolveBaselineColor() const;
+		/** @brief The slim marker bar left of an Edited or pack-supplied control. @return True when it was clicked to reset. */
+		bool DrawBaselineMarker() const;
 		/** @brief Tooltip for baselineLayer, empty for Base. */
 		std::string ResolveBaselineTooltip() const;
 		/// Jumps to the Scene Manager page supplying the value, or commits a sketch into it.
@@ -323,7 +325,6 @@ namespace SceneWidgetBinding
 		bool commitDeferred = false;
 		bool disabledOpened = false;
 		bool mixedFlagPushed = false;
-		bool tintPushed = false;
 
 		/// Horizontal space the leading gutter took, measured so the control can be shrunk by it.
 		float gutterConsumedWidth = 0.0f;

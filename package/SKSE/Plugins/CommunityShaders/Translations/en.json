@@ -39,7 +39,7 @@
     "cs_editor.baseline_from_named_pack": "Baseline: {}. This preset supplies the value.",
     "cs_editor.baseline_from_scene": "A Scene Manager preset supplies this value here. Editing sketches over it until you leave this feature or close the menu.",
     "cs_editor.baseline_jump_tooltip": "Open the Scene Manager page supplying this value.",
-    "cs_editor.baseline_reset_hint": "Middle-click to restore the default.",
+    "cs_editor.baseline_reset_hint": "Click the bar at its left, or middle-click, to restore it.",
     "cs_editor.baseline_sketch": "Sketched over the Scene Manager's value. It is kept as your base setting, but the scene's value returns once you leave this feature or close the menu.",
     "cs_editor.box_size": "Box Size",
     "cs_editor.browser_group_forms": "Forms",

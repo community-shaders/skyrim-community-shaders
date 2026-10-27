@@ -401,6 +401,8 @@ public:
 		static constexpr float TINTED_FRAME_BG_HOVERED_ALPHA = 0.35f;
 		static constexpr float TINTED_FRAME_BG_ACTIVE_ALPHA = 0.45f;
 		static constexpr float TINTED_FRAME_BORDER_SIZE = 1.0f;
+		static constexpr float BASELINE_MARKER_WIDTH = 3.0f;       // Changed-setting marker bar left of a control (1080p baseline)
+		static constexpr float BASELINE_MARKER_IDLE_ALPHA = 0.7f;  // Its opacity until hovered
 
 		// Status button brightness adjustment offsets. Bright colors are darkened by the same amounts for contrast.
 		static constexpr float BUTTON_MIN_COLOR_CHANNEL = 0.0f;
