@@ -203,55 +203,75 @@ namespace
 	}
 
 	/**
-	 * @brief Draws one compact button of the top page group: a framed icon and label. An Accent button tints its
-	 * icon, a Launcher button ends in an external-open glyph.
-	 * @param width Button width; 0 fills the rest of the line.
+	 * @brief Draws one pill of the top page switcher: a centred accent icon and label. The selected pill gets an eased
+	 * accent tint and outline, hover a soft fill; a Launcher pill adds a small external-open glyph after its label.
+	 * @param width Pill width; 0 fills the rest of the line.
 	 * @return True when clicked.
 	 */
 	bool DrawNavRow(const FeatureListRenderer::BuiltInMenu& menu, bool selected, bool disabled, float width = 0.0f)
 	{
+		using Constants = ThemeManager::Constants;
 		using NavStyle = FeatureListRenderer::NavStyle;
 
+		const float scale = Util::GetUIScale();
 		const float lineHeight = ImGui::GetTextLineHeight();
 		const float height = ImGui::GetFrameHeight();
-		const float padX = ImGui::GetStyle().FramePadding.x;
 		const ImVec2 rowPos = ImGui::GetCursorScreenPos();
-		const float right = rowPos.x + (width > 0.0f ? width : ImGui::GetContentRegionAvail().x);
-		// Glyphs and label sit on the button's vertical centre
-		const ImVec2 pos(rowPos.x, rowPos.y + (height - lineHeight) * 0.5f);
+		const float rowWidth = width > 0.0f ? width : ImGui::GetContentRegionAvail().x;
 
 		bool clicked = false;
 		{
 			Util::DisableGuard disable(disabled);
-			// The row's fill is drawn below from the eased blend, so the built-in highlight is made invisible
 			ImGui::PushStyleColor(ImGuiCol_Header, IM_COL32_BLACK_TRANS);
 			ImGui::PushStyleColor(ImGuiCol_HeaderHovered, IM_COL32_BLACK_TRANS);
 			ImGui::PushStyleColor(ImGuiCol_HeaderActive, IM_COL32_BLACK_TRANS);
-			clicked = ImGui::Selectable("##NavRow", false, ImGuiSelectableFlags_None, ImVec2(right - rowPos.x, height));
+			clicked = ImGui::Selectable("##NavRow", false, ImGuiSelectableFlags_None, ImVec2(rowWidth, height));
 			ImGui::PopStyleColor(3);
 		}
 		auto* drawList = ImGui::GetWindowDrawList();
-		// A quiet frame so the pair reads as buttons, not list rows
-		drawList->AddRectFilled(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), ImGui::GetColorU32(ImGuiCol_FrameBg), ImGui::GetStyle().FrameRounding);
-		DrawRowHighlight(drawList, selected, disabled);
-		ImVec4 textColor = ImGui::GetStyleColorVec4(disabled ? ImGuiCol_TextDisabled : ImGuiCol_Text);
-		ImVec4 iconColor = textColor;
-		if (!disabled && menu.style != NavStyle::Plain)
-			iconColor = Util::Colors::GetAccent();
-
-		float textRight = right - padX;
-		if (menu.style == NavStyle::Launcher) {
-			textRight -= lineHeight + ImGui::GetStyle().ItemInnerSpacing.x;
-			Icons::DrawCenteredGlyph(drawList, ImVec2(right - padX - lineHeight, pos.y), ImVec2(lineHeight, lineHeight), Icons::TI(MenuIcons::kExternal),
-				ImGui::GetColorU32(disabled ? ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled) : Util::Colors::GetSecondary()));
+		const ImVec2 min = ImGui::GetItemRectMin();
+		const ImVec2 max = ImGui::GetItemRectMax();
+		const float rounding = ImGui::GetStyle().FrameRounding;
+		const auto blend = Util::Anim::ItemBlend(ImGui::GetItemID(), ImGui::IsItemHovered() && !disabled, ImGui::IsItemActive(), selected);
+		if (blend.hover > 0.0f)
+			drawList->AddRectFilled(min, max, Util::Anim::ScaleAlphaU32(ImGui::GetColorU32(ImGuiCol_HeaderHovered), blend.hover), rounding);
+		if (blend.press > 0.0f)
+			drawList->AddRectFilled(min, max, Util::Anim::ScaleAlphaU32(ImGui::GetColorU32(ImGuiCol_HeaderActive), blend.press), rounding);
+		if (blend.selected > 0.0f) {
+			ImVec4 fill = Util::Colors::GetAccent();
+			fill.w = Constants::SEGMENT_SELECTED_FILL_ALPHA * blend.selected;
+			drawList->AddRectFilled(min, max, ImGui::GetColorU32(fill), rounding);
+			ImVec4 outline = Util::Colors::GetAccent();
+			outline.w = Constants::SEGMENT_SELECTED_OUTLINE_ALPHA * blend.selected;
+			drawList->AddRect(min, max, ImGui::GetColorU32(outline), rounding);
 		}
-		if (menu.icon)
-			Icons::DrawCenteredGlyph(drawList, ImVec2(pos.x + padX, pos.y), ImVec2(lineHeight, lineHeight), menu.icon, ImGui::GetColorU32(iconColor));
 
-		const float textX = pos.x + padX + lineHeight + ThemeManager::Constants::NAV_ROW_ICON_GAP * Util::GetUIScale();
+		const ImVec4 textColor = ImGui::GetStyleColorVec4(disabled ? ImGuiCol_TextDisabled : ImGuiCol_Text);
+		const ImVec4 iconColor = (!disabled && menu.style != NavStyle::Plain) ? Util::Colors::GetAccent() : textColor;
+		const float iconGap = Constants::NAV_ROW_ICON_GAP * scale;
+		const float glyphGap = Constants::SEGMENT_LAUNCHER_GAP * scale;
+		const bool launcher = menu.style == NavStyle::Launcher;
+
+		// Icon, label and launcher glyph form one group centred in the pill; a narrow pill trims the label instead
+		const float labelWidth = ImGui::CalcTextSize(menu.name.c_str()).x;
+		const float iconWidth = menu.icon ? lineHeight + iconGap : 0.0f;
+		const float glyphWidth = launcher ? lineHeight + glyphGap : 0.0f;
+		const float padX = ImGui::GetStyle().FramePadding.x;
+		const float usable = std::max(0.0f, (max.x - min.x) - padX * 2.0f);
+		const float shownLabel = std::min(labelWidth, std::max(0.0f, usable - iconWidth - glyphWidth));
+		const float groupWidth = iconWidth + shownLabel + glyphWidth;
+		float x = min.x + ((max.x - min.x) - groupWidth) * 0.5f;
+		const float y = min.y + (height - lineHeight) * 0.5f;
+		if (menu.icon) {
+			Icons::DrawCenteredGlyph(drawList, ImVec2(x, y), ImVec2(lineHeight, lineHeight), menu.icon, ImGui::GetColorU32(iconColor));
+			x += iconWidth;
+		}
 		ImGui::PushStyleColor(ImGuiCol_Text, textColor);
-		ImGui::RenderTextEllipsis(drawList, ImVec2(textX, pos.y), ImVec2(textRight, pos.y + lineHeight), textRight, menu.name.c_str(), nullptr, nullptr);
+		ImGui::RenderTextEllipsis(drawList, ImVec2(x, y), ImVec2(x + shownLabel, y + lineHeight), x + shownLabel, menu.name.c_str(), nullptr, nullptr);
 		ImGui::PopStyleColor();
+		if (launcher)
+			Icons::DrawCenteredGlyph(drawList, ImVec2(x + shownLabel + glyphGap, y), ImVec2(lineHeight, lineHeight), Icons::TI(MenuIcons::kExternal),
+				ImGui::GetColorU32(disabled ? ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled) : Util::Colors::GetSecondary()));
 		return clicked;
 	}
 
@@ -796,15 +816,21 @@ void FeatureListRenderer::RenderLeftColumn(
 			topIds[topCount++] = i;
 	}
 	if (topCount > 0) {
-		const float spacing = ImGui::GetStyle().ItemSpacing.x;
-		const float width = (ImGui::GetContentRegionAvail().x - spacing * static_cast<float>(topCount - 1)) / static_cast<float>(topCount);
+		// A rounded track holds the pages as pills, so the group reads as one segmented control
+		const float pad = ThemeManager::Constants::SEGMENT_TRACK_PAD * Util::GetUIScale();
+		const ImVec2 trackMin = ImGui::GetCursorScreenPos();
+		const float trackWidth = ImGui::GetContentRegionAvail().x;
+		const float pillWidth = (trackWidth - pad * static_cast<float>(topCount + 1)) / static_cast<float>(topCount);
+		ImGui::GetWindowDrawList()->AddRectFilled(trackMin, ImVec2(trackMin.x + trackWidth, trackMin.y + ImGui::GetFrameHeight() + pad * 2.0f),
+			ImGui::GetColorU32(ImGuiCol_FrameBg), ImGui::GetStyle().FrameRounding + pad);
 		for (size_t n = 0; n < topCount; n++) {
-			if (n > 0)
-				ImGui::SameLine(0.0f, spacing);
-			RenderBuiltInRow(*builtInAt(topIds[n]), topIds[n], selectedMenu, width);
+			ImGui::SetCursorScreenPos(ImVec2(trackMin.x + pad + static_cast<float>(n) * (pillWidth + pad), trackMin.y + pad));
+			RenderBuiltInRow(*builtInAt(topIds[n]), topIds[n], selectedMenu, pillWidth);
 		}
+		ImGui::SetCursorScreenPos(ImVec2(trackMin.x, trackMin.y + ImGui::GetFrameHeight() + pad * 2.0f));
+		ImGui::Dummy(ImVec2(trackWidth, 0.0f));
+		ImGui::Spacing();
 	}
-	ImGui::Separator();
 
 	if (!settingsOpen)
 		TrackBackTarget(menuList, selectedMenu);

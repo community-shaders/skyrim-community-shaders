@@ -1651,9 +1651,7 @@ namespace Util
 		// Get the appropriate icon for this category
 		ID3D11ShaderResourceView* categoryIcon = GetCategoryIcon(categoryKey);
 
-		// Keep icon lookup on the stable category key and render the translated label separately.
-		std::string headerText = std::format("{} ({})", displayName, categoryCount);
-
+		// Icon lookup uses the stable category key; the translated label is drawn separately.
 		// Draw category header with custom styling
 		ImDrawList* drawList = ImGui::GetWindowDrawList();
 		ImVec2 pos = ImGui::GetCursorScreenPos();
@@ -1664,84 +1662,51 @@ namespace Util
 		const float currentFontSize = ImGui::GetFontSize();
 		const float iconSize = currentFontSize * 1.2f;     // 20% larger than font height
 		const float iconSpacing = currentFontSize * 0.3f;  // 30% of font height for spacing
-		ImVec2 textSize = ImGui::CalcTextSize(headerText.c_str());
+		const ImVec2 textSize = ImGui::CalcTextSize(displayName);
 
-		// Calculate total content width (icon + spacing + text)
-		float contentWidth = textSize.x;
-		if (categoryIcon) {
-			contentWidth += iconSize + iconSpacing;
-		}
+		// Left-aligned label row: icon, secondary-coloured name, dimmer count, then a faint rule to the right edge
+		const float scale = Util::GetUIScale();
 
-		// Calculate line positions
-		float lineY = pos.y + textSize.y * 0.5f;
-		float lineLength = (availableWidth - contentWidth - 20.0f) * 0.5f;  // 20px for padding
-
-		// Create selectable area for the entire header
 		ImGui::PushID(categoryKey);
-		bool hovered = false;
-		bool clicked = false;
-
-		// Invisible button for hover detection and clicking
 		ImGui::SetCursorScreenPos(pos);
-		if (ImGui::InvisibleButton("##CategoryHeader", ImVec2(availableWidth, textSize.y + 4.0f))) {
-			clicked = true;
-		}
-		hovered = ImGui::IsItemHovered();
+		const bool clicked = ImGui::InvisibleButton("##CategoryHeader", ImVec2(availableWidth, textSize.y + ThemeManager::Constants::CATEGORY_HEADER_PAD * scale));
+		const bool hovered = ImGui::IsItemHovered();
 
-		// Draw the lines and text using Menu theme colors
-		auto& themeSettings = globals::menu->GetSettings().Theme;
-		auto& palette = themeSettings.Palette;
+		ImVec4 color = Util::Colors::GetSecondary();
+		if (!isExpanded)
+			color.w *= ThemeManager::Constants::CATEGORY_HEADER_COLLAPSED_ALPHA;
+		if (hovered)
+			color = ImGui::GetStyleColorVec4(ImGuiCol_Text);
+		const ImU32 headerColor = ImGui::GetColorU32(color);
+		ImVec4 countColor = color;
+		countColor.w *= ThemeManager::Constants::CATEGORY_HEADER_COUNT_ALPHA;
 
-		// Use theme text color
-		ImVec4 color = palette.Text;
-
-		// If minimized, apply reduced alpha
-		if (!isExpanded) {
-			color.w *= 0.7f;  // 70% alpha when minimized
-		}
-		// If hovered, slightly dim the color
-		if (hovered) {
-			color.w *= 0.8f;  // 80% alpha when hovered
-		}
-		ImU32 headerColor = ImGui::GetColorU32(color);  // Left line
-		if (lineLength > 0) {
-			drawList->AddLine(ImVec2(pos.x, lineY), ImVec2(pos.x + lineLength, lineY), headerColor, 1.0f);
-		}
-
-		// Right line
-		float rightLineStart = pos.x + lineLength + 10.0f + contentWidth + 10.0f;
-		if (rightLineStart < pos.x + availableWidth) {
-			drawList->AddLine(ImVec2(rightLineStart, lineY), ImVec2(pos.x + availableWidth, lineY), headerColor, 1.0f);
-		}
-
-		// Draw icon and text
-		float currentX = pos.x + lineLength + 10.0f;
-
-		// Draw icon if available
+		const float padX = ImGui::GetStyle().FramePadding.x;
+		float currentX = pos.x + padX;
 		if (categoryIcon) {
-			ImVec2 iconPos = ImVec2(currentX, pos.y + (textSize.y - iconSize) * 0.5f + 2.0f);
-			ImVec2 iconMax = ImVec2(iconPos.x + iconSize, iconPos.y + iconSize);
-
-			// Apply the same color tint as the text
-			ImU32 iconTint = headerColor;
-			drawList->AddImage(categoryIcon, iconPos, iconMax, ImVec2(0, 0), ImVec2(1, 1), iconTint);
-
+			const ImVec2 iconPos(currentX, pos.y + (textSize.y - iconSize) * 0.5f);
+			drawList->AddImage(categoryIcon, iconPos, ImVec2(iconPos.x + iconSize, iconPos.y + iconSize), ImVec2(0, 0), ImVec2(1, 1), headerColor);
 			currentX += iconSize + iconSpacing;
 		}
+		drawList->AddText(ImVec2(currentX, pos.y), headerColor, displayName);
+		currentX += textSize.x + iconSpacing;
+		const std::string countText = std::format("{}", categoryCount);
+		drawList->AddText(ImVec2(currentX, pos.y), ImGui::GetColorU32(countColor), countText.c_str());
+		currentX += ImGui::CalcTextSize(countText.c_str()).x + iconSpacing;
 
-		// Center text
-		ImVec2 textPos = ImVec2(currentX, pos.y + 2.0f);
-		drawList->AddText(textPos, headerColor, headerText.c_str());
-
-		// Handle click to toggle expansion
-		if (clicked) {
-			isExpanded = !isExpanded;
+		const float lineY = pos.y + textSize.y * 0.5f;
+		if (currentX < pos.x + availableWidth - padX) {
+			ImVec4 line = ImGui::GetStyleColorVec4(ImGuiCol_Separator);
+			line.w *= ThemeManager::Constants::CATEGORY_HEADER_LINE_ALPHA;
+			drawList->AddLine(ImVec2(currentX, lineY), ImVec2(pos.x + availableWidth - padX, lineY), ImGui::GetColorU32(line), 1.0f);
 		}
+
+		if (clicked)
+			isExpanded = !isExpanded;
 
 		ImGui::PopID();
 
-		// Move cursor to next line
-		ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + textSize.y + 8.0f));
+		ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + textSize.y + ThemeManager::Constants::CATEGORY_HEADER_PAD * scale));
 		ImGui::Dummy(ImVec2(availableWidth, 0.0f));
 		return clicked;
 	}

@@ -219,6 +219,14 @@ public:
 
 		// Main menu feature list pane (sizes are 1080p baseline, scaled by Util::GetUIScale())
 		static constexpr float NAV_ROW_ICON_GAP = 8.0f;                  // Gap between a page row's icon and its label
+		static constexpr float CATEGORY_HEADER_PAD = 6.0f;               // Category header: space below the label row
+		static constexpr float CATEGORY_HEADER_COLLAPSED_ALPHA = 0.7f;   // ... label alpha while the category is collapsed
+		static constexpr float CATEGORY_HEADER_COUNT_ALPHA = 0.6f;       // ... count alpha relative to the label
+		static constexpr float CATEGORY_HEADER_LINE_ALPHA = 0.5f;        // ... trailing rule alpha relative to the separator colour
+		static constexpr float SEGMENT_TRACK_PAD = 3.0f;                 // Page switcher: inset between the track and its pills
+		static constexpr float SEGMENT_SELECTED_FILL_ALPHA = 0.22f;      // ... selected pill accent fill alpha
+		static constexpr float SEGMENT_SELECTED_OUTLINE_ALPHA = 0.7f;    // ... selected pill accent outline alpha
+		static constexpr float SEGMENT_LAUNCHER_GAP = 4.0f;              // ... gap between a launcher label and its external-open glyph
 		static constexpr float SORT_FILTER_DOT_RATIO = 0.12f;            // Radius of the sort button's active-filter dot relative to the button height
 		static constexpr float AUTOHIDE_PANEL_WIDTH_RATIO = 0.2f;        // Auto-hide list width as a share of the pane (the pinned list's column ratio)
 		static constexpr float AUTOHIDE_PANEL_MIN_WIDTH = 240.0f;        // ... never narrower than this
