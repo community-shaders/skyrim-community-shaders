@@ -1708,7 +1708,10 @@ namespace Util
 
 		ImGui::PushID(categoryKey);
 		ImGui::SetCursorScreenPos(pos);
-		const bool clicked = ImGui::InvisibleButton("##CategoryHeader", ImVec2(availableWidth, textSize.y + ThemeManager::Constants::CATEGORY_HEADER_PAD * scale));
+		const float pad = ThemeManager::Constants::CATEGORY_HEADER_PAD * scale;
+		const bool clicked = ImGui::InvisibleButton("##CategoryHeader", ImVec2(availableWidth, textSize.y + pad));
+		// The pad is split evenly above and below the label, so the gap to the row above matches the gap below
+		pos.y += pad * 0.5f;
 		const bool hovered = ImGui::IsItemHovered();
 
 		ImVec4 color = Util::Colors::GetSecondary();
@@ -1745,7 +1748,7 @@ namespace Util
 
 		ImGui::PopID();
 
-		ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + textSize.y + ThemeManager::Constants::CATEGORY_HEADER_PAD * scale));
+		ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + textSize.y + pad * 0.5f));
 		ImGui::Dummy(ImVec2(availableWidth, 0.0f));
 		return clicked;
 	}
@@ -1788,28 +1791,21 @@ namespace Util
 			ImVec2 pos = ImGui::GetCursorScreenPos();
 			float availableWidth = ImGui::GetContentRegionAvail().x;
 			ImVec2 textSize = ImGui::CalcTextSize(sectionName);
+			// The gap is split evenly above and below the label, like a category header
+			const float gap = C::SECTION_HEADER_GAP * GetUIScale();
+			const float textTop = pos.y + gap * 0.5f;
+			const float sideGap = ImGui::GetStyle().ItemInnerSpacing.x;
 
-			// Calculate line positions
-			float lineY = pos.y + textSize.y * 0.5f;
-			float lineLength = (availableWidth - textSize.x - 20.0f) * 0.5f;  // 20px for padding
-
-			// Left line
+			// A rule either side of the centred label
+			const float lineY = textTop + textSize.y * 0.5f;
+			const float lineLength = (availableWidth - textSize.x) * 0.5f - sideGap;
 			if (lineLength > 0) {
 				drawList->AddLine(ImVec2(pos.x, lineY), ImVec2(pos.x + lineLength, lineY), headerColor, 1.0f);
+				drawList->AddLine(ImVec2(pos.x + availableWidth - lineLength, lineY), ImVec2(pos.x + availableWidth, lineY), headerColor, 1.0f);
 			}
+			drawList->AddText(ImVec2(pos.x + (availableWidth - textSize.x) * 0.5f, textTop), headerColor, sectionName);
 
-			// Right line
-			float rightLineStart = pos.x + lineLength + 10.0f + textSize.x + 10.0f;
-			if (rightLineStart < pos.x + availableWidth) {
-				drawList->AddLine(ImVec2(rightLineStart, lineY), ImVec2(pos.x + availableWidth, lineY), headerColor, 1.0f);
-			}
-
-			// Center text
-			ImVec2 textPos = ImVec2(pos.x + lineLength + 10.0f, pos.y + 2.0f);
-			drawList->AddText(textPos, headerColor, sectionName);
-
-			// Move cursor to next line
-			ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + textSize.y + C::SECTION_HEADER_GAP * GetUIScale()));
+			ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + textSize.y + gap));
 			ImGui::Dummy(ImVec2(availableWidth, 0.0f));
 		}
 
