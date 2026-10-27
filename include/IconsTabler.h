@@ -40,7 +40,7 @@
 #define ICON_TI_PENCIL "\xee\xac\x84"	// U+eb04
 #define ICON_TI_PLUS "\xee\xac\x8b"	// U+eb0b
 #define ICON_TI_REFRESH "\xee\xac\x93"	// U+eb13
-#define ICON_TI_SEARCH "î¬"	// U+eb1c
+#define ICON_TI_SEARCH "\xee\xac\x9c"	// U+eb1c
 #define ICON_TI_SETTINGS "\xee\xac\xa0"	// U+eb20
 #define ICON_TI_SUN "\xee\xac\xb0"	// U+eb30
 #define ICON_TI_TRASH "\xee\xad\x81"	// U+eb41
