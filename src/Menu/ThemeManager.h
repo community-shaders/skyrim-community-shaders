@@ -196,7 +196,6 @@ public:
 		static constexpr ImU32 HEADER_COLOR_ICON_IDLE = IM_COL32(220, 220, 220, 220);    // Docked colour icon tint while not hovered
 		static constexpr ImU32 WATERMARK_COLOR = IM_COL32(255, 255, 255, 45);            // Full-colour watermark logo tint
 		static constexpr float HEADER_ICON_IDLE_ALPHA = 0.85f;                           // Header icon opacity while neither hovered nor current (docked monochrome icons, Home button)
-		static constexpr float STATUS_BAR_GRIP_CLEARANCE_SCALE = 1.6f;                   // Right margin kept clear of the window resize grip, in font sizes
 		static constexpr float STATUS_BAR_NAV_BUTTON_FONT_RATIO = 1.8f;                  // Settings / Profiling button edge in the status bar, in font sizes
 		static constexpr float STATUS_BAR_NAV_GLYPH_FONT_RATIO = 1.35f;                  // Their glyph size, in font sizes (the save glyph is 1.0)
 		static constexpr float STATUS_BAR_DIVIDER_FONT_RATIO = 1.0f;                     // Height of the thin dividers between status bar groups, in font sizes
@@ -240,7 +239,6 @@ public:
 		static constexpr float LIST_HIGHLIGHT_SNAP_ROWS = 6.0f;          // A move of more rows than this appears at the target instead of gliding
 		static constexpr float SEGMENT_SELECTED_FILL_ALPHA = 0.22f;      // ... selected pill accent fill alpha (page switcher and palette scope pill)
 		static constexpr float SEGMENT_SELECTED_OUTLINE_ALPHA = 0.7f;    // ... selected pill accent outline alpha
-		static constexpr float SEGMENT_LAUNCHER_GAP = 4.0f;              // ... gap between a launcher label and its external-open glyph
 		static constexpr float SORT_FILTER_DOT_RATIO = 0.12f;            // Radius of the sort button's active-filter dot relative to the button height
 		static constexpr float AUTOHIDE_PANEL_WIDTH_RATIO = 0.2f;        // Auto-hide list width as a share of the pane (the pinned list's column ratio)
 		static constexpr float AUTOHIDE_PANEL_MIN_WIDTH = 240.0f;        // ... never narrower than this

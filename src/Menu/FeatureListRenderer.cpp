@@ -188,7 +188,7 @@ namespace
 
 	/**
 	 * @brief Draws one pill of the top page switcher: a centred accent icon and label. The selected pill gets an eased
-	 * accent tint and outline, hover a soft fill; a Launcher pill adds a small external-open glyph after its label.
+	 * accent tint and outline, hover a soft fill.
 	 * @param width Pill width; 0 fills the rest of the line.
 	 * @return True when clicked.
 	 */
@@ -235,31 +235,19 @@ namespace
 		const ImVec4 textColor = ImGui::GetStyleColorVec4(disabled ? ImGuiCol_TextDisabled : ImGuiCol_Text);
 		const ImVec4 iconColor = (!disabled && menu.style != NavStyle::Plain) ? Util::Colors::GetAccent() : textColor;
 		const float iconGap = Constants::NAV_ROW_ICON_GAP * scale;
-		const float glyphGap = Constants::SEGMENT_LAUNCHER_GAP * scale;
-		const bool launcher = menu.style == NavStyle::Launcher;
 
-		// Icon, label and launcher glyph form one group centred in the pill; a narrow pill trims the label instead
+		// Icon and label form one group centred in the pill, both centred on the pill's height by their ink. The label is
+		// never trimmed: the pill clips it
 		const float labelWidth = ImGui::CalcTextSize(menu.name.c_str()).x;
 		const float iconWidth = menu.icon ? lineHeight + iconGap : 0.0f;
-		const float glyphWidth = launcher ? lineHeight + glyphGap : 0.0f;
-		const float padX = ImGui::GetStyle().FramePadding.x;
-		const float usable = std::max(0.0f, (max.x - min.x) - padX * 2.0f);
-		const float shownLabel = std::min(labelWidth, std::max(0.0f, usable - iconWidth - glyphWidth));
-		const float groupWidth = iconWidth + shownLabel + glyphWidth;
-		float x = min.x + ((max.x - min.x) - groupWidth) * 0.5f;
-		const float y = min.y + (height - lineHeight) * 0.5f;
+		float x = std::max(min.x, min.x + ((max.x - min.x) - iconWidth - labelWidth) * 0.5f);
+		drawList->PushClipRect(min, max, true);
 		if (menu.icon) {
-			Icons::DrawCenteredGlyph(drawList, ImVec2(x, y), ImVec2(lineHeight, lineHeight), menu.icon, ImGui::GetColorU32(iconColor));
+			Icons::DrawCenteredGlyph(drawList, ImVec2(x, min.y), ImVec2(lineHeight, max.y - min.y), menu.icon, ImGui::GetColorU32(iconColor));
 			x += iconWidth;
 		}
-		// Glyphs centre by their box; the label centres by its ink, or it sits high in the pill
-		const float textY = Util::CenterTextTopY(min.y, max.y - min.y);
-		ImGui::PushStyleColor(ImGuiCol_Text, textColor);
-		ImGui::RenderTextEllipsis(drawList, ImVec2(x, textY), ImVec2(x + shownLabel, textY + lineHeight), x + shownLabel, menu.name.c_str(), nullptr, nullptr);
-		ImGui::PopStyleColor();
-		if (launcher)
-			Icons::DrawCenteredGlyph(drawList, ImVec2(x + shownLabel + glyphGap, y), ImVec2(lineHeight, lineHeight), Icons::TI(MenuIcons::kExternal),
-				ImGui::GetColorU32(disabled ? ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled) : Util::Colors::GetSecondary()));
+		drawList->AddText(ImVec2(x, Util::CenterTextTopY(min.y, max.y - min.y)), ImGui::GetColorU32(textColor), menu.name.c_str());
+		drawList->PopClipRect();
 		return clicked;
 	}
 
@@ -613,7 +601,7 @@ std::vector<FeatureListRenderer::MenuFuncInfo> FeatureListRenderer::BuildMenuLis
 		BuiltInMenu{ MenuPageIds::kPresets, T("menu.features.presets", "Presets"), []() { PresetsPageRenderer::Render(); },
 			Icons::TI(MenuIcons::kPresets), NavStyle::Accent, T("menu.features.presets_hint", "Control, change and manage your visual Presets to customise your CS experience"), true },
 		BuiltInMenu{ MenuPageIds::kCSEditor, T("menu.features.cs_editor", "CS Editor"), []() { globals::features::csEditor.DrawSettings(); },
-			Icons::TI(MenuIcons::kCSEditor), NavStyle::Launcher, {}, true },
+			Icons::TI(MenuIcons::kCSEditor), NavStyle::Accent, {}, true },
 	};
 	menuList.push_back(BuiltInMenu{ MenuPageIds::kSettings, T("menu.features.settings", "Settings"), drawSettings, Icons::TI(MenuIcons::kSettings) });
 	menuList.push_back(BuiltInMenu{ MenuPageIds::kProfiling, T("menu.features.profiling", "Profiling"), []() { ProfilingRenderer::RenderStatistics(); },

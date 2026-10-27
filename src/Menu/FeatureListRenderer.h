@@ -65,9 +65,8 @@ public:
 	/** @brief How a built-in page's row stands out in the list. */
 	enum class NavStyle : std::uint8_t
 	{
-		Plain,     ///< An ordinary row
-		Accent,    ///< Accent-tinted icon, for the page most users want first (Presets)
-		Launcher,  ///< Accent-tinted icon and a trailing external-open glyph: opens a window rather than a page (CS Editor)
+		Plain,   ///< An ordinary row
+		Accent,  ///< Accent-tinted icon, for the pages most users want first (Presets, CS Editor)
 	};
 
 	/** @brief Describes a built-in (non-feature) menu page with an ID, a display name and a draw callback. */

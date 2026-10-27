@@ -137,9 +137,10 @@ namespace StatusBarRenderer
 {
 	float GetHeight()
 	{
-		// The gap before the separator (left by the content above it), the separator, then equal gaps above and below the row
+		// The gap before the separator (left by the content above it), the separator, the gap above the row, then the row;
+		// the window's bottom padding is the gap below it
 		const float gap = ImGui::GetStyle().ItemSpacing.y;
-		return gap * 3.0f + Constants::SEPARATOR_THICKNESS + RowHeight();
+		return gap * 2.0f + Constants::SEPARATOR_THICKNESS + RowHeight();
 	}
 
 	float GetPageButtonsHeight()
@@ -271,10 +272,9 @@ namespace StatusBarRenderer
 			Util::GetFormattedVersion(REL::Module::get().version())));
 		addPart(MenuHeaderRenderer::GetSwapChainText());
 
-		// Keep clear of the window's bottom-right resize grip
-		const float gripClearance = ImGui::GetFontSize() * Constants::STATUS_BAR_GRIP_CLEARANCE_SCALE;
+		// The right edge mirrors the left: the window padding only
 		const float helpWidth = HomePageRenderer::GetHelpButtonWidth();
-		const float helpRight = right - gripClearance;
+		const float helpRight = right;
 		const float available = helpRight - helpWidth - ImGui::GetStyle().ItemSpacing.x - (row.x + segmentGap);
 		const float width = std::min(ImGui::CalcTextSize(info.c_str()).x, available);
 		if (width >= ImGui::GetFontSize()) {
@@ -283,7 +283,7 @@ namespace StatusBarRenderer
 			BrowserUI::EllipsizedText(info.c_str(), width, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
 		}
 
-		// Help sits at the right end, clear of the resize grip
+		// Help sits at the right end
 		row.x = helpRight - helpWidth;
 		row.Place(ImGui::GetFontSize() + ImGui::GetStyle().FramePadding.y * 2.0f);
 		HomePageRenderer::RenderHelpButton();
