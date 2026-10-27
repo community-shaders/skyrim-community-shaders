@@ -1506,7 +1506,6 @@
     "feature.light_limit_fix.key_feature_2": "无限动态光源",
     "feature.light_limit_fix.key_feature_3": "提升光照质量",
     "feature.light_limit_fix.key_feature_4": "增强视觉真实感",
-    "feature.light_limit_fix.light_limit_vis": "光源限制可视化",
     "feature.light_limit_fix.lights_vis_mode": "光源可视化模式",
     "feature.light_limit_fix.lights_vis_mode_tooltip": " - 可视化光源限制。当达到\"严格\"光源限制时为红色（传送门严格光源）。\n - 可视化严格光源的数量。\n - 可视化聚类光源的数量。\n - 可视化阴影遮罩。\n",
     "feature.light_limit_fix.local_shadow_filter_scale": "阴影滤波比例",

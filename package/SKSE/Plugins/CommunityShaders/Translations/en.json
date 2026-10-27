@@ -1530,7 +1530,6 @@
     "feature.light_limit_fix.key_feature_2": "Unlimited dynamic lights",
     "feature.light_limit_fix.key_feature_3": "Improved lighting quality",
     "feature.light_limit_fix.key_feature_4": "Enhanced visual realism",
-    "feature.light_limit_fix.light_limit_vis": "Light Limit Visualization",
     "feature.light_limit_fix.lights_vis_mode": "Lights Visualisation Mode",
     "feature.light_limit_fix.lights_vis_mode_tooltip": " - Visualise the light limit. Red when the \"strict\" light limit is reached (portal-strict lights).\n - Visualise the number of strict lights.\n - Visualise the number of clustered lights.\n - Visualize the Shadow Mask.\n",
     "feature.light_limit_fix.local_shadow_filter_scale": "Shadow Filter Scale",

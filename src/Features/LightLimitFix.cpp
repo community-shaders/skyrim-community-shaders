@@ -119,31 +119,27 @@ void LightLimitFix::DrawSettings()
 
 	ImGui::SeparatorText(T(TKEY("debug"), "Debug"));
 
-	if (ImGui::TreeNode(T(TKEY("light_limit_vis"), "Light Limit Visualization"))) {
-		ImGui::Checkbox(T(TKEY("enable_lights_vis"), "Enable Lights Visualisation"), &settings.EnableLightsVisualisation);
+	ImGui::Checkbox(T(TKEY("enable_lights_vis"), "Enable Lights Visualisation"), &settings.EnableLightsVisualisation);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("%s", T(TKEY("enable_lights_vis_tooltip"), "Enables visualization of the light limit\n"));
+	}
+
+	{
+		static const char* comboOptions[] = { "Light Limit", "Strict Lights Count", "Clustered Lights Count", "Shadow Mask" };
+		ImGui::Combo(T(TKEY("lights_vis_mode"), "Lights Visualisation Mode"), (int*)&settings.LightsVisualisationMode, comboOptions, 4);
 		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("%s", T(TKEY("enable_lights_vis_tooltip"), "Enables visualization of the light limit\n"));
+			ImGui::Text("%s", T(TKEY("lights_vis_mode_tooltip"),
+								  " - Visualise the light limit. Red when the \"strict\" light limit is reached (portal-strict lights).\n"
+								  " - Visualise the number of strict lights.\n"
+								  " - Visualise the number of clustered lights.\n"
+								  " - Visualize the Shadow Mask.\n"));
 		}
-
-		{
-			static const char* comboOptions[] = { "Light Limit", "Strict Lights Count", "Clustered Lights Count", "Shadow Mask" };
-			ImGui::Combo(T(TKEY("lights_vis_mode"), "Lights Visualisation Mode"), (int*)&settings.LightsVisualisationMode, comboOptions, 4);
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("%s", T(TKEY("lights_vis_mode_tooltip"),
-									  " - Visualise the light limit. Red when the \"strict\" light limit is reached (portal-strict lights).\n"
-									  " - Visualise the number of strict lights.\n"
-									  " - Visualise the number of clustered lights.\n"
-									  " - Visualize the Shadow Mask.\n"));
-			}
-		}
-		currentEnableLightsVisualisation = settings.EnableLightsVisualisation;
-		if (previousEnableLightsVisualisation != currentEnableLightsVisualisation) {
-			globals::state->SetDefines(settings.EnableLightsVisualisation ? "LLFDEBUG" : "");
-			shaderCache->Clear(RE::BSShader::Type::Lighting);
-			previousEnableLightsVisualisation = currentEnableLightsVisualisation;
-		}
-
-		ImGui::TreePop();
+	}
+	currentEnableLightsVisualisation = settings.EnableLightsVisualisation;
+	if (previousEnableLightsVisualisation != currentEnableLightsVisualisation) {
+		globals::state->SetDefines(settings.EnableLightsVisualisation ? "LLFDEBUG" : "");
+		shaderCache->Clear(RE::BSShader::Type::Lighting);
+		previousEnableLightsVisualisation = currentEnableLightsVisualisation;
 	}
 }
 

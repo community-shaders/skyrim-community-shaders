@@ -724,7 +724,6 @@
     "feature.light_limit_fix.key_feature_2": "Неограниченное количество динамических источников",
     "feature.light_limit_fix.key_feature_3": "Улучшенное качество освещения",
     "feature.light_limit_fix.key_feature_4": "Повышенный визуальный реализм",
-    "feature.light_limit_fix.light_limit_vis": "Визуализация лимита источников",
     "feature.light_limit_fix.lights_vis_mode": "Режим визуализации источников",
     "feature.light_limit_fix.lights_vis_mode_tooltip": " - Визуализация лимита источников света. Красный при достижении «строгого» лимита (portal-strict).\n - Визуализация количества строгих источников.\n - Визуализация количества кластерных источников.\n - Визуализация маски теней.\n",
     "feature.light_limit_fix.name": "Light Limit Fix",
