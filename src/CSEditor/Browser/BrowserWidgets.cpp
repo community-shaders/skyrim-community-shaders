@@ -232,17 +232,17 @@ namespace BrowserUI
 		const float iconBox = ImGui::GetFontSize() * kChipIconScale;
 
 		const bool clicked = ImGui::InvisibleButton(id, ImVec2(MeasureToggleChip(count), height));
-		const bool hovered = ImGui::IsItemHovered();
+		const float hover = Util::Anim::ItemBlend(ImGui::GetItemID(), ImGui::IsItemHovered(), false, false).hover;
 		const ImVec2 min = ImGui::GetItemRectMin();
 		const ImVec2 max = ImGui::GetItemRectMax();
 		ImDrawList* drawList = ImGui::GetWindowDrawList();
 		const float rounding = height * 0.5f;
 
 		if (active) {
-			drawList->AddRectFilled(min, max, WithAlpha(tint, hovered ? kToggleFillHoveredAlpha : kToggleFillAlpha), rounding);
+			drawList->AddRectFilled(min, max, WithAlpha(tint, kToggleFillAlpha + (kToggleFillHoveredAlpha - kToggleFillAlpha) * hover), rounding);
 			drawList->AddRect(min, max, WithAlpha(tint, kToggleBorderAlpha), rounding, 0, std::max(1.0f, scale));
 		} else {
-			drawList->AddRectFilled(min, max, ImGui::GetColorU32(hovered ? ImGuiCol_FrameBgHovered : ImGuiCol_FrameBg), rounding);
+			drawList->AddRectFilled(min, max, Util::Anim::LerpU32(ImGui::GetColorU32(ImGuiCol_FrameBg), ImGui::GetColorU32(ImGuiCol_FrameBgHovered), hover), rounding);
 		}
 
 		const ImU32 secondary = ImGui::GetColorU32(Util::Colors::GetSecondary());
@@ -281,11 +281,12 @@ namespace BrowserUI
 		ImDrawList* drawList = ImGui::GetWindowDrawList();
 		const float rounding = height * 0.5f;
 
+		const float hover = Util::Anim::ItemBlend(ImGui::GetItemID(), hovered, false, false).hover;
 		if (tint) {
-			drawList->AddRectFilled(min, max, WithAlpha(*tint, hovered ? kTintedChipFillHoveredAlpha : kTintedChipFillAlpha), rounding);
+			drawList->AddRectFilled(min, max, WithAlpha(*tint, kTintedChipFillAlpha + (kTintedChipFillHoveredAlpha - kTintedChipFillAlpha) * hover), rounding);
 			drawList->AddRect(min, max, WithAlpha(*tint, kTintedChipBorderAlpha), rounding, 0, std::max(1.0f, scale));
 		} else {
-			drawList->AddRectFilled(min, max, ImGui::GetColorU32(hovered ? ImGuiCol_FrameBgHovered : ImGuiCol_FrameBg), rounding);
+			drawList->AddRectFilled(min, max, Util::Anim::LerpU32(ImGui::GetColorU32(ImGuiCol_FrameBg), ImGui::GetColorU32(ImGuiCol_FrameBgHovered), hover), rounding);
 		}
 
 		const float centerY = (min.y + max.y) * 0.5f;

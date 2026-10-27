@@ -55,14 +55,8 @@ namespace
 		const auto& style = ImGui::GetStyle();
 		auto* drawList = ImGui::GetWindowDrawList();
 
-		const ImVec4 clear(0.0f, 0.0f, 0.0f, 0.0f);
-		ImGui::PushStyleColor(ImGuiCol_Header, clear);
-		ImGui::PushStyleColor(ImGuiCol_HeaderHovered, clear);
-		ImGui::PushStyleColor(ImGuiCol_HeaderActive, clear);
 		if (Util::Selectable(std::format("##{}", shortName).c_str(), isSelected))
 			selected = shortName;
-		ImGui::PopStyleColor(3);
-		const bool hovered = ImGui::IsItemHovered();
 
 		// Selectable pads its rect by half ItemSpacing, so neighbours touch; pull x inside the child's clip and leave a row gap.
 		const float padL = IM_TRUNC(style.ItemSpacing.x * 0.5f);
@@ -77,9 +71,6 @@ namespace
 		if (pinned)
 			drawList->AddRectFilled(rowMin, rowMax,
 				ImGui::GetColorU32(ImVec4(accent.x, accent.y, accent.z, isSelected ? kPinnedSelectedTintAlpha : kPinnedTintAlpha)),
-				style.FrameRounding);
-		if (isSelected || hovered)
-			drawList->AddRectFilled(rowMin, rowMax, ImGui::GetColorU32(isSelected ? ImGuiCol_Header : ImGuiCol_HeaderHovered),
 				style.FrameRounding);
 		if (pinned) {
 			drawList->PushClipRect(rowMin, ImVec2(rowMin.x + barWidth, rowMax.y), true);

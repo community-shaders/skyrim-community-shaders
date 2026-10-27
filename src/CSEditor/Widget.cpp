@@ -17,6 +17,7 @@
 #include "State.h"
 #include "Util.h"
 #include "Utils/UI.h"
+#include "Utils/UIAnim.h"
 #include "WeatherUtils.h"
 #include "imgui_internal.h"
 
@@ -579,21 +580,26 @@ bool Widget::DrawTitleBarActions(bool showApply, bool showSaveLoadRevert, bool s
 		if (ImGui::IsItemClicked())
 			pendingClick = action.onClick;
 
+		// Hover and press ease in and out; a destructive action tints with the error colour instead
+		const auto blend = Util::Anim::ItemBlend(ImGui::GetItemID(), hovered, held, false);
+		const auto DrawActionHighlight = [&] {
+			if (!action.destructive) {
+				Util::DrawAnimatedButtonHighlight(bb, ImGui::GetItemID(), hovered, held, false, drawList);
+				return;
+			}
+			auto color = statusPalette.Error;
+			color.w = WidgetUI::kDestructiveHoverAlpha * blend.hover + (WidgetUI::kDestructivePressAlpha - WidgetUI::kDestructiveHoverAlpha) * blend.press;
+			if (color.w > 0.0f)
+				drawList->AddRectFilled(bb.Min, bb.Max, ImGui::GetColorU32(color), rounding);
+		};
+
 		switch (action.kind) {
 		case Kind::LockBadge:
 			Util::DrawLockStatusBadge(bb.Min, action.locked, drawList, hovered, held);
 			break;
 		case Kind::Icon:
 			{
-				if (hovered || held) {
-					if (action.destructive) {
-						auto color = statusPalette.Error;
-						color.w = held ? 0.6f : 0.4f;
-						drawList->AddRectFilled(bb.Min, bb.Max, ImGui::GetColorU32(color), rounding);
-					} else {
-						Util::DrawRoundedButtonHighlight(bb, hovered, held, drawList);
-					}
-				}
+				DrawActionHighlight();
 				const float iconInset = std::max(1.0f, buttonHeight * 0.1f);
 				const ImVec2 iconMin = Util::IconLoader::SnapToPixel(ImVec2(bb.Min.x + iconInset, bb.Min.y + iconInset));
 				const ImVec2 iconSize = Util::IconLoader::SnapToPixel(ImVec2(bb.GetWidth() - iconInset * 2.0f, bb.GetHeight() - iconInset * 2.0f));
@@ -605,15 +611,7 @@ bool Widget::DrawTitleBarActions(bool showApply, bool showSaveLoadRevert, bool s
 			}
 		case Kind::Glyph:
 			{
-				if (hovered || held) {
-					if (action.destructive) {
-						auto color = statusPalette.Error;
-						color.w = held ? 0.6f : 0.4f;
-						drawList->AddRectFilled(bb.Min, bb.Max, ImGui::GetColorU32(color), rounding);
-					} else {
-						Util::DrawRoundedButtonHighlight(bb, hovered, held, drawList);
-					}
-				}
+				DrawActionHighlight();
 				if (action.glyph) {
 					const ImU32 col = action.textColor ? ImGui::GetColorU32(*action.textColor) : textCol;
 					Icons::DrawCenteredGlyph(drawList, bb.Min, bb.GetSize(), action.glyph, col);
@@ -623,15 +621,13 @@ bool Widget::DrawTitleBarActions(bool showApply, bool showSaveLoadRevert, bool s
 		case Kind::Text:
 			{
 				ImU32 fill = ImGui::GetColorU32(ImGuiCol_Button);
-				if (held)
-					fill = ImGui::GetColorU32(ImGuiCol_ButtonActive);
-				else if (hovered)
-					fill = ImGui::GetColorU32(ImGuiCol_ButtonHovered);
 				if (action.fillColor) {
 					auto color = *action.fillColor;
-					if (hovered || held)
-						color.w = std::min(1.0f, color.w + 0.2f);
+					color.w = std::min(1.0f, color.w + WidgetUI::kTextActionHoverBoost * blend.Highlight());
 					fill = ImGui::GetColorU32(color);
+				} else {
+					fill = Util::Anim::LerpU32(fill, ImGui::GetColorU32(ImGuiCol_ButtonHovered), blend.hover);
+					fill = Util::Anim::LerpU32(fill, ImGui::GetColorU32(ImGuiCol_ButtonActive), blend.press);
 				}
 				drawList->AddRectFilled(bb.Min, bb.Max, fill, rounding);
 				const ImVec2 textSize = ImGui::CalcTextSize(action.label.c_str());
@@ -728,7 +724,15 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 			if (!texture)
 				return;
 			ImGui::SameLine();
-			if (ImGui::ImageButton((std::string(searchId) + suffix).c_str(), texture, buttonSize))
+			// Image button chrome with an eased hover fill instead of ImGui's instant colour swap
+			const ImVec2 padding = ImGui::GetStyle().FramePadding;
+			const ImVec2 imageMin(ImGui::GetCursorScreenPos().x + padding.x, ImGui::GetCursorScreenPos().y + padding.y);
+			const bool clicked = ImGui::InvisibleButton((std::string(searchId) + suffix).c_str(),
+				ImVec2(buttonSize.x + padding.x * 2.0f, buttonSize.y + padding.y * 2.0f));
+			Util::DrawAnimatedButtonHighlight(ImRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax()), ImGui::GetItemID(),
+				ImGui::IsItemHovered(), ImGui::IsItemActive(), false);
+			ImGui::GetWindowDrawList()->AddImage(texture, imageMin, ImVec2(imageMin.x + buttonSize.x, imageMin.y + buttonSize.y));
+			if (clicked)
 				callback();
 			Util::AddTooltip(tooltip);
 		};

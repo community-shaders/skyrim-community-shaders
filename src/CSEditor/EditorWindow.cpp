@@ -29,6 +29,7 @@
 #include "Utils/Game.h"
 #include "Utils/Notifications.h"
 #include "Utils/UI.h"
+#include "Utils/UIAnim.h"
 #include "Weather/LightingTemplateWidget.h"
 #include "WeatherPickerWindow.h"
 #include "WeatherUtils.h"
@@ -44,7 +45,6 @@
 
 namespace
 {
-	constexpr float kToggleIconButtonPadding = 1.0f;
 	constexpr float kToggleActiveAlpha = 0.6f;
 	constexpr float kToggleHoverAlpha = 0.8f;
 	constexpr float kInactiveHoverAlpha = 0.25f;
@@ -122,36 +122,25 @@ namespace
 		return false;
 	}
 
-	/** @brief Toggle-style icon button with active fill chrome. Does not set cursor position. */
+	/** @brief Toggle-style icon button whose fill eases with hover, press and the active state. Does not set cursor position. */
 	bool DrawToggleIconButton(const char* id, Icons::GlyphRef glyph, bool isActive, const ImVec4& activeColor,
 		const ImVec2& size, ImU32 glyphColor)
 	{
-		ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
-		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(kToggleIconButtonPadding, kToggleIconButtonPadding));
-		if (isActive) {
-			auto color = activeColor;
-			color.w = kToggleActiveAlpha;
-			auto hover = color;
-			hover.w = kToggleHoverAlpha;
-			ImGui::PushStyleColor(ImGuiCol_Button, color);
-			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, hover);
-		} else {
-			auto hover = ImGui::ColorConvertU32ToFloat4(glyphColor);
-			hover.w = kInactiveHoverAlpha;
-			ImGui::PushStyleColor(ImGuiCol_Button, WidgetUI::kIconButtonTransparent);
-			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, hover);
-		}
-		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImGui::GetStyleColorVec4(ImGuiCol_ButtonHovered));
 		const bool clicked = ImGui::InvisibleButton(id, size);
 		const ImRect bb(ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
-		if (isActive || ImGui::IsItemHovered())
-			ImGui::GetWindowDrawList()->AddRectFilled(bb.Min, bb.Max,
-				ImGui::GetColorU32(ImGui::IsItemActive() ? ImGuiCol_ButtonActive :
-														   (ImGui::IsItemHovered() ? ImGuiCol_ButtonHovered : ImGuiCol_Button)),
-				ImGui::GetStyle().FrameRounding);
-		Icons::DrawCenteredGlyph(ImGui::GetWindowDrawList(), bb.Min, bb.GetSize(), glyph, glyphColor);
-		ImGui::PopStyleColor(3);
-		ImGui::PopStyleVar(2);
+		const auto blend = Util::Anim::ItemBlend(ImGui::GetItemID(), ImGui::IsItemHovered(), ImGui::IsItemActive(), isActive);
+		const float rounding = ImGui::GetStyle().FrameRounding;
+		ImDrawList* drawList = ImGui::GetWindowDrawList();
+		// Active fill, brightened by hover; an inactive button borrows the glyph colour for its hover tint
+		const ImVec4 tint = isActive ? activeColor : ImGui::ColorConvertU32ToFloat4(glyphColor);
+		const float restAlpha = isActive ? kToggleActiveAlpha : 0.0f;
+		const float hoverAlpha = isActive ? kToggleHoverAlpha : kInactiveHoverAlpha;
+		const float fillAlpha = restAlpha * blend.selected + (hoverAlpha - restAlpha * blend.selected) * blend.hover;
+		if (fillAlpha > 0.0f)
+			drawList->AddRectFilled(bb.Min, bb.Max, ImGui::GetColorU32(ImVec4(tint.x, tint.y, tint.z, fillAlpha)), rounding);
+		if (blend.press > 0.0f)
+			drawList->AddRectFilled(bb.Min, bb.Max, Util::Anim::ScaleAlphaU32(ImGui::GetColorU32(ImGuiCol_ButtonActive), blend.press), rounding);
+		Icons::DrawCenteredGlyph(drawList, bb.Min, bb.GetSize(), glyph, glyphColor);
 		return clicked;
 	}
 }  // namespace
@@ -341,13 +330,8 @@ void EditorWindow::DrawBrowserSidebar(bool compact)
 
 			ImGui::PushID(category.id);
 			const bool selected = m_selectedCategory == category.id;
-			const ImVec4 clear(0.0f, 0.0f, 0.0f, 0.0f);
-			ImGui::PushStyleColor(ImGuiCol_Header, clear);
-			ImGui::PushStyleColor(ImGuiCol_HeaderHovered, clear);
-			ImGui::PushStyleColor(ImGuiCol_HeaderActive, clear);
 			if (Util::Selectable("##category", selected, ImGuiSelectableFlags_None, ImVec2(0.0f, rowHeight)))
 				m_selectedCategory = category.id;
-			ImGui::PopStyleColor(3);
 
 			const bool hovered = ImGui::IsItemHovered();
 			// Selectable pads its rect by half ItemSpacing, so neighbours touch; pull x inside the child's clip and leave a row gap.
@@ -357,15 +341,10 @@ void EditorWindow::DrawBrowserSidebar(bool compact)
 			const ImVec2 max(ImGui::GetItemRectMax().x - (style.ItemSpacing.x - padL), ImGui::GetItemRectMax().y - halfGap);
 			const float itemHeight = max.y - min.y;
 			ImDrawList* drawList = ImGui::GetWindowDrawList();
-			if (selected || hovered)
-				drawList->AddRectFilled(min, max, ImGui::GetColorU32(selected ? ImGuiCol_Header : ImGuiCol_HeaderHovered), style.FrameRounding);
-			if (selected) {
-				drawList->PushClipRect(min, ImVec2(min.x + kSidebarStripeWidth * scale, max.y), true);
-				drawList->AddRectFilled(min, max, ImGui::GetColorU32(Util::Colors::GetAccent()), style.FrameRounding);
-				drawList->PopClipRect();
-			}
 
-			const ImU32 iconColor = ImGui::GetColorU32(selected ? Util::Colors::GetAccent() : Util::Colors::GetSecondary());
+			// The row's highlight and accent bar come from the shared list highlight; the icon takes the text colour
+			// on a selected row so it reads on the accent fill in every theme.
+			const ImU32 iconColor = selected ? ImGui::GetColorU32(ImGuiCol_Text) : ImGui::GetColorU32(Util::Colors::GetSecondary());
 			const float iconBox = ImGui::GetFontSize();
 			const float iconY = min.y + (itemHeight - iconBox) * 0.5f;
 			if (compact) {
@@ -520,8 +499,11 @@ void EditorWindow::ShowObjectsWindow()
 		DrawBrowserSidebar(compact);
 
 		ImGui::TableSetColumnIndex(1);
-		if (ImGui::BeginChild("##ObjectsContent", { 0, 0 }, ImGuiChildFlags_None, kStickyHeaderFlags))
+		if (ImGui::BeginChild("##ObjectsContent", { 0, 0 }, ImGuiChildFlags_None, kStickyHeaderFlags)) {
+			// Switching category fades the page in, like the main menu's pages
+			const Util::Anim::PageFade fade(ImGui::GetID(m_selectedCategory.c_str()));
 			DrawBrowserPage();
+		}
 		ImGui::EndChild();
 
 		ImGui::EndTable();
@@ -1092,7 +1074,7 @@ void EditorWindow::RenderUI()
 					auto _style = Util::TransparentIconButtonStyle();
 					ImGui::InvisibleButton(id, iconButtonSize);
 					const ImRect bb(ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
-					Util::DrawRoundedButtonHighlight(bb, enabled && ImGui::IsItemHovered(), enabled && ImGui::IsItemActive());
+					Util::DrawAnimatedButtonHighlight(bb, ImGui::GetItemID(), enabled && ImGui::IsItemHovered(), enabled && ImGui::IsItemActive(), false);
 					if (ImGui::IsItemClicked() && enabled)
 						action();
 					ImVec4 color = enabled ? textColor : statusPalette.Disable;
@@ -1129,7 +1111,7 @@ void EditorWindow::RenderUI()
 					auto _style = Util::TransparentIconButtonStyle();
 					ImGui::InvisibleButton("##GlobalExportPreset", iconButtonSize);
 					const ImRect bb(ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
-					Util::DrawRoundedButtonHighlight(bb, canExport && ImGui::IsItemHovered(), canExport && ImGui::IsItemActive());
+					Util::DrawAnimatedButtonHighlight(bb, ImGui::GetItemID(), canExport && ImGui::IsItemHovered(), canExport && ImGui::IsItemActive(), false);
 					if (ImGui::IsItemClicked() && canExport)
 						ScenePresetExport::Open();
 					ImVec4 exportCol = canExport ? textColor : statusPalette.Disable;
@@ -1158,7 +1140,7 @@ void EditorWindow::RenderUI()
 					auto _style = Util::TransparentIconButtonStyle();
 					ImGui::InvisibleButton("##DeleteSceneChanges", iconButtonSize);
 					const ImRect bb(ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
-					Util::DrawRoundedButtonHighlight(bb, canDelete && ImGui::IsItemHovered(), canDelete && ImGui::IsItemActive());
+					Util::DrawAnimatedButtonHighlight(bb, ImGui::GetItemID(), canDelete && ImGui::IsItemHovered(), canDelete && ImGui::IsItemActive(), false);
 					if (ImGui::IsItemClicked() && canDelete) {
 						deleteSceneChangesConfirmation.title = T(TKEY("scene_page_delete_changes_title"), "Delete changes");
 						deleteSceneChangesConfirmation.message = T(TKEY("scene_page_delete_changes_message"),
@@ -1372,8 +1354,7 @@ void EditorWindow::RenderUI()
 				auto _style = Util::TransparentIconButtonStyle();
 				const bool closeClicked = ImGui::InvisibleButton("##ActionBarClose", iconButtonSize);
 				const ImRect closeBb(ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
-				if (ImGui::IsItemHovered())
-					Util::DrawRoundedButtonHighlight(closeBb, true, ImGui::IsItemActive(), ImGui::GetWindowDrawList());
+				Util::DrawAnimatedButtonHighlight(closeBb, ImGui::GetItemID(), ImGui::IsItemHovered(), ImGui::IsItemActive(), false);
 				Icons::DrawCenteredGlyph(ImGui::GetWindowDrawList(), closeBb.Min, closeBb.GetSize(),
 					Icons::TI(ICON_TI_X), ImGui::GetColorU32(textColor));
 				if (closeClicked)
