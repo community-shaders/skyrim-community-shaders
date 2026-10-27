@@ -83,7 +83,6 @@ namespace
 		// Styling
 		{ Ids::kStyling, "menu.settings.global_scale", "Global Scale" },
 		{ Ids::kStyling, "menu.settings.scrollbar_opacity", "Scrollbar Opacity" },
-		{ Ids::kStyling, "menu.settings.advanced_styling", "Advanced styling" },
 		{ Ids::kStyling, "menu.settings.window_padding", "Window Padding" },
 		{ Ids::kStyling, "menu.settings.frame_padding", "Frame Padding" },
 		{ Ids::kStyling, "menu.settings.item_spacing", "Item Spacing" },
@@ -1020,85 +1019,86 @@ void SettingsTabRenderer::RenderStylingSection()
 	auto& themeSettings = globals::menu->GetSettings().Theme;
 	auto& style = themeSettings.Style;
 
-	if (ImGui::SliderFloat(T("menu.settings.global_scale", "Global Scale"), &themeSettings.GlobalScale, -1.f, 1.f, "%.2f")) {
-		float trueScale = exp2(themeSettings.GlobalScale);
-
-		ImGui::GetStyle().FontScaleMain = trueScale;
-	}
-
-	SeparatorTextWithFont(T("menu.settings.scrollbar_opacity", "Scrollbar Opacity"), Menu::FontRole::Subheading);
-	ImGui::SliderFloat(T("menu.settings.track_opacity", "Track Opacity"), &themeSettings.ScrollbarOpacity.Background, 0.0f, 1.0f, "%.2f");
-	if (auto _tt = Util::HoverTooltipWrapper())
-		ImGui::Text("%s", T("menu.settings.track_opacity_tooltip", "Controls the opacity of the scrollbar track/channel (the background area behind the scrollbar)."));
-	ImGui::SliderFloat(T("menu.settings.thumb_opacity", "Thumb Opacity"), &themeSettings.ScrollbarOpacity.Thumb, 0.0f, 1.0f, "%.2f");
-	if (auto _tt = Util::HoverTooltipWrapper())
-		ImGui::Text("%s", T("menu.settings.thumb_opacity_tooltip", "Controls the opacity of the scrollbar thumb (the draggable part)."));
-	ImGui::SliderFloat(T("menu.settings.thumb_hovered_opacity", "Thumb Hovered Opacity"), &themeSettings.ScrollbarOpacity.ThumbHovered, 0.0f, 1.0f, "%.2f");
-	if (auto _tt = Util::HoverTooltipWrapper())
-		ImGui::Text("%s", T("menu.settings.thumb_hovered_opacity_tooltip", "Controls the opacity of the scrollbar thumb when hovered."));
-	ImGui::SliderFloat(T("menu.settings.thumb_active_opacity", "Thumb Active Opacity"), &themeSettings.ScrollbarOpacity.ThumbActive, 0.0f, 1.0f, "%.2f");
-	if (auto _tt = Util::HoverTooltipWrapper())
-		ImGui::Text("%s", T("menu.settings.thumb_active_opacity_tooltip", "Controls the opacity of the scrollbar thumb when being dragged."));
-
-	// Raw ImGui style values: kept out of the way, most themes never need them
-	const auto advancedLabel = std::format("{}###AdvancedStyling", T("menu.settings.advanced_styling", "Advanced styling"));
-	if (ImGui::CollapsingHeader(advancedLabel.c_str())) {
-		SeparatorTextWithFont(T("menu.settings.section_layout", "Layout"), Menu::FontRole::Subheading);
-
-		ImGui::SliderFloat2(T("menu.settings.window_padding", "Window Padding"), (float*)&style.WindowPadding, 0.0f, 20.0f, "%.0f");
-		ImGui::SliderFloat2(T("menu.settings.frame_padding", "Frame Padding"), (float*)&style.FramePadding, 0.0f, 20.0f, "%.0f");
-		ImGui::SliderFloat2(T("menu.settings.item_spacing", "Item Spacing"), (float*)&style.ItemSpacing, 0.0f, 20.0f, "%.0f");
-		ImGui::SliderFloat2(T("menu.settings.item_inner_spacing", "Item Inner Spacing"), (float*)&style.ItemInnerSpacing, 0.0f, 20.0f, "%.0f");
-		ImGui::SliderFloat(T("menu.settings.indent_spacing", "Indent Spacing"), &style.IndentSpacing, 0.0f, 30.0f, "%.0f");
-		ImGui::SliderFloat(T("menu.settings.scrollbar_size", "Scrollbar Size"), &style.ScrollbarSize, 1.0f, 20.0f, "%.0f");
-		ImGui::SliderFloat(T("menu.settings.grab_min_size", "Grab Min Size"), &style.GrabMinSize, 1.0f, 20.0f, "%.0f");
-
-		SeparatorTextWithFont(T("menu.settings.section_borders", "Borders"), Menu::FontRole::Subheading);
-		ImGui::SliderFloat(T("menu.settings.window_border_size", "Window Border Size"), &style.WindowBorderSize, 0.0f, 5.0f, "%.0f");
-		ImGui::SliderFloat(T("menu.settings.child_border_size", "Child Border Size"), &style.ChildBorderSize, 0.0f, 5.0f, "%.0f");
-		ImGui::SliderFloat(T("menu.settings.popup_border_size", "Popup Border Size"), &style.PopupBorderSize, 0.0f, 5.0f, "%.0f");
-		ImGui::SliderFloat(T("menu.settings.frame_border_size", "Frame Border Size"), &style.FrameBorderSize, 0.0f, 5.0f, "%.0f");
-		ImGui::SliderFloat(T("menu.settings.tab_border_size", "Tab Border Size"), &style.TabBorderSize, 0.0f, 5.0f, "%.0f");
-		ImGui::SliderFloat(T("menu.settings.tab_bar_border_size", "Tab Bar Border Size"), &style.TabBarBorderSize, 0.0f, 5.0f, "%.0f");
-
-		SeparatorTextWithFont(T("menu.settings.section_rounding", "Rounding"), Menu::FontRole::Subheading);
-		ImGui::SliderFloat(T("menu.settings.window_rounding", "Window Rounding"), &style.WindowRounding, 0.0f, 12.0f, "%.0f");
-		ImGui::SliderFloat(T("menu.settings.child_rounding", "Child Rounding"), &style.ChildRounding, 0.0f, 12.0f, "%.0f");
-		ImGui::SliderFloat(T("menu.settings.frame_rounding", "Frame Rounding"), &style.FrameRounding, 0.0f, 12.0f, "%.0f");
-		ImGui::SliderFloat(T("menu.settings.popup_rounding", "Popup Rounding"), &style.PopupRounding, 0.0f, 12.0f, "%.0f");
-		ImGui::SliderFloat(T("menu.settings.scrollbar_rounding", "Scrollbar Rounding"), &style.ScrollbarRounding, 0.0f, 12.0f, "%.0f");
-		ImGui::SliderFloat(T("menu.settings.grab_rounding", "Grab Rounding"), &style.GrabRounding, 0.0f, 12.0f, "%.0f");
-		ImGui::SliderFloat(T("menu.settings.tab_rounding", "Tab Rounding"), &style.TabRounding, 0.0f, 12.0f, "%.0f");
-
-		SeparatorTextWithFont(T("menu.settings.section_tables", "Tables"), Menu::FontRole::Subheading);
-		ImGui::SliderFloat2(T("menu.settings.cell_padding", "Cell Padding"), (float*)&style.CellPadding, 0.0f, 20.0f, "%.0f");
-		ImGui::SliderAngle(T("menu.settings.table_angled_headers_angle", "Table Angled Headers Angle"), &style.TableAngledHeadersAngle, -50.0f, +50.0f);
-
-		SeparatorTextWithFont(T("menu.settings.section_widgets", "Widgets"), Menu::FontRole::Subheading);
-		{
-			FontRoleGuard comboFont(Menu::FontRole::Body);
-			const char* colorButtonPositions[] = {
-				T("menu.settings.color_button_left", "Left"),
-				T("menu.settings.color_button_right", "Right")
-			};
-			int colorButtonPos = (int)style.ColorButtonPosition;
-			if (ImGui::Combo(T("menu.settings.color_button_position", "ColorButtonPosition"), &colorButtonPos, colorButtonPositions, IM_ARRAYSIZE(colorButtonPositions))) {
-				style.ColorButtonPosition = static_cast<ImGuiDir>(colorButtonPos);
-			}
+	// One tab per group keeps each page short; the raw ImGui values sit behind their own tabs
+	if (Util::BeginPillTabBar("##StylingTabs")) {
+		if (Util::BeginPillTabItem(T("menu.settings.styling_tab_general", "General"))) {
+			if (ImGui::SliderFloat(T("menu.settings.global_scale", "Global Scale"), &themeSettings.GlobalScale, -1.f, 1.f, "%.2f"))
+				ImGui::GetStyle().FontScaleMain = exp2(themeSettings.GlobalScale);
+			SeparatorTextWithFont(T("menu.settings.scrollbar_opacity", "Scrollbar Opacity"), Menu::FontRole::Subheading);
+			ImGui::SliderFloat(T("menu.settings.track_opacity", "Track Opacity"), &themeSettings.ScrollbarOpacity.Background, 0.0f, 1.0f, "%.2f");
+			if (auto _tt = Util::HoverTooltipWrapper())
+				ImGui::Text("%s", T("menu.settings.track_opacity_tooltip", "Controls the opacity of the scrollbar track/channel (the background area behind the scrollbar)."));
+			ImGui::SliderFloat(T("menu.settings.thumb_opacity", "Thumb Opacity"), &themeSettings.ScrollbarOpacity.Thumb, 0.0f, 1.0f, "%.2f");
+			if (auto _tt = Util::HoverTooltipWrapper())
+				ImGui::Text("%s", T("menu.settings.thumb_opacity_tooltip", "Controls the opacity of the scrollbar thumb (the draggable part)."));
+			ImGui::SliderFloat(T("menu.settings.thumb_hovered_opacity", "Thumb Hovered Opacity"), &themeSettings.ScrollbarOpacity.ThumbHovered, 0.0f, 1.0f, "%.2f");
+			if (auto _tt = Util::HoverTooltipWrapper())
+				ImGui::Text("%s", T("menu.settings.thumb_hovered_opacity_tooltip", "Controls the opacity of the scrollbar thumb when hovered."));
+			ImGui::SliderFloat(T("menu.settings.thumb_active_opacity", "Thumb Active Opacity"), &themeSettings.ScrollbarOpacity.ThumbActive, 0.0f, 1.0f, "%.2f");
+			if (auto _tt = Util::HoverTooltipWrapper())
+				ImGui::Text("%s", T("menu.settings.thumb_active_opacity_tooltip", "Controls the opacity of the scrollbar thumb when being dragged."));
+			SeparatorTextWithFont(T("menu.settings.section_scrollbar", "Scrollbar"), Menu::FontRole::Subheading);
+			ImGui::SliderFloat(T("menu.settings.scrollbar_size", "Scrollbar Size"), &style.ScrollbarSize, 1.0f, 20.0f, "%.0f");
+			ImGui::SliderFloat(T("menu.settings.grab_min_size", "Grab Min Size"), &style.GrabMinSize, 1.0f, 20.0f, "%.0f");
+			Util::EndPillTabItem();
 		}
-		ImGui::SliderFloat2(T("menu.settings.button_text_align", "Button Text Align"), (float*)&style.ButtonTextAlign, 0.0f, 1.0f, "%.2f");
-		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text("%s", T("menu.settings.button_text_align_tooltip", "Alignment applies when a button is larger than its text content."));
-		ImGui::SliderFloat2(T("menu.settings.selectable_text_align", "Selectable Text Align"), (float*)&style.SelectableTextAlign, 0.0f, 1.0f, "%.2f");
-		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text("%s", T("menu.settings.selectable_text_align_tooltip", "Alignment applies when a selectable is larger than its text content."));
-		ImGui::SliderFloat(T("menu.settings.separator_text_border_size", "Separator Text Border Size"), &style.SeparatorTextBorderSize, 0.0f, 10.0f, "%.0f");
-		ImGui::SliderFloat2(T("menu.settings.separator_text_align", "Separator Text Align"), (float*)&style.SeparatorTextAlign, 0.0f, 1.0f, "%.2f");
-		ImGui::SliderFloat2(T("menu.settings.separator_text_padding", "Separator Text Padding"), (float*)&style.SeparatorTextPadding, 0.0f, 40.0f, "%.0f");
-		ImGui::SliderFloat(T("menu.settings.log_slider_deadzone", "Log Slider Deadzone"), &style.LogSliderDeadzone, 0.0f, 12.0f, "%.0f");
-
-		SeparatorTextWithFont(T("menu.settings.section_docking", "Docking"), Menu::FontRole::Subheading);
-		ImGui::SliderFloat(T("menu.settings.docking_splitter_size", "Docking Splitter Size"), &style.DockingSeparatorSize, 0.0f, 12.0f, "%.0f");
+		if (Util::BeginPillTabItem(T("menu.settings.styling_tab_spacing", "Spacing"))) {
+			ImGui::SliderFloat2(T("menu.settings.window_padding", "Window Padding"), (float*)&style.WindowPadding, 0.0f, 20.0f, "%.0f");
+			ImGui::SliderFloat2(T("menu.settings.frame_padding", "Frame Padding"), (float*)&style.FramePadding, 0.0f, 20.0f, "%.0f");
+			ImGui::SliderFloat2(T("menu.settings.item_spacing", "Item Spacing"), (float*)&style.ItemSpacing, 0.0f, 20.0f, "%.0f");
+			ImGui::SliderFloat2(T("menu.settings.item_inner_spacing", "Item Inner Spacing"), (float*)&style.ItemInnerSpacing, 0.0f, 20.0f, "%.0f");
+			ImGui::SliderFloat(T("menu.settings.indent_spacing", "Indent Spacing"), &style.IndentSpacing, 0.0f, 30.0f, "%.0f");
+			SeparatorTextWithFont(T("menu.settings.section_tables", "Tables"), Menu::FontRole::Subheading);
+			ImGui::SliderFloat2(T("menu.settings.cell_padding", "Cell Padding"), (float*)&style.CellPadding, 0.0f, 20.0f, "%.0f");
+			ImGui::SliderAngle(T("menu.settings.table_angled_headers_angle", "Table Angled Headers Angle"), &style.TableAngledHeadersAngle, -50.0f, +50.0f);
+			Util::EndPillTabItem();
+		}
+		if (Util::BeginPillTabItem(T("menu.settings.styling_tab_borders", "Borders"))) {
+			ImGui::SliderFloat(T("menu.settings.window_border_size", "Window Border Size"), &style.WindowBorderSize, 0.0f, 5.0f, "%.0f");
+			ImGui::SliderFloat(T("menu.settings.child_border_size", "Child Border Size"), &style.ChildBorderSize, 0.0f, 5.0f, "%.0f");
+			ImGui::SliderFloat(T("menu.settings.popup_border_size", "Popup Border Size"), &style.PopupBorderSize, 0.0f, 5.0f, "%.0f");
+			ImGui::SliderFloat(T("menu.settings.frame_border_size", "Frame Border Size"), &style.FrameBorderSize, 0.0f, 5.0f, "%.0f");
+			ImGui::SliderFloat(T("menu.settings.tab_border_size", "Tab Border Size"), &style.TabBorderSize, 0.0f, 5.0f, "%.0f");
+			ImGui::SliderFloat(T("menu.settings.tab_bar_border_size", "Tab Bar Border Size"), &style.TabBarBorderSize, 0.0f, 5.0f, "%.0f");
+			Util::EndPillTabItem();
+		}
+		if (Util::BeginPillTabItem(T("menu.settings.styling_tab_rounding", "Rounding"))) {
+			ImGui::SliderFloat(T("menu.settings.window_rounding", "Window Rounding"), &style.WindowRounding, 0.0f, 12.0f, "%.0f");
+			ImGui::SliderFloat(T("menu.settings.child_rounding", "Child Rounding"), &style.ChildRounding, 0.0f, 12.0f, "%.0f");
+			ImGui::SliderFloat(T("menu.settings.frame_rounding", "Frame Rounding"), &style.FrameRounding, 0.0f, 12.0f, "%.0f");
+			ImGui::SliderFloat(T("menu.settings.popup_rounding", "Popup Rounding"), &style.PopupRounding, 0.0f, 12.0f, "%.0f");
+			ImGui::SliderFloat(T("menu.settings.scrollbar_rounding", "Scrollbar Rounding"), &style.ScrollbarRounding, 0.0f, 12.0f, "%.0f");
+			ImGui::SliderFloat(T("menu.settings.grab_rounding", "Grab Rounding"), &style.GrabRounding, 0.0f, 12.0f, "%.0f");
+			ImGui::SliderFloat(T("menu.settings.tab_rounding", "Tab Rounding"), &style.TabRounding, 0.0f, 12.0f, "%.0f");
+			Util::EndPillTabItem();
+		}
+		if (Util::BeginPillTabItem(T("menu.settings.styling_tab_widgets", "Widgets"))) {
+			{
+				FontRoleGuard comboFont(Menu::FontRole::Body);
+				const char* colorButtonPositions[] = {
+					T("menu.settings.color_button_left", "Left"),
+					T("menu.settings.color_button_right", "Right")
+				};
+				int colorButtonPos = (int)style.ColorButtonPosition;
+				if (ImGui::Combo(T("menu.settings.color_button_position", "ColorButtonPosition"), &colorButtonPos, colorButtonPositions, IM_ARRAYSIZE(colorButtonPositions))) {
+					style.ColorButtonPosition = static_cast<ImGuiDir>(colorButtonPos);
+				}
+			}
+			ImGui::SliderFloat2(T("menu.settings.button_text_align", "Button Text Align"), (float*)&style.ButtonTextAlign, 0.0f, 1.0f, "%.2f");
+			if (auto _tt = Util::HoverTooltipWrapper())
+				ImGui::Text("%s", T("menu.settings.button_text_align_tooltip", "Alignment applies when a button is larger than its text content."));
+			ImGui::SliderFloat2(T("menu.settings.selectable_text_align", "Selectable Text Align"), (float*)&style.SelectableTextAlign, 0.0f, 1.0f, "%.2f");
+			if (auto _tt = Util::HoverTooltipWrapper())
+				ImGui::Text("%s", T("menu.settings.selectable_text_align_tooltip", "Alignment applies when a selectable is larger than its text content."));
+			ImGui::SliderFloat(T("menu.settings.separator_text_border_size", "Separator Text Border Size"), &style.SeparatorTextBorderSize, 0.0f, 10.0f, "%.0f");
+			ImGui::SliderFloat2(T("menu.settings.separator_text_align", "Separator Text Align"), (float*)&style.SeparatorTextAlign, 0.0f, 1.0f, "%.2f");
+			ImGui::SliderFloat2(T("menu.settings.separator_text_padding", "Separator Text Padding"), (float*)&style.SeparatorTextPadding, 0.0f, 40.0f, "%.0f");
+			ImGui::SliderFloat(T("menu.settings.log_slider_deadzone", "Log Slider Deadzone"), &style.LogSliderDeadzone, 0.0f, 12.0f, "%.0f");
+			SeparatorTextWithFont(T("menu.settings.section_docking", "Docking"), Menu::FontRole::Subheading);
+			ImGui::SliderFloat(T("menu.settings.docking_splitter_size", "Docking Splitter Size"), &style.DockingSeparatorSize, 0.0f, 12.0f, "%.0f");
+			Util::EndPillTabItem();
+		}
+		Util::EndPillTabBar();
 	}
 }
 
