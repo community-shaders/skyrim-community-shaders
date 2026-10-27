@@ -2,6 +2,7 @@
 #include "Menu/SettingReveal.h"
 #include "Utils/UIAnim.h"
 #include "Utils/UISurface.h"
+#include <imgui_internal.h>
 
 #include <algorithm>
 #include <cassert>
@@ -40,6 +41,7 @@
 #include "Util.h"
 #include "Utils/UI.h"
 #include "Utils/UIAnim.h"
+#include <imgui_internal.h>
 
 namespace
 {
@@ -161,44 +163,13 @@ namespace
 		const float lineHeight = ImGui::GetTextLineHeight();
 		const float padX = ImGui::CalcTextSize(" ").x;
 		const ImVec2 pos = ImGui::GetCursorScreenPos();
-		const bool clicked = ImGui::Selectable("##BackToFeatures", false, ImGuiSelectableFlags_None, ImVec2(0.0f, lineHeight));
+		const bool clicked = Util::Selectable("##BackToFeatures", false, ImGuiSelectableFlags_None, ImVec2(0.0f, lineHeight));
 		auto* drawList = ImGui::GetWindowDrawList();
 		Icons::DrawCenteredGlyph(drawList, ImVec2(pos.x + padX, pos.y), ImVec2(lineHeight, lineHeight), Icons::TI(ICON_TI_CHEVRON_LEFT),
 			ImGui::GetColorU32(Util::Colors::GetSecondary()));
 		drawList->AddText(ImVec2(pos.x + padX + lineHeight + ThemeManager::Constants::NAV_ROW_ICON_GAP * Util::GetUIScale(), pos.y),
 			ImGui::GetColorU32(ImGuiCol_Text), T("menu.features.back_to_features", "Features"));
 		return clicked;
-	}
-
-	/**
-	 * @brief Eased hover / press / selected fill for the item just submitted, as a row of the left pane: the hover
-	 * fill fades in, the selected row gets a subtle accent fill and a short accent bar on its left.
-	 */
-	void DrawRowHighlight(ImDrawList* drawList, bool selected, bool disabled)
-	{
-		using Constants = ThemeManager::Constants;
-		const auto blend = Util::Anim::ItemBlend(ImGui::GetItemID(), ImGui::IsItemHovered() && !disabled, ImGui::IsItemActive(), selected);
-		const ImVec2 min = ImGui::GetItemRectMin();
-		const ImVec2 max = ImGui::GetItemRectMax();
-		const float rounding = ImGui::GetStyle().FrameRounding;
-		if (blend.hover > 0.0f)
-			drawList->AddRectFilled(min, max, Util::Anim::ScaleAlphaU32(ImGui::GetColorU32(ImGuiCol_HeaderHovered), blend.hover), rounding);
-		if (blend.press > 0.0f)
-			drawList->AddRectFilled(min, max, Util::Anim::ScaleAlphaU32(ImGui::GetColorU32(ImGuiCol_HeaderActive), blend.press), rounding);
-		const auto& navSurface = Util::Surface::Get(Util::Surface::Role::NavSelected);
-		if (blend.selected > 0.0f && navSurface.enabled) {
-			if (navSurface.fillAlpha > 0.0f) {
-				ImVec4 fill = Util::Colors::GetAccent();
-				fill.w = navSurface.fillAlpha * blend.selected;
-				drawList->AddRectFilled(min, max, ImGui::GetColorU32(fill), rounding);
-			}
-			const float barWidth = navSurface.accentBarWidth * Util::GetUIScale();
-			if (navSurface.accentBar && barWidth > 0.0f) {
-				const float inset = (max.y - min.y) * Constants::NAV_SELECTED_BAR_INSET;
-				drawList->AddRectFilled(ImVec2(min.x, min.y + inset), ImVec2(min.x + barWidth, max.y - inset),
-					Util::Anim::ScaleAlphaU32(ImGui::GetColorU32(Util::Colors::GetAccent()), blend.selected), barWidth * 0.5f);
-			}
-		}
 	}
 
 	/**
@@ -236,13 +207,16 @@ namespace
 			drawList->AddRectFilled(min, max, Util::Anim::ScaleAlphaU32(ImGui::GetColorU32(ImGuiCol_HeaderHovered), blend.hover), rounding);
 		if (blend.press > 0.0f)
 			drawList->AddRectFilled(min, max, Util::Anim::ScaleAlphaU32(ImGui::GetColorU32(ImGuiCol_HeaderActive), blend.press), rounding);
-		if (blend.selected > 0.0f) {
+		if (selected || blend.selected > 0.0f) {
+			// The selected pill is one shape that glides between the pills; one that was just left fades out in place
+			const auto pill = selected ? Util::Anim::SelectionGlide(ImHashStr("NavPillGlide"), min, max) : Util::Anim::GlideRect{ min, max };
+			const float alpha = selected ? 1.0f : blend.selected;
 			ImVec4 fill = Util::Colors::GetAccent();
-			fill.w = Constants::SEGMENT_SELECTED_FILL_ALPHA * blend.selected;
-			drawList->AddRectFilled(min, max, ImGui::GetColorU32(fill), rounding);
+			fill.w = Constants::SEGMENT_SELECTED_FILL_ALPHA * alpha;
+			drawList->AddRectFilled(pill.min, pill.max, ImGui::GetColorU32(fill), rounding);
 			ImVec4 outline = Util::Colors::GetAccent();
-			outline.w = Constants::SEGMENT_SELECTED_OUTLINE_ALPHA * blend.selected;
-			drawList->AddRect(min, max, ImGui::GetColorU32(outline), rounding);
+			outline.w = Constants::SEGMENT_SELECTED_OUTLINE_ALPHA * alpha;
+			drawList->AddRect(pill.min, pill.max, ImGui::GetColorU32(outline), rounding);
 		}
 
 		const ImVec4 textColor = ImGui::GetStyleColorVec4(disabled ? ImGuiCol_TextDisabled : ImGuiCol_Text);
@@ -898,6 +872,7 @@ bool FeatureListRenderer::IsPageOpen(std::string_view pageId)
 
 void FeatureListRenderer::RenderSortPopup(const char* popupId)
 {
+	Util::Anim::PopupFade fade(popupId);
 	if (!ImGui::BeginPopup(popupId))
 		return;
 	const FilterCounts& counts = g_filterCounts;
@@ -1047,8 +1022,22 @@ void FeatureListRenderer::RenderRightColumn(
 	const Hooks& hooks)
 {
 	if (selectedMenu < menuList.size()) {
+		// A newly opened page fades in; the key is the page itself, so a rebuilt list does not restart it
+		const ImGuiID pageId = std::visit(
+			[](const auto& entry) -> ImGuiID {
+				using Entry = std::decay_t<decltype(entry)>;
+				if constexpr (std::is_same_v<Entry, FeatureListRenderer::BuiltInMenu>)
+					return ImGui::GetID(entry.id.data(), entry.id.data() + entry.id.size());
+				else if constexpr (std::is_same_v<Entry, Feature*>)
+					return ImGui::GetID(entry);
+				else
+					return 0;
+			},
+			menuList[selectedMenu]);
+		Util::Anim::PageFade fade(pageId);
 		std::visit(DrawMenuVisitor{ pendingFeatureSelection, hooks }, menuList[selectedMenu]);
 	} else if (g_detachedFeature) {
+		Util::Anim::PageFade fade(ImGui::GetID(g_detachedFeature));
 		DrawMenuVisitor{ pendingFeatureSelection, hooks }(g_detachedFeature);
 	} else {
 		BrowserUI::EmptyState(T("menu.features.select_item_left", "Please select an item on the left."));
@@ -1120,7 +1109,7 @@ void FeatureListRenderer::ListMenuVisitor::operator()(Feature* feat)
 	const float spaceWidth = ImGui::CalcTextSize(" ").x;
 	const std::string iconPad = showCategoryIcon ? std::string(static_cast<size_t>(std::ceil((iconColumn + spaceWidth) / spaceWidth)), ' ') : std::string();
 	ImGui::PushStyleColor(ImGuiCol_Text, textColor);
-	if (ImGui::Selectable(std::format(" {}{} ###Row", iconPad, feat->GetDisplayName()).c_str(), selectedMenuRef == listId, ImGuiSelectableFlags_SpanAllColumns)) {
+	if (Util::NavSelectable("FeatureListGlide", std::format(" {}{} ###Row", iconPad, feat->GetDisplayName()).c_str(), selectedMenuRef == listId, ImGuiSelectableFlags_SpanAllColumns)) {
 		selectedMenuRef = listId;
 	}
 	ImGui::PopStyleColor();
@@ -1185,6 +1174,7 @@ void FeatureListRenderer::ListMenuVisitor::operator()(Feature* feat)
 
 void FeatureListRenderer::ListMenuVisitor::RenderRowContextMenu(Feature* feat) const
 {
+	Util::Anim::PopupFade fade("##RowMenu");
 	if (!ImGui::BeginPopupContextItem("##RowMenu"))
 		return;
 
@@ -1471,7 +1461,7 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureSettings(Feature* feat, 
 					auto featureModLink = feat->GetFeatureModLink();
 					const auto downloadText = std::vformat(
 						T("menu.features.download_link", "Click here to download this feature ({})"), std::make_format_args(featureModLink));
-					if (ImGui::Selectable(downloadText.c_str())) {
+					if (Util::Selectable(downloadText.c_str())) {
 						ShellExecuteA(NULL, "open", featureModLink.c_str(), NULL, NULL, SW_SHOWNORMAL);
 					}
 					if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -1514,6 +1504,7 @@ void FeatureListRenderer::DrawMenuVisitor::RenderActionsMenu(Feature* feat, bool
 	if (auto _tt = Util::HoverTooltipWrapper())
 		ImGui::TextUnformatted(T("menu.features.actions_tooltip", "More actions"));
 
+	Util::Anim::PopupFade fade("##FeatureActionsMenu");
 	if (!ImGui::BeginPopup("##FeatureActionsMenu"))
 		return;
 	{
@@ -1556,7 +1547,7 @@ void FeatureListRenderer::DrawMenuVisitor::RenderDisabledAtBootNotice(Feature* f
 	const char* label = T("menu.features.enable_at_boot", "Enable at Boot");
 	const float width = ImGui::CalcTextSize(label).x + ImGui::GetStyle().FramePadding.x * 2.0f;
 	ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(0.0f, (ImGui::GetContentRegionAvail().x - width) * 0.5f));
-	if (ImGui::Button(label)) {
+	if (Util::Button(label)) {
 		const bool enabled = feat->ToggleAtBootSetting();
 		logger::info("{}: {} at boot.", feat->GetShortName(), enabled ? "Enabled" : "Disabled");
 	}
@@ -1635,7 +1626,7 @@ void FeatureListRenderer::DrawConstraintWarningDialog(std::string& pendingFeatur
 							break;
 						}
 					}
-					if (ImGui::Selectable(fmt::format("{}##imp{}", targetDisplayName, rowIndex).c_str())) {
+					if (Util::Selectable(fmt::format("{}##imp{}", targetDisplayName, rowIndex).c_str())) {
 						navigationTarget = settingId.featureShortName;
 						break;
 					}
@@ -1651,7 +1642,7 @@ void FeatureListRenderer::DrawConstraintWarningDialog(std::string& pendingFeatur
 				// --- Column 2: Constrained By (source features, clickable) ---
 				ImGui::TableSetColumnIndex(2);
 				if (!result.sources.empty()) {
-					if (ImGui::Selectable(fmt::format("{}##src{}", result.sources[0].featureName, rowIndex).c_str())) {
+					if (Util::Selectable(fmt::format("{}##src{}", result.sources[0].featureName, rowIndex).c_str())) {
 						navigationTarget = result.sources[0].featureShortName;
 						break;
 					}
@@ -1711,7 +1702,7 @@ void FeatureListRenderer::DrawConstraintWarningDialog(std::string& pendingFeatur
 		if (offset > 0)
 			ImGui::SetCursorPosX(offset);
 
-		if (ImGui::Button(T("menu.features.ok_button", "OK"), ImVec2(buttonWidth, 0))) {
+		if (Util::Button(T("menu.features.ok_button", "OK"), ImVec2(buttonWidth, 0))) {
 			if (g_dontShowAgainCheckbox) {
 				if (auto* menu = globals::menu) {
 					menu->GetSettings().SkipConstraintWarning = true;

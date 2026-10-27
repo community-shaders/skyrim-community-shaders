@@ -18,6 +18,7 @@
 #include "SettingsSections.h"
 #include "ThemeManager.h"
 #include "Utils/UI.h"
+#include "Utils/UIAnim.h"
 
 namespace
 {
@@ -237,7 +238,7 @@ namespace
 			}
 
 			ImGui::PushID(section.id.data(), section.id.data() + section.id.size());
-			if (ImGui::Selectable(GetSectionTitle(section.id), state.section == section.id))
+			if (Util::NavSelectable("SettingsSectionGlide", GetSectionTitle(section.id), state.section == section.id))
 				state.section = std::string(section.id);
 			if (hits && !hits->entries.empty())
 				DrawRowCount(hits->entries.size());
@@ -267,6 +268,7 @@ namespace
 
 	void RenderContent(PageState& state, const Section& section)
 	{
+		Util::Anim::PageFade fade(ImGui::GetID(section.id.data(), section.id.data() + section.id.size()));
 		DrawSectionHeader(section);
 		if (const auto matches = FindMatches(state.search.data()); matches && !(*matches)[IndexOf(section)].entries.empty())
 			DrawMatchHint((*matches)[IndexOf(section)]);
