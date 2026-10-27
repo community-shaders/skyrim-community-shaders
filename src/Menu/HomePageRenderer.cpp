@@ -115,6 +115,34 @@ namespace
 		Card& operator=(const Card&) = delete;
 	};
 
+	/** @brief Draws text word-wrapped to the available width, each line centred on it, in the secondary colour. */
+	void CenteredWrappedText(const char* text)
+	{
+		const float avail = ImGui::GetContentRegionAvail().x;
+		const float startX = ImGui::GetCursorPosX();
+		ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetSecondary());
+		std::string line;
+		const auto flush = [&] {
+			if (line.empty())
+				return;
+			ImGui::SetCursorPosX(startX + std::max(0.0f, (avail - ImGui::CalcTextSize(line.c_str()).x) * 0.5f));
+			ImGui::TextUnformatted(line.c_str());
+			line.clear();
+		};
+		std::string_view rest(text);
+		while (!rest.empty()) {
+			const size_t space = rest.find(' ');
+			const std::string word(rest.substr(0, space));
+			const std::string candidate = line.empty() ? word : line + ' ' + word;
+			if (!line.empty() && ImGui::CalcTextSize(candidate.c_str()).x > avail)
+				flush();
+			line = line.empty() ? word : line + ' ' + word;
+			rest = space == std::string_view::npos ? std::string_view{} : rest.substr(space + 1);
+		}
+		flush();
+		ImGui::PopStyleColor();
+	}
+
 	/** @brief Glyph box edge for the cards' icon buttons. */
 	float IconBoxSize()
 	{
@@ -337,12 +365,6 @@ namespace
 				"Please double check you have updated all features and that your load order is correct. "
 				"See CommunityShaders.log for details and check the Nexus Mods page or Discord server."));
 		}
-	}
-
-	/** @brief True when the Needs Attention card has anything to show. */
-	bool NeedsAttention()
-	{
-		return globals::state->HasUnsavedChanges() || IssuesPageRenderer::HasIssues() || !GetRestartPendingFeatures().empty();
 	}
 
 	/**
@@ -652,23 +674,20 @@ void HomePageRenderer::RenderHomePage()
 		ImGui::SetScrollY(0.0f);
 
 	// What CS is, straight at the top of the page
-	Util::Text::WrappedDisabled("%s", T("menu.home.intro", "Community Shaders provides advanced graphics enhancements for Skyrim. This collection of features brings modern rendering techniques to enhance your visual experience."));
+	CenteredWrappedText(T("menu.home.intro",
+		"Community Shaders is the open-source, next-generation graphics framework for Skyrim: modern lighting, materials, "
+		"water and post-processing, built in the open and shaped by the community."));
 	ImGui::Dummy(ImVec2(0.0f, Constants::HOME_CARD_SPACING * Util::GetUIScale()));
 
-	// Problems get a full-width card up top; the compact all-clear stays in the grid
-	const bool attentionOnTop = NeedsAttention();
-	if (attentionOnTop) {
-		RenderAttentionCard();
-		ImGui::Dummy(ImVec2(0.0f, Constants::HOME_CARD_SPACING * Util::GetUIScale()));
-	}
+	// Needs Attention always heads the page, across its full width
+	RenderAttentionCard();
+	ImGui::Dummy(ImVec2(0.0f, Constants::HOME_CARD_SPACING * Util::GetUIScale()));
 
 	// Two columns once each card gets about 30 characters of room, else one
 	const float charWidth = ImGui::CalcTextSize("0").x;
 	const int columns = ImGui::GetContentRegionAvail().x >= Constants::HOME_TWO_COLUMN_MIN_CHARS * charWidth ? 2 : 1;
 	if (ImGui::BeginTable("##HomeGrid", columns, ImGuiTableFlags_SizingStretchSame)) {
 		std::vector<void (*)()> cards = { &RenderPresetCard, &RenderSceneCard, &RenderShadersCard };
-		if (!attentionOnTop)
-			cards.push_back(&RenderAttentionCard);
 		cards.push_back(&RenderQuickAccessCard);
 		for (auto* card : cards) {
 			ImGui::TableNextColumn();
