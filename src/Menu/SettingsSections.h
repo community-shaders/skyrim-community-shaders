@@ -20,7 +20,6 @@ namespace SettingsSectionIds
 	inline constexpr std::string_view kFonts = "Fonts";
 	inline constexpr std::string_view kColors = "Colors";
 	inline constexpr std::string_view kStyling = "Styling";
-	inline constexpr std::string_view kSurfaces = "Surfaces";
 	inline constexpr std::string_view kHeaderEffects = "HeaderEffects";
 	// Advanced
 	inline constexpr std::string_view kDeveloper = "Developer";

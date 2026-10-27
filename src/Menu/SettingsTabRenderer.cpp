@@ -91,16 +91,16 @@ namespace
 		{ Ids::kStyling, "menu.settings.section_tables", "Tables" },
 		{ Ids::kStyling, "menu.settings.section_docking", "Docking" },
 		// Surfaces
-		{ Ids::kSurfaces, "menu.settings.reset_surfaces", "Reset surfaces to theme defaults" },
-		{ Ids::kSurfaces, "menu.settings.surface_home_card", "Home Cards" },
-		{ Ids::kSurfaces, "menu.settings.surface_toast", "Notification Toasts" },
-		{ Ids::kSurfaces, "menu.settings.surface_overlay_card", "Status Card" },
-		{ Ids::kSurfaces, "menu.settings.surface_palette", "Go To Palette" },
-		{ Ids::kSurfaces, "menu.settings.surface_nav_selected", "Selected Navigation Row" },
-		{ Ids::kSurfaces, "menu.settings.surface_padding", "Inner Padding" },
-		{ Ids::kSurfaces, "menu.settings.surface_fill_lift", "Fill Lift" },
-		{ Ids::kSurfaces, "menu.settings.surface_border_enabled", "Border" },
-		{ Ids::kSurfaces, "menu.settings.surface_shadow_enabled", "Shadow" },
+		{ Ids::kStyling, "menu.settings.reset_surfaces", "Reset surfaces to theme defaults" },
+		{ Ids::kStyling, "menu.settings.surface_home_card", "Home Cards" },
+		{ Ids::kStyling, "menu.settings.surface_toast", "Notification Toasts" },
+		{ Ids::kStyling, "menu.settings.surface_overlay_card", "Status Card" },
+		{ Ids::kStyling, "menu.settings.surface_palette", "Go To Palette" },
+		{ Ids::kStyling, "menu.settings.surface_nav_selected", "Selected Navigation Row" },
+		{ Ids::kStyling, "menu.settings.surface_padding", "Inner Padding" },
+		{ Ids::kStyling, "menu.settings.surface_fill_lift", "Fill Lift" },
+		{ Ids::kStyling, "menu.settings.surface_border_enabled", "Border" },
+		{ Ids::kStyling, "menu.settings.surface_shadow_enabled", "Shadow" },
 		// Header & Effects
 		{ Ids::kHeaderEffects, "menu.settings.use_monochrome_icons", "Use Monochrome Icons" },
 		{ Ids::kHeaderEffects, "menu.settings.use_monochrome_cs_logo", "Use Monochrome CS Logo" },
@@ -1096,6 +1096,10 @@ void SettingsTabRenderer::RenderStylingSection()
 			ImGui::SliderFloat(T("menu.settings.log_slider_deadzone", "Log Slider Deadzone"), &style.LogSliderDeadzone, 0.0f, 12.0f, "%.0f");
 			SeparatorTextWithFont(T("menu.settings.section_docking", "Docking"), Menu::FontRole::Subheading);
 			ImGui::SliderFloat(T("menu.settings.docking_splitter_size", "Docking Splitter Size"), &style.DockingSeparatorSize, 0.0f, 12.0f, "%.0f");
+			Util::EndPillTabItem();
+		}
+		if (Util::BeginPillTabItem(T("menu.settings.tab_surfaces", "Surfaces"))) {
+			RenderSurfacesSection();
 			Util::EndPillTabItem();
 		}
 		Util::EndPillTabBar();

@@ -54,7 +54,6 @@ namespace
 		Section{ Ids::kFonts, Group::Appearance, true, [](PageState&) { SettingsTabRenderer::RenderFontsSection(); } },
 		Section{ Ids::kColors, Group::Appearance, true, [](PageState&) { SettingsTabRenderer::RenderColorsSection(); } },
 		Section{ Ids::kStyling, Group::Appearance, true, [](PageState&) { SettingsTabRenderer::RenderStylingSection(); } },
-		Section{ Ids::kSurfaces, Group::Appearance, true, [](PageState&) { SettingsTabRenderer::RenderSurfacesSection(); } },
 		Section{ Ids::kHeaderEffects, Group::Appearance, true, [](PageState&) { SettingsTabRenderer::RenderHeaderEffectsSection(); } },
 		Section{ Ids::kDeveloper, Group::Advanced, false, [](PageState&) { AdvancedSettingsRenderer::RenderDeveloperSection(); } },
 		Section{ Ids::kLogging, Group::Advanced, false, [](PageState&) { AdvancedSettingsRenderer::RenderLoggingSection(); } },
@@ -108,8 +107,6 @@ namespace
 			return T("menu.settings.tab_colors", "Colors");
 		if (id == Ids::kStyling)
 			return T("menu.settings.tab_styling", "Styling");
-		if (id == Ids::kSurfaces)
-			return T("menu.settings.tab_surfaces", "Surfaces");
 		if (id == Ids::kHeaderEffects)
 			return T("menu.settings.nav_header_effects", "Header & Effects");
 		if (id == Ids::kDeveloper)
