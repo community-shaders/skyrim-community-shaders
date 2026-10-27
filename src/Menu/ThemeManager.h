@@ -218,6 +218,7 @@ public:
 		// Feature header constants
 		static constexpr float DEFAULT_FEATURE_TITLE_SCALE = 1.5f;  // Default scale for feature title text
 		static constexpr float VERSION_TEXT_OPACITY = 0.6f;         // Opacity for version text next to feature title
+		static constexpr float FEATURE_DESCRIPTION_OPACITY = 0.7f;  // Opacity for the description under a feature title
 
 		// Main menu feature list pane (sizes are 1080p baseline, scaled by Util::GetUIScale())
 		static constexpr float NAV_ROW_ICON_GAP = 8.0f;                  // Gap between a page row's icon and its label
@@ -292,10 +293,16 @@ public:
 		static constexpr float PALETTE_KEYCAP_EDGE_ALPHA = 0.18f;   // Opacity of a keycap's lower edge
 		static constexpr float PALETTE_EMPTY_ICON_RATIO = 1.5f;     // Radius of the empty-state disc as a multiple of the line height
 		static constexpr float PALETTE_EMPTY_DISC_ALPHA = 0.10f;    // Empty-state disc opacity
+		static constexpr float PALETTE_DIMMED_ALPHA = 0.5f;         // Opacity multiplier for rows of features that are not loaded
+		static constexpr float PALETTE_EMPTY_DISC_Y = 0.3f;         // Empty-state disc centre as a share of the list height
+		static constexpr float PALETTE_SEARCH_GLYPH_RATIO = 1.5f;   // Search glyph slot width as a multiple of the line height
+		static constexpr float PALETTE_SCOPE_HOVER_LABEL = 0.6f;    // How far a hovered scope label brightens toward the chosen one
+		static constexpr float PALETTE_SELECT_BAR_INSET = 0.2f;     // Selected-row accent bar inset from the row's top and bottom, as a share of its height
 		static constexpr float REVEAL_HIGHLIGHT_SECONDS = 1.0f;     // How long a revealed setting stays outlined
 		static constexpr float REVEAL_EXPIRY_SECONDS = 3.0f;        // A reveal request older than this is dropped
 		static constexpr float REVEAL_SCROLL_RATIO = 0.3f;          // Where in the view a revealed control lands (0 top, 1 bottom)
 		static constexpr float REVEAL_OUTLINE_THICKNESS = 2.0f;     // Reveal outline stroke
+		static constexpr float REVEAL_FADE_HOLD = 1.5f;             // Reveal outline stays at full strength for the first third of the highlight
 		static constexpr float REVEAL_OUTLINE_PADDING = 3.0f;       // Reveal outline margin around the control
 
 		// Home dashboard (sizes are 1080p baseline, scaled by Util::GetUIScale())
@@ -488,6 +495,28 @@ public:
 		static constexpr float WATERMARK_MONO_ALPHA = 0.18f;                           // Monochrome watermark logo opacity
 		static constexpr ImU32 HEADER_COLOR_ICON_IDLE = IM_COL32(220, 220, 220, 220);  // Docked colour icon tint while not hovered
 		static constexpr ImU32 WATERMARK_COLOR = IM_COL32(255, 255, 255, 45);          // Full-colour watermark logo tint
+
+		// --- Shader compile breakdown bar ---
+		static constexpr ImU32 SHADER_BAR_BACKGROUND = IM_COL32(40, 40, 40, 255);
+		static constexpr ImU32 SHADER_BAR_DEDUPLICATED = IM_COL32(120, 120, 120, 255);
+		static constexpr ImU32 SHADER_BAR_DISK_CACHE = IM_COL32(70, 130, 200, 255);
+		static constexpr ImU32 SHADER_BAR_FAST = IM_COL32(80, 180, 80, 255);
+		static constexpr ImU32 SHADER_BAR_SLOW = IM_COL32(220, 180, 50, 255);
+		static constexpr ImU32 SHADER_BAR_VERY_SLOW = IM_COL32(220, 60, 60, 255);
+		static constexpr ImU32 SHADER_BAR_FAILED = IM_COL32(160, 30, 30, 255);
+
+		// --- Menu window ---
+		static constexpr float DISABLE_AT_BOOT_MIN_SEARCH_FRAMES = 4.0f;  // Disable at Boot search field never narrower than this many frame heights
+
+		// --- Feature list and page header ---
+		static constexpr float AUTOHIDE_EDGE_SLOP = 2.0f;                // Auto-hide edge zone also catches a cursor this far outside the pane
+		static constexpr float FEATURE_ROW_PIN_SCALE = 0.75f;            // Pin glyph beside a pinned feature's name, as a share of the font size
+		static constexpr float FEATURE_BOOT_TOGGLE_WIDTH_RATIO = 1.6f;   // Load at Boot toggle width as a multiple of the frame height
+		static constexpr float FEATURE_BOOT_TOGGLE_HEIGHT_RATIO = 0.8f;  // Load at Boot toggle height as a multiple of the frame height
+
+		// --- First-time setup dialog ---
+		static constexpr float HOME_SETUP_WATERMARK_MONO_ALPHA = 0.24f;                   // Dialog logo watermark opacity, monochrome logo
+		static constexpr ImU32 HOME_SETUP_WATERMARK_COLOR = IM_COL32(255, 255, 255, 60);  // Dialog logo watermark tint, full-colour logo
 	};
 
 	static ThemeManager* GetSingleton()
