@@ -286,13 +286,13 @@ void AdvancedSettingsRenderer::RenderShaderDebugSection()
 	if (!shaderCache->blockedKey.empty()) {
 		// Create a visually distinct box for the blocked shader info with rounded corners and border
 		const float scale = Util::GetUIScale();
-		ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 8.0f * scale);
+		ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, ThemeManager::Constants::BLOCKED_SHADER_BOX_ROUNDING * scale);
 		ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, ImGui::GetStyle().WindowBorderSize);
 		ImVec4 blockedBgColor = Util::Colors::GetError();
-		blockedBgColor.w = 0.15f;  // Semi-transparent background
+		blockedBgColor.w = ThemeManager::Constants::BLOCKED_SHADER_BOX_BG_ALPHA;
 		ImGui::PushStyleColor(ImGuiCol_ChildBg, blockedBgColor);
 
-		float maxHeight = ImGui::GetContentRegionAvail().y * 0.3f;  // Limit to 30% to keep Active Shaders visible
+		float maxHeight = ImGui::GetContentRegionAvail().y * ThemeManager::Constants::BLOCKED_SHADER_BOX_MAX_HEIGHT_RATIO;
 		ImGui::SetNextWindowSizeConstraints(ImVec2(0.0f, 0.0f), ImVec2(FLT_MAX, maxHeight));
 		if (ImGui::BeginChild("##BlockedShaderInfo", ImVec2(0, 0), ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY)) {
 			Util::Text::Error(T("menu.advanced.shader_blocking_active", "Shader Blocking Active"));

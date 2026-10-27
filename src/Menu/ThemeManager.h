@@ -438,6 +438,30 @@ public:
 		static constexpr float FLASH_ACTIVE_SCALE = 0.9f;                                   // Flash colour scale when pressed
 		static constexpr float FEATURE_TOGGLE_WIDTH_RATIO = 1.6f;                           // Feature toggle width per frame height
 		static constexpr float FEATURE_TOGGLE_HEIGHT_RATIO = 0.8f;                          // Feature toggle height per frame height
+		// --- Settings / presets / advanced pages ---
+		static constexpr float THEME_DESC_BOX_WIDTH = 400.0f;                                 // Create-theme popup description box width, at 1080p
+		static constexpr float THEME_DESC_BOX_HEIGHT = 80.0f;                                 // Create-theme popup description box height, at 1080p
+		static constexpr float INVALID_INPUT_BORDER_SIZE = 2.0f;                              // Border width on an input with a validation error
+		static constexpr float SURFACE_PREVIEW_MARGIN = 14.0f;                                // Margin around the surface preview sample, at 1080p
+		static constexpr float SURFACE_PREVIEW_MAX_WIDTH_FONT_SIZES = 18.0f;                  // Surface preview width cap, in font sizes
+		static constexpr float BLOCKED_SHADER_BOX_ROUNDING = 8.0f;                            // Corner radius of the blocked-shader info box, at 1080p
+		static constexpr float BLOCKED_SHADER_BOX_BG_ALPHA = 0.15f;                           // Error-tinted background opacity of that box
+		static constexpr float BLOCKED_SHADER_BOX_MAX_HEIGHT_RATIO = 0.3f;                    // Max box height as a share of the space left, keeping Active Shaders visible
+		static constexpr float PRESET_ROW_PADDING = 6.0f;                                     // Vertical padding inside a preset pack row, at 1080p
+		static constexpr float PRESET_ROW_LOGO_SIZE = 40.0f;                                  // Preset pack logo edge, at 1080p
+		static constexpr float PRESET_ROW_INSET = 8.0f;                                       // Horizontal inset of preset row content, at 1080p
+		static constexpr float PRESET_ROW_STATUS_GAP = 6.0f;                                  // Gap before a preset row's status badge, at 1080p
+		static constexpr float PRESET_TITLE_TOP_PAD = 2.0f;                                   // Space above the preset detail title, at 1080p
+		static constexpr float PRESET_TITLE_FONT_SCALE = 1.35f;                               // Preset detail title size relative to the heading font
+		static constexpr float PRESET_VIEWER_ARROW_SCALE = 1.35f;                             // Screenshot viewer arrow button size, in frame heights
+		static constexpr float PRESET_VIEWER_MAX_SIZE_RATIO = 0.8f;                           // Screenshot viewer max size as a share of the viewport
+		static constexpr float PRESET_LIST_WIDTH_RATIO = 0.34f;                               // Preset list column share of the page width
+		static constexpr float PRESET_LIST_MIN_WIDTH = 260.0f;                                // Preset list column minimum width, at 1080p
+		static constexpr float PRESET_LIST_MAX_WIDTH = 380.0f;                                // Preset list column maximum width, at 1080p
+		static constexpr ImVec4 PRESET_VIEWER_BG_COLOR{ 0.02f, 0.02f, 0.04f, 0.72f };         // Screenshot viewer backdrop
+		static constexpr ImVec4 PRESET_VIEWER_ARROW_COLOR{ 0.0f, 0.0f, 0.0f, 0.45f };         // Viewer arrow button fill
+		static constexpr ImVec4 PRESET_VIEWER_ARROW_HOVER_COLOR{ 0.0f, 0.0f, 0.0f, 0.7f };    // Viewer arrow button hover
+		static constexpr ImVec4 PRESET_VIEWER_ARROW_ACTIVE_COLOR{ 0.0f, 0.0f, 0.0f, 0.85f };  // Viewer arrow button pressed
 	};
 
 	static ThemeManager* GetSingleton()

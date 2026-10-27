@@ -819,7 +819,7 @@ void SettingsTabRenderer::RenderThemesSection()
 		// Highlight the input field if invalid and validation error is shown
 		if (isThemeNameError && showValidationError) {
 			ImGui::PushStyleColor(ImGuiCol_Border, themeSettings.StatusPalette.Error);
-			ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 2.0f);
+			ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, ThemeManager::Constants::INVALID_INPUT_BORDER_SIZE);
 		}
 
 		ImGui::InputText(T("menu.settings.theme_name", "Theme Name"), newThemeName, sizeof(newThemeName));
@@ -845,7 +845,7 @@ void SettingsTabRenderer::RenderThemesSection()
 		// Highlight the input field if invalid and validation error is shown
 		if (isDuplicateDisplayName && showValidationError) {
 			ImGui::PushStyleColor(ImGuiCol_Border, themeSettings.StatusPalette.Error);
-			ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 2.0f);
+			ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, ThemeManager::Constants::INVALID_INPUT_BORDER_SIZE);
 		}
 
 		ImGui::InputText(T("menu.settings.display_name", "Display Name"), newThemeDisplayName, sizeof(newThemeDisplayName));
@@ -862,7 +862,7 @@ void SettingsTabRenderer::RenderThemesSection()
 
 		{
 			float scale = Util::GetUIScale();
-			ImGui::InputTextMultiline(T("menu.settings.description", "Description"), newThemeDescription, sizeof(newThemeDescription), ImVec2(400 * scale, 80 * scale));
+			ImGui::InputTextMultiline(T("menu.settings.description", "Description"), newThemeDescription, sizeof(newThemeDescription), ImVec2(ThemeManager::Constants::THEME_DESC_BOX_WIDTH * scale, ThemeManager::Constants::THEME_DESC_BOX_HEIGHT * scale));
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text("%s", T("menu.settings.description_tooltip", "Optional description for the theme"));
@@ -1124,9 +1124,9 @@ namespace
 	void DrawSurfacePreview(SurfaceRole role, const Util::Surface::RoleSettings& s)
 	{
 		const float scale = Util::GetUIScale();
-		const float margin = 14.0f * scale;
+		const float margin = ThemeManager::Constants::SURFACE_PREVIEW_MARGIN * scale;
 		const float height = ImGui::GetTextLineHeightWithSpacing() * 2.0f;
-		const float width = std::min(ImGui::GetContentRegionAvail().x, ImGui::GetFontSize() * 18.0f);
+		const float width = std::min(ImGui::GetContentRegionAvail().x, ImGui::GetFontSize() * ThemeManager::Constants::SURFACE_PREVIEW_MAX_WIDTH_FONT_SIZES);
 		const ImVec2 origin = ImGui::GetCursorScreenPos();
 		ImGui::Dummy(ImVec2(width, height + margin * 2.0f));
 		const ImVec2 p0(origin.x + margin, origin.y + margin);
