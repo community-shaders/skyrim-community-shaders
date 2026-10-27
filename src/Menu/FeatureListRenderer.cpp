@@ -1176,45 +1176,46 @@ void FeatureListRenderer::ListMenuVisitor::RenderRowContextMenu(Feature* feat) c
 	if (!ImGui::BeginPopupContextItem("##RowMenu"))
 		return;
 
-	MenuFonts::FontRoleGuard menuFont(Menu::FontRole::Body);
-	auto* state = globals::state;
-	const auto featureName = feat->GetShortName();
-	const bool isLoaded = feat->loaded;
-	const bool isDisabled = state->IsFeatureDisabled(featureName);
+	{
+		MenuFonts::FontRoleGuard menuFont(Menu::FontRole::Body);
+		auto* state = globals::state;
+		const auto featureName = feat->GetShortName();
+		const bool isLoaded = feat->loaded;
+		const bool isDisabled = state->IsFeatureDisabled(featureName);
 
-	const bool isFavorite = state->IsFeatureFavorite(featureName);
-	if (ImGui::MenuItem(isFavorite ? T("menu.features.unpin", "Unpin") : T("menu.features.pin", "Pin to Top"), nullptr, false, isLoaded))
-		ToggleFavorite(feat);
-	if (!isLoaded)
-		Util::AddTooltip(T("menu.features.pin_needs_loaded", "Only loaded features can be pinned"), Util::kTooltipWhenDisabled);
+		const bool isFavorite = state->IsFeatureFavorite(featureName);
+		if (ImGui::MenuItem(isFavorite ? T("menu.features.unpin", "Unpin") : T("menu.features.pin", "Pin to Top"), nullptr, false, isLoaded))
+			ToggleFavorite(feat);
+		if (!isLoaded)
+			Util::AddTooltip(T("menu.features.pin_needs_loaded", "Only loaded features can be pinned"), Util::kTooltipWhenDisabled);
 
-	// The same condition as the feature page's Restore Defaults, plus something to restore
-	const bool canRestore = isLoaded && !isDisabled && feat->UsesMainSettings();
-	if (ImGui::MenuItem(T("menu.features.restore_defaults", "Restore Defaults"), nullptr, false, canRestore && state->HasUserEdits(feat))) {
-		const auto restore = [feat] {
-			globals::state->RestoreFeatureLayers(feat);
-			// The scene layer's cached apply document must take the restored values before anything replays it
-			globals::sceneSettingsManager->CaptureExternalFeatureChanges(feat, true);
-		};
-		if (hooks.runFeatureCommand)
-			hooks.runFeatureCommand(feat, restore);
-		else
-			restore();
+		// The same condition as the feature page's Restore Defaults, plus something to restore
+		const bool canRestore = isLoaded && !isDisabled && feat->UsesMainSettings();
+		if (ImGui::MenuItem(T("menu.features.restore_defaults", "Restore Defaults"), nullptr, false, canRestore && state->HasUserEdits(feat))) {
+			const auto restore = [feat] {
+				globals::state->RestoreFeatureLayers(feat);
+				// The scene layer's cached apply document must take the restored values before anything replays it
+				globals::sceneSettingsManager->CaptureExternalFeatureChanges(feat, true);
+			};
+			if (hooks.runFeatureCommand)
+				hooks.runFeatureCommand(feat, restore);
+			else
+				restore();
+		}
+		Util::AddTooltip(canRestore ? T("menu.features.restore_defaults_tooltip", "Restore defaults: clears your edits to this feature, back to what defaults and your Baseline presets set") :
+									  T("menu.features.restore_unavailable", "Only loaded features that keep their settings in the user config can be restored"),
+			Util::kTooltipWhenDisabled);
+
+		if (ImGui::MenuItem(T("menu.features.load_at_boot", "Load at Boot"), nullptr, !isDisabled)) {
+			const bool enabled = feat->ToggleAtBootSetting();
+			logger::info("{}: {} at boot.", featureName, enabled ? "Enabled" : "Disabled");
+		}
+		Util::AddTooltip(T("menu.features.load_at_boot_tooltip", "Whether the game loads this feature at startup. Takes effect after a restart."));
+
+		ImGui::Separator();
+		if (ImGui::MenuItem(T("menu.features.copy_name", "Copy Name")))
+			ImGui::SetClipboardText(feat->GetDisplayName().c_str());
 	}
-	Util::AddTooltip(canRestore ? T("menu.features.restore_defaults_tooltip", "Restore defaults: clears your edits to this feature, back to what defaults and your Baseline presets set") :
-								  T("menu.features.restore_unavailable", "Only loaded features that keep their settings in the user config can be restored"),
-		Util::kTooltipWhenDisabled);
-
-	if (ImGui::MenuItem(T("menu.features.load_at_boot", "Load at Boot"), nullptr, !isDisabled)) {
-		const bool enabled = feat->ToggleAtBootSetting();
-		logger::info("{}: {} at boot.", featureName, enabled ? "Enabled" : "Disabled");
-	}
-	Util::AddTooltip(T("menu.features.load_at_boot_tooltip", "Whether the game loads this feature at startup. Takes effect after a restart."));
-
-	ImGui::Separator();
-	if (ImGui::MenuItem(T("menu.features.copy_name", "Copy Name")))
-		ImGui::SetClipboardText(feat->GetDisplayName().c_str());
-
 	ImGui::EndPopup();
 }
 
@@ -1479,35 +1480,36 @@ void FeatureListRenderer::DrawMenuVisitor::RenderActionsMenu(Feature* feat, bool
 
 	if (!ImGui::BeginPopup("##FeatureActionsMenu"))
 		return;
-	MenuFonts::FontRoleGuard menuFont(Menu::FontRole::Body);
+	{
+		MenuFonts::FontRoleGuard menuFont(Menu::FontRole::Body);
 
-	if (ImGui::MenuItem(T("feature.scene_manager.overwrites.export.button_title", "Export Feature Overwrite..."), nullptr, false, canExport))
-		FeatureOverwritesPanel::BeginExport(feat);
-	Util::AddTooltip(canExport ? T("feature.scene_manager.overwrites.export.button_tooltip",
-									 "Writes this feature's settings into a Baseline preset pack, applied from the Presets page. "
-									 "Scene layers are left out.\n"
-									 "For a full preset with scene layers, use Export Preset in the CS Editor (Ctrl+Shift+S).") :
-								 T("menu.features.export_unavailable", "Only loaded features with settings an overwrite can carry can be exported"),
-		Util::kTooltipWhenDisabled);
+		if (ImGui::MenuItem(T("feature.scene_manager.overwrites.export.button_title", "Export Feature Overwrite..."), nullptr, false, canExport))
+			FeatureOverwritesPanel::BeginExport(feat);
+		Util::AddTooltip(canExport ? T("feature.scene_manager.overwrites.export.button_tooltip",
+										 "Writes this feature's settings into a Baseline preset pack, applied from the Presets page. "
+										 "Scene layers are left out.\n"
+										 "For a full preset with scene layers, use Export Preset in the CS Editor (Ctrl+Shift+S).") :
+									 T("menu.features.export_unavailable", "Only loaded features with settings an overwrite can carry can be exported"),
+			Util::kTooltipWhenDisabled);
 
-	if (ImGui::MenuItem(T("menu.features.use_baselines", "Use Baseline Values"), nullptr, false, canUseBaselines))
-		RunFeatureCommand(feat, [feat] { globals::state->ClearFeatureEditsUnderBaselines(feat); });
-	Util::AddTooltip(canUseBaselines ? T("menu.features.use_baselines_tooltip",
-										   "Use Baseline preset values: your changes override settings your Baseline presets set. "
-										   "Click to drop those changes and use the presets' values. Your other changes stay.") :
-									   T("menu.features.use_baselines_unavailable", "None of your changes here override a setting your Baseline presets set"),
-		Util::kTooltipWhenDisabled);
+		if (ImGui::MenuItem(T("menu.features.use_baselines", "Use Baseline Values"), nullptr, false, canUseBaselines))
+			RunFeatureCommand(feat, [feat] { globals::state->ClearFeatureEditsUnderBaselines(feat); });
+		Util::AddTooltip(canUseBaselines ? T("menu.features.use_baselines_tooltip",
+											   "Use Baseline preset values: your changes override settings your Baseline presets set. "
+											   "Click to drop those changes and use the presets' values. Your other changes stay.") :
+										   T("menu.features.use_baselines_unavailable", "None of your changes here override a setting your Baseline presets set"),
+			Util::kTooltipWhenDisabled);
 
-	const bool hasEdits = canRestore && globals::state->HasUserEdits(feat);
-	if (ImGui::MenuItem(T("menu.features.restore_defaults", "Restore Defaults"), nullptr, false, hasEdits)) {
-		// Clears the user's edits, so the feature shows what defaults and Baseline packs set.
-		RunFeatureCommand(feat, [feat] { globals::state->RestoreFeatureLayers(feat); });
+		const bool hasEdits = canRestore && globals::state->HasUserEdits(feat);
+		if (ImGui::MenuItem(T("menu.features.restore_defaults", "Restore Defaults"), nullptr, false, hasEdits)) {
+			// Clears the user's edits, so the feature shows what defaults and Baseline packs set.
+			RunFeatureCommand(feat, [feat] { globals::state->RestoreFeatureLayers(feat); });
+		}
+		Util::AddTooltip(hasEdits   ? T("menu.features.restore_defaults_tooltip", "Restore defaults: clears your edits to this feature, back to what defaults and your Baseline presets set") :
+						 canRestore ? T("menu.features.restore_nothing", "Nothing to restore: this feature already matches its defaults and your Baseline presets") :
+									  T("menu.features.restore_unavailable", "Only loaded features that keep their settings in the user config can be restored"),
+			Util::kTooltipWhenDisabled);
 	}
-	Util::AddTooltip(hasEdits   ? T("menu.features.restore_defaults_tooltip", "Restore defaults: clears your edits to this feature, back to what defaults and your Baseline presets set") :
-					 canRestore ? T("menu.features.restore_nothing", "Nothing to restore: this feature already matches its defaults and your Baseline presets") :
-								  T("menu.features.restore_unavailable", "Only loaded features that keep their settings in the user config can be restored"),
-		Util::kTooltipWhenDisabled);
-
 	ImGui::EndPopup();
 }
 
