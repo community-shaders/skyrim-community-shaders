@@ -4,6 +4,7 @@
 
 #include <detours/detours.h>
 #include <imgui.h>
+#include <imgui_internal.h>
 
 namespace
 {
@@ -17,6 +18,26 @@ namespace
 	{
 		return Util::Anim::GlideSelectable(RealSelectable, label, selected, flags, size);
 	}
+
+	// Every popup and menu opens through BeginPopupEx, every combo through BeginComboPopup, and all end in EndPopup
+	auto* RealBeginPopupEx = &ImGui::BeginPopupEx;
+	auto* RealBeginComboPopup = &ImGui::BeginComboPopup;
+	auto* RealEndPopup = &ImGui::EndPopup;
+
+	bool DetouredBeginPopupEx(ImGuiID id, ImGuiWindowFlags flags)
+	{
+		return Util::Anim::FadedBeginPopup(RealBeginPopupEx, id, flags);
+	}
+
+	bool DetouredBeginComboPopup(ImGuiID id, const ImRect& bb, ImGuiComboFlags flags)
+	{
+		return Util::Anim::FadedBeginComboPopup(RealBeginComboPopup, id, bb, flags);
+	}
+
+	void DetouredEndPopup()
+	{
+		Util::Anim::FadedEndPopup(RealEndPopup);
+	}
 }
 
 namespace Util::UIHooks
@@ -28,13 +49,21 @@ namespace Util::UIHooks
 
 		DetourTransactionBegin();
 		DetourUpdateThread(GetCurrentThread());
-		if (const auto result = DetourAttach(reinterpret_cast<PVOID*>(&RealSelectable), reinterpret_cast<PVOID>(&DetouredSelectable)); result != NO_ERROR) {
-			DetourTransactionAbort();
-			logger::error("UIHooks: DetourAttach failed for ImGui::Selectable ({}); lists keep ImGui's own highlight", result);
-			return false;
+		const std::pair<PVOID*, PVOID> hooks[] = {
+			{ reinterpret_cast<PVOID*>(&RealSelectable), reinterpret_cast<PVOID>(&DetouredSelectable) },
+			{ reinterpret_cast<PVOID*>(&RealBeginPopupEx), reinterpret_cast<PVOID>(&DetouredBeginPopupEx) },
+			{ reinterpret_cast<PVOID*>(&RealBeginComboPopup), reinterpret_cast<PVOID>(&DetouredBeginComboPopup) },
+			{ reinterpret_cast<PVOID*>(&RealEndPopup), reinterpret_cast<PVOID>(&DetouredEndPopup) },
+		};
+		for (const auto& [target, detour] : hooks) {
+			if (const auto result = DetourAttach(target, detour); result != NO_ERROR) {
+				DetourTransactionAbort();
+				logger::error("UIHooks: DetourAttach failed ({}); lists and popups keep ImGui's own look", result);
+				return false;
+			}
 		}
 		if (const auto result = DetourTransactionCommit(); result != NO_ERROR) {
-			logger::error("UIHooks: DetourTransactionCommit failed ({}); lists keep ImGui's own highlight", result);
+			logger::error("UIHooks: DetourTransactionCommit failed ({}); lists and popups keep ImGui's own look", result);
 			return false;
 		}
 

@@ -4,6 +4,8 @@
 #include <imgui.h>
 #include <limits>
 
+struct ImRect;
+
 /**
  * @brief Small UI animation toolkit: per-ID animated floats kept in ImGui's state storage, easing curves, a
  * hover / press / selected blend for items and colour helpers. Every function honours the "UI animations" setting
@@ -198,45 +200,23 @@ namespace Util::Anim
 		NoListHighlight& operator=(const NoListHighlight&) = delete;
 	};
 
-	/**
-	 * @brief Fades a popup out after it closes. ImGui drops a popup's window the frame it closes, so while the popup is
-	 * open this keeps a copy of what it drew, and once it closes the copy is replayed over the screen, fading away.
-	 * Declare it before BeginPopup / BeginPopupModal in the same ID scope, every frame, whether or not the popup is
-	 * open. PopupFade includes it; use it alone for a popup that animates its own entrance.
-	 */
-	class PopupGhost
-	{
-	public:
-		/**
-		 * @param popupId The id string given to BeginPopup / BeginPopupModal.
-		 * @param modal True for BeginPopupModal, whose window is named by the string itself rather than by its id.
-		 */
-		explicit PopupGhost(const char* popupId, bool modal = false);
-		~PopupGhost();
-		PopupGhost(const PopupGhost&) = delete;
-		PopupGhost& operator=(const PopupGhost&) = delete;
-
-	private:
-		ImGuiID id = 0;
-		bool modal = false;
-		const char* popupId = nullptr;
-	};
+	/** @brief Signature of ImGui::BeginPopupEx, which BeginPopup, BeginPopupContextItem and BeginMenu funnel into. */
+	using BeginPopupExFn = bool (*)(ImGuiID, ImGuiWindowFlags);
+	/** @brief Signature of ImGui::BeginComboPopup, the popup of every combo. */
+	using BeginComboPopupFn = bool (*)(ImGuiID, const ImRect&, ImGuiComboFlags);
+	/** @brief Signature of ImGui::EndPopup. */
+	using EndPopupFn = void (*)();
 
 	/**
-	 * @brief Fades a popup in while it is open, and out once it closes. Declare it before BeginPopup (which may
-	 * return false); it pushes nothing while the popup is closed, and pops when it leaves scope.
+	 * @brief BeginPopupEx body that fades a popup in while it is open, and keeps a copy of what it drew so the copy
+	 * can fade out over the screen once ImGui closes the popup (replayed whenever the same popup is asked for while
+	 * closed, which BeginPopup and BeginPopupContextItem callers do every frame). Hooked into ImGui::BeginPopupEx
+	 * (see UIHooks), so every popup and menu gets it with no opt-in; modals, which draw their own entrance, never
+	 * pass through it. Pass straight through while UI animations are off.
 	 */
-	class PopupFade
-	{
-	public:
-		/** @param popupId The id string given to BeginPopup, in the same ID scope. */
-		explicit PopupFade(const char* popupId);
-		~PopupFade();
-		PopupFade(const PopupFade&) = delete;
-		PopupFade& operator=(const PopupFade&) = delete;
-
-	private:
-		PopupGhost ghost;
-		bool pushed = false;
-	};
+	bool FadedBeginPopup(BeginPopupExFn real, ImGuiID id, ImGuiWindowFlags flags);
+	/** @brief BeginComboPopup body that fades the dropdown in; the fade-out copy is not kept for combos. */
+	bool FadedBeginComboPopup(BeginComboPopupFn real, ImGuiID id, const ImRect& bb, ImGuiComboFlags flags);
+	/** @brief EndPopup body that unwinds the fade FadedBeginPopup or FadedBeginComboPopup started, if any. */
+	void FadedEndPopup(EndPopupFn real);
 }

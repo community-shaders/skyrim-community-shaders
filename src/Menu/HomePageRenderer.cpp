@@ -614,7 +614,6 @@ void HomePageRenderer::RenderHelpButton()
 
 void HomePageRenderer::RenderHelpPopover()
 {
-	Util::Anim::PopupFade fade(kHelpPopupId);
 	if (!ImGui::BeginPopup(kHelpPopupId))
 		return;
 

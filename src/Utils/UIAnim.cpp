@@ -12,6 +12,7 @@
 #include <cmath>
 #include <cstdint>
 #include <unordered_map>
+#include <vector>
 
 namespace Util::Anim
 {
@@ -165,7 +166,8 @@ namespace Util::Anim
 	namespace
 	{
 		std::uint32_t g_pageEpoch = 0;
-		ImGuiID g_lastPageId = 0;
+		// The page last shown in each top-level window, so the menu and the CS Editor never reset each other's epoch
+		std::unordered_map<ImGuiID, ImGuiID> g_lastPageIds;
 
 		/// True when a widget's eased state should start at rest: it was not drawn last frame, or the page changed.
 		/// Marks it drawn this frame. `salt` separates the keys of different widget kinds that share an id.
@@ -295,8 +297,9 @@ namespace Util::Anim
 
 	PageFade::PageFade(ImGuiID pageId)
 	{
-		if (pageId != g_lastPageId) {
-			g_lastPageId = pageId;
+		ImGuiID& lastPageId = g_lastPageIds[ImGui::GetCurrentWindow()->RootWindow->ID];
+		if (pageId != lastPageId) {
+			lastPageId = pageId;
 			++g_pageEpoch;
 		}
 		BeginFadeIn(pageId, Constants::ANIM_PAGE_ENTER_SECONDS, Constants::ANIM_PAGE_FADE_FROM);
@@ -495,69 +498,101 @@ namespace Util::Anim
 		}
 	}
 
-	PopupGhost::PopupGhost(const char* popupId, bool modal) :
-		id(ImGui::GetID(popupId)),
-		modal(modal),
-		popupId(popupId)
+	namespace
 	{
-		if (ReducedMotion())
-			return;
-		PopupSnapshot& snapshot = g_popupSnapshots[id];
-		const double now = ImGui::GetTime();
-		if (ImGui::IsPopupOpen(popupId)) {
-			snapshot.wasOpen = true;
-			snapshot.lastOpenTime = now;
-			snapshot.closedAt = -1.0;
-			return;
-		}
-		// Closed since last frame: start the fade, unless the menu itself was hidden in between
-		if (snapshot.wasOpen) {
-			snapshot.wasOpen = false;
-			if (now - snapshot.lastOpenTime < Constants::ANIM_POPUP_GHOST_MAX_GAP_SECONDS)
-				snapshot.closedAt = now;
-		}
-		if (snapshot.closedAt >= 0.0 && snapshot.list) {
-			const float t = static_cast<float>(now - snapshot.closedAt) * Speed() / Constants::ANIM_POPUP_SECONDS;
-			if (t >= 1.0f)
+		/// Draws the fade-out of a popup that closed, and notes whether it is open now.
+		void GhostUpdate(ImGuiID id, bool open)
+		{
+			if (ReducedMotion())
+				return;
+			PopupSnapshot& snapshot = g_popupSnapshots[id];
+			const double now = ImGui::GetTime();
+			if (open) {
+				snapshot.wasOpen = true;
+				snapshot.lastOpenTime = now;
 				snapshot.closedAt = -1.0;
-			else
-				DrawSnapshot(*snapshot.list, 1.0f - EaseOutCubic(t));
+				return;
+			}
+			// Closed since last frame: start the fade, unless the menu itself was hidden in between
+			if (snapshot.wasOpen) {
+				snapshot.wasOpen = false;
+				if (now - snapshot.lastOpenTime < Constants::ANIM_POPUP_GHOST_MAX_GAP_SECONDS)
+					snapshot.closedAt = now;
+			}
+			if (snapshot.closedAt >= 0.0 && snapshot.list) {
+				const float t = static_cast<float>(now - snapshot.closedAt) * Speed() / Constants::ANIM_POPUP_SECONDS;
+				if (t >= 1.0f)
+					snapshot.closedAt = -1.0;
+				else
+					DrawSnapshot(*snapshot.list, 1.0f - EaseOutCubic(t));
+			}
+		}
+
+		/// Remembers what an open popup drew, for GhostUpdate to replay once it closes.
+		void GhostCapture(ImGuiID id, const ImGuiWindow* window)
+		{
+			if (ReducedMotion() || !window || !window->WasActive)
+				return;
+			PopupSnapshot& snapshot = g_popupSnapshots[id];
+			if (!snapshot.list)
+				snapshot.list = IM_NEW(ImDrawList)(ImGui::GetDrawListSharedData());
+			snapshot.list->CmdBuffer = window->DrawList->CmdBuffer;
+			snapshot.list->IdxBuffer = window->DrawList->IdxBuffer;
+			snapshot.list->VtxBuffer = window->DrawList->VtxBuffer;
+		}
+
+		/// A popup the universal hooks faded in, so EndPopup knows to unwind it.
+		struct FadedPopup
+		{
+			const ImGuiWindow* window;
+			ImGuiID id;
+			bool ghost;
+		};
+		std::vector<FadedPopup> g_fadedPopups;
+
+		/// Fades a popup in around `begin`, which opens its window; true when the window is open.
+		template <class BeginFn>
+		bool FadeInPopup(ImGuiID id, bool ghost, BeginFn begin)
+		{
+			if (ReducedMotion())
+				return begin();
+			const bool open = ImGui::IsPopupOpen(id, ImGuiPopupFlags_None);
+			if (ghost)
+				GhostUpdate(id, open);
+			if (!open)
+				return begin();
+			BeginFadeIn(id, Constants::ANIM_POPUP_SECONDS, Constants::ANIM_PAGE_FADE_FROM);
+			if (!begin()) {
+				EndFadeIn();
+				return false;
+			}
+			g_fadedPopups.push_back({ ImGui::GetCurrentWindow(), id, ghost });
+			return true;
 		}
 	}
 
-	PopupGhost::~PopupGhost()
+	bool FadedBeginPopup(BeginPopupExFn real, ImGuiID id, ImGuiWindowFlags flags)
 	{
-		if (ReducedMotion() || !ImGui::IsPopupOpen(popupId))
-			return;
-		// Still open after its contents were drawn: remember them for when it closes
-		char name[64];
-		if (modal)
-			ImFormatString(name, IM_ARRAYSIZE(name), "%s", popupId);
-		else
-			ImFormatString(name, IM_ARRAYSIZE(name), "##Popup_%08x", id);
-		const ImGuiWindow* window = ImGui::FindWindowByName(name);
-		if (!window || !window->WasActive)
-			return;
-		PopupSnapshot& snapshot = g_popupSnapshots[id];
-		if (!snapshot.list)
-			snapshot.list = IM_NEW(ImDrawList)(ImGui::GetDrawListSharedData());
-		snapshot.list->CmdBuffer = window->DrawList->CmdBuffer;
-		snapshot.list->IdxBuffer = window->DrawList->IdxBuffer;
-		snapshot.list->VtxBuffer = window->DrawList->VtxBuffer;
+		return FadeInPopup(id, true, [&] { return real(id, flags); });
 	}
 
-	PopupFade::PopupFade(const char* popupId) :
-		ghost(popupId)
+	bool FadedBeginComboPopup(BeginComboPopupFn real, ImGuiID id, const ImRect& bb, ImGuiComboFlags flags)
 	{
-		const ImGuiID id = ImGui::GetID(popupId);
-		pushed = ImGui::IsPopupOpen(popupId);
-		if (pushed)
-			BeginFadeIn(id, Constants::ANIM_POPUP_SECONDS, Constants::ANIM_PAGE_FADE_FROM);
+		return FadeInPopup(id, false, [&] { return real(id, bb, flags); });
 	}
 
-	PopupFade::~PopupFade()
+	void FadedEndPopup(EndPopupFn real)
 	{
-		if (pushed)
-			EndFadeIn();
+		const ImGuiWindow* window = ImGui::GetCurrentWindow();
+		if (g_fadedPopups.empty() || g_fadedPopups.back().window != window) {
+			real();
+			return;
+		}
+		const FadedPopup popup = g_fadedPopups.back();
+		g_fadedPopups.pop_back();
+		real();
+		if (popup.ghost && ImGui::IsPopupOpen(popup.id, ImGuiPopupFlags_None))
+			GhostCapture(popup.id, window);
+		EndFadeIn();
 	}
 }

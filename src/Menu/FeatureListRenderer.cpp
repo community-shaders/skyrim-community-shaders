@@ -887,7 +887,6 @@ bool FeatureListRenderer::IsPageOpen(std::string_view pageId)
 
 void FeatureListRenderer::RenderSortPopup(const char* popupId)
 {
-	Util::Anim::PopupFade fade(popupId);
 	if (!ImGui::BeginPopup(popupId))
 		return;
 	const FilterCounts& counts = g_filterCounts;
@@ -1194,7 +1193,6 @@ void FeatureListRenderer::ListMenuVisitor::operator()(Feature* feat)
 
 void FeatureListRenderer::ListMenuVisitor::RenderRowContextMenu(Feature* feat) const
 {
-	Util::Anim::PopupFade fade("##RowMenu");
 	if (!ImGui::BeginPopupContextItem("##RowMenu"))
 		return;
 
@@ -1524,7 +1522,6 @@ void FeatureListRenderer::DrawMenuVisitor::RenderActionsMenu(Feature* feat, bool
 	if (auto _tt = Util::HoverTooltipWrapper())
 		ImGui::TextUnformatted(T("menu.features.actions_tooltip", "More actions"));
 
-	Util::Anim::PopupFade fade("##FeatureActionsMenu");
 	if (!ImGui::BeginPopup("##FeatureActionsMenu"))
 		return;
 	{
