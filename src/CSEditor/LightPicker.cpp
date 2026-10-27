@@ -1,4 +1,5 @@
 #include "LightPicker.h"
+#include "I18n/I18n.h"
 #include "Menu.h"
 
 #include "RE/B/bhkPickData.h"
@@ -258,14 +259,14 @@ void LightPicker::Update()
 	if (hoverMesh.valid) {
 		ImGui::BeginTooltip();
 		if (!hoverMesh.editorId.empty())
-			ImGui::Text("EditorID: %s", hoverMesh.editorId.c_str());
+			ImGui::Text("%s: %s", T("cs_editor.light_picker.editor_id", "EditorID"), hoverMesh.editorId.c_str());
 		if (!hoverMesh.modelPath.empty())
-			ImGui::Text("Mesh: %s", hoverMesh.modelPath.c_str());
-		ImGui::Text("Base FormID: 0x%08X", hoverMesh.baseFormId);
+			ImGui::Text("%s: %s", T("cs_editor.light_picker.mesh", "Mesh"), hoverMesh.modelPath.c_str());
+		ImGui::Text("%s: 0x%08X", T("cs_editor.light_picker.base_form_id", "Base FormID"), hoverMesh.baseFormId);
 		if (!hoverMesh.refFormEntry.empty())
-			ImGui::Text("Reference FormID: %s", hoverMesh.refFormEntry.c_str());
+			ImGui::Text("%s: %s", T("cs_editor.light_picker.reference_form_id", "Reference FormID"), hoverMesh.refFormEntry.c_str());
 		if (!hoverMesh.sourcePlugin.empty())
-			ImGui::Text("Plugin: %s", hoverMesh.sourcePlugin.c_str());
+			ImGui::Text("%s: %s", T("cs_editor.light_picker.plugin", "Plugin"), hoverMesh.sourcePlugin.c_str());
 		ImGui::EndTooltip();
 	}
 

@@ -2383,7 +2383,7 @@ bool EditorWindow::DrawPausedAwareGameHourSlider(const char* id)
 	const bool isPaused = IsTimePaused();
 	const char* timeFormat = isPaused ?
 	                             T(TKEY("time_slider_paused"), "Time: %.2f (paused)") :
-	                             "Time: %.2f";
+	                             T(TKEY("time_slider"), "Time: %.2f");
 	if (isPaused)
 		ImGui::PushStyleColor(ImGuiCol_Text, Menu::GetSingleton()->GetTheme().StatusPalette.Error);
 	const bool drawn = DrawGameHourSlider(id, timeFormat);
