@@ -157,7 +157,7 @@ void DeveloperTools::DrawSettings()
 		return selectTab == static_cast<int>(a_tool) ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None;
 	};
 
-	if (Util::BeginPillTabBar("##DeveloperToolTabs")) {
+	if (Util::BeginPillTabBar("##DeveloperToolTabs", true)) {
 		if (Util::BeginPillTabItem(T(TKEY("renderdoc"), "RenderDoc"), nullptr, tabFlags(Tool::RenderDoc))) {
 			renderDoc.DrawSettings();
 			Util::EndPillTabItem();

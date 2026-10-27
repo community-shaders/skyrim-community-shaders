@@ -277,8 +277,9 @@ namespace Util
 	 * @brief Glass/mica pill tab bar: drop-in replacement for ImGui::BeginTabBar / BeginTabItem.
 	 * Draws a compact translucent track with a selected pill instead of classic folder tabs.
 	 * Nesting is supported (stack). Tab labels from the previous frame drive the strip layout.
+	 * @param centered Centre the strip on the available width instead of starting it at the left.
 	 */
-	bool BeginPillTabBar(const char* str_id);
+	bool BeginPillTabBar(const char* str_id, bool centered = false);
 	bool BeginPillTabItem(const char* label, bool* p_open = nullptr, ImGuiTabItemFlags flags = 0);
 	void EndPillTabItem();
 	void EndPillTabBar();

@@ -358,7 +358,7 @@ namespace Util
 		}
 
 		/** @brief Draws the glass track + pills. Returns true if the selection changed. */
-		bool DrawGlassPillStrip(const char* id, const std::vector<std::string>& labels, int& selected, int marked = -1, bool muted = false)
+		bool DrawGlassPillStrip(const char* id, const std::vector<std::string>& labels, int& selected, int marked = -1, bool muted = false, bool centered = false)
 		{
 			if (labels.empty())
 				return false;
@@ -379,6 +379,8 @@ namespace Util
 				ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
 				ImGui::BeginChild(std::format("##PillStripScroll{}", id).c_str(), ImVec2(avail, palette.trackHeight),
 					ImGuiChildFlags_None, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+			} else if (centered) {
+				ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (avail - trackWidth) * 0.5f);
 			}
 
 			const ImVec2 trackMin = ImGui::GetCursorScreenPos();
@@ -472,7 +474,7 @@ namespace Util
 		return !g_pillTabStack.empty();
 	}
 
-	bool BeginPillTabBar(const char* str_id)
+	bool BeginPillTabBar(const char* str_id, bool centered)
 	{
 		const ImGuiID id = ImGui::GetID(str_id);
 		auto& state = g_pillTabBars[id];
@@ -483,7 +485,7 @@ namespace Util
 
 		{
 			MenuFonts::FontRoleGuard bodyFont(Menu::FontRole::Body);
-			DrawGlassPillStrip(str_id, state.labelsForStrip, state.selected);
+			DrawGlassPillStrip(str_id, state.labelsForStrip, state.selected, -1, false, centered);
 		}
 		ImGui::Spacing();
 		return true;
