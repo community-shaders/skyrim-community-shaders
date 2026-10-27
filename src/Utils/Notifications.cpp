@@ -3,7 +3,7 @@
 #include "Menu/ThemeManager.h"
 #include "Utils/UI.h"
 #include "Utils/UIAnim.h"
-#include "Utils/UIGlass.h"
+#include "Utils/UISurface.h"
 
 #include <algorithm>
 #include <format>
@@ -110,11 +110,11 @@ namespace Util::Notifications
 				const ImVec2 p0 = ImGui::GetWindowPos();
 				const ImVec2 p1{ p0.x + cardSize.x, p0.y + cardSize.y };
 				const float rounding = ImGui::GetStyle().WindowRounding;
-				Util::Glass::Style glass;
-				glass.rounding = rounding;
-				glass.alpha = alpha;
-				glass.shadow = true;
-				Util::Glass::Draw(draw, p0, p1, glass);
+				Util::Surface::Style surface;
+				surface.rounding = rounding;
+				surface.alpha = alpha;
+				surface.shadow = true;
+				Util::Surface::Draw(draw, p0, p1, surface);
 				const ImU32 accent = ImGui::ColorConvertFloat4ToU32(
 					ImVec4(notif.color.x, notif.color.y, notif.color.z, Constants::TOAST_ACCENT_ALPHA * alpha));
 				draw->AddRect(p0, p1, accent, rounding, 0, Constants::TOAST_BORDER_THICKNESS * scale);

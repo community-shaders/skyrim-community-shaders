@@ -193,6 +193,7 @@ public:
 		static constexpr float STATUS_BAR_NAV_BUTTON_FONT_RATIO = 1.8f;  // Settings / Profiling button edge in the status bar, in font sizes
 		static constexpr float STATUS_BAR_NAV_GLYPH_FONT_RATIO = 1.35f;  // Their glyph size, in font sizes (the save glyph is 1.0)
 		static constexpr float STATUS_BAR_DIVIDER_FONT_RATIO = 1.0f;     // Height of the thin dividers between status bar groups, in font sizes
+		static constexpr float HOME_CARD_PADDING = 12.0f;                // Inner padding on every side of a Home card (1080p baseline)
 		static constexpr float HOME_CARD_SPACING = 8.0f;                 // Vertical gap below each Home card (1080p baseline)
 		static constexpr float ATTENTION_FOCUS_SECONDS = 2.5f;           // How long the Needs Attention card stays outlined after a click-through
 		static constexpr float ATTENTION_FOCUS_FADE_SECONDS = 0.8f;      // Outline fade-out time at the end of that window
@@ -247,10 +248,6 @@ public:
 		static constexpr float PALETTE_BADGE_ROUNDING = 4.0f;     // Type badge corner radius
 		static constexpr float PALETTE_BADGE_FILL_ALPHA = 0.22f;  // Type badge fill opacity
 		static constexpr float PALETTE_ROW_PAD_Y = 4.0f;          // Vertical padding of a result row
-		static constexpr float PALETTE_PILL_PAD_X = 10.0f;        // Horizontal padding inside the header search pill
-		static constexpr float PALETTE_PILL_GAP = 12.0f;          // Minimum gap between the pill and the title or icons
-		static constexpr float PALETTE_PILL_HEIGHT_SCALE = 1.1f;  // Pill height relative to the frame height
-		static constexpr float PALETTE_PILL_HOVER_BOOST = 0.5f;   // Extra glass strength of the header pill while hovered
 		static constexpr float PALETTE_TOAST_SECONDS = 4.0f;      // How long the "Look under" toast stays
 		static constexpr float REVEAL_HIGHLIGHT_SECONDS = 1.0f;   // How long a revealed setting stays outlined
 		static constexpr float REVEAL_EXPIRY_SECONDS = 3.0f;      // A reveal request older than this is dropped
@@ -287,12 +284,10 @@ public:
 		static constexpr float SEARCH_ICON_OFFSET_X = 8.0f;              // Search icon offset from input edge
 		static constexpr float SEARCH_INPUT_PADDING_EXTRA = 14.0f;       // Extra input padding after icon
 		static constexpr float SEARCH_INPUT_FRAME_PADDING_Y = 6.0f;      // Search input vertical padding
-		static constexpr float SEARCH_ICON_STROKE_RATIO = 0.11f;         // Search icon stroke thickness relative to size
-		static constexpr float SEARCH_ICON_HANDLE_STROKE_RATIO = 0.105f;
-		static constexpr float COMBO_SEARCH_ICON_SIZE = 16.0f;     // Icon size for search inside combos
-		static constexpr float COMBO_SEARCH_ICON_ALPHA = 0.5f;     // Icon alpha for subtle appearance
-		static constexpr float COMBO_SEARCH_ICON_OFFSET_X = 5.0f;  // Icon horizontal offset from input edge
-		static constexpr float COMBO_SEARCH_PADDING_LEFT = 24.0f;  // Left padding to make room for icon
+		static constexpr float COMBO_SEARCH_ICON_SIZE = 16.0f;           // Icon size for search inside combos
+		static constexpr float COMBO_SEARCH_ICON_ALPHA = 0.5f;           // Icon alpha for subtle appearance
+		static constexpr float COMBO_SEARCH_ICON_OFFSET_X = 5.0f;        // Icon horizontal offset from input edge
+		static constexpr float COMBO_SEARCH_PADDING_LEFT = 24.0f;        // Left padding to make room for icon
 
 		// Window overlap readability constants
 		static constexpr float OVERLAP_MIN_ALPHA = 0.85f;       // Background alpha when windows overlap
@@ -326,24 +321,16 @@ public:
 		static constexpr float ANIM_PULSE_PERIOD = 2.6f;           // Seconds per attention pulse
 		static constexpr float ANIM_PULSE_AMPLITUDE = 0.25f;       // Attention pulse swing, as a share of full alpha
 		static constexpr float ANIM_SEARCH_RATE = 22.0f;           // Expanding search field open / close speed
-		static constexpr float NAV_SELECTED_TINT_AMOUNT = 0.18f;   // How much the accent tints the selected row's glass
 		static constexpr float NAV_SELECTED_BAR_INSET = 0.2f;      // Accent bar inset from the row's top and bottom, as a share of its height
 		static constexpr float ANIM_SELECTED_BAR_WIDTH = 3.0f;     // Accent bar on the left of the selected nav row (1080p baseline)
 
-		static constexpr float HOME_CARD_TINT_AMOUNT = 0.08f;  // How much a card's border colour tints its glass
-
-		// Glass surfaces (Util::Glass): translucent theme-derived fill, top highlight, hairline border, soft shadow
-		static constexpr float GLASS_FILL_ALPHA = 0.62f;             // Fill opacity of the window colour
-		static constexpr float GLASS_FILL_LIFT = 0.06f;              // Fill lifted toward white so glass reads above the page
-		static constexpr float GLASS_HIGHLIGHT_ALPHA = 0.10f;        // Top-edge sheen opacity (white)
-		static constexpr float GLASS_HIGHLIGHT_HEIGHT_RATIO = 0.5f;  // Sheen height as a share of the surface height
-		static constexpr float GLASS_HIGHLIGHT_MAX_HEIGHT = 48.0f;   // ... capped at this (1080p baseline)
-		static constexpr float GLASS_BORDER_ALPHA = 0.16f;           // Inner hairline opacity (white)
-		static constexpr float GLASS_EDGE_LINE_ALPHA = 0.22f;        // Brighter 1px line along the top edge
-		static constexpr int GLASS_SHADOW_LAYERS = 3;                // Soft shadow rings (capped at 4)
-		static constexpr float GLASS_SHADOW_SPREAD = 3.0f;           // Growth per shadow ring (1080p baseline)
-		static constexpr float GLASS_SHADOW_ALPHA = 0.09f;           // Opacity of each ring (black)
-		static constexpr float GLASS_SHADOW_OFFSET_Y = 2.0f;         // Shadow drop (1080p baseline)
+		// Flat surfaces (Util::Surface): one subtle step above the window colour, a hairline border, one soft shadow when floating
+		static constexpr float SURFACE_FILL_LIFT = 0.04f;        // Window colour lifted toward white so cards read above the page
+		static constexpr float SURFACE_BORDER_ALPHA = 0.08f;     // Hairline border opacity (white)
+		static constexpr float SURFACE_SHADOW_SPREAD = 6.0f;     // Floating surfaces' shadow growth (1080p baseline)
+		static constexpr float SURFACE_SHADOW_ALPHA = 0.22f;     // Shadow opacity (black)
+		static constexpr float SURFACE_SHADOW_OFFSET_Y = 2.0f;   // Shadow drop (1080p baseline)
+		static constexpr float NAV_SELECTED_FILL_ALPHA = 0.14f;  // Accent fill behind the selected nav row
 
 		// Tinted control frame: marks where a value comes from (inherited, or a scene override's winning layer)
 		static constexpr float TINTED_FRAME_BG_ALPHA = 0.25f;

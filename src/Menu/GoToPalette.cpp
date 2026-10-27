@@ -7,7 +7,7 @@
 #include "Menu/ThemeManager.h"
 #include "Utils/UI.h"
 #include "Utils/UIAnim.h"
-#include "Utils/UIGlass.h"
+#include "Utils/UISurface.h"
 
 #include <algorithm>
 #include <array>
@@ -168,12 +168,12 @@ namespace GoToPalette
 			return;
 		}
 		{
-			// Glass panel behind the content, with a soft shadow on the dimmed backdrop
-			Util::Glass::Style glass;
-			glass.shadow = true;
-			glass.rounding = ImGui::GetStyle().WindowRounding;
-			Util::Glass::Draw(ImGui::GetWindowDrawList(), ImGui::GetWindowPos(),
-				ImVec2(ImGui::GetWindowPos().x + ImGui::GetWindowSize().x, ImGui::GetWindowPos().y + ImGui::GetWindowSize().y), glass);
+			// Surface behind the content, with a soft shadow on the dimmed backdrop
+			Util::Surface::Style surface;
+			surface.shadow = true;
+			surface.rounding = ImGui::GetStyle().WindowRounding;
+			Util::Surface::Draw(ImGui::GetWindowDrawList(), ImGui::GetWindowPos(),
+				ImVec2(ImGui::GetWindowPos().x + ImGui::GetWindowSize().x, ImGui::GetWindowPos().y + ImGui::GetWindowSize().y), surface);
 		}
 
 		const float scale = Util::GetUIScale();

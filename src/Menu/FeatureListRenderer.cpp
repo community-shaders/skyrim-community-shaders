@@ -1,7 +1,7 @@
 #include "FeatureListRenderer.h"
 #include "Menu/SettingReveal.h"
 #include "Utils/UIAnim.h"
-#include "Utils/UIGlass.h"
+#include "Utils/UISurface.h"
 
 #include <algorithm>
 #include <cassert>
@@ -173,7 +173,7 @@ namespace
 
 	/**
 	 * @brief Eased hover / press / selected fill for the item just submitted, as a row of the left pane: the hover
-	 * fill fades in, the selected row gets a glass-tinted fill and a short accent bar on its left.
+	 * fill fades in, the selected row gets a subtle accent fill and a short accent bar on its left.
 	 */
 	void DrawRowHighlight(ImDrawList* drawList, bool selected, bool disabled)
 	{
@@ -187,12 +187,9 @@ namespace
 		if (blend.press > 0.0f)
 			drawList->AddRectFilled(min, max, Util::Anim::ScaleAlphaU32(ImGui::GetColorU32(ImGuiCol_HeaderActive), blend.press), rounding);
 		if (blend.selected > 0.0f) {
-			Util::Glass::Style glass;
-			glass.rounding = rounding;
-			glass.alpha = blend.selected;
-			glass.tint = ImGui::GetColorU32(Util::Colors::GetAccent());
-			glass.tintAmount = Constants::NAV_SELECTED_TINT_AMOUNT;
-			Util::Glass::Draw(drawList, min, max, glass);
+			ImVec4 fill = Util::Colors::GetAccent();
+			fill.w = Constants::NAV_SELECTED_FILL_ALPHA * blend.selected;
+			drawList->AddRectFilled(min, max, ImGui::GetColorU32(fill), rounding);
 			const float barWidth = Constants::ANIM_SELECTED_BAR_WIDTH * Util::GetUIScale();
 			const float inset = (max.y - min.y) * Constants::NAV_SELECTED_BAR_INSET;
 			drawList->AddRectFilled(ImVec2(min.x, min.y + inset), ImVec2(min.x + barWidth, max.y - inset),

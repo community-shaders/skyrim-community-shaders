@@ -36,7 +36,7 @@
 #include "ShaderCache.h"
 #include "State.h"
 #include "Utils/UIAnim.h"
-#include "Utils/UIGlass.h"
+#include "Utils/UISurface.h"
 
 // Static member definitions
 bool HomePageRenderer::isFirstTimeSetupShown = false;
@@ -71,22 +71,21 @@ namespace
 			// Cards fade in one after another each time the page is opened
 			const float enter = Util::Anim::EnterProgress(ImGui::GetID(id), Constants::ANIM_CARD_STAGGER_SECONDS * static_cast<float>(cardIndex++));
 			ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * enter);
-			if (border)
-				ImGui::PushStyleColor(ImGuiCol_Border, *border);
+			const float pad = Constants::HOME_CARD_PADDING * Util::GetUIScale();
+			ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(pad, pad));
 			ImGui::PushStyleColor(ImGuiCol_ChildBg, IM_COL32_BLACK_TRANS);
 			ImGui::BeginChild(id, ImVec2(0.0f, 0.0f),
-				ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY | ImGuiChildFlags_NavFlattened,
+				ImGuiChildFlags_AlwaysUseWindowPadding | ImGuiChildFlags_AutoResizeY | ImGuiChildFlags_NavFlattened,
 				ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-			ImGui::PopStyleColor(border ? 2 : 1);
-			// Glass backing, drawn first so the content sits on it
-			Util::Glass::Style glass;
-			glass.rounding = ImGui::GetStyle().ChildRounding;
-			if (border) {
-				glass.tint = ImGui::GetColorU32(*border);
-				glass.tintAmount = Constants::HOME_CARD_TINT_AMOUNT;
-			}
-			Util::Glass::Draw(ImGui::GetWindowDrawList(), ImGui::GetWindowPos(),
-				ImVec2(ImGui::GetWindowPos().x + ImGui::GetWindowSize().x, ImGui::GetWindowPos().y + ImGui::GetWindowSize().y), glass);
+			ImGui::PopStyleColor();
+			ImGui::PopStyleVar();
+			// Surface backing, drawn first so the content sits on it
+			Util::Surface::Style surface;
+			surface.rounding = ImGui::GetStyle().ChildRounding;
+			if (border)
+				surface.borderColor = ImGui::GetColorU32(*border);
+			Util::Surface::Draw(ImGui::GetWindowDrawList(), ImGui::GetWindowPos(),
+				ImVec2(ImGui::GetWindowPos().x + ImGui::GetWindowSize().x, ImGui::GetWindowPos().y + ImGui::GetWindowSize().y), surface);
 
 			ImGui::AlignTextToFramePadding();
 			{

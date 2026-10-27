@@ -26,7 +26,7 @@
 #include "State.h"
 #include "Util.h"
 #include "Utils/Notifications.h"
-#include "Utils/UIGlass.h"
+#include "Utils/UISurface.h"
 
 #include "Features/PerformanceOverlay.h"
 #include "Features/PerformanceOverlay/ABTesting/ABTesting.h"
@@ -72,7 +72,7 @@ namespace
 		using Constants = ThemeManager::Constants;
 		const float scale = Util::GetUIScale();
 		ImGui::SetNextWindowPos(position);
-		ImGui::SetNextWindowBgAlpha(0.0f);  // The glass surface is drawn by EndOverlayCard
+		ImGui::SetNextWindowBgAlpha(0.0f);  // The surface is drawn by EndOverlayCard
 		ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, ImGui::GetStyle().FrameRounding * Constants::TOAST_ROUNDING_SCALE);
 		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,
 			ImVec2((Constants::TOAST_PADDING_X + Constants::TOAST_STRIPE_WIDTH) * scale, Constants::TOAST_PADDING_Y * scale));
@@ -81,13 +81,13 @@ namespace
 			ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings);
 		KeepBehindMainWindow(ImGui::GetCurrentWindow());
 		if (visible) {
-			// Glass backing, drawn before the content. The card auto-sizes, so it uses last frame's rect.
-			Util::Glass::Style glass;
-			glass.rounding = ImGui::GetStyle().WindowRounding;
-			glass.shadow = true;
+			// Surface backing, drawn before the content. The card auto-sizes, so it uses last frame's rect.
+			Util::Surface::Style surface;
+			surface.rounding = ImGui::GetStyle().WindowRounding;
+			surface.shadow = true;
 			const ImVec2 p0 = ImGui::GetWindowPos();
 			const ImVec2 size = ImGui::GetWindowSize();
-			Util::Glass::Draw(ImGui::GetWindowDrawList(), p0, ImVec2(p0.x + size.x, p0.y + size.y), glass);
+			Util::Surface::Draw(ImGui::GetWindowDrawList(), p0, ImVec2(p0.x + size.x, p0.y + size.y), surface);
 		}
 		return visible;
 	}
