@@ -27,8 +27,10 @@ namespace Util
 
 		struct UIIcons
 		{
+			UIIcon saveSettings;
 			UIIcon loadSettings;
 			UIIcon deleteSettings;
+			UIIcon clearCache;
 			UIIcon logo;
 			UIIcon search;
 			UIIcon featureSettingRevert;

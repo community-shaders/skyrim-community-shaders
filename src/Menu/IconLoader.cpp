@@ -95,8 +95,10 @@ namespace Util::IconLoader
 
 	void UIIcons::ReleaseAll()
 	{
+		saveSettings.Release();
 		loadSettings.Release();
 		deleteSettings.Release();
+		clearCache.Release();
 		logo.Release();
 		search.Release();
 		featureSettingRevert.Release();
@@ -134,7 +136,9 @@ namespace Util::IconLoader
 		const char* logoPath = useMonochromeLogo ? "Community Shaders Logo\\Monochrome\\cs-logo.png" : "Community Shaders Logo\\cs-logo.png";
 
 		return {
+			{ std::string(iconFolder) + "\\save-settings.png", &icons.saveSettings.texture, &icons.saveSettings.size },
 			{ std::string(iconFolder) + "\\load-settings.png", &icons.loadSettings.texture, &icons.loadSettings.size },
+			{ std::string(iconFolder) + "\\clear-cache.png", &icons.clearCache.texture, &icons.clearCache.size },
 			{ std::string(iconFolder) + "\\delete.png", &icons.deleteSettings.texture, &icons.deleteSettings.size },
 			{ logoPath, &icons.logo.texture, &icons.logo.size },
 			{ std::string(iconFolder) + "\\restore-settings.png", &icons.featureSettingRevert.texture, &icons.featureSettingRevert.size },
