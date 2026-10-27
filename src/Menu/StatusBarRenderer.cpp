@@ -104,14 +104,7 @@ namespace
 			drawList->AddRectFilled(min, max, Util::Anim::ScaleAlphaU32(ImGui::GetColorU32(ImGuiCol_Header), blend.selected), rounding);
 		const ImVec4 resting = Util::Anim::Lerp(Util::Colors::GetSecondary(), ImGui::GetStyleColorVec4(ImGuiCol_Text), blend.hover);
 		const ImU32 color = ImGui::GetColorU32(Util::Anim::Lerp(resting, Util::Colors::GetAccent(), blend.selected));
-		if (ImFont* font = Icons::GetFont(glyph); font && glyph) {
-			// PushFont takes a size before the style and window font scales; undo them so the ratio is in font sizes
-			const ImGuiContext& context = *ImGui::GetCurrentContext();
-			const float fontScale = context.FontSizeBase > 0.0f ? context.FontSize / context.FontSizeBase : 1.0f;
-			ImGui::PushFont(font, ImGui::GetFontSize() * Constants::STATUS_BAR_NAV_GLYPH_FONT_RATIO / std::max(fontScale, 0.01f));
-			drawList->AddText(Icons::GetCenteredGlyphPos(min, ImVec2(size, size), glyph.utf8), color, glyph.utf8);
-			ImGui::PopFont();
-		}
+		MenuHeaderRenderer::DrawCenteredGlyph(drawList, min, size, ImGui::GetFontSize() * Constants::STATUS_BAR_NAV_GLYPH_FONT_RATIO, glyph, color);
 		if (tooltip)
 			Util::AddTooltip(tooltip, Util::kTooltipWhenDisabled);
 		row.Advance(0.0f);

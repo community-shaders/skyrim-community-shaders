@@ -481,6 +481,13 @@ public:
 		static constexpr float PRESET_POSTER_ASPECT = 2.0f / 3.0f;                             // Detail poster width over height (portrait)
 		static constexpr float PRESET_THUMB_HEIGHT_FRAMES = 4.0f;                              // Screenshot thumbnail width, in frame heights
 		static constexpr float SCREENSHOT_ASPECT = 16.0f / 9.0f;                               // Screenshot width over height
+		// --- Shell cleanup (header icons, watermark) ---
+		static constexpr float HEADER_DOCKED_IDLE_ALPHA = 0.85f;                       // Docked title-bar action icons: opacity while not hovered (monochrome icons)
+		static constexpr float HEADER_UNDOCKED_HOVER_GREY = 0.8f;                      // Undocked action icon hover fill: grey level
+		static constexpr float HEADER_UNDOCKED_HOVER_ALPHA = 0.25f;                    // ... and its alpha
+		static constexpr float WATERMARK_MONO_ALPHA = 0.18f;                           // Monochrome watermark logo opacity
+		static constexpr ImU32 HEADER_COLOR_ICON_IDLE = IM_COL32(220, 220, 220, 220);  // Docked colour icon tint while not hovered
+		static constexpr ImU32 WATERMARK_COLOR = IM_COL32(255, 255, 255, 45);          // Full-colour watermark logo tint
 	};
 
 	static ThemeManager* GetSingleton()

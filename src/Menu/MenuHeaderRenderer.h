@@ -55,6 +55,17 @@ public:
 	 */
 	static bool GlyphIconButton(const char* id, Icons::GlyphRef glyph, float glyphBox, const char* tooltip, bool active = false);
 
+	/**
+	 * @brief Draws an icon-font glyph centred in a square box.
+	 * @param drawList Target draw list.
+	 * @param min Top-left of the box.
+	 * @param box Edge of the box.
+	 * @param fontSize Glyph size, in the current font-size units (before style and window scaling).
+	 * @param glyph The Tabler glyph.
+	 * @param color Glyph colour.
+	 */
+	static void DrawCenteredGlyph(ImDrawList* drawList, ImVec2 min, float box, float fontSize, Icons::GlyphRef glyph, ImU32 color);
+
 	/** @brief "Community Shaders <version>", as the header title shows it. */
 	static std::string GetTitleText();
 
@@ -86,12 +97,12 @@ private:
 	 */
 	static bool RenderNavButton(bool docked, ImVec2 min, float size, const char* id, Icons::GlyphRef glyph, const char* tooltip,
 		bool current, const ImVec4* tintOverride, const std::function<void()>& onClick);
+	/** @brief Edge of every header icon button: the action icons, Home, issues and Go to all share it. */
+	static float GetHeaderIconSize(bool docked, float uiScale);
 	/**
 	 * @brief Draws the Home button and, while feature issues exist, the red issues button after it.
 	 * @return The total width taken, including the gaps after each button.
 	 */
-	/** @brief Edge of every header icon button: the action icons, Home, issues and Go to all share it. */
-	static float GetHeaderIconSize(bool docked, float uiScale);
 	static float RenderNavButtons(bool docked, ImVec2 min, float size, float gap);
 	static std::vector<ActionIcon> BuildActionIcons(const Util::IconLoader::UIIcons& uiIcons, const std::vector<MenuShortcuts::Shortcut>& shortcuts);
 	/** @return The x of the leftmost icon's left edge, or the window's right edge when there are no icons. */

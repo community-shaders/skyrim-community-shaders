@@ -28,19 +28,31 @@ namespace
 {
 	using RoleFontGuard = MenuFonts::FontRoleGuard;
 
+	/** @brief Icon tint for the header's glyph buttons: the theme text colour in monochrome mode, otherwise white. */
+	ImVec4 BaseIconTint()
+	{
+		const auto& theme = globals::menu->GetSettings().Theme;
+		return theme.UseMonochromeIcons ? theme.Palette.Text : ImVec4(1, 1, 1, 1);
+	}
+
 	/** @brief Draws an icon glyph centred in a square, sized to match the texture icons. */
 	void DrawIconGlyph(ImDrawList* drawList, ImVec2 min, float size, Icons::GlyphRef glyph, ImU32 color)
 	{
-		ImFont* font = Icons::GetFont(glyph);
-		if (!font || !glyph)
-			return;
-		// PushFont takes a size before the style and window font scales; undo them so the glyph matches the textures
-		const ImGuiContext& context = *ImGui::GetCurrentContext();
-		const float fontScale = context.FontSizeBase > 0.0f ? context.FontSize / context.FontSizeBase : 1.0f;
-		ImGui::PushFont(font, size * ThemeManager::Constants::HEADER_GLYPH_ICON_SCALE / std::max(fontScale, 0.01f));
-		drawList->AddText(Icons::GetCenteredGlyphPos(min, ImVec2(size, size), glyph.utf8), color, glyph.utf8);
-		ImGui::PopFont();
+		MenuHeaderRenderer::DrawCenteredGlyph(drawList, min, size, size * ThemeManager::Constants::HEADER_GLYPH_ICON_SCALE, glyph, color);
 	}
+}
+
+void MenuHeaderRenderer::DrawCenteredGlyph(ImDrawList* drawList, ImVec2 min, float box, float fontSize, Icons::GlyphRef glyph, ImU32 color)
+{
+	ImFont* font = Icons::GetFont(glyph);
+	if (!font || !glyph)
+		return;
+	// PushFont takes a size before the style and window font scales; undo them so the glyph matches the textures
+	const ImGuiContext& context = *ImGui::GetCurrentContext();
+	const float fontScale = context.FontSizeBase > 0.0f ? context.FontSize / context.FontSizeBase : 1.0f;
+	ImGui::PushFont(font, fontSize / std::max(fontScale, 0.01f));
+	drawList->AddText(Icons::GetCenteredGlyphPos(min, ImVec2(box, box), glyph.utf8), color, glyph.utf8);
+	ImGui::PopFont();
 }
 
 bool MenuHeaderRenderer::GlyphIconButton(const char* id, Icons::GlyphRef glyph, float glyphBox, const char* tooltip, bool active)
@@ -64,7 +76,7 @@ bool MenuHeaderRenderer::GlyphIconButton(const char* id, Icons::GlyphRef glyph, 
 			Util::Anim::ScaleAlphaU32(ImGui::GetColorU32(blend.selected > blend.hover ? ImGuiCol_ButtonHovered : ImGuiCol_FrameBgHovered), fill),
 			ImGui::GetStyle().FrameRounding);
 
-	ImVec4 tint = globals::menu->GetSettings().Theme.UseMonochromeIcons ? globals::menu->GetSettings().Theme.Palette.Text : ImVec4(1, 1, 1, 1);
+	ImVec4 tint = BaseIconTint();
 	tint = Util::Anim::Lerp(tint, Util::Colors::GetAccent(), blend.selected);
 	DrawIconGlyph(ImGui::GetWindowDrawList(), ImVec2(min.x + framePadding.x, min.y + framePadding.y), glyphBox, glyph, ImGui::GetColorU32(tint));
 	if (tooltip) {
@@ -99,7 +111,7 @@ bool MenuHeaderRenderer::RenderNavButton(bool docked, ImVec2 min, float size, co
 	ImDrawList* drawList = docked ? ImGui::GetForegroundDrawList() : ImGui::GetWindowDrawList();
 	Util::DrawAnimatedButtonHighlight(rect, ImGui::GetID(id), hovered, down, current, drawList);
 
-	ImVec4 tint = globals::menu->GetSettings().Theme.UseMonochromeIcons ? globals::menu->GetSettings().Theme.Palette.Text : ImVec4(1, 1, 1, 1);
+	ImVec4 tint = BaseIconTint();
 	if (tintOverride)
 		tint = *tintOverride;
 	else if (current)
@@ -426,12 +438,12 @@ float MenuHeaderRenderer::RenderDockedIcons(const std::vector<ActionIcon>& actio
 			// Use theme text color for monochrome icons
 			ImVec4 textColor = globals::menu->GetSettings().Theme.Palette.Text;
 			if (!isHovered) {
-				textColor.w *= 0.85f;  // Slightly reduce alpha when not hovered
+				textColor.w *= ThemeManager::Constants::HEADER_DOCKED_IDLE_ALPHA;
 			}
 			tintColor = ImGui::GetColorU32(textColor);
 		} else {
 			// Use white/gray tint for colored icons
-			tintColor = isHovered ? IM_COL32(255, 255, 255, 255) : IM_COL32(220, 220, 220, 220);
+			tintColor = isHovered ? IM_COL32_WHITE : ThemeManager::Constants::HEADER_COLOR_ICON_IDLE;
 		}
 		if (it->unsaved)
 			DrawUnsavedBox(fgDrawList, interactionRect.Min, interactionRect.Max);
@@ -488,13 +500,10 @@ void MenuHeaderRenderer::RenderUndockedIcons(const std::vector<ActionIcon>& acti
 	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(ThemeManager::Constants::UNDOCKED_ICON_ITEM_SPACING, 0.0f));  // Slightly increased spacing
 	ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);                                                           // Remove button borders
 	ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));                                                         // Transparent button background
-	ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.8f, 0.8f, 0.25f));                                     // Slightly more visible hover effect
+	ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(ThemeManager::Constants::HEADER_UNDOCKED_HOVER_GREY, ThemeManager::Constants::HEADER_UNDOCKED_HOVER_GREY, ThemeManager::Constants::HEADER_UNDOCKED_HOVER_GREY, ThemeManager::Constants::HEADER_UNDOCKED_HOVER_ALPHA));
 
 	// Get tint color for monochrome icons
-	ImVec4 tintColor = ImVec4(1, 1, 1, 1);
-	if (globals::menu->GetSettings().Theme.UseMonochromeIcons) {
-		tintColor = globals::menu->GetSettings().Theme.Palette.Text;
-	}
+	const ImVec4 tintColor = BaseIconTint();
 
 	// Same size as an ImageButton, which pads the image by FramePadding on each side
 	const ImVec2 framePadding = ImGui::GetStyle().FramePadding;
@@ -503,7 +512,6 @@ void MenuHeaderRenderer::RenderUndockedIcons(const std::vector<ActionIcon>& acti
 	// Draw action icons as ImageButtons, or glyph buttons where the texture is missing
 	for (size_t i = 0; i < actionIcons.size(); ++i) {
 		const auto& icon = actionIcons[i];
-		const ImVec4 iconTint = tintColor;
 		if (icon.unsaved) {
 			// The button's whole frame, which is what its hover highlight covers
 			const ImVec2 boxMin = ImGui::GetCursorScreenPos();
@@ -517,12 +525,12 @@ void MenuHeaderRenderer::RenderUndockedIcons(const std::vector<ActionIcon>& acti
 			// Use ImageButton with reduced image size to minimize padding
 			const ImVec2 snappedSize = Util::IconLoader::SnapToPixel(imageSize);
 			clicked = ImGui::ImageButton(buttonId.c_str(), Util::IconLoader::ViewForSize(icon.texture, snappedSize), snappedSize, ImVec2(0, 0),
-				ImVec2(1, 1), ImVec4(0, 0, 0, 0), iconTint);
+				ImVec2(1, 1), ImVec4(0, 0, 0, 0), tintColor);
 		} else {
 			clicked = Util::Button(buttonId.c_str(), glyphButtonSize);
 			const ImVec2 min = ImGui::GetItemRectMin();
 			DrawIconGlyph(ImGui::GetWindowDrawList(), ImVec2(min.x + framePadding.x, min.y + framePadding.y), imageSize.x, icon.glyph,
-				ImGui::GetColorU32(iconTint));
+				ImGui::GetColorU32(tintColor));
 		}
 		if (clicked) {
 			icon.callback();
@@ -572,10 +580,10 @@ void MenuHeaderRenderer::RenderWatermarkLogo(const Util::IconLoader::UIIcons& ui
 	ImU32 watermarkColor;
 	if (globals::menu->GetSettings().Theme.UseMonochromeLogo) {
 		ImVec4 textColor = globals::menu->GetSettings().Theme.Palette.Text;
-		textColor.w = 0.18f;  // Very low alpha for subtle watermark effect
+		textColor.w = ThemeManager::Constants::WATERMARK_MONO_ALPHA;
 		watermarkColor = ImGui::GetColorU32(textColor);
 	} else {
-		watermarkColor = IM_COL32(255, 255, 255, 45);
+		watermarkColor = ThemeManager::Constants::WATERMARK_COLOR;
 	}
 
 	const ImVec2 logoDrawMin = Util::IconLoader::SnapToPixel(logoMin);
