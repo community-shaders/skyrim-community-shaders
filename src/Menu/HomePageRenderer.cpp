@@ -408,14 +408,22 @@ namespace
 
 		auto* i18n = I18n::GetSingleton();
 
+		// Spacing goes between the entries only, so the card ends at its last one
+		bool firstEntry = true;
+		const auto entryGap = [&firstEntry] {
+			if (!std::exchange(firstEntry, false))
+				ImGui::Spacing();
+		};
+
 		// Unsaved changes: the header and footer hold the save and restore actions
 		if (unsaved) {
+			entryGap();
 			IconLine(unsavedColor, Icons::TI(MenuIcons::kSave), T("menu.home.unsaved_text", "You have unsaved changes."));
-			ImGui::Spacing();
 		}
 
 		// Feature issues: the rejected, obsolete or mismatched feature files and failed Baselines, with their actions
 		if (issueCount > 0) {
+			entryGap();
 			IconLine(error, Icons::TI(MenuIcons::kIssues),
 				i18n->Format("menu.status.feature_issues", { { "count", std::to_string(issueCount) } }, "Feature issues: {count}").c_str());
 			BrowserUI::HelpMarkerRight(FeatureIssues::GetCleanupGuide().c_str());
@@ -424,18 +432,20 @@ namespace
 
 		// Restart pending
 		if (!restartPending.empty()) {
+			entryGap();
 			ImGui::TextColored(globals::menu->GetTheme().StatusPalette.RestartNeeded, "%s",
 				i18n->Format("menu.home.restart_pending", { { "count", std::to_string(restartPending.size()) } }, "Restart needed for {count} features")
 					.c_str());
 			Util::AddTooltip(T("menu.home.restart_pending_tooltip",
 				"These features were installed, or had Load at boot changed, since the game started. The change applies at the next start."));
 			BrowserUI::MetaText(JoinNames(restartPending).c_str());
-			ImGui::Spacing();
 		}
 
 		// Setting constraints
-		if (constraintCount > 0)
+		if (constraintCount > 0) {
+			entryGap();
 			IssuesPageRenderer::RenderConstraintsSection();
+		}
 
 		// Brief outline after a click on the header or footer issues indicator
 		if (HomePageRenderer::IsAttentionFocused()) {
