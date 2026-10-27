@@ -319,9 +319,10 @@ namespace
 	 * @param featureName The display name of the feature
 	 * @param version The version string (can be empty)
 	 * @param description Short description shown below the title (single line, truncated if too long)
+	 * @param trailingX Receives the screen x just past the title, stage tag and version, where more annotations can go
 	 * @return The height of just the title line (for button alignment)
 	 */
-	float DrawFeatureHeader(const std::string& featureName, const std::string& version, const std::string& description = "", const std::string& stageTag = "", ImVec4 stageColor = {})
+	float DrawFeatureHeader(const std::string& featureName, const std::string& version, const std::string& description = "", const std::string& stageTag = "", ImVec4 stageColor = {}, float* trailingX = nullptr)
 	{
 		auto& themeSettings = globals::menu->GetTheme();
 		auto& palette = themeSettings.Palette;
@@ -408,10 +409,14 @@ namespace
 				ImGui::TextColored(versionColor, "v%s", formattedVersion.c_str());
 				ImGui::SetWindowFontScale(1.0f);
 			}
+			annotationX += versionSize.x + ImGui::GetStyle().ItemSpacing.x;
 
 			// Reset cursor to after the title block
 			ImGui::SetCursorScreenPos(ImVec2(startPos.x, startPos.y + titleSize.y + ImGui::GetStyle().ItemSpacing.y * 0.25f));
 		}
+
+		if (trailingX)
+			*trailingX = annotationX;
 
 		// Draw description if provided (wrapped to content width)
 		if (!description.empty()) {
@@ -1132,7 +1137,6 @@ void FeatureListRenderer::ListMenuVisitor::operator()(Feature* feat)
 		ImGui::SetScrollHereY();
 	const ImVec2 rowMin = ImGui::GetItemRectMin();
 	const ImVec2 rowMax = ImGui::GetItemRectMax();
-	const bool rowHovered = ImGui::IsItemHovered();
 	RenderRowContextMenu(feat);
 
 	// Favorites are pinned at the top of the list, marked by a pin attached to the name (its label ends in a space)
@@ -1176,16 +1180,6 @@ void FeatureListRenderer::ListMenuVisitor::operator()(Feature* feat)
 		}
 	}
 
-	// Modified: a small dot at the row's right edge, painted so it never pushes the row wider
-	if (isLoaded && globals::state->HasUserEdits(feat)) {
-		const float lineHeight = ImGui::GetTextLineHeight();
-		const float radius = lineHeight * ThemeManager::Constants::FEATURE_ROW_MODIFIED_DOT_RATIO;
-		const ImVec2 center(rowMax.x - ImGui::GetStyle().FramePadding.x - radius, (rowMin.y + rowMax.y) * 0.5f);
-		Util::DrawIconCircle(center, radius, ImGui::GetColorU32(Util::Colors::GetWarning()), true);
-		const float half = lineHeight * 0.5f;
-		if (rowHovered && ImGui::IsMouseHoveringRect(ImVec2(center.x - half, rowMin.y), ImVec2(center.x + half, rowMax.y)))
-			ImGui::SetTooltip("%s", T("menu.features.modified_tooltip", "Modified: differs from defaults and your Baseline presets"));
-	}
 	ImGui::PopID();
 }
 
@@ -1326,10 +1320,28 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureHeader(Feature* feat, bo
 	// Returns title-only height for button alignment
 	const auto stage = feat->GetReleaseStage();
 	const std::string stageTag = Feature::GetReleaseStageTag(stage);  // empty for Release; color unused when tag is empty
-	const float titleOnlyHeight = DrawFeatureHeader(feat->GetDisplayName(), isLoaded ? feat->version : "", description, stageTag, Feature::GetReleaseStageColor(stage));
+	float trailingX = titleStartPos.x;
+	const float titleOnlyHeight = DrawFeatureHeader(feat->GetDisplayName(), isLoaded ? feat->version : "", description, stageTag, Feature::GetReleaseStageColor(stage), &trailingX);
 
 	// Save cursor position after header (for restoring after buttons are drawn)
 	const ImVec2 cursorPosAfterHeader = ImGui::GetCursorScreenPos();
+
+	// Quiet marker while the feature differs from its defaults; clicking restores them like the actions menu does
+	if (canRestore && globals::state->HasUserEdits(feat)) {
+		ImGui::SetCursorScreenPos(ImVec2(trailingX, titleStartPos.y + titleOnlyHeight - iconSize));
+		const ImVec4 secondary = Util::Colors::GetSecondary();
+		bool restore = false;
+		{
+			MenuFonts::FontRoleGuard subtext(Menu::FontRole::Subtext);
+			ImGui::PushStyleColor(ImGuiCol_Text, secondary);
+			restore = BrowserUI::Chip("##FeatureModified", T("menu.features.modified_chip", "Modified"), Icons::TI(ICON_TI_PENCIL), &secondary);
+			ImGui::PopStyleColor();
+		}
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::TextUnformatted(T("menu.features.modified_chip_tooltip", "Differs from the defaults and your Baseline presets. Click to restore defaults."));
+		if (restore)
+			RestoreDefaults(feat);
+	}
 
 	// Controls sit middle-aligned with the title line only (not the description)
 	const float rowY = titleStartPos.y + (titleOnlyHeight - iconSize) * 0.5f;
@@ -1485,6 +1497,12 @@ void FeatureListRenderer::DrawMenuVisitor::RunFeatureCommand(Feature* feat, cons
 		command();
 }
 
+void FeatureListRenderer::DrawMenuVisitor::RestoreDefaults(Feature* feat) const
+{
+	// Clears the user's edits, so the feature shows what defaults and Baseline packs set.
+	RunFeatureCommand(feat, [feat] { globals::state->RestoreFeatureLayers(feat); });
+}
+
 void FeatureListRenderer::DrawMenuVisitor::RenderActionsMenu(Feature* feat, bool canExport, bool canRestore, bool canUseBaselines)
 {
 	const float size = ImGui::GetFrameHeight();
@@ -1520,8 +1538,7 @@ void FeatureListRenderer::DrawMenuVisitor::RenderActionsMenu(Feature* feat, bool
 
 		const bool hasEdits = canRestore && globals::state->HasUserEdits(feat);
 		if (ImGui::MenuItem(T("menu.features.restore_defaults", "Restore Defaults"), nullptr, false, hasEdits)) {
-			// Clears the user's edits, so the feature shows what defaults and Baseline packs set.
-			RunFeatureCommand(feat, [feat] { globals::state->RestoreFeatureLayers(feat); });
+			RestoreDefaults(feat);
 		}
 		Util::AddTooltip(hasEdits   ? T("menu.features.restore_defaults_tooltip", "Restore defaults: clears your edits to this feature, back to what defaults and your Baseline presets set") :
 						 canRestore ? T("menu.features.restore_nothing", "Nothing to restore: this feature already matches its defaults and your Baseline presets") :

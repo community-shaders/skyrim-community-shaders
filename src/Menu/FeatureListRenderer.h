@@ -243,6 +243,8 @@ private:
 		void RenderActionsMenu(Feature* feat, bool canExport, bool canRestore, bool canUseBaselines);
 		/** @brief Centred "disabled at boot" notice with a button that turns Load at Boot back on. */
 		static void RenderDisabledAtBootNotice(Feature* feat);
+		/** @brief Clears the feature's user edits through the command hook, as the actions menu and the Modified chip do. */
+		void RestoreDefaults(Feature* feat) const;
 		/** @brief Runs a command that rewrites the feature's settings through Hooks::runFeatureCommand. */
 		void RunFeatureCommand(Feature* feat, const std::function<void()>& command) const;
 		static void RenderFavoriteButton(Feature* feat);

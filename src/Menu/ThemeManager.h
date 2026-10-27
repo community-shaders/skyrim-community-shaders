@@ -239,7 +239,6 @@ public:
 		static constexpr float AUTOHIDE_GRIP_ALPHA = 0.5f;               // Grip opacity as a share of the secondary text colour
 		static constexpr float FEATURE_ROW_CATEGORY_ICON_SCALE = 0.95f;  // Category icon edge in the Alphabetical list, relative to the line height
 		static constexpr float FEATURE_ROW_CATEGORY_ICON_ALPHA = 0.55f;  // ... and its dimming
-		static constexpr float FEATURE_ROW_MODIFIED_DOT_RATIO = 0.18f;   // Modified dot radius relative to the text line height
 
 		// Settings page constants (sizes are 1080p baseline, scaled by Util::GetUIScale())
 		static constexpr float SETTINGS_NAV_GROUP_SPACING = 6.0f;  // Gap above each group label after the first
