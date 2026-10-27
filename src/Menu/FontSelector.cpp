@@ -4,6 +4,7 @@
 #include "Globals.h"
 #include "I18n/I18n.h"
 #include "ThemeManager.h"
+#include "Utils/UI.h"
 
 #include <format>
 
@@ -40,7 +41,7 @@ namespace MenuFonts::Selector
 			ImGui::PushID(family.name.c_str());
 			const Util::Fonts::StyleInfo* previewStyle = ResolveFamilyDefaultStyle(family);
 			ImFontGuard previewFont(previewStyle ? GetPreviewFont(previewStyle->file) : nullptr);
-			const bool clicked = ImGui::Selectable(family.displayName.c_str(), isSelected);
+			const bool clicked = Util::Selectable(family.displayName.c_str(), isSelected);
 			ImGui::PopID();
 			return clicked;
 		}
@@ -49,7 +50,7 @@ namespace MenuFonts::Selector
 		{
 			ImGui::PushID(styleInfo.file.c_str());
 			ImFontGuard previewFont(GetPreviewFont(styleInfo.file));
-			const bool clicked = ImGui::Selectable(styleInfo.displayName.c_str(), isSelected);
+			const bool clicked = Util::Selectable(styleInfo.displayName.c_str(), isSelected);
 			ImGui::PopID();
 			return clicked;
 		}
@@ -188,7 +189,7 @@ namespace MenuFonts::Selector
 		}
 		ImGui::SameLine();
 		const std::string resetLabel = std::format("Reset##Scale{}", roleIndex);
-		if (ImGui::Button(resetLabel.c_str())) {
+		if (Util::Button(resetLabel.c_str())) {
 			roleSettings.SizeScale = Menu::GetFontRoleDefaultScale(role);
 			MenuFonts::GetAtlasState().pendingFontReload = true;
 		}
@@ -208,7 +209,7 @@ namespace MenuFonts::Selector
 			}
 			ImGui::SameLine();
 			const std::string resetBtnLabel = std::string(T("menu.settings.reset", "Reset")) + "##FeatureHeaderScale";
-			if (ImGui::Button(resetBtnLabel.c_str())) {
+			if (Util::Button(resetBtnLabel.c_str())) {
 				themeSettings.FeatureHeading.FeatureTitleScale = ThemeManager::Constants::DEFAULT_FEATURE_TITLE_SCALE;
 			}
 		}

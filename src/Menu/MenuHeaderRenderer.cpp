@@ -53,7 +53,7 @@ bool MenuHeaderRenderer::GlyphIconButton(const char* id, Icons::GlyphRef glyph, 
 	ImGui::PushStyleColor(ImGuiCol_Button, IM_COL32_BLACK_TRANS);
 	ImGui::PushStyleColor(ImGuiCol_ButtonHovered, IM_COL32_BLACK_TRANS);
 	ImGui::PushStyleColor(ImGuiCol_ButtonActive, IM_COL32_BLACK_TRANS);
-	const bool clicked = ImGui::Button(id, buttonSize);
+	const bool clicked = Util::Button(id, buttonSize);
 	const ImVec2 min = ImGui::GetItemRectMin();
 	const ImVec2 max = ImGui::GetItemRectMax();
 	ImGui::PopStyleColor(3);
@@ -494,7 +494,7 @@ void MenuHeaderRenderer::RenderUndockedIcons(const std::vector<ActionIcon>& acti
 			clicked = ImGui::ImageButton(buttonId.c_str(), Util::IconLoader::ViewForSize(icon.texture, snappedSize), snappedSize, ImVec2(0, 0),
 				ImVec2(1, 1), ImVec4(0, 0, 0, 0), iconTint);
 		} else {
-			clicked = ImGui::Button(buttonId.c_str(), glyphButtonSize);
+			clicked = Util::Button(buttonId.c_str(), glyphButtonSize);
 			const ImVec2 min = ImGui::GetItemRectMin();
 			DrawIconGlyph(ImGui::GetWindowDrawList(), ImVec2(min.x + framePadding.x, min.y + framePadding.y), imageSize.x, icon.glyph,
 				ImGui::GetColorU32(iconTint));

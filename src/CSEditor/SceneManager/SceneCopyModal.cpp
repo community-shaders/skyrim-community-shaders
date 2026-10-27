@@ -1172,7 +1172,7 @@ namespace
 			Util::kTooltipWhenDisabled);
 
 		ImGui::SameLine();
-		if (ImGui::Button(cancelLabel)) {
+		if (Util::Button(cancelLabel)) {
 			ImGui::CloseCurrentPopup();
 			return std::nullopt;
 		}

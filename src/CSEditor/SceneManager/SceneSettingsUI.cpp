@@ -229,7 +229,7 @@ namespace
 	bool DrawAllDayChip()
 	{
 		const char* label = T(TKEY("period_bar_all_day"), "All day");
-		const bool clicked = ImGui::Button(label);
+		const bool clicked = Util::Button(label);
 		Util::AddTooltip(T(TKEY("period_bar_all_day_tooltip"),
 			"Use one set of settings for the whole day instead of separate period sets. "
 			"Period settings are kept, so turning Time of Day back on restores them."));

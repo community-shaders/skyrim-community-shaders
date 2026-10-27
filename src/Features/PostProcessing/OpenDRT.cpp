@@ -868,7 +868,7 @@ void OpenDRTDrawSettings(OpenDRTSettings& s, bool hdrActive, float hdrPaperWhite
 		ComboEnum(T("feature.post_processing.open_drt.tonescale_preset", "Tonescale Preset"), presets.tonescalePreset, kTonescalePresetLabels);
 
 		ImGui::BeginDisabled(SceneWidgetInterceptor::IsArmed());
-		if (ImGui::Button(T("feature.post_processing.open_drt.apply_preset", "Apply Preset"), { -FLT_MIN, 0 })) {
+		if (Util::Button(T("feature.post_processing.open_drt.apply_preset", "Apply Preset"), { -FLT_MIN, 0 })) {
 			ApplyLookPreset(s, presets.lookPreset);
 			ApplyTonescalePreset(s, presets.tonescalePreset);
 			s.clamp = 1;

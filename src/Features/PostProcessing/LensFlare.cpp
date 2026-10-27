@@ -172,7 +172,7 @@ void LensFlare::DrawSettings()
 			ImGui::PopID();
 		}
 		ImGui::BeginDisabled(SceneWidgetInterceptor::IsArmed());
-		if (ImGui::Button(T("feature.post_processing.lens_flare.reset_ghosts_to_default", "Reset Ghosts to Default"))) {
+		if (Util::Button(T("feature.post_processing.lens_flare.reset_ghosts_to_default", "Reset Ghosts to Default"))) {
 			GhostSettings defaults[NUM_GHOSTS] = {
 				{ { { 1.0f, 0.8f, 0.4f, 1.0f } }, -1.5f, true, 1.0f },
 				{ { { 1.0f, 1.0f, 0.6f, 1.0f } }, 2.5f, true, 1.0f },

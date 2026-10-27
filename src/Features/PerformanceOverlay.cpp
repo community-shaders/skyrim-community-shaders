@@ -203,11 +203,11 @@ void PerformanceOverlay::DrawSettings()
 
 		ImGui::Separator();
 		ImGui::Text("%s", T(TKEY("position"), "Position:"));
-		if (ImGui::Button(T(TKEY("reset_position"), "Reset Position"))) {
+		if (Util::Button(T(TKEY("reset_position"), "Reset Position"))) {
 			this->settings.PositionSet = false;
 		}
 		ImGui::SameLine();
-		if (ImGui::Button(T(TKEY("restore_defaults"), "Restore Defaults"))) {
+		if (Util::Button(T(TKEY("restore_defaults"), "Restore Defaults"))) {
 			RestoreDefaultSettings();
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -1191,11 +1191,11 @@ void PerformanceOverlay::DrawABTestSection(const std::vector<DrawCallRow>& allRo
 		// --- A/B Results Controls ---
 		static bool showSettingsDiff = false;
 		ImGui::BeginGroup();
-		if (ImGui::Button(showSettingsDiff ? "Hide Settings Diff" : "Show Settings Diff")) {
+		if (Util::Button(showSettingsDiff ? "Hide Settings Diff" : "Show Settings Diff")) {
 			showSettingsDiff = !showSettingsDiff;
 		}
 		ImGui::SameLine();
-		if (ImGui::Button("Clear A/B Test Results")) {
+		if (Util::Button("Clear A/B Test Results")) {
 			aggregator.Clear();
 			this->settingsDiff.clear();
 			this->settingsDiffLoaded = false;
@@ -1309,7 +1309,7 @@ void PerformanceOverlay::DrawDrawCallsTable(const std::vector<DrawCallRow>& main
 	overlay.CaptureTestData();
 	bool anyTestData = !overlay.testData.empty();
 	if (anyTestData) {
-		if (ImGui::Button(T(TKEY("clear_test_data"), "Clear Test Data"))) {
+		if (Util::Button(T(TKEY("clear_test_data"), "Clear Test Data"))) {
 			clearTestDataRequested = true;
 		}
 	}
@@ -1415,7 +1415,7 @@ std::vector<ColumnConfig> PerformanceOverlay::BuildDrawCallTableColumns(const Me
 				if (!row.enabled)
 					ImGui::PushStyleColor(ImGuiCol_Text, theme.StatusPalette.Disable);
 				bool wasEnabled = row.enabled;
-				if (ImGui::Selectable(row.label.c_str(), false)) {
+				if (Util::Selectable(row.label.c_str(), false)) {
 					auto maybeType = magic_enum::enum_cast<RE::BSShader::Type>(row.shaderType);
 					if (maybeType.has_value()) {
 						auto classIndex = magic_enum::enum_integer(*maybeType) - 1;
@@ -1623,7 +1623,7 @@ std::function<void(int, int, const DrawCallRow&)> PerformanceOverlay::CreateTabl
 		// Special handling for summary rows
 		if ((row.label == "Total:" || row.label == "Other:") && colIdx == 0) {
 			if (row.label == "Total:") {
-				if (ImGui::Selectable(row.label.c_str(), false, ImGuiSelectableFlags_SpanAllColumns)) {
+				if (Util::Selectable(row.label.c_str(), false, ImGuiSelectableFlags_SpanAllColumns)) {
 					HandleTotalRowToggle();
 				}
 				if (ImGui::IsItemHovered()) {

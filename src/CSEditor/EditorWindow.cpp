@@ -100,7 +100,7 @@ namespace
 
 		if (!enabled)
 			ImGui::BeginDisabled();
-		const bool pressed = ImGui::Selectable(label, false, ImGuiSelectableFlags_SpanAvailWidth);
+		const bool pressed = Util::Selectable(label, false, ImGuiSelectableFlags_SpanAvailWidth);
 		if (!enabled)
 			ImGui::EndDisabled();
 
@@ -345,7 +345,7 @@ void EditorWindow::DrawBrowserSidebar(bool compact)
 			ImGui::PushStyleColor(ImGuiCol_Header, clear);
 			ImGui::PushStyleColor(ImGuiCol_HeaderHovered, clear);
 			ImGui::PushStyleColor(ImGuiCol_HeaderActive, clear);
-			if (ImGui::Selectable("##category", selected, ImGuiSelectableFlags_None, ImVec2(0.0f, rowHeight)))
+			if (Util::Selectable("##category", selected, ImGuiSelectableFlags_None, ImVec2(0.0f, rowHeight)))
 				m_selectedCategory = category.id;
 			ImGui::PopStyleColor(3);
 
@@ -1684,7 +1684,7 @@ void EditorWindow::ShowSettingsWindow()
 			{ "Flags", T(TKEY("flags"), "Flags") }
 		};
 		for (const auto& option : options) {
-			if (ImGui::Selectable(option.label, settingsSelectedCategory == option.id)) {
+			if (Util::Selectable(option.label, settingsSelectedCategory == option.id)) {
 				settingsSelectedCategory = option.id;
 			}
 		}

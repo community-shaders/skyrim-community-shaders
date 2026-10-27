@@ -9,6 +9,7 @@
 #include "State.h"
 
 #include "I18n/I18n.h"
+#include "Utils/UI.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Skin::Settings,
@@ -174,7 +175,7 @@ void Skin::DrawSettings()
 		ImGui::Text("%s", T("feature.skin.multiply_the_tiling_for_the_body_to_match", "Multiply the tiling for the body to match the face"));
 	}
 
-	if (ImGui::Button(T("feature.skin.reload_skin_detail_texture", "Reload Skin Detail Texture"))) {
+	if (Util::Button(T("feature.skin.reload_skin_detail_texture", "Reload Skin Detail Texture"))) {
 		ReloadSkinDetail();
 	}
 

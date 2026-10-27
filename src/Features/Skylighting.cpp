@@ -65,7 +65,7 @@ void Skylighting::DrawSettings()
 
 	ImGui::Separator();
 
-	if (ImGui::Button(T(TKEY("rebuild"), "Rebuild Skylighting")))
+	if (Util::Button(T(TKEY("rebuild"), "Rebuild Skylighting")))
 		ResetSkylighting();
 
 	if (auto _tt = Util::HoverTooltipWrapper())
@@ -425,8 +425,8 @@ RE::BSShaderProperty::RenderPassArray* Skylighting::BSLightingShaderProperty_Get
 
 	constexpr float minOccluderRadius = 32.0f;
 	const bool validOccluder = property->flags.any(kZBufferWrite) &&
-		property->flags.none(kRefraction, kTempRefraction, kLODLandscape, kEyeReflect, kDecal, kDynamicDecal) &&
-		(skylighting.inOcclusion || property->flags.none(kMultiTextureLandscape, kNoLODLandBlend));
+	                           property->flags.none(kRefraction, kTempRefraction, kLODLandscape, kEyeReflect, kDecal, kDynamicDecal) &&
+	                           (skylighting.inOcclusion || property->flags.none(kMultiTextureLandscape, kNoLODLandBlend));
 	if (!validOccluder || !(geometry->worldBound.radius > minOccluderRadius))
 		return precipitationOcclusionMapRenderPassList;
 

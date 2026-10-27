@@ -200,13 +200,13 @@ void Widget::DrawDeleteConfirmationModal(const char* popupId)
 
 		ImGui::SetCursorPosX(cursorX);
 
-		if (ImGui::Button(T(TKEY("yes_delete"), "Yes, Delete"), ImVec2(buttonWidth, 0))) {
+		if (Util::Button(T(TKEY("yes_delete"), "Yes, Delete"), ImVec2(buttonWidth, 0))) {
 			Delete();
 			ImGui::CloseCurrentPopup();
 		}
 		ImGui::SameLine();
 
-		if (ImGui::Button(T(TKEY("cancel"), "Cancel"), ImVec2(buttonWidth, 0))) {
+		if (Util::Button(T(TKEY("cancel"), "Cancel"), ImVec2(buttonWidth, 0))) {
 			ImGui::CloseCurrentPopup();
 		}
 		ImGui::SetItemDefaultFocus();
@@ -739,7 +739,7 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 				iconButton("_Apply", Util::IconLoader::GetIcons().applyToGame.texture, T(TKEY("apply_changes"), "Apply changes to the game"), [&]() { ApplyChanges(); });
 			} else {
 				ImGui::SameLine();
-				if (ImGui::Button(T(TKEY("apply"), "Apply")))
+				if (Util::Button(T(TKEY("apply"), "Apply")))
 					ApplyChanges();
 				Util::AddTooltip(T(TKEY("apply_changes"), "Apply changes to the game"));
 			}
@@ -896,7 +896,7 @@ void Widget::DrawSearchDropdown()
 						std::string label = result.tabName.empty() ? result.displayName : std::format("{} ({})", result.displayName, result.tabName);
 
 						ImGui::PushID(i);
-						if (ImGui::Selectable(label.c_str(), false, ImGuiSelectableFlags_NoAutoClosePopups)) {
+						if (Util::Selectable(label.c_str(), false, ImGuiSelectableFlags_NoAutoClosePopups)) {
 							NavigateToSearchResult(result);
 							navigatedFromSearch = true;
 						}

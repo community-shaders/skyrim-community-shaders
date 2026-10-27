@@ -82,7 +82,7 @@ void PaletteWindow::DrawContents()
 			}
 
 			if (ImGui::BeginPopupContextItem()) {
-				if (ImGui::Selectable(T(TKEY("clear_favourite"), "Clear favourite"))) {
+				if (Util::Selectable(T(TKEY("clear_favourite"), "Clear favourite"))) {
 					favoriteColors[i].reset();
 					Save();
 				}
@@ -97,7 +97,7 @@ void PaletteWindow::DrawContents()
 		} else {
 			ImVec4 emptyColor(0.2f, 0.2f, 0.2f, 1.0f);
 			ImGui::PushStyleColor(ImGuiCol_Button, emptyColor);
-			ImGui::Button(id.c_str(), ImVec2(buttonSize, buttonSize));
+			Util::Button(id.c_str(), ImVec2(buttonSize, buttonSize));
 			ImGui::PopStyleColor();
 
 			ImVec2 buttonMin = ImGui::GetItemRectMin();

@@ -500,7 +500,7 @@ namespace
 		if (ImGui::BeginCombo("##Plugin", state.plugin.empty() ? allPlugins : state.plugin.c_str())) {
 			const auto searchText = Util::DrawComboSearchInput(kPluginSearchId);
 			// Always listed: it is the way back out of a plugin filter, whatever was typed.
-			if (ImGui::Selectable(allPlugins, state.plugin.empty())) {
+			if (Util::Selectable(allPlugins, state.plugin.empty())) {
 				state.plugin.clear();
 				Util::ClearComboSearch(kPluginSearchId);
 			}
@@ -510,7 +510,7 @@ namespace
 					continue;
 				anyMatch = true;
 				const bool selected = state.plugin == name;
-				if (ImGui::Selectable(std::format("{}  ({})###{}", name, count, name).c_str(), selected)) {
+				if (Util::Selectable(std::format("{}  ({})###{}", name, count, name).c_str(), selected)) {
 					state.plugin = name;
 					Util::ClearComboSearch(kPluginSearchId);
 				}
@@ -601,7 +601,7 @@ namespace
 				ImGui::OpenPopup("##RecentMore");
 			if (ImGui::BeginPopup("##RecentMore")) {
 				for (size_t i = shown; i < recent.size(); ++i)
-					if (ImGui::Selectable(std::format("{}##more{}", recent[i], i).c_str()))
+					if (Util::Selectable(std::format("{}##more{}", recent[i], i).c_str()))
 						OpenRecent(state, context, recent[i]);
 				ImGui::EndPopup();
 			}
@@ -977,13 +977,13 @@ namespace
 		ImGui::SameLine();
 		ImGui::SetNextItemWidth(-FLT_MIN);
 		if (ImGui::BeginCombo("##InspectorStatus", marker.empty() ? T(TKEY("none"), "None") : marker.c_str())) {
-			if (ImGui::Selectable(T(TKEY("none"), "None"), marker.empty()) && !marker.empty())
+			if (Util::Selectable(T(TKEY("none"), "None"), marker.empty()) && !marker.empty())
 				SetMarker(state, editor, editorId, nullptr);
 			for (const auto& [name, color] : editor.settings.recordMarkers) {
 				ImGui::PushID(name.c_str());
 				Util::DrawInlineIndicatorDot(ImGui::GetColorU32(color), true);
 				ImGui::SameLine();
-				if (ImGui::Selectable(name.c_str(), marker == name))
+				if (Util::Selectable(name.c_str(), marker == name))
 					SetMarker(state, editor, editorId, &name);
 				ImGui::PopID();
 			}

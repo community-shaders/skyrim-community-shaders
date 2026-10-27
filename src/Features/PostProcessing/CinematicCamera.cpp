@@ -528,7 +528,7 @@ namespace CinematicCamera
 				if (auto _tt = Util::HoverTooltipWrapper())
 					ImGui::TextUnformatted(T("feature.post_processing.cinematic_camera.focus_point_y_desc", "0% is the top edge; 100% is the bottom edge."));
 				ImGui::BeginDisabled(SceneWidgetInterceptor::IsArmed());
-				if (ImGui::Button(T("feature.post_processing.cinematic_camera.center_focus_point", "Center Focus Point")))
+				if (Util::Button(T("feature.post_processing.cinematic_camera.center_focus_point", "Center Focus Point")))
 					focus.ScreenPointUV = float2(0.5f, 0.5f);
 				ImGui::EndDisabled();
 			}

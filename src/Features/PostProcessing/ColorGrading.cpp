@@ -466,7 +466,7 @@ void ColorGrading::DrawSettings()
 					const float badgeW = Util::MeasureHdrSdrCapabilityPillWidth(supportsHDR);
 					const float rowW = nameSize.x + gap + badgeW;
 
-					if (ImGui::Selectable("##tm", selected, 0, ImVec2(rowW, 0))) {
+					if (Util::Selectable("##tm", selected, 0, ImVec2(rowW, 0))) {
 						tonemappers[tonemapperType].cached_settings = settings.tonemapParams;
 						settings.tonemapParams = tonemappers[i].cached_settings;
 						tonemapperType = i;
@@ -508,7 +508,7 @@ void ColorGrading::DrawSettings()
 			}
 
 			ImGui::BeginDisabled(SceneWidgetInterceptor::IsArmed());
-			if (ImGui::Button(T(TKEY("reset"), "Reset"), { -1, 0 }))
+			if (Util::Button(T(TKEY("reset"), "Reset"), { -1, 0 }))
 				settings.tonemapParams = tonemappers[tonemapperType].default_settings;
 			ImGui::EndDisabled();
 			ImGui::Spacing();
@@ -641,7 +641,7 @@ void ColorGrading::DrawSettings()
 		UpdateColorSpaceTransforms(hdrEnabled);
 	}
 
-	if (ImGui::Button(T(TKEY("save_lut_and_output_image"), "Save LUT and Output Image"))) {
+	if (Util::Button(T(TKEY("save_lut_and_output_image"), "Save LUT and Output Image"))) {
 		saveImagesFlag = true;
 	}
 	ImGui::SameLine();

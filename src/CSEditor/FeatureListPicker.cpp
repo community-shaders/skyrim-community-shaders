@@ -59,7 +59,7 @@ namespace
 		ImGui::PushStyleColor(ImGuiCol_Header, clear);
 		ImGui::PushStyleColor(ImGuiCol_HeaderHovered, clear);
 		ImGui::PushStyleColor(ImGuiCol_HeaderActive, clear);
-		if (ImGui::Selectable(std::format("##{}", shortName).c_str(), isSelected))
+		if (Util::Selectable(std::format("##{}", shortName).c_str(), isSelected))
 			selected = shortName;
 		ImGui::PopStyleColor(3);
 		const bool hovered = ImGui::IsItemHovered();

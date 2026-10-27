@@ -102,7 +102,7 @@ namespace
 								  "A full build stores about 120 MB, or about 1.1 GB in Developer Mode, "
 								  "so keep several builds' worth if you switch branches."));
 		}
-		if (ImGui::Button(T("menu.advanced.content_store_clear", "Clear Store"))) {
+		if (Util::Button(T("menu.advanced.content_store_clear", "Clear Store"))) {
 			a_cache->ClearContentStore();
 			lastRefresh = -kStoreUsageRefreshSeconds;
 		}
@@ -155,7 +155,7 @@ void AdvancedSettingsRenderer::RenderCompilerSection()
 	}
 
 	// Clear Shader Cache button
-	if (ImGui::Button(T("menu.advanced.clear_shader_cache", "Clear Shader Cache"), { -1, 0 })) {
+	if (Util::Button(T("menu.advanced.clear_shader_cache", "Clear Shader Cache"), { -1, 0 })) {
 		shaderCache->Clear();
 	}
 	if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -208,7 +208,7 @@ void AdvancedSettingsRenderer::RenderLoggingSection()
 	ImGui::Columns(2, nullptr, false);
 
 	// Dump Ini Settings button
-	if (ImGui::Button(T("menu.advanced.dump_ini_settings", "Dump Ini Settings"), { -1, 0 })) {
+	if (Util::Button(T("menu.advanced.dump_ini_settings", "Dump Ini Settings"), { -1, 0 })) {
 		Util::DumpSettingsOptions();
 	}
 
@@ -216,7 +216,7 @@ void AdvancedSettingsRenderer::RenderLoggingSection()
 
 	// Open Logs button
 	std::filesystem::path logPath = Util::PathHelpers::GetLogPath();
-	if (!logPath.empty() && ImGui::Button(T("menu.advanced.open_logs", "Open Logs"), { -1, 0 })) {
+	if (!logPath.empty() && Util::Button(T("menu.advanced.open_logs", "Open Logs"), { -1, 0 })) {
 		ShellExecuteA(NULL, "open", logPath.string().c_str(), NULL, NULL, SW_SHOWNORMAL);
 	}
 
@@ -562,7 +562,7 @@ void AdvancedSettingsRenderer::RenderDeveloperSection()
 							  "Intended for developing."));
 	}
 
-	if (ImGui::Button(T("menu.advanced.dump_feature_defaults", "Dump All Feature Defaults to JSON"), { -1, 0 })) {
+	if (Util::Button(T("menu.advanced.dump_feature_defaults", "Dump All Feature Defaults to JSON"), { -1, 0 })) {
 		if (const auto path = state->DumpFeatureDefaults(); !path.empty())
 			Util::FileHelpers::OpenWithShell(path);
 	}
@@ -759,7 +759,7 @@ void AdvancedSettingsRenderer::RenderDeveloperSection()
 
 		ImGui::Spacing();
 		// Test Conditions button - runs a set of console commands to prepare the player for testing
-		if (ImGui::Button(T("menu.advanced.test_conditions", "Test Conditions"), { -1, 0 })) {
+		if (Util::Button(T("menu.advanced.test_conditions", "Test Conditions"), { -1, 0 })) {
 			if (auto ui = RE::UI::GetSingleton(); ui && !ui->menuStack.empty() && RE::PlayerCharacter::GetSingleton()) {
 				RE::Console::ExecuteCommand("player.setav speedmult 1000");
 				RE::Console::ExecuteCommand("tgm");

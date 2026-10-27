@@ -90,7 +90,7 @@ namespace
 				Util::RenderTableCell(row.forcedTo, "", "", nullptr, ImVec4(1, 1, 1, 1), true);
 			} else if (colIdx == 2) {
 				if (!row.firstSourceShortName.empty()) {
-					if (ImGui::Selectable(std::format("{}##nav{}", row.constrainedBy, rowIdx).c_str()))
+					if (Util::Selectable(std::format("{}##nav{}", row.constrainedBy, rowIdx).c_str()))
 						globals::menu->SelectFeatureMenu(row.firstSourceShortName);
 					if (auto _tt = Util::HoverTooltipWrapper()) {
 						ImGui::Text("%s", I18n::GetSingleton()->Format("menu.home.click_to_navigate",

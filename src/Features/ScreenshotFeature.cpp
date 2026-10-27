@@ -654,7 +654,7 @@ void ScreenshotFeature::DrawSettings()
 				"SDR captures use the lossless format selected below."));
 	}
 
-	if (ImGui::Button(T(TKEY("take_screenshot"), "Take Screenshot Now"))) {
+	if (Util::Button(T(TKEY("take_screenshot"), "Take Screenshot Now"))) {
 		captureRequested = true;
 	}
 	ImGui::SameLine();
@@ -684,7 +684,7 @@ void ScreenshotFeature::DrawSettings()
 	ImGui::SameLine();
 	const bool canOpen = !screenshotPath.empty();
 	ImGui::BeginDisabled(!canOpen);
-	if (ImGui::Button(T(TKEY("open"), "Open"))) {
+	if (Util::Button(T(TKEY("open"), "Open"))) {
 		std::error_code ec;
 		std::filesystem::create_directories(screenshotPath, ec);
 		ShellExecuteA(nullptr, "open", screenshotPath.c_str(), nullptr, nullptr, SW_SHOWNORMAL);

@@ -240,9 +240,9 @@ void RemoteControl::DrawNvPerfSection()
 	const bool busy = status.state == NvPerf::CaptureState::Waiting || status.state == NvPerf::CaptureState::Capturing ||
 	                  status.state == NvPerf::CaptureState::Decoding;
 	if (busy) {
-		if (ImGui::Button(T(TKEY("cancel"), "Cancel capture")))
+		if (Util::Button(T(TKEY("cancel"), "Cancel capture")))
 			NvPerf::CancelCapture();
-	} else if (ImGui::Button(T(TKEY("capture"), "Capture"))) {
+	} else if (Util::Button(T(TKEY("capture"), "Capture"))) {
 		NvPerf::CaptureConfiguration configuration;
 		for (std::size_t i = 0; i < defaults.size(); ++i)
 			if (panel.defaultMetricEnabled[i])

@@ -170,7 +170,7 @@ void WeatherWidget::DrawWidget()
 		if (editorWindow->settings.enableInheritFromParent) {
 			if (ImGui::BeginCombo(T(TKEY("parent"), "Parent"), settings.parent.c_str())) {
 				// Option for "None"
-				if (ImGui::Selectable(T(TKEY("none"), "None"), parent == nullptr)) {
+				if (Util::Selectable(T(TKEY("none"), "None"), parent == nullptr)) {
 					parent = nullptr;
 					settings.parent = "None";
 				}
@@ -183,7 +183,7 @@ void WeatherWidget::DrawWidget()
 						continue;
 
 					// Option for each widget
-					if (ImGui::Selectable(widget->GetEditorID().c_str(), parent == widget.get())) {
+					if (Util::Selectable(widget->GetEditorID().c_str(), parent == widget.get())) {
 						parent = (WeatherWidget*)widget.get();
 						settings.parent = widget->GetEditorID();
 					}

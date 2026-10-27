@@ -240,7 +240,7 @@ namespace
 		if (baselineEnabled) {
 			const char* removeLabel = T("menu.presets.remove_baseline", "Remove Baseline");
 			BrowserUI::SameLineIfFits(MeasureButtonWidth(removeLabel));
-			if (ImGui::Button(removeLabel))
+			if (Util::Button(removeLabel))
 				catalog.RemoveBaseline(pack.id);
 			Util::AddTooltip(T("menu.presets.remove_baseline_tooltip",
 				"Stops applying this pack's baseline settings. Its features go back to what defaults and your other Baseline packs set; your own edits are kept."));
@@ -249,7 +249,7 @@ namespace
 		if (packActive) {
 			const char* disableLabel = T("menu.presets.disable", "Disable Preset");
 			BrowserUI::SameLineIfFits(MeasureButtonWidth(disableLabel));
-			if (ImGui::Button(disableLabel))
+			if (Util::Button(disableLabel))
 				catalog.DisableActivePack();
 			Util::AddTooltip(T("menu.presets.disable_tooltip",
 				"Turns this preset off. Scene settings and form edits fall back to your own, and an Effects 11 preset switches to Vanilla."));
@@ -392,7 +392,7 @@ void PresetsPageRenderer::RenderBaselineOrder()
 		ImGui::SameLine();
 		const auto* pack = catalog.FindPack(id);
 		const std::string label = std::format("{}. {}", row + 1, pack && !pack->name.empty() ? pack->name : id);
-		if (ImGui::Selectable(label.c_str(), selectedPackId == id)) {
+		if (Util::Selectable(label.c_str(), selectedPackId == id)) {
 			selectedPackId = id;
 			lightboxPackId.clear();
 			lightboxImageIndex = -1;
@@ -454,7 +454,7 @@ void PresetsPageRenderer::RenderList(float width)
 
 		const ImVec2 rowOrigin = ImGui::GetCursorScreenPos();
 		const float textWidth = ImGui::GetContentRegionAvail().x - logoSize - rowInset * 3.0f;
-		const bool clicked = ImGui::Selectable("##row", selected, ImGuiSelectableFlags_AllowOverlap | ImGuiSelectableFlags_AllowDoubleClick, ImVec2(0, rowHeight));
+		const bool clicked = Util::Selectable("##row", selected, ImGuiSelectableFlags_AllowOverlap | ImGuiSelectableFlags_AllowDoubleClick, ImVec2(0, rowHeight));
 		if (clicked) {
 			selectedPackId = pack.id;
 			lightboxPackId.clear();

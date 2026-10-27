@@ -160,7 +160,7 @@ void DoF::DrawSettings()
 		if (ImGui::BeginCombo(T("feature.post_processing.do_f.highlight_custom_shape", "Custom Aperture Texture"), owner->bokehResources.GetShapeName(selectedShape))) {
 			for (int i = 0; i < shapeCount; ++i) {
 				const bool selected = i == selectedShape;
-				if (ImGui::Selectable(owner->bokehResources.GetShapeName(i), selected))
+				if (Util::Selectable(owner->bokehResources.GetShapeName(i), selected))
 					settings.HighlightShape = i + 1;
 				if (selected)
 					ImGui::SetItemDefaultFocus();

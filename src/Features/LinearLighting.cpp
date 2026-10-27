@@ -79,7 +79,7 @@ void LinearLighting::DrawSettings()
 			const bool valid = std::isfinite(settings.gameGamma) && settings.gameGamma >= 0.1f && settings.gameGamma <= 4.0f;
 			ImGui::TextWrapped("%s", T(TKEY("game_gamma_hint"), "Game Gamma: 0.1 to 4. Apply to recompile shaders."));
 			ImGui::BeginDisabled(!valid);
-			if (ImGui::Button(T(TKEY("apply_game_gamma"), "Apply Game Gamma")))
+			if (Util::Button(T(TKEY("apply_game_gamma"), "Apply Game Gamma")))
 				applyGameGamma = settings.gameGamma != configuredGameGamma;
 			ImGui::EndDisabled();
 			ImGui::SeparatorText(T(TKEY("multipliers"), "Multipliers"));
