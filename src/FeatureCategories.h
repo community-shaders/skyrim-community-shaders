@@ -20,8 +20,4 @@ namespace FeatureCategories
 	/** @brief Order in which categories are listed in feature menus. */
 	inline constexpr std::array kMenuOrder = { kDisplay, kUtility, kCharacters, kGrass, kLighting, kMaterials,
 		kPostProcessing, kSky, kLandscapeAndTextures, kWater, kOther };
-
-	/** @brief Category order in the main menu's feature list: Display and Utility, rarely tuned, come last. */
-	inline constexpr std::array kMainMenuOrder = { kCharacters, kGrass, kLighting, kMaterials, kPostProcessing, kSky,
-		kLandscapeAndTextures, kWater, kOther, kDisplay, kUtility };
 }

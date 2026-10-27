@@ -706,13 +706,13 @@ std::vector<FeatureListRenderer::MenuFuncInfo> FeatureListRenderer::BuildMenuLis
 		if (categoryExpansionStates.try_emplace(category, category != FeatureCategories::kUtility).first->second)
 			std::ranges::copy(features, std::back_inserter(menuList));
 	};
-	for (const auto categoryName : FeatureCategories::kMainMenuOrder) {
+	for (const auto categoryName : FeatureCategories::kMenuOrder) {
 		if (const auto it = categorizedFeatures.find(std::string(categoryName)); it != categorizedFeatures.end())
 			addCategory(it->first, it->second);
 	}
 	// Then any category not in the predefined order
 	for (const auto& [category, features] : categorizedFeatures) {
-		if (std::ranges::find(FeatureCategories::kMainMenuOrder, std::string_view(category)) == FeatureCategories::kMainMenuOrder.end())
+		if (std::ranges::find(FeatureCategories::kMenuOrder, std::string_view(category)) == FeatureCategories::kMenuOrder.end())
 			addCategory(category, features);
 	}
 
