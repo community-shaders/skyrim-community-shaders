@@ -677,7 +677,7 @@ void HomePageRenderer::RenderHomePage()
 	// What CS is, straight at the top of the page
 	CenteredWrappedText(T("menu.home.intro",
 		"Community Shaders is the open-source, next-generation graphics framework for Skyrim: modern lighting, materials, "
-		"water and post-processing, built in the open and shaped by the community."));
+		"shader effects and post processing, built in the open and shaped by the community."));
 	ImGui::Dummy(ImVec2(0.0f, Constants::HOME_CARD_SPACING * Util::GetUIScale()));
 
 	// Needs Attention always heads the page, across its full width
