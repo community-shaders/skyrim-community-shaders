@@ -266,8 +266,10 @@ namespace
 			Icons::DrawCenteredGlyph(drawList, ImVec2(x, y), ImVec2(lineHeight, lineHeight), menu.icon, ImGui::GetColorU32(iconColor));
 			x += iconWidth;
 		}
+		// Glyphs centre by their box; the label centres by its ink, or it sits high in the pill
+		const float textY = Util::CenterTextTopY(min.y, max.y - min.y);
 		ImGui::PushStyleColor(ImGuiCol_Text, textColor);
-		ImGui::RenderTextEllipsis(drawList, ImVec2(x, y), ImVec2(x + shownLabel, y + lineHeight), x + shownLabel, menu.name.c_str(), nullptr, nullptr);
+		ImGui::RenderTextEllipsis(drawList, ImVec2(x, textY), ImVec2(x + shownLabel, textY + lineHeight), x + shownLabel, menu.name.c_str(), nullptr, nullptr);
 		ImGui::PopStyleColor();
 		if (launcher)
 			Icons::DrawCenteredGlyph(drawList, ImVec2(x + shownLabel + glyphGap, y), ImVec2(lineHeight, lineHeight), Icons::TI(MenuIcons::kExternal),
