@@ -228,6 +228,8 @@ public:
 		static constexpr float CATEGORY_HEADER_LINE_ALPHA = 0.5f;        // ... trailing rule alpha relative to the separator colour
 		static constexpr float SEGMENT_TRACK_PAD = 3.0f;                 // Page switcher: inset between the track and its pills
 		static constexpr float LEFT_PANE_EDGE_INSET = 3.0f;              // Room kept around the left pane's content so its edges and borders are not clipped (1080p baseline)
+		static constexpr float NAV_HOVER_VEIL_ALPHA = 0.07f;             // Hover fill of a list row, as a share of the text colour
+		static constexpr float NAV_PRESS_VEIL_ALPHA = 0.12f;             // Press fill of a list row
 		static constexpr float SEGMENT_SELECTED_FILL_ALPHA = 0.22f;      // ... selected pill accent fill alpha
 		static constexpr float SEGMENT_SELECTED_OUTLINE_ALPHA = 0.7f;    // ... selected pill accent outline alpha
 		static constexpr float SEGMENT_LAUNCHER_GAP = 4.0f;              // ... gap between a launcher label and its external-open glyph

@@ -1322,8 +1322,13 @@ namespace Util
 			const ImGuiID id = ImGui::GetID(label);
 			const ImGuiID glideId = listKey ? ImHashStr(listKey) : 0;
 			const auto blend = PendingBlend(id, glideId == 0 && selected);
-			const ImU32 hoverColor = ImGui::GetColorU32(ImGuiCol_HeaderHovered);
-			const ImU32 pressColor = ImGui::GetColorU32(ImGuiCol_HeaderActive);
+			// Navigation lists keep the accent for the selected row alone: hover and press are a faint veil of the text
+			// colour, so a hovered row never competes with the selection
+			const bool navList = glideId != 0;
+			const ImU32 hoverColor = navList ? ImGui::GetColorU32(ImGuiCol_Text) : ImGui::GetColorU32(ImGuiCol_HeaderHovered);
+			const ImU32 pressColor = navList ? ImGui::GetColorU32(ImGuiCol_Text) : ImGui::GetColorU32(ImGuiCol_HeaderActive);
+			const float hoverStrength = navList ? ThemeManager::Constants::NAV_HOVER_VEIL_ALPHA : 1.0f;
+			const float pressStrength = navList ? ThemeManager::Constants::NAV_PRESS_VEIL_ALPHA : 1.0f;
 			const ImU32 selectedColor = ImGui::GetColorU32(ImGuiCol_Header);
 
 			bool clicked = false;
@@ -1347,9 +1352,9 @@ namespace Util
 			if (blend.selected > 0.0f)
 				drawList->AddRectFilled(rect.Min, rect.Max, Anim::ScaleAlphaU32(selectedColor, blend.selected));
 			if (blend.hover > 0.0f)
-				drawList->AddRectFilled(rect.Min, rect.Max, Anim::ScaleAlphaU32(hoverColor, blend.hover));
+				drawList->AddRectFilled(rect.Min, rect.Max, Anim::ScaleAlphaU32(hoverColor, blend.hover * hoverStrength));
 			if (blend.press > 0.0f)
-				drawList->AddRectFilled(rect.Min, rect.Max, Anim::ScaleAlphaU32(pressColor, blend.press));
+				drawList->AddRectFilled(rect.Min, rect.Max, Anim::ScaleAlphaU32(pressColor, blend.press * pressStrength));
 
 			if (glides) {
 				const auto& navSurface = Surface::Get(Surface::Role::NavSelected);
