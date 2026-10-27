@@ -32,7 +32,6 @@
 #include "Menu/ShaderCacheStatusWidget.h"
 #include "Menu/ThemeManager.h"
 #include "Presets/UnifiedPresetCatalog.h"
-#include "SaveManager.h"
 #include "ShaderCache.h"
 #include "State.h"
 #include "Utils/UIAnim.h"
@@ -71,8 +70,10 @@ namespace
 			// Cards fade in one after another each time the page is opened
 			const float enter = Util::Anim::EnterProgress(ImGui::GetID(id), Constants::ANIM_CARD_STAGGER_SECONDS * static_cast<float>(cardIndex++));
 			ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * enter);
-			const float pad = Util::Surface::Get(Util::Surface::Role::HomeCard).padding * Util::GetUIScale();
-			ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(pad, pad));
+			const auto& cardSurface = Util::Surface::Get(Util::Surface::Role::HomeCard);
+			const float pad = cardSurface.padding * Util::GetUIScale();
+			// Without a drawn surface the vertical padding only adds dead space above and below the content
+			ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(pad, cardSurface.enabled ? pad : 0.0f));
 			ImGui::PushStyleColor(ImGuiCol_ChildBg, IM_COL32_BLACK_TRANS);
 			ImGui::BeginChild(id, ImVec2(0.0f, 0.0f),
 				ImGuiChildFlags_AlwaysUseWindowPadding | ImGuiChildFlags_AutoResizeY | ImGuiChildFlags_NavFlattened,
@@ -171,26 +172,6 @@ namespace
 		return names;
 	}
 
-	/** @brief Full-width notice while settings are unsaved, with Save and Restore. */
-	void RenderUnsavedBanner()
-	{
-		if (!globals::state->HasUnsavedChanges())
-			return;
-
-		const ImVec4 unsavedColor = Util::Colors::GetUnsaved();
-		Card card("##HomeUnsaved", Icons::TI(MenuIcons::kSave), nullptr, &unsavedColor);
-		ImGui::SameLine();
-		ImGui::TextColored(unsavedColor, "%s", T("menu.home.unsaved_text", "You have unsaved changes."));
-
-		const float box = IconBoxSize();
-		ImGui::SameLine();
-		if (MenuHeaderRenderer::GlyphIconButton("##HomeSave", Icons::TI(MenuIcons::kSave), box, T("menu.status.save", "Save")))
-			SaveManager::SaveAll();
-		ImGui::SameLine();
-		if (MenuHeaderRenderer::GlyphIconButton("##HomeRestore", Icons::TI(MenuIcons::kRestore), box, T("menu.restore_settings", "Restore Saved Settings")))
-			Util::RequestRestoreSavedSettingsConfirmation();
-	}
-
 	/** @brief The active preset pack and the enabled Baselines, or an invitation to browse presets. */
 	void RenderPresetCard()
 	{
@@ -202,7 +183,15 @@ namespace
 		Card card("##HomePreset", Icons::TI(MenuIcons::kPresets), T("menu.home.preset_title", "Preset"), &accent);
 
 		if (activeId.empty()) {
-			ImGui::TextWrapped("%s", T("menu.home.preset_none", "No preset active."));
+			ImGui::AlignTextToFramePadding();
+			ImGui::TextUnformatted(T("menu.home.preset_none", "No preset active."));
+			// Browse sits on this line, flush right
+			const char* browseLabel = T("menu.home.browse_presets", "Browse Presets");
+			const Icons::GlyphRef browseIcon = Icons::TI(MenuIcons::kPresets);
+			ImGui::SameLine();
+			ImGui::SetCursorPosX(std::max(ImGui::GetCursorPosX(), ImGui::GetContentRegionMax().x - Icons::MeasureLabeledButton(browseIcon, browseLabel)));
+			if (Icons::LabeledButton("##HomeBrowsePresets", browseIcon, browseLabel))
+				globals::menu->SelectFeatureMenu(std::string(MenuPageIds::kPresets));
 			Util::Text::WrappedDisabled("%s", T("menu.home.preset_none_hint", "Browse presets to apply a ready-made look across many features at once."));
 		} else {
 			const auto* pack = catalog.FindPack(activeId);
@@ -243,10 +232,10 @@ namespace
 			BrowserUI::MetaText(JoinNames(names).c_str());
 		}
 
-		BeginActions();
-		if (Action("##HomeBrowsePresets", Icons::TI(MenuIcons::kPresets), T("menu.home.browse_presets", "Browse Presets"), true))
-			globals::menu->SelectFeatureMenu(std::string(MenuPageIds::kPresets));
 		if (!activeId.empty()) {
+			BeginActions();
+			if (Action("##HomeBrowsePresets", Icons::TI(MenuIcons::kPresets), T("menu.home.browse_presets", "Browse Presets"), true))
+				globals::menu->SelectFeatureMenu(std::string(MenuPageIds::kPresets));
 			if (Action("##HomeDisablePreset", Icons::TI(ICON_TI_CIRCLE_X), T("menu.presets.disable", "Disable Preset"), false))
 				catalog.DisableActivePack();
 			Util::AddTooltip(T("menu.presets.disable_tooltip",
@@ -353,7 +342,7 @@ namespace
 	/** @brief True when the Needs Attention card has anything to show. */
 	bool NeedsAttention()
 	{
-		return IssuesPageRenderer::HasIssues() || !GetRestartPendingFeatures().empty();
+		return globals::state->HasUnsavedChanges() || IssuesPageRenderer::HasIssues() || !GetRestartPendingFeatures().empty();
 	}
 
 	/**
@@ -365,11 +354,13 @@ namespace
 		const size_t issueCount = IssuesPageRenderer::GetFeatureIssueCount();
 		const size_t constraintCount = IssuesPageRenderer::GetConstraintCount();
 		const auto restartPending = GetRestartPendingFeatures();
-		const bool allClear = issueCount == 0 && constraintCount == 0 && restartPending.empty();
+		const bool unsaved = globals::state->HasUnsavedChanges();
+		const bool allClear = !unsaved && issueCount == 0 && constraintCount == 0 && restartPending.empty();
 
 		const ImVec4 warning = Util::Colors::GetWarning();
 		const ImVec4 error = Util::Colors::GetError();
-		const ImVec4 border = issueCount > 0 ? error : warning;
+		const ImVec4 unsavedColor = Util::Colors::GetUnsaved();
+		const ImVec4 border = issueCount > 0 ? error : (restartPending.empty() && constraintCount == 0 ? unsavedColor : warning);
 		Card card("##HomeAttention", Icons::TI(MenuIcons::kIssues), T("menu.home.attention_title", "Needs Attention"),
 			allClear ? nullptr : &border);
 
@@ -383,6 +374,16 @@ namespace
 		}
 
 		auto* i18n = I18n::GetSingleton();
+
+		// Unsaved changes: the header and footer hold the save and restore actions
+		if (unsaved) {
+			ImGui::PushStyleColor(ImGuiCol_Text, unsavedColor);
+			Icons::Text(Icons::TI(MenuIcons::kSave));
+			ImGui::SameLine();
+			ImGui::TextUnformatted(T("menu.home.unsaved_text", "You have unsaved changes."));
+			ImGui::PopStyleColor();
+			ImGui::Spacing();
+		}
 
 		// Feature issues: the rejected, obsolete or mismatched feature files and failed Baselines, with their actions
 		if (issueCount > 0) {
@@ -649,7 +650,10 @@ void HomePageRenderer::RenderHomePage()
 	ImGui::BeginChild("##HomeCards", ImVec2(0.0f, -stripReserve), ImGuiChildFlags_NavFlattened);
 	if (std::exchange(attentionScrollPending, false))
 		ImGui::SetScrollY(0.0f);
-	RenderUnsavedBanner();
+
+	// What CS is, straight at the top of the page
+	Util::Text::WrappedDisabled("%s", T("menu.home.intro", "Community Shaders provides advanced graphics enhancements for Skyrim. This collection of features brings modern rendering techniques to enhance your visual experience."));
+	ImGui::Dummy(ImVec2(0.0f, Constants::HOME_CARD_SPACING * Util::GetUIScale()));
 
 	// Problems get a full-width card up top; the compact all-clear stays in the grid
 	const bool attentionOnTop = NeedsAttention();
