@@ -191,7 +191,7 @@ namespace
 
 		bool clicked = false;
 		{
-			Util::DisableGuard disable(disabled);
+			// A dimmed pill still takes the click: the caller explains why it cannot act
 			ImGui::PushStyleColor(ImGuiCol_Header, IM_COL32_BLACK_TRANS);
 			ImGui::PushStyleColor(ImGuiCol_HeaderHovered, IM_COL32_BLACK_TRANS);
 			ImGui::PushStyleColor(ImGuiCol_HeaderActive, IM_COL32_BLACK_TRANS);
@@ -808,8 +808,12 @@ void FeatureListRenderer::RenderLeftColumn(
 	if (topCount > 0) {
 		// A rounded track holds the pages as pills, so the group reads as one segmented control
 		const float pad = ThemeManager::Constants::SEGMENT_TRACK_PAD * Util::GetUIScale();
-		const ImVec2 trackMin = ImGui::GetCursorScreenPos();
-		const float trackWidth = ImGui::GetContentRegionAvail().x;
+		// The pane clips at its own edge, which cut the top and the side borders; leave a little room
+		const float inset = ThemeManager::Constants::LEFT_PANE_EDGE_INSET * Util::GetUIScale();
+		ImVec2 trackMin = ImGui::GetCursorScreenPos();
+		trackMin.x += inset;
+		trackMin.y += inset;
+		const float trackWidth = ImGui::GetContentRegionAvail().x - inset * 2.0f;
 		const float pillWidth = (trackWidth - pad * static_cast<float>(topCount + 1)) / static_cast<float>(topCount);
 		ImGui::GetWindowDrawList()->AddRectFilled(trackMin, ImVec2(trackMin.x + trackWidth, trackMin.y + ImGui::GetFrameHeight() + pad * 2.0f),
 			ImGui::GetColorU32(ImGuiCol_FrameBg), ImGui::GetStyle().FrameRounding + pad);
@@ -817,8 +821,8 @@ void FeatureListRenderer::RenderLeftColumn(
 			ImGui::SetCursorScreenPos(ImVec2(trackMin.x + pad + static_cast<float>(n) * (pillWidth + pad), trackMin.y + pad));
 			RenderBuiltInRow(*builtInAt(topIds[n]), topIds[n], selectedMenu, pillWidth);
 		}
-		ImGui::SetCursorScreenPos(ImVec2(trackMin.x, trackMin.y + ImGui::GetFrameHeight() + pad * 2.0f));
-		ImGui::Dummy(ImVec2(trackWidth, 0.0f));
+		ImGui::SetCursorScreenPos(ImVec2(trackMin.x - inset, trackMin.y + ImGui::GetFrameHeight() + pad * 2.0f));
+		ImGui::Dummy(ImVec2(trackWidth + inset * 2.0f, 0.0f));
 		ImGui::Spacing();
 	}
 
@@ -841,6 +845,8 @@ void FeatureListRenderer::RenderLeftColumn(
 	} else {
 		auto& filter = globals::menu->GetSettings().FeatureListFilter;
 		if (ImGui::BeginChild("##FeatureListScroll", ImVec2(0.0f, 0.0f))) {
+			// The first category icon reaches above its text line, which the child's top edge clipped
+			ImGui::SetCursorPosY(ImGui::GetCursorPosY() + ThemeManager::Constants::LEFT_PANE_EDGE_INSET * Util::GetUIScale());
 			for (size_t i = 0; i < menuList.size(); i++) {
 				if (!builtInAt(i))
 					std::visit(ListMenuVisitor{ i, selectedMenu, categoryExpansionStates, hooks }, menuList[i]);
@@ -1004,8 +1010,13 @@ void FeatureListRenderer::RenderBuiltInRow(const BuiltInMenu& menu, size_t listI
 	if (menu.id == MenuPageIds::kCSEditor) {
 		// Launcher: opens the editor window without leaving the current page
 		const bool canOpen = EditorWindow::CanBeOpen();
-		if (DrawNavRow(menu, false, !canOpen, width))
-			CSEditor::OpenEditorWindow();
+		if (DrawNavRow(menu, false, !canOpen, width)) {
+			// Without a save the click says why, with the same warning the other ways of opening the editor give
+			if (canOpen)
+				CSEditor::OpenEditorWindow();
+			else
+				EditorWindow::GetSingleton()->WarnOpeningBlocked();
+		}
 		Util::AddTooltip(canOpen ? T("menu.features.cs_editor_tooltip", "Opens the CS Editor window") :
 								   T("menu.features.cs_editor_needs_save", "Load a save to open the CS Editor"),
 			Util::kTooltipWhenDisabled);
