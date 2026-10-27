@@ -20,6 +20,7 @@
 #include "I18n/I18n.h"
 #include "IconsTabler.h"
 #include "Menu.h"
+#include "Menu/AdvancedSettingsRenderer.h"
 #include "Menu/FeatureListRenderer.h"
 #include "Menu/Fonts.h"
 #include "Menu/IconLoader.h"
@@ -304,8 +305,17 @@ namespace
 	{
 		const ImGuiStyle& style = ImGui::GetStyle();
 		const float box = IconBoxSize();
+		const float buttonWidth = box + style.FramePadding.x * 2.0f;
+		const float clearX = ImGui::GetWindowWidth() - style.WindowPadding.x - buttonWidth;
 		ImGui::SameLine();
-		ImGui::SetCursorPosX(ImGui::GetWindowWidth() - style.WindowPadding.x - box - style.FramePadding.x * 2.0f);
+		// Developer mode: the test scene button sits just left of the clear-cache icon
+		if (globals::state->IsDeveloperMode()) {
+			ImGui::SetCursorPosX(clearX - style.ItemSpacing.x - buttonWidth);
+			if (MenuHeaderRenderer::GlyphIconButton("##HomeTestConditions", Icons::TI(MenuIcons::kTestScene), box, AdvancedSettingsRenderer::GetTestConditionsTooltip()))
+				AdvancedSettingsRenderer::RunTestConditions();
+			ImGui::SameLine();
+		}
+		ImGui::SetCursorPosX(clearX);
 		const char* tooltip = T("menu.home.clear_cache_tooltip", "Clear shader cache...");
 		bool clicked;
 		if (auto* texture = globals::menu->GetUIIcons().clearCache.texture) {

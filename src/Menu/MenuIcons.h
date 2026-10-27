@@ -18,6 +18,7 @@ namespace MenuIcons
 	inline constexpr const char* kIssues = ICON_TI_ALERT_TRIANGLE;
 	inline constexpr const char* kShaders = ICON_TI_APERTURE;
 	inline constexpr const char* kLocations = ICON_TI_MAP_PIN;
+	inline constexpr const char* kTestScene = ICON_TI_PHOTO;
 	inline constexpr const char* kSave = ICON_TI_DEVICE_FLOPPY;
 	inline constexpr const char* kRestore = ICON_TI_RESTORE;
 	inline constexpr const char* kClearCache = ICON_TI_TRASH;

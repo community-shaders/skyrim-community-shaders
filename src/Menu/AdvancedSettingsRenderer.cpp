@@ -15,6 +15,8 @@
 #include "Globals.h"
 #include "I18n/I18n.h"
 #include "Menu.h"
+#include "Menu/Icons/helpers/IconFonts.h"
+#include "Menu/MenuIcons.h"
 #include "ShaderCache.h"
 #include "State.h"
 #include "Util.h"
@@ -53,6 +55,7 @@ namespace
 		{ Ids::kShaderDebug, "menu.advanced.active_shaders", "Active Shaders" },
 		// Testing (the A/B testing label is not translated)
 		{ Ids::kTesting, nullptr, "A/B Test Interval" },
+		{ Ids::kTesting, "menu.advanced.test_conditions", "Test Conditions" },
 		// Disable at Boot
 		{ Ids::kDisableAtBoot, "menu.settings.disabled_only", "Disabled only" },
 	};
@@ -748,29 +751,33 @@ void AdvancedSettingsRenderer::RenderDeveloperSection()
 							  "Resets every launch. Toggling this clears the shader cache and triggers a "
 							  "full recompile."));
 	}
+}
 
-	ImGui::Spacing();
-	ImGui::Separator();
-	ImGui::Spacing();
+void AdvancedSettingsRenderer::RunTestConditions()
+{
+	auto ui = RE::UI::GetSingleton();
+	if (!ui || ui->menuStack.empty() || !RE::PlayerCharacter::GetSingleton())
+		return;
+	RE::Console::ExecuteCommand("player.setav speedmult 1000");
+	RE::Console::ExecuteCommand("tgm");
+	RE::Console::ExecuteCommand("tcl");
+	EditorWindow::GetSingleton()->PauseTime();
+	RE::Console::ExecuteCommand("set gamehour to 12");
+	RE::Console::ExecuteCommand("coc whiterun");
+	RE::Console::ExecuteCommand("fw 81a");
+}
 
-	// Developer Mode Testing Section
-	if (globals::state->IsDeveloperMode()) {
-		FeatureIssues::Test::DrawDeveloperModeTestingUI();
-
-		ImGui::Spacing();
-		// Test Conditions button - runs a set of console commands to prepare the player for testing
-		if (Util::Button(T("menu.advanced.test_conditions", "Test Conditions"), { -1, 0 })) {
-			if (auto ui = RE::UI::GetSingleton(); ui && !ui->menuStack.empty() && RE::PlayerCharacter::GetSingleton()) {
-				RE::Console::ExecuteCommand("player.setav speedmult 1000");
-				RE::Console::ExecuteCommand("tgm");
-				RE::Console::ExecuteCommand("tcl");
-				EditorWindow::GetSingleton()->PauseTime();
-				RE::Console::ExecuteCommand("set gamehour to 12");
-				RE::Console::ExecuteCommand("coc whiterun");
-				RE::Console::ExecuteCommand("fw 81a");
-			}
-		}
-	}
+const char* AdvancedSettingsRenderer::GetTestConditionsTooltip()
+{
+	return T("menu.advanced.test_conditions_tooltip",
+		"Sets up the player for testing by running these console commands:\n"
+		"  player.setav speedmult 1000 - move very fast\n"
+		"  tgm - god mode\n"
+		"  tcl - no collision (fly through the world)\n"
+		"  set gamehour to 12 - noon, with time paused\n"
+		"  coc whiterun - teleport to Whiterun\n"
+		"  fw 81a - force weather 81A\n"
+		"Only runs while a game is loaded and a menu is open.");
 }
 
 void AdvancedSettingsRenderer::RenderTestingSection()
@@ -778,4 +785,17 @@ void AdvancedSettingsRenderer::RenderTestingSection()
 	// A/B Testing settings
 	auto* abTestingManager = ABTestingManager::GetSingleton();
 	abTestingManager->DrawSettingsUI();
+
+	// Developer mode: the issue tests and the one-click test scene
+	if (globals::state->IsDeveloperMode()) {
+		ImGui::Spacing();
+		ImGui::Separator();
+		ImGui::Spacing();
+		FeatureIssues::Test::DrawDeveloperModeTestingUI();
+
+		ImGui::Spacing();
+		if (Icons::LabeledButton("##TestConditions", Icons::TI(MenuIcons::kTestScene), T("menu.advanced.test_conditions", "Test Conditions")))
+			RunTestConditions();
+		Util::AddTooltip(GetTestConditionsTooltip());
+	}
 }

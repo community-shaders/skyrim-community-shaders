@@ -56,6 +56,7 @@
 #define ICON_TI_MENU_2 "\xee\xb1\x82"	// U+ec42
 #define ICON_TI_CHART_BUBBLE "\xee\xb1\xb5"	// U+ec75
 #define ICON_TI_WALK "\xee\xb2\x87"	// U+ec87
+#define ICON_TI_PHOTO "\xee\xac\x8a"	// U+eb0a
 #define ICON_TI_PIN "\xee\xb2\x9c"	// U+ec9c
 #define ICON_TI_CLOUD_FOG "\xee\xb3\x99"	// U+ecd9
 #define ICON_TI_MOON_2 "\xee\xb3\xa6"	// U+ece6
@@ -111,6 +112,7 @@ inline constexpr unsigned short ICON_TI_GLYPH_RANGES[] = {
 	0xeae8, 0xeae8,
 	0xeb01, 0xeb01,
 	0xeb04, 0xeb04,
+	0xeb0a, 0xeb0a,
 	0xeb0b, 0xeb0b,
 	0xeb13, 0xeb13,
 	0xeb1c, 0xeb1c,

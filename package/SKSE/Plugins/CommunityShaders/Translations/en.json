@@ -3218,6 +3218,7 @@
     "menu.advanced.tab_shader_debug": "Shader Debug",
     "menu.advanced.tab_testing": "Testing",
     "menu.advanced.test_conditions": "Test Conditions",
+    "menu.advanced.test_conditions_tooltip": "Sets up the player for testing by running these console commands:\n  player.setav speedmult 1000 - move very fast\n  tgm - god mode\n  tcl - no collision (fly through the world)\n  set gamehour to 12 - noon, with time paused\n  coc whiterun - teleport to Whiterun\n  fw 81a - force weather 81A\nOnly runs while a game is loaded and a menu is open.",
     "menu.advanced.top_slowest_shaders": "Top %zu Slowest Shaders (last build)",
     "menu.advanced.vertex": "Vertex",
     "menu.advanced.vertex_tooltip": "Replace Vertex Shaders. When false, will disable the custom Vertex Shaders for the types above. For developers to test whether CS shaders match vanilla behavior. ",

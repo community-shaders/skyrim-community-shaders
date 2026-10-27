@@ -27,4 +27,13 @@ public:
 	static void RenderDeveloperSection();
 	/** @brief A/B testing controls. */
 	static void RenderTestingSection();
+
+	/**
+	 * @brief Puts the player in a known test scene: fast, invulnerable, no collision, time paused at noon, in Whiterun
+	 * under a forced weather. Does nothing unless a game is loaded and a menu is open (the console needs both).
+	 */
+	static void RunTestConditions();
+
+	/** @brief Tooltip for the Test Conditions button, listing the console commands it runs. */
+	static const char* GetTestConditionsTooltip();
 };
