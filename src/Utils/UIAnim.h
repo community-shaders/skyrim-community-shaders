@@ -180,9 +180,10 @@ namespace Util::Anim
 	using SelectableFn = bool (*)(const char*, bool, ImGuiSelectableFlags, const ImVec2&);
 
 	/**
-	 * @brief Selectable body that draws one gliding highlight per list instead of a fill per row. The highlight eases
-	 * to whichever row the mouse is over, darkens while pressed, and rests on the selected row when the mouse is
-	 * elsewhere; ImGui's own hover and selected fills are hidden so nothing doubles up. Rows of one list are the
+	 * @brief Selectable body that draws the list highlights instead of ImGui's per-row fills. The selected row keeps its
+	 * own fill and accent bar in place; the hover highlight is one shape per list that glides after the mouse, darkens
+	 * while pressed, and fades out where it is when the mouse is over nothing clickable. ImGui's own hover and selected
+	 * fills are hidden so nothing doubles up. Rows of one list are the
 	 * Selectables of one window, so every list gets it with no opt-in. Hooked into ImGui::Selectable (see UIHooks);
 	 * passes straight through while UI animations are off.
 	 */

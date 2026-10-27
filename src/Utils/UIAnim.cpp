@@ -331,7 +331,6 @@ namespace Util::Anim
 		// Salts that separate one list's state keys; the list key is its window's id
 		constexpr ImGuiID kHoverIdSalt = 0x1B873593u;
 		constexpr ImGuiID kHoverFrameSalt = 0x2C4F8E15u;
-		constexpr ImGuiID kSelectedFrameSalt = 0x3D91A7C3u;
 		constexpr ImGuiID kDrawnFrameSalt = 0x4E27B5D9u;
 		constexpr ImGuiID kLastDrawSalt = 0x5F6A93E1u;
 		constexpr ImGuiID kVisSalt = 0x6A09E667u;
@@ -415,26 +414,31 @@ namespace Util::Anim
 			storage->SetInt(key(kHoverIdSalt), static_cast<int>(id));
 			storage->SetInt(key(kHoverFrameSalt), frame);
 		}
-		if (selected && !disabled)
-			storage->SetInt(key(kSelectedFrameSalt), frame);
-
-		// Who the highlight is on: the row the mouse was over a moment ago, else the selected row
-		const bool hoverRecent = storage->GetInt(key(kHoverFrameSalt), -10) >= frame - 1;
-		const ImGuiID hoverId = hoverRecent ? static_cast<ImGuiID>(storage->GetInt(key(kHoverIdSalt), 0)) : 0;
-		const bool isTarget = !disabled && (hoverId != 0 ? hoverId == id : selected);
-		const bool expectTarget = hoverId != 0 || storage->GetInt(key(kSelectedFrameSalt), -10) >= frame - 1;
-		const bool drawnThisFrame = storage->GetInt(key(kDrawnFrameSalt), -1) == frame;
-		const int lastDraw = storage->GetInt(key(kLastDrawSalt), -10);
 
 		// The rect is kept relative to the window's scrolled origin, so it stays put while the list scrolls
 		const ImVec2 origin(window->Pos.x - window->Scroll.x, window->Pos.y - window->Scroll.y);
+		ImRect rect = SelectableFillRect(flags);
+		// The fill reaches half an item spacing past the row; keep it inside the window so a pane's edge never cuts the bar
+		rect.Min.x = std::max(rect.Min.x, window->InnerClipRect.Min.x);
+		rect.Max.x = std::min(rect.Max.x, window->InnerClipRect.Max.x);
 
-		if (isTarget && !drawnThisFrame) {
+		// The selected row keeps its own fill and accent bar in place, fading in and out as the selection changes
+		const float selectedTarget = selected && !disabled ? 1.0f : 0.0f;
+		const bool selectionFresh = StartsAtRest(storage, id, kVisSalt);
+		const float selectedness = selectionFresh ? selectedTarget : Smooth(storage->GetFloat(id ^ kSelSalt, selectedTarget), selectedTarget, Constants::ANIM_SELECT_RATE);
+		storage->SetFloat(id ^ kSelSalt, selectedness);
+		if (selectedness > Constants::ANIM_EPSILON)
+			DrawListHighlight(underlay.Background(), rect.Min, rect.Max, selectedness, 1.0f, 0.0f);
+
+		// The hover highlight is one shape per list that glides after the mouse, and fades out where it is once the mouse
+		// is over nothing clickable (a divider, a gap), rather than going back to the selected row
+		const bool hoverRecent = storage->GetInt(key(kHoverFrameSalt), -10) >= frame - 1;
+		const ImGuiID hoverId = hoverRecent ? static_cast<ImGuiID>(storage->GetInt(key(kHoverIdSalt), 0)) : 0;
+		const bool drawnThisFrame = storage->GetInt(key(kDrawnFrameSalt), -1) == frame;
+		const int lastDraw = storage->GetInt(key(kLastDrawSalt), -10);
+
+		if (!disabled && hoverId == id && !drawnThisFrame) {
 			storage->SetInt(key(kDrawnFrameSalt), frame);
-			ImRect rect = SelectableFillRect(flags);
-			// The fill reaches half an item spacing past the row; keep it inside the window so a pane's edge never cuts the bar
-			rect.Min.x = std::max(rect.Min.x, window->InnerClipRect.Min.x);
-			rect.Max.x = std::min(rect.Max.x, window->InnerClipRect.Max.x);
 			const float targetRel[4] = { rect.Min.x - origin.x, rect.Min.y - origin.y, rect.Max.x - origin.x, rect.Max.y - origin.y };
 			const bool fresh = lastDraw < frame - 1;
 			float rel[4];
@@ -448,27 +452,21 @@ namespace Util::Anim
 				storage->SetFloat(key(kRectSalt + n), rel[n]);
 			}
 			const float visibility = Smooth(fresh ? 0.0f : storage->GetFloat(key(kVisSalt), 0.0f), 1.0f, Constants::ANIM_HOVER_RATE);
-			const float selectedTarget = selected ? 1.0f : 0.0f;
-			const float selectedness = Smooth(fresh ? selectedTarget : storage->GetFloat(key(kSelSalt), selectedTarget), selectedTarget, Constants::ANIM_SELECT_RATE);
 			const float press = Smooth(fresh ? 0.0f : storage->GetFloat(key(kPressSalt), 0.0f), held ? 1.0f : 0.0f, Constants::ANIM_HOVER_RATE);
 			storage->SetFloat(key(kVisSalt), visibility);
-			storage->SetFloat(key(kSelSalt), selectedness);
 			storage->SetFloat(key(kPressSalt), press);
 			storage->SetInt(key(kLastDrawSalt), frame);
 			DrawListHighlight(underlay.Background(), ImVec2(rel[0] + origin.x, rel[1] + origin.y), ImVec2(rel[2] + origin.x, rel[3] + origin.y),
-				visibility, selectedness, press);
-		} else if (!expectTarget && !drawnThisFrame && lastDraw >= frame - 1) {
-			// Nothing to rest on: the highlight fades out where it was
+				visibility, 0.0f, press);
+		} else if (hoverId == 0 && !drawnThisFrame && lastDraw >= frame - 1) {
 			const float visibility = Smooth(storage->GetFloat(key(kVisSalt), 0.0f), 0.0f, Constants::ANIM_HOVER_RATE);
 			storage->SetFloat(key(kVisSalt), visibility);
 			if (visibility > Constants::ANIM_EPSILON) {
 				storage->SetInt(key(kDrawnFrameSalt), frame);
 				storage->SetInt(key(kLastDrawSalt), frame);
-				const float selectedness = storage->GetFloat(key(kSelSalt), 0.0f);
-				const float press = storage->GetFloat(key(kPressSalt), 0.0f);
 				const ImVec2 min(storage->GetFloat(key(kRectSalt), 0.0f) + origin.x, storage->GetFloat(key(kRectSalt + 1), 0.0f) + origin.y);
 				const ImVec2 max(storage->GetFloat(key(kRectSalt + 2), 0.0f) + origin.x, storage->GetFloat(key(kRectSalt + 3), 0.0f) + origin.y);
-				DrawListHighlight(underlay.Background(), min, max, visibility, selectedness, press);
+				DrawListHighlight(underlay.Background(), min, max, visibility, 0.0f, storage->GetFloat(key(kPressSalt), 0.0f));
 			}
 		}
 		return clicked;
