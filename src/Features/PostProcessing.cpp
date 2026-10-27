@@ -1,6 +1,8 @@
 #include "PostProcessing.h"
 
+#include "CSEditor/EditorWindow.h"
 #include "CSEditor/SceneManager/SceneWidgetInterceptor.h"
+#include "Features/CSEditor.h"
 #include "IconsTabler.h"
 #include "Menu/Icons/helpers/IconFonts.h"
 #include "imgui_stdlib.h"
@@ -72,7 +74,15 @@ void PostProcessing::DrawSettings()
 	static int pipelinePageNum = 0;
 	static int pipelineFeatIdx = 0;
 
-	PostProcessingMode::DrawSelector();
+	// A scene replica of this page edits a scene layer, and inside the CS Editor (its Base Settings window draws this
+	// page too) the editor is already open, so the button is left out there.
+	PostProcessingMode::SelectorAction openEditor;
+	if (const auto* editor = EditorWindow::GetSingleton(); !SceneWidgetInterceptor::IsArmed() && (!editor || !editor->open)) {
+		openEditor.label = T("menu.home.open_cs_editor", "Open CS Editor");
+		openEditor.tooltip = T("menu.presets.open_cs_editor_tooltip", "Open the CS Editor for weather, lighting, and scene editing.");
+		openEditor.onClick = [] { CSEditor::OpenEditorWindow(); };
+	}
+	PostProcessingMode::DrawSelector(openEditor.label ? &openEditor : nullptr);
 
 	ImGui::Separator();
 

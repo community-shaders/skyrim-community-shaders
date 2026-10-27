@@ -820,11 +820,12 @@ void FeatureListRenderer::RenderLeftColumn(
 		trackMin.x += inset;
 		trackMin.y += inset;
 		const float trackWidth = ImGui::GetContentRegionAvail().x - inset * 2.0f;
-		const float pillWidth = (trackWidth - pad * static_cast<float>(topCount + 1)) / static_cast<float>(topCount);
+		const float pillGap = pad * ThemeManager::Constants::SEGMENT_PILL_GAP_RATIO;
+		const float pillWidth = (trackWidth - pad * 2.0f - pillGap * static_cast<float>(topCount - 1)) / static_cast<float>(topCount);
 		ImGui::GetWindowDrawList()->AddRectFilled(trackMin, ImVec2(trackMin.x + trackWidth, trackMin.y + ImGui::GetFrameHeight() + pad * 2.0f),
 			ImGui::GetColorU32(ImGuiCol_FrameBg), ImGui::GetStyle().FrameRounding + pad);
 		for (size_t n = 0; n < topCount; n++) {
-			ImGui::SetCursorScreenPos(ImVec2(trackMin.x + pad + static_cast<float>(n) * (pillWidth + pad), trackMin.y + pad));
+			ImGui::SetCursorScreenPos(ImVec2(trackMin.x + pad + static_cast<float>(n) * (pillWidth + pillGap), trackMin.y + pad));
 			RenderBuiltInRow(*builtInAt(topIds[n]), topIds[n], selectedMenu, pillWidth);
 		}
 		ImGui::SetCursorScreenPos(ImVec2(trackMin.x - inset, trackMin.y + ImGui::GetFrameHeight() + pad * 2.0f));

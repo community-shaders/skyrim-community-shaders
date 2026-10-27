@@ -227,6 +227,7 @@ public:
 		static constexpr float CATEGORY_HEADER_COUNT_ALPHA = 0.6f;       // ... count alpha relative to the label
 		static constexpr float CATEGORY_HEADER_LINE_ALPHA = 0.5f;        // ... trailing rule alpha relative to the separator colour
 		static constexpr float SEGMENT_TRACK_PAD = 3.0f;                 // Page switcher: inset between the track and its pills
+		static constexpr float SEGMENT_PILL_GAP_RATIO = 2.0f;            // Gap between neighbouring pills, in track pads, so their fills never touch
 		static constexpr float LEFT_PANE_EDGE_INSET = 3.0f;              // Room kept around the left pane's content so its edges and borders are not clipped (1080p baseline)
 		static constexpr float LIST_HIGHLIGHT_HOVER_RATIO = 0.7f;        // Hover look of the list highlight, as a share of its selected strength
 		static constexpr float LIST_HIGHLIGHT_SELECTED_DARKEN = 0.8f;    // Colour multiplier of the highlight once it rests on the selected row
@@ -367,7 +368,7 @@ public:
 		static constexpr float ANIM_SLIDER_RATE = 22.0f;                  // How fast a slider's grab glides to its value when not held, per second
 		static constexpr float ANIM_SLIDER_DRAG_RATE = 50.0f;             // The same while the slider is held, so a drag still feels direct
 		static constexpr float ANIM_TOGGLE_RATE = 14.0f;                  // How fast a toggle's knob slides, per second
-		static constexpr float ANIM_CHECK_RATE = 33.0f;                   // How fast a check mark fades in and out, per second
+		static constexpr float ANIM_CHECK_RATE = 50.0f;                   // How fast a check mark fades in and out, per second
 		static constexpr float ANIM_CHECK_POP_FROM = 0.7f;                // Check mark size, as a share of full, at the start of its fade-in
 		static constexpr float TOGGLE_TRACK_HEIGHT_RATIO = 0.62f;         // Toggle track thickness, as a share of the knob's diameter (Material: 16 of 21)
 		static constexpr float TOGGLE_TRACK_INSET_RATIO = 0.35f;          // How far the track stops short of each end, in knob radii, so the knob overhangs it

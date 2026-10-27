@@ -144,13 +144,27 @@ namespace Icons
 		ImGui::TextUnformatted(glyph.utf8);
 	}
 
-	/** @brief Icon-only button (id is an ImGui ##suffix; visible label is the glyph). */
+	/**
+	 * @brief Icon-only button (id is an ImGui ##suffix). The glyph is centred by its ink, not by its advance width
+	 * as a button label would be, so glyphs with uneven side bearings (the three dots, say) sit in the middle.
+	 */
 	inline bool Button(const char* id, GlyphRef glyph, const ImVec2& size = ImVec2(0, 0))
 	{
 		if (!glyph)
 			return false;
-		FontGuard font(glyph);
-		return ImGui::Button(std::format("{}{}", glyph.utf8, id).c_str(), size);
+		ImVec2 buttonSize = size;
+		if (buttonSize.x <= 0.0f || buttonSize.y <= 0.0f) {
+			FontGuard font(glyph);
+			const ImVec2 glyphSize = ImGui::CalcTextSize(glyph.utf8);
+			const ImVec2 padding = ImGui::GetStyle().FramePadding;
+			if (buttonSize.x <= 0.0f)
+				buttonSize.x = glyphSize.x + padding.x * 2.0f;
+			if (buttonSize.y <= 0.0f)
+				buttonSize.y = glyphSize.y + padding.y * 2.0f;
+		}
+		const bool clicked = ImGui::Button(id, buttonSize);
+		DrawCenteredGlyph(ImGui::GetWindowDrawList(), ImGui::GetItemRectMin(), ImGui::GetItemRectSize(), glyph, ImGui::GetColorU32(ImGuiCol_Text));
+		return clicked;
 	}
 
 	/** @brief Gap LabeledButton leaves between its glyph and label. */

@@ -1517,7 +1517,14 @@ void Effects11Editor::DrawLauncher()
 
 	// The shared selector drives UseEffect, which is saved to enbseries.ini with the rest of the preset
 	const bool wasEnabled = globals::features::effects11.IsPresetEnabled();
-	PostProcessingMode::DrawSelector();
+	// The editor button sits on the selector's row, with the hotkey under it
+	PostProcessingMode::SelectorAction openEditor;
+	openEditor.label = T(TKEY("open_editor"), "Open Effects 11 Editor");
+	if (!menuSettings.Effects11EditorKey.empty())
+		openEditor.hint = I18n::GetSingleton()->Format(TKEY("editor_hotkey"),
+			{ { "key", Util::Input::KeyIdToString(menuSettings.Effects11EditorKey) } }, "Hotkey: {key}");
+	openEditor.onClick = [this] { Open(true); };
+	PostProcessingMode::DrawSelector(&openEditor);
 	dirty |= globals::features::effects11.IsPresetEnabled() != wasEnabled;
 	if (dirty) {
 		SameLineIfFits(ImGui::CalcTextSize(T(TKEY("save"), "Save")).x);
@@ -1537,17 +1544,6 @@ void Effects11Editor::DrawLauncher()
 		// Without a preset Effects 11 cannot be selected, so the editor stays open to explain how to get one.
 		const Util::LockedSection modeLock(presetLoaded && PostProcessingMode::Get() != PostProcessingMode::Mode::Effects11,
 			T(TKEY("not_active_mode"), "Effects 11 is not the active mode, so the editor shows no changes. Select Effects 11 above to use it."));
-		const float scale = Util::GetUIScale();
-		const ImVec2 buttonSize((std::min)(ImGui::GetContentRegionAvail().x, 320.0f * scale), ImGui::GetFrameHeight() * 1.6f);
-		if (Util::Button(T(TKEY("open_editor"), "Open Effects 11 Editor"), buttonSize))
-			Open(true);
-		if (!menuSettings.Effects11EditorKey.empty()) {
-			ImGui::SameLine();
-			ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (buttonSize.y - ImGui::GetTextLineHeight()) * 0.5f);
-			const auto hotkey = I18n::GetSingleton()->Format(TKEY("editor_hotkey"),
-				{ { "key", Util::Input::KeyIdToString(menuSettings.Effects11EditorKey) } }, "Hotkey: {key}");
-			Util::TextUnformattedDisabled(hotkey.c_str());
-		}
 		ImGui::PushTextWrapPos(0.0f);
 		Util::TextUnformattedDisabled(T(TKEY("launcher_body"),
 			"The editor opens over the game, like the ENB editor, so every change shows live. "
