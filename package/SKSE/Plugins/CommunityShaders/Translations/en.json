@@ -4016,6 +4016,8 @@
     "menu.settings.surface_shadow_enabled_tooltip": "Draw a soft drop shadow behind the surface.",
     "menu.settings.surface_shadow_offset": "Shadow Drop",
     "menu.settings.surface_shadow_offset_tooltip": "Vertical shadow offset in pixels at 1080p. Positive values drop it below the surface.",
+    "menu.settings.surface_shadow_offset_x": "Shadow Shift",
+    "menu.settings.surface_shadow_offset_x_tooltip": "Horizontal shadow offset in pixels at 1080p. Positive values move it right of the surface.",
     "menu.settings.surface_shadow_opacity": "Shadow Opacity",
     "menu.settings.surface_shadow_opacity_tooltip": "Opacity of the black shadow.",
     "menu.settings.surface_shadow_spread": "Shadow Spread",

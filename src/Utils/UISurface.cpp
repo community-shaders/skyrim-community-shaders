@@ -72,6 +72,7 @@ namespace Util::Surface
 		s.borderAlpha = Constants::SURFACE_BORDER_ALPHA;
 		s.shadowSpread = Constants::SURFACE_SHADOW_SPREAD;
 		s.shadowAlpha = Constants::SURFACE_SHADOW_ALPHA;
+		s.shadowOffsetX = Constants::SURFACE_SHADOW_OFFSET_X;
 		s.shadowOffsetY = Constants::SURFACE_SHADOW_OFFSET_Y;
 		s.padding = Constants::HOME_CARD_PADDING;
 		s.accentBarWidth = Constants::ANIM_SELECTED_BAR_WIDTH;
@@ -116,7 +117,8 @@ namespace Util::Surface
 			ClampField(s.borderColor.w, 0.0f, 1.0f, 0.2f);
 			ClampField(s.shadowSpread, 0.0f, 32.0f, d.shadowSpread);
 			ClampField(s.shadowAlpha, 0.0f, 1.0f, d.shadowAlpha);
-			ClampField(s.shadowOffsetY, -16.0f, 16.0f, d.shadowOffsetY);
+			ClampField(s.shadowOffsetX, -Constants::SURFACE_SHADOW_OFFSET_MAX, Constants::SURFACE_SHADOW_OFFSET_MAX, d.shadowOffsetX);
+			ClampField(s.shadowOffsetY, -Constants::SURFACE_SHADOW_OFFSET_MAX, Constants::SURFACE_SHADOW_OFFSET_MAX, d.shadowOffsetY);
 			ClampField(s.padding, 0.0f, 48.0f, d.padding);
 			ClampField(s.accentBarWidth, 0.0f, 12.0f, d.accentBarWidth);
 		}
@@ -139,6 +141,7 @@ namespace Util::Surface
 				{ "Shadow", s.shadow },
 				{ "ShadowSpread", s.shadowSpread },
 				{ "ShadowAlpha", s.shadowAlpha },
+				{ "ShadowOffsetX", s.shadowOffsetX },
 				{ "ShadowOffsetY", s.shadowOffsetY },
 				{ "Padding", s.padding },
 				{ "AccentBar", s.accentBar },
@@ -173,6 +176,7 @@ namespace Util::Surface
 				ReadBool(*it, "Shadow", s.shadow);
 				ReadFloat(*it, "ShadowSpread", s.shadowSpread);
 				ReadFloat(*it, "ShadowAlpha", s.shadowAlpha);
+				ReadFloat(*it, "ShadowOffsetX", s.shadowOffsetX);
 				ReadFloat(*it, "ShadowOffsetY", s.shadowOffsetY);
 				ReadFloat(*it, "Padding", s.padding);
 				ReadBool(*it, "AccentBar", s.accentBar);
@@ -206,9 +210,10 @@ namespace Util::Surface
 		if (s.shadow && s.shadowAlpha > 0.0f) {
 			// The shadow spills outside the window that owns the list, so lift its clip rect for it
 			const float grow = s.shadowSpread * scale;
+			const float shiftX = s.shadowOffsetX * scale;
 			const float dropY = s.shadowOffsetY * scale;
 			drawList->PushClipRectFullScreen();
-			drawList->AddRectFilled(ImVec2(min.x - grow, min.y - grow + dropY), ImVec2(max.x + grow, max.y + grow + dropY),
+			drawList->AddRectFilled(ImVec2(min.x - grow + shiftX, min.y - grow + dropY), ImVec2(max.x + grow + shiftX, max.y + grow + dropY),
 				IM_COL32(0, 0, 0, static_cast<int>(255.0f * s.shadowAlpha * options.alpha)), rounding + grow);
 			drawList->PopClipRect();
 		}

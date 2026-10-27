@@ -40,6 +40,7 @@ namespace Util::Surface
 		bool shadow = false;                          /**< @brief Draw the soft outer shadow. */
 		float shadowSpread = 6.0f;                    /**< @brief How far the shadow grows past the surface. */
 		float shadowAlpha = 0.22f;                    /**< @brief Shadow opacity (black). */
+		float shadowOffsetX = 0.0f;                   /**< @brief Shadow sideways shift; positive moves it right. */
 		float shadowOffsetY = 2.0f;                   /**< @brief Shadow drop. */
 		float padding = 12.0f;                        /**< @brief Inner padding on every side (HomeCard only). */
 		bool accentBar = true;                        /**< @brief Accent bar on the left edge (NavSelected only). */

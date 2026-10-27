@@ -1170,7 +1170,9 @@ namespace
 			Util::DisableGuard shadowDisabled(!s.shadow);
 			Util::SliderFloatTip(T("menu.settings.surface_shadow_spread", "Shadow Spread"), &s.shadowSpread, 0.0f, 32.0f, "%.0f", T("menu.settings.surface_shadow_spread_tooltip", "How far the shadow grows past the surface edge, in pixels at 1080p."));
 			Util::SliderFloatTip(T("menu.settings.surface_shadow_opacity", "Shadow Opacity"), &s.shadowAlpha, 0.0f, 1.0f, "%.2f", T("menu.settings.surface_shadow_opacity_tooltip", "Opacity of the black shadow."));
-			Util::SliderFloatTip(T("menu.settings.surface_shadow_offset", "Shadow Drop"), &s.shadowOffsetY, -16.0f, 16.0f, "%.0f", T("menu.settings.surface_shadow_offset_tooltip", "Vertical shadow offset in pixels at 1080p. Positive values drop it below the surface."));
+			constexpr float offsetMax = ThemeManager::Constants::SURFACE_SHADOW_OFFSET_MAX;
+			Util::SliderFloatTip(T("menu.settings.surface_shadow_offset_x", "Shadow Shift"), &s.shadowOffsetX, -offsetMax, offsetMax, "%.0f", T("menu.settings.surface_shadow_offset_x_tooltip", "Horizontal shadow offset in pixels at 1080p. Positive values move it right of the surface."));
+			Util::SliderFloatTip(T("menu.settings.surface_shadow_offset", "Shadow Drop"), &s.shadowOffsetY, -offsetMax, offsetMax, "%.0f", T("menu.settings.surface_shadow_offset_tooltip", "Vertical shadow offset in pixels at 1080p. Positive values drop it below the surface."));
 		}
 	}
 }

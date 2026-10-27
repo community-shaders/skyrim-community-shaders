@@ -389,12 +389,14 @@ public:
 		static constexpr float ANIM_SELECTED_BAR_WIDTH = 3.0f;  // Accent bar on the left edge of a selected row: nav, palette, editor lists (1080p baseline)
 
 		// Flat surfaces (Util::Surface): one subtle step above the window colour, a hairline border, one soft shadow when floating
-		static constexpr float SURFACE_FILL_LIFT = 0.04f;        // Window colour lifted toward white so cards read above the page
-		static constexpr float SURFACE_BORDER_ALPHA = 0.08f;     // Hairline border opacity (white)
-		static constexpr float SURFACE_SHADOW_SPREAD = 6.0f;     // Floating surfaces' shadow growth (1080p baseline)
-		static constexpr float SURFACE_SHADOW_ALPHA = 0.22f;     // Shadow opacity (black)
-		static constexpr float SURFACE_SHADOW_OFFSET_Y = 2.0f;   // Shadow drop (1080p baseline)
-		static constexpr float NAV_SELECTED_FILL_ALPHA = 0.14f;  // Accent fill behind a selected nav or palette row
+		static constexpr float SURFACE_FILL_LIFT = 0.04f;          // Window colour lifted toward white so cards read above the page
+		static constexpr float SURFACE_BORDER_ALPHA = 0.08f;       // Hairline border opacity (white)
+		static constexpr float SURFACE_SHADOW_SPREAD = 6.0f;       // Floating surfaces' shadow growth (1080p baseline)
+		static constexpr float SURFACE_SHADOW_ALPHA = 0.22f;       // Shadow opacity (black)
+		static constexpr float SURFACE_SHADOW_OFFSET_X = 0.0f;     // Shadow sideways shift (1080p baseline)
+		static constexpr float SURFACE_SHADOW_OFFSET_Y = 2.0f;     // Shadow drop (1080p baseline)
+		static constexpr float SURFACE_SHADOW_OFFSET_MAX = 16.0f;  // Shadow offset range either way, each axis (1080p baseline)
+		static constexpr float NAV_SELECTED_FILL_ALPHA = 0.14f;    // Accent fill behind a selected nav or palette row
 
 		// Tinted control frame: marks where a value comes from (inherited, or a scene override's winning layer)
 		static constexpr float TINTED_FRAME_BG_ALPHA = 0.25f;
