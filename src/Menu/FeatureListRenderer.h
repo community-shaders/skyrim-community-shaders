@@ -279,7 +279,7 @@ private:
 		Hooks& hooks);
 
 	/** @brief Draws a built-in page's row; the CS Editor row opens its window instead of selecting the page. */
-	static void RenderBuiltInRow(const BuiltInMenu& menu, size_t listId, size_t& selectedMenu);
+	static void RenderBuiltInRow(const BuiltInMenu& menu, size_t listId, size_t& selectedMenu, float width = 0.0f);
 
 	static void RenderRightColumn(
 		const std::vector<MenuFuncInfo>& menuList,

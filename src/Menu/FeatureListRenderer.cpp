@@ -203,20 +203,22 @@ namespace
 	}
 
 	/**
-	 * @brief Draws one row of the top page group: an icon column, then the label, with the same left padding and
-	 * height as a feature row. An Accent row tints its icon, a Launcher row ends in an external-open glyph.
+	 * @brief Draws one compact button of the top page group: a framed icon and label. An Accent button tints its
+	 * icon, a Launcher button ends in an external-open glyph.
+	 * @param width Button width; 0 fills the rest of the line.
 	 * @return True when clicked.
 	 */
-	bool DrawNavRow(const FeatureListRenderer::BuiltInMenu& menu, bool selected, bool disabled)
+	bool DrawNavRow(const FeatureListRenderer::BuiltInMenu& menu, bool selected, bool disabled, float width = 0.0f)
 	{
 		using NavStyle = FeatureListRenderer::NavStyle;
 
-		MenuFonts::FontRoleGuard labelFont(Menu::FontRole::Subheading);
 		const float lineHeight = ImGui::GetTextLineHeight();
-		// Feature rows start their label after one space; the icon column starts there too
-		const float padX = ImGui::CalcTextSize(" ").x;
-		const ImVec2 pos = ImGui::GetCursorScreenPos();
-		const float right = pos.x + ImGui::GetContentRegionAvail().x;
+		const float height = ImGui::GetFrameHeight();
+		const float padX = ImGui::GetStyle().FramePadding.x;
+		const ImVec2 rowPos = ImGui::GetCursorScreenPos();
+		const float right = rowPos.x + (width > 0.0f ? width : ImGui::GetContentRegionAvail().x);
+		// Glyphs and label sit on the button's vertical centre
+		const ImVec2 pos(rowPos.x, rowPos.y + (height - lineHeight) * 0.5f);
 
 		bool clicked = false;
 		{
@@ -225,10 +227,12 @@ namespace
 			ImGui::PushStyleColor(ImGuiCol_Header, IM_COL32_BLACK_TRANS);
 			ImGui::PushStyleColor(ImGuiCol_HeaderHovered, IM_COL32_BLACK_TRANS);
 			ImGui::PushStyleColor(ImGuiCol_HeaderActive, IM_COL32_BLACK_TRANS);
-			clicked = ImGui::Selectable("##NavRow", false, ImGuiSelectableFlags_None, ImVec2(0.0f, lineHeight));
+			clicked = ImGui::Selectable("##NavRow", false, ImGuiSelectableFlags_None, ImVec2(right - rowPos.x, height));
 			ImGui::PopStyleColor(3);
 		}
 		auto* drawList = ImGui::GetWindowDrawList();
+		// A quiet frame so the pair reads as buttons, not list rows
+		drawList->AddRectFilled(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), ImGui::GetColorU32(ImGuiCol_FrameBg), ImGui::GetStyle().FrameRounding);
 		DrawRowHighlight(drawList, selected, disabled);
 		ImVec4 textColor = ImGui::GetStyleColorVec4(disabled ? ImGuiCol_TextDisabled : ImGuiCol_Text);
 		ImVec4 iconColor = textColor;
@@ -783,10 +787,22 @@ void FeatureListRenderer::RenderLeftColumn(
 	// The Settings page swaps the feature list for its own section list
 	const bool settingsOpen = selectedPage && selectedPage->id == MenuPageIds::kSettings && hooks.drawSettingsNav;
 
-	// Top group: the built-in pages outside the bottom group, in list order. Home has no row; its header icon opens it.
-	for (size_t i = 0; i < menuList.size(); i++) {
+	// Top group: the built-in pages outside the bottom group, in list order, as buttons sharing one line.
+	// Home has no button; its header icon opens it.
+	std::array<size_t, 4> topIds{};
+	size_t topCount = 0;
+	for (size_t i = 0; i < menuList.size() && topCount < topIds.size(); i++) {
 		if (const auto* menu = builtInAt(i); menu && !IsBottomMenu(menu->id) && menu->id != MenuPageIds::kHome)
-			RenderBuiltInRow(*menu, i, selectedMenu);
+			topIds[topCount++] = i;
+	}
+	if (topCount > 0) {
+		const float spacing = ImGui::GetStyle().ItemSpacing.x;
+		const float width = (ImGui::GetContentRegionAvail().x - spacing * static_cast<float>(topCount - 1)) / static_cast<float>(topCount);
+		for (size_t n = 0; n < topCount; n++) {
+			if (n > 0)
+				ImGui::SameLine(0.0f, spacing);
+			RenderBuiltInRow(*builtInAt(topIds[n]), topIds[n], selectedMenu, width);
+		}
 	}
 	ImGui::Separator();
 
@@ -1002,18 +1018,18 @@ void FeatureListRenderer::RenderAutoHidePane(
 	ImGui::PopStyleColor();
 }
 
-void FeatureListRenderer::RenderBuiltInRow(const BuiltInMenu& menu, size_t listId, size_t& selectedMenu)
+void FeatureListRenderer::RenderBuiltInRow(const BuiltInMenu& menu, size_t listId, size_t& selectedMenu, float width)
 {
 	ImGui::PushID(menu.id.data(), menu.id.data() + menu.id.size());
 	if (menu.id == MenuPageIds::kCSEditor) {
 		// Launcher: opens the editor window without leaving the current page
 		const bool canOpen = EditorWindow::CanBeOpen();
-		if (DrawNavRow(menu, false, !canOpen))
+		if (DrawNavRow(menu, false, !canOpen, width))
 			CSEditor::OpenEditorWindow();
 		Util::AddTooltip(canOpen ? T("menu.features.cs_editor_tooltip", "Opens the CS Editor window") :
 								   T("menu.features.cs_editor_needs_save", "Load a save to open the CS Editor"),
 			Util::kTooltipWhenDisabled);
-	} else if (DrawNavRow(menu, selectedMenu == listId, false)) {
+	} else if (DrawNavRow(menu, selectedMenu == listId, false, width)) {
 		selectedMenu = listId;
 	}
 	ImGui::PopID();
