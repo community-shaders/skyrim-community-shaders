@@ -209,10 +209,8 @@ namespace
 
 	void RenderNav(PageState& state, bool focusSearch)
 	{
-		if (focusSearch)
-			ImGui::SetKeyboardFocusHere();
-		const bool searchChanged = BrowserUI::SearchField("##SettingsSearch", state.search.data(), state.search.size(),
-			T("menu.settings.search_hint", "Search settings..."), ImGui::GetContentRegionAvail().x, false);
+		const bool searchChanged = BrowserUI::ExpandingSearchField("##SettingsSearch", state.search.data(), state.search.size(),
+			T("menu.settings.search_hint", "Search settings..."), ImGui::GetContentRegionAvail().x, focusSearch);
 		const auto matches = FindMatches(state.search.data());
 
 		// Typing moves off a section with no hits to the first one that has some

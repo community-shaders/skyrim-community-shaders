@@ -7,7 +7,9 @@
 #include "Utils/UI.h"
 #include "imgui_internal.h"
 
+#include "Utils/UIAnim.h"
 #include <algorithm>
+
 #include <cassert>
 #include <cmath>
 #include <cstdio>
@@ -208,6 +210,64 @@ namespace BrowserUI
 		return changed;
 	}
 
+	float ExpandingSearchCollapsedWidth()
+	{
+		return ImGui::GetFrameHeight();
+	}
+
+	bool ExpandingSearchField(const char* id, char* buffer, size_t bufferSize, const char* hint, float maxWidth, bool focusRequest)
+	{
+		// Frames the field stays open without focus, so a freshly requested focus can land
+		constexpr int kSearchSettleFrames = 3;
+		ImGui::PushID(id);
+		ImGuiStorage* storage = ImGui::GetStateStorage();
+		const ImGuiID openKey = ImGui::GetID("open");
+		const ImGuiID focusKey = ImGui::GetID("focus");
+		const ImGuiID settleKey = ImGui::GetID("settle");
+		const float collapsedWidth = ExpandingSearchCollapsedWidth();
+
+		bool open = storage->GetBool(openKey, false);
+		bool wantFocus = storage->GetBool(focusKey, false);
+		int settle = storage->GetInt(settleKey, 0);
+		const bool hasText = buffer[0] != '\0';
+		if (focusRequest || (!open && ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && ImGui::GetIO().KeyCtrl &&
+								ImGui::IsKeyPressed(ImGuiKey_F, false))) {
+			open = wantFocus = true;
+			settle = kSearchSettleFrames;
+		}
+		open = open || hasText;
+
+		const float progress = Util::Anim::Approach(ImGui::GetID("w"), open ? 1.0f : 0.0f, ThemeManager::Constants::ANIM_SEARCH_RATE);
+		bool changed = false;
+		if (!open && progress <= 0.0f) {
+			// Resting: just the magnifier
+			if (IconButton("##open", Icons::TI(ICON_TI_SEARCH), hint)) {
+				open = wantFocus = true;
+				settle = kSearchSettleFrames;
+			}
+		} else {
+			const float width = collapsedWidth + (maxWidth - collapsedWidth) * Util::Anim::EaseOutCubic(progress);
+			if (wantFocus) {
+				ImGui::SetKeyboardFocusHere();
+				wantFocus = false;
+			}
+			changed = SearchField("##field", buffer, bufferSize, hint, std::max(width, collapsedWidth), false);
+			// Closes again once focus has gone and nothing is typed; a couple of frames let a fresh focus land first
+			if (open && ImGui::IsItemActive())
+				settle = kSearchSettleFrames;
+			else if (open && settle > 0)
+				--settle;
+			else if (open && buffer[0] == '\0')
+				open = false;
+		}
+
+		storage->SetBool(openKey, open);
+		storage->SetBool(focusKey, wantFocus);
+		storage->SetInt(settleKey, settle);
+		ImGui::PopID();
+		return changed;
+	}
+
 	float MeasureToggleChip(int count)
 	{
 		char text[16];
@@ -329,28 +389,42 @@ namespace BrowserUI
 
 	namespace
 	{
-		/// Shared chrome for the quiet icon buttons; returns {clicked, hovered}.
-		std::pair<bool, bool> QuietButton(const char* id, bool active)
+		/// What QuietButton reports: the click and the eased hover / press / active state.
+		struct QuietState
+		{
+			bool clicked;
+			Util::Anim::Blend blend;
+		};
+
+		/// Shared chrome for the quiet icon buttons: a fill that eases in and out with hover, press and active.
+		QuietState QuietButton(const char* id, bool active)
 		{
 			const float size = IconButtonSize();
 			const bool clicked = ImGui::InvisibleButton(id, ImVec2(size, size));
-			const bool hovered = ImGui::IsItemHovered();
-			if (active || hovered) {
-				const ImGuiCol fill = active ? ImGuiCol_Header : (ImGui::IsItemActive() ? ImGuiCol_ButtonActive : ImGuiCol_FrameBgHovered);
-				ImGui::GetWindowDrawList()->AddRectFilled(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(),
-					ImGui::GetColorU32(fill), ImGui::GetStyle().FrameRounding);
-			}
-			return { clicked, hovered };
+			const auto blend = Util::Anim::ItemBlend(ImGui::GetItemID(), ImGui::IsItemHovered(), ImGui::IsItemActive(), active);
+			ImDrawList* drawList = ImGui::GetWindowDrawList();
+			const ImVec2 min = ImGui::GetItemRectMin();
+			const ImVec2 max = ImGui::GetItemRectMax();
+			const float rounding = ImGui::GetStyle().FrameRounding;
+			if (blend.hover > 0.0f)
+				drawList->AddRectFilled(min, max, Util::Anim::ScaleAlphaU32(ImGui::GetColorU32(ImGuiCol_FrameBgHovered), blend.hover), rounding);
+			if (blend.press > 0.0f)
+				drawList->AddRectFilled(min, max, Util::Anim::ScaleAlphaU32(ImGui::GetColorU32(ImGuiCol_ButtonActive), blend.press), rounding);
+			if (blend.selected > 0.0f)
+				drawList->AddRectFilled(min, max, Util::Anim::ScaleAlphaU32(ImGui::GetColorU32(ImGuiCol_Header), blend.selected), rounding);
+			return { clicked, blend };
 		}
 	}
 
 	bool IconButton(const char* id, Icons::GlyphRef glyph, const char* tooltip, bool active, ImU32 color)
 	{
-		const auto [clicked, hovered] = QuietButton(id, active);
+		const auto [clicked, blend] = QuietButton(id, active);
 		ImU32 glyphColor = color;
-		if (!glyphColor)
-			glyphColor = ImGui::GetColorU32(active ? Util::Colors::GetAccent() :
-													 (hovered ? ImGui::GetStyleColorVec4(ImGuiCol_Text) : Util::Colors::GetSecondary()));
+		if (!glyphColor) {
+			// Secondary -> text on hover, then -> accent while selected
+			const ImVec4 resting = Util::Anim::Lerp(Util::Colors::GetSecondary(), ImGui::GetStyleColorVec4(ImGuiCol_Text), blend.hover);
+			glyphColor = ImGui::GetColorU32(Util::Anim::Lerp(resting, Util::Colors::GetAccent(), blend.selected));
+		}
 		const float size = IconButtonSize();
 		Icons::DrawCenteredGlyph(ImGui::GetWindowDrawList(), ImGui::GetItemRectMin(), ImVec2(size, size), glyph, glyphColor);
 		if (tooltip)
@@ -365,7 +439,7 @@ namespace BrowserUI
 
 	bool PaintedIconButton(const char* id, const IconPainter& icon, ImU32 color, const char* tooltip)
 	{
-		const auto [clicked, hovered] = QuietButton(id, false);
+		const auto clicked = QuietButton(id, false).clicked;
 		const ImVec2 min = ImGui::GetItemRectMin();
 		const ImVec2 max = ImGui::GetItemRectMax();
 		if (icon)

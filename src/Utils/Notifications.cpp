@@ -2,6 +2,8 @@
 
 #include "Menu/ThemeManager.h"
 #include "Utils/UI.h"
+#include "Utils/UIAnim.h"
+#include "Utils/UIGlass.h"
 
 #include <algorithm>
 #include <format>
@@ -82,9 +84,9 @@ namespace Util::Notifications
 			const float remaining = notif.duration - elapsed;
 			float alpha = 1.0f;
 			if (elapsed < Constants::TOAST_FADE_IN_SECONDS)
-				alpha = elapsed / Constants::TOAST_FADE_IN_SECONDS;
+				alpha = Util::Anim::EaseOutCubic(elapsed / Constants::TOAST_FADE_IN_SECONDS);
 			else if (remaining < Constants::TOAST_FADE_OUT_SECONDS)
-				alpha = std::max(0.0f, remaining / Constants::TOAST_FADE_OUT_SECONDS);
+				alpha = Util::Anim::EaseInOut(remaining / Constants::TOAST_FADE_OUT_SECONDS);
 
 			const ImVec2 textSize = ImGui::CalcTextSize(notif.message.c_str(), nullptr, false, maxTextWidth);
 			const ImVec2 pad{ Constants::TOAST_PADDING_X * scale, Constants::TOAST_PADDING_Y * scale };
@@ -108,9 +110,11 @@ namespace Util::Notifications
 				const ImVec2 p0 = ImGui::GetWindowPos();
 				const ImVec2 p1{ p0.x + cardSize.x, p0.y + cardSize.y };
 				const float rounding = ImGui::GetStyle().WindowRounding;
-				ImVec4 cardBg = ImGui::GetStyleColorVec4(ImGuiCol_WindowBg);
-				cardBg.w = Constants::OVERLAP_MIN_ALPHA * alpha;
-				draw->AddRectFilled(p0, p1, ImGui::ColorConvertFloat4ToU32(cardBg), rounding);
+				Util::Glass::Style glass;
+				glass.rounding = rounding;
+				glass.alpha = alpha;
+				glass.shadow = true;
+				Util::Glass::Draw(draw, p0, p1, glass);
 				const ImU32 accent = ImGui::ColorConvertFloat4ToU32(
 					ImVec4(notif.color.x, notif.color.y, notif.color.z, Constants::TOAST_ACCENT_ALPHA * alpha));
 				draw->AddRect(p0, p1, accent, rounding, 0, Constants::TOAST_BORDER_THICKNESS * scale);

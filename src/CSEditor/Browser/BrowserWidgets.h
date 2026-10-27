@@ -41,6 +41,19 @@ namespace BrowserUI
 	bool SearchField(const char* id, char* buffer, size_t bufferSize, const char* hint, float width, bool ctrlFFocus,
 		ImGuiInputTextFlags flags = 0, ImGuiInputTextCallback callback = nullptr, void* userData = nullptr);
 
+	/** @brief Width of the collapsed ExpandingSearchField: a square the height of a frame. */
+	float ExpandingSearchCollapsedWidth();
+
+	/**
+	 * @brief A search field that rests as a magnifier icon and, when clicked, animates open into the full SearchField
+	 * with keyboard focus. It collapses back once it loses focus while empty (Escape clears and collapses) and stays
+	 * open while it holds text. Honours "Reduce UI animations" by snapping.
+	 * @param maxWidth Width of the field when fully open.
+	 * @param focusRequest Opens and focuses the field this frame (e.g. a Ctrl+F shortcut).
+	 * @return True when the text changed this frame.
+	 */
+	bool ExpandingSearchField(const char* id, char* buffer, size_t bufferSize, const char* hint, float maxWidth, bool focusRequest);
+
 	/** @brief Width a ToggleChip with this count takes. */
 	float MeasureToggleChip(int count);
 

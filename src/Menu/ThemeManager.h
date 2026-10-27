@@ -186,6 +186,8 @@ public:
 		static constexpr float STATUS_BAR_SEGMENT_GAP_SCALE = 3.0f;  // Gap between status bar parts, in item spacings
 
 		// Menu UX: header Home button, status bar, Home card rhythm
+		static constexpr float HEADER_NAV_BUTTON_FONT_RATIO = 1.15f;    // Home and issues button edge, in font sizes (before UI scale)
+		static constexpr float HEADER_ICON_HOVER_ALPHA = 0.6f;          // Hover fill strength of header glyph buttons at full blend
 		static constexpr float HEADER_HOME_IDLE_ALPHA = 0.85f;          // Home button opacity while neither hovered nor current
 		static constexpr float STATUS_BAR_GRIP_CLEARANCE_SCALE = 1.6f;  // Right margin kept clear of the window resize grip, in font sizes
 		static constexpr float HOME_CARD_SPACING = 8.0f;                // Vertical gap below each Home card (1080p baseline)
@@ -212,18 +214,19 @@ public:
 		static constexpr float VERSION_TEXT_OPACITY = 0.6f;         // Opacity for version text next to feature title
 
 		// Main menu feature list pane (sizes are 1080p baseline, scaled by Util::GetUIScale())
-		static constexpr float NAV_ROW_ICON_GAP = 8.0f;                 // Gap between a page row's icon and its label
-		static constexpr float SORT_FILTER_DOT_RATIO = 0.12f;           // Radius of the sort button's active-filter dot relative to the button height
-		static constexpr float AUTOHIDE_PANEL_WIDTH_RATIO = 0.2f;       // Auto-hide list width as a share of the pane (the pinned list's column ratio)
-		static constexpr float AUTOHIDE_PANEL_MIN_WIDTH = 240.0f;       // ... never narrower than this
-		static constexpr float AUTOHIDE_ACTIVATION_ZONE_WIDTH = 28.0f;  // Width of the left edge strip that reveals the auto-hide list
-		static constexpr float AUTOHIDE_OPEN_DELAY = 0.12f;             // Seconds the cursor must rest on the edge before the list opens
-		static constexpr float AUTOHIDE_CLOSE_DELAY = 0.4f;             // Seconds the cursor must be away before the list closes
-		static constexpr float AUTOHIDE_ANIM_SPEED = 16.0f;             // Slide smoothing rate per second (higher is snappier)
-		static constexpr float AUTOHIDE_ANIM_EPSILON = 0.003f;          // Slide progress within this of its target snaps to it
-		static constexpr float AUTOHIDE_GRIP_WIDTH = 3.0f;              // Width of the grip drawn on the edge while the list is hidden
-		static constexpr float AUTOHIDE_GRIP_ALPHA = 0.5f;              // Grip opacity as a share of the secondary text colour
-		static constexpr float FEATURE_ROW_MODIFIED_DOT_RATIO = 0.18f;  // Modified dot radius relative to the text line height
+		static constexpr float NAV_ROW_ICON_GAP = 8.0f;                  // Gap between a page row's icon and its label
+		static constexpr float SORT_FILTER_DOT_RATIO = 0.12f;            // Radius of the sort button's active-filter dot relative to the button height
+		static constexpr float AUTOHIDE_PANEL_WIDTH_RATIO = 0.2f;        // Auto-hide list width as a share of the pane (the pinned list's column ratio)
+		static constexpr float AUTOHIDE_PANEL_MIN_WIDTH = 240.0f;        // ... never narrower than this
+		static constexpr float AUTOHIDE_ACTIVATION_ZONE_WIDTH = 28.0f;   // Width of the left edge strip that reveals the auto-hide list
+		static constexpr float AUTOHIDE_OPEN_DELAY = 0.12f;              // Seconds the cursor must rest on the edge before the list opens
+		static constexpr float AUTOHIDE_CLOSE_DELAY = 0.4f;              // Seconds the cursor must be away before the list closes
+		static constexpr float AUTOHIDE_ANIM_SPEED = 16.0f;              // Slide smoothing rate per second (higher is snappier)
+		static constexpr float AUTOHIDE_GRIP_WIDTH = 3.0f;               // Width of the grip drawn on the edge while the list is hidden
+		static constexpr float AUTOHIDE_GRIP_ALPHA = 0.5f;               // Grip opacity as a share of the secondary text colour
+		static constexpr float FEATURE_ROW_CATEGORY_ICON_SCALE = 0.95f;  // Category icon edge in the Alphabetical list, relative to the line height
+		static constexpr float FEATURE_ROW_CATEGORY_ICON_ALPHA = 0.55f;  // ... and its dimming
+		static constexpr float FEATURE_ROW_MODIFIED_DOT_RATIO = 0.18f;   // Modified dot radius relative to the text line height
 
 		// Settings page constants (sizes are 1080p baseline, scaled by Util::GetUIScale())
 		static constexpr float SETTINGS_NAV_GROUP_SPACING = 6.0f;  // Gap above each group label after the first
@@ -244,7 +247,7 @@ public:
 		static constexpr float PALETTE_PILL_PAD_X = 10.0f;        // Horizontal padding inside the header search pill
 		static constexpr float PALETTE_PILL_GAP = 12.0f;          // Minimum gap between the pill and the title or icons
 		static constexpr float PALETTE_PILL_HEIGHT_SCALE = 1.1f;  // Pill height relative to the frame height
-		static constexpr float PALETTE_PILL_FILL_ALPHA = 0.55f;   // Pill background opacity
+		static constexpr float PALETTE_PILL_HOVER_BOOST = 0.5f;   // Extra glass strength of the header pill while hovered
 		static constexpr float PALETTE_TOAST_SECONDS = 4.0f;      // How long the "Look under" toast stays
 		static constexpr float REVEAL_HIGHLIGHT_SECONDS = 1.0f;   // How long a revealed setting stays outlined
 		static constexpr float REVEAL_EXPIRY_SECONDS = 3.0f;      // A reveal request older than this is dropped
@@ -256,7 +259,8 @@ public:
 		static constexpr float HOME_TWO_COLUMN_MIN_CHARS = 60.0f;                           // Content width, in average character widths, for two card columns
 		static constexpr float HOME_CARD_ACTION_GAP = 4.0f;                                 // Extra gap above a card's action buttons
 		static constexpr float HOME_PRESET_THUMB_SIZE = 64.0f;                              // Active preset thumbnail edge
-		static constexpr float HOME_DISCORD_BANNER_MAX_WIDTH = 600.0f;                      // Discord banner width cap (half the old Home banner's)
+		static constexpr float HOME_DISCORD_BANNER_MAX_HEIGHT = 110.0f;                     // Discord banner height cap; its width follows the aspect ratio
+		static constexpr float HOME_STRIP_FIRST_FRAME_FRAMES = 4.0f;                        // Bottom strip height guess for the first frame, in frame heights
 		static constexpr ImVec4 HOME_DISCORD_BANNER_HOVER_COLOR{ 0.1f, 0.1f, 0.1f, 0.3f };  // Subtle hover behind the transparent banner button
 		static constexpr ImVec4 HOME_DISCORD_BANNER_ACTIVE_COLOR{ 0.2f, 0.2f, 0.2f, 0.5f };
 
@@ -306,6 +310,37 @@ public:
 		static constexpr float TOAST_ACCENT_ALPHA = 0.65f;                  // Alpha of the message-coloured border and stripe
 		static constexpr float TOAST_BORDER_THICKNESS = 1.15f;              // Card outline thickness
 		static constexpr float TOAST_STRIPE_WIDTH = 3.0f;                   // Accent stripe on the card's left edge
+
+		// UI animation (Util::Anim): rates are per second for 1 - exp(-rate * dt) approach, durations in seconds
+		static constexpr float ANIM_HOVER_RATE = 18.0f;            // Hover / press colour blend speed
+		static constexpr float ANIM_SELECT_RATE = 14.0f;           // Selection highlight blend speed
+		static constexpr float ANIM_EPSILON = 0.002f;              // Blend within this of its target snaps to it
+		static constexpr float ANIM_POPUP_SECONDS = 0.14f;         // Popup and palette fade / scale-in time
+		static constexpr float ANIM_POPUP_SCALE_FROM = 0.97f;      // Palette panel scale at the start of its fade-in
+		static constexpr float ANIM_PAGE_ENTER_SECONDS = 0.18f;    // Page and Home card fade-in time
+		static constexpr float ANIM_CARD_STAGGER_SECONDS = 0.04f;  // Delay added per Home card
+		static constexpr float ANIM_CARD_SLIDE = 8.0f;             // Home card rise distance during its fade-in (1080p baseline)
+		static constexpr float ANIM_PULSE_PERIOD = 2.6f;           // Seconds per attention pulse
+		static constexpr float ANIM_PULSE_AMPLITUDE = 0.25f;       // Attention pulse swing, as a share of full alpha
+		static constexpr float ANIM_SEARCH_RATE = 22.0f;           // Expanding search field open / close speed
+		static constexpr float NAV_SELECTED_TINT_AMOUNT = 0.18f;   // How much the accent tints the selected row's glass
+		static constexpr float NAV_SELECTED_BAR_INSET = 0.2f;      // Accent bar inset from the row's top and bottom, as a share of its height
+		static constexpr float ANIM_SELECTED_BAR_WIDTH = 3.0f;     // Accent bar on the left of the selected nav row (1080p baseline)
+
+		static constexpr float HOME_CARD_TINT_AMOUNT = 0.08f;  // How much a card's border colour tints its glass
+
+		// Glass surfaces (Util::Glass): translucent theme-derived fill, top highlight, hairline border, soft shadow
+		static constexpr float GLASS_FILL_ALPHA = 0.62f;             // Fill opacity of the window colour
+		static constexpr float GLASS_FILL_LIFT = 0.06f;              // Fill lifted toward white so glass reads above the page
+		static constexpr float GLASS_HIGHLIGHT_ALPHA = 0.10f;        // Top-edge sheen opacity (white)
+		static constexpr float GLASS_HIGHLIGHT_HEIGHT_RATIO = 0.5f;  // Sheen height as a share of the surface height
+		static constexpr float GLASS_HIGHLIGHT_MAX_HEIGHT = 48.0f;   // ... capped at this (1080p baseline)
+		static constexpr float GLASS_BORDER_ALPHA = 0.16f;           // Inner hairline opacity (white)
+		static constexpr float GLASS_EDGE_LINE_ALPHA = 0.22f;        // Brighter 1px line along the top edge
+		static constexpr int GLASS_SHADOW_LAYERS = 3;                // Soft shadow rings (capped at 4)
+		static constexpr float GLASS_SHADOW_SPREAD = 3.0f;           // Growth per shadow ring (1080p baseline)
+		static constexpr float GLASS_SHADOW_ALPHA = 0.09f;           // Opacity of each ring (black)
+		static constexpr float GLASS_SHADOW_OFFSET_Y = 2.0f;         // Shadow drop (1080p baseline)
 
 		// Tinted control frame: marks where a value comes from (inherited, or a scene override's winning layer)
 		static constexpr float TINTED_FRAME_BG_ALPHA = 0.25f;

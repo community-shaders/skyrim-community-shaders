@@ -6,6 +6,8 @@
 #include "Menu/GoToIndex.h"
 #include "Menu/ThemeManager.h"
 #include "Utils/UI.h"
+#include "Utils/UIAnim.h"
+#include "Utils/UIGlass.h"
 
 #include <algorithm>
 #include <array>
@@ -147,16 +149,32 @@ namespace GoToPalette
 		}
 
 		const ImGuiViewport* viewport = ImGui::GetMainViewport();
+		// Fades in and grows slightly from the centre each time it opens
+		const float enter = ImGui::IsPopupOpen(kPopupId) ? Util::Anim::EnterProgress(ImGui::GetID(kPopupId), 0.0f, ThemeManager::Constants::ANIM_POPUP_SECONDS) : 1.0f;
+		const float grow = ThemeManager::Constants::ANIM_POPUP_SCALE_FROM + (1.0f - ThemeManager::Constants::ANIM_POPUP_SCALE_FROM) * enter;
 		ImGui::SetNextWindowPos(viewport->GetCenter(), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-		ImGui::SetNextWindowSize(ImVec2(viewport->Size.x * ThemeManager::Constants::PALETTE_WIDTH_RATIO,
-									 viewport->Size.y * ThemeManager::Constants::PALETTE_HEIGHT_RATIO),
+		ImGui::SetNextWindowSize(ImVec2(viewport->Size.x * ThemeManager::Constants::PALETTE_WIDTH_RATIO * grow,
+									 viewport->Size.y * ThemeManager::Constants::PALETTE_HEIGHT_RATIO * grow),
 			ImGuiCond_Always);
+		ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * enter);
+		ImGui::PushStyleColor(ImGuiCol_PopupBg, IM_COL32_BLACK_TRANS);
 
 		constexpr ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
 		                                   ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar;
 		g_open = ImGui::BeginPopupModal(kPopupId, nullptr, flags);
-		if (!g_open)
+		ImGui::PopStyleColor();
+		if (!g_open) {
+			ImGui::PopStyleVar();
 			return;
+		}
+		{
+			// Glass panel behind the content, with a soft shadow on the dimmed backdrop
+			Util::Glass::Style glass;
+			glass.shadow = true;
+			glass.rounding = ImGui::GetStyle().WindowRounding;
+			Util::Glass::Draw(ImGui::GetWindowDrawList(), ImGui::GetWindowPos(),
+				ImVec2(ImGui::GetWindowPos().x + ImGui::GetWindowSize().x, ImGui::GetWindowPos().y + ImGui::GetWindowSize().y), glass);
+		}
 
 		const float scale = Util::GetUIScale();
 
@@ -240,5 +258,6 @@ namespace GoToPalette
 			}
 		}
 		ImGui::EndPopup();
+		ImGui::PopStyleVar();
 	}
 }

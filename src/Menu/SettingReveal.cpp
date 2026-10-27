@@ -6,6 +6,7 @@
 #include "Utils/Notifications.h"
 #include "Utils/SettingsCatalog.h"
 #include "Utils/UI.h"
+#include "Utils/UIAnim.h"
 
 #include <algorithm>
 #include <imgui.h>
@@ -98,8 +99,7 @@ namespace SettingReveal
 
 		// Fades out over the highlight; drawn on the window list so the child clips it
 		const float remaining = static_cast<float>((g_pending.highlightUntil - now) / ThemeManager::Constants::REVEAL_HIGHLIGHT_SECONDS);
-		ImVec4 color = Util::Colors::GetAccent();
-		color.w *= std::clamp(remaining * 1.5f, 0.0f, 1.0f);
+		const ImVec4 color = Util::Anim::ScaleAlpha(Util::Colors::GetAccent(), Util::Anim::EaseOutCubic(remaining * 1.5f));
 		const float pad = ThemeManager::Constants::REVEAL_OUTLINE_PADDING * Util::GetUIScale();
 		const ImVec2 min = ImGui::GetItemRectMin();
 		const ImVec2 max = ImGui::GetItemRectMax();
