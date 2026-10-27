@@ -248,6 +248,7 @@ void PerformanceOverlay::RestoreDefaultSettings()
 	this->state.smoothFrameTimeMs = 0.0f;
 	this->state.postFGSmoothFps = 0.0f;
 	this->state.postFGSmoothFrameTimeMs = 0.0f;
+	ResetFrameStats();
 	this->state.minFrameTime = 1000.0f;
 	this->state.maxFrameTime = 0.0f;
 	this->state.smoothedMinFrameTime = 0.0f;
@@ -423,17 +424,15 @@ void PerformanceOverlay::DrawFPS()
 		ImGui::Text(this->state.isFrameGenerationActive ? T(TKEY("raw_fps"), "Raw FPS:") : T(TKEY("fps"), "FPS:"));
 		ImGui::TableNextColumn();
 
-		// Check if buffer is full for the avg
-		auto frameData = this->state.frameTimeHistory.GetData();
-		size_t validFrameCount = std::count_if(frameData.begin(), frameData.end(), [](float ft) { return ft > 0.0f; });
-		bool bufferIsFull = validFrameCount == frameData.size();
+		ImGui::Text("%.1f (%.2f ms)", this->state.smoothFps, this->state.smoothFrameTimeMs);
 
-		if (bufferIsFull) {
-			float avgFrameTime = std::accumulate(frameData.begin(), frameData.end(), 0.0f) / frameData.size();
-			float avgFps = (avgFrameTime > 0.001f) ? 1000.0f / avgFrameTime : 0.0f;
-			ImGui::Text("%.1f (%.2f ms) | Avg: %.1f", this->state.smoothFps, this->state.smoothFrameTimeMs, avgFps);
-		} else {
-			ImGui::Text("%.1f (%.2f ms)", this->state.smoothFps, this->state.smoothFrameTimeMs);
+		if (this->state.avgFps > 0.0f) {
+			ImGui::TableNextColumn();
+			ImGui::Text("%s", T(TKEY("avg_fps"), "Avg:"));
+			ImGui::TableNextColumn();
+			ImGui::Text("%.1f | %s %.1f", this->state.avgFps, T(TKEY("one_percent_low"), "1% Low:"), this->state.onePercentLowFps);
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip("%s", T(TKEY("avg_fps_tooltip"), "Average FPS (frames / time) and 1% low (FPS of the 99th percentile frame time) over the last 5 seconds."));
 		}
 
 		if (this->state.isFrameGenerationActive) {
@@ -1907,6 +1906,62 @@ void PerformanceOverlay::UpdateSummaryTestData(float smoothedFrameTime, float ot
 // PERFORMANCE OVERLAY STATE MANAGEMENT
 // ============================================================================
 
+void PerformanceOverlay::ResetFrameStats()
+{
+	state.intervalFrameTimeSumMs = 0.0;
+	state.intervalFrameCount = 0;
+	state.statsFrameTimes.clear();
+	state.statsFrameTimeSumMs = 0.0;
+	state.avgFps = 0.0f;
+	state.onePercentLowFps = 0.0f;
+}
+
+void PerformanceOverlay::AccumulateFrameStats()
+{
+	// The overlay only updates while drawn; a gap means the measured delta spans hidden frames
+	const uint32_t frame = globals::state->frameCount;
+	const bool contiguous = frame == state.lastStatsFrame + 1;
+	const bool repeat = frame == state.lastStatsFrame;
+	state.lastStatsFrame = frame;
+	if (repeat)
+		return;
+	if (!contiguous) {
+		ResetFrameStats();
+		return;
+	}
+	if (state.frameTimeMs <= 0.0f)
+		return;
+
+	state.intervalFrameTimeSumMs += state.frameTimeMs;
+	state.intervalFrameCount++;
+
+	// Every frame counts, hitches included, so the average matches frames / elapsed time
+	state.statsFrameTimes.push_back(state.frameTimeMs);
+	state.statsFrameTimeSumMs += state.frameTimeMs;
+	constexpr double windowMs = Settings::kStatsWindowSeconds * 1000.0;
+	while (state.statsFrameTimes.size() > 1 && state.statsFrameTimeSumMs - state.statsFrameTimes.front() >= windowMs) {
+		state.statsFrameTimeSumMs -= state.statsFrameTimes.front();
+		state.statsFrameTimes.pop_front();
+	}
+}
+
+void PerformanceOverlay::UpdateFrameStats()
+{
+	if (state.statsFrameTimes.empty() || state.statsFrameTimeSumMs < Settings::kStatsMinSeconds * 1000.0) {
+		state.avgFps = 0.0f;
+		state.onePercentLowFps = 0.0f;
+		return;
+	}
+
+	state.avgFps = Util::CalcFPS(static_cast<float>(state.statsFrameTimeSumMs / state.statsFrameTimes.size()));
+
+	// 1% low as the FPS of the 99th percentile frame time (CapFrameX "P1")
+	std::vector<float> sorted(state.statsFrameTimes.begin(), state.statsFrameTimes.end());
+	const size_t idx = static_cast<size_t>(0.99 * static_cast<double>(sorted.size() - 1));
+	std::nth_element(sorted.begin(), sorted.begin() + idx, sorted.end());
+	state.onePercentLowFps = Util::CalcFPS(sorted[idx]);
+}
+
 void PerformanceOverlay::UpdateGraphValues()
 {
 	// Check if Frame Generation is active
@@ -1928,6 +1983,8 @@ void PerformanceOverlay::UpdateGraphValues()
 	// Calculate frametime and fps
 	state.frameTimeMs = Util::CalcFrameTime(elapsedCounter, state.frequency);
 	state.fps = Util::CalcFPS(state.frameTimeMs);
+
+	AccumulateFrameStats();
 
 	// Calculate smooth values for display using the user-defined update interval
 	// Initialize overlay timing frequency if needed
@@ -2000,8 +2057,16 @@ void PerformanceOverlay::UpdateGraphValues()
 	// Update smooth values with user-specified interval
 	state.updateTimer += deltaTime;
 	if (state.updateTimer >= settings.UpdateInterval) {
-		state.smoothFps = state.fps;  // Sampling white noise won't give you smoothed noise. This is useless.
-		state.smoothFrameTimeMs = state.frameTimeMs;
+		if (state.intervalFrameCount > 0 && state.intervalFrameTimeSumMs > 0.0) {
+			state.smoothFrameTimeMs = static_cast<float>(state.intervalFrameTimeSumMs / state.intervalFrameCount);
+			state.smoothFps = Util::CalcFPS(state.smoothFrameTimeMs);
+		} else {
+			state.smoothFps = state.fps;
+			state.smoothFrameTimeMs = state.frameTimeMs;
+		}
+		state.intervalFrameTimeSumMs = 0.0;
+		state.intervalFrameCount = 0;
+		UpdateFrameStats();
 		if (state.isFrameGenerationActive) {
 			state.postFGSmoothFps = state.postFGFps;
 			state.postFGSmoothFrameTimeMs = state.postFGFrameTimeMs;
