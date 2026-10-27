@@ -9,6 +9,7 @@
 #include "Menu/ThemeManager.h"
 #include "Utils/Input.h"
 #include "Utils/Serialize.h"
+#include "Utils/UISurface.h"
 #include <array>
 #include <atomic>
 #include <cstdint>
@@ -285,6 +286,7 @@ public:
 			float ThumbHovered = 0.75f;  // Thumb when hovered
 			float ThumbActive = 0.9f;    // Thumb when being dragged
 		} ScrollbarOpacity;
+		Util::Surface::Settings Surfaces;  // per-role look of the menu's flat surfaces (Home cards, toasts, palette, nav)
 		struct PaletteColors
 		{
 			ImVec4 Background{ 0.10f, 0.10f, 0.10f, 0.80f };

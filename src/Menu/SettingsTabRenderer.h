@@ -61,6 +61,8 @@ public:
 	static void RenderFontsSection();
 	/** @brief Global scale and scrollbar opacity, with the raw ImGui style sliders in a collapsed fold. */
 	static void RenderStylingSection();
+	/** @brief Per-role look of the menu surfaces (Home cards, toasts, status card, palette, selected nav row). */
+	static void RenderSurfacesSection();
 	/** @brief Simple palette and the full ImGui color list. */
 	static void RenderColorsSection();
 };

@@ -110,11 +110,10 @@ namespace Util::Notifications
 				const ImVec2 p0 = ImGui::GetWindowPos();
 				const ImVec2 p1{ p0.x + cardSize.x, p0.y + cardSize.y };
 				const float rounding = ImGui::GetStyle().WindowRounding;
-				Util::Surface::Style surface;
+				Util::Surface::Options surface;
 				surface.rounding = rounding;
 				surface.alpha = alpha;
-				surface.shadow = true;
-				Util::Surface::Draw(draw, p0, p1, surface);
+				Util::Surface::Draw(draw, p0, p1, Util::Surface::Role::Toast, surface);
 				const ImU32 accent = ImGui::ColorConvertFloat4ToU32(
 					ImVec4(notif.color.x, notif.color.y, notif.color.z, Constants::TOAST_ACCENT_ALPHA * alpha));
 				draw->AddRect(p0, p1, accent, rounding, 0, Constants::TOAST_BORDER_THICKNESS * scale);

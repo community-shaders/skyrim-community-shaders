@@ -71,7 +71,7 @@ namespace
 			// Cards fade in one after another each time the page is opened
 			const float enter = Util::Anim::EnterProgress(ImGui::GetID(id), Constants::ANIM_CARD_STAGGER_SECONDS * static_cast<float>(cardIndex++));
 			ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * enter);
-			const float pad = Constants::HOME_CARD_PADDING * Util::GetUIScale();
+			const float pad = Util::Surface::Get(Util::Surface::Role::HomeCard).padding * Util::GetUIScale();
 			ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(pad, pad));
 			ImGui::PushStyleColor(ImGuiCol_ChildBg, IM_COL32_BLACK_TRANS);
 			ImGui::BeginChild(id, ImVec2(0.0f, 0.0f),
@@ -80,12 +80,13 @@ namespace
 			ImGui::PopStyleColor();
 			ImGui::PopStyleVar();
 			// Surface backing, drawn first so the content sits on it
-			Util::Surface::Style surface;
+			Util::Surface::Options surface;
 			surface.rounding = ImGui::GetStyle().ChildRounding;
 			if (border)
 				surface.borderColor = ImGui::GetColorU32(*border);
 			Util::Surface::Draw(ImGui::GetWindowDrawList(), ImGui::GetWindowPos(),
-				ImVec2(ImGui::GetWindowPos().x + ImGui::GetWindowSize().x, ImGui::GetWindowPos().y + ImGui::GetWindowSize().y), surface);
+				ImVec2(ImGui::GetWindowPos().x + ImGui::GetWindowSize().x, ImGui::GetWindowPos().y + ImGui::GetWindowSize().y),
+				Util::Surface::Role::HomeCard, surface);
 
 			ImGui::AlignTextToFramePadding();
 			{

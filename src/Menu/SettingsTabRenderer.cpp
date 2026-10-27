@@ -91,6 +91,17 @@ namespace
 		{ Ids::kStyling, "menu.settings.section_rounding", "Rounding" },
 		{ Ids::kStyling, "menu.settings.section_tables", "Tables" },
 		{ Ids::kStyling, "menu.settings.section_docking", "Docking" },
+		// Surfaces
+		{ Ids::kSurfaces, "menu.settings.reset_surfaces", "Reset surfaces to theme defaults" },
+		{ Ids::kSurfaces, "menu.settings.surface_home_card", "Home Cards" },
+		{ Ids::kSurfaces, "menu.settings.surface_toast", "Notification Toasts" },
+		{ Ids::kSurfaces, "menu.settings.surface_overlay_card", "Status Card" },
+		{ Ids::kSurfaces, "menu.settings.surface_palette", "Go To Palette" },
+		{ Ids::kSurfaces, "menu.settings.surface_nav_selected", "Selected Navigation Row" },
+		{ Ids::kSurfaces, "menu.settings.surface_padding", "Inner Padding" },
+		{ Ids::kSurfaces, "menu.settings.surface_fill_lift", "Fill Lift" },
+		{ Ids::kSurfaces, "menu.settings.surface_border_enabled", "Border" },
+		{ Ids::kSurfaces, "menu.settings.surface_shadow_enabled", "Shadow" },
 		// Header & Effects
 		{ Ids::kHeaderEffects, "menu.settings.use_monochrome_icons", "Use Monochrome Icons" },
 		{ Ids::kHeaderEffects, "menu.settings.use_monochrome_cs_logo", "Use Monochrome CS Logo" },
@@ -1089,6 +1100,196 @@ void SettingsTabRenderer::RenderStylingSection()
 		SeparatorTextWithFont(T("menu.settings.section_docking", "Docking"), Menu::FontRole::Subheading);
 		ImGui::SliderFloat(T("menu.settings.docking_splitter_size", "Docking Splitter Size"), &style.DockingSeparatorSize, 0.0f, 12.0f, "%.0f");
 	}
+}
+
+namespace
+{
+	using SurfaceRole = Util::Surface::Role;
+
+	const char* GetSurfaceRoleTitle(SurfaceRole role)
+	{
+		switch (role) {
+		case SurfaceRole::HomeCard:
+			return T("menu.settings.surface_home_card", "Home Cards");
+		case SurfaceRole::Toast:
+			return T("menu.settings.surface_toast", "Notification Toasts");
+		case SurfaceRole::OverlayCard:
+			return T("menu.settings.surface_overlay_card", "Status Card");
+		case SurfaceRole::Palette:
+			return T("menu.settings.surface_palette", "Go To Palette");
+		case SurfaceRole::NavSelected:
+			return T("menu.settings.surface_nav_selected", "Selected Navigation Row");
+		default:
+			return "";
+		}
+	}
+
+	const char* GetSurfaceRoleHint(SurfaceRole role)
+	{
+		switch (role) {
+		case SurfaceRole::HomeCard:
+			return T("menu.settings.surface_home_card_tooltip", "The panels on the Home page. When disabled they render as plain sections; the title line and padding stay.");
+		case SurfaceRole::Toast:
+			return T("menu.settings.surface_toast_tooltip", "The notification cards that appear in the corner of the screen.");
+		case SurfaceRole::OverlayCard:
+			return T("menu.settings.surface_overlay_card_tooltip", "The card that shows shader compilation progress.");
+		case SurfaceRole::Palette:
+			return T("menu.settings.surface_palette_tooltip", "The Ctrl+K go-to palette.");
+		case SurfaceRole::NavSelected:
+			return T("menu.settings.surface_nav_selected_tooltip", "The highlight behind the selected row of the left navigation.");
+		default:
+			return "";
+		}
+	}
+
+	/** @brief Draws a small sample of a surface role, so edits are visible next to the controls. */
+	void DrawSurfacePreview(SurfaceRole role, const Util::Surface::RoleSettings& s)
+	{
+		const float scale = Util::GetUIScale();
+		const float margin = 14.0f * scale;
+		const float height = ImGui::GetTextLineHeightWithSpacing() * 2.0f;
+		const float width = std::min(ImGui::GetContentRegionAvail().x, ImGui::GetFontSize() * 18.0f);
+		const ImVec2 origin = ImGui::GetCursorScreenPos();
+		ImGui::Dummy(ImVec2(width, height + margin * 2.0f));
+		const ImVec2 p0(origin.x + margin, origin.y + margin);
+		const ImVec2 p1(origin.x + width - margin, origin.y + margin + height);
+		ImDrawList* drawList = ImGui::GetWindowDrawList();
+		if (role == SurfaceRole::NavSelected) {
+			if (s.enabled) {
+				const float rounding = ImGui::GetStyle().FrameRounding;
+				ImVec4 fill = Util::Colors::GetAccent();
+				fill.w = s.fillAlpha;
+				drawList->AddRectFilled(p0, p1, ImGui::GetColorU32(fill), rounding);
+				const float barWidth = s.accentBarWidth * scale;
+				if (s.accentBar && barWidth > 0.0f) {
+					const float inset = (p1.y - p0.y) * ThemeManager::Constants::NAV_SELECTED_BAR_INSET;
+					drawList->AddRectFilled(ImVec2(p0.x, p0.y + inset), ImVec2(p0.x + barWidth, p1.y - inset),
+						ImGui::GetColorU32(Util::Colors::GetAccent()), barWidth * 0.5f);
+				}
+			}
+		} else {
+			Util::Surface::Options options;
+			options.rounding = role == SurfaceRole::HomeCard ? ImGui::GetStyle().ChildRounding : ImGui::GetStyle().WindowRounding;
+			Util::Surface::Draw(drawList, p0, p1, role, options);
+		}
+		const char* label = s.enabled ? T("menu.settings.surface_preview", "Preview") : T("menu.settings.surface_preview_disabled", "Disabled");
+		const ImVec2 textSize = ImGui::CalcTextSize(label);
+		drawList->AddText(ImVec2(p0.x + (p1.x - p0.x - textSize.x) * 0.5f, p0.y + (p1.y - p0.y - textSize.y) * 0.5f),
+			ImGui::GetColorU32(s.enabled ? ImGuiCol_Text : ImGuiCol_TextDisabled), label);
+	}
+
+	/** @brief Slider with a hover tooltip; returns true when the value changed. */
+	bool SurfaceSlider(const char* label, const char* tooltip, float* value, float lo, float hi, const char* format)
+	{
+		const bool changed = ImGui::SliderFloat(label, value, lo, hi, format);
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::TextUnformatted(tooltip);
+		return changed;
+	}
+
+	/** @brief Checkbox with a hover tooltip; returns true when the value changed. */
+	bool SurfaceCheckbox(const char* label, const char* tooltip, bool* value)
+	{
+		const bool changed = ImGui::Checkbox(label, value);
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::TextUnformatted(tooltip);
+		return changed;
+	}
+
+	/** @brief The controls of one surface role. */
+	void DrawSurfaceRoleControls(SurfaceRole role, Util::Surface::RoleSettings& s)
+	{
+		SurfaceCheckbox(T("menu.settings.surface_enabled", "Enabled"),
+			T("menu.settings.surface_enabled_tooltip", "Draw this surface. When off, the content still shows, just without the backing."), &s.enabled);
+		DrawSurfacePreview(role, s);
+
+		Util::DisableGuard disabled(!s.enabled);
+
+		if (role == SurfaceRole::NavSelected) {
+			SurfaceSlider(T("menu.settings.surface_nav_fill_opacity", "Fill Opacity"),
+				T("menu.settings.surface_nav_fill_opacity_tooltip", "Opacity of the accent colour fill behind the selected row."), &s.fillAlpha, 0.0f, 1.0f, "%.2f");
+			SurfaceCheckbox(T("menu.settings.surface_accent_bar", "Accent Bar"),
+				T("menu.settings.surface_accent_bar_tooltip", "Draw a short accent bar on the left edge of the selected row."), &s.accentBar);
+			{
+				Util::DisableGuard barDisabled(!s.accentBar);
+				SurfaceSlider(T("menu.settings.surface_accent_bar_width", "Accent Bar Width"),
+					T("menu.settings.surface_accent_bar_width_tooltip", "Width of the accent bar in pixels at 1080p."), &s.accentBarWidth, 0.0f, 12.0f, "%.1f");
+			}
+			return;
+		}
+
+		if (role == SurfaceRole::HomeCard) {
+			SurfaceSlider(T("menu.settings.surface_padding", "Inner Padding"),
+				T("menu.settings.surface_padding_tooltip", "Space between the card edge and its content, in pixels at 1080p. Applies even when the surface is disabled."), &s.padding, 0.0f, 48.0f, "%.0f");
+		}
+
+		SeparatorTextWithFont(T("menu.settings.surface_fill", "Fill"), Menu::FontRole::Subheading);
+		SurfaceSlider(T("menu.settings.surface_fill_lift", "Fill Lift"),
+			T("menu.settings.surface_fill_lift_tooltip", "How far the window colour is lightened toward white to make the surface read above the page."), &s.fillLift, 0.0f, 0.5f, "%.3f");
+		SurfaceSlider(T("menu.settings.surface_fill_opacity", "Fill Opacity"),
+			T("menu.settings.surface_fill_opacity_tooltip", "Multiplier on the fill opacity."), &s.fillAlpha, 0.0f, 1.0f, "%.2f");
+
+		bool useStyleRounding = s.rounding < 0.0f;
+		if (SurfaceCheckbox(T("menu.settings.surface_use_style_rounding", "Use Style Rounding"),
+				T("menu.settings.surface_use_style_rounding_tooltip", "Follow the corner rounding from the Styling section instead of a custom radius."), &useStyleRounding))
+			s.rounding = useStyleRounding ? -1.0f : std::clamp(ImGui::GetStyle().ChildRounding, 0.0f, 24.0f);
+		if (!useStyleRounding)
+			SurfaceSlider(T("menu.settings.surface_rounding", "Corner Radius"),
+				T("menu.settings.surface_rounding_tooltip", "Corner radius in pixels at 1080p."), &s.rounding, 0.0f, 24.0f, "%.0f");
+
+		SeparatorTextWithFont(T("menu.settings.surface_border", "Border"), Menu::FontRole::Subheading);
+		SurfaceCheckbox(T("menu.settings.surface_border_enabled", "Border"),
+			T("menu.settings.surface_border_enabled_tooltip", "Draw a hairline border around the surface."), &s.border);
+		{
+			Util::DisableGuard borderDisabled(!s.border);
+			SurfaceSlider(T("menu.settings.surface_border_opacity", "Border Opacity"),
+				T("menu.settings.surface_border_opacity_tooltip", "Opacity of the default white hairline."), &s.borderAlpha, 0.0f, 1.0f, "%.2f");
+			SurfaceCheckbox(T("menu.settings.surface_border_use_color", "Custom Border Colour"),
+				T("menu.settings.surface_border_use_color_tooltip", "Use your own border colour instead of the white hairline. Cards that signal a status keep their status colour."), &s.useBorderColor);
+			if (s.useBorderColor) {
+				ImGui::ColorEdit4(T("menu.settings.surface_border_color", "Border Colour"), reinterpret_cast<float*>(&s.borderColor));
+				if (auto _tt = Util::HoverTooltipWrapper())
+					ImGui::TextUnformatted(T("menu.settings.surface_border_color_tooltip", "Colour and opacity of the border."));
+			}
+		}
+
+		SeparatorTextWithFont(T("menu.settings.surface_shadow", "Shadow"), Menu::FontRole::Subheading);
+		SurfaceCheckbox(T("menu.settings.surface_shadow_enabled", "Shadow"),
+			T("menu.settings.surface_shadow_enabled_tooltip", "Draw a soft drop shadow behind the surface."), &s.shadow);
+		{
+			Util::DisableGuard shadowDisabled(!s.shadow);
+			SurfaceSlider(T("menu.settings.surface_shadow_spread", "Shadow Spread"),
+				T("menu.settings.surface_shadow_spread_tooltip", "How far the shadow grows past the surface edge, in pixels at 1080p."), &s.shadowSpread, 0.0f, 32.0f, "%.0f");
+			SurfaceSlider(T("menu.settings.surface_shadow_opacity", "Shadow Opacity"),
+				T("menu.settings.surface_shadow_opacity_tooltip", "Opacity of the black shadow."), &s.shadowAlpha, 0.0f, 1.0f, "%.2f");
+			SurfaceSlider(T("menu.settings.surface_shadow_offset", "Shadow Drop"),
+				T("menu.settings.surface_shadow_offset_tooltip", "Vertical shadow offset in pixels at 1080p. Positive values drop it below the surface."), &s.shadowOffsetY, -16.0f, 16.0f, "%.0f");
+		}
+	}
+}
+
+void SettingsTabRenderer::RenderSurfacesSection()
+{
+	auto& surfaces = globals::menu->GetSettings().Theme.Surfaces;
+
+	ImGui::TextWrapped("%s", T("menu.settings.surfaces_intro", "Backing, border and shadow of the menu cards and highlights. Changes apply immediately and are saved with the theme."));
+	if (ImGui::Button(T("menu.settings.reset_surfaces", "Reset surfaces to theme defaults")))
+		surfaces = Util::Surface::Settings{};
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::TextUnformatted(T("menu.settings.reset_surfaces_tooltip", "Restores every surface below to its built-in look. Save the theme to keep it."));
+
+	for (size_t i = 0; i < static_cast<size_t>(SurfaceRole::Count); ++i) {
+		const auto role = static_cast<SurfaceRole>(i);
+		ImGui::PushID(Util::Surface::RoleKey(role));
+		const auto label = std::format("{}###Surface{}", GetSurfaceRoleTitle(role), Util::Surface::RoleKey(role));
+		const bool open = ImGui::CollapsingHeader(label.c_str(), role == SurfaceRole::HomeCard ? ImGuiTreeNodeFlags_DefaultOpen : 0);
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::TextUnformatted(GetSurfaceRoleHint(role));
+		if (open)
+			DrawSurfaceRoleControls(role, surfaces.roles[i]);
+		ImGui::PopID();
+	}
+	surfaces.Sanitize();
 }
 
 void SettingsTabRenderer::RenderColorsSection()

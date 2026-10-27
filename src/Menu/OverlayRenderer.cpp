@@ -82,12 +82,12 @@ namespace
 		KeepBehindMainWindow(ImGui::GetCurrentWindow());
 		if (visible) {
 			// Surface backing, drawn before the content. The card auto-sizes, so it uses last frame's rect.
-			Util::Surface::Style surface;
+			Util::Surface::Options surface;
 			surface.rounding = ImGui::GetStyle().WindowRounding;
-			surface.shadow = true;
 			const ImVec2 p0 = ImGui::GetWindowPos();
 			const ImVec2 size = ImGui::GetWindowSize();
-			Util::Surface::Draw(ImGui::GetWindowDrawList(), p0, ImVec2(p0.x + size.x, p0.y + size.y), surface);
+			Util::Surface::Draw(ImGui::GetWindowDrawList(), p0, ImVec2(p0.x + size.x, p0.y + size.y),
+				Util::Surface::Role::OverlayCard, surface);
 		}
 		return visible;
 	}

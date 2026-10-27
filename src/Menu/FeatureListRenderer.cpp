@@ -186,14 +186,19 @@ namespace
 			drawList->AddRectFilled(min, max, Util::Anim::ScaleAlphaU32(ImGui::GetColorU32(ImGuiCol_HeaderHovered), blend.hover), rounding);
 		if (blend.press > 0.0f)
 			drawList->AddRectFilled(min, max, Util::Anim::ScaleAlphaU32(ImGui::GetColorU32(ImGuiCol_HeaderActive), blend.press), rounding);
-		if (blend.selected > 0.0f) {
-			ImVec4 fill = Util::Colors::GetAccent();
-			fill.w = Constants::NAV_SELECTED_FILL_ALPHA * blend.selected;
-			drawList->AddRectFilled(min, max, ImGui::GetColorU32(fill), rounding);
-			const float barWidth = Constants::ANIM_SELECTED_BAR_WIDTH * Util::GetUIScale();
-			const float inset = (max.y - min.y) * Constants::NAV_SELECTED_BAR_INSET;
-			drawList->AddRectFilled(ImVec2(min.x, min.y + inset), ImVec2(min.x + barWidth, max.y - inset),
-				Util::Anim::ScaleAlphaU32(ImGui::GetColorU32(Util::Colors::GetAccent()), blend.selected), barWidth * 0.5f);
+		const auto& navSurface = Util::Surface::Get(Util::Surface::Role::NavSelected);
+		if (blend.selected > 0.0f && navSurface.enabled) {
+			if (navSurface.fillAlpha > 0.0f) {
+				ImVec4 fill = Util::Colors::GetAccent();
+				fill.w = navSurface.fillAlpha * blend.selected;
+				drawList->AddRectFilled(min, max, ImGui::GetColorU32(fill), rounding);
+			}
+			const float barWidth = navSurface.accentBarWidth * Util::GetUIScale();
+			if (navSurface.accentBar && barWidth > 0.0f) {
+				const float inset = (max.y - min.y) * Constants::NAV_SELECTED_BAR_INSET;
+				drawList->AddRectFilled(ImVec2(min.x, min.y + inset), ImVec2(min.x + barWidth, max.y - inset),
+					Util::Anim::ScaleAlphaU32(ImGui::GetColorU32(Util::Colors::GetAccent()), blend.selected), barWidth * 0.5f);
+			}
 		}
 	}
 
