@@ -1512,8 +1512,6 @@ void Effects11Editor::DrawLauncher()
 		RefreshPresetPaths();
 	Util::TextUnformattedDisabled(presetPaths.iniDisplay.c_str());
 	Util::AddTooltip(presetPaths.iniFull.c_str());
-	PresetsPageRenderer::DrawOpenButton("##Effects11OpenPresets",
-		T("feature.effects11.open_presets_tooltip", "Load and switch Effects 11 presets on the Presets page."));
 
 	ImGui::Spacing();
 

@@ -166,6 +166,20 @@ namespace Util::Anim
 	{
 		std::uint32_t g_pageEpoch = 0;
 		ImGuiID g_lastPageId = 0;
+
+		/// True when a widget's eased state should start at rest: it was not drawn last frame, or the page changed.
+		/// Marks it drawn this frame. `salt` separates the keys of different widget kinds that share an id.
+		bool StartsAtRest(ImGuiStorage* storage, ImGuiID id, ImGuiID salt)
+		{
+			const ImGuiID frameKey = id ^ salt;
+			const ImGuiID epochKey = id ^ (salt * 31u + 7u);
+			const int frame = ImGui::GetFrameCount();
+			const int epoch = static_cast<int>(g_pageEpoch);
+			const bool fresh = storage->GetInt(frameKey, -10) < frame - 1 || storage->GetInt(epochKey, -1) != epoch;
+			storage->SetInt(frameKey, frame);
+			storage->SetInt(epochKey, epoch);
+			return fresh;
+		}
 	}
 
 	std::uint32_t PageEpoch()
@@ -220,16 +234,10 @@ namespace Util::Anim
 
 		ImGuiStorage* storage = ImGui::GetStateStorage();
 		const ImGuiID ratioKey = id ^ 0xA5A5A5A5u;
-		const ImGuiID frameKey = id ^ 0x3C3C3C3Cu;
-		const ImGuiID epochKey = id ^ 0x7E7E7E7Eu;
 		const float target = std::clamp((read(data) - vMin) / range, 0.0f, 1.0f);
 
 		// A slider that was not drawn last frame, or that belongs to a page that was just opened, starts at rest
-		const int frame = ImGui::GetFrameCount();
-		const int epoch = static_cast<int>(g_pageEpoch);
-		const bool fresh = storage->GetInt(frameKey, -10) < frame - 1 || storage->GetInt(epochKey, -1) != epoch;
-		storage->SetInt(frameKey, frame);
-		storage->SetInt(epochKey, epoch);
+		const bool fresh = StartsAtRest(storage, id, 0x3C3C3C3Cu);
 
 		// Held and dragged it follows closely; on its own it glides
 		const bool active = context.ActiveId == id;
@@ -246,6 +254,43 @@ namespace Util::Anim
 		ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(grabCenter - grabSize * 0.5f, frameMin.y + grabPadding),
 			ImVec2(grabCenter + grabSize * 0.5f, frameMin.y + frameHeight - grabPadding), active ? grabActiveColor : grabColor, style.GrabRounding);
 		return changed;
+	}
+
+	bool EasedCheckbox(CheckboxFn real, const char* label, bool* value)
+	{
+		ImGuiWindow* window = ImGui::GetCurrentWindow();
+		const ImGuiContext& context = *ImGui::GetCurrentContext();
+		if (ReducedMotion() || window->SkipItems || (context.CurrentItemFlags & ImGuiItemFlags_MixedValue))
+			return real(label, value);
+
+		const ImGuiID id = window->GetID(label);
+		const ImU32 checkColor = ImGui::GetColorU32(ImGuiCol_CheckMark);
+
+		// ImGui draws the frame and handles the click; only its instant check mark is hidden and redrawn below
+		ImGui::PushStyleColor(ImGuiCol_CheckMark, IM_COL32_BLACK_TRANS);
+		const bool pressed = real(label, value);
+		ImGui::PopStyleColor();
+		if (!ImGui::IsItemVisible())
+			return pressed;
+
+		ImGuiStorage* storage = ImGui::GetStateStorage();
+		const ImGuiID markKey = id ^ 0xB7E15163u;
+		const float target = *value ? 1.0f : 0.0f;
+		const bool fresh = StartsAtRest(storage, id, 0x9E3779B9u);
+		const float mark = fresh ? target : Smooth(storage->GetFloat(markKey, target), target, Constants::ANIM_CHECK_RATE);
+		storage->SetFloat(markKey, mark);
+		if (mark <= Constants::ANIM_EPSILON)
+			return pressed;
+
+		// The mark fades with its alpha and grows slightly from the centre as it appears (the box is the item's first square)
+		const float square = ImGui::GetFrameHeight();
+		const float pad = std::max(1.0f, std::floor(square / 6.0f));
+		const float size = square - pad * 2.0f;
+		const float scaled = size * (Constants::ANIM_CHECK_POP_FROM + (1.0f - Constants::ANIM_CHECK_POP_FROM) * mark);
+		const ImVec2 itemMin = ImGui::GetItemRectMin();
+		const float inset = pad + (size - scaled) * 0.5f;
+		ImGui::RenderCheckMark(window->DrawList, ImVec2(itemMin.x + inset, itemMin.y + inset), ScaleAlphaU32(checkColor, mark), scaled);
+		return pressed;
 	}
 
 	PageFade::PageFade(ImGuiID pageId)

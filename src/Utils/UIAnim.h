@@ -162,6 +162,17 @@ namespace Util::Anim
 	bool EasedSliderScalar(SliderScalarFn real, const char* label, ImGuiDataType dataType, void* data, const void* min,
 		const void* max, const char* format, ImGuiSliderFlags flags);
 
+	/** @brief Signature of ImGui::Checkbox. */
+	using CheckboxFn = bool (*)(const char*, bool*);
+
+	/**
+	 * @brief Checkbox whose check mark fades and pops in and out instead of switching. ImGui's own mark is hidden and
+	 * redrawn eased; the frame, hover and click behaviour are ImGui's. Hooked into ImGui::Checkbox (see
+	 * SceneWidgetInterceptor), so every checkbox gets it with no per-widget opt-in. Mixed-value checkboxes, and
+	 * everything while UI animations are off, pass straight through.
+	 */
+	bool EasedCheckbox(CheckboxFn real, const char* label, bool* value);
+
 	/** @brief Signature of ImGui::Selectable, which every list row (combo items, menu items, list boxes) funnels into. */
 	using SelectableFn = bool (*)(const char*, bool, ImGuiSelectableFlags, const ImVec2&);
 

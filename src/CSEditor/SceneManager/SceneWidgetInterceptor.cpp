@@ -235,11 +235,12 @@ namespace
 
 	bool DetouredCheckbox(const char* label, bool* v)
 	{
+		// Every checkbox ends here, so the check mark's fade applies to all of them, bound or not
 		if (!ShouldIntercept())
-			return RealCheckbox(label, v);
+			return Util::Anim::EasedCheckbox(RealCheckbox, label, v);
 		InterceptedCall interceptedCall;
 		SceneWidgetBinding::Guard guard(label, SceneWidgetBinding::Value::Bool(v));
-		return guard.Finish(RealCheckbox(label, guard.Bool()));
+		return guard.Finish(Util::Anim::EasedCheckbox(RealCheckbox, label, guard.Bool()));
 	}
 
 	/** @brief Accepts the palette's custom "COLOR_DND" payload, which the real color widgets ignore,

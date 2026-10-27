@@ -2181,7 +2181,6 @@
     "feature.post_processing.open_drt.tonescale": "色调尺度",
     "feature.post_processing.open_drt.tonescale_preset": "色调尺度预设",
     "feature.post_processing.open_drt.unitless_control_for_the_scene_linear_value_at": "无单位控制值，决定色调尺度系统在何处与显示峰值线性值（1.0）相交并裁切。\n为保持系统简单，这不是精确约束；大致对应肩部裁切为 0 时的 16，以及肩部裁切为 1 时的 1024。",
-    "feature.post_processing.open_presets_tooltip": "在预设页面应用后期处理预设。若要将当前设置保存为预设，请在 CS 编辑器中勾选后期处理并使用导出预设。",
     "feature.post_processing.physical_glare.adapt_speed": "适应速度",
     "feature.post_processing.physical_glare.aperture_blades": "光圈叶片数",
     "feature.post_processing.physical_glare.aperture_f_number_e_g_f2_8_smaller": "光圈 F 值（例如 F2.8）。越小表示光圈越大，衍射星芒越宽。\n物理上：光圈半径 = 1 / F 值。",

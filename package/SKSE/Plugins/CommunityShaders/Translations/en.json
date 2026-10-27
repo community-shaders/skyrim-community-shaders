@@ -2216,7 +2216,6 @@
     "feature.post_processing.open_drt.tonescale": "Tonescale",
     "feature.post_processing.open_drt.tonescale_preset": "Tonescale Preset",
     "feature.post_processing.open_drt.unitless_control_for_the_scene_linear_value_at": "Unitless control for the scene-linear value at which the tonescale system crosses the peak display linear value (1.0) and clips.\nThis is not an exact constraint in order to keep the system simple, but corresponds to roughly 16 at Shoulder Clip = 0 and 1024 at Shoulder Clip = 1",
-    "feature.post_processing.open_presets_tooltip": "Apply Post Processing presets on the Presets page. To save your current settings as one, use Export Preset in the CS Editor with Post Processing ticked.",
     "feature.post_processing.physical_glare.adapt_speed": "Adapt Speed",
     "feature.post_processing.physical_glare.aperture_blades": "Aperture Blades",
     "feature.post_processing.physical_glare.aperture_f_number_e_g_f2_8_smaller": "Aperture f-number (e.g. F2.8). Smaller = larger aperture = wider diffraction spikes.\nPhysically: aperture radius = 1 / f-number.",
