@@ -955,7 +955,7 @@ MenuShortcuts::Actions Menu::MakeShortcutActions()
 			if (FeatureListRenderer::IsPageOpen(MenuPageIds::kSettings))
 				pendingSearchFocus = true;
 			else
-				GoToPalette::Open(); },
+				GoToPalette::Open(GoToPalette::Scope::Features); },
 		.stepFeature = [this](int step) { pendingFeatureStep = step; },
 		.canTogglePin = [this] { return shownFeature && shownFeature->loaded; },
 		.togglePin = [this] { FeatureListRenderer::ToggleFavorite(shownFeature); },

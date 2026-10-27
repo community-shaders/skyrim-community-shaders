@@ -3,8 +3,11 @@
 #include "Menu/MenuShortcuts.h"
 #include "SceneSettingsCatalog.generated.h"
 
+#include <array>
 #include <cstddef>
+#include <cstdint>
 #include <functional>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -39,6 +42,7 @@ namespace GoToIndex
 		std::string chord;                                               ///< Shortcut shown on command rows; empty when unbound
 		std::string_view shortcutId;                                     ///< MenuShortcuts ID a command runs through; empty for other entries
 		bool dimmed = false;                                             ///< Drawn greyed, for features that are not loaded
+		std::uint32_t filterBits = 0;                                    ///< FeatureListFilter bits a Feature matches; the list filters apply to features only
 		const SceneSettingsCatalog::SettingMetadata* setting = nullptr;  ///< The catalog entry of a Setting
 		std::function<void()> run;                                       ///< Navigates or runs the command; unused when shortcutId is set
 	};
@@ -49,13 +53,31 @@ namespace GoToIndex
 	 */
 	void Refresh(const std::vector<MenuShortcuts::Shortcut>& shortcuts);
 
+	/** @brief What a search found. */
+	struct Results
+	{
+		std::vector<const Entry*> entries;  ///< Pointers into the index, valid until the next Refresh(); best first
+		std::array<size_t, 4> counts{};     ///< Matches per Kind (indexed by Kind), whatever scope was asked for
+		size_t recent = 0;                  ///< With an empty query and no scope: how many leading entries are recent picks
+		size_t Count(Kind kind) const { return counts[static_cast<size_t>(kind)]; }
+		size_t Total() const { return counts[0] + counts[1] + counts[2] + counts[3]; }
+	};
+
 	/**
-	 * @brief Entries that match a query, best first.
-	 * @param query User text; words are matched independently and all must match. Empty lists recent picks, then pages.
-	 * @param limit Most results to return.
-	 * @return Pointers into the index, valid until the next Refresh().
+	 * @brief Entries that match a query, best first. Features are narrowed by the main menu's feature filters
+	 * (Menu::Settings::FeatureListFilter), the same ones that narrow the feature list.
+	 * @param query User text; words are matched independently and all must match. Empty lists recent picks, then pages
+	 * (for one scope: every page, feature or command; settings only appear for a query).
+	 * @param only Restricts the entries to one kind; empty lists every kind, grouped, with each group trimmed.
+	 * @param limit Most entries to return.
 	 */
-	std::vector<const Entry*> Search(std::string_view query, size_t limit);
+	Results Search(std::string_view query, std::optional<Kind> only, size_t limit);
+
+	/**
+	 * @brief Byte offsets of the title characters a query matched, ascending. Only ASCII bytes are reported, so a
+	 * run of unreported bytes never splits a multi-byte character.
+	 */
+	std::vector<size_t> MatchPositions(std::string_view query, std::string_view title);
 
 	/**
 	 * @brief Scores one target against a query word: case-insensitive, subsequence match with bonuses for a

@@ -185,11 +185,11 @@ namespace Util::Surface
 		return defaults.roles[index];
 	}
 
-	ImU32 FillColor(const RoleSettings& settings, float alpha)
+	ImU32 FillColor(const RoleSettings& settings, float alpha, float minFillAlpha)
 	{
 		const ImVec4 window = ImGui::GetStyleColorVec4(ImGuiCol_WindowBg);
 		const ImVec4 lifted = Anim::Lerp(window, ImVec4(1.0f, 1.0f, 1.0f, window.w), settings.fillLift);
-		return ImGui::GetColorU32(ImVec4(lifted.x, lifted.y, lifted.z, window.w * settings.fillAlpha * alpha));
+		return ImGui::GetColorU32(ImVec4(lifted.x, lifted.y, lifted.z, std::max(window.w * settings.fillAlpha, minFillAlpha) * alpha));
 	}
 
 	void Draw(ImDrawList* drawList, const ImVec2& min, const ImVec2& max, Role role, const Options& options)
@@ -214,7 +214,7 @@ namespace Util::Surface
 
 		// A window's inner clip rect trims its left and right edges, so the surface takes its own rect as the clip
 		drawList->PushClipRect(min, max, false);
-		drawList->AddRectFilled(min, max, FillColor(s, options.alpha), rounding);
+		drawList->AddRectFilled(min, max, FillColor(s, options.alpha, options.minFillAlpha), rounding);
 		if (s.border) {
 			ImU32 color;
 			if (options.borderColor)

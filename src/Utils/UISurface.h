@@ -71,9 +71,10 @@ namespace Util::Surface
 	/** @brief Per-call geometry and fade; the look comes from the role's settings. */
 	struct Options
 	{
-		float rounding = -1.0f; /**< @brief Style rounding used when the role sets none; negative uses ChildRounding. */
-		float alpha = 1.0f;     /**< @brief Multiplier on every layer, for fades. */
-		ImU32 borderColor = 0;  /**< @brief Border colour override (e.g. a card's status colour); 0 uses the role's. */
+		float rounding = -1.0f;    /**< @brief Style rounding used when the role sets none; negative uses ChildRounding. */
+		float alpha = 1.0f;        /**< @brief Multiplier on every layer, for fades. */
+		ImU32 borderColor = 0;     /**< @brief Border colour override (e.g. a card's status colour); 0 uses the role's. */
+		float minFillAlpha = 0.0f; /**< @brief Floor for the fill's opacity before fades, so a see-through window colour cannot thin the surface. */
 	};
 
 	/**
@@ -84,8 +85,11 @@ namespace Util::Surface
 	void DrawAccentFrame(ImDrawList* drawList, const ImVec2& min, const ImVec2& max, ImU32 color, float rounding, float borderThickness,
 		float stripeWidth);
 
-	/** @brief Fill colour of a role: the window colour lifted by the role's fill lift, with an alpha multiplier. */
-	ImU32 FillColor(const RoleSettings& settings, float alpha = 1.0f);
+	/**
+	 * @brief Fill colour of a role: the window colour lifted by the role's fill lift, with an alpha multiplier.
+	 * @param minFillAlpha Floor for the window colour's own opacity times the role's fill alpha.
+	 */
+	ImU32 FillColor(const RoleSettings& settings, float alpha = 1.0f, float minFillAlpha = 0.0f);
 
 	/**
 	 * @brief Draws a surface into a draw list, using the role's settings from the active theme. Draws nothing when

@@ -160,6 +160,7 @@ namespace GoToIndex
 		void AddFeatures(std::vector<Entry>& out)
 		{
 			const bool developerMode = globals::state->IsDeveloperMode();
+			globals::state->PrimeUserEdits();  // answers every feature's Modified filter at once
 			for (Feature* feature : Feature::GetFeatureList()) {
 				const std::string shortName = feature->GetShortName();
 				if (!feature->IsInMenu() || feature->IsHiddenUnreleased())
@@ -174,6 +175,7 @@ namespace GoToIndex
 				entry.title = feature->GetDisplayName();
 				entry.breadcrumb = category;
 				entry.haystack = shortName + " " + category;
+				entry.filterBits = FeatureListRenderer::GetFilterBits(feature);
 				if (!feature->loaded) {
 					entry.dimmed = true;
 					entry.breadcrumb += std::string(" ") + T("menu.palette.not_loaded", "(not loaded)");
@@ -276,6 +278,52 @@ namespace GoToIndex
 			addCommand("help", T("menu.palette.cmd_help", "Keyboard shortcuts and help"), {}, hint(Ids::kHelp), Ids::kHelp);
 		}
 
+		/// Splits a query at spaces into its words.
+		std::vector<std::string_view> SplitWords(std::string_view query)
+		{
+			std::vector<std::string_view> words;
+			for (size_t start = 0; start < query.size();) {
+				const auto end = query.find(' ', start);
+				const auto word = query.substr(start, end == std::string_view::npos ? std::string_view::npos : end - start);
+				if (!word.empty())
+					words.push_back(word);
+				if (end == std::string_view::npos)
+					break;
+				start = end + 1;
+			}
+			return words;
+		}
+
+		/// Whether the feature filters leave an entry in; they narrow features only.
+		bool PassesFeatureFilter(const Entry& entry)
+		{
+			namespace Filter = ::FeatureListFilter;
+			if (entry.kind != Kind::Feature)
+				return true;
+			const auto filter = globals::menu->GetSettings().FeatureListFilter & Filter::kKnown;
+			if (filter == 0)
+				return true;
+			// Like the list: with Unloaded on only unloaded features are candidates, otherwise only loaded ones
+			if (((filter & Filter::kUnloaded) != 0) != ((entry.filterBits & Filter::kUnloaded) != 0))
+				return false;
+			return FeatureListRenderer::PassesFilter(entry.filterBits, filter);
+		}
+
+		/// Features in the order the feature list shows them: pinned first, then by name or by category.
+		void SortFeatures(std::vector<const Entry*>& features)
+		{
+			const bool alphabetical = globals::menu->GetSettings().FeatureListSort == Menu::FeatureSortMode::Alphabetical;
+			std::ranges::stable_sort(features, [alphabetical](const Entry* a, const Entry* b) {
+				const bool pinnedA = (a->filterBits & FeatureListFilter::kFavorites) != 0;
+				const bool pinnedB = (b->filterBits & FeatureListFilter::kFavorites) != 0;
+				if (pinnedA != pinnedB)
+					return pinnedA;
+				if (!alphabetical && a->breadcrumb != b->breadcrumb)
+					return a->breadcrumb < b->breadcrumb;
+				return a->title < b->title;
+			});
+		}
+
 		/// Sum of the best score of every query word, or -1 if any word matches nothing.
 		int ScoreEntry(const std::vector<std::string_view>& words, const Entry& entry, const std::string& context)
 		{
@@ -358,40 +406,84 @@ namespace GoToIndex
 		AddCatalogSettings();
 	}
 
-	std::vector<const Entry*> Search(std::string_view query, size_t limit)
+	std::vector<size_t> MatchPositions(std::string_view query, std::string_view title)
 	{
-		std::vector<const Entry*> results;
-
-		std::vector<std::string_view> words;
-		for (size_t start = 0; start < query.size();) {
-			const auto end = query.find(' ', start);
-			const auto word = query.substr(start, end == std::string_view::npos ? std::string_view::npos : end - start);
-			if (!word.empty())
-				words.push_back(word);
-			if (end == std::string_view::npos)
-				break;
-			start = end + 1;
+		std::vector<size_t> positions;
+		for (const auto word : SplitWords(query)) {
+			if (word.size() > title.size())
+				continue;
+			const auto lower = [](char c) { return Fold(c); };
+			if (const auto hit = std::ranges::search(title, word, {}, lower, lower); !hit.empty()) {
+				const size_t begin = static_cast<size_t>(hit.begin() - title.begin());
+				for (size_t i = 0; i < word.size(); ++i)
+					positions.push_back(begin + i);
+				continue;
+			}
+			// The same greedy subsequence walk ScoreWord scores
+			size_t at = 0;
+			std::vector<size_t> found;
+			for (const char q : word) {
+				while (at < title.size() && Fold(title[at]) != Fold(q))
+					++at;
+				if (at == title.size()) {
+					found.clear();
+					break;
+				}
+				found.push_back(at++);
+			}
+			positions.insert(positions.end(), found.begin(), found.end());
 		}
+		std::ranges::sort(positions);
+		positions.erase(std::unique(positions.begin(), positions.end()), positions.end());
+		std::erase_if(positions, [&](size_t i) { return static_cast<unsigned char>(title[i]) >= 0x80; });
+		return positions;
+	}
+
+	Results Search(std::string_view query, std::optional<Kind> only, size_t limit)
+	{
+		Results results;
+		const auto words = SplitWords(query);
 
 		const auto forEach = [](auto&& fn) {
-			for (const auto& entry : g_entries)
-				fn(entry);
+			for (const auto& entry : g_entries) {
+				if (PassesFeatureFilter(entry))
+					fn(entry);
+			}
 			for (const auto& entry : g_settingEntries)
 				fn(entry);
 		};
+		const auto wanted = [&only](const Entry& entry) { return !only || *only == entry.kind; };
 
 		if (words.empty()) {
-			// Recent picks, then the pages
-			for (const auto& id : g_recent) {
-				forEach([&](const Entry& entry) {
-					if (entry.id == id && results.size() < limit)
-						results.push_back(&entry);
-				});
-			}
+			// Settings are too many to list: they wait for a query
 			forEach([&](const Entry& entry) {
-				if (entry.kind == Kind::Page && results.size() < limit && std::ranges::find(results, &entry) == results.end())
-					results.push_back(&entry);
+				if (entry.kind != Kind::Setting)
+					results.counts[static_cast<size_t>(entry.kind)]++;
 			});
+			if (only == Kind::Setting)
+				return results;
+			if (!only) {
+				// Recent picks, then the pages
+				for (const auto& id : g_recent) {
+					forEach([&](const Entry& entry) {
+						if (entry.id == id && results.entries.size() < limit)
+							results.entries.push_back(&entry);
+					});
+				}
+				results.recent = results.entries.size();
+			}
+			std::vector<const Entry*> listed;
+			forEach([&](const Entry& entry) {
+				const bool inDefault = only ? entry.kind == *only : entry.kind == Kind::Page;
+				if (inDefault && std::ranges::find(results.entries, &entry) == results.entries.end())
+					listed.push_back(&entry);
+			});
+			if (only == Kind::Feature)
+				SortFeatures(listed);
+			for (const Entry* entry : listed) {
+				if (results.entries.size() < limit)
+					results.entries.push_back(entry);
+			}
 			return results;
 		}
 
@@ -403,8 +495,11 @@ namespace GoToIndex
 		std::vector<Scored> scored;
 		forEach([&](const Entry& entry) {
 			const std::string context = entry.breadcrumb + " " + entry.haystack;
-			if (const int score = ScoreEntry(words, entry, context); score >= 0)
-				scored.push_back({ score, &entry });
+			if (const int score = ScoreEntry(words, entry, context); score >= 0) {
+				results.counts[static_cast<size_t>(entry.kind)]++;
+				if (wanted(entry))
+					scored.push_back({ score, &entry });
+			}
 		});
 		std::ranges::stable_sort(scored, [](const Scored& a, const Scored& b) {
 			if (a.score != b.score)
@@ -413,8 +508,29 @@ namespace GoToIndex
 				return a.entry->kind < b.entry->kind;
 			return a.entry->title.size() < b.entry->title.size();
 		});
-		for (size_t i = 0; i < scored.size() && i < limit; ++i)
-			results.push_back(scored[i].entry);
+
+		if (only) {
+			for (size_t i = 0; i < scored.size() && i < limit; ++i)
+				results.entries.push_back(scored[i].entry);
+			return results;
+		}
+
+		// Every kind: groups ordered by their best hit, each trimmed, so the top result stays on top
+		std::array<std::vector<const Entry*>, 4> groups;
+		std::vector<Kind> order;
+		for (const auto& hit : scored) {
+			auto& group = groups[static_cast<size_t>(hit.entry->kind)];
+			if (group.empty())
+				order.push_back(hit.entry->kind);
+			if (group.size() < ThemeManager::Constants::PALETTE_GROUP_MAX)
+				group.push_back(hit.entry);
+		}
+		for (const Kind kind : order) {
+			for (const Entry* entry : groups[static_cast<size_t>(kind)]) {
+				if (results.entries.size() < limit)
+					results.entries.push_back(entry);
+			}
+		}
 		return results;
 	}
 
