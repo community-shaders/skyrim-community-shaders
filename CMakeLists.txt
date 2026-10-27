@@ -54,7 +54,7 @@ option(
 option(TRACY_SUPPORT "Enable support for tracy profiler" OFF)
 option(
     NVPERF_SUPPORT
-    "Enable the Nsight Perf range profiler in Remote Control (requires NVPERF_SDK_ROOT)"
+    "Enable the Nsight Perf range profiler in Developer Tools (requires NVPERF_SDK_ROOT)"
     OFF
 )
 set(NVPERF_SDK_ROOT
