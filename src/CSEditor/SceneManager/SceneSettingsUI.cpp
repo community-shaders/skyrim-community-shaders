@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <array>
 #include <cstdio>
-#include <cstring>
 #include <format>
 #include <list>
 #include <optional>

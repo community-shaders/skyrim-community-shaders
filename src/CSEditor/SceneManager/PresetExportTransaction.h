@@ -10,7 +10,6 @@
 #include <format>
 #include <fstream>
 #include <functional>
-#include <iterator>
 #include <set>
 #include <stdexcept>
 #include <string>
@@ -76,8 +75,10 @@ public:
 		}
 	}
 
+	/** @brief The staging folder that stands in for the target until Commit. */
 	const std::filesystem::path& Root() const { return staged; }
 
+	/** @brief Marks the target as changed by writes made outside the staging folder, so a rollback restores it. */
 	void TrackExternalWrites() { targetTouched = true; }
 
 	bool Commit()

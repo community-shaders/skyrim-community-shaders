@@ -5,7 +5,6 @@
 #include "../EditorWindow.h"
 #include "FeatureOverwritesPanel.h"
 #include "Features/CSEditor.h"
-#include "IconsTabler.h"
 #include "Menu/Icons/helpers/IconFonts.h"
 #include "Menu/Icons/helpers/SceneActionIcons.h"
 #include "Menu/MenuIcons.h"

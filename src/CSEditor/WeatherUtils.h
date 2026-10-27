@@ -3,10 +3,7 @@
 #include "../I18n/I18n.h"
 #include "Util.h"
 #include "Widget.h"
-#include <cctype>
 #include <format>
-#include <functional>
-#include <map>
 #include <string>
 #include <vector>
 

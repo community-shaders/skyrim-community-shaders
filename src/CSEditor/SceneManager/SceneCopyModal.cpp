@@ -5,7 +5,6 @@
 #include <bitset>
 #include <cassert>
 #include <format>
-#include <functional>
 #include <map>
 #include <optional>
 #include <ranges>
