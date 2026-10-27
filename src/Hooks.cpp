@@ -308,25 +308,20 @@ namespace GrassExtensions
 	{
 		static void thunk(RE::BSShader* shader, RE::BSRenderPass* pass, uint32_t renderFlags)
 		{
-			// Replace vanilla setup and pixel constants for passes handled by Grass Optimizations.
-			if (!globals::features::grassOptimizations.SetupGrassPass(shader, pass)) {
-				func(shader, pass, renderFlags);
-				LegacyGraphicsCompatibility::BindLegacyGrassPerGeometryToPixelShader();
-			}
+			// Grass Optimizations' setup replaces this for its buckets, and covered shapes draw nothing.
+			if (globals::features::grassOptimizations.SetupGrassPass(shader, pass) != GrassOptimizations::GrassPassSetup::kNative)
+				return;
+
+			func(shader, pass, renderFlags);
+			LegacyGraphicsCompatibility::BindLegacyGrassPerGeometryToPixelShader();
 
 			auto state = globals::state;
-
-			state->permutationData.ExtraShaderDescriptor &= ~static_cast<uint32_t>(State::ExtraShaderDescriptors::GrassSphereNormal);
+			const auto* shaderProperty = static_cast<RE::BSShaderProperty*>(pass->geometry->GetGeometryRuntimeData().shaderProperty.get());
+			state->SetGrassSphereNormal(shaderProperty && shaderProperty->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kEffectLighting));
 
 			// Grass meshes are rooted at the model origin, so the model bound's center sits about halfway up the mesh.
 			const auto& bound = pass->geometry->GetModelData().modelBound;
 			state->permutationData.GrassCanopyHeight = bound.center.z > 1.0f ? 2.0f * bound.center.z : std::max(bound.center.z + bound.radius, 1.0f);
-
-			if (auto* shaderProperty = static_cast<RE::BSShaderProperty*>(pass->geometry->GetGeometryRuntimeData().shaderProperty.get())) {
-				if (shaderProperty->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kEffectLighting)) {
-					state->permutationData.ExtraShaderDescriptor |= static_cast<uint32_t>(State::ExtraShaderDescriptors::GrassSphereNormal);
-				}
-			}
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};

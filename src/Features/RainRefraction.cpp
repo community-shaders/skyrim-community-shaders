@@ -44,6 +44,17 @@ namespace
 		if (FAILED(hr))
 			return fail(std::format("Failed to load texture (invalid image, HRESULT 0x{:08X})", static_cast<uint32_t>(hr)));
 
+		// Fit the drop billboard to the texture's alpha coverage, which needs 8-bit RGBA texels
+		DirectX::ScratchImage rgbaImage;
+		const auto* source = image.GetImage(0, 0, 0);
+		if (source->format != DXGI_FORMAT_R8G8B8A8_UNORM) {
+			hr = DirectX::Convert(*source, DXGI_FORMAT_R8G8B8A8_UNORM, DirectX::TEX_FILTER_DEFAULT, DirectX::TEX_THRESHOLD_DEFAULT, rgbaImage);
+			if (FAILED(hr))
+				return fail(std::format("Failed to load texture (invalid image, HRESULT 0x{:08X})", static_cast<uint32_t>(hr)));
+			source = rgbaImage.GetImage(0, 0, 0);
+		}
+		result.footprint = RainRefractionTexture::GetFootprint({ source->pixels, source->slicePitch }, source->width, source->height, source->rowPitch);
+
 		DirectX::ScratchImage mipImage;
 		hr = DirectX::GenerateMipMaps(image.GetImages(), image.GetImageCount(), image.GetMetadata(), DirectX::TEX_FILTER_DEFAULT, 0, mipImage);
 		if (FAILED(hr))
@@ -182,6 +193,9 @@ RainRefraction::PerFrame RainRefraction::GetCommonBufferData()
 		data.MotionTransparency = settingManager.GetInterpolatedTimeOfDayValue("MotionTransparency", "RAIN");
 	}
 	data.Enable = data.Enable && GetRaindropSRV() && alphaBlendState;
+	const auto& footprint = IsManagedByENB() && presetRaindrops.srv ? presetRaindrops.footprint : defaultRaindrops.footprint;
+	data.TextureBounds = float4{ footprint.uvBounds[0], footprint.uvBounds[1], footprint.uvBounds[2], footprint.uvBounds[3] };
+	data.TextureRadiusScale = float2{ footprint.radiusScale[0], footprint.radiusScale[1] };
 
 	perFrameCache = data;
 	return data;
@@ -197,15 +211,18 @@ bool RainRefraction::IsRefractiveRainPass()
 
 void RainRefraction::ModifyParticle()
 {
-	if (!IsRefractiveRainPass())
+	if (globals::state->currentPixelDescriptor != static_cast<uint32_t>(SIE::ShaderCache::ParticleShaderTechniques::EnvCubeRain))
 		return;
 
+	// The rain vertex shader reads the Enable flag whether or not refraction is active this frame
 	auto context = globals::d3d::context;
-	ID3D11ShaderResourceView* srv = GetRaindropSRV();
-	context->PSSetShaderResources(80, 1, &srv);
-
 	ID3D11Buffer* cbs[] = { globals::state->sharedDataCB->CB(), globals::state->featureDataCB->CB() };
 	context->VSSetConstantBuffers(5, 2, cbs);
+	if (!perFrameCache.Enable)
+		return;
+
+	ID3D11ShaderResourceView* srv = GetRaindropSRV();
+	context->PSSetShaderResources(80, 1, &srv);
 }
 
 void RainRefraction::ParticleShaderHacks()

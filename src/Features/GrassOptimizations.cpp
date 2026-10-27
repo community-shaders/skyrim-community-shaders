@@ -3,6 +3,7 @@
 #include <span>
 
 #include "Profiler.h"
+#include "State.h"
 #include "TruePBR.h"
 #include "TruePBR/BSLightingShaderMaterialPBR.h"
 #include "Utils/VersionedRelocation.h"
@@ -257,24 +258,27 @@ void GrassOptimizations::UpdateGrass(const RE::NiCamera* cam)
 	CullGrass(cam);
 }
 
-bool GrassOptimizations::SetupGrassPass(RE::BSShader* shader, RE::BSRenderPass* pass)
+GrassOptimizations::GrassPassSetup GrassOptimizations::SetupGrassPass(RE::BSShader* shader, RE::BSRenderPass* pass)
 {
 	if (auto* bucket = loaded ? bucketStore.FindBucket(pass->geometry) : nullptr) {
-		if (HasCurrentCull() && bucket->optimizedReady && bucket->sliceTableCount)
-			SetupOptimizedPass(*bucket);
-		return true;
+		if (!HasCurrentCull() || !bucket->optimizedReady || !bucket->sliceTableCount)
+			return GrassPassSetup::kCovered;
+
+		SetupOptimizedPass(*bucket);
+		return GrassPassSetup::kOptimized;
 	}
 
 	if (loaded && HasCurrentCull() && pass->geometry->GetType().get() == RE::BSGeometry::Type::kMultiStreamInstanceTriShape) {
-		if (auto shape = bucketStore.FindRenderedShape(static_cast<RE::BSMultiStreamInstanceTriShape*>(pass->geometry)); shape && bucketStore.IsShapeOptimized(*shape))
-			return true;
+		const auto* snapshot = bucketStore.GetCullSnapshot();
+		if (const auto* native = snapshot ? snapshot->Find(pass->geometry) : nullptr; native && bucketStore.IsShapeOptimized(*native, globals::game::graphicsState->frameCount))
+			return GrassPassSetup::kCovered;
 	}
 
 	// Native coverage owns its material setup because optimized passes bind their own material state.
 	const auto* shaderProperty = pass->shaderProperty;
 	if (loaded && shaderProperty && shaderProperty->material)
 		Hooks::BSGrassShader_SetupMaterial::func(shader, static_cast<const RE::BSLightingShaderMaterialBase*>(shaderProperty->material));
-	return false;
+	return GrassPassSetup::kNative;
 }
 
 void GrassOptimizations::SetupOptimizedPass(const GrassBucket& b)
@@ -287,6 +291,8 @@ void GrassOptimizations::SetupOptimizedPass(const GrassBucket& b)
 	ctx1->PSSetConstantBuffers1(2, 1, &bucketCB, &windowFirst, &geometryNum);
 	// BSGrassShader_SetupGeometry sets this texture's address and filter modes once the hook chain returns.
 	globals::game::shadowState->SetPSTexture(0, b.asset.diffuseTexture->rendererTexture);
+	// Canopy heights come from the bucket constants, so only the lighting mode is shared with native grass.
+	globals::state->SetGrassSphereNormal(b.asset.key.draw.sphereNormal);
 	if (b.asset.key.draw.pbrMaterial) {
 		TruePBR::SetGrassPBRTextures(static_cast<const BSLightingShaderMaterialPBR*>(b.asset.material.get()));
 		UINT materialNum = 16;
@@ -469,9 +475,10 @@ void GrassOptimizations::Hooks::NiNode_OnVisible::thunk(RE::NiNode* This, RE::Ni
 
 	const bool queueOptimized = mainView || frame - mainViewVisitFrame.load(std::memory_order_relaxed) > 2;
 
-	const auto snapshot = self.bucketStore.AcquireCullSnapshot();
+	const auto* snapshot = self.bucketStore.GetCullSnapshot();
 	const auto cull = [&](RE::NiAVObject* child) {
-		if (!snapshot || !snapshot->IsDirect(child))
+		const auto* native = snapshot ? snapshot->Find(child) : nullptr;
+		if (!native || !native->direct)
 			child->Cull(process, alphaGroupIndex);
 		else if (queueOptimized)
 			process->AppendVirtual(*static_cast<RE::BSGeometry*>(child), alphaGroupIndex);
@@ -531,16 +538,18 @@ void GrassOptimizations::Hooks::BSGrassShader_SetupMaterial::thunk(RE::BSShader*
 void GrassOptimizations::Hooks::DrawVanilla(RE::BSMultiStreamInstanceTriShape* geometry)
 {
 	auto& self = globals::features::grassOptimizations;
-	const bool optimized = self.loaded && self.HasCurrentCull();
-	const auto shape = optimized ? self.bucketStore.FindRenderedShape(geometry) : nullptr;
-	if (shape && self.bucketStore.IsShapeOptimized(*shape))
+	const auto* snapshot = self.loaded ? self.bucketStore.GetCullSnapshot() : nullptr;
+	const auto* native = snapshot ? snapshot->Find(geometry) : nullptr;
+	const bool current = native && self.HasCurrentCull();
+	if (current && self.bucketStore.IsShapeOptimized(*native, globals::game::graphicsState->frameCount))
 		return;
+
+	const auto* shape = current && native->registration->registered.load(std::memory_order_acquire) ? native->registration.get() : nullptr;
 
 	auto* ctx = globals::d3d::context;
 	auto& groups = geometry->GetMultiStreamTrishapeRuntimeData().instanceGroups;
 
-	const auto snapshot = self.bucketStore.AcquireCullSnapshot();
-	const bool direct = self.loaded && snapshot && snapshot->IsDirect(geometry);
+	const bool direct = native && native->direct;
 
 	if (auto& cb = globals::features::grassOptimizations.vanillaDrawCB) {
 		ID3D11Buffer* marker = cb->CB();

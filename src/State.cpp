@@ -295,6 +295,14 @@ bool State::HandlePostProcessing(RE::RENDER_TARGET a_input, RE::RENDER_TARGET a_
  * shader descriptor tracking, increments and atomically publishes the frame
  * count, and disables reflection and improved snow shaders.
  */
+void State::SetGrassSphereNormal(bool sphereNormal)
+{
+	if (sphereNormal)
+		permutationData.ExtraShaderDescriptor |= static_cast<uint32_t>(ExtraShaderDescriptors::GrassSphereNormal);
+	else
+		permutationData.ExtraShaderDescriptor &= ~static_cast<uint32_t>(ExtraShaderDescriptors::GrassSphereNormal);
+}
+
 void State::Reset()
 {
 	globals::profiler->EndFrame();

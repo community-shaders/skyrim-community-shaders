@@ -83,6 +83,7 @@ void GrassOptimizations::CullGrass(const RE::NiCamera* camera)
 	visibleBuckets.clear();
 	sliceTableCPU.clear();
 
+	spatialRebuildBudget = 1;
 	globals::profiler->BeginPass("GrassOptimizations::SliceCull");
 	for (auto& [key, bucket] : bucketStore.buckets) {
 		bucket.ResetCullState();
@@ -239,6 +240,11 @@ void GrassOptimizations::CullBucketSlices(GrassBucket& bucket, const FrustumSoA&
 	uint32_t planeMask;
 	if (!ClassifyAabb(frustumSoA, bucketMin, bucketMax, planeMask))
 		return;
+
+	if (bucket.spatialRebuildPending && spatialRebuildBudget) {
+		--spatialRebuildBudget;
+		bucket.clustersValid = false;
+	}
 
 	if (!bucket.clustersValid || bucket.clusteredSlices != bucket.uploadedSlices)
 		bucketStore.MergeSlicesIntoRuns(bucket);
@@ -509,6 +515,17 @@ void GrassBucketStore::UpdateCoarseBounds(GrassBucket& bucket)
 	bucket.coarseValid = true;
 }
 
+uint64_t GrassBucketStore::MortonCode(uint64_t cell)
+{
+	const auto x = (uint32_t)(cell >> 32) + 0x8000u;
+	const auto y = (uint32_t)cell + 0x8000u;
+
+	uint64_t code = 0;
+	for (uint32_t bit = 0; bit < 16; ++bit)
+		code |= (uint64_t)((x >> bit) & 1u) << (2 * bit) | (uint64_t)((y >> bit) & 1u) << (2 * bit + 1);
+	return code;
+}
+
 void GrassBucketStore::MergeSlicesIntoRuns(GrassBucket& bucket)
 {
 	// Group slices by their instance bounds because several cells can share a shape origin.
@@ -519,7 +536,9 @@ void GrassBucketStore::MergeSlicesIntoRuns(GrassBucket& bucket)
 		return ((uint64_t)(uint32_t)cellX << 32) | (uint32_t)cellY;
 	};
 
-	if (!bucket.clustersValid) {
+	const bool rebuild = !bucket.clustersValid;
+	if (rebuild) {
+		bucket.appendedRuns = 0;
 		bucket.sliceRunBatches.clear();
 		bucket.sliceRunCount = 0;
 		bucket.sliceBlockBatches.clear();
@@ -533,18 +552,37 @@ void GrassBucketStore::MergeSlicesIntoRuns(GrassBucket& bucket)
 
 	const float padding = bucket.boundsPadding;
 	const uint32_t uploadedSliceCount = bucket.uploadedSlices;
-	for (uint32_t sliceIndex = bucket.clusteredSlices; sliceIndex < uploadedSliceCount; ++sliceIndex) {
+
+	// Rebuilds visit slices in Morton order so each cull block covers a compact area.
+	std::vector<uint32_t> order(std::max(uploadedSliceCount, bucket.clusteredSlices) - bucket.clusteredSlices);
+	std::iota(order.begin(), order.end(), bucket.clusteredSlices);
+
+	if (rebuild) {
+		std::vector<std::pair<uint64_t, uint32_t>> keyed;
+		keyed.reserve(order.size());
+		for (const auto sliceIndex : order)
+			keyed.emplace_back(MortonCode(cellOf(bucket.slices[sliceIndex]->bounds)), sliceIndex);
+
+		std::ranges::stable_sort(keyed, {}, &std::pair<uint64_t, uint32_t>::first);
+		for (size_t i = 0; i < keyed.size(); ++i)
+			order[i] = keyed[i].second;
+	}
+
+	for (const auto sliceIndex : order) {
 		auto& slice = *bucket.slices[sliceIndex];
 		const auto& bounds = slice.bounds;
 
 		// Runs require a shared cell, but their groups may reference noncontiguous source records.
-		const bool sameCellAsPrevious = sliceIndex && bucket.sliceRunCount &&
-		                                cellOf(bounds) == cellOf(bucket.slices[sliceIndex - 1]->bounds);
+		const auto cell = cellOf(bounds);
+		const bool sameCellAsPrevious = bucket.sliceRunCount && cell == bucket.lastRunCell;
+		bucket.lastRunCell = cell;
 
 		if (!sameCellAsPrevious) {
 			if (bucket.sliceRunCount % 4 == 0)
 				bucket.sliceRunBatches.emplace_back();
 			++bucket.sliceRunCount;
+			if (!rebuild)
+				++bucket.appendedRuns;
 		}
 
 		auto& runBatch = bucket.sliceRunBatches.back();
@@ -598,4 +636,6 @@ void GrassBucketStore::MergeSlicesIntoRuns(GrassBucket& bucket)
 
 	bucket.clusteredSlices = uploadedSliceCount;
 	bucket.clustersValid = true;
+	// Reorder once appended runs make up a quarter of the bucket.
+	bucket.spatialRebuildPending = !rebuild && bucket.appendedRuns >= 64 && bucket.appendedRuns * 4 >= bucket.sliceRunCount;
 }
