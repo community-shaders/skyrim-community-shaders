@@ -56,7 +56,8 @@ namespace
 		// Behavior
 		{ Ids::kBehavior, "menu.settings.show_status_bar", "Show Status Bar" },
 		{ Ids::kBehavior, "menu.settings.auto_hide_feature_list", "Auto-hide Feature List" },
-		{ Ids::kBehavior, "menu.settings.reduce_ui_animations", "Reduce UI animations" },
+		{ Ids::kBehavior, "menu.settings.ui_animations", "UI animations" },
+		{ Ids::kBehavior, "menu.settings.animation_speed", "Animation speed" },
 		{ Ids::kBehavior, "menu.settings.feature_list_order", "Feature List Order" },
 		{ Ids::kBehavior, "menu.settings.require_shift_to_dock", "Require Shift to Dock" },
 		{ Ids::kBehavior, "menu.settings.tooltip_hover_delay", "Tooltip Hover Delay" },
@@ -423,7 +424,7 @@ void SettingsTabRenderer::RenderLanguageSection()
 			bool isSelected = (code == currentLocale);
 			auto displayName = GetLocaleDisplayLabel(code, name);
 			ImGui::PushID(code.c_str());
-			if (ImGui::Selectable(displayName.c_str(), isSelected)) {
+			if (Util::Selectable(displayName.c_str(), isSelected)) {
 				i18n->SetLocale(code);
 				MenuFonts::GetAtlasState().pendingFontReload = true;
 			}
@@ -449,6 +450,24 @@ void SettingsTabRenderer::RenderBehaviorSection()
 {
 	auto& themeSettings = globals::menu->GetSettings().Theme;
 
+	// The master switch is stored as its opposite (ReduceUIAnimations), so settings files from before the
+	// animation speed option keep their meaning
+	auto& menuSettings = globals::menu->GetSettings();
+	bool animationsOn = !menuSettings.ReduceUIAnimations;
+	if (ImGui::Checkbox(T("menu.settings.ui_animations", "UI animations"), &animationsOn))
+		menuSettings.ReduceUIAnimations = !animationsOn;
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("%s", T("menu.settings.ui_animations_tooltip", "Hover fades, sliding highlights and fade-ins in the menu. Turn off to make every change snap instead of easing."));
+	}
+	{
+		Util::DisableGuard disable(!animationsOn);
+		ImGui::SliderFloat(T("menu.settings.animation_speed", "Animation speed"), &menuSettings.AnimationSpeed,
+			ThemeManager::Constants::ANIM_SPEED_MIN, ThemeManager::Constants::ANIM_SPEED_MAX, "%.2fx", ImGuiSliderFlags_AlwaysClamp);
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("%s", T("menu.settings.animation_speed_tooltip", "How fast menu animations run: 0.5x is slower, 2x is quicker. 1x is the default."));
+		}
+	}
+
 	ImGui::Checkbox(T("menu.settings.show_status_bar", "Show Status Bar"), &themeSettings.ShowFooter);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("%s", T("menu.settings.show_status_bar_tooltip",
@@ -459,11 +478,6 @@ void SettingsTabRenderer::RenderBehaviorSection()
 	ImGui::Checkbox(T("menu.settings.auto_hide_feature_list", "Auto-hide Feature List"), &globals::menu->GetSettings().AutoHideFeatureList);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("%s", T("menu.settings.auto_hide_feature_list_tooltip", "Automatically hides the left feature list panel. Move cursor to the left edge to show it."));
-	}
-
-	ImGui::Checkbox(T("menu.settings.reduce_ui_animations", "Reduce UI animations"), &globals::menu->GetSettings().ReduceUIAnimations);
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("%s", T("menu.settings.reduce_ui_animations_tooltip", "Turns off menu motion: hover fades, slide-ins, the pulsing issues icon and the expanding search field all snap instead of easing."));
 	}
 
 	{
@@ -500,7 +514,7 @@ void SettingsTabRenderer::RenderBehaviorSection()
 	}
 
 	ImGui::Spacing();
-	if (ImGui::Button(T("menu.settings.reset_window_layout", "Reset Window Layout")))
+	if (Util::Button(T("menu.settings.reset_window_layout", "Reset Window Layout")))
 		globals::menu->resetLayout = true;
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("%s", T("menu.settings.reset_window_layout_tooltip", "Moves the menu window back to the centre of the screen at its default size."));
@@ -649,7 +663,7 @@ void SettingsTabRenderer::RenderThemesSection()
 		}
 	}
 
-	if (ImGui::Button(T("menu.settings.refresh", "Refresh"))) {
+	if (Util::Button(T("menu.settings.refresh", "Refresh"))) {
 		themeManager->RefreshThemes();
 		// Ensure a valid theme is still selected
 		const auto* themeInfo = themeManager->GetThemeInfo(currentThemePreset);
@@ -667,7 +681,7 @@ void SettingsTabRenderer::RenderThemesSection()
 	}
 
 	ImGui::SameLine();
-	if (ImGui::Button(T("menu.settings.open_themes_folder", "Open Themes Folder"))) {
+	if (Util::Button(T("menu.settings.open_themes_folder", "Open Themes Folder"))) {
 		std::filesystem::path themesPath = Util::PathHelpers::GetThemesRealPath();
 		ShellExecuteA(NULL, "open", themesPath.string().c_str(), NULL, NULL, SW_SHOWNORMAL);
 	}
@@ -919,7 +933,7 @@ void SettingsTabRenderer::RenderThemesSection()
 		}
 
 		ImGui::SameLine();
-		if (ImGui::Button(T("menu.settings.cancel", "Cancel"))) {
+		if (Util::Button(T("menu.settings.cancel", "Cancel"))) {
 			showCreateThemePopup = false;
 			ImGui::CloseCurrentPopup();
 		}
@@ -1005,7 +1019,7 @@ void SettingsTabRenderer::RenderFontsSection()
 		ImGui::PopID();
 	}
 
-	if (ImGui::Button(T("menu.settings.refresh_font_families", "Refresh Font Families"))) {
+	if (Util::Button(T("menu.settings.refresh_font_families", "Refresh Font Families"))) {
 		refreshFontCatalog(true);
 		MenuFonts::GetAtlasState().pendingFontReload = true;
 	}
@@ -1277,7 +1291,7 @@ void SettingsTabRenderer::RenderSurfacesSection()
 	auto& surfaces = globals::menu->GetSettings().Theme.Surfaces;
 
 	ImGui::TextWrapped("%s", T("menu.settings.surfaces_intro", "Backing, border and shadow of the menu cards and highlights. Changes apply immediately and are saved with the theme."));
-	if (ImGui::Button(T("menu.settings.reset_surfaces", "Reset surfaces to theme defaults")))
+	if (Util::Button(T("menu.settings.reset_surfaces", "Reset surfaces to theme defaults")))
 		surfaces = Util::Surface::Settings{};
 	if (auto _tt = Util::HoverTooltipWrapper())
 		ImGui::TextUnformatted(T("menu.settings.reset_surfaces_tooltip", "Restores every surface below to its built-in look. Save the theme to keep it."));
