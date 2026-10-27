@@ -401,7 +401,7 @@ namespace FeatureIssues
 		ImGui::TableSetupColumn("##Actions", ImGuiTableColumnFlags_WidthFixed, actionsWidth);
 		ImGui::TableNextColumn();
 
-		// Most critical first; the last shown section has no rule under it, the card's edge closes it
+		// Most critical first
 		struct IssueSection
 		{
 			const char* title;
@@ -436,16 +436,24 @@ namespace FeatureIssues
 					"and must be updated to the new Baseline format. Check the file format and content."),
 				theme.StatusPalette.Error, baselineIssues },
 		};
-		const IssueSection* lastShown = nullptr;
+		// Each section is its title and features beside its description, with a rule between sections
+		bool firstShown = true;
 		for (const auto& section : sections) {
-			if (!section.issues.empty())
-				lastShown = &section;
-		}
-		for (const auto& section : sections) {
-			if (auto wrapper = Util::SectionWrapper(section.title, section.description, section.color, !section.issues.empty(), &section != lastShown)) {
+			if (section.issues.empty())
+				continue;
+			if (!std::exchange(firstShown, false))
+				ImGui::Separator();
+			ImGui::PushID(section.title);
+			if (ImGui::BeginTable("##IssueSection", 2, ImGuiTableFlags_SizingStretchSame)) {
+				ImGui::TableNextColumn();
+				ImGui::TextColored(section.color, "%s", section.title);
 				for (const auto* issue : section.issues)
 					DrawFeatureIssue(*issue, section.color);
+				ImGui::TableNextColumn();
+				ImGui::TextWrapped("%s", section.description);
+				ImGui::EndTable();
 			}
+			ImGui::PopID();
 		}
 
 		// Cleanup actions, one per row at the card's width

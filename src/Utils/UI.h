@@ -702,10 +702,9 @@ namespace Util
 		 * @param description Optional description text shown below the title
 		 * @param titleColor Color for the section title
 		 * @param isVisible Whether the section should be visible (used for conditional sections)
-		 * @param ruleBelow Whether a separator closes the section; off for the last of a run
 		 */
 		SectionWrapper(const char* title, const char* description = nullptr,
-			const ImVec4& titleColor = ImVec4(1, 1, 1, 1), bool isVisible = true, bool ruleBelow = true);
+			const ImVec4& titleColor = ImVec4(1, 1, 1, 1), bool isVisible = true);
 
 		/** @brief Closes the section with its separator, if it has one. */
 		~SectionWrapper();
@@ -723,7 +722,6 @@ namespace Util
 
 	private:
 		bool m_shouldDraw;
-		bool m_ruleBelow;
 	};
 
 	/** @brief Slider that shows a 0..1 member as a percentage (lb..ub) and writes back only on edit. */
