@@ -40,9 +40,9 @@ namespace GoToIndex
 
 		constexpr const char* kSeparator = " > ";
 
-		/// Settings entries of the catalog, cached for one locale and set of loaded features.
+		/// Settings entries of the catalog, cached for one I18n generation and set of loaded features.
 		std::vector<Entry> g_settingEntries;
-		std::string g_settingLocale;
+		std::uint64_t g_settingGeneration = 0;
 		size_t g_settingLoadedCount = 0;
 		bool g_settingsBuilt = false;
 
@@ -185,15 +185,15 @@ namespace GoToIndex
 
 		void AddCatalogSettings()
 		{
-			const auto locale = I18n::GetSingleton()->GetCurrentLocale();
+			const auto generation = I18n::GetSingleton()->GetGeneration();
 			size_t loadedCount = 0;
 			for (Feature* feature : Feature::GetFeatureList())
 				loadedCount += feature->loaded ? 1 : 0;
-			if (g_settingsBuilt && locale == g_settingLocale && loadedCount == g_settingLoadedCount)
+			if (g_settingsBuilt && generation == g_settingGeneration && loadedCount == g_settingLoadedCount)
 				return;
 
 			g_settingEntries.clear();
-			g_settingLocale = locale;
+			g_settingGeneration = generation;
 			g_settingLoadedCount = loadedCount;
 			g_settingsBuilt = true;
 
