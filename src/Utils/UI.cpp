@@ -2896,71 +2896,47 @@ namespace Util
 		if (!enabled)
 			return false;
 
-		// Calculate appropriate size if not specified - make it smaller
+		using Constants = ThemeManager::Constants;
 		ImVec2 toggleSize = size;
-		if (toggleSize.x <= 0) {
-			toggleSize.x = ImGui::GetFrameHeight() * 1.6f;  // Smaller 1.6:1 aspect ratio
-		}
-		if (toggleSize.y <= 0) {
-			toggleSize.y = ImGui::GetFrameHeight() * 0.8f;  // Smaller height
-		}
+		if (toggleSize.x <= 0)
+			toggleSize.x = ImGui::GetFrameHeight() * 1.6f;
+		if (toggleSize.y <= 0)
+			toggleSize.y = ImGui::GetFrameHeight() * 0.8f;
 
-		// Get theme colors for better integration
-		auto& style = ImGui::GetStyle();
-		auto& colors = style.Colors;
-
-		// Use theme header colors instead of bright green/red
-		ImVec4 toggleBg = *enabled ?
-		                      colors[ImGuiCol_Header] :  // Use header color when enabled
-		                      colors[ImGuiCol_FrameBg];  // Use frame background when disabled
-
-		ImVec4 toggleBgHovered = *enabled ?
-		                             colors[ImGuiCol_HeaderHovered] :  // Use header hovered when enabled
-		                             colors[ImGuiCol_FrameBgHovered];  // Use frame hovered when disabled
-
-		ImVec4 toggleBgActive = *enabled ?
-		                            colors[ImGuiCol_HeaderActive] :  // Use header active when enabled
-		                            colors[ImGuiCol_FrameBgActive];  // Use frame active when disabled
-
-		// Apply toggle styling with border
-		ImGui::PushStyleColor(ImGuiCol_Button, toggleBg);
-		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, toggleBgHovered);
-		ImGui::PushStyleColor(ImGuiCol_ButtonActive, toggleBgActive);
-		ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, toggleSize.y * 0.5f);  // Round ends
-		ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.5f);               // Larger border
-
-		// Create unique ID for the toggle
 		ImGui::PushID(label);
-
-		// Draw the toggle button
-		bool clicked = ImGui::Button("", toggleSize);
-
-		// Draw the toggle knob
-		ImDrawList* drawList = ImGui::GetWindowDrawList();
-		ImVec2 buttonMin = ImGui::GetItemRectMin();
-		ImVec2 buttonMax = ImGui::GetItemRectMax();
-
-		// Calculate knob position and size
-		float knobRadius = (toggleSize.y - 4.0f) * 0.5f;
-		float knobPadding = 2.0f;
-		float knobTravel = toggleSize.x - (knobRadius * 2.0f) - (knobPadding * 2.0f);
-		float knobX = *enabled ?
-		                  buttonMin.x + knobPadding + knobRadius + knobTravel :
-		                  buttonMin.x + knobPadding + knobRadius;
-		float knobY = buttonMin.y + toggleSize.y * 0.5f;
-
-		// Draw knob
-		ImU32 knobColor = ImGui::ColorConvertFloat4ToU32(ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
-		drawList->AddCircleFilled(ImVec2(knobX, knobY), knobRadius, knobColor);
-
-		ImGui::PopID();
-		ImGui::PopStyleVar(2);  // Pop both FrameRounding and FrameBorderSize
-		ImGui::PopStyleColor(3);
-
-		// Handle toggle action
-		if (clicked) {
+		const ImGuiID id = ImGui::GetID("toggle");
+		const bool clicked = ImGui::InvisibleButton("##toggle", toggleSize);
+		const bool hovered = ImGui::IsItemHovered();
+		if (clicked)
 			*enabled = !*enabled;
-		}
+		ImGui::PopID();
+
+		// Material style: a thin pill track with a larger round knob that overhangs both its ends. The knob slides
+		// (eased, and snapped while UI animations are off), and its colours follow the theme's accent.
+		const float on = Anim::Approach(id, *enabled ? 1.0f : 0.0f, Constants::ANIM_TOGGLE_RATE, *enabled ? 1.0f : 0.0f);
+		const float hover = Anim::Approach(id + 1, hovered ? 1.0f : 0.0f, Constants::ANIM_HOVER_RATE, 0.0f);
+
+		const ImVec2 min = ImGui::GetItemRectMin();
+		const float knobRadius = toggleSize.y * 0.5f;
+		const float trackHeight = toggleSize.y * Constants::TOGGLE_TRACK_HEIGHT_RATIO;
+		const float trackOverhang = knobRadius * Constants::TOGGLE_TRACK_INSET_RATIO;
+		const float centerY = min.y + toggleSize.y * 0.5f;
+		const ImVec2 trackMin(min.x + trackOverhang, centerY - trackHeight * 0.5f);
+		const ImVec2 trackMax(min.x + toggleSize.x - trackOverhang, centerY + trackHeight * 0.5f);
+		const float knobX = min.x + knobRadius + (toggleSize.x - knobRadius * 2.0f) * on;
+
+		const ImVec4 accent = Colors::GetAccent();
+		const ImVec4 trackOff = ImGui::GetStyleColorVec4(ImGuiCol_FrameBg);
+		const ImVec4 trackOn = Anim::ScaleAlpha(accent, Constants::TOGGLE_TRACK_ON_ALPHA);
+		const ImVec4 knobOff = Anim::Lerp(Colors::GetSecondary(), ImGui::GetStyleColorVec4(ImGuiCol_Text), hover);
+		const ImVec4 knobOn = Anim::Lerp(accent, ImVec4(1.0f, 1.0f, 1.0f, accent.w), hover * Constants::TOGGLE_KNOB_HOVER_LIFT);
+
+		ImDrawList* drawList = ImGui::GetWindowDrawList();
+		drawList->AddRectFilled(trackMin, trackMax, ImGui::GetColorU32(Anim::Lerp(trackOff, trackOn, on)), trackHeight * 0.5f);
+		// A soft shadow lifts the knob off the track, as in the Material design
+		drawList->AddCircleFilled(ImVec2(knobX, centerY + Constants::TOGGLE_SHADOW_OFFSET_RATIO * knobRadius), knobRadius,
+			ImGui::GetColorU32(ImVec4(0.0f, 0.0f, 0.0f, Constants::TOGGLE_SHADOW_ALPHA)));
+		drawList->AddCircleFilled(ImVec2(knobX, centerY), knobRadius, ImGui::GetColorU32(Anim::Lerp(knobOff, knobOn, on)));
 
 		return clicked;
 	}

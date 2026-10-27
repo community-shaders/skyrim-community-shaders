@@ -673,7 +673,9 @@ namespace Util
 	bool Selectable(const char* label, bool* selected, ImGuiSelectableFlags flags = 0, const ImVec2& size = ImVec2(0, 0));
 
 	/**
-	 * Clean, minimalist toggle switch for feature enable/disable state
+	 * Animated toggle switch in the Material style (after cmdwtf/imgui_toggle's Material preset): a thin pill track
+	 * with a larger round knob that overhangs its ends and slides between the two states. Colours come from the theme's
+	 * accent; animations follow the UI animation settings.
 	 * @param label Label text to display next to the toggle
 	 * @param enabled Reference to the boolean state to toggle
 	 * @param size Toggle size (optional, defaults to automatic sizing)

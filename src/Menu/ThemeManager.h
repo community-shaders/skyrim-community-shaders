@@ -365,6 +365,13 @@ public:
 		static constexpr float ANIM_PAGE_FADE_FROM = 0.4f;                // Page alpha at the start of that fade (never fully hidden, so there is no flash)
 		static constexpr float ANIM_GLIDE_RATE = 26.0f;                   // How fast a selection highlight glides to the newly selected item, per second
 		static constexpr float ANIM_SLIDER_RATE = 16.0f;                  // How fast a slider eases to a value changed from outside, per second
+		static constexpr float ANIM_TOGGLE_RATE = 14.0f;                  // How fast a toggle's knob slides, per second
+		static constexpr float TOGGLE_TRACK_HEIGHT_RATIO = 0.62f;         // Toggle track thickness, as a share of the knob's diameter (Material: 16 of 21)
+		static constexpr float TOGGLE_TRACK_INSET_RATIO = 0.35f;          // How far the track stops short of each end, in knob radii, so the knob overhangs it
+		static constexpr float TOGGLE_TRACK_ON_ALPHA = 0.5f;              // Track strength while on: the dim accent of the Material style
+		static constexpr float TOGGLE_KNOB_HOVER_LIFT = 0.2f;             // How far the on-knob lightens towards white while hovered
+		static constexpr float TOGGLE_SHADOW_OFFSET_RATIO = 0.12f;        // Knob shadow drop, in knob radii
+		static constexpr float TOGGLE_SHADOW_ALPHA = 0.3f;                // Knob shadow strength
 		static constexpr float ANIM_SLIDER_SNAP_FRACTION = 0.002f;        // A slider within this share of its range of the target snaps to it
 		static constexpr float ANIM_SPEED_MIN = 0.5f;                     // Animation speed multiplier range (Settings > Behavior)
 		static constexpr float ANIM_SPEED_MAX = 2.0f;
