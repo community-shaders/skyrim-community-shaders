@@ -140,7 +140,7 @@ namespace StatusBarRenderer
 			if (part.empty())
 				return;
 			if (!info.empty())
-				info += "  Â·  ";
+				info += "  ·  ";
 			info += part;
 		};
 		addPart(globals::state->adapterDescription);
