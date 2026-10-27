@@ -1802,7 +1802,6 @@
     "menu.settings.skip_unchanged_shaders_tooltip": "При включении шейдер перекомпилируется только если .hlsl новее .bin на диске. Требует включённого «Кэша на диске».",
     "menu.settings.status": "Статус",
     "menu.settings.tab_bar_border_size": "Размер рамки панели вкладок",
-    "menu.settings.tab_behavior": "Поведение",
     "menu.settings.tab_border_size": "Размер рамки вкладки",
     "menu.settings.tab_colors": "Цвета",
     "menu.settings.tab_fonts": "Шрифты",

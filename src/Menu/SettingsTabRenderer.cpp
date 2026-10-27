@@ -54,15 +54,15 @@ namespace
 		// Language
 		{ Ids::kLanguage, "menu.settings.language", "Language" },
 		// Behavior
-		{ Ids::kBehavior, "menu.settings.show_status_bar", "Show Status Bar" },
-		{ Ids::kBehavior, "menu.settings.auto_hide_feature_list", "Auto-hide Feature List" },
-		{ Ids::kBehavior, "menu.settings.ui_animations", "UI animations" },
-		{ Ids::kBehavior, "menu.settings.animation_speed", "Animation speed" },
-		{ Ids::kBehavior, "menu.settings.feature_list_order", "Feature List Order" },
-		{ Ids::kBehavior, "menu.settings.require_shift_to_dock", "Require Shift to Dock" },
-		{ Ids::kBehavior, "menu.settings.tooltip_hover_delay", "Tooltip Hover Delay" },
-		{ Ids::kBehavior, "menu.settings.warn_forced_settings", "Warn When Settings Are Forced" },
-		{ Ids::kBehavior, "menu.settings.reset_window_layout", "Reset Window Layout" },
+		{ Ids::kHeaderEffects, "menu.settings.show_status_bar", "Show Status Bar" },
+		{ Ids::kStyling, "menu.settings.auto_hide_feature_list", "Auto-hide Feature List" },
+		{ Ids::kStyling, "menu.settings.ui_animations", "UI animations" },
+		{ Ids::kStyling, "menu.settings.animation_speed", "Animation speed" },
+		{ Ids::kStyling, "menu.settings.feature_list_order", "Feature List Order" },
+		{ Ids::kStyling, "menu.settings.require_shift_to_dock", "Require Shift to Dock" },
+		{ Ids::kStyling, "menu.settings.tooltip_hover_delay", "Tooltip Hover Delay" },
+		{ Ids::kStyling, "menu.settings.warn_forced_settings", "Warn When Settings Are Forced" },
+		{ Ids::kStyling, "menu.settings.reset_window_layout", "Reset Window Layout" },
 		// Theme
 		{ Ids::kTheme, "menu.settings.theme_preset", "Theme Preset" },
 		{ Ids::kTheme, "menu.settings.open_themes_folder", "Open Themes Folder" },
@@ -446,9 +446,11 @@ void SettingsTabRenderer::RenderLanguageSection()
 	}
 }
 
-void SettingsTabRenderer::RenderBehaviorSection()
+void SettingsTabRenderer::RenderInterfaceOptions()
 {
 	auto& themeSettings = globals::menu->GetSettings().Theme;
+
+	SeparatorTextWithFont(T("menu.settings.section_animations", "Animations"), Menu::FontRole::Subheading);
 
 	// The master switch is stored as its opposite (ReduceUIAnimations), so settings files from before the
 	// animation speed option keep their meaning
@@ -468,12 +470,7 @@ void SettingsTabRenderer::RenderBehaviorSection()
 		}
 	}
 
-	ImGui::Checkbox(T("menu.settings.show_status_bar", "Show Status Bar"), &themeSettings.ShowFooter);
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("%s", T("menu.settings.show_status_bar_tooltip",
-							  "Shows a bar at the bottom of the window with unsaved changes, shader compilation, "
-							  "failed shaders and feature issues, plus the GPU, game version and swap chain"));
-	}
+	SeparatorTextWithFont(T("menu.settings.section_window_layout", "Window & Layout"), Menu::FontRole::Subheading);
 
 	ImGui::Checkbox(T("menu.settings.auto_hide_feature_list", "Auto-hide Feature List"), &globals::menu->GetSettings().AutoHideFeatureList);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -493,12 +490,20 @@ void SettingsTabRenderer::RenderBehaviorSection()
 			sort = sortIndex == 1 ? Menu::FeatureSortMode::Alphabetical : Menu::FeatureSortMode::Category;
 	}
 
+	if (Util::Button(T("menu.settings.reset_window_layout", "Reset Window Layout")))
+		globals::menu->resetLayout = true;
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("%s", T("menu.settings.reset_window_layout_tooltip", "Moves the menu window back to the centre of the screen at its default size."));
+	}
+
 	if (ImGui::Checkbox(T("menu.settings.require_shift_to_dock", "Require Shift to Dock"), &globals::menu->GetSettings().RequireShiftToDock)) {
 		ImGui::GetIO().ConfigDockingWithShift = globals::menu->GetSettings().RequireShiftToDock;
 	}
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("%s", T("menu.settings.require_shift_to_dock_tooltip", "When enabled, you must hold Shift while dragging to dock/snap windows. Prevents accidental docking."));
 	}
+
+	SeparatorTextWithFont(T("menu.settings.section_tooltips_warnings", "Tooltips & Warnings"), Menu::FontRole::Subheading);
 
 	ImGui::SliderFloat(T("menu.settings.tooltip_hover_delay", "Tooltip Hover Delay"), &themeSettings.TooltipHoverDelay, 0.0f, 2.0f, "%.2f s", ImGuiSliderFlags_AlwaysClamp);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -511,13 +516,6 @@ void SettingsTabRenderer::RenderBehaviorSection()
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("%s", T("menu.settings.warn_forced_settings_tooltip",
 							  "Shows a popup when a setting change makes another feature force one of its settings to a fixed value."));
-	}
-
-	ImGui::Spacing();
-	if (Util::Button(T("menu.settings.reset_window_layout", "Reset Window Layout")))
-		globals::menu->resetLayout = true;
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("%s", T("menu.settings.reset_window_layout_tooltip", "Moves the menu window back to the centre of the screen at its default size."));
 	}
 }
 
@@ -544,6 +542,13 @@ void SettingsTabRenderer::RenderHeaderEffectsSection()
 	ImGui::Checkbox(T("menu.settings.center_header_title", "Center Header Title"), &themeSettings.CenterHeader);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("%s", T("menu.settings.center_header_title_tooltip", "Centers the Community Shaders title and logo in the header title bar"));
+	}
+
+	ImGui::Checkbox(T("menu.settings.show_status_bar", "Show Status Bar"), &themeSettings.ShowFooter);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("%s", T("menu.settings.show_status_bar_tooltip",
+							  "Shows a bar at the bottom of the window with unsaved changes, shader compilation, "
+							  "failed shaders and feature issues, plus the GPU, game version and swap chain"));
 	}
 
 	SeparatorTextWithFont(T("menu.settings.visual_effects", "Visual Effects"), Menu::FontRole::Subheading);
@@ -1038,6 +1043,7 @@ void SettingsTabRenderer::RenderStylingSection()
 		if (Util::BeginPillTabItem(T("menu.settings.styling_tab_general", "General"))) {
 			if (ImGui::SliderFloat(T("menu.settings.global_scale", "Global Scale"), &themeSettings.GlobalScale, -1.f, 1.f, "%.2f"))
 				ImGui::GetStyle().FontScaleMain = exp2(themeSettings.GlobalScale);
+			RenderInterfaceOptions();
 			SeparatorTextWithFont(T("menu.settings.scrollbar_opacity", "Scrollbar Opacity"), Menu::FontRole::Subheading);
 			ImGui::SliderFloat(T("menu.settings.track_opacity", "Track Opacity"), &themeSettings.ScrollbarOpacity.Background, 0.0f, 1.0f, "%.2f");
 			if (auto _tt = Util::HoverTooltipWrapper())

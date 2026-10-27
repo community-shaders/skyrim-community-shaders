@@ -50,7 +50,6 @@ namespace
 				} },
 		Section{ Ids::kKeybindings, Group::General, false, [](PageState& state) { SettingsTabRenderer::RenderKeybindingsSection(state.keys); } },
 		Section{ Ids::kLanguage, Group::General, false, [](PageState&) { SettingsTabRenderer::RenderLanguageSection(); } },
-		Section{ Ids::kBehavior, Group::General, true, [](PageState&) { SettingsTabRenderer::RenderBehaviorSection(); } },
 		Section{ Ids::kTheme, Group::Appearance, true, [](PageState&) { SettingsTabRenderer::RenderThemesSection(); } },
 		Section{ Ids::kFonts, Group::Appearance, true, [](PageState&) { SettingsTabRenderer::RenderFontsSection(); } },
 		Section{ Ids::kColors, Group::Appearance, true, [](PageState&) { SettingsTabRenderer::RenderColorsSection(); } },
@@ -98,8 +97,6 @@ namespace
 			return T("menu.settings.tab_keybindings", "Keybindings");
 		if (id == Ids::kLanguage)
 			return T("menu.settings.section_language", "Language");
-		if (id == Ids::kBehavior)
-			return T("menu.settings.tab_behavior", "Behavior");
 		if (id == Ids::kTheme)
 			return T("menu.settings.nav_theme", "Theme");
 		if (id == Ids::kFonts)
@@ -223,6 +220,10 @@ namespace
 
 		ImGui::Spacing();
 
+		// Rows fill half an item spacing beyond their text, so the list is indented past that plus a margin
+		const float navInset = ImGui::GetStyle().ItemSpacing.x * 0.5f + ThemeManager::Constants::LEFT_PANE_EDGE_INSET * Util::GetUIScale();
+		ImGui::Indent(navInset);
+
 		const float groupSpacing = ThemeManager::Constants::SETTINGS_NAV_GROUP_SPACING * Util::GetUIScale();
 		const Group* currentGroup = nullptr;
 		for (const auto& section : kSections) {
@@ -247,6 +248,7 @@ namespace
 
 		if (matches && !currentGroup)
 			ImGui::TextDisabled("%s", T("menu.settings.search_no_match", "No matching settings"));
+		ImGui::Unindent(navInset);
 	}
 
 	/** @brief Lists the matched setting labels of the shown section above its content. */

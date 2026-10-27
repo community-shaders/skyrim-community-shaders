@@ -52,7 +52,8 @@ public:
 	/** @brief Interface language picker. */
 	static void RenderLanguageSection();
 	/** @brief Menu behaviour options and the Reset Window Layout button. */
-	static void RenderBehaviorSection();
+	/** @brief General interface options (animations, window and layout, tooltips); drawn on the Styling page's General tab. */
+	static void RenderInterfaceOptions();
 	/** @brief Header title and icon options, background blur, menu fade and the theme cursor. */
 	static void RenderHeaderEffectsSection();
 	/** @brief Theme preset picker with save, save-as and delete. */

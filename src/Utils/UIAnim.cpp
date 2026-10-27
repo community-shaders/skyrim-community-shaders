@@ -349,7 +349,10 @@ namespace Util::Anim
 
 		if (isTarget && !drawnThisFrame) {
 			storage->SetInt(key(kDrawnFrameSalt), frame);
-			const ImRect rect = SelectableFillRect(flags);
+			ImRect rect = SelectableFillRect(flags);
+			// The fill reaches half an item spacing past the row; keep it inside the window so a pane's edge never cuts the bar
+			rect.Min.x = std::max(rect.Min.x, window->InnerClipRect.Min.x);
+			rect.Max.x = std::min(rect.Max.x, window->InnerClipRect.Max.x);
 			const float targetRel[4] = { rect.Min.x - origin.x, rect.Min.y - origin.y, rect.Max.x - origin.x, rect.Max.y - origin.y };
 			const bool fresh = lastDraw < frame - 1;
 			float rel[4];

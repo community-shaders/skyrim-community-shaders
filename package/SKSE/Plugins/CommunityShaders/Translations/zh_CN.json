@@ -3563,7 +3563,6 @@
     "menu.settings.skip_unchanged_shaders_tooltip": "启用时，仅当每个着色器的.hlsl文件比磁盘上缓存的.bin更新时才从源代码重新编译。源文件未更改的着色器直接从磁盘缓存加载，避免完整的启动编译开销。适用于迭代测试：更改着色器文件后仅重建该着色器。需要\"启用磁盘缓存\"处于活动状态。",
     "menu.settings.status": "状态",
     "menu.settings.tab_bar_border_size": "标签栏边框大小",
-    "menu.settings.tab_behavior": "行为",
     "menu.settings.tab_border_size": "标签页边框大小",
     "menu.settings.tab_colors": "颜色",
     "menu.settings.tab_fonts": "字体",
