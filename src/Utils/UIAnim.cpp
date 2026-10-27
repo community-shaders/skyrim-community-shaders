@@ -186,7 +186,8 @@ namespace Util::Anim
 	namespace
 	{
 		std::uint32_t g_pageEpoch = 0;
-		// The page last shown in each top-level window, so the menu and the CS Editor never reset each other's epoch
+		// The page last shown at each PageFade call site (its window and ID stack). Nested fades, such as a settings
+		// section inside the Settings page, each keep their own, so they never flip one shared slot every frame
 		std::unordered_map<ImGuiID, ImGuiID> g_lastPageIds;
 
 		/// True when a widget's eased state should start at rest: it was not drawn last frame, or the page changed.
@@ -310,7 +311,7 @@ namespace Util::Anim
 
 	PageFade::PageFade(ImGuiID pageId)
 	{
-		ImGuiID& lastPageId = g_lastPageIds[ImGui::GetCurrentWindow()->RootWindow->ID];
+		ImGuiID& lastPageId = g_lastPageIds[ImGui::GetID("##PageFadeSlot")];
 		if (pageId != lastPageId) {
 			lastPageId = pageId;
 			++g_pageEpoch;
