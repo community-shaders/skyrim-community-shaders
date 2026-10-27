@@ -123,8 +123,8 @@ private:
 	ID3D11ShaderResourceView* UpdateEngineLocalShadowData();
 	ID3D11ComputeShader* GetMaterialSetupCS();
 	ID3D11ComputeShader* GetFarMaterialSetupCS();
-	ID3D11ComputeShader* GetConservativeDepthCS();
-	ID3D11ComputeShader* GetFarConservativeDepthCS();
+	ID3D11ComputeShader* GetConservativeDepthCS(bool a_groupReduce);
+	ID3D11ComputeShader* GetFarConservativeDepthCS(bool a_groupReduce);
 	ID3D11ComputeShader* GetLightScatteringCS();
 	ID3D11ComputeShader* GetFarLightScatteringCS();
 	ID3D11ComputeShader* GetIntegrationCS();
@@ -151,6 +151,8 @@ private:
 	ID3D11ComputeShader* farMaterialSetupCS = nullptr;
 	ID3D11ComputeShader* conservativeDepthCS = nullptr;
 	ID3D11ComputeShader* farConservativeDepthCS = nullptr;
+	ID3D11ComputeShader* conservativeDepthGroupCS = nullptr;
+	ID3D11ComputeShader* farConservativeDepthGroupCS = nullptr;
 	ID3D11ComputeShader* lightScatteringCS = nullptr;
 	ID3D11ComputeShader* farLightScatteringCS = nullptr;
 	ID3D11ComputeShader* integrationCS = nullptr;
