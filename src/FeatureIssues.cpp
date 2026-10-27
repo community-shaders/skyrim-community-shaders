@@ -393,7 +393,7 @@ namespace FeatureIssues
 		const float actionsWidth = std::max({ Icons::MeasureLabeledButton(Icons::TI(MenuIcons::kFolder), featuresLabel),
 									   Icons::MeasureLabeledButton(Icons::TI(MenuIcons::kFolder), shadersLabel),
 									   Icons::MeasureLabeledButton(Icons::TI(MenuIcons::kLogs), logsLabel),
-									   ImGui::CalcTextSize(clearLabel).x + style.FramePadding.x * 2.0f }) +
+									   Icons::MeasureLabeledButton(Icons::TI(ICON_TI_TRASH), clearLabel) }) +
 		                           style.WindowPadding.x * 2.0f;
 		if (!ImGui::BeginTable("##FeatureIssuesLayout", 2, ImGuiTableFlags_SizingStretchProp))
 			return;
@@ -401,54 +401,50 @@ namespace FeatureIssues
 		ImGui::TableSetupColumn("##Actions", ImGuiTableColumnFlags_WidthFixed, actionsWidth);
 		ImGui::TableNextColumn();
 
-		// Shader Breaking Features Section (most critical)
-		if (auto section = Util::SectionWrapper(T("menu.issues.compilation_breaking_header", "Compilation Breaking Features"),
+		// Most critical first; the last shown section has no rule under it, the card's edge closes it
+		struct IssueSection
+		{
+			const char* title;
+			const char* description;
+			const ImVec4& color;
+			const std::vector<const FeatureIssueInfo*>& issues;
+		};
+		const IssueSection sections[] = {
+			{ T("menu.issues.compilation_breaking_header", "Compilation Breaking Features"),
 				T("menu.issues.compilation_breaking_desc",
 					"The following features modified core shader files and must be completely uninstalled via your mod manager. "
 					"Deleting just the INI file will not fix compilation errors if core shaders were modified."),
-				theme.StatusPalette.Error, !shaderBreakingIssues.empty())) {
-			for (const auto* issue : shaderBreakingIssues) {
-				DrawFeatureIssue(*issue, theme.StatusPalette.Error);
-			}
-		}
-		// Unknown Features Section (potentially compilation breaking)
-		if (auto section = Util::SectionWrapper(T("menu.issues.unknown_features_header", "Unknown Features"),
+				theme.StatusPalette.Error, shaderBreakingIssues },
+			{ T("menu.issues.unknown_features_header", "Unknown Features"),
 				T("menu.issues.unknown_features_desc",
 					"The following features are not recognized and we tried to disable automatically. "
 					"They may be from development branches or newer CS versions. Since we cannot determine what files they may have modified, "
 					"they should be removed as a precaution to prevent potential shader compilation failures."),
-				theme.StatusPalette.Error, !unknownIssues.empty())) {
-			for (const auto* issue : unknownIssues) {
-				DrawFeatureIssue(*issue, theme.StatusPalette.Error);
-			}
-		}
-		// Obsolete Features Section (non-shader-breaking)
-		if (auto section = Util::SectionWrapper(T("menu.issues.obsolete_features_header", "Obsolete Features"),
+				theme.StatusPalette.Error, unknownIssues },
+			{ T("menu.issues.obsolete_features_header", "Obsolete Features"),
 				T("menu.issues.obsolete_features_desc",
 					"The following features are obsolete and disabled automatically. "
 					"These features have been removed or replaced in this CS version but do not modify core shaders."),
-				theme.StatusPalette.Warning, !obsoleteIssues.empty())) {
-			for (const auto* issue : obsoleteIssues) {
-				DrawFeatureIssue(*issue, theme.StatusPalette.Warning);
-			}
-		}
-		// Version Mismatch Section
-		if (auto section = Util::SectionWrapper(T("menu.issues.wrong_version_header", "Wrong Version Features"),
+				theme.StatusPalette.Warning, obsoleteIssues },
+			{ T("menu.issues.wrong_version_header", "Wrong Version Features"),
 				T("menu.issues.wrong_version_desc",
 					"The following features have version compatibility issues and were disabled automatically. Please check for any updates or if the feature is considered obsolete."),
-				theme.StatusPalette.Warning, !versionIssues.empty())) {
-			for (const auto* issue : versionIssues) {
-				DrawFeatureIssue(*issue, theme.StatusPalette.Warning);
-			}
-		}
-		// Baseline preset failures
-		if (auto section = Util::SectionWrapper(T("menu.issues.baseline_failures_header", "Baseline Preset Failures"),
+				theme.StatusPalette.Warning, versionIssues },
+			{ T("menu.issues.baseline_failures_header", "Baseline Preset Failures"),
 				T("menu.issues.baseline_failures_desc",
 					"These Baseline preset files failed to load or apply. Old-format feature overrides are not compatible anymore "
 					"and must be updated to the new Baseline format. Check the file format and content."),
-				theme.StatusPalette.Error, !baselineIssues.empty())) {
-			for (const auto* issue : baselineIssues) {
-				DrawFeatureIssue(*issue, theme.StatusPalette.Error);
+				theme.StatusPalette.Error, baselineIssues },
+		};
+		const IssueSection* lastShown = nullptr;
+		for (const auto& section : sections) {
+			if (!section.issues.empty())
+				lastShown = &section;
+		}
+		for (const auto& section : sections) {
+			if (auto wrapper = Util::SectionWrapper(section.title, section.description, section.color, !section.issues.empty(), &section != lastShown)) {
+				for (const auto* issue : section.issues)
+					DrawFeatureIssue(*issue, section.color);
 			}
 		}
 
@@ -468,7 +464,7 @@ namespace FeatureIssues
 					openPath(logPath);
 				Util::HoverTip(T("menu.issues.open_logs_tooltip", "Opens the CommunityShaders.log file for manual review."));
 			}
-			if (Util::Button(clearLabel, buttonSize))
+			if (Icons::LabeledButton("##ClearIssues", Icons::TI(ICON_TI_TRASH), clearLabel, buttonSize))
 				ClearFeatureIssues();
 			Util::HoverTip(T("menu.issues.clear_issue_list_tooltip", "Clears this issue list (useful after cleanup)."));
 		}

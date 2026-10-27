@@ -1630,9 +1630,9 @@ namespace Util
 	}
 
 	// SectionWrapper implementation
-	SectionWrapper::SectionWrapper(const char* title, const char* description, const ImVec4& titleColor, bool isVisible) :
+	SectionWrapper::SectionWrapper(const char* title, const char* description, const ImVec4& titleColor, bool isVisible, bool ruleBelow) :
 		m_shouldDraw(isVisible),
-		m_treeNodeOpened(false)
+		m_ruleBelow(ruleBelow)
 	{
 		if (!m_shouldDraw) {
 			return;
@@ -1646,7 +1646,7 @@ namespace Util
 
 	SectionWrapper::~SectionWrapper()
 	{
-		if (m_shouldDraw) {
+		if (m_shouldDraw && m_ruleBelow) {
 			ImGui::Spacing();
 			ImGui::Separator();
 			ImGui::Spacing();
