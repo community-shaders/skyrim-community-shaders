@@ -23,7 +23,6 @@
 #include "ThemeManager.h"
 #include "Util.h"
 #include "Utils/UIAnim.h"
-#include "Utils/UIGlass.h"
 
 namespace
 {
@@ -432,72 +431,17 @@ float MenuHeaderRenderer::RenderSearchPill(bool docked, float left, float right,
 	const std::string& shortcutHint)
 {
 	using Constants = ThemeManager::Constants;
-	const char* label = T("ui.search", "Search...");
-	const float height = std::min(rowHeight, ImGui::GetFrameHeight() * Constants::PALETTE_PILL_HEIGHT_SCALE * uiScale);
-	if (height <= 0.0f)
+	// Same size as the Home / issues buttons it sits beside
+	const float size = std::min(rowHeight, ImGui::GetFontSize() * Constants::HEADER_NAV_BUTTON_FONT_RATIO * uiScale);
+	const float gap = Constants::DOCKED_ICON_SPACING * uiScale;
+	if (size <= 0.0f || right - gap - left < size)
 		return left;
 
-	const float pad = Constants::PALETTE_PILL_PAD_X * uiScale;
-	const float gap = Constants::PALETTE_PILL_GAP * uiScale;
-	const float glyphSize = height * 0.5f;
-	const float labelWidth = ImGui::CalcTextSize(label).x;
-	const float hintWidth = shortcutHint.empty() ? 0.0f : ImGui::CalcTextSize(shortcutHint.c_str()).x;
-	const float fullWidth = pad + glyphSize + pad * 0.5f + labelWidth + (hintWidth > 0.0f ? gap + hintWidth : 0.0f) + pad;
-
-	// Full pill when it fits; icon-only when tight; dropped when even that does not fit
-	const float room = right - gap - left;
-	const bool iconOnly = room < fullWidth;
-	const float width = iconOnly ? height : fullWidth;
-	if (room < width)
-		return left;
-	const float x = left;
-	const ImVec2 min(x, top + (rowHeight - height) * 0.5f);
-	const ImVec2 max(min.x + width, min.y + height);
-
-	bool hovered;
-	bool down;
-	bool clicked;
-	if (docked) {
-		// Drawn over the title bar like the icons, so the hit test is manual; the palette's own modal blocks it
-		hovered = !GoToPalette::IsOpen() && ImGui::IsMouseHoveringRect(min, max, false);
-		down = hovered && ImGui::IsMouseDown(ImGuiMouseButton_Left);
-		clicked = hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left);
-	} else {
-		const ImVec2 saved = ImGui::GetCursorScreenPos();
-		ImGui::SetCursorScreenPos(min);
-		clicked = ImGui::InvisibleButton("##GoToPill", ImVec2(width, height));
-		hovered = ImGui::IsItemHovered();
-		down = ImGui::IsItemActive();
-		ImGui::SetCursorScreenPos(saved);
-	}
-
-	ImDrawList* drawList = docked ? ImGui::GetForegroundDrawList() : ImGui::GetWindowDrawList();
-	Util::Glass::Style glass;
-	glass.rounding = height * 0.5f;
-	// Brightens toward the hovered state instead of snapping
-	glass.alpha = 1.0f + Util::Anim::ItemBlend(ImGui::GetID("##GoToPill"), hovered, down, false).hover * Constants::PALETTE_PILL_HOVER_BOOST;
-	Util::Glass::Draw(drawList, min, max, glass);
-
-	const ImU32 textColor = ImGui::GetColorU32(ImGuiCol_TextDisabled);
-	if (iconOnly) {
-		Icons::DrawCenteredGlyph(drawList, min, ImVec2(width, height), Icons::TI(MenuIcons::kSearch), ImGui::GetColorU32(ImGuiCol_Text));
-	} else {
-		Icons::DrawCenteredGlyph(drawList, ImVec2(min.x + pad, min.y), ImVec2(glyphSize, height), Icons::TI(MenuIcons::kSearch), textColor);
-		const float textY = Util::CenterTextTopY(min.y, height);
-		const float labelX = min.x + pad + glyphSize + pad * 0.5f;
-		drawList->AddText(ImVec2(labelX, textY), textColor, label);
-		if (hintWidth > 0.0f)
-			drawList->AddText(ImVec2(max.x - pad - hintWidth, textY), textColor, shortcutHint.c_str());
-	}
-
-	if (hovered) {
-		const std::string tooltip = shortcutHint.empty() ? std::string(T("menu.palette.pill_tooltip", "Go to a page, feature or setting")) :
-		                                                   std::format("{} ({})", T("menu.palette.pill_tooltip", "Go to a page, feature or setting"), shortcutHint);
-		ImGui::SetTooltip("%s", tooltip.c_str());
-	}
-	if (clicked)
-		GoToPalette::Open();
-	return x + width + gap;
+	const std::string tooltip = shortcutHint.empty() ? std::string(T("menu.palette.pill_tooltip", "Go to...")) :
+	                                                   std::format("{} ({})", T("menu.palette.pill_tooltip", "Go to..."), shortcutHint);
+	RenderNavButton(docked, ImVec2(left, top + (rowHeight - size) * 0.5f), size, "##HeaderGoTo", Icons::TI(MenuIcons::kSearch), tooltip.c_str(),
+		false, nullptr, []() { GoToPalette::Open(); });
+	return left + size + gap;
 }
 
 void MenuHeaderRenderer::RenderUndockedIcons(const std::vector<ActionIcon>& actionIcons, float uiScale)
