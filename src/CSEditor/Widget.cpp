@@ -56,8 +56,7 @@ void Widget::Load(bool showNotification)
 		if (showNotification) {
 			EditorWindow::GetSingleton()->ShowNotification(
 				std::format("No saved file - reset {} to vanilla values", GetEditorID()),
-				Util::Colors::GetInfo(),
-				3.0f);
+				Util::Colors::GetInfo());
 		}
 		return;
 	}
@@ -116,8 +115,7 @@ void Widget::Delete()
 		                          T(TKEY("deleted_reverted_to_vanilla"), "Deleted {} - reverted to vanilla values");
 		EditorWindow::GetSingleton()->ShowNotification(
 			std::vformat(message, std::make_format_args(editorId)),
-			Util::Colors::GetSuccess(),
-			3.0f);
+			Util::Colors::GetSuccess());
 	} catch (const std::filesystem::filesystem_error& e) {
 		logger::warn("Error deleting settings file ({}) : {}\n", filePath, e.what());
 	}
@@ -394,7 +392,7 @@ bool Widget::DrawTitleBarActions(bool showApply, bool showSaveLoadRevert, bool s
 		} else {
 			auto& action = addText("##TitleApply", T(TKEY("apply"), "Apply"), tooltip, onClick);
 			auto fill = statusPalette.SuccessColor;
-			fill.w = 0.6f;
+			fill.w = ThemeManager::Constants::CSE_TITLE_APPLY_FILL_ALPHA;
 			action.fillColor = fill;
 		}
 	}

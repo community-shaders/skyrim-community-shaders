@@ -2,6 +2,20 @@
 
 #include "WeatherUtils.h"
 
+namespace CSEditorWindows
+{
+	/// Chrome shared by the floating, auto-sized editor panels (palette and weather picker): no title bar, not resizable or scrollable.
+	inline constexpr ImGuiWindowFlags kFloatingPanelFlags =
+		ImGuiWindowFlags_NoTitleBar |
+		ImGuiWindowFlags_NoFocusOnAppearing |
+		ImGuiWindowFlags_AlwaysAutoResize |
+		ImGuiWindowFlags_NoResize |
+		ImGuiWindowFlags_NoScrollbar |
+		ImGuiWindowFlags_NoScrollWithMouse |
+		ImGuiWindowFlags_NoSavedSettings |
+		ImGuiWindowFlags_NoCollapse;
+}
+
 class PaletteWindow
 {
 public:

@@ -341,6 +341,47 @@ void LightEditor::UpdateEmittanceColor()
 	emittanceColorActive = true;
 }
 
+namespace
+{
+	/**
+	 * @brief Searchable combo over (editorID, form) pairs with a leading "none" row.
+	 * @param noneIsCurrent  Whether the none row is the active choice.
+	 * @param onNone         Called when the none row is picked.
+	 * @param isCurrent      Called as isCurrent(editorID, form) to mark the active entry.
+	 * @param onPick         Called as onPick(editorID, form) when an entry is picked.
+	 */
+	template <typename Entries, typename OnNone, typename IsCurrent, typename OnPick>
+	void DrawSearchableFormCombo(const char* label, const char* searchId, const char* preview, const char* noneLabel,
+		bool noneIsCurrent, const Entries& entries, OnNone onNone, IsCurrent isCurrent, OnPick onPick)
+	{
+		if (!ImGui::BeginCombo(label, preview)) {
+			Util::ClearComboSearch(searchId);
+			return;
+		}
+		const auto searchText = Util::DrawComboSearchInput(searchId);
+		if (searchText.empty() || Util::StringMatchesSearch(noneLabel, searchText)) {
+			if (Util::Selectable(noneLabel, noneIsCurrent)) {
+				onNone();
+				Util::ClearComboSearch(searchId);
+			}
+			if (noneIsCurrent)
+				ImGui::SetItemDefaultFocus();
+		}
+		for (const auto& [edid, form] : entries) {
+			if (!searchText.empty() && !Util::StringMatchesSearch(edid, searchText))
+				continue;
+			const bool current = isCurrent(edid, form);
+			if (Util::Selectable(edid.c_str(), current)) {
+				onPick(edid, form);
+				Util::ClearComboSearch(searchId);
+			}
+			if (current)
+				ImGui::SetItemDefaultFocus();
+		}
+		ImGui::EndCombo();
+	}
+}  // namespace
+
 // Picking a form sets the reference's runtime emittance source live; "(None)" removes it. LP bulbs
 // additionally persist the choice via Save to Light Placer.
 void LightEditor::DrawExternalEmittanceCombo()
@@ -354,33 +395,15 @@ void LightEditor::DrawExternalEmittanceCombo()
 	const char* kNoneLabel = T(TKEY("none"), "(None)");
 	const char* preview = externalEmittanceEdid.empty() ? kNoneLabel : externalEmittanceEdid.c_str();
 	const auto externalEmittanceLabel = fmt::format("{}##combo", T(TKEY("external_emittance"), "External Emittance"));
-	if (ImGui::BeginCombo(externalEmittanceLabel.c_str(), preview)) {
-		auto searchText = Util::DrawComboSearchInput(kEmittanceComboId);
-		if (searchText.empty() || Util::StringMatchesSearch(kNoneLabel, searchText)) {
-			if (Util::Selectable(kNoneLabel, externalEmittanceEdid.empty())) {
-				ClearExternalEmittance();
-				Util::ClearComboSearch(kEmittanceComboId);
-			}
-			if (externalEmittanceEdid.empty())
-				ImGui::SetItemDefaultFocus();
-		}
-		for (auto& [edid, form] : s_emittanceFormList) {
-			if (!searchText.empty() && !Util::StringMatchesSearch(edid, searchText))
-				continue;
-			const bool isCurrent = edid == externalEmittanceEdid;
-			if (Util::Selectable(edid.c_str(), isCurrent)) {
-				externalEmittanceEdid = edid;
-				useExternalEmittance = true;
-				ApplyExternalEmittance(form);
-				Util::ClearComboSearch(kEmittanceComboId);
-			}
-			if (isCurrent)
-				ImGui::SetItemDefaultFocus();
-		}
-		ImGui::EndCombo();
-	} else {
-		Util::ClearComboSearch(kEmittanceComboId);
-	}
+	DrawSearchableFormCombo(
+		externalEmittanceLabel.c_str(), kEmittanceComboId, preview, kNoneLabel, externalEmittanceEdid.empty(), s_emittanceFormList,
+		[&] { ClearExternalEmittance(); },
+		[&](const std::string& edid, RE::TESForm*) { return edid == externalEmittanceEdid; },
+		[&](const std::string& edid, RE::TESForm* form) {
+			externalEmittanceEdid = edid;
+			useExternalEmittance = true;
+			ApplyExternalEmittance(form);
+		});
 }
 
 RE::FormID LightEditor::ResolveFormEntry(const std::string& entry)
@@ -738,7 +761,7 @@ void LightEditor::DrawLightTable(const ImVec2& size)
 					if (ImGui::TableSetColumnIndex(4) && light.isLP) {
 						const ImVec4 info = Util::Colors::GetInfo();
 						const float width = Util::DrawBadgeAt(ImGui::GetCursorScreenPos(), ImGui::GetFrameHeight(), T(TKEY("column_lp"), "LP"),
-							ImVec4(info.x, info.y, info.z, 0.22f), ImGui::GetStyleColorVec4(ImGuiCol_Text));
+							ImVec4(info.x, info.y, info.z, ThemeManager::Constants::CSE_LP_BADGE_ALPHA), ImGui::GetStyleColorVec4(ImGuiCol_Text));
 						ImGui::Dummy(ImVec2(width, ImGui::GetFrameHeight()));
 					}
 					ImGui::PopID();
@@ -1034,40 +1057,22 @@ void LightEditor::DrawAdjustments(const ImVec2& size)
 
 		static constexpr const char* kLighOverrideId = "LighFormOverride";
 		const auto bulbTypeLabel = fmt::format("{}##combo", T(TKEY("bulb_type"), "Bulb type"));
-		if (ImGui::BeginCombo(bulbTypeLabel.c_str(), previewEdid)) {
-			auto searchText = Util::DrawComboSearchInput(kLighOverrideId);
-			if (searchText.empty() || Util::StringMatchesSearch(kOriginalLabel, searchText)) {
-				if (Util::Selectable(kOriginalLabel, current.data.lighFormId == original.data.lighFormId)) {
-					current.data = original.data;
-					Util::ClearComboSearch(kLighOverrideId);
-				}
-				if (current.data.lighFormId == original.data.lighFormId)
-					ImGui::SetItemDefaultFocus();
-			}
-			for (auto& [edid, ligh] : s_lighFormList) {
-				if (!searchText.empty() && !Util::StringMatchesSearch(edid, searchText))
-					continue;
-				const bool isCurrent = ligh->GetFormID() == current.data.lighFormId;
-				if (Util::Selectable(edid.c_str(), isCurrent)) {
-					// Swap the LIGH form but keep the user's edited fade/radius/size/cutoff.
-					const float savedFade = current.data.fade;
-					const float savedRadius = current.data.radius;
-					const float savedSize = current.data.size;
-					const float savedCutoff = current.data.cutoffOverride;
-					ApplyLighFormData(ligh);
-					current.data.fade = savedFade;
-					current.data.radius = savedRadius;
-					current.data.size = savedSize;
-					current.data.cutoffOverride = savedCutoff;
-					Util::ClearComboSearch(kLighOverrideId);
-				}
-				if (isCurrent)
-					ImGui::SetItemDefaultFocus();
-			}
-			ImGui::EndCombo();
-		} else {
-			Util::ClearComboSearch(kLighOverrideId);
-		}
+		DrawSearchableFormCombo(
+			bulbTypeLabel.c_str(), kLighOverrideId, previewEdid, kOriginalLabel, current.data.lighFormId == original.data.lighFormId, s_lighFormList,
+			[&] { current.data = original.data; },
+			[&](const std::string&, RE::TESObjectLIGH* ligh) { return ligh->GetFormID() == current.data.lighFormId; },
+			[&](const std::string&, RE::TESObjectLIGH* ligh) {
+				// Swap the LIGH form but keep the user's edited fade/radius/size/cutoff.
+				const float savedFade = current.data.fade;
+				const float savedRadius = current.data.radius;
+				const float savedSize = current.data.size;
+				const float savedCutoff = current.data.cutoffOverride;
+				ApplyLighFormData(ligh);
+				current.data.fade = savedFade;
+				current.data.radius = savedRadius;
+				current.data.size = savedSize;
+				current.data.cutoffOverride = savedCutoff;
+			});
 	}
 
 	// External emittance applies to any reference-backed bulb, so it lives outside the attached-only block.

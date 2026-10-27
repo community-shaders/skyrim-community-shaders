@@ -45,17 +45,7 @@ void WeatherPickerWindow::Draw()
 	if (anchorResolved)
 		positioned = true;
 
-	constexpr ImGuiWindowFlags kFlags =
-		ImGuiWindowFlags_NoTitleBar |
-		ImGuiWindowFlags_NoFocusOnAppearing |
-		ImGuiWindowFlags_AlwaysAutoResize |
-		ImGuiWindowFlags_NoResize |
-		ImGuiWindowFlags_NoScrollbar |
-		ImGuiWindowFlags_NoScrollWithMouse |
-		ImGuiWindowFlags_NoSavedSettings |
-		ImGuiWindowFlags_NoCollapse;
-
-	if (ImGui::Begin("##WeatherPickerWindow", nullptr, kFlags))
+	if (ImGui::Begin("##WeatherPickerWindow", nullptr, CSEditorWindows::kFloatingPanelFlags))
 		DrawContents();
 	ImGui::End();
 }
@@ -63,8 +53,8 @@ void WeatherPickerWindow::Draw()
 void WeatherPickerWindow::DrawContents()
 {
 	const float scale = Util::GetUIScale();
-	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f * scale, 4.0f * scale));
-	ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4.0f * scale, 2.0f * scale));
+	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(ThemeManager::Constants::CSE_PICKER_ITEM_SPACING * scale, ThemeManager::Constants::CSE_PICKER_ITEM_SPACING * scale));
+	ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(ThemeManager::Constants::CSE_PICKER_ITEM_SPACING * scale, ThemeManager::Constants::CSE_PICKER_FRAME_PADDING_Y * scale));
 
 	auto* sky = globals::game::sky;
 	if (!sky) {
@@ -167,7 +157,7 @@ void WeatherPickerWindow::DrawContents()
 	ImGui::PopStyleVar();
 	Util::AddTooltip(T(TKEY("reset_weather_tooltip"), "Resets weather to default"));
 
-	CSEditor::DrawWeatherTransitionBar(sky, comboWidth + 4.0f * scale + iconSize, false);
+	CSEditor::DrawWeatherTransitionBar(sky, comboWidth + ThemeManager::Constants::CSE_PICKER_ITEM_SPACING * scale + iconSize, false);
 
 	ImGui::PopStyleVar(2);
 }

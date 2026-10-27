@@ -152,7 +152,6 @@ void WeatherWidget::DrawWidget()
 	WeatherUtils::SetCurrentWidget(this);
 	const float scale = Util::GetUIScale();
 	if (BeginWidgetWindow(false, true, true, weather, "##WeatherSearch")) {
-		// Draw header with search and all buttons
 		DrawWidgetHeader("##WeatherSearch", false, true, true, weather);
 		DrawSearchDropdown();
 
@@ -188,7 +187,6 @@ void WeatherWidget::DrawWidget()
 						settings.parent = widget->GetEditorID();
 					}
 
-					// Set default focus to the current parent
 					if (parent == widget.get()) {
 						ImGui::SetItemDefaultFocus();
 					}
@@ -281,7 +279,7 @@ void WeatherWidget::DrawWidget()
 			WeatherWidget* parentWidget = hasParent ? GetParent() : nullptr;
 			const float todLabelOffset = (hasParent ? 120.0f : 100.0f) * scale;
 			const float formLabelOffset = (hasParent ? 170.0f : 150.0f) * scale;
-			const float pickerWidth = 225.0f * scale;
+			const float pickerWidth = ThemeManager::Constants::CSE_WEATHER_COLOR_PICKER_WIDTH * scale;
 			auto makeTimeRecordLabel = [](const char* recordType, int colorTime) {
 				return std::format("{} {}", recordType, ColorTimeLabel(colorTime));
 			};
@@ -436,8 +434,7 @@ void WeatherWidget::LoadSettings()
 				settings = vanillaSettings;
 				EditorWindow::GetSingleton()->ShowNotification(
 					std::format("Some values failed to load for {}", GetEditorID()),
-					Util::Colors::GetError(),
-					3.0f);
+					Util::Colors::GetError());
 			} else {
 				logger::info("Weather {}: Loaded settings - {} weather properties, {} colors, {} fog properties",
 					GetEditorID(),
@@ -1079,7 +1076,7 @@ void WeatherWidget::DrawCloudSettings()
 			if (!settings.clouds[i].texturePath.empty()) {
 				auto* texture = GetCloudTexture(i);
 				if (texture) {
-					float textureSize = 128.0f * scale;
+					float textureSize = ThemeManager::Constants::CSE_CLOUD_PREVIEW_SIZE * scale;
 					float groupEndX = ImGui::GetItemRectMax().x;
 					float availRight = ImGui::GetWindowPos().x + ImGui::GetWindowSize().x - ImGui::GetStyle().WindowPadding.x - groupEndX;
 					float offset = std::max(20.0f * scale, (availRight - textureSize) * 0.5f);
@@ -1505,8 +1502,7 @@ void WeatherWidget::InheritAllFromParent()
 
 	EditorWindow::GetSingleton()->ShowNotification(
 		std::format("Inherited all settings from {}", parentWidget->GetEditorID()),
-		Util::Colors::GetSuccess(),
-		3.0f);
+		Util::Colors::GetSuccess());
 }
 
 void WeatherWidget::ApplyChanges()

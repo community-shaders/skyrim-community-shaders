@@ -568,6 +568,12 @@ namespace WeatherUtils
 // Time of Day (TOD) helper implementation
 namespace TOD
 {
+	/// Width of one of the four time-of-day columns that fill the available row.
+	static float TODColumnWidth()
+	{
+		return (ImGui::GetContentRegionAvail().x - 3.0f * ImGui::GetStyle().ItemSpacing.x) / 4.0f;
+	}
+
 	const char* GetPeriodName(int index)
 	{
 		switch (index) {
@@ -631,9 +637,7 @@ namespace TOD
 		ImGui::TableNextRow();
 		ImGui::TableSetColumnIndex(1);
 
-		float totalWidth = ImGui::GetContentRegionAvail().x;
-		float spacing = ImGui::GetStyle().ItemSpacing.x;
-		float sliderWidth = (totalWidth - 3 * spacing) / 4.0f;
+		const float sliderWidth = TODColumnWidth();
 
 		for (int i = 0; i < Count; ++i) {
 			if (i > 0)
@@ -705,8 +709,7 @@ namespace TOD
 		DrawCenteredLabel(label);
 		ImGui::TableSetColumnIndex(1);
 
-		float totalWidth = ImGui::GetContentRegionAvail().x;
-		float sliderWidth = (totalWidth - 3 * ImGui::GetStyle().ItemSpacing.x) / 4.0f;
+		const float sliderWidth = TODColumnWidth();
 
 		for (int i = 0; i < Count; ++i) {
 			if (i > 0)
@@ -764,10 +767,7 @@ namespace TOD
 
 		ImGui::TableSetColumnIndex(1);
 
-		float totalWidth = ImGui::GetContentRegionAvail().x;
-		float spacing = ImGui::GetStyle().ItemSpacing.x;
-		// Match the header calculation exactly
-		float columnWidth = (totalWidth - 3 * spacing) / 4.0f;
+		const float columnWidth = TODColumnWidth();
 
 		for (int i = 0; i < Count; ++i) {
 			if (i > 0)
@@ -969,9 +969,7 @@ namespace TOD
 
 		ImGui::TableSetColumnIndex(1);
 
-		float totalWidth = ImGui::GetContentRegionAvail().x;
-		float spacing = ImGui::GetStyle().ItemSpacing.x;
-		float columnWidth = (totalWidth - 3 * spacing) / 4.0f;
+		const float columnWidth = TODColumnWidth();
 
 		for (int i = 0; i < Count; ++i) {
 			if (i > 0)
@@ -1081,9 +1079,7 @@ namespace TOD
 		DrawCenteredLabel(label);
 		ImGui::TableSetColumnIndex(1);
 
-		float totalWidth = ImGui::GetContentRegionAvail().x;
-		float spacing = ImGui::GetStyle().ItemSpacing.x;
-		float columnWidth = (totalWidth - 3 * spacing) / 4.0f;
+		const float columnWidth = TODColumnWidth();
 
 		for (int i = 0; i < Count; ++i) {
 			if (i > 0)
@@ -1122,9 +1118,7 @@ namespace TOD
 
 		ImGui::TableSetColumnIndex(1);
 
-		float totalWidth = ImGui::GetContentRegionAvail().x;
-		float spacing = ImGui::GetStyle().ItemSpacing.x;
-		float columnWidth = (totalWidth - 3 * spacing) / 4.0f;
+		const float columnWidth = TODColumnWidth();
 
 		if (inheritFlag)
 			PushInheritedStyle();

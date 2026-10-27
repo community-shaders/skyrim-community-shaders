@@ -28,18 +28,8 @@ void PaletteWindow::Draw()
 	// pixel size, so res / UI scale changes stay proportional automatically.
 	ImGui::SetNextWindowPos(ImVec2(displaySize.x - pad, bottomY), layoutCond, ImVec2(1.0f, 1.0f));
 
-	constexpr ImGuiWindowFlags kFlags =
-		ImGuiWindowFlags_NoTitleBar |
-		ImGuiWindowFlags_NoFocusOnAppearing |
-		ImGuiWindowFlags_AlwaysAutoResize |
-		ImGuiWindowFlags_NoResize |
-		ImGuiWindowFlags_NoScrollbar |
-		ImGuiWindowFlags_NoScrollWithMouse |
-		ImGuiWindowFlags_NoSavedSettings |
-		ImGuiWindowFlags_NoCollapse;
-
 	// No title/close chrome; toggle via the action-bar Palette checkbox.
-	if (ImGui::Begin("##CSEditorPalette", nullptr, kFlags)) {
+	if (ImGui::Begin("##CSEditorPalette", nullptr, CSEditorWindows::kFloatingPanelFlags)) {
 		DrawContents();
 	}
 	ImGui::End();
@@ -48,8 +38,8 @@ void PaletteWindow::Draw()
 void PaletteWindow::DrawContents()
 {
 	const float scale = Util::GetUIScale();
-	const float buttonSize = 24.0f * scale;
-	const float spacing = 4.0f * scale;
+	const float buttonSize = ThemeManager::Constants::CSE_PALETTE_BUTTON_SIZE * scale;
+	const float spacing = ThemeManager::Constants::CSE_PALETTE_SPACING * scale;
 	// Favourites row is the widest fixed content; wrap / auto-size both key off this.
 	const float favouritesRowWidth = buttonSize * static_cast<float>(maxFavoriteSlots) +
 	                                 spacing * static_cast<float>(maxFavoriteSlots - 1);
@@ -103,7 +93,7 @@ void PaletteWindow::DrawContents()
 			ImVec2 buttonMin = ImGui::GetItemRectMin();
 			ImVec2 buttonMax = ImGui::GetItemRectMax();
 			ImVec2 center = ImVec2((buttonMin.x + buttonMax.x) * 0.5f, (buttonMin.y + buttonMax.y) * 0.5f);
-			float starSize = buttonSize * 0.4f;
+			float starSize = buttonSize * ThemeManager::Constants::CSE_PALETTE_STAR_RATIO;
 			ImU32 starColor = IM_COL32(160, 160, 160, 255);
 			DrawIconStar(center, starSize, starColor, false);
 
@@ -191,7 +181,7 @@ void PaletteWindow::TrackColorUsage(const float3& color)
 {
 	float currentTime = static_cast<float>(ImGui::GetTime());
 
-	const float epsilon = 0.001f;
+	const float epsilon = ThemeManager::Constants::CSE_PALETTE_COLOR_EPSILON;
 	for (auto& entry : colorEntries) {
 		if (std::abs(entry.color.x - color.x) < epsilon &&
 			std::abs(entry.color.y - color.y) < epsilon &&

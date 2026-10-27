@@ -713,11 +713,9 @@ void EditorWindow::ShowWidgetWindow()
 			undoHistory.Watch(MakeUndoTarget(widget));
 	});
 
-	// Draw all open widgets using WidgetFactory template
 	for (auto* collection : GetWidgetCollections())
 		WidgetFactory::DrawOpenWidgets(*collection);
 
-	// Draw current cell lighting widget if open
 	if (currentCellLightingWidget && currentCellLightingWidget->IsOpen()) {
 		currentCellLightingWidget->DrawWidget();
 	}
@@ -754,8 +752,8 @@ void EditorWindow::DrawEditorWindows(float scale, float actionBarBottom)
 		viewportBottomY = actionBarBottom + pad;
 	}
 
-	auto settingsWindowHeight = height * 0.25f;
-	auto settingsWindowWidth = width * 0.25f;
+	auto settingsWindowHeight = height * ThemeManager::Constants::CSE_SETTINGS_WINDOW_RATIO;
+	auto settingsWindowWidth = width * ThemeManager::Constants::CSE_SETTINGS_WINDOW_RATIO;
 	if (showSettingsWindow) {
 		ImGui::SetNextWindowSize(ImVec2(settingsWindowWidth, settingsWindowHeight), ImGuiCond_FirstUseEver);
 		ImGui::SetNextWindowPos({ (width / 2.0f) - (settingsWindowWidth / 2.0f), (height / 2.0f) - (settingsWindowHeight / 2.0f) }, ImGuiCond_Appearing);
@@ -927,7 +925,6 @@ void EditorWindow::RenderUI()
 				auto player = RE::PlayerCharacter::GetSingleton();
 				if (player && player->parentCell && player->parentCell->IsInteriorCell()) {
 					if (ImGui::MenuItem(T(TKEY("edit_current_cell_lighting"), "Edit Current Cell Lighting"))) {
-						// Check if widget already exists
 						bool found = false;
 						if (currentCellLightingWidget && currentCellLightingWidget->cell == player->parentCell) {
 							currentCellLightingWidget->SetOpen(true);
@@ -935,7 +932,6 @@ void EditorWindow::RenderUI()
 						}
 
 						if (!found) {
-							// Create new widget for current cell
 							currentCellLightingWidget = std::make_unique<CellLightingWidget>(player->parentCell);
 							currentCellLightingWidget->CacheFormData();
 							currentCellLightingWidget->Load();
@@ -2414,7 +2410,7 @@ void EditorWindow::DrawTimeScaleSlider(const char* id, RE::Calendar* calendar)
 	assert(calendar && calendar->timeScale);
 	if (timePaused)
 		timeScaleSlider = std::max(savedTimeScale, kTimeScaleMin);
-	else if (std::abs(calendar->timeScale->value - timeScaleSlider) > 0.01f)
+	else if (std::abs(calendar->timeScale->value - timeScaleSlider) > ThemeManager::Constants::CSE_TIME_SCALE_SYNC_EPSILON)
 		timeScaleSlider = calendar->timeScale->value;
 
 	ImGui::BeginDisabled(timePaused);
@@ -2499,7 +2495,7 @@ void EditorWindow::WarnOpeningBlocked()
 {
 	const std::string message = T(TKEY("open_blocked"), "Wait! You cannot open the editor in a loading screen or menu.");
 	// A repeated hotkey press while the card is still up would only stack copies of it.
-	Util::Notifications::ShowOnce(message, Util::Colors::GetWarning(), 3.0f);
+	Util::Notifications::ShowOnce(message, Util::Colors::GetWarning(), kNotificationDuration);
 }
 
 void EditorWindow::HideGameMenus()

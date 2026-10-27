@@ -394,7 +394,7 @@ namespace
 		ImGui::Indent();
 		if (ImGui::CollapsingHeader(T("cs_editor.debug.scene_context", "Scene Context"), ImGuiTreeNodeFlags_DefaultOpen))
 			DrawSceneContext(snapshot);
-		if (ImGui::CollapsingHeader(T("cs_editor.debug.time_of_day", "Time of Day"), ImGuiTreeNodeFlags_DefaultOpen))
+		if (ImGui::CollapsingHeader(T("cs_editor.debug.time_of_day_header", "Time of Day"), ImGuiTreeNodeFlags_DefaultOpen))
 			DrawTimeOfDay(snapshot);
 		if (ImGui::CollapsingHeader(T("cs_editor.debug.weather", "Weather"), ImGuiTreeNodeFlags_DefaultOpen))
 			DrawWeather(snapshot);

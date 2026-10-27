@@ -517,6 +517,19 @@ public:
 		// --- First-time setup dialog ---
 		static constexpr float HOME_SETUP_WATERMARK_MONO_ALPHA = 0.24f;                   // Dialog logo watermark opacity, monochrome logo
 		static constexpr ImU32 HOME_SETUP_WATERMARK_COLOR = IM_COL32(255, 255, 255, 60);  // Dialog logo watermark tint, full-colour logo
+		// --- CS Editor ---
+		static constexpr float CSE_PALETTE_BUTTON_SIZE = 24.0f;          // Palette swatch button edge, before UI scale
+		static constexpr float CSE_PALETTE_SPACING = 4.0f;               // Gap between palette swatches, before UI scale
+		static constexpr float CSE_PALETTE_STAR_RATIO = 0.4f;            // Empty-favourite star size as a share of the swatch
+		static constexpr float CSE_PALETTE_COLOR_EPSILON = 0.001f;       // Channel tolerance when matching a colour to a palette entry
+		static constexpr float CSE_TITLE_APPLY_FILL_ALPHA = 0.6f;        // Fill alpha of the text-only Apply title-bar action
+		static constexpr float CSE_LP_BADGE_ALPHA = 0.22f;               // Fill alpha of the LP badge in the light list
+		static constexpr float CSE_WEATHER_COLOR_PICKER_WIDTH = 225.0f;  // Weather colour/form picker width, before UI scale
+		static constexpr float CSE_CLOUD_PREVIEW_SIZE = 128.0f;          // Cloud texture preview edge, before UI scale
+		static constexpr float CSE_PICKER_ITEM_SPACING = 4.0f;           // Weather picker item spacing, before UI scale
+		static constexpr float CSE_PICKER_FRAME_PADDING_Y = 2.0f;        // Weather picker vertical frame padding, before UI scale
+		static constexpr float CSE_SETTINGS_WINDOW_RATIO = 0.25f;        // First-use size of the editor settings window vs the display
+		static constexpr float CSE_TIME_SCALE_SYNC_EPSILON = 0.01f;      // Time scale drift before the slider re-reads the game value
 	};
 
 	static ThemeManager* GetSingleton()
