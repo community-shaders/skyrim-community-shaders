@@ -906,7 +906,6 @@ void Menu::DrawSettings()
 		FeatureListRenderer::RenderFeatureList(
 			footer_height,
 			selectedMenu,
-			featureSearch,
 			pendingFeatureSelection,
 			categoryExpansionStates,
 			[&]() { DrawSettingsPage(false, false); },
@@ -951,7 +950,12 @@ MenuShortcuts::Actions Menu::MakeShortcutActions()
 		.undo = [this] { pendingUndo = UndoRequest::Undo; },
 		.redo = [this] { pendingUndo = UndoRequest::Redo; },
 		.openGoTo = [] { GoToPalette::Open(); },
-		.focusSearch = [this] { pendingSearchFocus = true; },
+		.focusSearch = [this] {
+			// The Settings page has its own search field; everywhere else Ctrl+F searches features through the palette
+			if (FeatureListRenderer::IsPageOpen(MenuPageIds::kSettings))
+				pendingSearchFocus = true;
+			else
+				GoToPalette::Open(); },
 		.stepFeature = [this](int step) { pendingFeatureStep = step; },
 		.canTogglePin = [this] { return shownFeature && shownFeature->loaded; },
 		.togglePin = [this] { FeatureListRenderer::ToggleFavorite(shownFeature); },

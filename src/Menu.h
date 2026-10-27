@@ -155,8 +155,6 @@ public:
 	/** @brief Draws the main settings window with all tabs and feature panels */
 	void DrawSettings();
 
-	// Search bar state
-	std::string featureSearch;  // For left pane feature search
 	/** @brief Draws the in-game performance/debug overlay */
 	void DrawOverlay();
 	/** @brief Draws the detached weather details editor window */
@@ -542,7 +540,7 @@ private:
 	// Menu navigation
 	std::string pendingFeatureSelection;  // Feature to select on next frame
 	int pendingFeatureStep = 0;           // Ctrl+PgUp / Ctrl+PgDn request, applied by the feature list this frame
-	bool pendingSearchFocus = false;      // Ctrl+F request, applied by the feature list this frame
+	bool pendingSearchFocus = false;      // Ctrl+F on the Settings page, applied by its section list this frame
 	Feature* shownFeature = nullptr;      // Feature whose page the right column drew; read by shortcuts the frame after
 
 	// Keyboard shortcuts, built on the first DrawSettings and dispatched once per frame

@@ -3216,7 +3216,6 @@
     "menu.features.settings_hidden_disabled": "功能设置已隐藏，因为此功能在启动时被禁用。",
     "menu.features.sort_alphabetically": "按字母顺序",
     "menu.features.sort_by_category": "按类别",
-    "menu.features.sort_tooltip": "排序功能",
     "menu.features.tag_alpha": "[ALPHA]",
     "menu.features.tag_beta": "[BETA]",
     "menu.features.use_baselines_tooltip": "使用基础预设值：你的更改会覆盖基础预设设置的数值。点击以放弃这些更改并使用预设值。你的其他更改会保留。",

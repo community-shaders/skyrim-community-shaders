@@ -71,7 +71,6 @@ namespace
 	/// What the cached menu list was built from; any difference rebuilds it.
 	struct MenuListKey
 	{
-		std::string search;
 		std::uint32_t filter = 0;
 		Menu::FeatureSortMode sort = Menu::FeatureSortMode::Category;
 		std::uint64_t i18nGeneration = 0;
@@ -275,12 +274,6 @@ namespace
 			Icons::DrawCenteredGlyph(drawList, ImVec2(x + shownLabel + glyphGap, y), ImVec2(lineHeight, lineHeight), Icons::TI(MenuIcons::kExternal),
 				ImGui::GetColorU32(disabled ? ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled) : Util::Colors::GetSecondary()));
 		return clicked;
-	}
-
-	/** @brief Glyph on the sort button; the popup holds the sort order and the filters, so it does not follow the mode. */
-	Icons::GlyphRef GetSortButtonIcon()
-	{
-		return Icons::TI(ICON_TI_MENU_2);
 	}
 
 	/// Set when a shortcut moved the selection, so the list scrolls the newly selected row into view.
@@ -531,7 +524,6 @@ std::string FeatureListRenderer::TranslateCategory(std::string_view category)
 void FeatureListRenderer::RenderFeatureList(
 	float footerHeight,
 	size_t& selectedMenu,
-	std::string& featureSearch,
 	std::string& pendingFeatureSelection,
 	std::map<std::string, bool>& categoryExpansionStates,
 	const std::function<void()>& drawSettings,
@@ -539,9 +531,8 @@ void FeatureListRenderer::RenderFeatureList(
 {
 	ImGui::BeginChild("Menus Table", ImVec2(0, -footerHeight));
 
-	// A search filter or a collapsed category could hide the feature being navigated to
+	// A collapsed category could hide the feature being navigated to
 	if (!pendingFeatureSelection.empty()) {
-		featureSearch.clear();
 		if (const auto* feature = Feature::FindFeatureByShortName(pendingFeatureSelection))
 			categoryExpansionStates[std::string(feature->GetCategory())] = true;
 		g_menuListDirty = true;
@@ -552,7 +543,7 @@ void FeatureListRenderer::RenderFeatureList(
 	const std::string selectedKey = selectedMenu < g_menuList.list.size() ? GetEntryKey(g_menuList.list[selectedMenu]) :
 	                                g_detachedFeature                     ? "feature:" + g_detachedFeature->GetShortName() :
 	                                                                        std::string();
-	if (UpdateMenuList(featureSearch, categoryExpansionStates, drawSettings) && !selectedKey.empty())
+	if (UpdateMenuList(categoryExpansionStates, drawSettings) && !selectedKey.empty())
 		ReselectEntry(selectedKey, g_menuList.list, selectedMenu);
 	const auto& menuList = g_menuList.list;
 
@@ -588,13 +579,13 @@ void FeatureListRenderer::RenderFeatureList(
 	const auto* openPage = selectedMenu < menuList.size() ? std::get_if<BuiltInMenu>(&menuList[selectedMenu]) : nullptr;
 	const bool settingsOpen = openPage && openPage->id == MenuPageIds::kSettings && hooks.drawSettingsNav;
 	if (globals::menu->GetSettings().AutoHideFeatureList && !settingsOpen) {
-		RenderAutoHidePane(menuList, selectedMenu, featureSearch, pendingFeatureSelection, categoryExpansionStates, hooks);
+		RenderAutoHidePane(menuList, selectedMenu, pendingFeatureSelection, categoryExpansionStates, hooks);
 	} else if (ImGui::BeginTable("Menus Table", 2, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_Resizable)) {
 		ImGui::TableSetupColumn("##ListOfMenus", 0, 2);
 		ImGui::TableSetupColumn("##MenuConfig", 0, 8);
 		ImGui::TableNextColumn();
 		// Changes made here (search, filters, sort, a category, a pin) rebuild the list next frame
-		RenderLeftColumn(menuList, selectedMenu, featureSearch, categoryExpansionStates, hooks);
+		RenderLeftColumn(menuList, selectedMenu, categoryExpansionStates, hooks);
 		ImGui::TableNextColumn();
 		RenderRightColumn(menuList, selectedMenu, pendingFeatureSelection, hooks);
 		ImGui::EndTable();
@@ -606,13 +597,11 @@ void FeatureListRenderer::RenderFeatureList(
 }
 
 bool FeatureListRenderer::UpdateMenuList(
-	const std::string& featureSearch,
 	std::map<std::string, bool>& categoryExpansionStates,
 	const std::function<void()>& drawSettings)
 {
 	const auto& menuSettings = globals::menu->GetSettings();
 	MenuListKey key{
-		.search = featureSearch,
 		.filter = menuSettings.FeatureListFilter & FeatureListFilter::kKnown,
 		.sort = menuSettings.FeatureListSort,
 		.i18nGeneration = I18n::GetSingleton()->GetGeneration(),
@@ -635,15 +624,44 @@ bool FeatureListRenderer::UpdateMenuList(
 		return false;
 	}
 
-	g_menuList.list = BuildMenuList(featureSearch, categoryExpansionStates, drawSettings, g_filterCounts);
+	g_menuList.list = BuildMenuList(categoryExpansionStates, drawSettings, g_filterCounts);
 	g_menuList.key = std::move(key);
 	g_menuList.valid = true;
 	g_menuListDirty = false;
 	return true;
 }
 
+std::uint32_t FeatureListRenderer::GetFilterBits(Feature* feat)
+{
+	auto* sceneManager = globals::sceneSettingsManager;
+	const auto shortName = feat->GetShortName();
+	std::uint32_t bits = 0;
+	if (feat->loaded && globals::state->IsFeatureFavorite(shortName))
+		bits |= FeatureListFilter::kFavorites;
+	if (globals::state->HasUserEdits(feat))
+		bits |= FeatureListFilter::kModified;
+	if (sceneManager && sceneManager->HasAnySceneEntriesForFeature(shortName))
+		bits |= FeatureListFilter::kScene;
+	if (feat->GetReleaseStage() != Feature::ReleaseStage::Release)
+		bits |= FeatureListFilter::kPreRelease;
+	if (!feat->loaded)
+		bits |= FeatureListFilter::kUnloaded;
+	return bits;
+}
+
+bool FeatureListRenderer::PassesFilter(std::uint32_t bits, std::uint32_t filter)
+{
+	constexpr std::uint32_t kAttributes = FeatureListFilter::kKnown & ~FeatureListFilter::kUnloaded;
+	const std::uint32_t required = filter & kAttributes;
+	return (bits & required) == required;
+}
+
+const FeatureListRenderer::FilterCounts& FeatureListRenderer::GetFilterCounts()
+{
+	return g_filterCounts;
+}
+
 std::vector<FeatureListRenderer::MenuFuncInfo> FeatureListRenderer::BuildMenuList(
-	const std::string& featureSearch,
 	std::map<std::string, bool>& categoryExpansionStates,
 	const std::function<void()>& drawSettings,
 	FilterCounts& counts)
@@ -663,7 +681,6 @@ std::vector<FeatureListRenderer::MenuFuncInfo> FeatureListRenderer::BuildMenuLis
 		Icons::TI(MenuIcons::kProfiling), NavStyle::Plain, T("menu.features.profiling_hint", "What each feature costs per frame"), true });
 
 	auto* state = globals::state;
-	auto* sceneManager = globals::sceneSettingsManager;
 	const auto filter = globals::menu->GetSettings().FeatureListFilter & FeatureListFilter::kKnown;
 	const bool showUnloaded = (filter & FeatureListFilter::kUnloaded) != 0;
 	const bool developerMode = state->IsDeveloperMode();
@@ -691,21 +708,14 @@ std::vector<FeatureListRenderer::MenuFuncInfo> FeatureListRenderer::BuildMenuLis
 		if (showUnloaded ? !unloadedListed : !feat->loaded)
 			continue;
 
-		const bool favorite = feat->loaded && state->IsFeatureFavorite(shortName);
-		const bool modified = state->HasUserEdits(feat);
-		const bool scene = sceneManager && sceneManager->HasAnySceneEntriesForFeature(shortName);
-		const bool preRelease = feat->GetReleaseStage() != Feature::ReleaseStage::Release;
+		const auto bits = GetFilterBits(feat);
+		const bool favorite = (bits & FeatureListFilter::kFavorites) != 0;
 		counts.favorites += favorite;
-		counts.modified += modified;
-		counts.scene += scene;
-		counts.preRelease += preRelease;
+		counts.modified += (bits & FeatureListFilter::kModified) != 0;
+		counts.scene += (bits & FeatureListFilter::kScene) != 0;
+		counts.preRelease += (bits & FeatureListFilter::kPreRelease) != 0;
 
-		const bool passes = (!(filter & FeatureListFilter::kFavorites) || favorite) &&
-		                    (!(filter & FeatureListFilter::kModified) || modified) &&
-		                    (!(filter & FeatureListFilter::kScene) || scene) &&
-		                    (!(filter & FeatureListFilter::kPreRelease) || preRelease) &&
-		                    (featureSearch.empty() || Util::FeatureMatchesSearch(feat, featureSearch));
-		if (!passes)
+		if (!PassesFilter(bits, filter))
 			continue;
 		counts.shown++;
 		(favorite ? favorites : listed).push_back(feat);
@@ -800,7 +810,6 @@ void FeatureListRenderer::HandlePendingFeatureSelection(
 void FeatureListRenderer::RenderLeftColumn(
 	const std::vector<MenuFuncInfo>& menuList,
 	size_t& selectedMenu,
-	std::string& featureSearch,
 	std::map<std::string, bool>& categoryExpansionStates,
 	Hooks& hooks)
 {
@@ -851,53 +860,20 @@ void FeatureListRenderer::RenderLeftColumn(
 		}
 		ImGui::EndChild();
 	} else {
-		// Search and sort stay put, the features scroll
-		const float iconButtonWidth = ImGui::GetFrameHeight();
-		{
-			// The field edits a C buffer; the menu keeps the text as a string, so copy it in and take changes back.
-			// While the field is active ImGui edits its own copy, so the per-frame copy never fights the typing.
-			char searchBuffer[256];
-			strncpy_s(searchBuffer, featureSearch.c_str(), _TRUNCATE);
-			// Ctrl+F comes from the menu's shortcut table (focusSearch); the field opens from the icon, that shortcut or Ctrl+F
-			if (BrowserUI::ExpandingSearchField("##FeatureSearch", searchBuffer, sizeof(searchBuffer), T("ui.search_features", "Search Features..."),
-					ImGui::GetContentRegionAvail().x - (iconButtonWidth + ImGui::GetStyle().ItemSpacing.x), hooks.focusSearch))
-				featureSearch = searchBuffer;
-		}
-		const float searchBarHeight = ImGui::GetItemRectSize().y;
-
 		auto& filter = globals::menu->GetSettings().FeatureListFilter;
-		{
-			auto style = Util::TransparentIconButtonStyle();
-			// The sort button stays pinned to the right edge while the search field opens and closes
-			ImGui::SameLine();
-			ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(0.0f, ImGui::GetContentRegionAvail().x - iconButtonWidth));
-			if (Icons::Button("###FeatureSort", GetSortButtonIcon(), ImVec2(iconButtonWidth, searchBarHeight)))
-				ImGui::OpenPopup("##FeatureSortPopup");
-			// A dot on the button while any filter narrows the list
-			if ((filter & FeatureListFilter::kKnown) != 0) {
-				const float radius = ImGui::GetFrameHeight() * ThemeManager::Constants::SORT_FILTER_DOT_RATIO;
-				const ImVec2 max = ImGui::GetItemRectMax();
-				Util::DrawIconCircle(ImVec2(max.x - radius * 1.5f, ImGui::GetItemRectMin().y + radius * 1.5f), radius, ImGui::GetColorU32(Util::Colors::GetAccent()), true);
-			}
-			if (auto _tt = Util::HoverTooltipWrapper())
-				ImGui::Text("%s", T("menu.features.sort_tooltip", "Sort and filter features"));
-		}
-		RenderSortPopup(g_filterCounts);
-
 		if (ImGui::BeginChild("##FeatureListScroll", ImVec2(0.0f, 0.0f))) {
 			for (size_t i = 0; i < menuList.size(); i++) {
 				if (!builtInAt(i))
 					std::visit(ListMenuVisitor{ i, selectedMenu, categoryExpansionStates, hooks }, menuList[i]);
 			}
-			if (g_filterCounts.shown == 0 && (filter != 0 || !featureSearch.empty())) {
+			if (g_filterCounts.shown == 0 && filter != 0) {
 				BrowserUI::EmptyState(T("menu.features.no_matches", "No features match"),
-					T("menu.features.no_matches_hint", "Try another search, or turn off a filter."));
-				const char* clearLabel = T("menu.features.clear_filters", "Clear search and filters");
+					T("menu.features.no_matches_hint", "Turn off a filter to list more features."));
+				const char* clearLabel = T("menu.features.clear_filters", "Clear filters");
 				const float clearWidth = ImGui::CalcTextSize(clearLabel).x;
 				ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(0.0f, (ImGui::GetContentRegionAvail().x - clearWidth) * 0.5f));
 				if (BrowserUI::Link("##ClearFilters", clearLabel)) {
 					filter = 0;
-					featureSearch.clear();
 				}
 			}
 		}
@@ -915,10 +891,11 @@ bool FeatureListRenderer::IsPageOpen(std::string_view pageId)
 	return g_openPageId == pageId;
 }
 
-void FeatureListRenderer::RenderSortPopup(const FilterCounts& counts)
+void FeatureListRenderer::RenderSortPopup(const char* popupId)
 {
-	if (!ImGui::BeginPopup("##FeatureSortPopup"))
+	if (!ImGui::BeginPopup(popupId))
 		return;
+	const FilterCounts& counts = g_filterCounts;
 	auto& menuSettings = globals::menu->GetSettings();
 
 	ImGui::SeparatorText(T("menu.features.sort_section", "Sort"));
@@ -973,7 +950,6 @@ void FeatureListRenderer::RenderSortPopup(const FilterCounts& counts)
 void FeatureListRenderer::RenderAutoHidePane(
 	const std::vector<MenuFuncInfo>& menuList,
 	size_t& selectedMenu,
-	std::string& featureSearch,
 	std::string& pendingFeatureSelection,
 	std::map<std::string, bool>& categoryExpansionStates,
 	Hooks& hooks)
@@ -998,11 +974,7 @@ void FeatureListRenderer::RenderAutoHidePane(
 	const bool inEdge = inY && mouse.x >= areaMin.x - 2.0f * scale && mouse.x < areaMin.x + Constants::AUTOHIDE_ACTIVATION_ZONE_WIDTH * scale;
 	const bool inDrawer = inY && mouse.x >= areaMin.x && mouse.x < areaMin.x + drawerWidth;
 
-	if (hooks.focusSearch) {
-		// Ctrl+F needs the search field on screen
-		drawer.open = true;
-		drawer.hoverSince = drawer.leaveSince = -1.0;
-	} else if (!drawer.open) {
+	if (!drawer.open) {
 		// Opens after the cursor has rested on the edge for a moment, so passing by does not flash the list
 		if (!inEdge)
 			drawer.hoverSince = -1.0;
@@ -1038,8 +1010,8 @@ void FeatureListRenderer::RenderAutoHidePane(
 	background.w = 1.0f;
 	ImGui::PushStyleColor(ImGuiCol_ChildBg, background);
 	if (ImGui::BeginChild("##FeatureListDrawer", ImVec2(drawerWidth, avail.y), ImGuiChildFlags_Borders)) {
-		RenderLeftColumn(menuList, selectedMenu, featureSearch, categoryExpansionStates, hooks);
-		// Typing in the search field or an open sort popup holds the list open even with the cursor elsewhere
+		RenderLeftColumn(menuList, selectedMenu, categoryExpansionStates, hooks);
+		// An active field or an open popup holds the list open even with the cursor elsewhere
 		drawer.keepOpen = ImGui::IsAnyItemActive() || ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
 	}
 	ImGui::EndChild();

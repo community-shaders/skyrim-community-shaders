@@ -38,8 +38,8 @@ namespace MenuPageIds
 /**
  * @brief Filters of the main menu's feature list, stored as a bitmask in Menu::Settings::FeatureListFilter.
  *
- * Filters combine with AND, and the search text applies on top. Without kUnloaded only loaded features are listed;
- * with it, only the ones that are not.
+ * Filters combine with AND. Without kUnloaded only loaded features are listed; with it, only the ones that are not.
+ * The sort and filter popup lives in the Go to palette (Ctrl+K).
  */
 namespace FeatureListFilter
 {
@@ -55,7 +55,7 @@ namespace FeatureListFilter
 /**
  * @brief Renders the two-column feature list and settings panel in the main menu.
  *
- * The left column shows a searchable, categorized list of built-in pages and
+ * The left column shows a categorized list of built-in pages and
  * installed features. The right column displays the settings UI for whichever
  * item is currently selected.
  */
@@ -97,7 +97,7 @@ public:
 		/// In: moves the selection to the previous (< 0) or next (> 0) feature in the visible list, skipping
 		/// category headers, labels and built-in pages. Reset to 0 once applied.
 		int featureStep = 0;
-		/// In: focuses the feature search field this frame (Ctrl+F). Reset once applied.
+		/// In: focuses the Settings search field this frame (Ctrl+F while Settings is open). Reset once applied.
 		bool focusSearch = false;
 		/// Called with the feature whose page is about to be drawn this frame, before its header.
 		std::function<void(Feature*)> onFeatureShown;
@@ -109,7 +109,7 @@ public:
 		std::function<void(bool focusSearch)> drawSettingsNav;
 	};
 
-	/** @brief How many features each filter would list on its own, ignoring the search and other filters. */
+	/** @brief How many features each filter would list on its own, ignoring the other filters. */
 	struct FilterCounts
 	{
 		int favorites = 0;
@@ -117,7 +117,7 @@ public:
 		int scene = 0;
 		int preRelease = 0;
 		int unloaded = 0;
-		/// Features the current search and filters list, pinned ones included.
+		/// Features the current filters list, pinned ones included.
 		int shown = 0;
 	};
 
@@ -130,7 +130,6 @@ public:
 	 *
 	 * @param footerHeight Height reserved for the footer area below the list.
 	 * @param selectedMenu Index of the currently selected menu item (updated on selection change).
-	 * @param featureSearch Current search filter string (updated by the search input).
 	 * @param pendingFeatureSelection Feature short name or page ID (MenuPageIds) to auto-select; a page display
 	 *        name is accepted as a fallback. Cleared after processing.
 	 * @param categoryExpansionStates Map of category name to expanded/collapsed state.
@@ -140,7 +139,6 @@ public:
 	static void RenderFeatureList(
 		float footerHeight,
 		size_t& selectedMenu,
-		std::string& featureSearch,
 		std::string& pendingFeatureSelection,
 		std::map<std::string, bool>& categoryExpansionStates,
 		const std::function<void()>& drawSettings,
@@ -180,6 +178,28 @@ public:
 
 	/** @brief Translated display label for a FeatureCategories value. */
 	static std::string TranslateCategory(std::string_view category);
+
+	/**
+	 * @brief Which filters a feature matches, as FeatureListFilter bits (kUnloaded set when it is not loaded).
+	 * Call State::PrimeUserEdits() first when asking for many features.
+	 */
+	static std::uint32_t GetFilterBits(Feature* feat);
+
+	/**
+	 * @brief Whether a feature's filter bits satisfy the active filters. Only the attribute filters (Pinned, Modified,
+	 * Scene, Pre-release) are checked; the Unloaded filter picks which features are candidates and is up to the caller.
+	 */
+	static bool PassesFilter(std::uint32_t bits, std::uint32_t filter);
+
+	/** @brief Filter counts from the last time the list was built; shown beside each filter in the sort popup. */
+	static const FilterCounts& GetFilterCounts();
+
+	/**
+	 * @brief Draws the sort and filter popup (sort order, filters with counts, Clear filters) if `popupId` is open.
+	 * The sort and filters are saved with the menu settings and drive both the list and the Go to palette.
+	 * @param popupId ID passed to ImGui::OpenPopup.
+	 */
+	static void RenderSortPopup(const char* popupId);
 
 private:
 	struct ListMenuVisitor
@@ -229,38 +249,32 @@ private:
 	};
 
 	/**
-	 * @brief Builds the list from the built-in pages and the features the search and filters pass.
+	 * @brief Builds the list from the built-in pages and the features the filters pass.
 	 * @param counts Receives each filter's count and the number of features listed.
 	 */
 	static std::vector<MenuFuncInfo> BuildMenuList(
-		const std::string& featureSearch,
 		std::map<std::string, bool>& categoryExpansionStates,
 		const std::function<void()>& drawSettings,
 		FilterCounts& counts);
 
 	/**
-	 * @brief Rebuilds the cached list when something it depends on changed: the search, filters, sort order,
+	 * @brief Rebuilds the cached list when something it depends on changed: the filters, sort order,
 	 * language, favorites, a category's expansion, feature edits, scene entries, or the menu was closed.
 	 * @return True when the list was rebuilt, so the caller can re-find the selected entry.
 	 */
 	static bool UpdateMenuList(
-		const std::string& featureSearch,
 		std::map<std::string, bool>& categoryExpansionStates,
 		const std::function<void()>& drawSettings);
-
-	/** @brief Draws the sort button's popup: sort order, the filters with their counts, and Clear filters. */
-	static void RenderSortPopup(const FilterCounts& counts);
 
 	static void HandlePendingFeatureSelection(
 		std::string& pendingFeatureSelection,
 		const std::vector<MenuFuncInfo>& menuList,
 		size_t& selectedMenu);
 
-	/** @brief Draws the list: top pages, the searchable feature list (or the Settings sections), then the bottom page buttons. */
+	/** @brief Draws the list: top pages, the feature list (or the Settings sections), then the bottom page buttons. */
 	static void RenderLeftColumn(
 		const std::vector<MenuFuncInfo>& menuList,
 		size_t& selectedMenu,
-		std::string& featureSearch,
 		std::map<std::string, bool>& categoryExpansionStates,
 		Hooks& hooks);
 
@@ -273,7 +287,6 @@ private:
 	static void RenderAutoHidePane(
 		const std::vector<MenuFuncInfo>& menuList,
 		size_t& selectedMenu,
-		std::string& featureSearch,
 		std::string& pendingFeatureSelection,
 		std::map<std::string, bool>& categoryExpansionStates,
 		Hooks& hooks);
