@@ -11,6 +11,7 @@
 #include "Menu/Fonts.h"
 #include "Menu/IconLoader.h"
 #include "Menu/Icons/helpers/IconFonts.h"
+#include "Menu/MenuIcons.h"
 #include "Menu/ThemeManager.h"
 #include "PerfUtils.h"
 #include "ShaderCache.h"
@@ -2071,27 +2072,6 @@ namespace Util
 		ImGui::PopStyleVar();
 	}
 
-	void DrawSearchIcon(const ImVec2& position, float size, float alpha)
-	{
-		ImDrawList* drawList = ImGui::GetWindowDrawList();
-
-		ImVec2 center = ImVec2(position.x + size * 0.46f, position.y + size * 0.5f);
-		float radius = size * 0.3f;
-		const float circleStroke = size * ThemeManager::Constants::SEARCH_ICON_STROKE_RATIO;
-		const float handleStroke = size * ThemeManager::Constants::SEARCH_ICON_HANDLE_STROKE_RATIO;
-
-		auto& theme = globals::menu->GetTheme().Palette;
-		ImVec4 iconColor = theme.Text;
-		iconColor.w *= alpha;
-		ImU32 placeholderColor = ImGui::GetColorU32(iconColor);
-
-		drawList->AddCircle(center, radius, placeholderColor, 12, circleStroke);
-
-		ImVec2 handleStart = ImVec2(center.x + radius * 0.81f, center.y + radius * 0.81f);
-		ImVec2 handleEnd = ImVec2(handleStart.x + size * 0.29f, handleStart.y + size * 0.29f);
-		drawList->AddLine(handleStart, handleEnd, placeholderColor, handleStroke);
-	}
-
 	namespace detail
 	{
 		struct ComboSearchState
@@ -2129,10 +2109,10 @@ namespace Util
 		ImGui::InputTextWithHint(widgetId, T("ui.search", "Search..."), state.buffer, IM_ARRAYSIZE(state.buffer));
 		ImGui::PopStyleVar();
 
-		ImVec2 iconPos = ImVec2(
-			ImGui::GetItemRectMin().x + iconOffsetX,
-			ImGui::GetItemRectMin().y + (ImGui::GetItemRectSize().y - iconSize) * 0.5f);
-		DrawSearchIcon(iconPos, iconSize, iconAlpha);
+		ImVec4 iconColor = ImGui::GetStyleColorVec4(ImGuiCol_Text);
+		iconColor.w *= iconAlpha;
+		Icons::DrawCenteredGlyph(ImGui::GetWindowDrawList(), ImVec2(ImGui::GetItemRectMin().x + iconOffsetX, ImGui::GetItemRectMin().y),
+			ImVec2(iconSize, ImGui::GetItemRectSize().y), Icons::TI(MenuIcons::kSearch), ImGui::GetColorU32(iconColor));
 
 		ImGui::Separator();
 
@@ -2187,8 +2167,10 @@ namespace Util
 		}
 
 		// Draw search icon using the reusable function
-		ImVec2 iconPos = ImVec2(cursorPos.x + ThemeManager::Constants::SEARCH_ICON_OFFSET_X * scale, cursorPos.y + (frameHeight - iconSize) * 0.5f);
-		DrawSearchIcon(iconPos, iconSize, ThemeManager::Constants::SEARCH_ICON_ALPHA);
+		ImVec4 iconColor = textColor;
+		iconColor.w *= ThemeManager::Constants::SEARCH_ICON_ALPHA;
+		Icons::DrawCenteredGlyph(ImGui::GetWindowDrawList(), ImVec2(cursorPos.x + ThemeManager::Constants::SEARCH_ICON_OFFSET_X * scale, cursorPos.y),
+			ImVec2(iconSize, frameHeight), Icons::TI(MenuIcons::kSearch), ImGui::GetColorU32(iconColor));
 
 		ImGui::PopStyleVar(2);
 		ImGui::PopStyleColor(5);

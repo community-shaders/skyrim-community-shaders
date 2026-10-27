@@ -4,6 +4,7 @@
 #include "IconsTabler.h"
 #include "Menu.h"
 #include "Menu/Fonts.h"
+#include "Menu/MenuIcons.h"
 #include "Utils/UI.h"
 #include "imgui_internal.h"
 
@@ -186,9 +187,13 @@ namespace BrowserUI
 
 		const ImVec2 min = ImGui::GetItemRectMin();
 		const ImVec2 max = ImGui::GetItemRectMax();
-		Util::DrawSearchIcon(
-			ImVec2(min.x + ThemeManager::Constants::COMBO_SEARCH_ICON_OFFSET_X * searchScale, min.y + (frameHeight - iconSize) * 0.5f),
-			iconSize, ThemeManager::Constants::COMBO_SEARCH_ICON_ALPHA);
+		{
+			ImVec4 iconColor = ImGui::GetStyleColorVec4(ImGuiCol_Text);
+			iconColor.w *= ThemeManager::Constants::COMBO_SEARCH_ICON_ALPHA;
+			Icons::DrawCenteredGlyph(ImGui::GetWindowDrawList(),
+				ImVec2(min.x + ThemeManager::Constants::COMBO_SEARCH_ICON_OFFSET_X * searchScale, min.y),
+				ImVec2(iconSize, frameHeight), Icons::TI(MenuIcons::kSearch), ImGui::GetColorU32(iconColor));
+		}
 
 		if (buffer[0] != '\0') {
 			const ImVec2 clearMin(max.x - frameHeight, min.y);
@@ -240,11 +245,16 @@ namespace BrowserUI
 		const float progress = Util::Anim::Approach(ImGui::GetID("w"), open ? 1.0f : 0.0f, ThemeManager::Constants::ANIM_SEARCH_RATE);
 		bool changed = false;
 		if (!open && progress <= 0.0f) {
-			// Resting: just the magnifier
-			if (IconButton("##open", Icons::TI(ICON_TI_SEARCH), hint)) {
-				open = wantFocus = true;
-				settle = kSearchSettleFrames;
+			// Resting: a magnifier button styled like the sort button beside it
+			const float size = IconButtonSize();
+			{
+				auto style = Util::TransparentIconButtonStyle();
+				if (Icons::Button("###open", Icons::TI(MenuIcons::kSearch), ImVec2(size, size))) {
+					open = wantFocus = true;
+					settle = kSearchSettleFrames;
+				}
 			}
+			Util::AddTooltip(hint, Util::kTooltipWhenDisabled);
 		} else {
 			const float width = collapsedWidth + (maxWidth - collapsedWidth) * Util::Anim::EaseOutCubic(progress);
 			if (wantFocus) {

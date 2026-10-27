@@ -1166,14 +1166,6 @@ namespace Util
 	bool StringMatchesSearch(const std::string& text, const std::string& searchQuery);
 
 	/**
-	 * @brief Draws a search icon (magnifying glass) at the specified position.
-	 * @param position The screen position where the icon should be drawn
-	 * @param size The size of the icon (default: 20.0f)
-	 * @param alpha Alpha multiplier for the icon color (default: 0.7f for subtle appearance)
-	 */
-	void DrawSearchIcon(const ImVec2& position, float size = ThemeManager::Constants::SEARCH_ICON_SIZE, float alpha = ThemeManager::Constants::SEARCH_ICON_ALPHA);
-
-	/**
 	 * @brief Draws a search input field with icon inside a combo dropdown.
 	 *
 	 * Reusable helper for any combo that needs search/filter functionality.

@@ -17,6 +17,7 @@
 #include "IconLoader.h"
 #include "IconsTabler.h"
 #include "Menu.h"
+#include "MenuIcons.h"
 #include "ShaderCache.h"
 #include "ShaderCacheStatusWidget.h"
 #include "State.h"
@@ -1111,8 +1112,10 @@ void SettingsTabRenderer::RenderColorsSection()
 	// Draw search icon
 	const ImVec2 filterMin = ImGui::GetItemRectMin();
 	const ImVec2 filterSize = ImGui::GetItemRectSize();
-	ImVec2 iconPos = ImVec2(filterMin.x + ThemeManager::Constants::SEARCH_ICON_OFFSET_X * scale, filterMin.y + (filterSize.y - iconSize) * 0.5f);
-	Util::DrawSearchIcon(iconPos, iconSize, ThemeManager::Constants::SEARCH_ICON_ALPHA);
+	ImVec4 iconColor = ImGui::GetStyleColorVec4(ImGuiCol_Text);
+	iconColor.w *= ThemeManager::Constants::SEARCH_ICON_ALPHA;
+	Icons::DrawCenteredGlyph(ImGui::GetWindowDrawList(), ImVec2(filterMin.x + ThemeManager::Constants::SEARCH_ICON_OFFSET_X * scale, filterMin.y),
+		ImVec2(iconSize, filterSize.y), Icons::TI(MenuIcons::kSearch), ImGui::GetColorU32(iconColor));
 
 	ImGui::Spacing();
 
