@@ -336,7 +336,9 @@ namespace Util::Anim
 		constexpr ImGuiID kVisSalt = 0x6A09E667u;
 		constexpr ImGuiID kSelSalt = 0x7B3C1D8Fu;
 		constexpr ImGuiID kPressSalt = 0x8C5E2A47u;
-		constexpr ImGuiID kRectSalt = 0x9D7F4B63u;  // + 0..3
+		constexpr ImGuiID kRectSalt = 0x9D7F4B63u;     // + 0..3
+		constexpr ImGuiID kSelRectSalt = 0xAE1C5F27u;  // + 0..3: the selected row's fill, relative to the list origin
+		constexpr ImGuiID kSelRectFrameSalt = 0xBF4D2A91u;
 
 		/// The area ImGui::Selectable fills for an item: its rect grown by half the item spacing.
 		ImRect SelectableFillRect(ImGuiSelectableFlags flags)
@@ -429,6 +431,12 @@ namespace Util::Anim
 		storage->SetFloat(id ^ kSelSalt, selectedness);
 		if (selectedness > Constants::ANIM_EPSILON)
 			DrawListHighlight(underlay.Background(), rect.Min, rect.Max, selectedness, 1.0f, 0.0f);
+		if (selected && !disabled) {
+			const float selRel[4] = { rect.Min.x - origin.x, rect.Min.y - origin.y, rect.Max.x - origin.x, rect.Max.y - origin.y };
+			for (ImGuiID n = 0; n < 4; ++n)
+				storage->SetFloat(key(kSelRectSalt + n), selRel[n]);
+			storage->SetInt(key(kSelRectFrameSalt), frame);
+		}
 
 		// The hover highlight is one shape per list that glides after the mouse, and fades out where it is once the mouse
 		// is over nothing clickable (a divider, a gap), rather than going back to the selected row
@@ -439,7 +447,17 @@ namespace Util::Anim
 
 		if (!disabled && hoverId == id && !drawnThisFrame) {
 			storage->SetInt(key(kDrawnFrameSalt), frame);
-			const float targetRel[4] = { rect.Min.x - origin.x, rect.Min.y - origin.y, rect.Max.x - origin.x, rect.Max.y - origin.y };
+			float targetRel[4] = { rect.Min.x - origin.x, rect.Min.y - origin.y, rect.Max.x - origin.x, rect.Max.y - origin.y };
+			// Beside the selected row the hover gives way to its fill, shrinking to just touch it rather than overlap
+			if (!selected && storage->GetInt(key(kSelRectFrameSalt), -10) >= frame - 1) {
+				const float selTop = storage->GetFloat(key(kSelRectSalt + 1), 0.0f);
+				const float selBottom = storage->GetFloat(key(kSelRectSalt + 3), 0.0f);
+				const bool sameColumn = storage->GetFloat(key(kSelRectSalt), 0.0f) < targetRel[2] && storage->GetFloat(key(kSelRectSalt + 2), 0.0f) > targetRel[0];
+				if (sameColumn && targetRel[1] < selTop && targetRel[3] > selTop)
+					targetRel[3] = selTop;
+				else if (sameColumn && targetRel[1] < selBottom && targetRel[3] > selBottom)
+					targetRel[1] = selBottom;
+			}
 			const bool fresh = lastDraw < frame - 1;
 			float rel[4];
 			float stored[4];
