@@ -562,6 +562,10 @@ namespace GoToPalette
 			ImGui::OpenPopup(kPopupId);
 		}
 
+		// A click outside the panel makes ImGui drop window focus, and closing a popup only restores focus that is
+		// still on it, so the menu that opened the palette gets it back by hand when the palette goes
+		ImGuiWindow* const parentWindow = ImGui::GetCurrentWindow();
+
 		const ImGuiViewport* viewport = ImGui::GetMainViewport();
 		// Fades in and grows slightly from the centre each time it opens
 		const float enter = ImGui::IsPopupOpen(kPopupId) ? Util::Anim::EnterProgress(ImGui::GetID(kPopupId), 0.0f, Constants::ANIM_POPUP_SECONDS) : 1.0f;
@@ -719,17 +723,20 @@ namespace GoToPalette
 		DrawFooter(scale);
 
 		if ((chosen || close) && !closing) {
-			if (Util::Anim::ReducedMotion())
+			if (Util::Anim::ReducedMotion()) {
 				ImGui::CloseCurrentPopup();
-			else
+				ImGui::FocusWindow(parentWindow);
+			} else
 				g_state.closeStartedAt = ImGui::GetTime();
 			if (chosen) {
 				GoToIndex::RecordPick(*chosen);
 				GoToIndex::Execute(*chosen, shortcuts);
 			}
 		}
-		if (closing && exitProgress >= 1.0f)
+		if (closing && exitProgress >= 1.0f) {
 			ImGui::CloseCurrentPopup();
+			ImGui::FocusWindow(parentWindow);
+		}
 		ImGui::EndPopup();
 		ImGui::PopStyleVar();
 	}
