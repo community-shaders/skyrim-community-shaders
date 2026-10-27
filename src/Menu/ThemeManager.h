@@ -518,18 +518,57 @@ public:
 		static constexpr float HOME_SETUP_WATERMARK_MONO_ALPHA = 0.24f;                   // Dialog logo watermark opacity, monochrome logo
 		static constexpr ImU32 HOME_SETUP_WATERMARK_COLOR = IM_COL32(255, 255, 255, 60);  // Dialog logo watermark tint, full-colour logo
 		// --- CS Editor ---
-		static constexpr float CSE_PALETTE_BUTTON_SIZE = 24.0f;          // Palette swatch button edge, before UI scale
-		static constexpr float CSE_PALETTE_SPACING = 4.0f;               // Gap between palette swatches, before UI scale
-		static constexpr float CSE_PALETTE_STAR_RATIO = 0.4f;            // Empty-favourite star size as a share of the swatch
-		static constexpr float CSE_PALETTE_COLOR_EPSILON = 0.001f;       // Channel tolerance when matching a colour to a palette entry
-		static constexpr float CSE_TITLE_APPLY_FILL_ALPHA = 0.6f;        // Fill alpha of the text-only Apply title-bar action
-		static constexpr float CSE_LP_BADGE_ALPHA = 0.22f;               // Fill alpha of the LP badge in the light list
-		static constexpr float CSE_WEATHER_COLOR_PICKER_WIDTH = 225.0f;  // Weather colour/form picker width, before UI scale
-		static constexpr float CSE_CLOUD_PREVIEW_SIZE = 128.0f;          // Cloud texture preview edge, before UI scale
-		static constexpr float CSE_PICKER_ITEM_SPACING = 4.0f;           // Weather picker item spacing, before UI scale
-		static constexpr float CSE_PICKER_FRAME_PADDING_Y = 2.0f;        // Weather picker vertical frame padding, before UI scale
-		static constexpr float CSE_SETTINGS_WINDOW_RATIO = 0.25f;        // First-use size of the editor settings window vs the display
-		static constexpr float CSE_TIME_SCALE_SYNC_EPSILON = 0.01f;      // Time scale drift before the slider re-reads the game value
+		static constexpr float CSE_PALETTE_BUTTON_SIZE = 24.0f;                                // Palette swatch button edge, before UI scale
+		static constexpr float CSE_PALETTE_SPACING = 4.0f;                                     // Gap between palette swatches, before UI scale
+		static constexpr float CSE_PALETTE_STAR_RATIO = 0.4f;                                  // Empty-favourite star size as a share of the swatch
+		static constexpr float CSE_PALETTE_COLOR_EPSILON = 0.001f;                             // Channel tolerance when matching a colour to a palette entry
+		static constexpr float CSE_PALETTE_FRAME_PADDING = 2.0f;                               // Frame padding inside the palette window, before UI scale
+		static constexpr int CSE_PALETTE_RECENT_COUNT = 5;                                     // Recently used colours listed under the favourites
+		static constexpr ImVec4 CSE_PALETTE_EMPTY_SLOT_COLOR{ 0.2f, 0.2f, 0.2f, 1.0f };        // Empty favourite slot fill
+		static constexpr ImVec4 CSE_PALETTE_EMPTY_STAR_COLOR{ 0.627f, 0.627f, 0.627f, 1.0f };  // Empty favourite slot star outline
+		static constexpr float CSE_TITLE_APPLY_FILL_ALPHA = 0.6f;                              // Fill alpha of the text-only Apply title-bar action
+		static constexpr float CSE_LP_BADGE_ALPHA = 0.22f;                                     // Fill alpha of the LP badge in the light list
+		static constexpr float CSE_WEATHER_COLOR_PICKER_WIDTH = 225.0f;                        // Weather colour/form picker width, before UI scale
+		static constexpr float CSE_CLOUD_PREVIEW_SIZE = 128.0f;                                // Cloud texture preview edge, before UI scale
+		static constexpr float CSE_PICKER_ITEM_SPACING = 4.0f;                                 // Weather picker item spacing, before UI scale
+		static constexpr float CSE_PICKER_FRAME_PADDING_Y = 2.0f;                              // Weather picker vertical frame padding, before UI scale
+		static constexpr float CSE_PICKER_COMBO_WIDTH = 180.0f;                                // Weather picker combo and list width, before UI scale
+		static constexpr float CSE_PICKER_LIST_ROWS = 12.0f;                                   // Rows the weather picker list shows before scrolling
+		static constexpr float CSE_PICKER_CHIP_PAD = 6.0f;                                     // Padding around a weather filter chip label, before UI scale
+		static constexpr float CSE_PICKER_CHIP_GAP = 3.0f;                                     // Gap between the two filter chip columns, before UI scale
+		static constexpr float CSE_PICKER_GROUP_GAP = 2.0f;                                    // Gap between the picker list and its filter chips, before UI scale
+		static constexpr float CSE_SETTINGS_WINDOW_RATIO = 0.25f;                              // First-use size of the editor settings window vs the display
+		static constexpr float CSE_TIME_SCALE_SYNC_EPSILON = 0.01f;                            // Time scale drift before the slider re-reads the game value
+		static constexpr float CSE_BROWSER_MAX_WIDTH = 960.0f;                                 // Widest the first-use Browser window gets, before UI scale, so ultrawide gives the rest to the viewport
+		static constexpr float CSE_EDITOR_HEIGHT_RATIO = 0.85f;                                // First-use height of the Browser window as a share of the space under the action bar
+		static constexpr float CSE_ACTION_BAR_BG_ALPHA_RATIO = 0.7f;                           // Action bar fill alpha relative to overlapping windows
+		static constexpr float CSE_ACTION_BAR_SLIDER_WIDTH = 300.0f;                           // Game time plus time speed sliders in the action bar, before UI scale
+		static constexpr float CSE_ACTION_BAR_DIVIDER_INSET_RATIO = 0.2f;                      // Vertical inset of the action bar dividers, as a share of its height
+		static constexpr float CSE_DISABLED_ICON_ALPHA = 0.5f;                                 // Glyph alpha of a disabled action bar icon
+		static constexpr float CSE_UI_SCALE_MIN = 0.5f;                                        // Editor UI scale slider range
+		static constexpr float CSE_UI_SCALE_MAX = 2.0f;
+		static constexpr float CSE_UNDO_NOTIFICATION_SECONDS = 2.0f;    // How long the undone / redone notice stays
+		static constexpr float CSE_TIME_SLIDER_MIN_WIDTH = 40.0f;       // Narrowest a time control slider shrinks to, before UI scale
+		static constexpr float CSE_ADD_LIGHT_POPUP_WIDTH = 520.0f;      // Add-light dialog width, before UI scale
+		static constexpr float CSE_CARD_BG_ALPHA = 0.5f;                // Share of the frame colour's alpha kept by detail cards (Browser inspector, Light Editor panels)
+		static constexpr float CSE_RECORD_TOD_LABEL_OFFSET = 100.0f;    // Records tab: time-of-day label column offset, before UI scale
+		static constexpr float CSE_RECORD_FORM_LABEL_OFFSET = 150.0f;   // Records tab: form label column offset, before UI scale
+		static constexpr float CSE_RECORD_PARENT_COLUMN_WIDTH = 20.0f;  // Records tab: extra offset for the inherit checkbox column
+		static constexpr float CSE_CLOUD_LAYER_INDENT = 10.0f;          // Indent of a cloud layer's controls, before UI scale
+		static constexpr float CSE_CLOUD_SLIDER_WIDTH_RATIO = 0.3f;     // Cloud layer speed slider width as a share of the available width
+		static constexpr float CSE_CLOUD_TOD_LABEL_WIDTH = 120.0f;      // Cloud layer colour table label column, before UI scale
+		static constexpr float CSE_FOG_PARAM_COLUMN_WIDTH = 80.0f;      // Fog table parameter column, before UI scale
+		static constexpr float CSE_TOD_BUTTON_HEIGHT_RATIO = 1.5f;      // Time-of-day row height as a multiple of a frame height
+		static constexpr float CSE_INHERIT_CHECKBOX_WIDTH = 20.0f;      // Space reserved for an inherit checkbox beside a slider, before UI scale
+		static constexpr float CSE_CONFIRM_BUTTON_WIDTH = 120.0f;       // Delete confirmation button width, before UI scale
+		static constexpr float CSE_FORM_LIST_NAME_WEIGHT = 3.0f;        // Browser list: Editor ID column stretch weight
+		static constexpr float CSE_FORM_LIST_FILE_WEIGHT = 1.4f;        // Browser list: File column stretch weight
+		static constexpr float CSE_USAGE_SLOTS_MAX_RATIO = 0.45f;       // Inspector usage row: most of the width the slot names may take
+		static constexpr float CSE_ROW_ACCENT_WIDTH = 3.0f;             // Accent bar on the edge of a list row (Browser stripe, sidebar, pinned feature), before UI scale
+		static constexpr float CSE_PINNED_TINT_ALPHA = 0.14f;           // Tint behind a pinned feature row, as a share of the accent's opacity
+		static constexpr float CSE_PINNED_SELECTED_TINT_ALPHA = 0.26f;  // ... while that row is selected
+		static constexpr float CSE_BOOT_TOGGLE_WIDTH_RATIO = 1.6f;      // Boot enable toggle width as a multiple of a frame height
+		static constexpr float CSE_ADD_LIGHT_POPUP_TOP_RATIO = 0.1f;    // Add-light dialog top edge as a share of the display, so combos open below it
 	};
 
 	static ThemeManager* GetSingleton()

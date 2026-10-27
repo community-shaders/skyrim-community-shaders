@@ -743,7 +743,7 @@ namespace TOD
 		bool changed = false;
 		const bool highlighted = PushTODHighlight(label);
 
-		const float buttonSize = ImGui::GetFrameHeight() * 1.5f;
+		const float buttonSize = ImGui::GetFrameHeight() * ThemeManager::Constants::CSE_TOD_BUTTON_HEIGHT_RATIO;
 
 		ImGui::TableNextRow();
 		ImGui::TableSetColumnIndex(0);
@@ -863,7 +863,7 @@ namespace TOD
 
 		float totalWidth = ImGui::GetContentRegionAvail().x;
 		const float scale = Util::GetUIScale();
-		float checkboxWidth = 20.0f * scale;
+		float checkboxWidth = ThemeManager::Constants::CSE_INHERIT_CHECKBOX_WIDTH * scale;
 		float spacing = ImGui::GetStyle().ItemSpacing.x;
 		float sliderWidth = (totalWidth - (static_cast<int>(Count) - 1) * spacing - (parentValues ? static_cast<int>(Count) * checkboxWidth : 0)) / static_cast<float>(Count);
 
@@ -937,7 +937,7 @@ namespace TOD
 		bool changed = false;
 		const bool highlighted = PushTODHighlight(label);
 
-		const float buttonSize = ImGui::GetFrameHeight() * 1.5f;
+		const float buttonSize = ImGui::GetFrameHeight() * ThemeManager::Constants::CSE_TOD_BUTTON_HEIGHT_RATIO;
 
 		ImGui::TableNextRow();
 		ImGui::TableSetColumnIndex(0);

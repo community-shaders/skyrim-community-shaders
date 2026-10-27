@@ -57,9 +57,6 @@ private:
 	static constexpr int maxFavoriteSlots = 10;
 	std::array<std::optional<float3>, maxFavoriteSlots> favoriteColors;
 
-	float3 copiedColor = { 0.0f, 0.0f, 0.0f };
-	bool hasColorInClipboard = false;
-
 	void DrawContents();
 	std::vector<ColorEntry*> GetRecentColors(int count);
 };

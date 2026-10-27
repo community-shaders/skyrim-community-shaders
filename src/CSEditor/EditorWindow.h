@@ -127,7 +127,6 @@ public:
 	static constexpr float kGameHourMax = 23.99f;
 	static constexpr float kTimeScaleMin = 0.1f;
 	static constexpr float kTimeScaleMax = 4000.0f;
-	static constexpr float kMenuBarSliderWidth = 400.0f;
 
 	// Notification durations, in seconds; the long one suits messages that explain what to do next.
 	static constexpr float kNotificationDuration = 3.0f;
@@ -138,9 +137,6 @@ public:
 	static constexpr float kMinFlySpeed = 1.0f;
 	static constexpr float kMaxFlySpeed = 100.0f;
 	static constexpr float kFlySpeedScrollStep = 2.0f;
-	static constexpr float kToggleActiveAlpha = 0.6f;
-	static constexpr float kToggleHoverAlpha = 0.8f;
-	static constexpr float kInactiveHoverAlpha = 0.25f;
 
 	// Preview mode state
 	float flySpeed = kDefaultFlySpeed;
@@ -239,6 +235,15 @@ public:
 	 * @param weather The weather form to lock.
 	 */
 	void LockWeatherForUser(RE::TESWeather* weather);
+
+	/** @brief Returns true if the user's lock holds exactly this weather. */
+	bool IsWeatherLockedByUser(const RE::TESWeather* weather) const;
+
+	/** @brief Locks the weather for the user, or releases the user's lock when it already holds it. */
+	void ToggleUserWeatherLock(RE::TESWeather* weather);
+
+	/** @brief Tooltip for a weather lock badge: the hook warning when locking is degraded, else what a click does. */
+	static const char* GetWeatherLockTooltip(bool locked);
 
 	/** @brief Release the user's lock: while the editor is open it falls back to the implicit lock, otherwise it unlocks. */
 	void ReleaseUserWeatherLock();

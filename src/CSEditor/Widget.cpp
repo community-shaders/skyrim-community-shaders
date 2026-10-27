@@ -14,14 +14,21 @@
 #include "Menu/Icons/helpers/WeatherTypeIcons.h"
 #include "Menu/MenuIcons.h"
 #include "SaveManager.h"
-#include "State.h"
 #include "Util.h"
 #include "Utils/UI.h"
 #include "Utils/UIAnim.h"
-#include "WeatherUtils.h"
 #include "imgui_internal.h"
 
 #define I18N_KEY_PREFIX "cs_editor."
+
+namespace
+{
+	/** @brief Fills the one "{}" of a translated message with a name. */
+	std::string FormatName(const char* message, const std::string& name)
+	{
+		return std::vformat(message, std::make_format_args(name));
+	}
+}
 
 void Widget::Save()
 {
@@ -55,7 +62,7 @@ void Widget::Load(bool showNotification)
 
 		if (showNotification) {
 			EditorWindow::GetSingleton()->ShowNotification(
-				std::format("No saved file - reset {} to vanilla values", GetEditorID()),
+				FormatName(T(TKEY("no_saved_file_reset"), "No saved file - reset {} to vanilla values"), GetEditorID()),
 				Util::Colors::GetInfo());
 		}
 		return;
@@ -70,7 +77,7 @@ void Widget::Load(bool showNotification)
 	auto document = Util::FileHelpers::ReadJsonFile(filePath, "editor widget settings", 0, &error);
 	if (!document && error.empty()) {
 		logger::warn("Failed to open settings file: {}", filePath);
-		notify(std::format("Failed to open file for {}", GetEditorID()), Util::Colors::GetWarning());
+		notify(FormatName(T(TKEY("failed_open_file"), "Failed to open file for {}"), GetEditorID()), Util::Colors::GetWarning());
 		return;
 	}
 
@@ -80,16 +87,16 @@ void Widget::Load(bool showNotification)
 		LoadSettings();
 	} catch (const std::exception& e) {
 		logger::error("Unexpected error loading settings file ({}) : {}", filePath, e.what());
-		notify(std::format("Error loading {} - resetting to vanilla", GetEditorID()), Util::Colors::GetError());
+		notify(FormatName(T(TKEY("error_loading_reset"), "Error loading {} - resetting to vanilla"), GetEditorID()), Util::Colors::GetError());
 		js = json();
 		LoadSettings();
 		return;
 	}
 
 	if (loaded)
-		notify(std::format("Loaded saved settings for {}", GetEditorID()), Util::Colors::GetSuccess());
+		notify(FormatName(T(TKEY("loaded_saved_settings"), "Loaded saved settings for {}"), GetEditorID()), Util::Colors::GetSuccess());
 	else
-		notify(std::format("Parse error for {} - resetting to vanilla", GetEditorID()), Util::Colors::GetError());
+		notify(FormatName(T(TKEY("parse_error_reset"), "Parse error for {} - resetting to vanilla"), GetEditorID()), Util::Colors::GetError());
 }
 
 void Widget::Delete()
@@ -192,7 +199,7 @@ void Widget::DrawDeleteConfirmationModal(const char* popupId)
 		ImGui::Separator();
 
 		const float scale = Util::GetUIScale();
-		const float buttonWidth = 120.0f * scale;
+		const float buttonWidth = ThemeManager::Constants::CSE_CONFIRM_BUTTON_WIDTH * scale;
 		const float spacing = ImGui::GetStyle().ItemSpacing.x;
 		const float totalWidth = (buttonWidth * 2) + spacing;
 		const float cursorX = (ImGui::GetWindowWidth() - totalWidth) / 2.0f;
@@ -365,21 +372,13 @@ bool Widget::DrawTitleBarActions(bool showApply, bool showSaveLoadRevert, bool s
 
 	// Force Weather / Unlock: lock badge matching the floating action bar
 	if (showForceWeather && weather) {
-		const bool isLocked = editorWindow->IsWeatherLockedByUser() && editorWindow->GetLockedWeather() == weather;
-		const char* tooltip = !EditorWindow::AreWeatherLockHooksInstalled() ?
-		                          T(TKEY("weather_lock_hooks_unavailable"), "Weather-lock hooks failed to install; the lock still works but weather may briefly flash before correcting") :
-		                          (isLocked ? T(TKEY("unlock_weather"), "Unlock Weather") : T(TKEY("force_this_weather"), "Force This Weather"));
+		const bool isLocked = editorWindow->IsWeatherLockedByUser(weather);
 		TitleBarAction action;
 		action.id = "##TitleForceWeather";
 		action.kind = Kind::LockBadge;
 		action.locked = isLocked;
-		action.tooltip = tooltip;
-		action.onClick = [editorWindow, weather, isLocked]() {
-			if (isLocked)
-				editorWindow->ReleaseUserWeatherLock();
-			else
-				editorWindow->LockWeatherForUser(weather);
-		};
+		action.tooltip = EditorWindow::GetWeatherLockTooltip(isLocked);
+		action.onClick = [editorWindow, weather]() { editorWindow->ToggleUserWeatherLock(weather); };
 		actions.emplace_back(std::move(action));
 	}
 
@@ -685,16 +684,9 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 		if (!showForceWeather || !weather)
 			return;
 		ImGui::SameLine();
-		bool isLocked = editorWindow->IsWeatherLockedByUser() && editorWindow->GetLockedWeather() == weather;
-		const char* tooltip = !EditorWindow::AreWeatherLockHooksInstalled() ?
-		                          T(TKEY("weather_lock_hooks_unavailable"), "Weather-lock hooks failed to install; the lock still works but weather may briefly flash before correcting") :
-		                          (isLocked ? T(TKEY("unlock_weather"), "Unlock Weather") : T(TKEY("force_this_weather"), "Force This Weather"));
-		if (Util::LockStatusBadgeButton("##InlineForceWeather", isLocked, tooltip)) {
-			if (isLocked)
-				editorWindow->ReleaseUserWeatherLock();
-			else
-				editorWindow->LockWeatherForUser(weather);
-		}
+		const bool isLocked = editorWindow->IsWeatherLockedByUser(weather);
+		if (Util::LockStatusBadgeButton("##InlineForceWeather", isLocked, EditorWindow::GetWeatherLockTooltip(isLocked)))
+			editorWindow->ToggleUserWeatherLock(weather);
 	};
 
 	const bool unsaved = HasUnsavedChanges();

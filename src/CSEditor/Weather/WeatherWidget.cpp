@@ -277,8 +277,9 @@ void WeatherWidget::DrawWidget()
 
 			const bool hasParent = InheritsFromParent();
 			WeatherWidget* parentWidget = hasParent ? GetParent() : nullptr;
-			const float todLabelOffset = (hasParent ? 120.0f : 100.0f) * scale;
-			const float formLabelOffset = (hasParent ? 170.0f : 150.0f) * scale;
+			const float parentColumnWidth = hasParent ? ThemeManager::Constants::CSE_RECORD_PARENT_COLUMN_WIDTH : 0.0f;
+			const float todLabelOffset = (ThemeManager::Constants::CSE_RECORD_TOD_LABEL_OFFSET + parentColumnWidth) * scale;
+			const float formLabelOffset = (ThemeManager::Constants::CSE_RECORD_FORM_LABEL_OFFSET + parentColumnWidth) * scale;
 			const float pickerWidth = ThemeManager::Constants::CSE_WEATHER_COLOR_PICKER_WIDTH * scale;
 			auto makeTimeRecordLabel = [](const char* recordType, int colorTime) {
 				return std::format("{} {}", recordType, ColorTimeLabel(colorTime));
@@ -432,8 +433,9 @@ void WeatherWidget::LoadSettings()
 			if (hadErrors) {
 				// Fallback to vanilla/game values
 				settings = vanillaSettings;
+				const std::string editorId = GetEditorID();
 				EditorWindow::GetSingleton()->ShowNotification(
-					std::format("Some values failed to load for {}", GetEditorID()),
+					std::vformat(T(TKEY("values_failed_to_load"), "Some values failed to load for {}"), std::make_format_args(editorId)),
 					Util::Colors::GetError());
 			} else {
 				logger::info("Weather {}: Loaded settings - {} weather properties, {} colors, {} fog properties",
@@ -458,10 +460,11 @@ void WeatherWidget::LoadSettings()
 			logger::error("Weather {}: Failed to deserialize settings from JSON: {}", GetEditorID(), e.what());
 			// Fallback to vanilla/game values on exception
 			settings = vanillaSettings;
+			const std::string editorId = GetEditorID();
 			EditorWindow::GetSingleton()->ShowNotification(
-				std::format("Some values failed to load for {}", GetEditorID()),
+				std::vformat(T(TKEY("values_failed_to_load"), "Some values failed to load for {}"), std::make_format_args(editorId)),
 				Util::Colors::GetError(),
-				3.0f);
+				EditorWindow::kNotificationDuration);
 			return;
 		}
 	} else {
@@ -1052,7 +1055,7 @@ void WeatherWidget::DrawCloudSettings()
 
 		if (layerOpen) {
 			const float scale = Util::GetUIScale();
-			ImGui::Indent(10.0f * scale);
+			ImGui::Indent(ThemeManager::Constants::CSE_CLOUD_LAYER_INDENT * scale);
 
 			// Begin horizontal layout for enable checkbox and sliders on left, texture on right
 			ImGui::BeginGroup();
@@ -1063,7 +1066,7 @@ void WeatherWidget::DrawCloudSettings()
 				changed = true;
 			}
 
-			ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x * 0.3f);
+			ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x * ThemeManager::Constants::CSE_CLOUD_SLIDER_WIDTH_RATIO);
 			if (WeatherUtils::DrawSliderInt8(std::format("Cloud Layer Speed Y##{}", layer), settings.clouds[i].cloudLayerSpeedY))
 				changed = true;
 			if (WeatherUtils::DrawSliderInt8(std::format("Cloud Layer Speed X##{}", layer), settings.clouds[i].cloudLayerSpeedX))
@@ -1092,7 +1095,7 @@ void WeatherWidget::DrawCloudSettings()
 				}
 			}
 
-			if (TOD::BeginTODTable((layer + "_TOD_Table").c_str(), 120.0f)) {
+			if (TOD::BeginTODTable((layer + "_TOD_Table").c_str(), ThemeManager::Constants::CSE_CLOUD_TOD_LABEL_WIDTH)) {
 				TOD::RenderTODHeader();
 				TOD::DrawTODSeparator();
 				auto drawCloudTODRows = [&](auto drawRows) {
@@ -1136,7 +1139,7 @@ void WeatherWidget::DrawCloudSettings()
 				TOD::EndTODTable();
 			}
 
-			ImGui::Unindent(10.0f * scale);
+			ImGui::Unindent(ThemeManager::Constants::CSE_CLOUD_LAYER_INDENT * scale);
 		}
 	}
 	if (enableChanged) {
@@ -1164,7 +1167,7 @@ void WeatherWidget::DrawFogSettings()
 
 	const float scale = Util::GetUIScale();
 	if (ImGui::BeginTable("FogTable", 3, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchSame)) {
-		ImGui::TableSetupColumn(T(TKEY("parameter"), "Parameter"), ImGuiTableColumnFlags_WidthFixed, 80.0f * scale);
+		ImGui::TableSetupColumn(T(TKEY("parameter"), "Parameter"), ImGuiTableColumnFlags_WidthFixed, ThemeManager::Constants::CSE_FOG_PARAM_COLUMN_WIDTH * scale);
 		ImGui::TableSetupColumn(T(TKEY("day"), "Day"), ImGuiTableColumnFlags_WidthStretch, 1.0f);
 		ImGui::TableSetupColumn(T(TKEY("night"), "Night"), ImGuiTableColumnFlags_WidthStretch, 1.0f);
 
@@ -1500,8 +1503,9 @@ void WeatherWidget::InheritAllFromParent()
 	pendingReinit = true;
 	AutoApply(true);
 
+	const std::string parentId = parentWidget->GetEditorID();
 	EditorWindow::GetSingleton()->ShowNotification(
-		std::format("Inherited all settings from {}", parentWidget->GetEditorID()),
+		std::vformat(T(TKEY("inherited_all_settings"), "Inherited all settings from {}"), std::make_format_args(parentId)),
 		Util::Colors::GetSuccess());
 }
 

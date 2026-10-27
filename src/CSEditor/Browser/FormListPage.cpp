@@ -16,7 +16,6 @@
 #include "imgui_internal.h"
 
 #include <algorithm>
-#include <cmath>
 #include <filesystem>
 #include <format>
 #include <map>
@@ -62,7 +61,6 @@ namespace
 	constexpr size_t kMaxActiveRecords = 4;
 	/// The favourite star mixes the theme's hotkey yellow toward its warning orange, a softer gold.
 	constexpr float kFavoriteTowardWarning = 0.3f;
-	constexpr float kInspectorBgAlpha = 0.5f;
 
 	enum ColumnId : ImGuiID
 	{
@@ -438,9 +436,7 @@ namespace
 			}
 
 			const float width = BrowserUI::MeasureChip(label.c_str(), icon.IsValid()) + spacing + BrowserUI::IconButtonSize();
-			ImGui::SameLine();
-			if (ImGui::GetContentRegionAvail().x < width)
-				ImGui::NewLine();
+			BrowserUI::SameLineIfFits(width);
 
 			if (BrowserUI::Chip("##chip", label.c_str(), icon, &iconColor, record.outgoing ? nullptr : &live)) {
 				if (record.category == kCellLighting)
@@ -497,32 +493,13 @@ namespace
 		// Setting constraints replaces the combo's own height cap, so restore one with room for the search row.
 		const float popupMaxHeight = ImGui::GetTextLineHeightWithSpacing() * kPluginPopupMaxRows + style.WindowPadding.y * 2.0f;
 		ImGui::SetNextWindowSizeConstraints(ImVec2(kPluginPopupMinWidth * scale, 0.0f), ImVec2(FLT_MAX, popupMaxHeight));
-		if (ImGui::BeginCombo("##Plugin", state.plugin.empty() ? allPlugins : state.plugin.c_str())) {
-			const auto searchText = Util::DrawComboSearchInput(kPluginSearchId);
-			// Always listed: it is the way back out of a plugin filter, whatever was typed.
-			if (Util::Selectable(allPlugins, state.plugin.empty())) {
-				state.plugin.clear();
-				Util::ClearComboSearch(kPluginSearchId);
-			}
-			bool anyMatch = false;
-			for (const auto& [name, count] : state.plugins) {
-				if (!searchText.empty() && !Util::StringMatchesSearch(name, searchText))
-					continue;
-				anyMatch = true;
-				const bool selected = state.plugin == name;
-				if (Util::Selectable(std::format("{}  ({})###{}", name, count, name).c_str(), selected)) {
-					state.plugin = name;
-					Util::ClearComboSearch(kPluginSearchId);
-				}
-				if (selected)
-					ImGui::SetItemDefaultFocus();
-			}
-			if (!anyMatch && !searchText.empty())
-				ImGui::TextDisabled("%s", T(TKEY("plugin_search_empty"), "No plugins match."));
-			ImGui::EndCombo();
-		} else {
-			Util::ClearComboSearch(kPluginSearchId);
-		}
+		BrowserUI::SearchableFormCombo(
+			{ "##Plugin", kPluginSearchId, state.plugin.empty() ? allPlugins : state.plugin.c_str(), allPlugins, state.plugin.empty(), true,
+				T(TKEY("plugin_search_empty"), "No plugins match.") },
+			state.plugins, [&state] { state.plugin.clear(); },
+			[&state](const std::string& name, int) { return state.plugin == name; },
+			[&state](const std::string& name, int) { state.plugin = name; },
+			[](const std::string& name, int count) { return std::format("{}  ({})###{}", name, count, name); });
 
 		if (chipsInline)
 			ImGui::SameLine();
@@ -818,8 +795,8 @@ namespace
 		ImGui::TableSetupScrollFreeze(0, 1);
 		ImGui::TableSetupColumn("##fav", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoSort | ImGuiTableColumnFlags_NoHide | ImGuiTableColumnFlags_NoResize,
 			ImGui::GetFrameHeight() + style.CellPadding.x, ColFav);
-		ImGui::TableSetupColumn(T(TKEY("editor_id"), "Editor ID"), ImGuiTableColumnFlags_WidthStretch | ImGuiTableColumnFlags_NoHide, 3.0f, ColName);
-		ImGui::TableSetupColumn(T(TKEY("file"), "File"), ImGuiTableColumnFlags_WidthStretch, 1.4f, ColFile);
+		ImGui::TableSetupColumn(T(TKEY("editor_id"), "Editor ID"), ImGuiTableColumnFlags_WidthStretch | ImGuiTableColumnFlags_NoHide, ThemeManager::Constants::CSE_FORM_LIST_NAME_WEIGHT, ColName);
+		ImGui::TableSetupColumn(T(TKEY("file"), "File"), ImGuiTableColumnFlags_WidthStretch, ThemeManager::Constants::CSE_FORM_LIST_FILE_WEIGHT, ColFile);
 		ImGui::TableSetupColumn(T(TKEY("form_id"), "Form ID"), ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_DefaultHide,
 			ImGui::CalcTextSize("00000000").x + style.CellPadding.x, ColFormId);
 		ImGui::TableSetupColumn(T(TKEY("status"), "Status"), ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_DefaultHide,
@@ -1105,7 +1082,7 @@ namespace
 			ImGui::PushID(static_cast<int>(i));
 			const std::string name = use.weather->GetEditorID();
 			const float avail = ImGui::GetContentRegionAvail().x;
-			const float slotsWidth = std::min(ImGui::CalcTextSize(use.slots.c_str()).x + spacing, avail * 0.45f);
+			const float slotsWidth = std::min(ImGui::CalcTextSize(use.slots.c_str()).x + spacing, avail * ThemeManager::Constants::CSE_USAGE_SLOTS_MAX_RATIO);
 			if (BrowserUI::Link("##weather", name.c_str(), avail - slotsWidth) && use.weather->form)
 				FollowLink(state, editor, std::string(kWeather), use.weather, use.weather->form->GetFormID());
 			Util::AddTooltip(T(TKEY("form_link_tooltip"), "Click to find it in its list. Ctrl+click to open its editor."));
@@ -1171,36 +1148,15 @@ namespace
 		if (!canLock)
 			return;
 		ImGui::SameLine();
-		const bool locked = editor.IsWeatherLockedByUser() && editor.GetLockedWeather() == weatherWidget->weather;
-		const char* tooltip = !EditorWindow::AreWeatherLockHooksInstalled() ?
-		                          T(TKEY("weather_lock_hooks_unavailable"), "Weather-lock hooks failed to install; the lock still works but weather may briefly flash before correcting") :
-		                          (locked ? T(TKEY("unlock_weather"), "Unlock Weather") : T(TKEY("force_this_weather"), "Force This Weather"));
-		if (Util::LockStatusBadgeButton("##InspectorLock", locked, tooltip)) {
-			if (locked)
-				editor.ReleaseUserWeatherLock();
-			else
-				editor.LockWeatherForUser(weatherWidget->weather);
-		}
-	}
-
-	/// A rounded, softly tinted child window; the caller ends it whatever this returns.
-	bool BeginCard(const char* id, const ImVec2& size, ImGuiChildFlags flags = ImGuiChildFlags_None)
-	{
-		const auto& style = ImGui::GetStyle();
-		ImVec4 background = style.Colors[ImGuiCol_FrameBg];
-		background.w *= kInspectorBgAlpha;
-		ImGui::PushStyleColor(ImGuiCol_ChildBg, background);
-		ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, style.FrameRounding);
-		const bool visible = ImGui::BeginChild(id, size, flags | ImGuiChildFlags_AlwaysUseWindowPadding);
-		ImGui::PopStyleVar();
-		ImGui::PopStyleColor();
-		return visible;
+		const bool locked = editor.IsWeatherLockedByUser(weatherWidget->weather);
+		if (Util::LockStatusBadgeButton("##InspectorLock", locked, EditorWindow::GetWeatherLockTooltip(locked)))
+			editor.ToggleUserWeatherLock(weatherWidget->weather);
 	}
 
 	void DrawInspector(FormListState& state, const Context& context, const ImVec2& size, const std::vector<ActiveRecord>& active)
 	{
 		const auto& style = ImGui::GetStyle();
-		if (BeginCard("##Inspector", size)) {
+		if (BrowserUI::BeginCard("##Inspector", size)) {
 			Widget* widget = FindWidget(*context.widgets, GetSelectedId(state, context.category));
 			if (!widget) {
 				BrowserUI::EmptyState(T(TKEY("inspector_empty"), "Nothing selected"),
@@ -1244,7 +1200,7 @@ namespace
 		}
 
 		ImGui::Spacing();
-		if (BeginCard("##CellCard", ImVec2(0.0f, 0.0f), ImGuiChildFlags_AutoResizeY)) {
+		if (BrowserUI::BeginCard("##CellCard", ImVec2(0.0f, 0.0f), ImGuiChildFlags_AutoResizeY)) {
 			const char* cellName = cell->GetName();
 			{
 				Icons::FontGuard font(context.icon);

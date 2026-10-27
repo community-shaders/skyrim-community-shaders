@@ -1,11 +1,11 @@
 #pragma once
 
 #include "Menu/Icons/helpers/IconFonts.h"
+#include "Utils/UI.h"
 
 #include <functional>
 #include <imgui.h>
 #include <optional>
-#include <string>
 
 /** @brief Hand-drawn five-point star (the icon font has no outline star). */
 void DrawIconStar(ImVec2 center, float radius, ImU32 color, bool filled);
@@ -40,6 +40,78 @@ namespace BrowserUI
 	 */
 	bool SearchField(const char* id, char* buffer, size_t bufferSize, const char* hint, float width, bool ctrlFFocus,
 		ImGuiInputTextFlags flags = 0, ImGuiInputTextCallback callback = nullptr, void* userData = nullptr);
+
+	/** @brief What a SearchableFormCombo shows around its entries. */
+	struct SearchableComboSpec
+	{
+		/// Combo label, with its ## id.
+		const char* label;
+		/// Stable id of the search box state, one per combo.
+		const char* searchId;
+		/// Closed combo text.
+		const char* preview;
+		/// Leading row that clears the choice.
+		const char* noneLabel;
+		/// Whether the none row is the active choice.
+		bool noneIsCurrent;
+		/// Lists the none row whatever was typed, as the way back out of a filter.
+		bool noneAlwaysListed = false;
+		/// Shown when text was typed and no entry matches; null shows nothing.
+		const char* noMatchText = nullptr;
+	};
+
+	/** @brief Entry name as the row label, for SearchableFormCombo callers that show nothing more. */
+	struct NameLabel
+	{
+		template <typename Name, typename Value>
+		const Name& operator()(const Name& name, const Value&) const
+		{
+			return name;
+		}
+	};
+
+	/**
+	 * @brief Combo with a search box over (name, value) pairs and a leading "none" row.
+	 * Call SetNextItemWidth and any popup constraints first.
+	 * @param onNone Called when the none row is picked.
+	 * @param isCurrent Called as isCurrent(name, value) to mark the active entry.
+	 * @param onPick Called as onPick(name, value) when an entry is picked.
+	 * @param itemLabel Called as itemLabel(name, value) for a row's text; searching still matches the name.
+	 */
+	template <typename Entries, typename OnNone, typename IsCurrent, typename OnPick, typename ItemLabel = NameLabel>
+	void SearchableFormCombo(const SearchableComboSpec& spec, const Entries& entries, OnNone onNone, IsCurrent isCurrent, OnPick onPick,
+		ItemLabel itemLabel = {})
+	{
+		if (!ImGui::BeginCombo(spec.label, spec.preview)) {
+			Util::ClearComboSearch(spec.searchId);
+			return;
+		}
+		const auto searchText = Util::DrawComboSearchInput(spec.searchId);
+		if (spec.noneAlwaysListed || searchText.empty() || Util::StringMatchesSearch(spec.noneLabel, searchText)) {
+			if (Util::Selectable(spec.noneLabel, spec.noneIsCurrent)) {
+				onNone();
+				Util::ClearComboSearch(spec.searchId);
+			}
+			if (spec.noneIsCurrent)
+				ImGui::SetItemDefaultFocus();
+		}
+		bool anyMatch = false;
+		for (const auto& [name, value] : entries) {
+			if (!searchText.empty() && !Util::StringMatchesSearch(name, searchText))
+				continue;
+			anyMatch = true;
+			const bool current = isCurrent(name, value);
+			if (Util::Selectable(itemLabel(name, value).c_str(), current)) {
+				onPick(name, value);
+				Util::ClearComboSearch(spec.searchId);
+			}
+			if (current)
+				ImGui::SetItemDefaultFocus();
+		}
+		if (spec.noMatchText && !anyMatch && !searchText.empty())
+			ImGui::TextDisabled("%s", spec.noMatchText);
+		ImGui::EndCombo();
+	}
 
 	/** @brief Width a ToggleChip with this count takes. */
 	float MeasureToggleChip(int count);
@@ -126,6 +198,12 @@ namespace BrowserUI
 	 */
 	void RowStripe(ImU32 color, float rowHeight);
 
+	/**
+	 * @brief Bounds of the last Selectable row, pulled inside the parent's clip with a gap above and below.
+	 * Selectable pads its rect by half the item spacing so neighbours touch; rows drawn by hand use this instead.
+	 */
+	void InsetRowRect(ImVec2& min, ImVec2& max);
+
 	/** @brief Selectable flags for a list row in a modal that has a tick box drawn over its start. */
 	inline constexpr ImGuiSelectableFlags kTickRowFlags = ImGuiSelectableFlags_NoAutoClosePopups |
 	                                                      ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap;
@@ -178,6 +256,12 @@ namespace BrowserUI
 	 * @param clearTooltip Tooltip of the clear chip.
 	 */
 	SelectionAction SelectionFooter(size_t selected, size_t selectedShown, const char* clearTooltip);
+
+	/**
+	 * @brief Opens a rounded, softly tinted child window for a detail panel; always pair with ImGui::EndChild.
+	 * @return Whether it is visible.
+	 */
+	bool BeginCard(const char* id, const ImVec2& size, ImGuiChildFlags flags = ImGuiChildFlags_None);
 
 	/** @brief Table row height that fits one frame-height control plus cell padding. */
 	float RowHeight();

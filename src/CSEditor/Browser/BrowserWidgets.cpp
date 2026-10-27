@@ -15,7 +15,6 @@
 #include <cmath>
 #include <cstdio>
 #include <format>
-#include <utility>
 
 #define I18N_KEY_PREFIX "cs_editor."
 
@@ -32,7 +31,6 @@ namespace
 	constexpr float kTintedChipFillAlpha = 0.14f;
 	constexpr float kTintedChipFillHoveredAlpha = 0.22f;
 	constexpr float kTintedChipBorderAlpha = 0.5f;
-	constexpr float kStripeWidth = 3.0f;
 	/// Floor for the alternating row tint, so long lists stay scannable under themes that leave it clear.
 	constexpr float kMinRowShadeAlpha = 0.04f;
 	constexpr float kStarRadiusScale = 0.5f;
@@ -500,6 +498,15 @@ namespace BrowserUI
 			centredLine(hint, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
 	}
 
+	void InsetRowRect(ImVec2& min, ImVec2& max)
+	{
+		const auto& style = ImGui::GetStyle();
+		const float padLeft = IM_TRUNC(style.ItemSpacing.x * 0.5f);
+		const float halfGap = style.ItemInnerSpacing.x * 0.5f;
+		min = ImVec2(ImGui::GetItemRectMin().x + padLeft, ImGui::GetItemRectMin().y + halfGap);
+		max = ImVec2(ImGui::GetItemRectMax().x - (style.ItemSpacing.x - padLeft), ImGui::GetItemRectMax().y - halfGap);
+	}
+
 	void RowStripe(ImU32 color, float rowHeight)
 	{
 		ImGuiTable* table = ImGui::GetCurrentTable();
@@ -507,7 +514,7 @@ namespace BrowserUI
 			return;
 		const float x0 = ImGui::TableGetCellBgRect(table, table->CurrentColumn).Min.x;
 		ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(x0, table->RowPosY1),
-			ImVec2(x0 + kStripeWidth * Util::GetUIScale(), table->RowPosY1 + rowHeight), color);
+			ImVec2(x0 + ThemeManager::Constants::CSE_ROW_ACCENT_WIDTH * Util::GetUIScale(), table->RowPosY1 + rowHeight), color);
 	}
 
 	namespace
@@ -613,6 +620,19 @@ namespace BrowserUI
 			action = SelectionAction::Clear;
 		Util::AddTooltip(clearTooltip);
 		return action;
+	}
+
+	bool BeginCard(const char* id, const ImVec2& size, ImGuiChildFlags flags)
+	{
+		const auto& style = ImGui::GetStyle();
+		ImVec4 background = style.Colors[ImGuiCol_FrameBg];
+		background.w *= ThemeManager::Constants::CSE_CARD_BG_ALPHA;
+		ImGui::PushStyleColor(ImGuiCol_ChildBg, background);
+		ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, style.FrameRounding);
+		const bool visible = ImGui::BeginChild(id, size, flags | ImGuiChildFlags_AlwaysUseWindowPadding);
+		ImGui::PopStyleVar();
+		ImGui::PopStyleColor();
+		return visible;
 	}
 
 	float RowHeight()

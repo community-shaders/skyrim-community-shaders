@@ -17,11 +17,8 @@
 #include "FeatureListPicker.h"
 #include "Features/PostProcessing.h"
 #include "Globals.h"
-#include "IconsTabler.h"
-#include "Menu.h"
 #include "Menu/FeatureListRenderer.h"
 #include "Menu/FeatureUndo.h"
-#include "Menu/Fonts.h"
 #include "Menu/Icons/helpers/IconFonts.h"
 #include "Menu/Icons/helpers/SceneActionIcons.h"
 #include "Menu/MenuIcons.h"
@@ -80,7 +77,7 @@ namespace
 		const auto featureName = feature->GetShortName();
 		bool bootEnabled = !globals::state->IsFeatureDisabled(featureName);
 
-		if (Util::FeatureToggle("##BootToggle", &bootEnabled, ImVec2(ImGui::GetFrameHeight() * 1.6f, 0.0f))) {
+		if (Util::FeatureToggle("##BootToggle", &bootEnabled, ImVec2(ImGui::GetFrameHeight() * ThemeManager::Constants::CSE_BOOT_TOGGLE_WIDTH_RATIO, 0.0f))) {
 			const bool nowDisabled = feature->ToggleAtBootSetting();
 			logger::info("[CSEditor] {}: {} at boot.", featureName, nowDisabled ? "Disabled" : "Enabled");
 		}

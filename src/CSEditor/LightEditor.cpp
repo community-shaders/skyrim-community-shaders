@@ -341,47 +341,6 @@ void LightEditor::UpdateEmittanceColor()
 	emittanceColorActive = true;
 }
 
-namespace
-{
-	/**
-	 * @brief Searchable combo over (editorID, form) pairs with a leading "none" row.
-	 * @param noneIsCurrent  Whether the none row is the active choice.
-	 * @param onNone         Called when the none row is picked.
-	 * @param isCurrent      Called as isCurrent(editorID, form) to mark the active entry.
-	 * @param onPick         Called as onPick(editorID, form) when an entry is picked.
-	 */
-	template <typename Entries, typename OnNone, typename IsCurrent, typename OnPick>
-	void DrawSearchableFormCombo(const char* label, const char* searchId, const char* preview, const char* noneLabel,
-		bool noneIsCurrent, const Entries& entries, OnNone onNone, IsCurrent isCurrent, OnPick onPick)
-	{
-		if (!ImGui::BeginCombo(label, preview)) {
-			Util::ClearComboSearch(searchId);
-			return;
-		}
-		const auto searchText = Util::DrawComboSearchInput(searchId);
-		if (searchText.empty() || Util::StringMatchesSearch(noneLabel, searchText)) {
-			if (Util::Selectable(noneLabel, noneIsCurrent)) {
-				onNone();
-				Util::ClearComboSearch(searchId);
-			}
-			if (noneIsCurrent)
-				ImGui::SetItemDefaultFocus();
-		}
-		for (const auto& [edid, form] : entries) {
-			if (!searchText.empty() && !Util::StringMatchesSearch(edid, searchText))
-				continue;
-			const bool current = isCurrent(edid, form);
-			if (Util::Selectable(edid.c_str(), current)) {
-				onPick(edid, form);
-				Util::ClearComboSearch(searchId);
-			}
-			if (current)
-				ImGui::SetItemDefaultFocus();
-		}
-		ImGui::EndCombo();
-	}
-}  // namespace
-
 // Picking a form sets the reference's runtime emittance source live; "(None)" removes it. LP bulbs
 // additionally persist the choice via Save to Light Placer.
 void LightEditor::DrawExternalEmittanceCombo()
@@ -395,8 +354,8 @@ void LightEditor::DrawExternalEmittanceCombo()
 	const char* kNoneLabel = T(TKEY("none"), "(None)");
 	const char* preview = externalEmittanceEdid.empty() ? kNoneLabel : externalEmittanceEdid.c_str();
 	const auto externalEmittanceLabel = fmt::format("{}##combo", T(TKEY("external_emittance"), "External Emittance"));
-	DrawSearchableFormCombo(
-		externalEmittanceLabel.c_str(), kEmittanceComboId, preview, kNoneLabel, externalEmittanceEdid.empty(), s_emittanceFormList,
+	BrowserUI::SearchableFormCombo(
+		{ externalEmittanceLabel.c_str(), kEmittanceComboId, preview, kNoneLabel, externalEmittanceEdid.empty() }, s_emittanceFormList,
 		[&] { ClearExternalEmittance(); },
 		[&](const std::string& edid, RE::TESForm*) { return edid == externalEmittanceEdid; },
 		[&](const std::string& edid, RE::TESForm* form) {
@@ -488,7 +447,6 @@ namespace
 	constexpr float kLightInspectorBesideMinWidth = 640.0f;
 	constexpr float kLightInspectorWidth = 380.0f;
 	constexpr float kLightSearchWidth = 220.0f;
-	constexpr float kInspectorBgAlpha = 0.5f;
 	constexpr int kFlagGridColumns = 3;
 	/// Position units per dragged pixel; Shift and Alt speed it up and slow it down.
 	constexpr float kPositionDragSpeed = 0.25f;
@@ -506,20 +464,6 @@ namespace
 	void Section(const char* label)
 	{
 		BrowserUI::SectionLabel(label, true);
-	}
-
-	/** @brief Opens a tinted, scrollable inspector panel; always pair with ImGui::EndChild. @return Whether it is visible. */
-	bool BeginPanel(const char* id, const ImVec2& size)
-	{
-		const auto& style = ImGui::GetStyle();
-		ImVec4 background = style.Colors[ImGuiCol_FrameBg];
-		background.w *= kInspectorBgAlpha;
-		ImGui::PushStyleColor(ImGuiCol_ChildBg, background);
-		ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, style.FrameRounding);
-		const bool visible = ImGui::BeginChild(id, size, ImGuiChildFlags_AlwaysUseWindowPadding);
-		ImGui::PopStyleVar();
-		ImGui::PopStyleColor();
-		return visible;
 	}
 
 	using BrowserUI::SameLineIfFits;
@@ -805,7 +749,7 @@ void LightEditor::DrawLightTable(const ImVec2& size)
 
 void LightEditor::DrawInspector(const ImVec2& size)
 {
-	if (!BeginPanel("##LightInspector", size)) {
+	if (!BrowserUI::BeginCard("##LightInspector", size)) {
 		ImGui::EndChild();
 		return;
 	}
@@ -1042,7 +986,7 @@ void LightEditor::DrawFlags()
 
 void LightEditor::DrawAdjustments(const ImVec2& size)
 {
-	if (!BeginPanel("##LightAdjustments", size) || !selected.isSelected) {
+	if (!BrowserUI::BeginCard("##LightAdjustments", size) || !selected.isSelected) {
 		ImGui::EndChild();
 		return;
 	}
@@ -1057,8 +1001,8 @@ void LightEditor::DrawAdjustments(const ImVec2& size)
 
 		static constexpr const char* kLighOverrideId = "LighFormOverride";
 		const auto bulbTypeLabel = fmt::format("{}##combo", T(TKEY("bulb_type"), "Bulb type"));
-		DrawSearchableFormCombo(
-			bulbTypeLabel.c_str(), kLighOverrideId, previewEdid, kOriginalLabel, current.data.lighFormId == original.data.lighFormId, s_lighFormList,
+		BrowserUI::SearchableFormCombo(
+			{ bulbTypeLabel.c_str(), kLighOverrideId, previewEdid, kOriginalLabel, current.data.lighFormId == original.data.lighFormId }, s_lighFormList,
 			[&] { current.data = original.data; },
 			[&](const std::string&, RE::TESObjectLIGH* ligh) { return ligh->GetFormID() == current.data.lighFormId; },
 			[&](const std::string&, RE::TESObjectLIGH* ligh) {
@@ -1428,8 +1372,8 @@ void LightEditor::DrawAddLightPopup()
 	const float scale = Util::GetUIScale();
 	// Anchor toward the top of the screen so combo dropdowns have room to open below.
 	const ImVec2 displaySize = ImGui::GetIO().DisplaySize;
-	ImGui::SetNextWindowPos(ImVec2(displaySize.x * 0.5f, displaySize.y * 0.1f), ImGuiCond_Appearing, ImVec2(0.5f, 0.0f));
-	ImGui::SetNextWindowSize(ImVec2(520 * scale, 0), ImGuiCond_Appearing);
+	ImGui::SetNextWindowPos(ImVec2(displaySize.x * 0.5f, displaySize.y * ThemeManager::Constants::CSE_ADD_LIGHT_POPUP_TOP_RATIO), ImGuiCond_Appearing, ImVec2(0.5f, 0.0f));
+	ImGui::SetNextWindowSize(ImVec2(ThemeManager::Constants::CSE_ADD_LIGHT_POPUP_WIDTH * scale, 0), ImGuiCond_Appearing);
 	if (ImGui::BeginPopupModal(T(TKEY("select_mesh"), "Select Mesh"), nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
 		ImGui::Text(T(TKEY("picked_editor_id"), "EditorID: %s"), pickedMesh.editorId.empty() ? T(TKEY("none_value"), "(none)") : pickedMesh.editorId.c_str());
 		ImGui::Text(T(TKEY("picked_mesh"), "Mesh: %s"), pickedMesh.modelPath.empty() ? T(TKEY("none_value"), "(none)") : pickedMesh.modelPath.c_str());
@@ -2395,13 +2339,15 @@ void LightEditor::UpdateSelectedLight(RE::TESObjectREFR* refr, RE::TESObjectLIGH
 
 	UpdateEmittanceColor();
 
-	displayInfo.ownerEditorId = refr ? clib_util::editorID::get_editorID(refr) : "Unknown";
+	const std::string unknown = T(TKEY("unknown"), "Unknown");
+	displayInfo.ownerEditorId = refr ? clib_util::editorID::get_editorID(refr) : unknown;
 	displayInfo.baseObjectFormId = refr && refr->GetBaseObject() ? refr->GetBaseObject()->formID : 0;
-	displayInfo.ownerLastEditedBy = refr && refr->GetDescriptionOwnerFile() ? refr->GetDescriptionOwnerFile()->fileName : "Unknown";
+	displayInfo.ownerLastEditedBy = refr && refr->GetDescriptionOwnerFile() ? refr->GetDescriptionOwnerFile()->fileName : unknown;
 	displayInfo.cellFormId = refr && refr->GetParentCell() ? refr->GetParentCell()->GetFormID() : 0;
-	displayInfo.cellEditorId = refr && refr->GetParentCell() ? refr->GetParentCell()->GetFormEditorID() : "Unknown";
+	const char* cellEditorId = refr && refr->GetParentCell() ? refr->GetParentCell()->GetFormEditorID() : nullptr;
+	displayInfo.cellEditorId = cellEditorId ? cellEditorId : unknown;
 	displayInfo.lighFormId = ligh ? ligh->GetFormID() : 0;
-	displayInfo.lighEditorId = ligh ? clib_util::editorID::get_editorID(ligh) : "Unknown";
+	displayInfo.lighEditorId = ligh ? clib_util::editorID::get_editorID(ligh) : unknown;
 }
 
 float LightEditor::GetLPRefScale() const
