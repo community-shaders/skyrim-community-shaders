@@ -3,6 +3,8 @@
 #include "Globals.h"
 #include "Menu.h"
 #include "Menu/ThemeManager.h"
+#include "Utils/UI.h"
+#include "Utils/UISurface.h"
 
 #include <imgui_internal.h>
 
@@ -238,6 +240,153 @@ namespace Util::Anim
 	PageFade::~PageFade()
 	{
 		EndFadeIn();
+	}
+
+	namespace
+	{
+		int g_noListHighlight = 0;
+
+		// Salts that separate one list's state keys; the list key is its window's id
+		constexpr ImGuiID kHoverIdSalt = 0x1B873593u;
+		constexpr ImGuiID kHoverFrameSalt = 0x2C4F8E15u;
+		constexpr ImGuiID kSelectedFrameSalt = 0x3D91A7C3u;
+		constexpr ImGuiID kDrawnFrameSalt = 0x4E27B5D9u;
+		constexpr ImGuiID kLastDrawSalt = 0x5F6A93E1u;
+		constexpr ImGuiID kVisSalt = 0x6A09E667u;
+		constexpr ImGuiID kSelSalt = 0x7B3C1D8Fu;
+		constexpr ImGuiID kPressSalt = 0x8C5E2A47u;
+		constexpr ImGuiID kRectSalt = 0x9D7F4B63u;  // + 0..3
+
+		/// The area ImGui::Selectable fills for an item: its rect grown by half the item spacing.
+		ImRect SelectableFillRect(ImGuiSelectableFlags flags)
+		{
+			const ImGuiStyle& style = ImGui::GetStyle();
+			const float spacingX = (flags & ImGuiSelectableFlags_SpanAllColumns) ? 0.0f : style.ItemSpacing.x;
+			const float left = std::floor(spacingX * 0.5f);
+			const float top = std::floor(style.ItemSpacing.y * 0.5f);
+			return ImRect(ImVec2(ImGui::GetItemRectMin().x - left, ImGui::GetItemRectMin().y - top),
+				ImVec2(ImGui::GetItemRectMax().x + (spacingX - left), ImGui::GetItemRectMax().y + (style.ItemSpacing.y - top)));
+		}
+
+		/// The highlight's look: the accent at the NavSelected surface's strength, fainter on hover, darker once selected
+		/// or pressed, with the accent bar fading in on a selected row.
+		void DrawListHighlight(ImDrawList* drawList, const ImVec2& min, const ImVec2& max, float visibility, float selectedness, float press)
+		{
+			const auto& surface = Surface::Get(Surface::Role::NavSelected);
+			if (!surface.enabled || visibility <= 0.0f)
+				return;
+			const ImVec4 accent = Colors::GetAccent();
+			const float darken = (1.0f - (1.0f - Constants::LIST_HIGHLIGHT_SELECTED_DARKEN) * selectedness) *
+			                     (1.0f - (1.0f - Constants::LIST_HIGHLIGHT_PRESS_DARKEN) * press);
+			const float strength = (Constants::LIST_HIGHLIGHT_HOVER_RATIO + (1.0f - Constants::LIST_HIGHLIGHT_HOVER_RATIO) * selectedness) *
+			                       (1.0f + (Constants::LIST_HIGHLIGHT_PRESS_BOOST - 1.0f) * press);
+			const float rounding = ImGui::GetStyle().FrameRounding;
+			drawList->AddRectFilled(min, max,
+				ImGui::GetColorU32(ImVec4(accent.x * darken, accent.y * darken, accent.z * darken, std::min(1.0f, surface.fillAlpha * strength * visibility))),
+				rounding);
+			const float barWidth = surface.accentBarWidth * GetUIScale();
+			if (surface.accentBar && barWidth > 0.0f && selectedness > 0.0f) {
+				const float inset = (max.y - min.y) * Constants::NAV_SELECTED_BAR_INSET;
+				drawList->AddRectFilled(ImVec2(min.x, min.y + inset), ImVec2(min.x + barWidth, max.y - inset),
+					ImGui::GetColorU32(ScaleAlpha(accent, selectedness * visibility)), barWidth * 0.5f);
+			}
+		}
+	}
+
+	NoListHighlight::NoListHighlight()
+	{
+		++g_noListHighlight;
+	}
+
+	NoListHighlight::~NoListHighlight()
+	{
+		--g_noListHighlight;
+	}
+
+	bool GlideSelectable(SelectableFn real, const char* label, bool selected, ImGuiSelectableFlags flags, const ImVec2& size)
+	{
+		ImGuiWindow* window = ImGui::GetCurrentWindow();
+		if (g_noListHighlight > 0 || ReducedMotion() || window->SkipItems)
+			return real(label, selected, flags, size);
+
+		const ImGuiID id = window->GetID(label);
+		const ImGuiID list = window->ID;
+		ImGuiStorage* storage = ImGui::GetStateStorage();
+
+		// ImGui's own fills are hidden; the list highlight below replaces them
+		UnderlayScope underlay;
+		ImGui::PushStyleColor(ImGuiCol_Header, IM_COL32_BLACK_TRANS);
+		ImGui::PushStyleColor(ImGuiCol_HeaderHovered, IM_COL32_BLACK_TRANS);
+		ImGui::PushStyleColor(ImGuiCol_HeaderActive, IM_COL32_BLACK_TRANS);
+		const bool clicked = real(label, selected, flags, size);
+		ImGui::PopStyleColor(3);
+		if (!ImGui::IsItemVisible())
+			return clicked;
+
+		const int frame = ImGui::GetFrameCount();
+		const bool disabled = (flags & ImGuiSelectableFlags_Disabled) != 0;
+		const bool hovered = !disabled && ImGui::IsItemHovered();
+		const bool held = hovered && ImGui::IsItemActive();
+		const auto key = [list](ImGuiID salt) { return list ^ salt; };
+
+		if (hovered) {
+			storage->SetInt(key(kHoverIdSalt), static_cast<int>(id));
+			storage->SetInt(key(kHoverFrameSalt), frame);
+		}
+		if (selected && !disabled)
+			storage->SetInt(key(kSelectedFrameSalt), frame);
+
+		// Who the highlight is on: the row the mouse was over a moment ago, else the selected row
+		const bool hoverRecent = storage->GetInt(key(kHoverFrameSalt), -10) >= frame - 1;
+		const ImGuiID hoverId = hoverRecent ? static_cast<ImGuiID>(storage->GetInt(key(kHoverIdSalt), 0)) : 0;
+		const bool isTarget = !disabled && (hoverId != 0 ? hoverId == id : selected);
+		const bool expectTarget = hoverId != 0 || storage->GetInt(key(kSelectedFrameSalt), -10) >= frame - 1;
+		const bool drawnThisFrame = storage->GetInt(key(kDrawnFrameSalt), -1) == frame;
+		const int lastDraw = storage->GetInt(key(kLastDrawSalt), -10);
+
+		// The rect is kept relative to the window's scrolled origin, so it stays put while the list scrolls
+		const ImVec2 origin(window->Pos.x - window->Scroll.x, window->Pos.y - window->Scroll.y);
+
+		if (isTarget && !drawnThisFrame) {
+			storage->SetInt(key(kDrawnFrameSalt), frame);
+			const ImRect rect = SelectableFillRect(flags);
+			const float targetRel[4] = { rect.Min.x - origin.x, rect.Min.y - origin.y, rect.Max.x - origin.x, rect.Max.y - origin.y };
+			const bool fresh = lastDraw < frame - 1;
+			float rel[4];
+			float stored[4];
+			for (ImGuiID n = 0; n < 4; ++n)
+				stored[n] = storage->GetFloat(key(kRectSalt + n), targetRel[n]);
+			// A jump of many rows is another list in the same window, so it appears there instead of sweeping across
+			const bool snap = fresh || std::abs(targetRel[1] - stored[1]) > rect.GetHeight() * Constants::LIST_HIGHLIGHT_SNAP_ROWS;
+			for (ImGuiID n = 0; n < 4; ++n) {
+				rel[n] = snap ? targetRel[n] : Smooth(stored[n], targetRel[n], Constants::ANIM_GLIDE_RATE);
+				storage->SetFloat(key(kRectSalt + n), rel[n]);
+			}
+			const float visibility = Smooth(fresh ? 0.0f : storage->GetFloat(key(kVisSalt), 0.0f), 1.0f, Constants::ANIM_HOVER_RATE);
+			const float selectedTarget = selected ? 1.0f : 0.0f;
+			const float selectedness = Smooth(fresh ? selectedTarget : storage->GetFloat(key(kSelSalt), selectedTarget), selectedTarget, Constants::ANIM_SELECT_RATE);
+			const float press = Smooth(fresh ? 0.0f : storage->GetFloat(key(kPressSalt), 0.0f), held ? 1.0f : 0.0f, Constants::ANIM_HOVER_RATE);
+			storage->SetFloat(key(kVisSalt), visibility);
+			storage->SetFloat(key(kSelSalt), selectedness);
+			storage->SetFloat(key(kPressSalt), press);
+			storage->SetInt(key(kLastDrawSalt), frame);
+			DrawListHighlight(underlay.Background(), ImVec2(rel[0] + origin.x, rel[1] + origin.y), ImVec2(rel[2] + origin.x, rel[3] + origin.y),
+				visibility, selectedness, press);
+		} else if (!expectTarget && !drawnThisFrame && lastDraw >= frame - 1) {
+			// Nothing to rest on: the highlight fades out where it was
+			const float visibility = Smooth(storage->GetFloat(key(kVisSalt), 0.0f), 0.0f, Constants::ANIM_HOVER_RATE);
+			storage->SetFloat(key(kVisSalt), visibility);
+			if (visibility > Constants::ANIM_EPSILON) {
+				storage->SetInt(key(kDrawnFrameSalt), frame);
+				storage->SetInt(key(kLastDrawSalt), frame);
+				const float selectedness = storage->GetFloat(key(kSelSalt), 0.0f);
+				const float press = storage->GetFloat(key(kPressSalt), 0.0f);
+				const ImVec2 min(storage->GetFloat(key(kRectSalt), 0.0f) + origin.x, storage->GetFloat(key(kRectSalt + 1), 0.0f) + origin.y);
+				const ImVec2 max(storage->GetFloat(key(kRectSalt + 2), 0.0f) + origin.x, storage->GetFloat(key(kRectSalt + 3), 0.0f) + origin.y);
+				DrawListHighlight(underlay.Background(), min, max, visibility, selectedness, press);
+			}
+		}
+		return clicked;
 	}
 
 	namespace

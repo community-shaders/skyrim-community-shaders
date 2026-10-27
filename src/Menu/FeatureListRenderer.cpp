@@ -191,6 +191,8 @@ namespace
 
 		bool clicked = false;
 		{
+			// The pill draws its own highlight, so the list highlight stays out of it
+			Util::Anim::NoListHighlight ownHighlight;
 			// A dimmed pill still takes the click: the caller explains why it cannot act
 			ImGui::PushStyleColor(ImGuiCol_Header, IM_COL32_BLACK_TRANS);
 			ImGui::PushStyleColor(ImGuiCol_HeaderHovered, IM_COL32_BLACK_TRANS);
@@ -1120,7 +1122,7 @@ void FeatureListRenderer::ListMenuVisitor::operator()(Feature* feat)
 	const float spaceWidth = ImGui::CalcTextSize(" ").x;
 	const std::string iconPad = showCategoryIcon ? std::string(static_cast<size_t>(std::ceil((iconColumn + spaceWidth) / spaceWidth)), ' ') : std::string();
 	ImGui::PushStyleColor(ImGuiCol_Text, textColor);
-	if (Util::NavSelectable("FeatureListGlide", std::format(" {}{} ###Row", iconPad, feat->GetDisplayName()).c_str(), selectedMenuRef == listId, ImGuiSelectableFlags_SpanAllColumns)) {
+	if (Util::Selectable(std::format(" {}{} ###Row", iconPad, feat->GetDisplayName()).c_str(), selectedMenuRef == listId, ImGuiSelectableFlags_SpanAllColumns)) {
 		selectedMenuRef = listId;
 	}
 	ImGui::PopStyleColor();

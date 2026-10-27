@@ -238,7 +238,7 @@ namespace
 			}
 
 			ImGui::PushID(section.id.data(), section.id.data() + section.id.size());
-			if (Util::NavSelectable("SettingsSectionGlide", GetSectionTitle(section.id), state.section == section.id))
+			if (Util::Selectable(GetSectionTitle(section.id), state.section == section.id))
 				state.section = std::string(section.id);
 			if (hits && !hits->entries.empty())
 				DrawRowCount(hits->entries.size());

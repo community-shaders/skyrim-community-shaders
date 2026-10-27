@@ -664,20 +664,13 @@ namespace Util
 	bool Button(const char* label, const ImVec2& size = ImVec2(0, 0));
 
 	/**
-	 * @brief Drop-in for ImGui::Selectable whose hover, press and selected fills ease in and out instead of
-	 * switching. Behaviour is otherwise identical to ImGui::Selectable.
+	 * @brief ImGui::Selectable. Every Selectable is hooked (UIHooks, Anim::GlideSelectable), so rows of any list get
+	 * the gliding hover / selected highlight whichever way they are called; these exist for call sites that prefer
+	 * the Util namespace.
 	 */
 	bool Selectable(const char* label, bool selected = false, ImGuiSelectableFlags flags = 0, const ImVec2& size = ImVec2(0, 0));
 	/** @brief Selectable() overload that toggles `*selected` when clicked, like its ImGui counterpart. */
 	bool Selectable(const char* label, bool* selected, ImGuiSelectableFlags flags = 0, const ImVec2& size = ImVec2(0, 0));
-
-	/**
-	 * @brief Row of a navigation list (feature list, Settings sections): eased hover and press fills, and a selected
-	 * highlight that is one shape gliding between the list's rows (Anim::SelectionGlide), in the nav-selected
-	 * surface style.
-	 * @param listKey Stable name of the list; every row of the list passes the same one.
-	 */
-	bool NavSelectable(const char* listKey, const char* label, bool selected, ImGuiSelectableFlags flags = 0, const ImVec2& size = ImVec2(0, 0));
 
 	/**
 	 * Clean, minimalist toggle switch for feature enable/disable state

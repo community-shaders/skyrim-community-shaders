@@ -211,28 +211,7 @@ namespace Util
 
 	bool TableRowSelectable(const char* label, bool selected, ImGuiSelectableFlags flags)
 	{
-		const ImVec4 kTransparent(0.0f, 0.0f, 0.0f, 0.0f);
-		ImGui::PushStyleColor(ImGuiCol_Header, kTransparent);
-		ImGui::PushStyleColor(ImGuiCol_HeaderHovered, kTransparent);
-		ImGui::PushStyleColor(ImGuiCol_HeaderActive, kTransparent);
-
-		bool pressed = ImGui::Selectable(label, selected, flags, ImVec2(0, ImGui::GetFrameHeight()));
-		bool hovered = ImGui::IsItemHovered();
-		bool active = ImGui::IsItemActive();
-		ImGui::PopStyleColor(3);
-
-		if (active || hovered) {
-			const ImGuiCol highlightCol = active ? ImGuiCol_HeaderActive : ImGuiCol_HeaderHovered;
-			const ImU32 rowColor = ImGui::GetColorU32(highlightCol);
-			ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, rowColor);
-			ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1, rowColor);
-		} else if (selected) {
-			const ImU32 rowColor = ImGui::GetColorU32(ImGuiCol_Header);
-			ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, rowColor);
-			ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1, rowColor);
-		}
-
-		return pressed;
+		return ImGui::Selectable(label, selected, flags, ImVec2(0, ImGui::GetFrameHeight()));
 	}
 
 	void SetTooltipPositionNearMouse(float estimatedHeight, float estimatedWidth)
@@ -1303,76 +1282,6 @@ namespace Util
 			const bool enabled = (g.CurrentItemFlags & ImGuiItemFlags_Disabled) == 0;
 			return Anim::ItemBlend(id, enabled && g.HoveredIdPreviousFrame == id, enabled && g.ActiveId == id, selected);
 		}
-
-		/// The rectangle ImGui::Selectable fills for an item: its rect grown by half the item spacing.
-		ImRect SelectableFillRect(ImGuiSelectableFlags flags)
-		{
-			const ImGuiStyle& style = ImGui::GetStyle();
-			const float spacingX = (flags & ImGuiSelectableFlags_SpanAllColumns) ? 0.0f : style.ItemSpacing.x;
-			const float left = std::floor(spacingX * 0.5f);
-			const float top = std::floor(style.ItemSpacing.y * 0.5f);
-			return ImRect(ImVec2(ImGui::GetItemRectMin().x - left, ImGui::GetItemRectMin().y - top),
-				ImVec2(ImGui::GetItemRectMax().x + (spacingX - left), ImGui::GetItemRectMax().y + (style.ItemSpacing.y - top)));
-		}
-
-		/// Selectable with ImGui's own fills hidden and eased ones drawn beneath its label; `glideId` set draws the
-		/// selected state as a gliding nav highlight instead of an eased fill.
-		bool EasedSelectable(const char* label, bool selected, ImGuiSelectableFlags flags, const ImVec2& size, const char* listKey)
-		{
-			const ImGuiID id = ImGui::GetID(label);
-			const ImGuiID glideId = listKey ? ImHashStr(listKey) : 0;
-			const auto blend = PendingBlend(id, glideId == 0 && selected);
-			// Navigation lists keep the accent for the selected row alone: hover and press are a faint veil of the text
-			// colour, so a hovered row never competes with the selection
-			const bool navList = glideId != 0;
-			const ImU32 hoverColor = navList ? ImGui::GetColorU32(ImGuiCol_Text) : ImGui::GetColorU32(ImGuiCol_HeaderHovered);
-			const ImU32 pressColor = navList ? ImGui::GetColorU32(ImGuiCol_Text) : ImGui::GetColorU32(ImGuiCol_HeaderActive);
-			const float hoverStrength = navList ? ThemeManager::Constants::NAV_HOVER_VEIL_ALPHA : 1.0f;
-			const float pressStrength = navList ? ThemeManager::Constants::NAV_PRESS_VEIL_ALPHA : 1.0f;
-			const ImU32 selectedColor = ImGui::GetColorU32(ImGuiCol_Header);
-
-			bool clicked = false;
-			UnderlayScope underlay;
-			{
-				ImGui::PushStyleColor(ImGuiCol_Header, IM_COL32_BLACK_TRANS);
-				ImGui::PushStyleColor(ImGuiCol_HeaderHovered, IM_COL32_BLACK_TRANS);
-				ImGui::PushStyleColor(ImGuiCol_HeaderActive, IM_COL32_BLACK_TRANS);
-				clicked = ImGui::Selectable(label, selected, flags, size);
-				ImGui::PopStyleColor(3);
-			}
-			if (!ImGui::IsItemVisible())
-				return clicked;
-
-			const bool glides = glideId != 0 && selected;
-			if (blend.Highlight() <= 0.0f && !glides)
-				return clicked;
-
-			const ImRect rect = SelectableFillRect(flags);
-			ImDrawList* drawList = underlay.Background();
-			if (blend.selected > 0.0f)
-				drawList->AddRectFilled(rect.Min, rect.Max, Anim::ScaleAlphaU32(selectedColor, blend.selected));
-			if (blend.hover > 0.0f)
-				drawList->AddRectFilled(rect.Min, rect.Max, Anim::ScaleAlphaU32(hoverColor, blend.hover * hoverStrength));
-			if (blend.press > 0.0f)
-				drawList->AddRectFilled(rect.Min, rect.Max, Anim::ScaleAlphaU32(pressColor, blend.press * pressStrength));
-
-			if (glides) {
-				const auto& navSurface = Surface::Get(Surface::Role::NavSelected);
-				if (navSurface.enabled) {
-					const auto glide = Anim::SelectionGlide(glideId, rect.Min, rect.Max);
-					const float rounding = ImGui::GetStyle().FrameRounding;
-					if (navSurface.fillAlpha > 0.0f)
-						drawList->AddRectFilled(glide.min, glide.max, ImGui::GetColorU32(Anim::ScaleAlpha(Colors::GetAccent(), navSurface.fillAlpha)), rounding);
-					const float barWidth = navSurface.accentBarWidth * GetUIScale();
-					if (navSurface.accentBar && barWidth > 0.0f) {
-						const float inset = (glide.max.y - glide.min.y) * ThemeManager::Constants::NAV_SELECTED_BAR_INSET;
-						drawList->AddRectFilled(ImVec2(glide.min.x, glide.min.y + inset), ImVec2(glide.min.x + barWidth, glide.max.y - inset),
-							ImGui::GetColorU32(Colors::GetAccent()), barWidth * 0.5f);
-					}
-				}
-			}
-			return clicked;
-		}
 	}  // namespace
 
 	bool Button(const char* label, const ImVec2& size)
@@ -1395,20 +1304,13 @@ namespace Util
 
 	bool Selectable(const char* label, bool selected, ImGuiSelectableFlags flags, const ImVec2& size)
 	{
-		return EasedSelectable(label, selected, flags, size, nullptr);
+		// ImGui::Selectable is hooked (UIHooks), so every row already gets the gliding list highlight
+		return ImGui::Selectable(label, selected, flags, size);
 	}
 
 	bool Selectable(const char* label, bool* selected, ImGuiSelectableFlags flags, const ImVec2& size)
 	{
-		if (!EasedSelectable(label, *selected, flags, size, nullptr))
-			return false;
-		*selected = !*selected;
-		return true;
-	}
-
-	bool NavSelectable(const char* listKey, const char* label, bool selected, ImGuiSelectableFlags flags, const ImVec2& size)
-	{
-		return EasedSelectable(label, selected, flags, size, listKey);
+		return ImGui::Selectable(label, selected, flags, size);
 	}
 
 	bool DrawAnimatedButtonHighlight(const ImRect& rect, ImGuiID id, bool hovered, bool held, bool current, ImDrawList* drawList)

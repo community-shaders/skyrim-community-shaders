@@ -162,6 +162,31 @@ namespace Util::Anim
 	bool EasedSliderScalar(SliderScalarFn real, const char* label, ImGuiDataType dataType, void* data, const void* min,
 		const void* max, const char* format, ImGuiSliderFlags flags);
 
+	/** @brief Signature of ImGui::Selectable, which every list row (combo items, menu items, list boxes) funnels into. */
+	using SelectableFn = bool (*)(const char*, bool, ImGuiSelectableFlags, const ImVec2&);
+
+	/**
+	 * @brief Selectable body that draws one gliding highlight per list instead of a fill per row. The highlight eases
+	 * to whichever row the mouse is over, darkens while pressed, and rests on the selected row when the mouse is
+	 * elsewhere; ImGui's own hover and selected fills are hidden so nothing doubles up. Rows of one list are the
+	 * Selectables of one window, so every list gets it with no opt-in. Hooked into ImGui::Selectable (see UIHooks);
+	 * passes straight through while UI animations are off.
+	 */
+	bool GlideSelectable(SelectableFn real, const char* label, bool selected, ImGuiSelectableFlags flags, const ImVec2& size);
+
+	/**
+	 * @brief Scope for rows that draw their own highlight (a custom pill, say): Selectables inside it skip the list
+	 * highlight. Everything else gets it automatically.
+	 */
+	class NoListHighlight
+	{
+	public:
+		NoListHighlight();
+		~NoListHighlight();
+		NoListHighlight(const NoListHighlight&) = delete;
+		NoListHighlight& operator=(const NoListHighlight&) = delete;
+	};
+
 	/**
 	 * @brief Fades a popup out after it closes. ImGui drops a popup's window the frame it closes, so while the popup is
 	 * open this keeps a copy of what it drew, and once it closes the copy is replayed over the screen, fading away.

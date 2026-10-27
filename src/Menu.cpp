@@ -47,6 +47,7 @@
 #include "State.h"
 #include "Util.h"
 #include "Utils/UI.h"
+#include "Utils/UIHooks.h"
 
 #include "CSEditor/Browser/BrowserWidgets.h"
 #include "CSEditor/EditorWindow.h"
@@ -796,6 +797,7 @@ void Menu::Init()
 	// Detours must land before any feature draws, and this is the first guaranteed render-thread
 	// point; Install logs its own failure and leaves the interceptor inert.
 	SceneWidgetInterceptor::Install();
+	Util::UIHooks::Install();
 
 	initialized = true;
 }
