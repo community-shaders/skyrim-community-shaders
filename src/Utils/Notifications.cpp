@@ -76,7 +76,7 @@ namespace Util::Notifications
 			notifications.end());
 
 		const ImGuiViewport* viewport = ImGui::GetMainViewport();
-		const float maxTextWidth = std::min(Constants::TOAST_MAX_TEXT_WIDTH * scale, viewport->WorkSize.x * Constants::TOAST_MAX_TEXT_WIDTH_VIEWPORT_RATIO);
+		const float maxTextWidth = std::min(Constants::TOAST_MAX_TEXT_WIDTH_FONTS * ImGui::GetFontSize(), viewport->WorkSize.x * Constants::TOAST_MAX_TEXT_WIDTH_VIEWPORT_RATIO);
 		float stackUp = 0.0f;
 
 		for (auto& notif : notifications) {

@@ -153,11 +153,11 @@ namespace Util::Anim
 	using SliderScalarFn = bool (*)(const char*, ImGuiDataType, void*, const void*, const void*, const char*, ImGuiSliderFlags);
 
 	/**
-	 * @brief Slider body with automatic easing. When the bound value changes from outside (a preset, restore, undo,
-	 * paste), the slider's grab and number ease to the new value instead of jumping. Direct edits are never delayed:
-	 * while the user holds the slider, or when the value is at rest, @p real runs on the caller's value untouched.
-	 * Hooked into ImGui::SliderScalar, so every slider variant gets it with no per-widget opt-in. Float and int
-	 * sliders ease; other data types, and everything while UI animations are off, pass straight through.
+	 * @brief Slider body whose grab glides. The value itself changes the instant the user acts, so nothing is delayed;
+	 * ImGui's grab is hidden and redrawn gliding to the value's position, which covers a click that jumps a long way
+	 * on a wide slider, a drag (followed closely) and a value changed from outside (a preset, restore, undo). Hooked
+	 * into ImGui::SliderScalar, so every slider variant gets it with no per-widget opt-in. Float and int sliders glide;
+	 * logarithmic sliders, other data types, and everything while UI animations are off, pass straight through.
 	 */
 	bool EasedSliderScalar(SliderScalarFn real, const char* label, ImGuiDataType dataType, void* data, const void* min,
 		const void* max, const char* format, ImGuiSliderFlags flags);

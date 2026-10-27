@@ -178,19 +178,52 @@ namespace Util::Anim
 	{
 		const bool isFloat = dataType == ImGuiDataType_Float;
 		const bool isInt = dataType == ImGuiDataType_S32;
-		if (ReducedMotion() || (!isFloat && !isInt))
+		ImGuiContext& context = *ImGui::GetCurrentContext();
+		const ImGuiID id = ImGui::GetID(label);
+		// Logarithmic sliders map value to position differently, and the text-entry mode has no grab: leave both to ImGui
+		if (ReducedMotion() || (!isFloat && !isInt) || (flags & ImGuiSliderFlags_Logarithmic) || context.TempInputId == id)
 			return real(label, dataType, data, min, max, format, flags);
 
 		const auto read = [&](const void* value) {
 			return isFloat ? *static_cast<const float*>(value) : static_cast<float>(*static_cast<const int*>(value));
 		};
-		const ImGuiID id = ImGui::GetID(label);
+		// ImGui's slider frame: the item width from the cursor, as tall as the label's line plus padding
+		const ImGuiStyle& style = ImGui::GetStyle();
+		const float frameWidth = ImGui::CalcItemWidth();
+		const float frameHeight = ImGui::CalcTextSize(label, nullptr, true).y + style.FramePadding.y * 2.0f;
+		const ImU32 grabColor = ImGui::GetColorU32(ImGuiCol_SliderGrab);
+		const ImU32 grabActiveColor = ImGui::GetColorU32(ImGuiCol_SliderGrabActive);
+
+		// The value changes the instant the user acts, so nothing downstream is delayed; only ImGui's own grab is hidden
+		// and drawn again below, gliding to where the value now is. That covers a click that jumps a long way, a drag,
+		// and a value changed from outside, whichever way it moved.
+		ImGui::PushStyleColor(ImGuiCol_SliderGrab, IM_COL32_BLACK_TRANS);
+		ImGui::PushStyleColor(ImGuiCol_SliderGrabActive, IM_COL32_BLACK_TRANS);
+		const bool changed = real(label, dataType, data, min, max, format, flags);
+		ImGui::PopStyleColor(2);
+		if (!ImGui::IsItemVisible())
+			return changed;
+
+		const float vMin = read(min);
+		const float vMax = read(max);
+		const float range = vMax - vMin;
+		const ImVec2 frameMin = ImGui::GetItemRectMin();
+		const float grabPadding = 2.0f;  // ImGui's own (hard-coded there)
+		const float sliderSize = frameWidth - grabPadding * 2.0f;
+		float grabSize = style.GrabMinSize;
+		if (isInt && range != 0.0f)
+			grabSize = std::max(sliderSize / (std::abs(range) + 1.0f), style.GrabMinSize);
+		grabSize = std::min(grabSize, sliderSize);
+		const float usableSize = sliderSize - grabSize;
+		if (usableSize <= 0.0f || range == 0.0f || !std::isfinite(range))
+			return changed;
+
 		ImGuiStorage* storage = ImGui::GetStateStorage();
-		const ImGuiID shownKey = id ^ 0xA5A5A5A5u;
+		const ImGuiID ratioKey = id ^ 0xA5A5A5A5u;
 		const ImGuiID frameKey = id ^ 0x3C3C3C3Cu;
 		const ImGuiID epochKey = id ^ 0x7E7E7E7Eu;
+		const float target = std::clamp((read(data) - vMin) / range, 0.0f, 1.0f);
 
-		const float target = read(data);
 		// A slider that was not drawn last frame, or that belongs to a page that was just opened, starts at rest
 		const int frame = ImGui::GetFrameCount();
 		const int epoch = static_cast<int>(g_pageEpoch);
@@ -198,33 +231,20 @@ namespace Util::Anim
 		storage->SetInt(frameKey, frame);
 		storage->SetInt(epochKey, epoch);
 
-		float shown = target;
-		if (!fresh && ImGui::GetActiveID() != id) {
-			shown = Smooth(storage->GetFloat(shownKey, target), target, Constants::ANIM_SLIDER_RATE);
-			const float snap = std::max(isInt ? 0.5f : 0.0f, std::abs(read(max) - read(min)) * Constants::ANIM_SLIDER_SNAP_FRACTION);
-			if (std::abs(shown - target) <= snap)
-				shown = target;
+		// Held and dragged it follows closely; on its own it glides
+		const bool active = context.ActiveId == id;
+		float ratio = target;
+		if (!fresh) {
+			ratio = Smooth(storage->GetFloat(ratioKey, target), target, active ? Constants::ANIM_SLIDER_DRAG_RATE : Constants::ANIM_SLIDER_RATE);
+			if (std::abs(ratio - target) <= Constants::ANIM_SLIDER_SNAP_FRACTION)
+				ratio = target;
 		}
+		storage->SetFloat(ratioKey, ratio);
 
-		if (shown == target) {
-			storage->SetFloat(shownKey, target);
-			return real(label, dataType, data, min, max, format, flags);
-		}
-
-		// Easing: the widget draws a copy, and only a real edit is written back
-		float easedFloat = shown;
-		int easedInt = static_cast<int>(std::lround(shown));
-		void* eased = isFloat ? static_cast<void*>(&easedFloat) : static_cast<void*>(&easedInt);
-		const bool changed = real(label, dataType, eased, min, max, format, flags);
-		if (changed) {
-			if (isFloat)
-				*static_cast<float*>(data) = easedFloat;
-			else
-				*static_cast<int*>(data) = easedInt;
-			storage->SetFloat(shownKey, read(data));
-		} else {
-			storage->SetFloat(shownKey, shown);
-		}
+		const float usableMin = frameMin.x + grabPadding + grabSize * 0.5f;
+		const float grabCenter = usableMin + ratio * usableSize;
+		ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(grabCenter - grabSize * 0.5f, frameMin.y + grabPadding),
+			ImVec2(grabCenter + grabSize * 0.5f, frameMin.y + frameHeight - grabPadding), active ? grabActiveColor : grabColor, style.GrabRounding);
 		return changed;
 	}
 
