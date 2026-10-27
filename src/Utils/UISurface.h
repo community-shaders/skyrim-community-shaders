@@ -86,12 +86,6 @@ namespace Util::Surface
 		float stripeWidth);
 
 	/**
-	 * @brief Fill colour of a role: the window colour lifted by the role's fill lift, with an alpha multiplier.
-	 * @param minFillAlpha Floor for the window colour's own opacity times the role's fill alpha.
-	 */
-	ImU32 FillColor(const RoleSettings& settings, float alpha = 1.0f, float minFillAlpha = 0.0f);
-
-	/**
 	 * @brief Draws a surface into a draw list, using the role's settings from the active theme. Draws nothing when
 	 * the role is disabled.
 	 * @param drawList Target list (e.g. ImGui::GetWindowDrawList()).

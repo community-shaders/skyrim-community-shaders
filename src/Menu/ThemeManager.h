@@ -407,16 +407,45 @@ public:
 		static constexpr float BUTTON_STATUS_TEXT_ACTIVE_ALPHA = 1.0f;
 
 		// --- UI utils ---
-		static constexpr float BUTTON_TRANSPARENT_HOVER_ALPHA = 0.25f;              // Hover/active fill of the transparent icon button
-		static constexpr float STATUS_BANNER_FILL_ALPHA = 0.16f;                    // Status banner fill, as a share of the status colour's alpha
-		static constexpr float LOCK_BUTTON_FILL_ALPHA = 0.22f;                      // Lock toggle button fill
-		static constexpr float LOCK_BUTTON_BORDER_ALPHA = 0.55f;                    // Lock toggle button border
-		static constexpr float LOCK_BUTTON_ROUNDING_RATIO = 0.35f;                  // Lock toggle button corner radius per button size
-		static constexpr float TOOLTIP_WRAP_FONT_SIZES = 35.0f;                     // Wrapped tooltip width in font sizes
-		static constexpr ImVec4 BADGE_HDR_BG = ImVec4(0.40f, 0.58f, 0.78f, 0.30f);  // HDR badge background
-		static constexpr ImVec4 BADGE_HDR_FG = ImVec4(0.72f, 0.86f, 1.00f, 0.95f);  // HDR badge text
-		static constexpr ImVec4 BADGE_SDR_BG = ImVec4(0.78f, 0.42f, 0.42f, 0.30f);  // SDR badge background
-		static constexpr ImVec4 BADGE_SDR_FG = ImVec4(1.00f, 0.72f, 0.72f, 0.95f);  // SDR badge text
+		static constexpr float BUTTON_TRANSPARENT_HOVER_ALPHA = 0.25f;                      // Hover/active fill of the transparent icon button
+		static constexpr float STATUS_BANNER_FILL_ALPHA = 0.16f;                            // Status banner fill, as a share of the status colour's alpha
+		static constexpr float LOCK_BUTTON_FILL_ALPHA = 0.22f;                              // Lock toggle button fill
+		static constexpr float LOCK_BUTTON_BORDER_ALPHA = 0.55f;                            // Lock toggle button border
+		static constexpr float LOCK_BUTTON_ROUNDING_RATIO = 0.35f;                          // Lock toggle button corner radius per button size
+		static constexpr float TOOLTIP_WRAP_FONT_SIZES = 35.0f;                             // Wrapped tooltip width in font sizes
+		static constexpr ImVec4 BADGE_HDR_BG = ImVec4(0.40f, 0.58f, 0.78f, 0.30f);          // HDR badge background
+		static constexpr ImVec4 BADGE_HDR_FG = ImVec4(0.72f, 0.86f, 1.00f, 0.95f);          // HDR badge text
+		static constexpr ImVec4 BADGE_SDR_BG = ImVec4(0.78f, 0.42f, 0.42f, 0.30f);          // SDR badge background
+		static constexpr ImVec4 BADGE_SDR_FG = ImVec4(1.00f, 0.72f, 0.72f, 0.95f);          // SDR badge text
+		static constexpr float GLASS_TRACK_IDLE_ALPHA = 0.07f;                              // Segmented control track when the frame colour is transparent
+		static constexpr float GLASS_TRACK_FRAME_MIX = 0.35f;                               // Share of the frame colour mixed into the white track
+		static constexpr float GLASS_TRACK_ALPHA_SCALE = 0.45f;                             // Track alpha per unit of frame alpha
+		static constexpr float GLASS_TRACK_ALPHA_MIN = 0.06f;                               // Track alpha floor (also its additive base)
+		static constexpr float GLASS_TRACK_ALPHA_MAX = 0.22f;                               // Track alpha ceiling
+		static constexpr float GLASS_SELECTED_ALPHA_FLOOR = 0.35f;                          // Minimum header alpha before scaling the selected fill
+		static constexpr float GLASS_SELECTED_ALPHA_SCALE = 0.85f;                          // Selected fill alpha scale
+		static constexpr float GLASS_SELECTED_ALPHA_MIN = 0.28f;                            // Selected fill alpha floor
+		static constexpr float GLASS_SELECTED_ALPHA_MAX = 0.55f;                            // Selected fill alpha ceiling
+		static constexpr float GLASS_HOVER_ALPHA_SCALE = 0.45f;                             // Hover fill alpha relative to the selected fill
+		static constexpr float GLASS_MUTED_SELECTED_SCALE = 0.4f;                           // Selected fill alpha scale in muted mode
+		static constexpr float GLASS_MUTED_TEXT_SCALE = 0.75f;                              // Idle text alpha scale in muted mode
+		static constexpr float GLASS_SEGMENT_MIN_PAD_X = 8.0f;                              // Minimum horizontal segment padding (px at baseline scale)
+		static constexpr float GLASS_SEGMENT_PAD_X_SCALE = 1.35f;                           // Segment padding per unit of frame padding
+		static constexpr float GLASS_MARK_MIN_RADIUS = 1.5f;                                // Marked-segment dot minimum radius (px)
+		static constexpr float GLASS_MARK_RADIUS_RATIO = 0.1f;                              // Marked-segment dot radius per font size
+		static constexpr float STATUS_BANNER_GAP = 8.0f;                                    // Gap between status banner icon and text (px at baseline scale)
+		static constexpr float LOGO_TEXT_GAP = 8.0f;                                        // Gap between a logo and the text beside it (px at baseline scale)
+		static constexpr float EDITOR_CHROME_PAD_FACTOR = 4.0f;                             // Editor header height: frame paddings above and below plus outer air
+		static constexpr float SECTION_ICON_SCALE = 1.2f;                                   // Section header icon size per font size
+		static constexpr float SECTION_ICON_SPACING_SCALE = 0.3f;                           // Section header icon spacing per font size
+		static constexpr float SECTION_HEADER_GAP = 8.0f;                                   // Gap below a centred section header (px at baseline scale)
+		static constexpr ImVec4 FEATURE_TOGGLE_ACTIVE_BG = ImVec4(0.3f, 0.3f, 0.3f, 0.9f);  // Active frame of the feature toggle row
+		static constexpr float UNSAVED_ALPHA = 0.75f;                                       // Alpha of the unsaved-changes colour
+		static constexpr float FLASH_BRIGHTEN = 0.2f;                                       // Button brighten while a click flash plays
+		static constexpr float FLASH_HOVER_SCALE = 1.1f;                                    // Flash colour scale when hovered
+		static constexpr float FLASH_ACTIVE_SCALE = 0.9f;                                   // Flash colour scale when pressed
+		static constexpr float FEATURE_TOGGLE_WIDTH_RATIO = 1.6f;                           // Feature toggle width per frame height
+		static constexpr float FEATURE_TOGGLE_HEIGHT_RATIO = 0.8f;                          // Feature toggle height per frame height
 	};
 
 	static ThemeManager* GetSingleton()

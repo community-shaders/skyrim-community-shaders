@@ -26,6 +26,14 @@ namespace Util::Surface
 			value = std::clamp(value, lo, hi);
 		}
 
+		/** @brief Fill colour of a role: the window colour lifted by the role's fill lift, with an alpha multiplier. */
+		ImU32 FillColor(const RoleSettings& settings, float alpha = 1.0f, float minFillAlpha = 0.0f)
+		{
+			const ImVec4 window = ImGui::GetStyleColorVec4(ImGuiCol_WindowBg);
+			const ImVec4 lifted = Anim::Lerp(window, ImVec4(1.0f, 1.0f, 1.0f, window.w), settings.fillLift);
+			return ImGui::GetColorU32(ImVec4(lifted.x, lifted.y, lifted.z, std::max(window.w * settings.fillAlpha, minFillAlpha) * alpha));
+		}
+
 		void ReadBool(const nlohmann::json& j, const char* key, bool& out)
 		{
 			if (const auto it = j.find(key); it != j.end() && it->is_boolean())
@@ -183,13 +191,6 @@ namespace Util::Surface
 		if (globals::menu)
 			return globals::menu->GetTheme().Surfaces.roles[index];
 		return defaults.roles[index];
-	}
-
-	ImU32 FillColor(const RoleSettings& settings, float alpha, float minFillAlpha)
-	{
-		const ImVec4 window = ImGui::GetStyleColorVec4(ImGuiCol_WindowBg);
-		const ImVec4 lifted = Anim::Lerp(window, ImVec4(1.0f, 1.0f, 1.0f, window.w), settings.fillLift);
-		return ImGui::GetColorU32(ImVec4(lifted.x, lifted.y, lifted.z, std::max(window.w * settings.fillAlpha, minFillAlpha) * alpha));
 	}
 
 	void Draw(ImDrawList* drawList, const ImVec2& min, const ImVec2& max, Role role, const Options& options)

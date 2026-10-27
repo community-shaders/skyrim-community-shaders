@@ -54,6 +54,7 @@ class Feature;
 
 namespace Util
 {
+	/** @brief Feeds ImGui the display size and the mouse position, mapped from window to render-target pixels. */
 	void UpdateImGuiInput(HWND hwnd, float bufferWidth, float bufferHeight);
 	/**
 	 * Represents a single line and its color for any colored text rendering (tooltips, legends, etc.).
@@ -72,6 +73,7 @@ namespace Util
 	// Theme style values and pixel constants are designed for this size.
 	constexpr float kBaselineFontSize = ThemeManager::Constants::DEFAULT_SCREEN_HEIGHT * ThemeManager::Constants::DEFAULT_FONT_RATIO;
 
+	/** @brief Font size relative to a baseline font size, the factor pixel sizes are scaled by. */
 	inline float GetUIScaleForBaseline(float baselineFontSize) { return ImGui::GetFontSize() / baselineFontSize; }
 
 	/** @brief Returns a scale factor relative to the 1080p baseline font size. */
@@ -343,6 +345,7 @@ namespace Util
 	 * The popup respects the "don't ask me again" setting.
 	 */
 	void RequestClearShaderCacheConfirmation();
+	/** @brief Renders the shader-cache clear confirmation popup; call every frame. */
 	void DrawClearShaderCacheConfirmation();
 	/** @brief Draws the banner telling the user that shaders were cleared and will be fully recompiled; click dismisses it. */
 	void DrawRecacheBanner();
@@ -400,11 +403,14 @@ namespace Util
 		ConfirmationPopup(std::string title, std::string message, std::string confirmLabel = "Confirm", std::string cancelLabel = "Cancel") :
 			title(std::move(title)), message(std::move(message)), confirmLabel(std::move(confirmLabel)), cancelLabel(std::move(cancelLabel)) {}
 
+		/** @brief Opens the popup on the next Draw, or resolves it at once when the user chose not to be asked again. */
 		void Request();
-		bool Draw();  // Returns true on confirm frame
+		/** @brief Draws the popup while requested. @return True on the frame the user confirms. */
+		bool Draw();
 		/** @brief Draws the popup while requested. @return The button pressed this frame, else Choice::None. */
 		Choice DrawChoice();
 
+		/** @brief True while the popup is requested or showing. */
 		bool IsOpen() const { return show; }
 
 	private:
@@ -699,6 +705,7 @@ namespace Util
 		bool m_treeNodeOpened;
 	};
 
+	/** @brief Slider that shows a 0..1 member as a percentage (lb..ub) and writes back only on edit. */
 	bool PercentageSlider(const char* label, float* data, float lb = 0.f, float ub = 100.f, const char* format = "%.1f %%", ImGuiSliderFlags flags = 0);
 
 	/**
@@ -725,6 +732,7 @@ namespace Util
 			return ImGui::SliderFloat4(label, v, v_min, v_max, format, flags);
 	}
 
+	/** @brief Main viewport size multiplied by scale. */
 	ImVec2 GetNativeViewportSizeScaled(float scale);
 
 	// Icon loading functions
@@ -734,16 +742,19 @@ namespace Util
 		ID3D11ShaderResourceView** out_srv,
 		ImVec2& out_size);
 
+	/** @brief Loads a DDS file into a shader resource view; same ownership rules as LoadTextureFromFile. */
 	bool LoadDDSTextureFromFile(ID3D11Device* device,
 		const char* filename,
 		ID3D11ShaderResourceView** out_srv,
 		ImVec2& out_size);
 
+	/** @brief Loads the menu icon textures; forwards to IconLoader. */
 	bool InitializeMenuIcons(Menu* menu);
 
 	// Text rendering helpers for clearer title text
 	// These functions modify ImGui rendering state and should be called within ImGui context
 	ImVec2 DrawSharpText(const char* text, bool alignToPixelGrid = true, float scale = 1.0f);
+	/** @brief Draws a logo followed by text on one line. @return Size of the drawn row. */
 	ImVec2 DrawAlignedTextWithLogo(ID3D11ShaderResourceView* logoTexture, const ImVec2& logoSize, const char* text, float textScale = DefaultHeaderTextScale, ImU32 logoTint = IM_COL32_WHITE);
 
 	/**
@@ -799,6 +810,7 @@ namespace Util
 	/** @brief The icon texture of a feature category (its stable key, e.g. "Lighting"); null when it has none. */
 	ID3D11ShaderResourceView* GetCategoryIcon(const char* categoryKey);
 
+	/** @brief Draws a feature-category header with its icon and count; a click toggles isExpanded. @return True when clicked. */
 	bool DrawCategoryHeader(const char* categoryKey, const char* displayName, bool& isExpanded, int categoryCount);
 
 	/**
@@ -1027,6 +1039,7 @@ namespace Util
 
 	// A standard string comparator for use with ShowSortedStringTable
 	bool StringSortComparator(const std::string& a, const std::string& b, bool ascending);
+	/** @brief Draws text with case-insensitive matches of searchTerm drawn in highlightColor. */
 	void RenderTextWithHighlights(const std::string& text, const std::string& searchTerm, ImVec4 highlightColor = ImVec4(1.0f, 1.0f, 0.0f, 1.0f));
 
 	// Performance overlay formatting and color helpers
