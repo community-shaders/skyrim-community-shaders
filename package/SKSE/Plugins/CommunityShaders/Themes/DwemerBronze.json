@@ -95,18 +95,19 @@
             "SeparatorTextPadding": [16.0, 3.0],
             "SeparatorTextAlign": [0.0, 0.5]
         },
+        "UseCustomCursor": true,
         "Cursor": {
             "Scale": 1.0,
             "Types": {
-                "Arrow": { "HotspotX": 4.0, "HotspotY": 3.0 },
-                "TextInput": { "HotspotX": 16.0, "HotspotY": 16.0 },
-                "ResizeAll": { "HotspotX": 16.0, "HotspotY": 16.0 },
-                "ResizeNS": { "HotspotX": 16.0, "HotspotY": 16.0 },
-                "ResizeEW": { "HotspotX": 16.0, "HotspotY": 16.0 },
-                "ResizeNESW": { "HotspotX": 16.0, "HotspotY": 16.0 },
-                "ResizeNWSE": { "HotspotX": 16.0, "HotspotY": 16.0 },
-                "Hand": { "HotspotX": 14.0, "HotspotY": 3.0 },
-                "NotAllowed": { "HotspotX": 16.0, "HotspotY": 16.0 }
+                "Arrow": { "HotspotX": 3.0, "HotspotY": 2.2 },
+                "TextInput": { "HotspotX": 12.0, "HotspotY": 12.0 },
+                "ResizeAll": { "HotspotX": 12.0, "HotspotY": 12.0 },
+                "ResizeNS": { "HotspotX": 12.0, "HotspotY": 12.0 },
+                "ResizeEW": { "HotspotX": 12.0, "HotspotY": 12.0 },
+                "ResizeNESW": { "HotspotX": 12.0, "HotspotY": 12.0 },
+                "ResizeNWSE": { "HotspotX": 12.0, "HotspotY": 12.0 },
+                "Hand": { "HotspotX": 10.6, "HotspotY": 2.2 },
+                "NotAllowed": { "HotspotX": 12.0, "HotspotY": 12.0 }
             }
         },
         "FullPalette": [

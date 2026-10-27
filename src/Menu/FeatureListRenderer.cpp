@@ -36,6 +36,7 @@
 #include "Menu/PresetsPageRenderer.h"
 #include "Menu/ProfilingRenderer.h"
 #include "Menu/SettingsPageRenderer.h"
+#include "Menu/StatusBarRenderer.h"
 #include "Menu/ThemeManager.h"
 #include "State.h"
 #include "Util.h"
@@ -799,6 +800,10 @@ void FeatureListRenderer::RenderLeftColumn(
 	// The Settings page swaps the feature list for its own section list
 	const bool settingsOpen = selectedPage && selectedPage->id == MenuPageIds::kSettings && hooks.drawSettingsNav;
 
+	// With the status bar off, Settings and Profiling live in a row at the pane's bottom, so the list leaves room for it
+	const bool pageButtonsHere = !globals::menu->GetSettings().Theme.ShowFooter;
+	const float pageButtonsHeight = pageButtonsHere ? StatusBarRenderer::GetPageButtonsHeight() : 0.0f;
+
 	// Top group: the built-in pages outside the bottom group, in list order, as buttons sharing one line.
 	// Home has no button; its header icon opens it.
 	std::array<size_t, 4> topIds{};
@@ -834,7 +839,7 @@ void FeatureListRenderer::RenderLeftColumn(
 	if (settingsOpen) {
 		if (DrawBackRow())
 			LeaveSettings(menuList, selectedMenu);
-		if (ImGui::BeginChild("##SettingsNavScroll", ImVec2(0.0f, 0.0f))) {
+		if (ImGui::BeginChild("##SettingsNavScroll", ImVec2(0.0f, -pageButtonsHeight))) {
 			hooks.drawSettingsNav(hooks.focusSearch);
 			// Escape with nothing being typed goes back to the features
 			if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && !ImGui::IsAnyItemActive() &&
@@ -846,7 +851,7 @@ void FeatureListRenderer::RenderLeftColumn(
 		ImGui::EndChild();
 	} else {
 		auto& filter = globals::menu->GetSettings().FeatureListFilter;
-		if (ImGui::BeginChild("##FeatureListScroll", ImVec2(0.0f, 0.0f))) {
+		if (ImGui::BeginChild("##FeatureListScroll", ImVec2(0.0f, -pageButtonsHeight))) {
 			// The first category icon reaches above its text line, which the child's top edge clipped
 			ImGui::SetCursorPosY(ImGui::GetCursorPosY() + ThemeManager::Constants::LEFT_PANE_EDGE_INSET * Util::GetUIScale());
 			for (size_t i = 0; i < menuList.size(); i++) {
@@ -866,6 +871,9 @@ void FeatureListRenderer::RenderLeftColumn(
 		}
 		ImGui::EndChild();
 	}
+
+	if (pageButtonsHere)
+		StatusBarRenderer::RenderPageButtons();
 }
 
 void FeatureListRenderer::RequestPage(std::string_view pageId)

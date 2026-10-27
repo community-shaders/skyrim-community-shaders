@@ -129,8 +129,8 @@ namespace
 		row.x = x + 0.5f + gap;
 	}
 
-	/** @brief Settings and Profiling, then a divider; the left end of the bar. */
-	void NavGroup(Row& row)
+	/** @brief Settings and Profiling with dividers between them, and after them when `trailingDivider`. */
+	void NavGroup(Row& row, bool trailingDivider = true)
 	{
 		const float gap = ImGui::GetStyle().ItemSpacing.x;
 		const auto page = [&](std::string_view id, const char* widgetId, const char* glyph, const char* tooltip) {
@@ -141,7 +141,8 @@ namespace
 		page(MenuPageIds::kSettings, "##StatusSettings", MenuIcons::kSettings, T("menu.features.settings", "Settings"));
 		Divider(row);
 		page(MenuPageIds::kProfiling, "##StatusProfiling", MenuIcons::kProfiling, T("menu.features.profiling", "Profiling"));
-		Divider(row);
+		if (trailingDivider)
+			Divider(row);
 	}
 }
 
@@ -154,7 +155,24 @@ namespace StatusBarRenderer
 		return gap * 3.0f + Constants::SEPARATOR_THICKNESS + RowHeight();
 	}
 
-	void Render(const std::vector<MenuShortcuts::Shortcut>& shortcuts, bool showStatus)
+	float GetPageButtonsHeight()
+	{
+		const float gap = ImGui::GetStyle().ItemSpacing.y;
+		return gap * 2.0f + Constants::SEPARATOR_THICKNESS + RowHeight();
+	}
+
+	void RenderPageButtons()
+	{
+		const float gap = ImGui::GetStyle().ItemSpacing.y;
+		const ImVec2 origin = ImGui::GetCursorScreenPos();
+		ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal, Constants::SEPARATOR_THICKNESS);
+		ImGui::PushID("##PageButtons");
+		Row row{ origin.x, origin.y + Constants::SEPARATOR_THICKNESS + gap, RowHeight() };
+		NavGroup(row, false);
+		ImGui::PopID();
+	}
+
+	void Render(const std::vector<MenuShortcuts::Shortcut>& shortcuts)
 	{
 		const float gap = ImGui::GetStyle().ItemSpacing.y;
 		const ImVec2 origin = ImGui::GetCursorScreenPos();
@@ -166,10 +184,6 @@ namespace StatusBarRenderer
 		const float right = left + ImGui::GetContentRegionAvail().x;
 
 		NavGroup(row);
-		if (!showStatus) {
-			ImGui::PopID();
-			return;
-		}
 
 		auto* i18n = I18n::GetSingleton();
 		const float segmentGap = ImGui::GetStyle().ItemSpacing.x * Constants::STATUS_BAR_SEGMENT_GAP_SCALE;

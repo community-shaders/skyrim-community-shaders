@@ -261,7 +261,7 @@ public:
 		float TooltipHoverDelay = 0.5f;     // tooltip hover delay in seconds
 		bool BackgroundBlurEnabled = true;  // enable background blur effect
 		bool MenuFadeEnabled = true;        // fade the menu and its blur in and out when it is toggled
-		bool UseCustomCursor = false;       // use theme cursor images instead of default ImGui cursors
+		bool UseCustomCursor = true;        // use theme cursor images instead of default ImGui cursors (each bundled theme ships a set)
 		struct CursorImageSettings
 		{
 			std::string File;
