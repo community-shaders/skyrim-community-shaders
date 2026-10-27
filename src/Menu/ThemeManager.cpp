@@ -43,7 +43,6 @@ namespace
 	// -------------------------
 	// Disabled text alpha: Makes inactive UI elements visually distinct but still readable
 	// Value calibrated for accessibility - too low = invisible, too high = looks enabled
-	constexpr float DISABLED_TEXT_ALPHA = 0.3f;  // 30% opacity for disabled elements
 
 	// Resize grip hover alpha: Subtle hover effect to avoid visual clutter
 	// Low value maintains minimalist aesthetic while providing hover feedback
@@ -278,16 +277,9 @@ void ThemeManager::SetupImGuiStyle(const Menu& menu)
 	colors[ImGuiCol_Separator] = themeSettings.Palette.Separator;
 	colors[ImGuiCol_ResizeGrip] = themeSettings.Palette.ResizeGrip;
 
-	// Apply frame border to UI elements with frames/borders
+	// Frame fill comes from the simple palette. Check mark, slider grab and disabled text come from the full
+	// palette, so a theme can give them an accent colour and a readable disabled-text contrast.
 	colors[ImGuiCol_FrameBg] = themeSettings.Palette.FrameBorder;
-	colors[ImGuiCol_CheckMark] = themeSettings.Palette.Text;
-	colors[ImGuiCol_SliderGrab] = themeSettings.Palette.FrameBorder;
-	colors[ImGuiCol_SliderGrabActive] = themeSettings.Palette.FrameBorder;
-
-	// Apply derived colors based on simple palette
-	ImVec4 textDisabled = themeSettings.Palette.Text;
-	textDisabled.w = DISABLED_TEXT_ALPHA;
-	colors[ImGuiCol_TextDisabled] = textDisabled;
 
 	ImVec4 resizeGripHovered = themeSettings.Palette.ResizeGrip;
 	resizeGripHovered.w = RESIZE_GRIP_HOVER_ALPHA;
