@@ -142,82 +142,8 @@ namespace
 		ImGui::Spacing();
 	}
 
-	/** @brief ASCII case-folded substring test; UTF-8 bytes past ASCII must match exactly, so translated labels still match. */
-	bool ContainsFolded(std::string_view text, std::string_view query)
+	void RenderNav(PageState& state)
 	{
-		const auto lower = [](char c) { return (c >= 'A' && c <= 'Z') ? static_cast<char>(c - 'A' + 'a') : c; };
-		return !std::ranges::search(text, query, {}, lower, lower).empty();
-	}
-
-	const char* GetEntryLabel(const SettingsSearchEntry& entry)
-	{
-		return entry.labelKey ? T(entry.labelKey, entry.fallback) : entry.fallback;
-	}
-
-	/** @brief Search hits of one section: its title, and the setting labels that matched. */
-	struct SectionMatches
-	{
-		bool title = false;
-		std::vector<const SettingsSearchEntry*> entries;
-
-		[[nodiscard]] bool Any() const { return title || !entries.empty(); }
-	};
-
-	/** @brief Hits per section, indexed like kSections. */
-	using Matches = std::array<SectionMatches, kSections.size()>;
-
-	size_t IndexOf(const Section& section)
-	{
-		return static_cast<size_t>(&section - kSections.data());
-	}
-
-	/** @brief Matches the trimmed query against every section title and indexed label, or nothing for an empty query. */
-	std::optional<Matches> FindMatches(std::string_view query)
-	{
-		const auto first = query.find_first_not_of(" \t");
-		if (first == std::string_view::npos)
-			return std::nullopt;
-		query = query.substr(first, query.find_last_not_of(" \t") - first + 1);
-
-		Matches matches{};
-		const auto searchIndex = [&](std::span<const SettingsSearchEntry> index) {
-			for (const auto& entry : index) {
-				const Section* section = FindSection(entry.sectionId);
-				if (section && (ContainsFolded(GetEntryLabel(entry), query) || ContainsFolded(entry.fallback, query)))
-					matches[IndexOf(*section)].entries.push_back(&entry);
-			}
-		};
-		searchIndex(SettingsTabRenderer::GetSearchIndex());
-		searchIndex(AdvancedSettingsRenderer::GetSearchIndex());
-		for (const auto& section : kSections)
-			matches[IndexOf(section)].title = ContainsFolded(GetSectionTitle(section.id), query);
-		return matches;
-	}
-
-	/** @brief Draws a hit count at the right edge of the row just drawn. */
-	void DrawRowCount(size_t count)
-	{
-		const std::string text = std::to_string(count);
-		const ImVec2 min = ImGui::GetItemRectMin();
-		const ImVec2 max = ImGui::GetItemRectMax();
-		const ImVec2 size = ImGui::CalcTextSize(text.c_str());
-		ImGui::GetWindowDrawList()->AddText(ImVec2(max.x - size.x - ImGui::GetStyle().FramePadding.x, min.y + (max.y - min.y - size.y) * 0.5f),
-			ImGui::GetColorU32(ImGuiCol_TextDisabled), text.c_str());
-	}
-
-	void RenderNav(PageState& state, bool focusSearch)
-	{
-		const bool searchChanged = BrowserUI::ExpandingSearchField("##SettingsSearch", state.search.data(), state.search.size(),
-			T("menu.settings.search_hint", "Search settings..."), ImGui::GetContentRegionAvail().x, focusSearch);
-		const auto matches = FindMatches(state.search.data());
-
-		// Typing moves off a section with no hits to the first one that has some
-		if (const Section* current = FindSection(state.section); searchChanged && matches && current && !(*matches)[IndexOf(*current)].Any()) {
-			const auto hit = std::ranges::find_if(*matches, &SectionMatches::Any);
-			if (hit != matches->end())
-				state.section = std::string(kSections[static_cast<size_t>(hit - matches->begin())].id);
-		}
-
 		ImGui::Spacing();
 
 		// Rows fill half an item spacing beyond their text, so the list is indented past that plus a margin
@@ -227,10 +153,6 @@ namespace
 		const float groupSpacing = ThemeManager::Constants::SETTINGS_NAV_GROUP_SPACING * Util::GetUIScale();
 		const Group* currentGroup = nullptr;
 		for (const auto& section : kSections) {
-			const SectionMatches* hits = matches ? &(*matches)[IndexOf(section)] : nullptr;
-			if (hits && !hits->Any())
-				continue;
-
 			if (!currentGroup || *currentGroup != section.group) {
 				if (currentGroup)
 					ImGui::Dummy(ImVec2(0.0f, groupSpacing));
@@ -241,39 +163,16 @@ namespace
 			ImGui::PushID(section.id.data(), section.id.data() + section.id.size());
 			if (Util::Selectable(GetSectionTitle(section.id), state.section == section.id))
 				state.section = std::string(section.id);
-			if (hits && !hits->entries.empty())
-				DrawRowCount(hits->entries.size());
 			ImGui::PopID();
 		}
 
-		if (matches && !currentGroup)
-			ImGui::TextDisabled("%s", T("menu.settings.search_no_match", "No matching settings"));
 		ImGui::Unindent(navInset);
-	}
-
-	/** @brief Lists the matched setting labels of the shown section above its content. */
-	void DrawMatchHint(const SectionMatches& hits)
-	{
-		std::string labels;
-		for (const auto* entry : hits.entries) {
-			std::string_view label = GetEntryLabel(*entry);
-			label = label.substr(0, label.find_last_not_of(" :") + 1);  // keybinding labels end in ':'
-			if (!labels.empty())
-				labels += ", ";
-			labels += label;
-		}
-		ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetAccent());
-		ImGui::TextWrapped("%s", I18n::GetSingleton()->Format("menu.settings.search_matches", { { "labels", labels } }, "Matching settings: {labels}").c_str());
-		ImGui::PopStyleColor();
-		ImGui::Spacing();
 	}
 
 	void RenderContent(PageState& state, const Section& section)
 	{
 		Util::Anim::PageFade fade(ImGui::GetID(section.id.data(), section.id.data() + section.id.size()));
 		DrawSectionHeader(section);
-		if (const auto matches = FindMatches(state.search.data()); matches && !(*matches)[IndexOf(section)].entries.empty())
-			DrawMatchHint((*matches)[IndexOf(section)]);
 		if (section.editsTheme)
 			SettingsTabRenderer::RenderThemeSaveNote();
 
@@ -287,8 +186,6 @@ void SettingsPageRenderer::Render(PageState& state)
 {
 	if (!IsKnownSection(state.section))
 		state.section = std::string(GetFirstSection());
-	if (!state.search.empty())
-		state.search.back() = '\0';  // the search text is read as a C string
 
 	// Fonts asks for a preview-font atlas while it is drawn. Drop it on any other section so it is not
 	// rebaked into every later atlas rebuild for the rest of the session.
@@ -304,13 +201,11 @@ void SettingsPageRenderer::Render(PageState& state)
 	ImGui::EndChild();
 }
 
-void SettingsPageRenderer::RenderSectionList(PageState& state, bool focusSearch)
+void SettingsPageRenderer::RenderSectionList(PageState& state)
 {
 	if (!IsKnownSection(state.section))
 		state.section = std::string(GetFirstSection());
-	if (!state.search.empty())
-		state.search.back() = '\0';  // the search text is read as a C string
-	RenderNav(state, focusSearch);
+	RenderNav(state);
 }
 
 std::vector<SettingsPageRenderer::SectionInfo> SettingsPageRenderer::GetSections()

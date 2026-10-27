@@ -215,69 +215,6 @@ namespace BrowserUI
 		return changed;
 	}
 
-	float ExpandingSearchCollapsedWidth()
-	{
-		return ImGui::GetFrameHeight();
-	}
-
-	bool ExpandingSearchField(const char* id, char* buffer, size_t bufferSize, const char* hint, float maxWidth, bool focusRequest)
-	{
-		// Frames the field stays open without focus, so a freshly requested focus can land
-		constexpr int kSearchSettleFrames = 3;
-		ImGui::PushID(id);
-		ImGuiStorage* storage = ImGui::GetStateStorage();
-		const ImGuiID openKey = ImGui::GetID("open");
-		const ImGuiID focusKey = ImGui::GetID("focus");
-		const ImGuiID settleKey = ImGui::GetID("settle");
-		const float collapsedWidth = ExpandingSearchCollapsedWidth();
-
-		bool open = storage->GetBool(openKey, false);
-		bool wantFocus = storage->GetBool(focusKey, false);
-		int settle = storage->GetInt(settleKey, 0);
-		const bool hasText = buffer[0] != '\0';
-		if (focusRequest || (!open && ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && ImGui::GetIO().KeyCtrl &&
-								ImGui::IsKeyPressed(ImGuiKey_F, false))) {
-			open = wantFocus = true;
-			settle = kSearchSettleFrames;
-		}
-		open = open || hasText;
-
-		const float progress = Util::Anim::Approach(ImGui::GetID("w"), open ? 1.0f : 0.0f, ThemeManager::Constants::ANIM_SEARCH_RATE);
-		bool changed = false;
-		if (!open && progress <= 0.0f) {
-			// Resting: a magnifier button styled like the sort button beside it
-			const float size = IconButtonSize();
-			{
-				auto style = Util::TransparentIconButtonStyle();
-				if (Icons::Button("###open", Icons::TI(MenuIcons::kSearch), ImVec2(size, size))) {
-					open = wantFocus = true;
-					settle = kSearchSettleFrames;
-				}
-			}
-			Util::AddTooltip(hint, Util::kTooltipWhenDisabled);
-		} else {
-			const float width = collapsedWidth + (maxWidth - collapsedWidth) * Util::Anim::EaseOutCubic(progress);
-			if (wantFocus) {
-				ImGui::SetKeyboardFocusHere();
-				wantFocus = false;
-			}
-			changed = SearchField("##field", buffer, bufferSize, hint, std::max(width, collapsedWidth), false);
-			// Closes again once focus has gone and nothing is typed; a couple of frames let a fresh focus land first
-			if (open && ImGui::IsItemActive())
-				settle = kSearchSettleFrames;
-			else if (open && settle > 0)
-				--settle;
-			else if (open && buffer[0] == '\0')
-				open = false;
-		}
-
-		storage->SetBool(openKey, open);
-		storage->SetBool(focusKey, wantFocus);
-		storage->SetInt(settleKey, settle);
-		ImGui::PopID();
-		return changed;
-	}
-
 	float MeasureToggleChip(int count)
 	{
 		char text[16];

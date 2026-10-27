@@ -572,7 +572,6 @@ void FeatureListRenderer::RenderFeatureList(
 		RenderRightColumn(menuList, selectedMenu, pendingFeatureSelection, hooks);
 		ImGui::EndTable();
 	}
-	hooks.focusSearch = false;
 	g_scrollToSelection = false;  // a hidden list drops the request rather than scrolling later
 
 	ImGui::EndChild();
@@ -840,7 +839,7 @@ void FeatureListRenderer::RenderLeftColumn(
 		if (DrawBackRow())
 			LeaveSettings(menuList, selectedMenu);
 		if (ImGui::BeginChild("##SettingsNavScroll", ImVec2(0.0f, -pageButtonsHeight))) {
-			hooks.drawSettingsNav(hooks.focusSearch);
+			hooks.drawSettingsNav();
 			// Escape with nothing being typed goes back to the features
 			if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && !ImGui::IsAnyItemActive() &&
 				ImGui::GetCurrentContext()->ActiveIdPreviousFrame == 0 && ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {

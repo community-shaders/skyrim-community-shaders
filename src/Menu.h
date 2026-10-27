@@ -541,7 +541,6 @@ private:
 	// Menu navigation
 	std::string pendingFeatureSelection;  // Feature to select on next frame
 	int pendingFeatureStep = 0;           // Ctrl+PgUp / Ctrl+PgDn request, applied by the feature list this frame
-	bool pendingSearchFocus = false;      // Ctrl+F on the Settings page, applied by its section list this frame
 	Feature* shownFeature = nullptr;      // Feature whose page the right column drew; read by shortcuts the frame after
 
 	// Keyboard shortcuts, built on the first DrawSettings and dispatched once per frame
@@ -573,8 +572,7 @@ private:
 	// handled; the claim waits here until that release reads it with TakeConsumedEscape().
 	bool escapeConsumed = false;
 
-	// Settings page: in-page search and the Disable at Boot list filter
-	std::array<char, 128> settingsSearch{};
+	// Settings page: Disable at Boot list filter
 	std::array<char, 128> disableAtBootSearch{};
 	bool disableAtBootDisabledOnly = false;
 
@@ -587,9 +585,8 @@ private:
 	/**
 	 * @brief Draws the Settings page.
 	 * @param navOnly Draws only the section list (the left pane while Settings is open) instead of the selected section.
-	 * @param focusSearch With navOnly, focuses the settings search field this frame.
 	 */
-	void DrawSettingsPage(bool navOnly, bool focusSearch);
+	void DrawSettingsPage(bool navOnly);
 	void DrawDisableAtBootSettings();
 	/** @brief Applies a queued undo or redo before anything draws, and reports it with a toast. */
 	void ApplyPendingUndo();

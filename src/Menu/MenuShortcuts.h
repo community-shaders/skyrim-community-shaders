@@ -52,7 +52,7 @@ namespace MenuShortcuts
 		std::function<void()> undo;
 		std::function<void()> redo;
 		std::function<void()> openGoTo;        ///< Opens the "Go to..." palette
-		std::function<void()> focusSearch;     ///< Ctrl+F: focuses the Settings search while Settings is open, otherwise opens the palette
+		std::function<void()> focusSearch;     ///< Ctrl+F: opens the Go to palette on Features
 		std::function<void(int)> stepFeature;  ///< -1 for the previous feature in the list, +1 for the next
 		std::function<bool()> canTogglePin;
 		std::function<void()> togglePin;

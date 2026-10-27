@@ -895,7 +895,6 @@ void Menu::DrawSettings()
 		shownFeature = nullptr;
 		FeatureListRenderer::Hooks listHooks{
 			.featureStep = std::exchange(pendingFeatureStep, 0),
-			.focusSearch = std::exchange(pendingSearchFocus, false),
 			.onFeatureShown = [this](Feature* feat) {
 				shownFeature = feat;
 				if (feat->IsInMenu())
@@ -904,14 +903,14 @@ void Menu::DrawSettings()
 				if (feat->loaded && feat->UsesMainSettings() && !globals::state->IsFeatureDisabled(feat->GetShortName()))
 					undoHistory.Watch(MakeMenuFeatureUndoTarget(feat)); },
 			.runFeatureCommand = [this](Feature* feat, const std::function<void()>& command) { undoHistory.Change(MakeMenuFeatureUndoTarget(feat), command); },
-			.drawSettingsNav = [this](bool focusSearch) { DrawSettingsPage(true, focusSearch); },
+			.drawSettingsNav = [this] { DrawSettingsPage(true); },
 		};
 		FeatureListRenderer::RenderFeatureList(
 			footer_height,
 			selectedMenu,
 			pendingFeatureSelection,
 			categoryExpansionStates,
-			[&]() { DrawSettingsPage(false, false); },
+			[&]() { DrawSettingsPage(false); },
 			listHooks);
 
 		if (settings.Theme.ShowFooter)
@@ -954,12 +953,7 @@ MenuShortcuts::Actions Menu::MakeShortcutActions()
 		.undo = [this] { pendingUndo = UndoRequest::Undo; },
 		.redo = [this] { pendingUndo = UndoRequest::Redo; },
 		.openGoTo = [] { GoToPalette::Open(); },
-		.focusSearch = [this] {
-			// The Settings page has its own search field; everywhere else Ctrl+F searches features through the palette
-			if (FeatureListRenderer::IsPageOpen(MenuPageIds::kSettings))
-				pendingSearchFocus = true;
-			else
-				GoToPalette::Open(GoToPalette::Scope::Features); },
+		.focusSearch = [] { GoToPalette::Open(GoToPalette::Scope::Features); },
 		.stepFeature = [this](int step) { pendingFeatureStep = step; },
 		.canTogglePin = [this] { return shownFeature && shownFeature->loaded; },
 		.togglePin = [this] { FeatureListRenderer::ToggleFavorite(shownFeature); },
@@ -993,11 +987,10 @@ void Menu::DispatchShortcuts()
  * Delegates rendering to SettingsPageRenderer, passing the key-capture flags and
  * selected section it updates, and a callback for the private disable-at-boot list.
  */
-void Menu::DrawSettingsPage(bool navOnly, bool focusSearch)
+void Menu::DrawSettingsPage(bool navOnly)
 {
 	SettingsPageRenderer::PageState state{
 		.section = settings.LastSettingsSection,
-		.search = settingsSearch,
 		.keys = {
 			.settingToggleKey = settingToggleKey,
 			.settingsEffectsToggle = settingsEffectsToggle,
@@ -1013,7 +1006,7 @@ void Menu::DrawSettingsPage(bool navOnly, bool focusSearch)
 	};
 
 	if (navOnly)
-		SettingsPageRenderer::RenderSectionList(state, focusSearch);
+		SettingsPageRenderer::RenderSectionList(state);
 	else
 		SettingsPageRenderer::Render(state);
 }

@@ -370,7 +370,6 @@ public:
 		static constexpr float ANIM_SPEED_MAX = 2.0f;
 		static constexpr float ANIM_PULSE_PERIOD = 2.6f;        // Seconds per attention pulse
 		static constexpr float ANIM_PULSE_AMPLITUDE = 0.25f;    // Attention pulse swing, as a share of full alpha
-		static constexpr float ANIM_SEARCH_RATE = 22.0f;        // Expanding search field open / close speed
 		static constexpr float NAV_SELECTED_BAR_INSET = 0.2f;   // Accent bar inset from the row's top and bottom, as a share of its height
 		static constexpr float ANIM_SELECTED_BAR_WIDTH = 3.0f;  // Accent bar on the left of the selected nav row (1080p baseline)
 

@@ -97,16 +97,13 @@ public:
 		/// In: moves the selection to the previous (< 0) or next (> 0) feature in the visible list, skipping
 		/// category headers, labels and built-in pages. Reset to 0 once applied.
 		int featureStep = 0;
-		/// In: focuses the Settings search field this frame (Ctrl+F while Settings is open). Reset once applied.
-		bool focusSearch = false;
 		/// Called with the feature whose page is about to be drawn this frame, before its header.
 		std::function<void(Feature*)> onFeatureShown;
 		/// Runs a header command that rewrites a feature's settings (Restore Defaults, Use Baseline Values) so it can
 		/// be undone. When empty the command just runs.
 		std::function<void(Feature*, const std::function<void()>&)> runFeatureCommand;
-		/// Draws the Settings section list (search field and sections) in place of the feature list while the Settings
-		/// page is open. The argument focuses the settings search field this frame.
-		std::function<void(bool focusSearch)> drawSettingsNav;
+		/// Draws the Settings section list in place of the feature list while the Settings page is open.
+		std::function<void()> drawSettingsNav;
 	};
 
 	/** @brief How many features each filter would list on its own, ignoring the other filters. */
