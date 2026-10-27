@@ -7,7 +7,6 @@
 #include "Globals.h"
 #include "I18n/I18n.h"
 #include "Menu.h"
-#include "Menu/Fonts.h"
 #include "Presets/UnifiedPresetCatalog.h"
 #include "ShaderCache.h"
 #include "State.h"
@@ -201,7 +200,7 @@ namespace PostProcessingMode
 		if (!action || !action->label)
 			return;
 
-		// The page's action sits on the selector's row, flush right and as tall as the selector, hint below it
+		// The page's action sits on the selector's row, flush right and as tall as the selector
 		const float rowBottom = ImGui::GetCursorPosY();
 		const float stripHeight = rowBottom - rowTop - ImGui::GetStyle().ItemSpacing.y;
 		const float buttonWidth = ImGui::CalcTextSize(action->label).x + ImGui::GetStyle().FramePadding.x * 4.0f;
@@ -211,15 +210,6 @@ namespace PostProcessingMode
 			action->onClick();
 		if (action->tooltip)
 			Util::AddTooltip(action->tooltip);
-
-		float bottom = rowBottom;
-		if (!action->hint.empty()) {
-			MenuFonts::FontRoleGuard subtext(Menu::FontRole::Subtext);
-			const float hintWidth = ImGui::CalcTextSize(action->hint.c_str()).x;
-			ImGui::SetCursorPos(ImVec2(right - hintWidth, rowTop + stripHeight + ImGui::GetStyle().ItemSpacing.y * 0.25f));
-			Util::TextUnformattedDisabled(action->hint.c_str());
-			bottom = std::max(bottom, ImGui::GetCursorPosY());
-		}
-		ImGui::SetCursorPosY(bottom);
+		ImGui::SetCursorPosY(rowBottom);
 	}
 }

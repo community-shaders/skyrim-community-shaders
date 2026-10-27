@@ -1,7 +1,6 @@
 #pragma once
 
 #include <functional>
-#include <string>
 
 /** @brief Picks the one post-processing pipeline that drives the frame, keeping Post Processing and Effects 11 exclusive. */
 namespace PostProcessingMode
@@ -36,12 +35,11 @@ namespace PostProcessingMode
 	/** @brief Applies a mode re-read after startup right away, since nothing else would without Effects 11 loaded. */
 	void ApplyReloaded();
 
-	/** @brief A button anchored to the right of the selector, as tall as it, with an optional small hint line under it. */
+	/** @brief A button anchored to the right of the selector, as tall as it. */
 	struct SelectorAction
 	{
 		const char* label = nullptr;
 		const char* tooltip = nullptr;
-		std::string hint;  ///< Small text under the button (a hotkey, say); empty for none
 		std::function<void()> onClick;
 	};
 

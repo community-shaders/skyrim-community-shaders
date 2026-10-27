@@ -20,6 +20,7 @@
 #include "Globals.h"
 #include "I18n/I18n.h"
 #include "Menu.h"
+#include "Menu/Fonts.h"
 #include "Menu/PresetsPageRenderer.h"
 #include "PostProcessingMode.h"
 #include "Utils/UI.h"
@@ -1512,17 +1513,22 @@ void Effects11Editor::DrawLauncher()
 		RefreshPresetPaths();
 	Util::TextUnformattedDisabled(presetPaths.iniDisplay.c_str());
 	Util::AddTooltip(presetPaths.iniFull.c_str());
+	// The editor's hotkey sits at the right end of this line, above the editor button on the selector's row
+	if (!menuSettings.Effects11EditorKey.empty()) {
+		const std::string hotkey = I18n::GetSingleton()->Format(TKEY("editor_hotkey"),
+			{ { "key", Util::Input::KeyIdToString(menuSettings.Effects11EditorKey) } }, "Hotkey: {key}");
+		MenuFonts::FontRoleGuard subtext(Menu::FontRole::Subtext);
+		BrowserUI::RightAlign(ImGui::CalcTextSize(hotkey.c_str()).x);
+		Util::TextUnformattedDisabled(hotkey.c_str());
+	}
 
 	ImGui::Spacing();
 
 	// The shared selector drives UseEffect, which is saved to enbseries.ini with the rest of the preset
 	const bool wasEnabled = globals::features::effects11.IsPresetEnabled();
-	// The editor button sits on the selector's row, with the hotkey under it
+	// The editor button sits on the selector's row
 	PostProcessingMode::SelectorAction openEditor;
 	openEditor.label = T(TKEY("open_editor"), "Open Effects 11 Editor");
-	if (!menuSettings.Effects11EditorKey.empty())
-		openEditor.hint = I18n::GetSingleton()->Format(TKEY("editor_hotkey"),
-			{ { "key", Util::Input::KeyIdToString(menuSettings.Effects11EditorKey) } }, "Hotkey: {key}");
 	openEditor.onClick = [this] { Open(true); };
 	PostProcessingMode::DrawSelector(&openEditor);
 	dirty |= globals::features::effects11.IsPresetEnabled() != wasEnabled;
