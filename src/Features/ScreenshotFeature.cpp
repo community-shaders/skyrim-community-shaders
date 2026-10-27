@@ -732,7 +732,7 @@ void ScreenshotFeature::DrawSettings()
 							  "Suppresses Skyrim's built-in PrintScreen capture while the game is running.\n"
 							  "Skyrim.ini is not modified; unchecking restores its bAllowScreenShot value."));
 
-	if (!disableVanillaScreenshot && HotkeyCollidesWithVanilla()) {
+	if (!disableVanillaScreenshot && vanillaScreenshotDefault.value_or(false) && HotkeyCollidesWithVanilla()) {
 		Util::Text::WrappedWarning(
 			T(TKEY("hotkey_collision_vanilla"),
 				"This hotkey collides with vanilla PrintScreen; both saves will fire. "
