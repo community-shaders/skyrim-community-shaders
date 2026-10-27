@@ -48,15 +48,16 @@ namespace GoToPalette
 			}
 		}
 
+		/** @brief Theme colour of a kind's badge: four different theme roles, so no two kinds share a colour. */
 		ImVec4 KindColor(GoToIndex::Kind kind)
 		{
 			switch (kind) {
 			case GoToIndex::Kind::Page:
-				return Util::Colors::GetInfo();
+				return Util::Colors::GetAccent();
 			case GoToIndex::Kind::Feature:
 				return Util::Colors::GetSuccess();
 			case GoToIndex::Kind::Setting:
-				return Util::Colors::GetAccent();
+				return Util::Colors::GetSecondary();
 			case GoToIndex::Kind::Command:
 			default:
 				return Util::Colors::GetWarning();
