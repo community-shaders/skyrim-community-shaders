@@ -1529,7 +1529,7 @@ namespace FeatureIssues
 			auto* menu = Menu::GetSingleton();
 			const auto& themeSettings = menu->GetTheme();
 
-			if (ImGui::CollapsingHeader(T("menu.issues.test.testing_header", "Testing"), ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick)) {
+			{
 				{
 					auto sectionWrapper = Util::SectionWrapper(
 						T("menu.issues.test.feature_issue_testing", "Feature Issue Testing"),

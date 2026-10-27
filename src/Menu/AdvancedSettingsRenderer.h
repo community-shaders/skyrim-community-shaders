@@ -18,8 +18,10 @@ public:
 	static void RenderCompilerSection();
 	/** @brief Log level, shader defines, and the log and ini dump buttons. */
 	static void RenderLoggingSection();
-	/** @brief Shader replacement toggles, shader blocking and the active shader list. */
+	/** @brief Shader replacement toggles and the shader blocking switch. */
 	static void RenderShaderDebugSection();
+	/** @brief The shaders used in recent frames, with the blocked shader's details; a row click blocks that shader. */
+	static void RenderActiveShadersSection();
 	/** @brief Developer mode, file watcher, compiler flags, the content store and build statistics. */
 	static void RenderDeveloperSection();
 	/** @brief A/B testing controls. */

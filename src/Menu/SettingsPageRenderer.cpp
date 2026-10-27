@@ -57,6 +57,7 @@ namespace
 		Section{ Ids::kDeveloper, Group::Advanced, false, [](PageState&) { AdvancedSettingsRenderer::RenderDeveloperSection(); } },
 		Section{ Ids::kLogging, Group::Advanced, false, [](PageState&) { AdvancedSettingsRenderer::RenderLoggingSection(); } },
 		Section{ Ids::kShaderDebug, Group::Advanced, false, [](PageState&) { AdvancedSettingsRenderer::RenderShaderDebugSection(); } },
+		Section{ Ids::kActiveShaders, Group::Advanced, false, [](PageState&) { AdvancedSettingsRenderer::RenderActiveShadersSection(); } },
 		Section{ Ids::kTesting, Group::Advanced, false, [](PageState&) { AdvancedSettingsRenderer::RenderTestingSection(); } },
 		Section{ Ids::kDisableAtBoot, Group::Advanced, false, [](PageState& state) {
 					if (state.drawDisableAtBoot)
@@ -112,6 +113,8 @@ namespace
 			return T("menu.advanced.tab_logging", "Logging");
 		if (id == Ids::kShaderDebug)
 			return T("menu.advanced.tab_shader_debug", "Shader Debug");
+		if (id == Ids::kActiveShaders)
+			return T("menu.advanced.active_shaders", "Active Shaders");
 		if (id == Ids::kTesting)
 			return T("menu.advanced.tab_testing", "Testing");
 		if (id == Ids::kDisableAtBoot)
@@ -119,7 +122,25 @@ namespace
 		return "";
 	}
 
-	/** @brief Section title in the feature page title style, with its group as a muted breadcrumb below. */
+	/** @brief One-line summary shown under an Advanced section's title, or nullptr to show the group name instead. */
+	const char* GetSectionDescription(std::string_view id)
+	{
+		if (id == Ids::kDeveloper)
+			return T("menu.advanced.desc_developer", "Developer mode, shader compiler flags and build statistics, for working on Community Shaders itself.");
+		if (id == Ids::kLogging)
+			return T("menu.advanced.desc_logging", "How much goes into CommunityShaders.log, extra shader defines, and quick access to the logs.");
+		if (id == Ids::kShaderDebug)
+			return T("menu.advanced.desc_shader_debug", "Choose which game shaders Community Shaders replaces, to compare against vanilla or isolate a problem.");
+		if (id == Ids::kActiveShaders)
+			return T("menu.advanced.desc_active_shaders", "Shaders drawn in the last second. Click a row to block that shader, right-click to copy its details.");
+		if (id == Ids::kTesting)
+			return T("menu.advanced.desc_testing", "A/B comparisons and test setups for checking changes in game.");
+		if (id == Ids::kDisableAtBoot)
+			return T("menu.advanced.desc_disable_at_boot", "Keep features from loading when the game starts, without uninstalling them.");
+		return nullptr;
+	}
+
+	/** @brief Section title in the feature page title style, with its description (or group) as a muted line below. */
 	void DrawSectionHeader(const Section& section)
 	{
 		const float titleScale = globals::menu->GetFeatureTitleScale();
@@ -132,7 +153,10 @@ namespace
 		}
 		{
 			MenuFonts::FontRoleGuard subtextFont(Menu::FontRole::Subtext);
-			ImGui::TextDisabled("%s", GetGroupLabel(section.group));
+			const char* description = GetSectionDescription(section.id);
+			ImGui::PushTextWrapPos(0.0f);
+			ImGui::TextDisabled("%s", description ? description : GetGroupLabel(section.group));
+			ImGui::PopTextWrapPos();
 		}
 		ImGui::Separator();
 		ImGui::Spacing();

@@ -1599,12 +1599,14 @@ namespace Util
 		ImGui::BeginChild(containerId.c_str(), ImVec2(0, tableHeight), true, ImGuiWindowFlags_HorizontalScrollbar);
 		ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2(4, 2));
 
-		ImGuiTableFlags flags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Sortable | ImGuiTableFlags_Resizable | ImGuiTableFlags_SizingStretchProp;
+		// The table scrolls inside the container, so its header row stays in view
+		ImGuiTableFlags flags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Sortable | ImGuiTableFlags_Resizable | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_ScrollY;
 		if (ImGui::BeginTable(table_id, static_cast<int>(columns.size()), flags)) {
 			// Set up columns
 			for (size_t i = 0; i < columns.size(); ++i) {
 				ImGui::TableSetupColumn(columns[i].header.c_str());
 			}
+			ImGui::TableSetupScrollFreeze(0, 1);
 			ImGui::TableHeadersRow();
 
 			SortTableRows(filteredRows, ReadTableSortSpec(static_cast<int>(sortColumn), ascending), customSorts);

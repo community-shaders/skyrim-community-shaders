@@ -1041,11 +1041,22 @@ void Menu::DrawDisableAtBootSettings()
 	if (entries.empty())
 		ImGui::TextDisabled("%s", T("menu.settings.disable_at_boot_no_match", "No features match."));
 
+	// As many columns as the widest name allows, filled row by row
+	const ImGuiStyle& style = ImGui::GetStyle();
+	float widestName = 0.0f;
+	for (const auto& entry : entries)
+		widestName = std::max(widestName, ImGui::CalcTextSize(entry.first.c_str()).x);
+	const float columnWidth = ImGui::GetFrameHeight() + style.ItemInnerSpacing.x + widestName + style.ItemSpacing.x;
+	const int columns = std::clamp(static_cast<int>(ImGui::GetContentRegionAvail().x / columnWidth), 1, std::max(1, static_cast<int>(entries.size())));
+	if (entries.empty() || !ImGui::BeginTable("##DisableAtBoot", columns, ImGuiTableFlags_SizingStretchSame))
+		return;
 	for (const auto& [displayName, shortName] : entries) {
+		ImGui::TableNextColumn();
 		bool isDisabled = disabledFeatures.contains(shortName) && disabledFeatures[shortName];
 		if (ImGui::Checkbox(std::format("{}##{}", displayName, shortName).c_str(), &isDisabled))
 			disabledFeatures[shortName] = isDisabled;
 	}
+	ImGui::EndTable();
 }
 
 /**

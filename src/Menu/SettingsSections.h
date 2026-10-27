@@ -24,6 +24,7 @@ namespace SettingsSectionIds
 	inline constexpr std::string_view kDeveloper = "Developer";
 	inline constexpr std::string_view kLogging = "Logging";
 	inline constexpr std::string_view kShaderDebug = "ShaderDebug";
+	inline constexpr std::string_view kActiveShaders = "ActiveShaders";
 	inline constexpr std::string_view kTesting = "Testing";
 	inline constexpr std::string_view kDisableAtBoot = "DisableAtBoot";
 }

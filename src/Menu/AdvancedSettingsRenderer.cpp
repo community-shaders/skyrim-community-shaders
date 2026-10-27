@@ -1,4 +1,5 @@
 #include "AdvancedSettingsRenderer.h"
+#include "CSEditor/Browser/BrowserWidgets.h"
 
 #include <algorithm>
 #include <format>
@@ -52,7 +53,7 @@ namespace
 		// Shader Debug
 		{ Ids::kShaderDebug, "menu.advanced.replace_original_shaders", "Replace Original Shaders" },
 		{ Ids::kShaderDebug, "menu.advanced.enable_shader_blocking", "Enable Shader Blocking" },
-		{ Ids::kShaderDebug, "menu.advanced.active_shaders", "Active Shaders" },
+		{ Ids::kActiveShaders, "menu.advanced.active_shaders", "Active Shaders" },
 		// Testing (the A/B testing label is not translated)
 		{ Ids::kTesting, nullptr, "A/B Test Interval" },
 		{ Ids::kTesting, "menu.advanced.test_conditions", "Test Conditions" },
@@ -208,30 +209,19 @@ void AdvancedSettingsRenderer::RenderLoggingSection()
 
 	ImGui::Spacing();
 
-	ImGui::Columns(2, nullptr, false);
-
-	// Dump Ini Settings button
-	if (Util::Button(T("menu.advanced.dump_ini_settings", "Dump Ini Settings"), { -1, 0 })) {
+	if (Icons::LabeledButton("##DumpIni", Icons::TI(ICON_TI_FILE_EXPORT), T("menu.advanced.dump_ini_settings", "Dump Ini Settings")))
 		Util::DumpSettingsOptions();
+	if (const auto logPath = Util::PathHelpers::GetLogPath(); !logPath.empty()) {
+		ImGui::SameLine();
+		if (Icons::LabeledButton("##OpenLogs", Icons::TI(ICON_TI_FOLDER_OPEN), T("menu.advanced.open_logs", "Open Logs")))
+			ShellExecuteA(NULL, "open", logPath.string().c_str(), NULL, NULL, SW_SHOWNORMAL);
 	}
-
-	ImGui::NextColumn();
-
-	// Open Logs button
-	std::filesystem::path logPath = Util::PathHelpers::GetLogPath();
-	if (!logPath.empty() && Util::Button(T("menu.advanced.open_logs", "Open Logs"), { -1, 0 })) {
-		ShellExecuteA(NULL, "open", logPath.string().c_str(), NULL, NULL, SW_SHOWNORMAL);
-	}
-
-	ImGui::Columns(1);
 }
 
 void AdvancedSettingsRenderer::RenderShaderDebugSection()
 {
-	auto shaderCache = globals::shaderCache;
 	auto state = globals::state;
 
-	// Shader Replacement section
 	Util::DrawSectionHeader(T("menu.advanced.replace_original_shaders", "Replace Original Shaders"));
 
 	if (ImGui::BeginTable("##ReplaceToggles", 3, ImGuiTableFlags_SizingStretchSame)) {
@@ -245,38 +235,56 @@ void AdvancedSettingsRenderer::RenderShaderDebugSection()
 			} else
 				ImGui::Checkbox(std::format("{}", magic_enum::enum_name(type)).c_str(), &state->enabledClasses[classIndex]);
 		});
-		if (state->IsDeveloperMode()) {
-			ImGui::Checkbox(T("menu.advanced.vertex", "Vertex"), &state->enableVShaders);
-			Util::HoverTip(T("menu.advanced.vertex_tooltip",
-				"Replace Vertex Shaders. "
-				"When false, will disable the custom Vertex Shaders for the types above. "
-				"For developers to test whether CS shaders match vanilla behavior. "));
-
-			ImGui::Checkbox(T("menu.advanced.pixel", "Pixel"), &state->enablePShaders);
-			Util::HoverTip(T("menu.advanced.pixel_tooltip",
-				"Replace Pixel Shaders. "
-				"When false, will disable the custom Pixel Shaders for the types above. "
-				"For developers to test whether CS shaders match vanilla behavior. "));
-
-			ImGui::Checkbox(T("menu.advanced.compute", "Compute"), &state->enableCShaders);
-			Util::HoverTip(T("menu.advanced.compute_tooltip",
-				"Replace Compute Shaders. "
-				"When false, will disable the custom Compute Shaders for the types above. "
-				"For developers to test whether CS shaders match vanilla behavior. "));
-		}
 		ImGui::EndTable();
 	}
 
-	// Only show shader blocking section in developer mode
-	if (!globals::state->IsDeveloperMode()) {
+	if (!state->IsDeveloperMode())
 		return;
+
+	ImGui::Spacing();
+	Util::DrawSectionHeader(T("menu.advanced.replace_shader_stages", "Replace Shader Stages"));
+	if (ImGui::BeginTable("##ReplaceStages", 3, ImGuiTableFlags_SizingStretchSame)) {
+		ImGui::TableNextColumn();
+		ImGui::Checkbox(T("menu.advanced.vertex", "Vertex"), &state->enableVShaders);
+		Util::HoverTip(T("menu.advanced.vertex_tooltip",
+			"Replace Vertex Shaders. "
+			"When false, will disable the custom Vertex Shaders for the types above. "
+			"For developers to test whether CS shaders match vanilla behavior. "));
+
+		ImGui::TableNextColumn();
+		ImGui::Checkbox(T("menu.advanced.pixel", "Pixel"), &state->enablePShaders);
+		Util::HoverTip(T("menu.advanced.pixel_tooltip",
+			"Replace Pixel Shaders. "
+			"When false, will disable the custom Pixel Shaders for the types above. "
+			"For developers to test whether CS shaders match vanilla behavior. "));
+
+		ImGui::TableNextColumn();
+		ImGui::Checkbox(T("menu.advanced.compute", "Compute"), &state->enableCShaders);
+		Util::HoverTip(T("menu.advanced.compute_tooltip",
+			"Replace Compute Shaders. "
+			"When false, will disable the custom Compute Shaders for the types above. "
+			"For developers to test whether CS shaders match vanilla behavior. "));
+		ImGui::EndTable();
 	}
 
 	ImGui::Spacing();
-	ImGui::Separator();
-	ImGui::Spacing();
+	auto& menuSettings = globals::menu->GetSettings();
+	Util::CheckboxTip(T("menu.advanced.enable_shader_blocking", "Enable Shader Blocking"), &menuSettings.EnableShaderBlocking, T("menu.advanced.enable_shader_blocking_tooltip", "Enables hotkeys to cycle through and block individual shaders for debugging purposes."));
+	if (menuSettings.EnableShaderBlocking) {
+		ImGui::Indent();
+		ImGui::TextDisabled("%s", T("menu.advanced.shader_block_keys_moved", "Set the Block Previous and Block Next keys under Keybindings."));
+		ImGui::Unindent();
+	}
+}
 
-	// Show blocked shader status as a regular section
+void AdvancedSettingsRenderer::RenderActiveShadersSection()
+{
+	auto shaderCache = globals::shaderCache;
+	if (!globals::state->IsDeveloperMode()) {
+		ImGui::TextDisabled("%s", T("menu.advanced.active_shaders_needs_dev", "Enable Developer Mode to list the active shaders."));
+		return;
+	}
+
 	if (!shaderCache->blockedKey.empty()) {
 		// Create a visually distinct box for the blocked shader info with rounded corners and border
 		const float scale = Util::GetUIScale();
@@ -326,170 +334,156 @@ void AdvancedSettingsRenderer::RenderShaderDebugSection()
 		ImGui::PopStyleColor();  // ChildBg
 	}
 
-	// Shader Debug section
-	if (ImGui::CollapsingHeader(T("menu.advanced.shader_debug_header", "Shader Debug"))) {
-		auto& menuSettings = globals::menu->GetSettings();
+	ImGui::Spacing();
+	// Get fresh active shaders data for accurate count and table
+	auto activeShaders = shaderCache->GetActiveShaders();
+	uint32_t totalDrawCalls = 0;
+	for (const auto& shader : activeShaders) {
+		totalDrawCalls += shader.drawCalls;
+	}
+	ImGui::TextDisabled("%s", I18n::GetSingleton()->Format("menu.advanced.active_shaders_count",
+													  { { "count", std::to_string(activeShaders.size()) }, { "draws", std::to_string(totalDrawCalls) } },
+													  "{count} shaders, {draws} draw calls this frame")
+								  .c_str());
 
-		Util::CheckboxTip(T("menu.advanced.enable_shader_blocking", "Enable Shader Blocking"), &menuSettings.EnableShaderBlocking, T("menu.advanced.enable_shader_blocking_tooltip", "Enables hotkeys to cycle through and block individual shaders for debugging purposes."));
+	// Static variables to maintain table filter state
+	static char filterText[256] = "";
+	static int searchColumn = 0;        // 0 = All Columns, then one per column: Type, Class, Descriptor, Frame %, Key
+	static size_t sortColumn = 3;       // Default sort by Frame % (draw calls)
+	static bool sortAscending = false;  // Descending by default (highest usage first)
 
-		if (menuSettings.EnableShaderBlocking) {
-			ImGui::Indent();
-			ImGui::TextDisabled("%s", T("menu.advanced.shader_block_keys_moved", "Set the Block Previous and Block Next keys under Keybindings."));
-			ImGui::Unindent();
-		}
+	struct ShaderRow
+	{
+		SIE::ShaderCache::ActiveShaderInfo shader;
+		uint32_t totalDrawCalls;
+	};
+
+	std::vector<ShaderRow> shaderRows;
+	for (const auto& shader : activeShaders) {
+		shaderRows.push_back({ shader, totalDrawCalls });
 	}
 
-	// Active shaders list
-	if (ImGui::CollapsingHeader(T("menu.advanced.active_shaders", "Active Shaders"), ImGuiTreeNodeFlags_DefaultOpen)) {
-		ImGui::Text("%s", T("menu.advanced.active_shaders_used_recently", "Active Shaders (Used Recently)"));
-		Util::HoverTip(T("menu.advanced.active_shaders_tooltip",
-			"List of shaders that have been used in recent frames. "
-			"Enable Shader Blocking above to use hotkeys to cycle through and block shaders for debugging. "
-			"Shaders not used for ~1 second are removed from this list."));
+	// Build column configurations
+	std::vector<Util::TableColumnConfig<ShaderRow>> columns = {
+		{ T("menu.advanced.column_type", "Type"), T("menu.advanced.column_type_tooltip", "Shader type"), [](const ShaderRow& row) {
+			 return std::string(magic_enum::enum_name(row.shader.shaderType));
+		 } },
+		{ T("menu.advanced.column_class", "Class"), T("menu.advanced.column_class_tooltip", "Shader class"), [](const ShaderRow& row) {
+			 return std::string(magic_enum::enum_name(row.shader.shaderClass));
+		 } },
+		{ T("menu.advanced.column_descriptor", "Descriptor"), T("menu.advanced.column_descriptor_tooltip", "Shader descriptor"), [](const ShaderRow& row) {
+			 return std::format("0x{:X}", row.shader.descriptor);
+		 } },
+		{ T("menu.advanced.column_frame_pct", "Frame %"), T("menu.advanced.column_frame_pct_tooltip", "Percentage of draw calls this frame"), [](const ShaderRow& row) {
+			 float percentage = Util::CalculatePercentage(static_cast<float>(row.shader.drawCalls), static_cast<float>(row.totalDrawCalls));
+			 return Util::FormatPercent(percentage);
+		 } },
+		{ T("menu.advanced.column_key", "Key"), T("menu.advanced.column_key_tooltip", "Shader key"), [](const ShaderRow& row) {
+			 return row.shader.key;
+		 } }
+	};
 
-		// Get fresh active shaders data for accurate count and table
-		auto activeShaders = shaderCache->GetActiveShaders();
-		uint32_t totalDrawCalls = 0;
-		for (const auto& shader : activeShaders) {
-			totalDrawCalls += shader.drawCalls;
+	// Row click callbacks
+	auto onRowLeftClick = [shaderCache](const ShaderRow& row) {
+		if (row.shader.key == shaderCache->blockedKey) {
+			shaderCache->DisableShaderBlocking();
+		} else {
+			shaderCache->blockedKey = row.shader.key;
+			logger::info("Blocking shader: {}", row.shader.key);
 		}
+	};
 
-		// Static variables to maintain table filter state
-		static char filterText[256] = "";
-		static int searchColumn = 0;        // 0 = All Columns, 1 = Type, 2 = Class, 3 = Descriptor, 4 = Draw Calls, 5 = Key
-		static size_t sortColumn = 4;       // Default sort by Frame % (draw calls)
-		static bool sortAscending = false;  // Descending by default (highest usage first)
+	auto onRowRightClick = [shaderCache](const ShaderRow& row) {
+		ImGui::SetClipboardText(DescribeShader(row.shader).c_str());
+	};
+	auto getRowTooltip = [shaderCache](const ShaderRow& row) {
+		std::string clickAction = (row.shader.key == shaderCache->blockedKey) ? T("menu.advanced.click_to_unblock", "Left-click to unblock this shader") : T("menu.advanced.click_to_block", "Left-click to block this shader");
+		auto shaderType = magic_enum::enum_name(row.shader.shaderType);
+		auto shaderClass = magic_enum::enum_name(row.shader.shaderClass);
 
-		struct ShaderRow
-		{
-			SIE::ShaderCache::ActiveShaderInfo shader;
-			uint32_t totalDrawCalls;
+		return std::vformat(T("menu.advanced.shader_row_tooltip", "Type: {}\nClass: {}\nDescriptor: 0x{:X}\nKey: {}\n\n{}"), std::make_format_args(
+																																 shaderType,
+																																 shaderClass,
+																																 row.shader.descriptor,
+																																 row.shader.key,
+																																 clickAction));
+	};
+
+	// Define function to extract filterable fields (for TableFilterState)
+	auto getFilterableFields = [](const ShaderRow& row) -> std::vector<std::string> {
+		return {
+			std::string(magic_enum::enum_name(row.shader.shaderType)),                                                                         // Type
+			std::string(magic_enum::enum_name(row.shader.shaderClass)),                                                                        // Class
+			std::format("0x{:X}", row.shader.descriptor),                                                                                      // Descriptor
+			Util::FormatPercent(Util::CalculatePercentage(static_cast<float>(row.shader.drawCalls), static_cast<float>(row.totalDrawCalls))),  // Frame %
+			row.shader.key                                                                                                                     // Key
 		};
+	};
 
-		std::vector<ShaderRow> shaderRows;
-		for (const auto& shader : activeShaders) {
-			shaderRows.push_back({ shader, totalDrawCalls });
+	// Define sorting comparators (customSorts parameter)
+	std::vector<std::function<bool(const ShaderRow&, const ShaderRow&, bool)>> sorters = {
+		// Type - string sort
+		[](const ShaderRow& a, const ShaderRow& b, bool ascending) {
+			std::string aVal = std::string(magic_enum::enum_name(a.shader.shaderType));
+			std::string bVal = std::string(magic_enum::enum_name(b.shader.shaderType));
+			return ascending ? (aVal < bVal) : (aVal > bVal);
+		},
+		// Class - string sort
+		[](const ShaderRow& a, const ShaderRow& b, bool ascending) {
+			std::string aVal = std::string(magic_enum::enum_name(a.shader.shaderClass));
+			std::string bVal = std::string(magic_enum::enum_name(b.shader.shaderClass));
+			return ascending ? (aVal < bVal) : (aVal > bVal);
+		},
+		// Descriptor - numeric sort
+		[](const ShaderRow& a, const ShaderRow& b, bool ascending) {
+			return ascending ? (a.shader.descriptor < b.shader.descriptor) : (a.shader.descriptor > b.shader.descriptor);
+		},
+		// Frame % - numeric sort
+		[](const ShaderRow& a, const ShaderRow& b, bool ascending) {
+			float aPercent = Util::CalculatePercentage(static_cast<float>(a.shader.drawCalls), static_cast<float>(a.totalDrawCalls));
+			float bPercent = Util::CalculatePercentage(static_cast<float>(b.shader.drawCalls), static_cast<float>(b.totalDrawCalls));
+			return ascending ? (aPercent < bPercent) : (aPercent > bPercent);
+		},
+		// Key - string sort
+		[](const ShaderRow& a, const ShaderRow& b, bool ascending) {
+			return ascending ? (a.shader.key < b.shader.key) : (a.shader.key > b.shader.key);
 		}
+	};
 
-		// Build column configurations
-		std::vector<Util::TableColumnConfig<ShaderRow>> columns = {
-			{ T("menu.advanced.column_type", "Type"), T("menu.advanced.column_type_tooltip", "Shader type"), [](const ShaderRow& row) {
-				 return std::string(magic_enum::enum_name(row.shader.shaderType));
-			 } },
-			{ T("menu.advanced.column_class", "Class"), T("menu.advanced.column_class_tooltip", "Shader class"), [](const ShaderRow& row) {
-				 return std::string(magic_enum::enum_name(row.shader.shaderClass));
-			 } },
-			{ T("menu.advanced.column_descriptor", "Descriptor"), T("menu.advanced.column_descriptor_tooltip", "Shader descriptor"), [](const ShaderRow& row) {
-				 return std::format("0x{:X}", row.shader.descriptor);
-			 } },
-			{ T("menu.advanced.column_frame_pct", "Frame %"), T("menu.advanced.column_frame_pct_tooltip", "Percentage of draw calls this frame"), [](const ShaderRow& row) {
-				 float percentage = Util::CalculatePercentage(static_cast<float>(row.shader.drawCalls), static_cast<float>(row.totalDrawCalls));
-				 return Util::FormatPercent(percentage);
-			 } },
-			{ T("menu.advanced.column_key", "Key"), T("menu.advanced.column_key_tooltip", "Shader key"), [](const ShaderRow& row) {
-				 return row.shader.key;
-			 } }
-		};
+	// Create filter state
+	Util::TableFilterState<ShaderRow> filterState(getFilterableFields);
 
-		// Row click callbacks
-		auto onRowLeftClick = [shaderCache](const ShaderRow& row) {
-			if (row.shader.key == shaderCache->blockedKey) {
-				shaderCache->DisableShaderBlocking();
-			} else {
-				shaderCache->blockedKey = row.shader.key;
-				logger::info("Blocking shader: {}", row.shader.key);
-			}
-		};
+	// Initialize filter state from existing variables
+	filterState.filterText = std::string(filterText, filterText + strlen(filterText));
+	filterState.searchColumn = searchColumn;
 
-		auto onRowRightClick = [shaderCache](const ShaderRow& row) {
-			ImGui::SetClipboardText(DescribeShader(row.shader).c_str());
-		};
-		auto getRowTooltip = [shaderCache](const ShaderRow& row) {
-			std::string clickAction = (row.shader.key == shaderCache->blockedKey) ? T("menu.advanced.click_to_unblock", "Left-click to unblock this shader") : T("menu.advanced.click_to_block", "Left-click to block this shader");
-			auto shaderType = magic_enum::enum_name(row.shader.shaderType);
-			auto shaderClass = magic_enum::enum_name(row.shader.shaderClass);
+	// Define input events for row interactions
+	std::vector<Util::TableInputEvent<ShaderRow>> inputEvents = {
+		// Left-click to block/unblock shader
+		{ Util::TableInputEventType::MouseClick, onRowLeftClick, "", 0 },
+		// Right-click context menu for copying info
+		{ Util::TableInputEventType::ContextMenu, onRowRightClick, T("menu.advanced.copy_info", "Copy Info"), 1 }
+	};
 
-			return std::vformat(T("menu.advanced.shader_row_tooltip", "Type: {}\nClass: {}\nDescriptor: 0x{:X}\nKey: {}\n\n{}"), std::make_format_args(
-																																	 shaderType,
-																																	 shaderClass,
-																																	 row.shader.descriptor,
-																																	 row.shader.key,
-																																	 clickAction));
-		};
+	// Render the table with all configurations
+	Util::ShowInteractiveTable<ShaderRow>(
+		"##ActiveShadersTable",
+		columns,
+		shaderRows,
+		sortColumn,
+		sortAscending,
+		sorters,
+		filterState,
+		inputEvents,
+		getRowTooltip,
+		nullptr,
+		nullptr,
+		0.0f);
 
-		// Define function to extract filterable fields (for TableFilterState)
-		auto getFilterableFields = [](const ShaderRow& row) -> std::vector<std::string> {
-			return {
-				std::string(magic_enum::enum_name(row.shader.shaderType)),                                                                         // Type
-				std::string(magic_enum::enum_name(row.shader.shaderClass)),                                                                        // Class
-				std::format("0x{:X}", row.shader.descriptor),                                                                                      // Descriptor
-				Util::FormatPercent(Util::CalculatePercentage(static_cast<float>(row.shader.drawCalls), static_cast<float>(row.totalDrawCalls))),  // Frame %
-				row.shader.key                                                                                                                     // Key
-			};
-		};
-
-		// Define sorting comparators (customSorts parameter)
-		std::vector<std::function<bool(const ShaderRow&, const ShaderRow&, bool)>> sorters = {
-			// Type - string sort
-			[](const ShaderRow& a, const ShaderRow& b, bool ascending) {
-				std::string aVal = std::string(magic_enum::enum_name(a.shader.shaderType));
-				std::string bVal = std::string(magic_enum::enum_name(b.shader.shaderType));
-				return ascending ? (aVal < bVal) : (aVal > bVal);
-			},
-			// Class - string sort
-			[](const ShaderRow& a, const ShaderRow& b, bool ascending) {
-				std::string aVal = std::string(magic_enum::enum_name(a.shader.shaderClass));
-				std::string bVal = std::string(magic_enum::enum_name(b.shader.shaderClass));
-				return ascending ? (aVal < bVal) : (aVal > bVal);
-			},
-			// Descriptor - numeric sort
-			[](const ShaderRow& a, const ShaderRow& b, bool ascending) {
-				return ascending ? (a.shader.descriptor < b.shader.descriptor) : (a.shader.descriptor > b.shader.descriptor);
-			},
-			// Frame % - numeric sort
-			[](const ShaderRow& a, const ShaderRow& b, bool ascending) {
-				float aPercent = Util::CalculatePercentage(static_cast<float>(a.shader.drawCalls), static_cast<float>(a.totalDrawCalls));
-				float bPercent = Util::CalculatePercentage(static_cast<float>(b.shader.drawCalls), static_cast<float>(b.totalDrawCalls));
-				return ascending ? (aPercent < bPercent) : (aPercent > bPercent);
-			},
-			// Key - string sort
-			[](const ShaderRow& a, const ShaderRow& b, bool ascending) {
-				return ascending ? (a.shader.key < b.shader.key) : (a.shader.key > b.shader.key);
-			}
-		};
-
-		// Create filter state
-		Util::TableFilterState<ShaderRow> filterState(getFilterableFields);
-
-		// Initialize filter state from existing variables
-		filterState.filterText = std::string(filterText, filterText + strlen(filterText));
-		filterState.searchColumn = searchColumn;
-
-		// Define input events for row interactions
-		std::vector<Util::TableInputEvent<ShaderRow>> inputEvents = {
-			// Left-click to block/unblock shader
-			{ Util::TableInputEventType::MouseClick, onRowLeftClick, "", 0 },
-			// Right-click context menu for copying info
-			{ Util::TableInputEventType::ContextMenu, onRowRightClick, T("menu.advanced.copy_info", "Copy Info"), 1 }
-		};
-
-		// Render the table with all configurations
-		Util::ShowInteractiveTable<ShaderRow>(
-			"##ActiveShadersTable",
-			columns,
-			shaderRows,
-			sortColumn,
-			sortAscending,
-			sorters,
-			filterState,
-			inputEvents,
-			getRowTooltip);
-
-		// Update static variables with modified filter state
-		strncpy_s(filterText, filterState.filterText.c_str(), sizeof(filterText) - 1);
-		filterText[sizeof(filterText) - 1] = '\0';
-		searchColumn = filterState.searchColumn;
-	}
+	// Update static variables with modified filter state
+	strncpy_s(filterText, filterState.filterText.c_str(), sizeof(filterText) - 1);
+	filterText[sizeof(filterText) - 1] = '\0';
+	searchColumn = filterState.searchColumn;
 }
 
 void AdvancedSettingsRenderer::RenderDeveloperSection()
@@ -497,6 +491,9 @@ void AdvancedSettingsRenderer::RenderDeveloperSection()
 	auto shaderCache = globals::shaderCache;
 	auto state = globals::state;
 
+	if (!ImGui::BeginTable("##DeveloperLayout", 2, ImGuiTableFlags_SizingStretchSame))
+		return;
+	ImGui::TableNextColumn();
 	if (ImGui::Checkbox(T("menu.advanced.enable_developer_mode", "Enable Developer Mode"), &state->enableDeveloperMode)) {
 		logger::info("Developer Mode {}", state->enableDeveloperMode ? "enabled" : "disabled");
 	}
@@ -511,7 +508,6 @@ void AdvancedSettingsRenderer::RenderDeveloperSection()
 
 	ImGui::Spacing();
 
-	// File Watcher option (moved from Advanced/Logging)
 	bool useFileWatcher = shaderCache->UseFileWatcher();
 	if (ImGui::Checkbox(T("menu.advanced.enable_file_watcher", "Enable File Watcher"), &useFileWatcher)) {
 		shaderCache->SetFileWatcher(useFileWatcher);
@@ -520,7 +516,7 @@ void AdvancedSettingsRenderer::RenderDeveloperSection()
 		"Automatically recompile shaders on file change. "
 		"Intended for developing."));
 
-	if (Util::Button(T("menu.advanced.dump_feature_defaults", "Dump All Feature Defaults to JSON"), { -1, 0 })) {
+	if (Icons::LabeledButton("##DumpDefaults", Icons::TI(ICON_TI_FILE_EXPORT), T("menu.advanced.dump_feature_defaults", "Dump All Feature Defaults to JSON"))) {
 		if (const auto path = state->DumpFeatureDefaults(); !path.empty())
 			Util::FileHelpers::OpenWithShell(path);
 	}
@@ -528,7 +524,61 @@ void AdvancedSettingsRenderer::RenderDeveloperSection()
 		"Writes every feature's built-in default settings to FeatureDefaults.json and opens it. "
 		"Defaults come from the running build; Baseline packs and your edits are not included."));
 
-	// Debug addresses section (moved from Advanced/Logging)
+	// The shader compiler flags share a card on the right
+	ImGui::TableNextColumn();
+	if (BrowserUI::BeginCard("##CompilerFlags", ImVec2(0.0f, 0.0f), ImGuiChildFlags_AutoResizeY)) {
+		ImGui::SeparatorText(T("menu.advanced.compiler_flags", "Shader Compiler Flags"));
+		Util::CheckboxTip(T("menu.advanced.frame_annotations", "Frame Annotations"), &globals::state->frameAnnotations, T("menu.advanced.frame_annotations_tooltip", "Enable detailed frame annotations for debugging render passes and draw calls."));
+
+		// Half-precision (partial precision) shader compile flag
+		bool partialPrecision = globals::state->enablePartialPrecision.load(std::memory_order_relaxed);
+		if (ImGui::Checkbox(T("menu.advanced.half_precision", "Half Precision (Partial Precision)"), &partialPrecision)) {
+			globals::state->enablePartialPrecision.store(partialPrecision, std::memory_order_relaxed);
+			// Force a recompile so the flag actually takes effect on subsequent shader builds.
+			globals::shaderCache->Clear();
+		}
+		Util::HoverTip(T("menu.advanced.half_precision_tooltip",
+			"Adds D3DCOMPILE_PARTIAL_PRECISION to the shader compiler flags.\n"
+			"Lets fxc downgrade unmarked float ops to FP16 where it can prove safety, "
+			"on top of the existing min16float type hints.\n"
+			"On FP16-capable GPUs (Pascal+ / GCN+ / Skylake+) this can halve register "
+			"pressure and double ALU throughput, but it can also introduce minor visual "
+			"differences in shaders that haven't been audited for precision sensitivity.\n"
+			"Toggling this clears the shader cache and triggers a full recompile."));
+
+		bool contentStore = globals::state->enableContentStore.load(std::memory_order_relaxed);
+		if (ImGui::Checkbox(T("menu.advanced.content_store", "Persistent Shader Store (Developers/Testers)"), &contentStore))
+			globals::state->enableContentStore.store(contentStore, std::memory_order_relaxed);
+		Util::HoverTip(T("menu.advanced.content_store_tooltip",
+			"Keeps every compiled shader keyed by its preprocessed source and compiler flags. "
+			"After a cache wipe, a plugin update or a feature change, shaders already compiled "
+			"for the same code are restored instead of recompiled.\n"
+			"Costs one preprocess per shader (tens of milliseconds) and disk space in "
+			"Data/ShaderCache/ContentStore, trimmed to the least recently used. "
+			"Takes effect for shaders compiled from now on."));
+		DrawContentStoreDetails(globals::shaderCache, contentStore);
+
+		// Avoid flow control compiler flag (transient — not saved to config because the
+		// right setting depends on the current scene, not the user).
+		bool avoidFlowControl = globals::state->enableAvoidFlowControl.load(std::memory_order_relaxed);
+		if (ImGui::Checkbox(T("menu.advanced.avoid_flow_control", "Avoid Flow Control"), &avoidFlowControl)) {
+			globals::state->enableAvoidFlowControl.store(avoidFlowControl, std::memory_order_relaxed);
+			// Force a recompile so the flag actually takes effect on subsequent shader builds.
+			globals::shaderCache->Clear();
+		}
+		Util::HoverTip(T("menu.advanced.avoid_flow_control_tooltip",
+			"Adds D3DCOMPILE_AVOID_FLOW_CONTROL to the shader compiler flags.\n"
+			"Forces fxc to flatten branches into predicated ops rather than emitting "
+			"dynamic flow control. Often a win for short branch bodies and uniformly-"
+			"taken branches; usually a loss for long divergent branches that vanilla "
+			"flow control would skip entirely.\n"
+			"Resets every launch. Toggling this clears the shader cache and triggers a "
+			"full recompile."));
+	}
+	ImGui::EndChild();
+	ImGui::EndTable();
+
+	// Addresses and build statistics are niche, so they come last
 	if (ImGui::TreeNodeEx(T("menu.advanced.addresses", "Addresses"))) {
 		auto Renderer = globals::game::renderer;
 		auto BSShaderAccumulator = *globals::game::currentAccumulator.get();
@@ -539,8 +589,7 @@ void AdvancedSettingsRenderer::RenderDeveloperSection()
 		ImGui::TreePop();
 	}
 
-	// Statistics section (moved from Advanced/Logging)
-	if (ImGui::TreeNodeEx(T("menu.advanced.statistics", "Statistics"), ImGuiTreeNodeFlags_DefaultOpen)) {
+	if (ImGui::TreeNodeEx(T("menu.advanced.statistics", "Statistics"))) {
 		std::string shaderStatsString = shaderCache->GetShaderStatsString();
 		ImGui::Text("%s", std::vformat(T("menu.advanced.shader_compiler_stats", "Shader Compiler : {}"), std::make_format_args(shaderStatsString)).c_str());
 
@@ -630,54 +679,6 @@ void AdvancedSettingsRenderer::RenderDeveloperSection()
 
 		ImGui::TreePop();
 	}
-
-	// Frame annotations toggle (moved from Advanced/Logging)
-	Util::CheckboxTip(T("menu.advanced.frame_annotations", "Frame Annotations"), &globals::state->frameAnnotations, T("menu.advanced.frame_annotations_tooltip", "Enable detailed frame annotations for debugging render passes and draw calls."));
-
-	// Half-precision (partial precision) shader compile flag
-	bool partialPrecision = globals::state->enablePartialPrecision.load(std::memory_order_relaxed);
-	if (ImGui::Checkbox(T("menu.advanced.half_precision", "Half Precision (Partial Precision)"), &partialPrecision)) {
-		globals::state->enablePartialPrecision.store(partialPrecision, std::memory_order_relaxed);
-		// Force a recompile so the flag actually takes effect on subsequent shader builds.
-		globals::shaderCache->Clear();
-	}
-	Util::HoverTip(T("menu.advanced.half_precision_tooltip",
-		"Adds D3DCOMPILE_PARTIAL_PRECISION to the shader compiler flags.\n"
-		"Lets fxc downgrade unmarked float ops to FP16 where it can prove safety, "
-		"on top of the existing min16float type hints.\n"
-		"On FP16-capable GPUs (Pascal+ / GCN+ / Skylake+) this can halve register "
-		"pressure and double ALU throughput, but it can also introduce minor visual "
-		"differences in shaders that haven't been audited for precision sensitivity.\n"
-		"Toggling this clears the shader cache and triggers a full recompile."));
-
-	bool contentStore = globals::state->enableContentStore.load(std::memory_order_relaxed);
-	if (ImGui::Checkbox(T("menu.advanced.content_store", "Persistent Shader Store (Developers/Testers)"), &contentStore))
-		globals::state->enableContentStore.store(contentStore, std::memory_order_relaxed);
-	Util::HoverTip(T("menu.advanced.content_store_tooltip",
-		"Keeps every compiled shader keyed by its preprocessed source and compiler flags. "
-		"After a cache wipe, a plugin update or a feature change, shaders already compiled "
-		"for the same code are restored instead of recompiled.\n"
-		"Costs one preprocess per shader (tens of milliseconds) and disk space in "
-		"Data/ShaderCache/ContentStore, trimmed to the least recently used. "
-		"Takes effect for shaders compiled from now on."));
-	DrawContentStoreDetails(globals::shaderCache, contentStore);
-
-	// Avoid flow control compiler flag (transient — not saved to config because the
-	// right setting depends on the current scene, not the user).
-	bool avoidFlowControl = globals::state->enableAvoidFlowControl.load(std::memory_order_relaxed);
-	if (ImGui::Checkbox(T("menu.advanced.avoid_flow_control", "Avoid Flow Control"), &avoidFlowControl)) {
-		globals::state->enableAvoidFlowControl.store(avoidFlowControl, std::memory_order_relaxed);
-		// Force a recompile so the flag actually takes effect on subsequent shader builds.
-		globals::shaderCache->Clear();
-	}
-	Util::HoverTip(T("menu.advanced.avoid_flow_control_tooltip",
-		"Adds D3DCOMPILE_AVOID_FLOW_CONTROL to the shader compiler flags.\n"
-		"Forces fxc to flatten branches into predicated ops rather than emitting "
-		"dynamic flow control. Often a win for short branch bodies and uniformly-"
-		"taken branches; usually a loss for long divergent branches that vanilla "
-		"flow control would skip entirely.\n"
-		"Resets every launch. Toggling this clears the shader cache and triggers a "
-		"full recompile."));
 }
 
 void AdvancedSettingsRenderer::RunTestConditions()
