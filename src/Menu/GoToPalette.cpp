@@ -136,10 +136,9 @@ namespace GoToPalette
 		{
 			ImVec4 tint = KindColor(kind);
 			if (dimmed)
-				tint.w *= 0.5f;
-			ImVec4 fill = tint;
-			fill.w *= Constants::PALETTE_BADGE_FILL_ALPHA;
-			drawList->AddRectFilled(min, ImVec2(min.x + size.x, min.y + size.y), ImGui::GetColorU32(fill),
+				tint = Util::Anim::ScaleAlpha(tint, Constants::PALETTE_DIMMED_ALPHA);
+			drawList->AddRectFilled(min, ImVec2(min.x + size.x, min.y + size.y),
+				ImGui::GetColorU32(Util::Anim::ScaleAlpha(tint, Constants::PALETTE_BADGE_FILL_ALPHA)),
 				Constants::PALETTE_BADGE_ROUNDING * Util::GetUIScale());
 			const char* label = KindLabel(kind);
 			const ImVec2 textSize = ImGui::CalcTextSize(label);
@@ -288,8 +287,8 @@ namespace GoToPalette
 			ImVec4 textColor = style.Colors[ImGuiCol_Text];
 			ImVec4 matchColor = Util::Colors::GetAccent();
 			if (entry.dimmed) {
-				textColor.w *= 0.5f;
-				matchColor.w *= 0.5f;
+				textColor = Util::Anim::ScaleAlpha(textColor, Constants::PALETTE_DIMMED_ALPHA);
+				matchColor = Util::Anim::ScaleAlpha(matchColor, Constants::PALETTE_DIMMED_ALPHA);
 			}
 
 			const bool twoLines = !entry.breadcrumb.empty();
@@ -342,7 +341,7 @@ namespace GoToPalette
 
 			const float radius = lineHeight * Constants::PALETTE_EMPTY_ICON_RATIO;
 			const float centerX = origin.x + avail.x * 0.5f;
-			const float discY = origin.y + avail.y * 0.3f;
+			const float discY = origin.y + avail.y * Constants::PALETTE_EMPTY_DISC_Y;
 			const ImVec4 textColor = ImGui::GetStyleColorVec4(ImGuiCol_Text);
 			drawList->AddCircleFilled(ImVec2(centerX, discY), radius, ImGui::GetColorU32(Util::Anim::ScaleAlpha(textColor, Constants::PALETTE_EMPTY_DISC_ALPHA)));
 			Icons::DrawCenteredGlyph(drawList, ImVec2(centerX - radius, discY - radius), ImVec2(radius * 2.0f, radius * 2.0f), Icons::TI(ICON_TI_SEARCH),
@@ -375,7 +374,7 @@ namespace GoToPalette
 			drawList->AddRect(fieldMin, fieldMax, ImGui::GetColorU32(Util::Anim::ScaleAlpha(Util::Colors::GetAccent(), Constants::PALETTE_FIELD_BORDER_ALPHA)),
 				rounding, ImDrawFlags_None, scale);
 
-			const float glyphWidth = lineHeight * 1.5f;
+			const float glyphWidth = lineHeight * Constants::PALETTE_SEARCH_GLYPH_RATIO;
 			Icons::DrawCenteredGlyph(drawList, ImVec2(fieldMin.x + padX, fieldMin.y), ImVec2(glyphWidth, fieldHeight), Icons::TI(ICON_TI_SEARCH),
 				ImGui::GetColorU32(ImGuiCol_TextDisabled));
 
@@ -388,18 +387,15 @@ namespace GoToPalette
 			if (!ImGui::IsAnyItemActive() && !sortOpen)
 				ImGui::SetKeyboardFocusHere();
 			ImGui::SetNextItemWidth(buttonMin.x - inset - inputX);
-			bool entered = false;
-			{
-				ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0.0f, (fieldHeight - lineHeight) * 0.5f));
-				ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
-				ImGui::PushStyleColor(ImGuiCol_FrameBg, IM_COL32_BLACK_TRANS);
-				ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, IM_COL32_BLACK_TRANS);
-				ImGui::PushStyleColor(ImGuiCol_FrameBgActive, IM_COL32_BLACK_TRANS);
-				entered = ImGui::InputTextWithHint("##GoToInput", T("menu.palette.hint", "Search pages, features and settings..."),
-					g_state.query.data(), g_state.query.size(), ImGuiInputTextFlags_EnterReturnsTrue);
-				ImGui::PopStyleColor(3);
-				ImGui::PopStyleVar(2);
-			}
+			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0.0f, (fieldHeight - lineHeight) * 0.5f));
+			ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
+			ImGui::PushStyleColor(ImGuiCol_FrameBg, IM_COL32_BLACK_TRANS);
+			ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, IM_COL32_BLACK_TRANS);
+			ImGui::PushStyleColor(ImGuiCol_FrameBgActive, IM_COL32_BLACK_TRANS);
+			const bool entered = ImGui::InputTextWithHint("##GoToInput", T("menu.palette.hint", "Search pages, features and settings..."),
+				g_state.query.data(), g_state.query.size(), ImGuiInputTextFlags_EnterReturnsTrue);
+			ImGui::PopStyleColor(3);
+			ImGui::PopStyleVar(2);
 
 			// Sort and filter button, inside the frame
 			ImGui::SetCursorScreenPos(buttonMin);
@@ -487,7 +483,7 @@ namespace GoToPalette
 				const float hover = Util::Anim::Toggle(ImGui::GetID("hover"), ImGui::IsItemHovered());
 				ImGui::PopID();
 
-				const ImVec4 labelColor = Util::Anim::Lerp(dimColor, textColor, std::max(chosen, hover * 0.6f));
+				const ImVec4 labelColor = Util::Anim::Lerp(dimColor, textColor, std::max(chosen, hover * Constants::PALETTE_SCOPE_HOVER_LABEL));
 				const float textY = Util::CenterTextTopY(itemMin.y, itemHeight);
 				drawList->AddText(ImVec2(itemMin.x + itemPadX, textY), ImGui::GetColorU32(labelColor), slot.label);
 
@@ -538,6 +534,84 @@ namespace GoToPalette
 			const std::string count = I18n::GetSingleton()->Format("menu.palette.result_count",
 				{ { "count", std::to_string(g_state.results.entries.size()) } }, "{count} results");
 			drawList->AddText(ImVec2(pos.x + width - ImGui::CalcTextSize(count.c_str()).x, textY), ImGui::GetColorU32(ImGuiCol_TextDisabled), count.c_str());
+		}
+
+		/** @brief The scrolling result list with its gliding selection bar; sets `chosen` when a row is clicked. */
+		void DrawResults(bool moved, float scale, const GoToIndex::Entry*& chosen)
+		{
+			const auto& style = ImGui::GetStyle();
+			const int count = static_cast<int>(g_state.results.entries.size());
+			if (std::exchange(g_state.resetScroll, false))
+				ImGui::SetScrollY(0.0f);
+			const ImVec2 origin = ImGui::GetCursorScreenPos();
+			const float width = ImGui::GetContentRegionAvail().x;
+			if (count == 0) {
+				DrawEmptyState(origin, ImGui::GetContentRegionAvail(), scale);
+			} else {
+				const float badgeWidth = MeasureBadgeWidth(scale);
+				const float rowHeight = ImGui::GetTextLineHeight() * 2.0f + style.ItemInnerSpacing.y + Constants::PALETTE_ROW_PAD_Y * scale * 2.0f;
+				const float headerHeight = ImGui::GetTextLineHeight() + Constants::PALETTE_HEADER_PAD_Y * scale * 2.0f;
+				float totalHeight = 0.0f;
+				const std::vector<Item> items = BuildItems(rowHeight, headerHeight, totalHeight);
+				ImGui::Dummy(ImVec2(width, totalHeight));
+
+				// Where the selected row sits, and the top of its group header when it leads one
+				float selectedY = 0.0f;
+				float selectedTop = 0.0f;
+				for (size_t n = 0; n < items.size(); ++n) {
+					if (items[n].entry != g_state.selected)
+						continue;
+					selectedY = items[n].y;
+					selectedTop = n > 0 && items[n - 1].entry < 0 ? items[n - 1].y : selectedY;
+				}
+				if (moved) {
+					const float viewTop = ImGui::GetScrollY();
+					const float viewHeight = ImGui::GetWindowHeight();
+					if (selectedTop < viewTop)
+						ImGui::SetScrollY(selectedTop);
+					else if (selectedY + rowHeight > viewTop + viewHeight)
+						ImGui::SetScrollY(selectedY + rowHeight - viewHeight);
+				}
+
+				// The highlight is one shape that glides from row to row
+				ImDrawList* drawList = ImGui::GetWindowDrawList();
+				const ImVec4 accent = Util::Colors::GetAccent();
+				const float rowRounding = Constants::PALETTE_ROW_ROUNDING * scale;
+				const auto bar = Util::Anim::SelectionGlide(ImGui::GetID("##rowGlide"), ImVec2(origin.x, origin.y + selectedY),
+					ImVec2(origin.x + width, origin.y + selectedY + rowHeight), Constants::PALETTE_ROW_RATE);
+				const ImVec2 barMin = bar.min;
+				const ImVec2 barMax = bar.max;
+				drawList->AddRectFilled(barMin, barMax, ImGui::GetColorU32(Util::Anim::ScaleAlpha(accent, Constants::PALETTE_SELECT_FILL_ALPHA)), rowRounding);
+				const float barWidth = Constants::ANIM_SELECTED_BAR_WIDTH * scale;
+				drawList->AddRectFilled(ImVec2(barMin.x, barMin.y + rowHeight * Constants::PALETTE_SELECT_BAR_INSET), ImVec2(barMin.x + barWidth, barMax.y - rowHeight * Constants::PALETTE_SELECT_BAR_INSET),
+					ImGui::GetColorU32(accent), barWidth * 0.5f);
+
+				const bool mouseMoved = ImGui::GetIO().MouseDelta.x != 0.0f || ImGui::GetIO().MouseDelta.y != 0.0f;
+				const ImVec4 textColor = ImGui::GetStyleColorVec4(ImGuiCol_Text);
+				for (const auto& item : items) {
+					const ImVec2 min(origin.x, origin.y + item.y);
+					const ImVec2 max(origin.x + width, min.y + item.height);
+					if (!ImGui::IsRectVisible(min, max))
+						continue;
+					if (item.entry < 0) {
+						DrawHeader(item, min, max);
+						continue;
+					}
+					const auto& entry = *g_state.results.entries[static_cast<size_t>(item.entry)];
+					ImGui::PushID(entry.id.c_str());
+					ImGui::SetCursorScreenPos(min);
+					if (ImGui::InvisibleButton("##row", ImVec2(width, item.height)))
+						chosen = &entry;
+					const bool hovered = ImGui::IsItemHovered();
+					if (mouseMoved && hovered)
+						g_state.selected = item.entry;
+					const float hover = Util::Anim::Toggle(ImGui::GetID("hover"), hovered && item.entry != g_state.selected);
+					if (hover > 0.0f)
+						drawList->AddRectFilled(min, max, ImGui::GetColorU32(Util::Anim::ScaleAlpha(textColor, Constants::PALETTE_HOVER_FILL_ALPHA * hover)), rowRounding);
+					DrawRow(entry, min, max, badgeWidth, scale);
+					ImGui::PopID();
+				}
+			}
 		}
 	}
 
@@ -598,15 +672,13 @@ namespace GoToPalette
 			ImGui::PopStyleVar();
 			return;
 		}
-		{
-			// Surface behind the content, with a soft shadow on the dimmed backdrop
-			Util::Surface::Options surface;
-			surface.rounding = ImGui::GetStyle().WindowRounding;
-			surface.minFillAlpha = Constants::PALETTE_MIN_FILL_ALPHA;
-			Util::Surface::Draw(ImGui::GetWindowDrawList(), ImGui::GetWindowPos(),
-				ImVec2(ImGui::GetWindowPos().x + ImGui::GetWindowSize().x, ImGui::GetWindowPos().y + ImGui::GetWindowSize().y),
-				Util::Surface::Role::Palette, surface);
-		}
+		// Surface behind the content, with a soft shadow on the dimmed backdrop
+		Util::Surface::Options surface;
+		surface.rounding = ImGui::GetStyle().WindowRounding;
+		surface.minFillAlpha = Constants::PALETTE_MIN_FILL_ALPHA;
+		const ImVec2 panelMin = ImGui::GetWindowPos();
+		const ImVec2 panelMax(panelMin.x + ImGui::GetWindowSize().x, panelMin.y + ImGui::GetWindowSize().y);
+		Util::Surface::Draw(ImGui::GetWindowDrawList(), panelMin, panelMax, Util::Surface::Role::Palette, surface);
 
 		const float scale = Util::GetUIScale();
 		const bool sortOpen = ImGui::IsPopupOpen(kSortPopupId);
@@ -618,12 +690,9 @@ namespace GoToPalette
 			close = !sortOpen;
 		}
 		// A click outside the panel closes it; while the sort popup is open that click belongs to the popup
-		if (!sortOpen && ImGui::GetFrameCount() > g_state.openedFrame && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
-			const ImVec2 panelMin = ImGui::GetWindowPos();
-			const ImVec2 panelMax(panelMin.x + ImGui::GetWindowSize().x, panelMin.y + ImGui::GetWindowSize().y);
-			if (!ImGui::IsMouseHoveringRect(panelMin, panelMax, false))
-				close = true;
-		}
+		if (!sortOpen && ImGui::GetFrameCount() > g_state.openedFrame && ImGui::IsMouseClicked(ImGuiMouseButton_Left) &&
+			!ImGui::IsMouseHoveringRect(panelMin, panelMax, false))
+			close = true;
 		if (!sortOpen && ImGui::IsKeyPressed(ImGuiKey_Tab, false)) {
 			const int step = ImGui::GetIO().KeyShift ? -1 : 1;
 			const int scopeCount = static_cast<int>(kScopes.size());
@@ -650,81 +719,9 @@ namespace GoToPalette
 		if (entered && count > 0)
 			chosen = g_state.results.entries[static_cast<size_t>(g_state.selected)];
 
-		const auto& style = ImGui::GetStyle();
 		const float footerHeight = KeycapHeight() + Constants::PALETTE_GAP * scale * 2.0f;
-		if (ImGui::BeginChild("##GoToResults", ImVec2(0.0f, -footerHeight), ImGuiChildFlags_None)) {
-			if (std::exchange(g_state.resetScroll, false))
-				ImGui::SetScrollY(0.0f);
-			const ImVec2 origin = ImGui::GetCursorScreenPos();
-			const float width = ImGui::GetContentRegionAvail().x;
-			if (count == 0) {
-				DrawEmptyState(origin, ImGui::GetContentRegionAvail(), scale);
-			} else {
-				const float badgeWidth = MeasureBadgeWidth(scale);
-				const float rowHeight = ImGui::GetTextLineHeight() * 2.0f + style.ItemInnerSpacing.y + Constants::PALETTE_ROW_PAD_Y * scale * 2.0f;
-				const float headerHeight = ImGui::GetTextLineHeight() + Constants::PALETTE_HEADER_PAD_Y * scale * 2.0f;
-				float totalHeight = 0.0f;
-				const std::vector<Item> items = BuildItems(rowHeight, headerHeight, totalHeight);
-				ImGui::Dummy(ImVec2(width, totalHeight));
-
-				// Where the selected row sits, and the top of its group header when it leads one
-				float selectedY = 0.0f;
-				float selectedTop = 0.0f;
-				for (size_t n = 0; n < items.size(); ++n) {
-					if (items[n].entry != g_state.selected)
-						continue;
-					selectedY = items[n].y;
-					selectedTop = n > 0 && items[n - 1].entry < 0 ? items[n - 1].y : selectedY;
-				}
-				if (moved) {
-					const float viewTop = ImGui::GetScrollY();
-					const float viewHeight = ImGui::GetWindowHeight();
-					if (selectedTop < viewTop)
-						ImGui::SetScrollY(selectedTop);
-					else if (selectedY + rowHeight > viewTop + viewHeight)
-						ImGui::SetScrollY(selectedY + rowHeight - viewHeight);
-				}
-
-				// The highlight is one shape that glides from row to row
-				ImDrawList* drawList = ImGui::GetWindowDrawList();
-				const ImVec4 accent = Util::Colors::GetAccent();
-				const float rowRounding = Constants::PALETTE_ROW_ROUNDING * scale;
-				const auto bar = Util::Anim::SelectionGlide(ImGui::GetID("##rowGlide"), ImVec2(origin.x, origin.y + selectedY),
-					ImVec2(origin.x + width, origin.y + selectedY + rowHeight), Constants::PALETTE_ROW_RATE);
-				const ImVec2 barMin = bar.min;
-				const ImVec2 barMax = bar.max;
-				drawList->AddRectFilled(barMin, barMax, ImGui::GetColorU32(Util::Anim::ScaleAlpha(accent, Constants::PALETTE_SELECT_FILL_ALPHA)), rowRounding);
-				const float barWidth = Constants::ANIM_SELECTED_BAR_WIDTH * scale;
-				drawList->AddRectFilled(ImVec2(barMin.x, barMin.y + rowHeight * 0.2f), ImVec2(barMin.x + barWidth, barMax.y - rowHeight * 0.2f),
-					ImGui::GetColorU32(accent), barWidth * 0.5f);
-
-				const bool mouseMoved = ImGui::GetIO().MouseDelta.x != 0.0f || ImGui::GetIO().MouseDelta.y != 0.0f;
-				const ImVec4 textColor = ImGui::GetStyleColorVec4(ImGuiCol_Text);
-				for (const auto& item : items) {
-					const ImVec2 min(origin.x, origin.y + item.y);
-					const ImVec2 max(origin.x + width, min.y + item.height);
-					if (!ImGui::IsRectVisible(min, max))
-						continue;
-					if (item.entry < 0) {
-						DrawHeader(item, min, max);
-						continue;
-					}
-					const auto& entry = *g_state.results.entries[static_cast<size_t>(item.entry)];
-					ImGui::PushID(entry.id.c_str());
-					ImGui::SetCursorScreenPos(min);
-					if (ImGui::InvisibleButton("##row", ImVec2(width, item.height)))
-						chosen = &entry;
-					const bool hovered = ImGui::IsItemHovered();
-					if (mouseMoved && hovered)
-						g_state.selected = item.entry;
-					const float hover = Util::Anim::Toggle(ImGui::GetID("hover"), hovered && item.entry != g_state.selected);
-					if (hover > 0.0f)
-						drawList->AddRectFilled(min, max, ImGui::GetColorU32(Util::Anim::ScaleAlpha(textColor, Constants::PALETTE_HOVER_FILL_ALPHA * hover)), rowRounding);
-					DrawRow(entry, min, max, badgeWidth, scale);
-					ImGui::PopID();
-				}
-			}
-		}
+		if (ImGui::BeginChild("##GoToResults", ImVec2(0.0f, -footerHeight), ImGuiChildFlags_None))
+			DrawResults(moved, scale, chosen);
 		ImGui::EndChild();
 
 		DrawFooter(scale);

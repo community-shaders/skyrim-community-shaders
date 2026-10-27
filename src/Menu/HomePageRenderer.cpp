@@ -164,6 +164,16 @@ namespace
 		return Icons::LabeledButton(id, icon, label);
 	}
 
+	/** @brief A glyph followed by a line of text, both in one colour. */
+	void IconLine(const ImVec4& color, Icons::GlyphRef icon, const char* text)
+	{
+		ImGui::PushStyleColor(ImGuiCol_Text, color);
+		Icons::Text(icon);
+		ImGui::SameLine();
+		ImGui::TextUnformatted(text);
+		ImGui::PopStyleColor();
+	}
+
 	/** @brief Comma-separated list of names, for one ellipsized line. */
 	std::string JoinNames(const std::vector<std::string>& names)
 	{
@@ -320,8 +330,9 @@ namespace
 		bool clicked;
 		if (auto* texture = globals::menu->GetUIIcons().clearCache.texture) {
 			ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
-			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
-			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.8f, 0.8f, 0.25f));
+			ImGui::PushStyleColor(ImGuiCol_Button, IM_COL32_BLACK_TRANS);
+			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(Constants::HEADER_UNDOCKED_HOVER_GREY, Constants::HEADER_UNDOCKED_HOVER_GREY, Constants::HEADER_UNDOCKED_HOVER_GREY,
+															  Constants::HEADER_UNDOCKED_HOVER_ALPHA));
 			clicked = ImGui::ImageButton("##HomeClearCache", texture, ImVec2(box, box));
 			ImGui::PopStyleColor(2);
 			ImGui::PopStyleVar();
@@ -397,11 +408,7 @@ namespace
 			allClear ? nullptr : &border);
 
 		if (allClear) {
-			ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetSuccess());
-			Icons::Text(Icons::TI(ICON_TI_CHECK));
-			ImGui::SameLine();
-			ImGui::TextUnformatted(T("menu.home.all_good", "All good: no issues, constraints or pending restarts."));
-			ImGui::PopStyleColor();
+			IconLine(Util::Colors::GetSuccess(), Icons::TI(ICON_TI_CHECK), T("menu.home.all_good", "All good: no issues, constraints or pending restarts."));
 			return;
 		}
 
@@ -409,22 +416,14 @@ namespace
 
 		// Unsaved changes: the header and footer hold the save and restore actions
 		if (unsaved) {
-			ImGui::PushStyleColor(ImGuiCol_Text, unsavedColor);
-			Icons::Text(Icons::TI(MenuIcons::kSave));
-			ImGui::SameLine();
-			ImGui::TextUnformatted(T("menu.home.unsaved_text", "You have unsaved changes."));
-			ImGui::PopStyleColor();
+			IconLine(unsavedColor, Icons::TI(MenuIcons::kSave), T("menu.home.unsaved_text", "You have unsaved changes."));
 			ImGui::Spacing();
 		}
 
 		// Feature issues: the rejected, obsolete or mismatched feature files and failed Baselines, with their actions
 		if (issueCount > 0) {
-			ImGui::PushStyleColor(ImGuiCol_Text, error);
-			Icons::Text(Icons::TI(MenuIcons::kIssues));
-			ImGui::SameLine();
-			ImGui::TextUnformatted(
+			IconLine(error, Icons::TI(MenuIcons::kIssues),
 				i18n->Format("menu.status.feature_issues", { { "count", std::to_string(issueCount) } }, "Feature issues: {count}").c_str());
-			ImGui::PopStyleColor();
 			FeatureIssues::DrawFeatureIssuesUI();
 			ImGui::Spacing();
 		}
@@ -441,9 +440,8 @@ namespace
 		}
 
 		// Setting constraints
-		if (constraintCount > 0) {
+		if (constraintCount > 0)
 			IssuesPageRenderer::RenderConstraintsSection();
-		}
 
 		// Brief outline after a click on the header or footer issues indicator
 		if (HomePageRenderer::IsAttentionFocused()) {
@@ -531,7 +529,7 @@ namespace
 
 			ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
 			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0.0f, 0.0f));
-			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+			ImGui::PushStyleColor(ImGuiCol_Button, IM_COL32_BLACK_TRANS);
 			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, Constants::HOME_DISCORD_BANNER_HOVER_COLOR);
 			ImGui::PushStyleColor(ImGuiCol_ButtonActive, Constants::HOME_DISCORD_BANNER_ACTIVE_COLOR);
 			if (ImGui::ImageButton("##DiscordButton", Util::IconLoader::ViewForSize(discord.texture, size), size))
@@ -697,8 +695,7 @@ void HomePageRenderer::RenderHomePage()
 	const float charWidth = ImGui::CalcTextSize("0").x;
 	const int columns = ImGui::GetContentRegionAvail().x >= Constants::HOME_TWO_COLUMN_MIN_CHARS * charWidth ? 2 : 1;
 	if (ImGui::BeginTable("##HomeGrid", columns, ImGuiTableFlags_SizingStretchSame)) {
-		std::vector<void (*)()> cards = { &RenderPresetCard, &RenderSceneCard, &RenderShadersCard };
-		cards.push_back(&RenderQuickAccessCard);
+		constexpr std::array<void (*)(), 4> cards = { &RenderPresetCard, &RenderSceneCard, &RenderShadersCard, &RenderQuickAccessCard };
 		for (auto* card : cards) {
 			ImGui::TableNextColumn();
 			card();
@@ -715,9 +712,8 @@ void HomePageRenderer::RenderHomePage()
 
 void HomePageRenderer::RenderFirstTimeSetupDialog()
 {
-	if (!ShouldShowFirstTimeSetup()) {
+	if (!ShouldShowFirstTimeSetup())
 		return;
-	}
 
 	// Block input to the game and make cursor visible - input blocking is handled by ShouldSwallowInput()
 	auto& io = ImGui::GetIO();
@@ -725,17 +721,17 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 	io.WantCaptureKeyboard = true;
 	io.MouseDrawCursor = true;  // Show ImGui cursor
 
-	float uiScale = Util::GetUIScale();
-	ImVec2 center = ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f);
+	const float uiScale = Util::GetUIScale();
+	const ImVec2 center(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f);
 	ImGui::SetNextWindowPos(center, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
 	ImGui::SetNextWindowSizeConstraints(ImVec2(DIALOG_MIN_WIDTH * uiScale, 0), ImVec2(DIALOG_MAX_WIDTH * uiScale, FLT_MAX));
 	ImGui::SetNextWindowFocus();
 
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, DIALOG_CORNER_ROUNDING * uiScale);
 
-	ImGuiWindowFlags flags = ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
-	                         ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings |
-	                         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_AlwaysAutoResize;
+	constexpr ImGuiWindowFlags flags = ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+	                                   ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings |
+	                                   ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_AlwaysAutoResize;
 
 	if (!ImGui::Begin("##FirstTimeSetup", nullptr, flags)) {
 		ImGui::PopStyleVar();
@@ -743,7 +739,7 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 		return;
 	}
 
-	// Fullscreen fade on the dialog's draw list — covers all windows beneath at the dialog's z-position
+	// Fullscreen fade on the dialog's own draw list, so it covers every window beneath it
 	auto* drawList = ImGui::GetWindowDrawList();
 	drawList->PushClipRectFullScreen();
 	drawList->AddRectFilled(ImVec2(0, 0), io.DisplaySize, IM_COL32(0, 0, 0, MODAL_OVERLAY_ALPHA));
@@ -751,40 +747,24 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 
 	auto menu = Menu::GetSingleton();
 
-	// Render CS logo as background watermark with proper aspect ratio
+	// The logo as a faint watermark behind the dialog, keeping its aspect ratio
 	if (menu && Util::IconLoader::GetIcons().logo.texture) {
-		ImVec2 windowPos = ImGui::GetWindowPos();
-		ImVec2 windowSize = ImGui::GetWindowSize();
+		const ImVec2 windowPos = ImGui::GetWindowPos();
+		const ImVec2 windowSize = ImGui::GetWindowSize();
+		const ImVec2 textureSize = Util::IconLoader::GetIcons().logo.size;
+		const float logoHeight = LOGO_WATERMARK_HEIGHT * uiScale;
+		const float logoWidth = logoHeight * textureSize.x / textureSize.y;
+		const ImVec2 logoMin(windowPos.x + (windowSize.x - logoWidth) * 0.5f, windowPos.y + (windowSize.y - logoHeight) * 0.5f);
+		const ImVec2 logoMax(logoMin.x + logoWidth, logoMin.y + logoHeight);
 
-		// Get the original texture size to maintain aspect ratio
-		ImVec2 textureSize = Util::IconLoader::GetIcons().logo.size;
-		float aspectRatio = textureSize.x / textureSize.y;
-
-		// Set desired height and calculate width to maintain aspect ratio
-		float logoHeight = LOGO_WATERMARK_HEIGHT * uiScale;
-		float logoWidth = logoHeight * aspectRatio;
-
-		ImVec2 logoMin(windowPos.x + (windowSize.x - logoWidth) * 0.5f,
-			windowPos.y + (windowSize.y - logoHeight) * 0.5f);
-		ImVec2 logoMax(logoMin.x + logoWidth, logoMin.y + logoHeight);
-
-		// Determine watermark color based on monochrome logo setting
-		ImU32 watermarkColor;
-		if (menu->GetSettings().Theme.UseMonochromeLogo) {
-			ImVec4 textColor = menu->GetSettings().Theme.Palette.Text;
-			textColor.w = 0.24f;  // Low alpha for watermark effect
-			watermarkColor = ImGui::GetColorU32(textColor);
-		} else {
-			watermarkColor = IM_COL32(255, 255, 255, 60);
-		}
-
-		// Render as subtle watermark background
-		ImGui::GetWindowDrawList()->AddImage(Util::IconLoader::GetIcons().logo.texture, logoMin, logoMax,
-			ImVec2(0, 0), ImVec2(1, 1), watermarkColor);
+		ImVec4 monoColor = menu->GetSettings().Theme.Palette.Text;
+		monoColor.w = Constants::HOME_SETUP_WATERMARK_MONO_ALPHA;
+		const ImU32 watermarkColor = menu->GetSettings().Theme.UseMonochromeLogo ? ImGui::GetColorU32(monoColor) : Constants::HOME_SETUP_WATERMARK_COLOR;
+		drawList->AddImage(Util::IconLoader::GetIcons().logo.texture, logoMin, logoMax, ImVec2(0, 0), ImVec2(1, 1), watermarkColor);
 	}
 
 	// Center all content
-	float windowWidth = ImGui::GetWindowWidth();
+	const float windowWidth = ImGui::GetWindowWidth();
 	auto centerText = [windowWidth](const char* text) {
 		ImGui::SetCursorPosX((windowWidth - ImGui::CalcTextSize(text).x) * 0.5f);
 	};
@@ -792,7 +772,7 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 		ImGui::SetCursorPosX((windowWidth - width) * 0.5f);
 	};
 
-	// Version text - two lines, both centered (reduced spacing between lines)
+	// Two centred lines with the gap between them tightened
 	const char* versionLine1 = T("menu.setup.new_install_line1", "This appears to be a new install, update, or");
 	const char* versionLine2 = T("menu.setup.new_install_line2", "reinstallation of Community Shaders.");
 
@@ -804,69 +784,49 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 
 	ImGui::Spacing();
 
-	// Description - centered
 	const char* description = T("menu.setup.choose_hotkey", "Click the key below to choose a menu hotkey:");
 	centerText(description);
 	ImGui::Text("%s", description);
 
-	// Hotkey selection - clickable hotkey text
-	// Show current toggle key and allow user to change it by clicking on it
+	// The current toggle key, as text the user clicks to change it
 	auto& themeSettings = menu->GetTheme();
-	bool isCapturing = menu->settingToggleKey;
+	const bool isCapturing = menu->settingToggleKey;
 
-	// Increase font size for hotkey text - bigger when capturing
+	// Bigger while capturing
 	ImGui::SetWindowFontScale(isCapturing ? HOTKEY_TEXT_SCALE_CAPTURING : HOTKEY_TEXT_SCALE);
 
 	// Format hotkey with brackets to make it look like a button
 	const std::string toggleKeyName = Util::Input::KeyIdToString(menu->GetSettings().ToggleKey);
-	std::string hotkeyStr;
-	if (isCapturing) {
-		hotkeyStr = "[ ... ]";
-	} else {
-		hotkeyStr = "[ " + toggleKeyName + " ]";
-	}
+	const std::string hotkeyStr = isCapturing ? "[ ... ]" : "[ " + toggleKeyName + " ]";
 
-	ImVec2 hotkeyTextSize = ImGui::CalcTextSize(hotkeyStr.c_str());
+	const ImVec2 hotkeyTextSize = ImGui::CalcTextSize(hotkeyStr.c_str());
 
 	centerWidth(hotkeyTextSize.x);
-	ImVec2 buttonPos = ImGui::GetCursorScreenPos();
+	const ImVec2 buttonPos = ImGui::GetCursorScreenPos();
 
-	// Create invisible button for hover detection and clicking
+	// An invisible button over the text takes the hover and click; the text is drawn on top of it
 	ImGui::PushID("HotkeyButton");
-	bool clicked = ImGui::InvisibleButton("##HotkeyClick", hotkeyTextSize);
-	bool hovered = ImGui::IsItemHovered();
+	const bool clicked = ImGui::InvisibleButton("##HotkeyClick", hotkeyTextSize);
+	const bool hovered = ImGui::IsItemHovered();
 	ImGui::PopID();
-
-	// Set cursor position back for text rendering
 	ImGui::SetCursorScreenPos(buttonPos);
 
-	// Choose color based on state
-	ImVec4 hotkeyColor;
-	if (isCapturing) {
-		// Pulsing effect using theme's hotkey color
-		hotkeyColor = Util::GetPulsingColor(themeSettings.StatusPalette.CurrentHotkey);
-	} else if (hovered) {
-		hotkeyColor = ImVec4(themeSettings.StatusPalette.CurrentHotkey.x * HOTKEY_HOVER_DIM_FACTOR,
-			themeSettings.StatusPalette.CurrentHotkey.y * HOTKEY_HOVER_DIM_FACTOR,
-			themeSettings.StatusPalette.CurrentHotkey.z * HOTKEY_HOVER_DIM_FACTOR,
-			themeSettings.StatusPalette.CurrentHotkey.w);
-	} else {
-		hotkeyColor = themeSettings.StatusPalette.CurrentHotkey;
-	}
+	const ImVec4 baseHotkeyColor = themeSettings.StatusPalette.CurrentHotkey;
+	ImVec4 hotkeyColor = baseHotkeyColor;
+	if (isCapturing)
+		hotkeyColor = Util::GetPulsingColor(baseHotkeyColor);
+	else if (hovered)
+		hotkeyColor = ImVec4(baseHotkeyColor.x * HOTKEY_HOVER_DIM_FACTOR, baseHotkeyColor.y * HOTKEY_HOVER_DIM_FACTOR,
+			baseHotkeyColor.z * HOTKEY_HOVER_DIM_FACTOR, baseHotkeyColor.w);
 
 	ImGui::TextColored(hotkeyColor, "%s", hotkeyStr.c_str());
 
 	ImGui::SetWindowFontScale(1.0f);
 
-	// Handle click to start hotkey capture
-	if (clicked && !isCapturing) {
-		// Prevent starting capture if this click was caused by Enter key
-		// (keyboard nav), so a reflexive Enter press doesn't enter capture mode.
-		if (!ImGui::IsKeyPressed(ImGuiKey_Enter))
-			menu->settingToggleKey = true;
-	}
+	// A click that came from Enter (keyboard nav) is ignored, so a reflexive Enter press does not start capture
+	if (clicked && !isCapturing && !ImGui::IsKeyPressed(ImGuiKey_Enter))
+		menu->settingToggleKey = true;
 
-	// Show hotkey capture message when in capture mode
 	if (isCapturing) {
 		const char* pressKeyText = T("menu.setup.press_any_key", "Press any key to set as toggle key...");
 		centerText(pressKeyText);
@@ -874,19 +834,16 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 	}
 
 	// CS Editor hotkey status — updates live as user picks keys
-	{
-		auto& csEditorKey = menu->GetSettings().CSEditorToggleKey;
-		if (csEditorKey.empty()) {
-			const char* warnText = T("menu.setup.cs_editor_unbound", "CS Editor hotkey unbound - chosen key uses Shift");
-			centerText(warnText);
-			Util::Text::Warning("%s", warnText);
-		} else {
-			std::string infoStr = I18n::GetSingleton()->Format("menu.setup.cs_editor_will_be",
-				{ { "key", Util::Input::KeyIdToString(csEditorKey) } },
-				"CS Editor hotkey will be: {key}");
-			centerText(infoStr.c_str());
-			ImGui::TextDisabled("%s", infoStr.c_str());
-		}
+	const auto& csEditorKey = menu->GetSettings().CSEditorToggleKey;
+	if (csEditorKey.empty()) {
+		const char* warnText = T("menu.setup.cs_editor_unbound", "CS Editor hotkey unbound - chosen key uses Shift");
+		centerText(warnText);
+		Util::Text::Warning("%s", warnText);
+	} else {
+		const std::string infoStr = I18n::GetSingleton()->Format("menu.setup.cs_editor_will_be",
+			{ { "key", Util::Input::KeyIdToString(csEditorKey) } }, "CS Editor hotkey will be: {key}");
+		centerText(infoStr.c_str());
+		ImGui::TextDisabled("%s", infoStr.c_str());
 	}
 
 	ImGui::Spacing();
@@ -914,26 +871,18 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 
 bool HomePageRenderer::ShouldShowFirstTimeSetup()
 {
-	// Check if already completed this session
-	if (isFirstTimeSetupShown) {
+	if (isFirstTimeSetupShown)
 		return false;
-	}
-
-	// Check if first-time setup has been completed using the Menu settings
-	auto menu = Menu::GetSingleton();
-	return !menu->GetSettings().FirstTimeSetupCompleted;
+	return !Menu::GetSingleton()->GetSettings().FirstTimeSetupCompleted;
 }
 
 void HomePageRenderer::MarkFirstTimeSetupComplete()
 {
-	// Set the flag in the Menu settings
 	auto menu = Menu::GetSingleton();
 	menu->GetSettings().FirstTimeSetupCompleted = true;
-	// Ensure we are not capturing a hotkey when closing the dialog
-	menu->settingToggleKey = false;
+	menu->settingToggleKey = false;  // never leave a hotkey capture running behind the closed dialog
 
-	// Immediately save settings to ensure the flag is persisted
-	// This prevents the welcome screen from showing again even if user doesn't manually save
+	// Saved at once so the welcome screen cannot return when the user never saves by hand
 	globals::state->Save();
 
 	isFirstTimeSetupShown = true;

@@ -3,7 +3,6 @@
 #include "CSEditor/EditorWindow.h"
 #include "Feature.h"
 #include "FeatureIssues.h"
-#include "Features/CSEditor.h"
 #include "Features/Effects11.h"
 #include "Features/Effects11/Editor/Effects11Editor.h"
 #include "Features/ScreenshotFeature.h"
@@ -17,7 +16,6 @@
 #include "Menu/SettingsPageRenderer.h"
 #include "Menu/SettingsTabRenderer.h"
 #include "Menu/ThemeManager.h"
-#include "SaveManager.h"
 #include "State.h"
 #include "Util.h"
 #include "Utils/FileSystem.h"
@@ -354,12 +352,12 @@ namespace GoToIndex
 		constexpr int kWordStart = 200;
 		constexpr int kConsecutive = 15;
 		constexpr int kSubsequenceWordStart = 30;
+		constexpr int kLengthBonusCap = 80;  // Targets shorter than this earn the difference
 
-		const auto lower = [](char c) { return Fold(c); };
-		const int lengthBonus = std::max(0, 80 - static_cast<int>(target.size()));
+		const int lengthBonus = std::max(0, kLengthBonusCap - static_cast<int>(target.size()));
 
 		// Substring first: the strongest signal, and cheap
-		if (const auto hit = std::ranges::search(target, word, {}, lower, lower); !hit.empty()) {
+		if (const auto hit = std::ranges::search(target, word, {}, Fold, Fold); !hit.empty()) {
 			const size_t pos = static_cast<size_t>(hit.begin() - target.begin());
 			int score = kSubstring - static_cast<int>(pos) + lengthBonus;
 			if (pos == 0)
@@ -412,8 +410,7 @@ namespace GoToIndex
 		for (const auto word : SplitWords(query)) {
 			if (word.size() > title.size())
 				continue;
-			const auto lower = [](char c) { return Fold(c); };
-			if (const auto hit = std::ranges::search(title, word, {}, lower, lower); !hit.empty()) {
+			if (const auto hit = std::ranges::search(title, word, {}, Fold, Fold); !hit.empty()) {
 				const size_t begin = static_cast<size_t>(hit.begin() - title.begin());
 				for (size_t i = 0; i < word.size(); ++i)
 					positions.push_back(begin + i);

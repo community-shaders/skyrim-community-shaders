@@ -12,9 +12,7 @@
 #include "FeatureIssues.h"
 #include "Globals.h"
 #include "I18n/I18n.h"
-#include "IconsTabler.h"
 #include "Menu.h"
-#include "Menu/MenuIcons.h"
 #include "Menu/ThemeManager.h"
 #include "Util.h"
 

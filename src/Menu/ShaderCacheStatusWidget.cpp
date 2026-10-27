@@ -1,5 +1,7 @@
 #include "Menu/ShaderCacheStatusWidget.h"
 
+#include <algorithm>
+
 #include <imgui.h>
 
 #include "Globals.h"
@@ -36,12 +38,12 @@ namespace ShaderCacheStatusWidget
 			const char* label;
 		};
 		const Segment segments[] = {
-			{ cacheHits, IM_COL32(120, 120, 120, 255), T("menu.settings.shader_deduplicated", "Deduplicated") },
-			{ diskHits, IM_COL32(70, 130, 200, 255), T("menu.settings.shader_disk_cache", "Disk cache") },
-			{ fast, IM_COL32(80, 180, 80, 255), T("menu.settings.shader_fast", "Fast (<2s)") },
-			{ medium, IM_COL32(220, 180, 50, 255), T("menu.settings.shader_slow", "Slow (2-8s)") },
-			{ verySlow, IM_COL32(220, 60, 60, 255), T("menu.settings.shader_very_slow", "Very slow (>=8s)") },
-			{ failed, IM_COL32(160, 30, 30, 255), T("menu.settings.shader_failed", "Failed") },
+			{ cacheHits, ThemeManager::Constants::SHADER_BAR_DEDUPLICATED, T("menu.settings.shader_deduplicated", "Deduplicated") },
+			{ diskHits, ThemeManager::Constants::SHADER_BAR_DISK_CACHE, T("menu.settings.shader_disk_cache", "Disk cache") },
+			{ fast, ThemeManager::Constants::SHADER_BAR_FAST, T("menu.settings.shader_fast", "Fast (<2s)") },
+			{ medium, ThemeManager::Constants::SHADER_BAR_SLOW, T("menu.settings.shader_slow", "Slow (2-8s)") },
+			{ verySlow, ThemeManager::Constants::SHADER_BAR_VERY_SLOW, T("menu.settings.shader_very_slow", "Very slow (>=8s)") },
+			{ failed, ThemeManager::Constants::SHADER_BAR_FAILED, T("menu.settings.shader_failed", "Failed") },
 		};
 
 		const float barHeight = ThemeManager::Constants::SHADER_BREAKDOWN_BAR_HEIGHT * Util::GetUIScale();
@@ -49,22 +51,17 @@ namespace ShaderCacheStatusWidget
 		const ImVec2 cursor = ImGui::GetCursorScreenPos();
 		ImDrawList* drawList = ImGui::GetWindowDrawList();
 
-		// Background
-		drawList->AddRectFilled(cursor, ImVec2(cursor.x + barWidth, cursor.y + barHeight), IM_COL32(40, 40, 40, 255));
+		drawList->AddRectFilled(cursor, ImVec2(cursor.x + barWidth, cursor.y + barHeight), ThemeManager::Constants::SHADER_BAR_BACKGROUND);
 
-		// Draw segments
 		float x = cursor.x;
 		for (const auto& seg : segments) {
 			if (seg.count == 0)
 				continue;
-			float segWidth = (static_cast<float>(seg.count) / static_cast<float>(total)) * barWidth;
-			if (segWidth < 1.0f)
-				segWidth = 1.0f;
+			const float segWidth = std::max(1.0f, (static_cast<float>(seg.count) / static_cast<float>(total)) * barWidth);
 			drawList->AddRectFilled(ImVec2(x, cursor.y), ImVec2(x + segWidth, cursor.y + barHeight), seg.color);
 			x += segWidth;
 		}
 
-		// Reserve space and handle tooltip
 		ImGui::Dummy(ImVec2(barWidth, barHeight));
 		if (ImGui::IsItemHovered()) {
 			ImGui::BeginTooltip();
