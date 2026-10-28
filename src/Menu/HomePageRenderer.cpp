@@ -330,7 +330,7 @@ namespace
 		if (auto* texture = globals::menu->GetUIIcons().clearCache.texture) {
 			// Drawn like the header's nav buttons: eased theme highlight, then the icon
 			const float pad = style.FramePadding.y;
-			clicked = ImGui::InvisibleButton("##HomeClearCache", ImVec2(buttonSize, buttonSize));
+			clicked = ImGui::InvisibleButton("##HomeClearCache", ImVec2(buttonSize, buttonSize), ImGuiButtonFlags_EnableNav);
 			const ImRect rect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
 			Util::DrawAnimatedButtonHighlight(rect, ImGui::GetItemID(), ImGui::IsItemHovered(), ImGui::IsItemActive(), false);
 			ImGui::GetWindowDrawList()->AddImage(texture, ImVec2(rect.Min.x + pad, rect.Min.y + pad), ImVec2(rect.Max.x - pad, rect.Max.y - pad),

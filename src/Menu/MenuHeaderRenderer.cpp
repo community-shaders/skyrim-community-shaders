@@ -49,15 +49,12 @@ bool MenuHeaderRenderer::GlyphIconButton(const char* id, Icons::GlyphRef glyph, 
 	const ImVec2 buttonSize(glyphBox + pad * 2.0f, glyphBox + pad * 2.0f);
 
 	ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
-	// The button itself is invisible; its fill is the nav buttons' eased highlight
-	ImGui::PushStyleColor(ImGuiCol_Button, IM_COL32_BLACK_TRANS);
-	ImGui::PushStyleColor(ImGuiCol_ButtonHovered, IM_COL32_BLACK_TRANS);
-	ImGui::PushStyleColor(ImGuiCol_ButtonActive, IM_COL32_BLACK_TRANS);
+	// Clear at rest, except the current page's button, which keeps the hover fill
+	ImGui::PushStyleColor(ImGuiCol_Button, active ? ImGui::GetStyleColorVec4(ImGuiCol_ButtonHovered) : ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
 	const bool clicked = Util::Button(id, buttonSize);
-	ImGui::PopStyleColor(3);
+	ImGui::PopStyleColor();
 	ImGui::PopStyleVar();
 	const ImRect rect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
-	Util::DrawAnimatedButtonHighlight(rect, ImGui::GetItemID(), ImGui::IsItemHovered(), ImGui::IsItemActive(), active);
 
 	const ImVec4 tint = active ? Util::Colors::GetAccent() : BaseIconTint();
 	DrawIconGlyph(ImGui::GetWindowDrawList(), ImVec2(rect.Min.x + pad, rect.Min.y + pad), glyphBox, glyph, ImGui::GetColorU32(tint));
@@ -484,7 +481,7 @@ void MenuHeaderRenderer::RenderUndockedIcons(const std::vector<ActionIcon>& acti
 	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(ThemeManager::Constants::UNDOCKED_ICON_ITEM_SPACING, 0.0f));
 	for (size_t i = 0; i < actionIcons.size(); ++i) {
 		const auto& icon = actionIcons[i];
-		const bool clicked = ImGui::InvisibleButton(std::format("##ActionBtn{}", i).c_str(), buttonSize);
+		const bool clicked = ImGui::InvisibleButton(std::format("##ActionBtn{}", i).c_str(), buttonSize, ImGuiButtonFlags_EnableNav);
 		const ImRect rect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
 		ImDrawList* drawList = ImGui::GetWindowDrawList();
 		if (icon.unsaved)

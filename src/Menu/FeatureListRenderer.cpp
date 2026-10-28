@@ -848,7 +848,7 @@ void FeatureListRenderer::RenderLeftColumn(
 			const float glyphWidth = Icons::CalcGlyphSize(searchGlyph).x;
 			const ImVec2 fieldMin = ImGui::GetCursorScreenPos();
 			const float fieldWidth = ImGui::GetContentRegionAvail().x - fieldHeight - style.ItemSpacing.x;
-			if (ImGui::InvisibleButton("##FeatureSearch", ImVec2(fieldWidth, fieldHeight)))
+			if (ImGui::InvisibleButton("##FeatureSearch", ImVec2(fieldWidth, fieldHeight), ImGuiButtonFlags_EnableNav))
 				GoToPalette::Open(GoToPalette::Scope::Features);
 			if (ImGui::IsItemHovered())
 				ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);

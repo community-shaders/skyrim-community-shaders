@@ -123,10 +123,10 @@ namespace
 	bool DrawBarIconButton(const char* id, Icons::GlyphRef glyph, bool enabled, const ImVec4& enabledColor, const ImVec4& disabledColor,
 		const ImVec2& size)
 	{
-		ImGui::InvisibleButton(id, size);
+		const bool pressed = ImGui::InvisibleButton(id, size, ImGuiButtonFlags_EnableNav);
 		const ImRect bb(ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
 		Util::DrawAnimatedButtonHighlight(bb, ImGui::GetItemID(), enabled && ImGui::IsItemHovered(), enabled && ImGui::IsItemActive(), false);
-		const bool clicked = enabled && ImGui::IsItemClicked();
+		const bool clicked = enabled && pressed;
 		ImVec4 color = enabled ? enabledColor : disabledColor;
 		if (!enabled)
 			color.w = ThemeManager::Constants::CSE_DISABLED_ICON_ALPHA;
