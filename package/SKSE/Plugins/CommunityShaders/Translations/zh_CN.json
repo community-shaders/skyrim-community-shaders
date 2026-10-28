@@ -3414,7 +3414,7 @@
     "menu.features.presets": "预设",
     "menu.features.presets_hint": "控制、更改和管理视觉预设，打造你的 CS 体验",
     "menu.features.profiling": "性能分析",
-    "menu.features.profiling_hint": "每个功能每帧的开销",
+    "menu.features.profiling_hint": "性能叠加层，以及每个功能每帧的开销",
     "menu.features.restore_defaults": "恢复默认值",
     "menu.features.restore_defaults_tooltip": "恢复此功能的默认设置",
     "menu.features.restore_nothing": "无需恢复：此功能已与默认值及基础预设一致",
