@@ -255,14 +255,14 @@ namespace Util
 		return changed;
 	}
 
-	/** @brief Text HelpMarker draws, exposed so callers can measure it. */
-	inline constexpr const char* kHelpMarkerLabel = "(?)";
+	/** @brief Width HelpMarker takes, so callers can right-align it. */
+	float HelpMarkerWidth();
 
 	/**
-	 * Draws a "(?)" help marker with a tooltip on hover.
-	 * @param a_desc Tooltip text to show
+	 * Draws the help icon (the footer's help glyph) with a tooltip on hover.
+	 * @param a_desc Tooltip text to show; null draws only the icon, for a caller that adds its own tooltip
 	 */
-	void HelpMarker(const char* a_desc);
+	void HelpMarker(const char* a_desc = nullptr);
 
 	/**
 	 * @brief Compact segmented control: one rounded track, label-sized segments, the selection in the accent colour.
@@ -299,8 +299,8 @@ namespace Util
 	 * @param a_min Top-left of the badge in screen space.
 	 * @param a_locked True draws a lock in SuccessColor; false draws unlock in Error.
 	 * @param a_drawList Optional; defaults to the current window draw list.
-	 * @param a_hovered Draws the transparent-icon-button hover overlay under the badge.
-	 * @param a_held Draws the pressed overlay instead.
+	 * @param a_hovered Eases in the shared button highlight (and hand cursor) under the badge; draw right after the badge's item.
+	 * @param a_held Eases in the pressed highlight instead.
 	 */
 	void DrawLockStatusBadge(ImVec2 a_min, bool a_locked, ImDrawList* a_drawList = nullptr, bool a_hovered = false, bool a_held = false);
 
@@ -537,6 +537,12 @@ namespace Util
 	 */
 	StyledButtonWrapper StatusTextButtonStyle(const ImVec4& color);
 
+	/**
+	 * Hover and press in a state colour (unsaved, locked, destructive), keeping the button's resting colour.
+	 * When `apply` is false it keeps the current colours, so a caller can scope it unconditionally.
+	 */
+	StyledButtonWrapper StateHoverButtonStyle(const ImVec4& color, bool apply = true);
+
 	/** Style for confirmatory or positive actions such as Apply, Confirm, or Accept. */
 	StyledButtonWrapper SuccessButtonStyle();
 
@@ -578,14 +584,6 @@ namespace Util
 	bool DrawRoundedButtonHighlight(const ImVec2& min, const ImVec2& max, bool hovered, bool active, ImDrawList* drawList = nullptr);
 	bool DrawRoundedButtonHighlight(const ImVec2& min, const ImVec2& max, bool hovered, bool active, float rounding, ImDrawList* drawList);
 
-	/**
-	 * @brief DrawRoundedButtonHighlight with the fill easing in and out (Util::Anim) instead of switching on and off.
-	 * For buttons hit-tested by hand, where there is no ImGui item whose id could key the animation.
-	 * @param id Stable key for this button (e.g. ImGui::GetID("##Home")).
-	 * @param held True while the button is pressed; draws the stronger fill.
-	 * @param current Keeps the hover fill, for the button of the current page.
-	 * @return True when anything was drawn.
-	 */
 	/**
 	 * @brief RAII card on the SectionCard surface for grouping related settings: an auto-height child with an icon and
 	 * a heading. Content goes between construction and destruction; a gap follows the card.
@@ -679,6 +677,15 @@ namespace Util
 	 */
 	OptionCardClick OptionCard(const char* id, const OptionCardContent& content, bool selected, const ImVec2& size = ImVec2(0, 0));
 
+	/**
+	 * @brief DrawRoundedButtonHighlight with the fill easing in and out (Util::Anim) instead of switching on and off.
+	 * For buttons hit-tested by hand, where there is no ImGui item whose id could key the animation. Shows the hand
+	 * cursor while hovered.
+	 * @param id Stable key for this button (e.g. ImGui::GetID("##Home")).
+	 * @param held True while the button is pressed; draws the stronger fill.
+	 * @param current Keeps the hover fill, for the button of the current page.
+	 * @return True when anything was drawn.
+	 */
 	bool DrawAnimatedButtonHighlight(const ImRect& rect, ImGuiID id, bool hovered, bool held, bool current, ImDrawList* drawList = nullptr);
 
 	/** @brief Draws a circle icon, filled or outlined, on the window draw list. */

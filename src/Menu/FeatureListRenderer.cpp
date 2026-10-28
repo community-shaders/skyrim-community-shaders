@@ -25,6 +25,7 @@
 #include "I18n/I18n.h"
 #include "IconsTabler.h"
 #include "Menu.h"
+#include "Menu/GoToPalette.h"
 #include "Menu/HomePageRenderer.h"
 #include "Menu/IconLoader.h"
 #include "Menu/Icons/helpers/IconFonts.h"
@@ -187,6 +188,29 @@ namespace
 		return clicked;
 	}
 
+	/** @brief Glyph shown on the sort button for the given feature list sort mode. */
+	Icons::GlyphRef GetSortModeIcon(Menu::FeatureSortMode mode)
+	{
+		switch (mode) {
+		case Menu::FeatureSortMode::Alphabetical:
+			return Icons::TI(ICON_TI_SORT_ASCENDING_LETTERS);
+		case Menu::FeatureSortMode::Category:
+		default:  // unknown values from a hand-edited config fall back to categories
+			return Icons::TI(ICON_TI_CATEGORY);
+		}
+	}
+
+	/** @brief The feature list's sort modes as menu items, for the list's sort popup and the Go to palette's. */
+	void DrawSortModeItems()
+	{
+		using enum Menu::FeatureSortMode;
+		auto& sort = globals::menu->GetSettings().FeatureListSort;
+		if (ImGui::MenuItem(T("menu.features.sort_by_category", "By Category"), nullptr, sort == Category))
+			sort = Category;
+		if (ImGui::MenuItem(T("menu.features.sort_alphabetically", "Alphabetical"), nullptr, sort == Alphabetical))
+			sort = Alphabetical;
+	}
+
 	/**
 	 * @brief Draws one pill of the top page switcher: a centred accent icon and label. The selected pill gets an eased
 	 * accent tint and outline, hover a soft fill.
@@ -212,7 +236,7 @@ namespace
 			ImGui::PushStyleColor(ImGuiCol_Header, IM_COL32_BLACK_TRANS);
 			ImGui::PushStyleColor(ImGuiCol_HeaderHovered, IM_COL32_BLACK_TRANS);
 			ImGui::PushStyleColor(ImGuiCol_HeaderActive, IM_COL32_BLACK_TRANS);
-			clicked = ImGui::Selectable("##NavRow", false, ImGuiSelectableFlags_None, ImVec2(rowWidth, height));
+			clicked = ImGui::Selectable("##NavRow", false, ImGuiSelectableFlags_NoPadWithHalfSpacing, ImVec2(rowWidth, height));
 			ImGui::PopStyleColor(3);
 		}
 		auto* drawList = ImGui::GetWindowDrawList();
@@ -816,6 +840,44 @@ void FeatureListRenderer::RenderLeftColumn(
 		}
 		ImGui::EndChild();
 	} else {
+		const float fieldHeight = ImGui::GetFrameHeight();
+		{
+			// Looks like a search field but is a button: the Go to palette's Features scope does the searching
+			const ImGuiStyle& style = ImGui::GetStyle();
+			const Icons::GlyphRef searchGlyph = Icons::TI(MenuIcons::kSearch);
+			const float glyphWidth = Icons::CalcGlyphSize(searchGlyph).x;
+			const ImVec2 fieldMin = ImGui::GetCursorScreenPos();
+			const float fieldWidth = ImGui::GetContentRegionAvail().x - fieldHeight - style.ItemSpacing.x;
+			if (ImGui::InvisibleButton("##FeatureSearch", ImVec2(fieldWidth, fieldHeight)))
+				GoToPalette::Open(GoToPalette::Scope::Features);
+			if (ImGui::IsItemHovered())
+				ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+			ImDrawList* drawList = ImGui::GetWindowDrawList();
+			ImVec4 iconColor = ImGui::GetStyleColorVec4(ImGuiCol_Text);
+			iconColor.w *= ThemeManager::Constants::SEARCH_ICON_ALPHA;
+			const float glyphX = fieldMin.x + style.FramePadding.x;
+			Icons::DrawCenteredGlyph(drawList, ImVec2(glyphX, fieldMin.y), ImVec2(glyphWidth, fieldHeight), searchGlyph, ImGui::GetColorU32(iconColor));
+			drawList->PushClipRect(fieldMin, ImVec2(fieldMin.x + fieldWidth, fieldMin.y + fieldHeight), true);
+			drawList->AddText(ImVec2(glyphX + glyphWidth + style.ItemSpacing.x, Util::CenterTextTopY(fieldMin.y, fieldHeight)),
+				ImGui::GetColorU32(ImGuiCol_TextDisabled), T("ui.search_features", "Search Features..."));
+			drawList->PopClipRect();
+		}
+		ImGui::SameLine();
+
+		{
+			auto style = Util::TransparentIconButtonStyle();
+			const auto sortIcon = GetSortModeIcon(globals::menu->GetSettings().FeatureListSort);
+			if (Icons::Button("###FeatureSort", sortIcon, ImVec2(fieldHeight, fieldHeight)))
+				ImGui::OpenPopup("##FeatureSortPopup");
+		}
+
+		Util::HoverTip(T("menu.features.sort_tooltip", "Sort features"));
+
+		if (ImGui::BeginPopup("##FeatureSortPopup")) {
+			DrawSortModeItems();
+			ImGui::EndPopup();
+		}
+
 		auto& filter = globals::menu->GetSettings().FeatureListFilter;
 		if (ImGui::BeginChild("##FeatureListScroll", ImVec2(0.0f, -pageButtonsHeight))) {
 			// The first category icon reaches above its text line, which the child's top edge clipped
@@ -861,13 +923,8 @@ void FeatureListRenderer::RenderSortPopup(const char* popupId)
 	const FilterCounts& counts = g_filterCounts;
 	auto& menuSettings = globals::menu->GetSettings();
 
-	ImGui::SeparatorText(T("menu.features.sort_section", "Sort"));
-	using enum Menu::FeatureSortMode;
-	auto& sort = menuSettings.FeatureListSort;
-	if (ImGui::MenuItem(T("menu.features.sort_by_category", "By Category"), nullptr, sort == Category))
-		sort = Category;
-	if (ImGui::MenuItem(T("menu.features.sort_alphabetically", "Alphabetical"), nullptr, sort == Alphabetical))
-		sort = Alphabetical;
+	ImGui::SeparatorText(T("menu.settings.feature_list_order", "Feature List Order"));
+	DrawSortModeItems();
 
 	ImGui::SeparatorText(T("menu.features.filter_section", "Filter"));
 	auto& filter = menuSettings.FeatureListFilter;
@@ -1085,17 +1142,20 @@ void FeatureListRenderer::ListMenuVisitor::operator()(Feature* feat)
 	const float iconColumn = ImGui::GetTextLineHeight() * ThemeManager::Constants::FEATURE_ROW_CATEGORY_ICON_SCALE;
 	const float spaceWidth = ImGui::CalcTextSize(" ").x;
 	const std::string iconPad = showCategoryIcon ? std::string(static_cast<size_t>(std::ceil((iconColumn + spaceWidth) / spaceWidth)), ' ') : std::string();
+	// The row's content clears the selected row's accent bar; the highlight still spans the whole row
+	const float edgeInset = std::max(ImGui::GetStyle().FramePadding.x, ThemeManager::Constants::ANIM_SELECTED_BAR_WIDTH * Util::GetUIScale());
+	ImGui::SetCursorPosX(ImGui::GetCursorPosX() + edgeInset);
 	ImGui::PushStyleColor(ImGuiCol_Text, textColor);
-	if (Util::Selectable(std::format(" {}{} ###Row", iconPad, feat->GetDisplayName()).c_str(), selectedMenuRef == listId, ImGuiSelectableFlags_SpanAllColumns))
+	if (Util::Selectable(std::format("{}{} ###Row", iconPad, feat->GetDisplayName()).c_str(), selectedMenuRef == listId, ImGuiSelectableFlags_SpanAllColumns))
 		selectedMenuRef = listId;
 	ImGui::PopStyleColor();
 	if (showCategoryIcon) {
 		if (auto* texture = Util::GetCategoryIcon(std::string(feat->GetCategory()).c_str())) {
 			const ImVec2 itemMin = ImGui::GetItemRectMin();
 			const float pad = (ImGui::GetItemRectSize().y - iconColumn) * 0.5f;
-			ImGui::GetWindowDrawList()->AddImage(texture, ImVec2(itemMin.x + spaceWidth, itemMin.y + pad),
-				ImVec2(itemMin.x + spaceWidth + iconColumn, itemMin.y + pad + iconColumn), ImVec2(0, 0), ImVec2(1, 1),
-				IM_COL32(255, 255, 255, static_cast<int>(255.0f * ThemeManager::Constants::FEATURE_ROW_CATEGORY_ICON_ALPHA)));
+			ImGui::GetWindowDrawList()->AddImage(texture, ImVec2(itemMin.x + edgeInset, itemMin.y + pad),
+				ImVec2(itemMin.x + edgeInset + iconColumn, itemMin.y + pad + iconColumn), ImVec2(0, 0), ImVec2(1, 1),
+				ImGui::GetColorU32(IM_COL32_WHITE, ThemeManager::Constants::FEATURE_ROW_CATEGORY_ICON_ALPHA));
 		}
 	}
 	if (g_scrollToSelection && selectedMenuRef == listId && !ImGui::IsItemVisible())
@@ -1104,31 +1164,43 @@ void FeatureListRenderer::ListMenuVisitor::operator()(Feature* feat)
 	const ImVec2 rowMax = ImGui::GetItemRectMax();
 	RenderRowContextMenu(feat);
 
-	// Favorites are pinned at the top of the list, marked by a pin attached to the name (its label ends in a space)
-	if (isLoaded && globals::state->IsFeatureFavorite(featureName)) {
-		ImGui::SameLine(0.0f, 0.0f);
-		const Icons::GlyphRef pin = Icons::TI(ICON_TI_PIN);
-		const float lineHeight = ImGui::GetTextLineHeight();
-		const ImVec2 origin = ImGui::GetCursorScreenPos();
-		Icons::FontGuard pinFont(pin, ThemeManager::Constants::FEATURE_ROW_PIN_SCALE);
-		const ImVec2 pinBox(ImGui::CalcTextSize(pin.utf8).x, lineHeight);
-		ImGui::Dummy(pinBox);
-		ImGui::GetWindowDrawList()->AddText(Icons::GetCenteredGlyphPos(origin, pinBox, pin.utf8),
-			ImGui::GetColorU32(Util::Colors::GetAccent()), pin.utf8);
-	}
-
-	// The stage badge sits behind the name, regardless of loaded state
+	// The stage badge sits right after the name, regardless of loaded state; the indicator icons follow it
 	if (const auto stage = feat->GetReleaseStage(); stage != Feature::ReleaseStage::Release) {
 		MenuFonts::FontRoleGuard badgeFont(Menu::FontRole::Subtext);
 		BrowserUI::InlineBadge(stage == Feature::ReleaseStage::Alpha ? T("menu.features.badge_alpha", "Alpha") : T("menu.features.badge_beta", "Beta"),
 			Feature::GetReleaseStageColor(stage), rowMax.y - rowMin.y);
 	}
 
+	// Indicator icons stack after the name and badge: a standard gap before the first, a space between the rest
+	const float lineHeight = ImGui::GetTextLineHeight();
+	bool firstIcon = true;
+	const auto nextIconBox = [&](float width) {
+		ImGui::SameLine(0.0f, firstIcon ? -1.0f : spaceWidth);
+		firstIcon = false;
+		const ImVec2 origin = ImGui::GetCursorScreenPos();
+		ImGui::Dummy(ImVec2(width, lineHeight));
+		return origin;
+	};
+	const auto indicatorDot = [&](ImU32 color, bool filled) {
+		const float radius = lineHeight * ThemeManager::Constants::SCENE_INDICATOR_RADIUS_RATIO;
+		const ImVec2 origin = nextIconBox(radius * 2.0f);
+		Util::DrawIconCircle(ImVec2(origin.x + radius, origin.y + lineHeight * 0.5f), radius, color, filled);
+	};
+
+	// Favorites are pinned at the top of the list, marked by a pin
+	if (isLoaded && globals::state->IsFeatureFavorite(featureName)) {
+		const Icons::GlyphRef pin = Icons::TI(ICON_TI_PIN);
+		Icons::FontGuard pinFont(pin, ThemeManager::Constants::FEATURE_ROW_PIN_SCALE);
+		const ImVec2 pinBox(ImGui::CalcTextSize(pin.utf8).x, lineHeight);
+		const ImVec2 origin = nextIconBox(pinBox.x);
+		ImGui::GetWindowDrawList()->AddText(Icons::GetCenteredGlyphPos(origin, pinBox, pin.utf8),
+			ImGui::GetColorU32(Util::Colors::GetAccent()), pin.utf8);
+	}
+
 	// A feature only authored for other scenes still gets a hollow dot, so its settings stay discoverable.
 	if (auto* sceneManager = globals::sceneSettingsManager; sceneManager->HasAnySceneEntriesForFeature(featureName)) {
 		const bool applying = sceneManager->IsFeatureOverridingBase(featureName);
-		ImGui::SameLine();
-		Util::DrawInlineIndicatorDot(ImGui::GetColorU32(Util::Colors::GetInfo()), applying);
+		indicatorDot(ImGui::GetColorU32(Util::Colors::GetInfo()), applying);
 		Util::HoverTip(applying ?
 						   T("menu.features.scene_indicator_overriding",
 							   "Scene Manager is overriding settings here. Blue settings show its values.") :
@@ -1136,8 +1208,7 @@ void FeatureListRenderer::ListMenuVisitor::operator()(Feature* feat)
 							   "Has Scene Manager settings for other times, weathers or locations."));
 
 		if (sceneManager->HasSketches(featureName)) {
-			ImGui::SameLine();
-			Util::DrawInlineIndicatorDot(ImGui::GetColorU32(Util::Colors::GetSuccess()), true);
+			indicatorDot(ImGui::GetColorU32(Util::Colors::GetSuccess()), true);
 			Util::HoverTip(T("menu.features.scene_indicator_sketched",
 				"Has settings sketched over the Scene Manager's values. They revert once you leave this feature."));
 		}
@@ -1151,36 +1222,39 @@ void FeatureListRenderer::ListMenuVisitor::RenderRowContextMenu(Feature* feat) c
 	if (!ImGui::BeginPopupContextItem("##RowMenu"))
 		return;
 
-	MenuFonts::FontRoleGuard menuFont(Menu::FontRole::Body);
-	auto* state = globals::state;
-	const auto featureName = feat->GetShortName();
-	const bool isLoaded = feat->loaded;
-	const bool isDisabled = state->IsFeatureDisabled(featureName);
+	{
+		// Scoped so the font pops before EndPopup closes the popup
+		MenuFonts::FontRoleGuard menuFont(Menu::FontRole::Body);
+		auto* state = globals::state;
+		const auto featureName = feat->GetShortName();
+		const bool isLoaded = feat->loaded;
+		const bool isDisabled = state->IsFeatureDisabled(featureName);
 
-	const bool isFavorite = state->IsFeatureFavorite(featureName);
-	if (ImGui::MenuItem(isFavorite ? T("menu.features.unpin", "Unpin") : T("menu.features.pin", "Pin to Top"), nullptr, false, isLoaded))
-		ToggleFavorite(feat);
-	if (!isLoaded)
-		Util::AddTooltip(T("menu.features.pin_needs_loaded", "Only loaded features can be pinned"), Util::kTooltipWhenDisabled);
+		const bool isFavorite = state->IsFeatureFavorite(featureName);
+		if (ImGui::MenuItem(isFavorite ? T("menu.features.unpin", "Unpin") : T("menu.features.pin", "Pin to Top"), nullptr, false, isLoaded))
+			ToggleFavorite(feat);
+		if (!isLoaded)
+			Util::AddTooltip(T("menu.features.pin_needs_loaded", "Only loaded features can be pinned"), Util::kTooltipWhenDisabled);
 
-	// The same condition as the feature page's Restore Defaults, plus something to restore
-	const bool canRestore = isLoaded && !isDisabled && feat->UsesMainSettings();
-	if (ImGui::MenuItem(T("menu.features.restore_defaults", "Restore Defaults"), nullptr, false, canRestore && state->HasUserEdits(feat))) {
-		RestoreFeatureDefaults(hooks, feat);
+		// The same condition as the feature page's Restore Defaults, plus something to restore
+		const bool canRestore = isLoaded && !isDisabled && feat->UsesMainSettings();
+		if (ImGui::MenuItem(T("menu.features.restore_defaults", "Restore Defaults"), nullptr, false, canRestore && state->HasUserEdits(feat))) {
+			RestoreFeatureDefaults(hooks, feat);
+		}
+		Util::AddTooltip(canRestore ? T("menu.features.restore_defaults_tooltip", "Restore defaults: clears your edits to this feature, back to what defaults and your Baseline presets set") :
+									  T("menu.features.restore_unavailable", "Only loaded features that keep their settings in the user config can be restored"),
+			Util::kTooltipWhenDisabled);
+
+		if (ImGui::MenuItem(T("menu.features.load_at_boot", "Load at Boot"), nullptr, !isDisabled)) {
+			const bool enabled = feat->ToggleAtBootSetting();
+			logger::info("{}: {} at boot.", featureName, enabled ? "Enabled" : "Disabled");
+		}
+		Util::AddTooltip(T("menu.features.load_at_boot_tooltip", "Whether the game loads this feature at startup. Takes effect after a restart."));
+
+		ImGui::Separator();
+		if (ImGui::MenuItem(T("menu.features.copy_name", "Copy Name")))
+			ImGui::SetClipboardText(feat->GetDisplayName().c_str());
 	}
-	Util::AddTooltip(canRestore ? T("menu.features.restore_defaults_tooltip", "Restore defaults: clears your edits to this feature, back to what defaults and your Baseline presets set") :
-								  T("menu.features.restore_unavailable", "Only loaded features that keep their settings in the user config can be restored"),
-		Util::kTooltipWhenDisabled);
-
-	if (ImGui::MenuItem(T("menu.features.load_at_boot", "Load at Boot"), nullptr, !isDisabled)) {
-		const bool enabled = feat->ToggleAtBootSetting();
-		logger::info("{}: {} at boot.", featureName, enabled ? "Enabled" : "Disabled");
-	}
-	Util::AddTooltip(T("menu.features.load_at_boot_tooltip", "Whether the game loads this feature at startup. Takes effect after a restart."));
-
-	ImGui::Separator();
-	if (ImGui::MenuItem(T("menu.features.copy_name", "Copy Name")))
-		ImGui::SetClipboardText(feat->GetDisplayName().c_str());
 	ImGui::EndPopup();
 }
 

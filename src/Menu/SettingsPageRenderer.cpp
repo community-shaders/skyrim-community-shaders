@@ -184,9 +184,12 @@ namespace
 	{
 		ImGui::Spacing();
 
-		// Rows fill half an item spacing beyond their text, so the list is indented past that plus a margin
-		const float navInset = ImGui::GetStyle().ItemSpacing.x * 0.5f + ThemeManager::Constants::LEFT_PANE_EDGE_INSET * Util::GetUIScale();
-		ImGui::Indent(navInset);
+		// Same insets as the feature list: rows clear the selected row's accent bar and their highlight spans the pane;
+		// group labels sit where its category headers do
+		const ImGuiStyle& style = ImGui::GetStyle();
+		const float barWidth = ThemeManager::Constants::ANIM_SELECTED_BAR_WIDTH * Util::GetUIScale();
+		const float rowInset = std::max(style.FramePadding.x, barWidth);
+		const float labelInset = std::max(style.ItemInnerSpacing.x, barWidth);
 
 		const float groupSpacing = ThemeManager::Constants::SETTINGS_NAV_GROUP_SPACING * Util::GetUIScale();
 		const Group* currentGroup = nullptr;
@@ -195,16 +198,16 @@ namespace
 				if (currentGroup)
 					ImGui::Dummy(ImVec2(0.0f, groupSpacing));
 				currentGroup = &section.group;
+				ImGui::SetCursorPosX(ImGui::GetCursorPosX() + labelInset);
 				BrowserUI::SectionLabel(GetGroupLabel(section.group));
 			}
 
 			ImGui::PushID(section.id.data(), section.id.data() + section.id.size());
-			if (Util::Selectable(GetSectionTitle(section.id), state.section == section.id))
+			ImGui::SetCursorPosX(ImGui::GetCursorPosX() + rowInset);
+			if (Util::Selectable(GetSectionTitle(section.id), state.section == section.id, ImGuiSelectableFlags_SpanAllColumns))
 				state.section = std::string(section.id);
 			ImGui::PopID();
 		}
-
-		ImGui::Unindent(navInset);
 	}
 
 	void RenderContent(PageState& state, const Section& section)

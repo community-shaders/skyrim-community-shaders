@@ -4,7 +4,6 @@
 #include "Feature.h"
 #include "Menu/FontAtlasState.h"
 #include "Menu/IconLoader.h"
-#include "Menu/MenuHeaderRenderer.h"
 #include "Menu/MenuShortcuts.h"
 #include "Menu/ThemeManager.h"
 #include "Utils/Input.h"

@@ -507,7 +507,8 @@ namespace GoToPalette
 			const ImVec2 pos = ImGui::GetCursorScreenPos();
 			const float width = ImGui::GetContentRegionAvail().x;
 			const float gap = Constants::PALETTE_GAP * scale;
-			drawList->AddLine(ImVec2(pos.x, pos.y + gap * 0.5f), ImVec2(pos.x + width, pos.y + gap * 0.5f), ImGui::GetColorU32(ImGuiCol_Separator));
+			const float lineY = pos.y + gap * 0.5f;
+			drawList->AddLine(ImVec2(pos.x, lineY), ImVec2(pos.x + width, lineY), ImGui::GetColorU32(ImGuiCol_Separator));
 
 			struct Hint
 			{
@@ -520,7 +521,9 @@ namespace GoToPalette
 				{ T("menu.palette.key_enter", "Enter"), T("menu.palette.hint_open", "open") },
 				{ T("menu.palette.key_esc", "Esc"), T("menu.palette.hint_close", "close") },
 			} };
-			const float keyY = pos.y + gap;
+			// Centred between the line and the popup's bottom edge, which lies past the window's bottom padding
+			const float panelBottom = ImGui::GetWindowPos().y + ImGui::GetWindowSize().y;
+			const float keyY = lineY + (panelBottom - lineY - KeycapHeight()) * 0.5f;
 			const float textY = Util::CenterTextTopY(keyY, KeycapHeight());
 			float x = pos.x;
 			for (const auto& hint : hints) {

@@ -249,7 +249,7 @@ namespace Util::Surface
 			else if (s.useBorderColor)
 				color = ImGui::GetColorU32(ImVec4(s.borderColor.x, s.borderColor.y, s.borderColor.z, s.borderColor.w * options.alpha));
 			else
-				color = IM_COL32(255, 255, 255, static_cast<int>(255.0f * s.borderAlpha * options.alpha));
+				color = ImGui::GetColorU32(ImVec4(1.0f, 1.0f, 1.0f, s.borderAlpha * options.alpha));
 			drawList->AddRect(min, max, color, rounding);
 		}
 		drawList->PopClipRect();

@@ -10,6 +10,7 @@
 #include "ShaderCache.h"
 #include "State.h"
 #include "Util.h"
+#include "Utils/UI.h"
 
 #define I18N_KEY_PREFIX "feature.true_pbr."
 
@@ -236,7 +237,7 @@ void TruePBR::DrawSettings()
 				}
 			}
 			if (selectedPbrTextureSet != nullptr) {
-				if (ImGui::Button(T(TKEY("save"), "Save"))) {
+				if (Util::Button(T(TKEY("save"), "Save"))) {
 					PNState::SavePBRRecordConfig("Data\\PBRTextureSets", selectedPbrTextureSetName, *selectedPbrTextureSet);
 				}
 			}
@@ -253,7 +254,7 @@ void TruePBR::DrawSettings()
 			bool wasEdited = false;
 			if (ImGui::TreeNodeEx(T(TKEY("base_color_scale"), "Base Color Scale"), ImGuiTreeNodeFlags_DefaultOpen)) {
 				auto resetBaseColorScaleLabel = std::string(T(TKEY("reset_to_1_0"), "Reset to 1.0")) + "##BaseColorScale";
-				if (ImGui::Button(resetBaseColorScaleLabel.c_str())) {
+				if (Util::Button(resetBaseColorScaleLabel.c_str())) {
 					selectedPbrMaterialObject->baseColorScale = { 1.f, 1.f, 1.f };
 					wasEdited = true;
 				}
@@ -343,7 +344,7 @@ void TruePBR::DrawSettings()
 				}
 			}
 			if (selectedPbrMaterialObject != nullptr) {
-				if (ImGui::Button(T(TKEY("material_save"), "Save"))) {
+				if (Util::Button(T(TKEY("material_save"), "Save"))) {
 					PNState::SavePBRRecordConfig("Data\\PBRMaterialObjects", selectedPbrMaterialObjectName, *selectedPbrMaterialObject);
 				}
 			}
