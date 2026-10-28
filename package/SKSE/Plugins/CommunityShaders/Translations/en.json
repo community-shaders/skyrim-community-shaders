@@ -2431,6 +2431,7 @@
     "feature.remote_control.nvperf.nesting": "Nesting levels",
     "feature.remote_control.nvperf.nesting_tooltip": "Selected ranges nested this deep are measured too. Each level multiplies the passes.",
     "feature.remote_control.nvperf.no_metrics": "Select at least one metric.",
+    "feature.remote_control.nvperf.not_built": "This build was compiled without Nsight Perf: %s.",
     "feature.remote_control.nvperf.ranges": "Ranges",
     "feature.remote_control.nvperf.ranges_hint": "every outermost range",
     "feature.remote_control.nvperf.ranges_tooltip": "Comma-separated perf event names; a trailing * matches every name with that prefix.",
