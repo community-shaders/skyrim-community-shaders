@@ -1157,7 +1157,10 @@ namespace NvPerf
 
 	namespace
 	{
-		constexpr const char* kNotBuilt = "built without Nsight Perf (configure with -DNVPERF_SUPPORT=ON)";
+		std::string NotBuilt()
+		{
+			return std::format("built without Nsight Perf ({})", Host::BuildHint());
+		}
 	}
 
 	bool Probe() { return false; }
@@ -1165,13 +1168,13 @@ namespace NvPerf
 	DeviceInfo GetDeviceInfo()
 	{
 		DeviceInfo info;
-		info.error = kNotBuilt;
+		info.error = NotBuilt();
 		return info;
 	}
 
 	bool RequestCapture(const CaptureConfiguration&, std::uint64_t&, std::string& a_error)
 	{
-		a_error = kNotBuilt;
+		a_error = NotBuilt();
 		return false;
 	}
 

@@ -2498,7 +2498,7 @@
     "feature.remote_control.nvperf.nesting": "嵌套层数",
     "feature.remote_control.nvperf.nesting_tooltip": "同时测量所选范围中嵌套至此深度的范围。每增加一层，分析轮数会成倍增加。",
     "feature.remote_control.nvperf.no_metrics": "请至少选择一个指标。",
-    "feature.remote_control.nvperf.not_built": "此版本编译时未包含 Nsight Perf。请使用 -DNVPERF_SUPPORT=ON 和 NVPERF_SDK_ROOT 配置。",
+    "feature.remote_control.nvperf.not_built": "此版本编译时未包含 Nsight Perf：%s。",
     "feature.remote_control.nvperf.ranges": "范围",
     "feature.remote_control.nvperf.ranges_hint": "所有最外层范围",
     "feature.remote_control.nvperf.ranges_tooltip": "以英文逗号分隔的性能事件名称；末尾的 * 匹配所有以该前缀开头的名称。",

@@ -325,7 +325,7 @@ public:
 	 */
 	[[nodiscard]] static uint32_t GetRuntimePixelBits(const RE::BSShader& a_shader);
 
-	/** @brief Whether perf events reach a consumer: an attached capture tool, Tracy, or an Nsight Perf pass. */
+	/** @brief Whether perf events reach a consumer: an attached capture tool, a connected Tracy client, or an Nsight Perf pass. */
 	[[nodiscard]] bool PerfEventsConsumed() const;
 	/** @brief Whether Frame Annotations' per-draw events are worth building: the setting is on and consumed. */
 	[[nodiscard]] bool AnnotateDraws() const { return frameAnnotations && PerfEventsConsumed(); }

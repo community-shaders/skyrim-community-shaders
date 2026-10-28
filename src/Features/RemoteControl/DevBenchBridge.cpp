@@ -373,6 +373,7 @@ namespace
 				auto* profiler = globals::profiler;
 				if (!profiler)
 					return json{ { "error", "profiler unavailable" } };
+				profiler->KeepActive(3600);
 				json passes = json::array();
 				for (const auto& r : profiler->GetStatistics()) {
 					if (!r.valid)

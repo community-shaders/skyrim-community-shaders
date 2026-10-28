@@ -91,7 +91,7 @@ void Profiler::Release()
 
 void Profiler::BeginFrame()
 {
-	if (!initialized || !context || frameActive || frameSkipped)
+	if (!initialized || !context || frameActive || frameSkipped || !IsActive())
 		return;
 
 	CollectResults();
@@ -105,27 +105,28 @@ void Profiler::BeginFrame()
 	auto& frame = frames[writeFrame];
 	frame.activeCount = 0;
 	frameActive = true;
+	passOpen = false;
 	context->Begin(frame.disjoint.get());
 }
 
-void Profiler::BeginPass(const std::string& name)
+void Profiler::BeginPass(std::string_view name)
 {
 	if (!initialized || !context)
 		return;
 
 	if (!frameActive)
 		BeginFrame();
-	if (!frameActive)
-		return;
 
-	auto& frame = frames[writeFrame];
-	if (frame.activeCount >= kMaxTimers)
-		return;
-
-	auto& timer = frame.timers[frame.activeCount];
-	timer.name = name;
-	context->End(timer.begin.get());
-	QueryPerformanceCounter(&timer.cpuBegin);
+	if (frameActive) {
+		auto& frame = frames[writeFrame];
+		if (frame.activeCount < kMaxTimers) {
+			auto& timer = frame.timers[frame.activeCount];
+			timer.name.assign(name);
+			context->End(timer.begin.get());
+			QueryPerformanceCounter(&timer.cpuBegin);
+			passOpen = true;
+		}
+	}
 
 	if (beginPerfEvent)
 		beginPerfEvent(name);
@@ -133,21 +134,22 @@ void Profiler::BeginPass(const std::string& name)
 
 void Profiler::EndPass()
 {
-	if (!initialized || !context || !frameActive)
+	if (!initialized || !context)
 		return;
 
-	auto& frame = frames[writeFrame];
-	if (frame.activeCount >= kMaxTimers)
-		return;
+	if (frameActive) {
+		auto& frame = frames[writeFrame];
+		if (frame.activeCount < kMaxTimers && std::exchange(passOpen, false)) {
+			auto& timer = frame.timers[frame.activeCount];
 
-	auto& timer = frame.timers[frame.activeCount];
+			LARGE_INTEGER cpuEnd;
+			QueryPerformanceCounter(&cpuEnd);
+			timer.cpuMs = static_cast<float>(static_cast<double>(cpuEnd.QuadPart - timer.cpuBegin.QuadPart) * cpuTicksToMs);
 
-	LARGE_INTEGER cpuEnd;
-	QueryPerformanceCounter(&cpuEnd);
-	timer.cpuMs = static_cast<float>(static_cast<double>(cpuEnd.QuadPart - timer.cpuBegin.QuadPart) * cpuTicksToMs);
-
-	context->End(timer.end.get());
-	frame.activeCount++;
+			context->End(timer.end.get());
+			frame.activeCount++;
+		}
+	}
 
 	if (endPerfEvent)
 		endPerfEvent({});
@@ -158,6 +160,8 @@ void Profiler::EndFrame()
 	if (!initialized || !context)
 		return;
 
+	frameCounter.fetch_add(1, std::memory_order_relaxed);
+
 	if (frameSkipped) {
 		frameSkipped = false;
 		return;
@@ -166,6 +170,7 @@ void Profiler::EndFrame()
 		return;
 
 	frameActive = false;
+	passOpen = false;
 	context->End(frames[writeFrame].disjoint.get());
 	writeFrame = (writeFrame + 1) % kFrameLatency;
 	pendingFrames++;

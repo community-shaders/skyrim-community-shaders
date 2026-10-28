@@ -40,4 +40,9 @@ namespace NvPerf::Host
 	{
 		return Util::PathHelpers::GetCommunityShaderPath();
 	}
+
+	const char* BuildHint()
+	{
+		return "configure with -DNVPERF_SUPPORT=ON -DNVPERF_SDK_ROOT=<sdk>";
+	}
 }

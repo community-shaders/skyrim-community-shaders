@@ -13,6 +13,7 @@
 
 #include "Features/RemoteControl/DevBenchBridge.h"
 #include "Features/RemoteControl/NvPerf.h"
+#include "Features/RemoteControl/NvPerfHost.h"
 #include "Globals.h"
 #include "I18n/I18n.h"
 #include "Menu.h"
@@ -212,7 +213,7 @@ void RemoteControl::DrawNvPerfPanel()
 	NvPerf::Probe();
 	const auto device = NvPerf::GetDeviceInfo();
 	if (!device.built) {
-		ImGui::TextColored(theme.Warning, "%s", T(TKEY("not_built"), "This build was compiled without Nsight Perf. Configure with -DNVPERF_SUPPORT=ON and NVPERF_SDK_ROOT."));
+		ImGui::TextColored(theme.Warning, T(TKEY("not_built"), "This build was compiled without Nsight Perf: %s."), NvPerf::Host::BuildHint());
 		return;
 	}
 	if (!device.gpuSupported) {

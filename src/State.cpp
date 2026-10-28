@@ -45,6 +45,7 @@
 #ifdef TRACY_ENABLE
 static thread_local std::vector<TracyCZoneCtx> s_tracyPerfZones;
 #endif
+static thread_local std::vector<bool> s_perfEventEmitted;
 
 void State::UpdateLightingShaderPermutation(RE::BSRenderPass* a_pass)
 {
@@ -1368,15 +1369,22 @@ uint32_t State::GetRuntimePixelBits(const RE::BSShader& a_shader)
 
 bool State::PerfEventsConsumed() const
 {
+	if ((pPerf && pPerf->GetStatus()) || NvPerf::RangesActive())
+		return true;
 #ifdef TRACY_ENABLE
-	return true;
+	return TracyIsConnected;
 #else
-	return (pPerf && pPerf->GetStatus()) || NvPerf::RangesActive();
+	return false;
 #endif
 }
 
 void State::BeginPerfEvent(std::string_view title)
 {
+	// Record whether this event was emitted, so EndPerfEvent stays balanced if a consumer attaches or leaves in between.
+	const bool emit = PerfEventsConsumed();
+	s_perfEventEmitted.push_back(emit);
+	if (!emit)
+		return;
 #ifdef TRACY_ENABLE
 	// Use dynamic source location so Tracy displays the title as the zone name
 	// rather than the static function name "BeginPerfEvent".
@@ -1396,6 +1404,14 @@ void State::BeginPerfEvent(std::string_view title)
 
 void State::EndPerfEvent()
 {
+	if (s_perfEventEmitted.empty()) {
+		logger::warn("EndPerfEvent called without a matching BeginPerfEvent");
+		return;
+	}
+	const bool emitted = s_perfEventEmitted.back();
+	s_perfEventEmitted.pop_back();
+	if (!emitted)
+		return;
 #ifdef TRACY_ENABLE
 	if (!s_tracyPerfZones.empty()) {
 		TracyCZoneEnd(s_tracyPerfZones.back());
@@ -1411,6 +1427,8 @@ void State::EndPerfEvent()
 
 void State::SetPerfMarker(std::string_view title)
 {
+	if (!PerfEventsConsumed())
+		return;
 	pPerf->SetMarker(std::wstring(title.begin(), title.end()).c_str());
 }
 
