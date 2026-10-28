@@ -1424,10 +1424,14 @@ namespace SIE
 			mapBufferConsts("PerGeometry", bufferSizes[2]);
 		}
 
-		/** @brief Cache-key salt for debug compiles, so their files never replace release ones. */
-		static constexpr auto kDebugCompileTag = "debug;";
+		/** @brief Whether a compiled blob carries debug info, so a cached blob from the other compile mode is recompiled. */
+		static bool HasDebugInfo(ID3DBlob* a_blob)
+		{
+			winrt::com_ptr<ID3DBlob> pdb;
+			return SUCCEEDED(D3DGetBlobPart(a_blob->GetBufferPointer(), a_blob->GetBufferSize(), D3D_BLOB_PDB, 0, pdb.put()));
+		}
 
-		std::wstring GetDiskPath(const RE::BSShader& shader, uint32_t descriptor, ShaderClass shaderClass, bool debugCompile = ShaderCache::IsDebugCompile())
+		std::wstring GetDiskPath(const RE::BSShader& shader, uint32_t descriptor, ShaderClass shaderClass)
 		{
 			const std::string_view name = shader.fxpFilename;
 			if (name == "RunGrass" &&
@@ -1437,7 +1441,7 @@ namespace SIE
 
 			std::array<D3D_SHADER_MACRO, 64> defines{};
 			GetShaderDefines(shader, descriptor, std::span{ defines });
-			const auto suffixNarrow = Util::GetShaderDefinesSuffix((debugCompile ? kDebugCompileTag : "") + globals::state->GetDefinesString() + ";" + MergeDefinesString(defines, true));
+			const auto suffixNarrow = Util::GetShaderDefinesSuffix(globals::state->GetDefinesString() + ";" + MergeDefinesString(defines, true));
 			const std::wstring suffix(suffixNarrow.begin(), suffixNarrow.end());
 
 			const std::wstring wname(name.begin(), name.end());
@@ -1707,11 +1711,11 @@ namespace SIE
 
 			const auto type = shader.shaderType.get();
 
-			// Read once: Developer Mode can toggle mid-compile, and the blob must match its cache file name
+			// Read once: Developer Mode can toggle mid-compile
 			const bool debugCompile = ShaderCache::IsDebugCompile();
 
 			// check diskcache
-			auto diskPath = GetDiskPath(shader, descriptor, shaderClass, debugCompile);
+			auto diskPath = GetDiskPath(shader, descriptor, shaderClass);
 			winrt::com_ptr<ID3DBlob> shaderBlob;
 
 			// A failed filesystem probe is a cache miss, not a failed compilation task.
@@ -1760,6 +1764,8 @@ namespace SIE
 					// Fall through to recompile from source.
 				} else if (auto intactBlob = ReadIntactBlob(diskPath); !intactBlob) {
 					logger::error("Failed to load {} shader {}::{:X}", magic_enum::enum_name(shaderClass), magic_enum::enum_name(type), descriptor);
+				} else if (HasDebugInfo(intactBlob.get()) != debugCompile) {
+					logger::debug("Recompiling shader {}: cached copy was compiled {} debug info", SIE::SShaderCache::GetShaderString(shaderClass, shader, descriptor, true), debugCompile ? "without" : "with");
 				} else {
 					shaderBlob = std::move(intactBlob);
 					logger::debug("Loaded shader from {}", Util::WStringToString(diskPath));
@@ -2887,7 +2893,7 @@ namespace SIE
 				// The source stem keeps shaders that share a folder and entry point from sharing one cache blob.
 				const std::wstring cacheName = std::format(L"{}_{}", srcPath.stem().wstring(), std::wstring(entryPoint.begin(), entryPoint.end()));
 				const bool debugCompile = IsDebugCompile();
-				const auto globalDefinesSuffixNarrow = Util::GetShaderDefinesSuffix((debugCompile ? SShaderCache::kDebugCompileTag : "") + state->GetDefinesString());
+				const auto globalDefinesSuffixNarrow = Util::GetShaderDefinesSuffix(state->GetDefinesString());
 				const std::wstring globalDefinesSuffix(globalDefinesSuffixNarrow.begin(), globalDefinesSuffixNarrow.end());
 				const std::wstring defineSlugW(defineSlug.begin(), defineSlug.end());
 				const std::wstring diskPath = defineSlug.empty() ?
@@ -2945,8 +2951,9 @@ namespace SIE
 				if (!diskCacheOutdated) {
 					winrt::com_ptr<ID3DBlob> blob;
 					if (SUCCEEDED(D3DReadFileToBlob(diskPath.c_str(), blob.put())) && blob) {
-						HRESULT hr = createShader(blob.get());
-						if (SUCCEEDED(hr)) {
+						if (SShaderCache::HasDebugInfo(blob.get()) != debugCompile) {
+							logger::debug("Recompiling standalone {} shader {}:{}: cached copy was compiled {} debug info", stageName, srcPathStr, entryPoint, debugCompile ? "without" : "with");
+						} else if (SUCCEEDED(createShader(blob.get()))) {
 							Util::SetResourceName(shader, "%s:%s", srcPathStr.c_str(), entryPoint.c_str());
 							logger::debug("Loaded standalone {} shader {}:{} from {}", stageName, srcPathStr, entryPoint, Util::WStringToString(diskPath));
 						} else {
