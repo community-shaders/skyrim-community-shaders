@@ -197,7 +197,9 @@ void PerformanceOverlay::DrawSettings()
 		ImGui::SliderFloat(T(TKEY("text_size"), "Text Size"), &this->settings.TextSize, 0.8f, 1.2f, "%.2f");
 		ImGui::SliderFloat(T(TKEY("bg_opacity"), "Background Opacity"), &this->settings.BackgroundOpacity, 0.0f, 1.0f, "%.2f");
 		ImGui::Checkbox(T(TKEY("show_border"), "Show Border"), &this->settings.ShowBorder);
-		ImGui::SliderFloat(T(TKEY("update_interval"), "Update Interval"), &this->settings.UpdateInterval, 0.001f, PerformanceOverlay::Settings::kMaxUpdateInterval, "%.2f seconds");
+		ImGui::SliderFloat(T(TKEY("update_interval"), "FPS Smoothing"), &this->settings.UpdateInterval, 0.001f, PerformanceOverlay::Settings::kMaxUpdateInterval, "%.2f seconds");
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::TextUnformatted(T(TKEY("update_interval_tooltip"), "How long the FPS readout averages over. It updates every frame; higher values steady it, lower values follow changes faster. Avg and 1% low refresh at this rate too (at most 4 times a second)."));
 		ImGui::SliderInt(T(TKEY("frame_history_size"), "Frame History Size"), &this->settings.FrameHistorySize,
 			this->settings.kMinFrameHistorySize, this->settings.kMaxFrameHistorySize, "%d", ImGuiSliderFlags_AlwaysClamp);
 
@@ -1909,8 +1911,8 @@ void PerformanceOverlay::UpdateSummaryTestData(float smoothedFrameTime, float ot
 
 void PerformanceOverlay::ResetFrameStats()
 {
-	state.intervalFrameTimeSumMs = 0.0;
-	state.intervalFrameCount = 0;
+	state.smoothTimeSumMs = 0.0;
+	state.smoothFrameWeight = 0.0;
 	state.statsFrameTimes.clear();
 	state.statsFrameTimeSumMs = 0.0;
 	state.avgFps = 0.0f;
@@ -1933,8 +1935,12 @@ void PerformanceOverlay::AccumulateFrameStats()
 	if (state.frameTimeMs <= 0.0f)
 		return;
 
-	state.intervalFrameTimeSumMs += state.frameTimeMs;
-	state.intervalFrameCount++;
+	// Older frames fade by the time that has passed, not by how many frames came after, so the smoothing feels the
+	// same at any frame rate; the ratio of the two sums stays frames / elapsed time
+	const double timeConstantMs = std::max(settings.UpdateInterval, Settings::kMinSmoothingSeconds) * 1000.0;
+	const double decay = std::exp(-state.frameTimeMs / timeConstantMs);
+	state.smoothTimeSumMs = state.smoothTimeSumMs * decay + state.frameTimeMs;
+	state.smoothFrameWeight = state.smoothFrameWeight * decay + 1.0;
 
 	// Every frame counts, hitches included, so the average matches frames / elapsed time
 	state.statsFrameTimes.push_back(state.frameTimeMs);
@@ -2055,23 +2061,23 @@ void PerformanceOverlay::UpdateGraphValues()
 			state.postFGFrameTimeHistory.Push(state.postFGFrameTimeMs);
 	}
 
-	// Update smooth values with user-specified interval
+	// The smoothed FPS updates every frame
+	if (state.smoothFrameWeight > 0.0 && state.smoothTimeSumMs > 0.0) {
+		state.smoothFrameTimeMs = static_cast<float>(state.smoothTimeSumMs / state.smoothFrameWeight);
+		state.smoothFps = Util::CalcFPS(state.smoothFrameTimeMs);
+	} else {
+		state.smoothFps = state.fps;
+		state.smoothFrameTimeMs = state.frameTimeMs;
+	}
+	if (state.isFrameGenerationActive) {
+		state.postFGSmoothFrameTimeMs = state.smoothFrameTimeMs / Settings::kFrameGenerationMultiplier;
+		state.postFGSmoothFps = state.smoothFps * Settings::kFrameGenerationMultiplier;
+	}
+
+	// Avg and 1% low sort the whole window, so they refresh on the interval instead
 	state.updateTimer += deltaTime;
-	if (state.updateTimer >= settings.UpdateInterval) {
-		if (state.intervalFrameCount > 0 && state.intervalFrameTimeSumMs > 0.0) {
-			state.smoothFrameTimeMs = static_cast<float>(state.intervalFrameTimeSumMs / state.intervalFrameCount);
-			state.smoothFps = Util::CalcFPS(state.smoothFrameTimeMs);
-		} else {
-			state.smoothFps = state.fps;
-			state.smoothFrameTimeMs = state.frameTimeMs;
-		}
-		state.intervalFrameTimeSumMs = 0.0;
-		state.intervalFrameCount = 0;
+	if (state.updateTimer >= std::max(settings.UpdateInterval, Settings::kMinStatsRefreshSeconds)) {
 		UpdateFrameStats();
-		if (state.isFrameGenerationActive) {
-			state.postFGSmoothFps = state.postFGFps;
-			state.postFGSmoothFrameTimeMs = state.postFGFrameTimeMs;
-		}
 		state.updateTimer = 0.0f;
 	}
 }
