@@ -43,6 +43,6 @@ namespace NvPerf::Host
 
 	const char* BuildHint()
 	{
-		return "configure with -DNVPERF_SUPPORT=ON";
+		return "configure with -DNVPERF_SUPPORT=ON -DNVPERF_SDK_ROOT=<sdk>";
 	}
 }

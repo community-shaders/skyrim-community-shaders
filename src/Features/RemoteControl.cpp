@@ -212,7 +212,7 @@ void RemoteControl::DrawNvPerfPanel()
 	NvPerf::Probe();
 	const auto device = NvPerf::GetDeviceInfo();
 	if (!device.built) {
-		ImGui::TextColored(theme.Warning, "%s", T(TKEY("not_built"), "This build was compiled without Nsight Perf. Configure with -DNVPERF_SUPPORT=ON and NVPERF_SDK_ROOT."));
+		ImGui::TextColored(theme.Warning, T(TKEY("unavailable"), "Nsight Perf is unavailable: %s"), device.error.c_str());
 		return;
 	}
 	if (!device.gpuSupported) {
