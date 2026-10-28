@@ -47,7 +47,7 @@
         "TooltipHoverDelay": 0.5,
         "BackgroundBlurEnabled": true,
         "Palette": {
-            "Background": [0.95, 0.953, 0.96, 1.0],
+            "Background": [0.95, 0.953, 0.96, 0.78],
             "Text": [0.08, 0.09, 0.11, 1.0],
             "WindowBorder": [0.42, 0.45, 0.52, 0.0],
             "FrameBorder": [0.79, 0.805, 0.835, 0.95],
@@ -155,7 +155,7 @@
         "Colors": {
             "Text": [0.08, 0.09, 0.11, 1.0],
             "TextDisabled": [0.4, 0.42, 0.46, 1.0],
-            "WindowBg": [0.95, 0.953, 0.96, 1.0],
+            "WindowBg": [0.95, 0.953, 0.96, 0.78],
             "ChildBg": [0.925, 0.93, 0.94, 0.0],
             "PopupBg": [0.975, 0.977, 0.982, 0.97],
             "Border": [0.42, 0.45, 0.52, 0.28],
