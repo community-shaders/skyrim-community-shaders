@@ -16,6 +16,7 @@
 #include "Utils/ShaderContentStore.h"
 
 #include "Features/DynamicCubemaps.h"
+#include "Features/RenderDoc.h"
 
 #include "Plugin.h"
 
@@ -1423,7 +1424,10 @@ namespace SIE
 			mapBufferConsts("PerGeometry", bufferSizes[2]);
 		}
 
-		std::wstring GetDiskPath(const RE::BSShader& shader, uint32_t descriptor, ShaderClass shaderClass)
+		/** @brief Cache-key salt for debug compiles, so their files never replace release ones. */
+		static constexpr auto kDebugCompileTag = "debug;";
+
+		std::wstring GetDiskPath(const RE::BSShader& shader, uint32_t descriptor, ShaderClass shaderClass, bool debugCompile = ShaderCache::IsDebugCompile())
 		{
 			const std::string_view name = shader.fxpFilename;
 			if (name == "RunGrass" &&
@@ -1433,7 +1437,7 @@ namespace SIE
 
 			std::array<D3D_SHADER_MACRO, 64> defines{};
 			GetShaderDefines(shader, descriptor, std::span{ defines });
-			const auto suffixNarrow = Util::GetShaderDefinesSuffix(globals::state->GetDefinesString() + ";" + MergeDefinesString(defines, true));
+			const auto suffixNarrow = Util::GetShaderDefinesSuffix((debugCompile ? kDebugCompileTag : "") + globals::state->GetDefinesString() + ";" + MergeDefinesString(defines, true));
 			const std::wstring suffix(suffixNarrow.begin(), suffixNarrow.end());
 
 			const std::wstring wname(name.begin(), name.end());
@@ -1565,7 +1569,7 @@ namespace SIE
 		static Util::ContentHash::Hash128 StoreKey(const Util::ContentHash::Hash128& a_key)
 		{
 			static constexpr std::string_view kSchema = "store-v1";
-			const auto context = std::format("{}|{}|{}", kSchema, GetCompilerIdentity(), globals::state->IsDeveloperMode() ? "dev" : "release");
+			const auto context = std::format("{}|{}|{}", kSchema, GetCompilerIdentity(), ShaderCache::IsDebugCompile() ? "dev" : "release");
 			return Util::ContentHash::CombineHashes(a_key, Util::ContentHash::HashString(context));
 		}
 
@@ -1640,8 +1644,8 @@ namespace SIE
 			result.source.assign(static_cast<const char*>(preprocessed->GetBufferPointer()), preprocessed->GetBufferSize());
 			if (!result.source.empty() && result.source.back() == '\0')
 				result.source.pop_back();
-			// Developer Mode keeps #line in the key: stripping it would share debug info with another variant's source lines.
-			const auto keyText = globals::state->IsDeveloperMode() ? result.source : Util::CompileDedupe::StripLineDirectives(result.source);
+			// Debug compiles keep #line in the key: stripping it would share debug info with another variant's source lines.
+			const auto keyText = (a_flags & D3DCOMPILE_DEBUG) ? result.source : Util::CompileDedupe::StripLineDirectives(result.source);
 			result.key = Util::CompileDedupe::MakeKey({ keyText, "main", GetShaderProfile(a_class), a_flags });
 			auto acquired = GetCompileDedupe().Acquire(*result.key);
 			result.compileFailed = acquired.compileFailed;
@@ -1703,8 +1707,11 @@ namespace SIE
 
 			const auto type = shader.shaderType.get();
 
+			// Read once: Developer Mode can toggle mid-compile, and the blob must match its cache file name
+			const bool debugCompile = ShaderCache::IsDebugCompile();
+
 			// check diskcache
-			auto diskPath = GetDiskPath(shader, descriptor, shaderClass);
+			auto diskPath = GetDiskPath(shader, descriptor, shaderClass, debugCompile);
 			winrt::com_ptr<ID3DBlob> shaderBlob;
 
 			// A failed filesystem probe is a cache miss, not a failed compilation task.
@@ -1771,7 +1778,7 @@ namespace SIE
 			} else if (shaderClass == ShaderClass::Compute) {
 				defines[lastIndex++] = { "CSHADER", nullptr };
 			}
-			if (globals::state->IsDeveloperMode()) {
+			if (debugCompile) {
 				defines[lastIndex++] = { "D3DCOMPILE_SKIP_OPTIMIZATION", nullptr };
 				defines[lastIndex++] = { "D3DCOMPILE_DEBUG", nullptr };
 			}
@@ -1797,7 +1804,7 @@ namespace SIE
 
 			// compile shaders — match Utils/D3D.cpp CompileShader flag policy (strictness, optional toggles, validation).
 			winrt::com_ptr<ID3DBlob> errorBlob;
-			uint32_t flags = !globals::state->IsDeveloperMode() ? (D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_OPTIMIZATION_LEVEL3) : D3DCOMPILE_DEBUG;
+			uint32_t flags = !debugCompile ? (D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_OPTIMIZATION_LEVEL3) : D3DCOMPILE_DEBUG;
 			if (globals::state->enablePartialPrecision.load(std::memory_order_relaxed)) {
 				flags |= D3DCOMPILE_PARTIAL_PRECISION;
 			}
@@ -1880,7 +1887,7 @@ namespace SIE
 #endif
 
 			// strip debug info
-			if (!globals::state->IsDeveloperMode() && !dedupeHit) {
+			if (!debugCompile && !dedupeHit) {
 				winrt::com_ptr<ID3DBlob> strippedShaderBlob;
 
 				const uint32_t stripFlags = D3DCOMPILER_STRIP_DEBUG_INFO |
@@ -2879,7 +2886,8 @@ namespace SIE
 				}
 				// The source stem keeps shaders that share a folder and entry point from sharing one cache blob.
 				const std::wstring cacheName = std::format(L"{}_{}", srcPath.stem().wstring(), std::wstring(entryPoint.begin(), entryPoint.end()));
-				const auto globalDefinesSuffixNarrow = Util::GetShaderDefinesSuffix(state->GetDefinesString());
+				const bool debugCompile = IsDebugCompile();
+				const auto globalDefinesSuffixNarrow = Util::GetShaderDefinesSuffix((debugCompile ? SShaderCache::kDebugCompileTag : "") + state->GetDefinesString());
 				const std::wstring globalDefinesSuffix(globalDefinesSuffixNarrow.begin(), globalDefinesSuffixNarrow.end());
 				const std::wstring defineSlugW(defineSlug.begin(), defineSlug.end());
 				const std::wstring diskPath = defineSlug.empty() ?
@@ -2957,7 +2965,7 @@ namespace SIE
 						if (d.first && d.first[0])
 							macros.push_back({ d.first, d.second });
 					}
-					if (state->IsDeveloperMode()) {
+					if (debugCompile) {
 						macros.push_back({ "D3DCOMPILE_SKIP_OPTIMIZATION", "" });
 						macros.push_back({ "D3DCOMPILE_DEBUG", "" });
 					}
@@ -2976,7 +2984,7 @@ namespace SIE
 					macros.push_back({ "DX11", "" });
 					macros.push_back({ nullptr, nullptr });
 
-					uint32_t flags = !state->IsDeveloperMode() ? (D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_OPTIMIZATION_LEVEL3) : D3DCOMPILE_DEBUG;
+					uint32_t flags = !debugCompile ? (D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_OPTIMIZATION_LEVEL3) : D3DCOMPILE_DEBUG;
 					if (state->enablePartialPrecision.load(std::memory_order_relaxed))
 						flags |= D3DCOMPILE_PARTIAL_PRECISION;
 					if (state->enableAvoidFlowControl.load(std::memory_order_relaxed))
@@ -3061,6 +3069,11 @@ namespace SIE
 	void ShaderCache::SetDiskCache(bool value)
 	{
 		isDiskCache = value;
+	}
+
+	bool ShaderCache::IsDebugCompile()
+	{
+		return globals::state->IsDeveloperMode() || RenderDoc::IsLoaded();
 	}
 
 	bool ShaderCache::IsSkipUnchangedShaders() const
