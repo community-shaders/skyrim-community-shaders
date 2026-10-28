@@ -1,5 +1,8 @@
 #include "FontSelector.h"
+#include "CSEditor/Browser/BrowserWidgets.h"
 #include "Menu/FontAtlasState.h"
+#include "Menu/Icons/helpers/IconFonts.h"
+#include "Menu/MenuIcons.h"
 
 #include "Globals.h"
 #include "I18n/I18n.h"
@@ -180,24 +183,16 @@ namespace MenuFonts::Selector
 			RenderStyleCombo(menu, themeSettings, roleSettings, *selectedFamily, role, roleIndex, descriptor.displayName, styleIndex);
 		}
 
-		{
-			FontRoleGuard sampleFont(role);
-			ImGui::TextWrapped(
-				"%s",
-				T("menu.settings.font_preview_sample", "The quick brown fox jumps over the lazy dog."));
-		}
-
-		ImGui::TextDisabled(T("menu.settings.file_label", "File: %s"), roleSettings.File.c_str());
-
 		const std::string scaleLabel = RoleLabel("menu.settings.font_scale_label", "{role} Scale", descriptor.displayName, roleIndex);
 		if (ImGui::SliderFloat(scaleLabel.c_str(), &roleSettings.SizeScale, ThemeManager::Constants::FONT_ROLE_SCALE_MIN, ThemeManager::Constants::FONT_ROLE_SCALE_MAX, "%.2fx", ImGuiSliderFlags_AlwaysClamp)) {
 			MenuFonts::GetAtlasState().pendingFontReload = true;
 		}
-		ImGui::SameLine();
-		const std::string resetLabel = std::format("{}##Scale{}", T("menu.settings.reset", "Reset"), roleIndex);
-		if (Util::Button(resetLabel.c_str())) {
-			roleSettings.SizeScale = Menu::GetFontRoleDefaultScale(role);
-			MenuFonts::GetAtlasState().pendingFontReload = true;
+		if (roleSettings.SizeScale != Menu::GetFontRoleDefaultScale(role)) {
+			ImGui::SameLine();
+			if (BrowserUI::IconButton("##ResetScale", Icons::TI(MenuIcons::kRestore), T("menu.settings.font_scale_reset_tooltip", "Reset to the default scale"))) {
+				roleSettings.SizeScale = Menu::GetFontRoleDefaultScale(role);
+				MenuFonts::GetAtlasState().pendingFontReload = true;
+			}
 		}
 
 		if (role == Menu::FontRole::Title) {
@@ -209,10 +204,10 @@ namespace MenuFonts::Selector
 				"%.1fx",
 				ImGuiSliderFlags_AlwaysClamp);
 			Util::HoverTip(T("menu.settings.feature_header_scale_tooltip", "Scale multiplier for feature title text in the Settings tab."));
-			ImGui::SameLine();
-			const std::string resetBtnLabel = std::format("{}##FeatureHeaderScale", T("menu.settings.reset", "Reset"));
-			if (Util::Button(resetBtnLabel.c_str())) {
-				themeSettings.FeatureHeading.FeatureTitleScale = ThemeManager::Constants::DEFAULT_FEATURE_TITLE_SCALE;
+			if (themeSettings.FeatureHeading.FeatureTitleScale != ThemeManager::Constants::DEFAULT_FEATURE_TITLE_SCALE) {
+				ImGui::SameLine();
+				if (BrowserUI::IconButton("##ResetFeatureHeaderScale", Icons::TI(MenuIcons::kRestore), T("menu.settings.font_scale_reset_tooltip", "Reset to the default scale")))
+					themeSettings.FeatureHeading.FeatureTitleScale = ThemeManager::Constants::DEFAULT_FEATURE_TITLE_SCALE;
 			}
 		}
 	}

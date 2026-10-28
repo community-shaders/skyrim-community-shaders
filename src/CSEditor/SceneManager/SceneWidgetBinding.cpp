@@ -641,7 +641,7 @@ void SceneWidgetBinding::Guard::BindBaseline()
 		return;
 	}
 
-	baselineLayer = ResolveBaselineLayer(baselinePackId);
+	baselineLayer = ResolveBaselineLayer();
 	if ((baselineLayer == BaselineLayer::Scene || baselineLayer == BaselineLayer::Sketch) &&
 		(policy == GutterPolicy::Owner || ClaimGutter(value.data))) {
 		CaptureNextItemWidth();
@@ -650,9 +650,8 @@ void SceneWidgetBinding::Guard::BindBaseline()
 	PushCompensatedItemWidth();
 }
 
-SceneWidgetBinding::BaselineLayer SceneWidgetBinding::Guard::ResolveBaselineLayer(std::string& a_packId) const
+SceneWidgetBinding::BaselineLayer SceneWidgetBinding::Guard::ResolveBaselineLayer() const
 {
-	a_packId.clear();
 	auto* manager = SceneSettingsManager::GetSingleton();
 	const auto anyComponent = [&](auto&& a_predicate) { return std::ranges::any_of(components, a_predicate); };
 
@@ -662,51 +661,12 @@ SceneWidgetBinding::BaselineLayer SceneWidgetBinding::Guard::ResolveBaselineLaye
 			return manager->IsActiveSceneSetting(identity.featureShortName, identity.settingPath, component.settingKey);
 		}))
 		return BaselineLayer::Scene;
-
-	bool fromPack = false;
-	for (const auto& component : components) {
-		std::string packId;
-		const auto* packValue = FindBaselineValue(*component.setting, packId);
-		const auto* beneath = packValue ? packValue : FindLayeredBaseValue(*component.setting);
-		if (packValue && a_packId.empty())
-			a_packId = std::move(packId);
-		if (!beneath)
-			continue;
-		if (!SceneSettingsManager::AppliedValuesEqual(*beneath, ReadEditedValue(component)))
-			return BaselineLayer::Edited;
-		fromPack |= packValue != nullptr;
-	}
-	return fromPack ? BaselineLayer::Pack : BaselineLayer::Base;
-}
-
-std::optional<ImVec4> SceneWidgetBinding::Guard::ResolveBaselineColor() const
-{
-	switch (baselineLayer) {
-	case BaselineLayer::Pack:
-		return Util::Colors::GetWarning();
-	case BaselineLayer::Edited:
-		return Util::Colors::GetSecondary();
-	case BaselineLayer::Sketch:
-		return Util::Colors::GetSuccess();
-	case BaselineLayer::Scene:
-		return Util::Colors::GetInfo();
-	default:
-		return std::nullopt;
-	}
+	return BaselineLayer::Base;
 }
 
 std::string SceneWidgetBinding::Guard::ResolveBaselineTooltip() const
 {
 	switch (baselineLayer) {
-	case BaselineLayer::Pack:
-		return std::vformat(T(TKEY("baseline_from_named_pack"), "Baseline: {}. This preset supplies the value."),
-			std::make_format_args(baselinePackId));
-	case BaselineLayer::Edited:
-		if (baselinePackId.empty())
-			return T(TKEY("baseline_edited"), "Edited: your change from the default. Save Settings keeps it; Restore Defaults clears it.");
-		return std::vformat(T(TKEY("baseline_edited_over_pack"),
-								"Edited: your change over Baseline {}. Save Settings keeps it; Restore Defaults goes back to the preset."),
-			std::make_format_args(baselinePackId));
 	case BaselineLayer::Scene:
 		return T(TKEY("baseline_from_scene"),
 			"A Scene Manager preset supplies this value here. Editing sketches over it until you leave "
@@ -745,41 +705,6 @@ void SceneWidgetBinding::Guard::DrawBaselineGutter()
 
 	ImGui::PopID();
 	ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x);
-}
-
-bool SceneWidgetBinding::Guard::DrawBaselineMarker() const
-{
-	// Edited and pack-supplied values get a slim bar left of the control, like an editor's changed-line
-	// marker, so the control itself keeps its normal look
-	if (baselineLayer != BaselineLayer::Edited && baselineLayer != BaselineLayer::Pack)
-		return false;
-	using Constants = ThemeManager::Constants;
-	const ImVec2 itemMin = ImGui::GetItemRectMin();
-	const ImVec2 itemMax = ImGui::GetItemRectMax();
-	const float gap = ImGui::GetStyle().ItemInnerSpacing.x;
-	const float width = Constants::BASELINE_MARKER_WIDTH * Util::GetUIScale();
-	const float inset = (itemMax.y - itemMin.y) * Constants::NAV_SELECTED_BAR_INSET;
-	const ImVec2 barMin(itemMin.x - gap - width, itemMin.y + inset);
-	const ImVec2 barMax(itemMin.x - gap, itemMax.y - inset);
-	// The hit area spans the whole gap, so the thin bar is easy to point at
-	const bool hovered = ImGui::IsWindowHovered() && ImGui::IsMouseHoveringRect(ImVec2(barMin.x - gap, itemMin.y), ImVec2(itemMin.x, itemMax.y));
-	ImVec4 color = *ResolveBaselineColor();
-	if (!hovered)
-		color.w *= Constants::BASELINE_MARKER_IDLE_ALPHA;
-
-	// The bar can sit in the window padding, outside the item clip rect
-	ImGuiWindow* window = ImGui::GetCurrentWindow();
-	window->DrawList->PushClipRect(window->Rect().Min, window->Rect().Max, false);
-	window->DrawList->AddRectFilled(barMin, barMax, ImGui::GetColorU32(color), width * 0.5f);
-	window->DrawList->PopClipRect();
-
-	if (!hovered)
-		return false;
-	const bool resettable = baselineLayer == BaselineLayer::Edited;
-	if (resettable)
-		ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
-	ImGui::SetTooltip("%s", ResolveBaselineTooltip().c_str());
-	return resettable && ImGui::IsMouseClicked(ImGuiMouseButton_Left);
 }
 
 void SceneWidgetBinding::Guard::ResolveState()
@@ -1278,11 +1203,8 @@ bool SceneWidgetBinding::Guard::TryEnableOverrideFromGesture()
 bool SceneWidgetBinding::Guard::TryResetFromGesture()
 {
 	assert(state == State::Baseline);
-	const bool markerClicked = DrawBaselineMarker();
 	// An active item still owns its value (InputText keeps its own buffer), and MarkItemEdited expects none.
-	if (ImGui::IsAnyItemActive())
-		return false;
-	if (!markerClicked && !(ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Middle)))
+	if (ImGui::IsAnyItemActive() || !ImGui::IsItemHovered() || !ImGui::IsMouseClicked(ImGuiMouseButton_Middle))
 		return false;
 
 	// Back to what lies beneath the edit: the Baseline pack's value, else the default
@@ -1617,10 +1539,8 @@ bool SceneWidgetBinding::Guard::Finish(bool a_changed)
 			for (const auto& component : components)
 				manager->RecordBaselineEdit(ComponentIdentity(component), ReadEditedValue(component));
 		}
-		if (auto tooltip = ResolveBaselineTooltip(); !tooltip.empty()) {
-			tooltip.append("\n").append(T(TKEY("baseline_reset_hint"), "Click the bar at its left, or middle-click, to restore it."));
+		if (const auto tooltip = ResolveBaselineTooltip(); !tooltip.empty())
 			Util::AddTooltip(tooltip.c_str(), Util::kTooltipWhenDisabled);
-		}
 		return a_changed;
 	}
 	// Both were greyed, so neither took input: no gutter to own and nothing to commit. Words are all a

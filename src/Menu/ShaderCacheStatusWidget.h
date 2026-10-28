@@ -10,4 +10,7 @@ namespace ShaderCacheStatusWidget
 	 * per-category tooltip. Draws nothing while no shaders have been queued.
 	 */
 	void DrawBreakdownBar();
+
+	/** @brief One coloured key entry per non-empty bar category with its count, wrapping across the content width. */
+	void DrawBreakdownLegend();
 }

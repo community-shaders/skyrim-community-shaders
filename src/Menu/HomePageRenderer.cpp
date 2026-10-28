@@ -85,6 +85,7 @@ namespace
 			// Surface backing, drawn first so the content sits on it
 			Util::Surface::Options surface;
 			surface.rounding = ImGui::GetStyle().ChildRounding;
+			surface.clip = Util::Surface::ParentClipRect();
 			if (border)
 				surface.borderColor = ImGui::GetColorU32(*border);
 			Util::Surface::Draw(ImGui::GetWindowDrawList(), ImGui::GetWindowPos(),

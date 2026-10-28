@@ -37,7 +37,7 @@ namespace
 	{
 		std::string_view id;
 		Group group;
-		bool editsTheme;  ///< Edits values stored in the theme file, so the theme save note is shown above it
+		bool editsTheme;  ///< Edits values stored in the theme file, so the header shows the theme save note
 		void (*draw)(PageState& state);
 	};
 
@@ -122,9 +122,25 @@ namespace
 		return "";
 	}
 
-	/** @brief One-line summary shown under an Advanced section's title, or nullptr to show the group name instead. */
+	/** @brief One-line summary shown under a section's title, or nullptr to show the group name instead. */
 	const char* GetSectionDescription(std::string_view id)
 	{
+		if (id == Ids::kShadersCache)
+			return T("menu.settings.desc_shaders_cache", "Whether Community Shaders replaces the game's shaders, how compiled shaders are cached, and how many threads compile them.");
+		if (id == Ids::kKeybindings)
+			return T("menu.settings.desc_keybindings", "Keys that open the menu and editors, toggle overlays, take screenshots and drive debugging.");
+		if (id == Ids::kLanguage)
+			return T("menu.settings.desc_language", "The language of the Community Shaders menu.");
+		if (id == Ids::kTheme)
+			return T("menu.settings.desc_theme", "Pick a theme preset, or save the current look as your own theme.");
+		if (id == Ids::kFonts)
+			return T("menu.settings.desc_fonts", "The typeface and size of each kind of text in the menu.");
+		if (id == Ids::kColors)
+			return T("menu.settings.desc_colors", "The menu's palette: backgrounds, text, accents and status colours.");
+		if (id == Ids::kStyling)
+			return T("menu.settings.desc_styling", "Animations, layout, spacing and rounding, and the surfaces behind cards, toasts and panels.");
+		if (id == Ids::kHeaderEffects)
+			return T("menu.settings.desc_header_effects", "The header's icons and layout, the status bar, and effects such as background blur and menu fade.");
 		if (id == Ids::kDeveloper)
 			return T("menu.advanced.desc_developer", "Developer mode, shader compiler flags and build statistics, for working on Community Shaders itself.");
 		if (id == Ids::kLogging)
@@ -158,6 +174,8 @@ namespace
 			ImGui::TextDisabled("%s", description ? description : GetGroupLabel(section.group));
 			ImGui::PopTextWrapPos();
 		}
+		if (section.editsTheme)
+			SettingsTabRenderer::RenderThemeSaveNote();
 		ImGui::Separator();
 		ImGui::Spacing();
 	}
@@ -193,8 +211,6 @@ namespace
 	{
 		Util::Anim::PageFade fade(ImGui::GetID(section.id.data(), section.id.data() + section.id.size()));
 		DrawSectionHeader(section);
-		if (section.editsTheme)
-			SettingsTabRenderer::RenderThemeSaveNote();
 
 		ImGui::PushID(section.id.data(), section.id.data() + section.id.size());
 		section.draw(state);

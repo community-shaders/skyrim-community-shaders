@@ -180,6 +180,16 @@ public:
 	void ConsumeEscape() { escapeConsumed = true; }
 	/** @brief Drops the main menu's undo history, so reloaded saved settings cannot be undone into stale edits. */
 	void ClearUndoHistory() { undoHistory.Forget(""); }
+	/** @brief Registers a target in the main menu's undo history (Ctrl+Z / Ctrl+Y) for the frame its UI is drawn; call before drawing it. */
+	void WatchUndoTarget(UndoHistory::Target target) { undoHistory.Watch(std::move(target)); }
+	/** @brief Queues an undo of the newest change, applied before the next frame draws, as Ctrl+Z does. */
+	void RequestUndo() { pendingUndo = UndoRequest::Undo; }
+	/** @brief Queues a redo of the newest undone change, as Ctrl+Y does. */
+	void RequestRedo() { pendingUndo = UndoRequest::Redo; }
+	/** @brief Whether the main menu's history has a change to undo. */
+	bool CanUndo() const { return undoHistory.CanUndo(); }
+	/** @brief Whether the main menu's history has an undone change to redo. */
+	bool CanRedo() const { return undoHistory.CanRedo(); }
 	/**
 	 * @brief Reads and clears the claim made by ConsumeEscape().
 	 * @return True when a widget claimed the Escape press being released.
@@ -412,6 +422,11 @@ public:
 	static void PaletteToJson(json& themeJson, const std::array<ImVec4, ImGuiCol_COUNT>& palette);
 	/** @brief Deserializes palette from named color map or legacy positional array */
 	static void PaletteFromJson(const json& themeJson, std::array<ImVec4, ImGuiCol_COUNT>& palette);
+	/**
+	 * @brief Reads a theme file's "Theme" object into theme settings, palette included, without applying it.
+	 * @throws nlohmann::json::exception when the object does not fit.
+	 */
+	static void ThemeFromJson(const json& themeJson, ThemeSettings& theme);
 
 	/** @brief Serializes cursor settings to JSON using named cursor type keys */
 	static void CursorToJson(json& cursorJson, const ThemeSettings::CursorSettings& cursorSettings);

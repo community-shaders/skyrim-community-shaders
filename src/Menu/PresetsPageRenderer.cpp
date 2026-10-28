@@ -151,9 +151,10 @@ namespace
 	{
 		ImGui::Dummy(ImVec2(size, size));
 		const auto& logo = Util::IconLoader::GetIcons().logoMonochrome;
+		// The logo is stored large; the mip nearest the drawn size keeps small list icons from aliasing
 		if (logo.texture)
-			DrawRoundedImage(ImGui::GetWindowDrawList(), reinterpret_cast<ImTextureID>(logo.texture), ImGui::GetItemRectMin(), ImGui::GetItemRectMax(),
-				0.0f, ImGui::GetColorU32(ThemeAccent(info)));
+			DrawRoundedImage(ImGui::GetWindowDrawList(), reinterpret_cast<ImTextureID>(Util::IconLoader::ViewForSize(logo.texture, ImVec2(size, size))),
+				ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), 0.0f, ImGui::GetColorU32(ThemeAccent(info)));
 	}
 
 	/** @brief Circular translucent arrow button centered on center; returns true when clicked. */
@@ -1009,8 +1010,15 @@ void PresetsPageRenderer::RenderThemeDetail()
 	const bool active = globals::menu->GetSettings().SelectedThemePreset == info->name;
 	if (ApplyButton(T("menu.presets.apply_theme", "Apply Theme"), !active))
 		globals::menu->LoadThemePreset(info->name);
-	if (FolderButton("##OpenThemes", T("menu.presets.open_theme_folder", "Open Theme Folder")))
-		ShellExecuteW(nullptr, L"open", themeManager->GetThemesDirectory().wstring().c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+	if (FolderButton("##OpenThemes", T("menu.presets.open_theme_folder", "Open Theme Folder"))) {
+		// The game's Data path only exists inside a mod manager's virtual file system, which Explorer cannot see;
+		// open the folder on disk that holds the plugin instead
+		std::filesystem::path themesPath = Util::PathHelpers::GetThemesRealPath();
+		std::error_code ec;
+		if (Util::PathHelpers::GetRootRealPath().empty() || !std::filesystem::is_directory(themesPath, ec))
+			themesPath = themeManager->GetThemesDirectory();
+		ShellExecuteW(nullptr, L"open", themesPath.wstring().c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+	}
 	if (active) {
 		MenuFonts::FontRoleGuard sub(Menu::FontRole::Subtext);
 		ImGui::TextColored(globals::menu->GetTheme().StatusPalette.SuccessColor, "%s", T("menu.presets.active_theme", "This is the current menu theme."));

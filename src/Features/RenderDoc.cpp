@@ -171,13 +171,9 @@ void RenderDoc::DrawSettings()
 	// Include enable toggle and annotation forcing logic here
 	bool prevRenderDocCapture = enableRenderDocCapture;
 	if (ImGui::Checkbox(T(TKEY("enable_capture"), "Enable RenderDoc Capture"), &enableRenderDocCapture)) {
-		if (enableRenderDocCapture && !prevRenderDocCapture) {
-			globals::state->useFrameAnnotations = globals::state->frameAnnotations;
-			globals::state->frameAnnotations = true;
-		}
-		if (!enableRenderDocCapture && prevRenderDocCapture) {
-			globals::state->frameAnnotations = globals::state->useFrameAnnotations;
-		}
+		const bool enabled = enableRenderDocCapture;
+		enableRenderDocCapture = prevRenderDocCapture;
+		SetCaptureEnabled(enabled);
 	}
 
 	if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -725,6 +721,19 @@ bool RenderDoc::TriggerConfiguredCapture(bool a_checkDiskSpace)
 	}
 
 	return true;
+}
+
+void RenderDoc::SetCaptureEnabled(bool a_enabled)
+{
+	if (a_enabled == enableRenderDocCapture)
+		return;
+	enableRenderDocCapture = a_enabled;
+	if (a_enabled) {
+		globals::state->useFrameAnnotations = globals::state->frameAnnotations;
+		globals::state->frameAnnotations = true;
+	} else {
+		globals::state->frameAnnotations = globals::state->useFrameAnnotations;
+	}
 }
 
 bool RenderDoc::HandleCaptureHotkey(uint32_t a_vkKey)

@@ -1,6 +1,7 @@
 #pragma once
 #include <algorithm>
 #include <cfloat>  // For FLT_MAX
+#include <cstdint>
 #include <cstdio>
 #include <functional>
 #include <imgui.h>
@@ -561,6 +562,9 @@ namespace Util
 	/** Draws a destructive button with ButtonWithFlash click feedback. */
 	bool ErrorButtonWithFlash(const char* label, const ImVec2& size = ImVec2(0, 0), int flashDurationMs = 200);
 
+	/** Draws a destructive ButtonWithFlash with a leading Tabler icon. */
+	bool ErrorButtonWithFlash(const char* id, const char* tablerIcon, const char* label, int flashDurationMs = 200);
+
 	/**
 	 * Creates a transparent button with theme text color hover. Caller must push/pop FrameBorderSize=0 separately.
 	 */
@@ -582,6 +586,99 @@ namespace Util
 	 * @param current Keeps the hover fill, for the button of the current page.
 	 * @return True when anything was drawn.
 	 */
+	/**
+	 * @brief RAII card on the SectionCard surface for grouping related settings: an auto-height child with an icon and
+	 * a heading. Content goes between construction and destruction; a gap follows the card.
+	 */
+	class SectionCard
+	{
+	public:
+		/**
+		 * @param id Stable child id.
+		 * @param icon Tabler glyph (ICON_TI_*) before the title, or null.
+		 * @param title Translated heading.
+		 */
+		SectionCard(const char* id, const char* icon, const char* title);
+		/**
+		 * @param id Stable child id.
+		 * @param image Icon texture before the title (such as a category icon), or null.
+		 * @param title Translated heading.
+		 */
+		SectionCard(const char* id, ID3D11ShaderResourceView* image, const char* title);
+		~SectionCard();
+		SectionCard(const SectionCard&) = delete;
+		SectionCard& operator=(const SectionCard&) = delete;
+
+	private:
+		/** @brief Opens the card's child and draws its surface. */
+		static void Begin(const char* id);
+	};
+
+	/**
+	 * @brief RAII side-by-side columns for settings inside a card: a borderless table when the space is wide enough,
+	 * otherwise one stacked column. Call Next() before each column's content after the first.
+	 */
+	class SettingColumns
+	{
+	public:
+		/**
+		 * @param id Table id.
+		 * @param columns Column count when wide enough.
+		 * @param minColumnFontSizes Narrowest column, in font sizes, before the columns stack.
+		 */
+		SettingColumns(const char* id, int columns = 2, float minColumnFontSizes = 20.0f);
+		~SettingColumns();
+		/** @brief Moves to the next column, or adds a gap when stacked. */
+		void Next();
+		SettingColumns(const SettingColumns&) = delete;
+		SettingColumns& operator=(const SettingColumns&) = delete;
+
+	private:
+		bool table = false;
+	};
+
+	/** @brief Sets the next slider's width so it and its label fit the rest of the line, such as a narrow column. */
+	void FitNextItemWithLabel(const char* label);
+
+	/**
+	 * @brief One short line explaining the setting just drawn, in the subtext font and the disabled colour, wrapped.
+	 * @param alignToCheckboxLabel Indent it under a checkbox's label instead of its box.
+	 */
+	void SettingHint(const char* text, bool alignToCheckboxLabel = true);
+
+	/** @brief What an OptionCard shows. Strings are borrowed for the call only. */
+	struct OptionCardContent
+	{
+		const char* icon = nullptr;          /**< @brief Tabler glyph (ICON_TI_*) before the title, or null. */
+		const char* title = "";              /**< @brief Heading-sized title. */
+		const char* status = nullptr;        /**< @brief Short status line under the title, or null. */
+		ImVec4 statusColor{ 1, 1, 1, 1 };    /**< @brief Colour of the status line. */
+		const char* description = nullptr;   /**< @brief Wrapped secondary text, or null. */
+		const char* action = nullptr;        /**< @brief Label of a button along the card's bottom edge, or null for none. */
+		const char* actionTooltip = nullptr; /**< @brief Hover text of the action button, or null. */
+		bool unavailable = false;            /**< @brief Dims the content (the option cannot run here); the card stays clickable. */
+	};
+
+	/** @brief What an OptionCard click hit. */
+	enum class OptionCardClick : std::uint8_t
+	{
+		None,
+		Card,  /**< @brief The card itself: select it. */
+		Action /**< @brief The action button. */
+	};
+
+	/** @brief Height an OptionCard needs to show its content at a given width; take the max to line up a row of cards. */
+	float OptionCardHeight(const OptionCardContent& content, float width);
+
+	/**
+	 * @brief A clickable card on the OptionCard surface, for picking one of a few options whose details open below.
+	 * The card is one button (mouse, keyboard and gamepad) with an optional action button pinned to its bottom edge;
+	 * the selected card takes an accent border. Padding is even on every side.
+	 * @param id Unique ID within the current ID stack.
+	 * @param size Card size; a zero x fills the available width, a zero y uses OptionCardHeight.
+	 */
+	OptionCardClick OptionCard(const char* id, const OptionCardContent& content, bool selected, const ImVec2& size = ImVec2(0, 0));
+
 	bool DrawAnimatedButtonHighlight(const ImRect& rect, ImGuiID id, bool hovered, bool held, bool current, ImDrawList* drawList = nullptr);
 
 	/** @brief Draws a circle icon, filled or outlined, on the window draw list. */
@@ -642,6 +739,14 @@ namespace Util
 	 * @return True if the button was clicked
 	 */
 	bool ButtonWithFlash(const char* label, const ImVec2& size = ImVec2(0, 0), int flashDurationMs = 200);
+
+	/**
+	 * @brief ButtonWithFlash with a leading Tabler icon (Icons::LabeledButton).
+	 * @param id Unique ##id; also keys the flash timer.
+	 * @param tablerIcon ICON_TI_* glyph.
+	 * @param label Translated label.
+	 */
+	bool ButtonWithFlash(const char* id, const char* tablerIcon, const char* label, int flashDurationMs = 200);
 
 	/**
 	 * @brief Lets a fill be drawn beneath the widgets submitted while the scope is alive, by drawing them on a

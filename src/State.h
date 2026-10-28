@@ -188,6 +188,13 @@ public:
 	 */
 	bool HasUserEdits(Feature* feature);
 
+	/**
+	 * @brief The edits HasUserEdits answers for: the parts of a feature's settings that differ from GetFeatureBase.
+	 * @details Not cached; meant for an on-demand listing rather than every frame.
+	 * @return An empty object when the feature has none.
+	 */
+	nlohmann::json GetUserEdits(Feature* feature);
+
 	/** @brief Fills the HasUserEdits cache for every loaded feature under one scene layer suspension. */
 	void PrimeUserEdits();
 
@@ -507,6 +514,8 @@ public:
 	PermutationCB permutationDataPrevious{};
 
 	Util::FrameChecker frameChecker;
+	/// Resets the Active Shaders counts once per frame; separate from frameChecker, which only ticks while the performance overlay shows.
+	Util::FrameChecker shaderTrackingFrameChecker;
 	void RequestHistoryReset() { historyResetFrame = frameCount + 1u; }
 	bool ShouldResetHistory() const { return frameCount == historyResetFrame; }
 

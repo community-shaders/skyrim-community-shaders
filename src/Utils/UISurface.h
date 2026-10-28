@@ -20,6 +20,8 @@ namespace Util::Surface
 		OverlayCard, /**< @brief The shader compilation status card. */
 		Palette,     /**< @brief The Ctrl+K go-to palette. */
 		NavSelected, /**< @brief The selected row of the left navigation. */
+		OptionCard,  /**< @brief Clickable cards that pick one option and open it below (Util::OptionCard). */
+		SectionCard, /**< @brief Cards grouping related settings on a page (Util::SectionCard). */
 		Count
 	};
 
@@ -76,7 +78,12 @@ namespace Util::Surface
 		float alpha = 1.0f;        /**< @brief Multiplier on every layer, for fades. */
 		ImU32 borderColor = 0;     /**< @brief Border colour override (e.g. a card's status colour); 0 uses the role's. */
 		float minFillAlpha = 0.0f; /**< @brief Floor for the fill's opacity before fades, so a see-through window colour cannot thin the surface. */
+		ImVec4 clip{ 0, 0, 0, 0 }; /**< @brief Screen rect (min x, min y, max x, max y) the surface and shadow stay inside, such as the scrolling page
+		                                holding a card; an empty rect leaves them unbounded. */
 	};
+
+	/** @brief The visible area of the window enclosing the current child window, as an Options::clip. */
+	ImVec4 ParentClipRect();
 
 	/**
 	 * @brief Draws an accent frame inside [min, max]: a border of even thickness on every side plus a thicker stripe

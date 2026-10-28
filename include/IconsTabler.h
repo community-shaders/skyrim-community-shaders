@@ -50,6 +50,7 @@
 #define ICON_TI_ARROW_BACK_UP "\xee\xad\xb7"	// U+eb77
 #define ICON_TI_ARROW_FORWARD_UP "\xee\xad\xb8"	// U+eb78
 #define ICON_TI_BRUSH "\xee\xae\xb8"	// U+ebb8
+#define ICON_TI_TYPOGRAPHY "\xee\xaf\x85"	// U+ebc5
 #define ICON_TI_FLASK "\xee\xaf\x92"	// U+ebd2
 #define ICON_TI_SNOWFLAKE "\xee\xb0\x8b"	// U+ec0b
 #define ICON_TI_ADJUSTMENTS_HORIZONTAL "\xee\xb0\xb8"	// U+ec38
@@ -69,6 +70,7 @@
 #define ICON_TI_SORT_ASCENDING_LETTERS "\xee\xbc\x98"	// U+ef18
 #define ICON_TI_LAYOUT_SIDEBAR_LEFT_COLLAPSE "\xef\x80\x84"	// U+f004
 #define ICON_TI_LAYOUT_SIDEBAR_LEFT_EXPAND "\xef\x80\x85"	// U+f005
+#define ICON_TI_ROBOT "\xef\x80\x8b"	// U+f00b
 #define ICON_TI_NORTH_STAR "\xef\x80\x94"	// U+f014
 #define ICON_TI_PLUG_OFF "\xef\x86\x80"	// U+f180
 #define ICON_TI_ARROWS_EXCHANGE "\xef\x87\xb4"	// U+f1f4
@@ -76,6 +78,7 @@
 #define ICON_TI_SCAN_EYE "\xef\x87\xbf"	// U+f1ff
 #define ICON_TI_LOADER_2 "\xef\x88\xa6"	// U+f226
 #define ICON_TI_SUN_LOW "\xef\x88\xb7"	// U+f237
+#define ICON_TI_TEXT_SIZE "\xef\x8a\xb1"	// U+f2b1
 #define ICON_TI_CLOCK_PAUSE "\xef\x95\x88"	// U+f548
 #define ICON_TI_SPARKLES "\xef\x9b\x97"	// U+f6d7
 #define ICON_TI_SHARE_2 "\xef\x9e\x99"	// U+f799
@@ -127,6 +130,7 @@ inline constexpr unsigned short ICON_TI_GLYPH_RANGES[] = {
 	0xeb77, 0xeb77,
 	0xeb78, 0xeb78,
 	0xebb8, 0xebb8,
+	0xebc5, 0xebc5,
 	0xebd2, 0xebd2,
 	0xec0b, 0xec0b,
 	0xec38, 0xec38,
@@ -144,6 +148,7 @@ inline constexpr unsigned short ICON_TI_GLYPH_RANGES[] = {
 	0xef18, 0xef18,
 	0xf004, 0xf004,
 	0xf005, 0xf005,
+	0xf00b, 0xf00b,
 	0xf014, 0xf014,
 	0xf180, 0xf180,
 	0xf1f4, 0xf1f4,
@@ -151,6 +156,7 @@ inline constexpr unsigned short ICON_TI_GLYPH_RANGES[] = {
 	0xf1ff, 0xf1ff,
 	0xf226, 0xf226,
 	0xf237, 0xf237,
+	0xf2b1, 0xf2b1,
 	0xf548, 0xf548,
 	0xf6d7, 0xf6d7,
 	0xf799, 0xf799,

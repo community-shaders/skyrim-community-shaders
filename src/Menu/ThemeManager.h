@@ -219,9 +219,13 @@ public:
 		static constexpr float UI_FADE_SECONDS = 0.15f;                       // Time for a menu or editor widgets fade to run end to end
 
 		// Feature header constants
-		static constexpr float DEFAULT_FEATURE_TITLE_SCALE = 1.5f;  // Default scale for feature title text
-		static constexpr float VERSION_TEXT_OPACITY = 0.6f;         // Opacity for version text next to feature title
-		static constexpr float FEATURE_DESCRIPTION_OPACITY = 0.7f;  // Opacity for the description under a feature title
+		static constexpr float DEFAULT_FEATURE_TITLE_SCALE = 1.5f;         // Default scale for feature title text
+		static constexpr float OPTION_CARD_TITLE_SCALE = 1.25f;            // Option card titles, on the Heading font role
+		static constexpr float COLORS_PAGE_CELL_WIDTH_FONT_SIZES = 14.0f;  // Narrowest colour cell on the Colours page, in font sizes
+		static constexpr float FONTS_PAGE_ROLE_LIST_FONT_SIZES = 12.0f;    // Width of the Fonts page's role list, in font sizes
+		static constexpr float NAV_PILL_MIN_CONTENT_SCALE = 0.7f;          // Smallest a narrow nav pill shrinks its icon and label; below it the label hides
+		static constexpr float VERSION_TEXT_OPACITY = 0.6f;                // Opacity for version text next to feature title
+		static constexpr float FEATURE_DESCRIPTION_OPACITY = 0.7f;         // Opacity for the description under a feature title
 
 		// Main menu feature list pane (sizes are 1080p baseline, scaled by Util::GetUIScale())
 		static constexpr float NAV_ROW_ICON_GAP = 8.0f;                  // Gap between a page row's icon and its label
@@ -403,8 +407,6 @@ public:
 		static constexpr float TINTED_FRAME_BG_HOVERED_ALPHA = 0.35f;
 		static constexpr float TINTED_FRAME_BG_ACTIVE_ALPHA = 0.45f;
 		static constexpr float TINTED_FRAME_BORDER_SIZE = 1.0f;
-		static constexpr float BASELINE_MARKER_WIDTH = 3.0f;       // Changed-setting marker bar left of a control (1080p baseline)
-		static constexpr float BASELINE_MARKER_IDLE_ALPHA = 0.7f;  // Its opacity until hovered
 
 		// Status button brightness adjustment offsets. Bright colors are darkened by the same amounts for contrast.
 		static constexpr float BUTTON_MIN_COLOR_CHANNEL = 0.0f;

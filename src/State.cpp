@@ -179,6 +179,10 @@ void State::Draw()
 		if (globals::menu->overlayVisible && globals::features::performanceOverlay.loaded && globals::features::performanceOverlay.IsOverlayVisible())
 			Debug();
 
+		// Active Shaders counts draws per frame whether or not the performance overlay is up
+		if (IsDeveloperMode() && shaderTrackingFrameChecker.IsNewFrame())
+			globals::shaderCache->ResetFrameShaderTracking();
+
 		updateShader = false;
 	}
 }
@@ -198,9 +202,6 @@ void State::Debug()
 			c = 0;
 		for (auto& ft : frameTimePerType)
 			ft = 0.0f;
-
-		// Reset active shader tracking for developer mode
-		globals::shaderCache->ResetFrameShaderTracking();
 
 		// Start timing for this frame
 		if (frameTimingFrequency.QuadPart == 0) {
@@ -1007,6 +1008,19 @@ bool State::HasUserEdits(Feature* feature)
 	}
 	userEdits[name] = edited;
 	return edited;
+}
+
+json State::GetUserEdits(Feature* feature)
+{
+	if (!feature->loaded || !feature->UsesMainSettings())
+		return json::object();
+	const auto* base = GetFeatureBase(feature->GetName());
+	if (!base)
+		return json::object();
+	SceneSettingsManager::SceneLayerGuard sceneLayerGuard;
+	json current;
+	feature->SaveSettings(current);
+	return DiffFromBase(current, *base);
 }
 
 void State::PrimeUserEdits()

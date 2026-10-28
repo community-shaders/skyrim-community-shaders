@@ -139,36 +139,37 @@ std::span<const SettingsSearchEntry> AdvancedSettingsRenderer::GetSearchIndex()
 void AdvancedSettingsRenderer::RenderCompilerSection()
 {
 	auto shaderCache = globals::shaderCache;
+	Util::SectionCard card("##ShaderCompiler", ICON_TI_SETTINGS, T("menu.settings.section_compiler", "Compiler"));
 
+	// Startup and in-game thread counts side by side
 	{
-		MenuFonts::FontRoleGuard headingFont(Menu::FontRole::Subheading);
-		ImGui::SeparatorText(T("menu.settings.section_compiler", "Compiler"));
+		Util::SettingColumns columns("##CompilerThreadColumns");
+		const char* threadsLabel = T("menu.advanced.compiler_threads", "Compiler Threads");
+		Util::FitNextItemWithLabel(threadsLabel);
+		ImGui::SliderInt(threadsLabel, &shaderCache->compilationThreadCount, 1, static_cast<int32_t>(std::thread::hardware_concurrency()), "%d", ImGuiSliderFlags_AlwaysClamp);
+		Util::HoverTip(T("menu.advanced.compiler_threads_tooltip",
+			"Number of threads used to compile shaders at startup. "
+			"Defaults to all logical cores minus one for OS headroom (E-cores included). "
+			"Higher values finish compilation faster but may make the system less responsive."));
+		Util::SettingHint(T("menu.advanced.compiler_threads_hint", "Used at startup. More finishes sooner but leaves less for the rest of the system."), false);
+
+		columns.Next();
+		const char* backgroundLabel = T("menu.advanced.background_compiler_threads", "Background Compiler Threads");
+		Util::FitNextItemWithLabel(backgroundLabel);
+		ImGui::SliderInt(backgroundLabel, &shaderCache->backgroundCompilationThreadCount, 1, static_cast<int32_t>(std::thread::hardware_concurrency()), "%d", ImGuiSliderFlags_AlwaysClamp);
+		Util::HoverTip(T("menu.advanced.background_compiler_threads_tooltip",
+			"Number of threads used to compile shaders during gameplay. "
+			"Defaults to half of performance cores to avoid impacting the render thread. "
+			"Higher values finish compilation faster but may cause stuttering."));
+		Util::SettingHint(T("menu.advanced.background_compiler_threads_hint", "Used while playing. More finishes sooner but can stutter."), false);
 	}
 
-	// Compiler Thread controls
-	ImGui::SliderInt(T("menu.advanced.compiler_threads", "Compiler Threads"), &shaderCache->compilationThreadCount, 1, static_cast<int32_t>(std::thread::hardware_concurrency()), "%d", ImGuiSliderFlags_AlwaysClamp);
-	Util::HoverTip(T("menu.advanced.compiler_threads_tooltip",
-		"Number of threads used to compile shaders at startup. "
-		"Defaults to all logical cores minus one for OS headroom (E-cores included). "
-		"Higher values finish compilation faster but may make the system less responsive."));
-	ImGui::SliderInt(T("menu.advanced.background_compiler_threads", "Background Compiler Threads"), &shaderCache->backgroundCompilationThreadCount, 1, static_cast<int32_t>(std::thread::hardware_concurrency()), "%d", ImGuiSliderFlags_AlwaysClamp);
-	Util::HoverTip(T("menu.advanced.background_compiler_threads_tooltip",
-		"Number of threads used to compile shaders during gameplay. "
-		"Defaults to half of performance cores to avoid impacting the render thread. "
-		"Higher values finish compilation faster but may cause stuttering."));
-
-	// Dump Shaders option
+	ImGui::Spacing();
 	bool useDump = shaderCache->IsDump();
 	if (ImGui::Checkbox(T("menu.advanced.dump_shaders", "Dump Shaders"), &useDump)) {
 		shaderCache->SetDump(useDump);
 	}
-	Util::HoverTip(T("menu.advanced.dump_shaders_tooltip", "Dump shaders at startup. This should be used only when reversing shaders. Normal users don't need this."));
-
-	// Clear Shader Cache button
-	if (Util::Button(T("menu.advanced.clear_shader_cache", "Clear Shader Cache"), { -1, 0 })) {
-		shaderCache->Clear();
-	}
-	Util::HoverTip(T("menu.advanced.clear_shader_cache_tooltip", "Clear all compiled shaders from memory. Forces recompilation of all shaders on next use."));
+	Util::SettingHint(T("menu.advanced.dump_shaders_tooltip", "Dump shaders at startup. This should be used only when reversing shaders. Normal users don't need this."));
 }
 
 void AdvancedSettingsRenderer::RenderLoggingSection()
@@ -177,19 +178,27 @@ void AdvancedSettingsRenderer::RenderLoggingSection()
 
 	// Log Level selection
 	spdlog::level::level_enum logLevel = globals::state->GetLogLevel();
-	const char* items[] = {
-		T("menu.advanced.log_level_trace", "trace"),
-		T("menu.advanced.log_level_debug", "debug"),
-		T("menu.advanced.log_level_info", "info"),
-		T("menu.advanced.log_level_warn", "warn"),
-		T("menu.advanced.log_level_err", "err"),
-		T("menu.advanced.log_level_critical", "critical"),
-		T("menu.advanced.log_level_off", "off")
+	// In spdlog level order; each entry explains what that level writes
+	const std::pair<const char*, const char*> levels[] = {
+		{ T("menu.advanced.log_level_trace", "Trace"), T("menu.advanced.log_level_trace_tooltip", "Everything, down to per-frame detail. Logs grow quickly and the game may slow down. Also turns on Developer Mode.") },
+		{ T("menu.advanced.log_level_debug", "Debug"), T("menu.advanced.log_level_debug_tooltip", "Extra detail for tracking down a problem. Also turns on Developer Mode.") },
+		{ T("menu.advanced.log_level_info", "Info"), T("menu.advanced.log_level_info_tooltip", "Normal startup and status messages, plus everything below. The default.") },
+		{ T("menu.advanced.log_level_warn", "Warn"), T("menu.advanced.log_level_warn_tooltip", "Problems Community Shaders worked around, plus errors.") },
+		{ T("menu.advanced.log_level_err", "Error"), T("menu.advanced.log_level_err_tooltip", "Only failures, such as a shader that did not compile.") },
+		{ T("menu.advanced.log_level_critical", "Critical"), T("menu.advanced.log_level_critical_tooltip", "Only failures that stop Community Shaders from working.") },
+		{ T("menu.advanced.log_level_off", "Off"), T("menu.advanced.log_level_off_tooltip", "Nothing is written to the log.") },
 	};
-	int item_current = static_cast<int>(logLevel);
-	if (ImGui::Combo(T("menu.advanced.log_level", "Log Level"), &item_current, items, IM_ARRAYSIZE(items))) {
-		ImGui::SameLine();
-		globals::state->SetLogLevel(static_cast<spdlog::level::level_enum>(item_current));
+	const int currentLevel = std::clamp(static_cast<int>(logLevel), 0, static_cast<int>(std::size(levels)) - 1);
+	if (ImGui::BeginCombo(T("menu.advanced.log_level", "Log Level"), levels[currentLevel].first)) {
+		for (int i = 0; i < static_cast<int>(std::size(levels)); ++i) {
+			const bool selected = i == currentLevel;
+			if (Util::Selectable(levels[i].first, selected))
+				globals::state->SetLogLevel(static_cast<spdlog::level::level_enum>(i));
+			Util::HoverTip(levels[i].second);
+			if (selected)
+				ImGui::SetItemDefaultFocus();
+		}
+		ImGui::EndCombo();
 	}
 	Util::HoverTip(T("menu.advanced.log_level_tooltip", "Log level. Trace is most verbose. Default is info. Debug and Trace also enable Developer Mode."));
 
@@ -524,6 +533,21 @@ void AdvancedSettingsRenderer::RenderDeveloperSection()
 		"Writes every feature's built-in default settings to FeatureDefaults.json and opens it. "
 		"Defaults come from the running build; Baseline packs and your edits are not included."));
 
+	// Engine object addresses, for attaching a debugger; each button copies its address
+	ImGui::Spacing();
+	{
+		MenuFonts::FontRoleGuard heading(Menu::FontRole::Subheading);
+		ImGui::SeparatorText(T("menu.advanced.addresses", "Addresses"));
+	}
+	{
+		auto Renderer = globals::game::renderer;
+		auto BSShaderAccumulator = *globals::game::currentAccumulator.get();
+		auto RendererShadowState = globals::game::shadowState;
+		ADDRESS_NODE(Renderer);
+		ADDRESS_NODE(BSShaderAccumulator);
+		ADDRESS_NODE(RendererShadowState);
+	}
+
 	// The shader compiler flags share a card on the right
 	ImGui::TableNextColumn();
 	if (BrowserUI::BeginCard("##CompilerFlags", ImVec2(0.0f, 0.0f), ImGuiChildFlags_AutoResizeY)) {
@@ -578,16 +602,7 @@ void AdvancedSettingsRenderer::RenderDeveloperSection()
 	ImGui::EndChild();
 	ImGui::EndTable();
 
-	// Addresses and build statistics are niche, so they come last
-	if (ImGui::TreeNodeEx(T("menu.advanced.addresses", "Addresses"))) {
-		auto Renderer = globals::game::renderer;
-		auto BSShaderAccumulator = *globals::game::currentAccumulator.get();
-		auto RendererShadowState = globals::game::shadowState;
-		ADDRESS_NODE(Renderer);
-		ADDRESS_NODE(BSShaderAccumulator);
-		ADDRESS_NODE(RendererShadowState);
-		ImGui::TreePop();
-	}
+	// Build statistics are niche, so they come last
 
 	if (ImGui::TreeNodeEx(T("menu.advanced.statistics", "Statistics"))) {
 		std::string shaderStatsString = shaderCache->GetShaderStatsString();

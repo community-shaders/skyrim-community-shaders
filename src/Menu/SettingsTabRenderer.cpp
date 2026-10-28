@@ -1,8 +1,13 @@
 #include "SettingsTabRenderer.h"
 
+#include <algorithm>
+#include <array>
+#include <cmath>
 #include <format>
+#include <functional>
 #include <set>
 #include <string>
+#include <vector>
 #include <windows.h>
 
 #include "BackgroundBlur.h"
@@ -98,6 +103,8 @@ namespace
 		{ Ids::kStyling, "menu.settings.surface_overlay_card", "Status Card" },
 		{ Ids::kStyling, "menu.settings.surface_palette", "Go To Palette" },
 		{ Ids::kStyling, "menu.settings.surface_nav_selected", "Selected Navigation Row" },
+		{ Ids::kStyling, "menu.settings.surface_option_card", "Option Cards" },
+		{ Ids::kStyling, "menu.settings.surface_section_card", "Section Cards" },
 		{ Ids::kStyling, "menu.settings.surface_padding", "Inner Padding" },
 		{ Ids::kStyling, "menu.settings.surface_fill_lift", "Fill Lift" },
 		{ Ids::kStyling, "menu.settings.surface_border_enabled", "Border" },
@@ -118,6 +125,347 @@ namespace
 		}
 
 		return std::string(localeCode);
+	}
+
+	/** @brief Visits every colour value of a theme the Colours page edits, as (data, float count). */
+	template <class Theme, class Fn>
+	void ForEachColorValue(Theme& theme, Fn&& fn)
+	{
+		for (auto* color : { &theme.Palette.Background, &theme.Palette.Text, &theme.Palette.WindowBorder, &theme.Palette.FrameBorder,
+				 &theme.Palette.Separator, &theme.Palette.ResizeGrip, &theme.StatusPalette.Disable, &theme.StatusPalette.Error,
+				 &theme.StatusPalette.Warning, &theme.StatusPalette.RestartNeeded, &theme.StatusPalette.CurrentHotkey,
+				 &theme.StatusPalette.SuccessColor, &theme.StatusPalette.InfoColor, &theme.FeatureHeading.ColorDefault,
+				 &theme.FeatureHeading.ColorHovered })
+			fn(&color->x, 4);
+		fn(&theme.FeatureHeading.MinimizedFactor, 1);
+		for (auto& color : theme.FullPalette)
+			fn(&color.x, 4);
+	}
+
+	/** @brief Every colour value of the live theme, flattened: the Colours page's undo snapshot. */
+	std::vector<float> CaptureThemeColors()
+	{
+		std::vector<float> values;
+		ForEachColorValue(globals::menu->GetSettings().Theme, [&](const float* data, int count) { values.insert(values.end(), data, data + count); });
+		return values;
+	}
+
+	/** @brief The Colours page's undo target: every colour of the live theme, as one value. */
+	UndoHistory::Target MakeThemeColorsUndoTarget()
+	{
+		return {
+			.key = "theme.colors",
+			.label = T("menu.settings.tab_colors", "Colors"),
+			.capture = [] { return UndoHistory::Capture(CaptureThemeColors()); },
+			.restore = [](const UndoHistory::Snapshot& snapshot) {
+				const auto& values = UndoHistory::Get<std::vector<float>>(snapshot);
+				size_t i = 0;
+				ForEachColorValue(globals::menu->GetSettings().Theme, [&](float* data, int count) {
+					for (int c = 0; c < count && i < values.size(); ++c)
+						data[c] = values[i++];
+				}); },
+		};
+	}
+
+	/**
+	 * @brief The selected theme as its file has it: what the Colours and Fonts resets put a value back to. Re-read when the selection
+	 * changes or the page is opened again, so a Save Theme in between is picked up.
+	 */
+	const Menu::ThemeSettings& GetThemeFileReference()
+	{
+		static Menu::ThemeSettings reference;
+		static std::string referenceName;
+		static int lastFrame = -2;
+		const std::string& selected = globals::menu->GetSettings().SelectedThemePreset;
+		const int frame = ImGui::GetFrameCount();
+		if (selected != referenceName || frame - lastFrame > 1) {
+			referenceName = selected;
+			reference = Menu::ThemeSettings{};
+			if (const auto* info = ThemeManager::GetSingleton()->GetThemeInfo(selected); info && info->themeData.contains("Theme")) {
+				try {
+					const json& theme = info->themeData["Theme"];
+					Menu::ThemeFromJson(theme, reference);
+				} catch (const std::exception& e) {
+					logger::warn("Colors page: could not read theme '{}' for reset: {}", selected, e.what());
+					reference = Menu::ThemeSettings{};
+				}
+			}
+		}
+		lastFrame = frame;
+		return reference;
+	}
+
+	/** @brief Whether two colours differ by more than a picker step. */
+	bool ColorDiffers(const float* a, const float* b, int count)
+	{
+		for (int i = 0; i < count; ++i)
+			if (std::abs(a[i] - b[i]) > 1.0f / 512.0f)
+				return true;
+		return false;
+	}
+
+	/** @brief One editable colour on the Colours page. */
+	struct ColorEntry
+	{
+		const char* name;
+		float* value;
+		const float* reference;
+		ImGuiColorEditFlags flags = ImGuiColorEditFlags_None;
+		const char* note = nullptr;  ///< Hover text explaining a limit on the colour
+	};
+
+	/** @brief The Full Palette groups, in display order. */
+	enum class PaletteGroup : int
+	{
+		Text,
+		Windows,
+		Inputs,
+		Buttons,
+		Lists,
+		Tabs,
+		Scrollbar,
+		Tables,
+		Plots,
+		Docking,
+		Count
+	};
+
+	const char* GetPaletteGroupTitle(PaletteGroup group)
+	{
+		switch (group) {
+		case PaletteGroup::Text:
+			return T("menu.settings.palette_group_text", "Text");
+		case PaletteGroup::Windows:
+			return T("menu.settings.palette_group_windows", "Windows & Popups");
+		case PaletteGroup::Inputs:
+			return T("menu.settings.palette_group_inputs", "Inputs, Sliders & Checkboxes");
+		case PaletteGroup::Buttons:
+			return T("menu.settings.palette_group_buttons", "Buttons");
+		case PaletteGroup::Lists:
+			return T("menu.settings.palette_group_lists", "Headers, Lists & Separators");
+		case PaletteGroup::Tabs:
+			return T("menu.settings.palette_group_tabs", "Tabs");
+		case PaletteGroup::Scrollbar:
+			return T("menu.settings.palette_group_scrollbar", "Scrollbar");
+		case PaletteGroup::Tables:
+			return T("menu.settings.palette_group_tables", "Tables");
+		case PaletteGroup::Plots:
+			return T("menu.settings.palette_group_plots", "Graphs");
+		default:
+			return T("menu.settings.palette_group_docking", "Docking & Navigation");
+		}
+	}
+
+	/** @brief Group of an ImGuiCol, from its name so the mapping survives ImGui adding or reordering colours. */
+	PaletteGroup GetPaletteGroup(int colorIndex)
+	{
+		const std::string_view name = ImGui::GetStyleColorName(colorIndex);
+		const auto starts = [&](std::string_view prefix) { return name.starts_with(prefix); };
+		if (starts("Text") || starts("InputTextCursor"))
+			return PaletteGroup::Text;
+		if (starts("Window") || starts("ChildBg") || starts("PopupBg") || starts("Border") || starts("TitleBg") || starts("MenuBarBg") || starts("ModalWindowDimBg"))
+			return PaletteGroup::Windows;
+		if (starts("FrameBg") || starts("CheckMark") || starts("SliderGrab"))
+			return PaletteGroup::Inputs;
+		if (starts("Button"))
+			return PaletteGroup::Buttons;
+		if (starts("Header") || starts("TreeLines") || starts("Separator") || starts("ResizeGrip"))
+			return PaletteGroup::Lists;
+		if (starts("Tab"))
+			return PaletteGroup::Tabs;
+		if (starts("Scrollbar"))
+			return PaletteGroup::Scrollbar;
+		if (starts("Table"))
+			return PaletteGroup::Tables;
+		if (starts("Plot"))
+			return PaletteGroup::Plots;
+		return PaletteGroup::Docking;
+	}
+
+	/** @brief Full Palette slots the theme fills from elsewhere, so editing them here would do nothing. */
+	bool IsPaletteSlotDerived(int colorIndex)
+	{
+		switch (colorIndex) {
+		case ImGuiCol_Text:
+		case ImGuiCol_WindowBg:
+		case ImGuiCol_Border:
+		case ImGuiCol_FrameBg:
+		case ImGuiCol_Separator:
+		case ImGuiCol_ResizeGrip:
+		case ImGuiCol_ResizeGripHovered:
+		case ImGuiCol_ResizeGripActive:
+			return true;
+		default:
+			return false;
+		}
+	}
+
+	/** @brief State of the Colours page's toolbar. UI state only. */
+	struct ColorsPageState
+	{
+		ImGuiTextFilter filter;
+		bool changedOnly = false;
+	};
+
+	ColorsPageState& GetColorsPageState()
+	{
+		static ColorsPageState state;
+		return state;
+	}
+
+	/** @brief Whether an entry passes the search text and the Changed only toggle. */
+	bool IsColorEntryShown(const ColorEntry& entry)
+	{
+		const auto& state = GetColorsPageState();
+		if (!state.filter.PassFilter(entry.name))
+			return false;
+		const int count = (entry.flags & ImGuiColorEditFlags_NoAlpha) ? 3 : 4;
+		return !state.changedOnly || ColorDiffers(entry.value, entry.reference, count);
+	}
+
+	/**
+	 * @brief Draws colours as a grid of swatch + name cells, with a reset button on each one that differs from the
+	 * theme file. Clicking a swatch opens the picker; hovering it shows the value.
+	 */
+	void DrawColorGrid(const char* id, const std::vector<ColorEntry>& entries)
+	{
+		const float cellMinWidth = ImGui::GetFontSize() * ThemeManager::Constants::COLORS_PAGE_CELL_WIDTH_FONT_SIZES;
+		const int columns = std::clamp(static_cast<int>(ImGui::GetContentRegionAvail().x / cellMinWidth), 1, 3);
+		if (!ImGui::BeginTable(id, columns, ImGuiTableFlags_SizingStretchSame))
+			return;
+		for (const auto& entry : entries) {
+			ImGui::TableNextColumn();
+			ImGui::PushID(entry.name);
+			const float cellStartX = ImGui::GetCursorPosX();
+			const float cellWidth = ImGui::GetContentRegionAvail().x;
+			ImGui::ColorEdit4("##Color", entry.value,
+				entry.flags | ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel | ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_AlphaPreviewHalf);
+			ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x);
+			ImGui::AlignTextToFramePadding();
+			ImGui::TextUnformatted(entry.name);
+			if (entry.note)
+				Util::HoverTip(entry.note);
+
+			const int count = (entry.flags & ImGuiColorEditFlags_NoAlpha) ? 3 : 4;
+			if (ColorDiffers(entry.value, entry.reference, count)) {
+				const float buttonWidth = ImGui::GetFrameHeight();
+				ImGui::SameLine();
+				ImGui::SetCursorPosX(std::max(ImGui::GetCursorPosX(), cellStartX + cellWidth - buttonWidth));
+				if (BrowserUI::IconButton("##Reset", Icons::TI(MenuIcons::kRestore), T("menu.settings.color_reset_tooltip", "Reset to the theme's colour")))
+					std::copy_n(entry.reference, count, entry.value);
+			}
+			ImGui::PopID();
+		}
+		ImGui::EndTable();
+	}
+
+	/** @brief A SectionCard holding a colour grid; skipped entirely when the toolbar filters every entry out. */
+	void DrawColorCard(const char* id, const char* icon, const char* title, const std::vector<ColorEntry>& entries, const std::function<void()>& extra = {})
+	{
+		std::vector<ColorEntry> shown;
+		for (const auto& entry : entries)
+			if (IsColorEntryShown(entry))
+				shown.push_back(entry);
+		if (shown.empty() && !extra)
+			return;
+		Util::SectionCard card(id, icon, title);
+		DrawColorGrid("##Grid", shown);
+		if (extra)
+			extra();
+	}
+
+	/** @brief The Fonts page's undo target: base size, resolution sizing, every role's font and scale, and the feature header scale. */
+	UndoHistory::Target MakeFontsUndoTarget()
+	{
+		return {
+			.key = "theme.fonts",
+			.label = T("menu.settings.tab_fonts", "Fonts"),
+			.capture = [] {
+				const auto& settings = globals::menu->GetSettings();
+				json state = { { "size", settings.Theme.FontSize }, { "auto", settings.UseResolutionFont }, { "titleScale", settings.Theme.FeatureHeading.FeatureTitleScale } };
+				for (const auto& role : settings.Theme.FontRoles)
+					state["roles"].push_back({ role.Family, role.Style, role.File, role.SizeScale });
+				return UndoHistory::Capture(std::move(state)); },
+			.restore = [](const UndoHistory::Snapshot& snapshot) {
+				const auto& state = UndoHistory::Get<json>(snapshot);
+				auto& settings = globals::menu->GetSettings();
+				settings.Theme.FontSize = state["size"].get<float>();
+				settings.UseResolutionFont = state["auto"].get<bool>();
+				settings.Theme.FeatureHeading.FeatureTitleScale = state["titleScale"].get<float>();
+				const auto& roles = state["roles"];
+				for (size_t i = 0; i < settings.Theme.FontRoles.size() && i < roles.size(); ++i) {
+					auto& role = settings.Theme.FontRoles[i];
+					role.Family = roles[i][0].get<std::string>();
+					role.Style = roles[i][1].get<std::string>();
+					role.File = roles[i][2].get<std::string>();
+					role.SizeScale = roles[i][3].get<float>();
+				}
+				settings.Theme.FontName = settings.Theme.FontRoles[static_cast<size_t>(Menu::FontRole::Body)].File;
+				MenuFonts::GetAtlasState().pendingFontReload = true; },
+		};
+	}
+
+	/** @brief What each font role is used for, under its name on the Fonts page. */
+	const char* GetFontRoleDescription(Menu::FontRole role)
+	{
+		switch (role) {
+		case Menu::FontRole::Body:
+			return T("menu.settings.font_role_body_desc", "Most of the menu: settings, lists and buttons.");
+		case Menu::FontRole::Title:
+			return T("menu.settings.font_role_title_desc", "Large titles, such as the menu header and feature names at the top of a page.");
+		case Menu::FontRole::Heading:
+			return T("menu.settings.font_role_heading_desc", "Section headers, such as card titles and category labels.");
+		case Menu::FontRole::Subheading:
+			return T("menu.settings.font_role_subheading_desc", "Subsection headers and separators within a page.");
+		case Menu::FontRole::Subtext:
+		default:
+			return T("menu.settings.font_role_subtext_desc", "Smaller secondary text, such as descriptions and hints.");
+		}
+	}
+
+	/** @brief Whether a role's font and scale match the theme file. */
+	bool FontRoleMatches(const Menu::ThemeSettings::FontRoleSettings& a, const Menu::ThemeSettings::FontRoleSettings& b)
+	{
+		return a.Family == b.Family && a.Style == b.Style && a.File == b.File && std::abs(a.SizeScale - b.SizeScale) < 0.001f;
+	}
+
+	/**
+	 * @brief One row of the role list: the role's name drawn in its own font, with its family, style and scale
+	 * underneath. @return True when clicked.
+	 */
+	bool FontRoleRow(Menu::FontRole role, const Menu::ThemeSettings::FontRoleSettings& settings, bool selected)
+	{
+		const auto& descriptor = Menu::FontRoleDescriptors[static_cast<size_t>(role)];
+		const std::string detail = std::format("{} {} \u00b7 {:.2f}x", settings.Family, settings.Style, settings.SizeScale);
+		float nameHeight;
+		ImFont* nameFont;
+		float nameSize;
+		{
+			MenuFonts::FontRoleGuard roleFont(role);
+			nameFont = ImGui::GetFont();
+			nameSize = ImGui::GetFontSize();
+			nameHeight = ImGui::GetTextLineHeight();
+		}
+		ImFont* detailFont;
+		float detailSize;
+		{
+			MenuFonts::FontRoleGuard subtext(Menu::FontRole::Subtext);
+			detailFont = ImGui::GetFont();
+			detailSize = ImGui::GetFontSize();
+		}
+		const ImGuiStyle& style = ImGui::GetStyle();
+		const float pad = style.FramePadding.y;
+		const float height = pad * 2.0f + nameHeight + detailSize;
+		const bool clicked = Util::Selectable("##RoleRow", selected, ImGuiSelectableFlags_None, ImVec2(0.0f, height));
+		const ImVec2 min = ImGui::GetItemRectMin();
+		const ImVec2 max = ImGui::GetItemRectMax();
+		ImDrawList* drawList = ImGui::GetWindowDrawList();
+		drawList->PushClipRect(min, max, true);
+		const float x = min.x + style.FramePadding.x;
+		drawList->AddText(nameFont, nameSize, ImVec2(x, min.y + pad), ImGui::GetColorU32(ImGuiCol_Text), descriptor.displayName.data());
+		drawList->AddText(detailFont, detailSize, ImVec2(x, min.y + pad + nameHeight), ImGui::GetColorU32(ImGuiCol_TextDisabled), detail.c_str());
+		drawList->PopClipRect();
+		return clicked;
 	}
 
 	// Convert ImGui internal color names to user-friendly display names
@@ -299,67 +647,109 @@ std::span<const SettingsSearchEntry> SettingsTabRenderer::GetSearchIndex()
 void SettingsTabRenderer::RenderThemeSaveNote()
 {
 	auto& ts = globals::menu->GetSettings().Theme;
+	MenuFonts::FontRoleGuard subtextFont(Menu::FontRole::Subtext);
 	ImGui::PushStyleColor(ImGuiCol_Text, ts.StatusPalette.InfoColor);
 	ImGui::TextWrapped("%s", T("menu.settings.theme_save_model",
 								 "Theme edits are saved into the theme file with Save Theme. "
 								 "Which theme is selected is saved with Save Settings (Ctrl+S)."));
 	ImGui::PopStyleColor();
-	ImGui::Spacing();
 }
 
 void SettingsTabRenderer::RenderShadersSection()
 {
 	auto shaderCache = globals::shaderCache;
+	auto* i18n = I18n::GetSingleton();
 
-	bool useCustomShaders = shaderCache->IsEnabled();
-	if (Util::CheckboxTip(T("menu.settings.use_custom_shaders", "Use Custom Shaders"), &useCustomShaders, T("menu.settings.use_custom_shaders_tooltip", "Disabling this effectively disables all features."))) {
-		shaderCache->SetEnabled(useCustomShaders);
+	// Status: the last build at a glance and the cache actions
+	{
+		Util::SectionCard card("##ShaderCacheStatus", MenuIcons::kShaders, T("menu.settings.card_shader_cache", "Shader Cache"));
+		const uint64_t failed = shaderCache->GetFailedTasks();
+		if (shaderCache->IsCompiling()) {
+			ImGui::TextColored(Util::Colors::GetInfo(), "%s",
+				i18n->Format("menu.status.compiling",
+						{ { "done", std::to_string(shaderCache->GetCompletedTasks()) }, { "total", std::to_string(shaderCache->GetTotalTasks()) } },
+						"Compiling shaders {done}/{total}")
+					.c_str());
+		} else if (shaderCache->GetTotalTasks() == 0) {
+			Util::Text::Disabled("%s", T("menu.home.shaders_none", "No shaders compiled yet"));
+		} else {
+			ImGui::TextUnformatted(i18n->Format("menu.home.shaders_build_time",
+										   { { "time", shaderCache->GetShaderStatsString(true, true) } }, "Last build: {time}")
+					.c_str());
+			ImGui::SameLine();
+			if (failed > 0)
+				ImGui::TextColored(Util::Colors::GetError(), "%s",
+					i18n->Format("menu.status.failed_shaders", { { "count", std::to_string(failed) } }, "Failed shaders: {count}").c_str());
+			else
+				Util::Text::Success("%s", T("menu.home.shaders_no_failures", "No failed shaders"));
+		}
+
+		if (shaderCache->GetTotalTasks() > 0) {
+			ShaderCacheStatusWidget::DrawBreakdownBar();
+			ShaderCacheStatusWidget::DrawBreakdownLegend();
+			if (globals::state->IsDeveloperMode()) {
+				MenuFonts::FontRoleGuard subtext(Menu::FontRole::Subtext);
+				ImGui::TextDisabled("Threads: %d compile, %d background, %d pool | P-cores: %d",
+					(int)shaderCache->compilationThreadCount,
+					(int)shaderCache->backgroundCompilationThreadCount,
+					(int)shaderCache->compilationPool.get_thread_count(),
+					(int)Util::GetPerformanceCoreCount());
+			}
+		}
+
+		ImGui::Spacing();
+		if (Util::Button(T("menu.advanced.clear_shader_cache", "Clear Shader Cache")))
+			shaderCache->Clear();
+		Util::HoverTip(T("menu.advanced.clear_shader_cache_tooltip", "Clear all compiled shaders from memory. Forces recompilation of all shaders on next use."));
+		ImGui::SameLine();
+		if (Util::Button(T("menu.settings.full_recache", "Full Recache...")))
+			Util::RequestClearShaderCacheConfirmation();
+		Util::HoverTip(T("menu.settings.full_recache_tooltip", "Clears the memory and disk caches, so every shader compiles again at the next start."));
+		ImGui::SameLine(0.0f, ImGui::GetStyle().ItemSpacing.x * 4.0f);
+
+		auto& menuSettings = globals::menu->GetSettings();
+		bool skipConfirmation = menuSettings.SkipClearCacheConfirmation;
+		if (Util::CheckboxTip(T("menu.settings.skip_clear_cache_dialogue", "Skip Clear Cache Dialogue"), &skipConfirmation, T("menu.settings.skip_clear_cache_dialogue_tooltip", "When checked, the shader cache will be cleared immediately without asking for confirmation."))) {
+			menuSettings.SkipClearCacheConfirmation = skipConfirmation;
+		}
 	}
 
-	bool useDiskCache = shaderCache->IsDiskCache();
-	if (Util::CheckboxTip(T("menu.settings.enable_disk_cache", "Enable Disk Cache"), &useDiskCache, T("menu.settings.enable_disk_cache_tooltip", "Disables loading shaders from disk and prevents saving compiled shaders to disk cache."))) {
-		shaderCache->SetDiskCache(useDiskCache);
-	}
+	// Shaders and the disk cache side by side: whether CS replaces the game's shaders, and how they are kept
+	{
+		Util::SectionCard card("##ShaderOptions", ICON_TI_SPARKLES, T("menu.settings.card_shader_options", "Shaders & Disk Cache"));
+		Util::SettingColumns columns("##ShaderOptionColumns");
 
-	bool skipUnchanged = shaderCache->IsSkipUnchangedShaders();
-	ImGui::BeginDisabled(!useDiskCache);
-	if (ImGui::Checkbox(T("menu.settings.skip_unchanged_shaders", "Skip Unchanged Shaders"), &skipUnchanged)) {
-		shaderCache->SetSkipUnchangedShaders(skipUnchanged);
-	}
-	ImGui::EndDisabled();
-	Util::HoverTip(T("menu.settings.skip_unchanged_shaders_tooltip",
-		"When enabled, each shader is recompiled from source only if its .hlsl file "
-		"is newer than the cached .bin on disk. "
-		"Shaders whose source has not changed are loaded directly from the disk cache, "
-		"avoiding the full startup compilation cost. "
-		"Useful for iterative testing: change a shader file and only that shader is rebuilt. "
-		"Requires 'Enable Disk Cache' to be active."));
+		bool useCustomShaders = shaderCache->IsEnabled();
+		if (ImGui::Checkbox(T("menu.settings.use_custom_shaders", "Use Custom Shaders"), &useCustomShaders))
+			shaderCache->SetEnabled(useCustomShaders);
+		Util::SettingHint(T("menu.settings.use_custom_shaders_tooltip", "Disabling this effectively disables all features."));
 
-	bool useAsync = shaderCache->IsAsync();
-	if (Util::CheckboxTip(T("menu.settings.enable_async", "Enable Async"), &useAsync, T("menu.settings.enable_async_tooltip", "Skips a shader being replaced if it hasn't been compiled yet. Also makes compilation blazingly fast!"))) {
-		shaderCache->SetAsync(useAsync);
-	}
+		ImGui::Spacing();
+		bool useAsync = shaderCache->IsAsync();
+		if (ImGui::Checkbox(T("menu.settings.enable_async", "Enable Async"), &useAsync))
+			shaderCache->SetAsync(useAsync);
+		Util::SettingHint(T("menu.settings.enable_async_hint", "Draws the game's own shader until its replacement is compiled, so startup is much faster."));
 
-	// Skip confirmation when clearing shader cache
-	auto& menuSettings = globals::menu->GetSettings();
-	bool skipConfirmation = menuSettings.SkipClearCacheConfirmation;
-	if (Util::CheckboxTip(T("menu.settings.skip_clear_cache_dialogue", "Skip Clear Cache Dialogue"), &skipConfirmation, T("menu.settings.skip_clear_cache_dialogue_tooltip", "When checked, the shader cache will be cleared immediately without asking for confirmation."))) {
-		menuSettings.SkipClearCacheConfirmation = skipConfirmation;
-	}
+		columns.Next();
+		bool useDiskCache = shaderCache->IsDiskCache();
+		if (ImGui::Checkbox(T("menu.settings.enable_disk_cache", "Enable Disk Cache"), &useDiskCache))
+			shaderCache->SetDiskCache(useDiskCache);
+		Util::SettingHint(T("menu.settings.enable_disk_cache_hint", "Saves compiled shaders to disk, so later starts load them instead of compiling."));
 
-	if (shaderCache->GetTotalTasks() > 0) {
-		ImGui::Text(T("menu.settings.last_shader_cache_duration", "Last shader cache build duration: %s"),
-			shaderCache->GetShaderStatsString(true, true).c_str());
-
-		ShaderCacheStatusWidget::DrawBreakdownBar();
-
-		auto state = globals::state;
-		if (state->IsDeveloperMode()) {
-			ImGui::Text("Threads: %d compile, %d background, %d pool | P-cores: %d",
-				(int)shaderCache->compilationThreadCount,
-				(int)shaderCache->backgroundCompilationThreadCount,
-				(int)shaderCache->compilationPool.get_thread_count(),
-				(int)Util::GetPerformanceCoreCount());
+		ImGui::Spacing();
+		bool skipUnchanged = shaderCache->IsSkipUnchangedShaders();
+		{
+			Util::DisableGuard noDiskCache(!useDiskCache);
+			if (ImGui::Checkbox(T("menu.settings.skip_unchanged_shaders", "Skip Unchanged Shaders"), &skipUnchanged))
+				shaderCache->SetSkipUnchangedShaders(skipUnchanged);
+			Util::HoverTip(T("menu.settings.skip_unchanged_shaders_tooltip",
+				"When enabled, each shader is recompiled from source only if its .hlsl file "
+				"is newer than the cached .bin on disk. "
+				"Shaders whose source has not changed are loaded directly from the disk cache, "
+				"avoiding the full startup compilation cost. "
+				"Useful for iterative testing: change a shader file and only that shader is rebuilt. "
+				"Requires 'Enable Disk Cache' to be active."));
+			Util::SettingHint(T("menu.settings.skip_unchanged_shaders_hint", "Rebuilds only shaders whose source changed since they were cached. Needs the disk cache."));
 		}
 	}
 }
@@ -369,24 +759,29 @@ void SettingsTabRenderer::RenderKeybindingsSection(SettingsState& state)
 	auto& settings = globals::menu->GetSettings();
 	static const Menu::Settings defaults{};
 
-	SeparatorTextWithFont(T("menu.settings.keys_menus_editors", "Menus & Editors"), Menu::FontRole::Subheading);
-	KeybindingRow(T("menu.settings.toggle_key", "Toggle Key:"), settings.ToggleKey, defaults.ToggleKey, state.settingToggleKey, "Change##toggle");
-	KeybindingRow(T("menu.settings.cs_editor_toggle_key", "CS Editor Toggle Key:"), settings.CSEditorToggleKey, defaults.CSEditorToggleKey, state.settingCSEditorToggleKey, "Change##CSEditorToggle");
-	KeybindingRow(T("menu.settings.effects11_editor_key", "Effects 11 Editor Key:"), settings.Effects11EditorKey, defaults.Effects11EditorKey, state.settingEffects11EditorKey, "Change##Effects11Editor");
+	{
+		Util::SectionCard card("##KeysMenusEditors", ICON_TI_LAYOUT_COLUMNS, T("menu.settings.keys_menus_editors", "Menus & Editors"));
+		KeybindingRow(T("menu.settings.toggle_key", "Toggle Key:"), settings.ToggleKey, defaults.ToggleKey, state.settingToggleKey, "Change##toggle");
+		KeybindingRow(T("menu.settings.cs_editor_toggle_key", "CS Editor Toggle Key:"), settings.CSEditorToggleKey, defaults.CSEditorToggleKey, state.settingCSEditorToggleKey, "Change##CSEditorToggle");
+		KeybindingRow(T("menu.settings.effects11_editor_key", "Effects 11 Editor Key:"), settings.Effects11EditorKey, defaults.Effects11EditorKey, state.settingEffects11EditorKey, "Change##Effects11Editor");
+	}
 
-	SeparatorTextWithFont(T("menu.settings.keys_overlays_capture", "Overlays & Capture"), Menu::FontRole::Subheading);
-	KeybindingRow(T("menu.settings.overlay_toggle_key", "Overlay Toggle Key:"), settings.OverlayToggleKey, defaults.OverlayToggleKey, state.settingOverlayToggleKey, "Change##OverlayToggle");
-	KeybindingRow(T("menu.settings.screenshot_key", "Screenshot Key:"), settings.ScreenshotKey, defaults.ScreenshotKey, state.settingScreenshotKey, "Change##Screenshot");
+	{
+		Util::SectionCard card("##KeysOverlaysCapture", MenuIcons::kProfiling, T("menu.settings.keys_overlays_capture", "Overlays & Capture"));
+		KeybindingRow(T("menu.settings.overlay_toggle_key", "Overlay Toggle Key:"), settings.OverlayToggleKey, defaults.OverlayToggleKey, state.settingOverlayToggleKey, "Change##OverlayToggle");
+		KeybindingRow(T("menu.settings.screenshot_key", "Screenshot Key:"), settings.ScreenshotKey, defaults.ScreenshotKey, state.settingScreenshotKey, "Change##Screenshot");
+	}
 
-	SeparatorTextWithFont(T("menu.settings.keys_debug", "Debug"), Menu::FontRole::Subheading);
+	Util::SectionCard card("##KeysDebug", Util::GetCategoryIcon("Utility"), T("menu.settings.keys_debug", "Debug"));
 	KeybindingRow(T("menu.settings.effect_toggle_key", "Effect Toggle Key:"), settings.EffectToggleKey, defaults.EffectToggleKey, state.settingsEffectsToggle, "Change##EffectToggle");
 	KeybindingRow(T("menu.settings.effects11_toggle_key", "Effects 11 Toggle Key:"), settings.Effects11ToggleKey, defaults.Effects11ToggleKey, state.settingEffects11ToggleKey, "Change##Effects11Toggle");
 	KeybindingRow(T("menu.settings.skip_compilation_key", "Skip Compilation Key:"), settings.SkipCompilationKey, defaults.SkipCompilationKey, state.settingSkipCompilationKey, "Change##skip");
 	KeybindingRow(T("menu.settings.shader_block_prev_key", "Shader Block Previous Key:"), settings.ShaderBlockPrevKey, defaults.ShaderBlockPrevKey, state.settingShaderBlockPrevKey, "Change##ShaderBlockPrev");
 	KeybindingRow(T("menu.settings.shader_block_next_key", "Shader Block Next Key:"), settings.ShaderBlockNextKey, defaults.ShaderBlockNextKey, state.settingShaderBlockNextKey, "Change##ShaderBlockNext");
 	if (!settings.EnableShaderBlocking) {
-		ImGui::TextDisabled("%s", T("menu.settings.shader_block_keys_hint",
-									  "The shader block keys work while Enable Shader Blocking is on (Shader Debug, Developer Mode only)."));
+		Util::SettingHint(T("menu.settings.shader_block_keys_hint",
+							  "The shader block keys work while Enable Shader Blocking is on (Shader Debug, Developer Mode only)."),
+			false);
 	}
 }
 
@@ -609,7 +1004,7 @@ void SettingsTabRenderer::RenderThemesSection()
 		}
 	}
 
-	if (Util::Button(T("menu.settings.refresh", "Refresh"))) {
+	if (Icons::LabeledButton("##RefreshThemes", Icons::TI(ICON_TI_REFRESH), T("menu.settings.refresh", "Refresh"))) {
 		themeManager->RefreshThemes();
 		// Ensure a valid theme is still selected
 		const auto* themeInfo = themeManager->GetThemeInfo(currentThemePreset);
@@ -627,7 +1022,7 @@ void SettingsTabRenderer::RenderThemesSection()
 	}
 
 	ImGui::SameLine();
-	if (Util::Button(T("menu.settings.open_themes_folder", "Open Themes Folder"))) {
+	if (Icons::LabeledButton("##OpenThemesFolder", Icons::TI(MenuIcons::kFolder), T("menu.settings.open_themes_folder", "Open Themes Folder"))) {
 		std::filesystem::path themesPath = Util::PathHelpers::GetThemesRealPath();
 		ShellExecuteA(NULL, "open", themesPath.string().c_str(), NULL, NULL, SW_SHOWNORMAL);
 	}
@@ -639,6 +1034,10 @@ void SettingsTabRenderer::RenderThemesSection()
 	if (currentItem >= 0 && currentItem < static_cast<int>(themes.size())) {
 		ImGui::Spacing();
 		const auto& selectedTheme = themes[currentItem];
+		ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetAccent());
+		Icons::Text(Icons::TI(MenuIcons::kPresets));
+		ImGui::PopStyleColor();
+		ImGui::SameLine();
 		ImGui::Text("%s", T("menu.settings.selected_theme", "Selected Theme: "));
 		ImGui::SameLine(0, 0);
 		ImGui::TextColored(themeSettings.StatusPalette.InfoColor, "%s", selectedTheme.displayName.c_str());
@@ -652,7 +1051,7 @@ void SettingsTabRenderer::RenderThemesSection()
 	const auto* currentThemeInfo = themeManager->GetThemeInfo(currentThemePreset);
 
 	if (!isPreset) {
-		if (Util::ButtonWithFlash(T("menu.settings.save_theme", "Save Theme"))) {
+		if (Util::ButtonWithFlash("##SaveTheme", MenuIcons::kSave, T("menu.settings.save_theme", "Save Theme"))) {
 			if (currentThemeInfo) {
 				// Get current settings
 				json currentThemeJson;
@@ -717,7 +1116,7 @@ void SettingsTabRenderer::RenderThemesSection()
 		ImGui::SameLine();
 	}
 
-	if (Util::ButtonWithFlash(T("menu.settings.save_as_new_theme", "Save As New Theme"))) {
+	if (Util::ButtonWithFlash("##SaveAsNewTheme", ICON_TI_PLUS, T("menu.settings.save_as_new_theme", "Save As New Theme"))) {
 		showCreateThemePopup = true;
 		memset(newThemeName, 0, sizeof(newThemeName));
 		memset(newThemeDisplayName, 0, sizeof(newThemeDisplayName));
@@ -727,7 +1126,7 @@ void SettingsTabRenderer::RenderThemesSection()
 
 	if (!isPreset && currentThemeInfo && !currentThemeInfo->filePath.empty()) {
 		ImGui::SameLine();
-		if (Util::ErrorButtonWithFlash(T("menu.settings.delete_theme", "Delete"))) {
+		if (Util::ErrorButtonWithFlash("##DeleteTheme", ICON_TI_TRASH, T("menu.settings.delete_theme", "Delete"))) {
 			deleteThemePopup.message =
 				std::string(T("menu.settings.delete_theme_confirm_part1",
 					"Are you sure you want to delete the theme '")) +
@@ -839,7 +1238,7 @@ void SettingsTabRenderer::RenderThemesSection()
 		ImGui::Separator();
 
 		// Buttons
-		if (Util::ButtonWithFlash(T("menu.settings.create_theme", "Create Theme"))) {
+		if (Util::ButtonWithFlash("##CreateTheme", ICON_TI_CHECK, T("menu.settings.create_theme", "Create Theme"))) {
 			if (!isThemeNameEmpty && !isDuplicateName && !isDuplicateDisplayName) {
 				// Valid theme name, reset error state and proceed
 				showValidationError = false;
@@ -871,7 +1270,7 @@ void SettingsTabRenderer::RenderThemesSection()
 		}
 
 		ImGui::SameLine();
-		if (Util::Button(T("menu.settings.cancel", "Cancel"))) {
+		if (Icons::LabeledButton("##CancelCreateTheme", Icons::TI(ICON_TI_X), T("menu.settings.cancel", "Cancel"))) {
 			showCreateThemePopup = false;
 			ImGui::CloseCurrentPopup();
 		}
@@ -893,30 +1292,13 @@ void SettingsTabRenderer::RenderFontsSection()
 {
 	auto* menuInstance = globals::menu;
 	auto& themeSettings = menuInstance->GetSettings().Theme;
-
-	SeparatorTextWithFont(T("menu.settings.font", "Font"), Menu::FontRole::Subheading);
-
-	bool& useAutoFont = menuInstance->GetSettings().UseResolutionFont;
-	if (Util::CheckboxTip(T("menu.settings.use_resolution_based_font_size", "Use resolution-based font size"), &useAutoFont, T("menu.settings.use_resolution_based_font_size_tooltip", "When enabled, the UI font size scales with your screen resolution. Disable to set a fixed size."))) {
-		if (!useAutoFont) {
-			// Seed the fixed-size slider with the current effective size so it doesn't jump
-			float effective = ThemeManager::ResolveFontSize(*menuInstance);
-			themeSettings.FontSize = std::clamp(effective, ThemeManager::Constants::MIN_FONT_SIZE, ThemeManager::Constants::MAX_FONT_SIZE);
-		}
-		MenuFonts::GetAtlasState().pendingFontReload = true;
-	}
-
-	ImGui::BeginDisabled(useAutoFont);
-	if (ImGui::SliderFloat(T("menu.settings.base_font_size", "Base Font Size"), &themeSettings.FontSize, ThemeManager::Constants::MIN_FONT_SIZE, ThemeManager::Constants::MAX_FONT_SIZE, "%.0f")) {
-		MenuFonts::GetAtlasState().pendingFontReload = true;
-	}
-	ImGui::EndDisabled();
-
-	float effectiveNow = ThemeManager::ResolveFontSize(*menuInstance);
-	ImGui::Text(T("menu.settings.effective_size", "Effective size: %.0f px"), std::round(effectiveNow));
+	// Watched before anything draws, so each slider drag, pick or reset undoes as one step
+	menuInstance->WatchUndoTarget(MakeFontsUndoTarget());
+	const auto& reference = GetThemeFileReference();
 
 	static Util::Fonts::Catalog fontCatalog;
 	static bool catalogInitialized = false;
+	static size_t selectedRole = 0;
 	auto refreshFontCatalog = [&](bool forceRescan = false) {
 		fontCatalog = Util::Fonts::DiscoverFontCatalog(forceRescan);
 	};
@@ -931,34 +1313,114 @@ void SettingsTabRenderer::RenderFontsSection()
 		catalogInitialized = true;
 	}
 
-	ImGui::Spacing();
-	SeparatorTextWithFont(T("menu.settings.font_roles", "Font Roles"), Menu::FontRole::Subheading);
-
-	if (fontCatalog.families.empty()) {
-		Util::Text::Warning("%s", T("menu.settings.no_fonts_found", "No fonts found. Place .ttf files in Interface/CommunityShaders/Fonts/"));
-	}
-
-	for (size_t roleIndex = 0; roleIndex < Menu::FontRoleDescriptors.size(); ++roleIndex) {
-		auto role = static_cast<Menu::FontRole>(roleIndex);
-		auto descriptor = Menu::FontRoleDescriptors[roleIndex];
-
-		ImGui::PushID(static_cast<int>(roleIndex));
-		{
-			FontRoleGuard headingFont(Menu::FontRole::Subheading);
-			ImGui::TextUnformatted(descriptor.displayName.data());
+	// Size: the base size every role scales from
+	{
+		Util::SectionCard card("##FontSize", ICON_TI_TEXT_SIZE, T("menu.settings.card_font_size", "Size"));
+		bool& useAutoFont = menuInstance->GetSettings().UseResolutionFont;
+		if (ImGui::Checkbox(T("menu.settings.use_resolution_based_font_size", "Use resolution-based font size"), &useAutoFont)) {
+			if (!useAutoFont) {
+				// Seed the fixed-size slider with the current effective size so it doesn't jump
+				float effective = ThemeManager::ResolveFontSize(*menuInstance);
+				themeSettings.FontSize = std::clamp(effective, ThemeManager::Constants::MIN_FONT_SIZE, ThemeManager::Constants::MAX_FONT_SIZE);
+			}
+			MenuFonts::GetAtlasState().pendingFontReload = true;
 		}
+		Util::SettingHint(T("menu.settings.use_resolution_based_font_size_tooltip", "When enabled, the UI font size scales with your screen resolution. Disable to set a fixed size."));
 
-		MenuFonts::Selector::RenderRolePickers(*menuInstance, themeSettings, fontCatalog, role, roleIndex);
-
-		ImGui::Separator();
-		ImGui::PopID();
+		ImGui::Spacing();
+		{
+			Util::DisableGuard autoSize(useAutoFont);
+			if (ImGui::SliderFloat(T("menu.settings.base_font_size", "Base Font Size"), &themeSettings.FontSize, ThemeManager::Constants::MIN_FONT_SIZE, ThemeManager::Constants::MAX_FONT_SIZE, "%.0f")) {
+				MenuFonts::GetAtlasState().pendingFontReload = true;
+			}
+		}
+		const float effectiveNow = ThemeManager::ResolveFontSize(*menuInstance);
+		Util::SettingHint(I18n::GetSingleton()->Format("menu.settings.effective_size_hint", { { "size", std::format("{:.0f}", std::round(effectiveNow)) } },
+												  "Body text is drawn at {size} px; the other roles scale from it.")
+							  .c_str(),
+			false);
 	}
 
-	if (Util::Button(T("menu.settings.refresh_font_families", "Refresh Font Families"))) {
-		refreshFontCatalog(true);
-		MenuFonts::GetAtlasState().pendingFontReload = true;
+	// Roles: pick one on the left, edit it on the right
+	{
+		Util::SectionCard card("##FontRoles", ICON_TI_TYPOGRAPHY, T("menu.settings.font_roles", "Font Roles"));
+		if (Icons::LabeledButton("##RefreshFonts", Icons::TI(ICON_TI_REFRESH), T("menu.settings.refresh_font_families", "Refresh Font Families"))) {
+			refreshFontCatalog(true);
+			MenuFonts::GetAtlasState().pendingFontReload = true;
+		}
+		Util::HoverTip(T("menu.settings.refresh_font_families_tooltip", "Rescan the Fonts directory after adding or removing font files."));
+		if (fontCatalog.families.empty())
+			Util::Text::Warning("%s", T("menu.settings.no_fonts_found", "No fonts found. Place .ttf files in Interface/CommunityShaders/Fonts/"));
+		ImGui::Spacing();
+
+		selectedRole = std::min(selectedRole, Menu::FontRoleDescriptors.size() - 1);
+		const float listWidth = ImGui::GetFontSize() * ThemeManager::Constants::FONTS_PAGE_ROLE_LIST_FONT_SIZES;
+		if (ImGui::BeginTable("##FontRoleLayout", 2, ImGuiTableFlags_BordersInnerV)) {
+			ImGui::TableSetupColumn("##Roles", ImGuiTableColumnFlags_WidthFixed, listWidth);
+			ImGui::TableSetupColumn("##Detail", ImGuiTableColumnFlags_WidthStretch);
+			ImGui::TableNextRow();
+
+			ImGui::TableNextColumn();
+			for (size_t i = 0; i < Menu::FontRoleDescriptors.size(); ++i) {
+				ImGui::PushID(static_cast<int>(i));
+				if (FontRoleRow(static_cast<Menu::FontRole>(i), themeSettings.FontRoles[i], selectedRole == i))
+					selectedRole = i;
+				ImGui::PopID();
+			}
+
+			ImGui::TableNextColumn();
+			const auto role = static_cast<Menu::FontRole>(selectedRole);
+			auto& roleSettings = themeSettings.FontRoles[selectedRole];
+			const auto& referenceRole = reference.FontRoles[selectedRole];
+			ImGui::PushID(static_cast<int>(selectedRole));
+			{
+				MenuFonts::FontRoleGuard heading(Menu::FontRole::Heading);
+				ImGui::TextUnformatted(Menu::FontRoleDescriptors[selectedRole].displayName.data());
+			}
+			Util::SettingHint(GetFontRoleDescription(role), false);
+			ImGui::Spacing();
+
+			MenuFonts::Selector::RenderRolePickers(*menuInstance, themeSettings, fontCatalog, role, selectedRole);
+
+			// Preview in the role's own font
+			ImGui::Spacing();
+			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(ImGui::GetStyle().FramePadding.x * 2.0f, ImGui::GetStyle().FramePadding.y * 3.0f));
+			if (ImGui::BeginChild("##FontPreview", ImVec2(0.0f, 0.0f), ImGuiChildFlags_FrameStyle | ImGuiChildFlags_AutoResizeY)) {
+				MenuFonts::FontRoleGuard sampleFont(role);
+				ImGui::TextWrapped("%s", T("menu.settings.font_preview_sample", "The quick brown fox jumps over the lazy dog."));
+				ImGui::TextWrapped("%s", "0123456789 ABCDEFGHIJKLM abcdefghijklm");
+			}
+			ImGui::EndChild();
+			ImGui::PopStyleVar();
+			Util::SettingHint(Util::PathHelpers::ToUtf8(std::filesystem::path(roleSettings.File).filename()).c_str(), false);
+
+			// Actions for this role
+			ImGui::Spacing();
+			if (Icons::LabeledButton("##UseEverywhere", Icons::TI(ICON_TI_COPY), T("menu.settings.font_use_everywhere", "Use for All Roles"))) {
+				for (size_t i = 0; i < themeSettings.FontRoles.size(); ++i) {
+					auto& other = themeSettings.FontRoles[i];
+					other.Family = roleSettings.Family;
+					other.Style = roleSettings.Style;
+					other.File = roleSettings.File;
+				}
+				themeSettings.FontName = roleSettings.File;
+				MenuFonts::GetAtlasState().pendingFontReload = true;
+			}
+			Util::HoverTip(T("menu.settings.font_use_everywhere_tooltip", "Give every role this family and style. Each role keeps its own scale."));
+			if (!FontRoleMatches(roleSettings, referenceRole)) {
+				ImGui::SameLine();
+				if (Icons::LabeledButton("##ResetRole", Icons::TI(MenuIcons::kRestore), T("menu.settings.font_reset_role", "Reset Role"))) {
+					roleSettings = referenceRole;
+					if (role == Menu::FontRole::Body)
+						themeSettings.FontName = roleSettings.File;
+					MenuFonts::GetAtlasState().pendingFontReload = true;
+				}
+				Util::HoverTip(T("menu.settings.font_reset_role_tooltip", "Put this role's font and scale back to the selected theme's file. Undo brings your edit back."));
+			}
+			ImGui::PopID();
+			ImGui::EndTable();
+		}
 	}
-	Util::HoverTip(T("menu.settings.refresh_font_families_tooltip", "Rescan the Fonts directory after adding or removing font files."));
 }
 
 void SettingsTabRenderer::RenderStylingSection()
@@ -1061,6 +1523,10 @@ namespace
 			return T("menu.settings.surface_palette", "Go To Palette");
 		case SurfaceRole::NavSelected:
 			return T("menu.settings.surface_nav_selected", "Selected Navigation Row");
+		case SurfaceRole::OptionCard:
+			return T("menu.settings.surface_option_card", "Option Cards");
+		case SurfaceRole::SectionCard:
+			return T("menu.settings.surface_section_card", "Section Cards");
 		default:
 			return "";
 		}
@@ -1079,6 +1545,10 @@ namespace
 			return T("menu.settings.surface_palette_tooltip", "The Ctrl+K go-to palette.");
 		case SurfaceRole::NavSelected:
 			return T("menu.settings.surface_nav_selected_tooltip", "The highlight behind the selected row of the left navigation.");
+		case SurfaceRole::OptionCard:
+			return T("menu.settings.surface_option_card_tooltip", "Clickable cards that pick a tool or mode, such as the tools on the Developer Tools page. The selected card takes the accent colour as its border.");
+		case SurfaceRole::SectionCard:
+			return T("menu.settings.surface_section_card_tooltip", "Cards that group related settings on a page, such as Shaders & Cache.");
 		default:
 			return "";
 		}
@@ -1201,87 +1671,153 @@ void SettingsTabRenderer::RenderSurfacesSection()
 
 void SettingsTabRenderer::RenderColorsSection()
 {
-	auto& themeSettings = globals::menu->GetSettings().Theme;
-	auto& colors = themeSettings.FullPalette;
+	auto* menu = globals::menu;
+	auto& themeSettings = menu->GetSettings().Theme;
+	auto& pageState = GetColorsPageState();
+	// Watched before anything draws, so a picker drag, a reset and Reset All each undo as one step
+	menu->WatchUndoTarget(MakeThemeColorsUndoTarget());
+	const auto& reference = GetThemeFileReference();
 
-	// Color filter at the top with search icon
-	static ImGuiTextFilter colorFilter;
+	// The colour groups. Base colours also fill their Full Palette slots, so those slots are left out below.
+	const std::vector<ColorEntry> baseColors = {
+		{ T("menu.settings.color_background", "Background"), &themeSettings.Palette.Background.x, &reference.Palette.Background.x },
+		{ T("menu.settings.color_text", "Text"), &themeSettings.Palette.Text.x, &reference.Palette.Text.x },
+		{ T("menu.settings.color_window_border", "Window Border"), &themeSettings.Palette.WindowBorder.x, &reference.Palette.WindowBorder.x },
+		{ T("menu.settings.color_slider_input_bg", "Slider & Input Background"), &themeSettings.Palette.FrameBorder.x, &reference.Palette.FrameBorder.x },
+		{ T("menu.settings.color_separator_line", "Separator Line"), &themeSettings.Palette.Separator.x, &reference.Palette.Separator.x },
+		{ T("menu.settings.color_resize_grip", "Resize Grip"), &themeSettings.Palette.ResizeGrip.x, &reference.Palette.ResizeGrip.x },
+	};
+	auto& status = themeSettings.StatusPalette;
+	const std::vector<ColorEntry> statusColors = {
+		{ T("menu.settings.color_success", "Success"), &status.SuccessColor.x, &reference.StatusPalette.SuccessColor.x },
+		{ T("menu.settings.color_info", "Info"), &status.InfoColor.x, &reference.StatusPalette.InfoColor.x },
+		{ T("menu.settings.color_warning", "Warning"), &status.Warning.x, &reference.StatusPalette.Warning.x },
+		{ T("menu.settings.color_error", "Error"), &status.Error.x, &reference.StatusPalette.Error.x },
+		{ T("menu.settings.color_restart_needed", "Restart Needed"), &status.RestartNeeded.x, &reference.StatusPalette.RestartNeeded.x },
+		{ T("menu.settings.color_disabled", "Disabled"), &status.Disable.x, &reference.StatusPalette.Disable.x },
+		{ T("menu.settings.color_current_hotkey", "Current Hotkey"), &status.CurrentHotkey.x, &reference.StatusPalette.CurrentHotkey.x },
+	};
+	const std::vector<ColorEntry> headingColors = {
+		{ T("menu.settings.color_default", "Default"), &themeSettings.FeatureHeading.ColorDefault.x, &reference.FeatureHeading.ColorDefault.x },
+		{ T("menu.settings.color_hovered", "Hovered"), &themeSettings.FeatureHeading.ColorHovered.x, &reference.FeatureHeading.ColorHovered.x },
+	};
+	std::array<std::vector<ColorEntry>, static_cast<size_t>(PaletteGroup::Count)> paletteGroups;
+	for (int i = 0; i < ImGuiCol_COUNT; ++i) {
+		if (IsPaletteSlotDerived(i))
+			continue;
+		ColorEntry entry{ GetFriendlyColorName(i), &themeSettings.FullPalette[i].x, &reference.FullPalette[i].x };
+		// The scrollbar's opacities come from Styling, so only the colour is edited here
+		if (i == ImGuiCol_ScrollbarBg || i == ImGuiCol_ScrollbarGrab || i == ImGuiCol_ScrollbarGrabHovered || i == ImGuiCol_ScrollbarGrabActive) {
+			entry.flags = ImGuiColorEditFlags_NoAlpha;
+			entry.note = T("menu.settings.color_scrollbar_opacity_note", "Opacity is set under Styling > Scrollbar.");
+		}
+		paletteGroups[static_cast<size_t>(GetPaletteGroup(i))].push_back(entry);
+	}
 
-	const float scale = Util::GetSearchUIScale();
-	const float iconSize = ThemeManager::Constants::SEARCH_ICON_SIZE * scale;
-	const float iconSpace = iconSize + ThemeManager::Constants::SEARCH_INPUT_PADDING_EXTRA * scale;
-	float availableWidth = ImGui::GetFontSize() * 16;
+	// Count what differs from the theme file, for the toolbar
+	int changed = 0;
+	const auto countChanged = [&](const std::vector<ColorEntry>& entries) {
+		for (const auto& entry : entries)
+			changed += ColorDiffers(entry.value, entry.reference, (entry.flags & ImGuiColorEditFlags_NoAlpha) ? 3 : 4) ? 1 : 0;
+	};
+	countChanged(baseColors);
+	countChanged(statusColors);
+	countChanged(headingColors);
+	for (const auto& group : paletteGroups)
+		countChanged(group);
+	const bool minimizedChanged = std::abs(themeSettings.FeatureHeading.MinimizedFactor - reference.FeatureHeading.MinimizedFactor) > 0.001f;
+	changed += minimizedChanged ? 1 : 0;
 
-	// Custom style for filter with icon space
-	ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(iconSpace, ThemeManager::Constants::SEARCH_INPUT_FRAME_PADDING_Y * scale));
-	colorFilter.Draw(T("menu.settings.filter_colors", "Filter colors"), availableWidth);
-	ImGui::PopStyleVar();
+	// Toolbar: search, Changed only, then undo / redo / reset on the right
+	{
+		const float scale = Util::GetSearchUIScale();
+		const float iconSize = ThemeManager::Constants::SEARCH_ICON_SIZE * scale;
+		const float iconSpace = iconSize + ThemeManager::Constants::SEARCH_INPUT_PADDING_EXTRA * scale;
+		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(iconSpace, ThemeManager::Constants::SEARCH_INPUT_FRAME_PADDING_Y * scale));
+		pageState.filter.Draw(T("menu.settings.filter_colors", "Filter colors"), ImGui::GetFontSize() * 14.0f);
+		ImGui::PopStyleVar();
+		const ImVec2 filterMin = ImGui::GetItemRectMin();
+		const ImVec2 filterSize = ImGui::GetItemRectSize();
+		ImVec4 iconColor = ImGui::GetStyleColorVec4(ImGuiCol_Text);
+		iconColor.w *= ThemeManager::Constants::SEARCH_ICON_ALPHA;
+		Icons::DrawCenteredGlyph(ImGui::GetWindowDrawList(), ImVec2(filterMin.x + ThemeManager::Constants::SEARCH_ICON_OFFSET_X * scale, filterMin.y),
+			ImVec2(iconSize, filterSize.y), Icons::TI(MenuIcons::kSearch), ImGui::GetColorU32(iconColor));
 
-	// Draw search icon
-	const ImVec2 filterMin = ImGui::GetItemRectMin();
-	const ImVec2 filterSize = ImGui::GetItemRectSize();
-	ImVec4 iconColor = ImGui::GetStyleColorVec4(ImGuiCol_Text);
-	iconColor.w *= ThemeManager::Constants::SEARCH_ICON_ALPHA;
-	Icons::DrawCenteredGlyph(ImGui::GetWindowDrawList(), ImVec2(filterMin.x + ThemeManager::Constants::SEARCH_ICON_OFFSET_X * scale, filterMin.y),
-		ImVec2(iconSize, filterSize.y), Icons::TI(MenuIcons::kSearch), ImGui::GetColorU32(iconColor));
+		ImGui::SameLine();
+		Util::CheckboxTip(T("menu.settings.colors_changed_only", "Changed only"), &pageState.changedOnly,
+			T("menu.settings.colors_changed_only_tooltip", "List only the colours that differ from the selected theme's file."));
 
+		const char* undoLabel = T("menu.settings.colors_undo", "Undo");
+		const char* redoLabel = T("menu.settings.colors_redo", "Redo");
+		const char* resetLabel = T("menu.settings.colors_reset_all", "Reset All");
+		const float buttonsWidth = Icons::MeasureLabeledButton(Icons::TI(ICON_TI_ARROW_BACK_UP), undoLabel) +
+		                           Icons::MeasureLabeledButton(Icons::TI(ICON_TI_ARROW_FORWARD_UP), redoLabel) +
+		                           Icons::MeasureLabeledButton(Icons::TI(MenuIcons::kRestore), resetLabel) + ImGui::GetStyle().ItemSpacing.x * 2.0f;
+		ImGui::SameLine();
+		ImGui::SetCursorPosX(std::max(ImGui::GetCursorPosX(), ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - buttonsWidth));
+		{
+			Util::DisableGuard noUndo(!menu->CanUndo());
+			if (Icons::LabeledButton("##ColorsUndo", Icons::TI(ICON_TI_ARROW_BACK_UP), undoLabel))
+				menu->RequestUndo();
+		}
+		Util::AddTooltip(T("menu.settings.colors_undo_tooltip", "Undo the last change (Ctrl+Z)."), Util::kTooltipWhenDisabled);
+		ImGui::SameLine();
+		{
+			Util::DisableGuard noRedo(!menu->CanRedo());
+			if (Icons::LabeledButton("##ColorsRedo", Icons::TI(ICON_TI_ARROW_FORWARD_UP), redoLabel))
+				menu->RequestRedo();
+		}
+		Util::AddTooltip(T("menu.settings.colors_redo_tooltip", "Redo the last undone change (Ctrl+Y)."), Util::kTooltipWhenDisabled);
+		ImGui::SameLine();
+		{
+			Util::DisableGuard nothingChanged(changed == 0);
+			if (Icons::LabeledButton("##ColorsResetAll", Icons::TI(MenuIcons::kRestore), resetLabel)) {
+				// Copies the theme file's colours back; one undo step undoes it
+				std::vector<float> values;
+				ForEachColorValue(reference, [&](const float* data, int count) { values.insert(values.end(), data, data + count); });
+				size_t i = 0;
+				ForEachColorValue(themeSettings, [&](float* data, int count) {
+					for (int c = 0; c < count; ++c)
+						data[c] = values[i++];
+				});
+			}
+		}
+		Util::AddTooltip(T("menu.settings.colors_reset_all_tooltip", "Put every colour back to the selected theme's file. Undo brings your edits back."), Util::kTooltipWhenDisabled);
+
+		MenuFonts::FontRoleGuard subtext(Menu::FontRole::Subtext);
+		if (changed > 0)
+			ImGui::TextColored(Util::Colors::GetAccent(), "%s",
+				I18n::GetSingleton()->Format("menu.settings.colors_changed_count", { { "count", std::to_string(changed) } }, "{count} changed from the theme file").c_str());
+		else
+			ImGui::TextDisabled("%s", T("menu.settings.colors_none_changed", "Matches the theme file"));
+	}
 	ImGui::Spacing();
 
-	// Background & Text
-	if (colorFilter.PassFilter("Background"))
-		ImGui::ColorEdit4(T("menu.settings.color_background", "Background"), (float*)&themeSettings.Palette.Background);
-	if (colorFilter.PassFilter("Text"))
-		ImGui::ColorEdit4(T("menu.settings.color_text", "Text"), (float*)&themeSettings.Palette.Text);
+	DrawColorCard("##ColorsBase", MenuIcons::kPresets, T("menu.settings.colors_card_base", "Base"), baseColors);
+	DrawColorCard("##ColorsStatus", ICON_TI_ALERT_TRIANGLE, T("menu.settings.status", "Status"), statusColors);
 
-	if (ImGui::TreeNodeEx(T("menu.settings.borders_and_separators", "Borders & Separators"), ImGuiTreeNodeFlags_DefaultOpen)) {
-		if (colorFilter.PassFilter("Window Border"))
-			ImGui::ColorEdit4(T("menu.settings.color_window_border", "Window Border"), (float*)&themeSettings.Palette.WindowBorder);
-		if (colorFilter.PassFilter("Slider & Input Background"))
-			ImGui::ColorEdit4(T("menu.settings.color_slider_input_bg", "Slider & Input Background"), (float*)&themeSettings.Palette.FrameBorder);
-		if (colorFilter.PassFilter("Separator Line"))
-			ImGui::ColorEdit4(T("menu.settings.color_separator_line", "Separator Line"), (float*)&themeSettings.Palette.Separator);
-		if (colorFilter.PassFilter("Resize Grip"))
-			ImGui::ColorEdit4(T("menu.settings.color_resize_grip", "Resize Grip"), (float*)&themeSettings.Palette.ResizeGrip);
-		ImGui::TreePop();
-	}
-
-	if (ImGui::TreeNodeEx(T("menu.settings.feature_headings", "Feature Headings"), ImGuiTreeNodeFlags_DefaultOpen)) {
-		if (colorFilter.PassFilter("Default"))
-			ImGui::ColorEdit4(T("menu.settings.color_default", "Default"), (float*)&themeSettings.FeatureHeading.ColorDefault);
-		if (colorFilter.PassFilter("Hovered"))
-			ImGui::ColorEdit4(T("menu.settings.color_hovered", "Hovered"), (float*)&themeSettings.FeatureHeading.ColorHovered);
-		if (colorFilter.PassFilter("Minimized Transparency"))
+	const bool minimizedShown = pageState.filter.PassFilter("Minimized Transparency") && (!pageState.changedOnly || minimizedChanged);
+	DrawColorCard("##ColorsHeadings", ICON_TI_LAYOUT_COLUMNS, T("menu.settings.feature_headings", "Feature Headings"), headingColors,
+		minimizedShown ? std::function<void()>([&] {
 			ImGui::SliderFloat(T("menu.settings.color_minimized_transparency", "Minimized Transparency"), &themeSettings.FeatureHeading.MinimizedFactor, 0.0f, 1.0f, "%.2f");
-		ImGui::TreePop();
+			if (minimizedChanged) {
+				ImGui::SameLine();
+				if (BrowserUI::IconButton("##ResetMinimized", Icons::TI(MenuIcons::kRestore), T("menu.settings.color_reset_tooltip", "Reset to the theme's colour")))
+					themeSettings.FeatureHeading.MinimizedFactor = reference.FeatureHeading.MinimizedFactor;
+			}
+		}) :
+						 std::function<void()>{});
+
+	// Full Palette: every other ImGui colour, one card per kind of widget
+	{
+		MenuFonts::FontRoleGuard heading(Menu::FontRole::Subheading);
+		ImGui::SeparatorText(T("menu.settings.full_palette", "Full Palette"));
 	}
-
-	if (ImGui::TreeNodeEx(T("menu.settings.status", "Status"), ImGuiTreeNodeFlags_DefaultOpen)) {
-		if (colorFilter.PassFilter("Disabled"))
-			ImGui::ColorEdit4(T("menu.settings.color_disabled", "Disabled"), (float*)&themeSettings.StatusPalette.Disable);
-		if (colorFilter.PassFilter("Error"))
-			ImGui::ColorEdit4(T("menu.settings.color_error", "Error"), (float*)&themeSettings.StatusPalette.Error);
-		if (colorFilter.PassFilter("Warning"))
-			ImGui::ColorEdit4(T("menu.settings.color_warning", "Warning"), (float*)&themeSettings.StatusPalette.Warning);
-		if (colorFilter.PassFilter("Restart Needed"))
-			ImGui::ColorEdit4(T("menu.settings.color_restart_needed", "Restart Needed"), (float*)&themeSettings.StatusPalette.RestartNeeded);
-		if (colorFilter.PassFilter("Current Hotkey"))
-			ImGui::ColorEdit4(T("menu.settings.color_current_hotkey", "Current Hotkey"), (float*)&themeSettings.StatusPalette.CurrentHotkey);
-		if (colorFilter.PassFilter("Success"))
-			ImGui::ColorEdit4(T("menu.settings.color_success", "Success"), (float*)&themeSettings.StatusPalette.SuccessColor);
-		if (colorFilter.PassFilter("Info"))
-			ImGui::ColorEdit4(T("menu.settings.color_info", "Info"), (float*)&themeSettings.StatusPalette.InfoColor);
-		ImGui::TreePop();
-	}
-
-	if (ImGui::TreeNode(T("menu.settings.full_palette", "Full Palette"))) {
-		ImGui::TextWrapped("%s", T("menu.settings.full_palette_tooltip", "Advanced color controls for detailed customization of all UI elements."));
-
-		for (int i = 0; i < ImGuiCol_COUNT; i++) {
-			const char* friendlyName = GetFriendlyColorName(i);
-			if (!colorFilter.PassFilter(friendlyName))
-				continue;
-			ImGui::ColorEdit4(friendlyName, (float*)&colors[i], ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_AlphaPreviewHalf);
-		}
-		ImGui::TreePop();
+	Util::SettingHint(T("menu.settings.full_palette_tooltip", "Advanced color controls for detailed customization of all UI elements."), false);
+	ImGui::Spacing();
+	for (size_t g = 0; g < paletteGroups.size(); ++g) {
+		const auto group = static_cast<PaletteGroup>(g);
+		const std::string id = std::format("##Palette{}", g);
+		DrawColorCard(id.c_str(), nullptr, GetPaletteGroupTitle(group), paletteGroups[g]);
 	}
 }

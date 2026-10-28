@@ -223,21 +223,44 @@ namespace Util::Anim
 		const float frameHeight = ImGui::CalcTextSize(label, nullptr, true).y + style.FramePadding.y * 2.0f;
 		const ImU32 grabColor = ImGui::GetColorU32(ImGuiCol_SliderGrab);
 		const ImU32 grabActiveColor = ImGui::GetColorU32(ImGuiCol_SliderGrabActive);
+		const ImU32 frameColor = ImGui::GetColorU32(ImGuiCol_FrameBg);
+		const ImU32 frameHoveredColor = ImGui::GetColorU32(ImGuiCol_FrameBgHovered);
+		const ImU32 frameActiveColor = ImGui::GetColorU32(ImGuiCol_FrameBgActive);
 
 		// The value changes the instant the user acts, so nothing downstream is delayed; only ImGui's own grab is hidden
 		// and drawn again below, gliding to where the value now is. That covers a click that jumps a long way, a drag,
-		// and a value changed from outside, whichever way it moved.
+		// and a value changed from outside, whichever way it moved. ImGui draws on the upper channel with its fill hidden;
+		// the fill and the grab go on the lower one, so the value text stays on top of the grab.
+		ImDrawList* drawList = ImGui::GetWindowDrawList();
+		ImDrawListSplitter splitter;
+		splitter.Split(drawList, 2);
+		splitter.SetCurrentChannel(drawList, 1);
 		ImGui::PushStyleColor(ImGuiCol_SliderGrab, IM_COL32_BLACK_TRANS);
 		ImGui::PushStyleColor(ImGuiCol_SliderGrabActive, IM_COL32_BLACK_TRANS);
+		ImGui::PushStyleColor(ImGuiCol_FrameBg, IM_COL32_BLACK_TRANS);
+		ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, IM_COL32_BLACK_TRANS);
+		ImGui::PushStyleColor(ImGuiCol_FrameBgActive, IM_COL32_BLACK_TRANS);
 		const bool changed = real(label, dataType, data, min, max, format, flags);
-		ImGui::PopStyleColor(2);
+		ImGui::PopStyleColor(5);
+		splitter.SetCurrentChannel(drawList, 0);
+		struct MergeOnExit
+		{
+			ImDrawListSplitter& splitter;
+			ImDrawList* drawList;
+			~MergeOnExit() { splitter.Merge(drawList); }
+		} mergeOnExit{ splitter, drawList };
 		if (!ImGui::IsItemVisible())
 			return changed;
+
+		// ImGui's frame fill, as RenderFrame draws it
+		const bool active = context.ActiveId == id;
+		const ImVec2 frameMin = ImGui::GetItemRectMin();
+		const ImVec2 frameMax(frameMin.x + frameWidth, frameMin.y + frameHeight);
+		drawList->AddRectFilled(frameMin, frameMax, active ? frameActiveColor : (context.HoveredId == id ? frameHoveredColor : frameColor), style.FrameRounding);
 
 		const float vMin = read(min);
 		const float vMax = read(max);
 		const float range = vMax - vMin;
-		const ImVec2 frameMin = ImGui::GetItemRectMin();
 		const float grabPadding = 2.0f;  // ImGui's own (hard-coded there)
 		const float sliderSize = frameWidth - grabPadding * 2.0f;
 		float grabSize = style.GrabMinSize;
@@ -256,7 +279,6 @@ namespace Util::Anim
 		const bool fresh = StartsAtRest(storage, id, 0x3C3C3C3Cu);
 
 		// Held and dragged it follows closely; on its own it glides
-		const bool active = context.ActiveId == id;
 		float ratio = target;
 		if (!fresh) {
 			ratio = Smooth(storage->GetFloat(ratioKey, target), target, active ? Constants::ANIM_SLIDER_DRAG_RATE : Constants::ANIM_SLIDER_RATE);
@@ -267,7 +289,7 @@ namespace Util::Anim
 
 		const float usableMin = frameMin.x + grabPadding + grabSize * 0.5f;
 		const float grabCenter = usableMin + ratio * usableSize;
-		ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(grabCenter - grabSize * 0.5f, frameMin.y + grabPadding),
+		drawList->AddRectFilled(ImVec2(grabCenter - grabSize * 0.5f, frameMin.y + grabPadding),
 			ImVec2(grabCenter + grabSize * 0.5f, frameMin.y + frameHeight - grabPadding), active ? grabActiveColor : grabColor, style.GrabRounding);
 		return changed;
 	}

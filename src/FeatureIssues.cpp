@@ -489,6 +489,32 @@ namespace FeatureIssues
 			T("menu.issues.use_clear_issue_list", "Use 'Clear Issue List' to refresh after manual cleanup"));
 	}
 
+	/**
+	 * @brief Puts the next piece of an issue row on the current line when it still fits the column, else starts it on
+	 * a new line at the row's text indent, so a long row wraps instead of running past the column.
+	 * @param a_width Width of the next piece.
+	 * @param a_wrapX Screen x a wrapped line starts at (the feature name's left edge).
+	 */
+	static void SameLineOrWrap(float a_width, float a_wrapX)
+	{
+		const float spacing = ImGui::GetStyle().ItemSpacing.x;
+		const float lineEnd = ImGui::GetItemRectMax().x;
+		// Right after an item the cursor sits at the next line's start, so this is the column's right edge
+		const float rightEdge = ImGui::GetCursorScreenPos().x + ImGui::GetContentRegionAvail().x;
+		if (lineEnd + spacing + a_width <= rightEdge) {
+			ImGui::SameLine(0.0f, spacing);
+			return;
+		}
+		ImGui::SetCursorScreenPos(ImVec2(a_wrapX, ImGui::GetCursorScreenPos().y));
+		ImGui::AlignTextToFramePadding();
+	}
+
+	/** @brief Width of an ImGui::SmallButton with this label. */
+	static float SmallButtonWidth(const char* a_label)
+	{
+		return ImGui::CalcTextSize(a_label, nullptr, true).x + ImGui::GetStyle().FramePadding.x * 2.0f;
+	}
+
 	static void DrawFeatureIssue(const FeatureIssueInfo& issue, const ImVec4& color)
 	{
 		// Get theme colors directly
@@ -504,6 +530,7 @@ namespace FeatureIssues
 		ImGui::TextColored(color, "%s",
 			T(("menu.issues.feature_name." + issue.shortName).c_str(),
 				issue.displayName.empty() ? issue.shortName.c_str() : issue.displayName.c_str()));
+		const float wrapX = ImGui::GetItemRectMin().x;
 
 		// Show detailed information in tooltip
 		if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -576,22 +603,25 @@ namespace FeatureIssues
 
 		// Handle replacement feature actions for obsolete features
 		if (issue.IsObsolete() && !issue.replacementFeature.empty()) {
-			// Show replacement info using friendly name with emphasis
-			ImGui::SameLine();
-			ImGui::Text("%s", T("menu.issues.replaced_by_prefix", "(replaced by "));
+			// Show replacement info using friendly name with emphasis; the three parts wrap as one
+			const char* replacedPrefix = T("menu.issues.replaced_by_prefix", "(replaced by ");
+			const char* replacedSuffix = T("menu.issues.replaced_by_suffix", ")");
+			SameLineOrWrap(ImGui::CalcTextSize(replacedPrefix).x + ImGui::CalcTextSize(issue.replacementFeatureDisplayName.c_str()).x +
+							   ImGui::CalcTextSize(replacedSuffix).x,
+				wrapX);
+			ImGui::Text("%s", replacedPrefix);
 			ImGui::SameLine(0, 0);  // No spacing
 			ImGui::TextColored(theme.StatusPalette.RestartNeeded, "%s", issue.replacementFeatureDisplayName.c_str());
 			ImGui::SameLine(0, 0);  // No spacing
-			ImGui::Text("%s", T("menu.issues.replaced_by_suffix", ")"));
+			ImGui::Text("%s", replacedSuffix);
 
 			if (issue.replacementFeatureInstalled) {
 				// Show "Open" button to navigate to the replacement feature
-				ImGui::SameLine();
-
 				{
 					auto openKey = "menu.issues.open_feature_settings";
 					auto openDefault = "Open " + issue.replacementFeatureDisplayName + " Settings";
 					auto openText = I18n::GetSingleton()->Format(openKey, { { "name", issue.replacementFeatureDisplayName } }, openDefault.c_str());
+					SameLineOrWrap(SmallButtonWidth(openText.c_str()), wrapX);
 					if (ImGui::SmallButton(openText.c_str())) {
 						// Navigate to the replacement feature in the menu
 						menu->SelectFeatureMenu(issue.replacementFeature);
@@ -608,12 +638,11 @@ namespace FeatureIssues
 			} else {
 				// Check if replacement feature has a download link (cached)
 				if (!issue.replacementFeatureModLink.empty()) {
-					ImGui::SameLine();
-
 					{
 						auto dlKey = "menu.issues.download_button";
 						auto dlDefault = "Download " + issue.replacementFeatureDisplayName;
 						auto dlText = I18n::GetSingleton()->Format(dlKey, { { "name", issue.replacementFeatureDisplayName } }, dlDefault.c_str());
+						SameLineOrWrap(SmallButtonWidth(dlText.c_str()), wrapX);
 						if (ImGui::SmallButton(dlText.c_str())) {
 							ShellExecuteA(0, 0, issue.replacementFeatureModLink.c_str(), 0, 0, SW_SHOW);
 						}
@@ -631,15 +660,14 @@ namespace FeatureIssues
 
 		// Handle download action for version mismatch features
 		if (IsVersionMismatchForCoreFeature(issue)) {
-			ImGui::SameLine();
-			ImGui::Text("%s", T("menu.issues.core_feature_installed", "Core feature already installed"));
+			const char* coreInstalled = T("menu.issues.core_feature_installed", "Core feature already installed");
+			SameLineOrWrap(ImGui::CalcTextSize(coreInstalled).x, wrapX);
+			ImGui::Text("%s", coreInstalled);
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::TextWrapped("%s", T("menu.issues.core_feature_installed_tooltip",
 											 "This feature is already included as part of the core Community Shaders installation. Uninstall this feature with your mod manager."));
 			}
 		} else if (issue.IsVersionMismatch()) {
-			ImGui::SameLine();
-
 			if (!issue.replacementFeatureModLink.empty()) {
 				std::string buttonKey;
 				std::string buttonDefault;
@@ -654,6 +682,7 @@ namespace FeatureIssues
 					{ { "name", issue.replacementFeatureDisplayName }, { "version", issue.minimumVersionRequired } },
 					buttonDefault.c_str());
 
+				SameLineOrWrap(SmallButtonWidth(buttonText.c_str()), wrapX);
 				if (ImGui::SmallButton(buttonText.c_str())) {
 					ShellExecuteA(0, 0, issue.replacementFeatureModLink.c_str(), 0, 0, SW_SHOW);
 				}
@@ -674,11 +703,14 @@ namespace FeatureIssues
 			} else {
 				// Show message when no download link is available
 				if (issue.minimumVersionRequired.empty()) {
-					ImGui::TextWrapped("%s", T("menu.issues.update_required", "Update Required"));
+					const char* updateText = T("menu.issues.update_required", "Update Required");
+					SameLineOrWrap(ImGui::CalcTextSize(updateText).x, wrapX);
+					ImGui::TextWrapped("%s", updateText);
 				} else {
 					auto updateText = I18n::GetSingleton()->Format("menu.issues.update_to_version_required",
 						{ { "version", issue.minimumVersionRequired } },
 						"Update to {version}+ Required");
+					SameLineOrWrap(ImGui::CalcTextSize(updateText.c_str()).x, wrapX);
 					ImGui::TextWrapped("%s", updateText.c_str());
 				}
 				if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -697,12 +729,11 @@ namespace FeatureIssues
 
 		// Show download button for any feature with a download link (even if no replacement)
 		if (!issue.IsVersionMismatch() && !issue.IsObsolete() && !issue.replacementFeatureModLink.empty()) {
-			ImGui::SameLine();
-
 			{
 				auto dlKey = "menu.issues.download_button";
 				auto dlDefault = "Download " + issue.replacementFeatureDisplayName;
 				auto dlText = I18n::GetSingleton()->Format(dlKey, { { "name", issue.replacementFeatureDisplayName } }, dlDefault.c_str());
+				SameLineOrWrap(SmallButtonWidth(dlText.c_str()), wrapX);
 				if (ImGui::SmallButton(dlText.c_str())) {
 					ShellExecuteA(0, 0, issue.replacementFeatureModLink.c_str(), 0, 0, SW_SHOW);
 				}
@@ -722,7 +753,7 @@ namespace FeatureIssues
 		// The legacy Overrides row has no file of its own, so Delete would only hide it.
 		canSafelyDelete &= !issue.IsBaselineFailed() || issue.fileInfo.hasINI;
 		if (canSafelyDelete) {
-			ImGui::SameLine();
+			SameLineOrWrap(ImGui::GetFrameHeight(), wrapX);
 			std::string confirmPopupId = "Confirm Delete##" + issue.shortName;
 			const char* deleteTooltip = issue.IsUnknown() ?
 			                                T("menu.issues.delete_unknown_tooltip",

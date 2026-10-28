@@ -39,6 +39,7 @@ public:
 	static std::span<const SettingsSearchEntry> GetSearchIndex();
 
 	/** @brief The one line explaining how theme edits and the theme selection are saved. */
+	/** @brief The theme save note: one subtitle-sized line in the info colour, for the header of sections that edit the theme. */
 	static void RenderThemeSaveNote();
 
 	/** @brief Shader cache options and the last build's compilation breakdown. */

@@ -41,6 +41,10 @@ public:
 	/** @brief True when renderdoc.dll is in the process, whether loaded by CS or injected by the RenderDoc UI. */
 	static bool IsLoaded();
 	void TriggerCapture();
+	/** @brief Captures with the configured frame count after checking disk space, as the panel's button does. @return False when it could not start. */
+	bool CaptureNow() { return TriggerConfiguredCapture(); }
+	/** @brief Turns capture on or off for the next start, forcing frame annotations on while it is on and restoring them after. */
+	void SetCaptureEnabled(bool a_enabled);
 	void TriggerMultiFrameCapture(uint32_t a_frameCount);
 	bool HandleCaptureHotkey(uint32_t a_vkKey);
 	void SetCaptureFilePathTemplate(const std::string& a_template);

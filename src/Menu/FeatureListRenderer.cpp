@@ -37,6 +37,7 @@
 #include "Menu/ThemeManager.h"
 #include "State.h"
 #include "Util.h"
+#include "Utils/SettingsCatalog.h"
 #include "Utils/UI.h"
 #include "Utils/UIAnim.h"
 #include "Utils/UISurface.h"
@@ -236,18 +237,35 @@ namespace
 		const ImVec4 iconColor = (!disabled && menu.style != NavStyle::Plain) ? Util::Colors::GetAccent() : textColor;
 		const float iconGap = Constants::NAV_ROW_ICON_GAP * scale;
 
-		// Icon and label form one group centred in the pill, both centred on the pill's height by their ink. The label is
-		// never trimmed: the pill clips it
+		// Icon and label form one group centred in the pill, both centred on the pill's height by their ink. A narrow
+		// pill shrinks the pair to fit; past the smallest readable size only the icon stays, with the name on hover
+		const float fontSize = ImGui::GetFontSize();
+		const float available = std::max(0.0f, (max.x - min.x) - ImGui::GetStyle().FramePadding.x * 2.0f);
 		const float labelWidth = ImGui::CalcTextSize(menu.name.c_str()).x;
 		const float iconWidth = menu.icon ? lineHeight + iconGap : 0.0f;
-		float x = std::max(min.x, min.x + ((max.x - min.x) - iconWidth - labelWidth) * 0.5f);
+		const float fullWidth = iconWidth + labelWidth;
+		float fit = fullWidth > available && fullWidth > 0.0f ? available / fullWidth : 1.0f;
+		const bool iconOnly = menu.icon && fit < Constants::NAV_PILL_MIN_CONTENT_SCALE;
+		if (iconOnly)
+			fit = std::min(1.0f, available / lineHeight);
+		fit = std::max(fit, Constants::NAV_PILL_MIN_CONTENT_SCALE);
+
+		const float iconSize = lineHeight * fit;
+		const float groupWidth = iconOnly ? iconSize : fullWidth * fit;
+		float x = std::max(min.x, min.x + ((max.x - min.x) - groupWidth) * 0.5f);
 		drawList->PushClipRect(min, max, true);
 		if (menu.icon) {
-			Icons::DrawCenteredGlyph(drawList, ImVec2(x, min.y), ImVec2(lineHeight, max.y - min.y), menu.icon, ImGui::GetColorU32(iconColor));
-			x += iconWidth;
+			Icons::DrawCenteredGlyph(drawList, ImVec2(x, min.y), ImVec2(iconSize, max.y - min.y), fontSize * fit, menu.icon, ImGui::GetColorU32(iconColor));
+			x += iconWidth * fit;
 		}
-		drawList->AddText(ImVec2(x, Util::CenterTextTopY(min.y, max.y - min.y)), ImGui::GetColorU32(textColor), menu.name.c_str());
+		if (!iconOnly) {
+			// Shrinking about the line's middle keeps the ink-centred position of the full-size text
+			const float textY = Util::CenterTextTopY(min.y, max.y - min.y) + lineHeight * (1.0f - fit) * 0.5f;
+			drawList->AddText(ImGui::GetFont(), fontSize * fit, ImVec2(x, textY), ImGui::GetColorU32(textColor), menu.name.c_str());
+		}
 		drawList->PopClipRect();
+		if (iconOnly && ImGui::IsItemHovered())
+			ImGui::SetTooltip("%s", menu.name.c_str());
 		return clicked;
 	}
 
@@ -787,6 +805,8 @@ void FeatureListRenderer::RenderLeftColumn(
 			LeaveSettings(menuList, selectedMenu);
 		if (ImGui::BeginChild("##SettingsNavScroll", ImVec2(0.0f, -pageButtonsHeight))) {
 			hooks.drawSettingsNav();
+			// Room below the last row, so its selection highlight is not clipped by the pane's bottom edge
+			ImGui::Dummy(ImVec2(0.0f, ThemeManager::Constants::LEFT_PANE_EDGE_INSET * Util::GetUIScale()));
 			// Escape with nothing being typed goes back to the features
 			if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && !ImGui::IsAnyItemActive() &&
 				ImGui::GetCurrentContext()->ActiveIdPreviousFrame == 0 && ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
@@ -804,6 +824,8 @@ void FeatureListRenderer::RenderLeftColumn(
 				if (!builtInAt(i))
 					std::visit(ListMenuVisitor{ i, selectedMenu, categoryExpansionStates, hooks }, menuList[i]);
 			}
+			// Room below the last row, so its selection highlight is not clipped by the pane's bottom edge
+			ImGui::Dummy(ImVec2(0.0f, ThemeManager::Constants::LEFT_PANE_EDGE_INSET * Util::GetUIScale()));
 			if (g_filterCounts.shown == 0 && filter != 0) {
 				BrowserUI::EmptyState(T("menu.features.no_matches", "No features match"),
 					T("menu.features.no_matches_hint", "Turn off a filter to list more features."));
@@ -1204,6 +1226,35 @@ void FeatureListRenderer::DrawMenuVisitor::operator()(Feature* feat)
 	DrawConstraintWarningDialog(pendingFeatureSelection);
 }
 
+namespace
+{
+	/** @brief Table of a feature's edited settings with their current and base values, for the Modified chip's tooltip. */
+	void RenderUserEditsList(Feature* feat)
+	{
+		const auto edits = globals::state->GetUserEdits(feat);
+		const auto* base = globals::state->GetFeatureBase(feat->GetName());
+		const auto rows = Util::Settings::GetExportSettings(feat->GetShortName(), edits);
+		if (rows.empty() || !ImGui::BeginTable("##UserEdits", 3, ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_RowBg))
+			return;
+		ImGui::TableSetupColumn(T("menu.features.modified_list_setting", "Setting"));
+		ImGui::TableSetupColumn(T("menu.features.modified_list_value", "Value"));
+		ImGui::TableSetupColumn(T("menu.features.modified_list_default", "Default"));
+		ImGui::TableHeadersRow();
+		for (const auto& row : rows) {
+			const nlohmann::json::json_pointer pointer(row.path);
+			ImGui::TableNextRow();
+			ImGui::TableNextColumn();
+			ImGui::TextUnformatted(row.label.c_str());
+			ImGui::TableNextColumn();
+			ImGui::TextUnformatted(Util::Settings::FormatValue(edits.at(pointer)).c_str());
+			ImGui::TableNextColumn();
+			if (base && base->contains(pointer))
+				ImGui::TextDisabled("%s", Util::Settings::FormatValue(base->at(pointer)).c_str());
+		}
+		ImGui::EndTable();
+	}
+}
+
 void FeatureListRenderer::DrawMenuVisitor::RenderFeatureHeader(Feature* feat, bool isDisabled, bool isLoaded)
 {
 	auto& themeSettings = globals::menu->GetSettings().Theme;
@@ -1257,7 +1308,13 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureHeader(Feature* feat, bo
 			restore = BrowserUI::Chip("##FeatureModified", T("menu.features.modified_chip", "Modified"), Icons::TI(ICON_TI_PENCIL), &secondary);
 			ImGui::PopStyleColor();
 		}
-		Util::HoverTip(T("menu.features.modified_chip_tooltip", "Differs from the defaults and your Baseline presets. Click to restore defaults."));
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::TextUnformatted(T("menu.features.modified_chip_tooltip", "Differs from the defaults and your Baseline presets. Click to restore defaults."));
+			if (ImGui::GetIO().KeyShift)
+				RenderUserEditsList(feat);
+			else
+				ImGui::TextDisabled("%s", T("menu.features.modified_chip_shift_hint", "Hold Shift to list the edited settings."));
+		}
 		if (restore)
 			RestoreDefaults(feat);
 	}

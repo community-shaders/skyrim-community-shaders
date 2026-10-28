@@ -250,6 +250,12 @@ namespace
 	};
 }
 
+void Menu::ThemeFromJson(const json& themeJson, ThemeSettings& theme)
+{
+	theme = themeJson.get<ThemeSettings>();
+	PaletteFromJson(themeJson, theme.FullPalette);
+}
+
 void Menu::CursorFromJson(const json& cursorJson, ThemeSettings::CursorSettings& cursor)
 {
 	cursor.Types = {};

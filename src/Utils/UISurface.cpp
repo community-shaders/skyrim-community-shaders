@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <imgui_internal.h>
 #include <nlohmann/json.hpp>
 
 #include "Globals.h"
@@ -60,6 +61,10 @@ namespace Util::Surface
 			return "Palette";
 		case Role::NavSelected:
 			return "NavSelected";
+		case Role::OptionCard:
+			return "OptionCard";
+		case Role::SectionCard:
+			return "SectionCard";
 		default:
 			return "";
 		}
@@ -81,6 +86,13 @@ namespace Util::Surface
 			s.enabled = false;  // Home cards render as plain sections unless a theme turns the surface on
 			break;
 		case Role::Toast:
+			// Small spread, offset down-right: reads as a backdrop shadow rather than a dark outline
+			s.shadow = true;
+			s.shadowSpread = 2.0f;
+			s.shadowAlpha = 0.30f;
+			s.shadowOffsetX = 3.0f;
+			s.shadowOffsetY = 4.0f;
+			break;
 		case Role::OverlayCard:
 		case Role::Palette:
 			s.shadow = true;
@@ -207,19 +219,28 @@ namespace Util::Surface
 		const float styleRounding = options.rounding >= 0.0f ? options.rounding : ImGui::GetStyle().ChildRounding;
 		const float rounding = s.rounding >= 0.0f ? s.rounding * scale : styleRounding;
 
+		// A bounded surface (a card in a scrolling page) never draws past its bounds
+		const bool bounded = options.clip.z > options.clip.x && options.clip.w > options.clip.y;
 		if (s.shadow && s.shadowAlpha > 0.0f) {
 			// The shadow spills outside the window that owns the list, so lift its clip rect for it
 			const float grow = s.shadowSpread * scale;
 			const float shiftX = s.shadowOffsetX * scale;
 			const float dropY = s.shadowOffsetY * scale;
-			drawList->PushClipRectFullScreen();
+			if (bounded)
+				drawList->PushClipRect(ImVec2(options.clip.x, options.clip.y), ImVec2(options.clip.z, options.clip.w), false);
+			else
+				drawList->PushClipRectFullScreen();
 			drawList->AddRectFilled(ImVec2(min.x - grow + shiftX, min.y - grow + dropY), ImVec2(max.x + grow + shiftX, max.y + grow + dropY),
 				IM_COL32(0, 0, 0, static_cast<int>(255.0f * s.shadowAlpha * options.alpha)), rounding + grow);
 			drawList->PopClipRect();
 		}
 
 		// A window's inner clip rect trims its left and right edges, so the surface takes its own rect as the clip
-		drawList->PushClipRect(min, max, false);
+		if (bounded)
+			drawList->PushClipRect(ImVec2(std::max(min.x, options.clip.x), std::max(min.y, options.clip.y)),
+				ImVec2(std::min(max.x, options.clip.z), std::min(max.y, options.clip.w)), false);
+		else
+			drawList->PushClipRect(min, max, false);
 		drawList->AddRectFilled(min, max, FillColor(s, options.alpha, options.minFillAlpha), rounding);
 		if (s.border) {
 			ImU32 color;
@@ -232,6 +253,15 @@ namespace Util::Surface
 			drawList->AddRect(min, max, color, rounding);
 		}
 		drawList->PopClipRect();
+	}
+
+	ImVec4 ParentClipRect()
+	{
+		const ImGuiWindow* window = ImGui::GetCurrentWindow();
+		const ImGuiWindow* parent = window ? window->ParentWindow : nullptr;
+		if (!parent)
+			return {};
+		return { parent->ClipRect.Min.x, parent->ClipRect.Min.y, parent->ClipRect.Max.x, parent->ClipRect.Max.y };
 	}
 
 	void DrawAccentFrame(ImDrawList* drawList, const ImVec2& min, const ImVec2& max, ImU32 color, float rounding, float borderThickness,

@@ -1146,6 +1146,12 @@ namespace Util
 		return ButtonWithFlash(label, size, flashDurationMs);
 	}
 
+	bool ErrorButtonWithFlash(const char* id, const char* tablerIcon, const char* label, int flashDurationMs)
+	{
+		auto _style = DestructiveButtonStyle();
+		return ButtonWithFlash(id, tablerIcon, label, flashDurationMs);
+	}
+
 	StyledButtonWrapper StatusTextButtonStyle(const ImVec4& color)
 	{
 		return StyledButtonWrapper(color,
@@ -1309,6 +1315,245 @@ namespace Util
 	{
 		const ImVec4 resting = Anim::Lerp(Colors::GetSecondary(), ImGui::GetStyleColorVec4(ImGuiCol_Text), hover);
 		return ImGui::GetColorU32(Anim::Lerp(resting, Colors::GetAccent(), selected));
+	}
+
+	void SectionCard::Begin(const char* id)
+	{
+		const float pad = ThemeManager::Constants::HOME_CARD_PADDING * GetUIScale();
+		// Without a drawn surface the vertical padding only adds dead space above and below the content
+		const bool surfaceShown = Surface::Get(Surface::Role::SectionCard).enabled;
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(pad, surfaceShown ? pad : 0.0f));
+		ImGui::PushStyleColor(ImGuiCol_ChildBg, IM_COL32_BLACK_TRANS);
+		ImGui::BeginChild(id, ImVec2(0.0f, 0.0f),
+			ImGuiChildFlags_AlwaysUseWindowPadding | ImGuiChildFlags_AutoResizeY | ImGuiChildFlags_NavFlattened,
+			ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+		ImGui::PopStyleColor();
+		ImGui::PopStyleVar();
+
+		// Surface backing, drawn first so the content sits on it
+		Surface::Options surface;
+		surface.rounding = ImGui::GetStyle().ChildRounding;
+		surface.clip = Surface::ParentClipRect();
+		const ImVec2 min = ImGui::GetWindowPos();
+		const ImVec2 size = ImGui::GetWindowSize();
+		Surface::Draw(ImGui::GetWindowDrawList(), min, ImVec2(min.x + size.x, min.y + size.y), Surface::Role::SectionCard, surface);
+	}
+
+	SectionCard::SectionCard(const char* id, ID3D11ShaderResourceView* image, const char* title)
+	{
+		Begin(id);
+		MenuFonts::FontRoleGuard heading(Menu::FontRole::Heading);
+		if (image) {
+			// Category icons are white art tinted by the accent, matching the glyph icons of other cards
+			const float size = ImGui::GetTextLineHeight();
+			const ImVec2 pos = ImGui::GetCursorScreenPos();
+			ImGui::Dummy(ImVec2(size, size));
+			ImGui::GetWindowDrawList()->AddImage(IconLoader::ViewForSize(image, ImVec2(size, size)), pos, ImVec2(pos.x + size, pos.y + size),
+				ImVec2(0, 0), ImVec2(1, 1), ImGui::GetColorU32(Colors::GetAccent()));
+			ImGui::SameLine();
+		}
+		ImGui::TextUnformatted(title);
+		ImGui::Spacing();
+	}
+
+	SectionCard::SectionCard(const char* id, const char* icon, const char* title)
+	{
+		Begin(id);
+		MenuFonts::FontRoleGuard heading(Menu::FontRole::Heading);
+		if (icon) {
+			ImGui::PushStyleColor(ImGuiCol_Text, Colors::GetAccent());
+			Icons::Text(Icons::TI(icon));
+			ImGui::PopStyleColor();
+			ImGui::SameLine();
+		}
+		ImGui::TextUnformatted(title);
+		ImGui::Spacing();
+	}
+
+	SectionCard::~SectionCard()
+	{
+		ImGui::EndChild();
+		ImGui::Dummy(ImVec2(0.0f, ThemeManager::Constants::HOME_CARD_SPACING * GetUIScale()));
+	}
+
+	SettingColumns::SettingColumns(const char* id, int columns, float minColumnFontSizes)
+	{
+		const float needed = ImGui::GetFontSize() * minColumnFontSizes * static_cast<float>(columns);
+		if (columns > 1 && ImGui::GetContentRegionAvail().x >= needed)
+			table = ImGui::BeginTable(id, columns, ImGuiTableFlags_SizingStretchSame | ImGuiTableFlags_NoPadOuterX);
+		if (table)
+			ImGui::TableNextColumn();
+	}
+
+	SettingColumns::~SettingColumns()
+	{
+		if (table)
+			ImGui::EndTable();
+	}
+
+	void SettingColumns::Next()
+	{
+		if (table)
+			ImGui::TableNextColumn();
+		else
+			ImGui::Spacing();
+	}
+
+	void FitNextItemWithLabel(const char* label)
+	{
+		const float labelWidth = ImGui::CalcTextSize(label, nullptr, true).x;
+		const float width = ImGui::GetContentRegionAvail().x - labelWidth - ImGui::GetStyle().ItemInnerSpacing.x;
+		ImGui::SetNextItemWidth(std::max(width, ImGui::GetFontSize() * 6.0f));
+	}
+
+	void SettingHint(const char* text, bool alignToCheckboxLabel)
+	{
+		const float indent = alignToCheckboxLabel ? ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x : 0.0f;
+		if (indent > 0.0f)
+			ImGui::Indent(indent);
+		{
+			MenuFonts::FontRoleGuard subtext(Menu::FontRole::Subtext);
+			ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+			ImGui::TextWrapped("%s", text);
+			ImGui::PopStyleColor();
+		}
+		if (indent > 0.0f)
+			ImGui::Unindent(indent);
+	}
+
+	namespace
+	{
+		/** @brief Inner padding of an OptionCard, the same on every side: the Home card padding scaled to the UI. */
+		float OptionCardPadding()
+		{
+			return ThemeManager::Constants::HOME_CARD_PADDING * GetUIScale();
+		}
+
+		/** @brief Line heights of an OptionCard's rows, measured in their font roles. */
+		struct OptionCardMetrics
+		{
+			float titleHeight = 0.0f;
+			float statusHeight = 0.0f;
+			float descriptionHeight = 0.0f;
+			float actionHeight = 0.0f;
+			float gap = 0.0f;
+		};
+
+		OptionCardMetrics MeasureOptionCard(const OptionCardContent& content, float innerWidth)
+		{
+			OptionCardMetrics m;
+			m.gap = ImGui::GetStyle().ItemSpacing.y;
+			{
+				MenuFonts::FontRoleGuard heading(Menu::FontRole::Heading);
+				m.titleHeight = ImGui::GetTextLineHeight() * ThemeManager::Constants::OPTION_CARD_TITLE_SCALE;
+			}
+			if (content.status)
+				m.statusHeight = ImGui::GetTextLineHeight();
+			if (content.description) {
+				MenuFonts::FontRoleGuard subtext(Menu::FontRole::Subtext);
+				m.descriptionHeight = ImGui::CalcTextSize(content.description, nullptr, false, std::max(1.0f, innerWidth)).y;
+			}
+			if (content.action)
+				m.actionHeight = ImGui::GetFrameHeight();
+			return m;
+		}
+	}
+
+	float OptionCardHeight(const OptionCardContent& content, float width)
+	{
+		const float padding = OptionCardPadding();
+		const auto m = MeasureOptionCard(content, width - padding * 2.0f);
+		float height = padding * 2.0f + m.titleHeight;
+		if (m.statusHeight > 0.0f)
+			height += m.gap + m.statusHeight;
+		if (m.descriptionHeight > 0.0f)
+			height += m.gap + m.descriptionHeight;
+		if (m.actionHeight > 0.0f)
+			height += m.gap * 2.0f + m.actionHeight;
+		return height;
+	}
+
+	OptionCardClick OptionCard(const char* id, const OptionCardContent& content, bool selected, const ImVec2& size)
+	{
+		const ImGuiStyle& style = ImGui::GetStyle();
+		const float width = size.x > 0.0f ? size.x : ImGui::GetContentRegionAvail().x;
+		const float height = size.y > 0.0f ? size.y : OptionCardHeight(content, width);
+		const float padding = OptionCardPadding();
+		const ImVec2 min = ImGui::GetCursorScreenPos();
+		const ImVec2 max(min.x + width, min.y + height);
+		const ImVec4 inner(min.x + padding, min.y + padding, max.x - padding, max.y - padding);
+		const auto m = MeasureOptionCard(content, inner.z - inner.x);
+		const float contentAlpha = content.unavailable ? style.DisabledAlpha : 1.0f;
+		const auto faded = [contentAlpha](ImVec4 color) {
+			color.w *= contentAlpha;
+			return ImGui::GetColorU32(color);
+		};
+
+		// Content goes on the upper channel; the surface is drawn underneath once the card's hover is known
+		ImDrawList* drawList = ImGui::GetWindowDrawList();
+		ImDrawListSplitter splitter;
+		splitter.Split(drawList, 2);
+		splitter.SetCurrentChannel(drawList, 1);
+		ImGui::PushID(id);
+
+		// The action button comes before the card button so it wins the hover where they overlap
+		OptionCardClick result = OptionCardClick::None;
+		if (content.action) {
+			ImGui::SetCursorScreenPos(ImVec2(inner.x, inner.w - m.actionHeight));
+			if (Button(content.action))
+				result = OptionCardClick::Action;
+			if (content.actionTooltip)
+				HoverTip(content.actionTooltip);
+		}
+
+		drawList->PushClipRect(ImVec2(inner.x, inner.y), ImVec2(inner.z, inner.w), true);
+		float y = inner.y;
+		{
+			MenuFonts::FontRoleGuard heading(Menu::FontRole::Heading);
+			const float titleSize = ImGui::GetFontSize() * ThemeManager::Constants::OPTION_CARD_TITLE_SCALE;
+			float x = inner.x;
+			if (content.icon) {
+				Icons::DrawCenteredGlyph(drawList, ImVec2(x, y), ImVec2(m.titleHeight, m.titleHeight), titleSize,
+					Icons::TI(content.icon), faded(style.Colors[ImGuiCol_Text]));
+				x += m.titleHeight + style.ItemInnerSpacing.x;
+			}
+			drawList->AddText(ImGui::GetFont(), titleSize, ImVec2(x, y), faded(style.Colors[ImGuiCol_Text]), content.title);
+			y += m.titleHeight;
+		}
+		if (content.status) {
+			y += m.gap;
+			drawList->AddText(ImVec2(inner.x, y), faded(content.statusColor), content.status);
+			y += m.statusHeight;
+		}
+		if (content.description) {
+			y += m.gap;
+			MenuFonts::FontRoleGuard subtext(Menu::FontRole::Subtext);
+			drawList->AddText(ImGui::GetFont(), ImGui::GetFontSize(), ImVec2(inner.x, y), faded(style.Colors[ImGuiCol_TextDisabled]),
+				content.description, nullptr, inner.z - inner.x);
+		}
+		drawList->PopClipRect();
+
+		// Submitted last, so the layout continues below the card with no cursor fix-up
+		ImGui::SetCursorScreenPos(min);
+		if (ImGui::InvisibleButton("##Card", ImVec2(width, height)) && result == OptionCardClick::None)
+			result = OptionCardClick::Card;
+		const bool hovered = ImGui::IsItemHovered();
+		ImGui::PopID();
+
+		// Selected takes the accent border; hover previews it at half strength
+		splitter.SetCurrentChannel(drawList, 0);
+		Surface::Options options;
+		const ImVec2 clipMin = drawList->GetClipRectMin();
+		const ImVec2 clipMax = drawList->GetClipRectMax();
+		options.clip = ImVec4(clipMin.x, clipMin.y, clipMax.x, clipMax.y);
+		ImVec4 accent = Colors::GetAccent();
+		if (!selected)
+			accent.w *= 0.5f;
+		if (selected || hovered)
+			options.borderColor = ImGui::GetColorU32(accent);
+		Surface::Draw(drawList, min, max, Surface::Role::OptionCard, options);
+		splitter.Merge(drawList);
+		return result;
 	}
 
 	bool DrawAnimatedButtonHighlight(const ImRect& rect, ImGuiID id, bool hovered, bool held, bool current, ImDrawList* drawList)
@@ -2695,62 +2940,75 @@ namespace Util
 		}
 	}  // namespace Input
 
-	bool ButtonWithFlash(const char* label, const ImVec2& size, int flashDurationMs)
+	namespace
 	{
-		static std::unordered_map<std::string, std::chrono::steady_clock::time_point> flashTimers;
-		static std::mutex flashTimersMutex;
-
-		std::string buttonId = std::string(label);
-		auto now = std::chrono::steady_clock::now();
-
-		// Check if this button has active flash (thread-safe)
-		bool hasActiveFlash = false;
+		/** @brief Runs a button draw with the flash look while its timer (keyed by key) is live, and starts the timer on a click. */
+		bool DrawWithFlash(const std::string& key, int flashDurationMs, const std::function<bool()>& draw)
 		{
-			std::lock_guard<std::mutex> lock(flashTimersMutex);
-			auto it = flashTimers.find(buttonId);
-			if (it != flashTimers.end()) {
-				auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - it->second);
-				if (elapsed.count() < flashDurationMs) {
-					hasActiveFlash = true;
-				} else {
-					// Flash expired, remove it
-					flashTimers.erase(it);
+			static std::unordered_map<std::string, std::chrono::steady_clock::time_point> flashTimers;
+			static std::mutex flashTimersMutex;
+
+			auto now = std::chrono::steady_clock::now();
+
+			// Check if this button has active flash (thread-safe)
+			bool hasActiveFlash = false;
+			{
+				std::lock_guard<std::mutex> lock(flashTimersMutex);
+				auto it = flashTimers.find(key);
+				if (it != flashTimers.end()) {
+					auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - it->second);
+					if (elapsed.count() < flashDurationMs) {
+						hasActiveFlash = true;
+					} else {
+						// Flash expired, remove it
+						flashTimers.erase(it);
+					}
 				}
 			}
+
+			// Style the button with flash effect if active.
+			bool styleChanged = false;
+			if (hasActiveFlash) {
+				// Use subtle white overlay similar to action icon hover effect
+				ImVec4 normalButton = ImGui::GetStyleColorVec4(ImGuiCol_Button);
+				ImVec4 flashColor = ImVec4(
+					normalButton.x + C::FLASH_BRIGHTEN,
+					normalButton.y + C::FLASH_BRIGHTEN,
+					normalButton.z + C::FLASH_BRIGHTEN,
+					normalButton.w);
+				ImVec4 flashHovered = ImVec4(flashColor.x * C::FLASH_HOVER_SCALE, flashColor.y * C::FLASH_HOVER_SCALE, flashColor.z * C::FLASH_HOVER_SCALE, flashColor.w);
+				ImVec4 flashActive = ImVec4(flashColor.x * C::FLASH_ACTIVE_SCALE, flashColor.y * C::FLASH_ACTIVE_SCALE, flashColor.z * C::FLASH_ACTIVE_SCALE, flashColor.w);
+
+				ImGui::PushStyleColor(ImGuiCol_Button, flashColor);
+				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, flashHovered);
+				ImGui::PushStyleColor(ImGuiCol_ButtonActive, flashActive);
+				styleChanged = true;
+			}
+
+			bool clicked = draw();
+
+			if (styleChanged) {
+				ImGui::PopStyleColor(3);
+			}
+
+			// If clicked, start the flash timer (thread-safe)
+			if (clicked) {
+				std::lock_guard<std::mutex> lock(flashTimersMutex);
+				flashTimers[key] = now;
+			}
+
+			return clicked;
 		}
+	}
 
-		// Style the button with flash effect if active.
-		bool styleChanged = false;
-		if (hasActiveFlash) {
-			// Use subtle white overlay similar to action icon hover effect
-			ImVec4 normalButton = ImGui::GetStyleColorVec4(ImGuiCol_Button);
-			ImVec4 flashColor = ImVec4(
-				normalButton.x + C::FLASH_BRIGHTEN,
-				normalButton.y + C::FLASH_BRIGHTEN,
-				normalButton.z + C::FLASH_BRIGHTEN,
-				normalButton.w);
-			ImVec4 flashHovered = ImVec4(flashColor.x * C::FLASH_HOVER_SCALE, flashColor.y * C::FLASH_HOVER_SCALE, flashColor.z * C::FLASH_HOVER_SCALE, flashColor.w);
-			ImVec4 flashActive = ImVec4(flashColor.x * C::FLASH_ACTIVE_SCALE, flashColor.y * C::FLASH_ACTIVE_SCALE, flashColor.z * C::FLASH_ACTIVE_SCALE, flashColor.w);
+	bool ButtonWithFlash(const char* label, const ImVec2& size, int flashDurationMs)
+	{
+		return DrawWithFlash(label, flashDurationMs, [&] { return ImGui::Button(label, size); });
+	}
 
-			ImGui::PushStyleColor(ImGuiCol_Button, flashColor);
-			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, flashHovered);
-			ImGui::PushStyleColor(ImGuiCol_ButtonActive, flashActive);
-			styleChanged = true;
-		}
-
-		bool clicked = ImGui::Button(label, size);
-
-		if (styleChanged) {
-			ImGui::PopStyleColor(3);
-		}
-
-		// If clicked, start the flash timer (thread-safe)
-		if (clicked) {
-			std::lock_guard<std::mutex> lock(flashTimersMutex);
-			flashTimers[buttonId] = now;
-		}
-
-		return clicked;
+	bool ButtonWithFlash(const char* id, const char* tablerIcon, const char* label, int flashDurationMs)
+	{
+		return DrawWithFlash(id, flashDurationMs, [&] { return Icons::LabeledButton(id, Icons::TI(tablerIcon), label); });
 	}
 
 	bool LoadDDSTextureFromFile(ID3D11Device* device,
