@@ -51,8 +51,8 @@ static const float TapWeights[5] = { 0.178400, 0.210431, 0.222338, 0.210431, 0.1
 	// The center tap always has full weight, so weightSum is never zero.
 	float weightedSum = 0.0;
 	float weightSum = 0.0;
-	[unroll]
-	for (uint i = 0; i < 5; i++) {
+	[unroll] for (uint i = 0; i < 5; i++)
+	{
 		int tap = idx + TapOffsets[i];
 		float relativeDelta = abs(linearDepth[tap] - centerDepth) * rcpCenterDepth;
 		float weight = TapWeights[i] * (1.0 - smoothstep(0.1, 0.3, relativeDelta));

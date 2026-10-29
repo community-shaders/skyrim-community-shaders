@@ -13,9 +13,9 @@ namespace NativeMenu::Vendor::ListRows
 	void Ensure(RE::GFxValue& a_list, std::uint32_t a_needed, const char* a_tag,
 		const std::function<void(RE::GFxValue&)>& a_setup)
 	{
-		RE::GFxValue  maxShownV;
+		RE::GFxValue maxShownV;
 		std::uint32_t curClips = 0;
-		const bool    haveMaxShown = a_list.GetMember("iMaxItemsShown", &maxShownV) && maxShownV.IsNumber();
+		const bool haveMaxShown = a_list.GetMember("iMaxItemsShown", &maxShownV) && maxShownV.IsNumber();
 		if (haveMaxShown)
 			curClips = static_cast<std::uint32_t>(maxShownV.GetNumber());
 		logger::debug("ListRows[{}]: iMaxItemsShown found={} value={} needed={}", a_tag, haveMaxShown, curClips,
@@ -30,7 +30,7 @@ namespace NativeMenu::Vendor::ListRows
 		}
 
 		double originX = 0.0, originY = 0.0, stepX = 0.0, stepY = 0.0;
-		bool   haveStep = false;
+		bool haveStep = false;
 		if (a_list.GetMember("Entry1", &entry1) && entry1.IsObject()) {
 			RE::GFxValue x0, y0, x1, y1;
 			if (entry0.GetMember("_x", &x0) && x0.IsNumber() && entry0.GetMember("_y", &y0) && y0.IsNumber() &&
@@ -46,16 +46,16 @@ namespace NativeMenu::Vendor::ListRows
 			haveStep);
 
 		RE::GFxValue onRollOver, onPress, onPressAux;
-		const bool   haveOnRollOver = entry0.GetMember("onRollOver", &onRollOver);
-		const bool   haveOnPress = entry0.GetMember("onPress", &onPress);
-		const bool   haveOnPressAux = entry0.GetMember("onPressAux", &onPressAux);
+		const bool haveOnRollOver = entry0.GetMember("onRollOver", &onRollOver);
+		const bool haveOnPress = entry0.GetMember("onPress", &onPress);
+		const bool haveOnPressAux = entry0.GetMember("onPressAux", &onPressAux);
 
 		for (std::uint32_t i = curClips; i < a_needed; ++i) {
 			RE::GFxValue src;
 			if (!a_list.GetMember("Entry0", &src))
 				break;
 
-			const std::string  newName = "Entry" + std::to_string(i);
+			const std::string newName = "Entry" + std::to_string(i);
 			const RE::GFxValue dupArgs[2] = { RE::GFxValue(newName.c_str()), RE::GFxValue(kDepthBase + i) };
 			src.Invoke("duplicateMovieClip", nullptr, dupArgs, 2);
 

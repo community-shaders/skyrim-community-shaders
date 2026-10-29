@@ -20,18 +20,18 @@ namespace NativeMenu::Vendor::SystemMenuHook
 
 		std::atomic<bool> g_sessionActive{ false };
 		std::atomic<bool> g_injected{ false };
-		std::atomic<int>  g_injectTicks{ 0 };
+		std::atomic<int> g_injectTicks{ 0 };
 
 		bool IsSystemPage(const RE::GFxValue& a_value)
 		{
 			return a_value.IsObject() && a_value.HasMember("CategoryList") && a_value.HasMember("SettingsList") &&
-				a_value.HasMember("MappingList");
+			       a_value.HasMember("MappingList");
 		}
 
 		bool FindSystemPage(const RE::GFxValue& a_root, RE::GFxValue& a_out, int a_maxDepth)
 		{
 			std::vector<RE::GFxValue> current{ a_root };
-			int                       budget = 2500;
+			int budget = 2500;
 			for (int depth = 0; depth <= a_maxDepth && !current.empty(); ++depth) {
 				std::vector<RE::GFxValue> next;
 				for (auto& node : current) {
