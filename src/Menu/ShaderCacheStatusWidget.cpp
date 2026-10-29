@@ -63,14 +63,14 @@ namespace ShaderCacheStatusWidget
 		const ImVec2 cursor = ImGui::GetCursorScreenPos();
 		ImDrawList* drawList = ImGui::GetWindowDrawList();
 
-		drawList->AddRectFilled(cursor, ImVec2(cursor.x + barWidth, cursor.y + barHeight), ThemeManager::Constants::SHADER_BAR_BACKGROUND);
+		drawList->AddRectFilled(cursor, ImVec2(cursor.x + barWidth, cursor.y + barHeight), ImGui::GetColorU32(ThemeManager::Constants::SHADER_BAR_BACKGROUND));
 
 		float x = cursor.x;
 		for (const auto& seg : segments) {
 			if (seg.count == 0)
 				continue;
 			const float segWidth = std::max(1.0f, (static_cast<float>(seg.count) / static_cast<float>(total)) * barWidth);
-			drawList->AddRectFilled(ImVec2(x, cursor.y), ImVec2(x + segWidth, cursor.y + barHeight), seg.color);
+			drawList->AddRectFilled(ImVec2(x, cursor.y), ImVec2(x + segWidth, cursor.y + barHeight), ImGui::GetColorU32(seg.color));
 			x += segWidth;
 		}
 
@@ -109,7 +109,7 @@ namespace ShaderCacheStatusWidget
 			first = false;
 			const ImVec2 pos = ImGui::GetCursorScreenPos();
 			const float y = pos.y + (ImGui::GetTextLineHeight() - swatch) * 0.5f;
-			ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(pos.x, y), ImVec2(pos.x + swatch, y + swatch), seg.color, swatch * 0.25f);
+			ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(pos.x, y), ImVec2(pos.x + swatch, y + swatch), ImGui::GetColorU32(seg.color), swatch * 0.25f);
 			ImGui::Dummy(ImVec2(swatch, ImGui::GetTextLineHeight()));
 			ImGui::SameLine(0.0f, style.ItemInnerSpacing.x);
 			ImGui::TextDisabled("%s", text.c_str());

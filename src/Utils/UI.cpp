@@ -665,8 +665,8 @@ namespace Util
 		const float y = a_min.y + (a_rowHeight - pillH) * 0.5f;
 
 		a_drawList->AddRectFilled(ImVec2(a_min.x, y), ImVec2(a_min.x + pillW, y + pillH),
-			ImGui::ColorConvertFloat4ToU32(a_bg), kBadgeRounding * scale);
-		a_drawList->AddText(ImVec2(a_min.x + padX, y + padY), ImGui::ColorConvertFloat4ToU32(a_fg), a_label);
+			ImGui::GetColorU32(a_bg), kBadgeRounding * scale);
+		a_drawList->AddText(ImVec2(a_min.x + padX, y + padY), ImGui::GetColorU32(a_fg), a_label);
 		return pillW;
 	}
 

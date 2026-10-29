@@ -720,7 +720,8 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 				ImVec2(buttonSize.x + padding.x * 2.0f, buttonSize.y + padding.y * 2.0f));
 			Util::DrawAnimatedButtonHighlight(ImRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax()), ImGui::GetItemID(),
 				ImGui::IsItemHovered(), ImGui::IsItemActive(), false);
-			ImGui::GetWindowDrawList()->AddImage(texture, imageMin, ImVec2(imageMin.x + buttonSize.x, imageMin.y + buttonSize.y));
+			ImGui::GetWindowDrawList()->AddImage(texture, imageMin, ImVec2(imageMin.x + buttonSize.x, imageMin.y + buttonSize.y), ImVec2(0, 0),
+				ImVec2(1, 1), ImGui::GetColorU32(IM_COL32_WHITE));
 			if (clicked)
 				callback();
 			Util::AddTooltip(tooltip);

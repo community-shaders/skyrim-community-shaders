@@ -154,8 +154,8 @@ void HistogramAutoExposure::DrawSettings()
 		ImGui::InvisibleButton("##histogram_canvas", canvasSize);
 
 		auto* drawList = ImGui::GetWindowDrawList();
-		drawList->AddRectFilled(canvasPos, ImVec2(canvasPos.x + canvasSize.x, canvasPos.y + canvasSize.y), IM_COL32(18, 18, 18, 255));
-		drawList->AddRect(canvasPos, ImVec2(canvasPos.x + canvasSize.x, canvasPos.y + canvasSize.y), IM_COL32(80, 80, 80, 255));
+		drawList->AddRectFilled(canvasPos, ImVec2(canvasPos.x + canvasSize.x, canvasPos.y + canvasSize.y), ImGui::GetColorU32(IM_COL32(18, 18, 18, 255)));
+		drawList->AddRect(canvasPos, ImVec2(canvasPos.x + canvasSize.x, canvasPos.y + canvasSize.y), ImGui::GetColorU32(IM_COL32(80, 80, 80, 255)));
 
 		const float binWidth = canvasSize.x / static_cast<float>(kHistogramBins);
 		for (int i = 0; i < kHistogramBins; i++) {
@@ -165,7 +165,7 @@ void HistogramAutoExposure::DrawSettings()
 			const float x1 = canvasPos.x + static_cast<float>(i + 1) * binWidth;
 			const float y0 = canvasPos.y + canvasSize.y - barHeight;
 			const ImU32 color = i == 0 ? IM_COL32(90, 90, 90, 180) : IM_COL32(90, 150, 220, 220);
-			drawList->AddRectFilled(ImVec2(x0, y0), ImVec2(x1, canvasPos.y + canvasSize.y), color);
+			drawList->AddRectFilled(ImVec2(x0, y0), ImVec2(x1, canvasPos.y + canvasSize.y), ImGui::GetColorU32(color));
 		}
 
 		auto evToX = [&](float ev) {
@@ -176,7 +176,7 @@ void HistogramAutoExposure::DrawSettings()
 
 		auto drawMarker = [&](float ev, ImU32 color) {
 			const float x = evToX(ev);
-			drawList->AddLine(ImVec2(x, canvasPos.y), ImVec2(x, canvasPos.y + canvasSize.y), color, 2.f);
+			drawList->AddLine(ImVec2(x, canvasPos.y), ImVec2(x, canvasPos.y + canvasSize.y), ImGui::GetColorU32(color), 2.f);
 		};
 
 		drawMarker(log2(parameters.LuminanceRange.x) + 3.0f, IM_COL32(255, 200, 0, 255));

@@ -2279,7 +2279,7 @@ namespace
 		// Clip the full rounded frame to the strip so the bottom corners match the frame rounding.
 		auto fillSpan = [&](float startHour, float endHour, ImU32 color) {
 			drawList->PushClipRect(ImVec2(stripX(startHour), frameMax.y - kPeriodStripHeight), ImVec2(stripX(endHour), frameMax.y), true);
-			drawList->AddRectFilled(frameMin, frameMax, color, ImGui::GetStyle().FrameRounding);
+			drawList->AddRectFilled(frameMin, frameMax, ImGui::GetColorU32(color), ImGui::GetStyle().FrameRounding);
 			drawList->PopClipRect();
 		};
 

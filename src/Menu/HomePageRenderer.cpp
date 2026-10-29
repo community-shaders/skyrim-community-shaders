@@ -749,7 +749,7 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 	// Fullscreen fade on the dialog's own draw list, so it covers every window beneath it
 	auto* drawList = ImGui::GetWindowDrawList();
 	drawList->PushClipRectFullScreen();
-	drawList->AddRectFilled(ImVec2(0, 0), io.DisplaySize, IM_COL32(0, 0, 0, MODAL_OVERLAY_ALPHA));
+	drawList->AddRectFilled(ImVec2(0, 0), io.DisplaySize, ImGui::GetColorU32(IM_COL32(0, 0, 0, MODAL_OVERLAY_ALPHA)));
 	drawList->PopClipRect();
 
 	auto menu = Menu::GetSingleton();

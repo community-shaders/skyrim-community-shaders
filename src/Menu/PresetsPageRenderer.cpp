@@ -519,7 +519,7 @@ void PresetsPageRenderer::RenderList(float width)
 			if (pack.logoSRV)
 				DrawRoundedImage(dl, reinterpret_cast<ImTextureID>(pack.logoSRV.get()), p0, p1, rounding);
 			else
-				dl->AddRectFilled(p0, p1, ImGui::ColorConvertFloat4ToU32(ThemeManager::Constants::PRESET_LOGO_PLACEHOLDER_COLOR), rounding);
+				dl->AddRectFilled(p0, p1, ImGui::GetColorU32(ThemeManager::Constants::PRESET_LOGO_PLACEHOLDER_COLOR), rounding);
 		}
 
 		ImGui::SameLine(0.0f, rowInset);
@@ -637,7 +637,7 @@ void PresetsPageRenderer::RenderDetail()
 				DrawRoundedImage(dl, reinterpret_cast<ImTextureID>(poster), origin, p1, rounding);
 			} else {
 				dl->AddRectFilled(origin, p1,
-					ImGui::ColorConvertFloat4ToU32(ThemeManager::Constants::PRESET_POSTER_PLACEHOLDER_COLOR), rounding);
+					ImGui::GetColorU32(ThemeManager::Constants::PRESET_POSTER_PLACEHOLDER_COLOR), rounding);
 			}
 		}
 
@@ -749,7 +749,7 @@ void PresetsPageRenderer::RenderDetail()
 			if (pack->screenshotSRVs[i])
 				DrawRoundedImage(dl, reinterpret_cast<ImTextureID>(pack->screenshotSRVs[i].get()), p0, p1, style.FrameRounding);
 			if (isOpen || ImGui::IsItemHovered()) {
-				const ImU32 border = ImGui::ColorConvertFloat4ToU32(isOpen ?
+				const ImU32 border = ImGui::GetColorU32(isOpen ?
 																		theme.StatusPalette.InfoColor :
 																		ImGui::GetStyleColorVec4(ImGuiCol_Border));
 				dl->AddRect(p0, p1, border, style.FrameRounding, 0, style.FrameBorderSize + (isOpen ? 1.0f : 0.0f));

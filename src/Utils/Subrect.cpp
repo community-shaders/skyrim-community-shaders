@@ -249,7 +249,7 @@ namespace Util::Subrect
 		ImVec2 pMin(cursorPos.x + currentUV.x * imageSize.x, cursorPos.y + currentUV.y * imageSize.y);
 		ImVec2 pMax(cursorPos.x + (currentUV.x + currentUV.w) * imageSize.x,
 			cursorPos.y + (currentUV.y + currentUV.h) * imageSize.y);
-		drawList->AddRect(pMin, pMax, IM_COL32(0, 255, 0, 255), 0.0f, 0, 2.0f);
+		drawList->AddRect(pMin, pMax, ImGui::GetColorU32(IM_COL32(0, 255, 0, 255)), 0.0f, 0, 2.0f);
 	}
 
 	PixelRegion Controller::GetPixelRegion(uint32_t width, uint32_t height) const
