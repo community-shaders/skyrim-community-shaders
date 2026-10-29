@@ -288,7 +288,7 @@ namespace NvPerf
 			csv << '\n';
 			for (const auto& range : a_result.rangeResults) {
 				csv << a_result.id << ',' << range.sample << ',' << a_result.startFrame << ',' << CsvEscape(range.name) << ',' << CsvEscape(range.path) << ','
-					<< range.occurrence;
+				    << range.occurrence;
 				for (double value : range.values)
 					csv << ',' << value;
 				csv << '\n';

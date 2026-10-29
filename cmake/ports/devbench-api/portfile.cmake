@@ -15,15 +15,25 @@ vcpkg_from_github(
 )
 
 # MIT API glue → header to include/, source to share/ (referenced by the config target).
-file(INSTALL "${SOURCE_PATH}/include/DevBenchAPI.h"
-    DESTINATION "${CURRENT_PACKAGES_DIR}/include")
-file(INSTALL "${SOURCE_PATH}/include/DevBenchAPI.cpp"
-    DESTINATION "${CURRENT_PACKAGES_DIR}/share/${PORT}/src")
+file(
+    INSTALL "${SOURCE_PATH}/include/DevBenchAPI.h"
+    DESTINATION "${CURRENT_PACKAGES_DIR}/include"
+)
+file(
+    INSTALL "${SOURCE_PATH}/include/DevBenchAPI.cpp"
+    DESTINATION "${CURRENT_PACKAGES_DIR}/share/${PORT}/src"
+)
 
 # CMake package config — defines DevBench::API.
-file(INSTALL "${CMAKE_CURRENT_LIST_DIR}/devbench-api-config.cmake"
-    DESTINATION "${CURRENT_PACKAGES_DIR}/share/${PORT}")
+file(
+    INSTALL "${CMAKE_CURRENT_LIST_DIR}/devbench-api-config.cmake"
+    DESTINATION "${CURRENT_PACKAGES_DIR}/share/${PORT}"
+)
 
 # The API glue is MIT (not the GPL-3.0 plugin) — ship that as the port copyright.
-file(INSTALL "${SOURCE_PATH}/include/DevBenchAPI.LICENSE.txt"
-    DESTINATION "${CURRENT_PACKAGES_DIR}/share/${PORT}" RENAME copyright)
+file(
+    INSTALL "${SOURCE_PATH}/include/DevBenchAPI.LICENSE.txt"
+    DESTINATION "${CURRENT_PACKAGES_DIR}/share/${PORT}"
+    RENAME
+    copyright
+)

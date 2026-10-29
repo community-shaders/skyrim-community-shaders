@@ -11,25 +11,28 @@ add_subdirectory(${CMAKE_SOURCE_DIR}/extern/FidelityFX-SDK/sdk)
 # different IPO settings overwrite each other; a /GL lib then breaks the
 # incremental Dev-Fast link (LNK4075, fatal under /WX). Keep them per-build.
 foreach(
-  _ffx_lib
-  ffx_backend_dx11_x64
-  ffx_fsr3_x64
-  ffx_fsr3upscaler_x64
-  ffx_frameinterpolation_x64
-  ffx_opticalflow_x64
+    _ffx_lib
+    ffx_backend_dx11_x64
+    ffx_fsr3_x64
+    ffx_fsr3upscaler_x64
+    ffx_frameinterpolation_x64
+    ffx_opticalflow_x64
 )
-  # Frame interpolation and optical flow targets only exist when the SDK builds them, and each
-  # config needs its own folder: a multi-config generator (Visual Studio) would otherwise
-  # overwrite one config's lib with the other's.
-  if(TARGET ${_ffx_lib})
-    set_target_properties(
-      ${_ffx_lib}
-      PROPERTIES
-      ARCHIVE_OUTPUT_DIRECTORY_DEBUG "${CMAKE_BINARY_DIR}/ffx_sdk/Debug"
-      ARCHIVE_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/ffx_sdk/Release"
-      ARCHIVE_OUTPUT_DIRECTORY_RELWITHDEBINFO "${CMAKE_BINARY_DIR}/ffx_sdk/RelWithDebInfo"
-    )
-  endif()
+    # Frame interpolation and optical flow targets only exist when the SDK builds them, and each
+    # config needs its own folder: a multi-config generator (Visual Studio) would otherwise
+    # overwrite one config's lib with the other's.
+    if(TARGET ${_ffx_lib})
+        set_target_properties(
+            ${_ffx_lib}
+            PROPERTIES
+                ARCHIVE_OUTPUT_DIRECTORY_DEBUG
+                    "${CMAKE_BINARY_DIR}/ffx_sdk/Debug"
+                ARCHIVE_OUTPUT_DIRECTORY_RELEASE
+                    "${CMAKE_BINARY_DIR}/ffx_sdk/Release"
+                ARCHIVE_OUTPUT_DIRECTORY_RELWITHDEBINFO
+                    "${CMAKE_BINARY_DIR}/ffx_sdk/RelWithDebInfo"
+        )
+    endif()
 endforeach()
 
 # Upstream bug: the FFX dx11 backend's compile_shaders() leaks literal
@@ -39,29 +42,24 @@ endforeach()
 # Pre-creating empty placeholder files at those paths satisfies Ninja without
 # triggering rebuilds. If an SDK update adds a new leaked name, add it here.
 if(NOT CMAKE_GENERATOR MATCHES "Visual Studio")
-  set(_ffx_dx11_bindir
-      "${CMAKE_BINARY_DIR}/extern/FidelityFX-SDK/sdk/src/backends/dx11"
-  )
-  foreach(
-    _ffx_bogus_dep
-    FSR1_PERMUTATION_OUTPUTS
-    FSR2_PERMUTATION_OUTPUTS
-    FSR3UPSCALER_PERMUTATION_OUTPUTS
-    FRAMEINTERPOLATION_PERMUTATION_OUTPUTS
-    OPTICALFLOW_PERMUTATION_OUTPUTS
-  )
-    if(NOT EXISTS "${_ffx_dx11_bindir}/${_ffx_bogus_dep}")
-      file(
-        WRITE "${_ffx_dx11_bindir}/${_ffx_bogus_dep}"
-        "placeholder for upstream FFX CMake dependency-name leak; see cmake/FidelityFX-SDK.cmake\n"
-      )
-    endif()
-  endforeach()
+    set(_ffx_dx11_bindir
+        "${CMAKE_BINARY_DIR}/extern/FidelityFX-SDK/sdk/src/backends/dx11"
+    )
+    foreach(
+        _ffx_bogus_dep
+        FSR1_PERMUTATION_OUTPUTS
+        FSR2_PERMUTATION_OUTPUTS
+        FSR3UPSCALER_PERMUTATION_OUTPUTS
+        FRAMEINTERPOLATION_PERMUTATION_OUTPUTS
+        OPTICALFLOW_PERMUTATION_OUTPUTS
+    )
+        if(NOT EXISTS "${_ffx_dx11_bindir}/${_ffx_bogus_dep}")
+            file(
+                WRITE "${_ffx_dx11_bindir}/${_ffx_bogus_dep}"
+                "placeholder for upstream FFX CMake dependency-name leak; see cmake/FidelityFX-SDK.cmake\n"
+            )
+        endif()
+    endforeach()
 endif()
 
-target_link_libraries(
-  ${PROJECT_NAME}
-  PRIVATE
-  ffx_backend_dx11_x64
-  ffx_fsr3_x64
-)
+target_link_libraries(${PROJECT_NAME} PRIVATE ffx_backend_dx11_x64 ffx_fsr3_x64)
