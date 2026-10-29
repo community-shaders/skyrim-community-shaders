@@ -368,7 +368,7 @@ namespace
 		ImGui::PushID(pack.id.c_str());
 		const ImVec2 rowOrigin = ImGui::GetCursorScreenPos();
 		const float rowHeight = ImGui::GetTextLineHeightWithSpacing() * 2.0f;
-		const bool clicked = ImGui::Selectable("##row", selected, ImGuiSelectableFlags_AllowOverlap, ImVec2(0.0f, rowHeight));
+		const bool clicked = Util::Selectable("##row", selected, ImGuiSelectableFlags_AllowOverlap, ImVec2(0.0f, rowHeight));
 
 		ImGui::SetCursorScreenPos(ImVec2(rowOrigin.x + ImGui::GetStyle().FramePadding.x, rowOrigin.y));
 		ImGui::BeginGroup();
@@ -856,7 +856,7 @@ namespace
 		                             form.type == PresetType::CS       ? !manager->HasAnyUserEntries() && !hasMods && !HasBaselinePayload() && formEditKeys.empty() :
 		                                                                 false;
 		ImGui::BeginDisabled(sanitizedName.empty() || reservedName || !validVersion || typeMismatch || nothingToExport);
-		if (ImGui::Button(T(TKEY("scene_export_confirm"), "Export"))) {
+		if (Util::Button(T(TKEY("scene_export_confirm"), "Export"))) {
 			collidingFiles = SceneSettingsManager::FindPresetFiles(sanitizedName);
 			if (form.type != PresetType::Baseline)
 				std::ranges::copy(FormEditSources::ListPackFormFiles(Util::PathHelpers::GetUnifiedPackPath(sanitizedName)),
@@ -891,7 +891,7 @@ namespace
 				Util::kTooltipWhenDisabled);
 
 		ImGui::SameLine(0.0f, style.ItemSpacing.x);
-		if (ImGui::Button(T(TKEY("cancel"), "Cancel")))
+		if (Util::Button(T(TKEY("cancel"), "Cancel")))
 			ImGui::CloseCurrentPopup();
 	}
 

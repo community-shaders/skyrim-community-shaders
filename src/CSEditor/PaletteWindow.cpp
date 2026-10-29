@@ -1,5 +1,6 @@
 #include "PaletteWindow.h"
 #include "../I18n/I18n.h"
+#include "Browser/BrowserWidgets.h"
 #include "EditorWindow.h"
 #include "Menu/Fonts.h"
 #include "Menu/ThemeManager.h"
@@ -9,8 +10,25 @@
 
 #define I18N_KEY_PREFIX "cs_editor."
 
-// Forward declaration from EditorWindow.cpp
-void DrawIconStar(ImVec2 center, float radius, ImU32 color, bool filled);
+namespace
+{
+	/**
+	 * @brief Colour swatch that copies its value on click and drags it as a COLOR_DND payload.
+	 * The swatch stays the last item, so the caller can attach a tooltip.
+	 */
+	void DrawColorSwatch(const char* id, float3& color, float size)
+	{
+		const ImVec4 colorVec(color.x, color.y, color.z, 1.0f);
+		if (ImGui::ColorButton(id, colorVec, ImGuiColorEditFlags_NoAlpha, ImVec2(size, size)))
+			ImGui::SetClipboardText(std::format("{:.3f}, {:.3f}, {:.3f}", color.x, color.y, color.z).c_str());
+
+		if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
+			ImGui::SetDragDropPayload("COLOR_DND", &color, sizeof(float3));
+			ImGui::ColorButton("##preview", colorVec, ImGuiColorEditFlags_NoAlpha);
+			ImGui::EndDragDropSource();
+		}
+	}
+}
 
 void PaletteWindow::Draw()
 {
@@ -28,18 +46,8 @@ void PaletteWindow::Draw()
 	// pixel size, so res / UI scale changes stay proportional automatically.
 	ImGui::SetNextWindowPos(ImVec2(displaySize.x - pad, bottomY), layoutCond, ImVec2(1.0f, 1.0f));
 
-	constexpr ImGuiWindowFlags kFlags =
-		ImGuiWindowFlags_NoTitleBar |
-		ImGuiWindowFlags_NoFocusOnAppearing |
-		ImGuiWindowFlags_AlwaysAutoResize |
-		ImGuiWindowFlags_NoResize |
-		ImGuiWindowFlags_NoScrollbar |
-		ImGuiWindowFlags_NoScrollWithMouse |
-		ImGuiWindowFlags_NoSavedSettings |
-		ImGuiWindowFlags_NoCollapse;
-
 	// No title/close chrome; toggle via the action-bar Palette checkbox.
-	if (ImGui::Begin("##CSEditorPalette", nullptr, kFlags)) {
+	if (ImGui::Begin("##CSEditorPalette", nullptr, CSEditorWindows::kFloatingPanelFlags)) {
 		DrawContents();
 	}
 	ImGui::End();
@@ -48,14 +56,14 @@ void PaletteWindow::Draw()
 void PaletteWindow::DrawContents()
 {
 	const float scale = Util::GetUIScale();
-	const float buttonSize = 24.0f * scale;
-	const float spacing = 4.0f * scale;
+	const float buttonSize = ThemeManager::Constants::CSE_PALETTE_BUTTON_SIZE * scale;
+	const float spacing = ThemeManager::Constants::CSE_PALETTE_SPACING * scale;
 	// Favourites row is the widest fixed content; wrap / auto-size both key off this.
 	const float favouritesRowWidth = buttonSize * static_cast<float>(maxFavoriteSlots) +
 	                                 spacing * static_cast<float>(maxFavoriteSlots - 1);
 
 	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(spacing, spacing));
-	ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2.0f * scale, 2.0f * scale));
+	ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(ThemeManager::Constants::CSE_PALETTE_FRAME_PADDING * scale, ThemeManager::Constants::CSE_PALETTE_FRAME_PADDING * scale));
 
 	ImGui::TextUnformatted(T(TKEY("favourites"), "Favourites"));
 
@@ -67,22 +75,10 @@ void PaletteWindow::DrawContents()
 
 		if (favoriteColors[i].has_value()) {
 			auto& color = favoriteColors[i].value();
-			ImVec4 colorVec(color.x, color.y, color.z, 1.0f);
-
-			if (ImGui::ColorButton(id.c_str(), colorVec, ImGuiColorEditFlags_NoAlpha, ImVec2(buttonSize, buttonSize))) {
-				copiedColor = color;
-				hasColorInClipboard = true;
-				ImGui::SetClipboardText(std::format("{:.3f}, {:.3f}, {:.3f}", color.x, color.y, color.z).c_str());
-			}
-
-			if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
-				ImGui::SetDragDropPayload("COLOR_DND", &color, sizeof(float3));
-				ImGui::ColorButton("##preview", colorVec, ImGuiColorEditFlags_NoAlpha);
-				ImGui::EndDragDropSource();
-			}
+			DrawColorSwatch(id.c_str(), color, buttonSize);
 
 			if (ImGui::BeginPopupContextItem()) {
-				if (ImGui::Selectable(T(TKEY("clear_favourite"), "Clear favourite"))) {
+				if (Util::Selectable(T(TKEY("clear_favourite"), "Clear favourite"))) {
 					favoriteColors[i].reset();
 					Save();
 				}
@@ -95,17 +91,15 @@ void PaletteWindow::DrawContents()
 				T(TKEY("right_click_to_clear"), "Right-click to clear"))
 					.c_str());
 		} else {
-			ImVec4 emptyColor(0.2f, 0.2f, 0.2f, 1.0f);
-			ImGui::PushStyleColor(ImGuiCol_Button, emptyColor);
-			ImGui::Button(id.c_str(), ImVec2(buttonSize, buttonSize));
+			ImGui::PushStyleColor(ImGuiCol_Button, ThemeManager::Constants::CSE_PALETTE_EMPTY_SLOT_COLOR);
+			Util::Button(id.c_str(), ImVec2(buttonSize, buttonSize));
 			ImGui::PopStyleColor();
 
-			ImVec2 buttonMin = ImGui::GetItemRectMin();
-			ImVec2 buttonMax = ImGui::GetItemRectMax();
-			ImVec2 center = ImVec2((buttonMin.x + buttonMax.x) * 0.5f, (buttonMin.y + buttonMax.y) * 0.5f);
-			float starSize = buttonSize * 0.4f;
-			ImU32 starColor = IM_COL32(160, 160, 160, 255);
-			DrawIconStar(center, starSize, starColor, false);
+			const ImVec2 buttonMin = ImGui::GetItemRectMin();
+			const ImVec2 buttonMax = ImGui::GetItemRectMax();
+			const ImVec2 center((buttonMin.x + buttonMax.x) * 0.5f, (buttonMin.y + buttonMax.y) * 0.5f);
+			DrawIconStar(center, buttonSize * ThemeManager::Constants::CSE_PALETTE_STAR_RATIO,
+				ImGui::GetColorU32(ThemeManager::Constants::CSE_PALETTE_EMPTY_STAR_COLOR), false);
 
 			Util::AddTooltip(T(TKEY("drag_to_favourites"), "Drag a colour here to add to favourites"));
 		}
@@ -131,7 +125,7 @@ void PaletteWindow::DrawContents()
 
 	ImGui::Spacing();
 	ImGui::TextUnformatted(T(TKEY("recently_used"), "Recently Used"));
-	auto recentColors = GetRecentColors(5);
+	auto recentColors = GetRecentColors(ThemeManager::Constants::CSE_PALETTE_RECENT_COUNT);
 
 	if (recentColors.empty()) {
 		MenuFonts::FontRoleGuard subtext(Menu::FontRole::Subtext);
@@ -142,20 +136,8 @@ void PaletteWindow::DrawContents()
 				ImGui::SameLine(0.0f, spacing);
 
 			auto* entry = recentColors[i];
-			ImVec4 color(entry->color.x, entry->color.y, entry->color.z, 1.0f);
-			std::string id = "##recent_color_" + std::to_string(i);
-
-			if (ImGui::ColorButton(id.c_str(), color, ImGuiColorEditFlags_NoAlpha, ImVec2(buttonSize, buttonSize))) {
-				copiedColor = entry->color;
-				hasColorInClipboard = true;
-				ImGui::SetClipboardText(std::format("{:.3f}, {:.3f}, {:.3f}", entry->color.x, entry->color.y, entry->color.z).c_str());
-			}
-
-			if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
-				ImGui::SetDragDropPayload("COLOR_DND", &entry->color, sizeof(float3));
-				ImGui::ColorButton("##preview", color, ImGuiColorEditFlags_NoAlpha);
-				ImGui::EndDragDropSource();
-			}
+			const std::string id = "##recent_color_" + std::to_string(i);
+			DrawColorSwatch(id.c_str(), entry->color, buttonSize);
 
 			Util::AddTooltip(std::format("RGB: {:.3f}, {:.3f}, {:.3f}\n{}\n{}",
 				entry->color.x, entry->color.y, entry->color.z,
@@ -191,7 +173,7 @@ void PaletteWindow::TrackColorUsage(const float3& color)
 {
 	float currentTime = static_cast<float>(ImGui::GetTime());
 
-	const float epsilon = 0.001f;
+	const float epsilon = ThemeManager::Constants::CSE_PALETTE_COLOR_EPSILON;
 	for (auto& entry : colorEntries) {
 		if (std::abs(entry.color.x - color.x) < epsilon &&
 			std::abs(entry.color.y - color.y) < epsilon &&

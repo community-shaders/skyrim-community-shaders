@@ -6,6 +6,7 @@
 #include <ranges>
 #include <vector>
 
+#include "Browser/BrowserWidgets.h"
 #include "Feature.h"
 #include "FeatureCategories.h"
 #include "Globals.h"
@@ -22,11 +23,6 @@ namespace
 {
 	using Marker = FeatureListPicker::Marker;
 	using Options = FeatureListPicker::Options;
-
-	/// A pinned row's accent: the tint behind it, as a share of the accent's opacity, and its edge bar.
-	constexpr float kPinnedTintAlpha = 0.14f;
-	constexpr float kPinnedSelectedTintAlpha = 0.26f;
-	constexpr float kPinnedBarWidth = 3.0f;
 
 	bool IsPinned(const Options& options, const Feature* feature)
 	{
@@ -55,33 +51,19 @@ namespace
 		const auto& style = ImGui::GetStyle();
 		auto* drawList = ImGui::GetWindowDrawList();
 
-		const ImVec4 clear(0.0f, 0.0f, 0.0f, 0.0f);
-		ImGui::PushStyleColor(ImGuiCol_Header, clear);
-		ImGui::PushStyleColor(ImGuiCol_HeaderHovered, clear);
-		ImGui::PushStyleColor(ImGuiCol_HeaderActive, clear);
-		if (ImGui::Selectable(std::format("##{}", shortName).c_str(), isSelected))
+		if (Util::Selectable(std::format("##{}", shortName).c_str(), isSelected))
 			selected = shortName;
-		ImGui::PopStyleColor(3);
-		const bool hovered = ImGui::IsItemHovered();
 
-		// Selectable pads its rect by half ItemSpacing, so neighbours touch; pull x inside the child's clip and leave a row gap.
-		const float padL = IM_TRUNC(style.ItemSpacing.x * 0.5f);
-		const float halfGap = style.ItemInnerSpacing.x * 0.5f;
-		const ImVec2 rowMin(ImGui::GetItemRectMin().x + padL, ImGui::GetItemRectMin().y + halfGap);
-		const ImVec2 rowMax(ImGui::GetItemRectMax().x - (style.ItemSpacing.x - padL), ImGui::GetItemRectMax().y - halfGap);
+		ImVec2 rowMin, rowMax;
+		BrowserUI::InsetRowRect(rowMin, rowMax);
 
 		const ImVec4 accent = Util::Colors::GetAccent();
-		const float barWidth = kPinnedBarWidth * Util::GetUIScale();
+		const float barWidth = ThemeManager::Constants::ANIM_SELECTED_BAR_WIDTH * Util::GetUIScale();
 		const float edgeInset = std::max(style.FramePadding.x, barWidth) + style.ItemInnerSpacing.x;
 		float textMaxX = rowMax.x - edgeInset;
-		if (pinned)
-			drawList->AddRectFilled(rowMin, rowMax,
-				ImGui::GetColorU32(ImVec4(accent.x, accent.y, accent.z, isSelected ? kPinnedSelectedTintAlpha : kPinnedTintAlpha)),
-				style.FrameRounding);
-		if (isSelected || hovered)
-			drawList->AddRectFilled(rowMin, rowMax, ImGui::GetColorU32(isSelected ? ImGuiCol_Header : ImGuiCol_HeaderHovered),
-				style.FrameRounding);
 		if (pinned) {
+			const float tintAlpha = isSelected ? ThemeManager::Constants::CSE_PINNED_SELECTED_TINT_ALPHA : ThemeManager::Constants::CSE_PINNED_TINT_ALPHA;
+			drawList->AddRectFilled(rowMin, rowMax, ImGui::GetColorU32(ImVec4(accent.x, accent.y, accent.z, tintAlpha)), style.FrameRounding);
 			drawList->PushClipRect(rowMin, ImVec2(rowMin.x + barWidth, rowMax.y), true);
 			drawList->AddRectFilled(rowMin, rowMax, ImGui::GetColorU32(accent), style.FrameRounding);
 			drawList->PopClipRect();

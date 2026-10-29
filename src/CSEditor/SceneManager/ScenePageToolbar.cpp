@@ -1,7 +1,6 @@
 #include "ScenePageToolbar.h"
 
 #include <format>
-#include <optional>
 #include <string>
 
 #include "../../I18n/I18n.h"

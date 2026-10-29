@@ -1,4 +1,5 @@
 #include "LensFlareWidget.h"
+#include "../../I18n/I18n.h"
 #include "../EditorWindow.h"
 #include "../WeatherUtils.h"
 
@@ -31,8 +32,8 @@ void LensFlareWidget::DrawWidget()
 			});
 		};
 
-		drawSection(LensFlareSetting::kFadeDistRadiusScale, "Fade Distance", settings.fadeDistRadiusScale);
-		drawSection(LensFlareSetting::kColorInfluence, "Color", settings.colorInfluence);
+		drawSection(LensFlareSetting::kFadeDistRadiusScale, T("cs_editor.lens_flare.fade_distance", "Fade Distance"), settings.fadeDistRadiusScale);
+		drawSection(LensFlareSetting::kColorInfluence, T("cs_editor.lens_flare.color", "Color"), settings.colorInfluence);
 
 		AutoApply(changed);
 	}

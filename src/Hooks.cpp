@@ -317,7 +317,9 @@ namespace GrassExtensions
 
 			auto state = globals::state;
 			const auto* shaderProperty = static_cast<RE::BSShaderProperty*>(pass->geometry->GetGeometryRuntimeData().shaderProperty.get());
-			state->SetGrassSphereNormal(shaderProperty && shaderProperty->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kEffectLighting));
+			// TruePBR marks converted grass properties with kMenuScreen.
+			state->SetGrassFlags(shaderProperty && shaderProperty->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kEffectLighting),
+				shaderProperty && shaderProperty->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kMenuScreen));
 
 			// Grass meshes are rooted at the model origin, so the model bound's center sits about halfway up the mesh.
 			const auto& bound = pass->geometry->GetModelData().modelBound;

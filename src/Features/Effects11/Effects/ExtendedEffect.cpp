@@ -759,7 +759,7 @@ namespace
 				if (ImGui::BeginCombo("##v", preview)) {
 					for (int j = 0; j < static_cast<int>(uiVar.dropdownItems.size()); ++j) {
 						const int value = quality ? j - 1 : j;
-						if (ImGui::Selectable(uiVar.dropdownItems[j].c_str(), uiVar.intValue == value)) {
+						if (Util::Selectable(uiVar.dropdownItems[j].c_str(), uiVar.intValue == value)) {
 							uiVar.intValue = value;
 							changed = true;
 						}
@@ -863,7 +863,7 @@ namespace
 			if (ImGui::BeginCombo("##technique", current)) {
 				for (uint32_t i = 0; i < effect->uiTechniques.size(); ++i) {
 					ImGui::PushID(static_cast<int>(i));
-					if (ImGui::Selectable(effect->uiTechniques[i].displayName.c_str(), effect->selectedTechniqueIndex == i)) {
+					if (Util::Selectable(effect->uiTechniques[i].displayName.c_str(), effect->selectedTechniqueIndex == i)) {
 						effect->selectedTechniqueIndex = i;
 						ctx.changedEffects.insert(effect);
 						ctx.view.changed = true;

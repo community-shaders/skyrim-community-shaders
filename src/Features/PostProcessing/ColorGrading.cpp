@@ -178,13 +178,13 @@ struct TonemapperInfo
 
 					ImGui::SliderFloat(T(TKEY("cross_over_point"), "Cross-over Point"), &params[0].w, 0.f, 5.f, "%.2f");
 					if (auto _tt = Util::HoverTooltipWrapper())
-						ImGui::Text(T(TKEY("cross_over_point_tooltip"), "Point where the toe and shoulder are pieced together into a single curve."));
+						ImGui::TextUnformatted(T(TKEY("cross_over_point_tooltip"), "Point where the toe and shoulder are pieced together into a single curve."));
 					ImGui::SliderFloat(T(TKEY("shoulder_strength"), "Shoulder Strength"), &params[1].x, 0.f, 1.f, "%.2f");
 					if (auto _tt = Util::HoverTooltipWrapper())
-						ImGui::Text(T(TKEY("shoulder_strength_tooltip"), "Amount of blending between a straight-line curve and a purely asymptotic curve for the shoulder."));
+						ImGui::TextUnformatted(T(TKEY("shoulder_strength_tooltip"), "Amount of blending between a straight-line curve and a purely asymptotic curve for the shoulder."));
 					ImGui::SliderFloat(T(TKEY("toe_strength"), "Toe Strength"), &params[1].y, 0.f, 1.f, "%.2f");
 					if (auto _tt = Util::HoverTooltipWrapper())
-						ImGui::Text(T(TKEY("toe_strength_tooltip"), "Amount of blending between a straight-line curve and a purely asymptotic curve for the toe.")); },
+						ImGui::TextUnformatted(T(TKEY("toe_strength_tooltip"), "Amount of blending between a straight-line curve and a purely asymptotic curve for the toe.")); },
 				{ f4{ 1.f, 0.f, 2.f, 0.3f }, f4{ 0.8f, 0.7f, 0.f, 0.f } } },
 
 			{ "Uchimura/Grand Turismo Curve"sv, "UchimuraFilmic"sv,
@@ -245,13 +245,13 @@ struct TonemapperInfo
 					ImGui::SliderFloat(T(TKEY("saturation"), "Saturation"), &params[1].x, 0.f, 2.f, "%.2f");
 					ImGui::SliderFloat(T(TKEY("cone_response"), "Cone Response"), &params[1].y, 0.f, 2.f, "%.2f");
 					if (auto _tt = Util::HoverTooltipWrapper())
-						ImGui::Text(T(TKEY("cone_response_tooltip"), "Scales the per-cone response contrast."));
+						ImGui::TextUnformatted(T(TKEY("cone_response_tooltip"), "Scales the per-cone response contrast."));
 					ImGui::SliderFloat(T(TKEY("gamut_compression"), "Gamut Compression"), &params[1].z, 0.f, 1.f, "%.2f");
 					if (auto _tt = Util::HoverTooltipWrapper())
-						ImGui::Text(T(TKEY("gamut_compression_tooltip"), "0 bypasses gamut mapping; 1 applies the full display-gamut projection."));
+						ImGui::TextUnformatted(T(TKEY("gamut_compression_tooltip"), "0 bypasses gamut mapping; 1 applies the full display-gamut projection."));
 					ImGui::SliderFloat(T(TKEY("compression"), "Compression"), &params[1].w, 0.f, 2.f, "%.2f");
 					if (auto _tt = Util::HoverTooltipWrapper())
-						ImGui::Text(T(TKEY("compression_tooltip"), "Finite-response compression power. 0 selects automatic compression; positive values select a manual power."));
+						ImGui::TextUnformatted(T(TKEY("compression_tooltip"), "Finite-response compression power. 0 selects automatic compression; positive values select a manual power."));
 					drawHDRStatus();
 				},
 				{ f4{ 1.f, 1.f, 1.f, 1.f }, f4{ 1.f, 1.f, 1.f, 1.f } } },
@@ -325,11 +325,11 @@ void ColorGrading::DrawSettings()
 {
 	ImGui::Checkbox(T(TKEY("skip_ldr_color_grading"), "Skip LDR Color Grading"), &settings.skipLDR);
 	if (auto _tt = Util::HoverTooltipWrapper())
-		ImGui::Text(T(TKEY("skip_ldr_color_grading_tooltip"), "Skip color grading after tonemapping. This includes Lift Gamma Gain. Will be automatically skipped with HDR on."));
+		ImGui::TextUnformatted(T(TKEY("skip_ldr_color_grading_tooltip"), "Skip color grading after tonemapping. This includes Lift Gamma Gain. Will be automatically skipped with HDR on."));
 
 	ImGui::Checkbox(T(TKEY("skip_lut_direct_color_grading"), "Skip LUT (Direct Color Grading)"), &settings.skipLUT);
 	if (auto _tt = Util::HoverTooltipWrapper())
-		ImGui::Text(T(TKEY("skip_lut_direct_color_grading_tooltip"), "Skip baking color grading into a LUT and apply it directly per-pixel. More accurate but slower."));
+		ImGui::TextUnformatted(T(TKEY("skip_lut_direct_color_grading_tooltip"), "Skip baking color grading into a LUT and apply it directly per-pixel. More accurate but slower."));
 
 	ImGui::Checkbox(T(TKEY("convert_linear_to_log_before_hdr_color_grading"), "Convert Linear to Log Before HDR Color Grading"), &settings.useLog);
 	if (settings.useLog) {
@@ -356,7 +356,7 @@ void ColorGrading::DrawSettings()
 		ImGui::SliderFloat(T(TKEY("input_gamma"), "Input Gamma"), &settings.inOutGamma.z, 0.f, 3.f, "%.3f");
 		ImGui::SliderFloat(T(TKEY("output_gamma"), "Output Gamma"), &settings.inOutGamma.w, 0.f, 3.f, "%.3f");
 
-		ImGui::Text(T(TKEY("pre_tonemapping_settings"), "Pre-Tonemapping Settings"));
+		ImGui::TextUnformatted(T(TKEY("pre_tonemapping_settings"), "Pre-Tonemapping Settings"));
 		if (ImGui::TreeNode(T(TKEY("exposure_temperature_tint"), "Exposure/Temperature/Tint"))) {
 			exposureSlider(&settings.exposureTemperatureTint.x);
 			ImGui::SliderFloat(T(TKEY("temperature"), "Temperature"), &settings.exposureTemperatureTint.y, 10.f, 150.f, "%1.f00K");
@@ -379,7 +379,7 @@ void ColorGrading::DrawSettings()
 		}
 
 		if (ImGui::TreeNode(T(TKEY("oklch_color_mixer"), "OKLCH Color Mixer"))) {
-			ImGui::Text(T(TKEY("oklch_color_mixer_tooltip"), "Adjust brightness, vibrance and hue shift of specific hues in the perceptually uniform OKLCH space."));
+			ImGui::TextUnformatted(T(TKEY("oklch_color_mixer_tooltip"), "Adjust brightness, vibrance and hue shift of specific hues in the perceptually uniform OKLCH space."));
 			constexpr std::array<ImColor, 7> hues = { {
 				{ 255, 0, 0 },
 				{ 182, 124, 1 },
@@ -429,7 +429,7 @@ void ColorGrading::DrawSettings()
 			ImGui::TreePop();
 		}
 
-		ImGui::Text(T(TKEY("post_tonemapping_settings"), "Post-Tonemapping Settings"));
+		ImGui::TextUnformatted(T(TKEY("post_tonemapping_settings"), "Post-Tonemapping Settings"));
 		if (ImGui::TreeNode(T(TKEY("lift_gamma_gain"), "Lift Gamma Gain"))) {
 			ImGui::DragFloat4(T(TKEY("lift"), "Lift"), &settings.lift.x, 1e-3f, -1.f, 1.f, "%.3f");
 			ImGui::DragFloat4(T(TKEY("gamma"), "Gamma"), &settings.gamma.x, 1e-3f, -1.5f, 1.5f, "%.3f");
@@ -471,7 +471,7 @@ void ColorGrading::DrawSettings()
 					const float badgeW = Util::MeasureHdrSdrCapabilityPillWidth(supportsHDR);
 					const float rowW = nameSize.x + gap + badgeW;
 
-					if (ImGui::Selectable("##tm", selected, 0, ImVec2(rowW, 0))) {
+					if (Util::Selectable("##tm", selected, 0, ImVec2(rowW, 0))) {
 						tonemappers[tonemapperType].cached_settings = settings.tonemapParams;
 						settings.tonemapParams = tonemappers[i].cached_settings;
 						tonemapperType = i;
@@ -506,14 +506,14 @@ void ColorGrading::DrawSettings()
 			if (hdrActive && !tonemappers[tonemapperType].supportsHDR) {
 				ImGui::Checkbox(T(TKEY("enable_auto_hdr"), "Enable AutoHDR"), &settings.enableAutoHDR);
 				if (auto _tt = Util::HoverTooltipWrapper())
-					ImGui::Text(T(TKEY("enable_auto_hdr_tooltip"),
+					ImGui::TextUnformatted(T(TKEY("enable_auto_hdr_tooltip"),
 						"This tonemapper outputs SDR (0-1). AutoHDR expands highlights toward your HDR peak brightness. "
 						"Disable if you prefer a strictly SDR look on an HDR display."));
 				ImGui::Spacing();
 			}
 
 			ImGui::BeginDisabled(SceneWidgetInterceptor::IsArmed());
-			if (ImGui::Button(T(TKEY("reset"), "Reset"), { -1, 0 }))
+			if (Util::Button(T(TKEY("reset"), "Reset"), { -1, 0 }))
 				settings.tonemapParams = tonemappers[tonemapperType].default_settings;
 			ImGui::EndDisabled();
 			ImGui::Spacing();
@@ -552,11 +552,11 @@ void ColorGrading::DrawSettings()
 				auto* dl = ImGui::GetWindowDrawList();
 
 				// Background
-				dl->AddRectFilled(canvasPos, { canvasPos.x + canvasSize.x, canvasPos.y + canvasSize.y }, IM_COL32(20, 20, 20, 255));
-				dl->AddRect(canvasPos, { canvasPos.x + canvasSize.x, canvasPos.y + canvasSize.y }, IM_COL32(80, 80, 80, 255));
+				dl->AddRectFilled(canvasPos, { canvasPos.x + canvasSize.x, canvasPos.y + canvasSize.y }, ImGui::GetColorU32(IM_COL32(20, 20, 20, 255)));
+				dl->AddRect(canvasPos, { canvasPos.x + canvasSize.x, canvasPos.y + canvasSize.y }, ImGui::GetColorU32(IM_COL32(80, 80, 80, 255)));
 
 				// Grid lines
-				auto gridColor = IM_COL32(50, 50, 50, 255);
+				auto gridColor = ImGui::GetColorU32(IM_COL32(50, 50, 50, 255));
 				for (int g = 1; g <= 3; g++) {
 					float gy = canvasPos.y + canvasSize.y * (1.f - (float)g / 4.f);
 					dl->AddLine({ canvasPos.x, gy }, { canvasPos.x + canvasSize.x, gy }, gridColor);
@@ -574,7 +574,7 @@ void ColorGrading::DrawSettings()
 					float y0 = canvasPos.y + canvasSize.y;
 					float x1 = canvasPos.x + canvasSize.x * identityEndX;
 					float y1 = canvasPos.y + canvasSize.y * (1.f - std::min(1.f, yMax) / yMax);
-					dl->AddLine({ x0, y0 }, { x1, y1 }, IM_COL32(80, 80, 80, 128));
+					dl->AddLine({ x0, y0 }, { x1, y1 }, ImGui::GetColorU32(IM_COL32(80, 80, 80, 128)));
 				}
 
 				// Draw RGB curves
@@ -584,7 +584,7 @@ void ColorGrading::DrawSettings()
 						float x1 = canvasPos.x + canvasSize.x * ((float)(i + 1) / (CurveSamples - 1));
 						float y0 = canvasPos.y + canvasSize.y * (1.f - std::clamp(data[i] / yMax, 0.f, 1.f));
 						float y1 = canvasPos.y + canvasSize.y * (1.f - std::clamp(data[i + 1] / yMax, 0.f, 1.f));
-						dl->AddLine({ x0, y0 }, { x1, y1 }, color, 1.5f);
+						dl->AddLine({ x0, y0 }, { x1, y1 }, ImGui::GetColorU32(color), 1.5f);
 					}
 				};
 
@@ -600,7 +600,7 @@ void ColorGrading::DrawSettings()
 					float preValue = t * CurveMaxInput;
 
 					// Vertical cursor line
-					dl->AddLine({ mousePos.x, canvasPos.y }, { mousePos.x, canvasPos.y + canvasSize.y }, IM_COL32(200, 200, 200, 100));
+					dl->AddLine({ mousePos.x, canvasPos.y }, { mousePos.x, canvasPos.y + canvasSize.y }, ImGui::GetColorU32(IM_COL32(200, 200, 200, 100)));
 
 					ImGui::BeginTooltip();
 					ImGui::Text(T(TKEY("curve_preview_pre"), "Pre:  %.3f"), preValue);
@@ -622,7 +622,7 @@ void ColorGrading::DrawSettings()
 	ImGui::SeparatorText(T(TKEY("game_color_grading"), "Game Color Grading"));
 	ImGui::SliderFloat3(T(TKEY("cinematic_blend"), "Cinematic Blend"), &settings.gameCinematicBlend.x, 0.f, 1.f, "%.3f");
 	if (auto _tt = Util::HoverTooltipWrapper())
-		ImGui::Text(T(TKEY("cinematic_blend_tooltip"), "Saturation, Brightness and Contrast."));
+		ImGui::TextUnformatted(T(TKEY("cinematic_blend_tooltip"), "Saturation, Brightness and Contrast."));
 	ImGui::SliderFloat(T(TKEY("fade_blend"), "Fade Blend"), &settings.gameFadeBlend, 0.f, 1.f, "%.3f");
 	ImGui::SliderFloat(T(TKEY("tint_blend"), "Tint Blend"), &settings.gameTintBlend, 0.f, 1.f, "%.3f");
 	ImGui::SeparatorText(T(TKEY("color_space_transform"), "Color Space Transform"));
@@ -641,12 +641,12 @@ void ColorGrading::DrawSettings()
 		ImGui::Combo(T(TKEY("working_color_space"), "Working Color Space"), &settings.processColorSpace, spaces.data(), (int)spaces.size());
 		ImGui::TextDisabled(T(TKEY("output_color_space"), "Output Color Space: %s (auto from HDR Display)"), spaces[outputColorSpace]);
 		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text(T(TKEY("output_color_space_tooltip"), "Output switches automatically: SDR -> sRGB, HDR -> BT2020."));
+			ImGui::TextUnformatted(T(TKEY("output_color_space_tooltip"), "Output switches automatically: SDR -> sRGB, HDR -> BT2020."));
 
 		UpdateColorSpaceTransforms(hdrEnabled);
 	}
 
-	if (ImGui::Button(T(TKEY("save_lut_and_output_image"), "Save LUT and Output Image"))) {
+	if (Util::Button(T(TKEY("save_lut_and_output_image"), "Save LUT and Output Image"))) {
 		saveImagesFlag = true;
 	}
 	ImGui::SameLine();

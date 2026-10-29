@@ -371,7 +371,7 @@ void HDRDisplay::DrawSettings()
 	// Advanced override button — shown when HDR is neither active nor auto-detected
 	if (!isHDRMonitor && !oldEnableHDR) {
 		ImGui::SameLine();
-		if (ImGui::Button(T(TKEY("advanced"), "Advanced"))) {
+		if (Util::Button(T(TKEY("advanced"), "Advanced"))) {
 			bool dontShowWarning;
 			{
 				std::lock_guard<std::mutex> lock(settingsMutex);
@@ -433,7 +433,7 @@ void HDRDisplay::DrawSettings()
 			buttonWidthForLabel(forceEnableLabel),
 			buttonWidthForLabel(cancelLabel) });
 
-		if (ImGui::Button(forceEnableLabel, ImVec2(buttonWidth, 0))) {
+		if (Util::Button(forceEnableLabel, ImVec2(buttonWidth, 0))) {
 			{
 				std::lock_guard<std::mutex> lock(settingsMutex);
 				settings.enableHDR = true;
@@ -446,7 +446,7 @@ void HDRDisplay::DrawSettings()
 			ImGui::CloseCurrentPopup();
 		}
 		ImGui::SameLine();
-		if (ImGui::Button(cancelLabel, ImVec2(buttonWidth, 0))) {
+		if (Util::Button(cancelLabel, ImVec2(buttonWidth, 0))) {
 			{
 				std::lock_guard<std::mutex> lock(settingsMutex);
 				settings.enableHDR = false;

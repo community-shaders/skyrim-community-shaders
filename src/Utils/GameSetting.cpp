@@ -221,7 +221,7 @@ namespace Util
 		}
 		if (settingData.offset != 0) {
 			ImGui::SameLine();
-			if (ImGui::Button(::T("ui.copy", "Copy"))) {
+			if (Util::Button(::T("ui.copy", "Copy"))) {
 				ImGui::SetClipboardText(settingName.c_str());
 			}
 			if (auto _tt = HoverTooltipWrapper()) {

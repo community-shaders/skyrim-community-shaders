@@ -6,6 +6,7 @@
 #include "Features/PostProcessing.h"
 #include "Globals.h"
 #include "I18n/I18n.h"
+#include "Menu.h"
 #include "Presets/UnifiedPresetCatalog.h"
 #include "ShaderCache.h"
 #include "State.h"
@@ -161,7 +162,7 @@ namespace PostProcessingMode
 			ApplyPending();
 	}
 
-	void DrawSelector()
+	void DrawSelector(const SelectorAction* action)
 	{
 		std::array<Mode, kModeCount> modes{};
 		std::array<const char*, kModeCount> labels{};
@@ -181,6 +182,7 @@ namespace PostProcessingMode
 		if (CanUseEffects11())
 			addSegment(Mode::Effects11, T("ui.post_processing_mode.effects11", "Effects 11"));
 
+		const float rowTop = ImGui::GetCursorPosY();
 		// Re-clicking the active mode must not undo a manual Linear Lighting opt-out.
 		if (Util::SegmentedControl("PostProcessingMode", labels.data(), count, selected) && modes[selected] != current) {
 			Set(modes[selected]);
@@ -194,5 +196,20 @@ namespace PostProcessingMode
 
 		Util::AddTooltip(T("ui.post_processing_mode.tooltip",
 			"Only one pipeline runs at a time. Vanilla uses the game's original post processing."));
+
+		if (!action || !action->label)
+			return;
+
+		// The page's action sits on the selector's row, flush right and as tall as the selector
+		const float rowBottom = ImGui::GetCursorPosY();
+		const float stripHeight = rowBottom - rowTop - ImGui::GetStyle().ItemSpacing.y;
+		const float buttonWidth = ImGui::CalcTextSize(action->label).x + ImGui::GetStyle().FramePadding.x * 4.0f;
+		const float right = ImGui::GetContentRegionMax().x;
+		ImGui::SetCursorPos(ImVec2(right - buttonWidth, rowTop));
+		if (Util::Button(action->label, ImVec2(buttonWidth, stripHeight)) && action->onClick)
+			action->onClick();
+		if (action->tooltip)
+			Util::AddTooltip(action->tooltip);
+		ImGui::SetCursorPosY(rowBottom);
 	}
 }

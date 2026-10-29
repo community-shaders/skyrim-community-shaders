@@ -13,10 +13,10 @@
 #include "IconsTabler.h"
 #include "Menu.h"
 #include "Menu/BackgroundBlur.h"
-#include "Menu/Fonts.h"
 #include "Menu/Icons/helpers/IconFonts.h"
 #include "Menu/Icons/helpers/SceneActionIcons.h"
 #include "Menu/Icons/helpers/WeatherTypeIcons.h"
+#include "Menu/MenuIcons.h"
 #include "PaletteWindow.h"
 #include "SaveManager.h"
 #include "SceneManager/ScenePresetExport.h"
@@ -26,7 +26,9 @@
 #include "Utils/Climate.h"
 #include "Utils/FileSystem.h"
 #include "Utils/Game.h"
+#include "Utils/Notifications.h"
 #include "Utils/UI.h"
+#include "Utils/UIAnim.h"
 #include "Weather/LightingTemplateWidget.h"
 #include "WeatherPickerWindow.h"
 #include "WeatherUtils.h"
@@ -42,10 +44,7 @@
 
 namespace
 {
-	constexpr float kToggleIconButtonPadding = 1.0f;
 	constexpr float kToggleActiveAlpha = 0.6f;
-	constexpr float kToggleHoverAlpha = 0.8f;
-	constexpr float kInactiveHoverAlpha = 0.25f;
 	constexpr float kMenuShortcutScale = 0.85f;
 	/// Game time slider width relative to the time speed slider in the toolbar.
 	constexpr float kMenuBarGameTimeWidthScale = 2.0f;
@@ -98,7 +97,7 @@ namespace
 
 		if (!enabled)
 			ImGui::BeginDisabled();
-		const bool pressed = ImGui::Selectable(label, false, ImGuiSelectableFlags_SpanAvailWidth);
+		const bool pressed = Util::Selectable(label, false, ImGuiSelectableFlags_SpanAvailWidth);
 		if (!enabled)
 			ImGui::EndDisabled();
 
@@ -120,36 +119,34 @@ namespace
 		return false;
 	}
 
-	/** @brief Toggle-style icon button with active fill chrome. Does not set cursor position. */
+	/** @brief Transparent action bar icon with an animated highlight; a disabled one is dimmed and ignores clicks. */
+	bool DrawBarIconButton(const char* id, Icons::GlyphRef glyph, bool enabled, const ImVec4& enabledColor, const ImVec4& disabledColor,
+		const ImVec2& size)
+	{
+		const bool pressed = ImGui::InvisibleButton(id, size, ImGuiButtonFlags_EnableNav);
+		const ImRect bb(ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
+		Util::DrawAnimatedButtonHighlight(bb, ImGui::GetItemID(), enabled && ImGui::IsItemHovered(), enabled && ImGui::IsItemActive(), false);
+		const bool clicked = enabled && pressed;
+		ImVec4 color = enabled ? enabledColor : disabledColor;
+		if (!enabled)
+			color.w = ThemeManager::Constants::CSE_DISABLED_ICON_ALPHA;
+		Icons::DrawCenteredGlyph(ImGui::GetWindowDrawList(), bb.Min, bb.GetSize(), glyph, ImGui::GetColorU32(color));
+		return clicked;
+	}
+
+	/** @brief Toggle-style icon button whose fill eases with hover, press and the active state. Does not set cursor position. */
 	bool DrawToggleIconButton(const char* id, Icons::GlyphRef glyph, bool isActive, const ImVec4& activeColor,
 		const ImVec2& size, ImU32 glyphColor)
 	{
-		ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
-		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(kToggleIconButtonPadding, kToggleIconButtonPadding));
-		if (isActive) {
-			auto color = activeColor;
-			color.w = kToggleActiveAlpha;
-			auto hover = color;
-			hover.w = kToggleHoverAlpha;
-			ImGui::PushStyleColor(ImGuiCol_Button, color);
-			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, hover);
-		} else {
-			auto hover = ImGui::ColorConvertU32ToFloat4(glyphColor);
-			hover.w = kInactiveHoverAlpha;
-			ImGui::PushStyleColor(ImGuiCol_Button, WidgetUI::kIconButtonTransparent);
-			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, hover);
-		}
-		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImGui::GetStyleColorVec4(ImGuiCol_ButtonHovered));
 		const bool clicked = ImGui::InvisibleButton(id, size);
 		const ImRect bb(ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
-		if (isActive || ImGui::IsItemHovered())
-			ImGui::GetWindowDrawList()->AddRectFilled(bb.Min, bb.Max,
-				ImGui::GetColorU32(ImGui::IsItemActive() ? ImGuiCol_ButtonActive :
-														   (ImGui::IsItemHovered() ? ImGuiCol_ButtonHovered : ImGuiCol_Button)),
+		ImDrawList* drawList = ImGui::GetWindowDrawList();
+		// The active state keeps its colour; hover and press are the bar's shared highlight
+		if (isActive)
+			drawList->AddRectFilled(bb.Min, bb.Max, ImGui::GetColorU32(ImVec4(activeColor.x, activeColor.y, activeColor.z, kToggleActiveAlpha)),
 				ImGui::GetStyle().FrameRounding);
-		Icons::DrawCenteredGlyph(ImGui::GetWindowDrawList(), bb.Min, bb.GetSize(), glyph, glyphColor);
-		ImGui::PopStyleColor(3);
-		ImGui::PopStyleVar(2);
+		Util::DrawAnimatedButtonHighlight(bb, ImGui::GetItemID(), ImGui::IsItemHovered(), ImGui::IsItemActive(), false, drawList);
+		Icons::DrawCenteredGlyph(drawList, bb.Min, bb.GetSize(), glyph, glyphColor);
 		return clicked;
 	}
 }  // namespace
@@ -158,61 +155,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(EditorWindow::Settings::PaletteC
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(EditorWindow::Settings::PaletteValueEntry, name, value, useCount, lastUsedTime, isFavorite)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(EditorWindow::Settings::PaletteFavoriteColor, hasValue, r, g, b)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(EditorWindow::Settings, recordMarkers, markedRecords, autoApplyChanges, useTextButtons, enableInheritFromParent, showFeatureDebug, editorUIScale, favoriteWidgets, recentWidgets, maxRecentWidgets, showViewport, showFeaturesWindow, selectedCategory, browserShowInspector, browserSidebarCompact, skipToolDiscardPrompt, widgetTypeSizes, paletteColors, paletteValues, paletteFavorites)
-
-void DrawIconStar(ImVec2 center, float radius, ImU32 color, bool filled)
-{
-	auto* drawList = ImGui::GetWindowDrawList();
-	constexpr int numPoints = 5;
-	const float angleStep = IM_PI / numPoints;
-	ImVec2 points[10];
-
-	for (int i = 0; i < numPoints * 2; i++) {
-		float angle = -IM_PI * 0.5f + i * angleStep;
-		float r = (i % 2 == 0) ? radius : radius * 0.38f;
-		points[i] = ImVec2(center.x + cosf(angle) * r, center.y + sinf(angle) * r);
-	}
-
-	if (filled) {
-		// Disable AA fill temporarily — ImGui adds a 1px fringe around each filled shape
-		// that creates visible seams at the pentagon/triangle boundaries.
-		ImDrawListFlags oldFlags = drawList->Flags;
-		drawList->Flags &= ~ImDrawListFlags_AntiAliasedFill;
-
-		ImVec2 innerPentagon[5];
-		for (int i = 0; i < 5; i++) {
-			innerPentagon[i] = points[i * 2 + 1];  // inner points
-		}
-		drawList->AddConvexPolyFilled(innerPentagon, 5, color);
-		for (int i = 0; i < 5; i++) {
-			drawList->AddTriangleFilled(points[i * 2], points[i * 2 + 1], points[(i * 2 + 9) % 10], color);
-		}
-
-		drawList->Flags = oldFlags;
-
-		// Draw an AA polyline over the outer perimeter to restore smooth edges
-		drawList->AddPolyline(points, 10, color, ImDrawFlags_Closed, 1.5f);
-	} else {
-		drawList->AddPolyline(points, 10, color, ImDrawFlags_Closed, 1.5f);
-	}
-}
-
-// Pennant on a pole. The icon font only ships a solid flag, so the outline state is drawn by hand.
-void DrawIconFlag(ImVec2 center, float height, ImU32 color, bool filled)
-{
-	auto* drawList = ImGui::GetWindowDrawList();
-	const float width = height * 0.9f;
-	const float thickness = std::max(1.0f, height * 0.1f);
-	const ImVec2 top(center.x - width * 0.4f, center.y - height * 0.5f);
-	const ImVec2 bottom(top.x, center.y + height * 0.5f);
-	const ImVec2 tip(top.x + width, top.y + height * 0.25f);
-	const ImVec2 hoist(top.x, top.y + height * 0.5f);
-
-	drawList->AddLine(top, bottom, color, thickness);
-	if (filled)
-		drawList->AddTriangleFilled(top, tip, hoist, color);
-	else
-		drawList->AddTriangle(top, tip, hoist, color, thickness);
-}
 
 namespace
 {
@@ -248,7 +190,7 @@ namespace
 		EditorChromeScope& operator=(const EditorChromeScope&) = delete;
 
 	private:
-		static constexpr float kItemSpacingYScale = 0.55f;
+		static constexpr float kItemSpacingYScale = 0.75f;
 		static constexpr float kWindowPaddingYScale = 0.75f;
 		static constexpr int kDensityVars = 2;
 		static constexpr std::array<ImGuiStyleVar, 5> kRoundingVars{
@@ -311,7 +253,6 @@ namespace
 {
 	/// Starting width of the browser's category sidebar at the 1080p baseline; the user can drag it.
 	constexpr float kBrowserSidebarWidth = 200.0f;
-	constexpr float kSidebarStripeWidth = 3.0f;
 
 	enum BrowserGroup
 	{
@@ -339,7 +280,7 @@ namespace
 			{ "Shader Particle Geometry", T(TKEY("category_shader_particle"), "Shader Particle Geometry"), Icons::TI(ICON_TI_CHART_BUBBLE), kGroupForms },
 			{ "Lens Flare", T(TKEY("category_lens_flare"), "Lens Flare"), Icons::TI(ICON_TI_NORTH_STAR), kGroupForms },
 			{ "Visual Effect", T(TKEY("category_visual_effect"), "Visual Effect"), Icons::TI(ICON_TI_SPARKLES), kGroupForms },
-			{ "Locations", T(TKEY("category_locations"), "Locations"), Icons::TI(ICON_TI_MAP_PIN), kGroupScene },
+			{ "Locations", T(TKEY("category_locations"), "Locations"), Icons::TI(MenuIcons::kLocations), kGroupScene },
 			{ "Scene Manager", T(TKEY("category_scene_manager"), "Scene Manager"), Icons::TI(ICON_TI_STACK_2), kGroupScene },
 			{ "Light Editor", T(TKEY("category_lighting_editor"), "Light Editor"), Icons::TI(ICON_TI_BULB), kGroupTools },
 		} };
@@ -394,31 +335,18 @@ void EditorWindow::DrawBrowserSidebar(bool compact)
 
 			ImGui::PushID(category.id);
 			const bool selected = m_selectedCategory == category.id;
-			const ImVec4 clear(0.0f, 0.0f, 0.0f, 0.0f);
-			ImGui::PushStyleColor(ImGuiCol_Header, clear);
-			ImGui::PushStyleColor(ImGuiCol_HeaderHovered, clear);
-			ImGui::PushStyleColor(ImGuiCol_HeaderActive, clear);
-			if (ImGui::Selectable("##category", selected, ImGuiSelectableFlags_None, ImVec2(0.0f, rowHeight)))
+			if (Util::Selectable("##category", selected, ImGuiSelectableFlags_None, ImVec2(0.0f, rowHeight)))
 				m_selectedCategory = category.id;
-			ImGui::PopStyleColor(3);
 
 			const bool hovered = ImGui::IsItemHovered();
-			// Selectable pads its rect by half ItemSpacing, so neighbours touch; pull x inside the child's clip and leave a row gap.
-			const float padL = IM_TRUNC(style.ItemSpacing.x * 0.5f);
-			const float halfGap = style.ItemInnerSpacing.x * 0.5f;
-			const ImVec2 min(ImGui::GetItemRectMin().x + padL, ImGui::GetItemRectMin().y + halfGap);
-			const ImVec2 max(ImGui::GetItemRectMax().x - (style.ItemSpacing.x - padL), ImGui::GetItemRectMax().y - halfGap);
+			ImVec2 min, max;
+			BrowserUI::InsetRowRect(min, max);
 			const float itemHeight = max.y - min.y;
 			ImDrawList* drawList = ImGui::GetWindowDrawList();
-			if (selected || hovered)
-				drawList->AddRectFilled(min, max, ImGui::GetColorU32(selected ? ImGuiCol_Header : ImGuiCol_HeaderHovered), style.FrameRounding);
-			if (selected) {
-				drawList->PushClipRect(min, ImVec2(min.x + kSidebarStripeWidth * scale, max.y), true);
-				drawList->AddRectFilled(min, max, ImGui::GetColorU32(Util::Colors::GetAccent()), style.FrameRounding);
-				drawList->PopClipRect();
-			}
 
-			const ImU32 iconColor = ImGui::GetColorU32(selected ? Util::Colors::GetAccent() : Util::Colors::GetSecondary());
+			// The row's highlight and accent bar come from the shared list highlight; the icon takes the text colour
+			// on a selected row so it reads on the accent fill in every theme.
+			const ImU32 iconColor = selected ? ImGui::GetColorU32(ImGuiCol_Text) : ImGui::GetColorU32(Util::Colors::GetSecondary());
 			const float iconBox = ImGui::GetFontSize();
 			const float iconY = min.y + (itemHeight - iconBox) * 0.5f;
 			if (compact) {
@@ -426,7 +354,7 @@ void EditorWindow::DrawBrowserSidebar(bool compact)
 				if (hovered)
 					ImGui::SetTooltip("%s", category.label);
 			} else {
-				const float edgeInset = std::max(style.FramePadding.x, kSidebarStripeWidth * scale);
+				const float edgeInset = std::max(style.FramePadding.x, ThemeManager::Constants::ANIM_SELECTED_BAR_WIDTH * scale);
 				const float iconX = min.x + edgeInset;
 				Icons::DrawCenteredGlyph(drawList, ImVec2(iconX, iconY), ImVec2(iconBox, iconBox), category.icon, iconColor);
 
@@ -477,9 +405,8 @@ void EditorWindow::DrawBrowserPage()
 	}
 
 	const std::string id = category->id;
-	ClaimTimePeriodSet(id == "Weather"                            ? TimePeriodSet::Weather :
-					   id == "Locations" || id == "Scene Manager" ? TimePeriodSet::Scene :
-																	TimePeriodSet::None);
+	// The Time slider's period strip shows the scene periods on the scene pages and the sky's four times everywhere else
+	ClaimTimePeriodSet(id == "Locations" || id == "Scene Manager" ? TimePeriodSet::Scene : TimePeriodSet::Weather);
 	if (id == "Light Editor") {
 		lightEditor.DrawSettings();
 		return;
@@ -574,8 +501,11 @@ void EditorWindow::ShowObjectsWindow()
 		DrawBrowserSidebar(compact);
 
 		ImGui::TableSetColumnIndex(1);
-		if (ImGui::BeginChild("##ObjectsContent", { 0, 0 }, ImGuiChildFlags_None, kStickyHeaderFlags))
+		if (ImGui::BeginChild("##ObjectsContent", { 0, 0 }, ImGuiChildFlags_None, kStickyHeaderFlags)) {
+			// Switching category fades the page in, like the main menu's pages
+			const Util::Anim::PageFade fade(ImGui::GetID(m_selectedCategory.c_str()));
 			DrawBrowserPage();
+		}
 		ImGui::EndChild();
 
 		ImGui::EndTable();
@@ -785,11 +715,9 @@ void EditorWindow::ShowWidgetWindow()
 			undoHistory.Watch(MakeUndoTarget(widget));
 	});
 
-	// Draw all open widgets using WidgetFactory template
 	for (auto* collection : GetWidgetCollections())
 		WidgetFactory::DrawOpenWidgets(*collection);
 
-	// Draw current cell lighting widget if open
 	if (currentCellLightingWidget && currentCellLightingWidget->IsOpen()) {
 		currentCellLightingWidget->DrawWidget();
 	}
@@ -801,10 +729,10 @@ void EditorWindow::DrawEditorWindows(float scale, float actionBarBottom)
 	auto width = ImGui::GetIO().DisplaySize.x;
 	auto height = ImGui::GetIO().DisplaySize.y;
 	const float availableWidth = width - pad * 3.0f;  // left pad + gap + right pad
-	const float availableHeight = (height - actionBarBottom - pad * 2.0f) * 0.85f;
+	const float availableHeight = (height - actionBarBottom - pad * 2.0f) * ThemeManager::Constants::CSE_EDITOR_HEIGHT_RATIO;
 	const auto layoutCond = resetLayout ? ImGuiCond_Always : ImGuiCond_FirstUseEver;
 	// Browser gets up to half the available width, capped so ultrawide gives extra to viewport
-	const float maxBrowserWidth = 960.0f * scale;
+	const float maxBrowserWidth = ThemeManager::Constants::CSE_BROWSER_MAX_WIDTH * scale;
 	const float browserWidth = std::min(availableWidth * 0.5f, maxBrowserWidth);
 	const float viewportWidth = availableWidth - browserWidth;
 	ImGui::SetNextWindowSize(ImVec2(browserWidth, availableHeight), layoutCond);
@@ -826,8 +754,8 @@ void EditorWindow::DrawEditorWindows(float scale, float actionBarBottom)
 		viewportBottomY = actionBarBottom + pad;
 	}
 
-	auto settingsWindowHeight = height * 0.25f;
-	auto settingsWindowWidth = width * 0.25f;
+	auto settingsWindowHeight = height * ThemeManager::Constants::CSE_SETTINGS_WINDOW_RATIO;
+	auto settingsWindowWidth = width * ThemeManager::Constants::CSE_SETTINGS_WINDOW_RATIO;
 	if (showSettingsWindow) {
 		ImGui::SetNextWindowSize(ImVec2(settingsWindowWidth, settingsWindowHeight), ImGuiCond_FirstUseEver);
 		ImGui::SetNextWindowPos({ (width / 2.0f) - (settingsWindowWidth / 2.0f), (height / 2.0f) - (settingsWindowHeight / 2.0f) }, ImGuiCond_Appearing);
@@ -911,10 +839,9 @@ void EditorWindow::RenderUI()
 		const float rounding = style.FrameRounding;
 		const float frameH = ImGui::GetFrameHeight();
 		const float yPad = std::max(0.0f, (actionBarHeight - frameH) * 0.5f);
-		// Same fill as overlapping CS windows: theme WindowBg RGB at OVERLAP_MIN_ALPHA.
+		// Theme WindowBg RGB, a little more transparent than overlapping CS windows.
 		const ImU32 bgRGB = ImGui::GetColorU32(ImGuiCol_WindowBg) & ~IM_COL32_A_MASK;
 		ImVec4 barBg = ImGui::ColorConvertU32ToFloat4(bgRGB);
-		barBg.w = ThemeManager::Constants::OVERLAP_MIN_ALPHA;
 
 		ImGui::SetNextWindowPos(ImVec2(viewport->Pos.x + actionBarPad, viewport->Pos.y + actionBarPad));
 		ImGui::SetNextWindowSize(ImVec2(viewport->Size.x - actionBarPad * 2.0f, actionBarHeight));
@@ -932,8 +859,7 @@ void EditorWindow::RenderUI()
 		ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, rounding);
 		ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
 		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(style.FramePadding.x, yPad));
-		// Make action bar slightly more transparent
-		barBg.w = ThemeManager::Constants::OVERLAP_MIN_ALPHA * 0.7f;
+		barBg.w = ThemeManager::Constants::OVERLAP_MIN_ALPHA * ThemeManager::Constants::CSE_ACTION_BAR_BG_ALPHA_RATIO;
 		// Background is drawn by hand below: window rounding can't square individual corners.
 		ImGui::PushStyleColor(ImGuiCol_WindowBg, IM_COL32_BLACK_TRANS);
 
@@ -998,22 +924,8 @@ void EditorWindow::RenderUI()
 				// Current cell lighting
 				auto player = RE::PlayerCharacter::GetSingleton();
 				if (player && player->parentCell && player->parentCell->IsInteriorCell()) {
-					if (ImGui::MenuItem(T(TKEY("edit_current_cell_lighting"), "Edit Current Cell Lighting"))) {
-						// Check if widget already exists
-						bool found = false;
-						if (currentCellLightingWidget && currentCellLightingWidget->cell == player->parentCell) {
-							currentCellLightingWidget->SetOpen(true);
-							found = true;
-						}
-
-						if (!found) {
-							// Create new widget for current cell
-							currentCellLightingWidget = std::make_unique<CellLightingWidget>(player->parentCell);
-							currentCellLightingWidget->CacheFormData();
-							currentCellLightingWidget->Load();
-							currentCellLightingWidget->SetOpen(true);
-						}
-					}
+					if (ImGui::MenuItem(T(TKEY("edit_current_cell_lighting"), "Edit Current Cell Lighting")))
+						OpenCellLighting(player->parentCell, true);
 				} else {
 					ImGui::BeginDisabled();
 					ImGui::MenuItem(T(TKEY("edit_current_cell_lighting"), "Edit Current Cell Lighting"));
@@ -1047,10 +959,8 @@ void EditorWindow::RenderUI()
 					ImGui::EndDisabled();
 					Util::AddTooltip(T(TKEY("viewport_unavailable_hdr"), "Viewport is unavailable when HDR Display is enabled"), Util::kTooltipWhenDisabled);
 				}
-				if (ImGui::Checkbox(T(TKEY("palette"), "Palette"), &PaletteWindow::GetSingleton()->open)) {
-				}
-				if (ImGui::Checkbox(T(TKEY("weather_picker"), "Weather Picker"), &WeatherPickerWindow::GetSingleton()->open)) {
-				}
+				ImGui::Checkbox(T(TKEY("palette"), "Palette"), &PaletteWindow::GetSingleton()->open);
+				ImGui::Checkbox(T(TKEY("weather_picker"), "Weather Picker"), &WeatherPickerWindow::GetSingleton()->open);
 				ImGui::Checkbox(T(TKEY("weather_debug"), "Weather Debug"), &showWeatherDebug);
 				Util::AddTooltip(T(TKEY("weather_debug_tooltip"), "Current and last weather details, plus rain & wetness analysis from other features"));
 				if (ImGui::Checkbox(T(TKEY("base_settings_window"), "Base Settings"), &settings.showFeaturesWindow))
@@ -1140,21 +1050,8 @@ void EditorWindow::RenderUI()
 			// Undo and redo: Tabler glyphs (not theme PNGs)
 			const auto drawHistoryButton = [&](const char* id, const char* glyph, bool enabled, const std::string& tooltip, auto&& action) {
 				ImGui::SetCursorScreenPos(ImVec2(ImGui::GetCursorScreenPos().x, iconY));
-				ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
-				ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0.0f, 0.0f));
-				{
-					auto _style = Util::TransparentIconButtonStyle();
-					ImGui::InvisibleButton(id, iconButtonSize);
-					const ImRect bb(ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
-					Util::DrawRoundedButtonHighlight(bb, enabled && ImGui::IsItemHovered(), enabled && ImGui::IsItemActive());
-					if (ImGui::IsItemClicked() && enabled)
-						action();
-					ImVec4 color = enabled ? textColor : statusPalette.Disable;
-					if (!enabled)
-						color.w = 0.5f;
-					Icons::DrawCenteredGlyph(ImGui::GetWindowDrawList(), bb.Min, bb.GetSize(), Icons::TI(glyph), ImGui::GetColorU32(color));
-				}
-				ImGui::PopStyleVar(2);
+				if (DrawBarIconButton(id, Icons::TI(glyph), enabled, textColor, statusPalette.Disable, iconButtonSize))
+					action();
 				Util::AddTooltip(tooltip.c_str());
 			};
 			{
@@ -1177,22 +1074,8 @@ void EditorWindow::RenderUI()
 			{
 				const bool canExport = ScenePresetExport::CanExport();
 				ImGui::SetCursorScreenPos(ImVec2(ImGui::GetCursorScreenPos().x, iconY));
-				ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
-				ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0.0f, 0.0f));
-				{
-					auto _style = Util::TransparentIconButtonStyle();
-					ImGui::InvisibleButton("##GlobalExportPreset", iconButtonSize);
-					const ImRect bb(ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
-					Util::DrawRoundedButtonHighlight(bb, canExport && ImGui::IsItemHovered(), canExport && ImGui::IsItemActive());
-					if (ImGui::IsItemClicked() && canExport)
-						ScenePresetExport::Open();
-					ImVec4 exportCol = canExport ? textColor : statusPalette.Disable;
-					if (!canExport)
-						exportCol.w = 0.5f;
-					Icons::DrawCenteredGlyph(ImGui::GetWindowDrawList(), bb.Min, bb.GetSize(),
-						SceneActionIcons::kExport, ImGui::GetColorU32(exportCol));
-				}
-				ImGui::PopStyleVar(2);
+				if (DrawBarIconButton("##GlobalExportPreset", SceneActionIcons::kExport, canExport, textColor, statusPalette.Disable, iconButtonSize))
+					ScenePresetExport::Open();
 				const std::string exportTooltip = std::format("{} (Ctrl+Shift+S)\n{}", T(TKEY("export_preset"), "Export Preset..."),
 					canExport ?
 						ScenePresetExport::GetSummary() :
@@ -1206,29 +1089,15 @@ void EditorWindow::RenderUI()
 				auto* sceneManager = globals::sceneSettingsManager;
 				const bool canDelete = sceneManager && sceneManager->HasAnyUserEntries();
 				ImGui::SetCursorScreenPos(ImVec2(ImGui::GetCursorScreenPos().x, iconY));
-				ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
-				ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0.0f, 0.0f));
-				{
-					auto _style = Util::TransparentIconButtonStyle();
-					ImGui::InvisibleButton("##DeleteSceneChanges", iconButtonSize);
-					const ImRect bb(ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
-					Util::DrawRoundedButtonHighlight(bb, canDelete && ImGui::IsItemHovered(), canDelete && ImGui::IsItemActive());
-					if (ImGui::IsItemClicked() && canDelete) {
-						deleteSceneChangesConfirmation.title = T(TKEY("scene_page_delete_changes_title"), "Delete changes");
-						deleteSceneChangesConfirmation.message = T(TKEY("scene_page_delete_changes_message"),
-							"Remove every setting you have authored, in every context, and let the installed preset drive the "
-							"scene?\n\nSettings you removed from the preset come back too. This cannot be undone.");
-						deleteSceneChangesConfirmation.confirmLabel = T(TKEY("scene_page_delete_changes"), "Delete Changes");
-						deleteSceneChangesConfirmation.cancelLabel = T(TKEY("cancel"), "Cancel");
-						deleteSceneChangesConfirmation.Request();
-					}
-					ImVec4 deleteCol = canDelete ? statusPalette.Error : statusPalette.Disable;
-					if (!canDelete)
-						deleteCol.w = 0.5f;
-					Icons::DrawCenteredGlyph(ImGui::GetWindowDrawList(), bb.Min, bb.GetSize(),
-						SceneActionIcons::kDelete, ImGui::GetColorU32(deleteCol));
+				if (DrawBarIconButton("##DeleteSceneChanges", SceneActionIcons::kDelete, canDelete, statusPalette.Error, statusPalette.Disable, iconButtonSize)) {
+					deleteSceneChangesConfirmation.title = T(TKEY("scene_page_delete_changes_title"), "Delete changes");
+					deleteSceneChangesConfirmation.message = T(TKEY("scene_page_delete_changes_message"),
+						"Remove every setting you have authored, in every context, and let the installed preset drive the "
+						"scene?\n\nSettings you removed from the preset come back too. This cannot be undone.");
+					deleteSceneChangesConfirmation.confirmLabel = T(TKEY("scene_page_delete_changes"), "Delete Changes");
+					deleteSceneChangesConfirmation.cancelLabel = T(TKEY("cancel"), "Cancel");
+					deleteSceneChangesConfirmation.Request();
 				}
-				ImGui::PopStyleVar(2);
 				Util::AddTooltip(canDelete ?
 									 T(TKEY("scene_page_delete_changes_tooltip"),
 										 "Deletes your authored scene changes everywhere so the installed preset applies again.") :
@@ -1242,7 +1111,7 @@ void EditorWindow::RenderUI()
 			const float barMinX = barPos.x;
 			const float barWidth = ImGui::GetWindowSize().x;
 			const float& itemSpacing = ImGui::GetStyle().ItemSpacing.x;
-			const float sliderWidth = kMenuBarSliderWidth * scale * 0.75f;
+			const float sliderWidth = ThemeManager::Constants::CSE_ACTION_BAR_SLIDER_WIDTH * scale;
 			const float halfSliderWidth = sliderWidth * 0.5f;
 
 			float rightCursor = clipRight;
@@ -1326,7 +1195,7 @@ void EditorWindow::RenderUI()
 			{
 				auto* drawList = ImGui::GetWindowDrawList();
 				const ImU32 dividerColor = ImGui::GetColorU32(ImGuiCol_Separator);
-				const float inset = actionBarHeight * 0.2f;
+				const float inset = actionBarHeight * ThemeManager::Constants::CSE_ACTION_BAR_DIVIDER_INSET_RATIO;
 				for (int i = 0; i < dividerCount; ++i)
 					drawList->AddLine({ dividerX[i], barMinY + inset }, { dividerX[i], barMinY + actionBarHeight - inset }, dividerColor, kDividerThickness);
 			}
@@ -1335,8 +1204,7 @@ void EditorWindow::RenderUI()
 			if (weatherName) {
 				const float badgeY = iconY + (iconSize - lockBadgeSize) * 0.5f;
 				ImGui::SetCursorScreenPos(ImVec2(centerX, badgeY));
-				if (Util::LockStatusBadgeButton("##ActionBarWeatherLock", weatherLocked,
-						weatherLocked ? T(TKEY("unlock_weather"), "Unlock Weather") : T(TKEY("force_this_weather"), "Force This Weather"))) {
+				if (Util::LockStatusBadgeButton("##ActionBarWeatherLock", weatherLocked, GetWeatherLockTooltip(weatherLocked))) {
 					if (weatherLocked)
 						ReleaseUserWeatherLock();
 					else if (statusWeather)
@@ -1413,27 +1281,17 @@ void EditorWindow::RenderUI()
 			{
 				const bool unsaved = HasUnsavedChanges();
 				ImGui::SetCursorScreenPos(ImVec2(saveButtonX, iconY));
-				if (DrawToggleIconButton("##ActionBarSave", Icons::TI(ICON_TI_DEVICE_FLOPPY), false, enabledColor, iconButtonSize,
-						ImGui::GetColorU32(unsaved ? Util::Colors::GetUnsaved() : textColor)))
+				const ImVec4 saveColor = unsaved ? Util::Colors::GetUnsaved() : textColor;
+				auto tint = Util::StateHoverButtonStyle(saveColor, unsaved);
+				if (DrawBarIconButton("##ActionBarSave", Icons::TI(MenuIcons::kSave), true, saveColor, saveColor, iconButtonSize))
 					SaveManager::SaveEditor(SaveManager::Trigger::User);
 				Util::AddTooltip(SaveManager::GetEditorSaveTooltip(unsaved));
 			}
 
 			// Close: white cross, no red fill
 			ImGui::SetCursorScreenPos(ImVec2(xButtonX, iconY));
-			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0.0f, 0.0f));
-			{
-				auto _style = Util::TransparentIconButtonStyle();
-				const bool closeClicked = ImGui::InvisibleButton("##ActionBarClose", iconButtonSize);
-				const ImRect closeBb(ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
-				if (ImGui::IsItemHovered())
-					Util::DrawRoundedButtonHighlight(closeBb, true, ImGui::IsItemActive(), ImGui::GetWindowDrawList());
-				Icons::DrawCenteredGlyph(ImGui::GetWindowDrawList(), closeBb.Min, closeBb.GetSize(),
-					Icons::TI(ICON_TI_X), ImGui::GetColorU32(textColor));
-				if (closeClicked)
-					open = false;
-			}
-			ImGui::PopStyleVar();
+			if (DrawBarIconButton("##ActionBarClose", Icons::TI(ICON_TI_X), true, textColor, textColor, iconButtonSize))
+				open = false;
 			Util::AddTooltip(T(TKEY("close_cs_editor"), "Close CS Editor (Esc)"));
 
 			barWindow->DC.LayoutType = barLayoutBackup;
@@ -1472,7 +1330,7 @@ void EditorWindow::RenderUI()
 	undoHistory.EndFrame();
 
 	// Render notifications on top of everything
-	RenderNotifications();
+	Util::Notifications::Draw();
 
 	// Restore previous font scale
 	ImGui::GetStyle().FontScaleMain = previousScale;
@@ -1737,7 +1595,7 @@ void EditorWindow::ShowSettingsWindow()
 			{ "Flags", T(TKEY("flags"), "Flags") }
 		};
 		for (const auto& option : options) {
-			if (ImGui::Selectable(option.label, settingsSelectedCategory == option.id)) {
+			if (Util::Selectable(option.label, settingsSelectedCategory == option.id)) {
 				settingsSelectedCategory = option.id;
 			}
 		}
@@ -1764,13 +1622,13 @@ void EditorWindow::ShowSettingsWindow()
 			ImGui::AlignTextToFramePadding();
 			ImGui::TextUnformatted(T(TKEY("editor_ui_scale"), "Editor UI Scale"));
 			ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x);
-			if (BrowserUI::IconButton("##ResetUIScale", Icons::TI(ICON_TI_RESTORE), T(TKEY("reset_ui_scale_tooltip"), "Reset UI scale to default (100%)"))) {
+			if (BrowserUI::IconButton("##ResetUIScale", Icons::TI(MenuIcons::kRestore), T(TKEY("reset_ui_scale_tooltip"), "Reset UI scale to default (100%)"))) {
 				settings.editorUIScale = 1.0f;
 				Save();
 			}
 
 			ImGui::SetNextItemWidth(-1);
-			if (ImGui::SliderFloat("##EditorUIScale", &settings.editorUIScale, 0.5f, 2.0f, "%.2f")) {
+			if (ImGui::SliderFloat("##EditorUIScale", &settings.editorUIScale, ThemeManager::Constants::CSE_UI_SCALE_MIN, ThemeManager::Constants::CSE_UI_SCALE_MAX, "%.2f")) {
 				Save();
 			}
 			Util::AddTooltip(T(TKEY("editor_ui_scale_tooltip"), "Scale the size of all editor UI elements (0.5 = 50%, 2.0 = 200%)"));
@@ -1824,7 +1682,7 @@ void EditorWindow::ShowSettingsWindow()
 
 					// Editable label - use separate buffer for each marker
 					auto& labelBuffer = labelBuffers[recordMarker.first];
-					if (labelBuffer[0] == '\0' || labelBuffers.find(recordMarker.first) == labelBuffers.end()) {
+					if (labelBuffer[0] == '\0') {
 						strncpy_s(labelBuffer.data(), labelBuffer.size(), recordMarker.first.c_str(), labelBuffer.size() - 1);
 						labelBuffer[labelBuffer.size() - 1] = '\0';
 					}
@@ -2158,6 +2016,26 @@ bool EditorWindow::IsWeatherLockedByUser() const
 	return IsWeatherLocked() && !weatherLockedByOverlay;
 }
 
+bool EditorWindow::IsWeatherLockedByUser(const RE::TESWeather* weather) const
+{
+	return IsWeatherLockedByUser() && GetLockedWeather() == weather;
+}
+
+void EditorWindow::ToggleUserWeatherLock(RE::TESWeather* weather)
+{
+	if (IsWeatherLockedByUser(weather))
+		ReleaseUserWeatherLock();
+	else
+		LockWeatherForUser(weather);
+}
+
+const char* EditorWindow::GetWeatherLockTooltip(bool locked)
+{
+	if (!AreWeatherLockHooksInstalled())
+		return T(TKEY("weather_lock_hooks_unavailable"), "Weather-lock hooks failed to install; the lock still works but weather may briefly flash before correcting");
+	return locked ? T(TKEY("unlock_weather"), "Unlock Weather") : T(TKEY("force_this_weather"), "Force This Weather");
+}
+
 void EditorWindow::LockWeatherForUser(RE::TESWeather* weather)
 {
 	LockWeather(weather);
@@ -2401,7 +2279,7 @@ namespace
 		// Clip the full rounded frame to the strip so the bottom corners match the frame rounding.
 		auto fillSpan = [&](float startHour, float endHour, ImU32 color) {
 			drawList->PushClipRect(ImVec2(stripX(startHour), frameMax.y - kPeriodStripHeight), ImVec2(stripX(endHour), frameMax.y), true);
-			drawList->AddRectFilled(frameMin, frameMax, color, ImGui::GetStyle().FrameRounding);
+			drawList->AddRectFilled(frameMin, frameMax, ImGui::GetColorU32(color), ImGui::GetStyle().FrameRounding);
 			drawList->PopClipRect();
 		};
 
@@ -2456,7 +2334,7 @@ bool EditorWindow::DrawPausedAwareGameHourSlider(const char* id)
 	const bool isPaused = IsTimePaused();
 	const char* timeFormat = isPaused ?
 	                             T(TKEY("time_slider_paused"), "Time: %.2f (paused)") :
-	                             "Time: %.2f";
+	                             T(TKEY("time_slider"), "Time: %.2f");
 	if (isPaused)
 		ImGui::PushStyleColor(ImGuiCol_Text, Menu::GetSingleton()->GetTheme().StatusPalette.Error);
 	const bool drawn = DrawGameHourSlider(id, timeFormat);
@@ -2487,7 +2365,7 @@ void EditorWindow::DrawTimeScaleSlider(const char* id, RE::Calendar* calendar)
 	assert(calendar && calendar->timeScale);
 	if (timePaused)
 		timeScaleSlider = std::max(savedTimeScale, kTimeScaleMin);
-	else if (std::abs(calendar->timeScale->value - timeScaleSlider) > 0.01f)
+	else if (std::abs(calendar->timeScale->value - timeScaleSlider) > ThemeManager::Constants::CSE_TIME_SCALE_SYNC_EPSILON)
 		timeScaleSlider = calendar->timeScale->value;
 
 	ImGui::BeginDisabled(timePaused);
@@ -2514,28 +2392,24 @@ void EditorWindow::DrawTimeControls()
 	const float gap = ImGui::GetStyle().ItemSpacing.x;
 	const float iconSize = ImGui::GetFrameHeight();
 	const float avail = ImGui::GetContentRegionAvail().x;
-	const float sliderWidth = std::max(40.0f, (avail - iconSize * 2.0f - gap * 3.0f) * 0.5f);
+	const float sliderWidth = std::max(ThemeManager::Constants::CSE_TIME_SLIDER_MIN_WIDTH * Util::GetUIScale(), (avail - iconSize * 2.0f - gap * 3.0f) * 0.5f);
 
 	ImGui::SetNextItemWidth(sliderWidth);
 	DrawPausedAwareGameHourSlider("##FeatureGameTime");
-	if (auto _tt = Util::HoverTooltipWrapper())
-		ImGui::Text("%s", T(TKEY("game_time_tooltip"), "Adjust the current game time"));
+	Util::HoverTip(T(TKEY("game_time_tooltip"), "Adjust the current game time"));
 
 	ImGui::SameLine();
 	DrawTimePauseToggle("##FeaturePauseTime", ImVec2(iconSize, iconSize));
-	if (auto _tt = Util::HoverTooltipWrapper())
-		ImGui::Text("%s", T(TKEY("pause_time_tooltip"), "Pause or resume game time progression"));
+	Util::HoverTip(T(TKEY("pause_time_tooltip"), "Pause or resume game time progression"));
 
 	ImGui::SameLine();
 	ImGui::SetNextItemWidth(sliderWidth);
 	DrawTimeScaleSlider("##TimeScale", calendar);
 
 	ImGui::SameLine();
-	{
-		auto _style = Util::TransparentIconButtonStyle();
-		if (Icons::Button("##FeatureResetSpeed", Icons::TI(ICON_TI_RESTORE), ImVec2(iconSize, iconSize)))
-			ResetTimeScale();
-	}
+	const ImVec4 textColor = ImGui::GetStyleColorVec4(ImGuiCol_Text);
+	if (DrawBarIconButton("##FeatureResetSpeed", Icons::TI(MenuIcons::kRestore), true, textColor, textColor, ImVec2(iconSize, iconSize)))
+		ResetTimeScale();
 	if (auto _tt = Util::HoverTooltipWrapper())
 		ImGui::Text(T(TKEY("reset_speed_tooltip"), "Reset time speed to vanilla (%.1fx)"), kVanillaTimeScale);
 }
@@ -2572,9 +2446,7 @@ void EditorWindow::WarnOpeningBlocked()
 {
 	const std::string message = T(TKEY("open_blocked"), "Wait! You cannot open the editor in a loading screen or menu.");
 	// A repeated hotkey press while the card is still up would only stack copies of it.
-	if (std::ranges::any_of(notifications, [&message](const Notification& notification) { return notification.message == message; }))
-		return;
-	ShowNotification(message, Util::Colors::GetWarning(), 3.0f);
+	Util::Notifications::ShowOnce(message, Util::Colors::GetWarning());
 }
 
 void EditorWindow::HideGameMenus()
@@ -2684,10 +2556,8 @@ void EditorWindow::AdjustFlySpeed(float scrollDelta)
 
 bool EditorWindow::ShouldHandleEscapeKey()
 {
-	if (suppressNextEditorEscape) {
-		suppressNextEditorEscape = false;
+	if (Menu::GetSingleton()->TakeConsumedEscape())
 		return false;
-	}
 	return !ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
 }
 
@@ -2696,7 +2566,7 @@ bool EditorWindow::ClosePopupOnEscape()
 	if (!ImGui::IsKeyPressed(ImGuiKey_Escape))
 		return false;
 	// The menu or editor ignores Escape only while a popup is open, which this close is about to end.
-	GetSingleton()->suppressNextEditorEscape = true;
+	Menu::GetSingleton()->ConsumeEscape();
 	ImGui::CloseCurrentPopup();
 	return true;
 }
@@ -2730,14 +2600,14 @@ void EditorWindow::PerformUndo()
 {
 	if (const auto label = undoHistory.Undo())
 		ShowNotification(std::vformat(T(TKEY("undone_changes_to"), "Undone changes to {}"), std::make_format_args(*label)),
-			Util::Colors::GetInfo(), 2.0f);
+			Util::Colors::GetInfo(), ThemeManager::Constants::UNDO_TOAST_SECONDS);
 }
 
 void EditorWindow::PerformRedo()
 {
 	if (const auto label = undoHistory.Redo())
 		ShowNotification(std::vformat(T(TKEY("redone_changes_to"), "Redone changes to {}"), std::make_format_args(*label)),
-			Util::Colors::GetInfo(), 2.0f);
+			Util::Colors::GetInfo(), ThemeManager::Constants::UNDO_TOAST_SECONDS);
 }
 
 void EditorWindow::DiscardWidgetChanges(Widget& widget)
@@ -2756,18 +2626,7 @@ void EditorWindow::DiscardAllWidgetChanges()
 
 void EditorWindow::ShowNotification(const std::string& message, const ImVec4& color, float duration)
 {
-	// Guard against calls before ImGui is initialized
-	if (!ImGui::GetCurrentContext()) {
-		logger::warn("ShowNotification called before ImGui initialization: {}", message);
-		return;
-	}
-
-	Notification notif;
-	notif.message = message;
-	notif.color = color;
-	notif.startTime = static_cast<float>(ImGui::GetTime());
-	notif.duration = duration;
-	notifications.push_back(notif);
+	Util::Notifications::Show(message, color, duration);
 }
 
 void EditorWindow::RequestToolPrompt(ExternalTool& tool, ToolPromptReason reason, std::function<void()> proceed)
@@ -2827,83 +2686,6 @@ void EditorWindow::DrawToolPrompt()
 	}
 	if (auto proceed = std::exchange(toolPromptProceed, nullptr))
 		proceed();
-}
-
-void EditorWindow::RenderNotifications()
-{
-	// Guard against calls before ImGui is initialized
-	if (!ImGui::GetCurrentContext()) {
-		return;
-	}
-
-	const float currentTime = static_cast<float>(ImGui::GetTime());
-	const float scale = Util::GetUIScale();
-	constexpr float kFadeIn = 0.18f;
-	constexpr float kFadeOut = 0.55f;
-
-	notifications.erase(
-		std::remove_if(notifications.begin(), notifications.end(),
-			[currentTime](const Notification& n) { return currentTime - n.startTime > n.duration; }),
-		notifications.end());
-
-	const ImGuiViewport* viewport = ImGui::GetMainViewport();
-	const float maxTextWidth = std::min(380.0f * scale, viewport->WorkSize.x * 0.5f);
-	float stackUp = 0.0f;
-
-	for (auto& notif : notifications) {
-		const float elapsed = currentTime - notif.startTime;
-		const float remaining = notif.duration - elapsed;
-		float alpha = 1.0f;
-		if (elapsed < kFadeIn)
-			alpha = elapsed / kFadeIn;
-		else if (remaining < kFadeOut)
-			alpha = std::max(0.0f, remaining / kFadeOut);
-
-		const ImVec2 textSize = ImGui::CalcTextSize(notif.message.c_str(), nullptr, false, maxTextWidth);
-		const ImVec2 pad{ 16.0f * scale, 12.0f * scale };
-		const ImVec2 cardSize{ textSize.x + pad.x * 2.0f, textSize.y + pad.y * 2.0f };
-		const float x = viewport->WorkPos.x + (viewport->WorkSize.x - cardSize.x) * 0.5f;
-		const float y = viewport->WorkPos.y + viewport->WorkSize.y - cardSize.y - (32.0f * scale + stackUp);
-
-		ImGui::SetNextWindowPos(ImVec2(x, y), ImGuiCond_Always);
-		ImGui::SetNextWindowSize(cardSize, ImGuiCond_Always);
-		ImGui::SetNextWindowBgAlpha(0.0f);
-
-		ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, ImGui::GetStyle().FrameRounding * 1.25f);
-		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, pad);
-		ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-
-		if (ImGui::Begin(std::format("##Notification{}", (void*)&notif).c_str(), nullptr,
-				ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
-					ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoDocking |
-					ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoScrollbar)) {
-			ImDrawList* draw = ImGui::GetWindowDrawList();
-			const ImVec2 p0 = ImGui::GetWindowPos();
-			const ImVec2 p1{ p0.x + cardSize.x, p0.y + cardSize.y };
-			const float rounding = ImGui::GetStyle().WindowRounding;
-			ImVec4 cardBg = ImGui::GetStyleColorVec4(ImGuiCol_WindowBg);
-			cardBg.w = ThemeManager::Constants::OVERLAP_MIN_ALPHA * alpha;
-			draw->AddRectFilled(p0, p1, ImGui::ColorConvertFloat4ToU32(cardBg), rounding);
-			const ImU32 accent = ImGui::ColorConvertFloat4ToU32(
-				ImVec4(notif.color.x, notif.color.y, notif.color.z, 0.65f * alpha));
-			draw->AddRect(p0, p1, accent, rounding, 0, 1.15f * scale);
-			draw->PushClipRect(p0, ImVec2(p0.x + 3.0f * scale, p1.y), true);
-			draw->AddRectFilled(p0, p1, accent, rounding);
-			draw->PopClipRect();
-
-			ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + maxTextWidth);
-			ImVec4 colorWithAlpha = notif.color;
-			colorWithAlpha.w *= alpha;
-			ImGui::PushStyleColor(ImGuiCol_Text, colorWithAlpha);
-			ImGui::TextWrapped("%s", notif.message.c_str());
-			ImGui::PopStyleColor();
-			ImGui::PopTextWrapPos();
-		}
-		ImGui::End();
-		ImGui::PopStyleVar(3);
-
-		stackUp += cardSize.y + 8.0f * scale;
-	}
 }
 
 void EditorWindow::RefreshJsonAttachmentCache(const std::vector<Widget*>& widgets)

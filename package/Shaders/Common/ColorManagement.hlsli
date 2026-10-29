@@ -34,12 +34,19 @@ namespace Color
 		return PBRMaterialIsGammaEncoded ? TransferFunctions::LinearToGamma22(linearColor) : linearColor;
 	}
 
-	float3 Albedo(float3 color)
+	/** @brief Albedo for Lambert-lit colors, which skip the PBR material encoding even in TRUE_PBR shaders. */
+	float3 LambertAlbedo(float3 color)
 	{
 #	if defined(EFFECTS11)
 		if (SharedData::enbSettings.Enable)
 			color = pow(abs(color), SharedData::enbSettings.ColorPow);
 #	endif
+		return color;
+	}
+
+	float3 Albedo(float3 color)
+	{
+		color = LambertAlbedo(color);
 #	if defined(TRUE_PBR)
 		color = LinearToPBRMaterial(color);
 #	endif

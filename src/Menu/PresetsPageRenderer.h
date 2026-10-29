@@ -12,6 +12,9 @@ public:
 	/** @brief Draws the page, discovering packs and picking an initial selection on first use. */
 	static void Render();
 
+	/** @brief Scans the packs and picks the page's initial selection, once per session; later calls do nothing. */
+	static void EnsureDiscovered();
+
 	/** @brief Closes the screenshot lightbox if open. @return True if it consumed the request. */
 	static bool CloseLightboxIfOpen();
 
@@ -43,8 +46,14 @@ private:
 	static void RenderList(float width);
 	/** @brief The selected pack's artwork, metadata and actions. */
 	static void RenderDetail();
+	/** @brief The menu themes, each with its CS logo in the theme's accent, while the UI chip is on. */
+	static void RenderThemeList(float width);
+	/** @brief The selected theme's logo, description, Apply Theme and Open Theme Folder. */
+	static void RenderThemeDetail();
 	/** @brief Full-viewport screenshot lightbox when a filmstrip thumb is selected. */
 	static void RenderScreenshotLightbox();
+	/** @brief Forgets the open screenshot and its pack. */
+	static void ResetLightbox();
 	/** @brief Width DrawBackendBadges will take, for right-aligning it. */
 	static float MeasureBackendBadgesWidth(bool hasE11, bool hasCSPresets, bool hasBaseline, bool compact);
 

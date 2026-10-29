@@ -5,7 +5,6 @@
 #include <bitset>
 #include <cassert>
 #include <format>
-#include <functional>
 #include <map>
 #include <optional>
 #include <ranges>
@@ -24,6 +23,7 @@
 #include "IconsTabler.h"
 #include "Menu/Icons/helpers/LocationTargetIcons.h"
 #include "Menu/Icons/helpers/WeatherTypeIcons.h"
+#include "Menu/MenuIcons.h"
 #include "SceneSettingsContextRules.h"
 #include "Utils/SettingsCatalog.h"
 #include "Utils/UI.h"
@@ -268,7 +268,7 @@ namespace
 		case SceneContextType::Weather:
 			return WeatherTypeIcons::kCloudy;
 		case SceneContextType::Location:
-			return Icons::TI(ICON_TI_MAP_PIN);
+			return Icons::TI(MenuIcons::kLocations);
 		default:
 			return Icons::TI(ICON_TI_CLOCK);
 		}
@@ -1171,7 +1171,7 @@ namespace
 			Util::kTooltipWhenDisabled);
 
 		ImGui::SameLine();
-		if (ImGui::Button(cancelLabel)) {
+		if (Util::Button(cancelLabel)) {
 			ImGui::CloseCurrentPopup();
 			return std::nullopt;
 		}

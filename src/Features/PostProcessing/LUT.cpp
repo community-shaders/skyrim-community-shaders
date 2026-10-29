@@ -33,11 +33,11 @@ namespace
 	/** @brief Load/Clear acting on the feature's own LUT, as the main menu shows it. */
 	void DrawBaseLutControls(LUT& lut)
 	{
-		const bool loadClicked = ImGui::Button(T("feature.post_processing.lut.load", "Load"));
+		const bool loadClicked = Util::Button(T("feature.post_processing.lut.load", "Load"));
 		if (loadClicked)
 			lut.ReadTexture(lut.tempPath);
 		ImGui::SameLine();
-		const bool clearClicked = ImGui::Button(T("feature.post_processing.lut.clear", "Clear"));
+		const bool clearClicked = Util::Button(T("feature.post_processing.lut.clear", "Clear"));
 		if (clearClicked) {
 			lut.Clear();
 			lut.tempPath = "";
@@ -50,7 +50,7 @@ namespace
 		}
 
 		if (lut.LutType == -1)
-			ImGui::Text(T("feature.post_processing.lut.loaded_texture_none", "Loaded Texture: None"));
+			ImGui::TextUnformatted(T("feature.post_processing.lut.loaded_texture_none", "Loaded Texture: None"));
 		else
 			ImGui::Text(T("feature.post_processing.lut.loaded_texture", "Loaded Texture: %s"), lut.settings.LutPath.c_str());
 	}

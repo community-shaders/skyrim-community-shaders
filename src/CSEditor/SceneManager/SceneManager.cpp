@@ -5,9 +5,9 @@
 #include "../EditorWindow.h"
 #include "FeatureOverwritesPanel.h"
 #include "Features/CSEditor.h"
-#include "IconsTabler.h"
 #include "Menu/Icons/helpers/IconFonts.h"
 #include "Menu/Icons/helpers/SceneActionIcons.h"
+#include "Menu/MenuIcons.h"
 #include "Menu/PresetsPageRenderer.h"
 #include "SceneLayerHeader.h"
 #include "ScenePresetExport.h"
@@ -62,9 +62,9 @@ namespace
 	{
 		BeginFieldRow(label);
 		if (value)
-			Util::Text::Success("yes");
+			Util::Text::Success(T("cs_editor.debug.yes", "yes"));
 		else
-			Util::Text::Disabled("no");
+			Util::Text::Disabled(T("cs_editor.debug.no", "no"));
 	}
 
 	std::string FormatGameHour(float hour)
@@ -76,8 +76,8 @@ namespace
 
 	void DrawPeriodHeaders()
 	{
-		for (const auto* name : SceneSettingsManager::kPeriodNames)
-			ImGui::TableSetupColumn(name);
+		for (int period = 0; period < SceneSettingsManager::kPeriodCount; ++period)
+			ImGui::TableSetupColumn(SceneSettingsManager::GetPeriodDisplayName(static_cast<SceneSettingsManager::TimeOfDayPeriod>(period)));
 		ImGui::TableHeadersRow();
 	}
 
@@ -116,19 +116,20 @@ namespace
 	void DrawEntryTable(const char* id, const std::vector<DebugEntry>& entries)
 	{
 		if (entries.empty()) {
-			Util::Text::Disabled("No entries");
+			Util::Text::Disabled(T("cs_editor.debug.no_entries", "No entries"));
 			return;
 		}
 		if (!ImGui::BeginTable(id, 8, kDebugTableFlags))
 			return;
 
-		for (const auto* header : { "Feature", "Path", "Setting", "Value", "Period", "Transition", "Source", "State" })
+		for (const auto* header : { T("cs_editor.debug.feature", "Feature"), T("cs_editor.debug.path", "Path"), T("cs_editor.debug.setting", "Setting"), T("cs_editor.debug.value", "Value"), T("cs_editor.debug.period", "Period"), T("cs_editor.debug.transition", "Transition"), T("cs_editor.debug.source", "Source"), T("cs_editor.debug.state", "State") })
 			ImGui::TableSetupColumn(header);
 		ImGui::TableHeadersRow();
 
 		for (const auto& entry : entries) {
 			ImGui::TableNextRow();
-			for (const auto* column : { &entry.feature, &entry.path, &entry.key, &entry.value, &entry.period }) {
+			const std::string featureLabel = SceneSettingsManager::GetFeatureDisplayName(entry.feature);
+			for (const auto* column : { &featureLabel, &entry.path, &entry.key, &entry.value, &entry.period }) {
 				ImGui::TableNextColumn();
 				ImGui::TextUnformatted(column->empty() ? kMissingValue : column->c_str());
 			}
@@ -136,18 +137,18 @@ namespace
 			if (entry.transitionSeconds)
 				ImGui::Text("%.2fs", *entry.transitionSeconds);
 			else
-				Util::Text::Disabled("global");
+				Util::Text::Disabled(T("cs_editor.debug.global", "global"));
 			ImGui::TableNextColumn();
-			ImGui::TextUnformatted(entry.overwrite ? "overwrite" : "user");
+			ImGui::TextUnformatted(entry.overwrite ? T("cs_editor.debug.overwrite", "overwrite") : T("cs_editor.debug.user", "user"));
 			ImGui::TableNextColumn();
 			if (entry.resolvable)
-				Util::Text::Success("resolvable");
+				Util::Text::Success(T("cs_editor.debug.resolvable", "resolvable"));
 			else if (entry.paused)
-				Util::Text::Warning("paused");
+				Util::Text::Warning(T("cs_editor.debug.paused", "paused"));
 			else if (!entry.active)
-				Util::Text::Warning("feature paused");
+				Util::Text::Warning(T("cs_editor.debug.feature_paused", "feature paused"));
 			else
-				Util::Text::Disabled("not resolvable");
+				Util::Text::Disabled(T("cs_editor.debug.not_resolvable", "not resolvable"));
 		}
 		ImGui::EndTable();
 	}
@@ -155,7 +156,7 @@ namespace
 	void DrawLayers(const std::vector<DebugLayer>& layers)
 	{
 		if (layers.empty()) {
-			Util::Text::Disabled("None");
+			Util::Text::Disabled(T("cs_editor.debug.none", "None"));
 			return;
 		}
 		for (size_t index = 0; index < layers.size(); ++index) {
@@ -177,41 +178,41 @@ namespace
 	void DrawNameList(const std::vector<std::string>& names)
 	{
 		if (names.empty()) {
-			Util::Text::Disabled("None");
+			Util::Text::Disabled(T("cs_editor.debug.none", "None"));
 			return;
 		}
 		for (const auto& name : names)
-			ImGui::BulletText("%s", name.c_str());
+			ImGui::BulletText("%s", SceneSettingsManager::GetFeatureDisplayName(name).c_str());
 	}
 
 	void DrawSceneContext(const DebugSnapshot& snapshot)
 	{
 		if (BeginFieldTable("SceneContext")) {
-			DrawFlag("Player and cell ready", snapshot.playerReady);
-			DrawFlag("Interior", snapshot.interior);
-			DrawFlag("Main or loading menu open", snapshot.menuOpen);
-			DrawField("Cell", snapshot.cellName);
-			DrawField("Cell editor ID", snapshot.cellEditorId);
-			DrawFormIdField("Cell form ID", snapshot.cellId);
-			DrawField("Location", snapshot.locationName);
-			DrawFormIdField("Location form ID", snapshot.locationId);
+			DrawFlag(T("cs_editor.debug.player_and_cell_ready", "Player and cell ready"), snapshot.playerReady);
+			DrawFlag(T("cs_editor.debug.interior", "Interior"), snapshot.interior);
+			DrawFlag(T("cs_editor.debug.main_or_loading_menu_open", "Main or loading menu open"), snapshot.menuOpen);
+			DrawField(T("cs_editor.debug.cell", "Cell"), snapshot.cellName);
+			DrawField(T("cs_editor.debug.cell_editor_id", "Cell editor ID"), snapshot.cellEditorId);
+			DrawFormIdField(T("cs_editor.debug.cell_form_id", "Cell form ID"), snapshot.cellId);
+			DrawField(T("cs_editor.debug.location", "Location"), snapshot.locationName);
+			DrawFormIdField(T("cs_editor.debug.location_form_id", "Location form ID"), snapshot.locationId);
 			ImGui::EndTable();
 		}
 
 		ImGui::Spacing();
-		ImGui::TextUnformatted("Location targets (applied in order, later targets win)");
+		ImGui::TextUnformatted(T("cs_editor.debug.location_targets_applied_in_order_later_", "Location targets (applied in order, later targets win)"));
 		if (snapshot.locationTargets.empty()) {
-			Util::Text::Disabled("None");
+			Util::Text::Disabled(T("cs_editor.debug.none", "None"));
 			return;
 		}
 		if (ImGui::BeginTable("LocationTargets", 4, kDebugTableFlags)) {
-			for (const auto* header : { "Type", "Name", "Form key", "COC" })
+			for (const auto* header : { T("cs_editor.debug.type", "Type"), T("cs_editor.debug.name", "Name"), T("cs_editor.debug.form_key", "Form key"), T("cs_editor.debug.coc", "COC") })
 				ImGui::TableSetupColumn(header);
 			ImGui::TableHeadersRow();
 			for (const auto& target : snapshot.locationTargets) {
 				ImGui::TableNextRow();
 				ImGui::TableNextColumn();
-				ImGui::TextUnformatted(SceneSettingsManager::GetLocationTargetTypeName(target.type));
+				ImGui::TextUnformatted(SceneSettingsManager::GetLocationTargetTypeDisplayName(target.type));
 				for (const auto* column : { &target.name, &target.formKey, &target.cocCode }) {
 					ImGui::TableNextColumn();
 					ImGui::TextUnformatted(column->empty() ? kMissingValue : column->c_str());
@@ -224,93 +225,94 @@ namespace
 	void DrawTimeOfDay(const DebugSnapshot& snapshot)
 	{
 		if (BeginFieldTable("TimeOfDay")) {
-			DrawField("Game hour", FormatGameHour(snapshot.gameHour));
-			DrawField("Current period", SceneSettingsManager::GetPeriodName(snapshot.period));
-			DrawField("Hour at last resolve",
+			DrawField(T("cs_editor.debug.game_hour", "Game hour"), FormatGameHour(snapshot.gameHour));
+			DrawField(T("cs_editor.debug.current_period", "Current period"), SceneSettingsManager::GetPeriodDisplayName(snapshot.period));
+			DrawField(T("cs_editor.debug.hour_at_last_resolve", "Hour at last resolve"),
 				snapshot.lastHour < 0.0f ? std::string(kMissingValue) : FormatGameHour(snapshot.lastHour));
 			ImGui::EndTable();
 		}
 
 		ImGui::Spacing();
-		ImGui::TextUnformatted("Live period weights");
+		ImGui::TextUnformatted(T("cs_editor.debug.live_period_weights", "Live period weights"));
 		DrawPeriodWeights("LiveWeights", snapshot.timeOfDayFactors);
 
 		ImGui::Spacing();
-		ImGui::TextUnformatted("Weights used by the last resolve");
+		ImGui::TextUnformatted(T("cs_editor.debug.weights_used_by_the_last_resolve", "Weights used by the last resolve"));
 		DrawPeriodWeights("ResolvedWeights", snapshot.blendFactors);
 	}
 
 	void DrawWeather(const DebugSnapshot& snapshot)
 	{
 		if (BeginFieldTable("Weather")) {
-			DrawField("Current weather", snapshot.currentWeatherName);
-			DrawFormIdField("Current weather form ID", snapshot.weather.currentWeatherId);
-			DrawField("Previous weather", snapshot.previousWeatherName);
-			DrawFormIdField("Previous weather form ID", snapshot.weather.previousWeatherId);
-			DrawField("Transition lerp", std::format("{:.4f}", snapshot.weather.lerp));
-			DrawFormIdField("Current at last resolve", snapshot.lastWeather.currentWeatherId);
-			DrawFormIdField("Previous at last resolve", snapshot.lastWeather.previousWeatherId);
-			DrawField("Lerp at last resolve", std::format("{:.4f}", snapshot.lastWeather.lerp));
+			DrawField(T("cs_editor.debug.current_weather", "Current weather"), snapshot.currentWeatherName);
+			DrawFormIdField(T("cs_editor.debug.current_weather_form_id", "Current weather form ID"), snapshot.weather.currentWeatherId);
+			DrawField(T("cs_editor.debug.previous_weather", "Previous weather"), snapshot.previousWeatherName);
+			DrawFormIdField(T("cs_editor.debug.previous_weather_form_id", "Previous weather form ID"), snapshot.weather.previousWeatherId);
+			DrawField(T("cs_editor.debug.transition_lerp", "Transition lerp"), std::format("{:.4f}", snapshot.weather.lerp));
+			DrawFormIdField(T("cs_editor.debug.current_at_last_resolve", "Current at last resolve"), snapshot.lastWeather.currentWeatherId);
+			DrawFormIdField(T("cs_editor.debug.previous_at_last_resolve", "Previous at last resolve"), snapshot.lastWeather.previousWeatherId);
+			DrawField(T("cs_editor.debug.lerp_at_last_resolve", "Lerp at last resolve"), std::format("{:.4f}", snapshot.lastWeather.lerp));
 			ImGui::EndTable();
 		}
 		if (snapshot.interior)
-			Util::Text::Disabled("Weather is not blended while in an interior.");
+			Util::Text::Disabled(T("cs_editor.debug.weather_is_not_blended_while_in_an_inter", "Weather is not blended while in an interior."));
 	}
 
 	void DrawResolverState(const DebugSnapshot& snapshot)
 	{
 		if (BeginFieldTable("ResolverState")) {
-			DrawFlag("Scene data loaded", snapshot.dataLoaded);
-			DrawFlag("Weather data loaded", snapshot.weatherDataLoaded);
-			DrawFlag("Location data loaded", snapshot.locationDataLoaded);
-			DrawFlag("Game data ready", snapshot.gameDataReady);
-			DrawFlag("Resolver suspended", snapshot.resolverSuspended);
-			DrawFlag("Resolver dirty", snapshot.resolverDirty);
-			DrawFlag("Active entry cache dirty", snapshot.activeEntryCacheDirty);
-			DrawFlag("Has active scene entries", snapshot.hasActiveSceneEntries);
-			DrawFlag("Deferred save pending", snapshot.deferredSceneChangesPending);
-			DrawField("Scene layer suspend depth", std::format("{}", snapshot.sceneLayerSuspendDepth));
-			DrawFlag("Interior at last resolve", snapshot.lastInterior);
-			DrawFormIdField("Cell at last resolve", snapshot.lastCellId);
-			DrawFormIdField("Location at last resolve", snapshot.lastLocationId);
+			DrawFlag(T("cs_editor.debug.scene_data_loaded", "Scene data loaded"), snapshot.dataLoaded);
+			DrawFlag(T("cs_editor.debug.weather_data_loaded", "Weather data loaded"), snapshot.weatherDataLoaded);
+			DrawFlag(T("cs_editor.debug.location_data_loaded", "Location data loaded"), snapshot.locationDataLoaded);
+			DrawFlag(T("cs_editor.debug.game_data_ready", "Game data ready"), snapshot.gameDataReady);
+			DrawFlag(T("cs_editor.debug.resolver_suspended", "Resolver suspended"), snapshot.resolverSuspended);
+			DrawFlag(T("cs_editor.debug.resolver_dirty", "Resolver dirty"), snapshot.resolverDirty);
+			DrawFlag(T("cs_editor.debug.active_entry_cache_dirty", "Active entry cache dirty"), snapshot.activeEntryCacheDirty);
+			DrawFlag(T("cs_editor.debug.has_active_scene_entries", "Has active scene entries"), snapshot.hasActiveSceneEntries);
+			DrawFlag(T("cs_editor.debug.deferred_save_pending", "Deferred save pending"), snapshot.deferredSceneChangesPending);
+			DrawField(T("cs_editor.debug.scene_layer_suspend_depth", "Scene layer suspend depth"), std::format("{}", snapshot.sceneLayerSuspendDepth));
+			DrawFlag(T("cs_editor.debug.interior_at_last_resolve", "Interior at last resolve"), snapshot.lastInterior);
+			DrawFormIdField(T("cs_editor.debug.cell_at_last_resolve", "Cell at last resolve"), snapshot.lastCellId);
+			DrawFormIdField(T("cs_editor.debug.location_at_last_resolve", "Location at last resolve"), snapshot.lastLocationId);
 			ImGui::EndTable();
 		}
 
 		ImGui::Spacing();
-		ImGui::TextUnformatted("Features failing to apply");
+		ImGui::TextUnformatted(T("cs_editor.debug.features_failing_to_apply", "Features failing to apply"));
 		DrawNameList(snapshot.applyFailures);
 
 		ImGui::Spacing();
-		ImGui::TextUnformatted("Features failing to restore");
+		ImGui::TextUnformatted(T("cs_editor.debug.features_failing_to_restore", "Features failing to restore"));
 		DrawNameList(snapshot.restoreFailures);
 	}
 
 	void DrawLocationTransitions(const DebugSnapshot& snapshot)
 	{
 		if (BeginFieldTable("LocationTransitions")) {
-			DrawField("Global duration", std::format("{:.2f}s", snapshot.globalTransitionSeconds));
-			DrawField("Pause-aware clock", std::format("{:.3f}", snapshot.transitionTime));
-			DrawField("Last tick",
+			DrawField(T("cs_editor.debug.global_duration", "Global duration"), std::format("{:.2f}s", snapshot.globalTransitionSeconds));
+			DrawField(T("cs_editor.debug.pause_aware_clock", "Pause-aware clock"), std::format("{:.3f}", snapshot.transitionTime));
+			DrawField(T("cs_editor.debug.last_tick", "Last tick"),
 				snapshot.lastTransitionTick < 0.0f ? std::string(kMissingValue) :
 													 std::format("{:.3f} ({:.3f} ago)", snapshot.lastTransitionTick,
 														 snapshot.transitionTime - snapshot.lastTransitionTick));
-			DrawField("Active transitions", std::format("{}", snapshot.locationTransitions.size()));
-			DrawField("Feature batches", std::format("{}", snapshot.transitionBatchCount));
-			DrawFlag("Batches dirty", snapshot.transitionBatchesDirty);
+			DrawField(T("cs_editor.debug.active_transitions", "Active transitions"), std::format("{}", snapshot.locationTransitions.size()));
+			DrawField(T("cs_editor.debug.feature_batches", "Feature batches"), std::format("{}", snapshot.transitionBatchCount));
+			DrawFlag(T("cs_editor.debug.batches_dirty", "Batches dirty"), snapshot.transitionBatchesDirty);
 			ImGui::EndTable();
 		}
 
 		ImGui::Spacing();
 		if (snapshot.locationTransitions.empty()) {
-			Util::Text::Disabled("No transitions are currently easing.");
+			Util::Text::Disabled(T("cs_editor.debug.no_transitions_are_currently_easing", "No transitions are currently easing."));
 		} else if (ImGui::BeginTable("ActiveTransitions", 8, kDebugTableFlags)) {
 			for (const auto* header :
-				{ "Feature", "Path", "Setting", "Start", "Current", "Target", "Progress", "Direction" })
+				{ T("cs_editor.debug.feature", "Feature"), T("cs_editor.debug.path", "Path"), T("cs_editor.debug.setting", "Setting"), T("cs_editor.debug.start", "Start"), T("cs_editor.debug.current", "Current"), T("cs_editor.debug.target", "Target"), T("cs_editor.debug.progress", "Progress"), T("cs_editor.debug.direction", "Direction") })
 				ImGui::TableSetupColumn(header);
 			ImGui::TableHeadersRow();
 			for (const auto& transition : snapshot.locationTransitions) {
 				ImGui::TableNextRow();
-				for (const auto* column : { &transition.feature, &transition.path, &transition.key }) {
+				const std::string featureLabel = SceneSettingsManager::GetFeatureDisplayName(transition.feature);
+				for (const auto* column : { &featureLabel, &transition.path, &transition.key }) {
 					ImGui::TableNextColumn();
 					ImGui::TextUnformatted(column->empty() ? kMissingValue : column->c_str());
 				}
@@ -323,25 +325,25 @@ namespace
 				ImGui::TableNextColumn();
 				ImGui::Text("%.0f%% of %.2fs", transition.progress * 100.0f, transition.duration);
 				ImGui::TableNextColumn();
-				ImGui::TextUnformatted(transition.restoreAtEnd ? "restoring" : "applying");
+				ImGui::TextUnformatted(transition.restoreAtEnd ? T("cs_editor.debug.restoring", "restoring") : T("cs_editor.debug.applying", "applying"));
 			}
 			ImGui::EndTable();
 		}
 
 		ImGui::Spacing();
-		ImGui::TextUnformatted("Features failing to apply transitions");
+		ImGui::TextUnformatted(T("cs_editor.debug.features_failing_to_apply_transitions", "Features failing to apply transitions"));
 		DrawNameList(snapshot.transitionApplyFailures);
 	}
 
 	void DrawPresets(const std::optional<SceneSettingsManager::PresetMetadata>& preset)
 	{
 		if (!preset) {
-			Util::Text::Disabled("No active preset pack.");
+			Util::Text::Disabled(T("cs_editor.debug.no_active_preset_pack", "No active preset pack."));
 			return;
 		}
 		if (!ImGui::BeginTable("Presets", 3, kDebugTableFlags))
 			return;
-		for (const auto* header : { "Name", "Version", "File" })
+		for (const auto* header : { T("cs_editor.debug.name", "Name"), T("cs_editor.debug.version", "Version"), T("cs_editor.debug.file", "File") })
 			ImGui::TableSetupColumn(header);
 		ImGui::TableHeadersRow();
 		ImGui::TableNextRow();
@@ -357,7 +359,7 @@ namespace
 	void DrawResolvedSettings(const DebugSnapshot& snapshot)
 	{
 		if (snapshot.resolvedSettings.empty()) {
-			Util::Text::Disabled("No settings are currently overridden.");
+			Util::Text::Disabled(T("cs_editor.debug.no_settings_are_currently_overridden", "No settings are currently overridden."));
 			return;
 		}
 
@@ -365,16 +367,16 @@ namespace
 			const auto& setting = snapshot.resolvedSettings[index];
 			ImGui::PushID(static_cast<int>(index));
 			const auto header = std::format("{}{}.{}: {} (base {})",
-				setting.feature,
+				SceneSettingsManager::GetFeatureDisplayName(setting.feature),
 				setting.path.empty() ? "" : std::format(".{}", setting.path),
 				setting.key, setting.applied, setting.baseline);
 			if (ImGui::TreeNode(header.c_str())) {
 				if (ImGui::BeginTable("PeriodValues", SceneSettingsManager::kPeriodCount + 1, kDebugTableFlags)) {
-					ImGui::TableSetupColumn("Layer");
+					ImGui::TableSetupColumn(T("cs_editor.debug.layer", "Layer"));
 					DrawPeriodHeaders();
-					DrawPeriodValues("Time of day", setting.timeOfDayValues);
-					DrawPeriodValues("Current weather", setting.currentWeatherValues);
-					DrawPeriodValues("Previous weather", setting.previousWeatherValues);
+					DrawPeriodValues(T("cs_editor.debug.time_of_day", "Time of day"), setting.timeOfDayValues);
+					DrawPeriodValues(T("cs_editor.debug.current_weather", "Current weather"), setting.currentWeatherValues);
+					DrawPeriodValues(T("cs_editor.debug.previous_weather", "Previous weather"), setting.previousWeatherValues);
 					ImGui::EndTable();
 				}
 				ImGui::TreePop();
@@ -387,27 +389,27 @@ namespace
 	void DrawDebug(const SceneSettingsManager& manager)
 	{
 		const auto snapshot = manager.GetDebugSnapshot();
-		ImGui::TextWrapped("Live debug view of the scene resolver. Sampled every frame while this section is open.");
+		ImGui::TextWrapped(T("cs_editor.debug.live_debug_view_of_the_scene_resolver_sa", "Live debug view of the scene resolver. Sampled every frame while this section is open."));
 		ImGui::Indent();
-		if (ImGui::CollapsingHeader("Scene Context", ImGuiTreeNodeFlags_DefaultOpen))
+		if (ImGui::CollapsingHeader(T("cs_editor.debug.scene_context", "Scene Context"), ImGuiTreeNodeFlags_DefaultOpen))
 			DrawSceneContext(snapshot);
-		if (ImGui::CollapsingHeader("Time of Day", ImGuiTreeNodeFlags_DefaultOpen))
+		if (ImGui::CollapsingHeader(T("cs_editor.debug.time_of_day_header", "Time of Day"), ImGuiTreeNodeFlags_DefaultOpen))
 			DrawTimeOfDay(snapshot);
-		if (ImGui::CollapsingHeader("Weather", ImGuiTreeNodeFlags_DefaultOpen))
+		if (ImGui::CollapsingHeader(T("cs_editor.debug.weather", "Weather"), ImGuiTreeNodeFlags_DefaultOpen))
 			DrawWeather(snapshot);
-		if (ImGui::CollapsingHeader("Resolver State"))
+		if (ImGui::CollapsingHeader(T("cs_editor.debug.resolver_state", "Resolver State")))
 			DrawResolverState(snapshot);
-		if (ImGui::CollapsingHeader("Location Transitions", ImGuiTreeNodeFlags_DefaultOpen))
+		if (ImGui::CollapsingHeader(T("cs_editor.debug.location_transitions", "Location Transitions"), ImGuiTreeNodeFlags_DefaultOpen))
 			DrawLocationTransitions(snapshot);
-		if (ImGui::CollapsingHeader("Applied Settings", ImGuiTreeNodeFlags_DefaultOpen))
+		if (ImGui::CollapsingHeader(T("cs_editor.debug.applied_settings", "Applied Settings"), ImGuiTreeNodeFlags_DefaultOpen))
 			DrawResolvedSettings(snapshot);
-		if (ImGui::CollapsingHeader("Presets"))
+		if (ImGui::CollapsingHeader(T("cs_editor.debug.presets", "Presets")))
 			DrawPresets(manager.GetActivePresetMetadata());
-		if (ImGui::CollapsingHeader("Scene Type Entries"))
+		if (ImGui::CollapsingHeader(T("cs_editor.debug.scene_type_entries", "Scene Type Entries")))
 			DrawLayers(snapshot.sceneLayers);
-		if (ImGui::CollapsingHeader("Weather Entries"))
+		if (ImGui::CollapsingHeader(T("cs_editor.debug.weather_entries", "Weather Entries")))
 			DrawLayers(snapshot.weatherLayers);
-		if (ImGui::CollapsingHeader("Location Entries"))
+		if (ImGui::CollapsingHeader(T("cs_editor.debug.location_entries", "Location Entries")))
 			DrawLayers(snapshot.locationLayers);
 		ImGui::Unindent();
 	}
@@ -415,14 +417,14 @@ namespace
 	/** @brief Buttons into the CS Editor pages that author scene settings, which only open in game. */
 	void DrawEditorShortcuts()
 	{
-		if (Icons::LabeledButton("##SceneManagerOpenEditor", Icons::TI(ICON_TI_BRUSH),
+		if (Icons::LabeledButton("##SceneManagerOpenEditor", Icons::TI(MenuIcons::kCSEditor),
 				T("feature.scene_manager.open_editor", "Open Scene Manager")))
 			SceneSettingsUI::OpenSceneManagerPage();
 		Util::AddTooltip(T("feature.scene_manager.open_editor_tooltip",
 			"Open the CS Editor's Scene Manager page, to author time of day and interior settings."));
 
 		ImGui::SameLine();
-		if (Icons::LabeledButton("##SceneManagerOpenLocations", Icons::TI(ICON_TI_MAP_PIN),
+		if (Icons::LabeledButton("##SceneManagerOpenLocations", Icons::TI(MenuIcons::kLocations),
 				T("feature.scene_manager.open_locations", "Locations")))
 			SceneSettingsUI::OpenLocationsPage();
 		Util::AddTooltip(T("feature.scene_manager.open_locations_tooltip", "Open the CS Editor's Locations page, to add places to override."));

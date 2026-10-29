@@ -2,9 +2,9 @@
 
 #include "CSEditor/EditorWindow.h"
 #include "CSEditor/SceneManager/SceneWidgetInterceptor.h"
+#include "Features/CSEditor.h"
 #include "IconsTabler.h"
 #include "Menu/Icons/helpers/IconFonts.h"
-#include "Menu/PresetsPageRenderer.h"
 #include "imgui_stdlib.h"
 
 #include "Menu.h"
@@ -74,22 +74,15 @@ void PostProcessing::DrawSettings()
 	static int pipelinePageNum = 0;
 	static int pipelineFeatIdx = 0;
 
-	// Presets live on the Presets page like every other pack; a scene replica of this page edits a
-	// scene layer rather than the base settings a preset sets, so it leaves the row out.
-	if (!SceneWidgetInterceptor::IsArmed()) {
-		PresetsPageRenderer::DrawOpenButton("##PostProcessingOpenPresets",
-			T("feature.post_processing.open_presets_tooltip",
-				"Apply Post Processing presets on the Presets page. To save your current settings as one, use "
-				"Export Preset in the CS Editor with Post Processing ticked."));
-
-		// Inside the CS Editor (its Base Settings window draws this page too) the editor is already open.
-		if (const auto* editor = EditorWindow::GetSingleton(); !editor || !editor->open)
-			PresetsPageRenderer::DrawOpenCSEditorButton("##PostProcessingOpenCSEditor");
-
-		ImGui::Separator();
+	// A scene replica of this page edits a scene layer, and inside the CS Editor (its Base Settings window draws this
+	// page too) the editor is already open, so the button is left out there.
+	PostProcessingMode::SelectorAction openEditor;
+	if (const auto* editor = EditorWindow::GetSingleton(); !SceneWidgetInterceptor::IsArmed() && (!editor || !editor->open)) {
+		openEditor.label = T("menu.home.open_cs_editor", "Open CS Editor");
+		openEditor.tooltip = T("menu.presets.open_cs_editor_tooltip", "Open the CS Editor for weather, lighting, and scene editing.");
+		openEditor.onClick = [] { CSEditor::OpenEditorWindow(); };
 	}
-
-	PostProcessingMode::DrawSelector();
+	PostProcessingMode::DrawSelector(openEditor.label ? &openEditor : nullptr);
 
 	ImGui::Separator();
 

@@ -760,11 +760,14 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float skylightingShadowVisibility = 1.0;
 #			endif
 
+	// TruePBR textures have no complex atlas but share this depth pass, and can pass the corner-texel test by chance.
+	const bool pbr = (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::GrassPBR) != 0;
 #			ifdef GRASS_OPTIMIZATIONS
-	bool complex = input.IsComplex > 0.5;
-	[branch] if (input.IsComplex < 0.0)
+	bool complex = !pbr && input.IsComplex > 0.5;
+	[branch] if (!pbr && input.IsComplex < 0.0)
 #			else
-	bool complex;
+	bool complex = false;
+	[branch] if (!pbr)
 #			endif
 	{
 		float x, y;

@@ -1,9 +1,13 @@
 #include "FontSelector.h"
+#include "CSEditor/Browser/BrowserWidgets.h"
 #include "Menu/FontAtlasState.h"
+#include "Menu/Icons/helpers/IconFonts.h"
+#include "Menu/MenuIcons.h"
 
 #include "Globals.h"
 #include "I18n/I18n.h"
 #include "ThemeManager.h"
+#include "Utils/UI.h"
 
 #include <format>
 
@@ -11,6 +15,12 @@ namespace MenuFonts::Selector
 {
 	namespace
 	{
+		/// "<Role> <Suffix>" label with a unique ID suffix, e.g. "Body Family##3".
+		std::string RoleLabel(const char* key, const char* fallback, std::string_view roleDisplayName, size_t roleIndex)
+		{
+			return std::format("{}##{}", I18n::GetSingleton()->Format(key, { { "role", std::string(roleDisplayName) } }, fallback), roleIndex);
+		}
+
 		void ApplyRoleFontSelection(
 			Menu::ThemeSettings& themeSettings,
 			Menu::ThemeSettings::FontRoleSettings& roleSettings,
@@ -40,7 +50,7 @@ namespace MenuFonts::Selector
 			ImGui::PushID(family.name.c_str());
 			const Util::Fonts::StyleInfo* previewStyle = ResolveFamilyDefaultStyle(family);
 			ImFontGuard previewFont(previewStyle ? GetPreviewFont(previewStyle->file) : nullptr);
-			const bool clicked = ImGui::Selectable(family.displayName.c_str(), isSelected);
+			const bool clicked = Util::Selectable(family.displayName.c_str(), isSelected);
 			ImGui::PopID();
 			return clicked;
 		}
@@ -49,7 +59,7 @@ namespace MenuFonts::Selector
 		{
 			ImGui::PushID(styleInfo.file.c_str());
 			ImFontGuard previewFont(GetPreviewFont(styleInfo.file));
-			const bool clicked = ImGui::Selectable(styleInfo.displayName.c_str(), isSelected);
+			const bool clicked = Util::Selectable(styleInfo.displayName.c_str(), isSelected);
 			ImGui::PopID();
 			return clicked;
 		}
@@ -65,7 +75,7 @@ namespace MenuFonts::Selector
 			int& familyIndex)
 		{
 			const char* familyPreview = catalog.families.empty() ? T("menu.settings.no_families", "No families") : catalog.families[familyIndex].displayName.c_str();
-			const std::string familyLabel = std::format("{} Family##{}", roleDisplayName, roleIndex);
+			const std::string familyLabel = RoleLabel("menu.settings.font_family_label", "{role} Family", roleDisplayName, roleIndex);
 
 			ImFontGuard rolePreviewFont(menu.GetFont(role));
 			ImGui::PushID("Family");
@@ -119,7 +129,7 @@ namespace MenuFonts::Selector
 			int& styleIndex)
 		{
 			const char* stylePreview = selectedFamily.styles.empty() ? T("menu.settings.no_styles", "No styles") : selectedFamily.styles[styleIndex].displayName.c_str();
-			const std::string styleLabel = std::format("{} Style##{}", roleDisplayName, roleIndex);
+			const std::string styleLabel = RoleLabel("menu.settings.font_style_label", "{role} Style", roleDisplayName, roleIndex);
 
 			ImFontGuard rolePreviewFont(menu.GetFont(role));
 			ImGui::PushID("Style");
@@ -173,43 +183,31 @@ namespace MenuFonts::Selector
 			RenderStyleCombo(menu, themeSettings, roleSettings, *selectedFamily, role, roleIndex, descriptor.displayName, styleIndex);
 		}
 
-		{
-			FontRoleGuard sampleFont(role);
-			ImGui::TextWrapped(
-				"%s",
-				T("menu.settings.font_preview_sample", "The quick brown fox jumps over the lazy dog."));
-		}
-
-		ImGui::TextDisabled(T("menu.settings.file_label", "File: %s"), roleSettings.File.c_str());
-
-		const std::string scaleLabel = std::format("{} Scale##{}", descriptor.displayName, roleIndex);
-		if (ImGui::SliderFloat(scaleLabel.c_str(), &roleSettings.SizeScale, 0.5f, 2.5f, "%.2fx", ImGuiSliderFlags_AlwaysClamp)) {
+		const std::string scaleLabel = RoleLabel("menu.settings.font_scale_label", "{role} Scale", descriptor.displayName, roleIndex);
+		if (ImGui::SliderFloat(scaleLabel.c_str(), &roleSettings.SizeScale, ThemeManager::Constants::FONT_ROLE_SCALE_MIN, ThemeManager::Constants::FONT_ROLE_SCALE_MAX, "%.2fx", ImGuiSliderFlags_AlwaysClamp)) {
 			MenuFonts::GetAtlasState().pendingFontReload = true;
 		}
-		ImGui::SameLine();
-		const std::string resetLabel = std::format("Reset##Scale{}", roleIndex);
-		if (ImGui::Button(resetLabel.c_str())) {
-			roleSettings.SizeScale = Menu::GetFontRoleDefaultScale(role);
-			MenuFonts::GetAtlasState().pendingFontReload = true;
+		if (roleSettings.SizeScale != Menu::GetFontRoleDefaultScale(role)) {
+			ImGui::SameLine();
+			if (BrowserUI::IconButton("##ResetScale", Icons::TI(MenuIcons::kRestore), T("menu.settings.font_scale_reset_tooltip", "Reset to the default scale"))) {
+				roleSettings.SizeScale = Menu::GetFontRoleDefaultScale(role);
+				MenuFonts::GetAtlasState().pendingFontReload = true;
+			}
 		}
 
 		if (role == Menu::FontRole::Title) {
 			ImGui::SliderFloat(
 				T("menu.settings.feature_header_scale", "Feature Header Scale"),
 				&themeSettings.FeatureHeading.FeatureTitleScale,
-				1.0f,
-				3.0f,
+				ThemeManager::Constants::SETTINGS_TITLE_SCALE_MIN,
+				ThemeManager::Constants::SETTINGS_TITLE_SCALE_MAX,
 				"%.1fx",
 				ImGuiSliderFlags_AlwaysClamp);
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text(
-					"%s",
-					T("menu.settings.feature_header_scale_tooltip", "Scale multiplier for feature title text in the Settings tab."));
-			}
-			ImGui::SameLine();
-			const std::string resetBtnLabel = std::string(T("menu.settings.reset", "Reset")) + "##FeatureHeaderScale";
-			if (ImGui::Button(resetBtnLabel.c_str())) {
-				themeSettings.FeatureHeading.FeatureTitleScale = ThemeManager::Constants::DEFAULT_FEATURE_TITLE_SCALE;
+			Util::HoverTip(T("menu.settings.feature_header_scale_tooltip", "Scale multiplier for feature title text in the Settings tab."));
+			if (themeSettings.FeatureHeading.FeatureTitleScale != ThemeManager::Constants::DEFAULT_FEATURE_TITLE_SCALE) {
+				ImGui::SameLine();
+				if (BrowserUI::IconButton("##ResetFeatureHeaderScale", Icons::TI(MenuIcons::kRestore), T("menu.settings.font_scale_reset_tooltip", "Reset to the default scale")))
+					themeSettings.FeatureHeading.FeatureTitleScale = ThemeManager::Constants::DEFAULT_FEATURE_TITLE_SCALE;
 			}
 		}
 	}

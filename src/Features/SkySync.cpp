@@ -147,7 +147,7 @@ void SkySync::DrawSettings()
 		{
 			auto addGuard = Util::DisableGuard(editorID.empty() || IsWorldspaceDisabled(worldspace));
 			const auto addLabel = I18n::GetSingleton()->Format(TKEY("add_current_worldspace"), { { "name", editorID.empty() ? std::string("-") : editorID } }, "Add Current Worldspace ({name})");
-			if (ImGui::Button(addLabel.c_str())) {
+			if (Util::Button(addLabel.c_str())) {
 				worldspaces.push_back(editorID);
 				UpdateWorldspaceDisabled();
 			}

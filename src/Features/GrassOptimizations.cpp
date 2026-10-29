@@ -292,7 +292,7 @@ void GrassOptimizations::SetupOptimizedPass(const GrassBucket& b)
 	// BSGrassShader_SetupGeometry sets this texture's address and filter modes once the hook chain returns.
 	globals::game::shadowState->SetPSTexture(0, b.asset.diffuseTexture->rendererTexture);
 	// Canopy heights come from the bucket constants, so only the lighting mode is shared with native grass.
-	globals::state->SetGrassSphereNormal(b.asset.key.draw.sphereNormal);
+	globals::state->SetGrassFlags(b.asset.key.draw.sphereNormal, b.asset.key.draw.pbrMaterial);
 	if (b.asset.key.draw.pbrMaterial) {
 		TruePBR::SetGrassPBRTextures(static_cast<const BSLightingShaderMaterialPBR*>(b.asset.material.get()));
 		UINT materialNum = 16;
