@@ -2897,8 +2897,8 @@ namespace SIE
 				const std::wstring globalDefinesSuffix(globalDefinesSuffixNarrow.begin(), globalDefinesSuffixNarrow.end());
 				const std::wstring defineSlugW(defineSlug.begin(), defineSlug.end());
 				const std::wstring diskPath = defineSlug.empty() ?
-			                                      std::format(L"{}/{}{}{}", GetStandaloneComputeCacheDir(srcPath), cacheName, globalDefinesSuffix, cacheExt) :
-			                                      std::format(L"{}/{}_{}{}{}", GetStandaloneComputeCacheDir(srcPath), cacheName, defineSlugW, globalDefinesSuffix, cacheExt);
+				                                  std::format(L"{}/{}{}{}", GetStandaloneComputeCacheDir(srcPath), cacheName, globalDefinesSuffix, cacheExt) :
+				                                  std::format(L"{}/{}_{}{}{}", GetStandaloneComputeCacheDir(srcPath), cacheName, defineSlugW, globalDefinesSuffix, cacheExt);
 
 				ID3D11DeviceChild* shader = nullptr;
 				bool diskCacheOutdated = true;
