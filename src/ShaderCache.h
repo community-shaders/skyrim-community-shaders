@@ -430,6 +430,8 @@ namespace SIE
 		bool IsDiskCache() const;
 		/** Sets whether the persistent disk cache is enabled. */
 		void SetDiskCache(bool value);
+		/** @brief Whether shaders compile with debug info: Developer Mode, or RenderDoc attached. */
+		static bool IsDebugCompile();
 		/**
 		 * @brief Deletes the on-disk shader cache directory.
 		 * @param a_keepContentStore Keep the persistent shader store, whose blobs stay valid because they are keyed by their own inputs.

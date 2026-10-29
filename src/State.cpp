@@ -45,6 +45,7 @@
 #ifdef TRACY_ENABLE
 static thread_local std::vector<TracyCZoneCtx> s_tracyPerfZones;
 #endif
+static thread_local std::vector<bool> s_perfEventEmitted;
 
 void State::UpdateLightingShaderPermutation(RE::BSRenderPass* a_pass)
 {
@@ -178,6 +179,10 @@ void State::Draw()
 		if (globals::menu->overlayVisible && globals::features::performanceOverlay.loaded && globals::features::performanceOverlay.IsOverlayVisible())
 			Debug();
 
+		// Active Shaders counts draws per frame whether or not the performance overlay is up
+		if (IsDeveloperMode() && shaderTrackingFrameChecker.IsNewFrame())
+			globals::shaderCache->ResetFrameShaderTracking();
+
 		updateShader = false;
 	}
 }
@@ -197,9 +202,6 @@ void State::Debug()
 			c = 0;
 		for (auto& ft : frameTimePerType)
 			ft = 0.0f;
-
-		// Reset active shader tracking for developer mode
-		globals::shaderCache->ResetFrameShaderTracking();
 
 		// Start timing for this frame
 		if (frameTimingFrequency.QuadPart == 0) {
@@ -295,12 +297,12 @@ bool State::HandlePostProcessing(RE::RENDER_TARGET a_input, RE::RENDER_TARGET a_
  * shader descriptor tracking, increments and atomically publishes the frame
  * count, and disables reflection and improved snow shaders.
  */
-void State::SetGrassSphereNormal(bool sphereNormal)
+void State::SetGrassFlags(bool sphereNormal, bool pbr)
 {
-	if (sphereNormal)
-		permutationData.ExtraShaderDescriptor |= static_cast<uint32_t>(ExtraShaderDescriptors::GrassSphereNormal);
-	else
-		permutationData.ExtraShaderDescriptor &= ~static_cast<uint32_t>(ExtraShaderDescriptors::GrassSphereNormal);
+	constexpr auto sphereNormalFlag = static_cast<uint32_t>(ExtraShaderDescriptors::GrassSphereNormal);
+	constexpr auto pbrFlag = static_cast<uint32_t>(ExtraShaderDescriptors::GrassPBR);
+	permutationData.ExtraShaderDescriptor = (permutationData.ExtraShaderDescriptor & ~(sphereNormalFlag | pbrFlag)) |
+	                                        (sphereNormal ? sphereNormalFlag : 0) | (pbr ? pbrFlag : 0);
 }
 
 void State::Reset()
@@ -706,6 +708,7 @@ void State::MarkSettingsSaved()
 
 void State::CheckFeatureSettingsChanged(Feature* feature)
 {
+	InvalidateEditsUnderBaselines(feature);
 	if (settingsChanged || !feature->loaded || !feature->UsesMainSettings())
 		return;
 	const auto name = feature->GetName();
@@ -820,6 +823,7 @@ void State::LoadFromJson(nlohmann::json& settings)
 			feature->Load(settings);
 		}
 	}
+	InvalidateEditsUnderBaselines();
 }
 
 void State::Save()
@@ -977,10 +981,61 @@ bool State::HasEditsUnderBaselines(Feature* feature)
 
 void State::InvalidateEditsUnderBaselines(Feature* feature)
 {
-	if (feature)
-		editsUnderBaselines.erase(feature->GetName());
-	else
+	if (feature) {
+		const auto name = feature->GetName();
+		editsUnderBaselines.erase(name);
+		userEdits.erase(name);
+	} else {
 		editsUnderBaselines.clear();
+		userEdits.clear();
+	}
+	++userEditsRevision;
+}
+
+bool State::HasUserEdits(Feature* feature)
+{
+	const auto name = feature->GetName();
+	if (const auto found = userEdits.find(name); found != userEdits.end())
+		return found->second;
+	bool edited = false;
+	if (feature->loaded && feature->UsesMainSettings()) {
+		if (const auto* base = GetFeatureBase(name)) {
+			SceneSettingsManager::SceneLayerGuard sceneLayerGuard;
+			json current;
+			feature->SaveSettings(current);
+			edited = !DiffFromBase(current, *base).empty();
+		}
+	}
+	userEdits[name] = edited;
+	return edited;
+}
+
+json State::GetUserEdits(Feature* feature)
+{
+	if (!feature->loaded || !feature->UsesMainSettings())
+		return json::object();
+	const auto* base = GetFeatureBase(feature->GetName());
+	if (!base)
+		return json::object();
+	SceneSettingsManager::SceneLayerGuard sceneLayerGuard;
+	json current;
+	feature->SaveSettings(current);
+	return DiffFromBase(current, *base);
+}
+
+void State::PrimeUserEdits()
+{
+	const auto stale = [this](Feature* feature) {
+		return feature->loaded && feature->UsesMainSettings() && !userEdits.contains(feature->GetName());
+	};
+	if (std::ranges::none_of(Feature::GetFeatureList(), stale))
+		return;
+	// One suspension for the lot; the guards HasUserEdits takes inside it only nest
+	SceneSettingsManager::SceneLayerGuard sceneLayerGuard;
+	for (auto* feature : Feature::GetFeatureList()) {
+		if (stale(feature))
+			HasUserEdits(feature);
+	}
 }
 
 void State::ClearFeatureEditsUnderBaselines(Feature* feature)
@@ -1328,15 +1383,22 @@ uint32_t State::GetRuntimePixelBits(const RE::BSShader& a_shader)
 
 bool State::PerfEventsConsumed() const
 {
+	if ((pPerf && pPerf->GetStatus()) || NvPerf::RangesActive())
+		return true;
 #ifdef TRACY_ENABLE
-	return true;
+	return TracyIsConnected;
 #else
-	return (pPerf && pPerf->GetStatus()) || NvPerf::RangesActive();
+	return false;
 #endif
 }
 
 void State::BeginPerfEvent(std::string_view title)
 {
+	// Record whether this event was emitted, so EndPerfEvent stays balanced if a consumer attaches or leaves in between.
+	const bool emit = PerfEventsConsumed();
+	s_perfEventEmitted.push_back(emit);
+	if (!emit)
+		return;
 #ifdef TRACY_ENABLE
 	// Use dynamic source location so Tracy displays the title as the zone name
 	// rather than the static function name "BeginPerfEvent".
@@ -1356,6 +1418,14 @@ void State::BeginPerfEvent(std::string_view title)
 
 void State::EndPerfEvent()
 {
+	if (s_perfEventEmitted.empty()) {
+		logger::warn("EndPerfEvent called without a matching BeginPerfEvent");
+		return;
+	}
+	const bool emitted = s_perfEventEmitted.back();
+	s_perfEventEmitted.pop_back();
+	if (!emitted)
+		return;
 #ifdef TRACY_ENABLE
 	if (!s_tracyPerfZones.empty()) {
 		TracyCZoneEnd(s_tracyPerfZones.back());
@@ -1371,6 +1441,8 @@ void State::EndPerfEvent()
 
 void State::SetPerfMarker(std::string_view title)
 {
+	if (!PerfEventsConsumed())
+		return;
 	pPerf->SetMarker(std::wstring(title.begin(), title.end()).c_str());
 }
 

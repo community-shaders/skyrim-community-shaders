@@ -12,14 +12,23 @@
 #include "IconsTabler.h"
 #include "Menu/Icons/helpers/IconFonts.h"
 #include "Menu/Icons/helpers/WeatherTypeIcons.h"
+#include "Menu/MenuIcons.h"
 #include "SaveManager.h"
-#include "State.h"
 #include "Util.h"
 #include "Utils/UI.h"
-#include "WeatherUtils.h"
+#include "Utils/UIAnim.h"
 #include "imgui_internal.h"
 
 #define I18N_KEY_PREFIX "cs_editor."
+
+namespace
+{
+	/** @brief Fills the one "{}" of a translated message with a name. */
+	std::string FormatName(const char* message, const std::string& name)
+	{
+		return std::vformat(message, std::make_format_args(name));
+	}
+}
 
 void Widget::Save()
 {
@@ -53,9 +62,8 @@ void Widget::Load(bool showNotification)
 
 		if (showNotification) {
 			EditorWindow::GetSingleton()->ShowNotification(
-				std::format("No saved file - reset {} to vanilla values", GetEditorID()),
-				Util::Colors::GetInfo(),
-				3.0f);
+				FormatName(T(TKEY("no_saved_file_reset"), "No saved file - reset {} to vanilla values"), GetEditorID()),
+				Util::Colors::GetInfo());
 		}
 		return;
 	}
@@ -69,7 +77,7 @@ void Widget::Load(bool showNotification)
 	auto document = Util::FileHelpers::ReadJsonFile(filePath, "editor widget settings", 0, &error);
 	if (!document && error.empty()) {
 		logger::warn("Failed to open settings file: {}", filePath);
-		notify(std::format("Failed to open file for {}", GetEditorID()), Util::Colors::GetWarning());
+		notify(FormatName(T(TKEY("failed_open_file"), "Failed to open file for {}"), GetEditorID()), Util::Colors::GetWarning());
 		return;
 	}
 
@@ -79,16 +87,16 @@ void Widget::Load(bool showNotification)
 		LoadSettings();
 	} catch (const std::exception& e) {
 		logger::error("Unexpected error loading settings file ({}) : {}", filePath, e.what());
-		notify(std::format("Error loading {} - resetting to vanilla", GetEditorID()), Util::Colors::GetError());
+		notify(FormatName(T(TKEY("error_loading_reset"), "Error loading {} - resetting to vanilla"), GetEditorID()), Util::Colors::GetError());
 		js = json();
 		LoadSettings();
 		return;
 	}
 
 	if (loaded)
-		notify(std::format("Loaded saved settings for {}", GetEditorID()), Util::Colors::GetSuccess());
+		notify(FormatName(T(TKEY("loaded_saved_settings"), "Loaded saved settings for {}"), GetEditorID()), Util::Colors::GetSuccess());
 	else
-		notify(std::format("Parse error for {} - resetting to vanilla", GetEditorID()), Util::Colors::GetError());
+		notify(FormatName(T(TKEY("parse_error_reset"), "Parse error for {} - resetting to vanilla"), GetEditorID()), Util::Colors::GetError());
 }
 
 void Widget::Delete()
@@ -114,8 +122,7 @@ void Widget::Delete()
 		                          T(TKEY("deleted_reverted_to_vanilla"), "Deleted {} - reverted to vanilla values");
 		EditorWindow::GetSingleton()->ShowNotification(
 			std::vformat(message, std::make_format_args(editorId)),
-			Util::Colors::GetSuccess(),
-			3.0f);
+			Util::Colors::GetSuccess());
 	} catch (const std::filesystem::filesystem_error& e) {
 		logger::warn("Error deleting settings file ({}) : {}\n", filePath, e.what());
 	}
@@ -149,7 +156,7 @@ void Widget::DrawPackSourceBadge() const
 	ImGui::SameLine();
 	{
 		Icons::FontGuard font(Icons::Family::Tabler);
-		ImGui::TextColored(packBadge->color, "%s", ICON_TI_STACK_2);
+		ImGui::TextColored(packBadge->color, "%s", MenuIcons::kPresets);
 	}
 	Util::AddTooltip(packBadge->tooltip.c_str());
 }
@@ -192,20 +199,20 @@ void Widget::DrawDeleteConfirmationModal(const char* popupId)
 		ImGui::Separator();
 
 		const float scale = Util::GetUIScale();
-		const float buttonWidth = 120.0f * scale;
+		const float buttonWidth = ThemeManager::Constants::CSE_CONFIRM_BUTTON_WIDTH * scale;
 		const float spacing = ImGui::GetStyle().ItemSpacing.x;
 		const float totalWidth = (buttonWidth * 2) + spacing;
 		const float cursorX = (ImGui::GetWindowWidth() - totalWidth) / 2.0f;
 
 		ImGui::SetCursorPosX(cursorX);
 
-		if (ImGui::Button(T(TKEY("yes_delete"), "Yes, Delete"), ImVec2(buttonWidth, 0))) {
+		if (Util::Button(T(TKEY("yes_delete"), "Yes, Delete"), ImVec2(buttonWidth, 0))) {
 			Delete();
 			ImGui::CloseCurrentPopup();
 		}
 		ImGui::SameLine();
 
-		if (ImGui::Button(T(TKEY("cancel"), "Cancel"), ImVec2(buttonWidth, 0))) {
+		if (Util::Button(T(TKEY("cancel"), "Cancel"), ImVec2(buttonWidth, 0))) {
 			ImGui::CloseCurrentPopup();
 		}
 		ImGui::SetItemDefaultFocus();
@@ -303,7 +310,7 @@ namespace
 		const char* tooltip = "";
 		std::optional<ImVec4> textColor;  ///< Text/Glyph colour override
 		std::optional<ImVec4> fillColor;  ///< Text kind: persistent fill colour override
-		bool destructive = false;         ///< Hover highlight uses the error colour
+		std::optional<ImVec4> hoverTint;  ///< Hover and press in this colour instead of the theme's (unsaved save, delete)
 		bool startsGroup = false;         ///< Leave a wider gap before this action
 		bool locked = false;              ///< LockBadge kind
 		std::function<void()> onClick;
@@ -326,7 +333,7 @@ bool Widget::DrawTitleBarActions(bool showApply, bool showSaveLoadRevert, bool s
 
 	const auto& style = ImGui::GetStyle();
 	const auto& statusPalette = menu->GetTheme().StatusPalette;
-	const bool useIcons = !editorWindow->settings.useTextButtons && menu->GetSettings().Theme.ShowActionIcons;
+	const bool useIcons = !editorWindow->settings.useTextButtons;
 	const float scale = Util::GetUIScale();
 	using Kind = TitleBarAction::Kind;
 
@@ -365,21 +372,13 @@ bool Widget::DrawTitleBarActions(bool showApply, bool showSaveLoadRevert, bool s
 
 	// Force Weather / Unlock: lock badge matching the floating action bar
 	if (showForceWeather && weather) {
-		const bool isLocked = editorWindow->IsWeatherLockedByUser() && editorWindow->GetLockedWeather() == weather;
-		const char* tooltip = !EditorWindow::AreWeatherLockHooksInstalled() ?
-		                          T(TKEY("weather_lock_hooks_unavailable"), "Weather-lock hooks failed to install; the lock still works but weather may briefly flash before correcting") :
-		                          (isLocked ? T(TKEY("unlock_weather"), "Unlock Weather") : T(TKEY("force_this_weather"), "Force This Weather"));
+		const bool isLocked = editorWindow->IsWeatherLockedByUser(weather);
 		TitleBarAction action;
 		action.id = "##TitleForceWeather";
 		action.kind = Kind::LockBadge;
 		action.locked = isLocked;
-		action.tooltip = tooltip;
-		action.onClick = [editorWindow, weather, isLocked]() {
-			if (isLocked)
-				editorWindow->ReleaseUserWeatherLock();
-			else
-				editorWindow->LockWeatherForUser(weather);
-		};
+		action.tooltip = EditorWindow::GetWeatherLockTooltip(isLocked);
+		action.onClick = [editorWindow, weather]() { editorWindow->ToggleUserWeatherLock(weather); };
 		actions.emplace_back(std::move(action));
 	}
 
@@ -392,7 +391,7 @@ bool Widget::DrawTitleBarActions(bool showApply, bool showSaveLoadRevert, bool s
 		} else {
 			auto& action = addText("##TitleApply", T(TKEY("apply"), "Apply"), tooltip, onClick);
 			auto fill = statusPalette.SuccessColor;
-			fill.w = 0.6f;
+			fill.w = ThemeManager::Constants::CSE_TITLE_APPLY_FILL_ALPHA;
 			action.fillColor = fill;
 		}
 	}
@@ -408,11 +407,13 @@ bool Widget::DrawTitleBarActions(bool showApply, bool showSaveLoadRevert, bool s
 		if (unsaved)
 			unsavedColor = Util::Colors::GetUnsaved();
 		if (useIcons) {
-			auto& action = addGlyph("##TitleSave", Icons::TI(ICON_TI_DEVICE_FLOPPY), saveTooltip, saveClick);
+			auto& action = addGlyph("##TitleSave", Icons::TI(MenuIcons::kSave), saveTooltip, saveClick);
 			action.textColor = unsavedColor;
+			action.hoverTint = unsavedColor;
 		} else {
 			auto& action = addText("##TitleSave", T(TKEY("save"), "Save"), saveTooltip, saveClick);
 			action.textColor = unsavedColor;
+			action.hoverTint = unsavedColor;
 		}
 
 		const char* loadTooltip = T(TKEY("load_saved_file"), "Load saved file, else the active preset's values, else vanilla");
@@ -425,7 +426,7 @@ bool Widget::DrawTitleBarActions(bool showApply, bool showSaveLoadRevert, bool s
 		const char* revertTooltip = T(TKEY("revert_to_original"), "Revert to original game values");
 		auto revertClick = [this]() { RevertChanges(); };
 		if (useIcons) {
-			auto& action = addGlyph("##TitleRevert", Icons::TI(ICON_TI_RESTORE), revertTooltip, revertClick);
+			auto& action = addGlyph("##TitleRevert", Icons::TI(MenuIcons::kRestore), revertTooltip, revertClick);
 			action.textColor = statusPalette.Warning;
 		} else {
 			auto& action = addText("##TitleRevert", T(TKEY("revert"), "Revert"), revertTooltip, revertClick);
@@ -443,11 +444,11 @@ bool Widget::DrawTitleBarActions(bool showApply, bool showSaveLoadRevert, bool s
 				deleteAction = &addText("##TitleDelete", T(TKEY("delete"), "Delete"), deleteTooltip, deleteClick);
 				deleteAction->textColor = statusPalette.Error;
 			}
-			deleteAction->destructive = true;
+			deleteAction->hoverTint = statusPalette.Error;
 		}
 
 		if (packBadge) {
-			auto& action = addGlyph("##TitlePackSource", Icons::TI(ICON_TI_STACK_2), packBadge->tooltip.c_str(), []() {});
+			auto& action = addGlyph("##TitlePackSource", Icons::TI(MenuIcons::kPresets), packBadge->tooltip.c_str(), []() {});
 			action.textColor = packBadge->color;
 		}
 
@@ -575,8 +576,16 @@ bool Widget::DrawTitleBarActions(bool showApply, bool showSaveLoadRevert, bool s
 		ImGui::InvisibleButton(action.id.c_str(), bb.GetSize());
 		const bool hovered = ImGui::IsItemHovered();
 		const bool held = ImGui::IsItemActive();
+		if (hovered)
+			ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
 		if (ImGui::IsItemClicked())
 			pendingClick = action.onClick;
+
+		// Hover and press ease in and out, in the action's state colour when it has one
+		const auto DrawActionHighlight = [&] {
+			auto tint = Util::StateHoverButtonStyle(action.hoverTint.value_or(ImVec4()), action.hoverTint.has_value());
+			Util::DrawAnimatedButtonHighlight(bb, ImGui::GetItemID(), hovered, held, false, drawList);
+		};
 
 		switch (action.kind) {
 		case Kind::LockBadge:
@@ -584,31 +593,19 @@ bool Widget::DrawTitleBarActions(bool showApply, bool showSaveLoadRevert, bool s
 			break;
 		case Kind::Icon:
 			{
-				if (hovered || held) {
-					if (action.destructive) {
-						auto color = statusPalette.Error;
-						color.w = held ? 0.6f : 0.4f;
-						drawList->AddRectFilled(bb.Min, bb.Max, ImGui::GetColorU32(color), rounding);
-					} else {
-						Util::DrawRoundedButtonHighlight(bb, hovered, held, drawList);
-					}
-				}
+				DrawActionHighlight();
 				const float iconInset = std::max(1.0f, buttonHeight * 0.1f);
-				drawList->AddImage(action.texture, ImVec2(bb.Min.x + iconInset, bb.Min.y + iconInset), ImVec2(bb.Max.x - iconInset, bb.Max.y - iconInset),
+				const ImVec2 iconMin = Util::IconLoader::SnapToPixel(ImVec2(bb.Min.x + iconInset, bb.Min.y + iconInset));
+				const ImVec2 iconSize = Util::IconLoader::SnapToPixel(ImVec2(bb.GetWidth() - iconInset * 2.0f, bb.GetHeight() - iconInset * 2.0f));
+				// The action holds the texture as an ImGui reference; its id is the icon's full view
+				auto* fullView = reinterpret_cast<ID3D11ShaderResourceView*>(action.texture.GetTexID());
+				drawList->AddImage(Util::IconLoader::ViewForSize(fullView, iconSize), iconMin, ImVec2(iconMin.x + iconSize.x, iconMin.y + iconSize.y),
 					ImVec2(0, 0), ImVec2(1, 1), ImGui::GetColorU32(iconTint));
 				break;
 			}
 		case Kind::Glyph:
 			{
-				if (hovered || held) {
-					if (action.destructive) {
-						auto color = statusPalette.Error;
-						color.w = held ? 0.6f : 0.4f;
-						drawList->AddRectFilled(bb.Min, bb.Max, ImGui::GetColorU32(color), rounding);
-					} else {
-						Util::DrawRoundedButtonHighlight(bb, hovered, held, drawList);
-					}
-				}
+				DrawActionHighlight();
 				if (action.glyph) {
 					const ImU32 col = action.textColor ? ImGui::GetColorU32(*action.textColor) : textCol;
 					Icons::DrawCenteredGlyph(drawList, bb.Min, bb.GetSize(), action.glyph, col);
@@ -617,16 +614,16 @@ bool Widget::DrawTitleBarActions(bool showApply, bool showSaveLoadRevert, bool s
 			}
 		case Kind::Text:
 			{
+				const auto blend = Util::Anim::ItemBlend(ImGui::GetItemID(), hovered, held, false);
+				auto tint = Util::StateHoverButtonStyle(action.hoverTint.value_or(ImVec4()), action.hoverTint.has_value());
 				ImU32 fill = ImGui::GetColorU32(ImGuiCol_Button);
-				if (held)
-					fill = ImGui::GetColorU32(ImGuiCol_ButtonActive);
-				else if (hovered)
-					fill = ImGui::GetColorU32(ImGuiCol_ButtonHovered);
 				if (action.fillColor) {
 					auto color = *action.fillColor;
-					if (hovered || held)
-						color.w = std::min(1.0f, color.w + 0.2f);
+					color.w = std::min(1.0f, color.w + WidgetUI::kTextActionHoverBoost * blend.Highlight());
 					fill = ImGui::GetColorU32(color);
+				} else {
+					fill = Util::Anim::LerpU32(fill, ImGui::GetColorU32(ImGuiCol_ButtonHovered), blend.hover);
+					fill = Util::Anim::LerpU32(fill, ImGui::GetColorU32(ImGuiCol_ButtonActive), blend.press);
 				}
 				drawList->AddRectFilled(bb.Min, bb.Max, fill, rounding);
 				const ImVec2 textSize = ImGui::CalcTextSize(action.label.c_str());
@@ -652,7 +649,7 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 {
 	auto editorWindow = EditorWindow::GetSingleton();
 	auto menu = globals::menu;
-	bool useIcons = !editorWindow->settings.useTextButtons && menu && menu->GetSettings().Theme.ShowActionIcons;
+	bool useIcons = !editorWindow->settings.useTextButtons;
 	const float scale = Util::GetUIScale();
 	if (navigatedFromSearch) {
 		ClearSearchState(true);
@@ -686,16 +683,9 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 		if (!showForceWeather || !weather)
 			return;
 		ImGui::SameLine();
-		bool isLocked = editorWindow->IsWeatherLockedByUser() && editorWindow->GetLockedWeather() == weather;
-		const char* tooltip = !EditorWindow::AreWeatherLockHooksInstalled() ?
-		                          T(TKEY("weather_lock_hooks_unavailable"), "Weather-lock hooks failed to install; the lock still works but weather may briefly flash before correcting") :
-		                          (isLocked ? T(TKEY("unlock_weather"), "Unlock Weather") : T(TKEY("force_this_weather"), "Force This Weather"));
-		if (Util::LockStatusBadgeButton("##InlineForceWeather", isLocked, tooltip)) {
-			if (isLocked)
-				editorWindow->ReleaseUserWeatherLock();
-			else
-				editorWindow->LockWeatherForUser(weather);
-		}
+		const bool isLocked = editorWindow->IsWeatherLockedByUser(weather);
+		if (Util::LockStatusBadgeButton("##InlineForceWeather", isLocked, EditorWindow::GetWeatherLockTooltip(isLocked)))
+			editorWindow->ToggleUserWeatherLock(weather);
 	};
 
 	const bool unsaved = HasUnsavedChanges();
@@ -723,7 +713,16 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 			if (!texture)
 				return;
 			ImGui::SameLine();
-			if (ImGui::ImageButton((std::string(searchId) + suffix).c_str(), texture, buttonSize))
+			// Image button chrome with an eased hover fill instead of ImGui's instant colour swap
+			const ImVec2 padding = ImGui::GetStyle().FramePadding;
+			const ImVec2 imageMin(ImGui::GetCursorScreenPos().x + padding.x, ImGui::GetCursorScreenPos().y + padding.y);
+			const bool clicked = ImGui::InvisibleButton((std::string(searchId) + suffix).c_str(),
+				ImVec2(buttonSize.x + padding.x * 2.0f, buttonSize.y + padding.y * 2.0f));
+			Util::DrawAnimatedButtonHighlight(ImRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax()), ImGui::GetItemID(),
+				ImGui::IsItemHovered(), ImGui::IsItemActive(), false);
+			ImGui::GetWindowDrawList()->AddImage(texture, imageMin, ImVec2(imageMin.x + buttonSize.x, imageMin.y + buttonSize.y), ImVec2(0, 0),
+				ImVec2(1, 1), ImGui::GetColorU32(IM_COL32_WHITE));
+			if (clicked)
 				callback();
 			Util::AddTooltip(tooltip);
 		};
@@ -734,7 +733,7 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 				iconButton("_Apply", Util::IconLoader::GetIcons().applyToGame.texture, T(TKEY("apply_changes"), "Apply changes to the game"), [&]() { ApplyChanges(); });
 			} else {
 				ImGui::SameLine();
-				if (ImGui::Button(T(TKEY("apply"), "Apply")))
+				if (Util::Button(T(TKEY("apply"), "Apply")))
 					ApplyChanges();
 				Util::AddTooltip(T(TKEY("apply_changes"), "Apply changes to the game"));
 			}
@@ -744,12 +743,16 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 		if (inlineActions && showSaveLoadRevert) {
 			Util::ToolbarDivider(false);
 			ImGui::SameLine();
-			if (unsaved)
-				ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetUnsaved());
-			if (Icons::Button(std::format("{}##_Save", searchId ? searchId : "").c_str(), Icons::TI(ICON_TI_DEVICE_FLOPPY)))
-				saveAll();
-			if (unsaved)
-				ImGui::PopStyleColor();
+			{
+				// Unsaved: the glyph and its hover take the unsaved colour
+				auto tint = Util::StateHoverButtonStyle(Util::Colors::GetUnsaved(), unsaved);
+				if (unsaved)
+					ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetUnsaved());
+				if (Icons::Button(std::format("{}##_Save", searchId ? searchId : "").c_str(), Icons::TI(MenuIcons::kSave)))
+					saveAll();
+				if (unsaved)
+					ImGui::PopStyleColor();
+			}
 			Util::AddTooltip(saveTooltip);
 			iconButton("_Load", Util::IconLoader::GetIcons().loadSettings.texture, T(TKEY("load_saved_file"), "Load saved file, else the active preset's values, else vanilla"), [&]() { Load(); });
 			iconButton("_Revert", Util::IconLoader::GetIcons().featureSettingRevert.texture, T(TKEY("revert_to_original"), "Revert to original game values"), [&]() { RevertChanges(); });
@@ -795,12 +798,15 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 			if (inlineActions && showSaveLoadRevert) {
 				Util::ToolbarDivider(false);
 				ImGui::SameLine();
-				if (unsaved)
-					ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetUnsaved());
-				if (Util::ButtonWithFlash(T(TKEY("save"), "Save")))
-					saveAll();
-				if (unsaved)
-					ImGui::PopStyleColor();
+				{
+					auto tint = Util::StateHoverButtonStyle(Util::Colors::GetUnsaved(), unsaved);
+					if (unsaved)
+						ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetUnsaved());
+					if (Util::ButtonWithFlash(T(TKEY("save"), "Save")))
+						saveAll();
+					if (unsaved)
+						ImGui::PopStyleColor();
+				}
 				Util::AddTooltip(saveTooltip);
 				textButton(T(TKEY("load"), "Load"), T(TKEY("load_saved_file"), "Load saved file, else the active preset's values, else vanilla"), [&]() { Load(); });
 				ImGui::SameLine();
@@ -891,7 +897,7 @@ void Widget::DrawSearchDropdown()
 						std::string label = result.tabName.empty() ? result.displayName : std::format("{} ({})", result.displayName, result.tabName);
 
 						ImGui::PushID(i);
-						if (ImGui::Selectable(label.c_str(), false, ImGuiSelectableFlags_NoAutoClosePopups)) {
+						if (Util::Selectable(label.c_str(), false, ImGuiSelectableFlags_NoAutoClosePopups)) {
 							NavigateToSearchResult(result);
 							navigatedFromSearch = true;
 						}

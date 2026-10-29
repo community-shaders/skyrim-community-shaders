@@ -79,7 +79,7 @@ void HistogramAutoExposure::DrawSettings()
 	ImGui::BeginDisabled(cam != nullptr);
 	ImGui::SliderFloat(T("feature.post_processing.histogram_auto_exposure.exposure_compensation", "Exposure Compensation"), &settings.ExposureCompensation, -5.f, 5.f, "%+.2f EV");
 	if (auto _tt = Util::HoverTooltipWrapper())
-		ImGui::Text(T("feature.post_processing.histogram_auto_exposure.applying_additional_exposure_adjustment_to_the_image", "Applying additional exposure adjustment to the image."));
+		ImGui::TextUnformatted(T("feature.post_processing.histogram_auto_exposure.applying_additional_exposure_adjustment_to_the_image", "Applying additional exposure adjustment to the image."));
 	ImGui::EndDisabled();
 
 	if (cam) {
@@ -90,7 +90,7 @@ void HistogramAutoExposure::DrawSettings()
 	ImGui::SliderFloat(T("feature.post_processing.histogram_auto_exposure.adaptation_speed", "Adaptation Speed"), &settings.AdaptSpeed, 0.1f, 5.f, "%.2f");
 	ImGui::SliderFloat2(T("feature.post_processing.histogram_auto_exposure.focus_area", "Focus Area"), &settings.AdaptArea.x, 0.f, 1.f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
 	if (auto _tt = Util::HoverTooltipWrapper())
-		ImGui::Text(T("feature.post_processing.histogram_auto_exposure.specifies_the_proportion_of_the_area_width_height", "Specifies the proportion of the area [width, height] that auto exposure will adapt to."));
+		ImGui::TextUnformatted(T("feature.post_processing.histogram_auto_exposure.specifies_the_proportion_of_the_area_width_height", "Specifies the proportion of the area [width, height] that auto exposure will adapt to."));
 
 	ImGui::BeginDisabled(cam != nullptr);
 	ImGui::SliderFloat2(T("feature.post_processing.histogram_auto_exposure.adaptation_range", "Adaptation Range"), &settings.AdaptationRange.x, -10.f, 21.f, "%.2f EV100");
@@ -110,10 +110,10 @@ void HistogramAutoExposure::DrawSettings()
 		ImGui::SliderFloat(T("feature.post_processing.histogram_auto_exposure.max_strength", "Max Strength"), &settings.PurkinjeStrength, 0.f, 5.f, "%.2f");
 		ImGui::SliderFloat(T("feature.post_processing.histogram_auto_exposure.fade_in_ev", "Fade In EV100"), &settings.PurkinjeStartEV, -10.f, 3.f, "%.2f EV100");
 		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text(T("feature.post_processing.histogram_auto_exposure.the_purkinje_effect_will_start_to_take_place", "The Purkinje effect will start to take place when the average scene luminance falls lower than this."));
+			ImGui::TextUnformatted(T("feature.post_processing.histogram_auto_exposure.the_purkinje_effect_will_start_to_take_place", "The Purkinje effect will start to take place when the average scene luminance falls lower than this."));
 		ImGui::SliderFloat(T("feature.post_processing.histogram_auto_exposure.max_effect_ev", "Max Effect EV100"), &settings.PurkinjeMaxEV, -7.f, 3.f, "%.2f EV100");
 		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text(T("feature.post_processing.histogram_auto_exposure.from_this_point_onward_the_purkinje_effect_remains", "From this point onward, the Purkinje effect remains the greatest."));
+			ImGui::TextUnformatted(T("feature.post_processing.histogram_auto_exposure.from_this_point_onward_the_purkinje_effect_remains", "From this point onward, the Purkinje effect remains the greatest."));
 
 		ImGui::TreePop();
 	}
@@ -154,8 +154,8 @@ void HistogramAutoExposure::DrawSettings()
 		ImGui::InvisibleButton("##histogram_canvas", canvasSize);
 
 		auto* drawList = ImGui::GetWindowDrawList();
-		drawList->AddRectFilled(canvasPos, ImVec2(canvasPos.x + canvasSize.x, canvasPos.y + canvasSize.y), IM_COL32(18, 18, 18, 255));
-		drawList->AddRect(canvasPos, ImVec2(canvasPos.x + canvasSize.x, canvasPos.y + canvasSize.y), IM_COL32(80, 80, 80, 255));
+		drawList->AddRectFilled(canvasPos, ImVec2(canvasPos.x + canvasSize.x, canvasPos.y + canvasSize.y), ImGui::GetColorU32(IM_COL32(18, 18, 18, 255)));
+		drawList->AddRect(canvasPos, ImVec2(canvasPos.x + canvasSize.x, canvasPos.y + canvasSize.y), ImGui::GetColorU32(IM_COL32(80, 80, 80, 255)));
 
 		const float binWidth = canvasSize.x / static_cast<float>(kHistogramBins);
 		for (int i = 0; i < kHistogramBins; i++) {
@@ -165,7 +165,7 @@ void HistogramAutoExposure::DrawSettings()
 			const float x1 = canvasPos.x + static_cast<float>(i + 1) * binWidth;
 			const float y0 = canvasPos.y + canvasSize.y - barHeight;
 			const ImU32 color = i == 0 ? IM_COL32(90, 90, 90, 180) : IM_COL32(90, 150, 220, 220);
-			drawList->AddRectFilled(ImVec2(x0, y0), ImVec2(x1, canvasPos.y + canvasSize.y), color);
+			drawList->AddRectFilled(ImVec2(x0, y0), ImVec2(x1, canvasPos.y + canvasSize.y), ImGui::GetColorU32(color));
 		}
 
 		auto evToX = [&](float ev) {
@@ -176,7 +176,7 @@ void HistogramAutoExposure::DrawSettings()
 
 		auto drawMarker = [&](float ev, ImU32 color) {
 			const float x = evToX(ev);
-			drawList->AddLine(ImVec2(x, canvasPos.y), ImVec2(x, canvasPos.y + canvasSize.y), color, 2.f);
+			drawList->AddLine(ImVec2(x, canvasPos.y), ImVec2(x, canvasPos.y + canvasSize.y), ImGui::GetColorU32(color), 2.f);
 		};
 
 		drawMarker(log2(parameters.LuminanceRange.x) + 3.0f, IM_COL32(255, 200, 0, 255));
@@ -189,7 +189,7 @@ void HistogramAutoExposure::DrawSettings()
 			const int bin = std::clamp(static_cast<int>((mouseX - canvasPos.x) / binWidth), 0, kHistogramBins - 1);
 			ImGui::BeginTooltip();
 			if (bin == 0) {
-				ImGui::Text(T("feature.post_processing.histogram_auto_exposure.bin_0_below_luminance_threshold", "Bin 0: below luminance threshold"));
+				ImGui::TextUnformatted(T("feature.post_processing.histogram_auto_exposure.bin_0_below_luminance_threshold", "Bin 0: below luminance threshold"));
 			} else {
 				const float histogramPos = static_cast<float>(bin - kFirstLuminanceBin) / static_cast<float>(kLastLuminanceBin - kFirstLuminanceBin);
 				const float ev = histogramPos * (kMaxEV100 - kMinEV100) + kMinEV100;

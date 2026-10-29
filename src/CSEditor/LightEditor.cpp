@@ -354,33 +354,15 @@ void LightEditor::DrawExternalEmittanceCombo()
 	const char* kNoneLabel = T(TKEY("none"), "(None)");
 	const char* preview = externalEmittanceEdid.empty() ? kNoneLabel : externalEmittanceEdid.c_str();
 	const auto externalEmittanceLabel = fmt::format("{}##combo", T(TKEY("external_emittance"), "External Emittance"));
-	if (ImGui::BeginCombo(externalEmittanceLabel.c_str(), preview)) {
-		auto searchText = Util::DrawComboSearchInput(kEmittanceComboId);
-		if (searchText.empty() || Util::StringMatchesSearch(kNoneLabel, searchText)) {
-			if (ImGui::Selectable(kNoneLabel, externalEmittanceEdid.empty())) {
-				ClearExternalEmittance();
-				Util::ClearComboSearch(kEmittanceComboId);
-			}
-			if (externalEmittanceEdid.empty())
-				ImGui::SetItemDefaultFocus();
-		}
-		for (auto& [edid, form] : s_emittanceFormList) {
-			if (!searchText.empty() && !Util::StringMatchesSearch(edid, searchText))
-				continue;
-			const bool isCurrent = edid == externalEmittanceEdid;
-			if (ImGui::Selectable(edid.c_str(), isCurrent)) {
-				externalEmittanceEdid = edid;
-				useExternalEmittance = true;
-				ApplyExternalEmittance(form);
-				Util::ClearComboSearch(kEmittanceComboId);
-			}
-			if (isCurrent)
-				ImGui::SetItemDefaultFocus();
-		}
-		ImGui::EndCombo();
-	} else {
-		Util::ClearComboSearch(kEmittanceComboId);
-	}
+	BrowserUI::SearchableFormCombo(
+		{ externalEmittanceLabel.c_str(), kEmittanceComboId, preview, kNoneLabel, externalEmittanceEdid.empty() }, s_emittanceFormList,
+		[&] { ClearExternalEmittance(); },
+		[&](const std::string& edid, RE::TESForm*) { return edid == externalEmittanceEdid; },
+		[&](const std::string& edid, RE::TESForm* form) {
+			externalEmittanceEdid = edid;
+			useExternalEmittance = true;
+			ApplyExternalEmittance(form);
+		});
 }
 
 RE::FormID LightEditor::ResolveFormEntry(const std::string& entry)
@@ -465,7 +447,6 @@ namespace
 	constexpr float kLightInspectorBesideMinWidth = 640.0f;
 	constexpr float kLightInspectorWidth = 380.0f;
 	constexpr float kLightSearchWidth = 220.0f;
-	constexpr float kInspectorBgAlpha = 0.5f;
 	constexpr int kFlagGridColumns = 3;
 	/// Position units per dragged pixel; Shift and Alt speed it up and slow it down.
 	constexpr float kPositionDragSpeed = 0.25f;
@@ -485,20 +466,6 @@ namespace
 		BrowserUI::SectionLabel(label, true);
 	}
 
-	/** @brief Opens a tinted, scrollable inspector panel; always pair with ImGui::EndChild. @return Whether it is visible. */
-	bool BeginPanel(const char* id, const ImVec2& size)
-	{
-		const auto& style = ImGui::GetStyle();
-		ImVec4 background = style.Colors[ImGuiCol_FrameBg];
-		background.w *= kInspectorBgAlpha;
-		ImGui::PushStyleColor(ImGuiCol_ChildBg, background);
-		ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, style.FrameRounding);
-		const bool visible = ImGui::BeginChild(id, size, ImGuiChildFlags_AlwaysUseWindowPadding);
-		ImGui::PopStyleVar();
-		ImGui::PopStyleColor();
-		return visible;
-	}
-
 	using BrowserUI::SameLineIfFits;
 
 	float CheckboxWidth(const char* label)
@@ -515,9 +482,7 @@ void LightEditor::DrawSettings()
 	BrowserUI::PageHeader(Icons::TI(ICON_TI_BULB), T(TKEY("header"), "Light Editor"), subtitle.c_str());
 	ImGui::SameLine();
 	ImGui::Checkbox(T(TKEY("log_mode"), "Log Mode"), &extendedLogMode);
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("%s", T(TKEY("log_mode_tooltip"), "Extend slider ranges and use a logarithmic scale."));
-	}
+	Util::HoverTip(T(TKEY("log_mode_tooltip"), "Extend slider ranges and use a logarithmic scale."));
 
 	const bool isAttaching = (attachPhase != AttachPhase::Idle);
 	if (isAttaching) {
@@ -534,10 +499,10 @@ void LightEditor::DrawSettings()
 	const auto drawTop = [this](const ImVec2& topSize) {
 		// Bounds the split pane, which sizes itself to the space left.
 		if (ImGui::BeginChild("##LightTop", topSize, ImGuiChildFlags_None, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse))
-			BrowserUI::SplitPane({ "##LightSplit", kLightInspectorBesideMinWidth, kLightInspectorWidth, kDefaultStackedTableRatio }, stackedTableRatio, [this](const ImVec2& size) { DrawLightTable(size); }, [this](const ImVec2& size) { DrawInspector(size); });
+			BrowserUI::SplitPane({ "##LightSplit", kLightInspectorBesideMinWidth, kLightInspectorWidth, kDefaultStackedTableRatio, EditorWindow::GetSingleton()->resetLayout }, stackedTableRatio, [this](const ImVec2& size) { DrawLightTable(size); }, [this](const ImVec2& size) { DrawInspector(size); });
 		ImGui::EndChild();
 	};
-	BrowserUI::StackedSplit("##LightAdjustSplit", topPaneRatio, kDefaultTopPaneRatio, drawTop, [this](const ImVec2& size) { DrawAdjustments(size); });
+	BrowserUI::StackedSplit("##LightAdjustSplit", topPaneRatio, kDefaultTopPaneRatio, EditorWindow::GetSingleton()->resetLayout, drawTop, [this](const ImVec2& size) { DrawAdjustments(size); });
 
 	if (isAttaching)
 		ImGui::EndDisabled();
@@ -555,18 +520,14 @@ void LightEditor::DrawToolbar()
 	if (Icons::LabeledButton("##ToggleAllLP", Icons::TI(ICON_TI_BULB), toggleAllLabel)) {
 		ScheduleConsoleCommand("tlp 0");
 	}
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("%s", T(TKEY("toggle_all_lp_lights_tooltip"), "Toggle all Light Placer lights on/off (tlp 0)."));
-	}
+	Util::HoverTip(T(TKEY("toggle_all_lp_lights_tooltip"), "Toggle all Light Placer lights on/off (tlp 0)."));
 
 	const char* markersLabel = T(TKEY("toggle_lp_markers"), "Toggle LP Markers");
 	SameLineIfFits(Icons::MeasureLabeledButton(Icons::TI(ICON_TI_EYE), markersLabel));
 	if (Icons::LabeledButton("##ToggleMarkers", Icons::TI(ICON_TI_EYE), markersLabel)) {
 		ScheduleConsoleCommand("tlp 1");
 	}
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("%s", T(TKEY("toggle_lp_markers_tooltip"), "Toggle Light Placer debug markers (tlp 1)."));
-	}
+	Util::HoverTip(T(TKEY("toggle_lp_markers_tooltip"), "Toggle Light Placer debug markers (tlp 1)."));
 
 	const char* reloadLabel = T(TKEY("reload_lp"), "Reload LP");
 	SameLineIfFits(Icons::MeasureLabeledButton(Icons::TI(ICON_TI_REFRESH), reloadLabel));
@@ -578,9 +539,7 @@ void LightEditor::DrawToolbar()
 		ScheduleConsoleCommand("reloadlp");
 		EditorWindow::GetSingleton()->ShowNotification(T(TKEY("reloading_lp_configs"), "Reloading Light Placer configs..."), Util::Colors::GetInfo());
 	}
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("%s", T(TKEY("reload_lp_tooltip"), "Reload all Light Placer JSON configs in-game (reloadlp)."));
-	}
+	Util::HoverTip(T(TKEY("reload_lp_tooltip"), "Reload all Light Placer JSON configs in-game (reloadlp)."));
 
 	SameLineIfFits(ImGui::CalcTextSize(T(TKEY("select_mesh"), "Select Mesh")).x + ImGui::GetStyle().FramePadding.x * 2.0f);
 	DrawAddLightButton();
@@ -610,9 +569,7 @@ void LightEditor::DrawToolbar()
 	const char* shadowsOnlyLabel = T(TKEY("shadows_only"), "Shadows Only");
 	SameLineIfFits(CheckboxWidth(shadowsOnlyLabel));
 	ImGui::Checkbox(shadowsOnlyLabel, &shadowsOnly);
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("%s", T(TKEY("shadows_only_tooltip"), "Only show lights with HemiShadow or OmniShadow flags."));
-	}
+	Util::HoverTip(T(TKEY("shadows_only_tooltip"), "Only show lights with HemiShadow or OmniShadow flags."));
 }
 
 void LightEditor::DrawLightTable(const ImVec2& size)
@@ -738,7 +695,7 @@ void LightEditor::DrawLightTable(const ImVec2& size)
 					if (ImGui::TableSetColumnIndex(4) && light.isLP) {
 						const ImVec4 info = Util::Colors::GetInfo();
 						const float width = Util::DrawBadgeAt(ImGui::GetCursorScreenPos(), ImGui::GetFrameHeight(), T(TKEY("column_lp"), "LP"),
-							ImVec4(info.x, info.y, info.z, 0.22f), ImGui::GetStyleColorVec4(ImGuiCol_Text));
+							ImVec4(info.x, info.y, info.z, ThemeManager::Constants::CSE_LP_BADGE_ALPHA), ImGui::GetStyleColorVec4(ImGuiCol_Text));
 						ImGui::Dummy(ImVec2(width, ImGui::GetFrameHeight()));
 					}
 					ImGui::PopID();
@@ -782,7 +739,7 @@ void LightEditor::DrawLightTable(const ImVec2& size)
 
 void LightEditor::DrawInspector(const ImVec2& size)
 {
-	if (!BeginPanel("##LightInspector", size)) {
+	if (!BrowserUI::BeginCard("##LightInspector", size)) {
 		ImGui::EndChild();
 		return;
 	}
@@ -816,7 +773,7 @@ void LightEditor::DrawInspector(const ImVec2& size)
 
 	// Per-light actions
 	ImGui::Spacing();
-	if (ImGui::Button(T(TKEY("reset"), "Reset"))) {
+	if (Util::Button(T(TKEY("reset"), "Reset"))) {
 		current = original;
 		if (lpInfo.isLPLight) {
 			lpFlagSet = originalLpFlagSet;
@@ -831,7 +788,7 @@ void LightEditor::DrawInspector(const ImVec2& size)
 	}
 
 	ImGui::SameLine();
-	if (ImGui::Button(T(TKEY("toggle_light"), "Toggle Light"))) {
+	if (Util::Button(T(TKEY("toggle_light"), "Toggle Light"))) {
 		if (lpInfo.isLPLight && activeRefr)
 			ScheduleConsoleCommand("tlp 0", activeRefr);
 		else if (current.data.fade == 0.0f)
@@ -866,7 +823,7 @@ void LightEditor::DrawInspector(const ImVec2& size)
 		Section(T(TKEY("section_light_placer"), "Light Placer"));
 		{
 			auto _style = Util::StatusButtonStyle(lpMatchFound ? Util::Colors::GetSuccess() : Util::Colors::GetError());
-			if (ImGui::Button(T(TKEY("write_to_light_placer"), "Write to Light Placer")))
+			if (Util::Button(T(TKEY("write_to_light_placer"), "Write to Light Placer")))
 				WriteChanges();
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -879,9 +836,7 @@ void LightEditor::DrawInspector(const ImVec2& size)
 		ImGui::SameLine();
 		if (Util::ErrorButton(T(TKEY("delete_entry"), "Delete")))
 			deleteConfirmPopupRequested = true;
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("%s", T(TKEY("delete_entry_tooltip"), "Delete this light entry from the Light Placer JSON.\nIf it is the only light in its entry, the whole models/formIDs entry is removed too."));
-		}
+		Util::HoverTip(T(TKEY("delete_entry_tooltip"), "Delete this light entry from the Light Placer JSON.\nIf it is the only light in its entry, the whole models/formIDs entry is removed too."));
 
 		auto doFilterButton = [&](bool isWhiteList) {
 			bool& inList = isWhiteList ? lpInWhitelist : lpInBlacklist;
@@ -892,9 +847,9 @@ void LightEditor::DrawInspector(const ImVec2& size)
 			bool clicked = false;
 			if (inList) {
 				auto _style = Util::StatusButtonStyle(activeColor);
-				clicked = ImGui::Button(removeLabel);
+				clicked = Util::Button(removeLabel);
 			} else {
-				clicked = ImGui::Button(addLabel);
+				clicked = Util::Button(addLabel);
 			}
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::Text(T(TKEY("filter_button_tooltip"), "%s\nFormat: %s\nReload LP to apply."), inList ? removeLabel : addLabel,
@@ -915,7 +870,7 @@ void LightEditor::DrawInspector(const ImVec2& size)
 		ImGui::SameLine();
 		doFilterButton(false);
 
-		if (ImGui::Button(T(TKEY("save_as_separate_entry"), "Save as Separate Entry"))) {
+		if (Util::Button(T(TKEY("save_as_separate_entry"), "Save as Separate Entry"))) {
 			const bool ok = SaveAsSeparateEntry(saveColorToLP);
 			if (ok) {
 				ReloadLPAndReselect();
@@ -1019,7 +974,7 @@ void LightEditor::DrawFlags()
 
 void LightEditor::DrawAdjustments(const ImVec2& size)
 {
-	if (!BeginPanel("##LightAdjustments", size) || !selected.isSelected) {
+	if (!BrowserUI::BeginCard("##LightAdjustments", size) || !selected.isSelected) {
 		ImGui::EndChild();
 		return;
 	}
@@ -1034,40 +989,22 @@ void LightEditor::DrawAdjustments(const ImVec2& size)
 
 		static constexpr const char* kLighOverrideId = "LighFormOverride";
 		const auto bulbTypeLabel = fmt::format("{}##combo", T(TKEY("bulb_type"), "Bulb type"));
-		if (ImGui::BeginCombo(bulbTypeLabel.c_str(), previewEdid)) {
-			auto searchText = Util::DrawComboSearchInput(kLighOverrideId);
-			if (searchText.empty() || Util::StringMatchesSearch(kOriginalLabel, searchText)) {
-				if (ImGui::Selectable(kOriginalLabel, current.data.lighFormId == original.data.lighFormId)) {
-					current.data = original.data;
-					Util::ClearComboSearch(kLighOverrideId);
-				}
-				if (current.data.lighFormId == original.data.lighFormId)
-					ImGui::SetItemDefaultFocus();
-			}
-			for (auto& [edid, ligh] : s_lighFormList) {
-				if (!searchText.empty() && !Util::StringMatchesSearch(edid, searchText))
-					continue;
-				const bool isCurrent = ligh->GetFormID() == current.data.lighFormId;
-				if (ImGui::Selectable(edid.c_str(), isCurrent)) {
-					// Swap the LIGH form but keep the user's edited fade/radius/size/cutoff.
-					const float savedFade = current.data.fade;
-					const float savedRadius = current.data.radius;
-					const float savedSize = current.data.size;
-					const float savedCutoff = current.data.cutoffOverride;
-					ApplyLighFormData(ligh);
-					current.data.fade = savedFade;
-					current.data.radius = savedRadius;
-					current.data.size = savedSize;
-					current.data.cutoffOverride = savedCutoff;
-					Util::ClearComboSearch(kLighOverrideId);
-				}
-				if (isCurrent)
-					ImGui::SetItemDefaultFocus();
-			}
-			ImGui::EndCombo();
-		} else {
-			Util::ClearComboSearch(kLighOverrideId);
-		}
+		BrowserUI::SearchableFormCombo(
+			{ bulbTypeLabel.c_str(), kLighOverrideId, previewEdid, kOriginalLabel, current.data.lighFormId == original.data.lighFormId }, s_lighFormList,
+			[&] { current.data = original.data; },
+			[&](const std::string&, RE::TESObjectLIGH* ligh) { return ligh->GetFormID() == current.data.lighFormId; },
+			[&](const std::string&, RE::TESObjectLIGH* ligh) {
+				// Swap the LIGH form but keep the user's edited fade/radius/size/cutoff.
+				const float savedFade = current.data.fade;
+				const float savedRadius = current.data.radius;
+				const float savedSize = current.data.size;
+				const float savedCutoff = current.data.cutoffOverride;
+				ApplyLighFormData(ligh);
+				current.data.fade = savedFade;
+				current.data.radius = savedRadius;
+				current.data.size = savedSize;
+				current.data.cutoffOverride = savedCutoff;
+			});
 	}
 
 	// External emittance applies to any reference-backed bulb, so it lives outside the attached-only block.
@@ -1078,9 +1015,7 @@ void LightEditor::DrawAdjustments(const ImVec2& size)
 		ImGui::SameLine();
 		const auto saveColorLabel = fmt::format("{}##color", T(TKEY("save_color"), "Save"));
 		ImGui::Checkbox(saveColorLabel.c_str(), &saveColorToLP);
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("%s", T(TKEY("save_color_tooltip"), "Include color when saving to Light Placer.\nWhen unchecked, the light falls back to the LIGH form color."));
-		}
+		Util::HoverTip(T(TKEY("save_color_tooltip"), "Include color when saving to Light Placer.\nWhen unchecked, the light falls back to the LIGH form color."));
 	}
 
 	// Logarithmic+extended or normal slider per extendedLogMode. Log scale requires min > 0, so
@@ -1170,12 +1105,10 @@ void LightEditor::LoadPopupPrefs()
 
 void LightEditor::DrawAddLightButton()
 {
-	if (ImGui::Button(T(TKEY("select_mesh"), "Select Mesh"))) {
+	if (Util::Button(T(TKEY("select_mesh"), "Select Mesh"))) {
 		picker.BeginPick();
 	}
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("%s", T(TKEY("select_mesh_tooltip"), "Click a mesh in the world to attach a new bulb, edit an existing bulb, or whitelist/blacklist this reference."));
-	}
+	Util::HoverTip(T(TKEY("select_mesh_tooltip"), "Click a mesh in the world to attach a new bulb, edit an existing bulb, or whitelist/blacklist this reference."));
 
 	if (picker.IsPicking()) {
 		int pm = static_cast<int>(picker.pickMode);
@@ -1362,7 +1295,7 @@ int LightEditor::DrawAttachedBulbCombo(const char* searchId, bool openNow)
 			if (!MatchesComboFilter(filter, label))
 				continue;
 			const bool isSel = (i == addSelectedBulb);
-			if (ImGui::Selectable(label.c_str(), isSel)) {
+			if (Util::Selectable(label.c_str(), isSel)) {
 				addSelectedBulb = i;
 				clicked = i;
 			}
@@ -1386,7 +1319,7 @@ void LightEditor::DrawLightRecordCombo(const char* searchId)
 			if (!MatchesComboFilter(filter, edid))
 				continue;
 			const bool isSel = ligh->GetFormID() == addSelectedLighFormId;
-			if (ImGui::Selectable(edid.c_str(), isSel))
+			if (Util::Selectable(edid.c_str(), isSel))
 				addSelectedLighFormId = ligh->GetFormID();
 			if (isSel)
 				ImGui::SetItemDefaultFocus();
@@ -1423,8 +1356,8 @@ void LightEditor::DrawAddLightPopup()
 	const float scale = Util::GetUIScale();
 	// Anchor toward the top of the screen so combo dropdowns have room to open below.
 	const ImVec2 displaySize = ImGui::GetIO().DisplaySize;
-	ImGui::SetNextWindowPos(ImVec2(displaySize.x * 0.5f, displaySize.y * 0.1f), ImGuiCond_Appearing, ImVec2(0.5f, 0.0f));
-	ImGui::SetNextWindowSize(ImVec2(520 * scale, 0), ImGuiCond_Appearing);
+	ImGui::SetNextWindowPos(ImVec2(displaySize.x * 0.5f, displaySize.y * ThemeManager::Constants::CSE_ADD_LIGHT_POPUP_TOP_RATIO), ImGuiCond_Appearing, ImVec2(0.5f, 0.0f));
+	ImGui::SetNextWindowSize(ImVec2(ThemeManager::Constants::CSE_ADD_LIGHT_POPUP_WIDTH * scale, 0), ImGuiCond_Appearing);
 	if (ImGui::BeginPopupModal(T(TKEY("select_mesh"), "Select Mesh"), nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
 		ImGui::Text(T(TKEY("picked_editor_id"), "EditorID: %s"), pickedMesh.editorId.empty() ? T(TKEY("none_value"), "(none)") : pickedMesh.editorId.c_str());
 		ImGui::Text(T(TKEY("picked_mesh"), "Mesh: %s"), pickedMesh.modelPath.empty() ? T(TKEY("none_value"), "(none)") : pickedMesh.modelPath.c_str());
@@ -1444,7 +1377,7 @@ void LightEditor::DrawAddLightPopup()
 			if (!available) {
 				{
 					auto _d = Util::DisableGuard(true);
-					ImGui::Button(label);
+					Util::Button(label);
 				}
 				if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
 					ImGui::SetTooltip("%s", unavailTip);
@@ -1452,10 +1385,10 @@ void LightEditor::DrawAddLightPopup()
 			}
 			if (active) {
 				auto _s = Util::StatusButtonStyle(Util::Colors::GetInfo());
-				ImGui::Button(label);
+				Util::Button(label);
 				return false;
 			}
-			return ImGui::Button(label);
+			return Util::Button(label);
 		};
 
 		const bool hasBulbs = !attachedBulbs.empty();
@@ -1473,7 +1406,7 @@ void LightEditor::DrawAddLightPopup()
 		ImGui::SameLine();
 		// Single bulb: "Edit Bulb" fires immediately without entering the mode.
 		if (hasBulbs && attachedBulbs.size() == 1) {
-			if (ImGui::Button(T(TKEY("mode_edit_bulb"), "Edit Bulb"))) {
+			if (Util::Button(T(TKEY("mode_edit_bulb"), "Edit Bulb"))) {
 				const auto& bulb = attachedBulbs[0];
 				pendingSelectRefrId = bulb.refrId;
 				pendingSelectConfigPath = bulb.configPath;
@@ -1522,7 +1455,7 @@ void LightEditor::DrawAddLightPopup()
 						if (!MatchesComboFilter(cfgFilter, lpConfigPaths[i]))
 							continue;
 						const bool isSel = (i == addSelectedConfig);
-						if (ImGui::Selectable(lpConfigPaths[i].c_str(), isSel))
+						if (Util::Selectable(lpConfigPaths[i].c_str(), isSel))
 							addSelectedConfig = i;
 						if (isSel)
 							ImGui::SetItemDefaultFocus();
@@ -1554,7 +1487,7 @@ void LightEditor::DrawAddLightPopup()
 					std::string reason;
 					const bool canAdd = CanAddBulb(reason);
 					ImGui::BeginDisabled(!canAdd);
-					const bool clicked = ImGui::Button(T(TKEY("add_bulb"), "Add Bulb"));
+					const bool clicked = Util::Button(T(TKEY("add_bulb"), "Add Bulb"));
 					ImGui::EndDisabled();
 					if (!canAdd && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
 						ImGui::SetTooltip("%s", reason.c_str());
@@ -1579,7 +1512,7 @@ void LightEditor::DrawAddLightPopup()
 				ImGui::Separator();
 				const bool canAddPt = (addSelectedBulb >= 0 && addSelectedBulb < (int)attachedBulbs.size());
 				ImGui::BeginDisabled(!canAddPt);
-				const bool clickedPt = ImGui::Button(T(TKEY("add_point"), "Add Point"));
+				const bool clickedPt = Util::Button(T(TKEY("add_point"), "Add Point"));
 				ImGui::EndDisabled();
 
 				if (clickedPt && canAddPt) {
@@ -1608,7 +1541,7 @@ void LightEditor::DrawAddLightPopup()
 				const bool canAddTE = bulbOk && lightOk && !isDupe;
 
 				ImGui::BeginDisabled(!canAddTE);
-				const bool clickedTE = ImGui::Button(T(TKEY("add_to_entry_btn"), "Add to Entry"));
+				const bool clickedTE = Util::Button(T(TKEY("add_to_entry_btn"), "Add to Entry"));
 				ImGui::EndDisabled();
 				if (!canAddTE && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
 					if (isDupe)
@@ -1679,7 +1612,7 @@ void LightEditor::DrawAddLightPopup()
 			// from the identically-labelled mode selector button rendered in the same popup.
 			const std::string confirmLabel = std::string(addPopupMode == ModeWhitelist ? T(TKEY("add_to_whitelist"), "Add to Whitelist") : T(TKEY("add_to_blacklist"), "Add to Blacklist")) + "##confirm";
 			ImGui::BeginDisabled(!bulbChosen);
-			const bool confirm = ImGui::Button(confirmLabel.c_str());
+			const bool confirm = Util::Button(confirmLabel.c_str());
 			ImGui::EndDisabled();
 
 			if (confirm && bulbChosen) {
@@ -1721,7 +1654,7 @@ void LightEditor::DrawAddLightPopup()
 					if (!MatchesComboFilter(filterSv, lbl))
 						continue;
 					const bool isSel = (i == addSelectedFilterEntry);
-					if (ImGui::Selectable(lbl.c_str(), isSel))
+					if (Util::Selectable(lbl.c_str(), isSel))
 						addSelectedFilterEntry = i;
 					if (isSel)
 						ImGui::SetItemDefaultFocus();
@@ -1732,7 +1665,7 @@ void LightEditor::DrawAddLightPopup()
 			ImGui::Separator();
 			const bool entryChosen = (addSelectedFilterEntry >= 0 && addSelectedFilterEntry < (int)filterListEntries.size());
 			ImGui::BeginDisabled(!entryChosen);
-			const bool clickedRemove = ImGui::Button(T(TKEY("remove_btn"), "Remove"));
+			const bool clickedRemove = Util::Button(T(TKEY("remove_btn"), "Remove"));
 			ImGui::EndDisabled();
 
 			if (clickedRemove && entryChosen) {
@@ -1749,9 +1682,9 @@ void LightEditor::DrawAddLightPopup()
 			}
 		}
 
-		if (ImGui::Button(T(TKEY("close"), "Close")) || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+		if (Util::Button(T(TKEY("close"), "Close")) || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
 			if (ImGui::IsKeyPressed(ImGuiKey_Escape))
-				EditorWindow::GetSingleton()->suppressNextEditorEscape = true;
+				Menu::GetSingleton()->ConsumeEscape();
 			SavePopupPrefs();
 			ImGui::CloseCurrentPopup();
 		}
@@ -2390,13 +2323,15 @@ void LightEditor::UpdateSelectedLight(RE::TESObjectREFR* refr, RE::TESObjectLIGH
 
 	UpdateEmittanceColor();
 
-	displayInfo.ownerEditorId = refr ? clib_util::editorID::get_editorID(refr) : "Unknown";
+	const std::string unknown = T(TKEY("unknown"), "Unknown");
+	displayInfo.ownerEditorId = refr ? clib_util::editorID::get_editorID(refr) : unknown;
 	displayInfo.baseObjectFormId = refr && refr->GetBaseObject() ? refr->GetBaseObject()->formID : 0;
-	displayInfo.ownerLastEditedBy = refr && refr->GetDescriptionOwnerFile() ? refr->GetDescriptionOwnerFile()->fileName : "Unknown";
+	displayInfo.ownerLastEditedBy = refr && refr->GetDescriptionOwnerFile() ? refr->GetDescriptionOwnerFile()->fileName : unknown;
 	displayInfo.cellFormId = refr && refr->GetParentCell() ? refr->GetParentCell()->GetFormID() : 0;
-	displayInfo.cellEditorId = refr && refr->GetParentCell() ? refr->GetParentCell()->GetFormEditorID() : "Unknown";
+	const char* cellEditorId = refr && refr->GetParentCell() ? refr->GetParentCell()->GetFormEditorID() : nullptr;
+	displayInfo.cellEditorId = cellEditorId ? cellEditorId : unknown;
 	displayInfo.lighFormId = ligh ? ligh->GetFormID() : 0;
-	displayInfo.lighEditorId = ligh ? clib_util::editorID::get_editorID(ligh) : "Unknown";
+	displayInfo.lighEditorId = ligh ? clib_util::editorID::get_editorID(ligh) : unknown;
 }
 
 float LightEditor::GetLPRefScale() const
@@ -2927,7 +2862,7 @@ void LightEditor::DrawDeleteConfirmation()
 			ImGui::CloseCurrentPopup();
 		}
 		ImGui::SameLine();
-		if (ImGui::Button(T(TKEY("cancel"), "Cancel")))
+		if (Util::Button(T(TKEY("cancel"), "Cancel")))
 			ImGui::CloseCurrentPopup();
 	}
 }

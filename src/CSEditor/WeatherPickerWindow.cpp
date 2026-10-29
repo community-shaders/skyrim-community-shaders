@@ -4,11 +4,10 @@
 #include "EditorWindow.h"
 #include "Features/CSEditor.h"
 #include "Globals.h"
-#include "IconsTabler.h"
 #include "Menu/Icons/helpers/IconFonts.h"
+#include "Menu/MenuIcons.h"
 #include "Menu/ThemeManager.h"
 #include "PaletteWindow.h"
-#include "Utils/Game.h"
 #include "Utils/UI.h"
 #include "imgui_internal.h"
 
@@ -44,17 +43,7 @@ void WeatherPickerWindow::Draw()
 	if (anchorResolved)
 		positioned = true;
 
-	constexpr ImGuiWindowFlags kFlags =
-		ImGuiWindowFlags_NoTitleBar |
-		ImGuiWindowFlags_NoFocusOnAppearing |
-		ImGuiWindowFlags_AlwaysAutoResize |
-		ImGuiWindowFlags_NoResize |
-		ImGuiWindowFlags_NoScrollbar |
-		ImGuiWindowFlags_NoScrollWithMouse |
-		ImGuiWindowFlags_NoSavedSettings |
-		ImGuiWindowFlags_NoCollapse;
-
-	if (ImGui::Begin("##WeatherPickerWindow", nullptr, kFlags))
+	if (ImGui::Begin("##WeatherPickerWindow", nullptr, CSEditorWindows::kFloatingPanelFlags))
 		DrawContents();
 	ImGui::End();
 }
@@ -62,8 +51,8 @@ void WeatherPickerWindow::Draw()
 void WeatherPickerWindow::DrawContents()
 {
 	const float scale = Util::GetUIScale();
-	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f * scale, 4.0f * scale));
-	ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4.0f * scale, 2.0f * scale));
+	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(ThemeManager::Constants::CSE_PICKER_ITEM_SPACING * scale, ThemeManager::Constants::CSE_PICKER_ITEM_SPACING * scale));
+	ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(ThemeManager::Constants::CSE_PICKER_ITEM_SPACING * scale, ThemeManager::Constants::CSE_PICKER_FRAME_PADDING_Y * scale));
 
 	auto* sky = globals::game::sky;
 	if (!sky) {
@@ -92,12 +81,12 @@ void WeatherPickerWindow::DrawContents()
 	auto& filteredWeathers = CSEditor::GetFilteredWeathers();
 	auto& selectedWeatherIdx = CSEditor::GetSelectedWeatherIdx();
 
-	const float comboWidth = 180.0f * scale;
+	const float comboWidth = ThemeManager::Constants::CSE_PICKER_COMBO_WIDTH * scale;
 	const float listWidth = comboWidth;
-	const float listHeight = ImGui::GetTextLineHeightWithSpacing() * 12.0f;
+	const float listHeight = ImGui::GetTextLineHeightWithSpacing() * ThemeManager::Constants::CSE_PICKER_LIST_ROWS;
 	// Popup is the scroll list with the filter chip grid joined to its right.
-	const float chipsWidth = 2.0f * (ImGui::CalcTextSize("Aurora Sun").x + ImGui::GetStyle().FramePadding.x * 2.0f + 6.0f * scale) + 3.0f * scale;
-	const float popupWidth = listWidth + chipsWidth + ImGui::GetStyle().WindowPadding.x * 2.0f + 2.0f * scale;
+	const float chipsWidth = 2.0f * (ImGui::CalcTextSize("Aurora Sun").x + ImGui::GetStyle().FramePadding.x * 2.0f + ThemeManager::Constants::CSE_PICKER_CHIP_PAD * scale) + ThemeManager::Constants::CSE_PICKER_CHIP_GAP * scale;
+	const float popupWidth = listWidth + chipsWidth + ImGui::GetStyle().WindowPadding.x * 2.0f + ThemeManager::Constants::CSE_PICKER_GROUP_GAP * scale;
 	ImGui::SetNextWindowSizeConstraints(ImVec2(popupWidth, 0.0f), ImVec2(FLT_MAX, FLT_MAX));
 
 	ImGui::SetNextItemWidth(comboWidth);
@@ -121,7 +110,7 @@ void WeatherPickerWindow::DrawContents()
 				const bool isSelected = (selectedWeatherIdx == i);
 				ImGui::PushID(static_cast<int>(weather->GetFormID()));  // Editor IDs can repeat across plugins
 				ImGui::PushStyleColor(ImGuiCol_Text, CSEditor::GetWeatherTypeColor(weather));
-				const bool didSelect = ImGui::Selectable(weatherShortName(weather).c_str(), isSelected);
+				const bool didSelect = Util::Selectable(weatherShortName(weather).c_str(), isSelected);
 				ImGui::PopStyleColor();
 				ImGui::PopID();
 
@@ -145,7 +134,7 @@ void WeatherPickerWindow::DrawContents()
 		ImGui::EndChild();
 		ImGui::EndGroup();
 
-		ImGui::SameLine(0.0f, 2.0f * scale);
+		ImGui::SameLine(0.0f, ThemeManager::Constants::CSE_PICKER_GROUP_GAP * scale);
 		ImGui::BeginGroup();
 		CSEditor::DrawWeatherFilterChips();
 		ImGui::EndGroup();
@@ -155,18 +144,18 @@ void WeatherPickerWindow::DrawContents()
 		Util::ClearComboSearch(kWeatherSearchId);
 	}
 
-	ImGui::SameLine(0.0f, 4.0f * scale);
+	ImGui::SameLine(0.0f, ThemeManager::Constants::CSE_PICKER_ITEM_SPACING * scale);
 	const float iconSize = ImGui::GetFrameHeight();
 	ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0.0f, 0.0f));
 	{
 		auto _style = Util::TransparentIconButtonStyle();
-		if (Icons::Button("##WeatherPickerWindowReset", Icons::TI(ICON_TI_RESTORE), ImVec2(iconSize, iconSize)))
+		if (Icons::Button("##WeatherPickerWindowReset", Icons::TI(MenuIcons::kRestore), ImVec2(iconSize, iconSize)))
 			CSEditor::ResetWeatherToDefault(sky);
 	}
 	ImGui::PopStyleVar();
 	Util::AddTooltip(T(TKEY("reset_weather_tooltip"), "Resets weather to default"));
 
-	CSEditor::DrawWeatherTransitionBar(sky, comboWidth + 4.0f * scale + iconSize, false);
+	CSEditor::DrawWeatherTransitionBar(sky, comboWidth + ThemeManager::Constants::CSE_PICKER_ITEM_SPACING * scale + iconSize, false);
 
 	ImGui::PopStyleVar(2);
 }

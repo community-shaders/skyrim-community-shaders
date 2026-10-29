@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <atomic>
 #include <d3d11.h>
 #include <functional>
 #include <string>
@@ -120,13 +121,28 @@ public:
 	 * @brief Begins a named GPU/CPU timing pass within the current frame.
 	 * @param name Pass identifier (e.g. "Feature::PassName"). Implicitly calls BeginFrame if needed.
 	 */
-	void BeginPass(const std::string& name);
+	void BeginPass(std::string_view name);
 
 	/** @brief Ends the current timing pass and records the CPU/GPU timestamps. */
 	void EndPass();
 
 	/** @brief Ends the current profiling frame and advances the ring buffer write cursor. */
 	void EndFrame();
+
+	/**
+	 * @brief Keeps GPU/CPU pass timing running for the next few frames; call it each frame a consumer reads the results.
+	 * @param frames Frames to stay active for. Timing stops once no consumer has asked within that window.
+	 * A shorter request never cuts a longer one short, so the overlay cannot end a DevBench window.
+	 */
+	void KeepActive(uint32_t frames = 2)
+	{
+		const uint64_t until = frameCounter.load(std::memory_order_relaxed) + frames;
+		uint64_t current = activeUntilFrame.load(std::memory_order_relaxed);
+		while (current < until && !activeUntilFrame.compare_exchange_weak(current, until, std::memory_order_relaxed)) {
+		}
+	}
+	/** @brief True while a consumer asked for timings within its KeepActive window. */
+	bool IsActive() const { return frameCounter.load(std::memory_order_relaxed) <= activeUntilFrame.load(std::memory_order_relaxed); }
 
 	/** @brief Gets the live timings and history from the last collected frame. Rolling statistics are left at zero; see GetStatistics. */
 	const std::vector<TimerResult>& GetResults() const { return results; }
@@ -194,9 +210,12 @@ private:
 	uint32_t pendingFrames = 0;
 	bool initialized = false;
 	bool frameActive = false;
+	bool passOpen = false;
 	// Ring was full at BeginFrame; the whole frame is unprofiled.
 	bool frameSkipped = false;
 	double cpuTicksToMs = 0.0;
+	std::atomic<uint64_t> frameCounter{ 0 };
+	std::atomic<uint64_t> activeUntilFrame{ 0 };
 
 	PerfEventCallback beginPerfEvent;
 	PerfEventCallback endPerfEvent;

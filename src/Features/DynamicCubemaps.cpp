@@ -52,7 +52,7 @@ void DynamicCubemaps::DrawSettings()
 		if (settings.EnabledCreator) {
 			ImGui::ColorEdit3(T(TKEY("color"), "Color"), reinterpret_cast<float*>(&settings.CubemapColor));
 			ImGui::SliderFloat(T(TKEY("roughness"), "Roughness"), &settings.CubemapColor.w, 0.0f, 1.0f, "%.2f");
-			if (ImGui::Button(T(TKEY("export"), "Export"))) {
+			if (Util::Button(T(TKEY("export"), "Export"))) {
 				auto device = globals::d3d::device;
 				auto context = globals::d3d::context;
 

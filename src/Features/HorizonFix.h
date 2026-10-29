@@ -30,6 +30,7 @@
 struct HorizonFix : Feature
 {
 	virtual inline std::string GetName() override { return "Horizon Fix"; }
+	virtual std::string GetDisplayName() override { return T("feature.horizon_fix.name", "Horizon Fix"); }
 	virtual inline std::string GetShortName() override { return "HorizonFix"; }
 	virtual inline std::string_view GetShaderDefineName() override { return "HORIZON_FIX"; }
 	virtual inline bool HasShaderDefine(RE::BSShader::Type t) override

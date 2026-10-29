@@ -88,8 +88,8 @@ public:
 	/** @brief Per-frame reset: advances timer, caches menu state, resets descriptors and frame counters. */
 	void Reset();
 
-	/** @brief Selects sphere-normal grass lighting for the next grass draw. */
-	void SetGrassSphereNormal(bool sphereNormal);
+	/** @brief Selects sphere-normal lighting and the TruePBR material for the next grass draw. */
+	void SetGrassFlags(bool sphereNormal, bool pbr);
 	/** @brief One-time post-D3D setup: creates resources, probes GPU caps, initializes features. */
 	void Setup();
 
@@ -175,8 +175,31 @@ public:
 	 */
 	bool HasEditsUnderBaselines(Feature* feature);
 
-	/** @brief Forgets the cached HasEditsUnderBaselines answer for one feature, or every feature when null. */
+	/**
+	 * @brief Forgets the cached HasEditsUnderBaselines and HasUserEdits answers for one feature, or every
+	 *        feature when null. Call after anything rewrites a feature's settings or its base.
+	 */
 	void InvalidateEditsUnderBaselines(Feature* feature = nullptr);
+
+	/**
+	 * @brief Whether a feature's settings differ from defaults with the enabled Baseline packs applied: the
+	 *        edits Restore Defaults clears. Saving does not change the answer.
+	 * @details Cached per feature; InvalidateEditsUnderBaselines marks the answer stale.
+	 */
+	bool HasUserEdits(Feature* feature);
+
+	/**
+	 * @brief The edits HasUserEdits answers for: the parts of a feature's settings that differ from GetFeatureBase.
+	 * @details Not cached; meant for an on-demand listing rather than every frame.
+	 * @return An empty object when the feature has none.
+	 */
+	nlohmann::json GetUserEdits(Feature* feature);
+
+	/** @brief Fills the HasUserEdits cache for every loaded feature under one scene layer suspension. */
+	void PrimeUserEdits();
+
+	/** @brief Bumped whenever a cached HasUserEdits answer may have changed, so callers can tell when to recount. */
+	std::uint64_t GetUserEditsRevision() const { return userEditsRevision; }
 
 	/** @brief Drops the user's edits to every setting an enabled Baseline pack sets on one feature. */
 	void ClearFeatureEditsUnderBaselines(Feature* feature);
@@ -309,7 +332,7 @@ public:
 	 */
 	[[nodiscard]] static uint32_t GetRuntimePixelBits(const RE::BSShader& a_shader);
 
-	/** @brief Whether perf events reach a consumer: an attached capture tool, Tracy, or an Nsight Perf pass. */
+	/** @brief Whether perf events reach a consumer: an attached capture tool, a connected Tracy client, or an Nsight Perf pass. */
 	[[nodiscard]] bool PerfEventsConsumed() const;
 	/** @brief Whether Frame Annotations' per-draw events are worth building: the setting is on and consumed. */
 	[[nodiscard]] bool AnnotateDraws() const { return frameAnnotations && PerfEventsConsumed(); }
@@ -380,6 +403,7 @@ public:
 		IsAurora = 1 << 10,
 		IsMoon = 1 << 11,
 		ProjectedTextureIsSRGB = 1 << 12,
+		GrassPBR = 1 << 13,
 	};
 
 	/** @brief Bitflags describing extra feature-specific properties related to terrain displacement and material models. */
@@ -491,6 +515,8 @@ public:
 	PermutationCB permutationDataPrevious{};
 
 	Util::FrameChecker frameChecker;
+	/// Resets the Active Shaders counts once per frame; separate from frameChecker, which only ticks while the performance overlay shows.
+	Util::FrameChecker shaderTrackingFrameChecker;
 	void RequestHistoryReset() { historyResetFrame = frameCount + 1u; }
 	bool ShouldResetHistory() const { return frameCount == historyResetFrame; }
 
@@ -587,6 +613,10 @@ private:
 	std::unordered_map<std::string, nlohmann::json> featureBases;
 	/// Per feature: the cached HasEditsUnderBaselines answer.
 	std::unordered_map<std::string, bool> editsUnderBaselines;
+	/// Per feature: the cached HasUserEdits answer.
+	std::unordered_map<std::string, bool> userEdits;
+	/// See GetUserEditsRevision().
+	std::uint64_t userEditsRevision = 0;
 	/// Per feature: the edits SettingsUser.json holds, kept for features that are not loaded so a save
 	/// carries them over untouched.
 	std::unordered_map<std::string, nlohmann::json> userFeatureEdits;

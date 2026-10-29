@@ -1,10 +1,14 @@
 #include "FeatureIssues.h"
 #include "Feature.h"
 
+#include "CSEditor/Browser/BrowserWidgets.h"
 #include "I18n/I18n.h"
 #include "Menu.h"
+#include "Menu/Icons/helpers/IconFonts.h"
+#include "Menu/MenuIcons.h"
 #include "State.h"
 #include "Util.h"
+#include "Utils/UI.h"
 
 namespace FeatureIssues
 {
@@ -380,104 +384,136 @@ namespace FeatureIssues
 				baselineIssues.push_back(&issue);
 			}
 		}
-		// Shader Breaking Features Section (most critical)
-		if (auto section = Util::SectionWrapper(T("menu.issues.compilation_breaking_header", "Compilation Breaking Features"),
+		// The issue sections on the left, the cleanup actions in a card on the right
+		const ImGuiStyle& style = ImGui::GetStyle();
+		const std::filesystem::path logPath = Util::PathHelpers::GetLogPath();
+		const char* featuresLabel = T("menu.issues.open_features_folder", "Open Features Folder");
+		const char* shadersLabel = T("menu.issues.open_shaders_directory", "Open Shaders Directory");
+		const char* logsLabel = T("menu.issues.open_logs", "Open Logs");
+		const char* clearLabel = T("menu.issues.clear_issue_list", "Clear Issue List");
+		const float actionsWidth = std::max({ Icons::MeasureLabeledButton(Icons::TI(MenuIcons::kFolder), featuresLabel),
+									   Icons::MeasureLabeledButton(Icons::TI(MenuIcons::kFolder), shadersLabel),
+									   Icons::MeasureLabeledButton(Icons::TI(MenuIcons::kLogs), logsLabel),
+									   Icons::MeasureLabeledButton(Icons::TI(ICON_TI_TRASH), clearLabel) }) +
+		                           style.WindowPadding.x * 2.0f;
+		if (!ImGui::BeginTable("##FeatureIssuesLayout", 2, ImGuiTableFlags_SizingStretchProp))
+			return;
+		ImGui::TableSetupColumn("##Issues", ImGuiTableColumnFlags_WidthStretch);
+		ImGui::TableSetupColumn("##Actions", ImGuiTableColumnFlags_WidthFixed, actionsWidth);
+		ImGui::TableNextColumn();
+
+		// Most critical first
+		struct IssueSection
+		{
+			const char* title;
+			const char* description;
+			const ImVec4& color;
+			const std::vector<const FeatureIssueInfo*>& issues;
+		};
+		const IssueSection sections[] = {
+			{ T("menu.issues.compilation_breaking_header", "Compilation Breaking Features"),
 				T("menu.issues.compilation_breaking_desc",
 					"The following features modified core shader files and must be completely uninstalled via your mod manager. "
 					"Deleting just the INI file will not fix compilation errors if core shaders were modified."),
-				theme.StatusPalette.Error, !shaderBreakingIssues.empty())) {
-			for (const auto* issue : shaderBreakingIssues) {
-				DrawFeatureIssue(*issue, theme.StatusPalette.Error);
-			}
-		}
-		// Unknown Features Section (potentially compilation breaking)
-		if (auto section = Util::SectionWrapper(T("menu.issues.unknown_features_header", "Unknown Features"),
+				theme.StatusPalette.Error, shaderBreakingIssues },
+			{ T("menu.issues.unknown_features_header", "Unknown Features"),
 				T("menu.issues.unknown_features_desc",
 					"The following features are not recognized and we tried to disable automatically. "
 					"They may be from development branches or newer CS versions. Since we cannot determine what files they may have modified, "
 					"they should be removed as a precaution to prevent potential shader compilation failures."),
-				theme.StatusPalette.Error, !unknownIssues.empty())) {
-			for (const auto* issue : unknownIssues) {
-				DrawFeatureIssue(*issue, theme.StatusPalette.Error);
-			}
-		}
-		// Obsolete Features Section (non-shader-breaking)
-		if (auto section = Util::SectionWrapper(T("menu.issues.obsolete_features_header", "Obsolete Features"),
+				theme.StatusPalette.Error, unknownIssues },
+			{ T("menu.issues.obsolete_features_header", "Obsolete Features"),
 				T("menu.issues.obsolete_features_desc",
 					"The following features are obsolete and disabled automatically. "
 					"These features have been removed or replaced in this CS version but do not modify core shaders."),
-				theme.StatusPalette.Warning, !obsoleteIssues.empty())) {
-			for (const auto* issue : obsoleteIssues) {
-				DrawFeatureIssue(*issue, theme.StatusPalette.Warning);
-			}
-		}
-		// Version Mismatch Section
-		if (auto section = Util::SectionWrapper(T("menu.issues.wrong_version_header", "Wrong Version Features"),
+				theme.StatusPalette.Warning, obsoleteIssues },
+			{ T("menu.issues.wrong_version_header", "Wrong Version Features"),
 				T("menu.issues.wrong_version_desc",
 					"The following features have version compatibility issues and were disabled automatically. Please check for any updates or if the feature is considered obsolete."),
-				theme.StatusPalette.Warning, !versionIssues.empty())) {
-			for (const auto* issue : versionIssues) {
-				DrawFeatureIssue(*issue, theme.StatusPalette.Warning);
-			}
-		}
-		// Baseline preset failures
-		if (auto section = Util::SectionWrapper(T("menu.issues.baseline_failures_header", "Baseline Preset Failures"),
+				theme.StatusPalette.Warning, versionIssues },
+			{ T("menu.issues.baseline_failures_header", "Baseline Preset Failures"),
 				T("menu.issues.baseline_failures_desc",
 					"These Baseline preset files failed to load or apply. Old-format feature overrides are not compatible anymore "
 					"and must be updated to the new Baseline format. Check the file format and content."),
-				theme.StatusPalette.Error, !baselineIssues.empty())) {
-			for (const auto* issue : baselineIssues) {
-				DrawFeatureIssue(*issue, theme.StatusPalette.Error);
+				theme.StatusPalette.Error, baselineIssues },
+		};
+		// Each section is its title and features beside its description, with a rule between sections
+		bool firstShown = true;
+		for (const auto& section : sections) {
+			if (section.issues.empty())
+				continue;
+			if (!std::exchange(firstShown, false))
+				ImGui::Separator();
+			ImGui::PushID(section.title);
+			if (ImGui::BeginTable("##IssueSection", 2, ImGuiTableFlags_SizingStretchSame)) {
+				ImGui::TableNextColumn();
+				ImGui::TextColored(section.color, "%s", section.title);
+				for (const auto* issue : section.issues)
+					DrawFeatureIssue(*issue, section.color);
+				ImGui::TableNextColumn();
+				ImGui::TextWrapped("%s", section.description);
+				ImGui::EndTable();
 			}
+			ImGui::PopID();
 		}
 
-		// Common cleanup actions section
-		ImGui::TextColored(theme.Palette.Text, "%s", T("menu.issues.cleanup_actions", "Cleanup Actions:"));
-		if (ImGui::Button(T("menu.issues.open_features_folder", "Open Features Folder"))) {
-			std::filesystem::path featuresPath = Util::PathHelpers::GetFeaturesRealPath();
-			ShellExecuteA(NULL, "open", featuresPath.string().c_str(), NULL, NULL, SW_SHOWNORMAL);
-		}
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("%s", T("menu.issues.open_features_folder_tooltip", "Opens the Features folder containing INI files for manual review."));
-		}
-		ImGui::SameLine();
-		if (ImGui::Button(T("menu.issues.open_shaders_directory", "Open Shaders Directory"))) {
-			std::filesystem::path shadersPath = Util::PathHelpers::GetShadersRealPath();
-			ShellExecuteA(NULL, "open", shadersPath.string().c_str(), NULL, NULL, SW_SHOWNORMAL);
-		}
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("%s", T("menu.issues.open_shaders_tooltip", "Opens the main Shaders directory to view individual feature shader folders."));
-		}
-
-		std::filesystem::path logPath = Util::PathHelpers::GetLogPath();
-		if (!logPath.empty()) {
-			ImGui::SameLine();
-			if (ImGui::Button(T("menu.issues.open_logs", "Open Logs"))) {
-				ShellExecuteA(NULL, "open", logPath.string().c_str(), NULL, NULL, SW_SHOWNORMAL);
+		// Cleanup actions, one per row at the card's width
+		ImGui::TableNextColumn();
+		if (BrowserUI::BeginCard("##CleanupActions", ImVec2(0.0f, 0.0f), ImGuiChildFlags_AutoResizeY)) {
+			const ImVec2 buttonSize(ImGui::GetContentRegionAvail().x, 0.0f);
+			const auto openPath = [](const std::filesystem::path& path) { ShellExecuteA(NULL, "open", path.string().c_str(), NULL, NULL, SW_SHOWNORMAL); };
+			if (Icons::LabeledButton("##OpenFeatures", Icons::TI(MenuIcons::kFolder), featuresLabel, buttonSize))
+				openPath(Util::PathHelpers::GetFeaturesRealPath());
+			Util::HoverTip(T("menu.issues.open_features_folder_tooltip", "Opens the Features folder containing INI files for manual review."));
+			if (Icons::LabeledButton("##OpenShaders", Icons::TI(MenuIcons::kFolder), shadersLabel, buttonSize))
+				openPath(Util::PathHelpers::GetShadersRealPath());
+			Util::HoverTip(T("menu.issues.open_shaders_tooltip", "Opens the main Shaders directory to view individual feature shader folders."));
+			if (!logPath.empty()) {
+				if (Icons::LabeledButton("##OpenLogs", Icons::TI(MenuIcons::kLogs), logsLabel, buttonSize))
+					openPath(logPath);
+				Util::HoverTip(T("menu.issues.open_logs_tooltip", "Opens the CommunityShaders.log file for manual review."));
 			}
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("%s", T("menu.issues.open_logs_tooltip", "Opens the CommunityShaders.log file for manual review."));
-			}
+			if (Icons::LabeledButton("##ClearIssues", Icons::TI(ICON_TI_TRASH), clearLabel, buttonSize))
+				ClearFeatureIssues();
+			Util::HoverTip(T("menu.issues.clear_issue_list_tooltip", "Clears this issue list (useful after cleanup)."));
 		}
+		ImGui::EndChild();
+		ImGui::EndTable();
+	}
 
-		ImGui::SameLine();
-		if (ImGui::Button(T("menu.issues.clear_issue_list", "Clear Issue List"))) {
-			ClearFeatureIssues();
+	std::string GetCleanupGuide()
+	{
+		return std::format("{}\n- {}\n- {}\n- {}\n- {}", T("menu.issues.general_actions", "General Actions:"),
+			T("menu.issues.use_open_features_folder", "Use 'Open Features Folder' to manually review INI files"),
+			T("menu.issues.use_open_shaders_directory", "Use 'Open Shaders Directory' to check for orphaned shader folders"),
+			T("menu.issues.use_open_logs", "Use 'Open Logs' to manually review the logs"),
+			T("menu.issues.use_clear_issue_list", "Use 'Clear Issue List' to refresh after manual cleanup"));
+	}
+
+	/**
+	 * @brief Puts the next piece of an issue row on the current line when it still fits the column, else starts it on
+	 * a new line at the row's text indent, so a long row wraps instead of running past the column.
+	 * @param a_width Width of the next piece.
+	 * @param a_wrapX Screen x a wrapped line starts at (the feature name's left edge).
+	 */
+	static void SameLineOrWrap(float a_width, float a_wrapX)
+	{
+		const float spacing = ImGui::GetStyle().ItemSpacing.x;
+		const float lineEnd = ImGui::GetItemRectMax().x;
+		// Right after an item the cursor sits at the next line's start, so this is the column's right edge
+		const float rightEdge = ImGui::GetCursorScreenPos().x + ImGui::GetContentRegionAvail().x;
+		if (lineEnd + spacing + a_width <= rightEdge) {
+			ImGui::SameLine(0.0f, spacing);
+			return;
 		}
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("%s", T("menu.issues.clear_issue_list_tooltip", "Clears this issue list (useful after cleanup)."));
-		}
+		ImGui::SetCursorScreenPos(ImVec2(a_wrapX, ImGui::GetCursorScreenPos().y));
+		ImGui::AlignTextToFramePadding();
+	}
 
-		ImGui::Spacing();
-		ImGui::Separator();
-		ImGui::Spacing();
-
-		// Cleanup guidance
-		ImGui::TextColored(theme.Palette.Text, "%s", T("menu.issues.general_actions", "General Actions:"));
-		ImGui::BulletText("%s", T("menu.issues.use_open_features_folder", "Use 'Open Features Folder' to manually review INI files"));
-		ImGui::BulletText("%s", T("menu.issues.use_open_shaders_directory", "Use 'Open Shaders Directory' to check for orphaned shader folders"));
-		ImGui::BulletText("%s", T("menu.issues.use_open_logs", "Use 'Open Logs' to manually review the logs"));
-		ImGui::BulletText("%s", T("menu.issues.use_clear_issue_list", "Use 'Clear Issue List' to refresh after manual cleanup"));
+	/** @brief Width of an ImGui::SmallButton with this label. */
+	static float SmallButtonWidth(const char* a_label)
+	{
+		return ImGui::CalcTextSize(a_label, nullptr, true).x + ImGui::GetStyle().FramePadding.x * 2.0f;
 	}
 
 	static void DrawFeatureIssue(const FeatureIssueInfo& issue, const ImVec4& color)
@@ -488,12 +524,14 @@ namespace FeatureIssues
 
 		ImGui::PushID(issue.shortName.c_str());
 
-		// Show feature name with appropriate color
+		// Show feature name with appropriate color, on the same line height as the row's buttons
+		ImGui::AlignTextToFramePadding();
 		ImGui::Bullet();
 		ImGui::SameLine();
 		ImGui::TextColored(color, "%s",
 			T(("menu.issues.feature_name." + issue.shortName).c_str(),
 				issue.displayName.empty() ? issue.shortName.c_str() : issue.displayName.c_str()));
+		const float wrapX = ImGui::GetItemRectMin().x;
 
 		// Show detailed information in tooltip
 		if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -566,22 +604,25 @@ namespace FeatureIssues
 
 		// Handle replacement feature actions for obsolete features
 		if (issue.IsObsolete() && !issue.replacementFeature.empty()) {
-			// Show replacement info using friendly name with emphasis
-			ImGui::SameLine();
-			ImGui::Text("%s", T("menu.issues.replaced_by_prefix", "(replaced by "));
+			// Show replacement info using friendly name with emphasis; the three parts wrap as one
+			const char* replacedPrefix = T("menu.issues.replaced_by_prefix", "(replaced by ");
+			const char* replacedSuffix = T("menu.issues.replaced_by_suffix", ")");
+			SameLineOrWrap(ImGui::CalcTextSize(replacedPrefix).x + ImGui::CalcTextSize(issue.replacementFeatureDisplayName.c_str()).x +
+							   ImGui::CalcTextSize(replacedSuffix).x,
+				wrapX);
+			ImGui::Text("%s", replacedPrefix);
 			ImGui::SameLine(0, 0);  // No spacing
 			ImGui::TextColored(theme.StatusPalette.RestartNeeded, "%s", issue.replacementFeatureDisplayName.c_str());
 			ImGui::SameLine(0, 0);  // No spacing
-			ImGui::Text("%s", T("menu.issues.replaced_by_suffix", ")"));
+			ImGui::Text("%s", replacedSuffix);
 
 			if (issue.replacementFeatureInstalled) {
 				// Show "Open" button to navigate to the replacement feature
-				ImGui::SameLine();
-
 				{
 					auto openKey = "menu.issues.open_feature_settings";
 					auto openDefault = "Open " + issue.replacementFeatureDisplayName + " Settings";
 					auto openText = I18n::GetSingleton()->Format(openKey, { { "name", issue.replacementFeatureDisplayName } }, openDefault.c_str());
+					SameLineOrWrap(SmallButtonWidth(openText.c_str()), wrapX);
 					if (ImGui::SmallButton(openText.c_str())) {
 						// Navigate to the replacement feature in the menu
 						menu->SelectFeatureMenu(issue.replacementFeature);
@@ -598,12 +639,11 @@ namespace FeatureIssues
 			} else {
 				// Check if replacement feature has a download link (cached)
 				if (!issue.replacementFeatureModLink.empty()) {
-					ImGui::SameLine();
-
 					{
 						auto dlKey = "menu.issues.download_button";
 						auto dlDefault = "Download " + issue.replacementFeatureDisplayName;
 						auto dlText = I18n::GetSingleton()->Format(dlKey, { { "name", issue.replacementFeatureDisplayName } }, dlDefault.c_str());
+						SameLineOrWrap(SmallButtonWidth(dlText.c_str()), wrapX);
 						if (ImGui::SmallButton(dlText.c_str())) {
 							ShellExecuteA(0, 0, issue.replacementFeatureModLink.c_str(), 0, 0, SW_SHOW);
 						}
@@ -621,15 +661,14 @@ namespace FeatureIssues
 
 		// Handle download action for version mismatch features
 		if (IsVersionMismatchForCoreFeature(issue)) {
-			ImGui::SameLine();
-			ImGui::Text("%s", T("menu.issues.core_feature_installed", "Core feature already installed"));
+			const char* coreInstalled = T("menu.issues.core_feature_installed", "Core feature already installed");
+			SameLineOrWrap(ImGui::CalcTextSize(coreInstalled).x, wrapX);
+			ImGui::Text("%s", coreInstalled);
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::TextWrapped("%s", T("menu.issues.core_feature_installed_tooltip",
 											 "This feature is already included as part of the core Community Shaders installation. Uninstall this feature with your mod manager."));
 			}
 		} else if (issue.IsVersionMismatch()) {
-			ImGui::SameLine();
-
 			if (!issue.replacementFeatureModLink.empty()) {
 				std::string buttonKey;
 				std::string buttonDefault;
@@ -644,6 +683,7 @@ namespace FeatureIssues
 					{ { "name", issue.replacementFeatureDisplayName }, { "version", issue.minimumVersionRequired } },
 					buttonDefault.c_str());
 
+				SameLineOrWrap(SmallButtonWidth(buttonText.c_str()), wrapX);
 				if (ImGui::SmallButton(buttonText.c_str())) {
 					ShellExecuteA(0, 0, issue.replacementFeatureModLink.c_str(), 0, 0, SW_SHOW);
 				}
@@ -664,11 +704,14 @@ namespace FeatureIssues
 			} else {
 				// Show message when no download link is available
 				if (issue.minimumVersionRequired.empty()) {
-					ImGui::TextWrapped("%s", T("menu.issues.update_required", "Update Required"));
+					const char* updateText = T("menu.issues.update_required", "Update Required");
+					SameLineOrWrap(ImGui::CalcTextSize(updateText).x, wrapX);
+					ImGui::TextWrapped("%s", updateText);
 				} else {
 					auto updateText = I18n::GetSingleton()->Format("menu.issues.update_to_version_required",
 						{ { "version", issue.minimumVersionRequired } },
 						"Update to {version}+ Required");
+					SameLineOrWrap(ImGui::CalcTextSize(updateText.c_str()).x, wrapX);
 					ImGui::TextWrapped("%s", updateText.c_str());
 				}
 				if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -687,12 +730,11 @@ namespace FeatureIssues
 
 		// Show download button for any feature with a download link (even if no replacement)
 		if (!issue.IsVersionMismatch() && !issue.IsObsolete() && !issue.replacementFeatureModLink.empty()) {
-			ImGui::SameLine();
-
 			{
 				auto dlKey = "menu.issues.download_button";
 				auto dlDefault = "Download " + issue.replacementFeatureDisplayName;
 				auto dlText = I18n::GetSingleton()->Format(dlKey, { { "name", issue.replacementFeatureDisplayName } }, dlDefault.c_str());
+				SameLineOrWrap(SmallButtonWidth(dlText.c_str()), wrapX);
 				if (ImGui::SmallButton(dlText.c_str())) {
 					ShellExecuteA(0, 0, issue.replacementFeatureModLink.c_str(), 0, 0, SW_SHOW);
 				}
@@ -712,23 +754,14 @@ namespace FeatureIssues
 		// The legacy Overrides row has no file of its own, so Delete would only hide it.
 		canSafelyDelete &= !issue.IsBaselineFailed() || issue.fileInfo.hasINI;
 		if (canSafelyDelete) {
-			ImGui::SameLine();
-			std::string deleteButtonId = "Delete##" + issue.shortName;
+			SameLineOrWrap(ImGui::GetFrameHeight(), wrapX);
 			std::string confirmPopupId = "Confirm Delete##" + issue.shortName;
-
-			if (ImGui::SmallButton(deleteButtonId.c_str())) {
+			const char* deleteTooltip = issue.IsUnknown() ?
+			                                T("menu.issues.delete_unknown_tooltip",
+												"Delete files for this unknown feature. WARNING: If this feature modified core shaders, deletion may not fix compilation issues.") :
+			                                T("menu.issues.delete_files_tooltip", "Delete all files associated with this feature (INI, shaders, etc.)");
+			if (BrowserUI::IconButton("##Delete", Icons::TI(ICON_TI_TRASH), deleteTooltip))
 				ImGui::OpenPopup(confirmPopupId.c_str());
-			}
-
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				if (issue.IsUnknown()) {
-					ImGui::Text("%s", T("menu.issues.delete_unknown_tooltip",
-										  "Delete files for this unknown feature. WARNING: If this feature modified core shaders, deletion may not fix compilation issues."));
-				} else {
-					ImGui::Text("%s", T("menu.issues.delete_files_tooltip",
-										  "Delete all files associated with this feature (INI, shaders, etc.)"));
-				}
-			}
 
 			// Confirmation popup for deletion
 			if (auto popup = Util::CenteredPopupModal(confirmPopupId.c_str())) {
@@ -767,7 +800,7 @@ namespace FeatureIssues
 				ImGui::TextColored(theme.StatusPalette.Error, "%s", T("menu.issues.cannot_be_undone", "This action cannot be undone!"));
 				ImGui::Spacing();
 
-				if (ImGui::Button(T("menu.issues.delete", "Delete"), ImVec2(120, 0))) {
+				if (Util::Button(T("menu.issues.delete", "Delete"), ImVec2(120, 0))) {
 					if (DeleteFeatureFiles(issue)) {
 						s_pendingIssueRemoval = issue.shortName;
 					}
@@ -775,7 +808,7 @@ namespace FeatureIssues
 				}
 				ImGui::SetItemDefaultFocus();
 				ImGui::SameLine();
-				if (ImGui::Button(T("menu.issues.cancel", "Cancel"), ImVec2(120, 0))) {
+				if (Util::Button(T("menu.issues.cancel", "Cancel"), ImVec2(120, 0))) {
 					ImGui::CloseCurrentPopup();
 				}
 			}
@@ -1529,7 +1562,7 @@ namespace FeatureIssues
 			auto* menu = Menu::GetSingleton();
 			const auto& themeSettings = menu->GetTheme();
 
-			if (ImGui::CollapsingHeader(T("menu.issues.test.testing_header", "Testing"), ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick)) {
+			{
 				{
 					auto sectionWrapper = Util::SectionWrapper(
 						T("menu.issues.test.feature_issue_testing", "Feature Issue Testing"),
@@ -1559,7 +1592,7 @@ namespace FeatureIssues
 								themeSettings.StatusPalette.RestartNeeded,
 								themeSettings.StatusPalette.CurrentHotkey);
 
-							if (ImGui::Button(T("menu.issues.test.create_test_inis", "Create Test Inis"), { -1, 0 })) {
+							if (Util::Button(T("menu.issues.test.create_test_inis", "Create Test Inis"), { -1, 0 })) {
 								auto testInis = CreateTestInis();
 								logger::info("Created {} test INI files for feature issue testing", testInis.size());
 							}
@@ -1582,7 +1615,7 @@ namespace FeatureIssues
 								themeSettings.StatusPalette.Error,
 								themeSettings.StatusPalette.CurrentHotkey);
 
-							if (ImGui::Button(T("menu.issues.test.restore", "Restore"), { -1, 0 })) {
+							if (Util::Button(T("menu.issues.test.restore", "Restore"), { -1, 0 })) {
 								auto& testInis = GetCurrentTestInis();
 								if (RestoreOriginalState(testInis)) {
 									logger::info("Successfully restored original state");

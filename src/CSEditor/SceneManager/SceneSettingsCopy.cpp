@@ -556,12 +556,6 @@ SceneSettingsManager::CopyResult SceneSettingsManager::CopySettingsToContext(con
 	return result;
 }
 
-SceneSettingsManager::CopyResult SceneSettingsManager::CopySettings(const SceneContextId& source,
-	const SceneContextId& destination, CopyConflictPolicy conflictPolicy)
-{
-	return CopySettingsToContext(source, destination, conflictPolicy, false);
-}
-
 SceneSettingsManager::CopyResult SceneSettingsManager::CopySettingsBatch(const SceneContextId& source,
 	std::span<const SceneContextId> destinations, CopyConflictPolicy conflictPolicy)
 {

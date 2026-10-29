@@ -195,7 +195,7 @@ void CSEditor::DrawSettings()
 	EnsureWeatherListLoaded();
 
 	ImGui::BeginDisabled(!EditorWindow::CanBeOpen());
-	if (ImGui::Button(T(TKEY("open_editor"), "Open CS Editor"), { -1, 0 }))
+	if (Util::Button(T(TKEY("open_editor"), "Open CS Editor"), { -1, 0 }))
 		OpenEditorWindow();
 	ImGui::EndDisabled();
 }

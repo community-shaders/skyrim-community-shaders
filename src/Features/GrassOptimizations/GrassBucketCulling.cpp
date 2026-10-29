@@ -103,7 +103,8 @@ void GrassOptimizations::CullGrass(const RE::NiCamera* camera)
 	}
 
 	std::erase_if(visibleBuckets, [&](GrassBucket* bucket) {
-		bucket->complexSRV = bucketStore.meshLibrary.GetComplexGrass(bucket->asset.diffuseTexture.get(), ctx);
+		// TruePBR textures have no complex atlas to detect.
+		bucket->complexSRV = bucket->asset.key.draw.pbrMaterial ? nullptr : bucketStore.meshLibrary.GetComplexGrass(bucket->asset.diffuseTexture.get(), ctx);
 
 		if (bucket->cullGroups.size() <= kMaxRecordGroups && bucketStore.UploadCullGroups(*bucket, ctx))
 			return false;

@@ -50,14 +50,11 @@ private:
 		Count
 	};
 
-	/**
-	 * @brief Draws one overview card: icon, title, status line and an Open button that selects the tool's tab.
-	 */
-	void DrawToolCard(Tool a_tool, const char* a_icon, const char* a_title, const char* a_status, const ImVec4& a_statusColor, const char* a_blurb);
-
 	/** @brief Opens the devbench Nexus Mods page in the default browser. */
 	static void OpenDevBenchNexusPage();
 
-	// UI state only: which tab the cards asked to select next frame.
-	int pendingTab = -1;
+	// UI state only: the tool whose card is selected and whose panel shows below the cards.
+	Tool selectedTool = Tool::RenderDoc;
+	// Whether the first draw has picked the tool in use.
+	bool selectionInitialized = false;
 };

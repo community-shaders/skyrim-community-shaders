@@ -1700,6 +1700,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	sampledLodLandColor = TexLandLodBlend1Sampler.Sample(SampLandLodBlend1Sampler, input.TexCoord0.zw);
 	lodLandColor = ColorManagement::DiffuseToWorking(sampledLodLandColor);
 #		endif
+	// Matches the LOD terrain shader, which applies Color::Albedo to its non-PBR base color.
+	lodLandColor.xyz = Color::LambertAlbedo(lodLandColor.xyz);
 
 #		if defined(LOD_BLENDING)
 	lodLandColor.xyz = pow(abs(lodLandColor.xyz), SharedData::lodBlendingSettings.LODTerrainGamma) * SharedData::lodBlendingSettings.LODTerrainBrightness;

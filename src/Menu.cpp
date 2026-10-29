@@ -1,5 +1,7 @@
 #include "Menu.h"
+#include "Menu/FeatureUndo.h"
 #include "Menu/FontAtlasState.h"
+#include "Utils/Notifications.h"
 
 #ifndef DIRECTINPUT_VERSION
 #	define DIRECTINPUT_VERSION 0x0800
@@ -26,24 +28,30 @@
 #include "Features/RenderDoc.h"
 #include "Features/Upscaling.h"
 #include "I18n/I18n.h"
-#include "Menu/AdvancedSettingsRenderer.h"
 #include "Menu/BackgroundBlur.h"
 #include "Menu/CursorLoader.h"
 #include "Menu/FeatureListRenderer.h"
 #include "Menu/Fonts.h"
+#include "Menu/GoToPalette.h"
 #include "Menu/HomePageRenderer.h"
 #include "Menu/IconLoader.h"
 #include "Menu/MenuHeaderRenderer.h"
+#include "Menu/MenuShortcuts.h"
 #include "Menu/OverlayRenderer.h"
 #include "Menu/PresetsPageRenderer.h"
-#include "Menu/SettingsTabRenderer.h"
+#include "Menu/SettingsPageRenderer.h"
+#include "Menu/StatusBarRenderer.h"
 #include "Menu/ThemeManager.h"
+#include "SaveManager.h"
 #include "ShaderCache.h"
 #include "State.h"
 #include "Util.h"
 #include "Utils/UI.h"
+#include "Utils/UIHooks.h"
 
+#include "CSEditor/Browser/BrowserWidgets.h"
 #include "CSEditor/EditorWindow.h"
+#include "CSEditor/SceneManager/SceneSettingsManager.h"
 #include "CSEditor/SceneManager/SceneWidgetInterceptor.h"
 #include "Features/CSEditor.h"
 #include "Features/Effects11.h"
@@ -172,6 +180,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	UseCustomCursor,
 	Cursor,
 	ScrollbarOpacity,
+	Surfaces,
 	Palette,
 	StatusPalette,
 	FeatureHeading,
@@ -190,6 +199,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	FirstTimeSetupCompleted,
 	SkipClearCacheConfirmation,
 	AutoHideFeatureList,
+	ReduceUIAnimations,
+	AnimationSpeed,
 	FeatureListSort,
 	SkipConstraintWarning,
 	RequireShiftToDock,
@@ -198,6 +209,24 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	SelectedThemePreset)
 
 bool IsEnabled = false;
+
+namespace
+{
+	/**
+	 * @brief FeatureUndo's target for a feature, plus the bookkeeping DrawFeatureBody does after a settings
+	 * rewrite. Its restore already marks the settings changed and drops the cached baseline-edits answer;
+	 * the scene layer's cached apply document must also take the restored values before anything replays it.
+	 */
+	UndoHistory::Target MakeMenuFeatureUndoTarget(Feature* feature)
+	{
+		auto target = FeatureUndo::MakeTarget(feature);
+		target.restore = [restore = std::move(target.restore), feature](const UndoHistory::Snapshot& snapshot) {
+			restore(snapshot);
+			globals::sceneSettingsManager->CaptureExternalFeatureChanges(feature, true);
+		};
+		return target;
+	}
+}
 std::unordered_map<std::string, int> Menu::categoryCounts;
 
 namespace
@@ -219,6 +248,12 @@ namespace
 		{ "Hand", ImGuiMouseCursor_Hand },
 		{ "NotAllowed", ImGuiMouseCursor_NotAllowed },
 	};
+}
+
+void Menu::ThemeFromJson(const json& themeJson, ThemeSettings& theme)
+{
+	theme = themeJson.get<ThemeSettings>();
+	PaletteFromJson(themeJson, theme.FullPalette);
 }
 
 void Menu::CursorFromJson(const json& cursorJson, ThemeSettings::CursorSettings& cursor)
@@ -439,6 +474,33 @@ void Menu::Load(json& o_json)
 	loadComboList(o_json, "Effects11ToggleKey", settings.Effects11ToggleKey);
 	loadComboList(o_json, "Effects11EditorKey", settings.Effects11EditorKey);
 
+	// Unknown or malformed values (hand-edited config, a section that no longer exists) open the first section
+	settings.LastSettingsSection = std::string(SettingsPageRenderer::GetFirstSection());
+	if (const auto it = o_json.find("LastSettingsSection"); it != o_json.end() && it->is_string()) {
+		auto section = it->get<std::string>();
+		if (SettingsPageRenderer::IsKnownSection(section))
+			settings.LastSettingsSection = std::move(section);
+	}
+
+	// Feature list filters; bits from a newer or hand-edited config that no chip uses are dropped
+	settings.FeatureListFilter = 0;
+	if (const auto it = o_json.find("FeatureListFilter"); it != o_json.end() && it->is_number_integer() && it->get<std::int64_t>() >= 0)
+		settings.FeatureListFilter = static_cast<std::uint32_t>(it->get<std::int64_t>() & FeatureListFilter::kKnown);
+
+	// Recently opened features: known short names only, without repeats, capped; malformed entries are dropped
+	settings.RecentFeatures.clear();
+	if (const auto it = o_json.find("RecentFeatures"); it != o_json.end() && it->is_array()) {
+		for (const auto& entry : *it) {
+			if (settings.RecentFeatures.size() >= MAX_RECENT_FEATURES)
+				break;
+			if (!entry.is_string())
+				continue;
+			auto name = entry.get<std::string>();
+			if (Feature::FindFeatureByShortName(name) && std::ranges::find(settings.RecentFeatures, name) == settings.RecentFeatures.end())
+				settings.RecentFeatures.push_back(std::move(name));
+		}
+	}
+
 	// Legacy support: If old config has Theme data and no SelectedThemePreset, load it
 	if (o_json.contains("Theme") && o_json["Theme"].is_object() && settings.SelectedThemePreset.empty()) {
 		bool hasFontRoles = o_json["Theme"].contains("FontRoles");
@@ -508,6 +570,10 @@ void Menu::Save(json& o_json)
 	InputCombo::ComboList::to_json(o_json["ScreenshotKey"], settings.ScreenshotKey);
 	InputCombo::ComboList::to_json(o_json["Effects11ToggleKey"], settings.Effects11ToggleKey);
 	InputCombo::ComboList::to_json(o_json["Effects11EditorKey"], settings.Effects11EditorKey);
+
+	o_json["LastSettingsSection"] = settings.LastSettingsSection;
+	o_json["FeatureListFilter"] = settings.FeatureListFilter;
+	o_json["RecentFeatures"] = settings.RecentFeatures;
 }
 
 void Menu::LoadTheme(json& o_json)
@@ -737,6 +803,7 @@ void Menu::Init()
 	// Detours must land before any feature draws, and this is the first guaranteed render-thread
 	// point; Install logs its own failure and leaves the interceptor inert.
 	SceneWidgetInterceptor::Install();
+	Util::UIHooks::Install();
 
 	initialized = true;
 }
@@ -761,6 +828,9 @@ void Menu::DrawSettings()
 		focusChanged = false;
 	}
 
+	// Outside the feature body and its baseline interceptor scope, before anything reads the settings this frame
+	ApplyPendingUndo();
+
 	// Apply theme styling with universal contrast enhancement
 	ThemeManager::SetupImGuiStyle(*this);
 
@@ -773,176 +843,226 @@ void Menu::DrawSettings()
 	ImGui::SetNextWindowPos(Util::GetNativeViewportSizeScaled(0.5f), layoutCond, ImVec2(0.5f, 0.5f));
 	ImGui::SetNextWindowSize(Util::GetNativeViewportSizeScaled(0.8f), layoutCond);
 	resetLayout = false;
-	auto versionStr = Util::GetFormattedVersion(Plugin::VERSION);
-	auto expectedTag = std::format("v{}", versionStr);
-	auto displayTitle = Plugin::BUILD_DESCRIBE == expectedTag ? I18n::GetSingleton()->Format("menu.window_title", { { "version", versionStr } }, "Community Shaders {version}") : I18n::GetSingleton()->Format("menu.window_title_dev", { { "version", versionStr }, { "build", Util::GetBuildLabel() } }, "Community Shaders {version} {build}");
-	// Use ### to keep a stable window ID regardless of build suffix, preserving docking state
-	auto title = std::format("{}###CommunityShaders", displayTitle);
+	const auto versionStr = Util::GetFormattedVersion(Plugin::VERSION);
+	auto* i18n = I18n::GetSingleton();
+	const auto displayTitle = Plugin::BUILD_DESCRIBE == std::format("v{}", versionStr) ?
+	                              i18n->Format("menu.window_title", { { "version", versionStr } }, "Community Shaders {version}") :
+	                              i18n->Format("menu.window_title_dev", { { "version", versionStr }, { "build", Util::GetBuildLabel() } }, "Community Shaders {version} {build}");
+	// ### keeps the window ID stable across build suffixes, preserving docking state
+	const auto title = std::format("{}###CommunityShaders", displayTitle);
 
-	// Determine window flags based on docking state
-	ImGuiWindowFlags windowFlags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollbar;
-	// Check if this will be docked (we need to peek at the docking state)
+	// The title bar only shows while docked; the window cannot be asked before it begins, so last frame's state stands in
 	static bool wasDocked = false;
-	bool willBeDocked = wasDocked;  // Use previous frame's state as approximation
-
-	// Only hide title bar when not docked
-	if (!willBeDocked) {
+	ImGuiWindowFlags windowFlags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollbar;
+	if (!wasDocked)
 		windowFlags |= ImGuiWindowFlags_NoTitleBar;
-	}
 
 	Util::BeginWithRoundedClose(title.c_str(), &IsEnabled, windowFlags);
 	{
-		// Update docking state tracking
-		bool isDocked = ImGui::IsWindowDocked();
+		const bool isDocked = ImGui::IsWindowDocked();
 		wasDocked = isDocked;
 
+		// Before anything draws, so a shortcut's request reaches the header and feature list this frame.
+		DispatchShortcuts();
+
+		// A scale within rounding of the default snaps to it exactly, so built-in themes stay at the default
 		float globalScale = settings.Theme.GlobalScale;
+		if (std::abs(globalScale - ThemeManager::Constants::DEFAULT_GLOBAL_SCALE) < 0.001f)
+			globalScale = ThemeManager::Constants::DEFAULT_GLOBAL_SCALE;
 
-		// Use default global scale (0.0) for built-in themes when GlobalScale equals the default
-		if (std::abs(globalScale - ThemeManager::Constants::DEFAULT_GLOBAL_SCALE) < 0.001f) {
-			globalScale = ThemeManager::Constants::DEFAULT_GLOBAL_SCALE;  // Ensure built-in themes stay at 0.0
-		}
-
-		const float uiScale = exp2(globalScale);  // User's manual GlobalScale for header icons
-		// Check if we can show icons - require setting enabled and at least some icons loaded (for undocked)
-		// For docked mode, always show icons if textures are available
+		const float uiScale = exp2(globalScale);  // The user's manual GlobalScale, for header icons
+		// Action icons always show; one whose texture is missing falls back to its glyph
 		auto& uiIcons = Util::IconLoader::GetIcons();
-		bool canShowIcons = settings.Theme.ShowActionIcons &&
-		                    (uiIcons.saveSettings.texture ||
-								uiIcons.loadSettings.texture ||
-								uiIcons.clearCache.texture);  // Always show logo if available, regardless of action icons setting
-		bool showLogo = uiIcons.logo.texture != nullptr;
+		const bool showLogo = uiIcons.logo.texture != nullptr;
 
-		// Render header using extracted component
-		MenuHeaderRenderer::RenderHeader(isDocked, showLogo, canShowIcons, uiScale, uiIcons);
+		MenuHeaderRenderer::RenderHeader(isDocked, showLogo, uiScale, uiIcons, shortcuts);
 		Util::DrawRecacheBanner();
 
-		// Main content starts here - no additional separator needed as it's already handled in the conditions above
+		// A modal, so it is drawn at window level next to the header's popovers
+		GoToPalette::Draw(shortcuts);
 
-		float footer_height = settings.Theme.ShowFooter ?
-		                          (ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y * 3) :
-		                          0.0f;
+		// With the status bar off there is no footer; the left pane keeps the Settings and Profiling buttons instead
+		const float footerHeight = settings.Theme.ShowFooter ? StatusBarRenderer::GetHeight() : 0.0f;
 
-		// Static storage for menu state - must persist across frames
 		static size_t selectedMenu = 0;
 		static std::map<std::string, bool> categoryExpansionStates;
 
-		// Render feature list using extracted component
+		shownFeature = nullptr;
+		FeatureListRenderer::Hooks listHooks{
+			.featureStep = std::exchange(pendingFeatureStep, 0),
+			.onFeatureShown = [this](Feature* feat) {
+				shownFeature = feat;
+				if (feat->IsInMenu())
+					RecordRecentFeature(feat->GetShortName());
+				// Watched before the header, so its Restore / Use Baselines clicks and the body's edits are both seen
+				if (feat->loaded && feat->UsesMainSettings() && !globals::state->IsFeatureDisabled(feat->GetShortName()))
+					undoHistory.Watch(MakeMenuFeatureUndoTarget(feat)); },
+			.runFeatureCommand = [this](Feature* feat, const std::function<void()>& command) { undoHistory.Change(MakeMenuFeatureUndoTarget(feat), command); },
+			.drawSettingsNav = [this] { DrawSettingsPage(true); },
+		};
 		FeatureListRenderer::RenderFeatureList(
-			footer_height,
+			footerHeight,
 			selectedMenu,
-			featureSearch,
 			pendingFeatureSelection,
 			categoryExpansionStates,
-			[&]() { DrawGeneralSettings(); },
-			[&]() { DrawAdvancedSettings(); });
+			[&]() { DrawSettingsPage(false); },
+			listHooks);
 
-		if (settings.Theme.ShowFooter) {
-			ImGui::Spacing();
-			ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal, ThemeManager::Constants::SEPARATOR_THICKNESS);
-			ImGui::Spacing();
-			DrawFooter();
-		}
+		if (settings.Theme.ShowFooter)
+			StatusBarRenderer::Render(shortcuts);
 
-		// Draw global popups (needs to be called once per frame)
+		// Global popups, once per frame
 		Util::DrawClearShaderCacheConfirmation();
+		Util::DrawRestoreSavedSettingsConfirmation();
 	}
 	ImGui::End();
+
+	// After every watched feature has drawn; records the change an interaction that ended this frame made
+	undoHistory.EndFrame();
+	// The overlay also hosts the toasts; Draw() only draws once per frame
+	Util::Notifications::Draw();
+}
+
+void Menu::ApplyPendingUndo()
+{
+	const auto request = std::exchange(pendingUndo, UndoRequest::None);
+	if (request == UndoRequest::None)
+		return;
+
+	const bool undo = request == UndoRequest::Undo;
+	auto* i18n = I18n::GetSingleton();
+	if (const auto label = undo ? undoHistory.Undo() : undoHistory.Redo()) {
+		const auto message = undo ? i18n->Format("menu.shortcuts.undid", { { "name", *label } }, "Undid: {name}") :
+		                            i18n->Format("menu.shortcuts.redid", { { "name", *label } }, "Redid: {name}");
+		Util::Notifications::Show(message, Util::Colors::GetInfo(), ThemeManager::Constants::UNDO_TOAST_SECONDS);
+	} else {
+		Util::Notifications::ShowOnce(undo ? T("menu.shortcuts.nothing_to_undo", "Nothing to undo") : T("menu.shortcuts.nothing_to_redo", "Nothing to redo"),
+			settings.Theme.StatusPalette.Disable, ThemeManager::Constants::UNDO_TOAST_SECONDS);
+	}
+}
+
+MenuShortcuts::Actions Menu::MakeShortcutActions()
+{
+	return {
+		.save = [] { SaveManager::SaveAll(); },
+		.undo = [this] { pendingUndo = UndoRequest::Undo; },
+		.redo = [this] { pendingUndo = UndoRequest::Redo; },
+		.openGoTo = [] { GoToPalette::Open(); },
+		.focusSearch = [] { GoToPalette::Open(GoToPalette::Scope::Features); },
+		.stepFeature = [this](int step) { pendingFeatureStep = step; },
+		.canTogglePin = [this] { return shownFeature && shownFeature->loaded; },
+		.togglePin = [this] { FeatureListRenderer::ToggleFavorite(shownFeature); },
+		.openPage = [this](std::string_view pageId) { SelectFeatureMenu(std::string(pageId)); },
+		.canOpenEditor = [] { return EditorWindow::CanBeOpen(); },
+		.openEditor = [] { CSEditor::OpenEditorWindow(); },
+		.openHelp = [this] {
+			SelectFeatureMenu(std::string(MenuPageIds::kHome));
+			HomePageRenderer::RequestHelpPopover(); },
+	};
+}
+
+void Menu::DispatchShortcuts()
+{
+	if (shortcuts.empty())
+		shortcuts = MenuShortcuts::BuildTable(MakeShortcutActions());
+
+	// The CS Editor has its own Ctrl+Z / Ctrl+S, a focused text field owns its keys, a hotkey capture
+	// records the next chord as a binding, and a modal (confirmation) must be answered first.
+	const auto* editorWindow = EditorWindow::GetSingleton();
+	const bool allowed = IsEnabled && !ImGui::GetIO().WantTextInput && !IsCapturingHotkeyInput() &&
+	                     !(editorWindow && editorWindow->open) && !ImGui::GetTopMostPopupModal() &&
+	                     !HomePageRenderer::ShouldShowFirstTimeSetup();
+	if (allowed)
+		MenuShortcuts::Dispatch(shortcuts);
 }
 
 /**
- * @brief Renders the General settings tab content
+ * @brief Renders the Settings page content
  *
- * Delegates rendering to SettingsTabRenderer for the general configuration panel,
- * which includes Shaders, Keybindings, and Interface sub-tabs. This method provides
- * the callback for key-to-string conversion while maintaining separation of concerns.
+ * Delegates rendering to SettingsPageRenderer, passing the key-capture flags and
+ * selected section it updates, and a callback for the private disable-at-boot list.
  */
-void Menu::DrawGeneralSettings()
+void Menu::DrawSettingsPage(bool navOnly)
 {
-	// Prepare settings state for the renderer
-	SettingsTabRenderer::SettingsState state{
-		.settingToggleKey = settingToggleKey,
-		.settingsEffectsToggle = settingsEffectsToggle,
-		.settingSkipCompilationKey = settingSkipCompilationKey,
-		.settingOverlayToggleKey = settingOverlayToggleKey,
-		.settingShaderBlockPrevKey = settingShaderBlockPrevKey,
-		.settingShaderBlockNextKey = settingShaderBlockNextKey,
-		.settingCSEditorToggleKey = settingCSEditorToggleKey,
-		.settingScreenshotKey = settingScreenshotKey,
-		.settingEffects11ToggleKey = settingEffects11ToggleKey,
-		.settingEffects11EditorKey = settingEffects11EditorKey
+	SettingsPageRenderer::PageState state{
+		.section = settings.LastSettingsSection,
+		.keys = {
+			.settingToggleKey = settingToggleKey,
+			.settingsEffectsToggle = settingsEffectsToggle,
+			.settingSkipCompilationKey = settingSkipCompilationKey,
+			.settingOverlayToggleKey = settingOverlayToggleKey,
+			.settingShaderBlockPrevKey = settingShaderBlockPrevKey,
+			.settingShaderBlockNextKey = settingShaderBlockNextKey,
+			.settingCSEditorToggleKey = settingCSEditorToggleKey,
+			.settingScreenshotKey = settingScreenshotKey,
+			.settingEffects11ToggleKey = settingEffects11ToggleKey,
+			.settingEffects11EditorKey = settingEffects11EditorKey },
+		.drawDisableAtBoot = [this]() { DrawDisableAtBootSettings(); }
 	};
 
-	// Render settings using extracted component
-	SettingsTabRenderer::RenderGeneralSettings(state);
-}
-
-/**
- * @brief Renders the Advanced settings tab content
- *
- * Delegates rendering to AdvancedSettingsRenderer for developer and advanced user
- * settings. Uses lambda callbacks to access private Menu methods while maintaining
- * encapsulation and proper separation of concerns.
- */
-void Menu::DrawAdvancedSettings()
-{
-	AdvancedSettingsRenderer::RenderAdvancedSettings(
-		[this]() { DrawDisableAtBootSettings(); });
+	if (navOnly)
+		SettingsPageRenderer::RenderSectionList(state);
+	else
+		SettingsPageRenderer::Render(state);
 }
 
 void Menu::DrawDisableAtBootSettings()
 {
-	auto state = globals::state;
-	auto& disabledFeatures = state->GetDisabledFeatures();
+	auto& disabledFeatures = globals::state->GetDisabledFeatures();
 
-	ImGui::Text("%s",
+	ImGui::TextWrapped("%s",
 		T("menu.disable_at_boot_desc",
 			"Select features to disable at boot. "
 			"This is the same as deleting a feature.ini file. "
 			"Restart will be required to reenable."));
+	ImGui::PushStyleColor(ImGuiCol_Text, settings.Theme.StatusPalette.RestartNeeded);
+	ImGui::TextWrapped("%s", T("menu.settings.disable_at_boot_restart", "Changes here take effect the next time the game starts."));
+	ImGui::PopStyleColor();
 
 	ImGui::Spacing();
 
-	if (ImGui::CollapsingHeader(T("menu.features", "Features"), ImGuiTreeNodeFlags_DefaultOpen)) {
-		// Prepare a sorted list of feature pointers
-		auto featureList = Feature::GetFeatureList();
-		std::sort(featureList.begin(), featureList.end(), [](Feature* a, Feature* b) {
-			return a->GetShortName() < b->GetShortName();
-		});
+	const char* disabledOnlyLabel = T("menu.settings.disabled_only", "Disabled only");
+	const float chipWidth = BrowserUI::MeasureChip(disabledOnlyLabel, false);
+	const float searchWidth = std::max(ImGui::GetFrameHeight() * ThemeManager::Constants::DISABLE_AT_BOOT_MIN_SEARCH_FRAMES, ImGui::GetContentRegionAvail().x - chipWidth - ImGui::GetStyle().ItemSpacing.x);
+	BrowserUI::SearchField("##DisableAtBootSearch", disableAtBootSearch.data(), disableAtBootSearch.size(), T("ui.search", "Search..."), searchWidth, false);
+	BrowserUI::SameLineIfFits(chipWidth);
+	if (BrowserUI::FilterChip("##DisabledOnly", { disabledOnlyLabel }, disableAtBootDisabledOnly))
+		disableAtBootDisabledOnly = !disableAtBootDisabledOnly;
 
-		// Display sorted features
-		for (auto* feature : featureList) {
-			if (feature->IsHiddenUnreleased())
-				continue;
+	ImGui::Spacing();
 
-			const std::string featureName = feature->GetShortName();
-			bool isDisabled = disabledFeatures.contains(featureName) && disabledFeatures[featureName];
-
-			if (ImGui::Checkbox(featureName.c_str(), &isDisabled)) {
-				// Update the disabledFeatures map based on user interaction
-				disabledFeatures[featureName] = isDisabled;
-			}
-		}
+	// Label by the (translated) display name the feature list shows; the short name keys the setting and the widget ID
+	const std::string query(disableAtBootSearch.data());
+	std::vector<std::pair<std::string, std::string>> entries;  // display name, short name
+	for (auto* feature : Feature::GetFeatureList()) {
+		if (feature->IsHiddenUnreleased() || !Util::FeatureMatchesSearch(feature, query))
+			continue;
+		const std::string shortName(feature->GetShortName());
+		if (disableAtBootDisabledOnly && !(disabledFeatures.contains(shortName) && disabledFeatures[shortName]))
+			continue;
+		entries.emplace_back(feature->GetDisplayName(), shortName);
 	}
-}
+	std::ranges::sort(entries);
 
-void Menu::DrawFooter()
-{
-	ImGui::BulletText("%s", I18n::GetSingleton()->Format("menu.footer.game_version",
-													{ { "runtime", std::string(magic_enum::enum_name(REL::Module::GetRuntime())) },
-														{ "version", Util::GetFormattedVersion(REL::Module::get().version()) } },
-													"Game Version: {runtime} {version}")
-								.c_str());
-	ImGui::SameLine();
-	ImGui::BulletText("%s", I18n::GetSingleton()->Format("menu.footer.d3d12_swap_chain",
-													{ { "status", globals::features::upscaling.d3d12SwapChainActive ? std::string(T("common.active", "Active")) : std::string(T("common.inactive", "Inactive")) } },
-													"D3D12 Swap Chain: {status}")
-								.c_str());
-	ImGui::SameLine();
-	ImGui::BulletText("%s", I18n::GetSingleton()->Format("menu.footer.gpu",
-													{ { "name", globals::state->adapterDescription } },
-													"GPU: {name}")
-								.c_str());
+	if (entries.empty())
+		ImGui::TextDisabled("%s", T("menu.settings.disable_at_boot_no_match", "No features match."));
+
+	// As many columns as the widest name allows, filled row by row
+	const ImGuiStyle& style = ImGui::GetStyle();
+	float widestName = 0.0f;
+	for (const auto& entry : entries)
+		widestName = std::max(widestName, ImGui::CalcTextSize(entry.first.c_str()).x);
+	const float columnWidth = ImGui::GetFrameHeight() + style.ItemInnerSpacing.x + widestName + style.ItemSpacing.x;
+	const int columns = std::clamp(static_cast<int>(ImGui::GetContentRegionAvail().x / columnWidth), 1, std::max(1, static_cast<int>(entries.size())));
+	if (entries.empty() || !ImGui::BeginTable("##DisableAtBoot", columns, ImGuiTableFlags_SizingStretchSame))
+		return;
+	for (const auto& [displayName, shortName] : entries) {
+		ImGui::TableNextColumn();
+		bool isDisabled = disabledFeatures.contains(shortName) && disabledFeatures[shortName];
+		if (ImGui::Checkbox(std::format("{}##{}", displayName, shortName).c_str(), &isDisabled))
+			disabledFeatures[shortName] = isDisabled;
+	}
+	ImGui::EndTable();
 }
 
 /**
@@ -966,26 +1086,21 @@ void Menu::DrawOverlay()
 		atlas.pendingFontReload = true;
 	}
 
-	// Process deferred font reload BEFORE any ImGui operations
-	// This is the safest place to do font atlas modifications
+	// Deferred font reload, before any ImGui operation: the safest place to modify the font atlas.
+	// The flag stays set on failure, so it retries next frame.
 	if (MenuFonts::GetAtlasState().pendingFontReload && canReload) {
-		// Call ReloadFont first - only clear flag if it succeeds
-		if (ThemeManager::ReloadFont(*this, MenuFonts::GetAtlasState().cachedFontSize)) {
-			// Reload completed successfully
+		if (ThemeManager::ReloadFont(*this, MenuFonts::GetAtlasState().cachedFontSize))
 			MenuFonts::GetAtlasState().pendingFontReload = false;
-		} else {
-			// Reload failed - keep flag true to retry next frame
+		else
 			logger::warn("Menu::DrawOverlay() - Font reload failed, will retry next frame");
-		}
 	}
 
-	// Process deferred icon reload BEFORE rendering
+	// Deferred icon reload, before rendering
 	if (Util::IconLoader::PendingReload() && canReload) {
-		if (Util::IconLoader::InitializeMenuIcons(this)) {
+		if (Util::IconLoader::InitializeMenuIcons(this))
 			Util::IconLoader::PendingReload() = false;
-		} else {
+		else
 			logger::warn("Menu::DrawOverlay() - Icon reload failed, will retry next frame");
-		}
 	}
 
 	if (pendingCursorReload && canReload) {
@@ -1012,18 +1127,7 @@ void Menu::DrawOverlay()
 		ThemeManager::ResolveFontSize(*this));
 }
 
-/**
- * @brief Processes queued input events
- *
- * This method handles the logic of routing input events to appropriate handlers:
- * - Keyboard and mouse events are processed directly for ImGui integration
- * - Includes key state normalization and stuck key detection/correction
- *
- * The method maintains thread safety through mutex protection of the input event queue.
- *
- * @note This method contains Menu-specific logic and state management that makes it
- *       inappropriate for extraction to a utility class.
- */
+/** @brief The CS Editor key derived from the menu key: Shift plus its base key; empty when the menu key already uses Shift or has no base key. */
 static std::vector<InputCombo> DeriveCSEditorKey(const std::vector<InputCombo>& menuKey)
 {
 	bool hasShift = false;
@@ -1045,6 +1149,18 @@ static std::vector<InputCombo> DeriveCSEditorKey(const std::vector<InputCombo>& 
 	return { InputCombo::Keyboard(VK_SHIFT), InputCombo::Keyboard(baseKey) };
 }
 
+/**
+ * @brief Processes queued input events
+ *
+ * This method handles the logic of routing input events to appropriate handlers:
+ * - Keyboard and mouse events are processed directly for ImGui integration
+ * - Includes key state normalization and stuck key detection/correction
+ *
+ * The method maintains thread safety through mutex protection of the input event queue.
+ *
+ * @note This method contains Menu-specific logic and state management that makes it
+ *       inappropriate for extraction to a utility class.
+ */
 void Menu::ProcessInputEventQueue()
 {
 	std::unique_lock<std::shared_mutex> mutex(_inputEventMutex);
@@ -1240,9 +1356,7 @@ void Menu::ProcessInputEventQueue()
 						if (effects11Editor.ShouldHandleEscapeKey())
 							effects11Editor.Close();
 					} else if (IsEnabled && (!editorWindow || !editorWindow->open)) {
-						if (editorWindow && editorWindow->suppressNextEditorEscape)
-							editorWindow->suppressNextEditorEscape = false;
-						else
+						if (!TakeConsumedEscape())
 							IsEnabled = false;
 					}
 				}
@@ -1316,9 +1430,8 @@ void Menu::OnFocusChanged()
 {
 	// Solves the alt+tab stuck issue, but disables tab after tabbing back in.
 	if (const auto& inputMgr = RE::BSInputDeviceManager::GetSingleton()) {
-		if (const auto& device = inputMgr->GetKeyboard()) {
+		if (const auto& device = inputMgr->GetKeyboard())
 			device->ClearInputState();
-		}
 	}
 	// Allows tab to work again after alt+tabbing back in.
 	ImGui::GetIO().ClearInputKeys();
@@ -1326,23 +1439,20 @@ void Menu::OnFocusChanged()
 
 void Menu::ProcessInputEvents(RE::InputEvent* const* a_events)
 {
+	// Only button, char and thumbstick events matter
 	for (auto it = *a_events; it; it = it->next) {
-		// Accept button, char, and thumbstick events
-		if (it->GetEventType() != RE::INPUT_EVENT_TYPE::kButton &&
-			it->GetEventType() != RE::INPUT_EVENT_TYPE::kChar &&
-
-			it->GetEventType() != RE::INPUT_EVENT_TYPE::kThumbstick
-
-			)  // we do not care about non button/char/thumbstick events
-			continue;
-
-		if (it->GetEventType() == RE::INPUT_EVENT_TYPE::kButton) {
+		switch (it->GetEventType()) {
+		case RE::INPUT_EVENT_TYPE::kButton:
 			addToEventQueue(KeyEvent(static_cast<RE::ButtonEvent*>(it)));
-		} else if (it->GetEventType() == RE::INPUT_EVENT_TYPE::kChar) {
+			break;
+		case RE::INPUT_EVENT_TYPE::kChar:
 			addToEventQueue(KeyEvent(static_cast<CharEvent*>(it)));
-
-		} else if (it->GetEventType() == RE::INPUT_EVENT_TYPE::kThumbstick) {
+			break;
+		case RE::INPUT_EVENT_TYPE::kThumbstick:
 			addToEventQueue(KeyEvent(static_cast<RE::ThumbstickEvent*>(it)));
+			break;
+		default:
+			break;
 		}
 	}
 }
@@ -1387,8 +1497,24 @@ bool Menu::IsPreviewFlying()
 	return editorWindow && editorWindow->IsPreviewFlying();
 }
 
+void Menu::RecordRecentFeature(const std::string& shortName)
+{
+	auto& recent = settings.RecentFeatures;
+	if (!recent.empty() && recent.front() == shortName)
+		return;  // the common case: the same page drawn again
+	std::erase(recent, shortName);
+	recent.insert(recent.begin(), shortName);
+	if (recent.size() > MAX_RECENT_FEATURES)
+		recent.resize(MAX_RECENT_FEATURES);
+}
+
 void Menu::SelectFeatureMenu(const std::string& featureName)
 {
+	// Issues live in Home's Needs Attention card
+	if (featureName == MenuPageIds::kIssues) {
+		HomePageRenderer::FocusNeedsAttention();
+		return;
+	}
 	pendingFeatureSelection = featureName;
 	logger::info("Queued navigation to {} feature menu", featureName);
 }
@@ -1402,15 +1528,8 @@ void Menu::SelectFeatureMenu(const std::string& featureName)
  */
 void Menu::DrawWeatherDetailsWindow()
 {
-	if (!globals::features::csEditor.WeatherDetailsWindow.Enabled) {
+	auto& csEditor = globals::features::csEditor;
+	if (!csEditor.WeatherDetailsWindow.Enabled || !csEditor.loaded)
 		return;
-	}
-	if (!globals::features::csEditor.loaded) {
-		return;
-	}
-
-	// Use Weather core feature for all window management and rendering
-	auto& weather = globals::features::csEditor;
-	bool* p_open = &globals::features::csEditor.WeatherDetailsWindow.Enabled;
-	weather.RenderWeatherDetailsWindow(p_open, !globals::features::performanceOverlay.settings.ShowWeatherPicker);
+	csEditor.RenderWeatherDetailsWindow(&csEditor.WeatherDetailsWindow.Enabled, !globals::features::performanceOverlay.settings.ShowWeatherPicker);
 }

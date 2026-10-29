@@ -18,7 +18,6 @@
 #include <filesystem>
 #include <format>
 #include <fstream>
-#include <iterator>
 #include <optional>
 #include <span>
 #include <string>
@@ -257,7 +256,7 @@ namespace
 			names.empty(), T(TKEY("export.existing_none_tooltip"), "Nothing exported under a name yet."));
 		if (ImGui::BeginPopup(kPickerId)) {
 			for (const auto& name : names)
-				if (ImGui::Selectable(name.c_str(), name == target.name))
+				if (Util::Selectable(name.c_str(), name == target.name))
 					strncpy_s(target.name, sizeof(target.name), name.c_str(), _TRUNCATE);
 			ImGui::EndPopup();
 		}
@@ -578,7 +577,7 @@ namespace
 		                   "###export";
 		{
 			const Util::DisableGuard blocked(blocker != nullptr);
-			if (ImGui::Button(label.c_str())) {
+			if (Util::Button(label.c_str())) {
 				session.failed = !RunExport();
 				if (!session.failed) {
 					EditorWindow::GetSingleton()->ShowNotification(
@@ -591,7 +590,7 @@ namespace
 		Util::AddTooltip(blocker ? blocker : T(TKEY("export.ready_tooltip"), "Writes the ticked settings without scene-specific values."),
 			Util::kTooltipWhenDisabled);
 		ImGui::SameLine();
-		if (ImGui::Button(T("cs_editor.cancel", "Cancel")))
+		if (Util::Button(T("cs_editor.cancel", "Cancel")))
 			ImGui::CloseCurrentPopup();
 	}
 
