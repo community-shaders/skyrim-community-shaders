@@ -526,7 +526,7 @@ void ColorGrading::DrawSettings()
 		// Tonemapping curve visualization (GPU-evaluated, RGB overlay)
 		if (ImGui::TreeNode(T(TKEY("curve_preview"), "Curve Preview"))) {
 			curveReadbackRequested = true;
-			curveReadbackRequestFrame = static_cast<int>(globals::state->frameCount);
+			curveReadbackRequestFrame = static_cast<int64_t>(globals::state->frameCount);
 
 			if (settings.skipLUT) {
 				ImGui::TextDisabled(T(TKEY("curve_preview_requires_lut"), "Enable LUT generation to see curve preview (uncheck 'Skip LUT')"));
@@ -1145,7 +1145,7 @@ void ColorGrading::Draw(TextureInfo& inout_tex)
 	const bool curveReadbackActive =
 		curveReadbackRequested &&
 		ImGui::GetCurrentContext() &&
-		curveReadbackRequestFrame >= static_cast<int>(globals::state->frameCount) - 1;
+		curveReadbackRequestFrame >= static_cast<int64_t>(globals::state->frameCount) - 1;
 	if (!curveReadbackActive)
 		curveReadbackRequested = false;
 
