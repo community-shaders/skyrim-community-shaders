@@ -25,7 +25,6 @@
 #include "I18n/I18n.h"
 #include "IconsTabler.h"
 #include "Menu.h"
-#include "Menu/GoToPalette.h"
 #include "Menu/HomePageRenderer.h"
 #include "Menu/IconLoader.h"
 #include "Menu/Icons/helpers/IconFonts.h"
@@ -209,6 +208,41 @@ namespace
 			sort = Category;
 		if (ImGui::MenuItem(T("menu.features.sort_alphabetically", "Alphabetical"), nullptr, sort == Alphabetical))
 			sort = Alphabetical;
+	}
+
+	/** @brief Gap above the list's first line of text, deep enough for the sort button to centre on it. */
+	float GetListTextTop()
+	{
+		return std::max(ImGui::GetStyle().FramePadding.y, ThemeManager::Constants::LEFT_PANE_EDGE_INSET * Util::GetUIScale());
+	}
+
+	/** @brief The sort button floating over the list's top-right; a child window so it takes the mouse from the rows. */
+	void DrawFloatingSortButton()
+	{
+		const float size = ImGui::GetFrameHeight();
+		const float inset = ThemeManager::Constants::LEFT_PANE_EDGE_INSET * Util::GetUIScale();
+		const ImRect visible = ImGui::GetCurrentWindow()->InnerRect;
+		const float top = visible.Min.y + GetListTextTop() + (ImGui::GetTextLineHeight() - size) * 0.5f;
+		ImGui::SetCursorScreenPos(ImVec2(visible.Max.x - size - inset, top));
+		if (ImGui::BeginChild("##FeatureSortOverlay", ImVec2(size, size), ImGuiChildFlags_NavFlattened,
+			ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse)) {
+			const ImGuiID buttonId = ImGui::GetID("###FeatureSort");
+			const bool lit = ImGui::IsWindowHovered() || ImGui::GetFocusID() == buttonId || ImGui::IsPopupOpen("##FeatureSortPopup");
+			const float alpha = std::lerp(ThemeManager::Constants::PALETTE_DIMMED_ALPHA, 1.0f, Util::Anim::Toggle(ImGui::GetID("##Visibility"), lit));
+			ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * alpha);
+			{
+				auto style = Util::TransparentIconButtonStyle();
+				if (Icons::Button("###FeatureSort", GetSortModeIcon(globals::menu->GetSettings().FeatureListSort), ImVec2(size, size)))
+					ImGui::OpenPopup("##FeatureSortPopup");
+			}
+			ImGui::PopStyleVar();
+			Util::HoverTip(T("menu.features.sort_tooltip", "Sort features"));
+			if (ImGui::BeginPopup("##FeatureSortPopup")) {
+				DrawSortModeItems();
+				ImGui::EndPopup();
+			}
+		}
+		ImGui::EndChild();
 	}
 
 	/**
@@ -840,48 +874,14 @@ void FeatureListRenderer::RenderLeftColumn(
 		}
 		ImGui::EndChild();
 	} else {
-		const float fieldHeight = ImGui::GetFrameHeight();
-		{
-			// Looks like a search field but is a button: the Go to palette's Features scope does the searching
-			const ImGuiStyle& style = ImGui::GetStyle();
-			const Icons::GlyphRef searchGlyph = Icons::TI(MenuIcons::kSearch);
-			const float glyphWidth = Icons::CalcGlyphSize(searchGlyph).x;
-			const ImVec2 fieldMin = ImGui::GetCursorScreenPos();
-			const float fieldWidth = ImGui::GetContentRegionAvail().x - fieldHeight - style.ItemSpacing.x;
-			if (ImGui::InvisibleButton("##FeatureSearch", ImVec2(fieldWidth, fieldHeight), ImGuiButtonFlags_EnableNav))
-				GoToPalette::Open(GoToPalette::Scope::Features);
-			if (ImGui::IsItemHovered())
-				ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
-			ImDrawList* drawList = ImGui::GetWindowDrawList();
-			ImVec4 iconColor = ImGui::GetStyleColorVec4(ImGuiCol_Text);
-			iconColor.w *= ThemeManager::Constants::SEARCH_ICON_ALPHA;
-			const float glyphX = fieldMin.x + style.FramePadding.x;
-			Icons::DrawCenteredGlyph(drawList, ImVec2(glyphX, fieldMin.y), ImVec2(glyphWidth, fieldHeight), searchGlyph, ImGui::GetColorU32(iconColor));
-			drawList->PushClipRect(fieldMin, ImVec2(fieldMin.x + fieldWidth, fieldMin.y + fieldHeight), true);
-			drawList->AddText(ImVec2(glyphX + glyphWidth + style.ItemSpacing.x, Util::CenterTextTopY(fieldMin.y, fieldHeight)),
-				ImGui::GetColorU32(ImGuiCol_TextDisabled), T("ui.search_features", "Search Features..."));
-			drawList->PopClipRect();
-		}
-		ImGui::SameLine();
-
-		{
-			auto style = Util::TransparentIconButtonStyle();
-			const auto sortIcon = GetSortModeIcon(globals::menu->GetSettings().FeatureListSort);
-			if (Icons::Button("###FeatureSort", sortIcon, ImVec2(fieldHeight, fieldHeight)))
-				ImGui::OpenPopup("##FeatureSortPopup");
-		}
-
-		Util::HoverTip(T("menu.features.sort_tooltip", "Sort features"));
-
-		if (ImGui::BeginPopup("##FeatureSortPopup")) {
-			DrawSortModeItems();
-			ImGui::EndPopup();
-		}
-
 		auto& filter = globals::menu->GetSettings().FeatureListFilter;
 		if (ImGui::BeginChild("##FeatureListScroll", ImVec2(0.0f, -pageButtonsHeight))) {
-			// The first category icon reaches above its text line, which the child's top edge clipped
-			ImGui::SetCursorPosY(ImGui::GetCursorPosY() + ThemeManager::Constants::LEFT_PANE_EDGE_INSET * Util::GetUIScale());
+			// A category header keeps half its pad above its text
+			const auto first = std::ranges::find_if(menuList, [](const auto& entry) { return !std::holds_alternative<BuiltInMenu>(entry); });
+			const float headerPad = first != menuList.end() && std::holds_alternative<CategoryHeader>(*first) ?
+			                            ThemeManager::Constants::CATEGORY_HEADER_PAD * Util::GetUIScale() * 0.5f :
+			                            0.0f;
+			ImGui::SetCursorPosY(ImGui::GetCursorPosY() + GetListTextTop() - headerPad);
 			for (size_t i = 0; i < menuList.size(); i++) {
 				if (!builtInAt(i))
 					std::visit(ListMenuVisitor{ i, selectedMenu, categoryExpansionStates, hooks }, menuList[i]);
@@ -898,6 +898,7 @@ void FeatureListRenderer::RenderLeftColumn(
 					filter = 0;
 				}
 			}
+			DrawFloatingSortButton();
 		}
 		ImGui::EndChild();
 	}
