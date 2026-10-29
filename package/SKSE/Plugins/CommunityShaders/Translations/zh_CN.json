@@ -1468,7 +1468,7 @@
     "feature.light_editor.add_to_whitelist": "添加到白名单",
     "feature.light_editor.added_light_to_config": "已将光源添加到 {path}",
     "feature.light_editor.added_to_blacklist": "已添加到黑名单",
-    "feature.light_editor.added_to_whitelist": "已加入白名单",
+    "feature.light_editor.added_to_whitelist": "已添加到白名单",
     "feature.light_editor.attach_by": "附加方式：",
     "feature.light_editor.attach_editor_id": "EditorID",
     "feature.light_editor.attach_form_id": "FormID",
