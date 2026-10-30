@@ -173,5 +173,4 @@ public:
 			logger::info("[SSS] Installed hooks");
 		}
 	};
-
 };

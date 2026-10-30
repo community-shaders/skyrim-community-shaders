@@ -22,10 +22,10 @@ ref's whole include tree is materialized (via `git archive`), so the base compil
 against base-ref `.hlsli` headers and the working tree against working headers — a
 refactor that also edits a shared header is compared correctly, not masked:
 
--   **IDENTICAL** SHA-256 of the `.cso` ⇒ the refactor is a provable no-op (fxc emits
-    no timestamps without `/Zi`, so identical source ⇒ identical bytes).
--   **DIFFERS** ⇒ it dumps and diffs the `/Fc` assembly so a legitimate-but-non-identical
-    change can be reviewed.
+- **IDENTICAL** SHA-256 of the `.cso` ⇒ the refactor is a provable no-op (fxc emits
+  no timestamps without `/Zi`, so identical source ⇒ identical bytes).
+- **DIFFERS** ⇒ it dumps and diffs the `/Fc` assembly so a legitimate-but-non-identical
+  change can be reviewed.
 
 Exit codes: `0` all identical, `2` some differ, `1` compile error. Defaults to comparing
 the working tree against `merge-base(HEAD, origin/dev)`; pass `-BaseRef <ref>` to override.
@@ -36,13 +36,13 @@ full `shader-validation.yaml` matrix — pass `-Permutations` for exotic define 
 
 Two deployment targets for different workflows:
 
--   **`COPY_SHADERS`** - Fast shader-only deployment (seconds)
--   **`DEPLOY_ALL`** - Full build + tests + deployment (minutes)
+- **`COPY_SHADERS`** - Fast shader-only deployment (seconds)
+- **`DEPLOY_ALL`** - Full build + tests + deployment (minutes)
 
 ### Requirements
 
--   Must have `AUTO_PLUGIN_DEPLOYMENT=ON` in your CMake preset
--   Must have `CommunityShadersOutputDir` environment variable set to your Skyrim directory
+- Must have `AUTO_PLUGIN_DEPLOYMENT=ON` in your CMake preset
+- Must have `CommunityShadersOutputDir` environment variable set to your Skyrim directory
 
 ### Usage
 

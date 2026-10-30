@@ -9,16 +9,16 @@
 
 ### Required for Shader Development
 
--   **HLSL Tools** (`TimGJones.hlsltools`)
-    -   Syntax highlighting and IntelliSense for HLSL
--   **CMake Tools** (`ms-vscode.cmake-tools`)
-    -   Build system integration
+- **HLSL Tools** (`TimGJones.hlsltools`)
+    - Syntax highlighting and IntelliSense for HLSL
+- **CMake Tools** (`ms-vscode.cmake-tools`)
+    - Build system integration
 
 ### Optional for Productivity
 
--   **Run On Save** (`emeraldwalk.RunOnSave`)
-    -   Auto-deploy shaders when saving files
-    -   See configuration below
+- **Run On Save** (`emeraldwalk.RunOnSave`)
+    - Auto-deploy shaders when saving files
+    - See configuration below
 
 ## Auto-Deploy on Save (Optional)
 
@@ -53,10 +53,10 @@ Automatically deploy shaders when you save `.hlsl` or `.hlsli` files.
 
 **How it works:**
 
--   Triggers `COPY_SHADERS` target on shader file saves
--   Only copies shaders (no DLL build, no tests)
--   Excludes build artifacts and test files
--   Shows status messages in VSCode
+- Triggers `COPY_SHADERS` target on shader file saves
+- Only copies shaders (no DLL build, no tests)
+- Excludes build artifacts and test files
+- Shows status messages in VSCode
 
 **Interaction with built-in filewatcher:**
 
@@ -75,10 +75,10 @@ This provides near-instant iteration: edit → save → see changes in seconds.
 
 Your `.vscode/settings.json` is gitignored, so you can customize it without affecting other developers:
 
--   Adjust auto-deploy behavior
--   Add your own file associations
--   Configure workspace-specific settings
+- Adjust auto-deploy behavior
+- Add your own file associations
+- Configure workspace-specific settings
 
 ## See Also
 
--   [Shader Development Workflow](./shader-workflow.md) - Manual and automated shader deployment
+- [Shader Development Workflow](./shader-workflow.md) - Manual and automated shader deployment

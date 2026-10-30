@@ -110,7 +110,7 @@ SceneSettingsManager::DebugSnapshot SceneSettingsManager::GetDebugSnapshot() con
 			.name = FormatDebugFormName(weatherId),
 			.detail = std::format("{:08X}", weatherId),
 			.matchesCurrentScene = weatherId == snapshot.weather.currentWeatherId ||
-		                           weatherId == snapshot.weather.previousWeatherId,
+			                       weatherId == snapshot.weather.previousWeatherId,
 			.entries = buildEntries(config.entries, SceneType::TimeOfDay),
 		});
 	}

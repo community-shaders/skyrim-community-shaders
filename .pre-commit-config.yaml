@@ -1,15 +1,19 @@
+exclude: ^extern/
 repos:
     - repo: https://github.com/pre-commit/pre-commit-hooks
       rev: v6.0.0
       hooks:
           - id: trailing-whitespace
             args: [--markdown-linebreak-ext=md]
+            # Diff context lines for blank lines are a single space.
+            exclude: \.patch$
           - id: mixed-line-ending
             args: [--fix=lf]
           - id: check-yaml
+          - id: check-json
 
     - repo: https://github.com/pre-commit/mirrors-clang-format
-      rev: v22.1.4
+      rev: v23.1.3
       hooks:
           - id: clang-format
             args: [--style=file]
@@ -17,18 +21,33 @@ repos:
             files: \.(h|hpp|c|cpp|hlsl|hlsli)$
             exclude: ^(extern|include)/
 
-    - repo: https://github.com/pre-commit/mirrors-prettier
-      rev: v4.0.0-alpha.8
+    # Before prettier so the regenerated translation files get formatted.
+    - repo: local
+      hooks:
+          - id: extract-i18n
+            name: regenerate en.json
+            entry: python tools/extract-i18n.py --write
+            language: python
+            pass_filenames: false
+            files: &i18n_files ^(src/.*\.(cpp|h)|package/SKSE/Plugins/CommunityShaders/Translations/.*\.json|tools/(extract|sort)-i18n\.py)$
+          - id: sort-i18n
+            name: sort translation keys
+            # No --prune-extra: a missed extraction would silently delete translations.
+            entry: python tools/sort-i18n.py --write
+            language: python
+            pass_filenames: false
+            files: *i18n_files
+
+    - repo: https://github.com/rbubley/mirrors-prettier
+      rev: v3.9.10
       hooks:
           - id: prettier
-            additional_dependencies: ["prettier@3.1.0"]
             files: \.(json|md|yml|yaml)$
             exclude: ^(\.\/)?(extern|include|build|dist)\/
-    - repo: https://github.com/BlankSpruce/gersemi
-      rev: 0.26.1
+    - repo: https://github.com/BlankSpruce/gersemi-pre-commit
+      rev: 0.29.2
       hooks:
           - id: gersemi
-            files: '(^CMakeLists.txt$|.*\\.cmake$)'
 ci:
     autofix_commit_msg: |
         style: 🎨 apply pre-commit.ci formatting

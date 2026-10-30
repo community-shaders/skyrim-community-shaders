@@ -1,7 +1,7 @@
 #pragma once
 
-#include "Effect.h"
 #include "../UITree.h"
+#include "Effect.h"
 
 #include <span>
 

@@ -12,11 +12,11 @@ The `renderdoc.dll` file must be obtained from official RenderDoc releases.
 
 For stable Windows builds, the runtime package uses this pattern:
 
--   `https://renderdoc.org/stable/${VERSION}/RenderDoc_${VERSION}_64.zip`
+- `https://renderdoc.org/stable/${VERSION}/RenderDoc_${VERSION}_64.zip`
 
 For example, for v1.43:
 
--   `https://renderdoc.org/stable/1.43/RenderDoc_1.43_64.zip`
+- `https://renderdoc.org/stable/1.43/RenderDoc_1.43_64.zip`
 
 ## Installation Steps
 
