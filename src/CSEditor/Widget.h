@@ -215,11 +215,12 @@ public:
 	/** @brief Draws every open window of this widget, then drops the extra ones that were closed. */
 	void DrawViews();
 
-	/** @brief Returns a window title with unique ImGui ID: "EditorID###FormID", marked with a dot while unsaved and numbered for extra windows. */
+	/** @brief Title with unique ImGui ID ("EditorID###FormID") of the window being drawn, else the first open one; dotted while unsaved, numbered for extra windows. */
 	std::string GetWindowTitle() const
 	{
 		const char* unsavedMark = HasUnsavedChanges() ? "\xE2\x80\xA2 " : "";
-		const int viewId = View().id;
+		const auto openView = std::ranges::find_if(views, &WidgetView::open);
+		const int viewId = currentView ? currentView->id : (openView != views.end() ? openView->id : 0);
 		if (viewId == 0)
 			return std::format("{}{}###{}", unsavedMark, GetEditorID(), GetFormID());
 		return std::format("{}{} ({})###{}_{}", unsavedMark, GetEditorID(), viewId + 1, GetFormID(), viewId);
