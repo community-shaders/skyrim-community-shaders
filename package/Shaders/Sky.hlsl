@@ -211,6 +211,9 @@ cbuffer AlphaTestRefCB : register(b11)
 // Effects 11 procedural sun: the disc replaces the sun texture, and clouds in front of it hide it or, when thin, pass it on
 #	if defined(EFFECTS11) && defined(TEX) && !defined(MOONMASK) && !defined(DITHER)
 #		include "Effects11/ProceduralSun.hlsli"
+#		if defined(CLOUD_SHADOWS)
+#			include "CloudShadows/CloudShadows.hlsli"
+#		endif
 #		if defined(CLOUDS)
 #			define EFFECTS11_CLOUD_SUN
 #		else
@@ -350,6 +353,12 @@ PS_OUTPUT main(PS_INPUT input)
 		float sunCoverage;
 		EvaluateProceduralSun(viewDirection, input.Color.xyz, SharedData::enbSettings.ProceduralSunHaloIntensity, proceduralSunColor, sunCoverage);
 
+#			if defined(CLOUD_SHADOWS)
+		// The clouds drawn next hide the sun only as much as the sky; dimming it here by their total opacity makes them hide it harder
+		float cloudOpacity = saturate(CloudShadows::CloudShadowsTexture.SampleLevel(SampBaseSampler, viewDirection, 0));
+		proceduralSunColor *= pow(1.0 - cloudOpacity, (ProceduralSun::CloudExtinction - 1.0) * cloudOpacity);
+#			endif
+
 		// A sun texture that is transparent at its center hides the sun, so it hides the disc too
 		float sunTextureAlpha = saturate(TexBaseSampler.SampleLevel(SampBaseSampler, 0.5, 0).w);
 
@@ -458,9 +467,10 @@ PS_OUTPUT main(PS_INPUT input)
 				EvaluateProceduralSun(viewDirection, sunTint, SharedData::enbSettings.ProceduralSunHaloIntensity, sunColor, sunCoverage);
 				[branch] if (sunCoverage > 0.0)
 				{
-					// The sun behind is drawn first, so where it outshines the cloud a deeper cloud hides its leak;
-					// faint layers barely deepen, so layers stacked over a cloud that already hid the sun add little glow
 					float sunBehind = Color::RGBToLuminance(sunColor * sunCoverage * SharedData::SunColor.xyz);
+#					if !defined(CLOUD_SHADOWS)
+					// Without cloud occlusion the sun cannot dim itself, so where it outshines the cloud a deeper cloud hides its leak;
+					// faint layers barely deepen, so layers stacked over a cloud that already hid the sun add little glow
 					float sunContrast = saturate(sunBehind / max(ProceduralSun::CloudSunContrast * Color::RGBToLuminance(psout.Color.xyz), 1e-5) - 1.0);
 					float cloudAlpha = psout.Color.w;
 					psout.Color.w = 1.0 - pow(1.0 - cloudAlpha, lerp(1.0, ProceduralSun::CloudExtinction, sunContrast * cloudAlpha));
@@ -472,6 +482,7 @@ PS_OUTPUT main(PS_INPUT input)
 						SharedData::enbSettings.ProceduralSunHaloCos,
 						SharedData::enbSettings.ProceduralSunHaloFalloff);
 					psout.Color.xyz += (psout.Color.w - cloudAlpha) / psout.Color.w * SharedData::enbSettings.ProceduralSunHaloIntensity * haloPlateau * SharedData::SunColor.xyz;
+#					endif
 
 					// Thin texture passes the disc on through alpha, which cannot show a sun an earlier layer already hid
 					float3 discColor;
