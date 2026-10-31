@@ -328,21 +328,24 @@ PS_OUTPUT main(PS_INPUT input)
 				SharedData::enbSettings.ProceduralSunHaloCos,
 				SharedData::enbSettings.ProceduralSunHaloFalloff);
 
+			// L = E / solid angle: the sunlight sets the brightness, and the sun tint applied below only sets the hue
+			float discRadiance = SharedData::enbSettings.ProceduralSunDiskRadiance * Color::RGBToLuminance(SharedData::DirLightColor.xyz) /
+			                     max(Color::RGBToLuminance(input.Color.xyz), 1e-5);
+
 			ProceduralSun::ComposeDiscAndHalo(
 				limbDarkening,
 				discCoverage,
-				SharedData::enbSettings.ProceduralSunDiskIntensity,
+				discRadiance,
 				haloProfile,
 				SharedData::enbSettings.ProceduralSunHaloIntensity,
 				proceduralSunColor,
 				sunCoverage);
 
 #			if defined(CLOUD_SHADOWS)
-			float cloudExtinction = SharedData::enbSettings.ProceduralSunCloudExtinction * sunCoverage;
-			[branch] if (cloudExtinction > 0.0)
+			[branch] if (sunCoverage > 0.0)
 			{
 				float capturedCloudOcclusion = CloudShadows::CloudShadowsTexture.SampleLevel(SampBaseSampler, viewDirection, 0).x;
-				proceduralSunColor *= ProceduralSun::GetCloudTransmission(capturedCloudOcclusion, cloudExtinction);
+				proceduralSunColor *= ProceduralSun::GetCloudTransmission(capturedCloudOcclusion, ProceduralSun::CloudExtinction * sunCoverage);
 			}
 #			endif
 		}
@@ -358,8 +361,11 @@ PS_OUTPUT main(PS_INPUT input)
 #		endif
 
 #		if defined(HDR_OUTPUT)
-	float hdrSunGain = HDRSun::GetHdrSunGain(input.TexCoord0.xy, baseColor);
-	baseColor.xyz *= hdrSunGain;
+#			if defined(EFFECTS11_PROCEDURAL_SUN)
+	// The procedural disc already carries physical radiance
+	[branch] if (!proceduralSunActive)
+#			endif
+		baseColor.xyz *= HDRSun::GetHdrSunGain(input.TexCoord0.xy, baseColor);
 #		endif
 
 #		if defined(DITHER)
@@ -374,9 +380,9 @@ PS_OUTPUT main(PS_INPUT input)
 
 #				if defined(EFFECTS11) && defined(CLOUD_SHADOWS)
 	// Sun glare: fade it with the clouds in front of the sun, as the procedural disc is
-	if (SharedData::enbSettings.EnableProceduralSun && SharedData::enbSettings.ProceduralSunCloudExtinction > 0.0) {
+	if (SharedData::enbSettings.EnableProceduralSun) {
 		float capturedCloudOcclusion = CloudShadows::CloudShadowsTexture.SampleLevel(SampBaseSampler, SharedData::SunDirection.xyz, 0).x;
-		psout.Color.w *= ProceduralSun::GetGlareCloudTransmission(capturedCloudOcclusion, SharedData::enbSettings.ProceduralSunCloudExtinction);
+		psout.Color.w *= ProceduralSun::GetGlareCloudTransmission(capturedCloudOcclusion);
 	}
 #				endif
 #			else

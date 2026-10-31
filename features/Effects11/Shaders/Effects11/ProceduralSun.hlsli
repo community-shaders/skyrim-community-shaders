@@ -28,6 +28,12 @@
 
 namespace ProceduralSun
 {
+	// Disc-area mean of the Hestroffer profile, 2 * sum(a_k / (k + 2)); dividing by it keeps the disc's irradiance unchanged
+	static const float3 LimbDarkeningDiscMean = float3(0.83599f, 0.80015f, 0.75960f);
+	// Below the FP16 and R11G11B10 maxima, so the disc never writes infinity
+	static const float MaxRadiance = 60000.0f;
+	static const float CloudExtinction = 4.0f;
+
 	// Hestroffer limb darkening profile (license above).
 	// http://www.physics.hmc.edu/faculty/esin/a101/limbdarkening.pdf
 	float3 GetHestrofferLimbDarkening(float normalizedRadius)
@@ -66,7 +72,7 @@ namespace ProceduralSun
 		float normalizedRadius = saturate(tanTheta * sunDiskCos / sunDiskSin);
 		float edgeWidth = max((1.0f - sunDiskCos) * edgeSoftness, 1e-8f);
 
-		limbDarkening = GetHestrofferLimbDarkening(normalizedRadius);
+		limbDarkening = GetHestrofferLimbDarkening(normalizedRadius) / LimbDarkeningDiscMean;
 		coverage = saturate((cosTheta - sunDiskCos) / edgeWidth);
 	}
 
@@ -83,7 +89,7 @@ namespace ProceduralSun
 	void ComposeDiscAndHalo(
 		float3 limbDarkening,
 		float discCoverage,
-		float diskIntensity,
+		float discRadiance,
 		float haloProfile,
 		float haloIntensity,
 		out float3 sunColor,
@@ -91,13 +97,13 @@ namespace ProceduralSun
 	{
 		haloProfile = haloIntensity > 0.0f ? saturate(haloProfile) : 0.0f;
 		sunCoverage = max(saturate(discCoverage), haloProfile);
-		float3 premultipliedSun = limbDarkening * diskIntensity * discCoverage + haloIntensity * haloProfile;
+		float3 premultipliedSun = limbDarkening * discRadiance * discCoverage + haloIntensity * haloProfile;
 		sunColor = premultipliedSun / max(sunCoverage, 1e-5f);
 	}
 
 	float4 ToAdditiveBlend(float4 color, float radianceLimit)
 	{
-		float3 emitted = max(color.xyz, 0.0f) * saturate(color.w);
+		float3 emitted = clamp(color.xyz, 0.0f, MaxRadiance) * saturate(color.w);
 		float peak = max(emitted.x, max(emitted.y, emitted.z));
 		if (peak <= 0.0f)
 			return 0.0f;
@@ -114,11 +120,9 @@ namespace ProceduralSun
 		return pow(saturate(1.0f - cloudOpacity), opticalDepthScale);
 	}
 
-	float GetGlareCloudTransmission(float capturedCloudOcclusion, float extinction)
+	float GetGlareCloudTransmission(float capturedCloudOcclusion)
 	{
-		if (extinction <= 0.0f)
-			return 1.0f;
-		return GetCloudTransmission(capturedCloudOcclusion, 1.0f + 0.5f * extinction);
+		return GetCloudTransmission(capturedCloudOcclusion, 1.0f + 0.5f * CloudExtinction);
 	}
 }
 

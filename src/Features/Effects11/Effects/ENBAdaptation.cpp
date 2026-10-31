@@ -103,8 +103,7 @@ ID3D11ShaderResourceView* ENBAdaptation::MaskProceduralSun(ID3D11ShaderResourceV
 {
 	auto& settingManager = SettingManager::GetSingleton();
 	const auto& effects11 = globals::features::effects11;
-	if (!effects11.enableEffect || !settingManager.GetValue<bool>("EnableProceduralSun", "EFFECT") ||
-		!settingManager.GetValue<bool>("ExcludeFromAdaptation", "PROCEDURALSUN"))
+	if (!effects11.enableEffect || !settingManager.GetValue<bool>("EnableProceduralSun", "EFFECT"))
 		return a_source;
 
 	// Adaptation runs after the world pass, so gate on an exterior sky rather than State::inWorld

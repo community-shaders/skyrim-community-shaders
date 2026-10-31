@@ -271,7 +271,7 @@ namespace SharedData
 
 		uint EnableProceduralSun;
 		float ProceduralSunDiskCos;
-		float ProceduralSunDiskIntensity;
+		float ProceduralSunDiskRadiance;
 		float ProceduralSunEdgeSoftness;
 
 		float ProceduralSunHaloCos;
@@ -281,8 +281,8 @@ namespace SharedData
 
 		float LightSpriteCurve;
 		float ProceduralSunHaloFalloff;
-		float ProceduralSunCloudExtinction;
 		float ProceduralSunRadianceLimit;
+		float pad1;
 
 		float ParticleIntensity;
 		float ParticleLightingInfluence;

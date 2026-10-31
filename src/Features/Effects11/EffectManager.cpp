@@ -286,9 +286,6 @@ void EffectManager::RegisterSettings()
 	settingManager.RegisterFloatSetting("EdgeSoftness", "PROCEDURALSUN", 0.4f, 0.0f, 1.0f, 0.01f, false);
 	settingManager.RegisterTimeOfDaySetting("GlowIntensity", "PROCEDURALSUN", 0.4f, 0.0f, 30000.0f, 0.01f, true);
 	settingManager.RegisterTimeOfDaySetting("GlowCurve", "PROCEDURALSUN", 10.0f, 0.0f, 100.0f, 0.01f, true);
-	settingManager.RegisterTimeOfDaySetting("DiskIntensity", "PROCEDURALSUN", 1.0f, 0.0f, 20.0f, 0.01f, true);
-	settingManager.RegisterFloatSetting("CloudExtinction", "PROCEDURALSUN", 4.0f, 0.0f, 16.0f, 0.1f, false);
-	settingManager.RegisterBoolSetting("ExcludeFromAdaptation", "PROCEDURALSUN", true, false);
 
 	settingManager.RegisterBoolSetting("EnableCloudsLightingFromMoon", "SKYSCATTERING", true, false);
 	settingManager.RegisterBoolSetting("CalculateCloudsEdgeFromScattering", "SKYSCATTERING", false, false);

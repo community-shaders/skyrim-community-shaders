@@ -421,9 +421,14 @@ Effects11::PerFrame Effects11::GetCommonBufferData()
 		data.ProceduralSunEdgeSoftness = std::clamp(edgeSoftness * edgeSoftness, 0.01f, 1.0f);
 		data.ProceduralSunHaloFalloff = 100.0f / (std::max(1.0f - diskRadius * diskRadius, FLT_MIN) * glowCurve);
 		data.ProceduralSunHaloIntensity = std::max(settingManager.GetInterpolatedTimeOfDayValue("GlowIntensity", "PROCEDURALSUN"), 0.0f);
-		data.ProceduralSunDiskIntensity = std::max(settingManager.GetInterpolatedTimeOfDayValue("DiskIntensity", "PROCEDURALSUN"), 0.0f);
-		data.ProceduralSunCloudExtinction = std::max(settingManager.GetValue<float>("CloudExtinction", "PROCEDURALSUN"), 0.0f);
 		data.ProceduralSunRadianceLimit = GetMainTargetRadianceLimit();
+
+		// Correction for E11's SDR tonemap; 1 keeps the physical L = E / solid angle
+		static constexpr float sunRadianceScale = 1.0f;
+		// 4 pi sin^2(r / 2) is the disc's solid angle 2 pi (1 - cos r), without the small-angle cancellation
+		const float halfAngleSin = std::sin(proceduralSunAngularRadius * 0.5f);
+		const float discSolidAngle = 4.0f * std::numbers::pi_v<float> * halfAngleSin * halfAngleSin;
+		data.ProceduralSunDiskRadiance = discSolidAngle > 0.0f ? sunRadianceScale / discSolidAngle : 0.0f;
 	}
 
 	perFrameCache = data;
