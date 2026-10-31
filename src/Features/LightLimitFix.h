@@ -6,6 +6,8 @@
 struct LightLimitFix : OverlayFeature
 {
 	static constexpr uint MAX_LIGHTS = 1024;
+	// ClusterCullingCS stages every light in one thread group (16 x 16 x 4) of shared memory.
+	static_assert(MAX_LIGHTS <= 16 * 16 * 4);
 
 	struct ParticleLightConfig
 	{

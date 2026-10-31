@@ -40,13 +40,13 @@ float3 IntersectionZPlane(float3 B, float z_dist)
 	return result;
 }
 
-[numthreads(1, 1, 1)] void main(uint3 groupId : SV_GroupID,
-	uint3 dispatchThreadId : SV_DispatchThreadID,
-	uint3 groupThreadId : SV_GroupThreadID,
-	uint groupIndex : SV_GroupIndex) {
-	uint clusterIndex = groupId.x +
-	                    groupId.y * ClusterSize.x +
-	                    groupId.z * (ClusterSize.x * ClusterSize.y);
+[numthreads(64, 1, 1)] void main(uint3 dispatchThreadId : SV_DispatchThreadID) {
+	uint clusterIndex = dispatchThreadId.x;
+	if (clusterIndex >= ClusterSize.x * ClusterSize.y * ClusterSize.z)
+		return;
+
+	uint sliceSize = ClusterSize.x * ClusterSize.y;
+	uint3 groupId = uint3(clusterIndex % ClusterSize.x, (clusterIndex % sliceSize) / ClusterSize.x, clusterIndex / sliceSize);
 
 	float2 clusterSize = rcp(float2(ClusterSize.x, ClusterSize.y));
 

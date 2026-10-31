@@ -26,10 +26,16 @@ namespace FeatureConstraints
 					} else if (constraint.forcedValue != result.forcedValue) {
 						// Two features disagree on the forced value; first one wins.
 						// Log once so it surfaces during development / testing.
-						logger::warn("[FeatureConstraints] Conflict on {}.{}: {} wants {}, but {} already forced {}",
-							setting.featureShortName, setting.settingPath,
-							feature->GetName(), FormatConstraintValue(constraint.forcedValue),
-							result.sources[0].featureName, FormatConstraintValue(result.forcedValue));
+						static std::mutex loggedConflictsMutex;
+						static std::unordered_set<std::string> loggedConflicts;
+						std::scoped_lock lock(loggedConflictsMutex);
+						if (loggedConflicts.insert(std::format("{}.{}|{}|{}|{}", setting.featureShortName, setting.settingPath, feature->GetShortName(),
+													   FormatConstraintValue(constraint.forcedValue), FormatConstraintValue(result.forcedValue)))
+								.second)
+							logger::warn("[FeatureConstraints] Conflict on {}.{}: {} wants {}, but {} already forced {}",
+								setting.featureShortName, setting.settingPath,
+								feature->GetName(), FormatConstraintValue(constraint.forcedValue),
+								result.sources[0].featureName, FormatConstraintValue(result.forcedValue));
 					}
 					result.sources.push_back({ feature->GetName(),
 						feature->GetShortName(),
