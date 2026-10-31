@@ -9,6 +9,10 @@
 #include "Common/Random.hlsli"
 #include "Common/SharedData.hlsli"
 
+#if defined(PROCEDURAL_AURORA)
+#	include "ProceduralAurora/ProceduralAurora.hlsli"
+#endif
+
 #if defined(VSHADER)
 struct VS_INPUT
 {
@@ -333,6 +337,21 @@ PS_OUTPUT main(PS_INPUT input)
 		skyGradientColor = SkyScattering::ApplySkyScattering(skyGradientColor, input.SkyBlendColor2.xyz, viewDirection) + SkyScattering::GetMoonGlow(viewDirection);
 #				endif
 	psout.Color.xyz = skyGradientColor + skyScale;
+
+#				if defined(PROCEDURAL_AURORA)
+	// Drawn on the sky dome so stars, moons and clouds still draw over it. The gradient is taken outside the branch.
+	const float3 auroraDirection = normalize(input.WorldPosition.xyz);
+	const float auroraPixelAngle = length(fwidth(auroraDirection));
+	[branch] if (SharedData::proceduralAuroraSettings.Enabled && SharedData::proceduralAuroraSettings.Atmosphere.x > 0.0 && auroraDirection.z > -0.03)
+	{
+		float3 aurora = ColorManagement::SRGBToWorking(ProceduralAurora::Render(auroraDirection, auroraPixelAngle));
+#					if defined(EFFECTS11)
+		[branch] if (SharedData::enbSettings.Enable)
+			aurora = pow(max(aurora, 0.0), SharedData::enbSettings.AuroraCurve) * SharedData::enbSettings.AuroraIntensity;
+#					endif
+		psout.Color.xyz += aurora;
+	}
+#				endif
 
 #				if defined(EFFECTS11)
 	// FixBlackCrush: multiplicative dither vanishes near black and bands dark skies, so fade to additive dither there
