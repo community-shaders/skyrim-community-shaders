@@ -197,8 +197,8 @@ void LightLimitFix::SetupResources()
 		clusterBuildingCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\LightLimitFix\\ClusterBuildingCS.hlsl", clusterDefines, "cs_5_0");
 		clusterCullingCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\LightLimitFix\\ClusterCullingCS.hlsl", clusterDefines, "cs_5_0");
 
-		lightBuildingCB = new ConstantBuffer(ConstantBufferDesc<LightBuildingCB>());
-		lightCullingCB = new ConstantBuffer(ConstantBufferDesc<LightCullingCB>());
+		lightBuildingCB = new ConstantBuffer(ConstantBufferDesc<LightBuildingCB>(), "LLF::LightBuildingCB");
+		lightCullingCB = new ConstantBuffer(ConstantBufferDesc<LightCullingCB>(), "LLF::LightCullingCB");
 	}
 
 	{
@@ -276,7 +276,7 @@ void LightLimitFix::SetupResources()
 	}
 
 	{
-		strictLightDataCB = new ConstantBuffer(ConstantBufferDesc<StrictLightDataCB>());
+		strictLightDataCB = new ConstantBuffer(ConstantBufferDesc<StrictLightDataCB>(), "LLF::StrictLightDataCB");
 	}
 }
 
@@ -1927,7 +1927,7 @@ bool LightLimitFix::EnsureLocalShadowCopyShader()
 		std::vector<std::pair<const char*, const char*>> defines;
 		localShadowCopyCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\LightLimitFix\\LocalShadowCopyCS.hlsl", defines, "cs_5_0");
 		if (!localShadowCopyCB)
-			localShadowCopyCB = new ConstantBuffer(ConstantBufferDesc<LocalShadowCopyCB>());
+			localShadowCopyCB = new ConstantBuffer(ConstantBufferDesc<LocalShadowCopyCB>(), "LightLimitFix::LocalShadowCopyCB");
 	}
 	return localShadowCopyCS && localShadowCopyCB;
 }
