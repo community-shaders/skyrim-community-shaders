@@ -3133,8 +3133,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		fogColor = 0.0;
 	}
 	if ((FrameBuffer::FrameParams.y && FrameBuffer::FrameParams.z) || inReflection) {
+		// ISSAOComposite's fade (FogColor.w = 1 / frame buffer range); reflections skip the composite.
+		float fogFade = inReflection ? 1.0 : FogColor.w;
 #		if defined(EXP_HEIGHT_FOG)
 		if (SharedData::exponentialHeightFogSettings.enabled) {
+			fogFade = ExponentialHeightFog::GetVanillaFogFade(fogFade);
 			if (!ExponentialHeightFog::ShouldDisableVanillaFog()) {
 				color.xyz = lerp(color.xyz, vanillaFogColor, vanillaFogFactor);
 			}
@@ -3145,6 +3148,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		else
 		color.xyz = lerp(color.xyz, fogColor, fogFactor);
 #		endif
+		color.xyz *= fogFade;
 	}
 #	endif
 
