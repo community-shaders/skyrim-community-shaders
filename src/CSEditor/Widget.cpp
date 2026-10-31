@@ -28,6 +28,18 @@ namespace
 	{
 		return std::vformat(message, std::make_format_args(name));
 	}
+
+	/** @brief Text-button label of the action that opens another window on a widget. */
+	const char* GetAnotherViewLabel()
+	{
+		return T(TKEY("new_window"), "New Window");
+	}
+
+	/** @brief Tooltip of the action that opens another window on a widget. */
+	const char* GetAnotherViewTooltip()
+	{
+		return T(TKEY("new_window_tooltip"), "Open another window on this form, to show another tab beside this one. Edits show in both.");
+	}
 }
 
 void Widget::Save()
@@ -248,26 +260,68 @@ std::string Widget::GetFolderName() const
 	}
 }
 
+void Widget::OpenAnotherView()
+{
+	// The lowest number no open window holds; closed ones linger until DrawViews prunes them.
+	const auto taken = [this](int id) {
+		return std::ranges::any_of(views, [id](const WidgetView& view) { return view.open && view.id == id; });
+	};
+	int id = 1;
+	while (taken(id))
+		++id;
+	auto& view = views.emplace_back(WidgetView{ .id = id, .open = true, .pendingFocus = true });
+	if (currentView) {
+		const float cascade = Util::GetEditorChromeHeaderHeight();
+		const ImVec2 sourcePos = ImGui::GetCurrentWindow()->RootWindow->Pos;
+		view.spawnPos = ImVec2(sourcePos.x + cascade, sourcePos.y + cascade);
+	}
+}
+
+void Widget::CloseFocusedView()
+{
+	const auto focused = std::ranges::find_if(views, [this](const WidgetView& view) { return view.open && view.id == focusedViewId; });
+	(focused != views.end() ? *focused : views.front()).open = false;
+}
+
+void Widget::DrawViews()
+{
+	for (auto& view : views) {
+		if (!view.open)
+			continue;
+		currentView = &view;
+		DrawWidget();
+	}
+	currentView = nullptr;
+	views.remove_if([](const WidgetView& view) { return view.id != 0 && !view.open; });
+}
+
 bool Widget::BeginWidgetWindow(bool showApply, bool showSaveLoadRevert, bool showForceWeather, RE::TESWeather* weather, const char* searchId)
 {
+	auto& view = View();
 	SetupWidgetWindowDefaults(GetWidgetTypeName());
-	if (m_pendingFocus) {
-		ImGui::SetNextWindowFocus();
-		m_pendingFocus = false;
+	if (view.spawnPos) {
+		ImGui::SetNextWindowPos(*view.spawnPos, ImGuiCond_Appearing);
+		view.spawnPos.reset();
 	}
-	m_customHeaderActionsDrawn = false;
-	m_titleBarSearchDrawn = false;
+	if (view.pendingFocus) {
+		ImGui::SetNextWindowFocus();
+		view.pendingFocus = false;
+	}
+	view.customHeaderActionsDrawn = false;
+	view.titleBarSearchDrawn = false;
 
 	// Weather type icon sits left of the title via drawLeading (standalone icon fonts).
 	std::string title = GetWindowTitle();
 	const auto typeIcon = WeatherTypeIcons::Resolve(weather);
 	const bool hasLeadingIcon = typeIcon.has_value();
 
-	bool result = Util::BeginWithCustomHeader(title.c_str(), &open, [this, showApply, showSaveLoadRevert, showForceWeather, weather, searchId]() { m_customHeaderActionsDrawn = DrawTitleBarActions(showApply, showSaveLoadRevert, showForceWeather, weather, true, searchId); }, ImGuiWindowFlags_NoSavedSettings | kStickyHeaderFlags, hasLeadingIcon ? [typeIcon](ImVec2 iconMin, float iconSize) { WeatherTypeIcons::Draw(typeIcon, ImGui::GetWindowDrawList(), iconMin, iconSize,
-																																																																																																		   ImGui::GetColorU32(ImGuiCol_Text)); } : std::function<void(ImVec2, float)>{});
+	bool result = Util::BeginWithCustomHeader(title.c_str(), &view.open, [this, &view, showApply, showSaveLoadRevert, showForceWeather, weather, searchId]() { view.customHeaderActionsDrawn = DrawTitleBarActions(showApply, showSaveLoadRevert, showForceWeather, weather, true, searchId); }, ImGuiWindowFlags_NoSavedSettings | kStickyHeaderFlags, hasLeadingIcon ? [typeIcon](ImVec2 iconMin, float iconSize) { WeatherTypeIcons::Draw(typeIcon, ImGui::GetWindowDrawList(), iconMin, iconSize,
+																																																																																																						  ImGui::GetColorU32(ImGuiCol_Text)); } : std::function<void(ImVec2, float)>{});
 	UpdateWidgetTypeSize(GetWidgetTypeName());
-	if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows))
+	if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows)) {
+		focusedViewId = view.id;
 		EditorWindow::GetSingleton()->SetFocusedWidget(*this);
+	}
 	return result;
 }
 
@@ -456,6 +510,14 @@ bool Widget::DrawTitleBarActions(bool showApply, bool showSaveLoadRevert, bool s
 			actions[groupStart].startsGroup = true;
 	}
 
+	{
+		const char* tooltip = GetAnotherViewTooltip();
+		auto onClick = [this]() { OpenAnotherView(); };
+		auto& action = useIcons ? addGlyph("##TitleAnotherView", Icons::TI(ICON_TI_LAYOUT_COLUMNS), tooltip, onClick) :
+		                          addText("##TitleAnotherView", GetAnotherViewLabel(), tooltip, onClick);
+		action.startsGroup = actions.size() > 1;
+	}
+
 	const float gap = style.ItemInnerSpacing.x;
 	const float groupGap = gap * 3.0f;
 	const float fontSize = ImGui::GetFontSize();
@@ -536,13 +598,14 @@ bool Widget::DrawTitleBarActions(bool showApply, bool showSaveLoadRevert, bool s
 			ClearSearchState(true);
 			ImGui::SetKeyboardFocusHere();
 		}
-		ImGui::InputTextWithHint(searchId, T(TKEY("search_settings_hint"), "Search settings (Ctrl+F)"), searchBuffer, sizeof(searchBuffer));
-		searchInputMin = ImGui::GetItemRectMin();
-		searchInputMax = ImGui::GetItemRectMax();
+		auto& view = View();
+		ImGui::InputTextWithHint(searchId, T(TKEY("search_settings_hint"), "Search settings (Ctrl+F)"), view.searchBuffer, sizeof(view.searchBuffer));
+		view.searchInputMin = ImGui::GetItemRectMin();
+		view.searchInputMax = ImGui::GetItemRectMax();
 		if (ImGui::IsItemEdited())
-			dropdownVisible = true;
+			view.dropdownVisible = true;
 		drewSearch = true;
-		m_titleBarSearchDrawn = true;
+		view.titleBarSearchDrawn = true;
 	}
 
 	if (actions.empty() && !drewSearch)
@@ -651,16 +714,17 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 	auto menu = globals::menu;
 	bool useIcons = !editorWindow->settings.useTextButtons;
 	const float scale = Util::GetUIScale();
-	if (navigatedFromSearch) {
+	auto& view = View();
+	if (view.navigatedFromSearch) {
 		ClearSearchState(true);
-		navigatedFromSearch = false;
+		view.navigatedFromSearch = false;
 	}
 
 	// Prefer the title/custom header for the action buttons; fall back to the inline row when they didn't fit.
-	const bool actionsInTitleBar = m_customHeaderActionsDrawn ||
+	const bool actionsInTitleBar = view.customHeaderActionsDrawn ||
 	                               DrawTitleBarActions(showApply, showSaveLoadRevert, showForceWeather, weather, false, searchId);
 	const bool inlineActions = !actionsInTitleBar;
-	const bool searchInTitleBar = m_titleBarSearchDrawn;
+	const bool searchInTitleBar = view.titleBarSearchDrawn;
 
 	auto drawSearchBar = [&]() {
 		if (searchInTitleBar)
@@ -672,11 +736,11 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 			ClearSearchState(true);
 			ImGui::SetKeyboardFocusHere();
 		}
-		ImGui::InputTextWithHint(searchId, T(TKEY("search_settings_hint"), "Search settings (Ctrl+F)"), searchBuffer, sizeof(searchBuffer));
-		searchInputMin = ImGui::GetItemRectMin();
-		searchInputMax = ImGui::GetItemRectMax();
+		ImGui::InputTextWithHint(searchId, T(TKEY("search_settings_hint"), "Search settings (Ctrl+F)"), view.searchBuffer, sizeof(view.searchBuffer));
+		view.searchInputMin = ImGui::GetItemRectMin();
+		view.searchInputMax = ImGui::GetItemRectMax();
 		if (ImGui::IsItemEdited())
-			dropdownVisible = true;
+			view.dropdownVisible = true;
 	};
 
 	auto drawForceWeatherButton = [&]() {
@@ -771,6 +835,14 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 			DrawPackSourceBadge();
 		}
 
+		if (inlineActions) {
+			Util::ToolbarDivider(false);
+			ImGui::SameLine();
+			if (Icons::Button(std::format("{}##_AnotherView", searchId ? searchId : "").c_str(), Icons::TI(ICON_TI_LAYOUT_COLUMNS)))
+				OpenAnotherView();
+			Util::AddTooltip(GetAnotherViewTooltip());
+		}
+
 		ImGui::PopStyleColor(2);
 		ImGui::PopStyleVar(2);
 	} else {
@@ -824,6 +896,11 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 
 				DrawPackSourceBadge();
 			}
+
+			if (inlineActions) {
+				Util::ToolbarDivider(false);
+				textButton(GetAnotherViewLabel(), GetAnotherViewTooltip(), [&]() { OpenAnotherView(); });
+			}
 		}
 	}
 
@@ -835,25 +912,25 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 		Util::AddTooltip(T(TKEY("manual_apply_required_tooltip"), "This form type is only re-read by the engine on weather reinit.\nAuto-apply is disabled - use the Apply button."));
 	}
 
-	if (!m_titleBarSearchDrawn || inlineActions ||
+	if (!view.titleBarSearchDrawn || inlineActions ||
 		(showApply && RequiresManualApply() && editorWindow->settings.autoApplyChanges))
 		ImGui::Separator();
 
 	// Remember where the dropdown should appear so DrawSearchDropdown()
 	// (called after this function) can anchor itself below the search bar.
-	searchDropdownAnchor = m_titleBarSearchDrawn ? ImVec2(searchInputMin.x, searchInputMax.y) : ImGui::GetCursorScreenPos();
+	view.searchDropdownAnchor = view.titleBarSearchDrawn ? ImVec2(view.searchInputMin.x, view.searchInputMax.y) : ImGui::GetCursorScreenPos();
 
 	// Rebuild match list only when the query changed; this gates per-frame
 	// CollectSearchableSettings() walks plus three case-insensitive searches per entry.
-	if (searchBuffer[0] != '\0') {
-		if (searchResultsForQuery != searchBuffer) {
-			searchResults = CollectSearchableSettings();
-			std::erase_if(searchResults, [&](const SearchResult& r) {
-				return !ContainsStringIgnoreCase(r.displayName, searchBuffer) &&
-				       !ContainsStringIgnoreCase(r.tabName, searchBuffer) &&
-				       !ContainsStringIgnoreCase(r.settingId, searchBuffer);
+	if (view.searchBuffer[0] != '\0') {
+		if (view.searchResultsForQuery != view.searchBuffer) {
+			view.searchResults = CollectSearchableSettings();
+			std::erase_if(view.searchResults, [&](const SearchResult& r) {
+				return !ContainsStringIgnoreCase(r.displayName, view.searchBuffer) &&
+				       !ContainsStringIgnoreCase(r.tabName, view.searchBuffer) &&
+				       !ContainsStringIgnoreCase(r.settingId, view.searchBuffer);
 			});
-			searchResultsForQuery = searchBuffer;
+			view.searchResultsForQuery = view.searchBuffer;
 		}
 	} else {
 		ClearSearchState(false);
@@ -862,15 +939,16 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 
 void Widget::DrawSearchDropdown()
 {
-	if (!dropdownVisible || searchResults.empty())
+	auto& view = View();
+	if (!view.dropdownVisible || view.searchResults.empty())
 		return;
 
 	const float scale = Util::GetUIScale();
-	ImGui::SetNextWindowPos(searchDropdownAnchor, ImGuiCond_Always);
+	ImGui::SetNextWindowPos(view.searchDropdownAnchor, ImGuiCond_Always);
 	ImGui::SetNextWindowSize(ImVec2(WidgetUI::kSearchDropdownWidth * scale, 0));
 	ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 1.0f);
 	ImGui::PushStyleColor(ImGuiCol_WindowBg, ImGui::GetStyleColorVec4(ImGuiCol_PopupBg));
-	const std::string dropdownWindowId = std::format("##SearchDropdown_{}", static_cast<const void*>(this));
+	const std::string dropdownWindowId = std::format("##SearchDropdown_{}_{}", static_cast<const void*>(this), view.id);
 	if (ImGui::Begin(dropdownWindowId.c_str(), nullptr,
 			ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
 				ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings |
@@ -879,27 +957,27 @@ void Widget::DrawSearchDropdown()
 
 		// Treat clicks on the search input itself as "inside" so typing/cursor
 		// positioning in the input doesn't dismiss the dropdown.
-		const ImRect searchInputRect(searchInputMin, searchInputMax);
+		const ImRect searchInputRect(view.searchInputMin, view.searchInputMax);
 		const bool clickedOutside = ImGui::GetIO().MouseClicked[0] &&
 		                            !ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem) &&
 		                            !searchInputRect.Contains(ImGui::GetIO().MousePos);
 		if (clickedOutside || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
-			dropdownVisible = false;
+			view.dropdownVisible = false;
 		} else {
-			const size_t visibleRows = std::min(WidgetUI::kSearchDropdownMaxResults, searchResults.size());
+			const size_t visibleRows = std::min(WidgetUI::kSearchDropdownMaxResults, view.searchResults.size());
 			const float childHeight = ImGui::GetFrameHeightWithSpacing() * static_cast<float>(visibleRows);
 			if (ImGui::BeginChild("##SearchDropdownResults", ImVec2(0.0f, childHeight), ImGuiChildFlags_Borders)) {
 				ImGuiListClipper clipper;
-				clipper.Begin(static_cast<int>(searchResults.size()), ImGui::GetTextLineHeightWithSpacing());
+				clipper.Begin(static_cast<int>(view.searchResults.size()), ImGui::GetTextLineHeightWithSpacing());
 				while (clipper.Step()) {
 					for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; ++i) {
-						const auto& result = searchResults[static_cast<size_t>(i)];
+						const auto& result = view.searchResults[static_cast<size_t>(i)];
 						std::string label = result.tabName.empty() ? result.displayName : std::format("{} ({})", result.displayName, result.tabName);
 
 						ImGui::PushID(i);
 						if (Util::Selectable(label.c_str(), false, ImGuiSelectableFlags_NoAutoClosePopups)) {
 							NavigateToSearchResult(result);
-							navigatedFromSearch = true;
+							view.navigatedFromSearch = true;
 						}
 						ImGui::PopID();
 					}
@@ -915,35 +993,39 @@ void Widget::DrawSearchDropdown()
 
 void Widget::ClearSearchState(bool clearBuffer)
 {
+	auto& view = View();
 	if (clearBuffer)
-		searchBuffer[0] = '\0';
-	searchResults.clear();
-	searchResultsForQuery.clear();
-	dropdownVisible = false;
+		view.searchBuffer[0] = '\0';
+	view.searchResults.clear();
+	view.searchResultsForQuery.clear();
+	view.dropdownVisible = false;
 }
 
 void Widget::NavigateToSearchResult(const SearchResult& result)
 {
-	activeTabOverride = result.tabName;
-	highlightedSetting = result.settingId;
-	highlightedDisplaySetting = result.displayName;
-	highlightStartTime = static_cast<float>(ImGui::GetTime());
-	scrollToHighlighted = true;
+	auto& view = View();
+	view.activeTabOverride = result.tabName;
+	view.highlightedSetting = result.settingId;
+	view.highlightedDisplaySetting = result.displayName;
+	view.highlightStartTime = static_cast<float>(ImGui::GetTime());
+	view.scrollToHighlighted = true;
 }
 
 int Widget::GetTabFlagsForOverride(const std::string& tabName)
 {
-	if (activeTabOverride.empty() || activeTabOverride != tabName)
+	auto& view = View();
+	if (view.activeTabOverride.empty() || view.activeTabOverride != tabName)
 		return 0;
-	activeTabOverride.clear();
+	view.activeTabOverride.clear();
 	return ImGuiTabItemFlags_SetSelected;
 }
 
 bool Widget::MatchesSearch(const std::string& settingId) const
 {
-	if (searchBuffer[0] == '\0')
+	const auto& view = View();
+	if (view.searchBuffer[0] == '\0')
 		return true;
-	return std::any_of(searchResults.begin(), searchResults.end(),
+	return std::any_of(view.searchResults.begin(), view.searchResults.end(),
 		[&](const SearchResult& r) { return r.settingId == settingId; });
 }
 
@@ -962,9 +1044,10 @@ bool Widget::MatchesAnySearch(std::initializer_list<const char*> settingIds) con
 
 bool Widget::IsHighlighted(const std::string& settingId) const
 {
-	if (highlightedSetting != settingId && highlightedDisplaySetting != settingId)
+	const auto& view = View();
+	if (view.highlightedSetting != settingId && view.highlightedDisplaySetting != settingId)
 		return false;
-	const float elapsed = static_cast<float>(ImGui::GetTime()) - highlightStartTime;
+	const float elapsed = static_cast<float>(ImGui::GetTime()) - view.highlightStartTime;
 	return elapsed < WidgetUI::kHighlightDurationSeconds;
 }
 
@@ -972,7 +1055,7 @@ void Widget::PushHighlightStyle(const std::string& settingId)
 {
 	if (!IsHighlighted(settingId))
 		return;
-	const float elapsed = static_cast<float>(ImGui::GetTime()) - highlightStartTime;
+	const float elapsed = static_cast<float>(ImGui::GetTime()) - View().highlightStartTime;
 	const float normalized = std::clamp(elapsed / WidgetUI::kHighlightDurationSeconds, 0.0f, 1.0f);
 	const float triangularFade = 1.0f - std::abs(normalized * 2.0f - 1.0f);
 	const float alpha = std::clamp(WidgetUI::kHighlightMaxAlpha * triangularFade, 0.0f, WidgetUI::kHighlightMaxAlpha);
@@ -989,9 +1072,9 @@ void Widget::PopHighlightStyle(const std::string& settingId)
 	if (!IsHighlighted(settingId))
 		return;
 	ImGui::PopStyleColor(2);
-	if (scrollToHighlighted) {
+	if (auto& view = View(); view.scrollToHighlighted) {
 		ImGui::SetScrollHereY(0.5f);
-		scrollToHighlighted = false;
+		view.scrollToHighlighted = false;
 	}
 }
 

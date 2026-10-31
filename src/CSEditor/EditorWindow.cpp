@@ -421,6 +421,12 @@ void EditorWindow::DrawBrowserPage()
 					{ { "count", std::to_string(manager->GetAuthoredLocationTargets().size()) } }, "{count} on your list");
 		}
 		BrowserUI::PageHeader(category->icon, category->label, subtitle.c_str());
+		if (!locations) {
+			BrowserUI::RightAlign(BrowserUI::IconButtonSize());
+			if (BrowserUI::IconButton("##PopOutSceneManager", Icons::TI(ICON_TI_PICTURE_IN_PICTURE_ON),
+					T(TKEY("scene_panel_pop_out_tooltip"), "Open this panel in its own window, to keep it beside other editors.")))
+				SceneSettingsUI::OpenSceneManagerWindow();
+		}
 		BeginScrollableContent(locations ? "##LocationsScroll" : "##SceneManagerScroll");
 		if (locations)
 			SceneSettingsUI::DrawLocationBrowser();
@@ -701,9 +707,9 @@ void EditorWindow::ShowWidgetWindow()
 	const auto& io = ImGui::GetIO();
 	auto* focusedWidget = io.KeyCtrl && !io.WantTextInput && lastFocusedWidgetKey ? FindWidget(*lastFocusedWidgetKey) : nullptr;
 	if (focusedWidget && focusedWidget->IsOpen()) {
-		// Ctrl+W closes the focused widget; Ctrl+R discards its unsaved changes.
+		// Ctrl+W closes the focused widget window; Ctrl+R discards its unsaved changes.
 		if (ImGui::IsKeyPressed(ImGuiKey_W, false)) {
-			focusedWidget->SetOpen(false);
+			focusedWidget->CloseFocusedView();
 			lastFocusedWidgetKey.reset();
 		} else if (ImGui::IsKeyPressed(ImGuiKey_R, false)) {
 			DiscardWidgetChanges(*focusedWidget);
@@ -719,7 +725,7 @@ void EditorWindow::ShowWidgetWindow()
 		WidgetFactory::DrawOpenWidgets(*collection);
 
 	if (currentCellLightingWidget && currentCellLightingWidget->IsOpen()) {
-		currentCellLightingWidget->DrawWidget();
+		currentCellLightingWidget->DrawViews();
 	}
 }
 
@@ -766,6 +772,7 @@ void EditorWindow::DrawEditorWindows(float scale, float actionBarBottom)
 
 	// Locations are not form widgets, so their windows are drawn alongside the widget pass.
 	SceneSettingsUI::DrawLocationWindows();
+	SceneSettingsUI::DrawSceneManagerWindow();
 
 	// Show palette window
 	PaletteWindow::GetSingleton()->Draw();
