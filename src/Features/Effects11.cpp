@@ -423,12 +423,16 @@ Effects11::PerFrame Effects11::GetCommonBufferData()
 		data.ProceduralSunHaloIntensity = std::max(settingManager.GetInterpolatedTimeOfDayValue("GlowIntensity", "PROCEDURALSUN"), 0.0f);
 		data.ProceduralSunRadianceLimit = GetMainTargetRadianceLimit();
 
-		// Correction for E11's SDR tonemap; 1 keeps the physical L = E / solid angle
-		static constexpr float sunRadianceScale = 1.0f;
-		// 4 pi sin^2(r / 2) is the disc's solid angle 2 pi (1 - cos r), without the small-angle cancellation
-		const float halfAngleSin = std::sin(proceduralSunAngularRadius * 0.5f);
-		const float discSolidAngle = 4.0f * std::numbers::pi_v<float> * halfAngleSin * halfAngleSin;
-		data.ProceduralSunDiskRadiance = discSolidAngle > 0.0f ? sunRadianceScale / discSolidAngle : 0.0f;
+		// L = E * referenceSolidAngle / solid angle: preset tonemaps break on a physical (~1e4 E) sun, so a disc of
+		// this radius shows the sunlight itself, and smaller discs get brighter as the same energy concentrates
+		static constexpr float referenceDiscRadius = DirectX::XMConvertToRadians(1.0f);
+		// 4 pi sin^2(r / 2) is the solid angle 2 pi (1 - cos r), without the small-angle cancellation
+		const auto solidAngle = [](float a_radius) {
+			const float halfAngleSin = std::sin(a_radius * 0.5f);
+			return 4.0f * std::numbers::pi_v<float> * halfAngleSin * halfAngleSin;
+		};
+		const float discSolidAngle = solidAngle(proceduralSunAngularRadius);
+		data.ProceduralSunDiskRadiance = discSolidAngle > 0.0f ? solidAngle(referenceDiscRadius) / discSolidAngle : 0.0f;
 	}
 
 	perFrameCache = data;

@@ -32,7 +32,10 @@ namespace ProceduralSun
 	static const float3 LimbDarkeningDiscMean = float3(0.83599f, 0.80015f, 0.75960f);
 	// Below the FP16 and R11G11B10 maxima, so the disc never writes infinity
 	static const float MaxRadiance = 60000.0f;
+	// Cloud alpha is authored against the sky; toward the far brighter sun the cloud counts its optical depth this many times
 	static const float CloudExtinction = 4.0f;
+	// The cloud deepens once the sun behind it is this many times brighter, fully at twice that; below, deepening hides more sky than sun
+	static const float CloudSunContrast = 4.0f;
 
 	// Hestroffer limb darkening profile (license above).
 	// http://www.physics.hmc.edu/faculty/esin/a101/limbdarkening.pdf
@@ -86,6 +89,13 @@ namespace ProceduralSun
 		return (1.0f - normalizedDistance) * rcp(1.0f + max(haloFalloff, 0.0f) * normalizedDistance);
 	}
 
+	/** @brief The halo capped at its value one disc radius past the disc edge: smooth over the disc and its sharp rim. */
+	float EvaluateHaloPlateau(float cosTheta, float sunDiskCos, float sunHaloCos, float haloFalloff)
+	{
+		float twiceDiscCos = 2.0f * sunDiskCos * sunDiskCos - 1.0f;
+		return min(EvaluateHalo(cosTheta, sunDiskCos, sunHaloCos, haloFalloff), EvaluateHalo(twiceDiscCos, sunDiskCos, sunHaloCos, haloFalloff));
+	}
+
 	void ComposeDiscAndHalo(
 		float3 limbDarkening,
 		float discCoverage,
@@ -110,19 +120,6 @@ namespace ProceduralSun
 
 		float alpha = clamp(peak / max(radianceLimit, 1.0f), 1.0f / 256.0f, 1.0f);
 		return float4(emitted / alpha, alpha);
-	}
-
-	float GetCloudTransmission(float capturedCloudOcclusion, float opticalDepthScale)
-	{
-		float cloudOpacity = saturate(capturedCloudOcclusion);
-		if (opticalDepthScale <= 0.0f || cloudOpacity <= 0.0f)
-			return 1.0f;
-		return pow(saturate(1.0f - cloudOpacity), opticalDepthScale);
-	}
-
-	float GetGlareCloudTransmission(float capturedCloudOcclusion)
-	{
-		return GetCloudTransmission(capturedCloudOcclusion, 1.0f + 0.5f * CloudExtinction);
 	}
 }
 
