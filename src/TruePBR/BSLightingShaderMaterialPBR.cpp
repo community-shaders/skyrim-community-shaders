@@ -55,6 +55,7 @@ void BSLightingShaderMaterialPBR::CopyMembers(RE::BSShaderMaterial* that)
 	coatSpecularLevel = pbrThat->coatSpecularLevel;
 	fuzzColor = pbrThat->fuzzColor;
 	fuzzWeight = pbrThat->fuzzWeight;
+	fuzzRoughness = pbrThat->fuzzRoughness;
 	glintParameters = pbrThat->glintParameters;
 	projectedMaterialBaseColorScale = pbrThat->projectedMaterialBaseColorScale;
 	projectedMaterialRoughness = pbrThat->projectedMaterialRoughness;
@@ -83,6 +84,7 @@ std::uint32_t BSLightingShaderMaterialPBR::ComputeCRC32(uint32_t srcHash)
 		float coatSpecularLevel = 0.f;
 		std::array<float, 3> fuzzColor = { 0.f, 0.f, 0.f };
 		float fuzzWeight = 0.f;
+		float fuzzRoughness = -1.f;
 		float screenSpaceScale = 0.f;
 		float logMicrofacetDensity = 0.f;
 		float microfacetRoughness = 0.f;
@@ -115,6 +117,7 @@ std::uint32_t BSLightingShaderMaterialPBR::ComputeCRC32(uint32_t srcHash)
 	hashes.fuzzColor[1] = fuzzColor[1] * 100.f;
 	hashes.fuzzColor[2] = fuzzColor[2] * 100.f;
 	hashes.fuzzWeight = fuzzWeight * 100.f;
+	hashes.fuzzRoughness = GetFuzzRoughness() * 100.f;
 	hashes.screenSpaceScale = glintParameters.screenSpaceScale * 100.f;
 	hashes.logMicrofacetDensity = glintParameters.logMicrofacetDensity * 100.f;
 	hashes.microfacetRoughness = glintParameters.microfacetRoughness * 100.f;
@@ -180,6 +183,7 @@ void BSLightingShaderMaterialPBR::ApplyTextureSetData(const TruePBR::PBRTextureS
 		if (pbrFlags.any(PBRFlags::Fuzz)) {
 			fuzzColor = textureSetData.fuzzColor;
 			fuzzWeight = textureSetData.fuzzWeight;
+			fuzzRoughness = textureSetData.fuzzRoughness;
 		}
 	}
 
@@ -353,8 +357,10 @@ void BSLightingShaderMaterialPBR::LoadBinary(RE::NiStream& stream)
 		glintParameters.densityRandomization = parameters[3];
 
 		if (stream.header.version > 0x4A) {
-			float dummy;
-			stream.iStr->read(&dummy, 1);
+			// Environment Map Scale values below 1 override base roughness.
+			float environmentMapScale;
+			stream.iStr->read(&environmentMapScale, 1);
+			fuzzRoughness = environmentMapScale < 1.f ? environmentMapScale : -1.f;
 		}
 	}
 }
@@ -442,6 +448,11 @@ const RE::NiColor& BSLightingShaderMaterialPBR::GetFuzzColor() const
 float BSLightingShaderMaterialPBR::GetFuzzWeight() const
 {
 	return fuzzWeight;
+}
+
+float BSLightingShaderMaterialPBR::GetFuzzRoughness() const
+{
+	return std::isfinite(fuzzRoughness) && fuzzRoughness >= 0.f ? std::min(fuzzRoughness, 1.f) : -1.f;
 }
 
 const GlintParameters& BSLightingShaderMaterialPBR::GetGlintParameters() const

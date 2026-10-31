@@ -36,6 +36,7 @@ namespace PBR
 		static const uint ProjectedGlint = (1 << 12);
 		static const uint Foliage = (1 << 13);
 		static const uint ThinSurface = (1 << 14);
+		static const uint HasFuzzRoughnessTexture = (1 << 15);
 	}
 
 	bool IsFoliageMaterial(uint flags)
@@ -95,23 +96,6 @@ namespace PBR
 		float D = BRDF::D_GGX(roughness, NdotH);
 		float G = BRDF::Vis_SmithJointApprox(roughness, NdotV, NdotL);
 		F = BRDF::F_Schlick(F0, VdotH);
-
-		return D * G * F;
-	}
-
-	/// @brief Evaluate Charlie microflake specular BRDF for sheen/fabric (D * Vis * F)
-	/// @param roughness Perceptual roughness [0,1]
-	/// @param F0 Reflectance at normal incidence
-	/// @param NdotL Dot product of normal and light direction
-	/// @param NdotV Dot product of normal and view direction
-	/// @param NdotH Dot product of normal and half vector
-	/// @param VdotH Dot product of view and half vector
-	/// @return Specular BRDF value (D * Vis * F)
-	float3 SpecularMicroflakes(float roughness, float3 F0, float NdotL, float NdotV, float NdotH, float VdotH)
-	{
-		float D = BRDF::D_Charlie(roughness, NdotH);
-		float G = BRDF::Vis_Neubelt(NdotV, NdotL);
-		float3 F = BRDF::F_Schlick(F0, VdotH);
 
 		return D * G * F;
 	}

@@ -32,6 +32,7 @@ enum class PBRShaderFlags : uint32_t
 	ProjectedGlint = 1 << 12,
 	Foliage = 1 << 13,
 	ThinSurface = 1 << 14,
+	HasFuzzRoughnessTexture = 1 << 15,
 };
 
 /**
@@ -198,6 +199,8 @@ public:
 	const RE::NiColor& GetFuzzColor() const;
 	/** @brief Returns the fuzz layer weight/intensity. */
 	float GetFuzzWeight() const;
+	/** @brief Returns fuzz roughness clamped to [0, 1], or a negative value to use base roughness. */
+	float GetFuzzRoughness() const;
 
 	/** @brief Returns the glint rendering parameters for this material's base surface. */
 	const GlintParameters& GetGlintParameters() const;
@@ -218,13 +221,14 @@ public:
 
 	RE::NiColor fuzzColor;
 	float fuzzWeight = 0.f;
+	float fuzzRoughness = -1.f;
 
 	GlintParameters glintParameters;
 
 	// Roughness in r, metallic in g, AO in b, nonmetal reflectance in a
 	RE::NiPointer<RE::NiSourceTexture> rmaosTexture;
 
-	// Emission color in rgb
+	// Emission color in rgb, fuzz roughness in a
 	RE::NiPointer<RE::NiSourceTexture> emissiveTexture;
 
 	// Displacement in r

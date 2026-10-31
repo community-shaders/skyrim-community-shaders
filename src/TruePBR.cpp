@@ -42,6 +42,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	innerLayerDisplacementOffset,
 	fuzzColor,
 	fuzzWeight,
+	fuzzRoughness,
 	glintParameters);
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
@@ -924,6 +925,33 @@ struct BSLightingShaderProperty_GetRenderPasses_LocalMap
 	static inline REL::Relocation<decltype(thunk)> func;
 };
 
+// Use emissive alpha for fuzz roughness when the format supports it.
+static bool HasEmissiveFuzzRoughness(const BSLightingShaderMaterialPBR* material)
+{
+	const auto* texture = material->emissiveTexture.get();
+	if (texture == nullptr || texture->rendererTexture == nullptr || texture->rendererTexture->resourceView == nullptr) {
+		return false;
+	}
+
+	D3D11_SHADER_RESOURCE_VIEW_DESC desc;
+	texture->rendererTexture->resourceView->GetDesc(&desc);
+	switch (desc.Format) {
+	case DXGI_FORMAT_BC1_UNORM:
+	case DXGI_FORMAT_BC1_UNORM_SRGB:
+	case DXGI_FORMAT_BC4_UNORM:
+	case DXGI_FORMAT_BC5_UNORM:
+	case DXGI_FORMAT_BC6H_UF16:
+	case DXGI_FORMAT_B8G8R8X8_UNORM:
+	case DXGI_FORMAT_B8G8R8X8_UNORM_SRGB:
+	case DXGI_FORMAT_B5G6R5_UNORM:
+	case DXGI_FORMAT_R8_UNORM:
+	case DXGI_FORMAT_R8G8_UNORM:
+		return false;
+	default:
+		return true;
+	}
+}
+
 bool TruePBR::BSLightingShader_SetupMaterial(RE::BSLightingShader* shader, RE::BSLightingShaderMaterialBase const* material)
 {
 	using enum SIE::ShaderCache::LightingShaderTechniques;
@@ -1129,6 +1157,7 @@ bool TruePBR::BSLightingShader_SetupMaterial(RE::BSLightingShader* shader, RE::B
 				PBRProjectedUVParams1[0] = pbrMaterial->GetProjectedMaterialBaseColorScale()[0];
 				PBRProjectedUVParams1[1] = pbrMaterial->GetProjectedMaterialBaseColorScale()[1];
 				PBRProjectedUVParams1[2] = pbrMaterial->GetProjectedMaterialBaseColorScale()[2];
+				PBRProjectedUVParams1[3] = pbrMaterial->GetFuzzRoughness();
 				shadowState->SetPSConstant(PBRProjectedUVParams1, RE::BSGraphics::ConstantGroupLevel::PerMaterial, lightingPSConstants.MaterialObjectRGBScale);
 
 				std::array<float, 4> PBRProjectedUVParams2;
@@ -1171,6 +1200,10 @@ bool TruePBR::BSLightingShader_SetupMaterial(RE::BSLightingShader* shader, RE::B
 				shadowState->SetPSTextureFilterMode(9, RE::BSGraphics::TextureFilterMode::kAnisotropic);
 
 				shaderFlags.set(PBRShaderFlags::HasFeaturesTexture1);
+			}
+
+			if (hasEmissive && shaderFlags.any(PBRShaderFlags::Fuzz) && HasEmissiveFuzzRoughness(pbrMaterial)) {
+				shaderFlags.set(PBRShaderFlags::HasFuzzRoughnessTexture);
 			}
 
 			{
@@ -1515,6 +1548,9 @@ TruePBR::GrassPBRConstants TruePBR::GetGrassPBRConstants(const BSLightingShaderM
 		if (HasGrassFeaturesTexture1(material)) {
 			shaderFlags.set(PBRShaderFlags::HasFeaturesTexture1);
 		}
+		if (HasGrassEmissive(material) && HasEmissiveFuzzRoughness(material)) {
+			shaderFlags.set(PBRShaderFlags::HasFuzzRoughnessTexture);
+		}
 	}
 	if (HasGrassEmissive(material)) {
 		shaderFlags.set(PBRShaderFlags::HasEmissive);
@@ -1531,7 +1567,8 @@ TruePBR::GrassPBRConstants TruePBR::GetGrassPBRConstants(const BSLightingShaderM
 			hasSubsurface ? subsurfaceColor.blue : 0.0f, hasSubsurface ? material->GetSubsurfaceOpacity() : 1.0f },
 		{ hasFuzz ? fuzzColor.red : 0.0f, hasFuzz ? fuzzColor.green : 0.0f,
 			hasFuzz ? fuzzColor.blue : 0.0f, hasFuzz ? material->GetFuzzWeight() : 0.0f },
-		{ material->GetSubsurfaceBalance(), thinSurfaceParams[0], thinSurfaceParams[1], thinSurfaceParams[2] }
+		{ material->GetSubsurfaceBalance(), thinSurfaceParams[0], thinSurfaceParams[1], thinSurfaceParams[2] },
+		{ material->GetFuzzRoughness(), 0.f, 0.f, 0.f }
 	};
 }
 
@@ -1730,9 +1767,11 @@ struct BSGrassShader_SetupMaterial
 		std::array<float, 4> pbrParams2{ constants.params2[0], constants.params2[1], constants.params2[2], constants.params2[3] };
 		std::array<float, 4> pbrParams3{ constants.params3[0], constants.params3[1], constants.params3[2], constants.params3[3] };
 		std::array<float, 4> pbrParams4{ constants.params4[0], constants.params4[1], constants.params4[2], constants.params4[3] };
+		std::array<float, 4> pbrParams5{ constants.params5[0], constants.params5[1], constants.params5[2], constants.params5[3] };
 		shadowState->SetPSConstant(pbrParams2, RE::BSGraphics::ConstantGroupLevel::PerMaterial, grassPSConstants.PBRParams2);
 		shadowState->SetPSConstant(pbrParams3, RE::BSGraphics::ConstantGroupLevel::PerMaterial, grassPSConstants.PBRParams3);
 		shadowState->SetPSConstant(pbrParams4, RE::BSGraphics::ConstantGroupLevel::PerMaterial, grassPSConstants.PBRParams4);
+		shadowState->SetPSConstant(pbrParams5, RE::BSGraphics::ConstantGroupLevel::PerMaterial, grassPSConstants.PBRParams5);
 
 		RE::BSGraphics::Renderer::FlushPSConstantGroup(RE::BSGraphics::ConstantGroupLevel::PerMaterial);
 		RE::BSGraphics::Renderer::ApplyPSConstantGroup(RE::BSGraphics::ConstantGroupLevel::PerMaterial);
