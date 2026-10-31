@@ -19,7 +19,8 @@ enum class SpecialShaderType
 {
 	Total = -1,
 	Other = -2,
-	CSPasses = -3
+	CSPasses = -3,
+	Present = -4
 };
 
 // Constants for special draw call values
