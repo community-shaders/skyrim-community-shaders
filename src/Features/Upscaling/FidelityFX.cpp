@@ -208,10 +208,12 @@ void FidelityFX::Present(bool a_useFrameGeneration, bool a_isHDR)
 		dispatchParameters.depth = ffxApiGetResourceDX12(swapChain.depthBufferShared12->resource.get());
 		dispatchParameters.motionVectors = ffxApiGetResourceDX12(swapChain.motionVectorBufferShared12->resource.get());
 
+		const auto& worldCamera = globals::game::GetWorldFrameBuffer();
+		TrackStaleCamera(worldCamera);
+
 		ffx::DispatchDescFrameGenerationPrepareCameraInfo cameraConfig{};
 
-		auto viewMatrix = globals::game::frameBufferCached.GetCameraViewInverse().Transpose();
-		auto cameraViewToClip = globals::game::frameBufferCached.GetCameraProjUnjittered().Transpose();
+		auto viewMatrix = worldCamera.GetCameraViewInverse().Transpose();
 
 		cameraConfig.cameraRight[0] = viewMatrix._11;
 		cameraConfig.cameraRight[1] = viewMatrix._12;
@@ -225,9 +227,9 @@ void FidelityFX::Present(bool a_useFrameGeneration, bool a_isHDR)
 		cameraConfig.cameraForward[1] = viewMatrix._32;
 		cameraConfig.cameraForward[2] = viewMatrix._33;
 
-		cameraConfig.cameraPosition[0] = globals::game::frameBufferCached.GetCameraPosAdjust().x;
-		cameraConfig.cameraPosition[1] = globals::game::frameBufferCached.GetCameraPosAdjust().y;
-		cameraConfig.cameraPosition[2] = globals::game::frameBufferCached.GetCameraPosAdjust().z;
+		cameraConfig.cameraPosition[0] = worldCamera.GetCameraPosAdjust().x;
+		cameraConfig.cameraPosition[1] = worldCamera.GetCameraPosAdjust().y;
+		cameraConfig.cameraPosition[2] = worldCamera.GetCameraPosAdjust().z;
 
 		if (ffx::Dispatch(frameGenContext, dispatchParameters, cameraConfig) != ffx::ReturnCode::Ok) {
 			logger::critical("[FidelityFX] Failed to dispatch frame generation!");
@@ -238,6 +240,20 @@ void FidelityFX::Present(bool a_useFrameGeneration, bool a_isHDR)
 
 	// Set isFrameGenActive based on whether FSR3 frame generation is enabled
 	isFrameGenActive = a_useFrameGeneration;
+}
+
+void FidelityFX::TrackStaleCamera(const globals::FrameBufferCache& a_worldCamera)
+{
+	const auto& presentCamera = globals::game::frameBufferCached;
+	if (presentCamera.GetCameraViewInverse() != a_worldCamera.GetCameraViewInverse() || presentCamera.GetCameraPosAdjust() != a_worldCamera.GetCameraPosAdjust())
+		staleCameraFrames++;
+
+	if (++trackedCameraFrames < StaleCameraLogInterval)
+		return;
+
+	logger::debug("[FidelityFX] Frame generation: {}/{} frames had a non-world PerFrame camera at present, used the world camera instead", staleCameraFrames, trackedCameraFrames);
+	staleCameraFrames = 0;
+	trackedCameraFrames = 0;
 }
 
 void FidelityFX::CreateFSRResources()
