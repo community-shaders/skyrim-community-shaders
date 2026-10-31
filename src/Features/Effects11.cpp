@@ -407,10 +407,12 @@ Effects11::PerFrame Effects11::GetCommonBufferData()
 		// The ENB keys describe a disc drawn across the sun billboard: Size is its radius as a share of
 		// the billboard (0.04 per unit) and the glow fades out at the billboard edge. They are mapped to
 		// the angular disc and halo through the billboard's measured angular size, so presets keep their sun.
+		// Keeps the halo falloff finite: an infinite one makes the halo inf * 0 = NaN at the disc edge
+		static constexpr float minHaloFalloffFactor = 1e-3f;
 		const float billboardTan = std::max(data.SunBillboardTan, 1e-4f);
 		const float size = std::max(settingManager.GetValue<float>("Size", "PROCEDURALSUN"), 0.0f);
 		const float edgeSoftness = settingManager.GetValue<float>("EdgeSoftness", "PROCEDURALSUN");
-		const float glowCurve = std::max(FLT_MIN, settingManager.GetInterpolatedTimeOfDayValue("GlowCurve", "PROCEDURALSUN"));
+		const float glowCurve = std::max(minHaloFalloffFactor, settingManager.GetInterpolatedTimeOfDayValue("GlowCurve", "PROCEDURALSUN"));
 
 		const float diskRadius = std::min(size * 0.04f, 1.0f);
 		proceduralSunAngularRadius = std::atan(diskRadius * billboardTan);
@@ -419,7 +421,7 @@ Effects11::PerFrame Effects11::GetCommonBufferData()
 		data.ProceduralSunHaloCos = 1.0f / std::sqrt(1.0f + billboardTan * billboardTan);
 		// The old edge spanned softness^2 of the disc's squared radius, and the disc profile works in the same space
 		data.ProceduralSunEdgeSoftness = std::clamp(edgeSoftness * edgeSoftness, 0.01f, 1.0f);
-		data.ProceduralSunHaloFalloff = 100.0f / (std::max(1.0f - diskRadius * diskRadius, FLT_MIN) * glowCurve);
+		data.ProceduralSunHaloFalloff = 100.0f / (std::max(1.0f - diskRadius * diskRadius, minHaloFalloffFactor) * glowCurve);
 		data.ProceduralSunHaloIntensity = std::max(settingManager.GetInterpolatedTimeOfDayValue("GlowIntensity", "PROCEDURALSUN"), 0.0f);
 		data.ProceduralSunRadianceLimit = GetMainTargetRadianceLimit();
 
