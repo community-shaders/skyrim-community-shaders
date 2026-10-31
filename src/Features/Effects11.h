@@ -52,17 +52,19 @@ public:
 		float CloudsEdgeMoonMultiplier;
 
 		uint EnableProceduralSun;
-		float ProceduralSunDiskRadiusSq;
-		float ProceduralSunDiskEdgeScale;
-		float ProceduralSunGlowIntensity;
+		float ProceduralSunDiskCos;
+		float ProceduralSunDiskRadiance;
+		float ProceduralSunEdgeSoftness;
 
-		float ProceduralSunCoronaFalloff;
-		float ProceduralSunCoronaScale;
+		float ProceduralSunHaloCos;
+		float ProceduralSunHaloIntensity;
 		uint UseProceduralGradientWeights;
 		float ProceduralGradientWeightCurve;
 
 		float LightSpriteCurve;
-		float pad1[3];
+		float ProceduralSunHaloFalloff;
+		float ProceduralSunRadianceLimit;
+		float pad1;
 
 		float ParticleIntensity;
 		float ParticleLightingInfluence;
@@ -221,6 +223,8 @@ public:
 	float3 scatteringSunColor = { 1.0f, 1.0f, 1.0f };
 	/** @brief Sun direction used for sky scattering; mirrored below the horizon while the sun disc is hidden. */
 	float3 scatteringSunDirection = { 0.0f, 0.0f, 1.0f };
+	/** @brief Angular radius of the [PROCEDURALSUN] disc, in radians; the adaptation sun mask covers it. */
+	float proceduralSunAngularRadius = 0.0f;
 	/** @brief Per-channel sunlight before over after the [ENVIRONMENT] direct lighting grade, from the last OverrideWeather. */
 	float3 directLightingUngradeScale = { 1.0f, 1.0f, 1.0f };
 

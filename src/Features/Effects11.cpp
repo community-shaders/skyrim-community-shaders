@@ -51,6 +51,26 @@ namespace
 		return bound.radius * 0.70710678f / distance;
 	}
 
+	/** @brief Largest radiance the main render target can hold; the procedural sun is encoded below it for alpha blending. */
+	float GetMainTargetRadianceLimit()
+	{
+		const auto renderer = globals::game::renderer;
+		const auto rtv = renderer ? renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN].RTV : nullptr;
+		if (!rtv)
+			return 1.0f;
+
+		D3D11_RENDER_TARGET_VIEW_DESC desc{};
+		rtv->GetDesc(&desc);
+		switch (desc.Format) {
+		case DXGI_FORMAT_R16G16B16A16_FLOAT:
+		case DXGI_FORMAT_R32G32B32A32_FLOAT:
+		case DXGI_FORMAT_R11G11B10_FLOAT:
+			return 4096.0f;
+		default:
+			return 1.0f;
+		}
+	}
+
 	/** @brief A screen-sized 2D texture with an SRV, plus an RTV and/or UAV on request. */
 	std::unique_ptr<Texture2D> CreateScreenTexture(uint32_t a_width, uint32_t a_height, DXGI_FORMAT a_format, bool a_renderTarget, bool a_unorderedAccess, const char* a_name)
 	{
@@ -144,7 +164,7 @@ namespace
 		static constexpr float moonMaskExponent = 4.0f;
 		const auto& skySync = globals::features::skySync;
 
-		if (a_sunRays && EffectManager::GetSunVisibility(a_sky->sun) > 0.0f) {
+		if (a_sunRays && Util::GetSunVisibility(a_sky->sun) > 0.0f) {
 			if (const auto prop = skyrim_cast<RE::BSSkyShaderProperty*>(a_sky->sun->sunBase->GetGeometryRuntimeData().shaderProperty.get())) {
 				const auto& blend = prop->kBlendColor;
 				a_light = { float3(blend.red, blend.green, blend.blue) * blend.alpha, skySync.GetCelestialDirection(a_sky, SkySync::Caster::Sun), a_perFrame.SunBillboardTan, sunMaskExponent, true };
@@ -201,7 +221,7 @@ void Effects11::UpdateSkyScattering(PerFrame& a_data)
 	// Mirror the direction below the horizon while the sun is hidden (e.g. by a weather)
 	if (sky && sky->sun) {
 		auto direction = globals::features::skySync.GetCelestialDirection(sky, SkySync::Caster::Sun);
-		if (EffectManager::GetSunVisibility(sky->sun) <= 0.0f && direction.z > 0.0f)
+		if (Util::GetSunVisibility(sky->sun) <= 0.0f && direction.z > 0.0f)
 			direction.z = -direction.z;
 		scatteringSunDirection = { direction.x, direction.y, direction.z };
 	}
@@ -384,22 +404,32 @@ Effects11::PerFrame Effects11::GetCommonBufferData()
 	data.WaterReflectionAmount = settingManager.GetValue<float>("ReflectionAmount", "WATER");
 
 	{
-		float size = settingManager.GetValue<float>("Size", "PROCEDURALSUN");
-		float edgeSoftness = settingManager.GetValue<float>("EdgeSoftness", "PROCEDURALSUN");
-		float glowCurve = std::max(FLT_MIN, settingManager.GetInterpolatedTimeOfDayValue("GlowCurve", "PROCEDURALSUN"));
+		// The ENB keys describe a disc drawn across the sun billboard: Size is its radius as a share of
+		// the billboard (0.04 per unit) and the glow fades out at the billboard edge. They are mapped to
+		// the angular disc and halo through the billboard's measured angular size, so presets keep their sun.
+		const float billboardTan = std::max(data.SunBillboardTan, 1e-4f);
+		const float size = std::max(settingManager.GetValue<float>("Size", "PROCEDURALSUN"), 0.0f);
+		const float edgeSoftness = settingManager.GetValue<float>("EdgeSoftness", "PROCEDURALSUN");
+		const float glowCurve = std::max(FLT_MIN, settingManager.GetInterpolatedTimeOfDayValue("GlowCurve", "PROCEDURALSUN"));
 
-		float scaledSize = size * 0.04f;
-		float diskSq = scaledSize * scaledSize;
-		float outerSpan = std::max(1.0f - diskSq, FLT_MIN);
-		float softSq = std::max(edgeSoftness * edgeSoftness, FLT_MIN);
+		const float diskRadius = std::min(size * 0.04f, 1.0f);
+		proceduralSunAngularRadius = std::atan(diskRadius * billboardTan);
 
-		data.ProceduralSunDiskRadiusSq = diskSq;
-		data.ProceduralSunCoronaScale = 1.0f / outerSpan;
-		data.ProceduralSunDiskEdgeScale = 1.0f / (std::max(diskSq, FLT_MIN) * softSq);
-		data.ProceduralSunCoronaFalloff = 100.0f / (outerSpan * glowCurve);
+		data.ProceduralSunDiskCos = std::cos(proceduralSunAngularRadius);
+		data.ProceduralSunHaloCos = 1.0f / std::sqrt(1.0f + billboardTan * billboardTan);
+		// The old edge spanned softness^2 of the disc's squared radius, and the disc profile works in the same space
+		data.ProceduralSunEdgeSoftness = std::clamp(edgeSoftness * edgeSoftness, 0.01f, 1.0f);
+		data.ProceduralSunHaloFalloff = 100.0f / (std::max(1.0f - diskRadius * diskRadius, FLT_MIN) * glowCurve);
+		data.ProceduralSunHaloIntensity = std::max(settingManager.GetInterpolatedTimeOfDayValue("GlowIntensity", "PROCEDURALSUN"), 0.0f);
+		data.ProceduralSunRadianceLimit = GetMainTargetRadianceLimit();
+
+		// Correction for E11's SDR tonemap; 1 keeps the physical L = E / solid angle
+		static constexpr float sunRadianceScale = 1.0f;
+		// 4 pi sin^2(r / 2) is the disc's solid angle 2 pi (1 - cos r), without the small-angle cancellation
+		const float halfAngleSin = std::sin(proceduralSunAngularRadius * 0.5f);
+		const float discSolidAngle = 4.0f * std::numbers::pi_v<float> * halfAngleSin * halfAngleSin;
+		data.ProceduralSunDiskRadiance = discSolidAngle > 0.0f ? sunRadianceScale / discSolidAngle : 0.0f;
 	}
-
-	data.ProceduralSunGlowIntensity = settingManager.GetInterpolatedTimeOfDayValue("GlowIntensity", "PROCEDURALSUN");
 
 	perFrameCache = data;
 	return data;
@@ -503,8 +533,10 @@ void Effects11::ClearShaderCache()
 		}
 	}
 
-	if (EffectManager::GetSingleton().IsInitialized())
-		EffectManager::GetSingleton().ReloadShaders();
+	auto& effectManager = EffectManager::GetSingleton();
+	effectManager.enbAdaptation.ClearShaderCache();
+	if (effectManager.IsInitialized())
+		effectManager.ReloadShaders();
 }
 
 float3 Curve(float3 color, float power)
@@ -905,7 +937,7 @@ void Effects11::DrawVolumetricRays()
 	// The apply pass lights the rays with SunColor, which is premultiplied by the sun's visibility,
 	// so with the sun faded out (overcast, rain, fog, night) the passes would only add black
 	auto& settingManager = SettingManager::GetSingleton();
-	if (!settingManager.GetValue<bool>("EnableVolumetricRays", "EFFECT") || EffectManager::GetSunVisibility(sky->sun) <= 0.0f)
+	if (!settingManager.GetValue<bool>("EnableVolumetricRays", "EFFECT") || Util::GetSunVisibility(sky->sun) <= 0.0f)
 		return;
 
 	auto& effectManager = EffectManager::GetSingleton();
