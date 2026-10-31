@@ -298,13 +298,9 @@ void FidelityFX::CreateFSRResources()
 	contextDescription.maxUpscaleSize.height = displayHeight;
 	contextDescription.displaySize.width = displayWidth;
 	contextDescription.displaySize.height = displayHeight;
-	contextDescription.flags = FFX_FSR3_ENABLE_UPSCALING_ONLY | FFX_FSR3_ENABLE_AUTO_EXPOSURE;
-	if (globals::features::hdrDisplay.loaded) {
-		contextDescription.flags |= FFX_FSR3_ENABLE_HIGH_DYNAMIC_RANGE;
-		contextDescription.backBufferFormat = FFX_SURFACE_FORMAT_R10G10B10A2_UNORM;
-	} else {
-		contextDescription.backBufferFormat = FFX_SURFACE_FORMAT_R8G8B8A8_UNORM;
-	}
+	// FSR upscales kMAIN before the tonemap, so its input is HDR radiance whatever the display mode
+	contextDescription.flags = FFX_FSR3_ENABLE_UPSCALING_ONLY | FFX_FSR3_ENABLE_AUTO_EXPOSURE | FFX_FSR3_ENABLE_HIGH_DYNAMIC_RANGE;
+	contextDescription.backBufferFormat = globals::features::hdrDisplay.loaded ? FFX_SURFACE_FORMAT_R10G10B10A2_UNORM : FFX_SURFACE_FORMAT_R8G8B8A8_UNORM;
 	contextDescription.backendInterfaceUpscaling = fsrInterface;
 
 	if (ffxFsr3ContextCreate(&fsrContext[0], &contextDescription) != FFX_OK) {

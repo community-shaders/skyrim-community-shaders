@@ -92,6 +92,7 @@ public:
 		float pad3 = 0.0f;
 		float3 volumetricFogNoiseVelocity = { 0.0f, 0.0f, 0.0f };
 		float pad0;
+		float4 originalFogColorOverride = { 1.0f, 1.0f, 1.0f, 0.0f };  // rgb = replaces the weather fog colour, a = blend amount
 	} settings;
 	STATIC_ASSERT_ALIGNAS_16(Settings);
 

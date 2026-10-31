@@ -1,6 +1,6 @@
 {
     "name": "tracy",
-    "version-string": "0.14.0",
+    "version-string": "0.14.2-20a293b3",
     "description": "A real time, nanosecond resolution, remote telemetry, hybrid frame and sampling profiler for games and other applications.",
     "homepage": "https://github.com/wolfpld/tracy",
     "license": "BSD-3-Clause",
