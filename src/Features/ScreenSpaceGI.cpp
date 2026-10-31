@@ -707,7 +707,6 @@ void ScreenSpaceGI::UpdateSB()
 		data.RcpTexDim = float2(1.0f) / res;
 		data.FrameDim = dynres;
 		data.RcpFrameDim = float2(1.0f) / dynres;
-		data.FrameIndex = globals::state->frameCount;
 
 		data.NumSlices = settings.NumSlices;
 		data.NumSteps = settings.NumSteps;
@@ -921,6 +920,7 @@ void ScreenSpaceGI::DrawSSGI()
 		srvs.at(6) = texIlCoCg[inputGITexIdx]->srv.get();
 		srvs.at(7) = texGiSpecular[inputAoTexIdx]->srv.get();
 		srvs.at(8) = texNormal->srv.get();
+		srvs.at(9) = texAo[inputAoTexIdx]->srv.get();
 
 		uavs.at(0) = texAo[!inputAoTexIdx]->uav.get();
 		uavs.at(1) = texIlY[!inputGITexIdx]->uav.get();
