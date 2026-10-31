@@ -178,7 +178,7 @@ public:
 private:
 	void DrawWeatherAnalysis() const;
 
-	size_t rainTimer = 0;  // milliseconds; size_t for precision
+	size_t rainTimer = 0;  // microseconds; size_t for precision
 	bool splashesOfStormsLoaded = false;
 
 	// Weather wetness calculation result for debug display
