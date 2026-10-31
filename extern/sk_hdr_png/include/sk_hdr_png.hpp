@@ -557,7 +557,7 @@ sk_hdr_png::crc32 (const void* typeless_data, size_t offset, size_t len, uint32_
 //  1. Remove gAMA chunk  (Prevents SKIV from recognizing as HDR)
 //  2. Remove sRGB chunk  (Prevents Discord from rendering in HDR)
 //
-//  3. Add cICP  (The primary way of defining HDR10) 
+//  3. Add cICP  (The primary way of defining HDR10)
 //  4. Add iCCP  (Required for Discord to render in HDR)
 //
 //  (5) Add cLLi  [Unnecessary, but probably a good idea]

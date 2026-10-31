@@ -662,11 +662,11 @@ void TruePBR::GenerateShaderPermutations(RE::BSShader* shader)
 			auto vertexShaderDesriptor = descriptor;
 			auto pixelShaderDescriptor = descriptor;
 			state->ModifyShaderLookup(*shader, vertexShaderDesriptor, pixelShaderDescriptor);
-			std::ignore = shaderCache->GetPixelShader(*shader, pixelShaderDescriptor);
+			std::ignore = shaderCache->GetPixelShader(*shader, pixelShaderDescriptor, true);
 		}
 	} else if (shader->shaderType == RE::BSShader::Type::Utility) {
 		for (auto descriptor : Permutations::GeneratePBRUtilityPixelPermutations()) {
-			std::ignore = shaderCache->GetPixelShader(*shader, descriptor);
+			std::ignore = shaderCache->GetPixelShader(*shader, descriptor, true);
 		}
 	}
 }

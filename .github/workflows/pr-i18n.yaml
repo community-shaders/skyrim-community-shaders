@@ -29,58 +29,9 @@ jobs:
               with:
                   python-version: "3.11"
 
+            # pre-commit.ci regenerates en.json and sorts locales; this gates merges if the autofix didn't land.
             - name: Check en.json is up to date
               run: python tools/extract-i18n.py --check
-
-            - name: Check for orphaned keys
-              run: python tools/extract-i18n.py --orphans
-
-            - name: Check translation file key order matches en.json
-              id: sort_i18n
-              continue-on-error: true
-              run: python tools/sort-i18n.py --check
-
-            - name: Comment on translation key order mismatch
-              if: ${{ steps.sort_i18n.outcome == 'failure' }}
-              continue-on-error: true
-              uses: actions/github-script@v9
-              with:
-                  script: |
-                      const marker = '<!-- sort-i18n-warning -->';
-                      const body = [
-                          marker,
-                          'Translation file key order does not match `en.json`.',
-                          '',
-                          'This does not block the PR, but please run:',
-                          '',
-                          '```sh',
-                          'python tools/sort-i18n.py --write',
-                          '```'
-                      ].join('\n');
-                      const { data: comments } = await github.rest.issues.listComments({
-                          owner: context.repo.owner,
-                          repo: context.repo.repo,
-                          issue_number: context.issue.number,
-                          per_page: 100
-                      });
-                      const comment = comments.find(comment =>
-                          comment.user.type === 'Bot' && comment.body.includes(marker)
-                      );
-                      if (comment) {
-                          await github.rest.issues.updateComment({
-                              owner: context.repo.owner,
-                              repo: context.repo.repo,
-                              comment_id: comment.id,
-                              body
-                          });
-                      } else {
-                          await github.rest.issues.createComment({
-                              owner: context.repo.owner,
-                              repo: context.repo.repo,
-                              issue_number: context.issue.number,
-                              body
-                          });
-                      }
 
             - name: Validate translation file formats
               run: |

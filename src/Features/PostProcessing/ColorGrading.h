@@ -193,7 +193,12 @@ struct ColorGrading : public PostProcessFeature
 	std::array<float, CurveSamples> curveG = {};
 	std::array<float, CurveSamples> curveB = {};
 	bool curveReadbackRequested = false;
-	int curveReadbackRequestFrame = -1;
+	int64_t curveReadbackRequestFrame = -1;
 	bool curveNeedsUpdate = true;
 	std::array<char, sizeof(ColorCB)> prevCurveCB = {};
+	// Inputs of the last LUT generation, so an unchanged LUT is not regenerated every frame.
+	std::array<char, sizeof(ColorCB)> lutKey = {};
+	ID3D11ComputeShader* lutShader = nullptr;
+	uint64_t lutGeneration = 0;
+	bool lutValid = false;
 };

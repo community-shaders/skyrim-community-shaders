@@ -39,6 +39,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	disableVanillaFog,
 	fogInscatteringColor,
 	originalFogColorAmount,
+	originalFogColorOverride,
 	volumetricFogEnabled,
 	volumetricGridPixelSize,
 	volumetricGridSizeZ,
@@ -102,6 +103,7 @@ ExponentialHeightFog::Settings ExponentialHeightFog::GetCommonBufferData() const
 	auto& linearLighting = globals::features::linearLighting;
 	linearLighting.SRGBToWorking(&data.inscatteringTint.x);
 	linearLighting.SRGBToWorking(&data.fogInscatteringColor.x);
+	linearLighting.SRGBToWorking(&data.originalFogColorOverride.x);
 	linearLighting.SRGBToWorking(&data.volumetricFogAlbedo.x);
 	linearLighting.SRGBToWorking(&data.volumetricFogEmissive.x);
 
@@ -128,6 +130,12 @@ void ExponentialHeightFog::DrawSettings()
 	ImGui::SliderFloat(T(TKEY("fog_height_falloff"), "Fog Height Falloff"), &settings.fogHeightFalloff, 0.001f, 2.0f, "%.3f");
 	ImGui::ColorEdit4(T(TKEY("fog_inscattering_color"), "Fog Inscattering Color"), (float*)&settings.fogInscatteringColor);
 	ImGui::SliderFloat(T(TKEY("original_fog_color_amount"), "Original Fog Color Amount"), &settings.originalFogColorAmount, 0.0f, 1.0f, "%.2f");
+	ImGui::ColorEdit4(T(TKEY("original_fog_color_override"), "Original Fog Color Override"), (float*)&settings.originalFogColorOverride);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("%s", T(TKEY("original_fog_color_override_tooltip"),
+							  "Replaces the weather's fog colour used by Original Fog Color Amount.\n"
+							  "Alpha blends from the weather colour (0) to this colour (1)."));
+	}
 	ImGui::SliderFloat(T(TKEY("fog_density"), "Fog Density"), &settings.fogDensity, 0.0f, 1.0f, "%.3f");
 	if (ImGui::TreeNode(T(TKEY("second_fog_layer"), "Second Fog Layer"))) {
 		ImGui::SliderFloat(T(TKEY("fog_height_2"), "Fog Height 2"), &settings.fogHeight2, -22000.0f, 22000.0f, "%.1f");
@@ -276,6 +284,14 @@ void ExponentialHeightFog::ClearShaderCache()
 	if (farConservativeDepthCS) {
 		farConservativeDepthCS->Release();
 		farConservativeDepthCS = nullptr;
+	}
+	if (conservativeDepthGroupCS) {
+		conservativeDepthGroupCS->Release();
+		conservativeDepthGroupCS = nullptr;
+	}
+	if (farConservativeDepthGroupCS) {
+		farConservativeDepthGroupCS->Release();
+		farConservativeDepthGroupCS = nullptr;
 	}
 	if (lightScatteringCS) {
 		lightScatteringCS->Release();
@@ -573,8 +589,13 @@ ID3D11ComputeShader* ExponentialHeightFog::GetMaterialSetupCS()
 	return materialSetupCS;
 }
 
-ID3D11ComputeShader* ExponentialHeightFog::GetConservativeDepthCS()
+ID3D11ComputeShader* ExponentialHeightFog::GetConservativeDepthCS(bool a_groupReduce)
 {
+	if (a_groupReduce) {
+		if (!conservativeDepthGroupCS)
+			conservativeDepthGroupCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\ExponentialHeightFog\\VolumetricFogConservativeDepthCS.hlsl", { { "GROUP_REDUCE", "" } }, "cs_5_0"));
+		return conservativeDepthGroupCS;
+	}
 	if (!conservativeDepthCS)
 		conservativeDepthCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\ExponentialHeightFog\\VolumetricFogConservativeDepthCS.hlsl", {}, "cs_5_0"));
 	return conservativeDepthCS;
@@ -624,8 +645,13 @@ ID3D11ComputeShader* ExponentialHeightFog::GetFarMaterialSetupCS()
 	return farMaterialSetupCS;
 }
 
-ID3D11ComputeShader* ExponentialHeightFog::GetFarConservativeDepthCS()
+ID3D11ComputeShader* ExponentialHeightFog::GetFarConservativeDepthCS(bool a_groupReduce)
 {
+	if (a_groupReduce) {
+		if (!farConservativeDepthGroupCS)
+			farConservativeDepthGroupCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\ExponentialHeightFog\\VolumetricFogConservativeDepthCS.hlsl", { { "VOLUMETRIC_FOG_FAR_GRID", "" }, { "GROUP_REDUCE", "" } }, "cs_5_0"));
+		return farConservativeDepthGroupCS;
+	}
 	if (!farConservativeDepthCS)
 		farConservativeDepthCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\ExponentialHeightFog\\VolumetricFogConservativeDepthCS.hlsl", { { "VOLUMETRIC_FOG_FAR_GRID", "" } }, "cs_5_0"));
 	return farConservativeDepthCS;
@@ -831,6 +857,7 @@ void ExponentialHeightFog::Prepass()
 		Texture3D* integrated;
 		ID3D11ComputeShader* materialSetupCS;
 		ID3D11ComputeShader* conservativeDepthCS;
+		bool groupReduce;
 		ID3D11ComputeShader* lightScatteringCS;
 		ID3D11ComputeShader* integrationCS;
 		bool hasPrevConservativeDepth;
@@ -847,7 +874,10 @@ void ExponentialHeightFog::Prepass()
 			context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
 			context->CSSetShader(p.conservativeDepthCS, nullptr, 0);
 			globals::profiler->BeginPass(p.name);
-			context->Dispatch(groupX, groupY, 1);
+			if (p.groupReduce)
+				context->Dispatch(p.gridSize.x, p.gridSize.y, 1);
+			else
+				context->Dispatch(groupX, groupY, 1);
 			globals::profiler->EndPass();
 			uavs[0] = nullptr;
 			context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
@@ -902,6 +932,10 @@ void ExponentialHeightFog::Prepass()
 		}
 	};
 
+	// From 8-pixel cells up, one thread group per cell reduces the cell's depth footprint in parallel.
+	const bool nearGroupReduce = std::clamp(settings.volumetricGridPixelSize, 4u, 64u) >= 8;
+	const bool farGroupReduce = std::clamp(settings.volumetricFarGridPixelSize, 4u, 64u) >= 8;
+
 	runVolumetricPass({ currentGridSize,
 		vBufferA.get(),
 		conservativeDepth.get(),
@@ -910,7 +944,8 @@ void ExponentialHeightFog::Prepass()
 		temporalHistoryValid ? lightScatteringHistory.get() : nullptr,
 		integratedLightScattering.get(),
 		GetMaterialSetupCS(),
-		GetConservativeDepthCS(),
+		GetConservativeDepthCS(nearGroupReduce),
+		nearGroupReduce,
 		GetLightScatteringCS(),
 		GetIntegrationCS(),
 		temporalHistoryValid && hasConservativeDepthHistory,
@@ -925,7 +960,8 @@ void ExponentialHeightFog::Prepass()
 			temporalHistoryValidFar ? lightScatteringFarHistory.get() : nullptr,
 			integratedLightScatteringFar.get(),
 			GetFarMaterialSetupCS(),
-			GetFarConservativeDepthCS(),
+			GetFarConservativeDepthCS(farGroupReduce),
+			farGroupReduce,
 			GetFarLightScatteringCS(),
 			GetFarIntegrationCS(),
 			temporalHistoryValidFar && hasConservativeDepthFarHistory,

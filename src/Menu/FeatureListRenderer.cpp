@@ -225,7 +225,7 @@ namespace
 		const float top = visible.Min.y + GetListTextTop() + (ImGui::GetTextLineHeight() - size) * 0.5f;
 		ImGui::SetCursorScreenPos(ImVec2(visible.Max.x - size - inset, top));
 		if (ImGui::BeginChild("##FeatureSortOverlay", ImVec2(size, size), ImGuiChildFlags_NavFlattened,
-			ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse)) {
+				ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse)) {
 			const ImGuiID buttonId = ImGui::GetID("###FeatureSort");
 			const bool lit = ImGui::IsWindowHovered() || ImGui::GetFocusID() == buttonId || ImGui::IsPopupOpen("##FeatureSortPopup");
 			const float alpha = std::lerp(ThemeManager::Constants::PALETTE_DIMMED_ALPHA, 1.0f, Util::Anim::Toggle(ImGui::GetID("##Visibility"), lit));

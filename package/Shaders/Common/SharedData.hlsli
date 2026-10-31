@@ -446,6 +446,7 @@ namespace SharedData
 		float pad3;
 		float3 volumetricFogNoiseVelocity;
 		float pad0;
+		float4 originalFogColorOverride;
 	};
 
 	struct TruePBRSettings

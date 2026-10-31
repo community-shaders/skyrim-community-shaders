@@ -119,7 +119,7 @@ namespace Icons
 		struct Ink
 		{
 			ImVec2 quad{ -1.0f, -1.0f };  // unmeasured; never matches a real quad
-			ImVec4 box;  // ink bounds, in the same units as the quad
+			ImVec4 box;                   // ink bounds, in the same units as the quad
 		};
 		static std::unordered_map<ImGuiID, Ink> inkCache;
 		const ImGuiID key = ImHashData(&c, sizeof(c), baked->BakedId);

@@ -27,9 +27,7 @@ float3 TriDither(float2 screenPos, uint frameCount)
 	return (float3(pcg3d(seed1)) - float3(pcg3d(seed2))) / float(0xFFFFFFFFu);
 }
 
-[numthreads(8, 8, 1)] void main(uint3 id
-	: SV_DispatchThreadID)
-{
+[numthreads(8, 8, 1)] void main(uint3 id : SV_DispatchThreadID) {
 	uint width, height;
 	OutputTexture.GetDimensions(width, height);
 	if (id.x >= width || id.y >= height) {

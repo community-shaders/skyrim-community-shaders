@@ -147,7 +147,7 @@ namespace ImageBasedLighting
 	}
 #endif
 
-	float3 GetFogIBLColor(float3 fogColor)
+	float3 GetFogIBLColorBlend(float3 fogColor)
 	{
 		float3 iblColor;
 		if (SharedData::iblSettings.DALCMode >= 2) {
@@ -167,6 +167,14 @@ namespace ImageBasedLighting
 			}
 		}
 		return lerp(fogColor, iblColor, SharedData::iblSettings.FogAmount);
+	}
+
+	float3 GetFogIBLColor(float3 fogColor)
+	{
+		float3 result = fogColor;
+		[branch] if (SharedData::iblSettings.FogAmount != 0.0)
+			result = GetFogIBLColorBlend(fogColor);
+		return result;
 	}
 }
 

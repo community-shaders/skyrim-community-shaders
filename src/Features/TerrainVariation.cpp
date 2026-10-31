@@ -1,10 +1,10 @@
 #include "TerrainVariation.h"
+#include "../Util.h"
 #include "Globals.h"
 #include "I18n/I18n.h"
 #include "Menu.h"
 #include "Menu/Fonts.h"
 #include "State.h"
-#include "../Util.h"
 
 #include <cctype>
 
@@ -20,7 +20,7 @@ void TerrainVariation::DrawSettings()
 	{
 		MenuFonts::FontRoleGuard bodyGuard(Menu::FontRole::Body);
 		ImGui::TextWrapped("%s", T(TKEY("always_enabled_note"),
-			"Terrain Variation is always enabled when installed. To turn it off, use Disable at Boot."));
+									 "Terrain Variation is always enabled when installed. To turn it off, use Disable at Boot."));
 	}
 
 	ImGui::Spacing();

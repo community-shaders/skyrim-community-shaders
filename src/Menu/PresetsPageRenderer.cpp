@@ -750,8 +750,8 @@ void PresetsPageRenderer::RenderDetail()
 				DrawRoundedImage(dl, reinterpret_cast<ImTextureID>(pack->screenshotSRVs[i].get()), p0, p1, style.FrameRounding);
 			if (isOpen || ImGui::IsItemHovered()) {
 				const ImU32 border = ImGui::GetColorU32(isOpen ?
-																		theme.StatusPalette.InfoColor :
-																		ImGui::GetStyleColorVec4(ImGuiCol_Border));
+															theme.StatusPalette.InfoColor :
+															ImGui::GetStyleColorVec4(ImGuiCol_Border));
 				dl->AddRect(p0, p1, border, style.FrameRounding, 0, style.FrameBorderSize + (isOpen ? 1.0f : 0.0f));
 			}
 			if (clicked) {

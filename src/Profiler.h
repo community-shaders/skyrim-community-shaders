@@ -93,6 +93,16 @@ public:
 		}
 	};
 
+	/** @brief Rolling wall-clock statistics of the interval between EndFrame calls. */
+	struct FrameStats
+	{
+		float lastMs = 0.0f;
+		float avgMs = 0.0f;
+		float p95Ms = 0.0f;
+		float p99Ms = 0.0f;
+		uint32_t count = 0;
+	};
+
 	/**
 	 * @brief Creates timestamp query objects and prepares the frame ring buffer.
 	 * @param device D3D11 device used to create query objects.
@@ -155,6 +165,13 @@ public:
 	 */
 	std::vector<TimerResult> GetStatistics(std::string_view timerPrefix = {}) const;
 
+	/**
+	 * @brief Gets the present-cadence frame interval statistics, tracked even while GPU timing is off.
+	 * Re-sorts the history if it gained a sample, so callers should throttle it.
+	 * Not synchronized: call it only on the thread that calls EndFrame, like GetResults.
+	 */
+	FrameStats GetFrameStats() const;
+
 	/** @brief Gets the total GPU time in milliseconds for the last collected frame. */
 	float GetTotalTimeMs() const { return totalTimeMs; }
 
@@ -213,9 +230,13 @@ private:
 	bool passOpen = false;
 	// Ring was full at BeginFrame; the whole frame is unprofiled.
 	bool frameSkipped = false;
-	double cpuTicksToMs = 0.0;
+	static double QpcTicksToMs();
+
+	double cpuTicksToMs = QpcTicksToMs();
 	std::atomic<uint64_t> frameCounter{ 0 };
 	std::atomic<uint64_t> activeUntilFrame{ 0 };
+	RollingHistory frameHistory;
+	int64_t lastFrameTicks = 0;
 
 	PerfEventCallback beginPerfEvent;
 	PerfEventCallback endPerfEvent;

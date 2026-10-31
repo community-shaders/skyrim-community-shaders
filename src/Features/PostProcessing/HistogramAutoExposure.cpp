@@ -52,8 +52,8 @@ void HistogramAutoExposure::DrawCameraExposureReadout()
 	const auto parameters = GetExposureParameters();
 	float iso = cam->ISO;
 	if (cam->Exposure == CinematicCamera::ExposureMode::AutoISO) {
-		exposureReadbackRequestFrame = ImGui::GetFrameCount();
-		if (resetAdaptation || adaptationReadbackFrame < 0 || adaptationReadbackFrame < ImGui::GetFrameCount() - 1) {
+		exposureReadbackRequestFrame = static_cast<int64_t>(globals::state->frameCount);
+		if (resetAdaptation || adaptationReadbackFrame < 0 || adaptationReadbackFrame < static_cast<int64_t>(globals::state->frameCount) - 1) {
 			ImGui::TextDisabled("%s", T("feature.post_processing.cinematic_camera.metering", "Metering..."));
 			return;
 		}
@@ -120,7 +120,7 @@ void HistogramAutoExposure::DrawSettings()
 
 	if (ImGui::CollapsingHeader(T("feature.post_processing.histogram_auto_exposure.histogram", "Histogram"), ImGuiTreeNodeFlags_DefaultOpen)) {
 		histogramReadbackRequested = true;
-		histogramReadbackRequestFrame = ImGui::GetFrameCount();
+		histogramReadbackRequestFrame = static_cast<int64_t>(globals::state->frameCount);
 
 		constexpr float kMinEV100 = -10.f;
 		constexpr float kMaxEV100 = 21.f;
@@ -337,13 +337,13 @@ void HistogramAutoExposure::Draw(TextureInfo& inout_tex)
 	const bool histogramReadbackActive =
 		histogramReadbackRequested &&
 		ImGui::GetCurrentContext() &&
-		histogramReadbackRequestFrame >= ImGui::GetFrameCount() - 1;
+		histogramReadbackRequestFrame >= static_cast<int64_t>(globals::state->frameCount) - 1;
 	if (!histogramReadbackActive)
 		histogramReadbackRequested = false;
 	const bool exposureReadbackActive =
 		ImGui::GetCurrentContext() &&
 		exposureReadbackRequestFrame >= 0 &&
-		exposureReadbackRequestFrame >= ImGui::GetFrameCount() - 1;
+		exposureReadbackRequestFrame >= static_cast<int64_t>(globals::state->frameCount) - 1;
 
 	{
 		state->BeginPerfEvent("Calculate Histogram");
@@ -422,7 +422,7 @@ void HistogramAutoExposure::Draw(TextureInfo& inout_tex)
 		D3D11_MAPPED_SUBRESOURCE adaptMapped{};
 		if (SUCCEEDED(context->Map(adaptationStagingBuffer.get(), 0, D3D11_MAP_READ, 0, &adaptMapped))) {
 			adaptationValue = *reinterpret_cast<float*>(adaptMapped.pData);
-			adaptationReadbackFrame = ImGui::GetFrameCount();
+			adaptationReadbackFrame = static_cast<int64_t>(globals::state->frameCount);
 			context->Unmap(adaptationStagingBuffer.get(), 0);
 		}
 	}

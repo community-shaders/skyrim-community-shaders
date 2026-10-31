@@ -334,7 +334,7 @@ float4 Skin::GetWetness(RE::BSGeometry* geometry)
 {
 	float4 wetness = float4(0.0f, 0.0f, 0.0f, 0.0f);
 	auto userData = geometry->GetUserData();
-	if (userData && userData->formType == RE::FormType::ActorCharacter) {
+	if (userData && userData->IsActor()) {
 		auto actor = static_cast<RE::Character*>(userData);
 		const uint32_t actorFormID = userData->formID;
 		const uint currentFrame = globals::state->frameCount;

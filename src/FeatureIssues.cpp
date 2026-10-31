@@ -128,7 +128,7 @@ namespace FeatureIssues
 		return std::any_of(s_featureIssues.begin(), s_featureIssues.end(),
 			[](const auto& issue) {
 				return (issue.issueType == FeatureIssueInfo::IssueType::OBSOLETE && issue.ModifiedShaderDirectory()) ||
-			           issue.issueType == FeatureIssueInfo::IssueType::UNKNOWN;
+				       issue.issueType == FeatureIssueInfo::IssueType::UNKNOWN;
 			});
 	}
 

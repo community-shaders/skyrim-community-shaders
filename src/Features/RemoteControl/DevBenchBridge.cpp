@@ -18,6 +18,7 @@
 #	include "Features/RemoteControl/NvPerf.h"
 #	include "Features/RenderDoc.h"
 #	include "Features/ScreenshotFeature.h"
+#	include "Features/Upscaling.h"
 #	include "Globals.h"
 #	include "Profiler.h"
 #	include "CSEditor/SceneManager/SceneSettingsManager.h"
@@ -83,6 +84,12 @@ namespace
 	std::mutex g_lastRequestMutex;
 	std::optional<DevBenchBridge::Request> g_lastRequest;
 
+	// Exception text can hold ANSI-code-page bytes; a strict dump would throw past the C ABI.
+	std::string DumpForDevBench(const json& a_json)
+	{
+		return a_json.dump(-1, ' ', false, json::error_handler_t::replace);
+	}
+
 	void RunHandler(const char* a_tool, json (*a_build)(const json&), const char* a_argsJson, void* a_sink, DevBenchAPI::WriteFn a_write)
 	{
 		{
@@ -102,7 +109,7 @@ namespace
 		} catch (...) {
 			out = json{ { "error", "unknown handler error" } };
 		}
-		const std::string dumped = out.dump();
+		const std::string dumped = DumpForDevBench(out);
 		a_write(a_sink, dumped.c_str());
 	}
 
@@ -270,8 +277,9 @@ namespace
 				if (target->loaded && !applied)
 					g_toggledOffFeatures.insert(target);
 				target->loaded = applied;
+				globals::shaderCache->ResetActiveShaderTracking();
 				if (auto* dvb = DevBenchAPI::GetDevBenchInterface001()) {
-					const std::string payload = json{ { "shortName", shortName }, { "enabled", applied } }.dump();
+					const std::string payload = DumpForDevBench(json{ { "shortName", shortName }, { "enabled", applied } });
 					dvb->EmitEvent("communityshaders.feature.changed", payload.c_str());
 				}
 			});
@@ -404,7 +412,16 @@ namespace
 					entry["gpuHistory"] = hist;
 					passes.push_back(entry);
 				}
+				const auto frame = profiler->GetFrameStats();
 				return json{
+					{ "frame", {
+								   { "ms", frame.lastMs },
+								   { "avgMs", frame.avgMs },
+								   { "p95Ms", frame.p95Ms },
+								   { "p99Ms", frame.p99Ms },
+								   { "samples", frame.count },
+								   { "frameGeneration", globals::features::upscaling.IsFrameGenerationActive() },
+							   } },
 					{ "totalGpuMs", profiler->GetTotalTimeMs() },
 					{ "totalCpuMs", profiler->GetCpuTotalTimeMs() },
 					{ "frame_count", EnqueuedFrame() },
@@ -834,7 +851,7 @@ namespace DevBenchBridge
 		dvb->RegisterTool("communityshaders.feature", featureDesc, &FeatureToolHandler, nullptr);
 
 		static constexpr const char* inspectDesc =
-			R"({"description":"Read non-feature Community Shaders engine state. Kind-dispatched; response is a JSON object. kind=state -> {plugin,frame_count}. kind=shadercache -> {compiling,completedTasks,totalTasks,failedTasks,currentFailedCount,frame_count}. kind=profiler -> {totalGpuMs,totalCpuMs,frame_count,passes:[{name,gpuMs,gpuAvgMs,gpuP95Ms,gpuP99Ms,cpuMs,cpuAvgMs,gpuHistory:[...]}]}; optional filter param to match pass names.","readOnly":true,"inputSchema":{"type":"object","properties":{"kind":{"type":"string","enum":["state","shadercache","profiler"]},"filter":{"type":"string"}},"required":["kind"]}})";
+			R"({"description":"Read non-feature Community Shaders engine state. Kind-dispatched; response is a JSON object. kind=state -> {plugin,frame_count}. kind=shadercache -> {compiling,completedTasks,totalTasks,failedTasks,currentFailedCount,frame_count}. kind=profiler -> {frame:{ms,avgMs,p95Ms,p99Ms,samples,frameGeneration} (engine-frame wall clock; presents run ~2x when frameGeneration),totalGpuMs,totalCpuMs,frame_count,passes:[{name,gpuMs,gpuAvgMs,gpuP95Ms,gpuP99Ms,cpuMs,cpuAvgMs,gpuHistory:[...]}]}; optional filter param to match pass names.","readOnly":true,"inputSchema":{"type":"object","properties":{"kind":{"type":"string","enum":["state","shadercache","profiler"]},"filter":{"type":"string"}},"required":["kind"]}})";
 		dvb->RegisterTool("communityshaders.inspect", inspectDesc, &InspectToolHandler, nullptr);
 
 		static constexpr const char* shadercacheDesc =
@@ -850,7 +867,7 @@ namespace DevBenchBridge
 		dvb->RegisterTool("communityshaders.nvperf", nvperfDesc, &NvPerfToolHandler, nullptr);
 		NvPerf::SetCompletionCallback([](const NvPerf::CaptureResult& a_result) {
 			if (auto* host = DevBenchAPI::GetDevBenchInterface001()) {
-				const std::string payload = json{ { "captureId", a_result.id }, { "success", a_result.success }, { "error", a_result.error } }.dump();
+				const std::string payload = DumpForDevBench(json{ { "captureId", a_result.id }, { "success", a_result.success }, { "error", a_result.error } });
 				host->EmitEvent("communityshaders.nvperf.completed", payload.c_str());
 			}
 		});
