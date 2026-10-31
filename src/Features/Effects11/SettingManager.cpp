@@ -1,5 +1,6 @@
 #include "SettingManager.h"
 
+#include "IniSerialization.h"
 #include "PresetManager.h"
 #include "WeatherManager.h"
 #include <Windows.h>
@@ -194,10 +195,9 @@ SettingValue SettingManager::ResolveWeatherValue(uint32_t weatherID, uint32_t se
 		base);
 }
 
-void SettingManager::RegisterBoolSetting(const std::string& key, const std::string& category,
-	bool defaultValue, bool hasWeatherSupport)
+/** @brief A bool setting ready for RegisterSettingInternal. */
+static Setting MakeBoolSetting(const std::string& key, const std::string& category, bool defaultValue, bool hasWeatherSupport)
 {
-	std::unique_lock lock(mutex);
 	Setting setting;
 	setting.key = key;
 	setting.category = category;
@@ -205,7 +205,14 @@ void SettingManager::RegisterBoolSetting(const std::string& key, const std::stri
 	setting.hasWeatherSupport = hasWeatherSupport;
 	setting.defaultValue = defaultValue;
 	setting.currentValue = defaultValue;
+	return setting;
+}
 
+void SettingManager::RegisterBoolSetting(const std::string& key, const std::string& category,
+	bool defaultValue, bool hasWeatherSupport)
+{
+	std::unique_lock lock(mutex);
+	Setting setting = MakeBoolSetting(key, category, defaultValue, hasWeatherSupport);
 	RegisterSettingInternal(setting);
 }
 
@@ -268,6 +275,11 @@ void SettingManager::RegisterColorTimeOfDaySetting(const std::string& key, const
 	setting.currentValue = colorTimeOfDayDefault;
 
 	RegisterSettingInternal(setting);
+
+	// ENB gives every colour filter its own HDRWeighting switch
+	Setting hdrWeighting = MakeBoolSetting(key + "HDRWeighting", category, false, hasWeatherSupport);
+	RegisterSettingInternal(hdrWeighting);
+	allSettings[setting.id].hdrWeightingID = hdrWeighting.id;
 }
 
 template <typename T>
@@ -366,28 +378,30 @@ void SettingManager::SetValueInternal(uint32_t id, const T& value)
 		// Update all weather IDs sharing the same file
 		auto& weatherManager = WeatherManager::GetSingleton();
 		auto* entry = weatherManager.FindWeatherEntry(targetWeatherID);
-
-		if (entry) {
-			// Only the periods the edit changed become weather-defined; the rest keep following enbseries.ini
-			const uint8_t editedPeriods = ChangedPeriods(ResolveWeatherValue(targetWeatherID, id), value);
-			for (uint32_t linkedID : entry->weatherIDs) {
-				auto& data = weatherData[linkedID];
-				if (data.size() < allSettings.size()) {
-					auto oldSize = data.size();
-					data.resize(allSettings.size());
-					for (size_t i = oldSize; i < allSettings.size(); ++i) {
-						data[i] = allSettings[i].currentValue;
-					}
-				}
-				data[id] = value;
-
-				auto& defined = weatherDefined[linkedID];
-				if (defined.size() < allSettings.size())
-					defined.resize(allSettings.size(), 0);
-				defined[id] |= editedPeriods;
-			}
+		if (!entry) {
+			setting.currentValue = value;
 			return;
 		}
+
+		// Only the periods the edit changed become weather-defined; the rest keep following enbseries.ini
+		const uint8_t editedPeriods = ChangedPeriods(ResolveWeatherValue(targetWeatherID, id), value);
+		for (uint32_t linkedID : entry->weatherIDs) {
+			auto& data = weatherData[linkedID];
+			if (data.size() < allSettings.size()) {
+				auto oldSize = data.size();
+				data.resize(allSettings.size());
+				for (size_t i = oldSize; i < allSettings.size(); ++i) {
+					data[i] = allSettings[i].currentValue;
+				}
+			}
+			data[id] = value;
+
+			auto& defined = weatherDefined[linkedID];
+			if (defined.size() < allSettings.size())
+				defined.resize(allSettings.size(), 0);
+			defined[id] |= editedPeriods;
+		}
+		return;
 	}
 
 	setting.currentValue = value;
@@ -428,7 +442,7 @@ float3 SettingManager::GetInterpolatedColorTimeOfDayValue(std::string_view key, 
 	if (id == 0xFFFFFFFF)
 		return {};
 	ColorTimeOfDayValue colorTimeOfDayValue = GetValueInternal<ColorTimeOfDayValue>(id);
-	return ComputeColorTimeOfDayInterpolation(colorTimeOfDayValue);
+	return ComputeColorTimeOfDayInterpolation(colorTimeOfDayValue, GetValueInternal<bool>(allSettings[id].hdrWeightingID));
 }
 
 const Setting* SettingManager::GetSettingInfo(std::string_view key, std::string_view category) const
@@ -902,16 +916,21 @@ float SettingManager::ComputeTimeOfDayInterpolation(const TimeOfDayValue& value)
 	       timeOfDay2[3] * value.values[TimeOfDayValue::InteriorNight];
 }
 
-float3 SettingManager::ComputeColorTimeOfDayInterpolation(const ColorTimeOfDayValue& value) const
+float3 SettingManager::ComputeColorTimeOfDayInterpolation(const ColorTimeOfDayValue& value, bool hdrWeighting) const
 {
-	return timeOfDay1[0] * value.values[ColorTimeOfDayValue::Dawn] +
-	       timeOfDay1[1] * value.values[ColorTimeOfDayValue::Sunrise] +
-	       timeOfDay1[2] * value.values[ColorTimeOfDayValue::Day] +
-	       timeOfDay1[3] * value.values[ColorTimeOfDayValue::Sunset] +
-	       timeOfDay2[0] * value.values[ColorTimeOfDayValue::Dusk] +
-	       timeOfDay2[1] * value.values[ColorTimeOfDayValue::Night] +
-	       timeOfDay2[2] * value.values[ColorTimeOfDayValue::InteriorDay] +
-	       timeOfDay2[3] * value.values[ColorTimeOfDayValue::InteriorNight];
+	static const float3 rec709Luminance{ 0.2126f, 0.7152f, 0.0722f };
+	const float periodWeights[ColorTimeOfDayValue::Total] = { timeOfDay1[0], timeOfDay1[1], timeOfDay1[2], timeOfDay1[3],
+		timeOfDay2[0], timeOfDay2[1], timeOfDay2[2], timeOfDay2[3] };
+
+	float3 blended{};
+	float weightSum = 0.0f;
+	for (int i = 0; i < ColorTimeOfDayValue::Total; ++i) {
+		const float weight = periodWeights[i] * (hdrWeighting ? value.values[i].Dot(rec709Luminance) : 1.0f);
+		blended += value.values[i] * weight;
+		weightSum += weight;
+	}
+	// Brighter filters take a larger share of the transition, so a dim tinted period fades out sooner
+	return hdrWeighting && weightSum > 0.0f ? blended / weightSum : blended;
 }
 
 /** @brief Reads a raw ini value; returns false if the key is missing or empty. */
@@ -1035,25 +1054,6 @@ uint8_t SettingManager::LoadSettingFromFile(const std::string& filePath, const s
 
 void SettingManager::SaveSettingToFile(const std::string& filePath, const std::string& section, const std::string& key, const Setting& setting, uint8_t periodMask)
 {
-	auto formatFloat = [](float value) -> std::string {
-		// Six decimals: presets use values finer than 0.001, and saving any time-of-day period rewrites every defined one
-		char temp[64];
-		sprintf_s(temp, "%.6f", value);
-		std::string result = temp;
-
-		// Remove trailing zeros
-		while (result.length() > 1 && result.back() == '0') {
-			result.pop_back();
-		}
-
-		// Ensure at least one decimal place (add .0 if needed)
-		if (result.back() == '.') {
-			result += '0';
-		}
-
-		return result;
-	};
-
 	switch (setting.type) {
 	case SettingType::Bool:
 		{
@@ -1064,7 +1064,7 @@ void SettingManager::SaveSettingToFile(const std::string& filePath, const std::s
 	case SettingType::Float:
 		{
 			float value = std::get<float>(setting.currentValue);
-			std::string formatted = formatFloat(value);
+			std::string formatted = Effects11Util::Ini::FormatFloat(value);
 			WritePrivateProfileStringA(section.c_str(), key.c_str(), formatted.c_str(), filePath.c_str());
 			break;
 		}
@@ -1076,7 +1076,7 @@ void SettingManager::SaveSettingToFile(const std::string& filePath, const std::s
 				if (!(periodMask & PeriodBit(i)))
 					continue;
 				std::string fullKey = key + timeOfDayNames[i];
-				std::string formatted = formatFloat(timeOfDayValue.values[i]);
+				std::string formatted = Effects11Util::Ini::FormatFloat(timeOfDayValue.values[i]);
 				WritePrivateProfileStringA(section.c_str(), fullKey.c_str(), formatted.c_str(), filePath.c_str());
 			}
 			break;
@@ -1090,7 +1090,8 @@ void SettingManager::SaveSettingToFile(const std::string& filePath, const std::s
 					continue;
 				std::string fullKey = key + timeOfDayNames[i];
 				const auto& color = colorTimeOfDayValue.values[i];
-				std::string formatted = formatFloat(color.x) + ", " + formatFloat(color.y) + ", " + formatFloat(color.z);
+				const float rgb[3] = { color.x, color.y, color.z };
+				std::string formatted = Effects11Util::Ini::FormatFloatList(rgb);
 				WritePrivateProfileStringA(section.c_str(), fullKey.c_str(), formatted.c_str(), filePath.c_str());
 			}
 			break;

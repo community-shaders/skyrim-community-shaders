@@ -253,8 +253,10 @@ void WriteScreenSpaceShadow(DispatchParameters inParameters, int3 inGroupID, int
 		half2 coord = read_xy * inParameters.InvDepthTextureSize * inParameters.DynamicRes;
 		half2 coord_with_offset = (read_xy + offset_xy) * inParameters.InvDepthTextureSize * inParameters.DynamicRes;
 
-		depths.x = inParameters.DepthTexture.SampleLevel(inParameters.PointBorderSampler, coord, 0);
-		depths.y = inParameters.DepthTexture.SampleLevel(inParameters.PointBorderSampler, coord_with_offset, 0);
+		// Under dynamic resolution the render area is the texture's top-left, and the border sampler
+		// only covers reads past the texture: reads past the render area are off-screen too.
+		depths.x = all(coord < inParameters.DynamicRes) ? inParameters.DepthTexture.SampleLevel(inParameters.PointBorderSampler, coord, 0) : inParameters.FarDepthValue;
+		depths.y = all(coord_with_offset < inParameters.DynamicRes) ? inParameters.DepthTexture.SampleLevel(inParameters.PointBorderSampler, coord_with_offset, 0) : inParameters.FarDepthValue;
 
 		// Depth thresholds (bilinear/shadow thickness) are based on a fractional ratio of the difference between sampled depth and the far clip depth
 		static const half kDepthThicknessFloor = 1e-4h;  // Prevents division by zero in depth_scale when depth is at the far clip plane
@@ -339,16 +341,28 @@ void WriteScreenSpaceShadow(DispatchParameters inParameters, int3 inGroupID, int
 	half front_start_depth = scaled_start_depth - z_sign;
 	half back_start_depth = scaled_start_depth + z_sign;
 
-	[unroll] for (i = 0; i < SAMPLE_COUNT; i++)
+#if (SAMPLE_COUNT / 4) * 4 != SAMPLE_COUNT
+#	error SAMPLE_COUNT must be a multiple of 4
+#endif
+#if SAMPLE_COUNT > 128
+#	define SSS_MARCH_ATTRIBUTE [loop]
+#else
+#	define SSS_MARCH_ATTRIBUTE [unroll]
+#endif
+	SSS_MARCH_ATTRIBUTE for (i = 0; i < SAMPLE_COUNT; i += 4)
 	{
-		half shadow_depth = DepthData[sample_index + i] * depth_scale;
-		half front_depth_delta = abs(front_start_depth - shadow_depth);
-		half back_depth_delta = abs(back_start_depth - shadow_depth);
+		[unroll] for (int j = 0; j < 4; j++)
+		{
+			half shadow_depth = DepthData[sample_index + i + j] * depth_scale;
+			half front_depth_delta = abs(front_start_depth - shadow_depth);
+			half back_depth_delta = abs(back_start_depth - shadow_depth);
 
-		// By using 4 values, the average shadow can be taken, which can help soften single-pixel shadows.
-		front_shadow_value[i & 3] = min(front_shadow_value[i & 3], front_depth_delta);
-		back_shadow_value[i & 3] = min(back_shadow_value[i & 3], back_depth_delta);
+			// By using 4 values, the average shadow can be taken, which can help soften single-pixel shadows.
+			front_shadow_value[j] = min(front_shadow_value[j], front_depth_delta);
+			back_shadow_value[j] = min(back_shadow_value[j], back_depth_delta);
+		}
 	}
+#undef SSS_MARCH_ATTRIBUTE
 
 	// Apply the contrast value.
 	// A value of 0 indicates a sample was exactly matched to the reference depth (and the result is fully shadowed)

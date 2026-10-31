@@ -2,11 +2,19 @@
 
 #include <BS_thread_pool.hpp>
 #include <atomic>
+#include <deque>
 #include <efsw/efsw.hpp>
+#include <functional>
+#include <span>
+#include <string_view>
+#include <unordered_set>
+#include <variant>
 #include <vector>
 #include <winrt/base.h>
 
 #include "Utils/WinApi.h"
+
+struct ID3D11ComputeShader;
 
 using namespace std::chrono;
 
@@ -109,6 +117,8 @@ namespace ShaderConstants
 		const int32_t PBRFlags = 14;
 		const int32_t PBRParams1 = 15;
 		const int32_t PBRParams2 = 16;
+		const int32_t PBRParams3 = 17;
+		const int32_t PBRParams4 = 18;
 	};
 
 	struct EffectPS
@@ -161,12 +171,14 @@ namespace SIE
 			Completed
 		};
 		ShaderCompilationTask(ShaderClass shaderClass, const RE::BSShader& shader,
-			uint32_t descriptor);
+			uint32_t descriptor, bool a_precompile = false);
 		/** @brief Compiles the shader, writing the result to the ShaderCache. */
 		void Perform() const;
 
 		/** @brief Returns a unique hash identifying this shader class, type, and descriptor combo. */
 		size_t GetId() const;
+		/** @brief Returns the id GetId() would give a task for this shader class, type, and descriptor. */
+		static size_t MakeId(ShaderClass a_shaderClass, RE::BSShader::Type a_type, uint32_t a_descriptor);
 		/** @brief Returns a human-readable string describing this task (shader file, class, defines). */
 		std::string GetString() const;
 
@@ -181,6 +193,10 @@ namespace SIE
 		void SetEnqueuedQpc(int64_t qpc) { enqueuedQpc = qpc; }
 		/** @brief Gets the QPC timestamp when this task was enqueued. */
 		int64_t GetEnqueuedQpc() const { return enqueuedQpc; }
+		/** @brief Whether this task was requested only to populate the startup cache. */
+		bool IsPrecompile() const { return precompile; }
+		/** @brief Keeps a queued startup task when rendering requests the same permutation. */
+		void RequireForRendering() { precompile = false; }
 
 		bool operator==(const ShaderCompilationTask& other) const;
 
@@ -193,6 +209,7 @@ namespace SIE
 		static int ComputePriority(ShaderClass shaderClass, const RE::BSShader& shader, uint32_t descriptor);
 		int cachedPriority;
 		int64_t enqueuedQpc = 0;
+		bool precompile = false;
 	};
 }
 
@@ -244,12 +261,23 @@ namespace SIE
 			completionTime.store(0, std::memory_order_relaxed);
 		}
 
-		/** @brief Blocks until a task is available or the stop token is signalled. */
-		std::optional<ShaderCompilationTask> WaitTake(std::stop_token stoken);
+		/** @brief Blocks until a dispatch slot and some work (a queued permutation-matrix
+		 *  task, or -- only once the matrix is empty -- a queued aux closure) are both
+		 *  available, or the stop token is signalled. The matrix always wins admission
+		 *  over aux when both are ready, preserving LPT priority ordering. */
+		std::optional<std::variant<ShaderCompilationTask, std::function<void()>>> TryTakeNext(std::stop_token stoken);
 		/** @brief Enqueues a task for compilation. */
 		void Add(const ShaderCompilationTask& task);
 		/** @brief Marks a task as finished and records its timing metrics. */
 		void Complete(const ShaderCompilationTask& task);
+		/** @brief Frees a dispatch slot and wakes TryTakeNext(). Call even on a stale-generation
+		 *  task -- it still held a real slot, and nothing else wakes a waiter blocked on it. */
+		void ReleaseDispatchSlot();
+		/** @brief Queues a compile closure that isn't a ShaderCompilationTask (currently:
+		 *  standalone compute-shader compiles from PostProcessFeature::CompileComputeShadersAsync)
+		 *  to share the same dispatchedTasksInFlight budget as the main permutation matrix,
+		 *  instead of being submitted to compilationPool independently of it. Wakes TryTakeNext(). */
+		void EnqueueAux(std::function<void()> work);
 		/** @brief Resets all task queues and counters for a fresh compilation pass. */
 		void Clear();
 		/** @brief Formats a millisecond duration into a human-readable time string. */
@@ -261,6 +289,7 @@ namespace SIE
 		std::atomic<uint64_t> completedTasks = 0;
 		std::atomic<uint64_t> totalTasks = 0;
 		std::atomic<uint64_t> failedTasks = 0;
+		std::atomic<uint32_t> dispatchedTasksInFlight = 0;  // Admission budget enforced by TryTakeNext()
 		std::atomic<uint64_t> cacheHitTasks = 0;            // number of compiles of a previously seen shader combo
 		std::atomic<uint64_t> diskHitTasks = 0;             // tasks resolved from disk cache rather than compiled
 		std::atomic<uint64_t> contentDedupeTasks = 0;       // compiles skipped because identical preprocessed code had already compiled this session
@@ -316,21 +345,35 @@ namespace SIE
 	private:
 		/** Tasks awaiting dispatch, ordered by cached priority and task id. */
 		std::set<ShaderCompilationTask, TaskPriorityLess> availableTasks;
+		/** Queued tasks the game asked for during background compilation; dispatched before availableTasks. */
+		std::set<ShaderCompilationTask, TaskPriorityLess> demandedTasks;
 		std::set<ShaderCompilationTask, TaskPriorityLess> tasksInProgress;
 		std::set<ShaderCompilationTask, TaskPriorityLess> processedTasks;  // completed or failed
+		std::deque<std::function<void()>> pendingAuxTasks;                 // see EnqueueAux/TryTakeNext
 		std::condition_variable_any conditionVariable;
 	};
 
 	struct ShaderCacheResult
 	{
-		ID3DBlob* blob;
+		winrt::com_ptr<ID3DBlob> blob;
 		ShaderCompilationTask::Status status;
 		system_clock::time_point compileTime = system_clock::now();
-		bool loadedFromDisk = false;  /**< true when the shader blob was read from the disk cache rather than compiled */
+		bool loadedFromDisk = false; /**< true when the shader blob was read from the disk cache rather than compiled */
 	};
 
 	namespace SShaderCache
 	{
+		struct VertexShaderDeleter
+		{
+			void operator()(RE::BSGraphics::VertexShader* shader) const noexcept
+			{
+				std::destroy_at(shader);
+				delete[] reinterpret_cast<uint8_t*>(shader);
+			}
+		};
+
+		using VertexShaderPtr = std::unique_ptr<RE::BSGraphics::VertexShader, VertexShaderDeleter>;
+
 		/** @brief Reads a cached blob, deleting the file and returning null when it is unreadable or not intact DXBC. */
 		winrt::com_ptr<ID3DBlob> ReadIntactBlob(const std::wstring& diskPath);
 
@@ -394,11 +437,16 @@ namespace SIE
 		bool IsDiskCache() const;
 		/** Sets whether the persistent disk cache is enabled. */
 		void SetDiskCache(bool value);
+		/** @brief Whether shaders compile with debug info: Developer Mode, or RenderDoc attached. */
+		static bool IsDebugCompile();
 		/**
 		 * @brief Deletes the on-disk shader cache directory.
 		 * @param a_keepContentStore Keep the persistent shader store, whose blobs stay valid because they are keyed by their own inputs.
 		 */
 		void DeleteDiskCache(bool a_keepContentStore = false);
+		/** @brief True after a user action cleared every shader, until the menu banner is dismissed. */
+		bool IsRecachePending() const { return recachePending; }
+		void SetRecachePending(bool value) { recachePending = value; }
 		/** @brief Validates disk cache integrity against current shader sources and feature set. */
 		void ValidateDiskCache();
 		/** @brief Writes cache metadata (version, feature list) to the disk cache directory. */
@@ -442,6 +490,7 @@ namespace SIE
 		bool ShaderModifiedSince(const std::string& a_type, system_clock::time_point a_current);
 
 		void Clear();
+		void Reload(const std::function<void()>& activate);
 		void Clear(RE::BSShader::Type a_type);
 		/**
    		* @brief Clears and marks shaders for recompilation based on the given path.
@@ -465,7 +514,7 @@ namespace SIE
 		*/
 		bool Clear(const std::string& a_path);
 
-		bool AddCompletedShader(ShaderClass shaderClass, const RE::BSShader& shader, uint32_t descriptor, ID3DBlob* a_blob, bool fromDisk = false);
+		bool AddCompletedShader(ShaderClass shaderClass, const RE::BSShader& shader, uint32_t descriptor, winrt::com_ptr<ID3DBlob> a_blob, bool fromDisk = false);
 
 		enum class ClaimResult
 		{
@@ -473,21 +522,81 @@ namespace SIE
 			Claimed,   // Claimed as Pending; caller must compile and call AddCompletedShader
 			Failed     // Previous attempt failed; skipped until invalidation drops the entry
 		};
-		std::pair<ClaimResult, ID3DBlob*> ClaimCompilation(const std::string& key);
+		std::pair<ClaimResult, winrt::com_ptr<ID3DBlob>> ClaimCompilation(const std::string& key);
 		void ResolvePendingFailure(const std::string& key);
 
-		ID3DBlob* GetCompletedShader(const std::string& a_key);
-		ID3DBlob* GetCompletedShader(const SIE::ShaderCompilationTask& a_task);
-		ID3DBlob* GetCompletedShader(ShaderClass shaderClass, const RE::BSShader& shader, uint32_t descriptor);
+		winrt::com_ptr<ID3DBlob> GetCompletedShader(const std::string& a_key);
+		winrt::com_ptr<ID3DBlob> GetCompletedShader(const SIE::ShaderCompilationTask& a_task);
+		winrt::com_ptr<ID3DBlob> GetCompletedShader(ShaderClass shaderClass, const RE::BSShader& shader, uint32_t descriptor);
 		bool IsShaderLoadedFromDisk(const std::string& a_key);
 		ShaderCompilationTask::Status GetShaderStatus(const std::string& a_key);
 		std::string GetShaderStatsString(bool a_timeOnly = false, bool a_elapsedOnly = false);
 
-		RE::BSGraphics::VertexShader* GetVertexShader(const RE::BSShader& shader, uint32_t descriptor);
+		/** @brief Requests a vertex shader; startup precompiles (a_precompile) are skipped in background mode. */
+		RE::BSGraphics::VertexShader* GetVertexShader(const RE::BSShader& shader, uint32_t descriptor, bool a_precompile = false);
+		/** @brief Requests a pixel shader; startup precompiles (a_precompile) are skipped in background mode. */
 		RE::BSGraphics::PixelShader* GetPixelShader(const RE::BSShader& shader,
-			uint32_t descriptor);
+			uint32_t descriptor, bool a_precompile = false);
+		bool HasPixelShaders(RE::BSShader::Type type, std::span<const uint32_t> descriptors);
 		RE::BSGraphics::ComputeShader* GetComputeShader(const RE::BSShader& shader,
 			uint32_t descriptor);
+
+		/// Callback fired once a standalone compute shader finishes compiling or
+		/// loads from disk. Runs on a compilation-pool worker thread; the pointer
+		/// is null on failure (never throws). The caller owns thread-safe storage.
+		/// A non-null pointer is one owned reference: the callback must either
+		/// take ownership (e.g. winrt::com_ptr::attach) or Release() it.
+		using ComputeShaderReadyCallback = std::function<void(ID3D11ComputeShader*)>;
+
+		/// Shader class selector for the standalone (non-BSShader) async compile path.
+		enum class StandaloneShaderClass
+		{
+			Vertex,
+			Pixel,
+			Compute
+		};
+
+		/// Same contract as ComputeShaderReadyCallback, but for any shader class;
+		/// the pointer is the matching ID3D11VertexShader / ID3D11PixelShader /
+		/// ID3D11ComputeShader interface.
+		using StandaloneShaderReadyCallback = std::function<void(ID3D11DeviceChild*)>;
+
+		/// @brief Compile (or load from the disk cache) a standalone vertex/pixel/compute
+		///        shader on the shared compilation pool, off the calling thread.
+		/// @param sourcePath  HLSL source path under Data/Shaders (e.g.
+		///                    Data\\Shaders\\PostProcessing\\Vignette\\vignette.ps.hlsl).
+		/// @param entryPoint  HLSL entry function name.
+		/// @param defines     Preprocessor macro name/value pairs; the caller must
+		///                    keep each string alive until the callback fires
+		///                    (string literals satisfy this).
+		/// @param shaderClass Which shader stage to compile for.
+		/// @param onReady     Invoked exactly once when the shader is ready.
+		void EnqueueStandaloneShaderCompile(
+			std::wstring sourcePath,
+			std::string entryPoint,
+			std::vector<std::pair<const char*, const char*>> defines,
+			StandaloneShaderClass shaderClass,
+			StandaloneShaderReadyCallback onReady);
+
+		/// @brief Compile (or load from the disk cache) a standalone compute shader
+		///        on the shared compilation pool, off the calling thread.
+		/// @param sourcePath  HLSL source path under Data/Shaders (e.g.
+		///                    Data\\Shaders\\PostProcessing\\DoF\\dof.cs.hlsl).
+		/// @param entryPoint  HLSL entry function name.
+		/// @param defines     Preprocessor macro name/value pairs; the caller must
+		///                    keep each string alive until the callback fires
+		///                    (string literals satisfy this).
+		/// @param onReady     Invoked exactly once when the shader is ready.
+		void EnqueueComputeShaderCompile(
+			std::wstring sourcePath,
+			std::string entryPoint,
+			std::vector<std::pair<const char*, const char*>> defines,
+			ComputeShaderReadyCallback onReady);
+
+		/// @brief Deletes a standalone compute-shader feature's own disk-cache
+		///        subtree (e.g. L"PostProcessing/DoF"), without touching any
+		///        other feature's cache.
+		void ClearStandaloneComputeCache(std::wstring_view relativeDir);
 
 		RE::BSGraphics::VertexShader* MakeAndAddVertexShader(const RE::BSShader& shader,
 			uint32_t descriptor);
@@ -576,7 +685,7 @@ namespace SIE
 		int32_t backgroundCompilationThreadCount = std::max(static_cast<int32_t>(Util::GetPerformanceCoreCount()) / 2, 1);
 		BS::thread_pool<> compilationPool{ static_cast<std::size_t>(compilationThreadCount) };
 		std::jthread managementJthread;  // dedicated thread for ManageCompilationSet (not in pool)
-		/** @brief Updates compilation mode and wakes the dispatcher to recheck its capacity. */
+		/** @brief Switches compilation mode, dropping unstarted precompiles when entering background mode, and wakes the dispatcher. */
 		void SetBackgroundCompilation(bool value);
 		std::atomic_bool backgroundCompilation{ false };
 		bool menuLoaded = false;
@@ -614,6 +723,7 @@ namespace SIE
 			// Community Shaders start
 			TruePbr = 1 << 3,
 			Deferred = 1 << 4,
+			LandscapeSeams = 1 << 5,
 			// Community Shaders end
 			Specular = 1 << 9,
 			SoftLighting = 1 << 10,
@@ -771,6 +881,7 @@ namespace SIE
 			LodObject = 1 << 27,
 			LocalMapFogOfWar = 1 << 28,
 			OpaqueEffect = 1 << 29,
+			TruePbr = 1 << 30,
 		};
 
 		// Shader blocking data for developer mode
@@ -797,9 +908,13 @@ namespace SIE
 		};
 
 		ankerl::unordered_dense::map<std::string, ActiveShaderInfo> activeShaders;
+		/// Shader key per task id, so TrackActiveShader builds each key once. The key embeds feature defines, so it is reset when they may change.
+		ankerl::unordered_dense::map<size_t, std::string> activeShaderKeys;
 		mutable std::mutex activeShadersMutex;
 
 		void TrackActiveShader(ShaderClass shaderClass, const RE::BSShader& shader, uint32_t descriptor);
+		/** @brief Drops cached keys and tracked shaders; call when feature defines may change (cache clear, feature toggle). */
+		void ResetActiveShaderTracking();
 		void ResetFrameShaderTracking();
 		std::vector<ActiveShaderInfo> GetActiveShaders() const;
 
@@ -825,12 +940,12 @@ namespace SIE
 
 		~ShaderCache();
 
-		template <typename ShaderType>
+		template <typename ShaderType, typename Deleter = std::default_delete<ShaderType>>
 		using ShaderMapArray = std::array<
-			ankerl::unordered_dense::map<uint32_t, std::unique_ptr<ShaderType>>,
+			ankerl::unordered_dense::map<uint32_t, std::unique_ptr<ShaderType, Deleter>>,
 			RE::BSShader::Type::Total>;
 
-		ShaderMapArray<RE::BSGraphics::VertexShader> vertexShaders;
+		ShaderMapArray<RE::BSGraphics::VertexShader, SShaderCache::VertexShaderDeleter> vertexShaders;
 		ShaderMapArray<RE::BSGraphics::PixelShader> pixelShaders;
 		ShaderMapArray<RE::BSGraphics::ComputeShader> computeShaders;
 
@@ -841,6 +956,8 @@ namespace SIE
 		bool isDump = false;
 		bool hideError = false;
 		bool useFileWatcher = false;
+		bool preserveStandaloneCache = false;
+		bool recachePending = false;
 
 		std::stop_source ssource;
 		std::mutex vertexShadersMutex;
@@ -889,8 +1006,6 @@ namespace SIE
 		void processQueue();
 		void handleFileAction(efsw::WatchID, const std::string& dir, const std::string& filename, efsw::Action action, std::string) override;
 
-		std::jthread fileWatcherThread;  // dedicated thread for processQueue (not in pool)
-
 	private:
 		ShaderFileDependencyTracker* deps;
 		struct fileAction
@@ -903,5 +1018,8 @@ namespace SIE
 		};
 		std::mutex actionMutex;
 		std::vector<fileAction> queue{};
+
+	public:
+		std::jthread fileWatcherThread;
 	};
 }

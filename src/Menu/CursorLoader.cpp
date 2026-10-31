@@ -28,7 +28,11 @@ namespace Util::CursorLoader
 
 		void ForEachSlot(const Menu::ThemeSettings& theme, auto&& fn)
 		{
-			static constexpr struct { ImGuiMouseCursor cursor; const char* defaultFile; } kSlots[] = {
+			static constexpr struct
+			{
+				ImGuiMouseCursor cursor;
+				const char* defaultFile;
+			} kSlots[] = {
 				{ ImGuiMouseCursor_Arrow, "cursor.png" },
 				{ ImGuiMouseCursor_TextInput, "cursor_text.png" },
 				{ ImGuiMouseCursor_ResizeAll, "cursor_resize_all.png" },
@@ -68,7 +72,7 @@ namespace Util::CursorLoader
 		bool IsPathAllowed(const std::filesystem::path& path)
 		{
 			return Util::IsPathWithinDirectory(Util::PathHelpers::GetThemesPath(), path) ||
-				   Util::IsPathWithinDirectory(Util::PathHelpers::GetCursorsPath(), path);
+			       Util::IsPathWithinDirectory(Util::PathHelpers::GetCursorsPath(), path);
 		}
 	}
 

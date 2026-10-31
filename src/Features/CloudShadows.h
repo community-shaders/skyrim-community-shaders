@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Utils/Game.h"
+
 struct CloudShadows : Feature
 {
 private:
@@ -56,9 +58,16 @@ public:
 	uint32_t renderedLayersMask[6] = {};
 	uint32_t globalRenderedMask = 0;
 	int previouslyRenderedSide = -1;
+	/** @brief Set once the occlusion has been cleared for a weather without cloud layers. */
+	bool occlusionClearedWithoutClouds = false;
 
 	ID3D11BlendState* cloudShadowBlendState = nullptr;
 
+private:
+	Util::FrameChecker frameChecker;
+	Util::FrameChecker frame_checker[6];
+
+public:
 	/** @brief Creates cubemap textures, SRVs, RTVs, and blend state for cloud shadow rendering. */
 	virtual void SetupResources() override;
 

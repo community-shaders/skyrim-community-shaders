@@ -1,7 +1,11 @@
 #include "Globals.h"
 
+#include "CSEditor/SceneManager/SceneManager.h"
+#include "CSEditor/SceneManager/SceneSettingsManager.h"
 #include "Deferred.h"
+#include "Features/CSEditor.h"
 #include "Features/CloudShadows.h"
+#include "Features/DeveloperTools.h"
 #include "Features/DynamicCubemaps.h"
 #include "Features/Effects11.h"
 #include "Features/ExponentialHeightFog.h"
@@ -19,6 +23,8 @@
 #include "Features/LightLimitFix.h"
 #include "Features/LinearLighting.h"
 #include "Features/PerformanceOverlay.h"
+#include "Features/PostProcessing.h"
+#include "Features/RainRefraction.h"
 #include "Features/RemoteControl.h"
 #include "Features/RenderDoc.h"
 #include "Features/ScreenSpaceGI.h"
@@ -37,15 +43,12 @@
 #include "Features/VolumetricLighting.h"
 #include "Features/VolumetricShadows.h"
 #include "Features/WaterEffects.h"
-#include "Features/CSEditor.h"
 #include "Features/WetnessEffects.h"
 #include "Menu.h"
-#include "SceneSettingsManager.h"
 #include "ShaderCache.h"
 #include "State.h"
 #include "TruePBR.h"
 #include "Utils/Game.h"
-#include "WeatherManager.h"
 
 namespace globals
 {
@@ -72,6 +75,7 @@ namespace globals
 		HairSpecular hairSpecular{};
 		HorizonFix horizonFix{};
 		InteriorSun interiorSun{};
+		RainRefraction rainRefraction{};
 		ScreenSpaceGI screenSpaceGI{};
 		ScreenSpaceShadows screenSpaceShadows{};
 		Skylighting skylighting{};
@@ -90,6 +94,7 @@ namespace globals
 		Upscaling upscaling{};
 		HDRDisplay hdrDisplay{};
 		Effects11 effects11{};
+		DeveloperTools developerTools{};
 		RenderDoc renderDoc{};
 		RemoteControl remoteControl{};
 		ScreenshotFeature screenshotFeature{};
@@ -97,6 +102,8 @@ namespace globals
 		ExponentialHeightFog exponentialHeightFog{};
 		TruePBR truePBR{};
 		Skin skin{};
+		SceneManager sceneManager{};
+		PostProcessing postProcessing{};
 
 		namespace llf
 		{
@@ -165,7 +172,6 @@ namespace globals
 	Deferred* deferred = nullptr;
 	Menu* menu = nullptr;
 	SIE::ShaderCache* shaderCache = nullptr;
-	WeatherManager* weatherManager = nullptr;
 	SceneSettingsManager* sceneSettingsManager = nullptr;
 
 	static Profiler profilerInstance;
@@ -177,7 +183,6 @@ namespace globals
 		state = State::GetSingleton();
 		menu = Menu::GetSingleton();
 		deferred = Deferred::GetSingleton();
-		weatherManager = WeatherManager::GetSingleton();
 		sceneSettingsManager = SceneSettingsManager::GetSingleton();
 	}
 
@@ -259,8 +264,18 @@ namespace globals
 	void CacheFramebuffer()
 	{
 		using namespace game;
-		auto frameBuffer = (FrameBuffer*)mappedFrameBuffer->pData;
-		frameBufferCached.data = *frameBuffer;
+		static_assert(sizeof(FrameBuffer) % sizeof(__m128i) == 0);
+
+		auto* source = static_cast<__m128i*>(mappedFrameBuffer->pData);
+		auto* destination = reinterpret_cast<__m128i*>(&frameBufferCached.data);
+
+		if (reinterpret_cast<uintptr_t>(source) % alignof(__m128i) == 0) {
+			for (size_t i = 0; i < sizeof(FrameBuffer) / sizeof(__m128i); ++i)
+				_mm_storeu_si128(destination + i, _mm_stream_load_si128(source + i));
+		} else {
+			frameBufferCached.data = *reinterpret_cast<FrameBuffer*>(source);
+		}
+
 		mappedFrameBuffer = nullptr;
 	}
 

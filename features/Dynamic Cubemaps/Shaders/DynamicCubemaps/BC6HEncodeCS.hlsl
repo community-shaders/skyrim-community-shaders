@@ -247,33 +247,43 @@ void EncodeP1(inout uint4 block, inout float blockMSLE, float3 texels[16])
 
 	float3 blockMinNonInset = blockMin;
 	float3 blockMaxNonInset = blockMax;
+	// Constant blocks have no direction to normalize; all indices stay 0 with equal endpoints
+	const bool isConstantBlock = all(blockMin == blockMax);
+
+	uint indices[16] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+	float3 endpoint0;
+	float3 endpoint1;
+	if (isConstantBlock) {
+		endpoint0 = Quantize10(blockMin);
+		endpoint1 = endpoint0;
+	} else {
 #if INSET_COLOR_BBOX
-	InsetColorBBoxP1(texels, blockMin, blockMax);
+		InsetColorBBoxP1(texels, blockMin, blockMax);
 #endif
 
 #if OPTIMIZE_ENDPOINTS
-	OptimizeEndpointsP1(texels, blockMin, blockMax, blockMinNonInset, blockMaxNonInset);
+		OptimizeEndpointsP1(texels, blockMin, blockMax, blockMinNonInset, blockMaxNonInset);
 #endif
 
-	float3 blockDir = blockMax - blockMin;
-	blockDir = blockDir / (blockDir.x + blockDir.y + blockDir.z);
+		float3 blockDir = blockMax - blockMin;
+		blockDir = blockDir / (blockDir.x + blockDir.y + blockDir.z);
 
-	float3 endpoint0 = Quantize10(blockMin);
-	float3 endpoint1 = Quantize10(blockMax);
-	float endPoint0Pos = f32tof16(dot(blockMin, blockDir));
-	float endPoint1Pos = f32tof16(dot(blockMax, blockDir));
+		endpoint0 = Quantize10(blockMin);
+		endpoint1 = Quantize10(blockMax);
+		float endPoint0Pos = f32tof16(dot(blockMin, blockDir));
+		float endPoint1Pos = f32tof16(dot(blockMax, blockDir));
 
-	float fixupTexelPos = f32tof16(dot(texels[0], blockDir));
-	uint fixupIndex = ComputeIndex4(fixupTexelPos, endPoint0Pos, endPoint1Pos);
-	if (fixupIndex > 7) {
-		Swap(endPoint0Pos, endPoint1Pos);
-		Swap(endpoint0, endpoint1);
-	}
+		float fixupTexelPos = f32tof16(dot(texels[0], blockDir));
+		uint fixupIndex = ComputeIndex4(fixupTexelPos, endPoint0Pos, endPoint1Pos);
+		if (fixupIndex > 7) {
+			Swap(endPoint0Pos, endPoint1Pos);
+			Swap(endpoint0, endpoint1);
+		}
 
-	uint indices[16] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
-	for (uint i = 0; i < 16; ++i) {
-		float texelPos = f32tof16(dot(texels[i], blockDir));
-		indices[i] = ComputeIndex4(texelPos, endPoint0Pos, endPoint1Pos);
+		for (uint i = 0; i < 16; ++i) {
+			float texelPos = f32tof16(dot(texels[i], blockDir));
+			indices[i] = ComputeIndex4(texelPos, endPoint0Pos, endPoint1Pos);
+		}
 	}
 
 	float3 endpoint0Unq = Unquantize10(endpoint0);
@@ -323,12 +333,15 @@ void EncodeP1(inout uint4 block, inout float blockMSLE, float3 texels[16])
 	if (all(blockCoord < TextureSizeInBlocks)) {
 		int2 texelBase = int2(blockCoord) * 4;
 
+		uint mipWidth, mipHeight, elements, levels;
+		SrcTexture.GetDimensions(MipLevel, mipWidth, mipHeight, elements, levels);
+		int2 maxTexel = int2(mipWidth, mipHeight) - 1;
+
 		float3 texels[16];
 		[unroll] for (int i = 0; i < 16; i++)
 		{
-			int tx = i % 4;
-			int ty = i / 4;
-			texels[i] = SrcTexture.Load(int4(texelBase.x + tx, texelBase.y + ty, int(faceIndex), int(MipLevel))).rgb;
+			int2 texel = min(texelBase + int2(i % 4, i / 4), maxTexel);
+			texels[i] = SrcTexture.Load(int4(texel, int(faceIndex), int(MipLevel))).rgb;
 		}
 
 		uint4 block = uint4(0, 0, 0, 0);

@@ -11,6 +11,8 @@ enum class PBRFlags : uint32_t
 	CoatNormal = 1 << 4,
 	Fuzz = 1 << 5,
 	HairMarschner = 1 << 6,
+	Foliage = 1 << 7,
+	ThinSurface = 1 << 8,
 };
 
 enum class PBRShaderFlags : uint32_t
@@ -28,6 +30,8 @@ enum class PBRShaderFlags : uint32_t
 	HairMarschner = 1 << 10,
 	Glint = 1 << 11,
 	ProjectedGlint = 1 << 12,
+	Foliage = 1 << 13,
+	ThinSurface = 1 << 14,
 };
 
 /**
@@ -45,6 +49,7 @@ public:
 	{
 		TruePBR::PBRTextureSetData* textureSetData = nullptr;
 		TruePBR::PBRMaterialObjectData* materialObjectData = nullptr;
+		std::optional<std::array<float, 4>> nifThinSurfaceParameters;
 		/**
 		 * FormID of the TESObjectREFR whose Clone3D call last wrote MATO data to this
 		 * material.  Used by the fork-before-write check to detect when a pooled material
@@ -74,23 +79,23 @@ public:
 	 *
 	 * @return A new heap-allocated BSLightingShaderMaterialPBR instance.
 	 */
-	RE::BSShaderMaterial* Create() override;                                                                                      // 01
+	RE::BSShaderMaterial* Create() override;  // 01
 	/**
 	 * @brief Copies all PBR-specific members from another material, including textures and extensions.
 	 * @param that Source material to copy from (must be BSLightingShaderMaterialPBR).
 	 */
-	void CopyMembers(RE::BSShaderMaterial* that) override;                                                                        // 02
+	void CopyMembers(RE::BSShaderMaterial* that) override;  // 02
 	/**
 	 * @brief Computes a CRC32 hash incorporating all PBR-specific fields and texture paths.
 	 * @param srcHash Initial hash seed.
 	 * @return Combined CRC32 hash for material deduplication.
 	 */
-	std::uint32_t ComputeCRC32(uint32_t srcHash) override;                                                                        // 04
+	std::uint32_t ComputeCRC32(uint32_t srcHash) override;  // 04
 	/**
 	 * @brief Returns the material feature type.
 	 * @return Always returns kDefault to integrate with the vanilla shader dispatch.
 	 */
-	Feature GetFeature() const override;                                                                                          // 06
+	Feature GetFeature() const override;  // 06
 	/**
 	 * @brief Loads PBR textures (RMAOS, emissive, displacement, features) from a texture set.
 	 *
@@ -99,9 +104,9 @@ public:
 	 * @param arg1 Unused argument passed through from the base class.
 	 * @param inTextureSet The texture set to load PBR textures from.
 	 */
-	void OnLoadTextureSet(std::uint64_t arg1, RE::BSTextureSet* inTextureSet) override;                                           // 08
+	void OnLoadTextureSet(std::uint64_t arg1, RE::BSTextureSet* inTextureSet) override;  // 08
 	/** @brief Releases all PBR texture references in addition to base class textures. */
-	void ClearTextures() override;                                                                                                // 09
+	void ClearTextures() override;  // 09
 	/**
 	 * @brief Assigns default textures to any PBR texture slots that are still null.
 	 * @param skinned Whether the mesh is skinned.
@@ -116,12 +121,12 @@ public:
 	 * @param textures Output array to fill with texture pointers.
 	 * @return The number of textures written.
 	 */
-	uint32_t GetTextures(RE::NiSourceTexture** textures) override;                                                                // 0B
+	uint32_t GetTextures(RE::NiSourceTexture** textures) override;  // 0B
 	/**
 	 * @brief Deserializes PBR-specific parameters (coat, fuzz, glint) from a NiStream.
 	 * @param stream The binary stream to read from.
 	 */
-	void LoadBinary(RE::NiStream& stream) override;                                                                               // 0D
+	void LoadBinary(RE::NiStream& stream) override;  // 0D
 
 	/**
 	 * @brief Allocates a scrap-heap temporary for use during BSLightingShaderProperty::LoadBinary.
@@ -139,6 +144,8 @@ public:
 	 * @param textureSetData The texture set configuration to apply.
 	 */
 	void ApplyTextureSetData(const TruePBR::PBRTextureSetData& textureSetData);
+	/** @brief Applies the four finite values in the NIF PBRThinSurface extra-data block. */
+	bool ApplyNifThinSurfaceParameters(std::span<const float> parameters);
 	/**
 	 * @brief Applies projected material object parameters (base color scale, roughness, specular, glint) to this material.
 	 * @param materialObjectData The material object configuration to apply.
@@ -164,6 +171,10 @@ public:
 	const RE::NiColor& GetSubsurfaceColor() const;
 	/** @brief Returns the subsurface scattering opacity (stored in subSurfaceLightRolloff). */
 	float GetSubsurfaceOpacity() const;
+	/** @brief Returns the back-side share of subsurface scattering. */
+	float GetSubsurfaceBalance() const;
+	/** @brief Returns front/back thin-surface specular weights and back-face roughness scale. */
+	const std::array<float, 3>& GetThinSurfaceParameters() const;
 
 	/** @brief Returns the clearcoat layer color (stored in specularColor). */
 	const RE::NiColor& GetCoatColor() const;
@@ -197,6 +208,10 @@ public:
 	RE::BSShaderMaterial::Feature loadedWithFeature = RE::BSShaderMaterial::Feature::kDefault;
 
 	stl::enumeration<PBRFlags> pbrFlags;
+	// Retain NIF defaults when texture-set parameters are reapplied.
+	stl::enumeration<PBRFlags> nifThinSurfaceFlags;
+	float subsurfaceBalance = 0.75f;
+	std::array<float, 3> thinSurfaceParameters = { 0.5f, 0.5f, 1.f };
 
 	float coatRoughness = 1.f;
 	float coatSpecularLevel = 0.04f;

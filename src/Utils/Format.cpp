@@ -15,6 +15,13 @@ namespace Util
 		return v.substr(0, v.find_last_of("."));
 	}
 
+	std::string GetBuildLabel()
+	{
+		if (Plugin::BUILD_BRANCH.empty())
+			return std::format("[{}]", Plugin::BUILD_DESCRIBE);
+		return std::format("[{}][{}]", Plugin::BUILD_BRANCH, Plugin::BUILD_DESCRIBE);
+	}
+
 	std::string DefinesToString(const std::vector<std::pair<const char*, const char*>>& defines)
 	{
 		std::string result;
@@ -215,15 +222,10 @@ namespace Util
 	std::string FormatDeltaWithPercent(float a, float b, float threshold)
 	{
 		float delta = b - a;
-		float percentDelta = 0.0f;
-		if (a < b && a > 0.0f) {
-			percentDelta = 100.0f * (b - a) / a;
-		} else if (b < a && b > 0.0f) {
-			percentDelta = 100.0f * (a - b) / b;
-		}
+		const float percentDelta = a > 0.0f ? 100.0f * delta / a : 0.0f;
 		char buffer[64];
-		if (percentDelta >= threshold) {
-			sprintf_s(buffer, " (+%.1f%%)", (b < a ? -percentDelta : percentDelta));
+		if (std::abs(percentDelta) >= threshold) {
+			sprintf_s(buffer, " (%+.1f%%)", percentDelta);
 		} else {
 			buffer[0] = '\0';
 		}
@@ -265,6 +267,71 @@ namespace Util
 										   });
 	}
 
+	std::string ToLower(std::string text)
+	{
+		std::transform(text.begin(), text.end(), text.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+		return text;
+	}
+
+	char32_t NextCodepoint(std::string_view text, size_t& pos)
+	{
+		const auto byte = [&](size_t i) { return static_cast<unsigned char>(text[i]); };
+		const unsigned char lead = byte(pos);
+		const size_t length = lead < 0x80 ? 1 : (lead >> 5) == 0x6 ? 2 :
+		                                    (lead >> 4) == 0xE     ? 3 :
+		                                    (lead >> 3) == 0x1E    ? 4 :
+		                                                             0;
+		if (length <= 1 || pos + length > text.size()) {
+			++pos;
+			return lead;
+		}
+		char32_t c = lead & (0x7F >> length);
+		for (size_t i = 1; i < length; ++i) {
+			if ((byte(pos + i) & 0xC0) != 0x80) {
+				++pos;
+				return lead;
+			}
+			c = (c << 6) | (byte(pos + i) & 0x3F);
+		}
+		pos += length;
+		return c;
+	}
+
+	char32_t FoldCodepoint(char32_t c)
+	{
+		if (c < 0x80)
+			return (c >= 'A' && c <= 'Z') ? c + ('a' - 'A') : c;
+		if (c > 0xFFFF)
+			return c;
+		// CharLowerW given a value below 0x10000 lowercases that one character, independent of the C locale
+		return static_cast<char32_t>(reinterpret_cast<std::uintptr_t>(CharLowerW(reinterpret_cast<LPWSTR>(static_cast<std::uintptr_t>(c)))));
+	}
+
+	std::string FoldForSearch(std::string_view text)
+	{
+		std::string folded;
+		folded.reserve(text.size());
+		for (size_t pos = 0; pos < text.size();) {
+			const char32_t c = FoldCodepoint(NextCodepoint(text, pos));
+			if (c < 0x80) {
+				folded += static_cast<char>(c);
+			} else if (c < 0x800) {
+				folded += static_cast<char>(0xC0 | (c >> 6));
+				folded += static_cast<char>(0x80 | (c & 0x3F));
+			} else if (c < 0x10000) {
+				folded += static_cast<char>(0xE0 | (c >> 12));
+				folded += static_cast<char>(0x80 | ((c >> 6) & 0x3F));
+				folded += static_cast<char>(0x80 | (c & 0x3F));
+			} else {
+				folded += static_cast<char>(0xF0 | (c >> 18));
+				folded += static_cast<char>(0x80 | ((c >> 12) & 0x3F));
+				folded += static_cast<char>(0x80 | ((c >> 6) & 0x3F));
+				folded += static_cast<char>(0x80 | (c & 0x3F));
+			}
+		}
+		return folded;
+	}
+
 	std::string GetShaderDefinesSuffix(const std::string& definesStr)
 	{
 		if (definesStr.empty())
@@ -275,5 +342,40 @@ namespace Util
 			h *= 16777619u;  // FNV prime
 		}
 		return std::format("_{:08X}", h);
+	}
+
+	std::string PrettifyIdentifier(std::string_view id)
+	{
+		if (id.empty())
+			return {};
+
+		std::string result;
+		result.reserve(id.size() + id.size() / 4);
+		const auto appendSpaceIfNeeded = [&]() {
+			if (!result.empty() && result.back() != ' ')
+				result += ' ';
+		};
+
+		for (size_t i = 0; i < id.size(); ++i) {
+			const char character = id[i];
+			if (character == '_' || character == '-') {
+				appendSpaceIfNeeded();
+				continue;
+			}
+
+			if (i > 0 && std::isupper(static_cast<unsigned char>(character))) {
+				const char previous = id[i - 1];
+				const bool previousUpper = std::isupper(static_cast<unsigned char>(previous));
+				const bool previousSeparator = previous == '_' || previous == '-';
+				if ((!previousUpper && !previousSeparator) ||
+					(previousUpper && i + 1 < id.size() && std::islower(static_cast<unsigned char>(id[i + 1]))))
+					appendSpaceIfNeeded();
+			}
+
+			const bool startsWord = result.empty() || result.back() == ' ';
+			result += startsWord ? static_cast<char>(std::toupper(static_cast<unsigned char>(character))) : character;
+		}
+
+		return result;
 	}
 }  // namespace Util

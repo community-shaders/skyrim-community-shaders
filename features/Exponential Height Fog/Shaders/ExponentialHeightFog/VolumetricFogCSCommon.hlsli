@@ -44,6 +44,8 @@ cbuffer VolumetricFogCB : register(b0)
 #define VolumetricFogHasSkylighting ((VOLUMETRIC_FOG_FLAGS & 8u) != 0u)
 #define VolumetricFogHasPrevConservativeDepth ((VOLUMETRIC_FOG_FLAGS & 16u) != 0u)
 #define VolumetricFogHasLocalLights ((VOLUMETRIC_FOG_FLAGS & 32u) != 0u)
+#define VolumetricFogHasLocalShadowCache ((VOLUMETRIC_FOG_FLAGS & 64u) != 0u)
+#define VolumetricFogHasEngineLocalShadows ((VOLUMETRIC_FOG_FLAGS & 128u) != 0u)
 #define VolumetricFogInvGridSize VOLUMETRIC_FOG_INV_GRID_SIZE
 #define VolumetricFogNearFadeInDistanceInv VOLUMETRIC_FOG_NEAR_FADE_INV
 #define VolumetricFogHistoryWeight VOLUMETRIC_FOG_HISTORY_WEIGHT

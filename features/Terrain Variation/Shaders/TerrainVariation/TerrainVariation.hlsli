@@ -5,6 +5,7 @@
 #ifndef TERRAIN_VARIATION_HLSLI
 #define TERRAIN_VARIATION_HLSLI
 
+#include "Common/ColorManagement.hlsli"
 #include "Common/SharedData.hlsli"
 
 // --------------------- CONSTANTS AND STRUCTURES --------------------- //
@@ -13,7 +14,6 @@ static const float2x2 SKEW_MATRIX = float2x2(1.0, 0.0, -0.57735027, 1.15470054);
 static const float WORLD_SCALE = 332.54;
 // Mesh UVs already tile, so one lattice cell maps to one UV tile.
 static const float MESH_SCALE = 1.0;
-static const float3 LUMINANCE_WEIGHTS = float3(0.2126, 0.7152, 0.0722);
 static const float2 HASH_MULTIPLIER = float2(1271.5151, 3337.8237);
 // Fade width for c1/c2 rank-swap seams when discarding the third triangle corner.
 static const float TAP_SWAP_FADE_WIDTH = 0.1;
@@ -27,12 +27,9 @@ struct StochasticOffsets
 {
 	float2 offset1;
 	float2 offset2;
-	// Normalized weight of tap 1 in [0.5, 1]; tap 2 gets the remainder.
+	// Normalized weight of tap 1; tap 2 gets the remainder.
 	float tap1Weight;
 };
-
-// Shared LOD base for the six-way blend (set once per pixel).
-static float g_terrainStochasticLodBase;
 
 struct StochasticCorner
 {
@@ -56,29 +53,36 @@ inline float2 hashLOD(float2 p)
 	return frac(float2(dot(p, float2(1.0, 17.0)), dot(p, float2(1.0, 23.0))));
 }
 
-// LOD base from original UV derivatives + MipBias.
-// Hashed offsets break implicit derivatives, so SampleLevel needs an explicit mip.
-inline float ComputeTerrainStochasticLodBase(float2 uv)
+// Value of the top-left pixel of the 2x2 quad, read through fine derivatives (SM5 has no QuadReadLaneAt).
+// Exact for integer-valued input, so every pixel of the quad gets the same bits.
+inline float4 QuadReadTopLeft(float4 v, float2 quadPixel)
 {
-	float2 dx = ddx(uv);
-	float2 dy = ddy(uv);
-	float minDeltaSq = min(dot(dx, dx), dot(dy, dy));
-	return 0.5 * log2(max(minDeltaSq, 1e-12)) + SharedData::MipBias;
+	v -= quadPixel.x * ddx_fine(v);
+	return v - quadPixel.y * ddy_fine(v);
 }
 
-// Per-texture mip; square landscape maps only shift the shared LOD by log2(size).
-inline float TerrainStochasticMipLevel(Texture2D tex)
+inline float2 QuadReadTopLeft(float2 v, float2 quadPixel)
 {
-	float2 textureDims;
-	tex.GetDimensions(textureDims.x, textureDims.y);
-	return max(g_terrainStochasticLodBase + log2(max(textureDims.x, textureDims.y)), 0.0);
+	v -= quadPixel.x * ddx_fine(v);
+	return v - quadPixel.y * ddy_fine(v);
+}
+
+// Barycentric weight of a lattice corner (hat function of the skewed triangular grid).
+// Equals the barycentric inside the corner's six triangles and 0 elsewhere.
+inline float StochasticCornerWeight(float2 skewUV, float2 cell)
+{
+	float2 d = skewUV - cell;
+	return saturate(1.0 - max(max(abs(d.x), abs(d.y)), abs(d.x + d.y)));
 }
 
 // Two highest barycentric corners of the triangular grid.
 // Near c1/c2 ties, fade w2 so the discarded corner cannot pop;
 // near c0/c1 ties, disable that fade so the primary swap stays symmetric.
 // Contrast exponent is 2, so weights are squared rather than pow()'d.
-inline StochasticOffsets ComputeStochasticOffsetsScaled(float2 uv, float scale)
+// Corners are chosen once per 2x2 quad, so each tap's UV offset is constant across the quad and
+// Sample/SampleBias get clean implicit derivatives (hardware mip and anisotropic filtering).
+// Weights stay per pixel, evaluated against the quad's corners.
+inline StochasticOffsets ComputeStochasticOffsetsScaled(float2 uv, float scale, float2 pixelPos)
 {
 	float2 skewUV = mul(SKEW_MATRIX, uv * scale);
 	float2 vxID = floor(skewUV);
@@ -118,29 +122,40 @@ inline StochasticOffsets ComputeStochasticOffsetsScaled(float2 uv, float scale)
 		c2 = t;
 	}
 
-	float w1 = saturate(c0.w);
-	w1 *= w1;
-	float w2 = saturate(c1.w);
-	w2 *= w2;
-	float rankFade = smoothstep(0.0, TAP_SWAP_FADE_WIDTH, c1.w - c2.w);
-	float dominanceGuard = smoothstep(0.0, DOMINANCE_GUARD_WIDTH, c0.w - c1.w);
-	w2 *= lerp(1.0, rankFade, dominanceGuard);
+	float2 quadPixel = float2(uint2(pixelPos) & 1u);
+	float4 tapCells = QuadReadTopLeft(float4(c0.cell, c1.cell), quadPixel);
+	float2 droppedCell = QuadReadTopLeft(c2.cell, quadPixel);
+
+	// Equal to c0.w, c1.w, c2.w on the top-left pixel.
+	float b1 = StochasticCornerWeight(skewUV, tapCells.xy);
+	float b2 = StochasticCornerWeight(skewUV, tapCells.zw);
+	float bDropped = StochasticCornerWeight(skewUV, droppedCell);
+
+	// The fade applies to whichever tap is weaker here, which can differ from the top-left pixel.
+	float hi = max(b1, b2);
+	float lo = min(b1, b2);
+	float rankFade = smoothstep(0.0, TAP_SWAP_FADE_WIDTH, lo - bDropped);
+	float dominanceGuard = smoothstep(0.0, DOMINANCE_GUARD_WIDTH, hi - lo);
+	float fade = lerp(1.0, rankFade, dominanceGuard);
+	float w1 = b1 * b1 * (b1 < b2 ? fade : 1.0);
+	float w2 = b2 * b2 * (b1 < b2 ? 1.0 : fade);
 
 	StochasticOffsets o;
-	o.offset1 = hash2D2D(c0.cell);
-	o.offset2 = hash2D2D(c1.cell);
+	o.offset1 = hash2D2D(tapCells.xy);
+	o.offset2 = hash2D2D(tapCells.zw);
 	o.tap1Weight = w1 * rcp(max(w1 + w2, 1e-8));
 	return o;
 }
 
-inline StochasticOffsets ComputeStochasticOffsets(float2 landscapeUV)
+// pixelPos is SV_Position.xy; it selects the pixel's slot in its 2x2 quad.
+inline StochasticOffsets ComputeStochasticOffsets(float2 landscapeUV, float2 pixelPos)
 {
-	return ComputeStochasticOffsetsScaled(landscapeUV, WORLD_SCALE);
+	return ComputeStochasticOffsetsScaled(landscapeUV, WORLD_SCALE, pixelPos);
 }
 
-inline StochasticOffsets ComputeStochasticOffsetsMesh(float2 meshUV)
+inline StochasticOffsets ComputeStochasticOffsetsMesh(float2 meshUV, float2 pixelPos)
 {
-	return ComputeStochasticOffsetsScaled(meshUV, MESH_SCALE);
+	return ComputeStochasticOffsetsScaled(meshUV, MESH_SCALE, pixelPos);
 }
 
 // --------------------- STOCHASTIC SAMPLING FUNCTIONS --------------------- //
@@ -154,7 +169,7 @@ inline float4 StochasticBlendTwoSamples(float4 s1, float4 s2, float tap1Weight, 
 }
 
 // Stochastic sampling function for Terrain LOD & LOD Mask.
-inline float4 StochasticSampleLOD(float rnd, Texture2D tex, SamplerState samp, float2 uv)
+inline float4 StochasticSampleLOD(float rnd, Texture2D tex, SamplerState samp, float2 uv, out float4 sampledColor)
 {
 	float2 cellID = floor(uv * 255437.0);
 	float2 offset1 = hashLOD(cellID) * 0.08;
@@ -167,23 +182,43 @@ inline float4 StochasticSampleLOD(float rnd, Texture2D tex, SamplerState samp, f
 	float4 s1 = tex.SampleBias(samp, uv + j1, SharedData::MipBias);
 	float4 s2 = tex.SampleBias(samp, uv + j2, SharedData::MipBias);
 
+	sampledColor = lerp(s2, s1, STOCHASTIC_LOD_BLEND);
+	s1 = ColorManagement::DiffuseToWorking(s1);
+	s2 = ColorManagement::DiffuseToWorking(s2);
+
 	// Simple 2-sample blend weighted toward first sample
 	return lerp(s2, s1, STOCHASTIC_LOD_BLEND);
 }
 
-// Main stochastic sampling function
+// Height-aware blend of two color taps: luminance for RGB data, alpha when available.
+inline float4 StochasticBlendColorTaps(float4 s1, float4 s2, StochasticOffsets offsets, bool colorTexture = false, bool linearInput = false)
+{
+	// Height weights belong to the source data, independent of the working gamut.
+	float h1 = lerp(dot(s1.rgb, float3(0.2125, 0.7154, 0.0721)), s1.a, step(0.001, s1.a));
+	float h2 = lerp(dot(s2.rgb, float3(0.2125, 0.7154, 0.0721)), s2.a, step(0.001, s2.a));
+
+	if (colorTexture) {
+		s1 = ColorManagement::DiffuseToWorking(s1, linearInput);
+		s2 = ColorManagement::DiffuseToWorking(s2, linearInput);
+	}
+
+	return StochasticBlendTwoSamples(s1, s2, offsets.tap1Weight, h1, h2);
+}
+
+// Main stochastic sampling functions. Offsets are constant per 2x2 quad, so the hardware
+// derives mip and anisotropic footprint from implicit derivatives as for a plain Sample.
 inline float4 StochasticEffect(Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets)
 {
-	// Calculate custom mip level from original UVs.
-	float mipLevel = TerrainStochasticMipLevel(tex);
+	float4 s1 = tex.Sample(samp, uv + offsets.offset1);
+	float4 s2 = tex.Sample(samp, uv + offsets.offset2);
+	return StochasticBlendColorTaps(s1, s2, offsets);
+}
 
-	float4 s1 = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
-	float4 s2 = tex.SampleLevel(samp, uv + offsets.offset2, mipLevel);
-
-	// Height calculation - use luminance for RGB data, alpha when available
-	float h1 = lerp(dot(s1.rgb, LUMINANCE_WEIGHTS), s1.a, step(0.001, s1.a));
-	float h2 = lerp(dot(s2.rgb, LUMINANCE_WEIGHTS), s2.a, step(0.001, s2.a));
-	return StochasticBlendTwoSamples(s1, s2, offsets.tap1Weight, h1, h2);
+inline float4 StochasticEffectBias(Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float mipBias, bool colorTexture = false, bool linearInput = false)
+{
+	float4 s1 = tex.SampleBias(samp, uv + offsets.offset1, mipBias);
+	float4 s2 = tex.SampleBias(samp, uv + offsets.offset2, mipBias);
+	return StochasticBlendColorTaps(s1, s2, offsets, colorTexture, linearInput);
 }
 
 // Stochastic sampling for parallax/height; same offsets as albedo so height stays aligned.

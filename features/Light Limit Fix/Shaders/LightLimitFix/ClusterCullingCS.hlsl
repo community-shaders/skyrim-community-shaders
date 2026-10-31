@@ -71,6 +71,11 @@ bool LightIntersectsCluster(float3 position, float radiusSquared, ClusterAABB cl
 	uint offset = 0;
 	InterlockedAdd(lightIndexCounter[0], visibleLightCount, offset);
 
+	// The list holds an average budget per cluster; clamp to what remains.
+	uint capacity, stride;
+	lightIndexList.GetDimensions(capacity, stride);
+	visibleLightCount = min(visibleLightCount, capacity - min(offset, capacity));
+
 	for (uint j = 0; j < visibleLightCount; j++) {
 		lightIndexList[offset + j] = visibleLightIndices[j];
 	}

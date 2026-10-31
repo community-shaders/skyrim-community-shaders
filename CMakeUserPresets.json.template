@@ -12,6 +12,15 @@
 				"CommunityShadersOutputDir": "F:/MySkyrimModpack/mods/CommunityShaders;F:/SteamLibrary/steamapps/common/Skyrim Special Edition/Data"
 			},
 			"inherits": "ALL"
+		},
+		{
+			"name": "ALL-WITH-NVPERF",
+			"binaryDir": "${sourceDir}/build/ALL-NVPERF",
+			"cacheVariables": {
+				"NVPERF_SUPPORT": "ON",
+				"NVPERF_SDK_ROOT": "C:/NVIDIA_Nsight_Perf_SDK/NvPerf"
+			},
+			"inherits": "ALL-WITH-AUTO-DEPLOYMENT"
 		}
 	]
 }

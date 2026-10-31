@@ -55,7 +55,7 @@ namespace FeatureIssues
 		{
 			OBSOLETE,          // Known obsolete feature with replacement info
 			VERSION_MISMATCH,  // Feature exists but version is incompatible
-			OVERRIDE_FAILED,   // Override file failed to load or apply
+			BASELINE_FAILED,   // Baseline preset file failed to load or apply
 			UNKNOWN            // Feature not recognized by this CS version
 		};
 
@@ -66,8 +66,8 @@ namespace FeatureIssues
 		bool IsObsolete() const { return issueType == IssueType::OBSOLETE; }
 		/** @brief Checks if issue type is VERSION_MISMATCH. */
 		bool IsVersionMismatch() const { return issueType == IssueType::VERSION_MISMATCH; }
-		/** @brief Checks if issue type is OVERRIDE_FAILED. */
-		bool IsOverrideFailed() const { return issueType == IssueType::OVERRIDE_FAILED; }
+		/** @brief Checks if issue type is BASELINE_FAILED. */
+		bool IsBaselineFailed() const { return issueType == IssueType::BASELINE_FAILED; }
 		/** @brief Checks if issue type is UNKNOWN. */
 		bool IsUnknown() const { return issueType == IssueType::UNKNOWN; }
 		/** @brief Checks whether a replacement feature is specified. */
@@ -117,6 +117,9 @@ namespace FeatureIssues
 	 */
 	FeatureFileInfo GetFeatureFileInfo(const std::string& featureName);
 
+	/** @brief Local "YYYY-MM-DD HH:MM:SS" form of a file time, or "Unknown" when it cannot be converted. */
+	std::string FormatFileTimestamp(std::filesystem::file_time_type timestamp);
+
 	/**
 	 * Add a feature issue to the tracking system
 	 *
@@ -135,6 +138,9 @@ namespace FeatureIssues
 	 * Draw UI for feature issues (rejected and obsolete features)
 	 */
 	void DrawFeatureIssuesUI();
+
+	/** @brief The cleanup steps the actions card supports, as one tooltip text. */
+	std::string GetCleanupGuide();
 
 	/**
 	 * Delete feature directory and related files safely

@@ -27,14 +27,6 @@ namespace
 		constexpr const char* kFogFar = "Fog Far";
 		constexpr const char* kFogPower = "Fog Power";
 		constexpr const char* kFogClampMax = "Fog Clamp (Max)";
-		constexpr const char* kXPlus = "X+ (Right)";
-		constexpr const char* kXMinus = "X- (Left)";
-		constexpr const char* kYPlus = "Y+ (Front)";
-		constexpr const char* kYMinus = "Y- (Back)";
-		constexpr const char* kZPlus = "Z+ (Up)";
-		constexpr const char* kZMinus = "Z- (Down)";
-		constexpr const char* kSpecular = "Specular";
-		constexpr const char* kFresnelPower = "Fresnel Power";
 		constexpr const char* kLightFadeStart = "Light Fade Start";
 		constexpr const char* kLightFadeEnd = "Light Fade End";
 		constexpr const char* kClipDistance = "Clip Distance";
@@ -52,12 +44,71 @@ namespace
 		constexpr const char* kInheritFogMaxClamp = "Inherit Fog Max (Clamp)";
 		constexpr const char* kInheritLightFadeDistances = "Inherit Light Fade Distances";
 	}
+
+	using Inherit = RE::INTERIOR_DATA::Inherit;
+
+	/** @brief A lighting-template inheritance flag: its game bit, setting, saved key and checkbox label. */
+	struct InheritFlag
+	{
+		Inherit bit;
+		bool CellLightingSettings::* setting;
+		const char* key;
+		const char* label;
+	};
+
+	constexpr InheritFlag kInheritFlags[] = {
+		{ Inherit::kAmbientColor, &CellLightingSettings::inheritAmbientColor, "ambientColor", CellLightingSetting::kInheritAmbientColor },
+		{ Inherit::kDirectionalColor, &CellLightingSettings::inheritDirectionalColor, "directionalColor", CellLightingSetting::kInheritDirectionalColor },
+		{ Inherit::kFogColor, &CellLightingSettings::inheritFogColor, "fogColor", CellLightingSetting::kInheritFogColor },
+		{ Inherit::kFogNear, &CellLightingSettings::inheritFogNear, "fogNear", CellLightingSetting::kInheritFogNear },
+		{ Inherit::kFogFar, &CellLightingSettings::inheritFogFar, "fogFar", CellLightingSetting::kInheritFogFar },
+		{ Inherit::kDirectionalRotation, &CellLightingSettings::inheritDirectionalRotation, "directionalRotation", CellLightingSetting::kInheritDirectionalRotation },
+		{ Inherit::kDirectionalFade, &CellLightingSettings::inheritDirectionalFade, "directionalFade", CellLightingSetting::kInheritDirectionalFade },
+		{ Inherit::kClipDistance, &CellLightingSettings::inheritClipDistance, "clipDistance", CellLightingSetting::kInheritClipDistance },
+		{ Inherit::kFogPower, &CellLightingSettings::inheritFogPower, "fogPower", CellLightingSetting::kInheritFogPower },
+		{ Inherit::kFogMax, &CellLightingSettings::inheritFogMax, "fogMax", CellLightingSetting::kInheritFogMaxClamp },
+		{ Inherit::kLightFadeDistances, &CellLightingSettings::inheritLightFadeDistances, "lightFadeDistances", CellLightingSetting::kInheritLightFadeDistances },
+	};
+
+	/** @brief Calls visit(section, key, field) for every saved setting; section names the nested object, or is null at the top level. */
+	template <class Visit>
+	void ForEachSavedField(CellLightingSettings& settings, Visit&& visit)
+	{
+		visit(nullptr, "ambient", settings.ambient);
+		visit(nullptr, "directional", settings.directional);
+		visit(nullptr, "fogColorNear", settings.fogColorNear);
+		visit(nullptr, "fogColorFar", settings.fogColorFar);
+		visit(nullptr, "fogNear", settings.fogNear);
+		visit(nullptr, "fogFar", settings.fogFar);
+		visit(nullptr, "fogPower", settings.fogPower);
+		visit(nullptr, "fogClamp", settings.fogClamp);
+		visit(nullptr, "directionalFade", settings.directionalFade);
+		visit(nullptr, "clipDist", settings.clipDist);
+		visit(nullptr, "lightFadeStart", settings.lightFadeStart);
+		visit(nullptr, "lightFadeEnd", settings.lightFadeEnd);
+		visit(nullptr, "directionalXY", settings.directionalXY);
+		visit(nullptr, "directionalZ", settings.directionalZ);
+
+		// Cell saves predate DALCSettings, so they keep their own key names.
+		auto& dalc = settings.dalc;
+		visit("dalc", "xPlus", dalc.directional[0].max);
+		visit("dalc", "xMinus", dalc.directional[0].min);
+		visit("dalc", "yPlus", dalc.directional[1].max);
+		visit("dalc", "yMinus", dalc.directional[1].min);
+		visit("dalc", "zPlus", dalc.directional[2].max);
+		visit("dalc", "zMinus", dalc.directional[2].min);
+		visit("dalc", "specular", dalc.specular);
+		visit("dalc", "fresnelPower", dalc.fresnelPower);
+
+		for (const auto& flag : kInheritFlags)
+			visit("inherit", flag.key, settings.*flag.setting);
+	}
 }
 
 void CellLightingWidget::DrawWidget()
 {
 	WeatherUtils::SetCurrentWidget(this);
-	if (BeginWidgetWindow()) {
+	if (BeginWidgetWindow(true, true, false, nullptr, "##CellLightingSearch")) {
 		DrawWidgetHeader("##CellLightingSearch", true, true);
 		DrawSearchDropdown();
 	}
@@ -70,43 +121,29 @@ void CellLightingWidget::DrawWidget()
 	} else {
 		bool changed = false;
 
-		if (ImGui::BeginTabBar("CellLightingTabs")) {
+		if (Util::BeginPillTabBar("CellLightingTabs")) {
 			const ImGuiTabItemFlags basicFlags = GetTabFlagsForOverride(CellLightingTab::kBasic);
 			const ImGuiTabItemFlags fogFlags = GetTabFlagsForOverride(CellLightingTab::kFog);
 			const ImGuiTabItemFlags dalcFlags = GetTabFlagsForOverride(CellLightingTab::kDalc);
 			const ImGuiTabItemFlags inheritFlags = GetTabFlagsForOverride(CellLightingTab::kInheritance);
 
-			auto drawInherited = [](bool inherited, auto draw) -> bool {
-				if (inherited)
-					PushInheritedStyle();
-				const bool result = draw();
-				if (inherited) {
-					Util::AddTooltip(T(TKEY("inherited_from_lighting_template"), "Inherited from lighting template"));
-					PopInheritedStyle();
-				}
-				return result;
+			const char* inheritedTooltip = T(TKEY("inherited_from_lighting_template"), "Inherited from lighting template");
+			auto drawInherited = [inheritedTooltip](bool inherited, auto draw) {
+				return DrawInherited(inherited ? inheritedTooltip : nullptr, draw);
 			};
 
-			if (ImGui::BeginTabItem(T(TKEY("tab_basic"), "Basic"), nullptr, basicFlags)) {
+			if (Util::BeginPillTabItem(T(TKEY("tab_basic"), "Basic"), nullptr, basicFlags)) {
 				BeginScrollableContent("##BasicScroll");
 
 				auto drawMatchedHeader = [&](bool matches, const char* label, auto draw) {
-					if (!matches)
-						return;
-					if (ShouldOpenSearchSection())
-						ImGui::SetNextItemOpen(true, ImGuiCond_Always);
-					if (ImGui::CollapsingHeader(label, ImGuiTreeNodeFlags_DefaultOpen)) {
-						ImGui::Spacing();
+					if (matches && SearchHeader(label))
 						draw();
-						ImGui::Spacing();
-					}
 				};
 
 				drawMatchedHeader(MatchesAnySearch({ CellLightingSetting::kAmbientColor, CellLightingSetting::kDirectionalColor }), T(TKEY("ambient_directional"), "Ambient & Directional"), [&]() {
 					changed |= drawInherited(settings.inheritAmbientColor, [&]() {
 						return WeatherUtils::DrawColorEdit(CellLightingSetting::kAmbientColor, settings.ambient);
 					});
-					ImGui::Spacing();
 					changed |= drawInherited(settings.inheritDirectionalColor, [&]() {
 						return WeatherUtils::DrawColorEdit(CellLightingSetting::kDirectionalColor, settings.directional);
 					});
@@ -125,7 +162,6 @@ void CellLightingWidget::DrawWidget()
 						settings.directionalXY = static_cast<uint32_t>(xyDegrees);
 						changed = true;
 					}
-					ImGui::Spacing();
 					if (DrawIfMatchesSearch(CellLightingSetting::kZRotation, [&](const char* label) {
 							return drawInherited(settings.inheritDirectionalRotation, [&]() {
 								return DrawWithHighlight(label, [&]() {
@@ -136,7 +172,6 @@ void CellLightingWidget::DrawWidget()
 						settings.directionalZ = static_cast<uint32_t>(zDegrees);
 						changed = true;
 					}
-					ImGui::Spacing();
 					changed |= drawInherited(settings.inheritDirectionalFade, [&]() {
 						return WeatherUtils::DrawSliderFloat(CellLightingSetting::kDirectionalFade, settings.directionalFade, 0.0f, 1.0f);
 					});
@@ -146,7 +181,6 @@ void CellLightingWidget::DrawWidget()
 					changed |= drawInherited(settings.inheritLightFadeDistances, [&]() {
 						return WeatherUtils::DrawSliderFloat(CellLightingSetting::kLightFadeStart, settings.lightFadeStart, 0.0f, 163840.0f);
 					});
-					ImGui::Spacing();
 					changed |= drawInherited(settings.inheritLightFadeDistances, [&]() {
 						return WeatherUtils::DrawSliderFloat(CellLightingSetting::kLightFadeEnd, settings.lightFadeEnd, 0.0f, 163840.0f);
 					});
@@ -159,123 +193,73 @@ void CellLightingWidget::DrawWidget()
 				});
 
 				EndScrollableContent();
-				ImGui::EndTabItem();
+				Util::EndPillTabItem();
 			}
 
-			if (ImGui::BeginTabItem(T(TKEY("tab_fog"), "Fog"), nullptr, fogFlags)) {
+			if (Util::BeginPillTabItem(T(TKEY("tab_fog"), "Fog"), nullptr, fogFlags)) {
 				BeginScrollableContent("##FogScroll");
 
 				DrawSearchSectionIfMatches(CellLightingSetting::kFogNearColor, [&](const char*) {
-					ImGui::Spacing();
 					changed |= drawInherited(settings.inheritFogColor, [&]() {
 						return WeatherUtils::DrawColorEdit(CellLightingSetting::kFogNearColor, settings.fogColorNear);
 					});
 				});
 
 				DrawSearchSectionIfMatches(CellLightingSetting::kFogFarColor, [&](const char*) {
-					ImGui::Spacing();
 					changed |= drawInherited(settings.inheritFogColor, [&]() {
 						return WeatherUtils::DrawColorEdit(CellLightingSetting::kFogFarColor, settings.fogColorFar);
 					});
 				});
 
 				DrawSearchSectionIfMatches(CellLightingSetting::kFogNear, [&](const char*) {
-					ImGui::Spacing();
 					changed |= drawInherited(settings.inheritFogNear, [&]() {
 						return WeatherUtils::DrawSliderFloat(CellLightingSetting::kFogNear, settings.fogNear, 0.0f, 163840.0f);
 					});
 				});
 
 				DrawSearchSectionIfMatches(CellLightingSetting::kFogFar, [&](const char*) {
-					ImGui::Spacing();
 					changed |= drawInherited(settings.inheritFogFar, [&]() {
 						return WeatherUtils::DrawSliderFloat(CellLightingSetting::kFogFar, settings.fogFar, 0.0f, 163840.0f);
 					});
 				});
 
 				DrawSearchSectionIfMatches(CellLightingSetting::kFogPower, [&](const char*) {
-					ImGui::Spacing();
 					changed |= drawInherited(settings.inheritFogPower, [&]() {
 						return WeatherUtils::DrawSliderFloat(CellLightingSetting::kFogPower, settings.fogPower, 0.0f, 10.0f);
 					});
 				});
 
 				DrawSearchSectionIfMatches(CellLightingSetting::kFogClampMax, [&](const char*) {
-					ImGui::Spacing();
 					changed |= drawInherited(settings.inheritFogMax, [&]() {
 						return WeatherUtils::DrawSliderFloat(CellLightingSetting::kFogClampMax, settings.fogClamp, 0.0f, 1.0f);
 					});
 				});
 
 				EndScrollableContent();
-				ImGui::EndTabItem();
+				Util::EndPillTabItem();
 			}
 
-			if (ImGui::BeginTabItem(T(TKEY("tab_dalc"), "DALC"), nullptr, dalcFlags)) {
+			if (Util::BeginPillTabItem(T(TKEY("tab_dalc"), "DALC"), nullptr, dalcFlags)) {
 				BeginScrollableContent("##DALCScroll");
-
-				if (MatchesAnySearch({ CellLightingSetting::kSpecular, CellLightingSetting::kFresnelPower })) {
-					ImGui::SeparatorText(T(TKEY("dalc_header"), "Directional Ambient Lighting (DALC)"));
-					changed |= drawInherited(settings.inheritAmbientColor, [&]() {
-						return WeatherUtils::DrawColorEdit(CellLightingSetting::kSpecular, settings.directionalSpecular);
-					});
-					changed |= drawInherited(settings.inheritAmbientColor, [&]() {
-						return WeatherUtils::DrawSliderFloat(CellLightingSetting::kFresnelPower, settings.fresnelPower, 0.0f, 10.0f);
-					});
-				}
-
-				if (MatchesAnySearch({ CellLightingSetting::kXPlus, CellLightingSetting::kXMinus, CellLightingSetting::kYPlus,
-						CellLightingSetting::kYMinus, CellLightingSetting::kZPlus, CellLightingSetting::kZMinus })) {
-					ImGui::SeparatorText(T(TKEY("directional_colors"), "Directional Colors"));
-					changed |= drawInherited(settings.inheritAmbientColor, [&]() {
-						return WeatherUtils::DrawColorEdit(CellLightingSetting::kXPlus, settings.directionalXPlus);
-					});
-					changed |= drawInherited(settings.inheritAmbientColor, [&]() {
-						return WeatherUtils::DrawColorEdit(CellLightingSetting::kXMinus, settings.directionalXMinus);
-					});
-					changed |= drawInherited(settings.inheritAmbientColor, [&]() {
-						return WeatherUtils::DrawColorEdit(CellLightingSetting::kYPlus, settings.directionalYPlus);
-					});
-					changed |= drawInherited(settings.inheritAmbientColor, [&]() {
-						return WeatherUtils::DrawColorEdit(CellLightingSetting::kYMinus, settings.directionalYMinus);
-					});
-					changed |= drawInherited(settings.inheritAmbientColor, [&]() {
-						return WeatherUtils::DrawColorEdit(CellLightingSetting::kZPlus, settings.directionalZPlus);
-					});
-					changed |= drawInherited(settings.inheritAmbientColor, [&]() {
-						return WeatherUtils::DrawColorEdit(CellLightingSetting::kZMinus, settings.directionalZMinus);
-					});
-				}
-
+				changed |= DrawDALCControls(*this, settings.dalc, settings.inheritAmbientColor ? inheritedTooltip : nullptr);
 				EndScrollableContent();
-				ImGui::EndTabItem();
+				Util::EndPillTabItem();
 			}
 
-			if (ImGui::BeginTabItem(T(TKEY("tab_inheritance"), "Inheritance"), nullptr, inheritFlags)) {
+			if (Util::BeginPillTabItem(T(TKEY("tab_inheritance"), "Inheritance"), nullptr, inheritFlags)) {
 				BeginScrollableContent("##InheritanceScroll");
 				ImGui::TextWrapped("%s", T(TKEY("inherit_flags_desc"), "These flags control which lighting properties are inherited from the cell's lighting template."));
 				ImGui::Separator();
-				changed |= WeatherUtils::DrawCheckbox(CellLightingSetting::kInheritAmbientColor, settings.inheritAmbientColor);
-				changed |= WeatherUtils::DrawCheckbox(CellLightingSetting::kInheritDirectionalColor, settings.inheritDirectionalColor);
-				changed |= WeatherUtils::DrawCheckbox(CellLightingSetting::kInheritFogColor, settings.inheritFogColor);
-				changed |= WeatherUtils::DrawCheckbox(CellLightingSetting::kInheritFogNear, settings.inheritFogNear);
-				changed |= WeatherUtils::DrawCheckbox(CellLightingSetting::kInheritFogFar, settings.inheritFogFar);
-				changed |= WeatherUtils::DrawCheckbox(CellLightingSetting::kInheritDirectionalRotation, settings.inheritDirectionalRotation);
-				changed |= WeatherUtils::DrawCheckbox(CellLightingSetting::kInheritDirectionalFade, settings.inheritDirectionalFade);
-				changed |= WeatherUtils::DrawCheckbox(CellLightingSetting::kInheritClipDistance, settings.inheritClipDistance);
-				changed |= WeatherUtils::DrawCheckbox(CellLightingSetting::kInheritFogPower, settings.inheritFogPower);
-				changed |= WeatherUtils::DrawCheckbox(CellLightingSetting::kInheritFogMaxClamp, settings.inheritFogMax);
-				changed |= WeatherUtils::DrawCheckbox(CellLightingSetting::kInheritLightFadeDistances, settings.inheritLightFadeDistances);
+				for (const auto& flag : kInheritFlags)
+					changed |= WeatherUtils::DrawCheckbox(flag.label, settings.*flag.setting);
 				EndScrollableContent();
-				ImGui::EndTabItem();
+				Util::EndPillTabItem();
 			}
 
-			ImGui::EndTabBar();
+			Util::EndPillTabBar();
 		}
 
-		if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
-			ApplyChanges();
-		}
+		AutoApply(changed);
 	}
 	ImGui::End();
 }
@@ -289,118 +273,17 @@ void CellLightingWidget::LoadSettings()
 	if (!lighting)
 		return;
 
-	// Try to load from JSON first
-	if (!js.empty()) {
-		settings = vanillaSettings;
-		try {
-			if (js.contains("ambient")) {
-				auto arr = js["ambient"];
-				if (arr.is_array() && arr.size() == 3) {
-					settings.ambient = { arr[0], arr[1], arr[2] };
-				}
+	LoadSavedSettings([this] {
+		ForEachSavedField(settings, [this](const char* section, const char* key, auto& field) {
+			const json* node = &js;
+			if (section) {
+				const auto it = js.find(section);
+				node = it != js.end() ? &*it : nullptr;
 			}
-			if (js.contains("directional")) {
-				auto arr = js["directional"];
-				if (arr.is_array() && arr.size() == 3) {
-					settings.directional = { arr[0], arr[1], arr[2] };
-				}
-			}
-			if (js.contains("fogColorNear")) {
-				auto arr = js["fogColorNear"];
-				if (arr.is_array() && arr.size() == 3) {
-					settings.fogColorNear = { arr[0], arr[1], arr[2] };
-				}
-			}
-			if (js.contains("fogColorFar")) {
-				auto arr = js["fogColorFar"];
-				if (arr.is_array() && arr.size() == 3) {
-					settings.fogColorFar = { arr[0], arr[1], arr[2] };
-				}
-			}
-			if (js.contains("fogNear"))
-				settings.fogNear = js["fogNear"];
-			if (js.contains("fogFar"))
-				settings.fogFar = js["fogFar"];
-			if (js.contains("fogPower"))
-				settings.fogPower = js["fogPower"];
-			if (js.contains("fogClamp"))
-				settings.fogClamp = js["fogClamp"];
-			if (js.contains("directionalFade"))
-				settings.directionalFade = js["directionalFade"];
-			if (js.contains("clipDist"))
-				settings.clipDist = js["clipDist"];
-			if (js.contains("lightFadeStart"))
-				settings.lightFadeStart = js["lightFadeStart"];
-			if (js.contains("lightFadeEnd"))
-				settings.lightFadeEnd = js["lightFadeEnd"];
-			if (js.contains("directionalXY"))
-				settings.directionalXY = js["directionalXY"];
-			if (js.contains("directionalZ"))
-				settings.directionalZ = js["directionalZ"];
-
-			if (js.contains("dalc")) {
-				auto& dalc = js["dalc"];
-				if (dalc.contains("xPlus") && dalc["xPlus"].is_array() && dalc["xPlus"].size() == 3) {
-					settings.directionalXPlus = { dalc["xPlus"][0], dalc["xPlus"][1], dalc["xPlus"][2] };
-				}
-				if (dalc.contains("xMinus") && dalc["xMinus"].is_array() && dalc["xMinus"].size() == 3) {
-					settings.directionalXMinus = { dalc["xMinus"][0], dalc["xMinus"][1], dalc["xMinus"][2] };
-				}
-				if (dalc.contains("yPlus") && dalc["yPlus"].is_array() && dalc["yPlus"].size() == 3) {
-					settings.directionalYPlus = { dalc["yPlus"][0], dalc["yPlus"][1], dalc["yPlus"][2] };
-				}
-				if (dalc.contains("yMinus") && dalc["yMinus"].is_array() && dalc["yMinus"].size() == 3) {
-					settings.directionalYMinus = { dalc["yMinus"][0], dalc["yMinus"][1], dalc["yMinus"][2] };
-				}
-				if (dalc.contains("zPlus") && dalc["zPlus"].is_array() && dalc["zPlus"].size() == 3) {
-					settings.directionalZPlus = { dalc["zPlus"][0], dalc["zPlus"][1], dalc["zPlus"][2] };
-				}
-				if (dalc.contains("zMinus") && dalc["zMinus"].is_array() && dalc["zMinus"].size() == 3) {
-					settings.directionalZMinus = { dalc["zMinus"][0], dalc["zMinus"][1], dalc["zMinus"][2] };
-				}
-				if (dalc.contains("specular") && dalc["specular"].is_array() && dalc["specular"].size() == 3) {
-					settings.directionalSpecular = { dalc["specular"][0], dalc["specular"][1], dalc["specular"][2] };
-				}
-				if (dalc.contains("fresnelPower"))
-					settings.fresnelPower = dalc["fresnelPower"];
-			}
-
-			if (js.contains("inherit")) {
-				auto& inherit = js["inherit"];
-				if (inherit.contains("ambientColor"))
-					settings.inheritAmbientColor = inherit["ambientColor"];
-				if (inherit.contains("directionalColor"))
-					settings.inheritDirectionalColor = inherit["directionalColor"];
-				if (inherit.contains("fogColor"))
-					settings.inheritFogColor = inherit["fogColor"];
-				if (inherit.contains("fogNear"))
-					settings.inheritFogNear = inherit["fogNear"];
-				if (inherit.contains("fogFar"))
-					settings.inheritFogFar = inherit["fogFar"];
-				if (inherit.contains("directionalRotation"))
-					settings.inheritDirectionalRotation = inherit["directionalRotation"];
-				if (inherit.contains("directionalFade"))
-					settings.inheritDirectionalFade = inherit["directionalFade"];
-				if (inherit.contains("clipDistance"))
-					settings.inheritClipDistance = inherit["clipDistance"];
-				if (inherit.contains("fogPower"))
-					settings.inheritFogPower = inherit["fogPower"];
-				if (inherit.contains("fogMax"))
-					settings.inheritFogMax = inherit["fogMax"];
-				if (inherit.contains("lightFadeDistances"))
-					settings.inheritLightFadeDistances = inherit["lightFadeDistances"];
-			}
-
-		} catch (const std::exception& e) {
-			logger::error("CellLighting {}: Failed to load from JSON: {}", GetEditorID(), e.what());
-			settings = vanillaSettings;
-		}
-	} else {
-		settings = vanillaSettings;
-	}
-
-	originalSettings = settings;
-	ApplyChanges();
+			if (node && node->contains(key))
+				node->at(key).get_to(field);
+		});
+	});
 }
 
 void CellLightingWidget::LoadFromGameSettings()
@@ -429,67 +312,17 @@ void CellLightingWidget::LoadFromGameSettings()
 	settings.directionalXY = lighting->directionalXY;
 	settings.directionalZ = lighting->directionalZ;
 
-	auto& dalc = lighting->directionalAmbientLightingColors;
-	ColorToFloat3(dalc.directional.x.max, settings.directionalXPlus);
-	ColorToFloat3(dalc.directional.x.min, settings.directionalXMinus);
-	ColorToFloat3(dalc.directional.y.max, settings.directionalYPlus);
-	ColorToFloat3(dalc.directional.y.min, settings.directionalYMinus);
-	ColorToFloat3(dalc.directional.z.max, settings.directionalZPlus);
-	ColorToFloat3(dalc.directional.z.min, settings.directionalZMinus);
-	ColorToFloat3(dalc.specular, settings.directionalSpecular);
-	settings.fresnelPower = dalc.fresnelPower;
+	settings.dalc.Read(lighting->directionalAmbientLightingColors);
 
-	auto flags = lighting->lightingTemplateInheritanceFlags;
-	settings.inheritAmbientColor = flags.any(RE::INTERIOR_DATA::Inherit::kAmbientColor);
-	settings.inheritDirectionalColor = flags.any(RE::INTERIOR_DATA::Inherit::kDirectionalColor);
-	settings.inheritFogColor = flags.any(RE::INTERIOR_DATA::Inherit::kFogColor);
-	settings.inheritFogNear = flags.any(RE::INTERIOR_DATA::Inherit::kFogNear);
-	settings.inheritFogFar = flags.any(RE::INTERIOR_DATA::Inherit::kFogFar);
-	settings.inheritDirectionalRotation = flags.any(RE::INTERIOR_DATA::Inherit::kDirectionalRotation);
-	settings.inheritDirectionalFade = flags.any(RE::INTERIOR_DATA::Inherit::kDirectionalFade);
-	settings.inheritClipDistance = flags.any(RE::INTERIOR_DATA::Inherit::kClipDistance);
-	settings.inheritFogPower = flags.any(RE::INTERIOR_DATA::Inherit::kFogPower);
-	settings.inheritFogMax = flags.any(RE::INTERIOR_DATA::Inherit::kFogMax);
-	settings.inheritLightFadeDistances = flags.any(RE::INTERIOR_DATA::Inherit::kLightFadeDistances);
+	for (const auto& flag : kInheritFlags)
+		settings.*flag.setting = lighting->lightingTemplateInheritanceFlags.any(flag.bit);
 }
 
 void CellLightingWidget::SaveSettings()
 {
-	js["ambient"] = { settings.ambient.x, settings.ambient.y, settings.ambient.z };
-	js["directional"] = { settings.directional.x, settings.directional.y, settings.directional.z };
-	js["fogColorNear"] = { settings.fogColorNear.x, settings.fogColorNear.y, settings.fogColorNear.z };
-	js["fogColorFar"] = { settings.fogColorFar.x, settings.fogColorFar.y, settings.fogColorFar.z };
-	js["fogNear"] = settings.fogNear;
-	js["fogFar"] = settings.fogFar;
-	js["fogPower"] = settings.fogPower;
-	js["fogClamp"] = settings.fogClamp;
-	js["directionalFade"] = settings.directionalFade;
-	js["clipDist"] = settings.clipDist;
-	js["lightFadeStart"] = settings.lightFadeStart;
-	js["lightFadeEnd"] = settings.lightFadeEnd;
-	js["directionalXY"] = settings.directionalXY;
-	js["directionalZ"] = settings.directionalZ;
-
-	js["dalc"]["xPlus"] = { settings.directionalXPlus.x, settings.directionalXPlus.y, settings.directionalXPlus.z };
-	js["dalc"]["xMinus"] = { settings.directionalXMinus.x, settings.directionalXMinus.y, settings.directionalXMinus.z };
-	js["dalc"]["yPlus"] = { settings.directionalYPlus.x, settings.directionalYPlus.y, settings.directionalYPlus.z };
-	js["dalc"]["yMinus"] = { settings.directionalYMinus.x, settings.directionalYMinus.y, settings.directionalYMinus.z };
-	js["dalc"]["zPlus"] = { settings.directionalZPlus.x, settings.directionalZPlus.y, settings.directionalZPlus.z };
-	js["dalc"]["zMinus"] = { settings.directionalZMinus.x, settings.directionalZMinus.y, settings.directionalZMinus.z };
-	js["dalc"]["specular"] = { settings.directionalSpecular.x, settings.directionalSpecular.y, settings.directionalSpecular.z };
-	js["dalc"]["fresnelPower"] = settings.fresnelPower;
-
-	js["inherit"]["ambientColor"] = settings.inheritAmbientColor;
-	js["inherit"]["directionalColor"] = settings.inheritDirectionalColor;
-	js["inherit"]["fogColor"] = settings.inheritFogColor;
-	js["inherit"]["fogNear"] = settings.inheritFogNear;
-	js["inherit"]["fogFar"] = settings.inheritFogFar;
-	js["inherit"]["directionalRotation"] = settings.inheritDirectionalRotation;
-	js["inherit"]["directionalFade"] = settings.inheritDirectionalFade;
-	js["inherit"]["clipDistance"] = settings.inheritClipDistance;
-	js["inherit"]["fogPower"] = settings.inheritFogPower;
-	js["inherit"]["fogMax"] = settings.inheritFogMax;
-	js["inherit"]["lightFadeDistances"] = settings.inheritLightFadeDistances;
+	ForEachSavedField(settings, [this](const char* section, const char* key, const auto& field) {
+		(section ? js[section] : js)[key] = field;
+	});
 	originalSettings = settings;
 }
 
@@ -522,78 +355,29 @@ void CellLightingWidget::ApplyChanges()
 	lighting->directionalXY = settings.directionalXY;
 	lighting->directionalZ = settings.directionalZ;
 
-	// Apply directional ambient lighting colors
-	auto& dalc = lighting->directionalAmbientLightingColors;
-	Float3ToColor(settings.directionalXPlus, dalc.directional.x.max);
-	Float3ToColor(settings.directionalXMinus, dalc.directional.x.min);
-	Float3ToColor(settings.directionalYPlus, dalc.directional.y.max);
-	Float3ToColor(settings.directionalYMinus, dalc.directional.y.min);
-	Float3ToColor(settings.directionalZPlus, dalc.directional.z.max);
-	Float3ToColor(settings.directionalZMinus, dalc.directional.z.min);
-	Float3ToColor(settings.directionalSpecular, dalc.specular);
-	dalc.fresnelPower = settings.fresnelPower;
+	settings.dalc.Write(lighting->directionalAmbientLightingColors);
 
-	// Apply inheritance flags
 	lighting->lightingTemplateInheritanceFlags.reset();
-	if (settings.inheritAmbientColor)
-		lighting->lightingTemplateInheritanceFlags.set(RE::INTERIOR_DATA::Inherit::kAmbientColor);
-	if (settings.inheritDirectionalColor)
-		lighting->lightingTemplateInheritanceFlags.set(RE::INTERIOR_DATA::Inherit::kDirectionalColor);
-	if (settings.inheritFogColor)
-		lighting->lightingTemplateInheritanceFlags.set(RE::INTERIOR_DATA::Inherit::kFogColor);
-	if (settings.inheritFogNear)
-		lighting->lightingTemplateInheritanceFlags.set(RE::INTERIOR_DATA::Inherit::kFogNear);
-	if (settings.inheritFogFar)
-		lighting->lightingTemplateInheritanceFlags.set(RE::INTERIOR_DATA::Inherit::kFogFar);
-	if (settings.inheritDirectionalRotation)
-		lighting->lightingTemplateInheritanceFlags.set(RE::INTERIOR_DATA::Inherit::kDirectionalRotation);
-	if (settings.inheritDirectionalFade)
-		lighting->lightingTemplateInheritanceFlags.set(RE::INTERIOR_DATA::Inherit::kDirectionalFade);
-	if (settings.inheritClipDistance)
-		lighting->lightingTemplateInheritanceFlags.set(RE::INTERIOR_DATA::Inherit::kClipDistance);
-	if (settings.inheritFogPower)
-		lighting->lightingTemplateInheritanceFlags.set(RE::INTERIOR_DATA::Inherit::kFogPower);
-	if (settings.inheritFogMax)
-		lighting->lightingTemplateInheritanceFlags.set(RE::INTERIOR_DATA::Inherit::kFogMax);
-	if (settings.inheritLightFadeDistances)
-		lighting->lightingTemplateInheritanceFlags.set(RE::INTERIOR_DATA::Inherit::kLightFadeDistances);
-}
-
-void CellLightingWidget::RevertChanges()
-{
-	settings = vanillaSettings;
-	ApplyChanges();
-}
-
-bool CellLightingWidget::HasUnsavedChanges() const
-{
-	return !(settings == originalSettings);
+	for (const auto& flag : kInheritFlags) {
+		if (settings.*flag.setting)
+			lighting->lightingTemplateInheritanceFlags.set(flag.bit);
+	}
 }
 
 std::vector<Widget::SearchResult> CellLightingWidget::CollectSearchableSettings() const
 {
-	const std::vector<std::pair<std::string, std::vector<std::string>>> entries = {
+	std::vector<std::string> inheritLabels;
+	for (const auto& flag : kInheritFlags)
+		inheritLabels.emplace_back(flag.label);
+	return WeatherUtils::LabelSearchResults({
 		{ CellLightingTab::kBasic, { CellLightingSetting::kAmbientColor, CellLightingSetting::kDirectionalColor,
 									   CellLightingSetting::kXYRotation, CellLightingSetting::kZRotation, CellLightingSetting::kDirectionalFade,
 									   CellLightingSetting::kLightFadeStart, CellLightingSetting::kLightFadeEnd, CellLightingSetting::kClipDistance } },
 		{ CellLightingTab::kFog, { CellLightingSetting::kFogNearColor, CellLightingSetting::kFogFarColor,
 									 CellLightingSetting::kFogNear, CellLightingSetting::kFogFar, CellLightingSetting::kFogPower, CellLightingSetting::kFogClampMax } },
-		{ CellLightingTab::kDalc, { CellLightingSetting::kSpecular, CellLightingSetting::kFresnelPower,
-									  CellLightingSetting::kXPlus, CellLightingSetting::kXMinus, CellLightingSetting::kYPlus, CellLightingSetting::kYMinus,
-									  CellLightingSetting::kZPlus, CellLightingSetting::kZMinus } },
-		{ CellLightingTab::kInheritance, { CellLightingSetting::kInheritAmbientColor, CellLightingSetting::kInheritDirectionalColor, CellLightingSetting::kInheritFogColor,
-											 CellLightingSetting::kInheritFogNear, CellLightingSetting::kInheritFogFar, CellLightingSetting::kInheritDirectionalRotation,
-											 CellLightingSetting::kInheritDirectionalFade, CellLightingSetting::kInheritClipDistance, CellLightingSetting::kInheritFogPower,
-											 CellLightingSetting::kInheritFogMaxClamp, CellLightingSetting::kInheritLightFadeDistances } },
-	};
-
-	std::vector<SearchResult> results;
-	for (const auto& [tab, names] : entries) {
-		for (const auto& name : names) {
-			results.push_back({ WeatherUtils::TranslateControlLabel(name), tab, name });
-		}
-	}
-	return results;
+		{ CellLightingTab::kDalc, { DALCSetting::kAll.begin(), DALCSetting::kAll.end() } },
+		{ CellLightingTab::kInheritance, std::move(inheritLabels) },
+	});
 }
 
 #undef I18N_KEY_PREFIX

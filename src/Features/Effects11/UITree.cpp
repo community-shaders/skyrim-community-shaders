@@ -95,9 +95,8 @@ namespace UITree
 			for (int i = 0; i < static_cast<int>(effect->uiVariables.size()); ++i) {
 				auto& var = effect->uiVariables[i];
 
-				std::string uname = !var.uniqueName.empty() ? var.uniqueName
-				                    : !var.group.empty()    ? var.group + "." + var.displayName
-				                                            : var.displayName;
+				std::string uname = !var.uniqueName.empty() ? var.uniqueName : !var.group.empty() ? var.group + "." + var.displayName :
+				                                                                                    var.displayName;
 				uniqueNameMap[uname] = { effect, i };
 				fileMap[uname] = { effect, i };
 
@@ -115,7 +114,7 @@ namespace UITree
 				item.type = Item::Type::Variable;
 				item.var = { effect, i };
 				item.ordering = var.ordering;
-				item.sourceOrder = var.sourceOrder + offset;
+				item.sourceOrder = var.sourceOrder == INT_MAX ? INT_MAX : var.sourceOrder + offset;
 				node->items.push_back(std::move(item));
 			}
 
@@ -128,13 +127,12 @@ namespace UITree
 				if (!sep.name.empty() && !seenItems.insert(sep.name).second)
 					continue;
 
-				GroupNode* node = sep.isTopLevel ? &root
-				                 : !sep.group.empty() ? TraverseGroupPath(root, sep.group, meta)
-				                                      : &root;
+				GroupNode* node = sep.isTopLevel ? &root : !sep.group.empty() ? TraverseGroupPath(root, sep.group, meta) :
+				                                                                &root;
 
 				Item item;
 				item.type = Item::Type::Separator;
-				item.sourceOrder = sep.sourceOrder + offset;
+				item.sourceOrder = sep.sourceOrder == INT_MAX ? INT_MAX : sep.sourceOrder + offset;
 				item.ordering = sep.ordering;
 				item.hasOrdering = sep.hasOrdering;
 				node->items.push_back(std::move(item));

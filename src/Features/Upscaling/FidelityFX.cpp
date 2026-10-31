@@ -96,7 +96,8 @@ void FidelityFX::Present(bool a_useFrameGeneration, bool a_isHDR)
 	// Use seq_cst for both to ensure the callback sees both values consistently
 	hdrPeakNits.store(peakNits, std::memory_order_seq_cst);
 	isHDRActive.store(a_isHDR, std::memory_order_seq_cst);
-	needsReset.store(hdrParamsChanged, std::memory_order_seq_cst);
+	if (hdrParamsChanged || globals::state->ShouldResetHistory())
+		needsReset.store(true, std::memory_order_seq_cst);
 
 	ffx::ConfigureDescFrameGeneration configParameters{};
 
@@ -142,7 +143,7 @@ void FidelityFX::Present(bool a_useFrameGeneration, bool a_isHDR)
 	// If HDR parameters changed, skip a frame ID to force FidelityFX to reset its history
 	// This prevents interpolation artifacts when frames were encoded with different parameters
 	// Per FidelityFX docs: "Any non-exactly-one difference will reset the frame generation logic"
-	if (hdrParamsChanged && a_useFrameGeneration) {
+	if ((hdrParamsChanged || globals::state->ShouldResetHistory()) && a_useFrameGeneration) {
 		frameID += 2;  // Skip one ID to trigger reset
 	}
 
@@ -281,13 +282,9 @@ void FidelityFX::CreateFSRResources()
 	contextDescription.maxUpscaleSize.height = displayHeight;
 	contextDescription.displaySize.width = displayWidth;
 	contextDescription.displaySize.height = displayHeight;
-	contextDescription.flags = FFX_FSR3_ENABLE_UPSCALING_ONLY | FFX_FSR3_ENABLE_AUTO_EXPOSURE;
-	if (globals::features::hdrDisplay.loaded) {
-		contextDescription.flags |= FFX_FSR3_ENABLE_HIGH_DYNAMIC_RANGE;
-		contextDescription.backBufferFormat = FFX_SURFACE_FORMAT_R10G10B10A2_UNORM;
-	} else {
-		contextDescription.backBufferFormat = FFX_SURFACE_FORMAT_R8G8B8A8_UNORM;
-	}
+	// FSR upscales kMAIN before the tonemap, so its input is HDR radiance whatever the display mode
+	contextDescription.flags = FFX_FSR3_ENABLE_UPSCALING_ONLY | FFX_FSR3_ENABLE_AUTO_EXPOSURE | FFX_FSR3_ENABLE_HIGH_DYNAMIC_RANGE;
+	contextDescription.backBufferFormat = globals::features::hdrDisplay.loaded ? FFX_SURFACE_FORMAT_R10G10B10A2_UNORM : FFX_SURFACE_FORMAT_R8G8B8A8_UNORM;
 	contextDescription.backendInterfaceUpscaling = fsrInterface;
 
 	if (ffxFsr3ContextCreate(&fsrContext[0], &contextDescription) != FFX_OK) {
@@ -302,7 +299,7 @@ void FidelityFX::CreateFSRResources()
 
 void FidelityFX::DestroyFSRResources()
 {
-	if (ffxFsr3ContextDestroy(&fsrContext[0]) != FFX_OK)
+	if (fsrScratchBuffer && ffxFsr3ContextDestroy(&fsrContext[0]) != FFX_OK)
 		logger::critical("[FidelityFX] Failed to destroy FSR3 context!");
 
 	// Free the scratch buffer to prevent memory leak
@@ -374,7 +371,7 @@ void FidelityFX::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_r
 	dispatchParameters.sharpness = a_sharpness;
 	dispatchParameters.cameraFovAngleVertical = Util::GetVerticalFOVRad();
 	dispatchParameters.viewSpaceToMetersFactor = 0.01428222656f;
-	dispatchParameters.reset = false;
+	dispatchParameters.reset = globals::state->ShouldResetHistory();
 	dispatchParameters.preExposure = 1.0f;
 	dispatchParameters.flags = 0;
 

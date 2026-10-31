@@ -68,8 +68,8 @@ void SubsurfaceScattering::DrawSettings()
 					ImGui::Text("%s", T(TKEY("thickness_tooltip"), "Blur radius relative to depth."));
 				}
 
-				updateKernels = updateKernels || ImGui::ColorEdit3(T(TKEY("strength"), "Strength"), (float*)&settings.BaseProfile.Strength);
-				updateKernels = updateKernels || ImGui::ColorEdit3(T(TKEY("falloff"), "Falloff"), (float*)&settings.BaseProfile.Falloff);
+				updateKernels |= ImGui::ColorEdit3(T(TKEY("strength"), "Strength"), (float*)&settings.BaseProfile.Strength);
+				updateKernels |= ImGui::ColorEdit3(T(TKEY("falloff"), "Falloff"), (float*)&settings.BaseProfile.Falloff);
 
 				ImGui::TreePop();
 			}
@@ -85,8 +85,8 @@ void SubsurfaceScattering::DrawSettings()
 					ImGui::Text("%s", T(TKEY("thickness_tooltip"), "Blur radius relative to depth."));
 				}
 
-				updateKernels = updateKernels || ImGui::ColorEdit3(T(TKEY("strength"), "Strength"), (float*)&settings.HumanProfile.Strength);
-				updateKernels = updateKernels || ImGui::ColorEdit3(T(TKEY("falloff"), "Falloff"), (float*)&settings.HumanProfile.Falloff);
+				updateKernels |= ImGui::ColorEdit3(T(TKEY("strength"), "Strength"), (float*)&settings.HumanProfile.Strength);
+				updateKernels |= ImGui::ColorEdit3(T(TKEY("falloff"), "Falloff"), (float*)&settings.HumanProfile.Falloff);
 
 				ImGui::TreePop();
 			}
@@ -239,9 +239,7 @@ void SubsurfaceScattering::DrawSSS()
 
 		blurCBData.BurleySamples = settings.BurleySamples;
 		// Burley always does full albedo removal/reapply; scatter mode only applies to Separable SSS.
-		blurCBData.ScatterMode = (settings.SSMode == 0)
-		                             ? (uint)std::clamp(settings.ScatterMode, (int)kPreScatter, (int)kPreAndPostScatter)
-		                             : (uint)kPostScatter;
+		blurCBData.ScatterMode = (settings.SSMode == 0) ? (uint)std::clamp(settings.ScatterMode, (int)kPreScatter, (int)kPreAndPostScatter) : (uint)kPostScatter;
 
 		blurCBData.MeanFreePathBase = settings.MeanFreePathBase;
 		blurCBData.MeanFreePathHuman = settings.MeanFreePathHuman;
@@ -384,11 +382,11 @@ void SubsurfaceScattering::SetupResources()
 		D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
 		main.UAV->GetDesc(&uavDesc);
 
-		blurHorizontalTemp = new Texture2D(texDesc);
+		blurHorizontalTemp = new Texture2D(texDesc, "SSS::BlurHorizontalTemp");
 		blurHorizontalTemp->CreateSRV(srvDesc);
 		blurHorizontalTemp->CreateUAV(uavDesc);
 
-		diffuseNoAlbedoTex = new Texture2D(texDesc);
+		diffuseNoAlbedoTex = new Texture2D(texDesc, "SSS::DiffuseNoAlbedo");
 		diffuseNoAlbedoTex->CreateSRV(srvDesc);
 		diffuseNoAlbedoTex->CreateUAV(uavDesc);
 	}
@@ -416,12 +414,14 @@ void SubsurfaceScattering::Reset()
 void SubsurfaceScattering::RestoreDefaultSettings()
 {
 	settings = {};
+	updateKernels = true;
 }
 
 void SubsurfaceScattering::LoadSettings(json& o_json)
 {
 	settings = o_json;
 	settings.ScatterMode = std::clamp(settings.ScatterMode, (int)kPreScatter, (int)kPreAndPostScatter);
+	updateKernels = true;
 }
 
 void SubsurfaceScattering::SaveSettings(json& o_json)
@@ -434,6 +434,10 @@ void SubsurfaceScattering::ClearShaderCache()
 	if (prepassSS) {
 		prepassSS->Release();
 		prepassSS = nullptr;
+	}
+	if (prepassBurleySS) {
+		prepassBurleySS->Release();
+		prepassBurleySS = nullptr;
 	}
 	if (horizontalSSBlur) {
 		horizontalSSBlur->Release();
@@ -451,6 +455,11 @@ void SubsurfaceScattering::ClearShaderCache()
 
 ID3D11ComputeShader* SubsurfaceScattering::GetComputeShaderPrepass()
 {
+	if (settings.SSMode == 1) {
+		if (!prepassBurleySS)
+			prepassBurleySS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\SubsurfaceScattering\\DiffuseExtractionCS.hlsl", { { "BURLEY", "" } }, "cs_5_0");
+		return prepassBurleySS;
+	}
 	if (!prepassSS) {
 		logger::debug("Compiling prepassSS");
 		prepassSS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\SubsurfaceScattering\\DiffuseExtractionCS.hlsl", {}, "cs_5_0");

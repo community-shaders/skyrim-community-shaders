@@ -1,6 +1,7 @@
 #include "LegacyGraphicsCompatibility.h"
 
 #include "Globals.h"
+#include "Utils/VersionedRelocation.h"
 
 #include <bit>
 #include <mutex>
@@ -28,13 +29,6 @@ namespace LegacyGraphicsCompatibility
 		};
 
 		thread_local CameraProjectionSnapshot cameraProjectionSnapshot;
-
-		[[nodiscard]] std::uintptr_t ReadRelativeCallTarget(std::uintptr_t a_callSite) noexcept
-		{
-			std::int32_t displacement{};
-			std::memcpy(std::addressof(displacement), reinterpret_cast<const void*>(a_callSite + 1), sizeof(displacement));
-			return a_callSite + 5 + displacement;
-		}
 
 		struct AlphaBlend_SetViewport
 		{
@@ -475,8 +469,7 @@ namespace LegacyGraphicsCompatibility
 		{
 			const auto callSite = REL::RelocationID(100950, 107732).address() + REL::Relocate(0x151, 0x148);
 			const auto expectedTarget = REL::RelocationID(75564, 77365).address();
-			constexpr auto callPattern = REL::make_pattern<"E8 ?? ?? ?? ??">();
-			if (!REL::verify_code(callSite, callPattern) || ReadRelativeCallTarget(callSite) != expectedTarget) {
+			if (!Util::VersionedRelocation::IsCallTo(callSite, expectedTarget)) {
 				logger::error("Legacy AlphaBlend viewport call does not match the verified 1.5.97/1.6.1170 binary; adapter not installed");
 				return;
 			}
@@ -490,8 +483,7 @@ namespace LegacyGraphicsCompatibility
 		{
 			const auto callSite = REL::RelocationID(100979, 107762).address() + REL::Relocate(0x3B5, 0x360);
 			const auto expectedTarget = REL::RelocationID(75564, 77365).address();
-			constexpr auto callPattern = REL::make_pattern<"E8 ?? ?? ?? ??">();
-			if (!REL::verify_code(callSite, callPattern) || ReadRelativeCallTarget(callSite) != expectedTarget) {
+			if (!Util::VersionedRelocation::IsCallTo(callSite, expectedTarget)) {
 				logger::error("Legacy shadow bounds viewport call does not match the verified 1.5.97/1.6.1170 binary; adapter not installed");
 				return;
 			}
@@ -504,6 +496,8 @@ namespace LegacyGraphicsCompatibility
 		void InstallStateCameraProjectionAdapter()
 		{
 			const auto updateJitter = REL::RelocationID(75709, 77518).address();
+			// `UpdateJitter` starts with a RIP-relative load that a Detours trampoline may be too far to reach, so hook its only call instead
+			const auto updateJitterCallSite = REL::RelocationID(75460, 77245).address() + REL::Relocate(0xE5, 0xE2);
 			const auto setCameraData = REL::RelocationID(75694, 77503).address();
 			const bool updateJitterVerified = REL::Module::IsSE() ?
 			                                      REL::verify_code(
@@ -523,14 +517,14 @@ namespace LegacyGraphicsCompatibility
 													   setCameraData,
 													   REL::make_pattern<
 														   "48 89 5C 24 08 48 89 6C 24 10 48 89 74 24 18 57 48 83 EC 20">());
-			if (!updateJitterVerified || !setCameraDataVerified) {
+			if (!updateJitterVerified || !setCameraDataVerified || !Util::VersionedRelocation::IsCallTo(updateJitterCallSite, updateJitter)) {
 				logger::error("Legacy jitter/SetCameraData functions do not match the verified 1.5.97/1.6.1170 binaries; camera-projection adapters not installed");
 				return;
 			}
 
 			Main_UpdateJitter::func = updateJitter;
 			State_SetCameraData::func = setCameraData;
-			stl::detour_thunk<Main_UpdateJitter>(updateJitter);
+			SKSE::GetTrampoline().write_call<5>(updateJitterCallSite, Main_UpdateJitter::thunk);
 			stl::detour_thunk<State_SetCameraData>(setCameraData);
 			logger::info("Installed legacy jitter-preservation and State::SetCameraData adapters");
 		}

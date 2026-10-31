@@ -1,5 +1,7 @@
 #include "Common/Color.hlsli"
+#include "Common/ColorManagement.hlsli"
 #include "Common/SharedData.hlsli"
+#include "DynamicCubemaps/CubemapCommon.hlsli"
 
 TextureCube<float4> EnvCaptureTexture : register(t0);
 TextureCube<float4> ReflectionsTexture : register(t1);
@@ -9,46 +11,10 @@ RWTexture2DArray<float4> EnvInferredTexture : register(u0);
 
 SamplerState LinearSampler : register(s0);
 
-// Calculate normalized sampling direction vector based on current fragment coordinates.
-// This is essentially "inverse-sampling": we reconstruct what the sampling vector would be if we wanted it to "hit"
-// this particular fragment in a cubemap.
-float3 GetSamplingVector(uint3 ThreadID, in RWTexture2DArray<float4> OutputTexture)
-{
-	float width = 0.0f;
-	float height = 0.0f;
-	float depth = 0.0f;
-	OutputTexture.GetDimensions(width, height, depth);
-
-	float2 st = ThreadID.xy / float2(width, height);
-	float2 uv = 2.0 * float2(st.x, 1.0 - st.y) - 1.0;
-
-	// Select vector based on cubemap face index.
-	float3 result = float3(0.0f, 0.0f, 0.0f);
-	switch (ThreadID.z) {
-	case 0:
-		result = float3(1.0, uv.y, -uv.x);
-		break;
-	case 1:
-		result = float3(-1.0, uv.y, uv.x);
-		break;
-	case 2:
-		result = float3(uv.x, 1.0, -uv.y);
-		break;
-	case 3:
-		result = float3(uv.x, -1.0, uv.y);
-		break;
-	case 4:
-		result = float3(uv.x, uv.y, 1.0);
-		break;
-	case 5:
-		result = float3(-uv.x, uv.y, -1.0);
-		break;
-	}
-	return normalize(result);
-}
-
 [numthreads(8, 8, 1)] void main(uint3 ThreadID : SV_DispatchThreadID) {
-	float3 uv = GetSamplingVector(ThreadID, EnvInferredTexture);
+	uint width, height, depth;
+	EnvInferredTexture.GetDimensions(width, height, depth);
+	float3 uv = GetCubemapSamplingVector(ThreadID, float2(width, height));
 	float4 color = EnvCaptureTexture.SampleLevel(LinearSampler, uv, 0);
 
 	float mipLevel = 0.0;
@@ -90,13 +56,13 @@ float3 GetSamplingVector(uint3 ThreadID, in RWTexture2DArray<float4> OutputTextu
 	}
 
 #if defined(REFLECTIONS)
-	color.rgb = lerp(color.rgb, Color::IrradianceToLinear(ReflectionsTexture.SampleLevel(LinearSampler, uv, 0.0).rgb), saturate(mipLevel / 8.0));
+	color.rgb = lerp(color.rgb, ColorManagement::SceneToLinear(ReflectionsTexture.SampleLevel(LinearSampler, uv, 0.0).rgb), saturate(mipLevel / 8.0));
 #else
 	if (color.a <= 0.0001)
-		color.rgb = Color::IrradianceToLinear(Color::Ambient(max(0.0, SharedData::GetAmbient(uv))));
+		color.rgb = ColorManagement::SceneToLinear(Color::Ambient(max(0.0, SharedData::GetAmbient(uv))));
 	color.rgb = lerp(color.rgb, color.rgb * DefaultCubemap.SampleLevel(LinearSampler, uv, 0.0).xyz, saturate(mipLevel / 8.0));
 #endif
 
-	color.rgb = Color::IrradianceToGamma(color.rgb);
+	color.rgb = ColorManagement::LinearToScene(color.rgb);
 	EnvInferredTexture[ThreadID] = max(0, color);
 }

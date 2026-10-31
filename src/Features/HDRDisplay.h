@@ -74,7 +74,7 @@ public:
 	virtual void DataLoaded() override;
 	/** @brief Creates HDR, output, and UI textures, constant buffer, and upgrades LDR render targets. */
 	virtual void SetupResources() override;
-	/** @brief Releases cached HDR output and UI brightness compute shaders. */
+	/** @brief Releases cached compute shaders and patched blend states. */
 	virtual void ClearShaderCache() override;
 	/** @brief Installs HDR pipeline hooks when the Upscaling feature is not loaded. */
 	virtual void PostPostLoad() override;
@@ -138,8 +138,9 @@ public:
 	/**
 	 * @brief Installs swap chain Present vtable hooks and OMSetBlendState detour for HDR pipeline.
 	 * @param swapChain The DXGI swap chain to hook.
+	 * @param originalPresent Present before other plugins patched its vtable slot.
 	 */
-	static void InstallSwapChainPresentHooks(IDXGISwapChain* swapChain);
+	static void InstallSwapChainPresentHooks(IDXGISwapChain* swapChain, std::uintptr_t originalPresent);
 	/**
 	 * @brief Handles the swap chain Present call, drawing ImGui overlay and running HDR compositing.
 	 * @param swapChain The DXGI swap chain.
@@ -176,8 +177,8 @@ public:
 		float isSceneLinear;             ///< 1.0 = Linear Lighting active, scene already linear
 		float pad0;                      ///< 1.0 = main menu/loading screen active
 		float fgTweenMenuMidAlphaBoost;  ///< 1.0 = TweenMenu (pause) open — FG UIBrightnessCS mid-alpha boost only
-		float previewSDR;                ///< 1.0 = emit sRGB SDR (crop preview) instead of PQ HDR10
-		float applyAutoHDR;              ///< 1.0 = Effects11 replaced ISHDR, so expand its SDR result into HDR
+		float previewSDR;                ///< 1.0 = emit gamma 2.2 SDR (crop preview) instead of PQ HDR10
+		float applyAutoHDR;              ///< 1.0 = expand SDR tonemap output (Effects11 or PP SDR tonemapper + AutoHDR) into HDR
 		float pad2;
 		float pad3;
 	};
@@ -191,9 +192,10 @@ public:
 
 	Texture2D* hdrTexture = nullptr;
 	Texture2D* outputTexture = nullptr;
-	Texture2D* uiTexture = nullptr;          // Separate UI render target for proper compositing
-	Texture2D* cleanSceneCapture = nullptr;  // Pre-blur copy of hdrTexture for clean captures
+	Texture2D* uiTexture = nullptr;            // Separate UI render target for proper compositing
+	Texture2D* cleanSceneCapture = nullptr;    // Pre-blur copy of hdrTexture for clean captures
 	uint cleanSceneCaptureFrame = UINT32_MAX;  // frameCount when cleanSceneCapture was last refreshed
+	uint movieDrawnFrame = UINT32_MAX;         // frameCount when a Bink movie was last drawn into the UI buffer
 
 	ID3D11ComputeShader* hdrOutputCS = nullptr;
 	/** @brief Returns the HDR output compute shader, compiling it on first use. */
@@ -247,7 +249,12 @@ private:
 	bool showHDRWarningPopup = false;
 	bool pendingHDREnable = false;
 	bool presentSuppressed = false;
-	std::unordered_map<ID3D11BlendState*, winrt::com_ptr<ID3D11BlendState>> patchedBlendStateCache;
+	struct PatchedBlendState
+	{
+		winrt::com_ptr<ID3D11BlendState> original;
+		winrt::com_ptr<ID3D11BlendState> patched;
+	};
+	std::unordered_map<ID3D11BlendState*, PatchedBlendState> patchedBlendStateCache;
 
 	HRESULT PresentToSwapChain(IDXGISwapChain* swapChain, UINT syncInterval, UINT flags);
 	void DrawImGuiForPresent(bool frameGenActive, bool hdrReady);

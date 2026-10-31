@@ -1,10 +1,53 @@
 #pragma once
 #include <array>
 #include <d3d11.h>
+#include <d3dcompiler.h>
+#include <filesystem>
+#include <fstream>
 #include <winrt/base.h>
 
 namespace Util
 {
+	/**
+	 * @brief ID3DInclude handler resolving #include paths under Data\Shaders,
+	 *        shared by every HLSL compile call site in this codebase.
+	 */
+	struct CustomInclude : public ID3DInclude
+	{
+		HRESULT Open([[maybe_unused]] D3D_INCLUDE_TYPE IncludeType, LPCSTR pFileName, [[maybe_unused]] LPCVOID pParentData, LPCVOID* ppData, UINT* pBytes) override
+		{
+			std::filesystem::path filePath = pFileName;
+			filePath = L"Data\\Shaders" / filePath;
+
+			std::ifstream file(filePath, std::ios::binary);
+			if (!file.is_open()) {
+				*ppData = NULL;
+				*pBytes = 0;
+				return E_FAIL;
+			}
+
+			file.seekg(0, std::ios::end);
+			UINT size = static_cast<UINT>(file.tellg());
+			file.seekg(0, std::ios::beg);
+
+			char* data = new char[size];
+			if (!file.read(data, size)) {
+				delete[] data;
+				*ppData = NULL;
+				*pBytes = 0;
+				return E_FAIL;
+			}
+			*ppData = data;
+			*pBytes = size;
+			return S_OK;
+		}
+
+		HRESULT Close(LPCVOID pData) override
+		{
+			delete[] static_cast<const char*>(pData);
+			return S_OK;
+		}
+	};
 	/**
 	 * @brief Look up the matching SRV for a given render target view.
 	 * @param a_rtv The render target view to look up.
@@ -39,6 +82,25 @@ namespace Util
 	 * @param Format A printf-style format string for the name.
 	 */
 	void SetResourceName(ID3D11DeviceChild* Resource, const char* Format, ...);
+
+	/**
+	 * @brief Enables D3D11 multithread protection and holds the immediate context's lock for the scope.
+	 * Scopes are reference counted, and the protection state from before the first scope is restored when the last one ends.
+	 */
+	class MultithreadScope
+	{
+	public:
+		explicit MultithreadScope(ID3D11DeviceContext* context);
+		~MultithreadScope();
+		MultithreadScope(const MultithreadScope&) = delete;
+		MultithreadScope& operator=(const MultithreadScope&) = delete;
+
+		/** @brief True when the lock is held; false when ID3D11Multithread is unavailable. */
+		explicit operator bool() const { return multithread != nullptr; }
+
+	private:
+		winrt::com_ptr<REX::W32::ID3D11Multithread> multithread;
+	};
 
 	/**
 	 * @brief Compile an HLSL shader from file and create the appropriate D3D11 shader object.

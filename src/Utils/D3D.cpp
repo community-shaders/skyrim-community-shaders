@@ -1,6 +1,7 @@
 #include "D3D.h"
 
 #include "Deferred.h"
+#include "Feature.h"
 #include "Features/TerrainBlending.h"
 #include "ShaderCache.h"
 #include "State.h"
@@ -16,6 +17,37 @@
 
 namespace Util
 {
+	namespace
+	{
+		std::mutex multithreadScopeMutex;
+		int multithreadScopeHolders = 0;
+		BOOL multithreadScopePriorProtection = FALSE;
+	}
+
+	MultithreadScope::MultithreadScope(ID3D11DeviceContext* context)
+	{
+		if (!context || FAILED(context->QueryInterface(multithread.put()))) {
+			multithread = nullptr;
+			return;
+		}
+		{
+			std::lock_guard lock(multithreadScopeMutex);
+			const BOOL prior = multithread->SetMultithreadProtected(TRUE);
+			if (multithreadScopeHolders++ == 0)
+				multithreadScopePriorProtection = prior;
+		}
+		multithread->Enter();
+	}
+
+	MultithreadScope::~MultithreadScope()
+	{
+		if (!multithread)
+			return;
+		multithread->Leave();
+		std::lock_guard lock(multithreadScopeMutex);
+		if (--multithreadScopeHolders == 0)
+			multithread->SetMultithreadProtected(multithreadScopePriorProtection);
+	}
 
 	ID3D11ShaderResourceView* GetCurrentSceneDepthSRV(bool prefer16bit)
 	{
@@ -112,43 +144,10 @@ namespace Util
 		int len = _vsnprintf_s(buffer, _TRUNCATE, Format, va);
 		va_end(va);
 
-		Resource->SetPrivateData(WKPDID_D3DDebugObjectNameT, len, buffer);
+		if (len < 0)
+			len = static_cast<int>(strnlen(buffer, sizeof(buffer)));
+		Resource->SetPrivateData(WKPDID_D3DDebugObjectNameT, static_cast<UINT>(len), buffer);
 	}
-
-	struct CustomInclude : public ID3DInclude
-	{
-		HRESULT Open([[maybe_unused]] D3D_INCLUDE_TYPE IncludeType, LPCSTR pFileName, [[maybe_unused]] LPCVOID pParentData, LPCVOID* ppData, UINT* pBytes) override
-		{
-			std::filesystem::path filePath = pFileName;
-			filePath = L"Data\\Shaders" / filePath;
-
-			std::ifstream file(filePath, std::ios::binary);
-			if (!file.is_open()) {
-				*ppData = NULL;
-				*pBytes = 0;
-				return E_FAIL;
-			}
-
-			// Get filesize
-			file.seekg(0, std::ios::end);
-			UINT size = static_cast<UINT>(file.tellg());
-			file.seekg(0, std::ios::beg);
-
-			// Create buffer and read file
-			char* data = new char[size];
-			file.read(data, size);
-			*ppData = data;
-			*pBytes = size;
-			return S_OK;
-		}
-
-		HRESULT Close(LPCVOID pData) override
-		{
-			if (pData)
-				delete[] pData;
-			return S_OK;
-		}
-	};
 
 	// Per-frame getters would otherwise retry a failed compile every frame.
 	namespace
@@ -289,7 +288,8 @@ namespace Util
 			}
 		}
 
-		if (globals::state->IsDeveloperMode()) {
+		const bool debugCompile = SIE::ShaderCache::IsDebugCompile();
+		if (debugCompile) {
 			macros.push_back({ "D3DCOMPILE_SKIP_OPTIMIZATION", "" });
 			macros.push_back({ "D3DCOMPILE_DEBUG", "" });
 		}
@@ -297,6 +297,15 @@ namespace Util
 		if (!shaderDefines->empty()) {
 			for (unsigned int i = 0; i < shaderDefines->size(); i++)
 				macros.push_back({ shaderDefines->at(i).first.c_str(), shaderDefines->at(i).second.c_str() });
+		}
+
+		for (auto* feature : Feature::GetFeatureList()) {
+			if (!feature->loaded)
+				continue;
+			for (const auto& [name, value] : feature->GetCommonShaderDefines()) {
+				if (std::ranges::none_of(macros, [&](const auto& macro) { return name == macro.Name; }))
+					macros.push_back({ name.data(), value.empty() ? nullptr : value.data() });
+			}
 		}
 		if (!_stricmp(ProgramType, "ps_5_0"))
 			macros.push_back({ "PSHADER", "" });
@@ -321,7 +330,7 @@ namespace Util
 		macros.push_back({ nullptr, nullptr });
 
 		// Compiler setup
-		uint32_t flags = !globals::state->IsDeveloperMode() ? (D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_OPTIMIZATION_LEVEL3) : D3DCOMPILE_DEBUG;
+		uint32_t flags = !debugCompile ? (D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_OPTIMIZATION_LEVEL3) : D3DCOMPILE_DEBUG;
 		if (globals::state->enablePartialPrecision.load(std::memory_order_relaxed))
 			flags |= D3DCOMPILE_PARTIAL_PRECISION;
 		if (globals::state->enableAvoidFlowControl.load(std::memory_order_relaxed))
@@ -332,8 +341,8 @@ namespace Util
 		if (globals::shaderCache->IsDiskCache())
 			flags |= D3DCOMPILE_SKIP_VALIDATION;
 
-		ID3DBlob* shaderBlob;
-		ID3DBlob* shaderErrors;
+		winrt::com_ptr<ID3DBlob> shaderBlob;
+		winrt::com_ptr<ID3DBlob> shaderErrors;
 
 		const auto failureKey = std::format("{}|{}|{}|{}|{}", str, ProgramType, Program, flags, DefinesToString(macros));
 		{
@@ -368,7 +377,7 @@ namespace Util
 		}
 
 		logger::debug("Compiling {} with {}", str, DefinesToString(macros));
-		if (FAILED(D3DCompileFromFile(FilePath, macros.data(), &include, Program, ProgramType, flags, 0, &shaderBlob, &shaderErrors))) {
+		if (FAILED(D3DCompileFromFile(FilePath, macros.data(), &include, Program, ProgramType, flags, 0, shaderBlob.put(), shaderErrors.put()))) {
 			logger::warn("Shader compilation failed:\n\n{}", shaderErrors ? static_cast<char*>(shaderErrors->GetBufferPointer()) : "Unknown error");
 			recordFailure();
 			return nullptr;
@@ -376,10 +385,10 @@ namespace Util
 		if (shaderErrors)
 			logger::debug("Shader logs:\n{}", static_cast<char*>(shaderErrors->GetBufferPointer()));
 		if (diskPath)
-			Store(*diskPath, shaderBlob);
+			Store(*diskPath, shaderBlob.get());
 
 		ID3D11DeviceChild* shader = nullptr;
-		DX::ThrowIfFailed(CreateShaderObject(device, ProgramType, shaderBlob, &shader));
+		DX::ThrowIfFailed(CreateShaderObject(device, ProgramType, shaderBlob.get(), &shader));
 		return shader;
 	}
 
