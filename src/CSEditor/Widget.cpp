@@ -858,7 +858,7 @@ void Widget::DrawSearchDropdown()
 		// positioning in the input doesn't dismiss the dropdown.
 		const ImRect searchInputRect(searchInputMin, searchInputMax);
 		const bool clickedOutside = ImGui::GetIO().MouseClicked[0] &&
-		                            !ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem) &&
+		                            !ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows | ImGuiHoveredFlags_AllowWhenBlockedByActiveItem) &&
 		                            !searchInputRect.Contains(ImGui::GetIO().MousePos);
 		if (clickedOutside || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
 			dropdownVisible = false;
