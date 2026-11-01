@@ -11,7 +11,6 @@
 #include <windows.h>
 
 #include "BackgroundBlur.h"
-#include "CSEditor/Browser/BrowserWidgets.h"
 #include "CursorLoader.h"
 #include "Features/ScreenshotFeature.h"
 #include "FontAtlasState.h"
@@ -351,7 +350,7 @@ namespace
 				const float buttonWidth = ImGui::GetFrameHeight();
 				ImGui::SameLine();
 				ImGui::SetCursorPosX(std::max(ImGui::GetCursorPosX(), cellStartX + cellWidth - buttonWidth));
-				if (BrowserUI::IconButton("##Reset", Icons::TI(MenuIcons::kRestore), T("menu.settings.color_reset_tooltip", "Reset to the theme's colour")))
+				if (Util::IconButton("##Reset", Icons::TI(MenuIcons::kRestore), T("menu.settings.color_reset_tooltip", "Reset to the theme's colour")))
 					std::copy_n(entry.reference, count, entry.value);
 			}
 			ImGui::PopID();
@@ -628,7 +627,7 @@ namespace
 		ImGui::SameLine();
 		const auto tooltip = I18n::GetSingleton()->Format("menu.settings.reset_keybinding_tooltip",
 			{ { "key", Util::Input::KeyIdToString(defaultCombo) } }, "Reset to default ({key})");
-		if (BrowserUI::IconButton(std::format("##Reset{}", id).c_str(), Icons::TI(ICON_TI_RESTORE), tooltip.c_str()))
+		if (Util::IconButton(std::format("##Reset{}", id).c_str(), Icons::TI(ICON_TI_RESTORE), tooltip.c_str()))
 			combo = defaultCombo;
 	}
 
@@ -1004,7 +1003,7 @@ void SettingsTabRenderer::RenderThemesSection()
 		}
 	}
 
-	if (Icons::LabeledButton("##RefreshThemes", Icons::TI(ICON_TI_REFRESH), T("menu.settings.refresh", "Refresh"))) {
+	if (Util::LabeledButton("##RefreshThemes", Icons::TI(ICON_TI_REFRESH), T("menu.settings.refresh", "Refresh"))) {
 		themeManager->RefreshThemes();
 		// Ensure a valid theme is still selected
 		const auto* themeInfo = themeManager->GetThemeInfo(currentThemePreset);
@@ -1022,7 +1021,7 @@ void SettingsTabRenderer::RenderThemesSection()
 	}
 
 	ImGui::SameLine();
-	if (Icons::LabeledButton("##OpenThemesFolder", Icons::TI(MenuIcons::kFolder), T("menu.settings.open_themes_folder", "Open Themes Folder"))) {
+	if (Util::LabeledButton("##OpenThemesFolder", Icons::TI(MenuIcons::kFolder), T("menu.settings.open_themes_folder", "Open Themes Folder"))) {
 		std::filesystem::path themesPath = Util::PathHelpers::GetThemesRealPath();
 		ShellExecuteA(NULL, "open", themesPath.string().c_str(), NULL, NULL, SW_SHOWNORMAL);
 	}
@@ -1270,7 +1269,7 @@ void SettingsTabRenderer::RenderThemesSection()
 		}
 
 		ImGui::SameLine();
-		if (Icons::LabeledButton("##CancelCreateTheme", Icons::TI(ICON_TI_X), T("menu.settings.cancel", "Cancel"))) {
+		if (Util::LabeledButton("##CancelCreateTheme", Icons::TI(ICON_TI_X), T("menu.settings.cancel", "Cancel"))) {
 			showCreateThemePopup = false;
 			ImGui::CloseCurrentPopup();
 		}
@@ -1344,7 +1343,7 @@ void SettingsTabRenderer::RenderFontsSection()
 	// Roles: pick one on the left, edit it on the right
 	{
 		Util::SectionCard card("##FontRoles", ICON_TI_TYPOGRAPHY, T("menu.settings.font_roles", "Font Roles"));
-		if (Icons::LabeledButton("##RefreshFonts", Icons::TI(ICON_TI_REFRESH), T("menu.settings.refresh_font_families", "Refresh Font Families"))) {
+		if (Util::LabeledButton("##RefreshFonts", Icons::TI(ICON_TI_REFRESH), T("menu.settings.refresh_font_families", "Refresh Font Families"))) {
 			refreshFontCatalog(true);
 			MenuFonts::GetAtlasState().pendingFontReload = true;
 		}
@@ -1396,7 +1395,7 @@ void SettingsTabRenderer::RenderFontsSection()
 
 			// Actions for this role
 			ImGui::Spacing();
-			if (Icons::LabeledButton("##UseEverywhere", Icons::TI(ICON_TI_COPY), T("menu.settings.font_use_everywhere", "Use for All Roles"))) {
+			if (Util::LabeledButton("##UseEverywhere", Icons::TI(ICON_TI_COPY), T("menu.settings.font_use_everywhere", "Use for All Roles"))) {
 				for (size_t i = 0; i < themeSettings.FontRoles.size(); ++i) {
 					auto& other = themeSettings.FontRoles[i];
 					other.Family = roleSettings.Family;
@@ -1409,7 +1408,7 @@ void SettingsTabRenderer::RenderFontsSection()
 			Util::HoverTip(T("menu.settings.font_use_everywhere_tooltip", "Give every role this family and style. Each role keeps its own scale."));
 			if (!FontRoleMatches(roleSettings, referenceRole)) {
 				ImGui::SameLine();
-				if (Icons::LabeledButton("##ResetRole", Icons::TI(MenuIcons::kRestore), T("menu.settings.font_reset_role", "Reset Role"))) {
+				if (Util::LabeledButton("##ResetRole", Icons::TI(MenuIcons::kRestore), T("menu.settings.font_reset_role", "Reset Role"))) {
 					roleSettings = referenceRole;
 					if (role == Menu::FontRole::Body)
 						themeSettings.FontName = roleSettings.File;
@@ -1750,28 +1749,28 @@ void SettingsTabRenderer::RenderColorsSection()
 		const char* undoLabel = T("menu.settings.colors_undo", "Undo");
 		const char* redoLabel = T("menu.settings.colors_redo", "Redo");
 		const char* resetLabel = T("menu.settings.colors_reset_all", "Reset All");
-		const float buttonsWidth = Icons::MeasureLabeledButton(Icons::TI(ICON_TI_ARROW_BACK_UP), undoLabel) +
-		                           Icons::MeasureLabeledButton(Icons::TI(ICON_TI_ARROW_FORWARD_UP), redoLabel) +
-		                           Icons::MeasureLabeledButton(Icons::TI(MenuIcons::kRestore), resetLabel) + ImGui::GetStyle().ItemSpacing.x * 2.0f;
+		const float buttonsWidth = Util::MeasureLabeledButton(Icons::TI(ICON_TI_ARROW_BACK_UP), undoLabel) +
+		                           Util::MeasureLabeledButton(Icons::TI(ICON_TI_ARROW_FORWARD_UP), redoLabel) +
+		                           Util::MeasureLabeledButton(Icons::TI(MenuIcons::kRestore), resetLabel) + ImGui::GetStyle().ItemSpacing.x * 2.0f;
 		ImGui::SameLine();
 		ImGui::SetCursorPosX(std::max(ImGui::GetCursorPosX(), ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - buttonsWidth));
 		{
 			Util::DisableGuard noUndo(!menu->CanUndo());
-			if (Icons::LabeledButton("##ColorsUndo", Icons::TI(ICON_TI_ARROW_BACK_UP), undoLabel))
+			if (Util::LabeledButton("##ColorsUndo", Icons::TI(ICON_TI_ARROW_BACK_UP), undoLabel))
 				menu->RequestUndo();
 		}
 		Util::AddTooltip(T("menu.settings.colors_undo_tooltip", "Undo the last change (Ctrl+Z)."), Util::kTooltipWhenDisabled);
 		ImGui::SameLine();
 		{
 			Util::DisableGuard noRedo(!menu->CanRedo());
-			if (Icons::LabeledButton("##ColorsRedo", Icons::TI(ICON_TI_ARROW_FORWARD_UP), redoLabel))
+			if (Util::LabeledButton("##ColorsRedo", Icons::TI(ICON_TI_ARROW_FORWARD_UP), redoLabel))
 				menu->RequestRedo();
 		}
 		Util::AddTooltip(T("menu.settings.colors_redo_tooltip", "Redo the last undone change (Ctrl+Y)."), Util::kTooltipWhenDisabled);
 		ImGui::SameLine();
 		{
 			Util::DisableGuard nothingChanged(changed == 0);
-			if (Icons::LabeledButton("##ColorsResetAll", Icons::TI(MenuIcons::kRestore), resetLabel)) {
+			if (Util::LabeledButton("##ColorsResetAll", Icons::TI(MenuIcons::kRestore), resetLabel)) {
 				// Copies the theme file's colours back; one undo step undoes it
 				std::vector<float> values;
 				ForEachColorValue(reference, [&](const float* data, int count) { values.insert(values.end(), data, data + count); });
@@ -1802,7 +1801,7 @@ void SettingsTabRenderer::RenderColorsSection()
 			ImGui::SliderFloat(T("menu.settings.color_minimized_transparency", "Minimized Transparency"), &themeSettings.FeatureHeading.MinimizedFactor, 0.0f, 1.0f, "%.2f");
 			if (minimizedChanged) {
 				ImGui::SameLine();
-				if (BrowserUI::IconButton("##ResetMinimized", Icons::TI(MenuIcons::kRestore), T("menu.settings.color_reset_tooltip", "Reset to the theme's colour")))
+				if (Util::IconButton("##ResetMinimized", Icons::TI(MenuIcons::kRestore), T("menu.settings.color_reset_tooltip", "Reset to the theme's colour")))
 					themeSettings.FeatureHeading.MinimizedFactor = reference.FeatureHeading.MinimizedFactor;
 			}
 		}) :

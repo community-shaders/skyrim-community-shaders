@@ -517,21 +517,21 @@ void LightEditor::DrawToolbar()
 	ImGui::Checkbox(disableInvSqLabel, &disableInvSqLights);
 
 	const char* toggleAllLabel = T(TKEY("toggle_all_lp_lights"), "Toggle All LP Lights");
-	if (Icons::LabeledButton("##ToggleAllLP", Icons::TI(ICON_TI_BULB), toggleAllLabel)) {
+	if (Util::LabeledButton("##ToggleAllLP", Icons::TI(ICON_TI_BULB), toggleAllLabel)) {
 		ScheduleConsoleCommand("tlp 0");
 	}
 	Util::HoverTip(T(TKEY("toggle_all_lp_lights_tooltip"), "Toggle all Light Placer lights on/off (tlp 0)."));
 
 	const char* markersLabel = T(TKEY("toggle_lp_markers"), "Toggle LP Markers");
-	SameLineIfFits(Icons::MeasureLabeledButton(Icons::TI(ICON_TI_EYE), markersLabel));
-	if (Icons::LabeledButton("##ToggleMarkers", Icons::TI(ICON_TI_EYE), markersLabel)) {
+	SameLineIfFits(Util::MeasureLabeledButton(Icons::TI(ICON_TI_EYE), markersLabel));
+	if (Util::LabeledButton("##ToggleMarkers", Icons::TI(ICON_TI_EYE), markersLabel)) {
 		ScheduleConsoleCommand("tlp 1");
 	}
 	Util::HoverTip(T(TKEY("toggle_lp_markers_tooltip"), "Toggle Light Placer debug markers (tlp 1)."));
 
 	const char* reloadLabel = T(TKEY("reload_lp"), "Reload LP");
-	SameLineIfFits(Icons::MeasureLabeledButton(Icons::TI(ICON_TI_REFRESH), reloadLabel));
-	if (Icons::LabeledButton("##ReloadLP", Icons::TI(ICON_TI_REFRESH), reloadLabel)) {
+	SameLineIfFits(Util::MeasureLabeledButton(Icons::TI(ICON_TI_REFRESH), reloadLabel));
+	if (Util::LabeledButton("##ReloadLP", Icons::TI(ICON_TI_REFRESH), reloadLabel)) {
 		QueueReselectCurrentLP();  // capture before RestoreOriginal clears lpInfo/activeRefr
 		RestoreOriginal();
 		previous = {};

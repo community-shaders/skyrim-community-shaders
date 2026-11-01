@@ -691,7 +691,7 @@ void SceneWidgetBinding::Guard::DrawBaselineGutter()
 				SceneSettingsUI::OpenSceneContext(*context, identity.featureShortName);
 		Util::AddTooltip(T(TKEY("baseline_jump_tooltip"), "Open the Scene Manager page supplying this value."));
 	} else {
-		const bool committed = Icons::Button("##SketchCommit", SceneActionIcons::kSave);
+		const bool committed = Util::LabeledButton("##SketchCommit", SceneActionIcons::kSave);
 		if (committed) {
 			std::vector<SceneSettingsManager::SettingIdentity> sketched;
 			for (const auto& component : components)

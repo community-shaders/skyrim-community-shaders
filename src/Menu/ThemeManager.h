@@ -220,27 +220,28 @@ public:
 		static constexpr float OPTION_CARD_TITLE_SCALE = 1.25f;            // Option card titles, on the Heading font role
 		static constexpr float COLORS_PAGE_CELL_WIDTH_FONT_SIZES = 14.0f;  // Narrowest colour cell on the Colours page, in font sizes
 		static constexpr float FONTS_PAGE_ROLE_LIST_FONT_SIZES = 12.0f;    // Width of the Fonts page's role list, in font sizes
-		static constexpr float NAV_PILL_MIN_CONTENT_SCALE = 0.7f;          // Smallest a narrow nav pill shrinks its icon and label; below it the label hides
 		static constexpr float VERSION_TEXT_OPACITY = 0.6f;                // Opacity for version text next to feature title
 		static constexpr float FEATURE_DESCRIPTION_OPACITY = 0.7f;         // Opacity for the description under a feature title
 
 		// Main menu feature list pane (sizes are 1080p baseline, scaled by Util::GetUIScale())
-		static constexpr float NAV_ROW_ICON_GAP = 8.0f;                  // Gap between a page row's icon and its label
+		static constexpr float ICON_LABEL_GAP = 8.0f;                    // Gap between an icon and its label
 		static constexpr float CATEGORY_HEADER_PAD = 6.0f;               // Category header: space above and below the label row
 		static constexpr float CATEGORY_HEADER_COLLAPSED_ALPHA = 0.7f;   // ... label alpha while the category is collapsed
 		static constexpr float CATEGORY_HEADER_COUNT_ALPHA = 0.6f;       // ... count alpha relative to the label
 		static constexpr float CATEGORY_HEADER_LINE_ALPHA = 0.5f;        // ... trailing rule alpha relative to the separator colour
-		static constexpr float SEGMENT_TRACK_PAD = 3.0f;                 // Page switcher: inset between the track and its pills
+		static constexpr float SEGMENT_TRACK_PAD = 3.0f;                 // Segmented control: inset between the track and its pills
 		static constexpr float SEGMENT_PILL_GAP_RATIO = 2.0f;            // Gap between neighbouring pills, in track pads, so their fills never touch
+		static constexpr float SEGMENT_MIN_CONTENT_SCALE = 0.7f;         // ... smallest content scale before only the icon shows
+		static constexpr float SEGMENT_MUTED_SELECTED_SCALE = 0.4f;      // ... selected pill alpha scale in muted mode
 		static constexpr float LEFT_PANE_EDGE_INSET = 3.0f;              // Room kept around the left pane's content so its edges and borders are not clipped (1080p baseline)
 		static constexpr float LIST_HIGHLIGHT_HOVER_RATIO = 0.7f;        // Hover look of the list highlight, as a share of its selected strength
 		static constexpr float LIST_HIGHLIGHT_SELECTED_DARKEN = 0.8f;    // Colour multiplier of the highlight once it rests on the selected row
 		static constexpr float LIST_HIGHLIGHT_PRESS_DARKEN = 0.85f;      // Extra colour multiplier while the row is pressed
 		static constexpr float LIST_HIGHLIGHT_PRESS_BOOST = 1.5f;        // Strength multiplier while pressed
 		static constexpr float LIST_HIGHLIGHT_SNAP_ROWS = 6.0f;          // A move of more rows than this appears at the target instead of gliding
-		static constexpr float SEGMENT_SELECTED_FILL_ALPHA = 0.22f;      // ... selected pill accent fill alpha (page switcher and palette scope pill)
+		static constexpr float SEGMENT_SELECTED_FILL_ALPHA = 0.22f;      // ... selected pill accent fill alpha
 		static constexpr float SEGMENT_SELECTED_OUTLINE_ALPHA = 0.7f;    // ... selected pill accent outline alpha
-		static constexpr float SORT_FILTER_DOT_RATIO = 0.12f;            // Radius of the sort button's active-filter dot relative to the button height
+		static constexpr float STATUS_DOT_RATIO = 0.12f;                 // Radius of an accent status dot, per frame height
 		static constexpr float AUTOHIDE_PANEL_WIDTH_RATIO = 0.2f;        // Auto-hide list width as a share of the pane (the pinned list's column ratio)
 		static constexpr float AUTOHIDE_PANEL_MIN_WIDTH = 240.0f;        // ... never narrower than this
 		static constexpr float AUTOHIDE_ACTIVATION_ZONE_WIDTH = 28.0f;   // Width of the left edge strip that reveals the auto-hide list
@@ -277,14 +278,6 @@ public:
 		static constexpr float PALETTE_FIELD_PAD_X = 12.0f;         // Space left of the search glyph
 		static constexpr float PALETTE_FIELD_INSET = 6.0f;          // Space around the sort button inside the field
 		static constexpr float PALETTE_FIELD_BORDER_ALPHA = 0.55f;  // Accent border opacity of the focused search field
-		static constexpr float PALETTE_SCOPE_PAD = 3.0f;            // Padding of the scope track around its pill
-		static constexpr float PALETTE_SCOPE_ITEM_PAD_X = 12.0f;    // Horizontal padding of a scope's label
-		static constexpr float PALETTE_SCOPE_COUNT_PAD_X = 5.0f;    // Horizontal padding inside a scope's count chip
-		static constexpr float PALETTE_SCOPE_ROUNDING = 8.0f;       // Scope track and pill corner radius
-		static constexpr float PALETTE_PILL_RATE = 22.0f;           // How fast the scope pill glides to the chosen scope, per second
-		static constexpr float PALETTE_PILL_FILL_ALPHA = 0.22f;     // Scope pill accent fill opacity
-		static constexpr float PALETTE_PILL_BORDER_ALPHA = 0.55f;   // Scope pill accent border opacity
-		static constexpr float PALETTE_COUNT_FILL_ALPHA = 0.12f;    // Count chip fill opacity of an unchosen scope
 		static constexpr float PALETTE_ROW_ROUNDING = 8.0f;         // Result row highlight corner radius
 		static constexpr float PALETTE_ROW_RATE = 26.0f;            // How fast the row highlight glides between rows, per second
 		static constexpr float PALETTE_SELECT_FILL_ALPHA = 0.14f;   // Selected row accent fill opacity
@@ -299,7 +292,6 @@ public:
 		static constexpr float PALETTE_DIMMED_ALPHA = 0.5f;         // Opacity multiplier for rows of features that are not loaded
 		static constexpr float PALETTE_EMPTY_DISC_Y = 0.3f;         // Empty-state disc centre as a share of the list height
 		static constexpr float PALETTE_SEARCH_GLYPH_RATIO = 1.5f;   // Search glyph slot width as a multiple of the line height
-		static constexpr float PALETTE_SCOPE_HOVER_LABEL = 0.6f;    // How far a hovered scope label brightens toward the chosen one
 		static constexpr float PALETTE_SELECT_BAR_INSET = 0.2f;     // Selected-row accent bar inset from the row's top and bottom, as a share of its height
 		static constexpr float REVEAL_HIGHLIGHT_SECONDS = 1.0f;     // How long a revealed setting stays outlined
 		static constexpr float REVEAL_EXPIRY_SECONDS = 3.0f;        // A reveal request older than this is dropped
@@ -325,6 +317,7 @@ public:
 		// Icon drawing constants
 		static constexpr int ICON_CIRCLE_SEGMENTS = 16;        // Segments for small icon circles
 		static constexpr float ICON_OUTLINE_THICKNESS = 1.5f;  // Outline stroke for hollow icons, before UI scale
+		static constexpr float DESTRUCTIVE_ICON_ALPHA = 0.8f;  // Error-colour opacity of delete/remove icon glyphs
 
 		// Search input constants
 		static constexpr float SEARCH_BASELINE_SCREEN_HEIGHT = 1440.0f;  // Search chrome is authored for 2K.
@@ -442,24 +435,6 @@ public:
 		static constexpr float SECTION_ICON_SPACING_SCALE = 0.3f;                   // Section header icon spacing per font size
 		static constexpr float SECTION_HEADER_GAP = 8.0f;                           // Gap below a centred section header (px at baseline scale)
 		static constexpr float INVALID_INPUT_BORDER_SIZE = 2.0f;                    // Border width on an input with a validation error
-
-		// Shared widgets: segmented control glass look (Util::SegmentedControl)
-		static constexpr float GLASS_TRACK_IDLE_ALPHA = 0.07f;      // Segmented control track when the frame colour is transparent
-		static constexpr float GLASS_TRACK_FRAME_MIX = 0.35f;       // Share of the frame colour mixed into the white track
-		static constexpr float GLASS_TRACK_ALPHA_SCALE = 0.45f;     // Track alpha per unit of frame alpha
-		static constexpr float GLASS_TRACK_ALPHA_MIN = 0.06f;       // Track alpha floor (also its additive base)
-		static constexpr float GLASS_TRACK_ALPHA_MAX = 0.22f;       // Track alpha ceiling
-		static constexpr float GLASS_SELECTED_ALPHA_FLOOR = 0.35f;  // Minimum header alpha before scaling the selected fill
-		static constexpr float GLASS_SELECTED_ALPHA_SCALE = 0.85f;  // Selected fill alpha scale
-		static constexpr float GLASS_SELECTED_ALPHA_MIN = 0.28f;    // Selected fill alpha floor
-		static constexpr float GLASS_SELECTED_ALPHA_MAX = 0.55f;    // Selected fill alpha ceiling
-		static constexpr float GLASS_HOVER_ALPHA_SCALE = 0.45f;     // Hover fill alpha relative to the selected fill
-		static constexpr float GLASS_MUTED_SELECTED_SCALE = 0.4f;   // Selected fill alpha scale in muted mode
-		static constexpr float GLASS_MUTED_TEXT_SCALE = 0.75f;      // Idle text alpha scale in muted mode
-		static constexpr float GLASS_SEGMENT_MIN_PAD_X = 8.0f;      // Minimum horizontal segment padding (px at baseline scale)
-		static constexpr float GLASS_SEGMENT_PAD_X_SCALE = 1.35f;   // Segment padding per unit of frame padding
-		static constexpr float GLASS_MARK_MIN_RADIUS = 1.5f;        // Marked-segment dot minimum radius (px)
-		static constexpr float GLASS_MARK_RADIUS_RATIO = 0.1f;      // Marked-segment dot radius per font size
 
 		// Settings, Advanced and Presets pages (sizes are 1080p baseline unless noted)
 		static constexpr float FONT_ROLE_SCALE_MIN = 0.5f;  // Per-role font scale slider range (Settings > Fonts)

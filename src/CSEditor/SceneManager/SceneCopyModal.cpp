@@ -990,7 +990,7 @@ namespace
 			other = DescribeDestinations(plan, rows);
 		}
 
-		const float swapSize = BrowserUI::IconButtonSize();
+		const float swapSize = Util::IconButtonSize();
 		const float cardWidth = (ImGui::GetContentRegionAvail().x - swapSize - ImGui::GetStyle().ItemSpacing.x * 2.0f) * 0.5f;
 		const float top = ImGui::GetCursorPosY();
 		DrawRouteCard(from ? T(TKEY("scene_copy_from"), "From") : T(TKEY("scene_copy_from_page"), "From this page"),
@@ -1001,7 +1001,7 @@ namespace
 		ImGui::SetCursorPosY(top + (cardHeight - swapSize) * 0.5f);
 		const auto tooltip = std::format("{}\n{}", T(TKEY("scene_copy_swap"), "Swap direction"),
 			T(TKEY("scene_copy_swap_tooltip"), "Switches between copying out of this page and copying into it. Starts the picks over."));
-		if (BrowserUI::IconButton("##swap", Icons::TI(ICON_TI_ARROWS_EXCHANGE), tooltip.c_str(), false,
+		if (Util::IconButton("##swap", Icons::TI(ICON_TI_ARROWS_EXCHANGE), tooltip.c_str(), false,
 				ImGui::GetColorU32(ImGuiCol_Text)))
 			session.swapPending = true;
 

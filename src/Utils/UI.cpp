@@ -293,53 +293,6 @@ namespace Util
 
 	namespace
 	{
-		struct GlassSegmentPalette
-		{
-			ImVec4 track;
-			ImVec4 selectedFill;
-			ImVec4 selectedText;
-			ImVec4 idleText;
-			ImVec4 hoverFill;
-			float rounding = 0.0f;
-			float inset = 0.0f;
-			float segmentHeight = 0.0f;
-			float trackHeight = 0.0f;
-		};
-
-		GlassSegmentPalette MakeGlassSegmentPalette(bool muted = false)
-		{
-			const auto& style = ImGui::GetStyle();
-			GlassSegmentPalette p;
-			p.trackHeight = ImGui::GetFrameHeight();
-			p.inset = std::max(2.0f, std::floor(style.FramePadding.y * 0.55f));
-			p.segmentHeight = p.trackHeight - p.inset * 2.0f;
-			p.rounding = std::max(style.FrameRounding, p.trackHeight * 0.5f);
-
-			// Translucent mica-style track over the blurred panel.
-			p.track = ImVec4(1.0f, 1.0f, 1.0f, C::GLASS_TRACK_IDLE_ALPHA);
-			const ImVec4 frame = ImGui::GetStyleColorVec4(ImGuiCol_FrameBg);
-			if (frame.w > 0.01f) {
-				p.track.x = frame.x * C::GLASS_TRACK_FRAME_MIX + (1.0f - C::GLASS_TRACK_FRAME_MIX);
-				p.track.y = frame.y * C::GLASS_TRACK_FRAME_MIX + (1.0f - C::GLASS_TRACK_FRAME_MIX);
-				p.track.z = frame.z * C::GLASS_TRACK_FRAME_MIX + (1.0f - C::GLASS_TRACK_FRAME_MIX);
-				p.track.w = std::clamp(frame.w * C::GLASS_TRACK_ALPHA_SCALE + C::GLASS_TRACK_ALPHA_MIN, C::GLASS_TRACK_ALPHA_MIN, C::GLASS_TRACK_ALPHA_MAX);
-			}
-
-			p.selectedFill = ImGui::GetStyleColorVec4(ImGuiCol_Header);
-			p.selectedFill.w = std::clamp(std::max(p.selectedFill.w, C::GLASS_SELECTED_ALPHA_FLOOR) * C::GLASS_SELECTED_ALPHA_SCALE, C::GLASS_SELECTED_ALPHA_MIN, C::GLASS_SELECTED_ALPHA_MAX);
-			p.selectedText = style.Colors[ImGuiCol_Text];
-			p.idleText = Colors::GetSecondary();
-			p.hoverFill = p.selectedFill;
-			p.hoverFill.w *= C::GLASS_HOVER_ALPHA_SCALE;
-
-			if (muted) {
-				p.selectedFill.w *= C::GLASS_MUTED_SELECTED_SCALE;
-				p.selectedText = p.idleText;
-				p.idleText.w *= C::GLASS_MUTED_TEXT_SCALE;
-			}
-			return p;
-		}
-
 		std::string_view PillTabDisplayLabel(const char* label)
 		{
 			std::string_view view(label ? label : "");
@@ -368,116 +321,173 @@ namespace Util
 			return it != g_pillTabBars.end() ? &it->second : nullptr;
 		}
 
-		/** @brief Draws the glass track + pills. Returns true if the selection changed. */
-		bool DrawGlassPillStrip(const char* id, const std::vector<std::string>& labels, int& selected, int marked = -1, bool muted = false, bool centered = false)
-		{
-			if (labels.empty())
-				return false;
-
-			const auto palette = MakeGlassSegmentPalette(muted);
-			const auto& style = ImGui::GetStyle();
-			const float padX = std::max(C::GLASS_SEGMENT_MIN_PAD_X * GetUIScale(), style.FramePadding.x * C::GLASS_SEGMENT_PAD_X_SCALE);
-
-			float contentWidth = palette.inset * static_cast<float>(labels.size() + 1);
-			for (const auto& label : labels)
-				contentWidth += ImGui::CalcTextSize(label.c_str()).x + padX * 2.0f;
-
-			const float avail = ImGui::GetContentRegionAvail().x;
-			const bool needScroll = contentWidth > avail + 0.5f;
-			const float trackWidth = needScroll ? contentWidth : std::min(contentWidth, avail);
-
-			if (needScroll) {
-				ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
-				ImGui::BeginChild(std::format("##PillStripScroll{}", id).c_str(), ImVec2(avail, palette.trackHeight),
-					ImGuiChildFlags_None, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-			} else if (centered) {
-				ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (avail - trackWidth) * 0.5f);
-			}
-
-			const ImVec2 trackMin = ImGui::GetCursorScreenPos();
-			const ImVec2 trackMax{ trackMin.x + trackWidth, trackMin.y + palette.trackHeight };
-			auto* drawList = ImGui::GetWindowDrawList();
-
-			drawList->AddRectFilled(trackMin, trackMax, ImGui::GetColorU32(palette.track), palette.rounding);
-			drawList->AddRect(trackMin, trackMax, ImGui::GetColorU32(ImVec4(1.0f, 1.0f, 1.0f, 0.10f)), palette.rounding);
-
-			ImGui::PushID(id);
-			ImGui::BeginGroup();
-			ImGui::SetCursorScreenPos({ trackMin.x + palette.inset, trackMin.y + palette.inset });
-			ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
-			ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, { palette.inset, 0.0f });
-			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, { padX, (palette.segmentHeight - ImGui::GetFontSize()) * 0.5f });
-			ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, std::max(0.0f, palette.rounding - palette.inset));
-
-			// The selected pill is one shape that glides to the chosen tab; the buttons themselves stay clear.
-			// Its rectangle follows from the label widths, since the buttons are laid out in a row.
-			if (selected >= 0 && selected < static_cast<int>(labels.size())) {
-				float selectedX = trackMin.x + palette.inset;
-				for (int i = 0; i < selected; ++i)
-					selectedX += ImGui::CalcTextSize(labels[static_cast<size_t>(i)].c_str()).x + padX * 2.0f + palette.inset;
-				const float selectedWidth = ImGui::CalcTextSize(labels[static_cast<size_t>(selected)].c_str()).x + padX * 2.0f;
-				const auto pill = Anim::SelectionGlide(ImGui::GetID("pillGlide"), ImVec2(selectedX, trackMin.y + palette.inset),
-					ImVec2(selectedX + selectedWidth, trackMin.y + palette.inset + palette.segmentHeight));
-				drawList->AddRectFilled(pill.min, pill.max, ImGui::GetColorU32(palette.selectedFill), std::max(0.0f, palette.rounding - palette.inset));
-			}
-			ImVec4 clearFill = palette.hoverFill;
-			clearFill.w = 0.0f;
-
-			bool changed = false;
-			for (int i = 0; i < static_cast<int>(labels.size()); ++i) {
-				if (i > 0)
-					ImGui::SameLine();
-				const bool isSelected = i == selected;
-				ImGui::PushID(i);
-				ImGui::PushStyleColor(ImGuiCol_Button, clearFill);
-				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, isSelected ? clearFill : palette.hoverFill);
-				ImGui::PushStyleColor(ImGuiCol_ButtonActive, clearFill);
-				ImGui::PushStyleColor(ImGuiCol_Text, isSelected ? palette.selectedText : palette.idleText);
-				if (Util::Button(labels[i].c_str())) {
-					selected = i;
-					changed = true;
-				}
-				ImGui::PopStyleColor(4);
-
-				if (i == marked && !isSelected) {
-					const ImVec2 min = ImGui::GetItemRectMin();
-					const ImVec2 max = ImGui::GetItemRectMax();
-					const float radius = std::max(C::GLASS_MARK_MIN_RADIUS, ImGui::GetFontSize() * C::GLASS_MARK_RADIUS_RATIO);
-					drawList->AddCircleFilled({ max.x - padX * 0.35f, (min.y + max.y) * 0.5f }, radius,
-						ImGui::GetColorU32(Colors::GetAccent()));
-				}
-				ImGui::PopID();
-			}
-
-			ImGui::SameLine(0.0f, 0.0f);
-			ImGui::Dummy({ palette.inset, palette.segmentHeight });
-			ImGui::Dummy({ 0.0f, palette.inset });
-			ImGui::PopStyleVar(4);
-			ImGui::EndGroup();
-			ImGui::PopID();
-
-			if (needScroll) {
-				if (ImGui::IsWindowHovered() && std::abs(ImGui::GetIO().MouseWheel) > 0.0f)
-					ImGui::SetScrollX(ImGui::GetScrollX() - ImGui::GetIO().MouseWheel * 40.0f);
-				ImGui::EndChild();
-				ImGui::PopStyleVar();
-			}
-
-			return changed;
-		}
+		constexpr float kBadgePadX = 5.0f;
+		constexpr float kBadgePadY = 1.5f;
+		constexpr float kBadgeRounding = 3.0f;
+		constexpr float kBadgeFillAlpha = 0.22f;
+		constexpr float kBadgeLabelTowardText = 0.35f;
 	}  // namespace
+
+	int SegmentedControl(const char* id, std::span<const Segment> segments, int selected, const SegmentedOptions& options)
+	{
+		if (segments.empty())
+			return -1;
+
+		const auto& style = ImGui::GetStyle();
+		const float scale = GetUIScale();
+		const float pad = C::SEGMENT_TRACK_PAD * scale;
+		const float gap = pad * C::SEGMENT_PILL_GAP_RATIO;
+		const float iconGap = C::ICON_LABEL_GAP * scale;
+		const float fontSize = ImGui::GetFontSize();
+		const float lineHeight = ImGui::GetTextLineHeight();
+		const float trackHeight = options.height > 0.0f ? options.height : ImGui::GetFrameHeight() + pad * 2.0f;
+		const float itemHeight = trackHeight - pad * 2.0f;
+		// The pill takes the theme's frame rounding and the track wraps it concentrically
+		const float pillRounding = style.FrameRounding;
+		const float trackRounding = pillRounding > 0.0f ? pillRounding + pad : 0.0f;
+		const int count = static_cast<int>(segments.size());
+
+		const auto labelEnd = [](const Segment& segment) { return ImGui::FindRenderedTextEnd(segment.label); };
+		const auto contentWidth = [&](const Segment& segment) {
+			float width = ImGui::CalcTextSize(segment.label, labelEnd(segment)).x;
+			if (segment.icon)
+				width += lineHeight + iconGap;
+			if (segment.count)
+				width += style.ItemInnerSpacing.x + MeasureBadgeWidth(segment.count);
+			return width;
+		};
+
+		std::vector<float> widths(segments.size());
+		float trackWidth = pad * 2.0f + gap * static_cast<float>(count - 1);
+		if (options.width > 0.0f) {
+			std::ranges::fill(widths, std::max(1.0f, (options.width - trackWidth) / static_cast<float>(count)));
+			trackWidth = options.width;
+		} else {
+			for (int i = 0; i < count; ++i) {
+				widths[i] = contentWidth(segments[i]) + style.FramePadding.x * 2.0f;
+				trackWidth += widths[i];
+			}
+		}
+
+		ImGui::PushID(id);
+		ImGui::BeginGroup();
+		const float avail = ImGui::GetContentRegionAvail().x;
+		const bool scroll = options.width <= 0.0f && trackWidth > avail + 0.5f;
+		if (scroll) {
+			ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+			ImGui::BeginChild("##scroll", ImVec2(avail, trackHeight), ImGuiChildFlags_None,
+				ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+		} else if (options.centered) {
+			ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (avail - trackWidth) * 0.5f);
+		}
+
+		ImDrawList* drawList = ImGui::GetWindowDrawList();
+		const ImVec2 trackMin = ImGui::GetCursorScreenPos();
+		drawList->AddRectFilled(trackMin, ImVec2(trackMin.x + trackWidth, trackMin.y + trackHeight), ImGui::GetColorU32(ImGuiCol_FrameBg), trackRounding);
+
+		std::vector<float> xs(segments.size());
+		for (int i = 0; i < count; ++i)
+			xs[i] = i == 0 ? trackMin.x + pad : xs[i - 1] + widths[i - 1] + gap;
+
+		const ImVec4 accent = Colors::GetAccent();
+		const float pillAlpha = options.muted ? C::SEGMENT_MUTED_SELECTED_SCALE : 1.0f;
+		if (selected >= 0 && selected < count) {
+			const float top = trackMin.y + pad;
+			const auto pill = Anim::SelectionGlide(ImGui::GetID("##pill"), ImVec2(xs[selected], top), ImVec2(xs[selected] + widths[selected], top + itemHeight));
+			drawList->AddRectFilled(pill.min, pill.max, ImGui::GetColorU32(Anim::ScaleAlpha(accent, C::SEGMENT_SELECTED_FILL_ALPHA * pillAlpha)), pillRounding);
+			drawList->AddRect(pill.min, pill.max, ImGui::GetColorU32(Anim::ScaleAlpha(accent, C::SEGMENT_SELECTED_OUTLINE_ALPHA * pillAlpha)), pillRounding);
+		}
+
+		const ImVec4 textColor = ImGui::GetStyleColorVec4(ImGuiCol_Text);
+		const ImVec4 dimColor = ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled);
+		int clicked = -1;
+		for (int i = 0; i < count; ++i) {
+			const Segment& segment = segments[i];
+			const ImVec2 min(xs[i], trackMin.y + pad);
+			const ImVec2 max(min.x + widths[i], min.y + itemHeight);
+
+			// Narrow segments shrink their content, then keep only the icon
+			const float available = std::max(0.0f, widths[i] - style.FramePadding.x * 2.0f);
+			const float fullWidth = contentWidth(segment);
+			float fit = fullWidth > available && fullWidth > 0.0f ? available / fullWidth : 1.0f;
+			const bool iconOnly = segment.icon && fit < C::SEGMENT_MIN_CONTENT_SCALE;
+			if (iconOnly)
+				fit = std::min(1.0f, available / lineHeight);
+			fit = std::max(fit, C::SEGMENT_MIN_CONTENT_SCALE);
+
+			ImGui::SetCursorScreenPos(min);
+			ImGui::PushID(i);
+			if (ImGui::InvisibleButton("##segment", ImVec2(widths[i], itemHeight), ImGuiButtonFlags_EnableNav))
+				clicked = i;
+			const bool hovered = ImGui::IsItemHovered();
+			if (segment.tooltip)
+				AddTooltip(segment.tooltip);
+			else if (iconOnly && hovered)
+				ImGui::SetTooltip("%.*s", static_cast<int>(labelEnd(segment) - segment.label), segment.label);
+			const float chosen = Anim::Toggle(ImGui::GetItemID(), i == selected) * pillAlpha;
+			const float hover = Anim::Toggle(ImGui::GetID("hover"), hovered && !segment.disabled);
+			ImGui::PopID();
+			if (hovered)
+				ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+
+			const ImVec4 labelColor = segment.disabled ? Anim::ScaleAlpha(dimColor, style.DisabledAlpha) : Anim::Lerp(dimColor, textColor, std::max(chosen, hover * C::LIST_HIGHLIGHT_HOVER_RATIO));
+			const ImVec4 iconColor = segment.accentIcon && !segment.disabled ? accent : labelColor;
+
+			// Icon, label and count form one group centred in the segment
+			const float iconSize = lineHeight * fit;
+			const float groupWidth = iconOnly ? iconSize : fullWidth * fit;
+			float x = std::max(min.x, min.x + (widths[i] - groupWidth) * 0.5f);
+			const float textY = CenterTextTopY(min.y, itemHeight) + lineHeight * (1.0f - fit) * 0.5f;
+			drawList->PushClipRect(min, max, true);
+			if (segment.icon) {
+				Icons::DrawCenteredGlyph(drawList, ImVec2(x, min.y), ImVec2(iconSize, itemHeight), fontSize * fit, segment.icon, ImGui::GetColorU32(iconColor));
+				x += (lineHeight + iconGap) * fit;
+			}
+			if (!iconOnly) {
+				drawList->AddText(ImGui::GetFont(), fontSize * fit, ImVec2(x, textY), ImGui::GetColorU32(labelColor), segment.label, labelEnd(segment));
+				x += ImGui::CalcTextSize(segment.label, labelEnd(segment)).x * fit;
+				if (segment.count) {
+					x += style.ItemInnerSpacing.x * fit;
+					ImGui::PushFont(nullptr, ImGui::GetCurrentContext()->FontSizeBase * fit);
+					DrawBadgeAt(ImVec2(x, min.y), itemHeight, segment.count, Anim::ScaleAlpha(Anim::Lerp(textColor, accent, chosen), kBadgeFillAlpha), labelColor, drawList);
+					ImGui::PopFont();
+				}
+			}
+			drawList->PopClipRect();
+
+			if (i == options.marked && i != selected) {
+				const float radius = ImGui::GetFrameHeight() * C::STATUS_DOT_RATIO;
+				drawList->AddCircleFilled(ImVec2(max.x - radius * 1.5f, (min.y + max.y) * 0.5f), radius, ImGui::GetColorU32(accent));
+			}
+		}
+
+		ImGui::SetCursorScreenPos(trackMin);
+		ImGui::Dummy(ImVec2(trackWidth, trackHeight));
+		if (scroll) {
+			if (ImGui::IsWindowHovered() && ImGui::GetIO().MouseWheel != 0.0f)
+				ImGui::SetScrollX(ImGui::GetScrollX() - ImGui::GetIO().MouseWheel * lineHeight * 2.0f);
+			ImGui::EndChild();
+			ImGui::PopStyleVar();
+		}
+		ImGui::EndGroup();
+		ImGui::PopID();
+		return clicked;
+	}
 
 	bool SegmentedControl(const char* a_id, const char* const* a_labels, int a_count, int& a_selected, int a_marked,
 		bool a_muted)
 	{
 		if (!a_labels || a_count <= 0)
 			return false;
-		std::vector<std::string> labels;
-		labels.reserve(static_cast<size_t>(a_count));
+		std::vector<Segment> segments(static_cast<size_t>(a_count));
 		for (int i = 0; i < a_count; ++i)
-			labels.emplace_back(a_labels[i] ? a_labels[i] : "");
-		return SceneWidgetInterceptor::InterceptInt(a_id, a_selected,
-			[&](int& a_bound) { return DrawGlassPillStrip(a_id, labels, a_bound, a_marked, a_muted); });
+			segments[i].label = a_labels[i] ? a_labels[i] : "";
+		return SceneWidgetInterceptor::InterceptInt(a_id, a_selected, [&](int& a_bound) {
+			const int clicked = SegmentedControl(a_id, segments, a_bound, { .marked = a_marked, .muted = a_muted });
+			if (clicked >= 0)
+				a_bound = clicked;
+			return clicked >= 0;
+		});
 	}
 
 	bool IsInsidePillTabBar()
@@ -496,7 +506,11 @@ namespace Util
 
 		{
 			MenuFonts::FontRoleGuard bodyFont(Menu::FontRole::Body);
-			DrawGlassPillStrip(str_id, state.labelsForStrip, state.selected, -1, false, centered);
+			std::vector<Segment> segments(state.labelsForStrip.size());
+			for (size_t i = 0; i < segments.size(); ++i)
+				segments[i].label = state.labelsForStrip[i].c_str();
+			if (const int clicked = SegmentedControl(str_id, segments, state.selected, { .centered = centered }); clicked >= 0)
+				state.selected = clicked;
 		}
 		ImGui::Spacing();
 		return true;
@@ -634,15 +648,6 @@ namespace Util
 		if (a_tooltip)
 			AddTooltip(a_tooltip);
 		return clicked;
-	}
-
-	namespace
-	{
-		constexpr float kBadgePadX = 5.0f;
-		constexpr float kBadgePadY = 1.5f;
-		constexpr float kBadgeRounding = 3.0f;
-		constexpr float kBadgeFillAlpha = 0.22f;
-		constexpr float kBadgeLabelTowardText = 0.35f;
 	}
 
 	float MeasureBadgeWidth(const char* a_label)
@@ -1210,7 +1215,7 @@ namespace Util
 		return Util::Button(label, size);
 	}
 
-	StyledButtonWrapper TransparentIconButtonStyle()
+	static StyledButtonWrapper TransparentIconButtonStyle()
 	{
 		// The theme's button hover and press fills, as the header's nav buttons use
 		const ImGuiStyle& style = ImGui::GetStyle();
@@ -1315,6 +1320,86 @@ namespace Util
 		}
 		if (ImGui::IsItemHovered())
 			ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+		return clicked;
+	}
+
+	float IconButtonSize()
+	{
+		return ImGui::GetFrameHeight();
+	}
+
+	bool QuietIconButtonFrame(const char* id, bool active, ImU32* glyphColor)
+	{
+		const float size = IconButtonSize();
+		const bool clicked = ImGui::InvisibleButton(id, ImVec2(size, size), ImGuiButtonFlags_EnableNav);
+		if (ImGui::IsItemHovered())
+			ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+		const auto blend = Anim::ItemBlend(ImGui::GetItemID(), ImGui::IsItemHovered(), ImGui::IsItemActive(), active);
+		Anim::FillBlend(ImGui::GetWindowDrawList(), ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), ImGui::GetStyle().FrameRounding, blend);
+		if (glyphColor)
+			*glyphColor = QuietIconColor(blend.hover, blend.selected);
+		return clicked;
+	}
+
+	bool IconButton(const char* id, Icons::GlyphRef glyph, const char* tooltip, bool active, ImU32 color)
+	{
+		ImU32 glyphColor = color;
+		const bool clicked = QuietIconButtonFrame(id, active, color ? nullptr : &glyphColor);
+		Icons::DrawCenteredGlyph(ImGui::GetWindowDrawList(), ImGui::GetItemRectMin(), ImGui::GetItemRectSize(), glyph, glyphColor);
+		if (tooltip)
+			AddTooltip(tooltip, kTooltipWhenDisabled);
+		return clicked;
+	}
+
+	ImU32 DestructiveIconColor()
+	{
+		const ImVec4 error = Colors::GetError();
+		return ImGui::GetColorU32(ImVec4(error.x, error.y, error.z, C::DESTRUCTIVE_ICON_ALPHA));
+	}
+
+	float LabeledButtonGap(Icons::GlyphRef glyph, const char* label)
+	{
+		return (glyph && label && label[0]) ? ImGui::GetStyle().ItemInnerSpacing.x : 0.0f;
+	}
+
+	float MeasureLabeledButton(Icons::GlyphRef glyph, const char* label)
+	{
+		const float labelWidth = label ? ImGui::CalcTextSize(label).x : 0.0f;
+		return Icons::CalcGlyphSize(glyph).x + LabeledButtonGap(glyph, label) + labelWidth + ImGui::GetStyle().FramePadding.x * 2.0f;
+	}
+
+	bool LabeledButton(const char* id, Icons::GlyphRef glyph, const char* label, const ImVec2& size)
+	{
+		const ImVec2 iconSize = Icons::CalcGlyphSize(glyph);
+		const ImVec2 labelSize = label ? ImGui::CalcTextSize(label) : ImVec2(0, 0);
+		const float gap = LabeledButtonGap(glyph, label);
+
+		ImVec2 btnSize = size;
+		if (btnSize.y <= 0.0f)
+			btnSize.y = ImGui::GetFrameHeight();
+		// Icon-only buttons are square
+		if (btnSize.x <= 0.0f)
+			btnSize.x = label && label[0] ? MeasureLabeledButton(glyph, label) : btnSize.y;
+
+		ImGui::PushID(id);
+		const bool clicked = Button("##labeled", btnSize);
+		const ImVec2 min = ImGui::GetItemRectMin();
+		const ImVec2 max = ImGui::GetItemRectMax();
+		ImDrawList* dl = ImGui::GetWindowDrawList();
+
+		const float contentW = iconSize.x + gap + labelSize.x;
+		float x = min.x + (btnSize.x - contentW) * 0.5f;
+		const float midY = (min.y + max.y) * 0.5f;
+		const ImU32 col = ImGui::GetColorU32(ImGuiCol_Text);
+
+		if (glyph) {
+			Icons::DrawCenteredGlyph(dl, ImVec2(x, min.y), ImVec2(iconSize.x, btnSize.y), glyph, col);
+			x += iconSize.x + gap;
+		}
+		if (label && label[0])
+			dl->AddText(ImVec2(x, midY - labelSize.y * 0.5f), col, label);
+
+		ImGui::PopID();
 		return clicked;
 	}
 
@@ -3039,7 +3124,7 @@ namespace Util
 
 	bool ButtonWithFlash(const char* id, const char* tablerIcon, const char* label, int flashDurationMs)
 	{
-		return DrawWithFlash(id, flashDurationMs, [&] { return Icons::LabeledButton(id, Icons::TI(tablerIcon), label); });
+		return DrawWithFlash(id, flashDurationMs, [&] { return Util::LabeledButton(id, Icons::TI(tablerIcon), label); });
 	}
 
 	bool LoadDDSTextureFromFile(ID3D11Device* device,
