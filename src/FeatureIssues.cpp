@@ -437,7 +437,7 @@ namespace FeatureIssues
 					"and must be updated to the new Baseline format. Check the file format and content."),
 				theme.StatusPalette.Error, baselineIssues },
 		};
-		// Each section is its title and features beside its description, with a rule between sections
+		// Each section stacks its title, description and features, with a rule between sections
 		bool firstShown = true;
 		for (const auto& section : sections) {
 			if (section.issues.empty())
@@ -445,15 +445,10 @@ namespace FeatureIssues
 			if (!std::exchange(firstShown, false))
 				ImGui::Separator();
 			ImGui::PushID(section.title);
-			if (ImGui::BeginTable("##IssueSection", 2, ImGuiTableFlags_SizingStretchSame)) {
-				ImGui::TableNextColumn();
-				ImGui::TextColored(section.color, "%s", section.title);
-				for (const auto* issue : section.issues)
-					DrawFeatureIssue(*issue, section.color);
-				ImGui::TableNextColumn();
-				ImGui::TextWrapped("%s", section.description);
-				ImGui::EndTable();
-			}
+			ImGui::TextColored(section.color, "%s", section.title);
+			Util::Text::WrappedSecondary("%s", section.description);
+			for (const auto* issue : section.issues)
+				DrawFeatureIssue(*issue, section.color);
 			ImGui::PopID();
 		}
 
