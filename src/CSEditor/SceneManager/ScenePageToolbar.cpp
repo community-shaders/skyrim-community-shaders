@@ -26,12 +26,14 @@ namespace
 	/// Divider that keeps the transition label from reading as part of the control before the toolbar.
 	constexpr float kDividerThickness = 1.0f;
 
-	/// Clear is page-local, so each page keys its own confirmation and only that page draws it.
+	/// Clear is page-local, so each page keys its own confirmation. Windows can show the same page,
+	/// so only the requesting window draws it: the popup opens under that window's ID stack.
 	struct PageConfirmation
 	{
 		void Request(const SceneContextId& a_page)
 		{
 			context = a_page;
+			requestingWindow = ImGui::GetCurrentWindow()->RootWindow->ID;
 			requested = true;
 			popup.Request();
 		}
@@ -41,7 +43,7 @@ namespace
 		template <typename Action>
 		void Draw(const SceneContextId& a_page, Action&& a_confirmed)
 		{
-			if (!requested || context != a_page)
+			if (!requested || context != a_page || requestingWindow != ImGui::GetCurrentWindow()->RootWindow->ID)
 				return;
 			if (popup.Draw())
 				a_confirmed();
@@ -52,6 +54,7 @@ namespace
 
 		Util::ConfirmationPopup popup;
 		SceneContextId context;
+		ImGuiID requestingWindow = 0;
 		bool requested = false;
 	};
 	PageConfirmation clearConfirmation;
