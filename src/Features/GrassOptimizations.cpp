@@ -309,6 +309,7 @@ void GrassOptimizations::DrawBucket(GrassBucket& b)
 	if (!meshVB || !indexB || !meshStride)
 		return;
 
+	globals::profiler->BeginPass("GrassOptimizations::IndirectDraw");
 	auto& shadowState = globals::game::shadowState->GetRuntimeData();
 	static REL::Relocation<void (*)(uint32_t)> SetDirtyStates{ REL::RelocationID(75580, 77386) };
 	if (shadowState.topology != D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST) {
@@ -371,6 +372,7 @@ void GrassOptimizations::DrawBucket(GrassBucket& b)
 
 		ctx->DrawIndexedInstancedIndirect(bucketStore.arguments->resource.get(), (b.cullSlot * kTierCount + tier) * kArgsStride);
 	}
+	globals::profiler->EndPass();
 }
 
 void GrassOptimizations::Hooks::BSMultiStreamInstanceTriShape_dtor::thunk(RE::BSMultiStreamInstanceTriShape* shape)
