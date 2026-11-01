@@ -227,6 +227,10 @@ public:
 	virtual void LoadSettings(json&) {}
 	virtual void RestoreDefaultSettings() {}
 
+	/** @brief Rewrites defaults that depend on the current settings, so a middle-click reset restores the right value.
+	 *  @param a_defaults The feature's default settings, in the shape SaveSettings writes. */
+	virtual void ApplyContextualDefaults(json& a_defaults) const { (void)a_defaults; }
+
 	/**
 	 * @brief Toggles the "disabled at boot" state for this feature.
 	 * @return The new disabled state (true = disabled at boot).
