@@ -7,6 +7,7 @@
 #include "Globals.h"
 #include "Menu.h"
 #include "State.h"
+#include "Utils/Game.h"
 
 #include "PresetManager.h"
 #include "SettingManager.h"
@@ -929,24 +930,13 @@ void EffectManager::UpdateCursorData()
 	commonData.tempInfo2[3] = lastRightClick[1];
 }
 
-float EffectManager::GetSunVisibility(const RE::Sun* a_sun)
-{
-	if (!a_sun || !a_sun->root || !a_sun->sunBaseNode || !a_sun->sunBase)
-		return 0.0f;
-	if (a_sun->root->GetFlags().any(RE::NiAVObject::Flag::kHidden) || a_sun->sunBaseNode->GetFlags().any(RE::NiAVObject::Flag::kHidden))
-		return 0.0f;
-
-	const auto property = skyrim_cast<RE::BSSkyShaderProperty*>(a_sun->sunBase->GetGeometryRuntimeData().shaderProperty.get());
-	return property ? std::clamp(property->kBlendColor.alpha, 0.0f, 1.0f) : 0.0f;
-}
-
 void EffectManager::UpdateLightParameters()
 {
 	auto sky = globals::game::sky;
 	if (!sky || !sky->sun || !sky->sun->root || !sky->root)
 		return;
 
-	const float visibility = GetSunVisibility(sky->sun);
+	const float visibility = Util::GetSunVisibility(sky->sun);
 	if (visibility <= 0.0f)
 		return;
 
