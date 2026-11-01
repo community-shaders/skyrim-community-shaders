@@ -4,7 +4,6 @@
 #include <cmath>
 #include <filesystem>
 #include <format>
-#include <imgui_stdlib.h>
 
 #include "CSEditor/Browser/BrowserWidgets.h"
 #include "EditorWidgets.h"
@@ -453,19 +452,35 @@ void Effects11Editor::DrawNoPreset()
 		for (const auto& error : mainEffect.GetErrors())
 			Util::Text::WrappedError("%s", error.c_str());
 	} else {
-		ImGui::TextUnformatted(T(TKEY("no_preset_body"),
-			"Effects 11 runs ENB-style presets. Install a preset so that enbseries.ini and the "
-			"enbseries folder (containing at least enbeffect.fx) are in the game folder or in Data, "
-			"then click Reload Shaders."));
+		switch (presetPaths.missing) {
+		case PresetPaths::Missing::IniFile:
+			ImGui::TextUnformatted(T(TKEY("no_preset_missing_ini"),
+				"enbseries.ini was not found. Install an ENB-style preset with enbseries.ini in the game folder "
+				"or in Data, then click Reload Shaders."));
+			break;
+		case PresetPaths::Missing::SeriesFolder:
+			ImGui::TextUnformatted(T(TKEY("no_preset_missing_folder"),
+				"enbseries.ini was found, but the enbseries folder is missing. Install the preset's enbseries "
+				"folder in the game folder or in Data, then click Reload Shaders."));
+			break;
+		case PresetPaths::Missing::MainEffect:
+			ImGui::TextUnformatted(T(TKEY("no_preset_missing_effect"),
+				"enbseries.ini and the enbseries folder were found, but enbseries/enbeffect.fx is missing. "
+				"Some presets ship their .fx files in a separate mod: check that it is installed and enabled, "
+				"then click Reload Shaders."));
+			break;
+		}
 	}
 	ImGui::PopTextWrapPos();
 
 	ImGui::Spacing();
-	ImGui::PushTextWrapPos(0.0f);
-	Util::TextUnformattedDisabled(T(TKEY("looking_for"), "Looking for:"));
-	ImGui::TextUnformatted(presetPaths.mainEffect.c_str());
-	ImGui::PopTextWrapPos();
-	ImGui::Spacing();
+	if (!mainEffect.IsFilePresent()) {
+		ImGui::PushTextWrapPos(0.0f);
+		Util::TextUnformattedDisabled(T(TKEY("looking_for"), "Looking for:"));
+		ImGui::TextUnformatted(presetPaths.missingPath.c_str());
+		ImGui::PopTextWrapPos();
+		ImGui::Spacing();
+	}
 
 	if (Util::Button(T(TKEY("reload_shaders"), "Reload Shaders")))
 		ReloadShaders();
@@ -627,22 +642,12 @@ void Effects11Editor::DrawStatus()
 
 void Effects11Editor::DrawSearchBar(std::string& a_filter, const char* a_hint, bool& a_focusRequest)
 {
-	ImGui::PushID(a_hint);
-	const float clearWidth = a_filter.empty() ? 0.0f : ImGui::GetFrameHeight() + ImGui::GetStyle().ItemSpacing.x;
 	if (a_focusRequest) {
 		ImGui::SetKeyboardFocusHere();
 		a_focusRequest = false;
 	}
-	ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - clearWidth);
-	ImGui::InputTextWithHint("##search", a_hint, &a_filter, ImGuiInputTextFlags_EscapeClearsAll);
+	Util::SearchField(a_hint, a_filter, a_hint, ImGui::GetContentRegionAvail().x, false);
 	Util::AddTooltip(T(TKEY("search_tip"), "Filter by name. Shortcut: Ctrl+F. Esc clears the search."));
-	if (!a_filter.empty()) {
-		ImGui::SameLine();
-		if (Util::Button("X##clear", ImVec2(ImGui::GetFrameHeight(), ImGui::GetFrameHeight())))
-			a_filter.clear();
-		Util::AddTooltip(T(TKEY("clear_search"), "Clear the search"));
-	}
-	ImGui::PopID();
 }
 
 void Effects11Editor::DrawPeriodFocusCombo()
@@ -1412,7 +1417,27 @@ void Effects11Editor::RefreshPresetPaths()
 	const auto iniPath = presetManager.GetENBSeriesIniPath();
 	presetPaths.iniFull = iniPath.string();
 	presetPaths.iniDisplay = DisplayPath(iniPath);
-	presetPaths.mainEffect = EffectManager::GetSingleton().enbEffect.GetFilePath().string();
+
+	// An incomplete Data layout makes the legacy lookup fall back to the game root, so report against Data
+	auto layoutRoot = iniPath.parent_path();
+	if (presetManager.IsLegacyActive() && !presetManager.HasLegacyInstall()) {
+		const auto dataRoot = std::filesystem::absolute("Data");
+		if (std::filesystem::exists(dataRoot / PresetManager::kEnbSeriesIniName) || std::filesystem::exists(dataRoot / PresetManager::kEnbSeriesDirName))
+			layoutRoot = dataRoot;
+	}
+
+	const auto layoutIniPath = layoutRoot / PresetManager::kEnbSeriesIniName;
+	const auto seriesPath = layoutRoot / PresetManager::kEnbSeriesDirName;
+	if (!std::filesystem::exists(layoutIniPath)) {
+		presetPaths.missing = PresetPaths::Missing::IniFile;
+		presetPaths.missingPath = layoutIniPath.string();
+	} else if (!std::filesystem::is_directory(seriesPath)) {
+		presetPaths.missing = PresetPaths::Missing::SeriesFolder;
+		presetPaths.missingPath = seriesPath.string();
+	} else {
+		presetPaths.missing = PresetPaths::Missing::MainEffect;
+		presetPaths.missingPath = EffectManager::GetSingleton().enbEffect.GetFilePath().string();
+	}
 }
 
 void Effects11Editor::Revert()

@@ -411,14 +411,8 @@ void OverlayRenderer::RenderShaderCompilationStatus(const std::function<const ch
 	auto& themeSettings = Menu::GetSingleton()->GetTheme();
 	auto* renderDoc = RenderDoc::GetSingleton();
 	bool renderDocAvailable = renderDoc->IsAvailable();
-	const auto renderDocInformation = renderDoc->GetOverlayWarningMessage();
-
-	const std::unordered_map<std::string, std::string> statsArg{ { "stats", shaderCache->GetShaderStatsString(!state->IsDeveloperMode()) } };
-	const auto progressTitle = shaderCache->backgroundCompilation ?
-	                               I18n::GetSingleton()->Format("overlay.compiling_shaders_background", statsArg, "Background Compiling Shaders: {stats}") :
-	                               I18n::GetSingleton()->Format("overlay.compiling_shaders", statsArg, "Compiling Shaders: {stats}");
-	auto percent = (float)compiledShaders / (float)totalShaders;
-	auto progressOverlay = fmt::format("{}/{} ({:2.1f}%)", compiledShaders, totalShaders, 100 * percent);
+	// Runs every frame, so only build the strings a visible card shows
+	const auto renderDocInformation = renderDocAvailable ? renderDoc->GetOverlayWarningMessage() : std::string();
 
 	const uint32_t effectFailed = GetFailedEffectCount();
 	const bool showFailures = (failed && !hide) || effectFailed;
@@ -437,6 +431,13 @@ void OverlayRenderer::RenderShaderCompilationStatus(const std::function<const ch
 	}
 
 	if (compiling) {
+		const std::unordered_map<std::string, std::string> statsArg{ { "stats", shaderCache->GetShaderStatsString(!state->IsDeveloperMode()) } };
+		const auto progressTitle = shaderCache->backgroundCompilation ?
+		                               I18n::GetSingleton()->Format("overlay.compiling_shaders_background", statsArg, "Background Compiling Shaders: {stats}") :
+		                               I18n::GetSingleton()->Format("overlay.compiling_shaders", statsArg, "Compiling Shaders: {stats}");
+		auto percent = (float)compiledShaders / (float)totalShaders;
+		auto progressOverlay = fmt::format("{}/{} ({:2.1f}%)", compiledShaders, totalShaders, 100 * percent);
+
 		ImGui::TextUnformatted(progressTitle.c_str());
 		ImGui::ProgressBar(percent, ImVec2(0.0f, 0.0f), progressOverlay.c_str());
 		if (state->IsDeveloperMode()) {

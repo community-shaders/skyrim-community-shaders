@@ -348,8 +348,6 @@ namespace Util::Anim
 
 	namespace
 	{
-		int g_noListHighlight = 0;
-
 		// Salts that separate one list's state keys; the list key is its window's id
 		constexpr ImGuiID kHoverIdSalt = 0x1B873593u;
 		constexpr ImGuiID kHoverFrameSalt = 0x2C4F8E15u;
@@ -387,20 +385,10 @@ namespace Util::Anim
 		}
 	}
 
-	NoListHighlight::NoListHighlight()
-	{
-		++g_noListHighlight;
-	}
-
-	NoListHighlight::~NoListHighlight()
-	{
-		--g_noListHighlight;
-	}
-
 	bool GlideSelectable(SelectableFn real, const char* label, bool selected, ImGuiSelectableFlags flags, const ImVec2& size)
 	{
 		ImGuiWindow* window = ImGui::GetCurrentWindow();
-		if (g_noListHighlight > 0 || ReducedMotion() || window->SkipItems)
+		if (ReducedMotion() || window->SkipItems)
 			return real(label, selected, flags, size);
 
 		const ImGuiID id = window->GetID(label);

@@ -39,6 +39,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	disableVanillaFog,
 	fogInscatteringColor,
 	originalFogColorAmount,
+	originalFogColorOverride,
 	volumetricFogEnabled,
 	volumetricGridPixelSize,
 	volumetricGridSizeZ,
@@ -102,6 +103,7 @@ ExponentialHeightFog::Settings ExponentialHeightFog::GetCommonBufferData() const
 	auto& linearLighting = globals::features::linearLighting;
 	linearLighting.SRGBToWorking(&data.inscatteringTint.x);
 	linearLighting.SRGBToWorking(&data.fogInscatteringColor.x);
+	linearLighting.SRGBToWorking(&data.originalFogColorOverride.x);
 	linearLighting.SRGBToWorking(&data.volumetricFogAlbedo.x);
 	linearLighting.SRGBToWorking(&data.volumetricFogEmissive.x);
 
@@ -128,6 +130,12 @@ void ExponentialHeightFog::DrawSettings()
 	ImGui::SliderFloat(T(TKEY("fog_height_falloff"), "Fog Height Falloff"), &settings.fogHeightFalloff, 0.001f, 2.0f, "%.3f");
 	ImGui::ColorEdit4(T(TKEY("fog_inscattering_color"), "Fog Inscattering Color"), (float*)&settings.fogInscatteringColor);
 	ImGui::SliderFloat(T(TKEY("original_fog_color_amount"), "Original Fog Color Amount"), &settings.originalFogColorAmount, 0.0f, 1.0f, "%.2f");
+	ImGui::ColorEdit4(T(TKEY("original_fog_color_override"), "Original Fog Color Override"), (float*)&settings.originalFogColorOverride);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("%s", T(TKEY("original_fog_color_override_tooltip"),
+							  "Replaces the weather's fog colour used by Original Fog Color Amount.\n"
+							  "Alpha blends from the weather colour (0) to this colour (1)."));
+	}
 	ImGui::SliderFloat(T(TKEY("fog_density"), "Fog Density"), &settings.fogDensity, 0.0f, 1.0f, "%.3f");
 	if (ImGui::TreeNode(T(TKEY("second_fog_layer"), "Second Fog Layer"))) {
 		ImGui::SliderFloat(T(TKEY("fog_height_2"), "Fog Height 2"), &settings.fogHeight2, -22000.0f, 22000.0f, "%.1f");

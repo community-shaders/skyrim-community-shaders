@@ -182,7 +182,7 @@ namespace
 		auto* drawList = ImGui::GetWindowDrawList();
 		Icons::DrawCenteredGlyph(drawList, ImVec2(pos.x + padX, pos.y), ImVec2(lineHeight, lineHeight), Icons::TI(ICON_TI_CHEVRON_LEFT),
 			ImGui::GetColorU32(Util::Colors::GetSecondary()));
-		drawList->AddText(ImVec2(pos.x + padX + lineHeight + ThemeManager::Constants::NAV_ROW_ICON_GAP * Util::GetUIScale(), pos.y),
+		drawList->AddText(ImVec2(pos.x + padX + lineHeight + ThemeManager::Constants::ICON_LABEL_GAP * Util::GetUIScale(), pos.y),
 			ImGui::GetColorU32(ImGuiCol_Text), T("menu.features.back_to_features", "Features"));
 		return clicked;
 	}
@@ -230,11 +230,8 @@ namespace
 			const bool lit = ImGui::IsWindowHovered() || ImGui::GetFocusID() == buttonId || ImGui::IsPopupOpen("##FeatureSortPopup");
 			const float alpha = std::lerp(ThemeManager::Constants::PALETTE_DIMMED_ALPHA, 1.0f, Util::Anim::Toggle(ImGui::GetID("##Visibility"), lit));
 			ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * alpha);
-			{
-				auto style = Util::TransparentIconButtonStyle();
-				if (Icons::Button("###FeatureSort", GetSortModeIcon(globals::menu->GetSettings().FeatureListSort), ImVec2(size, size)))
-					ImGui::OpenPopup("##FeatureSortPopup");
-			}
+			if (Util::IconButton("###FeatureSort", GetSortModeIcon(globals::menu->GetSettings().FeatureListSort), nullptr))
+				ImGui::OpenPopup("##FeatureSortPopup");
 			ImGui::PopStyleVar();
 			Util::HoverTip(T("menu.features.sort_tooltip", "Sort features"));
 			if (ImGui::BeginPopup("##FeatureSortPopup")) {
@@ -243,88 +240,6 @@ namespace
 			}
 		}
 		ImGui::EndChild();
-	}
-
-	/**
-	 * @brief Draws one pill of the top page switcher: a centred accent icon and label. The selected pill gets an eased
-	 * accent tint and outline, hover a soft fill.
-	 * @param width Pill width; 0 fills the rest of the line.
-	 * @return True when clicked.
-	 */
-	bool DrawNavRow(const FeatureListRenderer::BuiltInMenu& menu, bool selected, bool disabled, float width = 0.0f)
-	{
-		using Constants = ThemeManager::Constants;
-		using NavStyle = FeatureListRenderer::NavStyle;
-
-		const float scale = Util::GetUIScale();
-		const float lineHeight = ImGui::GetTextLineHeight();
-		const float height = ImGui::GetFrameHeight();
-		const ImVec2 rowPos = ImGui::GetCursorScreenPos();
-		const float rowWidth = width > 0.0f ? width : ImGui::GetContentRegionAvail().x;
-
-		bool clicked = false;
-		{
-			// The pill draws its own highlight, so the list highlight stays out of it
-			Util::Anim::NoListHighlight ownHighlight;
-			// A dimmed pill still takes the click: the caller explains why it cannot act
-			ImGui::PushStyleColor(ImGuiCol_Header, IM_COL32_BLACK_TRANS);
-			ImGui::PushStyleColor(ImGuiCol_HeaderHovered, IM_COL32_BLACK_TRANS);
-			ImGui::PushStyleColor(ImGuiCol_HeaderActive, IM_COL32_BLACK_TRANS);
-			clicked = ImGui::Selectable("##NavRow", false, ImGuiSelectableFlags_NoPadWithHalfSpacing, ImVec2(rowWidth, height));
-			ImGui::PopStyleColor(3);
-		}
-		auto* drawList = ImGui::GetWindowDrawList();
-		const ImVec2 min = ImGui::GetItemRectMin();
-		const ImVec2 max = ImGui::GetItemRectMax();
-		const float rounding = ImGui::GetStyle().FrameRounding;
-		const auto blend = Util::Anim::ItemBlend(ImGui::GetItemID(), ImGui::IsItemHovered() && !disabled, ImGui::IsItemActive(), selected);
-		Util::Anim::FillLayer(drawList, min, max, rounding, ImGuiCol_HeaderHovered, blend.hover);
-		Util::Anim::FillLayer(drawList, min, max, rounding, ImGuiCol_HeaderActive, blend.press);
-		if (selected || blend.selected > 0.0f) {
-			// The selected pill is one shape that glides between the pills; one that was just left fades out in place
-			const auto pill = selected ? Util::Anim::SelectionGlide(ImHashStr("NavPillGlide"), min, max) : Util::Anim::GlideRect{ min, max };
-			const float alpha = selected ? 1.0f : blend.selected;
-			ImVec4 accent = Util::Colors::GetAccent();
-			accent.w = Constants::SEGMENT_SELECTED_FILL_ALPHA * alpha;
-			drawList->AddRectFilled(pill.min, pill.max, ImGui::GetColorU32(accent), rounding);
-			accent.w = Constants::SEGMENT_SELECTED_OUTLINE_ALPHA * alpha;
-			drawList->AddRect(pill.min, pill.max, ImGui::GetColorU32(accent), rounding);
-		}
-
-		const ImVec4 textColor = ImGui::GetStyleColorVec4(disabled ? ImGuiCol_TextDisabled : ImGuiCol_Text);
-		const ImVec4 iconColor = (!disabled && menu.style != NavStyle::Plain) ? Util::Colors::GetAccent() : textColor;
-		const float iconGap = Constants::NAV_ROW_ICON_GAP * scale;
-
-		// Icon and label form one group centred in the pill, both centred on the pill's height by their ink. A narrow
-		// pill shrinks the pair to fit; past the smallest readable size only the icon stays, with the name on hover
-		const float fontSize = ImGui::GetFontSize();
-		const float available = std::max(0.0f, (max.x - min.x) - ImGui::GetStyle().FramePadding.x * 2.0f);
-		const float labelWidth = ImGui::CalcTextSize(menu.name.c_str()).x;
-		const float iconWidth = menu.icon ? lineHeight + iconGap : 0.0f;
-		const float fullWidth = iconWidth + labelWidth;
-		float fit = fullWidth > available && fullWidth > 0.0f ? available / fullWidth : 1.0f;
-		const bool iconOnly = menu.icon && fit < Constants::NAV_PILL_MIN_CONTENT_SCALE;
-		if (iconOnly)
-			fit = std::min(1.0f, available / lineHeight);
-		fit = std::max(fit, Constants::NAV_PILL_MIN_CONTENT_SCALE);
-
-		const float iconSize = lineHeight * fit;
-		const float groupWidth = iconOnly ? iconSize : fullWidth * fit;
-		float x = std::max(min.x, min.x + ((max.x - min.x) - groupWidth) * 0.5f);
-		drawList->PushClipRect(min, max, true);
-		if (menu.icon) {
-			Icons::DrawCenteredGlyph(drawList, ImVec2(x, min.y), ImVec2(iconSize, max.y - min.y), fontSize * fit, menu.icon, ImGui::GetColorU32(iconColor));
-			x += iconWidth * fit;
-		}
-		if (!iconOnly) {
-			// Shrinking about the line's middle keeps the ink-centred position of the full-size text
-			const float textY = Util::CenterTextTopY(min.y, max.y - min.y) + lineHeight * (1.0f - fit) * 0.5f;
-			drawList->AddText(ImGui::GetFont(), fontSize * fit, ImVec2(x, textY), ImGui::GetColorU32(textColor), menu.name.c_str());
-		}
-		drawList->PopClipRect();
-		if (iconOnly && ImGui::IsItemHovered())
-			ImGui::SetTooltip("%s", menu.name.c_str());
-		return clicked;
 	}
 
 	/// Set when a shortcut moved the selection, so the list scrolls the newly selected row into view.
@@ -349,29 +264,30 @@ namespace
 		return false;
 	}
 
-	void SeparatorTextWithFont(const char* text, Menu::FontRole role)
+	/** @brief Badge label of a pre-release stage; null for release features. */
+	const char* GetStageBadgeLabel(Feature::ReleaseStage stage)
 	{
-		MenuFonts::FontRoleGuard guard(role);
-		ImGui::SeparatorText(text);
-	}
-
-	void SeparatorTextWithFont(const std::string& text, Menu::FontRole role)
-	{
-		SeparatorTextWithFont(text.c_str(), role);
+		switch (stage) {
+		case Feature::ReleaseStage::Alpha:
+			return T("menu.features.badge_alpha", "Alpha");
+		case Feature::ReleaseStage::Beta:
+			return T("menu.features.badge_beta", "Beta");
+		default:
+			return nullptr;
+		}
 	}
 
 	/**
-	 * @brief Draws a feature header: the name in large text, then the stage tag and version bottom-aligned beside it,
+	 * @brief Draws a feature header: the name in large text, then the stage badge and version bottom-aligned beside it,
 	 * the description below and a separator.
 	 * @param featureName The display name of the feature
 	 * @param version The version string (can be empty)
 	 * @param description Short description shown below the title, wrapped to the content width
-	 * @param stageTag Release stage marker such as [BETA] (can be empty)
-	 * @param stageColor Colour of the stage tag
-	 * @param trailingX Receives the screen x just past the title, stage tag and version, where more annotations can go
+	 * @param stage Release stage; pre-release stages get a badge
+	 * @param trailingX Receives the screen x just past the title, stage badge and version, where more annotations can go
 	 * @return The height of just the title line (for button alignment)
 	 */
-	float DrawFeatureHeader(const std::string& featureName, const std::string& version, const std::string& description = "", const std::string& stageTag = "", ImVec4 stageColor = {}, float* trailingX = nullptr)
+	float DrawFeatureHeader(const std::string& featureName, const std::string& version, const std::string& description = "", Feature::ReleaseStage stage = Feature::ReleaseStage::Release, float* trailingX = nullptr)
 	{
 		const auto& themeSettings = globals::menu->GetTheme();
 		const ImVec4 textColor = themeSettings.Palette.Text;
@@ -396,14 +312,18 @@ namespace
 		const ImVec2 titleSize = scaledSize(Menu::FontRole::Title, featureName.c_str());
 		drawScaled(Menu::FontRole::Title, ImGui::GetStyleColorVec4(ImGuiCol_Text), featureName.c_str());
 
-		// Running x for the bottom-aligned annotations (stage tag, then version) right of the title
+		// Running x for the bottom-aligned annotations (stage badge, then version) right of the title
 		float annotationX = startPos.x + titleSize.x + itemSpacingX;
 
-		if (!stageTag.empty()) {
-			const ImVec2 tagSize = scaledSize(Menu::FontRole::Body, stageTag.c_str());
-			ImGui::SetCursorScreenPos(ImVec2(annotationX, startPos.y + titleSize.y - tagSize.y));
-			drawScaled(Menu::FontRole::Body, stageColor, stageTag.c_str());
-			annotationX += tagSize.x + itemSpacingX;
+		const bool hasStageBadge = stage != Feature::ReleaseStage::Release;
+		if (hasStageBadge) {
+			// Centred on the version's line
+			const float lineHeight = scaledSize(Menu::FontRole::Body, featureName.c_str()).y;
+			ImGui::SetCursorScreenPos(ImVec2(annotationX, startPos.y + titleSize.y - lineHeight));
+			ImGui::SetWindowFontScale(titleScale);
+			FeatureListRenderer::DrawStageBadge(stage, lineHeight);
+			ImGui::SetWindowFontScale(1.0f);
+			annotationX += ImGui::GetItemRectSize().x + itemSpacingX;
 		}
 
 		if (!version.empty()) {
@@ -416,7 +336,7 @@ namespace
 		}
 
 		// Back under the title block
-		if (!stageTag.empty() || !version.empty())
+		if (hasStageBadge || !version.empty())
 			ImGui::SetCursorScreenPos(ImVec2(startPos.x, startPos.y + titleSize.y + ImGui::GetStyle().ItemSpacing.y * 0.25f));
 
 		if (trailingX)
@@ -523,6 +443,25 @@ std::string FeatureListRenderer::TranslateCategory(std::string_view category)
 		return T("feature.category.water", "Water");
 
 	return std::string(category);
+}
+
+float FeatureListRenderer::MeasureStageBadge(Feature::ReleaseStage stage)
+{
+	const char* label = GetStageBadgeLabel(stage);
+	if (!label)
+		return 0.0f;
+	MenuFonts::FontRoleGuard badgeFont(Menu::FontRole::Subtext);
+	return Util::MeasureBadgeWidth(label);
+}
+
+void FeatureListRenderer::DrawStageBadge(Feature::ReleaseStage stage, float rowHeight)
+{
+	const char* label = GetStageBadgeLabel(stage);
+	if (!label)
+		return;
+	const auto& statusPalette = globals::menu->GetTheme().StatusPalette;
+	MenuFonts::FontRoleGuard badgeFont(Menu::FontRole::Subtext);
+	Util::Badge(label, stage == Feature::ReleaseStage::Alpha ? statusPalette.Error : statusPalette.Warning, rowHeight);
 }
 
 void FeatureListRenderer::RenderFeatureList(
@@ -673,15 +612,15 @@ std::vector<FeatureListRenderer::MenuFuncInfo> FeatureListRenderer::BuildMenuLis
 	// then the bottom group (kBottomMenuIds)
 	auto menuList = std::vector<MenuFuncInfo>{
 		BuiltInMenu{ MenuPageIds::kHome, T("menu.features.home", "Home"), []() { HomePageRenderer::RenderHomePage(); },
-			Icons::TI(MenuIcons::kHome), NavStyle::Plain, {}, false },
+			Icons::TI(MenuIcons::kHome), {}, false },
 		BuiltInMenu{ MenuPageIds::kPresets, T("menu.features.presets", "Presets"), []() { PresetsPageRenderer::Render(); },
-			Icons::TI(MenuIcons::kPresets), NavStyle::Accent, T("menu.features.presets_hint", "Control, change and manage your visual Presets to customise your CS experience"), true },
+			Icons::TI(MenuIcons::kPresets), T("menu.features.presets_hint", "Control, change and manage your visual Presets to customise your CS experience"), true },
 		BuiltInMenu{ MenuPageIds::kCSEditor, T("menu.features.cs_editor", "CS Editor"), []() { globals::features::csEditor.DrawSettings(); },
-			Icons::TI(MenuIcons::kCSEditor), NavStyle::Accent, {}, true },
+			Icons::TI(MenuIcons::kCSEditor), {}, true },
 	};
 	menuList.push_back(BuiltInMenu{ MenuPageIds::kSettings, T("menu.features.settings", "Settings"), drawSettings, Icons::TI(MenuIcons::kSettings) });
 	menuList.push_back(BuiltInMenu{ MenuPageIds::kProfiling, T("menu.features.profiling", "Profiling"), []() { ProfilingRenderer::RenderStatistics(); },
-		Icons::TI(MenuIcons::kProfiling), NavStyle::Plain, T("menu.features.profiling_hint", "What each feature costs per frame"), true });
+		Icons::TI(MenuIcons::kProfiling), T("menu.features.profiling_hint", "What each feature costs per frame"), true });
 
 	auto* state = globals::state;
 	const auto filter = globals::menu->GetSettings().FeatureListFilter & FeatureListFilter::kKnown;
@@ -834,24 +773,35 @@ void FeatureListRenderer::RenderLeftColumn(
 			topIds[topCount++] = i;
 	}
 	if (topCount > 0) {
-		// A rounded track holds the pages as pills, so the group reads as one segmented control
-		const float pad = ThemeManager::Constants::SEGMENT_TRACK_PAD * Util::GetUIScale();
-		// The pane clips at its own edge, which cut the top and the side borders; leave a little room
-		const float inset = ThemeManager::Constants::LEFT_PANE_EDGE_INSET * Util::GetUIScale();
-		ImVec2 trackMin = ImGui::GetCursorScreenPos();
-		trackMin.x += inset;
-		trackMin.y += inset;
-		const float trackWidth = ImGui::GetContentRegionAvail().x - inset * 2.0f;
-		const float pillGap = pad * ThemeManager::Constants::SEGMENT_PILL_GAP_RATIO;
-		const float pillWidth = (trackWidth - pad * 2.0f - pillGap * static_cast<float>(topCount - 1)) / static_cast<float>(topCount);
-		ImGui::GetWindowDrawList()->AddRectFilled(trackMin, ImVec2(trackMin.x + trackWidth, trackMin.y + ImGui::GetFrameHeight() + pad * 2.0f),
-			ImGui::GetColorU32(ImGuiCol_FrameBg), ImGui::GetStyle().FrameRounding + pad);
+		const bool canOpenEditor = EditorWindow::CanBeOpen();
+		std::array<Util::Segment, topIds.size()> segments;
+		int selected = -1;
 		for (size_t n = 0; n < topCount; n++) {
-			ImGui::SetCursorScreenPos(ImVec2(trackMin.x + pad + static_cast<float>(n) * (pillWidth + pillGap), trackMin.y + pad));
-			RenderBuiltInRow(*builtInAt(topIds[n]), topIds[n], selectedMenu, pillWidth);
+			const auto& menu = *builtInAt(topIds[n]);
+			segments[n] = { .label = menu.name.c_str(), .icon = menu.icon };
+			// The CS Editor segment opens its window instead of a page
+			if (menu.id == MenuPageIds::kCSEditor) {
+				segments[n].disabled = !canOpenEditor;
+				segments[n].tooltip = canOpenEditor ? T("menu.features.cs_editor_tooltip", "Opens the CS Editor window") :
+				                                      T("menu.features.cs_editor_needs_save", "Load a save to open the CS Editor");
+			} else if (selectedMenu == topIds[n]) {
+				selected = static_cast<int>(n);
+			}
 		}
-		ImGui::SetCursorScreenPos(ImVec2(trackMin.x - inset, trackMin.y + ImGui::GetFrameHeight() + pad * 2.0f));
-		ImGui::Dummy(ImVec2(trackWidth + inset * 2.0f, 0.0f));
+
+		// Keep the pane's edge from clipping the track
+		const float inset = ThemeManager::Constants::LEFT_PANE_EDGE_INSET * Util::GetUIScale();
+		const float width = ImGui::GetContentRegionAvail().x - inset * 2.0f;
+		ImGui::SetCursorScreenPos(ImVec2(ImGui::GetCursorScreenPos().x + inset, ImGui::GetCursorScreenPos().y + inset));
+		if (const int clicked = Util::SegmentedControl("##PageSwitcher", std::span(segments.data(), topCount), selected, { .width = width }); clicked >= 0) {
+			const auto& menu = *builtInAt(topIds[clicked]);
+			if (menu.id != MenuPageIds::kCSEditor)
+				selectedMenu = topIds[clicked];
+			else if (canOpenEditor)
+				CSEditor::OpenEditorWindow();
+			else  // Without a save, says why
+				EditorWindow::GetSingleton()->WarnOpeningBlocked();
+		}
 		ImGui::Spacing();
 	}
 
@@ -1037,28 +987,6 @@ void FeatureListRenderer::RenderAutoHidePane(
 	ImGui::PopStyleColor();
 }
 
-void FeatureListRenderer::RenderBuiltInRow(const BuiltInMenu& menu, size_t listId, size_t& selectedMenu, float width)
-{
-	ImGui::PushID(menu.id.data(), menu.id.data() + menu.id.size());
-	if (menu.id == MenuPageIds::kCSEditor) {
-		// Launcher: opens the editor window without leaving the current page
-		const bool canOpen = EditorWindow::CanBeOpen();
-		if (DrawNavRow(menu, false, !canOpen, width)) {
-			// Without a save the click says why, with the same warning the other ways of opening the editor give
-			if (canOpen)
-				CSEditor::OpenEditorWindow();
-			else
-				EditorWindow::GetSingleton()->WarnOpeningBlocked();
-		}
-		Util::AddTooltip(canOpen ? T("menu.features.cs_editor_tooltip", "Opens the CS Editor window") :
-								   T("menu.features.cs_editor_needs_save", "Load a save to open the CS Editor"),
-			Util::kTooltipWhenDisabled);
-	} else if (DrawNavRow(menu, selectedMenu == listId, false, width)) {
-		selectedMenu = listId;
-	}
-	ImGui::PopID();
-}
-
 void FeatureListRenderer::RenderRightColumn(
 	const std::vector<MenuFuncInfo>& menuList,
 	size_t selectedMenu,
@@ -1088,15 +1016,15 @@ void FeatureListRenderer::RenderRightColumn(
 	}
 }
 
-void FeatureListRenderer::ListMenuVisitor::operator()(const BuiltInMenu& menu)
+void FeatureListRenderer::ListMenuVisitor::operator()(const BuiltInMenu&)
 {
-	RenderBuiltInRow(menu, listId, selectedMenuRef);
+	// Built-in pages are the page switcher's segments, never list rows
 }
 
 void FeatureListRenderer::ListMenuVisitor::operator()(const std::string& label)
 {
 	// Themed via ImGuiCol_Separator
-	SeparatorTextWithFont(label, Menu::FontRole::Subheading);
+	Util::SeparatorTextWithFont(label.c_str(), Menu::FontRole::Subheading);
 }
 
 void FeatureListRenderer::ListMenuVisitor::operator()(const CategoryHeader& header)
@@ -1167,9 +1095,8 @@ void FeatureListRenderer::ListMenuVisitor::operator()(Feature* feat)
 
 	// The stage badge sits right after the name, regardless of loaded state; the indicator icons follow it
 	if (const auto stage = feat->GetReleaseStage(); stage != Feature::ReleaseStage::Release) {
-		MenuFonts::FontRoleGuard badgeFont(Menu::FontRole::Subtext);
-		BrowserUI::InlineBadge(stage == Feature::ReleaseStage::Alpha ? T("menu.features.badge_alpha", "Alpha") : T("menu.features.badge_beta", "Beta"),
-			Feature::GetReleaseStageColor(stage), rowMax.y - rowMin.y);
+		ImGui::SameLine();
+		DrawStageBadge(stage, rowMax.y - rowMin.y);
 	}
 
 	// Indicator icons stack after the name and badge: a standard gap before the first, a space between the rest
@@ -1366,9 +1293,8 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureHeader(Feature* feat, bo
 
 	// Title, version and description on the left; the title-only height aligns the buttons
 	const auto stage = feat->GetReleaseStage();
-	const std::string stageTag = Feature::GetReleaseStageTag(stage);  // empty for Release; color unused when tag is empty
 	float trailingX = titleStartPos.x;
-	const float titleOnlyHeight = DrawFeatureHeader(feat->GetDisplayName(), isLoaded ? feat->version : "", description, stageTag, Feature::GetReleaseStageColor(stage), &trailingX);
+	const float titleOnlyHeight = DrawFeatureHeader(feat->GetDisplayName(), isLoaded ? feat->version : "", description, stage, &trailingX);
 
 	const ImVec2 cursorPosAfterHeader = ImGui::GetCursorScreenPos();
 
@@ -1531,7 +1457,7 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureSettings(Feature* feat, 
 
 	if (hasFailedMessage && feat->DrawFailLoadMessage() && !FeatureIssues::IsObsoleteFeature(feat->GetShortName())) {
 		ImGui::Spacing();
-		SeparatorTextWithFont(T("menu.features.error_header", "Error"), Menu::FontRole::Subheading);
+		Util::SeparatorTextWithFont(T("menu.features.error_header", "Error"), Menu::FontRole::Subheading);
 		ImGui::TextColored(themeSettings.StatusPalette.Error, "%s", feat->failedLoadedMessage.c_str());
 	}
 }
@@ -1551,12 +1477,8 @@ void FeatureListRenderer::DrawMenuVisitor::RestoreDefaults(Feature* feat) const
 
 void FeatureListRenderer::DrawMenuVisitor::RenderActionsMenu(Feature* feat, bool canExport, bool canRestore, bool canUseBaselines)
 {
-	const float size = ImGui::GetFrameHeight();
-	{
-		auto style = Util::TransparentIconButtonStyle();
-		if (Icons::Button("##FeatureActions", Icons::TI(ICON_TI_DOTS), ImVec2(size, size)))
-			ImGui::OpenPopup("##FeatureActionsMenu");
-	}
+	if (Util::IconButton("##FeatureActions", Icons::TI(ICON_TI_DOTS), nullptr))
+		ImGui::OpenPopup("##FeatureActionsMenu");
 	Util::HoverTip(T("menu.features.actions_tooltip", "More actions"));
 
 	if (!ImGui::BeginPopup("##FeatureActionsMenu"))
@@ -1619,12 +1541,8 @@ void FeatureListRenderer::ToggleFavorite(Feature* feat)
 void FeatureListRenderer::DrawMenuVisitor::RenderFavoriteButton(Feature* feat)
 {
 	const bool isFavorite = globals::state->IsFeatureFavorite(feat->GetShortName());
-	const float size = ImGui::GetFrameHeight();
-	{
-		auto style = Util::TransparentIconButtonStyle();
-		if (Icons::Button("###Favorite", Icons::TI(isFavorite ? ICON_TI_PINNED_OFF : ICON_TI_PIN), ImVec2(size, size)))
-			ToggleFavorite(feat);
-	}
+	if (Util::IconButton("###Favorite", Icons::TI(isFavorite ? ICON_TI_PINNED_OFF : ICON_TI_PIN), nullptr))
+		ToggleFavorite(feat);
 
 	Util::HoverTip(isFavorite ? T("menu.features.remove_from_favorites_tooltip", "Remove from favorites: moves this feature back into the main list") : T("menu.features.add_to_favorites_tooltip", "Add to favorites: lists this feature at the top of the feature list"));
 }
