@@ -417,14 +417,14 @@ namespace
 	/** @brief Buttons into the CS Editor pages that author scene settings, which only open in game. */
 	void DrawEditorShortcuts()
 	{
-		if (Icons::LabeledButton("##SceneManagerOpenEditor", Icons::TI(MenuIcons::kCSEditor),
+		if (Util::LabeledButton("##SceneManagerOpenEditor", Icons::TI(MenuIcons::kCSEditor),
 				T("feature.scene_manager.open_editor", "Open Scene Manager")))
 			SceneSettingsUI::OpenSceneManagerPage();
 		Util::AddTooltip(T("feature.scene_manager.open_editor_tooltip",
 			"Open the CS Editor's Scene Manager page, to author time of day and interior settings."));
 
 		ImGui::SameLine();
-		if (Icons::LabeledButton("##SceneManagerOpenLocations", Icons::TI(MenuIcons::kLocations),
+		if (Util::LabeledButton("##SceneManagerOpenLocations", Icons::TI(MenuIcons::kLocations),
 				T("feature.scene_manager.open_locations", "Locations")))
 			SceneSettingsUI::OpenLocationsPage();
 		Util::AddTooltip(T("feature.scene_manager.open_locations_tooltip", "Open the CS Editor's Locations page, to add places to override."));
@@ -432,7 +432,7 @@ namespace
 		ImGui::SameLine();
 		{
 			Util::DisableGuard disable(!ScenePresetExport::CanExport());
-			if (Icons::LabeledButton("##SceneManagerExportPreset", SceneActionIcons::kExport,
+			if (Util::LabeledButton("##SceneManagerExportPreset", SceneActionIcons::kExport,
 					T("cs_editor.export_preset", "Export Preset..."))) {
 				CSEditor::OpenEditorWindow();
 				// The export dialog is drawn by the editor window, so it only opens once the editor has.

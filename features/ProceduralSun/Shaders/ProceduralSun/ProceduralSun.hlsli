@@ -1,7 +1,8 @@
 #ifndef PROCEDURAL_SUN_HLSLI
 #define PROCEDURAL_SUN_HLSLI
 
-namespace ProceduralSun
+// Distinct from the Effects 11 ProceduralSun namespace: both headers can be included in one Sky shader
+namespace StandaloneSun
 {
 	// The engine's fixed glare-visibility sample threshold assumes this sun-base half-width.
 	static const float VANILLA_SUN_BASE_HALF_WIDTH = 425.0f;

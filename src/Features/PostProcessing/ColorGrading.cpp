@@ -660,6 +660,13 @@ void ColorGrading::RestoreDefaultSettings()
 	recompileFlag = true;
 }
 
+void ColorGrading::ApplyContextualDefaults(json& a_settings) const
+{
+	auto& tonemappers = TonemapperInfo::GetTonemappers();
+	assert(tonemapperType >= 0 && tonemapperType < (int)tonemappers.size());
+	a_settings["tonemapParams"] = tonemappers[tonemapperType].default_settings;
+}
+
 bool ColorGrading::WantsAutoHDR() const
 {
 	auto& hdr = globals::features::hdrDisplay;

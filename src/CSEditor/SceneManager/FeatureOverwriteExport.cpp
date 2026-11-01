@@ -43,7 +43,6 @@ namespace
 	constexpr float kValueColumnEm = 6.0f;
 
 	constexpr size_t kNameBufferSize = 128;
-	constexpr size_t kSearchBufferSize = 256;
 	constexpr std::string_view kGroupSeparator = " / ";
 
 	/// CheckboxFlags states: every bit set reads as ticked, some as mixed.
@@ -105,7 +104,7 @@ namespace
 	{
 		std::vector<FeatureExport> features;
 		size_t viewed = 0;
-		char search[kSearchBufferSize]{};
+		std::string search;
 		std::optional<size_t> group;
 		bool inFileOnly = false;
 		bool removeUnticked = false;
@@ -330,7 +329,7 @@ namespace
 	/** @brief Search, a chip per group, and the in-file toggle. */
 	void DrawSettingFilters(const FeatureExport& entry)
 	{
-		BrowserUI::SearchField("##search", session.search, sizeof(session.search), T("ui.search", "Search..."),
+		Util::SearchField("##search", session.search, T("ui.search", "Search..."),
 			ImGui::GetFontSize() * kSearchWidthEm, true);
 		if (entry.groups.size() > 1) {
 			ImGui::PushID("groups");
@@ -673,18 +672,13 @@ void FeatureOverwritesPanel::DrawExport()
 
 void FeatureOverwritesPanel::DrawExportButton(Feature* feature, const char* id)
 {
-	const float size = ImGui::GetFrameHeight();
-	{
-		auto style = Util::TransparentIconButtonStyle();
-		if (Icons::Button(id, Icons::TI(ICON_TI_FILE_EXPORT), ImVec2(size, size)))
-			BeginExport(feature);
-	}
 	const auto tooltip = std::format("{}\n{}", T(TKEY("export.button_title"), "Export Feature Overwrite..."),
 		T(TKEY("export.button_tooltip"),
 			"Writes this feature's settings into a Baseline preset pack, applied from the Presets page. "
 			"Scene layers are left out.\n"
 			"For a full preset with scene layers, use Export Preset in the CS Editor (Ctrl+Shift+S)."));
-	Util::AddTooltip(tooltip.c_str());
+	if (Util::IconButton(id, Icons::TI(ICON_TI_FILE_EXPORT), tooltip.c_str()))
+		BeginExport(feature);
 }
 
 #undef I18N_KEY_PREFIX

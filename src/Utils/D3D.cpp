@@ -367,6 +367,7 @@ namespace Util
 		if (const auto cachedBlob = diskPath ? SIE::SShaderCache::ReadIntactBlob(*diskPath) : nullptr) {
 			ID3D11DeviceChild* shader = nullptr;
 			if (SUCCEEDED(CreateShaderObject(device, ProgramType, cachedBlob.get(), &shader))) {
+				Util::SetResourceName(shader, "%s:%s", str.c_str(), Program);
 				logger::debug("Loaded {} from {}", str, Util::WStringToString(*diskPath));
 				return shader;
 			}
@@ -389,6 +390,7 @@ namespace Util
 
 		ID3D11DeviceChild* shader = nullptr;
 		DX::ThrowIfFailed(CreateShaderObject(device, ProgramType, shaderBlob.get(), &shader));
+		Util::SetResourceName(shader, "%s:%s", str.c_str(), Program);
 		return shader;
 	}
 

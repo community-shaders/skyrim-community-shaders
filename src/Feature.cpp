@@ -324,51 +324,6 @@ bool Feature::ToggleAtBootSetting()
 	return state->IsFeatureDisabled(featureName);  // Return the new state
 }
 
-std::string Feature::GetDisplayCategory() const
-{
-	const auto category = GetCategory();
-	if (category == FeatureCategories::kCharacters)
-		return T("feature.category.characters", "Characters");
-	if (category == FeatureCategories::kDisplay)
-		return T("feature.category.display", "Display");
-	if (category == FeatureCategories::kGrass)
-		return T("feature.category.grass", "Grass");
-	if (category == FeatureCategories::kLandscapeAndTextures)
-		return T("feature.category.landscape_and_textures", "Landscape & Textures");
-	if (category == FeatureCategories::kLighting)
-		return T("feature.category.lighting", "Lighting");
-	if (category == FeatureCategories::kMaterials)
-		return T("feature.category.materials", "Materials");
-	if (category == FeatureCategories::kOther)
-		return T("feature.category.other", "Other");
-	if (category == FeatureCategories::kSky)
-		return T("feature.category.sky", "Sky");
-	if (category == FeatureCategories::kUtility)
-		return T("feature.category.utility", "Utility");
-	if (category == FeatureCategories::kWater)
-		return T("feature.category.water", "Water");
-
-	return std::string(category);
-}
-
-std::string Feature::GetReleaseStageTag(ReleaseStage stage)
-{
-	switch (stage) {
-	case ReleaseStage::Alpha:
-		return T("menu.features.tag_alpha", "[ALPHA]");
-	case ReleaseStage::Beta:
-		return T("menu.features.tag_beta", "[BETA]");
-	default:
-		return {};
-	}
-}
-
-ImVec4 Feature::GetReleaseStageColor(ReleaseStage stage)
-{
-	const auto& statusPalette = globals::menu->GetTheme().StatusPalette;
-	return stage == ReleaseStage::Alpha ? statusPalette.Error : statusPalette.Warning;
-}
-
 void Feature::DrawUnloadedUI()
 {
 	// Prioritize detailed failure message if available
