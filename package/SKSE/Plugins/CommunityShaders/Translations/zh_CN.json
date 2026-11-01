@@ -3889,8 +3889,6 @@
     "menu.settings.surface_home_card_tooltip": "主页上的面板。禁用时显示为普通区块，标题行和内边距保留。",
     "menu.settings.surface_nav_fill_opacity": "填充不透明度",
     "menu.settings.surface_nav_fill_opacity_tooltip": "选中行背后强调色填充的不透明度。",
-    "menu.settings.surface_nav_selected": "选中的导航行",
-    "menu.settings.surface_nav_selected_tooltip": "左侧导航中选中行背后的高亮。",
     "menu.settings.surface_overlay_card": "状态卡片",
     "menu.settings.surface_overlay_card_tooltip": "显示着色器编译进度的卡片。",
     "menu.settings.surface_padding": "内边距",

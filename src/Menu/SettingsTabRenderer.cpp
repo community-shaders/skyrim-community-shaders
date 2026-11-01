@@ -101,7 +101,7 @@ namespace
 		{ Ids::kStyling, "menu.settings.surface_toast", "Notification Toasts" },
 		{ Ids::kStyling, "menu.settings.surface_overlay_card", "Status Card" },
 		{ Ids::kStyling, "menu.settings.surface_palette", "Go To Palette" },
-		{ Ids::kStyling, "menu.settings.surface_nav_selected", "Selected Navigation Row" },
+		{ Ids::kStyling, "menu.settings.surface_list_highlight", "List Highlight" },
 		{ Ids::kStyling, "menu.settings.surface_option_card", "Option Cards" },
 		{ Ids::kStyling, "menu.settings.surface_section_card", "Section Cards" },
 		{ Ids::kStyling, "menu.settings.surface_padding", "Inner Padding" },
@@ -1512,7 +1512,7 @@ namespace
 		case SurfaceRole::Palette:
 			return T("menu.settings.surface_palette", "Go To Palette");
 		case SurfaceRole::ListHighlight:
-			return T("menu.settings.surface_nav_selected", "Selected Navigation Row");
+			return T("menu.settings.surface_list_highlight", "List Highlight");
 		case SurfaceRole::OptionCard:
 			return T("menu.settings.surface_option_card", "Option Cards");
 		case SurfaceRole::SectionCard:
@@ -1534,7 +1534,7 @@ namespace
 		case SurfaceRole::Palette:
 			return T("menu.settings.surface_palette_tooltip", "The Ctrl+K go-to palette.");
 		case SurfaceRole::ListHighlight:
-			return T("menu.settings.surface_nav_selected_tooltip", "The highlight behind the selected row of the left navigation.");
+			return T("menu.settings.surface_list_highlight_tooltip", "The highlight behind selected and hovered rows in lists, menus and dropdowns.");
 		case SurfaceRole::OptionCard:
 			return T("menu.settings.surface_option_card_tooltip", "Clickable cards that pick a tool or mode, such as the tools on the Developer Tools page. The selected card takes the accent colour as its border.");
 		case SurfaceRole::SectionCard:

@@ -4070,8 +4070,6 @@
     "menu.settings.surface_home_card_tooltip": "Panelerna på startsidan. När de inaktiveras ritas de som vanliga avsnitt; rubrikraden och mellanrummet behålls.",
     "menu.settings.surface_nav_fill_opacity": "Fyllningsopacitet",
     "menu.settings.surface_nav_fill_opacity_tooltip": "Opaciteten för accentfärgens fyllning bakom den valda raden.",
-    "menu.settings.surface_nav_selected": "Vald navigeringsrad",
-    "menu.settings.surface_nav_selected_tooltip": "Markeringen bakom den valda raden i den vänstra navigeringen.",
     "menu.settings.surface_option_card": "Alternativkort",
     "menu.settings.surface_option_card_tooltip": "Klickbara kort som väljer ett verktyg eller läge, till exempel verktygen på sidan Utvecklarverktyg. Det valda kortet får accentfärgen som kant.",
     "menu.settings.surface_overlay_card": "Statuskort",
