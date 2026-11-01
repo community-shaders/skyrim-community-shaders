@@ -31,7 +31,7 @@ namespace
 
 	bool MatchesSearch(const Options& options, Feature* feature)
 	{
-		return options.search.empty() || Util::FeatureMatchesSearch(feature, options.search.data());
+		return !options.search || Util::FeatureMatchesSearch(feature, *options.search);
 	}
 
 	/** @brief Name tinted by boot state, with the marker dot painted just past it. */
@@ -102,9 +102,8 @@ namespace
 
 void FeatureListPicker::Draw(std::span<Feature* const> features, std::string& selected, const Options& options)
 {
-	if (!options.search.empty())
-		Util::SearchField("##FeatureSearch", options.search.data(), options.search.size(), T("ui.search_features", "Search Features..."),
-			ImGui::GetContentRegionAvail().x, false);
+	if (options.search)
+		Util::SearchField("##FeatureSearch", *options.search, T("ui.search_features", "Search Features..."), ImGui::GetContentRegionAvail().x, false);
 
 	for (auto* feature : options.pinned) {
 		if (feature && MatchesSearch(options, feature))

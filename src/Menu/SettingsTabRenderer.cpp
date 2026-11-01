@@ -303,6 +303,7 @@ namespace
 	/** @brief State of the Colours page's toolbar. UI state only. */
 	struct ColorsPageState
 	{
+		std::string filterText;
 		ImGuiTextFilter filter;
 		bool changedOnly = false;
 	};
@@ -1719,9 +1720,10 @@ void SettingsTabRenderer::RenderColorsSection()
 
 	// Toolbar: search, Changed only, then undo / redo / reset on the right
 	{
-		if (Util::SearchField("##ColorFilter", pageState.filter.InputBuf, IM_ARRAYSIZE(pageState.filter.InputBuf),
-				T("menu.settings.filter_colors", "Filter colors"), ImGui::GetFontSize() * 14.0f, false))
+		if (Util::SearchField("##ColorFilter", pageState.filterText, T("menu.settings.filter_colors", "Filter colors"), ImGui::GetFontSize() * 14.0f, false)) {
+			strncpy_s(pageState.filter.InputBuf, pageState.filterText.c_str(), _TRUNCATE);
 			pageState.filter.Build();
+		}
 
 		ImGui::SameLine();
 		Util::CheckboxTip(T("menu.settings.colors_changed_only", "Changed only"), &pageState.changedOnly,

@@ -79,7 +79,7 @@ namespace
 	/// Form edits a CS or E11 export carries, read once when the dialog opens.
 	FormEditSources::FormKeySet formEditKeys;
 	std::string formEditSummary;
-	char pickerSearch[256]{};
+	std::string pickerSearch;
 
 	Util::DeferredModal dialog;
 	/// Also write the base Post Processing settings as the pack's Baseline file: how Post Processing presets are made.
@@ -401,10 +401,10 @@ namespace
 		const float scale = Util::GetUIScale();
 
 		if (ImGui::IsWindowAppearing()) {
-			pickerSearch[0] = '\0';
+			pickerSearch.clear();
 			ImGui::SetKeyboardFocusHere();
 		}
-		Util::SearchField("##ScenePresetExportPickerSearch", pickerSearch, sizeof(pickerSearch), T("menu.presets.search", "Search presets..."), -1.0f, false);
+		Util::SearchField("##ScenePresetExportPickerSearch", pickerSearch, T("menu.presets.search", "Search presets..."), -1.0f, false);
 
 		auto& catalog = UnifiedPresetCatalog::GetSingleton();
 		const auto currentId = Util::FileHelpers::SanitizeFileName(form.name);

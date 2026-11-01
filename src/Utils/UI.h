@@ -1193,7 +1193,7 @@ namespace Util
 	 * @param searchQuery The search query string
 	 * @return True if the feature matches the search query
 	 */
-	bool FeatureMatchesSearch(Feature* feat, std::string_view searchQuery);
+	bool FeatureMatchesSearch(Feature* feat, const std::string& searchQuery);
 
 	/**
 	 * @brief Generic case-insensitive string matching for search functionality.
@@ -1201,7 +1201,7 @@ namespace Util
 	 * @param searchQuery The search query string
 	 * @return True if the text matches the search query (case-insensitive)
 	 */
-	bool StringMatchesSearch(std::string_view text, std::string_view searchQuery);
+	bool StringMatchesSearch(const std::string& text, const std::string& searchQuery);
 
 	/**
 	 * @brief Search input with a magnifier inside the frame and a clear button while it holds text.
@@ -1210,7 +1210,7 @@ namespace Util
 	 * @param flags, callback, userData Passed on to the input, alongside EscapeClearsAll.
 	 * @return True when the text changed this frame.
 	 */
-	bool SearchField(const char* id, char* buffer, size_t bufferSize, const char* hint, float width, bool ctrlFFocus,
+	bool SearchField(const char* id, std::string& text, const char* hint, float width, bool ctrlFFocus,
 		ImGuiInputTextFlags flags = 0, ImGuiInputTextCallback callback = nullptr, void* userData = nullptr);
 
 	/**
@@ -1638,10 +1638,7 @@ namespace Util
 		 */
 		void RenderControls(const std::vector<std::string>& columnHeaders)
 		{
-			char filterBuffer[256] = { 0 };
-			strncpy_s(filterBuffer, filterText.c_str(), sizeof(filterBuffer) - 1);
-
-			SearchField("##TableFilter", filterBuffer, IM_ARRAYSIZE(filterBuffer), ::T("ui.search", "Search..."), ImGui::CalcItemWidth(), false);
+			SearchField("##TableFilter", filterText, ::T("ui.search", "Search..."), ImGui::CalcItemWidth(), false);
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::Text("Filter table by the selected column. Case-insensitive.");
 			}
@@ -1657,9 +1654,6 @@ namespace Util
 			}
 
 			ImGui::Combo("Search In", &searchColumn, searchOptionsCStr.data(), static_cast<int>(searchOptionsCStr.size()));
-
-			// Update filter text from buffer
-			filterText = filterBuffer;
 		}
 	};
 

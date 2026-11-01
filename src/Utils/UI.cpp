@@ -29,6 +29,7 @@
 #include <dxgi.h>
 #include <imgui.h>
 #include <imgui_internal.h>
+#include <imgui_stdlib.h>
 #include <wrl/client.h>
 
 #include "../Feature.h"
@@ -2265,7 +2266,7 @@ namespace Util
 			return badColor;
 	}
 
-	bool FeatureMatchesSearch(Feature* feat, std::string_view searchQuery)
+	bool FeatureMatchesSearch(Feature* feat, const std::string& searchQuery)
 	{
 		if (searchQuery.empty())
 			return true;
@@ -2283,7 +2284,7 @@ namespace Util
 		       contains(FeatureListRenderer::TranslateCategory(feat->GetCategory()));
 	}
 
-	bool StringMatchesSearch(std::string_view text, std::string_view searchQuery)
+	bool StringMatchesSearch(const std::string& text, const std::string& searchQuery)
 	{
 		if (searchQuery.empty())
 			return true;
@@ -2331,7 +2332,7 @@ namespace Util
 	{
 		struct ComboSearchState
 		{
-			char buffer[256] = {};
+			std::string buffer;
 			bool needsFocus = true;
 		};
 
@@ -2342,7 +2343,7 @@ namespace Util
 		}
 	}
 
-	bool SearchField(const char* id, char* buffer, size_t bufferSize, const char* hint, float width, bool ctrlFFocus,
+	bool SearchField(const char* id, std::string& text, const char* hint, float width, bool ctrlFFocus,
 		ImGuiInputTextFlags flags, ImGuiInputTextCallback callback, void* userData)
 	{
 		ImGui::PushID(id);
@@ -2358,12 +2359,12 @@ namespace Util
 			ImGui::SetKeyboardFocusHere();
 
 		// The clear button sits over the frame's right end, so the input has to let it take the hover.
-		const bool hadText = buffer[0] != '\0';
+		const bool hadText = !text.empty();
 		if (hadText)
 			ImGui::SetNextItemAllowOverlap();
 		ImGui::SetNextItemWidth(width);
 		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(padLeft, style.FramePadding.y));
-		bool changed = ImGui::InputTextWithHint("##input", hint, buffer, bufferSize,
+		bool changed = ImGui::InputTextWithHint("##input", hint, &text,
 			ImGuiInputTextFlags_EscapeClearsAll | flags, callback, userData);
 		ImGui::PopStyleVar();
 		const ImGuiLastItemData inputItem = ImGui::GetCurrentContext()->LastItemData;
@@ -2382,11 +2383,11 @@ namespace Util
 				ImVec2(iconSize, frameHeight), Icons::TI(MenuIcons::kSearch), ImGui::GetColorU32(iconColor));
 		}
 
-		if (buffer[0] != '\0') {
+		if (!text.empty()) {
 			const ImVec2 clearMin(max.x - frameHeight, min.y);
 			ImGui::SetCursorScreenPos(clearMin);
 			if (ImGui::InvisibleButton("##clear", ImVec2(frameHeight, frameHeight))) {
-				buffer[0] = '\0';
+				text.clear();
 				changed = true;
 			}
 			const bool hovered = ImGui::IsItemHovered();
@@ -2413,7 +2414,7 @@ namespace Util
 
 		char widgetId[128];
 		snprintf(widgetId, sizeof(widgetId), "##%s_search", id);
-		SearchField(widgetId, state.buffer, IM_ARRAYSIZE(state.buffer), T("ui.search", "Search..."), ImGui::CalcItemWidth(), false);
+		SearchField(widgetId, state.buffer, T("ui.search", "Search..."), ImGui::CalcItemWidth(), false);
 		ImGui::Separator();
 
 		return state.buffer;
@@ -2422,7 +2423,7 @@ namespace Util
 	void ClearComboSearch(const char* id)
 	{
 		auto& state = detail::GetComboSearchStates()[id];
-		state.buffer[0] = '\0';
+		state.buffer.clear();
 		state.needsFocus = true;
 	}
 

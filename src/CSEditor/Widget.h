@@ -15,7 +15,6 @@
 namespace WidgetUI
 {
 	// Search bar / dropdown
-	constexpr int kSearchBufferSize = 256;
 	constexpr float kSearchBarWidth = 200.0f;
 	constexpr float kSearchDropdownWidth = 300.0f;
 	constexpr size_t kSearchDropdownMaxResults = 5;
@@ -287,7 +286,7 @@ public:
 	void DrawWidgetHeader(const char* searchId, bool showApply = true, bool showSaveLoadRevert = false, bool showForceWeather = false, RE::TESWeather* weather = nullptr);
 
 	// Search functionality
-	char searchBuffer[WidgetUI::kSearchBufferSize] = "";
+	std::string searchBuffer;
 	int deleteConfirmationFrame = -1;
 
 	// Unified search dropdown + tab navigation + highlight helpers.
@@ -374,7 +373,7 @@ public:
 	}
 
 	/** @brief Returns true if a search is active or the user navigated from search, indicating sections should be expanded. */
-	bool ShouldOpenSearchSection() const { return searchBuffer[0] != '\0' || navigatedFromSearch; }
+	bool ShouldOpenSearchSection() const { return !searchBuffer.empty() || navigatedFromSearch; }
 
 	/** @brief Applies the edits at once when they changed and the editor is set to apply changes as they are made. */
 	void AutoApply(bool changed);

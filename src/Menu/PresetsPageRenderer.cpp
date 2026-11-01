@@ -30,7 +30,7 @@
 #include <vector>
 
 std::optional<UnifiedPresetCatalog::PresetType> PresetsPageRenderer::typeFilter;
-char PresetsPageRenderer::searchBuffer[128] = {};
+std::string PresetsPageRenderer::searchBuffer;
 std::string PresetsPageRenderer::selectedPackId;
 bool PresetsPageRenderer::discovered = false;
 std::string PresetsPageRenderer::lightboxPackId;
@@ -342,7 +342,7 @@ void PresetsPageRenderer::RenderToolbar()
 	auto& catalog = UnifiedPresetCatalog::GetSingleton();
 	const float scale = Util::GetUIScale();
 
-	Util::SearchField("##PresetSearch", searchBuffer, IM_ARRAYSIZE(searchBuffer),
+	Util::SearchField("##PresetSearch", searchBuffer,
 		T("menu.presets.search", "Search presets..."), ThemeManager::Constants::PRESET_SEARCH_WIDTH * scale, true);
 
 	ImGui::SameLine();

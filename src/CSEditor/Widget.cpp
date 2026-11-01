@@ -822,7 +822,7 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 
 	// Rebuild match list only when the query changed; this gates per-frame
 	// CollectSearchableSettings() walks plus three case-insensitive searches per entry.
-	if (searchBuffer[0] != '\0') {
+	if (!searchBuffer.empty()) {
 		if (searchResultsForQuery != searchBuffer) {
 			searchResults = CollectSearchableSettings();
 			std::erase_if(searchResults, [&](const SearchResult& r) {
@@ -896,7 +896,7 @@ void Widget::DrawSearchInput(const char* searchId, float width)
 		ClearSearchState(true);
 		ImGui::SetKeyboardFocusHere();
 	}
-	if (Util::SearchField(searchId, searchBuffer, sizeof(searchBuffer), T(TKEY("search_settings_hint"), "Search settings (Ctrl+F)"), width, false))
+	if (Util::SearchField(searchId, searchBuffer, T(TKEY("search_settings_hint"), "Search settings (Ctrl+F)"), width, false))
 		dropdownVisible = true;
 	searchInputMin = ImGui::GetItemRectMin();
 	searchInputMax = ImGui::GetItemRectMax();
@@ -905,7 +905,7 @@ void Widget::DrawSearchInput(const char* searchId, float width)
 void Widget::ClearSearchState(bool clearBuffer)
 {
 	if (clearBuffer)
-		searchBuffer[0] = '\0';
+		searchBuffer.clear();
 	searchResults.clear();
 	searchResultsForQuery.clear();
 	dropdownVisible = false;
@@ -930,7 +930,7 @@ int Widget::GetTabFlagsForOverride(const std::string& tabName)
 
 bool Widget::MatchesSearch(const std::string& settingId) const
 {
-	if (searchBuffer[0] == '\0')
+	if (searchBuffer.empty())
 		return true;
 	return std::any_of(searchResults.begin(), searchResults.end(),
 		[&](const SearchResult& r) { return r.settingId == settingId; });

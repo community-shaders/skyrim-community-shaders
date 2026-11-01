@@ -476,7 +476,7 @@ namespace
 		const bool chipsInline = avail - fixedWidth - chipsWidth - spacing >= kMinSearchWidth * scale;
 		const float searchWidth = std::max(kMinSearchWidth * scale * 0.5f, avail - fixedWidth - (chipsInline ? chipsWidth + spacing : 0.0f));
 
-		Util::SearchField("##ObjectFilter", state.filter, sizeof(state.filter), T(TKEY("filter_hint"), "Filter... (Ctrl+F)"), searchWidth, true);
+		Util::SearchField("##ObjectFilter", state.filter, T(TKEY("filter_hint"), "Filter... (Ctrl+F)"), searchWidth, true);
 
 		ImGui::SameLine();
 		ImGui::SetNextItemWidth(scopeWidth);

@@ -596,7 +596,7 @@ private:
 	bool escapeConsumed = false;
 
 	// Settings page: Disable at Boot list filter
-	std::array<char, 128> disableAtBootSearch{};
+	std::string disableAtBootSearch;
 	bool disableAtBootDisabledOnly = false;
 
 	// Skyrim AFK vanity camera: delayed spin while idle. Held off while any CS UI is open.

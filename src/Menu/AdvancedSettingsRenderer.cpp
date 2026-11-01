@@ -356,7 +356,7 @@ void AdvancedSettingsRenderer::RenderActiveShadersSection()
 								  .c_str());
 
 	// Static variables to maintain table filter state
-	static char filterText[256] = "";
+	static std::string filterText;
 	static int searchColumn = 0;        // 0 = All Columns, then one per column: Type, Class, Descriptor, Frame %, Key
 	static size_t sortColumn = 3;       // Default sort by Frame % (draw calls)
 	static bool sortAscending = false;  // Descending by default (highest usage first)
@@ -463,7 +463,7 @@ void AdvancedSettingsRenderer::RenderActiveShadersSection()
 	Util::TableFilterState<ShaderRow> filterState(getFilterableFields);
 
 	// Initialize filter state from existing variables
-	filterState.filterText = std::string(filterText, filterText + strlen(filterText));
+	filterState.filterText = filterText;
 	filterState.searchColumn = searchColumn;
 
 	// Define input events for row interactions
@@ -490,8 +490,7 @@ void AdvancedSettingsRenderer::RenderActiveShadersSection()
 		0.0f);
 
 	// Update static variables with modified filter state
-	strncpy_s(filterText, filterState.filterText.c_str(), sizeof(filterText) - 1);
-	filterText[sizeof(filterText) - 1] = '\0';
+	filterText = filterState.filterText;
 	searchColumn = filterState.searchColumn;
 }
 
