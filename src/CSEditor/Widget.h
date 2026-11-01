@@ -18,7 +18,6 @@
 namespace WidgetUI
 {
 	// Search bar / dropdown
-	constexpr int kSearchBufferSize = 256;
 	constexpr float kSearchBarWidth = 200.0f;
 	constexpr float kSearchDropdownWidth = 300.0f;
 	constexpr size_t kSearchDropdownMaxResults = 5;
@@ -329,7 +328,7 @@ public:
 		bool customHeaderActionsDrawn = false;
 		bool titleBarSearchDrawn = false;
 
-		char searchBuffer[WidgetUI::kSearchBufferSize] = "";
+		std::string searchBuffer;
 		// Cached dropdown position from DrawWidgetHeader so DrawSearchDropdown() can anchor below the search bar.
 		ImVec2 searchDropdownAnchor{ 0.0f, 0.0f };
 		ImVec2 searchInputMin{ 0.0f, 0.0f };
@@ -425,7 +424,7 @@ public:
 	}
 
 	/** @brief Returns true if a search is active or the user navigated from search, indicating sections should be expanded. */
-	bool ShouldOpenSearchSection() const { return View().searchBuffer[0] != '\0' || View().navigatedFromSearch; }
+	bool ShouldOpenSearchSection() const { return !View().searchBuffer.empty() || View().navigatedFromSearch; }
 
 	/** @brief Applies the edits at once when they changed and the editor is set to apply changes as they are made. */
 	void AutoApply(bool changed);
@@ -527,6 +526,8 @@ protected:
 	int focusedViewId = 0;
 
 	void ClearSearchState(bool clearBuffer);
+	/** @brief The settings search input at the cursor; Ctrl+F focuses it and starts a fresh search. */
+	void DrawSearchInput(const char* searchId, float width);
 	virtual void NavigateToSearchResult(const SearchResult& result);
 };
 

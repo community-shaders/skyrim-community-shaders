@@ -189,19 +189,6 @@ namespace Util::Anim
 	 */
 	bool GlideSelectable(SelectableFn real, const char* label, bool selected, ImGuiSelectableFlags flags, const ImVec2& size);
 
-	/**
-	 * @brief Scope for rows that draw their own highlight (a custom pill, say): Selectables inside it skip the list
-	 * highlight. Everything else gets it automatically.
-	 */
-	class NoListHighlight
-	{
-	public:
-		NoListHighlight();
-		~NoListHighlight();
-		NoListHighlight(const NoListHighlight&) = delete;
-		NoListHighlight& operator=(const NoListHighlight&) = delete;
-	};
-
 	/** @brief Signature of ImGui::BeginPopupEx, which BeginPopup, BeginPopupContextItem and BeginMenu funnel into. */
 	using BeginPopupExFn = bool (*)(ImGuiID, ImGuiWindowFlags);
 	/** @brief Signature of ImGui::BeginComboPopup, the popup of every combo. */

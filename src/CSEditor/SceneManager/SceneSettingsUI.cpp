@@ -124,7 +124,7 @@ namespace
 
 	struct LocationPickerState
 	{
-		char search[256]{};
+		std::string search;
 		/// Catalog indices passing the search, rebuilt only when the query changes.
 		std::vector<size_t> matches;
 		bool matchesValid = false;
@@ -133,7 +133,7 @@ namespace
 	};
 	LocationPickerState locationPicker;
 
-	char authoredLocationSearch[256]{};
+	std::string authoredLocationSearch;
 	Util::ConfirmationPopup locationRemoveConfirmation;
 	/// The place the open remove confirmation is about.
 	std::optional<SceneSettingsManager::LocationTarget> pendingLocationRemoval;
@@ -568,20 +568,10 @@ namespace
 	/// Trailing icon action for an addable row: quiet until hovered, a check once the place is listed.
 	bool DrawLocationAddButton(bool authored)
 	{
-		const Icons::GlyphRef icon = authored ? SceneActionIcons::kAdded : SceneActionIcons::kAdd;
-		const float padding = ImGui::GetStyle().FramePadding.x * 0.5f;
-		const float width = Icons::CalcGlyphSize(icon).x + padding * 2.0f;
-		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(0.0f, ImGui::GetContentRegionAvail().x - width));
-
-		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, { padding, ImGui::GetStyle().FramePadding.y });
-		ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
-		auto _style = Util::TransparentIconButtonStyle();
-		ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetSecondary());
+		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(0.0f, ImGui::GetContentRegionAvail().x - Util::IconButtonSize()));
 		ImGui::BeginDisabled(authored);
-		const bool clicked = Icons::Button("##add", icon);
+		const bool clicked = Util::IconButton("##add", authored ? SceneActionIcons::kAdded : SceneActionIcons::kAdd, GetLocationAddTooltip(authored));
 		ImGui::EndDisabled();
-		ImGui::PopStyleColor();
-		ImGui::PopStyleVar(2);
 		return clicked;
 	}
 
@@ -631,7 +621,6 @@ namespace
 		const bool authored = manager.IsLocationTargetAuthored(target.type, target.formKey);
 		if (DrawLocationAddButton(authored))
 			manager.AddLocationTarget(target);
-		Util::AddTooltip(GetLocationAddTooltip(authored), Util::kTooltipWhenDisabled);
 
 		ImGui::PopID();
 	}
@@ -661,7 +650,7 @@ namespace
 			const bool authored = manager->IsLocationTargetAuthored(target.type, target.formKey);
 			const Icons::GlyphRef icon = GetLocationTargetIcon(target);
 			const float width = BrowserUI::MeasureChip(target.name.c_str(), icon.IsValid()) + ImGui::GetStyle().ItemInnerSpacing.x +
-			                    BrowserUI::IconButtonSize();
+			                    Util::IconButtonSize();
 
 			// The separator only sits between chips that share a line.
 			if (i > 0) {
@@ -691,7 +680,7 @@ namespace
 
 			ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x);
 			ImGui::BeginDisabled(authored);
-			if (BrowserUI::IconButton("##add", authored ? SceneActionIcons::kAdded : SceneActionIcons::kAdd,
+			if (Util::IconButton("##add", authored ? SceneActionIcons::kAdded : SceneActionIcons::kAdd,
 					GetLocationAddTooltip(authored),
 					false, ImGui::GetColorU32(authored ? Util::Colors::GetSuccess() : Util::Colors::GetAccent())))
 				manager->AddLocationTarget(target);
@@ -722,7 +711,7 @@ namespace
 		const auto& catalog = manager->GetLocationCatalog();
 		const float scale = Util::GetUIScale();
 
-		bool changed = BrowserUI::SearchField("##LocationSearch", locationPicker.search, IM_ARRAYSIZE(locationPicker.search),
+		bool changed = Util::SearchField("##LocationSearch", locationPicker.search,
 			T(TKEY("location_search"), "Search by name, editor ID, or type..."),
 			std::min(ImGui::GetContentRegionAvail().x, kLocationSearchWidth * scale), false);
 
@@ -818,7 +807,7 @@ namespace
 
 		// A filter only earns its row once the list is long enough to need one.
 		if (targets.size() > kAuthoredFilterThreshold) {
-			BrowserUI::SearchField("##AuthoredSearch", authoredLocationSearch, IM_ARRAYSIZE(authoredLocationSearch),
+			Util::SearchField("##AuthoredSearch", authoredLocationSearch,
 				T(TKEY("location_filter_list"), "Filter your list..."),
 				std::min(ImGui::GetContentRegionAvail().x, kLocationSearchWidth * Util::GetUIScale()), false);
 			if (const std::string query = authoredLocationSearch; !query.empty())
@@ -826,7 +815,7 @@ namespace
 		}
 
 		const auto& here = manager->GetCurrentLocationTargets();
-		const float button = BrowserUI::IconButtonSize();
+		const float button = Util::IconButtonSize();
 		const float actionWidth = button * 2.0f + ImGui::GetStyle().ItemSpacing.x;
 		{
 			BrowserUI::RowShadeScope shade;
@@ -863,13 +852,13 @@ namespace
 
 					ImGui::TableNextColumn();
 					ImGui::SetNextItemAllowOverlap();
-					if (BrowserUI::IconButton("##edit", Icons::TI(ICON_TI_PENCIL), T(TKEY("location_edit_tooltip"), "Edit its settings"), opened))
+					if (Util::IconButton("##edit", Icons::TI(ICON_TI_PENCIL), T(TKEY("location_edit_tooltip"), "Edit its settings"), opened))
 						OpenLocationWindow(target);
 					ImGui::SameLine(0.0f, ImGui::GetStyle().ItemSpacing.x);
 					ImGui::SetNextItemAllowOverlap();
-					if (BrowserUI::IconButton("##remove", SceneActionIcons::kDelete,
+					if (Util::IconButton("##remove", SceneActionIcons::kDelete,
 							T(TKEY("location_remove_tooltip"), "Drops the location from the list along with the settings authored for it."),
-							false, BrowserUI::DestructiveIconColor()))
+							false, Util::DestructiveIconColor()))
 						RequestLocationRemoval(target);
 
 					ImGui::PopID();

@@ -242,7 +242,7 @@ void EditorWindow::DrawActiveWeatherIndicator(bool drawTrailer)
 		openWeatherEditor();
 	Util::AddTooltip(std::format("{} (0x{:08X})", T(TKEY("open_active_weather_tooltip"), "Open this weather's editor window."), id).c_str());
 	ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x);
-	if (BrowserUI::IconButton("##active_weather_indicator", Icons::TI(ICON_TI_EXTERNAL_LINK),
+	if (Util::IconButton("##active_weather_indicator", Icons::TI(ICON_TI_EXTERNAL_LINK),
 			T(TKEY("open_active_weather_tooltip"), "Open this weather's editor window.")))
 		openWeatherEditor();
 	if (drawTrailer)
@@ -382,10 +382,10 @@ void EditorWindow::DrawBrowserSidebar(bool compact)
 
 	// Collapse / expand, kept at the bottom of the column.
 	const bool sceneManager = m_selectedCategory == "Scene Manager";
-	const float button = BrowserUI::IconButtonSize();
+	const float button = Util::IconButtonSize();
 	ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(0.0f, ImGui::GetContentRegionAvail().x - button) * (compact ? 0.5f : 1.0f));
 	ImGui::BeginDisabled(sceneManager);
-	if (BrowserUI::IconButton("##SidebarCompact", Icons::TI(compact ? ICON_TI_CHEVRON_RIGHT : ICON_TI_CHEVRON_LEFT),
+	if (Util::IconButton("##SidebarCompact", Icons::TI(compact ? ICON_TI_CHEVRON_RIGHT : ICON_TI_CHEVRON_LEFT),
 			sceneManager ? T(TKEY("sidebar_compact_scene_manager"), "Scene Manager keeps the full sidebar for its feature list.") :
 						   (compact ? T(TKEY("sidebar_expand"), "Expand the sidebar") : T(TKEY("sidebar_collapse"), "Collapse the sidebar to icons")))) {
 		settings.browserSidebarCompact = !settings.browserSidebarCompact;
@@ -1629,7 +1629,7 @@ void EditorWindow::ShowSettingsWindow()
 			ImGui::AlignTextToFramePadding();
 			ImGui::TextUnformatted(T(TKEY("editor_ui_scale"), "Editor UI Scale"));
 			ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x);
-			if (BrowserUI::IconButton("##ResetUIScale", Icons::TI(MenuIcons::kRestore), T(TKEY("reset_ui_scale_tooltip"), "Reset UI scale to default (100%)"))) {
+			if (Util::IconButton("##ResetUIScale", Icons::TI(MenuIcons::kRestore), T(TKEY("reset_ui_scale_tooltip"), "Reset UI scale to default (100%)"))) {
 				settings.editorUIScale = 1.0f;
 				Save();
 			}
@@ -1708,7 +1708,7 @@ void EditorWindow::ShowSettingsWindow()
 					}
 
 					ImGui::TableSetColumnIndex(2);
-					if (BrowserUI::IconButton(std::format("##{}", recordMarker.first).c_str(), Icons::TI(ICON_TI_TRASH), T(TKEY("delete"), "Delete")))
+					if (Util::IconButton(std::format("##{}", recordMarker.first).c_str(), Icons::TI(ICON_TI_TRASH), T(TKEY("delete"), "Delete")))
 						markerToDelete = recordMarker.first;
 				}
 

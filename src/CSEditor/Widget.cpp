@@ -591,21 +591,9 @@ bool Widget::DrawTitleBarActions(bool showApply, bool showSaveLoadRevert, bool s
 		const float searchX = cursorX + (actionsLeft - cursorX - searchWidth) * 0.5f;
 		const float searchY = titleRect.Min.y + (titleRect.GetHeight() - searchH) * 0.5f;
 		ImGui::SetCursorScreenPos(ImVec2(searchX, searchY));
-		ImGui::SetNextItemWidth(searchWidth);
-		bool ctrlF = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) &&
-		             ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_F, false);
-		if (ctrlF) {
-			ClearSearchState(true);
-			ImGui::SetKeyboardFocusHere();
-		}
-		auto& view = View();
-		ImGui::InputTextWithHint(searchId, T(TKEY("search_settings_hint"), "Search settings (Ctrl+F)"), view.searchBuffer, sizeof(view.searchBuffer));
-		view.searchInputMin = ImGui::GetItemRectMin();
-		view.searchInputMax = ImGui::GetItemRectMax();
-		if (ImGui::IsItemEdited())
-			view.dropdownVisible = true;
+		DrawSearchInput(searchId, searchWidth);
 		drewSearch = true;
-		view.titleBarSearchDrawn = true;
+		View().titleBarSearchDrawn = true;
 	}
 
 	if (actions.empty() && !drewSearch)
@@ -727,20 +715,8 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 	const bool searchInTitleBar = view.titleBarSearchDrawn;
 
 	auto drawSearchBar = [&]() {
-		if (searchInTitleBar)
-			return;
-		ImGui::SetNextItemWidth(WidgetUI::kSearchBarWidth * scale);
-		bool ctrlF = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) &&
-		             ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_F, false);
-		if (ctrlF) {
-			ClearSearchState(true);
-			ImGui::SetKeyboardFocusHere();
-		}
-		ImGui::InputTextWithHint(searchId, T(TKEY("search_settings_hint"), "Search settings (Ctrl+F)"), view.searchBuffer, sizeof(view.searchBuffer));
-		view.searchInputMin = ImGui::GetItemRectMin();
-		view.searchInputMax = ImGui::GetItemRectMax();
-		if (ImGui::IsItemEdited())
-			view.dropdownVisible = true;
+		if (!searchInTitleBar)
+			DrawSearchInput(searchId, WidgetUI::kSearchBarWidth * scale);
 	};
 
 	auto drawForceWeatherButton = [&]() {
@@ -812,7 +788,7 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 				auto tint = Util::StateHoverButtonStyle(Util::Colors::GetUnsaved(), unsaved);
 				if (unsaved)
 					ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetUnsaved());
-				if (Icons::Button(std::format("{}##_Save", searchId ? searchId : "").c_str(), Icons::TI(MenuIcons::kSave)))
+				if (Util::LabeledButton(std::format("{}##_Save", searchId ? searchId : "").c_str(), Icons::TI(MenuIcons::kSave)))
 					saveAll();
 				if (unsaved)
 					ImGui::PopStyleColor();
@@ -922,7 +898,7 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 
 	// Rebuild match list only when the query changed; this gates per-frame
 	// CollectSearchableSettings() walks plus three case-insensitive searches per entry.
-	if (view.searchBuffer[0] != '\0') {
+	if (!view.searchBuffer.empty()) {
 		if (view.searchResultsForQuery != view.searchBuffer) {
 			view.searchResults = CollectSearchableSettings();
 			std::erase_if(view.searchResults, [&](const SearchResult& r) {
@@ -991,11 +967,24 @@ void Widget::DrawSearchDropdown()
 	ImGui::PopStyleVar();
 }
 
+void Widget::DrawSearchInput(const char* searchId, float width)
+{
+	if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_F, false)) {
+		ClearSearchState(true);
+		ImGui::SetKeyboardFocusHere();
+	}
+	auto& view = View();
+	if (Util::SearchField(searchId, view.searchBuffer, T(TKEY("search_settings_hint"), "Search settings (Ctrl+F)"), width, false))
+		view.dropdownVisible = true;
+	view.searchInputMin = ImGui::GetItemRectMin();
+	view.searchInputMax = ImGui::GetItemRectMax();
+}
+
 void Widget::ClearSearchState(bool clearBuffer)
 {
 	auto& view = View();
 	if (clearBuffer)
-		view.searchBuffer[0] = '\0';
+		view.searchBuffer.clear();
 	view.searchResults.clear();
 	view.searchResultsForQuery.clear();
 	view.dropdownVisible = false;
@@ -1023,7 +1012,7 @@ int Widget::GetTabFlagsForOverride(const std::string& tabName)
 bool Widget::MatchesSearch(const std::string& settingId) const
 {
 	const auto& view = View();
-	if (view.searchBuffer[0] == '\0')
+	if (view.searchBuffer.empty())
 		return true;
 	return std::any_of(view.searchResults.begin(), view.searchResults.end(),
 		[&](const SearchResult& r) { return r.settingId == settingId; });

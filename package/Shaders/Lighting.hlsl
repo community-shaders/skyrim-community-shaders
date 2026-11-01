@@ -614,7 +614,7 @@ float GetRimLightMultiplier(float3 L, float3 V, float3 N)
 #	if !defined(TRUE_PBR)
 float ProcessSparkleColor(float color)
 {
-	return exp2(SparkleParams.y * log2(min(1, abs(color))));
+	return SparkleParams.y > 0 ? exp2(SparkleParams.y * log2(min(1, abs(color)))) : 1.0;
 }
 #	endif
 

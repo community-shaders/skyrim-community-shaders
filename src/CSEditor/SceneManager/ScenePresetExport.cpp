@@ -404,8 +404,7 @@ namespace
 			pickerSearch.clear();
 			ImGui::SetKeyboardFocusHere();
 		}
-		ImGui::SetNextItemWidth(-1);
-		ImGui::InputTextWithHint("##ScenePresetExportPickerSearch", T("menu.presets.search", "Search presets..."), &pickerSearch);
+		Util::SearchField("##ScenePresetExportPickerSearch", pickerSearch, T("menu.presets.search", "Search presets..."), -1.0f, false);
 
 		auto& catalog = UnifiedPresetCatalog::GetSingleton();
 		const auto currentId = Util::FileHelpers::SanitizeFileName(form.name);
