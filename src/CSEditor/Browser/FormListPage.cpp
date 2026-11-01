@@ -1278,7 +1278,7 @@ void FormListPage::Draw(Browser::FormListState& state, const Context& context)
 			{ { "shown", std::to_string(state.rows.size()) }, { "total", std::to_string(state.total) } }, "{shown} of {total} records");
 	BrowserUI::PageHeader(context.icon, context.title, subtitle.c_str());
 	if (hasList) {
-		BrowserUI::RightAlign(ImGui::CalcTextSize("(?)").x + ImGui::GetStyle().ItemSpacing.x + BrowserUI::IconButtonSize());
+		BrowserUI::RightAlign(Util::HelpMarkerWidth() + ImGui::GetStyle().ItemSpacing.x + BrowserUI::IconButtonSize());
 		Util::HelpMarker(T(TKEY("browser_help"),
 			"Click a row to inspect it; double-click it or press Enter to open its editor.\n"
 			"The arrow keys move through the list. Ctrl+F focuses the filter.\n"

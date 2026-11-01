@@ -104,7 +104,6 @@ public:
 	/** @brief Installs the BSGrassShader and main update hooks after all plugins have loaded. */
 	virtual void PostPostLoad() override;
 
-
 	struct Hooks
 	{
 		struct BSGrassShader_SetupGeometry

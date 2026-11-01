@@ -127,7 +127,7 @@ namespace
 		applyConfirmation.Request();
 	}
 
-	void DrawRoundedImage(ImDrawList* dl, ImTextureID texture, const ImVec2& p0, const ImVec2& p1, float rounding, ImU32 tint = IM_COL32_WHITE)
+	void DrawRoundedImage(ImDrawList* dl, ImTextureID texture, const ImVec2& p0, const ImVec2& p1, float rounding, ImU32 tint = ImGui::GetColorU32(IM_COL32_WHITE))
 	{
 		dl->AddImageRounded(texture, p0, p1, ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f), tint, rounding);
 	}
@@ -164,22 +164,17 @@ namespace
 		ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, diameter * 0.5f);
 		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0.0f, 0.0f));
 		ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, ImVec2(0.5f, 0.5f));
+		ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
 		ImGui::PushStyleColor(ImGuiCol_Button, ThemeManager::Constants::PRESET_VIEWER_ARROW_COLOR);
 		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ThemeManager::Constants::PRESET_VIEWER_ARROW_HOVER_COLOR);
 		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ThemeManager::Constants::PRESET_VIEWER_ARROW_ACTIVE_COLOR);
 
-		const bool clicked = ImGui::InvisibleButton(id, ImVec2(diameter, diameter));
-		const ImVec2 p0 = ImGui::GetItemRectMin();
-		const ImVec2 p1 = ImGui::GetItemRectMax();
-		ImDrawList* dl = ImGui::GetWindowDrawList();
-		const ImU32 bg = ImGui::GetColorU32(ImGui::IsItemActive()  ? ImGuiCol_ButtonActive :
-											ImGui::IsItemHovered() ? ImGuiCol_ButtonHovered :
-																	 ImGuiCol_Button);
-		dl->AddCircleFilled(ImVec2((p0.x + p1.x) * 0.5f, (p0.y + p1.y) * 0.5f), diameter * 0.5f, bg);
-		Icons::DrawCenteredGlyph(dl, p0, ImVec2(p1.x - p0.x, p1.y - p0.y), icon, ImGui::GetColorU32(ImGuiCol_Text));
+		// Rounded to a circle by the pushed FrameRounding
+		const bool clicked = Util::Button(id, ImVec2(diameter, diameter));
+		Icons::DrawCenteredGlyph(ImGui::GetWindowDrawList(), ImGui::GetItemRectMin(), ImGui::GetItemRectSize(), icon, ImGui::GetColorU32(ImGuiCol_Text));
 
 		ImGui::PopStyleColor(3);
-		ImGui::PopStyleVar(3);
+		ImGui::PopStyleVar(4);
 		return clicked;
 	}
 
@@ -524,7 +519,7 @@ void PresetsPageRenderer::RenderList(float width)
 			if (pack.logoSRV)
 				DrawRoundedImage(dl, reinterpret_cast<ImTextureID>(pack.logoSRV.get()), p0, p1, rounding);
 			else
-				dl->AddRectFilled(p0, p1, ImGui::ColorConvertFloat4ToU32(ThemeManager::Constants::PRESET_LOGO_PLACEHOLDER_COLOR), rounding);
+				dl->AddRectFilled(p0, p1, ImGui::GetColorU32(ThemeManager::Constants::PRESET_LOGO_PLACEHOLDER_COLOR), rounding);
 		}
 
 		ImGui::SameLine(0.0f, rowInset);
@@ -642,7 +637,7 @@ void PresetsPageRenderer::RenderDetail()
 				DrawRoundedImage(dl, reinterpret_cast<ImTextureID>(poster), origin, p1, rounding);
 			} else {
 				dl->AddRectFilled(origin, p1,
-					ImGui::ColorConvertFloat4ToU32(ThemeManager::Constants::PRESET_POSTER_PLACEHOLDER_COLOR), rounding);
+					ImGui::GetColorU32(ThemeManager::Constants::PRESET_POSTER_PLACEHOLDER_COLOR), rounding);
 			}
 		}
 
@@ -754,9 +749,9 @@ void PresetsPageRenderer::RenderDetail()
 			if (pack->screenshotSRVs[i])
 				DrawRoundedImage(dl, reinterpret_cast<ImTextureID>(pack->screenshotSRVs[i].get()), p0, p1, style.FrameRounding);
 			if (isOpen || ImGui::IsItemHovered()) {
-				const ImU32 border = ImGui::ColorConvertFloat4ToU32(isOpen ?
-																		theme.StatusPalette.InfoColor :
-																		ImGui::GetStyleColorVec4(ImGuiCol_Border));
+				const ImU32 border = ImGui::GetColorU32(isOpen ?
+															theme.StatusPalette.InfoColor :
+															ImGui::GetStyleColorVec4(ImGuiCol_Border));
 				dl->AddRect(p0, p1, border, style.FrameRounding, 0, style.FrameBorderSize + (isOpen ? 1.0f : 0.0f));
 			}
 			if (clicked) {

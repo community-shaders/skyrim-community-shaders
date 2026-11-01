@@ -310,7 +310,7 @@ namespace
 		const char* tooltip = "";
 		std::optional<ImVec4> textColor;  ///< Text/Glyph colour override
 		std::optional<ImVec4> fillColor;  ///< Text kind: persistent fill colour override
-		bool destructive = false;         ///< Hover highlight uses the error colour
+		std::optional<ImVec4> hoverTint;  ///< Hover and press in this colour instead of the theme's (unsaved save, delete)
 		bool startsGroup = false;         ///< Leave a wider gap before this action
 		bool locked = false;              ///< LockBadge kind
 		std::function<void()> onClick;
@@ -409,9 +409,11 @@ bool Widget::DrawTitleBarActions(bool showApply, bool showSaveLoadRevert, bool s
 		if (useIcons) {
 			auto& action = addGlyph("##TitleSave", Icons::TI(MenuIcons::kSave), saveTooltip, saveClick);
 			action.textColor = unsavedColor;
+			action.hoverTint = unsavedColor;
 		} else {
 			auto& action = addText("##TitleSave", T(TKEY("save"), "Save"), saveTooltip, saveClick);
 			action.textColor = unsavedColor;
+			action.hoverTint = unsavedColor;
 		}
 
 		const char* loadTooltip = T(TKEY("load_saved_file"), "Load saved file, else the active preset's values, else vanilla");
@@ -442,7 +444,7 @@ bool Widget::DrawTitleBarActions(bool showApply, bool showSaveLoadRevert, bool s
 				deleteAction = &addText("##TitleDelete", T(TKEY("delete"), "Delete"), deleteTooltip, deleteClick);
 				deleteAction->textColor = statusPalette.Error;
 			}
-			deleteAction->destructive = true;
+			deleteAction->hoverTint = statusPalette.Error;
 		}
 
 		if (packBadge) {
@@ -574,20 +576,15 @@ bool Widget::DrawTitleBarActions(bool showApply, bool showSaveLoadRevert, bool s
 		ImGui::InvisibleButton(action.id.c_str(), bb.GetSize());
 		const bool hovered = ImGui::IsItemHovered();
 		const bool held = ImGui::IsItemActive();
+		if (hovered)
+			ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
 		if (ImGui::IsItemClicked())
 			pendingClick = action.onClick;
 
-		// Hover and press ease in and out; a destructive action tints with the error colour instead
-		const auto blend = Util::Anim::ItemBlend(ImGui::GetItemID(), hovered, held, false);
+		// Hover and press ease in and out, in the action's state colour when it has one
 		const auto DrawActionHighlight = [&] {
-			if (!action.destructive) {
-				Util::DrawAnimatedButtonHighlight(bb, ImGui::GetItemID(), hovered, held, false, drawList);
-				return;
-			}
-			auto color = statusPalette.Error;
-			color.w = WidgetUI::kDestructiveHoverAlpha * blend.hover + (WidgetUI::kDestructivePressAlpha - WidgetUI::kDestructiveHoverAlpha) * blend.press;
-			if (color.w > 0.0f)
-				drawList->AddRectFilled(bb.Min, bb.Max, ImGui::GetColorU32(color), rounding);
+			auto tint = Util::StateHoverButtonStyle(action.hoverTint.value_or(ImVec4()), action.hoverTint.has_value());
+			Util::DrawAnimatedButtonHighlight(bb, ImGui::GetItemID(), hovered, held, false, drawList);
 		};
 
 		switch (action.kind) {
@@ -617,6 +614,8 @@ bool Widget::DrawTitleBarActions(bool showApply, bool showSaveLoadRevert, bool s
 			}
 		case Kind::Text:
 			{
+				const auto blend = Util::Anim::ItemBlend(ImGui::GetItemID(), hovered, held, false);
+				auto tint = Util::StateHoverButtonStyle(action.hoverTint.value_or(ImVec4()), action.hoverTint.has_value());
 				ImU32 fill = ImGui::GetColorU32(ImGuiCol_Button);
 				if (action.fillColor) {
 					auto color = *action.fillColor;
@@ -721,7 +720,8 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 				ImVec2(buttonSize.x + padding.x * 2.0f, buttonSize.y + padding.y * 2.0f));
 			Util::DrawAnimatedButtonHighlight(ImRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax()), ImGui::GetItemID(),
 				ImGui::IsItemHovered(), ImGui::IsItemActive(), false);
-			ImGui::GetWindowDrawList()->AddImage(texture, imageMin, ImVec2(imageMin.x + buttonSize.x, imageMin.y + buttonSize.y));
+			ImGui::GetWindowDrawList()->AddImage(texture, imageMin, ImVec2(imageMin.x + buttonSize.x, imageMin.y + buttonSize.y), ImVec2(0, 0),
+				ImVec2(1, 1), ImGui::GetColorU32(IM_COL32_WHITE));
 			if (clicked)
 				callback();
 			Util::AddTooltip(tooltip);
@@ -743,12 +743,16 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 		if (inlineActions && showSaveLoadRevert) {
 			Util::ToolbarDivider(false);
 			ImGui::SameLine();
-			if (unsaved)
-				ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetUnsaved());
-			if (Icons::Button(std::format("{}##_Save", searchId ? searchId : "").c_str(), Icons::TI(MenuIcons::kSave)))
-				saveAll();
-			if (unsaved)
-				ImGui::PopStyleColor();
+			{
+				// Unsaved: the glyph and its hover take the unsaved colour
+				auto tint = Util::StateHoverButtonStyle(Util::Colors::GetUnsaved(), unsaved);
+				if (unsaved)
+					ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetUnsaved());
+				if (Icons::Button(std::format("{}##_Save", searchId ? searchId : "").c_str(), Icons::TI(MenuIcons::kSave)))
+					saveAll();
+				if (unsaved)
+					ImGui::PopStyleColor();
+			}
 			Util::AddTooltip(saveTooltip);
 			iconButton("_Load", Util::IconLoader::GetIcons().loadSettings.texture, T(TKEY("load_saved_file"), "Load saved file, else the active preset's values, else vanilla"), [&]() { Load(); });
 			iconButton("_Revert", Util::IconLoader::GetIcons().featureSettingRevert.texture, T(TKEY("revert_to_original"), "Revert to original game values"), [&]() { RevertChanges(); });
@@ -794,12 +798,15 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 			if (inlineActions && showSaveLoadRevert) {
 				Util::ToolbarDivider(false);
 				ImGui::SameLine();
-				if (unsaved)
-					ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetUnsaved());
-				if (Util::ButtonWithFlash(T(TKEY("save"), "Save")))
-					saveAll();
-				if (unsaved)
-					ImGui::PopStyleColor();
+				{
+					auto tint = Util::StateHoverButtonStyle(Util::Colors::GetUnsaved(), unsaved);
+					if (unsaved)
+						ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetUnsaved());
+					if (Util::ButtonWithFlash(T(TKEY("save"), "Save")))
+						saveAll();
+					if (unsaved)
+						ImGui::PopStyleColor();
+				}
 				Util::AddTooltip(saveTooltip);
 				textButton(T(TKEY("load"), "Load"), T(TKEY("load_saved_file"), "Load saved file, else the active preset's values, else vanilla"), [&]() { Load(); });
 				ImGui::SameLine();

@@ -195,7 +195,7 @@ void WeatherWidget::DrawWidget()
 				ImGui::EndCombo();
 			}
 			ImGui::SameLine();
-			ImGui::TextDisabled("(?)");
+			Util::HelpMarker();
 			if (ImGui::IsItemHovered()) {
 				ImGui::BeginTooltip();
 				ImGui::TextUnformatted(T(TKEY("parent_cs_editor_feature"), "Editor-only feature: Set a parent weather to copy settings from."));

@@ -203,6 +203,7 @@ void RenderDoc::DrawSettings()
 		{
 			auto captureSection = Util::SectionWrapper(T(TKEY("capture_control"), "Capture Control"), T(TKEY("capture_control_tooltip"), "Manual capture creation and basic controls"));
 			if (captureSection) {
+				ImGui::AlignTextToFramePadding();
 				ImGui::TextColored(themeSettings.StatusPalette.InfoColor, "%s", T(TKEY("capture_active"), "RenderDoc capture is active."));
 				ImGui::SameLine();
 
@@ -305,6 +306,7 @@ void RenderDoc::DrawSettings()
 				Util::ColorCodedValueConfig diskUsageConfig = Util::ColorCodedValueConfig::HighIsBad(0.1f, 1.0f, 5.0f);
 				diskUsageConfig.tooltipText = T(TKEY("capture_size_tooltip"), "Total size of all capture files in the captures directory");
 
+				ImGui::AlignTextToFramePadding();
 				Util::DrawColorCodedValue(T(TKEY("capture_size"), "Capture Size"), diskUsageGB, std::format("{:.2f} GB", diskUsageGB), diskUsageConfig);
 
 				if (diskUsageMB > 0) {
@@ -387,11 +389,11 @@ void RenderDoc::DrawSettings()
 												break;
 											case 1:  // Size
 												cmp = (a.fileSize < b.fileSize) ? -1 : (a.fileSize > b.fileSize) ? 1 :
-											                                                                       0;
+												                                                                   0;
 												break;
 											case 2:  // Created (time)
 												cmp = (a.lastWriteTime < b.lastWriteTime) ? -1 : (a.lastWriteTime > b.lastWriteTime) ? 1 :
-											                                                                                           0;
+												                                                                                       0;
 												break;
 											}
 

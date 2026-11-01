@@ -186,26 +186,23 @@ public:
 		static constexpr float STATUS_BAR_SEGMENT_GAP_SCALE = 3.0f;  // Gap between status bar parts, in item spacings
 
 		// Menu UX: header Home button, status bar, Home card rhythm
-		static constexpr float HEADER_ICON_SCALE = 0.92f;                                // Shrinks every header icon button (actions, Home, issues, Go to) alike; the logo keeps its size
-		static constexpr float ICON_MIP_SELECT_BIAS = 0.3f;                              // Added to log2(downscale) when picking an icon mip: higher keeps a larger, crisper level
-		static constexpr float HEADER_UNSAVED_BOX_FILL_ALPHA = 0.22f;                    // Fill of the box behind the save icon while changes are unsaved
-		static constexpr float HEADER_UNSAVED_BOX_BORDER_ALPHA = 0.55f;                  // Its border
-		static constexpr float HEADER_ICON_HOVER_ALPHA = 0.6f;                           // Hover fill strength of header glyph buttons at full blend
-		static constexpr ImVec4 HEADER_UNDOCKED_HOVER_COLOR{ 0.8f, 0.8f, 0.8f, 0.25f };  // Undocked action icon hover fill
-		static constexpr float WATERMARK_MONO_ALPHA = 0.18f;                             // Monochrome watermark logo opacity
-		static constexpr ImU32 HEADER_COLOR_ICON_IDLE = IM_COL32(220, 220, 220, 220);    // Docked colour icon tint while not hovered
-		static constexpr ImU32 WATERMARK_COLOR = IM_COL32(255, 255, 255, 45);            // Full-colour watermark logo tint
-		static constexpr float HEADER_ICON_IDLE_ALPHA = 0.85f;                           // Header icon opacity while neither hovered nor current (docked monochrome icons, Home button)
-		static constexpr float STATUS_BAR_NAV_BUTTON_FONT_RATIO = 1.8f;                  // Settings / Profiling button edge in the status bar, in font sizes
-		static constexpr float STATUS_BAR_NAV_GLYPH_FONT_RATIO = 1.35f;                  // Their glyph size, in font sizes (the save glyph is 1.0)
-		static constexpr float STATUS_BAR_DIVIDER_FONT_RATIO = 1.0f;                     // Height of the thin dividers between status bar groups, in font sizes
-		static constexpr float HOME_CARD_PADDING = 12.0f;                                // Inner padding on every side of a Home card (1080p baseline)
-		static constexpr float HOME_CARD_SPACING = 8.0f;                                 // Vertical gap below each Home card (1080p baseline)
-		static constexpr float ATTENTION_FOCUS_SECONDS = 2.5f;                           // How long the Needs Attention card stays outlined after a click-through
-		static constexpr float ATTENTION_FOCUS_FADE_SECONDS = 0.8f;                      // Outline fade-out time at the end of that window
-		static constexpr float ATTENTION_FOCUS_THICKNESS = 2.0f;                         // Outline thickness (1080p baseline)
-		static constexpr float HOME_CARD_ICON_BOX_SCALE = 1.2f;                          // Card icon button glyph box, in font sizes
-		static constexpr float UNDO_TOAST_SECONDS = 2.0f;                                // How long the main menu's undo / redo toast stays
+		static constexpr float HEADER_ICON_SCALE = 0.92f;                              // Shrinks every header icon button (actions, Home, issues, Go to) alike; the logo keeps its size
+		static constexpr float ICON_MIP_SELECT_BIAS = 0.3f;                            // Added to log2(downscale) when picking an icon mip: higher keeps a larger, crisper level
+		static constexpr float HEADER_UNSAVED_BOX_FILL_ALPHA = 0.22f;                  // Fill of the box behind the save icon while changes are unsaved
+		static constexpr float HEADER_UNSAVED_BOX_BORDER_ALPHA = 0.55f;                // Its border
+		static constexpr float WATERMARK_MONO_ALPHA = 0.18f;                           // Monochrome watermark logo opacity
+		static constexpr ImU32 HEADER_COLOR_ICON_IDLE = IM_COL32(220, 220, 220, 220);  // Docked colour icon tint while not hovered
+		static constexpr ImU32 WATERMARK_COLOR = IM_COL32(255, 255, 255, 45);          // Full-colour watermark logo tint
+		static constexpr float HEADER_ICON_IDLE_ALPHA = 0.85f;                         // Header icon opacity while neither hovered nor current (docked monochrome icons, Home button)
+		static constexpr float STATUS_BAR_NAV_BUTTON_FONT_RATIO = 1.8f;                // Settings / Profiling button edge in the status bar, in font sizes
+		static constexpr float STATUS_BAR_DIVIDER_FONT_RATIO = 1.0f;                   // Height of the thin dividers between status bar groups, in font sizes
+		static constexpr float HOME_CARD_PADDING = 12.0f;                              // Inner padding on every side of a Home card (1080p baseline)
+		static constexpr float HOME_CARD_SPACING = 8.0f;                               // Vertical gap below each Home card (1080p baseline)
+		static constexpr float ATTENTION_FOCUS_SECONDS = 2.5f;                         // How long the Needs Attention card stays outlined after a click-through
+		static constexpr float ATTENTION_FOCUS_FADE_SECONDS = 0.8f;                    // Outline fade-out time at the end of that window
+		static constexpr float ATTENTION_FOCUS_THICKNESS = 2.0f;                       // Outline thickness (1080p baseline)
+		static constexpr float HOME_CARD_ICON_BOX_SCALE = 1.2f;                        // Card icon button glyph box, in font sizes
+		static constexpr float UNDO_TOAST_SECONDS = 2.0f;                              // How long the main menu's undo / redo toast stays
 
 		// UI Layout constants
 		static constexpr float BUTTON_SPACING = 8.0f;
@@ -229,7 +226,7 @@ public:
 
 		// Main menu feature list pane (sizes are 1080p baseline, scaled by Util::GetUIScale())
 		static constexpr float NAV_ROW_ICON_GAP = 8.0f;                  // Gap between a page row's icon and its label
-		static constexpr float CATEGORY_HEADER_PAD = 6.0f;               // Category header: space below the label row
+		static constexpr float CATEGORY_HEADER_PAD = 6.0f;               // Category header: space above and below the label row
 		static constexpr float CATEGORY_HEADER_COLLAPSED_ALPHA = 0.7f;   // ... label alpha while the category is collapsed
 		static constexpr float CATEGORY_HEADER_COUNT_ALPHA = 0.6f;       // ... count alpha relative to the label
 		static constexpr float CATEGORY_HEADER_LINE_ALPHA = 0.5f;        // ... trailing rule alpha relative to the separator colour
@@ -336,10 +333,8 @@ public:
 		static constexpr float SEARCH_ICON_OFFSET_X = 8.0f;              // Search icon offset from input edge
 		static constexpr float SEARCH_INPUT_PADDING_EXTRA = 14.0f;       // Extra input padding after icon
 		static constexpr float SEARCH_INPUT_FRAME_PADDING_Y = 6.0f;      // Search input vertical padding
-		static constexpr float COMBO_SEARCH_ICON_SIZE = 16.0f;           // Icon size for search inside combos
 		static constexpr float COMBO_SEARCH_ICON_ALPHA = 0.5f;           // Icon alpha for subtle appearance
 		static constexpr float COMBO_SEARCH_ICON_OFFSET_X = 5.0f;        // Icon horizontal offset from input edge
-		static constexpr float COMBO_SEARCH_PADDING_LEFT = 24.0f;        // Left padding to make room for icon
 
 		// Window overlap readability constants
 		static constexpr float OVERLAP_MIN_ALPHA = 0.85f;       // Background alpha when windows overlap
@@ -417,17 +412,18 @@ public:
 		static constexpr float BUTTON_STATUS_TEXT_ACTIVE_ALPHA = 1.0f;
 
 		// Shared widgets: buttons and banners (Util::Button, Util::StatusBanner, lock and flash effects)
-		static constexpr float BUTTON_TRANSPARENT_HOVER_ALPHA = 0.25f;  // Hover/active fill of the transparent icon button
-		static constexpr float PILL_ROUNDING = 999.0f;                  // Frame rounding that turns a button into a full pill
-		static constexpr float STATUS_BANNER_FILL_ALPHA = 0.16f;        // Status banner fill, as a share of the status colour's alpha
-		static constexpr float STATUS_BANNER_GAP = 8.0f;                // Gap between status banner icon and text (px at baseline scale)
-		static constexpr float LOCK_BUTTON_FILL_ALPHA = 0.22f;          // Lock toggle button fill
-		static constexpr float LOCK_BUTTON_BORDER_ALPHA = 0.55f;        // Lock toggle button border
-		static constexpr float LOCK_BUTTON_ROUNDING_RATIO = 0.35f;      // Lock toggle button corner radius per button size
-		static constexpr float UNSAVED_ALPHA = 0.75f;                   // Alpha of the unsaved-changes colour
-		static constexpr float FLASH_BRIGHTEN = 0.2f;                   // Button brighten while a click flash plays
-		static constexpr float FLASH_HOVER_SCALE = 1.1f;                // Flash colour scale when hovered
-		static constexpr float FLASH_ACTIVE_SCALE = 0.9f;               // Flash colour scale when pressed
+		static constexpr float BUTTON_STATE_HOVER_ALPHA = 0.4f;     // Hover fill of a button tinted by its state colour (unsaved save, lock, delete)
+		static constexpr float BUTTON_STATE_PRESS_ALPHA = 0.6f;     // ... its press fill
+		static constexpr float PILL_ROUNDING = 999.0f;              // Frame rounding that turns a button into a full pill
+		static constexpr float STATUS_BANNER_FILL_ALPHA = 0.16f;    // Status banner fill, as a share of the status colour's alpha
+		static constexpr float STATUS_BANNER_GAP = 8.0f;            // Gap between status banner icon and text (px at baseline scale)
+		static constexpr float LOCK_BUTTON_FILL_ALPHA = 0.22f;      // Lock toggle button fill
+		static constexpr float LOCK_BUTTON_BORDER_ALPHA = 0.55f;    // Lock toggle button border
+		static constexpr float LOCK_BUTTON_ROUNDING_RATIO = 0.35f;  // Lock toggle button corner radius per button size
+		static constexpr float UNSAVED_ALPHA = 0.75f;               // Alpha of the unsaved-changes colour
+		static constexpr float FLASH_BRIGHTEN = 0.2f;               // Button brighten while a click flash plays
+		static constexpr float FLASH_HOVER_SCALE = 1.1f;            // Flash colour scale when hovered
+		static constexpr float FLASH_ACTIVE_SCALE = 0.9f;           // Flash colour scale when pressed
 
 		// Shared widgets: feature toggle (Util::FeatureToggle; also the Load at Boot toggles)
 		static constexpr ImVec4 FEATURE_TOGGLE_ACTIVE_BG = ImVec4(0.3f, 0.3f, 0.3f, 0.9f);  // Active frame of the feature toggle row
@@ -550,7 +546,6 @@ public:
 		static constexpr float CSE_UI_SCALE_MAX = 2.0f;
 		static constexpr float CSE_TIME_SLIDER_MIN_WIDTH = 40.0f;       // Narrowest a time control slider shrinks to, before UI scale
 		static constexpr float CSE_ADD_LIGHT_POPUP_WIDTH = 520.0f;      // Add-light dialog width, before UI scale
-		static constexpr float CSE_CARD_BG_ALPHA = 0.5f;                // Share of the frame colour's alpha kept by detail cards (Browser inspector, Light Editor panels)
 		static constexpr float CSE_RECORD_TOD_LABEL_OFFSET = 100.0f;    // Records tab: time-of-day label column offset, before UI scale
 		static constexpr float CSE_RECORD_FORM_LABEL_OFFSET = 150.0f;   // Records tab: form label column offset, before UI scale
 		static constexpr float CSE_RECORD_PARENT_COLUMN_WIDTH = 20.0f;  // Records tab: extra offset for the inherit checkbox column

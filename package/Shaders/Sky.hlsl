@@ -374,16 +374,19 @@ PS_OUTPUT main(PS_INPUT input)
 #			if defined(CLOUDS) && defined(EFFECTS11)
 	[branch] if (SharedData::enbSettings.Enable)
 	{
-		float3 viewDirection = normalize(input.WorldPosition.xyz);
-		float cloudTextureAlpha = saturate(baseColor.w);
-		float cloudTextureGray = pow(max(dot(baseColor.xyz, 1.0 / 3.0), 0.0), SharedData::enbSettings.CloudsCurve);
-
-		float3 cloudColor = pow(max(input.Color.xyz * baseColor.xyz, 0.0), SharedData::enbSettings.CloudsCurve);
-		cloudColor = lerp(cloudColor, dot(cloudColor, 1.0 / 3.0), SharedData::enbSettings.CloudsDesaturation) * SharedData::enbSettings.CloudsIntensity * SharedData::enbSettings.CloudsColorFilter;
-
-		bool cloudScattering = SharedData::enbSettings.EnableCloudsScattering && !(Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::NoSkyScattering);
-		psout.Color.xyz = SkyScattering::ShadeCloud(cloudColor, cloudTextureAlpha, cloudTextureGray, viewDirection, cloudScattering, SampBaseSampler) + skyScale * min(SharedData::enbSettings.CloudsIntensity, 1.0);
 		psout.Color.w = saturate(input.Color.w * baseColor.w * (1.0 + baseColor.w * SharedData::enbSettings.CloudsVertexAlphaBoost));
+		[branch] if (psout.Color.w > 0.0)
+		{
+			float3 viewDirection = normalize(input.WorldPosition.xyz);
+			float cloudTextureAlpha = saturate(baseColor.w);
+			float cloudTextureGray = pow(max(dot(baseColor.xyz, 1.0 / 3.0), 0.0), SharedData::enbSettings.CloudsCurve);
+
+			float3 cloudColor = pow(max(input.Color.xyz * baseColor.xyz, 0.0), SharedData::enbSettings.CloudsCurve);
+			cloudColor = lerp(cloudColor, dot(cloudColor, 1.0 / 3.0), SharedData::enbSettings.CloudsDesaturation) * SharedData::enbSettings.CloudsIntensity * SharedData::enbSettings.CloudsColorFilter;
+
+			bool cloudScattering = SharedData::enbSettings.EnableCloudsScattering && !(Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::NoSkyScattering);
+			psout.Color.xyz = SkyScattering::ShadeCloud(cloudColor, cloudTextureAlpha, cloudTextureGray, viewDirection, cloudScattering, SampBaseSampler) + skyScale * min(SharedData::enbSettings.CloudsIntensity, 1.0);
+		}
 	}
 #			endif
 #		endif

@@ -56,10 +56,12 @@ PS_OUTPUT main(PS_INPUT input)
 			g_RenderTargetResolution.xy;
 		color.x = sourceTex.Sample(sourceSampler, finalTexCoord + sampleOffset).x;
 		color.x += sourceTex.Sample(sourceSampler,
-			finalTexCoord + float2(-sampleOffset.x, sampleOffset.y)).x;
+								finalTexCoord + float2(-sampleOffset.x, sampleOffset.y))
+		               .x;
 		color.x += sourceTex.Sample(sourceSampler, finalTexCoord - sampleOffset).x;
 		color.x += sourceTex.Sample(sourceSampler,
-			finalTexCoord + float2(sampleOffset.x, -sampleOffset.y)).x;
+								finalTexCoord + float2(sampleOffset.x, -sampleOffset.y))
+		               .x;
 		color.x *= 0.25;
 	} else {
 		color = sourceTex.Sample(sourceSampler, finalTexCoord);

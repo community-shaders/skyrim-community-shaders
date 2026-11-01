@@ -71,9 +71,7 @@ namespace
 		const bool clicked = ImGui::InvisibleButton("##segment", ImVec2(iconSize.x + gap + labelWidth + style.FramePadding.x * 2.0f, height));
 		const ImVec2 min = ImGui::GetItemRectMin();
 		auto* drawList = ImGui::GetWindowDrawList();
-		if (ImGui::IsItemHovered() || ImGui::IsItemActive())
-			drawList->AddRectFilled(min, ImGui::GetItemRectMax(),
-				ImGui::GetColorU32(ImGui::IsItemActive() ? ImGuiCol_ButtonActive : ImGuiCol_ButtonHovered), style.FrameRounding);
+		Util::DrawAnimatedButtonHighlight(ImRect(min, ImGui::GetItemRectMax()), ImGui::GetItemID(), ImGui::IsItemHovered(), ImGui::IsItemActive(), false, drawList);
 		const ImU32 col = ImGui::GetColorU32(color);
 		float x = min.x + style.FramePadding.x;
 		Icons::DrawCenteredGlyph(drawList, ImVec2(x, min.y), ImVec2(iconSize.x, height), icon, col);
@@ -90,17 +88,8 @@ namespace
 	{
 		const float size = NavButtonSize();
 		row.Place(size);
-		const bool clicked = ImGui::InvisibleButton(id, ImVec2(size, size));
-		const auto blend = Util::Anim::ItemBlend(ImGui::GetItemID(), ImGui::IsItemHovered(), ImGui::IsItemActive(), selected);
-		auto* drawList = ImGui::GetWindowDrawList();
-		const ImVec2 min = ImGui::GetItemRectMin();
-		const ImVec2 max = ImGui::GetItemRectMax();
-		const float rounding = ImGui::GetStyle().FrameRounding;
-		Util::Anim::FillBlend(drawList, min, max, rounding, blend);
-		const ImU32 color = Util::QuietIconColor(blend.hover, blend.selected);
-		Icons::DrawCenteredGlyph(drawList, min, ImVec2(size, size), ImGui::GetFontSize() * Constants::STATUS_BAR_NAV_GLYPH_FONT_RATIO, glyph, color);
-		if (tooltip)
-			Util::AddTooltip(tooltip, Util::kTooltipWhenDisabled);
+		// The help button's helper; it pads the glyph box by FramePadding.y each side
+		const bool clicked = MenuHeaderRenderer::GlyphIconButton(id, glyph, size - ImGui::GetStyle().FramePadding.y * 2.0f, tooltip, selected);
 		row.Advance(0.0f);
 		return clicked;
 	}
@@ -119,11 +108,10 @@ namespace
 	/** @brief Settings and Profiling with dividers between them, and after them when `trailingDivider`. */
 	void NavGroup(Row& row, bool trailingDivider = true)
 	{
-		const float gap = ImGui::GetStyle().ItemSpacing.x;
+		// Divider adds the gap on both sides, so each divider sits midway between its neighbours
 		const auto page = [&](std::string_view id, const char* widgetId, const char* glyph, const char* tooltip) {
 			if (NavButton(row, widgetId, Icons::TI(glyph), tooltip, FeatureListRenderer::IsPageOpen(id)))
 				FeatureListRenderer::RequestPage(id);
-			row.x += gap;
 		};
 		page(MenuPageIds::kSettings, "##StatusSettings", MenuIcons::kSettings, T("menu.features.settings", "Settings"));
 		Divider(row);
@@ -138,9 +126,9 @@ namespace StatusBarRenderer
 	float GetHeight()
 	{
 		// The gap before the separator (left by the content above it), the separator, the gap above the row, then the row;
-		// the window's bottom padding is the gap below it
+		// the window's bottom padding is the gap below it, and the gap above matches it
 		const float gap = ImGui::GetStyle().ItemSpacing.y;
-		return gap * 2.0f + Constants::SEPARATOR_THICKNESS + RowHeight();
+		return gap + Constants::SEPARATOR_THICKNESS + ImGui::GetStyle().WindowPadding.y + RowHeight();
 	}
 
 	float GetPageButtonsHeight()
@@ -162,7 +150,7 @@ namespace StatusBarRenderer
 
 	void Render(const std::vector<MenuShortcuts::Shortcut>& shortcuts)
 	{
-		const float gap = ImGui::GetStyle().ItemSpacing.y;
+		const float gap = ImGui::GetStyle().WindowPadding.y;
 		const ImVec2 origin = ImGui::GetCursorScreenPos();
 		ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal, Constants::SEPARATOR_THICKNESS);
 

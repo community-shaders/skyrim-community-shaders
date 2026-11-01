@@ -169,10 +169,7 @@ void MotionBlur::DrawSettings()
 	// Samples (each UI sample represents 2 actual samples)
 	ImGui::SliderInt(T("feature.post_processing.motion_blur.samples", "Samples"), &settings.SampleCount, 8, 16, "%d");
 	ImGui::SameLine();
-	ImGui::TextDisabled(T("feature.post_processing.motion_blur.a", "(?)"));
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("%s", T("feature.post_processing.motion_blur.sample_count_is_doubled_internally_for_smoother_results", "Sample count is doubled internally for smoother results.\nMore samples = better quality but slower performance"));
-	}
+	Util::HelpMarker(T("feature.post_processing.motion_blur.sample_count_is_doubled_internally_for_smoother_results", "Sample count is doubled internally for smoother results.\nMore samples = better quality but slower performance"));
 }
 
 void MotionBlur::Draw(TextureInfo& inout_tex)

@@ -8,7 +8,6 @@ private:
 	static constexpr std::string_view MOD_ID = "130375";
 
 public:
-
 	virtual inline std::string GetName() override { return "Screen Space GI"; }
 	virtual std::string GetDisplayName() override { return T("feature.screen_space_gi.name", "Screen Space GI"); }
 	virtual inline std::string GetShortName() override { return "ScreenSpaceGI"; }
@@ -111,7 +110,7 @@ public:
 		float2 RcpTexDim;  //
 		float2 FrameDim;
 		float2 RcpFrameDim;  //
-		uint FrameIndex;
+		float pad0;
 
 		uint NumSlices;
 		uint NumSteps;

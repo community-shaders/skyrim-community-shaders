@@ -30,9 +30,7 @@ namespace WidgetUI
 	constexpr ImVec4 kIconButtonTransparent = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
 	constexpr float kIconButtonHoverAlpha = 0.25f;
 
-	// Title-bar action chips: error tint of a destructive action, and how much a filled text action brightens
-	constexpr float kDestructiveHoverAlpha = 0.4f;
-	constexpr float kDestructivePressAlpha = 0.6f;
+	// Title-bar action chips: how much a filled text action brightens on hover
 	constexpr float kTextActionHoverBoost = 0.2f;
 
 	// Category section header text (light teal-blue)

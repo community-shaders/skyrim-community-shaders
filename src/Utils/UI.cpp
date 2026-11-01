@@ -273,11 +273,22 @@ namespace Util
 		}
 	}
 
+	float HelpMarkerWidth()
+	{
+		return ImGui::GetTextLineHeight();
+	}
+
 	void HelpMarker(const char* a_desc)
 	{
 		ImGui::AlignTextToFramePadding();
-		TextUnformattedDisabled(kHelpMarkerLabel);
-		AddTooltip(a_desc, ImGuiHoveredFlags_DelayShort);
+		// Centred on the frame-aligned line at the footer help glyph's size
+		const ImVec2 pos = ImGui::GetCursorScreenPos();
+		const ImVec2 box(HelpMarkerWidth(), ImGui::GetFrameHeight());
+		ImGui::Dummy(box);
+		Icons::DrawCenteredGlyph(ImGui::GetWindowDrawList(), pos, box, ImGui::GetFontSize() * ThemeManager::Constants::HEADER_GLYPH_ICON_SCALE, Icons::TI(MenuIcons::kHelp),
+			ImGui::GetColorU32(ImGuiCol_TextDisabled));
+		if (a_desc)
+			HoverTip(a_desc);
 	}
 
 	namespace
@@ -422,7 +433,7 @@ namespace Util
 				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, isSelected ? clearFill : palette.hoverFill);
 				ImGui::PushStyleColor(ImGuiCol_ButtonActive, clearFill);
 				ImGui::PushStyleColor(ImGuiCol_Text, isSelected ? palette.selectedText : palette.idleText);
-				if (ImGui::Button(labels[i].c_str())) {
+				if (Util::Button(labels[i].c_str())) {
 					selected = i;
 					changed = true;
 				}
@@ -590,8 +601,12 @@ namespace Util
 
 		const ImVec2 max(a_min.x + size, a_min.y + size);
 		const float rounding = std::min(ImGui::GetStyle().FrameRounding, size * ThemeManager::Constants::LOCK_BUTTON_ROUNDING_RATIO);
-		auto _style = TransparentIconButtonStyle();
-		DrawRoundedButtonHighlight(a_min, max, a_hovered, a_held, rounding, a_drawList);
+		// Both callers draw this right after the badge's item, so the last item id keys the eased highlight, in the
+		// badge's own state colour
+		{
+			auto tint = StateHoverButtonStyle(statusColor);
+			DrawAnimatedButtonHighlight(ImRect(a_min, max), ImGui::GetItemID(), a_hovered, a_held, false, a_drawList);
+		}
 		a_drawList->AddRectFilled(a_min, max, ImGui::GetColorU32(fill), rounding);
 		a_drawList->AddRect(a_min, max, ImGui::GetColorU32(border), rounding);
 		Icons::DrawCenteredGlyph(a_drawList, a_min, ImVec2(size, size),
@@ -650,8 +665,8 @@ namespace Util
 		const float y = a_min.y + (a_rowHeight - pillH) * 0.5f;
 
 		a_drawList->AddRectFilled(ImVec2(a_min.x, y), ImVec2(a_min.x + pillW, y + pillH),
-			ImGui::ColorConvertFloat4ToU32(a_bg), kBadgeRounding * scale);
-		a_drawList->AddText(ImVec2(a_min.x + padX, y + padY), ImGui::ColorConvertFloat4ToU32(a_fg), a_label);
+			ImGui::GetColorU32(a_bg), kBadgeRounding * scale);
+		a_drawList->AddText(ImVec2(a_min.x + padX, y + padY), ImGui::GetColorU32(a_fg), a_label);
 		return pillW;
 	}
 
@@ -840,7 +855,7 @@ namespace Util
 			if (offset > 0)
 				ImGui::SetCursorPosX(offset);
 
-			if (ImGui::Button(T("ui.clear_cache", "Clear Cache"), ImVec2(buttonWidth, 0))) {
+			if (Util::Button(T("ui.clear_cache", "Clear Cache"), ImVec2(buttonWidth, 0))) {
 				// Save preference if checkbox is checked
 				if (dontAskAgainCheckbox) {
 					if (auto* menu = globals::menu) {
@@ -855,7 +870,7 @@ namespace Util
 
 			ImGui::SameLine();
 
-			if (ImGui::Button(T("ui.cancel", "Cancel"), ImVec2(buttonWidth, 0))) {
+			if (Util::Button(T("ui.cancel", "Cancel"), ImVec2(buttonWidth, 0))) {
 				showClearCacheConfirmation = false;
 				ImGui::CloseCurrentPopup();
 			}
@@ -957,7 +972,7 @@ namespace Util
 			};
 
 			if (!confirmLabel.empty()) {
-				if (primaryConfirm ? SuccessButton(confirmLabel.c_str(), buttonSize) : ImGui::Button(confirmLabel.c_str(), buttonSize))
+				if (primaryConfirm ? SuccessButton(confirmLabel.c_str(), buttonSize) : Util::Button(confirmLabel.c_str(), buttonSize))
 					pick(Choice::Confirm);
 				if (focus == Focus::Confirm)
 					ImGui::SetItemDefaultFocus();
@@ -970,7 +985,7 @@ namespace Util
 				ImGui::SameLine();
 			}
 
-			if (ImGui::Button(cancelLabel.empty() ? T("ui.cancel", "Cancel") : cancelLabel.c_str(), buttonSize))
+			if (Util::Button(cancelLabel.empty() ? T("ui.cancel", "Cancel") : cancelLabel.c_str(), buttonSize))
 				pick(Choice::Cancel);
 			if (focus == Focus::Cancel)
 				ImGui::SetItemDefaultFocus();
@@ -1137,7 +1152,7 @@ namespace Util
 	bool ErrorButton(const char* label, const ImVec2& size)
 	{
 		auto _style = DestructiveButtonStyle();
-		return ImGui::Button(label, size);
+		return Util::Button(label, size);
 	}
 
 	bool ErrorButtonWithFlash(const char* label, const ImVec2& size, int flashDurationMs)
@@ -1159,6 +1174,14 @@ namespace Util
 			ButtonHelpers::WithAlpha(color, ThemeManager::Constants::BUTTON_STATUS_TEXT_ACTIVE_ALPHA));
 	}
 
+	StyledButtonWrapper StateHoverButtonStyle(const ImVec4& color, bool apply)
+	{
+		const ImGuiStyle& style = ImGui::GetStyle();
+		if (!apply)
+			return StyledButtonWrapper(style.Colors[ImGuiCol_Button], style.Colors[ImGuiCol_ButtonHovered], style.Colors[ImGuiCol_ButtonActive]);
+		return StyledButtonWrapper(style.Colors[ImGuiCol_Button], Anim::ScaleAlpha(color, C::BUTTON_STATE_HOVER_ALPHA), Anim::ScaleAlpha(color, C::BUTTON_STATE_PRESS_ALPHA));
+	}
+
 	StyledButtonWrapper SuccessButtonStyle()
 	{
 		return StatusTextButtonStyle(Menu::GetSingleton()->GetTheme().StatusPalette.SuccessColor);
@@ -1172,26 +1195,26 @@ namespace Util
 	bool SuccessButton(const char* label, const ImVec2& size)
 	{
 		auto _style = SuccessButtonStyle();
-		return ImGui::Button(label, size);
+		return Util::Button(label, size);
 	}
 
 	bool WarningButton(const char* label, const ImVec2& size)
 	{
 		auto _style = WarningButtonStyle();
-		return ImGui::Button(label, size);
+		return Util::Button(label, size);
 	}
 
 	bool ErrorTextButton(const char* label, const ImVec2& size)
 	{
 		auto _style = StatusTextButtonStyle(Menu::GetSingleton()->GetTheme().StatusPalette.Error);
-		return ImGui::Button(label, size);
+		return Util::Button(label, size);
 	}
 
 	StyledButtonWrapper TransparentIconButtonStyle()
 	{
-		auto hoverColor = Menu::GetSingleton()->GetTheme().Palette.Text;
-		hoverColor.w = ThemeManager::Constants::BUTTON_TRANSPARENT_HOVER_ALPHA;
-		return StyledButtonWrapper(ImVec4(0, 0, 0, 0), hoverColor, hoverColor);
+		// The theme's button hover and press fills, as the header's nav buttons use
+		const ImGuiStyle& style = ImGui::GetStyle();
+		return StyledButtonWrapper(ImVec4(0, 0, 0, 0), style.Colors[ImGuiCol_ButtonHovered], style.Colors[ImGuiCol_ButtonActive]);
 	}
 
 	ImVec4 GetIconTint()
@@ -1274,19 +1297,24 @@ namespace Util
 
 	bool Button(const char* label, const ImVec2& size)
 	{
-		if (Anim::ReducedMotion())
-			return ImGui::Button(label, size);
-		const auto blend = PendingBlend(ImGui::GetID(label), false);
-		const ImVec4 rest = ImGui::GetStyleColorVec4(ImGuiCol_Button);
-		const ImVec4 hovered = ImGui::GetStyleColorVec4(ImGuiCol_ButtonHovered);
-		const ImVec4 active = ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive);
-		// Every state shows the eased colour, so the instant hover / press swap of ImGui is replaced by the blend
-		const ImVec4 eased = Anim::Lerp(Anim::Lerp(rest, hovered, blend.hover), active, blend.press);
-		ImGui::PushStyleColor(ImGuiCol_Button, eased);
-		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, eased);
-		ImGui::PushStyleColor(ImGuiCol_ButtonActive, eased);
-		const bool clicked = ImGui::Button(label, size);
-		ImGui::PopStyleColor(3);
+		bool clicked;
+		if (Anim::ReducedMotion()) {
+			clicked = ImGui::Button(label, size);
+		} else {
+			const auto blend = PendingBlend(ImGui::GetID(label), false);
+			const ImVec4 rest = ImGui::GetStyleColorVec4(ImGuiCol_Button);
+			const ImVec4 hovered = ImGui::GetStyleColorVec4(ImGuiCol_ButtonHovered);
+			const ImVec4 active = ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive);
+			// Every state shows the eased colour, so the instant hover / press swap of ImGui is replaced by the blend
+			const ImVec4 eased = Anim::Lerp(Anim::Lerp(rest, hovered, blend.hover), active, blend.press);
+			ImGui::PushStyleColor(ImGuiCol_Button, eased);
+			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, eased);
+			ImGui::PushStyleColor(ImGuiCol_ButtonActive, eased);
+			clicked = ImGui::Button(label, size);
+			ImGui::PopStyleColor(3);
+		}
+		if (ImGui::IsItemHovered())
+			ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
 		return clicked;
 	}
 
@@ -1303,7 +1331,7 @@ namespace Util
 
 	void AddressButton(const char* a_name, uintptr_t a_address)
 	{
-		if (ImGui::Button(a_name))
+		if (Util::Button(a_name))
 			ImGui::SetClipboardText(std::format("{0:x}", a_address).c_str());
 		if (ImGui::IsItemHovered()) {
 			const auto tooltip = I18n::GetSingleton()->Format("ui.copy_address_tooltip", { { "name", a_name } }, "Copy {name} Address to Clipboard");
@@ -1558,6 +1586,8 @@ namespace Util
 
 	bool DrawAnimatedButtonHighlight(const ImRect& rect, ImGuiID id, bool hovered, bool held, bool current, ImDrawList* drawList)
 	{
+		if (hovered)
+			ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
 		const auto blend = Anim::ItemBlend(id, hovered || current, held, false);
 		if (blend.hover <= 0.0f && blend.press <= 0.0f)
 			return false;
@@ -1818,7 +1848,7 @@ namespace Util
 			ImGui::SetCursorScreenPos(ImVec2(rowStart.x + avail - closeSize,
 				rowStart.y + (rowHeight - closeSize) * 0.5f));
 			auto _style = TransparentIconButtonStyle();
-			const bool clicked = ImGui::Button("##CustomHeaderClose", ImVec2(closeSize, closeSize));
+			const bool clicked = Util::Button("##CustomHeaderClose", ImVec2(closeSize, closeSize));
 			DrawCustomHeaderCloseCross(ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
 			if (clicked)
 				*p_open = false;
@@ -1971,7 +2001,8 @@ namespace Util
 		countColor.w *= ThemeManager::Constants::CATEGORY_HEADER_COUNT_ALPHA;
 
 		const float padX = ImGui::GetStyle().FramePadding.x;
-		float currentX = pos.x + padX;
+		// Clear of a selected row's accent bar, slightly left of the rows' text
+		float currentX = pos.x + std::max(ImGui::GetStyle().ItemInnerSpacing.x, ThemeManager::Constants::ANIM_SELECTED_BAR_WIDTH * scale);
 		if (categoryIcon) {
 			const ImVec2 iconPos(currentX, pos.y + (textSize.y - iconSize) * 0.5f);
 			drawList->AddImage(categoryIcon, iconPos, ImVec2(iconPos.x + iconSize, iconPos.y + iconSize), ImVec2(0, 0), ImVec2(1, 1), headerColor);
@@ -2325,10 +2356,10 @@ namespace Util
 		}
 
 		const float scale = GetSearchUIScale();
-		const float iconSize = ThemeManager::Constants::COMBO_SEARCH_ICON_SIZE * scale;
 		constexpr float iconAlpha = ThemeManager::Constants::COMBO_SEARCH_ICON_ALPHA;
 		const float iconOffsetX = ThemeManager::Constants::COMBO_SEARCH_ICON_OFFSET_X * scale;
-		const float paddingLeft = ThemeManager::Constants::COMBO_SEARCH_PADDING_LEFT * scale;
+		const float iconSize = Icons::CalcGlyphSize(Icons::TI(MenuIcons::kSearch)).x;
+		const float paddingLeft = iconOffsetX + iconSize + ImGui::GetStyle().ItemInnerSpacing.x;
 
 		char widgetId[128];
 		snprintf(widgetId, sizeof(widgetId), "##%s_search", id);
@@ -3003,7 +3034,7 @@ namespace Util
 
 	bool ButtonWithFlash(const char* label, const ImVec2& size, int flashDurationMs)
 	{
-		return DrawWithFlash(label, flashDurationMs, [&] { return ImGui::Button(label, size); });
+		return DrawWithFlash(label, flashDurationMs, [&] { return Util::Button(label, size); });
 	}
 
 	bool ButtonWithFlash(const char* id, const char* tablerIcon, const char* label, int flashDurationMs)
@@ -3171,7 +3202,7 @@ namespace Util
 				buttonText = T("ui.keybind.recording", "Recording... (Esc to cancel)");
 			}
 
-			if (ImGui::Button(buttonText.c_str(), ImVec2(0, 0))) {
+			if (Util::Button(buttonText.c_str(), ImVec2(0, 0))) {
 				isRecording = false;
 			}
 
@@ -3185,7 +3216,7 @@ namespace Util
 			// Display current binding with unique button ID
 			std::string keyString = Util::Input::KeyIdToString(combo);
 			std::string btnLabel = keyString + "##" + recordingLabel;
-			if (ImGui::Button(btnLabel.c_str(), ImVec2(0, 0))) {
+			if (Util::Button(btnLabel.c_str(), ImVec2(0, 0))) {
 				isRecording = true;
 			}
 

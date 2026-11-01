@@ -50,10 +50,10 @@ harness instead: capture one frame, swap just that shader, diff against the ship
 
 ## Features
 
--   A feature is a `Feature` subclass (`src/Feature.h`) in `src/Features/<Name>.cpp/h`, with shaders in `features/<Name>/Shaders/` and a versioned `features/<Name>/Shaders/Features/<Name>.ini`. A `CORE` marker file in `features/<Name>/` bundles it with the main mod.
--   Features reach each other through `globals::features` (`src/Globals.h`).
--   New features: start from `docs/new-feature-template/`; `NewFeatureReadme.md` there lists the required registration edits. GPU-heavy features need a user toggle.
--   Changing a feature's settings structure requires a version bump in its `.ini`.
+- A feature is a `Feature` subclass (`src/Feature.h`) in `src/Features/<Name>.cpp/h`, with shaders in `features/<Name>/Shaders/` and a versioned `features/<Name>/Shaders/Features/<Name>.ini`. A `CORE` marker file in `features/<Name>/` bundles it with the main mod.
+- Features reach each other through `globals::features` (`src/Globals.h`).
+- New features: start from `docs/new-feature-template/`; `NewFeatureReadme.md` there lists the required registration edits. GPU-heavy features need a user toggle.
+- Changing a feature's settings structure requires a version bump in its `.ini`.
 
 ## SE/AE runtime targeting (CommonLibSSE-NG)
 
@@ -76,42 +76,44 @@ Beta = True
 Unreleased = True
 ```
 
--   Truthy values: `true`, `1`, `yes`, `on` (case-insensitive). `Alpha` takes precedence over `Beta`.
--   `Unreleased` is independent of the stage: it only hides the feature until its `.ini` is installed, and is only ever set or cleared by hand.
--   Flag lines must start the line. `Alpha`/`Beta` are parsed by both `CMakeLists.txt` and `tools/feature_version_audit.py`; **keep these two regexes in sync**. `Unreleased` is parsed by CMake only.
--   `GetReleaseStage()` is not cached: resolve it once and pass it around.
--   `IsDisabledByDefault()` is true only for CORE features at a non-Release stage. Do not add a redundant `IsDisabledByDefault` override on a feature that already carries a stage flag.
+- Truthy values: `true`, `1`, `yes`, `on` (case-insensitive). `Alpha` takes precedence over `Beta`.
+- `Unreleased` is independent of the stage: it only hides the feature until its `.ini` is installed, and is only ever set or cleared by hand.
+- Flag lines must start the line. `Alpha`/`Beta` are parsed by both `CMakeLists.txt` and `tools/feature_version_audit.py`; **keep these two regexes in sync**. `Unreleased` is parsed by CMake only.
+- `GetReleaseStage()` is not cached: resolve it once and pass it around.
+- `IsDisabledByDefault()` is true only for CORE features at a non-Release stage. Do not add a redundant `IsDisabledByDefault` override on a feature that already carries a stage flag.
 
 Versioning (enforced by `tools/feature_version_audit.py`):
 
--   Pre-release features use `0.x`. Entering pre-release: Beta starts at `0-2-0`, Alpha at `0-1-0`.
--   `alpha -> beta` bumps the minor and resets the patch. Within a stage, normal semver inside `0.x`.
--   A breaking change (`feat!:` / `BREAKING CHANGE:`) on a pre-release feature promotes it to `1-0-0` and strips the Alpha/Beta flag (`--apply-bumps` does both). `Unreleased` is left alone; clear it by hand when the feature ships.
--   Stage transitions are exact-match enforced and may lower the version (e.g. release `1.x` -> beta `0-2-0`).
+- Pre-release features use `0.x`. Entering pre-release: Beta starts at `0-2-0`, Alpha at `0-1-0`.
+- `alpha -> beta` bumps the minor and resets the patch. Within a stage, normal semver inside `0.x`.
+- A breaking change (`feat!:` / `BREAKING CHANGE:`) on a pre-release feature promotes it to `1-0-0` and strips the Alpha/Beta flag (`--apply-bumps` does both). `Unreleased` is left alone; clear it by hand when the feature ships.
+- Stage transitions are exact-match enforced and may lower the version (e.g. release `1.x` -> beta `0-2-0`).
 
 ## Project conventions
 
--   **D3D11 resource naming**: every D3D11 resource must be named for RenderDoc. After raw `device->Create*` calls use `Util::SetResourceName(ptr, "Feature::ResourceDescription")`. Wrapper types in `src/Buffer.h` (`Texture2D`, `Buffer`, `ConstantBuffer`, ...) take the name in the constructor and name their views automatically (`"Feature::Name SRV"` / `"Feature::Name UAV"`). The single implementation is `Util::SetResourceName` in `src/Utils/D3D.cpp`; never duplicate the GUID or re-implement it inline. Forward-declare in headers and delegate.
--   UI spacing, padding and colors come from `ThemeManager::Constants` (`src/Menu/ThemeManager.h`), not hardcoded values.
--   ImGui: always pair `BeginTable()` / `EndTable()`; use RAII for style changes.
--   UI components extracted from `Menu` (`src/Menu/*Renderer`) access its private methods via callbacks rather than making them public; UI state lives in `Menu` and is passed to components as parameters.
--   Doxygen comments on public methods.
--   Minimize D3D state changes and restore state after modifying it. Respect the split between Skyrim's rendering thread and game logic thread.
--   Validate `.ini` files and user settings: malformed configs can crash Skyrim.
--   Features must disable cleanly on shader compilation failure.
--   No TODO/FIXME placeholders unless explicitly asked for planning.
+- **D3D11 resource naming**: every D3D11 resource must be named for RenderDoc. After raw `device->Create*` calls use `Util::SetResourceName(ptr, "Feature::ResourceDescription")`. Wrapper types in `src/Buffer.h` (`Texture2D`, `Buffer`, `ConstantBuffer`, ...) take the name in the constructor and name their views automatically (`"Feature::Name SRV"` / `"Feature::Name UAV"`). The single implementation is `Util::SetResourceName` in `src/Utils/D3D.cpp`; never duplicate the GUID or re-implement it inline. Forward-declare in headers and delegate.
+- UI spacing, padding and colors come from `ThemeManager::Constants` (`src/Menu/ThemeManager.h`), not hardcoded values.
+- ImGui: always pair `BeginTable()` / `EndTable()`; use RAII for style changes.
+- UI components extracted from `Menu` (`src/Menu/*Renderer`) access its private methods via callbacks rather than making them public; UI state lives in `Menu` and is passed to components as parameters.
+- Doxygen comments on public methods.
+- Minimize D3D state changes and restore state after modifying it. Respect the split between Skyrim's rendering thread and game logic thread.
+- Validate `.ini` files and user settings: malformed configs can crash Skyrim.
+- Features must disable cleanly on shader compilation failure.
+- No TODO/FIXME placeholders unless explicitly asked for planning.
 
 ## Dear ImGui conventions
 
--   Version: 1.92.6 (pinned in `vcpkg.json` `overrides`), docking branch (`docking-experimental` vcpkg feature; `ImGuiConfigFlags_DockingEnable` is set in `Menu.cpp`). Keyboard and gamepad nav are enabled.
--   Backend: DX11 + Win32 (`imgui_impl_dx11.h` / `imgui_impl_win32.h`), driven from `src/Menu.cpp`, `src/Menu/OverlayRenderer.cpp` and `src/Menu/ThemeManager.cpp`. Do not modify backend, renderer or font-atlas setup code unless asked.
--   ImGui headers come from vcpkg, not the repo. Before using an API, check its signature in the pinned `imgui.h` (in the vcpkg-installed `imgui` package) and use `imgui_demo.cpp` as the reference for correct usage. Recent releases changed several APIs (1.92: dynamic fonts and `PushFont(font, size)`; 1.90: `ImGuiChildFlags` replacing the `BeginChild` border bool), so do not copy snippets written for older versions.
--   `imgui.h` is included by `include/PCH.h`. `imgui_internal.h` and `imgui_stdlib.h` are included per file; prefer public API and only reach into internals when nothing public works.
--   ImVec2/ImVec4 operators are not enabled (`IMGUI_DEFINE_MATH_OPERATORS` is not defined, and defining it in a `.cpp` is too late because the PCH already included `imgui.h`). Write arithmetic component-wise, as the existing code does: `ImVec2(a.x + b.x, a.y + b.y)`.
--   Give repeated or empty-label widgets unique IDs with `PushID`/`PopID` or a `##suffix` (`"##AdvancedSettingsTabs"`). Widgets built in loops (per feature, per row) should push an ID derived from a stable key rather than the loop index when the list can reorder.
--   Prefer the RAII guards over raw Push/Pop for state: `Util::DisableGuard` (`src/Utils/UI.h`), `MenuFonts::FontRoleGuard`, `MenuFonts::ImFontGuard`, `MenuFonts::TabBarPaddingGuard` (`src/Menu/Fonts.h`).
--   Spacing, padding and colors come from `ThemeManager::Constants`, not literals. Scale sizes by the font/global scale rather than hardcoding pixels.
--   Icons: use Tabler (`Icons::TI`) for UI. FA and Game-Icons are for game-world icons (places, creatures, lore), e.g. `LocationTypeIcons.h`. Glyphs above U+FFFF can't load.
+- Version: 1.92.6 (pinned in `vcpkg.json` `overrides`), docking branch (`docking-experimental` vcpkg feature; `ImGuiConfigFlags_DockingEnable` is set in `Menu.cpp`). Keyboard and gamepad nav are enabled.
+- Backend: DX11 + Win32 (`imgui_impl_dx11.h` / `imgui_impl_win32.h`), driven from `src/Menu.cpp`, `src/Menu/OverlayRenderer.cpp` and `src/Menu/ThemeManager.cpp`. Do not modify backend, renderer or font-atlas setup code unless asked.
+- ImGui headers come from vcpkg, not the repo. Before using an API, check its signature in the pinned `imgui.h` (in the vcpkg-installed `imgui` package) and use `imgui_demo.cpp` as the reference for correct usage. Recent releases changed several APIs (1.92: dynamic fonts and `PushFont(font, size)`; 1.90: `ImGuiChildFlags` replacing the `BeginChild` border bool), so do not copy snippets written for older versions.
+- `imgui.h` is included by `include/PCH.h`. `imgui_internal.h` and `imgui_stdlib.h` are included per file; prefer public API and only reach into internals when nothing public works.
+- ImVec2/ImVec4 operators are not enabled (`IMGUI_DEFINE_MATH_OPERATORS` is not defined, and defining it in a `.cpp` is too late because the PCH already included `imgui.h`). Write arithmetic component-wise, as the existing code does: `ImVec2(a.x + b.x, a.y + b.y)`.
+- Give repeated or empty-label widgets unique IDs with `PushID`/`PopID` or a `##suffix` (`"##AdvancedSettingsTabs"`). Widgets built in loops (per feature, per row) should push an ID derived from a stable key rather than the loop index when the list can reorder.
+- Prefer the RAII guards over raw Push/Pop for state: `Util::DisableGuard` (`src/Utils/UI.h`), `MenuFonts::FontRoleGuard`, `MenuFonts::ImFontGuard`, `MenuFonts::TabBarPaddingGuard` (`src/Menu/Fonts.h`).
+- Spacing, padding and colors come from `ThemeManager::Constants`, not literals. Scale sizes by the font/global scale rather than hardcoding pixels.
+- Use `Util::Button`, not `ImGui::Button` (eased hover, hand cursor).
+- Colours drawn straight to an `ImDrawList` go through `ImGui::GetColorU32`, or they skip the menu fade.
+- Icons: use Tabler (`Icons::TI`) for UI. FA and Game-Icons are for game-world icons (places, creatures, lore), e.g. `LocationTypeIcons.h`. Glyphs above U+FFFF can't load.
 
 ## Internationalization (i18n)
 
@@ -137,13 +139,11 @@ ui.<component>                  Utility UI
 weather_editor.<item>           Weather editor
 ```
 
-After adding or changing strings (CI checks all of these):
+After adding or changing strings, regenerate locally (pre-commit.ci also runs both on PRs and pushes the fix):
 
 ```bash
-python tools/extract-i18n.py --write    # regenerate en.json
-python tools/extract-i18n.py --check
-python tools/extract-i18n.py --orphans
-python tools/sort-i18n.py --check       # if it fails: python tools/sort-i18n.py --write
+python tools/extract-i18n.py --write                 # regenerate en.json
+python tools/sort-i18n.py --write --prune-extra      # reorder locales, drop keys removed from en.json
 ```
 
 When editing non-English files: translate values only, never keys; keep placeholders (`{count}`), format specifiers (`%s`, `%.1f`) and anything after `##` unchanged.
@@ -158,10 +158,10 @@ These drive semantic-release: `feat:` → minor bump, `fix:` → patch, `feat!:`
 
 Do not, without explicit user direction:
 
--   Force-push or rebase `main` or `dev`, or force-reset `hotfix/X.Y.x` by hand (the release workflow does that).
--   Create tags matching `v*` (semantic-release owns them).
--   Bump `VERSION` in `CMakeLists.txt` outside the release workflow.
--   PR a feature branch into `main`.
--   Run `Release: Semantic Version` on `hotfix/X.Y.x` for the current line; it fails as out of range. Use `ff_target` into `main` instead.
+- Force-push or rebase `main` or `dev`, or force-reset `hotfix/X.Y.x` by hand (the release workflow does that).
+- Create tags matching `v*` (semantic-release owns them).
+- Bump `VERSION` in `CMakeLists.txt` outside the release workflow.
+- PR a feature branch into `main`.
+- Run `Release: Semantic Version` on `hotfix/X.Y.x` for the current line; it fails as out of range. Use `ff_target` into `main` instead.
 
 Release process: [Developers wiki: Patch Release Process](https://github.com/community-shaders/skyrim-community-shaders/wiki/Developers#patch-release-process-any-line).

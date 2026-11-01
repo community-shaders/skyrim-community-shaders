@@ -22,16 +22,16 @@ op-reordering restructure produces.
 
 ## Prerequisites
 
--   RenderDoc, reachable via the `renderdoc` MCP (`Eval`, `Get-Texture`, `Instance`).
--   SkyrimSE or SkyrimVR launchable with RenderDoc injected (`rd.ExecuteAndInject(<loader>, …,
+- RenderDoc, reachable via the `renderdoc` MCP (`Eval`, `Get-Texture`, `Instance`).
+- SkyrimSE or SkyrimVR launchable with RenderDoc injected (`rd.ExecuteAndInject(<loader>, …,
 hookIntoChildren=True)`, or launch from the RenderDoc GUI) — `<loader>` is `skse64_loader.exe`
-    for SE/AE and `sksevr_loader.exe` for VR. The **main menu** already runs the TAA pass, so it is
-    a valid capture surface on either edition.
--   The build must be in **TAA upscaling mode** (DLSS/FSR replace `ISTemporalAA`) and ideally with
-    **HDR and frame-generation off** — otherwise Open Shaders presents through a DX12 interop
-    swapchain and RenderDoc captures only the D3D12 present (Copy/Present, no draws), not the
-    D3D11 TAA pass.
--   `fxc.exe` (Windows SDK) — same compiler the offline verifier uses.
+  for SE/AE and `sksevr_loader.exe` for VR. The **main menu** already runs the TAA pass, so it is
+  a valid capture surface on either edition.
+- The build must be in **TAA upscaling mode** (DLSS/FSR replace `ISTemporalAA`) and ideally with
+  **HDR and frame-generation off** — otherwise Open Shaders presents through a DX12 interop
+  swapchain and RenderDoc captures only the D3D12 present (Copy/Present, no draws), not the
+  D3D11 TAA pass.
+- `fxc.exe` (Windows SDK) — same compiler the offline verifier uses.
 
 ## Steps
 
@@ -71,27 +71,27 @@ shader as the "candidate" and reports a meaningless `EQUIVALENT`.
 Confirm with `Instance list` (the `renderdoc` MCP) that an instance shows `capture_loaded: true`
 after capturing.
 
--   The **main menu** runs the TAA pass, but its history rectification is near-passthrough on a
-    static image. **A menu frame does NOT validate any change that flows through the motion-
-    dependent path** (reject / history reproject / clip-to-AABB) — it reads a false `EQUIVALENT`.
-    Use a menu frame only for changes you already know are motion-independent. _(This is how a
-    gate-inversion bug once slipped through: byte-for-byte `EQUIVALENT` on the menu, ~4× off under
-    motion — caught only by re-running on an in-game motion frame and bisecting the commits.)_
--   For anything touching the blend/reject core, capture an **in-game frame with real motion**.
-    Via `dev-bench` + `renderdoc`: load a light **interior** save, then `record replay` a movement
-    recording (continuous teleport along a path = sustained motion vectors) and fire
-    `TargetControl.TriggerCapture(1)` ~3 s into the replay from a **concurrent** `Eval` (the replay
-    call blocks for its whole duration, so the trigger must run in parallel). `camera setPov vanity`
-    gives orbiting motion on SE; in VR the HMD drives the camera, so **player translation is the
-    reliable VR motion source**.
--   **Capture size is the gate.** SE in-game ≈ 1.5 GB; VR interior ≈ 0.5–5.5 GB (loads fine); VR
-    **exterior ≈ 14 GB and wedges/crashes RenderDoc** — stay indoors (e.g. Dragonsreach). A
-    corrupt/oversized `.rdc` needs a full RenderDoc relaunch, not an MCP reconnect.
--   `TargetControl` sometimes returns a **stale** `NewCapture` path — verify the new `.rdc` by
-    timestamp/size on disk, don't trust the returned string.
--   On a huge frame, a full-frame `SetFrameEvent` sweep times out the eval worker — use
-    `taa_candidates(reverse=True, stop_after=1)` (or `max_scan_drawcalls=N`) to scan from the end
-    (post-process is near there) and stop at the first match.
+- The **main menu** runs the TAA pass, but its history rectification is near-passthrough on a
+  static image. **A menu frame does NOT validate any change that flows through the motion-
+  dependent path** (reject / history reproject / clip-to-AABB) — it reads a false `EQUIVALENT`.
+  Use a menu frame only for changes you already know are motion-independent. _(This is how a
+  gate-inversion bug once slipped through: byte-for-byte `EQUIVALENT` on the menu, ~4× off under
+  motion — caught only by re-running on an in-game motion frame and bisecting the commits.)_
+- For anything touching the blend/reject core, capture an **in-game frame with real motion**.
+  Via `dev-bench` + `renderdoc`: load a light **interior** save, then `record replay` a movement
+  recording (continuous teleport along a path = sustained motion vectors) and fire
+  `TargetControl.TriggerCapture(1)` ~3 s into the replay from a **concurrent** `Eval` (the replay
+  call blocks for its whole duration, so the trigger must run in parallel). `camera setPov vanity`
+  gives orbiting motion on SE; in VR the HMD drives the camera, so **player translation is the
+  reliable VR motion source**.
+- **Capture size is the gate.** SE in-game ≈ 1.5 GB; VR interior ≈ 0.5–5.5 GB (loads fine); VR
+  **exterior ≈ 14 GB and wedges/crashes RenderDoc** — stay indoors (e.g. Dragonsreach). A
+  corrupt/oversized `.rdc` needs a full RenderDoc relaunch, not an MCP reconnect.
+- `TargetControl` sometimes returns a **stale** `NewCapture` path — verify the new `.rdc` by
+  timestamp/size on disk, don't trust the returned string.
+- On a huge frame, a full-frame `SetFrameEvent` sweep times out the eval worker — use
+  `taa_candidates(reverse=True, stop_after=1)` (or `max_scan_drawcalls=N`) to scan from the end
+  (post-process is near there) and stop at the first match.
 
 ### 3. Load the harness and run the A/B (via the `renderdoc` MCP `Eval`)
 
@@ -122,8 +122,8 @@ ab(<eventId>,
 shader with slightly different optimization than offline fxc, so even an identical shader leaves
 a small **noise floor** (`baseline_vs_live.mean_abs`, e.g. ~2e-4 on a 10-bit RT). `ab()` reports:
 
--   `noise_floor_mean` — the baseline residue.
--   `verdict`: `EQUIVALENT` if `candidate_vs_live.mean_abs ≤ 3× the floor`, else `DIFFERS`.
+- `noise_floor_mean` — the baseline residue.
+- `verdict`: `EQUIVALENT` if `candidate_vs_live.mean_abs ≤ 3× the floor`, else `DIFFERS`.
 
 Validated on the SE main menu (TAA on, HDR/frame-gen off): the pre-rename `dev` shader read
 `EQUIVALENT` (mean = floor), a deliberately ×0.5 shader read `DIFFERS` (mean ≈ 83× floor, 61%
@@ -151,50 +151,50 @@ ab(cands[0]["eventId"], candidate_dxbc=..., baseline_dxbc=...)
 
 So to point it at a different shader you change only:
 
--   **The pass fingerprint** — pass your shader's distinctive SRV names to `find_candidates()` (no
-    source edit needed). Match by bound resources, not draw index (indices shift frame to frame).
--   **The permutation defines** — compile A′/B with the exact `/D` set the running build used.
--   **The capture state** — pick a frame that actually exercises the code path (see lessons).
+- **The pass fingerprint** — pass your shader's distinctive SRV names to `find_candidates()` (no
+  source edit needed). Match by bound resources, not draw index (indices shift frame to frame).
+- **The permutation defines** — compile A′/B with the exact `/D` set the running build used.
+- **The capture state** — pick a frame that actually exercises the code path (see lessons).
 
 ## Lessons (generalizable RE technique)
 
 These transfer to any GPU-shader RE/validation work, not just TAA:
 
--   **Offline byte-identity beats any runtime check — try it first.** Far more refactoring stays
-    bytecode-identical than you'd expect (even destructuring deeply-aliased decompile scratch, since
-    the compiler already SSA's it). Prove those with an `fxc` byte-compare
-    (`verify-shader-refactor.ps1`), one small step at a time — no game needed. Reserve a runtime swap
-    for changes where the compiler legitimately emits different-but-equivalent code (op reordering,
-    algebraic rewrites).
--   **Freeze inputs with a same-frame swap.** Any pass whose inputs are bound resources can be
-    validated by replacing only that shader on one captured frame: A and B then run on byte-identical
-    inputs, so the output diff is pure shader behaviour — no cross-launch timing/RNG/pose noise.
--   **Judge against a baseline noise floor, not zero.** The runtime compiler differs from offline
-    `fxc` by a few LSBs, so even an identical shader isn't bit-exact vs the live RT. Always swap the
-    _shipping_ shader in too and measure the candidate relative to that floor.
--   **Capture a state that exercises the path under test.** A degenerate frame (idle menu, static
-    camera, untaken branch) gives a false pass for any state-dependent code — temporal history,
-    motion vectors, conditionally-enabled features. Identify what state your code depends on and
-    capture a frame in it. _(TAA: a static menu read `EQUIVALENT` even with a real motion-path bug;
-    only an in-game motion frame exposed it.)_
--   **Baseline against the change's true parent, not a distant branch.** If your work is stacked on
-    an unmerged fix, diffing against `dev` folds that fix into the "floor" → a huge bogus residue and
-    a meaningless verdict. Compile the baseline from the immediate parent commit.
--   **Confirm which source you compiled.** A wrong-branch/ref compile silently validates the deployed
-    shader against itself and always reports `EQUIVALENT`. Check `git branch`/the ref first.
--   **Find the pass by its resource fingerprint, and reverse-scan.** Match a draw by its bound
-    textures/buffers, not its index (indices shift frame to frame). Post-process sits near frame end,
-    so scan drawcalls in reverse — a full-frame state sweep can time out on a large capture.
--   **Interop swapchains hide the inner API.** When an app presents D3D11 work through a DX12 interop
-    swapchain (here: HDR / frame-gen / upscaler paths), RenderDoc hooks the D3D12 present and the
-    D3D11 draws aren't in the frame at all. Disable the feature that triggers interop to capture the
-    inner API; if you can't, fall back to offline byte-identity for that permutation.
--   **Captures scale with scene complexity.** A heavy scene (especially stereo/VR) can produce a
-    multi-GB capture that wedges the tools; shrink the scene (interior, lower res) to keep captures
-    loadable. Verify a new capture by file timestamp/size — capture APIs sometimes return a stale path.
--   **Know your tooling's quirks.** (Here, the `renderdoc` MCP `Eval`: a fresh namespace per call can
-    drop your defs — `exec` the harness and call it in the _same_ `Eval`; and stdout may lag one call
-    behind, so poll again to drain it.)
--   One frame proves equivalence on that frame; loop over a few representative frames for confidence.
-    This is a regression check against a known-good baseline, not a formal proof — pair it with the
-    offline verifier, which formally covers everything that stays bytecode-identical.
+- **Offline byte-identity beats any runtime check — try it first.** Far more refactoring stays
+  bytecode-identical than you'd expect (even destructuring deeply-aliased decompile scratch, since
+  the compiler already SSA's it). Prove those with an `fxc` byte-compare
+  (`verify-shader-refactor.ps1`), one small step at a time — no game needed. Reserve a runtime swap
+  for changes where the compiler legitimately emits different-but-equivalent code (op reordering,
+  algebraic rewrites).
+- **Freeze inputs with a same-frame swap.** Any pass whose inputs are bound resources can be
+  validated by replacing only that shader on one captured frame: A and B then run on byte-identical
+  inputs, so the output diff is pure shader behaviour — no cross-launch timing/RNG/pose noise.
+- **Judge against a baseline noise floor, not zero.** The runtime compiler differs from offline
+  `fxc` by a few LSBs, so even an identical shader isn't bit-exact vs the live RT. Always swap the
+  _shipping_ shader in too and measure the candidate relative to that floor.
+- **Capture a state that exercises the path under test.** A degenerate frame (idle menu, static
+  camera, untaken branch) gives a false pass for any state-dependent code — temporal history,
+  motion vectors, conditionally-enabled features. Identify what state your code depends on and
+  capture a frame in it. _(TAA: a static menu read `EQUIVALENT` even with a real motion-path bug;
+  only an in-game motion frame exposed it.)_
+- **Baseline against the change's true parent, not a distant branch.** If your work is stacked on
+  an unmerged fix, diffing against `dev` folds that fix into the "floor" → a huge bogus residue and
+  a meaningless verdict. Compile the baseline from the immediate parent commit.
+- **Confirm which source you compiled.** A wrong-branch/ref compile silently validates the deployed
+  shader against itself and always reports `EQUIVALENT`. Check `git branch`/the ref first.
+- **Find the pass by its resource fingerprint, and reverse-scan.** Match a draw by its bound
+  textures/buffers, not its index (indices shift frame to frame). Post-process sits near frame end,
+  so scan drawcalls in reverse — a full-frame state sweep can time out on a large capture.
+- **Interop swapchains hide the inner API.** When an app presents D3D11 work through a DX12 interop
+  swapchain (here: HDR / frame-gen / upscaler paths), RenderDoc hooks the D3D12 present and the
+  D3D11 draws aren't in the frame at all. Disable the feature that triggers interop to capture the
+  inner API; if you can't, fall back to offline byte-identity for that permutation.
+- **Captures scale with scene complexity.** A heavy scene (especially stereo/VR) can produce a
+  multi-GB capture that wedges the tools; shrink the scene (interior, lower res) to keep captures
+  loadable. Verify a new capture by file timestamp/size — capture APIs sometimes return a stale path.
+- **Know your tooling's quirks.** (Here, the `renderdoc` MCP `Eval`: a fresh namespace per call can
+  drop your defs — `exec` the harness and call it in the _same_ `Eval`; and stdout may lag one call
+  behind, so poll again to drain it.)
+- One frame proves equivalence on that frame; loop over a few representative frames for confidence.
+  This is a regression check against a known-good baseline, not a formal proof — pair it with the
+  offline verifier, which formally covers everything that stays bytecode-identical.

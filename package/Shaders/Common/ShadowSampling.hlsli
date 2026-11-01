@@ -161,9 +161,8 @@ namespace ShadowSampling
 		return GetAmbientLighting() + GetDirectionalLighting();
 	}
 
-	void ExtractLighting(float3 inputColor, out float3 dirColor, out float3 ambientColor)
+	void ExtractLighting(float3 inputColor, float3 ambientColorAmb, out float3 dirColor, out float3 ambientColor)
 	{
-		float3 ambientColorAmb = GetAmbientLighting();
 		float3 dirLightColorDir = GetDirectionalLighting();
 
 		float inputLuma = Color::RGBToLuminance(inputColor);
@@ -179,6 +178,11 @@ namespace ShadowSampling
 
 		dirColor = dirLightColorAmb;
 		ambientColor = ambientColorAmb;
+	}
+
+	void ExtractLighting(float3 inputColor, out float3 dirColor, out float3 ambientColor)
+	{
+		ExtractLighting(inputColor, GetAmbientLighting(), dirColor, ambientColor);
 	}
 }
 

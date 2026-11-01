@@ -8,6 +8,7 @@
 #include "Menu/MenuIcons.h"
 #include "State.h"
 #include "Util.h"
+#include "Utils/UI.h"
 
 namespace FeatureIssues
 {
@@ -127,7 +128,7 @@ namespace FeatureIssues
 		return std::any_of(s_featureIssues.begin(), s_featureIssues.end(),
 			[](const auto& issue) {
 				return (issue.issueType == FeatureIssueInfo::IssueType::OBSOLETE && issue.ModifiedShaderDirectory()) ||
-			           issue.issueType == FeatureIssueInfo::IssueType::UNKNOWN;
+				       issue.issueType == FeatureIssueInfo::IssueType::UNKNOWN;
 			});
 	}
 
@@ -799,7 +800,7 @@ namespace FeatureIssues
 				ImGui::TextColored(theme.StatusPalette.Error, "%s", T("menu.issues.cannot_be_undone", "This action cannot be undone!"));
 				ImGui::Spacing();
 
-				if (ImGui::Button(T("menu.issues.delete", "Delete"), ImVec2(120, 0))) {
+				if (Util::Button(T("menu.issues.delete", "Delete"), ImVec2(120, 0))) {
 					if (DeleteFeatureFiles(issue)) {
 						s_pendingIssueRemoval = issue.shortName;
 					}
@@ -807,7 +808,7 @@ namespace FeatureIssues
 				}
 				ImGui::SetItemDefaultFocus();
 				ImGui::SameLine();
-				if (ImGui::Button(T("menu.issues.cancel", "Cancel"), ImVec2(120, 0))) {
+				if (Util::Button(T("menu.issues.cancel", "Cancel"), ImVec2(120, 0))) {
 					ImGui::CloseCurrentPopup();
 				}
 			}
@@ -1591,7 +1592,7 @@ namespace FeatureIssues
 								themeSettings.StatusPalette.RestartNeeded,
 								themeSettings.StatusPalette.CurrentHotkey);
 
-							if (ImGui::Button(T("menu.issues.test.create_test_inis", "Create Test Inis"), { -1, 0 })) {
+							if (Util::Button(T("menu.issues.test.create_test_inis", "Create Test Inis"), { -1, 0 })) {
 								auto testInis = CreateTestInis();
 								logger::info("Created {} test INI files for feature issue testing", testInis.size());
 							}
@@ -1614,7 +1615,7 @@ namespace FeatureIssues
 								themeSettings.StatusPalette.Error,
 								themeSettings.StatusPalette.CurrentHotkey);
 
-							if (ImGui::Button(T("menu.issues.test.restore", "Restore"), { -1, 0 })) {
+							if (Util::Button(T("menu.issues.test.restore", "Restore"), { -1, 0 })) {
 								auto& testInis = GetCurrentTestInis();
 								if (RestoreOriginalState(testInis)) {
 									logger::info("Successfully restored original state");

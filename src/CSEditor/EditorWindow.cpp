@@ -45,8 +45,6 @@
 namespace
 {
 	constexpr float kToggleActiveAlpha = 0.6f;
-	constexpr float kToggleHoverAlpha = 0.8f;
-	constexpr float kInactiveHoverAlpha = 0.25f;
 	constexpr float kMenuShortcutScale = 0.85f;
 	/// Game time slider width relative to the time speed slider in the toolbar.
 	constexpr float kMenuBarGameTimeWidthScale = 2.0f;
@@ -125,21 +123,14 @@ namespace
 	bool DrawBarIconButton(const char* id, Icons::GlyphRef glyph, bool enabled, const ImVec4& enabledColor, const ImVec4& disabledColor,
 		const ImVec2& size)
 	{
-		ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
-		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0.0f, 0.0f));
-		bool clicked = false;
-		{
-			auto _style = Util::TransparentIconButtonStyle();
-			ImGui::InvisibleButton(id, size);
-			const ImRect bb(ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
-			Util::DrawAnimatedButtonHighlight(bb, ImGui::GetItemID(), enabled && ImGui::IsItemHovered(), enabled && ImGui::IsItemActive(), false);
-			clicked = enabled && ImGui::IsItemClicked();
-			ImVec4 color = enabled ? enabledColor : disabledColor;
-			if (!enabled)
-				color.w = ThemeManager::Constants::CSE_DISABLED_ICON_ALPHA;
-			Icons::DrawCenteredGlyph(ImGui::GetWindowDrawList(), bb.Min, bb.GetSize(), glyph, ImGui::GetColorU32(color));
-		}
-		ImGui::PopStyleVar(2);
+		const bool pressed = ImGui::InvisibleButton(id, size, ImGuiButtonFlags_EnableNav);
+		const ImRect bb(ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
+		Util::DrawAnimatedButtonHighlight(bb, ImGui::GetItemID(), enabled && ImGui::IsItemHovered(), enabled && ImGui::IsItemActive(), false);
+		const bool clicked = enabled && pressed;
+		ImVec4 color = enabled ? enabledColor : disabledColor;
+		if (!enabled)
+			color.w = ThemeManager::Constants::CSE_DISABLED_ICON_ALPHA;
+		Icons::DrawCenteredGlyph(ImGui::GetWindowDrawList(), bb.Min, bb.GetSize(), glyph, ImGui::GetColorU32(color));
 		return clicked;
 	}
 
@@ -149,17 +140,12 @@ namespace
 	{
 		const bool clicked = ImGui::InvisibleButton(id, size);
 		const ImRect bb(ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
-		const auto blend = Util::Anim::ItemBlend(ImGui::GetItemID(), ImGui::IsItemHovered(), ImGui::IsItemActive(), isActive);
-		const float rounding = ImGui::GetStyle().FrameRounding;
 		ImDrawList* drawList = ImGui::GetWindowDrawList();
-		// Active fill, brightened by hover; an inactive button borrows the glyph colour for its hover tint
-		const ImVec4 tint = isActive ? activeColor : ImGui::ColorConvertU32ToFloat4(glyphColor);
-		const float restAlpha = isActive ? kToggleActiveAlpha : 0.0f;
-		const float hoverAlpha = isActive ? kToggleHoverAlpha : kInactiveHoverAlpha;
-		const float fillAlpha = restAlpha * blend.selected + (hoverAlpha - restAlpha * blend.selected) * blend.hover;
-		if (fillAlpha > 0.0f)
-			drawList->AddRectFilled(bb.Min, bb.Max, ImGui::GetColorU32(ImVec4(tint.x, tint.y, tint.z, fillAlpha)), rounding);
-		Util::Anim::FillLayer(drawList, bb.Min, bb.Max, rounding, ImGuiCol_ButtonActive, blend.press);
+		// The active state keeps its colour; hover and press are the bar's shared highlight
+		if (isActive)
+			drawList->AddRectFilled(bb.Min, bb.Max, ImGui::GetColorU32(ImVec4(activeColor.x, activeColor.y, activeColor.z, kToggleActiveAlpha)),
+				ImGui::GetStyle().FrameRounding);
+		Util::DrawAnimatedButtonHighlight(bb, ImGui::GetItemID(), ImGui::IsItemHovered(), ImGui::IsItemActive(), false, drawList);
 		Icons::DrawCenteredGlyph(drawList, bb.Min, bb.GetSize(), glyph, glyphColor);
 		return clicked;
 	}
@@ -204,7 +190,7 @@ namespace
 		EditorChromeScope& operator=(const EditorChromeScope&) = delete;
 
 	private:
-		static constexpr float kItemSpacingYScale = 0.55f;
+		static constexpr float kItemSpacingYScale = 0.75f;
 		static constexpr float kWindowPaddingYScale = 0.75f;
 		static constexpr int kDensityVars = 2;
 		static constexpr std::array<ImGuiStyleVar, 5> kRoundingVars{
@@ -1295,8 +1281,9 @@ void EditorWindow::RenderUI()
 			{
 				const bool unsaved = HasUnsavedChanges();
 				ImGui::SetCursorScreenPos(ImVec2(saveButtonX, iconY));
-				if (DrawToggleIconButton("##ActionBarSave", Icons::TI(MenuIcons::kSave), false, enabledColor, iconButtonSize,
-						ImGui::GetColorU32(unsaved ? Util::Colors::GetUnsaved() : textColor)))
+				const ImVec4 saveColor = unsaved ? Util::Colors::GetUnsaved() : textColor;
+				auto tint = Util::StateHoverButtonStyle(saveColor, unsaved);
+				if (DrawBarIconButton("##ActionBarSave", Icons::TI(MenuIcons::kSave), true, saveColor, saveColor, iconButtonSize))
 					SaveManager::SaveEditor(SaveManager::Trigger::User);
 				Util::AddTooltip(SaveManager::GetEditorSaveTooltip(unsaved));
 			}
@@ -2292,7 +2279,7 @@ namespace
 		// Clip the full rounded frame to the strip so the bottom corners match the frame rounding.
 		auto fillSpan = [&](float startHour, float endHour, ImU32 color) {
 			drawList->PushClipRect(ImVec2(stripX(startHour), frameMax.y - kPeriodStripHeight), ImVec2(stripX(endHour), frameMax.y), true);
-			drawList->AddRectFilled(frameMin, frameMax, color, ImGui::GetStyle().FrameRounding);
+			drawList->AddRectFilled(frameMin, frameMax, ImGui::GetColorU32(color), ImGui::GetStyle().FrameRounding);
 			drawList->PopClipRect();
 		};
 
@@ -2420,11 +2407,9 @@ void EditorWindow::DrawTimeControls()
 	DrawTimeScaleSlider("##TimeScale", calendar);
 
 	ImGui::SameLine();
-	{
-		auto _style = Util::TransparentIconButtonStyle();
-		if (Icons::Button("##FeatureResetSpeed", Icons::TI(MenuIcons::kRestore), ImVec2(iconSize, iconSize)))
-			ResetTimeScale();
-	}
+	const ImVec4 textColor = ImGui::GetStyleColorVec4(ImGuiCol_Text);
+	if (DrawBarIconButton("##FeatureResetSpeed", Icons::TI(MenuIcons::kRestore), true, textColor, textColor, ImVec2(iconSize, iconSize)))
+		ResetTimeScale();
 	if (auto _tt = Util::HoverTooltipWrapper())
 		ImGui::Text(T(TKEY("reset_speed_tooltip"), "Reset time speed to vanilla (%.1fx)"), kVanillaTimeScale);
 }

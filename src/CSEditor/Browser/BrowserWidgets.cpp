@@ -9,6 +9,7 @@
 #include "imgui_internal.h"
 
 #include "Utils/UIAnim.h"
+#include "Utils/UISurface.h"
 #include <algorithm>
 
 #include <cassert>
@@ -160,8 +161,9 @@ namespace BrowserUI
 		ImGui::PushID(id);
 		const auto& style = ImGui::GetStyle();
 		const float searchScale = Util::GetSearchUIScale();
-		const float iconSize = ThemeManager::Constants::COMBO_SEARCH_ICON_SIZE * searchScale;
-		const float padLeft = ThemeManager::Constants::COMBO_SEARCH_PADDING_LEFT * searchScale;
+		const float iconX = ThemeManager::Constants::COMBO_SEARCH_ICON_OFFSET_X * searchScale;
+		const float iconSize = Icons::CalcGlyphSize(Icons::TI(MenuIcons::kSearch)).x;
+		const float padLeft = iconX + iconSize + style.ItemInnerSpacing.x;
 		const float frameHeight = ImGui::GetFrameHeight();
 
 		if (ctrlFFocus && ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) &&
@@ -189,7 +191,7 @@ namespace BrowserUI
 			ImVec4 iconColor = ImGui::GetStyleColorVec4(ImGuiCol_Text);
 			iconColor.w *= ThemeManager::Constants::COMBO_SEARCH_ICON_ALPHA;
 			Icons::DrawCenteredGlyph(ImGui::GetWindowDrawList(),
-				ImVec2(min.x + ThemeManager::Constants::COMBO_SEARCH_ICON_OFFSET_X * searchScale, min.y),
+				ImVec2(min.x + iconX, min.y),
 				ImVec2(iconSize, frameHeight), Icons::TI(MenuIcons::kSearch), ImGui::GetColorU32(iconColor));
 		}
 
@@ -248,8 +250,7 @@ namespace BrowserUI
 		const float iconX = min.x + kChipPadX * scale;
 		if (icon)
 			icon(drawList, ImVec2(iconX + iconBox * 0.5f, centerY), iconBox, active ? ImGui::GetColorU32(tint) : secondary);
-		const ImVec2 textSize = ImGui::CalcTextSize(text);
-		drawList->AddText(ImVec2(iconX + iconBox + kChipGap * scale, centerY - textSize.y * 0.5f),
+		drawList->AddText(ImVec2(iconX + iconBox + kChipGap * scale, Util::CenterTextTopY(min.y, max.y - min.y)),
 			active ? ImGui::GetColorU32(ImGuiCol_Text) : secondary, text);
 
 		if (tooltip)
@@ -294,8 +295,7 @@ namespace BrowserUI
 			Icons::DrawCenteredGlyph(drawList, ImVec2(x, centerY - iconBox * 0.5f), ImVec2(iconBox, iconBox), icon, color);
 			x += iconBox + kChipGap * scale;
 		}
-		const ImVec2 textSize = ImGui::CalcTextSize(label);
-		drawList->AddText(ImVec2(x, centerY - textSize.y * 0.5f), ImGui::GetColorU32(ImGuiCol_Text), label);
+		drawList->AddText(ImVec2(x, Util::CenterTextTopY(min.y, max.y - min.y)), ImGui::GetColorU32(ImGuiCol_Text), label);
 		if (hovered)
 			ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
 		return clicked;
@@ -347,6 +347,8 @@ namespace BrowserUI
 		{
 			const float size = IconButtonSize();
 			const bool clicked = ImGui::InvisibleButton(id, ImVec2(size, size));
+			if (ImGui::IsItemHovered())
+				ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
 			const auto blend = Util::Anim::ItemBlend(ImGui::GetItemID(), ImGui::IsItemHovered(), ImGui::IsItemActive(), active);
 			ImDrawList* drawList = ImGui::GetWindowDrawList();
 			const ImVec2 min = ImGui::GetItemRectMin();
@@ -589,7 +591,7 @@ namespace BrowserUI
 
 	void HelpMarkerRight(const char* text)
 	{
-		RightAlign(ImGui::CalcTextSize(Util::kHelpMarkerLabel).x);
+		RightAlign(Util::HelpMarkerWidth());
 		Util::HelpMarker(text);
 	}
 
@@ -617,14 +619,17 @@ namespace BrowserUI
 
 	bool BeginCard(const char* id, const ImVec2& size, ImGuiChildFlags flags)
 	{
-		const auto& style = ImGui::GetStyle();
-		ImVec4 background = style.Colors[ImGuiCol_FrameBg];
-		background.w *= ThemeManager::Constants::CSE_CARD_BG_ALPHA;
-		ImGui::PushStyleColor(ImGuiCol_ChildBg, background);
-		ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, style.FrameRounding);
+		ImGui::PushStyleColor(ImGuiCol_ChildBg, IM_COL32_BLACK_TRANS);
 		const bool visible = ImGui::BeginChild(id, size, flags | ImGuiChildFlags_AlwaysUseWindowPadding);
-		ImGui::PopStyleVar();
 		ImGui::PopStyleColor();
+
+		// The section card's surface, so these follow the theme like the menu's cards
+		Util::Surface::Options surface;
+		surface.rounding = ImGui::GetStyle().ChildRounding;
+		surface.clip = Util::Surface::ParentClipRect();
+		const ImVec2 min = ImGui::GetWindowPos();
+		const ImVec2 cardSize = ImGui::GetWindowSize();
+		Util::Surface::Draw(ImGui::GetWindowDrawList(), min, ImVec2(min.x + cardSize.x, min.y + cardSize.y), Util::Surface::Role::SectionCard, surface);
 		return visible;
 	}
 

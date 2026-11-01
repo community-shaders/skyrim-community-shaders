@@ -239,9 +239,7 @@ void SubsurfaceScattering::DrawSSS()
 
 		blurCBData.BurleySamples = settings.BurleySamples;
 		// Burley always does full albedo removal/reapply; scatter mode only applies to Separable SSS.
-		blurCBData.ScatterMode = (settings.SSMode == 0)
-		                             ? (uint)std::clamp(settings.ScatterMode, (int)kPreScatter, (int)kPreAndPostScatter)
-		                             : (uint)kPostScatter;
+		blurCBData.ScatterMode = (settings.SSMode == 0) ? (uint)std::clamp(settings.ScatterMode, (int)kPreScatter, (int)kPreAndPostScatter) : (uint)kPostScatter;
 
 		blurCBData.MeanFreePathBase = settings.MeanFreePathBase;
 		blurCBData.MeanFreePathHuman = settings.MeanFreePathHuman;
@@ -437,6 +435,10 @@ void SubsurfaceScattering::ClearShaderCache()
 		prepassSS->Release();
 		prepassSS = nullptr;
 	}
+	if (prepassBurleySS) {
+		prepassBurleySS->Release();
+		prepassBurleySS = nullptr;
+	}
 	if (horizontalSSBlur) {
 		horizontalSSBlur->Release();
 		horizontalSSBlur = nullptr;
@@ -453,6 +455,11 @@ void SubsurfaceScattering::ClearShaderCache()
 
 ID3D11ComputeShader* SubsurfaceScattering::GetComputeShaderPrepass()
 {
+	if (settings.SSMode == 1) {
+		if (!prepassBurleySS)
+			prepassBurleySS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\SubsurfaceScattering\\DiffuseExtractionCS.hlsl", { { "BURLEY", "" } }, "cs_5_0");
+		return prepassBurleySS;
+	}
 	if (!prepassSS) {
 		logger::debug("Compiling prepassSS");
 		prepassSS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\SubsurfaceScattering\\DiffuseExtractionCS.hlsl", {}, "cs_5_0");

@@ -352,7 +352,7 @@ float3 LottesFilmic(float3 val)
 	float b = (pow(maxHDR, a) * midOut - pow(midIn, a) * peakOutput) /
 	          ((pow(maxHDR, a * d) - pow(midIn, a * d)) * midOut * peakOutput),
 		  c = (pow(maxHDR, a * d) * pow(midIn, a) * peakOutput - pow(maxHDR, a) * pow(midIn, a * d) * midOut) /
-	          ((pow(maxHDR, a * d) - pow(midIn, a * d)) * midOut * peakOutput);
+		      ((pow(maxHDR, a * d) - pow(midIn, a * d)) * midOut * peakOutput);
 
 	val = pow(val, a) / (pow(val, a * d) * b + c);
 	val = enableHDR ? clamp(val, 0.0, peakOutput) : saturate(val);

@@ -258,7 +258,7 @@ namespace BrowserUI
 	SelectionAction SelectionFooter(size_t selected, size_t selectedShown, const char* clearTooltip);
 
 	/**
-	 * @brief Opens a rounded, softly tinted child window for a detail panel; always pair with ImGui::EndChild.
+	 * @brief Opens a child window on the theme's section card surface for a detail panel; always pair with ImGui::EndChild.
 	 * @return Whether it is visible.
 	 */
 	bool BeginCard(const char* id, const ImVec2& size, ImGuiChildFlags flags = ImGuiChildFlags_None);

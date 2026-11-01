@@ -44,28 +44,20 @@ namespace
 
 bool MenuHeaderRenderer::GlyphIconButton(const char* id, Icons::GlyphRef glyph, float glyphBox, const char* tooltip, bool active)
 {
-	const ImVec2 framePadding = ImGui::GetStyle().FramePadding;
-	const ImVec2 buttonSize(glyphBox + framePadding.x * 2.0f, glyphBox + framePadding.y * 2.0f);
+	// Square like the nav buttons: the vertical padding on both axes
+	const float pad = ImGui::GetStyle().FramePadding.y;
+	const ImVec2 buttonSize(glyphBox + pad * 2.0f, glyphBox + pad * 2.0f);
 
 	ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
-	// The button itself is invisible; its fill is drawn from the eased hover / press / active blend
-	ImGui::PushStyleColor(ImGuiCol_Button, IM_COL32_BLACK_TRANS);
-	ImGui::PushStyleColor(ImGuiCol_ButtonHovered, IM_COL32_BLACK_TRANS);
-	ImGui::PushStyleColor(ImGuiCol_ButtonActive, IM_COL32_BLACK_TRANS);
+	// Clear at rest, except the current page's button, which keeps the hover fill
+	ImGui::PushStyleColor(ImGuiCol_Button, active ? ImGui::GetStyleColorVec4(ImGuiCol_ButtonHovered) : ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
 	const bool clicked = Util::Button(id, buttonSize);
-	const ImVec2 min = ImGui::GetItemRectMin();
-	const ImVec2 max = ImGui::GetItemRectMax();
-	ImGui::PopStyleColor(3);
+	ImGui::PopStyleColor();
 	ImGui::PopStyleVar();
-	const auto blend = Util::Anim::ItemBlend(ImGui::GetItemID(), ImGui::IsItemHovered(), ImGui::IsItemActive(), active);
-	if (const float fill = std::max(blend.hover * ThemeManager::Constants::HEADER_ICON_HOVER_ALPHA, blend.selected); fill > 0.0f)
-		ImGui::GetWindowDrawList()->AddRectFilled(min, max,
-			Util::Anim::ScaleAlphaU32(ImGui::GetColorU32(blend.selected > blend.hover ? ImGuiCol_ButtonHovered : ImGuiCol_FrameBgHovered), fill),
-			ImGui::GetStyle().FrameRounding);
+	const ImRect rect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
 
-	ImVec4 tint = BaseIconTint();
-	tint = Util::Anim::Lerp(tint, Util::Colors::GetAccent(), blend.selected);
-	DrawIconGlyph(ImGui::GetWindowDrawList(), ImVec2(min.x + framePadding.x, min.y + framePadding.y), glyphBox, glyph, ImGui::GetColorU32(tint));
+	const ImVec4 tint = active ? Util::Colors::GetAccent() : BaseIconTint();
+	DrawIconGlyph(ImGui::GetWindowDrawList(), ImVec2(rect.Min.x + pad, rect.Min.y + pad), glyphBox, glyph, ImGui::GetColorU32(tint));
 	if (tooltip) {
 		Util::HoverTip(tooltip);
 	}
@@ -281,7 +273,7 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, float uiScal
 				ImVec2 logoSizeVec(logoSize * logoAspectRatio, logoSize);
 
 				// Determine tint color for logo
-				ImU32 logoTint = IM_COL32_WHITE;
+				ImU32 logoTint = ImGui::GetColorU32(IM_COL32_WHITE);
 				if (globals::menu->GetSettings().Theme.UseMonochromeLogo) {
 					ImVec4 textColor = globals::menu->GetSettings().Theme.Palette.Text;
 					logoTint = ImGui::GetColorU32(textColor);
@@ -416,6 +408,7 @@ float MenuHeaderRenderer::RenderDockedIcons(const std::vector<ActionIcon>& actio
 
 		// Check mouse interaction against full area
 		const bool isHovered = ImGui::IsMouseHoveringRect(interactionRect.Min, interactionRect.Max, false);
+		auto unsavedTint = Util::StateHoverButtonStyle(Util::Colors::GetUnsaved(), it->unsaved);  // the unsaved save hovers in its colour
 		Util::DrawAnimatedButtonHighlight(interactionRect, ImGui::GetID(it->tooltip.c_str()), isHovered, isHovered && ImGui::IsMouseDown(ImGuiMouseButton_Left), false, fgDrawList);
 
 		// Draw icon with hover effect, using reduced area to minimize padding
@@ -429,7 +422,7 @@ float MenuHeaderRenderer::RenderDockedIcons(const std::vector<ActionIcon>& actio
 			tintColor = ImGui::GetColorU32(textColor);
 		} else {
 			// Use white/gray tint for colored icons
-			tintColor = isHovered ? IM_COL32_WHITE : ThemeManager::Constants::HEADER_COLOR_ICON_IDLE;
+			tintColor = ImGui::GetColorU32(isHovered ? IM_COL32_WHITE : ThemeManager::Constants::HEADER_COLOR_ICON_IDLE);
 		}
 		if (it->unsaved)
 			DrawUnsavedBox(fgDrawList, interactionRect.Min, interactionRect.Max);
@@ -477,61 +470,42 @@ void MenuHeaderRenderer::RenderUndockedIcons(const std::vector<ActionIcon>& acti
 	if (actionIcons.empty())
 		return;
 
-	// Undocked: Draw icons as ImageButtons in a table column
+	// Undocked: square buttons in a table column, drawn like the nav buttons (eased theme highlight, then the icon)
 	const float iconSize = GetHeaderIconSize(false, uiScale);
 	const float paddingReduction = ThemeManager::Constants::UNDOCKED_ICON_PADDING_REDUCTION * uiScale;
 	const ImVec2 imageSize(iconSize - paddingReduction, iconSize - paddingReduction);
+	const float pad = ImGui::GetStyle().FramePadding.y;
+	const ImVec2 buttonSize(imageSize.x + pad * 2.0f, imageSize.y + pad * 2.0f);
+	const ImU32 tint = ImGui::GetColorU32(BaseIconTint());
 
-	// Setup button styling for transparent background with hover effects
-	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(ThemeManager::Constants::UNDOCKED_ICON_ITEM_SPACING, 0.0f));  // Slightly increased spacing
-	ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);                                                           // Remove button borders
-	ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));                                                         // Transparent button background
-	ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ThemeManager::Constants::HEADER_UNDOCKED_HOVER_COLOR);
-
-	// Get tint color for monochrome icons
-	const ImVec4 tintColor = BaseIconTint();
-
-	// Same size as an ImageButton, which pads the image by FramePadding on each side
-	const ImVec2 framePadding = ImGui::GetStyle().FramePadding;
-	const ImVec2 glyphButtonSize(imageSize.x + framePadding.x * 2.0f, imageSize.y + framePadding.y * 2.0f);
-
-	// Draw action icons as ImageButtons, or glyph buttons where the texture is missing
+	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(ThemeManager::Constants::UNDOCKED_ICON_ITEM_SPACING, 0.0f));
 	for (size_t i = 0; i < actionIcons.size(); ++i) {
 		const auto& icon = actionIcons[i];
-		if (icon.unsaved) {
-			// The button's whole frame, which is what its hover highlight covers
-			const ImVec2 boxMin = ImGui::GetCursorScreenPos();
-			DrawUnsavedBox(ImGui::GetWindowDrawList(), boxMin, ImVec2(boxMin.x + glyphButtonSize.x, boxMin.y + glyphButtonSize.y));
-		}
-
-		std::string buttonId = std::format("##ActionBtn{}", i);
-
-		bool clicked;
+		const bool clicked = ImGui::InvisibleButton(std::format("##ActionBtn{}", i).c_str(), buttonSize, ImGuiButtonFlags_EnableNav);
+		const ImRect rect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
+		ImDrawList* drawList = ImGui::GetWindowDrawList();
+		if (icon.unsaved)
+			DrawUnsavedBox(drawList, rect.Min, rect.Max);
+		auto unsavedTint = Util::StateHoverButtonStyle(Util::Colors::GetUnsaved(), icon.unsaved);  // the unsaved save hovers in its colour
+		Util::DrawAnimatedButtonHighlight(rect, ImGui::GetItemID(), ImGui::IsItemHovered(), ImGui::IsItemActive(), false, drawList);
+		const ImVec2 contentMin(rect.Min.x + pad, rect.Min.y + pad);
 		if (icon.texture) {
-			// Use ImageButton with reduced image size to minimize padding
+			// Whole-pixel rect, and the mip level nearest this size, so the PNG edges stay crisp
+			const ImVec2 snappedMin = Util::IconLoader::SnapToPixel(contentMin);
 			const ImVec2 snappedSize = Util::IconLoader::SnapToPixel(imageSize);
-			clicked = ImGui::ImageButton(buttonId.c_str(), Util::IconLoader::ViewForSize(icon.texture, snappedSize), snappedSize, ImVec2(0, 0),
-				ImVec2(1, 1), ImVec4(0, 0, 0, 0), tintColor);
+			drawList->AddImage(Util::IconLoader::ViewForSize(icon.texture, snappedSize), snappedMin,
+				ImVec2(snappedMin.x + snappedSize.x, snappedMin.y + snappedSize.y), ImVec2(0, 0), ImVec2(1, 1), tint);
 		} else {
-			clicked = Util::Button(buttonId.c_str(), glyphButtonSize);
-			const ImVec2 min = ImGui::GetItemRectMin();
-			DrawIconGlyph(ImGui::GetWindowDrawList(), ImVec2(min.x + framePadding.x, min.y + framePadding.y), imageSize.x, icon.glyph,
-				ImGui::GetColorU32(tintColor));
+			DrawIconGlyph(drawList, contentMin, imageSize.x, icon.glyph, tint);
 		}
-		if (clicked) {
+		if (clicked)
 			icon.callback();
-		}
 		Util::HoverTip(icon.tooltip.c_str());
 
-		// Add SameLine except for the last button
-		if (i < actionIcons.size() - 1) {
+		if (i < actionIcons.size() - 1)
 			ImGui::SameLine();
-		}
 	}
-
-	// Restore default style
-	ImGui::PopStyleVar(2);    // Pop both style variables: ItemSpacing and FrameBorderSize
-	ImGui::PopStyleColor(2);  // Pop both style colors: Button and ButtonHovered
+	ImGui::PopStyleVar();
 }
 
 void MenuHeaderRenderer::RenderWatermarkLogo(const Util::IconLoader::UIIcons& uiIcons)
@@ -567,7 +541,7 @@ void MenuHeaderRenderer::RenderWatermarkLogo(const Util::IconLoader::UIIcons& ui
 		textColor.w = ThemeManager::Constants::WATERMARK_MONO_ALPHA;
 		watermarkColor = ImGui::GetColorU32(textColor);
 	} else {
-		watermarkColor = ThemeManager::Constants::WATERMARK_COLOR;
+		watermarkColor = ImGui::GetColorU32(ThemeManager::Constants::WATERMARK_COLOR);
 	}
 
 	const ImVec2 logoDrawMin = Util::IconLoader::SnapToPixel(logoMin);

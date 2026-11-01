@@ -1,17 +1,19 @@
 ﻿#include "EngineFix.h"
 
 #include "EngineFixes/EffectShaderNoDecalsFix.h"
+#include "EngineFixes/EmptyOverlayCullFix.h"
 #include "EngineFixes/LODBlendRingFix.h"
 #include "EngineFixes/LandscapeSeamsFix.h"
 #include "EngineFixes/ShadowmapCascadeCullingFix.h"
 #include "EngineFixes/ShadowmapCascadeRasterizerFix.h"
-#include "EngineFixes/SunShadowMaskFix.h"
 #include "EngineFixes/SunOcclusionPollFix.h"
+#include "EngineFixes/SunShadowMaskFix.h"
 #include "EngineFixes/WaterReflectionCubemapFix.h"
 
 const std::vector<EngineFix*>& EngineFix::GetOnPostPostLoadFixesList()
 {
 	static EffectShaderNoDecalsFix effectShaderNoDecalsFix;
+	static EmptyOverlayCullFix emptyOverlayCullFix;
 	static ShadowmapCascadeCullingFix shadowmapCascadeCullingFix;
 	static ShadowmapRasterizerFix shadowmapRasterizerFix;
 	static SunShadowMaskFix sunShadowMaskFix;
@@ -20,6 +22,7 @@ const std::vector<EngineFix*>& EngineFix::GetOnPostPostLoadFixesList()
 
 	static std::vector<EngineFix*> fixes = {
 		&effectShaderNoDecalsFix,
+		&emptyOverlayCullFix,
 		&LandscapeSeamsFix::GetInstance(),
 		&LODBlendRingFix::GetInstance(),
 		&shadowmapCascadeCullingFix,

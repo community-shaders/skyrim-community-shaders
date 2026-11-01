@@ -362,17 +362,6 @@ namespace Util::Anim
 		constexpr ImGuiID kSelRectSalt = 0xAE1C5F27u;  // + 0..3: the selected row's fill, relative to the list origin
 		constexpr ImGuiID kSelRectFrameSalt = 0xBF4D2A91u;
 
-		/// The area ImGui::Selectable fills for an item: its rect grown by half the item spacing.
-		ImRect SelectableFillRect(ImGuiSelectableFlags flags)
-		{
-			const ImGuiStyle& style = ImGui::GetStyle();
-			const float spacingX = (flags & ImGuiSelectableFlags_SpanAllColumns) ? 0.0f : style.ItemSpacing.x;
-			const float left = std::floor(spacingX * 0.5f);
-			const float top = std::floor(style.ItemSpacing.y * 0.5f);
-			return ImRect(ImVec2(ImGui::GetItemRectMin().x - left, ImGui::GetItemRectMin().y - top),
-				ImVec2(ImGui::GetItemRectMax().x + (spacingX - left), ImGui::GetItemRectMax().y + (style.ItemSpacing.y - top)));
-		}
-
 		/// The highlight's look: the accent at the NavSelected surface's strength, fainter on hover, darker once selected
 		/// or pressed, with the accent bar fading in on a selected row.
 		void DrawListHighlight(ImDrawList* drawList, const ImVec2& min, const ImVec2& max, float visibility, float selectedness, float press)
@@ -441,7 +430,8 @@ namespace Util::Anim
 
 		// The rect is kept relative to the window's scrolled origin, so it stays put while the list scrolls
 		const ImVec2 origin(window->Pos.x - window->Scroll.x, window->Pos.y - window->Scroll.y);
-		ImRect rect = SelectableFillRect(flags);
+		// Selectable's item rect already includes its half item spacing pad, which is the area ImGui fills
+		ImRect rect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
 		// The fill reaches half an item spacing past the row; keep it inside the window so a pane's edge never cuts the bar
 		rect.Min.x = std::max(rect.Min.x, window->InnerClipRect.Min.x);
 		rect.Max.x = std::min(rect.Max.x, window->InnerClipRect.Max.x);

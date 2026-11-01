@@ -235,7 +235,7 @@ namespace
 				const float thumb = Constants::HOME_PRESET_THUMB_SIZE * Util::GetUIScale();
 				ImGui::Dummy(ImVec2(thumb, thumb));
 				ImGui::GetWindowDrawList()->AddImageRounded(reinterpret_cast<ImTextureID>(pack->logoSRV.get()),
-					ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f), IM_COL32_WHITE,
+					ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f), ImGui::GetColorU32(IM_COL32_WHITE),
 					ImGui::GetStyle().FrameRounding);
 				ImGui::SameLine();
 			}
@@ -311,12 +311,15 @@ namespace
 	{
 		const ImGuiStyle& style = ImGui::GetStyle();
 		const float box = IconBoxSize();
-		const float buttonWidth = box + style.FramePadding.x * 2.0f;
-		const float clearX = ImGui::GetWindowWidth() - style.WindowPadding.x - buttonWidth;
+		// Square icon buttons pad by the vertical padding on both axes (GlyphIconButton)
+		const float buttonSize = box + style.FramePadding.y * 2.0f;
+		const float clearX = ImGui::GetWindowWidth() - style.WindowPadding.x - buttonSize;
 		ImGui::SameLine();
+		// The buttons are taller than the status text; centre them on its ink rather than hanging below it
+		ImGui::SetCursorPosY(ImGui::GetCursorPosY() + Util::GetTextInkCenterY() - buttonSize * 0.5f);
 		// Developer mode: the test scene button sits just left of the clear-cache icon
 		if (globals::state->IsDeveloperMode()) {
-			ImGui::SetCursorPosX(clearX - style.ItemSpacing.x - buttonWidth);
+			ImGui::SetCursorPosX(clearX - style.ItemSpacing.x - buttonSize);
 			if (MenuHeaderRenderer::GlyphIconButton("##HomeTestConditions", Icons::TI(MenuIcons::kTestScene), box, AdvancedSettingsRenderer::GetTestConditionsTooltip()))
 				AdvancedSettingsRenderer::RunTestConditions();
 			ImGui::SameLine();
@@ -325,12 +328,13 @@ namespace
 		const char* tooltip = T("menu.home.clear_cache_tooltip", "Clear shader cache...");
 		bool clicked;
 		if (auto* texture = globals::menu->GetUIIcons().clearCache.texture) {
-			ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
-			ImGui::PushStyleColor(ImGuiCol_Button, IM_COL32_BLACK_TRANS);
-			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, Constants::HEADER_UNDOCKED_HOVER_COLOR);
-			clicked = ImGui::ImageButton("##HomeClearCache", texture, ImVec2(box, box));
-			ImGui::PopStyleColor(2);
-			ImGui::PopStyleVar();
+			// Drawn like the header's nav buttons: eased theme highlight, then the icon
+			const float pad = style.FramePadding.y;
+			clicked = ImGui::InvisibleButton("##HomeClearCache", ImVec2(buttonSize, buttonSize), ImGuiButtonFlags_EnableNav);
+			const ImRect rect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
+			Util::DrawAnimatedButtonHighlight(rect, ImGui::GetItemID(), ImGui::IsItemHovered(), ImGui::IsItemActive(), false);
+			ImGui::GetWindowDrawList()->AddImage(texture, ImVec2(rect.Min.x + pad, rect.Min.y + pad), ImVec2(rect.Max.x - pad, rect.Max.y - pad),
+				ImVec2(0, 0), ImVec2(1, 1), ImGui::GetColorU32(IM_COL32_WHITE));
 			Util::AddTooltip(tooltip);
 		} else {
 			clicked = MenuHeaderRenderer::GlyphIconButton("##HomeClearCache", Icons::TI(MenuIcons::kClearCache), box, tooltip);
@@ -598,7 +602,7 @@ double HomePageRenderer::GetAttentionFocusRemaining()
 
 float HomePageRenderer::GetHelpButtonWidth()
 {
-	return ImGui::GetFontSize() + ImGui::GetStyle().FramePadding.x * 2.0f;
+	return ImGui::GetFontSize() + ImGui::GetStyle().FramePadding.y * 2.0f;
 }
 
 void HomePageRenderer::RenderHelpButton()
@@ -745,7 +749,7 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 	// Fullscreen fade on the dialog's own draw list, so it covers every window beneath it
 	auto* drawList = ImGui::GetWindowDrawList();
 	drawList->PushClipRectFullScreen();
-	drawList->AddRectFilled(ImVec2(0, 0), io.DisplaySize, IM_COL32(0, 0, 0, MODAL_OVERLAY_ALPHA));
+	drawList->AddRectFilled(ImVec2(0, 0), io.DisplaySize, ImGui::GetColorU32(IM_COL32(0, 0, 0, MODAL_OVERLAY_ALPHA)));
 	drawList->PopClipRect();
 
 	auto menu = Menu::GetSingleton();
@@ -762,7 +766,7 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 
 		ImVec4 monoColor = menu->GetSettings().Theme.Palette.Text;
 		monoColor.w = Constants::HOME_SETUP_WATERMARK_MONO_ALPHA;
-		const ImU32 watermarkColor = menu->GetSettings().Theme.UseMonochromeLogo ? ImGui::GetColorU32(monoColor) : Constants::HOME_SETUP_WATERMARK_COLOR;
+		const ImU32 watermarkColor = menu->GetSettings().Theme.UseMonochromeLogo ? ImGui::GetColorU32(monoColor) : ImGui::GetColorU32(Constants::HOME_SETUP_WATERMARK_COLOR);
 		drawList->AddImage(Util::IconLoader::GetIcons().logo.texture, logoMin, logoMax, ImVec2(0, 0), ImVec2(1, 1), watermarkColor);
 	}
 

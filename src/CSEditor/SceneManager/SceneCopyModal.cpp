@@ -961,7 +961,8 @@ namespace
 
 		ImGui::SetCursorScreenPos(ImVec2(min.x + pad.x, min.y + pad.y));
 		Util::TextUnformattedDisabled(caption);
-		ImGui::SetCursorScreenPos(ImVec2(min.x + pad.x, ImGui::GetCursorScreenPos().y));
+		// Not the cursor: after the swap button's SameLine it advances by the button's line height, not the caption's.
+		ImGui::SetCursorScreenPos(ImVec2(min.x + pad.x, min.y + pad.y + ImGui::GetTextLineHeightWithSpacing()));
 		if (side) {
 			DrawTintedGlyph(side->icon, ImGui::GetTextLineHeight());
 			BrowserUI::EllipsizedText(side->label.c_str(), max.x - pad.x - ImGui::GetCursorScreenPos().x,

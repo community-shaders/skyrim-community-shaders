@@ -526,7 +526,7 @@ void ColorGrading::DrawSettings()
 		// Tonemapping curve visualization (GPU-evaluated, RGB overlay)
 		if (ImGui::TreeNode(T(TKEY("curve_preview"), "Curve Preview"))) {
 			curveReadbackRequested = true;
-			curveReadbackRequestFrame = ImGui::GetFrameCount();
+			curveReadbackRequestFrame = static_cast<int64_t>(globals::state->frameCount);
 
 			if (settings.skipLUT) {
 				ImGui::TextDisabled(T(TKEY("curve_preview_requires_lut"), "Enable LUT generation to see curve preview (uncheck 'Skip LUT')"));
@@ -552,11 +552,11 @@ void ColorGrading::DrawSettings()
 				auto* dl = ImGui::GetWindowDrawList();
 
 				// Background
-				dl->AddRectFilled(canvasPos, { canvasPos.x + canvasSize.x, canvasPos.y + canvasSize.y }, IM_COL32(20, 20, 20, 255));
-				dl->AddRect(canvasPos, { canvasPos.x + canvasSize.x, canvasPos.y + canvasSize.y }, IM_COL32(80, 80, 80, 255));
+				dl->AddRectFilled(canvasPos, { canvasPos.x + canvasSize.x, canvasPos.y + canvasSize.y }, ImGui::GetColorU32(IM_COL32(20, 20, 20, 255)));
+				dl->AddRect(canvasPos, { canvasPos.x + canvasSize.x, canvasPos.y + canvasSize.y }, ImGui::GetColorU32(IM_COL32(80, 80, 80, 255)));
 
 				// Grid lines
-				auto gridColor = IM_COL32(50, 50, 50, 255);
+				auto gridColor = ImGui::GetColorU32(IM_COL32(50, 50, 50, 255));
 				for (int g = 1; g <= 3; g++) {
 					float gy = canvasPos.y + canvasSize.y * (1.f - (float)g / 4.f);
 					dl->AddLine({ canvasPos.x, gy }, { canvasPos.x + canvasSize.x, gy }, gridColor);
@@ -574,7 +574,7 @@ void ColorGrading::DrawSettings()
 					float y0 = canvasPos.y + canvasSize.y;
 					float x1 = canvasPos.x + canvasSize.x * identityEndX;
 					float y1 = canvasPos.y + canvasSize.y * (1.f - std::min(1.f, yMax) / yMax);
-					dl->AddLine({ x0, y0 }, { x1, y1 }, IM_COL32(80, 80, 80, 128));
+					dl->AddLine({ x0, y0 }, { x1, y1 }, ImGui::GetColorU32(IM_COL32(80, 80, 80, 128)));
 				}
 
 				// Draw RGB curves
@@ -584,7 +584,7 @@ void ColorGrading::DrawSettings()
 						float x1 = canvasPos.x + canvasSize.x * ((float)(i + 1) / (CurveSamples - 1));
 						float y0 = canvasPos.y + canvasSize.y * (1.f - std::clamp(data[i] / yMax, 0.f, 1.f));
 						float y1 = canvasPos.y + canvasSize.y * (1.f - std::clamp(data[i + 1] / yMax, 0.f, 1.f));
-						dl->AddLine({ x0, y0 }, { x1, y1 }, color, 1.5f);
+						dl->AddLine({ x0, y0 }, { x1, y1 }, ImGui::GetColorU32(color), 1.5f);
 					}
 				};
 
@@ -600,7 +600,7 @@ void ColorGrading::DrawSettings()
 					float preValue = t * CurveMaxInput;
 
 					// Vertical cursor line
-					dl->AddLine({ mousePos.x, canvasPos.y }, { mousePos.x, canvasPos.y + canvasSize.y }, IM_COL32(200, 200, 200, 100));
+					dl->AddLine({ mousePos.x, canvasPos.y }, { mousePos.x, canvasPos.y + canvasSize.y }, ImGui::GetColorU32(IM_COL32(200, 200, 200, 100)));
 
 					ImGui::BeginTooltip();
 					ImGui::Text(T(TKEY("curve_preview_pre"), "Pre:  %.3f"), preValue);
@@ -855,6 +855,7 @@ void ColorGrading::SetupResources()
 		};
 
 		texLUT = std::make_unique<Texture3D>(lutTexDesc);
+		lutValid = false;
 		texLUT->CreateSRV(lutSrvDesc);
 		texLUT->CreateUAV(lutUavDesc);
 	}
@@ -1084,7 +1085,9 @@ void ColorGrading::Draw(TextureInfo& inout_tex)
 	context->CSSetSamplers(0, 1, samplers.data());
 	ID3D11UnorderedAccessView* uav = nullptr;
 
-	if (!settings.skipLUT) {
+	// The LUT depends only on ColorCB and the generator shader, so regenerate it only when either changed.
+	const uint64_t generation = shaderGeneration.load(std::memory_order_relaxed);
+	if (!settings.skipLUT && (!lutValid || lutShader != lutgenCS.get() || lutGeneration != generation || memcmp(&colorCBData, lutKey.data(), sizeof(ColorCB)) != 0)) {
 		// LUT Gen
 		uav = texLUT->uav.get();
 		context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
@@ -1094,6 +1097,11 @@ void ColorGrading::Draw(TextureInfo& inout_tex)
 		uav = nullptr;
 		context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
 		context->CSSetShader(nullptr, nullptr, 0);
+
+		lutValid = lutgenCS.get() != nullptr;
+		lutShader = lutgenCS.get();
+		lutGeneration = generation;
+		memcpy(lutKey.data(), &colorCBData, sizeof(ColorCB));
 	}
 
 	// Apply Color Grading (via LUT or direct)
@@ -1137,7 +1145,7 @@ void ColorGrading::Draw(TextureInfo& inout_tex)
 	const bool curveReadbackActive =
 		curveReadbackRequested &&
 		ImGui::GetCurrentContext() &&
-		curveReadbackRequestFrame >= ImGui::GetFrameCount() - 1;
+		curveReadbackRequestFrame >= static_cast<int64_t>(globals::state->frameCount) - 1;
 	if (!curveReadbackActive)
 		curveReadbackRequested = false;
 
