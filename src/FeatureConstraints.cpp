@@ -2,6 +2,7 @@
 #include "Feature.h"
 #include "Globals.h"
 #include "State.h"
+#include "Utils/Logging.h"
 
 #include <unordered_set>
 
@@ -26,12 +27,9 @@ namespace FeatureConstraints
 					} else if (constraint.forcedValue != result.forcedValue) {
 						// Two features disagree on the forced value; first one wins.
 						// Log once so it surfaces during development / testing.
-						static std::mutex loggedConflictsMutex;
-						static std::unordered_set<std::string> loggedConflicts;
-						std::scoped_lock lock(loggedConflictsMutex);
-						if (loggedConflicts.insert(std::format("{}.{}|{}|{}|{}", setting.featureShortName, setting.settingPath, feature->GetShortName(),
-													   FormatConstraintValue(constraint.forcedValue), FormatConstraintValue(result.forcedValue)))
-								.second)
+						static Util::OnceSet loggedConflicts;
+						if (loggedConflicts.First(setting.featureShortName, setting.settingPath, feature->GetShortName(),
+								constraint.forcedValue, result.forcedValue))
 							logger::warn("[FeatureConstraints] Conflict on {}.{}: {} wants {}, but {} already forced {}",
 								setting.featureShortName, setting.settingPath,
 								feature->GetName(), FormatConstraintValue(constraint.forcedValue),

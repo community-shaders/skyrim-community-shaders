@@ -1,6 +1,7 @@
 #include "Menu.h"
 #include "Menu/FeatureUndo.h"
 #include "Menu/FontAtlasState.h"
+#include "Utils/Logging.h"
 #include "Utils/Notifications.h"
 
 #ifndef DIRECTINPUT_VERSION
@@ -1104,13 +1105,12 @@ void Menu::DrawOverlay()
 	}
 
 	if (pendingCursorReload && canReload) {
-		static bool loggedCursorReloadRetry = false;
+		static Util::OnceFlag loggedCursorReloadRetry;
 		if (Util::CursorLoader::Reload(this)) {
 			pendingCursorReload = false;
-			loggedCursorReloadRetry = false;
-		} else if (!loggedCursorReloadRetry) {
+			loggedCursorReloadRetry.Reset();
+		} else if (loggedCursorReloadRetry.First()) {
 			logger::warn("Menu::DrawOverlay() - Cursor reload deferred (will retry when ready)");
-			loggedCursorReloadRetry = true;
 		}
 	}
 
