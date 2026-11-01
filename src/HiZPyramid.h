@@ -3,40 +3,47 @@
 #include "Buffer.h"
 
 /**
- * @brief Max-depth mip pyramid over scene depth, shared by Grass Optimizations and Procedural Grass for occlusion culling.
- * A texel at level N is exactly the farthest depth of everything beneath it.
+ * @brief Shared max-depth pyramid for conservative occlusion culling.
+ * Depth runs from 0 (near) to 1 (far); padding uses far depth.
  */
 class HiZPyramid
 {
 public:
 	/**
-	 * @brief Rebuilds the pyramid from the live main depth, falling back to the post-Z-prepass copy.
-	 * @param device Device used to create the per-mip views when the size changes.
-	 * @param ctx Immediate context the reduction dispatches are issued on.
-	 * @param forceRefresh Rebuild even when the pyramid was already produced this frame.
-	 * @return True when the pyramid is valid for this frame.
+	 * @brief Builds from main depth or the prepass copy, reusing this frame's cached pyramid.
+	 * @param device Device for texture and view creation.
+	 * @param ctx Immediate context for compute dispatches.
+	 * @param forceRefresh Rebuild after depth changes within the same frame.
+	 * @return Whether a pyramid is available for this frame.
+	 * @note Restores render targets and clears used SRV/UAV slots. Call before binding
+	 * the next pass's compute shader, constant buffers and resources.
 	 */
 	bool Build(ID3D11Device* device, ID3D11DeviceContext* ctx, bool forceRefresh = false);
 
-	/** @brief Returns the full-chain SRV, or nullptr when the pyramid is not valid this frame. */
+	/** @brief Returns this frame's pyramid SRV, or nullptr. */
 	ID3D11ShaderResourceView* GetSRV() const;
-	/** @brief Returns true when Build succeeded for the current frame. */
+	/** @brief Reports whether a build succeeded this frame. */
 	bool IsValid() const;
-	/** @brief Returns true when the current pyramid uses this frame's live opaque depth. */
+	/** @brief Reports whether this frame's pyramid was built from main depth. */
 	bool HasCurrentSceneDepth() const { return IsValid() && usingLiveDepth; }
-	/** @brief Returns the base level width in texels. */
+	/** @brief Returns the active base width in texels, rounded up. */
 	uint32_t GetWidth() const { return width; }
-	/** @brief Returns the base level height in texels. */
+	/** @brief Returns the active base height in texels, rounded up. */
 	uint32_t GetHeight() const { return height; }
-	/** @brief Returns the number of trustworthy mip levels; 1 when the reduction chain is absent. */
-	uint32_t GetMipCount() const { return spdCS ? mipCount : 1u; }
+	/** @brief Returns the usable mip count; 1 when SPD is unavailable. */
+	uint32_t GetMipCount() const { return spdCS && texture ? texture->desc.MipLevels : 1u; }
 
 	/** @brief Creates the reduction parameter buffer. */
 	void SetupResources();
-	/** @brief Releases the cached compute shaders so they recompile on next use. */
+	/** @brief Clears shaders and compilation failures for a retry on next use. */
 	void ClearShaderCache();
 
 private:
+	static constexpr uint32_t kDownsampleFactor = 4;
+	// Padding to 64x64 preserves every texel through six reductions.
+	static constexpr uint32_t kOutputMipCount = 6;
+	static constexpr uint32_t kTileSize = 64;
+
 	struct alignas(16) BaseParams
 	{
 		uint32_t srcWidth;
@@ -55,20 +62,19 @@ private:
 	};
 	STATIC_ASSERT_ALIGNAS_16(SPDParams);
 
-	/** @brief Returns the post-Z-prepass depth SRV, the fallback when the live main depth is unavailable. */
+	/** @brief Returns the prepass depth copy used when main depth is unavailable. */
 	static ID3D11ShaderResourceView* GetSourceDepthSRV();
 
-	/** @brief Returns the live main depth SRV, or nullptr when unavailable. */
+	/** @brief Returns the original main-depth SRV, or nullptr. */
 	static ID3D11ShaderResourceView* GetLiveDepthSRV();
 
-	/** @brief (Re)creates the pyramid texture and its per-mip views for a new size. */
-	bool CreateTexture(ID3D11Device* device, uint32_t dstW, uint32_t dstH);
+	/** @brief Creates up to outputMipCount reduction levels, limited by the texture dimensions. */
+	bool CreateTexture(ID3D11Device* device, uint32_t dstW, uint32_t dstH, uint32_t outputMipCount);
 
 	std::unique_ptr<Texture2D> texture;
-	// False when the base pass read the post-Z-prepass fallback.
 	bool usingLiveDepth = false;
-	std::array<uint32_t, 10> lastLogKey{};
-	std::vector<winrt::com_ptr<ID3D11UnorderedAccessView>> mipUAVs;
+	// SPD writes mips 1 and above; the texture owns the mip-0 UAV.
+	std::vector<winrt::com_ptr<ID3D11UnorderedAccessView>> outputUAVs;
 	winrt::com_ptr<ID3D11ShaderResourceView> mip0SRV;
 	std::unique_ptr<ConstantBuffer> paramsCB;
 
@@ -80,14 +86,6 @@ private:
 
 	uint32_t width = 0;
 	uint32_t height = 0;
-	uint32_t paddedWidth = 0;
-	uint32_t paddedHeight = 0;
-	uint32_t mipCount = 1;
 	bool valid = false;
 	uint32_t builtFrame = UINT32_MAX;
-
-	static constexpr uint32_t kDownsampleFactor = 4;
-	// A 64x64-padded base halves exactly for six levels; a seventh could floor an odd level and drop its last row.
-	static constexpr uint32_t kExactMips = 6;
-	static constexpr uint32_t tileSize = 64;
 };
