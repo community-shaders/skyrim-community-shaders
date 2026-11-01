@@ -12,7 +12,6 @@
  */
 
 #include "Menu/FontAtlasState.h"
-#include "Utils/UI.h"
 
 #include <format>
 #include <imgui.h>
@@ -188,80 +187,5 @@ namespace Icons
 			return;
 		FontGuard font(glyph);
 		ImGui::TextUnformatted(glyph.utf8);
-	}
-
-	/**
-	 * @brief Icon-only button (id is an ImGui ##suffix). The glyph is centred by its ink, not by its advance width
-	 * as a button label would be, so glyphs with uneven side bearings (the three dots, say) sit in the middle.
-	 */
-	inline bool Button(const char* id, GlyphRef glyph, const ImVec2& size = ImVec2(0, 0))
-	{
-		if (!glyph)
-			return false;
-		ImVec2 buttonSize = size;
-		if (buttonSize.x <= 0.0f || buttonSize.y <= 0.0f) {
-			FontGuard font(glyph);
-			// Square like the nav buttons: the glyph's line and the vertical padding on both axes
-			const float side = ImGui::CalcTextSize(glyph.utf8).y + ImGui::GetStyle().FramePadding.y * 2.0f;
-			if (buttonSize.x <= 0.0f)
-				buttonSize.x = side;
-			if (buttonSize.y <= 0.0f)
-				buttonSize.y = side;
-		}
-		const bool clicked = Util::Button(id, buttonSize);
-		DrawCenteredGlyph(ImGui::GetWindowDrawList(), ImGui::GetItemRectMin(), ImGui::GetItemRectSize(), glyph, ImGui::GetColorU32(ImGuiCol_Text));
-		return clicked;
-	}
-
-	/** @brief Gap LabeledButton leaves between its glyph and label. */
-	inline float LabeledButtonGap(GlyphRef glyph, const char* label)
-	{
-		return (glyph && label && label[0]) ? ImGui::GetStyle().ItemInnerSpacing.x : 0.0f;
-	}
-
-	/** @brief Width LabeledButton takes at its natural size, for right-aligning it. */
-	inline float MeasureLabeledButton(GlyphRef glyph, const char* label)
-	{
-		const float labelWidth = label ? ImGui::CalcTextSize(label).x : 0.0f;
-		return CalcGlyphSize(glyph).x + LabeledButtonGap(glyph, label) + labelWidth + ImGui::GetStyle().FramePadding.x * 2.0f;
-	}
-
-	/**
-	 * @brief Button with a leading icon glyph and body-font label.
-	 * Icon fonts have no Latin glyphs, so the two faces are drawn separately.
-	 */
-	inline bool LabeledButton(const char* id, GlyphRef glyph, const char* label,
-		const ImVec2& size = ImVec2(0, 0))
-	{
-		const ImVec2 iconSize = CalcGlyphSize(glyph);
-		const ImVec2 labelSize = label ? ImGui::CalcTextSize(label) : ImVec2(0, 0);
-		const float gap = LabeledButtonGap(glyph, label);
-
-		ImVec2 btnSize = size;
-		if (btnSize.x <= 0.0f)
-			btnSize.x = MeasureLabeledButton(glyph, label);
-		if (btnSize.y <= 0.0f)
-			btnSize.y = ImGui::GetFrameHeight();
-
-		ImGui::PushID(id);
-		const bool clicked = Util::Button("##labeled", btnSize);
-		const ImVec2 min = ImGui::GetItemRectMin();
-		const ImVec2 max = ImGui::GetItemRectMax();
-		ImDrawList* dl = ImGui::GetWindowDrawList();
-
-		const float contentW = iconSize.x + gap + labelSize.x;
-		float x = min.x + (btnSize.x - contentW) * 0.5f;
-		const float midY = (min.y + max.y) * 0.5f;
-		const ImU32 col = ImGui::GetColorU32(ImGuiCol_Text);
-
-		if (glyph) {
-			DrawCenteredGlyph(dl, ImVec2(x, min.y), ImVec2(iconSize.x, btnSize.y), glyph, col);
-			x += iconSize.x + gap;
-		}
-		if (label && label[0])
-			dl->AddText(ImVec2(x, midY - labelSize.y * 0.5f), col, label);
-
-		ImGui::PopID();
-		return clicked;
 	}
 }

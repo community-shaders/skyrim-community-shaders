@@ -4,7 +4,6 @@
 #include <string>
 
 #include "../../I18n/I18n.h"
-#include "../Browser/BrowserWidgets.h"
 #include "Menu/Icons/helpers/IconFonts.h"
 #include "Menu/Icons/helpers/SceneActionIcons.h"
 #include "SceneCopyModal.h"
@@ -93,7 +92,7 @@ namespace
 		                                      SceneTransitionField::GetWidth() + style.ItemSpacing.x :
 		                                  0.0f;
 		// Pause, copy, and clear, each set apart by a divider.
-		return BrowserUI::IconButtonSize() * 3.0f + transitionWidth + CompactDividerWidth() * 2.0f;
+		return Util::IconButtonSize() * 3.0f + transitionWidth + CompactDividerWidth() * 2.0f;
 	}
 
 	/// Right-aligns a toolbar of a_width, moving it to its own row when the current one cannot hold it.
@@ -142,7 +141,7 @@ namespace
 		                                ActionTooltip(T(TKEY("scene_page_resume_all"), "Resume All"),
 											T(TKEY("scene_page_resume_all_tooltip"), "Applies every override on this page again."));
 		ImGui::BeginDisabled(a_summary.total == 0);
-		if (BrowserUI::IconButton("##ScenePageToggle", pauseTarget ? SceneActionIcons::kPause : SceneActionIcons::kResume,
+		if (Util::IconButton("##ScenePageToggle", pauseTarget ? SceneActionIcons::kPause : SceneActionIcons::kResume,
 				tooltip.c_str(), !pauseTarget))
 			a_manager.SetContextEntriesPaused(a_context, pauseTarget);
 		ImGui::EndDisabled();
@@ -157,7 +156,7 @@ namespace
 				"Copies settings between this page and other times of day, interiors, weathers or locations, with a "
 				"preview before anything changes."));
 		ImGui::BeginDisabled(!a_hasEntries && !SceneCopyModal::HasSources(a_context));
-		if (BrowserUI::IconButton("##ScenePageCopy", SceneActionIcons::kCopy, tooltip.c_str()))
+		if (Util::IconButton("##ScenePageCopy", SceneActionIcons::kCopy, tooltip.c_str()))
 			SceneCopyModal::Open(a_context);
 		ImGui::EndDisabled();
 	}
@@ -169,8 +168,8 @@ namespace
 		const std::string tooltip = ActionTooltip(clearLabel,
 			T(TKEY("scene_page_clear_tooltip"), "Removes every override this page holds."));
 		ImGui::BeginDisabled(a_summary.total == 0);
-		if (BrowserUI::IconButton("##ScenePageClear", SceneActionIcons::kDelete, tooltip.c_str(), false,
-				BrowserUI::DestructiveIconColor())) {
+		if (Util::IconButton("##ScenePageClear", SceneActionIcons::kDelete, tooltip.c_str(), false,
+				Util::DestructiveIconColor())) {
 			auto count = a_summary.total;
 			auto pageName = a_manager.GetSceneContextDisplayName(a_context);
 			clearConfirmation.popup.title = T(TKEY("scene_page_clear_title"), "Clear page");

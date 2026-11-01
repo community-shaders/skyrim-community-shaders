@@ -720,27 +720,27 @@ void DynamicCubemaps::SetupResources()
 		uavDesc.Texture2DArray.FirstArraySlice = 0;
 		uavDesc.Texture2DArray.ArraySize = texDesc.ArraySize;
 
-		envCaptureTexture = new Texture2D(texDesc);
+		envCaptureTexture = new Texture2D(texDesc, "DynamicCubemaps::EnvCapture");
 		envCaptureTexture->CreateSRV(srvDesc);
 		envCaptureTexture->CreateUAV(uavDesc);
 
-		envCaptureRawTexture = new Texture2D(texDesc);
+		envCaptureRawTexture = new Texture2D(texDesc, "DynamicCubemaps::EnvCaptureRaw");
 		envCaptureRawTexture->CreateSRV(srvDesc);
 		envCaptureRawTexture->CreateUAV(uavDesc);
 
-		envCapturePositionTexture = new Texture2D(texDesc);
+		envCapturePositionTexture = new Texture2D(texDesc, "DynamicCubemaps::EnvCapturePosition");
 		envCapturePositionTexture->CreateSRV(srvDesc);
 		envCapturePositionTexture->CreateUAV(uavDesc);
 
-		envCaptureReflectionsTexture = new Texture2D(texDesc);
+		envCaptureReflectionsTexture = new Texture2D(texDesc, "DynamicCubemaps::EnvCaptureReflections");
 		envCaptureReflectionsTexture->CreateSRV(srvDesc);
 		envCaptureReflectionsTexture->CreateUAV(uavDesc);
 
-		envCaptureRawReflectionsTexture = new Texture2D(texDesc);
+		envCaptureRawReflectionsTexture = new Texture2D(texDesc, "DynamicCubemaps::EnvCaptureRawReflections");
 		envCaptureRawReflectionsTexture->CreateSRV(srvDesc);
 		envCaptureRawReflectionsTexture->CreateUAV(uavDesc);
 
-		envCapturePositionReflectionsTexture = new Texture2D(texDesc);
+		envCapturePositionReflectionsTexture = new Texture2D(texDesc, "DynamicCubemaps::EnvCapturePositionReflections");
 		envCapturePositionReflectionsTexture->CreateSRV(srvDesc);
 		envCapturePositionReflectionsTexture->CreateUAV(uavDesc);
 
@@ -748,11 +748,11 @@ void DynamicCubemaps::SetupResources()
 		srvDesc.Format = texDesc.Format;
 		uavDesc.Format = texDesc.Format;
 
-		envTexture = new Texture2D(texDesc);
+		envTexture = new Texture2D(texDesc, "DynamicCubemaps::Env");
 		envTexture->CreateSRV(srvDesc);
 		envTexture->CreateUAV(uavDesc);
 
-		envReflectionsTexture = new Texture2D(texDesc);
+		envReflectionsTexture = new Texture2D(texDesc, "DynamicCubemaps::EnvReflections");
 		envReflectionsTexture->CreateSRV(srvDesc);
 		envReflectionsTexture->CreateUAV(uavDesc);
 
@@ -891,7 +891,10 @@ void DynamicCubemaps::SetupResources()
 	}
 
 	{
-		DirectX::CreateDDSTextureFromFile(device, L"Data\\Shaders\\DynamicCubemaps\\defaultcubemap.dds", nullptr, &defaultCubemap);
+		winrt::com_ptr<ID3D11Resource> defaultCubemapResource;
+		DirectX::CreateDDSTextureFromFile(device, L"Data\\Shaders\\DynamicCubemaps\\defaultcubemap.dds", defaultCubemapResource.put(), &defaultCubemap);
+		Util::SetResourceName(defaultCubemapResource.get(), "DynamicCubemaps::DefaultCubemap");
+		Util::SetResourceName(defaultCubemap, "DynamicCubemaps::DefaultCubemap SRV");
 	}
 }
 

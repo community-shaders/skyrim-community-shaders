@@ -455,19 +455,20 @@ namespace
 		return nullptr;
 	}
 
-	/** @brief The setting's value in one of the settings layers State holds for its feature. */
-	const json* FindStateLayerValue(const SettingMetadata& a_setting,
-		const json* (State::*a_layer)(const std::string&) const)
+	/**
+	 * @brief The setting's value in the layers beneath the user's edits (defaults with Baseline packs applied),
+	 *        with defaults that depend on the feature's current settings adjusted.
+	 * @param a_storage Holds the adjusted document the result points into.
+	 */
+	const json* FindContextualBaseValue(const SettingMetadata& a_setting, json& a_storage)
 	{
 		auto* feature = Feature::FindFeatureByShortName(std::string{ a_setting.featureShortName });
-		const auto* layer = feature ? (globals::state->*a_layer)(feature->GetName()) : nullptr;
-		return layer ? SceneSettingsInternal::GetCatalogSerializedValue(*layer, a_setting) : nullptr;
-	}
-
-	/** @brief The setting's value in the layers beneath the user's edits: defaults with Baseline packs applied. */
-	const json* FindLayeredBaseValue(const SettingMetadata& a_setting)
-	{
-		return FindStateLayerValue(a_setting, &State::GetFeatureBase);
+		const auto* base = feature ? globals::state->GetFeatureBase(feature->GetName()) : nullptr;
+		if (!base)
+			return nullptr;
+		a_storage = *base;
+		feature->ApplyContextualDefaults(a_storage);
+		return SceneSettingsInternal::GetCatalogSerializedValue(a_storage, a_setting);
 	}
 }
 
@@ -691,7 +692,7 @@ void SceneWidgetBinding::Guard::DrawBaselineGutter()
 				SceneSettingsUI::OpenSceneContext(*context, identity.featureShortName);
 		Util::AddTooltip(T(TKEY("baseline_jump_tooltip"), "Open the Scene Manager page supplying this value."));
 	} else {
-		const bool committed = Icons::Button("##SketchCommit", SceneActionIcons::kSave);
+		const bool committed = Util::LabeledButton("##SketchCommit", SceneActionIcons::kSave);
 		if (committed) {
 			std::vector<SceneSettingsManager::SettingIdentity> sketched;
 			for (const auto& component : components)
@@ -1209,10 +1210,11 @@ bool SceneWidgetBinding::Guard::TryResetFromGesture()
 
 	// Back to what lies beneath the edit: the Baseline pack's value, else the default
 	bool reset = false;
+	json contextualBase;
 	for (const auto& component : components) {
 		std::string packId;
 		const auto* packValue = FindBaselineValue(*component.setting, packId);
-		const auto* beneath = packValue ? packValue : FindLayeredBaseValue(*component.setting);
+		const auto* beneath = packValue ? packValue : FindContextualBaseValue(*component.setting, contextualBase);
 		if (!beneath || SceneSettingsManager::AppliedValuesEqual(*beneath, ReadEditedValue(component)))
 			continue;
 		WriteComponent(value.data, component, *beneath);

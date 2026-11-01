@@ -704,7 +704,6 @@
     "cs_editor.scene_transition_tooltip": "Antalet sekunder som värdet tonar in och ut när platsen ändras.\nLämna fältet tomt för att följa sidans övergångstid.",
     "cs_editor.scene_undo_label": "Scenhanteraren",
     "cs_editor.scene_weather_unresolved": "Det här vädret saknar formulär och kan därför inte innehålla åsidosättningar.",
-    "cs_editor.search_clear": "Rensa sökningen",
     "cs_editor.search_settings_hint": "Sök inställningar (Ctrl+F)",
     "cs_editor.select_weather": "Välj väder",
     "cs_editor.session_history": "Session och historik",
@@ -1051,7 +1050,6 @@
     "feature.effects11.category.weather_desc": "Vädervisa värden från filerna som anges i _weatherlist.ini.",
     "feature.effects11.description": "Effects 11 läser in ENBSeries-kompatibel FX-efterbearbetning. Installera flera förinställningar under Data/SKSE/Plugins/CommunityShaders/Effects11/Presets/<Name>/, var och en med enbseries.ini och enbseries/, använd en klassisk enbseries-installation i rotkatalogen/Data som Äldre eller leverera effects11/ i ett samlat förinställningspaket. Byte under körning ändrar inte filer i rotkatalogen.",
     "feature.effects11.editor.cancel": "Avbryt",
-    "feature.effects11.editor.clear_search": "Rensa sökningen",
     "feature.effects11.editor.context_hint": "Högerklicka på ett värde för att återställa, kopiera eller klistra in.",
     "feature.effects11.editor.copy": "Kopiera",
     "feature.effects11.editor.copy_errors": "Kopiera fel",
@@ -3542,8 +3540,6 @@
     "menu.features.settings_hidden_disabled": "Funktionsinställningarna är dolda eftersom funktionen är inaktiverad vid start.",
     "menu.features.sort_alphabetically": "Alfabetiskt",
     "menu.features.sort_by_category": "Efter kategori",
-    "menu.features.tag_alpha": "[ALPHA]",
-    "menu.features.tag_beta": "[BETA]",
     "menu.features.unpin": "Lossa",
     "menu.features.use_baselines": "Använd Baseline-värden",
     "menu.features.use_baselines_tooltip": "Använd värden från Baseline-förinställningar: dina ändringar åsidosätter inställningar som Baseline-förinställningarna anger. Klicka för att ta bort ändringarna och använda förinställningarnas värden. Dina övriga ändringar behålls.",
@@ -4237,5 +4233,6 @@
     "ui.restore_saved_settings_confirm": "Du har osparade ändringar. Om du återställer de sparade inställningarna försvinner de. Det går inte att ångra.",
     "ui.restore_saved_settings_title": "Återställa sparade inställningar?",
     "ui.search": "Sök…",
+    "ui.search_clear": "Rensa sökningen",
     "ui.search_features": "Sök funktioner…"
 }
