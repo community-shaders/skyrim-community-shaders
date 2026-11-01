@@ -567,13 +567,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	}
 	[branch] if (pbrDetail && (PBRFlags & PBR::Flags::Fuzz) != 0)
 	{
-		material.FuzzColor = PBRParams3.xyz;
+		material.FuzzColor = Color::LinearSRGBToWorking(PBRParams3.xyz);
 		material.FuzzWeight = PBRParams3.w;
-		material.FuzzRoughness = PBRParams5.x >= 0.0f ? PBRParams5.x : material.Roughness;
+		material.FuzzRoughness = PBRParams5.x;
 		[branch] if ((PBRFlags & PBR::Flags::HasFeatureTexture1) != 0)
 		{
 			float4 fuzz = TexFuzzSampler.Sample(SampFuzzSampler, input.TexCoord.xy);
-			material.FuzzColor *= Color::Albedo(Color::LinearSRGBToWorking(fuzz.xyz));
+			material.FuzzColor *= Color::LinearSRGBToWorking(fuzz.xyz);
 			material.FuzzWeight *= fuzz.w;
 		}
 		[branch] if ((PBRFlags & PBR::Flags::HasFuzzRoughnessTexture) != 0)
