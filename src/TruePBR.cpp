@@ -954,7 +954,7 @@ struct BSLightingShaderProperty_GetRenderPasses_LocalMap
 	static inline REL::Relocation<decltype(thunk)> func;
 };
 
-/** @brief True when the material opts in to fuzz roughness in emissive alpha and the texture format stores alpha. */
+/** @brief True when fuzz roughness explicitly uses a valid emissive alpha channel. */
 static bool HasEmissiveFuzzRoughness(const BSLightingShaderMaterialPBR* material)
 {
 	if (!material->fuzzRoughnessTexture) {
@@ -966,27 +966,9 @@ static bool HasEmissiveFuzzRoughness(const BSLightingShaderMaterialPBR* material
 		return false;
 	}
 
-	D3D11_SHADER_RESOURCE_VIEW_DESC desc;
+	D3D11_SHADER_RESOURCE_VIEW_DESC desc{};
 	texture->rendererTexture->resourceView->GetDesc(&desc);
-	switch (desc.Format) {
-	case DXGI_FORMAT_BC2_UNORM:
-	case DXGI_FORMAT_BC2_UNORM_SRGB:
-	case DXGI_FORMAT_BC3_UNORM:
-	case DXGI_FORMAT_BC3_UNORM_SRGB:
-	case DXGI_FORMAT_BC7_UNORM:
-	case DXGI_FORMAT_BC7_UNORM_SRGB:
-	case DXGI_FORMAT_R8G8B8A8_UNORM:
-	case DXGI_FORMAT_R8G8B8A8_UNORM_SRGB:
-	case DXGI_FORMAT_B8G8R8A8_UNORM:
-	case DXGI_FORMAT_B8G8R8A8_UNORM_SRGB:
-	case DXGI_FORMAT_R10G10B10A2_UNORM:
-	case DXGI_FORMAT_R16G16B16A16_UNORM:
-	case DXGI_FORMAT_R16G16B16A16_FLOAT:
-	case DXGI_FORMAT_R32G32B32A32_FLOAT:
-		return true;
-	default:
-		return false;
-	}
+	return Util::SupportsMaterialAlpha(desc.Format);
 }
 
 bool TruePBR::BSLightingShader_SetupMaterial(RE::BSLightingShader* shader, RE::BSLightingShaderMaterialBase const* material)
