@@ -393,6 +393,16 @@ void PostProcessing::SaveSettings(json& o_json)
 	o_json.erase("ppsettings");
 }
 
+void PostProcessing::ApplyContextualDefaults(json& a_defaults) const
+{
+	for (const auto& pipe : pipeline) {
+		if (!pipe)
+			continue;
+		if (auto section = a_defaults.find(pipe->GetType()); section != a_defaults.end() && section->contains("settings"))
+			pipe->ApplyContextualDefaults((*section)["settings"]);
+	}
+}
+
 void PostProcessing::BuildPipeline()
 {
 	pipeline[static_cast<size_t>(FeaturePipelineIndex::LocalExposure)] = std::make_shared<LocalExposure>();

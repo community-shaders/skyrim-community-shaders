@@ -176,7 +176,7 @@ void VolumetricLighting::PostPostLoad()
 
 void VolumetricLighting::SetupResources()
 {
-	vlDataCB = new ConstantBuffer(ConstantBufferDesc<VLData>());
+	vlDataCB = new ConstantBuffer(ConstantBufferDesc<VLData>(), "VolumetricLighting::VLDataCB");
 }
 
 void VolumetricLighting::EarlyPrepass()

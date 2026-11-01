@@ -7,6 +7,7 @@
 #include "Globals.h"
 #include "Menu.h"
 #include "State.h"
+#include "Utils/Game.h"
 
 #include "PresetManager.h"
 #include "SettingManager.h"
@@ -538,6 +539,7 @@ void EffectManager::CreateQuadGeometry()
 	initData.pSysMem = vertices;
 
 	DX::ThrowIfFailed(globals::d3d::device->CreateBuffer(&bufferDesc, &initData, quadVertexBuffer.put()));
+	Util::SetResourceName(quadVertexBuffer.get(), "EffectManager::QuadVertexBuffer");
 
 	// Create input layout for ENB post-processing
 	D3D11_INPUT_ELEMENT_DESC inputElementDescs[] = {
@@ -568,6 +570,7 @@ void EffectManager::CreateQuadGeometry()
 	if (FAILED(hr)) {
 		logger::error("[EFFECTS11] Failed to create shared input layout for ENB effects");
 	}
+	Util::SetResourceName(inputLayout.get(), "EffectManager::InputLayout");
 }
 
 void EffectManager::CreateRenderStates()
@@ -586,6 +589,7 @@ void EffectManager::CreateRenderStates()
 	rastDesc.AntialiasedLineEnable = FALSE;
 
 	DX::ThrowIfFailed(globals::d3d::device->CreateRasterizerState(&rastDesc, rasterizerState.put()));
+	Util::SetResourceName(rasterizerState.get(), "EffectManager::RasterizerState");
 
 	// Blend state for standard rendering (no blending)
 	D3D11_BLEND_DESC blendDesc = {};
@@ -595,6 +599,7 @@ void EffectManager::CreateRenderStates()
 	blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
 
 	DX::ThrowIfFailed(globals::d3d::device->CreateBlendState(&blendDesc, blendState.put()));
+	Util::SetResourceName(blendState.get(), "EffectManager::BlendState");
 }
 
 void EffectManager::CreateCopyShaders()
@@ -619,6 +624,7 @@ void EffectManager::CreateCopyShaders()
 		logger::error("[EFFECTS11] Failed to create copy vertex shader");
 		return;
 	}
+	Util::SetResourceName(copyVertexShader.get(), "EffectManager::CopyVS");
 
 	auto pixelShaderSource = LoadShaderFile("Data\\Shaders\\Effects11\\CopyPS.hlsl");
 	if (pixelShaderSource.empty())
@@ -641,6 +647,7 @@ void EffectManager::CreateCopyShaders()
 		logger::error("[EFFECTS11] Failed to create copy pixel shader");
 		return;
 	}
+	Util::SetResourceName(copyPixelShader.get(), "EffectManager::CopyPS");
 
 	D3D11_BUFFER_DESC cbDesc{};
 	cbDesc.ByteWidth = 16;
@@ -648,6 +655,7 @@ void EffectManager::CreateCopyShaders()
 	cbDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
 	cbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
 	globals::d3d::device->CreateBuffer(&cbDesc, nullptr, ditherConstantBuffer.put());
+	Util::SetResourceName(ditherConstantBuffer.get(), "EffectManager::DitherCB");
 
 	logger::info("[EFFECTS11] Created texture copy shaders successfully");
 }
@@ -674,6 +682,7 @@ void EffectManager::CreateColorCorrectionShader()
 		logger::error("[EFFECTS11] Failed to create color correction compute shader");
 		return;
 	}
+	Util::SetResourceName(colorCorrectionComputeShader.get(), "EffectManager::ColorCorrectionCS");
 
 	// Create constant buffer
 	D3D11_BUFFER_DESC cbDesc = {};
@@ -687,6 +696,7 @@ void EffectManager::CreateColorCorrectionShader()
 		logger::error("[EFFECTS11] Failed to create color correction constant buffer");
 		return;
 	}
+	Util::SetResourceName(colorCorrectionConstantBuffer.get(), "EffectManager::ColorCorrectionCB");
 
 	logger::info("[EFFECTS11] Created color correction compute shader successfully");
 }
@@ -920,24 +930,13 @@ void EffectManager::UpdateCursorData()
 	commonData.tempInfo2[3] = lastRightClick[1];
 }
 
-float EffectManager::GetSunVisibility(const RE::Sun* a_sun)
-{
-	if (!a_sun || !a_sun->root || !a_sun->sunBaseNode || !a_sun->sunBase)
-		return 0.0f;
-	if (a_sun->root->GetFlags().any(RE::NiAVObject::Flag::kHidden) || a_sun->sunBaseNode->GetFlags().any(RE::NiAVObject::Flag::kHidden))
-		return 0.0f;
-
-	const auto property = skyrim_cast<RE::BSSkyShaderProperty*>(a_sun->sunBase->GetGeometryRuntimeData().shaderProperty.get());
-	return property ? std::clamp(property->kBlendColor.alpha, 0.0f, 1.0f) : 0.0f;
-}
-
 void EffectManager::UpdateLightParameters()
 {
 	auto sky = globals::game::sky;
 	if (!sky || !sky->sun || !sky->sun->root || !sky->root)
 		return;
 
-	const float visibility = GetSunVisibility(sky->sun);
+	const float visibility = Util::GetSunVisibility(sky->sun);
 	if (visibility <= 0.0f)
 		return;
 
