@@ -29,6 +29,7 @@
 #include <dxgi.h>
 #include <imgui.h>
 #include <imgui_internal.h>
+#include <imgui_stdlib.h>
 #include <wrl/client.h>
 
 #include "../Feature.h"
@@ -210,6 +211,12 @@ namespace Util
 		ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
 		ImGui::TextUnformatted(a_text, a_textEnd);
 		ImGui::PopStyleColor();
+	}
+
+	void SeparatorTextWithFont(const char* a_text, Menu::FontRole a_role)
+	{
+		MenuFonts::FontRoleGuard guard(a_role);
+		ImGui::SeparatorText(a_text);
 	}
 
 	bool TableRowSelectable(const char* label, bool selected, ImGuiSelectableFlags flags)
@@ -656,7 +663,6 @@ namespace Util
 	{
 		constexpr float kBadgePadX = 5.0f;
 		constexpr float kBadgePadY = 1.5f;
-		constexpr float kBadgeRounding = 3.0f;
 		constexpr float kBadgeFillAlpha = 0.22f;
 		constexpr float kBadgeLabelTowardText = 0.35f;
 	}
@@ -681,21 +687,22 @@ namespace Util
 		const float y = a_min.y + (a_rowHeight - pillH) * 0.5f;
 
 		a_drawList->AddRectFilled(ImVec2(a_min.x, y), ImVec2(a_min.x + pillW, y + pillH),
-			ImGui::GetColorU32(a_bg), kBadgeRounding * scale);
+			ImGui::GetColorU32(a_bg), ImGui::GetStyle().FrameRounding);
 		a_drawList->AddText(ImVec2(a_min.x + padX, y + padY), ImGui::GetColorU32(a_fg), a_label);
 		return pillW;
 	}
 
-	void Badge(const char* a_label, const ImVec4& a_tint)
+	void Badge(const char* a_label, const ImVec4& a_tint, float a_rowHeight)
 	{
 		const ImVec4 text = ImGui::GetStyleColorVec4(ImGuiCol_Text);
 		const ImVec4 bg(a_tint.x, a_tint.y, a_tint.z, kBadgeFillAlpha);
 		const ImVec4 fg(a_tint.x + (text.x - a_tint.x) * kBadgeLabelTowardText,
 			a_tint.y + (text.y - a_tint.y) * kBadgeLabelTowardText,
 			a_tint.z + (text.z - a_tint.z) * kBadgeLabelTowardText, 1.0f);
-		const float lineH = ImGui::GetTextLineHeight();
-		const float width = DrawBadgeAt(ImGui::GetCursorScreenPos(), lineH, a_label, bg, fg);
-		ImGui::Dummy(ImVec2(width, lineH));
+		if (a_rowHeight <= 0.0f)
+			a_rowHeight = ImGui::GetTextLineHeight();
+		const float width = DrawBadgeAt(ImGui::GetCursorScreenPos(), a_rowHeight, a_label, bg, fg);
+		ImGui::Dummy(ImVec2(width, a_rowHeight));
 	}
 
 	float MeasureHdrSdrCapabilityPillWidth(bool a_supportsHDR)
@@ -1778,6 +1785,15 @@ namespace Util
 		window->DrawList->PopClipRect();
 	}
 
+	// Close-button cross, sized like ImGui's RenderCloseButton.
+	static void DrawCloseCross(ImDrawList* drawList, const ImVec2& c, float fontSize)
+	{
+		const float d = fontSize * kCloseCrossDiagonalScale - kCloseCrossInset;
+		const ImU32 col = ImGui::GetColorU32(ImGuiCol_Text);
+		drawList->AddLine({ c.x - d, c.y - d }, { c.x + d, c.y + d }, col);
+		drawList->AddLine({ c.x + d, c.y - d }, { c.x - d, c.y + d }, col);
+	}
+
 	// Draws a rounded close button overlay, matching native ImGui CloseButton position.
 	static void DrawRoundedCloseHighlight(ImGuiWindow* window)
 	{
@@ -1786,12 +1802,7 @@ namespace Util
 
 		const float sz = ImGui::GetFontSize();
 		DrawRoundedTitleBarButton(window, RightTitleBarButtonOrigin(window, sz), sz, [&](const ImRect& bb) {
-			// Cross lines match ImGui's internal RenderCloseButton geometry.
-			const ImVec2 c = bb.GetCenter();
-			const float d = sz * kCloseCrossDiagonalScale - kCloseCrossInset;
-			const ImU32 col = ImGui::GetColorU32(ImGuiCol_Text);
-			window->DrawList->AddLine({ c.x - d, c.y - d }, { c.x + d, c.y + d }, col);
-			window->DrawList->AddLine({ c.x + d, c.y - d }, { c.x - d, c.y + d }, col);
+			DrawCloseCross(window->DrawList, bb.GetCenter(), sz);
 		});
 	}
 
@@ -1851,20 +1862,6 @@ namespace Util
 	// true state after it - so, like the main window's own header, this frame draws whatever last
 	// frame was and re-checks are one frame behind a dock/undock transition.
 	static std::unordered_map<std::string, bool> s_customHeaderWasDocked;
-
-	// Draws the close button's crossed lines, matching DrawRoundedCloseHighlight's native geometry.
-	// Unlike the native button, nothing else renders the X, so it has to be drawn unconditionally
-	// rather than only while highlighted.
-	static void DrawCustomHeaderCloseCross(const ImVec2& min, const ImVec2& max)
-	{
-		const ImVec2 c((min.x + max.x) * 0.5f, (min.y + max.y) * 0.5f);
-		const float sz = max.x - min.x;
-		const float d = sz * kCloseCrossDiagonalScale - kCloseCrossInset;
-		const ImU32 col = ImGui::GetColorU32(ImGuiCol_Text);
-		ImDrawList* drawList = ImGui::GetWindowDrawList();
-		drawList->AddLine({ c.x - d, c.y - d }, { c.x + d, c.y + d }, col);
-		drawList->AddLine({ c.x + d, c.y - d }, { c.x - d, c.y + d }, col);
-	}
 
 	float GetEditorChromeHeaderHeight()
 	{
@@ -1945,7 +1942,7 @@ namespace Util
 				rowStart.y + (rowHeight - closeSize) * 0.5f));
 			auto _style = TransparentIconButtonStyle();
 			const bool clicked = Util::Button("##CustomHeaderClose", ImVec2(closeSize, closeSize));
-			DrawCustomHeaderCloseCross(ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
+			DrawCloseCross(ImGui::GetWindowDrawList(), ImRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax()).GetCenter(), ImGui::GetFontSize());
 			if (clicked)
 				*p_open = false;
 		}
@@ -2431,7 +2428,7 @@ namespace Util
 	{
 		struct ComboSearchState
 		{
-			char buffer[256] = {};
+			std::string buffer;
 			bool needsFocus = true;
 		};
 
@@ -2440,6 +2437,66 @@ namespace Util
 			static std::unordered_map<std::string, ComboSearchState> states;
 			return states;
 		}
+	}
+
+	bool SearchField(const char* id, std::string& text, const char* hint, float width, bool ctrlFFocus,
+		ImGuiInputTextFlags flags, ImGuiInputTextCallback callback, void* userData)
+	{
+		ImGui::PushID(id);
+		const auto& style = ImGui::GetStyle();
+		const float searchScale = Util::GetSearchUIScale();
+		const float iconX = C::SEARCH_ICON_OFFSET_X * searchScale;
+		const float iconSize = Icons::CalcGlyphSize(Icons::TI(MenuIcons::kSearch)).x;
+		const float padLeft = iconX + iconSize + style.ItemInnerSpacing.x;
+		const float frameHeight = ImGui::GetFrameHeight();
+
+		if (ctrlFFocus && ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) &&
+			ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_F, false))
+			ImGui::SetKeyboardFocusHere();
+
+		// The clear button sits over the frame's right end, so the input has to let it take the hover.
+		const bool hadText = !text.empty();
+		if (hadText)
+			ImGui::SetNextItemAllowOverlap();
+		ImGui::SetNextItemWidth(width);
+		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(padLeft, style.FramePadding.y));
+		bool changed = ImGui::InputTextWithHint("##input", hint, &text,
+			ImGuiInputTextFlags_EscapeClearsAll | flags, callback, userData);
+		ImGui::PopStyleVar();
+		const ImGuiLastItemData inputItem = ImGui::GetCurrentContext()->LastItemData;
+
+		// Escape here belongs to the field; without this the same press would also close the editor or menu.
+		if ((ImGui::IsItemActive() || ImGui::IsItemDeactivated()) && ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+			Menu::GetSingleton()->ConsumeEscape();
+
+		const ImVec2 min = ImGui::GetItemRectMin();
+		const ImVec2 max = ImGui::GetItemRectMax();
+		{
+			ImVec4 iconColor = ImGui::GetStyleColorVec4(ImGuiCol_Text);
+			iconColor.w *= C::SEARCH_ICON_ALPHA;
+			Icons::DrawCenteredGlyph(ImGui::GetWindowDrawList(),
+				ImVec2(min.x + iconX, min.y),
+				ImVec2(iconSize, frameHeight), Icons::TI(MenuIcons::kSearch), ImGui::GetColorU32(iconColor));
+		}
+
+		if (!text.empty()) {
+			const ImVec2 clearMin(max.x - frameHeight, min.y);
+			ImGui::SetCursorScreenPos(clearMin);
+			if (ImGui::InvisibleButton("##clear", ImVec2(frameHeight, frameHeight))) {
+				text.clear();
+				changed = true;
+			}
+			const bool hovered = ImGui::IsItemHovered();
+			if (hovered)
+				ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+			Icons::DrawCenteredGlyph(ImGui::GetWindowDrawList(), clearMin, ImVec2(frameHeight, frameHeight),
+				Icons::TI(ICON_TI_X), ImGui::GetColorU32(hovered ? ImGuiCol_Text : ImGuiCol_TextDisabled));
+			AddTooltip(T("ui.search_clear", "Clear search"));
+			ImGui::GetCurrentContext()->LastItemData = inputItem;
+		}
+
+		ImGui::PopID();
+		return changed;
 	}
 
 	std::string DrawComboSearchInput(const char* id)
@@ -2451,24 +2508,9 @@ namespace Util
 			state.needsFocus = false;
 		}
 
-		const float scale = GetSearchUIScale();
-		constexpr float iconAlpha = ThemeManager::Constants::COMBO_SEARCH_ICON_ALPHA;
-		const float iconOffsetX = ThemeManager::Constants::COMBO_SEARCH_ICON_OFFSET_X * scale;
-		const float iconSize = Icons::CalcGlyphSize(Icons::TI(MenuIcons::kSearch)).x;
-		const float paddingLeft = iconOffsetX + iconSize + ImGui::GetStyle().ItemInnerSpacing.x;
-
 		char widgetId[128];
 		snprintf(widgetId, sizeof(widgetId), "##%s_search", id);
-
-		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(paddingLeft, ImGui::GetStyle().FramePadding.y));
-		ImGui::InputTextWithHint(widgetId, T("ui.search", "Search..."), state.buffer, IM_ARRAYSIZE(state.buffer));
-		ImGui::PopStyleVar();
-
-		ImVec4 iconColor = ImGui::GetStyleColorVec4(ImGuiCol_Text);
-		iconColor.w *= iconAlpha;
-		Icons::DrawCenteredGlyph(ImGui::GetWindowDrawList(), ImVec2(ImGui::GetItemRectMin().x + iconOffsetX, ImGui::GetItemRectMin().y),
-			ImVec2(iconSize, ImGui::GetItemRectSize().y), Icons::TI(MenuIcons::kSearch), ImGui::GetColorU32(iconColor));
-
+		SearchField(widgetId, state.buffer, T("ui.search", "Search..."), ImGui::CalcItemWidth(), false);
 		ImGui::Separator();
 
 		return state.buffer;
@@ -2477,59 +2519,8 @@ namespace Util
 	void ClearComboSearch(const char* id)
 	{
 		auto& state = detail::GetComboSearchStates()[id];
-		state.buffer[0] = '\0';
+		state.buffer.clear();
 		state.needsFocus = true;
-	}
-
-	void DrawFeatureSearchBar(std::string& searchString, float availableWidth)
-	{
-		ImGui::PushID("FeatureSearchBar");
-
-		const float scale = GetSearchUIScale();
-		const float iconSize = ThemeManager::Constants::SEARCH_ICON_SIZE * scale;
-		const float iconSpace = iconSize + ThemeManager::Constants::SEARCH_INPUT_PADDING_EXTRA * scale;
-
-		// Get the current cursor position and available width
-		ImVec2 cursorPos = ImGui::GetCursorScreenPos();
-		if (availableWidth <= 0.0f) {
-			availableWidth = ImGui::GetContentRegionAvail().x;
-		}
-		float frameHeight = ImGui::GetFrameHeight();
-
-		// Custom style - always transparent background to avoid click blocking
-		ImVec4 bgColor = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
-		ImVec4 bgColorActive = C::FEATURE_TOGGLE_ACTIVE_BG;
-		// Use theme text color instead of hardcoded color
-		auto& palette = globals::menu->GetTheme().Palette;
-		ImVec4 textColor = palette.Text;
-
-		ImGui::PushStyleColor(ImGuiCol_FrameBg, bgColor);
-		ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, bgColor);
-		ImGui::PushStyleColor(ImGuiCol_FrameBgActive, bgColorActive);
-		ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0, 0, 0, 0));
-		ImGui::PushStyleColor(ImGuiCol_Text, textColor);
-		ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
-		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(iconSpace, ThemeManager::Constants::SEARCH_INPUT_FRAME_PADDING_Y * scale));
-
-		// Draw the input field
-		ImGui::SetNextItemWidth(availableWidth);
-		char buffer[256];
-		strncpy_s(buffer, searchString.c_str(), sizeof(buffer) - 1);
-		buffer[sizeof(buffer) - 1] = '\0';
-
-		if (ImGui::InputTextWithHint("##feature_search", T("ui.search_features", "Search Features..."), buffer, sizeof(buffer))) {
-			searchString = buffer;
-		}
-
-		// Draw search icon using the reusable function
-		ImVec4 iconColor = textColor;
-		iconColor.w *= ThemeManager::Constants::SEARCH_ICON_ALPHA;
-		Icons::DrawCenteredGlyph(ImGui::GetWindowDrawList(), ImVec2(cursorPos.x + ThemeManager::Constants::SEARCH_ICON_OFFSET_X * scale, cursorPos.y),
-			ImVec2(iconSize, frameHeight), Icons::TI(MenuIcons::kSearch), ImGui::GetColorU32(iconColor));
-
-		ImGui::PopStyleVar(2);
-		ImGui::PopStyleColor(5);
-		ImGui::PopID();
 	}
 
 	TableSortSpec ReadTableSortSpec(int defaultColumn, bool defaultAscending)

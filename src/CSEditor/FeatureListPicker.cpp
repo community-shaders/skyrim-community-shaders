@@ -103,7 +103,7 @@ namespace
 void FeatureListPicker::Draw(std::span<Feature* const> features, std::string& selected, const Options& options)
 {
 	if (options.search)
-		Util::DrawFeatureSearchBar(*options.search);
+		Util::SearchField("##FeatureSearch", *options.search, T("ui.search_features", "Search Features..."), ImGui::GetContentRegionAvail().x, false);
 
 	for (auto* feature : options.pinned) {
 		if (feature && MatchesSearch(options, feature))

@@ -705,7 +705,6 @@
     "cs_editor.scene_transition_tooltip": "Seconds this value takes to ease in and out when the location changes.\nLeave the field empty to follow the page's transition time.",
     "cs_editor.scene_undo_label": "Scene Manager",
     "cs_editor.scene_weather_unresolved": "This weather has no form, so it cannot hold overrides.",
-    "cs_editor.search_clear": "Clear search",
     "cs_editor.search_settings_hint": "Search settings (Ctrl+F)",
     "cs_editor.select_weather": "Select Weather",
     "cs_editor.session_history": "Session & History",
@@ -1052,7 +1051,6 @@
     "feature.effects11.category.weather_desc": "Per-weather values from the files listed in _weatherlist.ini.",
     "feature.effects11.description": "Effects 11 loads ENBSeries-compatible FX post-processing. Install multiple presets under Data/SKSE/Plugins/CommunityShaders/Effects11/Presets/<Name>/ (each with enbseries.ini + enbseries/), use a classic root/Data enbseries install as Legacy, or ship effects11/ inside a unified Presets pack. Hotswap does not modify root files.",
     "feature.effects11.editor.cancel": "Cancel",
-    "feature.effects11.editor.clear_search": "Clear the search",
     "feature.effects11.editor.context_hint": "Right-click a value for reset, copy and paste.",
     "feature.effects11.editor.copy": "Copy",
     "feature.effects11.editor.copy_errors": "Copy errors",
@@ -3549,8 +3547,6 @@
     "menu.features.sort_alphabetically": "Alphabetical",
     "menu.features.sort_by_category": "By Category",
     "menu.features.sort_tooltip": "Sort features",
-    "menu.features.tag_alpha": "[ALPHA]",
-    "menu.features.tag_beta": "[BETA]",
     "menu.features.unpin": "Unpin",
     "menu.features.use_baselines": "Use Baseline Values",
     "menu.features.use_baselines_tooltip": "Use Baseline preset values: your changes override settings your Baseline presets set. Click to drop those changes and use the presets' values. Your other changes stay.",
@@ -4244,5 +4240,6 @@
     "ui.restore_saved_settings_confirm": "You have unsaved changes. Restoring the saved settings will discard them. This cannot be undone.",
     "ui.restore_saved_settings_title": "Restore Saved Settings?",
     "ui.search": "Search...",
+    "ui.search_clear": "Clear search",
     "ui.search_features": "Search Features..."
 }

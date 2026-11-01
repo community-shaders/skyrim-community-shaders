@@ -563,7 +563,7 @@ void LightEditor::DrawToolbar()
 
 	const float scale = Util::GetUIScale();
 	SameLineIfFits(kLightSearchWidth * scale);
-	BrowserUI::SearchField("##LightSearch", lightSearch, sizeof(lightSearch), T(TKEY("filter_lights"), "Filter lights..."),
+	Util::SearchField("##LightSearch", lightSearch, T(TKEY("filter_lights"), "Filter lights..."),
 		kLightSearchWidth * scale, false);
 
 	const char* shadowsOnlyLabel = T(TKEY("shadows_only"), "Shadows Only");
@@ -1086,16 +1086,12 @@ void LightEditor::LoadPopupPrefs()
 		return;
 	const auto& j = *prefs;
 	if (auto it = j.find("addConfigSearch"); it != j.end() && it->is_string()) {
-		auto s = it->get<std::string>();
-		std::strncpy(addConfigSearch, s.c_str(), sizeof(addConfigSearch) - 1);
-		addConfigSearch[sizeof(addConfigSearch) - 1] = '\0';  // strncpy won't terminate an oversized source
+		addConfigSearch = it->get<std::string>();
 	}
 	if (auto it = j.find("addAttachMode"); it != j.end() && it->is_number_integer())
 		addAttachMode = it->get<int>();
 	if (auto it = j.find("addLighSearch"); it != j.end() && it->is_string()) {
-		auto s = it->get<std::string>();
-		std::strncpy(addLighSearch, s.c_str(), sizeof(addLighSearch) - 1);
-		addLighSearch[sizeof(addLighSearch) - 1] = '\0';
+		addLighSearch = it->get<std::string>();
 	}
 	if (auto it = j.find("addPopupMode"); it != j.end() && it->is_number_integer())
 		addPopupMode = it->get<int>();
@@ -1159,7 +1155,7 @@ bool LightEditor::MatchesComboFilter(std::string_view filter, const std::string&
 }
 
 bool LightEditor::BeginSearchableCombo(const char* label, const char* preview, const char* searchId,
-	char* searchBuf, size_t searchBufSize, std::string_view& filterOut, bool openNow)
+	std::string& search, std::string_view& filterOut, bool openNow)
 {
 	filterOut = {};
 	// SetNextItemOpen is ignored for combos (they open via the derived popup id), so open it directly to
@@ -1170,10 +1166,9 @@ bool LightEditor::BeginSearchableCombo(const char* label, const char* preview, c
 		return false;
 	if (ImGui::IsWindowAppearing())
 		ImGui::SetKeyboardFocusHere();
-	ImGui::SetNextItemWidth(-1.0f);
-	ImGui::InputText(searchId, searchBuf, searchBufSize);
+	Util::SearchField(searchId, search, T("ui.search", "Search..."), -1.0f, false);
 	ImGui::Separator();
-	filterOut = searchBuf;
+	filterOut = search;
 	return true;
 }
 
@@ -1288,7 +1283,7 @@ int LightEditor::DrawAttachedBulbCombo(const char* searchId, bool openNow)
 	int clicked = -1;
 	const char* preview = (addSelectedBulb >= 0 && addSelectedBulb < (int)attachedBulbs.size()) ? attachedBulbs[addSelectedBulb].lightEDID.c_str() : T(TKEY("select_a_bulb"), "Select a bulb");
 	std::string_view filter;
-	if (BeginSearchableCombo(T(TKEY("attached_bulb"), "Attached bulb"), preview, searchId, addBulbSearch, sizeof(addBulbSearch), filter, openNow)) {
+	if (BeginSearchableCombo(T(TKEY("attached_bulb"), "Attached bulb"), preview, searchId, addBulbSearch, filter, openNow)) {
 		for (int i = 0; i < (int)attachedBulbs.size(); ++i) {
 			const auto& bulb = attachedBulbs[i];
 			const std::string label = fmt::format("{}[{}]  ({})", bulb.lightEDID, bulb.index, bulb.configPath);
@@ -1314,7 +1309,7 @@ void LightEditor::DrawLightRecordCombo(const char* searchId)
 	if (const auto* edid = LighEdidPtrForFormId(addSelectedLighFormId))
 		preview = edid->c_str();
 	std::string_view filter;
-	if (BeginSearchableCombo(T(TKEY("light_record"), "Light record"), preview, searchId, addLighSearch, sizeof(addLighSearch), filter, false)) {
+	if (BeginSearchableCombo(T(TKEY("light_record"), "Light record"), preview, searchId, addLighSearch, filter, false)) {
 		for (auto& [edid, ligh] : s_lighFormList) {
 			if (!MatchesComboFilter(filter, edid))
 				continue;
@@ -1448,7 +1443,7 @@ void LightEditor::DrawAddLightPopup()
 			if (!hasBulbs || addLightSubMode == SubModeNewEntry) {
 				const char* configPreview = (addSelectedConfig >= 0 && addSelectedConfig < (int)lpConfigPaths.size()) ? lpConfigPaths[addSelectedConfig].c_str() : T(TKEY("select_a_config"), "Select a config");
 				std::string_view cfgFilter;
-				if (BeginSearchableCombo(T(TKEY("target_json"), "Target JSON"), configPreview, "##cfg_search", addConfigSearch, sizeof(addConfigSearch), cfgFilter, false)) {
+				if (BeginSearchableCombo(T(TKEY("target_json"), "Target JSON"), configPreview, "##cfg_search", addConfigSearch, cfgFilter, false)) {
 					if (lpConfigPaths.empty())
 						ImGui::TextDisabled("%s", T(TKEY("no_configs_found"), "No configs found in Data\\LightPlacer\\"));
 					for (int i = 0; i < (int)lpConfigPaths.size(); ++i) {
@@ -1644,7 +1639,7 @@ void LightEditor::DrawAddLightPopup()
 		if (addPopupMode == ModeRemoveFromList) {
 			const char* filterPreview = (addSelectedFilterEntry >= 0 && addSelectedFilterEntry < (int)filterListEntries.size()) ? filterListEntries[addSelectedFilterEntry].lightEDID.c_str() : T(TKEY("select_a_bulb"), "Select a bulb");
 			std::string_view filterSv;
-			if (BeginSearchableCombo(T(TKEY("attached_bulb"), "Attached bulb"), filterPreview, "##filter_search", addFilterSearch, sizeof(addFilterSearch), filterSv, false)) {
+			if (BeginSearchableCombo(T(TKEY("attached_bulb"), "Attached bulb"), filterPreview, "##filter_search", addFilterSearch, filterSv, false)) {
 				for (int i = 0; i < (int)filterListEntries.size(); ++i) {
 					const auto& fe = filterListEntries[i];
 					const std::string lbl = fmt::format("[{}]  {}  ({})  \"{}\"",
@@ -2087,7 +2082,7 @@ void LightEditor::GatherAttachedBulbs(RE::TESObjectREFR* refr)
 {
 	attachedBulbs.clear();
 	addSelectedBulb = -1;
-	addBulbSearch[0] = '\0';
+	addBulbSearch.clear();
 	if (!refr)
 		return;
 
@@ -2129,7 +2124,7 @@ void LightEditor::ScanFilterListEntries(RE::TESObjectREFR* refr, const std::vect
 {
 	filterListEntries.clear();
 	addSelectedFilterEntry = -1;
-	addFilterSearch[0] = '\0';
+	addFilterSearch.clear();
 	addFilterEntryType = 0;
 	if (!refr)
 		return;

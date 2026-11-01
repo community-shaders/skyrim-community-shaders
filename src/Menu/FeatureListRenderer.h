@@ -8,9 +8,8 @@
 #include <variant>
 #include <vector>
 
+#include "Feature.h"
 #include "Menu/Icons/helpers/IconFonts.h"
-
-struct Feature;
 
 /**
  * @brief Canonical, untranslated IDs of the built-in menu pages.
@@ -166,6 +165,12 @@ public:
 
 	/** @brief Translated display label for a FeatureCategories value. */
 	static std::string TranslateCategory(std::string_view category);
+
+	/** @brief Width of a pre-release stage's badge; 0 for release features. */
+	static float MeasureStageBadge(Feature::ReleaseStage stage);
+
+	/** @brief Draws a pre-release stage's badge at the cursor, centred in rowHeight; nothing for release features. */
+	static void DrawStageBadge(Feature::ReleaseStage stage, float rowHeight);
 
 	/**
 	 * @brief Which filters a feature matches, as FeatureListFilter bits (kUnloaded set when it is not loaded).

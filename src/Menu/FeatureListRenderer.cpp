@@ -264,29 +264,30 @@ namespace
 		return false;
 	}
 
-	void SeparatorTextWithFont(const char* text, Menu::FontRole role)
+	/** @brief Badge label of a pre-release stage; null for release features. */
+	const char* GetStageBadgeLabel(Feature::ReleaseStage stage)
 	{
-		MenuFonts::FontRoleGuard guard(role);
-		ImGui::SeparatorText(text);
-	}
-
-	void SeparatorTextWithFont(const std::string& text, Menu::FontRole role)
-	{
-		SeparatorTextWithFont(text.c_str(), role);
+		switch (stage) {
+		case Feature::ReleaseStage::Alpha:
+			return T("menu.features.badge_alpha", "Alpha");
+		case Feature::ReleaseStage::Beta:
+			return T("menu.features.badge_beta", "Beta");
+		default:
+			return nullptr;
+		}
 	}
 
 	/**
-	 * @brief Draws a feature header: the name in large text, then the stage tag and version bottom-aligned beside it,
+	 * @brief Draws a feature header: the name in large text, then the stage badge and version bottom-aligned beside it,
 	 * the description below and a separator.
 	 * @param featureName The display name of the feature
 	 * @param version The version string (can be empty)
 	 * @param description Short description shown below the title, wrapped to the content width
-	 * @param stageTag Release stage marker such as [BETA] (can be empty)
-	 * @param stageColor Colour of the stage tag
-	 * @param trailingX Receives the screen x just past the title, stage tag and version, where more annotations can go
+	 * @param stage Release stage; pre-release stages get a badge
+	 * @param trailingX Receives the screen x just past the title, stage badge and version, where more annotations can go
 	 * @return The height of just the title line (for button alignment)
 	 */
-	float DrawFeatureHeader(const std::string& featureName, const std::string& version, const std::string& description = "", const std::string& stageTag = "", ImVec4 stageColor = {}, float* trailingX = nullptr)
+	float DrawFeatureHeader(const std::string& featureName, const std::string& version, const std::string& description = "", Feature::ReleaseStage stage = Feature::ReleaseStage::Release, float* trailingX = nullptr)
 	{
 		const auto& themeSettings = globals::menu->GetTheme();
 		const ImVec4 textColor = themeSettings.Palette.Text;
@@ -311,14 +312,18 @@ namespace
 		const ImVec2 titleSize = scaledSize(Menu::FontRole::Title, featureName.c_str());
 		drawScaled(Menu::FontRole::Title, ImGui::GetStyleColorVec4(ImGuiCol_Text), featureName.c_str());
 
-		// Running x for the bottom-aligned annotations (stage tag, then version) right of the title
+		// Running x for the bottom-aligned annotations (stage badge, then version) right of the title
 		float annotationX = startPos.x + titleSize.x + itemSpacingX;
 
-		if (!stageTag.empty()) {
-			const ImVec2 tagSize = scaledSize(Menu::FontRole::Body, stageTag.c_str());
-			ImGui::SetCursorScreenPos(ImVec2(annotationX, startPos.y + titleSize.y - tagSize.y));
-			drawScaled(Menu::FontRole::Body, stageColor, stageTag.c_str());
-			annotationX += tagSize.x + itemSpacingX;
+		const bool hasStageBadge = stage != Feature::ReleaseStage::Release;
+		if (hasStageBadge) {
+			// Centred on the version's line
+			const float lineHeight = scaledSize(Menu::FontRole::Body, featureName.c_str()).y;
+			ImGui::SetCursorScreenPos(ImVec2(annotationX, startPos.y + titleSize.y - lineHeight));
+			ImGui::SetWindowFontScale(titleScale);
+			FeatureListRenderer::DrawStageBadge(stage, lineHeight);
+			ImGui::SetWindowFontScale(1.0f);
+			annotationX += ImGui::GetItemRectSize().x + itemSpacingX;
 		}
 
 		if (!version.empty()) {
@@ -331,7 +336,7 @@ namespace
 		}
 
 		// Back under the title block
-		if (!stageTag.empty() || !version.empty())
+		if (hasStageBadge || !version.empty())
 			ImGui::SetCursorScreenPos(ImVec2(startPos.x, startPos.y + titleSize.y + ImGui::GetStyle().ItemSpacing.y * 0.25f));
 
 		if (trailingX)
@@ -438,6 +443,25 @@ std::string FeatureListRenderer::TranslateCategory(std::string_view category)
 		return T("feature.category.water", "Water");
 
 	return std::string(category);
+}
+
+float FeatureListRenderer::MeasureStageBadge(Feature::ReleaseStage stage)
+{
+	const char* label = GetStageBadgeLabel(stage);
+	if (!label)
+		return 0.0f;
+	MenuFonts::FontRoleGuard badgeFont(Menu::FontRole::Subtext);
+	return Util::MeasureBadgeWidth(label);
+}
+
+void FeatureListRenderer::DrawStageBadge(Feature::ReleaseStage stage, float rowHeight)
+{
+	const char* label = GetStageBadgeLabel(stage);
+	if (!label)
+		return;
+	const auto& statusPalette = globals::menu->GetTheme().StatusPalette;
+	MenuFonts::FontRoleGuard badgeFont(Menu::FontRole::Subtext);
+	Util::Badge(label, stage == Feature::ReleaseStage::Alpha ? statusPalette.Error : statusPalette.Warning, rowHeight);
 }
 
 void FeatureListRenderer::RenderFeatureList(
@@ -1000,7 +1024,7 @@ void FeatureListRenderer::ListMenuVisitor::operator()(const BuiltInMenu&)
 void FeatureListRenderer::ListMenuVisitor::operator()(const std::string& label)
 {
 	// Themed via ImGuiCol_Separator
-	SeparatorTextWithFont(label, Menu::FontRole::Subheading);
+	Util::SeparatorTextWithFont(label.c_str(), Menu::FontRole::Subheading);
 }
 
 void FeatureListRenderer::ListMenuVisitor::operator()(const CategoryHeader& header)
@@ -1071,9 +1095,8 @@ void FeatureListRenderer::ListMenuVisitor::operator()(Feature* feat)
 
 	// The stage badge sits right after the name, regardless of loaded state; the indicator icons follow it
 	if (const auto stage = feat->GetReleaseStage(); stage != Feature::ReleaseStage::Release) {
-		MenuFonts::FontRoleGuard badgeFont(Menu::FontRole::Subtext);
-		BrowserUI::InlineBadge(stage == Feature::ReleaseStage::Alpha ? T("menu.features.badge_alpha", "Alpha") : T("menu.features.badge_beta", "Beta"),
-			Feature::GetReleaseStageColor(stage), rowMax.y - rowMin.y);
+		ImGui::SameLine();
+		DrawStageBadge(stage, rowMax.y - rowMin.y);
 	}
 
 	// Indicator icons stack after the name and badge: a standard gap before the first, a space between the rest
@@ -1270,9 +1293,8 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureHeader(Feature* feat, bo
 
 	// Title, version and description on the left; the title-only height aligns the buttons
 	const auto stage = feat->GetReleaseStage();
-	const std::string stageTag = Feature::GetReleaseStageTag(stage);  // empty for Release; color unused when tag is empty
 	float trailingX = titleStartPos.x;
-	const float titleOnlyHeight = DrawFeatureHeader(feat->GetDisplayName(), isLoaded ? feat->version : "", description, stageTag, Feature::GetReleaseStageColor(stage), &trailingX);
+	const float titleOnlyHeight = DrawFeatureHeader(feat->GetDisplayName(), isLoaded ? feat->version : "", description, stage, &trailingX);
 
 	const ImVec2 cursorPosAfterHeader = ImGui::GetCursorScreenPos();
 
@@ -1435,7 +1457,7 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureSettings(Feature* feat, 
 
 	if (hasFailedMessage && feat->DrawFailLoadMessage() && !FeatureIssues::IsObsoleteFeature(feat->GetShortName())) {
 		ImGui::Spacing();
-		SeparatorTextWithFont(T("menu.features.error_header", "Error"), Menu::FontRole::Subheading);
+		Util::SeparatorTextWithFont(T("menu.features.error_header", "Error"), Menu::FontRole::Subheading);
 		ImGui::TextColored(themeSettings.StatusPalette.Error, "%s", feat->failedLoadedMessage.c_str());
 	}
 }

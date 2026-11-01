@@ -139,7 +139,7 @@ namespace GoToPalette
 				tint = Util::Anim::ScaleAlpha(tint, Constants::PALETTE_DIMMED_ALPHA);
 			drawList->AddRectFilled(min, ImVec2(min.x + size.x, min.y + size.y),
 				ImGui::GetColorU32(Util::Anim::ScaleAlpha(tint, Constants::PALETTE_BADGE_FILL_ALPHA)),
-				Constants::PALETTE_BADGE_ROUNDING * Util::GetUIScale());
+				ImGui::GetStyle().FrameRounding);
 			const char* label = KindLabel(kind);
 			const ImVec2 textSize = ImGui::CalcTextSize(label);
 			drawList->AddText(ImVec2(min.x + (size.x - textSize.x) * 0.5f, min.y + (size.y - textSize.y) * 0.5f), ImGui::GetColorU32(tint), label);
@@ -160,7 +160,7 @@ namespace GoToPalette
 		{
 			const ImVec4 textColor = ImGui::GetStyleColorVec4(ImGuiCol_Text);
 			const ImVec2 max(min.x + KeycapWidth(text, scale), min.y + KeycapHeight());
-			const float rounding = Constants::PALETTE_KEYCAP_ROUNDING * scale;
+			const float rounding = ImGui::GetStyle().FrameRounding;
 			drawList->AddRectFilled(min, max, ImGui::GetColorU32(Util::Anim::ScaleAlpha(textColor, Constants::PALETTE_KEYCAP_FILL_ALPHA)), rounding);
 			drawList->AddRect(min, max, ImGui::GetColorU32(Util::Anim::ScaleAlpha(textColor, Constants::PALETTE_KEYCAP_EDGE_ALPHA)), rounding);
 			const ImVec2 textSize = ImGui::CalcTextSize(text);
@@ -366,9 +366,11 @@ namespace GoToPalette
 			const ImVec2 fieldMin = ImGui::GetCursorScreenPos();
 			const float fieldWidth = ImGui::GetContentRegionAvail().x;
 			const ImVec2 fieldMax(fieldMin.x + fieldWidth, fieldMin.y + fieldHeight);
-			const float rounding = Constants::PALETTE_FIELD_ROUNDING * scale;
 			const float padX = Constants::PALETTE_FIELD_PAD_X * scale;
 			const float inset = Constants::PALETTE_FIELD_INSET * scale;
+			// The sort button takes the theme's frame rounding and the field wraps it concentrically
+			const float buttonRounding = style.FrameRounding;
+			const float rounding = buttonRounding > 0.0f ? buttonRounding + inset : 0.0f;
 
 			drawList->AddRectFilled(fieldMin, fieldMax, ImGui::GetColorU32(ImGuiCol_FrameBg), rounding);
 			drawList->AddRect(fieldMin, fieldMax, ImGui::GetColorU32(Util::Anim::ScaleAlpha(Util::Colors::GetAccent(), Constants::PALETTE_FIELD_BORDER_ALPHA)),
@@ -404,7 +406,7 @@ namespace GoToPalette
 			const ImVec4 textColor = ImGui::GetStyleColorVec4(ImGuiCol_Text);
 			const ImVec2 buttonMax(buttonMin.x + buttonSize, buttonMin.y + buttonSize);
 			drawList->AddRectFilled(buttonMin, buttonMax,
-				ImGui::GetColorU32(Util::Anim::ScaleAlpha(textColor, Constants::PALETTE_HOVER_FILL_ALPHA * (1.0f + hover))), std::max(0.0f, rounding - inset));
+				ImGui::GetColorU32(Util::Anim::ScaleAlpha(textColor, Constants::PALETTE_HOVER_FILL_ALPHA * (1.0f + hover))), buttonRounding);
 			Icons::DrawCenteredGlyph(drawList, buttonMin, ImVec2(buttonSize, buttonSize), Icons::TI(ICON_TI_MENU_2),
 				ImGui::GetColorU32(Util::Anim::Lerp(ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled), textColor, hover)));
 			if ((globals::menu->GetSettings().FeatureListFilter & FeatureListFilter::kKnown) != 0) {

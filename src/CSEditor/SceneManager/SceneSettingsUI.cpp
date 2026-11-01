@@ -113,7 +113,7 @@ namespace
 
 	struct LocationPickerState
 	{
-		char search[256]{};
+		std::string search;
 		/// Catalog indices passing the search, rebuilt only when the query changes.
 		std::vector<size_t> matches;
 		bool matchesValid = false;
@@ -122,7 +122,7 @@ namespace
 	};
 	LocationPickerState locationPicker;
 
-	char authoredLocationSearch[256]{};
+	std::string authoredLocationSearch;
 	Util::ConfirmationPopup locationRemoveConfirmation;
 	/// The place the open remove confirmation is about.
 	std::optional<SceneSettingsManager::LocationTarget> pendingLocationRemoval;
@@ -700,7 +700,7 @@ namespace
 		const auto& catalog = manager->GetLocationCatalog();
 		const float scale = Util::GetUIScale();
 
-		bool changed = BrowserUI::SearchField("##LocationSearch", locationPicker.search, IM_ARRAYSIZE(locationPicker.search),
+		bool changed = Util::SearchField("##LocationSearch", locationPicker.search,
 			T(TKEY("location_search"), "Search by name, editor ID, or type..."),
 			std::min(ImGui::GetContentRegionAvail().x, kLocationSearchWidth * scale), false);
 
@@ -796,7 +796,7 @@ namespace
 
 		// A filter only earns its row once the list is long enough to need one.
 		if (targets.size() > kAuthoredFilterThreshold) {
-			BrowserUI::SearchField("##AuthoredSearch", authoredLocationSearch, IM_ARRAYSIZE(authoredLocationSearch),
+			Util::SearchField("##AuthoredSearch", authoredLocationSearch,
 				T(TKEY("location_filter_list"), "Filter your list..."),
 				std::min(ImGui::GetContentRegionAvail().x, kLocationSearchWidth * Util::GetUIScale()), false);
 			if (const std::string query = authoredLocationSearch; !query.empty())

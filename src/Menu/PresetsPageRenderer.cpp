@@ -30,7 +30,7 @@
 #include <vector>
 
 std::optional<UnifiedPresetCatalog::PresetType> PresetsPageRenderer::typeFilter;
-char PresetsPageRenderer::searchBuffer[128] = {};
+std::string PresetsPageRenderer::searchBuffer;
 std::string PresetsPageRenderer::selectedPackId;
 bool PresetsPageRenderer::discovered = false;
 std::string PresetsPageRenderer::lightboxPackId;
@@ -333,7 +333,7 @@ void PresetsPageRenderer::RenderToolbar()
 	auto& catalog = UnifiedPresetCatalog::GetSingleton();
 	const float scale = Util::GetUIScale();
 
-	BrowserUI::SearchField("##PresetSearch", searchBuffer, IM_ARRAYSIZE(searchBuffer),
+	Util::SearchField("##PresetSearch", searchBuffer,
 		T("menu.presets.search", "Search presets..."), ThemeManager::Constants::PRESET_SEARCH_WIDTH * scale, true);
 
 	ImGui::SameLine();
@@ -634,15 +634,13 @@ void PresetsPageRenderer::RenderDetail()
 			ImGui::BeginGroup();
 			{
 				const auto stage = PresetCompatibility::ReleaseStageFromVersion(pack->version);
-				const std::string stageTag = Feature::GetReleaseStageTag(stage);
 
 				MenuFonts::FontRoleGuard title(Menu::FontRole::Heading);
 				ImGui::SetWindowFontScale(ThemeManager::Constants::PRESET_TITLE_FONT_SCALE);
 				ImGui::TextWrapped("%s", pack->name.c_str());
-				if (!stageTag.empty()) {
-					MenuFonts::FontRoleGuard body(Menu::FontRole::Body);
-					BrowserUI::SameLineIfFits(ImGui::CalcTextSize(stageTag.c_str()).x);
-					ImGui::TextColored(Feature::GetReleaseStageColor(stage), "%s", stageTag.c_str());
+				if (stage != Feature::ReleaseStage::Release) {
+					BrowserUI::SameLineIfFits(FeatureListRenderer::MeasureStageBadge(stage));
+					FeatureListRenderer::DrawStageBadge(stage, ImGui::GetTextLineHeight());
 				}
 				ImGui::SetWindowFontScale(1.0f);
 			}

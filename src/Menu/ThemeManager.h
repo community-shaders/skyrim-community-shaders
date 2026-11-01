@@ -274,7 +274,6 @@ public:
 		static constexpr size_t PALETTE_GROUP_MAX = 12;             // Results per kind on the All scope; the rest wait behind the kind's scope
 		static constexpr float PALETTE_GAP = 8.0f;                  // Space between the palette's field, scope row, list and footer
 		static constexpr float PALETTE_FIELD_HEIGHT_RATIO = 1.6f;   // Search field height as a multiple of a frame height
-		static constexpr float PALETTE_FIELD_ROUNDING = 10.0f;      // Search field corner radius
 		static constexpr float PALETTE_FIELD_PAD_X = 12.0f;         // Space left of the search glyph
 		static constexpr float PALETTE_FIELD_INSET = 6.0f;          // Space around the sort button inside the field
 		static constexpr float PALETTE_FIELD_BORDER_ALPHA = 0.55f;  // Accent border opacity of the focused search field
@@ -284,7 +283,6 @@ public:
 		static constexpr float PALETTE_HOVER_FILL_ALPHA = 0.06f;    // Hovered row fill opacity
 		static constexpr float PALETTE_HEADER_PAD_Y = 6.0f;         // Vertical padding of a group header
 		static constexpr float PALETTE_KEYCAP_PAD_X = 6.0f;         // Horizontal padding inside a keycap
-		static constexpr float PALETTE_KEYCAP_ROUNDING = 4.0f;      // Keycap corner radius
 		static constexpr float PALETTE_KEYCAP_FILL_ALPHA = 0.10f;   // Keycap fill opacity
 		static constexpr float PALETTE_KEYCAP_EDGE_ALPHA = 0.18f;   // Opacity of a keycap's lower edge
 		static constexpr float PALETTE_EMPTY_ICON_RATIO = 1.5f;     // Radius of the empty-state disc as a multiple of the line height
@@ -321,13 +319,8 @@ public:
 
 		// Search input constants
 		static constexpr float SEARCH_BASELINE_SCREEN_HEIGHT = 1440.0f;  // Search chrome is authored for 2K.
-		static constexpr float SEARCH_ICON_SIZE = 20.0f;                 // Default search icon size
-		static constexpr float SEARCH_ICON_ALPHA = 0.7f;                 // Default search icon opacity
-		static constexpr float SEARCH_ICON_OFFSET_X = 8.0f;              // Search icon offset from input edge
-		static constexpr float SEARCH_INPUT_PADDING_EXTRA = 14.0f;       // Extra input padding after icon
-		static constexpr float SEARCH_INPUT_FRAME_PADDING_Y = 6.0f;      // Search input vertical padding
-		static constexpr float COMBO_SEARCH_ICON_ALPHA = 0.5f;           // Icon alpha for subtle appearance
-		static constexpr float COMBO_SEARCH_ICON_OFFSET_X = 5.0f;        // Icon horizontal offset from input edge
+		static constexpr float SEARCH_ICON_ALPHA = 0.5f;                 // Search glyph opacity
+		static constexpr float SEARCH_ICON_OFFSET_X = 5.0f;              // Search glyph offset from the input's left edge
 
 		// Window overlap readability constants
 		static constexpr float OVERLAP_MIN_ALPHA = 0.85f;       // Background alpha when windows overlap
@@ -419,9 +412,8 @@ public:
 		static constexpr float FLASH_ACTIVE_SCALE = 0.9f;           // Flash colour scale when pressed
 
 		// Shared widgets: feature toggle (Util::FeatureToggle; also the Load at Boot toggles)
-		static constexpr ImVec4 FEATURE_TOGGLE_ACTIVE_BG = ImVec4(0.3f, 0.3f, 0.3f, 0.9f);  // Active frame of the feature toggle row
-		static constexpr float FEATURE_TOGGLE_WIDTH_RATIO = 1.6f;                           // Feature toggle width per frame height
-		static constexpr float FEATURE_TOGGLE_HEIGHT_RATIO = 0.8f;                          // Feature toggle height per frame height
+		static constexpr float FEATURE_TOGGLE_WIDTH_RATIO = 1.6f;   // Feature toggle width per frame height
+		static constexpr float FEATURE_TOGGLE_HEIGHT_RATIO = 0.8f;  // Feature toggle height per frame height
 
 		// Shared widgets: tooltips, badges, section headers and editor chrome
 		static constexpr float TOOLTIP_WRAP_FONT_SIZES = 35.0f;                     // Wrapped tooltip width in font sizes
