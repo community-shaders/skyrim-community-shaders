@@ -578,7 +578,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		}
 		[branch] if ((PBRFlags & PBR::Flags::HasFuzzRoughnessTexture) != 0)
 		{
-			material.FuzzRoughness = TexEmissiveSampler.Sample(SampEmissiveSampler, input.TexCoord.xy).w * (PBRParams5.x >= 0.0f ? PBRParams5.x : 1.0f);
+			material.FuzzRoughness = TexEmissiveSampler.Sample(SampEmissiveSampler, input.TexCoord.xy).w;
 		}
 	}
 	const float grassNdotV = clamp(abs(dot(normal, viewDirection)), EPSILON_DOT_CLAMP, 1.0f);

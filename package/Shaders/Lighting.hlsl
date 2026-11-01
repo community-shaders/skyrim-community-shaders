@@ -2141,7 +2141,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		}
 		[branch] if ((PBRFlags & PBR::Flags::HasFuzzRoughnessTexture) != 0)
 		{
-			material.FuzzRoughness = TexGlowSampler.Sample(SampGlowSampler, uv).w * (MaterialObjectRGBScale.w >= 0.0f ? MaterialObjectRGBScale.w : 1.0f);
+			material.FuzzRoughness = TexGlowSampler.Sample(SampGlowSampler, uv).w;
 		}
 		material.FuzzWeight = lerp(material.FuzzWeight, 0, projectedMaterialWeight);
 	}
