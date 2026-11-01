@@ -567,7 +567,7 @@ cbuffer PerMaterial : register(b1)
 	float3 PBRParams1 : packoffset(c15.y);  // roughness scale, displacement scale, specular level
 	float4 PBRParams2 : packoffset(c16);    // subsurface color, subsurface opacity
 
-	float4 MaterialObjectRGBScale : packoffset(c17);  // Projected material RGB scale in xyz, fuzz roughness in w (negative uses base roughness)
+	float4 MaterialObjectRGBScale : packoffset(c17);  // projected material RGB scale, fuzz roughness (negative uses base roughness)
 };
 
 cbuffer PerGeometry : register(b2)
@@ -2513,7 +2513,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	DirectLightingOutput dirLightOutput;
 #	if defined(TRUE_PBR)
 	dirLightContext = CreateDirectLightingContext(worldNormal.xyz, coatWorldNormal, vertexNormal.xyz, refractedViewDirection, viewDirection, refractedDirLightDirection, DirLightDirection, dirLightColor, dirDetailedShadow, dirSoftShadow);
-
+	float directFuzzNdotV = clamp(abs(dot(dirLightContext.worldNormal, dirLightContext.viewDir)), isThinSurface ? 0.0f : EPSILON_DOT_CLAMP, 1.0f);
+	PBR::FuzzLayer directFuzz = PBR::CreateFuzzLayer(material, directFuzzNdotV);
+	PBR::CacheFuzzLTC(directFuzz, dirLightContext.worldNormal, dirLightContext.viewDir, directFuzzNdotV);
 	if (thinSurfaceNormals)
 		dirLightContext.backTransmissionVisibility = PBR::GetThinSurfaceBackTransmissionVisibility(thinSurfaceFaceNormal, DirLightDirection);
 #	else
@@ -2528,7 +2530,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	float2 uvOriginal_ddx = ddx(uvOriginal);
 	float2 uvOriginal_ddy = ddy(uvOriginal);
-	EvaluateLighting(dirLightContext, material, tbnTr, uvOriginal, uvOriginal_ddx, uvOriginal_ddy, dirLightOutput);
+	EvaluateLighting(dirLightContext, material,
+#	if defined(TRUE_PBR)
+		directFuzz,
+#	endif
+		tbnTr, uvOriginal, uvOriginal_ddx, uvOriginal_ddy, dirLightOutput);
 	dirLightOutput.transmission *= dirTransmissionContactShadow;
 #	if defined(WETNESS_EFFECTS)
 	if (waterRoughnessSpecular < 1)
@@ -2594,7 +2600,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		}
 #				endif
 #			endif
-		EvaluateLighting(pointLightContext, material, tbnTr, uvOriginal, uvOriginal_ddx, uvOriginal_ddy, pointLightOutput);
+		EvaluateLighting(pointLightContext, material,
+#			if defined(TRUE_PBR)
+			directFuzz,
+#			endif
+			tbnTr, uvOriginal, uvOriginal_ddx, uvOriginal_ddy, pointLightOutput);
 #			if defined(WETNESS_EFFECTS)
 		if (waterRoughnessSpecular < 1)
 			EvaluateWetnessLighting(wetnessNormal, pointLightContext, waterRoughnessSpecular, pointLightOutput);
@@ -2717,7 +2727,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		}
 #				endif
 #			endif
-		EvaluateLighting(pointLightContext, material, tbnTr, uvOriginal, uvOriginal_ddx, uvOriginal_ddy, pointLightOutput);
+		EvaluateLighting(pointLightContext, material,
+#			if defined(TRUE_PBR)
+			directFuzz,
+#			endif
+			tbnTr, uvOriginal, uvOriginal_ddx, uvOriginal_ddy, pointLightOutput);
 #			if defined(WETNESS_EFFECTS)
 		if (waterRoughnessSpecular < 1)
 			EvaluateWetnessLighting(wetnessNormal, pointLightContext, waterRoughnessSpecular, pointLightOutput);
@@ -2897,7 +2911,18 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	indirectContext = CreateIndirectLightingContext(ambientNormal, vertexNormal.xyz, viewDirection);
 
-	GetIndirectLobeWeights(indirectLobeWeights, indirectContext, material, uvOriginal);
+#	if defined(TRUE_PBR)
+	PBR::FuzzLayer indirectFuzz = directFuzz;
+	float indirectFuzzNdotV = clamp(abs(dot(indirectContext.worldNormal, indirectContext.viewDir)), isThinSurface ? 0.0f : EPSILON_DOT_CLAMP, 1.0f);
+	// Ambient uses its own normal and the unrefracted view, so rebuild the layer only if that changes NdotV.
+	[branch] if (indirectFuzzNdotV != directFuzzNdotV)
+		indirectFuzz = PBR::CreateFuzzLayer(material, indirectFuzzNdotV);
+#	endif
+	GetIndirectLobeWeights(indirectLobeWeights, indirectContext, material,
+#	if defined(TRUE_PBR)
+		indirectFuzz,
+#	endif
+		uvOriginal);
 
 #	if defined(WETNESS_EFFECTS)
 #		if defined(DYNAMIC_CUBEMAPS)

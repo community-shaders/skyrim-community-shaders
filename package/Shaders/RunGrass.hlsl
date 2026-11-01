@@ -581,11 +581,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 			material.FuzzRoughness = TexEmissiveSampler.Sample(SampEmissiveSampler, input.TexCoord.xy).w * (PBRParams5.x >= 0.0f ? PBRParams5.x : 1.0f);
 		}
 	}
-	PBR::ThinSurface grassSurface = PBR::CreateThinSurface(material, clamp(abs(dot(normal, viewDirection)), EPSILON_DOT_CLAMP, 1.0f), pbrDetail);
-	PBR::FuzzLayer grassFuzz = (PBR::FuzzLayer)0;
-	if (pbrDetail) {
-		grassFuzz = PBR::CreateFuzzLayer(material, clamp(abs(dot(normal, viewDirection)), EPSILON_DOT_CLAMP, 1.0f));
-	}
+	const float grassNdotV = clamp(abs(dot(normal, viewDirection)), EPSILON_DOT_CLAMP, 1.0f);
+	PBR::ThinSurface grassSurface = PBR::CreateThinSurface(material, grassNdotV, pbrDetail);
+	PBR::FuzzLayer grassFuzz = PBR::CreateFuzzLayer(material, grassNdotV, pbrDetail);
+	PBR::CacheFuzzLTC(grassFuzz, normal, viewDirection, grassNdotV);
 
 	float3 viewPosition = mul(FrameBuffer::CameraView, float4(input.WorldPosition.xyz, 1)).xyz;
 	float2 screenUV = FrameBuffer::ViewToUV(viewPosition);

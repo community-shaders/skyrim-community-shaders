@@ -116,31 +116,48 @@ namespace PBR
 		return color;
 	}
 
+	/// @brief OpenPBR fuzz layer resolved once per pixel and shared by every light
 	struct FuzzLayer
 	{
 		float weight;
 		float3 color;
 		float roughness;
-		float weightedAlbedo;  // Cached weight * directional albedo.
-		float specularThroughput;
+		float weightedAlbedo;      // weight * directional albedo
+		float specularThroughput;  // Share of substrate specular left under the fuzz
+		FuzzLTC ltc;               // Set only by CacheFuzzLTC, and only when weightedAlbedo > 0
 	};
 
-	FuzzLayer CreateFuzzLayer(MaterialProperties material, float NdotV)
+	/// @brief Resolve the fuzz layer for a view angle
+	/// @param material Material with FuzzColor, FuzzWeight and FuzzRoughness (negative uses Roughness)
+	/// @param NdotV Dot product of normal and view direction
+	/// @param enabled False returns an empty layer that leaves the substrate unchanged
+	/// @return Layer with no cached LTC; call CacheFuzzLTC before evaluating direct lights
+	FuzzLayer CreateFuzzLayer(MaterialProperties material, float NdotV, bool enabled = true)
 	{
 		FuzzLayer fuzz = (FuzzLayer)0;
 		fuzz.specularThroughput = 1.0f;
 
-		[branch] if ((PBRFlags & Flags::Fuzz) != 0)
+		[branch] if (enabled && (PBRFlags & Flags::Fuzz) != 0)
 		{
 			fuzz.roughness = clamp(material.FuzzRoughness >= 0.0f ? material.FuzzRoughness : material.Roughness, 0.01f, 1.0f);
 			fuzz.weight = saturate(material.FuzzWeight);
 			fuzz.weightedAlbedo = saturate(fuzz.weight * FuzzDirectionalAlbedo(NdotV, fuzz.roughness));
 			fuzz.color = saturate(material.FuzzColor);
-			// Legacy inputs used the fuzz mask to replace substrate specular.
+			// Without a fuzz roughness (legacy materials) the fuzz mask replaces substrate specular, as the old sheen did.
 			fuzz.specularThroughput = material.FuzzRoughness < 0.0f ? 1.0f - fuzz.weight : 1.0f - fuzz.weightedAlbedo;
 		}
 
 		return fuzz;
+	}
+
+	/// @brief Cache the view-dependent fuzz LTC for direct lighting; skipped for an invisible layer
+	/// @param N Surface normal, flipped to face the viewer
+	/// @param V View direction
+	/// @param NdotV Dot product of normal and view direction
+	void CacheFuzzLTC(inout FuzzLayer fuzz, float3 N, float3 V, float NdotV)
+	{
+		[branch] if (fuzz.weightedAlbedo > 0.0f)
+			fuzz.ltc = CreateFuzzLTC(V, GetThinSurfaceNormal(N, V), max(NdotV, EPSILON_DOT_CLAMP), fuzz.roughness);
 	}
 
 	struct ThinSurface
@@ -218,8 +235,8 @@ namespace PBR
 			lightingOutput.specular = saturate(material.ThinSurfaceSpecularWeight) * D * visibility * F * detailedLightColor * specularNdotL * fuzz.specularThroughput;
 			[branch] if (fuzz.weightedAlbedo > 0.0f)
 			{
-				float3 fuzzReflection = FuzzLobe(L, V, specularNormal, NdotV, fuzz.roughness) * detailedLightColor;
-				float3 fuzzTransmission = Color::PBRMaterialToLinear(surface.backTransmissionAlbedo) * FuzzLobeTransmitted(L, V, specularNormal, NdotV, fuzz.roughness) *
+				float3 fuzzReflection = FuzzLobe(L, fuzz.ltc) * detailedLightColor;
+				float3 fuzzTransmission = Color::PBRMaterialToLinear(surface.backTransmissionAlbedo) * FuzzLobeTransmitted(L, fuzz.ltc) *
 				                          context.lightColor * context.softShadow * context.backTransmissionVisibility;
 				lightingOutput.specular += fuzz.weightedAlbedo * fuzz.color * (fuzzReflection + fuzzTransmission);
 			}
@@ -247,7 +264,7 @@ namespace PBR
 		                       SpecularOcclusion(NdotV, material.Roughness * material.Roughness, material.AO);
 	}
 
-	void GetDirectLightInput(out DirectLightingOutput lightingOutput, DirectContext context, MaterialProperties material, float3x3 tbnTr, float2 uv)
+	void GetDirectLightInput(out DirectLightingOutput lightingOutput, DirectContext context, MaterialProperties material, FuzzLayer fuzz, float3x3 tbnTr, float2 uv)
 	{
 		lightingOutput = (DirectLightingOutput)0;
 
@@ -255,7 +272,6 @@ namespace PBR
 			float NdotV = saturate(abs(dot(context.worldNormal, context.viewDir)));
 
 			ThinSurface surface = CreateThinSurface(material, NdotV, true, false);
-			FuzzLayer fuzz = CreateFuzzLayer(material, NdotV);
 
 			GetDirectLightInputThinSurface(lightingOutput, context, material, surface, fuzz, true, 0.0f, mul(tbnTr, context.halfVector).x);
 
@@ -365,17 +381,17 @@ namespace PBR
 
 			[branch] if ((PBRFlags & Flags::Fuzz) != 0)
 			{
-				float3 fuzzNormal = GetThinSurfaceNormal(N, V);
-				float fuzzNdotV = clamp(abs(NdotV), EPSILON_DOT_CLAMP, 1.0f);
-				FuzzLayer fuzz = CreateFuzzLayer(material, fuzzNdotV);
-
 				float throughput = 1.0f - fuzz.weightedAlbedo;
 				float3 diffuseThroughput = Color::LinearToPBRMaterial(throughput.xxx);
+
 				lightingOutput.diffuse *= diffuseThroughput;
 				lightingOutput.specular *= fuzz.specularThroughput;
 				lightingOutput.transmission *= diffuseThroughput;
 				lightingOutput.coatDiffuse *= diffuseThroughput;
-				lightingOutput.specular += fuzz.weightedAlbedo * fuzz.color * FuzzLobe(L, V, fuzzNormal, fuzzNdotV, fuzz.roughness) * detailedLightColor;
+
+				// An invisible layer has no cached LTC, and evaluating the zeroed one is 0 / 0.
+				[branch] if (fuzz.weightedAlbedo > 0.0f)
+					lightingOutput.specular += fuzz.weightedAlbedo * fuzz.color * FuzzLobe(L, fuzz.ltc) * detailedLightColor;
 			}
 #endif
 		}
@@ -389,14 +405,13 @@ namespace PBR
 		}
 	}
 
-	void GetIndirectLobeWeights(out IndirectLobeWeights lobeWeights, IndirectContext context, MaterialProperties material)
+	void GetIndirectLobeWeights(out IndirectLobeWeights lobeWeights, IndirectContext context, MaterialProperties material, FuzzLayer fuzz)
 	{
 		lobeWeights = (IndirectLobeWeights)0;
 
 		if (IsThinSurfaceMaterial(PBRFlags)) {
 			float NdotV = saturate(abs(dot(context.worldNormal, context.viewDir)));
 			ThinSurface surface = CreateThinSurface(material, NdotV, true);
-			FuzzLayer fuzz = CreateFuzzLayer(material, NdotV);
 
 			GetIndirectLobeWeightsThinSurface(lobeWeights, context, material, surface, fuzz);
 
@@ -470,7 +485,6 @@ namespace PBR
 #if !defined(LANDSCAPE) && !defined(LODLANDSCAPE)
 		[branch] if ((PBRFlags & Flags::Fuzz) != 0 && (PBRFlags & Flags::HairMarschner) == 0)
 		{
-			FuzzLayer fuzz = CreateFuzzLayer(material, clamp(abs(dot(N, V)), EPSILON_DOT_CLAMP, 1.0f));
 			lobeWeights.diffuse = Color::LinearToPBRMaterial(Color::PBRMaterialToLinear(lobeWeights.diffuse) * (1.0f - fuzz.weightedAlbedo) + fuzz.weightedAlbedo * fuzz.color * material.AO);
 			lobeWeights.specular *= fuzz.specularThroughput;
 		}
