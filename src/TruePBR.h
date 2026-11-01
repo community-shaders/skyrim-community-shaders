@@ -124,7 +124,7 @@ public:
 	 */
 	void SetupGrassMaterial(RE::BSLightingShaderProperty* sourceProperty, RE::BSLightingShaderProperty* grassProperty);
 
-	/** @brief Matches the material constant layout in RunGrass.hlsl. */
+	/** @brief Match the PBR PerMaterial layout at b1 in RunGrass.hlsl. */
 	struct GrassPBRConstants
 	{
 		uint32_t flags;
@@ -188,6 +188,7 @@ public:
 		RE::NiColor fuzzColor;
 		float fuzzWeight = 0.f;
 		float fuzzRoughness = -1.f;
+		bool fuzzRoughnessTexture = false;
 
 		GlintParameters glintParameters;
 	};

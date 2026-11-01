@@ -42,6 +42,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	fuzzColor,
 	fuzzWeight,
 	fuzzRoughness,
+	fuzzRoughnessTexture,
 	glintParameters);
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
@@ -809,6 +810,23 @@ static bool IsPBRShaderProperty(const RE::BSShaderProperty* property)
 	return property->material != nullptr && property->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kVertexLighting) && (property->material->GetFeature() == RE::BSShaderMaterial::Feature::kDefault || property->material->GetFeature() == RE::BSShaderMaterial::Feature::kMultiTexLandLODBlend);
 }
 
+/** @brief Returns the values of a NiFloatsExtraData block, or an empty span when it is absent or malformed. */
+static std::span<const float> GetNifFloats(RE::BSLightingShaderProperty* property, const char* name, std::uint32_t count, const RE::NiStream& stream)
+{
+	const auto* extra = property->GetExtraData(name);
+	if (!extra) {
+		return {};
+	}
+
+	const auto* floats = netimmerse_cast<const RE::NiFloatsExtraData*>(extra);
+	if (!floats || floats->size != count || !floats->value) {
+		logger::warn("[TruePBR] {} has invalid {} extra data, expected {} floats", stream.inputFilePath, name, count);
+		return {};
+	}
+
+	return { floats->value, floats->size };
+}
+
 struct BSLightingShaderProperty_PostLinkObject
 {
 	static void thunk(RE::BSLightingShaderProperty* property, RE::NiStream& stream)
@@ -818,13 +836,9 @@ struct BSLightingShaderProperty_PostLinkObject
 			return;
 		}
 
-		const auto* extra = property->GetExtraData("PBRThinSurface");
-		if (!extra) {
-			return;
-		}
-		const auto* parameters = netimmerse_cast<const RE::NiFloatsExtraData*>(extra);
-		if (!parameters || parameters->size != 4 || !parameters->value) {
-			logger::warn("[TruePBR] {} has invalid PBRThinSurface extra data, expected four floats", stream.inputFilePath);
+		const auto thinSurfaceParameters = GetNifFloats(property, "PBRThinSurface", 4, stream);
+		const auto fuzzParameters = GetNifFloats(property, "PBRFuzz", 2, stream);
+		if (thinSurfaceParameters.empty() && fuzzParameters.empty()) {
 			return;
 		}
 
@@ -839,11 +853,26 @@ struct BSLightingShaderProperty_PostLinkObject
 		if (const auto* textureSetData = BSLightingShaderMaterialPBR::All[&source].textureSetData) {
 			source.ApplyTextureSetData(*textureSetData);
 		}
-		if (!source.ApplyNifThinSurfaceParameters({ parameters->value, parameters->size })) {
-			logger::warn("[TruePBR] {} has non-finite PBRThinSurface parameters", stream.inputFilePath);
-			return;
+
+		bool applied = false;
+		if (!thinSurfaceParameters.empty()) {
+			if (source.ApplyNifThinSurfaceParameters(thinSurfaceParameters)) {
+				applied = true;
+			} else {
+				logger::warn("[TruePBR] {} has non-finite PBRThinSurface parameters", stream.inputFilePath);
+			}
 		}
-		property->SetMaterial(&source, true);
+		if (!fuzzParameters.empty()) {
+			if (source.ApplyNifFuzzParameters(fuzzParameters)) {
+				applied = true;
+			} else {
+				logger::warn("[TruePBR] {} has invalid PBRFuzz values, expected finite roughness and 0 or 1", stream.inputFilePath);
+			}
+		}
+
+		if (applied) {
+			property->SetMaterial(&source, true);
+		}
 	}
 	static inline REL::Relocation<decltype(thunk)> func;
 };
@@ -924,9 +953,13 @@ struct BSLightingShaderProperty_GetRenderPasses_LocalMap
 	static inline REL::Relocation<decltype(thunk)> func;
 };
 
-// Use emissive alpha for fuzz roughness when the format supports it.
+/** @brief True when the material opts in to fuzz roughness in emissive alpha and the texture format stores alpha. */
 static bool HasEmissiveFuzzRoughness(const BSLightingShaderMaterialPBR* material)
 {
+	if (!material->fuzzRoughnessTexture) {
+		return false;
+	}
+
 	const auto* texture = material->emissiveTexture.get();
 	if (texture == nullptr || texture->rendererTexture == nullptr || texture->rendererTexture->resourceView == nullptr) {
 		return false;
@@ -935,19 +968,23 @@ static bool HasEmissiveFuzzRoughness(const BSLightingShaderMaterialPBR* material
 	D3D11_SHADER_RESOURCE_VIEW_DESC desc;
 	texture->rendererTexture->resourceView->GetDesc(&desc);
 	switch (desc.Format) {
-	case DXGI_FORMAT_BC1_UNORM:
-	case DXGI_FORMAT_BC1_UNORM_SRGB:
-	case DXGI_FORMAT_BC4_UNORM:
-	case DXGI_FORMAT_BC5_UNORM:
-	case DXGI_FORMAT_BC6H_UF16:
-	case DXGI_FORMAT_B8G8R8X8_UNORM:
-	case DXGI_FORMAT_B8G8R8X8_UNORM_SRGB:
-	case DXGI_FORMAT_B5G6R5_UNORM:
-	case DXGI_FORMAT_R8_UNORM:
-	case DXGI_FORMAT_R8G8_UNORM:
-		return false;
-	default:
+	case DXGI_FORMAT_BC2_UNORM:
+	case DXGI_FORMAT_BC2_UNORM_SRGB:
+	case DXGI_FORMAT_BC3_UNORM:
+	case DXGI_FORMAT_BC3_UNORM_SRGB:
+	case DXGI_FORMAT_BC7_UNORM:
+	case DXGI_FORMAT_BC7_UNORM_SRGB:
+	case DXGI_FORMAT_R8G8B8A8_UNORM:
+	case DXGI_FORMAT_R8G8B8A8_UNORM_SRGB:
+	case DXGI_FORMAT_B8G8R8A8_UNORM:
+	case DXGI_FORMAT_B8G8R8A8_UNORM_SRGB:
+	case DXGI_FORMAT_R10G10B10A2_UNORM:
+	case DXGI_FORMAT_R16G16B16A16_UNORM:
+	case DXGI_FORMAT_R16G16B16A16_FLOAT:
+	case DXGI_FORMAT_R32G32B32A32_FLOAT:
 		return true;
+	default:
+		return false;
 	}
 }
 
