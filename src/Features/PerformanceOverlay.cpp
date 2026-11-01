@@ -1595,7 +1595,7 @@ std::pair<std::vector<DrawCallRow>, std::vector<DrawCallRow>> PerformanceOverlay
 	DrawCallRow presentRow = {
 		"Present:", magic_enum::enum_integer(SpecialShaderType::Present), kDrawCallsNotApplicable, presentTime, presentPercent,
 		0.0f,
-		std::string("CPU time spent waiting inside the swap chain Present call."),
+		std::string("CPU time spent waiting inside the swap chain Present call. Capped at the frame time not attributed to shader types, so it can read lower than the measured wait."),
 		true, std::nullopt, std::nullopt
 	};
 	DrawCallRow otherRow = {
