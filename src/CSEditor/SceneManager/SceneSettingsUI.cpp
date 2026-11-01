@@ -111,6 +111,17 @@ namespace
 	/// A list because a drawn window can open another mid-iteration (greyed-setting navigation).
 	std::list<LocationWindow> locationWindows;
 
+	/// The Scene Manager panel popped out of the browser, with a feature selection of its own.
+	struct SceneManagerWindow
+	{
+		std::string selectedFeature;
+		std::string featureSearch;
+		bool open = false;
+		bool pendingFocus = false;
+	};
+	SceneManagerWindow sceneManagerWindow;
+	constexpr const char* kSceneManagerWidgetType = "SceneManagerPanel";
+
 	struct LocationPickerState
 	{
 		std::string search;
@@ -417,7 +428,7 @@ namespace
 	/// Feature column beside the panel body, split by a divider the user can drag.
 	/// Transitionable features are the weather set; the rest also covers interior and location.
 	void DrawFeatureLayout(std::string& selectedFeature, std::string& featureSearch, bool transitionableOnly,
-		bool withPeriodBar, const SceneSettingsManager::SceneContextId& baseContext)
+		bool withPeriodBar, const SceneSettingsManager::SceneContextId& baseContext, bool sceneManagerPanel = false)
 	{
 		if (!ImGui::BeginTable("SceneFeatureLayout", 2, FeatureListPicker::kLayoutFlags))
 			return;
@@ -434,7 +445,7 @@ namespace
 
 		ImGui::TableSetColumnIndex(1);
 		if (ImGui::BeginChild("##SceneFeatureBody"))
-			DrawPanel(selectedFeature, baseContext, withPeriodBar);
+			DrawPanel(selectedFeature, baseContext, withPeriodBar, sceneManagerPanel);
 		ImGui::EndChild();
 
 		ImGui::EndTable();
@@ -922,9 +933,7 @@ void SceneSettingsUI::DrawWeatherSceneTab(RE::FormID weatherId)
 
 void SceneSettingsUI::DrawSceneManagerPanel()
 {
-	// DrawPanel below draws the active-weather indicator itself, above the period and actions row,
-	// since this is the only caller that passes sceneManagerPanel = true.
-
+	// DrawPanel below draws the active-weather indicator itself, above the period and actions row.
 	// The interior layer takes the panel over indoors, and it has no periods.
 	SyncSceneToggles();
 	WatchSceneSettingsForUndo();
@@ -971,34 +980,44 @@ void SceneSettingsUI::DrawLocationBrowser()
 	DrawLocationPicker();
 }
 
+/** @brief A floating scene window with a type glyph left of its title; drawBody runs only while it is visible. */
+template <class DrawBody>
+static void DrawSceneWindow(const char* widgetType, const std::string& title, Icons::GlyphRef icon, bool& open,
+	bool& pendingFocus, DrawBody&& drawBody)
+{
+	if (pendingFocus) {
+		ImGui::SetNextWindowFocus();
+		pendingFocus = false;
+	}
+
+	SetupWidgetWindowDefaults(widgetType);
+	const bool visible = Util::BeginWithCustomHeader(title.c_str(), &open, nullptr,
+		ImGuiWindowFlags_NoSavedSettings | kStickyHeaderFlags,
+		icon ?
+			[icon](ImVec2 iconMin, float iconSize) {
+				Icons::DrawCenteredGlyph(ImGui::GetWindowDrawList(), iconMin, ImVec2(iconSize, iconSize),
+					icon, ImGui::GetColorU32(ImGuiCol_Text));
+			} :
+			std::function<void(ImVec2, float)>{});
+	UpdateWidgetTypeSize(widgetType);
+	if (visible) {
+		WatchSceneSettingsForUndo();
+		EditorWindow::GetSingleton()->ClaimTimePeriodSet(EditorWindow::TimePeriodSet::Scene);
+		drawBody();
+	}
+	ImGui::End();
+}
+
 void SceneSettingsUI::DrawLocationWindows()
 {
 	for (auto& window : locationWindows) {
 		if (!window.open)
 			continue;
 
-		if (window.pendingFocus) {
-			ImGui::SetNextWindowFocus();
-			window.pendingFocus = false;
-		}
-
-		SetupWidgetWindowDefaults(kLocationWidgetType);
 		// LocType / category glyph left of the title (same pattern as weather popouts).
-		const Icons::GlyphRef typeIcon = GetLocationTargetIcon(window.target);
 		const auto title = std::format("{} ({})###SceneLocation_{}", window.target.name,
 			GetLocationTypeLabel(window.target.type), window.target.formKey);
-		const bool visible = Util::BeginWithCustomHeader(title.c_str(), &window.open, nullptr,
-			ImGuiWindowFlags_NoSavedSettings | kStickyHeaderFlags,
-			typeIcon ?
-				[typeIcon](ImVec2 iconMin, float iconSize) {
-					Icons::DrawCenteredGlyph(ImGui::GetWindowDrawList(), iconMin, ImVec2(iconSize, iconSize),
-						typeIcon, ImGui::GetColorU32(ImGuiCol_Text));
-				} :
-				std::function<void(ImVec2, float)>{});
-		UpdateWidgetTypeSize(kLocationWidgetType);
-		if (visible) {
-			WatchSceneSettingsForUndo();
-			EditorWindow::GetSingleton()->ClaimTimePeriodSet(EditorWindow::TimePeriodSet::Scene);
+		DrawSceneWindow(kLocationWidgetType, title, GetLocationTargetIcon(window.target), window.open, window.pendingFocus, [&] {
 			const SceneSettingsManager::SceneContextId context{
 				.type = SceneSettingsManager::SceneContextType::Location,
 				.period = TimeOfDayPeriod::Count,
@@ -1007,11 +1026,33 @@ void SceneSettingsUI::DrawLocationWindows()
 			};
 			// Both sets take location features; a per-period set greys whatever cannot blend.
 			DrawFeatureLayout(window.selectedFeature, window.featureSearch, false, true, context);
-		}
-		ImGui::End();
+		});
 	}
 
 	std::erase_if(locationWindows, [](const auto& window) { return !window.open; });
+}
+
+void SceneSettingsUI::OpenSceneManagerWindow()
+{
+	sceneManagerWindow.open = true;
+	sceneManagerWindow.pendingFocus = true;
+	if (sceneManagerWindow.selectedFeature.empty())
+		sceneManagerWindow.selectedFeature = panelSelectedFeature;
+}
+
+void SceneSettingsUI::DrawSceneManagerWindow()
+{
+	if (!sceneManagerWindow.open)
+		return;
+
+	SyncSceneToggles();
+	// The ID stays fixed while the label follows the layer the panel edits.
+	const auto title = std::format("{}###SceneManagerWindow",
+		interiorEnabled ? T(TKEY("layer_interior"), "Interior") : T(TKEY("layer_time_of_day"), "Time of day"));
+	DrawSceneWindow(kSceneManagerWidgetType, title, Icons::TI(ICON_TI_CLOCK), sceneManagerWindow.open, sceneManagerWindow.pendingFocus, [] {
+		DrawFeatureLayout(sceneManagerWindow.selectedFeature, sceneManagerWindow.featureSearch, false, true,
+			GetSceneManagerPanelContext(), true);
+	});
 }
 
 void SceneSettingsUI::OpenSceneContext(const SceneSettingsManager::SceneContextId& context,
