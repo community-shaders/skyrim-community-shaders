@@ -5,6 +5,7 @@
 #include "ShaderCache.h"
 #include "State.h"
 #include "Utils/D3D.h"
+#include "Utils/Logging.h"
 #include "Utils/SphericalHarmonics.h"
 #include "Utils/VersionedRelocation.h"
 
@@ -719,8 +720,8 @@ RE::BSBatchRenderer::GeometryGroup* Skylighting::BSShaderAccumulator_StartGroupi
 	// The engine allocates from this pool without a bounds check; callers already handle a null group
 	static REL::Relocation<std::uint32_t*> poolCount{ REL::RelocationID(528319, 415271) };
 	if (*poolCount >= poolCapacity) {
-		static bool warned = false;
-		if (!std::exchange(warned, true))
+		static Util::OnceFlag warned;
+		if (warned.First())
 			logger::warn("[SKYLIGHTING] Alpha group pool full, extra ordered geometry renders unsorted");
 		return nullptr;
 	}

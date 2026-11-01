@@ -5,6 +5,7 @@
 
 #include "NativeMenu/Vendor/ListRows.h"
 #include "NativeMenu/Vendor/Text.h"
+#include "Utils/Logging.h"
 
 #include <chrono>
 #include <cmath>
@@ -312,12 +313,10 @@ namespace NativeMenu::Vendor::VanillaSettingsEngine
 					RE::GFxValue("__cs_scrollbar"), RE::GFxValue(22000.0) };
 				if (!a_list.Invoke("attachMovie", &bar, attach, 3) || !bar.IsObject()) {
 					// A replacer interface may not export it; leave the list as vanilla built it.
-					static bool loggedOnce = false;
-					if (!loggedOnce) {
-						loggedOnce = true;
+					static Util::OnceFlag loggedOnce;
+					if (loggedOnce.First())
 						logger::warn(
 							"VanillaSettingsEngine: no JournalScrollBar in this interface - lists keep their arrows");
-					}
 					return;
 				}
 
