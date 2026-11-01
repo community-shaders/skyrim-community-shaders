@@ -422,8 +422,8 @@ void EditorWindow::DrawBrowserPage()
 		}
 		BrowserUI::PageHeader(category->icon, category->label, subtitle.c_str());
 		if (!locations) {
-			BrowserUI::RightAlign(BrowserUI::IconButtonSize());
-			if (BrowserUI::IconButton("##PopOutSceneManager", Icons::TI(ICON_TI_PICTURE_IN_PICTURE_ON),
+			BrowserUI::RightAlign(Util::IconButtonSize());
+			if (Util::IconButton("##PopOutSceneManager", Icons::TI(ICON_TI_PICTURE_IN_PICTURE_ON),
 					T(TKEY("scene_panel_pop_out_tooltip"), "Open this panel in its own window, to keep it beside other editors.")))
 				SceneSettingsUI::OpenSceneManagerWindow();
 		}

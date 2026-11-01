@@ -814,9 +814,8 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 		if (inlineActions) {
 			Util::ToolbarDivider(false);
 			ImGui::SameLine();
-			if (Icons::Button(std::format("{}##_AnotherView", searchId ? searchId : "").c_str(), Icons::TI(ICON_TI_LAYOUT_COLUMNS)))
+			if (Util::IconButton(std::format("{}##_AnotherView", searchId ? searchId : "").c_str(), Icons::TI(ICON_TI_LAYOUT_COLUMNS), GetAnotherViewTooltip()))
 				OpenAnotherView();
-			Util::AddTooltip(GetAnotherViewTooltip());
 		}
 
 		ImGui::PopStyleColor(2);
