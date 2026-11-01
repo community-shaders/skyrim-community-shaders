@@ -24,6 +24,7 @@
 #include "Features/LinearLighting.h"
 #include "Features/PerformanceOverlay.h"
 #include "Features/PostProcessing.h"
+#include "Features/ProceduralSun.h"
 #include "Features/RainRefraction.h"
 #include "Features/RemoteControl.h"
 #include "Features/RenderDoc.h"
@@ -75,6 +76,7 @@ namespace globals
 		HairSpecular hairSpecular{};
 		HorizonFix horizonFix{};
 		InteriorSun interiorSun{};
+		ProceduralSun proceduralSun{};
 		RainRefraction rainRefraction{};
 		ScreenSpaceGI screenSpaceGI{};
 		ScreenSpaceShadows screenSpaceShadows{};

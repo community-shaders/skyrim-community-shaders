@@ -485,6 +485,23 @@ namespace SharedData
 		float2 pad1;
 	};
 
+	struct ProceduralSunSettings
+	{
+		uint enabled;
+		float sunDiskCos;
+		float diskIntensity;
+		float edgeSoftness;
+
+		uint haloEnabled;
+		float sunHaloCos;
+		float haloIntensity;
+		float haloFalloff;
+
+		float cloudOcclusionStrength;
+		float sunQuadModelRadius;
+		float2 pad0;
+	};
+
 	cbuffer FeatureData : register(b6)
 	{
 		GrassLightingSettings grassLightingSettings;
@@ -508,6 +525,7 @@ namespace SharedData
 		SkinData skinData;
 		HorizonFixSettings horizonFixSettings;
 		RainRefractionSettings rainRefractionSettings;
+		ProceduralSunSettings proceduralSunSettings;
 	};
 
 	Texture2D<float4> DepthTexture : register(t17);

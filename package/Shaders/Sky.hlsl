@@ -9,6 +9,23 @@
 #include "Common/Random.hlsli"
 #include "Common/SharedData.hlsli"
 
+#if defined(PROCEDURAL_SUN)
+#	include "ProceduralSun/ProceduralSun.hlsli"
+
+/** @brief True for the in-world sun pass, unless an Effects 11 preset already draws its own procedural sun. */
+bool IsProceduralSunActive()
+{
+	bool effects11OwnsSun = false;
+#	if defined(EFFECTS11)
+	effects11OwnsSun = SharedData::enbSettings.EnableProceduralSun != 0;
+#	endif
+	return SharedData::proceduralSunSettings.enabled && !effects11OwnsSun &&
+	       (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsSun) &&
+	       (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InWorld) &&
+	       !(Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InReflection);
+}
+#endif
+
 #if defined(VSHADER)
 struct VS_INPUT
 {
@@ -96,10 +113,26 @@ VS_OUTPUT main(VS_INPUT input)
 	VS_OUTPUT vsout;
 
 	float4 inputPosition = float4(input.Position.xyz, 1.0);
+	float4 previousInputPosition = inputPosition;
+
+#	if defined(PROCEDURAL_SUN) && defined(TEX) && !defined(DITHER)
+	if (IsProceduralSunActive()) {
+		float outerCos = SharedData::proceduralSunSettings.haloEnabled && SharedData::proceduralSunSettings.haloIntensity > 0.0f ?
+		                     SharedData::proceduralSunSettings.sunHaloCos :
+		                     SharedData::proceduralSunSettings.sunDiskCos;
+		inputPosition.xyz = ProceduralSun::ResizeBillboardVertex(input.Position.xyz, World, SharedData::proceduralSunSettings.sunQuadModelRadius, outerCos);
+		previousInputPosition.xyz = ProceduralSun::ResizeBillboardVertex(input.Position.xyz, PreviousWorld, SharedData::proceduralSunSettings.sunQuadModelRadius, outerCos);
+	}
+#	endif
 
 #	if defined(OCCLUSION)
 
-	// Intentionally left blank
+#		if defined(PROCEDURAL_SUN)
+	if (IsProceduralSunActive()) {
+		inputPosition.xyz *= ProceduralSun::GetOcclusionBillboardScale(SharedData::proceduralSunSettings.sunQuadModelRadius);
+		previousInputPosition = inputPosition;
+	}
+#		endif
 
 #	elif defined(MOONMASK)
 
@@ -155,7 +188,7 @@ VS_OUTPUT main(VS_INPUT input)
 	vsout.Position = mul(WorldViewProj, inputPosition).xyww;
 	vsout.WorldPosition = mul(World, inputPosition);
 	vsout.FogPosition = vsout.WorldPosition.xyz - EyePosition.xyz;
-	vsout.PreviousWorldPosition = mul(PreviousWorld, inputPosition);
+	vsout.PreviousWorldPosition = mul(PreviousWorld, previousInputPosition);
 
 	return vsout;
 }
@@ -194,6 +227,10 @@ cbuffer AlphaTestRefCB : register(b11)
 
 #	include "Common/MotionBlur.hlsli"
 #	include "Common/SharedData.hlsli"
+
+#	if defined(PROCEDURAL_SUN) && defined(CLOUD_SHADOWS) && defined(TEX) && !defined(DITHER)
+#		include "CloudShadows/CloudShadows.hlsli"
+#	endif
 
 // Sun, moons and stars dimmed and reddened by the atmosphere they are seen through
 #	if defined(EFFECTS11) && (defined(HORIZFADE) || (defined(TEX) && !defined(DITHER) && !defined(CLOUDS)))
@@ -296,6 +333,51 @@ PS_OUTPUT main(PS_INPUT input)
 	blendColor.xyz = ColorManagement::TextureToWorking(blendColor.xyz);
 	baseColor.xyz = ColorManagement::TextureToWorking(baseColor.xyz);
 	baseColor = PParams.xxxx * (-baseColor + blendColor) + baseColor;
+#		endif
+
+#		if defined(PROCEDURAL_SUN) && defined(TEX) && !defined(DITHER)
+	if (IsProceduralSunActive()) {
+		float3 viewDirection = normalize(input.WorldPosition.xyz);
+		float cosTheta = clamp(dot(viewDirection, SharedData::SunDirection.xyz), -1.0f, 1.0f);
+		float3 limbDarkening;
+		float discCoverage;
+		ProceduralSun::EvaluateDisc(
+			cosTheta,
+			SharedData::proceduralSunSettings.sunDiskCos,
+			SharedData::proceduralSunSettings.edgeSoftness,
+			limbDarkening,
+			discCoverage);
+
+		float haloProfile = 0.0f;
+		if (SharedData::proceduralSunSettings.haloEnabled) {
+			haloProfile = ProceduralSun::EvaluateHalo(
+				cosTheta,
+				SharedData::proceduralSunSettings.sunDiskCos,
+				SharedData::proceduralSunSettings.sunHaloCos,
+				SharedData::proceduralSunSettings.haloFalloff);
+		}
+
+		float3 proceduralSunColor;
+		float sunCoverage;
+		ProceduralSun::ComposeDiscAndHalo(
+			limbDarkening,
+			discCoverage,
+			SharedData::proceduralSunSettings.diskIntensity,
+			haloProfile,
+			SharedData::proceduralSunSettings.haloIntensity,
+			proceduralSunColor,
+			sunCoverage);
+
+		baseColor.xyz = ColorManagement::TextureToWorking(proceduralSunColor, true);
+		baseColor.w = sunCoverage;
+#			if defined(CLOUD_SHADOWS)
+		if (sunCoverage > 0.0f && SharedData::proceduralSunSettings.cloudOcclusionStrength > 0.0f) {
+			float cloudOpacity = CloudShadows::CloudShadowsTexture.SampleLevel(SampBaseSampler, viewDirection, 0).x;
+			baseColor.w *= ProceduralSun::GetCloudTransmission(cloudOpacity, SharedData::proceduralSunSettings.cloudOcclusionStrength);
+		}
+#			endif
+		skyScale = 0.0;
+	}
 #		endif
 
 #		if defined(HDR_OUTPUT)
