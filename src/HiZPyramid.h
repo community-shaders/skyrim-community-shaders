@@ -30,6 +30,8 @@ public:
 	uint32_t GetWidth() const { return width; }
 	/** @brief Returns the active base height in texels, rounded up. */
 	uint32_t GetHeight() const { return height; }
+	/** @brief Returns the viewport UV-to-texel scale, preserving partial tiles. */
+	float2 GetUVScale() const { return uvScale; }
 	/** @brief Returns the usable mip count; 1 when SPD is unavailable. */
 	uint32_t GetMipCount() const { return spdCS && texture ? texture->desc.MipLevels : 1u; }
 
@@ -86,6 +88,7 @@ private:
 
 	uint32_t width = 0;
 	uint32_t height = 0;
+	float2 uvScale{};
 	bool valid = false;
 	uint32_t builtFrame = UINT32_MAX;
 };

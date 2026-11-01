@@ -18,7 +18,7 @@ void GrassOptimizations::CullGrass(const RE::NiCamera* camera)
 
 	// The setup hook calls this update only when PerFrame contains the main camera.
 	const auto& frameBuffer = globals::game::frameBufferCached;
-	const auto& mainCameraViewProj = frameBuffer.GetCameraViewProjUnjittered();
+	const auto& mainCameraViewProj = frameBuffer.GetCameraViewProj();
 	const auto& mainCameraPos = frameBuffer.GetCameraPosAdjust();
 
 	if (settings.EnableOcclusionCulling)
@@ -66,8 +66,9 @@ void GrassOptimizations::CullGrass(const RE::NiCamera* camera)
 
 		params.meshLODBandPx = std::max(0.0f, settings.MeshLODBandPixels);
 		params.hiZEnabled = (settings.EnableOcclusionCulling && globals::hiZPyramid->IsValid()) ? 1.0f : 0.0f;
-		params.hiZSizeX = (float)globals::hiZPyramid->GetWidth();
-		params.hiZSizeY = (float)globals::hiZPyramid->GetHeight();
+		const auto hiZUVScale = globals::hiZPyramid->GetUVScale();
+		params.hiZSizeX = hiZUVScale.x;
+		params.hiZSizeY = hiZUVScale.y;
 
 		const auto* rowW = params.cameraViewProj[3];
 		params.projectionWLength = std::sqrt(rowW[0] * rowW[0] + rowW[1] * rowW[1] + rowW[2] * rowW[2]);

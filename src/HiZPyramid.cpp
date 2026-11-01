@@ -126,7 +126,8 @@ bool HiZPyramid::Build(ID3D11Device* device, ID3D11DeviceContext* ctx, bool forc
 		return false;
 
 	const float2 screenSize{ (float)globals::game::graphicsState->screenWidth, (float)globals::game::graphicsState->screenHeight };
-	const auto renderSize = Util::ConvertToDynamic(screenSize);
+	// Depth uses the scaled viewport even while dynamic resolution is locked.
+	const auto renderSize = Util::ConvertToDynamic(screenSize, true);
 
 	const uint32_t srcW = std::max(1u, (uint32_t)std::lround(renderSize.x));
 	const uint32_t srcH = std::max(1u, (uint32_t)std::lround(renderSize.y));
@@ -155,6 +156,8 @@ bool HiZPyramid::Build(ID3D11Device* device, ID3D11DeviceContext* ctx, bool forc
 
 	width = validW;
 	height = validH;
+	// Preserve fractional tiles to keep UVs aligned with source depth.
+	uvScale = float2{ (float)srcW / kDownsampleFactor, (float)srcH / kDownsampleFactor };
 
 	if (!baseCS) {
 		if (baseCSFailed)
