@@ -314,14 +314,14 @@ void EvaluateProceduralSun(float3 viewDirection, float3 sunTint, float haloInten
 
 	float3 limbDarkening;
 	float discCoverage;
-	ProceduralSun::EvaluateDisc(
+	SunDisc::EvaluateDisc(
 		cosTheta,
 		SharedData::enbSettings.ProceduralSunDiskCos,
 		SharedData::enbSettings.ProceduralSunEdgeSoftness,
 		limbDarkening,
 		discCoverage);
 
-	float haloProfile = ProceduralSun::EvaluateHalo(
+	float haloProfile = SunDisc::EvaluateHalo(
 		cosTheta,
 		SharedData::enbSettings.ProceduralSunDiskCos,
 		SharedData::enbSettings.ProceduralSunHaloCos,
@@ -330,7 +330,7 @@ void EvaluateProceduralSun(float3 viewDirection, float3 sunTint, float haloInten
 	float discRadiance = SharedData::enbSettings.ProceduralSunDiskRadiance * Color::RGBToLuminance(SharedData::DirLightColor.xyz) /
 	                     max(Color::RGBToLuminance(sunTint), 1e-5);
 
-	ProceduralSun::ComposeDiscAndHalo(
+	SunDisc::ComposeDiscAndHalo(
 		limbDarkening,
 		discCoverage,
 		discRadiance,
@@ -387,30 +387,27 @@ PS_OUTPUT main(PS_INPUT input)
 		float cosTheta = clamp(dot(viewDirection, SharedData::SunDirection.xyz), -1.0f, 1.0f);
 		float3 limbDarkening;
 		float discCoverage;
-		StandaloneSun::EvaluateDisc(
+		SunDisc::EvaluateDisc(
 			cosTheta,
 			SharedData::proceduralSunSettings.sunDiskCos,
 			SharedData::proceduralSunSettings.edgeSoftness,
 			limbDarkening,
 			discCoverage);
 
-		float haloProfile = 0.0f;
-		if (SharedData::proceduralSunSettings.haloEnabled) {
-			haloProfile = StandaloneSun::EvaluateHalo(
-				cosTheta,
-				SharedData::proceduralSunSettings.sunDiskCos,
-				SharedData::proceduralSunSettings.sunHaloCos,
-				SharedData::proceduralSunSettings.haloFalloff);
-		}
+		float haloProfile = SunDisc::EvaluateHalo(
+			cosTheta,
+			SharedData::proceduralSunSettings.sunDiskCos,
+			SharedData::proceduralSunSettings.sunHaloCos,
+			SharedData::proceduralSunSettings.haloFalloff);
 
 		float3 proceduralSunColor;
 		float sunCoverage;
-		StandaloneSun::ComposeDiscAndHalo(
+		SunDisc::ComposeDiscAndHalo(
 			limbDarkening,
 			discCoverage,
 			SharedData::proceduralSunSettings.diskIntensity,
 			haloProfile,
-			SharedData::proceduralSunSettings.haloIntensity,
+			SharedData::proceduralSunSettings.haloEnabled ? SharedData::proceduralSunSettings.haloIntensity : 0.0f,
 			proceduralSunColor,
 			sunCoverage);
 

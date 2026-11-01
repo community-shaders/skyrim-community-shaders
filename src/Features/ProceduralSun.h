@@ -11,7 +11,7 @@ struct ProceduralSun : Feature
 	{
 		uint enabled = false;
 		float sunDiskAngularRadius = DirectX::XMConvertToRadians(0.53f);
-		float diskIntensity = 6.0f;
+		float diskIntensity = 4.8f;
 		float edgeSoftness = 0.125f;
 		uint haloEnabled = true;
 		float haloAngularWidth = DirectX::XMConvertToRadians(4.0f);
@@ -73,6 +73,9 @@ struct ProceduralSun : Feature
 	virtual void SaveSettings(json& o_json) override;
 	/** @brief Restores default Procedural Sun settings. */
 	virtual void RestoreDefaultSettings() override;
+
+	/** @brief Returns true while the Effects 11 procedural sun is enabled, which then replaces this feature's sun. */
+	bool IsManagedByENB() const;
 
 	/** @brief Returns the settings uploaded to the shared feature buffer. */
 	PerFrameData GetCommonBufferData() const;

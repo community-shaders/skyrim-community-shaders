@@ -3,6 +3,9 @@
 #include <algorithm>
 #include <cmath>
 
+#include "Effects11.h"
+#include "Effects11/SettingManager.h"
+#include "Globals.h"
 #include "I18n/I18n.h"
 #include "Utils/UI.h"
 
@@ -66,6 +69,9 @@ namespace
 
 void ProceduralSun::DrawSettings()
 {
+	const Util::LockedSection enbLock(IsManagedByENB(),
+		T("common.settings_managed_by_enb", "This setting is managed by Effects 11."));
+
 	bool enabled = settings.enabled != 0;
 	if (ImGui::Checkbox(T(TKEY("enabled"), "Enabled"), &enabled))
 		settings.enabled = enabled;
@@ -121,6 +127,12 @@ void ProceduralSun::SaveSettings(json& o_json)
 void ProceduralSun::RestoreDefaultSettings()
 {
 	settings = {};
+}
+
+bool ProceduralSun::IsManagedByENB() const
+{
+	const auto& effects11 = globals::features::effects11;
+	return effects11.loaded && effects11.enableEffect && SettingManager::GetSingleton().GetValue<bool>("EnableProceduralSun", "EFFECT");
 }
 
 ProceduralSun::PerFrameData ProceduralSun::GetCommonBufferData() const
