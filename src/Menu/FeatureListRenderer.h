@@ -62,21 +62,13 @@ namespace FeatureListFilter
 class FeatureListRenderer
 {
 public:
-	/** @brief How a built-in page's row stands out in the list. */
-	enum class NavStyle : std::uint8_t
-	{
-		Plain,   ///< An ordinary row
-		Accent,  ///< Accent-tinted icon, for the pages most users want first (Presets, CS Editor)
-	};
-
 	/** @brief Describes a built-in (non-feature) menu page with an ID, a display name and a draw callback. */
 	struct BuiltInMenu
 	{
 		std::string_view id;  ///< Canonical page ID from MenuPageIds, used for all page logic
 		std::string name;     ///< Translated label shown in the list
 		std::function<void()> func;
-		Icons::GlyphRef icon{};  ///< Glyph leading the row and the page header; none leaves the space empty
-		NavStyle style = NavStyle::Plain;
+		Icons::GlyphRef icon{};   ///< Glyph leading the row and the page header; none leaves the space empty
 		std::string hint;         ///< The page header's subtitle
 		bool showHeader = false;  ///< Draws a BrowserUI::PageHeader above the page; off for pages with their own title
 	};
@@ -288,9 +280,6 @@ private:
 		std::string& pendingFeatureSelection,
 		std::map<std::string, bool>& categoryExpansionStates,
 		Hooks& hooks);
-
-	/** @brief Draws a built-in page's row; the CS Editor row opens its window instead of selecting the page. */
-	static void RenderBuiltInRow(const BuiltInMenu& menu, size_t listId, size_t& selectedMenu, float width = 0.0f);
 
 	static void RenderRightColumn(
 		const std::vector<MenuFuncInfo>& menuList,

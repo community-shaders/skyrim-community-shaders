@@ -153,19 +153,7 @@ namespace BrowserUI
 	 */
 	void InlineBadge(const char* label, const ImVec4& tint, float height = 0.0f);
 
-	/** @brief Square size of IconButton. */
-	float IconButtonSize();
-
-	/**
-	 * @brief Quiet square icon button: transparent until hovered, filled while active.
-	 * @param color Glyph colour; 0 uses the secondary text colour.
-	 */
-	bool IconButton(const char* id, Icons::GlyphRef glyph, const char* tooltip, bool active = false, ImU32 color = 0);
-
-	/** @brief Glyph colour for IconButtons that delete: the error colour, softened to sit quietly in a row. */
-	ImU32 DestructiveIconColor();
-
-	/** @brief IconButton variant for painted (non-font) icons such as the star and flag. */
+	/** @brief Util::IconButton variant for painted (non-font) icons such as the star and flag. */
 	bool PaintedIconButton(const char* id, const IconPainter& icon, ImU32 color, const char* tooltip);
 
 	/**

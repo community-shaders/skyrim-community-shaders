@@ -249,17 +249,8 @@ namespace
 	/** @brief Borderless folder icon after the Apply button, wrapping to a new row when the pane is narrow. */
 	bool FolderButton(const char* id, const char* tooltip)
 	{
-		const Icons::GlyphRef folderIcon = Icons::TI(MenuIcons::kFolder);
-		BrowserUI::SameLineIfFits(Icons::CalcGlyphSize(folderIcon).x + ImGui::GetStyle().FramePadding.x * 2.0f);
-		bool clicked = false;
-		{
-			auto _style = Util::TransparentIconButtonStyle();
-			ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
-			clicked = Icons::Button(id, folderIcon);
-			ImGui::PopStyleVar();
-		}
-		Util::AddTooltip(tooltip);
-		return clicked;
+		BrowserUI::SameLineIfFits(Util::IconButtonSize());
+		return Util::IconButton(id, Icons::TI(MenuIcons::kFolder), tooltip);
 	}
 
 	/** @brief Apply, open-folder, remove-baseline and disable buttons, then a line saying how the pack is active. */
@@ -371,21 +362,13 @@ void PresetsPageRenderer::RenderToolbar()
 	// A small divider keeps these maintenance actions from reading as more filter chips.
 	Util::ToolbarDivider();
 
-	{
-		auto _style = Util::TransparentIconButtonStyle();
-		if (Icons::Button("##PresetsRefresh", Icons::TI(ICON_TI_REFRESH))) {
-			catalog.Discover();
-			discovered = true;
-		}
-		if (ImGui::IsItemHovered())
-			ImGui::SetTooltip("%s", T("menu.presets.refresh_tooltip", "Rescan unified packs and Effects 11 library presets."));
-
-		ImGui::SameLine();
-		if (Icons::Button("##PresetsOpenFolder", Icons::TI(ICON_TI_FOLDER_OPEN)))
-			catalog.OpenPresetsFolder();
-		if (ImGui::IsItemHovered())
-			ImGui::SetTooltip("%s", T("menu.presets.open_folder_tooltip", "Open the unified Presets library folder in Explorer."));
+	if (Util::IconButton("##PresetsRefresh", Icons::TI(ICON_TI_REFRESH), T("menu.presets.refresh_tooltip", "Rescan unified packs and Effects 11 library presets."))) {
+		catalog.Discover();
+		discovered = true;
 	}
+	ImGui::SameLine();
+	if (Util::IconButton("##PresetsOpenFolder", Icons::TI(ICON_TI_FOLDER_OPEN), T("menu.presets.open_folder_tooltip", "Open the unified Presets library folder in Explorer.")))
+		catalog.OpenPresetsFolder();
 
 	DrawOpenCSEditorButton("##PresetsOpenCSEditor");
 }
@@ -394,8 +377,8 @@ void PresetsPageRenderer::DrawOpenCSEditorButton(const char* id)
 {
 	const char* title = T("menu.presets.open_cs_editor", "CS Editor");
 	const Icons::GlyphRef brush = Icons::TI(MenuIcons::kCSEditor);
-	BrowserUI::RightAlign(Icons::MeasureLabeledButton(brush, title));
-	if (Icons::LabeledButton(id, brush, title))
+	BrowserUI::RightAlign(Util::MeasureLabeledButton(brush, title));
+	if (Util::LabeledButton(id, brush, title))
 		CSEditor::OpenEditorWindow();
 	Util::AddTooltip(T("menu.presets.open_cs_editor_tooltip", "Open the CS Editor for weather, lighting, and scene editing."));
 }
@@ -677,7 +660,7 @@ void PresetsPageRenderer::RenderDetail()
 					Util::Text::Secondary("%s", metaLine.c_str());
 				if (!pack->nexusUrl.empty()) {
 					ImGui::SameLine(0.0f, style.ItemSpacing.x);
-					if (Icons::Button("##NexusLink", Icons::TI(ICON_TI_EXTERNAL_LINK)))
+					if (Util::LabeledButton("##NexusLink", Icons::TI(ICON_TI_EXTERNAL_LINK)))
 						Util::FileHelpers::OpenWithShell(pack->nexusUrl);
 					Util::AddTooltip(T("menu.presets.nexus_link_tooltip", "Open this preset's Nexus Mods page."));
 				}
@@ -781,12 +764,12 @@ void PresetsPageRenderer::Open()
 
 float PresetsPageRenderer::MeasureOpenButton()
 {
-	return Icons::MeasureLabeledButton(Icons::TI(MenuIcons::kPresets), T("menu.presets.open_presets", "Presets"));
+	return Util::MeasureLabeledButton(Icons::TI(MenuIcons::kPresets), T("menu.presets.open_presets", "Presets"));
 }
 
 void PresetsPageRenderer::DrawOpenButton(const char* id, const char* tooltip)
 {
-	if (Icons::LabeledButton(id, Icons::TI(MenuIcons::kPresets), T("menu.presets.open_presets", "Presets")))
+	if (Util::LabeledButton(id, Icons::TI(MenuIcons::kPresets), T("menu.presets.open_presets", "Presets")))
 		Open();
 	Util::AddTooltip(tooltip);
 }

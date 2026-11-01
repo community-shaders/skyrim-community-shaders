@@ -673,18 +673,13 @@ void FeatureOverwritesPanel::DrawExport()
 
 void FeatureOverwritesPanel::DrawExportButton(Feature* feature, const char* id)
 {
-	const float size = ImGui::GetFrameHeight();
-	{
-		auto style = Util::TransparentIconButtonStyle();
-		if (Icons::Button(id, Icons::TI(ICON_TI_FILE_EXPORT), ImVec2(size, size)))
-			BeginExport(feature);
-	}
 	const auto tooltip = std::format("{}\n{}", T(TKEY("export.button_title"), "Export Feature Overwrite..."),
 		T(TKEY("export.button_tooltip"),
 			"Writes this feature's settings into a Baseline preset pack, applied from the Presets page. "
 			"Scene layers are left out.\n"
 			"For a full preset with scene layers, use Export Preset in the CS Editor (Ctrl+Shift+S)."));
-	Util::AddTooltip(tooltip.c_str());
+	if (Util::IconButton(id, Icons::TI(ICON_TI_FILE_EXPORT), tooltip.c_str()))
+		BeginExport(feature);
 }
 
 #undef I18N_KEY_PREFIX

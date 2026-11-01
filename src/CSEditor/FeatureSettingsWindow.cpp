@@ -10,7 +10,6 @@
 #include <vector>
 
 #include "../I18n/I18n.h"
-#include "Browser/BrowserWidgets.h"
 #include "EditorWindow.h"
 #include "Feature.h"
 #include "FeatureCategories.h"
@@ -187,14 +186,14 @@ namespace
 	void DrawBaselineExportButton(float centerY)
 	{
 		if (centerY >= 0.0f)
-			ImGui::SetCursorScreenPos(ImVec2(ImGui::GetCursorScreenPos().x, centerY - BrowserUI::IconButtonSize() * 0.5f));
+			ImGui::SetCursorScreenPos(ImVec2(ImGui::GetCursorScreenPos().x, centerY - Util::IconButtonSize() * 0.5f));
 
 		const auto tooltip = std::format("{}\n{}", T(TKEY("baseline_export"), "Export Baseline Preset..."),
 			T(TKEY("baseline_export_tooltip"),
 				"Saves the base settings of the features you tick as a Baseline preset, applied from the Presets page. "
 				"Scene layers are left out.\n"
 				"For a file loaded at every game start instead, use Export Feature Overwrite beside a feature's settings."));
-		if (BrowserUI::IconButton("##BaseSettingsExport", SceneActionIcons::kExport, tooltip.c_str()))
+		if (Util::IconButton("##BaseSettingsExport", SceneActionIcons::kExport, tooltip.c_str()))
 			ScenePresetExport::OpenBaseline(selectedFeature);
 	}
 
@@ -206,7 +205,7 @@ namespace
 		ImGui::SetCursorScreenPos(ImVec2(ImGui::GetCursorScreenPos().x, ImGui::GetItemRectMin().y));
 		const char* tooltip = T(TKEY("features_save_settings_tooltip"),
 			"Save Settings: saves feature settings and everything in the CS editor.");
-		if (BrowserUI::IconButton("##FeatureSaveSettings", Icons::TI(MenuIcons::kSave), tooltip))
+		if (Util::IconButton("##FeatureSaveSettings", Icons::TI(MenuIcons::kSave), tooltip))
 			SaveManager::SaveAll();
 	}
 

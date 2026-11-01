@@ -391,10 +391,10 @@ namespace FeatureIssues
 		const char* shadersLabel = T("menu.issues.open_shaders_directory", "Open Shaders Directory");
 		const char* logsLabel = T("menu.issues.open_logs", "Open Logs");
 		const char* clearLabel = T("menu.issues.clear_issue_list", "Clear Issue List");
-		const float actionsWidth = std::max({ Icons::MeasureLabeledButton(Icons::TI(MenuIcons::kFolder), featuresLabel),
-									   Icons::MeasureLabeledButton(Icons::TI(MenuIcons::kFolder), shadersLabel),
-									   Icons::MeasureLabeledButton(Icons::TI(MenuIcons::kLogs), logsLabel),
-									   Icons::MeasureLabeledButton(Icons::TI(ICON_TI_TRASH), clearLabel) }) +
+		const float actionsWidth = std::max({ Util::MeasureLabeledButton(Icons::TI(MenuIcons::kFolder), featuresLabel),
+									   Util::MeasureLabeledButton(Icons::TI(MenuIcons::kFolder), shadersLabel),
+									   Util::MeasureLabeledButton(Icons::TI(MenuIcons::kLogs), logsLabel),
+									   Util::MeasureLabeledButton(Icons::TI(ICON_TI_TRASH), clearLabel) }) +
 		                           style.WindowPadding.x * 2.0f;
 		if (!ImGui::BeginTable("##FeatureIssuesLayout", 2, ImGuiTableFlags_SizingStretchProp))
 			return;
@@ -457,18 +457,18 @@ namespace FeatureIssues
 		if (BrowserUI::BeginCard("##CleanupActions", ImVec2(0.0f, 0.0f), ImGuiChildFlags_AutoResizeY)) {
 			const ImVec2 buttonSize(ImGui::GetContentRegionAvail().x, 0.0f);
 			const auto openPath = [](const std::filesystem::path& path) { ShellExecuteA(NULL, "open", path.string().c_str(), NULL, NULL, SW_SHOWNORMAL); };
-			if (Icons::LabeledButton("##OpenFeatures", Icons::TI(MenuIcons::kFolder), featuresLabel, buttonSize))
+			if (Util::LabeledButton("##OpenFeatures", Icons::TI(MenuIcons::kFolder), featuresLabel, buttonSize))
 				openPath(Util::PathHelpers::GetFeaturesRealPath());
 			Util::HoverTip(T("menu.issues.open_features_folder_tooltip", "Opens the Features folder containing INI files for manual review."));
-			if (Icons::LabeledButton("##OpenShaders", Icons::TI(MenuIcons::kFolder), shadersLabel, buttonSize))
+			if (Util::LabeledButton("##OpenShaders", Icons::TI(MenuIcons::kFolder), shadersLabel, buttonSize))
 				openPath(Util::PathHelpers::GetShadersRealPath());
 			Util::HoverTip(T("menu.issues.open_shaders_tooltip", "Opens the main Shaders directory to view individual feature shader folders."));
 			if (!logPath.empty()) {
-				if (Icons::LabeledButton("##OpenLogs", Icons::TI(MenuIcons::kLogs), logsLabel, buttonSize))
+				if (Util::LabeledButton("##OpenLogs", Icons::TI(MenuIcons::kLogs), logsLabel, buttonSize))
 					openPath(logPath);
 				Util::HoverTip(T("menu.issues.open_logs_tooltip", "Opens the CommunityShaders.log file for manual review."));
 			}
-			if (Icons::LabeledButton("##ClearIssues", Icons::TI(ICON_TI_TRASH), clearLabel, buttonSize))
+			if (Util::LabeledButton("##ClearIssues", Icons::TI(ICON_TI_TRASH), clearLabel, buttonSize))
 				ClearFeatureIssues();
 			Util::HoverTip(T("menu.issues.clear_issue_list_tooltip", "Clears this issue list (useful after cleanup)."));
 		}
@@ -755,7 +755,7 @@ namespace FeatureIssues
 			                                T("menu.issues.delete_unknown_tooltip",
 												"Delete files for this unknown feature. WARNING: If this feature modified core shaders, deletion may not fix compilation issues.") :
 			                                T("menu.issues.delete_files_tooltip", "Delete all files associated with this feature (INI, shaders, etc.)");
-			if (BrowserUI::IconButton("##Delete", Icons::TI(ICON_TI_TRASH), deleteTooltip))
+			if (Util::IconButton("##Delete", Icons::TI(ICON_TI_TRASH), deleteTooltip))
 				ImGui::OpenPopup(confirmPopupId.c_str());
 
 			// Confirmation popup for deletion

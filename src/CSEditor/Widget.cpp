@@ -748,7 +748,7 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 				auto tint = Util::StateHoverButtonStyle(Util::Colors::GetUnsaved(), unsaved);
 				if (unsaved)
 					ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetUnsaved());
-				if (Icons::Button(std::format("{}##_Save", searchId ? searchId : "").c_str(), Icons::TI(MenuIcons::kSave)))
+				if (Util::LabeledButton(std::format("{}##_Save", searchId ? searchId : "").c_str(), Icons::TI(MenuIcons::kSave)))
 					saveAll();
 				if (unsaved)
 					ImGui::PopStyleColor();

@@ -218,11 +218,11 @@ void AdvancedSettingsRenderer::RenderLoggingSection()
 
 	ImGui::Spacing();
 
-	if (Icons::LabeledButton("##DumpIni", Icons::TI(ICON_TI_FILE_EXPORT), T("menu.advanced.dump_ini_settings", "Dump Ini Settings")))
+	if (Util::LabeledButton("##DumpIni", Icons::TI(ICON_TI_FILE_EXPORT), T("menu.advanced.dump_ini_settings", "Dump Ini Settings")))
 		Util::DumpSettingsOptions();
 	if (const auto logPath = Util::PathHelpers::GetLogPath(); !logPath.empty()) {
 		ImGui::SameLine();
-		if (Icons::LabeledButton("##OpenLogs", Icons::TI(MenuIcons::kLogs), T("menu.advanced.open_logs", "Open Logs")))
+		if (Util::LabeledButton("##OpenLogs", Icons::TI(MenuIcons::kLogs), T("menu.advanced.open_logs", "Open Logs")))
 			ShellExecuteA(NULL, "open", logPath.string().c_str(), NULL, NULL, SW_SHOWNORMAL);
 	}
 }
@@ -525,7 +525,7 @@ void AdvancedSettingsRenderer::RenderDeveloperSection()
 		"Automatically recompile shaders on file change. "
 		"Intended for developing."));
 
-	if (Icons::LabeledButton("##DumpDefaults", Icons::TI(ICON_TI_FILE_EXPORT), T("menu.advanced.dump_feature_defaults", "Dump All Feature Defaults to JSON"))) {
+	if (Util::LabeledButton("##DumpDefaults", Icons::TI(ICON_TI_FILE_EXPORT), T("menu.advanced.dump_feature_defaults", "Dump All Feature Defaults to JSON"))) {
 		if (const auto path = state->DumpFeatureDefaults(); !path.empty())
 			Util::FileHelpers::OpenWithShell(path);
 	}
@@ -737,7 +737,7 @@ void AdvancedSettingsRenderer::RenderTestingSection()
 		FeatureIssues::Test::DrawDeveloperModeTestingUI();
 
 		ImGui::Spacing();
-		if (Icons::LabeledButton("##TestConditions", Icons::TI(MenuIcons::kTestScene), T("menu.advanced.test_conditions", "Test Conditions")))
+		if (Util::LabeledButton("##TestConditions", Icons::TI(MenuIcons::kTestScene), T("menu.advanced.test_conditions", "Test Conditions")))
 			RunTestConditions();
 		Util::AddTooltip(GetTestConditionsTooltip());
 	}
