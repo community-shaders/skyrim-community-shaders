@@ -535,10 +535,7 @@ void AdvancedSettingsRenderer::RenderDeveloperSection()
 
 	// Engine object addresses, for attaching a debugger; each button copies its address
 	ImGui::Spacing();
-	{
-		MenuFonts::FontRoleGuard heading(Menu::FontRole::Subheading);
-		ImGui::SeparatorText(T("menu.advanced.addresses", "Addresses"));
-	}
+	Util::SeparatorTextWithFont(T("menu.advanced.addresses", "Addresses"), Menu::FontRole::Subheading);
 	{
 		auto Renderer = globals::game::renderer;
 		auto BSShaderAccumulator = *globals::game::currentAccumulator.get();

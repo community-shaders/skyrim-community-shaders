@@ -4,7 +4,6 @@
 #include <cmath>
 #include <filesystem>
 #include <format>
-#include <imgui_stdlib.h>
 
 #include "CSEditor/Browser/BrowserWidgets.h"
 #include "EditorWidgets.h"
@@ -641,24 +640,14 @@ void Effects11Editor::DrawStatus()
 	ImGui::EndTable();
 }
 
-void Effects11Editor::DrawSearchBar(std::string& a_filter, const char* a_hint, bool& a_focusRequest)
+void Effects11Editor::DrawSearchBar(std::span<char> a_filter, const char* a_hint, bool& a_focusRequest)
 {
-	ImGui::PushID(a_hint);
-	const float clearWidth = a_filter.empty() ? 0.0f : ImGui::GetFrameHeight() + ImGui::GetStyle().ItemSpacing.x;
 	if (a_focusRequest) {
 		ImGui::SetKeyboardFocusHere();
 		a_focusRequest = false;
 	}
-	ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - clearWidth);
-	ImGui::InputTextWithHint("##search", a_hint, &a_filter, ImGuiInputTextFlags_EscapeClearsAll);
+	Util::SearchField(a_hint, a_filter.data(), a_filter.size(), a_hint, ImGui::GetContentRegionAvail().x, false);
 	Util::AddTooltip(T(TKEY("search_tip"), "Filter by name. Shortcut: Ctrl+F. Esc clears the search."));
-	if (!a_filter.empty()) {
-		ImGui::SameLine();
-		if (Util::Button("X##clear", ImVec2(ImGui::GetFrameHeight(), ImGui::GetFrameHeight())))
-			a_filter.clear();
-		Util::AddTooltip(T(TKEY("clear_search"), "Clear the search"));
-	}
-	ImGui::PopID();
 }
 
 void Effects11Editor::DrawPeriodFocusCombo()
@@ -769,7 +758,7 @@ void Effects11Editor::DrawSections()
 		drewAnything = true;
 	}
 
-	if (!drewAnything && !settingsFilter.empty()) {
+	if (!drewAnything && settingsFilter[0]) {
 		const auto text = I18n::GetSingleton()->Format(TKEY("no_settings_match"), { { "search", settingsFilter } }, "No settings match \"{search}\".");
 		Util::TextUnformattedDisabled(text.c_str());
 	}
@@ -783,7 +772,7 @@ void Effects11Editor::DrawCategory(const std::string& a_category, const char* a_
 	const bool weatherAware = settingManager.IsWeatherSystemEnabled() && settingManager.CategoryHasWeatherSupport(a_category);
 	const bool handedOff = E11Handoff::IsE11SettingHandedOff(a_category);
 
-	if (!settingsFilter.empty())
+	if (settingsFilter[0])
 		ImGui::SetNextItemOpen(true, ImGuiCond_Always);
 	const std::string label = std::format("{}###section_{}", a_name, a_category);
 	const bool expanded = ImGui::CollapsingHeader(label.c_str(), a_category == "EFFECT" ? ImGuiTreeNodeFlags_DefaultOpen : ImGuiTreeNodeFlags_None);
@@ -1291,7 +1280,7 @@ void Effects11Editor::DrawShaderWindow()
 				DrawEffectSection(*file.effect, file.enableSettingID, file.friendlyName, totals);
 			}
 
-			if (!shaderFilter.empty() && totals.drawn == 0) {
+			if (shaderFilter[0] && totals.drawn == 0) {
 				const auto text = I18n::GetSingleton()->Format(TKEY("no_parameters_match"), { { "search", shaderFilter } }, "No parameters match \"{search}\".");
 				Util::TextUnformattedDisabled(text.c_str());
 			}
@@ -1333,7 +1322,7 @@ void Effects11Editor::DrawEffectSection(Effect& a_effect, uint32_t a_enableSetti
 	const bool hasToggle = a_enableSettingID != kInvalidSettingID;
 	const bool enabled = !hasToggle || settingManager.GetValue<bool>(a_enableSettingID);
 
-	if (!shaderFilter.empty())
+	if (shaderFilter[0])
 		ImGui::SetNextItemOpen(true, ImGuiCond_Always);
 	ImGui::SetNextItemAllowOverlap();
 	if (failed)

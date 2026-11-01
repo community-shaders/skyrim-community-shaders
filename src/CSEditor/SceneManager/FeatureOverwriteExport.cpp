@@ -330,7 +330,7 @@ namespace
 	/** @brief Search, a chip per group, and the in-file toggle. */
 	void DrawSettingFilters(const FeatureExport& entry)
 	{
-		BrowserUI::SearchField("##search", session.search, sizeof(session.search), T("ui.search", "Search..."),
+		Util::SearchField("##search", session.search, sizeof(session.search), T("ui.search", "Search..."),
 			ImGui::GetFontSize() * kSearchWidthEm, true);
 		if (entry.groups.size() > 1) {
 			ImGui::PushID("groups");

@@ -2,6 +2,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -77,7 +78,7 @@ private:
 	// Settings window parts
 	void DrawToolbar();
 	void DrawStatus();
-	void DrawSearchBar(std::string& a_filter, const char* a_hint, bool& a_focusRequest);
+	void DrawSearchBar(std::span<char> a_filter, const char* a_hint, bool& a_focusRequest);
 	void DrawPeriodFocusCombo();
 	void DrawSections();
 	std::vector<const Setting*> CollectRows(const std::string& a_category, const char* a_name) const;
@@ -129,8 +130,8 @@ private:
 	int periodFocus = kFocusCurrent;
 	int hiddenPeriodParameters = 0;
 	PendingAction pendingAction = PendingAction::None;
-	std::string settingsFilter;
-	std::string shaderFilter;
+	char settingsFilter[256]{};
+	char shaderFilter[256]{};
 
 	/** Preset file locations, cached because resolving them touches the disk. */
 	struct PresetPaths

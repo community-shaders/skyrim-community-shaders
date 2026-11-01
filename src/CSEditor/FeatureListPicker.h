@@ -29,8 +29,8 @@ namespace FeatureListPicker
 
 	struct Options
 	{
-		/// Search text; null hides the search bar.
-		std::string* search = nullptr;
+		/// Search text; empty hides the search bar.
+		std::span<char> search;
 		/// Expansion state per category; null lists the features flat, in the order given.
 		std::map<std::string, bool>* categories = nullptr;
 		/// Listed first and outside any category, such as Post Processing in Base Settings.

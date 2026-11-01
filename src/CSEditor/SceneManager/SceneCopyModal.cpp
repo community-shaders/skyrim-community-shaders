@@ -676,7 +676,7 @@ namespace
 	{
 		if (std::exchange(session.focusSearch, false))
 			ImGui::SetKeyboardFocusHere();
-		BrowserUI::SearchField("##search", session.search, sizeof(session.search), T("ui.search", "Search..."),
+		Util::SearchField("##search", session.search, sizeof(session.search), T("ui.search", "Search..."),
 			ImGui::GetFontSize() * kSearchWidthEm, true, ImGuiInputTextFlags_CallbackHistory, OnSearchHistory,
 			&session.cursorStep);
 		session.enterCommits = ImGui::IsItemFocused();

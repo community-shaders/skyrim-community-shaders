@@ -96,7 +96,7 @@ namespace
 	/// Each panel keeps its own selection: several can be on screen at once.
 	std::string weatherSelectedFeature;
 	std::string panelSelectedFeature;
-	std::string weatherFeatureSearch;
+	char weatherFeatureSearch[256]{};
 
 	/// A location the user opened for editing. Locations are not forms in the widget system, so the
 	/// editor tracks its own windows instead of going through Widget.
@@ -104,7 +104,7 @@ namespace
 	{
 		SceneSettingsManager::LocationTarget target;
 		std::string selectedFeature;
-		std::string featureSearch;
+		char featureSearch[256]{};
 		bool open = true;
 		bool pendingFocus = false;
 	};
@@ -369,7 +369,7 @@ namespace
 
 	/// The shared feature column, dotting the features this page already holds settings for.
 	void DrawFeatureList(std::string& selected, const std::vector<Feature*>& features,
-		const SceneSettingsManager::SceneContextId& context, std::string* search)
+		const SceneSettingsManager::SceneContextId& context, std::span<char> search)
 	{
 		if (features.empty()) {
 			selected.clear();
@@ -416,7 +416,7 @@ namespace
 
 	/// Feature column beside the panel body, split by a divider the user can drag.
 	/// Transitionable features are the weather set; the rest also covers interior and location.
-	void DrawFeatureLayout(std::string& selectedFeature, std::string& featureSearch, bool transitionableOnly,
+	void DrawFeatureLayout(std::string& selectedFeature, std::span<char> featureSearch, bool transitionableOnly,
 		bool withPeriodBar, const SceneSettingsManager::SceneContextId& baseContext)
 	{
 		if (!ImGui::BeginTable("SceneFeatureLayout", 2, FeatureListPicker::kLayoutFlags))
@@ -429,7 +429,7 @@ namespace
 		// Each column scrolls on its own, so a long feature list never drags the panel with it.
 		ImGui::TableSetColumnIndex(0);
 		if (ImGui::BeginChild("##SceneFeatureList"))
-			DrawFeatureList(selectedFeature, GetSceneFeatures(transitionableOnly), baseContext, &featureSearch);
+			DrawFeatureList(selectedFeature, GetSceneFeatures(transitionableOnly), baseContext, featureSearch);
 		ImGui::EndChild();
 
 		ImGui::TableSetColumnIndex(1);
@@ -711,7 +711,7 @@ namespace
 		const auto& catalog = manager->GetLocationCatalog();
 		const float scale = Util::GetUIScale();
 
-		bool changed = BrowserUI::SearchField("##LocationSearch", locationPicker.search, IM_ARRAYSIZE(locationPicker.search),
+		bool changed = Util::SearchField("##LocationSearch", locationPicker.search, IM_ARRAYSIZE(locationPicker.search),
 			T(TKEY("location_search"), "Search by name, editor ID, or type..."),
 			std::min(ImGui::GetContentRegionAvail().x, kLocationSearchWidth * scale), false);
 
@@ -807,7 +807,7 @@ namespace
 
 		// A filter only earns its row once the list is long enough to need one.
 		if (targets.size() > kAuthoredFilterThreshold) {
-			BrowserUI::SearchField("##AuthoredSearch", authoredLocationSearch, IM_ARRAYSIZE(authoredLocationSearch),
+			Util::SearchField("##AuthoredSearch", authoredLocationSearch, IM_ARRAYSIZE(authoredLocationSearch),
 				T(TKEY("location_filter_list"), "Filter your list..."),
 				std::min(ImGui::GetContentRegionAvail().x, kLocationSearchWidth * Util::GetUIScale()), false);
 			if (const std::string query = authoredLocationSearch; !query.empty())
@@ -948,7 +948,7 @@ void SceneSettingsUI::DrawSceneManagerCategoryFeatures()
 
 	ImGui::Indent();
 	ImGui::SetWindowFontScale(kNestedFeatureFontScale);
-	DrawFeatureList(panelSelectedFeature, GetSceneFeatures(false), GetSceneManagerPanelContext(), nullptr);
+	DrawFeatureList(panelSelectedFeature, GetSceneFeatures(false), GetSceneManagerPanelContext(), {});
 	ImGui::SetWindowFontScale(1.0f);
 	ImGui::Unindent();
 }

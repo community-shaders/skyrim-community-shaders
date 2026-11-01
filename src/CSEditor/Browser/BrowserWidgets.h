@@ -15,7 +15,7 @@ void DrawIconFlag(ImVec2 center, float height, ImU32 color, bool filled);
 
 /**
  * @brief Shared building blocks for the CS Editor Browser pages: chips, badges, row accents,
- * ellipsized meta text, page headers and the search field. Sizes follow Util::GetUIScale().
+ * ellipsized meta text and page headers. Sizes follow Util::GetUIScale().
  */
 namespace BrowserUI
 {
@@ -30,16 +30,6 @@ namespace BrowserUI
 	IconPainter FlagIcon(bool filled);
 	/** @brief Painter for a filled dot (unsaved changes). */
 	IconPainter DotIcon();
-
-	/**
-	 * @brief Search input with a magnifier inside the frame and a clear button while it holds text.
-	 * Escape clears the text without closing the editor. Item queries afterwards refer to the input.
-	 * @param ctrlFFocus Ctrl+F focuses the field while its window (or a child) is focused.
-	 * @param flags, callback, userData Passed on to the input, alongside EscapeClearsAll.
-	 * @return True when the text changed this frame.
-	 */
-	bool SearchField(const char* id, char* buffer, size_t bufferSize, const char* hint, float width, bool ctrlFFocus,
-		ImGuiInputTextFlags flags = 0, ImGuiInputTextCallback callback = nullptr, void* userData = nullptr);
 
 	/** @brief What a SearchableFormCombo shows around its entries. */
 	struct SearchableComboSpec

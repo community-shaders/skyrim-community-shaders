@@ -563,7 +563,7 @@ void LightEditor::DrawToolbar()
 
 	const float scale = Util::GetUIScale();
 	SameLineIfFits(kLightSearchWidth * scale);
-	BrowserUI::SearchField("##LightSearch", lightSearch, sizeof(lightSearch), T(TKEY("filter_lights"), "Filter lights..."),
+	Util::SearchField("##LightSearch", lightSearch, sizeof(lightSearch), T(TKEY("filter_lights"), "Filter lights..."),
 		kLightSearchWidth * scale, false);
 
 	const char* shadowsOnlyLabel = T(TKEY("shadows_only"), "Shadows Only");
@@ -1170,8 +1170,7 @@ bool LightEditor::BeginSearchableCombo(const char* label, const char* preview, c
 		return false;
 	if (ImGui::IsWindowAppearing())
 		ImGui::SetKeyboardFocusHere();
-	ImGui::SetNextItemWidth(-1.0f);
-	ImGui::InputText(searchId, searchBuf, searchBufSize);
+	Util::SearchField(searchId, searchBuf, searchBufSize, T("ui.search", "Search..."), -1.0f, false);
 	ImGui::Separator();
 	filterOut = searchBuf;
 	return true;

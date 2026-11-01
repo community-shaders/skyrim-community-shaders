@@ -11,6 +11,7 @@
 #include <windows.h>  // For WPARAM and virtual key constants
 
 #include "../FeatureConstraints.h"
+#include "../I18n/I18n.h"
 #include "../Menu/Fonts.h"
 #include "../Menu/ThemeManager.h"
 #include "Utils/Input.h"
@@ -201,6 +202,9 @@ namespace Util
 	 */
 	void TextUnformattedDisabled(const char* a_text, const char* a_textEnd = nullptr);
 
+	/** @brief ImGui::SeparatorText in the given font role. */
+	void SeparatorTextWithFont(const char* a_text, Menu::FontRole a_role);
+
 	/**
 	 * Full-row hover/selection highlight for ImGui tables.
 	 * Makes the entire table row highlight on hover/active/selected instead of just the selectable cell.
@@ -325,8 +329,11 @@ namespace Util
 	float DrawBadgeAt(ImVec2 a_min, float a_rowHeight, const char* a_label, const ImVec4& a_bg, const ImVec4& a_fg,
 		ImDrawList* a_drawList = nullptr);
 
-	/** @brief Badge tinted from one colour (soft fill, readable label), drawn at the cursor; advances layout with Dummy. */
-	void Badge(const char* a_label, const ImVec4& a_tint);
+	/**
+	 * @brief Badge tinted from one colour (soft fill, readable label), drawn at the cursor; advances layout with Dummy.
+	 * @param a_rowHeight Row to centre in; 0 is the line height.
+	 */
+	void Badge(const char* a_label, const ImVec4& a_tint, float a_rowHeight = 0.0f);
 
 	/**
 	 * @brief Soft rectangular HDR/SDR capability pill (muted blue / muted red).
@@ -1186,7 +1193,7 @@ namespace Util
 	 * @param searchQuery The search query string
 	 * @return True if the feature matches the search query
 	 */
-	bool FeatureMatchesSearch(Feature* feat, const std::string& searchQuery);
+	bool FeatureMatchesSearch(Feature* feat, std::string_view searchQuery);
 
 	/**
 	 * @brief Generic case-insensitive string matching for search functionality.
@@ -1194,7 +1201,17 @@ namespace Util
 	 * @param searchQuery The search query string
 	 * @return True if the text matches the search query (case-insensitive)
 	 */
-	bool StringMatchesSearch(const std::string& text, const std::string& searchQuery);
+	bool StringMatchesSearch(std::string_view text, std::string_view searchQuery);
+
+	/**
+	 * @brief Search input with a magnifier inside the frame and a clear button while it holds text.
+	 * Escape clears the text without closing the menu or editor. Item queries afterwards refer to the input.
+	 * @param ctrlFFocus Ctrl+F focuses the field while its window (or a child) is focused.
+	 * @param flags, callback, userData Passed on to the input, alongside EscapeClearsAll.
+	 * @return True when the text changed this frame.
+	 */
+	bool SearchField(const char* id, char* buffer, size_t bufferSize, const char* hint, float width, bool ctrlFFocus,
+		ImGuiInputTextFlags flags = 0, ImGuiInputTextCallback callback = nullptr, void* userData = nullptr);
 
 	/**
 	 * @brief Draws a search input field with icon inside a combo dropdown.
@@ -1244,13 +1261,6 @@ namespace Util
 
 	/** @brief Pops the style pushed by PushTintedFrameStyle. Always call after the corresponding push. */
 	void PopTintedFrameStyle();
-
-	/**
-	 * @brief Draws the feature search bar with magnifying glass icon.
-	 * @param searchString Reference to the search string to modify
-	 * @param availableWidth The available width for the search bar
-	 */
-	void DrawFeatureSearchBar(std::string& searchString, float availableWidth = 0.0f);
 
 	/**
 	 * Provides access to theme-aware UI colors for consistent styling.
@@ -1631,7 +1641,7 @@ namespace Util
 			char filterBuffer[256] = { 0 };
 			strncpy_s(filterBuffer, filterText.c_str(), sizeof(filterBuffer) - 1);
 
-			ImGui::InputText("Filter", filterBuffer, IM_ARRAYSIZE(filterBuffer));
+			SearchField("##TableFilter", filterBuffer, IM_ARRAYSIZE(filterBuffer), ::T("ui.search", "Search..."), ImGui::CalcItemWidth(), false);
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::Text("Filter table by the selected column. Case-insensitive.");
 			}

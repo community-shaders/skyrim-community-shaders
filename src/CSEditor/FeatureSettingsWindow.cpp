@@ -42,7 +42,7 @@ namespace
 	/// above the categories instead, as the stack most edits start from.
 	constexpr std::array kExcludedCategories = { FeatureCategories::kUtility, FeatureCategories::kDisplay, FeatureCategories::kPostProcessing };
 
-	std::string featureSearch;
+	char featureSearch[256]{};
 	/// Short name of the feature shown in the Features window; also the constraint dialog's navigation target.
 	std::string selectedFeature;
 	std::map<std::string, bool> categoryExpansion;
@@ -174,7 +174,7 @@ namespace
 
 		FeatureListPicker::Draw(features, selectedFeature,
 			{
-				.search = &featureSearch,
+				.search = featureSearch,
 				.categories = &categoryExpansion,
 				.pinned = pinPostProcessing ? std::span<Feature* const>(pinned) : std::span<Feature* const>(),
 				.marker = SceneMarker,
@@ -260,7 +260,7 @@ void FeatureSettingsWindow::Select(const std::string& featureShortName)
 	selectedFeature = featureShortName;
 	focusRequested = true;
 	// A search or a collapsed category would hide the row just chosen.
-	featureSearch.clear();
+	featureSearch[0] = '\0';
 	if (auto* feature = FindAnyFeatureByShortName(featureShortName))
 		categoryExpansion[std::string(feature->GetCategory())] = true;
 }

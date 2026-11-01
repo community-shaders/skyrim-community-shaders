@@ -630,10 +630,7 @@ void HomePageRenderer::RenderHelpPopover()
 		ImGui::CloseCurrentPopup();
 	}
 
-	{
-		MenuFonts::FontRoleGuard heading(Menu::FontRole::Subheading);
-		ImGui::SeparatorText(T("menu.help.shortcuts", "Keyboard Shortcuts"));
-	}
+	Util::SeparatorTextWithFont(T("menu.help.shortcuts", "Keyboard Shortcuts"), Menu::FontRole::Subheading);
 	if (ImGui::BeginTable("##HelpShortcuts", 2, ImGuiTableFlags_SizingFixedFit)) {
 		for (const auto& row : MenuShortcuts::BuildHelpRows(globals::menu->GetShortcuts())) {
 			ImGui::TableNextRow();
@@ -645,10 +642,7 @@ void HomePageRenderer::RenderHelpPopover()
 		ImGui::EndTable();
 	}
 
-	{
-		MenuFonts::FontRoleGuard heading(Menu::FontRole::Subheading);
-		ImGui::SeparatorText(T("menu.help.help", "Help"));
-	}
+	Util::SeparatorTextWithFont(T("menu.help.help", "Help"), Menu::FontRole::Subheading);
 	for (size_t i = 0; i < MenuLinks::kAll.size(); ++i) {
 		const auto link = MenuLinks::kAll[i];
 		if (i > 0) {
@@ -663,10 +657,7 @@ void HomePageRenderer::RenderHelpPopover()
 		Util::HoverTip(MenuLinks::GetUrl(link));
 	}
 
-	{
-		MenuFonts::FontRoleGuard heading(Menu::FontRole::Subheading);
-		ImGui::SeparatorText(T("menu.help.about", "About"));
-	}
+	Util::SeparatorTextWithFont(T("menu.help.about", "About"), Menu::FontRole::Subheading);
 	const auto buildTag = MenuHeaderRenderer::GetBuildTagText();
 	const auto title = MenuHeaderRenderer::GetTitleText();
 	ImGui::TextUnformatted(buildTag.empty() ? title.c_str() : std::format("{} {}", title, buildTag).c_str());

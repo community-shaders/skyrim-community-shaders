@@ -4,7 +4,6 @@
 #include "IconsTabler.h"
 #include "Menu.h"
 #include "Menu/Fonts.h"
-#include "Menu/MenuIcons.h"
 #include "Utils/UI.h"
 #include "imgui_internal.h"
 
@@ -153,66 +152,6 @@ namespace BrowserUI
 		return [](ImDrawList* drawList, ImVec2 center, float size, ImU32 color) {
 			drawList->AddCircleFilled(center, size * kDotRadiusScale, color);
 		};
-	}
-
-	bool SearchField(const char* id, char* buffer, size_t bufferSize, const char* hint, float width, bool ctrlFFocus,
-		ImGuiInputTextFlags flags, ImGuiInputTextCallback callback, void* userData)
-	{
-		ImGui::PushID(id);
-		const auto& style = ImGui::GetStyle();
-		const float searchScale = Util::GetSearchUIScale();
-		const float iconX = ThemeManager::Constants::COMBO_SEARCH_ICON_OFFSET_X * searchScale;
-		const float iconSize = Icons::CalcGlyphSize(Icons::TI(MenuIcons::kSearch)).x;
-		const float padLeft = iconX + iconSize + style.ItemInnerSpacing.x;
-		const float frameHeight = ImGui::GetFrameHeight();
-
-		if (ctrlFFocus && ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) &&
-			ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_F, false))
-			ImGui::SetKeyboardFocusHere();
-
-		// The clear button sits over the frame's right end, so the input has to let it take the hover.
-		const bool hadText = buffer[0] != '\0';
-		if (hadText)
-			ImGui::SetNextItemAllowOverlap();
-		ImGui::SetNextItemWidth(width);
-		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(padLeft, style.FramePadding.y));
-		bool changed = ImGui::InputTextWithHint("##input", hint, buffer, bufferSize,
-			ImGuiInputTextFlags_EscapeClearsAll | flags, callback, userData);
-		ImGui::PopStyleVar();
-		const ImGuiLastItemData inputItem = ImGui::GetCurrentContext()->LastItemData;
-
-		// Escape here belongs to the field; without this the same press would also close the editor or menu.
-		if ((ImGui::IsItemActive() || ImGui::IsItemDeactivated()) && ImGui::IsKeyPressed(ImGuiKey_Escape, false))
-			Menu::GetSingleton()->ConsumeEscape();
-
-		const ImVec2 min = ImGui::GetItemRectMin();
-		const ImVec2 max = ImGui::GetItemRectMax();
-		{
-			ImVec4 iconColor = ImGui::GetStyleColorVec4(ImGuiCol_Text);
-			iconColor.w *= ThemeManager::Constants::COMBO_SEARCH_ICON_ALPHA;
-			Icons::DrawCenteredGlyph(ImGui::GetWindowDrawList(),
-				ImVec2(min.x + iconX, min.y),
-				ImVec2(iconSize, frameHeight), Icons::TI(MenuIcons::kSearch), ImGui::GetColorU32(iconColor));
-		}
-
-		if (buffer[0] != '\0') {
-			const ImVec2 clearMin(max.x - frameHeight, min.y);
-			ImGui::SetCursorScreenPos(clearMin);
-			if (ImGui::InvisibleButton("##clear", ImVec2(frameHeight, frameHeight))) {
-				buffer[0] = '\0';
-				changed = true;
-			}
-			const bool hovered = ImGui::IsItemHovered();
-			if (hovered)
-				ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
-			Icons::DrawCenteredGlyph(ImGui::GetWindowDrawList(), clearMin, ImVec2(frameHeight, frameHeight),
-				Icons::TI(ICON_TI_X), ImGui::GetColorU32(hovered ? ImGuiCol_Text : ImGuiCol_TextDisabled));
-			Util::AddTooltip(T(TKEY("search_clear"), "Clear search"));
-			ImGui::GetCurrentContext()->LastItemData = inputItem;
-		}
-
-		ImGui::PopID();
-		return changed;
 	}
 
 	float MeasureToggleChip(int count)

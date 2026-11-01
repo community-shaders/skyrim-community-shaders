@@ -601,17 +601,6 @@ namespace
 		}
 	}
 
-	void SeparatorTextWithFont(const char* text, Menu::FontRole role)
-	{
-		MenuFonts::FontRoleGuard guard(role);
-		ImGui::SeparatorText(text);
-	}
-
-	void SeparatorTextWithFont(const std::string& text, Menu::FontRole role)
-	{
-		SeparatorTextWithFont(text.c_str(), role);
-	}
-
 	bool ComboWithFont(const char* label, int* currentItem, const char* const items[], int itemCount, Menu::FontRole role)
 	{
 		FontRoleGuard guard(role);
@@ -829,7 +818,7 @@ void SettingsTabRenderer::RenderInterfaceOptions()
 {
 	auto& themeSettings = globals::menu->GetSettings().Theme;
 
-	SeparatorTextWithFont(T("menu.settings.section_animations", "Animations"), Menu::FontRole::Subheading);
+	Util::SeparatorTextWithFont(T("menu.settings.section_animations", "Animations"), Menu::FontRole::Subheading);
 
 	// The master switch is stored as its opposite (ReduceUIAnimations), so settings files from before the
 	// animation speed option keep their meaning
@@ -842,7 +831,7 @@ void SettingsTabRenderer::RenderInterfaceOptions()
 		Util::SliderFloatTip(T("menu.settings.animation_speed", "Animation speed"), &menuSettings.AnimationSpeed, ThemeManager::Constants::ANIM_SPEED_MIN, ThemeManager::Constants::ANIM_SPEED_MAX, "%.2fx", T("menu.settings.animation_speed_tooltip", "How fast menu animations run: 0.5x is slower, 2x is quicker. 1x is the default."), ImGuiSliderFlags_AlwaysClamp);
 	}
 
-	SeparatorTextWithFont(T("menu.settings.section_window_layout", "Window & Layout"), Menu::FontRole::Subheading);
+	Util::SeparatorTextWithFont(T("menu.settings.section_window_layout", "Window & Layout"), Menu::FontRole::Subheading);
 
 	Util::CheckboxTip(T("menu.settings.auto_hide_feature_list", "Auto-hide Feature List"), &globals::menu->GetSettings().AutoHideFeatureList, T("menu.settings.auto_hide_feature_list_tooltip", "Automatically hides the left feature list panel. Move cursor to the left edge to show it."));
 
@@ -867,7 +856,7 @@ void SettingsTabRenderer::RenderInterfaceOptions()
 		ImGui::GetIO().ConfigDockingWithShift = globals::menu->GetSettings().RequireShiftToDock;
 	}
 
-	SeparatorTextWithFont(T("menu.settings.section_tooltips_warnings", "Tooltips & Warnings"), Menu::FontRole::Subheading);
+	Util::SeparatorTextWithFont(T("menu.settings.section_tooltips_warnings", "Tooltips & Warnings"), Menu::FontRole::Subheading);
 
 	Util::SliderFloatTip(T("menu.settings.tooltip_hover_delay", "Tooltip Hover Delay"), &themeSettings.TooltipHoverDelay, 0.0f, 2.0f, "%.2f s", T("menu.settings.tooltip_hover_delay_tooltip", "Time in seconds to wait before a tooltip appears when hovering over an item."), ImGuiSliderFlags_AlwaysClamp);
 
@@ -880,7 +869,7 @@ void SettingsTabRenderer::RenderHeaderEffectsSection()
 {
 	auto& themeSettings = globals::menu->GetSettings().Theme;
 
-	SeparatorTextWithFont(T("menu.settings.section_header", "Header"), Menu::FontRole::Subheading);
+	Util::SeparatorTextWithFont(T("menu.settings.section_header", "Header"), Menu::FontRole::Subheading);
 
 	if (Util::CheckboxTip(T("menu.settings.use_monochrome_icons", "Use Monochrome Icons"), &themeSettings.UseMonochromeIcons, T("menu.settings.use_monochrome_icons_tooltip", "Uses white monochrome icons that adapt to your theme's text color"))) {
 		Util::IconLoader::PendingReload() = true;
@@ -896,7 +885,7 @@ void SettingsTabRenderer::RenderHeaderEffectsSection()
 																											"Shows a bar at the bottom of the window with unsaved changes, shader compilation, "
 																											"failed shaders and feature issues, plus the GPU, game version and swap chain"));
 
-	SeparatorTextWithFont(T("menu.settings.visual_effects", "Visual Effects"), Menu::FontRole::Subheading);
+	Util::SeparatorTextWithFont(T("menu.settings.visual_effects", "Visual Effects"), Menu::FontRole::Subheading);
 
 	if (Util::CheckboxTip(T("menu.settings.background_blur", "Background Blur"), &themeSettings.BackgroundBlurEnabled, T("menu.settings.background_blur_tooltip", "Applies a blur effect to the background behind the menu window."))) {
 		BackgroundBlur::SetEnabled(themeSettings.BackgroundBlurEnabled);
@@ -948,7 +937,7 @@ void SettingsTabRenderer::RenderThemesSection()
 	static bool updateSuccess = false;
 
 	// Theme Preset Selection
-	SeparatorTextWithFont(T("menu.settings.theme_preset", "Theme Preset"), Menu::FontRole::Subheading);
+	Util::SeparatorTextWithFont(T("menu.settings.theme_preset", "Theme Preset"), Menu::FontRole::Subheading);
 
 	// Get theme manager
 	auto themeManager = ThemeManager::GetSingleton();
@@ -1434,12 +1423,12 @@ void SettingsTabRenderer::RenderStylingSection()
 			if (ImGui::SliderFloat(T("menu.settings.global_scale", "Global Scale"), &themeSettings.GlobalScale, -1.f, 1.f, "%.2f"))
 				ImGui::GetStyle().FontScaleMain = exp2(themeSettings.GlobalScale);
 			RenderInterfaceOptions();
-			SeparatorTextWithFont(T("menu.settings.scrollbar_opacity", "Scrollbar Opacity"), Menu::FontRole::Subheading);
+			Util::SeparatorTextWithFont(T("menu.settings.scrollbar_opacity", "Scrollbar Opacity"), Menu::FontRole::Subheading);
 			Util::SliderFloatTip(T("menu.settings.track_opacity", "Track Opacity"), &themeSettings.ScrollbarOpacity.Background, 0.0f, 1.0f, "%.2f", T("menu.settings.track_opacity_tooltip", "Controls the opacity of the scrollbar track/channel (the background area behind the scrollbar)."));
 			Util::SliderFloatTip(T("menu.settings.thumb_opacity", "Thumb Opacity"), &themeSettings.ScrollbarOpacity.Thumb, 0.0f, 1.0f, "%.2f", T("menu.settings.thumb_opacity_tooltip", "Controls the opacity of the scrollbar thumb (the draggable part)."));
 			Util::SliderFloatTip(T("menu.settings.thumb_hovered_opacity", "Thumb Hovered Opacity"), &themeSettings.ScrollbarOpacity.ThumbHovered, 0.0f, 1.0f, "%.2f", T("menu.settings.thumb_hovered_opacity_tooltip", "Controls the opacity of the scrollbar thumb when hovered."));
 			Util::SliderFloatTip(T("menu.settings.thumb_active_opacity", "Thumb Active Opacity"), &themeSettings.ScrollbarOpacity.ThumbActive, 0.0f, 1.0f, "%.2f", T("menu.settings.thumb_active_opacity_tooltip", "Controls the opacity of the scrollbar thumb when being dragged."));
-			SeparatorTextWithFont(T("menu.settings.section_scrollbar", "Scrollbar"), Menu::FontRole::Subheading);
+			Util::SeparatorTextWithFont(T("menu.settings.section_scrollbar", "Scrollbar"), Menu::FontRole::Subheading);
 			ImGui::SliderFloat(T("menu.settings.scrollbar_size", "Scrollbar Size"), &style.ScrollbarSize, 1.0f, 20.0f, "%.0f");
 			ImGui::SliderFloat(T("menu.settings.grab_min_size", "Grab Min Size"), &style.GrabMinSize, 1.0f, 20.0f, "%.0f");
 			Util::EndPillTabItem();
@@ -1450,7 +1439,7 @@ void SettingsTabRenderer::RenderStylingSection()
 			ImGui::SliderFloat2(T("menu.settings.item_spacing", "Item Spacing"), (float*)&style.ItemSpacing, 0.0f, 20.0f, "%.0f");
 			ImGui::SliderFloat2(T("menu.settings.item_inner_spacing", "Item Inner Spacing"), (float*)&style.ItemInnerSpacing, 0.0f, 20.0f, "%.0f");
 			ImGui::SliderFloat(T("menu.settings.indent_spacing", "Indent Spacing"), &style.IndentSpacing, 0.0f, 30.0f, "%.0f");
-			SeparatorTextWithFont(T("menu.settings.section_tables", "Tables"), Menu::FontRole::Subheading);
+			Util::SeparatorTextWithFont(T("menu.settings.section_tables", "Tables"), Menu::FontRole::Subheading);
 			ImGui::SliderFloat2(T("menu.settings.cell_padding", "Cell Padding"), (float*)&style.CellPadding, 0.0f, 20.0f, "%.0f");
 			ImGui::SliderAngle(T("menu.settings.table_angled_headers_angle", "Table Angled Headers Angle"), &style.TableAngledHeadersAngle, -50.0f, +50.0f);
 			Util::EndPillTabItem();
@@ -1494,7 +1483,7 @@ void SettingsTabRenderer::RenderStylingSection()
 			ImGui::SliderFloat2(T("menu.settings.separator_text_align", "Separator Text Align"), (float*)&style.SeparatorTextAlign, 0.0f, 1.0f, "%.2f");
 			ImGui::SliderFloat2(T("menu.settings.separator_text_padding", "Separator Text Padding"), (float*)&style.SeparatorTextPadding, 0.0f, 40.0f, "%.0f");
 			ImGui::SliderFloat(T("menu.settings.log_slider_deadzone", "Log Slider Deadzone"), &style.LogSliderDeadzone, 0.0f, 12.0f, "%.0f");
-			SeparatorTextWithFont(T("menu.settings.section_docking", "Docking"), Menu::FontRole::Subheading);
+			Util::SeparatorTextWithFont(T("menu.settings.section_docking", "Docking"), Menu::FontRole::Subheading);
 			ImGui::SliderFloat(T("menu.settings.docking_splitter_size", "Docking Splitter Size"), &style.DockingSeparatorSize, 0.0f, 12.0f, "%.0f");
 			Util::EndPillTabItem();
 		}
@@ -1612,7 +1601,7 @@ namespace
 			Util::SliderFloatTip(T("menu.settings.surface_padding", "Inner Padding"), &s.padding, 0.0f, 48.0f, "%.0f", T("menu.settings.surface_padding_tooltip", "Space between the card edge and its content, in pixels at 1080p. Applies even when the surface is disabled."));
 		}
 
-		SeparatorTextWithFont(T("menu.settings.surface_fill", "Fill"), Menu::FontRole::Subheading);
+		Util::SeparatorTextWithFont(T("menu.settings.surface_fill", "Fill"), Menu::FontRole::Subheading);
 		Util::SliderFloatTip(T("menu.settings.surface_fill_lift", "Fill Lift"), &s.fillLift, 0.0f, 0.5f, "%.3f", T("menu.settings.surface_fill_lift_tooltip", "How far the window colour is lightened toward white to make the surface read above the page."));
 		Util::SliderFloatTip(T("menu.settings.surface_fill_opacity", "Fill Opacity"), &s.fillAlpha, 0.0f, 1.0f, "%.2f", T("menu.settings.surface_fill_opacity_tooltip", "Multiplier on the fill opacity."));
 
@@ -1622,7 +1611,7 @@ namespace
 		if (!useStyleRounding)
 			Util::SliderFloatTip(T("menu.settings.surface_rounding", "Corner Radius"), &s.rounding, 0.0f, 24.0f, "%.0f", T("menu.settings.surface_rounding_tooltip", "Corner radius in pixels at 1080p."));
 
-		SeparatorTextWithFont(T("menu.settings.surface_border", "Border"), Menu::FontRole::Subheading);
+		Util::SeparatorTextWithFont(T("menu.settings.surface_border", "Border"), Menu::FontRole::Subheading);
 		Util::CheckboxTip(T("menu.settings.surface_border_enabled", "Border"), &s.border, T("menu.settings.surface_border_enabled_tooltip", "Draw a hairline border around the surface."));
 		{
 			Util::DisableGuard borderDisabled(!s.border);
@@ -1634,7 +1623,7 @@ namespace
 			}
 		}
 
-		SeparatorTextWithFont(T("menu.settings.surface_shadow", "Shadow"), Menu::FontRole::Subheading);
+		Util::SeparatorTextWithFont(T("menu.settings.surface_shadow", "Shadow"), Menu::FontRole::Subheading);
 		Util::CheckboxTip(T("menu.settings.surface_shadow_enabled", "Shadow"), &s.shadow, T("menu.settings.surface_shadow_enabled_tooltip", "Draw a soft drop shadow behind the surface."));
 		{
 			Util::DisableGuard shadowDisabled(!s.shadow);
@@ -1730,18 +1719,9 @@ void SettingsTabRenderer::RenderColorsSection()
 
 	// Toolbar: search, Changed only, then undo / redo / reset on the right
 	{
-		const float scale = Util::GetSearchUIScale();
-		const float iconSize = ThemeManager::Constants::SEARCH_ICON_SIZE * scale;
-		const float iconSpace = iconSize + ThemeManager::Constants::SEARCH_INPUT_PADDING_EXTRA * scale;
-		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(iconSpace, ThemeManager::Constants::SEARCH_INPUT_FRAME_PADDING_Y * scale));
-		pageState.filter.Draw(T("menu.settings.filter_colors", "Filter colors"), ImGui::GetFontSize() * 14.0f);
-		ImGui::PopStyleVar();
-		const ImVec2 filterMin = ImGui::GetItemRectMin();
-		const ImVec2 filterSize = ImGui::GetItemRectSize();
-		ImVec4 iconColor = ImGui::GetStyleColorVec4(ImGuiCol_Text);
-		iconColor.w *= ThemeManager::Constants::SEARCH_ICON_ALPHA;
-		Icons::DrawCenteredGlyph(ImGui::GetWindowDrawList(), ImVec2(filterMin.x + ThemeManager::Constants::SEARCH_ICON_OFFSET_X * scale, filterMin.y),
-			ImVec2(iconSize, filterSize.y), Icons::TI(MenuIcons::kSearch), ImGui::GetColorU32(iconColor));
+		if (Util::SearchField("##ColorFilter", pageState.filter.InputBuf, IM_ARRAYSIZE(pageState.filter.InputBuf),
+				T("menu.settings.filter_colors", "Filter colors"), ImGui::GetFontSize() * 14.0f, false))
+			pageState.filter.Build();
 
 		ImGui::SameLine();
 		Util::CheckboxTip(T("menu.settings.colors_changed_only", "Changed only"), &pageState.changedOnly,

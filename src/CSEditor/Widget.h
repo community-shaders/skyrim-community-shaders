@@ -491,6 +491,8 @@ protected:
 	bool m_titleBarSearchDrawn = false;
 
 	void ClearSearchState(bool clearBuffer);
+	/** @brief The settings search input at the cursor; Ctrl+F focuses it and starts a fresh search. */
+	void DrawSearchInput(const char* searchId, float width);
 	virtual void NavigateToSearchResult(const SearchResult& result);
 };
 

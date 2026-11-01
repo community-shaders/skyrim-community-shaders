@@ -1024,7 +1024,7 @@ void Menu::DrawDisableAtBootSettings()
 	const char* disabledOnlyLabel = T("menu.settings.disabled_only", "Disabled only");
 	const float chipWidth = BrowserUI::MeasureChip(disabledOnlyLabel, false);
 	const float searchWidth = std::max(ImGui::GetFrameHeight() * ThemeManager::Constants::DISABLE_AT_BOOT_MIN_SEARCH_FRAMES, ImGui::GetContentRegionAvail().x - chipWidth - ImGui::GetStyle().ItemSpacing.x);
-	BrowserUI::SearchField("##DisableAtBootSearch", disableAtBootSearch.data(), disableAtBootSearch.size(), T("ui.search", "Search..."), searchWidth, false);
+	Util::SearchField("##DisableAtBootSearch", disableAtBootSearch.data(), disableAtBootSearch.size(), T("ui.search", "Search..."), searchWidth, false);
 	BrowserUI::SameLineIfFits(chipWidth);
 	if (BrowserUI::FilterChip("##DisabledOnly", { disabledOnlyLabel }, disableAtBootDisabledOnly))
 		disableAtBootDisabledOnly = !disableAtBootDisabledOnly;
