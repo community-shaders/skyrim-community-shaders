@@ -588,15 +588,15 @@ std::vector<FeatureListRenderer::MenuFuncInfo> FeatureListRenderer::BuildMenuLis
 	// then the bottom group (kBottomMenuIds)
 	auto menuList = std::vector<MenuFuncInfo>{
 		BuiltInMenu{ MenuPageIds::kHome, T("menu.features.home", "Home"), []() { HomePageRenderer::RenderHomePage(); },
-			Icons::TI(MenuIcons::kHome), NavStyle::Plain, {}, false },
+			Icons::TI(MenuIcons::kHome), {}, false },
 		BuiltInMenu{ MenuPageIds::kPresets, T("menu.features.presets", "Presets"), []() { PresetsPageRenderer::Render(); },
-			Icons::TI(MenuIcons::kPresets), NavStyle::Accent, T("menu.features.presets_hint", "Control, change and manage your visual Presets to customise your CS experience"), true },
+			Icons::TI(MenuIcons::kPresets), T("menu.features.presets_hint", "Control, change and manage your visual Presets to customise your CS experience"), true },
 		BuiltInMenu{ MenuPageIds::kCSEditor, T("menu.features.cs_editor", "CS Editor"), []() { globals::features::csEditor.DrawSettings(); },
-			Icons::TI(MenuIcons::kCSEditor), NavStyle::Accent, {}, true },
+			Icons::TI(MenuIcons::kCSEditor), {}, true },
 	};
 	menuList.push_back(BuiltInMenu{ MenuPageIds::kSettings, T("menu.features.settings", "Settings"), drawSettings, Icons::TI(MenuIcons::kSettings) });
 	menuList.push_back(BuiltInMenu{ MenuPageIds::kProfiling, T("menu.features.profiling", "Profiling"), []() { ProfilingRenderer::RenderStatistics(); },
-		Icons::TI(MenuIcons::kProfiling), NavStyle::Plain, T("menu.features.profiling_hint", "What each feature costs per frame"), true });
+		Icons::TI(MenuIcons::kProfiling), T("menu.features.profiling_hint", "What each feature costs per frame"), true });
 
 	auto* state = globals::state;
 	const auto filter = globals::menu->GetSettings().FeatureListFilter & FeatureListFilter::kKnown;
@@ -754,7 +754,7 @@ void FeatureListRenderer::RenderLeftColumn(
 		int selected = -1;
 		for (size_t n = 0; n < topCount; n++) {
 			const auto& menu = *builtInAt(topIds[n]);
-			segments[n] = { .label = menu.name.c_str(), .icon = menu.icon, .accentIcon = menu.style == NavStyle::Accent };
+			segments[n] = { .label = menu.name.c_str(), .icon = menu.icon };
 			// The CS Editor segment opens its window instead of a page
 			if (menu.id == MenuPageIds::kCSEditor) {
 				segments[n].disabled = !canOpenEditor;

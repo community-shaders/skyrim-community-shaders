@@ -431,7 +431,14 @@ namespace GoToPalette
 			for (size_t i = 0; i < kScopes.size(); ++i) {
 				const auto kind = ScopeKind(kScopes[i]);
 				counts[i] = std::to_string(kind ? g_state.results.Count(*kind) : g_state.results.Total());
-				segments[i] = { .label = ScopeLabel(kScopes[i]), .count = counts[i].c_str() };
+				segments[i] = { .label = ScopeLabel(kScopes[i]) };
+				segments[i].width = Util::MeasureSegmentContent(segments[i]) + ImGui::GetStyle().ItemInnerSpacing.x + Util::MeasureBadgeWidth(counts[i].c_str());
+				segments[i].draw = [count = counts[i].c_str()](const Util::Segment& segment, const Util::SegmentState& state) {
+					const float x = Util::DrawSegmentContent(segment, state) + ImGui::GetStyle().ItemInnerSpacing.x;
+					const ImVec4 tint = Util::Anim::Lerp(ImGui::GetStyleColorVec4(ImGuiCol_Text), Util::Colors::GetAccent(), state.chosen);
+					Util::DrawBadgeAt(ImVec2(x, state.min.y), state.max.y - state.min.y, count,
+						Util::Anim::ScaleAlpha(tint, Constants::PALETTE_BADGE_FILL_ALPHA), state.color, state.drawList);
+				};
 				if (kScopes[i] == g_state.scope)
 					selected = static_cast<int>(i);
 			}

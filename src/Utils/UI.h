@@ -266,16 +266,33 @@ namespace Util
 	 */
 	void HelpMarker(const char* a_desc = nullptr);
 
+	/** @brief What a segment's content draws into; the font is already scaled to fit. */
+	struct SegmentState
+	{
+		ImDrawList* drawList = nullptr;
+		ImVec2 min;  ///< Content box
+		ImVec2 max;
+		ImVec4 color;  ///< Label colour for the current state
+		float chosen = 0.0f;
+		bool iconOnly = false;
+	};
+
 	/** @brief One segment of a SegmentedControl. */
 	struct Segment
 	{
-		const char* label = "";         ///< Text after "##" is not shown
-		Icons::GlyphRef icon{};         ///< Leads the label; shown alone when the segment is too narrow
-		const char* count = nullptr;    ///< Count chip after the label
-		bool disabled = false;          ///< Dimmed but still clickable
-		bool accentIcon = false;        ///< Icon in the accent colour
-		const char* tooltip = nullptr;  ///< Shown while the segment is hovered
+		const char* label = "";  ///< Text after "##" is not shown
+		Icons::GlyphRef icon{};  ///< Shown alone when the segment is too narrow
+		bool disabled = false;   ///< Dimmed but still clickable
+		const char* tooltip = nullptr;
+		float width = 0.0f;  ///< 0 measures the icon and label
+		std::function<void(const Segment&, const SegmentState&)> draw;  ///< Null draws the icon and label
 	};
+
+	/** @brief Width of a segment's icon and label. */
+	float MeasureSegmentContent(const Segment& segment);
+
+	/** @brief Draws a segment's icon and label; returns the x past them. */
+	float DrawSegmentContent(const Segment& segment, const SegmentState& state);
 
 	/** @brief Layout and state of a SegmentedControl. */
 	struct SegmentedOptions

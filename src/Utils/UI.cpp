@@ -320,13 +320,34 @@ namespace Util
 			auto it = g_pillTabBars.find(g_pillTabStack.back());
 			return it != g_pillTabBars.end() ? &it->second : nullptr;
 		}
-
-		constexpr float kBadgePadX = 5.0f;
-		constexpr float kBadgePadY = 1.5f;
-		constexpr float kBadgeRounding = 3.0f;
-		constexpr float kBadgeFillAlpha = 0.22f;
-		constexpr float kBadgeLabelTowardText = 0.35f;
 	}  // namespace
+
+	float MeasureSegmentContent(const Segment& segment)
+	{
+		const float labelWidth = ImGui::CalcTextSize(segment.label, ImGui::FindRenderedTextEnd(segment.label)).x;
+		if (!segment.icon)
+			return labelWidth;
+		return ImGui::GetTextLineHeight() + (labelWidth > 0.0f ? C::ICON_LABEL_GAP * GetUIScale() + labelWidth : 0.0f);
+	}
+
+	float DrawSegmentContent(const Segment& segment, const SegmentState& state)
+	{
+		const float height = state.max.y - state.min.y;
+		const ImU32 labelColor = ImGui::GetColorU32(state.color);
+		const char* labelEnd = ImGui::FindRenderedTextEnd(segment.label);
+		float x = state.min.x;
+		if (segment.icon) {
+			const float iconSize = ImGui::GetTextLineHeight();
+			Icons::DrawCenteredGlyph(state.drawList, ImVec2(x, state.min.y), ImVec2(iconSize, height), ImGui::GetFontSize(), segment.icon,
+				ImGui::GetColorU32(Anim::Lerp(state.color, Colors::GetAccent(), state.chosen)));
+			x += iconSize;
+			if (state.iconOnly || labelEnd == segment.label)
+				return x;
+			x += C::ICON_LABEL_GAP * GetUIScale();
+		}
+		state.drawList->AddText(ImVec2(x, CenterTextTopY(state.min.y, height)), labelColor, segment.label, labelEnd);
+		return x + ImGui::CalcTextSize(segment.label, labelEnd).x;
+	}
 
 	int SegmentedControl(const char* id, std::span<const Segment> segments, int selected, const SegmentedOptions& options)
 	{
@@ -337,8 +358,6 @@ namespace Util
 		const float scale = GetUIScale();
 		const float pad = C::SEGMENT_TRACK_PAD * scale;
 		const float gap = pad * C::SEGMENT_PILL_GAP_RATIO;
-		const float iconGap = C::ICON_LABEL_GAP * scale;
-		const float fontSize = ImGui::GetFontSize();
 		const float lineHeight = ImGui::GetTextLineHeight();
 		const float trackHeight = options.height > 0.0f ? options.height : ImGui::GetFrameHeight() + pad * 2.0f;
 		const float itemHeight = trackHeight - pad * 2.0f;
@@ -347,15 +366,7 @@ namespace Util
 		const float trackRounding = pillRounding > 0.0f ? pillRounding + pad : 0.0f;
 		const int count = static_cast<int>(segments.size());
 
-		const auto labelEnd = [](const Segment& segment) { return ImGui::FindRenderedTextEnd(segment.label); };
-		const auto contentWidth = [&](const Segment& segment) {
-			float width = ImGui::CalcTextSize(segment.label, labelEnd(segment)).x;
-			if (segment.icon)
-				width += lineHeight + iconGap;
-			if (segment.count)
-				width += style.ItemInnerSpacing.x + MeasureBadgeWidth(segment.count);
-			return width;
-		};
+		const auto contentWidth = [](const Segment& segment) { return segment.width > 0.0f ? segment.width : MeasureSegmentContent(segment); };
 
 		std::vector<float> widths(segments.size());
 		float trackWidth = pad * 2.0f + gap * static_cast<float>(count - 1);
@@ -422,8 +433,8 @@ namespace Util
 			const bool hovered = ImGui::IsItemHovered();
 			if (segment.tooltip)
 				AddTooltip(segment.tooltip);
-			else if (iconOnly && hovered)
-				ImGui::SetTooltip("%.*s", static_cast<int>(labelEnd(segment) - segment.label), segment.label);
+			else if (const char* labelEnd = ImGui::FindRenderedTextEnd(segment.label); iconOnly && hovered && labelEnd != segment.label)
+				ImGui::SetTooltip("%.*s", static_cast<int>(labelEnd - segment.label), segment.label);
 			const float chosen = Anim::Toggle(ImGui::GetItemID(), i == selected) * pillAlpha;
 			const float hover = Anim::Toggle(ImGui::GetID("hover"), hovered && !segment.disabled);
 			ImGui::PopID();
@@ -431,28 +442,19 @@ namespace Util
 				ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
 
 			const ImVec4 labelColor = segment.disabled ? Anim::ScaleAlpha(dimColor, style.DisabledAlpha) : Anim::Lerp(dimColor, textColor, std::max(chosen, hover * C::LIST_HIGHLIGHT_HOVER_RATIO));
-			const ImVec4 iconColor = segment.accentIcon && !segment.disabled ? accent : labelColor;
 
-			// Icon, label and count form one group centred in the segment
-			const float iconSize = lineHeight * fit;
-			const float groupWidth = iconOnly ? iconSize : fullWidth * fit;
-			float x = std::max(min.x, min.x + (widths[i] - groupWidth) * 0.5f);
-			const float textY = CenterTextTopY(min.y, itemHeight) + lineHeight * (1.0f - fit) * 0.5f;
+			const float boxWidth = (iconOnly ? lineHeight : fullWidth) * fit;
+			const float x = std::max(min.x, min.x + (widths[i] - boxWidth) * 0.5f);
+			const SegmentState state{ drawList, ImVec2(x, min.y), ImVec2(x + boxWidth, max.y), labelColor, chosen, iconOnly };
 			drawList->PushClipRect(min, max, true);
-			if (segment.icon) {
-				Icons::DrawCenteredGlyph(drawList, ImVec2(x, min.y), ImVec2(iconSize, itemHeight), fontSize * fit, segment.icon, ImGui::GetColorU32(iconColor));
-				x += (lineHeight + iconGap) * fit;
-			}
-			if (!iconOnly) {
-				drawList->AddText(ImGui::GetFont(), fontSize * fit, ImVec2(x, textY), ImGui::GetColorU32(labelColor), segment.label, labelEnd(segment));
-				x += ImGui::CalcTextSize(segment.label, labelEnd(segment)).x * fit;
-				if (segment.count) {
-					x += style.ItemInnerSpacing.x * fit;
-					ImGui::PushFont(nullptr, ImGui::GetCurrentContext()->FontSizeBase * fit);
-					DrawBadgeAt(ImVec2(x, min.y), itemHeight, segment.count, Anim::ScaleAlpha(Anim::Lerp(textColor, accent, chosen), kBadgeFillAlpha), labelColor, drawList);
-					ImGui::PopFont();
-				}
-			}
+			if (fit < 1.0f)
+				ImGui::PushFont(nullptr, ImGui::GetCurrentContext()->FontSizeBase * fit);
+			if (segment.draw)
+				segment.draw(segment, state);
+			else
+				DrawSegmentContent(segment, state);
+			if (fit < 1.0f)
+				ImGui::PopFont();
 			drawList->PopClipRect();
 
 			if (i == options.marked && i != selected) {
@@ -648,6 +650,15 @@ namespace Util
 		if (a_tooltip)
 			AddTooltip(a_tooltip);
 		return clicked;
+	}
+
+	namespace
+	{
+		constexpr float kBadgePadX = 5.0f;
+		constexpr float kBadgePadY = 1.5f;
+		constexpr float kBadgeRounding = 3.0f;
+		constexpr float kBadgeFillAlpha = 0.22f;
+		constexpr float kBadgeLabelTowardText = 0.35f;
 	}
 
 	float MeasureBadgeWidth(const char* a_label)

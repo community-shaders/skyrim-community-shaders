@@ -62,13 +62,6 @@ namespace FeatureListFilter
 class FeatureListRenderer
 {
 public:
-	/** @brief How a built-in page's row stands out in the list. */
-	enum class NavStyle : std::uint8_t
-	{
-		Plain,   ///< An ordinary row
-		Accent,  ///< Accent-tinted icon, for the pages most users want first (Presets, CS Editor)
-	};
-
 	/** @brief Describes a built-in (non-feature) menu page with an ID, a display name and a draw callback. */
 	struct BuiltInMenu
 	{
@@ -76,7 +69,6 @@ public:
 		std::string name;     ///< Translated label shown in the list
 		std::function<void()> func;
 		Icons::GlyphRef icon{};  ///< Glyph leading the row and the page header; none leaves the space empty
-		NavStyle style = NavStyle::Plain;
 		std::string hint;         ///< The page header's subtitle
 		bool showHeader = false;  ///< Draws a BrowserUI::PageHeader above the page; off for pages with their own title
 	};
