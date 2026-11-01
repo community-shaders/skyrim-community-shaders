@@ -461,7 +461,8 @@ namespace
 		const ImVec2 max = ImGui::GetItemRectMax();
 		ImDrawList* drawList = ImGui::GetWindowDrawList();
 		drawList->PushClipRect(min, max, true);
-		const float x = min.x + style.FramePadding.x;
+		// Inset from the highlight's visible edge (the clip) like the Go to palette's rows
+		const float x = drawList->GetClipRectMin().x + style.FramePadding.x * 2.0f;
 		drawList->AddText(nameFont, nameSize, ImVec2(x, min.y + pad), ImGui::GetColorU32(ImGuiCol_Text), descriptor.displayName.data());
 		drawList->AddText(detailFont, detailSize, ImVec2(x, min.y + pad + nameHeight), ImGui::GetColorU32(ImGuiCol_TextDisabled), detail.c_str());
 		drawList->PopClipRect();
@@ -1510,7 +1511,7 @@ namespace
 			return T("menu.settings.surface_overlay_card", "Status Card");
 		case SurfaceRole::Palette:
 			return T("menu.settings.surface_palette", "Go To Palette");
-		case SurfaceRole::NavSelected:
+		case SurfaceRole::ListHighlight:
 			return T("menu.settings.surface_nav_selected", "Selected Navigation Row");
 		case SurfaceRole::OptionCard:
 			return T("menu.settings.surface_option_card", "Option Cards");
@@ -1532,7 +1533,7 @@ namespace
 			return T("menu.settings.surface_overlay_card_tooltip", "The card that shows shader compilation progress.");
 		case SurfaceRole::Palette:
 			return T("menu.settings.surface_palette_tooltip", "The Ctrl+K go-to palette.");
-		case SurfaceRole::NavSelected:
+		case SurfaceRole::ListHighlight:
 			return T("menu.settings.surface_nav_selected_tooltip", "The highlight behind the selected row of the left navigation.");
 		case SurfaceRole::OptionCard:
 			return T("menu.settings.surface_option_card_tooltip", "Clickable cards that pick a tool or mode, such as the tools on the Developer Tools page. The selected card takes the accent colour as its border.");
@@ -1555,24 +1556,9 @@ namespace
 		const ImVec2 p0(origin.x + margin, origin.y + margin);
 		const ImVec2 p1(origin.x + width - margin, origin.y + margin + height);
 		ImDrawList* drawList = ImGui::GetWindowDrawList();
-		if (role == SurfaceRole::NavSelected) {
-			if (s.enabled) {
-				const float rounding = ImGui::GetStyle().FrameRounding;
-				ImVec4 fill = Util::Colors::GetAccent();
-				fill.w = s.fillAlpha;
-				drawList->AddRectFilled(p0, p1, ImGui::GetColorU32(fill), rounding);
-				const float barWidth = s.accentBarWidth * scale;
-				if (s.accentBar && barWidth > 0.0f) {
-					const float inset = (p1.y - p0.y) * ThemeManager::Constants::NAV_SELECTED_BAR_INSET;
-					drawList->AddRectFilled(ImVec2(p0.x, p0.y + inset), ImVec2(p0.x + barWidth, p1.y - inset),
-						ImGui::GetColorU32(Util::Colors::GetAccent()), barWidth * 0.5f);
-				}
-			}
-		} else {
-			Util::Surface::Options options;
-			options.rounding = role == SurfaceRole::HomeCard ? ImGui::GetStyle().ChildRounding : ImGui::GetStyle().WindowRounding;
-			Util::Surface::Draw(drawList, p0, p1, role, options);
-		}
+		Util::Surface::Options options;
+		options.rounding = role == SurfaceRole::HomeCard ? ImGui::GetStyle().ChildRounding : ImGui::GetStyle().WindowRounding;
+		Util::Surface::Draw(drawList, p0, p1, role, options);
 		const char* label = s.enabled ? T("menu.settings.surface_preview", "Preview") : T("menu.settings.surface_preview_disabled", "Disabled");
 		const ImVec2 textSize = ImGui::CalcTextSize(label);
 		drawList->AddText(ImVec2(p0.x + (p1.x - p0.x - textSize.x) * 0.5f, p0.y + (p1.y - p0.y - textSize.y) * 0.5f),
@@ -1587,7 +1573,7 @@ namespace
 
 		Util::DisableGuard disabled(!s.enabled);
 
-		if (role == SurfaceRole::NavSelected) {
+		if (role == SurfaceRole::ListHighlight) {
 			Util::SliderFloatTip(T("menu.settings.surface_nav_fill_opacity", "Fill Opacity"), &s.fillAlpha, 0.0f, 1.0f, "%.2f", T("menu.settings.surface_nav_fill_opacity_tooltip", "Opacity of the accent colour fill behind the selected row."));
 			Util::CheckboxTip(T("menu.settings.surface_accent_bar", "Accent Bar"), &s.accentBar, T("menu.settings.surface_accent_bar_tooltip", "Draw a short accent bar on the left edge of the selected row."));
 			{
