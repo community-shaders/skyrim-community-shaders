@@ -1708,6 +1708,8 @@
     "feature.light_limit_fix.particle_light_count": "Particle Lights : {}",
     "feature.light_limit_fix.shadow_cache_stats": "Shadow Cache : {} x {}x{}, {} MB",
     "feature.light_limit_fix.shadow_casters_stats": "Shadow Casters : {} tracked, {} cached, {} rendered this frame",
+    "feature.light_limit_fix.skip_redundant_light_attach": "Skip Redundant Light Updates",
+    "feature.light_limit_fix.skip_redundant_light_attach_tooltip": "The game re-checks every dynamic light's nearby geometry each frame, which costs milliseconds in scenes with hundreds of lights. With this on, a light that has not moved or changed is only re-checked every 60 frames.",
     "feature.light_limit_fix.statistics": "Statistics",
     "feature.linear_lighting.ambient_multiplier": "Ambient Multiplier",
     "feature.linear_lighting.apply_game_gamma": "Apply Game Gamma",
