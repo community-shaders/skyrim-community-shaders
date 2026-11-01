@@ -22,9 +22,7 @@ void GrassOptimizations::CullGrass(const RE::NiCamera* camera)
 	const auto& mainCameraPos = frameBuffer.GetCameraPosAdjust();
 
 	if (settings.EnableOcclusionCulling)
-		hiZ.Build(device, ctx);
-	else
-		hiZ.Invalidate();
+		globals::hiZPyramid->Build(device, ctx);
 
 	{
 		CullParamsCB params{};
@@ -67,13 +65,13 @@ void GrassOptimizations::CullGrass(const RE::NiCamera* camera)
 		params.densityDistanceRcp = 1.0f / std::max(vanillaMaxDistance, 1e-4f);
 
 		params.meshLODBandPx = std::max(0.0f, settings.MeshLODBandPixels);
-		params.hiZEnabled = hiZ.IsValid() ? 1.0f : 0.0f;
-		params.hiZSizeX = (float)hiZ.GetWidth();
-		params.hiZSizeY = (float)hiZ.GetHeight();
+		params.hiZEnabled = (settings.EnableOcclusionCulling && globals::hiZPyramid->IsValid()) ? 1.0f : 0.0f;
+		params.hiZSizeX = (float)globals::hiZPyramid->GetWidth();
+		params.hiZSizeY = (float)globals::hiZPyramid->GetHeight();
 
 		const auto* rowW = params.cameraViewProj[3];
 		params.projectionWLength = std::sqrt(rowW[0] * rowW[0] + rowW[1] * rowW[1] + rowW[2] * rowW[2]);
-		params.hiZMipCount = (float)hiZ.GetMipCount();
+		params.hiZMipCount = (float)globals::hiZPyramid->GetMipCount();
 		params.occlusionBias = std::max(0.0f, settings.OcclusionBias);
 		params.costBiasStartDist = std::max(0.0f, settings.CostBiasStartDistance);
 
@@ -403,7 +401,7 @@ void GrassOptimizations::UploadCullState(ID3D11DeviceContext* ctx)
 	const D3D11_BOX argumentBox{ 0, 0, 0, argumentCount * (UINT)sizeof(uint32_t), 1, 1 };
 	ctx->UpdateSubresource(bucketStore.arguments->resource.get(), 0, &argumentBox, cullArguments.data(), 0, 0);
 
-	ID3D11ShaderResourceView* sharedSRVs[2] = { hiZ.GetSRV(), sliceTable->srv.get() };
+	ID3D11ShaderResourceView* sharedSRVs[2] = { globals::hiZPyramid->GetSRV(), sliceTable->srv.get() };
 	ctx->CSSetShaderResources(2, 2, sharedSRVs);
 	for (GrassBucket* bucket : visibleBuckets) {
 		CullBucket(*bucket, ctx);

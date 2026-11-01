@@ -32,6 +32,7 @@
 #include "Features/TerrainHelper.h"
 #include "Features/Upscaling.h"
 #include "Features/VolumetricShadows.h"
+#include "HiZPyramid.h"
 #include "Menu.h"
 #include "PostProcessingMode.h"
 #include "Presets/UnifiedPresetCatalog.h"
@@ -364,6 +365,7 @@ void State::Setup()
 {
 	globals::features::truePBR.SetupResources();
 	SetupResources();
+	globals::hiZPyramid->SetupResources();
 
 	// Probe typed UAV load support before features set up their resources, so any
 	// gating logic that wants to read the log can run during feature SetupResources.

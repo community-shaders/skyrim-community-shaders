@@ -200,7 +200,6 @@ void GrassOptimizations::ClearShaderCache()
 {
 	cullCS = nullptr;
 	cullCSFailed = false;
-	hiZ.ClearShaderCache();
 	bucketStore.meshLibrary.ClearShaderCache();
 }
 

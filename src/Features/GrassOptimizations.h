@@ -4,7 +4,7 @@
 
 #include "Buffer.h"
 #include "GrassOptimizations/GrassBucketStore.h"
-#include "GrassOptimizations/HiZPyramid.h"
+#include "HiZPyramid.h"
 
 /** @brief Rewrites vanilla grass rendering with a bucket system using indirect draws and compute culling of individual instances. */
 struct GrassOptimizations : Feature
@@ -315,7 +315,6 @@ private:
 	void DrawBucket(GrassBucket& b);
 
 	GrassBucketStore bucketStore;
-	HiZPyramid hiZ;
 
 	uint32_t lastFrame = UINT32_MAX;
 

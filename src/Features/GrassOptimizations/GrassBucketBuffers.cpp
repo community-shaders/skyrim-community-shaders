@@ -15,8 +15,6 @@ void GrassOptimizations::SetupResources()
 		vanillaDrawCB->Update(marker);
 	}
 
-	hiZ.SetupResources();
-
 	if (FAILED(globals::d3d::context->QueryInterface(__uuidof(ID3D11DeviceContext1), ctx1.put_void())) || !ctx1) {
 		logger::error("[GRASS OPTIMIZATIONS] ID3D11DeviceContext1 unavailable — feature disabled");
 		ctx1 = nullptr;

@@ -1,33 +1,55 @@
 #include "HiZPyramid.h"
 
 #include "Features/TerrainBlending.h"
+#include "Features/Upscaling.h"
 #include "Profiler.h"
 
 void HiZPyramid::SetupResources()
 {
-	paramsCB = std::make_unique<ConstantBuffer>(ConstantBufferDesc<BaseParams>(), "GrassOptimizations::HiZParamsCB");
+	paramsCB = std::make_unique<ConstantBuffer>(ConstantBufferDesc<BaseParams>(), "HiZPyramid::ParamsCB");
 }
 
 void HiZPyramid::ClearShaderCache()
 {
-	valid = false;
 	baseCS = nullptr;
 	spdCS = nullptr;
 	baseCSFailed = false;
 	spdCSFailed = false;
+	valid = false;
+	builtFrame = UINT32_MAX;
+}
+
+ID3D11ShaderResourceView* HiZPyramid::GetSRV() const
+{
+	return IsValid() && texture ? texture->srv.get() : nullptr;
+}
+
+bool HiZPyramid::IsValid() const
+{
+	return valid && builtFrame == globals::state->frameCount;
+}
+
+ID3D11ShaderResourceView* HiZPyramid::GetSourceDepthSRV()
+{
+	// With Terrain Blending active, read its backup of the original post-Z-prepass view.
+	auto& tb = globals::features::terrainBlending;
+	if (tb.loaded && tb.settings.Enabled && tb.prepassSRVBackup)
+		return tb.prepassSRVBackup;
+	if (auto* renderer = globals::game::renderer)
+		return renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY].depthSRV;
+	return nullptr;
 }
 
 ID3D11ShaderResourceView* HiZPyramid::GetLiveDepthSRV()
 {
-	// Use the live UNORM view because Terrain Blending's replacement is not ready during depth rendering.
-	auto& tb = globals::features::terrainBlending;
-	if (tb.loaded && tb.depthSRVBackup)
-		return tb.depthSRVBackup;
+	// Terrain Blending keeps the original kMAIN view here while its replacement is bound.
+	auto& terrainBlending = globals::features::terrainBlending;
+	if (terrainBlending.loaded && terrainBlending.depthSRVBackup)
+		return terrainBlending.depthSRVBackup;
 
 	auto* renderer = globals::game::renderer;
 	if (!renderer)
 		return nullptr;
-
 	return renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN].depthSRV;
 }
 
@@ -54,11 +76,10 @@ bool HiZPyramid::CreateTexture(ID3D11Device* device, uint32_t dstW, uint32_t dst
 	td.SampleDesc.Count = 1;
 	td.Usage = D3D11_USAGE_DEFAULT;
 	td.BindFlags = D3D11_BIND_UNORDERED_ACCESS | D3D11_BIND_SHADER_RESOURCE;
-
 	try {
-		texture = std::make_unique<Texture2D>(td, "GrassOptimizations::HiZ");
+		texture = std::make_unique<Texture2D>(td, "HiZPyramid::Texture");
 
-		// Culling reads the full mip chain with mip 0 read through a separate view.
+		// Full-chain SRV for culling.
 		D3D11_SHADER_RESOURCE_VIEW_DESC sd{};
 		sd.Format = DXGI_FORMAT_R32_FLOAT;
 		sd.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
@@ -66,12 +87,12 @@ bool HiZPyramid::CreateTexture(ID3D11Device* device, uint32_t dstW, uint32_t dst
 		sd.Texture2D.MipLevels = mips;
 		texture->CreateSRV(sd);
 
-		// A mip-0-only SRV lets SPD read mip 0 without overlapping the output UAVs.
+		// Mip-0-only SRV, so SPD reads mip 0 without overlapping its output UAVs.
 		sd.Texture2D.MipLevels = 1;
 		DX::ThrowIfFailed(device->CreateShaderResourceView(texture->resource.get(), &sd, mip0SRV.put()));
-		Util::SetResourceName(mip0SRV.get(), "GrassOptimizations::HiZ Mip0 SRV");
+		Util::SetResourceName(mip0SRV.get(), "HiZPyramid::Texture Mip0 SRV");
 	} catch (...) {
-		logger::error("[GRASS OPTIMIZATIONS] HiZ texture create failed");
+		logger::error("[HiZ Pyramid] HiZ texture create failed");
 		texture.reset();
 		return false;
 	}
@@ -81,14 +102,12 @@ bool HiZPyramid::CreateTexture(ID3D11Device* device, uint32_t dstW, uint32_t dst
 		ud.Format = DXGI_FORMAT_R32_FLOAT;
 		ud.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D;
 		ud.Texture2D.MipSlice = m;
-
 		winrt::com_ptr<ID3D11UnorderedAccessView> uav;
 		if (FAILED(device->CreateUnorderedAccessView(texture->resource.get(), &ud, uav.put()))) {
-			logger::error("[GRASS OPTIMIZATIONS] HiZ mip UAV create failed");
+			logger::error("[HiZ Pyramid] HiZ mip UAV create failed");
 			return false;
 		}
-
-		Util::SetResourceName(uav.get(), "GrassOptimizations::HiZ Mip%u UAV", m);
+		Util::SetResourceName(uav.get(), "HiZPyramid::Texture Mip%u UAV", m);
 		mipUAVs.push_back(uav);
 	}
 
@@ -98,8 +117,12 @@ bool HiZPyramid::CreateTexture(ID3D11Device* device, uint32_t dstW, uint32_t dst
 	return true;
 }
 
-bool HiZPyramid::Build(ID3D11Device* device, ID3D11DeviceContext* ctx)
+bool HiZPyramid::Build(ID3D11Device* device, ID3D11DeviceContext* ctx, bool forceRefresh)
 {
+	const uint32_t currentFrame = globals::state->frameCount;
+	if (!forceRefresh && builtFrame == currentFrame)
+		return valid;
+
 	valid = false;
 
 	if (!paramsCB || !globals::game::renderer)
@@ -116,12 +139,17 @@ bool HiZPyramid::Build(ID3D11Device* device, ID3D11DeviceContext* ctx)
 	if (!validW || !validH)
 		return false;
 
+	// Prefer the live main depth; the post-Z-prepass copy is only a fallback.
+	usingLiveDepth = true;
 	ID3D11ShaderResourceView* srcSRV = GetLiveDepthSRV();
+	if (!srcSRV) {
+		usingLiveDepth = false;
+		srcSRV = GetSourceDepthSRV();
+	}
 	if (!srcSRV)
 		return false;
 
-	// Allocate at nominal resolution to avoid resizing as dynamic resolution changes.
-	// Pad to SPD tiles so mip reduction preserves edge texels and conservative depth bounds.
+	// Size from the nominal extent so dynamic resolution never reallocates, padded to SPD tiles so every level halves exactly.
 	const auto padToTile = [](uint32_t v) { return (v + tileSize - 1) & ~(tileSize - 1); };
 	const uint32_t padW = padToTile(((uint32_t)screenSize.x + kDownsampleFactor - 1) / kDownsampleFactor);
 	const uint32_t padH = padToTile(((uint32_t)screenSize.y + kDownsampleFactor - 1) / kDownsampleFactor);
@@ -132,44 +160,46 @@ bool HiZPyramid::Build(ID3D11Device* device, ID3D11DeviceContext* ctx)
 	width = validW;
 	height = validH;
 
+	// Both depth sources are R24_UNORM_X8_TYPELESS views, so one permutation covers them.
 	if (!baseCS) {
 		if (baseCSFailed)
 			return false;
 
 		baseCS.attach(static_cast<ID3D11ComputeShader*>(
-			Util::CompileShader(L"Data\\Shaders\\GrassOptimizations\\GrassHiZCS.hlsl", {}, "cs_5_0")));
+			Util::CompileShader(L"Data\\Shaders\\Common\\HiZ\\GrassHiZCS.hlsl", {}, "cs_5_0")));
 		if (!baseCS) {
 			baseCSFailed = true;
-			logger::error("[GRASS OPTIMIZATIONS] HiZ CS load failed — occlusion culling disabled");
+			logger::error("[HiZ Pyramid] HiZ CS load failed — occlusion culling disabled");
 			return false;
 		}
 	}
 
 	if (!spdCS && !spdCSFailed) {
 		spdCS.attach(static_cast<ID3D11ComputeShader*>(
-			Util::CompileShader(L"Data\\Shaders\\GrassOptimizations\\SPD\\SPD.hlsl", {}, "cs_5_0")));
+			Util::CompileShader(L"Data\\Shaders\\Common\\HiZ\\SPD.hlsl", {}, "cs_5_0")));
 		if (!spdCS) {
 			spdCSFailed = true;
-			logger::error("[GRASS OPTIMIZATIONS] SPD load failed — large instances will not be occlusion culled");
+			logger::error("[HiZ Pyramid] SPD load failed — large instances will not be occlusion culled");
 		}
 	}
 
-	// Fill unrendered margins with far depth so padding cannot occlude grass.
+	// Texels outside the rendered extent reduce to far depth, so padding never occludes.
 	paramsCB->Update(BaseParams{ srcW, srcH, padW, padH });
 
 	ID3D11UnorderedAccessView* nullUAV = nullptr;
 	ID3D11ShaderResourceView* nullSRV = nullptr;
 
-	globals::profiler->BeginPass("GrassOptimizations::HiZ");
-	// Unbind the depth target while the reduction reads its SRV.
+	globals::profiler->BeginPass("HiZPyramid::Base");
+	// kMAIN cannot be bound as a DSV while it is read as an SRV, so unbind the outputs for the dispatch.
 	ID3D11RenderTargetView* rtvs[D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT]{};
 	ID3D11DepthStencilView* dsv = nullptr;
-	ctx->OMGetRenderTargets(D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT, rtvs, &dsv);
-	ctx->OMSetRenderTargets(0, nullptr, nullptr);
+	if (usingLiveDepth) {
+		ctx->OMGetRenderTargets(D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT, rtvs, &dsv);
+		ctx->OMSetRenderTargets(0, nullptr, nullptr);
+	}
 
 	ID3D11Buffer* cb = paramsCB->CB();
 	ID3D11UnorderedAccessView* baseUAV = mipUAVs[0].get();
-
 	ctx->CSSetShader(baseCS.get(), nullptr, 0);
 	ctx->CSSetConstantBuffers(0, 1, &cb);
 	ctx->CSSetShaderResources(0, 1, &srcSRV);
@@ -178,17 +208,21 @@ bool HiZPyramid::Build(ID3D11Device* device, ID3D11DeviceContext* ctx)
 	ctx->CSSetUnorderedAccessViews(0, 1, &nullUAV, nullptr);
 	ctx->CSSetShaderResources(0, 1, &nullSRV);
 
-	ctx->OMSetRenderTargets(D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT, rtvs, dsv);
-	for (auto* rtv : rtvs) {
-		if (rtv)
-			rtv->Release();
+	if (usingLiveDepth) {
+		ctx->OMSetRenderTargets(D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT, rtvs, dsv);
+		for (auto* rtv : rtvs) {
+			if (rtv)
+				rtv->Release();
+		}
+		if (dsv)
+			dsv->Release();
 	}
+	globals::profiler->EndPass();
 
-	if (dsv)
-		dsv->Release();
-
-	// Reduce the max-depth mip chain in one dispatch, with each group processing one tile in shared memory.
+	// One dispatch reduces the whole chain; each group reduces one 64x64 tile in LDS.
 	if (spdCS && GetMipCount() > 1) {
+		globals::profiler->BeginPass("HiZPyramid::Mips");
+
 		const uint32_t outputMips = GetMipCount() - 1;
 		const uint32_t groupsX = padW / tileSize;
 		const uint32_t groupsY = padH / tileSize;
@@ -209,10 +243,24 @@ bool HiZPyramid::Build(ID3D11Device* device, ID3D11DeviceContext* ctx)
 		ID3D11UnorderedAccessView* spdNulls[kExactMips]{};
 		ctx->CSSetUnorderedAccessViews(0, kExactMips, spdNulls, nullptr);
 		ctx->CSSetShaderResources(0, 1, &nullSRV);
+		globals::profiler->EndPass();
 	}
 
-	globals::profiler->EndPass();
+	// Log only when the build parameters change.
+	const std::array<uint32_t, 10> logKey{ validW, validH, padW, padH, GetMipCount(), srcW, srcH,
+		(uint32_t)screenSize.x, (uint32_t)screenSize.y, usingLiveDepth ? 1u : 0u };
+	if (logKey != lastLogKey) {
+		lastLogKey = logKey;
+		const auto& rt = globals::game::graphicsState->GetRuntimeData();
+		logger::info("[HiZ Pyramid] HiZ occlusion cull active: {}x{} tiles (1/{} res) in a {}x{} texture, {} mips, source={}; screen {}x{}, depth extent {}x{}, dynRes ratio {:.3f}x{:.3f} lock={}, upscale scale {:.3f}x{:.3f}",
+			validW, validH, kDownsampleFactor, padW, padH, GetMipCount(),
+			usingLiveDepth ? "kMAIN" : "kPOST_ZPREPASS_COPY (fallback)",
+			(uint32_t)screenSize.x, (uint32_t)screenSize.y, srcW, srcH,
+			rt.dynamicResolutionWidthRatio, rt.dynamicResolutionHeightRatio, (int)rt.dynamicResolutionLock,
+			globals::features::upscaling.resolutionScale.x, globals::features::upscaling.resolutionScale.y);
+	}
 
 	valid = true;
+	builtFrame = currentFrame;
 	return true;
 }
