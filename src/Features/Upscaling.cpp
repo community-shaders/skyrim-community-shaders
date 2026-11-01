@@ -1189,15 +1189,9 @@ void Upscaling::PostDisplay()
 	globals::state->UpdateSharedData(false, false);
 }
 
-void Upscaling::TimerSleepQPC(int64_t targetQPC)
+void Upscaling::TimerSleepQPC(int64_t targetQPC, int64_t frequency)
 {
-	constexpr DWORD kHighResolutionTimer = 0x00000002;
-	static const HANDLE timer = CreateWaitableTimerExW(nullptr, nullptr, kHighResolutionTimer, TIMER_ALL_ACCESS);
-	static const int64_t frequency = [] {
-		LARGE_INTEGER value;
-		QueryPerformanceFrequency(&value);
-		return value.QuadPart;
-	}();
+	static const HANDLE timer = CreateWaitableTimerExW(nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS);
 
 	LARGE_INTEGER currentQPC;
 	QueryPerformanceCounter(&currentQPC);
@@ -1214,7 +1208,6 @@ void Upscaling::TimerSleepQPC(int64_t targetQPC)
 		if (due.QuadPart >= 0 || !SetWaitableTimerEx(timer, &due, 0, nullptr, nullptr, nullptr, 0))
 			break;
 		WaitForSingleObject(timer, 100);
-		// Re-measure each pass so a late or early wake re-plans from real time
 		QueryPerformanceCounter(&currentQPC);
 	}
 
@@ -1244,17 +1237,12 @@ void Upscaling::FrameLimiter()
 
 			// Fixed cadence: a late frame is repaid next frame instead of drifting
 			static int64_t nextFrame = 0;
-			static int64_t lastFrameTicks = 0;
-			if (targetFrameTicks != lastFrameTicks) {
-				nextFrame = 0;
-				lastFrameTicks = targetFrameTicks;
-			}
 
 			LARGE_INTEGER timeNow;
 			QueryPerformanceCounter(&timeNow);
 			if (timeNow.QuadPart < nextFrame)
-				TimerSleepQPC(nextFrame);
-			// Over a whole interval behind (hitch, FG toggle): restart from now
+				TimerSleepQPC(nextFrame, qpf.QuadPart);
+			// Over a whole interval behind (hitch, limiter re-enabled): restart from now
 			nextFrame = timeNow.QuadPart < nextFrame + targetFrameTicks ? nextFrame + targetFrameTicks : timeNow.QuadPart + targetFrameTicks;
 		}
 	}
