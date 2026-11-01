@@ -68,7 +68,7 @@ public:
 		std::string_view id;  ///< Canonical page ID from MenuPageIds, used for all page logic
 		std::string name;     ///< Translated label shown in the list
 		std::function<void()> func;
-		Icons::GlyphRef icon{};  ///< Glyph leading the row and the page header; none leaves the space empty
+		Icons::GlyphRef icon{};   ///< Glyph leading the row and the page header; none leaves the space empty
 		std::string hint;         ///< The page header's subtitle
 		bool showHeader = false;  ///< Draws a BrowserUI::PageHeader above the page; off for pages with their own title
 	};

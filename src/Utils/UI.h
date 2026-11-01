@@ -284,7 +284,7 @@ namespace Util
 		Icons::GlyphRef icon{};  ///< Shown alone when the segment is too narrow
 		bool disabled = false;   ///< Dimmed but still clickable
 		const char* tooltip = nullptr;
-		float width = 0.0f;  ///< 0 measures the icon and label
+		float width = 0.0f;                                             ///< 0 measures the icon and label
 		std::function<void(const Segment&, const SegmentState&)> draw;  ///< Null draws the icon and label
 	};
 
