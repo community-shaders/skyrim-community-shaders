@@ -3,7 +3,6 @@
 
 void GrassOptimizations::CullGrass(const RE::NiCamera* camera)
 {
-	auto* device = globals::d3d::device;
 	auto* ctx = globals::d3d::context;
 
 	RE::NiFrustumPlanes frustum{};
@@ -16,68 +15,56 @@ void GrassOptimizations::CullGrass(const RE::NiCamera* camera)
 	FrustumSoA frustumSoA;
 	BuildFrustumSoA(frustumSoA, frustum);
 
-	// The setup hook calls this update only when PerFrame contains the main camera.
+	// Setup runs with the main camera's PerFrame data.
 	const auto& frameBuffer = globals::game::frameBufferCached;
+	// Match the projection jitter used by the depth buffer.
 	const auto& mainCameraViewProj = frameBuffer.GetCameraViewProj();
 	const auto& mainCameraPos = frameBuffer.GetCameraPosAdjust();
 
-	if (settings.EnableOcclusionCulling)
-		globals::hiZPyramid->Build(device, ctx);
+	CullParamsCB params{};
 
-	{
-		CullParamsCB params{};
-
-		for (int i = 0; i < 6; ++i) {
-			params.frustumPlanes[i][0] = frustum.cullingPlanes[i].normal.x;
-			params.frustumPlanes[i][1] = frustum.cullingPlanes[i].normal.y;
-			params.frustumPlanes[i][2] = frustum.cullingPlanes[i].normal.z;
-			params.frustumPlanes[i][3] = frustum.cullingPlanes[i].constant;
-		}
-
-		std::memcpy(params.cameraViewProj, &mainCameraViewProj, sizeof(params.cameraViewProj));
-		params.cameraPos[0] = mainCameraPos.x;
-		params.cameraPos[1] = mainCameraPos.y;
-		params.cameraPos[2] = mainCameraPos.z;
-
-		params.minPixelSize = settings.MinPixelSize;
-		params.fullDetailPixelSize = settings.FullDetailPixelSize;
-		params.lodMinKeep = settings.MinDensity;
-		params.lodFadeBand = 0.15f;
-
-		const auto& viewFrustum = camera->GetRuntimeData2().viewFrustum;
-		const auto [screenWidth, screenHeight] = globals::game::renderer->GetScreenSize();
-		params.meshCostBias = settings.MeshCostBias;
-		params.projScale = screenHeight / (2.0f * std::abs(viewFrustum.fTop));
-		params.maxDistSq = maxDistSq;
-		params.edgeFadeStart = std::clamp(settings.EdgeFadeStart, 0.0f, 1.0f);
-
-		params.alphaParam1 = grassStartFadeDistance;
-		params.alphaParam2 = maxGrassDistance;
-		params.fadeNow = timeAccum;
-		params.fadeInTimeRcp = fadeInTimeRcp;
-
-		const float collisionDistance = std::max(0.0f, settings.CollisionDistance);
-		params.invisibleFadeCull = settings.InvisibleFadeCull;
-		params.simpleShadingPixelSize = std::max(0.0f, settings.SimpleShadingPixelSize);
-		params.collisionDistSq = collisionDistance * collisionDistance;
-		params.midLODPixelSize = settings.MidLODPixelSize;
-		params.farLODPixelSize = settings.EnableMidLOD ? std::min(settings.FarLODPixelSize, settings.MidLODPixelSize) : settings.FarLODPixelSize;
-		params.densityDistanceRcp = 1.0f / std::max(vanillaMaxDistance, 1e-4f);
-
-		params.meshLODBandPx = std::max(0.0f, settings.MeshLODBandPixels);
-		params.hiZEnabled = (settings.EnableOcclusionCulling && globals::hiZPyramid->IsValid()) ? 1.0f : 0.0f;
-		const auto hiZUVScale = globals::hiZPyramid->GetUVScale();
-		params.hiZSizeX = hiZUVScale.x;
-		params.hiZSizeY = hiZUVScale.y;
-
-		const auto* rowW = params.cameraViewProj[3];
-		params.projectionWLength = std::sqrt(rowW[0] * rowW[0] + rowW[1] * rowW[1] + rowW[2] * rowW[2]);
-		params.hiZMipCount = (float)globals::hiZPyramid->GetMipCount();
-		params.occlusionBias = std::max(0.0f, settings.OcclusionBias);
-		params.costBiasStartDist = std::max(0.0f, settings.CostBiasStartDistance);
-
-		cullParamsCB->Update(params);
+	for (int i = 0; i < 6; ++i) {
+		params.frustumPlanes[i][0] = frustum.cullingPlanes[i].normal.x;
+		params.frustumPlanes[i][1] = frustum.cullingPlanes[i].normal.y;
+		params.frustumPlanes[i][2] = frustum.cullingPlanes[i].normal.z;
+		params.frustumPlanes[i][3] = frustum.cullingPlanes[i].constant;
 	}
+
+	std::memcpy(params.cameraViewProj, &mainCameraViewProj, sizeof(params.cameraViewProj));
+	params.cameraPos[0] = mainCameraPos.x;
+	params.cameraPos[1] = mainCameraPos.y;
+	params.cameraPos[2] = mainCameraPos.z;
+
+	params.minPixelSize = settings.MinPixelSize;
+	params.fullDetailPixelSize = settings.FullDetailPixelSize;
+	params.lodMinKeep = settings.MinDensity;
+	params.lodFadeBand = 0.15f;
+
+	const auto& viewFrustum = camera->GetRuntimeData2().viewFrustum;
+	const auto [screenWidth, screenHeight] = globals::game::renderer->GetScreenSize();
+	params.meshCostBias = settings.MeshCostBias;
+	params.projScale = screenHeight / (2.0f * std::abs(viewFrustum.fTop));
+	params.maxDistSq = maxDistSq;
+	params.edgeFadeStart = std::clamp(settings.EdgeFadeStart, 0.0f, 1.0f);
+
+	params.alphaParam1 = grassStartFadeDistance;
+	params.alphaParam2 = maxGrassDistance;
+	params.fadeNow = timeAccum;
+	params.fadeInTimeRcp = fadeInTimeRcp;
+
+	const float collisionDistance = std::max(0.0f, settings.CollisionDistance);
+	params.invisibleFadeCull = settings.InvisibleFadeCull;
+	params.simpleShadingPixelSize = std::max(0.0f, settings.SimpleShadingPixelSize);
+	params.collisionDistSq = collisionDistance * collisionDistance;
+	params.midLODPixelSize = settings.MidLODPixelSize;
+	params.farLODPixelSize = settings.EnableMidLOD ? std::min(settings.FarLODPixelSize, settings.MidLODPixelSize) : settings.FarLODPixelSize;
+	params.densityDistanceRcp = 1.0f / std::max(vanillaMaxDistance, 1e-4f);
+
+	params.meshLODBandPx = std::max(0.0f, settings.MeshLODBandPixels);
+	const auto* rowW = params.cameraViewProj[3];
+	params.projectionWLength = std::sqrt(rowW[0] * rowW[0] + rowW[1] * rowW[1] + rowW[2] * rowW[2]);
+	params.occlusionBias = std::max(0.0f, settings.OcclusionBias);
+	params.costBiasStartDist = std::max(0.0f, settings.CostBiasStartDistance);
 
 	visibleBuckets.clear();
 	sliceTableCPU.clear();
@@ -117,9 +104,7 @@ void GrassOptimizations::CullGrass(const RE::NiCamera* camera)
 
 	globals::profiler->EndPass();
 
-	globals::profiler->BeginPass("GrassOptimizations::InstanceCull");
-	UploadCullState(ctx);
-	globals::profiler->EndPass();
+	UploadCullState(ctx, params);
 }
 
 ID3D11ComputeShader* GrassOptimizations::GetCullCS()
@@ -369,7 +354,7 @@ void GrassOptimizations::DisableOptimizedDraws()
 	visibleBuckets.clear();
 }
 
-void GrassOptimizations::UploadCullState(ID3D11DeviceContext* ctx)
+void GrassOptimizations::UploadCullState(ID3D11DeviceContext* ctx, CullParamsCB& params)
 {
 	if (visibleBuckets.empty()) {
 		bucketStore.PrepareCullOutputs({});
@@ -378,11 +363,21 @@ void GrassOptimizations::UploadCullState(ID3D11DeviceContext* ctx)
 
 	ID3D11ShaderResourceView* nullInstanceView = nullptr;
 	ctx->VSSetShaderResources(2, 1, &nullInstanceView);
-	// All resources and uploads must succeed before any bucket is dispatched.
+	// Complete uploads before starting either compute pass.
 	if (!bucketStore.PrepareCullOutputs(visibleBuckets) || !UploadCullBucketConstants(ctx) || !UploadSliceTable(ctx)) {
 		DisableOptimizedDraws();
 		return;
 	}
+
+	// Build Hi-Z before binding grass compute state.
+	const bool useHiZ = settings.EnableOcclusionCulling && globals::hiZPyramid->Build(globals::d3d::device, ctx);
+	globals::profiler->BeginPass("GrassOptimizations::InstanceCull");
+	params.hiZEnabled = useHiZ ? 1.0f : 0.0f;
+	const auto hiZUVScale = globals::hiZPyramid->GetUVScale();
+	params.hiZSizeX = hiZUVScale.x;
+	params.hiZSizeY = hiZUVScale.y;
+	params.hiZMipCount = (float)globals::hiZPyramid->GetMipCount();
+	cullParamsCB->Update(params);
 
 	ID3D11Buffer* paramsCB = cullParamsCB->CB();
 	ctx->CSSetConstantBuffers(0, 1, &paramsCB);
@@ -402,7 +397,7 @@ void GrassOptimizations::UploadCullState(ID3D11DeviceContext* ctx)
 	const D3D11_BOX argumentBox{ 0, 0, 0, argumentCount * (UINT)sizeof(uint32_t), 1, 1 };
 	ctx->UpdateSubresource(bucketStore.arguments->resource.get(), 0, &argumentBox, cullArguments.data(), 0, 0);
 
-	ID3D11ShaderResourceView* sharedSRVs[2] = { globals::hiZPyramid->GetSRV(), sliceTable->srv.get() };
+	ID3D11ShaderResourceView* sharedSRVs[2] = { useHiZ ? globals::hiZPyramid->GetSRV() : nullptr, sliceTable->srv.get() };
 	ctx->CSSetShaderResources(2, 2, sharedSRVs);
 	for (GrassBucket* bucket : visibleBuckets) {
 		CullBucket(*bucket, ctx);
@@ -417,6 +412,7 @@ void GrassOptimizations::UploadCullState(ID3D11DeviceContext* ctx)
 
 	// Removals at Present may destroy these buckets before the next frame.
 	visibleBuckets.clear();
+	globals::profiler->EndPass();
 }
 
 uint32_t GrassOptimizations::DispatchWidth(uint32_t groupCount)

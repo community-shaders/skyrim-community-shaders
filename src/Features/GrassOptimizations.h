@@ -293,8 +293,8 @@ private:
 	/** @brief Returns whether PerFrame contains the main camera rather than a reflection, cubemap or shadow camera. */
 	static bool IsMainCameraPerFrame(const RE::NiPoint3& mainCameraPos);
 
-	/** @brief Uploads the per-bucket cull constants and the slice table, then issues the cull dispatches. */
-	void UploadCullState(ID3D11DeviceContext* ctx);
+	/** @brief Uploads resources, builds Hi-Z, and dispatches grass culling. */
+	void UploadCullState(ID3D11DeviceContext* ctx, CullParamsCB& params);
 
 	/** @brief Fills every visible bucket's slot of the per-bucket constant buffer with one map. */
 	bool UploadCullBucketConstants(ID3D11DeviceContext* ctx);
