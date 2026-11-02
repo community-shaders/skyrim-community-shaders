@@ -1,6 +1,7 @@
 #include "Effects11.h"
 
 #include "Effects11/D3D11StateBackup.h"
+#include "Effects11/ENBExtender.h"
 #include "Effects11/ENBHelper.h"
 #include "Effects11/Editor/Effects11Editor.h"
 #include "Effects11/EffectManager.h"
@@ -477,6 +478,11 @@ void Effects11::SetUseEffect(bool enabled)
 {
 	auto& settingManager = SettingManager::GetSingleton();
 	settingManager.SetValue<bool>(settingManager.GetSettingID("UseEffect", "GLOBAL"), enabled);
+}
+
+void Effects11::Load()
+{
+	ENBExtender::SuppressHelperPrompt();
 }
 
 void Effects11::SetupResources()
