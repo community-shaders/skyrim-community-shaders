@@ -900,7 +900,7 @@ void EffectManager::UpdateCursorData()
 
 	// Shaders get the cursor while a UI that shows it is open, e.g. for click-to-focus depth of field
 	auto* menu = globals::menu;
-	const bool cursorVisible = (menu && menu->IsEnabled) || Effects11Editor::GetSingleton().IsOpen();
+	const bool cursorVisible = (menu && menu->IsOpen()) || Effects11Editor::GetSingleton().IsOpen();
 	if (cursorVisible && ImGui::GetCurrentContext()) {
 		const auto& io = ImGui::GetIO();
 		if (io.DisplaySize.x > 0.0f && io.DisplaySize.y > 0.0f) {
