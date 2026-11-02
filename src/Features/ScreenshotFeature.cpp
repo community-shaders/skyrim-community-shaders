@@ -528,10 +528,16 @@ namespace
 		constexpr size_t kChunkTypeOffset = 4;
 		constexpr size_t kChunkOverhead = 12;  // length + type + CRC
 
-		std::vector<uint8_t> data;
+		std::error_code ec;
+		std::string data(std::filesystem::file_size(path, ec), '\0');
+		if (ec) {
+			return false;
+		}
 		{
 			std::ifstream file(path, std::ios::binary);
-			data.assign(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
+			if (!file.read(data.data(), static_cast<std::streamsize>(data.size()))) {
+				return false;
+			}
 		}
 
 		for (size_t offset = kPngSignatureSize; offset + kChunkOverhead <= data.size();) {
@@ -544,10 +550,8 @@ namespace
 				return false;
 			}
 			if (std::memcmp(type, "cICP", 4) == 0) {
-				data.erase(data.begin() + offset, data.begin() + offset + chunkSize);
-				std::ofstream file(path, std::ios::binary | std::ios::trunc);
-				file.write(reinterpret_cast<const char*>(data.data()), static_cast<std::streamsize>(data.size()));
-				return file.good();
+				data.erase(offset, chunkSize);
+				return Util::FileHelpers::WriteFileAtomically(path, data, "HDR screenshot");
 			}
 			offset += chunkSize;
 		}
