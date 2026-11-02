@@ -42,6 +42,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	innerLayerDisplacementOffset,
 	fuzzColor,
 	fuzzWeight,
+	fuzzRoughness,
+	fuzzRoughnessTexture,
 	glintParameters);
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
@@ -809,6 +811,23 @@ static bool IsPBRShaderProperty(const RE::BSShaderProperty* property)
 	return property->material != nullptr && property->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kVertexLighting) && (property->material->GetFeature() == RE::BSShaderMaterial::Feature::kDefault || property->material->GetFeature() == RE::BSShaderMaterial::Feature::kMultiTexLandLODBlend);
 }
 
+/** @brief Returns the values of a NiFloatsExtraData block, or an empty span when it is absent or malformed. */
+static std::span<const float> GetNifFloats(RE::BSLightingShaderProperty* property, const char* name, std::uint32_t count, const RE::NiStream& stream)
+{
+	const auto* extra = property->GetExtraData(name);
+	if (!extra) {
+		return {};
+	}
+
+	const auto* floats = netimmerse_cast<const RE::NiFloatsExtraData*>(extra);
+	if (!floats || floats->size != count || !floats->value) {
+		logger::warn("[TruePBR] {} has invalid {} extra data, expected {} floats", stream.inputFilePath, name, count);
+		return {};
+	}
+
+	return { floats->value, floats->size };
+}
+
 struct BSLightingShaderProperty_PostLinkObject
 {
 	static void thunk(RE::BSLightingShaderProperty* property, RE::NiStream& stream)
@@ -818,13 +837,9 @@ struct BSLightingShaderProperty_PostLinkObject
 			return;
 		}
 
-		const auto* extra = property->GetExtraData("PBRThinSurface");
-		if (!extra) {
-			return;
-		}
-		const auto* parameters = netimmerse_cast<const RE::NiFloatsExtraData*>(extra);
-		if (!parameters || parameters->size != 4 || !parameters->value) {
-			logger::warn("[TruePBR] {} has invalid PBRThinSurface extra data, expected four floats", stream.inputFilePath);
+		const auto thinSurfaceParameters = GetNifFloats(property, "PBRThinSurface", 4, stream);
+		const auto fuzzParameters = GetNifFloats(property, "PBRFuzz", 2, stream);
+		if (thinSurfaceParameters.empty() && fuzzParameters.empty()) {
 			return;
 		}
 
@@ -839,11 +854,26 @@ struct BSLightingShaderProperty_PostLinkObject
 		if (const auto* textureSetData = BSLightingShaderMaterialPBR::All[&source].textureSetData) {
 			source.ApplyTextureSetData(*textureSetData);
 		}
-		if (!source.ApplyNifThinSurfaceParameters({ parameters->value, parameters->size })) {
-			logger::warn("[TruePBR] {} has non-finite PBRThinSurface parameters", stream.inputFilePath);
-			return;
+
+		bool applied = false;
+		if (!thinSurfaceParameters.empty()) {
+			if (source.ApplyNifThinSurfaceParameters(thinSurfaceParameters)) {
+				applied = true;
+			} else {
+				logger::warn("[TruePBR] {} has non-finite PBRThinSurface parameters", stream.inputFilePath);
+			}
 		}
-		property->SetMaterial(&source, true);
+		if (!fuzzParameters.empty()) {
+			if (source.ApplyNifFuzzParameters(fuzzParameters)) {
+				applied = true;
+			} else {
+				logger::warn("[TruePBR] {} has invalid PBRFuzz values, expected finite roughness and 0 or 1", stream.inputFilePath);
+			}
+		}
+
+		if (applied) {
+			property->SetMaterial(&source, true);
+		}
 	}
 	static inline REL::Relocation<decltype(thunk)> func;
 };
@@ -923,6 +953,23 @@ struct BSLightingShaderProperty_GetRenderPasses_LocalMap
 	}
 	static inline REL::Relocation<decltype(thunk)> func;
 };
+
+/** @brief True when fuzz roughness explicitly uses a valid emissive alpha channel. */
+static bool HasEmissiveFuzzRoughness(const BSLightingShaderMaterialPBR* material)
+{
+	if (!material->fuzzRoughnessTexture) {
+		return false;
+	}
+
+	const auto* texture = material->emissiveTexture.get();
+	if (texture == nullptr || texture->rendererTexture == nullptr || texture->rendererTexture->resourceView == nullptr) {
+		return false;
+	}
+
+	D3D11_SHADER_RESOURCE_VIEW_DESC desc{};
+	texture->rendererTexture->resourceView->GetDesc(&desc);
+	return Util::SupportsMaterialAlpha(desc.Format);
+}
 
 bool TruePBR::BSLightingShader_SetupMaterial(RE::BSLightingShader* shader, RE::BSLightingShaderMaterialBase const* material)
 {
@@ -1129,6 +1176,7 @@ bool TruePBR::BSLightingShader_SetupMaterial(RE::BSLightingShader* shader, RE::B
 				PBRProjectedUVParams1[0] = pbrMaterial->GetProjectedMaterialBaseColorScale()[0];
 				PBRProjectedUVParams1[1] = pbrMaterial->GetProjectedMaterialBaseColorScale()[1];
 				PBRProjectedUVParams1[2] = pbrMaterial->GetProjectedMaterialBaseColorScale()[2];
+				PBRProjectedUVParams1[3] = pbrMaterial->GetFuzzRoughness();
 				shadowState->SetPSConstant(PBRProjectedUVParams1, RE::BSGraphics::ConstantGroupLevel::PerMaterial, lightingPSConstants.MaterialObjectRGBScale);
 
 				std::array<float, 4> PBRProjectedUVParams2;
@@ -1171,6 +1219,10 @@ bool TruePBR::BSLightingShader_SetupMaterial(RE::BSLightingShader* shader, RE::B
 				shadowState->SetPSTextureFilterMode(9, RE::BSGraphics::TextureFilterMode::kAnisotropic);
 
 				shaderFlags.set(PBRShaderFlags::HasFeaturesTexture1);
+			}
+
+			if (hasEmissive && shaderFlags.any(PBRShaderFlags::Fuzz) && HasEmissiveFuzzRoughness(pbrMaterial)) {
+				shaderFlags.set(PBRShaderFlags::HasFuzzRoughnessTexture);
 			}
 
 			{
@@ -1515,6 +1567,9 @@ TruePBR::GrassPBRConstants TruePBR::GetGrassPBRConstants(const BSLightingShaderM
 		if (HasGrassFeaturesTexture1(material)) {
 			shaderFlags.set(PBRShaderFlags::HasFeaturesTexture1);
 		}
+		if (HasGrassEmissive(material) && HasEmissiveFuzzRoughness(material)) {
+			shaderFlags.set(PBRShaderFlags::HasFuzzRoughnessTexture);
+		}
 	}
 	if (HasGrassEmissive(material)) {
 		shaderFlags.set(PBRShaderFlags::HasEmissive);
@@ -1531,7 +1586,8 @@ TruePBR::GrassPBRConstants TruePBR::GetGrassPBRConstants(const BSLightingShaderM
 			hasSubsurface ? subsurfaceColor.blue : 0.0f, hasSubsurface ? material->GetSubsurfaceOpacity() : 1.0f },
 		{ hasFuzz ? fuzzColor.red : 0.0f, hasFuzz ? fuzzColor.green : 0.0f,
 			hasFuzz ? fuzzColor.blue : 0.0f, hasFuzz ? material->GetFuzzWeight() : 0.0f },
-		{ material->GetSubsurfaceBalance(), thinSurfaceParams[0], thinSurfaceParams[1], thinSurfaceParams[2] }
+		{ material->GetSubsurfaceBalance(), thinSurfaceParams[0], thinSurfaceParams[1], thinSurfaceParams[2] },
+		{ material->GetFuzzRoughness(), 0.f, 0.f, 0.f }
 	};
 }
 
@@ -1730,9 +1786,11 @@ struct BSGrassShader_SetupMaterial
 		std::array<float, 4> pbrParams2{ constants.params2[0], constants.params2[1], constants.params2[2], constants.params2[3] };
 		std::array<float, 4> pbrParams3{ constants.params3[0], constants.params3[1], constants.params3[2], constants.params3[3] };
 		std::array<float, 4> pbrParams4{ constants.params4[0], constants.params4[1], constants.params4[2], constants.params4[3] };
+		std::array<float, 4> pbrParams5{ constants.params5[0], constants.params5[1], constants.params5[2], constants.params5[3] };
 		shadowState->SetPSConstant(pbrParams2, RE::BSGraphics::ConstantGroupLevel::PerMaterial, grassPSConstants.PBRParams2);
 		shadowState->SetPSConstant(pbrParams3, RE::BSGraphics::ConstantGroupLevel::PerMaterial, grassPSConstants.PBRParams3);
 		shadowState->SetPSConstant(pbrParams4, RE::BSGraphics::ConstantGroupLevel::PerMaterial, grassPSConstants.PBRParams4);
+		shadowState->SetPSConstant(pbrParams5, RE::BSGraphics::ConstantGroupLevel::PerMaterial, grassPSConstants.PBRParams5);
 
 		RE::BSGraphics::Renderer::FlushPSConstantGroup(RE::BSGraphics::ConstantGroupLevel::PerMaterial);
 		RE::BSGraphics::Renderer::ApplyPSConstantGroup(RE::BSGraphics::ConstantGroupLevel::PerMaterial);

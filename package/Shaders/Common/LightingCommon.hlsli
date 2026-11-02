@@ -106,6 +106,7 @@ struct MaterialProperties
 	float3 CoatF0;
 	float3 FuzzColor;
 	float FuzzWeight;
+	float FuzzRoughness;
 	float GlintScreenSpaceScale;
 	float GlintLogMicrofacetDensity;
 	float GlintMicrofacetRoughness;

@@ -394,6 +394,23 @@ namespace Util
 		return shader;
 	}
 
+	bool SupportsMaterialAlpha(DXGI_FORMAT format)
+	{
+		static constexpr std::array formats{
+			DXGI_FORMAT_BC2_UNORM,
+			DXGI_FORMAT_BC3_UNORM,
+			DXGI_FORMAT_BC7_UNORM,
+			DXGI_FORMAT_R8G8B8A8_UNORM,
+			DXGI_FORMAT_B8G8R8A8_UNORM,
+			DXGI_FORMAT_R10G10B10A2_UNORM,
+			DXGI_FORMAT_R16G16B16A16_UNORM,
+			DXGI_FORMAT_R16G16B16A16_FLOAT,
+			DXGI_FORMAT_R32G32B32A32_FLOAT
+		};
+
+		return std::ranges::contains(formats, DirectX::MakeLinear(format));
+	}
+
 	// RAII wrapper for D3D mapped resources
 	class ScopedD3DMap
 	{

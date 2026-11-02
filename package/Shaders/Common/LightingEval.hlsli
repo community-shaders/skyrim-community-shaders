@@ -98,11 +98,15 @@ float3 VanillaSpecular(DirectContext context, float shininess, bool specular, fl
 	return lightColorMultiplier;
 }
 
-void EvaluateLighting(DirectContext context, MaterialProperties material, float3x3 tbnTr, float2 uv, float2 uv_ddx, float2 uv_ddy, out DirectLightingOutput lightingOutput)
+void EvaluateLighting(DirectContext context, MaterialProperties material,
+#if defined(TRUE_PBR)
+	PBR::FuzzLayer fuzz,
+#endif
+	float3x3 tbnTr, float2 uv, float2 uv_ddx, float2 uv_ddy, out DirectLightingOutput lightingOutput)
 {
 	lightingOutput = (DirectLightingOutput)0;
 #if defined(TRUE_PBR)
-	PBR::GetDirectLightInput(lightingOutput, context, material, tbnTr, uv);
+	PBR::GetDirectLightInput(lightingOutput, context, material, fuzz, tbnTr, uv);
 #elif defined(LIGHTING)
 #	if defined(CS_HAIR_SHADING)
 	if (SharedData::hairSpecularSettings.Enabled) {
@@ -146,11 +150,15 @@ void EvaluateLighting(DirectContext context, MaterialProperties material, float3
 #endif
 }
 
-void GetIndirectLobeWeights(out IndirectLobeWeights lobeWeights, IndirectContext context, MaterialProperties material, float2 uv)
+void GetIndirectLobeWeights(out IndirectLobeWeights lobeWeights, IndirectContext context, MaterialProperties material,
+#if defined(TRUE_PBR)
+	PBR::FuzzLayer fuzz,
+#endif
+	float2 uv)
 {
 	lobeWeights = (IndirectLobeWeights)0;
 #if defined(TRUE_PBR)
-	PBR::GetIndirectLobeWeights(lobeWeights, context, material);
+	PBR::GetIndirectLobeWeights(lobeWeights, context, material, fuzz);
 #else
 #	if defined(CS_HAIR_SHADING)
 	if (SharedData::hairSpecularSettings.Enabled) {

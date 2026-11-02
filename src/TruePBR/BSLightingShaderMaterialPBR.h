@@ -32,6 +32,7 @@ enum class PBRShaderFlags : uint32_t
 	ProjectedGlint = 1 << 12,
 	Foliage = 1 << 13,
 	ThinSurface = 1 << 14,
+	HasFuzzRoughnessTexture = 1 << 15,
 };
 
 /**
@@ -50,6 +51,7 @@ public:
 		TruePBR::PBRTextureSetData* textureSetData = nullptr;
 		TruePBR::PBRMaterialObjectData* materialObjectData = nullptr;
 		std::optional<std::array<float, 4>> nifThinSurfaceParameters;
+		std::optional<std::array<float, 2>> nifFuzzParameters;
 		/**
 		 * FormID of the TESObjectREFR whose Clone3D call last wrote MATO data to this
 		 * material.  Used by the fork-before-write check to detect when a pooled material
@@ -146,6 +148,8 @@ public:
 	void ApplyTextureSetData(const TruePBR::PBRTextureSetData& textureSetData);
 	/** @brief Applies the four finite values in the NIF PBRThinSurface extra-data block. */
 	bool ApplyNifThinSurfaceParameters(std::span<const float> parameters);
+	/** @brief Applies the NIF PBRFuzz extra data: fuzz roughness (negative uses base roughness) and emissive-alpha roughness (0 or 1). */
+	bool ApplyNifFuzzParameters(std::span<const float> parameters);
 	/**
 	 * @brief Applies projected material object parameters (base color scale, roughness, specular, glint) to this material.
 	 * @param materialObjectData The material object configuration to apply.
@@ -198,6 +202,8 @@ public:
 	const RE::NiColor& GetFuzzColor() const;
 	/** @brief Returns the fuzz layer weight/intensity. */
 	float GetFuzzWeight() const;
+	/** @brief Returns fuzz roughness clamped to [0, 1], or a negative value to use base roughness. */
+	float GetFuzzRoughness() const;
 
 	/** @brief Returns the glint rendering parameters for this material's base surface. */
 	const GlintParameters& GetGlintParameters() const;
@@ -218,13 +224,15 @@ public:
 
 	RE::NiColor fuzzColor;
 	float fuzzWeight = 0.f;
+	float fuzzRoughness = -1.f;
+	bool fuzzRoughnessTexture = false;
 
 	GlintParameters glintParameters;
 
 	// Roughness in r, metallic in g, AO in b, nonmetal reflectance in a
 	RE::NiPointer<RE::NiSourceTexture> rmaosTexture;
 
-	// Emission color in rgb
+	// Emission color in rgb, fuzz roughness in a when fuzzRoughnessTexture is set
 	RE::NiPointer<RE::NiSourceTexture> emissiveTexture;
 
 	// Displacement in r

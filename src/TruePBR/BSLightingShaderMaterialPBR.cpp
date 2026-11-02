@@ -55,6 +55,8 @@ void BSLightingShaderMaterialPBR::CopyMembers(RE::BSShaderMaterial* that)
 	coatSpecularLevel = pbrThat->coatSpecularLevel;
 	fuzzColor = pbrThat->fuzzColor;
 	fuzzWeight = pbrThat->fuzzWeight;
+	fuzzRoughness = pbrThat->fuzzRoughness;
+	fuzzRoughnessTexture = pbrThat->fuzzRoughnessTexture;
 	glintParameters = pbrThat->glintParameters;
 	projectedMaterialBaseColorScale = pbrThat->projectedMaterialBaseColorScale;
 	projectedMaterialRoughness = pbrThat->projectedMaterialRoughness;
@@ -77,12 +79,15 @@ std::uint32_t BSLightingShaderMaterialPBR::ComputeCRC32(uint32_t srcHash)
 		uint32_t pbrFlags = 0;
 		uint32_t nifThinSurfaceFlags = 0;
 		uint32_t hasNifThinSurfaceParameters = 0;
+		uint32_t hasNifFuzzParameters = 0;
+		uint32_t fuzzRoughnessTexture = 0;
 		float subsurfaceBalance = 0.75f;
 		std::array<float, 3> thinSurfaceParameters = { 0.5f, 0.5f, 1.f };
 		float coatRoughness = 0.f;
 		float coatSpecularLevel = 0.f;
 		std::array<float, 3> fuzzColor = { 0.f, 0.f, 0.f };
 		float fuzzWeight = 0.f;
+		float fuzzRoughness = -1.f;
 		float screenSpaceScale = 0.f;
 		float logMicrofacetDensity = 0.f;
 		float microfacetRoughness = 0.f;
@@ -104,9 +109,13 @@ std::uint32_t BSLightingShaderMaterialPBR::ComputeCRC32(uint32_t srcHash)
 
 	hashes.pbrFlags = pbrFlags.underlying();
 	hashes.nifThinSurfaceFlags = nifThinSurfaceFlags.underlying();
+
 	if (const auto it = All.find(this); it != All.end()) {
 		hashes.hasNifThinSurfaceParameters = it->second.nifThinSurfaceParameters.has_value();
+		hashes.hasNifFuzzParameters = it->second.nifFuzzParameters.has_value();
 	}
+
+	hashes.fuzzRoughnessTexture = fuzzRoughnessTexture;
 	hashes.subsurfaceBalance = subsurfaceBalance;
 	hashes.thinSurfaceParameters = thinSurfaceParameters;
 	hashes.coatRoughness = coatRoughness * 100.f;
@@ -115,6 +124,7 @@ std::uint32_t BSLightingShaderMaterialPBR::ComputeCRC32(uint32_t srcHash)
 	hashes.fuzzColor[1] = fuzzColor[1] * 100.f;
 	hashes.fuzzColor[2] = fuzzColor[2] * 100.f;
 	hashes.fuzzWeight = fuzzWeight * 100.f;
+	hashes.fuzzRoughness = GetFuzzRoughness() * 100.f;
 	hashes.screenSpaceScale = glintParameters.screenSpaceScale * 100.f;
 	hashes.logMicrofacetDensity = glintParameters.logMicrofacetDensity * 100.f;
 	hashes.microfacetRoughness = glintParameters.microfacetRoughness * 100.f;
@@ -128,6 +138,7 @@ std::uint32_t BSLightingShaderMaterialPBR::ComputeCRC32(uint32_t srcHash)
 	hashes.projectedMaterialLogMicrofacetDensity = projectedMaterialGlintParameters.logMicrofacetDensity * 100.f;
 	hashes.projectedMaterialMicrofacetRoughness = projectedMaterialGlintParameters.microfacetRoughness * 100.f;
 	hashes.projectedMaterialDensityRandomization = projectedMaterialGlintParameters.densityRandomization * 100.f;
+
 	DiscardMislinkedTextureSet(textureSet);
 	if (textureSet != nullptr) {
 		hashes.rmaodHash = RE::BSCRC32<const char*>()(textureSet->GetTexturePath(RmaosTexture));
@@ -154,14 +165,18 @@ void BSLightingShaderMaterialPBR::ApplyTextureSetData(const TruePBR::PBRTextureS
 	specularPower = textureSetData.specularLevel;
 	rimLightPower = textureSetData.displacementScale;
 	subsurfaceBalance = std::clamp(textureSetData.subsurfaceBalance, 0.f, 1.f);
+
 	pbrFlags.reset(PBRFlags::ThinSurface, PBRFlags::Foliage);
 	pbrFlags.set(nifThinSurfaceFlags.get());
+
 	if (textureSetData.thinSurface) {
 		pbrFlags.set(PBRFlags::ThinSurface);
 	}
+
 	if (textureSetData.foliage) {
 		pbrFlags.set(PBRFlags::Foliage);
 	}
+
 	thinSurfaceParameters = { std::clamp(textureSetData.thinSurfaceSpecularWeight, 0.f, 1.f),
 		std::clamp(textureSetData.thinSurfaceBackSpecularWeight, 0.f, 1.f),
 		std::clamp(textureSetData.thinSurfaceBackRoughnessScale, 0.f, 3.f) };
@@ -180,6 +195,8 @@ void BSLightingShaderMaterialPBR::ApplyTextureSetData(const TruePBR::PBRTextureS
 		if (pbrFlags.any(PBRFlags::Fuzz)) {
 			fuzzColor = textureSetData.fuzzColor;
 			fuzzWeight = textureSetData.fuzzWeight;
+			fuzzRoughness = textureSetData.fuzzRoughness;
+			fuzzRoughnessTexture = textureSetData.fuzzRoughnessTexture;
 		}
 	}
 
@@ -188,6 +205,29 @@ void BSLightingShaderMaterialPBR::ApplyTextureSetData(const TruePBR::PBRTextureS
 	if (const auto it = All.find(this); it != All.end() && it->second.nifThinSurfaceParameters) {
 		ApplyNifThinSurfaceParameters(*it->second.nifThinSurfaceParameters);
 	}
+
+	if (const auto it = All.find(this); it != All.end() && it->second.nifFuzzParameters) {
+		ApplyNifFuzzParameters(*it->second.nifFuzzParameters);
+	}
+}
+
+bool BSLightingShaderMaterialPBR::ApplyNifFuzzParameters(std::span<const float> parameters)
+{
+	if (parameters.size() != 2 || std::ranges::any_of(parameters, [](float value) { return !std::isfinite(value); })) {
+		return false;
+	}
+
+	const float roughness = parameters[0];
+	const float useEmissiveAlpha = parameters[1];
+	if (useEmissiveAlpha != 0.f && useEmissiveAlpha != 1.f) {
+		return false;
+	}
+
+	fuzzRoughness = roughness < 0.f ? -1.f : std::min(roughness, 1.f);
+	fuzzRoughnessTexture = useEmissiveAlpha == 1.f;
+	All[this].nifFuzzParameters = std::array{ fuzzRoughness, useEmissiveAlpha };
+
+	return true;
 }
 
 bool BSLightingShaderMaterialPBR::ApplyNifThinSurfaceParameters(std::span<const float> parameters)
@@ -201,6 +241,7 @@ bool BSLightingShaderMaterialPBR::ApplyNifThinSurfaceParameters(std::span<const 
 		std::clamp(parameters[2], 0.f, 1.f),
 		std::clamp(parameters[3], 0.f, 3.f) };
 	All[this].nifThinSurfaceParameters = std::array{ subsurfaceBalance, thinSurfaceParameters[0], thinSurfaceParameters[1], thinSurfaceParameters[2] };
+
 	return true;
 }
 
@@ -353,8 +394,10 @@ void BSLightingShaderMaterialPBR::LoadBinary(RE::NiStream& stream)
 		glintParameters.densityRandomization = parameters[3];
 
 		if (stream.header.version > 0x4A) {
-			float dummy;
-			stream.iStr->read(&dummy, 1);
+			// Environment Map Scale below 1 is the fuzz roughness; the default of 1 keeps base roughness.
+			float environmentMapScale;
+			stream.iStr->read(&environmentMapScale, 1);
+			fuzzRoughness = environmentMapScale < 1.f ? environmentMapScale : -1.f;
 		}
 	}
 }
@@ -442,6 +485,11 @@ const RE::NiColor& BSLightingShaderMaterialPBR::GetFuzzColor() const
 float BSLightingShaderMaterialPBR::GetFuzzWeight() const
 {
 	return fuzzWeight;
+}
+
+float BSLightingShaderMaterialPBR::GetFuzzRoughness() const
+{
+	return std::isfinite(fuzzRoughness) && fuzzRoughness >= 0.f ? std::min(fuzzRoughness, 1.f) : -1.f;
 }
 
 const GlintParameters& BSLightingShaderMaterialPBR::GetGlintParameters() const

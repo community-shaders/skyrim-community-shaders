@@ -117,6 +117,9 @@ namespace Util
 	 */
 	void ClearShaderCompileFailures();
 
+	/** @brief True for supported float-sampled material formats with continuous alpha, including sRGB aliases; excludes BC1, integer and typeless formats. */
+	bool SupportsMaterialAlpha(DXGI_FORMAT format);
+
 	/**
 	 * @brief Apply an alpha-blended highlight tint to a texture via CPU staging copy.
 	 * @param texture The texture to tint.

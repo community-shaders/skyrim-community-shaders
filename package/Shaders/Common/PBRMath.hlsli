@@ -36,6 +36,7 @@ namespace PBR
 		static const uint ProjectedGlint = (1 << 12);
 		static const uint Foliage = (1 << 13);
 		static const uint ThinSurface = (1 << 14);
+		static const uint HasFuzzRoughnessTexture = (1 << 15);
 	}
 
 	bool IsFoliageMaterial(uint flags)
@@ -95,23 +96,6 @@ namespace PBR
 		float D = BRDF::D_GGX(roughness, NdotH);
 		float G = BRDF::Vis_SmithJointApprox(roughness, NdotV, NdotL);
 		F = BRDF::F_Schlick(F0, VdotH);
-
-		return D * G * F;
-	}
-
-	/// @brief Evaluate Charlie microflake specular BRDF for sheen/fabric (D * Vis * F)
-	/// @param roughness Perceptual roughness [0,1]
-	/// @param F0 Reflectance at normal incidence
-	/// @param NdotL Dot product of normal and light direction
-	/// @param NdotV Dot product of normal and view direction
-	/// @param NdotH Dot product of normal and half vector
-	/// @param VdotH Dot product of view and half vector
-	/// @return Specular BRDF value (D * Vis * F)
-	float3 SpecularMicroflakes(float roughness, float3 F0, float NdotL, float NdotV, float NdotH, float VdotH)
-	{
-		float D = BRDF::D_Charlie(roughness, NdotH);
-		float G = BRDF::Vis_Neubelt(NdotV, NdotL);
-		float3 F = BRDF::F_Schlick(F0, VdotH);
 
 		return D * G * F;
 	}
@@ -235,42 +219,59 @@ namespace PBR
 		return exp(-0.5 * d * d) / (s * sqrt(Math::TAU)) + o;
 	}
 
-	/// @brief Evaluate the OpenPBR fuzz lobe (Zeltner et al. 2022 sheen) as a linearly transformed cosine
-	/// @param L Light direction
+	/// @brief View-dependent basis and inverse LTC coefficients of the OpenPBR fuzz lobe
+	struct FuzzLTC
+	{
+		float3 X;
+		float3 Y;
+		float3 N;
+		float aInv;
+		float bInv;
+	};
+
+	/// @brief Cache the view-dependent basis and coefficients of the OpenPBR fuzz lobe.
 	/// @param V View direction
 	/// @param N Surface normal, facing the viewer
 	/// @param NdotV Dot product of normal and view direction
 	/// @param roughness Fuzz roughness [0.01,1]
-	/// @return Normalized lobe value with the cosine included; scale by FuzzDirectionalAlbedo for the reflection
+	/// @return Basis and coefficients for FuzzLobe and FuzzLobeTransmitted
 	/// @note Rational fits from the MaterialX reference implementation (mx_microfacet_sheen.glsl).
-	float FuzzLobe(float3 L, float3 V, float3 N, float NdotV, float roughness)
+	FuzzLTC CreateFuzzLTC(float3 V, float3 N, float NdotV, float roughness)
 	{
-		float3 X = V - N * NdotV;
-		float lengthSquared = dot(X, X);
-		X = lengthSquared > 1e-8 ? X * rsqrt(lengthSquared) : normalize(abs(N.z) < 0.999 ? cross(float3(0, 0, 1), N) : float3(1, 0, 0));
-		float3 Y = cross(N, X);
-		float3 w = float3(dot(L, X), dot(L, Y), dot(L, N));
+		FuzzLTC ltc;
+		ltc.X = V - N * NdotV;
+		float lengthSquared = dot(ltc.X, ltc.X);
+		ltc.X = lengthSquared > 1e-8 ? ltc.X * rsqrt(lengthSquared) : normalize(abs(N.z) < 0.999 ? cross(float3(0, 0, 1), N) : float3(1, 0, 0));
+		ltc.Y = cross(N, ltc.X);
+		ltc.N = N;
 
-		float aInv = (2.58126 * NdotV + 0.813703 * roughness) * roughness / (1.0 + 0.310327 * NdotV * NdotV + 2.60994 * NdotV * roughness);
-		float bInv = sqrt(1.0 - NdotV) * (roughness - 1.0) * roughness * roughness * roughness /
-		             (0.0000254053 + 1.71228 * NdotV - 1.71506 * NdotV * roughness + 1.34174 * roughness * roughness);
-		float3 wo = float3(aInv * w.x + bInv * w.z, aInv * w.y, w.z);
-		float scale = aInv / dot(wo, wo);
+		ltc.aInv = (2.58126 * NdotV + 0.813703 * roughness) * roughness / (1.0 + 0.310327 * NdotV * NdotV + 2.60994 * NdotV * roughness);
+		ltc.bInv = sqrt(1.0 - NdotV) * (roughness - 1.0) * roughness * roughness * roughness /
+		           (0.0000254053 + 1.71228 * NdotV - 1.71506 * NdotV * roughness + 1.34174 * roughness * roughness);
+		return ltc;
+	}
+
+	/// @brief Evaluate the OpenPBR fuzz lobe (Zeltner et al. 2022 sheen) from a cached LTC
+	/// @param L Light direction
+	/// @param ltc Cached view-dependent fuzz parameters
+	/// @return Normalized lobe value with the cosine included; scale by the layer's weighted albedo for the reflection
+	float FuzzLobe(float3 L, FuzzLTC ltc)
+	{
+		float3 w = float3(dot(L, ltc.X), dot(L, ltc.Y), dot(L, ltc.N));
+		float3 wo = float3(ltc.aInv * w.x + ltc.bInv * w.z, ltc.aInv * w.y, w.z);
+		float scale = ltc.aInv / dot(wo, wo);
 		return max(wo.z, 0.0) * Math::INV_PI * scale * scale;
 	}
 
 	/// @brief Evaluate the fuzz lobe on the viewer-side face of a thin-walled surface lit from behind
 	/// @param L Light direction, behind the surface
-	/// @param V View direction
-	/// @param N Surface normal, facing the viewer
-	/// @param NdotV Dot product of normal and view direction
-	/// @param roughness Fuzz roughness [0.01,1]
+	/// @param ltc Cached view-dependent fuzz parameters
 	/// @return Lobe value as FuzzLobe, zero for light in front; scale by the transmitted share of the light
 	/// @note OpenPBR thin-walled surfaces carry fuzz on both faces. Light transmitted through the surface reaches the
 	///       viewer-side fuzz continuing from the light, so that face sees it from the light's mirror image.
-	float FuzzLobeTransmitted(float3 L, float3 V, float3 N, float NdotV, float roughness)
+	float FuzzLobeTransmitted(float3 L, FuzzLTC ltc)
 	{
-		return FuzzLobe(reflect(L, N), V, N, NdotV, roughness);
+		return FuzzLobe(reflect(L, ltc.N), ltc);
 	}
 
 	/// @brief Calculate index of refraction for hair using Marschner model
