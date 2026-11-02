@@ -12,6 +12,7 @@
 #include "PresetManager.h"
 #include "SettingManager.h"
 #include "TextureManager.h"
+#include "Utils/Logging.h"
 #include "WeatherManager.h"
 
 #include <d3dcompiler.h>
@@ -900,7 +901,7 @@ void EffectManager::UpdateCursorData()
 
 	// Shaders get the cursor while a UI that shows it is open, e.g. for click-to-focus depth of field
 	auto* menu = globals::menu;
-	const bool cursorVisible = (menu && menu->IsEnabled) || Effects11Editor::GetSingleton().IsOpen();
+	const bool cursorVisible = (menu && menu->IsOpen()) || Effects11Editor::GetSingleton().IsOpen();
 	if (cursorVisible && ImGui::GetCurrentContext()) {
 		const auto& io = ImGui::GetIO();
 		if (io.DisplaySize.x > 0.0f && io.DisplaySize.y > 0.0f) {
@@ -1032,11 +1033,9 @@ void EffectManager::CopyToTarget(ID3D11Texture2D* a_source, ID3D11ShaderResource
 bool EffectManager::CopyTexture(ID3D11ShaderResourceView* a_source, ID3D11RenderTargetView* a_dest, bool a_dither)
 {
 	if (!a_source || !a_dest || !copyPixelShader || !copyVertexShader) {
-		static bool logged = false;
-		if (!logged) {
+		static Util::OnceFlag logged;
+		if (logged.First())
 			logger::warn("[EFFECTS11] Invalid parameters or shaders not initialized for texture copy");
-			logged = true;
-		}
 		return false;
 	}
 

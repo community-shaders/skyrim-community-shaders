@@ -286,7 +286,7 @@ namespace Util
 	{
 		const char* label = "";  ///< Text after "##" is not shown
 		Icons::GlyphRef icon{};  ///< Shown alone when the segment is too narrow
-		bool disabled = false;   ///< Dimmed but still clickable
+		bool disabled = false;   ///< Dimmed and not clickable; its tooltip still shows
 		const char* tooltip = nullptr;
 		float width = 0.0f;                                             ///< 0 measures the icon and label
 		std::function<void(const Segment&, const SegmentState&)> draw;  ///< Null draws the icon and label
@@ -361,26 +361,26 @@ namespace Util
 	 */
 	bool LockStatusBadgeButton(const char* a_id, bool a_locked, const char* a_tooltip = nullptr);
 
-	/** @brief Width of a DrawBadgeAt badge for the given label. */
+	/** @brief Width of a Badge for the given label. */
 	float MeasureBadgeWidth(const char* a_label);
 
-	/**
-	 * @brief Soft rectangular label badge, vertically centred in a row.
-	 * @param a_min Top-left of the row in screen space.
-	 * @param a_rowHeight Height of the row the badge is centred in.
-	 * @param a_bg Badge fill; usually the tint at a low alpha.
-	 * @param a_fg Label colour.
-	 * @param a_drawList Optional; defaults to the current window draw list.
-	 * @return The badge width.
-	 */
-	float DrawBadgeAt(ImVec2 a_min, float a_rowHeight, const char* a_label, const ImVec4& a_bg, const ImVec4& a_fg,
-		ImDrawList* a_drawList = nullptr);
+	/** @brief Layout and colour overrides of a Badge. */
+	struct BadgeOptions
+	{
+		float rowHeight = 0.0f;          ///< Row the badge is centred in; 0 is the line height
+		float width = 0.0f;              ///< Fixed width with the label centred; 0 fits the label
+		float alpha = 1.0f;              ///< Multiplier on fill and label, for fades
+		std::optional<ImVec4> fill;      ///< Replaces the tint's soft fill
+		std::optional<ImVec4> label;     ///< Replaces the tint's readable label colour
+		ImDrawList* drawList = nullptr;  ///< Defaults to the current window draw list
+		std::optional<ImVec2> at;        ///< Draws with this row top-left without advancing layout; unset draws at the cursor
+	};
 
 	/**
-	 * @brief Badge tinted from one colour (soft fill, readable label), drawn at the cursor; advances layout with Dummy.
-	 * @param a_rowHeight Row to centre in; 0 is the line height.
+	 * @brief Soft rectangular label badge tinted from one colour, vertically centred in a row.
+	 * @return The badge width.
 	 */
-	void Badge(const char* a_label, const ImVec4& a_tint, float a_rowHeight = 0.0f);
+	float Badge(const char* a_label, const ImVec4& a_tint, const BadgeOptions& a_options = {});
 
 	/**
 	 * @brief Soft rectangular HDR/SDR capability pill (muted blue / muted red).
@@ -830,6 +830,9 @@ namespace Util
 	 * stack, so pushed overrides still apply; behaviour is otherwise identical to ImGui::Button.
 	 */
 	bool Button(const char* label, const ImVec2& size = ImVec2(0, 0));
+
+	/** @brief Cursor over the hovered last item: a hand when clickable (if @p hand), not-allowed while disabled. */
+	void HoverCursor(bool hand = true);
 
 	/** @brief Square size of IconButton. */
 	float IconButtonSize();

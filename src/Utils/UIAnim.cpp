@@ -359,37 +359,27 @@ namespace Util::Anim
 		constexpr ImGuiID kRectSalt = 0x9D7F4B63u;     // + 0..3
 		constexpr ImGuiID kSelRectSalt = 0xAE1C5F27u;  // + 0..3: the selected row's fill, relative to the list origin
 		constexpr ImGuiID kSelRectFrameSalt = 0xBF4D2A91u;
-
-		/// The highlight's look: the accent at the NavSelected surface's strength, fainter on hover, darker once selected
-		/// or pressed, with the accent bar fading in on a selected row.
-		void DrawListHighlight(ImDrawList* drawList, const ImVec2& min, const ImVec2& max, float visibility, float selectedness, float press)
-		{
-			const auto& surface = Surface::Get(Surface::Role::NavSelected);
-			if (!surface.enabled || visibility <= 0.0f)
-				return;
-			const ImVec4 accent = Colors::GetAccent();
-			const float darken = (1.0f - (1.0f - Constants::LIST_HIGHLIGHT_SELECTED_DARKEN) * selectedness) *
-			                     (1.0f - (1.0f - Constants::LIST_HIGHLIGHT_PRESS_DARKEN) * press);
-			const float strength = (Constants::LIST_HIGHLIGHT_HOVER_RATIO + (1.0f - Constants::LIST_HIGHLIGHT_HOVER_RATIO) * selectedness) *
-			                       (1.0f + (Constants::LIST_HIGHLIGHT_PRESS_BOOST - 1.0f) * press);
-			const float rounding = ImGui::GetStyle().FrameRounding;
-			drawList->AddRectFilled(min, max,
-				ImGui::GetColorU32(ImVec4(accent.x * darken, accent.y * darken, accent.z * darken, std::min(1.0f, surface.fillAlpha * strength * visibility))),
-				rounding);
-			const float barWidth = surface.accentBarWidth * GetUIScale();
-			if (surface.accentBar && barWidth > 0.0f && selectedness > 0.0f) {
-				const float inset = (max.y - min.y) * Constants::NAV_SELECTED_BAR_INSET;
-				drawList->AddRectFilled(ImVec2(min.x, min.y + inset), ImVec2(min.x + barWidth, max.y - inset),
-					ImGui::GetColorU32(ScaleAlpha(accent, selectedness * visibility)), barWidth * 0.5f);
-			}
-		}
 	}
 
 	bool GlideSelectable(SelectableFn real, const char* label, bool selected, ImGuiSelectableFlags flags, const ImVec2& size)
 	{
 		ImGuiWindow* window = ImGui::GetCurrentWindow();
-		if (ReducedMotion() || window->SkipItems)
+		if (window->SkipItems)
 			return real(label, selected, flags, size);
+
+		// Text rows get the list text inset; rows without a label place their own content
+		const bool textRow = ImGui::FindRenderedTextEnd(label) != label && !ImGui::GetCurrentTable() &&
+		                     (size.x <= 0.0f || (flags & ImGuiSelectableFlags_SpanAvailWidth)) && window->DC.CursorPos.x <= window->WorkRect.Min.x + 0.5f;
+		if (textRow) {
+			window->DC.CursorPos.x = std::max(window->DC.CursorPos.x, window->InnerRect.Min.x + Surface::ListHighlightTextInset());
+			flags |= ImGuiSelectableFlags_SpanAllColumns;
+		}
+
+		if (ReducedMotion()) {
+			const bool clicked = real(label, selected, flags, size);
+			HoverCursor(false);
+			return clicked;
+		}
 
 		const ImGuiID id = window->GetID(label);
 		const ImGuiID list = window->ID;
@@ -402,6 +392,7 @@ namespace Util::Anim
 		ImGui::PushStyleColor(ImGuiCol_HeaderActive, IM_COL32_BLACK_TRANS);
 		const bool clicked = real(label, selected, flags, size);
 		ImGui::PopStyleColor(3);
+		HoverCursor(false);
 		if (!ImGui::IsItemVisible())
 			return clicked;
 
@@ -420,9 +411,18 @@ namespace Util::Anim
 		const ImVec2 origin(window->Pos.x - window->Scroll.x, window->Pos.y - window->Scroll.y);
 		// Selectable's item rect already includes its half item spacing pad, which is the area ImGui fills
 		ImRect rect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
-		// The fill reaches half an item spacing past the row; keep it inside the window so a pane's edge never cuts the bar
-		rect.Min.x = std::max(rect.Min.x, window->InnerClipRect.Min.x);
-		rect.Max.x = std::min(rect.Max.x, window->InnerClipRect.Max.x);
+		// Full-width rows highlight edge to edge
+		const bool fullRow = !ImGui::GetCurrentTable() && rect.Min.x <= window->WorkRect.Min.x && rect.Max.x >= window->WorkRect.Max.x;
+		if (fullRow) {
+			rect.Min.x = window->InnerRect.Min.x + window->WindowBorderSize;
+			rect.Max.x = window->InnerRect.Max.x - window->WindowBorderSize;
+			underlay.Background()->PushClipRect(ImVec2(rect.Min.x, window->InnerClipRect.Min.y), ImVec2(rect.Max.x, window->InnerClipRect.Max.y));
+		} else {
+			// The fill reaches half an item spacing past the row; keep it inside the visible clip (a table cell's, in a
+			// table) so its edge never cuts the bar
+			rect.Min.x = std::max(rect.Min.x, window->ClipRect.Min.x);
+			rect.Max.x = std::min(rect.Max.x, window->ClipRect.Max.x);
+		}
 
 		// The selected row keeps its own fill and accent bar in place, fading in and out as the selection changes
 		const float selectedTarget = selected && !disabled ? 1.0f : 0.0f;
@@ -430,7 +430,7 @@ namespace Util::Anim
 		const float selectedness = selectionFresh ? selectedTarget : Smooth(storage->GetFloat(id ^ kSelSalt, selectedTarget), selectedTarget, Constants::ANIM_SELECT_RATE);
 		storage->SetFloat(id ^ kSelSalt, selectedness);
 		if (selectedness > Constants::ANIM_EPSILON)
-			DrawListHighlight(underlay.Background(), rect.Min, rect.Max, selectedness, 1.0f, 0.0f);
+			Surface::DrawListHighlight(underlay.Background(), rect.Min, rect.Max, selectedness, 1.0f, 0.0f);
 		if (selected && !disabled) {
 			const float selRel[4] = { rect.Min.x - origin.x, rect.Min.y - origin.y, rect.Max.x - origin.x, rect.Max.y - origin.y };
 			for (ImGuiID n = 0; n < 4; ++n)
@@ -474,7 +474,7 @@ namespace Util::Anim
 			storage->SetFloat(key(kVisSalt), visibility);
 			storage->SetFloat(key(kPressSalt), press);
 			storage->SetInt(key(kLastDrawSalt), frame);
-			DrawListHighlight(underlay.Background(), ImVec2(rel[0] + origin.x, rel[1] + origin.y), ImVec2(rel[2] + origin.x, rel[3] + origin.y),
+			Surface::DrawListHighlight(underlay.Background(), ImVec2(rel[0] + origin.x, rel[1] + origin.y), ImVec2(rel[2] + origin.x, rel[3] + origin.y),
 				visibility, 0.0f, press);
 		} else if (hoverId == 0 && !drawnThisFrame && lastDraw >= frame - 1) {
 			const float visibility = Smooth(storage->GetFloat(key(kVisSalt), 0.0f), 0.0f, Constants::ANIM_HOVER_RATE);
@@ -484,9 +484,11 @@ namespace Util::Anim
 				storage->SetInt(key(kLastDrawSalt), frame);
 				const ImVec2 min(storage->GetFloat(key(kRectSalt), 0.0f) + origin.x, storage->GetFloat(key(kRectSalt + 1), 0.0f) + origin.y);
 				const ImVec2 max(storage->GetFloat(key(kRectSalt + 2), 0.0f) + origin.x, storage->GetFloat(key(kRectSalt + 3), 0.0f) + origin.y);
-				DrawListHighlight(underlay.Background(), min, max, visibility, 0.0f, storage->GetFloat(key(kPressSalt), 0.0f));
+				Surface::DrawListHighlight(underlay.Background(), min, max, visibility, 0.0f, storage->GetFloat(key(kPressSalt), 0.0f));
 			}
 		}
+		if (fullRow)
+			underlay.Background()->PopClipRect();
 		return clicked;
 	}
 

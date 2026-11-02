@@ -24,9 +24,7 @@ namespace
 	constexpr float kChipPadX = 9.0f;
 	/// Icon box inside chips and painted buttons, relative to the font size.
 	constexpr float kChipIconScale = 0.8f;
-	constexpr float kToggleFillAlpha = 0.2f;
 	constexpr float kToggleFillHoveredAlpha = 0.3f;
-	constexpr float kToggleBorderAlpha = 0.65f;
 	constexpr float kTintedChipFillAlpha = 0.14f;
 	constexpr float kTintedChipFillHoveredAlpha = 0.22f;
 	constexpr float kTintedChipBorderAlpha = 0.5f;
@@ -37,9 +35,6 @@ namespace
 	constexpr float kDotRadiusScale = 0.28f;
 	constexpr float kSectionLabelGap = 8.0f;
 	constexpr float kEmptyStateTopPad = 24.0f;
-	constexpr float kInlineBadgeFillAlpha = 0.22f;
-	/// How far an inline badge's label moves from the tint toward the text colour, for legibility.
-	constexpr float kInlineBadgeLabelTowardText = 0.35f;
 
 	ImU32 WithAlpha(const ImVec4& color, float alpha)
 	{
@@ -169,6 +164,7 @@ namespace BrowserUI
 		const float iconBox = ImGui::GetFontSize() * kChipIconScale;
 
 		const bool clicked = ImGui::InvisibleButton(id, ImVec2(MeasureToggleChip(count), height));
+		Util::HoverCursor();
 		const float hover = Util::Anim::ItemBlend(ImGui::GetItemID(), ImGui::IsItemHovered(), false, false).hover;
 		const ImVec2 min = ImGui::GetItemRectMin();
 		const ImVec2 max = ImGui::GetItemRectMax();
@@ -176,8 +172,8 @@ namespace BrowserUI
 		const float rounding = height * 0.5f;
 
 		if (active) {
-			drawList->AddRectFilled(min, max, WithAlpha(tint, kToggleFillAlpha + (kToggleFillHoveredAlpha - kToggleFillAlpha) * hover), rounding);
-			drawList->AddRect(min, max, WithAlpha(tint, kToggleBorderAlpha), rounding, 0, std::max(1.0f, scale));
+			drawList->AddRectFilled(min, max, WithAlpha(tint, ThemeManager::Constants::SELECTED_FILL_ALPHA + (kToggleFillHoveredAlpha - ThemeManager::Constants::SELECTED_FILL_ALPHA) * hover), rounding);
+			drawList->AddRect(min, max, WithAlpha(tint, ThemeManager::Constants::SELECTED_OUTLINE_ALPHA), rounding, 0, std::max(1.0f, scale));
 		} else {
 			drawList->AddRectFilled(min, max, Util::Anim::LerpU32(ImGui::GetColorU32(ImGuiCol_FrameBg), ImGui::GetColorU32(ImGuiCol_FrameBgHovered), hover), rounding);
 		}
@@ -254,15 +250,7 @@ namespace BrowserUI
 	void InlineBadge(const char* label, const ImVec4& tint, float height)
 	{
 		ImGui::SameLine();
-		const ImVec4 text = ImGui::GetStyleColorVec4(ImGuiCol_Text);
-		const ImVec4 bg(tint.x, tint.y, tint.z, kInlineBadgeFillAlpha);
-		const ImVec4 fg(tint.x + (text.x - tint.x) * kInlineBadgeLabelTowardText,
-			tint.y + (text.y - tint.y) * kInlineBadgeLabelTowardText,
-			tint.z + (text.z - tint.z) * kInlineBadgeLabelTowardText, 1.0f);
-		if (height <= 0.0f)
-			height = ImGui::GetFrameHeight();
-		const float width = Util::DrawBadgeAt(ImGui::GetCursorScreenPos(), height, label, bg, fg);
-		ImGui::Dummy(ImVec2(width, height));
+		Util::Badge(label, tint, { .rowHeight = height > 0.0f ? height : ImGui::GetFrameHeight() });
 	}
 
 	bool PaintedIconButton(const char* id, const IconPainter& icon, ImU32 color, const char* tooltip)
@@ -396,7 +384,7 @@ namespace BrowserUI
 			return;
 		const float x0 = ImGui::TableGetCellBgRect(table, table->CurrentColumn).Min.x;
 		ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(x0, table->RowPosY1),
-			ImVec2(x0 + ThemeManager::Constants::ANIM_SELECTED_BAR_WIDTH * Util::GetUIScale(), table->RowPosY1 + rowHeight), color);
+			ImVec2(x0 + Util::Surface::ListHighlightBarWidth(), table->RowPosY1 + rowHeight), color);
 	}
 
 	namespace

@@ -10,6 +10,7 @@
 #include "Menu/ThemeManager.h"
 #include "Shadercache.h"
 #include "State.h"
+#include "Utils/Logging.h"
 
 #include <bit>
 #include <numbers>
@@ -1185,15 +1186,6 @@ namespace
 		DirectX::XMFLOAT4X4 lightTransform{};
 	};
 
-	/** @brief Rate-limits a repeating log: true at most once per LOCAL_SHADOW_LOG_INTERVAL_FRAMES, updating a_lastFrame. */
-	bool ShouldLogThrottled(uint32_t& a_lastFrame, uint32_t a_frame)
-	{
-		if (a_frame - a_lastFrame <= LightLimitFix::LOCAL_SHADOW_LOG_INTERVAL_FRAMES)
-			return false;
-		a_lastFrame = a_frame;
-		return true;
-	}
-
 	/** @brief Typeless parent of a cache format, which is always R16_UNORM or R32_FLOAT. */
 	DXGI_FORMAT GetTypelessCacheFormat(DXGI_FORMAT a_cacheFormat)
 	{
@@ -1770,7 +1762,7 @@ void LightLimitFix::CopyLocalShadowMaps()
 	const uint32_t groups = (localShadowCacheResolution * threadsPerTexel + LOCAL_SHADOW_COPY_GROUP_SIZE - 1) / LOCAL_SHADOW_COPY_GROUP_SIZE;
 
 	bool computeBound = false;
-	static bool loggedMapping = false;
+	static Util::OnceFlag loggedMapping;
 
 	const uint32_t engineSliceCount = std::min(ENGINE_SHADOW_MAP_SLICES, localShadowEngineSlices);
 
@@ -1801,15 +1793,13 @@ void LightLimitFix::CopyLocalShadowMaps()
 			continue;
 
 		if (info.engineSlice >= engineSliceCount) {
-			static uint32_t warnedFrame = 0;
-			if (ShouldLogThrottled(warnedFrame, frame))
+			static Util::FrameThrottle missingSliceLog{ LOCAL_SHADOW_LOG_INTERVAL_FRAMES };
+			if (missingSliceLog.Ready(frame))
 				logger::debug("[LLF] Shadow caster without a usable engine slice (shadowmapIndex {}, maskIndex {}, renderTarget {})", info.engineSlice, info.maskIndex, info.renderTarget);
 			continue;
 		}
-		if (!loggedMapping) {
-			loggedMapping = true;
+		if (loggedMapping.First())
 			logger::info("[LLF] Local shadow slice mapping: shadowmapIndex {}, maskIndex {}, renderTarget {}, parabolic {}, shadowMapCount {}", info.engineSlice, info.maskIndex, info.renderTarget, light->GetIsParabolicLight(), light->shadowMapCount);
-		}
 
 		sliceClaims[info.engineSlice]++;
 		pending.push_back({ light, caster, info });
@@ -1822,8 +1812,8 @@ void LightLimitFix::CopyLocalShadowMaps()
 		const uint32_t engineSlice = info.engineSlice;
 
 		if (sliceClaims[engineSlice] > 1) {
-			static uint32_t collisionFrame = 0;
-			if (ShouldLogThrottled(collisionFrame, frame))
+			static Util::FrameThrottle collisionLog{ LOCAL_SHADOW_LOG_INTERVAL_FRAMES };
+			if (collisionLog.Ready(frame))
 				logger::debug("[LLF] Engine shadow slice {} claimed by {} casters this frame; skipping the copy", engineSlice, sliceClaims[engineSlice]);
 			continue;
 		}

@@ -756,7 +756,7 @@ void PresetsPageRenderer::Open()
 	auto* menu = globals::menu;
 	if (!menu)
 		return;
-	menu->IsEnabled = true;
+	menu->Open();
 	menu->SelectFeatureMenu(std::string(MenuPageIds::kPresets));
 }
 

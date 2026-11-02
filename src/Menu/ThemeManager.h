@@ -239,8 +239,10 @@ public:
 		static constexpr float LIST_HIGHLIGHT_PRESS_DARKEN = 0.85f;      // Extra colour multiplier while the row is pressed
 		static constexpr float LIST_HIGHLIGHT_PRESS_BOOST = 1.5f;        // Strength multiplier while pressed
 		static constexpr float LIST_HIGHLIGHT_SNAP_ROWS = 6.0f;          // A move of more rows than this appears at the target instead of gliding
-		static constexpr float SEGMENT_SELECTED_FILL_ALPHA = 0.22f;      // ... selected pill accent fill alpha
-		static constexpr float SEGMENT_SELECTED_OUTLINE_ALPHA = 0.7f;    // ... selected pill accent outline alpha
+		static constexpr float LIST_HIGHLIGHT_BAR_INSET = 0.2f;          // Accent bar inset from the row's top and bottom, as a share of its height
+		static constexpr float SELECTED_FILL_ALPHA = 0.2f;               // Fill alpha of a selected pill or chip
+		static constexpr float SELECTED_OUTLINE_ALPHA = 0.7f;            // ... its outline alpha
+		static constexpr float HOVER_FILL_ALPHA = 0.06f;                 // Hovered row fill, as a share of the text colour
 		static constexpr float STATUS_DOT_RATIO = 0.12f;                 // Radius of an accent status dot, per frame height
 		static constexpr float AUTOHIDE_PANEL_WIDTH_RATIO = 0.2f;        // Auto-hide list width as a share of the pane (the pinned list's column ratio)
 		static constexpr float AUTOHIDE_PANEL_MIN_WIDTH = 240.0f;        // ... never narrower than this
@@ -265,9 +267,6 @@ public:
 		static constexpr float PALETTE_HEIGHT_RATIO = 0.6f;         // Palette height as a share of the viewport
 		static constexpr size_t PALETTE_MAX_RESULTS = 200;          // Results listed for a query or scope
 		static constexpr size_t PALETTE_RECENT_COUNT = 8;           // Recent picks remembered for the empty query
-		static constexpr float PALETTE_BADGE_PAD_X = 6.0f;          // Horizontal padding inside a type badge
-		static constexpr float PALETTE_BADGE_ROUNDING = 4.0f;       // Type badge corner radius
-		static constexpr float PALETTE_BADGE_FILL_ALPHA = 0.22f;    // Type badge fill opacity
 		static constexpr float PALETTE_ROW_PAD_Y = 4.0f;            // Vertical padding of a result row
 		static constexpr float PALETTE_TOAST_SECONDS = 4.0f;        // How long the "Look under" toast stays
 		static constexpr float PALETTE_MIN_FILL_ALPHA = 0.97f;      // Palette panel fill opacity floor, so the menu behind never shows through
@@ -275,12 +274,7 @@ public:
 		static constexpr float PALETTE_GAP = 8.0f;                  // Space between the palette's field, scope row, list and footer
 		static constexpr float PALETTE_FIELD_HEIGHT_RATIO = 1.6f;   // Search field height as a multiple of a frame height
 		static constexpr float PALETTE_FIELD_PAD_X = 12.0f;         // Space left of the search glyph
-		static constexpr float PALETTE_FIELD_INSET = 6.0f;          // Space around the sort button inside the field
 		static constexpr float PALETTE_FIELD_BORDER_ALPHA = 0.55f;  // Accent border opacity of the focused search field
-		static constexpr float PALETTE_ROW_ROUNDING = 8.0f;         // Result row highlight corner radius
-		static constexpr float PALETTE_ROW_RATE = 26.0f;            // How fast the row highlight glides between rows, per second
-		static constexpr float PALETTE_SELECT_FILL_ALPHA = 0.14f;   // Selected row accent fill opacity
-		static constexpr float PALETTE_HOVER_FILL_ALPHA = 0.06f;    // Hovered row fill opacity
 		static constexpr float PALETTE_HEADER_PAD_Y = 6.0f;         // Vertical padding of a group header
 		static constexpr float PALETTE_KEYCAP_PAD_X = 6.0f;         // Horizontal padding inside a keycap
 		static constexpr float PALETTE_KEYCAP_FILL_ALPHA = 0.10f;   // Keycap fill opacity
@@ -290,7 +284,6 @@ public:
 		static constexpr float PALETTE_DIMMED_ALPHA = 0.5f;         // Opacity multiplier for rows of features that are not loaded
 		static constexpr float PALETTE_EMPTY_DISC_Y = 0.3f;         // Empty-state disc centre as a share of the list height
 		static constexpr float PALETTE_SEARCH_GLYPH_RATIO = 1.5f;   // Search glyph slot width as a multiple of the line height
-		static constexpr float PALETTE_SELECT_BAR_INSET = 0.2f;     // Selected-row accent bar inset from the row's top and bottom, as a share of its height
 		static constexpr float REVEAL_HIGHLIGHT_SECONDS = 1.0f;     // How long a revealed setting stays outlined
 		static constexpr float REVEAL_EXPIRY_SECONDS = 3.0f;        // A reveal request older than this is dropped
 		static constexpr float REVEAL_SCROLL_RATIO = 0.3f;          // Where in the view a revealed control lands (0 top, 1 bottom)
@@ -370,7 +363,6 @@ public:
 		static constexpr float ANIM_SPEED_MAX = 2.0f;
 		static constexpr float ANIM_PULSE_PERIOD = 2.6f;        // Seconds per attention pulse
 		static constexpr float ANIM_PULSE_AMPLITUDE = 0.25f;    // Attention pulse swing, as a share of full alpha
-		static constexpr float NAV_SELECTED_BAR_INSET = 0.2f;   // Accent bar inset from the row's top and bottom, as a share of its height (nav and palette rows)
 		static constexpr float ANIM_SELECTED_BAR_WIDTH = 3.0f;  // Accent bar on the left edge of a selected row: nav, palette, editor lists (1080p baseline)
 
 		// Flat surfaces (Util::Surface): one subtle step above the window colour, a hairline border, one soft shadow when floating
@@ -381,7 +373,7 @@ public:
 		static constexpr float SURFACE_SHADOW_OFFSET_X = 0.0f;     // Shadow sideways shift (1080p baseline)
 		static constexpr float SURFACE_SHADOW_OFFSET_Y = 2.0f;     // Shadow drop (1080p baseline)
 		static constexpr float SURFACE_SHADOW_OFFSET_MAX = 16.0f;  // Shadow offset range either way, each axis (1080p baseline)
-		static constexpr float NAV_SELECTED_FILL_ALPHA = 0.14f;    // Accent fill behind a selected nav or palette row
+		static constexpr float LIST_HIGHLIGHT_FILL_ALPHA = 0.14f;  // Accent fill behind a highlighted list row
 
 		// Tinted control frame: marks where a value comes from (inherited, or a scene override's winning layer)
 		static constexpr float TINTED_FRAME_BG_ALPHA = 0.25f;
@@ -491,7 +483,6 @@ public:
 		static constexpr ImVec4 CSE_PALETTE_EMPTY_SLOT_COLOR{ 0.2f, 0.2f, 0.2f, 1.0f };        // Empty favourite slot fill
 		static constexpr ImVec4 CSE_PALETTE_EMPTY_STAR_COLOR{ 0.627f, 0.627f, 0.627f, 1.0f };  // Empty favourite slot star outline
 		static constexpr float CSE_TITLE_APPLY_FILL_ALPHA = 0.6f;                              // Fill alpha of the text-only Apply title-bar action
-		static constexpr float CSE_LP_BADGE_ALPHA = 0.22f;                                     // Fill alpha of the LP badge in the light list
 		static constexpr float CSE_WEATHER_COLOR_PICKER_WIDTH = 225.0f;                        // Weather colour/form picker width, before UI scale
 		static constexpr float CSE_CLOUD_PREVIEW_SIZE = 128.0f;                                // Cloud texture preview edge, before UI scale
 		static constexpr float CSE_PICKER_ITEM_SPACING = 4.0f;                                 // Weather picker item spacing, before UI scale
