@@ -258,5 +258,6 @@ public:
 	std::string selectedPbrMaterialObjectName;
 	PBRMaterialObjectData* selectedPbrMaterialObject = nullptr;
 
-	RE::BGSTextureSet* currentTextureSet = nullptr;
+	inline static thread_local RE::BGSTextureSet* currentTextureSet = nullptr;
+	inline static thread_local RE::NiPointer<RE::BSShaderTextureSet> currentShaderTextureSet;
 };
