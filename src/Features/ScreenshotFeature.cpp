@@ -529,10 +529,11 @@ namespace
 		constexpr size_t kChunkOverhead = 12;  // length + type + CRC
 
 		std::error_code ec;
-		std::string data(std::filesystem::file_size(path, ec), '\0');
+		const auto fileSize = std::filesystem::file_size(path, ec);
 		if (ec) {
 			return false;
 		}
+		std::string data(fileSize, '\0');
 		{
 			std::ifstream file(path, std::ios::binary);
 			if (!file.read(data.data(), static_cast<std::streamsize>(data.size()))) {
