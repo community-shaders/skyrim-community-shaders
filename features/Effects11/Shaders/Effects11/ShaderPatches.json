@@ -8,7 +8,7 @@
             },
             {
                 "find": "color.xyz = color + bloom - color * bloom;",
-                "replace": "color.xyz = color.xyz + bloom * saturate(1.0 - color.xyz);"
+                "replace": "color.xyz = color.xyz + bloom * max(0.0, 1.0 - color.xyz);"
             }
         ]
     },
