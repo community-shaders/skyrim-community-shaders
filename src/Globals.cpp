@@ -24,6 +24,7 @@
 #include "Features/LinearLighting.h"
 #include "Features/PerformanceOverlay.h"
 #include "Features/PostProcessing.h"
+#include "Features/ProceduralAurora.h"
 #include "Features/RainRefraction.h"
 #include "Features/RemoteControl.h"
 #include "Features/RenderDoc.h"
@@ -104,6 +105,7 @@ namespace globals
 		Skin skin{};
 		SceneManager sceneManager{};
 		PostProcessing postProcessing{};
+		ProceduralAurora proceduralAurora{};
 
 		namespace llf
 		{
