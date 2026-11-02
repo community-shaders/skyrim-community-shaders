@@ -52,6 +52,9 @@ static const float PI = 3.14159265358979323846;
 
 groupshared float2 gs_buffer[FFT_SIZE];
 groupshared float2 gs_twiddle[FFT_SIZE / 2];
+#if defined(ROW_PASS) && defined(FORWARD)
+groupshared uint gs_nonzero;
+#endif
 
 float2 ComplexMul(float2 a, float2 b)
 {
@@ -74,6 +77,12 @@ float2 Twiddle(uint k, uint N)
 	const uint N = FFT_SIZE;
 	uint bits = firstbithigh(N);
 
+#if defined(ROW_PASS) && defined(FORWARD)
+	if (threadIdx == 0)
+		gs_nonzero = 0;
+	GroupMemoryBarrierWithGroupSync();
+	uint nonzero = 0;
+#endif
 	[unroll] for (uint i = 0; i < 2; ++i)
 	{
 		uint index = threadIdx + i * (FFT_SIZE / 2);
@@ -83,10 +92,31 @@ float2 Twiddle(uint k, uint N)
 		uint2 pos = uint2(groupId.x, index);
 #endif
 		uint rev = reversebits(index) >> (32 - bits);
-		gs_buffer[rev] = TexInput[pos];
+		float2 value = TexInput[pos];
+#if defined(ROW_PASS) && defined(FORWARD)
+		nonzero |= asuint(value.x) | asuint(value.y);
+#endif
+		gs_buffer[rev] = value;
 	}
+#if defined(ROW_PASS) && defined(FORWARD)
+	if (nonzero != 0)
+		InterlockedOr(gs_nonzero, 1u);
+#endif
 	gs_twiddle[threadIdx] = Twiddle(threadIdx, N);
 	GroupMemoryBarrierWithGroupSync();
+
+#if defined(ROW_PASS) && defined(FORWARD)
+	// An all-zero row transforms to zero. Sync after reading the flag so the early-out stays
+	// uniform for the barriers below.
+	const bool emptyRow = gs_nonzero == 0;
+	GroupMemoryBarrierWithGroupSync();
+	[branch] if (emptyRow)
+	{
+		RWTexOutput[uint2(threadIdx, groupId.x)] = 0.0f.xx;
+		RWTexOutput[uint2(threadIdx + FFT_SIZE / 2, groupId.x)] = 0.0f.xx;
+		return;
+	}
+#endif
 
 	[unroll] for (uint stage = 1; stage < N; stage <<= 1)
 	{

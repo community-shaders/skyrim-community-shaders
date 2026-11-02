@@ -145,15 +145,9 @@ void WeatherPickerWindow::DrawContents()
 	}
 
 	ImGui::SameLine(0.0f, ThemeManager::Constants::CSE_PICKER_ITEM_SPACING * scale);
-	const float iconSize = ImGui::GetFrameHeight();
-	ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0.0f, 0.0f));
-	{
-		auto _style = Util::TransparentIconButtonStyle();
-		if (Icons::Button("##WeatherPickerWindowReset", Icons::TI(MenuIcons::kRestore), ImVec2(iconSize, iconSize)))
-			CSEditor::ResetWeatherToDefault(sky);
-	}
-	ImGui::PopStyleVar();
-	Util::AddTooltip(T(TKEY("reset_weather_tooltip"), "Resets weather to default"));
+	const float iconSize = Util::IconButtonSize();
+	if (Util::IconButton("##WeatherPickerWindowReset", Icons::TI(MenuIcons::kRestore), T(TKEY("reset_weather_tooltip"), "Resets weather to default")))
+		CSEditor::ResetWeatherToDefault(sky);
 
 	CSEditor::DrawWeatherTransitionBar(sky, comboWidth + ThemeManager::Constants::CSE_PICKER_ITEM_SPACING * scale + iconSize, false);
 

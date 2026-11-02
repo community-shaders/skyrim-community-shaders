@@ -2,6 +2,7 @@
 
 #include "CursorLoader.h"
 #include "Menu.h"
+#include "Utils/Logging.h"
 
 namespace Util::CursorLoader
 {
@@ -118,15 +119,13 @@ namespace Util::CursorLoader
 		}
 
 		auto* device = globals::d3d::device;
-		static bool loggedMissingDevice = false;
+		static Util::OnceFlag loggedMissingDevice;
 		if (!device) {
-			if (!loggedMissingDevice) {
+			if (loggedMissingDevice.First())
 				logger::warn("CursorLoader::Reload: D3D device is null; will retry when available");
-				loggedMissingDevice = true;
-			}
 			return false;
 		}
-		loggedMissingDevice = false;
+		loggedMissingDevice.Reset();
 
 		MigrateLegacyCursorSettings(menu->GetSettings().Theme);
 		const auto& theme = menu->GetSettings().Theme;

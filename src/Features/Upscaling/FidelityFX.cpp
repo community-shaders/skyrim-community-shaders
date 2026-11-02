@@ -282,13 +282,9 @@ void FidelityFX::CreateFSRResources()
 	contextDescription.maxUpscaleSize.height = displayHeight;
 	contextDescription.displaySize.width = displayWidth;
 	contextDescription.displaySize.height = displayHeight;
-	contextDescription.flags = FFX_FSR3_ENABLE_UPSCALING_ONLY | FFX_FSR3_ENABLE_AUTO_EXPOSURE;
-	if (globals::features::hdrDisplay.loaded) {
-		contextDescription.flags |= FFX_FSR3_ENABLE_HIGH_DYNAMIC_RANGE;
-		contextDescription.backBufferFormat = FFX_SURFACE_FORMAT_R10G10B10A2_UNORM;
-	} else {
-		contextDescription.backBufferFormat = FFX_SURFACE_FORMAT_R8G8B8A8_UNORM;
-	}
+	// FSR upscales kMAIN before the tonemap, so its input is HDR radiance whatever the display mode
+	contextDescription.flags = FFX_FSR3_ENABLE_UPSCALING_ONLY | FFX_FSR3_ENABLE_AUTO_EXPOSURE | FFX_FSR3_ENABLE_HIGH_DYNAMIC_RANGE;
+	contextDescription.backBufferFormat = globals::features::hdrDisplay.loaded ? FFX_SURFACE_FORMAT_R10G10B10A2_UNORM : FFX_SURFACE_FORMAT_R8G8B8A8_UNORM;
 	contextDescription.backendInterfaceUpscaling = fsrInterface;
 
 	if (ffxFsr3ContextCreate(&fsrContext[0], &contextDescription) != FFX_OK) {
@@ -313,7 +309,7 @@ void FidelityFX::DestroyFSRResources()
 	}
 
 	// Reset crash logging flag when resources are destroyed
-	fsrDispatchCrashLogged = false;
+	fsrDispatchCrashLogged.Reset();
 }
 
 FfxResource ffxGetResource(ID3D11Resource* dx11Resource,
@@ -383,10 +379,8 @@ void FidelityFX::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_r
 		if (ffxFsr3ContextDispatchUpscale(&fsrContext[0], &dispatchParameters) != FFX_OK)
 			logger::critical("[FidelityFX] Failed to dispatch upscaling!");
 	} __except (EXCEPTION_EXECUTE_HANDLER) {
-		if (!fsrDispatchCrashLogged) {
+		if (fsrDispatchCrashLogged.First())
 			logger::critical("[FidelityFX] FSR3 dispatch crashed - this may be caused by RenderDoc capture interfering with FSR operations. Try disabling RenderDoc capture.");
-			fsrDispatchCrashLogged = true;
-		}
 	}
 
 	if (state->frameAnnotations)

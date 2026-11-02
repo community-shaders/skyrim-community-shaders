@@ -837,7 +837,7 @@ void WetnessEffects::Reset()
 {
 	// Not in GetCommonBufferData: the feature buffer is rebuilt several times per frame (see Deferred).
 	if (globals::game::ui && !globals::game::ui->GameIsPaused())
-		rainTimer += (size_t)(RE::GetSecondsSinceLastFrame() * 1000);  // BSTimer::delta is always 0 for some reason
+		rainTimer += (size_t)(RE::GetSecondsSinceLastFrame() * 1000000);  // BSTimer::delta is always 0 for some reason
 }
 
 WetnessEffects::PerFrame WetnessEffects::GetCommonBufferData() const
@@ -924,7 +924,7 @@ WetnessEffects::PerFrame WetnessEffects::GetCommonBufferData() const
 		}
 	}
 
-	data.Time = rainTimer / 1000.f;
+	data.Time = static_cast<float>(static_cast<double>(rainTimer) / 1000000.0);
 
 	data.settings = settings;
 	data.settings.MaxShoreWetness = settings.EnableWetnessEffects ? settings.MaxShoreWetness : 0.0f;

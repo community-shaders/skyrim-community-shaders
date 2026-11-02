@@ -110,7 +110,7 @@ public:
 		float2 RcpTexDim;  //
 		float2 FrameDim;
 		float2 RcpFrameDim;  //
-		uint FrameIndex;
+		float pad0;
 
 		uint NumSlices;
 		uint NumSteps;

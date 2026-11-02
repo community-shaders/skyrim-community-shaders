@@ -108,7 +108,7 @@ namespace CinematicCamera
 	RE::NiPoint3 FocusResolver::GetReferenceFocusPosition(RE::TESObjectREFR* a_ref)
 	{
 		RE::NiPoint3 targetPosition = a_ref->GetPosition();
-		if (a_ref->GetFormType() == RE::FormType::ActorCharacter) {
+		if (a_ref->IsActor()) {
 			auto head = a_ref->GetNodeByName("NPC Head [Head]");
 			if (head)
 				targetPosition = head->world.translate;

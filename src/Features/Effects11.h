@@ -52,17 +52,19 @@ public:
 		float CloudsEdgeMoonMultiplier;
 
 		uint EnableProceduralSun;
-		float ProceduralSunDiskRadiusSq;
-		float ProceduralSunDiskEdgeScale;
-		float ProceduralSunGlowIntensity;
+		float ProceduralSunDiskCos;
+		float ProceduralSunDiskRadiance;
+		float ProceduralSunEdgeSoftness;
 
-		float ProceduralSunCoronaFalloff;
-		float ProceduralSunCoronaScale;
+		float ProceduralSunHaloCos;
+		float ProceduralSunHaloIntensity;
 		uint UseProceduralGradientWeights;
 		float ProceduralGradientWeightCurve;
 
 		float LightSpriteCurve;
-		float pad1[3];
+		float ProceduralSunHaloFalloff;
+		float ProceduralSunRadianceLimit;
+		float pad1;
 
 		float ParticleIntensity;
 		float ParticleLightingInfluence;
@@ -221,6 +223,8 @@ public:
 	float3 scatteringSunColor = { 1.0f, 1.0f, 1.0f };
 	/** @brief Sun direction used for sky scattering; mirrored below the horizon while the sun disc is hidden. */
 	float3 scatteringSunDirection = { 0.0f, 0.0f, 1.0f };
+	/** @brief Angular radius of the [PROCEDURALSUN] disc, in radians; the adaptation sun mask covers it. */
+	float proceduralSunAngularRadius = 0.0f;
 	/** @brief Per-channel sunlight before over after the [ENVIRONMENT] direct lighting grade, from the last OverrideWeather. */
 	float3 directLightingUngradeScale = { 1.0f, 1.0f, 1.0f };
 
@@ -259,6 +263,13 @@ public:
 		RE::NiColor directionalAmbientColors[3][2];
 	};
 	void OverrideAmbientLighting(DirectionalAmbientColors& DirectionalAmbientColors);
+	/**
+	 * @brief During a transition between weathers with different presets, rescales the graded ambient cube towards
+	 * the blend of each weather graded by its own preset values.
+	 * @param a_sky The sky whose directional ambient cube a_graded was graded from.
+	 * @param a_graded Ambient colours already graded at the blended preset values; corrected in place.
+	 */
+	void BlendGradedAmbient(RE::Sky* a_sky, DirectionalAmbientColors& a_graded);
 
 	void ModifySky(RE::BSRenderPass* Pass);
 	/**
@@ -282,6 +293,13 @@ public:
 	bool ReplacedTonemapperThisFrame() const;
 
 private:
+	/**
+	 * @brief Grades the weather colours in place with the current preset values.
+	 * @return The sun scattering tint (scatteringSunColor unchanged when the effect is off).
+	 */
+	float3 GradeSkyColors(std::span<RE::NiColor, RE::TESWeather::ColorTypes::kTotal> a_colors) const;
+	/** @brief Per-weather counterpart of BlendGradedAmbient for the sky colours graded by GradeSkyColors. */
+	void BlendGradedWeathers(RE::Sky* a_sky, std::span<RE::NiColor, RE::TESWeather::ColorTypes::kTotal> a_graded) const;
 	bool presetActive = false;
 	bool resourcesReady = false;
 	/** @brief Creates the additive blend state shared by the ray passes on first use; false if creation failed. */

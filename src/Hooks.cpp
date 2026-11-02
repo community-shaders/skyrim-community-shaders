@@ -113,8 +113,8 @@ struct BSShader_LoadShaders
 
 		auto state = globals::state;
 		auto shaderCache = globals::shaderCache;
-		if (shaderCache->IsDiskCache() || shaderCache->IsDump()) {
-			if (shaderCache->IsDiskCache()) {
+		if ((shaderCache->IsDiskCache() && !shaderCache->backgroundCompilation) || shaderCache->IsDump()) {
+			if (shaderCache->IsDiskCache() && !shaderCache->backgroundCompilation) {
 				Feature::ForEachLoadedFeature("GenerateShaderPermutations", [shader](Feature* feature) {
 					feature->GenerateShaderPermutations(shader);
 				});
@@ -133,7 +133,7 @@ struct BSShader_LoadShaders
 				auto pixelShaderDescriptor = entry->id;
 				NormalizeLegacyUtilityDescriptors(*shader, vertexShaderDesriptor, pixelShaderDescriptor);
 				state->ModifyShaderLookup(*shader, vertexShaderDesriptor, pixelShaderDescriptor);
-				shaderCache->GetVertexShader(*shader, vertexShaderDesriptor);
+				shaderCache->GetVertexShader(*shader, vertexShaderDesriptor, true);
 			}
 			for (const auto& entry : shader->pixelShaders) {
 				if (entry->shader && shaderCache->IsDump()) {
@@ -147,19 +147,20 @@ struct BSShader_LoadShaders
 				auto pixelShaderDescriptor = entry->id;
 				NormalizeLegacyUtilityDescriptors(*shader, vertexShaderDesriptor, pixelShaderDescriptor);
 				state->ModifyShaderLookup(*shader, vertexShaderDesriptor, pixelShaderDescriptor);
-				shaderCache->GetPixelShader(*shader, pixelShaderDescriptor);
+				shaderCache->GetPixelShader(*shader, pixelShaderDescriptor, true);
 				state->ModifyShaderLookup(*shader, vertexShaderDesriptor, pixelShaderDescriptor, true);
-				shaderCache->GetPixelShader(*shader, pixelShaderDescriptor);
+				shaderCache->GetPixelShader(*shader, pixelShaderDescriptor, true);
 			}
 
 			if (shaderCache->IsDiskCache() && shader->shaderType.get() == RE::BSShader::Type::Effect) {
 				constexpr auto sharedRuntimeUnionDescriptor =
 					static_cast<std::uint32_t>(SIE::ShaderCache::EffectShaderFlags::MultBlend) |
 					static_cast<std::uint32_t>(SIE::ShaderCache::EffectShaderFlags::MotionVectorsNormals);
-				shaderCache->GetPixelShader(*shader, sharedRuntimeUnionDescriptor);
+				shaderCache->GetPixelShader(*shader, sharedRuntimeUnionDescriptor, true);
 				shaderCache->GetPixelShader(*shader,
 					sharedRuntimeUnionDescriptor |
-						static_cast<std::uint32_t>(SIE::ShaderCache::EffectShaderFlags::Deferred));
+						static_cast<std::uint32_t>(SIE::ShaderCache::EffectShaderFlags::Deferred),
+					true);
 			}
 		}
 		BSShaderHooks::hk_LoadShaders(shader, stream);
@@ -414,6 +415,8 @@ namespace WeatherExtensions
 					// compound on every call Sky has not recomputed colors for.
 					Effects11::DirectionalAmbientColors overridden = DirectionalAmbientColors;
 					globals::features::effects11.OverrideAmbientLighting(overridden);
+					if (auto* sky = globals::game::sky; sky && &DirectionalAmbientColors.directionalAmbientColors[0][0] == &sky->directionalAmbientColors[0][0])
+						globals::features::effects11.BlendGradedAmbient(sky, overridden);
 					func(overridden, AmbientSpecularTint, AmbientSpecularFresnel);
 					return;
 				}
