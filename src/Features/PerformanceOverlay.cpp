@@ -299,7 +299,7 @@ void PerformanceOverlay::DrawOverlay()
 	ImGuiWindowFlags windowFlags = ImGuiWindowFlags_NoDecoration;
 
 	// Only allow mouse interaction when the main menu is open
-	if (!menu->IsEnabled) {
+	if (!menu->IsOpen()) {
 		windowFlags |= ImGuiWindowFlags_NoInputs;
 	}
 

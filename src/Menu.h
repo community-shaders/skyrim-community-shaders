@@ -124,10 +124,16 @@ public:
 	}
 
 	bool initialized = false;
-	bool IsEnabled = false;
-	float openFade = 0.0f;  // 0 = closed, 1 = fully open; eased toward IsEnabled each frame
 
-	/** @brief Eases openFade toward IsEnabled, or snaps to it when the menu fade setting is off. */
+	/** @brief Whether the main menu is open. */
+	bool IsOpen() const { return open; }
+	/** @brief Opens the main menu. */
+	void Open();
+	/** @brief Closes the main menu and saves the State::SELF_SAVING_SETTINGS that changed. */
+	void Close();
+	float openFade = 0.0f;  // 0 = closed, 1 = fully open; eased toward IsOpen() each frame
+
+	/** @brief Eases openFade toward IsOpen(), or snaps to it when the menu fade setting is off. */
 	void UpdateOpenFade(float deltaTime);
 
 	/** @brief Loads menu settings from JSON, including legacy migration */
@@ -602,6 +608,9 @@ private:
 	// Skyrim AFK vanity camera: delayed spin while idle. Held off while any CS UI is open.
 	bool vanityCameraDisabled = false;
 	float savedVanityCameraDelay = 180.0f;
+
+	/// Changed only through Open() and Close(), so a close always saves.
+	bool open = false;
 
 	Menu() = default;
 

@@ -345,7 +345,7 @@ void Effects11Editor::Open(bool a_returnToMenu)
 	popupOpenLastFrame = false;
 	RefreshPresetPaths();
 	open.store(true, std::memory_order_relaxed);
-	globals::menu->IsEnabled = false;
+	globals::menu->Close();
 }
 
 void Effects11Editor::Close(bool a_restoreMenu)
@@ -354,7 +354,7 @@ void Effects11Editor::Close(bool a_restoreMenu)
 		return;
 	pendingAction = PendingAction::None;
 	if (a_restoreMenu && returnToMenu)
-		globals::menu->IsEnabled = true;
+		globals::menu->Open();
 	returnToMenu = false;
 }
 
@@ -363,7 +363,7 @@ void Effects11Editor::Toggle()
 	if (IsOpen())
 		Close();
 	else
-		Open(globals::menu->IsEnabled);
+		Open(globals::menu->IsOpen());
 }
 
 bool Effects11Editor::ShouldHandleEscapeKey()

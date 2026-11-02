@@ -1428,8 +1428,8 @@ void EditorWindow::UpdateOpenState()
 		BackgroundBlur::SetCSEditorActive(IsViewportActive());
 		overlayWeatherLockPending = true;
 		Effects11Editor::GetSingleton().Close();  // Restores the menu first so returnToMenu below records it.
-		returnToMenu = globals::menu->IsEnabled;
-		globals::menu->IsEnabled = false;
+		returnToMenu = globals::menu->IsOpen();
+		globals::menu->Close();
 
 	} else if (!open && wasOpen) {
 		lightEditor.ResetOverrides();
@@ -1437,7 +1437,7 @@ void EditorWindow::UpdateOpenState()
 		BackgroundBlur::SetCSEditorActive(false);
 		Effects11Editor::GetSingleton().Close(false);
 		if (std::exchange(returnToMenu, false))
-			globals::menu->IsEnabled = true;
+			globals::menu->Open();
 		overlayWeatherLockPending = false;
 		if (weatherLockedByOverlay) {
 			UnlockWeather();
