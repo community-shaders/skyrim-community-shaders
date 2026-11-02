@@ -184,8 +184,8 @@ namespace Util::Anim
 	 * own fill and accent bar in place; the hover highlight is one shape per list that glides after the mouse, darkens
 	 * while pressed, and fades out where it is when the mouse is over nothing clickable. ImGui's own hover and selected
 	 * fills are hidden so nothing doubles up. Rows of one list are the
-	 * Selectables of one window, so every list gets it with no opt-in. Hooked into ImGui::Selectable (see UIHooks);
-	 * passes straight through while UI animations are off.
+	 * Selectables of one window, so every list gets it with no opt-in. Hooked into ImGui::Selectable (see UIHooks).
+	 * Full-width rows highlight edge to edge; text rows are indented clear of the accent bar, even with animations off.
 	 */
 	bool GlideSelectable(SelectableFn real, const char* label, bool selected, ImGuiSelectableFlags flags, const ImVec2& size);
 

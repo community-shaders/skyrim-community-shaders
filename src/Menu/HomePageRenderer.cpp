@@ -316,15 +316,15 @@ namespace
 		const float clearX = ImGui::GetWindowWidth() - style.WindowPadding.x - buttonSize;
 		ImGui::SameLine();
 		// The buttons are taller than the status text; centre them on its ink rather than hanging below it
-		ImGui::SetCursorPosY(ImGui::GetCursorPosY() + Util::GetTextInkCenterY() - buttonSize * 0.5f);
+		const float buttonY = ImGui::GetCursorPosY() + Util::GetTextInkCenterY() - buttonSize * 0.5f;
 		// Developer mode: the test scene button sits just left of the clear-cache icon
 		if (globals::state->IsDeveloperMode()) {
-			ImGui::SetCursorPosX(clearX - style.ItemSpacing.x - buttonSize);
+			ImGui::SetCursorPos(ImVec2(clearX - style.ItemSpacing.x - buttonSize, buttonY));
 			if (MenuHeaderRenderer::GlyphIconButton("##HomeTestConditions", Icons::TI(MenuIcons::kTestScene), box, AdvancedSettingsRenderer::GetTestConditionsTooltip()))
 				AdvancedSettingsRenderer::RunTestConditions();
 			ImGui::SameLine();
 		}
-		ImGui::SetCursorPosX(clearX);
+		ImGui::SetCursorPos(ImVec2(clearX, buttonY));
 		const char* tooltip = T("menu.home.clear_cache_tooltip", "Clear shader cache...");
 		bool clicked;
 		if (auto* texture = globals::menu->GetUIIcons().clearCache.texture) {

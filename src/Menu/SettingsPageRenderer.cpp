@@ -18,6 +18,7 @@
 #include "ThemeManager.h"
 #include "Utils/UI.h"
 #include "Utils/UIAnim.h"
+#include "Utils/UISurface.h"
 
 namespace
 {
@@ -184,12 +185,8 @@ namespace
 	{
 		ImGui::Spacing();
 
-		// Same insets as the feature list: rows clear the selected row's accent bar and their highlight spans the pane;
-		// group labels sit where its category headers do
-		const ImGuiStyle& style = ImGui::GetStyle();
-		const float barWidth = ThemeManager::Constants::ANIM_SELECTED_BAR_WIDTH * Util::GetUIScale();
-		const float rowInset = std::max(style.FramePadding.x, barWidth);
-		const float labelInset = std::max(style.ItemInnerSpacing.x, barWidth);
+		// Group labels sit where the feature list's category headers do
+		const float labelInset = std::max(ImGui::GetStyle().ItemInnerSpacing.x, Util::Surface::ListHighlightBarWidth());
 
 		const float groupSpacing = ThemeManager::Constants::SETTINGS_NAV_GROUP_SPACING * Util::GetUIScale();
 		const Group* currentGroup = nullptr;
@@ -203,8 +200,7 @@ namespace
 			}
 
 			ImGui::PushID(section.id.data(), section.id.data() + section.id.size());
-			ImGui::SetCursorPosX(ImGui::GetCursorPosX() + rowInset);
-			if (Util::Selectable(GetSectionTitle(section.id), state.section == section.id, ImGuiSelectableFlags_SpanAllColumns))
+			if (Util::Selectable(GetSectionTitle(section.id), state.section == section.id))
 				state.section = std::string(section.id);
 			ImGui::PopID();
 		}

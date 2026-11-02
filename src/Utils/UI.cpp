@@ -412,8 +412,8 @@ namespace Util
 		if (selected >= 0 && selected < count) {
 			const float top = trackMin.y + pad;
 			const auto pill = Anim::SelectionGlide(ImGui::GetID("##pill"), ImVec2(xs[selected], top), ImVec2(xs[selected] + widths[selected], top + itemHeight));
-			drawList->AddRectFilled(pill.min, pill.max, ImGui::GetColorU32(Anim::ScaleAlpha(accent, C::SEGMENT_SELECTED_FILL_ALPHA * pillAlpha)), pillRounding);
-			drawList->AddRect(pill.min, pill.max, ImGui::GetColorU32(Anim::ScaleAlpha(accent, C::SEGMENT_SELECTED_OUTLINE_ALPHA * pillAlpha)), pillRounding);
+			drawList->AddRectFilled(pill.min, pill.max, ImGui::GetColorU32(Anim::ScaleAlpha(accent, C::SELECTED_FILL_ALPHA * pillAlpha)), pillRounding);
+			drawList->AddRect(pill.min, pill.max, ImGui::GetColorU32(Anim::ScaleAlpha(accent, C::SELECTED_OUTLINE_ALPHA * pillAlpha)), pillRounding);
 		}
 
 		const ImVec4 textColor = ImGui::GetStyleColorVec4(ImGuiCol_Text);
@@ -435,18 +435,19 @@ namespace Util
 
 			ImGui::SetCursorScreenPos(min);
 			ImGui::PushID(i);
+			ImGui::BeginDisabled(segment.disabled);
 			if (ImGui::InvisibleButton("##segment", ImVec2(widths[i], itemHeight), ImGuiButtonFlags_EnableNav))
 				clicked = i;
-			const bool hovered = ImGui::IsItemHovered();
+			ImGui::EndDisabled();
+			HoverCursor();
+			const bool hovered = ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled);
 			if (segment.tooltip)
-				AddTooltip(segment.tooltip);
+				AddTooltip(segment.tooltip, kTooltipWhenDisabled);
 			else if (const char* labelEnd = ImGui::FindRenderedTextEnd(segment.label); iconOnly && hovered && labelEnd != segment.label)
 				ImGui::SetTooltip("%.*s", static_cast<int>(labelEnd - segment.label), segment.label);
 			const float chosen = Anim::Toggle(ImGui::GetItemID(), i == selected) * pillAlpha;
 			const float hover = Anim::Toggle(ImGui::GetID("hover"), hovered && !segment.disabled);
 			ImGui::PopID();
-			if (hovered)
-				ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
 
 			const ImVec4 labelColor = segment.disabled ? Anim::ScaleAlpha(dimColor, style.DisabledAlpha) : Anim::Lerp(dimColor, textColor, std::max(chosen, hover * C::LIST_HIGHLIGHT_HOVER_RATIO));
 
@@ -672,37 +673,32 @@ namespace Util
 		return ImGui::CalcTextSize(a_label).x + kBadgePadX * GetUIScale() * 2.0f;
 	}
 
-	float DrawBadgeAt(ImVec2 a_min, float a_rowHeight, const char* a_label, const ImVec4& a_bg, const ImVec4& a_fg,
-		ImDrawList* a_drawList)
+	float Badge(const char* a_label, const ImVec4& a_tint, const BadgeOptions& a_options)
 	{
-		if (!a_drawList)
-			a_drawList = ImGui::GetWindowDrawList();
+		ImDrawList* drawList = a_options.drawList ? a_options.drawList : ImGui::GetWindowDrawList();
+		const ImVec2 min = a_options.at.value_or(ImGui::GetCursorScreenPos());
+		const float rowHeight = a_options.rowHeight > 0.0f ? a_options.rowHeight : ImGui::GetTextLineHeight();
+
+		const ImVec4 text = ImGui::GetStyleColorVec4(ImGuiCol_Text);
+		const ImVec4 fill = a_options.fill.value_or(ImVec4(a_tint.x, a_tint.y, a_tint.z, kBadgeFillAlpha));
+		const ImVec4 label = a_options.label.value_or(ImVec4(a_tint.x + (text.x - a_tint.x) * kBadgeLabelTowardText,
+			a_tint.y + (text.y - a_tint.y) * kBadgeLabelTowardText,
+			a_tint.z + (text.z - a_tint.z) * kBadgeLabelTowardText, 1.0f));
 
 		const float scale = GetUIScale();
 		const ImVec2 textSize = ImGui::CalcTextSize(a_label);
-		const float padX = kBadgePadX * scale;
 		const float padY = kBadgePadY * scale;
-		const float pillW = textSize.x + padX * 2.0f;
+		const float pillW = a_options.width > 0.0f ? a_options.width : textSize.x + kBadgePadX * scale * 2.0f;
 		const float pillH = textSize.y + padY * 2.0f;
-		const float y = a_min.y + (a_rowHeight - pillH) * 0.5f;
+		const float y = min.y + (rowHeight - pillH) * 0.5f;
 
-		a_drawList->AddRectFilled(ImVec2(a_min.x, y), ImVec2(a_min.x + pillW, y + pillH),
-			ImGui::GetColorU32(a_bg), ImGui::GetStyle().FrameRounding);
-		a_drawList->AddText(ImVec2(a_min.x + padX, y + padY), ImGui::GetColorU32(a_fg), a_label);
+		drawList->AddRectFilled(ImVec2(min.x, y), ImVec2(min.x + pillW, y + pillH),
+			ImGui::GetColorU32(Anim::ScaleAlpha(fill, a_options.alpha)), ImGui::GetStyle().FrameRounding);
+		drawList->AddText(ImVec2(min.x + (pillW - textSize.x) * 0.5f, y + padY), ImGui::GetColorU32(Anim::ScaleAlpha(label, a_options.alpha)), a_label);
+
+		if (!a_options.at)
+			ImGui::Dummy(ImVec2(pillW, rowHeight));
 		return pillW;
-	}
-
-	void Badge(const char* a_label, const ImVec4& a_tint, float a_rowHeight)
-	{
-		const ImVec4 text = ImGui::GetStyleColorVec4(ImGuiCol_Text);
-		const ImVec4 bg(a_tint.x, a_tint.y, a_tint.z, kBadgeFillAlpha);
-		const ImVec4 fg(a_tint.x + (text.x - a_tint.x) * kBadgeLabelTowardText,
-			a_tint.y + (text.y - a_tint.y) * kBadgeLabelTowardText,
-			a_tint.z + (text.z - a_tint.z) * kBadgeLabelTowardText, 1.0f);
-		if (a_rowHeight <= 0.0f)
-			a_rowHeight = ImGui::GetTextLineHeight();
-		const float width = DrawBadgeAt(ImGui::GetCursorScreenPos(), a_rowHeight, a_label, bg, fg);
-		ImGui::Dummy(ImVec2(width, a_rowHeight));
 	}
 
 	float MeasureHdrSdrCapabilityPillWidth(bool a_supportsHDR)
@@ -723,7 +719,7 @@ namespace Util
 		                      ThemeManager::Constants::BADGE_HDR_FG :
 		                      ThemeManager::Constants::BADGE_SDR_FG;
 
-		DrawBadgeAt(a_min, a_rowHeight, label, bg, fg, a_drawList);
+		Badge(label, fg, { .rowHeight = a_rowHeight, .fill = bg, .label = fg, .drawList = a_drawList, .at = a_min });
 	}
 
 	void DrawHdrSdrCapabilityPill(bool a_supportsHDR)
@@ -1336,9 +1332,18 @@ namespace Util
 			clicked = ImGui::Button(label, size);
 			ImGui::PopStyleColor(3);
 		}
-		if (ImGui::IsItemHovered())
-			ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+		HoverCursor();
 		return clicked;
+	}
+
+	void HoverCursor(bool hand)
+	{
+		if (ImGui::IsItemHovered()) {
+			if (hand)
+				ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+		} else if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+			ImGui::SetMouseCursor(ImGuiMouseCursor_NotAllowed);
+		}
 	}
 
 	float IconButtonSize()
@@ -1350,8 +1355,7 @@ namespace Util
 	{
 		const float size = IconButtonSize();
 		const bool clicked = ImGui::InvisibleButton(id, ImVec2(size, size), ImGuiButtonFlags_EnableNav);
-		if (ImGui::IsItemHovered())
-			ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+		HoverCursor();
 		const auto blend = Anim::ItemBlend(ImGui::GetItemID(), ImGui::IsItemHovered(), ImGui::IsItemActive(), active);
 		Anim::FillBlend(ImGui::GetWindowDrawList(), ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), ImGui::GetStyle().FrameRounding, blend);
 		if (glyphColor)
@@ -2095,7 +2099,7 @@ namespace Util
 
 		const float padX = ImGui::GetStyle().FramePadding.x;
 		// Clear of a selected row's accent bar, slightly left of the rows' text
-		float currentX = pos.x + std::max(ImGui::GetStyle().ItemInnerSpacing.x, ThemeManager::Constants::ANIM_SELECTED_BAR_WIDTH * scale);
+		float currentX = pos.x + std::max(ImGui::GetStyle().ItemInnerSpacing.x, Surface::ListHighlightBarWidth());
 		if (categoryIcon) {
 			const ImVec2 iconPos(currentX, pos.y + (textSize.y - iconSize) * 0.5f);
 			drawList->AddImage(categoryIcon, iconPos, ImVec2(iconPos.x + iconSize, iconPos.y + iconSize), ImVec2(0, 0), ImVec2(1, 1), headerColor);
@@ -2447,7 +2451,7 @@ namespace Util
 		const float searchScale = Util::GetSearchUIScale();
 		const float iconX = C::SEARCH_ICON_OFFSET_X * searchScale;
 		const float iconSize = Icons::CalcGlyphSize(Icons::TI(MenuIcons::kSearch)).x;
-		const float padLeft = iconX + iconSize + style.ItemInnerSpacing.x;
+		const float padLeft = iconX + iconSize + C::ICON_LABEL_GAP * GetUIScale();
 		const float frameHeight = ImGui::GetFrameHeight();
 
 		if (ctrlFFocus && ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) &&
@@ -2480,18 +2484,11 @@ namespace Util
 		}
 
 		if (!text.empty()) {
-			const ImVec2 clearMin(max.x - frameHeight, min.y);
-			ImGui::SetCursorScreenPos(clearMin);
-			if (ImGui::InvisibleButton("##clear", ImVec2(frameHeight, frameHeight))) {
+			ImGui::SetCursorScreenPos(ImVec2(max.x - frameHeight, min.y));
+			if (IconButton("##clear", Icons::TI(ICON_TI_X), T("ui.search_clear", "Clear search"))) {
 				text.clear();
 				changed = true;
 			}
-			const bool hovered = ImGui::IsItemHovered();
-			if (hovered)
-				ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
-			Icons::DrawCenteredGlyph(ImGui::GetWindowDrawList(), clearMin, ImVec2(frameHeight, frameHeight),
-				Icons::TI(ICON_TI_X), ImGui::GetColorU32(hovered ? ImGuiCol_Text : ImGuiCol_TextDisabled));
-			AddTooltip(T("ui.search_clear", "Clear search"));
 			ImGui::GetCurrentContext()->LastItemData = inputItem;
 		}
 

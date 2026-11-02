@@ -199,17 +199,6 @@ namespace
 		}
 	}
 
-	/** @brief The feature list's sort modes as menu items, for the list's sort popup and the Go to palette's. */
-	void DrawSortModeItems()
-	{
-		using enum Menu::FeatureSortMode;
-		auto& sort = globals::menu->GetSettings().FeatureListSort;
-		if (ImGui::MenuItem(T("menu.features.sort_by_category", "By Category"), nullptr, sort == Category))
-			sort = Category;
-		if (ImGui::MenuItem(T("menu.features.sort_alphabetically", "Alphabetical"), nullptr, sort == Alphabetical))
-			sort = Alphabetical;
-	}
-
 	/** @brief Gap above the list's first line of text, deep enough for the sort button to centre on it. */
 	float GetListTextTop()
 	{
@@ -232,12 +221,10 @@ namespace
 			ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * alpha);
 			if (Util::IconButton("###FeatureSort", GetSortModeIcon(globals::menu->GetSettings().FeatureListSort), nullptr))
 				ImGui::OpenPopup("##FeatureSortPopup");
+			FeatureListRenderer::DrawFilterDot(ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
 			ImGui::PopStyleVar();
-			Util::HoverTip(T("menu.features.sort_tooltip", "Sort features"));
-			if (ImGui::BeginPopup("##FeatureSortPopup")) {
-				DrawSortModeItems();
-				ImGui::EndPopup();
-			}
+			Util::HoverTip(T("menu.palette.sort_tooltip", "Sort and filter features"));
+			FeatureListRenderer::RenderSortPopup("##FeatureSortPopup");
 		}
 		ImGui::EndChild();
 	}
@@ -461,7 +448,7 @@ void FeatureListRenderer::DrawStageBadge(Feature::ReleaseStage stage, float rowH
 		return;
 	const auto& statusPalette = globals::menu->GetTheme().StatusPalette;
 	MenuFonts::FontRoleGuard badgeFont(Menu::FontRole::Subtext);
-	Util::Badge(label, stage == Feature::ReleaseStage::Alpha ? statusPalette.Error : statusPalette.Warning, rowHeight);
+	Util::Badge(label, stage == Feature::ReleaseStage::Alpha ? statusPalette.Error : statusPalette.Warning, { .rowHeight = rowHeight });
 }
 
 void FeatureListRenderer::RenderFeatureList(
@@ -797,10 +784,8 @@ void FeatureListRenderer::RenderLeftColumn(
 			const auto& menu = *builtInAt(topIds[clicked]);
 			if (menu.id != MenuPageIds::kCSEditor)
 				selectedMenu = topIds[clicked];
-			else if (canOpenEditor)
+			else
 				CSEditor::OpenEditorWindow();
-			else  // Without a save, says why
-				EditorWindow::GetSingleton()->WarnOpeningBlocked();
 		}
 		ImGui::Spacing();
 	}
@@ -867,6 +852,14 @@ bool FeatureListRenderer::IsPageOpen(std::string_view pageId)
 	return g_openPageId == pageId;
 }
 
+void FeatureListRenderer::DrawFilterDot(const ImVec2& buttonMin, const ImVec2& buttonMax)
+{
+	if ((globals::menu->GetSettings().FeatureListFilter & FeatureListFilter::kKnown) == 0)
+		return;
+	const float radius = ImGui::GetFrameHeight() * ThemeManager::Constants::STATUS_DOT_RATIO;
+	Util::DrawIconCircle(ImVec2(buttonMax.x - radius * 1.5f, buttonMin.y + radius * 1.5f), radius, ImGui::GetColorU32(Util::Colors::GetAccent()), true);
+}
+
 void FeatureListRenderer::RenderSortPopup(const char* popupId)
 {
 	if (!ImGui::BeginPopup(popupId))
@@ -875,7 +868,12 @@ void FeatureListRenderer::RenderSortPopup(const char* popupId)
 	auto& menuSettings = globals::menu->GetSettings();
 
 	ImGui::SeparatorText(T("menu.settings.feature_list_order", "Feature List Order"));
-	DrawSortModeItems();
+	using enum Menu::FeatureSortMode;
+	auto& sort = menuSettings.FeatureListSort;
+	if (ImGui::Selectable(T("menu.features.sort_by_category", "By Category"), sort == Category))
+		sort = Category;
+	if (ImGui::Selectable(T("menu.features.sort_alphabetically", "Alphabetical"), sort == Alphabetical))
+		sort = Alphabetical;
 
 	ImGui::SeparatorText(T("menu.features.filter_section", "Filter"));
 	auto& filter = menuSettings.FeatureListFilter;
@@ -887,8 +885,8 @@ void FeatureListRenderer::RenderSortPopup(const char* popupId)
 		const char* tooltip;
 	};
 	const Item items[] = {
-		{ FeatureListFilter::kFavorites, counts.favorites, T("menu.features.filter_label_favorites", "Pinned"),
-			T("menu.features.filter_favorites", "Pinned features") },
+		{ FeatureListFilter::kFavorites, counts.favorites, T("menu.features.filter_label_pinned", "Pinned"),
+			T("menu.features.filter_pinned", "Pinned features") },
 		{ FeatureListFilter::kModified, counts.modified, T("menu.features.filter_label_modified", "Modified"),
 			T("menu.features.filter_modified", "Modified: settings differ from defaults and your Baseline presets") },
 		{ FeatureListFilter::kScene, counts.scene, T("menu.features.filter_label_scene", "Scene"),
@@ -1071,19 +1069,18 @@ void FeatureListRenderer::ListMenuVisitor::operator()(Feature* feat)
 	const float iconColumn = ImGui::GetTextLineHeight() * ThemeManager::Constants::FEATURE_ROW_CATEGORY_ICON_SCALE;
 	const float spaceWidth = ImGui::CalcTextSize(" ").x;
 	const std::string iconPad = showCategoryIcon ? std::string(static_cast<size_t>(std::ceil((iconColumn + spaceWidth) / spaceWidth)), ' ') : std::string();
-	// The row's content clears the selected row's accent bar; the highlight still spans the whole row
-	const float edgeInset = std::max(ImGui::GetStyle().FramePadding.x, ThemeManager::Constants::ANIM_SELECTED_BAR_WIDTH * Util::GetUIScale());
-	ImGui::SetCursorPosX(ImGui::GetCursorPosX() + edgeInset);
 	ImGui::PushStyleColor(ImGuiCol_Text, textColor);
-	if (Util::Selectable(std::format("{}{} ###Row", iconPad, feat->GetDisplayName()).c_str(), selectedMenuRef == listId, ImGuiSelectableFlags_SpanAllColumns))
+	if (Util::Selectable(std::format("{}{} ###Row", iconPad, feat->GetDisplayName()).c_str(), selectedMenuRef == listId))
 		selectedMenuRef = listId;
 	ImGui::PopStyleColor();
 	if (showCategoryIcon) {
 		if (auto* texture = Util::GetCategoryIcon(std::string(feat->GetCategory()).c_str())) {
+			// Drawn in the space the label's leading pad leaves
 			const ImVec2 itemMin = ImGui::GetItemRectMin();
+			const float textX = itemMin.x + Util::Surface::ListHighlightTextInset();
 			const float pad = (ImGui::GetItemRectSize().y - iconColumn) * 0.5f;
-			ImGui::GetWindowDrawList()->AddImage(texture, ImVec2(itemMin.x + edgeInset, itemMin.y + pad),
-				ImVec2(itemMin.x + edgeInset + iconColumn, itemMin.y + pad + iconColumn), ImVec2(0, 0), ImVec2(1, 1),
+			ImGui::GetWindowDrawList()->AddImage(texture, ImVec2(textX, itemMin.y + pad),
+				ImVec2(textX + iconColumn, itemMin.y + pad + iconColumn), ImVec2(0, 0), ImVec2(1, 1),
 				ImGui::GetColorU32(IM_COL32_WHITE, ThemeManager::Constants::FEATURE_ROW_CATEGORY_ICON_ALPHA));
 		}
 	}
@@ -1544,7 +1541,7 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFavoriteButton(Feature* feat)
 	if (Util::IconButton("###Favorite", Icons::TI(isFavorite ? ICON_TI_PINNED_OFF : ICON_TI_PIN), nullptr))
 		ToggleFavorite(feat);
 
-	Util::HoverTip(isFavorite ? T("menu.features.remove_from_favorites_tooltip", "Remove from favorites: moves this feature back into the main list") : T("menu.features.add_to_favorites_tooltip", "Add to favorites: lists this feature at the top of the feature list"));
+	Util::HoverTip(isFavorite ? T("menu.features.unpin_tooltip", "Unpin: moves this feature back into the main list") : T("menu.features.pin_tooltip", "Pin: lists this feature at the top of the feature list"));
 }
 
 void FeatureListRenderer::DrawConstraintWarningDialog(std::string& pendingFeatureSelection)
