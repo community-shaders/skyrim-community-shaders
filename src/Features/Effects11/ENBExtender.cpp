@@ -1393,7 +1393,7 @@ namespace ENBExtender
 		GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, static_cast<LPCWSTR>(_ReturnAddress()), &caller);
 		std::wstring message = text ? text : L"";
 		std::ranges::transform(message, message.begin(), ::towlower);
-		const bool onlyHelperListed = message.find(std::wstring(helperFileName) + L'\'') != std::wstring::npos && message.find(L".dll'") == message.rfind(L".dll'");
+		const bool onlyHelperListed = message.find(L'\'' + std::wstring(helperFileName) + L'\'') != std::wstring::npos && message.find(L".dll'") == message.rfind(L".dll'");
 		if (caller && caller == GetModuleHandleW(L"KiLoader.dll") && (type & MB_TYPEMASK) == MB_YESNO &&
 			onlyHelperListed && message.find(L"loading point") != std::wstring_view::npos) {
 			logger::info("[ENBEXTENDER] Skipped KiLoader's prompt for ENBHelperSE.dll: Effects 11 does not use it");
