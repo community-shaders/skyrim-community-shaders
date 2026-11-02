@@ -378,7 +378,7 @@ PS_OUTPUT main(PS_INPUT input)
 #		endif
 
 #		if defined(DITHER)
-	float2 noiseGradUv = float2(0.125, 0.125) * input.Position.xy;
+	float2 noiseGradUv = float2(0.125, 0.125) * (input.Position.xy + Random::TemporalTileOffset(SharedData::FrameCount, 8.0));
 	float noiseGrad = TexNoiseGradSampler.Sample(SampNoiseGradSampler, noiseGradUv).x * 0.03125 - 0.0078125;
 	noiseGrad *= 10.0;
 
