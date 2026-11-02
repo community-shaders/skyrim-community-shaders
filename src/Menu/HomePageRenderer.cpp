@@ -880,8 +880,8 @@ void HomePageRenderer::MarkFirstTimeSetupComplete()
 	menu->GetSettings().FirstTimeSetupCompleted = true;
 	menu->settingToggleKey = false;  // never leave a hotkey capture running behind the closed dialog
 
-	// Saved at once so the welcome screen cannot return; the toggle key is the one setting it offers
-	constexpr std::array<std::string_view, 2> setupSettings{ "/Menu/FirstTimeSetupCompleted", "/Menu/ToggleKey" };
+	// Saved at once so the welcome screen cannot return, with the hotkeys it sets
+	constexpr std::array<std::string_view, 3> setupSettings{ "/Menu/FirstTimeSetupCompleted", "/Menu/ToggleKey", "/Menu/CSEditorToggleKey" };
 	globals::state->SaveCoreSettings(setupSettings);
 
 	isFirstTimeSetupShown = true;
