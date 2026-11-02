@@ -1,22 +1,25 @@
-[![Latest Release](https://img.shields.io/github/v/release/community-shaders/skyrim-community-shaders)](https://github.com/community-shaders/skyrim-community-shaders/releases)
-[![License](https://img.shields.io/github/license/community-shaders/skyrim-community-shaders)](./COPYING.txt)
-[![Last Commit](https://img.shields.io/github/last-commit/community-shaders/skyrim-community-shaders)](https://github.com/community-shaders/skyrim-community-shaders/commits)
-[![Build Status](https://img.shields.io/github/actions/workflow/status/community-shaders/skyrim-community-shaders/release-build.yaml?event=release)](https://github.com/community-shaders/skyrim-community-shaders/actions)
-[![Discord](https://img.shields.io/discord/1080142797870485606?label=discord&logo=discord&color=5865F2)](https://discord.com/invite/nkrQybAsyy)
-[![Open Issues](https://img.shields.io/github/issues/community-shaders/skyrim-community-shaders)](https://github.com/community-shaders/skyrim-community-shaders/issues)
-[![Contributors](https://img.shields.io/github/contributors/community-shaders/skyrim-community-shaders)](https://github.com/community-shaders/skyrim-community-shaders/graphs/contributors)
-[![Stars](https://img.shields.io/github/stars/community-shaders/skyrim-community-shaders?style=social)](https://github.com/community-shaders/skyrim-community-shaders/stargazers)
+<p align="center">
+  <img src="package/Interface/CommunityShaders/Icons/Community%20Shaders%20Logo/cs-logo.png#gh-dark-mode-only" alt="Community Shaders logo" width="160">
+</p>
 
-![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/community-shaders/skyrim-community-shaders?utm_source=oss&utm_medium=github&utm_campaign=community-shaders%2Fskyrim-community-shaders&labelColor=171717&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews)
+<h1 align="center">Skyrim Community Shaders</h1>
 
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/doodlum/skyrim-community-shaders)
+<p align="center">SKSE core plugin for community-driven advanced graphics modifications.</p>
 
-# Skyrim Community Shaders
+<p align="center"><a href="https://www.nexusmods.com/skyrimspecialedition/mods/86492"><b>Nexus</b></a> &nbsp;·&nbsp; <a href="https://modding.wiki/en/skyrim/developers/community-shaders"><b>User Wiki</b></a></p>
 
-SKSE core plugin for community-driven advanced graphics modifications.
-
-[Nexus](https://www.nexusmods.com/skyrimspecialedition/mods/86492)
-[User Wiki](https://modding.wiki/en/skyrim/developers/community-shaders)
+<p align="center">
+  <a href="https://github.com/community-shaders/skyrim-community-shaders/releases"><img src="https://img.shields.io/github/v/release/community-shaders/skyrim-community-shaders?style=flat-square" alt="Latest Release"></a>
+  <a href="https://github.com/community-shaders/skyrim-community-shaders/actions"><img src="https://img.shields.io/github/actions/workflow/status/community-shaders/skyrim-community-shaders/release-build.yaml?event=release&style=flat-square" alt="Build Status"></a>
+  <a href="./COPYING.txt"><img src="https://img.shields.io/github/license/community-shaders/skyrim-community-shaders?style=flat-square" alt="License"></a>
+  <a href="https://discord.com/invite/nkrQybAsyy"><img src="https://img.shields.io/discord/1080142797870485606?label=discord&logo=discord&logoColor=white&color=5865F2&style=flat-square" alt="Discord"></a>
+  <a href="https://github.com/community-shaders/skyrim-community-shaders/stargazers"><img src="https://img.shields.io/github/stars/community-shaders/skyrim-community-shaders?logo=github&style=flat-square" alt="Stars"></a>
+  <a href="https://github.com/community-shaders/skyrim-community-shaders/graphs/contributors"><img src="https://img.shields.io/github/contributors/community-shaders/skyrim-community-shaders?style=flat-square" alt="Contributors"></a>
+  <a href="https://github.com/community-shaders/skyrim-community-shaders/issues"><img src="https://img.shields.io/github/issues/community-shaders/skyrim-community-shaders?style=flat-square" alt="Open Issues"></a>
+  <a href="https://github.com/community-shaders/skyrim-community-shaders/commits"><img src="https://img.shields.io/github/last-commit/community-shaders/skyrim-community-shaders?style=flat-square" alt="Last Commit"></a>
+  <a href="https://coderabbit.ai"><img src="https://img.shields.io/coderabbit/prs/github/community-shaders/skyrim-community-shaders?label=CodeRabbit%20reviews&color=FF570A&style=flat-square" alt="CodeRabbit Pull Request Reviews"></a>
+  <a href="https://deepwiki.com/doodlum/skyrim-community-shaders"><img src="https://img.shields.io/badge/DeepWiki-ask-0A66C2?style=flat-square" alt="Ask DeepWiki"></a>
+</p>
 
 ## Requirements
 
