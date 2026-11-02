@@ -1240,6 +1240,10 @@ void Upscaling::FrameLimiter()
 
 			// Fixed cadence: a late frame is repaid next frame instead of drifting
 			static int64_t nextFrame = 0;
+			// FG toggles with menus; rebase the pending deadline onto the new interval
+			static int64_t lastFrameTicks = 0;
+			nextFrame += targetFrameTicks - lastFrameTicks;
+			lastFrameTicks = targetFrameTicks;
 
 			LARGE_INTEGER timeNow;
 			QueryPerformanceCounter(&timeNow);
