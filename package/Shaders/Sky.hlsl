@@ -312,29 +312,16 @@ void EvaluateProceduralSun(float3 viewDirection, float3 sunTint, float haloInten
 		haloIntensity);
 	[branch] if (cosTheta <= influenceCos) return;
 
-	float3 limbDarkening;
-	float discCoverage;
-	SunDisc::EvaluateDisc(
-		cosTheta,
-		SharedData::enbSettings.ProceduralSunDiskCos,
-		SharedData::enbSettings.ProceduralSunEdgeSoftness,
-		limbDarkening,
-		discCoverage);
-
-	float haloProfile = SunDisc::EvaluateHalo(
-		cosTheta,
-		SharedData::enbSettings.ProceduralSunDiskCos,
-		SharedData::enbSettings.ProceduralSunHaloCos,
-		SharedData::enbSettings.ProceduralSunHaloFalloff);
-
 	float discRadiance = SharedData::enbSettings.ProceduralSunDiskRadiance * Color::RGBToLuminance(SharedData::DirLightColor.xyz) /
 	                     max(Color::RGBToLuminance(sunTint), 1e-5);
 
-	SunDisc::ComposeDiscAndHalo(
-		limbDarkening,
-		discCoverage,
+	SunDisc::Evaluate(
+		cosTheta,
+		SharedData::enbSettings.ProceduralSunDiskCos,
+		SharedData::enbSettings.ProceduralSunEdgeSoftness,
+		SharedData::enbSettings.ProceduralSunHaloCos,
+		SharedData::enbSettings.ProceduralSunHaloFalloff,
 		discRadiance,
-		haloProfile,
 		haloIntensity,
 		color,
 		coverage);
@@ -381,32 +368,21 @@ PS_OUTPUT main(PS_INPUT input)
 	baseColor = PParams.xxxx * (-baseColor + blendColor) + baseColor;
 #		endif
 
+	float2 hdrSunTexCoord = input.TexCoord0.xy;
+	float sunCloudTransmission = 1.0;
 #		if defined(PROCEDURAL_SUN) && defined(TEX) && !defined(DITHER)
 	if (IsProceduralSunActive()) {
 		float3 viewDirection = normalize(input.WorldPosition.xyz);
 		float cosTheta = clamp(dot(viewDirection, SharedData::SunDirection.xyz), -1.0f, 1.0f);
-		float3 limbDarkening;
-		float discCoverage;
-		SunDisc::EvaluateDisc(
+		float3 proceduralSunColor;
+		float sunCoverage;
+		SunDisc::Evaluate(
 			cosTheta,
 			SharedData::proceduralSunSettings.sunDiskCos,
 			SharedData::proceduralSunSettings.edgeSoftness,
-			limbDarkening,
-			discCoverage);
-
-		float haloProfile = SunDisc::EvaluateHalo(
-			cosTheta,
-			SharedData::proceduralSunSettings.sunDiskCos,
 			SharedData::proceduralSunSettings.sunHaloCos,
-			SharedData::proceduralSunSettings.haloFalloff);
-
-		float3 proceduralSunColor;
-		float sunCoverage;
-		SunDisc::ComposeDiscAndHalo(
-			limbDarkening,
-			discCoverage,
+			SharedData::proceduralSunSettings.haloFalloff,
 			SharedData::proceduralSunSettings.diskIntensity,
-			haloProfile,
 			SharedData::proceduralSunSettings.haloEnabled ? SharedData::proceduralSunSettings.haloIntensity : 0.0f,
 			proceduralSunColor,
 			sunCoverage);
@@ -416,9 +392,11 @@ PS_OUTPUT main(PS_INPUT input)
 #			if defined(CLOUD_SHADOWS)
 		if (sunCoverage > 0.0f && SharedData::proceduralSunSettings.cloudOcclusionStrength > 0.0f) {
 			float cloudOpacity = CloudShadows::CloudShadowsTexture.SampleLevel(SampBaseSampler, viewDirection, 0).x;
-			baseColor.w *= StandaloneSun::GetCloudTransmission(cloudOpacity, SharedData::proceduralSunSettings.cloudOcclusionStrength);
+			sunCloudTransmission = StandaloneSun::GetCloudTransmission(cloudOpacity, SharedData::proceduralSunSettings.cloudOcclusionStrength);
 		}
 #			endif
+		// The resized billboard's UVs span the outer cone, not the disc, so the HDR gain weighs only brightness and coverage
+		hdrSunTexCoord = 0.5;
 		skyScale = 0.0;
 	}
 #		endif
@@ -453,8 +431,10 @@ PS_OUTPUT main(PS_INPUT input)
 	// The procedural disc already carries physical radiance
 	[branch] if (!proceduralSunActive)
 #			endif
-		baseColor.xyz *= HDRSun::GetHdrSunGain(input.TexCoord0.xy, baseColor);
+		baseColor.xyz *= HDRSun::GetHdrSunGain(hdrSunTexCoord, baseColor);
 #		endif
+	// After the HDR gain, whose coverage weighting would otherwise count the cloud a second time
+	baseColor.w *= sunCloudTransmission;
 
 #		if defined(DITHER)
 	float2 noiseGradUv = float2(0.125, 0.125) * input.Position.xy;

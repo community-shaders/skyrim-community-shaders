@@ -92,6 +92,25 @@ namespace SunDisc
 		float3 premultipliedSun = limbDarkening * discRadiance * discCoverage + haloIntensity * haloProfile;
 		sunColor = premultipliedSun / max(sunCoverage, 1e-5f);
 	}
+
+	/** @brief Limb-darkened disc plus halo at angular cosine @p cosTheta, unpremultiplied, with their combined coverage. */
+	void Evaluate(
+		float cosTheta,
+		float sunDiskCos,
+		float edgeSoftness,
+		float sunHaloCos,
+		float haloFalloff,
+		float discRadiance,
+		float haloIntensity,
+		out float3 sunColor,
+		out float sunCoverage)
+	{
+		float3 limbDarkening;
+		float discCoverage;
+		EvaluateDisc(cosTheta, sunDiskCos, edgeSoftness, limbDarkening, discCoverage);
+		float haloProfile = EvaluateHalo(cosTheta, sunDiskCos, sunHaloCos, haloFalloff);
+		ComposeDiscAndHalo(limbDarkening, discCoverage, discRadiance, haloProfile, haloIntensity, sunColor, sunCoverage);
+	}
 }
 
 #endif  // __SUN_DISC_DEPENDENCY_HLSL__
