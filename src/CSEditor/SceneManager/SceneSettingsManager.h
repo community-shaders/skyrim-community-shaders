@@ -24,6 +24,7 @@ using json = nlohmann::json;
 #include "Globals.h"
 #include "Presets/UnifiedPresetCatalog.h"
 #include "Utils/Form.h"
+#include "Utils/Logging.h"
 
 /// Manages interior, time-of-day, weather, and location-specific setting overrides.
 /// Applies catalog-backed settings in priority order and avoids redundant feature updates.
@@ -969,7 +970,7 @@ private:
 	json preservedUserSettingsRoot = json::object();
 	bool userSettingsDocumentLoaded = false;
 	bool userSettingsDocumentWritable = true;
-	bool userSettingsWriteBlockedWarning = false;
+	Util::OnceFlag userSettingsWriteBlockedWarning;
 	bool interiorUserSettingsModified = false;
 	bool timeOfDayUserSettingsModified = false;
 	bool weatherUserSettingsModified = false;
@@ -1044,14 +1045,14 @@ private:
 	{
 		size_t signature = 0;
 		std::chrono::steady_clock::time_point retryAfter{};
-		bool warningLogged = false;
+		Util::OnceFlag warningLogged;
 
 		/** @brief Backs off retries for this signature; true only on the first failure, when the caller should warn. */
 		bool Record(size_t failedSignature, std::chrono::steady_clock::time_point now)
 		{
 			signature = failedSignature;
 			retryAfter = now + kApplyRetryDelay;
-			return !std::exchange(warningLogged, true);
+			return warningLogged.First();
 		}
 	};
 	std::map<std::string, ApplyFailureState> applyFailures;

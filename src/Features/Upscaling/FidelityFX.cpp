@@ -309,7 +309,7 @@ void FidelityFX::DestroyFSRResources()
 	}
 
 	// Reset crash logging flag when resources are destroyed
-	fsrDispatchCrashLogged = false;
+	fsrDispatchCrashLogged.Reset();
 }
 
 FfxResource ffxGetResource(ID3D11Resource* dx11Resource,
@@ -379,10 +379,8 @@ void FidelityFX::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_r
 		if (ffxFsr3ContextDispatchUpscale(&fsrContext[0], &dispatchParameters) != FFX_OK)
 			logger::critical("[FidelityFX] Failed to dispatch upscaling!");
 	} __except (EXCEPTION_EXECUTE_HANDLER) {
-		if (!fsrDispatchCrashLogged) {
+		if (fsrDispatchCrashLogged.First())
 			logger::critical("[FidelityFX] FSR3 dispatch crashed - this may be caused by RenderDoc capture interfering with FSR operations. Try disabling RenderDoc capture.");
-			fsrDispatchCrashLogged = true;
-		}
 	}
 
 	if (state->frameAnnotations)

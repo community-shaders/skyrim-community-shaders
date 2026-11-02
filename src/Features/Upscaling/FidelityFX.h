@@ -17,6 +17,7 @@
 
 #include "../../Buffer.h"
 #include "../../State.h"
+#include "Utils/Logging.h"
 
 /** @brief Manages AMD FidelityFX Super Resolution 3 upscaling and frame generation. */
 class FidelityFX
@@ -80,5 +81,5 @@ private:
 	void* fsrScratchBuffer = nullptr;
 
 	// Flag to prevent spamming the log with FSR3 dispatch crash messages
-	bool fsrDispatchCrashLogged = false;
+	Util::OnceFlag fsrDispatchCrashLogged;
 };
