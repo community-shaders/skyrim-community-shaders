@@ -2830,6 +2830,8 @@
     "feature.screenshot.crop": "Crop",
     "feature.screenshot.disable_vanilla": "Disable vanilla screenshots",
     "feature.screenshot.disable_vanilla_tooltip": "Suppresses Skyrim's built-in PrintScreen capture while the game is running.\nSkyrim.ini is not modified; unchecking restores its bAllowScreenShot value.",
+    "feature.screenshot.fix_discord_hdr": "Fix Discord HDR screenshots",
+    "feature.screenshot.fix_discord_hdr_tooltip": "Removes the cICP tag from HDR PNGs, which Discord misreads and shows washed out.\nThe embedded ICC profile still describes the HDR colour space.",
     "feature.screenshot.folder": "Folder",
     "feature.screenshot.folder_tooltip": "Relative paths resolve against the Skyrim install dir.\nAbsolute paths (e.g. D:\\Captures) save there directly.",
     "feature.screenshot.hdr_avif": "HDR AVIF",
