@@ -485,7 +485,7 @@ void Menu::Load(json& o_json)
 	if (const auto it = o_json.find("FeatureListFilter"); it != o_json.end() && it->is_number_integer() && it->get<std::int64_t>() >= 0)
 		settings.FeatureListFilter = static_cast<std::uint32_t>(it->get<std::int64_t>() & FeatureListFilter::kKnown);
 
-	// Recently opened features: known short names only, without repeats, capped; malformed entries are dropped
+	// Recently opened features, deduped and capped; features load later, so Home filters unknown ones
 	settings.RecentFeatures.clear();
 	if (const auto it = o_json.find("RecentFeatures"); it != o_json.end() && it->is_array()) {
 		for (const auto& entry : *it) {
@@ -494,7 +494,7 @@ void Menu::Load(json& o_json)
 			if (!entry.is_string())
 				continue;
 			auto name = entry.get<std::string>();
-			if (Feature::FindFeatureByShortName(name) && std::ranges::find(settings.RecentFeatures, name) == settings.RecentFeatures.end())
+			if (std::ranges::find(settings.RecentFeatures, name) == settings.RecentFeatures.end())
 				settings.RecentFeatures.push_back(std::move(name));
 		}
 	}
