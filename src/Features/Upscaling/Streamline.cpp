@@ -335,15 +335,16 @@ bool Streamline::CheckFrameConstants(sl::ViewportHandle p_viewport)
 	slConstants.cameraNear = *globals::game::cameraNear;
 	slConstants.cameraFar = *globals::game::cameraFar;
 
-	auto viewMatrix = globals::game::frameBufferCached.GetCameraViewInverse().Transpose();
-	auto cameraViewToClip = globals::game::frameBufferCached.GetCameraProjUnjittered().Transpose();
+	const auto& worldCamera = globals::game::GetWorldFrameBuffer();
+	auto viewMatrix = worldCamera.GetCameraViewInverse().Transpose();
+	auto cameraViewToClip = worldCamera.GetCameraProjUnjittered().Transpose();
 
 	slConstants.cameraMotionIncluded = sl::Boolean::eTrue;
 	slConstants.cameraPinholeOffset = { 0.f, 0.f };
 	slConstants.cameraRight = { viewMatrix._11, viewMatrix._12, viewMatrix._13 };
 	slConstants.cameraUp = { viewMatrix._21, viewMatrix._22, viewMatrix._23 };
 	slConstants.cameraFwd = { viewMatrix._31, viewMatrix._32, viewMatrix._33 };
-	slConstants.cameraPos = *(sl::float3*)&globals::game::frameBufferCached.GetCameraPosAdjust();
+	slConstants.cameraPos = *(sl::float3*)&worldCamera.GetCameraPosAdjust();
 	slConstants.cameraViewToClip = *(sl::float4x4*)&cameraViewToClip;
 	slConstants.depthInverted = sl::Boolean::eFalse;
 
