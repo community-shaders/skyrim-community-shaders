@@ -397,7 +397,7 @@ Texture2D<float4> TexRMAOSSampler : register(t3);
 Texture2D<float4> TexSubsurfaceSampler : register(t4);
 // Texture-set slot 7 (featuresTexture1): sRGB fuzz color in RGB, linear weight in alpha.
 Texture2D<float4> TexFuzzSampler : register(t5);
-// Texture-set slot 3: linear emissive color in RGB, linear fuzz roughness in alpha.
+// Texture-set slot 3: linear emissive color in RGB.
 Texture2D<float4> TexEmissiveSampler : register(t6);
 #	endif
 
@@ -575,10 +575,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 			float4 fuzz = TexFuzzSampler.Sample(SampFuzzSampler, input.TexCoord.xy);
 			material.FuzzColor *= Color::LinearSRGBToWorking(fuzz.xyz);
 			material.FuzzWeight *= fuzz.w;
-		}
-		[branch] if ((PBRFlags & PBR::Flags::HasFuzzRoughnessTexture) != 0)
-		{
-			material.FuzzRoughness = TexEmissiveSampler.Sample(SampEmissiveSampler, input.TexCoord.xy).w;
 		}
 	}
 	const float grassNdotV = clamp(abs(dot(normal, viewDirection)), EPSILON_DOT_CLAMP, 1.0f);

@@ -218,14 +218,14 @@ bool BSLightingShaderMaterialPBR::ApplyNifFuzzParameters(std::span<const float> 
 	}
 
 	const float roughness = parameters[0];
-	const float useEmissiveAlpha = parameters[1];
-	if (useEmissiveAlpha != 0.f && useEmissiveAlpha != 1.f) {
+	const float useRoughnessTexture = parameters[1];
+	if (useRoughnessTexture != 0.f && useRoughnessTexture != 1.f) {
 		return false;
 	}
 
 	fuzzRoughness = roughness < 0.f ? -1.f : std::min(roughness, 1.f);
-	fuzzRoughnessTexture = useEmissiveAlpha == 1.f;
-	All[this].nifFuzzParameters = std::array{ fuzzRoughness, useEmissiveAlpha };
+	fuzzRoughnessTexture = useRoughnessTexture == 1.f;
+	All[this].nifFuzzParameters = std::array{ fuzzRoughness, useRoughnessTexture };
 
 	return true;
 }

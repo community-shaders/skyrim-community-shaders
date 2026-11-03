@@ -148,7 +148,7 @@ public:
 	void ApplyTextureSetData(const TruePBR::PBRTextureSetData& textureSetData);
 	/** @brief Applies the four finite values in the NIF PBRThinSurface extra-data block. */
 	bool ApplyNifThinSurfaceParameters(std::span<const float> parameters);
-	/** @brief Applies the NIF PBRFuzz extra data: fuzz roughness (negative uses base roughness) and emissive-alpha roughness (0 or 1). */
+	/** @brief Applies PBRFuzz extra data: roughness (negative uses base) and slot 4 green roughness enable (0 or 1). */
 	bool ApplyNifFuzzParameters(std::span<const float> parameters);
 	/**
 	 * @brief Applies projected material object parameters (base color scale, roughness, specular, glint) to this material.
@@ -232,10 +232,10 @@ public:
 	// Roughness in r, metallic in g, AO in b, nonmetal reflectance in a
 	RE::NiPointer<RE::NiSourceTexture> rmaosTexture;
 
-	// Emission color in rgb, fuzz roughness in a when fuzzRoughnessTexture is set
+	// Emission color in rgb
 	RE::NiPointer<RE::NiSourceTexture> emissiveTexture;
 
-	// Displacement in r
+	// Displacement in r, fuzz roughness in g when fuzzRoughnessTexture is set
 	RE::NiPointer<RE::NiSourceTexture> displacementTexture;
 
 	// Subsurface map (subsurface color in rgb, thickness in a) / Coat map (coat color in rgb, coat strength in a)

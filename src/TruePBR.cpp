@@ -954,21 +954,15 @@ struct BSLightingShaderProperty_GetRenderPasses_LocalMap
 	static inline REL::Relocation<decltype(thunk)> func;
 };
 
-/** @brief True when fuzz roughness explicitly uses a valid emissive alpha channel. */
-static bool HasEmissiveFuzzRoughness(const BSLightingShaderMaterialPBR* material)
+/** @brief True when slot 4 green is explicitly enabled and its texture is available. */
+static bool HasFuzzRoughnessTexture(const BSLightingShaderMaterialPBR* material)
 {
-	if (!material->fuzzRoughnessTexture) {
+	if (!material->fuzzRoughnessTexture || material->displacementTexture == globals::game::graphicsState->GetRuntimeData().defaultTextureBlack) {
 		return false;
 	}
 
-	const auto* texture = material->emissiveTexture.get();
-	if (texture == nullptr || texture->rendererTexture == nullptr || texture->rendererTexture->resourceView == nullptr) {
-		return false;
-	}
-
-	D3D11_SHADER_RESOURCE_VIEW_DESC desc{};
-	texture->rendererTexture->resourceView->GetDesc(&desc);
-	return Util::SupportsMaterialAlpha(desc.Format);
+	const auto* texture = material->displacementTexture.get();
+	return texture != nullptr && texture->rendererTexture != nullptr && texture->rendererTexture->resourceView != nullptr;
 }
 
 bool TruePBR::BSLightingShader_SetupMaterial(RE::BSLightingShader* shader, RE::BSLightingShaderMaterialBase const* material)
@@ -1221,7 +1215,7 @@ bool TruePBR::BSLightingShader_SetupMaterial(RE::BSLightingShader* shader, RE::B
 				shaderFlags.set(PBRShaderFlags::HasFeaturesTexture1);
 			}
 
-			if (hasEmissive && shaderFlags.any(PBRShaderFlags::Fuzz) && HasEmissiveFuzzRoughness(pbrMaterial)) {
+			if (shaderFlags.any(PBRShaderFlags::Fuzz) && HasFuzzRoughnessTexture(pbrMaterial)) {
 				shaderFlags.set(PBRShaderFlags::HasFuzzRoughnessTexture);
 			}
 
@@ -1566,9 +1560,6 @@ TruePBR::GrassPBRConstants TruePBR::GetGrassPBRConstants(const BSLightingShaderM
 		shaderFlags.set(PBRShaderFlags::Fuzz);
 		if (HasGrassFeaturesTexture1(material)) {
 			shaderFlags.set(PBRShaderFlags::HasFeaturesTexture1);
-		}
-		if (HasGrassEmissive(material) && HasEmissiveFuzzRoughness(material)) {
-			shaderFlags.set(PBRShaderFlags::HasFuzzRoughnessTexture);
 		}
 	}
 	if (HasGrassEmissive(material)) {
