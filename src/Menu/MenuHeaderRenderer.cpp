@@ -47,6 +47,15 @@ namespace
 		const ImGuiDockNode* node = ImGui::GetCurrentWindowRead()->DockNode;
 		return node && node->HostWindow ? node->HostWindow->DrawList : ImGui::GetForegroundDrawList();
 	}
+
+	/** @brief Hit test for a docked header button, which is not an ImGui item: inside this pane and not under a popup or another window. */
+	bool IsDockedHeaderButtonHovered(const ImRect& rect)
+	{
+		const ImGuiWindow* window = ImGui::GetCurrentWindowRead();
+		const ImGuiWindow* hovered = ImGui::GetCurrentContext()->HoveredWindow;
+		return hovered && hovered->RootWindowDockTree == window->RootWindowDockTree && window->Rect().Contains(ImGui::GetIO().MousePos) &&
+		       ImGui::IsMouseHoveringRect(rect.Min, rect.Max, false);
+	}
 }
 
 bool MenuHeaderRenderer::GlyphIconButton(const char* id, Icons::GlyphRef glyph, float glyphBox, const char* tooltip, bool active)
@@ -80,8 +89,7 @@ bool MenuHeaderRenderer::RenderNavButton(bool docked, ImVec2 min, float size, co
 	bool down;
 	bool clicked;
 	if (docked) {
-		// Drawn over the title bar like the action icons, so the hit test is manual; the palette's own modal blocks it
-		hovered = !GoToPalette::IsOpen() && ImGui::IsMouseHoveringRect(rect.Min, rect.Max, false);
+		hovered = IsDockedHeaderButtonHovered(rect);
 		down = hovered && ImGui::IsMouseDown(ImGuiMouseButton_Left);
 		clicked = hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left);
 	} else {
@@ -195,6 +203,11 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, float uiScal
 			RenderWatermarkLogo(uiIcons);
 		}
 
+		// Buttons that do not fit a narrow pane are clipped, matching their hit test
+		ImDrawList* barDrawList = DockedHeaderDrawList();
+		const ImRect pane = ImGui::GetCurrentWindowRead()->Rect();
+		barDrawList->PushClipRect(pane.Min, pane.Max, true);
+
 		// Draw action icons in the title bar area
 		const float iconsLeft = RenderDockedIcons(actionIcons, uiScale);
 
@@ -205,21 +218,24 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, float uiScal
 		const int navCount = IssuesPageRenderer::GetFeatureIssueCount() ? 3 : 2;  // Home, issues, search
 		const float navWidth = (homeSize + gap) * static_cast<float>(navCount);
 
-		// Home and search follow the node's last tab; a trailing spacer keeps the tabs shrinking short of the buttons
+		// Home and search follow the node's last tab; a trailing spacer keeps the tabs short of the header buttons
 		ImGuiWindow* window = ImGui::GetCurrentWindow();
 		float tabsRight = window->DC.DockTabItemRect.Max.x;
 		if (ImGuiDockNode* node = window->DockNode) {
 			for (const ImGuiWindow* tabWindow : node->Windows)
 				tabsRight = std::max(tabsRight, tabWindow->DC.DockTabItemRect.Max.x);
+			barDrawList->PopClipRect();  // The amend re-enters the host window, which would inherit the pane clip
 			if (node->TabBar && ImGui::DockNodeBeginAmendTabBar(node)) {
 				ImGui::TabItemSpacing("##HeaderButtons", ImGuiTabItemFlags_Trailing, std::max(0.0f, node->TabBar->BarRect.Max.x - iconsLeft) + navWidth);
 				ImGui::DockNodeEndAmendTabBar();
 			}
+			barDrawList->PushClipRect(pane.Min, pane.Max, true);
 		}
 		const float homeLeft = std::min(tabsRight + gap, iconsLeft - navWidth);
 		float titleRight = homeLeft + RenderNavButtons(true, ImVec2(homeLeft, windowPos.y + (titleBarHeight - homeSize) * 0.5f), homeSize, gap);
 		RenderSearchPill(true, titleRight, iconsLeft, windowPos.y, titleBarHeight, uiScale,
 			MenuShortcuts::GetHint(shortcuts, MenuShortcuts::Ids::kGoTo));
+		barDrawList->PopClipRect();
 	} else {
 		// When not docked, show the custom header
 		bool centerHeader = globals::menu->GetTheme().CenterHeader;
@@ -405,7 +421,6 @@ float MenuHeaderRenderer::RenderDockedIcons(const std::vector<ActionIcon>& actio
 	ImVec2 windowSize = ImGui::GetWindowSize();
 	float titleBarHeight = ImGui::GetFrameHeight();
 
-	// Drawn over the tab bar, under popups and tooltips
 	ImDrawList* barDrawList = DockedHeaderDrawList();
 
 	// Calculate icon positions (right to left from close button)
@@ -425,7 +440,7 @@ float MenuHeaderRenderer::RenderDockedIcons(const std::vector<ActionIcon>& actio
 		ImRect interactionRect({ iconX, iconY }, { iconX + iconSize, iconY + iconSize });
 
 		// Check mouse interaction against full area
-		const bool isHovered = ImGui::IsMouseHoveringRect(interactionRect.Min, interactionRect.Max, false);
+		const bool isHovered = IsDockedHeaderButtonHovered(interactionRect);
 		auto unsavedTint = Util::StateHoverButtonStyle(Util::Colors::GetUnsaved(), it->unsaved);  // the unsaved save hovers in its colour
 		Util::DrawAnimatedButtonHighlight(interactionRect, ImGui::GetID(it->tooltip.c_str()), isHovered, isHovered && ImGui::IsMouseDown(ImGuiMouseButton_Left), false, barDrawList);
 
