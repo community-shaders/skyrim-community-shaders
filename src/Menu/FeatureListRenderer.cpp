@@ -300,7 +300,7 @@ namespace
 		drawScaled(Menu::FontRole::Title, ImGui::GetStyleColorVec4(ImGuiCol_Text), featureName.c_str());
 
 		// Running x for the bottom-aligned annotations (stage badge, then version) right of the title
-		float annotationX = startPos.x + titleSize.x + itemSpacingX;
+		float annotationX = ImGui::GetItemRectMax().x + itemSpacingX;
 
 		const bool hasStageBadge = stage != Feature::ReleaseStage::Release;
 		if (hasStageBadge) {
@@ -1086,14 +1086,12 @@ void FeatureListRenderer::ListMenuVisitor::operator()(Feature* feat)
 	}
 	if (g_scrollToSelection && selectedMenuRef == listId && !ImGui::IsItemVisible())
 		ImGui::SetScrollHereY();
-	const ImVec2 rowMin = ImGui::GetItemRectMin();
-	const ImVec2 rowMax = ImGui::GetItemRectMax();
 	RenderRowContextMenu(feat);
 
 	// The stage badge sits right after the name, regardless of loaded state; the indicator icons follow it
 	if (const auto stage = feat->GetReleaseStage(); stage != Feature::ReleaseStage::Release) {
-		ImGui::SameLine();
-		DrawStageBadge(stage, rowMax.y - rowMin.y);
+		ImGui::SameLine(0.0f, 0.0f);
+		DrawStageBadge(stage, ImGui::GetTextLineHeight());
 	}
 
 	// Indicator icons stack after the name and badge: a standard gap before the first, a space between the rest
