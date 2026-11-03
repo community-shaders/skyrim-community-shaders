@@ -197,6 +197,7 @@ private:
 	bool active = false;              // the last Update steered the light, so the colour hooks may apply its state
 	float sunAngle = 90.0f;
 	float currentSkyRotation = D3D11_FLOAT32_MAX;
+	bool skyRotationApplied = false;  // survives the game-load cache reset until the root is restored
 	float lastGameHour = -1.0f;
 	bool immediateTransitionReady = false;
 
@@ -245,6 +246,7 @@ private:
 	void SetSunAngle();
 
 	void SetSkyRotation(const RE::Sky* sky, RE::TESObjectCELL* cell);
+	void ResetSkyRotation(const RE::Sky* sky);
 
 	/** @brief Whether the worldspace's editor ID is in the disabled list. */
 	bool IsWorldspaceDisabled(const RE::TESWorldSpace* worldspace) const;

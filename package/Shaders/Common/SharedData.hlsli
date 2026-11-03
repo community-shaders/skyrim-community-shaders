@@ -564,14 +564,9 @@ namespace SharedData
 	// Returns water data for the tile containing worldPosition (camera-relative XY).
 	float4 GetWaterData(float3 worldPosition)
 	{
-		float2 cellF = (((worldPosition.xy + FrameBuffer::CameraPosAdjust.xy)) / 4096.0) + 64.0;  // always positive
-		int2 cellInt;
-		float2 cellFrac = modf(cellF, cellInt);
-
-		cellF = worldPosition.xy / float2(4096.0, 4096.0);  // remap to cell scale
-		cellF += 2.5;                                       // 5x5 cell grid
-		cellF -= cellFrac;                                  // align to cell borders
-		cellInt = round(cellF);
+		// floor keeps negative coordinates and cell borders exact
+		float2 absolutePosition = worldPosition.xy + FrameBuffer::CameraPosAdjust.xy;
+		int2 cellInt = (int2)(floor(absolutePosition / 4096.0) - floor(FrameBuffer::CameraPosAdjust.xy / 4096.0)) + 2;  // 5x5 cell grid
 
 		uint waterTile = (uint)clamp(cellInt.x + (cellInt.y * 5), 0, 24);  // remap xy to 0-24
 
