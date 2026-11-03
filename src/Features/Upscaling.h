@@ -94,6 +94,12 @@ public:
 	bool d3d12SwapChainActive = false;
 	// Set by Main_PostProcessing when frame-generation inputs were copied; cleared after Present.
 	bool frameGenerationPrepared = false;
+	// Number of frames the active frame-generation backend produces per rendered
+	// frame (1 = classic 2x FG). Multi-frame backends (e.g. community DLSS-G
+	// multi-frame generation plugins) set this on activation so that
+	// Upscaling::FrameLimiter paces the base rate at refresh/(frames + 1)
+	// instead of assuming a fixed 2x cadence.
+	float frameGenGeneratedFrames = 1.0f;
 
 	// Timing and scaling
 	double refreshRate = 0.0f;
