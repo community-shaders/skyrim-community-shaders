@@ -596,25 +596,22 @@ float GetViewRayShadow(float3 worldPosition, float2 screenPosition, float depth)
 	return shadow;
 }
 
+/** @brief Takes the shadowed share of the sun out of a lit colour; unshadowed, the colour is unchanged. */
 float3 GetLightingShadow(float3 color, float3 worldPosition, float2 screenPosition, float depth, inout float shadowVariance)
 {
-	float3 dirColor;
-	float3 ambientColor;
-	ShadowSampling::ExtractLighting(color, dirColor, ambientColor);
-
 	float shadow = GetViewRayShadow(worldPosition, screenPosition, depth);
 
 	shadowVariance = 1.0 - sqrt(saturate(fwidth(shadow)));
 
-	dirColor *= shadow;
-
 #		if defined(EXP_HEIGHT_FOG)
 	if (SharedData::exponentialHeightFogSettings.enabled) {
-		dirColor *= ExponentialHeightFog::GetSunlightFogAttenuation(worldPosition.xyz, FrameBuffer::CameraPosAdjust.xyz);
+		shadow *= ExponentialHeightFog::GetSunlightFogAttenuation(worldPosition.xyz, FrameBuffer::CameraPosAdjust.xyz);
 	}
 #		endif
 
-	return dirColor + ambientColor;
+	float3 dirLight = ShadowSampling::GetDirectionalLighting();
+	float3 sceneLight = ShadowSampling::GetSceneLightingColor();
+	return color * (1.0 - saturate(dirLight * (1.0 - shadow) / max(sceneLight, 1e-5)));
 }
 #	endif
 
@@ -860,8 +857,7 @@ PS_OUTPUT main(PS_INPUT input)
 #	endif
 
 #	if !defined(LIGHTING) && defined(VC) && defined(TEXCOORD) && defined(NORMALS) && defined(TEXTURE) && defined(FALLOFF) && defined(SOFT)
-	// ExtractLighting assumes lit colour; fire is emissive
-	bool applyViewRayShadow = Permutation::PixelShaderDescriptor & Permutation::EffectFlags::GrayscaleToAlpha && lightingInfluence == 1.0 && !isFire;
+	bool applyViewRayShadow = Permutation::PixelShaderDescriptor & Permutation::EffectFlags::GrayscaleToAlpha && lightingInfluence == 1.0;
 #		if defined(EFFECTS11) && defined(IS_VOLUMETRIC_FOG)
 	// The fog block above already shadowed it
 	applyViewRayShadow = applyViewRayShadow && !isEnbVolumetricFog;
