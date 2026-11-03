@@ -301,7 +301,8 @@ namespace PBR
 				float forwardScatter = exp2(saturate(-VdotL) * subsurfacePower - subsurfacePower);
 				float backScatter = saturate(satNdotL * material.Thickness + (1.0 - material.Thickness)) * 0.5;
 				float subsurface = lerp(backScatter, 1, forwardScatter) * (1.0 - material.Thickness);
-				lightingOutput.transmission += material.SubsurfaceColor * subsurface * softLightColor * BRDF::Diffuse_Lambert() * kD;
+				float3 transmissionKD = 1.0f - saturate(SpecularDirectionalAlbedo(material.F0, material.Roughness, saturate(abs(NdotV))));
+				lightingOutput.transmission += material.SubsurfaceColor * subsurface * softLightColor * BRDF::Diffuse_Lambert() * transmissionKD;
 			}
 			else
 #	endif
