@@ -1233,8 +1233,15 @@ void Upscaling::FrameLimiter()
 
 		if (settings.frameLimitMode) {
 			static constexpr int64_t kNanosecondsPerSecond = 1000000000LL;
-			static constexpr double kFrameGenerationRateScale = 0.5;
-			const double frameRateScale = ShouldUseFrameGenerationThisFrame() ? kFrameGenerationRateScale : 1.0;
+			// Pace the base (pre-FG) rate so that rendered + generated frames fill
+			// exactly one refresh interval: base cap = refresh / (generated + 1).
+			// With classic 2x FG this equals the previous fixed 0.5 scale; multi-
+			// frame backends set frameGenGeneratedFrames > 1 (see Upscaling.h),
+			// otherwise they overproduce past the refresh rate and every surplus
+			// frame is dropped at vblank, causing bursty pacing.
+			const double frameRateScale = ShouldUseFrameGenerationThisFrame()
+				? 1.0 / (static_cast<double>(frameGenGeneratedFrames) + 1.0)
+				: 1.0;
 			int64_t targetFrameTimeNS = int64_t(static_cast<double>(kNanosecondsPerSecond) / (refreshRate * frameRateScale));
 			int64_t targetFrameTicks = (targetFrameTimeNS * qpf.QuadPart) / kNanosecondsPerSecond;
 
