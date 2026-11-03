@@ -1239,9 +1239,7 @@ void Upscaling::FrameLimiter()
 			// frame backends set frameGenGeneratedFrames > 1 (see Upscaling.h),
 			// otherwise they overproduce past the refresh rate and every surplus
 			// frame is dropped at vblank, causing bursty pacing.
-			const double frameRateScale = ShouldUseFrameGenerationThisFrame()
-				? 1.0 / (static_cast<double>(frameGenGeneratedFrames) + 1.0)
-				: 1.0;
+			const double frameRateScale = ShouldUseFrameGenerationThisFrame() ? 1.0 / (static_cast<double>(frameGenGeneratedFrames) + 1.0) : 1.0;
 			int64_t targetFrameTimeNS = int64_t(static_cast<double>(kNanosecondsPerSecond) / (refreshRate * frameRateScale));
 			int64_t targetFrameTicks = (targetFrameTimeNS * qpf.QuadPart) / kNanosecondsPerSecond;
 
