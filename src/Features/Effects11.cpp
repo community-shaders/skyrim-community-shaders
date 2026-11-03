@@ -6,6 +6,7 @@
 #include "Effects11/EffectManager.h"
 #include "Effects11/PresetManager.h"
 #include "Effects11/SettingManager.h"
+#include "Effects11/WeatherManager.h"
 
 #include "CloudShadows.h"
 #include "Deferred.h"
@@ -49,6 +50,26 @@ namespace
 
 		// The bound sphere encloses the square billboard, so its half-width is radius / sqrt(2)
 		return bound.radius * 0.70710678f / distance;
+	}
+
+	/** @brief Largest radiance the main render target can hold; the procedural sun is encoded below it for alpha blending. */
+	float GetMainTargetRadianceLimit()
+	{
+		const auto renderer = globals::game::renderer;
+		const auto rtv = renderer ? renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN].RTV : nullptr;
+		if (!rtv)
+			return 1.0f;
+
+		D3D11_RENDER_TARGET_VIEW_DESC desc{};
+		rtv->GetDesc(&desc);
+		switch (desc.Format) {
+		case DXGI_FORMAT_R16G16B16A16_FLOAT:
+		case DXGI_FORMAT_R32G32B32A32_FLOAT:
+		case DXGI_FORMAT_R11G11B10_FLOAT:
+			return 4096.0f;
+		default:
+			return 1.0f;
+		}
 	}
 
 	/** @brief A screen-sized 2D texture with an SRV, plus an RTV and/or UAV on request. */
@@ -144,7 +165,7 @@ namespace
 		static constexpr float moonMaskExponent = 4.0f;
 		const auto& skySync = globals::features::skySync;
 
-		if (a_sunRays && EffectManager::GetSunVisibility(a_sky->sun) > 0.0f) {
+		if (a_sunRays && Util::GetSunVisibility(a_sky->sun) > 0.0f) {
 			if (const auto prop = skyrim_cast<RE::BSSkyShaderProperty*>(a_sky->sun->sunBase->GetGeometryRuntimeData().shaderProperty.get())) {
 				const auto& blend = prop->kBlendColor;
 				a_light = { float3(blend.red, blend.green, blend.blue) * blend.alpha, skySync.GetCelestialDirection(a_sky, SkySync::Caster::Sun), a_perFrame.SunBillboardTan, sunMaskExponent, true };
@@ -201,7 +222,7 @@ void Effects11::UpdateSkyScattering(PerFrame& a_data)
 	// Mirror the direction below the horizon while the sun is hidden (e.g. by a weather)
 	if (sky && sky->sun) {
 		auto direction = globals::features::skySync.GetCelestialDirection(sky, SkySync::Caster::Sun);
-		if (EffectManager::GetSunVisibility(sky->sun) <= 0.0f && direction.z > 0.0f)
+		if (Util::GetSunVisibility(sky->sun) <= 0.0f && direction.z > 0.0f)
 			direction.z = -direction.z;
 		scatteringSunDirection = { direction.x, direction.y, direction.z };
 	}
@@ -384,22 +405,38 @@ Effects11::PerFrame Effects11::GetCommonBufferData()
 	data.WaterReflectionAmount = settingManager.GetValue<float>("ReflectionAmount", "WATER");
 
 	{
-		float size = settingManager.GetValue<float>("Size", "PROCEDURALSUN");
-		float edgeSoftness = settingManager.GetValue<float>("EdgeSoftness", "PROCEDURALSUN");
-		float glowCurve = std::max(FLT_MIN, settingManager.GetInterpolatedTimeOfDayValue("GlowCurve", "PROCEDURALSUN"));
+		// The ENB keys describe a disc drawn across the sun billboard: Size is its radius as a share of
+		// the billboard (0.04 per unit) and the glow fades out at the billboard edge. They are mapped to
+		// the angular disc and halo through the billboard's measured angular size, so presets keep their sun.
+		// Keeps the halo falloff finite: an infinite one makes the halo inf * 0 = NaN at the disc edge
+		static constexpr float minHaloFalloffFactor = 1e-3f;
+		const float billboardTan = std::max(data.SunBillboardTan, 1e-4f);
+		const float size = std::max(settingManager.GetValue<float>("Size", "PROCEDURALSUN"), 0.0f);
+		const float edgeSoftness = settingManager.GetValue<float>("EdgeSoftness", "PROCEDURALSUN");
+		const float glowCurve = std::max(minHaloFalloffFactor, settingManager.GetInterpolatedTimeOfDayValue("GlowCurve", "PROCEDURALSUN"));
 
-		float scaledSize = size * 0.04f;
-		float diskSq = scaledSize * scaledSize;
-		float outerSpan = std::max(1.0f - diskSq, FLT_MIN);
-		float softSq = std::max(edgeSoftness * edgeSoftness, FLT_MIN);
+		const float diskRadius = std::min(size * 0.04f, 1.0f);
+		proceduralSunAngularRadius = std::atan(diskRadius * billboardTan);
 
-		data.ProceduralSunDiskRadiusSq = diskSq;
-		data.ProceduralSunCoronaScale = 1.0f / outerSpan;
-		data.ProceduralSunDiskEdgeScale = 1.0f / (std::max(diskSq, FLT_MIN) * softSq);
-		data.ProceduralSunCoronaFalloff = 100.0f / (outerSpan * glowCurve);
+		data.ProceduralSunDiskCos = std::cos(proceduralSunAngularRadius);
+		data.ProceduralSunHaloCos = 1.0f / std::sqrt(1.0f + billboardTan * billboardTan);
+		// The old edge spanned softness^2 of the disc's squared radius, and the disc profile works in the same space
+		data.ProceduralSunEdgeSoftness = std::clamp(edgeSoftness * edgeSoftness, 0.01f, 1.0f);
+		data.ProceduralSunHaloFalloff = 100.0f / (std::max(1.0f - diskRadius * diskRadius, minHaloFalloffFactor) * glowCurve);
+		data.ProceduralSunHaloIntensity = std::max(settingManager.GetInterpolatedTimeOfDayValue("GlowIntensity", "PROCEDURALSUN"), 0.0f);
+		data.ProceduralSunRadianceLimit = GetMainTargetRadianceLimit();
+
+		// L = E * referenceSolidAngle / solid angle: preset tonemaps break on a physical (~1e4 E) sun, so a disc of
+		// this radius shows the sunlight itself, and smaller discs get brighter as the same energy concentrates
+		static constexpr float referenceDiscRadius = DirectX::XMConvertToRadians(1.0f);
+		// 4 pi sin^2(r / 2) is the solid angle 2 pi (1 - cos r), without the small-angle cancellation
+		const auto solidAngle = [](float a_radius) {
+			const float halfAngleSin = std::sin(a_radius * 0.5f);
+			return 4.0f * std::numbers::pi_v<float> * halfAngleSin * halfAngleSin;
+		};
+		const float discSolidAngle = solidAngle(proceduralSunAngularRadius);
+		data.ProceduralSunDiskRadiance = discSolidAngle > 0.0f ? solidAngle(referenceDiscRadius) / discSolidAngle : 0.0f;
 	}
-
-	data.ProceduralSunGlowIntensity = settingManager.GetInterpolatedTimeOfDayValue("GlowIntensity", "PROCEDURALSUN");
 
 	perFrameCache = data;
 	return data;
@@ -503,8 +540,10 @@ void Effects11::ClearShaderCache()
 		}
 	}
 
-	if (EffectManager::GetSingleton().IsInitialized())
-		EffectManager::GetSingleton().ReloadShaders();
+	auto& effectManager = EffectManager::GetSingleton();
+	effectManager.enbAdaptation.ClearShaderCache();
+	if (effectManager.IsInitialized())
+		effectManager.ReloadShaders();
 }
 
 float3 Curve(float3 color, float power)
@@ -565,21 +604,90 @@ static float3 GetNightWeightedColor(SettingManager& settingManager, std::string_
 	return nightWeight > 0.0f ? float3::Lerp(value, settingManager.GetValue<ColorTimeOfDayValue>(key, category)[ColorTimeOfDayValue::Night], nightWeight) : value;
 }
 
-void Effects11::OverrideWeather(RE::Sky* a_sky)
+namespace
 {
-	if (!a_sky) {
-		return;
+	constexpr float minColorMean = 1e-4f;
+	constexpr float minEffectLightingScale = 0.25f;
+	constexpr float maxEffectLightingScale = 8.0f;
+	constexpr float maxTransitionCorrection = 8.0f;
+
+	float ColorMean(float3 color)
+	{
+		return color.Dot({ 1.0f / 3.0f, 1.0f / 3.0f, 1.0f / 3.0f });
 	}
 
+	struct GradedTransition
+	{
+		float pct = 0.0f;
+		RE::TESWeather::ColorTime first = RE::TESWeather::ColorTime::kDay;
+		RE::TESWeather::ColorTime second = RE::TESWeather::ColorTime::kDay;
+		float firstWeight = 1.0f;
+	};
+
+	std::optional<GradedTransition> GetGradedTransition(RE::Sky* a_sky)
+	{
+		const float pct = a_sky->currentWeatherPct;
+		if (!(pct > 0.0f && pct < 1.0f) || !a_sky->currentWeather || !a_sky->lastWeather || a_sky->mode.get() != RE::Sky::Mode::kFull ||
+			a_sky->extLightingOverride || a_sky->currentRoom || a_sky->previousRoom || Util::IsInterior())
+			return std::nullopt;
+
+		auto& effectManager = EffectManager::GetSingleton();
+		auto& weatherManager = WeatherManager::GetSingleton();
+		if (!SettingManager::GetSingleton().IsWeatherSystemEnabled() ||
+			weatherManager.FindWeatherEntry(effectManager.currentWeatherID) == weatherManager.FindWeatherEntry(effectManager.previousWeatherID))
+			return std::nullopt;
+
+		GradedTransition result{ pct };
+		RE::Sky::COLOR_BLEND timeBlend{};
+		a_sky->FillColorBlend(timeBlend, a_sky->currentWeather, pct, result.first, result.second);
+		result.firstWeight = std::clamp(timeBlend.blend[0] + timeBlend.blend[2], 0.0f, 1.0f);
+		return result;
+	}
+
+	RE::NiColor BlendColorTimes(const RE::Sky* a_sky, RE::Color a_first, RE::Color a_second, float a_firstWeight)
+	{
+		RE::Sky::COLOR_BLEND blend{};
+		blend.RGBVal[0] = a_first;
+		blend.RGBVal[1] = a_second;
+		blend.blend[0] = a_firstWeight;
+		blend.blend[1] = 1.0f - a_firstWeight;
+		RE::NiColor result;
+		a_sky->SetColor(result, &blend, 0.0f);
+		return result;
+	}
+
+	float CorrectTransition(float a_graded, float a_target, float a_blended)
+	{
+		return a_blended > minColorMean ? a_graded * std::clamp(a_target / a_blended, 0.0f, maxTransitionCorrection) : a_graded;
+	}
+
+	RE::NiColor CorrectTransition(const RE::NiColor& a_graded, const RE::NiColor& a_target, const RE::NiColor& a_blended)
+	{
+		return { CorrectTransition(a_graded.red, a_target.red, a_blended.red),
+			CorrectTransition(a_graded.green, a_target.green, a_blended.green),
+			CorrectTransition(a_graded.blue, a_target.blue, a_blended.blue) };
+	}
+
+	/** @brief Sun scattering tint from a sun colour before SunIntensity, which only scales the sun itself. */
+	float3 SunScatteringTint(const float3& a_sunColor)
+	{
+		// Normalized only when brighter than 1: a dim sun (e.g. at dusk) keeps the scattering dim
+		const float sunColorPeak = std::max({ a_sunColor.x, a_sunColor.y, a_sunColor.z, 1.0f });
+		return { std::max(a_sunColor.x, 0.0f) / sunColorPeak, std::max(a_sunColor.y, 0.0f) / sunColorPeak, std::max(a_sunColor.z, 0.0f) / sunColorPeak };
+	}
+}
+
+float3 Effects11::GradeSkyColors(std::span<RE::NiColor, RE::TESWeather::ColorTypes::kTotal> a_colors) const
+{
 	auto& settingManager = SettingManager::GetSingleton();
 
-	auto& colors = a_sky->skyColor;
-
+	float rawSunMean = 0.0f;
+	float sunGradingRatio = 1.0f;
 	{
-		auto& dirLightColor = colors[(uint)RE::TESWeather::ColorTypes::kSunlight];
+		auto& dirLightColor = a_colors[(uint)RE::TESWeather::ColorTypes::kSunlight];
 
 		auto dirLightColorF3 = NiToF3(dirLightColor);
-		const float3 ungradedDirLightColor = dirLightColorF3;
+		rawSunMean = ColorMean(dirLightColorF3);
 
 		// A near-zero scale would blow up the divide below, so treat it as unset
 		static constexpr float minSunlightScale = 1e-3f;
@@ -602,71 +710,61 @@ void Effects11::OverrideWeather(RE::Sky* a_sky)
 
 		dirLightColorF3 /= sunlightScale;
 
-		// The game lights its VL with this colour too, but ENB presets tune [GAMEVOLUMETRICRAYS] against the ungraded sunlight
-		static constexpr float minGradedChannel = 1e-6f;
-		auto ungradeScale = [](float a_ungraded, float a_graded) { return a_graded > minGradedChannel ? a_ungraded / a_graded : 1.0f; };
-		directLightingUngradeScale = { ungradeScale(ungradedDirLightColor.x, dirLightColorF3.x), ungradeScale(ungradedDirLightColor.y, dirLightColorF3.y),
-			ungradeScale(ungradedDirLightColor.z, dirLightColorF3.z) };
+		sunGradingRatio = rawSunMean > minColorMean ? ColorMean(dirLightColorF3) / rawSunMean : 1.0f;
 
 		dirLightColor = F3ToNi(dirLightColorF3);
 	}
 
-	// A preset handing fog to CS leaves the vanilla fog values for Exponential Height Fog's scene settings
-	if (!IsHandedOff(E11Handoff::Feature::HeightFog)) {
-		{
-			auto& fogFarColor = colors[(uint)RE::TESWeather::ColorTypes::kFogFar];
-
-			auto fogFarColorF3 = NiToF3(fogFarColor);
-
-			auto fogColorCurve = settingManager.GetInterpolatedTimeOfDayValue("FogColorCurve", "ENVIRONMENT");
-			auto fogColorMultiplier = settingManager.GetInterpolatedTimeOfDayValue("FogColorMultiplier", "ENVIRONMENT");
-
-			auto fogColorFilter = settingManager.GetInterpolatedColorTimeOfDayValue("FogColorFilter", "ENVIRONMENT");
-			auto fogColorFilterAmount = settingManager.GetInterpolatedTimeOfDayValue("FogColorFilterAmount", "ENVIRONMENT");
-
-			fogFarColorF3 = Curve(fogFarColorF3, fogColorCurve);
-			fogFarColorF3 = ColorFilter(fogFarColorF3, fogColorFilter, fogColorFilterAmount);
-			fogFarColorF3 = Intensity(fogFarColorF3, fogColorMultiplier);
-
-			fogFarColor = F3ToNi(fogFarColorF3);
-
-			auto& fogNearColor = colors[(uint)RE::TESWeather::ColorTypes::kFogNear];
-
-			auto fogNearColorF3 = NiToF3(fogNearColor);
-
-			fogNearColorF3 = Curve(fogNearColorF3, fogColorCurve);
-			fogNearColorF3 = ColorFilter(fogNearColorF3, fogColorFilter, fogColorFilterAmount);
-			fogNearColorF3 = Intensity(fogNearColorF3, fogColorMultiplier);
-
-			fogNearColor = F3ToNi(fogNearColorF3);
-		}
-
-		{
-			a_sky->fogPower *= settingManager.GetInterpolatedTimeOfDayValue("FogCurveMultiplier", "ENVIRONMENT");
-		}
-
-		{
-			auto fogAmountMultiplier = settingManager.GetInterpolatedTimeOfDayValue("FogAmountMultiplier", "ENVIRONMENT");
-			fogAmountMultiplier = std::max(fogAmountMultiplier, 1e-4f);
-
-			a_sky->fogNear /= fogAmountMultiplier;
-			a_sky->fogFar /= fogAmountMultiplier;
-		}
+	{
+		auto& effectLightingColor = a_colors[(uint)RE::TESWeather::ColorTypes::kEffectLighting];
+		const float ambientMean = ColorMean(NiToF3(a_colors[(uint)RE::TESWeather::ColorTypes::kAmbient]));
+		const float ambientGradingRatio = settingManager.GetInterpolatedTimeOfDayValue("AmbientLightingIntensity", "ENVIRONMENT");
+		const float totalMean = rawSunMean + ambientMean;
+		const float sunShare = !Util::IsInterior() && totalMean > minColorMean ? rawSunMean / totalMean : 0.0f;
+		const float scale = std::clamp(std::lerp(ambientGradingRatio, sunGradingRatio, sunShare), minEffectLightingScale, maxEffectLightingScale);
+		effectLightingColor = F3ToNi(NiToF3(effectLightingColor) * scale);
 	}
 
+	// A preset handing fog to CS leaves the vanilla fog values for Exponential Height Fog's scene settings
+	if (!IsHandedOff(E11Handoff::Feature::HeightFog)) {
+		auto& fogFarColor = a_colors[(uint)RE::TESWeather::ColorTypes::kFogFar];
+
+		auto fogFarColorF3 = NiToF3(fogFarColor);
+
+		auto fogColorCurve = settingManager.GetInterpolatedTimeOfDayValue("FogColorCurve", "ENVIRONMENT");
+		auto fogColorMultiplier = settingManager.GetInterpolatedTimeOfDayValue("FogColorMultiplier", "ENVIRONMENT");
+
+		auto fogColorFilter = settingManager.GetInterpolatedColorTimeOfDayValue("FogColorFilter", "ENVIRONMENT");
+		auto fogColorFilterAmount = settingManager.GetInterpolatedTimeOfDayValue("FogColorFilterAmount", "ENVIRONMENT");
+
+		fogFarColorF3 = Curve(fogFarColorF3, fogColorCurve);
+		fogFarColorF3 = ColorFilter(fogFarColorF3, fogColorFilter, fogColorFilterAmount);
+		fogFarColorF3 = Intensity(fogFarColorF3, fogColorMultiplier);
+
+		fogFarColor = F3ToNi(fogFarColorF3);
+
+		auto& fogNearColor = a_colors[(uint)RE::TESWeather::ColorTypes::kFogNear];
+
+		auto fogNearColorF3 = NiToF3(fogNearColor);
+
+		fogNearColorF3 = Curve(fogNearColorF3, fogColorCurve);
+		fogNearColorF3 = ColorFilter(fogNearColorF3, fogColorFilter, fogColorFilterAmount);
+		fogNearColorF3 = Intensity(fogNearColorF3, fogColorMultiplier);
+
+		fogNearColor = F3ToNi(fogNearColorF3);
+	}
+
+	float3 sunTint = scatteringSunColor;
 	if (enableEffect) {
 		{
-			auto& sunColor = colors[(uint)RE::TESWeather::ColorTypes::kSun];
+			auto& sunColor = a_colors[(uint)RE::TESWeather::ColorTypes::kSun];
 
 			auto sunColorF3 = NiToF3(sunColor);
 
 			sunColorF3 = Desaturation(sunColorF3, settingManager.GetInterpolatedTimeOfDayValue("SunDesaturation", "SKY"));
 			sunColorF3 = ColorFilter(sunColorF3, settingManager.GetInterpolatedColorTimeOfDayValue("SunColorFilter", "SKY"), 0.0f);
 
-			// Normalized only when brighter than 1: a dim sun (e.g. at dusk) keeps the scattering dim.
-			// SunIntensity is left out, as it only scales the sun itself.
-			const float sunColorPeak = std::max({ sunColorF3.x, sunColorF3.y, sunColorF3.z, 1.0f });
-			scatteringSunColor = { std::max(sunColorF3.x, 0.0f) / sunColorPeak, std::max(sunColorF3.y, 0.0f) / sunColorPeak, std::max(sunColorF3.z, 0.0f) / sunColorPeak };
+			sunTint = SunScatteringTint(sunColorF3);
 
 			sunColorF3 = Intensity(sunColorF3, settingManager.GetInterpolatedTimeOfDayValue("SunIntensity", "SKY"));
 
@@ -674,7 +772,7 @@ void Effects11::OverrideWeather(RE::Sky* a_sky)
 		}
 
 		{
-			auto& moonColor = colors[(uint)RE::TESWeather::ColorTypes::kMoonGlare];
+			auto& moonColor = a_colors[(uint)RE::TESWeather::ColorTypes::kMoonGlare];
 
 			// Sky Sync tints the moons from night colours once the sun sets, so grade them towards night by the same weight
 			const float nightWeight = globals::features::skySync.GetMoonNightWeight();
@@ -691,7 +789,7 @@ void Effects11::OverrideWeather(RE::Sky* a_sky)
 		}
 
 		{
-			auto& sunGlareColor = colors[(uint)RE::TESWeather::ColorTypes::kSunGlare];
+			auto& sunGlareColor = a_colors[(uint)RE::TESWeather::ColorTypes::kSunGlare];
 
 			auto sunGlareColorF3 = NiToF3(sunGlareColor);
 
@@ -701,7 +799,7 @@ void Effects11::OverrideWeather(RE::Sky* a_sky)
 		}
 
 		if (settingManager.GetValue<bool>("EnableWater", "EFFECT")) {
-			auto& waterColor = colors[(uint)RE::TESWeather::ColorTypes::kWaterMultiplier];
+			auto& waterColor = a_colors[(uint)RE::TESWeather::ColorTypes::kWaterMultiplier];
 
 			auto waterColorF3 = NiToF3(waterColor);
 
@@ -714,7 +812,7 @@ void Effects11::OverrideWeather(RE::Sky* a_sky)
 		float gradientDesaturation = settingManager.GetInterpolatedTimeOfDayValue("GradientDesaturation", "SKY");
 
 		{
-			auto& horizonColor = colors[(uint)RE::TESWeather::ColorTypes::kHorizon];
+			auto& horizonColor = a_colors[(uint)RE::TESWeather::ColorTypes::kHorizon];
 			auto horizonColorF3 = NiToF3(horizonColor);
 
 			horizonColorF3 = Curve(horizonColorF3, settingManager.GetInterpolatedTimeOfDayValue("GradientHorizonCurve", "SKY"));
@@ -726,7 +824,7 @@ void Effects11::OverrideWeather(RE::Sky* a_sky)
 		}
 
 		{
-			auto& lowerColor = colors[(uint)RE::TESWeather::ColorTypes::kSkyLower];
+			auto& lowerColor = a_colors[(uint)RE::TESWeather::ColorTypes::kSkyLower];
 			auto lowerColorF3 = NiToF3(lowerColor);
 
 			lowerColorF3 = Curve(lowerColorF3, settingManager.GetInterpolatedTimeOfDayValue("GradientMiddleCurve", "SKY"));
@@ -738,7 +836,7 @@ void Effects11::OverrideWeather(RE::Sky* a_sky)
 		}
 
 		{
-			auto& upperColor = colors[(uint)RE::TESWeather::ColorTypes::kSkyUpper];
+			auto& upperColor = a_colors[(uint)RE::TESWeather::ColorTypes::kSkyUpper];
 			auto upperColorF3 = NiToF3(upperColor);
 
 			upperColorF3 = Curve(upperColorF3, settingManager.GetInterpolatedTimeOfDayValue("GradientTopCurve", "SKY"));
@@ -748,7 +846,104 @@ void Effects11::OverrideWeather(RE::Sky* a_sky)
 
 			upperColor = F3ToNi(upperColorF3);
 		}
+	}
 
+	return sunTint;
+}
+
+void Effects11::BlendGradedWeathers(RE::Sky* a_sky, std::span<RE::NiColor, RE::TESWeather::ColorTypes::kTotal> a_graded) const
+{
+	const auto transition = GetGradedTransition(a_sky);
+	if (!transition)
+		return;
+
+	using ColorTypes = RE::TESWeather::ColorTypes;
+	using ColorTime = RE::TESWeather::ColorTime;
+	using SkyColors = std::array<RE::NiColor, ColorTypes::kTotal>;
+
+	const bool nightSunlight = globals::features::skySync.GetLightNightWeight() >= 1.0f;
+	const float moonNightWeight = globals::features::skySync.GetMoonNightWeight();
+	auto weatherColors = [&](const RE::TESWeather* a_weather) {
+		auto night = [&](uint32_t a_type) {
+			const auto color = a_weather->colorData[a_type][ColorTime::kNight];
+			return BlendColorTimes(a_sky, color, color, 1.0f);
+		};
+
+		SkyColors result;
+		for (uint32_t type = 0; type < ColorTypes::kTotal; ++type)
+			result[type] = BlendColorTimes(a_sky, a_weather->colorData[type][transition->first], a_weather->colorData[type][transition->second], transition->firstWeight);
+		if (nightSunlight)
+			result[ColorTypes::kSunlight] = night(ColorTypes::kSunlight);
+		auto& moonGlare = result[ColorTypes::kMoonGlare];
+		moonGlare += (night(ColorTypes::kMoonGlare) - moonGlare) * moonNightWeight;
+		return result;
+	};
+
+	const float pct = transition->pct;
+	SkyColors lastColors = weatherColors(a_sky->lastWeather);
+	SkyColors currentColors = weatherColors(a_sky->currentWeather);
+	SkyColors blendedColors;
+	for (uint32_t type = 0; type < ColorTypes::kTotal; ++type)
+		blendedColors[type] = lastColors[type] * (1.0f - pct) + currentColors[type] * pct;
+
+	GradeSkyColors(blendedColors);
+	{
+		SettingManager::ScopedWeatherBlend lastBlend(0.0f);
+		GradeSkyColors(lastColors);
+	}
+	{
+		SettingManager::ScopedWeatherBlend currentBlend(1.0f);
+		GradeSkyColors(currentColors);
+	}
+
+	for (uint32_t type = 0; type < ColorTypes::kTotal; ++type)
+		a_graded[type] = CorrectTransition(a_graded[type], lastColors[type] * (1.0f - pct) + currentColors[type] * pct, blendedColors[type]);
+}
+
+void Effects11::OverrideWeather(RE::Sky* a_sky)
+{
+	if (!a_sky) {
+		return;
+	}
+
+	auto& settingManager = SettingManager::GetSingleton();
+
+	auto& colors = a_sky->skyColor;
+	const float3 ungradedDirLightColor = NiToF3(colors[(uint)RE::TESWeather::ColorTypes::kSunlight]);
+
+	float3 sunTint = GradeSkyColors(colors);
+	BlendGradedWeathers(a_sky, colors);
+
+	// The transition correction rescales kSun, so derive the tint from the corrected colour
+	const float sunIntensity = settingManager.GetInterpolatedTimeOfDayValue("SunIntensity", "SKY");
+	if (enableEffect && sunIntensity > minColorMean)
+		sunTint = SunScatteringTint(NiToF3(colors[(uint)RE::TESWeather::ColorTypes::kSun]) / sunIntensity);
+
+	// The game lights its VL with this colour too, but ENB presets tune [GAMEVOLUMETRICRAYS] against the ungraded sunlight
+	{
+		const float3 gradedDirLightColor = NiToF3(colors[(uint)RE::TESWeather::ColorTypes::kSunlight]);
+		static constexpr float minGradedChannel = 1e-6f;
+		auto ungradeScale = [](float a_ungraded, float a_graded) { return a_graded > minGradedChannel ? a_ungraded / a_graded : 1.0f; };
+		directLightingUngradeScale = { ungradeScale(ungradedDirLightColor.x, gradedDirLightColor.x), ungradeScale(ungradedDirLightColor.y, gradedDirLightColor.y),
+			ungradeScale(ungradedDirLightColor.z, gradedDirLightColor.z) };
+	}
+	scatteringSunColor = sunTint;
+
+	if (!IsHandedOff(E11Handoff::Feature::HeightFog)) {
+		{
+			a_sky->fogPower *= settingManager.GetInterpolatedTimeOfDayValue("FogCurveMultiplier", "ENVIRONMENT");
+		}
+
+		{
+			auto fogAmountMultiplier = settingManager.GetInterpolatedTimeOfDayValue("FogAmountMultiplier", "ENVIRONMENT");
+			fogAmountMultiplier = std::max(fogAmountMultiplier, 1e-4f);
+
+			a_sky->fogNear /= fogAmountMultiplier;
+			a_sky->fogFar /= fogAmountMultiplier;
+		}
+	}
+
+	if (enableEffect) {
 		// CloudsIntensity and CloudsColorFilter are applied by the sky shader, after CloudsCurve
 		if (auto clouds = a_sky->clouds) {
 			auto cloudsOpacity = settingManager.GetInterpolatedTimeOfDayValue("CloudsOpacity", "SKY");
@@ -814,6 +1009,53 @@ void Effects11::OverrideAmbientLighting(DirectionalAmbientColors& DirectionalAmb
 	for (auto& axis : colors) {
 		for (auto& ambientLightingColor : axis)
 			ambientLightingColor = F3ToNi(Intensity(NiToF3(ambientLightingColor), intensity));
+	}
+}
+
+void Effects11::BlendGradedAmbient(RE::Sky* a_sky, DirectionalAmbientColors& a_graded)
+{
+	const auto transition = GetGradedTransition(a_sky);
+	if (!transition)
+		return;
+
+	auto weatherAmbient = [&](const RE::TESWeather* a_weather) {
+		auto axes = [](const RE::BGSDirectionalAmbientLightingColors::Directional& a_directional) { return std::array{ a_directional.x, a_directional.y, a_directional.z }; };
+		const auto firstAxes = axes(a_weather->directionalAmbientLightingColors[transition->first].directional);
+		const auto secondAxes = axes(a_weather->directionalAmbientLightingColors[transition->second].directional);
+
+		DirectionalAmbientColors result;
+		for (size_t axis = 0; axis < firstAxes.size(); ++axis) {
+			result.directionalAmbientColors[axis][0] = BlendColorTimes(a_sky, firstAxes[axis].max, secondAxes[axis].max, transition->firstWeight);
+			result.directionalAmbientColors[axis][1] = BlendColorTimes(a_sky, firstAxes[axis].min, secondAxes[axis].min, transition->firstWeight);
+		}
+		return result;
+	};
+
+	const float pct = transition->pct;
+	DirectionalAmbientColors lastAmbient = weatherAmbient(a_sky->lastWeather);
+	DirectionalAmbientColors currentAmbient = weatherAmbient(a_sky->currentWeather);
+	DirectionalAmbientColors blendedAmbient;
+	for (size_t axis = 0; axis < 3; ++axis) {
+		for (size_t side = 0; side < 2; ++side)
+			blendedAmbient.directionalAmbientColors[axis][side] = lastAmbient.directionalAmbientColors[axis][side] * (1.0f - pct) + currentAmbient.directionalAmbientColors[axis][side] * pct;
+	}
+
+	OverrideAmbientLighting(blendedAmbient);
+	{
+		SettingManager::ScopedWeatherBlend lastBlend(0.0f);
+		OverrideAmbientLighting(lastAmbient);
+	}
+	{
+		SettingManager::ScopedWeatherBlend currentBlend(1.0f);
+		OverrideAmbientLighting(currentAmbient);
+	}
+
+	for (size_t axis = 0; axis < 3; ++axis) {
+		for (size_t side = 0; side < 2; ++side) {
+			auto& graded = a_graded.directionalAmbientColors[axis][side];
+			graded = CorrectTransition(graded, lastAmbient.directionalAmbientColors[axis][side] * (1.0f - pct) + currentAmbient.directionalAmbientColors[axis][side] * pct,
+				blendedAmbient.directionalAmbientColors[axis][side]);
+		}
 	}
 }
 
@@ -905,7 +1147,7 @@ void Effects11::DrawVolumetricRays()
 	// The apply pass lights the rays with SunColor, which is premultiplied by the sun's visibility,
 	// so with the sun faded out (overcast, rain, fog, night) the passes would only add black
 	auto& settingManager = SettingManager::GetSingleton();
-	if (!settingManager.GetValue<bool>("EnableVolumetricRays", "EFFECT") || EffectManager::GetSunVisibility(sky->sun) <= 0.0f)
+	if (!settingManager.GetValue<bool>("EnableVolumetricRays", "EFFECT") || Util::GetSunVisibility(sky->sun) <= 0.0f)
 		return;
 
 	auto& effectManager = EffectManager::GetSingleton();

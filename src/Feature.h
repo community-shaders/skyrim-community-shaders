@@ -57,7 +57,6 @@ struct Feature
 	virtual std::string GetName() = 0;
 	virtual std::string GetShortName() = 0;
 	virtual std::string GetDisplayName() { return GetName(); }
-	std::string GetDisplayCategory() const;
 	virtual std::string GetFeatureModLink() { return ""; }
 	virtual std::string_view GetShaderDefineName() { return ""; }
 
@@ -136,16 +135,6 @@ public:
 	 * advertises work in progress; once installed they render like any other feature.
 	 */
 	bool IsHiddenUnreleased() const { return !installed && IsUnreleased(); }
-
-	/**
-	 * Localized stage marker shown after the feature name ("[ALPHA]", "[BETA]"),
-	 * empty for release features. Takes the stage so callers that already resolved
-	 * it (see GetReleaseStage) avoid a redundant lookup.
-	 */
-	static std::string GetReleaseStageTag(ReleaseStage stage);
-
-	/** @brief Theme colour for a stage tag: Error for Alpha, Warning for Beta. */
-	static ImVec4 GetReleaseStageColor(ReleaseStage stage);
 
 	/**
 	 * Whether the feature is disabled at boot by default (before any user override).
@@ -237,6 +226,10 @@ public:
 	virtual void SaveSettings(json&) {}
 	virtual void LoadSettings(json&) {}
 	virtual void RestoreDefaultSettings() {}
+
+	/** @brief Rewrites defaults that depend on the current settings, so a middle-click reset restores the right value.
+	 *  @param a_defaults The feature's default settings, in the shape SaveSettings writes. */
+	virtual void ApplyContextualDefaults(json& a_defaults) const { (void)a_defaults; }
 
 	/**
 	 * @brief Toggles the "disabled at boot" state for this feature.

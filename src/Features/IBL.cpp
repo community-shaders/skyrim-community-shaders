@@ -289,10 +289,10 @@ void IBL::SetupResources()
 			.Texture2D = { .MipSlice = 0 }
 		};
 
-		envIBLTexture = new Texture2D(texDesc);
+		envIBLTexture = new Texture2D(texDesc, "IBL::EnvIBL");
 		envIBLTexture->CreateSRV(srvDesc);
 		envIBLTexture->CreateUAV(uavDesc);
-		skyIBLTexture = new Texture2D(texDesc);
+		skyIBLTexture = new Texture2D(texDesc, "IBL::SkyIBL");
 		skyIBLTexture->CreateSRV(srvDesc);
 		skyIBLTexture->CreateUAV(uavDesc);
 	}

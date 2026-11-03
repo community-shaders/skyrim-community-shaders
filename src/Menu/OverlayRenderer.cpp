@@ -286,7 +286,7 @@ void OverlayRenderer::RenderOverlay(
 
 	// The Effects 11 editor and the Community Shaders menu are exclusive; the CS Editor hosts it.
 	auto& effects11Editor = Effects11Editor::GetSingleton();
-	if (effects11Editor.IsOpen() && menu.IsEnabled)
+	if (effects11Editor.IsOpen() && menu.IsOpen())
 		effects11Editor.Close(false);
 
 	if (editorWindow->open) {
@@ -298,9 +298,9 @@ void OverlayRenderer::RenderOverlay(
 	} else if (effects11Editor.IsOpen()) {
 		ImGui::GetIO().MouseDrawCursor = true;
 		effects11Editor.Draw();
-	} else if (menu.IsEnabled || menu.openFade > 0.0f || HomePageRenderer::ShouldShowFirstTimeSetup()) {
-		ImGui::GetIO().MouseDrawCursor = menu.IsEnabled || HomePageRenderer::ShouldShowFirstTimeSetup();
-		if (menu.IsEnabled || menu.openFade > 0.0f) {
+	} else if (menu.IsOpen() || menu.openFade > 0.0f || HomePageRenderer::ShouldShowFirstTimeSetup()) {
+		ImGui::GetIO().MouseDrawCursor = menu.IsOpen() || HomePageRenderer::ShouldShowFirstTimeSetup();
+		if (menu.IsOpen() || menu.openFade > 0.0f) {
 			const auto& context = *ImGui::GetCurrentContext();
 			const bool editedBefore = context.ActiveIdHasBeenEditedThisFrame;
 			drawSettings();
@@ -313,7 +313,7 @@ void OverlayRenderer::RenderOverlay(
 	}
 
 	// Enabling a Baseline pack can happen from either the menu or the CS editor, and the answer outlives the page.
-	if (editorWindow->open || menu.IsEnabled)
+	if (editorWindow->open || menu.IsOpen())
 		UnifiedPresetCatalog::GetSingleton().DrawBaselineOverlapPrompt();
 
 	// The editor draws the notifications in its own frame; while it is closed they still need a host,
@@ -339,7 +339,7 @@ bool OverlayRenderer::ShouldSkipRendering()
 	const uint32_t effectFailed = GetFailedEffectCount();
 
 	return !(shaderCache->IsCompiling() ||
-			 Menu::GetSingleton()->IsEnabled ||
+			 Menu::GetSingleton()->IsOpen() ||
 			 Menu::GetSingleton()->openFade > 0.0f ||
 			 HomePageRenderer::ShouldShowFirstTimeSetup() ||
 			 EditorWindow::GetSingleton()->open ||

@@ -5,6 +5,10 @@
             {
                 "find": "lerp( TOD(a), a##_Interior, EInteriorFactor )",
                 "replace": "(EInteriorFactor ? a##_Interior : TOD(a))"
+            },
+            {
+                "find": "color.xyz = color + bloom - color * bloom;",
+                "replace": "color.xyz = color.xyz + bloom * max(0.0, 1.0 - color.xyz);"
             }
         ]
     },

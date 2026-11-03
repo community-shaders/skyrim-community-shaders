@@ -621,6 +621,11 @@ ID3D11ShaderResourceView* Effect::LoadTextureFromFile(const std::string& filenam
 		return nullptr;
 	}
 
+	winrt::com_ptr<ID3D11Resource> textureResource;
+	srv->GetResource(textureResource.put());
+	Util::SetResourceName(textureResource.get(), "Effects11::%s", filename.c_str());
+	Util::SetResourceName(srv.get(), "Effects11::%s SRV", filename.c_str());
+
 	customTextureCache[filename] = srv;
 	return srv.get();
 }

@@ -4,7 +4,6 @@
 #include <cmath>
 #include <filesystem>
 #include <format>
-#include <imgui_stdlib.h>
 
 #include "CSEditor/Browser/BrowserWidgets.h"
 #include "EditorWidgets.h"
@@ -346,7 +345,7 @@ void Effects11Editor::Open(bool a_returnToMenu)
 	popupOpenLastFrame = false;
 	RefreshPresetPaths();
 	open.store(true, std::memory_order_relaxed);
-	globals::menu->IsEnabled = false;
+	globals::menu->Close();
 }
 
 void Effects11Editor::Close(bool a_restoreMenu)
@@ -355,7 +354,7 @@ void Effects11Editor::Close(bool a_restoreMenu)
 		return;
 	pendingAction = PendingAction::None;
 	if (a_restoreMenu && returnToMenu)
-		globals::menu->IsEnabled = true;
+		globals::menu->Open();
 	returnToMenu = false;
 }
 
@@ -364,7 +363,7 @@ void Effects11Editor::Toggle()
 	if (IsOpen())
 		Close();
 	else
-		Open(globals::menu->IsEnabled);
+		Open(globals::menu->IsOpen());
 }
 
 bool Effects11Editor::ShouldHandleEscapeKey()
@@ -643,22 +642,12 @@ void Effects11Editor::DrawStatus()
 
 void Effects11Editor::DrawSearchBar(std::string& a_filter, const char* a_hint, bool& a_focusRequest)
 {
-	ImGui::PushID(a_hint);
-	const float clearWidth = a_filter.empty() ? 0.0f : ImGui::GetFrameHeight() + ImGui::GetStyle().ItemSpacing.x;
 	if (a_focusRequest) {
 		ImGui::SetKeyboardFocusHere();
 		a_focusRequest = false;
 	}
-	ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - clearWidth);
-	ImGui::InputTextWithHint("##search", a_hint, &a_filter, ImGuiInputTextFlags_EscapeClearsAll);
+	Util::SearchField(a_hint, a_filter, a_hint, ImGui::GetContentRegionAvail().x, false);
 	Util::AddTooltip(T(TKEY("search_tip"), "Filter by name. Shortcut: Ctrl+F. Esc clears the search."));
-	if (!a_filter.empty()) {
-		ImGui::SameLine();
-		if (Util::Button("X##clear", ImVec2(ImGui::GetFrameHeight(), ImGui::GetFrameHeight())))
-			a_filter.clear();
-		Util::AddTooltip(T(TKEY("clear_search"), "Clear the search"));
-	}
-	ImGui::PopID();
 }
 
 void Effects11Editor::DrawPeriodFocusCombo()

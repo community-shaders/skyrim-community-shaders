@@ -60,8 +60,6 @@ namespace
 	constexpr float kCardFillAlpha = 0.14f;
 	constexpr float kCardBorderAlpha = 0.5f;
 
-	constexpr size_t kSearchBufferSize = 256;
-
 	constexpr ImGuiTableFlags kDetailsTableFlags =
 		ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersOuter | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_ScrollY;
 
@@ -181,7 +179,7 @@ namespace
 		SceneContextId page;
 		std::string pageName;
 		TintedGlyph pageIcon;
-		char search[kSearchBufferSize]{};
+		std::string search;
 		/// Keyed by scene, so a ticked row stays ticked while a filter hides it.
 		std::set<SceneContextId> ticked;
 		/// From's source, and To's target while nothing is ticked.
@@ -676,7 +674,7 @@ namespace
 	{
 		if (std::exchange(session.focusSearch, false))
 			ImGui::SetKeyboardFocusHere();
-		BrowserUI::SearchField("##search", session.search, sizeof(session.search), T("ui.search", "Search..."),
+		Util::SearchField("##search", session.search, T("ui.search", "Search..."),
 			ImGui::GetFontSize() * kSearchWidthEm, true, ImGuiInputTextFlags_CallbackHistory, OnSearchHistory,
 			&session.cursorStep);
 		session.enterCommits = ImGui::IsItemFocused();
@@ -990,7 +988,7 @@ namespace
 			other = DescribeDestinations(plan, rows);
 		}
 
-		const float swapSize = BrowserUI::IconButtonSize();
+		const float swapSize = Util::IconButtonSize();
 		const float cardWidth = (ImGui::GetContentRegionAvail().x - swapSize - ImGui::GetStyle().ItemSpacing.x * 2.0f) * 0.5f;
 		const float top = ImGui::GetCursorPosY();
 		DrawRouteCard(from ? T(TKEY("scene_copy_from"), "From") : T(TKEY("scene_copy_from_page"), "From this page"),
@@ -1001,7 +999,7 @@ namespace
 		ImGui::SetCursorPosY(top + (cardHeight - swapSize) * 0.5f);
 		const auto tooltip = std::format("{}\n{}", T(TKEY("scene_copy_swap"), "Swap direction"),
 			T(TKEY("scene_copy_swap_tooltip"), "Switches between copying out of this page and copying into it. Starts the picks over."));
-		if (BrowserUI::IconButton("##swap", Icons::TI(ICON_TI_ARROWS_EXCHANGE), tooltip.c_str(), false,
+		if (Util::IconButton("##swap", Icons::TI(ICON_TI_ARROWS_EXCHANGE), tooltip.c_str(), false,
 				ImGui::GetColorU32(ImGuiCol_Text)))
 			session.swapPending = true;
 

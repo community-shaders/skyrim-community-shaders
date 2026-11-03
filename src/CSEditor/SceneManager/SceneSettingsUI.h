@@ -37,6 +37,12 @@ namespace SceneSettingsUI
 	 */
 	void DrawLocationWindows();
 
+	/** @brief Pops the Scene Manager panel out of the browser into its own window, or focuses it. */
+	void OpenSceneManagerWindow();
+
+	/** @brief Draws the popped-out Scene Manager panel; call once per frame beside DrawLocationWindows. */
+	void DrawSceneManagerWindow();
+
 	/** @brief Opens the CS Editor on the page authoring a scene context, with a feature selected. */
 	void OpenSceneContext(const SceneSettingsManager::SceneContextId& context, const std::string& featureShortName);
 
