@@ -611,7 +611,7 @@ float3 GetLightingShadow(float3 color, float3 worldPosition, float2 screenPositi
 
 	float3 dirLight = ShadowSampling::GetDirectionalLighting();
 	float3 sceneLight = ShadowSampling::GetSceneLightingColor();
-	return color * (1.0 - saturate(dirLight * (1.0 - shadow) / max(sceneLight, 1e-5)));
+	return color * (1.0 - saturate(dirLight * (1.0 - shadow) / max(sceneLight, EPSILON_DIVISION)));
 }
 #	endif
 
