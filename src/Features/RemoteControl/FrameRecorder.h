@@ -20,8 +20,8 @@ namespace FrameRecorder
 	struct Frame
 	{
 		double frameMs = 0.0;
-		double presentThreadCpuMs = 0.0;
-		double processCpuMs = 0.0;
+		double presentThreadCpuMs = 0.0; /**< @brief Cycle-time delta scaled by the measured TSC rate: an estimate, since the cycle unit is undocumented. */
+		double processCpuMs = 0.0;       /**< @brief As presentThreadCpuMs, summed over the process; GetProcessTimes is too coarse per frame. */
 		bool frameGeneration = false;
 	};
 
