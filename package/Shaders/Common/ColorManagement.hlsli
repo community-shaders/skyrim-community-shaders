@@ -104,8 +104,8 @@ namespace Color
 #	endif
 	}
 
-	/** @brief Scales additive effects: fire gets a curve and intensity, all other additive effects are light sprites. */
-	float3 AdditiveEffect(float3 color, bool isFire)
+	/** @brief Scales additive effects: fire gets a curve and intensity, light sprites get their intensity, anything else is left alone. */
+	float3 AdditiveEffect(float3 color, bool isFire, bool isLightSprite)
 	{
 #	if defined(EFFECTS11)
 		if (!SharedData::enbSettings.Enable)
@@ -119,7 +119,10 @@ namespace Color
 		const float lightSpriteIntensity = SharedData::linearLightingSettings.lightSpriteEffectMult;
 #	endif
 #	if defined(EFFECTS11) || defined(ENABLE_LL)
-		color = isFire ? pow(abs(color), fireCurve) * fireIntensity : color * lightSpriteIntensity;
+		if (isFire)
+			color = pow(abs(color), fireCurve) * fireIntensity;
+		else if (isLightSprite)
+			color *= lightSpriteIntensity;
 #	endif
 		return color;
 	}
