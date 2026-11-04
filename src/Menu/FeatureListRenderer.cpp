@@ -1169,7 +1169,7 @@ void FeatureListRenderer::ListMenuVisitor::operator()(Feature* feat)
 	if (const auto stage = feat->GetReleaseStage(); stage != Feature::ReleaseStage::Release) {
 		MenuFonts::FontRoleGuard badgeFont(Menu::FontRole::Subtext);
 		BrowserUI::InlineBadge(stage == Feature::ReleaseStage::Alpha ? T("menu.features.badge_alpha", "Alpha") : T("menu.features.badge_beta", "Beta"),
-			Feature::GetReleaseStageColor(stage), rowMax.y - rowMin.y);
+			Feature::GetReleaseStageColor(stage), rowMax.y - rowMin.y - ImGui::GetStyle().ItemSpacing.y);
 	}
 
 	// Indicator icons stack after the name and badge: a standard gap before the first, a space between the rest
