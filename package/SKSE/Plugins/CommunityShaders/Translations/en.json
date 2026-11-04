@@ -2839,6 +2839,8 @@
     "feature.screen_space_shadows.key_feature_3": "Better shadow accuracy",
     "feature.screen_space_shadows.key_feature_4": "Fine-scale shadow effects",
     "feature.screen_space_shadows.key_feature_5": "Configurable shadow contrast",
+    "feature.screen_space_shadows.max_ray_length": "Max Ray Length",
+    "feature.screen_space_shadows.max_ray_length_tooltip": "Maximum world-space length of a contact shadow ray. Keeps screen space shadows from duplicating the shadow map at a distance. 0 disables the cap.",
     "feature.screen_space_shadows.name": "Screen Space Shadows",
     "feature.screen_space_shadows.sample_count": "Sample Count Multiplier",
     "feature.screen_space_shadows.sample_count_tooltip": "Multiplier for shadow ray sample count. Higher values increase shadow reach at the cost of performance. Adapts to render resolution.",
