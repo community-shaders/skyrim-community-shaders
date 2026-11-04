@@ -1825,6 +1825,7 @@ void LightLimitFix::CopyLocalShadowMaps()
 				continue;
 			}
 		}
+		globals::profiler->BeginPass("LightLimitFix::LocalShadowCopy");
 		if (localShadowDirectCopy) {
 			context->CopySubresourceRegion(localShadowCache->resource.get(), D3D11CalcSubresource(0, static_cast<UINT>(caster->slice), 1), 0, 0, 0,
 				depthStencil.texture, D3D11CalcSubresource(0, engineSlice, localShadowEngineMipLevels), nullptr);
@@ -1844,6 +1845,7 @@ void LightLimitFix::CopyLocalShadowMaps()
 			localShadowCopyCB->Update(copyData);
 			context->Dispatch(groups, groups, 1);
 		}
+		globals::profiler->EndPass();
 
 		DirectX::XMMATRIX projection = DirectX::XMLoadFloat4x4(&info.lightTransform);
 		DirectX::XMStoreFloat4x4(&caster->shadowProj, projection);
