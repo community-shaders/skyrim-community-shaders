@@ -2443,7 +2443,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #	if defined(WATER_EFFECTS)
 	if (inWorld || inReflection)
-		dirLightColor *= WaterEffects::ComputeCaustics(waterData, input.WorldPosition.xyz);
+		dirLightColor *= WaterEffects::ComputeCaustics(waterData, input.WorldPosition.xyz, input.Position.xy);
 #	endif
 
 	// Apply world shadow (terrain shadows, cloud shadows) directly to light color

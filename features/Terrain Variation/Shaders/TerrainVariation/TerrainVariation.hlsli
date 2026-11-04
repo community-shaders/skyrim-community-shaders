@@ -6,6 +6,7 @@
 #define TERRAIN_VARIATION_HLSLI
 
 #include "Common/ColorManagement.hlsli"
+#include "Common/Math.hlsli"
 #include "Common/SharedData.hlsli"
 
 // --------------------- CONSTANTS AND STRUCTURES --------------------- //
@@ -51,20 +52,6 @@ inline float2 hashLOD(float2 p)
 {
 	p = frac(p * 0.318);
 	return frac(float2(dot(p, float2(1.0, 17.0)), dot(p, float2(1.0, 23.0))));
-}
-
-// Value of the top-left pixel of the 2x2 quad, read through fine derivatives (SM5 has no QuadReadLaneAt).
-// Exact for integer-valued input, so every pixel of the quad gets the same bits.
-inline float4 QuadReadTopLeft(float4 v, float2 quadPixel)
-{
-	v -= quadPixel.x * ddx_fine(v);
-	return v - quadPixel.y * ddy_fine(v);
-}
-
-inline float2 QuadReadTopLeft(float2 v, float2 quadPixel)
-{
-	v -= quadPixel.x * ddx_fine(v);
-	return v - quadPixel.y * ddy_fine(v);
 }
 
 // Barycentric weight of a lattice corner (hat function of the skewed triangular grid).
@@ -122,9 +109,9 @@ inline StochasticOffsets ComputeStochasticOffsetsScaled(float2 uv, float scale, 
 		c2 = t;
 	}
 
-	float2 quadPixel = float2(uint2(pixelPos) & 1u);
-	float4 tapCells = QuadReadTopLeft(float4(c0.cell, c1.cell), quadPixel);
-	float2 droppedCell = QuadReadTopLeft(c2.cell, quadPixel);
+	float2 quadPixel = Math::QuadPixel(pixelPos);
+	float4 tapCells = Math::QuadReadTopLeft(float4(c0.cell, c1.cell), quadPixel);
+	float2 droppedCell = Math::QuadReadTopLeft(c2.cell, quadPixel);
 
 	// Equal to c0.w, c1.w, c2.w on the top-left pixel.
 	float b1 = StochasticCornerWeight(skewUV, tapCells.xy);
