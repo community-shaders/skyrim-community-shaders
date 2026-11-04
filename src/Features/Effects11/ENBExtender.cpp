@@ -1,7 +1,9 @@
 ﻿#include "ENBExtender.h"
 
 #include <d3dcompiler.h>
+#include <detours/detours.h>
 #include <fstream>
+#include <intrin.h>
 #include <sstream>
 #include <unordered_set>
 
@@ -1242,19 +1244,94 @@ namespace ENBExtender
 		return source.starts_with("KIEFX");
 	}
 
+	/** @brief Maps the game root's enbseries onto the selected preset's for one ENBExt_Compile call. */
+	struct CompileRedirect
+	{
+		std::wstring from;
+		std::wstring to;
+		uint32_t opens = 0;
+	};
+
+	static thread_local CompileRedirect* activeRedirect = nullptr;
+
+	/** @brief Rewrites a path under the root's enbseries to the preset's, if this thread has an active redirect. */
+	static std::optional<std::wstring> RedirectPath(LPCWSTR path)
+	{
+		if (!activeRedirect || !path)
+			return std::nullopt;
+		std::error_code ec;
+		auto full = std::filesystem::absolute(path, ec).native();
+		const auto& from = activeRedirect->from;
+		if (ec || full.size() < from.size() || _wcsnicmp(full.c_str(), from.c_str(), from.size()) != 0 ||
+			(full.size() > from.size() && full[from.size()] != L'\\'))
+			return std::nullopt;
+		return activeRedirect->to + full.substr(from.size());
+	}
+
+	/** @brief Whether a file-opening import's result means the file was opened. */
+	static bool Opened(HRESULT result) { return SUCCEEDED(result); }
+	static bool Opened(FILE* file) { return file != nullptr; }
+	static bool Opened(HANDLE handle) { return handle != INVALID_HANDLE_VALUE; }
+
+	/** @brief KiENBExtender import hook that redirects its leading path argument. */
+	template <class Signature, bool OpensFile>
+	struct PathImportHook;
+
+	template <class R, bool OpensFile, class... Args>
+	struct PathImportHook<R(LPCWSTR, Args...), OpensFile>
+	{
+		static R Thunk(LPCWSTR path, Args... args)
+		{
+			auto redirected = RedirectPath(path);
+			R result = original(redirected ? redirected->c_str() : path, args...);
+			if constexpr (OpensFile) {
+				if (redirected && Opened(result))
+					++activeRedirect->opens;
+			}
+			return result;
+		}
+		static inline R (*original)(LPCWSTR, Args...) = nullptr;
+	};
+
+	using ReadFileToBlobHook = PathImportHook<HRESULT(LPCWSTR, ID3DBlob**), true>;
+	using FiopenHook = PathImportHook<FILE*(LPCWSTR, int, int), true>;
+	using CreateFileHook = PathImportHook<HANDLE(LPCWSTR, DWORD, DWORD, LPSECURITY_ATTRIBUTES, DWORD, DWORD, HANDLE), true>;
+	using GetFileAttributesExHook = PathImportHook<BOOL(LPCWSTR, GET_FILEEX_INFO_LEVELS, LPVOID), false>;
+	using FindFirstFileExHook = PathImportHook<HANDLE(LPCWSTR, FINDEX_INFO_LEVELS, LPVOID, FINDEX_SEARCH_OPS, LPVOID, DWORD), false>;
+	using FindFirstFileHook = PathImportHook<HANDLE(LPCWSTR, LPWIN32_FIND_DATAW), false>;
+
+	/** @brief Points one of the module's IAT entries at Hook::Thunk, keeping the previous target. */
+	template <class Hook>
+	static bool PatchImport(HMODULE module, std::string_view dll, std::string_view function)
+	{
+		auto* entry = SKSE::GetIATPtr<decltype(Hook::original)>(reinterpret_cast<REX::W32::HMODULE>(module), dll, function);
+		if (!entry)
+			return false;
+		assert(!Hook::original);
+		Hook::original = *entry;
+		REL::safe_write(reinterpret_cast<std::uintptr_t>(entry), reinterpret_cast<std::uintptr_t>(&Hook::Thunk));
+		return true;
+	}
+
+	/** @brief Hooks every file-reading import of KiENBExtender once; false if any is missing. */
+	static bool InstallCompileRedirect(HMODULE module)
+	{
+		static const bool installed =
+			PatchImport<ReadFileToBlobHook>(module, "D3DCOMPILER_47.dll", "D3DReadFileToBlob") &&
+			PatchImport<FiopenHook>(module, "MSVCP140.dll", "?_Fiopen@std@@YAPEAU_iobuf@@PEB_WHH@Z") &&
+			PatchImport<CreateFileHook>(module, "KERNEL32.dll", "CreateFileW") &&
+			PatchImport<GetFileAttributesExHook>(module, "KERNEL32.dll", "GetFileAttributesExW") &&
+			PatchImport<FindFirstFileExHook>(module, "KERNEL32.dll", "FindFirstFileExW") &&
+			PatchImport<FindFirstFileHook>(module, "KERNEL32.dll", "FindFirstFileW");
+		return installed;
+	}
+
 	bool CreateEncryptedEffect(const std::filesystem::path& effectPath, winrt::com_ptr<ID3DX11Effect>& effect, std::string& error)
 	{
 		auto effectName = effectPath.filename().string();
 		auto index = GetKiCompileFileIndex(effectName);
 		if (!index) {
 			error = fmt::format("Encrypted effect '{}' has no ENB Extender compile slot", effectName);
-			return false;
-		}
-
-		// ENBExt_Compile takes no path and always reads <current directory>\enbseries
-		std::error_code ec;
-		if (!std::filesystem::equivalent(effectPath.parent_path(), std::filesystem::absolute("enbseries"), ec)) {
-			error = "Encrypted preset: ENB Extender only loads presets from the game folder's enbseries, not Data\\enbseries";
 			return false;
 		}
 
@@ -1265,8 +1342,27 @@ namespace ENBExtender
 			return false;
 		}
 
+		// ENBExt_Compile takes no path and always reads <current directory>\enbseries
+		const auto rootSeries = std::filesystem::absolute("enbseries");
+		std::error_code ec;
+		const bool redirecting = !std::filesystem::equivalent(effectPath.parent_path(), rootSeries, ec);
+		if (redirecting && !InstallCompileRedirect(module)) {
+			error = "Encrypted preset: this ENB Extender version only loads presets from the game folder's enbseries";
+			return false;
+		}
+		CompileRedirect redirect{ rootSeries.native(), std::filesystem::absolute(effectPath.parent_path()).native() };
+
 		winrt::com_ptr<ID3DBlob> code, errors;
-		HRESULT hr = compile(*index, code.put(), errors.put());
+		HRESULT hr;
+		{
+			activeRedirect = redirecting ? &redirect : nullptr;
+			const SKSE::stl::scope_exit clearRedirect([]() noexcept { activeRedirect = nullptr; });
+			hr = compile(*index, code.put(), errors.put());
+		}
+		if (redirecting && !redirect.opens) {
+			error = "Encrypted preset: ENB Extender did not read the selected preset's files, so it only loads presets from the game folder's enbseries";
+			return false;
+		}
 		if (FAILED(hr) || !code) {
 			if (errors) {
 				auto* text = static_cast<const char*>(errors->GetBufferPointer());
@@ -1282,6 +1378,39 @@ namespace ENBExtender
 			return false;
 		}
 		return true;
+	}
+
+	/** @brief Lowercase so it matches KiLoader's prompt after lowercasing; file lookups are case-insensitive. */
+	static constexpr std::wstring_view helperFileName = L"enbhelperse.dll";
+
+	/** @brief Real MessageBoxW; Detours repoints it at a trampoline. */
+	static auto* RealMessageBoxW = &MessageBoxW;
+
+	/** @brief Picks No when KiLoader's Yes/No prompt lists only ENBHelperSE.dll as missing a loading point. */
+	static int WINAPI DetouredMessageBoxW(HWND window, LPCWSTR text, LPCWSTR caption, UINT type)
+	{
+		HMODULE caller = nullptr;
+		GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, static_cast<LPCWSTR>(_ReturnAddress()), &caller);
+		std::wstring message = text ? text : L"";
+		std::ranges::transform(message, message.begin(), ::towlower);
+		const bool onlyHelperListed = message.find(L'\'' + std::wstring(helperFileName) + L'\'') != std::wstring::npos && message.find(L".dll'") == message.rfind(L".dll'");
+		if (caller && caller == GetModuleHandleW(L"KiLoader.dll") && (type & MB_TYPEMASK) == MB_YESNO &&
+			onlyHelperListed && message.find(L"loading point") != std::wstring_view::npos) {
+			logger::info("[ENBEXTENDER] Skipped KiLoader's prompt for ENBHelperSE.dll: Effects 11 does not use it");
+			return IDNO;
+		}
+		return RealMessageBoxW(window, text, caption, type);
+	}
+
+	void SuppressHelperPrompt()
+	{
+		if (!std::filesystem::exists(std::filesystem::path(L"Data/KiLoader/Plugins") / helperFileName))
+			return;
+		DetourTransactionBegin();
+		DetourUpdateThread(GetCurrentThread());
+		DetourAttach(reinterpret_cast<PVOID*>(&RealMessageBoxW), reinterpret_cast<PVOID>(&DetouredMessageBoxW));
+		if (const auto result = DetourTransactionCommit(); result != NO_ERROR)
+			logger::warn("[ENBEXTENDER] Could not hook MessageBoxW ({}); KiLoader will still prompt about ENBHelperSE.dll", result);
 	}
 
 	/** @brief Drops spaces around '.' so "Group . Name" and "Group.Name" compare equal. */

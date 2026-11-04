@@ -363,7 +363,7 @@ void SubsurfaceScattering::DrawSSS()
 void SubsurfaceScattering::SetupResources()
 {
 	{
-		blurCB = new ConstantBuffer(ConstantBufferDesc<BlurCB>());
+		blurCB = new ConstantBuffer(ConstantBufferDesc<BlurCB>(), "SSS::BlurCB");
 	}
 
 	auto renderer = globals::game::renderer;

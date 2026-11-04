@@ -8,9 +8,8 @@
 #include <variant>
 #include <vector>
 
+#include "Feature.h"
 #include "Menu/Icons/helpers/IconFonts.h"
-
-struct Feature;
 
 /**
  * @brief Canonical, untranslated IDs of the built-in menu pages.
@@ -62,21 +61,13 @@ namespace FeatureListFilter
 class FeatureListRenderer
 {
 public:
-	/** @brief How a built-in page's row stands out in the list. */
-	enum class NavStyle : std::uint8_t
-	{
-		Plain,   ///< An ordinary row
-		Accent,  ///< Accent-tinted icon, for the pages most users want first (Presets, CS Editor)
-	};
-
 	/** @brief Describes a built-in (non-feature) menu page with an ID, a display name and a draw callback. */
 	struct BuiltInMenu
 	{
 		std::string_view id;  ///< Canonical page ID from MenuPageIds, used for all page logic
 		std::string name;     ///< Translated label shown in the list
 		std::function<void()> func;
-		Icons::GlyphRef icon{};  ///< Glyph leading the row and the page header; none leaves the space empty
-		NavStyle style = NavStyle::Plain;
+		Icons::GlyphRef icon{};   ///< Glyph leading the row and the page header; none leaves the space empty
 		std::string hint;         ///< The page header's subtitle
 		bool showHeader = false;  ///< Draws a BrowserUI::PageHeader above the page; off for pages with their own title
 	};
@@ -175,6 +166,12 @@ public:
 	/** @brief Translated display label for a FeatureCategories value. */
 	static std::string TranslateCategory(std::string_view category);
 
+	/** @brief Width of a pre-release stage's badge; 0 for release features. */
+	static float MeasureStageBadge(Feature::ReleaseStage stage);
+
+	/** @brief Draws a pre-release stage's badge at the cursor, centred in rowHeight; nothing for release features. */
+	static void DrawStageBadge(Feature::ReleaseStage stage, float rowHeight);
+
 	/**
 	 * @brief Which filters a feature matches, as FeatureListFilter bits (kUnloaded set when it is not loaded).
 	 * Call State::PrimeUserEdits() first when asking for many features.
@@ -189,6 +186,9 @@ public:
 
 	/** @brief Filter counts from the last time the list was built; shown beside each filter in the sort popup. */
 	static const FilterCounts& GetFilterCounts();
+
+	/** @brief Accent dot in the top-right corner of a sort button while a filter is on. */
+	static void DrawFilterDot(const ImVec2& buttonMin, const ImVec2& buttonMax);
 
 	/**
 	 * @brief Draws the sort and filter popup (sort order, filters with counts, Clear filters) if `popupId` is open.
@@ -288,9 +288,6 @@ private:
 		std::string& pendingFeatureSelection,
 		std::map<std::string, bool>& categoryExpansionStates,
 		Hooks& hooks);
-
-	/** @brief Draws a built-in page's row; the CS Editor row opens its window instead of selecting the page. */
-	static void RenderBuiltInRow(const BuiltInMenu& menu, size_t listId, size_t& selectedMenu, float width = 0.0f);
 
 	static void RenderRightColumn(
 		const std::vector<MenuFuncInfo>& menuList,

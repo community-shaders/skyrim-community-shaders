@@ -205,7 +205,7 @@ void Skin::LoadSkinDetailTexture()
 		return;
 	}
 
-	texSkinDetail = eastl::make_unique<Texture2D>(reinterpret_cast<ID3D11Texture2D*>(pResource));
+	texSkinDetail = eastl::make_unique<Texture2D>(reinterpret_cast<ID3D11Texture2D*>(pResource), "Skin::SkinDetail");
 
 	D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {
 		.Format = texSkinDetail->desc.Format,
@@ -222,7 +222,7 @@ void Skin::SetupResources()
 	logger::debug("Loading skin detail texture...");
 	LoadSkinDetailTexture();
 
-	PerGeometryCB = eastl::make_unique<ConstantBuffer>(ConstantBufferDesc<PerGeometryData>());
+	PerGeometryCB = eastl::make_unique<ConstantBuffer>(ConstantBufferDesc<PerGeometryData>(), "Skin::PerGeometryCB");
 }
 
 void Skin::ReloadSkinDetail()

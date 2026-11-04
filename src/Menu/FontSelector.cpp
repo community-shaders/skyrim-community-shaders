@@ -1,5 +1,4 @@
 #include "FontSelector.h"
-#include "CSEditor/Browser/BrowserWidgets.h"
 #include "Menu/FontAtlasState.h"
 #include "Menu/Icons/helpers/IconFonts.h"
 #include "Menu/MenuIcons.h"
@@ -189,7 +188,7 @@ namespace MenuFonts::Selector
 		}
 		if (roleSettings.SizeScale != Menu::GetFontRoleDefaultScale(role)) {
 			ImGui::SameLine();
-			if (BrowserUI::IconButton("##ResetScale", Icons::TI(MenuIcons::kRestore), T("menu.settings.font_scale_reset_tooltip", "Reset to the default scale"))) {
+			if (Util::IconButton("##ResetScale", Icons::TI(MenuIcons::kRestore), T("menu.settings.font_scale_reset_tooltip", "Reset to the default scale"))) {
 				roleSettings.SizeScale = Menu::GetFontRoleDefaultScale(role);
 				MenuFonts::GetAtlasState().pendingFontReload = true;
 			}
@@ -206,7 +205,7 @@ namespace MenuFonts::Selector
 			Util::HoverTip(T("menu.settings.feature_header_scale_tooltip", "Scale multiplier for feature title text in the Settings tab."));
 			if (themeSettings.FeatureHeading.FeatureTitleScale != ThemeManager::Constants::DEFAULT_FEATURE_TITLE_SCALE) {
 				ImGui::SameLine();
-				if (BrowserUI::IconButton("##ResetFeatureHeaderScale", Icons::TI(MenuIcons::kRestore), T("menu.settings.font_scale_reset_tooltip", "Reset to the default scale")))
+				if (Util::IconButton("##ResetFeatureHeaderScale", Icons::TI(MenuIcons::kRestore), T("menu.settings.font_scale_reset_tooltip", "Reset to the default scale")))
 					themeSettings.FeatureHeading.FeatureTitleScale = ThemeManager::Constants::DEFAULT_FEATURE_TITLE_SCALE;
 			}
 		}

@@ -286,7 +286,7 @@ void OverlayRenderer::RenderOverlay(
 
 	// The Effects 11 editor and the Community Shaders menu are exclusive; the CS Editor hosts it.
 	auto& effects11Editor = Effects11Editor::GetSingleton();
-	if (effects11Editor.IsOpen() && menu.IsEnabled)
+	if (effects11Editor.IsOpen() && menu.IsOpen())
 		effects11Editor.Close(false);
 
 	if (editorWindow->open) {
@@ -298,9 +298,9 @@ void OverlayRenderer::RenderOverlay(
 	} else if (effects11Editor.IsOpen()) {
 		ImGui::GetIO().MouseDrawCursor = true;
 		effects11Editor.Draw();
-	} else if (menu.IsEnabled || menu.openFade > 0.0f || HomePageRenderer::ShouldShowFirstTimeSetup()) {
-		ImGui::GetIO().MouseDrawCursor = menu.IsEnabled || HomePageRenderer::ShouldShowFirstTimeSetup();
-		if (menu.IsEnabled || menu.openFade > 0.0f) {
+	} else if (menu.IsOpen() || menu.openFade > 0.0f || HomePageRenderer::ShouldShowFirstTimeSetup()) {
+		ImGui::GetIO().MouseDrawCursor = menu.IsOpen() || HomePageRenderer::ShouldShowFirstTimeSetup();
+		if (menu.IsOpen() || menu.openFade > 0.0f) {
 			const auto& context = *ImGui::GetCurrentContext();
 			const bool editedBefore = context.ActiveIdHasBeenEditedThisFrame;
 			drawSettings();
@@ -313,7 +313,7 @@ void OverlayRenderer::RenderOverlay(
 	}
 
 	// Enabling a Baseline pack can happen from either the menu or the CS editor, and the answer outlives the page.
-	if (editorWindow->open || menu.IsEnabled)
+	if (editorWindow->open || menu.IsOpen())
 		UnifiedPresetCatalog::GetSingleton().DrawBaselineOverlapPrompt();
 
 	// The editor draws the notifications in its own frame; while it is closed they still need a host,
@@ -339,7 +339,7 @@ bool OverlayRenderer::ShouldSkipRendering()
 	const uint32_t effectFailed = GetFailedEffectCount();
 
 	return !(shaderCache->IsCompiling() ||
-			 Menu::GetSingleton()->IsEnabled ||
+			 Menu::GetSingleton()->IsOpen() ||
 			 Menu::GetSingleton()->openFade > 0.0f ||
 			 HomePageRenderer::ShouldShowFirstTimeSetup() ||
 			 EditorWindow::GetSingleton()->open ||
@@ -411,14 +411,8 @@ void OverlayRenderer::RenderShaderCompilationStatus(const std::function<const ch
 	auto& themeSettings = Menu::GetSingleton()->GetTheme();
 	auto* renderDoc = RenderDoc::GetSingleton();
 	bool renderDocAvailable = renderDoc->IsAvailable();
-	const auto renderDocInformation = renderDoc->GetOverlayWarningMessage();
-
-	const std::unordered_map<std::string, std::string> statsArg{ { "stats", shaderCache->GetShaderStatsString(!state->IsDeveloperMode()) } };
-	const auto progressTitle = shaderCache->backgroundCompilation ?
-	                               I18n::GetSingleton()->Format("overlay.compiling_shaders_background", statsArg, "Background Compiling Shaders: {stats}") :
-	                               I18n::GetSingleton()->Format("overlay.compiling_shaders", statsArg, "Compiling Shaders: {stats}");
-	auto percent = (float)compiledShaders / (float)totalShaders;
-	auto progressOverlay = fmt::format("{}/{} ({:2.1f}%)", compiledShaders, totalShaders, 100 * percent);
+	// Runs every frame, so only build the strings a visible card shows
+	const auto renderDocInformation = renderDocAvailable ? renderDoc->GetOverlayWarningMessage() : std::string();
 
 	const uint32_t effectFailed = GetFailedEffectCount();
 	const bool showFailures = (failed && !hide) || effectFailed;
@@ -437,6 +431,13 @@ void OverlayRenderer::RenderShaderCompilationStatus(const std::function<const ch
 	}
 
 	if (compiling) {
+		const std::unordered_map<std::string, std::string> statsArg{ { "stats", shaderCache->GetShaderStatsString(!state->IsDeveloperMode()) } };
+		const auto progressTitle = shaderCache->backgroundCompilation ?
+		                               I18n::GetSingleton()->Format("overlay.compiling_shaders_background", statsArg, "Background Compiling Shaders: {stats}") :
+		                               I18n::GetSingleton()->Format("overlay.compiling_shaders", statsArg, "Compiling Shaders: {stats}");
+		auto percent = (float)compiledShaders / (float)totalShaders;
+		auto progressOverlay = fmt::format("{}/{} ({:2.1f}%)", compiledShaders, totalShaders, 100 * percent);
+
 		ImGui::TextUnformatted(progressTitle.c_str());
 		ImGui::ProgressBar(percent, ImVec2(0.0f, 0.0f), progressOverlay.c_str());
 		if (state->IsDeveloperMode()) {

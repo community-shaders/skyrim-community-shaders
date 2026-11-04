@@ -64,7 +64,7 @@ namespace
 		const ImGuiStyle& style = ImGui::GetStyle();
 		const ImVec2 iconSize = Icons::CalcGlyphSize(icon);
 		const float labelWidth = ImGui::CalcTextSize(label).x;
-		const float gap = Icons::LabeledButtonGap(icon, label);
+		const float gap = Util::LabeledButtonGap(icon, label);
 		const float height = ImGui::GetFrameHeight();
 		row.Place(height);
 		ImGui::PushID(id);
