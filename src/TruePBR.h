@@ -4,6 +4,9 @@
 
 class BSLightingShaderMaterialPBR;
 
+/** @brief The engine's default land texture, used where a land quad names none. */
+RE::TESLandTexture* GetDefaultLandTexture();
+
 struct GlintParameters
 {
 	bool enabled = false;
