@@ -29,6 +29,27 @@ namespace Triplanar
 		dPdy = ddy(worldPos * scale);
 	}
 
+	/// Weighted triplanar sample with gradients from ComputeGradients, for use inside flow control.
+	float4 SampleGrad(Texture2D<float4> tex, SamplerState samp, float3 worldPos, float3 weights, float scale, float3 dPdx, float3 dPdy)
+	{
+		return tex.SampleGrad(samp, worldPos.yz * scale, dPdx.yz, dPdy.yz) * weights.x +
+		       tex.SampleGrad(samp, worldPos.xz * scale, dPdx.xz, dPdy.xz) * weights.y +
+		       tex.SampleGrad(samp, worldPos.xy * scale, dPdx.xy, dPdy.xy) * weights.z;
+	}
+
+	/// Stochastic triplanar with gradients from ComputeGradients.
+	float4 SampleStochasticGrad(Texture2D<float4> tex, SamplerState samp, float3 worldPos, float3 weights, float scale, float noise, float3 dPdx, float3 dPdy)
+	{
+		float4 result = 0;
+		if (noise < weights.x)
+			result = tex.SampleGrad(samp, worldPos.yz * scale, dPdx.yz, dPdy.yz);
+		else if (noise < weights.x + weights.y)
+			result = tex.SampleGrad(samp, worldPos.xz * scale, dPdx.xz, dPdy.xz);
+		else
+			result = tex.SampleGrad(samp, worldPos.xy * scale, dPdx.xy, dPdy.xy);
+		return result;
+	}
+
 	/// Stochastic triplanar: select one projection plane via noise, reducing 3 texture reads to 1.
 	float4 SampleStochastic(Texture2D<float4> tex, SamplerState samp, float3 worldPos, float3 weights, float scale, float noise)
 	{
