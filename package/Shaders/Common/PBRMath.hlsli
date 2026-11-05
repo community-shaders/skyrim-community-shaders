@@ -229,6 +229,17 @@ namespace PBR
 		float bInv;
 	};
 
+	/// @brief OpenPBR fuzz layer resolved once per pixel and shared by every light
+	struct FuzzLayer
+	{
+		float weight;
+		float3 color;
+		float roughness;
+		float weightedAlbedo;      // weight * directional albedo
+		float specularThroughput;  // Share of substrate specular left under the fuzz
+		FuzzLTC ltc;               // Set only by CacheFuzzLTC, and only when weightedAlbedo > 0
+	};
+
 	/// @brief Cache the view-dependent basis and coefficients of the OpenPBR fuzz lobe.
 	/// @param V View direction
 	/// @param N Surface normal, facing the viewer

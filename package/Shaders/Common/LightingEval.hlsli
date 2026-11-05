@@ -99,14 +99,11 @@ float3 VanillaSpecular(DirectContext context, float shininess, bool specular, fl
 }
 
 void EvaluateLighting(DirectContext context, MaterialProperties material,
-#if defined(TRUE_PBR)
-	PBR::FuzzLayer fuzz,
-#endif
 	float3x3 tbnTr, float2 uv, float2 uv_ddx, float2 uv_ddy, out DirectLightingOutput lightingOutput)
 {
 	lightingOutput = (DirectLightingOutput)0;
 #if defined(TRUE_PBR)
-	PBR::GetDirectLightInput(lightingOutput, context, material, fuzz, tbnTr, uv);
+	PBR::GetDirectLightInput(lightingOutput, context, material, tbnTr, uv);
 #elif defined(LIGHTING)
 #	if defined(CS_HAIR_SHADING)
 	if (SharedData::hairSpecularSettings.Enabled) {
@@ -151,14 +148,11 @@ void EvaluateLighting(DirectContext context, MaterialProperties material,
 }
 
 void GetIndirectLobeWeights(out IndirectLobeWeights lobeWeights, IndirectContext context, MaterialProperties material,
-#if defined(TRUE_PBR)
-	PBR::FuzzLayer fuzz,
-#endif
 	float2 uv)
 {
 	lobeWeights = (IndirectLobeWeights)0;
 #if defined(TRUE_PBR)
-	PBR::GetIndirectLobeWeights(lobeWeights, context, material, fuzz);
+	PBR::GetIndirectLobeWeights(lobeWeights, context, material);
 #else
 #	if defined(CS_HAIR_SHADING)
 	if (SharedData::hairSpecularSettings.Enabled) {
