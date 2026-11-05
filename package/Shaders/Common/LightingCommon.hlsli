@@ -90,6 +90,9 @@ struct MaterialProperties
 	float FuzzRoughness;
 	float3 FuzzColor;
 	float FuzzWeight;
+#	else
+	// PBR::GetIndirectLobeWeights reads AO; present in every layout.
+	float AO;
 #	endif
 #else
 	float Roughness;
