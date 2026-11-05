@@ -84,6 +84,13 @@ namespace Util
 	void SetResourceName(ID3D11DeviceChild* Resource, const char* Format, ...);
 
 	/**
+	 * @brief A texture's or buffer's size from its descriptor: every mip, array slice and sample.
+	 * @param a_resource The resource to measure.
+	 * @return Bytes, or 0 for a null resource or an unknown format.
+	 */
+	uint64_t ResourceBytes(ID3D11Resource* a_resource);
+
+	/**
 	 * @brief Enables D3D11 multithread protection and holds the immediate context's lock for the scope.
 	 * Scopes are reference counted, and the protection state from before the first scope is restored when the last one ends.
 	 */
@@ -108,9 +115,10 @@ namespace Util
 	 * @param Defines Preprocessor macro name/value pairs to pass to the compiler.
 	 * @param ProgramType Shader model target (e.g. "ps_5_0", "vs_5_0", "cs_5_0").
 	 * @param Program Entry point function name (defaults to "main").
+	 * @param OutBlob When non-null, receives the compiled bytecode (caller owns the reference).
 	 * @return The compiled shader object, or nullptr on failure. A failed compile is not retried until ClearShaderCompileFailures().
 	 */
-	ID3D11DeviceChild* CompileShader(const wchar_t* FilePath, const std::vector<std::pair<const char*, const char*>>& Defines, const char* ProgramType, const char* Program = "main");
+	ID3D11DeviceChild* CompileShader(const wchar_t* FilePath, const std::vector<std::pair<const char*, const char*>>& Defines, const char* ProgramType, const char* Program = "main", ID3DBlob** OutBlob = nullptr);
 
 	/**
 	 * @brief Allow previously failed CompileShader requests to compile again.

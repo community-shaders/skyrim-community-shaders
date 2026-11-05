@@ -133,6 +133,21 @@ namespace Util
 
 	GUID WKPDID_D3DDebugObjectNameT = { 0x429b8c22, 0x9188, 0x4b0c, 0x87, 0x42, 0xac, 0xb0, 0xbf, 0x85, 0xc2, 0x00 };
 
+	namespace
+	{
+		uint64_t MipChainBytes(DXGI_FORMAT a_format, uint32_t a_width, uint32_t a_height, uint32_t a_depth, uint32_t a_mips)
+		{
+			uint64_t bytes = 0;
+			for (uint32_t mip = 0; mip < std::max(a_mips, 1u); mip++) {
+				size_t rowPitch = 0, slicePitch = 0;
+				if (FAILED(DirectX::ComputePitch(a_format, std::max(a_width >> mip, 1u), std::max(a_height >> mip, 1u), rowPitch, slicePitch)))
+					return 0;
+				bytes += uint64_t(slicePitch) * std::max(a_depth >> mip, 1u);
+			}
+			return bytes;
+		}
+	}
+
 	void SetResourceName(ID3D11DeviceChild* Resource, const char* Format, ...)
 	{
 		if (!Resource)
@@ -148,6 +163,33 @@ namespace Util
 		if (len < 0)
 			len = static_cast<int>(strnlen(buffer, sizeof(buffer)));
 		Resource->SetPrivateData(WKPDID_D3DDebugObjectNameT, static_cast<UINT>(len), buffer);
+	}
+
+	uint64_t ResourceBytes(ID3D11Resource* a_resource)
+	{
+		if (!a_resource)
+			return 0;
+		if (winrt::com_ptr<ID3D11Buffer> buffer; SUCCEEDED(a_resource->QueryInterface(__uuidof(ID3D11Buffer), buffer.put_void()))) {
+			D3D11_BUFFER_DESC desc;
+			buffer->GetDesc(&desc);
+			return desc.ByteWidth;
+		}
+		if (winrt::com_ptr<ID3D11Texture2D> texture; SUCCEEDED(a_resource->QueryInterface(__uuidof(ID3D11Texture2D), texture.put_void()))) {
+			D3D11_TEXTURE2D_DESC desc;
+			texture->GetDesc(&desc);
+			return MipChainBytes(desc.Format, desc.Width, desc.Height, 1, desc.MipLevels) * std::max(desc.ArraySize, 1u) * std::max(desc.SampleDesc.Count, 1u);
+		}
+		if (winrt::com_ptr<ID3D11Texture3D> texture; SUCCEEDED(a_resource->QueryInterface(__uuidof(ID3D11Texture3D), texture.put_void()))) {
+			D3D11_TEXTURE3D_DESC desc;
+			texture->GetDesc(&desc);
+			return MipChainBytes(desc.Format, desc.Width, desc.Height, desc.Depth, desc.MipLevels);
+		}
+		if (winrt::com_ptr<ID3D11Texture1D> texture; SUCCEEDED(a_resource->QueryInterface(__uuidof(ID3D11Texture1D), texture.put_void()))) {
+			D3D11_TEXTURE1D_DESC desc;
+			texture->GetDesc(&desc);
+			return MipChainBytes(desc.Format, desc.Width, 1, 1, desc.MipLevels) * std::max(desc.ArraySize, 1u);
+		}
+		return 0;
 	}
 
 	// Per-frame getters would otherwise retry a failed compile every frame.
@@ -271,7 +313,7 @@ namespace Util
 		}
 	}
 
-	ID3D11DeviceChild* CompileShader(const wchar_t* FilePath, const std::vector<std::pair<const char*, const char*>>& Defines, const char* ProgramType, const char* Program)
+	ID3D11DeviceChild* CompileShader(const wchar_t* FilePath, const std::vector<std::pair<const char*, const char*>>& Defines, const char* ProgramType, const char* Program, ID3DBlob** OutBlob)
 	{
 		auto device = globals::d3d::device;
 
@@ -370,6 +412,8 @@ namespace Util
 			if (SUCCEEDED(CreateShaderObject(device, ProgramType, cachedBlob.get(), &shader))) {
 				Util::SetResourceName(shader, "%s:%s", str.c_str(), Program);
 				logger::debug("Loaded {} from {}", str, Util::WStringToString(*diskPath));
+				if (OutBlob)
+					cachedBlob.copy_to(OutBlob);
 				return shader;
 			}
 			// An intact container can still hold bytecode the runtime rejects; drop the entry and compile from source.
@@ -392,6 +436,8 @@ namespace Util
 		ID3D11DeviceChild* shader = nullptr;
 		DX::ThrowIfFailed(CreateShaderObject(device, ProgramType, shaderBlob.get(), &shader));
 		Util::SetResourceName(shader, "%s:%s", str.c_str(), Program);
+		if (OutBlob)
+			shaderBlob.copy_to(OutBlob);
 		return shader;
 	}
 
