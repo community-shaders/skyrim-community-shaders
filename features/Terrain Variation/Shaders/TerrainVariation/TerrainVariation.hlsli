@@ -80,41 +80,41 @@ inline float StochasticCornerWeight(float2 skewUV, float2 cell)
 // near c0/c1 ties, disable that fade so the primary swap stays symmetric.
 // Contrast exponent is 2, so weights are squared rather than pow()'d.
 // Declares skewUV and the three lattice corners around uv, strongest first, as c0..c2.
-#define STOCHASTIC_CORNERS(uv, scale) \
+#define STOCHASTIC_CORNERS(uv, scale)             \
 	float2 skewUV = mul(SKEW_MATRIX, uv * scale); \
-	float2 vxID = floor(skewUV); \
-	float2 f = frac(skewUV); \
-	float bz = 1.0 - f.x - f.y; \
-	StochasticCorner c0, c1, c2; \
-	if (bz > 0) { \
-		c0.cell = vxID; \
-		c0.w = bz; \
-		c1.cell = vxID + float2(0, 1); \
-		c1.w = f.y; \
-		c2.cell = vxID + float2(1, 0); \
-		c2.w = f.x; \
-	} else { \
-		c0.cell = vxID + 1.0; \
-		c0.w = -bz; \
-		c1.cell = vxID + float2(1, 0); \
-		c1.w = 1.0 - f.y; \
-		c2.cell = vxID + float2(0, 1); \
-		c2.w = 1.0 - f.x; \
-	} \
-	if (c1.w > c0.w) { \
-		StochasticCorner t = c0; \
-		c0 = c1; \
-		c1 = t; \
-	} \
-	if (c2.w > c0.w) { \
-		StochasticCorner t = c0; \
-		c0 = c2; \
-		c2 = t; \
-	} \
-	if (c2.w > c1.w) { \
-		StochasticCorner t = c1; \
-		c1 = c2; \
-		c2 = t; \
+	float2 vxID = floor(skewUV);                  \
+	float2 f = frac(skewUV);                      \
+	float bz = 1.0 - f.x - f.y;                   \
+	StochasticCorner c0, c1, c2;                  \
+	if (bz > 0) {                                 \
+		c0.cell = vxID;                           \
+		c0.w = bz;                                \
+		c1.cell = vxID + float2(0, 1);            \
+		c1.w = f.y;                               \
+		c2.cell = vxID + float2(1, 0);            \
+		c2.w = f.x;                               \
+	} else {                                      \
+		c0.cell = vxID + 1.0;                     \
+		c0.w = -bz;                               \
+		c1.cell = vxID + float2(1, 0);            \
+		c1.w = 1.0 - f.y;                         \
+		c2.cell = vxID + float2(0, 1);            \
+		c2.w = 1.0 - f.x;                         \
+	}                                             \
+	if (c1.w > c0.w) {                            \
+		StochasticCorner t = c0;                  \
+		c0 = c1;                                  \
+		c1 = t;                                   \
+	}                                             \
+	if (c2.w > c0.w) {                            \
+		StochasticCorner t = c0;                  \
+		c0 = c2;                                  \
+		c2 = t;                                   \
+	}                                             \
+	if (c2.w > c1.w) {                            \
+		StochasticCorner t = c1;                  \
+		c1 = c2;                                  \
+		c2 = t;                                   \
 	}
 
 // Corners are chosen once per 2x2 quad, so each tap's UV offset is constant across the quad and

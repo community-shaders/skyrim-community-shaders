@@ -178,7 +178,7 @@ namespace PBR
 			float NdotH = saturate(dot(specularNormal, H));
 			float VdotH = saturate(dot(V, H));
 			float D = BRDF::D_GGX(material.Roughness, NdotH);
-#if defined(GLINT)
+#	if defined(GLINT)
 			[branch] if (material.GlintLogMicrofacetDensity > 1.1f)
 			{
 				float Dmax = BRDF::D_GGX(material.Roughness, 1.0f);
@@ -186,7 +186,7 @@ namespace PBR
 					material.GlintDensityRandomization, material.GlintCache, glintH, D, Dmax)
 				        .x;
 			}
-#endif
+#	endif
 			float visibility = BRDF::Vis_SmithJoint(material.Roughness, NdotV, max(specularNdotL, EPSILON_DOT_CLAMP));
 			float3 F = BRDF::F_Schlick(material.F0, VdotH);
 			float3 detailedLightColor = context.lightColor * context.detailedShadow;
