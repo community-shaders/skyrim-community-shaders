@@ -253,6 +253,7 @@ void Deferred::PrepassPasses()
 	context->OMSetRenderTargets(0, nullptr, nullptr);  // Unbind all bound render targets
 
 	Feature::ForEachLoadedFeature("Prepass", [](Feature* feature) { feature->Prepass(); }, true);
+	Feature::ForEachLoadedFeature("PostPrepass", [](Feature* feature) { feature->PostPrepass(); }, true);
 }
 
 void Deferred::StartDeferred()
