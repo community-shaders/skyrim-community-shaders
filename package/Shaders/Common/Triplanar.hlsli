@@ -31,12 +31,12 @@ namespace Triplanar
 
 // One projection plane per pixel, picked by noise and sampled with the given gradients.
 #define TRIPLANAR_STOCHASTIC_PICK(tex, samp, worldPos, weights, scale, noise, dPdx, dPdy) \
-	float4 result = 0; \
-	if (noise < weights.x) \
-		result = tex.SampleGrad(samp, worldPos.yz * scale, dPdx.yz, dPdy.yz); \
-	else if (noise < weights.x + weights.y) \
-		result = tex.SampleGrad(samp, worldPos.xz * scale, dPdx.xz, dPdy.xz); \
-	else \
+	float4 result = 0;                                                                    \
+	if (noise < weights.x)                                                                \
+		result = tex.SampleGrad(samp, worldPos.yz * scale, dPdx.yz, dPdy.yz);             \
+	else if (noise < weights.x + weights.y)                                               \
+		result = tex.SampleGrad(samp, worldPos.xz * scale, dPdx.xz, dPdy.xz);             \
+	else                                                                                  \
 		result = tex.SampleGrad(samp, worldPos.xy * scale, dPdx.xy, dPdy.xy);
 
 	/// Weighted triplanar sample with gradients from ComputeGradients, for use inside flow control.
