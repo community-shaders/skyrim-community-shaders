@@ -315,6 +315,8 @@ namespace Util
 
 	ID3D11DeviceChild* CompileShader(const wchar_t* FilePath, const std::vector<std::pair<const char*, const char*>>& Defines, const char* ProgramType, const char* Program, ID3DBlob** OutBlob)
 	{
+		if (OutBlob)
+			*OutBlob = nullptr;
 		auto device = globals::d3d::device;
 
 		CustomInclude include;
@@ -436,7 +438,7 @@ namespace Util
 		ID3D11DeviceChild* shader = nullptr;
 		DX::ThrowIfFailed(CreateShaderObject(device, ProgramType, shaderBlob.get(), &shader));
 		Util::SetResourceName(shader, "%s:%s", str.c_str(), Program);
-		if (OutBlob)
+		if (OutBlob && shader)
 			shaderBlob.copy_to(OutBlob);
 		return shader;
 	}

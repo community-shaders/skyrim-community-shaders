@@ -187,6 +187,8 @@ void Profiler::EndFrame()
 	if (!initialized || !context)
 		return;
 
+	// Marks no frame took belong to a frame that recorded nothing.
+	pendingSkipped.clear();
 	frameCounter.fetch_add(1, std::memory_order_relaxed);
 
 	if (frameSkipped) {
