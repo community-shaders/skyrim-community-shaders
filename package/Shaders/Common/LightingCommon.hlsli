@@ -59,6 +59,7 @@ struct IndirectLobeWeights
 };
 
 #if defined(TRUE_PBR)
+#	include "Common/PBRMath.hlsli"
 #	if defined(GLINT)
 #		include "Common/Glints/Glints2023.hlsli"
 #	else
@@ -109,12 +110,14 @@ struct MaterialProperties
 	float3 CoatF0;
 	float3 FuzzColor;
 	float FuzzWeight;
+	float FuzzRoughness;
 	float GlintScreenSpaceScale;
 	float GlintLogMicrofacetDensity;
 	float GlintMicrofacetRoughness;
 	float GlintDensityRandomization;
 	Glints::GlintCachedVars GlintCache;
 	float Noise;
+	PBR::FuzzLayer Fuzz;
 #endif
 };
 
