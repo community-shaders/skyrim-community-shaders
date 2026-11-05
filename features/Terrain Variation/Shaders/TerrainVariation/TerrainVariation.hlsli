@@ -149,6 +149,9 @@ inline StochasticOffsets ComputeStochasticOffsetsScaled(float2 uv, float scale, 
 	return o;
 }
 
+// Per-pixel corners, no quad read: sample with explicit gradients (SampleGrad), because plain Sample would
+// take the corner jumps into its derivatives. period > 0 hashes the cells modulo period, for UVs past
+// the hash's precision; the cells come back unwrapped for StochasticCellUV.
 inline StochasticOffsets ComputeStochasticOffsetsScaledPeriodic(float2 uv, float scale, float period, out float2 cell1, out float2 cell2)
 {
 	STOCHASTIC_CORNERS(uv, scale)
