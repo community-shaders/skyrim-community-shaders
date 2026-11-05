@@ -1,7 +1,7 @@
 #ifndef EXTENDED_MATERIALS_PARALLAX_CORE_HLSLI
 #define EXTENDED_MATERIALS_PARALLAX_CORE_HLSLI
 
-// EM_PARALLAX_CUSTOM_HEIGHT swaps the height texture for EMParallaxCustomHeight in the non-landscape march (not the soft shadow).
+// EM_PARALLAX_CUSTOM_HEIGHT swaps the height texture for EMParallaxCustomHeight in the non-landscape march and soft shadow.
 #if defined(LANDSCAPE) && defined(EM_PARALLAX_CUSTOM_HEIGHT)
 #	error EM_PARALLAX_CUSTOM_HEIGHT has no landscape path
 #endif
@@ -209,6 +209,7 @@ float2 GetParallaxCoords(float distance, float2 coords, float mipLevel, float3 v
 
 #if !defined(LANDSCAPE)
 // https://advances.realtimerendering.com/s2006/Tatarchuk-POM.pdf
+// With EM_PARALLAX_CUSTOM_HEIGHT the taps read EMParallaxCustomHeight, and the caller passes sh0 from it.
 float GetParallaxSoftShadowMultiplier(float2 coords, float mipLevel, float3 L, float sh0, Texture2D<float4> tex, SamplerState texSampler, uint channel, float quality, float noise, DisplacementParams params, bool applyMeshTV, StochasticOffsets meshOffset)
 {
 	[branch] if (quality > 0.0)
@@ -219,7 +220,16 @@ float GetParallaxSoftShadowMultiplier(float2 coords, float mipLevel, float3 L, f
 		float2 rayDir = L.xy * 0.1 * params.HeightScale;
 		float4 multipliers = rcp((float4(1, 2, 3, 4) + noise));
 		float4 sh = sh0.xxxx;
-#	if defined(TERRAIN_VARIATION)
+#	if defined(EM_PARALLAX_CUSTOM_HEIGHT)
+		sh.x = AdjustDisplacementNormalized(EMParallaxCustomHeight(coords + rayDir * multipliers.x, mipLevel), params);
+		if (quality > 0.25)
+			sh.y = AdjustDisplacementNormalized(EMParallaxCustomHeight(coords + rayDir * multipliers.y, mipLevel), params);
+		if (quality > 0.5)
+			sh.z = AdjustDisplacementNormalized(EMParallaxCustomHeight(coords + rayDir * multipliers.z, mipLevel), params);
+		if (quality > 0.75)
+			sh.w = AdjustDisplacementNormalized(EMParallaxCustomHeight(coords + rayDir * multipliers.w, mipLevel), params);
+#	else
+#		if defined(TERRAIN_VARIATION)
 		[branch] if (applyMeshTV)
 		{
 			sh.x = AdjustDisplacementNormalized(StochasticHeightChannel(tex, texSampler, coords + rayDir * multipliers.x, mipLevel, channel, meshOffset), params);
@@ -231,7 +241,7 @@ float GetParallaxSoftShadowMultiplier(float2 coords, float mipLevel, float3 L, f
 				sh.w = AdjustDisplacementNormalized(StochasticHeightChannel(tex, texSampler, coords + rayDir * multipliers.w, mipLevel, channel, meshOffset), params);
 		}
 		else
-#	endif
+#		endif
 		{
 			sh.x = AdjustDisplacementNormalized(tex.SampleLevel(texSampler, coords + rayDir * multipliers.x, mipLevel)[channel], params);
 			if (quality > 0.25)
@@ -241,6 +251,7 @@ float GetParallaxSoftShadowMultiplier(float2 coords, float mipLevel, float3 L, f
 			if (quality > 0.75)
 				sh.w = AdjustDisplacementNormalized(tex.SampleLevel(texSampler, coords + rayDir * multipliers.w, mipLevel)[channel], params);
 		}
+#	endif
 		return 1.0 - saturate(dot(max(0, sh - sh0), shadowStrength));
 	}
 	return 1.0;
