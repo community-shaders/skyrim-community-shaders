@@ -208,6 +208,9 @@ float GetParallaxSoftShadowMultiplier(float2 coords, float mipLevel, float3 L, f
 {
 	[branch] if (quality > 0.0)
 	{
+#	if defined(EM_PARALLAX_CUSTOM_HEIGHT)
+		sh0 = EMParallaxCustomHeight(coords, mipLevel);
+#	endif
 		sh0 = AdjustDisplacementNormalized(sh0, params);
 		uint tapCount = ParallaxShadowTapCount(quality);
 		float shadowStrength = ShadowIntensity * (4.0 / tapCount);

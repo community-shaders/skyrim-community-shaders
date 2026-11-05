@@ -150,7 +150,7 @@ inline StochasticOffsets ComputeStochasticOffsetsScaled(float2 uv, float scale, 
 }
 
 // Per-pixel corners, no quad read: sample with an explicit mip level or gradients, because plain Sample would
-// take the corner jumps into its derivatives. period > 0 hashes the cells modulo period, for UVs past
+// take the corner jumps into its derivatives. period >= 1 hashes the cells modulo period, for UVs past
 // the hash's precision; the cells come back unwrapped for StochasticCellUV.
 inline StochasticOffsets ComputeStochasticOffsetsScaledPeriodic(float2 uv, float scale, float period, out float2 cell1, out float2 cell2)
 {
@@ -165,8 +165,8 @@ inline StochasticOffsets ComputeStochasticOffsetsScaledPeriodic(float2 uv, float
 	w2 *= lerp(1.0, rankFade, dominanceGuard);
 
 	StochasticOffsets o;
-	o.offset1 = hash2D2D(period > 0.0 ? c0.cell - period * floor(c0.cell / max(period, 1.0)) : c0.cell);
-	o.offset2 = hash2D2D(period > 0.0 ? c1.cell - period * floor(c1.cell / max(period, 1.0)) : c1.cell);
+	o.offset1 = hash2D2D(period >= 1.0 ? c0.cell - period * floor(c0.cell / max(period, 1.0)) : c0.cell);
+	o.offset2 = hash2D2D(period >= 1.0 ? c1.cell - period * floor(c1.cell / max(period, 1.0)) : c1.cell);
 	o.tap1Weight = w1 * rcp(max(w1 + w2, 1e-8));
 	cell1 = c0.cell;
 	cell2 = c1.cell;
