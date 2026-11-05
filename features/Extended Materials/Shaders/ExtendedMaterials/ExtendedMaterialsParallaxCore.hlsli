@@ -87,6 +87,14 @@ float2 GetParallaxCoords(float distance, float2 coords, float mipLevel, float3 v
 #	else
 			currHeight = GetTerrainHeightQuadRayMarch(noise, input, currentOffset[0].xy, currentOffset[0].zw, currentOffset[1].xy, currentOffset[1].zw, mipLevels, params, blendFactor, w1, w2, sharedOffset, weights) + 0.5;
 #	endif
+#elif defined(EM_PARALLAX_CUSTOM_HEIGHT)
+				// The includer defines EM_PARALLAX_CUSTOM_HEIGHT and float EMParallaxCustomHeight(float2 uv, float mip).
+				currHeight.x = EMParallaxCustomHeight(currentOffset[0].xy, mipLevel);
+				currHeight.y = EMParallaxCustomHeight(currentOffset[0].zw, mipLevel);
+				currHeight.z = EMParallaxCustomHeight(currentOffset[1].xy, mipLevel);
+				currHeight.w = EMParallaxCustomHeight(currentOffset[1].zw, mipLevel);
+
+				currHeight = AdjustDisplacementNormalized(currHeight, params);
 #else
 #	if defined(TERRAIN_VARIATION)
 			[branch] if (applyMeshTV)
