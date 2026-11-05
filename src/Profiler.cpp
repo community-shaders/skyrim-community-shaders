@@ -1,6 +1,7 @@
 #include "Profiler.h"
 
 #include <algorithm>
+#include <span>
 #include <unordered_map>
 
 float Profiler::RollingHistory::GetAverage() const
@@ -73,9 +74,9 @@ void Profiler::Release()
 		frame.disjoint = nullptr;
 		frame.timers.clear();
 		frame.activeCount = 0;
-		frame.skipped.clear();
+		frame.skipped = {};
 	}
-	pendingSkipped.clear();
+	pendingSkipped = {};
 	results.clear();
 	knownTimers.clear();
 	knownTimerIndex.clear();
@@ -102,8 +103,9 @@ void Profiler::BeginFrame()
 
 	auto& frame = frames[writeFrame];
 	frame.activeCount = 0;
-	frame.skipped.clear();
-	frame.skipped.swap(pendingSkipped);
+	frame.overflowed = false;
+	frame.skipped.count = 0;
+	std::swap(frame.skipped, pendingSkipped);
 	frameActive = true;
 	passOpen = false;
 	context->Begin(frame.disjoint.get());
@@ -125,6 +127,8 @@ void Profiler::BeginPass(std::string_view name)
 			context->End(timer.begin.get());
 			QueryPerformanceCounter(&timer.cpuBegin);
 			passOpen = true;
+		} else {
+			frame.overflowed = true;
 		}
 	}
 
@@ -159,20 +163,19 @@ void Profiler::MarkPassSkipped(std::string_view name)
 {
 	if (!initialized || !IsActive())
 		return;
-	auto& list = frameActive ? frames[writeFrame].skipped : pendingSkipped;
-	if (std::ranges::find(list, name) == list.end())
-		list.emplace_back(name);
+	(frameActive ? frames[writeFrame].skipped : pendingSkipped).Add(name);
 }
 
-Profiler::KnownTimer& Profiler::FindOrAddTimer(const std::string& name)
+void Profiler::SkipMarks::Add(std::string_view name)
 {
-	auto [it, inserted] = knownTimerIndex.try_emplace(name, knownTimers.size());
-	if (inserted) {
-		KnownTimer kt;
-		kt.name = name;
-		knownTimers.push_back(std::move(kt));
-	}
-	return knownTimers[it->second];
+	const auto live = std::span(names).first(count);
+	if (std::ranges::find(live, name) != live.end())
+		return;
+	if (count < names.size())
+		names[count].assign(name);
+	else
+		names.emplace_back(name);
+	count++;
 }
 
 void Profiler::EndFrame()
@@ -188,7 +191,7 @@ void Profiler::EndFrame()
 		return;
 
 	// Marks no frame took belong to a frame that recorded nothing.
-	pendingSkipped.clear();
+	pendingSkipped.count = 0;
 	frameCounter.fetch_add(1, std::memory_order_relaxed);
 
 	if (frameSkipped) {
@@ -235,6 +238,20 @@ void Profiler::CollectResults()
 		activeTotalMs = 0.0f;
 		activeCpuTotalMs = 0.0f;
 
+		// A skip needs no GPU timing, so it counts on disjoint frames too. A pass that began this frame ran, timed or not.
+		if (!frame.overflowed) {
+			const auto ran = std::span(frame.timers).first(frame.activeCount);
+			for (const auto& name : std::span(frame.skipped.names).first(frame.skipped.count)) {
+				auto it = knownTimerIndex.find(name);
+				if (it == knownTimerIndex.end() || std::ranges::any_of(ran, [&](const auto& timer) { return timer.name == name; }))
+					continue;
+				// lastSampleFrame stays, so a pass that is always skipped still retires.
+				auto& known = knownTimers[it->second];
+				known.gpu.PushSample(0.0f);
+				known.cpu.PushSample(0.0f);
+			}
+		}
+
 		if (disjointData.Disjoint)
 			continue;
 
@@ -256,7 +273,11 @@ void Profiler::CollectResults()
 			activeTotalMs += ms;
 			activeCpuTotalMs += timer.cpuMs;
 
-			FindOrAddTimer(timer.name);
+			if (knownTimerIndex.try_emplace(timer.name, knownTimers.size()).second) {
+				KnownTimer kt;
+				kt.name = timer.name;
+				knownTimers.push_back(std::move(kt));
+			}
 		}
 
 		// A name timed several times in one frame is one sample: its frame total.
@@ -264,14 +285,6 @@ void Profiler::CollectResults()
 			auto& known = knownTimers[knownTimerIndex.at(name)];
 			known.gpu.PushSample(data.gpuMs);
 			known.cpu.PushSample(data.cpuMs);
-			known.lastSampleFrame = collectedFrames;
-		}
-		for (const auto& name : frame.skipped) {
-			if (activeTimers.contains(name))
-				continue;
-			auto& known = FindOrAddTimer(name);
-			known.gpu.PushSample(0.0f);
-			known.cpu.PushSample(0.0f);
 			known.lastSampleFrame = collectedFrames;
 		}
 	}
