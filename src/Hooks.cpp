@@ -25,6 +25,7 @@
 #include "Features/LightLimitFix.h"
 #include "Features/PostProcessing.h"
 #include "Features/RainRefraction.h"
+#include "Features/RemoteControl/FrameRecorder.h"
 #include "Features/RemoteControl/NvPerf.h"
 #include "Features/RenderDoc.h"
 #include "Features/ScreenshotFeature.h"
@@ -503,6 +504,8 @@ struct IDXGISwapChain_Present
 			});
 
 		globals::state->Reset();
+
+		FrameRecorder::OnPresentEnd();
 
 		NvPerf::OnPresentEnd();
 
