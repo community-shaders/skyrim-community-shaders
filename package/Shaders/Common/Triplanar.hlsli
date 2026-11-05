@@ -29,6 +29,16 @@ namespace Triplanar
 		dPdy = ddy(worldPos * scale);
 	}
 
+// One projection plane per pixel, picked by noise and sampled with the given gradients.
+#define TRIPLANAR_STOCHASTIC_PICK(tex, samp, worldPos, weights, scale, noise, dPdx, dPdy) \
+	float4 result = 0; \
+	if (noise < weights.x) \
+		result = tex.SampleGrad(samp, worldPos.yz * scale, dPdx.yz, dPdy.yz); \
+	else if (noise < weights.x + weights.y) \
+		result = tex.SampleGrad(samp, worldPos.xz * scale, dPdx.xz, dPdy.xz); \
+	else \
+		result = tex.SampleGrad(samp, worldPos.xy * scale, dPdx.xy, dPdy.xy);
+
 	/// Weighted triplanar sample with gradients from ComputeGradients, for use inside flow control.
 	float4 SampleGrad(Texture2D<float4> tex, SamplerState samp, float3 worldPos, float3 weights, float scale, float3 dPdx, float3 dPdy)
 	{
@@ -40,13 +50,7 @@ namespace Triplanar
 	/// Stochastic triplanar with gradients from ComputeGradients.
 	float4 SampleStochasticGrad(Texture2D<float4> tex, SamplerState samp, float3 worldPos, float3 weights, float scale, float noise, float3 dPdx, float3 dPdy)
 	{
-		float4 result = 0;
-		if (noise < weights.x)
-			result = tex.SampleGrad(samp, worldPos.yz * scale, dPdx.yz, dPdy.yz);
-		else if (noise < weights.x + weights.y)
-			result = tex.SampleGrad(samp, worldPos.xz * scale, dPdx.xz, dPdy.xz);
-		else
-			result = tex.SampleGrad(samp, worldPos.xy * scale, dPdx.xy, dPdy.xy);
+		TRIPLANAR_STOCHASTIC_PICK(tex, samp, worldPos, weights, scale, noise, dPdx, dPdy)
 		return result;
 	}
 
@@ -57,13 +61,7 @@ namespace Triplanar
 		float3 dPdy = 0.0;
 		ComputeGradients(worldPos, scale, dPdx, dPdy);
 
-		float4 result = 0;
-		if (noise < weights.x)
-			result = tex.SampleGrad(samp, worldPos.yz * scale, dPdx.yz, dPdy.yz);
-		else if (noise < weights.x + weights.y)
-			result = tex.SampleGrad(samp, worldPos.xz * scale, dPdx.xz, dPdy.xz);
-		else
-			result = tex.SampleGrad(samp, worldPos.xy * scale, dPdx.xy, dPdy.xy);
+		TRIPLANAR_STOCHASTIC_PICK(tex, samp, worldPos, weights, scale, noise, dPdx, dPdy)
 		return result;
 	}
 
@@ -77,13 +75,7 @@ namespace Triplanar
 		dPdx *= biasScale;
 		dPdy *= biasScale;
 
-		float4 result = 0;
-		if (noise < weights.x)
-			result = tex.SampleGrad(samp, worldPos.yz * scale, dPdx.yz, dPdy.yz);
-		else if (noise < weights.x + weights.y)
-			result = tex.SampleGrad(samp, worldPos.xz * scale, dPdx.xz, dPdy.xz);
-		else
-			result = tex.SampleGrad(samp, worldPos.xy * scale, dPdx.xy, dPdy.xy);
+		TRIPLANAR_STOCHASTIC_PICK(tex, samp, worldPos, weights, scale, noise, dPdx, dPdy)
 		return result;
 	}
 }
