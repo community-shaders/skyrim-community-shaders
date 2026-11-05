@@ -136,6 +136,13 @@ public:
 	/** @brief Ends the current timing pass and records the CPU/GPU timestamps. */
 	void EndPass();
 
+	/**
+	 * @brief Records a zero sample for a pass skipped on purpose this frame, so its row reads 0 instead of its last cost.
+	 * @param name Pass identifier, as given to BeginPass. Ignored if that pass began this frame or has no row yet.
+	 * @note Needs an active profiler. A mark made before the frame's first BeginPass waits for it, and is dropped if no profiling frame begins before EndFrame. Zero samples do not keep a row alive, so a pass skipped for kTimerRetireFrames retires. Ignored on a frame that ran out of timers.
+	 */
+	void MarkPassSkipped(std::string_view name);
+
 	/** @brief Ends the current profiling frame and advances the ring buffer write cursor. */
 	void EndFrame();
 
@@ -203,6 +210,15 @@ public:
 	}
 
 private:
+	/** @brief Pass names marked skipped for one frame. The string slots are reused, so marking allocates only on first use. */
+	struct SkipMarks
+	{
+		std::vector<std::string> names;
+		uint32_t count = 0;
+
+		void Add(std::string_view name);
+	};
+
 	struct FrameQueries
 	{
 		winrt::com_ptr<ID3D11Query> disjoint;
@@ -216,6 +232,9 @@ private:
 		};
 		std::vector<TimerPair> timers;
 		uint32_t activeCount = 0;
+		SkipMarks skipped;
+		// A pass began past kMaxTimers, so a marked pass may have run untimed.
+		bool overflowed = false;
 	};
 
 	ID3D11DeviceContext* context = nullptr;
@@ -252,10 +271,13 @@ private:
 	};
 	std::vector<KnownTimer> knownTimers;
 	std::unordered_map<std::string, size_t> knownTimerIndex;
+	/** @brief Skip marks made before the frame's first BeginPass; they join that frame. */
+	SkipMarks pendingSkipped;
 	uint64_t collectedFrames = 0;
 	float totalTimeMs = 0.0f;
 	float cpuTotalTimeMs = 0.0f;
 
+	/** @brief Pushes each resolved frame's samples into the rows and publishes the newest. */
 	void CollectResults();
 
 	/** @brief Drops timers that have not been sampled for kTimerRetireFrames, so disabled passes stop reporting stale values. */
