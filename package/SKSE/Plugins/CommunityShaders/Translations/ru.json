@@ -1755,6 +1755,7 @@
     "menu.settings.refresh_font_families_tooltip": "Повторно сканировать папку шрифтов после добавления или удаления файлов.",
     "menu.settings.require_shift_to_dock": "Требовать Shift для стыковки",
     "menu.settings.require_shift_to_dock_tooltip": "При включении нужно удерживать Shift для стыковки окон. Предотвращает случайную стыковку.",
+    "menu.settings.revert_theme": "Откатить",
     "menu.settings.save_as_new_theme": "Сохранить как новую тему",
     "menu.settings.save_theme_tooltip": "Обновляет выбранную тему (%s) текущими настройками",
     "menu.settings.screenshot_key": "Клавиша скриншота:",
