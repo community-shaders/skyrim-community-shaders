@@ -139,6 +139,7 @@ public:
 	/**
 	 * @brief Records a zero sample for a pass skipped on purpose this frame, so its row reads 0 instead of its last cost.
 	 * @param name Pass identifier, as given to BeginPass. Ignored when a pass of that name ran in the same frame.
+	 * @note Kept only while the profiler is active. A mark made before the frame's first BeginPass waits for it; if no profiling frame begins before EndFrame, the mark is dropped and the row keeps its last cost.
 	 */
 	void MarkPassSkipped(std::string_view name);
 
@@ -265,7 +266,9 @@ private:
 	float totalTimeMs = 0.0f;
 	float cpuTotalTimeMs = 0.0f;
 
+	/** @brief Pushes each resolved frame's samples into the rows and publishes the newest. */
 	void CollectResults();
+	/** @brief Returns the row for name, adding it on first use. */
 	KnownTimer& FindOrAddTimer(const std::string& name);
 
 	/** @brief Drops timers that have not been sampled for kTimerRetireFrames, so disabled passes stop reporting stale values. */
