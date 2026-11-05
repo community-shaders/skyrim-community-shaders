@@ -79,48 +79,50 @@ inline float StochasticCornerWeight(float2 skewUV, float2 cell)
 // Near c1/c2 ties, fade w2 so the discarded corner cannot pop;
 // near c0/c1 ties, disable that fade so the primary swap stays symmetric.
 // Contrast exponent is 2, so weights are squared rather than pow()'d.
+// Declares skewUV and the three lattice corners around uv, strongest first, as c0..c2.
+#define STOCHASTIC_CORNERS(uv, scale) \
+	float2 skewUV = mul(SKEW_MATRIX, uv * scale); \
+	float2 vxID = floor(skewUV); \
+	float2 f = frac(skewUV); \
+	float bz = 1.0 - f.x - f.y; \
+	StochasticCorner c0, c1, c2; \
+	if (bz > 0) { \
+		c0.cell = vxID; \
+		c0.w = bz; \
+		c1.cell = vxID + float2(0, 1); \
+		c1.w = f.y; \
+		c2.cell = vxID + float2(1, 0); \
+		c2.w = f.x; \
+	} else { \
+		c0.cell = vxID + 1.0; \
+		c0.w = -bz; \
+		c1.cell = vxID + float2(1, 0); \
+		c1.w = 1.0 - f.y; \
+		c2.cell = vxID + float2(0, 1); \
+		c2.w = 1.0 - f.x; \
+	} \
+	if (c1.w > c0.w) { \
+		StochasticCorner t = c0; \
+		c0 = c1; \
+		c1 = t; \
+	} \
+	if (c2.w > c0.w) { \
+		StochasticCorner t = c0; \
+		c0 = c2; \
+		c2 = t; \
+	} \
+	if (c2.w > c1.w) { \
+		StochasticCorner t = c1; \
+		c1 = c2; \
+		c2 = t; \
+	}
+
 // Corners are chosen once per 2x2 quad, so each tap's UV offset is constant across the quad and
 // Sample/SampleBias get clean implicit derivatives (hardware mip and anisotropic filtering).
 // Weights stay per pixel, evaluated against the quad's corners.
 inline StochasticOffsets ComputeStochasticOffsetsScaled(float2 uv, float scale, float2 pixelPos)
 {
-	float2 skewUV = mul(SKEW_MATRIX, uv * scale);
-	float2 vxID = floor(skewUV);
-	float2 f = frac(skewUV);
-	float bz = 1.0 - f.x - f.y;
-
-	StochasticCorner c0, c1, c2;
-	if (bz > 0) {
-		c0.cell = vxID;
-		c0.w = bz;
-		c1.cell = vxID + float2(0, 1);
-		c1.w = f.y;
-		c2.cell = vxID + float2(1, 0);
-		c2.w = f.x;
-	} else {
-		c0.cell = vxID + 1.0;
-		c0.w = -bz;
-		c1.cell = vxID + float2(1, 0);
-		c1.w = 1.0 - f.y;
-		c2.cell = vxID + float2(0, 1);
-		c2.w = 1.0 - f.x;
-	}
-
-	if (c1.w > c0.w) {
-		StochasticCorner t = c0;
-		c0 = c1;
-		c1 = t;
-	}
-	if (c2.w > c0.w) {
-		StochasticCorner t = c0;
-		c0 = c2;
-		c2 = t;
-	}
-	if (c2.w > c1.w) {
-		StochasticCorner t = c1;
-		c1 = c2;
-		c2 = t;
-	}
+	STOCHASTIC_CORNERS(uv, scale)
 
 	float2 quadPixel = float2(uint2(pixelPos) & 1u);
 	float4 tapCells = QuadReadTopLeft(float4(c0.cell, c1.cell), quadPixel);
@@ -145,6 +147,32 @@ inline StochasticOffsets ComputeStochasticOffsetsScaled(float2 uv, float scale, 
 	o.offset2 = hash2D2D(tapCells.zw);
 	o.tap1Weight = w1 * rcp(max(w1 + w2, 1e-8));
 	return o;
+}
+
+inline StochasticOffsets ComputeStochasticOffsetsScaledPeriodic(float2 uv, float scale, float period, out float2 cell1, out float2 cell2)
+{
+	STOCHASTIC_CORNERS(uv, scale)
+
+	float w1 = saturate(c0.w);
+	w1 *= w1;
+	float w2 = saturate(c1.w);
+	w2 *= w2;
+	float rankFade = smoothstep(0.0, TAP_SWAP_FADE_WIDTH, c1.w - c2.w);
+	float dominanceGuard = smoothstep(0.0, DOMINANCE_GUARD_WIDTH, c0.w - c1.w);
+	w2 *= lerp(1.0, rankFade, dominanceGuard);
+
+	StochasticOffsets o;
+	o.offset1 = hash2D2D(period > 0.0 ? c0.cell - period * floor(c0.cell / max(period, 1.0)) : c0.cell);
+	o.offset2 = hash2D2D(period > 0.0 ? c1.cell - period * floor(c1.cell / max(period, 1.0)) : c1.cell);
+	o.tap1Weight = w1 * rcp(max(w1 + w2, 1e-8));
+	cell1 = c0.cell;
+	cell2 = c1.cell;
+	return o;
+}
+
+inline float2 StochasticCellUV(float2 cell, float scale)
+{
+	return mul(float2x2(1.0, 0.0, 0.5, 0.8660254), cell) / scale;
 }
 
 // pixelPos is SV_Position.xy; it selects the pixel's slot in its 2x2 quad.
