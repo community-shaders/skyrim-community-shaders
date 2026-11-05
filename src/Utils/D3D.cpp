@@ -169,27 +169,36 @@ namespace Util
 	{
 		if (!a_resource)
 			return 0;
-		if (winrt::com_ptr<ID3D11Buffer> buffer; SUCCEEDED(a_resource->QueryInterface(__uuidof(ID3D11Buffer), buffer.put_void()))) {
-			D3D11_BUFFER_DESC desc;
-			buffer->GetDesc(&desc);
-			return desc.ByteWidth;
+		D3D11_RESOURCE_DIMENSION dimension = D3D11_RESOURCE_DIMENSION_UNKNOWN;
+		a_resource->GetType(&dimension);
+		switch (dimension) {
+		case D3D11_RESOURCE_DIMENSION_BUFFER:
+			{
+				D3D11_BUFFER_DESC desc;
+				static_cast<ID3D11Buffer*>(a_resource)->GetDesc(&desc);
+				return desc.ByteWidth;
+			}
+		case D3D11_RESOURCE_DIMENSION_TEXTURE1D:
+			{
+				D3D11_TEXTURE1D_DESC desc;
+				static_cast<ID3D11Texture1D*>(a_resource)->GetDesc(&desc);
+				return MipChainBytes(desc.Format, desc.Width, 1, 1, desc.MipLevels) * std::max(desc.ArraySize, 1u);
+			}
+		case D3D11_RESOURCE_DIMENSION_TEXTURE2D:
+			{
+				D3D11_TEXTURE2D_DESC desc;
+				static_cast<ID3D11Texture2D*>(a_resource)->GetDesc(&desc);
+				return MipChainBytes(desc.Format, desc.Width, desc.Height, 1, desc.MipLevels) * std::max(desc.ArraySize, 1u) * std::max(desc.SampleDesc.Count, 1u);
+			}
+		case D3D11_RESOURCE_DIMENSION_TEXTURE3D:
+			{
+				D3D11_TEXTURE3D_DESC desc;
+				static_cast<ID3D11Texture3D*>(a_resource)->GetDesc(&desc);
+				return MipChainBytes(desc.Format, desc.Width, desc.Height, desc.Depth, desc.MipLevels);
+			}
+		default:
+			return 0;
 		}
-		if (winrt::com_ptr<ID3D11Texture2D> texture; SUCCEEDED(a_resource->QueryInterface(__uuidof(ID3D11Texture2D), texture.put_void()))) {
-			D3D11_TEXTURE2D_DESC desc;
-			texture->GetDesc(&desc);
-			return MipChainBytes(desc.Format, desc.Width, desc.Height, 1, desc.MipLevels) * std::max(desc.ArraySize, 1u) * std::max(desc.SampleDesc.Count, 1u);
-		}
-		if (winrt::com_ptr<ID3D11Texture3D> texture; SUCCEEDED(a_resource->QueryInterface(__uuidof(ID3D11Texture3D), texture.put_void()))) {
-			D3D11_TEXTURE3D_DESC desc;
-			texture->GetDesc(&desc);
-			return MipChainBytes(desc.Format, desc.Width, desc.Height, desc.Depth, desc.MipLevels);
-		}
-		if (winrt::com_ptr<ID3D11Texture1D> texture; SUCCEEDED(a_resource->QueryInterface(__uuidof(ID3D11Texture1D), texture.put_void()))) {
-			D3D11_TEXTURE1D_DESC desc;
-			texture->GetDesc(&desc);
-			return MipChainBytes(desc.Format, desc.Width, 1, 1, desc.MipLevels) * std::max(desc.ArraySize, 1u);
-		}
-		return 0;
 	}
 
 	// Per-frame getters would otherwise retry a failed compile every frame.
