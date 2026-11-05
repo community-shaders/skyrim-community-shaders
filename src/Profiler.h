@@ -136,6 +136,12 @@ public:
 	/** @brief Ends the current timing pass and records the CPU/GPU timestamps. */
 	void EndPass();
 
+	/**
+	 * @brief Records a zero sample for a pass skipped on purpose this frame, so its row reads 0 instead of its last cost.
+	 * @param name Pass identifier, as given to BeginPass. Ignored when a pass of that name ran in the same frame.
+	 */
+	void MarkPassSkipped(std::string_view name);
+
 	/** @brief Ends the current profiling frame and advances the ring buffer write cursor. */
 	void EndFrame();
 
@@ -216,6 +222,7 @@ private:
 		};
 		std::vector<TimerPair> timers;
 		uint32_t activeCount = 0;
+		std::vector<std::string> skipped;
 	};
 
 	ID3D11DeviceContext* context = nullptr;
@@ -252,11 +259,14 @@ private:
 	};
 	std::vector<KnownTimer> knownTimers;
 	std::unordered_map<std::string, size_t> knownTimerIndex;
+	/** @brief Skip marks made before the frame's first BeginPass; they join that frame. */
+	std::vector<std::string> pendingSkipped;
 	uint64_t collectedFrames = 0;
 	float totalTimeMs = 0.0f;
 	float cpuTotalTimeMs = 0.0f;
 
 	void CollectResults();
+	KnownTimer& FindOrAddTimer(const std::string& name);
 
 	/** @brief Drops timers that have not been sampled for kTimerRetireFrames, so disabled passes stop reporting stale values. */
 	void RetireStaleTimers();

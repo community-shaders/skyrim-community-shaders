@@ -73,7 +73,9 @@ void Profiler::Release()
 		frame.disjoint = nullptr;
 		frame.timers.clear();
 		frame.activeCount = 0;
+		frame.skipped.clear();
 	}
+	pendingSkipped.clear();
 	results.clear();
 	knownTimers.clear();
 	knownTimerIndex.clear();
@@ -100,6 +102,8 @@ void Profiler::BeginFrame()
 
 	auto& frame = frames[writeFrame];
 	frame.activeCount = 0;
+	frame.skipped.clear();
+	frame.skipped.swap(pendingSkipped);
 	frameActive = true;
 	passOpen = false;
 	context->Begin(frame.disjoint.get());
@@ -149,6 +153,26 @@ void Profiler::EndPass()
 
 	if (endPerfEvent)
 		endPerfEvent({});
+}
+
+void Profiler::MarkPassSkipped(std::string_view name)
+{
+	if (!initialized || !IsActive())
+		return;
+	auto& list = frameActive ? frames[writeFrame].skipped : pendingSkipped;
+	if (std::ranges::find(list, name) == list.end())
+		list.emplace_back(name);
+}
+
+Profiler::KnownTimer& Profiler::FindOrAddTimer(const std::string& name)
+{
+	auto [it, inserted] = knownTimerIndex.try_emplace(name, knownTimers.size());
+	if (inserted) {
+		KnownTimer kt;
+		kt.name = name;
+		knownTimers.push_back(std::move(kt));
+	}
+	return knownTimers[it->second];
 }
 
 void Profiler::EndFrame()
@@ -230,11 +254,7 @@ void Profiler::CollectResults()
 			activeTotalMs += ms;
 			activeCpuTotalMs += timer.cpuMs;
 
-			if (knownTimerIndex.try_emplace(timer.name, knownTimers.size()).second) {
-				KnownTimer kt;
-				kt.name = timer.name;
-				knownTimers.push_back(std::move(kt));
-			}
+			FindOrAddTimer(timer.name);
 		}
 
 		// A name timed several times in one frame is one sample: its frame total.
@@ -242,6 +262,14 @@ void Profiler::CollectResults()
 			auto& known = knownTimers[knownTimerIndex.at(name)];
 			known.gpu.PushSample(data.gpuMs);
 			known.cpu.PushSample(data.cpuMs);
+			known.lastSampleFrame = collectedFrames;
+		}
+		for (const auto& name : frame.skipped) {
+			if (activeTimers.contains(name))
+				continue;
+			auto& known = FindOrAddTimer(name);
+			known.gpu.PushSample(0.0f);
+			known.cpu.PushSample(0.0f);
 			known.lastSampleFrame = collectedFrames;
 		}
 	}
