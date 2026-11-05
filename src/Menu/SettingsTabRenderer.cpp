@@ -944,15 +944,8 @@ void SettingsTabRenderer::RenderThemesSection()
 	auto& themeSettings = globals::menu->GetSettings().Theme;
 
 	// Static variables for popup state and new theme creation
-	static Util::ConfirmationPopup deleteThemePopup(
-		T("menu.settings.delete_theme_title", "Delete Theme"), "",
-		T("menu.settings.delete_button", "Delete"),
-		T("menu.settings.cancel", "Cancel"));
-	static Util::ConfirmationPopup switchThemePopup(
-		T("menu.settings.switch_theme_title", "Discard Theme Changes"),
-		T("menu.settings.switch_theme_confirm", "Switching themes discards your unsaved theme changes."),
-		T("menu.settings.discard_and_switch", "Discard & Switch"),
-		T("menu.settings.cancel", "Cancel"));
+	static Util::ConfirmationPopup deleteThemePopup;
+	static Util::ConfirmationPopup switchThemePopup;
 	static std::string pendingTheme;
 	static bool showCreateThemePopup = false;
 	static char newThemeName[128] = "";
@@ -1025,6 +1018,10 @@ void SettingsTabRenderer::RenderThemesSection()
 		if (selectedTheme != currentThemePreset) {
 			if (IsThemeDirty()) {
 				pendingTheme = selectedTheme;
+				switchThemePopup.title = T("menu.settings.switch_theme_title", "Discard Theme Changes");
+				switchThemePopup.message = T("menu.settings.switch_theme_confirm", "Switching themes discards your unsaved theme changes.");
+				switchThemePopup.confirmLabel = T("menu.settings.discard_and_switch", "Discard & Switch");
+				switchThemePopup.cancelLabel = T("menu.settings.cancel", "Cancel");
 				switchThemePopup.Request();
 				currentItem = previousItem;
 			} else if (globals::menu->LoadThemePreset(selectedTheme)) {
@@ -1169,6 +1166,9 @@ void SettingsTabRenderer::RenderThemesSection()
 	if (!isPreset && currentThemeInfo && !currentThemeInfo->filePath.empty()) {
 		ImGui::SameLine();
 		if (Util::ErrorButtonWithFlash("##DeleteTheme", ICON_TI_TRASH, T("menu.settings.delete_theme", "Delete"))) {
+			deleteThemePopup.title = T("menu.settings.delete_theme_title", "Delete Theme");
+			deleteThemePopup.confirmLabel = T("menu.settings.delete_button", "Delete");
+			deleteThemePopup.cancelLabel = T("menu.settings.cancel", "Cancel");
 			deleteThemePopup.message =
 				std::string(T("menu.settings.delete_theme_confirm_part1",
 					"Are you sure you want to delete the theme '")) +
