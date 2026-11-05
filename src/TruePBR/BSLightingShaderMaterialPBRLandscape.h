@@ -1,5 +1,6 @@
 #pragma once
 
+#include "PBRTextureSlots.h"
 #include "TruePBR.h"
 
 /**
@@ -14,12 +15,12 @@
 class BSLightingShaderMaterialPBRLandscape : public RE::BSLightingShaderMaterialBase
 {
 public:
-	inline static constexpr auto FEATURE = static_cast<RE::BSShaderMaterial::Feature>(33);
+	inline static constexpr auto FEATURE = static_cast<RE::BSShaderMaterial::Feature>(22);
 
-	inline static constexpr auto BaseColorTexture = static_cast<RE::BSTextureSet::Texture>(0);
-	inline static constexpr auto NormalTexture = static_cast<RE::BSTextureSet::Texture>(1);
-	inline static constexpr auto DisplacementTexture = static_cast<RE::BSTextureSet::Texture>(3);
-	inline static constexpr auto RmaosTexture = static_cast<RE::BSTextureSet::Texture>(5);
+	inline static constexpr auto BaseColorTexture = PBRTextureIndex(PBRTextureSlot::BaseColor);
+	inline static constexpr auto NormalTexture = PBRTextureIndex(PBRTextureSlot::Normal);
+	inline static constexpr auto DisplacementTexture = PBRTextureIndex(PBRTextureSlot::Displacement);
+	inline static constexpr auto RmaosTexture = PBRTextureIndex(PBRTextureSlot::Rmaos);
 
 	inline static constexpr uint32_t NumTiles = 6;
 
@@ -39,11 +40,20 @@ public:
 	 * @return A new heap-allocated BSLightingShaderMaterialPBRLandscape instance.
 	 */
 	RE::BSShaderMaterial* Create() override;  // 01
-	/// @brief Copies from another PBR landscape material into this instance.
+	/**
+	 * @brief Copies the source landscape's textures, parameters, and terrain state.
+	 * @param that Source PBR landscape material.
+	 */
 	void CopyMembers(RE::BSShaderMaterial* that) override;  // 02
+	/** @brief Compares the complete render state of two PBR landscape materials. */
+	bool DoIsCopy(RE::BSShaderMaterial* that) override;
+	/** @brief Hashes the same render state used by DoIsCopy, including the pool seed. */
+	uint32_t ComputeCRC32(uint32_t srcHash) override;
+	/** @brief Returns the default PBR landscape material. */
+	RE::BSShaderMaterial* GetDefault() override;
 	/**
 	 * @brief Returns the material feature type.
-	 * @return Always returns kMultiTexLandLODBlend to integrate with the vanilla landscape shader dispatch.
+	 * @return The independent PBR landscape feature, 22.
 	 */
 	Feature GetFeature() const override;  // 06
 	/** @brief Releases all landscape texture references (base color, normal, displacement, RMAOS, overlay, noise). */
@@ -80,8 +90,12 @@ public:
 	 * @return True if at least one tile's glint parameters are enabled.
 	 */
 	bool HasGlint() const;
+	/** @brief Identifies the landscape type without relying on property flags. */
+	static bool IsPBR(const RE::BSShaderMaterial* material);
 
 	inline static std::unordered_map<BSLightingShaderMaterialPBRLandscape*, std::array<TruePBR::PBRTextureSetData*, NumTiles>> All;
+	/** @brief Protects extension tracking during asynchronous cell loading. */
+	inline static std::mutex AllLock;
 
 	// members
 	std::uint32_t numLandscapeTextures = 0;
@@ -108,6 +122,9 @@ public:
 	std::array<float, NumTiles> specularLevels;
 
 	std::array<GlintParameters, NumTiles> glintParameters;
+
+private:
+	std::vector<uint8_t> MaterialKey() const;
 };
 static_assert(offsetof(BSLightingShaderMaterialPBRLandscape, terrainOverlayTexture) == offsetof(RE::BSLightingShaderMaterialLandscape, terrainOverlayTexture));
 static_assert(offsetof(BSLightingShaderMaterialPBRLandscape, terrainNoiseTexture) == offsetof(RE::BSLightingShaderMaterialLandscape, terrainNoiseTexture));
