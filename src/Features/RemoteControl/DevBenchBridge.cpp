@@ -6,7 +6,7 @@
 // devbench plugin is present (GetDevBenchInterface001() returns null).
 //
 // The communityshaders.* tools below expose Community Shaders' graphics-feature, inspect,
-// capture, nvperf, shadercache, and settings operations through the single devbench
+// capture, nvperf, shadercache, settings and dev-flag operations through the single devbench
 // host over both MCP and REST. Each is namespaced to avoid collisions in devbench's
 // shared registry; the action / kind / inputSchema shapes are stable so clients can
 // rely on them.
@@ -15,6 +15,7 @@
 
 #	include "Feature.h"
 #	include "Features/DeveloperTools.h"
+#	include "Features/RemoteControl/DevFlags.h"
 #	include "Features/RemoteControl/FrameRecorder.h"
 #	include "Features/RemoteControl/NvPerf.h"
 #	include "Features/RenderDoc.h"
@@ -901,6 +902,48 @@ namespace
 	{
 		RunHandler("communityshaders.settings", &BuildSettingsResult, a_argsJson, a_sink, a_write);
 	}
+
+	/** @brief Every known dev flag and its value, as {"flags": {name: value}}. */
+	json DevFlagsJson()
+	{
+		json flags = json::object();
+		for (const auto& [name, value] : DevFlags::List())
+			flags[name] = value;
+		return json{ { "flags", std::move(flags) } };
+	}
+
+	/**
+	 * @brief Builds the response of the communityshaders.devflags tool.
+	 *
+	 * Flags are atomics read on any thread, so nothing marshals to the main thread.
+	 */
+	json BuildDevFlagsResult(const json& a_args)
+	{
+		const std::string action = a_args.value("action", std::string{ "list" });
+		if (action == "set") {
+			const auto flags = a_args.find("flags");
+			if (flags == a_args.end() || !flags->is_object())
+				return json{ { "error", "set needs flags: {name: bool}" } };
+			for (const auto& item : flags->items()) {
+				if (!item.value().is_boolean())
+					return json{ { "error", "flag values must be booleans" }, { "flag", item.key() } };
+			}
+			for (const auto& item : flags->items())
+				DevFlags::Set(item.key(), item.value().get<bool>());
+			return DevFlagsJson();
+		}
+		if (action == "reset")
+			DevFlags::Reset();
+		else if (action != "list")
+			return json{ { "error", "unknown action (set|list|reset)" }, { "action", action } };
+		return DevFlagsJson();
+	}
+
+	/** @brief DevBench entry point of the communityshaders.devflags tool. */
+	void DevFlagsToolHandler(void*, const char* a_argsJson, void* a_sink, DevBenchAPI::WriteFn a_write)
+	{
+		RunHandler("communityshaders.devflags", &BuildDevFlagsResult, a_argsJson, a_sink, a_write);
+	}
 }
 
 namespace DevBenchBridge
@@ -909,7 +952,7 @@ namespace DevBenchBridge
 	 * @brief Registers Community Shaders tools with the DevBench API if available.
 	 *
 	 * Registers tools for feature management, engine state inspection, shader cache control,
-	 * frame capture, per-frame timing, and settings persistence, provided the DevBench interface is available.
+	 * frame capture, per-frame timing, settings persistence and dev flags, provided the DevBench interface is available.
 	 */
 	void Install()
 	{
@@ -958,6 +1001,10 @@ namespace DevBenchBridge
 		static constexpr const char* settingsDesc =
 			R"({"description":"Save, load, or reset the GLOBAL Community Shaders user configuration (Data/SKSE/Plugins/CommunityShaders/*.json). Action-dispatched, all fire-and-forget on the main thread. save: persist current settings (State::Save). load: re-read settings from disk and apply (State::Load). reset: restore every feature to its defaults then persist. Use after communityshaders.feature set/reset to make changes durable, or to roll an A/B session back to the saved baseline.","inputSchema":{"type":"object","properties":{"action":{"type":"string","enum":["save","load","reset"]}},"required":["action"]}})";
 		dvb->RegisterTool("communityshaders.settings", settingsDesc, &SettingsToolHandler, nullptr);
+
+		static constexpr const char* devflagsDesc =
+			R"({"description":"Named runtime booleans guarding temporary candidate code paths (DEV_FLAG(\"tmp::name\") in C++), for screening a change on and off in one launch. Flags read false until set and reset at every launch. Action-dispatched. set: params flags (object of name -> boolean; all validated before any is applied). list (default): every flag a call site has read or set. reset: every flag false. All return {flags:{name:bool}}.","inputSchema":{"type":"object","properties":{"action":{"type":"string","enum":["set","list","reset"]},"flags":{"type":"object","additionalProperties":{"type":"boolean"}}}}})";
+		dvb->RegisterTool("communityshaders.devflags", devflagsDesc, &DevFlagsToolHandler, nullptr);
 	}
 
 	std::optional<Request> GetLastRequest()
