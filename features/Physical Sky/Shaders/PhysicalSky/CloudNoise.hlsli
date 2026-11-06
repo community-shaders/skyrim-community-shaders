@@ -6,6 +6,24 @@ float CloudDensityExponent(float height)
 	return saturate((height - 0.25) * 4.0) * 0.29999998 + 0.35;
 }
 
+float ReconstructNdfVoxelNoiseDensity(float4 noise, float profile, float topType, float height)
+{
+	// Nubis Cubed (2023), pp. 94, 99, 104: RG are low/high-frequency
+	// Curly-Alligator wisps; BA are low/high-frequency Alligator billows.
+	// These are value-erosion thresholds, not the NDF texture's density lobes.
+	const float dimensionalProfile = saturate(profile);
+	const float wispyThreshold = lerp(noise.r, noise.g, dimensionalProfile);
+	const float billowyThreshold = lerp(noise.b, noise.a, pow(dimensionalProfile, 0.25)) * 0.3;
+	const float billow = 1.0 - billowyThreshold;
+	const float wisps = 1.0 - wispyThreshold;
+	// Keep the NDF type/height blend, subtractive profile, and downstream base
+	// density shaping. NVDF's density-scale and camera fades do not apply here.
+	const float difference = wisps - billow;
+	const float typeBlend = difference * 0.5 * saturate((topType - 0.5) * 9.999998);
+	const float composite = (billow + typeBlend + (difference * 0.7 - typeBlend) * saturate((height - 0.1) * 4.9999995)) * 0.975;
+	return saturate(composite - (1.0 - min(0.7, profile)));
+}
+
 float ReconstructCloudNoiseDensity(float4 noise, float profile, float topType, float height, float distanceMeters, float storm = 0.0, bool risingBillows = false)
 {
 	const float erosion = pow(noise.a, 0.45) * -0.3;

@@ -41,7 +41,6 @@ uint VoxelAssetSlot(VoxelCloudData cloud)
 
 Texture2DArray<float3> TexVoxelModeling[8] : register(t60);
 Texture2DArray<float3> TexVoxelDistance[8] : register(t68);
-Texture3D<float4> NoiseVoxel : register(t76);
 StructuredBuffer<VoxelCloudData> VoxelClouds : register(t77);
 
 // D3D11 supports BC volumes as 2D slice arrays. Interpolate Z explicitly to
@@ -118,6 +117,12 @@ float VoxelSignedDistance(float3 uv, VoxelCloudData cloud)
 	return ((packed.y * .035294145 + packed.x + packed.z * .0006920431) * 4352.0 - 256.0) * cloud.parameters.x;
 }
 
+float2 VoxelAltitude(VoxelCloudData cloud)
+{
+	const float halfHeight = .5 * (abs(cloud.axisX.z) / cloud.axisX.w + abs(cloud.axisY.z) / cloud.axisY.w + abs(cloud.axisZ.z) / cloud.axisZ.w);
+	return (cloud.centerWeight.z + float2(-halfHeight, halfHeight)) * GAME_UNITS_PER_METER;
+}
+
 float2 VoxelBoxInterval(float3 origin, float3 direction, VoxelCloudData cloud, float start)
 {
 	const float3 uv = VoxelCoordinates(origin * GAME_UNIT_TO_M, cloud);
@@ -153,6 +158,7 @@ float EvaluateVoxelDensity(float3 metres, float3 field, VoxelCloudData cloud, fl
 #	ifdef CLOUD_VOXEL_COARSE
 	return field.x * field.z;
 #	else
+	[branch] if (VolumetricCloudBuffer[0].skipShapeNoise != 0u) return field.x * field.z;
 	const float mip = max(log2(abs(distance * cloud.noise.y) + 1.0) + mipBias, minimumMip);
 	const float3 coordinate = float3(metres.xy - VolumetricCloudBuffer[0].noiseWindOffset * GAME_UNIT_TO_M, metres.z) * (cloud.noise.x * .01);
 	const float4 noise = NoiseVoxel.SampleLevel(TileableSampler, coordinate, mip);
@@ -201,8 +207,7 @@ float AddVoxelDensity(float3 pos, float mipBias, float viewDistance, float minim
 			voxelContext.coverage = field.x;
 			voxelContext.dimension_profile = field.x * field.z;
 			voxelContext.height_fraction = uv.z;
-			const float halfHeight = .5 * (abs(cloud.axisX.z) / cloud.axisX.w + abs(cloud.axisY.z) / cloud.axisY.w + abs(cloud.axisZ.z) / cloud.axisZ.w);
-			voxelContext.altitude = (cloud.centerWeight.z + float2(-halfHeight, halfHeight)) * GAME_UNITS_PER_METER;
+			voxelContext.altitude = VoxelAltitude(cloud);
 		}
 	}
 	const float total = ndfDensity + voxelDensity;

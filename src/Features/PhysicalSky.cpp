@@ -43,7 +43,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	CloudNoiseSettings,
-	procedural, seed, shape, warp, warpCorrelation)
+	skipShapeNoise, useVoxelNoise, procedural, seed, shape, warp, warpCorrelation)
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	NdfNoiseInput,
@@ -192,6 +192,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	rayMarchRange,
 	shadowVolumeRange,
 	marchStepScale,
+	cloudBlurRadius,
 	cloudMap,
 	cloudLayer,
 	cloudNoise,
@@ -492,6 +493,7 @@ void PhysicalSky::LoadSettings(json& o_json)
 	const auto loadedLoading = settings.aerosolLoading;
 	const auto loadedHumidity = settings.aerosolHumidity;
 	settings = o_json;
+	settings.cloudBlurRadius = std::clamp(settings.cloudBlurRadius, 0, 2);
 	settings.SanitizeLightning();
 	if (settings.aerosolType != loadedType ||
 		settings.aerosolLoading != loadedLoading ||
@@ -1130,6 +1132,7 @@ void PhysicalSky::DrawWeatherMapSection()
 				ndfManager.DrawNdfNoise(settings.cloudMap, ndfTexManager);
 				ImGui::Spacing();
 				cloudNoiseGenerator.DrawSettings(settings.cloudNoise);
+				ImGui::Checkbox(T(TKEY("ndf_use_voxel_noise"), "Use NVDF Noise for NDF Clouds"), &settings.cloudNoise.useVoxelNoise);
 				ImGui::Spacing();
 				if (ImGui::Button(T(TKEY("reload_cloud_textures"), "Reload Cloud Textures"), { -FLT_MIN, 0 })) {
 					ndfTexManager.Reload();
@@ -1303,6 +1306,9 @@ void PhysicalSky::DrawCloudQualitySection()
 		ImGui::SliderFloat(T(TKEY("cloud_march_step_scale"), "Cloud March Step Scale"), &settings.marchStepScale, 0.125f, 2.f, "%.3f", ImGuiSliderFlags_Logarithmic);
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::TextWrapped("%s", T(TKEY("cloud_march_step_scale_desc"), "Step length multiplier. Larger steps cost less and lose thin detail; smaller steps cost more and resolve thin detail."));
+		ImGui::SliderInt(T(TKEY("cloud_blur_radius"), "Cloud Blur Radius"), &settings.cloudBlurRadius, 0, 2, "%d px", ImGuiSliderFlags_AlwaysClamp);
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::TextWrapped("%s", T(TKEY("cloud_blur_radius_desc"), "Final blur radius in internal rendering pixels, adjusted by cloud distance. 0 skips the blur pass; 1 is the default; 2 gives a wider blur."));
 	}
 }
 
@@ -1335,6 +1341,7 @@ void PhysicalSky::DrawVanillaCloudSection()
 void PhysicalSky::SettingsDebug()
 {
 	InfoBox(T(TKEY("beep_boop"), "Beep Boop."));
+	ImGui::Checkbox(T(TKEY("skip_cloud_shape_noise"), "Skip Cloud Shape and Detail Noise"), &settings.cloudNoise.skipShapeNoise);
 
 	if (ImGui::Button(T(TKEY("recompile_shaders"), "Recompile Shaders")))
 		ClearShaderCache();
@@ -1425,9 +1432,6 @@ void PhysicalSky::SettingsDebug()
 			BUFFER_VIEWER_NODE(texVolAux, debugScale);
 			BUFFER_VIEWER_NODE(texVolFilteredTr, debugScale);
 			BUFFER_VIEWER_NODE(texVolFilteredLum, debugScale);
-			BUFFER_VIEWER_NODE(texVoxelViewColor, debugScale);
-			BUFFER_VIEWER_NODE(texVoxelViewDepth, debugScale);
-			BUFFER_VIEWER_NODE(texVoxelCompositeLum, debugScale);
 			ImGui::TreePop();
 		}
 
@@ -1643,14 +1647,15 @@ bool PhysicalSky::ShadersOK()
 								   texCloudAmbientDensity && texCloudAmbientSweep && texCloudAmbientBoundary && texCloudAmbientLayout[0] && texCloudAmbientLayout[1] &&
 								   texCloudAmbientSource[0][0] && texCloudAmbientSource[0][1] && texCloudAmbientSource[1][0] && texCloudAmbientSource[1][1] &&
 								   texCloudAmbientSource[2][0] && texCloudAmbientSource[2][1] && texCloudAmbientSource[3][0] && texCloudAmbientSource[3][1] &&
-								   csVolMainView && csVolMainWithoutStorm && csVolMainSingleVolcanic && csStormTiles && texStormTiles && csVolFilter && csVolReproject && csVolCubeReproject && csVolShadowVolume && csVolShadowResample && texShadowVolumeRaw && csCloudShadowMean && csCloudShadowMeanVolcanic && texCloudShadowMean && csVolCubemap && csVolAmbientSH && csCloudAmbientReduce && texVolCloudAmbientSH && texCloudAmbientPartial &&
+								   csVolMainView && csVolMainWithoutStorm && csVolMainSingleVolcanic && csStormTiles && texStormTiles && csVolFilter && csVolFilterWide && csVolReproject && csVolCubeReproject && csVolShadowVolume && csVolShadowResample && texShadowVolumeRaw && csCloudShadowMean && csCloudShadowMeanVolcanic && texCloudShadowMean && csVolCubemap && csVolAmbientSH && csCloudAmbientReduce && texVolCloudAmbientSH && texCloudAmbientPartial &&
 								   texVolTr && texVolLum && texVolAux && texVolLowTr && texVolLowLum && texVolLowAux &&
 								   texVolFilteredTr && texVolFilteredLum && texVolFilteredAux &&
 								   texVolHistoryTr && texVolHistoryLum && texVolHistoryAux && texVolCubeTr && texVolCubeLum &&
 								   texVolCubeAux && texVolCubeHistoryTr && texVolCubeHistoryLum && texVolCubeHistoryAux &&
 								   texVolCubeTraceTr && texVolCubeTraceLum && texVolCubeTraceAux &&
 								   texShadowVolume && baseShapeNoiseSrv && cloudProfileLutSrv && cloudAdjustmentLutSrv && ndfReady && cirrusMapsReady);
-	const bool voxelShadersOk = !voxelCloudManager.Count() || (csVoxelView && csVoxelComposite && csVoxelLighting && csVolCubemapVoxel && csVolShadowVoxel && csCloudAmbientDensityVoxel && csCloudShadowMeanVoxel);
+	const bool voxelShadersOk = !voxelCloudManager.Count() || (cloudDispatchCb && csVoxelView && csVoxelLighting && csVolCubemapVoxel && csVolShadowVoxel && csCloudAmbientDensityVoxel && csCloudShadowMeanVoxel &&
+																  texVoxelTraceTr && texVoxelTraceLum && texVoxelTraceAux && texVoxelTraceMotion && texVoxelTraceLightning);
 	return baseShadersOk && volumetricShadersOk && voxelShadersOk;
 }
 
@@ -1898,6 +1903,7 @@ void PhysicalSky::Prepass()
 			baseShapeNoiseSrv.copy_from(shape);
 			cloudAdjustmentLutSrv.copy_from(adjustment);
 			volMainHistoryValid = false;
+			cloudAmbientValid = false;
 			cloudCrossSectionDirty = true;
 		}
 	}
@@ -1916,6 +1922,8 @@ void PhysicalSky::Prepass()
 			historyCloudMap.erase("localCloud");
 			const auto cloudSettingsKey = nlohmann::json{
 				{ "map", historyCloudMap },
+				{ "skipShapeNoise", settings.cloudNoise.skipShapeNoise },
+				{ "useVoxelNoise", settings.cloudNoise.useVoxelNoise },
 				{ "low", settings.cloudLayer.low },
 				{ "cirrus", settings.cloudLayer.cirrus },
 				{ "lighting", settings.cloudLayer.lighting },
@@ -1928,6 +1936,7 @@ void PhysicalSky::Prepass()
 			}.dump();
 			if (cloudSettingsKey != volCloudSettingsKey) {
 				volMainHistoryValid = false;
+				cloudAmbientValid = false;
 				volCloudSettingsKey = cloudSettingsKey;
 				cloudCrossSectionDirty = true;
 			}

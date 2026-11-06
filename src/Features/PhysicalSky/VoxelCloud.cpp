@@ -152,6 +152,20 @@ VoxelCloudManager::Resource& VoxelCloudManager::LoadResource(const std::string& 
 	return resource;
 }
 
+ID3D11ShaderResourceView* VoxelCloudManager::Noise()
+{
+	if (!noiseAttempted) {
+		noiseAttempted = true;
+		try {
+			noiseVoxel = LoadVolume("Data/Textures/PhysicalSky/NoiseVoxel.dds", false, "PhysicalSky::NoiseVoxel");
+		} catch (const std::exception& exception) {
+			error = exception.what();
+			logger::error("PhysicalSky voxel cloud: {}", error);
+		}
+	}
+	return noiseVoxel.get();
+}
+
 void VoxelCloudManager::Update(const SceneBlend& selection, const std::string& worldspace, bool enabled)
 {
 	if (!scanned)
@@ -189,16 +203,7 @@ void VoxelCloudManager::Update(const SceneBlend& selection, const std::string& w
 	}
 	if (placements.empty())
 		return;
-	if (!noiseAttempted) {
-		noiseAttempted = true;
-		try {
-			noiseVoxel = LoadVolume("Data/Textures/PhysicalSky/NoiseVoxel.dds", false, "PhysicalSky::NoiseVoxel");
-		} catch (const std::exception& exception) {
-			error = exception.what();
-			logger::error("PhysicalSky voxel cloud: {}", error);
-		}
-	}
-	if (!noiseVoxel)
+	if (!Noise())
 		return;
 	bindings[kAssetSlots * 2] = noiseVoxel.get();
 	std::map<std::string, uint32_t> slots;
@@ -276,7 +281,9 @@ void VoxelCloudManager::UpdateLighting(ID3D11ComputeShader* shader, float3 direc
 		return;
 	auto geometry = active;
 	for (auto& cloud : geometry) {
-		cloud.centerWeight.w = 0.f;
+		// The cached integral is in local UVW under a directional light. Moving
+		// the placement cannot change it; density and fade are applied at lookup.
+		cloud.centerWeight = {};
 		cloud.parameters.y = 0.f;
 		cloud.noise = {};
 	}

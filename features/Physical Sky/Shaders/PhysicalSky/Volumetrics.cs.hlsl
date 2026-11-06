@@ -133,6 +133,9 @@ struct VolumetricCloudData
 	uint stormCount;
 	uint voxelCount;
 	float2 voxelAltitude;
+	uint skipShapeNoise;
+	uint useVoxelNoise;
+	float2 noisePadding;
 };
 
 cbuffer VolumetricCloudConstants : register(b1)
@@ -146,6 +149,7 @@ Texture3D<float4> TexAerialPerspective : register(t2);
 Texture2D<float> TexDepth : register(t3);
 
 Texture3D<unorm float4> TexCloudShapeNoise : register(t4);
+Texture3D<float4> NoiseVoxel : register(t76);
 Texture2D<float4> TexCloudHeight : register(t5);
 Texture2D<float3> TexCloudModeling : register(t6);
 Texture2D<float4> TexCloudAtmosphereMs : register(t8);
@@ -787,13 +791,22 @@ float sampleCloudDensityFromContext(
 	const float biasedMip = risingBillows ? mipBias : (ndf.stormVolume ? floor(profileMip + mipBias) : floor(profileMip) + mipBias);
 #endif
 	const float mip = max(biasedMip, min(minimumMip, biasedMip + 1.0));
-	float4 noise;
+	// Storms have their own channel-dependent deformation and keep their noise.
+	const bool voxelNoise = info.useVoxelNoise != 0u && !ndf.stormVolume;
+	float4 noise = 0.0;
+	[branch] if (info.skipShapeNoise == 0u)
+	{
 #ifndef NO_CLOUD_STORMS
-	[branch] if (ndf.stormVolume)
-		noise = SampleCloudStormNoise(density_context.noise_coordinates, ndf.height_fraction, mip, ndf.stormIndex, ndf);
-	else
+		[branch] if (ndf.stormVolume)
+			noise = SampleCloudStormNoise(density_context.noise_coordinates, ndf.height_fraction, mip, ndf.stormIndex, ndf);
+		else
 #endif
-		noise = TexCloudShapeNoise.SampleLevel(TileableSampler, density_context.noise_coordinates, mip);
+		{
+			[branch] if (voxelNoise)
+				noise = NoiseVoxel.SampleLevel(TileableSampler, density_context.noise_coordinates, mip);
+			else noise = TexCloudShapeNoise.SampleLevel(TileableSampler, density_context.noise_coordinates, mip);
+		}
+	}
 	float profile = ndf.dimension_profile;
 #ifndef NO_CLOUD_STORMS
 	if (risingBillows) {
@@ -802,12 +815,18 @@ float sampleCloudDensityFromContext(
 		// A clipped gain makes every value above .4 the same displacement,
 		// flattening the lobe tips onto an offset copy of the carrier surface.
 		// Keep the full Alligator range; sqrt also matches the rounded noise mix.
-		const float lobe = ndf.plumeEnvelope.y * (sqrt(noise.g) - .35);
+		const float lobe = info.skipShapeNoise != 0u ? 0.0 : ndf.plumeEnvelope.y * (sqrt(noise.g) - .35);
 		profile *= saturate((lobe - ndf.plumeEnvelope.x) / 90.0 + .5);
 		density_context.ndf.dimension_profile = profile;
 	}
 #endif
-	const float eroded = ReconstructCloudNoiseDensity(noise, profile, ndf.top_type, ndf.height_fraction, density_context.eye_distance, ndf.storm, risingBillows);
+	float eroded = saturate(profile);
+	[branch] if (info.skipShapeNoise == 0u)
+	{
+		[branch] if (voxelNoise)
+			eroded = ReconstructNdfVoxelNoiseDensity(noise, profile, ndf.top_type, ndf.height_fraction);
+		else eroded = ReconstructCloudNoiseDensity(noise, profile, ndf.top_type, ndf.height_fraction, density_context.eye_distance, ndf.storm, risingBillows);
+	}
 #ifdef NO_CLOUD_STORMS
 	const float densityScale = info.lowDensityScale;
 #else
@@ -850,7 +869,7 @@ float sampleWeatherCloudDensity(
 	const float bottomFade = saturate((density_context.ndf.height_fraction - 0.02) * 33.333332);
 	const float2 xy = fieldMeters;
 	float2 noiseXY = xy * 0.0043545123;
-	[branch] if (bottomFade < 1.0)
+	[branch] if (info.skipShapeNoise == 0u && bottomFade < 1.0)
 	{
 		const float2 displacement = TexCloudAdjustmentLUT.SampleLevel(TileableSampler, xy * 0.004, 0).gb;
 		noiseXY += (displacement * 2.0 - 1.0) * (0.125 - bottomFade * 0.125);

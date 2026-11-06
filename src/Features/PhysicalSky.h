@@ -179,6 +179,7 @@ struct PhysicalSky final : public Feature
 		float rayMarchRange = 32.f;
 		float shadowVolumeRange = 8.f;  // km
 		float marchStepScale = 0.5f;
+		int cloudBlurRadius = 1;
 		NdfSettings cloudMap = {};
 		CloudLayer cloudLayer = {};
 		CloudNoiseSettings cloudNoise = {};
@@ -450,9 +451,12 @@ struct PhysicalSky final : public Feature
 		uint32_t stormCount;
 		uint32_t voxelCount;
 		float2 voxelAltitude;
+		uint32_t skipShapeNoise;
+		uint32_t useVoxelNoise;
+		float2 noisePadding;
 		std::array<float4, kCloudMsCalibrationSize> msCalibration;
 	};
-	static_assert(sizeof(VolumetricCloudCB) == 1232);
+	static_assert(sizeof(VolumetricCloudCB) == 1248);
 	static_assert(offsetof(VolumetricCloudCB, dirlightDir) == 48);
 	static_assert(offsetof(VolumetricCloudCB, previousCamera) == 64);
 	static_assert(offsetof(VolumetricCloudCB, lowNdfFrequency) == 128);
@@ -463,11 +467,11 @@ struct PhysicalSky final : public Feature
 	static_assert(offsetof(VolumetricCloudCB, localNdfRect) == 368);
 	static_assert(offsetof(VolumetricCloudCB, lowCloudPhase) == 416);
 	static_assert(offsetof(VolumetricCloudCB, stormCount) == 432);
-	static_assert(offsetof(VolumetricCloudCB, msCalibration) == 448);
+	static_assert(offsetof(VolumetricCloudCB, msCalibration) == 464);
 	eastl::unique_ptr<ConstantBuffer> volCloudCb = nullptr;
 	eastl::unique_ptr<ConstantBuffer> cloudDispatchCb;
 	eastl::unique_ptr<Texture2D> texVolStormMotion, texVolCubeStormMotion;
-	eastl::unique_ptr<Texture2D> texVoxelViewColor, texVoxelViewDepth, texVoxelCompositeTr, texVoxelCompositeLum, texVoxelCompositeAux;
+	eastl::unique_ptr<Texture2D> texVoxelTraceTr, texVoxelTraceLum, texVoxelTraceAux, texVoxelTraceMotion, texVoxelTraceLightning;
 
 	eastl::unique_ptr<Texture2D> texVolCloudAmbientSH = nullptr;
 	eastl::unique_ptr<Texture2D> texCloudAmbientPartial;
@@ -538,8 +542,8 @@ struct PhysicalSky final : public Feature
 	winrt::com_ptr<ID3D11ComputeShader> csStormTiles = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> csVolMainVolcanic, csVolCubemapVolcanic, csVolShadowVolcanic, csCloudAmbientDensityVolcanic;
 	winrt::com_ptr<ID3D11ComputeShader> csVolMainSingleVolcanic;
-	winrt::com_ptr<ID3D11ComputeShader> csVoxelView, csVoxelViewSingle, csVoxelComposite, csVolCubemapVoxel, csVolShadowVoxel, csCloudAmbientDensityVoxel, csVoxelLighting;
-	winrt::com_ptr<ID3D11ComputeShader> csVolFilter = nullptr;
+	winrt::com_ptr<ID3D11ComputeShader> csVoxelView, csVoxelViewSingle, csVolCubemapVoxel, csVolShadowVoxel, csCloudAmbientDensityVoxel, csVoxelLighting;
+	winrt::com_ptr<ID3D11ComputeShader> csVolFilter = nullptr, csVolFilterWide = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> csVolReproject = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> csVolCubeReproject = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> csVolShadowVolume = nullptr;

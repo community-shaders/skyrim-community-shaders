@@ -20,6 +20,8 @@ static_assert(sizeof(CloudNoiseBand) == 32);
 
 struct CloudNoiseSettings
 {
+	bool skipShapeNoise = false;
+	bool useVoxelNoise = false;
 	bool procedural = true;
 	uint32_t seed = 1337;
 	std::array<CloudNoiseBand, 4> shape = { { { 3, 5, 0.625f, 3.489f, 0.960f, 0.133f, 1.f },

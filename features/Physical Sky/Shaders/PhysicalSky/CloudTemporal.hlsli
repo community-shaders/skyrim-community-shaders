@@ -254,14 +254,14 @@ float3 RebaseCloudHistoryDepth(inout CloudTemporalSample history, float3 directi
 }
 
 void ResolveCloudHistoryVisibility(inout CloudTemporalSample history, CloudTemporalSample current,
-	float2 depthRange, float4 sampleMinimum, float4 sampleMaximum, float3 historyPosition, float2 currentUv, float evolutionBlend)
+	float2 depthRange, float4 sampleMinimum, float4 sampleMaximum, float3 historyPosition, float2 currentUv, float minimumConfidence)
 {
 	const float4 clip = mul(FrameBuffer::CameraViewProj, float4(historyPosition, 1));
 	float confidence = 1.0;
 	if (clip.w > 0.0) {
 		const float2 historyUv = clip.xy / clip.w * float2(0.5, -0.5) + 0.5;
 		const float cycleDisplacement = length((historyUv - currentUv) * VolumetricCloudBuffer[0].activeFrameDim) * 16.0;
-		confidence = max(smoothstep(0.0, 0.5, cycleDisplacement), evolutionBlend * 2.0);
+		confidence = max(smoothstep(0.0, 0.5, cycleDisplacement), minimumConfidence);
 	}
 	const float depthTolerance = EncodeCloudDepth(CloudViewStep(DecodeCloudDepth(depthRange.y), 0.0));
 	const bool depthValid = history.metadata.x >= depthRange.x - depthTolerance && history.metadata.x <= depthRange.y + depthTolerance;
@@ -392,8 +392,21 @@ cbuffer CloudDispatch : register(b3) { uint4 StormScreenRect; };
 		useHistory = traced || abs(sceneDepth - result.metadata.y) <= 0.064;
 		// Sparse phase neighbours are not a visibility change in a static medium.
 		// Keep their changing bounds from overwriting the other 15 history phases.
-		if (useHistory && currentValid && (any(cameraDelta != 0.0) || evolutionBlend > 0.0))
-			ResolveCloudHistoryVisibility(result, current, currentDepthRange, currentMinimum, currentMaximum, historyPosition, uv, evolutionBlend);
+		float localRotationConfidence = 0.0;
+		[branch] if (info.voxelCount > 0u && stormMotion.w > 0.0)
+		{
+			// A static local volume has no wind displacement. Pure camera rotation
+			// also has no depth-reprojection residual, but moves its sharp silhouette
+			// across history texels. Include that motion without including TAA jitter.
+			const float4 currentDirection = mul(FrameBuffer::CameraViewProjUnjittered, float4(ray, 0));
+			const float4 previousDirection = mul(FrameBuffer::CameraPreviousViewProjUnjittered, float4(ray, 0));
+			if (currentDirection.w > 0.0 && previousDirection.w > 0.0) {
+				const float2 rotationPixels = (previousDirection.xy / previousDirection.w - currentDirection.xy / currentDirection.w) * (0.5 * info.activeFrameDim);
+				localRotationConfidence = smoothstep(0.0, 0.5, length(rotationPixels)) * saturate(stormMotion.w / max(motionOpacity, 1e-6));
+			}
+		}
+		if (useHistory && currentValid && (any(cameraDelta != 0.0) || evolutionBlend > 0.0 || localRotationConfidence > 0.0))
+			ResolveCloudHistoryVisibility(result, current, currentDepthRange, currentMinimum, currentMaximum, historyPosition, uv, max(evolutionBlend * 2.0, localRotationConfidence));
 		if (useHistory && traced) {
 			const float weight = max(CloudHistoryBlend(previousUv - uv), evolutionBlend * 2.0);
 			result.transmittance = BlendCloudTransmittance(result.transmittance, TexVolLowTr[pixel / 4u], weight);

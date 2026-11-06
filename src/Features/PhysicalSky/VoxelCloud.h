@@ -52,6 +52,8 @@ struct VoxelCloudManager
 	void LoadInstances();
 	void Update(const SceneBlend& selection, const std::string& worldspace, bool enabled);
 	void Bind() const;
+	/** Load the shared noise independently of whether a voxel placement is active. */
+	ID3D11ShaderResourceView* Noise();
 	void UpdateLighting(ID3D11ComputeShader* shader, float3 direction);
 	void DrawSettings(SceneBlend& selection, const std::string& worldspace, float3 cameraMeters);
 	uint32_t Count() const { return static_cast<uint32_t>(active.size()); }

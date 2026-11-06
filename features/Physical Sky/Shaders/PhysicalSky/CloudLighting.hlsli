@@ -194,7 +194,14 @@ float2 CloudMaterialAmbient(NDFInfo ndf)
 	return result;
 }
 
-float CloudMultipleScattering(float extinction, NDFInfo ndf)
+struct CloudMsProfile
+{
+	float densityScale;
+	float referenceDepth;
+	float4 coefficients;
+};
+
+CloudMsProfile PrepareCloudMsProfile(NDFInfo ndf)
 {
 	const VolumetricCloudData info = VolumetricCloudBuffer[0];
 	const float width = min(info.msBoundaryWidth, max(ndf.altitude.y - ndf.altitude.x, 0.0) * (0.25 * GAME_UNIT_TO_M));
@@ -203,9 +210,11 @@ float CloudMultipleScattering(float extinction, NDFInfo ndf)
 	densityScale += ndf.voxelBlend * (ndf.voxelDensityScale - info.lowDensityScale);
 #endif
 	const float referenceDepth = densityScale * width;
-	if (referenceDepth <= 0.0 || extinction <= 0.0 || densityScale <= 0.0)
-		return 0.0;
-	const float exponent = CloudDensityExponent(ndf.height_fraction);
+	CloudMsProfile result = (CloudMsProfile)0;
+	result.densityScale = densityScale;
+	result.referenceDepth = referenceDepth;
+	if (referenceDepth <= 0.0 || densityScale <= 0.0)
+		return result;
 	const float coordinate = clamp((log2(referenceDepth) + 12.0) * 2.0, 0.0, 48.0);
 	const uint index = min((uint)coordinate, 47u);
 	float4 low = ndf.stormVolume ? CloudStorms[ndf.stormIndex].msCalibration[index] : CloudMsCalibration[index];
@@ -215,7 +224,18 @@ float CloudMultipleScattering(float extinction, NDFInfo ndf)
 		low = lerp(CloudMsCalibration[index], low, ndf.stormBlend);
 		high = lerp(CloudMsCalibration[index + 1u], high, ndf.stormBlend);
 	}
-	const float4 coefficients = lerp(low, high, coordinate - float(index));
+	result.coefficients = lerp(low, high, coordinate - float(index));
+	return result;
+}
+
+float CloudMultipleScattering(float extinction, NDFInfo ndf, CloudMsProfile calibration)
+{
+	const float referenceDepth = calibration.referenceDepth;
+	const float densityScale = calibration.densityScale;
+	if (referenceDepth <= 0.0 || extinction <= 0.0 || densityScale <= 0.0)
+		return 0.0;
+	const float exponent = CloudDensityExponent(ndf.height_fraction);
+	const float4 coefficients = calibration.coefficients;
 	const float profile = clamp((exponent - 0.35) * 10.0, 0.0, 3.0);
 	const uint profileIndex = min((uint)profile, 2u);
 	float coefficient = lerp(coefficients[profileIndex], coefficients[profileIndex + 1u], profile - float(profileIndex));
@@ -224,6 +244,11 @@ float CloudMultipleScattering(float extinction, NDFInfo ndf)
 	else if (referenceDepth < 0.000244140625)
 		coefficient *= referenceDepth * 4096.0;
 	return CloudScatteringSeries(coefficient * extinction / densityScale, CloudMaterialAlbedo(ndf));
+}
+
+float CloudMultipleScattering(float extinction, NDFInfo ndf)
+{
+	return CloudMultipleScattering(extinction, ndf, PrepareCloudMsProfile(ndf));
 }
 
 float CloudTransportExtinction(NDFInfo ndf)
@@ -240,7 +265,7 @@ float CloudLightOpticalDepth(float3 pos, float3 viewDir, NDFInfo ndf, float exti
 	return TraceCloudLighting(pos, viewDir, ndf, extinction, viewDistance, minimumMip, CloudTransportExtinction(ndf)) * VolumetricCloudBuffer[0].sunExtinction;
 }
 
-float3 ShadeCloudLighting(float3 pos, NDFInfo ndf, float extinction, float viewDepth, float viewOpacity, float phase, float opticalDepth)
+float3 ShadeCloudLighting(float3 pos, NDFInfo ndf, float extinction, float viewDepth, float viewOpacity, float phase, float opticalDepth, float multipleScattering)
 {
 	const VolumetricCloudData info = VolumetricCloudBuffer[0];
 	const float albedo = CloudMaterialAlbedo(ndf);
@@ -254,8 +279,16 @@ float3 ShadeCloudLighting(float3 pos, NDFInfo ndf, float extinction, float viewD
 	const float scatterAmount = CloudOpacity(viewDepth * densityGate);
 	float multiple = 0.0;
 	[branch] if (info.msStrength > 0.0 && albedo > 0.0)
-		multiple = info.msStrength * albedo * CloudMultipleScattering(extinction, ndf) * exp(-opticalDepth * transportExtinction);
+		multiple = info.msStrength * albedo * multipleScattering * exp(-opticalDepth * transportExtinction);
 	return info.cloudLightingScale * sunlight * (directional * scatterAmount + multiple * viewOpacity);
+}
+
+float3 ShadeCloudLighting(float3 pos, NDFInfo ndf, float extinction, float viewDepth, float viewOpacity, float phase, float opticalDepth)
+{
+	float multipleScattering = 0.0;
+	[branch] if (VolumetricCloudBuffer[0].msStrength > 0.0 && CloudMaterialAlbedo(ndf) > 0.0)
+		multipleScattering = CloudMultipleScattering(extinction, ndf);
+	return ShadeCloudLighting(pos, ndf, extinction, viewDepth, viewOpacity, phase, opticalDepth, multipleScattering);
 }
 
 float3 CloudLighting(float3 pos, float3 viewDir, NDFInfo ndf, float extinction, float viewDepth, float viewOpacity,

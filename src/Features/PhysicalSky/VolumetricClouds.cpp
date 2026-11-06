@@ -677,11 +677,11 @@ void PhysicalSky::SetupVolumetricResources()
 		cloudBoundaryDepth = nullptr;
 		DX::ThrowIfFailed(device->CreateDepthStencilState(&depth, cloudBoundaryDepth.put()));
 	}
-	texVoxelViewColor = createCloudTexture((mainDesc.Width + 1u) / 2u, (mainDesc.Height + 1u) / 2u, historyRadianceFormat, "PhysicalSky::VoxelViewColor");
-	texVoxelViewDepth = createCloudTexture((mainDesc.Width + 1u) / 2u, (mainDesc.Height + 1u) / 2u, DXGI_FORMAT_R32G32_FLOAT, "PhysicalSky::VoxelViewDepth");
-	texVoxelCompositeTr = createCloudTexture(mainDesc.Width, mainDesc.Height, DXGI_FORMAT_R16_FLOAT, "PhysicalSky::VoxelCompositeTr");
-	texVoxelCompositeLum = createCloudTexture(mainDesc.Width, mainDesc.Height, historyRadianceFormat, "PhysicalSky::VoxelCompositeLum");
-	texVoxelCompositeAux = createCloudTexture(mainDesc.Width, mainDesc.Height, DXGI_FORMAT_R16G16B16A16_FLOAT, "PhysicalSky::VoxelCompositeAux");
+	texVoxelTraceTr = createCloudTexture(lowW, lowH, DXGI_FORMAT_R16_FLOAT, "PhysicalSky::VoxelTraceTr");
+	texVoxelTraceLum = createCloudTexture(lowW, lowH, historyRadianceFormat, "PhysicalSky::VoxelTraceLum");
+	texVoxelTraceAux = createCloudTexture(lowW, lowH, DXGI_FORMAT_R16G16B16A16_FLOAT, "PhysicalSky::VoxelTraceAux");
+	texVoxelTraceMotion = createCloudTexture(lowW, lowH, DXGI_FORMAT_R16G16B16A16_FLOAT, "PhysicalSky::VoxelTraceMotion");
+	texVoxelTraceLightning = createCloudTexture(lowW, lowH, DXGI_FORMAT_R16G16_FLOAT, "PhysicalSky::VoxelTraceLightning");
 	texVolFilteredTr = createCloudTexture(mainDesc.Width, mainDesc.Height, DXGI_FORMAT_R16_FLOAT, "PhysicalSky::CloudFilteredTr");
 	texVolFilteredLum = createCloudTexture(mainDesc.Width, mainDesc.Height, historyRadianceFormat, "PhysicalSky::CloudFilteredLum");
 	texVolFilteredAux = createCloudTexture(mainDesc.Width, mainDesc.Height, DXGI_FORMAT_R16G16B16A16_FLOAT, "PhysicalSky::CloudFilteredAux");
@@ -832,12 +832,12 @@ void PhysicalSky::CompileVolumetricShaders()
 		ShaderInfo{ &csCloudAmbientDensityVolcanic, "Volumetrics.cs.hlsl", { { "VOLCANIC_STORMS_ONLY", "" } }, "buildCloudAmbientDensity" },
 		ShaderInfo{ &csVoxelView, "Volumetrics.cs.hlsl", { { "CLOUD_VOXELS", "" }, { "CLOUD_VOXEL_VIEW", "" }, { "NO_CLOUD_STORMS", "" } }, "renderVoxelView" },
 		ShaderInfo{ &csVoxelViewSingle, "Volumetrics.cs.hlsl", { { "CLOUD_VOXELS", "" }, { "CLOUD_VOXEL_SINGLE", "" }, { "CLOUD_VOXEL_VIEW", "" }, { "NO_CLOUD_STORMS", "" } }, "renderVoxelView" },
-		ShaderInfo{ &csVoxelComposite, "Volumetrics.cs.hlsl", { { "CLOUD_VOXELS", "" }, { "CLOUD_VOXEL_VIEW", "" }, { "NO_CLOUD_STORMS", "" } }, "compositeVoxelView" },
 		ShaderInfo{ &csVoxelLighting, "Volumetrics.cs.hlsl", { { "CLOUD_VOXELS", "" } }, "buildVoxelLighting" },
 		ShaderInfo{ &csVolCubemapVoxel, "Volumetrics.cs.hlsl", { { "CLOUD_REFLECTION", "" }, { "CLOUD_VOXELS", "" }, { "CLOUD_VOXEL_COARSE", "" } }, "renderCubemap" },
 		ShaderInfo{ &csVolShadowVoxel, "Volumetrics.cs.hlsl", { { "CLOUD_VOXELS", "" } }, "renderShadowVolume" },
 		ShaderInfo{ &csCloudAmbientDensityVoxel, "Volumetrics.cs.hlsl", { { "CLOUD_VOXELS", "" } }, "buildCloudAmbientDensity" },
 		ShaderInfo{ &csVolFilter, "Volumetrics.cs.hlsl", {}, "filterCloud" },
+		ShaderInfo{ &csVolFilterWide, "Volumetrics.cs.hlsl", { { "CLOUD_BLUR_RADIUS", "2" } }, "filterCloud" },
 		ShaderInfo{ &csVolReproject, "Volumetrics.cs.hlsl", {}, "reproject" },
 		ShaderInfo{ &csVolCubeReproject, "Volumetrics.cs.hlsl", {}, "reprojectCubemap" },
 		ShaderInfo{ &csVolShadowVolume, "Volumetrics.cs.hlsl", {}, "renderShadowVolume" },
@@ -1126,6 +1126,7 @@ void PhysicalSky::RenderVolumetricClouds(VolumetricCloudPass a_pass)
 	const auto cirrusTextures = cirrusMapManager.GetTextures();
 	const bool renderCirrus = cirrus.enabled && bool(cirrusTextures);
 	const CloudMiePhase lowCloudPhase(lighting.dropletDiameter);
+	auto* ndfVoxelNoise = settings.cloudNoise.useVoxelNoise ? voxelCloudManager.Noise() : nullptr;
 
 	VolumetricCloudCB cloudData = {
 		.rayMarchRange = KilometersToGameUnits(std::clamp(settings.rayMarchRange, 1.f, 64.f)),
@@ -1204,6 +1205,8 @@ void PhysicalSky::RenderVolumetricClouds(VolumetricCloudPass a_pass)
 		.stormCount = cloudStormManager.Count(),
 		.voxelCount = voxelCloudManager.Count(),
 		.voxelAltitude = voxelCloudManager.Altitude(),
+		.skipShapeNoise = settings.cloudNoise.skipShapeNoise ? 1u : 0u,
+		.useVoxelNoise = ndfVoxelNoise ? 1u : 0u,
 	};
 	cloudStormManager.UpdateLighting(lighting.dropletDiameter);
 	cloudStormManager.UpdateMotion(volWind.stormTime, previousWind.stormTime,
@@ -1227,6 +1230,8 @@ void PhysicalSky::RenderVolumetricClouds(VolumetricCloudPass a_pass)
 	context->CSSetConstantBuffers(1, 1, &cloudConstants);
 	if (voxelActive)
 		voxelCloudManager.Bind();
+	if (ndfVoxelNoise)
+		context->CSSetShaderResources(76, 1, &ndfVoxelNoise);
 	std::array<ID3D11ShaderResourceView*, 12> srvs = {
 		texTrLut->srv.get(),                                                  // t1
 		texApLut->srv.get(),                                                  // t2
@@ -1500,7 +1505,7 @@ void PhysicalSky::RenderVolumetricClouds(VolumetricCloudPass a_pass)
 		context->PSSetShaderResources(113, 1, nullOutputs);
 		context->PSSetShaderResources(109, 1, nullOutputs);
 		texVolCubeTr.swap(texVolCubeHistoryTr);
-		const auto voxelRect = voxelCloudManager.ScreenRect(cloudData.bottomZ, (renderW + 1u) / 2u, (renderH + 1u) / 2u);
+		const auto voxelRect = voxelCloudManager.ScreenRect(cloudData.bottomZ, (renderW + 3u) / 4u, (renderH + 3u) / 4u);
 		const bool voxelVisible = voxelRect[2] > voxelRect[0] && voxelRect[3] > voxelRect[1] && !state->isMapMenuOpen;
 		texVolCubeLum.swap(texVolCubeHistoryLum);
 		texVolCubeAux.swap(texVolCubeHistoryAux);
@@ -1600,13 +1605,37 @@ void PhysicalSky::RenderVolumetricClouds(VolumetricCloudPass a_pass)
 				cloudDispatchCb->Update(voxelRect);
 				dispatchConstants = cloudDispatchCb->CB();
 				context->CSSetConstantBuffers(3, 1, &dispatchConstants);
-				std::array<ID3D11UnorderedAccessView*, 2> voxelOutputs = { texVoxelViewColor->uav.get(), texVoxelViewDepth->uav.get() };
-				context->CSSetUnorderedAccessViews(0, 2, voxelOutputs.data(), nullptr);
+				// NDF and NVDF sample the same checkerboard phase. Combine their
+				// low-resolution integrals before the shared temporal reconstruction.
+				ID3D11UnorderedAccessView* nullLightning = nullptr;
+				context->CSSetUnorderedAccessViews(3, 1, &nullLightning, nullptr);
+				std::array<ID3D11ShaderResourceView*, 3> ndfInputs = { texVolLowTr->srv.get(), texVolLowLum->srv.get(), texVolLowAux->srv.get() };
+				context->CSSetShaderResources(20, (uint)ndfInputs.size(), ndfInputs.data());
+				auto* motionInput = texVolStormMotion->srv.get();
+				context->CSSetShaderResources(58, 1, &motionInput);
+				auto* maskInput = texLightningTrace->srv.get();
+				context->CSSetShaderResources(90, 1, &maskInput);
+				std::array<ID3D11UnorderedAccessView*, 4> voxelOutputs = { texVoxelTraceTr->uav.get(), texVoxelTraceLum->uav.get(), texVoxelTraceAux->uav.get(), texVoxelTraceLightning->uav.get() };
+				context->CSSetUnorderedAccessViews(0, (uint)voxelOutputs.size(), voxelOutputs.data(), nullptr);
+				auto* motionOutput = texVoxelTraceMotion->uav.get();
+				context->CSSetUnorderedAccessViews(6, 1, &motionOutput, nullptr);
 				context->CSSetShader(voxelCloudManager.Count() == 1 && csVoxelViewSingle ? csVoxelViewSingle.get() : csVoxelView.get(), nullptr, 0);
 				globals::profiler->BeginPass("PhysicalSky::VoxelMainView");
-				context->Dispatch((voxelRect[2] - voxelRect[0] + 7u) / 8u, (voxelRect[3] - voxelRect[1] + 7u) / 8u, 1);
+				// Outside the voxel rectangle the shader copies the NDF sample.
+				context->Dispatch((lowW + 7u) / 8u, (lowH + 7u) / 8u, 1);
 				globals::profiler->EndPass();
-				context->CSSetUnorderedAccessViews(0, 2, nullUavs, nullptr);
+				context->CSSetUnorderedAccessViews(0, 3, nullUavs, nullptr);
+				context->CSSetUnorderedAccessViews(3, 1, &nullLightning, nullptr);
+				motionOutput = nullptr;
+				context->CSSetUnorderedAccessViews(6, 1, &motionOutput, nullptr);
+				context->CSSetShaderResources(20, 3, nullTemporalSrvs);
+				context->CSSetShaderResources(58, 1, nullOutputs);
+				context->CSSetShaderResources(90, 1, nullOutputs);
+				texVolLowTr.swap(texVoxelTraceTr);
+				texVolLowLum.swap(texVoxelTraceLum);
+				texVolLowAux.swap(texVoxelTraceAux);
+				texVolStormMotion.swap(texVoxelTraceMotion);
+				texLightningTrace.swap(texVoxelTraceLightning);
 				dispatchConstants = nullptr;
 				context->CSSetConstantBuffers(3, 1, &dispatchConstants);
 			}
@@ -1641,20 +1670,29 @@ void PhysicalSky::RenderVolumetricClouds(VolumetricCloudPass a_pass)
 			context->CSSetShaderResources(20, (uint)traceSrvs.size(), nullTemporalSrvs);
 			context->CSSetShaderResources(58, 1, nullTemporalSrvs);
 
-			std::array<ID3D11ShaderResourceView*, 3> resultSrvs = {
-				texVolTr->srv.get(), texVolLum->srv.get(), texVolAux->srv.get()
-			};
-			context->CSSetShaderResources(29, (uint)resultSrvs.size(), resultSrvs.data());
-			std::array<ID3D11UnorderedAccessView*, 3> filteredUavs = {
-				texVolFilteredTr->uav.get(), texVolFilteredLum->uav.get(), texVolFilteredAux->uav.get()
-			};
-			context->CSSetUnorderedAccessViews(3, (uint)filteredUavs.size(), filteredUavs.data(), nullptr);
-			context->CSSetShader(csVolFilter.get(), nullptr, 0);
-			globals::profiler->BeginPass("PhysicalSky::VolumetricFilter");
-			context->Dispatch((renderW + 7u) >> 3, (renderH + 7u) >> 3, 1);
-			globals::profiler->EndPass();
-			context->CSSetUnorderedAccessViews(3, 3, nullUavs, nullptr);
-			context->CSSetShaderResources(29, (uint)resultSrvs.size(), nullTemporalSrvs);
+			const int blurRadius = std::clamp(settings.cloudBlurRadius, 0, 2);
+			if (blurRadius == 0) {
+				// Forward draws already hold these output identities. Keep them and
+				// the unfiltered history separate without dispatching a blur shader.
+				context->CopyResource(texVolFilteredTr->resource.get(), texVolTr->resource.get());
+				context->CopyResource(texVolFilteredLum->resource.get(), texVolLum->resource.get());
+				context->CopyResource(texVolFilteredAux->resource.get(), texVolAux->resource.get());
+			} else {
+				std::array<ID3D11ShaderResourceView*, 3> resultSrvs = {
+					texVolTr->srv.get(), texVolLum->srv.get(), texVolAux->srv.get()
+				};
+				context->CSSetShaderResources(29, (uint)resultSrvs.size(), resultSrvs.data());
+				std::array<ID3D11UnorderedAccessView*, 3> filteredUavs = {
+					texVolFilteredTr->uav.get(), texVolFilteredLum->uav.get(), texVolFilteredAux->uav.get()
+				};
+				context->CSSetUnorderedAccessViews(3, (uint)filteredUavs.size(), filteredUavs.data(), nullptr);
+				context->CSSetShader(blurRadius == 2 ? csVolFilterWide.get() : csVolFilter.get(), nullptr, 0);
+				globals::profiler->BeginPass("PhysicalSky::VolumetricFilter");
+				context->Dispatch((renderW + 7u) >> 3, (renderH + 7u) >> 3, 1);
+				globals::profiler->EndPass();
+				context->CSSetUnorderedAccessViews(3, 3, nullUavs, nullptr);
+				context->CSSetShaderResources(29, (uint)resultSrvs.size(), nullTemporalSrvs);
+			}
 		} else {
 			constexpr FLOAT clearTr[4] = { 1.f, 1.f, 1.f, 1.f };
 			constexpr FLOAT clearLum[4] = {};
@@ -1678,33 +1716,6 @@ void PhysicalSky::RenderVolumetricClouds(VolumetricCloudPass a_pass)
 			globals::profiler->EndPass();
 			context->CSSetUnorderedAccessViews(4, 2, nullUavs, nullptr);
 			context->CSSetShaderResources(94, 2, nullTemporalSrvs);
-		}
-		if (voxelVisible) {
-			cloudDispatchCb->Update(voxelRect);
-			auto* constants = cloudDispatchCb->CB();
-			context->CSSetConstantBuffers(3, 1, &constants);
-			std::array<ID3D11ShaderResourceView*, 3> ndfOutputs = { texVolFilteredTr->srv.get(), texVolFilteredLum->srv.get(), texVolFilteredAux->srv.get() };
-			std::array<ID3D11ShaderResourceView*, 2> voxelInputs = { texVoxelViewColor->srv.get(), texVoxelViewDepth->srv.get() };
-			std::array<ID3D11UnorderedAccessView*, 3> combinedOutputs = { texVoxelCompositeTr->uav.get(), texVoxelCompositeLum->uav.get(), texVoxelCompositeAux->uav.get() };
-			context->CSSetShaderResources(29, 3, ndfOutputs.data());
-			context->CSSetShaderResources(86, 2, voxelInputs.data());
-			context->CSSetUnorderedAccessViews(3, 3, combinedOutputs.data(), nullptr);
-			context->CSSetShader(csVoxelComposite.get(), nullptr, 0);
-			globals::profiler->BeginPass("PhysicalSky::VoxelComposite");
-			context->Dispatch((renderW + 7u) / 8u, (renderH + 7u) / 8u, 1);
-			globals::profiler->EndPass();
-			context->CSSetShaderResources(29, 3, nullTemporalSrvs);
-			context->CSSetShaderResources(86, 2, nullTemporalSrvs);
-			context->CSSetUnorderedAccessViews(3, 3, nullUavs, nullptr);
-			constants = nullptr;
-			context->CSSetConstantBuffers(3, 1, &constants);
-			// Publish the complete result through the same textures consumed by
-			// ViewAtmosphere and later transparent draws. Raw NDF history is separate.
-			std::swap(texVolFilteredTr, texVoxelCompositeTr);
-			std::swap(texVolFilteredLum, texVoxelCompositeLum);
-			std::swap(texVolFilteredAux, texVoxelCompositeAux);
-			outputSrvs[0] = texVolFilteredTr->srv.get();
-			outputSrvs[1] = texVolFilteredLum->srv.get();
 		}
 
 		uavs = { texVolCubeTraceTr->uav.get(), texVolCubeTraceLum->uav.get(), texVolCubeTraceAux->uav.get() };
