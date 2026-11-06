@@ -593,7 +593,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	if (!SharedData::InInterior)
 		dirLightColor *= ShadowSampling::GetWorldShadow(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust.xyz);
 #				if defined(WATER_EFFECTS)
-	dirLightColor *= WaterEffects::ComputeCaustics(SharedData::GetWaterData(input.WorldPosition.xyz), input.WorldPosition.xyz);
+	dirLightColor *= WaterEffects::ComputeCaustics(SharedData::GetWaterData(input.WorldPosition.xyz), input.WorldPosition.xyz, input.HPosition.xy);
 #				endif
 
 	float4 shadowColor = TexShadowMaskSampler.Load(int3(input.HPosition.xy, 0));
@@ -889,7 +889,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	if (!SharedData::InInterior)
 		dirLightColor *= ShadowSampling::GetWorldShadow(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust.xyz);
 #				if defined(WATER_EFFECTS)
-	dirLightColor *= WaterEffects::ComputeCaustics(SharedData::GetWaterData(input.WorldPosition.xyz), input.WorldPosition.xyz);
+	dirLightColor *= WaterEffects::ComputeCaustics(SharedData::GetWaterData(input.WorldPosition.xyz), input.WorldPosition.xyz, input.HPosition.xy);
 #				endif
 
 	float dirShadow = SharedData::InInterior ? 1.0 : shadowColor.x;
@@ -1142,7 +1142,7 @@ PS_OUTPUT main(PS_INPUT input)
 	if (!SharedData::InInterior)
 		dirLightColor *= ShadowSampling::GetWorldShadow(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust.xyz);
 #			if defined(WATER_EFFECTS)
-	dirLightColor *= WaterEffects::ComputeCaustics(SharedData::GetWaterData(input.WorldPosition.xyz), input.WorldPosition.xyz);
+	dirLightColor *= WaterEffects::ComputeCaustics(SharedData::GetWaterData(input.WorldPosition.xyz), input.WorldPosition.xyz, input.HPosition.xy);
 #			endif
 
 	float dirDetailedShadow = 1.0;
