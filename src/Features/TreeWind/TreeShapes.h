@@ -69,7 +69,7 @@ namespace TreeShapes
 			bool crown = false;
 		};
 
-		std::unordered_map<uint64_t, Block> blocks;     // key = the block's world translate
+		std::unordered_map<uint64_t, Block> blocks;      // key = the block's world translate
 		std::unordered_map<const void*, Entry> entries;  // key = the shape's vertex buffer
 	};
 }

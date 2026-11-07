@@ -194,7 +194,7 @@ VS_OUTPUT main(VS_INPUT input)
 	precise float4 worldPosition = float4(mul(inputPosition, transpose(worldMatrix)), 1);
 
 	float4 viewPos = mul(ViewProj, worldPosition);
-#	else   // !SKINNED
+#	else  // !SKINNED
 #		if defined(TREE_WIND_VS)
 	precise float4 previousWorldPosition = float4(mul(PreviousWorld, previousInputPosition), 1);
 #		else
