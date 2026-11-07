@@ -1100,7 +1100,7 @@ PS_OUTPUT main(PS_INPUT input)
 
 	float3 positionMSSkylight = input.WPosition.xyz;
 
-	sh2 skylightingSH = Skylighting::SampleNoBias(positionMSSkylight);
+	sh2 skylightingSH = Skylighting::Sample(positionMSSkylight, float3(0, 0, 1));
 	float skylighting = SphericalHarmonics::Unproject(skylightingSH, float3(0, 0, 1));
 
 	float skylightingDiffuse = Skylighting::EvaluateDiffuse(skylightingSH, float3(0, 0, 1), Skylighting::GetFadeOutFactor(input.WPosition.xyz));
