@@ -5,6 +5,7 @@
 #include <numeric>
 
 #include "Globals.h"
+#include "State.h"
 #include "Utils/D3D.h"
 
 namespace TreeShapes
@@ -298,6 +299,7 @@ namespace TreeShapes
 			entries.erase(it);
 		}
 
+		ZoneScopedN("TreeWind::BuildBendWeights");
 		const uint64_t blockKey = BlockKey(a_geometry);
 		auto& block = blocks[blockKey];
 		const float worldScale = a_geometry->world.scale;

@@ -284,6 +284,7 @@ float TreeWind::GetStorminess(const RE::TESWeather* a_weather) const
 
 void TreeWind::Reset()
 {
+	ZoneScoped;
 	float windSpeed = 0.0f;
 	float windAngle = 0.0f;
 	float storminess = 0.0f;
