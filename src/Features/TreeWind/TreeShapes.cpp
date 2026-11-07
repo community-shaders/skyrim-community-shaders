@@ -595,8 +595,10 @@ namespace TreeShapes
 	void BendWeights::Evict(uint a_frame)
 	{
 		std::erase_if(entries, [a_frame](const auto& a_entry) { return a_frame - a_entry.second.lastFrame > kEvictFrames; });
-		// Nothing in view any more: forget the trunk cards too
-		if (entries.empty())
-			blocks.clear();
+		// A block lives only while one of its shapes does, so its cards do not pile up
+		std::unordered_set<uint64_t> liveBlocks;
+		for (const auto& [vertexBuffer, entry] : entries)
+			liveBlocks.insert(entry.blockKey);
+		std::erase_if(blocks, [&liveBlocks](const auto& a_block) { return !liveBlocks.contains(a_block.first); });
 	}
 }

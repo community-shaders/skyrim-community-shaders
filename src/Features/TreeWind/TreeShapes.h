@@ -33,7 +33,7 @@ namespace TreeShapes
 		 */
 		ID3D11ShaderResourceView* Get(RE::BSGeometry* a_geometry, Kind a_kind, uint a_frame, bool a_treeModSupport);
 
-		/** @brief Frees the bend data of shapes not drawn for a while. */
+		/** @brief Frees the bend data of shapes not drawn for a while, and the blocks left without shapes. */
 		void Evict(uint a_frame);
 
 		/** @brief Frees all bend data, so it is rebuilt with new settings. */

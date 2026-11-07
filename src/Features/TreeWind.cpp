@@ -308,10 +308,12 @@ void TreeWind::Reset()
 	const double deltaTime = paused ? 0.0 : std::min(static_cast<double>(RE::GetSecondsSinceLastFrame()), 0.25);
 	prevPhase = phase;
 	phase += deltaTime * (settings.BaseSpeed + settings.WindSpeedGain * std::clamp(windSpeed, 0.0f, 1.0f));
-	// Keeps float precision in the shader
-	if (phase > 100000.0) {
-		phase -= 100000.0;
-		prevPhase -= 100000.0;
+	// Wraps at 200 pi, a whole number of cycles for every sway frequency in TreeWind.hlsli, and keeps float
+	// precision in the shader. Flutter stays continuous for flutter speeds with up to two decimals.
+	constexpr double kPhaseWrap = 200.0 * std::numbers::pi;
+	if (phase > kPhaseWrap) {
+		phase -= kPhaseWrap;
+		prevPhase -= kPhaseWrap;
 	}
 
 	// The map menus draw the LOD too, and it should stand still there
