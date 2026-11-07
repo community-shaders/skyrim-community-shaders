@@ -4,8 +4,8 @@
 #include <filesystem>
 #include <winrt/base.h>
 
-#include "Profiler.h"
 #include "../TextureManager.h"
+#include "Profiler.h"
 
 class Effect
 {

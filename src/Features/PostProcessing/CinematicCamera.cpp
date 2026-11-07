@@ -108,7 +108,7 @@ namespace CinematicCamera
 	RE::NiPoint3 FocusResolver::GetReferenceFocusPosition(RE::TESObjectREFR* a_ref)
 	{
 		RE::NiPoint3 targetPosition = a_ref->GetPosition();
-		if (a_ref->GetFormType() == RE::FormType::ActorCharacter) {
+		if (a_ref->IsActor()) {
 			auto head = a_ref->GetNodeByName("NPC Head [Head]");
 			if (head)
 				targetPosition = head->world.translate;
@@ -409,14 +409,14 @@ namespace CinematicCamera
 	{
 		switch ((FilmbackPreset)settings.Filmback.Preset) {
 		case FilmbackPreset::Super35:
-			return "Super 35";
+			return T("feature.post_processing.cinematic_camera.preset_super_35", "Super 35");
 		case FilmbackPreset::APSC:
-			return "APS-C";
+			return T("feature.post_processing.cinematic_camera.preset_aps_c", "APS-C");
 		case FilmbackPreset::Custom:
 			return T("feature.post_processing.cinematic_camera.custom", "Custom");
 		case FilmbackPreset::FullFrame:
 		default:
-			return "Full Frame";
+			return T("feature.post_processing.cinematic_camera.preset_full_frame", "Full Frame");
 		}
 	}
 
@@ -441,7 +441,6 @@ namespace CinematicCamera
 
 	void Controller::DrawSettings()
 	{
-		ImGui::Checkbox(T("feature.post_processing.cinematic_camera.name", "Cinematic Camera"), &settings.Enabled);
 		if (!settings.Enabled)
 			return;
 
@@ -479,7 +478,7 @@ namespace CinematicCamera
 			};
 			ImGui::Combo(T("feature.post_processing.cinematic_camera.gate_fit", "Gate Fit"), &fb.GateFit, gateFitNames, (int)std::size(gateFitNames));
 			if (auto _tt = Util::HoverTooltipWrapper())
-				ImGui::Text(T("feature.post_processing.cinematic_camera.gate_fit_desc",
+				ImGui::TextUnformatted(T("feature.post_processing.cinematic_camera.gate_fit_desc",
 					"Which sensor dimension maps to the game FOV. Horizontal keeps the horizontal angle of view; Vertical keeps the vertical angle and derives the horizontal FOV from the viewport aspect."));
 		}
 
@@ -529,7 +528,7 @@ namespace CinematicCamera
 				if (auto _tt = Util::HoverTooltipWrapper())
 					ImGui::TextUnformatted(T("feature.post_processing.cinematic_camera.focus_point_y_desc", "0% is the top edge; 100% is the bottom edge."));
 				ImGui::BeginDisabled(SceneWidgetInterceptor::IsArmed());
-				if (ImGui::Button(T("feature.post_processing.cinematic_camera.center_focus_point", "Center Focus Point")))
+				if (Util::Button(T("feature.post_processing.cinematic_camera.center_focus_point", "Center Focus Point")))
 					focus.ScreenPointUV = float2(0.5f, 0.5f);
 				ImGui::EndDisabled();
 			}

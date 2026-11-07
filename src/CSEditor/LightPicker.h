@@ -40,6 +40,7 @@ struct LightPicker
 	void BeginPick();
 	/** @brief Leaves pick mode without producing a result. */
 	void Cancel();
+	/** @brief Whether pick mode is active. */
 	[[nodiscard]] bool IsPicking() const { return picking; }
 
 	/** @brief Clears the cached hover hit so Update() recomputes next frame; call when pick mode changes to avoid a stale hit. */

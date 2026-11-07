@@ -17,10 +17,10 @@ The easiest way to contribute translations is through our hosted Weblate instanc
 
 Weblate provides:
 
--   Translation memory and suggestions
--   Consistency checks
--   Placeholder validation (`{name}` must be preserved)
--   Progress tracking per language
+- Translation memory and suggestions
+- Consistency checks
+- Placeholder validation (`{name}` must be preserved)
+- Progress tracking per language
 
 ### Option B: Direct PR on GitHub
 
@@ -94,13 +94,16 @@ ImGui::Checkbox(T(TKEY("enabled"), "Enabled"), &settings.enabled);
 
 ### CI Validation
 
-The `pr-i18n.yaml` workflow checks:
+pre-commit.ci fixes these on PRs by pushing an autofix commit, except for commits made by bots (the same hooks run locally under `pre-commit`):
 
--   `en.json` is in sync with source code (`--check`)
--   No orphaned keys exist (`--orphans`)
--   Translation file key order matches `en.json` (`sort-i18n.py --check`)
--   Translation files have valid JSON format
--   Placeholders `{name}` are consistent across languages
+- Regenerates `en.json` from source (`extract-i18n.py --write`)
+- Reorders translation files to match `en.json` (`sort-i18n.py --write`)
+
+The `pr-i18n.yaml` workflow then checks:
+
+- `en.json` is in sync with source code (`--check`)
+- Translation files have valid JSON format and no keys missing from `en.json`
+- Placeholders `{name}` are consistent across languages
 
 ### Translation Key Ordering
 

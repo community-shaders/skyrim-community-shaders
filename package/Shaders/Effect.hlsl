@@ -482,9 +482,10 @@ cbuffer PerGeometry : register(b2)
 float3 GetLightingColor(float3 msPosition, float3 worldPosition, float2 screenPosition, inout float shadowVariance)
 {
 	float3 color = DLightColor.xyz * Color::EffectLightingScale;
+	const float3 sceneAmbientColor = ShadowSampling::GetAmbientLighting();
 	bool suppressExternalEmittance = SharedData::InInterior && (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::SuppressExternalEmittance);
 	if (suppressExternalEmittance) {
-		color = ShadowSampling::GetAmbientLighting() + ShadowSampling::GetDirectionalLighting();
+		color = sceneAmbientColor + ShadowSampling::GetDirectionalLighting();
 	}
 
 #		if defined(SKYLIGHTING)
@@ -499,12 +500,12 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float2 screenPo
 
 	float3 dirColor;
 	float3 ambientColor;
-	ShadowSampling::ExtractLighting(color, dirColor, ambientColor);
+	ShadowSampling::ExtractLighting(color, sceneAmbientColor, dirColor, ambientColor);
 
 #		if defined(EFFECTS11)
 	if (SharedData::enbSettings.Enable) {
 		dirColor = ShadowSampling::GetDirectionalLighting();
-		ambientColor = ShadowSampling::GetAmbientLighting();
+		ambientColor = sceneAmbientColor;
 		dirColor *= SharedData::enbSettings.ParticleLightingInfluence;
 		ambientColor *= SharedData::enbSettings.ParticleAmbientInfluence;
 	}
@@ -595,25 +596,22 @@ float GetViewRayShadow(float3 worldPosition, float2 screenPosition, float depth)
 	return shadow;
 }
 
+/** @brief Takes the shadowed share of the sun out of a lit colour; unshadowed, the colour is unchanged. */
 float3 GetLightingShadow(float3 color, float3 worldPosition, float2 screenPosition, float depth, inout float shadowVariance)
 {
-	float3 dirColor;
-	float3 ambientColor;
-	ShadowSampling::ExtractLighting(color, dirColor, ambientColor);
-
 	float shadow = GetViewRayShadow(worldPosition, screenPosition, depth);
 
 	shadowVariance = 1.0 - sqrt(saturate(fwidth(shadow)));
 
-	dirColor *= shadow;
-
 #		if defined(EXP_HEIGHT_FOG)
 	if (SharedData::exponentialHeightFogSettings.enabled) {
-		dirColor *= ExponentialHeightFog::GetSunlightFogAttenuation(worldPosition.xyz, FrameBuffer::CameraPosAdjust.xyz);
+		shadow *= ExponentialHeightFog::GetSunlightFogAttenuation(worldPosition.xyz, FrameBuffer::CameraPosAdjust.xyz);
 	}
 #		endif
 
-	return dirColor + ambientColor;
+	float3 dirLight = ShadowSampling::GetDirectionalLighting();
+	float3 sceneLight = ShadowSampling::GetSceneLightingColor();
+	return color * (1.0 - saturate(dirLight * (1.0 - shadow) / max(sceneLight, EPSILON_DIVISION)));
 }
 #	endif
 
@@ -670,67 +668,46 @@ PS_OUTPUT main(PS_INPUT input)
 	float shadowVariance = 1.0;
 
 	bool isFire = false;
+	bool isLightSprite = false;
 #	if defined(ADDBLEND)
-#		if defined(SOFT)
+#		if defined(EFFECTS11)
+	// ENB's classes: a palette-mapped additive effect (a spell bolt, a flame) is fire; a light sprite is a sky glow or a soft
+	// plain-textured glow. Everything else, lit, membrane, blood and projected-UV effects included, keeps its own brightness.
+#			if !defined(LIGHTING) && !defined(MEMBRANE) && !defined(BLOOD) && !defined(PROJECTED_UV)
+	const bool grayscaleToColor = Permutation::PixelShaderDescriptor & Permutation::EffectFlags::GrayscaleToColor;
+	const bool grayscaleToAlpha = Permutation::PixelShaderDescriptor & Permutation::EffectFlags::GrayscaleToAlpha;
+	const bool skyObject = Permutation::VertexShaderDescriptor & Permutation::EffectFlags::SkyObject;
+#				if defined(TEXTURE)
+	const bool plainTexture = !grayscaleToColor && !grayscaleToAlpha && !(Permutation::PixelShaderDescriptor & Permutation::EffectFlags::IgnoreTexAlpha);
+#				else
+	const bool plainTexture = false;
+#				endif
+#				if defined(PARTICLES) && defined(TEXCOORD_INDEX) && defined(INDEXED_TEXTURE) && !defined(SOFT)
+	isFire = true;
+#				else
+	isFire = grayscaleToColor && grayscaleToAlpha;
+#					if defined(SOFT)
+	isLightSprite = !isFire && (skyObject || plainTexture);
+#					else
+	isLightSprite = !isFire && skyObject;
+#					endif
+#				endif
+#			endif
+#		else
+#			if defined(SOFT)
 	if (Permutation::PixelShaderDescriptor & Permutation::EffectFlags::GrayscaleToColor && Permutation::PixelShaderDescriptor & Permutation::EffectFlags::GrayscaleToAlpha)
 		isFire = true;
-#		elif defined(PARTICLES) && defined(TEXCOORD_INDEX) && defined(INDEXED_TEXTURE)
+#			elif defined(PARTICLES) && defined(TEXCOORD_INDEX) && defined(INDEXED_TEXTURE)
 	isFire = true;
+#			endif
+	// Linear Lighting treats every non-fire additive effect as a light sprite
+	isLightSprite = !isFire;
 #		endif
 #	endif
 
 #	if defined(EFFECTS11) && defined(IS_VOLUMETRIC_FOG)
 	const bool isEnbVolumetricFog = SharedData::enbSettings.Enable && !(Permutation::VertexShaderDescriptor & Permutation::EffectFlags::SkyObject) &&
 	                                (Permutation::PixelShaderDescriptor & Permutation::EffectFlags::GrayscaleToAlpha) && !(Permutation::PixelShaderDescriptor & Permutation::EffectFlags::GrayscaleToColor);
-#	endif
-
-#	if defined(LIGHTING)
-	propertyColor = GetLightingColor(input.MSPosition.xyz, input.WorldPosition.xyz, input.Position.xy, shadowVariance);
-
-#		if defined(LIGHT_LIMIT_FIX)
-	uint lightCount = 0;
-
-	float3 viewPosition = mul(FrameBuffer::CameraView, float4(input.WorldPosition.xyz, 1)).xyz;
-	float2 screenUV = FrameBuffer::ViewToUV(viewPosition);
-	bool inWorld = Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InWorld;
-
-#			if defined(EFFECTS11)
-	float clusteredPointScale = SharedData::enbSettings.Enable ? SharedData::enbSettings.ParticlePointLightingInfluence : 1.0;
-#			else
-	float clusteredPointScale = 1.0;
-#			endif
-
-	uint clusterIndex = 0;
-	if (inWorld && LightLimitFix::GetClusterIndex(screenUV, viewPosition.z, clusterIndex)) {
-		lightCount = LightLimitFix::lightGrid[clusterIndex].lightCount;
-		uint lightOffset = LightLimitFix::lightGrid[clusterIndex].offset;
-		[loop] for (uint i = 0; i < lightCount; i++)
-		{
-			uint clusteredLightIndex = LightLimitFix::lightList[lightOffset + i];
-			LightLimitFix::Light light = LightLimitFix::lights[clusteredLightIndex];
-			if (LightLimitFix::IsLightIgnored(light) || light.lightFlags & LightLimitFix::LightFlags::ShadowCaster) {
-				continue;
-			}
-			float3 lightDirection = light.positionWS.xyz - input.WorldPosition.xyz;
-			float lightDist = length(lightDirection);
-
-			float intensityMultiplier = LightLimitFix::GetAttenuation(lightDist, light);
-
-			float3 lightColor = Color::PointLight(light.color.xyz) * intensityMultiplier * 0.5 * light.fade * Color::EffectLightingScale;
-			propertyColor += lightColor * clusteredPointScale;
-		}
-	}
-
-#		endif
-#	elif defined(MEMBRANE)
-	propertyColor *= 0;
-	lightingInfluence = 0;
-#	endif
-
-	// Effects 11 PARTICLE Intensity never reached lit particles, keep that behavior.
-#	if !defined(IS_VOLUMETRIC_FOG) && !defined(MULTBLEND) && !defined(MULTBLEND_DECAL) && !(defined(EFFECTS11) && defined(LIGHTING))
-	if (!(Permutation::VertexShaderDescriptor & Permutation::EffectFlags::SkyObject) && !isFire)
-		propertyColor *= Color::ParticleEffectMult();
 #	endif
 
 	float4 baseTexColor = float4(1, 1, 1, 1);
@@ -841,13 +818,63 @@ PS_OUTPUT main(PS_INPUT input)
 	}
 #	endif
 
-	float3 lightColor = lerp(baseColor.xyz, propertyColor * baseColor.xyz, lightingInfluence);
-
 #	if !defined(MOTIONVECTORS_NORMALS)
 	if (alpha * fogMul.w - AlphaTestRefRS < 0) {
 		discard;
 	}
 #	endif
+
+	// Light only pixels that survive the alpha test.
+#	if defined(LIGHTING)
+	propertyColor = GetLightingColor(input.MSPosition.xyz, input.WorldPosition.xyz, input.Position.xy, shadowVariance);
+
+#		if defined(LIGHT_LIMIT_FIX)
+	uint lightCount = 0;
+
+	float3 viewPosition = mul(FrameBuffer::CameraView, float4(input.WorldPosition.xyz, 1)).xyz;
+	float2 screenUV = FrameBuffer::ViewToUV(viewPosition);
+	bool inWorld = Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InWorld;
+
+#			if defined(EFFECTS11)
+	float clusteredPointScale = SharedData::enbSettings.Enable ? SharedData::enbSettings.ParticlePointLightingInfluence : 1.0;
+#			else
+	float clusteredPointScale = 1.0;
+#			endif
+
+	uint clusterIndex = 0;
+	if (inWorld && LightLimitFix::GetClusterIndex(screenUV, viewPosition.z, clusterIndex)) {
+		lightCount = LightLimitFix::lightGrid[clusterIndex].lightCount;
+		uint lightOffset = LightLimitFix::lightGrid[clusterIndex].offset;
+		[loop] for (uint i = 0; i < lightCount; i++)
+		{
+			uint clusteredLightIndex = LightLimitFix::lightList[lightOffset + i];
+			LightLimitFix::Light light = LightLimitFix::lights[clusteredLightIndex];
+			if (LightLimitFix::IsLightIgnored(light) || light.lightFlags & LightLimitFix::LightFlags::ShadowCaster) {
+				continue;
+			}
+			float3 lightDirection = light.positionWS.xyz - input.WorldPosition.xyz;
+			float lightDist = length(lightDirection);
+
+			float intensityMultiplier = LightLimitFix::GetAttenuation(lightDist, light);
+
+			float3 lightColor = Color::PointLight(light.color.xyz) * intensityMultiplier * 0.5 * light.fade * Color::EffectLightingScale;
+			propertyColor += lightColor * clusteredPointScale;
+		}
+	}
+
+#		endif
+#	elif defined(MEMBRANE)
+	propertyColor *= 0;
+	lightingInfluence = 0;
+#	endif
+
+	// Effects 11 PARTICLE Intensity never reached lit particles, keep that behavior.
+#	if !defined(IS_VOLUMETRIC_FOG) && !defined(MULTBLEND) && !defined(MULTBLEND_DECAL) && !(defined(EFFECTS11) && defined(LIGHTING))
+	if (!(Permutation::VertexShaderDescriptor & Permutation::EffectFlags::SkyObject) && !isFire)
+		propertyColor *= Color::ParticleEffectMult();
+#	endif
+
+	float3 lightColor = lerp(baseColor.xyz, propertyColor * baseColor.xyz, lightingInfluence);
 
 #	if defined(ENABLE_LL) && !defined(DEFERRED) && !defined(MEMBRANE) && !defined(BLOOD) && !defined(MULTBLEND) && !defined(MULTBLEND_DECAL)
 	if ((Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::SourceAlphaBlend) &&
@@ -904,7 +931,7 @@ PS_OUTPUT main(PS_INPUT input)
 #			else
 	float3 blendedColor = lightColor * (1 - fogFactor);
 #			endif
-	blendedColor = Color::AdditiveEffect(blendedColor, isFire);
+	blendedColor = Color::AdditiveEffect(blendedColor, isFire, isLightSprite);
 #		elif defined(MULTBLEND) || defined(MULTBLEND_DECAL)
 #			if defined(EXP_HEIGHT_FOG)
 	float3 blendedColor = lerp(lightColor, 1.0.xxx, saturate(1.5 * vanillaFogFactor).xxx);

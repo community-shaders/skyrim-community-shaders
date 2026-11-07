@@ -97,8 +97,8 @@ std::vector<SceneSettingsManager::CopyCandidate> SceneSettingsManager::BuildCopy
 		candidates.push_back({
 			.setting = identity,
 			.displayName = entry->displayName.empty() ?
-		                       GetSceneSettingDisplayName(identity.featureShortName, identity.settingPath, identity.settingKey) :
-		                       entry->displayName,
+			                   GetSceneSettingDisplayName(identity.featureShortName, identity.settingPath, identity.settingKey) :
+			                   entry->displayName,
 			.value = entry->value,
 			.destinationValue = conflicts ? std::optional{ destinationIt->second } : std::nullopt,
 			.rejection = rejection,
@@ -262,7 +262,7 @@ std::vector<SceneSettingsManager::CopySource> SceneSettingsManager::GetCopyDesti
 	for (auto& target : GetAuthoredLocationTargets())
 		if (std::none_of(locationTargets.begin(), locationTargets.end(), [&](const auto& existing) {
 				return existing.type == target.type &&
-			           NormalizeLocationFormKey(existing.formKey) == NormalizeLocationFormKey(target.formKey);
+				       NormalizeLocationFormKey(existing.formKey) == NormalizeLocationFormKey(target.formKey);
 			}))
 			locationTargets.push_back(std::move(target));
 	for (const auto& target : locationTargets) {
@@ -554,12 +554,6 @@ SceneSettingsManager::CopyResult SceneSettingsManager::CopySettingsToContext(con
 
 	CommitContextUserEntryMutation(destination);
 	return result;
-}
-
-SceneSettingsManager::CopyResult SceneSettingsManager::CopySettings(const SceneContextId& source,
-	const SceneContextId& destination, CopyConflictPolicy conflictPolicy)
-{
-	return CopySettingsToContext(source, destination, conflictPolicy, false);
 }
 
 SceneSettingsManager::CopyResult SceneSettingsManager::CopySettingsBatch(const SceneContextId& source,

@@ -8,8 +8,8 @@ cbuffer DitherParams : register(b0)
 
 struct PS_INPUT
 {
-	float4 pos : SV_POSITION;
-	float2 txcoord0 : TEXCOORD0;
+	float4 pos: SV_POSITION;
+	float2 txcoord0: TEXCOORD0;
 };
 
 uint3 pcg3d(uint3 v)

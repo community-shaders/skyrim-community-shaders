@@ -81,7 +81,7 @@ GrassMaterialKey GrassMeshLibrary::CaptureMaterial(RE::BSShaderMaterial* materia
 
 	if (pbr) {
 		auto* pm = static_cast<BSLightingShaderMaterialPBR*>(material);
-		key.textures = { m->diffuseTexture.get(), m->normalTexture.get(), pm->rmaosTexture.get(), pm->featuresTexture0.get() };
+		key.textures = { m->diffuseTexture.get(), m->normalTexture.get(), pm->rmaosTexture.get(), pm->featuresTexture0.get(), pm->featuresTexture1.get(), pm->emissiveTexture.get() };
 		key.clampMode = (uint32_t)m->textureClampMode;
 		key.constants = TruePBR::GetGrassPBRConstants(pm);
 	}
@@ -287,6 +287,7 @@ void GrassMeshLibrary::LoadLODMesh(LODMesh& entry, const std::string& stem, LODT
 				entry.indexCount = 3u * ts->GetTrishapeRuntimeData().triangleCount;
 				const auto& bound = ts->GetModelData().modelBound;
 				entry.boundExtent = bound.center.Length() + bound.radius;
+				entry.canopyHeight = bound.center.z > 1.0f ? 2.0f * bound.center.z : std::max(bound.center.z + bound.radius, 1.0f);
 
 				if (entry.meshStride != 0 && entry.indexCount != 0)
 					entry.state = LoadState::kReady;

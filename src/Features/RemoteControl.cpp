@@ -1,4 +1,5 @@
-// Remote Control: status panel for the devbench bridge.
+// Remote Control: devbench bridge status and Nsight Perf panels, shown as tabs of the
+// Developer Tools feature (src/Features/DeveloperTools.cpp).
 //
 // The plugin's Model Context Protocol tools register into the external devbench host (the
 // devbench SKSE plugin, https://github.com/alandtse/devbench) via DevBenchBridge
@@ -12,15 +13,18 @@
 
 #include "Features/RemoteControl/DevBenchBridge.h"
 #include "Features/RemoteControl/NvPerf.h"
+#include "Features/RemoteControl/NvPerfHost.h"
 #include "Globals.h"
 #include "I18n/I18n.h"
 #include "Menu.h"
 #include "Utils/FileSystem.h"
+#include "Utils/Format.h"
 #include "Utils/UI.h"
 
 #include <imgui.h>
 #include <imgui_stdlib.h>
 #include <nlohmann/json.hpp>
+#include <shellapi.h>
 
 #include <algorithm>
 #include <cmath>
@@ -100,11 +104,29 @@ RemoteControl* RemoteControl::GetSingleton()
  */
 void RemoteControl::DataLoaded()
 {
-	// Register the plugin's tools into the devbench host. This feature owns the install; it runs at
+	// Register the plugin's tools into the devbench host. This component owns the install; it runs at
 	// DataLoaded rather than Load because devbench publishes its cross-plugin interface at
 	// kPostLoad — by DataLoaded it's ready. Inert (logged) when no host is present or the
 	// bridge was built disabled; idempotent on the devbench side (re-registering replaces).
 	DevBenchBridge::Install();
+}
+
+bool RemoteControl::IsDevBenchHostPresent()
+{
+#ifdef DEVBENCH_BRIDGE_ENABLED
+	return DevBenchAPI::GetDevBenchInterface001() != nullptr;
+#else
+	return false;
+#endif
+}
+
+bool RemoteControl::IsDevBenchBridgeBuilt()
+{
+#ifdef DEVBENCH_BRIDGE_ENABLED
+	return true;
+#else
+	return false;
+#endif
 }
 
 /**
@@ -115,7 +137,23 @@ void RemoteControl::DataLoaded()
  * warning if the devbench host is not detected or if the build was compiled without the devbench
  * bridge.
  */
-void RemoteControl::DrawSettings()
+int RemoteControl::GetDevBenchPort()
+{
+	// runtime.json I/O + JSON parse every frame would hitch the UI, and devbench may bind after the panel
+	// first opens, so re-read on a coarse interval. QPC, not std::chrono.
+	static int cachedPort = -1;       // -1 = not yet read
+	static LONGLONG lastReadQpc = 0;  // ticks at last read
+	LARGE_INTEGER freq, nowQpc;
+	QueryPerformanceFrequency(&freq);
+	QueryPerformanceCounter(&nowQpc);
+	if (cachedPort < 0 || nowQpc.QuadPart - lastReadQpc > 2 * freq.QuadPart) {  // > 2s
+		cachedPort = ReadDevBenchPort();
+		lastReadQpc = nowQpc.QuadPart;
+	}
+	return std::max(cachedPort, 0);
+}
+
+void RemoteControl::DrawDevBenchPanel()
 {
 	const auto& theme = Menu::GetSingleton()->GetTheme().StatusPalette;
 
@@ -132,25 +170,24 @@ void RemoteControl::DrawSettings()
 	if (dvb) {
 		ImGui::TextColored(theme.SuccessColor, "devbench host present (build %u)", dvb->GetBuildNumber());
 
-		// Cache the port — runtime.json I/O + JSON parse every frame would hitch the UI while
-		// the panel is open. Refresh on a coarse interval (devbench may bind after the panel
-		// first opens, so re-read periodically rather than only once). QPC, not std::chrono.
-		static int cachedPort = -1;       // -1 = not yet read
-		static LONGLONG lastReadQpc = 0;  // ticks at last read
-		LARGE_INTEGER freq, nowQpc;
-		QueryPerformanceFrequency(&freq);
-		QueryPerformanceCounter(&nowQpc);
-		if (cachedPort < 0 || nowQpc.QuadPart - lastReadQpc > 2 * freq.QuadPart) {  // > 2s
-			cachedPort = ReadDevBenchPort();
-			lastReadQpc = nowQpc.QuadPart;
-		}
-		if (cachedPort > 0) {
-			ImGui::Text("Host bound on port %d (from %s)", cachedPort, kRuntimeJsonPath);
+		const int port = GetDevBenchPort();
+		if (port > 0) {
+			const std::string endpoint = std::format("http://127.0.0.1:{}", port);
+			ImGui::AlignTextToFramePadding();
+			ImGui::Text(T("feature.remote_control.devbench.rest_endpoint", "REST endpoint: %s"), endpoint.c_str());
+			ImGui::SameLine();
+			if (Util::Button(T("feature.remote_control.devbench.copy_endpoint", "Copy")))
+				ImGui::SetClipboardText(endpoint.c_str());
+			ImGui::TextDisabled("%s", T("feature.remote_control.devbench.mcp_hint", "MCP clients connect through devbench's own bridge executable, which forwards to this endpoint."));
 		} else {
 			ImGui::TextDisabled(
 				"Port unknown — devbench writes it to %s once it binds.",
 				kRuntimeJsonPath);
 		}
+		if (const auto request = DevBenchBridge::GetLastRequest())
+			ImGui::Text(T("feature.remote_control.devbench.last_request", "Last request: %s, %s"), request->tool.c_str(), Util::FormatTimeAgo(request->time).c_str());
+		else
+			ImGui::TextDisabled("%s", T("feature.remote_control.devbench.no_requests", "No requests yet this session."));
 	} else {
 		ImGui::TextColored(theme.Warning,
 			"devbench host not detected. Install the devbench SKSE plugin; "
@@ -172,24 +209,110 @@ void RemoteControl::DrawSettings()
 		"This build was compiled without the devbench bridge "
 		"(DEVBENCH_BRIDGE=OFF). No tools are registered.");
 #endif
-
-	ImGui::Spacing();
-	DrawNvPerfSection();
 }
 
 #define I18N_KEY_PREFIX "feature.remote_control.nvperf."
 
+bool RemoteControl::RequestNvPerfCapture()
+{
+	auto& panel = nvperfPanel;
+	const auto defaults = NvPerf::DefaultMetrics();
+	if (panel.defaultMetricEnabled.size() != defaults.size())
+		panel.defaultMetricEnabled.assign(defaults.size(), 1);
+
+	NvPerf::CaptureConfiguration configuration;
+	for (std::size_t i = 0; i < defaults.size(); ++i)
+		if (panel.defaultMetricEnabled[i])
+			configuration.metrics.push_back(defaults[i]);
+	panel.requestError.clear();
+	for (const auto& text : SplitList(panel.extraMetrics)) {
+		NvPerf::MetricRequest metric;
+		if (!NvPerf::ParseMetric(text, metric, panel.requestError))
+			break;
+		configuration.metrics.push_back(std::move(metric));
+	}
+	if (panel.requestError.empty() && configuration.metrics.empty())
+		panel.requestError = T(TKEY("no_metrics"), "Select at least one metric.");
+	configuration.ranges = SplitList(panel.ranges);
+	configuration.samples = static_cast<std::uint32_t>(panel.samples);
+	configuration.delayFrames = static_cast<std::uint32_t>(panel.delayFrames);
+	configuration.nestingLevels = static_cast<std::uint16_t>(panel.nestingLevels);
+	std::uint64_t id = 0;
+	if (panel.requestError.empty())
+		NvPerf::RequestCapture(configuration, id, panel.requestError);
+	return panel.requestError.empty();
+}
+
+void RemoteControl::UpdateNvPerfHistory()
+{
+	auto& recent = nvperfPanel.recent;
+	auto latest = NvPerf::LatestResult();
+	if (!latest || (!recent.empty() && recent.front().result->id == latest->id))
+		return;
+	recent.insert(recent.begin(), { std::move(latest), std::filesystem::file_time_type::clock::now() });
+	if (recent.size() > kMaxRecentNvPerfCaptures)
+		recent.resize(kMaxRecentNvPerfCaptures);
+	nvperfPanel.viewedCaptureId = 0;  // follow the new capture
+}
+
 /**
- * @brief Renders the Nsight Perf capture controls and the latest capture's per-range summary.
+ * @brief Lists the captures of this session, newest first: picking one shows its summary below, and each row opens
+ * its CSV or the folder holding it.
+ */
+void RemoteControl::DrawRecentNvPerfCaptures(NvPerfPanel& a_panel)
+{
+	if (a_panel.recent.empty())
+		return;
+	const auto& theme = Menu::GetSingleton()->GetTheme().StatusPalette;
+	ImGui::Separator();
+	ImGui::TextUnformatted(T(TKEY("recent"), "Recent captures"));
+	if (!ImGui::BeginTable("##NvPerfRecent", 4, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit))
+		return;
+	ImGui::TableSetupColumn(T(TKEY("recent_capture"), "Capture"));
+	ImGui::TableSetupColumn(T(TKEY("recent_when"), "When"));
+	ImGui::TableSetupColumn(T(TKEY("recent_result"), "Result"), ImGuiTableColumnFlags_WidthStretch);
+	ImGui::TableSetupColumn(T(TKEY("recent_actions"), "Files"));
+	ImGui::TableHeadersRow();
+	const std::uint64_t viewed = a_panel.viewedCaptureId ? a_panel.viewedCaptureId : a_panel.recent.front().result->id;
+	for (const auto& recent : a_panel.recent) {
+		const auto& result = *recent.result;
+		ImGui::PushID(static_cast<int>(result.id));
+		ImGui::TableNextRow();
+		ImGui::TableNextColumn();
+		const std::string label = std::format("#{}", result.id);
+		if (Util::Selectable(label.c_str(), result.id == viewed, ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap))
+			a_panel.viewedCaptureId = result.id;
+		ImGui::TableNextColumn();
+		ImGui::TextUnformatted(Util::FormatTimeAgo(recent.time).c_str());
+		ImGui::TableNextColumn();
+		if (result.success)
+			ImGui::Text(T(TKEY("recent_ok"), "%zu ranges, %u samples"), result.summary.size(), result.samples);
+		else
+			ImGui::TextColored(theme.Error, "%s", result.error.c_str());
+		ImGui::TableNextColumn();
+		{
+			Util::DisableGuard noCsv(result.csvPath.empty());
+			if (ImGui::SmallButton(T(TKEY("open_csv"), "Open CSV")))
+				ShellExecuteW(nullptr, L"open", result.csvPath.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+			ImGui::SameLine();
+			if (ImGui::SmallButton(T(TKEY("show_in_folder"), "Show in folder"))) {
+				const std::wstring args = L"/select,\"" + result.csvPath.wstring() + L"\"";
+				ShellExecuteW(nullptr, L"open", L"explorer.exe", args.c_str(), nullptr, SW_SHOWNORMAL);
+			}
+		}
+		ImGui::PopID();
+	}
+	ImGui::EndTable();
+}
+
+/**
+ * @brief Renders the Nsight Perf capture controls and the recent captures and the viewed capture's per-range summary.
  *
  * The profiler library is probed the first time the section is opened. A capture runs over the next frames on the
  * render thread; this panel only requests it and reads its status, so it works with or without the devbench host.
  */
-void RemoteControl::DrawNvPerfSection()
+void RemoteControl::DrawNvPerfPanel()
 {
-	if (!ImGui::CollapsingHeader(T(TKEY("header"), "Nsight Perf (DX11)")))
-		return;
-
 	const auto& theme = Menu::GetSingleton()->GetTheme().StatusPalette;
 	auto& panel = nvperfPanel;
 
@@ -199,7 +322,7 @@ void RemoteControl::DrawNvPerfSection()
 	NvPerf::Probe();
 	const auto device = NvPerf::GetDeviceInfo();
 	if (!device.built) {
-		ImGui::TextColored(theme.Warning, "%s", T(TKEY("not_built"), "This build was compiled without Nsight Perf. Configure with -DNVPERF_SUPPORT=ON and NVPERF_SDK_ROOT."));
+		ImGui::TextColored(theme.Warning, T(TKEY("not_built"), "This build was compiled without Nsight Perf: %s."), NvPerf::Host::BuildHint());
 		return;
 	}
 	if (!device.gpuSupported) {
@@ -240,29 +363,10 @@ void RemoteControl::DrawNvPerfSection()
 	const bool busy = status.state == NvPerf::CaptureState::Waiting || status.state == NvPerf::CaptureState::Capturing ||
 	                  status.state == NvPerf::CaptureState::Decoding;
 	if (busy) {
-		if (ImGui::Button(T(TKEY("cancel"), "Cancel capture")))
+		if (Util::Button(T(TKEY("cancel"), "Cancel capture")))
 			NvPerf::CancelCapture();
-	} else if (ImGui::Button(T(TKEY("capture"), "Capture"))) {
-		NvPerf::CaptureConfiguration configuration;
-		for (std::size_t i = 0; i < defaults.size(); ++i)
-			if (panel.defaultMetricEnabled[i])
-				configuration.metrics.push_back(defaults[i]);
-		panel.requestError.clear();
-		for (const auto& text : SplitList(panel.extraMetrics)) {
-			NvPerf::MetricRequest metric;
-			if (!NvPerf::ParseMetric(text, metric, panel.requestError))
-				break;
-			configuration.metrics.push_back(std::move(metric));
-		}
-		if (panel.requestError.empty() && configuration.metrics.empty())
-			panel.requestError = T(TKEY("no_metrics"), "Select at least one metric.");
-		configuration.ranges = SplitList(panel.ranges);
-		configuration.samples = static_cast<std::uint32_t>(panel.samples);
-		configuration.delayFrames = static_cast<std::uint32_t>(panel.delayFrames);
-		configuration.nestingLevels = static_cast<std::uint16_t>(panel.nestingLevels);
-		std::uint64_t id = 0;
-		if (panel.requestError.empty())
-			NvPerf::RequestCapture(configuration, id, panel.requestError);
+	} else if (Util::Button(T(TKEY("capture"), "Capture"))) {
+		RequestNvPerfCapture();
 	}
 	if (!panel.requestError.empty())
 		ImGui::TextColored(theme.Error, "%s", panel.requestError.c_str());
@@ -283,7 +387,14 @@ void RemoteControl::DrawNvPerfSection()
 		break;
 	}
 
-	const auto result = NvPerf::LatestResult();
+	UpdateNvPerfHistory();
+	DrawRecentNvPerfCaptures(panel);
+
+	// The picked capture, else the newest
+	std::shared_ptr<const NvPerf::CaptureResult> result = panel.recent.empty() ? nullptr : panel.recent.front().result;
+	for (const auto& recent : panel.recent)
+		if (recent.result->id == panel.viewedCaptureId)
+			result = recent.result;
 	if (!result)
 		return;
 	ImGui::Separator();

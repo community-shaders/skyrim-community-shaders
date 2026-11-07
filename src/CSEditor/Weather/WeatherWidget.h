@@ -91,8 +91,8 @@ public:
 		CaptureVanillaSettings();
 	}
 
-	// Cloud texture cache (layer index -> SRV)
-	std::map<int, winrt::com_ptr<ID3D11ShaderResourceView>> cloudTextureCache;
+	// Null entries cache failed loads until the cache is cleared.
+	std::map<std::string, winrt::com_ptr<ID3D11ShaderResourceView>> cloudTextureCache;
 
 	/** @brief Renders the full weather editor UI with tabs for properties, DALC, atmosphere, clouds, fog, and records. */
 	void DrawWidget() override;

@@ -1,10 +1,7 @@
 #include "WetnessEffects.h"
-#include "CSEditor.h"
 #include "CSEditor/SceneManager/SceneWidgetInterceptor.h"
 #include "I18n/I18n.h"
 #include "Menu.h"
-#include "PerformanceOverlay.h"
-#include "State.h"
 
 #define I18N_KEY_PREFIX "feature.wetness_effects."
 
@@ -621,24 +618,10 @@ void WetnessEffects::DrawSettings()
 		ImGui::TreePop();
 	}
 
-	// The weather picker and debug overrides have no scene-context meaning, so hide them while a
-	// Scene Manager replica is borrowing this panel to author overrides.
+	// The debug overrides have no scene-context meaning, so hide them while a Scene Manager replica is
+	// borrowing this panel to author overrides.
 	if (SceneWidgetInterceptor::IsArmed())
 		return;
-
-	ImGui::Spacing();
-	ImGui::Spacing();
-	auto& csEditor = globals::features::csEditor;
-	if (csEditor.loaded) {
-		// The picker is a standalone widget now; the CS Editor feature has no menu page to open.
-		if (ImGui::SmallButton(T(TKEY("open_weather_picker"), "Open Weather Picker"))) {
-			globals::features::performanceOverlay.settings.ShowWeatherPicker = true;
-			globals::state->MarkSettingsChanged();
-		}
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("%s", T(TKEY("open_weather_picker_tooltip"), "Open the Weather Picker widget, which stays open when the main menu is closed"));
-		}
-	}
 
 	if (Util::ShowDebugSections() && ImGui::TreeNodeEx(T(TKEY("debug"), "Debug"), ImGuiTreeNodeFlags_DefaultOpen)) {
 		ImGui::Checkbox(T(TKEY("enable_wetness_override"), "Enable Wetness Override"), &debugSettings.EnableWetnessOverride);
@@ -854,7 +837,7 @@ void WetnessEffects::Reset()
 {
 	// Not in GetCommonBufferData: the feature buffer is rebuilt several times per frame (see Deferred).
 	if (globals::game::ui && !globals::game::ui->GameIsPaused())
-		rainTimer += (size_t)(RE::GetSecondsSinceLastFrame() * 1000);  // BSTimer::delta is always 0 for some reason
+		rainTimer += (size_t)(RE::GetSecondsSinceLastFrame() * 1000000);  // BSTimer::delta is always 0 for some reason
 }
 
 WetnessEffects::PerFrame WetnessEffects::GetCommonBufferData() const
@@ -941,7 +924,7 @@ WetnessEffects::PerFrame WetnessEffects::GetCommonBufferData() const
 		}
 	}
 
-	data.Time = rainTimer / 1000.f;
+	data.Time = static_cast<float>(static_cast<double>(rainTimer) / 1000000.0);
 
 	data.settings = settings;
 	data.settings.MaxShoreWetness = settings.EnableWetnessEffects ? settings.MaxShoreWetness : 0.0f;

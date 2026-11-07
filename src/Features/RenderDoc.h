@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Feature.h"
+#include <chrono>
 #include <filesystem>
 #include <mutex>
 #include <nlohmann/json.hpp>
@@ -28,7 +28,10 @@ struct CaptureFileInfo
 	std::string deletionErrorMessage;
 };
 
-class RenderDoc : public Feature
+/**
+ * @brief In-application RenderDoc capture support. A component of the Developer Tools feature, not a feature itself.
+ */
+class RenderDoc
 {
 public:
 	static RenderDoc* GetSingleton();
@@ -38,6 +41,10 @@ public:
 	/** @brief True when renderdoc.dll is in the process, whether loaded by CS or injected by the RenderDoc UI. */
 	static bool IsLoaded();
 	void TriggerCapture();
+	/** @brief Captures with the configured frame count after checking disk space, as the panel's button does. @return False when it could not start. */
+	bool CaptureNow() { return TriggerConfiguredCapture(); }
+	/** @brief Turns capture on or off for the next start, forcing frame annotations on while it is on and restoring them after. */
+	void SetCaptureEnabled(bool a_enabled);
 	void TriggerMultiFrameCapture(uint32_t a_frameCount);
 	bool HandleCaptureHotkey(uint32_t a_vkKey);
 	void SetCaptureFilePathTemplate(const std::string& a_template);
@@ -49,35 +56,14 @@ public:
 	void SetPendingCaptureComments(std::string a_comments);
 	void ApplyPendingCaptureComments(uint32_t a_index);
 
-	// Feature overrides
-	std::string GetName() override { return "RenderDoc"; }
-	virtual std::string GetDisplayName() override { return T("feature.render_doc.name", "RenderDoc"); }
-	std::string GetShortName() override { return "RenderDoc"; }
-	std::string_view GetCategory() const override { return FeatureCategories::kUtility; }
-	bool IsCore() const override { return true; }
-	bool IsInMenu() const override { return true; }
-	std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
-	{
-		return { T("feature.render_doc.description", "In-application RenderDoc capture support and convenience UI."),
-			{ T("feature.render_doc.key_feature_1", "Attach comments to captures that appear in RenderDoc UI"),
-				T("feature.render_doc.key_feature_2", "Open captures folder"),
-				T("feature.render_doc.key_feature_3", "Capture file management") } };
-	}
-	std::string_view GetShaderDefineName() override { return ""; }
-	bool HasShaderDefine(RE::BSShader::Type) override { return false; };
-
-	// Settings & UI
-	void DrawSettings() override;
-	void RestoreDefaultSettings() override;
-	void LoadSettings(json& o_json) override;
-	void SaveSettings(json& o_json) override;
-
-	// Resources
-	void SetupResources() override;
-	void ClearShaderCache() override;
-
-	// Lifecycle
-	void Load() override;
+	// Lifecycle and UI, driven by DeveloperTools
+	/** @brief Renders the RenderDoc tab of the Developer Tools panel. */
+	void DrawSettings();
+	void RestoreDefaultSettings();
+	void LoadSettings(json& o_json);
+	void SaveSettings(json& o_json);
+	/** @brief Loads renderdoc.dll when capture is enabled. Called from DeveloperTools::Load. */
+	void Load();
 
 	// Helper methods
 	std::filesystem::path GetCapturesPath() const;

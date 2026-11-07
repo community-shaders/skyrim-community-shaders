@@ -2,6 +2,7 @@
 
 #include "CursorLoader.h"
 #include "Menu.h"
+#include "Utils/Logging.h"
 
 namespace Util::CursorLoader
 {
@@ -28,7 +29,11 @@ namespace Util::CursorLoader
 
 		void ForEachSlot(const Menu::ThemeSettings& theme, auto&& fn)
 		{
-			static constexpr struct { ImGuiMouseCursor cursor; const char* defaultFile; } kSlots[] = {
+			static constexpr struct
+			{
+				ImGuiMouseCursor cursor;
+				const char* defaultFile;
+			} kSlots[] = {
 				{ ImGuiMouseCursor_Arrow, "cursor.png" },
 				{ ImGuiMouseCursor_TextInput, "cursor_text.png" },
 				{ ImGuiMouseCursor_ResizeAll, "cursor_resize_all.png" },
@@ -68,7 +73,7 @@ namespace Util::CursorLoader
 		bool IsPathAllowed(const std::filesystem::path& path)
 		{
 			return Util::IsPathWithinDirectory(Util::PathHelpers::GetThemesPath(), path) ||
-				   Util::IsPathWithinDirectory(Util::PathHelpers::GetCursorsPath(), path);
+			       Util::IsPathWithinDirectory(Util::PathHelpers::GetCursorsPath(), path);
 		}
 	}
 
@@ -114,15 +119,13 @@ namespace Util::CursorLoader
 		}
 
 		auto* device = globals::d3d::device;
-		static bool loggedMissingDevice = false;
+		static Util::OnceFlag loggedMissingDevice;
 		if (!device) {
-			if (!loggedMissingDevice) {
+			if (loggedMissingDevice.First())
 				logger::warn("CursorLoader::Reload: D3D device is null; will retry when available");
-				loggedMissingDevice = true;
-			}
 			return false;
 		}
-		loggedMissingDevice = false;
+		loggedMissingDevice.Reset();
 
 		MigrateLegacyCursorSettings(menu->GetSettings().Theme);
 		const auto& theme = menu->GetSettings().Theme;

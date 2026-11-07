@@ -58,12 +58,12 @@ Presets/MyModpack/
   logo.png / cover.png / gallery/
 ```
 
--   Baseline sits **beneath** the Scene Manager and is independent of the active pack: applying a Baseline-only pack never replaces the active Effects 11 / CS pack, and several Baseline packs can be enabled at once (the one applied last wins conflicts).
--   It is not limited by the Scene Manager black/whitelists. Any setting a feature saves to `SettingsUser.json` can be set. Only per-feature files are read, so Menu, Advanced (compiler threads, log level, ...) and other global keys cannot be shipped this way; files that name an unknown feature, an unknown setting key or a value of the wrong type are skipped and reported under Feature Issues.
--   Enabled Baseline packs are remembered in the `Presets` section of `SettingsUser.json` and re-applied every launch, so the values win over saved settings until the user changes a setting themselves (their change is kept as a delta; a change back to the pack's own value is not, so removing the pack later takes that setting with it). **Remove Baseline** stops applying the pack right away: the settings it set fall back to the layers beneath, and the user's own changes stay.
--   Per-file `_metadata` holds `version` and `description`; `"enabled": false` keeps the file from loading.
--   Files left in `CommunityShaders/Overrides/` by older versions are no longer read; move them into a pack's `Baseline/` folder.
--   Author one from **Export Overwrite** (feature header or Scene Manager): tick _Save as Baseline preset pack_ and the selected settings are written to `Presets/<Mod Name>/Baseline/<Feature>.json` with a starter manifest.
+- Baseline sits **beneath** the Scene Manager and is independent of the active pack: applying a Baseline-only pack never replaces the active Effects 11 / CS pack, and several Baseline packs can be enabled at once (the one applied last wins conflicts).
+- It is not limited by the Scene Manager black/whitelists. Any setting a feature saves to `SettingsUser.json` can be set. Only per-feature files are read, so Menu, Advanced (compiler threads, log level, ...) and other global keys cannot be shipped this way; files that name an unknown feature, an unknown setting key or a value of the wrong type are skipped and reported under Feature Issues.
+- Enabled Baseline packs are remembered in the `Presets` section of `SettingsUser.json` and re-applied every launch, so the values win over saved settings until the user changes a setting themselves (their change is kept as a delta; a change back to the pack's own value is not, so removing the pack later takes that setting with it). **Remove Baseline** stops applying the pack right away: the settings it set fall back to the layers beneath, and the user's own changes stay.
+- Per-file `_metadata` holds `version` and `description`; `"enabled": false` keeps the file from loading.
+- Files left in `CommunityShaders/Overrides/` by older versions are no longer read; move them into a pack's `Baseline/` folder.
+- Author one from **Export Overwrite** (feature header or Scene Manager): tick _Save as Baseline preset pack_ and the selected settings are written to `Presets/<Mod Name>/Baseline/<Feature>.json` with a starter manifest.
 
 ## Discovery
 

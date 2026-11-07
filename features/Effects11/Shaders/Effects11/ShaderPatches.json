@@ -1,20 +1,24 @@
 [
-	{
-		"file": "enbeffect.fx",
-		"patches": [
-			{
-				"find": "lerp( TOD(a), a##_Interior, EInteriorFactor )",
-				"replace": "(EInteriorFactor ? a##_Interior : TOD(a))"
-			}
-		]
-	},
-	{
-		"file": "enbUI_Bloom.fxh",
-		"patches": [
-			{
-				"find": "TO_STRING(|- TODIE - In Black).",
-				"replace": "TO_STRING(|- TODIE - In Black)"
-			}
-		]
-	}
+    {
+        "file": "enbeffect.fx",
+        "patches": [
+            {
+                "find": "lerp( TOD(a), a##_Interior, EInteriorFactor )",
+                "replace": "(EInteriorFactor ? a##_Interior : TOD(a))"
+            },
+            {
+                "find": "color.xyz = color + bloom - color * bloom;",
+                "replace": "color.xyz = color.xyz + bloom * max(0.0, 1.0 - color.xyz);"
+            }
+        ]
+    },
+    {
+        "file": "enbUI_Bloom.fxh",
+        "patches": [
+            {
+                "find": "TO_STRING(|- TODIE - In Black).",
+                "replace": "TO_STRING(|- TODIE - In Black)"
+            }
+        ]
+    }
 ]

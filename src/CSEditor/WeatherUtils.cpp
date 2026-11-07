@@ -1,5 +1,6 @@
 #include "WeatherUtils.h"
 #include "../I18n/I18n.h"
+#include "Browser/BrowserWidgets.h"
 #include "EditorWindow.h"
 #include "PaletteWindow.h"
 #include "Utils/Climate.h"
@@ -115,13 +116,6 @@ constexpr std::string_view kScopeSep = "::";
 static std::string ScopedKey(std::string_view label)
 {
 	return std::format("{}{}{}", static_cast<const void*>(g_currentWidget), kScopeSep, label);
-}
-
-// Recover the original label from a scoped key for use as a palette/UI key.
-static std::string_view UnscopeKey(std::string_view key)
-{
-	const auto pos = key.find(kScopeSep);
-	return pos == std::string_view::npos ? key : key.substr(pos + kScopeSep.size());
 }
 
 const char* WeatherUtils::TranslateControlLabel(std::string_view label)
@@ -347,19 +341,9 @@ bool ContainsStringIgnoreCase(const std::string_view a_string, const std::string
 	return !it.empty();
 }
 
-float Int8ToFloat(const int8_t& value)
-{
-	return ((float)(value + 128) / 255.0f);
-}
-
 float Uint8ToFloat(const uint8_t& value)
 {
 	return ((float)(value) / 255.0f);
-}
-
-int8_t FloatToInt8(const float& value)
-{
-	return (int8_t)std::lerp(-128, 127, std::clamp(value, 0.0f, 1.0f));
 }
 
 uint8_t FloatToUint8(const float& value)
@@ -584,6 +568,12 @@ namespace WeatherUtils
 // Time of Day (TOD) helper implementation
 namespace TOD
 {
+	/// Width of one of the four time-of-day columns that fill the available row.
+	static float TODColumnWidth()
+	{
+		return (ImGui::GetContentRegionAvail().x - 3.0f * ImGui::GetStyle().ItemSpacing.x) / 4.0f;
+	}
+
 	const char* GetPeriodName(int index)
 	{
 		switch (index) {
@@ -647,9 +637,7 @@ namespace TOD
 		ImGui::TableNextRow();
 		ImGui::TableSetColumnIndex(1);
 
-		float totalWidth = ImGui::GetContentRegionAvail().x;
-		float spacing = ImGui::GetStyle().ItemSpacing.x;
-		float sliderWidth = (totalWidth - 3 * spacing) / 4.0f;
+		const float sliderWidth = TODColumnWidth();
 
 		for (int i = 0; i < Count; ++i) {
 			if (i > 0)
@@ -688,6 +676,16 @@ namespace TOD
 		ImGui::Text("%s", label);
 	}
 
+	static bool DrawInheritCheckboxAndLabel(const char* label, bool& inheritFlag)
+	{
+		const bool clicked = ImGui::Checkbox((std::string("##inherit_") + label).c_str(), &inheritFlag);
+		Util::AddTooltip(T(TKEY("inherit_from_parent_weather"), "Inherit from parent weather"));
+		ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x);
+		ImGui::AlignTextToFramePadding();
+		BrowserUI::EllipsizedText(label, ImGui::GetContentRegionAvail().x, ImGui::GetStyleColorVec4(ImGuiCol_Text));
+		return clicked;
+	}
+
 	static bool PushTODHighlight(const char* label)
 	{
 		return g_currentWidget && g_currentWidget->PushHighlightIfNeeded(label);
@@ -711,8 +709,7 @@ namespace TOD
 		DrawCenteredLabel(label);
 		ImGui::TableSetColumnIndex(1);
 
-		float totalWidth = ImGui::GetContentRegionAvail().x;
-		float sliderWidth = (totalWidth - 3 * ImGui::GetStyle().ItemSpacing.x) / 4.0f;
+		const float sliderWidth = TODColumnWidth();
 
 		for (int i = 0; i < Count; ++i) {
 			if (i > 0)
@@ -746,8 +743,11 @@ namespace TOD
 		bool changed = false;
 		const bool highlighted = PushTODHighlight(label);
 
+		const float buttonSize = ImGui::GetFrameHeight() * ThemeManager::Constants::CSE_TOD_BUTTON_HEIGHT_RATIO;
+
 		ImGui::TableNextRow();
 		ImGui::TableSetColumnIndex(0);
+		ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (buttonSize - ImGui::GetFrameHeight()) * 0.5f);
 
 		// Only highlight the title text based on active time of day
 		bool anyActive = false;
@@ -767,13 +767,7 @@ namespace TOD
 
 		ImGui::TableSetColumnIndex(1);
 
-		float totalWidth = ImGui::GetContentRegionAvail().x;
-		float spacing = ImGui::GetStyle().ItemSpacing.x;
-		// Match the header calculation exactly
-		float columnWidth = (totalWidth - 3 * spacing) / 4.0f;
-
-		// Use a fixed button size
-		const float buttonSize = ImGui::GetFrameHeight() * 1.5f;
+		const float columnWidth = TODColumnWidth();
 
 		for (int i = 0; i < Count; ++i) {
 			if (i > 0)
@@ -869,7 +863,7 @@ namespace TOD
 
 		float totalWidth = ImGui::GetContentRegionAvail().x;
 		const float scale = Util::GetUIScale();
-		float checkboxWidth = 20.0f * scale;
+		float checkboxWidth = ThemeManager::Constants::CSE_INHERIT_CHECKBOX_WIDTH * scale;
 		float spacing = ImGui::GetStyle().ItemSpacing.x;
 		float sliderWidth = (totalWidth - (static_cast<int>(Count) - 1) * spacing - (parentValues ? static_cast<int>(Count) * checkboxWidth : 0)) / static_cast<float>(Count);
 
@@ -938,14 +932,16 @@ namespace TOD
 
 	bool DrawTODColorRow(const char* label, float3 colors[4], bool& inheritFlag, const float3 parentColors[4])
 	{
-		const float scale = Util::GetUIScale();
 		float factors[4];
 		GetTimeOfDayFactors(factors);
 		bool changed = false;
 		const bool highlighted = PushTODHighlight(label);
 
+		const float buttonSize = ImGui::GetFrameHeight() * ThemeManager::Constants::CSE_TOD_BUTTON_HEIGHT_RATIO;
+
 		ImGui::TableNextRow();
 		ImGui::TableSetColumnIndex(0);
+		ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (buttonSize - ImGui::GetFrameHeight()) * 0.5f);
 
 		bool anyActive = false;
 		for (int i = 0; i < Count; ++i) {
@@ -957,32 +953,15 @@ namespace TOD
 		if (!anyActive)
 			ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 0.5f);
 
-		// Draw label text
-		DrawCenteredLabel(label);
-
-		// Draw inherit checkbox right under the label
 		if (parentColors) {
-			ImGui::SameLine();
-			ImGui::PushStyleColor(ImGuiCol_FrameBg, WidgetUI::kInheritCheckboxFrameBg);
-			ImGui::PushStyleColor(ImGuiCol_CheckMark, WidgetUI::kInheritCheckboxMark);
-			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2 * scale, 2 * scale));
-
-			std::string inheritId = std::string("##inherit_") + label;
-			if (ImGui::Checkbox(inheritId.c_str(), &inheritFlag)) {
-				if (inheritFlag) {
-					// Copy all parent values
-					for (int i = 0; i < Count; ++i) {
-						colors[i] = parentColors[i];
-					}
-					changed = true;
+			if (DrawInheritCheckboxAndLabel(label, inheritFlag) && inheritFlag) {
+				for (int i = 0; i < Count; ++i) {
+					colors[i] = parentColors[i];
 				}
-				// Allow unchecking
+				changed = true;
 			}
-
-			ImGui::PopStyleVar();
-			ImGui::PopStyleColor(2);
-
-			Util::AddTooltip(T(TKEY("inherit_from_parent_weather"), "Inherit from parent weather"));
+		} else {
+			DrawCenteredLabel(label);
 		}
 
 		if (!anyActive)
@@ -990,10 +969,7 @@ namespace TOD
 
 		ImGui::TableSetColumnIndex(1);
 
-		float totalWidth = ImGui::GetContentRegionAvail().x;
-		float spacing = ImGui::GetStyle().ItemSpacing.x;
-		float columnWidth = (totalWidth - 3 * spacing) / 4.0f;
-		const float buttonSize = ImGui::GetFrameHeight() * 1.5f;
+		const float columnWidth = TODColumnWidth();
 
 		for (int i = 0; i < Count; ++i) {
 			if (i > 0)
@@ -1103,9 +1079,7 @@ namespace TOD
 		DrawCenteredLabel(label);
 		ImGui::TableSetColumnIndex(1);
 
-		float totalWidth = ImGui::GetContentRegionAvail().x;
-		float spacing = ImGui::GetStyle().ItemSpacing.x;
-		float columnWidth = (totalWidth - 3 * spacing) / 4.0f;
+		const float columnWidth = TODColumnWidth();
 
 		for (int i = 0; i < Count; ++i) {
 			if (i > 0)
@@ -1125,43 +1099,26 @@ namespace TOD
 
 	bool DrawTODFloatRow(const char* label, float values[4], bool& inheritFlag, const float parentValues[4], float minValue, float maxValue, const char* format)
 	{
-		const float scale = Util::GetUIScale();
 		bool changed = false;
 		const bool highlighted = PushTODHighlight(label);
 
 		ImGui::TableNextRow();
 		ImGui::TableSetColumnIndex(0);
 
-		DrawCenteredLabel(label);
-
-		// Draw inherit checkbox
 		if (parentValues) {
-			ImGui::SameLine();
-			ImGui::PushStyleColor(ImGuiCol_FrameBg, WidgetUI::kInheritCheckboxFrameBg);
-			ImGui::PushStyleColor(ImGuiCol_CheckMark, WidgetUI::kInheritCheckboxMark);
-			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2 * scale, 2 * scale));
-
-			std::string inheritId = std::string("##inherit_") + label;
-			if (ImGui::Checkbox(inheritId.c_str(), &inheritFlag)) {
-				if (inheritFlag) {
-					for (int i = 0; i < Count; ++i) {
-						values[i] = parentValues[i];
-					}
-					changed = true;
+			if (DrawInheritCheckboxAndLabel(label, inheritFlag) && inheritFlag) {
+				for (int i = 0; i < Count; ++i) {
+					values[i] = parentValues[i];
 				}
+				changed = true;
 			}
-
-			ImGui::PopStyleVar();
-			ImGui::PopStyleColor(2);
-
-			Util::AddTooltip(T(TKEY("inherit_from_parent_weather"), "Inherit from parent weather"));
+		} else {
+			DrawCenteredLabel(label);
 		}
 
 		ImGui::TableSetColumnIndex(1);
 
-		float totalWidth = ImGui::GetContentRegionAvail().x;
-		float spacing = ImGui::GetStyle().ItemSpacing.x;
-		float columnWidth = (totalWidth - 3 * spacing) / 4.0f;
+		const float columnWidth = TODColumnWidth();
 
 		if (inheritFlag)
 			PushInheritedStyle();
@@ -1189,46 +1146,6 @@ namespace TOD
 
 		if (inheritFlag)
 			PopInheritedStyle();
-
-		PopTODHighlight(label, highlighted);
-		return changed;
-	}
-
-	bool DrawTODInt8Row(const char* label, int values[4])
-	{
-		float factors[4];
-		GetTimeOfDayFactors(factors);
-		bool changed = false;
-		const bool highlighted = PushTODHighlight(label);
-
-		ImGui::TableNextRow();
-		ImGui::TableSetColumnIndex(0);
-		DrawCenteredLabel(label);
-		ImGui::TableSetColumnIndex(1);
-
-		float totalWidth = ImGui::GetContentRegionAvail().x;
-		float sliderWidth = (totalWidth - 3 * ImGui::GetStyle().ItemSpacing.x) / 4.0f;
-
-		for (int i = 0; i < Count; ++i) {
-			if (i > 0)
-				ImGui::SameLine();
-
-			bool isActive = factors[i] > 0.0f;
-			if (!isActive)
-				ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 0.5f);
-
-			ImGui::PushItemWidth(sliderWidth);
-			std::string id = std::string("##") + label + std::to_string(i);
-			if (ImGui::SliderInt(id.c_str(), &values[i], -127, 127))
-				changed = true;
-
-			Util::AddTooltip(std::format("{:.0f}%", factors[i] * 100.0f).c_str());
-
-			ImGui::PopItemWidth();
-
-			if (!isActive)
-				ImGui::PopStyleVar();
-		}
 
 		PopTODHighlight(label, highlighted);
 		return changed;
@@ -1314,17 +1231,6 @@ namespace PropertyDrawer
 		std::string id = std::string("##") + label;
 		return DrawWithWidgetHighlight(g_currentWidget, label, [&]() {
 			return ImGui::SliderFloat(id.c_str(), &value, minVal, maxVal, format);
-		});
-	}
-
-	bool DrawInt(const char* label, int& value, int minVal, int maxVal)
-	{
-		if (!MatchesCurrentWidgetSearch(label))
-			return false;
-		DrawLabel(label);
-		std::string id = std::string("##") + label;
-		return DrawWithWidgetHighlight(g_currentWidget, label, [&]() {
-			return ImGui::SliderInt(id.c_str(), &value, minVal, maxVal);
 		});
 	}
 

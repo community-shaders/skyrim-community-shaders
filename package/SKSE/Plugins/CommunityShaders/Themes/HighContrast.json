@@ -1,139 +1,221 @@
 {
     "DisplayName": "High Contrast",
-    "Description": "A high contrast theme for improved readability.",
-    "Version": "1.0.0",
+    "Description": "Black and white with bright accents, outlined controls and larger, heavier text for readability",
+    "Version": "1.1.0",
     "Author": "Community Shaders Team",
     "Theme": {
         "FontSize": 0.0,
-        "FontName": "Jost/Jost-Regular.ttf",
+        "FontName": "IBMPlexSans/IBMPlexSans-Regular.ttf",
         "GlobalScale": 0.0,
         "FontRoles": [
             {
+                "Family": "IBMPlex Sans",
+                "Style": "Regular",
+                "File": "IBMPlexSans/IBMPlexSans-Regular.ttf",
+                "SizeScale": 1.08
+            },
+            {
                 "Family": "Inter",
-                "Style": "Light",
-                "File": "Inter/Inter-Light.ttf",
-                "SizeScale": 1.0
+                "Style": "Regular",
+                "File": "Inter/Inter_24pt-Regular.ttf",
+                "SizeScale": 1.3
             },
             {
                 "Family": "Inter",
                 "Style": "SemiBold",
-                "File": "Inter/Inter-SemiBold.ttf",
-                "SizeScale": 1.0
+                "File": "Inter/Inter_24pt-SemiBold.ttf",
+                "SizeScale": 1.1
             },
             {
-                "Family": "Rubik",
+                "Family": "Inter",
                 "Style": "SemiBold",
-                "File": "Rubik/Rubik-SemiBold.ttf",
-                "SizeScale": 1.0
+                "File": "Inter/Inter_24pt-SemiBold.ttf",
+                "SizeScale": 1.05
             },
             {
                 "Family": "Inter",
-                "Style": "Light",
-                "File": "Inter/Inter-Light.ttf",
+                "Style": "Regular",
+                "File": "Inter/Inter_24pt-Regular.ttf",
                 "SizeScale": 1.0
-            },
-            {
-                "Family": "Inter",
-                "Style": "Light",
-                "File": "Inter/Inter-Light.ttf",
-                "SizeScale": 0.9
             }
         ],
         "UseSimplePalette": false,
         "ShowActionIcons": true,
-        "UseMonochromeIcons": false,
+        "UseMonochromeIcons": true,
+        "ShowFooter": true,
         "CenterHeader": true,
         "TooltipHoverDelay": 0.5,
         "BackgroundBlurEnabled": true,
         "Palette": {
-            "Background": [0.0, 0.0, 0.0, 0.95],
+            "Background": [0.0, 0.0, 0.0, 0.94],
             "Text": [1.0, 1.0, 1.0, 1.0],
-            "WindowBorder": [1.0, 1.0, 1.0, 1.0],
-            "FrameBorder": [0.4, 0.4, 0.4, 0.9],
-            "Separator": [1.0, 1.0, 1.0, 0.8],
-            "ResizeGrip": [1.0, 1.0, 1.0, 1.0]
+            "WindowBorder": [0.85, 0.85, 0.85, 0.6],
+            "FrameBorder": [0.09, 0.09, 0.09, 0.95],
+            "Separator": [0.85, 0.85, 0.85, 0.22],
+            "ResizeGrip": [0.85, 0.85, 0.85, 0.45]
         },
         "StatusPalette": {
-            "Disable": [0.5, 0.5, 0.5, 1.0],
-            "Error": [1.0, 0.0, 0.0, 1.0],
-            "Warning": [1.0, 1.0, 0.0, 1.0],
-            "RestartNeeded": [0.0, 1.0, 0.0, 1.0],
-            "CurrentHotkey": [0.0, 1.0, 1.0, 1.0],
-            "SuccessColor": [0.0, 1.0, 0.0, 1.0],
-            "InfoColor": [0.0, 0.5, 1.0, 1.0]
+            "Disable": [0.7, 0.7, 0.7, 1.0],
+            "Error": [1.0, 0.35, 0.35, 1.0],
+            "Warning": [1.0, 0.78, 0.15, 1.0],
+            "RestartNeeded": [0.35, 1.0, 0.5, 1.0],
+            "CurrentHotkey": [1.0, 1.0, 0.2, 1.0],
+            "SuccessColor": [0.3, 0.95, 0.45, 1.0],
+            "InfoColor": [0.4, 0.88, 1.0, 1.0]
         },
         "FeatureHeading": {
             "ColorDefault": [1.0, 1.0, 1.0, 1.0],
-            "ColorHovered": [0.8, 0.8, 0.8, 1.0],
-            "MinimizedFactor": 0.6
+            "ColorHovered": [0.4, 0.9, 1.0, 1.0],
+            "MinimizedFactor": 0.7
+        },
+        "ScrollbarOpacity": {
+            "Background": 0.0,
+            "Thumb": 0.35,
+            "ThumbHovered": 0.55,
+            "ThumbActive": 0.8
         },
         "Style": {
-            "WindowBorderSize": 2.0,
-            "ChildBorderSize": 2.0,
-            "FrameBorderSize": 2.0,
-            "WindowPadding": [18.0, 16.0],
-            "WindowRounding": 2.0,
-            "IndentSpacing": 12.0,
-            "FramePadding": [10.0, 6.0],
-            "CellPadding": [16.0, 8.0],
-            "ItemSpacing": [12.0, 12.0]
+            "WindowBorderSize": 0.0,
+            "ChildBorderSize": 0.0,
+            "FrameBorderSize": 1.0,
+            "WindowPadding": [10.0, 10.0],
+            "WindowRounding": 4.0,
+            "IndentSpacing": 14.0,
+            "FramePadding": [8.0, 5.0],
+            "CellPadding": [8.0, 4.0],
+            "ItemSpacing": [8.0, 6.0],
+            "FrameRounding": 3.0,
+            "TabRounding": 3.0,
+            "ScrollbarRounding": 10.0,
+            "ScrollbarSize": 10.0,
+            "GrabRounding": 3.0,
+            "GrabMinSize": 10.0,
+            "ItemInnerSpacing": [6.0, 4.0],
+            "ButtonTextAlign": [0.5, 0.5],
+            "SelectableTextAlign": [0.0, 0.0],
+            "SeparatorTextAlign": [0.0, 0.5],
+            "SeparatorTextPadding": [16.0, 3.0],
+            "SeparatorTextBorderSize": 1.0,
+            "WindowMinSize": [32.0, 32.0],
+            "ChildRounding": 4.0,
+            "PopupRounding": 4.0,
+            "PopupBorderSize": 1.0,
+            "TabBorderSize": 0.0,
+            "TabBarBorderSize": 0.0,
+            "TabMinWidthForCloseButton": 0.0,
+            "ColorButtonPosition": 0,
+            "ColumnsMinSpacing": 6.0,
+            "DockingSeparatorSize": 2.0,
+            "LogSliderDeadzone": 4.0,
+            "MouseCursorScale": 1.0,
+            "TableAngledHeadersAngle": 0.611
         },
-        "FullPalette": [
-            [1.0, 1.0, 1.0, 0.9],
-            [0.8, 0.8, 0.8, 1.0],
-            [0.0, 0.0, 0.0, 0.95],
-            [1.0, 1.0, 1.0, 0.39],
-            [0.05, 0.05, 0.05, 0.85],
-            [1.0, 1.0, 1.0, 0.65],
-            [0.0, 0.0, 0.0, 0.0],
-            [0.0, 0.0, 0.0, 1.0],
-            [0.3, 0.3, 0.3, 0.4],
-            [0.5, 0.5, 0.5, 0.45],
-            [0.0, 0.0, 0.0, 0.83],
-            [0.0, 0.0, 0.0, 0.87],
-            [0.2, 0.2, 0.2, 0.9],
-            [0.0, 0.0, 0.0, 0.9],
-            [0.15, 0.15, 0.15, 0.9],
-            [0.3, 0.3, 0.3, 1.0],
-            [0.5, 0.5, 0.5, 1.0],
-            [0.7, 0.7, 0.7, 1.0],
-            [1.0, 1.0, 1.0, 1.0],
-            [0.8, 0.8, 0.8, 1.0],
-            [0.2, 0.2, 0.2, 1.0],
-            [0.3, 0.3, 0.3, 1.0],
-            [0.35, 0.35, 0.35, 1.0],
-            [0.4, 0.4, 0.4, 1.0],
-            [0.25, 0.25, 0.25, 1.0],
-            [0.3, 0.3, 0.3, 1.0],
-            [0.35, 0.35, 0.35, 1.0],
-            [0.3, 0.3, 0.3, 1.0],
-            [0.35, 0.35, 0.35, 1.0],
-            [0.4, 0.4, 0.4, 1.0],
-            [1.0, 1.0, 1.0, 1.0],
-            [1.0, 1.0, 1.0, 0.6],
-            [1.0, 1.0, 1.0, 0.9],
-            [0.6, 0.6, 0.6, 0.31],
-            [0.8, 0.8, 0.8, 0.8],
-            [0.5, 0.5, 0.5, 1.0],
-            [0.55, 0.55, 0.55, 1.0],
-            [0.85, 0.85, 0.85, 1.0],
-            [0.7, 0.7, 0.7, 0.5],
-            [0.0, 0.0, 0.0, 0.0],
-            [1.0, 1.0, 1.0, 1.0],
-            [1.0, 1.0, 0.0, 1.0],
-            [1.0, 1.0, 0.0, 1.0],
-            [1.0, 1.0, 0.0, 1.0],
-            [0.6, 0.6, 0.6, 0.4],
-            [0.2, 0.2, 0.2, 1.0],
-            [0.15, 0.15, 0.15, 1.0],
-            [0.0, 0.0, 0.0, 0.0],
-            [1.0, 1.0, 1.0, 0.06],
-            [0.6, 0.6, 0.6, 0.35],
-            [1.0, 0.0, 0.0, 1.0],
-            [0.8, 0.8, 0.8, 1.0],
-            [0.4, 0.4, 0.4, 0.56],
-            [0.25, 0.25, 0.25, 0.35],
-            [0.25, 0.25, 0.25, 0.35]
-        ]
+        "UseCustomCursor": true,
+        "Cursor": {
+            "Scale": 1.0,
+            "Types": {
+                "Arrow": {
+                    "HotspotX": 3.0,
+                    "HotspotY": 2.2
+                },
+                "TextInput": {
+                    "HotspotX": 12.0,
+                    "HotspotY": 12.0
+                },
+                "ResizeAll": {
+                    "HotspotX": 12.0,
+                    "HotspotY": 12.0
+                },
+                "ResizeNS": {
+                    "HotspotX": 12.0,
+                    "HotspotY": 12.0
+                },
+                "ResizeEW": {
+                    "HotspotX": 12.0,
+                    "HotspotY": 12.0
+                },
+                "ResizeNESW": {
+                    "HotspotX": 12.0,
+                    "HotspotY": 12.0
+                },
+                "ResizeNWSE": {
+                    "HotspotX": 12.0,
+                    "HotspotY": 12.0
+                },
+                "Hand": {
+                    "HotspotX": 10.6,
+                    "HotspotY": 2.2
+                },
+                "NotAllowed": {
+                    "HotspotX": 12.0,
+                    "HotspotY": 12.0
+                }
+            }
+        },
+        "Colors": {
+            "Text": [1.0, 1.0, 1.0, 1.0],
+            "TextDisabled": [0.72, 0.72, 0.72, 1.0],
+            "WindowBg": [0.0, 0.0, 0.0, 0.94],
+            "ChildBg": [0.04, 0.04, 0.04, 0.0],
+            "PopupBg": [0.05, 0.05, 0.05, 0.97],
+            "Border": [0.85, 0.85, 0.85, 0.28],
+            "BorderShadow": [0, 0, 0, 0.0],
+            "FrameBg": [0.09, 0.09, 0.09, 0.95],
+            "FrameBgHovered": [0.08, 0.3, 0.38, 0.95],
+            "FrameBgActive": [0.1, 0.42, 0.52, 1.0],
+            "TitleBg": [0.0, 0.0, 0.0, 0.9],
+            "TitleBgActive": [0.07, 0.07, 0.07, 0.95],
+            "TitleBgCollapsed": [0.0, 0.0, 0.0, 0.7],
+            "MenuBarBg": [0.05, 0.05, 0.05, 0.9],
+            "ScrollbarBg": [0.0, 0.0, 0.0, 0.0],
+            "ScrollbarGrab": [1.0, 1.0, 1.0, 0.35],
+            "ScrollbarGrabHovered": [1.0, 1.0, 1.0, 0.55],
+            "ScrollbarGrabActive": [1.0, 1.0, 1.0, 0.8],
+            "CheckMark": [0.15, 0.82, 1.0, 1.0],
+            "SliderGrab": [0.15, 0.82, 1.0, 0.85],
+            "SliderGrabActive": [0.4, 0.9, 1.0, 1.0],
+            "Button": [0.15, 0.82, 1.0, 0.28],
+            "ButtonHovered": [0.15, 0.82, 1.0, 0.38],
+            "ButtonActive": [0.15, 0.82, 1.0, 0.46],
+            "Header": [0.15, 0.82, 1.0, 0.26],
+            "HeaderHovered": [0.15, 0.82, 1.0, 0.38],
+            "HeaderActive": [0.15, 0.82, 1.0, 0.46],
+            "Separator": [0.85, 0.85, 0.85, 0.22],
+            "SeparatorHovered": [0.15, 0.82, 1.0, 0.7],
+            "SeparatorActive": [0.15, 0.82, 1.0, 1.0],
+            "ResizeGrip": [0.85, 0.85, 0.85, 0.2],
+            "ResizeGripHovered": [0.15, 0.82, 1.0, 0.6],
+            "ResizeGripActive": [0.15, 0.82, 1.0, 0.9],
+            "InputTextCursor": [1.0, 1.0, 1.0, 1.0],
+            "TabHovered": [0.15, 0.82, 1.0, 0.38],
+            "Tab": [0.09, 0.09, 0.09, 0.6],
+            "TabSelected": [0.15, 0.82, 1.0, 0.28],
+            "TabSelectedOverline": [0.15, 0.82, 1.0, 1.0],
+            "TabDimmed": [0.09, 0.09, 0.09, 0.5],
+            "TabDimmedSelected": [0.15, 0.82, 1.0, 0.22],
+            "TabDimmedSelectedOverline": [0.85, 0.85, 0.85, 0.0],
+            "DockingPreview": [0.15, 0.82, 1.0, 0.5],
+            "DockingEmptyBg": [0.0, 0.0, 0.0, 0.6],
+            "PlotLines": [0.15, 0.82, 1.0, 1.0],
+            "PlotLinesHovered": [0.62, 0.95, 1.0, 1.0],
+            "PlotHistogram": [0.15, 0.82, 1.0, 0.9],
+            "PlotHistogramHovered": [0.62, 0.95, 1.0, 1.0],
+            "TableHeaderBg": [0.09, 0.09, 0.09, 0.95],
+            "TableBorderStrong": [0.85, 0.85, 0.85, 0.3],
+            "TableBorderLight": [0.85, 0.85, 0.85, 0.14],
+            "TableRowBg": [1, 1, 1, 0.0],
+            "TableRowBgAlt": [1, 1, 1, 0.035],
+            "TextLink": [0.4, 0.9, 1.0, 1.0],
+            "TextSelectedBg": [0.15, 0.82, 1.0, 0.35],
+            "TreeLines": [0.85, 0.85, 0.85, 0.5],
+            "DragDropTarget": [0.15, 0.82, 1.0, 0.9],
+            "DragDropTargetBg": [0.15, 0.82, 1.0, 0.08],
+            "UnsavedMarker": [1.0, 1.0, 1.0, 1.0],
+            "NavCursor": [0.15, 0.82, 1.0, 0.8],
+            "NavWindowingHighlight": [1, 1, 1, 0.7],
+            "NavWindowingDimBg": [0, 0, 0, 0.45],
+            "ModalWindowDimBg": [0, 0, 0, 0.5]
+        },
+        "UseMonochromeLogo": true
     }
 }

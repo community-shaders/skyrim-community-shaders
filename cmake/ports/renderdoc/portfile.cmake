@@ -9,8 +9,10 @@ vcpkg_from_github(
 )
 
 # Install the API header file
-file(INSTALL "${SOURCE_PATH}/renderdoc/api/app/renderdoc_app.h"
-     DESTINATION "${CURRENT_PACKAGES_DIR}/include/Renderdoc")
+file(
+    INSTALL "${SOURCE_PATH}/renderdoc/api/app/renderdoc_app.h"
+    DESTINATION "${CURRENT_PACKAGES_DIR}/include/Renderdoc"
+)
 
 # Install copyright/license
 vcpkg_install_copyright(FILE_LIST "${SOURCE_PATH}/LICENSE.md")
@@ -40,8 +42,9 @@ vcpkg_install_copyright(FILE_LIST "${SOURCE_PATH}/LICENSE.md")
 # Replace <SHA512> with the archive checksum for the selected RenderDoc version.
 
 # Create usage file with instructions for getting the runtime DLL
-file(WRITE "${CURRENT_PACKAGES_DIR}/share/${PORT}/usage"
-"RenderDoc provides an in-application API for frame capture and debugging.
+file(
+    WRITE "${CURRENT_PACKAGES_DIR}/share/${PORT}/usage"
+    "RenderDoc provides an in-application API for frame capture and debugging.
 
 This port provides the renderdoc_app.h header file for compile-time integration.
 
@@ -56,4 +59,5 @@ To obtain renderdoc.dll:
 - Deploy renderdoc.dll alongside your application
 
 API Documentation: https://renderdoc.org/docs/in_application_api.html
-")
+"
+)

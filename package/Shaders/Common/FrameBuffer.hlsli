@@ -17,16 +17,16 @@ namespace FrameBuffer
 		row_major float4x4 CameraViewProjInverse : packoffset(c32);
 		row_major float4x4 CameraProjInverse : packoffset(c36);
 		float4 CameraPosAdjust : packoffset(c40);
-		float4 CameraPreviousPosAdjust : packoffset(c41);  // fDRClampOffset in w
-		float4 FrameParams : packoffset(c42);                 // inverse fGamma in x, some flags in yzw
-		float4 DynamicResolutionParams1 : packoffset(c43);    // fDynamicResolutionWidthRatio in x,
-															  // fDynamicResolutionHeightRatio in y,
-															  // fDynamicResolutionPreviousWidthRatio in z,
-															  // fDynamicResolutionPreviousHeightRatio in w
-		float4 DynamicResolutionParams2 : packoffset(c44);    // inverse fDynamicResolutionWidthRatio in x, inverse
-															  // fDynamicResolutionHeightRatio in y,
-															  // fDynamicResolutionWidthRatio - fDRClampOffset in z,
-															  // fDynamicResolutionPreviousWidthRatio - fDRClampOffset in w
+		float4 CameraPreviousPosAdjust : packoffset(c41);   // fDRClampOffset in w
+		float4 FrameParams : packoffset(c42);               // inverse fGamma in x, some flags in yzw
+		float4 DynamicResolutionParams1 : packoffset(c43);  // fDynamicResolutionWidthRatio in x,
+															// fDynamicResolutionHeightRatio in y,
+															// fDynamicResolutionPreviousWidthRatio in z,
+															// fDynamicResolutionPreviousHeightRatio in w
+		float4 DynamicResolutionParams2 : packoffset(c44);  // inverse fDynamicResolutionWidthRatio in x, inverse
+															// fDynamicResolutionHeightRatio in y,
+															// fDynamicResolutionWidthRatio - fDRClampOffset in z,
+															// fDynamicResolutionPreviousWidthRatio - fDRClampOffset in w
 	}
 
 	/**

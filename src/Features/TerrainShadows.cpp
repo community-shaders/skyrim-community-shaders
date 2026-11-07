@@ -21,10 +21,10 @@ namespace
 	}
 
 	class TimeJumpEventHandler :
-		public RE::BSTEventSink<RE::TESWaitStopEvent>,
-		public RE::BSTEventSink<RE::TESSleepStopEvent>,
-		public RE::BSTEventSink<RE::TESFastTravelEndEvent>,
-		public RE::BSTEventSink<RE::BGSActorCellEvent>
+	    public RE::BSTEventSink<RE::TESWaitStopEvent>,
+	    public RE::BSTEventSink<RE::TESSleepStopEvent>,
+	    public RE::BSTEventSink<RE::TESFastTravelEndEvent>,
+	    public RE::BSTEventSink<RE::BGSActorCellEvent>
 	{
 	public:
 		RE::BSEventNotifyControl ProcessEvent(const RE::TESWaitStopEvent*, RE::BSTEventSource<RE::TESWaitStopEvent>*) override

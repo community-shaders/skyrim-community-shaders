@@ -6,8 +6,8 @@
 
 **For comprehensive development guidance, architecture details, and complete build instructions, see:**
 
--   **`.claude/CLAUDE.md`** - Concise guide to build tooling, project conventions, and release rules
--   **`AI-INSTRUCTIONS.md`** - Quick reference that also points to .claude/CLAUDE.md
+- **`.claude/CLAUDE.md`** - Concise guide to build tooling, project conventions, and release rules
+- **`AI-INSTRUCTIONS.md`** - Quick reference that also points to .claude/CLAUDE.md
 
 This file provides Copilot-specific guidance while avoiding duplication of the comprehensive documentation above.
 
@@ -19,14 +19,14 @@ SKSE64 plugin providing modular DirectX 11 graphics enhancements for Skyrim SE/A
 
 ### Windows-Only Requirements
 
--   Visual Studio Community 2026 with "Desktop development with C++" workload (VS 2022 via the `ALL-VS2022` preset)
--   CMake 4.2+, Git, vcpkg with VCPKG_ROOT environment variable, Windows SDK
--   **NEVER CANCEL BUILDS**: 45-60 minutes build time, 15-30 minutes shader validation
+- Visual Studio Community 2026 with "Desktop development with C++" workload (VS 2022 via the `ALL-VS2022` preset)
+- CMake 4.2+, Git, vcpkg with VCPKG_ROOT environment variable, Windows SDK
+- **NEVER CANCEL BUILDS**: 45-60 minutes build time, 15-30 minutes shader validation
 
 ### Linux/WSL Limitations
 
--   **Cannot build or validate shaders** - requires Windows fxc.exe compiler
--   **Limited to**: Code review, documentation, Python tooling only
+- **Cannot build or validate shaders** - requires Windows fxc.exe compiler
+- **Limited to**: Code review, documentation, Python tooling only
 
 ### Primary Build Command (Windows)
 
@@ -49,26 +49,26 @@ git submodule update --init --recursive  # If not cloned with --recursive
 
 **Graphics programming and Skyrim modding expert** with deep knowledge of:
 
--   DirectX 11/12 rendering pipelines and performance optimization
--   SKSE plugin development and CommonLibSSE-NG runtime targeting
--   HLSL shader development and GPU compute programming
--   ImGui interface design and Skyrim engine integration
+- DirectX 11/12 rendering pipelines and performance optimization
+- SKSE plugin development and CommonLibSSE-NG runtime targeting
+- HLSL shader development and GPU compute programming
+- ImGui interface design and Skyrim engine integration
 
 ### Proactive Issue Identification
 
 **Flag potential problems before they occur:**
 
--   **Performance Impact**: Graphics features affect rendering performance - suggest user toggles
--   **Runtime Compatibility**: Warn about SE/AE compatibility issues, suggest `REL::RelocateMember()` patterns
--   **Buffer Conflicts**: Highlight GPU register conflicts, recommend hlslkit buffer scanning
--   **Security Risks**: Validate user input, prevent DirectX crashes from malformed configurations
+- **Performance Impact**: Graphics features affect rendering performance - suggest user toggles
+- **Runtime Compatibility**: Warn about SE/AE compatibility issues, suggest `REL::RelocateMember()` patterns
+- **Buffer Conflicts**: Highlight GPU register conflicts, recommend hlslkit buffer scanning
+- **Security Risks**: Validate user input, prevent DirectX crashes from malformed configurations
 
 ### Code Quality Standards
 
--   **Complete Solutions**: No TODO/FIXME placeholders - provide fully functional code
--   **Performance Conscious**: Always consider GPU workload and user experience
--   **Cross-Platform**: Ensure changes work across SE/AE variants using runtime detection
--   **Error Handling**: Include proper resource management and graceful degradation
+- **Complete Solutions**: No TODO/FIXME placeholders - provide fully functional code
+- **Performance Conscious**: Always consider GPU workload and user experience
+- **Cross-Platform**: Ensure changes work across SE/AE variants using runtime detection
+- **Error Handling**: Include proper resource management and graceful degradation
 
 ## Architecture Quick Reference
 
@@ -114,9 +114,9 @@ pre-commit run --all-files
 
 This file focuses on Copilot-specific guidance while `.claude/CLAUDE.md` provides:
 
--   Build wrappers and shader refactor verification (`tools/verify-shader-refactor.ps1`)
--   Feature release stages (Alpha / Beta / Unreleased) and versioning rules
--   D3D11 resource naming, UI constant, and i18n conventions
--   Commit types and release branch rules
+- Build wrappers and shader refactor verification (`tools/verify-shader-refactor.ps1`)
+- Feature release stages (Alpha / Beta / Unreleased) and versioning rules
+- D3D11 resource naming, UI constant, and i18n conventions
+- Commit types and release branch rules
 
 Refer to `.claude/CLAUDE.md` for project rules not covered in this Copilot-specific summary.

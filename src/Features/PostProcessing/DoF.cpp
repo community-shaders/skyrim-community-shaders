@@ -101,7 +101,7 @@ void DoF::DrawSettings()
 		ImGui::SliderFloat(T("feature.post_processing.do_f.sensor_width", "Sensor Width"), &sensorWidth, 1.0f, 100.0f, "%.1f mm", ImGuiSliderFlags_AlwaysClamp);
 	}
 	if (auto _tt = Util::HoverTooltipWrapper())
-		ImGui::Text(T("feature.post_processing.do_f.sensor_width_desc", "Horizontal sensor extent the focal length and F-number are expressed for. 36 mm matches a full frame camera."));
+		ImGui::TextUnformatted(T("feature.post_processing.do_f.sensor_width_desc", "Horizontal sensor extent the focal length and F-number are expressed for. 36 mm matches a full frame camera."));
 	ImGui::EndDisabled();
 	if (!camActive && !SceneWidgetInterceptor::IsArmed()) {
 		settings.FocusCoord.x = autoFocusCoord[0];
@@ -116,15 +116,20 @@ void DoF::DrawSettings()
 	ImGui::SliderFloat(T("feature.post_processing.do_f.near_plane_max_blur", "Near Plane Max Blur"), &settings.NearPlaneMaxBlur, 0.0f, 4.0f, "%.2f");
 	ImGui::SliderFloat(T("feature.post_processing.do_f.max_far_coc_radius", "Max Far Blur Radius"), &settings.MaxFarCoCRadius, 0.001f, 0.1f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
 	if (auto _tt = Util::HoverTooltipWrapper())
-		ImGui::Text(T("feature.post_processing.do_f.max_far_coc_radius_desc", "Upper bound of the far field blur disc radius, as a fraction of the screen width. Caps how expensive/undersampled the gather can get."));
+		ImGui::TextUnformatted(T("feature.post_processing.do_f.max_far_coc_radius_desc", "Upper bound of the far field blur disc radius, as a fraction of the screen width. Caps how expensive/undersampled the gather can get."));
 	ImGui::SliderFloat(T("feature.post_processing.do_f.max_near_coc_radius", "Max Near Blur Radius"), &settings.MaxNearCoCRadius, 0.001f, 0.1f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
 	if (auto _tt = Util::HoverTooltipWrapper())
-		ImGui::Text(T("feature.post_processing.do_f.max_near_coc_radius_desc", "Upper bound of the near field blur disc radius, as a fraction of the screen width."));
+		ImGui::TextUnformatted(T("feature.post_processing.do_f.max_near_coc_radius_desc", "Upper bound of the near field blur disc radius, as a fraction of the screen width."));
 	ImGui::Checkbox(T("feature.post_processing.do_f.adaptive_gather", "Adaptive Gather"), &settings.UseAdaptiveGather);
 	if (auto _tt = Util::HoverTooltipWrapper())
-		ImGui::Text(T("feature.post_processing.do_f.adaptive_gather_desc", "Uses a fixed low-sample kernel and a CoC-aware image pyramid."));
-	if (settings.UseAdaptiveGather)
-		ImGui::Combo(T("feature.post_processing.do_f.gather_quality", "Gather Quality"), &settings.GatherQuality, "Performance (4 rings)\0Quality (5 rings)\0");
+		ImGui::TextUnformatted(T("feature.post_processing.do_f.adaptive_gather_desc", "Uses a fixed low-sample kernel and a CoC-aware image pyramid."));
+	if (settings.UseAdaptiveGather) {
+		const char* gatherQuality[] = {
+			T("feature.post_processing.do_f.gather_quality_performance", "Performance (4 rings)"),
+			T("feature.post_processing.do_f.gather_quality_quality", "Quality (5 rings)")
+		};
+		ImGui::Combo(T("feature.post_processing.do_f.gather_quality", "Gather Quality"), &settings.GatherQuality, gatherQuality, IM_ARRAYSIZE(gatherQuality));
+	}
 	if (!settings.UseAdaptiveGather)
 		ImGui::SliderFloat(T("feature.post_processing.do_f.blur_quality", "Compatibility Blur Quality"), &settings.BlurQuality, 2.0f, 30.0f, "%.1f");
 	ImGui::SliderFloat(T("feature.post_processing.do_f.near_far_plane_distance_compenation", "Near-Far Plane Distance Compenation"), &settings.NearFarDistanceCompensation, 1.0f, 5.0f, "%.2f");
@@ -132,7 +137,11 @@ void DoF::DrawSettings()
 	ImGui::SliderFloat(T("feature.post_processing.do_f.petzval_strength", "Petzval Strength"), &settings.PetzvalStrength, 0.0f, 2.0f, "%.2f");
 	ImGui::SliderFloat(T("feature.post_processing.do_f.highlight_boost", "Highlight Boost"), &settings.HighlightBoost, 0.0f, 1.0f, "%.2f");
 	ImGui::SliderFloat(T("feature.post_processing.do_f.post_blur_smoothing", "Post Blur Smoothing"), &settings.PostBlurSmoothing, 0.0f, 2.0f, "%.2f");
-	ImGui::Combo(T("feature.post_processing.do_f.bokeh_mode", "Bokeh Mode"), &settings.BokehMode, "Procedural\0Custom Texture (Higher Cost)\0");
+	const char* bokehModes[] = {
+		T("feature.post_processing.do_f.bokeh_mode_procedural", "Procedural"),
+		T("feature.post_processing.do_f.bokeh_mode_custom_texture", "Custom Texture (Higher Cost)")
+	};
+	ImGui::Combo(T("feature.post_processing.do_f.bokeh_mode", "Bokeh Mode"), &settings.BokehMode, bokehModes, IM_ARRAYSIZE(bokehModes));
 	if (settings.BokehMode == 0) {
 		ImGui::BeginDisabled(camActive);
 		{
@@ -160,7 +169,7 @@ void DoF::DrawSettings()
 		if (ImGui::BeginCombo(T("feature.post_processing.do_f.highlight_custom_shape", "Custom Aperture Texture"), owner->bokehResources.GetShapeName(selectedShape))) {
 			for (int i = 0; i < shapeCount; ++i) {
 				const bool selected = i == selectedShape;
-				if (ImGui::Selectable(owner->bokehResources.GetShapeName(i), selected))
+				if (Util::Selectable(owner->bokehResources.GetShapeName(i), selected))
 					settings.HighlightShape = i + 1;
 				if (selected)
 					ImGui::SetItemDefaultFocus();

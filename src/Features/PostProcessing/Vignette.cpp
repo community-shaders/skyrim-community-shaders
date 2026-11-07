@@ -35,11 +35,11 @@ void Vignette::DrawSettings()
 	if (!cam && !SceneWidgetInterceptor::IsArmed())
 		settings.FocalLength = focalLength;
 	if (auto _tt = Util::HoverTooltipWrapper())
-		ImGui::Text(T("feature.post_processing.vignette.the_focal_length_of_the_lens_relative_to", "The focal length of the lens, relative to image width."));
+		ImGui::TextUnformatted(T("feature.post_processing.vignette.the_focal_length_of_the_lens_relative_to", "The focal length of the lens, relative to image width."));
 
 	ImGui::SliderFloat(T("feature.post_processing.vignette.anamorphic_squeeze", "Anamorphic Squeeze"), &settings.Anamorphism, 0.1f, 1.f, "%.2f");
 	if (auto _tt = Util::HoverTooltipWrapper())
-		ImGui::Text(T("feature.post_processing.vignette.how_flat_the_vignette_looks_simulating_anamorphic_lens", "How flat the vignette looks, simulating anamorphic lens."));
+		ImGui::TextUnformatted(T("feature.post_processing.vignette.how_flat_the_vignette_looks_simulating_anamorphic_lens", "How flat the vignette looks, simulating anamorphic lens."));
 
 	ImGui::SliderFloat(T("feature.post_processing.vignette.power", "Power"), &settings.Power, 0.f, 4.f, "%.2f");
 	if (auto _tt = Util::HoverTooltipWrapper())

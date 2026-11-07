@@ -6,9 +6,9 @@ Quick reference for creating new graphics features in Community Shaders.
 
 Template files to copy and customize:
 
--   `docs/new-feature-template/NewFeature.h` → Copy to `src/Features/YourFeature.h`
--   `docs/new-feature-template/NewFeature.cpp` → Copy to `src/Features/YourFeature.cpp`
--   `docs/new-feature-template/New Feature/` → Copy to `features/YourFeature/`
+- `docs/new-feature-template/NewFeature.h` → Copy to `src/Features/YourFeature.h`
+- `docs/new-feature-template/NewFeature.cpp` → Copy to `src/Features/YourFeature.cpp`
+- `docs/new-feature-template/New Feature/` → Copy to `features/YourFeature/`
 
 ## Core System Registration
 
@@ -40,25 +40,25 @@ YourFeature yourFeature{};
 
 ### Class Names
 
--   Replace all `NewFeature` → `YourFeature`
--   Replace all `"New Feature"` → `"Your Feature Name"`
--   Replace all `"NewFeature"` → `"YourFeature"`
+- Replace all `NewFeature` → `YourFeature`
+- Replace all `"New Feature"` → `"Your Feature Name"`
+- Replace all `"NewFeature"` → `"YourFeature"`
 
 ### Metadata
 
--   `GetCategory()` → Choose: "Lighting", "Effects", "Rendering", "Performance", "Terrain", "Water", "Atmosphere"
--   `GetFeatureModLink()` → Update Nexus mod ID
--   `GetFeatureSummary()` → Update description and features list
--   `GetShaderDefineName()` → Your preprocessor define name
--   `HasShaderDefine()` → Which shader types use your define
+- `GetCategory()` → Choose: "Lighting", "Effects", "Rendering", "Performance", "Terrain", "Water", "Atmosphere"
+- `GetFeatureModLink()` → Update Nexus mod ID
+- `GetFeatureSummary()` → Update description and features list
+- `GetShaderDefineName()` → Your preprocessor define name
+- `HasShaderDefine()` → Which shader types use your define
 
 ### Settings
 
--   Update `Settings` struct with your parameters
--   Update `CbData` struct for shader constant buffer (must be 16-byte aligned)
--   Update NLOHMANN serialization macro
--   Customize `DrawSettings()` UI controls
--   Update shader compilation paths in `CompileShaders()`
+- Update `Settings` struct with your parameters
+- Update `CbData` struct for shader constant buffer (must be 16-byte aligned)
+- Update NLOHMANN serialization macro
+- Customize `DrawSettings()` UI controls
+- Update shader compilation paths in `CompileShaders()`
 
 ## Naming Conventions
 
@@ -75,18 +75,18 @@ YourFeature yourFeature{};
 
 The build system automatically handles:
 
--   Shader compilation and validation
--   Settings persistence (JSON serialization)
--   UI menu integration
--   Feature lifecycle management
--   Cross-platform builds (SE/AE)
+- Shader compilation and validation
+- Settings persistence (JSON serialization)
+- UI menu integration
+- Feature lifecycle management
+- Cross-platform builds (SE/AE)
 
 Build with: `./BuildRelease.bat ALL`
 
 ## Testing Checklist
 
--   [ ] Feature appears in settings menu
--   [ ] Settings save/load correctly
--   [ ] Shaders compile without errors
--   [ ] Feature works in-game
--   [ ] No build errors
+- [ ] Feature appears in settings menu
+- [ ] Settings save/load correctly
+- [ ] Shaders compile without errors
+- [ ] Feature works in-game
+- [ ] No build errors

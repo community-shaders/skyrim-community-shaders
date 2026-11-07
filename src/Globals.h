@@ -16,6 +16,7 @@ struct LightLimitFix;
 struct LinearLighting;
 struct LODBlending;
 struct InteriorSun;
+struct ProceduralSun;
 struct RainRefraction;
 struct ScreenSpaceGI;
 struct ScreenSpaceShadows;
@@ -47,6 +48,7 @@ struct SceneManager;
 class State;
 class Deferred;
 struct TruePBR;
+struct DeveloperTools;
 class RenderDoc;
 class RemoteControl;
 class Menu;
@@ -108,6 +110,7 @@ namespace globals
 		extern LinearLighting linearLighting;
 		extern LODBlending lodBlending;
 		extern InteriorSun interiorSun;
+		extern ProceduralSun proceduralSun;
 		extern RainRefraction rainRefraction;
 		extern ScreenSpaceGI screenSpaceGI;
 		extern ScreenSpaceShadows screenSpaceShadows;
@@ -128,6 +131,8 @@ namespace globals
 		extern Upscaling upscaling;
 		extern HDRDisplay hdrDisplay;
 		extern Effects11 effects11;
+		extern DeveloperTools developerTools;
+		// Developer Tools components, not features: driven by developerTools.
 		extern RenderDoc renderDoc;
 		extern RemoteControl remoteControl;
 		extern ScreenshotFeature screenshotFeature;

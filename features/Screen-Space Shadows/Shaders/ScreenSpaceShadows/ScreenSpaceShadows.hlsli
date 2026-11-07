@@ -12,4 +12,14 @@ namespace ScreenSpaceShadows
 	{
 		return GetScreenSpaceShadows(screenPosition, uv, noise).x;
 	}
+
+	// Depth only represents the visible face. Back-side rays would shadow the receiver itself.
+	float GetThinSurfaceScreenSpaceShadow(float3 screenPosition, float2 uv, float noise, float faceNdotL)
+	{
+		float weight = saturate(4.0 * faceNdotL);
+		float shadow = 1.0;
+		[branch] if (weight > 0.0)
+			shadow = lerp(1.0, GetScreenSpaceShadow(screenPosition, uv, noise), weight);
+		return shadow;
+	}
 }

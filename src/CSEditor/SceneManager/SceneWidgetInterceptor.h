@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <string_view>
 
 #include "SceneSettingsManager.h"
@@ -70,6 +71,12 @@ namespace SceneWidgetInterceptor
 	private:
 		Proxy previous;
 	};
+
+	/**
+	 * @brief Binds a custom int control no detour sees, e.g. Util::SegmentedControl, as the ImGui ones are bound.
+	 * @param a_draw Draws the control against the int it is handed and returns whether it changed it.
+	 */
+	bool InterceptInt(const char* a_label, int& a_value, const std::function<bool(int&)>& a_draw);
 
 	/// The armed context, or nullptr when unarmed. For SceneWidgetBinding and CustomSceneControls.
 	const Context* GetArmedContext();

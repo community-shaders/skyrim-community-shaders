@@ -28,47 +28,47 @@ void LocalExposure::DrawSettings()
 	if (!exposure || !exposure->IsActive()) {
 		ImGui::SliderFloat(T("feature.post_processing.local_exposure.exposure", "Exposure"), &settings.Exposure, 0.f, 4.f, "%.2f");
 		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text(T("feature.post_processing.local_exposure.manual_brightness_normalization_used_when_histogram_auto_exposure", "Manual brightness normalization used when Histogram Auto Exposure is disabled. Higher values make the scene behave brighter."));
+			ImGui::TextUnformatted(T("feature.post_processing.local_exposure.manual_brightness_normalization_used_when_histogram_auto_exposure", "Manual brightness normalization used when Histogram Auto Exposure is disabled. Higher values make the scene behave brighter."));
 	}
 
 	ImGui::SliderFloat(T("feature.post_processing.local_exposure.strength", "Strength"), &settings.Strength, 0.f, 1.f, "%.2f");
 	if (auto _tt = Util::HoverTooltipWrapper())
-		ImGui::Text(T("feature.post_processing.local_exposure.strength_tooltip", "Blends the local adjustment with the globally exposed image."));
+		ImGui::TextUnformatted(T("feature.post_processing.local_exposure.strength_tooltip", "Blends the local adjustment with the globally exposed image."));
 
 	ImGui::SliderFloat(T("feature.post_processing.local_exposure.highlight_contrast", "Highlight Contrast"), &settings.HighlightContrast, 0.f, 1.f, "%.2f");
 	if (auto _tt = Util::HoverTooltipWrapper())
-		ImGui::Text(T("feature.post_processing.local_exposure.highlight_contrast_tooltip", "Controls base-layer contrast above middle grey. Lower values recover more highlight range."));
+		ImGui::TextUnformatted(T("feature.post_processing.local_exposure.highlight_contrast_tooltip", "Controls base-layer contrast above middle grey. Lower values recover more highlight range."));
 
 	ImGui::SliderFloat(T("feature.post_processing.local_exposure.shadow_contrast", "Shadow Contrast"), &settings.ShadowContrast, 0.f, 1.f, "%.2f");
 	if (auto _tt = Util::HoverTooltipWrapper())
-		ImGui::Text(T("feature.post_processing.local_exposure.shadow_contrast_tooltip", "Controls base-layer contrast below middle grey. Lower values lift shadows more strongly."));
+		ImGui::TextUnformatted(T("feature.post_processing.local_exposure.shadow_contrast_tooltip", "Controls base-layer contrast below middle grey. Lower values lift shadows more strongly."));
 
 	ImGui::SliderFloat(T("feature.post_processing.local_exposure.detail_strength", "Detail Strength"), &settings.DetailStrength, 0.f, 2.f, "%.2f");
 	if (auto _tt = Util::HoverTooltipWrapper())
-		ImGui::Text(T("feature.post_processing.local_exposure.detail_strength_tooltip", "Preserves or boosts fine luminance detail separated from the base layer. 1.0 keeps the original detail contrast."));
+		ImGui::TextUnformatted(T("feature.post_processing.local_exposure.detail_strength_tooltip", "Preserves or boosts fine luminance detail separated from the base layer. 1.0 keeps the original detail contrast."));
 
 	ImGui::SliderFloat(T("feature.post_processing.local_exposure.base_blend", "Soft Base Blend"), &settings.BaseBlend, 0.f, 1.f, "%.2f");
 	if (auto _tt = Util::HoverTooltipWrapper())
-		ImGui::Text(T("feature.post_processing.local_exposure.base_blend_tooltip", "Blends the edge-aware base with a broad smooth base. Higher values reduce halos and keep large highlights natural."));
+		ImGui::TextUnformatted(T("feature.post_processing.local_exposure.base_blend_tooltip", "Blends the edge-aware base with a broad smooth base. Higher values reduce halos and keep large highlights natural."));
 
 	ImGui::SliderFloat(T("feature.post_processing.local_exposure.blurred_luminance_kernel_size", "Blurred Luminance Kernel Size"), &settings.BlurredLuminanceKernelSize, 0.f, 100.f, "%.1f%%", ImGuiSliderFlags_AlwaysClamp);
 	if (auto _tt = Util::HoverTooltipWrapper())
-		ImGui::Text(T("feature.post_processing.local_exposure.blurred_luminance_kernel_size_tooltip", "Sets the broad luminance blur diameter as a percentage of screen width."));
+		ImGui::TextUnformatted(T("feature.post_processing.local_exposure.blurred_luminance_kernel_size_tooltip", "Sets the broad luminance blur diameter as a percentage of screen width."));
 
 	if (ImGui::TreeNodeEx(T("feature.post_processing.local_exposure.advanced", "Advanced"), ImGuiTreeNodeFlags_DefaultOpen)) {
 		ImGui::SliderFloat(T("feature.post_processing.local_exposure.middle_grey_bias", "Middle Grey Bias"), &settings.MiddleGreyBias, -4.f, 4.f, "%+.2f EV");
 		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text(T("feature.post_processing.local_exposure.middle_grey_bias_tooltip", "Moves the tonal pivot used to separate highlight and shadow adjustments."));
+			ImGui::TextUnformatted(T("feature.post_processing.local_exposure.middle_grey_bias_tooltip", "Moves the tonal pivot used to separate highlight and shadow adjustments."));
 
 		ImGui::SliderFloat(T("feature.post_processing.local_exposure.highlight_threshold", "Highlight Threshold"), &settings.HighlightThreshold, 0.f, 4.f, "%.2f EV");
 		ImGui::SliderFloat(T("feature.post_processing.local_exposure.highlight_threshold_strength", "Highlight Threshold Strength"), &settings.HighlightThresholdStrength, 0.f, 1.f, "%.2f");
 		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text(T("feature.post_processing.local_exposure.highlight_threshold_tooltip", "Protects tones near middle grey before highlight compression begins."));
+			ImGui::TextUnformatted(T("feature.post_processing.local_exposure.highlight_threshold_tooltip", "Protects tones near middle grey before highlight compression begins."));
 
 		ImGui::SliderFloat(T("feature.post_processing.local_exposure.shadow_threshold", "Shadow Threshold"), &settings.ShadowThreshold, 0.f, 4.f, "%.2f EV");
 		ImGui::SliderFloat(T("feature.post_processing.local_exposure.shadow_threshold_strength", "Shadow Threshold Strength"), &settings.ShadowThresholdStrength, 0.f, 1.f, "%.2f");
 		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text(T("feature.post_processing.local_exposure.shadow_threshold_tooltip", "Protects tones near middle grey before shadow lifting begins."));
+			ImGui::TextUnformatted(T("feature.post_processing.local_exposure.shadow_threshold_tooltip", "Protects tones near middle grey before shadow lifting begins."));
 
 		ImGui::TreePop();
 	}
@@ -76,8 +76,7 @@ void LocalExposure::DrawSettings()
 	if (Util::ShowDebugSections() && ImGui::CollapsingHeader(T("feature.post_processing.local_exposure.debug", "Debug"))) {
 		static float debugRescale = .3f;
 		ImGui::SliderFloat(T("feature.post_processing.local_exposure.view_resize", "View Resize"), &debugRescale, 0.f, 1.f);
-		BUFFER_VIEWER_NODE_TITLE(texBaseLuminance, "Edge-aware Base Log Luminance", debugRescale);
-		BUFFER_VIEWER_NODE_TITLE(texLogLuminance, "Scene Log Luminance", debugRescale);
+		BUFFER_VIEWER_NODE_TITLE(texLogLuminance, T("feature.post_processing.local_exposure.buffer_scene_log_luminance", "Scene Log Luminance"), debugRescale);
 	}
 }
 
@@ -227,34 +226,6 @@ void LocalExposure::SetupResources()
 		createBlurTexture(texBlurredLuminance, "LocalExposure Blurred Luminance");
 	}
 
-	// Create output base-luminance texture (full resolution, R16F)
-	{
-		D3D11_TEXTURE2D_DESC texDesc = {};
-		texDesc.Width = fullW;
-		texDesc.Height = fullH;
-		texDesc.MipLevels = 1;
-		texDesc.ArraySize = 1;
-		texDesc.Format = DXGI_FORMAT_R16_FLOAT;
-		texDesc.SampleDesc.Count = 1;
-		texDesc.Usage = D3D11_USAGE_DEFAULT;
-		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
-
-		texBaseLuminance = eastl::make_unique<Texture2D>(texDesc, "LocalExposure Base Luminance");
-
-		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-		srvDesc.Format = DXGI_FORMAT_R16_FLOAT;
-		srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
-		srvDesc.Texture2D.MostDetailedMip = 0;
-		srvDesc.Texture2D.MipLevels = 1;
-		texBaseLuminance->CreateSRV(srvDesc);
-
-		D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
-		uavDesc.Format = DXGI_FORMAT_R16_FLOAT;
-		uavDesc.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D;
-		uavDesc.Texture2D.MipSlice = 0;
-		texBaseLuminance->CreateUAV(uavDesc);
-	}
-
 	// Create linear sampler
 	{
 		D3D11_SAMPLER_DESC sampDesc = {};
@@ -283,7 +254,7 @@ void LocalExposure::ClearShaderCache()
 	outputReady = false;
 	BumpShaderGeneration();
 	const auto shaderPtrs = std::array{
-		&setupCS, &downsampleCS, &blurHorizontalCS, &blurVerticalCS, &gridCS, &resolveCS
+		&setupCS, &downsampleCS, &blurHorizontalCS, &blurVerticalCS, &gridCS
 	};
 
 	{
@@ -307,7 +278,6 @@ void LocalExposure::CompileComputeShaders()
 		{ &blurHorizontalCS, "localexposure.cs.hlsl", {}, "CSBlurHorizontal" },
 		{ &blurVerticalCS, "localexposure.cs.hlsl", {}, "CSBlurVertical" },
 		{ &gridCS, "localexposure.cs.hlsl", {}, "CSBuildLuminanceGrid" },
-		{ &resolveCS, "localexposure.cs.hlsl", {}, "CSResolveBaseLuminance" },
 	};
 
 	CompileComputeShadersAsync(L"Data\\Shaders\\PostProcessing\\LocalExposure", shaderInfos);
@@ -318,7 +288,7 @@ void LocalExposure::Draw(TextureInfo& inout_tex)
 	auto context = globals::d3d::context;
 	auto state = globals::state;
 
-	if (!AllShadersReady({ &setupCS, &downsampleCS, &blurHorizontalCS, &blurVerticalCS, &gridCS, &resolveCS }))
+	if (!AllShadersReady({ &setupCS, &downsampleCS, &blurHorizontalCS, &blurVerticalCS, &gridCS }))
 		return;
 
 	state->BeginPerfEvent("Local Exposure");
@@ -460,25 +430,6 @@ void LocalExposure::Draw(TextureInfo& inout_tex)
 		globals::profiler->EndPass();
 	}
 
-	// === Pass 5: Resolve the base layer ===
-	{
-		globals::profiler->BeginPass("PostProcessing::LocalExposure::Resolve");
-		state->BeginPerfEvent("Resolve Base Luminance");
-
-		srvs[1] = texLogLuminance->srv.get();
-		srvs[2] = texLuminanceGrid->srv.get();
-		srvs[3] = texBlurredLuminance->srv.get();
-		uavs[0] = texBaseLuminance->uav.get();
-		context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
-		context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
-		context->CSSetShader(resolveCS.get(), nullptr, 0);
-		context->Dispatch((fullW + 7) >> 3, (fullH + 7) >> 3, 1);
-
-		resetViews();
-		state->EndPerfEvent();
-		globals::profiler->EndPass();
-	}
-
 	// Cleanup
 	context->CSSetShader(nullptr, nullptr, 0);
 	cb = nullptr;
@@ -486,7 +437,7 @@ void LocalExposure::Draw(TextureInfo& inout_tex)
 	samplers.fill(nullptr);
 	context->CSSetSamplers(0, (uint)samplers.size(), samplers.data());
 
-	// NOTE: We do not modify inout_tex. Composite consumes the base luminance map.
+	// NOTE: We do not modify inout_tex. Composite resolves the base from these analysis textures.
 	state->EndPerfEvent();
 	outputReady = true;
 }

@@ -6,9 +6,8 @@
 
 /// Local Exposure
 /// Separates scene luminance into an edge-aware base layer and a detail layer.
-/// The base layer is generated here without modifying scene color; Composite
-/// combines it with the current global exposure and applies the final local
-/// adjustment.
+/// Luminance analysis leaves scene color unchanged; Composite resolves the base
+/// layer and applies the local adjustment with the current global exposure.
 struct LocalExposure : public PostProcessFeature
 {
 	bool outputReady = false;
@@ -79,7 +78,6 @@ struct LocalExposure : public PostProcessFeature
 	eastl::unique_ptr<Texture3D> texLuminanceGrid = nullptr;
 	eastl::unique_ptr<Texture2D> texBlurTemp = nullptr;
 	eastl::unique_ptr<Texture2D> texBlurredLuminance = nullptr;
-	eastl::unique_ptr<Texture2D> texBaseLuminance = nullptr;
 
 	std::array<winrt::com_ptr<ID3D11ShaderResourceView>, s_MaxMips> logLuminanceMipSRVs = {};
 	std::array<winrt::com_ptr<ID3D11UnorderedAccessView>, s_MaxMips> logLuminanceMipUAVs = {};
@@ -95,7 +93,6 @@ struct LocalExposure : public PostProcessFeature
 	winrt::com_ptr<ID3D11ComputeShader> blurHorizontalCS = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> blurVerticalCS = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> gridCS = nullptr;
-	winrt::com_ptr<ID3D11ComputeShader> resolveCS = nullptr;
 
 	virtual void SetupResources() override;
 	virtual void ClearShaderCache() override;
@@ -108,7 +105,11 @@ struct LocalExposure : public PostProcessFeature
 
 	virtual void Draw(TextureInfo&) override;
 
-	/// Get the full-resolution base log-luminance texture consumed by Composite.
-	ID3D11ShaderResourceView* GetBaseLuminanceSRV() const { return outputReady && texBaseLuminance ? texBaseLuminance->srv.get() : nullptr; }
+	/// Get the original scene luminance used to resolve the base in Composite.
+	ID3D11ShaderResourceView* GetLogLuminanceSRV() const { return outputReady && texLogLuminance ? logLuminanceMipSRVs[0].get() : nullptr; }
+	/// Get the edge-aware grid consumed by Composite.
+	ID3D11ShaderResourceView* GetLuminanceGridSRV() const { return outputReady && texLuminanceGrid ? texLuminanceGrid->srv.get() : nullptr; }
+	/// Get the broad base consumed by Composite.
+	ID3D11ShaderResourceView* GetBlurredLuminanceSRV() const { return outputReady && texBlurredLuminance ? texBlurredLuminance->srv.get() : nullptr; }
 	ID3D11Buffer* GetConstantBuffer() const { return localExposureCB ? localExposureCB->CB() : nullptr; }
 };

@@ -4,6 +4,7 @@
 #include "OverlayFeature.h"
 #include "PerformanceOverlay/ABTesting/ABTestAggregator.h"
 #include "Utils/PerfUtils.h"
+#include <deque>
 #include <nlohmann/json.hpp>
 #include <optional>
 #include <string_view>
@@ -18,7 +19,8 @@ enum class SpecialShaderType
 {
 	Total = -1,
 	Other = -2,
-	CSPasses = -3
+	CSPasses = -3,
+	Present = -4
 };
 
 // Constants for special draw call values
@@ -170,6 +172,15 @@ struct PerformanceOverlay : OverlayFeature
 	* No parameters; uses settings from the singleton.
 	*/
 	void UpdateGraphValues();
+
+	/** @brief Clears the smoothed FPS accumulator and the rolling Avg / 1% low window. */
+	void ResetFrameStats();
+
+	/** @brief Adds the current frame time to the smoothed FPS and the rolling window; resets on a frame gap. */
+	void AccumulateFrameStats();
+
+	/** @brief Recomputes Avg and 1% low FPS from the rolling window. */
+	void UpdateFrameStats();
 	void DrawFPS();
 	void DrawVRAM();
 	void DrawPostFGFrameTimeGraph();
@@ -240,6 +251,18 @@ struct PerformanceOverlay : OverlayFeature
 		float postFGSmoothFps = 0.0f;
 		float postFGSmoothFrameTimeMs = 0.0f;
 
+		// Exponentially weighted frames / elapsed time: both sums decay with wall time, so a frame's weight halves
+		// every UpdateInterval * ln 2 seconds and the shown FPS moves every frame without stepping
+		double smoothTimeSumMs = 0.0;
+		double smoothFrameWeight = 0.0;
+
+		// Time-based rolling window of every frame, for Avg and 1% low
+		std::deque<float> statsFrameTimes;
+		double statsFrameTimeSumMs = 0.0;
+		uint32_t lastStatsFrame = UINT32_MAX;
+		float avgFps = 0.0f;
+		float onePercentLowFps = 0.0f;
+
 		// Update timing using QueryPerformanceCounter
 		float updateTimer = 0.0f;
 		LARGE_INTEGER overlayTimingFrequency = { 0 };
@@ -277,6 +300,10 @@ struct PerformanceOverlay : OverlayFeature
 		static constexpr float kVRAMSectionWidth = 300.0f;           // pixels - VRAM section width
 		static constexpr float kWindowBorderPadding = 20.0f;         // pixels - Window border padding
 		static constexpr float kDefaultFrameTimeMs = 16.67f;         // ms - Default frame time (60 FPS)
+		static constexpr float kStatsWindowSeconds = 5.0f;           // seconds - Rolling window for Avg / 1% low
+		static constexpr float kStatsMinSeconds = 1.0f;              // seconds - Minimum window before Avg / 1% low are shown
+		static constexpr float kMinSmoothingSeconds = 0.01f;         // seconds - Shortest FPS smoothing time constant
+		static constexpr float kMinStatsRefreshSeconds = 0.25f;      // seconds - Fastest Avg / 1% low refresh
 		static constexpr int kMinFrameHistorySize = 120;             // 2s @ 60fps, 0.5s @ 240fps
 		static constexpr int kMaxFrameHistorySize = 1800;            // 30s @ 60fps, 7.5s @ 240fps
 

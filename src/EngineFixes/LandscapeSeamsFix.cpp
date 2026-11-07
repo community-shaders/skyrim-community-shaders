@@ -758,8 +758,8 @@ void LandscapeSeamsFix::GenerateShaderPermutations(RE::BSShader* a_shader)
 		auto vertexShaderDescriptor = entry->id;
 		auto pixelShaderDescriptor = entry->id | SeamsFlag;
 		state->ModifyShaderLookup(*a_shader, vertexShaderDescriptor, pixelShaderDescriptor);
-		std::ignore = shaderCache->GetPixelShader(*a_shader, pixelShaderDescriptor);
+		std::ignore = shaderCache->GetPixelShader(*a_shader, pixelShaderDescriptor, true);
 		state->ModifyShaderLookup(*a_shader, vertexShaderDescriptor, pixelShaderDescriptor, true);
-		std::ignore = shaderCache->GetPixelShader(*a_shader, pixelShaderDescriptor);
+		std::ignore = shaderCache->GetPixelShader(*a_shader, pixelShaderDescriptor, true);
 	}
 }

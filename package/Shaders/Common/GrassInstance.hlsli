@@ -70,7 +70,9 @@ namespace GrassInstance
 		// The largest quaternion component was omitted and is reconstructed as the positive remainder.
 		const float big = sqrt(saturate(1.0 - a * a - b * b - c * c));
 		const uint omitted = packed.z >> 30;
-		const float4 q = omitted == 0 ? float4(big, a, b, c) : omitted == 1 ? float4(a, big, b, c) : omitted == 2 ? float4(a, b, big, c) : float4(a, b, c, big);
+		const float4 q = omitted == 0 ? float4(big, a, b, c) : omitted == 1 ? float4(a, big, b, c) :
+		                                                   omitted == 2     ? float4(a, b, big, c) :
+		                                                                      float4(a, b, c, big);
 		const float x = q.x, y = q.y, z = q.z, w = q.w;
 
 		const float3x3 rotation = float3x3(

@@ -92,6 +92,7 @@ public:
 		float pad3 = 0.0f;
 		float3 volumetricFogNoiseVelocity = { 0.0f, 0.0f, 0.0f };
 		float pad0;
+		float4 originalFogColorOverride = { 1.0f, 1.0f, 1.0f, 0.0f };  // rgb = replaces the weather fog colour, a = blend amount
 	} settings;
 	STATIC_ASSERT_ALIGNAS_16(Settings);
 
@@ -123,8 +124,8 @@ private:
 	ID3D11ShaderResourceView* UpdateEngineLocalShadowData();
 	ID3D11ComputeShader* GetMaterialSetupCS();
 	ID3D11ComputeShader* GetFarMaterialSetupCS();
-	ID3D11ComputeShader* GetConservativeDepthCS();
-	ID3D11ComputeShader* GetFarConservativeDepthCS();
+	ID3D11ComputeShader* GetConservativeDepthCS(bool a_groupReduce);
+	ID3D11ComputeShader* GetFarConservativeDepthCS(bool a_groupReduce);
 	ID3D11ComputeShader* GetLightScatteringCS();
 	ID3D11ComputeShader* GetFarLightScatteringCS();
 	ID3D11ComputeShader* GetIntegrationCS();
@@ -151,6 +152,8 @@ private:
 	ID3D11ComputeShader* farMaterialSetupCS = nullptr;
 	ID3D11ComputeShader* conservativeDepthCS = nullptr;
 	ID3D11ComputeShader* farConservativeDepthCS = nullptr;
+	ID3D11ComputeShader* conservativeDepthGroupCS = nullptr;
+	ID3D11ComputeShader* farConservativeDepthGroupCS = nullptr;
 	ID3D11ComputeShader* lightScatteringCS = nullptr;
 	ID3D11ComputeShader* farLightScatteringCS = nullptr;
 	ID3D11ComputeShader* integrationCS = nullptr;

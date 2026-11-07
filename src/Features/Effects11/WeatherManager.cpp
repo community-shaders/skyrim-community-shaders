@@ -90,11 +90,6 @@ void WeatherManager::LoadWeatherList()
 
 WeatherManager::WeatherEntry* WeatherManager::FindWeatherEntry(uint32_t weatherID)
 {
-	auto& effectManager = EffectManager::GetSingleton();
-	if (!SettingManager::GetSingleton().GetValueInternal<bool>(effectManager.ids.enableMultipleWeathers)) {
-		return nullptr;
-	}
-
 	auto it = weatherIDMap.find(weatherID);
 	if (it != weatherIDMap.end()) {
 		auto entryIt = weatherEntries.find(it->second);

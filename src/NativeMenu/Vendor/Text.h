@@ -12,7 +12,7 @@ namespace NativeMenu::Vendor::Text
 		static std::unordered_set<std::wstring> interned;
 
 		std::wstring wide;
-		const int    wideLen = MultiByteToWideChar(CP_UTF8, 0, a_utf8.c_str(), -1, nullptr, 0);
+		const int wideLen = MultiByteToWideChar(CP_UTF8, 0, a_utf8.c_str(), -1, nullptr, 0);
 		if (wideLen > 1) {
 			// wideLen includes the terminating NUL written by MultiByteToWideChar
 			wide.resize(static_cast<std::size_t>(wideLen));

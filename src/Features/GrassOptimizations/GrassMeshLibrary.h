@@ -43,6 +43,7 @@ public:
 		ID3D11Buffer* indexBuffer = nullptr;
 		uint32_t indexCount = 0;
 		float boundExtent = 0.0f;
+		float canopyHeight = 1.0f;
 		// The LOD .nif is authored separately, so its vertex format need not match the source mesh's.
 		uint32_t meshStride = 0;
 		uint64_t descVal = 0;
@@ -130,7 +131,7 @@ struct GrassDrawParams
 /** @brief Captures the material values consumed by grass drawing. */
 struct GrassMaterialKey
 {
-	std::array<RE::NiSourceTexture*, 4> textures{};
+	std::array<RE::NiSourceTexture*, 6> textures{};
 	uint32_t clampMode = 0;
 	TruePBR::GrassPBRConstants constants{};
 	bool operator==(const GrassMaterialKey&) const = default;
@@ -168,6 +169,12 @@ struct BucketKeyHash
 		for (float value : m.constants.params1)
 			combine(value);
 		for (float value : m.constants.params2)
+			combine(value);
+		for (float value : m.constants.params3)
+			combine(value);
+		for (float value : m.constants.params4)
+			combine(value);
+		for (float value : m.constants.params5)
 			combine(value);
 
 		combine(k.draw.wavePeriod);

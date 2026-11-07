@@ -1,4 +1,5 @@
 #include "BokehResources.h"
+#include "I18n/I18n.h"
 #include "Util.h"
 
 #include <DirectXTex.h>
@@ -276,11 +277,27 @@ float BokehResources::GetShapeSampleMaxRadius(int shapeIndex) const
 const char* BokehResources::GetShapeName(int index) const
 {
 	if (index < 0 || index >= MAX_SHAPES)
-		return "Unknown";
-	if (index < NUM_BUILTIN_SHAPES)
-		return builtinShapeNames[index].c_str();
+		return T("feature.post_processing.do_f.bokeh_shape_unknown", "Unknown");
+	if (index < NUM_BUILTIN_SHAPES) {
+		switch (index) {
+		case 0:
+			return T("feature.post_processing.do_f.bokeh_shape_heart", "Heart");
+		case 1:
+			return T("feature.post_processing.do_f.bokeh_shape_hexagon", "Hexagon");
+		case 2:
+			return T("feature.post_processing.do_f.bokeh_shape_fringy_soft", "Fringy Soft");
+		case 3:
+			return T("feature.post_processing.do_f.bokeh_shape_hex_fringy_soft", "Hex Fringy Soft");
+		case 4:
+			return T("feature.post_processing.do_f.bokeh_shape_star", "Star");
+		case 5:
+			return T("feature.post_processing.do_f.bokeh_shape_square", "Square");
+		default:
+			return T("feature.post_processing.do_f.bokeh_shape_unknown", "Unknown");
+		}
+	}
 	int customIdx = index - NUM_BUILTIN_SHAPES;
 	if (customIdx < MAX_CUSTOM_SHAPES && !customShapeNames[customIdx].empty())
 		return customShapeNames[customIdx].c_str();
-	return "Empty Slot";
+	return T("feature.post_processing.do_f.bokeh_shape_empty_slot", "Empty Slot");
 }

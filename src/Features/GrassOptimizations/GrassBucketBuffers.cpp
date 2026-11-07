@@ -1,5 +1,6 @@
 #include "Features/GrassLighting.h"
 #include "Features/GrassOptimizations.h"
+#include "Features/LinearLighting.h"
 
 #include <bit>
 
@@ -91,10 +92,13 @@ bool GrassOptimizations::UploadCullBucketConstants(ID3D11DeviceContext* ctx)
 		data.geometry.windVector[1] = draw.windDirection[1];
 		data.geometry.scaleMask[0] = data.geometry.scaleMask[1] = draw.uniformScale ? 1.0f : 0.0f;
 		data.material = bucket->asset.key.material.constants;
+		const auto& linearLighting = globals::features::linearLighting;
+		data.material.params1[2] = linearLighting.IsLinearLightingActive() ? linearLighting.settings.emitColorMult : 1.0f;
 		const auto lodMeshCost = [bucket](size_t tier) {
 			const auto* lod = bucket->lodMeshes[tier];
 			return lod ? std::sqrt(std::max(1.0f, (float)lod->indexCount / 24.0f)) : bucket->minPixelScale;
 		};
+		const float canopyHeight = draw.boundCenter[2] > 1.0f ? 2.0f * draw.boundCenter[2] : std::max(draw.boundCenter[2] + draw.modelRadius, 1.0f);
 		data.cull = {
 			.groupCount = bucket->groupCount,
 			.sliceTableOffset = bucket->sliceTableOffset,
@@ -114,7 +118,10 @@ bool GrassOptimizations::UploadCullBucketConstants(ID3D11DeviceContext* ctx)
 			.wavePeriod = draw.wavePeriod,
 			.timeBase = timeBase,
 			.prevTimeBase = prevTimeBase,
-			.farLODMeshCost = lodMeshCost(1)
+			.farLODMeshCost = lodMeshCost(1),
+			.canopyHeights = { canopyHeight,
+				bucket->lodMeshes[0] ? bucket->lodMeshes[0]->canopyHeight : canopyHeight,
+				bucket->lodMeshes[1] ? bucket->lodMeshes[1]->canopyHeight : canopyHeight }
 		};
 		++slot;
 	}

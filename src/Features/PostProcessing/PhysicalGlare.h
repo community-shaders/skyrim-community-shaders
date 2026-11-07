@@ -273,12 +273,6 @@ struct PhysicalGlare : public PostProcessFeature
 
 	virtual void Draw(TextureInfo&) override;
 
-	virtual inline void Reset() override
-	{
-		psfDirty = true;
-		apertureDirty = true;
-	}
-
 private:
 	void DispatchFFT(ID3D11ComputeShader* shader, Texture2D* input, Texture2D* output, uint resolution);
 	void GeneratePSF(const Settings& a_effective);
