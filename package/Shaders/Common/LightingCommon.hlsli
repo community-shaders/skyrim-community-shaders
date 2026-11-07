@@ -81,13 +81,14 @@ struct MaterialProperties
 	float3 backLightColor;
 	float Roughness;
 	float3 F0;
+	// The PBR evaluators read AO, so every layout has it; Lighting.hlsl defaults it to 1.
+	float AO;
 #	if defined(CS_SKIN_SHADING)
 	float RoughnessSecondary;
 	float SecondarySpecIntensity;
 	float Curvature;
 	float Thickness;
 	float3 SubsurfaceColor;
-	float AO;
 	float FuzzRoughness;
 	float3 FuzzColor;
 	float FuzzWeight;
