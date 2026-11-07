@@ -1755,6 +1755,7 @@ namespace SIE
 								shader.fxpFilename);
 						const auto sourceTime = std::filesystem::last_write_time(shaderSourcePath, ec);
 						if (ec) {
+							diskCacheOutdated = true;
 							logger::debug("Failed to read source mtime for {}: {}", Util::WStringToString(shaderSourcePath), ec.message());
 						} else if (sourceTime > diskCacheTime) {
 							diskCacheOutdated = true;
