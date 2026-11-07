@@ -70,8 +70,8 @@ public:
 	/** @brief Draws the ImGui settings UI for HDR enable, paper white, peak brightness, and UI brightness. */
 	virtual void DrawSettings() override;
 
-	/** @brief Enables the bUse64bitsHDRRenderTarget INI setting for float16 render targets. */
-	virtual void DataLoaded() override;
+	/** @brief Forces bUse64bitsHDRRenderTarget for float16 targets; call right before BSShaderRenderTargets::Create. */
+	void PreCreateRenderTargets();
 	/** @brief Creates HDR, output, and UI textures, constant buffer, and upgrades LDR render targets. */
 	virtual void SetupResources() override;
 	/** @brief Releases cached compute shaders and patched blend states. */
