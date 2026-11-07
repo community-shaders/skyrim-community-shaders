@@ -239,6 +239,7 @@ namespace
 	{
 		static void thunk(int64_t a1)
 		{
+			globals::features::screenshotFeature.SnapshotCleanScene();
 			globals::features::hdrDisplay.SetUIBuffer();
 			func(a1);
 		}
