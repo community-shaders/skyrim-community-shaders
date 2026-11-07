@@ -1,4 +1,4 @@
-#include "TreeLODWind.h"
+#include "TreeWind.h"
 
 #include <imgui.h>
 
@@ -6,10 +6,10 @@
 #include "Globals.h"
 #include "State.h"
 
-#define I18N_KEY_PREFIX "feature.tree_lod_wind."
+#define I18N_KEY_PREFIX "feature.tree_wind."
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
-	TreeLODWind::Settings,
+	TreeWind::Settings,
 	Enabled,
 	Amplitude,
 	BaseSpeed,
@@ -44,7 +44,7 @@ namespace
 	}
 }
 
-void TreeLODWind::DrawSettings()
+void TreeWind::DrawSettings()
 {
 	ImGui::Text("%s", std::vformat(T(TKEY("status"), "Weather wind {:.2f}   storminess {:.2f}   gust strength {:.2f}"),
 						  std::make_format_args(statusWind, statusStorminess, statusGust))
@@ -126,22 +126,22 @@ void TreeLODWind::DrawSettings()
 	}
 }
 
-void TreeLODWind::LoadSettings(json& o_json)
+void TreeWind::LoadSettings(json& o_json)
 {
 	settings = o_json;
 }
 
-void TreeLODWind::SaveSettings(json& o_json)
+void TreeWind::SaveSettings(json& o_json)
 {
 	o_json = settings;
 }
 
-void TreeLODWind::RestoreDefaultSettings()
+void TreeWind::RestoreDefaultSettings()
 {
 	settings = {};
 }
 
-void TreeLODWind::ApplyPreset(Preset a_preset)
+void TreeWind::ApplyPreset(Preset a_preset)
 {
 	const Settings defaults{};
 	settings.Amplitude = defaults.Amplitude;
@@ -181,14 +181,14 @@ void TreeLODWind::ApplyPreset(Preset a_preset)
 	}
 }
 
-struct TreeLODWind::Hooks
+struct TreeWind::Hooks
 {
 	struct BSLightingShader_SetupGeometry
 	{
 		static void thunk(RE::BSShader* This, RE::BSRenderPass* Pass, uint32_t RenderFlags)
 		{
 			func(This, Pass, RenderFlags);
-			globals::features::treeLODWind.BeginDraw(Pass);
+			globals::features::treeWind.BeginDraw(Pass);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
@@ -197,7 +197,7 @@ struct TreeLODWind::Hooks
 	{
 		static void thunk(RE::BSShader* This, RE::BSRenderPass* Pass, uint32_t RenderFlags)
 		{
-			globals::features::treeLODWind.EndDraw();
+			globals::features::treeWind.EndDraw();
 			func(This, Pass, RenderFlags);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
@@ -208,7 +208,7 @@ struct TreeLODWind::Hooks
 		static void thunk(RE::BSShader* This, RE::BSRenderPass* Pass, uint32_t RenderFlags)
 		{
 			func(This, Pass, RenderFlags);
-			globals::features::treeLODWind.BeginDraw(Pass);
+			globals::features::treeWind.BeginDraw(Pass);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
@@ -217,7 +217,7 @@ struct TreeLODWind::Hooks
 	{
 		static void thunk(RE::BSShader* This, RE::BSRenderPass* Pass, uint32_t RenderFlags)
 		{
-			globals::features::treeLODWind.EndDraw();
+			globals::features::treeWind.EndDraw();
 			func(This, Pass, RenderFlags);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
@@ -229,40 +229,40 @@ struct TreeLODWind::Hooks
 		stl::write_vfunc<0x7, BSLightingShader_RestoreGeometry>(RE::VTABLE_BSLightingShader[0]);
 		stl::write_vfunc<0x6, BSUtilityShader_SetupGeometry>(RE::VTABLE_BSUtilityShader[0]);
 		stl::write_vfunc<0x7, BSUtilityShader_RestoreGeometry>(RE::VTABLE_BSUtilityShader[0]);
-		logger::info("[Tree LOD Wind] Installed hooks - BSLightingShader and BSUtilityShader Setup/RestoreGeometry");
+		logger::info("[Tree Wind] Installed hooks - BSLightingShader and BSUtilityShader Setup/RestoreGeometry");
 	}
 };
 
-void TreeLODWind::PostPostLoad()
+void TreeWind::PostPostLoad()
 {
 	if (GetModuleHandleW(L"K747_LodWind.dll")) {
 		loaded = false;
 		failedLoadedMessage = T(TKEY("old_plugin_installed"),
 			"The Windswept Tree LOD plugin (K747_LodWind.dll) is installed. This feature replaces it: remove Windswept Tree LOD to use it.");
-		logger::warn("[Tree LOD Wind] {}", failedLoadedMessage);
+		logger::warn("[Tree Wind] {}", failedLoadedMessage);
 		return;
 	}
 	Hooks::Install();
 }
 
-void TreeLODWind::BeginDraw(RE::BSRenderPass* a_pass)
+void TreeWind::BeginDraw(RE::BSRenderPass* a_pass)
 {
 	const auto kind = TreeShapes::Classify(a_pass, settings.TreeModSupport);
 	drawBendWeights = kind == TreeShapes::Kind::None ? nullptr : bendWeights.Get(a_pass->geometry, kind, globals::state->frameCount, settings.TreeModSupport);
 }
 
-void TreeLODWind::EndDraw()
+void TreeWind::EndDraw()
 {
 	drawBendWeights = nullptr;
 }
 
-void TreeLODWind::SetupResources()
+void TreeWind::SetupResources()
 {
-	windOnCB = std::make_unique<ConstantBuffer>(ConstantBufferDesc<WindCB>(), "TreeLODWind::WindOn");
-	windOffCB = std::make_unique<ConstantBuffer>(ConstantBufferDesc<WindCB>(), "TreeLODWind::WindOff");
+	windOnCB = std::make_unique<ConstantBuffer>(ConstantBufferDesc<WindCB>(), "TreeWind::WindOn");
+	windOffCB = std::make_unique<ConstantBuffer>(ConstantBufferDesc<WindCB>(), "TreeWind::WindOff");
 }
 
-float TreeLODWind::GetStorminess(const RE::TESWeather* a_weather) const
+float TreeWind::GetStorminess(const RE::TESWeather* a_weather) const
 {
 	if (!a_weather)
 		return 0.0f;
@@ -282,7 +282,7 @@ float TreeLODWind::GetStorminess(const RE::TESWeather* a_weather) const
 	return std::clamp(std::max(typeStorminess, windStorminess), 0.0f, 1.0f);
 }
 
-void TreeLODWind::Reset()
+void TreeWind::Reset()
 {
 	float windSpeed = 0.0f;
 	float windAngle = 0.0f;
@@ -335,7 +335,7 @@ void TreeLODWind::Reset()
 	}
 }
 
-void TreeLODWind::SetShaderResources(ID3D11DeviceContext* a_context)
+void TreeWind::SetShaderResources(ID3D11DeviceContext* a_context)
 {
 	const auto shader = globals::state->currentShader;
 	if (!shader)

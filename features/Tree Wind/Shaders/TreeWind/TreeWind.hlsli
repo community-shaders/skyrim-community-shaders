@@ -1,11 +1,11 @@
-#ifndef __TREE_LOD_WIND_HLSLI__
-#define __TREE_LOD_WIND_HLSLI__
+#ifndef __TREE_WIND_HLSLI__
+#define __TREE_WIND_HLSLI__
 
-// Wind sway for DynDOLOD tree LOD. The Tree LOD Wind feature binds the wind buffer for every Lighting
+// Wind sway for DynDOLOD tree LOD. The Tree Wind feature binds the wind buffer for every Lighting
 // and Utility draw, with Params.z set only while it draws a tree LOD shape.
-namespace TreeLODWind
+namespace TreeWind
 {
-	cbuffer TreeLODWindCB : register(b3)
+	cbuffer TreeWindCB : register(b3)
 	{
 		float4 Wind;    // phase, previous phase, wind speed 0-1, wind angle (radians)
 		float4 Params;  // amplitude, near distance, enabled, unused
@@ -60,4 +60,4 @@ namespace TreeLODWind
 	}
 }
 
-#endif  // __TREE_LOD_WIND_HLSLI__
+#endif  // __TREE_WIND_HLSLI__

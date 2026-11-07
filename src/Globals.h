@@ -26,7 +26,7 @@ struct SubsurfaceScattering;
 struct TerrainBlending;
 struct TerrainHelper;
 struct TerrainShadows;
-struct TreeLODWind;
+struct TreeWind;
 struct UnifiedWater;
 struct VolumetricLighting;
 struct WaterEffects;
@@ -118,7 +118,7 @@ namespace globals
 		extern TerrainBlending terrainBlending;
 		extern TerrainHelper terrainHelper;
 		extern TerrainShadows terrainShadows;
-		extern TreeLODWind treeLODWind;
+		extern TreeWind treeWind;
 		extern UnifiedWater unifiedWater;
 		extern VolumetricLighting volumetricLighting;
 		extern WaterEffects waterEffects;

@@ -2,17 +2,17 @@
 
 #include "Buffer.h"
 #include "Feature.h"
-#include "TreeLODWind/TreeShapes.h"
+#include "TreeWind/TreeShapes.h"
 
 /**
  * @brief Wind sway for DynDOLOD tree LOD.
  *
  * Keeps a wind clock that follows the weather and binds it to the vertex shader (b3) for Lighting and
- * Utility draws. The TREE_LOD_WIND define adds the matching vertex offset to Lighting.hlsl and Utility.hlsl,
+ * Utility draws. The TREE_WIND define adds the matching vertex offset to Lighting.hlsl and Utility.hlsl,
  * so the colour, depth and shadow passes move together. The object LOD vertex shaders cannot tell tree
  * LOD apart at compile time, so each draw gets either the swaying (on) or the still (off) buffer.
  */
-struct TreeLODWind : Feature
+struct TreeWind : Feature
 {
 private:
 	static constexpr std::string_view MOD_ID = "195280";
@@ -44,7 +44,7 @@ public:
 		bool TreeModSupport = true;
 	};
 
-	/** @brief Mirrors TreeLODWindCB in TreeLODWind.hlsli. */
+	/** @brief Mirrors TreeWindCB in TreeWind.hlsli. */
 	struct alignas(16) WindCB
 	{
 		float4 Wind;    // phase, previous phase, wind speed 0-1, wind angle (radians)
@@ -64,10 +64,10 @@ public:
 
 	Settings settings;
 
-	virtual inline std::string GetName() override { return "Tree LOD Wind"; }
-	virtual inline std::string GetDisplayName() override { return T("feature.tree_lod_wind.name", "Tree LOD Wind"); }
-	virtual inline std::string GetShortName() override { return "TreeLODWind"; }
-	virtual inline std::string_view GetShaderDefineName() override { return "TREE_LOD_WIND"; }
+	virtual inline std::string GetName() override { return "Tree Wind"; }
+	virtual inline std::string GetDisplayName() override { return T("feature.tree_wind.name", "Tree Wind"); }
+	virtual inline std::string GetShortName() override { return "TreeWind"; }
+	virtual inline std::string_view GetShaderDefineName() override { return "TREE_WIND"; }
 	virtual inline bool HasShaderDefine(RE::BSShader::Type t) override
 	{
 		return t == RE::BSShader::Type::Lighting || t == RE::BSShader::Type::Utility;
@@ -77,9 +77,9 @@ public:
 
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
-		return { T("feature.tree_lod_wind.description", "Lets the distant DynDOLOD tree LOD sway in the wind."),
-			{ T("feature.tree_lod_wind.key_feature_1", "Sway follows the weather: gentle in clear skies, strong gusts in storms."),
-				T("feature.tree_lod_wind.key_feature_2", "Each tree bends from its base and keeps its own timing.") } };
+		return { T("feature.tree_wind.description", "Lets the distant DynDOLOD tree LOD sway in the wind."),
+			{ T("feature.tree_wind.key_feature_1", "Sway follows the weather: gentle in clear skies, strong gusts in storms."),
+				T("feature.tree_wind.key_feature_2", "Each tree bends from its base and keeps its own timing.") } };
 	}
 
 	virtual void DrawSettings() override;

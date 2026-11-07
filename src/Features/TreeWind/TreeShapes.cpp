@@ -570,7 +570,7 @@ namespace TreeShapes
 		const D3D11_SUBRESOURCE_DATA initData{ data.data(), 0, 0 };
 		if (FAILED(globals::d3d::device->CreateBuffer(&bufferDesc, &initData, entry.buffer.put())))
 			return nullptr;
-		Util::SetResourceName(entry.buffer.get(), "TreeLODWind::BendWeights");
+		Util::SetResourceName(entry.buffer.get(), "TreeWind::BendWeights");
 
 		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc{};
 		srvDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
@@ -578,7 +578,7 @@ namespace TreeShapes
 		srvDesc.Buffer.NumElements = vertices.count;
 		if (FAILED(globals::d3d::device->CreateShaderResourceView(entry.buffer.get(), &srvDesc, entry.srv.put())))
 			return nullptr;
-		Util::SetResourceName(entry.srv.get(), "TreeLODWind::BendWeights SRV");
+		Util::SetResourceName(entry.srv.get(), "TreeWind::BendWeights SRV");
 
 		entry.generation = block.generation;
 		return entries.insert_or_assign(vertices.vertexBuffer, std::move(entry)).first->second.srv.get();

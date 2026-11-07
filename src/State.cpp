@@ -30,7 +30,7 @@
 #include "Features/Skylighting.h"
 #include "Features/TerrainBlending.h"
 #include "Features/TerrainHelper.h"
-#include "Features/TreeLODWind.h"
+#include "Features/TreeWind.h"
 #include "Features/Upscaling.h"
 #include "Features/VolumetricShadows.h"
 #include "Menu.h"
@@ -158,9 +158,9 @@ void State::Draw()
 			truePBR.SetShaderResources(context);
 		}
 
-		if (globals::features::treeLODWind.loaded) {
-			ZoneScopedN("TreeLODWind::SetShaderResources");
-			globals::features::treeLODWind.SetShaderResources(context);
+		if (globals::features::treeWind.loaded) {
+			ZoneScopedN("TreeWind::SetShaderResources");
+			globals::features::treeWind.SetShaderResources(context);
 		}
 
 		if (permutationData != permutationDataPrevious) {
