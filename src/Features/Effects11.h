@@ -33,9 +33,6 @@ public:
 		};
 	}
 
-	/** @brief The active preset belongs to the active preset pack, so nothing goes in the user config. */
-	virtual bool UsesMainSettings() const override { return false; }
-
 	struct alignas(16) PerFrame
 	{
 		uint Enable;
@@ -193,7 +190,10 @@ public:
 	static_assert(offsetof(PerFrame, StarsCurve) % 16 == 0);
 	static_assert(offsetof(PerFrame, AuroraCurve) % 16 == 0);
 
-	/** @brief Settings saved with Community Shaders rather than with the preset. */
+	/**
+	 * @brief Settings saved in the Community Shaders user config, not with the preset.
+	 * The active preset itself belongs to the active preset pack and is not stored here.
+	 */
 	struct Settings
 	{
 		/** @brief Apply the preset's [ENVIRONMENT] ColorPow to PBR material colours as well as vanilla ones. */
