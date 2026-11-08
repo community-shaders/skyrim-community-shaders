@@ -1052,6 +1052,8 @@
     "feature.effects11.category.water_desc": "Water color, waves, fresnel, sun response and reflections.",
     "feature.effects11.category.weather": "Weather",
     "feature.effects11.category.weather_desc": "Per-weather values from the files listed in _weatherlist.ini.",
+    "feature.effects11.color_pow_on_pbr": "ColorPow on PBR",
+    "feature.effects11.color_pow_on_pbr_tooltip": "Apply the preset's ColorPow to PBR materials too.\nOff: PBR materials keep their authored colours; vanilla materials still get ColorPow.\nSaved with Community Shaders' settings, not with the preset.",
     "feature.effects11.description": "Effects 11 loads ENBSeries-compatible FX post-processing. Install multiple presets under Data/SKSE/Plugins/CommunityShaders/Effects11/Presets/<Name>/ (each with enbseries.ini + enbseries/), use a classic root/Data enbseries install as Legacy, or ship effects11/ inside a unified Presets pack. Hotswap does not modify root files.",
     "feature.effects11.editor.cancel": "Cancel",
     "feature.effects11.editor.context_hint": "Right-click a value for reset, copy and paste.",

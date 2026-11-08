@@ -49,6 +49,7 @@ namespace LandscapeLayers
 				[branch] if (LandscapeLayers::PbrTileUsesFullPBR(TILE))                                                                                            \
 				{                                                                                                                                                  \
 					landRMAOS = SampleTerrain(RMAOS_TEX, RMAOS_SAMP, uv, sharedOffset) * float4((PBR_PARAMS3).x, 1, 1, (PBR_PARAMS3).z);                           \
+					blendedPBRWeight += weight;                                                                                                                    \
 					[branch] if (LandscapeLayers::PbrTileHasGlint(TILE))                                                                                           \
 					{                                                                                                                                              \
 						glintParameters += weight * (GLINT_PARAMS);                                                                                                \
@@ -59,6 +60,7 @@ namespace LandscapeLayers
 					landRMAOS = float4(1 - landNormalAlpha, 0, 1, 0);                                                                                              \
 				}                                                                                                                                                  \
 				blendedRMAOS += landRMAOS * weight;                                                                                                                \
+				blendedWeight += weight;                                                                                                                           \
 				blendedRGB += landColorRGB * weight;                                                                                                               \
 				blendedAlpha += landAlpha * weight;                                                                                                                \
 				blendedNormalRGB += landNormalRGB * weight;                                                                                                        \

@@ -262,7 +262,8 @@ namespace SharedData
 		float FireIntensity;
 
 		float FireCurve;
-		float3 pad0;
+		float PBRColorPow;  // ColorPow for PBR material colors: ColorPow with "ColorPow on PBR" on, else 1
+		float2 pad0;
 
 		float CloudsCurve;
 		float CloudsDesaturation;

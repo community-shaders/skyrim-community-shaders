@@ -34,23 +34,46 @@ namespace Color
 		return PBRMaterialIsGammaEncoded ? TransferFunctions::LinearToGamma22(linearColor) : linearColor;
 	}
 
-	/** @brief Albedo for Lambert-lit colors, which skip the PBR material encoding even in TRUE_PBR shaders. */
-	float3 LambertAlbedo(float3 color)
+	/** @brief Raises a color to an Effects 11 ColorPow exponent while a preset is active; a no-op otherwise. */
+	float3 ApplyColorPow(float3 color, float exponent)
 	{
 #	if defined(EFFECTS11)
 		if (SharedData::enbSettings.Enable)
-			color = pow(abs(color), SharedData::enbSettings.ColorPow);
+			color = pow(abs(color), exponent);
 #	endif
 		return color;
 	}
 
+	/** @brief Albedo for Lambert-lit colors, which skip the PBR material encoding even in TRUE_PBR shaders. */
+	float3 LambertAlbedo(float3 color)
+	{
+		return ApplyColorPow(color, SharedData::enbSettings.ColorPow);
+	}
+
+	/** @brief Albedo for a PBR material color; Effects 11's "ColorPow on PBR" decides whether ColorPow reaches it. */
+	float3 PBRAlbedo(float3 color)
+	{
+		return LinearToPBRMaterial(ApplyColorPow(color, SharedData::enbSettings.PBRColorPow));
+	}
+
+	/**
+	 * @brief Albedo for a landscape blend of PBR and non-PBR tiles.
+	 * The ColorPow exponent follows the PBR tiles' share of the blend, so an area of one kind
+	 * grades like that kind alone, and the result is unchanged when "ColorPow on PBR" is on.
+	 */
+	float3 LandscapeAlbedo(float3 color, float pbrShare)
+	{
+		const float exponent = lerp(SharedData::enbSettings.ColorPow, SharedData::enbSettings.PBRColorPow, pbrShare);
+		return LinearToPBRMaterial(ApplyColorPow(color, exponent));
+	}
+
 	float3 Albedo(float3 color)
 	{
-		color = LambertAlbedo(color);
 #	if defined(TRUE_PBR)
-		color = LinearToPBRMaterial(color);
+		return PBRAlbedo(color);
+#	else
+		return LambertAlbedo(color);
 #	endif
-		return color;
 	}
 
 	float3 Light(float3 color)

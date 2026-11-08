@@ -44,7 +44,8 @@ public:
 		float FireIntensity;
 
 		float FireCurve;
-		float pad0[3];
+		float PBRColorPow;  ///< ColorPow for PBR material colours: ColorPow with "ColorPow on PBR" on, else 1
+		float pad0[2];
 
 		float CloudsCurve;
 		float CloudsDesaturation;
@@ -192,6 +193,13 @@ public:
 	static_assert(offsetof(PerFrame, StarsCurve) % 16 == 0);
 	static_assert(offsetof(PerFrame, AuroraCurve) % 16 == 0);
 
+	/** @brief Settings saved with Community Shaders rather than with the preset. */
+	struct Settings
+	{
+		/** @brief Apply the preset's [ENVIRONMENT] ColorPow to PBR material colours as well as vanilla ones. */
+		bool ColorPowOnPBR = false;
+	} settings;
+
 	bool enableEffect = false;
 
 	/** @brief Whether the active preset hands this feature back to CS through its manifest sceneControl. */
@@ -233,6 +241,9 @@ public:
 	void UpdateSkyScattering(PerFrame& a_data);
 
 	virtual void DrawSettings() override;
+	virtual void LoadSettings(json& o_json) override;
+	virtual void SaveSettings(json& o_json) override;
+	virtual void RestoreDefaultSettings() override;
 	virtual void Load() override;
 	virtual void SetupResources() override;
 	virtual void PostSetupResources() override;

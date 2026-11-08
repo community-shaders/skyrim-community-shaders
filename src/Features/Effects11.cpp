@@ -324,6 +324,7 @@ Effects11::PerFrame Effects11::GetCommonBufferData()
 
 	data.Enable = enableEffect;
 	data.ColorPow = settingManager.GetInterpolatedTimeOfDayValue("ColorPow", "ENVIRONMENT");
+	data.PBRColorPow = settings.ColorPowOnPBR ? data.ColorPow : 1.0f;
 	if (enableEffect)
 		data.SkyScaleMultiplier = settingManager.GetValue<bool>("DisableWrongSkyMath", "SKY") ? 0.0f : settingManager.GetInterpolatedTimeOfDayValue("GradientIntensity", "SKY");
 
@@ -443,9 +444,38 @@ Effects11::PerFrame Effects11::GetCommonBufferData()
 	return data;
 }
 
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
+	Effects11::Settings,
+	ColorPowOnPBR)
+
 void Effects11::DrawSettings()
 {
 	Effects11Editor::GetSingleton().DrawLauncher();
+
+#define I18N_KEY_PREFIX "feature.effects11."
+	ImGui::Checkbox(T(TKEY("color_pow_on_pbr"), "ColorPow on PBR"), &settings.ColorPowOnPBR);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::TextUnformatted(T(TKEY("color_pow_on_pbr_tooltip"),
+			"Apply the preset's ColorPow to PBR materials too.\n"
+			"Off: PBR materials keep their authored colours; vanilla materials still get ColorPow.\n"
+			"Saved with Community Shaders' settings, not with the preset."));
+	}
+#undef I18N_KEY_PREFIX
+}
+
+void Effects11::LoadSettings(json& o_json)
+{
+	settings = o_json;
+}
+
+void Effects11::SaveSettings(json& o_json)
+{
+	o_json = settings;
+}
+
+void Effects11::RestoreDefaultSettings()
+{
+	settings = {};
 }
 
 bool Effects11::IsUseEffectEnabled() const

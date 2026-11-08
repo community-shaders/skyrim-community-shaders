@@ -90,6 +90,7 @@ namespace LandscapeSeams
 			[branch] if (LandscapeSeams::HasFlag(LandscapeSeams::FlagPbr, INDEX))                                                                                                          \
 			{                                                                                                                                                                              \
 				landRMAOS = SampleTerrain(RMAOS_TEX, SampColorSampler, uv, sharedOffset) * float4(LandscapeSeams::Data.PBRParams[INDEX].x, 1, 1, LandscapeSeams::Data.PBRParams[INDEX].z); \
+				blendedPBRWeight += weight;                                                                                                                                                \
 				[branch] if (LandscapeSeams::HasFlag(LandscapeSeams::FlagGlint, INDEX))                                                                                                    \
 				{                                                                                                                                                                          \
 					glintParameters += weight * LandscapeSeams::Data.GlintParams[INDEX];                                                                                                   \
@@ -100,6 +101,7 @@ namespace LandscapeSeams
 				landRMAOS = float4(1 - landNormalAlpha, 0, 1, 0);                                                                                                                          \
 			}                                                                                                                                                                              \
 			blendedRMAOS += landRMAOS * weight;                                                                                                                                            \
+			blendedWeight += weight;                                                                                                                                                       \
 			blendedRGB += landColorRGB * weight;                                                                                                                                           \
 			blendedAlpha += landAlpha * weight;                                                                                                                                            \
 			blendedNormalRGB += landNormalRGB * weight;                                                                                                                                    \

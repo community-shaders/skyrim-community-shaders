@@ -1372,6 +1372,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #		if defined(TRUE_PBR)
 	float4 blendedRMAOS = 0;
+	float blendedWeight = 0;
+	float blendedPBRWeight = 0;  // share of the blend from PBR tiles, which may grade with their own ColorPow
 #		endif
 
 #		if defined(EMAT)
@@ -1510,7 +1512,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		undef SampleTerrainColor
 
 	float4 sampledBaseColor = float4(blendedRGB, blendedAlpha);
+#		if defined(TRUE_PBR)
+	baseColor = float4(Color::LandscapeAlbedo(blendedRGB, blendedPBRWeight / max(blendedWeight, EPSILON_DIVISION)), blendedAlpha);
+#		else
 	baseColor = float4(Color::Albedo(blendedRGB), blendedAlpha);
+#		endif
 	normal = float4(blendedNormalRGB, blendedNormalAlpha);
 #		if defined(TRUE_PBR)
 	rawRMAOS = blendedRMAOS;
