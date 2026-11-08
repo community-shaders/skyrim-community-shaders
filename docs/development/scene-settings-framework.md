@@ -66,7 +66,7 @@ when, and only when, a second TU needs it.
 ## How the catalog is built
 
 `CMakeLists.txt` runs the generator as a custom command before compiling, with
-`--min-entries 645 --min-controllable 538 --min-controllable-features 32` as a regression gate. The two
+`--min-entries 645 --min-controllable 538 --min-controllable-features 34` as a regression gate. The two
 controllable floors are the ones that matter: a parser change that stops binding a control does not
 remove the entry, it silently drops its `SceneControllable` flag. Keep them just under the real numbers.
 `--feature-floors cmake/scene_settings_catalog_floors.json` adds a floor per feature, which the totals
@@ -522,7 +522,7 @@ The generator can be run standalone to inspect its output:
 
 ```bash
 python cmake/generate_scene_settings_catalog.py --source-dir . --out-dir /tmp/catalog --min-entries 645 \
-    --min-controllable 538 --min-controllable-features 32 \
+    --min-controllable 538 --min-controllable-features 34 \
     --feature-floors cmake/scene_settings_catalog_floors.json
 ```
 

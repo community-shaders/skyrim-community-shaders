@@ -3,6 +3,7 @@
     "features": {
         "CloudShadows": 1,
         "DynamicCubemaps": 2,
+        "Effects11": 1,
         "ExponentialHeightFog": 58,
         "ExtendedMaterials": 6,
         "ExtendedTranslucency": 5,
