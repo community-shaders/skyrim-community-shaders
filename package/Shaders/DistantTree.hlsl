@@ -37,7 +37,7 @@ struct VS_OUTPUT
 #endif  // RENDER_DEPTH
 	float4 ViewPosition: POSITION3;
 #if defined(TREE_WIND) && !defined(RENDER_DEPTH)
-	// The billboard before sway: its facing, and so its lighting, stays put while the top bends
+	// The billboard before sway: its facing and shadow, and so its lighting, stay put while the top bends
 	float3 RestWorldPosition: POSITION4;
 #endif
 };
@@ -74,7 +74,8 @@ VS_OUTPUT main(VS_INPUT input)
 	vsout.RestWorldPosition = mul(World, finalModelPosition).xyz;
 #	endif
 
-#	if defined(TREE_WIND)
+	// The shadow pass keeps the still billboard, so a tree never shadows itself unevenly as it moves
+#	if defined(TREE_WIND) && !defined(RENDER_DEPTH)
 	if (TreeWind::IsEnabled()) {
 		float cameraDistance = length(mul(World, finalModelPosition).xyz);
 		finalModelPosition.xy += TreeWind::GetBillboardOffset(input.InstanceData1.xyz, input.Position.z, input.InstanceData1.w, cameraDistance, TreeWind::Wind.x);
@@ -246,8 +247,13 @@ PS_OUTPUT main(PS_INPUT input)
 	dirShadow = lerp(1.0, ScreenSpaceShadows::GetScreenSpaceShadow(input.Position.xyz, screenUV, screenNoise), 0.8);
 #			endif
 
+#			if defined(TREE_WIND)
+	if (dirShadow != 0.0)
+		dirShadow *= ShadowSampling::GetWorldShadow(input.RestWorldPosition, FrameBuffer::CameraPosAdjust.xyz);
+#			else
 	if (dirShadow != 0.0)
 		dirShadow *= ShadowSampling::GetWorldShadow(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust.xyz);
+#			endif
 
 	float3 diffuseColor = Color::DirectionalLight(SharedData::DirLightColor.xyz) * dirShadow * 0.5 * Color::BRDFScale;
 
@@ -276,7 +282,11 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.Albedo = float4(baseColor.xyz, 1);
 	psout.Masks = float4(0, 0, 1, 0);
 #		else
+#			if defined(TREE_WIND)
+	float dirShadow = ShadowSampling::GetWorldShadow(input.RestWorldPosition, FrameBuffer::CameraPosAdjust.xyz);
+#			else
 	float dirShadow = ShadowSampling::GetWorldShadow(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust.xyz);
+#			endif
 
 	float3 diffuseColor = Color::DirectionalLight(SharedData::DirLightColor.xyz) * dirShadow * 0.5 * Color::BRDFScale;
 
