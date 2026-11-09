@@ -70,7 +70,13 @@ namespace PNState
 	void ReadPBRRecordConfigs(const std::string& rootPath, std::function<bool(const std::string&, const json&)> recordReader, bool enableVerboseJsonLogging)
 	{
 		if (std::filesystem::exists(rootPath)) {
-			auto configs = clib_util::distribution::get_configs(rootPath, "", ".json");
+			std::vector<std::string> configs;
+			try {
+				configs = clib_util::distribution::get_configs(rootPath, "", ".json");
+			} catch (const std::exception& e) {
+				logger::error("[TruePBR] could not list {}: {}", rootPath, e.what());
+				return;
+			}
 
 			if (configs.empty()) {
 				logger::warn("[TruePBR] no .json files were found within the {} folder, aborting...", rootPath);
