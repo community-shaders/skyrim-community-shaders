@@ -36,6 +36,10 @@ struct VS_OUTPUT
 	float4 PreviousWorldPosition: POSITION2;
 #endif  // RENDER_DEPTH
 	float4 ViewPosition: POSITION3;
+#if defined(TREE_WIND) && !defined(RENDER_DEPTH)
+	// The billboard before sway: its facing, and so its lighting, stays put while the top bends
+	float3 RestWorldPosition: POSITION4;
+#endif
 };
 
 #ifdef VSHADER
@@ -66,6 +70,9 @@ VS_OUTPUT main(VS_INPUT input)
 	adjustedModelPosition.z = scaledModelPosition.z;
 	float4 finalModelPosition = float4(input.InstanceData1.xyz + adjustedModelPosition.xyz, 1.0);
 	float4 previousModelPosition = finalModelPosition;
+#	if defined(TREE_WIND) && !defined(RENDER_DEPTH)
+	vsout.RestWorldPosition = mul(World, finalModelPosition).xyz;
+#	endif
 
 #	if defined(TREE_WIND)
 	if (TreeWind::IsEnabled()) {
@@ -212,8 +219,13 @@ PS_OUTPUT main(PS_INPUT input)
 		discard;
 	}
 
+#		if defined(TREE_WIND)
+	float3 ddx = ddx_coarse(input.RestWorldPosition);
+	float3 ddy = ddy_coarse(input.RestWorldPosition);
+#		else
 	float3 ddx = ddx_coarse(input.WorldPosition.xyz);
 	float3 ddy = ddy_coarse(input.WorldPosition.xyz);
+#		endif
 	float3 normal = -normalize(cross(ddx, ddy));
 
 	float3 directionalAmbientColor = max(0, Color::Ambient(SharedData::GetAmbient(normal)));
