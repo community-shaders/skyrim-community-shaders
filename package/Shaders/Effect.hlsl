@@ -858,7 +858,7 @@ PS_OUTPUT main(PS_INPUT input)
 
 			float intensityMultiplier = LightLimitFix::GetAttenuation(lightDist, light);
 			[branch] if (intensityMultiplier > 1e-5 && localShadow)
-				intensityMultiplier *= LightLimitFix::GetLocalShadow(LinearSampler, light.localShadowIndex, input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust.xyz, lightDirection / max(lightDist, 1e-5), false, Random::InterleavedGradientNoise(input.Position.xy, SharedData::FrameCount));
+				intensityMultiplier *= LightLimitFix::GetLocalShadowWithLightFade(LinearSampler, light.localShadowIndex, input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust.xyz, lightDirection / max(lightDist, 1e-5), false, Random::InterleavedGradientNoise(input.Position.xy, SharedData::FrameCount));
 
 			float3 lightColor = Color::PointLight(light.color.xyz) * intensityMultiplier * 0.5 * light.fade * Color::EffectLightingScale;
 			propertyColor += lightColor * clusteredPointScale;
