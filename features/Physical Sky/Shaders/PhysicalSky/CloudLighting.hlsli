@@ -265,7 +265,7 @@ float CloudLightOpticalDepth(float3 pos, float3 viewDir, NDFInfo ndf, float exti
 	return TraceCloudLighting(pos, viewDir, ndf, extinction, viewDistance, minimumMip, CloudTransportExtinction(ndf)) * VolumetricCloudBuffer[0].sunExtinction;
 }
 
-float3 ShadeCloudLighting(float3 pos, NDFInfo ndf, float extinction, float viewDepth, float viewOpacity, float phase, float opticalDepth, float multipleScattering)
+float3 ShadeCloudLighting(float3 pos, NDFInfo ndf, float extinction, float viewDepth, float viewOpacity, float phase, float opticalDepth, float multipleScattering, float externalSunTransmission)
 {
 	const VolumetricCloudData info = VolumetricCloudBuffer[0];
 	const float albedo = CloudMaterialAlbedo(ndf);
@@ -280,7 +280,12 @@ float3 ShadeCloudLighting(float3 pos, NDFInfo ndf, float extinction, float viewD
 	float multiple = 0.0;
 	[branch] if (info.msStrength > 0.0 && albedo > 0.0)
 		multiple = info.msStrength * albedo * multipleScattering * exp(-opticalDepth * transportExtinction);
-	return info.cloudLightingScale * sunlight * (directional * scatterAmount + multiple * viewOpacity);
+	return info.cloudLightingScale * sunlight * externalSunTransmission * (directional * scatterAmount + multiple * viewOpacity);
+}
+
+float3 ShadeCloudLighting(float3 pos, NDFInfo ndf, float extinction, float viewDepth, float viewOpacity, float phase, float opticalDepth, float multipleScattering)
+{
+	return ShadeCloudLighting(pos, ndf, extinction, viewDepth, viewOpacity, phase, opticalDepth, multipleScattering, UpperSunTransmission(pos));
 }
 
 float3 ShadeCloudLighting(float3 pos, NDFInfo ndf, float extinction, float viewDepth, float viewOpacity, float phase, float opticalDepth)

@@ -11,6 +11,7 @@
 #include <cmath>
 #include <cstring>
 #include <imgui_stdlib.h>
+#include <numbers>
 
 #define I18N_KEY_PREFIX "feature.physical_sky."
 
@@ -132,14 +133,14 @@ namespace
 		return std::isfinite(value) ? std::clamp(value, minimum, maximum) : fallback;
 	}
 
-	void SanitizeRange(float4& range)
+	void SanitizeRange(float4& range, bool limitOutput = true)
 	{
 		range.x = FiniteClamp(range.x, -16.f, 16.f, -1.f);
 		range.y = FiniteClamp(range.y, -16.f, 16.f, 1.f);
 		if (std::abs(range.y - range.x) < 1e-5f)
 			range.y = range.x + 1e-5f;
-		range.z = FiniteClamp(range.z, -16.f, 16.f, 0.f);
-		range.w = FiniteClamp(range.w, -16.f, 16.f, 1.f);
+		range.z = limitOutput ? FiniteClamp(range.z, -16.f, 16.f, 0.f) : (std::isfinite(range.z) ? range.z : 0.f);
+		range.w = limitOutput ? FiniteClamp(range.w, -16.f, 16.f, 1.f) : (std::isfinite(range.w) ? range.w : 1.f);
 	}
 }
 
@@ -433,6 +434,7 @@ bool NdfManager::UpdateNdf(const NdfSettings& settings, TextureManager& textures
 			context->CSSetConstantBuffers(1, 1, &cb);
 			context->CSSetShader(nullptr, nullptr, 0);
 			context->GenerateMips(noiseTextures[i]->srv.get());
+			++weatherNoiseRevision;
 			if (i == 2u)
 				++noiseRevision;
 			generatedNoise[i] = data;
@@ -537,6 +539,8 @@ bool NdfManager::UpdateNdf(const NdfSettings& settings, TextureManager& textures
 		++generatedRevision;
 	if (noiseInputs[2] != sources[2])
 		++noiseRevision;
+	if (!std::equal(noiseInputs.begin(), noiseInputs.end(), sources.begin()))
+		++weatherNoiseRevision;
 	std::copy_n(sources.begin(), 4, noiseInputs.begin());
 	for (size_t i = 0; i < noiseInputs.size(); ++i)
 		noiseInputResources[i].copy_from(noiseInputs[i]);
@@ -625,6 +629,128 @@ NdfTextureSet NdfManager::GetNdf(const NdfSettings& settings, TextureManager& te
 CirrusSettings::CirrusSettings()
 {
 	weather.states.push_back({ { "value", CirrusWeatherState{} }, { "weight", 1.f } });
+}
+
+MidCloudSettings::MidCloudSettings()
+{
+	weather.states.push_back({ { "value", MidCloudWeatherState{} }, { "weight", 1.f } });
+}
+
+float2 MidCloudSettings::GetAltitudeRange() const
+{
+	const float base = FiniteClamp(altitude, 100.f, 16000.f, 3500.f);
+	const float span = FiniteClamp(thickness, 100.f, 4000.f, 800.f);
+	const float lift = span * FiniteClamp(bands.displacement, 0.f, 0.5f, 0.f);
+	return { base - lift, base + span + lift };
+}
+
+void MidCloudMapManager::SetupResources()
+{
+	parameters = eastl::make_unique<ConstantBuffer>(ConstantBufferDesc<Parameters>(), "PhysicalSky::MiddleCloudWeatherConstants");
+	for (auto& map : maps)
+		map = CreateNdfTexture(512, DXGI_FORMAT_R16G16B16A16_FLOAT, "PhysicalSky::MiddleCloudWeather");
+	D3D11_SAMPLER_DESC desc{};
+	desc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+	desc.AddressU = desc.AddressV = desc.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
+	desc.ComparisonFunc = D3D11_COMPARISON_NEVER;
+	desc.MaxLOD = D3D11_FLOAT32_MAX;
+	sampler = nullptr;
+	DX::ThrowIfFailed(globals::d3d::device->CreateSamplerState(&desc, sampler.put()));
+	Util::SetResourceName(sampler.get(), "PhysicalSky::MiddleCloudWeatherSampler");
+	CompileShaders();
+}
+
+void MidCloudMapManager::CompileShaders()
+{
+	valid = false;
+	output = nullptr;
+	shader = nullptr;
+	if (auto* raw = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\PhysicalSky\\MidCloudGenerate.cs.hlsl", {}, "cs_5_0")))
+		shader.attach(raw);
+}
+
+bool MidCloudMapManager::Update(const MidCloudSettings& settings, TextureManager& textures, const NdfManager& ndf)
+{
+	if (!shader || !parameters || !sampler || !maps[0] || !maps[1] ||
+		std::ranges::any_of(ndf.GetNoiseInputs(), [](auto* source) { return !source; })) {
+		valid = false;
+		return false;
+	}
+	std::vector<std::pair<MidCloudWeatherState, float>> states;
+	for (const auto& endpoint : settings.weather.states) {
+		try {
+			const float weight = endpoint.at("weight").get<float>();
+			if (!std::isfinite(weight) || weight <= 0.f)
+				continue;
+			auto state = endpoint.at("value").get<MidCloudWeatherState>();
+			textures.EnsureLoaded(state.localMap);
+			states.emplace_back(std::move(state), weight);
+		} catch (const nlohmann::json::exception&) {}
+	}
+	const auto nextKey = nlohmann::json{ settings.weather, settings.heightPower, settings.bands.displacement }.dump();
+	if (valid && key == nextKey && textureRevision == textures.revision && noiseRevision == ndf.GetWeatherNoiseRevision())
+		return false;
+	auto* context = globals::d3d::context;
+	winrt::com_ptr<ID3D11SamplerState> previousSampler;
+	context->CSGetSamplers(0, 1, previousSampler.put());
+	auto* cb = parameters->CB();
+	auto* sampling = sampler.get();
+	context->CSSetConstantBuffers(1, 1, &cb);
+	context->CSSetSamplers(0, 1, &sampling);
+	context->CSSetShader(shader.get(), nullptr, 0);
+	ID3D11ShaderResourceView* previous = nullptr;
+	ID3D11ShaderResourceView* nullSources[6] = {};
+	uint32_t target = 0;
+	for (const auto& [state, weight] : states) {
+		auto* local = textures.Query(state.localMap);
+		if (!NdfManager::IsTextureNdf(local, 3))
+			local = nullptr;
+		Parameters data{
+			.weather = { state.layers[0], state.layers[1], state.secondaryCoverage, state.coverageGain, state.thicknessVariation },
+			.localWeight = local ? FiniteClamp(state.localWeight, 0.f, 1.f, 0.f) : 0.f,
+			.localBlendMode = std::min(state.localBlendMode, 1u),
+			.weight = std::clamp(weight, 0.f, 1.f),
+			.hasPrevious = previous ? 1u : 0u,
+			.shape = { FiniteClamp(settings.heightPower, 0.25f, 4.f, 1.f), FiniteClamp(settings.bands.displacement, 0.f, .5f, 0.f), 0.f, 0.f }
+		};
+		for (auto& layer : data.weather) {
+			layer.noise = std::min(layer.noise, 4u);
+			layer.frequency = FiniteClamp(layer.frequency, 0.f, 64.f, 1.f);
+			layer.offset.x = FiniteClamp(layer.offset.x, -10000.f, 10000.f, 0.f);
+			layer.offset.y = FiniteClamp(layer.offset.y, -10000.f, 10000.f, 0.f);
+			SanitizeRange(layer.range, false);
+		}
+		parameters->Update(data);
+		std::array<ID3D11ShaderResourceView*, 6> sources{};
+		std::copy(ndf.GetNoiseInputs().begin(), ndf.GetNoiseInputs().end(), sources.begin());
+		sources[4] = local;
+		sources[5] = previous;
+		auto* uav = maps[target]->uav.get();
+		context->CSSetShaderResources(0, 6, sources.data());
+		context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
+		context->Dispatch(64, 64, 1);
+		uav = nullptr;
+		context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
+		context->CSSetShaderResources(0, 6, nullSources);
+		previous = maps[target]->srv.get();
+		target ^= 1u;
+	}
+	if (!previous) {
+		const float empty[4] = {};
+		context->ClearUnorderedAccessViewFloat(maps[0]->uav.get(), empty);
+		previous = maps[0]->srv.get();
+	}
+	cb = nullptr;
+	sampling = previousSampler.get();
+	context->CSSetConstantBuffers(1, 1, &cb);
+	context->CSSetSamplers(0, 1, &sampling);
+	context->CSSetShader(nullptr, nullptr, 0);
+	output.copy_from(previous);
+	key = nextKey;
+	textureRevision = textures.revision;
+	noiseRevision = ndf.GetWeatherNoiseRevision();
+	valid = true;
+	return true;
 }
 
 void CirrusMapManager::SetupResources()
@@ -778,12 +904,12 @@ bool CirrusMapManager::Update(const CirrusSettings& settings, TextureManager& te
 
 #define I18N_KEY_PREFIX "feature.physical_sky."
 
-static bool DrawCirrusWeather(const char* label, CirrusNoiseLayer& layer)
+static bool DrawWeatherNoise(const char* label, CirrusNoiseLayer& layer, bool normalizedOutput = true)
 {
 	if (!ImGui::TreeNode(label))
 		return false;
 	bool changed = ImGui::DragFloat2(T(TKEY("ndf_input_interval"), "Input interval"), &layer.range.x, 0.01f, -1.f, 1.f);
-	changed |= ImGui::DragFloat2(T(TKEY("ndf_output_interval"), "Output interval"), &layer.range.z, 0.01f, 0.f, 1.f);
+	changed |= ImGui::DragFloat2(T(TKEY("ndf_output_interval"), "Output interval"), &layer.range.z, 0.01f, 0.f, normalizedOutput ? 1.f : 0.f);
 	changed |= ImGui::DragFloat(T(TKEY("ndf_frequency"), "Frequency"), &layer.frequency, 0.05f, 0.f, 64.f);
 	changed |= ImGui::DragFloat2(T(TKEY("ndf_offset"), "Offset"), &layer.offset.x, 0.005f);
 	const char* slots[] = { "0", "1", "2", "3", T(TKEY("ndf_noise_slot_zero"), "Zero") };
@@ -796,18 +922,22 @@ static bool DrawCirrusWeather(const char* label, CirrusNoiseLayer& layer)
 	return changed;
 }
 
-static void DrawCirrusWeatherState(CirrusSettings& settings, TextureManager& textures)
+template <bool middle>
+static void DrawLayerWeatherState(SceneBlend& weather, TextureManager& textures)
 {
-	if (!ImGui::TreeNode(T(TKEY("cirrus_weather_settings"), "Cirrus weather")))
+	using WeatherState = std::conditional_t<middle, MidCloudWeatherState, CirrusWeatherState>;
+	if (!ImGui::TreeNode(middle ? T(TKEY("middle_weather"), "Middle cloud weather") : T(TKEY("cirrus_weather_settings"), "Cirrus weather")))
 		return;
-	ImGui::TextWrapped("%s", T(TKEY("cirrus_scene_hint"), "Each scene stores coverage, type and an optional local map. Weather and time transitions blend the generated maps, including changes of noise input or local texture."));
-	ImGui::TextWrapped("%s", T(TKEY("cirrus_shared_noise"), "Uses the four Cloud Map noise inputs."));
+	if constexpr (!middle) {
+		ImGui::TextWrapped("%s", T(TKEY("cirrus_scene_hint"), "Each scene stores coverage, type and an optional local map. Weather and time transitions blend the generated maps, including changes of noise input or local texture."));
+		ImGui::TextWrapped("%s", T(TKEY("cirrus_shared_noise"), "Uses the four Cloud Map noise inputs."));
+	}
 	const auto* armed = SceneWidgetInterceptor::GetArmedContext();
 	const bool scene = armed && !armed->baseline;
 	auto* manager = SceneSettingsManager::GetSingleton();
-	const SceneSettingsManager::SettingIdentity identity{ "PhysicalSky", { "cloudLayer", "cirrus" }, "weather" };
+	const SceneSettingsManager::SettingIdentity identity{ "PhysicalSky", { "cloudLayer", middle ? "middle" : "cirrus" }, "weather" };
 	std::optional<size_t> entryIndex;
-	nlohmann::json value = settings.weather;
+	nlohmann::json value = weather;
 	bool editable = true;
 	if (scene) {
 		entryIndex = manager->FindContextUserEntry(armed->contextId, identity.featureShortName, identity.settingPath, identity.settingKey);
@@ -817,7 +947,7 @@ static void DrawCirrusWeatherState(CirrusSettings& settings, TextureManager& tex
 			value = entries[*entryIndex].value;
 			editable = !entries[*entryIndex].paused;
 		} else {
-			if (ImGui::Button(T(TKEY("cirrus_scene_override"), "Override cirrus weather in this scene"))) {
+			if (ImGui::Button(middle ? T(TKEY("middle_scene_override"), "Override middle cloud weather in this scene") : T(TKEY("cirrus_scene_override"), "Override cirrus weather in this scene"))) {
 				if (entryIndex)
 					manager->ClearContextTombstone(armed->contextId, identity.featureShortName, identity.settingPath, identity.settingKey);
 				manager->AddContextSetting(armed->contextId, identity.featureShortName, identity.settingPath, identity.settingKey);
@@ -831,25 +961,32 @@ static void DrawCirrusWeatherState(CirrusSettings& settings, TextureManager& tex
 			return;
 		}
 	}
-	CirrusWeatherState state;
+	WeatherState state;
 	if (SceneBlend::IsValid(value) && !value["states"].empty()) {
 		const auto endpoint = std::max_element(value["states"].begin(), value["states"].end(), [](const auto& lhs, const auto& rhs) {
 			return lhs["weight"].template get<float>() < rhs["weight"].template get<float>();
 		});
 		try {
-			state = (*endpoint)["value"].get<CirrusWeatherState>();
+			state = (*endpoint)["value"].template get<WeatherState>();
 		} catch (const nlohmann::json::exception&) {
 		}
 		if (value["states"].size() > 1)
 			ImGui::TextWrapped("%s", T(TKEY("cirrus_edit_mixed"), "A transition is active. Editing captures the strongest endpoint as one weather state."));
 	}
 	ImGui::BeginDisabled(!editable);
-	bool changed = DrawCirrusWeather(T(TKEY("cirrus_coverage"), "Cirrus Coverage"), state.layers[0]);
-	changed |= DrawCirrusWeather(T(TKEY("cirrus_type"), "Cirrus Type"), state.layers[1]);
+	bool changed = DrawWeatherNoise(middle ? T(TKEY("ndf_primary_coverage"), "Primary coverage") : T(TKEY("cirrus_coverage"), "Cirrus Coverage"), state.layers[0], !middle);
+	if constexpr (middle) {
+		changed |= DrawWeatherNoise(T(TKEY("ndf_secondary_coverage"), "Secondary coverage"), state.secondaryCoverage, false);
+		changed |= DrawWeatherNoise(T(TKEY("ndf_coverage_gain"), "Coverage gain"), state.coverageGain, false);
+		changed |= DrawWeatherNoise(T(TKEY("middle_thickness_variation"), "Thickness variation (fraction of layer height)"), state.thicknessVariation, false);
+	}
+	changed |= DrawWeatherNoise(middle ? T(TKEY("middle_type"), "Cloud Type (As to Ac)") : T(TKEY("cirrus_type"), "Cirrus Type"), state.layers[1]);
 	changed |= ImGui::InputText(T(TKEY("cirrus_local_map"), "Local coverage / type / mask RGB"), &state.localMap);
-	ImGui::TextWrapped("%s", T(TKEY("cirrus_local_hint"), "Optional linear RGB DDS: R coverage, G type, B blend mask. Repeats every 16384 m times Cirrus UV Size; leave the path empty for no local map."));
+	if constexpr (!middle)
+		ImGui::TextWrapped("%s", T(TKEY("cirrus_local_hint"), "Optional linear RGB DDS: R coverage, G type, B blend mask. Repeats every 16384 m times Cirrus UV Size; leave the path empty for no local map."));
 	changed |= ImGui::SliderFloat(T(TKEY("cirrus_local_weight"), "Local map influence"), &state.localWeight, 0.f, 1.f);
-	changed |= ImGui::SliderFloat(T(TKEY("cirrus_local_wind"), "Local map wind scale"), &state.localWindScale, 0.f, 16.f);
+	if (!middle)
+		changed |= ImGui::SliderFloat(T(TKEY("cirrus_local_wind"), "Local map wind scale"), &state.localWindScale, 0.f, 16.f);
 	const char* modes[] = { T(TKEY("local_ndf_interpolate"), "Interpolate"), T(TKEY("local_ndf_maximum"), "Maximum") };
 	int mode = static_cast<int>(std::min(state.localBlendMode, 1u));
 	if (ImGui::Combo(T(TKEY("cirrus_local_blend"), "Local map blend"), &mode, modes, 2)) {
@@ -867,7 +1004,7 @@ static void DrawCirrusWeatherState(CirrusSettings& settings, TextureManager& tex
 			const SceneSettingsManager::EntryValueUpdate update{ *entryIndex, selection };
 			manager->UpdateContextEntryValues(armed->contextId, { &update, 1 }, true);
 		} else {
-			settings.weather = selection;
+			weather = selection;
 			manager->RecordBaselineEdit(identity, selection);
 		}
 	}
@@ -892,7 +1029,7 @@ void CirrusMapManager::DrawSettings(CirrusSettings& cirrus, CloudLightingSetting
 			ImGui::TreePop();
 		}
 	}
-	DrawCirrusWeatherState(cirrus, textures);
+	DrawLayerWeatherState<false>(cirrus.weather, textures);
 	if (ImGui::TreeNode(T(TKEY("cloud_cirrus_phase"), "Cirrus Phase and Scattering"))) {
 		ImGui::TextWrapped("%s", T(TKEY("cloud_cirrus_phase_desc"), "Cirrus uses an equally weighted, normalized dual-HG phase approximation. Positive G favors forward scattering; negative G favors backward scattering. These parameters affect only cirrus."));
 		ImGui::SliderFloat(T(TKEY("cloud_phase_forward"), "Cirrus Forward Phase G"), &lighting.phaseForwardG, 0.f, 0.95f, "%.3f");
@@ -902,6 +1039,38 @@ void CirrusMapManager::DrawSettings(CirrusSettings& cirrus, CloudLightingSetting
 			ImGui::TextWrapped("%s", T(TKEY("cloud_cirrus_thickness_desc"), "Effective geometric thickness used to estimate the sunlight path through cirrus and its attenuation, especially at grazing angles."));
 		ImGui::TreePop();
 	}
+}
+
+void MidCloudMapManager::DrawSettings(MidCloudSettings& settings, TextureManager& textures)
+{
+	ImGui::Checkbox(T(TKEY("middle_enabled"), "Enable middle clouds"), &settings.enabled);
+	ImGui::SliderFloat(T(TKEY("middle_altitude"), "Middle cloud base"), &settings.altitude, 100.f, 16000.f, "%.0f m");
+	ImGui::SliderFloat(T(TKEY("middle_thickness"), "Middle cloud height range"), &settings.thickness, 100.f, 4000.f, "%.0f m");
+	ImGui::SliderFloat(T(TKEY("middle_density"), "Middle cloud density"), &settings.densityScale, 0.f, 0.1f, "%.4f");
+	ImGui::SliderFloat(T(TKEY("middle_size"), "Weather Size"), &settings.uvSize, 0.1f, 8.f, "%.2f x");
+	ImGui::SliderFloat(T(TKEY("middle_softness"), "Top and bottom softness"), &settings.edgeSoftness, 0.01f, 0.5f);
+	ImGui::SliderFloat(T(TKEY("middle_cell_frequency"), "Cloud cell frequency"), &settings.cellFrequency, 0.25f, 16.f);
+	ImGui::SliderFloat(T(TKEY("middle_ac_cells"), "Ac cloud cell strength"), &settings.cellStrength, 0.f, 1.f);
+	ImGui::SliderFloat(T(TKEY("middle_as_cells"), "As cloud cell strength"), &settings.stratusCellStrength, 0.f, 1.f);
+	ImGui::SliderFloat(T(TKEY("middle_warp"), "Cloud cell distortion"), &settings.warpStrength, 0.f, 0.5f);
+	const char* detailModes[] = { T(TKEY("middle_detail_2d"), "2D surface"), T(TKEY("middle_detail_3d"), "3D volume") };
+	int detailMode = static_cast<int>(std::min(settings.detailMode, 1u));
+	if (ImGui::Combo(T(TKEY("middle_detail_mode"), "Detail representation"), &detailMode, detailModes, IM_ARRAYSIZE(detailModes)))
+		settings.detailMode = static_cast<uint32_t>(detailMode);
+	ImGui::SliderFloat(T(TKEY("middle_detail_scale"), "Detail texture size"), &settings.detailScale, 200.f, 4000.f, "%.0f m");
+	ImGui::TextWrapped("%s", T(TKEY("middle_detail_hint"), "Final density uses the shared Billow and Wisp noises: As selects Wisp, Ac selects Billow. 3D shapes the volume; 2D uses a horizontal noise slice. Detail size is independent of Weather Size. Both follow the upper-cloud wind."));
+	ImGui::SliderFloat(T(TKEY("middle_height_power"), "Coverage to thickness response"), &settings.heightPower, 0.25f, 4.f);
+	if (ImGui::TreeNode("Bands", T(TKEY("middle_bands"), "Cloud bands"))) {
+		ImGui::SliderFloat(T(TKEY("middle_band_direction"), "Band direction"), &settings.bands.direction, 0.f, 180.f, "%.0f deg");
+		ImGui::SliderFloat(T(TKEY("middle_band_wavelength"), "Band spacing"), &settings.bands.wavelength, 500.f, 16000.f, "%.0f m");
+		ImGui::SliderFloat(T(TKEY("middle_band_warp"), "Band bend (wavelengths)"), &settings.bands.warp, 0.f, 1.f);
+		ImGui::SliderFloat(T(TKEY("middle_band_coverage"), "Band organization"), &settings.bands.coverage, 0.f, 1.f);
+		ImGui::SliderFloat(T(TKEY("middle_band_thickness"), "Thickness contrast"), &settings.bands.thickness, 0.f, 1.f);
+		ImGui::SliderFloat(T(TKEY("middle_band_displacement"), "Layer undulation"), &settings.bands.displacement, 0.f, .5f);
+		ImGui::TextWrapped("%s", T(TKEY("middle_band_hint"), "Spacing is the nominal world distance between bands, independent of Weather Size. Local weather and cloud cells vary band width and allow breaks or merged regions. Bend changes neighbouring wavefronts smoothly in world space, measured in wavelengths. Billow/Wisp shape the final volume. Thickness contrast and layer undulation also work without coverage gaps. Undulation is a fraction of layer thickness."));
+		ImGui::TreePop();
+	}
+	DrawLayerWeatherState<true>(settings.weather, textures);
 }
 
 #undef I18N_KEY_PREFIX

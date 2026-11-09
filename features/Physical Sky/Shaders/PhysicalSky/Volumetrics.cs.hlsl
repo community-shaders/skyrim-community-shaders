@@ -135,13 +135,18 @@ struct VolumetricCloudData
 	float2 voxelAltitude;
 	uint skipShapeNoise;
 	uint useVoxelNoise;
-	float2 noisePadding;
+	float2 noisePadding;  // previous curvature radius, weather-history refresh weight
+	float4 middleLayer;   // bottom/top (game units), extinction/metre, weather UV/game unit
+	float4 middleShape;   // edge softness, reserved, detail UV/game unit, 3D detail
 };
 
 cbuffer VolumetricCloudConstants : register(b1)
 {
 	VolumetricCloudData VolumetricCloudBuffer[1];
 	float4 CloudMsCalibration[49];
+	float4 MiddleCloudCells;      // frequency, Ac modulation, As modulation, warp
+	float4 MiddleCloudBands;      // world wave vector (cycles/game unit), bend (wavelengths), organization
+	float4 MiddleCloudBandShape;  // thickness contrast, displacement (game units), wavelength (game units), enabled
 };
 Texture2D<float4> TexTransmittance : register(t1);
 Texture3D<float4> TexAerialPerspective : register(t2);
@@ -889,6 +894,8 @@ float sampleWeatherCloudDensity(
 #endif
 #include "PhysicalSky/CloudVoxel.hlsli"
 
+#include "PhysicalSky/MidCloud.hlsli"
+
 float3 sampleExternalSunTransmittance(float3 pos, float3 sun_dir)
 {
 	const VolumetricCloudData info = VolumetricCloudBuffer[0];
@@ -898,6 +905,8 @@ float3 sampleExternalSunTransmittance(float3 pos, float3 sun_dir)
 	return SampleAtmosphereLightTr(TexTransmittance, TransmittanceSampler, pos_planet, sun_dir);
 }
 
+float3 CirrusBoundaryRadiance(float3 position, float3 direction, float3 incoming);
+float3 MiddleBoundaryRadiance(float3 position, float3 direction, float2 opticalDepth);
 #include "PhysicalSky/CloudAmbient.hlsli"
 #include "PhysicalSky/CloudLighting.hlsli"
 
@@ -1184,17 +1193,7 @@ VolumetricCloudResult RenderVolumetricCloudRay(float3 direction, float3 eye, flo
 		result.cloud_depth = min(result.cloud_depth, stormInterval.x);
 	float cirrusDistance = sceneDistance;
 	bool cirrusPending = false;
-	if (info.cirrusEnabled != 0u) {
-		const float3 cirrusEye = cloudEye + float3(0.0, 0.0, info.cloudCurvatureRadius);
-		const float2 shell = IntersectSpherePair(cirrusEye, direction, info.cloudCurvatureRadius + info.cirrusAltitude);
-		cirrusDistance = shell.x >= 0.0 ? shell.x : shell.y;
-		if (cirrusDistance >= 0.0)
-			result.cloud_depth = bounds.length > 0.0 || hasBoundaryDepth ? min(result.cloud_depth, cirrusDistance) : cirrusDistance;
-		cirrusPending = cirrusDistance >= 0.0 && (!sceneLimited || cirrusDistance < sceneDistance);
-#ifdef CLOUD_REFLECTION
-		cirrusPending = cirrusPending && cirrusDistance >= raySegment.x && cirrusDistance < raySegment.y;
-#endif
-	}
+
 	if (low.length <= 0.0 && !cirrusPending)
 		return result;
 
@@ -1476,11 +1475,14 @@ VolumetricCloudResult RenderVolumetricCloudRay(float3 direction, float3 eye, flo
 	return result;
 }
 
+// clang-format off
+#include "PhysicalSky/UpperCloud.hlsli"
 #include "PhysicalSky/CloudBlur.hlsli"
 #include "PhysicalSky/CloudBounds.hlsli"
 #include "PhysicalSky/CloudTemporal.hlsli"
 #include "PhysicalSky/CloudVoxelView.hlsli"
 #include "PhysicalSky/LightningView.hlsli"
+// clang-format on
 
 // Match the largest shadow-volume dimension (kShadowVolW/H in PhysicalSky.h).
 #define NTHREADS 256
@@ -1550,6 +1552,9 @@ groupshared uint g_density_segment[NTHREADS];
 		// cloud shell outside the represented domain.
 		CloudDensityContext densityContext;
 		localExtinction = sampleCloudDensity(pos, GetCloudLayer(info), 2.0, 2000.0, 0.0, densityContext);
+		float4 middleModel;
+		float2 middleDepth;
+		localExtinction += MiddleCloudDensity(pos, middleModel, middleDepth, info.shadowVolumeRange / min(dims.x, dims.y));
 		density = localExtinction * length(ray_uv_increment * scale);
 
 		accumulated_density = density;
@@ -1649,7 +1654,11 @@ groupshared float ShadowMeanSamples[64];
 				const float distanceInCloud = (step + 0.5) * stepLength;
 				const float distanceAlongRay = distanceInCloud < nearLength ? start + distanceInCloud : farStart + distanceInCloud - nearLength;
 				CloudDensityContext densityContext;
-				const float density = sampleCloudDensity(pos + direction * distanceAlongRay, GetCloudLayer(info), 2.0, 2000.0, 0.0, densityContext);
+				float density = sampleCloudDensity(pos + direction * distanceAlongRay, GetCloudLayer(info), 2.0, 2000.0, 0.0, densityContext);
+				float4 middleModel;
+				float2 middleDepth;
+				density += MiddleCloudDensity(pos + direction * distanceAlongRay, middleModel, middleDepth,
+					max(stepLength * length(direction.xy), info.shadowVolumeRange / min(dims.x, dims.y)));
 				opticalDepth += density * stepLength * info.sunExtinction * GAME_UNIT_TO_M;
 			}
 			transmittance = exp(-max(opticalDepth, 0.0));

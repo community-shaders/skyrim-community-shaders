@@ -83,7 +83,10 @@ float3 CloudSampleDisplacement(float3 ray, float4 metadata, float opacity, float
 	lowDisplacement = lerp(lowDisplacement, stormDisplacement, stormWeight);
 	const float2 currentRelativeXY = ray.xy * lowDepth;
 	const float2 previousRelativeXY = currentRelativeXY + FrameBuffer::CameraPosAdjust.xy - info.previousCamera.xy - lowDisplacement.xy;
-	const float curvatureDisplacement = (1.0 - stormWeight) * dot(previousRelativeXY - currentRelativeXY, previousRelativeXY + currentRelativeXY) / info.cloudCurvatureRadius;
+	const float previousRadius = info.noisePadding.x > 0.0 ? info.noisePadding.x : info.cloudCurvatureRadius;
+	const float curvatureDisplacement = (1.0 - stormWeight) *
+	                                    (dot(previousRelativeXY - currentRelativeXY, previousRelativeXY + currentRelativeXY) / info.cloudCurvatureRadius +
+											dot(previousRelativeXY, previousRelativeXY) / previousRadius * ((info.cloudCurvatureRadius - previousRadius) / info.cloudCurvatureRadius));
 	lowDisplacement.z += curvatureDisplacement;
 	const float3 highDisplacement = float3(info.cirrusWindDelta, 0);
 	const float3 disagreement = lowDisplacement - highDisplacement;
@@ -341,8 +344,33 @@ cbuffer CloudDispatch : register(b3) { uint4 StormScreenRect; };
 	RWLightningMask[tid] = min(result.lightning, 65504.0);
 }
 
-	[numthreads(8, 8, 1)] void reproject(uint2 pixel : SV_DispatchThreadID)
+	// Independent upper-layer march, then compose at the same checkerboard sample.
+	[numthreads(8, 8, 1)] void renderUpperView(uint2 tid : SV_DispatchThreadID)
 {
+	const VolumetricCloudData info = VolumetricCloudBuffer[0];
+	if (any(tid >= uint2(info.lowFrameDim)))
+		return;
+	const uint2 pixel = tid * 4u + CloudPhaseOffset();
+	const float3 direction = CloudScreenRay(pixel);
+	const float deviceDepth = CloudSceneDeviceDepth(pixel, 1u);
+	const float sceneDistance = deviceDepth >= 1.0 - 1e-6 ? 0.0 : SharedData::GetScreenDepth(deviceDepth) / max(abs(mul(FrameBuffer::CameraView, float4(direction, 0)).z), 1e-6);
+	const float3 eye = FrameBuffer::CameraPosAdjust.xyz - float3(0, 0, info.bottomZ);
+	// Integrate middle segments deterministically; the checkerboard already
+	// moves the view ray. Filter noise by the screen footprint, not march length.
+	const float2 pixelFootprint = 2.0 / max(abs(float2(FrameBuffer::CameraProjUnjittered[0][0], FrameBuffer::CameraProjUnjittered[1][1])) * info.activeFrameDim, 1.0);
+	const VolumetricCloudResult upper = RenderUpperCloudRay(direction, eye, sceneDistance, CloudSpatialMarchHash(pixel), max(pixelFootprint.x, pixelFootprint.y));
+	float transmission = TexVolLowTr[tid];
+	float4 color = TexVolLowLum[tid], metadata = TexVolLowAux[tid], motion = TexVolLowStormMotion[tid];
+	float2 lightning = TexLightningTrace[tid];
+	CompositeUpperCloud(upper, transmission, color, metadata, motion, lightning);
+	RWTexTr[tid] = transmission;
+	RWTexLum[tid] = color;
+	RWTexAux[tid] = metadata;
+	RWStormMotion[tid] = motion;
+	RWLightningMask[tid] = lightning;
+}
+
+[numthreads(8, 8, 1)] void reproject(uint2 pixel : SV_DispatchThreadID) {
 	const VolumetricCloudData info = VolumetricCloudBuffer[0];
 	if (any(pixel >= uint2(info.activeFrameDim)))
 		return;
@@ -375,7 +403,7 @@ cbuffer CloudDispatch : register(b3) { uint4 StormScreenRect; };
 	const float3 displacement = CloudSampleDisplacement(ray, motionMetadata, motionOpacity, stormMotion, uncertainty, depth);
 	const float2 projectionScale = abs(float2(FrameBuffer::CameraProjUnjittered[0][0], FrameBuffer::CameraProjUnjittered[1][1])) * info.activeFrameDim * 0.5;
 	const float viewCosine = abs(mul(FrameBuffer::CameraView, float4(ray, 0)).z);
-	const float evolutionBlend = CloudEvolutionBlend(uncertainty, depth, max(projectionScale.x, projectionScale.y) / max(viewCosine * viewCosine, 1e-4));
+	const float evolutionBlend = max(info.noisePadding.y, CloudEvolutionBlend(uncertainty, depth, max(projectionScale.x, projectionScale.y) / max(viewCosine * viewCosine, 1e-4)));
 	const float3 cameraDelta = FrameBuffer::CameraPosAdjust.xyz - info.previousCamera - displacement;
 	const float3 previousPosition = ray * DecodeCloudDepth(depth) + cameraDelta;
 	const float4 clip = mul(info.previousViewProj, float4(previousPosition, 1));
@@ -557,7 +585,7 @@ float2 CloudCubePosition(float3 direction, uint face)
 	float uncertainty, depth;
 	const float3 displacement = CloudSampleDisplacement(direction, motionMetadata, TexCubeTraceLum.SampleLevel(TransmittanceSampler, depthDirection, 0).a, TexCubeStormMotion.SampleLevel(TransmittanceSampler, depthDirection, 0), uncertainty, depth);
 	const float cubeCosine = max(max(abs(direction.x), abs(direction.y)), abs(direction.z));
-	const float evolutionBlend = CloudEvolutionBlend(uncertainty, depth, 0.5 * dims.x / (cubeCosine * cubeCosine));
+	const float evolutionBlend = max(info.noisePadding.y, CloudEvolutionBlend(uncertainty, depth, 0.5 * dims.x / (cubeCosine * cubeCosine)));
 	const float3 cameraDelta = FrameBuffer::CameraPosAdjust.xyz - info.previousCamera - displacement;
 	const float3 previousPosition = direction * DecodeCloudDepth(depth) + cameraDelta;
 	const float3 previousDirection = normalize(previousPosition);

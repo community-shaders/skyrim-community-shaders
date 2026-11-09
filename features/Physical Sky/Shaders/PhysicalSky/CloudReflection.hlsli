@@ -58,11 +58,19 @@ groupshared float2 ReflectionLightning[CloudReflectionSegments];
 	const float depth = weights.y > 0.0 ? weights.x / weights.y : info.rayMarchRange;
 	// Keep the cloud source independent of foreground air. Reflection composition
 	// applies either the shared reflection medium or the legacy AP at this depth.
-	RWTexCubeTr[pixel] = transmission;
-	RWTexCubeLum[pixel] = float4(min(radiance, 65504.0), opacity);
+	float combinedTransmission = transmission;
+	float4 color = float4(radiance, opacity);
+	float4 metadata = float4(EncodeCloudDepth(depth), 0.0, weights.y > 0.0 ? saturate(weights.zw / weights.y) * opacity : 0.0);
+	float4 motion = weights.y > 0.0 ? ReflectionMotion[0] * (opacity / weights.y) : 0.0;
+	if (info.middleLayer.z > 0.0 || info.cirrusEnabled != 0u) {
+		const VolumetricCloudResult upper = RenderUpperCloudRay(direction, eye, 0.0, jitter.y, footprint);
+		CompositeUpperCloud(upper, combinedTransmission, color, metadata, motion, lightning);
+	}
+	RWTexCubeTr[pixel] = combinedTransmission;
+	RWTexCubeLum[pixel] = color;
 	RWLightningCubeMask[pixel] = min(lightning, 65504.0);
-	RWCubeStormMotion[pixel] = weights.y > 0.0 ? ReflectionMotion[0] * (opacity / weights.y) : 0.0;
-	RWTexCubeAux[pixel] = float4(EncodeCloudDepth(depth), 0.0, weights.y > 0.0 ? saturate(weights.zw / weights.y) * opacity : 0.0);
+	RWCubeStormMotion[pixel] = motion;
+	RWTexCubeAux[pixel] = metadata;
 }
 #endif
 #endif

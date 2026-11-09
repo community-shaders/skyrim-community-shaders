@@ -368,6 +368,7 @@ struct PhysicalSky final : public Feature
 	NdfManager ndfManager;
 	LocalNdfManager localNdfManager;
 	CirrusMapManager cirrusMapManager;
+	MidCloudMapManager midCloudMapManager;
 
 	static constexpr uint32_t kCloudMsCalibrationSize = 49;
 
@@ -453,10 +454,15 @@ struct PhysicalSky final : public Feature
 		float2 voxelAltitude;
 		uint32_t skipShapeNoise;
 		uint32_t useVoxelNoise;
-		float2 noisePadding;
+		float2 noisePadding;  // Previous curvature radius, weather-history refresh weight.
+		float4 middleLayer;
+		float4 middleShape;
 		std::array<float4, kCloudMsCalibrationSize> msCalibration;
+		float4 middleCells;
+		float4 middleBands;
+		float4 middleBandShape;
 	};
-	static_assert(sizeof(VolumetricCloudCB) == 1248);
+	static_assert(sizeof(VolumetricCloudCB) == 1328);
 	static_assert(offsetof(VolumetricCloudCB, dirlightDir) == 48);
 	static_assert(offsetof(VolumetricCloudCB, previousCamera) == 64);
 	static_assert(offsetof(VolumetricCloudCB, lowNdfFrequency) == 128);
@@ -467,7 +473,11 @@ struct PhysicalSky final : public Feature
 	static_assert(offsetof(VolumetricCloudCB, localNdfRect) == 368);
 	static_assert(offsetof(VolumetricCloudCB, lowCloudPhase) == 416);
 	static_assert(offsetof(VolumetricCloudCB, stormCount) == 432);
-	static_assert(offsetof(VolumetricCloudCB, msCalibration) == 464);
+	static_assert(offsetof(VolumetricCloudCB, middleLayer) == 464);
+	static_assert(offsetof(VolumetricCloudCB, msCalibration) == 496);
+	static_assert(offsetof(VolumetricCloudCB, middleCells) == 1280);
+	static_assert(offsetof(VolumetricCloudCB, middleBands) == 1296);
+	static_assert(offsetof(VolumetricCloudCB, middleBandShape) == 1312);
 	eastl::unique_ptr<ConstantBuffer> volCloudCb = nullptr;
 	eastl::unique_ptr<ConstantBuffer> cloudDispatchCb;
 	eastl::unique_ptr<Texture2D> texVolStormMotion, texVolCubeStormMotion;
@@ -501,6 +511,8 @@ struct PhysicalSky final : public Feature
 	eastl::unique_ptr<ConstantBuffer> cloudAmbientVolumeCB = nullptr;
 	uint32_t volFrameIndex = 0;
 	bool volMainHistoryValid = false;
+	bool cloudHeightBoundsDirty = true;
+	bool cloudWeatherChanged = false;
 	bool volHistoryUnifiedMedium = false;
 	float2 volHistoryFrameDim = {};
 	float volHistoryCurvatureRadius = 0.f;
@@ -518,6 +530,7 @@ struct PhysicalSky final : public Feature
 	float4x4 volHistoryViewProj = {};
 	float3 volHistoryCamera = {};
 	std::string volCloudSettingsKey;
+	std::string volCloudHistoryKey;
 
 	// Static low-cloud cross-section shown on the Clouds page.
 	static constexpr uint32_t kCloudCrossSectionW = 512;
@@ -538,6 +551,8 @@ struct PhysicalSky final : public Feature
 	static_assert(sizeof(CloudCrossSectionCB) == 64);
 
 	winrt::com_ptr<ID3D11ComputeShader> csVolMainView = nullptr;
+	winrt::com_ptr<ID3D11ComputeShader> csUpperView = nullptr, csUpperSunDepth = nullptr;
+	eastl::unique_ptr<Texture2D> texUpperSunDepth;
 	winrt::com_ptr<ID3D11ComputeShader> csVolMainWithoutStorm = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> csStormTiles = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> csVolMainVolcanic, csVolCubemapVolcanic, csVolShadowVolcanic, csCloudAmbientDensityVolcanic;

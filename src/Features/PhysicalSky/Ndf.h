@@ -201,6 +201,8 @@ struct NdfManager
 	uint64_t GetRevision() const { return generatedRevision; }
 	/// Tracks noise input changes independently of weather-field advection.
 	uint64_t GetNoiseRevision() const { return noiseRevision; }
+	/// Tracks every shared weather-noise slot, excluding low-cloud advection.
+	uint64_t GetWeatherNoiseRevision() const { return weatherNoiseRevision; }
 	float2 GetWeatherOffset() const { return generatedData.windOffset; }
 	float4 GetHeightAuxiliaryRange() const { return generatedData.heightAuxiliaryRange; }
 	/// Channel picker plus a preview of the generated weather map. Debug and the Clouds page share it.
@@ -223,6 +225,7 @@ private:
 	std::array<std::string, 9> sourcePaths = {};
 	uint64_t generatedRevision = 0;
 	uint64_t noiseRevision = 0;
+	uint64_t weatherNoiseRevision = 0;
 	uint64_t textureRevision = 0;
 	std::array<ID3D11ShaderResourceView*, 4> noiseInputs = {};
 	std::array<winrt::com_ptr<ID3D11ShaderResourceView>, 4> noiseInputResources;
@@ -275,6 +278,25 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	CirrusWeatherState,
 	layers, localMap, localWeight, localWindScale, localBlendMode)
 
+struct MidCloudWeatherState
+{
+	// Retain the old coverage/type keys. Missing new fields are neutral so
+	// existing scene endpoints and RGB maps keep their authored appearance.
+	std::array<CirrusNoiseLayer, 2> layers = { { { .noise = 1, .range = { -0.7f, 0.7f, 0.f, 0.6f } },
+		{ .range = { -1.f, 1.f, 0.65f, 0.65f } } } };
+	CirrusNoiseLayer secondaryCoverage{ .noise = 3, .range = { -1.f, 1.f, 0.f, 0.f } };
+	CirrusNoiseLayer coverageGain{ .range = { -1.f, 1.f, 1.f, 1.f } };
+	CirrusNoiseLayer thicknessVariation{ .noise = 0, .range = { -1.f, 1.f, 0.f, 0.f } };
+	std::string localMap;
+	float localWeight = 0.f;
+	float localWindScale = 1.f;
+	uint32_t localBlendMode = 0;
+};
+
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
+	MidCloudWeatherState,
+	layers, secondaryCoverage, coverageGain, thicknessVariation, localMap, localWeight, localWindScale, localBlendMode)
+
 struct CirrusSettings
 {
 	CirrusSettings();
@@ -315,9 +337,77 @@ struct CloudWindSettings
 	static CloudWindSettings Interpolate(const CloudWindSettings& from, const CloudWindSettings& to, float weight);
 };
 
+struct MidCloudBands
+{
+	float direction = 0.f;
+	float wavelength = 2000.f;
+	float warp = 0.25f;
+	float coverage = 0.f;
+	float thickness = 0.f;
+	float displacement = 0.f;
+};
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(MidCloudBands, direction, wavelength, warp, coverage, thickness, displacement)
+
+struct MidCloudSettings
+{
+	MidCloudSettings();
+	bool enabled = false;
+	float altitude = 3500.f;
+	float thickness = 800.f;
+	float densityScale = 0.02f;
+	float uvSize = 1.f;
+	float edgeSoftness = 0.1f;
+	float cellFrequency = 2.f;
+	float cellStrength = 0.9f;
+	float stratusCellStrength = 0.1f;
+	float warpStrength = 0.1f;
+	float detailScale = 256.f;
+	uint32_t detailMode = 1;
+	float heightPower = 1.f;
+	MidCloudBands bands;
+	SceneBlend weather;
+	/// Conservative curved-layer support, in metres above the atmosphere base.
+	float2 GetAltitudeRange() const;
+};
+
+struct MidCloudMapManager
+{
+	/// Allocate the weather-map accumulation pair and generation constants.
+	void SetupResources();
+	/// Recompile generation and invalidate the cached output.
+	void CompileShaders();
+	/// Regenerate changed scene/noise inputs; returns true when the map changes.
+	bool Update(const MidCloudSettings& settings, TextureManager& textures, const NdfManager& ndf);
+	/// Draw middle-layer and scene weather controls.
+	static void DrawSettings(MidCloudSettings& settings, TextureManager& textures);
+	/// Return the generated map, or null when generation is unavailable.
+	ID3D11ShaderResourceView* Weather() const { return valid ? output.get() : nullptr; }
+
+private:
+	struct Parameters
+	{
+		std::array<CirrusNoiseLayer, 5> weather;
+		float localWeight;
+		uint32_t localBlendMode;
+		float weight;
+		uint32_t hasPrevious;
+		float4 shape;
+	};
+	static_assert(sizeof(Parameters) == 192);
+	std::array<eastl::unique_ptr<Texture2D>, 2> maps;
+	eastl::unique_ptr<ConstantBuffer> parameters;
+	winrt::com_ptr<ID3D11ComputeShader> shader;
+	winrt::com_ptr<ID3D11SamplerState> sampler;
+	winrt::com_ptr<ID3D11ShaderResourceView> output;
+	std::string key;
+	uint64_t textureRevision = 0, noiseRevision = 0;
+	bool valid = false;
+};
+
 struct CloudLayer
 {
 	LowCloudSettings low;
+	MidCloudSettings middle;
 	CirrusSettings cirrus;
 	CloudLightingSettings lighting;
 	CloudWindSettings wind;

@@ -134,6 +134,55 @@ namespace CloudAmbientTransport
 	}
 
 	float3 BoundarySource(float3 ray, float altitude);
+	float2 AltitudeRange();
+
+	// Solid-angle hemisphere contributions cached with the atmosphere lighting.
+	void HemisphereSources(float altitude, out float3 sky, out float3 lower)
+	{
+		const float2 range = AltitudeRange();
+		const float row = 4.0 * sqrt(saturate((altitude - range.x) / max(range.y - range.x, 1.0)));
+		sky = TexCloudAmbientLighting.SampleLevel(TransmittanceSampler, float2((5.5 + row) / 512.0, 0.5 / 7.0), 0).rgb;
+		lower = TexCloudAmbientLighting.SampleLevel(TransmittanceSampler, float2((10.5 + row) / 512.0, 0.5 / 7.0), 0).rgb;
+	}
+
+	float3 MiddleSource(float3 pos, float2 opticalDepth)
+	{
+		float3 sky, lower;
+		HemisphereSources(0.5 * (VolumetricCloudBuffer[0].middleLayer.x + VolumetricCloudBuffer[0].middleLayer.y), sky, lower);
+		const float2 response = MiddleAmbientResponse(opticalDepth);
+		return sky * response.x + lower * response.y;
+	}
+
+	// The same source used to shade the middle cloud supplies the low cloud's
+	// boundary radiance. A thick deck replaces the sky, including its colour.
+	struct MiddleEnvironment
+	{
+		float2 depth;
+		float3 bottom;
+		float3 top;
+	};
+
+	MiddleEnvironment MiddleEnvironmentAt(float3 pos)
+	{
+		MiddleEnvironment env = (MiddleEnvironment)0;
+		const VolumetricCloudData info = VolumetricCloudBuffer[0];
+		[branch] if (info.middleLayer.z <= 0.0) return env;
+		const float4 column = MiddleCloudColumn(pos.xy);
+		if (column.z <= 0.0)
+			return env;
+		env.depth = MiddleColumnDepths(column, pos);
+		env.bottom = MiddleBoundaryRadiance(float3(pos.xy, column.x - CloudCurvatureOffset(pos.xy - FrameBuffer::CameraPosAdjust.xy, info.cloudCurvatureRadius)), float3(0, 0, 1), float2(env.depth.x + env.depth.y, 0));
+		env.top = MiddleBoundaryRadiance(float3(pos.xy, column.y - CloudCurvatureOffset(pos.xy - FrameBuffer::CameraPosAdjust.xy, info.cloudCurvatureRadius)), float3(0, 0, -1), float2(0, env.depth.x + env.depth.y));
+		return env;
+	}
+
+	float3 MiddleBoundary(MiddleEnvironment env, float3 direction, float3 incoming)
+	{
+		const bool upward = direction.z >= 0.0;
+		const float depth = upward ? env.depth.x : env.depth.y;
+		const float transmission = exp(-depth / max(abs(direction.z), 0.2));
+		return lerp(upward ? env.bottom : env.top, incoming, transmission);
+	}
 
 	float3 Source(float3 pos, float3 ray, bool previous)
 	{
@@ -313,7 +362,7 @@ namespace CloudAmbientTransport
 		[unroll] for (uint moment = 0u; moment < 9u; ++moment)
 			source += MomentBasis(moment, ray) * TexCloudAmbientBoundary.SampleLevel(TransmittanceSampler,
 																			float2((row + 0.5) / 26.0, (6.5 + moment) / 15.0), 0)
-		                                             .rgb;
+			                                         .rgb;
 		return max(source, 0.0);
 	}
 
@@ -435,6 +484,9 @@ groupshared float4 gAmbientIntervals[CLOUD_AMBIENT_SWEEP_THREADS];
 	if (any(index >= grid.size))
 		return;
 	const float altitude = (grid.origin.z + (index.z + 0.5) * grid.spacing.z) * GAME_UNITS_PER_METER;
+	const float2 xy = (grid.origin.xy + (float2(index.xy) + 0.5) * grid.spacing.xy) * GAME_UNITS_PER_METER;
+	const float3 position = float3(xy, altitude - CloudCurvatureOffset(xy - FrameBuffer::CameraPosAdjust.xy, VolumetricCloudBuffer[0].cloudCurvatureRadius));
+	const CloudAmbientTransport::MiddleEnvironment middle = CloudAmbientTransport::MiddleEnvironmentAt(position);
 	float3 q0 = 0.0, q1 = 0.0, q2 = 0.0, q3 = 0.0, q4 = 0.0;
 	float3 q5 = 0.0, q6 = 0.0, q7 = 0.0, q8 = 0.0;
 	[loop] for (uint directionIndex = 0u; directionIndex < 26u; ++directionIndex)
@@ -449,7 +501,8 @@ groupshared float4 gAmbientIntervals[CLOUD_AMBIENT_SWEEP_THREADS];
 			float(index[b]) - shear * offset[b] + 0.5 * grid.size.x,
 			(direction[major] > 0.0 ? float(grid.size[major] - 1u - index[major]) : float(index[major])) + directionIndex * 32u);
 		const float4 interval = TexCloudAmbientSweep.SampleLevel(TransmittanceSampler, (address + 0.5) / float3(64, 64, 832), 0);
-		const float3 incoming = direction.w * max(interval.rgb + interval.a * CloudAmbientTransport::Boundary(directionIndex, altitude), 0.0);
+		const float3 boundary = CloudAmbientTransport::MiddleBoundary(middle, direction.xyz, CloudAmbientTransport::Boundary(directionIndex, altitude));
+		const float3 incoming = direction.w * max(interval.rgb + interval.a * boundary, 0.0);
 		q0 += CloudAmbientTransport::MomentBasis(0u, direction.xyz) * incoming;
 		q1 += CloudAmbientTransport::MomentBasis(1u, direction.xyz) * incoming;
 		q2 += CloudAmbientTransport::MomentBasis(2u, direction.xyz) * incoming;
@@ -545,6 +598,15 @@ groupshared float gAmbientBinWeight[512];
 		boundary *= gAmbientDirections[31];
 		gAmbientBoundary[lane] = weight * boundary;
 		RWCloudAmbientBoundary[uint2(lane, group.y + 1u)] = float4(boundary, 0.0);
+		// Cache the external fallback separately from the spatial transport
+		// boundary. MainView only reads its existing SH; no middle-weather,
+		// ray intersections or hemisphere reconstruction in that hot path.
+		const float2 range = CloudAmbientTransport::AltitudeRange();
+		const float fraction = group.y * 0.25;
+		const float altitude = lerp(range.x, range.y, fraction * fraction);
+		const float3 position = float3(FrameBuffer::CameraPosAdjust.xy, altitude);
+		const CloudAmbientTransport::MiddleEnvironment middle = CloudAmbientTransport::MiddleEnvironmentAt(position);
+		gAmbientBoundary[lane] = weight * CloudAmbientTransport::MiddleBoundary(middle, selected, boundary);
 		if (group.y == 0u)
 			RWCloudAmbientBoundary[uint2(lane, 0)] = float4(selected, weight);
 	}
@@ -602,7 +664,9 @@ groupshared float gAmbientBinWeight[512];
 			const float profileAltitude = lerp(bottom, top, 0.5 + offset.z) * GAME_UNITS_PER_METER;
 			const float3 pos = float3(anchored, profileAltitude - CloudCurvatureOffset(anchored - FrameBuffer::CameraPosAdjust.xy, info.cloudCurvatureRadius));
 			CloudDensityContext context;
-			const float extinction = sampleCloudDensity(pos, GetCloudLayer(info), 0.0, 700.0, 0.0, context);
+			// Middle cloud has an analytic ambient response and an external boundary
+			// filter. Exclude it here even where the altitude bands overlap.
+			float extinction = sampleCloudDensity(pos, GetCloudLayer(info), 0.0, 700.0, 0.0, context);
 			const float2 phase = CloudMaterialAmbient(context.ndf);
 			const float sigma = extinction * ((top - bottom) / grid.spacing.z) * phase.x;
 			medium += sigma * float2(1.0, phase.y);
@@ -611,17 +675,19 @@ groupshared float gAmbientBinWeight[512];
 	RWCloudAmbientDensity[index] = 0.25 * medium * info.viewExtinction;
 }
 
-	[numthreads(512, 1, 1)] void buildCloudAmbientLighting(uint lane : SV_GroupIndex, uint3 group : SV_GroupID)
-{
+groupshared float3 gAmbientHemispheres[512];
+[numthreads(512, 1, 1)] void buildCloudAmbientLighting(uint lane : SV_GroupIndex, uint3 group : SV_GroupID) {
 	float weight;
 	const float3 d = CloudAmbientTransport::Direction(lane, weight);
 	const float2 range = CloudAmbientTransport::AltitudeRange();
 	const float fraction = group.y * 0.25;
 	const float altitude = lerp(range.x, range.y, fraction * fraction);
-	const float3 radiance = d.z > 0.0 ? CloudAmbientSky(d, altitude) :
-	                                    CloudAmbientGround(d, TexCloudAmbientSH[int2(5, 0)].rgb, altitude);
+	const float3 atmosphere = d.z > 0.0 ? CloudAmbientSky(d, altitude) :
+	                                      CloudAmbientGround(d, TexCloudAmbientSH[int2(5, 0)].rgb, altitude);
+	const float3 radiance = CirrusBoundaryRadiance(float3(FrameBuffer::CameraPosAdjust.xy, altitude), d, atmosphere);
 	RWCloudAmbientLighting[uint2(lane, group.y + 1u)] = float4(radiance, 0.0);
 	gAmbientReduction[lane] = weight * radiance;
+	gAmbientHemispheres[lane] = weight * radiance;
 	const float luminance = d.z > 0.0 ? dot(radiance, float3(0.2126, 0.7152, 0.0722)) : 0.0;
 	gAmbientColors[lane].x = luminance / 64.0;
 	GroupMemoryBarrierWithGroupSync();
@@ -629,12 +695,17 @@ groupshared float gAmbientBinWeight[512];
 	{
 		if (lane < stride)
 			gAmbientReduction[lane] += gAmbientReduction[lane + stride];
+		if (stride < 256u && lane % 256u < stride)
+			gAmbientHemispheres[lane] += gAmbientHemispheres[lane + stride];
 		if (group.y == 4u && stride < 64u && (lane % 64u) < stride)
 			gAmbientColors[lane].x += gAmbientColors[lane + stride].x;
 		GroupMemoryBarrierWithGroupSync();
 	}
-	if (lane == 0u)
+	if (lane == 0u) {
 		RWCloudAmbientLighting[uint2(group.y, 0)] = float4(gAmbientReduction[0], 0.0);
+		RWCloudAmbientLighting[uint2(5u + group.y, 0)] = float4(gAmbientHemispheres[256], 0.0);
+		RWCloudAmbientLighting[uint2(10u + group.y, 0)] = float4(gAmbientHemispheres[0], 0.0);
+	}
 	if (group.y < 4u)
 		return;
 	GroupMemoryBarrierWithGroupSync();

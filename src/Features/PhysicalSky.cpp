@@ -98,6 +98,11 @@ void to_json(nlohmann::json& j, const CirrusSettings& value)
 	j = { { "enabled", value.enabled }, { "altitude", value.altitude }, { "uvSize", value.uvSize }, { "densityScale", value.densityScale }, { "weather", value.weather } };
 }
 
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
+	MidCloudSettings,
+	enabled, altitude, thickness, densityScale, uvSize, edgeSoftness,
+	cellFrequency, cellStrength, stratusCellStrength, warpStrength, detailScale, detailMode, heightPower, bands, weather)
+
 void from_json(const nlohmann::json& j, CirrusSettings& value)
 {
 	value = {};
@@ -132,6 +137,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	CloudLayer,
 	low,
+	middle,
 	cirrus,
 	lighting,
 	wind)
@@ -950,6 +956,7 @@ void PhysicalSky::DrawCloudLayerProfile()
 	const auto& cirrus = settings.cloudLayer.cirrus;
 	const float2 altitudeKm = low.GetNdfAltitudeRangeKm();
 	const float cirrusKm = cirrus.GetAltitudeKm();
+	const auto middleAltitude = settings.cloudLayer.middle.GetAltitudeRange();
 	const float scale = Util::GetUIScale();
 	const float width = ImGui::GetContentRegionAvail().x;
 	const float height = 184.0f * scale;
@@ -977,7 +984,9 @@ void PhysicalSky::DrawCloudLayerProfile()
 	const float right = max.x - 14.0f * scale;
 	const float top = min.y + 14.0f * scale;
 	const float bottom = max.y - 14.0f * scale;
-	const float maxKm = std::max({ altitudeKm.y, cirrus.enabled ? cirrusKm : 0.0f, 4.0f }) * 1.12f;
+	const float maxKm = std::max({ altitudeKm.y, cirrus.enabled ? cirrusKm : 0.0f,
+							settings.cloudLayer.middle.enabled ? middleAltitude.y * .001f : 0.f, 4.0f }) *
+	                    1.12f;
 	const auto yFor = [&](float km) {
 		const float t = std::clamp(std::log1p(std::max(km, 0.0f) * 2.0f) / std::log1p(maxKm * 2.0f), 0.0f, 1.0f);
 		return bottom - t * (bottom - top);
@@ -1023,6 +1032,14 @@ void PhysicalSky::DrawCloudLayerProfile()
 		altitudeKm.x * 1000.0f, altitudeKm.y * 1000.0f);
 	labelAt(lowLabel.c_str(), (topY + baseY) * 0.5f, textColor, slab != nullptr);
 
+	if (settings.cloudLayer.middle.enabled) {
+		const float middleBottom = yFor(middleAltitude.x * .001f);
+		const float middleTop = yFor(middleAltitude.y * .001f);
+		drawList->AddRectFilled({ left, middleTop }, { right, middleBottom }, ImGui::GetColorU32({ accent.x, accent.y, accent.z, .18f }));
+		drawList->AddRect({ left, middleTop }, { right, middleBottom }, bandEdge);
+		const auto label = std::format("{}  {:.0f}-{:.0f} m", T(TKEY("cloud_profile_middle"), "Middle clouds (As / Ac)"), middleAltitude.x, middleAltitude.y);
+		labelAt(label.c_str(), (middleTop + middleBottom) * .5f, textColor);
+	}
 	if (cirrus.enabled) {
 		const float cirrusY = yFor(cirrusKm);
 		drawList->AddLine({ left, cirrusY }, { right, cirrusY },
@@ -1095,6 +1112,9 @@ void PhysicalSky::SettingsVolumetricClouds()
 			{ camera.x * Util::Units::GAME_UNIT_TO_M, camera.y * Util::Units::GAME_UNIT_TO_M });
 	}
 
+	ImGui::SetNextItemOpen(settings.cloudLayer.middle.enabled, ImGuiCond_FirstUseEver);
+	if (ImGui::CollapsingHeader(T(TKEY("middle_clouds"), "Middle Clouds (As / Ac)"), ImGuiTreeNodeFlags_SpanAvailWidth))
+		MidCloudMapManager::DrawSettings(settings.cloudLayer.middle, ndfTexManager);
 	DrawCirrusSection();
 	DrawCloudStormSection();
 	if (ImGui::CollapsingHeader(T(TKEY("voxel_section"), "Voxel Clouds"), ImGuiTreeNodeFlags_SpanAvailWidth)) {
@@ -1395,6 +1415,7 @@ void PhysicalSky::SettingsDebug()
 			DrawDebugCloudTexture(cloudProfileLutSrv.get(), "activeProfile", T(TKEY("debug_active_profile"), "Active vertical profile LUT"), debugScale);
 			DrawDebugCloudTexture(cloudAdjustmentLutSrv.get(), "activeAdjustment", T(TKEY("debug_active_adjustment"), "Active top expansion / warp LUT"), debugScale);
 			const auto cirrus = cirrusMapManager.GetTextures();
+			DrawDebugCloudTexture(midCloudMapManager.Weather(), "middleWeather", T(TKEY("debug_middle_weather"), "Middle cloud density / weighted bottom / weighted top"), debugScale);
 			DrawDebugCloudTexture(cirrus.weather, "cirrusWeather", T(TKEY("debug_cirrus_weather"), "Active cirrus coverage / type"), debugScale);
 			DrawDebugCloudTexture(cirrus.patterns, "cirrusPatterns", T(TKEY("debug_cirrus_patterns"), "Active cirrus patterns"), debugScale);
 			for (const auto& endpoint : settings.cloudLayer.cirrus.weather.states) {
@@ -1647,7 +1668,7 @@ bool PhysicalSky::ShadersOK()
 								   texCloudAmbientDensity && texCloudAmbientSweep && texCloudAmbientBoundary && texCloudAmbientLayout[0] && texCloudAmbientLayout[1] &&
 								   texCloudAmbientSource[0][0] && texCloudAmbientSource[0][1] && texCloudAmbientSource[1][0] && texCloudAmbientSource[1][1] &&
 								   texCloudAmbientSource[2][0] && texCloudAmbientSource[2][1] && texCloudAmbientSource[3][0] && texCloudAmbientSource[3][1] &&
-								   csVolMainView && csVolMainWithoutStorm && csVolMainSingleVolcanic && csStormTiles && texStormTiles && csVolFilter && csVolFilterWide && csVolReproject && csVolCubeReproject && csVolShadowVolume && csVolShadowResample && texShadowVolumeRaw && csCloudShadowMean && csCloudShadowMeanVolcanic && texCloudShadowMean && csVolCubemap && csVolAmbientSH && csCloudAmbientReduce && texVolCloudAmbientSH && texCloudAmbientPartial &&
+								   csVolMainView && csUpperView && csUpperSunDepth && texUpperSunDepth && csVolMainWithoutStorm && csVolMainSingleVolcanic && csStormTiles && texStormTiles && csVolFilter && csVolFilterWide && csVolReproject && csVolCubeReproject && csVolShadowVolume && csVolShadowResample && texShadowVolumeRaw && csCloudShadowMean && csCloudShadowMeanVolcanic && texCloudShadowMean && csVolCubemap && csVolAmbientSH && csCloudAmbientReduce && texVolCloudAmbientSH && texCloudAmbientPartial &&
 								   texVolTr && texVolLum && texVolAux && texVolLowTr && texVolLowLum && texVolLowAux &&
 								   texVolFilteredTr && texVolFilteredLum && texVolFilteredAux &&
 								   texVolHistoryTr && texVolHistoryLum && texVolHistoryAux && texVolCubeTr && texVolCubeLum &&
@@ -1693,6 +1714,11 @@ void PhysicalSky::Reset()
 		const auto voxelAltitude = voxelCloudManager.Altitude();
 		lowCloudBaseKm = std::min(lowCloudBaseKm, voxelAltitude.x * 0.001f);
 		lowCloudTopKm = std::max(lowCloudTopKm, voxelAltitude.y * 0.001f);
+	}
+	if (settings.cloudLayer.middle.enabled) {
+		const auto altitude = settings.cloudLayer.middle.GetAltitudeRange();
+		lowCloudBaseKm = std::min(lowCloudBaseKm, altitude.x * .001f);
+		lowCloudTopKm = std::max(lowCloudTopKm, altitude.y * .001f);
 	}
 	const float traceBottomKm = settings.cloudLayer.cirrus.enabled ? std::min(lowCloudBaseKm, settings.cloudLayer.cirrus.GetAltitudeKm()) : lowCloudBaseKm;
 	const float traceTopKm = settings.cloudLayer.cirrus.enabled ? std::max(lowCloudTopKm, settings.cloudLayer.cirrus.GetAltitudeKm()) : lowCloudTopKm;
@@ -1925,6 +1951,7 @@ void PhysicalSky::Prepass()
 				{ "skipShapeNoise", settings.cloudNoise.skipShapeNoise },
 				{ "useVoxelNoise", settings.cloudNoise.useVoxelNoise },
 				{ "low", settings.cloudLayer.low },
+				{ "middle", settings.cloudLayer.middle },
 				{ "cirrus", settings.cloudLayer.cirrus },
 				{ "lighting", settings.cloudLayer.lighting },
 				{ "stormRevision", cloudStormManager.Revision() },
@@ -1934,18 +1961,51 @@ void PhysicalSky::Prepass()
 				{ "planet", settings.planetRadius },
 				{ "bottom", cbData.zBottom }
 			}.dump();
-			if (cloudSettingsKey != volCloudSettingsKey) {
-				volMainHistoryValid = false;
-				cloudAmbientValid = false;
+			cloudWeatherChanged = cloudSettingsKey != volCloudSettingsKey;
+			if (cloudWeatherChanged) {
+				// A continuous weather blend changes values every frame. Keep the
+				// accumulated image and transport solution, but refresh weather bounds.
+				cloudHeightBoundsDirty = true;
 				volCloudSettingsKey = cloudSettingsKey;
 				cloudCrossSectionDirty = true;
 			}
 			if (ndfManager.UpdateNdf(settings.cloudMap, ndfTexManager)) {
-				volMainHistoryValid = false;
+				cloudHeightBoundsDirty = true;
 				cloudCrossSectionDirty = true;
 			}
-			if (settings.cloudLayer.cirrus.enabled && cirrusMapManager.Update(settings.cloudLayer.cirrus, ndfTexManager, ndfManager))
+			if (settings.cloudLayer.cirrus.enabled)
+				cirrusMapManager.Update(settings.cloudLayer.cirrus, ndfTexManager, ndfManager);
+			if (settings.cloudLayer.middle.enabled)
+				midCloudMapManager.Update(settings.cloudLayer.middle, ndfTexManager, ndfManager);
+
+			// Resource/layer switches and reference-frame changes still invalidate
+			// history. Map regeneration and continuous appearance changes do not.
+			auto noiseTopology = nlohmann::json::array();
+			for (const auto& input : settings.cloudMap.procedural.noise) {
+				const auto& noise = input.parameters;
+				noiseTopology.push_back({ input.texturePath, noise.type, noise.seed,
+					noise.frequency, noise.octaves, noise.lacunarity, noise.repetitions });
+			}
+			const auto historyKey = nlohmann::json{
+				{ "ndfSource", { settings.cloudMap.type, settings.cloudMap.texture } },
+				{ "noiseTopology", noiseTopology },
+				{ "textures", ndfTexManager.revision },
+				{ "skipShapeNoise", settings.cloudNoise.skipShapeNoise },
+				{ "useVoxelNoise", settings.cloudNoise.useVoxelNoise },
+				{ "middleEnabled", settings.cloudLayer.middle.enabled },
+				{ "middleDetailMode", settings.cloudLayer.middle.detailMode },
+				{ "cirrusEnabled", settings.cloudLayer.cirrus.enabled },
+				{ "stormRevision", cloudStormManager.Revision() },
+				{ "froxel", globals::features::viewAtmosphere.IsPrepared() },
+				{ "planet", settings.planetRadius },
+				{ "bottom", cbData.zBottom },
+				{ "worldspace", GetCurrentWorldspaceEditorID() }
+			}.dump();
+			if (historyKey != volCloudHistoryKey) {
 				volMainHistoryValid = false;
+				cloudAmbientValid = false;
+				volCloudHistoryKey = historyKey;
+			}
 			if (cloudCrossSectionDirty)
 				RenderCloudCrossSection();
 			RenderVolumetricClouds(VolumetricCloudPass::kShadowVolume);
