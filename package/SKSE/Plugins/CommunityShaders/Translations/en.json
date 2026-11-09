@@ -3067,7 +3067,7 @@
     "feature.tree_wind.bend_exponent": "Trunk Stiffness",
     "feature.tree_wind.bend_exponent_tooltip": "1 = the whole tree leans. Higher = the lower trunk stays stiffer and the top does more.",
     "feature.tree_wind.branch_flutter": "Branch Flutter",
-    "feature.tree_wind.description": "Lets the distant DynDOLOD tree LOD sway in the wind.",
+    "feature.tree_wind.description": "Lets the distant tree LOD sway in the wind.",
     "feature.tree_wind.enabled": "Trees Sway",
     "feature.tree_wind.enabled_tooltip": "Distant (LOD) trees sway in the wind. Off = still, as without this feature.",
     "feature.tree_wind.flutter": "Flutter",

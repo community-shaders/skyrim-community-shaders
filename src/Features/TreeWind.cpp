@@ -345,6 +345,12 @@ void TreeWind::SetShaderResources(ID3D11DeviceContext* a_context)
 		return;
 
 	const auto type = shader->shaderType.get();
+	// Standard tree LOD draws only trees, and sways from its instance data without bend data
+	if (type == RE::BSShader::Type::DistantTree) {
+		ID3D11Buffer* buffer = windOnCB->CB();
+		a_context->VSSetConstantBuffers(3, 1, &buffer);
+		return;
+	}
 	if (type != RE::BSShader::Type::Lighting && type != RE::BSShader::Type::Utility)
 		return;
 

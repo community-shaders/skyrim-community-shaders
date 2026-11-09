@@ -70,14 +70,14 @@ public:
 	virtual inline std::string_view GetShaderDefineName() override { return "TREE_WIND"; }
 	virtual inline bool HasShaderDefine(RE::BSShader::Type t) override
 	{
-		return t == RE::BSShader::Type::Lighting || t == RE::BSShader::Type::Utility;
+		return t == RE::BSShader::Type::Lighting || t == RE::BSShader::Type::Utility || t == RE::BSShader::Type::DistantTree;
 	}
 	virtual std::string_view GetCategory() const override { return FeatureCategories::kLandscapeAndTextures; }
 	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
 
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
-		return { T("feature.tree_wind.description", "Lets the distant DynDOLOD tree LOD sway in the wind."),
+		return { T("feature.tree_wind.description", "Lets the distant tree LOD sway in the wind."),
 			{ T("feature.tree_wind.key_feature_1", "Sway follows the weather: gentle in clear skies, strong gusts in storms."),
 				T("feature.tree_wind.key_feature_2", "Each tree bends from its base and keeps its own timing.") } };
 	}

@@ -1,8 +1,9 @@
 #ifndef __TREE_WIND_HLSLI__
 #define __TREE_WIND_HLSLI__
 
-// Wind sway for DynDOLOD tree LOD. The Tree Wind feature binds the wind buffer for every Lighting
-// and Utility draw, with Params.z set only while it draws a tree LOD shape.
+// Wind sway for tree LOD. The Tree Wind feature binds the wind buffer for every Lighting and Utility
+// draw, with Params.z set only while it draws a DynDOLOD tree LOD shape, and for every standard tree LOD
+// (DistantTree) draw.
 namespace TreeWind
 {
 	cbuffer TreeWindCB : register(b3)
@@ -57,6 +58,22 @@ namespace TreeWind
 		float h = frac(vertexID * 0.61803399) * 6.2831853;
 		float flutter = (frac(data.y * 7.31) < Detail.x) ? sin(phase * Detail.y + h) * Params.x * Shape.z * saturate(data.w) * scale : 0.0;
 		return offset + float2(sin(h), cos(h)) * flutter;
+	}
+
+	// Standard tree LOD: one billboard per tree, so the instance gives the tree's foot and size directly.
+	// a_heightMS is the vertex height above the foot and a_cameraDistance its distance from the camera.
+	float2 GetBillboardOffset(float3 a_footWS, float a_heightMS, float a_instanceScale, float a_cameraDistance, float phase)
+	{
+		// The quad's top vertices bend, its foot stays put
+		float bend = saturate(a_heightMS * a_instanceScale / 64.0);
+		float random = frac(sin(dot(floor(a_footWS.xy), float2(12.9898, 78.233))) * 43758.5453);
+		// Same world-space sway as the DynDOLOD shapes: height-scaled, as at LOD4
+		float scale = clamp(a_heightMS * a_instanceScale / 1600.0, 0.25, 1.25) * (0.8 + 0.4 * random) * 4.0;
+		float nearScale = lerp(Detail.z, 1.0, saturate((a_cameraDistance - Params.y) / max(Detail.w - Params.y, 1.0)));
+		float2 offset = Sway(a_footWS, phase + random * Shape.w) * scale * bend * nearScale;
+
+		float gustPulse = pow(saturate(sin(phase * 0.23 + random * 37.0 + dot(a_footWS.xy, float2(0.00031, 0.00027)))), max(Gusts.y, 1.0));
+		return offset * (1.0 + Gusts.x * gustPulse);
 	}
 }
 

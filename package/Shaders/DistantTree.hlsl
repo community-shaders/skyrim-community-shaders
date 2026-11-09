@@ -51,6 +51,10 @@ cbuffer PerGeometry : register(b2)
 	row_major float4x4 PreviousWorld : packoffset(c8);
 };
 
+#	if defined(TREE_WIND)
+#		include "TreeWind/TreeWind.hlsli"
+#	endif
+
 VS_OUTPUT main(VS_INPUT input)
 {
 	VS_OUTPUT vsout = (VS_OUTPUT)0;
@@ -61,6 +65,16 @@ VS_OUTPUT main(VS_INPUT input)
 	adjustedModelPosition.y = dot(input.InstanceData2.yx, scaledModelPosition.xy);
 	adjustedModelPosition.z = scaledModelPosition.z;
 	float4 finalModelPosition = float4(input.InstanceData1.xyz + adjustedModelPosition.xyz, 1.0);
+	float4 previousModelPosition = finalModelPosition;
+
+#	if defined(TREE_WIND)
+	if (TreeWind::IsEnabled()) {
+		float cameraDistance = length(mul(World, finalModelPosition).xyz);
+		finalModelPosition.xy += TreeWind::GetBillboardOffset(input.InstanceData1.xyz, input.Position.z, input.InstanceData1.w, cameraDistance, TreeWind::Wind.x);
+		previousModelPosition.xy += TreeWind::GetBillboardOffset(input.InstanceData1.xyz, input.Position.z, input.InstanceData1.w, cameraDistance, TreeWind::Wind.y);
+	}
+#	endif
+
 	float4 viewPosition = mul(WorldViewProj, finalModelPosition);
 
 #	ifdef RENDER_DEPTH
@@ -68,7 +82,7 @@ VS_OUTPUT main(VS_INPUT input)
 	vsout.Depth.zw = input.InstanceData2.zw;
 #	else
 	vsout.WorldPosition = mul(World, finalModelPosition);
-	vsout.PreviousWorldPosition = mul(PreviousWorld, finalModelPosition);
+	vsout.PreviousWorldPosition = mul(PreviousWorld, previousModelPosition);
 	vsout.ViewPosition = viewPosition;
 #	endif  // RENDER_DEPTH
 
