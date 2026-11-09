@@ -74,8 +74,7 @@ VS_OUTPUT main(VS_INPUT input)
 	vsout.RestWorldPosition = mul(World, finalModelPosition).xyz;
 #	endif
 
-	// The shadow pass keeps the still billboard, so a tree never shadows itself unevenly as it moves
-#	if defined(TREE_WIND) && !defined(RENDER_DEPTH)
+#	if defined(TREE_WIND)
 	if (TreeWind::IsEnabled()) {
 		float cameraDistance = length(mul(World, finalModelPosition).xyz);
 		finalModelPosition.xy += TreeWind::GetBillboardOffset(input.InstanceData1.xyz, input.Position.z, input.InstanceData1.w, cameraDistance, TreeWind::Wind.x);
