@@ -63,26 +63,27 @@ VS_OUTPUT main(VS_INPUT input)
 {
 	VS_OUTPUT vsout = (VS_OUTPUT)0;
 
-	float3 scaledModelPosition = input.InstanceData1.www * input.Position.xyz;
-	float3 adjustedModelPosition = 0.0.xxx;
+	// precise: the depth and colour passes draw the same billboards and must place them identically
+	precise float3 scaledModelPosition = input.InstanceData1.www * input.Position.xyz;
+	precise float3 adjustedModelPosition = 0.0.xxx;
 	adjustedModelPosition.x = dot(float2(1, -1) * input.InstanceData2.xy, scaledModelPosition.xy);
 	adjustedModelPosition.y = dot(input.InstanceData2.yx, scaledModelPosition.xy);
 	adjustedModelPosition.z = scaledModelPosition.z;
-	float4 finalModelPosition = float4(input.InstanceData1.xyz + adjustedModelPosition.xyz, 1.0);
-	float4 previousModelPosition = finalModelPosition;
+	precise float4 finalModelPosition = float4(input.InstanceData1.xyz + adjustedModelPosition.xyz, 1.0);
+	precise float4 previousModelPosition = finalModelPosition;
 #	if defined(TREE_WIND) && !defined(RENDER_DEPTH)
 	vsout.RestWorldPosition = mul(World, finalModelPosition).xyz;
 #	endif
 
 #	if defined(TREE_WIND)
 	if (TreeWind::IsEnabled()) {
-		float cameraDistance = length(mul(World, finalModelPosition).xyz);
+		precise float cameraDistance = length(mul(World, finalModelPosition).xyz);
 		finalModelPosition.xy += TreeWind::GetBillboardOffset(input.InstanceData1.xyz, input.Position.z, input.InstanceData1.w, cameraDistance, TreeWind::Wind.x);
 		previousModelPosition.xy += TreeWind::GetBillboardOffset(input.InstanceData1.xyz, input.Position.z, input.InstanceData1.w, cameraDistance, TreeWind::Wind.y);
 	}
 #	endif
 
-	float4 viewPosition = mul(WorldViewProj, finalModelPosition);
+	precise float4 viewPosition = mul(WorldViewProj, finalModelPosition);
 
 #	ifdef RENDER_DEPTH
 	vsout.Depth.xy = viewPosition.zw;
