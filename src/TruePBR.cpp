@@ -70,13 +70,23 @@ namespace PNState
 	void ReadPBRRecordConfigs(const std::string& rootPath, std::function<bool(const std::string&, const json&)> recordReader, bool enableVerboseJsonLogging)
 	{
 		if (std::filesystem::exists(rootPath)) {
+			// clib_util's get_configs narrows every name with path::string(), which throws on a name outside the
+			// system code page and loses the whole folder. Skip only that file: its stem can't match an editor ID.
 			std::vector<std::string> configs;
-			try {
-				configs = clib_util::distribution::get_configs(rootPath, "", ".json");
-			} catch (const std::exception& e) {
-				logger::error("[TruePBR] could not list {}: {}", rootPath, e.what());
-				return;
+			std::error_code ec;
+			for (std::filesystem::directory_iterator it(rootPath, ec), end; !ec && it != end; it.increment(ec)) {
+				const auto& path = it->path();
+				if (path.extension() != ".json")
+					continue;
+				try {
+					configs.push_back(path.string());
+				} catch (const std::exception&) {
+					logger::warn("[TruePBR] skipping {}: its name is outside the system code page", Util::PathHelpers::ToUtf8(path));
+				}
 			}
+			if (ec)
+				logger::error("[TruePBR] could not list {}: {}", rootPath, ec.message());
+			std::ranges::sort(configs);
 
 			if (configs.empty()) {
 				logger::warn("[TruePBR] no .json files were found within the {} folder, aborting...", rootPath);
