@@ -428,10 +428,13 @@ public:
 	/** @brief Deserializes palette from named color map or legacy positional array */
 	static void PaletteFromJson(const json& themeJson, std::array<ImVec4, ImGuiCol_COUNT>& palette);
 	/**
-	 * @brief Reads a theme file's "Theme" object into theme settings, palette included, without applying it.
+	 * @brief Reads a theme file's "Theme" object into theme settings, palette included, without applying it. Also
+	 * migrates old font and cursor settings and replaces a missing Body font with the default.
 	 * @throws nlohmann::json::exception when the object does not fit.
 	 */
 	static void ThemeFromJson(const json& themeJson, ThemeSettings& theme);
+	/** @brief Writes theme settings as a theme file's "Theme" object. */
+	static json ThemeToJson(const ThemeSettings& theme);
 
 	/** @brief Serializes cursor settings to JSON using named cursor type keys */
 	static void CursorToJson(json& cursorJson, const ThemeSettings::CursorSettings& cursorSettings);

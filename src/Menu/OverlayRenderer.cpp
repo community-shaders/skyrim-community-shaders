@@ -22,6 +22,7 @@
 #include "Menu.h"
 #include "Menu/CursorLoader.h"
 #include "Menu/FontAtlasState.h"
+#include "Menu/SettingsTabRenderer.h"
 #include "Presets/UnifiedPresetCatalog.h"
 #include "ShaderCache.h"
 #include "State.h"
@@ -305,8 +306,10 @@ void OverlayRenderer::RenderOverlay(
 			const bool editedBefore = context.ActiveIdHasBeenEditedThisFrame;
 			drawSettings();
 			// Only frames that edited something pay for the check; search boxes edit too, so it compares.
-			if (!editedBefore && context.ActiveIdHasBeenEditedThisFrame)
+			const bool edited = !editedBefore && context.ActiveIdHasBeenEditedThisFrame;
+			if (edited)
 				globals::state->CheckCoreSettingsChanged();
+			SettingsTabRenderer::CheckThemeChanged(edited || ImGui::IsMouseReleased(ImGuiMouseButton_Left) || context.NavActivateId != 0);
 		}
 	} else {
 		ImGui::GetIO().MouseDrawCursor = false;

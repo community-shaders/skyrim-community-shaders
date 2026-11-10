@@ -29,6 +29,29 @@ namespace Math
 	static const float HALF_PI = PI * 0.5f;                      // PI / 2
 	static const float TAU = PI * 2.0f;                          // PI * 2
 	static const float INV_PI = 1.0f / PI;                       // 1 / PI
+
+	/** @brief The pixel's slot in its 2x2 quad, 0 or 1 per axis. @param pixelPos SV_Position.xy. */
+	float2 QuadPixel(float2 pixelPos)
+	{
+		return float2(uint2(pixelPos) & 1u);
+	}
+
+	/**
+	 * @brief Value of the quad's top-left pixel, read through fine derivatives (SM5 has no QuadReadLaneAt).
+	 * Exact for integer-valued input, so every pixel of the quad gets the same bits. Needs uniform control flow.
+	 */
+	float4 QuadReadTopLeft(float4 v, float2 quadPixel)
+	{
+		v -= quadPixel.x * ddx_fine(v);
+		return v - quadPixel.y * ddy_fine(v);
+	}
+
+	/** @copydoc QuadReadTopLeft(float4, float2) */
+	float2 QuadReadTopLeft(float2 v, float2 quadPixel)
+	{
+		v -= quadPixel.x * ddx_fine(v);
+		return v - quadPixel.y * ddy_fine(v);
+	}
 }
 
 #endif  //__MATH_DEPENDENCY_HLSL__
