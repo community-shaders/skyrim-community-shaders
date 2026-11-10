@@ -55,23 +55,20 @@ void LocalExposure::DrawSettings()
 	if (auto _tt = Util::HoverTooltipWrapper())
 		ImGui::TextUnformatted(T("feature.post_processing.local_exposure.blurred_luminance_kernel_size_tooltip", "Sets the broad luminance blur diameter as a percentage of screen width."));
 
-	if (ImGui::TreeNodeEx(T("feature.post_processing.local_exposure.advanced", "Advanced"), ImGuiTreeNodeFlags_DefaultOpen)) {
-		ImGui::SliderFloat(T("feature.post_processing.local_exposure.middle_grey_bias", "Middle Grey Bias"), &settings.MiddleGreyBias, -4.f, 4.f, "%+.2f EV");
-		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::TextUnformatted(T("feature.post_processing.local_exposure.middle_grey_bias_tooltip", "Moves the tonal pivot used to separate highlight and shadow adjustments."));
+	ImGui::SeparatorText(T("feature.post_processing.local_exposure.advanced", "Advanced"));
+	ImGui::SliderFloat(T("feature.post_processing.local_exposure.middle_grey_bias", "Middle Grey Bias"), &settings.MiddleGreyBias, -4.f, 4.f, "%+.2f EV");
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::TextUnformatted(T("feature.post_processing.local_exposure.middle_grey_bias_tooltip", "Moves the tonal pivot used to separate highlight and shadow adjustments."));
 
-		ImGui::SliderFloat(T("feature.post_processing.local_exposure.highlight_threshold", "Highlight Threshold"), &settings.HighlightThreshold, 0.f, 4.f, "%.2f EV");
-		ImGui::SliderFloat(T("feature.post_processing.local_exposure.highlight_threshold_strength", "Highlight Threshold Strength"), &settings.HighlightThresholdStrength, 0.f, 1.f, "%.2f");
-		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::TextUnformatted(T("feature.post_processing.local_exposure.highlight_threshold_tooltip", "Protects tones near middle grey before highlight compression begins."));
+	ImGui::SliderFloat(T("feature.post_processing.local_exposure.highlight_threshold", "Highlight Threshold"), &settings.HighlightThreshold, 0.f, 4.f, "%.2f EV");
+	ImGui::SliderFloat(T("feature.post_processing.local_exposure.highlight_threshold_strength", "Highlight Threshold Strength"), &settings.HighlightThresholdStrength, 0.f, 1.f, "%.2f");
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::TextUnformatted(T("feature.post_processing.local_exposure.highlight_threshold_tooltip", "Protects tones near middle grey before highlight compression begins."));
 
-		ImGui::SliderFloat(T("feature.post_processing.local_exposure.shadow_threshold", "Shadow Threshold"), &settings.ShadowThreshold, 0.f, 4.f, "%.2f EV");
-		ImGui::SliderFloat(T("feature.post_processing.local_exposure.shadow_threshold_strength", "Shadow Threshold Strength"), &settings.ShadowThresholdStrength, 0.f, 1.f, "%.2f");
-		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::TextUnformatted(T("feature.post_processing.local_exposure.shadow_threshold_tooltip", "Protects tones near middle grey before shadow lifting begins."));
-
-		ImGui::TreePop();
-	}
+	ImGui::SliderFloat(T("feature.post_processing.local_exposure.shadow_threshold", "Shadow Threshold"), &settings.ShadowThreshold, 0.f, 4.f, "%.2f EV");
+	ImGui::SliderFloat(T("feature.post_processing.local_exposure.shadow_threshold_strength", "Shadow Threshold Strength"), &settings.ShadowThresholdStrength, 0.f, 1.f, "%.2f");
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::TextUnformatted(T("feature.post_processing.local_exposure.shadow_threshold_tooltip", "Protects tones near middle grey before shadow lifting begins."));
 
 	if (Util::ShowDebugSections() && ImGui::CollapsingHeader(T("feature.post_processing.local_exposure.debug", "Debug"))) {
 		static float debugRescale = .3f;
