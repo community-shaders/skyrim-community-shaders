@@ -621,6 +621,7 @@ void PhysicalSky::SetupVolumetricResources()
 	texLightningChannels = createCloudTexture(mainDesc.Width, mainDesc.Height, historyRadianceFormat, "PhysicalSky::LightningChannels");
 	texVolStormMotion = createCloudTexture(lowW, lowH, DXGI_FORMAT_R16G16B16A16_FLOAT, "PhysicalSky::CloudStormMotion");
 	texStormTiles = createCloudTexture((lowW + 7u) / 8u, (lowH + 7u) / 8u, DXGI_FORMAT_R32_UINT, "PhysicalSky::StormTiles");
+	texUpperTiles = createCloudTexture((lowW + 7u) / 8u, (lowH + 7u) / 8u, DXGI_FORMAT_R32_UINT, "PhysicalSky::UpperCloudTiles");
 	{
 		D3D11_TEXTURE2D_DESC desc = texVolLowAux->desc;
 		desc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
@@ -678,6 +679,35 @@ void PhysicalSky::SetupVolumetricResources()
 		DX::ThrowIfFailed(device->CreateDepthStencilState(&depth, cloudBoundaryDepth.put()));
 	}
 	texUpperSunDepth = createCloudTexture(256, 256, DXGI_FORMAT_R16G16_FLOAT, "PhysicalSky::UpperSunDepth");
+	{
+		D3D11_TEXTURE2D_DESC desc{};
+		desc.Width = desc.Height = kMiddleBoundsSize;
+		desc.MipLevels = kMiddleBoundsLevels;
+		desc.ArraySize = desc.SampleDesc.Count = 1;
+		desc.Format = DXGI_FORMAT_R32G32_FLOAT;
+		desc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
+		texMiddleBounds = eastl::make_unique<Texture2D>(desc, "PhysicalSky::MiddleCloudBounds");
+		D3D11_SHADER_RESOURCE_VIEW_DESC srv{};
+		srv.Format = desc.Format;
+		srv.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+		srv.Texture2D.MipLevels = kMiddleBoundsLevels;
+		texMiddleBounds->CreateSRV(srv);
+		for (uint32_t mip = 0; mip < kMiddleBoundsLevels; ++mip) {
+			srv.Texture2D.MostDetailedMip = mip;
+			srv.Texture2D.MipLevels = 1;
+			middleBoundsSrvs[mip] = nullptr;
+			DX::ThrowIfFailed(device->CreateShaderResourceView(texMiddleBounds->resource.get(), &srv, middleBoundsSrvs[mip].put()));
+			Util::SetResourceName(middleBoundsSrvs[mip].get(), "PhysicalSky::MiddleCloudBounds Mip%u SRV", mip);
+			D3D11_UNORDERED_ACCESS_VIEW_DESC uav{};
+			uav.Format = desc.Format;
+			uav.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D;
+			uav.Texture2D.MipSlice = mip;
+			middleBoundsUavs[mip] = nullptr;
+			DX::ThrowIfFailed(device->CreateUnorderedAccessView(texMiddleBounds->resource.get(), &uav, middleBoundsUavs[mip].put()));
+			Util::SetResourceName(middleBoundsUavs[mip].get(), "PhysicalSky::MiddleCloudBounds Mip%u UAV", mip);
+		}
+		middleBoundsDirty = true;
+	}
 	texVoxelTraceTr = createCloudTexture(lowW, lowH, DXGI_FORMAT_R16_FLOAT, "PhysicalSky::VoxelTraceTr");
 	texVoxelTraceLum = createCloudTexture(lowW, lowH, historyRadianceFormat, "PhysicalSky::VoxelTraceLum");
 	texVoxelTraceAux = createCloudTexture(lowW, lowH, DXGI_FORMAT_R16G16B16A16_FLOAT, "PhysicalSky::VoxelTraceAux");
@@ -827,8 +857,13 @@ void PhysicalSky::CompileVolumetricShaders()
 		ShaderInfo{ &csVolMainView, "Volumetrics.cs.hlsl", { { "CLOUD_AP_SHADOW", "" }, { "CLOUD_MAIN_DISPATCH", "" } } },
 		ShaderInfo{ &csUpperSunDepth, "Volumetrics.cs.hlsl", { { "NO_CLOUD_STORMS", "" } }, "buildUpperSunDepth" },
 		ShaderInfo{ &csUpperView, "Volumetrics.cs.hlsl", { { "NO_CLOUD_STORMS", "" } }, "renderUpperView" },
+		ShaderInfo{ &csUpperTiles, "Volumetrics.cs.hlsl", { { "NO_CLOUD_STORMS", "" } }, "classifyUpperTiles" },
+		ShaderInfo{ &csUpperViewTiles, "Volumetrics.cs.hlsl", { { "NO_CLOUD_STORMS", "" } }, "renderUpperTiles" },
+		ShaderInfo{ &csMiddleBounds, "MidCloudBounds.cs.hlsl", {} },
+		ShaderInfo{ &csMiddleBoundsReduce, "MidCloudBounds.cs.hlsl", {}, "reduceBounds" },
 		ShaderInfo{ &csStormTiles, "Volumetrics.cs.hlsl", {}, "classifyStormTiles" },
 		ShaderInfo{ &csVolMainWithoutStorm, "Volumetrics.cs.hlsl", { { "CLOUD_AP_SHADOW", "" }, { "CLOUD_MAIN_DISPATCH", "" }, { "NO_CLOUD_STORMS", "" } } },
+		ShaderInfo{ &csVolMainWeather, "Volumetrics.cs.hlsl", { { "CLOUD_AP_SHADOW", "" }, { "CLOUD_MAIN_DISPATCH", "" }, { "NO_CLOUD_STORMS", "" }, { "NO_LOCAL_NDF", "" } } },
 		ShaderInfo{ &csVolMainVolcanic, "Volumetrics.cs.hlsl", { { "CLOUD_AP_SHADOW", "" }, { "CLOUD_MAIN_DISPATCH", "" }, { "VOLCANIC_STORMS_ONLY", "" } } },
 		ShaderInfo{ &csVolMainSingleVolcanic, "Volumetrics.cs.hlsl", { { "CLOUD_AP_SHADOW", "" }, { "CLOUD_MAIN_DISPATCH", "" }, { "VOLCANIC_STORMS_ONLY", "" }, { "SINGLE_CLOUD_STORM", "" } } },
 		ShaderInfo{ &csVolCubemapVolcanic, "Volumetrics.cs.hlsl", { { "CLOUD_REFLECTION", "" }, { "VOLCANIC_STORMS_ONLY", "" } }, "renderCubemap" },
@@ -845,8 +880,11 @@ void PhysicalSky::CompileVolumetricShaders()
 		ShaderInfo{ &csVolReproject, "Volumetrics.cs.hlsl", {}, "reproject" },
 		ShaderInfo{ &csVolCubeReproject, "Volumetrics.cs.hlsl", {}, "reprojectCubemap" },
 		ShaderInfo{ &csVolShadowVolume, "Volumetrics.cs.hlsl", {}, "renderShadowVolume" },
+		ShaderInfo{ &csVolShadowWeather, "Volumetrics.cs.hlsl", { { "NO_CLOUD_STORMS", "" } }, "renderShadowVolume" },
+		ShaderInfo{ &csVolShadowColumns, "Volumetrics.cs.hlsl", { { "NO_CLOUD_STORMS", "" } }, "renderShadowColumns" },
 		ShaderInfo{ &csVolShadowResample, "Volumetrics.cs.hlsl", {}, "resampleShadowVolume" },
 		ShaderInfo{ &csCloudShadowMean, "Volumetrics.cs.hlsl", {}, "buildCloudShadowMean" },
+		ShaderInfo{ &csCloudShadowMeanWeather, "Volumetrics.cs.hlsl", { { "NO_CLOUD_STORMS", "" } }, "buildCloudShadowMean" },
 		ShaderInfo{ &csCloudShadowMeanVolcanic, "Volumetrics.cs.hlsl", { { "VOLCANIC_STORMS_ONLY", "" } }, "buildCloudShadowMean" },
 		ShaderInfo{ &csCloudShadowMeanVoxel, "Volumetrics.cs.hlsl", { { "CLOUD_VOXELS", "" } }, "buildCloudShadowMean" },
 		ShaderInfo{ &csVolCubemap, "Volumetrics.cs.hlsl", { { "CLOUD_REFLECTION", "" } }, "renderCubemap" },
@@ -868,6 +906,7 @@ void PhysicalSky::CompileVolumetricShaders()
 	localNdfManager.CompileShaders();
 	cirrusMapManager.CompileShaders();
 	midCloudMapManager.CompileShaders();
+	middleBoundsDirty = true;
 	cloudNoiseGenerator.CompileShaders();
 	vsCloudBoundary = nullptr;
 	psCloudBoundary = nullptr;
@@ -1347,7 +1386,6 @@ void PhysicalSky::RenderVolumetricClouds(VolumetricCloudPass a_pass)
 
 		context->CSSetShaderResources(1, (uint)srvs.size(), srvs.data());
 		context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
-		context->CSSetShader(voxelActive ? csVolShadowVoxel.get() : (cloudStormManager.VolcanicOnly() && csVolShadowVolcanic ? csVolShadowVolcanic.get() : csVolShadowVolume.get()), nullptr, 0);
 
 		// Dispatch based on dominant light direction component
 		const float shadowRangeGu = KilometersToGameUnits(settings.shadowVolumeRange);
@@ -1357,20 +1395,26 @@ void PhysicalSky::RenderVolumetricClouds(VolumetricCloudPass a_pass)
 		ray_px_dir.y *= kShadowVolH / shadowRangeGu;
 		ray_px_dir.z *= kShadowVolD / shadowThicknessGu;
 		const float dir_max_component = std::max({ std::abs(ray_px_dir.x), std::abs(ray_px_dir.y), std::abs(ray_px_dir.z) });
-		uint32_t dispatch_size[2];
-		if (std::abs(ray_px_dir.x) == dir_max_component || std::abs(ray_px_dir.y) == dir_max_component) {
-			dispatch_size[0] = kShadowVolW;
-			dispatch_size[1] = kShadowVolD;
+		const bool horizontal = std::abs(ray_px_dir.x) == dir_max_component || std::abs(ray_px_dir.y) == dir_max_component;
+		// Long, nearly horizontal low/storm rays need the parallel scan's latency
+		// hiding. Short columns and sparse multi-layer weather favour coherent rays.
+		const bool serialColumns = !voxelActive && cloudData.stormCount == 0u && (!horizontal || cloudData.middleLayer.z > 0.f);
+		auto* shadowShader = voxelActive                      ? csVolShadowVoxel.get() :
+		                     cloudData.stormCount == 0u       ? (serialColumns ? csVolShadowColumns.get() : csVolShadowWeather.get()) :
+		                     cloudStormManager.VolcanicOnly() ? csVolShadowVolcanic.get() :
+		                                                        csVolShadowVolume.get();
+		context->CSSetShader(shadowShader, nullptr, 0);
+		globals::profiler->BeginPass("PhysicalSky::VolumetricShadowVolume");
+		if (serialColumns) {
+			const uint32_t columnsY = horizontal ? kShadowVolD : kShadowVolH;
+			context->Dispatch((kShadowVolW + 7u) / 8u, (columnsY + 7u) / 8u, 1);
+		} else if (horizontal) {
+			context->Dispatch(kShadowVolW, kShadowVolD, 1);
 		} else {
-			// renderShadowVolume packs four full-depth columns into each group.
 			constexpr uint32_t columnsPerGroup = kShadowVolW / kShadowVolD;
 			static_assert(kShadowVolW % kShadowVolD == 0);
-			dispatch_size[0] = kShadowVolW / columnsPerGroup;
-			dispatch_size[1] = kShadowVolH;
+			context->Dispatch(kShadowVolW / columnsPerGroup, kShadowVolH, 1);
 		}
-
-		globals::profiler->BeginPass("PhysicalSky::VolumetricShadowVolume");
-		context->Dispatch(dispatch_size[0], dispatch_size[1], 1);
 		ID3D11UnorderedAccessView* nullUav = nullptr;
 		context->CSSetUnorderedAccessViews(0, 1, &nullUav, nullptr);
 		auto* rawShadow = texShadowVolumeRaw->srv.get();
@@ -1389,7 +1433,7 @@ void PhysicalSky::RenderVolumetricClouds(VolumetricCloudPass a_pass)
 		context->CSSetShaderResources(14, 1, &shadowInput);
 		auto* meanOutput = texCloudShadowMean->uav.get();
 		context->CSSetUnorderedAccessViews(0, 1, &meanOutput, nullptr);
-		context->CSSetShader(voxelActive ? csCloudShadowMeanVoxel.get() : (cloudStormManager.VolcanicOnly() ? csCloudShadowMeanVolcanic.get() : csCloudShadowMean.get()), nullptr, 0);
+		context->CSSetShader(voxelActive ? csCloudShadowMeanVoxel.get() : (cloudData.stormCount == 0u ? csCloudShadowMeanWeather.get() : (cloudStormManager.VolcanicOnly() ? csCloudShadowMeanVolcanic.get() : csCloudShadowMean.get())), nullptr, 0);
 		globals::profiler->BeginPass("PhysicalSky::CloudShadowMean");
 		context->Dispatch(1, kShadowMeanHeights, 1);
 		globals::profiler->EndPass();
@@ -1401,8 +1445,36 @@ void PhysicalSky::RenderVolumetricClouds(VolumetricCloudPass a_pass)
 	if (a_pass == VolumetricCloudPass::kMainViewAndCubemap) {
 		auto* ambientInput = texCloudAmbientLighting->srv.get();
 		context->CSSetShaderResources(40, 1, &ambientInput);
-		ID3D11UnorderedAccessView* nullBoundsUav = nullptr;
 		context->CSSetShaderResources(1, (uint)srvs.size(), srvs.data());
+		ID3D11UnorderedAccessView* nullBoundsUav = nullptr;
+		ID3D11ShaderResourceView* noMiddleBounds = nullptr;
+		context->CSSetShaderResources(105, 1, &noMiddleBounds);
+		if (cloudData.middleLayer.z > 0.f && csMiddleBounds && csMiddleBoundsReduce) {
+			if (middleBoundsDirty) {
+				globals::profiler->BeginPass("PhysicalSky::MiddleCloudBounds");
+				auto* output = middleBoundsUavs[0].get();
+				context->CSSetUnorderedAccessViews(5, 1, &output, nullptr);
+				context->CSSetShader(csMiddleBounds.get(), nullptr, 0);
+				context->Dispatch(kMiddleBoundsSize, kMiddleBoundsSize, 1);
+				ID3D11UnorderedAccessView* noOutput = nullptr;
+				context->CSSetUnorderedAccessViews(5, 1, &noOutput, nullptr);
+				context->CSSetShader(csMiddleBoundsReduce.get(), nullptr, 0);
+				for (uint32_t mip = 1; mip < kMiddleBoundsLevels; ++mip) {
+					auto* input = middleBoundsSrvs[mip - 1].get();
+					output = middleBoundsUavs[mip].get();
+					context->CSSetShaderResources(105, 1, &input);
+					context->CSSetUnorderedAccessViews(5, 1, &output, nullptr);
+					const auto groups = ((kMiddleBoundsSize >> mip) + 7u) / 8u;
+					context->Dispatch(groups, groups, 1);
+					context->CSSetUnorderedAccessViews(5, 1, &noOutput, nullptr);
+					context->CSSetShaderResources(105, 1, &noMiddleBounds);
+				}
+				globals::profiler->EndPass();
+				middleBoundsDirty = false;
+			}
+			auto* input = texMiddleBounds->srv.get();
+			context->CSSetShaderResources(105, 1, &input);
+		}
 		if (cloudData.middleLayer.z > 0.f || renderCirrus) {
 			ID3D11ShaderResourceView* noSunInput = nullptr;
 			context->CSSetShaderResources(100, 1, &noSunInput);
@@ -1626,8 +1698,8 @@ void PhysicalSky::RenderVolumetricClouds(VolumetricCloudPass a_pass)
 			}
 			// Ordinary pixels retain the small, storm-free shader even while a storm
 			// is visible. The two dispatches write disjoint pixels of the same outputs.
-			context->CSSetShader(csVolMainWithoutStorm.get(), nullptr, 0);
-			context->Dispatch((lowW + 7u) >> 3, (lowH + 7u) >> 3, 1);
+			context->CSSetShader(cloudData.localNdfAltitude.z <= 0.f ? csVolMainWeather.get() : csVolMainWithoutStorm.get(), nullptr, 0);
+			context->Dispatch((lowW + 7u) / 8u, (lowH + 3u) / 4u, 1);
 			if (stormVisible) {
 				const bool volcanic = cloudStormManager.VolcanicOnly() && csVolMainVolcanic;
 				auto* singleConstants = volcanic && csVolMainSingleVolcanic ? cloudStormManager.SingleData() : nullptr;
@@ -1706,11 +1778,26 @@ void PhysicalSky::RenderVolumetricClouds(VolumetricCloudPass a_pass)
 				context->CSSetUnorderedAccessViews(0, (uint)voxelOutputs.size(), voxelOutputs.data(), nullptr);
 				auto* motionOutput = texVoxelTraceMotion->uav.get();
 				context->CSSetUnorderedAccessViews(6, 1, &motionOutput, nullptr);
-				context->CSSetShader(csUpperView.get(), nullptr, 0);
 				globals::profiler->BeginPass("PhysicalSky::UpperCloudMainView");
+				// Below the middle layer, opaque foreground can hide whole tiles.
+				// Cirrus-only and inside/above-layer views keep the direct dispatch.
+				const bool classify = cloudData.middleLayer.z > 0.f &&
+				                      cameraPosition.z - cloudData.bottomZ < cloudData.middleLayer.x && csUpperTiles && csUpperViewTiles;
+				if (classify) {
+					auto* tileOutput = texUpperTiles->uav.get();
+					context->CSSetUnorderedAccessViews(4, 1, &tileOutput, nullptr);
+					context->CSSetShader(csUpperTiles.get(), nullptr, 0);
+					context->Dispatch((lowW + 7u) / 8u, (lowH + 7u) / 8u, 1);
+					tileOutput = nullptr;
+					context->CSSetUnorderedAccessViews(4, 1, &tileOutput, nullptr);
+					auto* tileInput = texUpperTiles->srv.get();
+					context->CSSetShaderResources(87, 1, &tileInput);
+				}
+				context->CSSetShader(classify ? csUpperViewTiles.get() : csUpperView.get(), nullptr, 0);
 				// All pixels use the same phase as the low-cloud trace.
 				context->Dispatch((lowW + 7u) / 8u, (lowH + 7u) / 8u, 1);
 				globals::profiler->EndPass();
+				context->CSSetShaderResources(87, 1, nullOutputs);
 				context->CSSetUnorderedAccessViews(0, 3, nullUavs, nullptr);
 				context->CSSetUnorderedAccessViews(3, 1, &nullLightning, nullptr);
 				motionOutput = nullptr;
@@ -1880,6 +1967,7 @@ void PhysicalSky::RenderVolumetricClouds(VolumetricCloudPass a_pass)
 		context->CSSetShaderResources(99, 1, nullSrvs);
 		context->CSSetShaderResources(100, 1, nullSrvs);
 		context->CSSetShaderResources(101, 3, nullSrvs);
+		context->CSSetShaderResources(105, 1, nullSrvs);
 		context->CSSetUnorderedAccessViews(0, 3, nullUavs, nullptr);
 		context->CSSetUnorderedAccessViews(3, 3, nullUavs, nullptr);
 		context->CSSetConstantBuffers(1, 1, nullCb);

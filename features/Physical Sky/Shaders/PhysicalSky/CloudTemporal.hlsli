@@ -306,6 +306,8 @@ cbuffer CloudDispatch : register(b3) { uint4 StormScreenRect; };
 #	define CLOUD_MAIN_THREADS 16, 8, 1
 #elif defined(CLOUD_MAIN_DISPATCH) && defined(VOLCANIC_STORMS_ONLY)
 #	define CLOUD_MAIN_THREADS 16, 4, 1
+#elif defined(CLOUD_MAIN_DISPATCH) && defined(NO_CLOUD_STORMS)
+#	define CLOUD_MAIN_THREADS 8, 4, 1
 #else
 #	define CLOUD_MAIN_THREADS 8, 8, 1
 #endif
@@ -344,8 +346,20 @@ cbuffer CloudDispatch : register(b3) { uint4 StormScreenRect; };
 	RWLightningMask[tid] = min(result.lightning, 65504.0);
 }
 
-	// Independent upper-layer march, then compose at the same checkerboard sample.
-	[numthreads(8, 8, 1)] void renderUpperView(uint2 tid : SV_DispatchThreadID)
+void StoreUpperCloudPixel(VolumetricCloudResult upper, uint2 tid)
+{
+	float transmission = TexVolLowTr[tid];
+	float4 color = TexVolLowLum[tid], metadata = TexVolLowAux[tid], motion = TexVolLowStormMotion[tid];
+	float2 lightning = TexLightningTrace[tid];
+	CompositeUpperCloud(upper, transmission, color, metadata, motion, lightning);
+	RWTexTr[tid] = transmission;
+	RWTexLum[tid] = color;
+	RWTexAux[tid] = metadata;
+	RWStormMotion[tid] = motion;
+	RWLightningMask[tid] = lightning;
+}
+
+void RenderUpperViewPixel(uint2 tid)
 {
 	const VolumetricCloudData info = VolumetricCloudBuffer[0];
 	if (any(tid >= uint2(info.lowFrameDim)))
@@ -359,18 +373,17 @@ cbuffer CloudDispatch : register(b3) { uint4 StormScreenRect; };
 	// moves the view ray. Filter noise by the screen footprint, not march length.
 	const float2 pixelFootprint = 2.0 / max(abs(float2(FrameBuffer::CameraProjUnjittered[0][0], FrameBuffer::CameraProjUnjittered[1][1])) * info.activeFrameDim, 1.0);
 	const VolumetricCloudResult upper = RenderUpperCloudRay(direction, eye, sceneDistance, CloudSpatialMarchHash(pixel), max(pixelFootprint.x, pixelFootprint.y));
-	float transmission = TexVolLowTr[tid];
-	float4 color = TexVolLowLum[tid], metadata = TexVolLowAux[tid], motion = TexVolLowStormMotion[tid];
-	float2 lightning = TexLightningTrace[tid];
-	CompositeUpperCloud(upper, transmission, color, metadata, motion, lightning);
-	RWTexTr[tid] = transmission;
-	RWTexLum[tid] = color;
-	RWTexAux[tid] = metadata;
-	RWStormMotion[tid] = motion;
-	RWLightningMask[tid] = lightning;
+	StoreUpperCloudPixel(upper, tid);
 }
 
-[numthreads(8, 8, 1)] void reproject(uint2 pixel : SV_DispatchThreadID) {
+[numthreads(8, 8, 1)] void renderUpperView(uint2 tid : SV_DispatchThreadID) {
+	RenderUpperViewPixel(tid);
+}
+
+#include "PhysicalSky/UpperCloudTiles.hlsli"
+
+	[numthreads(8, 8, 1)] void reproject(uint2 pixel : SV_DispatchThreadID)
+{
 	const VolumetricCloudData info = VolumetricCloudBuffer[0];
 	if (any(pixel >= uint2(info.activeFrameDim)))
 		return;

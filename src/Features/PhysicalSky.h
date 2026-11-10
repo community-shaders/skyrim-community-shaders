@@ -553,7 +553,16 @@ struct PhysicalSky final : public Feature
 	winrt::com_ptr<ID3D11ComputeShader> csVolMainView = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> csUpperView = nullptr, csUpperSunDepth = nullptr;
 	eastl::unique_ptr<Texture2D> texUpperSunDepth;
+	static constexpr uint32_t kMiddleBoundsSize = 32, kMiddleBoundsLevels = 6;
+	eastl::unique_ptr<Texture2D> texMiddleBounds;
+	std::array<winrt::com_ptr<ID3D11ShaderResourceView>, kMiddleBoundsLevels> middleBoundsSrvs;
+	std::array<winrt::com_ptr<ID3D11UnorderedAccessView>, kMiddleBoundsLevels> middleBoundsUavs;
+	winrt::com_ptr<ID3D11ComputeShader> csMiddleBounds, csMiddleBoundsReduce;
+	winrt::com_ptr<ID3D11ComputeShader> csUpperTiles, csUpperViewTiles;
+	eastl::unique_ptr<Texture2D> texUpperTiles;
+	bool middleBoundsDirty = true;
 	winrt::com_ptr<ID3D11ComputeShader> csVolMainWithoutStorm = nullptr;
+	winrt::com_ptr<ID3D11ComputeShader> csVolMainWeather = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> csStormTiles = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> csVolMainVolcanic, csVolCubemapVolcanic, csVolShadowVolcanic, csCloudAmbientDensityVolcanic;
 	winrt::com_ptr<ID3D11ComputeShader> csVolMainSingleVolcanic;
@@ -562,6 +571,7 @@ struct PhysicalSky final : public Feature
 	winrt::com_ptr<ID3D11ComputeShader> csVolReproject = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> csVolCubeReproject = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> csVolShadowVolume = nullptr;
+	winrt::com_ptr<ID3D11ComputeShader> csVolShadowWeather, csVolShadowColumns, csCloudShadowMeanWeather;
 	winrt::com_ptr<ID3D11ComputeShader> csVolShadowResample = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> csCloudShadowMean, csCloudShadowMeanVolcanic, csCloudShadowMeanVoxel;
 	winrt::com_ptr<ID3D11ComputeShader> csVolCubemap = nullptr;

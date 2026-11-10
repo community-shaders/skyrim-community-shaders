@@ -78,7 +78,7 @@ float3 MiddleBandBend(float2 coordinate)
 // Local column: bottom/top in game units, peak extinction per metre, As/Ac type.
 // The footprint is in game units, projected onto the weather plane. View and
 // lighting query the same shape at the scale their sampling can resolve.
-float4 MiddleCloudColumn(float2 position, float footprint = 0.0, float bandFootprint = 0.0)
+float4 MiddleCloudColumn(float2 position, float footprint = 0.0, float bandFootprint = 0.0, bool testAltitude = false, float altitude = 0.0)
 {
 	const VolumetricCloudData info = VolumetricCloudBuffer[0];
 	const float2 uv = (position - info.cirrusWindOffset) * info.middleLayer.w + 0.5;
@@ -86,6 +86,13 @@ float4 MiddleCloudColumn(float2 position, float footprint = 0.0, float bandFootp
 	const float3 geometry = field.yzw / max(field.x, 1e-6);
 	float2 bounds = lerp(info.middleLayer.x, info.middleLayer.y, geometry.xy);
 	float density = field.x;
+	// Cells and bands can only shrink a non-inverted column with normalized contrast.
+	// Extrapolated geometry remains supported; decline this bound when it can expand.
+	if (testAltitude && bounds.y >= bounds.x && (MiddleCloudBandShape.w <= 0.0 || (MiddleCloudBandShape.x >= 0.0 && MiddleCloudBandShape.x <= 1.0))) {
+		const float displacement = MiddleCloudBandShape.w > 0.0 ? abs(MiddleCloudBandShape.y) : 0.0;
+		if (altitude < bounds.x - displacement || altitude > bounds.y + displacement)
+			return 0.0;
+	}
 	[branch] if (density > 0.0)
 	{
 		const float modulation = lerp(MiddleCloudCells.z, MiddleCloudCells.y, geometry.z);
@@ -368,7 +375,7 @@ float MiddleCloudDensity(float3 position, out float4 model, out float2 opticalDe
 	if (info.middleLayer.z <= 0.0)
 		return 0.0;
 	const float altitude = CloudProfileAltitude(position, FrameBuffer::CameraPosAdjust.xy, info.cloudCurvatureRadius);
-	const float4 column = MiddleCloudColumn(position.xy, footprint);
+	const float4 column = MiddleCloudColumn(position.xy, footprint, 0.0, true, altitude);
 	if (column.z <= 0.0 || altitude <= column.x || altitude >= column.y)
 		return 0.0;
 	const float h = (altitude - column.x) / max(column.y - column.x, 1e-5);
@@ -448,7 +455,15 @@ float MiddleSelfShadowDepth(float3 position, float3 direction)
 	const float4 tailNoise = info.skipShapeNoise != 0u ? 0.0 : MiddleShapeNoise(position + direction * (0.5 * distance), distance, 0.0);
 	float4 column0 = MiddleCloudColumn(position.xy);
 	float depth = 0.0;
-	[loop] for (uint i = 0u; i < samples; ++i)
+	// Specialize the fixed probe spacing and detail/shared-noise queries in
+	// the upper view. Reflections already distribute view steps across lanes
+	// and run faster with the compact light loop.
+#if defined(NO_CLOUD_STORMS) && !defined(CLOUD_REFLECTION)
+	[unroll]
+#else
+	[loop]
+#endif
+		for (uint i = 0u; i < samples; ++i)
 	{
 		// Keep the eight probes, concentrating their resolution at the visible
 		// surface. Uniform layer-wide intervals filtered away the same Billow/

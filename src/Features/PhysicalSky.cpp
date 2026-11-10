@@ -1975,8 +1975,8 @@ void PhysicalSky::Prepass()
 			}
 			if (settings.cloudLayer.cirrus.enabled)
 				cirrusMapManager.Update(settings.cloudLayer.cirrus, ndfTexManager, ndfManager);
-			if (settings.cloudLayer.middle.enabled)
-				midCloudMapManager.Update(settings.cloudLayer.middle, ndfTexManager, ndfManager);
+			if (settings.cloudLayer.middle.enabled && midCloudMapManager.Update(settings.cloudLayer.middle, ndfTexManager, ndfManager))
+				middleBoundsDirty = true;
 
 			// Resource/layer switches and reference-frame changes still invalidate
 			// history. Map regeneration and continuous appearance changes do not.

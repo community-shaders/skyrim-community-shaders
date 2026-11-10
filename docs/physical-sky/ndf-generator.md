@@ -318,8 +318,11 @@ the final density. No additional noise volume allocation or light-march steps ar
 Carrier reconstruction and detail sampling are deterministic. A frozen midpoint
 column produces spatial terraces even without noise; randomizing that column
 independently instead creates inconsistent envelopes and lighting centroids
-between checkerboard phases. Reflections use the same upper marcher after their
-low-cloud reduction.
+between checkerboard phases. Reflections distribute the upper march's existing
+macro steps across the same 64 lanes used by low clouds, then reuse their ordered
+reduction. Direct and ambient transmission stay separate until composition;
+an exclusive transmission prefix retains the march's early exit, including for
+cirrus behind an opaque middle layer. The primary-view march is unchanged.
 Layer composition follows the existing integral-depth convention used by voxels;
 interpenetrating layers are approximate. Wind and curvature displacement retain
 the existing world anchoring and motion channels.
@@ -331,10 +334,22 @@ Middle self-shadow uses eight local solar-ray probes, limited to 3 km or
 the upper-layer exit. This is our sampling budget, not a fixed HP requirement.
 Each interval integrates the shaped profile between its endpoint weather columns,
 preserving thin clouds between probes.
-The first probe samples local detail; the remaining seven share one path-filtered
+The first two probes sample local detail; the remaining six share one path-filtered
 packed shape sample but keep their own positional weather, heights and type. This
 reduces repeated volume reads while retaining macro band shadows. It is a coarse
 optical-mass approximation, not exact integration of the 3D density field.
+The upper view unrolls the fixed eight-interval loop so FXC can fold probe spacing
+and specialize detail versus shared-noise queries without changing the samples.
+Reflections retain the compact light loop alongside their parallel view steps.
+Below the middle layer, a separate 8-by-8 tile classification skips Upper
+work only when the entire tile is empty or hidden behind zero-transmission low
+cloud, including the composition depth margin. Other tiles retain the original
+march. Cirrus-only and inside/above-layer views use the direct dispatch.
+A 32-square min/max weather hierarchy is rebuilt only after weather updates;
+bilinear support and vertical band displacement enlarge its conservative bounds.
+Extrapolated types bypass height culling. Cubemap rays use the same empty-space
+and foreground checks before their upper-layer work. No light or density cache
+replaces the existing low/middle self-shadow integrals.
 Lateral weather still uses midpoint quadrature. Both
 visible middle cloud and its outgoing environment radiance use this integral.
 Local upper/lower optical depths use one central erosion sample filtered to at
