@@ -22,18 +22,19 @@ void CODBloom::DrawSettings()
 		ImGui::TextUnformatted(T("feature.post_processing.codbloom.a_greater_radius_makes_the_bloom_slightly_blurrier", "A greater radius makes the bloom slightly blurrier."));
 
 	ImGui::SliderFloat(T("feature.post_processing.codbloom.mix", "Mix"), &settings.BlendFactor, 0.f, 1.f, "%.2f");
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::TextUnformatted(T("feature.post_processing.codbloom.mix_tooltip", "How much bloom is blended over the image."));
 
-	ImGui::Separator();
+	ImGui::SeparatorText(T("feature.post_processing.codbloom.section_levels", "Bloom Levels"));
+	Util::SettingHint(T("feature.post_processing.codbloom.levels_hint", "Pick a level, then set its intensity. Higher levels control wider, softer bloom."), false);
 
 	static int mipLevel = 1;
 	ImGui::SliderInt(T("feature.post_processing.codbloom.mip_level", "Mip Level"), &mipLevel, 1, (int)settings.MipBlendFactor.size(), "%d", ImGuiSliderFlags_AlwaysClamp);
 	if (auto _tt = Util::HoverTooltipWrapper())
 		ImGui::TextUnformatted(T("feature.post_processing.codbloom.the_greater_the_level_the_blurrier_the_part", "The greater the level, the blurrier the part it controls"));
-	ImGui::Indent();
 	{
 		ImGui::SliderFloat(T("feature.post_processing.codbloom.intensity", "Intensity"), &settings.MipBlendFactor[mipLevel - 1], 0.f, 1.f, "%.2f");
 	}
-	ImGui::Unindent();
 
 	if (Util::ShowDebugSections() && ImGui::CollapsingHeader(T("feature.post_processing.codbloom.debug", "Debug"))) {
 		static int mip = 0;

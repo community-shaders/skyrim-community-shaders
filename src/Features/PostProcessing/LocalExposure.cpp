@@ -25,10 +25,13 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 void LocalExposure::DrawSettings()
 {
 	auto* exposure = owner ? owner->GetPipelineFeature<HistogramAutoExposure>(PostProcessing::FeaturePipelineIndex::AutoExposure) : nullptr;
+	ImGui::SeparatorText(T("feature.post_processing.local_exposure.section_tone", "Tone"));
 	if (!exposure || !exposure->IsActive()) {
 		ImGui::SliderFloat(T("feature.post_processing.local_exposure.exposure", "Exposure"), &settings.Exposure, 0.f, 4.f, "%.2f");
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::TextUnformatted(T("feature.post_processing.local_exposure.manual_brightness_normalization_used_when_histogram_auto_exposure", "Manual brightness normalization used when Histogram Auto Exposure is disabled. Higher values make the scene behave brighter."));
+	} else {
+		Util::SettingHint(T("feature.post_processing.local_exposure.exposure_from_auto_exposure", "Brightness follows Histogram Auto Exposure."), false);
 	}
 
 	ImGui::SliderFloat(T("feature.post_processing.local_exposure.strength", "Strength"), &settings.Strength, 0.f, 1.f, "%.2f");
@@ -47,6 +50,7 @@ void LocalExposure::DrawSettings()
 	if (auto _tt = Util::HoverTooltipWrapper())
 		ImGui::TextUnformatted(T("feature.post_processing.local_exposure.detail_strength_tooltip", "Preserves or boosts fine luminance detail separated from the base layer. 1.0 keeps the original detail contrast."));
 
+	ImGui::SeparatorText(T("feature.post_processing.local_exposure.section_halos", "Halo Control"));
 	ImGui::SliderFloat(T("feature.post_processing.local_exposure.base_blend", "Soft Base Blend"), &settings.BaseBlend, 0.f, 1.f, "%.2f");
 	if (auto _tt = Util::HoverTooltipWrapper())
 		ImGui::TextUnformatted(T("feature.post_processing.local_exposure.base_blend_tooltip", "Blends the edge-aware base with a broad smooth base. Higher values reduce halos and keep large highlights natural."));
@@ -55,7 +59,8 @@ void LocalExposure::DrawSettings()
 	if (auto _tt = Util::HoverTooltipWrapper())
 		ImGui::TextUnformatted(T("feature.post_processing.local_exposure.blurred_luminance_kernel_size_tooltip", "Sets the broad luminance blur diameter as a percentage of screen width."));
 
-	if (ImGui::TreeNodeEx(T("feature.post_processing.local_exposure.advanced", "Advanced"), ImGuiTreeNodeFlags_DefaultOpen)) {
+	ImGui::Spacing();
+	if (ImGui::TreeNodeEx(T("feature.post_processing.local_exposure.advanced", "Advanced"))) {
 		ImGui::SliderFloat(T("feature.post_processing.local_exposure.middle_grey_bias", "Middle Grey Bias"), &settings.MiddleGreyBias, -4.f, 4.f, "%+.2f EV");
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::TextUnformatted(T("feature.post_processing.local_exposure.middle_grey_bias_tooltip", "Moves the tonal pivot used to separate highlight and shadow adjustments."));

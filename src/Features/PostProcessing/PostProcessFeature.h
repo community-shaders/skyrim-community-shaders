@@ -124,6 +124,12 @@ struct PostProcessFeature : public std::enable_shared_from_this<PostProcessFeatu
 	virtual void ApplyContextualDefaults(json& a_settings) const { (void)a_settings; }
 	virtual void DrawSettings() = 0;
 
+	/**
+	 * @brief A short muted note explaining that Cinematic Camera drives the greyed-out settings below it.
+	 * @param text Note to show; null uses the shared lens-and-focus wording.
+	 */
+	static void DrawCameraControlledNote(const char* text = nullptr);
+
 	struct TextureInfo
 	{
 		ID3D11Texture2D* tex = nullptr;

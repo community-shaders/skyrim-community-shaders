@@ -68,18 +68,14 @@ void LensFlare::DrawSettings()
 	tooltip(T("feature.post_processing.lens_flare.tooltip_intensity", "Master intensity for the entire lens flare effect"));
 
 	// Threshold
-	ImGui::Spacing();
-	ImGui::TextUnformatted(T("feature.post_processing.lens_flare.threshold", "Threshold"));
-	ImGui::Separator();
+	ImGui::SeparatorText(T("feature.post_processing.lens_flare.threshold", "Threshold"));
 	ImGui::SliderFloat(T("feature.post_processing.lens_flare.threshold_ev", "Threshold (EV100)"), &settings.ThresholdEV, -7.0f, 23.0f, "%+.2f EV100");
 	tooltip(T("feature.post_processing.lens_flare.tooltip_threshold_ev", "Brightness threshold in EV100 (0 EV100 = 0.125 linear luminance)."));
 	ImGui::SliderFloat(T("feature.post_processing.lens_flare.threshold_range", "Threshold Range"), &settings.ThresholdRange, 0.01f, 5.0f, "%.3f");
 	tooltip(T("feature.post_processing.lens_flare.tooltip_threshold_range", "Fade range for the threshold cutoff"));
 
 	// Ghost Settings
-	ImGui::Spacing();
-	ImGui::TextUnformatted(T("feature.post_processing.lens_flare.ghost_settings", "Ghost Settings"));
-	ImGui::Separator();
+	ImGui::SeparatorText(T("feature.post_processing.lens_flare.ghost_settings", "Ghost Settings"));
 
 	{
 		const char* modeNames[] = {
@@ -109,6 +105,8 @@ void LensFlare::DrawSettings()
 		if (cam)
 			apertureRotation = cam->ApertureBladeRotationDeg;
 
+		if (cam)
+			DrawCameraControlledNote();
 		ImGui::BeginDisabled(cam != nullptr);
 		{
 			const SceneWidgetInterceptor::ProxyScope proxy(&settings.ApertureBlades, 1.0f);
@@ -204,9 +202,7 @@ void LensFlare::DrawSettings()
 	}
 
 	// Halo Settings
-	ImGui::Spacing();
-	ImGui::TextUnformatted(T("feature.post_processing.lens_flare.halo_settings", "Halo Settings"));
-	ImGui::Separator();
+	ImGui::SeparatorText(T("feature.post_processing.lens_flare.halo_settings", "Halo Settings"));
 	ImGui::SliderFloat(T("feature.post_processing.lens_flare.halo_strength", "Halo Strength"), &settings.HaloStrength, 0.0f, 1.0f, "%.3f");
 	ImGui::SliderFloat(T("feature.post_processing.lens_flare.halo_radius", "Halo Radius"), &settings.HaloRadius, 0.0f, 1.0f, "%.3f");
 	ImGui::SliderFloat(T("feature.post_processing.lens_flare.halo_width", "Halo Width"), &settings.HaloWidth, 0.0f, 1.0f, "%.3f");
@@ -215,17 +211,11 @@ void LensFlare::DrawSettings()
 	ImGui::SliderFloat(T("feature.post_processing.lens_flare.halo_chroma_shift", "Halo Chroma Shift"), &settings.HaloChromaShift, 0.0f, 0.1f, "%.4f");
 
 	// Tint
-	ImGui::Spacing();
-	ImGui::TextUnformatted(T("feature.post_processing.lens_flare.color_tint", "Color Tint"));
-	ImGui::Separator();
+	ImGui::SeparatorText(T("feature.post_processing.lens_flare.color_tint", "Color Tint"));
 	ImGui::ColorEdit3(T("feature.post_processing.lens_flare.tint", "Tint"), settings.Tint.data());
 	tooltip(T("feature.post_processing.lens_flare.tooltip_tint", "Radial color gradient applied to the flare effect"));
 
 	// Debug
-	ImGui::Spacing();
-	ImGui::Separator();
-	ImGui::Spacing();
-
 	if (Util::ShowDebugSections() && ImGui::CollapsingHeader(T("feature.post_processing.lens_flare.debug", "Debug"))) {
 		ImGui::Checkbox(T("feature.post_processing.lens_flare.disable_threshold", "Disable Threshold"), &debugsettings.disableThreshold);
 		ImGui::Checkbox(T("feature.post_processing.lens_flare.disable_ghosts", "Disable Ghosts"), &debugsettings.disableGhosts);
