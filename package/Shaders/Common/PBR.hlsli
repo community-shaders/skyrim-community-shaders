@@ -12,7 +12,7 @@
 namespace PBR
 {
 #if defined(GLINT)
-	float3 SpecularMicrofacetWithGlint(float noise, float roughness, float3 F0, float NdotL, float NdotV, float NdotH, float VdotH, float glintH,
+	float3 SpecularMicrofacetWithGlint(float noise, float roughness, float3 F0, float NdotL, float NdotV, float NdotH, float VdotH, float3 glintH,
 		float logDensity, float microfacetRoughness, float densityRandomization, Glints::GlintCachedVars glintCache,
 		out float3 F)
 	{
@@ -180,7 +180,7 @@ namespace PBR
 	}
 
 	void GetDirectLightInputThinSurface(out DirectLightingOutput lightingOutput, DirectContext context, MaterialProperties material,
-		ThinSurface surface, bool doSpecular, float wrap, float glintH = 0.0f)
+		ThinSurface surface, bool doSpecular, float wrap, float3 glintH = 0.0f)
 	{
 		lightingOutput = (DirectLightingOutput)0;
 
@@ -265,7 +265,7 @@ namespace PBR
 
 			ThinSurface surface = CreateThinSurface(material, NdotV, true, false);
 
-			GetDirectLightInputThinSurface(lightingOutput, context, material, surface, true, 0.0f, mul(tbnTr, context.halfVector).x);
+			GetDirectLightInputThinSurface(lightingOutput, context, material, surface, true, 0.0f, mul(tbnTr, context.halfVector));
 
 			[branch] if (SharedData::truePBRSettings.EnableMicroShadows != 0)
 			{
@@ -324,7 +324,7 @@ namespace PBR
 		{
 			float3 F;  // Fresnel reflectance at current (V,H) angle
 #if defined(GLINT)
-			float3 Fr = SpecularMicrofacetWithGlint(material.Noise, material.Roughness, material.F0, max(specularNdotL, EPSILON_DOT_CLAMP), specularNdotV, satNdotH, satVdotH, mul(tbnTr, H).x,
+			float3 Fr = SpecularMicrofacetWithGlint(material.Noise, material.Roughness, material.F0, max(specularNdotL, EPSILON_DOT_CLAMP), specularNdotV, satNdotH, satVdotH, mul(tbnTr, H),
 				material.GlintLogMicrofacetDensity, material.GlintMicrofacetRoughness, material.GlintDensityRandomization, material.GlintCache, F);
 #else
 			float3 Fr = SpecularMicrofacet(material.Roughness, material.F0, max(specularNdotL, EPSILON_DOT_CLAMP), specularNdotV, satNdotH, satVdotH, F);
