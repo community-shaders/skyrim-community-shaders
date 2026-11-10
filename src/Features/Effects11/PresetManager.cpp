@@ -1,6 +1,7 @@
 #include "PresetManager.h"
 
 #include "EffectManager.h"
+#include "Overlays/PresetOverlays.h"
 #include "Presets/UnifiedPresetCatalog.h"
 #include "SettingManager.h"
 #include "Utils/FileSystem.h"
@@ -242,8 +243,12 @@ bool PresetManager::SwitchPreset(const std::string& id, bool saveCurrent)
 
 	if (saveCurrent) {
 		if (const auto* current = FindPreset(activePresetId); current && current->valid) {
-			settingManager.Save();
-			effectManager.Save();
+			{
+				const Overlays::Manager::RemovedScope removed;
+				settingManager.Save();
+				effectManager.Save();
+			}
+			Overlays::Manager::GetSingleton().SaveDirtyOverlays();
 		}
 	}
 
@@ -283,8 +288,12 @@ bool PresetManager::ExportActivePresetTo(const std::filesystem::path& destRoot, 
 	}
 
 	if (saveCurrent) {
-		SettingManager::GetSingleton().Save();
-		EffectManager::GetSingleton().Save();
+		{
+			const Overlays::Manager::RemovedScope removed;
+			SettingManager::GetSingleton().Save();
+			EffectManager::GetSingleton().Save();
+		}
+		Overlays::Manager::GetSingleton().SaveDirtyOverlays();
 	}
 
 	const auto sourceRoot = GetActivePresetRoot();

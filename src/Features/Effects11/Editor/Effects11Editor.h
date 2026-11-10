@@ -5,8 +5,15 @@
 #include <string>
 #include <vector>
 
+#include "OverlayPanel.h"
+
 struct Setting;
 class Effect;
+
+namespace Overlays
+{
+	struct RowInfo;
+}
 
 namespace UITree
 {
@@ -73,6 +80,7 @@ private:
 	void DrawSettingsWindow();
 	void DrawShaderWindow();
 	void DrawNoPreset();
+	void DrawOverlayWindow();
 
 	// Settings window parts
 	void DrawToolbar();
@@ -87,7 +95,7 @@ private:
 	void DrawSettingRow(const Setting& a_setting, bool a_categoryActive);
 	void DrawTimeOfDayRows(const Setting& a_setting, const char* a_label, bool a_editable, bool& a_labelHovered);
 	void DrawColorTimeOfDayRow(const Setting& a_setting, const char* a_label, bool a_editable, bool& a_labelHovered);
-	void DrawSettingTooltip(const Setting& a_setting, const std::string& a_name, bool a_dependencyMet);
+	void DrawSettingTooltip(const Setting& a_setting, const std::string& a_name, bool a_dependencyMet, const Overlays::RowInfo* a_overlayRow);
 
 	// Shader window parts
 	void DrawEffectSection(Effect& a_effect, uint32_t a_enableSettingID, const char* a_friendlyName, UITree::ViewOptions& a_totals);
@@ -119,6 +127,8 @@ private:
 	std::atomic<bool> open{ false };
 	bool returnToMenu = false;
 	bool showShaderPanel = true;
+	bool showOverlayPanel = false;
+	OverlayPanel overlayPanel;
 	bool resetLayout = false;
 	bool dirty = false;
 	bool shaderReloadNeeded = false;

@@ -7,6 +7,7 @@
 
 #include "../ENBExtender.h"
 #include "../IniSerialization.h"
+#include "../Overlays/PresetOverlays.h"
 #include "../PresetManager.h"
 #include "../TextureManager.h"
 #include "Features/Effects11/SettingsPatches.h"
@@ -43,18 +44,7 @@ bool Effect::Load()
 		const char* p = keysBuf.data();
 		while (p < keysBuf.data() + keysLen && *p) {
 			std::string iniKey(p);
-			std::string normalized;
-			for (size_t ci = 0; ci < iniKey.size(); ++ci) {
-				if (iniKey[ci] == ' ' && ci + 1 < iniKey.size() && iniKey[ci + 1] == '.')
-					continue;
-				if (iniKey[ci] == '.' && ci + 1 < iniKey.size() && iniKey[ci + 1] == ' ') {
-					normalized += '.';
-					++ci;
-					continue;
-				}
-				normalized += iniKey[ci];
-			}
-			normalizedIniKeys[normalized] = iniKey;
+			normalizedIniKeys[NormalizeIniKey(iniKey)] = iniKey;
 			p += iniKey.size() + 1;
 		}
 	}
@@ -184,6 +174,7 @@ void Effect::Save()
 	// Nothing loaded means nothing to persist; writing would leave stub ini files in the preset
 	if (!IsCompiled())
 		return;
+	assert(!Overlays::Manager::GetSingleton().IsApplied() && "save inside Overlays::Manager::RemovedScope");
 
 	std::filesystem::path iniPath = PresetManager::GetSingleton().GetENBSeriesPath() / (GetName() + ".ini");
 
@@ -927,6 +918,23 @@ std::string Effect::GetVariableIniKey(const UIVariable& uiVar)
 	if (!uiVar.uniqueName.empty())
 		return uiVar.uniqueName;
 	return uiVar.group.empty() ? uiVar.displayName : uiVar.group + "." + uiVar.displayName;
+}
+
+std::string Effect::NormalizeIniKey(std::string_view key)
+{
+	std::string normalized;
+	normalized.reserve(key.size());
+	for (size_t i = 0; i < key.size(); ++i) {
+		if (key[i] == ' ' && i + 1 < key.size() && key[i + 1] == '.')
+			continue;
+		if (key[i] == '.' && i + 1 < key.size() && key[i + 1] == ' ') {
+			normalized += '.';
+			++i;
+			continue;
+		}
+		normalized += key[i];
+	}
+	return normalized;
 }
 
 void Effect::LoadUIVariableValue(UIVariable& uiVar)

@@ -95,6 +95,9 @@ struct ColorTimeOfDayValue
 	}
 };
 
+/** @brief ini suffix of each time-of-day period, indexed like TimeOfDayValue. */
+inline constexpr const char* kTimeOfDayNames[TimeOfDayValue::Total] = { "Dawn", "Sunrise", "Day", "Sunset", "Dusk", "Night", "InteriorDay", "InteriorNight" };
+
 static_assert(TimeOfDayValue::Total <= 8 && ColorTimeOfDayValue::Total <= 8, "periods must fit the uint8_t mask");
 /** @brief Defined-period mask covering every time-of-day period; scalar settings always use it. */
 inline constexpr uint8_t AllPeriodsMask = static_cast<uint8_t>((1u << TimeOfDayValue::Total) - 1);
@@ -152,6 +155,19 @@ public:
 	float3 GetInterpolatedColorTimeOfDayValue(std::string_view key, std::string_view category);
 
 	const Setting* GetSettingInfo(std::string_view key, std::string_view category) const;
+	/** @brief The setting with this ID, or null. */
+	const Setting* GetSettingInfo(uint32_t id) const;
+
+	/** @brief One stored value without weather blending, and which periods its file defines. */
+	struct StoredValue
+	{
+		SettingValue value;
+		uint8_t definedMask = AllPeriodsMask;
+	};
+	/** @brief The enbseries.ini value (weatherID 0) or one weather's value; an undefined weather reports the base value and mask 0. */
+	StoredValue GetStoredValue(uint32_t id, uint32_t weatherID) const;
+	/** @brief Writes a stored value; a weather write goes to every weather sharing that weather's file. */
+	void SetStoredValue(uint32_t id, uint32_t weatherID, const StoredValue& stored);
 	std::vector<std::string> GetSettingsByCategory(const std::string& category) const;
 	bool CategoryHasWeatherSupport(const std::string& category) const;
 	void SetCategoryExteriorOnly(const std::string& category, bool exteriorOnly);
@@ -256,6 +272,10 @@ private:
 	uint8_t GetWeatherDefinedMask(uint32_t weatherID, uint32_t settingID) const;
 	/** @brief The setting as the weather sees it: its defined periods over the live enbseries.ini value. */
 	SettingValue ResolveWeatherValue(uint32_t weatherID, uint32_t settingID) const;
+	/** @brief The weather's value vector, grown to cover every setting with the base values. Caller holds the unique lock. */
+	std::vector<SettingValue>& WeatherValuesFor(uint32_t weatherID);
+	/** @brief The weather's defined-period masks, grown to cover every setting. Caller holds the unique lock. */
+	std::vector<uint8_t>& WeatherDefinedFor(uint32_t weatherID);
 
 	template <typename T>
 	T GetValueInternal(uint32_t id, bool rawValue = false, float weatherBlendOverride = -1.0f) const;

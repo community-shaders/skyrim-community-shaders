@@ -165,6 +165,12 @@ public:
 	std::vector<UIVariable> uiVariables;
 
 	static bool IsWeatherSeparated(const UIVariable& uiVar) { return !uiVar.separation.empty() && uiVar.separation != "None"; }
+	/** @brief True for a vector saved as one key per component (KeyX, KeyY, ...). */
+	static bool IsPerComponentVector(const UIVariable& uiVar);
+	/** @brief The ini key a variable is saved under: its UniqueName, else Group.UIName. */
+	static std::string GetVariableIniKey(const UIVariable& uiVar);
+	/** @brief Removes spaces around dots, which D3DPreprocess and ENB's #x place differently. */
+	static std::string NormalizeIniKey(std::string_view key);
 	static void CaptureBaseValue(UIVariable& uiVar);
 	/** @brief Records the current value as the shader default. Only meaningful before the ini is applied. */
 	static void CaptureDefaultValue(UIVariable& uiVar);
@@ -289,10 +295,6 @@ public:
 	void ClearVariableCache();
 
 	virtual bool IsTechniqueEnabled(TechniqueInfo&) { return true; }
-
-protected:
-	static bool IsPerComponentVector(const UIVariable& uiVar);
-	std::string GetVariableIniKey(const UIVariable& uiVar);
 
 private:
 	bool LoadFXFile();

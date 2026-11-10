@@ -1,6 +1,7 @@
 #include "SettingManager.h"
 
 #include "IniSerialization.h"
+#include "Overlays/PresetOverlays.h"
 #include "PresetManager.h"
 #include "WeatherManager.h"
 #include <Windows.h>
@@ -10,8 +11,6 @@
 #include <filesystem>
 #include <string>
 #include <tuple>
-
-static const char* const timeOfDayNames[] = { "Dawn", "Sunrise", "Day", "Sunset", "Dusk", "Night", "InteriorDay", "InteriorNight" };
 
 static bool TryParseBool(const std::string& a_value, bool& a_out)
 {
@@ -193,6 +192,57 @@ SettingValue SettingManager::ResolveWeatherValue(uint32_t weatherID, uint32_t se
 		}
 	},
 		base);
+}
+
+std::vector<SettingValue>& SettingManager::WeatherValuesFor(uint32_t weatherID)
+{
+	auto& data = weatherData[weatherID];
+	for (size_t i = data.size(); i < allSettings.size(); ++i)
+		data.push_back(allSettings[i].currentValue);
+	return data;
+}
+
+std::vector<uint8_t>& SettingManager::WeatherDefinedFor(uint32_t weatherID)
+{
+	auto& defined = weatherDefined[weatherID];
+	if (defined.size() < allSettings.size())
+		defined.resize(allSettings.size(), 0);
+	return defined;
+}
+
+const Setting* SettingManager::GetSettingInfo(uint32_t id) const
+{
+	std::shared_lock lock(mutex);
+	return id < allSettings.size() ? &allSettings[id] : nullptr;
+}
+
+SettingManager::StoredValue SettingManager::GetStoredValue(uint32_t id, uint32_t weatherID) const
+{
+	std::shared_lock lock(mutex);
+	assert(id < allSettings.size());
+	if (!weatherID)
+		return { allSettings[id].currentValue, AllPeriodsMask };
+	const auto weatherIt = weatherData.find(weatherID);
+	if (weatherIt == weatherData.end() || id >= weatherIt->second.size())
+		return { allSettings[id].currentValue, 0 };
+	return { weatherIt->second[id], GetWeatherDefinedMask(weatherID, id) };
+}
+
+void SettingManager::SetStoredValue(uint32_t id, uint32_t weatherID, const StoredValue& stored)
+{
+	std::unique_lock lock(mutex);
+	assert(id < allSettings.size());
+	if (!weatherID) {
+		allSettings[id].currentValue = stored.value;
+		return;
+	}
+	const auto* entry = WeatherManager::GetSingleton().FindWeatherEntry(weatherID);
+	if (!entry)
+		return;
+	for (uint32_t linkedID : entry->weatherIDs) {
+		WeatherValuesFor(linkedID)[id] = stored.value;
+		WeatherDefinedFor(linkedID)[id] = stored.definedMask;
+	}
 }
 
 /** @brief A bool setting ready for RegisterSettingInternal. */
@@ -388,20 +438,8 @@ void SettingManager::SetValueInternal(uint32_t id, const T& value)
 		// Only the periods the edit changed become weather-defined; the rest keep following enbseries.ini
 		const uint8_t editedPeriods = ChangedPeriods(ResolveWeatherValue(targetWeatherID, id), value);
 		for (uint32_t linkedID : entry->weatherIDs) {
-			auto& data = weatherData[linkedID];
-			if (data.size() < allSettings.size()) {
-				auto oldSize = data.size();
-				data.resize(allSettings.size());
-				for (size_t i = oldSize; i < allSettings.size(); ++i) {
-					data[i] = allSettings[i].currentValue;
-				}
-			}
-			data[id] = value;
-
-			auto& defined = weatherDefined[linkedID];
-			if (defined.size() < allSettings.size())
-				defined.resize(allSettings.size(), 0);
-			defined[id] |= editedPeriods;
+			WeatherValuesFor(linkedID)[id] = value;
+			WeatherDefinedFor(linkedID)[id] |= editedPeriods;
 		}
 		return;
 	}
@@ -636,6 +674,7 @@ void SettingManager::LoadWeatherSettings(const std::vector<uint32_t>& weatherIDs
 
 void SettingManager::SaveWeatherSettings(const std::string& weatherKey, const std::string& filePath)
 {
+	assert(!Overlays::Manager::GetSingleton().IsApplied() && "save inside Overlays::Manager::RemovedScope");
 	uint32_t weatherID;
 	if (!TryParseWeatherID(weatherKey, weatherID)) {
 		logger::error("[SettingManager] Invalid weather key: {}", weatherKey);
@@ -818,6 +857,7 @@ void SettingManager::LoadFromFile(const std::string& filePath)
 
 void SettingManager::SaveToFile(const std::string& filePath)
 {
+	assert(!Overlays::Manager::GetSingleton().IsApplied() && "save inside Overlays::Manager::RemovedScope");
 	std::filesystem::path absPath = std::filesystem::absolute(filePath);
 	std::string absPathStr = absPath.string();
 
@@ -1017,7 +1057,7 @@ uint8_t SettingManager::LoadSettingFromFile(const std::string& filePath, const s
 				}
 
 				for (int i = 0; i < 8; ++i) {
-					if (ReadIniValue(filePath, section, k + timeOfDayNames[i], str) && TryParseFloat(str, parsed)) {
+					if (ReadIniValue(filePath, section, k + kTimeOfDayNames[i], str) && TryParseFloat(str, parsed)) {
 						timeOfDayValue.values[i] = std::clamp(parsed, setting.minValue, setting.maxValue);
 						foundMask |= PeriodBit(i);
 					}
@@ -1040,7 +1080,7 @@ uint8_t SettingManager::LoadSettingFromFile(const std::string& filePath, const s
 				}
 
 				for (int i = 0; i < 8; ++i) {
-					if (ReadIniValue(filePath, section, k + timeOfDayNames[i], str) && TryParseColor(str, setting.minValue, setting.maxValue, parsed)) {
+					if (ReadIniValue(filePath, section, k + kTimeOfDayNames[i], str) && TryParseColor(str, setting.minValue, setting.maxValue, parsed)) {
 						colorTimeOfDayValue.values[i] = parsed;
 						foundMask |= PeriodBit(i);
 					}
@@ -1077,7 +1117,7 @@ void SettingManager::SaveSettingToFile(const std::string& filePath, const std::s
 			for (int i = 0; i < 8; ++i) {
 				if (!(periodMask & PeriodBit(i)))
 					continue;
-				std::string fullKey = key + timeOfDayNames[i];
+				std::string fullKey = key + kTimeOfDayNames[i];
 				std::string formatted = Effects11Util::Ini::FormatFloat(timeOfDayValue.values[i]);
 				WritePrivateProfileStringA(section.c_str(), fullKey.c_str(), formatted.c_str(), filePath.c_str());
 			}
@@ -1090,7 +1130,7 @@ void SettingManager::SaveSettingToFile(const std::string& filePath, const std::s
 			for (int i = 0; i < 8; ++i) {
 				if (!(periodMask & PeriodBit(i)))
 					continue;
-				std::string fullKey = key + timeOfDayNames[i];
+				std::string fullKey = key + kTimeOfDayNames[i];
 				const auto& color = colorTimeOfDayValue.values[i];
 				const float rgb[3] = { color.x, color.y, color.z };
 				std::string formatted = Effects11Util::Ini::FormatFloatList(rgb);
@@ -1104,7 +1144,7 @@ void SettingManager::SaveSettingToFile(const std::string& filePath, const std::s
 	for (const auto& legacyKey : setting.legacyKeys) {
 		WritePrivateProfileStringA(section.c_str(), legacyKey.c_str(), nullptr, filePath.c_str());
 		if (isTimeOfDay) {
-			for (const char* suffix : timeOfDayNames)
+			for (const char* suffix : kTimeOfDayNames)
 				WritePrivateProfileStringA(section.c_str(), (legacyKey + suffix).c_str(), nullptr, filePath.c_str());
 		}
 	}
@@ -1170,6 +1210,8 @@ void SettingManager::SetIgnoreWeatherSystemInterior(const std::string& category,
 
 void SettingManager::Load()
 {
+	// Every reload path (Initialize, ReloadActive, ReloadShaders, Revert) runs this first
+	Overlays::Manager::GetSingleton().RestoreBeforeReload();
 	LoadFromFile(PresetManager::GetSingleton().GetENBSeriesIniPath().string());
 	ReloadAllWeatherSettings();
 }

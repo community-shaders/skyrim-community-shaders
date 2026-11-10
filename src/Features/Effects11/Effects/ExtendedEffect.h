@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../UITree.h"
+#include "../WeatherManager.h"
 #include "Effect.h"
 
 #include <span>
@@ -16,6 +17,15 @@ public:
 	void SyncWeatherVarFromUI(size_t index, uint32_t weatherID);
 	void ApplyTimeOfDayInterpolation();
 	void SaveWeatherOverrides() override;
+
+	/** @brief Weather entry an edit of this variable is saved to, or null when it belongs to the base value. */
+	WeatherManager::WeatherEntry* WeatherEntryForEdit(size_t index, uint32_t weatherID) const;
+	/** @brief A weather file's stored text for an ini key, or null when that file does not define it. @param weatherIDs Every weather ID sharing the file. */
+	const std::string* GetWeatherValue(std::span<const uint32_t> weatherIDs, const std::string& iniKey) const;
+	/** @brief Sets, or with null removes, an ini key for every weather sharing one file. Not marked dirty, so it is never saved. */
+	void SetWeatherValue(std::span<const uint32_t> weatherIDs, const std::string& iniKey, const std::string* value);
+	/** @brief Re-parses the weather values after SetWeatherValue calls. */
+	void RefreshWeatherCaches() { RebuildWeatherCaches(); }
 
 	void Unload() override;
 	bool IsTechniqueEnabled(TechniqueInfo& info) override;
