@@ -249,12 +249,6 @@ namespace
 	};
 }
 
-void Menu::ThemeFromJson(const json& themeJson, ThemeSettings& theme)
-{
-	theme = themeJson.get<ThemeSettings>();
-	PaletteFromJson(themeJson, theme.FullPalette);
-}
-
 void Menu::CursorFromJson(const json& cursorJson, ThemeSettings::CursorSettings& cursor)
 {
 	cursor.Types = {};
@@ -312,6 +306,26 @@ static void SanitizeFontRolesJson(json& themeJson)
 		for (size_t i = fontRoles.size(); i < expected; ++i) {
 			fontRoles.push_back(defaults[i]);
 		}
+	}
+}
+
+void Menu::ThemeFromJson(const json& themeJson, ThemeSettings& theme)
+{
+	json sanitized = themeJson;
+	SanitizeFontRolesJson(sanitized);
+	theme = sanitized.get<ThemeSettings>();
+	PaletteFromJson(sanitized, theme.FullPalette);
+	if (sanitized.contains("Cursor") && sanitized["Cursor"].is_object())
+		CursorFromJson(sanitized["Cursor"], theme.Cursor);
+
+	MenuFonts::NormalizeFontRoles(theme, themeJson.contains("FontRoles"));
+	Util::CursorLoader::MigrateLegacyCursorSettings(theme);
+	auto& bodyRole = theme.FontRoles[static_cast<size_t>(FontRole::Body)];
+	if (!Util::ValidateFont(bodyRole.File)) {
+		const auto& defaults = GetDefaultFontRole(FontRole::Body);
+		logger::warn("Theme font '{}' not found, falling back to default font '{}'", bodyRole.File, defaults.File);
+		bodyRole = defaults;
+		theme.FontName = defaults.File;
 	}
 }
 
@@ -619,9 +633,17 @@ void Menu::SaveTheme(json& o_json)
 		settings.Theme.FontName = defaults.File;
 	}
 
-	o_json["Theme"] = settings.Theme;
-	PaletteToJson(o_json["Theme"], settings.Theme.FullPalette);
-	CursorToJson(o_json["Theme"]["Cursor"], settings.Theme.Cursor);
+	o_json["Theme"] = ThemeToJson(settings.Theme);
+}
+
+json Menu::ThemeToJson(const ThemeSettings& theme)
+{
+	json out = theme;
+	PaletteToJson(out, theme.FullPalette);
+	CursorToJson(out["Cursor"], theme.Cursor);
+	// The font reload rewrites FontName on its own; the Body role is what counts
+	out["FontName"] = theme.FontRoles[static_cast<size_t>(FontRole::Body)].File;
+	return out;
 }
 
 std::vector<std::string> Menu::DiscoverThemes()
@@ -648,29 +670,13 @@ bool Menu::LoadThemePreset(const std::string& themeName)
 	if (themeManager->LoadTheme(themeName, themeSettings)) {
 		// Create a backup of current theme in case loading fails
 		ThemeSettings backupTheme = settings.Theme;
-		bool hasFontRoles = themeSettings.contains("FontRoles");
-
-		SanitizeFontRolesJson(themeSettings);
 
 		try {
-			settings.Theme = themeSettings;
-			PaletteFromJson(themeSettings, settings.Theme.FullPalette);
-			if (themeSettings.contains("Cursor") && themeSettings["Cursor"].is_object()) {
-				CursorFromJson(themeSettings["Cursor"], settings.Theme.Cursor);
-			}
-
-			MenuFonts::NormalizeFontRoles(settings.Theme, hasFontRoles);
-			Util::CursorLoader::MigrateLegacyCursorSettings(settings.Theme);
-			auto& bodyRole = settings.Theme.FontRoles[static_cast<size_t>(FontRole::Body)];
-			if (!Util::ValidateFont(bodyRole.File)) {
-				const auto& defaults = Menu::GetDefaultFontRole(FontRole::Body);
-				logger::warn("Font '{}' from theme '{}' not found, falling back to default font '{}'",
-					bodyRole.File, themeName, defaults.File);
-				settings.Theme.FontRoles[static_cast<size_t>(FontRole::Body)] = defaults;
-				settings.Theme.FontName = defaults.File;
-			}
+			ThemeFromJson(themeSettings, settings.Theme);
 
 			settings.SelectedThemePreset = themeName;
+			// Colours and Fonts undo steps belong to the theme they were made on
+			undoHistory.Forget("theme.");
 
 			// Schedule deferred font reload if font has changed
 			if (settings.Theme.FontName != MenuFonts::GetAtlasState().cachedFontName) {
