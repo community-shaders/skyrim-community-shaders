@@ -116,21 +116,21 @@ void ExtendedTranslucency::DrawSettings()
 			ImGui::Text("%s", T(TKEY("skinned_mesh_only_tooltip"), "Control if this effect should only apply to skinned mesh. Check this option if you are seeing undesired effects on random objects."));
 		}
 
-		if (ImGui::SliderFloat(T(TKEY("transparency_increase"), "Transparency Increase"), &settings.AlphaReduction, 0, 1.f)) {
+		if (ImGui::SliderFloat(T(TKEY("transparency_increase"), "Transparency Increase"), &settings.AlphaReduction, 0, 1.f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
 			changed = true;
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text("%s", T(TKEY("transparency_increase_tooltip"), "Translucent material will make the material more opaque on average, which could be different from the intent. Reduce the alpha to counter this effect and increase the dynamic range of the output."));
 		}
 
-		if (ImGui::SliderFloat(T(TKEY("softness"), "Softness"), &settings.AlphaSoftness, 0.0f, 1.0f)) {
+		if (ImGui::SliderFloat(T(TKEY("softness"), "Softness"), &settings.AlphaSoftness, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
 			changed = true;
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text("%s", T(TKEY("softness_tooltip"), "Control the softness of the alpha increase, increase the softness reduce the increased amount of alpha."));
 		}
 
-		if (ImGui::SliderFloat(T(TKEY("blend_weight"), "Blend Weight"), &settings.AlphaStrength, 0.0f, 1.0f)) {
+		if (ImGui::SliderFloat(T(TKEY("blend_weight"), "Blend Weight"), &settings.AlphaStrength, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
 			changed = true;
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -146,6 +146,10 @@ void ExtendedTranslucency::DrawSettings()
 void ExtendedTranslucency::LoadSettings(json& o_json)
 {
 	settings = o_json;
+	const Settings defaults{};
+	settings.AlphaReduction = Util::ClampFinite(settings.AlphaReduction, defaults.AlphaReduction, 0.0f, 1.0f);
+	settings.AlphaSoftness = Util::ClampFinite(settings.AlphaSoftness, defaults.AlphaSoftness, 0.0f, 1.0f);
+	settings.AlphaStrength = Util::ClampFinite(settings.AlphaStrength, defaults.AlphaStrength, 0.0f, 1.0f);
 }
 
 void ExtendedTranslucency::SaveSettings(json& o_json)
