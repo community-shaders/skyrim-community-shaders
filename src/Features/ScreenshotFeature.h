@@ -32,8 +32,6 @@ struct ScreenshotFeature : public Feature
 	virtual void DrawSettings() override;
 	virtual void LoadSettings(json& a_json) override;
 	virtual void SaveSettings(json& a_json) override;
-	/** @brief Releases the screenshot compositor shader. */
-	virtual void ClearShaderCache() override;
 	/** @brief Resets transient state (no-op for this feature). */
 	virtual void Reset() override;
 	/** @brief Called after all features are loaded (no-op for this feature). */
@@ -43,6 +41,10 @@ struct ScreenshotFeature : public Feature
 	void Capture();
 	/** @brief Hands finished GPU readbacks to the worker, then executes Capture() if one is pending. Render thread only; call before the wrapped buffers are cleared. */
 	void ProcessCaptureRequest();
+	/** @brief Copies the scene before the HUD draws when an SDR capture is pending, so screenshots exclude the HUD and menu blur. */
+	void SnapshotCleanScene();
+	/** @brief Returns this frame's pre-UI snapshot, or nullptr if none was taken. */
+	ID3D11Texture2D* GetFreshCleanScene() const;
 	bool applyCropToScreenshot = true;
 
 	// Settings
@@ -95,8 +97,12 @@ private:
 	// directly (kFRAMEBUFFER on flat aliases the swap-chain backbuffer).
 	winrt::com_ptr<ID3D11Texture2D> previewCacheTexture;
 	winrt::com_ptr<ID3D11ShaderResourceView> previewCacheSRV;
-	std::unique_ptr<Texture2D> compositeTexture;
-	winrt::com_ptr<ID3D11ComputeShader> compositeCS;
+	std::unique_ptr<Texture2D> cleanSceneTexture;
+	uint32_t cleanSceneFrame = UINT32_MAX;
+	// Render thread only: a request already waited one frame for its pre-UI snapshot.
+	bool captureDeferred = false;
+	// Render thread only: set while the crop preview is drawn so the next frame snapshots the clean scene.
+	bool previewVisible = false;
 
 	/** @brief Polls in-flight staging copies without stalling and enqueues the finished ones for encoding. */
 	void ProcessPendingReadbacks();
@@ -107,6 +113,5 @@ private:
 	void EnqueueScreenshot(PendingScreenshot&& screenshot);
 	void ScreenshotWorkerLoop();
 	void EnsurePreviewCache(ID3D11Texture2D* sourceTexture);
-	ID3D11Texture2D* CompositeCapture(ID3D11Texture2D* sourceTexture, ID3D11ShaderResourceView* sceneSRV, ID3D11ShaderResourceView* uiSRV);
 	static void ShowInGameNotification(std::string message);
 };

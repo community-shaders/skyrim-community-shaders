@@ -239,6 +239,7 @@ namespace
 	{
 		static void thunk(int64_t a1)
 		{
+			globals::features::screenshotFeature.SnapshotCleanScene();
 			globals::features::hdrDisplay.SetUIBuffer();
 			func(a1);
 		}
@@ -616,9 +617,9 @@ void HDRDisplay::RestoreDefaultSettings()
 	settings.dontShowHDRWarning = false;
 }
 
-void HDRDisplay::DataLoaded()
+void HDRDisplay::PreCreateRenderTargets()
 {
-	// Use Skyrim's built-in ini setting to upgrade all HDR render targets to 16-bit float format.
+	// Prefs ini is read after plugin load and may clear this; upgrades HDR targets to fp16.
 	auto setting = RE::GetINISetting("bUse64bitsHDRRenderTarget:Display");
 	if (setting) {
 		setting->data.b = true;
