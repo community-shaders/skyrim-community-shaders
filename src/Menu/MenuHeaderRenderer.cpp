@@ -40,6 +40,22 @@ namespace
 	{
 		Icons::DrawCenteredGlyph(drawList, min, ImVec2(size, size), size * ThemeManager::Constants::HEADER_GLYPH_ICON_SCALE, glyph, color);
 	}
+
+	/** @brief Draw list for the docked header buttons: the tab bar's host window, so popups and tooltips stay above them. */
+	ImDrawList* DockedHeaderDrawList()
+	{
+		const ImGuiDockNode* node = ImGui::GetCurrentWindowRead()->DockNode;
+		return node && node->HostWindow ? node->HostWindow->DrawList : ImGui::GetForegroundDrawList();
+	}
+
+	/** @brief Hit test for a docked header button, which is not an ImGui item: inside this pane and not under a popup or another window. */
+	bool IsDockedHeaderButtonHovered(const ImRect& rect)
+	{
+		const ImGuiWindow* window = ImGui::GetCurrentWindowRead();
+		const ImGuiWindow* hovered = ImGui::GetCurrentContext()->HoveredWindow;
+		return hovered && hovered->RootWindowDockTree == window->RootWindowDockTree && window->Rect().Contains(ImGui::GetIO().MousePos) &&
+		       ImGui::IsMouseHoveringRect(rect.Min, rect.Max, false);
+	}
 }
 
 bool MenuHeaderRenderer::GlyphIconButton(const char* id, Icons::GlyphRef glyph, float glyphBox, const char* tooltip, bool active)
@@ -73,8 +89,7 @@ bool MenuHeaderRenderer::RenderNavButton(bool docked, ImVec2 min, float size, co
 	bool down;
 	bool clicked;
 	if (docked) {
-		// Drawn over the title bar like the action icons, so the hit test is manual; the palette's own modal blocks it
-		hovered = !GoToPalette::IsOpen() && ImGui::IsMouseHoveringRect(rect.Min, rect.Max, false);
+		hovered = IsDockedHeaderButtonHovered(rect);
 		down = hovered && ImGui::IsMouseDown(ImGuiMouseButton_Left);
 		clicked = hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left);
 	} else {
@@ -86,7 +101,7 @@ bool MenuHeaderRenderer::RenderNavButton(bool docked, ImVec2 min, float size, co
 		ImGui::SetCursorScreenPos(saved);
 	}
 
-	ImDrawList* drawList = docked ? ImGui::GetForegroundDrawList() : ImGui::GetWindowDrawList();
+	ImDrawList* drawList = docked ? DockedHeaderDrawList() : ImGui::GetWindowDrawList();
 	Util::DrawAnimatedButtonHighlight(rect, ImGui::GetID(id), hovered, down, current, drawList);
 
 	ImVec4 tint = BaseIconTint();
@@ -188,20 +203,39 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, float uiScal
 			RenderWatermarkLogo(uiIcons);
 		}
 
+		// Buttons that do not fit a narrow pane are clipped, matching their hit test
+		ImDrawList* barDrawList = DockedHeaderDrawList();
+		const ImRect pane = ImGui::GetCurrentWindowRead()->Rect();
+		barDrawList->PushClipRect(pane.Min, pane.Max, true);
+
 		// Draw action icons in the title bar area
 		const float iconsLeft = RenderDockedIcons(actionIcons, uiScale);
 
-		// The tab's width is the title text plus its padding and the dock and close buttons
 		const ImVec2 windowPos = ImGui::GetWindowPos();
 		const float titleBarHeight = ImGui::GetFrameHeight();
-		float titleRight = windowPos.x + ImGui::CalcTextSize(title.c_str()).x + titleBarHeight * 2.0f + ImGui::GetStyle().FramePadding.x * 2.0f;
-		// The tab hugs the window's left edge, so Home sits right after it, then the search pill
 		const float homeSize = GetHeaderIconSize(true, uiScale);
-		const float homeLeft = titleRight + ThemeManager::Constants::DOCKED_ICON_SPACING * uiScale;
-		titleRight = homeLeft + RenderNavButtons(true, ImVec2(homeLeft, windowPos.y + (titleBarHeight - homeSize) * 0.5f), homeSize,
-									ThemeManager::Constants::DOCKED_ICON_SPACING * uiScale);
+		const float gap = ThemeManager::Constants::DOCKED_ICON_SPACING * uiScale;
+		const int navCount = IssuesPageRenderer::GetFeatureIssueCount() ? 3 : 2;  // Home, issues, search
+		const float navWidth = (homeSize + gap) * static_cast<float>(navCount);
+
+		// Home and search follow the node's last tab; a trailing spacer keeps the tabs short of the header buttons
+		ImGuiWindow* window = ImGui::GetCurrentWindow();
+		float tabsRight = window->DC.DockTabItemRect.Max.x;
+		if (ImGuiDockNode* node = window->DockNode) {
+			for (const ImGuiWindow* tabWindow : node->Windows)
+				tabsRight = std::max(tabsRight, tabWindow->DC.DockTabItemRect.Max.x);
+			barDrawList->PopClipRect();  // The amend re-enters the host window, which would inherit the pane clip
+			if (node->TabBar && ImGui::DockNodeBeginAmendTabBar(node)) {
+				ImGui::TabItemSpacing("##HeaderButtons", ImGuiTabItemFlags_Trailing, std::max(0.0f, node->TabBar->BarRect.Max.x - iconsLeft) + navWidth);
+				ImGui::DockNodeEndAmendTabBar();
+			}
+			barDrawList->PushClipRect(pane.Min, pane.Max, true);
+		}
+		const float homeLeft = std::min(tabsRight + gap, iconsLeft - navWidth);
+		float titleRight = homeLeft + RenderNavButtons(true, ImVec2(homeLeft, windowPos.y + (titleBarHeight - homeSize) * 0.5f), homeSize, gap);
 		RenderSearchPill(true, titleRight, iconsLeft, windowPos.y, titleBarHeight, uiScale,
 			MenuShortcuts::GetHint(shortcuts, MenuShortcuts::Ids::kGoTo));
+		barDrawList->PopClipRect();
 	} else {
 		// When not docked, show the custom header
 		bool centerHeader = globals::menu->GetTheme().CenterHeader;
@@ -377,7 +411,7 @@ float MenuHeaderRenderer::RenderDockedIcons(const std::vector<ActionIcon>& actio
 	if (actionIcons.empty())
 		return ImGui::GetWindowPos().x + ImGui::GetWindowSize().x;
 
-	// Docked: Draw larger icons in the title bar using foreground draw list
+	// Docked: larger icons drawn over the tab bar
 	const float iconSize = GetHeaderIconSize(true, uiScale);
 	const float iconSpacing = ThemeManager::Constants::DOCKED_ICON_SPACING * uiScale;
 	const float rightMargin = ThemeManager::Constants::DOCKED_RIGHT_MARGIN * uiScale;
@@ -387,8 +421,7 @@ float MenuHeaderRenderer::RenderDockedIcons(const std::vector<ActionIcon>& actio
 	ImVec2 windowSize = ImGui::GetWindowSize();
 	float titleBarHeight = ImGui::GetFrameHeight();
 
-	// Use foreground draw list to draw over the title bar
-	ImDrawList* fgDrawList = ImGui::GetForegroundDrawList();
+	ImDrawList* barDrawList = DockedHeaderDrawList();
 
 	// Calculate icon positions (right to left from close button)
 	float iconX = windowPos.x + windowSize.x - rightMargin;
@@ -407,9 +440,9 @@ float MenuHeaderRenderer::RenderDockedIcons(const std::vector<ActionIcon>& actio
 		ImRect interactionRect({ iconX, iconY }, { iconX + iconSize, iconY + iconSize });
 
 		// Check mouse interaction against full area
-		const bool isHovered = ImGui::IsMouseHoveringRect(interactionRect.Min, interactionRect.Max, false);
+		const bool isHovered = IsDockedHeaderButtonHovered(interactionRect);
 		auto unsavedTint = Util::StateHoverButtonStyle(Util::Colors::GetUnsaved(), it->unsaved);  // the unsaved save hovers in its colour
-		Util::DrawAnimatedButtonHighlight(interactionRect, ImGui::GetID(it->tooltip.c_str()), isHovered, isHovered && ImGui::IsMouseDown(ImGuiMouseButton_Left), false, fgDrawList);
+		Util::DrawAnimatedButtonHighlight(interactionRect, ImGui::GetID(it->tooltip.c_str()), isHovered, isHovered && ImGui::IsMouseDown(ImGuiMouseButton_Left), false, barDrawList);
 
 		// Draw icon with hover effect, using reduced area to minimize padding
 		ImU32 tintColor;
@@ -425,15 +458,15 @@ float MenuHeaderRenderer::RenderDockedIcons(const std::vector<ActionIcon>& actio
 			tintColor = ImGui::GetColorU32(isHovered ? IM_COL32_WHITE : ThemeManager::Constants::HEADER_COLOR_ICON_IDLE);
 		}
 		if (it->unsaved)
-			DrawUnsavedBox(fgDrawList, interactionRect.Min, interactionRect.Max);
+			DrawUnsavedBox(barDrawList, interactionRect.Min, interactionRect.Max);
 		if (it->texture) {
 			// Whole-pixel rect, and the mip level nearest this size, so the PNG edges stay crisp
 			const ImVec2 snappedMin = Util::IconLoader::SnapToPixel(iconMin);
 			const ImVec2 snappedSize = Util::IconLoader::SnapToPixel(ImVec2(iconMax.x - iconMin.x, iconMax.y - iconMin.y));
-			fgDrawList->AddImage(Util::IconLoader::ViewForSize(it->texture, snappedSize), snappedMin,
+			barDrawList->AddImage(Util::IconLoader::ViewForSize(it->texture, snappedSize), snappedMin,
 				ImVec2(snappedMin.x + snappedSize.x, snappedMin.y + snappedSize.y), ImVec2(0, 0), ImVec2(1, 1), tintColor);
 		} else
-			DrawIconGlyph(fgDrawList, iconMin, iconMax.x - iconMin.x, it->glyph, tintColor);
+			DrawIconGlyph(barDrawList, iconMin, iconMax.x - iconMin.x, it->glyph, tintColor);
 
 		// Handle interaction
 		if (isHovered) {

@@ -15,13 +15,13 @@ namespace Util::Surface
 	/** @brief The places the menu draws a surface; each has its own theme settings. */
 	enum class Role : std::uint8_t
 	{
-		HomeCard,    /**< @brief Cards on the Home page. */
-		Toast,       /**< @brief Notification toast cards. */
-		OverlayCard, /**< @brief The shader compilation status card. */
-		Palette,     /**< @brief The Ctrl+K go-to palette. */
-		NavSelected, /**< @brief The selected row of the left navigation. */
-		OptionCard,  /**< @brief Clickable cards that pick one option and open it below (Util::OptionCard). */
-		SectionCard, /**< @brief Cards grouping related settings on a page (Util::SectionCard). */
+		HomeCard,      /**< @brief Cards on the Home page. */
+		Toast,         /**< @brief Notification toast cards. */
+		OverlayCard,   /**< @brief The shader compilation status card. */
+		Palette,       /**< @brief The Ctrl+K go-to palette. */
+		ListHighlight, /**< @brief The highlight behind hovered and selected list rows. */
+		OptionCard,    /**< @brief Clickable cards that pick one option and open it below (Util::OptionCard). */
+		SectionCard,   /**< @brief Cards grouping related settings on a page (Util::SectionCard). */
 		Count
 	};
 
@@ -33,7 +33,7 @@ namespace Util::Surface
 	{
 		bool enabled = true;                          /**< @brief Draw the surface at all. */
 		float fillLift = 0.04f;                       /**< @brief Window colour lifted toward white by this share. */
-		float fillAlpha = 1.0f;                       /**< @brief Fill opacity multiplier (NavSelected: accent fill opacity). */
+		float fillAlpha = 1.0f;                       /**< @brief Fill opacity multiplier (ListHighlight: accent fill opacity). */
 		float rounding = -1.0f;                       /**< @brief Corner radius; negative uses the style's rounding. */
 		bool border = true;                           /**< @brief Draw the hairline border. */
 		float borderAlpha = 0.08f;                    /**< @brief Hairline border opacity. */
@@ -45,8 +45,8 @@ namespace Util::Surface
 		float shadowOffsetX = 0.0f;                   /**< @brief Shadow sideways shift; positive moves it right. */
 		float shadowOffsetY = 2.0f;                   /**< @brief Shadow drop. */
 		float padding = 12.0f;                        /**< @brief Inner padding on every side (HomeCard only). */
-		bool accentBar = true;                        /**< @brief Accent bar on the left edge (NavSelected only). */
-		float accentBarWidth = 3.0f;                  /**< @brief Accent bar width (NavSelected only). */
+		bool accentBar = true;                        /**< @brief Accent bar on the left edge (ListHighlight only). */
+		float accentBarWidth = 3.0f;                  /**< @brief Accent bar width (ListHighlight only). */
 	};
 
 	/** @brief Surface settings of every role; part of a theme. Missing JSON fields keep these defaults. */
@@ -102,4 +102,16 @@ namespace Util::Surface
 	 * @param options Geometry fallback, fade and border colour override; see Options.
 	 */
 	void Draw(ImDrawList* drawList, const ImVec2& min, const ImVec2& max, Role role, const Options& options = {});
+
+	/**
+	 * @brief The list highlight; defaults draw a selected row at rest.
+	 * @param selectedness 0 is the hover look, 1 the selected look.
+	 */
+	void DrawListHighlight(ImDrawList* drawList, const ImVec2& min, const ImVec2& max, float visibility = 1.0f, float selectedness = 1.0f, float press = 0.0f);
+
+	/** @brief Width of the list highlight's accent bar at the current UI scale. */
+	float ListHighlightBarWidth();
+
+	/** @brief Distance from a list row's highlight edge to its text, clear of the accent bar. Text rows get it automatically. */
+	float ListHighlightTextInset();
 }

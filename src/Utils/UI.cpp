@@ -29,6 +29,7 @@
 #include <dxgi.h>
 #include <imgui.h>
 #include <imgui_internal.h>
+#include <imgui_stdlib.h>
 #include <wrl/client.h>
 
 #include "../Feature.h"
@@ -193,6 +194,12 @@ namespace Util
 		ImGui::PopStyleColor();
 	}
 
+	void SeparatorTextWithFont(const char* a_text, Menu::FontRole a_role)
+	{
+		MenuFonts::FontRoleGuard guard(a_role);
+		ImGui::SeparatorText(a_text);
+	}
+
 	bool TableRowSelectable(const char* label, bool selected, ImGuiSelectableFlags flags)
 	{
 		return ImGui::Selectable(label, selected, flags, ImVec2(0, ImGui::GetFrameHeight()));
@@ -274,53 +281,6 @@ namespace Util
 
 	namespace
 	{
-		struct GlassSegmentPalette
-		{
-			ImVec4 track;
-			ImVec4 selectedFill;
-			ImVec4 selectedText;
-			ImVec4 idleText;
-			ImVec4 hoverFill;
-			float rounding = 0.0f;
-			float inset = 0.0f;
-			float segmentHeight = 0.0f;
-			float trackHeight = 0.0f;
-		};
-
-		GlassSegmentPalette MakeGlassSegmentPalette(bool muted = false)
-		{
-			const auto& style = ImGui::GetStyle();
-			GlassSegmentPalette p;
-			p.trackHeight = ImGui::GetFrameHeight();
-			p.inset = std::max(2.0f, std::floor(style.FramePadding.y * 0.55f));
-			p.segmentHeight = p.trackHeight - p.inset * 2.0f;
-			p.rounding = std::max(style.FrameRounding, p.trackHeight * 0.5f);
-
-			// Translucent mica-style track over the blurred panel.
-			p.track = ImVec4(1.0f, 1.0f, 1.0f, C::GLASS_TRACK_IDLE_ALPHA);
-			const ImVec4 frame = ImGui::GetStyleColorVec4(ImGuiCol_FrameBg);
-			if (frame.w > 0.01f) {
-				p.track.x = frame.x * C::GLASS_TRACK_FRAME_MIX + (1.0f - C::GLASS_TRACK_FRAME_MIX);
-				p.track.y = frame.y * C::GLASS_TRACK_FRAME_MIX + (1.0f - C::GLASS_TRACK_FRAME_MIX);
-				p.track.z = frame.z * C::GLASS_TRACK_FRAME_MIX + (1.0f - C::GLASS_TRACK_FRAME_MIX);
-				p.track.w = std::clamp(frame.w * C::GLASS_TRACK_ALPHA_SCALE + C::GLASS_TRACK_ALPHA_MIN, C::GLASS_TRACK_ALPHA_MIN, C::GLASS_TRACK_ALPHA_MAX);
-			}
-
-			p.selectedFill = ImGui::GetStyleColorVec4(ImGuiCol_Header);
-			p.selectedFill.w = std::clamp(std::max(p.selectedFill.w, C::GLASS_SELECTED_ALPHA_FLOOR) * C::GLASS_SELECTED_ALPHA_SCALE, C::GLASS_SELECTED_ALPHA_MIN, C::GLASS_SELECTED_ALPHA_MAX);
-			p.selectedText = style.Colors[ImGuiCol_Text];
-			p.idleText = Colors::GetSecondary();
-			p.hoverFill = p.selectedFill;
-			p.hoverFill.w *= C::GLASS_HOVER_ALPHA_SCALE;
-
-			if (muted) {
-				p.selectedFill.w *= C::GLASS_MUTED_SELECTED_SCALE;
-				p.selectedText = p.idleText;
-				p.idleText.w *= C::GLASS_MUTED_TEXT_SCALE;
-			}
-			return p;
-		}
-
 		std::string_view PillTabDisplayLabel(const char* label)
 		{
 			std::string_view view(label ? label : "");
@@ -348,117 +308,177 @@ namespace Util
 			auto it = g_pillTabBars.find(g_pillTabStack.back());
 			return it != g_pillTabBars.end() ? &it->second : nullptr;
 		}
+	}  // namespace
 
-		/** @brief Draws the glass track + pills. Returns true if the selection changed. */
-		bool DrawGlassPillStrip(const char* id, const std::vector<std::string>& labels, int& selected, int marked = -1, bool muted = false, bool centered = false)
-		{
-			if (labels.empty())
-				return false;
+	float MeasureSegmentContent(const Segment& segment)
+	{
+		const float labelWidth = ImGui::CalcTextSize(segment.label, ImGui::FindRenderedTextEnd(segment.label)).x;
+		if (!segment.icon)
+			return labelWidth;
+		return ImGui::GetTextLineHeight() + (labelWidth > 0.0f ? C::ICON_LABEL_GAP * GetUIScale() + labelWidth : 0.0f);
+	}
 
-			const auto palette = MakeGlassSegmentPalette(muted);
-			const auto& style = ImGui::GetStyle();
-			const float padX = std::max(C::GLASS_SEGMENT_MIN_PAD_X * GetUIScale(), style.FramePadding.x * C::GLASS_SEGMENT_PAD_X_SCALE);
+	float DrawSegmentContent(const Segment& segment, const SegmentState& state)
+	{
+		const float height = state.max.y - state.min.y;
+		const ImU32 labelColor = ImGui::GetColorU32(state.color);
+		const char* labelEnd = ImGui::FindRenderedTextEnd(segment.label);
+		float x = state.min.x;
+		if (segment.icon) {
+			const float iconSize = ImGui::GetTextLineHeight();
+			Icons::DrawCenteredGlyph(state.drawList, ImVec2(x, state.min.y), ImVec2(iconSize, height), ImGui::GetFontSize(), segment.icon,
+				ImGui::GetColorU32(Anim::Lerp(state.color, Colors::GetAccent(), state.chosen)));
+			x += iconSize;
+			if (state.iconOnly || labelEnd == segment.label)
+				return x;
+			x += C::ICON_LABEL_GAP * GetUIScale();
+		}
+		state.drawList->AddText(ImVec2(x, CenterTextTopY(state.min.y, height)), labelColor, segment.label, labelEnd);
+		return x + ImGui::CalcTextSize(segment.label, labelEnd).x;
+	}
 
-			float contentWidth = palette.inset * static_cast<float>(labels.size() + 1);
-			for (const auto& label : labels)
-				contentWidth += ImGui::CalcTextSize(label.c_str()).x + padX * 2.0f;
+	int SegmentedControl(const char* id, std::span<const Segment> segments, int selected, const SegmentedOptions& options)
+	{
+		if (segments.empty())
+			return -1;
 
-			const float avail = ImGui::GetContentRegionAvail().x;
-			const bool needScroll = contentWidth > avail + 0.5f;
-			const float trackWidth = needScroll ? contentWidth : std::min(contentWidth, avail);
+		const auto& style = ImGui::GetStyle();
+		const float scale = GetUIScale();
+		const float pad = C::SEGMENT_TRACK_PAD * scale;
+		const float gap = pad * C::SEGMENT_PILL_GAP_RATIO;
+		const float lineHeight = ImGui::GetTextLineHeight();
+		const float trackHeight = options.height > 0.0f ? options.height : ImGui::GetFrameHeight() + pad * 2.0f;
+		const float itemHeight = trackHeight - pad * 2.0f;
+		// The pill takes the theme's frame rounding and the track wraps it concentrically
+		const float pillRounding = style.FrameRounding;
+		const float trackRounding = pillRounding > 0.0f ? pillRounding + pad : 0.0f;
+		const int count = static_cast<int>(segments.size());
 
-			if (needScroll) {
-				ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
-				ImGui::BeginChild(std::format("##PillStripScroll{}", id).c_str(), ImVec2(avail, palette.trackHeight),
-					ImGuiChildFlags_None, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-			} else if (centered) {
-				ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (avail - trackWidth) * 0.5f);
+		const auto contentWidth = [](const Segment& segment) { return segment.width > 0.0f ? segment.width : MeasureSegmentContent(segment); };
+
+		std::vector<float> widths(segments.size());
+		float trackWidth = pad * 2.0f + gap * static_cast<float>(count - 1);
+		if (options.width > 0.0f) {
+			std::ranges::fill(widths, std::max(1.0f, (options.width - trackWidth) / static_cast<float>(count)));
+			trackWidth = options.width;
+		} else {
+			for (int i = 0; i < count; ++i) {
+				widths[i] = contentWidth(segments[i]) + style.FramePadding.x * 2.0f;
+				trackWidth += widths[i];
 			}
+		}
 
-			const ImVec2 trackMin = ImGui::GetCursorScreenPos();
-			const ImVec2 trackMax{ trackMin.x + trackWidth, trackMin.y + palette.trackHeight };
-			auto* drawList = ImGui::GetWindowDrawList();
+		ImGui::PushID(id);
+		ImGui::BeginGroup();
+		const float avail = ImGui::GetContentRegionAvail().x;
+		const bool scroll = options.width <= 0.0f && trackWidth > avail + 0.5f;
+		if (scroll) {
+			ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+			ImGui::BeginChild("##scroll", ImVec2(avail, trackHeight), ImGuiChildFlags_None,
+				ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+		} else if (options.centered) {
+			ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (avail - trackWidth) * 0.5f);
+		}
 
-			drawList->AddRectFilled(trackMin, trackMax, ImGui::GetColorU32(palette.track), palette.rounding);
-			drawList->AddRect(trackMin, trackMax, ImGui::GetColorU32(ImVec4(1.0f, 1.0f, 1.0f, 0.10f)), palette.rounding);
+		ImDrawList* drawList = ImGui::GetWindowDrawList();
+		const ImVec2 trackMin = ImGui::GetCursorScreenPos();
+		drawList->AddRectFilled(trackMin, ImVec2(trackMin.x + trackWidth, trackMin.y + trackHeight), ImGui::GetColorU32(ImGuiCol_FrameBg), trackRounding);
 
-			ImGui::PushID(id);
-			ImGui::BeginGroup();
-			ImGui::SetCursorScreenPos({ trackMin.x + palette.inset, trackMin.y + palette.inset });
-			ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
-			ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, { palette.inset, 0.0f });
-			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, { padX, (palette.segmentHeight - ImGui::GetFontSize()) * 0.5f });
-			ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, std::max(0.0f, palette.rounding - palette.inset));
+		std::vector<float> xs(segments.size());
+		for (int i = 0; i < count; ++i)
+			xs[i] = i == 0 ? trackMin.x + pad : xs[i - 1] + widths[i - 1] + gap;
 
-			// The selected pill is one shape that glides to the chosen tab; the buttons themselves stay clear.
-			// Its rectangle follows from the label widths, since the buttons are laid out in a row.
-			if (selected >= 0 && selected < static_cast<int>(labels.size())) {
-				float selectedX = trackMin.x + palette.inset;
-				for (int i = 0; i < selected; ++i)
-					selectedX += ImGui::CalcTextSize(labels[static_cast<size_t>(i)].c_str()).x + padX * 2.0f + palette.inset;
-				const float selectedWidth = ImGui::CalcTextSize(labels[static_cast<size_t>(selected)].c_str()).x + padX * 2.0f;
-				const auto pill = Anim::SelectionGlide(ImGui::GetID("pillGlide"), ImVec2(selectedX, trackMin.y + palette.inset),
-					ImVec2(selectedX + selectedWidth, trackMin.y + palette.inset + palette.segmentHeight));
-				drawList->AddRectFilled(pill.min, pill.max, ImGui::GetColorU32(palette.selectedFill), std::max(0.0f, palette.rounding - palette.inset));
-			}
-			ImVec4 clearFill = palette.hoverFill;
-			clearFill.w = 0.0f;
+		const ImVec4 accent = Colors::GetAccent();
+		const float pillAlpha = options.muted ? C::SEGMENT_MUTED_SELECTED_SCALE : 1.0f;
+		if (selected >= 0 && selected < count) {
+			const float top = trackMin.y + pad;
+			const auto pill = Anim::SelectionGlide(ImGui::GetID("##pill"), ImVec2(xs[selected], top), ImVec2(xs[selected] + widths[selected], top + itemHeight));
+			drawList->AddRectFilled(pill.min, pill.max, ImGui::GetColorU32(Anim::ScaleAlpha(accent, C::SELECTED_FILL_ALPHA * pillAlpha)), pillRounding);
+			drawList->AddRect(pill.min, pill.max, ImGui::GetColorU32(Anim::ScaleAlpha(accent, C::SELECTED_OUTLINE_ALPHA * pillAlpha)), pillRounding);
+		}
 
-			bool changed = false;
-			for (int i = 0; i < static_cast<int>(labels.size()); ++i) {
-				if (i > 0)
-					ImGui::SameLine();
-				const bool isSelected = i == selected;
-				ImGui::PushID(i);
-				ImGui::PushStyleColor(ImGuiCol_Button, clearFill);
-				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, isSelected ? clearFill : palette.hoverFill);
-				ImGui::PushStyleColor(ImGuiCol_ButtonActive, clearFill);
-				ImGui::PushStyleColor(ImGuiCol_Text, isSelected ? palette.selectedText : palette.idleText);
-				if (Util::Button(labels[i].c_str())) {
-					selected = i;
-					changed = true;
-				}
-				ImGui::PopStyleColor(4);
+		const ImVec4 textColor = ImGui::GetStyleColorVec4(ImGuiCol_Text);
+		const ImVec4 dimColor = ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled);
+		int clicked = -1;
+		for (int i = 0; i < count; ++i) {
+			const Segment& segment = segments[i];
+			const ImVec2 min(xs[i], trackMin.y + pad);
+			const ImVec2 max(min.x + widths[i], min.y + itemHeight);
 
-				if (i == marked && !isSelected) {
-					const ImVec2 min = ImGui::GetItemRectMin();
-					const ImVec2 max = ImGui::GetItemRectMax();
-					const float radius = std::max(C::GLASS_MARK_MIN_RADIUS, ImGui::GetFontSize() * C::GLASS_MARK_RADIUS_RATIO);
-					drawList->AddCircleFilled({ max.x - padX * 0.35f, (min.y + max.y) * 0.5f }, radius,
-						ImGui::GetColorU32(Colors::GetAccent()));
-				}
-				ImGui::PopID();
-			}
+			// Narrow segments shrink their content, then keep only the icon
+			const float available = std::max(0.0f, widths[i] - style.FramePadding.x * 2.0f);
+			const float fullWidth = contentWidth(segment);
+			float fit = fullWidth > available && fullWidth > 0.0f ? available / fullWidth : 1.0f;
+			const bool iconOnly = segment.icon && fit < C::SEGMENT_MIN_CONTENT_SCALE;
+			if (iconOnly)
+				fit = std::min(1.0f, available / lineHeight);
+			fit = std::max(fit, C::SEGMENT_MIN_CONTENT_SCALE);
 
-			ImGui::SameLine(0.0f, 0.0f);
-			ImGui::Dummy({ palette.inset, palette.segmentHeight });
-			ImGui::Dummy({ 0.0f, palette.inset });
-			ImGui::PopStyleVar(4);
-			ImGui::EndGroup();
+			ImGui::SetCursorScreenPos(min);
+			ImGui::PushID(i);
+			ImGui::BeginDisabled(segment.disabled);
+			if (ImGui::InvisibleButton("##segment", ImVec2(widths[i], itemHeight), ImGuiButtonFlags_EnableNav))
+				clicked = i;
+			ImGui::EndDisabled();
+			HoverCursor();
+			const bool hovered = ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled);
+			if (segment.tooltip)
+				AddTooltip(segment.tooltip, kTooltipWhenDisabled);
+			else if (const char* labelEnd = ImGui::FindRenderedTextEnd(segment.label); iconOnly && hovered && labelEnd != segment.label)
+				ImGui::SetTooltip("%.*s", static_cast<int>(labelEnd - segment.label), segment.label);
+			const float chosen = Anim::Toggle(ImGui::GetItemID(), i == selected) * pillAlpha;
+			const float hover = Anim::Toggle(ImGui::GetID("hover"), hovered && !segment.disabled);
 			ImGui::PopID();
 
-			if (needScroll) {
-				if (ImGui::IsWindowHovered() && std::abs(ImGui::GetIO().MouseWheel) > 0.0f)
-					ImGui::SetScrollX(ImGui::GetScrollX() - ImGui::GetIO().MouseWheel * 40.0f);
-				ImGui::EndChild();
-				ImGui::PopStyleVar();
-			}
+			const ImVec4 labelColor = segment.disabled ? Anim::ScaleAlpha(dimColor, style.DisabledAlpha) : Anim::Lerp(dimColor, textColor, std::max(chosen, hover * C::LIST_HIGHLIGHT_HOVER_RATIO));
 
-			return changed;
+			const float boxWidth = (iconOnly ? lineHeight : fullWidth) * fit;
+			const float x = std::max(min.x, min.x + (widths[i] - boxWidth) * 0.5f);
+			const SegmentState state{ drawList, ImVec2(x, min.y), ImVec2(x + boxWidth, max.y), labelColor, chosen, iconOnly };
+			drawList->PushClipRect(min, max, true);
+			if (fit < 1.0f)
+				ImGui::PushFont(nullptr, ImGui::GetCurrentContext()->FontSizeBase * fit);
+			if (segment.draw)
+				segment.draw(segment, state);
+			else
+				DrawSegmentContent(segment, state);
+			if (fit < 1.0f)
+				ImGui::PopFont();
+			drawList->PopClipRect();
+
+			if (i == options.marked && i != selected) {
+				const float radius = ImGui::GetFrameHeight() * C::STATUS_DOT_RATIO;
+				drawList->AddCircleFilled(ImVec2(max.x - radius * 1.5f, (min.y + max.y) * 0.5f), radius, ImGui::GetColorU32(accent));
+			}
 		}
-	}  // namespace
+
+		ImGui::SetCursorScreenPos(trackMin);
+		ImGui::Dummy(ImVec2(trackWidth, trackHeight));
+		if (scroll) {
+			if (ImGui::IsWindowHovered() && ImGui::GetIO().MouseWheel != 0.0f)
+				ImGui::SetScrollX(ImGui::GetScrollX() - ImGui::GetIO().MouseWheel * lineHeight * 2.0f);
+			ImGui::EndChild();
+			ImGui::PopStyleVar();
+		}
+		ImGui::EndGroup();
+		ImGui::PopID();
+		return clicked;
+	}
 
 	bool SegmentedControl(const char* a_id, const char* const* a_labels, int a_count, int& a_selected, int a_marked,
 		bool a_muted)
 	{
 		if (!a_labels || a_count <= 0)
 			return false;
-		std::vector<std::string> labels;
-		labels.reserve(static_cast<size_t>(a_count));
+		std::vector<Segment> segments(static_cast<size_t>(a_count));
 		for (int i = 0; i < a_count; ++i)
-			labels.emplace_back(a_labels[i] ? a_labels[i] : "");
-		return SceneWidgetInterceptor::InterceptInt(a_id, a_selected,
-			[&](int& a_bound) { return DrawGlassPillStrip(a_id, labels, a_bound, a_marked, a_muted); });
+			segments[i].label = a_labels[i] ? a_labels[i] : "";
+		return SceneWidgetInterceptor::InterceptInt(a_id, a_selected, [&](int& a_bound) {
+			const int clicked = SegmentedControl(a_id, segments, a_bound, { .marked = a_marked, .muted = a_muted });
+			if (clicked >= 0)
+				a_bound = clicked;
+			return clicked >= 0;
+		});
 	}
 
 	bool IsInsidePillTabBar()
@@ -477,7 +497,11 @@ namespace Util
 
 		{
 			MenuFonts::FontRoleGuard bodyFont(Menu::FontRole::Body);
-			DrawGlassPillStrip(str_id, state.labelsForStrip, state.selected, -1, false, centered);
+			std::vector<Segment> segments(state.labelsForStrip.size());
+			for (size_t i = 0; i < segments.size(); ++i)
+				segments[i].label = state.labelsForStrip[i].c_str();
+			if (const int clicked = SegmentedControl(str_id, segments, state.selected, { .centered = centered }); clicked >= 0)
+				state.selected = clicked;
 		}
 		ImGui::Spacing();
 		return true;
@@ -621,7 +645,6 @@ namespace Util
 	{
 		constexpr float kBadgePadX = 5.0f;
 		constexpr float kBadgePadY = 1.5f;
-		constexpr float kBadgeRounding = 3.0f;
 		constexpr float kBadgeFillAlpha = 0.22f;
 		constexpr float kBadgeLabelTowardText = 0.35f;
 	}
@@ -631,36 +654,32 @@ namespace Util
 		return ImGui::CalcTextSize(a_label).x + kBadgePadX * GetUIScale() * 2.0f;
 	}
 
-	float DrawBadgeAt(ImVec2 a_min, float a_rowHeight, const char* a_label, const ImVec4& a_bg, const ImVec4& a_fg,
-		ImDrawList* a_drawList)
+	float Badge(const char* a_label, const ImVec4& a_tint, const BadgeOptions& a_options)
 	{
-		if (!a_drawList)
-			a_drawList = ImGui::GetWindowDrawList();
+		ImDrawList* drawList = a_options.drawList ? a_options.drawList : ImGui::GetWindowDrawList();
+		const ImVec2 min = a_options.at.value_or(ImGui::GetCursorScreenPos());
+		const float rowHeight = a_options.rowHeight > 0.0f ? a_options.rowHeight : ImGui::GetTextLineHeight();
+
+		const ImVec4 text = ImGui::GetStyleColorVec4(ImGuiCol_Text);
+		const ImVec4 fill = a_options.fill.value_or(ImVec4(a_tint.x, a_tint.y, a_tint.z, kBadgeFillAlpha));
+		const ImVec4 label = a_options.label.value_or(ImVec4(a_tint.x + (text.x - a_tint.x) * kBadgeLabelTowardText,
+			a_tint.y + (text.y - a_tint.y) * kBadgeLabelTowardText,
+			a_tint.z + (text.z - a_tint.z) * kBadgeLabelTowardText, 1.0f));
 
 		const float scale = GetUIScale();
 		const ImVec2 textSize = ImGui::CalcTextSize(a_label);
-		const float padX = kBadgePadX * scale;
 		const float padY = kBadgePadY * scale;
-		const float pillW = textSize.x + padX * 2.0f;
+		const float pillW = a_options.width > 0.0f ? a_options.width : textSize.x + kBadgePadX * scale * 2.0f;
 		const float pillH = textSize.y + padY * 2.0f;
-		const float y = a_min.y + (a_rowHeight - pillH) * 0.5f;
+		const float y = min.y + (rowHeight - pillH) * 0.5f;
 
-		a_drawList->AddRectFilled(ImVec2(a_min.x, y), ImVec2(a_min.x + pillW, y + pillH),
-			ImGui::GetColorU32(a_bg), kBadgeRounding * scale);
-		a_drawList->AddText(ImVec2(a_min.x + padX, y + padY), ImGui::GetColorU32(a_fg), a_label);
+		drawList->AddRectFilled(ImVec2(min.x, y), ImVec2(min.x + pillW, y + pillH),
+			ImGui::GetColorU32(Anim::ScaleAlpha(fill, a_options.alpha)), ImGui::GetStyle().FrameRounding);
+		drawList->AddText(ImVec2(min.x + (pillW - textSize.x) * 0.5f, y + padY), ImGui::GetColorU32(Anim::ScaleAlpha(label, a_options.alpha)), a_label);
+
+		if (!a_options.at)
+			ImGui::Dummy(ImVec2(pillW, rowHeight));
 		return pillW;
-	}
-
-	void Badge(const char* a_label, const ImVec4& a_tint)
-	{
-		const ImVec4 text = ImGui::GetStyleColorVec4(ImGuiCol_Text);
-		const ImVec4 bg(a_tint.x, a_tint.y, a_tint.z, kBadgeFillAlpha);
-		const ImVec4 fg(a_tint.x + (text.x - a_tint.x) * kBadgeLabelTowardText,
-			a_tint.y + (text.y - a_tint.y) * kBadgeLabelTowardText,
-			a_tint.z + (text.z - a_tint.z) * kBadgeLabelTowardText, 1.0f);
-		const float lineH = ImGui::GetTextLineHeight();
-		const float width = DrawBadgeAt(ImGui::GetCursorScreenPos(), lineH, a_label, bg, fg);
-		ImGui::Dummy(ImVec2(width, lineH));
 	}
 
 	float MeasureHdrSdrCapabilityPillWidth(bool a_supportsHDR)
@@ -681,7 +700,7 @@ namespace Util
 		                      ThemeManager::Constants::BADGE_HDR_FG :
 		                      ThemeManager::Constants::BADGE_SDR_FG;
 
-		DrawBadgeAt(a_min, a_rowHeight, label, bg, fg, a_drawList);
+		Badge(label, fg, { .rowHeight = a_rowHeight, .fill = bg, .label = fg, .drawList = a_drawList, .at = a_min });
 	}
 
 	void DrawHdrSdrCapabilityPill(bool a_supportsHDR)
@@ -1191,7 +1210,7 @@ namespace Util
 		return Util::Button(label, size);
 	}
 
-	StyledButtonWrapper TransparentIconButtonStyle()
+	static StyledButtonWrapper TransparentIconButtonStyle()
 	{
 		// The theme's button hover and press fills, as the header's nav buttons use
 		const ImGuiStyle& style = ImGui::GetStyle();
@@ -1294,8 +1313,96 @@ namespace Util
 			clicked = ImGui::Button(label, size);
 			ImGui::PopStyleColor(3);
 		}
-		if (ImGui::IsItemHovered())
-			ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+		HoverCursor();
+		return clicked;
+	}
+
+	void HoverCursor(bool hand)
+	{
+		if (ImGui::IsItemHovered()) {
+			if (hand)
+				ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+		} else if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+			ImGui::SetMouseCursor(ImGuiMouseCursor_NotAllowed);
+		}
+	}
+
+	float IconButtonSize()
+	{
+		return ImGui::GetFrameHeight();
+	}
+
+	bool QuietIconButtonFrame(const char* id, bool active, ImU32* glyphColor)
+	{
+		const float size = IconButtonSize();
+		const bool clicked = ImGui::InvisibleButton(id, ImVec2(size, size), ImGuiButtonFlags_EnableNav);
+		HoverCursor();
+		const auto blend = Anim::ItemBlend(ImGui::GetItemID(), ImGui::IsItemHovered(), ImGui::IsItemActive(), active);
+		Anim::FillBlend(ImGui::GetWindowDrawList(), ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), ImGui::GetStyle().FrameRounding, blend);
+		if (glyphColor)
+			*glyphColor = QuietIconColor(blend.hover, blend.selected);
+		return clicked;
+	}
+
+	bool IconButton(const char* id, Icons::GlyphRef glyph, const char* tooltip, bool active, ImU32 color)
+	{
+		ImU32 glyphColor = color;
+		const bool clicked = QuietIconButtonFrame(id, active, color ? nullptr : &glyphColor);
+		Icons::DrawCenteredGlyph(ImGui::GetWindowDrawList(), ImGui::GetItemRectMin(), ImGui::GetItemRectSize(), glyph, glyphColor);
+		if (tooltip)
+			AddTooltip(tooltip, kTooltipWhenDisabled);
+		return clicked;
+	}
+
+	ImU32 DestructiveIconColor()
+	{
+		const ImVec4 error = Colors::GetError();
+		return ImGui::GetColorU32(ImVec4(error.x, error.y, error.z, C::DESTRUCTIVE_ICON_ALPHA));
+	}
+
+	float LabeledButtonGap(Icons::GlyphRef glyph, const char* label)
+	{
+		return (glyph && label && label[0]) ? ImGui::GetStyle().ItemInnerSpacing.x : 0.0f;
+	}
+
+	float MeasureLabeledButton(Icons::GlyphRef glyph, const char* label)
+	{
+		const float labelWidth = label ? ImGui::CalcTextSize(label).x : 0.0f;
+		return Icons::CalcGlyphSize(glyph).x + LabeledButtonGap(glyph, label) + labelWidth + ImGui::GetStyle().FramePadding.x * 2.0f;
+	}
+
+	bool LabeledButton(const char* id, Icons::GlyphRef glyph, const char* label, const ImVec2& size)
+	{
+		const ImVec2 iconSize = Icons::CalcGlyphSize(glyph);
+		const ImVec2 labelSize = label ? ImGui::CalcTextSize(label) : ImVec2(0, 0);
+		const float gap = LabeledButtonGap(glyph, label);
+
+		ImVec2 btnSize = size;
+		if (btnSize.y <= 0.0f)
+			btnSize.y = ImGui::GetFrameHeight();
+		// Icon-only buttons are square
+		if (btnSize.x <= 0.0f)
+			btnSize.x = label && label[0] ? MeasureLabeledButton(glyph, label) : btnSize.y;
+
+		ImGui::PushID(id);
+		const bool clicked = Button("##labeled", btnSize);
+		const ImVec2 min = ImGui::GetItemRectMin();
+		const ImVec2 max = ImGui::GetItemRectMax();
+		ImDrawList* dl = ImGui::GetWindowDrawList();
+
+		const float contentW = iconSize.x + gap + labelSize.x;
+		float x = min.x + (btnSize.x - contentW) * 0.5f;
+		const float midY = (min.y + max.y) * 0.5f;
+		const ImU32 col = ImGui::GetColorU32(ImGuiCol_Text);
+
+		if (glyph) {
+			Icons::DrawCenteredGlyph(dl, ImVec2(x, min.y), ImVec2(iconSize.x, btnSize.y), glyph, col);
+			x += iconSize.x + gap;
+		}
+		if (label && label[0])
+			dl->AddText(ImVec2(x, midY - labelSize.y * 0.5f), col, label);
+
+		ImGui::PopID();
 		return clicked;
 	}
 
@@ -1663,6 +1770,15 @@ namespace Util
 		window->DrawList->PopClipRect();
 	}
 
+	// Close-button cross, sized like ImGui's RenderCloseButton.
+	static void DrawCloseCross(ImDrawList* drawList, const ImVec2& c, float fontSize)
+	{
+		const float d = fontSize * kCloseCrossDiagonalScale - kCloseCrossInset;
+		const ImU32 col = ImGui::GetColorU32(ImGuiCol_Text);
+		drawList->AddLine({ c.x - d, c.y - d }, { c.x + d, c.y + d }, col);
+		drawList->AddLine({ c.x + d, c.y - d }, { c.x - d, c.y + d }, col);
+	}
+
 	// Draws a rounded close button overlay, matching native ImGui CloseButton position.
 	static void DrawRoundedCloseHighlight(ImGuiWindow* window)
 	{
@@ -1671,12 +1787,7 @@ namespace Util
 
 		const float sz = ImGui::GetFontSize();
 		DrawRoundedTitleBarButton(window, RightTitleBarButtonOrigin(window, sz), sz, [&](const ImRect& bb) {
-			// Cross lines match ImGui's internal RenderCloseButton geometry.
-			const ImVec2 c = bb.GetCenter();
-			const float d = sz * kCloseCrossDiagonalScale - kCloseCrossInset;
-			const ImU32 col = ImGui::GetColorU32(ImGuiCol_Text);
-			window->DrawList->AddLine({ c.x - d, c.y - d }, { c.x + d, c.y + d }, col);
-			window->DrawList->AddLine({ c.x + d, c.y - d }, { c.x - d, c.y + d }, col);
+			DrawCloseCross(window->DrawList, bb.GetCenter(), sz);
 		});
 	}
 
@@ -1736,20 +1847,6 @@ namespace Util
 	// true state after it - so, like the main window's own header, this frame draws whatever last
 	// frame was and re-checks are one frame behind a dock/undock transition.
 	static std::unordered_map<std::string, bool> s_customHeaderWasDocked;
-
-	// Draws the close button's crossed lines, matching DrawRoundedCloseHighlight's native geometry.
-	// Unlike the native button, nothing else renders the X, so it has to be drawn unconditionally
-	// rather than only while highlighted.
-	static void DrawCustomHeaderCloseCross(const ImVec2& min, const ImVec2& max)
-	{
-		const ImVec2 c((min.x + max.x) * 0.5f, (min.y + max.y) * 0.5f);
-		const float sz = max.x - min.x;
-		const float d = sz * kCloseCrossDiagonalScale - kCloseCrossInset;
-		const ImU32 col = ImGui::GetColorU32(ImGuiCol_Text);
-		ImDrawList* drawList = ImGui::GetWindowDrawList();
-		drawList->AddLine({ c.x - d, c.y - d }, { c.x + d, c.y + d }, col);
-		drawList->AddLine({ c.x + d, c.y - d }, { c.x - d, c.y + d }, col);
-	}
 
 	float GetEditorChromeHeaderHeight()
 	{
@@ -1830,7 +1927,7 @@ namespace Util
 				rowStart.y + (rowHeight - closeSize) * 0.5f));
 			auto _style = TransparentIconButtonStyle();
 			const bool clicked = Util::Button("##CustomHeaderClose", ImVec2(closeSize, closeSize));
-			DrawCustomHeaderCloseCross(ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
+			DrawCloseCross(ImGui::GetWindowDrawList(), ImRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax()).GetCenter(), ImGui::GetFontSize());
 			if (clicked)
 				*p_open = false;
 		}
@@ -1983,7 +2080,7 @@ namespace Util
 
 		const float padX = ImGui::GetStyle().FramePadding.x;
 		// Clear of a selected row's accent bar, slightly left of the rows' text
-		float currentX = pos.x + std::max(ImGui::GetStyle().ItemInnerSpacing.x, ThemeManager::Constants::ANIM_SELECTED_BAR_WIDTH * scale);
+		float currentX = pos.x + std::max(ImGui::GetStyle().ItemInnerSpacing.x, Surface::ListHighlightBarWidth());
 		if (categoryIcon) {
 			const ImVec2 iconPos(currentX, pos.y + (textSize.y - iconSize) * 0.5f);
 			drawList->AddImage(categoryIcon, iconPos, ImVec2(iconPos.x + iconSize, iconPos.y + iconSize), ImVec2(0, 0), ImVec2(1, 1), headerColor);
@@ -2316,7 +2413,7 @@ namespace Util
 	{
 		struct ComboSearchState
 		{
-			char buffer[256] = {};
+			std::string buffer;
 			bool needsFocus = true;
 		};
 
@@ -2325,6 +2422,59 @@ namespace Util
 			static std::unordered_map<std::string, ComboSearchState> states;
 			return states;
 		}
+	}
+
+	bool SearchField(const char* id, std::string& text, const char* hint, float width, bool ctrlFFocus,
+		ImGuiInputTextFlags flags, ImGuiInputTextCallback callback, void* userData)
+	{
+		ImGui::PushID(id);
+		const auto& style = ImGui::GetStyle();
+		const float searchScale = Util::GetSearchUIScale();
+		const float iconX = C::SEARCH_ICON_OFFSET_X * searchScale;
+		const float iconSize = Icons::CalcGlyphSize(Icons::TI(MenuIcons::kSearch)).x;
+		const float padLeft = iconX + iconSize + C::ICON_LABEL_GAP * GetUIScale();
+		const float frameHeight = ImGui::GetFrameHeight();
+
+		if (ctrlFFocus && ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) &&
+			ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_F, false))
+			ImGui::SetKeyboardFocusHere();
+
+		// The clear button sits over the frame's right end, so the input has to let it take the hover.
+		const bool hadText = !text.empty();
+		if (hadText)
+			ImGui::SetNextItemAllowOverlap();
+		ImGui::SetNextItemWidth(width);
+		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(padLeft, style.FramePadding.y));
+		bool changed = ImGui::InputTextWithHint("##input", hint, &text,
+			ImGuiInputTextFlags_EscapeClearsAll | flags, callback, userData);
+		ImGui::PopStyleVar();
+		const ImGuiLastItemData inputItem = ImGui::GetCurrentContext()->LastItemData;
+
+		// Escape here belongs to the field; without this the same press would also close the editor or menu.
+		if ((ImGui::IsItemActive() || ImGui::IsItemDeactivated()) && ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+			Menu::GetSingleton()->ConsumeEscape();
+
+		const ImVec2 min = ImGui::GetItemRectMin();
+		const ImVec2 max = ImGui::GetItemRectMax();
+		{
+			ImVec4 iconColor = ImGui::GetStyleColorVec4(ImGuiCol_Text);
+			iconColor.w *= C::SEARCH_ICON_ALPHA;
+			Icons::DrawCenteredGlyph(ImGui::GetWindowDrawList(),
+				ImVec2(min.x + iconX, min.y),
+				ImVec2(iconSize, frameHeight), Icons::TI(MenuIcons::kSearch), ImGui::GetColorU32(iconColor));
+		}
+
+		if (!text.empty()) {
+			ImGui::SetCursorScreenPos(ImVec2(max.x - frameHeight, min.y));
+			if (IconButton("##clear", Icons::TI(ICON_TI_X), T("ui.search_clear", "Clear search"))) {
+				text.clear();
+				changed = true;
+			}
+			ImGui::GetCurrentContext()->LastItemData = inputItem;
+		}
+
+		ImGui::PopID();
+		return changed;
 	}
 
 	std::string DrawComboSearchInput(const char* id)
@@ -2336,24 +2486,9 @@ namespace Util
 			state.needsFocus = false;
 		}
 
-		const float scale = GetSearchUIScale();
-		constexpr float iconAlpha = ThemeManager::Constants::COMBO_SEARCH_ICON_ALPHA;
-		const float iconOffsetX = ThemeManager::Constants::COMBO_SEARCH_ICON_OFFSET_X * scale;
-		const float iconSize = Icons::CalcGlyphSize(Icons::TI(MenuIcons::kSearch)).x;
-		const float paddingLeft = iconOffsetX + iconSize + ImGui::GetStyle().ItemInnerSpacing.x;
-
 		char widgetId[128];
 		snprintf(widgetId, sizeof(widgetId), "##%s_search", id);
-
-		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(paddingLeft, ImGui::GetStyle().FramePadding.y));
-		ImGui::InputTextWithHint(widgetId, T("ui.search", "Search..."), state.buffer, IM_ARRAYSIZE(state.buffer));
-		ImGui::PopStyleVar();
-
-		ImVec4 iconColor = ImGui::GetStyleColorVec4(ImGuiCol_Text);
-		iconColor.w *= iconAlpha;
-		Icons::DrawCenteredGlyph(ImGui::GetWindowDrawList(), ImVec2(ImGui::GetItemRectMin().x + iconOffsetX, ImGui::GetItemRectMin().y),
-			ImVec2(iconSize, ImGui::GetItemRectSize().y), Icons::TI(MenuIcons::kSearch), ImGui::GetColorU32(iconColor));
-
+		SearchField(widgetId, state.buffer, T("ui.search", "Search..."), ImGui::CalcItemWidth(), false);
 		ImGui::Separator();
 
 		return state.buffer;
@@ -2362,59 +2497,8 @@ namespace Util
 	void ClearComboSearch(const char* id)
 	{
 		auto& state = detail::GetComboSearchStates()[id];
-		state.buffer[0] = '\0';
+		state.buffer.clear();
 		state.needsFocus = true;
-	}
-
-	void DrawFeatureSearchBar(std::string& searchString, float availableWidth)
-	{
-		ImGui::PushID("FeatureSearchBar");
-
-		const float scale = GetSearchUIScale();
-		const float iconSize = ThemeManager::Constants::SEARCH_ICON_SIZE * scale;
-		const float iconSpace = iconSize + ThemeManager::Constants::SEARCH_INPUT_PADDING_EXTRA * scale;
-
-		// Get the current cursor position and available width
-		ImVec2 cursorPos = ImGui::GetCursorScreenPos();
-		if (availableWidth <= 0.0f) {
-			availableWidth = ImGui::GetContentRegionAvail().x;
-		}
-		float frameHeight = ImGui::GetFrameHeight();
-
-		// Custom style - always transparent background to avoid click blocking
-		ImVec4 bgColor = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
-		ImVec4 bgColorActive = C::FEATURE_TOGGLE_ACTIVE_BG;
-		// Use theme text color instead of hardcoded color
-		auto& palette = globals::menu->GetTheme().Palette;
-		ImVec4 textColor = palette.Text;
-
-		ImGui::PushStyleColor(ImGuiCol_FrameBg, bgColor);
-		ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, bgColor);
-		ImGui::PushStyleColor(ImGuiCol_FrameBgActive, bgColorActive);
-		ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0, 0, 0, 0));
-		ImGui::PushStyleColor(ImGuiCol_Text, textColor);
-		ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
-		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(iconSpace, ThemeManager::Constants::SEARCH_INPUT_FRAME_PADDING_Y * scale));
-
-		// Draw the input field
-		ImGui::SetNextItemWidth(availableWidth);
-		char buffer[256];
-		strncpy_s(buffer, searchString.c_str(), sizeof(buffer) - 1);
-		buffer[sizeof(buffer) - 1] = '\0';
-
-		if (ImGui::InputTextWithHint("##feature_search", T("ui.search_features", "Search Features..."), buffer, sizeof(buffer))) {
-			searchString = buffer;
-		}
-
-		// Draw search icon using the reusable function
-		ImVec4 iconColor = textColor;
-		iconColor.w *= ThemeManager::Constants::SEARCH_ICON_ALPHA;
-		Icons::DrawCenteredGlyph(ImGui::GetWindowDrawList(), ImVec2(cursorPos.x + ThemeManager::Constants::SEARCH_ICON_OFFSET_X * scale, cursorPos.y),
-			ImVec2(iconSize, frameHeight), Icons::TI(MenuIcons::kSearch), ImGui::GetColorU32(iconColor));
-
-		ImGui::PopStyleVar(2);
-		ImGui::PopStyleColor(5);
-		ImGui::PopID();
 	}
 
 	TableSortSpec ReadTableSortSpec(int defaultColumn, bool defaultAscending)
@@ -3020,7 +3104,7 @@ namespace Util
 
 	bool ButtonWithFlash(const char* id, const char* tablerIcon, const char* label, int flashDurationMs)
 	{
-		return DrawWithFlash(id, flashDurationMs, [&] { return Icons::LabeledButton(id, Icons::TI(tablerIcon), label); });
+		return DrawWithFlash(id, flashDurationMs, [&] { return Util::LabeledButton(id, Icons::TI(tablerIcon), label); });
 	}
 
 	bool LoadDDSTextureFromFile(ID3D11Device* device,

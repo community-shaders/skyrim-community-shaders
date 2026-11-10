@@ -52,6 +52,7 @@ struct PostProcessing : Feature
 	virtual void LoadSettings(json& o_json) override;
 	virtual void SaveSettings(json& o_json) override;
 	virtual void RestoreDefaultSettings() override;
+	virtual void ApplyContextualDefaults(json& a_defaults) const override;
 
 	/**
 	 * @brief Whether Post Processing wants to replace the vanilla tonemap this frame.

@@ -367,7 +367,9 @@ void GrassCollision::UpdateCollisionTexture()
 
 	if (!settings.EnableGrassCollision) {
 		float clearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+		globals::profiler->BeginPass("GrassCollision::Clear");
 		context->ClearUnorderedAccessViewFloat(collisionTexture->uav.get(), clearColor);
+		globals::profiler->EndPass();
 		return;
 	}
 

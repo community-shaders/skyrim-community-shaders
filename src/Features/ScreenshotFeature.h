@@ -50,10 +50,12 @@ struct ScreenshotFeature : public Feature
 	// HDR PNG quantization (7-16); used when HDR Display captures the back buffer.
 	unsigned int hdrPngBitDepth = 11;
 	bool hdrUseAvif = false;
+	// Strip cICP from HDR PNGs so Discord falls back to the embedded ICC profile.
+	bool fixDiscordHdr = true;
 	// SDR output.
 	bool sdrUsePng = true;
 	// After save, put the file path on the clipboard (CF_HDROP).
-	bool copyToClipboard = false;
+	bool copyToClipboard = true;
 	// Suppress the game's own PrintScreen capture by clearing bAllowScreenShot in memory.
 	bool disableVanillaScreenshot = true;
 
@@ -72,7 +74,8 @@ private:
 		bool saveAsHdrAvif = false;
 		bool saveAsSdrPng = false;
 		int hdrPngBitDepth = 11;
-		bool copyToClipboard = false;
+		bool fixDiscordHdr = true;
+		bool copyToClipboard = true;
 		// Suppress the game's own PrintScreen capture by clearing bAllowScreenShot in memory.
 		bool disableVanillaScreenshot = true;
 	};

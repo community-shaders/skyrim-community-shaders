@@ -123,26 +123,13 @@ namespace GoToPalette
 			}
 		}
 
-		/** @brief Widest badge label plus padding, so every row's title starts at the same x. */
-		float MeasureBadgeWidth(float scale)
+		/** @brief Widest badge, so every row's title starts at the same x. */
+		float MeasureKindBadgeWidth()
 		{
 			float widest = 0.0f;
 			for (const auto kind : { GoToIndex::Kind::Page, GoToIndex::Kind::Feature, GoToIndex::Kind::Setting, GoToIndex::Kind::Command })
-				widest = std::max(widest, ImGui::CalcTextSize(KindLabel(kind)).x);
-			return widest + Constants::PALETTE_BADGE_PAD_X * scale * 2.0f;
-		}
-
-		void DrawBadge(ImDrawList* drawList, ImVec2 min, ImVec2 size, GoToIndex::Kind kind, bool dimmed)
-		{
-			ImVec4 tint = KindColor(kind);
-			if (dimmed)
-				tint = Util::Anim::ScaleAlpha(tint, Constants::PALETTE_DIMMED_ALPHA);
-			drawList->AddRectFilled(min, ImVec2(min.x + size.x, min.y + size.y),
-				ImGui::GetColorU32(Util::Anim::ScaleAlpha(tint, Constants::PALETTE_BADGE_FILL_ALPHA)),
-				Constants::PALETTE_BADGE_ROUNDING * Util::GetUIScale());
-			const char* label = KindLabel(kind);
-			const ImVec2 textSize = ImGui::CalcTextSize(label);
-			drawList->AddText(ImVec2(min.x + (size.x - textSize.x) * 0.5f, min.y + (size.y - textSize.y) * 0.5f), ImGui::GetColorU32(tint), label);
+				widest = std::max(widest, Util::MeasureBadgeWidth(KindLabel(kind)));
+			return widest;
 		}
 
 		float KeycapHeight()
@@ -160,7 +147,7 @@ namespace GoToPalette
 		{
 			const ImVec4 textColor = ImGui::GetStyleColorVec4(ImGuiCol_Text);
 			const ImVec2 max(min.x + KeycapWidth(text, scale), min.y + KeycapHeight());
-			const float rounding = Constants::PALETTE_KEYCAP_ROUNDING * scale;
+			const float rounding = ImGui::GetStyle().FrameRounding;
 			drawList->AddRectFilled(min, max, ImGui::GetColorU32(Util::Anim::ScaleAlpha(textColor, Constants::PALETTE_KEYCAP_FILL_ALPHA)), rounding);
 			drawList->AddRect(min, max, ImGui::GetColorU32(Util::Anim::ScaleAlpha(textColor, Constants::PALETTE_KEYCAP_EDGE_ALPHA)), rounding);
 			const ImVec2 textSize = ImGui::CalcTextSize(text);
@@ -266,10 +253,10 @@ namespace GoToPalette
 			const auto& style = ImGui::GetStyle();
 			const float lineHeight = ImGui::GetTextLineHeight();
 			const float rowHeight = max.y - min.y;
-			const float badgeHeight = lineHeight + style.FramePadding.y;
 
 			const float left = min.x + style.FramePadding.x * 2.0f;
-			DrawBadge(drawList, ImVec2(left, min.y + (rowHeight - badgeHeight) * 0.5f), ImVec2(badgeWidth, badgeHeight), entry.kind, entry.dimmed);
+			Util::Badge(KindLabel(entry.kind), KindColor(entry.kind),
+				{ .rowHeight = rowHeight, .width = badgeWidth, .alpha = entry.dimmed ? Constants::PALETTE_DIMMED_ALPHA : 1.0f, .at = ImVec2(left, min.y) });
 
 			const float textX = left + badgeWidth + style.ItemSpacing.x;
 			float rightEdge = max.x - style.FramePadding.x * 2.0f;
@@ -366,9 +353,11 @@ namespace GoToPalette
 			const ImVec2 fieldMin = ImGui::GetCursorScreenPos();
 			const float fieldWidth = ImGui::GetContentRegionAvail().x;
 			const ImVec2 fieldMax(fieldMin.x + fieldWidth, fieldMin.y + fieldHeight);
-			const float rounding = Constants::PALETTE_FIELD_ROUNDING * scale;
 			const float padX = Constants::PALETTE_FIELD_PAD_X * scale;
-			const float inset = Constants::PALETTE_FIELD_INSET * scale;
+			const float buttonSize = Util::IconButtonSize();
+			const float inset = (fieldHeight - buttonSize) * 0.5f;
+			// The sort button takes the theme's frame rounding and the field wraps it concentrically
+			const float rounding = style.FrameRounding > 0.0f ? style.FrameRounding + inset : 0.0f;
 
 			drawList->AddRectFilled(fieldMin, fieldMax, ImGui::GetColorU32(ImGuiCol_FrameBg), rounding);
 			drawList->AddRect(fieldMin, fieldMax, ImGui::GetColorU32(Util::Anim::ScaleAlpha(Util::Colors::GetAccent(), Constants::PALETTE_FIELD_BORDER_ALPHA)),
@@ -378,15 +367,17 @@ namespace GoToPalette
 			Icons::DrawCenteredGlyph(drawList, ImVec2(fieldMin.x + padX, fieldMin.y), ImVec2(glyphWidth, fieldHeight), Icons::TI(ICON_TI_SEARCH),
 				ImGui::GetColorU32(ImGuiCol_TextDisabled));
 
-			const float buttonSize = fieldHeight - inset * 2.0f;
 			const ImVec2 buttonMin(fieldMax.x - inset - buttonSize, fieldMin.y + inset);
 			const float inputX = fieldMin.x + padX + glyphWidth;
+			// The sort and filters only touch features, so only the tabs that list them get the button
+			const bool showSort = g_state.scope == Scope::Features || g_state.scope == Scope::All;
+			const float shown = Util::Anim::Toggle(ImGui::GetID("##SortShown"), showSort);
 
 			// The input keeps the keyboard unless a result or the sort popup is being used
 			ImGui::SetCursorScreenPos(ImVec2(inputX, fieldMin.y));
 			if (!ImGui::IsAnyItemActive() && !sortOpen)
 				ImGui::SetKeyboardFocusHere();
-			ImGui::SetNextItemWidth(buttonMin.x - inset - inputX);
+			ImGui::SetNextItemWidth(std::lerp(fieldMax.x - padX, buttonMin.x - inset, shown) - inputX);
 			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0.0f, (fieldHeight - lineHeight) * 0.5f));
 			ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
 			ImGui::PushStyleColor(ImGuiCol_FrameBg, IM_COL32_BLACK_TRANS);
@@ -398,24 +389,21 @@ namespace GoToPalette
 			ImGui::PopStyleVar(2);
 
 			// Sort and filter button, inside the frame
-			ImGui::SetCursorScreenPos(buttonMin);
-			const bool pressed = ImGui::InvisibleButton("##GoToSort", ImVec2(buttonSize, buttonSize));
-			const float hover = Util::Anim::Toggle(ImGui::GetItemID(), ImGui::IsItemHovered() || sortOpen);
-			const ImVec4 textColor = ImGui::GetStyleColorVec4(ImGuiCol_Text);
-			const ImVec2 buttonMax(buttonMin.x + buttonSize, buttonMin.y + buttonSize);
-			drawList->AddRectFilled(buttonMin, buttonMax,
-				ImGui::GetColorU32(Util::Anim::ScaleAlpha(textColor, Constants::PALETTE_HOVER_FILL_ALPHA * (1.0f + hover))), std::max(0.0f, rounding - inset));
-			Icons::DrawCenteredGlyph(drawList, buttonMin, ImVec2(buttonSize, buttonSize), Icons::TI(ICON_TI_MENU_2),
-				ImGui::GetColorU32(Util::Anim::Lerp(ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled), textColor, hover)));
-			if ((globals::menu->GetSettings().FeatureListFilter & FeatureListFilter::kKnown) != 0) {
-				const float radius = ImGui::GetFrameHeight() * Constants::SORT_FILTER_DOT_RATIO;
-				Util::DrawIconCircle(ImVec2(buttonMax.x - radius * 1.5f, buttonMin.y + radius * 1.5f), radius, ImGui::GetColorU32(Util::Colors::GetAccent()), true);
+			if (shown > 0.0f) {
+				ImGui::PushStyleVar(ImGuiStyleVar_Alpha, style.Alpha * shown);
+				ImGui::SetCursorScreenPos(buttonMin);
+				// Fading out, it no longer takes clicks
+				ImGui::BeginDisabled(!showSort);
+				if (Util::IconButton("##GoToSort", Icons::TI(ICON_TI_MENU_2), nullptr, sortOpen))
+					ImGui::OpenPopup(kSortPopupId);
+				ImGui::EndDisabled();
+				const ImVec2 buttonMax = ImGui::GetItemRectMax();
+				FeatureListRenderer::DrawFilterDot(buttonMin, buttonMax);
+				Util::HoverTip(T("menu.palette.sort_tooltip", "Sort and filter features"));
+				ImGui::PopStyleVar();
+				ImGui::SetNextWindowPos(ImVec2(buttonMax.x, buttonMax.y + style.ItemSpacing.y), ImGuiCond_Always, ImVec2(1.0f, 0.0f));
+				FeatureListRenderer::RenderSortPopup(kSortPopupId);
 			}
-			Util::HoverTip(T("menu.palette.sort_tooltip", "Sort and filter features"));
-			if (pressed)
-				ImGui::OpenPopup(kSortPopupId);
-			ImGui::SetNextWindowPos(ImVec2(buttonMax.x, buttonMax.y + style.ItemSpacing.y), ImGuiCond_Always, ImVec2(1.0f, 0.0f));
-			FeatureListRenderer::RenderSortPopup(kSortPopupId);
 
 			ImGui::SetCursorScreenPos(ImVec2(fieldMin.x, fieldMax.y + Constants::PALETTE_GAP * scale));
 			ImGui::Dummy(ImVec2(fieldWidth, 0.0f));
@@ -425,78 +413,28 @@ namespace GoToPalette
 		/** @brief The scope row: a segmented control whose accent pill glides to the chosen scope; each scope shows its count. */
 		void DrawScopeRow(float scale)
 		{
-			ImDrawList* drawList = ImGui::GetWindowDrawList();
-			const auto& style = ImGui::GetStyle();
-			const float lineHeight = ImGui::GetTextLineHeight();
-			const float trackPad = Constants::PALETTE_SCOPE_PAD * scale;
-			const float itemPadX = Constants::PALETTE_SCOPE_ITEM_PAD_X * scale;
-			const float countPadX = Constants::PALETTE_SCOPE_COUNT_PAD_X * scale;
-			const float itemHeight = lineHeight + style.FramePadding.y * 2.0f;
-			const float trackRounding = Constants::PALETTE_SCOPE_ROUNDING * scale;
-			const ImVec2 trackMin = ImGui::GetCursorScreenPos();
-
-			struct Slot
-			{
-				Scope scope;
-				const char* label;
-				std::string count;
-				float x;
-				float width;
-			};
-			std::array<Slot, kScopes.size()> slots{};
-			float x = trackPad;
+			std::array<std::string, kScopes.size()> counts;
+			std::array<Util::Segment, kScopes.size()> segments;
+			int selected = -1;
 			for (size_t i = 0; i < kScopes.size(); ++i) {
 				const auto kind = ScopeKind(kScopes[i]);
-				const size_t count = kind ? g_state.results.Count(*kind) : g_state.results.Total();
-				auto& slot = slots[i];
-				slot = { kScopes[i], ScopeLabel(kScopes[i]), std::to_string(count), x, 0.0f };
-				slot.width = itemPadX * 2.0f + ImGui::CalcTextSize(slot.label).x + style.ItemInnerSpacing.x +
-				             ImGui::CalcTextSize(slot.count.c_str()).x + countPadX * 2.0f;
-				x += slot.width;
+				counts[i] = std::to_string(kind ? g_state.results.Count(*kind) : g_state.results.Total());
+				segments[i] = { .label = ScopeLabel(kScopes[i]) };
+				segments[i].width = Util::MeasureSegmentContent(segments[i]) + ImGui::GetStyle().ItemInnerSpacing.x + Util::MeasureBadgeWidth(counts[i].c_str());
+				segments[i].draw = [count = counts[i].c_str()](const Util::Segment& segment, const Util::SegmentState& state) {
+					const float x = Util::DrawSegmentContent(segment, state) + ImGui::GetStyle().ItemInnerSpacing.x;
+					const ImVec4 tint = Util::Anim::Lerp(ImGui::GetStyleColorVec4(ImGuiCol_Text), Util::Colors::GetAccent(), state.chosen);
+					Util::Badge(count, tint,
+						{ .rowHeight = state.max.y - state.min.y, .label = state.color, .drawList = state.drawList, .at = ImVec2(x, state.min.y) });
+				};
+				if (kScopes[i] == g_state.scope)
+					selected = static_cast<int>(i);
 			}
-			const float trackWidth = x + trackPad;
-			const float trackHeight = itemHeight + trackPad * 2.0f;
-			drawList->AddRectFilled(trackMin, ImVec2(trackMin.x + trackWidth, trackMin.y + trackHeight), ImGui::GetColorU32(ImGuiCol_FrameBg), trackRounding);
+			if (const int clicked = Util::SegmentedControl("##Scopes", segments, selected); clicked >= 0)
+				g_state.scope = kScopes[static_cast<size_t>(clicked)];
 
-			// The pill eases to the chosen scope, in width too, as the labels differ
-			const auto& active = *std::ranges::find(slots, g_state.scope, &Slot::scope);
-			const ImVec4 accent = Util::Colors::GetAccent();
-			const auto pill = Util::Anim::SelectionGlide(ImGui::GetID("##scopePill"), ImVec2(trackMin.x + active.x, trackMin.y + trackPad),
-				ImVec2(trackMin.x + active.x + active.width, trackMin.y + trackPad + itemHeight), Constants::PALETTE_PILL_RATE);
-			const ImVec2 pillMin = pill.min;
-			const ImVec2 pillMax = pill.max;
-			const float pillRounding = std::max(0.0f, trackRounding - trackPad);
-			drawList->AddRectFilled(pillMin, pillMax, ImGui::GetColorU32(Util::Anim::ScaleAlpha(accent, Constants::SEGMENT_SELECTED_FILL_ALPHA)), pillRounding);
-			drawList->AddRect(pillMin, pillMax, ImGui::GetColorU32(Util::Anim::ScaleAlpha(accent, Constants::PALETTE_PILL_BORDER_ALPHA)), pillRounding,
-				ImDrawFlags_None, scale);
-
-			const ImVec4 textColor = ImGui::GetStyleColorVec4(ImGuiCol_Text);
-			const ImVec4 dimColor = ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled);
-			for (const auto& slot : slots) {
-				const ImVec2 itemMin(trackMin.x + slot.x, trackMin.y + trackPad);
-				ImGui::SetCursorScreenPos(itemMin);
-				ImGui::PushID(static_cast<int>(slot.scope));
-				if (ImGui::InvisibleButton("##scope", ImVec2(slot.width, itemHeight)))
-					g_state.scope = slot.scope;
-				const float chosen = Util::Anim::Toggle(ImGui::GetItemID(), slot.scope == g_state.scope);
-				const float hover = Util::Anim::Toggle(ImGui::GetID("hover"), ImGui::IsItemHovered());
-				ImGui::PopID();
-
-				const ImVec4 labelColor = Util::Anim::Lerp(dimColor, textColor, std::max(chosen, hover * Constants::PALETTE_SCOPE_HOVER_LABEL));
-				const float textY = Util::CenterTextTopY(itemMin.y, itemHeight);
-				drawList->AddText(ImVec2(itemMin.x + itemPadX, textY), ImGui::GetColorU32(labelColor), slot.label);
-
-				const float countWidth = ImGui::CalcTextSize(slot.count.c_str()).x + countPadX * 2.0f;
-				const ImVec2 chipMin(itemMin.x + slot.width - itemPadX - countWidth, itemMin.y + (itemHeight - lineHeight) * 0.5f);
-				const ImVec4 chipFill = Util::Anim::Lerp(Util::Anim::ScaleAlpha(textColor, Constants::PALETTE_COUNT_FILL_ALPHA),
-					Util::Anim::ScaleAlpha(accent, Constants::SEGMENT_SELECTED_FILL_ALPHA * 2.0f), chosen);
-				drawList->AddRectFilled(chipMin, ImVec2(chipMin.x + countWidth, chipMin.y + lineHeight), ImGui::GetColorU32(chipFill),
-					Constants::PALETTE_BADGE_ROUNDING * scale);
-				drawList->AddText(ImVec2(chipMin.x + countPadX, chipMin.y), ImGui::GetColorU32(labelColor), slot.count.c_str());
-			}
-
-			ImGui::SetCursorScreenPos(ImVec2(trackMin.x, trackMin.y + trackHeight + Constants::PALETTE_GAP * scale));
-			ImGui::Dummy(ImVec2(trackWidth, 0.0f));
+			ImGui::SetCursorScreenPos(ImVec2(ImGui::GetItemRectMin().x, ImGui::GetItemRectMax().y + Constants::PALETTE_GAP * scale));
+			ImGui::Dummy(ImVec2(0.0f, 0.0f));
 		}
 
 		/** @brief Footer: key hints as keycaps on the left, the number of results on the right. */
@@ -550,7 +488,7 @@ namespace GoToPalette
 			if (count == 0) {
 				DrawEmptyState(origin, ImGui::GetContentRegionAvail(), scale);
 			} else {
-				const float badgeWidth = MeasureBadgeWidth(scale);
+				const float badgeWidth = MeasureKindBadgeWidth();
 				const float rowHeight = ImGui::GetTextLineHeight() * 2.0f + style.ItemInnerSpacing.y + Constants::PALETTE_ROW_PAD_Y * scale * 2.0f;
 				const float headerHeight = ImGui::GetTextLineHeight() + Constants::PALETTE_HEADER_PAD_Y * scale * 2.0f;
 				float totalHeight = 0.0f;
@@ -577,16 +515,9 @@ namespace GoToPalette
 
 				// The highlight is one shape that glides from row to row
 				ImDrawList* drawList = ImGui::GetWindowDrawList();
-				const ImVec4 accent = Util::Colors::GetAccent();
-				const float rowRounding = Constants::PALETTE_ROW_ROUNDING * scale;
 				const auto bar = Util::Anim::SelectionGlide(ImGui::GetID("##rowGlide"), ImVec2(origin.x, origin.y + selectedY),
 					ImVec2(origin.x + width, origin.y + selectedY + rowHeight), Constants::ANIM_GLIDE_RATE);
-				const ImVec2 barMin = bar.min;
-				const ImVec2 barMax = bar.max;
-				drawList->AddRectFilled(barMin, barMax, ImGui::GetColorU32(Util::Anim::ScaleAlpha(accent, Constants::NAV_SELECTED_FILL_ALPHA)), rowRounding);
-				const float barWidth = Constants::ANIM_SELECTED_BAR_WIDTH * scale;
-				drawList->AddRectFilled(ImVec2(barMin.x, barMin.y + rowHeight * Constants::NAV_SELECTED_BAR_INSET), ImVec2(barMin.x + barWidth, barMax.y - rowHeight * Constants::NAV_SELECTED_BAR_INSET),
-					ImGui::GetColorU32(accent), barWidth * 0.5f);
+				Util::Surface::DrawListHighlight(drawList, bar.min, bar.max);
 
 				const bool mouseMoved = ImGui::GetIO().MouseDelta.x != 0.0f || ImGui::GetIO().MouseDelta.y != 0.0f;
 				const ImVec4 textColor = ImGui::GetStyleColorVec4(ImGuiCol_Text);
@@ -609,7 +540,7 @@ namespace GoToPalette
 						g_state.selected = item.entry;
 					const float hover = Util::Anim::Toggle(ImGui::GetID("hover"), hovered && item.entry != g_state.selected);
 					if (hover > 0.0f)
-						drawList->AddRectFilled(min, max, ImGui::GetColorU32(Util::Anim::ScaleAlpha(textColor, Constants::PALETTE_HOVER_FILL_ALPHA * hover)), rowRounding);
+						drawList->AddRectFilled(min, max, ImGui::GetColorU32(Util::Anim::ScaleAlpha(textColor, Constants::HOVER_FILL_ALPHA * hover)), style.FrameRounding);
 					DrawRow(entry, min, max, badgeWidth, scale);
 					ImGui::PopID();
 				}
