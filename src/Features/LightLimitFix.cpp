@@ -106,8 +106,6 @@ void LightLimitFix::DrawLightAttachSettings()
 
 void LightLimitFix::DrawSettings()
 {
-	auto shaderCache = globals::shaderCache;
-
 	ImGui::Checkbox(T(TKEY("enable_particle_lights"), "Enable Particle Lights"), &settings.EnableParticleLights);
 
 	ImGui::Spacing();
@@ -117,24 +115,6 @@ void LightLimitFix::DrawSettings()
 	ImGui::Spacing();
 
 	DrawLocalShadowSettings();
-
-	if (ImGui::TreeNodeEx(T(TKEY("statistics"), "Statistics"), ImGuiTreeNodeFlags_DefaultOpen)) {
-		ImGui::Text("%s", std::vformat(T(TKEY("clustered_light_count"), "Clustered Light Count : {}"), std::make_format_args(lightCount)).c_str());
-		ImGui::Text("%s", std::vformat(T(TKEY("particle_light_count"), "Particle Lights : {}"), std::make_format_args(particleLightCount)).c_str());
-		if (IsLocalShadowsEnabled()) {
-			ImGui::Text("%s", std::vformat(T(TKEY("shadow_casters_stats"), "Shadow Casters : {} tracked, {} cached, {} rendered this frame"),
-								  std::make_format_args(localShadowStatTracked, localShadowStatCached, localShadowStatRendered))
-								  .c_str());
-		}
-		if (localShadowCache) {
-			const uint64_t cacheMegabytes = (localShadowCacheSlots * GetLocalShadowSlotBytes(localShadowCacheResolution, localShadowCacheFormat)) >> 20;
-			ImGui::Text("%s", std::vformat(T(TKEY("shadow_cache_stats"), "Shadow Cache : {} x {}x{}, {} MB"),
-								  std::make_format_args(localShadowCacheSlots, localShadowCacheResolution, localShadowCacheResolution, cacheMegabytes))
-								  .c_str());
-		}
-
-		ImGui::TreePop();
-	}
 }
 
 void LightLimitFix::DrawDebugSection()
@@ -143,13 +123,36 @@ void LightLimitFix::DrawDebugSection()
 	if (!section)
 		return;
 
+	auto shaderCache = globals::shaderCache;
+
+	ImGui::Text("%s", std::vformat(T(TKEY("clustered_light_count"), "Clustered Light Count : {}"), std::make_format_args(lightCount)).c_str());
+	ImGui::Text("%s", std::vformat(T(TKEY("particle_light_count"), "Particle Lights : {}"), std::make_format_args(particleLightCount)).c_str());
+	if (IsLocalShadowsEnabled()) {
+		ImGui::Text("%s", std::vformat(T(TKEY("shadow_casters_stats"), "Shadow Casters : {} tracked, {} cached, {} rendered this frame"),
+							  std::make_format_args(localShadowStatTracked, localShadowStatCached, localShadowStatRendered))
+							  .c_str());
+	}
+	if (localShadowCache) {
+		const uint64_t cacheMegabytes = (localShadowCacheSlots * GetLocalShadowSlotBytes(localShadowCacheResolution, localShadowCacheFormat)) >> 20;
+		ImGui::Text("%s", std::vformat(T(TKEY("shadow_cache_stats"), "Shadow Cache : {} x {}x{}, {} MB"),
+							  std::make_format_args(localShadowCacheSlots, localShadowCacheResolution, localShadowCacheResolution, cacheMegabytes))
+							  .c_str());
+	}
+
+	ImGui::Spacing();
+
 	ImGui::Checkbox(T(TKEY("enable_lights_vis"), "Enable Lights Visualisation"), &settings.EnableLightsVisualisation);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("%s", T(TKEY("enable_lights_vis_tooltip"), "Enables visualization of the light limit\n"));
 	}
 
 	{
-		static const char* comboOptions[] = { "Light Limit", "Strict Lights Count", "Clustered Lights Count", "Shadow Mask" };
+		const char* comboOptions[] = {
+			T(TKEY("lights_vis_mode_light_limit"), "Light Limit"),
+			T(TKEY("lights_vis_mode_strict_lights"), "Strict Lights Count"),
+			T(TKEY("lights_vis_mode_clustered_lights"), "Clustered Lights Count"),
+			T(TKEY("lights_vis_mode_shadow_mask"), "Shadow Mask")
+		};
 		ImGui::Combo(T(TKEY("lights_vis_mode"), "Lights Visualisation Mode"), (int*)&settings.LightsVisualisationMode, comboOptions, 4);
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text("%s", T(TKEY("lights_vis_mode_tooltip"),

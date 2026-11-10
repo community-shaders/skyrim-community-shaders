@@ -357,8 +357,8 @@ void VolumetricShadows::DrawDebugSection()
 		};
 
 		// Mip 0 holds cascade 1, mip 1 holds cascade 0.
-		DisplayRT("VSM Cascade 0", shadowCopyTexture, shadowCopyMip1SRV, 1);
-		DisplayRT("VSM Cascade 1", shadowCopyTexture, shadowCopyMip0SRV, 0);
+		DisplayRT(T(TKEY("buffer_cascade_0"), "VSM Cascade 0"), shadowCopyTexture, shadowCopyMip1SRV, 1);
+		DisplayRT(T(TKEY("buffer_cascade_1"), "VSM Cascade 1"), shadowCopyTexture, shadowCopyMip0SRV, 0);
 
 		ImGui::TreePop();
 	}

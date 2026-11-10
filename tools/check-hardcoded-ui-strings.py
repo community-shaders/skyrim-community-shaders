@@ -78,6 +78,7 @@ LABEL_ARG = {
     "AddTooltip": 0,
     "DrawColorCodedValue": 0,
     "DrawSectionHeader": 0,
+    "DrawDllVersionTable": 0,
 }
 
 CALL_RE = re.compile(r"\b(?:ImGui|Util)::(" + "|".join(sorted(LABEL_ARG, key=len, reverse=True)) + r")\s*\(")

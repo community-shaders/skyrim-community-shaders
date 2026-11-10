@@ -1700,7 +1700,6 @@
     "feature.light_limit_fix.particle_light_count": "Partikelljus: {}",
     "feature.light_limit_fix.shadow_cache_stats": "Skuggcache: {} × {}×{}, {} MB",
     "feature.light_limit_fix.shadow_casters_stats": "Skuggkastare: {} spårade, {} cachade, {} ritade den här bildrutan",
-    "feature.light_limit_fix.statistics": "Statistik",
     "feature.linear_lighting.ambient_multiplier": "Multiplikator för omgivningsljus",
     "feature.linear_lighting.apply_game_gamma": "Använd spelets gamma",
     "feature.linear_lighting.blood_effects_multiplier": "Multiplikator för blodeffekter",
@@ -3081,7 +3080,6 @@
     "feature.unified_water.name": "Enhetligt vatten",
     "feature.unified_water.regenerate_caches": "Generera om cachefiler",
     "feature.unified_water.regenerate_flowmap": "Generera om flödeskarta",
-    "feature.upscaling.backend_diagnostics": "Bakändsdiagnostik",
     "feature.upscaling.description": "Avancerad bilduppskalning och bildgenerering för bättre prestanda",
     "feature.upscaling.dlss_model_preset": "DLSS-modellförinställning",
     "feature.upscaling.dlss_model_preset_default": "Standard",
@@ -4222,6 +4220,7 @@
     "ui.search_features": "Sök funktioner…",
     "feature.exp_height_fog.debug": "Felsökning",
     "feature.light_limit_fix.debug": "Felsökning",
+    "feature.light_limit_fix.statistics": "Statistik",
     "feature.post_processing.codbloom.debug": "Felsökning",
     "feature.post_processing.debug": "Felsökning",
     "feature.post_processing.do_f.debug": "Felsökning",
@@ -4233,5 +4232,6 @@
     "feature.terrain_shadows.debug": "Felsökning",
     "feature.true_pbr.debug": "Felsökning",
     "feature.unified_water.debug": "Felsökning",
+    "feature.upscaling.backend_diagnostics": "Bakändsdiagnostik",
     "feature.wetness_effects.debug": "Felsökning"
 }

@@ -1636,7 +1636,6 @@
     "feature.light_limit_fix.name": "光源限制修复",
     "feature.light_limit_fix.shadow_cache_stats": "阴影缓存：{} x {}x{}，{} MB",
     "feature.light_limit_fix.shadow_casters_stats": "阴影光源：{} 个已跟踪，{} 个已缓存，本帧渲染 {} 个",
-    "feature.light_limit_fix.statistics": "统计",
     "feature.linear_lighting.ambient_multiplier": "环境倍率",
     "feature.linear_lighting.apply_game_gamma": "应用游戏 Gamma",
     "feature.linear_lighting.blood_effects_multiplier": "血液效果倍率",
@@ -2985,7 +2984,6 @@
     "feature.unified_water.name": "统一水面",
     "feature.unified_water.regenerate_caches": "重新生成缓存",
     "feature.unified_water.regenerate_flowmap": "重新生成流图",
-    "feature.upscaling.backend_diagnostics": "后端诊断",
     "feature.upscaling.description": "先进的超分辨率和帧生成技术，提升游戏性能。",
     "feature.upscaling.dlss_model_preset": "DLSS模型预设",
     "feature.upscaling.dlss_model_preset_default": "默认",
@@ -4026,6 +4024,7 @@
     "ui.search_features": "搜索功能...",
     "feature.exp_height_fog.debug": "调试",
     "feature.light_limit_fix.debug": "调试",
+    "feature.light_limit_fix.statistics": "统计",
     "feature.post_processing.codbloom.debug": "调试",
     "feature.post_processing.debug": "调试",
     "feature.post_processing.do_f.debug": "调试",
@@ -4037,5 +4036,6 @@
     "feature.terrain_shadows.debug": "调试",
     "feature.true_pbr.debug": "调试",
     "feature.unified_water.debug": "调试",
+    "feature.upscaling.backend_diagnostics": "后端诊断",
     "feature.wetness_effects.debug": "调试"
 }

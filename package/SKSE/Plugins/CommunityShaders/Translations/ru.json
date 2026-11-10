@@ -725,7 +725,6 @@
     "feature.light_limit_fix.lights_vis_mode": "Режим визуализации источников",
     "feature.light_limit_fix.lights_vis_mode_tooltip": " - Визуализация лимита источников света. Красный при достижении «строгого» лимита (portal-strict).\n - Визуализация количества строгих источников.\n - Визуализация количества кластерных источников.\n - Визуализация маски теней.\n",
     "feature.light_limit_fix.name": "Light Limit Fix",
-    "feature.light_limit_fix.statistics": "Статистика",
     "feature.linear_lighting.ambient_multiplier": "Множитель рассеянного",
     "feature.linear_lighting.blood_effects_multiplier": "Множитель эффектов крови",
     "feature.linear_lighting.deferred_effects_multiplier": "Множитель отложенных эффектов",
@@ -1143,7 +1142,6 @@
     "feature.unified_water.name": "Unified Water",
     "feature.unified_water.regenerate_caches": "Перегенерировать кэши",
     "feature.unified_water.regenerate_flowmap": "Перегенерировать карту потока",
-    "feature.upscaling.backend_diagnostics": "Диагностика бэкенда",
     "feature.upscaling.description": "Продвинутые технологии апскейлинга и генерации кадров для улучшения производительности",
     "feature.upscaling.dlss_model_preset": "Пресет модели DLSS",
     "feature.upscaling.dlss_model_preset_default": "По умолчанию",
@@ -1844,8 +1842,10 @@
     "ui.search_features": "Поиск функций...",
     "feature.exp_height_fog.debug": "Отладка",
     "feature.light_limit_fix.debug": "Отладка",
+    "feature.light_limit_fix.statistics": "Статистика",
     "feature.screen_space_gi.debug": "Отладка",
     "feature.terrain_shadows.debug": "Отладка",
     "feature.unified_water.debug": "Отладка",
+    "feature.upscaling.backend_diagnostics": "Диагностика бэкенда",
     "feature.wetness_effects.debug": "Отладка"
 }

@@ -9,6 +9,7 @@
 #include "Upscaling/DX12SwapChain.h"
 #include "Upscaling/FidelityFX.h"
 #include "Upscaling/Streamline.h"
+#include "Utils/DebugSection.h"
 #include "Utils/Game.h"
 #include "Utils/UI.h"
 #include "Utils/VersionedRelocation.h"
@@ -450,24 +451,32 @@ void Upscaling::DrawSettings()
 
 		ImGui::TreePop();
 	}
+}
 
-	if (ImGui::TreeNodeEx(T(TKEY("backend_diagnostics"), "Backend Diagnostics"))) {
-		// Streamline log level selection
-		const char* logLevels[] = { "Off", "Default", "Verbose" };
-		int logLevelIdx = static_cast<int>(settings.streamlineLogLevel);
-		if (ImGui::Combo(T(TKEY("streamline_logging"), "Streamline Logging"), &logLevelIdx, logLevels, IM_ARRAYSIZE(logLevels))) {
-			settings.streamlineLogLevel = static_cast<uint>(logLevelIdx);
-		}
-		ImGui::TextUnformatted(T(TKEY("streamline_logging_restart_note"), "Changing this requires a restart to take effect."));
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("%s", T(TKEY("streamline_logging_tooltip"), "Streamline logging controls the verbosity of NVIDIA Streamline backend logs. Useful for debugging issues with DLSS/DLSS-G."));
-		}
+void Upscaling::DrawDebugSection()
+{
+	Util::DebugSection section;
+	if (!section)
+		return;
 
-		ImGui::Separator();
-		Util::DrawDllVersionTable("AMD FidelityFX DLLs (click to open folder)", FidelityFX::PluginDir, FidelityFX::dllVersions, "ffx_dll_versions");
-		Util::DrawDllVersionTable("NVIDIA Streamline DLLs (click to open folder)", Streamline::PluginDir, Streamline::dllVersions, "sl_dll_versions");
-		ImGui::TreePop();
+	// Streamline log level selection
+	const char* logLevels[] = {
+		T(TKEY("streamline_logging_off"), "Off"),
+		T(TKEY("streamline_logging_default"), "Default"),
+		T(TKEY("streamline_logging_verbose"), "Verbose")
+	};
+	int logLevelIdx = static_cast<int>(settings.streamlineLogLevel);
+	if (ImGui::Combo(T(TKEY("streamline_logging"), "Streamline Logging"), &logLevelIdx, logLevels, IM_ARRAYSIZE(logLevels))) {
+		settings.streamlineLogLevel = static_cast<uint>(logLevelIdx);
 	}
+	ImGui::TextUnformatted(T(TKEY("streamline_logging_restart_note"), "Changing this requires a restart to take effect."));
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("%s", T(TKEY("streamline_logging_tooltip"), "Streamline logging controls the verbosity of NVIDIA Streamline backend logs. Useful for debugging issues with DLSS/DLSS-G."));
+	}
+
+	ImGui::Separator();
+	Util::DrawDllVersionTable(T(TKEY("amd_dlls_title"), "AMD FidelityFX DLLs (click to open folder)"), FidelityFX::PluginDir, FidelityFX::dllVersions, "ffx_dll_versions");
+	Util::DrawDllVersionTable(T(TKEY("nvidia_dlls_title"), "NVIDIA Streamline DLLs (click to open folder)"), Streamline::PluginDir, Streamline::dllVersions, "sl_dll_versions");
 }
 
 void Upscaling::SaveSettings(json& o_json)
