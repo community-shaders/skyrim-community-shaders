@@ -1604,7 +1604,6 @@
     "menu.profiling.avg": "Среднее",
     "menu.profiling.cpu": "CPU",
     "menu.profiling.gpu": "GPU",
-    "menu.profiling.no_timing_data": "Нет данных о времени",
     "menu.profiling.no_timing_data_world": "Нет данных (войдите в игровой мир)",
     "menu.profiling.p95": "P95",
     "menu.profiling.p99": "P99",
