@@ -736,6 +736,8 @@ void FeatureListRenderer::HandlePendingFeatureSelection(
 	pendingFeatureSelection.clear();  // Clear after processing
 }
 
+static void SnapScrollToRows(const std::vector<float>& rowTops);
+
 void FeatureListRenderer::RenderLeftColumn(
 	const std::vector<MenuFuncInfo>& menuList,
 	size_t& selectedMenu,
@@ -817,12 +819,19 @@ void FeatureListRenderer::RenderLeftColumn(
 			                            ThemeManager::Constants::CATEGORY_HEADER_PAD * Util::GetUIScale() * 0.5f :
 			                            0.0f;
 			ImGui::SetCursorPosY(ImGui::GetCursorPosY() + GetListTextTop() - headerPad);
+			std::vector<float> rowTops;
+			rowTops.reserve(menuList.size());
 			for (size_t i = 0; i < menuList.size(); i++) {
-				if (!builtInAt(i))
+				if (!builtInAt(i)) {
+					const float top = ImGui::GetCursorPosY();
 					std::visit(ListMenuVisitor{ i, selectedMenu, categoryExpansionStates, hooks }, menuList[i]);
+					if (ImGui::GetCursorPosY() > top)
+						rowTops.push_back(top);
+				}
 			}
 			// Room below the last row, so its selection highlight is not clipped by the pane's bottom edge
 			ImGui::Dummy(ImVec2(0.0f, ThemeManager::Constants::LEFT_PANE_EDGE_INSET * Util::GetUIScale()));
+			SnapScrollToRows(rowTops);
 			if (g_filterCounts.shown == 0 && filter != 0) {
 				BrowserUI::EmptyState(T("menu.features.no_matches", "No features match"),
 					T("menu.features.no_matches_hint", "Turn off a filter to list more features."));
@@ -840,6 +849,60 @@ void FeatureListRenderer::RenderLeftColumn(
 
 	if (pageButtonsHere)
 		StatusBarRenderer::RenderPageButtons();
+}
+
+/**
+ * Once the user stops scrolling, eases the current window's scroll to the nearest
+ * row boundary so the top row is never left half-clipped.
+ * @param rowTops Content-space Y of each drawn row's top edge, in order.
+ */
+static void SnapScrollToRows(const std::vector<float>& rowTops)
+{
+	constexpr float kIdleDelay = 0.12f;  // seconds without scroll input before snapping
+	constexpr float kSnapRate = 18.0f;   // exponential ease rate (1/s)
+
+	static float s_lastScroll = -1.0f;  // scroll value at the end of last frame
+	static float s_idleTime = 0.0f;
+
+	const float scroll = ImGui::GetScrollY();
+	const float maxScroll = ImGui::GetScrollMaxY();
+	const ImGuiIO& io = ImGui::GetIO();
+	auto* window = ImGui::GetCurrentWindow();
+	const bool draggingScrollbar = ImGui::GetActiveID() == ImGui::GetWindowScrollbarID(window, ImGuiAxis_Y);
+	const bool wheel = io.MouseWheel != 0.0f && ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows);
+
+	// Any scroll change we did not cause (wheel, drag, keyboard nav) restarts the idle timer
+	if (draggingScrollbar || wheel || std::abs(scroll - s_lastScroll) > 0.01f)
+		s_idleTime = 0.0f;
+	else
+		s_idleTime += io.DeltaTime;
+	s_lastScroll = scroll;
+
+	if (rowTops.empty() || maxScroll <= 0.0f || s_idleTime < kIdleDelay)
+		return;
+
+	// Snap points: each row aligned to where the first row sits at scroll 0, plus the end of the list
+	float target = maxScroll;
+	float bestDist = std::abs(scroll - maxScroll);
+	for (const float top : rowTops) {
+		const float candidate = std::clamp(top - rowTops.front(), 0.0f, maxScroll);
+		const float dist = std::abs(scroll - candidate);
+		if (dist < bestDist) {
+			bestDist = dist;
+			target = candidate;
+		}
+	}
+	if (bestDist < 0.5f) {
+		if (bestDist > 0.0f) {
+			ImGui::SetScrollY(target);
+			s_lastScroll = target;
+		}
+		return;
+	}
+	const float t = 1.0f - std::exp(-kSnapRate * io.DeltaTime);
+	const float next = scroll + (target - scroll) * t;
+	ImGui::SetScrollY(next);
+	s_lastScroll = next;  // our own motion must not reset the idle timer
 }
 
 void FeatureListRenderer::RequestPage(std::string_view pageId)
