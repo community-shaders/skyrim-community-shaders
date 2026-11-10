@@ -25,6 +25,7 @@
 #include "Features/LightLimitFix.h"
 #include "Features/PostProcessing.h"
 #include "Features/RainRefraction.h"
+#include "Features/RemoteControl/FrameRecorder.h"
 #include "Features/RemoteControl/NvPerf.h"
 #include "Features/RenderDoc.h"
 #include "Features/ScreenshotFeature.h"
@@ -504,6 +505,8 @@ struct IDXGISwapChain_Present
 
 		globals::state->Reset();
 
+		FrameRecorder::OnPresentEnd();
+
 		NvPerf::OnPresentEnd();
 
 		TracyD3D11Collect(globals::state->tracyCtx);
@@ -646,6 +649,8 @@ struct BSShaderRenderTargets_Create
 	static void thunk()
 	{
 		Util::SetGameSettingValue<std::int32_t>("iNumFocusShadow:Display", iNumFocusShadow, 0);
+		if (globals::features::hdrDisplay.loaded)
+			globals::features::hdrDisplay.PreCreateRenderTargets();
 		func();
 		globals::ReInit();
 		globals::state->Setup();
