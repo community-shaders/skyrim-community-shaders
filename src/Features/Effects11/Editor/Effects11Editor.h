@@ -135,8 +135,17 @@ private:
 	/** Preset file locations, cached because resolving them touches the disk. */
 	struct PresetPaths
 	{
+		/** The first piece of a preset layout that is absent, in lookup order. */
+		enum class Missing
+		{
+			IniFile,
+			SeriesFolder,
+			MainEffect
+		};
+
 		std::string iniFull;
 		std::string iniDisplay;
-		std::string mainEffect;
+		Missing missing = Missing::MainEffect;
+		std::string missingPath;
 	} presetPaths;
 };

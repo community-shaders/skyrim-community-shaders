@@ -5,6 +5,7 @@
 #include "Feature.h"
 #include "SceneSettingsCatalog.generated.h"
 #include "SceneSettingsPolicy.h"
+#include "Utils/Hash.h"
 #include "Utils/SceneBlend.h"
 #include "Utils/SettingsCatalog.h"
 
@@ -39,8 +40,7 @@ namespace SceneSettingsInternal
 	using SceneSettingControlType = SceneSettingsManager::SettingControlType;
 	using FeatureSettingsCache = std::map<std::string, json>;
 
-	/** @brief Mixes value into signature, boost::hash_combine style. */
-	void CombineHash(size_t& signature, size_t value);
+	using Util::CombineHash;
 
 	/** @brief Mixes a primitive's type and value into signature. */
 	void HashSceneSettingValue(size_t& signature, const json& value);

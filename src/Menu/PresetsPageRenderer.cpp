@@ -30,7 +30,7 @@
 #include <vector>
 
 std::optional<UnifiedPresetCatalog::PresetType> PresetsPageRenderer::typeFilter;
-char PresetsPageRenderer::searchBuffer[128] = {};
+std::string PresetsPageRenderer::searchBuffer;
 std::string PresetsPageRenderer::selectedPackId;
 bool PresetsPageRenderer::discovered = false;
 std::string PresetsPageRenderer::lightboxPackId;
@@ -136,9 +136,16 @@ namespace
 	bool g_showThemes = false;
 	std::string g_selectedTheme;
 
-	/** @brief A theme's accent (its header colour), the tint of its CS logo. */
+	/** @brief The tint of a theme's CS logo: its optional top-level LogoColor ([r, g, b], 0-1), else its accent (header colour). */
 	ImVec4 ThemeAccent(const ThemeManager::ThemeInfo& info)
 	{
+		const auto logoColor = info.themeData.find("LogoColor");
+		const bool hasLogoColor = logoColor != info.themeData.end() && logoColor->is_array() && logoColor->size() >= 3 &&
+		                          std::all_of(logoColor->begin(), logoColor->begin() + 3, [](const json& c) { return c.is_number(); });
+		if (hasLogoColor) {
+			const auto channel = [&](size_t i) { return std::clamp((*logoColor)[i].get<float>(), 0.0f, 1.0f); };
+			return ImVec4(channel(0), channel(1), channel(2), 1.0f);
+		}
 		std::array<ImVec4, ImGuiCol_COUNT> palette{};
 		Menu::PaletteFromJson(info.themeData.contains("Theme") ? info.themeData["Theme"] : info.themeData, palette);
 		ImVec4 accent = palette[ImGuiCol_Header];
@@ -249,17 +256,8 @@ namespace
 	/** @brief Borderless folder icon after the Apply button, wrapping to a new row when the pane is narrow. */
 	bool FolderButton(const char* id, const char* tooltip)
 	{
-		const Icons::GlyphRef folderIcon = Icons::TI(MenuIcons::kFolder);
-		BrowserUI::SameLineIfFits(Icons::CalcGlyphSize(folderIcon).x + ImGui::GetStyle().FramePadding.x * 2.0f);
-		bool clicked = false;
-		{
-			auto _style = Util::TransparentIconButtonStyle();
-			ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
-			clicked = Icons::Button(id, folderIcon);
-			ImGui::PopStyleVar();
-		}
-		Util::AddTooltip(tooltip);
-		return clicked;
+		BrowserUI::SameLineIfFits(Util::IconButtonSize());
+		return Util::IconButton(id, Icons::TI(MenuIcons::kFolder), tooltip);
 	}
 
 	/** @brief Apply, open-folder, remove-baseline and disable buttons, then a line saying how the pack is active. */
@@ -342,7 +340,7 @@ void PresetsPageRenderer::RenderToolbar()
 	auto& catalog = UnifiedPresetCatalog::GetSingleton();
 	const float scale = Util::GetUIScale();
 
-	BrowserUI::SearchField("##PresetSearch", searchBuffer, IM_ARRAYSIZE(searchBuffer),
+	Util::SearchField("##PresetSearch", searchBuffer,
 		T("menu.presets.search", "Search presets..."), ThemeManager::Constants::PRESET_SEARCH_WIDTH * scale, true);
 
 	ImGui::SameLine();
@@ -371,21 +369,13 @@ void PresetsPageRenderer::RenderToolbar()
 	// A small divider keeps these maintenance actions from reading as more filter chips.
 	Util::ToolbarDivider();
 
-	{
-		auto _style = Util::TransparentIconButtonStyle();
-		if (Icons::Button("##PresetsRefresh", Icons::TI(ICON_TI_REFRESH))) {
-			catalog.Discover();
-			discovered = true;
-		}
-		if (ImGui::IsItemHovered())
-			ImGui::SetTooltip("%s", T("menu.presets.refresh_tooltip", "Rescan unified packs and Effects 11 library presets."));
-
-		ImGui::SameLine();
-		if (Icons::Button("##PresetsOpenFolder", Icons::TI(ICON_TI_FOLDER_OPEN)))
-			catalog.OpenPresetsFolder();
-		if (ImGui::IsItemHovered())
-			ImGui::SetTooltip("%s", T("menu.presets.open_folder_tooltip", "Open the unified Presets library folder in Explorer."));
+	if (Util::IconButton("##PresetsRefresh", Icons::TI(ICON_TI_REFRESH), T("menu.presets.refresh_tooltip", "Rescan unified packs and Effects 11 library presets."))) {
+		catalog.Discover();
+		discovered = true;
 	}
+	ImGui::SameLine();
+	if (Util::IconButton("##PresetsOpenFolder", Icons::TI(ICON_TI_FOLDER_OPEN), T("menu.presets.open_folder_tooltip", "Open the unified Presets library folder in Explorer.")))
+		catalog.OpenPresetsFolder();
 
 	DrawOpenCSEditorButton("##PresetsOpenCSEditor");
 }
@@ -394,8 +384,8 @@ void PresetsPageRenderer::DrawOpenCSEditorButton(const char* id)
 {
 	const char* title = T("menu.presets.open_cs_editor", "CS Editor");
 	const Icons::GlyphRef brush = Icons::TI(MenuIcons::kCSEditor);
-	BrowserUI::RightAlign(Icons::MeasureLabeledButton(brush, title));
-	if (Icons::LabeledButton(id, brush, title))
+	BrowserUI::RightAlign(Util::MeasureLabeledButton(brush, title));
+	if (Util::LabeledButton(id, brush, title))
 		CSEditor::OpenEditorWindow();
 	Util::AddTooltip(T("menu.presets.open_cs_editor_tooltip", "Open the CS Editor for weather, lighting, and scene editing."));
 }
@@ -651,15 +641,13 @@ void PresetsPageRenderer::RenderDetail()
 			ImGui::BeginGroup();
 			{
 				const auto stage = PresetCompatibility::ReleaseStageFromVersion(pack->version);
-				const std::string stageTag = Feature::GetReleaseStageTag(stage);
 
 				MenuFonts::FontRoleGuard title(Menu::FontRole::Heading);
 				ImGui::SetWindowFontScale(ThemeManager::Constants::PRESET_TITLE_FONT_SCALE);
 				ImGui::TextWrapped("%s", pack->name.c_str());
-				if (!stageTag.empty()) {
-					MenuFonts::FontRoleGuard body(Menu::FontRole::Body);
-					BrowserUI::SameLineIfFits(ImGui::CalcTextSize(stageTag.c_str()).x);
-					ImGui::TextColored(Feature::GetReleaseStageColor(stage), "%s", stageTag.c_str());
+				if (stage != Feature::ReleaseStage::Release) {
+					BrowserUI::SameLineIfFits(FeatureListRenderer::MeasureStageBadge(stage));
+					FeatureListRenderer::DrawStageBadge(stage, ImGui::GetTextLineHeight());
 				}
 				ImGui::SetWindowFontScale(1.0f);
 			}
@@ -677,7 +665,7 @@ void PresetsPageRenderer::RenderDetail()
 					Util::Text::Secondary("%s", metaLine.c_str());
 				if (!pack->nexusUrl.empty()) {
 					ImGui::SameLine(0.0f, style.ItemSpacing.x);
-					if (Icons::Button("##NexusLink", Icons::TI(ICON_TI_EXTERNAL_LINK)))
+					if (Util::LabeledButton("##NexusLink", Icons::TI(ICON_TI_EXTERNAL_LINK)))
 						Util::FileHelpers::OpenWithShell(pack->nexusUrl);
 					Util::AddTooltip(T("menu.presets.nexus_link_tooltip", "Open this preset's Nexus Mods page."));
 				}
@@ -775,18 +763,18 @@ void PresetsPageRenderer::Open()
 	auto* menu = globals::menu;
 	if (!menu)
 		return;
-	menu->IsEnabled = true;
+	menu->Open();
 	menu->SelectFeatureMenu(std::string(MenuPageIds::kPresets));
 }
 
 float PresetsPageRenderer::MeasureOpenButton()
 {
-	return Icons::MeasureLabeledButton(Icons::TI(MenuIcons::kPresets), T("menu.presets.open_presets", "Presets"));
+	return Util::MeasureLabeledButton(Icons::TI(MenuIcons::kPresets), T("menu.presets.open_presets", "Presets"));
 }
 
 void PresetsPageRenderer::DrawOpenButton(const char* id, const char* tooltip)
 {
-	if (Icons::LabeledButton(id, Icons::TI(MenuIcons::kPresets), T("menu.presets.open_presets", "Presets")))
+	if (Util::LabeledButton(id, Icons::TI(MenuIcons::kPresets), T("menu.presets.open_presets", "Presets")))
 		Open();
 	Util::AddTooltip(tooltip);
 }

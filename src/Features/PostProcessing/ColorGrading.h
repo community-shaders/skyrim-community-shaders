@@ -169,6 +169,7 @@ struct ColorGrading : public PostProcessFeature
 	virtual void RestoreDefaultSettings() override;
 	virtual void LoadSettings(json&) override;
 	virtual void SaveSettings(json&) override;
+	virtual void ApplyContextualDefaults(json&) const override;
 
 	virtual void DrawSettings() override;
 

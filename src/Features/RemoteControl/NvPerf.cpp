@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <cassert>
 #include <cctype>
 #include <cmath>
 #include <fstream>
@@ -180,11 +181,12 @@ namespace NvPerf
 			return escaped;
 		}
 
-		// Per filter, per frame. Every sample measures the same frame shape, so occurrences and summed counters are
-		// divided by the sample count.
+		// Per filter, per frame; also keeps each filter's values per sample. Every sample measures the same frame shape,
+		// so occurrences and summed counters are divided by the sample count.
 		std::vector<RangeSummary> Summarize(const CaptureResult& a_result)
 		{
 			const auto& metrics = a_result.metrics;
+			const std::size_t sampleCount = a_result.samples;
 			std::size_t timeMetric = metrics.size();
 			for (std::size_t m = 0; m < metrics.size(); ++m)
 				if (metrics[m].name == "gpu__time_duration")
@@ -194,6 +196,8 @@ namespace NvPerf
 				std::uint32_t occurrences = 0;
 				std::uint32_t incomplete = 0;
 				std::vector<double> values, weights;
+				std::vector<std::uint32_t> sampleOccurrences;
+				std::vector<std::vector<double>> sampleValues, sampleWeights;  // [metric][sample]
 			};
 			std::map<std::string, Totals> byName;
 			std::vector<std::string> order;
@@ -207,11 +211,16 @@ namespace NvPerf
 				if (std::ranges::any_of(range.enclosing, [&](const std::string& a_parent) { return keyOf(a_parent) == key; }))
 					continue;
 				auto [entry, inserted] = byName.try_emplace(key);
-				if (inserted)
-					order.push_back(key);
 				auto& totals = entry->second;
+				if (inserted) {
+					order.push_back(key);
+					totals.sampleOccurrences.resize(sampleCount);
+					totals.sampleValues.assign(metrics.size(), std::vector<double>(sampleCount));
+					totals.sampleWeights.assign(metrics.size(), std::vector<double>(sampleCount));
+				}
 				totals.values.resize(metrics.size());
 				totals.weights.resize(metrics.size());
+				assert(range.sample < sampleCount);
 				const double time = timeMetric < range.values.size() ? range.values[timeMetric] : 1.0;
 				bool incomplete = false;
 				for (std::size_t m = 0; m < metrics.size() && m < range.values.size(); ++m) {
@@ -223,11 +232,14 @@ namespace NvPerf
 					const double weight = IsSummed(metrics[m]) || std::isnan(time) ? 1.0 : time;
 					totals.values[m] += value * weight;
 					totals.weights[m] += weight;
+					totals.sampleValues[m][range.sample] += value * weight;
+					totals.sampleWeights[m][range.sample] += weight;
 				}
 				totals.incomplete += incomplete;
 				++totals.occurrences;
+				++totals.sampleOccurrences[range.sample];
 			}
-			const double samples = std::max<double>(a_result.samples, 1.0);
+			const double samples = std::max<double>(static_cast<double>(sampleCount), 1.0);
 			std::vector<RangeSummary> summary;
 			summary.reserve(order.size());
 			for (const auto& name : order) {
@@ -236,13 +248,24 @@ namespace NvPerf
 				entry.name = name;
 				entry.occurrencesPerFrame = totals.occurrences / samples;
 				entry.incomplete = totals.incomplete;
+				entry.perSample.resize(metrics.size());
 				for (std::size_t m = 0; m < metrics.size(); ++m) {
+					const bool summed = IsSummed(metrics[m]);
 					if (!totals.weights[m])
 						entry.values.push_back(std::nan(""));
-					else if (IsSummed(metrics[m]))
+					else if (summed)
 						entry.values.push_back(totals.values[m] / samples);
 					else
 						entry.values.push_back(totals.values[m] / totals.weights[m]);
+					auto& series = entry.perSample[m];
+					series.resize(sampleCount);
+					for (std::size_t s = 0; s < sampleCount; ++s) {
+						const double weight = totals.sampleWeights[m][s];
+						if (weight)
+							series[s] = summed ? totals.sampleValues[m][s] : totals.sampleValues[m][s] / weight;
+						else
+							series[s] = summed && !totals.sampleOccurrences[s] ? 0.0 : std::nan("");
+					}
 				}
 				summary.push_back(std::move(entry));
 			}

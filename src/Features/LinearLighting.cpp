@@ -297,12 +297,30 @@ RE::NiColor LinearLighting::LightColorToWorking(const RE::NiLight* light, bool e
 	auto color = effect ? static_cast<const RE::NiDirectionalLight*>(light)->GetDirectionalLightRuntimeData().effectColor : diffuse;
 	if (!IsLinearLightingActive())
 		return color;
-	auto* const point = skyrim_cast<RE::NiPointLight*>(const_cast<RE::NiLight*>(light));
+
+	struct Memo
+	{
+		const RE::NiLight* light = nullptr;
+		RE::NiColor source{};
+		RE::NiColor result{};
+		uint32_t frame = 0;
+		bool effect = false;
+		bool aces = false;
+	};
+	static thread_local Memo memo;
+	const bool aces = IsACEScgActive();
+	const uint32_t frame = globals::state->frameCount;
+	if (memo.light == light && memo.frame == frame && memo.effect == effect && memo.aces == aces && memo.source == color)
+		return memo.result;
+
+	const auto source = color;
+	auto* const point = netimmerse_cast<RE::NiPointLight*>(const_cast<RE::NiLight*>(light));
 	const bool linear = point && LLFCommon::RuntimeLightDataExt::Get(point)->flags.any(LightLimitFix::LightFlags::Linear);
 	if (!linear)
 		Util::ColorSpace::SRGBToLinear(&color.red);
-	if (IsACEScgActive())
+	if (aces)
 		Util::ColorSpace::SRGBGamutToAP1(&color.red);
+	memo = { light, source, color, frame, effect, aces };
 	return color;
 }
 

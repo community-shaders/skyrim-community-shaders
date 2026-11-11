@@ -226,7 +226,7 @@ namespace WidgetFactory
 	}
 
 	/**
-	 * @brief Draw all open widgets from a container.
+	 * @brief Draw every open window of the widgets in a container.
 	 * @tparam Container    A range of unique_ptr<Widget>.
 	 * @param  widgets          The widget container to iterate.
 	 */
@@ -235,7 +235,7 @@ namespace WidgetFactory
 	{
 		for (auto& widget : widgets) {
 			if (widget->IsOpen()) {
-				widget->DrawWidget();
+				widget->DrawViews();
 			}
 		}
 	}

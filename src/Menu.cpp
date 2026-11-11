@@ -1,6 +1,7 @@
 #include "Menu.h"
 #include "Menu/FeatureUndo.h"
 #include "Menu/FontAtlasState.h"
+#include "Utils/Logging.h"
 #include "Utils/Notifications.h"
 
 #ifndef DIRECTINPUT_VERSION
@@ -208,8 +209,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Theme,
 	SelectedThemePreset)
 
-bool IsEnabled = false;
-
 namespace
 {
 	/**
@@ -248,12 +247,6 @@ namespace
 		{ "Hand", ImGuiMouseCursor_Hand },
 		{ "NotAllowed", ImGuiMouseCursor_NotAllowed },
 	};
-}
-
-void Menu::ThemeFromJson(const json& themeJson, ThemeSettings& theme)
-{
-	theme = themeJson.get<ThemeSettings>();
-	PaletteFromJson(themeJson, theme.FullPalette);
 }
 
 void Menu::CursorFromJson(const json& cursorJson, ThemeSettings::CursorSettings& cursor)
@@ -313,6 +306,26 @@ static void SanitizeFontRolesJson(json& themeJson)
 		for (size_t i = fontRoles.size(); i < expected; ++i) {
 			fontRoles.push_back(defaults[i]);
 		}
+	}
+}
+
+void Menu::ThemeFromJson(const json& themeJson, ThemeSettings& theme)
+{
+	json sanitized = themeJson;
+	SanitizeFontRolesJson(sanitized);
+	theme = sanitized.get<ThemeSettings>();
+	PaletteFromJson(sanitized, theme.FullPalette);
+	if (sanitized.contains("Cursor") && sanitized["Cursor"].is_object())
+		CursorFromJson(sanitized["Cursor"], theme.Cursor);
+
+	MenuFonts::NormalizeFontRoles(theme, themeJson.contains("FontRoles"));
+	Util::CursorLoader::MigrateLegacyCursorSettings(theme);
+	auto& bodyRole = theme.FontRoles[static_cast<size_t>(FontRole::Body)];
+	if (!Util::ValidateFont(bodyRole.File)) {
+		const auto& defaults = GetDefaultFontRole(FontRole::Body);
+		logger::warn("Theme font '{}' not found, falling back to default font '{}'", bodyRole.File, defaults.File);
+		bodyRole = defaults;
+		theme.FontName = defaults.File;
 	}
 }
 
@@ -487,7 +500,7 @@ void Menu::Load(json& o_json)
 	if (const auto it = o_json.find("FeatureListFilter"); it != o_json.end() && it->is_number_integer() && it->get<std::int64_t>() >= 0)
 		settings.FeatureListFilter = static_cast<std::uint32_t>(it->get<std::int64_t>() & FeatureListFilter::kKnown);
 
-	// Recently opened features: known short names only, without repeats, capped; malformed entries are dropped
+	// Recently opened features: known ones only, deduped and capped; Home hides uninstalled ones
 	settings.RecentFeatures.clear();
 	if (const auto it = o_json.find("RecentFeatures"); it != o_json.end() && it->is_array()) {
 		for (const auto& entry : *it) {
@@ -496,7 +509,7 @@ void Menu::Load(json& o_json)
 			if (!entry.is_string())
 				continue;
 			auto name = entry.get<std::string>();
-			if (Feature::FindFeatureByShortName(name) && std::ranges::find(settings.RecentFeatures, name) == settings.RecentFeatures.end())
+			if (Feature::IsFeatureKnown(name) && std::ranges::find(settings.RecentFeatures, name) == settings.RecentFeatures.end())
 				settings.RecentFeatures.push_back(std::move(name));
 		}
 	}
@@ -620,9 +633,17 @@ void Menu::SaveTheme(json& o_json)
 		settings.Theme.FontName = defaults.File;
 	}
 
-	o_json["Theme"] = settings.Theme;
-	PaletteToJson(o_json["Theme"], settings.Theme.FullPalette);
-	CursorToJson(o_json["Theme"]["Cursor"], settings.Theme.Cursor);
+	o_json["Theme"] = ThemeToJson(settings.Theme);
+}
+
+json Menu::ThemeToJson(const ThemeSettings& theme)
+{
+	json out = theme;
+	PaletteToJson(out, theme.FullPalette);
+	CursorToJson(out["Cursor"], theme.Cursor);
+	// The font reload rewrites FontName on its own; the Body role is what counts
+	out["FontName"] = theme.FontRoles[static_cast<size_t>(FontRole::Body)].File;
+	return out;
 }
 
 std::vector<std::string> Menu::DiscoverThemes()
@@ -649,29 +670,13 @@ bool Menu::LoadThemePreset(const std::string& themeName)
 	if (themeManager->LoadTheme(themeName, themeSettings)) {
 		// Create a backup of current theme in case loading fails
 		ThemeSettings backupTheme = settings.Theme;
-		bool hasFontRoles = themeSettings.contains("FontRoles");
-
-		SanitizeFontRolesJson(themeSettings);
 
 		try {
-			settings.Theme = themeSettings;
-			PaletteFromJson(themeSettings, settings.Theme.FullPalette);
-			if (themeSettings.contains("Cursor") && themeSettings["Cursor"].is_object()) {
-				CursorFromJson(themeSettings["Cursor"], settings.Theme.Cursor);
-			}
-
-			MenuFonts::NormalizeFontRoles(settings.Theme, hasFontRoles);
-			Util::CursorLoader::MigrateLegacyCursorSettings(settings.Theme);
-			auto& bodyRole = settings.Theme.FontRoles[static_cast<size_t>(FontRole::Body)];
-			if (!Util::ValidateFont(bodyRole.File)) {
-				const auto& defaults = Menu::GetDefaultFontRole(FontRole::Body);
-				logger::warn("Font '{}' from theme '{}' not found, falling back to default font '{}'",
-					bodyRole.File, themeName, defaults.File);
-				settings.Theme.FontRoles[static_cast<size_t>(FontRole::Body)] = defaults;
-				settings.Theme.FontName = defaults.File;
-			}
+			ThemeFromJson(themeSettings, settings.Theme);
 
 			settings.SelectedThemePreset = themeName;
+			// Colours and Fonts undo steps belong to the theme they were made on
+			undoHistory.Forget("theme.");
 
 			// Schedule deferred font reload if font has changed
 			if (settings.Theme.FontName != MenuFonts::GetAtlasState().cachedFontName) {
@@ -857,7 +862,10 @@ void Menu::DrawSettings()
 	if (!wasDocked)
 		windowFlags |= ImGuiWindowFlags_NoTitleBar;
 
-	Util::BeginWithRoundedClose(title.c_str(), &IsEnabled, windowFlags);
+	bool keepOpen = true;
+	Util::BeginWithRoundedClose(title.c_str(), &keepOpen, windowFlags);
+	if (!keepOpen)
+		Close();
 	{
 		const bool isDocked = ImGui::IsWindowDocked();
 		wasDocked = isDocked;
@@ -969,7 +977,7 @@ void Menu::DispatchShortcuts()
 	// The CS Editor has its own Ctrl+Z / Ctrl+S, a focused text field owns its keys, a hotkey capture
 	// records the next chord as a binding, and a modal (confirmation) must be answered first.
 	const auto* editorWindow = EditorWindow::GetSingleton();
-	const bool allowed = IsEnabled && !ImGui::GetIO().WantTextInput && !IsCapturingHotkeyInput() &&
+	const bool allowed = open && !ImGui::GetIO().WantTextInput && !IsCapturingHotkeyInput() &&
 	                     !(editorWindow && editorWindow->open) && !ImGui::GetTopMostPopupModal() &&
 	                     !HomePageRenderer::ShouldShowFirstTimeSetup();
 	if (allowed)
@@ -1024,7 +1032,7 @@ void Menu::DrawDisableAtBootSettings()
 	const char* disabledOnlyLabel = T("menu.settings.disabled_only", "Disabled only");
 	const float chipWidth = BrowserUI::MeasureChip(disabledOnlyLabel, false);
 	const float searchWidth = std::max(ImGui::GetFrameHeight() * ThemeManager::Constants::DISABLE_AT_BOOT_MIN_SEARCH_FRAMES, ImGui::GetContentRegionAvail().x - chipWidth - ImGui::GetStyle().ItemSpacing.x);
-	BrowserUI::SearchField("##DisableAtBootSearch", disableAtBootSearch.data(), disableAtBootSearch.size(), T("ui.search", "Search..."), searchWidth, false);
+	Util::SearchField("##DisableAtBootSearch", disableAtBootSearch, T("ui.search", "Search..."), searchWidth, false);
 	BrowserUI::SameLineIfFits(chipWidth);
 	if (BrowserUI::FilterChip("##DisabledOnly", { disabledOnlyLabel }, disableAtBootDisabledOnly))
 		disableAtBootDisabledOnly = !disableAtBootDisabledOnly;
@@ -1081,7 +1089,7 @@ void Menu::DrawOverlay()
 	ImGuiContext* ctx = ImGui::GetCurrentContext();
 	bool canReload = ctx && !ctx->WithinFrameScope && ctx->WithinEndChildID == 0;
 
-	if (auto& atlas = MenuFonts::GetAtlasState(); !IsEnabled && atlas.wantsFontPreviewAtlas) {
+	if (auto& atlas = MenuFonts::GetAtlasState(); !open && atlas.wantsFontPreviewAtlas) {
 		atlas.wantsFontPreviewAtlas = false;
 		atlas.pendingFontReload = true;
 	}
@@ -1104,13 +1112,12 @@ void Menu::DrawOverlay()
 	}
 
 	if (pendingCursorReload && canReload) {
-		static bool loggedCursorReloadRetry = false;
+		static Util::OnceFlag loggedCursorReloadRetry;
 		if (Util::CursorLoader::Reload(this)) {
 			pendingCursorReload = false;
-			loggedCursorReloadRetry = false;
-		} else if (!loggedCursorReloadRetry) {
+			loggedCursorReloadRetry.Reset();
+		} else if (loggedCursorReloadRetry.First()) {
 			logger::warn("Menu::DrawOverlay() - Cursor reload deferred (will retry when ready)");
-			loggedCursorReloadRetry = true;
 		}
 	}
 
@@ -1209,9 +1216,12 @@ void Menu::ProcessInputEventQueue()
 				KeyAction keyActions[] = {
 					{ settings.ToggleKey, [this]() {
 						 if (!HomePageRenderer::ShouldShowFirstTimeSetup() && !EditorWindow::GetSingleton()->open) {
-							 IsEnabled = !IsEnabled;
-							 if (IsEnabled)
+							 if (open) {
+								 Close();
+							 } else {
+								 Open();
 								 ImGui::GetIO().ClearInputKeys();  // Prevent toggle key from remaining "held" in ImGui after open.
+							 }
 						 } else if (HomePageRenderer::ShouldShowFirstTimeSetup()) {
 							 HomePageRenderer::MarkFirstTimeSetupComplete();
 						 }
@@ -1355,9 +1365,9 @@ void Menu::ProcessInputEventQueue()
 					} else if (auto& effects11Editor = Effects11Editor::GetSingleton(); effects11Editor.IsOpen()) {
 						if (effects11Editor.ShouldHandleEscapeKey())
 							effects11Editor.Close();
-					} else if (IsEnabled && (!editorWindow || !editorWindow->open)) {
+					} else if (open && (!editorWindow || !editorWindow->open)) {
 						if (!TakeConsumedEscape())
-							IsEnabled = false;
+							Close();
 					}
 				}
 			} else if (event.IsDown() && !wasCapturingHotkey) {
@@ -1460,22 +1470,24 @@ void Menu::ProcessInputEvents(RE::InputEvent* const* a_events)
 void Menu::UpdateOpenFade(float deltaTime)
 {
 	if (settings.Theme.MenuFadeEnabled)
-		Util::StepFade(openFade, IsEnabled, deltaTime);
+		Util::StepFade(openFade, open, deltaTime);
 	else
-		openFade = IsEnabled ? 1.0f : 0.0f;
+		openFade = open ? 1.0f : 0.0f;
 }
 
 bool Menu::ShouldSwallowInput()
 {
 	auto editorWindow = EditorWindow::GetSingleton();
-	return IsEnabled || HomePageRenderer::ShouldShowFirstTimeSetup() || (editorWindow && editorWindow->open) ||
+	return open || HomePageRenderer::ShouldShowFirstTimeSetup() || (editorWindow && editorWindow->open) ||
 	       Effects11Editor::GetSingleton().IsOpen();
 }
 
 void Menu::SyncVanityCamera()
 {
 	const bool wantDisabled = ShouldSwallowInput();
-	auto setting = RE::GetINISetting("fAutoVanityModeDelay:Camera");
+	static RE::Setting* setting = nullptr;
+	if (!setting)
+		setting = RE::GetINISetting("fAutoVanityModeDelay:Camera");
 	if (!setting)
 		return;
 
@@ -1506,6 +1518,18 @@ void Menu::RecordRecentFeature(const std::string& shortName)
 	recent.insert(recent.begin(), shortName);
 	if (recent.size() > MAX_RECENT_FEATURES)
 		recent.resize(MAX_RECENT_FEATURES);
+}
+
+void Menu::Open()
+{
+	open = true;
+}
+
+void Menu::Close()
+{
+	if (!std::exchange(open, false))
+		return;
+	globals::state->SaveCoreSettings(State::SELF_SAVING_SETTINGS);
 }
 
 void Menu::SelectFeatureMenu(const std::string& featureName)

@@ -11,6 +11,7 @@
 #include "../../Util.h"
 #include "../Upscaling.h"
 #include "DX12SwapChain.h"
+#include "Utils/Logging.h"
 
 namespace
 {
@@ -310,11 +311,14 @@ bool Streamline::EnsureFrameToken()
 	if (!frameChecker.IsNewFrame())
 		return frameToken != nullptr;
 
+	static Util::OnceFlag tokenErrorLogged;
 	if (SL_FAILED(result, slGetNewFrameToken(frameToken, &globals::state->frameCount))) {
-		logger::error("[Streamline] Could not get frame token: {}", magic_enum::enum_name(result));
+		if (tokenErrorLogged.First())
+			logger::error("[Streamline] Could not get frame token: {}", magic_enum::enum_name(result));
 		frameToken = nullptr;
 		return false;
 	}
+	tokenErrorLogged.Reset();
 
 	return frameToken != nullptr;
 }
@@ -504,11 +508,10 @@ void Streamline::EvaluateDLSS(sl::ViewportHandle vp,
 			return;
 		const sl::Result markerResult = slPCLSetMarker(marker, *frameToken);
 		if (markerResult != sl::Result::eOk) {
-			static bool markerErrorLogged[2] = { false, false };
+			static Util::OnceFlag markerErrorLogged[2];
 			const uint32_t boundedStageIndex = std::min(stageIndex, 1u);
-			if (markerErrorLogged[boundedStageIndex])
+			if (!markerErrorLogged[boundedStageIndex].First())
 				return;
-			markerErrorLogged[boundedStageIndex] = true;
 			logger::warn(
 				"[Streamline] slPCLSetMarker({}) failed: {}",
 				stageName,
@@ -544,11 +547,9 @@ void Streamline::EvaluateDLSS(sl::ViewportHandle vp,
 		state->EndPerfEvent();
 
 	if (evalResult != sl::Result::eOk) {
-		static bool evalErrorLogged = false;
-		if (!evalErrorLogged) {
-			evalErrorLogged = true;
+		static Util::OnceFlag evalErrorLogged;
+		if (evalErrorLogged.First())
 			logger::error("[Streamline] slEvaluateFeature failed result={}", (int)evalResult);
-		}
 	}
 }
 

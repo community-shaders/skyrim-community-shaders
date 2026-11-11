@@ -151,6 +151,7 @@ struct LensFlare : public PostProcessFeature
 	winrt::com_ptr<ID3D11ComputeShader> bokehPrepareCS = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> fftThresholdCS = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> fftGhostComposeCS = nullptr;
+	winrt::com_ptr<ID3D11ComputeShader> fftGhostComposeFirstCS = nullptr;
 
 	uint currentFFTResolution = 256;
 	bool bokehFFTDirty = true;

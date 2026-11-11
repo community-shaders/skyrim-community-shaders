@@ -124,10 +124,16 @@ public:
 	}
 
 	bool initialized = false;
-	bool IsEnabled = false;
-	float openFade = 0.0f;  // 0 = closed, 1 = fully open; eased toward IsEnabled each frame
 
-	/** @brief Eases openFade toward IsEnabled, or snaps to it when the menu fade setting is off. */
+	/** @brief Whether the main menu is open. */
+	bool IsOpen() const { return open; }
+	/** @brief Opens the main menu. */
+	void Open();
+	/** @brief Closes the main menu and saves the State::SELF_SAVING_SETTINGS that changed. */
+	void Close();
+	float openFade = 0.0f;  // 0 = closed, 1 = fully open; eased toward IsOpen() each frame
+
+	/** @brief Eases openFade toward IsOpen(), or snaps to it when the menu fade setting is off. */
 	void UpdateOpenFade(float deltaTime);
 
 	/** @brief Loads menu settings from JSON, including legacy migration */
@@ -422,10 +428,13 @@ public:
 	/** @brief Deserializes palette from named color map or legacy positional array */
 	static void PaletteFromJson(const json& themeJson, std::array<ImVec4, ImGuiCol_COUNT>& palette);
 	/**
-	 * @brief Reads a theme file's "Theme" object into theme settings, palette included, without applying it.
+	 * @brief Reads a theme file's "Theme" object into theme settings, palette included, without applying it. Also
+	 * migrates old font and cursor settings and replaces a missing Body font with the default.
 	 * @throws nlohmann::json::exception when the object does not fit.
 	 */
 	static void ThemeFromJson(const json& themeJson, ThemeSettings& theme);
+	/** @brief Writes theme settings as a theme file's "Theme" object. */
+	static json ThemeToJson(const ThemeSettings& theme);
 
 	/** @brief Serializes cursor settings to JSON using named cursor type keys */
 	static void CursorToJson(json& cursorJson, const ThemeSettings::CursorSettings& cursorSettings);
@@ -596,12 +605,15 @@ private:
 	bool escapeConsumed = false;
 
 	// Settings page: Disable at Boot list filter
-	std::array<char, 128> disableAtBootSearch{};
+	std::string disableAtBootSearch;
 	bool disableAtBootDisabledOnly = false;
 
 	// Skyrim AFK vanity camera: delayed spin while idle. Held off while any CS UI is open.
 	bool vanityCameraDisabled = false;
 	float savedVanityCameraDelay = 180.0f;
+
+	/// Changed only through Open() and Close(), so a close always saves.
+	bool open = false;
 
 	Menu() = default;
 

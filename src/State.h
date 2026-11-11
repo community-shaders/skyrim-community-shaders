@@ -5,11 +5,14 @@
 #include <Tracy/TracyD3D11.hpp>
 
 #include <Buffer.h>
+#include <array>
 #include <atomic>
 #include <d3d11_1.h>
 #include <mutex>
 #include <nlohmann/json.hpp>
 #include <optional>
+#include <span>
+#include <string_view>
 
 using json = nlohmann::json;
 
@@ -75,6 +78,7 @@ public:
 	// Frame time tracking per shader type (in milliseconds)
 	float frameTimePerType[RE::BSShader::Type::Total + 1];        ///< Per-type frame time in milliseconds.
 	float smoothFrameTimePerType[RE::BSShader::Type::Total + 1];  ///< EMA-smoothed per-type frame time in milliseconds.
+	float smoothPresentTimeMs = 0.0f;                             ///< EMA-smoothed CPU time blocked in Present, in milliseconds.
 
 	// Timing state for per-type frame time tracking using QueryPerformanceCounter
 	LARGE_INTEGER frameTimingFrequency;
@@ -216,6 +220,20 @@ public:
 	/** @brief Re-checks the sections that are not feature settings (Menu, General, ...) against the last save or
 	 *  load. Cheap enough to call on any frame the main menu edited something. */
 	void CheckCoreSettingsChanged();
+
+	/** @brief Core settings, as JSON pointers into the user config, that save themselves when the menu closes and
+	 *  never count as unsaved. */
+	static constexpr std::array<std::string_view, 5> SELF_SAVING_SETTINGS = {
+		"/Menu/RecentFeatures", "/Menu/LastSettingsSection", "/Menu/FeatureListSort", "/Menu/SkipConstraintWarning",
+		"/Menu/SkipClearCacheConfirmation"
+	};
+
+	/**
+	 * @brief Saves the named core settings that differ from the last save in one write, without a full Save.
+	 * @param paths JSON pointers into the user config naming core settings, e.g. "/Menu/RecentFeatures".
+	 * @return True when nothing differed or the write succeeded.
+	 */
+	bool SaveCoreSettings(std::span<const std::string_view> paths);
 
 	/**
 	 * @brief A feature's settings in the layers beneath the user's edits: defaults with the enabled Baseline packs applied.
@@ -634,8 +652,8 @@ private:
 
 	/** @brief Writes the sections that are not feature settings; the caller holds m_mutex. */
 	void SaveCoreToJson(nlohmann::json& settings);
-	/** @brief Hash of what SaveCoreToJson writes, to tell whether those sections changed. */
-	size_t HashCoreSettings();
+	/** @brief What SaveCoreToJson writes, to tell whether those sections changed. */
+	nlohmann::json CaptureCoreSettings();
 	/** @brief Clears the unsaved state after the user config was written or read. */
 	void MarkSettingsSaved();
 	/** @brief Drops a feature's edits to the settings packData sets, so those show the pack's values.
@@ -644,7 +662,8 @@ private:
 
 	bool settingsChanged = false;
 	bool coreSettingsChanged = false;
-	size_t savedCoreHash = 0;
+	/// The core sections as last saved or loaded; partial saves patch it.
+	nlohmann::json savedCore;
 
 	std::optional<TonemapOwner> tonemapOwner;
 	uint historyResetFrame = UINT_MAX;

@@ -614,30 +614,28 @@ float GetViewRayShadow(float3 worldPosition, float2 screenPosition, float depth)
 	return shadow;
 }
 
+/** @brief Takes the shadowed share of the sun out of a lit colour; unshadowed, the colour is unchanged. */
 float3 GetLightingShadow(float3 color, float3 worldPosition, float2 screenPosition, float depth, inout float shadowVariance)
 {
-	float3 dirColor;
-	float3 ambientColor;
-	ShadowSampling::ExtractLighting(color, worldPosition, dirColor, ambientColor);
-
 	float shadow = GetViewRayShadow(worldPosition, screenPosition, depth);
 
 	shadowVariance = 1.0 - sqrt(saturate(fwidth(shadow)));
 
-	dirColor *= shadow;
-
 #		if defined(EXP_HEIGHT_FOG)
 	if (SharedData::exponentialHeightFogSettings.enabled) {
-		dirColor *= ExponentialHeightFog::GetSunlightFogAttenuation(worldPosition.xyz, FrameBuffer::CameraPosAdjust.xyz);
+		shadow *= ExponentialHeightFog::GetSunlightFogAttenuation(worldPosition.xyz, FrameBuffer::CameraPosAdjust.xyz);
 	}
 #		endif
 
+	float3 sunlightTransmission = shadow;
 #		if defined(PHYSICAL_SKY)
 	if (SharedData::physSkyData.enabled)
-		dirColor *= PhysSky::SampleTr(normalize(SharedData::DirLightDirection.xyz), SampDepthSampler);
+		sunlightTransmission *= PhysSky::SampleTr(normalize(SharedData::DirLightDirection.xyz), SampDepthSampler);
 #		endif
 
-	return dirColor + ambientColor;
+	float3 dirLight = ShadowSampling::GetDirectionalLighting();
+	float3 sceneLight = ShadowSampling::GetSceneLightingColor(worldPosition);
+	return color * (1.0 - saturate(dirLight * (1.0 - sunlightTransmission) / max(sceneLight, EPSILON_DIVISION)));
 }
 #	endif
 
@@ -697,12 +695,40 @@ PS_OUTPUT main(PS_INPUT input)
 	float2 screenUV = FrameBuffer::ViewToUV(viewPosition);
 
 	bool isFire = false;
+	bool isLightSprite = false;
 #	if defined(ADDBLEND)
-#		if defined(SOFT)
+#		if defined(EFFECTS11)
+	// ENB's classes: a palette-mapped additive effect (a spell bolt, a flame) is fire; a light sprite is a sky glow or a soft
+	// plain-textured glow. Everything else, lit, membrane, blood and projected-UV effects included, keeps its own brightness.
+#			if !defined(LIGHTING) && !defined(MEMBRANE) && !defined(BLOOD) && !defined(PROJECTED_UV)
+	const bool grayscaleToColor = Permutation::PixelShaderDescriptor & Permutation::EffectFlags::GrayscaleToColor;
+	const bool grayscaleToAlpha = Permutation::PixelShaderDescriptor & Permutation::EffectFlags::GrayscaleToAlpha;
+	const bool skyObject = Permutation::VertexShaderDescriptor & Permutation::EffectFlags::SkyObject;
+#				if defined(TEXTURE)
+	const bool plainTexture = !grayscaleToColor && !grayscaleToAlpha && !(Permutation::PixelShaderDescriptor & Permutation::EffectFlags::IgnoreTexAlpha);
+#				else
+	const bool plainTexture = false;
+#				endif
+#				if defined(PARTICLES) && defined(TEXCOORD_INDEX) && defined(INDEXED_TEXTURE) && !defined(SOFT)
+	isFire = true;
+#				else
+	isFire = grayscaleToColor && grayscaleToAlpha;
+#					if defined(SOFT)
+	isLightSprite = !isFire && (skyObject || plainTexture);
+#					else
+	isLightSprite = !isFire && skyObject;
+#					endif
+#				endif
+#			endif
+#		else
+#			if defined(SOFT)
 	if (Permutation::PixelShaderDescriptor & Permutation::EffectFlags::GrayscaleToColor && Permutation::PixelShaderDescriptor & Permutation::EffectFlags::GrayscaleToAlpha)
 		isFire = true;
-#		elif defined(PARTICLES) && defined(TEXCOORD_INDEX) && defined(INDEXED_TEXTURE)
+#			elif defined(PARTICLES) && defined(TEXCOORD_INDEX) && defined(INDEXED_TEXTURE)
 	isFire = true;
+#			endif
+	// Linear Lighting treats every non-fire additive effect as a light sprite
+	isLightSprite = !isFire;
 #		endif
 #	endif
 
@@ -848,13 +874,16 @@ PS_OUTPUT main(PS_INPUT input)
 		{
 			uint clusteredLightIndex = LightLimitFix::lightList[lightOffset + i];
 			LightLimitFix::Light light = LightLimitFix::lights[clusteredLightIndex];
-			if (LightLimitFix::IsLightIgnored(light) || light.lightFlags & LightLimitFix::LightFlags::ShadowCaster) {
+			const bool localShadow = light.lightFlags & LightLimitFix::LightFlags::LocalShadow;
+			if (LightLimitFix::IsLightIgnored(light) || ((light.lightFlags & LightLimitFix::LightFlags::ShadowCaster) && !localShadow)) {
 				continue;
 			}
 			float3 lightDirection = light.positionWS.xyz - input.WorldPosition.xyz;
 			float lightDist = length(lightDirection);
 
 			float intensityMultiplier = LightLimitFix::GetAttenuation(lightDist, light);
+			[branch] if (intensityMultiplier > 1e-5 && localShadow)
+				intensityMultiplier *= LightLimitFix::GetLocalShadowWithLightFade(LinearSampler, light.localShadowIndex, input.WorldPosition.xyz, LightLimitFix::FirstPerson ? LightLimitFix::WorldEyePosition.xyz : FrameBuffer::CameraPosAdjust.xyz, lightDirection / max(lightDist, 1e-5), false, Random::InterleavedGradientNoise(input.Position.xy, SharedData::FrameCount));
 
 			float3 lightColor = Color::PointLight(light.color.xyz) * intensityMultiplier * 0.5 * light.fade * Color::EffectLightingScale;
 			propertyColor += lightColor * clusteredPointScale;
@@ -939,7 +968,7 @@ PS_OUTPUT main(PS_INPUT input)
 	if (composeMedium) {
 		const ViewAtmosphere::Medium medium = ViewMedium::SampleViewMedium(input.WorldPosition.xyz, screenUV, SampBaseSampler);
 #		if defined(ADDBLEND)
-		blendedColor = Color::AdditiveEffect(blendedColor, isFire);
+		blendedColor = Color::AdditiveEffect(blendedColor, isFire, isLightSprite);
 		blendedColor = ColorManagement::SceneColor::ScaleByLinear(blendedColor, medium.transmittance);
 #		elif defined(MULTBLEND) || defined(MULTBLEND_DECAL)
 		blendedColor = lerp(1.0.xxx, lightColor, medium.transmittance);
@@ -984,7 +1013,7 @@ PS_OUTPUT main(PS_INPUT input)
 #			else
 		blendedColor = lightColor * (1 - fogFactor);
 #			endif
-		blendedColor = Color::AdditiveEffect(blendedColor, isFire);
+		blendedColor = Color::AdditiveEffect(blendedColor, isFire, isLightSprite);
 #		elif defined(MULTBLEND) || defined(MULTBLEND_DECAL)
 #			if defined(EXP_HEIGHT_FOG)
 		blendedColor = lerp(lightColor, 1.0.xxx, saturate(1.5 * vanillaFogFactor).xxx);

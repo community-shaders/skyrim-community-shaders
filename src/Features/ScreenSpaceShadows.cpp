@@ -228,12 +228,14 @@ void ScreenSpaceShadows::DrawShadows()
 	context->CSSetConstantBuffers(1, 1, &buffer);
 }
 
-void ScreenSpaceShadows::Prepass()
+void ScreenSpaceShadows::PostPrepass()
 {
 	auto context = globals::d3d::context;
 
 	float white[4] = { 1, 1, 1, 1 };
+	globals::profiler->BeginPass("ScreenSpaceShadows::Clear");
 	context->ClearUnorderedAccessViewFloat(screenSpaceShadowsTexture->uav.get(), white);
+	globals::profiler->EndPass();
 
 	if (auto sky = globals::game::sky)
 		if (bendSettings.Enable && sky->mode.get() == RE::Sky::Mode::kFull) {

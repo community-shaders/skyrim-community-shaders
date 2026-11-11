@@ -354,7 +354,11 @@ void State::Reset()
 	}
 
 	// Disable "improved" snow shader, unsupported
-	RE::GetINISetting("bEnableImprovedSnow:Display")->data.b = false;
+	static RE::Setting* improvedSnow = nullptr;
+	if (!improvedSnow)
+		improvedSnow = RE::GetINISetting("bEnableImprovedSnow:Display");
+	if (improvedSnow)
+		improvedSnow->data.b = false;
 
 	activeReflections = false;
 }
@@ -692,21 +696,32 @@ void State::SaveCoreToJson(json& settings)
 	settings["Version"] = Plugin::VERSION.string();
 }
 
-size_t State::HashCoreSettings()
+namespace
+{
+	/** @brief Drops the core settings that save themselves, so the unsaved check never counts them. */
+	void EraseSelfSavingSettings(json& core)
+	{
+		for (const auto path : State::SELF_SAVING_SETTINGS) {
+			const json::json_pointer pointer{ std::string(path) };
+			if (core.contains(pointer))
+				core.at(pointer.parent_pointer()).erase(pointer.back());
+		}
+	}
+}
+
+json State::CaptureCoreSettings()
 {
 	json core;
-	{
-		std::lock_guard<std::mutex> lock(m_mutex);
-		SaveCoreToJson(core);
-	}
-	return std::hash<std::string>{}(core.dump());
+	std::lock_guard<std::mutex> lock(m_mutex);
+	SaveCoreToJson(core);
+	return core;
 }
 
 void State::MarkSettingsSaved()
 {
 	settingsChanged = false;
 	coreSettingsChanged = false;
-	savedCoreHash = HashCoreSettings();
+	savedCore = CaptureCoreSettings();
 }
 
 void State::CheckFeatureSettingsChanged(Feature* feature)
@@ -729,7 +744,44 @@ void State::CheckFeatureSettingsChanged(Feature* feature)
 
 void State::CheckCoreSettingsChanged()
 {
-	coreSettingsChanged = HashCoreSettings() != savedCoreHash;
+	auto current = CaptureCoreSettings();
+	auto saved = savedCore;
+	EraseSelfSavingSettings(current);
+	EraseSelfSavingSettings(saved);
+	coreSettingsChanged = current != saved;
+}
+
+bool State::SaveCoreSettings(std::span<const std::string_view> paths)
+{
+	if (savedCore.is_null())
+		return false;
+	const auto current = CaptureCoreSettings();
+	json patch = json::object();
+	for (const auto path : paths) {
+		const json::json_pointer pointer{ std::string(path) };
+		if (!current.contains(pointer))
+			continue;
+		const auto& value = current.at(pointer);
+		if (!savedCore.contains(pointer) || savedCore.at(pointer) != value)
+			patch[pointer] = value;
+	}
+	if (patch.empty())
+		return true;
+
+	const auto configPath = Util::PathHelpers::GetSettingsUserPath();
+	std::error_code ec;
+	const bool fileExists = std::filesystem::exists(configPath, ec);
+	if (ec)
+		return false;
+	// Never replace a config that fails to parse with just the patch
+	auto settings = fileExists ? Util::FileHelpers::ReadJsonObject(configPath, "user config") : std::optional<json>(json::object());
+	if (!settings)
+		return false;
+	settings->merge_patch(patch);
+	if (!Util::FileHelpers::WriteJsonAtomically(configPath, *settings, 1, "config"))
+		return false;
+	savedCore.merge_patch(patch);
+	return true;
 }
 
 void State::LoadFromJson(nlohmann::json& settings)
@@ -1231,12 +1283,12 @@ void State::SetupResources()
 
 	auto renderer = globals::game::renderer;
 
-	permutationCB = std::make_unique<ConstantBuffer>(ConstantBufferDesc<PermutationCB>());
-	sharedDataCB = std::make_unique<ConstantBuffer>(ConstantBufferDesc<SharedDataCB>());
+	permutationCB = std::make_unique<ConstantBuffer>(ConstantBufferDesc<PermutationCB>(), "State::PermutationCB");
+	sharedDataCB = std::make_unique<ConstantBuffer>(ConstantBufferDesc<SharedDataCB>(), "State::SharedDataCB");
 
 	auto [data, size] = GetFeatureBufferData(false);
 	(void)data;
-	featureDataCB = std::make_unique<ConstantBuffer>(ConstantBufferDesc((uint32_t)size));
+	featureDataCB = std::make_unique<ConstantBuffer>(ConstantBufferDesc((uint32_t)size), "State::FeatureDataCB");
 
 	// Grab main texture to get resolution
 	D3D11_TEXTURE2D_DESC texDesc{};

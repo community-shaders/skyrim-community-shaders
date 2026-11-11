@@ -77,9 +77,10 @@ public:
 		float pad3 = 0.0f;
 		float3 volumetricFogNoiseVelocity = { 0.0f, 0.0f, 0.0f };
 		float pad0 = 0.0f;
+		float4 originalFogColorOverride = { 1.0f, 1.0f, 1.0f, 0.0f };  // rgb = replaces the weather fog colour, a = blend amount
 	} settings;
 	STATIC_ASSERT_ALIGNAS_16(Settings);
-	static_assert(sizeof(Settings) == 192);
+	static_assert(sizeof(Settings) == 208);
 
 	Settings GetCommonBufferData() const;
 	/** @brief Reports whether height fog contributes in the current scene. */
