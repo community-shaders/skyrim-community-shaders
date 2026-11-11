@@ -228,7 +228,7 @@ void ScreenSpaceShadows::DrawShadows()
 	context->CSSetConstantBuffers(1, 1, &buffer);
 }
 
-void ScreenSpaceShadows::Prepass()
+void ScreenSpaceShadows::PostPrepass()
 {
 	auto context = globals::d3d::context;
 
