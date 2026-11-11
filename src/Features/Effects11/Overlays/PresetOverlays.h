@@ -66,15 +66,22 @@ namespace Overlays
 		/** @brief Forgets the recorded #define values; call before effects compile. */
 		void ClearCompiledDefines() { compiledDefines.clear(); }
 
+		/** @brief Every overlay file of the active preset, sorted by file name. */
 		const std::vector<Overlay>& GetOverlays() const { return overlays; }
+		/** @brief File names of the active overlays, in apply order. */
 		const std::vector<std::string>& GetActive() const { return list.active; }
+		/** @brief The overlay with this file name, ignoring case; null when there is none. */
 		const Overlay* FindOverlay(std::string_view a_fileName) const;
+		/** @brief Whether the overlay is in the Active list. */
 		bool IsActive(std::string_view a_fileName) const { return ActivePosition(a_fileName) >= 0; }
 		/** @brief Ops of an overlay that match nothing in Effects 11. */
 		size_t UnmappedCount(size_t a_overlay) const { return a_overlay < unmapped.size() ? unmapped[a_overlay] : 0; }
+		/** @brief Whether the active preset has an enbpresetoverlays folder. */
 		bool HasFolder() const { return hasFolder; }
-		/** @brief File the last list, Amount or overlay write failed on; empty when none failed. */
+		/** @brief File the last list, Amount or overlay write failed on; cleared once that file writes successfully. */
 		const std::string& GetFailedWriteFile() const { return failedWriteFile; }
+		/** @brief Overlay whose Amount was not saved because its file could not be read; cleared once that file writes successfully. */
+		const std::string& GetFailedReadFile() const { return failedReadFile; }
 		/** @brief Increments whenever the overlay list is reloaded or grows, so UI caches can refresh. */
 		uint32_t GetGeneration() const { return generation; }
 
@@ -106,20 +113,23 @@ namespace Overlays
 		bool TakeSettingEdit(uint32_t a_settingID, const std::string& a_weatherFile, const SettingValue& a_before, const SettingValue& a_after);
 		/** @brief Creates an empty overlay file, enables it and makes it the edit target. */
 		bool CreateOverlay(std::string_view a_name);
-		/** @brief Moves unsaved base edits into a new overlay: snapshots every value, runs a_revert to reload from disk, and records each difference. */
+		/** @brief Moves unsaved base edits into a new overlay: snapshots every value, creates the file, runs a_revert to reload from disk, and records each difference. @return False when edits remain unsaved, in the base preset or the overlay. */
 		bool CreateOverlayFromChanges(std::string_view a_name, const std::function<void()>& a_revert);
 		/** @brief Whether any overlay has authored ops not yet written to its file. */
 		bool HasDirtyOverlays() const;
 		/** @brief Writes every overlay with unsaved authored ops. */
 		bool SaveDirtyOverlays();
+		/** @brief Saves the stores to the preset files without overlay values, then writes every overlay with unsaved ops. */
+		void SavePreset();
 
 	private:
 		Manager() = default;
 
-		/** @brief One op's step in a stack: the overlay and the values around it. */
+		/** @brief One op's step in a stack: the overlay, its op and the values around it. */
 		struct StackOp
 		{
 			size_t overlay = 0;
+			size_t op = 0;  ///< Index into the overlay's ops
 			OverlayValue before;
 			OverlayValue after;
 		};
@@ -134,10 +144,17 @@ namespace Overlays
 		struct CompiledDefine
 		{
 			std::string section;
-			std::string key;  ///< Normalized with Effect::NormalizeIniKey
+			std::string key;  ///< MatchKey of the ini key
 			std::string type;
 			std::string iniValue;
 			std::string compiledValue;
+		};
+		/** @brief An active op on a base file, keyed once so CompileDefine compares without allocating. */
+		struct DefineOp
+		{
+			const Op* op = nullptr;
+			float amount = 0.0f;
+			std::string key;  ///< MatchKey of the op name
 		};
 
 		/** @brief The enbpresetoverlays folder of the active preset. */
@@ -158,14 +175,20 @@ namespace Overlays
 		void WriteLive();
 		/** @brief Rebuilds the row markers and locks, and the all-rows lock, from the stacks and edit target. */
 		void RebuildRowInfo();
-		/** @brief The value a #define compiles to under the current active overlays. */
-		std::string CompileDefine(const CompiledDefine& a_define) const;
+		/** @brief Every active op on a base file, in apply order. */
+		std::vector<DefineOp> CollectDefineOps() const;
+		/** @brief The value a #define compiles to under the given active ops. */
+		static std::string CompileDefine(const CompiledDefine& a_define, const std::vector<DefineOp>& a_ops);
+		/** @brief Records a write's outcome: a failure is shown until that file writes successfully. @return a_written. */
+		bool TrackWrite(std::string_view a_fileName, bool a_written);
 		/** @brief Writes the Active order to the list file. */
 		void SaveListFile();
 		/** @brief Writes an overlay file and clears its dirty flag. */
 		bool SaveOverlayFile(Overlay& a_overlay);
 		/** @brief Adds, rewrites or removes the edit target's op for one slot so the slot ends at a_after. */
 		void RecordEdit(const SlotKey& a_slot, const OverlayValue& a_before, const OverlayValue& a_after);
+		/** @brief Drops an erased op's steps from the stacks and shifts the overlay's later op indices down. */
+		void ForgetStackOp(size_t a_overlay, size_t a_op);
 
 		std::filesystem::path seriesPath;
 		std::vector<Overlay> overlays;
@@ -179,6 +202,7 @@ namespace Overlays
 		std::vector<CompiledDefine> compiledDefines;  ///< Every #define read since the last compile started
 		std::string editTarget;
 		std::string failedWriteFile;
+		std::string failedReadFile;
 		uint32_t generation = 0;
 		bool applied = false;
 		bool hasFolder = false;

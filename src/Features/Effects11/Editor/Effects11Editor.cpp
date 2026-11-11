@@ -326,7 +326,7 @@ namespace
 		return std::clamp(a_viewport->WorkSize.x * kPanelWidthRatio, kPanelMinWidth * scale, maxWidth);
 	}
 
-	/** Places the overlay panel beside the left settings panel, half the screen tall. */
+	/** @brief Places the overlay panel beside the left settings panel, half the screen tall. */
 	void SetNextOverlayPanelPlacement(bool a_reset)
 	{
 		const auto* viewport = ImGui::GetMainViewport();
@@ -443,8 +443,6 @@ void Effects11Editor::Draw()
 		DrawShaderWindow();
 	if (IsOpen() && showOverlayPanel && EffectManager::GetSingleton().IsPresetLoaded())
 		DrawOverlayWindow();
-	if (Overlays::Manager::GetSingleton().IsShaderReloadNeeded())
-		shaderReloadNeeded = true;
 	resetLayout = false;
 	popupOpenLastFrame = ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
 }
@@ -569,15 +567,22 @@ void Effects11Editor::DrawToolbar()
 		Util::AddTooltip(tip.c_str());
 	}
 
-	// Shader panel toggle, right-aligned on the same line
+	// Overlay and shader panel toggles, right-aligned on the same line
+	const char* overlayLabel = showOverlayPanel ? T(TKEY("hide_overlays"), "Hide Overlays") : T(TKEY("show_overlays"), "Show Overlays");
 	const char* panelLabel = showShaderPanel ? T(TKEY("hide_shader_panel"), "Hide Shader Parameters") : T(TKEY("show_shader_panel"), "Show Shader Parameters");
-	const float panelWidth = ImGui::CalcTextSize(panelLabel).x + ImGui::GetStyle().FramePadding.x * 2.0f;
+	const auto& style = ImGui::GetStyle();
+	const auto buttonWidth = [&](const char* a_label) { return ImGui::CalcTextSize(a_label).x + style.FramePadding.x * 2.0f; };
+	const float togglesWidth = buttonWidth(overlayLabel) + style.ItemSpacing.x + buttonWidth(panelLabel);
 	ImGui::SameLine();
 	const float avail = ImGui::GetContentRegionAvail().x;
-	if (avail >= panelWidth)
-		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + avail - panelWidth);
+	if (avail >= togglesWidth)
+		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + avail - togglesWidth);
 	else
 		ImGui::NewLine();
+	if (Util::Button(std::format("{}###overlayPanel", overlayLabel).c_str()))
+		showOverlayPanel = !showOverlayPanel;
+	Util::AddTooltip(T(TKEY("overlays_tip"), "Show or hide the Preset Overlays panel: ENB Extender overlays, their Amount and order, and where edits are saved."));
+	ImGui::SameLine();
 	if (Util::Button(std::format("{}###shaderPanel", panelLabel).c_str()))
 		showShaderPanel = !showShaderPanel;
 	Util::AddTooltip(T(TKEY("shader_panel_tip"), "Show or hide the panel with the .fx shader parameters."));
@@ -603,19 +608,16 @@ void Effects11Editor::DrawToolbar()
 	Util::AddTooltip(T(TKEY("revert_tip"), "Discard unsaved changes and reload every value from disk."));
 
 	ImGui::SameLine();
+	// The overlay flag follows the active overlays, so unticking one can clear it again
+	const bool reloadNeeded = shaderReloadNeeded || Overlays::Manager::GetSingleton().IsShaderReloadNeeded();
 	const char* reloadLabel = T(TKEY("reload_shaders"), "Reload Shaders");
-	if (shaderReloadNeeded ? Util::WarningButton(reloadLabel) : Util::Button(reloadLabel))
+	if (reloadNeeded ? Util::WarningButton(reloadLabel) : Util::Button(reloadLabel))
 		RequestAction(PendingAction::ReloadShaders);
 	Util::AddTooltip(T(TKEY("reload_shaders_tip"),
 		"Recompile the .fx files and reload everything from disk.\n"
 		"Use this after changing a compile-time option or editing a shader file."));
 
-	ImGui::SameLine();
-	if (Util::Button(showOverlayPanel ? T(TKEY("hide_overlays"), "Hide Overlays") : T(TKEY("show_overlays"), "Show Overlays")))
-		showOverlayPanel = !showOverlayPanel;
-	Util::AddTooltip(T(TKEY("overlays_tip"), "Show or hide the Preset Overlays panel: ENB Extender overlays, their Amount and order, and where edits are saved."));
-
-	if (shaderReloadNeeded)
+	if (reloadNeeded)
 		Util::Text::WrappedWarning("%s", T(TKEY("reload_needed"), "Compile-time options changed. Save, then click Reload Shaders to apply them."));
 }
 
@@ -1375,7 +1377,8 @@ void Effects11Editor::DrawShaderWindow()
 
 			if (totals.changed)
 				dirty = true;
-			if (totals.compileTimeChanged)
+			// An edit taken by an overlay is tracked by the overlay manager's own flag
+			if (totals.compileTimeChanged && Overlays::Manager::GetSingleton().GetEditTarget().empty())
 				shaderReloadNeeded = true;
 		}
 		ImGui::EndChild();
@@ -1492,12 +1495,7 @@ void Effects11Editor::Save()
 {
 	if (!EffectManager::GetSingleton().IsPresetLoaded())
 		return;
-	{
-		const Overlays::Manager::RemovedScope removed;
-		SettingManager::GetSingleton().Save();
-		EffectManager::GetSingleton().Save();
-	}
-	Overlays::Manager::GetSingleton().SaveDirtyOverlays();
+	Overlays::Manager::GetSingleton().SavePreset();
 	dirty = false;
 }
 

@@ -133,8 +133,7 @@ void EffectManager::Apply()
 	enbEffectPostPass.Apply();
 
 #ifdef ENABLE_ENB_EXTENDER
-	EffectBase* allEffects[] = { &enbDepthOfField, &enbBloom, &enbLens, &enbAdaptation, &enbEffect, &enbEffectPostPass };
-	for (auto* effect : allEffects) {
+	for (auto* effect : AllEffects()) {
 		if (effect->IsCompiled())
 			effect->LoadWeatherData();
 	}
@@ -147,8 +146,7 @@ void EffectManager::Apply()
 void EffectManager::Load()
 {
 	Overlays::Manager::GetSingleton().LoadFiles();
-	EffectBase* allEffects[] = { &enbDepthOfField, &enbBloom, &enbLens, &enbAdaptation, &enbEffect, &enbEffectPostPass };
-	for (auto* effect : allEffects) {
+	for (auto* effect : AllEffects()) {
 		effect->Load();
 #ifdef ENABLE_ENB_EXTENDER
 		if (effect->IsCompiled())

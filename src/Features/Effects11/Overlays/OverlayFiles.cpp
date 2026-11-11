@@ -23,6 +23,7 @@ namespace Overlays
 		constexpr std::string_view kBlacklistSection = "BLACKLISTENTRY1";
 		constexpr std::string_view kUtf8Bom = "\xEF\xBB\xBF";
 
+		/** @brief The text without leading and trailing spaces, tabs and carriage returns. */
 		std::string_view TrimView(std::string_view a_text)
 		{
 			const auto first = a_text.find_first_not_of(kSpaces);
@@ -41,17 +42,20 @@ namespace Overlays
 			return a_text;
 		}
 
+		/** @brief Case-insensitive prefix test. */
 		bool StartsWithNoCase(std::string_view a_text, std::string_view a_prefix)
 		{
 			return a_text.size() >= a_prefix.size() && Util::IEquals(a_text.substr(0, a_prefix.size()), a_prefix);
 		}
 
+		/** @brief A key's unquoted value; empty when the section or key is missing. */
 		std::string ReadString(const IniSection* a_section, std::string_view a_key)
 		{
 			const auto* value = a_section ? a_section->Find(a_key) : nullptr;
 			return value ? std::string(Unquote(*value)) : std::string();
 		}
 
+		/** @brief A key's float value; a_fallback when the section or key is missing or unreadable. */
 		float ReadFloat(const IniSection* a_section, std::string_view a_key, float a_fallback)
 		{
 			const auto* value = a_section ? a_section->Find(a_key) : nullptr;
@@ -74,14 +78,7 @@ namespace Overlays
 			return a_text;
 		}
 
-		std::string Join(const std::vector<std::string>& a_items)
-		{
-			std::string joined;
-			for (const auto& item : a_items)
-				joined += (joined.empty() ? "" : ", ") + item;
-			return joined;
-		}
-
+		/** @brief A new [OVERLAYPARAMn] section for an authored op; the caller sets the section name. */
 		IniSection FormatOpSection(const Op& a_op)
 		{
 			IniSection section;
@@ -101,7 +98,7 @@ namespace Overlays
 			a_info.Set("UIDesc", EscapeNewlines(a_overlay.uiDesc));
 			a_info.Set("UIOrdering", std::to_string(a_overlay.uiOrdering));
 			a_info.Set("NeedsNoApply", "false");
-			a_info.Set("IncompatibleOverlays", Join(a_overlay.incompatible));
+			a_info.Set("IncompatibleOverlays", JoinList(a_overlay.incompatible));
 			a_info.Set("AmountMin", Effects11Util::Ini::FormatFloat(a_overlay.amountMin));
 			a_info.Set("AmountMax", Effects11Util::Ini::FormatFloat(a_overlay.amountMax));
 			a_info.Set("AmountStep", Effects11Util::Ini::FormatFloat(a_overlay.amountStep));
@@ -225,6 +222,14 @@ namespace Overlays
 		return items;
 	}
 
+	std::string JoinList(const std::vector<std::string>& a_items)
+	{
+		std::string joined;
+		for (const auto& item : a_items)
+			joined += (joined.empty() ? "" : ", ") + item;
+		return joined;
+	}
+
 	std::optional<Op> ParseOp(const IniSection& a_section, std::string& a_error)
 	{
 		Op op;
@@ -340,7 +345,7 @@ namespace Overlays
 
 	bool SaveList(const std::filesystem::path& a_seriesPath, OverlayList& a_list)
 	{
-		a_list.file.GetOrAdd(kListSection).Set("Active", Join(a_list.active));
+		a_list.file.GetOrAdd(kListSection).Set("Active", JoinList(a_list.active));
 		if (!a_list.file.Find(kBlacklistSection)) {
 			auto& blacklist = a_list.file.GetOrAdd(kBlacklistSection);
 			blacklist.Set("FileName", "enblocal.ini");

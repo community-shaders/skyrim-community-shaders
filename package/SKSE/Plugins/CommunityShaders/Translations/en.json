@@ -1182,6 +1182,7 @@
     "feature.effects11.open_presets_tooltip": "Load and switch Effects 11 presets on the Presets page.",
     "feature.effects11.overlays.active_order": "Active order (the last one wins)",
     "feature.effects11.overlays.amount": "Amount",
+    "feature.effects11.overlays.amount_read_failed": "Could not read {file}, so its Amount was not saved",
     "feature.effects11.overlays.amount_zero": "This overlay's Amount is 0, so edits cannot be recorded. Raise its Amount to edit.",
     "feature.effects11.overlays.cancel": "Cancel",
     "feature.effects11.overlays.changed_by": "Changed by preset overlays:",

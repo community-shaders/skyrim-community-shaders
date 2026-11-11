@@ -167,6 +167,10 @@ public:
 	static bool IsWeatherSeparated(const UIVariable& uiVar) { return !uiVar.separation.empty() && uiVar.separation != "None"; }
 	/** @brief True for a vector saved as one key per component (KeyX, KeyY, ...). */
 	static bool IsPerComponentVector(const UIVariable& uiVar);
+	/** @brief Ini key suffixes of a per-component vector's components. */
+	static constexpr const char* kComponentSuffixes[] = { "X", "Y", "Z", "W" };
+	/** @brief Component count of a Float or FloatN variable. */
+	static int GetComponentCount(UIVariableType type);
 	/** @brief The ini key a variable is saved under: its UniqueName, else Group.UIName. */
 	static std::string GetVariableIniKey(const UIVariable& uiVar);
 	/** @brief Removes spaces around dots, which D3DPreprocess and ENB's #x place differently. */

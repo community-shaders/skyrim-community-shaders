@@ -25,14 +25,6 @@ void ExtendedEffect::Unload()
 	Effect::Unload();
 }
 
-/** @brief Component count of a Float or FloatN variable. */
-static int GetComponentCount(Effect::UIVariableType type)
-{
-	return type == Effect::UIVariableType::Float ? 1 : type == Effect::UIVariableType::Float2 ? 2 :
-	                                               type == Effect::UIVariableType::Float3     ? 3 :
-	                                                                                            4;
-}
-
 // Technique evaluation
 
 int ExtendedEffect::ResolveTechniqueBinding(const std::string& variableName)
@@ -216,10 +208,9 @@ void ExtendedEffect::LoadWeatherData()
 				continue;
 
 			if (IsPerComponentVector(uiVar)) {
-				static const char* suffixes[] = { "X", "Y", "Z", "W" };
 				int comps = GetComponentCount(uiVar.type);
 				for (int c = 0; c < comps; ++c) {
-					std::string compKey = iniKey + suffixes[c];
+					std::string compKey = iniKey + kComponentSuffixes[c];
 					char buffer[256];
 					DWORD result = GetPrivateProfileStringA(section.c_str(), compKey.c_str(), "", buffer, sizeof(buffer), filePathStr.c_str());
 					if (result > 0)
@@ -292,9 +283,8 @@ void ExtendedEffect::ParseWeatherValue(const WeatherValues& values, const Weathe
 	};
 
 	if (slot.perComponent) {
-		static const char* suffixes[] = { "X", "Y", "Z", "W" };
 		for (int c = 0; c < slot.components; ++c) {
-			if (auto it = values.find(slot.iniKey + suffixes[c]); it != values.end())
+			if (auto it = values.find(slot.iniKey + kComponentSuffixes[c]); it != values.end())
 				parseComponent(it->second, c);
 		}
 		return;
@@ -407,9 +397,8 @@ void ExtendedEffect::SyncWeatherVarFromUI(size_t index, uint32_t weatherID)
 	} else {
 		int comps = GetComponentCount(uiVar.type);
 		if (IsPerComponentVector(uiVar)) {
-			static const char* suffixes[] = { "X", "Y", "Z", "W" };
 			for (int c = 0; c < comps; ++c)
-				updates.emplace_back(iniKey + suffixes[c], Effects11Util::Ini::FormatFloat(uiVar.vectorValue[c]));
+				updates.emplace_back(iniKey + kComponentSuffixes[c], Effects11Util::Ini::FormatFloat(uiVar.vectorValue[c]));
 		} else {
 			updates.emplace_back(iniKey, Effects11Util::Ini::FormatFloatList({ uiVar.vectorValue, static_cast<size_t>(comps) }));
 		}

@@ -20,7 +20,7 @@ namespace Overlays
 	{
 		/** @brief Shader parameters carry no UI step, so authored operands are rounded to this. */
 		constexpr float kShaderOperandStep = 0.0001f;
-		constexpr const char* kComponentSuffixes[kMaxComponents] = { "X", "Y", "Z", "W" };
+		static_assert(static_cast<int>(std::size(Effect::kComponentSuffixes)) == kMaxComponents);
 		/** @brief Interior* periods first, so "InteriorDay" wins over "Day". */
 		constexpr int kSuffixOrder[TimeOfDayValue::Total] = { 6, 7, 0, 1, 3, 4, 5, 2 };
 
@@ -29,39 +29,26 @@ namespace Overlays
 		/** @brief WeatherEntry::fileName -> IDs of every weather using that file; built by RebuildWeatherIndex. */
 		std::unordered_map<std::string, std::vector<uint32_t>> weatherIndex;
 
-		EffectBase* const* AllEffects(size_t& a_count)
+		/** @brief Whether a variable holds a saved value an op can target. */
+		bool IsTargetable(const Effect::UIVariable& a_var)
 		{
-			auto& manager = EffectManager::GetSingleton();
-			static EffectBase* const effects[] = { &manager.enbDepthOfField, &manager.enbBloom, &manager.enbLens, &manager.enbAdaptation, &manager.enbEffect, &manager.enbEffectPostPass };
-			a_count = std::size(effects);
-			return effects;
+			return !a_var.isLabel && !a_var.isPatched && (a_var.effectVariable || a_var.isDefine);
 		}
 
-		int ComponentCount(Effect::UIVariableType a_type)
-		{
-			switch (a_type) {
-			case Effect::UIVariableType::Float2:
-				return 2;
-			case Effect::UIVariableType::Float3:
-				return 3;
-			case Effect::UIVariableType::Float4:
-				return 4;
-			default:
-				return 1;
-			}
-		}
-
+		/** @brief Whether a variable type is Float or FloatN. */
 		bool IsFloatType(Effect::UIVariableType a_type)
 		{
 			return a_type != Effect::UIVariableType::Int && a_type != Effect::UIVariableType::Bool;
 		}
 
+		/** @brief ASCII-uppercased copy of the text. */
 		std::string ToUpperAscii(std::string a_text)
 		{
 			std::transform(a_text.begin(), a_text.end(), a_text.begin(), [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
 			return a_text;
 		}
 
+		/** @brief The file name part of a path, as UTF-8. */
 		std::string FileNameOnly(const std::string& a_path)
 		{
 			return Util::PathHelpers::ToUtf8(std::filesystem::path(a_path).filename());
@@ -94,9 +81,10 @@ namespace Overlays
 			return files;
 		}
 
+		/** @brief The ini key of a variable, or of one component of a per-component vector. */
 		std::string WeatherKey(const Effect::UIVariable& a_var, int8_t a_part)
 		{
-			return Effect::GetVariableIniKey(a_var) + (a_part >= 0 ? kComponentSuffixes[a_part] : "");
+			return Effect::GetVariableIniKey(a_var) + (a_part >= 0 ? Effect::kComponentSuffixes[a_part] : "");
 		}
 
 		/** @brief Whether the category names a shader file (e.g. ENBEFFECT.FX) rather than an engine category. */
@@ -111,12 +99,14 @@ namespace Overlays
 			return IsShaderCategory(a_category) ? Util::ToLower(std::string(a_category)) + ".ini" : std::string(PresetManager::kEnbSeriesIniName);
 		}
 
+		/** @brief ReadSlot for a setting slot. */
 		SlotValue ReadSettingSlot(const SlotKey& a_slot)
 		{
 			const auto stored = SettingManager::GetSingleton().GetStoredValue(a_slot.index, WeatherIDOf(a_slot.weatherFile));
 			return { SettingPartValue(stored.value, a_slot.part), a_slot.part < 0 ? stored.definedMask != 0 : (stored.definedMask & (1u << a_slot.part)) != 0 };
 		}
 
+		/** @brief WriteSlot for a setting slot; an undefined weather value clears its period bits. */
 		void WriteSettingSlot(const SlotKey& a_slot, const SlotValue& a_value)
 		{
 			auto& settings = SettingManager::GetSingleton();
@@ -142,6 +132,7 @@ namespace Overlays
 			settings.SetStoredValue(a_slot.index, weatherID, stored);
 		}
 
+		/** @brief ReadSlot for a shader slot; an undefined weather value reads as the base value. */
 		SlotValue ReadShaderSlot(const SlotKey& a_slot)
 		{
 			const auto& var = a_slot.effect->uiVariables[a_slot.index];
@@ -168,6 +159,7 @@ namespace Overlays
 #endif
 		}
 
+		/** @brief WriteSlot for a shader slot; an undefined weather value removes the key. */
 		void WriteShaderSlot(const SlotKey& a_slot, const SlotValue& a_value)
 		{
 			auto& var = a_slot.effect->uiVariables[a_slot.index];
@@ -207,7 +199,7 @@ namespace Overlays
 			out.kind = ValueKind::Bool;
 			break;
 		default:
-			out.components = ComponentCount(a_var.type);
+			out.components = Effect::GetComponentCount(a_var.type);
 			std::copy_n(a_base ? a_var.baseVectorValue : a_var.vectorValue, out.components, out.values.begin());
 			break;
 		}
@@ -288,7 +280,17 @@ namespace Overlays
 
 	bool OpTargetsBaseFile(const Op& a_op)
 	{
-		return a_op.fileName.empty() || HasWildcard(a_op.fileName) || Util::IEquals(a_op.fileName, BaseFileOf(a_op.category));
+		return a_op.fileName.empty() || MatchesPattern(a_op.fileName, BaseFileOf(a_op.category));
+	}
+
+	std::string MatchKey(std::string_view a_name)
+	{
+		return Util::ToLower(Effect::NormalizeIniKey(a_name));
+	}
+
+	bool HasPeriods(const Setting& a_setting)
+	{
+		return a_setting.type == SettingType::TimeOfDay || a_setting.type == SettingType::ColorTimeOfDay;
 	}
 
 	SlotValue ReadSlot(const SlotKey& a_slot)
@@ -364,24 +366,19 @@ namespace Overlays
 		for (const auto& category : settings.GetCategories()) {
 			for (const auto& key : settings.GetSettingsByCategory(category)) {
 				const auto* setting = settings.GetSettingInfo(key, category);
-				const bool periods = setting->type == SettingType::TimeOfDay || setting->type == SettingType::ColorTimeOfDay;
-				for (int part = periods ? 0 : -1; part < (periods ? TimeOfDayValue::Total : 0); ++part)
-					addFiles({ nullptr, setting->id, static_cast<int8_t>(part), {} }, setting->hasWeatherSupport);
+				ForEachSettingPart(*setting, [&](int8_t a_part) { addFiles({ nullptr, setting->id, a_part, {} }, setting->hasWeatherSupport); });
 			}
 		}
 
-		size_t count = 0;
-		const auto* effects = AllEffects(count);
-		for (size_t e = 0; e < count; ++e) {
-			auto* effect = effects[e];
+		for (auto* effect : EffectManager::GetSingleton().AllEffects()) {
 			if (!effect->IsCompiled())
 				continue;
 			for (uint32_t i = 0; i < effect->uiVariables.size(); ++i) {
 				const auto& var = effect->uiVariables[i];
-				if (var.isLabel || var.isPatched || (!var.effectVariable && !var.isDefine))
+				if (!IsTargetable(var))
 					continue;
 				const bool weathers = IsFloatType(var.type) && Effect::IsWeatherSeparated(var);
-				const int parts = Effect::IsPerComponentVector(var) ? ComponentCount(var.type) : 0;
+				const int parts = Effect::IsPerComponentVector(var) ? Effect::GetComponentCount(var.type) : 0;
 				for (int part = parts ? 0 : -1; part < parts; ++part)
 					addFiles({ effect, i, static_cast<int8_t>(part), {} }, weathers);
 			}
@@ -391,18 +388,13 @@ namespace Overlays
 
 	Resolver::Resolver()
 	{
-		size_t count = 0;
-		const auto* all = AllEffects(count);
-		for (size_t e = 0; e < count; ++e) {
-			auto* effect = all[e];
+		for (auto* effect : EffectManager::GetSingleton().AllEffects()) {
 			if (!effect->IsCompiled())
 				continue;
 			EffectIndex index{ effect, {} };
 			for (uint32_t i = 0; i < effect->uiVariables.size(); ++i) {
-				const auto& var = effect->uiVariables[i];
-				if (var.isLabel || var.isPatched || (!var.effectVariable && !var.isDefine))
-					continue;
-				index.keys.emplace(Effect::NormalizeIniKey(Effect::GetVariableIniKey(var)), i);
+				if (IsTargetable(effect->uiVariables[i]))
+					index.keys.emplace(MatchKey(Effect::GetVariableIniKey(effect->uiVariables[i])), i);
 			}
 			effects.push_back(std::move(index));
 		}
@@ -429,12 +421,13 @@ namespace Overlays
 		}
 
 		int component = -1;
-		auto keyIt = effectIt->keys.find(Effect::NormalizeIniKey(a_op.name));
+		auto keyIt = effectIt->keys.find(MatchKey(a_op.name));
 		if (keyIt == effectIt->keys.end() && a_op.name.size() > 1) {
-			const std::string_view suffixes = "XYZW";
-			if (const auto suffix = suffixes.find(a_op.name.back()); suffix != std::string_view::npos) {
-				keyIt = effectIt->keys.find(Effect::NormalizeIniKey(std::string_view(a_op.name).substr(0, a_op.name.size() - 1)));
-				component = static_cast<int>(suffix);
+			const std::string_view lastChar(&a_op.name.back(), 1);
+			const auto suffix = std::find_if(std::begin(Effect::kComponentSuffixes), std::end(Effect::kComponentSuffixes), [&](const char* a_suffix) { return Util::IEquals(lastChar, a_suffix); });
+			if (suffix != std::end(Effect::kComponentSuffixes)) {
+				keyIt = effectIt->keys.find(MatchKey(std::string_view(a_op.name).substr(0, a_op.name.size() - 1)));
+				component = static_cast<int>(suffix - std::begin(Effect::kComponentSuffixes));
 			}
 		}
 		if (keyIt == effectIt->keys.end()) {
@@ -445,7 +438,7 @@ namespace Overlays
 		auto* effect = effectIt->effect;
 		const auto& var = effect->uiVariables[keyIt->second];
 		const bool perComponent = Effect::IsPerComponentVector(var);
-		if (component >= 0 && (!perComponent || component >= ComponentCount(var.type))) {
+		if (component >= 0 && (!perComponent || component >= Effect::GetComponentCount(var.type))) {
 			a_reason = "no such shader parameter";
 			return false;
 		}
@@ -457,7 +450,7 @@ namespace Overlays
 		if (component >= 0) {
 			a_out.push_back({ { effect, keyIt->second, static_cast<int8_t>(component), {} }, -1, weatherCapable });
 		} else if (perComponent) {
-			const int components = ComponentCount(var.type);
+			const int components = Effect::GetComponentCount(var.type);
 			if (a_op.operand.components != 1 && a_op.operand.components != components) {
 				a_reason = "operand has the wrong number of components";
 				return false;
@@ -484,12 +477,9 @@ namespace Overlays
 			}
 			return nullptr;
 		};
-		const auto hasPeriods = [](const Setting& a_setting) { return a_setting.type == SettingType::TimeOfDay || a_setting.type == SettingType::ColorTimeOfDay; };
 
 		if (const auto* setting = findSetting(a_op.name)) {
-			const bool periods = hasPeriods(*setting);
-			for (int part = periods ? 0 : -1; part < (periods ? TimeOfDayValue::Total : 0); ++part)
-				a_out.push_back({ { nullptr, setting->id, static_cast<int8_t>(part), {} }, -1, setting->hasWeatherSupport });
+			ForEachSettingPart(*setting, [&](int8_t a_part) { a_out.push_back({ { nullptr, setting->id, a_part, {} }, -1, setting->hasWeatherSupport }); });
 			return true;
 		}
 		for (const int period : kSuffixOrder) {
@@ -497,7 +487,7 @@ namespace Overlays
 			if (a_op.name.size() <= suffix.size() || !Util::IEquals(std::string_view(a_op.name).substr(a_op.name.size() - suffix.size()), suffix))
 				continue;
 			const auto* setting = findSetting(std::string_view(a_op.name).substr(0, a_op.name.size() - suffix.size()));
-			if (setting && hasPeriods(*setting)) {
+			if (setting && HasPeriods(*setting)) {
 				a_out.push_back({ { nullptr, setting->id, static_cast<int8_t>(period), {} }, -1, setting->hasWeatherSupport });
 				return true;
 			}
@@ -513,16 +503,16 @@ namespace Overlays
 			return {};
 
 		const bool wildcard = HasWildcard(a_op.fileName);
-		const bool baseOnly = OpTargetsBaseFile(a_op) && !wildcard;
-		const auto weathers = baseOnly ? std::vector<std::string>() : MatchWeatherFiles(a_op.fileName, wildcard);
-		if (!baseOnly && !wildcard && weathers.empty()) {
+		const bool targetsBase = OpTargetsBaseFile(a_op);
+		const auto weathers = targetsBase && !wildcard ? std::vector<std::string>() : MatchWeatherFiles(a_op.fileName, wildcard);
+		if (!targetsBase && weathers.empty()) {
 			a_reason = std::format("weather file '{}' is not in _weatherlist.ini", a_op.fileName);
 			return {};
 		}
 
 		std::vector<ResolvedTarget> targets;
 		for (const auto& base : bases) {
-			if (baseOnly || wildcard)
+			if (targetsBase)
 				targets.push_back({ base.slot, base.operandComponent, false });
 			if (weathers.empty())
 				continue;

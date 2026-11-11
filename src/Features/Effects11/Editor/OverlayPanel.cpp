@@ -50,7 +50,7 @@ void OverlayPanel::DrawRowTooltip(const Overlays::RowInfo& a_row)
 
 namespace
 {
-	/** Width of the overlay name field, in font heights. */
+	/** @brief Width of the overlay name field, in font heights. */
 	constexpr float kNameFieldWidthEm = 18.0f;
 }
 
@@ -67,6 +67,10 @@ void OverlayPanel::Draw(bool& a_open, bool& a_dirty, const Callbacks& a_callback
 			const auto text = I18n::GetSingleton()->Format(TKEY("write_failed"), { { "file", failedFile } }, "Could not write {file}");
 			Util::Text::WrappedError("%s", text.c_str());
 		}
+		if (const auto& failedFile = manager.GetFailedReadFile(); !failedFile.empty()) {
+			const auto text = I18n::GetSingleton()->Format(TKEY("amount_read_failed"), { { "file", failedFile } }, "Could not read {file}, so its Amount was not saved");
+			Util::Text::WrappedError("%s", text.c_str());
+		}
 		ImGui::PopTextWrapPos();
 
 		DrawEditTarget();
@@ -79,7 +83,7 @@ void OverlayPanel::Draw(bool& a_open, bool& a_dirty, const Callbacks& a_callback
 			DrawCreateButtons();
 		}
 		ImGui::EndChild();
-		DrawNamePopup(a_callbacks);
+		DrawNamePopup(a_dirty, a_callbacks);
 		if (manager.HasDirtyOverlays())
 			a_dirty = true;
 	}
@@ -210,10 +214,7 @@ void OverlayPanel::DrawOverlayTooltip(size_t a_index)
 	if (!overlay.uiDesc.empty())
 		ImGui::TextUnformatted(overlay.uiDesc.c_str());
 	if (!overlay.incompatible.empty()) {
-		std::string names;
-		for (const auto& name : overlay.incompatible)
-			names += (names.empty() ? "" : ", ") + name;
-		const auto text = I18n::GetSingleton()->Format(TKEY("incompatible"), { { "overlays", names } }, "Incompatible with: {overlays}. Turning this on turns those off.");
+		const auto text = I18n::GetSingleton()->Format(TKEY("incompatible"), { { "overlays", Overlays::JoinList(overlay.incompatible) } }, "Incompatible with: {overlays}. Turning this on turns those off.");
 		Util::Text::WrappedWarning("%s", text.c_str());
 	}
 	if (const size_t unused = manager.UnmappedCount(a_index)) {
@@ -281,7 +282,7 @@ void OverlayPanel::DrawCreateButtons()
 		"Unsaved technique choices and per-weather (IgnoreWeatherSystem) toggles are discarded."));
 }
 
-void OverlayPanel::DrawNamePopup(const Callbacks& a_callbacks)
+void OverlayPanel::DrawNamePopup(bool& a_dirty, const Callbacks& a_callbacks)
 {
 	const std::string title = std::format("{}###OverlayName", T(TKEY("name_title"), "New overlay"));
 	if (openNamePopup) {
@@ -308,7 +309,7 @@ void OverlayPanel::DrawNamePopup(const Callbacks& a_callbacks)
 	if (create) {
 		auto& manager = Overlays::Manager::GetSingleton();
 		if (pendingFromChanges)
-			manager.CreateOverlayFromChanges(pendingName, a_callbacks.revert);
+			a_dirty |= !manager.CreateOverlayFromChanges(pendingName, a_callbacks.revert);  // the revert cleared the flag
 		else
 			manager.CreateOverlay(pendingName);
 		ImGui::CloseCurrentPopup();

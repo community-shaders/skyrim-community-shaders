@@ -36,13 +36,20 @@ public:
 	void Draw(bool& a_open, bool& a_dirty, const Callbacks& a_callbacks);
 
 private:
+	/** @brief The "Edits go to" combo and its warnings. */
 	void DrawEditTarget();
+	/** @brief The filtered overlays under collapsible group headers. */
 	void DrawOverlayList();
+	/** @brief One overlay's checkbox, tooltip and Amount slider. */
 	void DrawOverlayRow(size_t a_index);
+	/** @brief An overlay's name, file, description, incompatibilities and unused parameter count. */
 	void DrawOverlayTooltip(size_t a_index);
+	/** @brief The active overlays in apply order, with move up and down buttons. */
 	void DrawActiveOrder();
+	/** @brief The "New overlay" and "New overlay from unsaved changes" buttons. */
 	void DrawCreateButtons();
-	void DrawNamePopup(const Callbacks& a_callbacks);
+	/** @brief The modal that names a new overlay and creates it. */
+	void DrawNamePopup(bool& a_dirty, const Callbacks& a_callbacks);
 	/** @brief Rebuilds the filtered, grouped order when the overlays or the search changed. */
 	void RefreshOrder();
 

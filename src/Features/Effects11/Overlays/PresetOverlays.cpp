@@ -45,14 +45,16 @@ namespace Overlays
 			}
 		}
 
+		/** @brief The value rounded to the nearest multiple of a_step; unchanged when a_step is not positive. */
 		float RoundToStep(float a_value, float a_step)
 		{
 			return a_step > 0.0f ? std::round(a_value / a_step) * a_step : a_value;
 		}
 
+		/** @brief Whether the op is the one written for this slot name. */
 		bool SameTarget(const Op& a_op, const SlotName& a_name)
 		{
-			return Util::IEquals(a_op.category, a_name.category) && Effect::NormalizeIniKey(a_op.name) == Effect::NormalizeIniKey(a_name.name) &&
+			return Util::IEquals(a_op.category, a_name.category) && MatchKey(a_op.name) == MatchKey(a_name.name) &&
 			       Util::IEquals(a_op.fileName, a_name.fileName);
 		}
 	}
@@ -101,6 +103,7 @@ namespace Overlays
 		settingRows.clear();
 		overlays.clear();
 		failedWriteFile.clear();
+		failedReadFile.clear();
 		++generation;
 
 		std::error_code ec;
@@ -197,7 +200,7 @@ namespace Overlays
 				}
 				const auto before = stack.live.value;
 				stack.live.value = ApplyOperation(before, SliceOperand(overlay.ops[opIndex], target.operandComponent), overlay.amount);
-				stack.ops.push_back({ a_overlay, before, stack.live.value });
+				stack.ops.push_back({ a_overlay, opIndex, before, stack.live.value });
 			}
 		}
 	}
@@ -239,7 +242,8 @@ namespace Overlays
 		WriteLive();
 		FlushWeatherWrites();
 
-		shaderReloadNeeded = std::any_of(compiledDefines.begin(), compiledDefines.end(), [&](const CompiledDefine& define) { return CompileDefine(define) != define.compiledValue; });
+		const auto defineOps = CollectDefineOps();
+		shaderReloadNeeded = std::any_of(compiledDefines.begin(), compiledDefines.end(), [&](const CompiledDefine& define) { return CompileDefine(define, defineOps) != define.compiledValue; });
 		RebuildRowInfo();
 	}
 
@@ -261,31 +265,41 @@ namespace Overlays
 		}
 	}
 
-	std::string Manager::CompileDefine(const CompiledDefine& a_define) const
+	std::vector<Manager::DefineOp> Manager::CollectDefineOps() const
 	{
-		std::optional<OverlayValue> value;
+		std::vector<DefineOp> defineOps;
 		for (const auto& fileName : list.active) {
 			const auto* overlay = FindOverlay(fileName);
 			assert(overlay && "LoadFiles drops missing overlays from Active");
 			for (const auto& op : overlay->ops) {
-				if (!Util::IEquals(op.category, a_define.section) || Effect::NormalizeIniKey(op.name) != a_define.key || !OpTargetsBaseFile(op))
-					continue;
-				if (!value) {
-					value = ParseDefine(a_define.type, a_define.iniValue);
-					if (!value)
-						return a_define.iniValue;
-				}
-				if (IsCompatible(op, *value))
-					value = ApplyOperation(*value, op, overlay->amount);
+				if (OpTargetsBaseFile(op))
+					defineOps.push_back({ &op, overlay->amount, MatchKey(op.name) });
 			}
+		}
+		return defineOps;
+	}
+
+	std::string Manager::CompileDefine(const CompiledDefine& a_define, const std::vector<DefineOp>& a_ops)
+	{
+		std::optional<OverlayValue> value;
+		for (const auto& defineOp : a_ops) {
+			if (defineOp.key != a_define.key || !Util::IEquals(defineOp.op->category, a_define.section))
+				continue;
+			if (!value) {
+				value = ParseDefine(a_define.type, a_define.iniValue);
+				if (!value)
+					return a_define.iniValue;
+			}
+			if (IsCompatible(*defineOp.op, *value))
+				value = ApplyOperation(*value, *defineOp.op, defineOp.amount);
 		}
 		return value ? FormatDefine(*value) : a_define.iniValue;
 	}
 
 	void Manager::TransformDefine(std::string_view a_section, std::string_view a_key, std::string_view a_type, std::string& a_value)
 	{
-		CompiledDefine define{ std::string(a_section), Effect::NormalizeIniKey(a_key), std::string(a_type), a_value, {} };
-		define.compiledValue = CompileDefine(define);
+		CompiledDefine define{ std::string(a_section), MatchKey(a_key), std::string(a_type), a_value, {} };
+		define.compiledValue = CompileDefine(define, CollectDefineOps());
 		a_value = define.compiledValue;
 		compiledDefines.push_back(std::move(define));
 	}
@@ -296,14 +310,19 @@ namespace Overlays
 		settingRows.clear();
 		const auto* target = editTarget.empty() ? nullptr : FindOverlay(editTarget);
 		allRowsLocked = target && target->amount <= 0.0f;
-		const int targetPosition = editTarget.empty() ? -1 : ActivePosition(editTarget);
+		std::vector<int> activePositions(overlays.size(), -1);
+		for (size_t position = 0; position < list.active.size(); ++position) {
+			if (const auto* overlay = FindOverlay(list.active[position]))
+				activePositions[static_cast<size_t>(overlay - overlays.data())] = static_cast<int>(position);
+		}
+		const int targetPosition = target ? activePositions[static_cast<size_t>(target - overlays.data())] : -1;
 		for (const auto& [slot, stack] : stacks) {
 			auto& row = slot.IsShader() ? shaderRows[{ slot.effect, slot.index }] : settingRows[slot.index];
 			for (const auto& op : stack.ops) {
 				const bool known = std::any_of(row.contributions.begin(), row.contributions.end(), [&](const Contribution& c) { return c.overlay == op.overlay; });
 				if (!known)
 					row.contributions.push_back({ op.overlay, op.before, op.after });
-				if (targetPosition < 0 || ActivePosition(overlays[op.overlay].fileName) > targetPosition)
+				if (targetPosition < 0 || activePositions[op.overlay] > targetPosition)
 					row.locked = true;
 			}
 		}
@@ -321,18 +340,27 @@ namespace Overlays
 		return it != settingRows.end() ? &it->second : nullptr;
 	}
 
+	bool Manager::TrackWrite(std::string_view a_fileName, bool a_written)
+	{
+		if (!a_written) {
+			failedWriteFile = a_fileName;
+			return false;
+		}
+		for (auto* failedFile : { &failedWriteFile, &failedReadFile })
+			if (Util::IEquals(*failedFile, a_fileName))
+				failedFile->clear();
+		return true;
+	}
+
 	void Manager::SaveListFile()
 	{
-		if (!SaveList(seriesPath, list))
-			failedWriteFile = kListFileName;
+		TrackWrite(kListFileName, SaveList(seriesPath, list));
 	}
 
 	bool Manager::SaveOverlayFile(Overlay& a_overlay)
 	{
-		if (!SaveOverlay(FolderPath() / Util::PathHelpers::FromUtf8(a_overlay.fileName), a_overlay)) {
-			failedWriteFile = a_overlay.fileName;
+		if (!TrackWrite(a_overlay.fileName, SaveOverlay(FolderPath() / Util::PathHelpers::FromUtf8(a_overlay.fileName), a_overlay)))
 			return false;
-		}
 		a_overlay.dirty = false;
 		return true;
 	}
@@ -387,8 +415,12 @@ namespace Overlays
 		// Authored ops wait for Save, so only the Amount goes into the file as it is on disk
 		auto onDisk = LoadOverlay(FolderPath() / Util::PathHelpers::FromUtf8(overlay->fileName));
 		onDisk.amount = overlay->amount;
-		if (!onDisk.error.empty() || !SaveOverlayFile(onDisk))
-			failedWriteFile = overlay->fileName;
+		if (onDisk.error.empty()) {
+			SaveOverlayFile(onDisk);
+			return;
+		}
+		logger::warn("[Overlays] {}: Amount not saved, {}", overlay->fileName, onDisk.error);
+		failedReadFile = overlay->fileName;
 	}
 
 	void Manager::SetEditTarget(std::string a_fileName)
@@ -421,13 +453,15 @@ namespace Overlays
 		const auto name = DescribeSlot(a_slot);
 		const auto existing = std::find_if(target->ops.begin(), target->ops.end(), [&](const Op& op) { return SameTarget(op, name); });
 
+		const size_t opIndex = static_cast<size_t>(existing - target->ops.begin());
+
 		// An existing op is rewritten against the value it receives; a new one is appended last, so it receives the pre-edit value
 		OverlayValue received = a_before;
 		if (existing != target->ops.end()) {
 			if (const auto stack = stacks.find(a_slot); stack != stacks.end()) {
-				const auto op = std::find_if(stack->second.ops.begin(), stack->second.ops.end(), [&](const StackOp& s) { return s.overlay == targetIndex; });
-				if (op != stack->second.ops.end())
-					received = op->before;
+				const auto step = std::find_if(stack->second.ops.begin(), stack->second.ops.end(), [&](const StackOp& stackOp) { return stackOp.overlay == targetIndex && stackOp.op == opIndex; });
+				if (step != stack->second.ops.end())
+					received = step->before;
 			}
 		}
 
@@ -441,8 +475,10 @@ namespace Overlays
 			op.op = Operator::Add;
 			op.operand.components = a_after.components;
 			for (int c = 0; c < a_after.components; ++c) {
-				op.operand.values[c] = RoundToStep((a_after.values[c] - received.values[c]) / target->amount, step);
-				noOp &= std::abs(op.operand.values[c]) < step * 0.5f;
+				// Rounded before dividing by Amount, so the slot lands on the edited value at any Amount
+				const float delta = RoundToStep(a_after.values[c] - received.values[c], step);
+				op.operand.values[c] = delta / target->amount;
+				noOp &= delta == 0.0f;
 			}
 		} else {
 			op.op = Operator::Set;
@@ -451,11 +487,11 @@ namespace Overlays
 			noOp = a_after == received;
 		}
 
-		const size_t opIndex = static_cast<size_t>(existing - target->ops.begin());
 		if (existing != target->ops.end()) {
 			if (noOp) {
 				target->ops.erase(existing);
 				resolved[targetIndex].erase(resolved[targetIndex].begin() + opIndex);
+				ForgetStackOp(targetIndex, opIndex);
 			} else {
 				*existing = op;
 				std::string reason;
@@ -467,6 +503,16 @@ namespace Overlays
 			target->ops.push_back(std::move(op));
 		}
 		target->dirty = true;
+	}
+
+	void Manager::ForgetStackOp(size_t a_overlay, size_t a_op)
+	{
+		for (auto& [slot, stack] : stacks) {
+			std::erase_if(stack.ops, [&](const StackOp& stackOp) { return stackOp.overlay == a_overlay && stackOp.op == a_op; });
+			for (auto& stackOp : stack.ops)
+				if (stackOp.overlay == a_overlay && stackOp.op > a_op)
+					--stackOp.op;
+		}
 	}
 
 	bool Manager::TakeShaderEdit(Effect& a_effect, size_t a_index, const OverlayValue& a_before)
@@ -502,14 +548,12 @@ namespace Overlays
 	{
 		if (editTarget.empty())
 			return false;
-		const auto* setting = SettingManager::GetSingleton().GetSettingInfo(a_settingID);
-		const bool periods = setting->type == SettingType::TimeOfDay || setting->type == SettingType::ColorTimeOfDay;
-		for (int part = periods ? 0 : -1; part < (periods ? TimeOfDayValue::Total : 0); ++part) {
-			const auto before = SettingPartValue(a_before, part);
-			const auto after = SettingPartValue(a_after, part);
+		ForEachSettingPart(*SettingManager::GetSingleton().GetSettingInfo(a_settingID), [&](int8_t a_part) {
+			const auto before = SettingPartValue(a_before, a_part);
+			const auto after = SettingPartValue(a_after, a_part);
 			if (!(before == after))
-				RecordEdit({ nullptr, a_settingID, static_cast<int8_t>(part), a_weatherFile }, before, after);
-		}
+				RecordEdit({ nullptr, a_settingID, a_part, a_weatherFile }, before, after);
+		});
 		Reapply();
 		return true;
 	}
@@ -541,27 +585,54 @@ namespace Overlays
 
 	bool Manager::CreateOverlayFromChanges(std::string_view a_name, const std::function<void()>& a_revert)
 	{
-		SaveDirtyOverlays();  // the revert below reloads overlays from disk
+		// Files are created and saved before the revert, so a failed write keeps the unsaved edits
+		if (!SaveDirtyOverlays())
+			return false;
 		const auto slots = EnumerateSlots();
 		std::vector<SlotValue> edited;
 		edited.reserve(slots.size());
 		for (const auto& slot : slots)
 			edited.push_back(ReadSlot(slot));
-
-		a_revert();
 		if (!CreateOverlay(a_name))
 			return false;
 
-		for (size_t i = 0; i < slots.size(); ++i) {
-			if (!edited[i].defined)
-				continue;
-			const auto now = ReadSlot(slots[i]);
-			const auto received = now.defined ? now.value : ReadSlot(slots[i].Base()).value;
-			if (!(received == edited[i].value))
-				RecordEdit(slots[i], received, edited[i].value);
+		const std::string fileName = editTarget;
+		a_revert();
+		SetEditTarget(fileName);  // the reload keeps it active only when the list write succeeded
+		if (editTarget.empty()) {
+			// The reloaded overlay cannot take the edits, so they go back into the base preset
+			for (size_t i = 0; i < slots.size(); ++i) {
+				const auto now = ReadSlot(slots[i]);
+				if (edited[i].defined && !(now.defined && now.value == edited[i].value))
+					WriteSlot(slots[i], edited[i]);
+			}
+			FlushWeatherWrites();
+			return false;
 		}
-		Reapply();
+
+		// Undefined weather slots inherit the base value, so they are recorded once the base ops apply
+		for (const bool weatherPass : { false, true }) {
+			for (size_t i = 0; i < slots.size(); ++i) {
+				if (!edited[i].defined || slots[i].weatherFile.empty() == weatherPass)
+					continue;
+				const auto now = ReadSlot(slots[i]);
+				const auto received = now.defined ? now.value : ReadSlot(slots[i].Base()).value;
+				if (!(received == edited[i].value))
+					RecordEdit(slots[i], received, edited[i].value);
+			}
+			Reapply();
+		}
 		auto* overlay = FindOverlayMutable(editTarget);
 		return overlay && SaveOverlayFile(*overlay);
+	}
+
+	void Manager::SavePreset()
+	{
+		{
+			const RemovedScope removed;
+			SettingManager::GetSingleton().Save();
+			EffectManager::GetSingleton().Save();
+		}
+		SaveDirtyOverlays();
 	}
 }

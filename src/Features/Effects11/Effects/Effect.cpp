@@ -65,11 +65,10 @@ bool Effect::Load()
 
 		bool isPerComponent = IsPerComponentVector(uiVar);
 		if (isPerComponent) {
-			static const char* suffixes[] = { "X", "Y", "Z", "W" };
 			int numComponents = (uiVar.type == UIVariableType::Float2) ? 2 : (uiVar.type == UIVariableType::Float3) ? 3 :
 			                                                                                                          4;
 			for (int i = 0; i < numComponents; ++i) {
-				std::string compKey = iniKey + suffixes[i];
+				std::string compKey = iniKey + kComponentSuffixes[i];
 				auto* realKey = findIniKey(compKey);
 				if (!realKey)
 					realKey = &compKey;
@@ -209,11 +208,10 @@ void Effect::Save()
 		case UIVariableType::Float3:
 		case UIVariableType::Float4:
 			if (IsPerComponentVector(uiVar)) {
-				static const char* suffixes[] = { "X", "Y", "Z", "W" };
 				int numComponents = (uiVar.type == UIVariableType::Float2) ? 2 : (uiVar.type == UIVariableType::Float3) ? 3 :
 				                                                                                                          4;
 				for (int i = 0; i < numComponents; ++i) {
-					std::string compKey = iniKey + suffixes[i];
+					std::string compKey = iniKey + kComponentSuffixes[i];
 					std::string compValue = Effects11Util::Ini::FormatFloat(vectorValue[i]);
 					BOOL compResult = WritePrivateProfileStringA(section.c_str(), compKey.c_str(), compValue.c_str(), iniPath.string().c_str());
 					if (!compResult)
@@ -911,6 +909,13 @@ bool Effect::IsPerComponentVector(const UIVariable& uiVar)
 {
 	return (uiVar.type == UIVariableType::Float2 || uiVar.type == UIVariableType::Float3 || uiVar.type == UIVariableType::Float4) &&
 	       uiVar.widgetType != UIWidgetType::Color;
+}
+
+int Effect::GetComponentCount(UIVariableType type)
+{
+	return type == UIVariableType::Float ? 1 : type == UIVariableType::Float2 ? 2 :
+	                                       type == UIVariableType::Float3     ? 3 :
+	                                                                            4;
 }
 
 std::string Effect::GetVariableIniKey(const UIVariable& uiVar)

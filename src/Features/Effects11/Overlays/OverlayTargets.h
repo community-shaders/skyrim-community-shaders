@@ -58,9 +58,23 @@ namespace Overlays
 	void RebuildWeatherIndex();
 	/** @brief A setting value as an OverlayValue; a_part picks one period of a time-of-day value. */
 	OverlayValue SettingPartValue(const SettingValue& a_value, int a_part);
-	/** @brief Whether an op changes its category's base file: no FileName, a wildcard, or the base file named. */
+	/** @brief Whether an op changes its category's base file: no FileName, or one naming or matching the base file. */
 	bool OpTargetsBaseFile(const Op& a_op);
+	/** @brief An ini key as ops match it: normalized and lowercased, since the Win32 profile API ignores case. */
+	std::string MatchKey(std::string_view a_name);
+	/** @brief Whether a setting holds one value per time-of-day period. */
+	bool HasPeriods(const Setting& a_setting);
 
+	/** @brief Calls a_visit with each slot part of a setting: every period, or -1 for a single value. */
+	template <typename Visit>
+	void ForEachSettingPart(const Setting& a_setting, Visit&& a_visit)
+	{
+		const bool periods = HasPeriods(a_setting);
+		for (int part = periods ? 0 : -1; part < (periods ? TimeOfDayValue::Total : 0); ++part)
+			a_visit(static_cast<int8_t>(part));
+	}
+
+	/** @brief A slot's current value, as the stores hold it. */
 	SlotValue ReadSlot(const SlotKey& a_slot);
 	/** @brief Writes a slot; weather writes are batched until FlushWeatherWrites. */
 	void WriteSlot(const SlotKey& a_slot, const SlotValue& a_value);
@@ -70,6 +84,7 @@ namespace Overlays
 	OverlayValue ClampSlot(const SlotKey& a_slot, const OverlayValue& a_value);
 	/** @brief Rounding step for authored operands: the setting's step, or kShaderOperandStep. */
 	float StepOf(const SlotKey& a_slot);
+	/** @brief The FileName, Category and Name an authored op on this slot is written with. */
 	SlotName DescribeSlot(const SlotKey& a_slot);
 	/** @brief Every slot that holds a value, for "New overlay from unsaved changes". */
 	std::vector<SlotKey> EnumerateSlots();
@@ -95,7 +110,7 @@ namespace Overlays
 		struct EffectIndex
 		{
 			Effect* effect = nullptr;
-			std::unordered_map<std::string, uint32_t> keys;  ///< Normalized ini key -> variable index
+			std::unordered_map<std::string, uint32_t> keys;  ///< MatchKey of the ini key -> variable index
 		};
 		struct BaseTarget
 		{

@@ -114,6 +114,8 @@ namespace Overlays
 	int ParseFloatList(std::string_view a_text, std::array<float, kMaxComponents>& a_out);
 	/** @brief Splits a comma-separated list, trimming each item and dropping empty ones. */
 	std::vector<std::string> SplitList(std::string_view a_text);
+	/** @brief Joins items with ", ", the inverse of SplitList. */
+	std::string JoinList(const std::vector<std::string>& a_items);
 
 	/** @brief Parses an [OVERLAYPARAMn] section. @param a_error Receives why it was rejected. */
 	std::optional<Op> ParseOp(const IniSection& a_section, std::string& a_error);

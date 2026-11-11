@@ -238,18 +238,9 @@ bool PresetManager::SwitchPreset(const std::string& id, bool saveCurrent)
 	if (!target || !target->valid)
 		return false;
 
-	auto& settingManager = SettingManager::GetSingleton();
-	auto& effectManager = EffectManager::GetSingleton();
-
 	if (saveCurrent) {
-		if (const auto* current = FindPreset(activePresetId); current && current->valid) {
-			{
-				const Overlays::Manager::RemovedScope removed;
-				settingManager.Save();
-				effectManager.Save();
-			}
-			Overlays::Manager::GetSingleton().SaveDirtyOverlays();
-		}
+		if (const auto* current = FindPreset(activePresetId); current && current->valid)
+			Overlays::Manager::GetSingleton().SavePreset();
 	}
 
 	if (!SetActivePreset(id))
@@ -287,14 +278,8 @@ bool PresetManager::ExportActivePresetTo(const std::filesystem::path& destRoot, 
 		return false;
 	}
 
-	if (saveCurrent) {
-		{
-			const Overlays::Manager::RemovedScope removed;
-			SettingManager::GetSingleton().Save();
-			EffectManager::GetSingleton().Save();
-		}
-		Overlays::Manager::GetSingleton().SaveDirtyOverlays();
-	}
+	if (saveCurrent)
+		Overlays::Manager::GetSingleton().SavePreset();
 
 	const auto sourceRoot = GetActivePresetRoot();
 	std::string sourceReason;
