@@ -55,6 +55,23 @@ void DeveloperTools::RestoreDefaultSettings()
 	globals::features::renderDoc.RestoreDefaultSettings();
 }
 
+std::vector<Feature::SettingSearchEntry> DeveloperTools::GetSettingsSearchEntries()
+{
+	const auto select = [this](Tool tool) {
+		return [this, tool] {
+			selectedTool = tool;
+			selectionInitialized = true;
+		};
+	};
+	return {
+		{ "renderdoc", T(TKEY("renderdoc"), "RenderDoc"), T(TKEY("renderdoc_blurb"), "Frame captures for debugging rendering issues."), select(Tool::RenderDoc) },
+		{ "enable_capture", T("feature.renderdoc.enable_capture", "Enable RenderDoc Capture"), "RenderDoc", select(Tool::RenderDoc) },
+		{ "capture_frames", T("feature.renderdoc.capture_frames", "Capture Frames"), "RenderDoc", select(Tool::RenderDoc) },
+		{ "nsight", T(TKEY("nsight"), "Nsight Perf"), "NvPerf GPU counters", select(Tool::NsightPerf) },
+		{ "devbench", T(TKEY("devbench"), "devbench"), T(TKEY("devbench_blurb"), "Drive Community Shaders from AI assistants over MCP and REST."), select(Tool::DevBench) },
+	};
+}
+
 void DeveloperTools::OpenDevBenchNexusPage()
 {
 	ShellExecuteA(nullptr, "open", kDevBenchNexusUrl, nullptr, nullptr, SW_SHOWNORMAL);

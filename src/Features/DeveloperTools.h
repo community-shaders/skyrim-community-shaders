@@ -36,6 +36,7 @@ struct DeveloperTools : Feature
 	void Load() override;
 	void DataLoaded() override;
 
+	std::vector<SettingSearchEntry> GetSettingsSearchEntries() override;
 	void DrawSettings() override;
 	void RestoreDefaultSettings() override;
 	void LoadSettings(json& o_json) override;
