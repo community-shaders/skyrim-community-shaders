@@ -930,7 +930,7 @@ struct BSLightingShaderProperty_GetRenderPasses_LocalMap
 	static inline REL::Relocation<decltype(thunk)> func;
 };
 
-/** @brief True when slot 4 green is explicitly enabled and its texture is available. */
+/** @brief True when displacement green is explicitly enabled and its texture is available. */
 static bool HasFuzzRoughnessTexture(const BSLightingShaderMaterialPBR* material)
 {
 	if (!material->fuzzRoughnessTexture || material->displacementTexture == globals::game::graphicsState->GetRuntimeData().defaultTextureBlack) {

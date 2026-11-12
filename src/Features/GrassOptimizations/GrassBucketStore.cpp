@@ -1,4 +1,5 @@
 #include "GrassBucketStore.h"
+#include "TruePBR/BSLightingShaderMaterialPBR.h"
 
 #include <numbers>
 #include <thread>
@@ -198,8 +199,7 @@ std::optional<PendingCapture> GrassBucketStore::CaptureMetadata(RE::BSMultiStrea
 	asset.indexBuffer.copy_from(reinterpret_cast<ID3D11Buffer*>(rendererData->indexBuffer));
 
 	asset.material.reset(material);
-	// TruePBR marks converted grass properties with kMenuScreen.
-	draw.pbrMaterial = grassProperty->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kMenuScreen);
+	draw.pbrMaterial = BSLightingShaderMaterialPBR::IsPBR(material);
 	draw.sphereNormal = grassProperty->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kEffectLighting);
 	asset.key.material = GrassMeshLibrary::CaptureMaterial(material, draw.pbrMaterial);
 	draw.uniformScale = grassProperty->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kUniformScale);

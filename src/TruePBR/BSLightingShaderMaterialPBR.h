@@ -192,8 +192,8 @@ public:
 	stl::enumeration<PBRFlags> nifThinSurfaceFlags;                ///< NIF capabilities retained when TXST overrides are reapplied.
 	std::optional<std::array<float, 4>> nifThinSurfaceParameters;  ///< Per-NIF overrides reapplied after TXST data.
 	std::optional<std::array<float, 2>> nifFuzzParameters;         ///< PBRFuzz overrides reapplied after TXST data.
-	float fuzzRoughness = -1.f;                                  ///< Negative uses the base roughness.
-	bool fuzzRoughnessTexture = false;                           ///< Samples the displacement texture's green channel.
+	float fuzzRoughness = -1.f;                                    ///< Negative uses the base roughness.
+	bool fuzzRoughnessTexture = false;                             ///< Samples the displacement texture's green channel.
 	PBRParameters parameters;                                      ///< Independent base-surface parameters.
 	RE::NiPointer<RE::NiSourceTexture> rmaosTexture;               ///< Roughness, metallic, AO, and specular channels.
 	RE::NiPointer<RE::NiSourceTexture> emissiveTexture;            ///< Linear emission RGB.

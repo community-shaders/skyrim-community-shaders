@@ -225,14 +225,14 @@ void BSLightingShaderMaterialPBR::ApplyTextureSetData(const TruePBR::PBRTextureS
 	}
 }
 
-bool BSLightingShaderMaterialPBR::ApplyNifFuzzParameters(std::span<const float> parameters)
+bool BSLightingShaderMaterialPBR::ApplyNifFuzzParameters(std::span<const float> values)
 {
-	if (parameters.size() != 2 || std::ranges::any_of(parameters, [](float value) { return !std::isfinite(value); })) {
+	if (values.size() != 2 || std::ranges::any_of(values, [](float value) { return !std::isfinite(value); })) {
 		return false;
 	}
 
-	const float roughness = parameters[0];
-	const float useRoughnessTexture = parameters[1];
+	const float roughness = values[0];
+	const float useRoughnessTexture = values[1];
 	if (useRoughnessTexture != 0.f && useRoughnessTexture != 1.f) {
 		return false;
 	}

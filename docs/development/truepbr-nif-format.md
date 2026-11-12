@@ -170,7 +170,7 @@ Values are applied in this order:
 
 1. Read the NIF payload.
 2. Apply a matching TXST configuration, including its PBR feature switches.
-3. Apply the optional `PBRThinSurface` extra-data block.
+3. Apply the optional `PBRThinSurface` and `PBRFuzz` extra-data blocks.
 
 `PBRThinSurface` must be a `NiFloatsExtraData` block containing exactly four
 finite values:
@@ -184,6 +184,14 @@ finite values:
 
 These values override the corresponding payload and TXST values for that NIF.
 They do not change the binary payload layout.
+
+`PBRFuzz` is a `NiFloatsExtraData` block with two finite values: fuzz
+roughness (negative uses base roughness; non-negative values are clamped to
+`[0, 1]`) and a displacement-green roughness switch (`0` or `1`). These
+override TXST `fuzzRoughness` and `fuzzRoughnessTexture` and survive TXST
+reloads. The texture is the green channel of displacement slot **3**, not
+reserved slot 4. Without either override, fuzz uses base roughness. The v2
+payload remains 25 floats; it does not include these extra-data values.
 
 Projected-material MATO data is applied at runtime and is not part of the base
 PBR payload.
