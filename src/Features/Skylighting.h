@@ -58,6 +58,7 @@ public:
 	struct SkylightingCB
 	{
 		REX::W32::XMFLOAT4X4 OcclusionViewProj;
+		REX::W32::XMFLOAT4X4 ZenithViewProj;
 		float4 OcclusionSHBasis4Pi;  // SH basis of the occlusion direction, times 4 pi; evaluated once per capture
 
 		float3 PosOffset;  // cell origin in camera model space
@@ -66,9 +67,13 @@ public:
 		uint _pad1;
 		int ValidMargin[4];
 
+		float3 ZenithOffset;  // eye movement since the zenith capture
+		uint ZenithValid;
+
 		float MinDiffuseVisibility;
 		float MinSpecularVisibility;
-		uint _pad2[2];
+		uint AccumulateOcclusion;  // 0 on zenith frames, whose capture is not a sky visibility sample
+		uint _pad2;
 	};
 	static_assert(sizeof(SkylightingCB) % 16 == 0);
 
@@ -82,8 +87,10 @@ public:
 	winrt::com_ptr<ID3D11SamplerState> comparisonSampler = nullptr;
 
 	Texture2D* texOcclusion = nullptr;
+	Texture2D* texZenithOcclusion = nullptr;
 	Texture3D* texProbeArray = nullptr;
 	Texture3D* texAccumFramesArray = nullptr;
+	Texture3D* texProbeCoverage = nullptr;
 	Texture3D* texShadowBitmask = nullptr;
 	Texture3D* texShadowVisibility = nullptr;
 
@@ -96,6 +103,11 @@ public:
 	float occlusionDistance = 10000.f;
 	// Slack below the probe grid for eye movement between the grid update and the occlusion render.
 	static constexpr float OCCLUSION_BELOW_GRID_MARGIN = 512.f;
+	// Every Nth occlusion capture looks straight down instead; coprime with the 4 frustum quadrants so none is starved.
+	static constexpr uint ZENITH_INTERVAL = 7;
+	static constexpr float ZENITH_OCCLUSION_EXTENT = 4096.f;
+	// Matches Skylighting::COVERAGE_UNKNOWN in Skylighting.hlsli.
+	static constexpr uint COVERAGE_UNKNOWN = 2;
 
 	// cached variables
 	bool queuedResetSkylighting = true;
@@ -105,6 +117,13 @@ public:
 	REX::W32::XMFLOAT4X4 OcclusionTransform;
 	float4 OcclusionSHBasis4Pi;
 	uint frameCount = 0;
+	// Top-down occluder depth for telling which probes share a receiver's side of a roof.
+	REX::W32::XMFLOAT4X4 ZenithTransform;
+	float3 zenithEyePos;
+	bool zenithValid = false;
+	bool zenithFrame = false;
+	// The capture is relative to the main camera, whose eye is only current in the next in-world buffer update.
+	bool zenithEyePending = false;
 
 	/** @brief Clears the accumulation frames array to force a full rebuild of skylighting probes. */
 	void ResetSkylighting();

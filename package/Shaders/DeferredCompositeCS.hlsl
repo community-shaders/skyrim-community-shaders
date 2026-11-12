@@ -35,6 +35,8 @@ SamplerState LinearSampler : register(s0);
 
 #if defined(SKYLIGHTING)
 #	define SKYLIGHTING_PROBE_REGISTER t8
+#	define SKYLIGHTING_COVERAGE_REGISTER t18
+#	define SKYLIGHTING_ZENITH_REGISTER t19
 #	include "Skylighting/Skylighting.hlsli"
 #endif
 
