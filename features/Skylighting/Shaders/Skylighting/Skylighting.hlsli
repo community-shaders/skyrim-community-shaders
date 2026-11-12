@@ -26,6 +26,8 @@ namespace Skylighting
 	const static float3 CELL_SIZE = ARRAY_SIZE / ARRAY_DIM;
 	/** @brief Fraction of the volume at each edge that is faded out, covering cells still fading in after the volume scrolls. */
 	const static float FADE_MARGIN = 0.05;
+	/** @brief Floor on the tangent weight, so a sample with every probe behind its surface falls back to plain trilinear. */
+	const static float MIN_TANGENT_WEIGHT = 1e-3;
 
 	float GetFadeOutFactor(float3 positionMS)
 	{
@@ -157,8 +159,8 @@ namespace Skylighting
 					uint3 cellTexID = (cellID + SharedData::skylightingSettings.ArrayOrigin.xyz) % ARRAY_DIM;
 
 					// https://handmade.network/p/75/monter/blog/p/7288-engine_work__global_illumination_with_irradiance_probes
-					// basic tangent checks
-					float tangentWeight = dot(normalize(cellCentreMS - positionMSAdjusted), normalWS) * 0.5 + 0.5;
+					// Hard tangent check: a wrapped weight lets probes across thin occluders (roofs) leak the probe grid in.
+					float tangentWeight = saturate(dot(normalize(cellCentreMS - positionMSAdjusted), normalWS)) + MIN_TANGENT_WEIGHT;
 					float shW = triW * tangentWeight;
 					shSum = SphericalHarmonics::Add(shSum, SphericalHarmonics::Scale(SkylightingProbeArray[cellTexID], shW));
 					shWsum += shW;
