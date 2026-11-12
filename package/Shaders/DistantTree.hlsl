@@ -57,20 +57,23 @@ cbuffer PerGeometry : register(b2)
 
 #	if defined(TREE_WIND)
 #		include "TreeWind/TreeWind.hlsli"
+// The depth and colour passes draw the same swaying billboards and must place them identically
+#		define TREE_WIND_PRECISE precise
+#	else
+#		define TREE_WIND_PRECISE
 #	endif
 
 VS_OUTPUT main(VS_INPUT input)
 {
 	VS_OUTPUT vsout = (VS_OUTPUT)0;
 
-	// precise: the depth and colour passes draw the same billboards and must place them identically
-	precise float3 scaledModelPosition = input.InstanceData1.www * input.Position.xyz;
-	precise float3 adjustedModelPosition = 0.0.xxx;
+	TREE_WIND_PRECISE float3 scaledModelPosition = input.InstanceData1.www * input.Position.xyz;
+	TREE_WIND_PRECISE float3 adjustedModelPosition = 0.0.xxx;
 	adjustedModelPosition.x = dot(float2(1, -1) * input.InstanceData2.xy, scaledModelPosition.xy);
 	adjustedModelPosition.y = dot(input.InstanceData2.yx, scaledModelPosition.xy);
 	adjustedModelPosition.z = scaledModelPosition.z;
-	precise float4 finalModelPosition = float4(input.InstanceData1.xyz + adjustedModelPosition.xyz, 1.0);
-	precise float4 previousModelPosition = finalModelPosition;
+	TREE_WIND_PRECISE float4 finalModelPosition = float4(input.InstanceData1.xyz + adjustedModelPosition.xyz, 1.0);
+	TREE_WIND_PRECISE float4 previousModelPosition = finalModelPosition;
 #	if defined(TREE_WIND) && !defined(RENDER_DEPTH)
 	vsout.RestWorldPosition = mul(World, finalModelPosition).xyz;
 #	endif
@@ -83,7 +86,7 @@ VS_OUTPUT main(VS_INPUT input)
 	}
 #	endif
 
-	precise float4 viewPosition = mul(WorldViewProj, finalModelPosition);
+	TREE_WIND_PRECISE float4 viewPosition = mul(WorldViewProj, finalModelPosition);
 
 #	ifdef RENDER_DEPTH
 	vsout.Depth.xy = viewPosition.zw;

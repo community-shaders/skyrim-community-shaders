@@ -247,6 +247,9 @@ void TreeWind::PostPostLoad()
 
 void TreeWind::BeginDraw(RE::BSRenderPass* a_pass)
 {
+	drawBendWeights = nullptr;
+	if (!swayActive)
+		return;
 	const auto kind = TreeShapes::Classify(a_pass, settings.TreeModSupport);
 	drawBendWeights = kind == TreeShapes::Kind::None ? nullptr : bendWeights.Get(a_pass->geometry, kind, globals::state->frameCount, settings.TreeModSupport);
 }
@@ -316,12 +319,13 @@ void TreeWind::Reset()
 		prevPhase -= kPhaseWrap;
 	}
 
-	// The map menus draw the LOD too, and it should stand still there
-	const bool sway = settings.Enabled && !globals::state->isMapMenuOpen;
+	// The map menus draw the LOD too, and it should stand still there. While off, the draws skip all
+	// per-draw work; both buffers then read as off, whatever is still bound at VS b3.
+	swayActive = settings.Enabled && !globals::state->isMapMenuOpen;
 
 	WindCB data{};
 	data.Wind = { static_cast<float>(phase), static_cast<float>(prevPhase), windSpeed, windAngle };
-	data.Params = { settings.Amplitude, settings.MinDistance, sway ? 1.0f : 0.0f, 0.0f };
+	data.Params = { settings.Amplitude, settings.MinDistance, swayActive ? 1.0f : 0.0f, 0.0f };
 	data.Shape = { settings.BendExponent, 1.0f, settings.Flutter, settings.TreeSpread };
 	data.Detail = { settings.FlutterShare, settings.FlutterSpeed, settings.NearScale, settings.NearRampEnd };
 	data.Gusts = { gustStrength, gustRarity, 0.0f, 0.0f };
@@ -340,6 +344,8 @@ void TreeWind::Reset()
 
 void TreeWind::SetShaderResources(ID3D11DeviceContext* a_context)
 {
+	if (!swayActive)
+		return;
 	const auto shader = globals::state->currentShader;
 	if (!shader)
 		return;

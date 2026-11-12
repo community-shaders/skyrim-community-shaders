@@ -115,6 +115,7 @@ private:
 	TreeShapes::BendWeights bendWeights;
 	// Bend data of the tree LOD shape being drawn, nullptr for every other draw
 	ID3D11ShaderResourceView* drawBendWeights = nullptr;
+	bool swayActive = false;  // set once per frame in Reset: sway on and no map menu open
 
 	double phase = 0.0;
 	double prevPhase = 0.0;
