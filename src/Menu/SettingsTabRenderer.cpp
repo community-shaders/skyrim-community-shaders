@@ -27,6 +27,7 @@
 #include "State.h"
 #include "ThemeManager.h"
 #include "Utils/UI.h"
+#include "Utils/UIAnim.h"
 
 using json = nlohmann::json;
 
@@ -141,6 +142,13 @@ namespace
 			fn(&color.x, 4);
 	}
 
+	/// Set by theme undo, which changes the theme without an edit or a click.
+	bool themeCheckPending = true;
+	bool themeDirty = false;
+	/// The selected theme as its file has it, and the file's Theme object it was read from.
+	Menu::ThemeSettings themeReference;
+	json themeReferenceSource;
+
 	/** @brief Every colour value of the live theme, flattened: the Colours page's undo snapshot. */
 	std::vector<float> CaptureThemeColors()
 	{
@@ -162,36 +170,15 @@ namespace
 				ForEachColorValue(globals::menu->GetSettings().Theme, [&](float* data, int count) {
 					for (int c = 0; c < count && i < values.size(); ++c)
 						data[c] = values[i++];
-				}); },
+				});
+				themeCheckPending = true; },
 		};
 	}
 
-	/**
-	 * @brief The selected theme as its file has it: what the Colours and Fonts resets put a value back to. Re-read when the selection
-	 * changes or the page is opened again, so a Save Theme in between is picked up.
-	 */
+	/** @brief The selected theme as its file has it: what the Colours and Fonts resets put a value back to. */
 	const Menu::ThemeSettings& GetThemeFileReference()
 	{
-		static Menu::ThemeSettings reference;
-		static std::string referenceName;
-		static int lastFrame = -2;
-		const std::string& selected = globals::menu->GetSettings().SelectedThemePreset;
-		const int frame = ImGui::GetFrameCount();
-		if (selected != referenceName || frame - lastFrame > 1) {
-			referenceName = selected;
-			reference = Menu::ThemeSettings{};
-			if (const auto* info = ThemeManager::GetSingleton()->GetThemeInfo(selected); info && info->themeData.contains("Theme")) {
-				try {
-					const json& theme = info->themeData["Theme"];
-					Menu::ThemeFromJson(theme, reference);
-				} catch (const std::exception& e) {
-					logger::warn("Colors page: could not read theme '{}' for reset: {}", selected, e.what());
-					reference = Menu::ThemeSettings{};
-				}
-			}
-		}
-		lastFrame = frame;
-		return reference;
+		return themeReference;
 	}
 
 	/** @brief Whether two colours differ by more than a picker step. */
@@ -401,7 +388,8 @@ namespace
 					role.SizeScale = roles[i][3].get<float>();
 				}
 				settings.Theme.FontName = settings.Theme.FontRoles[static_cast<size_t>(Menu::FontRole::Body)].File;
-				MenuFonts::GetAtlasState().pendingFontReload = true; },
+				MenuFonts::GetAtlasState().pendingFontReload = true;
+				themeCheckPending = true; },
 		};
 	}
 
@@ -627,6 +615,17 @@ namespace
 		std::string selected = globals::menu->GetSettings().SelectedThemePreset;
 		return !selected.empty() && ThemeManager::GetSingleton()->IsPresetTheme(selected);
 	}
+
+	/** @brief A theme save button whose fill pulses while `unsaved`. */
+	bool ThemeSaveButton(const char* id, const char* tablerIcon, const char* label, bool unsaved)
+	{
+		if (!unsaved)
+			return Util::ButtonWithFlash(id, tablerIcon, label);
+		const float alpha = 1.0f - ThemeManager::Constants::ANIM_PULSE_AMPLITUDE * Util::Anim::Pulse();
+		Util::StyledButtonWrapper _style(Util::Anim::ScaleAlpha(ImGui::GetStyleColorVec4(ImGuiCol_Button), alpha),
+			ImGui::GetStyleColorVec4(ImGuiCol_ButtonHovered), ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
+		return Util::ButtonWithFlash(id, tablerIcon, label);
+	}
 }
 
 std::span<const SettingsSearchEntry> SettingsTabRenderer::GetSearchIndex()
@@ -634,15 +633,44 @@ std::span<const SettingsSearchEntry> SettingsTabRenderer::GetSearchIndex()
 	return kSearchIndex;
 }
 
-void SettingsTabRenderer::RenderThemeSaveNote()
+bool SettingsTabRenderer::IsThemeDirty()
 {
-	auto& ts = globals::menu->GetSettings().Theme;
-	MenuFonts::FontRoleGuard subtextFont(Menu::FontRole::Subtext);
-	ImGui::PushStyleColor(ImGuiCol_Text, ts.StatusPalette.InfoColor);
-	ImGui::TextWrapped("%s", T("menu.settings.theme_save_model",
-								 "Theme edits are saved into the theme file with Save Theme. "
-								 "Which theme is selected is saved with Save Settings (Ctrl+S)."));
-	ImGui::PopStyleColor();
+	return themeDirty;
+}
+
+void SettingsTabRenderer::CheckThemeChanged(bool interacted)
+{
+	const bool undone = std::exchange(themeCheckPending, false);
+	if (!interacted && !undone)
+		return;
+
+	static const json noFile;
+	const std::string& selected = globals::menu->GetSettings().SelectedThemePreset;
+	const auto* info = ThemeManager::GetSingleton()->GetThemeInfo(selected);
+	const json& source = info && info->themeData.contains("Theme") ? info->themeData["Theme"] : noFile;
+	if (source != themeReferenceSource) {
+		themeReferenceSource = source;
+		themeReference = Menu::ThemeSettings{};
+		if (!source.is_null()) {
+			try {
+				Menu::ThemeFromJson(source, themeReference);
+			} catch (const std::exception& e) {
+				logger::warn("Could not read theme '{}': {}", selected, e.what());
+				themeReference = Menu::ThemeSettings{};
+			}
+		}
+	}
+	themeDirty = Menu::ThemeToJson(globals::menu->GetSettings().Theme) != Menu::ThemeToJson(themeReference);
+}
+
+void SettingsTabRenderer::RenderThemeUnsavedBanner()
+{
+	if (!IsThemeDirty())
+		return;
+
+	if (Util::StatusBanner(MenuIcons::kSave, T("menu.settings.theme_unsaved_banner", "Unsaved theme changes. Click to open the Theme page, where they're saved."), Util::Colors::GetUnsaved()))
+		globals::menu->GetSettings().LastSettingsSection = std::string(Ids::kTheme);
+	ImGui::Spacing();
 }
 
 void SettingsTabRenderer::RenderShadersSection()
@@ -916,10 +944,9 @@ void SettingsTabRenderer::RenderThemesSection()
 	auto& themeSettings = globals::menu->GetSettings().Theme;
 
 	// Static variables for popup state and new theme creation
-	static Util::ConfirmationPopup deleteThemePopup(
-		T("menu.settings.delete_theme_title", "Delete Theme"), "",
-		T("menu.settings.delete_button", "Delete"),
-		T("menu.settings.cancel", "Cancel"));
+	static Util::ConfirmationPopup deleteThemePopup;
+	static Util::ConfirmationPopup switchThemePopup;
+	static std::string pendingTheme;
 	static bool showCreateThemePopup = false;
 	static char newThemeName[128] = "";
 	static char newThemeDisplayName[128] = "";
@@ -985,13 +1012,28 @@ void SettingsTabRenderer::RenderThemesSection()
 	}
 
 	// Theme preset dropdown
+	const int previousItem = currentItem;
 	if (ComboWithFont("##ThemePreset", &currentItem, items.data(), static_cast<int>(items.size()), Menu::FontRole::Body)) {
 		std::string selectedTheme = themes[currentItem].name;
-		if (selectedTheme != currentThemePreset && globals::menu->LoadThemePreset(selectedTheme)) {
-			// Theme loaded successfully, update UI
-			currentThemePreset = selectedTheme;
-			showUpdateFeedback = false;
+		if (selectedTheme != currentThemePreset) {
+			if (IsThemeDirty()) {
+				pendingTheme = selectedTheme;
+				switchThemePopup.title = T("menu.settings.switch_theme_title", "Discard Theme Changes");
+				switchThemePopup.message = T("menu.settings.switch_theme_confirm", "Switching themes discards your unsaved theme changes.");
+				switchThemePopup.confirmLabel = T("menu.settings.discard_and_switch", "Discard & Switch");
+				switchThemePopup.cancelLabel = T("menu.settings.cancel", "Cancel");
+				switchThemePopup.Request();
+				currentItem = previousItem;
+			} else if (globals::menu->LoadThemePreset(selectedTheme)) {
+				// Theme loaded successfully, update UI
+				currentThemePreset = selectedTheme;
+				showUpdateFeedback = false;
+			}
 		}
+	}
+	if (switchThemePopup.Draw() && globals::menu->LoadThemePreset(pendingTheme)) {
+		currentThemePreset = pendingTheme;
+		showUpdateFeedback = false;
 	}
 
 	if (Util::LabeledButton("##RefreshThemes", Icons::TI(ICON_TI_REFRESH), T("menu.settings.refresh", "Refresh"))) {
@@ -1041,7 +1083,7 @@ void SettingsTabRenderer::RenderThemesSection()
 	const auto* currentThemeInfo = themeManager->GetThemeInfo(currentThemePreset);
 
 	if (!isPreset) {
-		if (Util::ButtonWithFlash("##SaveTheme", MenuIcons::kSave, T("menu.settings.save_theme", "Save Theme"))) {
+		if (ThemeSaveButton("##SaveTheme", MenuIcons::kSave, T("menu.settings.save_theme", "Save Theme"), IsThemeDirty())) {
 			if (currentThemeInfo) {
 				// Get current settings
 				json currentThemeJson;
@@ -1106,7 +1148,8 @@ void SettingsTabRenderer::RenderThemesSection()
 		ImGui::SameLine();
 	}
 
-	if (Util::ButtonWithFlash("##SaveAsNewTheme", ICON_TI_PLUS, T("menu.settings.save_as_new_theme", "Save As New Theme"))) {
+	// Built-in themes can't be overwritten, so Save As New is their save
+	if (ThemeSaveButton("##SaveAsNewTheme", ICON_TI_PLUS, T("menu.settings.save_as_new_theme", "Save As New Theme"), isPreset && IsThemeDirty())) {
 		showCreateThemePopup = true;
 		memset(newThemeName, 0, sizeof(newThemeName));
 		memset(newThemeDisplayName, 0, sizeof(newThemeDisplayName));
@@ -1114,9 +1157,18 @@ void SettingsTabRenderer::RenderThemesSection()
 		showValidationError = false;
 	}
 
+	if (IsThemeDirty()) {
+		ImGui::SameLine();
+		if (Util::ButtonWithFlash("##RevertTheme", MenuIcons::kRestore, T("menu.settings.revert_theme", "Revert")))
+			globals::menu->LoadThemePreset(currentThemePreset);
+	}
+
 	if (!isPreset && currentThemeInfo && !currentThemeInfo->filePath.empty()) {
 		ImGui::SameLine();
 		if (Util::ErrorButtonWithFlash("##DeleteTheme", ICON_TI_TRASH, T("menu.settings.delete_theme", "Delete"))) {
+			deleteThemePopup.title = T("menu.settings.delete_theme_title", "Delete Theme");
+			deleteThemePopup.confirmLabel = T("menu.settings.delete_button", "Delete");
+			deleteThemePopup.cancelLabel = T("menu.settings.cancel", "Cancel");
 			deleteThemePopup.message =
 				std::string(T("menu.settings.delete_theme_confirm_part1",
 					"Are you sure you want to delete the theme '")) +

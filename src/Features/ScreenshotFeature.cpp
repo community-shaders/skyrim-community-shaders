@@ -13,6 +13,7 @@
 #include "Globals.h"
 #include "I18n/I18n.h"
 #include "Menu.h"
+#include "State.h"
 #include "Utils/D3D.h"
 #include "Utils/FileSystem.h"
 
@@ -37,7 +38,6 @@ namespace
 	{
 		ID3D11Texture2D* texture = nullptr;
 		ID3D11ShaderResourceView* srv = nullptr;
-		ID3D11ShaderResourceView* uiSRV = nullptr;
 		// kFRAMEBUFFER's SRV aliases the swap-chain backbuffer, which ImGui's DX11
 		// backend can't sample directly. When true, the preview path copies through
 		// the SRV-readable cache instead.
@@ -366,15 +366,18 @@ namespace
 			}
 		}
 
+		if (!IsFlatHdrScreenshotCapture()) {
+			if (auto* clean = globals::features::screenshotFeature.GetFreshCleanScene()) {
+				src.texture = clean;
+				src.description = "Pre-UI scene snapshot (no HUD, no menu blur)";
+				return src;
+			}
+		}
+
 		auto& upscaling = globals::features::upscaling;
 		if (IsFlatHdrScreenshotCapture() || upscaling.d3d12SwapChainActive) {
+			// With frame gen the HUD lives in a separate UI buffer, so the back buffer is UI-free.
 			src.texture = ResolveDisplayedBackBuffer(holder);
-			if (upscaling.d3d12SwapChainActive && upscaling.ShouldUseFrameGenerationThisFrame()) {
-				if (!upscaling.dx12SwapChain.swapChainBufferWrapped || !upscaling.dx12SwapChain.uiBufferWrapped)
-					return {};
-				src.srv = upscaling.dx12SwapChain.swapChainBufferWrapped->srv;
-				src.uiSRV = upscaling.dx12SwapChain.uiBufferWrapped->srv;
-			}
 			src.needsPreviewCache = true;
 			src.description = "Swap chain back buffer (display composite)";
 			return src;
@@ -631,11 +634,6 @@ void ScreenshotFeature::ApplyVanillaScreenshotSetting()
 	}
 }
 
-void ScreenshotFeature::ClearShaderCache()
-{
-	compositeCS = nullptr;
-}
-
 void ScreenshotFeature::LoadSettings(json& a_json)
 {
 	if (a_json.contains("ScreenshotPath"))
@@ -789,15 +787,11 @@ void ScreenshotFeature::DrawSettings()
 
 	ImGui::SeparatorText(T(TKEY("crop"), "Crop"));
 
-	// Preview reflects what Capture() would save.
+	// Preview reflects what Capture() would save; asks next frame's pre-UI hook for a snapshot.
+	previewVisible = true;
 	CaptureStateGuard guard(globals::d3d::context);
 	winrt::com_ptr<ID3D11Texture2D> previewTextureKeepAlive;
-	auto src = SelectCaptureSource(previewTextureKeepAlive, /*forCapture=*/false);
-	if (src.texture && src.uiSRV) {
-		src.texture = CompositeCapture(src.texture, src.srv, src.uiSRV);
-		src.srv = src.texture ? compositeTexture->srv.get() : nullptr;
-		src.needsPreviewCache = false;
-	}
+	const auto src = SelectCaptureSource(previewTextureKeepAlive, /*forCapture=*/false);
 
 	ID3D11ShaderResourceView* previewView = src.srv;
 	if (src.texture && (src.needsPreviewCache || !previewView)) {
@@ -810,59 +804,6 @@ void ScreenshotFeature::DrawSettings()
 	}
 
 	subrect.DrawEditor(previewView, src.texture, 1.0f, 0.0f, OpaquePreviewBlendCallback);
-}
-
-ID3D11Texture2D* ScreenshotFeature::CompositeCapture(ID3D11Texture2D* sourceTexture, ID3D11ShaderResourceView* sceneSRV, ID3D11ShaderResourceView* uiSRV)
-{
-	if (!sourceTexture || !sceneSRV || !uiSRV)
-		return nullptr;
-
-	if (!compositeCS) {
-		std::vector<std::pair<const char*, const char*>> defines;
-		compositeCS.attach(static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Screenshot\\CompositeCS.hlsl", defines, "cs_5_0")));
-		if (!compositeCS) {
-			logger::error("Failed to compile screenshot compositor.");
-			return nullptr;
-		}
-	}
-
-	D3D11_TEXTURE2D_DESC desc{};
-	sourceTexture->GetDesc(&desc);
-	if (!compositeTexture || compositeTexture->desc.Width != desc.Width || compositeTexture->desc.Height != desc.Height || compositeTexture->desc.Format != desc.Format) {
-		desc.MipLevels = 1;
-		desc.ArraySize = 1;
-		desc.SampleDesc.Count = 1;
-		desc.SampleDesc.Quality = 0;
-		desc.Usage = D3D11_USAGE_DEFAULT;
-		desc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
-		desc.CPUAccessFlags = 0;
-		desc.MiscFlags = 0;
-		auto texture = std::make_unique<Texture2D>(desc, "Screenshot::Composite");
-		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc{};
-		srvDesc.Format = desc.Format;
-		srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
-		srvDesc.Texture2D.MipLevels = 1;
-		texture->CreateSRV(srvDesc);
-		D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc{};
-		uavDesc.Format = desc.Format;
-		uavDesc.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D;
-		texture->CreateUAV(uavDesc);
-		compositeTexture = std::move(texture);
-	}
-
-	auto* context = globals::d3d::context;
-	ID3D11ShaderResourceView* srvs[2] = { sceneSRV, uiSRV };
-	context->CSSetShaderResources(0, ARRAYSIZE(srvs), srvs);
-	auto* uav = compositeTexture->uav.get();
-	context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
-	context->CSSetShader(compositeCS.get(), nullptr, 0);
-	context->Dispatch((desc.Width + 7) / 8, (desc.Height + 7) / 8, 1);
-	srvs[0] = nullptr;
-	srvs[1] = nullptr;
-	context->CSSetShaderResources(0, ARRAYSIZE(srvs), srvs);
-	uav = nullptr;
-	context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
-	return compositeTexture->resource.get();
 }
 
 void ScreenshotFeature::EnsurePreviewCache(ID3D11Texture2D* sourceTexture)
@@ -919,17 +860,61 @@ void ScreenshotFeature::Reset()
 	}
 }
 
+void ScreenshotFeature::SnapshotCleanScene()
+{
+	const bool previewWanted = std::exchange(previewVisible, false);
+	if (!loaded || !(captureRequested || previewWanted) || IsFlatHdrScreenshotCapture() || !globals::game::renderer)
+		return;
+
+	winrt::com_ptr<ID3D11Texture2D> sceneKeepAlive;
+	auto* scene = globals::features::upscaling.d3d12SwapChainActive ?
+	                  ResolveDisplayedBackBuffer(sceneKeepAlive) :
+	                  ResolveSlotTexture(globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kFRAMEBUFFER], sceneKeepAlive);
+	if (!scene)
+		return;
+
+	D3D11_TEXTURE2D_DESC desc{};
+	scene->GetDesc(&desc);
+	if (!cleanSceneTexture || cleanSceneTexture->desc.Width != desc.Width || cleanSceneTexture->desc.Height != desc.Height || cleanSceneTexture->desc.Format != desc.Format) {
+		desc.MipLevels = 1;
+		desc.ArraySize = 1;
+		desc.SampleDesc.Count = 1;
+		desc.SampleDesc.Quality = 0;
+		desc.Usage = D3D11_USAGE_DEFAULT;
+		desc.BindFlags = 0;
+		desc.CPUAccessFlags = 0;
+		desc.MiscFlags = 0;
+		cleanSceneTexture = std::make_unique<Texture2D>(desc, "Screenshot::CleanScene");
+	}
+	globals::d3d::context->CopyResource(cleanSceneTexture->resource.get(), scene);
+	cleanSceneFrame = globals::state->frameCount;
+}
+
+ID3D11Texture2D* ScreenshotFeature::GetFreshCleanScene() const
+{
+	return cleanSceneTexture && cleanSceneFrame == globals::state->frameCount ? cleanSceneTexture->resource.get() : nullptr;
+}
+
 void ScreenshotFeature::ProcessCaptureRequest()
 {
 	ProcessPendingReadbacks();
-	if (captureRequested.exchange(false)) {
-		try {
-			Capture();
-		} catch (const std::exception& e) {
-			logger::error("Screenshot capture failed: {}", e.what());
-		} catch (...) {
-			logger::error("Screenshot capture failed with an unknown exception.");
-		}
+	if (!captureRequested.exchange(false))
+		return;
+
+	// Hotkeys and the button are handled after the UI draws, so the pre-UI snapshot needs a one-frame wait.
+	if (!IsFlatHdrScreenshotCapture() && !GetFreshCleanScene() && !captureDeferred) {
+		captureDeferred = true;
+		captureRequested = true;
+		return;
+	}
+	captureDeferred = false;
+
+	try {
+		Capture();
+	} catch (const std::exception& e) {
+		logger::error("Screenshot capture failed: {}", e.what());
+	} catch (...) {
+		logger::error("Screenshot capture failed with an unknown exception.");
 	}
 }
 
@@ -1073,11 +1058,7 @@ void ScreenshotFeature::Capture()
 		logger::error("Failed to acquire screenshot source texture ({}).", src.description);
 		return;
 	}
-	ID3D11Texture2D* sourceTexture = src.uiSRV ? CompositeCapture(src.texture, src.srv, src.uiSRV) : src.texture;
-	if (!sourceTexture) {
-		logger::error("Failed to composite screenshot UI.");
-		return;
-	}
+	ID3D11Texture2D* sourceTexture = src.texture;
 
 	D3D11_TEXTURE2D_DESC srcDesc{};
 	sourceTexture->GetDesc(&srcDesc);

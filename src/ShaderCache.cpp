@@ -1031,6 +1031,7 @@ namespace SIE
 				{ "PBRParams2", grassPSConstants.PBRParams2 },
 				{ "PBRParams3", grassPSConstants.PBRParams3 },
 				{ "PBRParams4", grassPSConstants.PBRParams4 },
+				{ "PBRParams5", grassPSConstants.PBRParams5 },
 			};
 
 			auto& particleVS = result[static_cast<size_t>(RE::BSShader::Type::Particle)]
@@ -1754,6 +1755,7 @@ namespace SIE
 								shader.fxpFilename);
 						const auto sourceTime = std::filesystem::last_write_time(shaderSourcePath, ec);
 						if (ec) {
+							diskCacheOutdated = true;
 							logger::debug("Failed to read source mtime for {}: {}", Util::WStringToString(shaderSourcePath), ec.message());
 						} else if (sourceTime > diskCacheTime) {
 							diskCacheOutdated = true;

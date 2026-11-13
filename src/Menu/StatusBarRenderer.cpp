@@ -19,6 +19,8 @@
 #include "Menu/HomePageRenderer.h"
 #include "Menu/MenuHeaderRenderer.h"
 #include "Menu/MenuIcons.h"
+#include "Menu/SettingsSections.h"
+#include "Menu/SettingsTabRenderer.h"
 #include "Menu/ThemeManager.h"
 #include "SaveManager.h"
 #include "ShaderCache.h"
@@ -77,6 +79,25 @@ namespace
 		Icons::DrawCenteredGlyph(drawList, ImVec2(x, min.y), ImVec2(iconSize.x, height), icon, col);
 		drawList->AddText(ImVec2(x + iconSize.x + gap, Util::CenterTextTopY(min.y, height)), col, label);
 		ImGui::PopID();
+		if (tooltip)
+			Util::AddTooltip(tooltip);
+		row.Advance(0.0f);
+		return clicked;
+	}
+
+	/** @brief An unsaved-changes part: a dot and a label in the unsaved colour, then a link. @return True when the link is clicked. */
+	bool UnsavedSegment(Row& row, const char* id, const char* label, const char* link, const char* tooltip)
+	{
+		const ImVec4 unsavedColor = Util::Colors::GetUnsaved();
+		const float spacing = ImGui::GetStyle().ItemSpacing.x;
+		row.Place(ImGui::GetTextLineHeight());
+		Util::DrawInlineIndicatorDot(ImGui::GetColorU32(unsavedColor), true);
+		row.Advance(spacing);
+		row.PlaceText();
+		ImGui::TextColored(unsavedColor, "%s", label);
+		row.Advance(spacing);
+		row.PlaceText();
+		const bool clicked = BrowserUI::Link(id, link);
 		if (tooltip)
 			Util::AddTooltip(tooltip);
 		row.Advance(0.0f);
@@ -183,22 +204,18 @@ namespace StatusBarRenderer
 		// Unsaved changes, with a Save link
 		if (globals::state->HasUnsavedChanges()) {
 			nextSegment();
-			const ImVec4 unsavedColor = Util::Colors::GetUnsaved();
-			const float spacing = ImGui::GetStyle().ItemSpacing.x;
-			row.Place(ImGui::GetTextLineHeight());
-			Util::DrawInlineIndicatorDot(ImGui::GetColorU32(unsavedColor), true);
-			row.Advance(spacing);
-			row.PlaceText();
-			ImGui::TextColored(unsavedColor, "%s", T("menu.status.unsaved", "Unsaved changes"));
-			row.Advance(spacing);
-			row.PlaceText();
-			if (BrowserUI::Link("##StatusSave", T("menu.status.save", "Save")))
+			const auto tooltip = i18n->Format("menu.header.save_tooltip",
+				{ { "shortcut", MenuShortcuts::GetHint(shortcuts, MenuShortcuts::Ids::kSave) } }, "Save settings ({shortcut})");
+			if (UnsavedSegment(row, "##StatusSave", T("menu.status.unsaved", "Unsaved changes"), T("menu.status.save", "Save"), tooltip.c_str()))
 				SaveManager::SaveAll();
-			Util::AddTooltip(i18n->Format("menu.header.save_tooltip",
-									 { { "shortcut", MenuShortcuts::GetHint(shortcuts, MenuShortcuts::Ids::kSave) } },
-									 "Save settings ({shortcut})")
-					.c_str());
-			row.Advance(0.0f);
+		}
+
+		if (SettingsTabRenderer::IsThemeDirty()) {
+			nextSegment();
+			if (UnsavedSegment(row, "##StatusTheme", T("menu.settings.theme_unsaved", "Unsaved theme changes"), T("menu.status.go_to_theme", "Go to Theme"), nullptr)) {
+				globals::menu->GetSettings().LastSettingsSection = std::string(SettingsSectionIds::kTheme);
+				globals::menu->SelectFeatureMenu(std::string(MenuPageIds::kSettings));
+			}
 		}
 
 		auto* shaderCache = globals::shaderCache;
