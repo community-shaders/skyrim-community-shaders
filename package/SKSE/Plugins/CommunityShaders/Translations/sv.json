@@ -1,8 +1,9 @@
 {
     "_meta": {
+        "auto_generated": false,
+        "generator": "Swedish localization port reviewed 2026-10-28",
         "language": "Svenska",
         "locale": "sv",
-        "generator": "Swedish localization port reviewed 2026-10-28",
         "note": "Partiell översättning: saknade nycklar använder engelska som reservtext."
     },
     "common.active": "Aktiv",
@@ -1804,7 +1805,7 @@
     "feature.post_processing.border.the_color_of_the_border": "Kantens färg.",
     "feature.post_processing.border.the_depth_threshold_for_the_border_effect": "Djuptröskeln för kanteffekten.",
     "feature.post_processing.border.the_scale_of_the_border_on_each_side": "Skalan för kanten på varje sida av skärmen.",
-    "feature.post_processing.camera.description": "Kameraeffekter med linsdistorsion, kromatisk aberration, perifer mjukhet och filmkorn.",
+    "feature.post_processing.camera.description": "Kameraeffekter, bland annat fisköga, kromatisk aberration och filmkorn.",
     "feature.post_processing.camera.name": "Kamera",
     "feature.post_processing.cinematic_camera.aperture_blades": "Bländarlameller",
     "feature.post_processing.cinematic_camera.aperture_rotation": "Bländarrotation",
