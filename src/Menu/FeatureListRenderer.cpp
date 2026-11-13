@@ -1293,9 +1293,17 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureHeader(Feature* feat, bo
 
 	const ImVec2 cursorPosAfterHeader = ImGui::GetCursorScreenPos();
 
+	// Controls sit middle-aligned with the title line only (not the description)
+	const float rowY = titleStartPos.y + (titleOnlyHeight - iconSize) * 0.5f;
+	float x = titleStartPos.x + availableWidth - totalButtonWidth;
+	// Chips after the title stop short of the controls on the right
+	const float chipY = titleStartPos.y + titleOnlyHeight - iconSize;
+	const float chipRightLimit = x - buttonSpacing;
+	float chipX = trailingX;
+
 	// Quiet marker while the feature differs from its defaults; clicking restores them like the actions menu does
 	if (canRestore && globals::state->HasUserEdits(feat)) {
-		ImGui::SetCursorScreenPos(ImVec2(trailingX, titleStartPos.y + titleOnlyHeight - iconSize));
+		ImGui::SetCursorScreenPos(ImVec2(chipX, chipY));
 		const ImVec4 secondary = Util::Colors::GetSecondary();
 		bool restore = false;
 		{
@@ -1304,6 +1312,7 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureHeader(Feature* feat, bo
 			restore = BrowserUI::Chip("##FeatureModified", T("menu.features.modified_chip", "Modified"), Icons::TI(ICON_TI_PENCIL), &secondary);
 			ImGui::PopStyleColor();
 		}
+		chipX = ImGui::GetItemRectMax().x + buttonSpacing;
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::TextUnformatted(T("menu.features.modified_chip_tooltip", "Differs from the defaults and your Baseline presets. Click to restore defaults."));
 			if (ImGui::GetIO().KeyShift)
@@ -1315,9 +1324,11 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureHeader(Feature* feat, bo
 			RestoreDefaults(feat);
 	}
 
-	// Controls sit middle-aligned with the title line only (not the description)
-	const float rowY = titleStartPos.y + (titleOnlyHeight - iconSize) * 0.5f;
-	float x = titleStartPos.x + availableWidth - totalButtonWidth;
+	// What the feature's own passes cost per frame; opens the breakdown. Only features with timed passes show it.
+	if (!isDisabled && isLoaded) {
+		ImGui::SetCursorScreenPos(ImVec2(chipX, chipY));
+		ProfilingRenderer::RenderFeatureCostChip(featureName, chipRightLimit);
+	}
 
 	if (isLoaded) {
 		ImGui::SetCursorScreenPos(ImVec2(x, rowY));
@@ -1425,11 +1436,6 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureSettings(Feature* feat, 
 	} else {
 		if (isLoaded) {
 			DrawFeatureBody(feat);
-
-			if (feat != &globals::features::csEditor && ProfilingRenderer::HasFeatureTimers(feat->GetShortName())) {
-				ImGui::SeparatorText(T("menu.features.profiling", "Profiling"));
-				ProfilingRenderer::RenderFeatureTimers(feat->GetShortName());
-			}
 		} else {
 			if (FeatureIssues::IsObsoleteFeature(feat->GetShortName())) {
 				feat->DrawUnloadedUI();

@@ -3770,7 +3770,6 @@
     "menu.profiling.avg": "Medel",
     "menu.profiling.cpu": "CPU",
     "menu.profiling.gpu": "GPU",
-    "menu.profiling.no_timing_data": "Inga tidsdata",
     "menu.profiling.no_timing_data_world": "Inga tidsdata tillgängliga (gå in i spelvärlden)",
     "menu.profiling.p95": "P95",
     "menu.profiling.p99": "P99",

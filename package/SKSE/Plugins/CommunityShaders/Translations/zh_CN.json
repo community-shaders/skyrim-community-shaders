@@ -3643,7 +3643,6 @@
     "menu.profiling.avg": "平均",
     "menu.profiling.cpu": "CPU",
     "menu.profiling.gpu": "GPU",
-    "menu.profiling.no_timing_data": "无计时数据",
     "menu.profiling.no_timing_data_world": "无可用计时数据（请进入游戏世界）",
     "menu.profiling.p95": "P95",
     "menu.profiling.p99": "P99",
