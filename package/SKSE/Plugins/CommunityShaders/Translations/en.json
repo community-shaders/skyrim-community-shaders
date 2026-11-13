@@ -2787,7 +2787,6 @@
     "feature.screen_space_gi.ao_radius_tooltip": "A smaller radius produces tighter AO.",
     "feature.screen_space_gi.blur": "Blur",
     "feature.screen_space_gi.blur_radius": "Blur Radius",
-    "feature.screen_space_gi.buffer_viewer": "Buffer Viewer",
     "feature.screen_space_gi.custom": "Custom",
     "feature.screen_space_gi.denoising": "Denoising",
     "feature.screen_space_gi.depth_fade_range": "Depth Fade Range",

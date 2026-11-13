@@ -335,23 +335,19 @@ void ScreenSpaceGI::DrawDebugSection()
 	if (!section)
 		return;
 
-	if (ImGui::TreeNode(T(TKEY("buffer_viewer"), "Buffer Viewer"))) {
-		static float debugRescale = .3f;
-		ImGui::SliderFloat(T(TKEY("view_resize"), "View Resize"), &debugRescale, 0.f, 1.f);
+	static float debugRescale = .3f;
+	ImGui::SliderFloat(T(TKEY("view_resize"), "View Resize"), &debugRescale, 0.f, 1.f);
 
-		BUFFER_VIEWER_NODE(texNoise, debugRescale)
-		BUFFER_VIEWER_NODE(texWorkingDepth, debugRescale)
-		BUFFER_VIEWER_NODE(texPrevGeo, debugRescale)
-		BUFFER_VIEWER_NODE(texRadiance, debugRescale)
-		BUFFER_VIEWER_NODE(texAo[0], debugRescale)
-		BUFFER_VIEWER_NODE(texAo[1], debugRescale)
-		BUFFER_VIEWER_NODE(texIlY[0], debugRescale)
-		BUFFER_VIEWER_NODE(texIlY[1], debugRescale)
-		BUFFER_VIEWER_NODE(texIlCoCg[0], debugRescale)
-		BUFFER_VIEWER_NODE(texIlCoCg[1], debugRescale)
-
-		ImGui::TreePop();
-	}
+	BUFFER_VIEWER_NODE(texNoise, debugRescale)
+	BUFFER_VIEWER_NODE(texWorkingDepth, debugRescale)
+	BUFFER_VIEWER_NODE(texPrevGeo, debugRescale)
+	BUFFER_VIEWER_NODE(texRadiance, debugRescale)
+	BUFFER_VIEWER_NODE(texAo[0], debugRescale)
+	BUFFER_VIEWER_NODE(texAo[1], debugRescale)
+	BUFFER_VIEWER_NODE(texIlY[0], debugRescale)
+	BUFFER_VIEWER_NODE(texIlY[1], debugRescale)
+	BUFFER_VIEWER_NODE(texIlCoCg[0], debugRescale)
+	BUFFER_VIEWER_NODE(texIlCoCg[1], debugRescale)
 }
 
 void ScreenSpaceGI::LoadSettings(json& o_json)
