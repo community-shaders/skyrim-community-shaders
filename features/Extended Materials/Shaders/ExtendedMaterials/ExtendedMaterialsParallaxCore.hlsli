@@ -1,16 +1,21 @@
 #ifndef EXTENDED_MATERIALS_PARALLAX_CORE_HLSLI
 #define EXTENDED_MATERIALS_PARALLAX_CORE_HLSLI
 
+// EM_PARALLAX_CUSTOM_HEIGHT swaps the height texture for EMParallaxCustomHeight in the non-landscape march and soft shadow.
+#if defined(LANDSCAPE) && defined(EM_PARALLAX_CUSTOM_HEIGHT)
+#	error EM_PARALLAX_CUSTOM_HEIGHT has no landscape path
+#endif
+
 #if defined(LANDSCAPE)
 float2 GetParallaxCoords(PS_INPUT input, float distance, float2 coords, float mipLevels[6], float maxTexDim, float3 viewDir, float3x3 tbn, float noise, DisplacementParams params[6],
 	StochasticOffsets sharedOffset,
-	out float pixelOffset,
+	out float2 surfaceHeight,
 	out float weights[6])
 #else
-float2 GetParallaxCoords(float distance, float2 coords, float mipLevel, float3 viewDir, float3x3 tbn, float noise, Texture2D<float4> tex, SamplerState texSampler, uint channel, DisplacementParams params, bool applyMeshTV, StochasticOffsets meshOffset, out float pixelOffset)
+float2 GetParallaxCoords(float distance, float2 coords, float mipLevel, float3 viewDir, float3x3 tbn, float noise, Texture2D<float4> tex, SamplerState texSampler, uint channel, DisplacementParams params, bool applyMeshTV, StochasticOffsets meshOffset, out float2 surfaceHeight)
 #endif
 {
-	pixelOffset = 0.0;
+	surfaceHeight = float2(0.5, 0.0);
 #if defined(LANDSCAPE)
 	maxTexDim = maxTexDim;
 #endif
@@ -88,7 +93,14 @@ float2 GetParallaxCoords(float distance, float2 coords, float mipLevel, float3 v
 			currHeight = GetTerrainHeightQuadRayMarch(noise, input, currentOffset[0].xy, currentOffset[0].zw, currentOffset[1].xy, currentOffset[1].zw, mipLevels, params, blendFactor, w1, w2, sharedOffset, weights) + 0.5;
 #	endif
 #else
-#	if defined(TERRAIN_VARIATION)
+#	if defined(EM_PARALLAX_CUSTOM_HEIGHT)
+			// The includer defines EM_PARALLAX_CUSTOM_HEIGHT and float EMParallaxCustomHeight(float2 uv, float mip).
+			currHeight.x = EMParallaxCustomHeight(currentOffset[0].xy, mipLevel);
+			currHeight.y = EMParallaxCustomHeight(currentOffset[0].zw, mipLevel);
+			currHeight.z = EMParallaxCustomHeight(currentOffset[1].xy, mipLevel);
+			currHeight.w = EMParallaxCustomHeight(currentOffset[1].zw, mipLevel);
+#	else
+#		if defined(TERRAIN_VARIATION)
 			[branch] if (applyMeshTV)
 			{
 				currHeight.x = StochasticHeightChannel(tex, texSampler, currentOffset[0].xy, mipLevel, channel, meshOffset);
@@ -97,13 +109,14 @@ float2 GetParallaxCoords(float distance, float2 coords, float mipLevel, float3 v
 				currHeight.w = StochasticHeightChannel(tex, texSampler, currentOffset[1].zw, mipLevel, channel, meshOffset);
 			}
 			else
-#	endif
+#		endif
 			{
 				currHeight.x = tex.SampleLevel(texSampler, currentOffset[0].xy, mipLevel)[channel];
 				currHeight.y = tex.SampleLevel(texSampler, currentOffset[0].zw, mipLevel)[channel];
 				currHeight.z = tex.SampleLevel(texSampler, currentOffset[1].xy, mipLevel)[channel];
 				currHeight.w = tex.SampleLevel(texSampler, currentOffset[1].zw, mipLevel)[channel];
 			}
+#	endif
 
 			currHeight = AdjustDisplacementNormalized(currHeight, params);
 #endif
@@ -177,7 +190,7 @@ float2 GetParallaxCoords(float distance, float2 coords, float mipLevel, float3 v
 #endif
 			nearBlendToFar *= nearBlendToFar;
 		float offset = (1.0 - parallaxAmount) * -maxHeight + minHeight;
-		pixelOffset = saturate(lerp(parallaxAmount, 0.5, nearBlendToFar));
+		surfaceHeight = float2(saturate(parallaxAmount), contactRefinement ? (1.0 - nearBlendToFar) * smoothstep(0.0, 0.01, scale) : 0.0);
 		resultCoords = lerp(viewDirTS.xy * offset + coords.xy, coords, nearBlendToFar);
 	} else {
 #if defined(LANDSCAPE)
@@ -188,7 +201,7 @@ float2 GetParallaxCoords(float distance, float2 coords, float mipLevel, float3 v
 		weights[4] = input.LandBlendWeights2.x;
 		weights[5] = input.LandBlendWeights2.y;
 #endif
-		pixelOffset = 0.0;
+		surfaceHeight = float2(0.5, 0.0);
 	}
 
 	return resultCoords;
@@ -196,6 +209,7 @@ float2 GetParallaxCoords(float distance, float2 coords, float mipLevel, float3 v
 
 #if !defined(LANDSCAPE)
 // https://advances.realtimerendering.com/s2006/Tatarchuk-POM.pdf
+// With EM_PARALLAX_CUSTOM_HEIGHT the taps read EMParallaxCustomHeight, and the caller passes sh0 from it.
 float GetParallaxSoftShadowMultiplier(float2 coords, float mipLevel, float3 L, float sh0, Texture2D<float4> tex, SamplerState texSampler, uint channel, float quality, float noise, DisplacementParams params, bool applyMeshTV, StochasticOffsets meshOffset)
 {
 	[branch] if (quality > 0.0)
@@ -206,7 +220,16 @@ float GetParallaxSoftShadowMultiplier(float2 coords, float mipLevel, float3 L, f
 		float2 rayDir = L.xy * 0.1 * params.HeightScale;
 		float4 multipliers = rcp((float4(1, 2, 3, 4) + noise));
 		float4 sh = sh0.xxxx;
-#	if defined(TERRAIN_VARIATION)
+#	if defined(EM_PARALLAX_CUSTOM_HEIGHT)
+		sh.x = AdjustDisplacementNormalized(EMParallaxCustomHeight(coords + rayDir * multipliers.x, mipLevel), params);
+		if (quality > 0.25)
+			sh.y = AdjustDisplacementNormalized(EMParallaxCustomHeight(coords + rayDir * multipliers.y, mipLevel), params);
+		if (quality > 0.5)
+			sh.z = AdjustDisplacementNormalized(EMParallaxCustomHeight(coords + rayDir * multipliers.z, mipLevel), params);
+		if (quality > 0.75)
+			sh.w = AdjustDisplacementNormalized(EMParallaxCustomHeight(coords + rayDir * multipliers.w, mipLevel), params);
+#	else
+#		if defined(TERRAIN_VARIATION)
 		[branch] if (applyMeshTV)
 		{
 			sh.x = AdjustDisplacementNormalized(StochasticHeightChannel(tex, texSampler, coords + rayDir * multipliers.x, mipLevel, channel, meshOffset), params);
@@ -218,7 +241,7 @@ float GetParallaxSoftShadowMultiplier(float2 coords, float mipLevel, float3 L, f
 				sh.w = AdjustDisplacementNormalized(StochasticHeightChannel(tex, texSampler, coords + rayDir * multipliers.w, mipLevel, channel, meshOffset), params);
 		}
 		else
-#	endif
+#		endif
 		{
 			sh.x = AdjustDisplacementNormalized(tex.SampleLevel(texSampler, coords + rayDir * multipliers.x, mipLevel)[channel], params);
 			if (quality > 0.25)
@@ -228,6 +251,7 @@ float GetParallaxSoftShadowMultiplier(float2 coords, float mipLevel, float3 L, f
 			if (quality > 0.75)
 				sh.w = AdjustDisplacementNormalized(tex.SampleLevel(texSampler, coords + rayDir * multipliers.w, mipLevel)[channel], params);
 		}
+#	endif
 		return 1.0 - saturate(dot(max(0, sh - sh0), shadowStrength));
 	}
 	return 1.0;

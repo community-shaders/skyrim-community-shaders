@@ -209,6 +209,15 @@ public:
 	const GlintParameters& GetGlintParameters() const;
 
 	inline static std::unordered_map<BSLightingShaderMaterialPBR*, MaterialExtensions> All;
+	/** @brief Guards All: materials are created, copied and destroyed on the main thread and on background loader threads (Clone3D, NIF loads). Recursive for ApplyTextureSetData inside the settings iterations; never held across engine calls. */
+	inline static std::recursive_mutex AllMutex;
+
+	/** @brief Returns the material's extensions, creating them on first use; locks AllMutex for the lookup only. */
+	static MaterialExtensions& GetExtensions(BSLightingShaderMaterialPBR* material)
+	{
+		std::lock_guard lock(AllMutex);
+		return All[material];
+	}
 
 	// members
 	RE::BSShaderMaterial::Feature loadedWithFeature = RE::BSShaderMaterial::Feature::kDefault;
