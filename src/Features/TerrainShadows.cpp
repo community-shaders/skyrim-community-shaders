@@ -21,10 +21,10 @@ namespace
 	}
 
 	class TimeJumpEventHandler :
-		public RE::BSTEventSink<RE::TESWaitStopEvent>,
-		public RE::BSTEventSink<RE::TESSleepStopEvent>,
-		public RE::BSTEventSink<RE::TESFastTravelEndEvent>,
-		public RE::BSTEventSink<RE::BGSActorCellEvent>
+	    public RE::BSTEventSink<RE::TESWaitStopEvent>,
+	    public RE::BSTEventSink<RE::TESSleepStopEvent>,
+	    public RE::BSTEventSink<RE::TESFastTravelEndEvent>,
+	    public RE::BSTEventSink<RE::BGSActorCellEvent>
 	{
 	public:
 		RE::BSEventNotifyControl ProcessEvent(const RE::TESWaitStopEvent*, RE::BSTEventSource<RE::TESWaitStopEvent>*) override
@@ -205,29 +205,26 @@ void TerrainShadows::DrawSettings()
 				curr_worldspace_name = worldspace->GetName();
 			}
 		}
-		ImGui::Text(fmt::format("Current worldspace: {} ({})", curr_worldspace, curr_worldspace_name).c_str());
-		ImGui::Text(fmt::format("Has height map: {}", heightmaps.contains(curr_worldspace)).c_str());
+		ImGui::TextUnformatted(fmt::format("Current worldspace: {} ({})", curr_worldspace, curr_worldspace_name).c_str());
+		ImGui::TextUnformatted(fmt::format("Has height map: {}", heightmaps.contains(curr_worldspace)).c_str());
 
 		ImGui::Separator();
 
 		ImGui::BulletText("shadowUpdateCBData");
 		ImGui::Indent();
 		{
-			ImGui::Text(fmt::format("LightPxDir: ({}, {})", shadowUpdateCBData.LightPxDir.x, shadowUpdateCBData.LightPxDir.y).c_str());
-			ImGui::Text(fmt::format("LightDeltaZ: ({}, {})", shadowUpdateCBData.LightDeltaZ.x, shadowUpdateCBData.LightDeltaZ.y).c_str());
-			ImGui::Text(fmt::format("StartPxCoord: {}", shadowUpdateCBData.StartPxCoord).c_str());
-			ImGui::Text(fmt::format("PxSize: ({}, {})", shadowUpdateCBData.PxSize.x, shadowUpdateCBData.PxSize.y).c_str());
+			ImGui::TextUnformatted(fmt::format("LightPxDir: ({}, {})", shadowUpdateCBData.LightPxDir.x, shadowUpdateCBData.LightPxDir.y).c_str());
+			ImGui::TextUnformatted(fmt::format("LightDeltaZ: ({}, {})", shadowUpdateCBData.LightDeltaZ.x, shadowUpdateCBData.LightDeltaZ.y).c_str());
+			ImGui::TextUnformatted(fmt::format("StartPxCoord: {}", shadowUpdateCBData.StartPxCoord).c_str());
+			ImGui::TextUnformatted(fmt::format("PxSize: ({}, {})", shadowUpdateCBData.PxSize.x, shadowUpdateCBData.PxSize.y).c_str());
 		}
 		ImGui::Unindent();
 
-		if (ImGui::TreeNode(T(TKEY("buffer_viewer"), "Buffer Viewer"))) {
-			static float debugRescale = .1f;
-			ImGui::SliderFloat("View Resize", &debugRescale, 0.f, 1.f);
+		static float debugRescale = .1f;
+		ImGui::SliderFloat("View Resize", &debugRescale, 0.f, 1.f);
 
-			if (texShadowHeight) {
-				BUFFER_VIEWER_NODE_BULLET(texShadowHeight, debugRescale)
-			}
-			ImGui::TreePop();
+		if (texShadowHeight) {
+			BUFFER_VIEWER_NODE_BULLET(texShadowHeight, debugRescale)
 		}
 	}
 }

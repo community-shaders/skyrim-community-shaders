@@ -15,6 +15,13 @@ namespace Util
 		return v.substr(0, v.find_last_of("."));
 	}
 
+	std::string GetBuildLabel()
+	{
+		if (Plugin::BUILD_BRANCH.empty())
+			return std::format("[{}]", Plugin::BUILD_DESCRIBE);
+		return std::format("[{}][{}]", Plugin::BUILD_BRANCH, Plugin::BUILD_DESCRIBE);
+	}
+
 	std::string DefinesToString(const std::vector<std::pair<const char*, const char*>>& defines)
 	{
 		std::string result;
@@ -264,6 +271,65 @@ namespace Util
 	{
 		std::transform(text.begin(), text.end(), text.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
 		return text;
+	}
+
+	char32_t NextCodepoint(std::string_view text, size_t& pos)
+	{
+		const auto byte = [&](size_t i) { return static_cast<unsigned char>(text[i]); };
+		const unsigned char lead = byte(pos);
+		const size_t length = lead < 0x80 ? 1 : (lead >> 5) == 0x6 ? 2 :
+		                                    (lead >> 4) == 0xE     ? 3 :
+		                                    (lead >> 3) == 0x1E    ? 4 :
+		                                                             0;
+		if (length <= 1 || pos + length > text.size()) {
+			++pos;
+			return lead;
+		}
+		char32_t c = lead & (0x7F >> length);
+		for (size_t i = 1; i < length; ++i) {
+			if ((byte(pos + i) & 0xC0) != 0x80) {
+				++pos;
+				return lead;
+			}
+			c = (c << 6) | (byte(pos + i) & 0x3F);
+		}
+		pos += length;
+		return c;
+	}
+
+	char32_t FoldCodepoint(char32_t c)
+	{
+		if (c < 0x80)
+			return (c >= 'A' && c <= 'Z') ? c + ('a' - 'A') : c;
+		if (c > 0xFFFF)
+			return c;
+		// CharLowerW given a value below 0x10000 lowercases that one character, independent of the C locale
+		return static_cast<char32_t>(reinterpret_cast<std::uintptr_t>(CharLowerW(reinterpret_cast<LPWSTR>(static_cast<std::uintptr_t>(c)))));
+	}
+
+	std::string FoldForSearch(std::string_view text)
+	{
+		std::string folded;
+		folded.reserve(text.size());
+		for (size_t pos = 0; pos < text.size();) {
+			const char32_t c = FoldCodepoint(NextCodepoint(text, pos));
+			if (c < 0x80) {
+				folded += static_cast<char>(c);
+			} else if (c < 0x800) {
+				folded += static_cast<char>(0xC0 | (c >> 6));
+				folded += static_cast<char>(0x80 | (c & 0x3F));
+			} else if (c < 0x10000) {
+				folded += static_cast<char>(0xE0 | (c >> 12));
+				folded += static_cast<char>(0x80 | ((c >> 6) & 0x3F));
+				folded += static_cast<char>(0x80 | (c & 0x3F));
+			} else {
+				folded += static_cast<char>(0xF0 | (c >> 18));
+				folded += static_cast<char>(0x80 | ((c >> 12) & 0x3F));
+				folded += static_cast<char>(0x80 | ((c >> 6) & 0x3F));
+				folded += static_cast<char>(0x80 | (c & 0x3F));
+			}
+		}
+		return folded;
 	}
 
 	std::string GetShaderDefinesSuffix(const std::string& definesStr)

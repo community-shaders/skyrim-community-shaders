@@ -54,7 +54,7 @@ option(
 option(TRACY_SUPPORT "Enable support for tracy profiler" OFF)
 option(
     NVPERF_SUPPORT
-    "Enable the Nsight Perf range profiler in Remote Control (requires NVPERF_SDK_ROOT)"
+    "Enable the Nsight Perf range profiler in Developer Tools (requires NVPERF_SDK_ROOT)"
     OFF
 )
 set(NVPERF_SDK_ROOT
@@ -85,10 +85,49 @@ if(GIT_FOUND)
         OUTPUT_STRIP_TRAILING_WHITESPACE
         ERROR_QUIET
     )
+    execute_process(
+        COMMAND ${GIT_EXECUTABLE} branch --show-current
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        OUTPUT_VARIABLE GIT_BRANCH
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
+    execute_process(
+        COMMAND ${GIT_EXECUTABLE} rev-parse --short=9 HEAD
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        OUTPUT_VARIABLE GIT_HASH
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
+    execute_process(
+        COMMAND ${GIT_EXECUTABLE} status --porcelain --untracked-files=no
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        OUTPUT_VARIABLE _git_status
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
+    if(_git_status STREQUAL "")
+        set(GIT_DIRTY "false")
+    else()
+        set(GIT_DIRTY "true")
+    endif()
+    # CI PR checkouts are detached, so use the PR's source branch
+    if(GIT_BRANCH STREQUAL "" AND NOT "$ENV{GITHUB_HEAD_REF}" STREQUAL "")
+        set(GIT_BRANCH "$ENV{GITHUB_HEAD_REF}")
+    endif()
+    # Untrusted (PR authors pick it) and lands in a C++ string literal
+    string(REGEX REPLACE "[^A-Za-z0-9._/-]" "_" GIT_BRANCH "${GIT_BRANCH}")
+    # Only CI artifacts are official builds
+    if(NOT GIT_BRANCH STREQUAL "" AND NOT "$ENV{CI}" STREQUAL "true")
+        string(APPEND GIT_BRANCH "*")
+    endif()
 else()
     set(GIT_DESCRIBE "unknown")
+    set(GIT_HASH "")
+    set(GIT_DIRTY "false")
 endif()
 message("\tBuild version: ${GIT_DESCRIBE}")
+message("\tBuild branch: ${GIT_BRANCH}")
 
 # #######################################################################################################################
 # # Add CMake features
@@ -463,7 +502,7 @@ add_custom_command(
         "${CMAKE_CURRENT_SOURCE_DIR}/cmake/generate_scene_settings_catalog.py"
         --source-dir "${CMAKE_CURRENT_SOURCE_DIR}" --out-dir
         "${SCENE_SETTINGS_CATALOG_DIR}" --min-entries 645 --min-controllable 538
-        --min-controllable-features 30 --feature-floors
+        --min-controllable-features 32 --feature-floors
         "${SCENE_SETTINGS_CATALOG_FLOORS}" --stamp
         "${SCENE_SETTINGS_CATALOG_STAMP}"
     DEPENDS
@@ -877,16 +916,19 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
         )
     endif()
 
-    # Only copy shaders when HLSL files change; copy individually so unchanged
-    # files do not get their timestamps updated.
+    # Only copy shaders when a copied file changes; copy individually so unchanged
+    # files do not get their timestamps updated. Depend on every copied file, the
+    # feature .ini files included, not just HLSL_FILES.
     file(
         GLOB_RECURSE _package_shaders
         LIST_DIRECTORIES FALSE
+        CONFIGURE_DEPENDS
         "${CMAKE_SOURCE_DIR}/package/Shaders/*"
     )
     # Exclude test files from production packages
     list(FILTER _package_shaders EXCLUDE REGEX "/Tests/")
     set(_shader_copy_cmds)
+    set(_shader_copy_inputs ${_package_shaders})
 
     set(_feature_shader_paths_file
         "${CMAKE_CURRENT_BINARY_DIR}/feature_shader_paths.txt"
@@ -918,9 +960,11 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
             file(
                 GLOB_RECURSE _feat_shaders
                 LIST_DIRECTORIES FALSE
+                CONFIGURE_DEPENDS
                 "${_fpath}/Shaders/*"
             )
             list(FILTER _feat_shaders EXCLUDE REGEX "/Tests/")
+            list(APPEND _shader_copy_inputs ${_feat_shaders})
             append_copy_if_different(_shader_copy_cmds _feat_shaders "${_fpath}/Shaders" "${AIO_DIR}/Shaders")
         endif()
     endforeach()
@@ -932,7 +976,7 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
             ${_shader_copy_cmds}
         COMMAND ${CMAKE_COMMAND} -E touch copy_shaders.stamp
         DEPENDS
-            ${HLSL_FILES}
+            ${_shader_copy_inputs}
             ${CMAKE_SOURCE_DIR}/cmake/CleanupStaleEntries.cmake
         COMMENT "Copying changed shaders into AIO/Shaders"
     )

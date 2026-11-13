@@ -7,6 +7,7 @@
 #include "Common/Color.hlsli"
 #include "Common/ColorManagement.hlsli"
 #include "Common/Math.hlsli"
+#include "DynamicCubemaps/CubemapCommon.hlsli"
 
 static const float Epsilon = 0.00001;
 
@@ -67,42 +68,6 @@ float ndfGGX(float cosLh, float roughness)
 	return alphaSq / (Math::PI * denom * denom);
 }
 
-// Calculate normalized sampling direction vector based on current fragment coordinates.
-// This is essentially "inverse-sampling": we reconstruct what the sampling vector would be if we wanted it to "hit"
-// this particular fragment in a cubemap.
-float3 getSamplingVector(uint3 ThreadID)
-{
-	float outputWidth, outputHeight, outputDepth;
-	outputTexture.GetDimensions(outputWidth, outputHeight, outputDepth);
-
-	float2 st = ThreadID.xy / float2(outputWidth, outputHeight);
-	float2 uv = 2.0 * float2(st.x, 1.0 - st.y) - 1.0;
-
-	// Select vector based on cubemap face index.
-	float3 ret = 0.0f;
-	switch (ThreadID.z) {
-	case 0:
-		ret = float3(1.0, uv.y, -uv.x);
-		break;
-	case 1:
-		ret = float3(-1.0, uv.y, uv.x);
-		break;
-	case 2:
-		ret = float3(uv.x, 1.0, -uv.y);
-		break;
-	case 3:
-		ret = float3(uv.x, -1.0, uv.y);
-		break;
-	case 4:
-		ret = float3(uv.x, uv.y, 1.0);
-		break;
-	case 5:
-		ret = float3(-uv.x, uv.y, -1.0);
-		break;
-	}
-	return normalize(ret);
-}
-
 // Compute orthonormal basis for converting from tanget/shading space to world space.
 void computeBasisVectors(const float3 N, out float3 S, out float3 T)
 {
@@ -137,7 +102,7 @@ float3 tangentToWorld(const float3 v, const float3 N, const float3 S, const floa
 	float wt = 4.0 * Math::PI / (6 * inputWidth * inputHeight);
 
 	// Approximation: Assume zero viewing angle (isotropic reflections).
-	float3 N = getSamplingVector(ThreadID);
+	float3 N = GetCubemapSamplingVector(ThreadID, float2(outputWidth, outputHeight));
 	float3 Lo = N;
 
 	float3 S, T;

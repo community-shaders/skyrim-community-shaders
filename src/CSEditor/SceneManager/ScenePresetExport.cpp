@@ -368,7 +368,7 @@ namespace
 		ImGui::PushID(pack.id.c_str());
 		const ImVec2 rowOrigin = ImGui::GetCursorScreenPos();
 		const float rowHeight = ImGui::GetTextLineHeightWithSpacing() * 2.0f;
-		const bool clicked = ImGui::Selectable("##row", selected, ImGuiSelectableFlags_AllowOverlap, ImVec2(0.0f, rowHeight));
+		const bool clicked = Util::Selectable("##row", selected, ImGuiSelectableFlags_AllowOverlap, ImVec2(0.0f, rowHeight));
 
 		ImGui::SetCursorScreenPos(ImVec2(rowOrigin.x + ImGui::GetStyle().FramePadding.x, rowOrigin.y));
 		ImGui::BeginGroup();
@@ -404,8 +404,7 @@ namespace
 			pickerSearch.clear();
 			ImGui::SetKeyboardFocusHere();
 		}
-		ImGui::SetNextItemWidth(-1);
-		ImGui::InputTextWithHint("##ScenePresetExportPickerSearch", T("menu.presets.search", "Search presets..."), &pickerSearch);
+		Util::SearchField("##ScenePresetExportPickerSearch", pickerSearch, T("menu.presets.search", "Search presets..."), -1.0f, false);
 
 		auto& catalog = UnifiedPresetCatalog::GetSingleton();
 		const auto currentId = Util::FileHelpers::SanitizeFileName(form.name);
@@ -589,9 +588,14 @@ namespace
 			status = T(TKEY("scene_export_artwork_none"), "None");
 		}
 
-		ImGui::TextDisabled("%s", status.c_str());
+		const char* browseLabel = T(TKEY("scene_export_browse"), "Browse");
+		const char* clearLabel = T(TKEY("scene_export_clear"), "Clear");
+		const float buttonsWidth = ImGui::CalcTextSize(browseLabel).x + ImGui::CalcTextSize(clearLabel).x +
+		                           style.FramePadding.x * 4.0f + style.ItemInnerSpacing.x;
+		BrowserUI::EllipsizedText(status.c_str(), std::max(1.0f, ImGui::GetContentRegionAvail().x - buttonsWidth - style.ItemSpacing.x),
+			ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
 		ImGui::SameLine(0.0f, style.ItemSpacing.x);
-		if (ImGui::SmallButton(std::format("{}##Browse{}", T(TKEY("scene_export_browse"), "Browse"), label).c_str())) {
+		if (ImGui::SmallButton(std::format("{}##Browse{}", browseLabel, label).c_str())) {
 			std::vector<std::filesystem::path> picked;
 			if (BrowseImageFiles(multi, picked)) {
 				cleared = false;
@@ -603,7 +607,7 @@ namespace
 			}
 		}
 		ImGui::SameLine(0.0f, style.ItemInnerSpacing.x);
-		if (ImGui::SmallButton(std::format("{}##Clear{}", T(TKEY("scene_export_clear"), "Clear"), label).c_str())) {
+		if (ImGui::SmallButton(std::format("{}##Clear{}", clearLabel, label).c_str())) {
 			if (multi)
 				form.screenshotSources.clear();
 			else if (singleSource)
@@ -851,7 +855,7 @@ namespace
 		                             form.type == PresetType::CS       ? !manager->HasAnyUserEntries() && !hasMods && !HasBaselinePayload() && formEditKeys.empty() :
 		                                                                 false;
 		ImGui::BeginDisabled(sanitizedName.empty() || reservedName || !validVersion || typeMismatch || nothingToExport);
-		if (ImGui::Button(T(TKEY("scene_export_confirm"), "Export"))) {
+		if (Util::Button(T(TKEY("scene_export_confirm"), "Export"))) {
 			collidingFiles = SceneSettingsManager::FindPresetFiles(sanitizedName);
 			if (form.type != PresetType::Baseline)
 				std::ranges::copy(FormEditSources::ListPackFormFiles(Util::PathHelpers::GetUnifiedPackPath(sanitizedName)),
@@ -886,7 +890,7 @@ namespace
 				Util::kTooltipWhenDisabled);
 
 		ImGui::SameLine(0.0f, style.ItemSpacing.x);
-		if (ImGui::Button(T(TKEY("cancel"), "Cancel")))
+		if (Util::Button(T(TKEY("cancel"), "Cancel")))
 			ImGui::CloseCurrentPopup();
 	}
 

@@ -15,6 +15,7 @@
 #include "TruePBR.h"
 #include "Util.h"
 #include "Utils/ShaderDescriptor.h"
+#include "VanillaBinding.h"
 
 #include "CSEditor/SceneManager/WeatherTransition.h"
 #include "Features/Effects11.h"
@@ -24,6 +25,7 @@
 #include "Features/LightLimitFix.h"
 #include "Features/PostProcessing.h"
 #include "Features/RainRefraction.h"
+#include "Features/RemoteControl/FrameRecorder.h"
 #include "Features/RemoteControl/NvPerf.h"
 #include "Features/RenderDoc.h"
 #include "Features/ScreenshotFeature.h"
@@ -112,8 +114,8 @@ struct BSShader_LoadShaders
 
 		auto state = globals::state;
 		auto shaderCache = globals::shaderCache;
-		if (shaderCache->IsDiskCache() || shaderCache->IsDump()) {
-			if (shaderCache->IsDiskCache()) {
+		if ((shaderCache->IsDiskCache() && !shaderCache->backgroundCompilation) || shaderCache->IsDump()) {
+			if (shaderCache->IsDiskCache() && !shaderCache->backgroundCompilation) {
 				Feature::ForEachLoadedFeature("GenerateShaderPermutations", [shader](Feature* feature) {
 					feature->GenerateShaderPermutations(shader);
 				});
@@ -132,7 +134,7 @@ struct BSShader_LoadShaders
 				auto pixelShaderDescriptor = entry->id;
 				NormalizeLegacyUtilityDescriptors(*shader, vertexShaderDesriptor, pixelShaderDescriptor);
 				state->ModifyShaderLookup(*shader, vertexShaderDesriptor, pixelShaderDescriptor);
-				shaderCache->GetVertexShader(*shader, vertexShaderDesriptor);
+				shaderCache->GetVertexShader(*shader, vertexShaderDesriptor, true);
 			}
 			for (const auto& entry : shader->pixelShaders) {
 				if (entry->shader && shaderCache->IsDump()) {
@@ -146,19 +148,20 @@ struct BSShader_LoadShaders
 				auto pixelShaderDescriptor = entry->id;
 				NormalizeLegacyUtilityDescriptors(*shader, vertexShaderDesriptor, pixelShaderDescriptor);
 				state->ModifyShaderLookup(*shader, vertexShaderDesriptor, pixelShaderDescriptor);
-				shaderCache->GetPixelShader(*shader, pixelShaderDescriptor);
+				shaderCache->GetPixelShader(*shader, pixelShaderDescriptor, true);
 				state->ModifyShaderLookup(*shader, vertexShaderDesriptor, pixelShaderDescriptor, true);
-				shaderCache->GetPixelShader(*shader, pixelShaderDescriptor);
+				shaderCache->GetPixelShader(*shader, pixelShaderDescriptor, true);
 			}
 
 			if (shaderCache->IsDiskCache() && shader->shaderType.get() == RE::BSShader::Type::Effect) {
 				constexpr auto sharedRuntimeUnionDescriptor =
 					static_cast<std::uint32_t>(SIE::ShaderCache::EffectShaderFlags::MultBlend) |
 					static_cast<std::uint32_t>(SIE::ShaderCache::EffectShaderFlags::MotionVectorsNormals);
-				shaderCache->GetPixelShader(*shader, sharedRuntimeUnionDescriptor);
+				shaderCache->GetPixelShader(*shader, sharedRuntimeUnionDescriptor, true);
 				shaderCache->GetPixelShader(*shader,
 					sharedRuntimeUnionDescriptor |
-						static_cast<std::uint32_t>(SIE::ShaderCache::EffectShaderFlags::Deferred));
+						static_cast<std::uint32_t>(SIE::ShaderCache::EffectShaderFlags::Deferred),
+					true);
 			}
 		}
 		BSShaderHooks::hk_LoadShaders(shader, stream);
@@ -272,6 +275,7 @@ namespace SkyExtensions
 		static void thunk(RE::BSShader* shader, RE::BSRenderPass* pass, uint32_t renderFlags)
 		{
 			globals::state->UpdateSkyShaderPermutation(pass);
+			VanillaBinding::BindSkyResources(pass);
 			if (globals::features::effects11.loaded)
 				globals::features::effects11.ModifySky(pass);
 			func(shader, pass, renderFlags);
@@ -306,21 +310,22 @@ namespace GrassExtensions
 	{
 		static void thunk(RE::BSShader* shader, RE::BSRenderPass* pass, uint32_t renderFlags)
 		{
-			// Replace vanilla setup and pixel constants for passes handled by Grass Optimizations.
-			if (!globals::features::grassOptimizations.SetupGrassPass(shader, pass)) {
-				func(shader, pass, renderFlags);
-				LegacyGraphicsCompatibility::BindLegacyGrassPerGeometryToPixelShader();
-			}
+			// Grass Optimizations' setup replaces this for its buckets, and covered shapes draw nothing.
+			if (globals::features::grassOptimizations.SetupGrassPass(shader, pass) != GrassOptimizations::GrassPassSetup::kNative)
+				return;
+
+			func(shader, pass, renderFlags);
+			LegacyGraphicsCompatibility::BindLegacyGrassPerGeometryToPixelShader();
 
 			auto state = globals::state;
+			const auto* shaderProperty = static_cast<RE::BSShaderProperty*>(pass->geometry->GetGeometryRuntimeData().shaderProperty.get());
+			// TruePBR marks converted grass properties with kMenuScreen.
+			state->SetGrassFlags(shaderProperty && shaderProperty->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kEffectLighting),
+				shaderProperty && shaderProperty->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kMenuScreen));
 
-			state->permutationData.ExtraShaderDescriptor &= ~static_cast<uint32_t>(State::ExtraShaderDescriptors::GrassSphereNormal);
-
-			if (auto* shaderProperty = static_cast<RE::BSShaderProperty*>(pass->geometry->GetGeometryRuntimeData().shaderProperty.get())) {
-				if (shaderProperty->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kEffectLighting)) {
-					state->permutationData.ExtraShaderDescriptor |= static_cast<uint32_t>(State::ExtraShaderDescriptors::GrassSphereNormal);
-				}
-			}
+			// Grass meshes are rooted at the model origin, so the model bound's center sits about halfway up the mesh.
+			const auto& bound = pass->geometry->GetModelData().modelBound;
+			state->permutationData.GrassCanopyHeight = bound.center.z > 1.0f ? 2.0f * bound.center.z : std::max(bound.center.z + bound.radius, 1.0f);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
@@ -411,6 +416,8 @@ namespace WeatherExtensions
 					// compound on every call Sky has not recomputed colors for.
 					Effects11::DirectionalAmbientColors overridden = DirectionalAmbientColors;
 					globals::features::effects11.OverrideAmbientLighting(overridden);
+					if (auto* sky = globals::game::sky; sky && &DirectionalAmbientColors.directionalAmbientColors[0][0] == &sky->directionalAmbientColors[0][0])
+						globals::features::effects11.BlendGradedAmbient(sky, overridden);
 					func(overridden, AmbientSpecularTint, AmbientSpecularFresnel);
 					return;
 				}
@@ -498,6 +505,8 @@ struct IDXGISwapChain_Present
 
 		globals::state->Reset();
 
+		FrameRecorder::OnPresentEnd();
+
 		NvPerf::OnPresentEnd();
 
 		TracyD3D11Collect(globals::state->tracyCtx);
@@ -569,6 +578,8 @@ void Hooks::BSGraphics_SetDirtyStates::thunk(bool isCompute)
 {
 	func(isCompute);
 	globals::state->Draw();
+	if (!isCompute)
+		VanillaBinding::BindDrawResources();
 }
 
 struct ID3D11Device_CreateVertexShader
@@ -638,6 +649,8 @@ struct BSShaderRenderTargets_Create
 	static void thunk()
 	{
 		Util::SetGameSettingValue<std::int32_t>("iNumFocusShadow:Display", iNumFocusShadow, 0);
+		if (globals::features::hdrDisplay.loaded)
+			globals::features::hdrDisplay.PreCreateRenderTargets();
 		func();
 		globals::ReInit();
 		globals::state->Setup();

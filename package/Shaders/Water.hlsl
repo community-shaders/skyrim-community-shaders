@@ -843,16 +843,18 @@ float3 GetWaterSpecularColor(PS_INPUT input, float3 normal, float3 viewDirection
 		workingSpecularIrradiance = DynamicCubemaps::EnvTexture.SampleLevel(CubeMapSampler, R, 0).xyz;
 
 	float3 workingSpecularIrradianceReflections = 0.0;
-	if (skylightingSpecular > 0.0)
+	if (skylightingSpecular > 0.0) {
 		workingSpecularIrradianceReflections = DynamicCubemaps::EnvReflectionsTexture.SampleLevel(CubeMapSampler, R, 0).xyz;
-
-	float3 dynamicCubemap = ColorManagement::SceneColor::LerpInLinear(workingSpecularIrradiance, workingSpecularIrradianceReflections, skylightingSpecular);
-
-	float3 reflectionColor = dynamicCubemap;
-	if ((Permutation::PixelShaderDescriptor & Permutation::WaterFlags::Reflections) && !SharedData::HideSky) {
-		float reflectionAmount = saturate(length(input.WPosition.xyz) / 1024.0);
-		reflectionColor = lerp(dynamicCubemap, CubeMapTex.SampleLevel(CubeMapSampler, R, 0).xyz, reflectionAmount);
+		if ((Permutation::PixelShaderDescriptor & Permutation::WaterFlags::Reflections) && !SharedData::HideSky) {
+			// Only the sky-visible lobe, without the specular floor, fades to the engine cube
+			float minVisibility = SharedData::skylightingSettings.MinSpecularVisibility;
+			float skyVisibility = minVisibility < 1.0 ? saturate((skylightingSpecular - minVisibility) / (1.0 - minVisibility)) : 1.0;
+			float reflectionAmount = saturate(length(input.WPosition.xyz) / 1024.0) * skyVisibility;
+			workingSpecularIrradianceReflections = lerp(workingSpecularIrradianceReflections, CubeMapTex.SampleLevel(CubeMapSampler, R, 0).xyz, reflectionAmount);
+		}
 	}
+
+	float3 reflectionColor = ColorManagement::SceneColor::LerpInLinear(workingSpecularIrradiance, workingSpecularIrradianceReflections, skylightingSpecular);
 #			else
 	float3 reflectionColor = CubeMapTex.SampleLevel(CubeMapSampler, R, 0).xyz;
 #			endif
@@ -1014,7 +1016,7 @@ float3 GetSunColor(float3 normal, float3 viewDirection, float3 worldPosition)
 		return 0.0.xxx;
 
 	float3 reflectionDirection = reflect(viewDirection, normal);
-	float reflectionMul = exp2(VarAmounts.x * log2(saturate(dot(reflectionDirection, SunDir.xyz))));
+	float reflectionMul = VarAmounts.x > 0 ? exp2(VarAmounts.x * log2(saturate(dot(reflectionDirection, SunDir.xyz)))) : 1.0;
 
 	float3 sunColor = Color::DirectionalLight(ColorManagement::SRGBToWorking(SunColor.xyz)) * SunDir.w * (1.0 - exp(-DeepColor.w));
 #				if defined(EXP_HEIGHT_FOG)
@@ -1100,7 +1102,7 @@ PS_OUTPUT main(PS_INPUT input)
 
 	float3 positionMSSkylight = input.WPosition.xyz;
 
-	sh2 skylightingSH = Skylighting::SampleNoBias(positionMSSkylight);
+	sh2 skylightingSH = Skylighting::Sample(positionMSSkylight, float3(0, 0, 1));
 	float skylighting = SphericalHarmonics::Unproject(skylightingSH, float3(0, 0, 1));
 
 	float skylightingDiffuse = Skylighting::EvaluateDiffuse(skylightingSH, float3(0, 0, 1), Skylighting::GetFadeOutFactor(input.WPosition.xyz));
@@ -1216,7 +1218,7 @@ PS_OUTPUT main(PS_INPUT input)
 
 			float lightShadow = 1.0;
 			[branch] if (localShadow)
-				lightShadow = LightLimitFix::GetLocalShadow(DepthSampler, light.localShadowIndex, input.WPosition.xyz, FrameBuffer::CameraPosAdjust.xyz, normalizedLightDirection, false, Random::InterleavedGradientNoise(input.HPosition.xy, SharedData::FrameCount));
+				lightShadow = LightLimitFix::GetLocalShadowWithLightFade(DepthSampler, light.localShadowIndex, input.WPosition.xyz, FrameBuffer::CameraPosAdjust.xyz, normalizedLightDirection, false, Random::InterleavedGradientNoise(input.HPosition.xy, SharedData::FrameCount));
 
 			float3 H = normalize(normalizedLightDirection - viewDirection);
 			float HdotN = saturate(dot(H, normal));

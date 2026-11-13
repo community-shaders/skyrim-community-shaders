@@ -239,8 +239,28 @@ namespace
 	{
 		static void thunk(int64_t a1)
 		{
+			globals::features::screenshotFeature.SnapshotCleanScene();
 			globals::features::hdrDisplay.SetUIBuffer();
 			func(a1);
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	// Bink movies draw into kFRAMEBUFFER outside both redirects, so ApplyHDR would overwrite them.
+	// Route the draw into the UI buffer like the interface; the Present path undoes it.
+	struct HDR_Movie_Draw
+	{
+		static void thunk(void* a_movie)
+		{
+			auto& hdr = globals::features::hdrDisplay;
+			if (hdr.settings.enableHDR && !hdr.framebufferRedirected && hdr.hdrTexture && hdr.hdrTexture->rtv) {
+				const float clearColor[4]{};
+				globals::d3d::context->ClearRenderTargetView(hdr.hdrTexture->rtv.get(), clearColor);
+				hdr.movieDrawnFrame = globals::state->frameCount;
+				hdr.SetUIBuffer();
+			}
+
+			func(a_movie);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
@@ -352,7 +372,7 @@ void HDRDisplay::DrawSettings()
 	// Advanced override button — shown when HDR is neither active nor auto-detected
 	if (!isHDRMonitor && !oldEnableHDR) {
 		ImGui::SameLine();
-		if (ImGui::Button(T(TKEY("advanced"), "Advanced"))) {
+		if (Util::Button(T(TKEY("advanced"), "Advanced"))) {
 			bool dontShowWarning;
 			{
 				std::lock_guard<std::mutex> lock(settingsMutex);
@@ -414,7 +434,7 @@ void HDRDisplay::DrawSettings()
 			buttonWidthForLabel(forceEnableLabel),
 			buttonWidthForLabel(cancelLabel) });
 
-		if (ImGui::Button(forceEnableLabel, ImVec2(buttonWidth, 0))) {
+		if (Util::Button(forceEnableLabel, ImVec2(buttonWidth, 0))) {
 			{
 				std::lock_guard<std::mutex> lock(settingsMutex);
 				settings.enableHDR = true;
@@ -427,7 +447,7 @@ void HDRDisplay::DrawSettings()
 			ImGui::CloseCurrentPopup();
 		}
 		ImGui::SameLine();
-		if (ImGui::Button(cancelLabel, ImVec2(buttonWidth, 0))) {
+		if (Util::Button(cancelLabel, ImVec2(buttonWidth, 0))) {
 			{
 				std::lock_guard<std::mutex> lock(settingsMutex);
 				settings.enableHDR = false;
@@ -597,9 +617,9 @@ void HDRDisplay::RestoreDefaultSettings()
 	settings.dontShowHDRWarning = false;
 }
 
-void HDRDisplay::DataLoaded()
+void HDRDisplay::PreCreateRenderTargets()
 {
-	// Use Skyrim's built-in ini setting to upgrade all HDR render targets to 16-bit float format.
+	// Prefs ini is read after plugin load and may clear this; upgrades HDR targets to fp16.
 	auto setting = RE::GetINISetting("bUse64bitsHDRRenderTarget:Display");
 	if (setting) {
 		setting->data.b = true;
@@ -618,6 +638,8 @@ void HDRDisplay::PostPostLoad()
 		stl::detour_thunk<HDR_MenuManagerDrawInterfaceStartHook>(REL::RelocationID(79947, 82084));
 		stl::write_thunk_call<HDR_Main_PostProcessing>(REL::RelocationID(100430, 107148).address() + REL::Relocate(0x1F0, 0x1E7));
 	}
+
+	stl::detour_thunk<HDR_Movie_Draw>(REL::RelocationID(87907, 90279));
 }
 
 void HDRDisplay::SetupResources()
@@ -874,7 +896,9 @@ void HDRDisplay::SetUIBuffer()
 
 		if (uiBufferMode.useUIBuffer) {
 			float clearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+			globals::profiler->BeginPass("HDRDisplay::ClearUI");
 			globals::d3d::context->ClearRenderTargetView(targetRTV, clearColor);
+			globals::profiler->EndPass();
 		}
 
 		fb.RTV = targetRTV;
@@ -898,7 +922,9 @@ void HDRDisplay::SetUIBuffer()
 	}
 
 	float clearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+	globals::profiler->BeginPass("HDRDisplay::ClearUI");
 	globals::d3d::context->ClearRenderTargetView(uiTexture->rtv.get(), clearColor);
+	globals::profiler->EndPass();
 
 	fb.RTV = uiTexture->rtv.get();
 	globals::d3d::context->OMSetRenderTargets(1, &fb.RTV, nullptr);
@@ -938,7 +964,21 @@ namespace
 			if (!globals::features::upscaling.d3d12SwapChainActive)
 				globals::features::screenshotFeature.ProcessCaptureRequest();
 
-			return func(This, SyncInterval, Flags);
+			return TimedPresent(This, SyncInterval, Flags);
+		}
+
+		/** @brief Calls the real Present and folds its CPU wait into State::smoothPresentTimeMs. */
+		static HRESULT TimedPresent(IDXGISwapChain* swapChain, UINT syncInterval, UINT flags)
+		{
+			LARGE_INTEGER frequency, presentStart, presentEnd;
+			QueryPerformanceFrequency(&frequency);
+			QueryPerformanceCounter(&presentStart);
+			const HRESULT presentResult = func(swapChain, syncInterval, flags);
+			QueryPerformanceCounter(&presentEnd);
+			const float presentMs = static_cast<float>(static_cast<double>(presentEnd.QuadPart - presentStart.QuadPart) * 1000.0 / static_cast<double>(frequency.QuadPart));
+			auto& smoothPresentTimeMs = globals::state->smoothPresentTimeMs;
+			smoothPresentTimeMs = smoothPresentTimeMs * 0.95f + presentMs * 0.05f;
+			return presentResult;
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
@@ -1024,7 +1064,7 @@ ID3D11BlendState* HDRDisplay::GetPatchedAlphaBlendState(ID3D11BlendState* origin
 HRESULT HDRDisplay::PresentToSwapChain(IDXGISwapChain* swapChain, UINT syncInterval, UINT flags)
 {
 	globals::features::screenshotFeature.ProcessCaptureRequest();
-	return SwapChainPresentBottom::func(swapChain, syncInterval, flags);
+	return SwapChainPresentBottom::TimedPresent(swapChain, syncInterval, flags);
 }
 
 void HDRDisplay::DrawImGuiForPresent(bool frameGenActive, bool hdrReady)
@@ -1130,7 +1170,9 @@ void HDRDisplay::ClearUIBuffer()
 		return;
 
 	float clearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+	globals::profiler->BeginPass("HDRDisplay::ClearUI");
 	globals::d3d::context->ClearRenderTargetView(uiTexture->rtv.get(), clearColor);
+	globals::profiler->EndPass();
 
 	if (savedFramebufferRTV) {
 		auto& data = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
@@ -1181,6 +1223,7 @@ void HDRDisplay::ApplyHDR()
 
 		if (!GetHDROutputCS()) {
 			// Fallback: HDR shader files not present - copy kFRAMEBUFFER directly to output
+			globals::profiler->BeginPass("HDRDisplay::BackBufferCopy");
 			if (upscaling.d3d12SwapChainActive) {
 				// SetUIBuffer keeps non-FG fallback UI in kFRAMEBUFFER; FG keeps using
 				// uiBufferWrapped for FidelityFX UI composition.
@@ -1193,6 +1236,7 @@ void HDRDisplay::ApplyHDR()
 					backBuffer->Release();
 				}
 			}
+			globals::profiler->EndPass();
 
 			RestoreCleanScene();
 			state->EndPerfEvent();
@@ -1202,6 +1246,7 @@ void HDRDisplay::ApplyHDR()
 		DispatchHDROutput(sceneSRV, uiSRV, outputTexture->uav.get());
 	}
 
+	globals::profiler->BeginPass("HDRDisplay::BackBufferCopy");
 	if (upscaling.d3d12SwapChainActive) {
 		if (upscaling.dx12SwapChain.swapChainBufferWrapped &&
 			upscaling.dx12SwapChain.swapChainBufferWrapped->resource11 &&
@@ -1216,6 +1261,7 @@ void HDRDisplay::ApplyHDR()
 			backBuffer->Release();
 		}
 	}
+	globals::profiler->EndPass();
 
 	RestoreCleanScene();
 	state->EndPerfEvent();
@@ -1295,7 +1341,9 @@ void HDRDisplay::SnapshotCleanScene()
 		cleanSceneCapture->CreateSRV(srvDesc);
 	}
 
+	globals::profiler->BeginPass("HDRDisplay::CleanSceneSnapshot");
 	globals::d3d::context->CopyResource(cleanSceneCapture->resource.get(), hdrTexture->resource.get());
+	globals::profiler->EndPass();
 	cleanSceneCaptureFrame = globals::state->frameCount;
 }
 
@@ -1305,7 +1353,9 @@ void HDRDisplay::RestoreCleanScene()
 		!cleanSceneCapture || !cleanSceneCapture->resource)
 		return;
 
+	globals::profiler->BeginPass("HDRDisplay::CleanSceneRestore");
 	globals::d3d::context->CopyResource(hdrTexture->resource.get(), cleanSceneCapture->resource.get());
+	globals::profiler->EndPass();
 }
 
 bool HDRDisplay::IsCleanSceneCaptureFresh() const
@@ -1491,6 +1541,7 @@ void HDRDisplay::RestoreLDRRenderTargets()
 
 void HDRDisplay::ClearShaderCache()
 {
+	patchedBlendStateCache.clear();
 	if (hdrOutputCS) {
 		hdrOutputCS->Release();
 		hdrOutputCS = nullptr;
@@ -1619,7 +1670,7 @@ float4 HDRDisplay::GetSharedDataHDR() const
 
 HDRDisplay::HDRDataCB HDRDisplay::BuildHDRData() const
 {
-	bool isMainOrLoadingMenu = globals::state->IsMainOrLoadingMenuOpen();
+	bool isMainOrLoadingMenu = globals::state->IsMainOrLoadingMenuOpen() || movieDrawnFrame == globals::state->frameCount;
 	auto* ui = globals::game::ui;
 	bool skipUIComposite = IsFGCompositingThisFrame();
 

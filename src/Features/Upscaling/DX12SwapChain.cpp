@@ -247,19 +247,21 @@ HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT Flags)
 		auto fakeSwapChain = swapChainBufferWrapped->resource.get();
 		auto realSwapChain = swapChainBuffers[frameIndex].get();
 		{
-			std::vector<D3D12_RESOURCE_BARRIER> barriers;
-			barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(fakeSwapChain, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_SOURCE));
-			barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(realSwapChain, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_COPY_DEST));
-			commandLists[frameIndex]->ResourceBarrier(static_cast<UINT>(barriers.size()), barriers.data());
+			const D3D12_RESOURCE_BARRIER barriers[] = {
+				CD3DX12_RESOURCE_BARRIER::Transition(fakeSwapChain, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_SOURCE),
+				CD3DX12_RESOURCE_BARRIER::Transition(realSwapChain, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_COPY_DEST)
+			};
+			commandLists[frameIndex]->ResourceBarrier(static_cast<UINT>(std::size(barriers)), barriers);
 		}
 
 		commandLists[frameIndex]->CopyResource(realSwapChain, fakeSwapChain);
 
 		{
-			std::vector<D3D12_RESOURCE_BARRIER> barriers;
-			barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(fakeSwapChain, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_COMMON));
-			barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(realSwapChain, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT));
-			commandLists[frameIndex]->ResourceBarrier(static_cast<UINT>(barriers.size()), barriers.data());
+			const D3D12_RESOURCE_BARRIER barriers[] = {
+				CD3DX12_RESOURCE_BARRIER::Transition(fakeSwapChain, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_COMMON),
+				CD3DX12_RESOURCE_BARRIER::Transition(realSwapChain, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT)
+			};
+			commandLists[frameIndex]->ResourceBarrier(static_cast<UINT>(std::size(barriers)), barriers);
 		}
 	}
 
@@ -310,29 +312,6 @@ HRESULT DX12SwapChain::GetDevice(REFIID uuid, void** ppDevice)
 HANDLE DX12SwapChain::GetFrameLatencyWaitableObject()
 {
 	return swapChain->GetFrameLatencyWaitableObject();
-}
-
-float DX12SwapChain::GetFrameTime() const
-{
-	// Calculate frame time based on swap chain presentation
-	static float lastPresentTime = 0.0f;
-	static float frameTime = 1.0f / 60.0f;  // Default to 60 fps
-	static LARGE_INTEGER frequency = {};
-	static LARGE_INTEGER currentTime = {};
-
-	if (frequency.QuadPart == 0) {
-		QueryPerformanceFrequency(&frequency);
-	}
-
-	QueryPerformanceCounter(&currentTime);
-	float time = static_cast<float>(currentTime.QuadPart) / static_cast<float>(frequency.QuadPart);
-
-	if (lastPresentTime > 0.0f) {
-		frameTime = time - lastPresentTime;
-	}
-	lastPresentTime = time;
-
-	return frameTime;
 }
 
 WrappedResource::WrappedResource(D3D11_TEXTURE2D_DESC a_texDesc, ID3D11Device5* a_d3d11Device, ID3D12Device* a_d3d12Device)

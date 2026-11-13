@@ -20,6 +20,7 @@ Texture2D<float4> NormalTex : register(t0);
 Texture2D<float4> ColorTex : register(t1);
 Texture2D<float4> DepthTex : register(t2);
 Texture2D<float4> AlphaTex : register(t3);
+TextureCube<float4> SkyReflectionTex : register(t4);
 
 cbuffer PerGeometry : register(b2)
 {
@@ -31,8 +32,9 @@ static const int iterations = 64.0;
 static const int binaryIterations = ceil(log2(iterations));
 
 static const float rayLength = 1.0;
+static const float skyDepth = 1.0 - 1e-6;
 #	ifdef UNIFIED_WATER
-static const float maxValidDepth = 1.0 - 1e-6;
+static const float maxValidDepth = skyDepth;
 #	else
 static const float maxValidDepth = 0.9999;
 #	endif
@@ -49,7 +51,8 @@ float2 ConvertRaySamplePrevious(float2 raySample)
 
 float4 GetReflectionColor(
 	float3 projReflectionDirection,
-	float3 projPosition)
+	float3 projPosition,
+	float3 reflectionDirection)
 {
 	float3 prevRaySample;
 	float3 raySample = projPosition;
@@ -64,7 +67,7 @@ float4 GetReflectionColor(
 			return 0.0;
 
 		float iterationDepth = DepthTex.SampleLevel(DepthSampler, ConvertRaySample(sampleUV), 0).x;
-		if (iterationDepth > maxValidDepth)
+		if (iterationDepth > maxValidDepth && iterationDepth <= skyDepth)
 			continue;
 
 		if (saturate((raySample.z - iterationDepth) / SSRParams.y) > 0.0) {
@@ -78,7 +81,7 @@ float4 GetReflectionColor(
 
 				sampleUV = binaryRaySample.xy;
 				iterationDepth = DepthTex.SampleLevel(DepthSampler, ConvertRaySample(sampleUV), 0).x;
-				if (iterationDepth > maxValidDepth) {
+				if (iterationDepth > maxValidDepth && iterationDepth <= skyDepth) {
 					if (iterationDepth < binaryRaySample.z)
 						binaryMaxRaySample = binaryRaySample;
 					else
@@ -110,6 +113,13 @@ float4 GetReflectionColor(
 			float fadeFactor = depthThicknessFactor * ssrMarchingRadiusFadeFactor * centerDistanceFadeFactorX * centerDistanceFadeFactorY;
 
 			if (fadeFactor > 0.0) {
+				if (iterationDepth > skyDepth) {
+					if (SharedData::InInterior || SharedData::HideSky)
+						return 0.0;
+					float3 reflectionDirectionWS = FrameBuffer::ViewToWorld(reflectionDirection, false);
+					return float4(SkyReflectionTex.SampleLevel(ColorSampler, reflectionDirectionWS, 0).xyz, fadeFactor);
+				}
+
 				float2 finalSampleUV = binaryRaySample.xy;
 
 				float3 color = ColorTex.SampleLevel(ColorSampler, ConvertRaySample(finalSampleUV), 0).xyz;
@@ -193,7 +203,7 @@ PS_OUTPUT main(PS_INPUT input)
 
 	float3 projPosition = float3(uv, depth);
 
-	psout.Color = GetReflectionColor(projReflectionDirection, projPosition);
+	psout.Color = GetReflectionColor(projReflectionDirection, projPosition, reflectionDirection);
 
 	return psout;
 }

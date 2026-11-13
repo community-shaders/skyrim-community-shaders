@@ -2,9 +2,9 @@
 
 #include "CSEditor/EditorWindow.h"
 #include "CSEditor/SceneManager/SceneWidgetInterceptor.h"
+#include "Features/CSEditor.h"
 #include "IconsTabler.h"
 #include "Menu/Icons/helpers/IconFonts.h"
-#include "Menu/PresetsPageRenderer.h"
 #include "imgui_stdlib.h"
 
 #include "Menu.h"
@@ -74,37 +74,33 @@ void PostProcessing::DrawSettings()
 	static int pipelinePageNum = 0;
 	static int pipelineFeatIdx = 0;
 
-	// Presets live on the Presets page like every other pack; a scene replica of this page edits a
-	// scene layer rather than the base settings a preset sets, so it leaves the row out.
-	if (!SceneWidgetInterceptor::IsArmed()) {
-		PresetsPageRenderer::DrawOpenButton("##PostProcessingOpenPresets",
-			T("feature.post_processing.open_presets_tooltip",
-				"Apply Post Processing presets on the Presets page. To save your current settings as one, use "
-				"Export Preset in the CS Editor with Post Processing ticked."));
-
-		// Inside the CS Editor (its Base Settings window draws this page too) the editor is already open.
-		if (const auto* editor = EditorWindow::GetSingleton(); !editor || !editor->open)
-			PresetsPageRenderer::DrawOpenCSEditorButton("##PostProcessingOpenCSEditor");
-
-		ImGui::Separator();
+	// A scene replica of this page edits a scene layer, and inside the CS Editor (its Base Settings window draws this
+	// page too) the editor is already open, so the button is left out there.
+	PostProcessingMode::SelectorAction openEditor;
+	if (const auto* editor = EditorWindow::GetSingleton(); !SceneWidgetInterceptor::IsArmed() && (!editor || !editor->open)) {
+		openEditor.label = T("menu.home.open_cs_editor", "Open CS Editor");
+		openEditor.tooltip = T("menu.presets.open_cs_editor_tooltip", "Open the CS Editor for weather, lighting, and scene editing.");
+		openEditor.onClick = [] { CSEditor::OpenEditorWindow(); };
 	}
-
-	PostProcessingMode::DrawSelector();
+	PostProcessingMode::DrawSelector(openEditor.label ? &openEditor : nullptr);
 
 	ImGui::Separator();
 
-	// Effects 11 discards the pipeline output, so its controls would do nothing.
-	const Util::LockedSection effects11Lock(PostProcessingMode::Get() == PostProcessingMode::Mode::Effects11,
-		T("common.settings_managed_by_enb", "This setting is managed by Effects 11."));
+	// The pipeline only runs in its own mode, so its controls would do nothing in the others.
+	const auto mode = PostProcessingMode::Get();
+	const Util::LockedSection modeLock(mode != PostProcessingMode::Mode::PostProcessing,
+		mode == PostProcessingMode::Mode::Effects11 ?
+			T("common.settings_managed_by_enb", "This setting is managed by Effects 11.") :
+			T("feature.post_processing.off_in_vanilla", "Vanilla mode is active. Select Post Processing above to use these settings."));
 
 	{
 		auto& cam = cinematicCamera;
-		ImGui::Checkbox(T("feature.post_processing.cinematic_camera.name", "Cinematic Camera"), &cam.settings.Enabled);
+		ImGui::Checkbox(T("feature.post_processing.cinematic_camera.name", "Cinematic Camera"), &cinematicCamera.settings.Enabled);
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::Text("%s", T("feature.post_processing.cinematic_camera.description",
 								  "Controls lens, focus, exposure and FOV. Exposure processing runs automatically while the camera is active; other effects must be enabled separately."));
 		ImGui::SameLine();
-		if (Icons::LabeledButton("##CinematicCameraSettings", Icons::TI(ICON_TI_MENU_2),
+		if (Util::LabeledButton("##CinematicCameraSettings", Icons::TI(ICON_TI_MENU_2),
 				T("feature.post_processing.cinematic_camera.settings", "Settings")))
 			pipelinePageNum = 2;
 
@@ -154,7 +150,7 @@ void PostProcessing::DrawSettings()
 				if (!drawForcedEnabled("##Enabled", *feat))
 					ImGui::Checkbox("##Enabled", &feat->enabled);
 				ImGui::SameLine();
-				if (Icons::Button("##Bars", Icons::TI(ICON_TI_MENU_2))) {
+				if (Util::LabeledButton("##Bars", Icons::TI(ICON_TI_MENU_2))) {
 					pipelineFeatIdx = i;
 					pipelinePageNum = 1;
 				}
@@ -168,7 +164,7 @@ void PostProcessing::DrawSettings()
 			}
 		}
 	} else if (pipelinePageNum == 1) {
-		if (Icons::LabeledButton("##BackToPipeline", Icons::TI(ICON_TI_ARROW_LEFT),
+		if (Util::LabeledButton("##BackToPipeline", Icons::TI(ICON_TI_ARROW_LEFT),
 				T("feature.post_processing.back_to_pipeline", "Back to Pipeline"))) {
 			pipelinePageNum = 0;
 		}
@@ -184,7 +180,7 @@ void PostProcessing::DrawSettings()
 				ImGui::TextWrapped("%s", description.c_str());
 
 				ImGui::Spacing();
-				if (Icons::LabeledButton("##RecompileShaders", Icons::TI(ICON_TI_REFRESH),
+				if (Util::LabeledButton("##RecompileShaders", Icons::TI(ICON_TI_REFRESH),
 						T("feature.post_processing.recompile_shaders", "Recompile Shaders"))) {
 					feat->ClearShaderCache();
 				}
@@ -212,7 +208,7 @@ void PostProcessing::DrawSettings()
 			pipelinePageNum = 0;
 		}
 	} else if (pipelinePageNum == 2) {
-		if (Icons::LabeledButton("##BackToPipeline", Icons::TI(ICON_TI_ARROW_LEFT),
+		if (Util::LabeledButton("##BackToPipeline", Icons::TI(ICON_TI_ARROW_LEFT),
 				T("feature.post_processing.back_to_pipeline", "Back to Pipeline"))) {
 			pipelinePageNum = 0;
 		}
@@ -260,67 +256,64 @@ void PostProcessing::DrawSettings()
 	ImGui::Separator();
 
 	if (Util::ShowDebugSections() && ImGui::TreeNode(T("feature.post_processing.debug", "Debug"))) {
-		if (ImGui::TreeNode(T("feature.post_processing.game_imagespace_values", "Game ImageSpace Values"))) {
-			ImGui::Text(T("feature.post_processing.base_amount", "Base Amount: %.3f"), imageSpaceManager->gameISData.baseAmount);
-			ImGui::Text("%s", T("feature.post_processing.base_data", "Base Data:"));
-			ImGui::Text("%s", T("feature.post_processing.cinematic_values", "Cinematic Values:"));
-			ImGui::Text(T("feature.post_processing.saturation_brightness_contrast_values", "Saturation: %.3f\nBrightness: %.3f\nContrast: %.3f"),
-				imageSpaceManager->gameISData.baseData.cinematic.saturation,
-				imageSpaceManager->gameISData.baseData.cinematic.brightness,
-				imageSpaceManager->gameISData.baseData.cinematic.contrast);
+		ImGui::Text(T("feature.post_processing.base_amount", "Base Amount: %.3f"), imageSpaceManager->gameISData.baseAmount);
+		ImGui::Text("%s", T("feature.post_processing.base_data", "Base Data:"));
+		ImGui::Text("%s", T("feature.post_processing.cinematic_values", "Cinematic Values:"));
+		ImGui::Text(T("feature.post_processing.saturation_brightness_contrast_values", "Saturation: %.3f\nBrightness: %.3f\nContrast: %.3f"),
+			imageSpaceManager->gameISData.baseData.cinematic.saturation,
+			imageSpaceManager->gameISData.baseData.cinematic.brightness,
+			imageSpaceManager->gameISData.baseData.cinematic.contrast);
 
-			ImGui::Text("%s", T("feature.post_processing.hdr_values", "HDR Values:"));
-			ImGui::Text(T("feature.post_processing.hdr_values_detail", "Eye Adapt Speed: %.3f\nBloom Blur Radius: %.3f\nBloom Threshold: %.3f\nBloom Scale: %.3f\nReceive Bloom Threshold: %.3f\nWhite: %.3f\nSunlight Scale: %.3f\nSky Scale: %.3f\nEye Adapt Strength: %.3f"),
-				imageSpaceManager->gameISData.baseData.hdr.eyeAdaptSpeed,
-				imageSpaceManager->gameISData.baseData.hdr.bloomBlurRadius,
-				imageSpaceManager->gameISData.baseData.hdr.bloomThreshold,
-				imageSpaceManager->gameISData.baseData.hdr.bloomScale,
-				imageSpaceManager->gameISData.baseData.hdr.receiveBloomThreshold,
-				imageSpaceManager->gameISData.baseData.hdr.white,
-				imageSpaceManager->gameISData.baseData.hdr.sunlightScale,
-				imageSpaceManager->gameISData.baseData.hdr.skyScale,
-				imageSpaceManager->gameISData.baseData.hdr.eyeAdaptStrength);
+		ImGui::Text("%s", T("feature.post_processing.hdr_values", "HDR Values:"));
+		ImGui::Text(T("feature.post_processing.hdr_values_detail", "Eye Adapt Speed: %.3f\nBloom Blur Radius: %.3f\nBloom Threshold: %.3f\nBloom Scale: %.3f\nReceive Bloom Threshold: %.3f\nWhite: %.3f\nSunlight Scale: %.3f\nSky Scale: %.3f\nEye Adapt Strength: %.3f"),
+			imageSpaceManager->gameISData.baseData.hdr.eyeAdaptSpeed,
+			imageSpaceManager->gameISData.baseData.hdr.bloomBlurRadius,
+			imageSpaceManager->gameISData.baseData.hdr.bloomThreshold,
+			imageSpaceManager->gameISData.baseData.hdr.bloomScale,
+			imageSpaceManager->gameISData.baseData.hdr.receiveBloomThreshold,
+			imageSpaceManager->gameISData.baseData.hdr.white,
+			imageSpaceManager->gameISData.baseData.hdr.sunlightScale,
+			imageSpaceManager->gameISData.baseData.hdr.skyScale,
+			imageSpaceManager->gameISData.baseData.hdr.eyeAdaptStrength);
 
-			ImGui::Text("%s", T("feature.post_processing.tint_values", "Tint Values:"));
-			ImGui::Text(T("feature.post_processing.tint_values_detail", "Tint Amount: %.3f\nTint Color: (%.3f, %.3f, %.3f)"),
-				imageSpaceManager->gameISData.baseData.tint.amount,
-				imageSpaceManager->gameISData.baseData.tint.color.red,
-				imageSpaceManager->gameISData.baseData.tint.color.green,
-				imageSpaceManager->gameISData.baseData.tint.color.blue);
+		ImGui::Text("%s", T("feature.post_processing.tint_values", "Tint Values:"));
+		ImGui::Text(T("feature.post_processing.tint_values_detail", "Tint Amount: %.3f\nTint Color: (%.3f, %.3f, %.3f)"),
+			imageSpaceManager->gameISData.baseData.tint.amount,
+			imageSpaceManager->gameISData.baseData.tint.color.red,
+			imageSpaceManager->gameISData.baseData.tint.color.green,
+			imageSpaceManager->gameISData.baseData.tint.color.blue);
 
-			ImGui::Text("%s", T("feature.post_processing.depth_of_field_values", "Depth of Field Values:"));
-			ImGui::Text(T("feature.post_processing.depth_of_field_values_detail", "DOF Strength: %.3f\nDOF Distance: %.3f\nDOF Range: %.3f\nDOF Flags: %d\nDOF Sky Blur Radius: %d"),
-				imageSpaceManager->gameISData.baseData.depthOfField.strength,
-				imageSpaceManager->gameISData.baseData.depthOfField.distance,
-				imageSpaceManager->gameISData.baseData.depthOfField.range,
-				imageSpaceManager->gameISData.baseData.depthOfField.flags,
-				static_cast<int>(imageSpaceManager->gameISData.baseData.depthOfField.skyBlurRadius.get()));
+		ImGui::Text("%s", T("feature.post_processing.depth_of_field_values", "Depth of Field Values:"));
+		ImGui::Text(T("feature.post_processing.depth_of_field_values_detail", "DOF Strength: %.3f\nDOF Distance: %.3f\nDOF Range: %.3f\nDOF Flags: %d\nDOF Sky Blur Radius: %d"),
+			imageSpaceManager->gameISData.baseData.depthOfField.strength,
+			imageSpaceManager->gameISData.baseData.depthOfField.distance,
+			imageSpaceManager->gameISData.baseData.depthOfField.range,
+			imageSpaceManager->gameISData.baseData.depthOfField.flags,
+			static_cast<int>(imageSpaceManager->gameISData.baseData.depthOfField.skyBlurRadius.get()));
 
-			ImGui::Text(T("feature.post_processing.mod_amount", "Mod Amount: %.3f"), imageSpaceManager->gameISData.modAmount);
-			ImGui::Text("%s", T("feature.post_processing.mod_data", "Mod Data:"));
-			ImGui::Text(T("feature.post_processing.mod_fade_values_detail", "Fade Amount: %.3f\nFade Color: (%.3f, %.3f, %.3f)\nBlur Radius: %.3f\nDouble Vision Strength: %.3f\n"),
-				imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kFadeAmount],
-				imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kFadeR],
-				imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kFadeG],
-				imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kFadeB],
-				imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kBlurRadius],
-				imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kDoubleVisionStrength]);
-			ImGui::Text(T("feature.post_processing.radial_blur_values_detail", "Radial Blur Strength: %.3f\nRadial Blur Rampup: %.3f\nRadial Blur Start: %.3f\nRadial Blur Rampdown: %.3f\nRadial Blur Down Start: %.3f\nRadial Blur Center: (%.3f, %.3f)"),
-				imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kRadialBlurStrength],
-				imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kRadialBlurRampup],
-				imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kRadialBlurStart],
-				imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kRadialBlurRampdown],
-				imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kRadialBlurDownStart],
-				imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kRadialBlurCenterX],
-				imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kRadialBlurCenterY]);
-			ImGui::Text(T("feature.post_processing.mod_dof_values_detail", "DOF Strength: %.3f\nDOF Distance: %.3f\nDOF Range: %.3f\nDOF Mode: %d"),
-				imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kDOFStrength],
-				imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kDOFDistance],
-				imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kDOFRange],
-				imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kDOFMode]);
-			ImGui::Text(T("feature.post_processing.motion_blur_strength", "Motion Blur Strength: %.3f"), imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kMotionBlurStrength]);
-			ImGui::TreePop();
-		}
+		ImGui::Text(T("feature.post_processing.mod_amount", "Mod Amount: %.3f"), imageSpaceManager->gameISData.modAmount);
+		ImGui::Text("%s", T("feature.post_processing.mod_data", "Mod Data:"));
+		ImGui::Text(T("feature.post_processing.mod_fade_values_detail", "Fade Amount: %.3f\nFade Color: (%.3f, %.3f, %.3f)\nBlur Radius: %.3f\nDouble Vision Strength: %.3f\n"),
+			imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kFadeAmount],
+			imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kFadeR],
+			imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kFadeG],
+			imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kFadeB],
+			imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kBlurRadius],
+			imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kDoubleVisionStrength]);
+		ImGui::Text(T("feature.post_processing.radial_blur_values_detail", "Radial Blur Strength: %.3f\nRadial Blur Rampup: %.3f\nRadial Blur Start: %.3f\nRadial Blur Rampdown: %.3f\nRadial Blur Down Start: %.3f\nRadial Blur Center: (%.3f, %.3f)"),
+			imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kRadialBlurStrength],
+			imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kRadialBlurRampup],
+			imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kRadialBlurStart],
+			imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kRadialBlurRampdown],
+			imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kRadialBlurDownStart],
+			imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kRadialBlurCenterX],
+			imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kRadialBlurCenterY]);
+		ImGui::Text(T("feature.post_processing.mod_dof_values_detail", "DOF Strength: %.3f\nDOF Distance: %.3f\nDOF Range: %.3f\nDOF Mode: %d"),
+			imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kDOFStrength],
+			imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kDOFDistance],
+			imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kDOFRange],
+			imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kDOFMode]);
+		ImGui::Text(T("feature.post_processing.motion_blur_strength", "Motion Blur Strength: %.3f"), imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kMotionBlurStrength]);
 		ImGui::TreePop();
 	}
 	if (watchEdits) {
@@ -395,6 +388,16 @@ void PostProcessing::SaveSettings(json& o_json)
 	cinematicCamera.SaveSettings(camJson);
 	o_json["cinematic_camera"] = camJson;
 	o_json.erase("ppsettings");
+}
+
+void PostProcessing::ApplyContextualDefaults(json& a_defaults) const
+{
+	for (const auto& pipe : pipeline) {
+		if (!pipe)
+			continue;
+		if (auto section = a_defaults.find(pipe->GetType()); section != a_defaults.end() && section->contains("settings"))
+			pipe->ApplyContextualDefaults((*section)["settings"]);
+	}
 }
 
 void PostProcessing::BuildPipeline()
@@ -533,11 +536,6 @@ void PostProcessing::Reset()
 	// tonemap (or the pipeline is bypassed) PreProcess never runs, and a stale flag would
 	// make the next frame we do run read from the wrong buffer.
 	isrefraction = false;
-
-	for (auto& pipe : pipeline) {
-		if (pipe)
-			pipe->Reset();
-	}
 }
 
 void PostProcessing::CopyToRenderTarget(
@@ -559,13 +557,16 @@ void PostProcessing::CopyToRenderTarget(
 	targetRT.texture->GetDesc(&targetDesc);
 
 	if (!convert && srcDesc.Format == targetDesc.Format) {
+		globals::profiler->BeginPass("PostProcessing::CopyToTarget");
 		context->CopySubresourceRegion(targetRT.texture, 0, 0, 0, 0, srcTex, 0, nullptr);
+		globals::profiler->EndPass();
 		return;
 	}
 
 	if (!copyPS || !fullscreenVS || !convertTex || !convertTex->rtv || !convertTex->resource)
 		return;
 
+	globals::profiler->BeginPass("PostProcessing::ConvertToTarget");
 	{
 		PostProcessingRaster::RasterPass pass(context);
 
@@ -585,6 +586,7 @@ void PostProcessing::CopyToRenderTarget(
 	}
 
 	context->CopySubresourceRegion(targetRT.texture, 0, 0, 0, 0, convertTex->resource.get(), 0, nullptr);
+	globals::profiler->EndPass();
 }
 
 void PostProcessing::BeginLinearProcessing(PostProcessFeature::TextureInfo& texture)
@@ -593,6 +595,7 @@ void PostProcessing::BeginLinearProcessing(PostProcessFeature::TextureInfo& text
 	if (ll.IsLinearLightingActive())
 		return;
 	auto* context = globals::d3d::context;
+	globals::profiler->BeginPass("PostProcessing::BeginLinear");
 	PostProcessingRaster::RasterPass pass(context);
 	copyCB->Update(CopyCB{ .gamma = Util::ColorSpace::GAME_GAMMA });
 	ID3D11Buffer* cb = copyCB->CB();
@@ -607,6 +610,7 @@ void PostProcessing::BeginLinearProcessing(PostProcessFeature::TextureInfo& text
 	context->PSSetShaderResources(0, 1, &srv);
 	cb = nullptr;
 	context->PSSetConstantBuffers(1, 1, &cb);
+	globals::profiler->EndPass();
 	texture = { texInput->resource.get(), texInput->srv.get() };
 }
 
@@ -622,7 +626,7 @@ void PostProcessing::DrawFeature(PostProcessFeature& feature, PostProcessFeature
 
 void PostProcessing::DrawBeforeUpscaling()
 {
-	if (bypass || IsTonemapOwnedByEffects11())
+	if (!IsPipelineRunning())
 		return;
 
 	auto& upscaling = globals::features::upscaling;
@@ -741,14 +745,13 @@ void PostProcessing::PreProcess(RE::RENDER_TARGET a_input)
 
 void PostProcessing::ClearBorderMotionVectorsForFrameGen()
 {
-	// Effects11 owns the image, so no letterbox is drawn and zeroing its motion vectors
-	// would hand frame generation a band of static pixels over live scene content.
-	if (bypass || IsTonemapOwnedByEffects11())
+	// Without a drawn letterbox, zeroed motion vectors would hand frame generation static pixels over live scene content.
+	if (!IsPipelineRunning())
 		return;
 
 	auto borderIdx = static_cast<size_t>(FeaturePipelineIndex::Border);
 	auto& pipe = pipeline[borderIdx];
-	if (pipe && pipe->enabled) {
+	if (pipe && pipe->IsActive() && !(globals::state->IsMainOrLoadingMenuOpen() && pipe->DisableInMainLoadingMenu())) {
 		auto* border = static_cast<Border*>(pipe.get());
 		border->ClearMotionVectorsForFrameGen();
 	}
@@ -761,9 +764,9 @@ bool PostProcessing::WantsTonemapOwnership() const
 	return !bypass;
 }
 
-bool PostProcessing::IsTonemapOwnedByEffects11() const
+bool PostProcessing::IsPipelineRunning() const
 {
-	return globals::state->GetTonemapOwner() == State::TonemapOwner::kEffects11;
+	return !bypass && globals::state->GetTonemapOwner() == State::TonemapOwner::kPostProcessing;
 }
 
 bool PostProcessing::WantsAutoHDR() const
@@ -830,7 +833,7 @@ void PostProcessing::Prepass()
 		const float aspect = graphicsState && graphicsState->screenHeight > 0 ?
 		                         (float)graphicsState->screenWidth / (float)graphicsState->screenHeight :
 		                         16.0f / 9.0f;
-		const bool runnable = !bypass && !IsTonemapOwnedByEffects11() && !globals::state->IsMainOrLoadingMenuOpen();
+		const bool runnable = IsPipelineRunning() && !globals::state->IsMainOrLoadingMenuOpen();
 		cinematicCamera.Update(runnable, aspect);
 	}
 

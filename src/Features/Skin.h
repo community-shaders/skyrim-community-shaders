@@ -154,7 +154,7 @@ private:
 		std::string actorName;
 		std::vector<Surface> surfaces;
 		uint32_t lastRefresh = 0;
-		std::array<char, 128> filter{};
+		std::string filter;
 		std::string key;  ///< Selected skin texture; the material draft always belongs to it.
 		std::string draftKey;
 		SkinMaterials::Changes material, materialBaseline;

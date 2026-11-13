@@ -139,6 +139,9 @@ namespace FeatureIssues
 	 */
 	void DrawFeatureIssuesUI();
 
+	/** @brief The cleanup steps the actions card supports, as one tooltip text. */
+	std::string GetCleanupGuide();
+
 	/**
 	 * Delete feature directory and related files safely
 	 *

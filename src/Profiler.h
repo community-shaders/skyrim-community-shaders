@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <atomic>
 #include <d3d11.h>
 #include <functional>
 #include <string>
@@ -19,7 +20,7 @@ class Profiler
 {
 public:
 	static constexpr uint32_t kMaxTimers = 128;
-	static constexpr uint32_t kFrameLatency = 3;
+	static constexpr uint32_t kFrameLatency = 6;
 	static constexpr uint32_t kHistorySize = 300;
 	// Must exceed the longest legitimate gap between samples of a still-running pass;
 	// the DynamicCubemaps state machine spreads its passes over 6 frames.
@@ -92,6 +93,16 @@ public:
 		}
 	};
 
+	/** @brief Rolling wall-clock statistics of the interval between EndFrame calls. */
+	struct FrameStats
+	{
+		float lastMs = 0.0f;
+		float avgMs = 0.0f;
+		float p95Ms = 0.0f;
+		float p99Ms = 0.0f;
+		uint32_t count = 0;
+	};
+
 	/**
 	 * @brief Creates timestamp query objects and prepares the frame ring buffer.
 	 * @param device D3D11 device used to create query objects.
@@ -113,20 +124,42 @@ public:
 		endPerfEvent = std::move(endCb);
 	}
 
-	/** @brief Begins a new profiling frame; collects results from the oldest in-flight frame. */
+	/** @brief Collects resolved frames; begins one unless the ring is full. */
 	void BeginFrame();
 
 	/**
 	 * @brief Begins a named GPU/CPU timing pass within the current frame.
 	 * @param name Pass identifier (e.g. "Feature::PassName"). Implicitly calls BeginFrame if needed.
 	 */
-	void BeginPass(const std::string& name);
+	void BeginPass(std::string_view name);
 
 	/** @brief Ends the current timing pass and records the CPU/GPU timestamps. */
 	void EndPass();
 
+	/**
+	 * @brief Records a zero sample for a pass skipped on purpose this frame, so its row reads 0 instead of its last cost.
+	 * @param name Pass identifier, as given to BeginPass. Ignored if that pass began this frame or has no row yet.
+	 * @note Needs an active profiler. A mark made before the frame's first BeginPass waits for it, and is dropped if no profiling frame begins before EndFrame. Zero samples do not keep a row alive, so a pass skipped for kTimerRetireFrames retires. Ignored on a frame that ran out of timers.
+	 */
+	void MarkPassSkipped(std::string_view name);
+
 	/** @brief Ends the current profiling frame and advances the ring buffer write cursor. */
 	void EndFrame();
+
+	/**
+	 * @brief Keeps GPU/CPU pass timing running for the next few frames; call it each frame a consumer reads the results.
+	 * @param frameCount Frames to stay active for. Timing stops once no consumer has asked within that window.
+	 * A shorter request never cuts a longer one short, so the overlay cannot end a DevBench window.
+	 */
+	void KeepActive(uint32_t frameCount = 2)
+	{
+		const uint64_t until = frameCounter.load(std::memory_order_relaxed) + frameCount;
+		uint64_t current = activeUntilFrame.load(std::memory_order_relaxed);
+		while (current < until && !activeUntilFrame.compare_exchange_weak(current, until, std::memory_order_relaxed)) {
+		}
+	}
+	/** @brief True while a consumer asked for timings within its KeepActive window. */
+	bool IsActive() const { return frameCounter.load(std::memory_order_relaxed) <= activeUntilFrame.load(std::memory_order_relaxed); }
 
 	/** @brief Gets the live timings and history from the last collected frame. Rolling statistics are left at zero; see GetStatistics. */
 	const std::vector<TimerResult>& GetResults() const { return results; }
@@ -138,6 +171,13 @@ public:
 	 * @param timerPrefix Includes only passes starting with this prefix, or all passes when empty.
 	 */
 	std::vector<TimerResult> GetStatistics(std::string_view timerPrefix = {}) const;
+
+	/**
+	 * @brief Gets the present-cadence frame interval statistics, tracked even while GPU timing is off.
+	 * Re-sorts the history if it gained a sample, so callers should throttle it.
+	 * Not synchronized: call it only on the thread that calls EndFrame, like GetResults.
+	 */
+	FrameStats GetFrameStats() const;
 
 	/** @brief Gets the total GPU time in milliseconds for the last collected frame. */
 	float GetTotalTimeMs() const { return totalTimeMs; }
@@ -170,6 +210,15 @@ public:
 	}
 
 private:
+	/** @brief Pass names marked skipped for one frame. The string slots are reused, so marking allocates only on first use. */
+	struct SkipMarks
+	{
+		std::vector<std::string> names;
+		uint32_t count = 0;
+
+		void Add(std::string_view name);
+	};
+
 	struct FrameQueries
 	{
 		winrt::com_ptr<ID3D11Query> disjoint;
@@ -183,7 +232,9 @@ private:
 		};
 		std::vector<TimerPair> timers;
 		uint32_t activeCount = 0;
-		bool inFlight = false;
+		SkipMarks skipped;
+		// A pass began past kMaxTimers, so a marked pass may have run untimed.
+		bool overflowed = false;
 	};
 
 	ID3D11DeviceContext* context = nullptr;
@@ -191,10 +242,20 @@ private:
 	FrameQueries frames[kFrameLatency];
 	uint32_t writeFrame = 0;
 	uint32_t readFrame = 0;
-	uint32_t framesSinceInit = 0;
+	// Ended frames awaiting collection, oldest at readFrame.
+	uint32_t pendingFrames = 0;
 	bool initialized = false;
 	bool frameActive = false;
-	double cpuTicksToMs = 0.0;
+	bool passOpen = false;
+	// Ring was full at BeginFrame; the whole frame is unprofiled.
+	bool frameSkipped = false;
+	static double QpcTicksToMs();
+
+	double cpuTicksToMs = QpcTicksToMs();
+	std::atomic<uint64_t> frameCounter{ 0 };
+	std::atomic<uint64_t> activeUntilFrame{ 0 };
+	RollingHistory frameHistory;
+	int64_t lastFrameTicks = 0;
 
 	PerfEventCallback beginPerfEvent;
 	PerfEventCallback endPerfEvent;
@@ -210,10 +271,13 @@ private:
 	};
 	std::vector<KnownTimer> knownTimers;
 	std::unordered_map<std::string, size_t> knownTimerIndex;
+	/** @brief Skip marks made before the frame's first BeginPass; they join that frame. */
+	SkipMarks pendingSkipped;
 	uint64_t collectedFrames = 0;
 	float totalTimeMs = 0.0f;
 	float cpuTotalTimeMs = 0.0f;
 
+	/** @brief Pushes each resolved frame's samples into the rows and publishes the newest. */
 	void CollectResults();
 
 	/** @brief Drops timers that have not been sampled for kTimerRetireFrames, so disabled passes stop reporting stale values. */

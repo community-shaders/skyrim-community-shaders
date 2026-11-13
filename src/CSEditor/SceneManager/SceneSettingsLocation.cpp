@@ -1,5 +1,6 @@
 #include "SceneSettingsManager.h"
 
+#include "I18n/I18n.h"
 #include "SceneSettingsContextRules.h"
 #include "SceneSettingsInternal.h"
 #include "SceneSettingsLocationTargets.h"
@@ -39,6 +40,24 @@ const char* SceneSettingsManager::GetLocationSectionName(LocationTargetType type
 		return "cells";
 	default:
 		return "invalid";
+	}
+}
+
+const char* SceneSettingsManager::GetLocationTargetTypeDisplayName(LocationTargetType type)
+{
+	switch (type) {
+	case LocationTargetType::Worldspace:
+		return T("cs_editor.location_type.worldspace", "Worldspace");
+	case LocationTargetType::LocationType:
+		return T("cs_editor.location_type.location_type", "Location Type");
+	case LocationTargetType::Region:
+		return T("cs_editor.location_type.region", "Region");
+	case LocationTargetType::Location:
+		return T("cs_editor.location_type.location", "Location");
+	case LocationTargetType::Cell:
+		return T("cs_editor.location_type.cell", "Cell");
+	default:
+		return T("cs_editor.location_type.invalid", "Invalid");
 	}
 }
 

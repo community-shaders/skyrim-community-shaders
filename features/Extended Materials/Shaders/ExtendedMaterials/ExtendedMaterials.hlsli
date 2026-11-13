@@ -41,9 +41,7 @@ namespace ExtendedMaterials
 	{
 		float m = baseMip + 1.0;
 		m += min(2.0, baseMip * 0.5);
-		float farFloor = viewDist > 0.0
-			? lerp(0.0, 3.0, saturate((viewDist - 512.0) * rcp(1536.0)))
-			: saturate(baseMip - 1.0);
+		float farFloor = viewDist > 0.0 ? lerp(0.0, 3.0, saturate((viewDist - 512.0) * rcp(1536.0))) : saturate(baseMip - 1.0);
 		m = max(m, farFloor);
 		return floor(m);
 	}
@@ -77,9 +75,9 @@ namespace ExtendedMaterials
 
 	float GetMipLevelFromDims(float2 coords, float2 textureDims)
 	{
-#	if !defined(PARALLAX) && !defined(TRUE_PBR)
+#if !defined(PARALLAX) && !defined(TRUE_PBR)
 		textureDims /= 2.0;
-#	endif
+#endif
 
 		float2 texCoordsPerSize = coords * textureDims;
 
@@ -93,9 +91,9 @@ namespace ExtendedMaterials
 		// Compute the current mip level  (* 0.5 is effectively computing a square root before )
 		float mipLevel = max(0.5 * log2(minTexCoordDelta), 0);
 
-#	if !defined(PARALLAX) && !defined(TRUE_PBR)
+#if !defined(PARALLAX) && !defined(TRUE_PBR)
 		mipLevel++;
-#	endif
+#endif
 
 		return floor(max(mipLevel + SharedData::MipBias, 0));
 	}
@@ -107,10 +105,10 @@ namespace ExtendedMaterials
 		return GetMipLevelFromDims(coords, textureDims);
 	}
 
-#	if defined(LANDSCAPE)
-#		include "ExtendedMaterials/ExtendedMaterialsTerrain.hlsli"
-#	endif
-#	include "ExtendedMaterials/ExtendedMaterialsParallaxCore.hlsli"
+#if defined(LANDSCAPE)
+#	include "ExtendedMaterials/ExtendedMaterialsTerrain.hlsli"
+#endif
+#include "ExtendedMaterials/ExtendedMaterialsParallaxCore.hlsli"
 }
 
 #endif  // EXTENDED_MATERIALS_HLSLI

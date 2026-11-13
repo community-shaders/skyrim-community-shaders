@@ -182,7 +182,7 @@ void Skin::DrawLayerStack()
 
 void Skin::DrawLayerToolbar()
 {
-	const float button = BrowserUI::IconButtonSize();
+	const float button = Util::IconButtonSize();
 	const float spacing = ImGui::GetStyle().ItemSpacing.x;
 	// Undo and redo, save and revert, copy, clear and preview, with dividers between the groups.
 	AlignToolbar(button * 7.0f + spacing * 3.0f + (spacing * 4.0f + 1.0f) * 3.0f);
@@ -190,12 +190,12 @@ void Skin::DrawLayerToolbar()
 	const bool dirty = LayerDirty(editor.layer);
 
 	ImGui::BeginDisabled(editor.undo.empty());
-	if (BrowserUI::IconButton("##undo", Icons::TI(ICON_TI_ARROW_BACK_UP), T("feature.skin.undo", "Undo")))
+	if (Util::IconButton("##undo", Icons::TI(ICON_TI_ARROW_BACK_UP), T("feature.skin.undo", "Undo")))
 		Undo();
 	ImGui::EndDisabled();
 	ImGui::SameLine();
 	ImGui::BeginDisabled(editor.redo.empty());
-	if (BrowserUI::IconButton("##redo", Icons::TI(ICON_TI_ARROW_FORWARD_UP), T("feature.skin.redo", "Redo")))
+	if (Util::IconButton("##redo", Icons::TI(ICON_TI_ARROW_FORWARD_UP), T("feature.skin.redo", "Redo")))
 		Redo();
 	ImGui::EndDisabled();
 
@@ -204,27 +204,27 @@ void Skin::DrawLayerToolbar()
 																					   T("feature.skin.save_layer_material", "Writes this texture's material file.") :
 																					   T("feature.skin.save_layer_character", "Writes this character's file, with both character layers."));
 	ImGui::BeginDisabled(!dirty);
-	if (BrowserUI::IconButton("##save", SceneActionIcons::kSave, saveTooltip.c_str(), dirty, dirty ? ImGui::GetColorU32(Util::Colors::GetWarning()) : 0))
+	if (Util::IconButton("##save", SceneActionIcons::kSave, saveTooltip.c_str(), dirty, dirty ? ImGui::GetColorU32(Util::Colors::GetWarning()) : 0))
 		SaveLayer();
 	ImGui::SameLine();
-	if (BrowserUI::IconButton("##revert", Icons::TI(ICON_TI_RESTORE), Action(T("feature.skin.revert_layer", "Revert"), T("feature.skin.revert_layer_tooltip", "Return this layer to its saved values.")).c_str()))
+	if (Util::IconButton("##revert", Icons::TI(ICON_TI_RESTORE), Action(T("feature.skin.revert_layer", "Revert"), T("feature.skin.revert_layer_tooltip", "Return this layer to its saved values.")).c_str()))
 		RevertLayer();
 	ImGui::EndDisabled();
 
 	Util::ToolbarDivider();
-	if (BrowserUI::IconButton("##copy", SceneActionIcons::kCopy, Action(T("feature.skin.copy_layer", "Copy and share"), T("feature.skin.copy_layer_tooltip", "Copy values from another file, or share this character's file.")).c_str()))
+	if (Util::IconButton("##copy", SceneActionIcons::kCopy, Action(T("feature.skin.copy_layer", "Copy and share"), T("feature.skin.copy_layer_tooltip", "Copy values from another file, or share this character's file.")).c_str()))
 		ImGui::OpenPopup("##skin_copy");
 
 	Util::ToolbarDivider();
 	const auto* changes = LayerChanges(editor.layer);
 	const bool empty = !changes || changes->Empty();
 	ImGui::BeginDisabled(empty);
-	if (BrowserUI::IconButton("##clear", SceneActionIcons::kDelete, Action(T("feature.skin.clear_layer", "Clear layer"), T("feature.skin.clear_layer_tooltip", "Remove every value this layer sets. Save to make it permanent.")).c_str(),
-			false, BrowserUI::DestructiveIconColor()))
+	if (Util::IconButton("##clear", SceneActionIcons::kDelete, Action(T("feature.skin.clear_layer", "Clear layer"), T("feature.skin.clear_layer_tooltip", "Remove every value this layer sets. Save to make it permanent.")).c_str(),
+			false, Util::DestructiveIconColor()))
 		editor.clearRequested = true;
 	ImGui::EndDisabled();
 	ImGui::SameLine();
-	if (BrowserUI::IconButton("##wetness", Icons::TI(ICON_TI_DROPLET), Action(T("feature.skin.preview_override_wetness", "Test a specific wetness level"), T("feature.skin.preview_wetness_tooltip", "Previews the drafts at a fixed wetness while the editor is open.")).c_str(),
+	if (Util::IconButton("##wetness", Icons::TI(ICON_TI_DROPLET), Action(T("feature.skin.preview_override_wetness", "Test a specific wetness level"), T("feature.skin.preview_wetness_tooltip", "Previews the drafts at a fixed wetness while the editor is open.")).c_str(),
 			editor.previewWetness >= 0))
 		ImGui::OpenPopup("##skin_wetness");
 	if (editor.layer == Layer::CharacterMaterial && editor.character.materials.contains(editor.key) && editor.character.materials.at(editor.key).Empty())

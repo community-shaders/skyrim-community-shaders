@@ -2,6 +2,7 @@
 #include "Feature.h"
 #include "Globals.h"
 #include "State.h"
+#include "Utils/Logging.h"
 
 #include <unordered_set>
 
@@ -26,10 +27,13 @@ namespace FeatureConstraints
 					} else if (constraint.forcedValue != result.forcedValue) {
 						// Two features disagree on the forced value; first one wins.
 						// Log once so it surfaces during development / testing.
-						logger::warn("[FeatureConstraints] Conflict on {}.{}: {} wants {}, but {} already forced {}",
-							setting.featureShortName, setting.settingPath,
-							feature->GetName(), FormatConstraintValue(constraint.forcedValue),
-							result.sources[0].featureName, FormatConstraintValue(result.forcedValue));
+						static Util::OnceSet loggedConflicts;
+						if (loggedConflicts.First(setting.featureShortName, setting.settingPath, feature->GetShortName(),
+								constraint.forcedValue, result.forcedValue))
+							logger::warn("[FeatureConstraints] Conflict on {}.{}: {} wants {}, but {} already forced {}",
+								setting.featureShortName, setting.settingPath,
+								feature->GetName(), FormatConstraintValue(constraint.forcedValue),
+								result.sources[0].featureName, FormatConstraintValue(result.forcedValue));
 					}
 					result.sources.push_back({ feature->GetName(),
 						feature->GetShortName(),

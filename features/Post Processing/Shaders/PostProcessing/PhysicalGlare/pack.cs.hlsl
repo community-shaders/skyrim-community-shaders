@@ -12,5 +12,5 @@ RWTexture2D<float4> RWTexPacked : register(u0);
 	if (tid.x >= width || tid.y >= height)
 		return;
 
-	RWTexPacked[tid] = float4(TexIFFT_R[tid].x, TexIFFT_G[tid].x, TexIFFT_B[tid].x, 0.0);
+	RWTexPacked[tid] = float4(TexIFFT_R[tid].x, TexIFFT_G[tid].x, TexIFFT_B[tid].x, 1.0);  // Opaque alpha so the ImGui debug view isn't blended away
 }

@@ -42,7 +42,7 @@ public:
 	{
 		bool enableHDR = false;           // false = vanilla SDR, true = HDR output
 		uint hdrPaperWhite = 203;         // Reference white brightness in nits for HDR
-		uint hdrPeakNits = 800;           // Maximum display brightness in nits for HDR
+		uint hdrPeakNits = 1000;          // Maximum display brightness in nits for HDR
 		float hdrUIBrightness = 1.0f;     // UI brightness multiplier for HDR mode
 		bool dontShowHDRWarning = false;  // User preference to suppress HDR warning popup
 		bool hdrAutoDetected = false;     // Has auto-detection run at least once?
@@ -70,11 +70,11 @@ public:
 	/** @brief Draws the ImGui settings UI for HDR enable, paper white, peak brightness, and UI brightness. */
 	virtual void DrawSettings() override;
 
-	/** @brief Enables the bUse64bitsHDRRenderTarget INI setting for float16 render targets. */
-	virtual void DataLoaded() override;
+	/** @brief Forces bUse64bitsHDRRenderTarget for float16 targets; call right before BSShaderRenderTargets::Create. */
+	void PreCreateRenderTargets();
 	/** @brief Creates HDR, output, and UI textures, constant buffer, and upgrades LDR render targets. */
 	virtual void SetupResources() override;
-	/** @brief Releases cached HDR output and UI brightness compute shaders. */
+	/** @brief Releases cached compute shaders and patched blend states. */
 	virtual void ClearShaderCache() override;
 	/** @brief Installs HDR pipeline hooks when the Upscaling feature is not loaded. */
 	virtual void PostPostLoad() override;
@@ -195,6 +195,7 @@ public:
 	Texture2D* uiTexture = nullptr;            // Separate UI render target for proper compositing
 	Texture2D* cleanSceneCapture = nullptr;    // Pre-blur copy of hdrTexture for clean captures
 	uint cleanSceneCaptureFrame = UINT32_MAX;  // frameCount when cleanSceneCapture was last refreshed
+	uint movieDrawnFrame = UINT32_MAX;         // frameCount when a Bink movie was last drawn into the UI buffer
 
 	ID3D11ComputeShader* hdrOutputCS = nullptr;
 	/** @brief Returns the HDR output compute shader, compiling it on first use. */

@@ -507,7 +507,7 @@ void UnifiedPresetCatalog::DiscoverEffects11Presets()
 			pack.source = SourceKind::Effects11Orphan;
 			pack.description = T("menu.presets.effects11_library_description", "Effects11 library preset");
 			if (!preset.valid)
-				pack.invalidReason = T("menu.presets.missing_effects11_files", "Missing enbseries.ini, enbseries or enbseries/enbeffect.fx");
+				pack.invalidReason = preset.invalidReason;
 		}
 		packs.push_back(std::move(pack));
 	}

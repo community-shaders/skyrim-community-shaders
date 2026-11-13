@@ -4,6 +4,9 @@
 
 class BSLightingShaderMaterialPBR;
 
+/** @brief The engine's default land texture, used where a land quad names none. */
+RE::TESLandTexture* GetDefaultLandTexture();
+
 struct GlintParameters
 {
 	bool enabled = false;
@@ -130,9 +133,12 @@ public:
 		uint32_t flags;
 		float params1[3];
 		float params2[4];
+		float params3[4];
+		float params4[4];
+		float params5[4];
 		bool operator==(const GrassPBRConstants&) const = default;
 	};
-	static_assert(sizeof(GrassPBRConstants) == 32);
+	static_assert(sizeof(GrassPBRConstants) == 80 && offsetof(GrassPBRConstants, params4) == 48 && offsetof(GrassPBRConstants, params5) == 64);
 
 	/** @brief Set the renderer's textures and samplers for a PBR grass material. */
 	static void SetGrassPBRTextures(const BSLightingShaderMaterialPBR* material);
@@ -169,6 +175,12 @@ public:
 
 		RE::NiColor subsurfaceColor;
 		float subsurfaceOpacity = 0.f;
+		float subsurfaceBalance = 0.75f;
+		bool thinSurface = false;
+		bool foliage = false;
+		float thinSurfaceSpecularWeight = 0.5f;
+		float thinSurfaceBackSpecularWeight = 0.5f;
+		float thinSurfaceBackRoughnessScale = 1.f;
 
 		RE::NiColor coatColor = { 1.f, 1.f, 1.f };
 		float coatStrength = 1.f;
@@ -178,6 +190,8 @@ public:
 
 		RE::NiColor fuzzColor;
 		float fuzzWeight = 0.f;
+		float fuzzRoughness = -1.f;
+		bool fuzzRoughnessTexture = false;
 
 		GlintParameters glintParameters;
 	};

@@ -43,15 +43,6 @@ struct BokehResources
 		"cutestar.png",
 		"square.png"
 	};
-	std::array<std::string, NUM_BUILTIN_SHAPES> builtinShapeNames = {
-		"Heart",
-		"Hexagon",
-		"Fringy Soft",
-		"Hex Fringy Soft",
-		"Star",
-		"Square"
-	};
-
 	std::array<std::string, MAX_CUSTOM_SHAPES> customShapePaths = {};
 	std::array<std::string, MAX_CUSTOM_SHAPES> customShapeNames = {};
 

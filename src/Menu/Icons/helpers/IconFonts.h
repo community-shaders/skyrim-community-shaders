@@ -18,6 +18,7 @@
 #include <imgui_internal.h>
 
 #include <cstdint>
+#include <unordered_map>
 
 namespace Icons
 {
@@ -101,8 +102,7 @@ namespace Icons
 
 	/**
 	 * @brief Top-left pos for AddText that centres the glyph in boxMin+boxSize (current font), pixel-snapped.
-	 * Centres the glyph quad; on an axis where the quad starts at the origin (some icon fonts store bounds anchored
-	 * there), the advance / line box is centred instead.
+	 * Centres the glyph's ink, measured from the atlas once per glyph and size.
 	 */
 	[[nodiscard]] inline ImVec2 GetCenteredGlyphPos(ImVec2 boxMin, ImVec2 boxSize, const char* utf8Glyph)
 	{
@@ -113,15 +113,42 @@ namespace Icons
 		if (c == 0 || !baked)
 			return boxMin;
 		const ImFontGlyph* g = baked->FindGlyph(static_cast<ImWchar>(c));  // never null: falls back to the fallback glyph
-		const float fontSize = ImGui::GetFontSize();
-		const float scale = fontSize / baked->Size;
-		// Half-pixel tolerance covers sub-pixel raster offsets.
-		const bool anchoredX = ImFabs(g->X0) < 0.5f;
-		const bool anchoredY = ImFabs(g->Y1 - IM_ROUND(baked->Ascent)) < 0.5f;  // quad bottom on the baseline
-		const float x = anchoredX ? boxMin.x + (boxSize.x - g->AdvanceX * scale) * 0.5f :
-		                            boxMin.x + (boxSize.x - (g->X1 - g->X0) * scale) * 0.5f - g->X0 * scale;
-		const float y = anchoredY ? boxMin.y + (boxSize.y - fontSize) * 0.5f :
-		                            boxMin.y + (boxSize.y - (g->Y1 - g->Y0) * scale) * 0.5f - g->Y0 * scale;
+
+		// The quad comes from the font's glyph bbox, which can be looser than the ink (Tabler's all start at x=0)
+		struct Ink
+		{
+			ImVec2 quad{ -1.0f, -1.0f };  // unmeasured; never matches a real quad
+			ImVec4 box;                   // ink bounds, in the same units as the quad
+		};
+		static std::unordered_map<ImGuiID, Ink> inkCache;
+		const ImGuiID key = ImHashData(&c, sizeof(c), baked->BakedId);
+		const ImVec2 quad(g->X1 - g->X0, g->Y1 - g->Y0);
+		Ink& ink = inkCache[key];
+		if (ink.quad.x != quad.x || ink.quad.y != quad.y) {
+			ink = { quad, ImVec4(g->X0, g->Y0, g->X1, g->Y1) };
+			ImFontAtlas* atlas = baked->OwnerFont ? baked->OwnerFont->OwnerAtlas : nullptr;
+			ImTextureData* tex = atlas ? atlas->TexData : nullptr;
+			const ImTextureRect* r = (tex && tex->Pixels) ? ImFontAtlasPackGetRectSafe(atlas, g->PackId) : nullptr;
+			if (r && r->w > 0 && r->h > 0) {
+				const int alpha = tex->Format == ImTextureFormat_RGBA32 ? 3 : 0;
+				int x0 = r->w, y0 = r->h, x1 = -1, y1 = -1;
+				for (int py = 0; py < r->h; ++py)
+					for (int px = 0; px < r->w; ++px)
+						if (static_cast<const unsigned char*>(tex->GetPixelsAt(r->x + px, r->y + py))[alpha]) {
+							x0 = ImMin(x0, px), x1 = ImMax(x1, px);
+							y0 = ImMin(y0, py), y1 = ImMax(y1, py);
+						}
+				// The atlas rect can be oversampled, so map pixels to the quad proportionally
+				const float sx = quad.x / r->w, sy = quad.y / r->h;
+				if (x1 >= 0)
+					ink.box = ImVec4(g->X0 + x0 * sx, g->Y0 + y0 * sy, g->X0 + (x1 + 1) * sx, g->Y0 + (y1 + 1) * sy);
+			}
+		}
+
+		const ImVec4& b = ink.box;
+		const float scale = ImGui::GetFontSize() / baked->Size;
+		const float x = boxMin.x + (boxSize.x - (b.z - b.x) * scale) * 0.5f - b.x * scale;
+		const float y = boxMin.y + (boxSize.y - (b.w - b.y) * scale) * 0.5f - b.y * scale;
 		// ImFont::RenderText truncates the position; round here so the glyph isn't biased up-left.
 		return ImVec2(ImFloor(x + 0.5f), ImFloor(y + 0.5f));
 	}
@@ -135,6 +162,24 @@ namespace Icons
 		drawList->AddText(GetCenteredGlyphPos(boxMin, boxSize, glyph.utf8), col, glyph.utf8);
 	}
 
+	/**
+	 * @brief DrawCenteredGlyph at an explicit font size (pixels as rendered), regardless of the style and window
+	 * font scales, so a glyph can be matched to a texture icon of a known size.
+	 */
+	inline void DrawCenteredGlyph(ImDrawList* drawList, ImVec2 boxMin, ImVec2 boxSize,
+		float fontSize, GlyphRef glyph, ImU32 col)
+	{
+		ImFont* font = GetFont(glyph);
+		if (!drawList || !font || !glyph)
+			return;
+		// PushFont takes a size before the style and window font scales; undo them
+		const ImGuiContext& context = *ImGui::GetCurrentContext();
+		const float fontScale = context.FontSizeBase > 0.0f ? context.FontSize / context.FontSizeBase : 1.0f;
+		ImGui::PushFont(font, fontSize / ImMax(fontScale, 0.01f));
+		drawList->AddText(GetCenteredGlyphPos(boxMin, boxSize, glyph.utf8), col, glyph.utf8);
+		ImGui::PopFont();
+	}
+
 	/** @brief Icon-only text using the glyph's typeface. */
 	inline void Text(GlyphRef glyph)
 	{
@@ -142,72 +187,5 @@ namespace Icons
 			return;
 		FontGuard font(glyph);
 		ImGui::TextUnformatted(glyph.utf8);
-	}
-
-	/** @brief Icon-only button (id is an ImGui ##suffix; visible label is the glyph). */
-	inline bool Button(const char* id, GlyphRef glyph, const ImVec2& size = ImVec2(0, 0))
-	{
-		if (!glyph)
-			return false;
-		FontGuard font(glyph);
-		return ImGui::Button(std::format("{}{}", glyph.utf8, id).c_str(), size);
-	}
-
-	/** @brief Gap LabeledButton leaves between its glyph and label. */
-	inline float LabeledButtonGap(GlyphRef glyph, const char* label)
-	{
-		return (glyph && label && label[0]) ? ImGui::GetStyle().ItemInnerSpacing.x : 0.0f;
-	}
-
-	/** @brief Width LabeledButton takes at its natural size, for right-aligning it. */
-	inline float MeasureLabeledButton(GlyphRef glyph, const char* label)
-	{
-		const float labelWidth = label ? ImGui::CalcTextSize(label).x : 0.0f;
-		return CalcGlyphSize(glyph).x + LabeledButtonGap(glyph, label) + labelWidth + ImGui::GetStyle().FramePadding.x * 2.0f;
-	}
-
-	/**
-	 * @brief Button with a leading icon glyph and body-font label.
-	 * Icon fonts have no Latin glyphs, so the two faces are drawn separately.
-	 */
-	inline bool LabeledButton(const char* id, GlyphRef glyph, const char* label,
-		const ImVec2& size = ImVec2(0, 0))
-	{
-		const ImGuiStyle& style = ImGui::GetStyle();
-		const ImVec2 iconSize = CalcGlyphSize(glyph);
-		const ImVec2 labelSize = label ? ImGui::CalcTextSize(label) : ImVec2(0, 0);
-		const float gap = LabeledButtonGap(glyph, label);
-
-		ImVec2 btnSize = size;
-		if (btnSize.x <= 0.0f)
-			btnSize.x = MeasureLabeledButton(glyph, label);
-		if (btnSize.y <= 0.0f)
-			btnSize.y = ImGui::GetFrameHeight();
-
-		ImGui::PushID(id);
-		const bool clicked = ImGui::InvisibleButton("##labeled", btnSize);
-		const ImVec2 min = ImGui::GetItemRectMin();
-		const ImVec2 max = ImGui::GetItemRectMax();
-		ImDrawList* dl = ImGui::GetWindowDrawList();
-
-		const ImU32 bg = ImGui::GetColorU32(ImGui::IsItemActive()  ? ImGuiCol_ButtonActive :
-											ImGui::IsItemHovered() ? ImGuiCol_ButtonHovered :
-																	 ImGuiCol_Button);
-		dl->AddRectFilled(min, max, bg, style.FrameRounding);
-
-		const float contentW = iconSize.x + gap + labelSize.x;
-		float x = min.x + (btnSize.x - contentW) * 0.5f;
-		const float midY = (min.y + max.y) * 0.5f;
-		const ImU32 col = ImGui::GetColorU32(ImGuiCol_Text);
-
-		if (glyph) {
-			DrawCenteredGlyph(dl, ImVec2(x, min.y), ImVec2(iconSize.x, btnSize.y), glyph, col);
-			x += iconSize.x + gap;
-		}
-		if (label && label[0])
-			dl->AddText(ImVec2(x, midY - labelSize.y * 0.5f), col, label);
-
-		ImGui::PopID();
-		return clicked;
 	}
 }

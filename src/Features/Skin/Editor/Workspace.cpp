@@ -85,7 +85,7 @@ void Skin::Notify(const std::string& a_message, bool a_error) const
 {
 	if (auto* window = EditorWindow::GetSingleton())
 		window->ShowNotification(a_message, a_error ? Util::Colors::GetError() : Util::Colors::GetSuccess(),
-			a_error ? EditorWindow::kLongNotificationDuration : EditorWindow::kNotificationDuration);
+			a_error ? EditorWindow::kLongNotificationDuration : Util::Notifications::kDefaultDuration);
 	if (a_error)
 		logger::warn("[Advanced Skin Editor] {}", a_message);
 }

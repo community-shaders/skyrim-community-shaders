@@ -1,12 +1,10 @@
 #include "Features/RemoteControl/NvPerf.h"
-
-#include "Globals.h"
-#include "State.h"
-#include "Utils/FileSystem.h"
+#include "Features/RemoteControl/NvPerfHost.h"
 
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <cassert>
 #include <cctype>
 #include <cmath>
 #include <fstream>
@@ -138,13 +136,19 @@ namespace NvPerf
 
 	std::filesystem::path CsvPath()
 	{
-		return Util::PathHelpers::GetLogPath().parent_path() / "CommunityShaders-NvPerf.csv";
+		return Host::LogDirectory() / "CommunityShaders-NvPerf.csv";
 	}
 
 #ifdef NVPERF_ENABLED
 
 	namespace
 	{
+		std::string ToUtf8(const std::filesystem::path& a_path)
+		{
+			const auto text = a_path.u8string();
+			return { reinterpret_cast<const char*>(text.data()), text.size() };
+		}
+
 		bool IsSummed(const MetricRequest& a_metric)
 		{
 			return a_metric.metricType == kCounter && a_metric.rollupOp == kRollupSum;
@@ -177,11 +181,12 @@ namespace NvPerf
 			return escaped;
 		}
 
-		// Per filter, per frame. Every sample measures the same frame shape, so occurrences and summed counters are
-		// divided by the sample count.
+		// Per filter, per frame; also keeps each filter's values per sample. Every sample measures the same frame shape,
+		// so occurrences and summed counters are divided by the sample count.
 		std::vector<RangeSummary> Summarize(const CaptureResult& a_result)
 		{
 			const auto& metrics = a_result.metrics;
+			const std::size_t sampleCount = a_result.samples;
 			std::size_t timeMetric = metrics.size();
 			for (std::size_t m = 0; m < metrics.size(); ++m)
 				if (metrics[m].name == "gpu__time_duration")
@@ -191,6 +196,8 @@ namespace NvPerf
 				std::uint32_t occurrences = 0;
 				std::uint32_t incomplete = 0;
 				std::vector<double> values, weights;
+				std::vector<std::uint32_t> sampleOccurrences;
+				std::vector<std::vector<double>> sampleValues, sampleWeights;  // [metric][sample]
 			};
 			std::map<std::string, Totals> byName;
 			std::vector<std::string> order;
@@ -204,11 +211,16 @@ namespace NvPerf
 				if (std::ranges::any_of(range.enclosing, [&](const std::string& a_parent) { return keyOf(a_parent) == key; }))
 					continue;
 				auto [entry, inserted] = byName.try_emplace(key);
-				if (inserted)
-					order.push_back(key);
 				auto& totals = entry->second;
+				if (inserted) {
+					order.push_back(key);
+					totals.sampleOccurrences.resize(sampleCount);
+					totals.sampleValues.assign(metrics.size(), std::vector<double>(sampleCount));
+					totals.sampleWeights.assign(metrics.size(), std::vector<double>(sampleCount));
+				}
 				totals.values.resize(metrics.size());
 				totals.weights.resize(metrics.size());
+				assert(range.sample < sampleCount);
 				const double time = timeMetric < range.values.size() ? range.values[timeMetric] : 1.0;
 				bool incomplete = false;
 				for (std::size_t m = 0; m < metrics.size() && m < range.values.size(); ++m) {
@@ -220,11 +232,14 @@ namespace NvPerf
 					const double weight = IsSummed(metrics[m]) || std::isnan(time) ? 1.0 : time;
 					totals.values[m] += value * weight;
 					totals.weights[m] += weight;
+					totals.sampleValues[m][range.sample] += value * weight;
+					totals.sampleWeights[m][range.sample] += weight;
 				}
 				totals.incomplete += incomplete;
 				++totals.occurrences;
+				++totals.sampleOccurrences[range.sample];
 			}
-			const double samples = std::max<double>(a_result.samples, 1.0);
+			const double samples = std::max<double>(static_cast<double>(sampleCount), 1.0);
 			std::vector<RangeSummary> summary;
 			summary.reserve(order.size());
 			for (const auto& name : order) {
@@ -233,13 +248,24 @@ namespace NvPerf
 				entry.name = name;
 				entry.occurrencesPerFrame = totals.occurrences / samples;
 				entry.incomplete = totals.incomplete;
+				entry.perSample.resize(metrics.size());
 				for (std::size_t m = 0; m < metrics.size(); ++m) {
+					const bool summed = IsSummed(metrics[m]);
 					if (!totals.weights[m])
 						entry.values.push_back(std::nan(""));
-					else if (IsSummed(metrics[m]))
+					else if (summed)
 						entry.values.push_back(totals.values[m] / samples);
 					else
 						entry.values.push_back(totals.values[m] / totals.weights[m]);
+					auto& series = entry.perSample[m];
+					series.resize(sampleCount);
+					for (std::size_t s = 0; s < sampleCount; ++s) {
+						const double weight = totals.sampleWeights[m][s];
+						if (weight)
+							series[s] = summed ? totals.sampleValues[m][s] : totals.sampleValues[m][s] / weight;
+						else
+							series[s] = summed && !totals.sampleOccurrences[s] ? 0.0 : std::nan("");
+					}
 				}
 				summary.push_back(std::move(entry));
 			}
@@ -273,7 +299,7 @@ namespace NvPerf
 			const bool header = !std::filesystem::exists(a_result.csvPath, ec) || std::filesystem::file_size(a_result.csvPath, ec) == 0;
 			std::ofstream csv(a_result.csvPath, std::ios::app);
 			if (!csv) {
-				logger::warn("[NvPerf] could not write {}", a_result.csvPath.string());
+				logger::warn("[NvPerf] could not write {}", ToUtf8(a_result.csvPath));
 				return;
 			}
 			// Metric columns change between captures, so each capture repeats its header when it differs from a new file's.
@@ -285,7 +311,7 @@ namespace NvPerf
 			csv << '\n';
 			for (const auto& range : a_result.rangeResults) {
 				csv << a_result.id << ',' << range.sample << ',' << a_result.startFrame << ',' << CsvEscape(range.name) << ',' << CsvEscape(range.path) << ','
-					<< range.occurrence;
+				    << range.occurrence;
 				for (double value : range.values)
 					csv << ',' << value;
 				csv << '\n';
@@ -373,7 +399,7 @@ namespace NvPerf
 
 		ID3D11DeviceContext* Context()
 		{
-			return globals::d3d::context;
+			return Host::Context();
 		}
 
 		// Loads and initializes the library and identifies the device. Caller holds the mutex.
@@ -382,16 +408,16 @@ namespace NvPerf
 			auto& device = a_profiler.device;
 			if (device.probed)
 				return device.gpuSupported;
-			if (!globals::d3d::device) {
+			if (!Host::Device()) {
 				device.error = "the D3D11 device is not created yet";
 				return false;
 			}
 			device.probed = true;
-			device.libraryPath = Util::PathHelpers::GetCommunityShaderPath() / "NvPerf" / "nvperf_grfx_host.dll";
+			device.libraryPath = Host::DataDirectory() / "NvPerf" / "nvperf_grfx_host.dll";
 			// The import is delay-loaded: it must be loaded by path before the first NVPW call, which would otherwise
 			// raise rather than fail.
 			if (!::GetModuleHandleW(L"nvperf_grfx_host.dll") && !::LoadLibraryW(device.libraryPath.c_str())) {
-				device.error = std::format("could not load {}", device.libraryPath.string());
+				device.error = std::format("could not load {}", ToUtf8(device.libraryPath));
 				logger::info("[NvPerf] {}", device.error);
 				return false;
 			}
@@ -405,7 +431,7 @@ namespace NvPerf
 			}
 			device.available = true;
 			NVPW_D3D11_Device_GetDeviceIndex_Params index{ NVPW_D3D11_Device_GetDeviceIndex_Params_STRUCT_SIZE };
-			index.pDevice = globals::d3d::device;
+			index.pDevice = Host::Device();
 			if (Failed(NVPW_D3D11_Device_GetDeviceIndex(&index), "NVPW_D3D11_Device_GetDeviceIndex")) {
 				device.error = "the D3D11 device is not an NVIDIA GPU the profiler knows";
 				return false;
@@ -861,10 +887,10 @@ namespace NvPerf
 		{
 			auto& capture = *a_profiler.capture;
 			EndSession(a_profiler, capture);
-			globals::state->frameAnnotations = capture.previousFrameAnnotations;
+			Host::SetFrameAnnotations(capture.previousFrameAnnotations);
 
 			auto& result = capture.result;
-			result.endFrame = globals::state->frameCount;
+			result.endFrame = Host::FrameCount();
 			result.samples = capture.sample;
 			result.passesPerSample = capture.passesPerSample;
 			result.metrics.clear();
@@ -903,16 +929,16 @@ namespace NvPerf
 			capture.id = a_id;
 			capture.configuration = std::move(a_configuration);
 			capture.delayFrames = capture.configuration.delayFrames;
-			capture.previousFrameAnnotations = globals::state->frameAnnotations;
+			capture.previousFrameAnnotations = Host::FrameAnnotations();
 			// Perf events are the ranges, and most are only emitted with annotations on.
-			globals::state->frameAnnotations = true;
+			Host::SetFrameAnnotations(true);
 			a_profiler.rangeStack.clear();
 			a_profiler.unbalancedRanges = 0;
 
 			auto& result = capture.result;
 			result.id = a_id;
 			result.ranges = capture.configuration.ranges;
-			result.startFrame = globals::state->frameCount;
+			result.startFrame = Host::FrameCount();
 			result.csvPath = CsvPath();
 
 			std::string chipName;
@@ -1154,7 +1180,10 @@ namespace NvPerf
 
 	namespace
 	{
-		constexpr const char* kNotBuilt = "built without Nsight Perf (configure with -DNVPERF_SUPPORT=ON)";
+		std::string NotBuilt()
+		{
+			return std::format("built without Nsight Perf ({})", Host::BuildHint());
+		}
 	}
 
 	bool Probe() { return false; }
@@ -1162,13 +1191,13 @@ namespace NvPerf
 	DeviceInfo GetDeviceInfo()
 	{
 		DeviceInfo info;
-		info.error = kNotBuilt;
+		info.error = NotBuilt();
 		return info;
 	}
 
 	bool RequestCapture(const CaptureConfiguration&, std::uint64_t&, std::string& a_error)
 	{
-		a_error = kNotBuilt;
+		a_error = NotBuilt();
 		return false;
 	}
 

@@ -40,10 +40,12 @@
 #include "Utils/FileSystem.h"
 #include "Utils/SettingsCatalog.h"
 #include "Utils/SphericalHarmonics.h"
+#include "VanillaBinding.h"
 
 #ifdef TRACY_ENABLE
 static thread_local std::vector<TracyCZoneCtx> s_tracyPerfZones;
 #endif
+static thread_local std::vector<bool> s_perfEventEmitted;
 
 void State::UpdateLightingShaderPermutation(RE::BSRenderPass* a_pass)
 {
@@ -84,16 +86,6 @@ void State::UpdateSkyShaderPermutation(RE::BSRenderPass* a_pass)
 	}
 	if (skyProperty->uiSkyObjectType == RE::BSSkyShaderProperty::SkyObject::SO_MOON) {
 		permutationData.ExtraShaderDescriptor |= static_cast<uint32_t>(State::ExtraShaderDescriptors::IsMoon);
-	}
-
-	// The glare VS fades itself by scene depth coverage around the sun
-	if (skyProperty->uiSkyObjectType == RE::BSSkyShaderProperty::SkyObject::SO_SUN_GLARE) {
-		auto* context = globals::d3d::context;
-		ID3D11Buffer* buffers[] = { permutationCB->CB(), sharedDataCB->CB() };
-		context->VSSetConstantBuffers(4, static_cast<UINT>(std::size(buffers)), buffers);
-		// The sky draws with the z-prepass copy as its DSV, which would null an SRV of it; kMAIN holds the same depth
-		auto* depthSRV = globals::game::renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN].depthSRV;
-		context->VSSetShaderResources(17, 1, &depthSRV);
 	}
 }
 
@@ -187,6 +179,10 @@ void State::Draw()
 		if (globals::menu->overlayVisible && globals::features::performanceOverlay.loaded && globals::features::performanceOverlay.IsOverlayVisible())
 			Debug();
 
+		// Active Shaders counts draws per frame whether or not the performance overlay is up
+		if (IsDeveloperMode() && shaderTrackingFrameChecker.IsNewFrame())
+			globals::shaderCache->ResetFrameShaderTracking();
+
 		updateShader = false;
 	}
 }
@@ -206,9 +202,6 @@ void State::Debug()
 			c = 0;
 		for (auto& ft : frameTimePerType)
 			ft = 0.0f;
-
-		// Reset active shader tracking for developer mode
-		globals::shaderCache->ResetFrameShaderTracking();
 
 		// Start timing for this frame
 		if (frameTimingFrequency.QuadPart == 0) {
@@ -239,7 +232,7 @@ void State::Debug()
 		drawCalls[magic_enum::enum_integer(RE::BSShader::Type::Total)]++;
 	}
 
-	if (currentShader && updateShader && frameAnnotations) {
+	if (currentShader && updateShader && AnnotateDraws()) {
 		BeginPerfEvent(std::format("Draw: CS {}::{:x}::{}", magic_enum::enum_name(currentShader->shaderType.get()), permutationData.PixelShaderDescriptor, currentShader->fxpFilename));
 		SetPerfMarker(std::format("Defines: {}", SIE::ShaderCache::GetDefinesString(*currentShader, permutationData.PixelShaderDescriptor)));
 		EndPerfEvent();
@@ -304,6 +297,14 @@ bool State::HandlePostProcessing(RE::RENDER_TARGET a_input, RE::RENDER_TARGET a_
  * shader descriptor tracking, increments and atomically publishes the frame
  * count, and disables reflection and improved snow shaders.
  */
+void State::SetGrassFlags(bool sphereNormal, bool pbr)
+{
+	constexpr auto sphereNormalFlag = static_cast<uint32_t>(ExtraShaderDescriptors::GrassSphereNormal);
+	constexpr auto pbrFlag = static_cast<uint32_t>(ExtraShaderDescriptors::GrassPBR);
+	permutationData.ExtraShaderDescriptor = (permutationData.ExtraShaderDescriptor & ~(sphereNormalFlag | pbrFlag)) |
+	                                        (sphereNormal ? sphereNormalFlag : 0) | (pbr ? pbrFlag : 0);
+}
+
 void State::Reset()
 {
 	globals::profiler->EndFrame();
@@ -350,7 +351,11 @@ void State::Reset()
 	}
 
 	// Disable "improved" snow shader, unsupported
-	RE::GetINISetting("bEnableImprovedSnow:Display")->data.b = false;
+	static RE::Setting* improvedSnow = nullptr;
+	if (!improvedSnow)
+		improvedSnow = RE::GetINISetting("bEnableImprovedSnow:Display");
+	if (improvedSnow)
+		improvedSnow->data.b = false;
 
 	activeReflections = false;
 }
@@ -688,25 +693,37 @@ void State::SaveCoreToJson(json& settings)
 	settings["Version"] = Plugin::VERSION.string();
 }
 
-size_t State::HashCoreSettings()
+namespace
+{
+	/** @brief Drops the core settings that save themselves, so the unsaved check never counts them. */
+	void EraseSelfSavingSettings(json& core)
+	{
+		for (const auto path : State::SELF_SAVING_SETTINGS) {
+			const json::json_pointer pointer{ std::string(path) };
+			if (core.contains(pointer))
+				core.at(pointer.parent_pointer()).erase(pointer.back());
+		}
+	}
+}
+
+json State::CaptureCoreSettings()
 {
 	json core;
-	{
-		std::lock_guard<std::mutex> lock(m_mutex);
-		SaveCoreToJson(core);
-	}
-	return std::hash<std::string>{}(core.dump());
+	std::lock_guard<std::mutex> lock(m_mutex);
+	SaveCoreToJson(core);
+	return core;
 }
 
 void State::MarkSettingsSaved()
 {
 	settingsChanged = false;
 	coreSettingsChanged = false;
-	savedCoreHash = HashCoreSettings();
+	savedCore = CaptureCoreSettings();
 }
 
 void State::CheckFeatureSettingsChanged(Feature* feature)
 {
+	InvalidateEditsUnderBaselines(feature);
 	if (settingsChanged || !feature->loaded || !feature->UsesMainSettings())
 		return;
 	const auto name = feature->GetName();
@@ -724,7 +741,44 @@ void State::CheckFeatureSettingsChanged(Feature* feature)
 
 void State::CheckCoreSettingsChanged()
 {
-	coreSettingsChanged = HashCoreSettings() != savedCoreHash;
+	auto current = CaptureCoreSettings();
+	auto saved = savedCore;
+	EraseSelfSavingSettings(current);
+	EraseSelfSavingSettings(saved);
+	coreSettingsChanged = current != saved;
+}
+
+bool State::SaveCoreSettings(std::span<const std::string_view> paths)
+{
+	if (savedCore.is_null())
+		return false;
+	const auto current = CaptureCoreSettings();
+	json patch = json::object();
+	for (const auto path : paths) {
+		const json::json_pointer pointer{ std::string(path) };
+		if (!current.contains(pointer))
+			continue;
+		const auto& value = current.at(pointer);
+		if (!savedCore.contains(pointer) || savedCore.at(pointer) != value)
+			patch[pointer] = value;
+	}
+	if (patch.empty())
+		return true;
+
+	const auto configPath = Util::PathHelpers::GetSettingsUserPath();
+	std::error_code ec;
+	const bool fileExists = std::filesystem::exists(configPath, ec);
+	if (ec)
+		return false;
+	// Never replace a config that fails to parse with just the patch
+	auto settings = fileExists ? Util::FileHelpers::ReadJsonObject(configPath, "user config") : std::optional<json>(json::object());
+	if (!settings)
+		return false;
+	settings->merge_patch(patch);
+	if (!Util::FileHelpers::WriteJsonAtomically(configPath, *settings, 1, "config"))
+		return false;
+	savedCore.merge_patch(patch);
+	return true;
 }
 
 void State::LoadFromJson(nlohmann::json& settings)
@@ -821,6 +875,7 @@ void State::LoadFromJson(nlohmann::json& settings)
 			feature->Load(settings);
 		}
 	}
+	InvalidateEditsUnderBaselines();
 }
 
 void State::Save()
@@ -978,10 +1033,61 @@ bool State::HasEditsUnderBaselines(Feature* feature)
 
 void State::InvalidateEditsUnderBaselines(Feature* feature)
 {
-	if (feature)
-		editsUnderBaselines.erase(feature->GetName());
-	else
+	if (feature) {
+		const auto name = feature->GetName();
+		editsUnderBaselines.erase(name);
+		userEdits.erase(name);
+	} else {
 		editsUnderBaselines.clear();
+		userEdits.clear();
+	}
+	++userEditsRevision;
+}
+
+bool State::HasUserEdits(Feature* feature)
+{
+	const auto name = feature->GetName();
+	if (const auto found = userEdits.find(name); found != userEdits.end())
+		return found->second;
+	bool edited = false;
+	if (feature->loaded && feature->UsesMainSettings()) {
+		if (const auto* base = GetFeatureBase(name)) {
+			SceneSettingsManager::SceneLayerGuard sceneLayerGuard;
+			json current;
+			feature->SaveSettings(current);
+			edited = !DiffFromBase(current, *base).empty();
+		}
+	}
+	userEdits[name] = edited;
+	return edited;
+}
+
+json State::GetUserEdits(Feature* feature)
+{
+	if (!feature->loaded || !feature->UsesMainSettings())
+		return json::object();
+	const auto* base = GetFeatureBase(feature->GetName());
+	if (!base)
+		return json::object();
+	SceneSettingsManager::SceneLayerGuard sceneLayerGuard;
+	json current;
+	feature->SaveSettings(current);
+	return DiffFromBase(current, *base);
+}
+
+void State::PrimeUserEdits()
+{
+	const auto stale = [this](Feature* feature) {
+		return feature->loaded && feature->UsesMainSettings() && !userEdits.contains(feature->GetName());
+	};
+	if (std::ranges::none_of(Feature::GetFeatureList(), stale))
+		return;
+	// One suspension for the lot; the guards HasUserEdits takes inside it only nest
+	SceneSettingsManager::SceneLayerGuard sceneLayerGuard;
+	for (auto* feature : Feature::GetFeatureList()) {
+		if (stale(feature))
+			HasUserEdits(feature);
+	}
 }
 
 void State::ClearFeatureEditsUnderBaselines(Feature* feature)
@@ -1174,18 +1280,19 @@ void State::SetupResources()
 
 	auto renderer = globals::game::renderer;
 
-	permutationCB = std::make_unique<ConstantBuffer>(ConstantBufferDesc<PermutationCB>());
-	sharedDataCB = std::make_unique<ConstantBuffer>(ConstantBufferDesc<SharedDataCB>());
+	permutationCB = std::make_unique<ConstantBuffer>(ConstantBufferDesc<PermutationCB>(), "State::PermutationCB");
+	sharedDataCB = std::make_unique<ConstantBuffer>(ConstantBufferDesc<SharedDataCB>(), "State::SharedDataCB");
 
 	auto [data, size] = GetFeatureBufferData(false);
 	(void)data;
-	featureDataCB = std::make_unique<ConstantBuffer>(ConstantBufferDesc((uint32_t)size));
+	featureDataCB = std::make_unique<ConstantBuffer>(ConstantBufferDesc((uint32_t)size), "State::FeatureDataCB");
 
 	// Grab main texture to get resolution
 	D3D11_TEXTURE2D_DESC texDesc{};
 	renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN].texture->GetDesc(&texDesc);
 
-	globals::d3d::context->QueryInterface(__uuidof(pPerf), reinterpret_cast<void**>(&pPerf));
+	pPerf = nullptr;
+	globals::d3d::context->QueryInterface(__uuidof(ID3DUserDefinedAnnotation), pPerf.put_void());
 
 	featureLevel = globals::d3d::device->GetFeatureLevel();
 
@@ -1326,8 +1433,24 @@ uint32_t State::GetRuntimePixelBits(const RE::BSShader& a_shader)
 	return a_shader.shaderType.get() == RE::BSShader::Type::Water ? static_cast<uint32_t>(SIE::ShaderCache::WaterShaderFlags::Wading) : 0u;
 }
 
+bool State::PerfEventsConsumed() const
+{
+	if ((pPerf && pPerf->GetStatus()) || NvPerf::RangesActive())
+		return true;
+#ifdef TRACY_ENABLE
+	return TracyIsConnected;
+#else
+	return false;
+#endif
+}
+
 void State::BeginPerfEvent(std::string_view title)
 {
+	// Record whether this event was emitted, so EndPerfEvent stays balanced if a consumer attaches or leaves in between.
+	const bool emit = PerfEventsConsumed();
+	s_perfEventEmitted.push_back(emit);
+	if (!emit)
+		return;
 #ifdef TRACY_ENABLE
 	// Use dynamic source location so Tracy displays the title as the zone name
 	// rather than the static function name "BeginPerfEvent".
@@ -1347,6 +1470,14 @@ void State::BeginPerfEvent(std::string_view title)
 
 void State::EndPerfEvent()
 {
+	if (s_perfEventEmitted.empty()) {
+		logger::warn("EndPerfEvent called without a matching BeginPerfEvent");
+		return;
+	}
+	const bool emitted = s_perfEventEmitted.back();
+	s_perfEventEmitted.pop_back();
+	if (!emitted)
+		return;
 #ifdef TRACY_ENABLE
 	if (!s_tracyPerfZones.empty()) {
 		TracyCZoneEnd(s_tracyPerfZones.back());
@@ -1362,6 +1493,8 @@ void State::EndPerfEvent()
 
 void State::SetPerfMarker(std::string_view title)
 {
+	if (!PerfEventsConsumed())
+		return;
 	pPerf->SetMarker(std::wstring(title.begin(), title.end()).c_str());
 }
 
@@ -1512,8 +1645,7 @@ void State::UpdateSharedData([[maybe_unused]] bool a_inWorld, [[maybe_unused]] b
 		featureDataCB->Update(data, size);
 	}
 
-	auto* srv = Util::GetCurrentSceneDepthSRV(true);
-	globals::d3d::context->PSSetShaderResources(17, 1, &srv);
+	VanillaBinding::BindSceneDepth();
 }
 
 void State::ClearDisabledFeatures()

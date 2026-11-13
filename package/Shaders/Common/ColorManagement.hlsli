@@ -2,9 +2,6 @@
 #define __COLOR_MANAGEMENT_DEPENDENCY_HLSL__
 
 #include "Common/Color.hlsli"
-#if defined(PSHADER)
-#	include "Common/Permutation.hlsli"
-#endif
 
 #if defined(PSHADER) || defined(CSHADER) || defined(COMPUTESHADER)
 namespace Color
@@ -37,12 +34,19 @@ namespace Color
 		return PBRMaterialIsGammaEncoded ? TransferFunctions::LinearToGamma22(linearColor) : linearColor;
 	}
 
-	float3 Albedo(float3 color)
+	/** @brief Albedo for Lambert-lit colors, which skip the PBR material encoding even in TRUE_PBR shaders. */
+	float3 LambertAlbedo(float3 color)
 	{
 #	if defined(EFFECTS11)
 		if (SharedData::enbSettings.Enable)
 			color = pow(abs(color), SharedData::enbSettings.ColorPow);
 #	endif
+		return color;
+	}
+
+	float3 Albedo(float3 color)
+	{
+		color = LambertAlbedo(color);
 #	if defined(TRUE_PBR)
 		color = LinearToPBRMaterial(color);
 #	endif
@@ -100,8 +104,8 @@ namespace Color
 #	endif
 	}
 
-	/** @brief Scales additive effects: fire gets a curve and intensity, all other additive effects are light sprites. */
-	float3 AdditiveEffect(float3 color, bool isFire)
+	/** @brief Scales additive effects: fire gets a curve and intensity, light sprites get their intensity, anything else is left alone. */
+	float3 AdditiveEffect(float3 color, bool isFire, bool isLightSprite)
 	{
 #	if defined(EFFECTS11)
 		if (!SharedData::enbSettings.Enable)
@@ -115,7 +119,10 @@ namespace Color
 		const float lightSpriteIntensity = SharedData::linearLightingSettings.lightSpriteEffectMult;
 #	endif
 #	if defined(EFFECTS11) || defined(ENABLE_LL)
-		color = isFire ? pow(abs(color), fireCurve) * fireIntensity : color * lightSpriteIntensity;
+		if (isFire)
+			color = pow(abs(color), fireCurve) * fireIntensity;
+		else if (isLightSprite)
+			color *= lightSpriteIntensity;
 #	endif
 		return color;
 	}

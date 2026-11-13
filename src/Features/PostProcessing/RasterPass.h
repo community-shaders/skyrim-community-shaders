@@ -23,7 +23,7 @@ namespace PostProcessingRaster
 	 *   - RS: rasterizer state, viewports, scissor rects
 	 *   - IA: primitive topology + input layout (draws use no vertex buffer)
 	 *   - VS/HS/DS/GS/PS: shader objects
-	 *   - PS: resource slots 0-5, constant-buffer slots 0-5, sampler slot 0
+	 *   - PS: resource slots 0-7, constant-buffer slots 0-5, sampler slots 0-1
 	 */
 	struct RasterPass
 	{
@@ -76,9 +76,9 @@ namespace PostProcessingRaster
 		void Draw();
 
 	private:
-		static constexpr UINT kPSSRVCount = 6;
+		static constexpr UINT kPSSRVCount = 8;
 		static constexpr UINT kPSCBCount = 6;
-		static constexpr UINT kPSSamplerCount = 1;
+		static constexpr UINT kPSSamplerCount = 2;
 
 		ID3D11DeviceContext* context;
 

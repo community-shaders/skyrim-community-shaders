@@ -38,91 +38,86 @@ std::vector<std::pair<std::string_view, std::string_view>> DynamicCubemaps::GetS
 
 void DynamicCubemaps::DrawSettings()
 {
-	if (ImGui::TreeNodeEx(T(TKEY("screen_space_reflections"), "Screen Space Reflections"), ImGuiTreeNodeFlags_DefaultOpen)) {
-		recompileFlag |= ImGui::Checkbox(T(TKEY("enable_ssr"), "Enable Screen Space Reflections"), reinterpret_cast<bool*>(&settings.EnabledSSR));
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("%s", T(TKEY("enable_ssr_tooltip"), "Enable Screen Space Reflections on Water"));
-		}
-		ImGui::TreePop();
+	recompileFlag |= ImGui::Checkbox(T(TKEY("enable_ssr"), "Enable Screen Space Reflections"), reinterpret_cast<bool*>(&settings.EnabledSSR));
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("%s", T(TKEY("enable_ssr_tooltip"), "Enable Screen Space Reflections on Water"));
 	}
 
-	if (ImGui::TreeNodeEx(T(TKEY("dynamic_cubemap_creator"), "Dynamic Cubemap Creator"), ImGuiTreeNodeFlags_DefaultOpen)) {
-		ImGui::Text("%s", T(TKEY("creator_info"), "You must enable creator mode by adding the shader define CREATOR"));
-		ImGui::Checkbox(T(TKEY("enable_creator"), "Enable Creator"), reinterpret_cast<bool*>(&settings.EnabledCreator));
-		if (settings.EnabledCreator) {
-			ImGui::ColorEdit3(T(TKEY("color"), "Color"), reinterpret_cast<float*>(&settings.CubemapColor));
-			ImGui::SliderFloat(T(TKEY("roughness"), "Roughness"), &settings.CubemapColor.w, 0.0f, 1.0f, "%.2f");
-			if (ImGui::Button(T(TKEY("export"), "Export"))) {
-				auto device = globals::d3d::device;
-				auto context = globals::d3d::context;
+	ImGui::SeparatorText(T(TKEY("dynamic_cubemap_creator"), "Dynamic Cubemap Creator"));
+	ImGui::Text("%s", T(TKEY("creator_info"), "You must enable creator mode by adding the shader define CREATOR"));
+	ImGui::Checkbox(T(TKEY("enable_creator"), "Enable Creator"), reinterpret_cast<bool*>(&settings.EnabledCreator));
+	if (settings.EnabledCreator) {
+		ImGui::ColorEdit3(T(TKEY("color"), "Color"), reinterpret_cast<float*>(&settings.CubemapColor));
+		ImGui::SliderFloat(T(TKEY("roughness"), "Roughness"), &settings.CubemapColor.w, 0.0f, 1.0f, "%.2f");
+		if (Util::Button(T(TKEY("export"), "Export"))) {
+			auto device = globals::d3d::device;
+			auto context = globals::d3d::context;
 
-				D3D11_TEXTURE2D_DESC texDesc{};
-				texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-				texDesc.Height = 1;
-				texDesc.Width = 1;
-				texDesc.ArraySize = 6;
-				texDesc.MipLevels = 1;
-				texDesc.SampleDesc.Count = 1;
-				texDesc.Usage = D3D11_USAGE_DEFAULT;
-				texDesc.BindFlags = 0;
-				texDesc.MiscFlags = D3D11_RESOURCE_MISC_TEXTURECUBE;
+			D3D11_TEXTURE2D_DESC texDesc{};
+			texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+			texDesc.Height = 1;
+			texDesc.Width = 1;
+			texDesc.ArraySize = 6;
+			texDesc.MipLevels = 1;
+			texDesc.SampleDesc.Count = 1;
+			texDesc.Usage = D3D11_USAGE_DEFAULT;
+			texDesc.BindFlags = 0;
+			texDesc.MiscFlags = D3D11_RESOURCE_MISC_TEXTURECUBE;
 
-				D3D11_SUBRESOURCE_DATA subresourceData[6];
+			D3D11_SUBRESOURCE_DATA subresourceData[6];
 
-				struct PixelData
-				{
-					uint8_t r, g, b, a;
-				};
+			struct PixelData
+			{
+				uint8_t r, g, b, a;
+			};
 
-				static PixelData colorPixel{};
+			static PixelData colorPixel{};
 
-				colorPixel = { (uint8_t)((settings.CubemapColor.x * 255.0f) + 0.5f),
-					(uint8_t)((settings.CubemapColor.y * 255.0f) + 0.5f),
-					(uint8_t)((settings.CubemapColor.z * 255.0f) + 0.5f),
-					std::min((uint8_t)254u, (uint8_t)((settings.CubemapColor.w * 255.0f) + 0.5f)) };
+			colorPixel = { (uint8_t)((settings.CubemapColor.x * 255.0f) + 0.5f),
+				(uint8_t)((settings.CubemapColor.y * 255.0f) + 0.5f),
+				(uint8_t)((settings.CubemapColor.z * 255.0f) + 0.5f),
+				std::min((uint8_t)254u, (uint8_t)((settings.CubemapColor.w * 255.0f) + 0.5f)) };
 
-				static PixelData emptyPixel{};
+			static PixelData emptyPixel{};
 
-				subresourceData[0].pSysMem = &colorPixel;
-				subresourceData[0].SysMemPitch = sizeof(PixelData);
-				subresourceData[0].SysMemSlicePitch = sizeof(PixelData);
+			subresourceData[0].pSysMem = &colorPixel;
+			subresourceData[0].SysMemPitch = sizeof(PixelData);
+			subresourceData[0].SysMemSlicePitch = sizeof(PixelData);
 
-				for (uint i = 1; i < 6; i++) {
-					subresourceData[i].pSysMem = &emptyPixel;
-					subresourceData[i].SysMemPitch = sizeof(PixelData);
-					subresourceData[i].SysMemSlicePitch = sizeof(PixelData);
-				}
-
-				winrt::com_ptr<ID3D11Texture2D> tempTexture;
-				DirectX::ScratchImage image;
-
-				try {
-					DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, subresourceData, tempTexture.put()));
-					DX::ThrowIfFailed(CaptureTexture(device, context, tempTexture.get(), image));
-
-					if (std::filesystem::create_directories(defaultDynamicCubeMapSavePath)) {
-						logger::info("Missing DynamicCubeMap Creator directory created: {}", defaultDynamicCubeMapSavePath);
-					}
-
-					std::filesystem::path DynamicCubeMapSavePath = defaultDynamicCubeMapSavePath;
-					std::filesystem::path filename(std::format("R{:03d}G{:03d}B{:03d}A{:03d}.dds", colorPixel.r, colorPixel.g, colorPixel.b, colorPixel.a));
-					DynamicCubeMapSavePath /= filename;
-
-					if (std::filesystem::exists(DynamicCubeMapSavePath)) {
-						logger::info("DynamicCubeMap Creator file for {} already exists, skipping.", filename.string());
-					} else {
-						DX::ThrowIfFailed(SaveToDDSFile(image.GetImages(), image.GetImageCount(), image.GetMetadata(), DirectX::DDS_FLAGS::DDS_FLAGS_NONE, DynamicCubeMapSavePath.c_str()));
-						logger::info("DynamicCubeMap Creator file for {} written", filename.string());
-					}
-
-				} catch (const std::exception& e) {
-					logger::error("Failed in DynamicCubeMap Creator file: {} {}", defaultDynamicCubeMapSavePath, e.what());
-				}
-
-				image.Release();
+			for (uint i = 1; i < 6; i++) {
+				subresourceData[i].pSysMem = &emptyPixel;
+				subresourceData[i].SysMemPitch = sizeof(PixelData);
+				subresourceData[i].SysMemSlicePitch = sizeof(PixelData);
 			}
+
+			winrt::com_ptr<ID3D11Texture2D> tempTexture;
+			DirectX::ScratchImage image;
+
+			try {
+				DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, subresourceData, tempTexture.put()));
+				DX::ThrowIfFailed(CaptureTexture(device, context, tempTexture.get(), image));
+
+				if (std::filesystem::create_directories(defaultDynamicCubeMapSavePath)) {
+					logger::info("Missing DynamicCubeMap Creator directory created: {}", defaultDynamicCubeMapSavePath);
+				}
+
+				std::filesystem::path DynamicCubeMapSavePath = defaultDynamicCubeMapSavePath;
+				std::filesystem::path filename(std::format("R{:03d}G{:03d}B{:03d}A{:03d}.dds", colorPixel.r, colorPixel.g, colorPixel.b, colorPixel.a));
+				DynamicCubeMapSavePath /= filename;
+
+				if (std::filesystem::exists(DynamicCubeMapSavePath)) {
+					logger::info("DynamicCubeMap Creator file for {} already exists, skipping.", filename.string());
+				} else {
+					DX::ThrowIfFailed(SaveToDDSFile(image.GetImages(), image.GetImageCount(), image.GetMetadata(), DirectX::DDS_FLAGS::DDS_FLAGS_NONE, DynamicCubeMapSavePath.c_str()));
+					logger::info("DynamicCubeMap Creator file for {} written", filename.string());
+				}
+
+			} catch (const std::exception& e) {
+				logger::error("Failed in DynamicCubeMap Creator file: {} {}", defaultDynamicCubeMapSavePath, e.what());
+			}
+
+			image.Release();
 		}
-		ImGui::TreePop();
 	}
 }
 
@@ -474,10 +469,13 @@ void DynamicCubemaps::Irradiance(bool a_reflections, uint32_t a_startLevel, uint
 			size /= 2;
 
 		// Suffix: A = level 1, BA = levels 2..N-1, BB = last level.
-		const char* suffix = (a_startLevel == 1) ? "A" : (a_endLevel == MIPLEVELS) ? "BB" :
-		                                                                             "BA";
-		const auto passName = a_reflections ? std::format("DynamicCubemaps::IrradianceReflections{}", suffix) : std::format("DynamicCubemaps::Irradiance{}", suffix);
-		globals::profiler->BeginPass(passName);
+		static constexpr std::string_view passNames[2][3] = {
+			{ "DynamicCubemaps::IrradianceA", "DynamicCubemaps::IrradianceBA", "DynamicCubemaps::IrradianceBB" },
+			{ "DynamicCubemaps::IrradianceReflectionsA", "DynamicCubemaps::IrradianceReflectionsBA", "DynamicCubemaps::IrradianceReflectionsBB" }
+		};
+		const uint32_t suffix = (a_startLevel == 1) ? 0u : (a_endLevel == MIPLEVELS) ? 2u :
+		                                                                               1u;
+		globals::profiler->BeginPass(passNames[a_reflections ? 1 : 0][suffix]);
 		for (std::uint32_t level = a_startLevel; level < a_endLevel; level++, size /= 2) {
 			const UINT numGroups = (UINT)std::max(1u, (size + 7u) / 8u);
 
@@ -717,27 +715,27 @@ void DynamicCubemaps::SetupResources()
 		uavDesc.Texture2DArray.FirstArraySlice = 0;
 		uavDesc.Texture2DArray.ArraySize = texDesc.ArraySize;
 
-		envCaptureTexture = new Texture2D(texDesc);
+		envCaptureTexture = new Texture2D(texDesc, "DynamicCubemaps::EnvCapture");
 		envCaptureTexture->CreateSRV(srvDesc);
 		envCaptureTexture->CreateUAV(uavDesc);
 
-		envCaptureRawTexture = new Texture2D(texDesc);
+		envCaptureRawTexture = new Texture2D(texDesc, "DynamicCubemaps::EnvCaptureRaw");
 		envCaptureRawTexture->CreateSRV(srvDesc);
 		envCaptureRawTexture->CreateUAV(uavDesc);
 
-		envCapturePositionTexture = new Texture2D(texDesc);
+		envCapturePositionTexture = new Texture2D(texDesc, "DynamicCubemaps::EnvCapturePosition");
 		envCapturePositionTexture->CreateSRV(srvDesc);
 		envCapturePositionTexture->CreateUAV(uavDesc);
 
-		envCaptureReflectionsTexture = new Texture2D(texDesc);
+		envCaptureReflectionsTexture = new Texture2D(texDesc, "DynamicCubemaps::EnvCaptureReflections");
 		envCaptureReflectionsTexture->CreateSRV(srvDesc);
 		envCaptureReflectionsTexture->CreateUAV(uavDesc);
 
-		envCaptureRawReflectionsTexture = new Texture2D(texDesc);
+		envCaptureRawReflectionsTexture = new Texture2D(texDesc, "DynamicCubemaps::EnvCaptureRawReflections");
 		envCaptureRawReflectionsTexture->CreateSRV(srvDesc);
 		envCaptureRawReflectionsTexture->CreateUAV(uavDesc);
 
-		envCapturePositionReflectionsTexture = new Texture2D(texDesc);
+		envCapturePositionReflectionsTexture = new Texture2D(texDesc, "DynamicCubemaps::EnvCapturePositionReflections");
 		envCapturePositionReflectionsTexture->CreateSRV(srvDesc);
 		envCapturePositionReflectionsTexture->CreateUAV(uavDesc);
 
@@ -745,11 +743,11 @@ void DynamicCubemaps::SetupResources()
 		srvDesc.Format = texDesc.Format;
 		uavDesc.Format = texDesc.Format;
 
-		envTexture = new Texture2D(texDesc);
+		envTexture = new Texture2D(texDesc, "DynamicCubemaps::Env");
 		envTexture->CreateSRV(srvDesc);
 		envTexture->CreateUAV(uavDesc);
 
-		envReflectionsTexture = new Texture2D(texDesc);
+		envReflectionsTexture = new Texture2D(texDesc, "DynamicCubemaps::EnvReflections");
 		envReflectionsTexture->CreateSRV(srvDesc);
 		envReflectionsTexture->CreateUAV(uavDesc);
 
@@ -888,7 +886,10 @@ void DynamicCubemaps::SetupResources()
 	}
 
 	{
-		DirectX::CreateDDSTextureFromFile(device, L"Data\\Shaders\\DynamicCubemaps\\defaultcubemap.dds", nullptr, &defaultCubemap);
+		winrt::com_ptr<ID3D11Resource> defaultCubemapResource;
+		DirectX::CreateDDSTextureFromFile(device, L"Data\\Shaders\\DynamicCubemaps\\defaultcubemap.dds", defaultCubemapResource.put(), &defaultCubemap);
+		Util::SetResourceName(defaultCubemapResource.get(), "DynamicCubemaps::DefaultCubemap");
+		Util::SetResourceName(defaultCubemap, "DynamicCubemaps::DefaultCubemap SRV");
 	}
 }
 

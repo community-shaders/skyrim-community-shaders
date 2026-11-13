@@ -53,6 +53,10 @@ namespace SharedData
 		// Only read by the GRASS_OPTIMIZATIONS permutation, for grass drawn with an LOD mesh.
 		float MidLODBrightness;
 		float FarLODBrightness;
+		float PBRWrappedLightingAmount;
+		float SubsurfaceBalance;
+		float CanopyOcclusion;
+		float ClumpShading;
 	};
 
 	struct CPMSettings
@@ -266,17 +270,19 @@ namespace SharedData
 		float CloudsEdgeMoonMultiplier;
 
 		uint EnableProceduralSun;
-		float ProceduralSunDiskRadiusSq;
-		float ProceduralSunDiskEdgeScale;
-		float ProceduralSunGlowIntensity;
+		float ProceduralSunDiskCos;
+		float ProceduralSunDiskRadiance;
+		float ProceduralSunEdgeSoftness;
 
-		float ProceduralSunCoronaFalloff;
-		float ProceduralSunCoronaScale;
+		float ProceduralSunHaloCos;
+		float ProceduralSunHaloIntensity;
 		uint UseProceduralGradientWeights;
 		float ProceduralGradientWeightCurve;
 
 		float LightSpriteCurve;
-		float3 pad1;
+		float ProceduralSunHaloFalloff;
+		float ProceduralSunRadianceLimit;
+		float pad1;
 
 		float ParticleIntensity;
 		float ParticleLightingInfluence;
@@ -335,7 +341,8 @@ namespace SharedData
 
 		float MasserBillboardTan;
 		float SecundaBillboardTan;
-		float2 SkyScatteringPad0;
+		float SkyScaleMultiplier;
+		float SkyScatteringPad0;
 
 		uint EnableWater;
 		float WaterWavesAmplitude;
@@ -441,6 +448,7 @@ namespace SharedData
 		float pad3;
 		float3 volumetricFogNoiseVelocity;
 		float pad0;
+		float4 originalFogColorOverride;
 	};
 
 	struct TruePBRSettings
@@ -474,6 +482,26 @@ namespace SharedData
 		float MotionStretch;
 		float MotionTransparency;
 		float pad0;
+		float4 TextureBounds;
+		float2 TextureRadiusScale;
+		float2 pad1;
+	};
+
+	struct ProceduralSunSettings
+	{
+		uint enabled;
+		float sunDiskCos;
+		float diskIntensity;
+		float edgeSoftness;
+
+		uint haloEnabled;
+		float sunHaloCos;
+		float haloIntensity;
+		float haloFalloff;
+
+		float cloudOcclusionStrength;
+		float sunQuadModelRadius;
+		float2 pad0;
 	};
 
 	cbuffer FeatureData : register(b6)
@@ -499,6 +527,7 @@ namespace SharedData
 		SkinData skinData;
 		HorizonFixSettings horizonFixSettings;
 		RainRefractionSettings rainRefractionSettings;
+		ProceduralSunSettings proceduralSunSettings;
 	};
 
 	Texture2D<float4> DepthTexture : register(t17);
@@ -535,14 +564,9 @@ namespace SharedData
 	// Returns water data for the tile containing worldPosition (camera-relative XY).
 	float4 GetWaterData(float3 worldPosition)
 	{
-		float2 cellF = (((worldPosition.xy + FrameBuffer::CameraPosAdjust.xy)) / 4096.0) + 64.0;  // always positive
-		int2 cellInt;
-		float2 cellFrac = modf(cellF, cellInt);
-
-		cellF = worldPosition.xy / float2(4096.0, 4096.0);  // remap to cell scale
-		cellF += 2.5;                                       // 5x5 cell grid
-		cellF -= cellFrac;                                  // align to cell borders
-		cellInt = round(cellF);
+		// floor keeps negative coordinates and cell borders exact
+		float2 absolutePosition = worldPosition.xy + FrameBuffer::CameraPosAdjust.xy;
+		int2 cellInt = (int2)(floor(absolutePosition / 4096.0) - floor(FrameBuffer::CameraPosAdjust.xy / 4096.0)) + 2;  // 5x5 cell grid
 
 		uint waterTile = (uint)clamp(cellInt.x + (cellInt.y * 5), 0, 24);  // remap xy to 0-24
 

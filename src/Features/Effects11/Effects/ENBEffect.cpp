@@ -52,7 +52,10 @@ void ENBEffect::UpdateEffectVariables()
 	auto& modData = data.modData;
 
 	params01[2].x = baseData.hdr.receiveBloomThreshold;
-	params01[2].y = baseData.hdr.white * RE::GetINISetting("fReinhardWhiteScale:Display")->GetFloat();
+	static RE::Setting* reinhardWhiteScale = nullptr;
+	if (!reinhardWhiteScale)
+		reinhardWhiteScale = RE::GetINISetting("fReinhardWhiteScale:Display");
+	params01[2].y = baseData.hdr.white * (reinhardWhiteScale ? reinhardWhiteScale->GetFloat() : 1.0f);
 
 	params01[3].x = baseData.cinematic.saturation;
 	params01[3].z = baseData.cinematic.contrast;

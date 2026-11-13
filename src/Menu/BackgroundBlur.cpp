@@ -4,6 +4,7 @@
 
 #include "BackgroundBlur.h"
 #include "../Features/HDRDisplay.h"
+#include "../Features/PerformanceOverlay.h"
 #include "../Features/Upscaling.h"
 #include "../Globals.h"
 #include "../ShaderCache.h"
@@ -48,6 +49,7 @@ namespace BackgroundBlur
 		std::mutex resourceMutex;
 		bool enabled = false;
 		bool csEditorActive = false;
+		float fade = 1.0f;
 
 		// DirectX resources (RAII managed)
 		winrt::com_ptr<ID3D11VertexShader> vertexShader;
@@ -101,7 +103,8 @@ namespace BackgroundBlur
 		struct WindowConstants
 		{
 			float windowRect[4];    // x = minX, y = minY, z = maxX, w = maxY (in pixels)
-			float windowParams[4];  // x = cornerRadius, y = screenWidth, z = screenHeight, w = unused
+			float windowParams[4];  // x = cornerRadius, y = screenWidth, z = screenHeight, w = fullscreen
+			float fadeParams[4];    // x = fade
 		};
 
 		struct UIBufferViews
@@ -407,7 +410,9 @@ namespace BackgroundBlur
 
 		// Step 2: Blend UI buffer at downsampled resolution (pre-multiplied alpha)
 		// Small HUD elements may be slightly softened but this is much faster
-		if (uiBufferSRV && compositeBlendState) {
+		// The HUD is only blurred and cleared at full strength; while fading it stays sharp, so it never pops
+		const bool blurHud = fade >= 1.0f;
+		if (blurHud && uiBufferSRV && compositeBlendState) {
 			context->OMSetBlendState(compositeBlendState.get(), nullptr, 0xFFFFFFFF);
 			context->PSSetShaderResources(0, 1, &uiBufferSRV);
 			context->Draw(FULLSCREEN_TRIANGLE_VERTICES, 0);
@@ -446,7 +451,7 @@ namespace BackgroundBlur
 		context->Draw(FULLSCREEN_TRIANGLE_VERTICES, 0);
 		context->PSSetShaderResources(0, 1, &nullSRV);
 
-		// Final composition: upscale from quarter-res with rounded corner mask
+		// Final composition: upscale from eighth-res with rounded corner mask
 		context->RSSetViewports(1, &originalViewport);
 
 		// Expand scissor rect slightly for anti-aliased rounded corner edges
@@ -471,6 +476,7 @@ namespace BackgroundBlur
 			windowConstants.windowParams[1] = static_cast<float>(sourceDesc.Width);
 			windowConstants.windowParams[2] = static_cast<float>(sourceDesc.Height);
 			windowConstants.windowParams[3] = csEditorActive ? 1.0f : 0.0f;
+			windowConstants.fadeParams[0] = fade;
 			context->UpdateSubresource(windowConstantBuffer.get(), 0, nullptr, &windowConstants, 0, 0);
 			auto windowConstantBufferPtr = windowConstantBuffer.get();
 			context->PSSetConstantBuffers(1, 1, &windowConstantBufferPtr);
@@ -487,8 +493,9 @@ namespace BackgroundBlur
 		context->PSSetShaderResources(0, 1, &nullSRV);
 
 		// Clear UI buffer where blur was drawn (prevents HUD showing through)
-		if (uiBufferRTV) {
+		if (blurHud && uiBufferRTV) {
 			context->OMSetRenderTargets(1, &uiBufferRTV, nullptr);
+			// Unblended on purpose: a fade-scaled blend blacked out and flickered the D3D12 UI buffer
 			context->OMSetBlendState(nullptr, nullptr, 0xFFFFFFFF);
 
 			// Clear with same rounded shape - window constants already bound
@@ -548,19 +555,19 @@ namespace BackgroundBlur
 		enabled = enable;
 	}
 
+	void SetFade(float newFade)
+	{
+		fade = std::clamp(newFade, 0.0f, 1.0f);
+	}
+
 	void SetCSEditorActive(bool active)
 	{
 		csEditorActive = active;
 	}
 
-	bool IsCSEditorActive()
-	{
-		return csEditorActive;
-	}
-
 	void RenderBackgroundBlur()
 	{
-		if (!enabled) {
+		if (!enabled || fade <= 0.0f) {
 			return;
 		}
 
@@ -693,7 +700,7 @@ namespace BackgroundBlur
 			}
 
 			// Skip Performance Overlay window (no blur)
-			if (window->Name && std::string_view(window->Name) == "Performance Overlay") {
+			if (window->Name && std::string_view(window->Name).ends_with(PerformanceOverlay::kWindowId)) {
 				continue;
 			}
 

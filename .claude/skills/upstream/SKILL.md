@@ -11,9 +11,9 @@ Any maintainer can run this skill. Branches are always pushed to **the invoking 
 
 ## 0. Inputs
 
--   **Window:** default is the last 1 day of activity on each fork. Use the fork's last commit date, not today's date.
--   **Explicit commits:** `open:<sha>` / `bottle:<sha>`. When given, triage only those (window ignored).
--   **`--auto`:** skip the checkpoint in step 3 for `port-clean` and `port-adapted` items only. `needs-decision` items are never ported under `--auto`; they are reported and wait for a maintainer's approval. Never set `--auto` for scheduled or unattended runs.
+- **Window:** default is the last 1 day of activity on each fork. Use the fork's last commit date, not today's date.
+- **Explicit commits:** `open:<sha>` / `bottle:<sha>`. When given, triage only those (window ignored).
+- **`--auto`:** skip the checkpoint in step 3 for `port-clean` and `port-adapted` items only. `needs-decision` items are never ported under `--auto`; they are reported and wait for a maintainer's approval. Never set `--auto` for scheduled or unattended runs.
 
 ## 1. Setup
 
@@ -74,7 +74,7 @@ pip install -q git+https://github.com/alandtse/hlslkit.git   # buffer-scan only;
 
 ### 2a. Collect
 
--   Anchor the window to each fork's tip, so a fork that has been quiet for a few days still yields its last day of commits:
+- Anchor the window to each fork's tip, so a fork that has been quiet for a few days still yields its last day of commits:
 
     ```bash
     tip=$(git log -1 --format=%cI <remote/branch>)
@@ -82,7 +82,7 @@ pip install -q git+https://github.com/alandtse/hlslkit.git   # buffer-scan only;
     git log --first-parent --since="$cutoff" <remote/branch>
     ```
 
--   Also collect every `(sync)` commit, merges included, because `--first-parent` misses the follow-ups and any sync merge that sits on a side branch a `chore(sync)` merge brought in:
+- Also collect every `(sync)` commit, merges included, because `--first-parent` misses the follow-ups and any sync merge that sits on a side branch a `chore(sync)` merge brought in:
 
     ```bash
     git log --grep='(sync)' --since-as-filter="$cutoff" <remote/branch>
@@ -90,7 +90,7 @@ pip install -q git+https://github.com/alandtse/hlslkit.git   # buffer-scan only;
 
     A commit can appear in both logs, so deduplicate by SHA before triage. Triage `fix(sync)` and `refactor(sync)` commits like any other commit. `chore(sync): bump ...` version bumps are not relevant to upstream; mark them so.
 
--   Drop only the `chore(sync): merge upstream` commits themselves from triage, but first extract their **sync residue**: fork-side changes that rode along with the sync. Let `P` be the sync's first parent and `U` the upstream commit it pulled in (the second parent, or for a squash-style sync the commit named in its message). If a squash-style sync names no upstream commit, review the whole sync by hand instead of inferring `U` from commit dates. The expected result is the clean merge of the two, so the residue is what the sync changed beyond it:
+- Drop only the `chore(sync): merge upstream` commits themselves from triage, but first extract their **sync residue**: fork-side changes that rode along with the sync. Let `P` be the sync's first parent and `U` the upstream commit it pulled in (the second parent, or for a squash-style sync the commit named in its message). If a squash-style sync names no upstream commit, review the whole sync by hand instead of inferring `U` from commit dates. The expected result is the clean merge of the two, so the residue is what the sync changed beyond it:
 
     ```bash
     tree=$(git merge-tree --write-tree <P> <U>)   # exit 1 = conflicts: review the whole sync by hand; any other non-zero exit is a git error (bad ref?): stop and report it
@@ -99,8 +99,8 @@ pip install -q git+https://github.com/alandtse/hlslkit.git   # buffer-scan only;
 
     A non-empty diff is one candidate (source `sync <sha>`), triaged like any other commit. If `merge-tree` exits 1 (conflicts), the sync was not a clean merge, so its residue cannot be computed: review that merge's whole diff by hand (`git diff <sha>^1 <sha>`), as was needed for `9a0c2a67`. A very large diff means `U` is probably wrong: try the neighbouring upstream commit, else report it and move on.
 
--   For a remaining merge commit (more than one parent), use its first-parent diff everywhere below: `git diff <sha>^1 <sha>` instead of `git show <sha>`, because `git show` prints a combined diff that can hide changes. A clean merge port uses `git cherry-pick -m 1 <sha>`.
--   After filtering, group non-merge commits only when they are adjacent in the original first-parent history and touch the same area (e.g. "opt pass" + "opt fixes"). A filtered-out commit or a merge commit always ends a group, so a group's `git diff A^ B` never contains anything that was not selected. Record each group as its exact list of SHAs and triage its **combined** diff.
+- For a remaining merge commit (more than one parent), use its first-parent diff everywhere below: `git diff <sha>^1 <sha>` instead of `git show <sha>`, because `git show` prints a combined diff that can hide changes. A clean merge port uses `git cherry-pick -m 1 <sha>`.
+- After filtering, group non-merge commits only when they are adjacent in the original first-parent history and touch the same area (e.g. "opt pass" + "opt fixes"). A filtered-out commit or a merge commit always ends a group, so a group's `git diff A^ B` never contains anything that was not selected. Record each group as its exact list of SHAs and triage its **combined** diff.
 
 ### 2b. Already ported or upstream?
 
@@ -115,24 +115,24 @@ There is no committed ledger. The record of what has been ported is the `Ported 
 
 ### 2c. Covered by an open upstream PR?
 
--   List open PRs on community-shaders/skyrim-community-shaders (all authors).
--   For each PR whose **file list** overlaps the commit's files, read its diff and decide: covered, partially covered, or unrelated.
--   Also search PR titles for the commit's scope and keywords.
+- List open PRs on community-shaders/skyrim-community-shaders (all authors).
+- For each PR whose **file list** overlaps the commit's files, read its diff and decide: covered, partially covered, or unrelated.
+- Also search PR titles for the commit's scope and keywords.
 
 ### 2d. Fork-only?
 
--   For every file the commit touches: `git cat-file -e upstream/dev:<path>`.
--   For every function, member or setting it modifies: grep upstream/dev.
--   Known fork-only areas, which are hints only and must still be verified:
-    -   **open-shaders:** NeuralRendering, FoveatedRender, ShadowAtlas/ShadowScheduler/ShadowCasterManager (SCM), CSUtility, LazyShader, the VR HMD mask, DLSS stereo fallback, CommonLib bumps beyond upstream's pinned version.
-    -   **Bottled:** SnowCover, ReverseZ, lite lighting variants (`NoWetness`/`NoSnowCover` flags), SkySync helpers absent upstream.
--   If a commit depends on earlier fork-only work, name that prerequisite in the reason.
+- For every file the commit touches: `git cat-file -e upstream/dev:<path>`.
+- For every function, member or setting it modifies: grep upstream/dev.
+- Known fork-only areas, which are hints only and must still be verified:
+    - **open-shaders:** NeuralRendering, FoveatedRender, ShadowAtlas/ShadowScheduler/ShadowCasterManager (SCM), CSUtility, LazyShader, the VR HMD mask, DLSS stereo fallback, CommonLib bumps beyond upstream's pinned version.
+    - **Bottled:** SnowCover, ReverseZ, lite lighting variants (`NoWetness`/`NoSnowCover` flags), SkySync helpers absent upstream.
+- If a commit depends on earlier fork-only work, name that prerequisite in the reason.
 
 ### 2e. Portable? Classify the patch
 
--   `git show <sha> | git -C "$SCRATCH/upstream-dev" apply --check` → **clean**
--   `git apply --3way` or a hand port → **adapted**: list every place where upstream's code differs.
--   Generated or config files (shader-validation yaml, en.json) → **regenerate** against upstream; never hand-merge them.
+- `git show <sha> | git -C "$SCRATCH/upstream-dev" apply --check` → **clean**
+- `git apply --3way` or a hand port → **adapted**: list every place where upstream's code differs.
+- Generated or config files (shader-validation yaml, en.json) → **regenerate** against upstream; never hand-merge them.
 
 ### 2f. Size gate
 
@@ -166,20 +166,20 @@ Outcomes: `port-clean`, `port-adapted`, `already-upstream (#NNNN)`, `in-open-PR 
 
 ## 5. Validate (Linux-runnable)
 
--   `clang-format --style=file --dry-run` on touched files. Only touched lines may change; never reformat a whole file.
--   If any strings changed: `python tools/extract-i18n.py --write`, then `--check`, `--orphans`, and `python tools/sort-i18n.py --check`.
--   If a feature `.ini` or settings struct changed: `python tools/feature_version_audit.py`.
--   If YAML or JSON configs changed: load them with `yaml.safe_load` / `json.load`.
--   If shaders or registers changed: `hlslkit-buffer-scan --features-dir features/`.
--   Record what could **not** be verified (C++ build, fxc shader compile, runtime behaviour).
+- `clang-format --style=file --dry-run` on touched files. Only touched lines may change; never reformat a whole file.
+- If any strings changed: `python tools/extract-i18n.py --write`, then `--check`, `--orphans`, and `python tools/sort-i18n.py --check`.
+- If a feature `.ini` or settings struct changed: `python tools/feature_version_audit.py`.
+- If YAML or JSON configs changed: load them with `yaml.safe_load` / `json.load`.
+- If shaders or registers changed: `hlslkit-buffer-scan --features-dir features/`.
+- Record what could **not** be verified (C++ build, fxc shader compile, runtime behaviour).
 
 ## 6. Commit
 
--   Title: `type(scope): description`, ≤ 50 chars. Pick the type for its version impact: `fix`/`perf` → patch, `feat` → minor, `refactor`/`chore`/`style`/`docs`/`test` → none.
--   Body wrapped at 72: what was wrong, why the change fixes it, and how upstream differs from the fork.
--   Last body line: `Ported from <owner/repo>#<pr>` or `<owner/repo>@<sha>` (for a group, every SHA: `<owner/repo>@<sha-1>, @<sha-2>`), plus "adapted to dev" if hand-ported. Step 2b depends on this line, so never omit it.
--   Trailers: `Co-authored-by: <original author>` when you are the committer, plus any attribution trailers the session requires.
--   Never include model identifiers.
+- Title: `type(scope): description`, ≤ 50 chars. Pick the type for its version impact: `fix`/`perf` → patch, `feat` → minor, `refactor`/`chore`/`style`/`docs`/`test` → none.
+- Body wrapped at 72: what was wrong, why the change fixes it, and how upstream differs from the fork.
+- Last body line: `Ported from <owner/repo>#<pr>` or `<owner/repo>@<sha>` (for a group, every SHA: `<owner/repo>@<sha-1>, @<sha-2>`), plus "adapted to dev" if hand-ported. Step 2b depends on this line, so never omit it.
+- Trailers: `Co-authored-by: <original author>` when you are the committer, plus any attribution trailers the session requires.
+- Never include model identifiers.
 
 ## 7. Publish
 
@@ -201,21 +201,21 @@ Do not write any report or ledger files into the repository. The PR descriptions
 
 Final message to the maintainer:
 
--   the triage table
--   the PR links
--   the needs-decision items with size and risk
--   everything not verified
+- the triage table
+- the PR links
+- the needs-decision items with size and risk
+- everything not verified
 
 ## 9. Follow-through
 
--   Handle CI failures and review comments according to the PR-watching rules.
--   When every PR is green, mergeable and has no open threads, send one line ("all N waiting on reviewers") and keep only the safety-net check-in.
+- Handle CI failures and review comments according to the PR-watching rules.
+- When every PR is green, mergeable and has no open threads, send one line ("all N waiting on reviewers") and keep only the safety-net check-in.
 
 ## Never
 
--   Push a branch to `community-shaders/skyrim-community-shaders`. Branches go on the maintainer's fork only.
--   Push to `main`/`dev`, force-push shared branches, or create `v*` tags.
--   Port a commit without re-deriving its claim against upstream code.
--   Hand-merge generated files or reformat untouched code.
--   Commit run reports, ledgers or other per-run artifacts.
--   Skip the checkpoint on scheduled or unattended runs.
+- Push a branch to `community-shaders/skyrim-community-shaders`. Branches go on the maintainer's fork only.
+- Push to `main`/`dev`, force-push shared branches, or create `v*` tags.
+- Port a commit without re-deriving its claim against upstream code.
+- Hand-merge generated files or reformat untouched code.
+- Commit run reports, ledgers or other per-run artifacts.
+- Skip the checkpoint on scheduled or unattended runs.

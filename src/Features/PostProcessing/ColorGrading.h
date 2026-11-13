@@ -169,6 +169,7 @@ struct ColorGrading : public PostProcessFeature
 	virtual void RestoreDefaultSettings() override;
 	virtual void LoadSettings(json&) override;
 	virtual void SaveSettings(json&) override;
+	virtual void ApplyContextualDefaults(json&) const override;
 
 	virtual void DrawSettings() override;
 
@@ -193,7 +194,12 @@ struct ColorGrading : public PostProcessFeature
 	std::array<float, CurveSamples> curveG = {};
 	std::array<float, CurveSamples> curveB = {};
 	bool curveReadbackRequested = false;
-	int curveReadbackRequestFrame = -1;
+	int64_t curveReadbackRequestFrame = -1;
 	bool curveNeedsUpdate = true;
 	std::array<char, sizeof(ColorCB)> prevCurveCB = {};
+	// Inputs of the last LUT generation, so an unchanged LUT is not regenerated every frame.
+	std::array<char, sizeof(ColorCB)> lutKey = {};
+	ID3D11ComputeShader* lutShader = nullptr;
+	uint64_t lutGeneration = 0;
+	bool lutValid = false;
 };

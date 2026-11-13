@@ -20,6 +20,7 @@ public:
 	void LoadWeatherList();
 	void LoadLocationWeather();
 
+	/** @brief Looks up a listed weather independently of EnableMultipleWeathers. */
 	WeatherEntry* FindWeatherEntry(uint32_t weatherID);
 
 	/// @brief Gets the effective weather ID, checking for location-based overrides first.

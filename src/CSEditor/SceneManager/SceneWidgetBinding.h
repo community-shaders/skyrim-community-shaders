@@ -82,11 +82,9 @@ namespace SceneWidgetBinding
 	/// Which layer a main-menu control's value comes from, highest precedence last.
 	enum class BaselineLayer : std::uint8_t
 	{
-		Base,    // the default value
-		Pack,    // a Baseline preset supplies it
-		Edited,  // the user's edit over the default or a Baseline preset's value
-		Scene,   // a Scene Manager preset supplies it
-		Sketch   // edited over the Scene Manager's value, until the menu moves on
+		Base,   // the user's base setting
+		Scene,  // a Scene Manager preset supplies it
+		Sketch  // edited over the Scene Manager's value, until the menu moves on
 	};
 
 	/// Wraps one intercepted widget call for the duration of that call.
@@ -137,9 +135,7 @@ namespace SceneWidgetBinding
 		 * @brief Highest layer behind a main-menu control: sketch, scene, the user's edit, Baseline preset, else default.
 		 * @param a_packId Receives the Baseline pack supplying the value beneath, or is cleared.
 		 */
-		BaselineLayer ResolveBaselineLayer(std::string& a_packId) const;
-		/** @brief Tint for baselineLayer, nothing for Base. */
-		std::optional<ImVec4> ResolveBaselineColor() const;
+		BaselineLayer ResolveBaselineLayer() const;
 		/** @brief Tooltip for baselineLayer, empty for Base. */
 		std::string ResolveBaselineTooltip() const;
 		/// Jumps to the Scene Manager page supplying the value, or commits a sketch into it.
@@ -186,6 +182,9 @@ namespace SceneWidgetBinding
 		/** @brief Double-click / Ctrl+click / Shift+click on a greyed control ticks the override on.
 		 *  @return True when the gesture fired and the override was enabled. */
 		bool TryEnableOverrideFromGesture();
+		/** @brief Middle-click on a main-menu control writes back the feature's code default.
+		 *  @return True when the gesture fired and changed the value. */
+		bool TryResetFromGesture();
 
 		/** @brief Writes an edit into this control's entries, reviving a tombstone and creating missing entries first. */
 		void Commit();
@@ -263,8 +262,8 @@ namespace SceneWidgetBinding
 		 *  highest lower layer supplying it, else the feature's base.
 		 *  @return Null when the live member already holds that base. */
 		const json* ResolveFallbackValue(const Component& a_component) const;
-		/** @brief Writes a stored value into the component's slot of the holding storage, in widget scale. */
-		void WriteHoldingComponent(const Component& a_component, const json& a_stored);
+		/** @brief Writes a stored value into the component's slot of a_storage, in widget scale. */
+		void WriteComponent(void* a_storage, const Component& a_component, const json& a_stored) const;
 
 		/// The caller's post-call storage, as the primitive one component persists.
 		json ReadEditedValue(const Component& a_component) const;
@@ -280,8 +279,6 @@ namespace SceneWidgetBinding
 		GutterPolicy policy;
 		State state = State::Unsupported;
 		BaselineLayer baselineLayer = BaselineLayer::Base;
-		/// The Baseline pack supplying the value beneath the control, for its tooltip.
-		std::string baselinePackId;
 		/// Layer winning at this address, which drives the colour independently of `state`. A paused
 		/// user entry stays Paused so the checkbox has something to resume, but reads as the mod's.
 		SceneSettingsManager::SettingLayer winningLayer = SceneSettingsManager::SettingLayer::None;
@@ -320,7 +317,6 @@ namespace SceneWidgetBinding
 		bool commitDeferred = false;
 		bool disabledOpened = false;
 		bool mixedFlagPushed = false;
-		bool tintPushed = false;
 
 		/// Horizontal space the leading gutter took, measured so the control can be shrunk by it.
 		float gutterConsumedWidth = 0.0f;

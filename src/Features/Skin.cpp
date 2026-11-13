@@ -1,5 +1,6 @@
 #include "Skin.h"
 #include "Skin/Editor/Files.h"
+#include "Utils/UI.h"
 
 #include <cmath>
 #include <imgui_stdlib.h>
@@ -100,7 +101,7 @@ void Skin::DrawSettings()
 		settings.DetailTexture = *chosen;
 		changed = true;
 	}
-	if (ImGui::Button(T("feature.skin.reload_skin_resources", "Reload skin resources")))
+	if (Util::Button(T("feature.skin.reload_skin_resources", "Reload skin resources")))
 		ReloadResources();
 	DrawGlobalSettings();
 	if (changed)

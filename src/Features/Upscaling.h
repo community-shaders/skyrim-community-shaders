@@ -107,7 +107,6 @@ public:
 	bool ShouldPrepareFrameGeneration() const;
 	/** @brief Returns the frame-generation decision made in post-processing, held until the frame is presented. */
 	bool ShouldUseFrameGenerationThisFrame() const;
-	float GetFrameGenerationFrameTime() const;
 	bool IsUpscalingActive() const;
 
 	// Feature interface overrides
@@ -201,7 +200,7 @@ public:
 	 */
 	void ApplySharpening();
 
-	static void TimerSleepQPC(int64_t targetQPC);
+	static void TimerSleepQPC(int64_t targetQPC, int64_t frequency);
 
 	void FrameLimiter();
 
@@ -210,7 +209,6 @@ public:
 	// Unified interface methods - external code should use these instead of direct access
 	void LoadUpscalingSDKs();  // Loads all SDKs at once
 	HANDLE GetFrameLatencyWaitableObject() const;
-	float GetFrameTime() const;
 
 	// Backend interface methods
 	bool IsBackendInitialized() const;

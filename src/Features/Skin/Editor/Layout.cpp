@@ -103,16 +103,16 @@ std::string Skin::GetEditorSubtitle()
 void Skin::DrawEditorPageActions()
 {
 	std::lock_guard lock(mutex);
-	const float button = BrowserUI::IconButtonSize();
+	const float button = Util::IconButtonSize();
 	BrowserUI::RightAlign(button * 2.0f + ImGui::GetStyle().ItemSpacing.x);
 	const auto tools = std::format("{}\n{}", T("feature.skin.workspace_textures", "Texture tools"),
 		T("feature.skin.texture_tools_tooltip", "Pack grayscale maps into a Skin controls texture, or a detail normal with its region mask."));
-	if (BrowserUI::IconButton("##skin_tools", Icons::TI(ICON_TI_TOOLS), tools.c_str(), editor.toolsWindow))
+	if (Util::IconButton("##skin_tools", Icons::TI(ICON_TI_TOOLS), tools.c_str(), editor.toolsWindow))
 		editor.toolsWindow = !editor.toolsWindow;
 	ImGui::SameLine();
 	const auto reload = std::format("{}\n{}", T("feature.skin.reload_skin_resources", "Reload skin resources"),
 		T("feature.skin.reload_skin_resources_help_v2", "Re-reads material files, character files and DDS inputs changed outside the game."));
-	if (BrowserUI::IconButton("##skin_reload", Icons::TI(ICON_TI_REFRESH), reload.c_str()))
+	if (Util::IconButton("##skin_reload", Icons::TI(ICON_TI_REFRESH), reload.c_str()))
 		ReloadResources();
 }
 
@@ -174,8 +174,8 @@ void Skin::DrawTextureList()
 			T("feature.skin.choose_target_first_v2", "Choose Player, or select an NPC in the console, to see which skin textures it shows."));
 		return;
 	}
-	BrowserUI::SearchField("##skin_filter", editor.filter.data(), editor.filter.size(), T("feature.skin.filter_textures", "Filter textures..."), ImGui::GetContentRegionAvail().x, true);
-	const std::string query = editor.filter.data();
+	Util::SearchField("##skin_filter", editor.filter, T("feature.skin.filter_textures", "Filter textures..."), ImGui::GetContentRegionAvail().x, true);
+	const std::string query = editor.filter;
 
 	// One row per texture under the part it is mainly shown on; the row lists every place it appears.
 	struct Row

@@ -33,15 +33,15 @@ public:
 	struct Settings
 	{
 		float MinPixelSize = 2.0f;
-		float FullDetailPixelSize = 16.0f;
-		float MinDensity = 0.03f;
+		float FullDetailPixelSize = 12.0f;
+		float MinDensity = 0.07f;
 		float MeshCostBias = 0.25f;
 		float CostBiasStartDistance = 6000.0f;
 		float InvisibleFadeCull = 0.0f;
 		float RenderDistanceOverride = 0.0f;
 		float EdgeFadeStart = 0.85f;
 		bool EnableOcclusionCulling = true;
-		float SimpleShadingPixelSize = 0.0f;
+		float SimpleShadingPixelSize = 8.0f;
 		float OcclusionBias = 0.001f;
 		float CollisionDistance = 2048.0f;
 		bool EnableMeshLOD = false;
@@ -71,8 +71,16 @@ public:
 	/** @brief Installs the grass capture, culling and draw hooks after all plugins have loaded. */
 	virtual void PostPostLoad() override;
 
-	/** @brief Applies owned proxy setup or native coverage setup and returns whether to skip engine geometry setup. */
-	bool SetupGrassPass(RE::BSShader* shader, RE::BSRenderPass* pass);
+	/** @brief Identifies who sets up a grass pass: the engine, an optimized bucket, or nobody because optimized buckets cover it. */
+	enum class GrassPassSetup
+	{
+		kNative,
+		kOptimized,
+		kCovered
+	};
+
+	/** @brief Applies owned proxy setup or native coverage setup and returns who set up the pass. */
+	GrassPassSetup SetupGrassPass(RE::BSShader* shader, RE::BSRenderPass* pass);
 
 private:
 	/** @brief Returns the instance culling compute shader, compiling it on first use. */
@@ -117,7 +125,8 @@ private:
 		float costBiasStartDist;
 
 		float farLODPixelSize;
-		float pad0[3];
+		float densityDistanceRcp;
+		float pad0[2];
 	};
 	STATIC_ASSERT_ALIGNAS_16(CullParamsCB);
 
@@ -147,12 +156,16 @@ private:
 		float timeBase;
 		float prevTimeBase;
 		float farLODMeshCost;
+
+		std::array<float, kTierCount> canopyHeights;
+		float pad1;
 	};
 	STATIC_ASSERT_ALIGNAS_16(CullBucketCB);
 	// RunGrass.hlsl reads the draw marker, texture threshold and shared-page offset through this slot.
-	static_assert(sizeof(CullBucketCB) == 80 && offsetof(CullBucketCB, groupCount) == 0 && offsetof(CullBucketCB, complexThreshold) == 56 &&
+	static_assert(sizeof(CullBucketCB) == 96 && offsetof(CullBucketCB, groupCount) == 0 && offsetof(CullBucketCB, complexThreshold) == 56 &&
 				  offsetof(CullBucketCB, outputOffset) == 20 && offsetof(CullBucketCB, argsOffset) == 24 &&
-				  offsetof(CullBucketCB, midLODMeshCost) == 60 && offsetof(CullBucketCB, farLODMeshCost) == 76);
+				  offsetof(CullBucketCB, midLODMeshCost) == 60 && offsetof(CullBucketCB, farLODMeshCost) == 76 &&
+				  offsetof(CullBucketCB, canopyHeights) == 80);
 
 	// Match the c16-c21 fields read by GRASS_OPTIMIZATIONS in RunGrass.hlsl.
 	struct alignas(16) GrassPerGeometry
@@ -250,9 +263,6 @@ private:
 	/** @brief Test a coarse AABB and return the planes its children still need to test. */
 	static bool ClassifyAabb(const FrustumSoA& f, __m128 lo, __m128 hi, uint32_t& intersectingPlanes);
 
-	/** @brief Derives world-space frustum planes from the camera frustum and transform. */
-	static void ComputeFrustumPlanes(RE::NiFrustumPlanes& out, const RE::NiFrustum& viewFrustum, const RE::NiTransform& transform);
-
 	/** @brief Uploads admitted data and culls grass once per frame using the validated main camera. */
 	void UpdateGrass(const RE::NiCamera* cam);
 
@@ -332,6 +342,8 @@ private:
 	std::vector<std::pair<uint32_t, uint32_t>> sliceTableCPU;
 	// Store this frame's visible buckets in cull-slot order.
 	std::vector<GrassBucket*> visibleBuckets;
+	// A spatial run rebuild re-sorts and re-uploads a whole bucket, so each frame allows one.
+	uint32_t spatialRebuildBudget = 0;
 	std::vector<uint32_t> cullArguments;
 
 	float timeAccum = 0.0f;
@@ -369,10 +381,15 @@ private:
 			inline static REL::Relocation<decltype(thunk)> func;
 		};
 
-		// DoneAddingInstances adds each chunk of generated instances through this virtual, which returns the group index.
 		struct AddGroup
 		{
 			static std::uint32_t thunk(RE::BSMultiStreamInstanceTriShape* shape, std::uint32_t count, std::uint16_t* instanceData, std::uint32_t instanceShorts, float boundPadding);
+			inline static REL::Relocation<decltype(thunk)> func;
+		};
+
+		struct DoneAddingInstances
+		{
+			static void thunk(RE::BSMultiStreamInstanceTriShape* shape, RE::BSTArray<std::uint32_t>& groupIndices);
 			inline static REL::Relocation<decltype(thunk)> func;
 		};
 

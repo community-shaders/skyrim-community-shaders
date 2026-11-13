@@ -22,6 +22,7 @@ struct Border : public PostProcessFeature
 	{
 		float4 BorderColor;
 		float4 Scale;
+		float4 BufferDim;
 	};
 	eastl::unique_ptr<ConstantBuffer> borderCB = nullptr;
 

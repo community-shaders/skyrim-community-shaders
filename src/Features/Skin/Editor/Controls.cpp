@@ -253,7 +253,7 @@ void Skin::DrawTextureInputs(SkinMaterials::Changes& a_changes, const SkinMateri
 				ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x);
 				// Archived files are not listed by the browser, so the path can always be typed.
 				std::string input = path;
-				const float buttons = BrowserUI::IconButtonSize() * 3.0f + ImGui::GetStyle().ItemSpacing.x * 3.0f;
+				const float buttons = Util::IconButtonSize() * 3.0f + ImGui::GetStyle().ItemSpacing.x * 3.0f;
 				ImGui::SetNextItemWidth(std::max(ImGui::GetFontSize() * 8.0f, ImGui::GetContentRegionAvail().x - buttons));
 				const char* none = i == 2 ? T("feature.skin.global_detail", "Global detail") : T("feature.skin.no_texture_short", "None");
 				{
@@ -266,17 +266,17 @@ void Skin::DrawTextureInputs(SkinMaterials::Changes& a_changes, const SkinMateri
 				}
 				Util::AddTooltip(path.empty() ? none : path.c_str());
 				ImGui::SameLine();
-				if (BrowserUI::IconButton("##pick", Icons::TI(ICON_TI_FOLDER_OPEN), T("feature.skin.choose_dds_tooltip", "Choose a DDS from the game's Data folder")))
+				if (Util::IconButton("##pick", Icons::TI(ICON_TI_FOLDER_OPEN), T("feature.skin.choose_dds_tooltip", "Choose a DDS from the game's Data folder")))
 					OpenResourceBrowser(editor.browser, path.empty() ? editor.key : path);
 				if (const auto chosen = ResourceBrowserPopup(editor.browser, ".dds")) {
 					edit = { TextureMode::Resource, NormalizeTexturePath(*chosen) };
 					Invalidate(true);
 				}
 				ImGui::SameLine();
-				if (BrowserUI::IconButton("##none", Icons::TI(ICON_TI_X), i == 2 ? T("feature.skin.use_global_detail", "Use global detail") : T("feature.skin.use_neutral", "Use neutral")))
+				if (Util::IconButton("##none", Icons::TI(ICON_TI_X), i == 2 ? T("feature.skin.use_global_detail", "Use global detail") : T("feature.skin.use_neutral", "Use neutral")))
 					edit = material ? TextureEdit{} : TextureEdit{ TextureMode::Default, {} };
 				ImGui::SameLine();
-				if (i != 1 && BrowserUI::IconButton("##build", Icons::TI(ICON_TI_TOOLS), T("feature.skin.open_texture_tools", "Build a packed texture..."))) {
+				if (i != 1 && Util::IconButton("##build", Icons::TI(ICON_TI_TOOLS), T("feature.skin.open_texture_tools", "Build a packed texture..."))) {
 					editor.tools.detail = i == 2;
 					editor.toolsOutput.clear();
 					editor.toolsWindow = true;

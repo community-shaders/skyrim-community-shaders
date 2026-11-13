@@ -96,7 +96,7 @@ public:
 		Sun,
 		Masser,
 		Secunda,
-		Zenith  // fallback when no moon is up: lights as a pseudo skylight, without VL
+		Zenith  // fallback when no moon is up: lights as a pseudo skylight, without direct light or VL
 	};
 
 	/**
@@ -109,6 +109,7 @@ public:
 
 	/**
 	 * @brief Moon selected by the "Moon light source" setting, when it is currently visible.
+	 * While Sky Sync steers the light at night, this is the moon the shadow fader is moving to, so moon rays follow the shadows.
 	 * @return Caster::Masser or Caster::Secunda, or Caster::Zenith when the chosen moon is hidden or faded out.
 	 */
 	Caster GetMoonLightCaster(const RE::Sky* sky) const;
@@ -140,14 +141,16 @@ private:
 	{
 		RE::NiPoint3 currentDir = { 0.0f, 0.0f, 1.0f };
 		RE::NiPoint3 startDir = { 0.0f, 0.0f, 1.0f };
+		RE::NiPoint3 dimDir = { 0.0f, 0.0f, 1.0f };  // direction whose elevation drives the horizon dim
 		Caster target = Caster::Sun;
+		Caster source = Caster::Sun;  // target before the current transition
 		float fadeTimer = 0.0f;
 		float immediateTransitionRemaining = 0.0f;
 		bool transitioning = false;
 		float intensityFactor = 1.0f;  // scales directional light and VL while the caster changes
 		float startIntensityFactor = 1.0f;
-		float vlFade = 1.0f;  // additionally scales VL, fading it out towards the zenith fallback
-		float startVlFade = 1.0f;
+		float casterFade = 1.0f;  // additionally scales directional light and VL, fading them out towards the zenith fallback
+		float startCasterFade = 1.0f;
 
 		/** @brief Fraction of the current transition completed, 0 to 1. */
 		float Progress(float fadeDuration) const { return fadeDuration > 0.0f ? fadeTimer / fadeDuration : 1.0f; }
@@ -195,6 +198,7 @@ private:
 	bool active = false;              // the last Update steered the light, so the colour hooks may apply its state
 	float sunAngle = 90.0f;
 	float currentSkyRotation = D3D11_FLOAT32_MAX;
+	bool skyRotationApplied = false;  // survives the game-load cache reset until the root is restored
 	float lastGameHour = -1.0f;
 	bool immediateTransitionReady = false;
 
@@ -243,6 +247,7 @@ private:
 	void SetSunAngle();
 
 	void SetSkyRotation(const RE::Sky* sky, RE::TESObjectCELL* cell);
+	void ResetSkyRotation(const RE::Sky* sky);
 
 	/** @brief Whether the worldspace's editor ID is in the disabled list. */
 	bool IsWorldspaceDisabled(const RE::TESWorldSpace* worldspace) const;
@@ -275,8 +280,11 @@ private:
 	/** @brief Sun::Update's arc as a unit direction, except that the night half runs below the horizon instead of mirrored above it. */
 	static RE::NiPoint3 CalculateVanillaSunDirection(float hour, float sunrise, float sunset);
 
-	/** @brief Angle along the alternate path's arc, 0 at sunrise and pi at sunset. */
-	static float GetAlternateSunPhase(float hour, float sunrise, float sunset) { return DirectX::XM_PI * (hour - sunrise) / (sunset - sunrise); }
+	/**
+	 * @brief Angle along the alternate path's circle: 0 at sunrise, pi at sunset, 2 pi at the next sunrise.
+	 * Day and night each span their own length, so the angle stays continuous across midnight.
+	 */
+	static float GetAlternateSunPhase(float hour, float sunrise, float sunset);
 
 	/** @brief Unit direction on the alternate path, an arc tilted by sunAngle degrees from the horizon. */
 	static RE::NiPoint3 CalculateAlternateSunDirection(float hour, float sunrise, float sunset, float sunAngle);

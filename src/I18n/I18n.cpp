@@ -133,6 +133,7 @@ void I18n::SetLocale(const std::string& locale)
 		defaultCache_.clear();
 		defaultStorage_.clear();
 		currentLocale_ = "en";
+		generation_.fetch_add(1, std::memory_order_relaxed);
 		logger::info("[I18n] Switched to English (en).");
 		return;
 	}
@@ -143,11 +144,25 @@ void I18n::SetLocale(const std::string& locale)
 		defaultCache_.clear();
 		defaultStorage_.clear();
 		currentLocale_ = locale;
+		generation_.fetch_add(1, std::memory_order_relaxed);
 		logger::info("[I18n] Switched to locale '{}'.", locale);
 	} else {
 		logger::warn("[I18n] Failed to load locale '{}'. Staying on '{}'.",
 			locale, currentLocale_);
 	}
+}
+
+int I18n::GetCoveragePercent() const
+{
+	std::shared_lock lock(mutex_);
+	if (currentLocale_ == "en" || fallback_.empty())
+		return 100;
+	size_t translated = 0;
+	for (const auto& [key, value] : strings_) {
+		if (!value.empty() && fallback_.contains(key))
+			++translated;
+	}
+	return static_cast<int>(translated * 100 / fallback_.size());
 }
 
 std::vector<std::pair<std::string, std::string>> I18n::GetAvailableLocales() const
@@ -182,6 +197,7 @@ void I18n::Reload()
 		}
 	}
 
+	generation_.fetch_add(1, std::memory_order_relaxed);
 	logger::info("[I18n] Reloaded. Locale: {}  |  {} fallback keys",
 		currentLocale_, fallback_.size());
 }

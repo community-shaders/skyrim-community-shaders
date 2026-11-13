@@ -158,7 +158,7 @@ private:
 	SortOption sortOption = SortOption::Distance;
 	bool sortDescending = false;
 	/// Text filter over the light table (matches the display name).
-	char lightSearch[128] = {};
+	std::string lightSearch;
 
 	std::vector<LightInfo> lights = {};
 	std::unordered_map<RE::TESObjectREFR*, uint32_t> lightsAttached = {};
@@ -362,7 +362,7 @@ private:
 	};
 	std::vector<AttachedBulb> attachedBulbs;  // bulbs live-attached to pickedMesh, built on popup open
 	int addSelectedBulb = -1;                 // index into attachedBulbs
-	char addBulbSearch[256] = {};             // search text for the bulb combo
+	std::string addBulbSearch;                // search text for the bulb combo
 	bool editBulbComboPendingOpen = false;    // one-shot: open the Edit Bulb combo on mode entry
 
 	struct FilterListEntry
@@ -374,7 +374,7 @@ private:
 	};
 	std::vector<FilterListEntry> filterListEntries;  // WL/BL entries where pickedMesh's ref appears
 	int addSelectedFilterEntry = -1;
-	char addFilterSearch[256] = {};
+	std::string addFilterSearch;
 	int addFilterEntryType = 0;  // 0 = Reference (FormID), 1 = Cell EditorID
 
 	// Popup selections.
@@ -382,8 +382,8 @@ private:
 	int addSelectedConfig = -1;              // index into lpConfigPaths
 	int addAttachMode = -1;                  // 0 = Model, 1 = FormID, 2 = EditorID
 	RE::FormID addSelectedLighFormId = 0;    // chosen LIGH
-	char addConfigSearch[256] = {};          // persisted search text for Target JSON combo
-	char addLighSearch[256] = {};            // persisted search text for Light record combo
+	std::string addConfigSearch;             // persisted search text for Target JSON combo
+	std::string addLighSearch;               // persisted search text for Light record combo
 	int addPopupMode = -1;                   // 0 = Add Light, 1 = Edit Bulb, 2 = Whitelist, 3 = Blacklist, 4 = Remove from List
 	enum AddPopupMode
 	{
@@ -432,7 +432,7 @@ private:
 	void DrawDeleteConfirmation();
 	/** @brief Opens a persistent-buffer searchable combo (Add-Light style); true while open, with the filter in filterOut. */
 	static bool BeginSearchableCombo(const char* label, const char* preview, const char* searchId,
-		char* searchBuf, size_t searchBufSize, std::string_view& filterOut, bool openNow);
+		std::string& search, std::string_view& filterOut, bool openNow);
 	/** @brief True when an item should be shown for the given combo filter (empty matches everything). */
 	static bool MatchesComboFilter(std::string_view filter, const std::string& text);
 	/** @brief Shows a success- or error-styled notification for an operation result. */

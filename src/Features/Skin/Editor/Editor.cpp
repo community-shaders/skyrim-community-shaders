@@ -81,7 +81,7 @@ void Skin::DrawTextureTools()
 		const auto& anchor = editor.key;
 		if (editor.toolsOutput.empty() && anchor.size() > 4)
 			editor.toolsOutput = anchor.substr(0, anchor.size() - 4) + (editor.tools.detail ? "_detail.dds" : "_rfaos.dds");
-		ImGui::SetNextItemWidth(std::max(ImGui::GetFontSize() * 8.0f, ImGui::GetContentRegionAvail().x - BrowserUI::IconButtonSize() - ImGui::GetStyle().ItemSpacing.x));
+		ImGui::SetNextItemWidth(std::max(ImGui::GetFontSize() * 8.0f, ImGui::GetContentRegionAvail().x - Util::IconButtonSize() - ImGui::GetStyle().ItemSpacing.x));
 		ImGui::InputTextWithHint("##tools_output", "textures/myskin/body_rfaos.dds", &editor.toolsOutput);
 		Util::AddTooltip(T("feature.skin.texture_output_help", "Source images can come from anywhere. The result is a game resource: choose its path inside textures/. It is written below the same mod folder as material files."));
 		ImGui::SameLine();

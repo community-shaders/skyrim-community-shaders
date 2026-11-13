@@ -16,15 +16,15 @@ void Border::DrawSettings()
 {
 	ImGui::ColorEdit3(T("feature.post_processing.border.border_color", "Border Color"), reinterpret_cast<float*>(&settings.BorderColor));
 	if (auto _tt = Util::HoverTooltipWrapper())
-		ImGui::Text(T("feature.post_processing.border.the_color_of_the_border", "The color of the border."));
+		ImGui::TextUnformatted(T("feature.post_processing.border.the_color_of_the_border", "The color of the border."));
 
 	ImGui::SliderFloat(T("feature.post_processing.border.depth_threshold", "Depth Threshold"), &settings.DepthThreshold, 0.f, 1.f, "%.2f");
 	if (auto _tt = Util::HoverTooltipWrapper())
-		ImGui::Text(T("feature.post_processing.border.the_depth_threshold_for_the_border_effect", "The depth threshold for the border effect."));
+		ImGui::TextUnformatted(T("feature.post_processing.border.the_depth_threshold_for_the_border_effect", "The depth threshold for the border effect."));
 
 	ImGui::SliderFloat4(T("feature.post_processing.border.scale_top_down_left_right", "Scale (Top, Down, Left, Right)"), reinterpret_cast<float*>(&settings.Scale), 0.f, 0.5f, "%.2f");
 	if (auto _tt = Util::HoverTooltipWrapper())
-		ImGui::Text(T("feature.post_processing.border.the_scale_of_the_border_on_each_side", "The scale of the border on each side of the screen."));
+		ImGui::TextUnformatted(T("feature.post_processing.border.the_scale_of_the_border_on_each_side", "The scale of the border on each side of the screen."));
 }
 
 void Border::RestoreDefaultSettings()
@@ -48,7 +48,7 @@ void Border::SetupResources()
 
 	logger::debug("Creating buffers...");
 	{
-		borderCB = eastl::make_unique<ConstantBuffer>(ConstantBufferDesc<BorderCB>());
+		borderCB = eastl::make_unique<ConstantBuffer>(ConstantBufferDesc<BorderCB>(), "PostProcessing::Border::Constants");
 	}
 
 	logger::debug("Creating 2D textures...");
@@ -74,7 +74,7 @@ void Border::SetupResources()
 		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
 		texDesc.MiscFlags = 0;
 
-		texOutput = eastl::make_unique<Texture2D>(texDesc);
+		texOutput = eastl::make_unique<Texture2D>(texDesc, "PostProcessing::Border::Output");
 		texOutput->CreateSRV(srvDesc);
 		texOutput->CreateUAV(uavDesc);
 	}
@@ -125,13 +125,13 @@ void Border::ClearMotionVectorsForFrameGen()
 	auto renderer = globals::game::renderer;
 	auto context = globals::d3d::context;
 
-	// Compute dynamic resolution dimensions (actual rendered area before upscaling)
 	float2 screenSize{ (float)globals::game::graphicsState->screenWidth, (float)globals::game::graphicsState->screenHeight };
-	auto dynResDim = Util::ConvertToDynamic(screenSize);
+	auto dynResDim = Util::ConvertToDynamic(screenSize, true);
 
 	BorderCB data = {
 		.BorderColor = float4(settings.BorderColor.x, settings.BorderColor.y, settings.BorderColor.z, settings.DepthThreshold),
-		.Scale = settings.Scale
+		.Scale = settings.Scale,
+		.BufferDim = float4(dynResDim.x, dynResDim.y, 1.f / dynResDim.x, 1.f / dynResDim.y)
 	};
 	borderCB->Update(data);
 
@@ -140,13 +140,6 @@ void Border::ClearMotionVectorsForFrameGen()
 		return;
 	}
 	auto motion = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
-
-	// Bind SharedData (b5) and FrameBuffer (b12) for CS stage — shader needs
-	// BufferDim and DynamicResolutionParams1 to compute dynamic resolution area.
-	auto* sharedDataBuf = globals::state->sharedDataCB->CB();
-	context->CSSetConstantBuffers(5, 1, &sharedDataBuf);
-	ID3D11Buffer* perFrameBuf = *globals::game::perFrame.get();
-	context->CSSetConstantBuffers(12, 1, &perFrameBuf);
 
 	ID3D11ShaderResourceView* srvs[1] = { depthSRV };
 	context->CSSetShaderResources(0, 1, srvs);
@@ -181,7 +174,8 @@ void Border::Draw(TextureInfo& inout_tex)
 
 	BorderCB data = {
 		.BorderColor = float4(settings.BorderColor.x, settings.BorderColor.y, settings.BorderColor.z, settings.DepthThreshold),
-		.Scale = settings.Scale
+		.Scale = settings.Scale,
+		.BufferDim = float4(res.x, res.y, 1.f / res.x, 1.f / res.y)
 	};
 	borderCB->Update(data);
 

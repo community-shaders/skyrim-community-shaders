@@ -531,7 +531,7 @@ jobs:
               id: upload
               if: steps.version-check.outputs.should_upload == 'true'
               continue-on-error: true
-              uses: Nexus-Mods/upload-action@c96019556046053aa26044b44396cd38929daf23  # v1.0.0-beta.10
+              uses: Nexus-Mods/upload-action@c96019556046053aa26044b44396cd38929daf23 # v1.0.0-beta.10
               with:
                   api_key: ${{ secrets.UNEX_APIKEY }}
                   mod_id: ${{ matrix.unique_mod_id }}

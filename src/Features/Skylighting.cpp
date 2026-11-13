@@ -5,6 +5,7 @@
 #include "ShaderCache.h"
 #include "State.h"
 #include "Utils/D3D.h"
+#include "Utils/Logging.h"
 #include "Utils/SphericalHarmonics.h"
 #include "Utils/VersionedRelocation.h"
 
@@ -65,7 +66,7 @@ void Skylighting::DrawSettings()
 
 	ImGui::Separator();
 
-	if (ImGui::Button(T(TKEY("rebuild"), "Rebuild Skylighting")))
+	if (Util::Button(T(TKEY("rebuild"), "Rebuild Skylighting")))
 		ResetSkylighting();
 
 	if (auto _tt = Util::HoverTooltipWrapper())
@@ -425,8 +426,8 @@ RE::BSShaderProperty::RenderPassArray* Skylighting::BSLightingShaderProperty_Get
 
 	constexpr float minOccluderRadius = 32.0f;
 	const bool validOccluder = property->flags.any(kZBufferWrite) &&
-		property->flags.none(kRefraction, kTempRefraction, kLODLandscape, kEyeReflect, kDecal, kDynamicDecal) &&
-		(skylighting.inOcclusion || property->flags.none(kMultiTextureLandscape, kNoLODLandBlend));
+	                           property->flags.none(kRefraction, kTempRefraction, kLODLandscape, kEyeReflect, kDecal, kDynamicDecal) &&
+	                           (skylighting.inOcclusion || property->flags.none(kMultiTextureLandscape, kNoLODLandBlend));
 	if (!validOccluder || !(geometry->worldBound.radius > minOccluderRadius))
 		return precipitationOcclusionMapRenderPassList;
 
@@ -719,8 +720,8 @@ RE::BSBatchRenderer::GeometryGroup* Skylighting::BSShaderAccumulator_StartGroupi
 	// The engine allocates from this pool without a bounds check; callers already handle a null group
 	static REL::Relocation<std::uint32_t*> poolCount{ REL::RelocationID(528319, 415271) };
 	if (*poolCount >= poolCapacity) {
-		static bool warned = false;
-		if (!std::exchange(warned, true))
+		static Util::OnceFlag warned;
+		if (warned.First())
 			logger::warn("[SKYLIGHTING] Alpha group pool full, extra ordered geometry renders unsorted");
 		return nullptr;
 	}

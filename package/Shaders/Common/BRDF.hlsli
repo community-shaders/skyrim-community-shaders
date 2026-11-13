@@ -169,8 +169,8 @@ namespace BRDF
 	float Vis_SmithJointApprox(float roughness, float NdotV, float NdotL)
 	{
 		float a = roughness * roughness;
-		float Vis_SmithV = NdotL * (NdotV * (1.0 + a) + a);
-		float Vis_SmithL = NdotV * (NdotL * (1.0 + a) + a);
+		float Vis_SmithV = NdotL * (NdotV * (1.0 - a) + a);
+		float Vis_SmithL = NdotV * (NdotL * (1.0 - a) + a);
 		return rcp(max(Vis_SmithV + Vis_SmithL, EPSILON_DIVISION)) * 0.5;
 	}
 

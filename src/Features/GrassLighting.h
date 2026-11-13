@@ -34,8 +34,17 @@ public:
 		// Only consumed by the GRASS_OPTIMIZATIONS permutation, for grass drawn with an LOD mesh.
 		float MidLODBrightness = 1.0f;
 		float FarLODBrightness = 1.0f;
+		float PBRWrappedLightingAmount = 0.5f;
+		float SubsurfaceBalance = 1.0f;
+		float CanopyOcclusion = 0.5f;
+		float ClumpShading = 0.5f;
 	};
 	STATIC_ASSERT_ALIGNAS_16(Settings);
+	static_assert(sizeof(Settings) == 48);
+	static_assert(offsetof(Settings, PBRWrappedLightingAmount) == 32);
+	static_assert(offsetof(Settings, SubsurfaceBalance) == 36);
+	static_assert(offsetof(Settings, CanopyOcclusion) == 40);
+	static_assert(offsetof(Settings, ClumpShading) == 44);
 
 	Settings settings;
 
@@ -45,5 +54,4 @@ public:
 	virtual void LoadSettings(json& o_json) override;
 	virtual void SaveSettings(json& o_json) override;
 	virtual void RestoreDefaultSettings() override;
-
 };

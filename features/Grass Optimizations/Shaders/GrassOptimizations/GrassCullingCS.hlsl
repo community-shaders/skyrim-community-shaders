@@ -40,7 +40,8 @@ cbuffer CullParams : register(b0)
 	float CostBiasStartDist;
 
 	float FarLODPixelSize;
-	float3 _pad0;
+	float DensityDistanceRcp;
+	float2 _pad0;
 };
 
 cbuffer CullBucket : register(b1)
@@ -146,7 +147,9 @@ uint CullInstance(uint idx, GrassInstance::CullGroup group, out float2 wind, out
 	// Conservatively approximate the vertex shader's ScaleMask-based size variation.
 	const float instanceRadius = ModelRadius * (1.0 + max(sizeVariance, 0.0));
 
-	const float projPx = (instanceRadius / dist) * ProjScale;
+	// Use camera depth so pixel sizing stays consistent across the view.
+	const float clipW = dot(CameraViewProj[3].xyz, dv) + CameraViewProj[3].w;
+	const float projPx = (instanceRadius * ProjectionWLength / max(clipW, 1e-4)) * ProjScale;
 
 	// Hash world positions so compaction preserves density and LOD choices.
 	const uint2 rand = Random::pcg2d(asuint(world.xy) ^ asuint(world.z));
@@ -178,7 +181,8 @@ uint CullInstance(uint idx, GrassInstance::CullGroup group, out float2 wind, out
 	float lodFade = 1.0;
 	const float effFullPx = FullDetailPixelSize * pxScale;
 	if (projPx < effFullPx) {
-		const float t = saturate((effFullPx - projPx) / max(effFullPx - effMinPx, 1e-4));
+		const float distanceRamp = saturate(dist * DensityDistanceRcp);
+		const float t = saturate((effFullPx - projPx) / max(effFullPx - effMinPx, 1e-4)) * distanceRamp;
 		const float keep = lerp(1.0, LODMinKeep, t);
 		const float densityRandom = RandFloat(rand.x);
 		if (densityRandom > keep + LODFadeBand)
