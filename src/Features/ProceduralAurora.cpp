@@ -1,5 +1,7 @@
 #include "ProceduralAurora.h"
 
+#include "Effects11.h"
+#include "Globals.h"
 #include "I18n/I18n.h"
 #include "State.h"
 
@@ -168,8 +170,16 @@ void ProceduralAurora::ApplyPreset(int index)
 	settings.CrownStart = preset.crownStart;
 }
 
+bool ProceduralAurora::IsActive() const
+{
+	return loaded && settings.Enabled && !globals::features::effects11.OwnsFeature(E11Handoff::Feature::ProceduralAurora);
+}
+
 void ProceduralAurora::DrawSettings()
 {
+	const Util::LockedSection enbLock(globals::features::effects11.OwnsFeature(E11Handoff::Feature::ProceduralAurora),
+		T("common.settings_managed_by_enb", "This setting is managed by Effects 11."));
+
 	ImGui::Checkbox(T(TKEY("enabled"), "Enabled"), &settings.Enabled);
 	{
 		const auto night = GetNight();
@@ -250,7 +260,7 @@ void ProceduralAurora::DrawSettings()
 
 ProceduralAurora::CommonBufferData ProceduralAurora::GetCommonBufferData()
 {
-	if (!loaded || !settings.Enabled) {
+	if (!IsActive()) {
 		auroraVisibility = 0.0f;
 		lastClockUpdate = {};
 		return {};
@@ -322,7 +332,7 @@ uint32_t ProceduralAurora::GetNightIndex()
 void ProceduralAurora::OnSkyUpdate(RE::Sky* a_sky)
 {
 	ZoneScoped;
-	const bool hideRibbons = loaded && settings.Enabled;
+	const bool hideRibbons = IsActive();
 	if (!hideRibbons && !ribbonsCulled)
 		return;
 

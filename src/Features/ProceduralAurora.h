@@ -81,6 +81,9 @@ public:
 	 */
 	void OnSkyUpdate(RE::Sky* a_sky);
 
+	/** @brief Whether the procedural aurora replaces the vanilla one; off while Effects 11 owns the aurora. */
+	bool IsActive() const;
+
 	/** @brief Packs the settings for the shared feature constant buffer (SharedData::proceduralAuroraSettings). */
 	CommonBufferData GetCommonBufferData();
 
