@@ -14,7 +14,7 @@ namespace SkinEditor
 			if (FAILED(a_result))
 				throw std::runtime_error(I18n::GetSingleton()->Format("feature.skin.texture_operation_failed", { { "code", std::format("{:08X}", static_cast<uint32_t>(a_result)) } }, "Texture operation failed ({code})."));
 		}
-		DirectX::ScratchImage ReadImage(const std::string& a_path)
+		DirectX::ScratchImage ReadImage(const std::string& a_path, DXGI_FORMAT* a_sourceFormat = nullptr)
 		{
 			using namespace DirectX;
 			const auto bytes = ReadResource(a_path);
@@ -29,6 +29,8 @@ namespace SkinEditor
 			if (metadata.dimension != TEX_DIMENSION_TEXTURE2D || metadata.arraySize != 1 || metadata.IsCubemap() ||
 				metadata.width > 8192 || metadata.height > 8192)
 				throw std::runtime_error(T("feature.skin.use_a_single_2d_image_no_larger_than_8192_by", "Use a single 2D image, no larger than 8192 by 8192."));
+			if (a_sourceFormat)
+				*a_sourceFormat = metadata.format;
 			image.OverrideFormat(MakeLinear(metadata.format));
 			ScratchImage pixels;
 			if (IsCompressed(image.GetMetadata().format))
@@ -86,10 +88,9 @@ namespace SkinEditor
 
 	Bytes PackDetail(const TextureTools& a_options)
 	{
-		auto pixels = ReadImage(a_options.normal);
-		const auto source = ReadResource(a_options.normal);
-		DirectX::TexMetadata sourceMetadata{};
-		const bool reconstruct = SUCCEEDED(DirectX::GetMetadataFromDDSMemory(source.data(), source.size(), DirectX::DDS_FLAGS_NONE, sourceMetadata)) && sourceMetadata.format == DXGI_FORMAT_BC5_UNORM;
+		DXGI_FORMAT sourceFormat{};
+		auto pixels = ReadImage(a_options.normal, &sourceFormat);
+		const bool reconstruct = sourceFormat == DXGI_FORMAT_BC5_UNORM;
 		DirectX::ScratchImage mask;
 		if (!a_options.mask.empty())
 			mask = ReadImage(a_options.mask);
@@ -134,11 +135,8 @@ namespace SkinEditor
 			if (a_material.textures[i].empty())
 				continue;
 			const auto path = SkinMaterials::NormalizeTexturePath(a_material.textures[i]);
-			SkinTextures::Validate(path);
-			const auto bytes = ReadResource(path);
-			DirectX::TexMetadata metadata;
-			Check(DirectX::GetMetadataFromDDSMemory(bytes.data(), bytes.size(), DirectX::DDS_FLAGS_NONE, metadata));
-			if (metadata.format == DXGI_FORMAT_BC5_SNORM || (i != 2 && metadata.format == DXGI_FORMAT_BC5_UNORM))
+			const auto format = SkinTextures::Validate(path);
+			if (format == DXGI_FORMAT_BC5_SNORM || (i != 2 && format == DXGI_FORMAT_BC5_UNORM))
 				throw std::runtime_error(T("feature.skin.bc5_unorm_is_only_supported_for_detail_normals_without_a", "BC5 UNORM is only supported for detail normals without a mask."));
 		}
 	}

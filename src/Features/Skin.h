@@ -25,7 +25,7 @@ struct Skin : Feature
 	std::string_view GetCategory() const override { return FeatureCategories::kCharacters; }
 	std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
-		return { T("feature.skin.summary_texture_materials", "Physically based skin whose materials follow the skin texture, with per-save character adjustments."),
+		return { T("feature.skin.summary_texture_materials", "Physically based skin whose materials follow the skin texture, with file-based character adjustments shared across saves."),
 			{ T("feature.skin.roughness_fuzz_and_reflectance_controls", "Roughness, fuzz and reflectance controls"), T("feature.skin.detail_normals_with_a_main_uv_region_mask", "Detail normals with a main-UV region mask"),
 				T("feature.skin.independent_transmission_and_post_process_sss_strength", "Independent transmission and post-process SSS strength"), T("feature.skin.summary_editor", "In-game material editor with live preview") } };
 	}
@@ -219,7 +219,7 @@ private:
 	void SelectActor(RE::Actor* a_actor, Editor::Source a_source);
 	void RefreshSurfaces();
 	void SelectKey(const std::string& a_key);
-	void LoadMaterialDraft(const std::string& a_key);
+	void LoadMaterialDraft(const std::string& a_key, bool a_clearHistory = true);
 	void SaveMaterial(const std::filesystem::path& a_root);
 	std::filesystem::path OutputRoot() const;
 	void SaveCharacter();
@@ -230,7 +230,7 @@ private:
 	void PushUndo(const Editor::Draft& a_before);
 	void Undo();
 	void Redo();
-	SkinMaterials::Changes* LayerChanges(Layer a_layer);
+	SkinMaterials::Changes* LayerChanges(Layer a_layer, bool a_create = false);
 	SkinMaterials::Material InheritedMaterial(Layer a_layer);
 	Provenance ParameterProvenance(size_t a_parameter, Layer a_layer) const;
 	Provenance TextureProvenance(size_t a_texture, Layer a_layer) const;

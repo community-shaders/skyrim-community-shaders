@@ -50,10 +50,14 @@ void Skin::ReloadResources()
 	editor.thumbnailKey.clear();
 	// Files may have been edited outside the game. Drafts without unsaved changes follow the files.
 	if (!editor.draftKey.empty() && !MaterialDirty())
-		LoadMaterialDraft(editor.draftKey);
+		LoadMaterialDraft(editor.draftKey, false);
 	if (editor.draftTarget && !CharacterDirty()) {
 		const auto* saved = SkinCharacters::Find(*SkinCharacters::Get(), editor.draftTarget.key);
 		editor.character = editor.characterBaseline = saved ? saved->customization : SkinCharacters::Customization{};
+		for (auto& draft : editor.undo)
+			draft.character = editor.character;
+		for (auto& draft : editor.redo)
+			draft.character = editor.character;
 	}
 }
 

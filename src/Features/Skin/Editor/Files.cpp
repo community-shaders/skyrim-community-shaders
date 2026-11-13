@@ -1,8 +1,8 @@
 #include "Files.h"
 
 #include "../Runtime/Textures.h"
+#include "Utils/FileSystem.h"
 
-#include <commdlg.h>
 #include <cwctype>
 #include <fstream>
 #include <mutex>
@@ -43,7 +43,7 @@ namespace SkinEditor
 	void RememberOutput(const std::string& a_resource, const std::filesystem::path& a_file)
 	{
 		std::lock_guard lock(outputMutex);
-		outputs[OutputKey(a_resource)] = a_file;
+		outputs[OutputKey(a_resource)] = std::filesystem::absolute(a_file);
 	}
 
 	void ForgetOutputs()
@@ -54,8 +54,7 @@ namespace SkinEditor
 
 	std::string UTF8(const std::filesystem::path& a_path)
 	{
-		const auto text = a_path.u8string();
-		return { text.begin(), text.end() };
+		return Util::PathHelpers::ToUtf8(a_path);
 	}
 
 	uint64_t Fingerprint(std::span<const uint8_t> a_bytes)
@@ -68,13 +67,12 @@ namespace SkinEditor
 
 	std::optional<Bytes> FindResource(const std::string& a_path)
 	{
+		// Session replacements take precedence even while virtual Data still exposes an older file.
+		if (const auto file = SessionOutput(a_path); file && std::filesystem::exists(*file))
+			return ReadResource(UTF8(*file));
 		RE::BSResourceNiBinaryStream input(ResourcePath(a_path));
-		if (!input.good() || !input.stream) {
-			// Written this session but not (yet) visible to the game: read it from where it was written.
-			if (const auto file = SessionOutput(a_path); file && std::filesystem::exists(*file))
-				return ReadResource(UTF8(*file));
+		if (!input.good() || !input.stream)
 			return std::nullopt;
-		}
 		if (input.stream->totalSize > MaxBytes)
 			throw std::runtime_error(T("feature.skin.asset_read_limit", "Cannot read asset or asset exceeds 512 MiB: ") + a_path);
 		Bytes bytes(input.stream->totalSize);
@@ -153,24 +151,11 @@ namespace SkinEditor
 		filter.push_back(L'\0');
 		filter.append(pattern);
 		filter.append(2, L'\0');
-		std::array<wchar_t, 32768> buffer{};
-		const auto initial = a_initial.wstring();
-		if (initial.size() >= buffer.size())
-			throw std::runtime_error(T("feature.skin.file_path_is_too_long", "File path is too long."));
-		std::copy(initial.begin(), initial.end(), buffer.begin());
-		OPENFILENAMEW dialog{};
-		dialog.lStructSize = static_cast<DWORD>(sizeof(dialog));
-		dialog.hwndOwner = GetActiveWindow();
-		dialog.lpstrFilter = filter.c_str();
-		dialog.lpstrFile = buffer.data();
-		dialog.nMaxFile = static_cast<DWORD>(buffer.size());
-		dialog.lpstrDefExt = a_extension;
-		dialog.Flags = OFN_EXPLORER | OFN_NOCHANGEDIR | OFN_PATHMUSTEXIST |
-		               (a_save ? OFN_OVERWRITEPROMPT : OFN_FILEMUSTEXIST);
-		if (a_save ? GetSaveFileNameW(&dialog) : GetOpenFileNameW(&dialog))
-			return std::filesystem::path(buffer.data());
-		if (const auto error = CommDlgExtendedError())
-			throw std::runtime_error(I18n::GetSingleton()->Format("feature.skin.file_dialog_failed", { { "code", std::format("{:08X}", error) } }, "File dialog failed ({code})."));
+		const auto result = Util::ShowFileDialog({ .filter = filter.c_str(), .extension = a_extension, .initial = a_initial, .save = a_save });
+		if (result.error)
+			throw std::runtime_error(I18n::GetSingleton()->Format("feature.skin.file_dialog_failed", { { "code", std::format("{:08X}", result.error) } }, "File dialog failed ({code})."));
+		if (!result.paths.empty())
+			return result.paths.front();
 		return std::nullopt;
 	}
 

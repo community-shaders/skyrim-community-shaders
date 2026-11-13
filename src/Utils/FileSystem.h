@@ -21,6 +21,23 @@ struct SettingsDiffEntry
 
 namespace Util
 {
+	/** @brief Native open/save dialog settings. Filters use the Windows double-NUL format. */
+	struct FileDialogOptions
+	{
+		const wchar_t* filter = nullptr;
+		const wchar_t* extension = nullptr;
+		std::filesystem::path initial;
+		bool save = false;
+		bool multiple = false;  ///< Only applies to open dialogs.
+	};
+	struct FileDialogResult
+	{
+		std::vector<std::filesystem::path> paths;
+		uint32_t error = 0;  ///< CommDlgExtendedError; empty paths with zero error means cancellation.
+	};
+	/** @brief Opens a native file dialog without changing the working directory. */
+	FileDialogResult ShowFileDialog(const FileDialogOptions& a_options);
+
 	/**
 	 * Path construction utilities for consistent file system path handling.
 	 * Reduces repeated path construction and provides consistent path handling.

@@ -12,7 +12,6 @@
 #include <vector>
 
 #include <Windows.h>
-#include <commdlg.h>
 
 #pragma comment(lib, "comdlg32.lib")
 
@@ -521,13 +520,6 @@ namespace
 	/** @brief Opens the Windows image picker. @return Whether any file was chosen. */
 	bool BrowseImageFiles(bool allowMultiple, std::vector<std::filesystem::path>& outPaths)
 	{
-		outPaths.clear();
-		constexpr DWORD kBufferChars = 32768;
-		std::wstring buffer(kBufferChars, L'\0');
-
-		OPENFILENAMEW ofn{};
-		ofn.lStructSize = sizeof(ofn);
-		ofn.hwndOwner = GetActiveWindow();
 		std::wstring filter = winrt::to_hstring(T(TKEY("scene_export_image_filter"), "Images (*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.dds)")).c_str();
 		filter.push_back(L'\0');
 		filter.append(L"*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.dds");
@@ -536,28 +528,10 @@ namespace
 		filter.push_back(L'\0');
 		filter.append(L"*.*");
 		filter.append(2, L'\0');
-		ofn.lpstrFilter = filter.c_str();
-		ofn.lpstrFile = buffer.data();
-		ofn.nMaxFile = kBufferChars;
-		ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_EXPLORER | OFN_NOCHANGEDIR;
-		if (allowMultiple)
-			ofn.Flags |= OFN_ALLOWMULTISELECT;
-
-		if (!GetOpenFileNameW(&ofn))
-			return false;
-
-		const wchar_t* ptr = buffer.c_str();
-		std::filesystem::path directory = ptr;
-		ptr += directory.native().size() + 1;
-		if (!*ptr) {
-			// Single selection: buffer is the full path.
-			outPaths.push_back(directory);
-			return true;
-		}
-		while (*ptr) {
-			outPaths.push_back(directory / ptr);
-			ptr += std::wcslen(ptr) + 1;
-		}
+		auto result = Util::ShowFileDialog({ .filter = filter.c_str(), .multiple = allowMultiple });
+		if (result.error)
+			logger::warn("[Scene export] File dialog failed ({:08X})", result.error);
+		outPaths = std::move(result.paths);
 		return !outPaths.empty();
 	}
 

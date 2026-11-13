@@ -10,5 +10,6 @@ namespace SkinTextures
 		std::string error;
 	};
 	Resource Load(const std::string& a_path);
-	void Validate(const std::string& a_path);
+	/// Decodes and validates a DDS once, returning its source format (UNKNOWN for an empty path).
+	DXGI_FORMAT Validate(const std::string& a_path);
 }

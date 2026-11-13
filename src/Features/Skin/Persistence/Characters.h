@@ -57,7 +57,7 @@ namespace SkinCharacters
 	Snapshot Get();
 	const Character* Find(const State& a_state, const std::string& a_key);
 
-	/// Writes the character's file and applies it. An empty customization removes the file. Returns the file.
+	/// Writes the character's file and applies it. An empty customization keeps a winning override with no adjustments. Returns the file.
 	std::filesystem::path Save(const Target& a_target, Customization a_customization);
 	/// Reads the adjustments of any character file, whoever it targets, for reuse on another character.
 	Customization Import(const std::filesystem::path& a_path);

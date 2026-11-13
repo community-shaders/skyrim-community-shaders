@@ -46,18 +46,19 @@ namespace
 void Skin::DrawMaterialControls()
 {
 	const Editor::Draft before{ editor.material, editor.character };
+	if (!LayerAvailable(editor.layer))
+		editor.layer = Layer::Material;
 	const auto layer = editor.layer;
 	if (!LayerAvailable(layer))
-		editor.layer = Layer::Material;
-	const auto inherited = InheritedMaterial(editor.layer);
-	auto* changes = LayerChanges(editor.layer);
-	if (!changes)
 		return;
+	const auto inherited = InheritedMaterial(layer);
+	const auto* current = LayerChanges(layer);
+	auto changes = current ? *current : Changes{};
 
 	const char* sections[] = { T("feature.skin.section_textures", "Textures"), T("feature.skin.section_specular", "Dual specular lobes"), T("feature.skin.section_fuzz", "Fuzz and edges"), T("feature.skin.section_transmission", "Transmission and SSS"), T("feature.skin.section_detail", "Detail normals"), T("feature.skin.section_wetness", "Wet response") };
 	Util::SegmentedControl("##skin_sections", sections, 6, editor.section);
 	ImGui::Spacing();
-	const auto effective = Apply(inherited, *changes);
+	const auto effective = Apply(inherited, changes);
 	switch (editor.section) {
 	case 1:
 		Util::Text::WrappedSecondary("%s", effective.textures[0].empty() ? T("feature.skin.specular_scalar_mode", "No RFAOS: the two lobes use their own roughness values and the native specular-map control. RFAOS multipliers are retained for use when a controls texture is assigned.") : T("feature.skin.specular_texture_mode", "RFAOS assigned: its red channel is multiplied separately for each lobe. Absolute roughness values are retained for use without RFAOS."));
@@ -75,12 +76,14 @@ void Skin::DrawMaterialControls()
 		break;
 	}
 	if (editor.section == 0)
-		DrawTextureInputs(*changes, inherited);
+		DrawTextureInputs(changes, inherited);
 	else
-		DrawParameters(*changes, inherited);
+		DrawParameters(changes, inherited);
 
-	if (editor.layer == Layer::CharacterMaterial && changes->Empty())
+	if (layer == Layer::CharacterMaterial && changes.Empty())
 		editor.character.materials.erase(editor.key);
+	else
+		*LayerChanges(layer, true) = std::move(changes);
 	if (before != Editor::Draft{ editor.material, editor.character }) {
 		// A slider drag is one undo step, not one per frame.
 		if (!editor.editGesture)
@@ -224,10 +227,12 @@ void Skin::DrawTextureInputs(SkinMaterials::Changes& a_changes, const SkinMateri
 	{
 		BrowserUI::RowShadeScope shade;
 		if (ImGui::BeginTable("##skin_textures", 2, kRowsFlags)) {
+			const SKSE::stl::scope_exit endTable([]() noexcept { ImGui::EndTable(); });
 			ImGui::TableSetupColumn("##label", ImGuiTableColumnFlags_WidthFixed, labelWidth + ImGui::GetStyle().CellPadding.x * 2.0f);
 			ImGui::TableSetupColumn("##value", ImGuiTableColumnFlags_WidthStretch);
 			for (size_t i = 0; i < TextureCount; ++i) {
 				ImGui::PushID(static_cast<int>(i));
+				const SKSE::stl::scope_exit popID([]() noexcept { ImGui::PopID(); });
 				const auto provenance = TextureProvenance(i, editor.layer);
 				auto& edit = a_changes.textures[i];
 				const auto path = Apply(a_inherited, a_changes).textures[i];
@@ -281,9 +286,7 @@ void Skin::DrawTextureInputs(SkinMaterials::Changes& a_changes, const SkinMateri
 					editor.toolsOutput.clear();
 					editor.toolsWindow = true;
 				}
-				ImGui::PopID();
 			}
-			ImGui::EndTable();
 		}
 	}
 	ImGui::Spacing();

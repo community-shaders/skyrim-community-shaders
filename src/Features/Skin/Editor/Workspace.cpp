@@ -181,7 +181,7 @@ void Skin::SelectKey(const std::string& a_key)
 	});
 }
 
-void Skin::LoadMaterialDraft(const std::string& a_key)
+void Skin::LoadMaterialDraft(const std::string& a_key, bool a_clearHistory)
 {
 	const auto entry = FindMaterial(a_key);
 	editor.draftKey = a_key;
@@ -196,8 +196,16 @@ void Skin::LoadMaterialDraft(const std::string& a_key)
 			editor.fingerprintWarning = e.what();
 		}
 	}
-	editor.undo.clear();
-	editor.redo.clear();
+	if (a_clearHistory) {
+		editor.undo.clear();
+		editor.redo.clear();
+	} else {
+		// Keep character undo/redo, but never restore the material from before the reload.
+		for (auto& draft : editor.undo)
+			draft.material = editor.material;
+		for (auto& draft : editor.redo)
+			draft.material = editor.material;
+	}
 	editor.thumbnailKey.clear();
 	Invalidate();
 }
@@ -248,11 +256,9 @@ void Skin::SaveCharacter()
 	if (editor.character.name.empty())
 		editor.character.name = editor.actorName;
 	std::erase_if(editor.character.materials, [](const auto& item) { return item.second.Empty(); });
-	const bool removed = editor.character.Empty();
 	const auto file = SkinCharacters::Save(editor.draftTarget, editor.character);
 	editor.characterBaseline = editor.character;
-	Notify(removed ? I18n::GetSingleton()->Format("feature.skin.character_file_removed", { { "path", UTF8(file) } }, "No adjustments left; removed {path}.") :
-					 I18n::GetSingleton()->Format("feature.skin.character_saved_short", { { "path", UTF8(file) } }, "Saved {path}"));
+	Notify(I18n::GetSingleton()->Format("feature.skin.character_saved_short", { { "path", UTF8(file) } }, "Saved {path}"));
 	Invalidate();
 }
 
@@ -269,8 +275,12 @@ void Skin::RevertLayer()
 	PushUndo({ editor.material, editor.character });
 	if (editor.layer == Layer::Material)
 		editor.material = editor.materialBaseline;
+	else if (editor.layer == Layer::CharacterAll)
+		editor.character.all = editor.characterBaseline.all;
+	else if (const auto saved = editor.characterBaseline.materials.find(editor.key); saved != editor.characterBaseline.materials.end())
+		editor.character.materials[editor.key] = saved->second;
 	else
-		editor.character = editor.characterBaseline;
+		editor.character.materials.erase(editor.key);
 	Invalidate();
 }
 
@@ -321,7 +331,7 @@ void Skin::Redo()
 	Invalidate();
 }
 
-SkinMaterials::Changes* Skin::LayerChanges(Layer a_layer)
+SkinMaterials::Changes* Skin::LayerChanges(Layer a_layer, bool a_create)
 {
 	switch (a_layer) {
 	case Layer::Material:
@@ -329,7 +339,12 @@ SkinMaterials::Changes* Skin::LayerChanges(Layer a_layer)
 	case Layer::CharacterAll:
 		return &editor.character.all;
 	default:
-		return editor.key.empty() ? nullptr : &editor.character.materials[editor.key];
+		if (editor.key.empty())
+			return nullptr;
+		if (a_create)
+			return &editor.character.materials[editor.key];
+		const auto found = editor.character.materials.find(editor.key);
+		return found == editor.character.materials.end() ? nullptr : &found->second;
 	}
 }
 

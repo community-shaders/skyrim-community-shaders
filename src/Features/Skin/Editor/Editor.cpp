@@ -20,6 +20,7 @@ namespace
 	void SourcePicker(const char* a_label, std::string& a_path)
 	{
 		ImGui::PushID(a_label);
+		const SKSE::stl::scope_exit popID([]() noexcept { ImGui::PopID(); });
 		ImGui::AlignTextToFramePadding();
 		ImGui::TextUnformatted(a_label);
 		ImGui::SameLine();
@@ -30,7 +31,6 @@ namespace
 		if (ImGui::Button(T("feature.skin.choose_image", "Choose image")))
 			if (const auto path = ChooseFile(false, ImageFilter, nullptr))
 				a_path = UTF8(*path);
-		ImGui::PopID();
 	}
 }
 
@@ -100,31 +100,34 @@ void Skin::DrawTextureTools()
 		ImGui::Checkbox(T("feature.skin.compress_as_bc7_slower", "Compress as BC7 (slower)"), &editor.tools.compress);
 
 		ImGui::Spacing();
-		ImGui::BeginDisabled(resource.empty());
-		if (ImGui::Button(T("feature.skin.build_and_save_dds", "Build and save DDS"), ImVec2(-FLT_MIN, 0))) {
-			PublishResource(root, resource, editor.tools.detail ? PackDetail(editor.tools) : PackControls(editor.tools));
-			editor.generatedDDS = resource;
-			editor.generatedDetail = editor.tools.detail;
-			Invalidate(true);
-			Notify(T("feature.skin.dds_saved_as_resource", "DDS saved with linear channels, alpha and mipmaps."));
+		{
+			Util::DisableGuard disabled(resource.empty());
+			if (ImGui::Button(T("feature.skin.build_and_save_dds", "Build and save DDS"), ImVec2(-FLT_MIN, 0))) {
+				PublishResource(root, resource, editor.tools.detail ? PackDetail(editor.tools) : PackControls(editor.tools));
+				editor.thumbnailKey.clear();
+				editor.generatedDDS = resource;
+				editor.generatedDetail = editor.tools.detail;
+				Invalidate(true);
+				Notify(T("feature.skin.dds_saved_as_resource", "DDS saved with linear channels, alpha and mipmaps."));
+			}
 		}
-		ImGui::EndDisabled();
 
 		if (!editor.generatedDDS.empty()) {
 			ImGui::Spacing();
 			BrowserUI::SectionLabel(T("feature.skin.texture_output", "Created texture"));
 			BrowserUI::MetaText(editor.generatedDDS.c_str());
 			const bool usable = editor.layer != Layer::CharacterAll && LayerAvailable(editor.layer);
-			ImGui::BeginDisabled(!usable);
-			const auto assign = I18n::GetSingleton()->Format("feature.skin.assign_to_layer", { { "layer", LayerLabel(editor.layer) } }, "Use in {layer}");
-			if (ImGui::Button(assign.c_str())) {
-				PushUndo({ editor.material, editor.character });
-				LayerChanges(editor.layer)->textures[editor.generatedDetail ? 2 : 0] = { TextureMode::Resource, editor.generatedDDS };
-				editor.section = 0;
-				Invalidate(true);
-				Notify(T("feature.skin.texture_assigned_to_draft", "Texture assigned to the draft. Preview and save the material to finish."));
+			{
+				Util::DisableGuard disabled(!usable);
+				const auto assign = I18n::GetSingleton()->Format("feature.skin.assign_to_layer", { { "layer", LayerLabel(editor.layer) } }, "Use in {layer}");
+				if (ImGui::Button(assign.c_str())) {
+					PushUndo({ editor.material, editor.character });
+					LayerChanges(editor.layer, true)->textures[editor.generatedDetail ? 2 : 0] = { TextureMode::Resource, editor.generatedDDS };
+					editor.section = 0;
+					Invalidate(true);
+					Notify(T("feature.skin.texture_assigned_to_draft", "Texture assigned to the draft. Preview and save the material to finish."));
+				}
 			}
-			ImGui::EndDisabled();
 			if (!usable)
 				Util::AddTooltip(T("feature.skin.assign_unavailable", "Select a skin texture and a layer that holds textures."), Util::kTooltipWhenDisabled);
 		}

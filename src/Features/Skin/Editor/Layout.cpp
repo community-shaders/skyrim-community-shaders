@@ -269,19 +269,25 @@ void Skin::DrawMaterialEditor()
 		DrawProblems();
 		ImGui::Spacing();
 		if (ImGui::BeginTable("##skin_layout", 2, kLayoutFlags)) {
+			const SKSE::stl::scope_exit endTable([]() noexcept { ImGui::EndTable(); });
 			ImGui::TableSetupColumn("##textures", ImGuiTableColumnFlags_WidthFixed, kListWidth * Util::GetUIScale());
 			ImGui::TableSetupColumn("##body", ImGuiTableColumnFlags_WidthStretch);
 			ImGui::TableNextRow();
 			// Each column scrolls on its own, so a long texture list never drags the material with it.
 			ImGui::TableSetColumnIndex(0);
-			if (ImGui::BeginChild("##skin_texture_list"))
-				DrawTextureList();
-			ImGui::EndChild();
+			{
+				const bool visible = ImGui::BeginChild("##skin_texture_list");
+				const SKSE::stl::scope_exit endChild([]() noexcept { ImGui::EndChild(); });
+				if (visible)
+					DrawTextureList();
+			}
 			ImGui::TableSetColumnIndex(1);
-			if (ImGui::BeginChild("##skin_texture_panel"))
-				DrawTexturePanel();
-			ImGui::EndChild();
-			ImGui::EndTable();
+			{
+				const bool visible = ImGui::BeginChild("##skin_texture_panel");
+				const SKSE::stl::scope_exit endChild([]() noexcept { ImGui::EndChild(); });
+				if (visible)
+					DrawTexturePanel();
+			}
 		}
 	} catch (const std::exception& error) {
 		Notify(error.what(), true);

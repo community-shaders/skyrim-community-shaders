@@ -88,7 +88,9 @@ namespace SkinCharacters
 					if (key.empty())
 						throw std::runtime_error(T("feature.skin.character_file_material_key", "Not a skin texture path: ") + name);
 					try {
-						result.materials[key] = SkinMaterials::DecodeChanges(changes);
+						auto decoded = SkinMaterials::DecodeChanges(changes);
+						if (!decoded.Empty())
+							result.materials[key] = std::move(decoded);
 					} catch (const std::exception& e) {
 						throw std::runtime_error(name + ": " + e.what());
 					}
@@ -107,15 +109,20 @@ namespace SkinCharacters
 			result["all"] = { { "parameters", SkinMaterials::Encode(SkinMaterials::ScalarsOnly(a_value.all)).at("parameters") } };
 			result["materials"] = std::move(materials);
 			// Names come from game strings, which are not guaranteed to be valid UTF-8.
-			return result.dump(2, ' ', false, nlohmann::ordered_json::error_handler_t::replace) + "\n";
+			const auto text = result.dump(2, ' ', false, nlohmann::ordered_json::error_handler_t::replace) + "\n";
+			if (text.size() > MaxBytes)
+				throw std::runtime_error(T("feature.skin.character_file_too_large", "The character file exceeds 1 MiB."));
+			return text;
 		}
 
 		json ReadFile(const std::filesystem::path& a_path)
 		{
 			// A plain stream, opened by relative path: this resolves files in a mod manager's virtual Data folder.
 			std::ifstream input(a_path, std::ios::binary);
-			std::string text((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
-			if (!input.good() && !input.eof())
+			std::string text(MaxBytes + 1, '\0');
+			input.read(text.data(), static_cast<std::streamsize>(text.size()));
+			text.resize(static_cast<size_t>(input.gcount()));
+			if (input.bad() || (input.fail() && !input.eof()))
 				throw std::runtime_error(T("feature.skin.character_file_unreadable", "The file could not be read."));
 			if (text.size() > MaxBytes)
 				throw std::runtime_error(T("feature.skin.character_file_too_large", "The character file exceeds 1 MiB."));
@@ -232,18 +239,11 @@ namespace SkinCharacters
 		State next = *state;
 		const auto existing = next.characters.find(a_target.key);
 		const auto file = existing != next.characters.end() ? existing->second.file : Directory() / FileName(a_target, a_customization.name);
-		if (a_customization.Empty()) {
-			std::error_code error;
-			std::filesystem::remove(file, error);
-			if (error)
-				throw std::runtime_error(T("feature.skin.character_file_not_removed", "The character file could not be removed: ") + SkinEditor::UTF8(file));
-			next.characters.erase(a_target.key);
-		} else {
-			const auto text = Encode(a_target, a_customization);
-			const SkinEditor::Output output{ file, { text.begin(), text.end() } };
-			SkinEditor::Publish(std::span(&output, 1), false);
-			next.characters[a_target.key] = { a_target, std::move(a_customization), file };
-		}
+		// Keep an empty winning file: deleting it could reveal another mod's adjustments.
+		const auto text = Encode(a_target, a_customization);
+		const SkinEditor::Output output{ file, { text.begin(), text.end() } };
+		SkinEditor::Publish(std::span(&output, 1), false);
+		next.characters[a_target.key] = { a_target, std::move(a_customization), file };
 		Publish(std::move(next));
 		return file;
 	}

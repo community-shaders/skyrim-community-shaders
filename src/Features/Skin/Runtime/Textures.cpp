@@ -32,15 +32,17 @@ namespace SkinTextures
 		}
 	}
 
-	void Validate(const std::string& a_path)
+	DXGI_FORMAT Validate(const std::string& a_path)
 	{
 		if (!a_path.empty()) {
 			const auto bytes = SkinEditor::ReadResource(a_path);
-			Metadata(bytes);
+			const auto metadata = Metadata(bytes);
 			DirectX::ScratchImage image;
 			if (FAILED(DirectX::LoadFromDDSMemory(bytes.data(), bytes.size(), DirectX::DDS_FLAGS_NONE, nullptr, image)))
 				throw std::runtime_error(T("feature.skin.dds_decoding_failed", "DDS decoding failed."));
+			return metadata.format;
 		}
+		return DXGI_FORMAT_UNKNOWN;
 	}
 
 	Resource Load(const std::string& a_path)

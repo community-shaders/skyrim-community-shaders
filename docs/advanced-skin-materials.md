@@ -173,7 +173,7 @@ The page follows the Scene Manager's layout:
 - **Rows**: each value leads with a gutter box, ticked when the edited layer sets the value. It is green when that value is the one shown, and amber when a higher layer of the selected character sets it too. Editing a value sets it on the layer; untick, or right-click and choose **Inherit again**, to inherit. The tooltip names the layer the value comes from.
 - **Texture tools**: a separate window for channel packing, whose result can be assigned to the layer being edited.
 
-Saving the texture material writes its file. Saving either character layer writes the character's file; with no adjustments left, it removes the file. Errors and confirmations appear as editor notifications.
+Saving the texture material writes its file. Saving either character layer writes the character's file; with no adjustments left, it keeps an empty override so older files for the same character do not become active again. Errors and confirmations appear as editor notifications.
 
 While the editor is open, a texture material draft previews on everything that shows the texture, on any character, and a character draft previews on that character. That is exactly what saving will affect. Both drafts are retained while switching layers; choosing another texture or character asks before discarding unsaved edits. Undo and redo cover both drafts.
 
