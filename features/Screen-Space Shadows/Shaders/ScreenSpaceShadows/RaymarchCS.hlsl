@@ -33,6 +33,13 @@ cbuffer PerFrame : register(b1)
 	float SurfaceThickness;
 	float BilinearThreshold;
 	float ShadowContrast;
+	uint Enable;
+	uint SampleCount;
+	float MaxRayLength;
+	uint2 SettingsPad;
+
+	float4 LightProjection;  // Clip-space vector toward the light, as passed to BuildDispatchList()
+	float4 CameraData;       // (far, near, far - near, far * near)
 };
 
 [numthreads(WAVE_SIZE, 1, 1)] void main(
@@ -53,6 +60,9 @@ cbuffer PerFrame : register(b1)
 	parameters.SurfaceThickness = SurfaceThickness;
 	parameters.BilinearThreshold = BilinearThreshold;
 	parameters.ShadowContrast = ShadowContrast;
+	parameters.MaxRayLength = MaxRayLength;
+	parameters.LightProjection = LightProjection;
+	parameters.CameraData = CameraData;
 
 	parameters.DynamicRes = DynamicRes;
 

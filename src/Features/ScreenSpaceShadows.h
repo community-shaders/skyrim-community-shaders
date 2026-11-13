@@ -31,7 +31,8 @@ public:
 		float ShadowContrast = 1.0f;
 		uint Enable = 1;
 		uint SampleCount = 1;
-		uint pad0[3];
+		float MaxRayLength = 24.0f;
+		uint pad0[2];
 	};
 
 	BendSettings bendSettings;
@@ -54,6 +55,9 @@ public:
 		float2 DynamicRes;
 
 		BendSettings settings;
+
+		float LightProjection[4];  // Clip-space vector toward the light, as passed to BuildDispatchList()
+		float CameraData[4];       // (far, near, far - near, far * near)
 	};
 	STATIC_ASSERT_ALIGNAS_16(RaymarchCB);
 

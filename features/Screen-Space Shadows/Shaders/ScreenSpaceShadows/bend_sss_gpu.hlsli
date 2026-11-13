@@ -58,6 +58,8 @@ struct DispatchParameters
 
 	float2 DynamicRes;
 
+	float MaxRayLength;  // Maximum world-space length of a shadow ray. Keeps it a contact shadow at any distance. <= 0 disables the cap.
+
 	bool IgnoreEdgePixels;  // If an edge is detected, the edge pixel will not contribute to the shadow.
 							// If a very flat surface is being lit and rendered at an grazing angles, the edge detect may incorrectly detect multiple 'edge' pixels along that flat surface.
 							// In these cases, the grazing angle of the light may subsequently produce aliasing artefacts in the shadow where these incorrect edges were detected.
@@ -92,6 +94,7 @@ struct DispatchParameters
 		SurfaceThickness = 0.005;
 		BilinearThreshold = 0.02;
 		ShadowContrast = 4;
+		MaxRayLength = 0;
 		IgnoreEdgePixels = false;
 		UsePrecisionOffset = false;
 		BilinearSamplingOffsetMode = false;
@@ -107,6 +110,9 @@ struct DispatchParameters
 	// Renderer Specific Values:
 	half FarDepthValue;   // Set to the Depth Buffer Value for the far clip plane, as determined by renderer projection matrix setup (typically 0).
 	half NearDepthValue;  // Set to the Depth Buffer Value for the near clip plane, as determined by renderer projection matrix setup (typically 1).
+
+	float4 LightProjection;  // Clip-space vector toward the light (the same projection passed to BuildDispatchList()). Only used when 'MaxRayLength' > 0.
+	float4 CameraData;       // (far, near, far - near, far * near) camera planes, to linearize depth. Only used when 'MaxRayLength' > 0.
 
 	// Sampling data:
 	half2 InvDepthTextureSize;  // Inverse of the texture dimensions for 'DepthTexture' (used to convert from pixel coordinates to UVs)
@@ -341,6 +347,20 @@ void WriteScreenSpaceShadow(DispatchParameters inParameters, int3 inGroupID, int
 	half front_start_depth = scaled_start_depth - z_sign;
 	half back_start_depth = scaled_start_depth + z_sign;
 
+	// The march is a fixed pixel count, which grows in world units with distance. Cap it at MaxRayLength.
+	float ray_pixels = 1e10;
+	if (inParameters.MaxRayLength > 0) {
+		float view_z = inParameters.CameraData.w / (inParameters.CameraData.x - sampling_depth[0] * inParameters.CameraData.z);
+		float2 ray_ndc = float2(1, -1) * ((write_xy + 0.5) * inParameters.InvDepthTextureSize * 2 - 1);
+		float3 ray_end = float3(ray_ndc * view_z + inParameters.MaxRayLength * inParameters.LightProjection.xy, view_z + inParameters.MaxRayLength * inParameters.LightProjection.w);
+		if (ray_end.z > 0) {
+			float2 ray_delta = (ray_end.xy / ray_end.z - ray_ndc) * 0.5 / inParameters.InvDepthTextureSize;
+			ray_pixels = max(abs(ray_delta.x), abs(ray_delta.y));
+		}
+	}
+	float fade_start = ray_pixels * 0.75;
+	float fade_rcp = 1.0 / max(ray_pixels * 0.25, 1e-3);
+
 #if (SAMPLE_COUNT / 4) * 4 != SAMPLE_COUNT
 #	error SAMPLE_COUNT must be a multiple of 4
 #endif
@@ -354,8 +374,9 @@ void WriteScreenSpaceShadow(DispatchParameters inParameters, int3 inGroupID, int
 		[unroll] for (int j = 0; j < 4; j++)
 		{
 			half shadow_depth = DepthData[sample_index + i + j] * depth_scale;
-			half front_depth_delta = abs(front_start_depth - shadow_depth);
-			half back_depth_delta = abs(back_start_depth - shadow_depth);
+			half ray_fade = saturate((float(i + j + 1) - fade_start) * fade_rcp);
+			half front_depth_delta = abs(front_start_depth - shadow_depth) + ray_fade;
+			half back_depth_delta = abs(back_start_depth - shadow_depth) + ray_fade;
 
 			// By using 4 values, the average shadow can be taken, which can help soften single-pixel shadows.
 			front_shadow_value[j] = min(front_shadow_value[j], front_depth_delta);
