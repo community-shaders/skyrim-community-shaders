@@ -693,7 +693,7 @@ void SettingsTabRenderer::RenderShadersSection()
 		} else {
 			ImGui::TextUnformatted(i18n->Format("menu.home.shaders_build_time",
 										   { { "time", shaderCache->GetShaderStatsString(true, true) } }, "Last build: {time}")
-									   .c_str());
+					.c_str());
 			ImGui::SameLine();
 			if (failed > 0)
 				ImGui::TextColored(Util::Colors::GetError(), "%s",

@@ -19,7 +19,6 @@
 #include "Menu/FeatureListRenderer.h"
 #include "Menu/FeatureUndo.h"
 #include "Menu/Icons/helpers/IconFonts.h"
-#include "Utils/DebugSection.h"
 #include "Menu/Icons/helpers/SceneActionIcons.h"
 #include "Menu/MenuIcons.h"
 #include "SaveManager.h"
@@ -28,6 +27,7 @@
 #include "SceneManager/ScenePresetExport.h"
 #include "SceneManager/SceneSettingsManager.h"
 #include "State.h"
+#include "Utils/DebugSection.h"
 #include "Utils/UI.h"
 
 #define I18N_KEY_PREFIX "cs_editor."
