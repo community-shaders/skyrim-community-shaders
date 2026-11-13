@@ -3,6 +3,7 @@
 #include "I18n/I18n.h"
 #include "State.h"
 #include "Util.h"
+#include "Utils/AsyncShaderSet.h"
 
 #include <algorithm>
 #include <cmath>
@@ -42,16 +43,13 @@ void CloudNoiseGenerator::SetupResources()
 	valid = pending = false;
 }
 
-void CloudNoiseGenerator::CompileShaders()
+void CloudNoiseGenerator::CompileShaders(Util::AsyncShaderSet& a_shaders)
 {
 	valid = pending = false;
 	const std::array programs = { std::pair{ &shapeProgram, "generateShape" },
 		std::pair{ &adjustmentProgram, "generateAdjustment" }, std::pair{ &adjustmentMipProgram, "generateAdjustmentMip" } };
-	for (const auto& [program, entry] : programs) {
-		*program = nullptr;
-		if (auto* shader = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\PhysicalSky\\CloudNoiseGenerate.cs.hlsl", {}, "cs_5_0", entry)))
-			program->attach(shader);
-	}
+	for (const auto& [program, entry] : programs)
+		a_shaders.Add(*program, L"Data\\Shaders\\PhysicalSky\\CloudNoiseGenerate.cs.hlsl", {}, entry);
 }
 
 bool CloudNoiseGenerator::Update(const CloudNoiseSettings& settings, ID3D11ShaderResourceView* source)

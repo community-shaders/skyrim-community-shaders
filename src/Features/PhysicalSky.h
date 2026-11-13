@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Utils/AsyncShaderSet.h"
 #include "Utils/TexturePreview.h"
 
 #include "PhysicalSky/Aerosol.h"
@@ -70,7 +71,10 @@ struct PhysicalSky final : public Feature
 	// Resources
 	void SetupResources() override;
 	void ClearShaderCache() override;
+	/** @brief Queues the sky LUT and aerial perspective shaders. */
 	void CompileShaders();
+	/** @brief Render thread: publishes finished shaders and queues each group the first frame it is needed. */
+	void UpdateShaders();
 	bool ShadersOK();
 
 	// Draw
@@ -83,6 +87,7 @@ struct PhysicalSky final : public Feature
 	inline void PostPostLoad() override { Hooks::Install(); }
 
 	////////////////////////////////////////////////// Feature Specific Data
+	constexpr static std::wstring_view kShaderDir = L"Data\\Shaders\\PhysicalSky";
 	constexpr static uint16_t kTrLutW = 256;
 	constexpr static uint16_t kTrLutH = 64;
 	constexpr static uint16_t kMsLutW = 32;
@@ -604,7 +609,12 @@ struct PhysicalSky final : public Feature
 		kMainViewAndCubemap
 	};
 	void SetupVolumetricResources();
+	/** @brief Queues every volumetric cloud shader, including the cloud managers'. */
 	void CompileVolumetricShaders();
+	Util::AsyncShaderSet shaders;  ///< Every Physical Sky shader; compiled off the render thread.
+	bool baseShadersQueued = false;
+	bool volumetricShadersQueued = false;
+	std::atomic_bool recompileRequested{ false };  ///< Set by ClearShaderCache, which the file watcher calls off the render thread.
 	void RenderCloudBoundary(const CloudBoundaryCB& a_data, NdfTextureSet a_textures);
 	void LoadCloudTextures();
 	void UpdateCloudWind();

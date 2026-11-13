@@ -86,16 +86,13 @@ void LocalNdfManager::SetupResources()
 	targets.clear();
 	previews.clear();
 	activeAssets.clear();
-	CompileShaders();
 }
 
-void LocalNdfManager::CompileShaders()
+void LocalNdfManager::CompileShaders(Util::AsyncShaderSet& a_shaders)
 {
-	program = nullptr;
 	key.clear();
 	altitude = {};
-	if (auto* raw = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\PhysicalSky\\LocalNdf.cs.hlsl", {}, "cs_5_0")))
-		program.attach(raw);
+	a_shaders.Add(program, L"Data\\Shaders\\PhysicalSky\\LocalNdf.cs.hlsl");
 }
 
 NdfTextureSet LocalNdfManager::GetTextures() const

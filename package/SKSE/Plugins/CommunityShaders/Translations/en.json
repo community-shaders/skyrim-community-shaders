@@ -2059,6 +2059,7 @@
     "feature.physical_sky.cloud_weather_shape_desc": "These weather controls shape both global and local NDF clouds. A local map changes coverage, types and heights; it does not carry a separate density or softness preset.",
     "feature.physical_sky.cloud_wind_velocity_desc": "Horizontal velocity in world X/Y axes. Scene transitions blend the components, including across direction changes. The resulting travel speed is capped at 80 m/s.",
     "feature.physical_sky.clouds": "Clouds",
+    "feature.physical_sky.compiling": "Compiling",
     "feature.physical_sky.composition": "Low Clouds",
     "feature.physical_sky.cubemap_face": "Cubemap Face",
     "feature.physical_sky.debug_active_adjustment": "Active top expansion / warp LUT",

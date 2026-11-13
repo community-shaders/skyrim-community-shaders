@@ -163,22 +163,17 @@ void NdfManager::SetupResources()
 	};
 	sampler = nullptr;
 	DX::ThrowIfFailed(globals::d3d::device->CreateSamplerState(&desc, sampler.put()));
-	CompileShaders();
 }
 
-void NdfManager::CompileShaders()
+void NdfManager::CompileShaders(Util::AsyncShaderSet& a_shaders)
 {
 	generatedValid = false;
 	noiseValid.fill(false);
 	noiseInputs.fill(nullptr);
 	for (auto& resource : noiseInputResources)
 		resource = nullptr;
-	generatorProgram = nullptr;
-	noiseProgram = nullptr;
-	if (auto* raw = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\PhysicalSky\\NdfGenerate.cs.hlsl", {}, "cs_5_0")))
-		generatorProgram.attach(raw);
-	if (auto* raw = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\PhysicalSky\\NdfNoise.cs.hlsl", {}, "cs_5_0")))
-		noiseProgram.attach(raw);
+	a_shaders.Add(generatorProgram, L"Data\\Shaders\\PhysicalSky\\NdfGenerate.cs.hlsl");
+	a_shaders.Add(noiseProgram, L"Data\\Shaders\\PhysicalSky\\NdfNoise.cs.hlsl");
 }
 
 const char* NdfManager::GetSettingsTypeName(const NdfSettings& settings)
@@ -653,16 +648,13 @@ void MidCloudMapManager::SetupResources()
 	sampler = nullptr;
 	DX::ThrowIfFailed(globals::d3d::device->CreateSamplerState(&desc, sampler.put()));
 	Util::SetResourceName(sampler.get(), "PhysicalSky::MiddleCloudWeatherSampler");
-	CompileShaders();
 }
 
-void MidCloudMapManager::CompileShaders()
+void MidCloudMapManager::CompileShaders(Util::AsyncShaderSet& a_shaders)
 {
 	valid = false;
 	output = nullptr;
-	shader = nullptr;
-	if (auto* raw = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\PhysicalSky\\MidCloudGenerate.cs.hlsl", {}, "cs_5_0")))
-		shader.attach(raw);
+	a_shaders.Add(shader, L"Data\\Shaders\\PhysicalSky\\MidCloudGenerate.cs.hlsl");
 }
 
 bool MidCloudMapManager::Update(const MidCloudSettings& settings, TextureManager& textures, const NdfManager& ndf)
@@ -765,18 +757,15 @@ void CirrusMapManager::SetupResources()
 	};
 	sampler = nullptr;
 	DX::ThrowIfFailed(globals::d3d::device->CreateSamplerState(&desc, sampler.put()));
-	CompileShaders();
 }
 
-void CirrusMapManager::CompileShaders()
+void CirrusMapManager::CompileShaders(Util::AsyncShaderSet& a_shaders)
 {
 	generatedValid = false;
 	outputs = {};
 	for (auto& resource : outputResources)
 		resource = nullptr;
-	weatherProgram = nullptr;
-	if (auto* raw = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\PhysicalSky\\CirrusGenerate.cs.hlsl", {}, "cs_5_0", "generateWeather")))
-		weatherProgram.attach(raw);
+	a_shaders.Add(weatherProgram, L"Data\\Shaders\\PhysicalSky\\CirrusGenerate.cs.hlsl", {}, "generateWeather");
 }
 
 bool CirrusMapManager::ShadersReady(const CirrusSettings&) const

@@ -543,7 +543,6 @@ void DoF::ClearShaderCache()
 			}
 	}
 
-	globals::shaderCache->ClearStandaloneComputeCache(L"PostProcessing/DoF");
 	CompileComputeShaders();
 }
 

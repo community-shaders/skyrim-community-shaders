@@ -69,7 +69,7 @@ struct CloudStormManager
 {
 	void LoadInstances();
 	void SetupResources();
-	void CompileShaders();
+	void CompileShaders(Util::AsyncShaderSet& a_shaders);
 	void Update(TextureManager& textures, ID3D11ShaderResourceView* pattern, uint64_t noiseRevision, const std::string& worldspace, bool enabled);
 	void UpdateMotion(double time, double previousTime, float2 lowWind, float2 highWind, float lowWindAltitude, float highWindAltitude);
 	void CommitMotion();

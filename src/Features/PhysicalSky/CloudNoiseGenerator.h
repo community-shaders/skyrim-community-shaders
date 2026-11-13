@@ -5,6 +5,11 @@
 #include <array>
 #include <cstdint>
 
+namespace Util
+{
+	class AsyncShaderSet;
+}
+
 struct CloudNoiseBand
 {
 	uint32_t frequency = 3;
@@ -37,7 +42,7 @@ class CloudNoiseGenerator
 {
 public:
 	void SetupResources();
-	void CompileShaders();
+	void CompileShaders(Util::AsyncShaderSet& a_shaders);
 	bool Update(const CloudNoiseSettings& settings, ID3D11ShaderResourceView* adjustment);
 	void DrawSettings(CloudNoiseSettings& settings);
 	ID3D11ShaderResourceView* Shape() const { return shape ? shape->srv.get() : nullptr; }
