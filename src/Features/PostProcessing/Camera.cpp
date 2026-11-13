@@ -30,7 +30,10 @@ void Camera::DrawSettings()
 		ImGui::TextUnformatted(T("feature.post_processing.camera.lens_distortion_tooltip", "Positive values create barrel distortion; negative values create pincushion distortion. The mapping crops inward to avoid clamped edges."));
 
 	const auto* cam = owner ? owner->GetActivePhysicalCameraState() : nullptr;
-	float lensFOV = std::clamp(cam ? cam->HorizontalFOVDeg : settings.LensFOV, 20.0f, 160.0f);
+	float lensFOV = settings.LensFOV;
+	if (cam)
+		lensFOV = cam->HorizontalFOVDeg;
+	lensFOV = std::clamp(lensFOV, 20.0f, 160.0f);
 	ImGui::BeginDisabled(cam != nullptr);
 	{
 		const SceneWidgetInterceptor::ProxyScope proxy(&settings.LensFOV, 1.0f);
