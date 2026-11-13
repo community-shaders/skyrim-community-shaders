@@ -51,7 +51,6 @@ public:
 	std::string GetCapturesDirectory() const;
 	std::string GetCapturePath(uint32_t a_index);
 	uint32_t GetNumCaptures() const;
-	uint32_t CalculateCapturesDiskUsage();
 	void ClearFrameCaptures();
 	void SetPendingCaptureComments(std::string a_comments);
 	void ApplyPendingCaptureComments(uint32_t a_index);
@@ -119,7 +118,6 @@ public:
 	std::vector<CaptureFileInfo> cachedCaptureFiles;
 	std::chrono::steady_clock::time_point cacheLastUpdate;
 	bool cacheValid = false;
-	bool wasSectionVisible = false;  // Track if RenderDoc section was visible last frame
 
 	// Track files that failed to delete for UI feedback
 	std::unordered_map<std::filesystem::path, std::string> failedDeletions;
