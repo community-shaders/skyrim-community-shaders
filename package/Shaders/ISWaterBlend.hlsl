@@ -61,7 +61,7 @@ PS_OUTPUT main(PS_INPUT input)
 	if (motionScreenPosition.x >= 0 && motionScreenPosition.y >= 0 && motionScreenPosition.x <= 1 &&
 		motionScreenPosition.y <= 1 && waterHistory.w > 0.0 && all(isfinite(waterHistory))
 #	if defined(ENABLE_LL)
-		&& SharedData::ResetHistory == 0
+	    && SharedData::ResetHistory == 0
 #	endif
 	) {
 		float historyFactor = 0.95;

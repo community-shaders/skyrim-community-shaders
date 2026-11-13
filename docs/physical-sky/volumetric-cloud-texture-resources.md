@@ -158,22 +158,22 @@ its maps and invalidate cloud history. Disabled cirrus skips generation.
 
 ## Static validation checklist
 
--   `NubisCloudShapeNoise.dds` loads as a tileable 3D RGBA texture and is bound at `t4`.
--   Low NDF uses linear height RG and modeling RGB textures at t5/t6.
--   NDF coverage is generated independently from `NubisCloudShapeNoise.dds`.
--   Empty or reversed height intervals are rejected by the density query.
--   Noise is queried only inside positive NDF/profile support, with zero density outside it.
--   Cirrus weather/pattern inputs are linear 2D RG/RGB resources at t9/t10.
+- `NubisCloudShapeNoise.dds` loads as a tileable 3D RGBA texture and is bound at `t4`.
+- Low NDF uses linear height RG and modeling RGB textures at t5/t6.
+- NDF coverage is generated independently from `NubisCloudShapeNoise.dds`.
+- Empty or reversed height intervals are rejected by the density query.
+- Noise is queried only inside positive NDF/profile support, with zero density outside it.
+- Cirrus weather/pattern inputs are linear 2D RG/RGB resources at t9/t10.
 
 ## Implementation references
 
--   low NDF generation and texture selection: `src/Features/PhysicalSky/Ndf.cpp`
--   low NDF settings: `src/Features/PhysicalSky/Ndf.h`
--   DDS loading and bindings: `src/Features/PhysicalSky/VolumetricClouds.cpp`
--   low NDF generator shader: `features/Physical Sky/Shaders/PhysicalSky/NdfGenerate.cs.hlsl`
--   cirrus weather generator: `features/Physical Sky/Shaders/PhysicalSky/CirrusGenerate.cs.hlsl`
--   density sampling: `features/Physical Sky/Shaders/PhysicalSky/Volumetrics.cs.hlsl`
--   noise reconstruction: `features/Physical Sky/Shaders/PhysicalSky/CloudNoise.hlsli`
+- low NDF generation and texture selection: `src/Features/PhysicalSky/Ndf.cpp`
+- low NDF settings: `src/Features/PhysicalSky/Ndf.h`
+- DDS loading and bindings: `src/Features/PhysicalSky/VolumetricClouds.cpp`
+- low NDF generator shader: `features/Physical Sky/Shaders/PhysicalSky/NdfGenerate.cs.hlsl`
+- cirrus weather generator: `features/Physical Sky/Shaders/PhysicalSky/CirrusGenerate.cs.hlsl`
+- density sampling: `features/Physical Sky/Shaders/PhysicalSky/Volumetrics.cs.hlsl`
+- noise reconstruction: `features/Physical Sky/Shaders/PhysicalSky/CloudNoise.hlsli`
 
 ## Optional resource fallback
 

@@ -10,9 +10,9 @@ humidity. Custom retains direct editing of scattering, absorption, and phase.
 The tables derive from **Optical Properties of Aerosols and Clouds (OPAC) 4.0**,
 by Peter Koepke, Josef Gasteiger, and Michael Hess:
 
--   [Software and data, DOI 10.5281/zenodo.7275005](https://doi.org/10.5281/zenodo.7275005)
--   [Hess, Koepke, and Schult (1998), original OPAC model](<https://doi.org/10.1175/1520-0477(1998)079%3C0831:OPOAAC%3E2.0.CO;2>)
--   [Koepke, Gasteiger, and Hess (2015), nonspherical mineral particles](https://doi.org/10.5194/acp-15-5947-2015)
+- [Software and data, DOI 10.5281/zenodo.7275005](https://doi.org/10.5281/zenodo.7275005)
+- [Hess, Koepke, and Schult (1998), original OPAC model](<https://doi.org/10.1175/1520-0477(1998)079%3C0831:OPOAAC%3E2.0.CO;2>)
+- [Koepke, Gasteiger, and Hess (2015), nonspherical mineral particles](https://doi.org/10.5194/acp-15-5947-2015)
 
 The published `opac_40b.zip` has MD5 `04163f8d40758e59744ae5fce1dd3253`
 and SHA-256 `561d95f60e7151861f0114f7e654b85fb763ed367263ba76255780fc735d110d`.

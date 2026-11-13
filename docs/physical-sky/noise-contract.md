@@ -20,11 +20,11 @@ it does not yet generate this voxel-specific four-channel resource.
 
 Two linear lookup textures accompany the shape volume. Optional packed inputs are:
 
--   `NubisVerticalProfile.dds`: BC5, one mip; R is the bottom profile and G is
-    the top profile. U is type and V is local height, increasing bottom to top.
--   `NubisVerticalAdjustment.dds`: BC7, seven mips; R expands the top profile,
-    and GB supplies horizontal noise displacement near the base. Profile lookup
-    clamps UVs; displacement lookup wraps and always uses mip 0.
+- `NubisVerticalProfile.dds`: BC5, one mip; R is the bottom profile and G is
+  the top profile. U is type and V is local height, increasing bottom to top.
+- `NubisVerticalAdjustment.dds`: BC7, seven mips; R expands the top profile,
+  and GB supplies horizontal noise displacement near the base. Profile lookup
+  clamps UVs; displacement lookup wraps and always uses mip 0.
 
 See [resource fallback](volumetric-cloud-texture-resources.md#optional-resource-fallback)
 for runtime LUT packing and operation without DDS files.

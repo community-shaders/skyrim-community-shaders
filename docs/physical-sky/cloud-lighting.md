@@ -84,14 +84,14 @@ or a guarantee of appearance under every density and atmospheric source.
 
 The controls have distinct contracts:
 
--   Source quantities, such as solar irradiance and atmospheric transmission,
-    retain their physical units and normalization.
--   Brightness corrections multiply the evaluated response. One preserves that
-    response; it does not prove that an empirical response conserves energy.
--   Phase intensities, phase G, attenuation and height powers, and ambient shaping
-    define the approximation. They remain editable and Scene Manager controlled.
--   Fixed coefficients belonging to the response formula stay with that formula.
-    They must not absorb weather settings or arbitrary exposure compensation.
+- Source quantities, such as solar irradiance and atmospheric transmission,
+  retain their physical units and normalization.
+- Brightness corrections multiply the evaluated response. One preserves that
+  response; it does not prove that an empirical response conserves energy.
+- Phase intensities, phase G, attenuation and height powers, and ambient shaping
+  define the approximation. They remain editable and Scene Manager controlled.
+- Fixed coefficients belonging to the response formula stay with that formula.
+  They must not absorb weather settings or arbitrary exposure compensation.
 
 | Setting                                            |  Default | Model role                                                     |
 | -------------------------------------------------- | -------: | -------------------------------------------------------------- |
@@ -496,12 +496,12 @@ cover spatial RGB differences and altitude-dependent sunset visibility. These ch
 GPU acceptance still needs camera motion, layer overlap, sunrise/sunset, and
 generated/imported NDF heights.
 
--   [Nubis Evolved, SIGGRAPH 2022](https://advances.realtimerendering.com/s2022/SIGGRAPH2022-Advances-NubisEvolved-NoVideos.pdf)
--   [Nubis Cubed, SIGGRAPH 2023 materials](https://advances.realtimerendering.com/s2023/)
--   [Sampling and temporal reconstruction](cloud-sampling.md)
--   [NDF generation and input contract](ndf-generator.md)
+- [Nubis Evolved, SIGGRAPH 2022](https://advances.realtimerendering.com/s2022/SIGGRAPH2022-Advances-NubisEvolved-NoVideos.pdf)
+- [Nubis Cubed, SIGGRAPH 2023 materials](https://advances.realtimerendering.com/s2023/)
+- [Sampling and temporal reconstruction](cloud-sampling.md)
+- [NDF generation and input contract](ndf-generator.md)
 
 Scattering references:
 
--   [PBRT: Phase functions](https://pbr-book.org/4ed/Volume_Scattering/Phase_Functions) — normalization of individual phase functions and interpretation of mean cosine.
--   [PBRT: Volume scattering processes](https://www.pbr-book.org/4ed/Volume_Scattering/Volume_Scattering_Processes) — scattering albedo and extinction.
+- [PBRT: Phase functions](https://pbr-book.org/4ed/Volume_Scattering/Phase_Functions) — normalization of individual phase functions and interpretation of mean cosine.
+- [PBRT: Volume scattering processes](https://www.pbr-book.org/4ed/Volume_Scattering/Volume_Scattering_Processes) — scattering albedo and extinction.

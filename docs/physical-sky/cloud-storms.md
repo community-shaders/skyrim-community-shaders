@@ -178,11 +178,11 @@ visible footprint still needs GPU time and must be measured in-game.
 
 An instance can supply any combination of these exact-match rules (OR semantics):
 
--   `replacementReference`: the original single `0xFormID~Plugin` reference.
--   `replacementReferences`: additional references in the same format.
--   `replacementNodes`: node names, matching the geometry or any ancestor.
--   `replacementTextures`: effect source-texture paths, case-insensitive and treating
-    slash directions equally. These are full paths, including `textures\`.
+- `replacementReference`: the original single `0xFormID~Plugin` reference.
+- `replacementReferences`: additional references in the same format.
+- `replacementNodes`: node names, matching the geometry or any ancestor.
+- `replacementTextures`: effect source-texture paths, case-insensitive and treating
+  slash directions equally. These are full paths, including `textures\`.
 
 Rules only apply while that instance is active in its assigned worldspace.
 Reference and node matches cull in `BSCullingProcess::AppendVirtual`. The effect
