@@ -71,8 +71,16 @@ public:
 	/** @brief Installs the grass capture, culling and draw hooks after all plugins have loaded. */
 	virtual void PostPostLoad() override;
 
-	/** @brief Applies owned proxy setup or native coverage setup and returns whether to skip engine geometry setup. */
-	bool SetupGrassPass(RE::BSShader* shader, RE::BSRenderPass* pass);
+	/** @brief Identifies who sets up a grass pass: the engine, an optimized bucket, or nobody because optimized buckets cover it. */
+	enum class GrassPassSetup
+	{
+		kNative,
+		kOptimized,
+		kCovered
+	};
+
+	/** @brief Applies owned proxy setup or native coverage setup and returns who set up the pass. */
+	GrassPassSetup SetupGrassPass(RE::BSShader* shader, RE::BSRenderPass* pass);
 
 private:
 	/** @brief Returns the instance culling compute shader, compiling it on first use. */
@@ -255,9 +263,6 @@ private:
 	/** @brief Test a coarse AABB and return the planes its children still need to test. */
 	static bool ClassifyAabb(const FrustumSoA& f, __m128 lo, __m128 hi, uint32_t& intersectingPlanes);
 
-	/** @brief Derives world-space frustum planes from the camera frustum and transform. */
-	static void ComputeFrustumPlanes(RE::NiFrustumPlanes& out, const RE::NiFrustum& viewFrustum, const RE::NiTransform& transform);
-
 	/** @brief Uploads admitted data and culls grass once per frame using the validated main camera. */
 	void UpdateGrass(const RE::NiCamera* cam);
 
@@ -337,6 +342,8 @@ private:
 	std::vector<std::pair<uint32_t, uint32_t>> sliceTableCPU;
 	// Store this frame's visible buckets in cull-slot order.
 	std::vector<GrassBucket*> visibleBuckets;
+	// A spatial run rebuild re-sorts and re-uploads a whole bucket, so each frame allows one.
+	uint32_t spatialRebuildBudget = 0;
 	std::vector<uint32_t> cullArguments;
 
 	float timeAccum = 0.0f;

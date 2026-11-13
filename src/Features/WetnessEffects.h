@@ -61,6 +61,15 @@ public:
 		float RippleRadius = 1.f;
 		float RippleBreadth = .5f;
 		float RippleLifetime = .5f;
+		float WallRainDensity = 1.0f;
+		float WallRainDropSize = 1.0f;
+		float WallRainSpeed = 1.0f;
+		float WallRainLayering = 1.0f;
+		float WallRainNormalStrength = 2.0f;
+		float WallRainWetness = 1.0f;
+		float WallRainDarkening = 0.65f;
+		uint EnableWallRain = true;
+		float WallRainTrailLength = 1.0f;
 	};
 
 	struct alignas(16) PerFrame
@@ -71,9 +80,11 @@ public:
 		float Wetness;
 		float PuddleWetness;
 		Settings settings;
-		uint pad0;
 	};
 	STATIC_ASSERT_ALIGNAS_16(PerFrame);
+	static_assert(sizeof(Settings) == 144);
+	static_assert(offsetof(PerFrame, settings) == 80);
+	static_assert(sizeof(PerFrame) == 224);
 
 	struct DebugSettings
 	{
@@ -178,7 +189,7 @@ public:
 private:
 	void DrawWeatherAnalysis() const;
 
-	size_t rainTimer = 0;  // milliseconds; size_t for precision
+	size_t rainTimer = 0;  // microseconds; size_t for precision
 	bool splashesOfStormsLoaded = false;
 
 	// Weather wetness calculation result for debug display

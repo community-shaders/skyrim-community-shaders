@@ -61,7 +61,6 @@ void LinearLighting::DrawSettings()
 
 	if (Util::BeginPillTabBar("##LinearLightingTabs")) {
 		if (Util::BeginPillTabItem(T(TKEY("tab_general"), "General"))) {
-			ImGui::SeparatorText(T(TKEY("multipliers"), "Multipliers"));
 			ImGui::SliderFloat(T(TKEY("directional_light_multiplier"), "Directional Light Multiplier"), &settings.directionalLightMult, 0.0f, 10.0f, "%.2f");
 			ImGui::SliderFloat(T(TKEY("ambient_multiplier"), "Ambient Multiplier"), &settings.ambientMult, 0.0f, 10.0f, "%.2f");
 			ImGui::SliderFloat(T(TKEY("glowmap_multiplier"), "Glowmap Multiplier"), &settings.glowmapMult, 0.0f, 10.0f, "%.2f");
@@ -79,26 +78,24 @@ void LinearLighting::DrawSettings()
 			const bool valid = std::isfinite(settings.gameGamma) && settings.gameGamma >= 0.1f && settings.gameGamma <= 4.0f;
 			ImGui::TextWrapped("%s", T(TKEY("game_gamma_hint"), "Game Gamma: 0.1 to 4. Apply to recompile shaders."));
 			ImGui::BeginDisabled(!valid);
-			if (ImGui::Button(T(TKEY("apply_game_gamma"), "Apply Game Gamma")))
+			if (Util::Button(T(TKEY("apply_game_gamma"), "Apply Game Gamma")))
 				applyGameGamma = settings.gameGamma != configuredGameGamma;
 			ImGui::EndDisabled();
 			ImGui::SeparatorText(T(TKEY("multipliers"), "Multipliers"));
 			ImGui::SliderFloat(T(TKEY("emissive_color_multiplier"), "Emissive Color Multiplier"), &settings.emitColorMult, 0.0f, 10.0f, "%.2f");
 			ImGui::SliderFloat(T(TKEY("point_light_multiplier"), "Point Light Multiplier"), &settings.pointLightMult, 0.0f, 10.0f, "%.2f");
 
-			if (ImGui::TreeNodeEx(T(TKEY("effects"), "Effects"), ImGuiTreeNodeFlags_DefaultOpen)) {
-				ImGui::SliderFloat(T(TKEY("effect_lighting_multiplier"), "Effect Lighting Multiplier"), &settings.effectLightingMult, 0.0f, 10.0f, "%.2f");
-				ImGui::SliderFloat(T(TKEY("membrane_effects_multiplier"), "Membrane Effects Multiplier"), &settings.membraneEffectMult, 0.0f, 10.0f, "%.2f");
-				ImGui::SliderFloat(T(TKEY("blood_effects_multiplier"), "Blood Effects Multiplier"), &settings.bloodEffectMult, 0.0f, 10.0f, "%.2f");
-				ImGui::SliderFloat(T(TKEY("projected_effects_multiplier"), "Projected Effects Multiplier"), &settings.projectedEffectMult, 0.0f, 10.0f, "%.2f");
-				ImGui::SliderFloat(T(TKEY("deferred_effects_multiplier"), "Deferred Effects Multiplier"), &settings.deferredEffectMult, 0.0f, 10.0f, "%.2f");
-				ImGui::SliderFloat(T(TKEY("other_effects_multiplier"), "Other Effects Multiplier"), &settings.otherEffectMult, 0.0f, 10.0f, "%.2f");
-				ImGui::SliderFloat(T(TKEY("particle_effects_multiplier"), "Particle Effects Multiplier"), &settings.particleEffectMult, 0.0f, 10.0f, "%.2f");
-				ImGui::SliderFloat(T(TKEY("light_sprite_effects_multiplier"), "Light Sprite Effects Multiplier"), &settings.lightSpriteEffectMult, 0.0f, 10.0f, "%.2f");
-				ImGui::SliderFloat(T(TKEY("fire_effects_multiplier"), "Fire Effects Multiplier"), &settings.fireEffectMult, 0.0f, 10.0f, "%.2f");
-				ImGui::SliderFloat(T(TKEY("fire_effects_curve"), "Fire Effects Curve"), &settings.fireEffectCurve, FireEffectCurveMin, FireEffectCurveMax, "%.2f");
-				ImGui::TreePop();
-			}
+			ImGui::SeparatorText(T(TKEY("effects"), "Effects"));
+			ImGui::SliderFloat(T(TKEY("effect_lighting_multiplier"), "Effect Lighting Multiplier"), &settings.effectLightingMult, 0.0f, 10.0f, "%.2f");
+			ImGui::SliderFloat(T(TKEY("membrane_effects_multiplier"), "Membrane Effects Multiplier"), &settings.membraneEffectMult, 0.0f, 10.0f, "%.2f");
+			ImGui::SliderFloat(T(TKEY("blood_effects_multiplier"), "Blood Effects Multiplier"), &settings.bloodEffectMult, 0.0f, 10.0f, "%.2f");
+			ImGui::SliderFloat(T(TKEY("projected_effects_multiplier"), "Projected Effects Multiplier"), &settings.projectedEffectMult, 0.0f, 10.0f, "%.2f");
+			ImGui::SliderFloat(T(TKEY("deferred_effects_multiplier"), "Deferred Effects Multiplier"), &settings.deferredEffectMult, 0.0f, 10.0f, "%.2f");
+			ImGui::SliderFloat(T(TKEY("other_effects_multiplier"), "Other Effects Multiplier"), &settings.otherEffectMult, 0.0f, 10.0f, "%.2f");
+			ImGui::SliderFloat(T(TKEY("particle_effects_multiplier"), "Particle Effects Multiplier"), &settings.particleEffectMult, 0.0f, 10.0f, "%.2f");
+			ImGui::SliderFloat(T(TKEY("light_sprite_effects_multiplier"), "Light Sprite Effects Multiplier"), &settings.lightSpriteEffectMult, 0.0f, 10.0f, "%.2f");
+			ImGui::SliderFloat(T(TKEY("fire_effects_multiplier"), "Fire Effects Multiplier"), &settings.fireEffectMult, 0.0f, 10.0f, "%.2f");
+			ImGui::SliderFloat(T(TKEY("fire_effects_curve"), "Fire Effects Curve"), &settings.fireEffectCurve, FireEffectCurveMin, FireEffectCurveMax, "%.2f");
 
 			Util::EndPillTabItem();
 		}
@@ -289,12 +286,30 @@ RE::NiColor LinearLighting::LightColorToWorking(const RE::NiLight* light, bool e
 	auto color = effect ? static_cast<const RE::NiDirectionalLight*>(light)->GetDirectionalLightRuntimeData().effectColor : diffuse;
 	if (!IsLinearLightingActive())
 		return color;
-	auto* const point = skyrim_cast<RE::NiPointLight*>(const_cast<RE::NiLight*>(light));
+
+	struct Memo
+	{
+		const RE::NiLight* light = nullptr;
+		RE::NiColor source{};
+		RE::NiColor result{};
+		uint32_t frame = 0;
+		bool effect = false;
+		bool aces = false;
+	};
+	static thread_local Memo memo;
+	const bool aces = IsACEScgActive();
+	const uint32_t frame = globals::state->frameCount;
+	if (memo.light == light && memo.frame == frame && memo.effect == effect && memo.aces == aces && memo.source == color)
+		return memo.result;
+
+	const auto source = color;
+	auto* const point = netimmerse_cast<RE::NiPointLight*>(const_cast<RE::NiLight*>(light));
 	const bool linear = point && LLFCommon::RuntimeLightDataExt::Get(point)->flags.any(LightLimitFix::LightFlags::Linear);
 	if (!linear)
 		Util::ColorSpace::SRGBToLinear(&color.red);
-	if (IsACEScgActive())
+	if (aces)
 		Util::ColorSpace::SRGBGamutToAP1(&color.red);
+	memo = { light, source, color, frame, effect, aces };
 	return color;
 }
 
@@ -472,7 +487,7 @@ namespace
 					WriteRGB(Group::PerGeometry, 0, ll.SRGBToWorking(effect->emittanceColor ? *effect->emittanceColor : RE::NiColor{ 1.f, 1.f, 1.f }));
 				}
 				if (!membrane && (descriptor & (1u << 16)) && pass->numLights && pass->sceneLights && pass->sceneLights[0]) {
-					if (const auto* light = skyrim_cast<RE::NiDirectionalLight*>(pass->sceneLights[0]->light.get())) {
+					if (const auto* light = netimmerse_cast<RE::NiDirectionalLight*>(pass->sceneLights[0]->light.get())) {
 						const float scale = RE::ImageSpaceManager::GetSingleton()->GetRuntimeData().data.baseData.hdr.sunlightScale;
 						WriteRGB(Group::PerGeometry, 11, ll.LightColorToWorking(light, true) * (light->GetLightRuntimeData().fade * scale));
 					}

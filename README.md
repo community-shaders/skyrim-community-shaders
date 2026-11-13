@@ -1,32 +1,35 @@
-[![Latest Release](https://img.shields.io/github/v/release/community-shaders/skyrim-community-shaders)](https://github.com/community-shaders/skyrim-community-shaders/releases)
-[![License](https://img.shields.io/github/license/community-shaders/skyrim-community-shaders)](./COPYING.txt)
-[![Last Commit](https://img.shields.io/github/last-commit/community-shaders/skyrim-community-shaders)](https://github.com/community-shaders/skyrim-community-shaders/commits)
-[![Build Status](https://img.shields.io/github/actions/workflow/status/community-shaders/skyrim-community-shaders/release-build.yaml?event=release)](https://github.com/community-shaders/skyrim-community-shaders/actions)
-[![Discord](https://img.shields.io/discord/1080142797870485606?label=discord&logo=discord&color=5865F2)](https://discord.com/invite/nkrQybAsyy)
-[![Open Issues](https://img.shields.io/github/issues/community-shaders/skyrim-community-shaders)](https://github.com/community-shaders/skyrim-community-shaders/issues)
-[![Contributors](https://img.shields.io/github/contributors/community-shaders/skyrim-community-shaders)](https://github.com/community-shaders/skyrim-community-shaders/graphs/contributors)
-[![Stars](https://img.shields.io/github/stars/community-shaders/skyrim-community-shaders?style=social)](https://github.com/community-shaders/skyrim-community-shaders/stargazers)
+<p align="center">
+  <img src="package/Interface/CommunityShaders/Icons/Community%20Shaders%20Logo/cs-logo.png#gh-dark-mode-only" alt="Community Shaders logo" width="160">
+</p>
 
-![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/community-shaders/skyrim-community-shaders?utm_source=oss&utm_medium=github&utm_campaign=community-shaders%2Fskyrim-community-shaders&labelColor=171717&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews)
+<h1 align="center">Skyrim Community Shaders</h1>
 
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/doodlum/skyrim-community-shaders)
+<p align="center">SKSE core plugin for community-driven advanced graphics modifications.</p>
 
-# Skyrim Community Shaders
+<p align="center"><a href="https://www.nexusmods.com/skyrimspecialedition/mods/86492"><b>Nexus</b></a> &nbsp;·&nbsp; <a href="https://modding.wiki/en/skyrim/developers/community-shaders"><b>User Wiki</b></a></p>
 
-SKSE core plugin for community-driven advanced graphics modifications.
-
-[Nexus](https://www.nexusmods.com/skyrimspecialedition/mods/86492)
-[User Wiki](https://modding.wiki/en/skyrim/developers/community-shaders)
+<p align="center">
+  <a href="https://github.com/community-shaders/skyrim-community-shaders/releases"><img src="https://img.shields.io/github/v/release/community-shaders/skyrim-community-shaders?style=flat-square" alt="Latest Release"></a>
+  <a href="https://github.com/community-shaders/skyrim-community-shaders/actions"><img src="https://img.shields.io/github/actions/workflow/status/community-shaders/skyrim-community-shaders/release-build.yaml?event=release&style=flat-square" alt="Build Status"></a>
+  <a href="./COPYING.txt"><img src="https://img.shields.io/github/license/community-shaders/skyrim-community-shaders?style=flat-square" alt="License"></a>
+  <a href="https://discord.com/invite/nkrQybAsyy"><img src="https://img.shields.io/discord/1080142797870485606?label=discord&logo=discord&logoColor=white&color=5865F2&style=flat-square" alt="Discord"></a>
+  <a href="https://github.com/community-shaders/skyrim-community-shaders/stargazers"><img src="https://img.shields.io/github/stars/community-shaders/skyrim-community-shaders?logo=github&style=flat-square" alt="Stars"></a>
+  <a href="https://github.com/community-shaders/skyrim-community-shaders/graphs/contributors"><img src="https://img.shields.io/github/contributors/community-shaders/skyrim-community-shaders?style=flat-square" alt="Contributors"></a>
+  <a href="https://github.com/community-shaders/skyrim-community-shaders/issues"><img src="https://img.shields.io/github/issues/community-shaders/skyrim-community-shaders?style=flat-square" alt="Open Issues"></a>
+  <a href="https://github.com/community-shaders/skyrim-community-shaders/commits"><img src="https://img.shields.io/github/last-commit/community-shaders/skyrim-community-shaders?style=flat-square" alt="Last Commit"></a>
+  <a href="https://coderabbit.ai"><img src="https://img.shields.io/coderabbit/prs/github/community-shaders/skyrim-community-shaders?label=CodeRabbit%20reviews&color=FF570A&style=flat-square" alt="CodeRabbit Pull Request Reviews"></a>
+  <a href="https://deepwiki.com/doodlum/skyrim-community-shaders"><img src="https://img.shields.io/badge/DeepWiki-ask-0A66C2?style=flat-square" alt="Ask DeepWiki"></a>
+</p>
 
 ## Requirements
 
--   Any terminal of your choice (e.g., PowerShell)
--   [Visual Studio Community 2026](https://visualstudio.microsoft.com/)
-    -   Desktop development with C++
-    -   CMake Tools for Windows
-    -   HLSL Tools
--   [Git](https://git-scm.com/downloads)
-    -   Edit the `PATH` environment variable and add the Git.exe install path as a new value
+- Any terminal of your choice (e.g., PowerShell)
+- [Visual Studio Community 2026](https://visualstudio.microsoft.com/)
+    - Desktop development with C++
+    - CMake Tools for Windows
+    - HLSL Tools
+- [Git](https://git-scm.com/downloads)
+    - Edit the `PATH` environment variable and add the Git.exe install path as a new value
 
 ## Optional Requirements
 
@@ -35,21 +38,21 @@ CMake & Vcpkg comes with Visual Studio in Developer Command Prompts already.
 Install them manually only if you want them in everywhere.
 ```
 
--   [CMake](https://cmake.org/)
-    -   No need to install manually if you have Visual Studio CMake Tools installed
-    -   CMake 4.2+ is **required** now
-    -   Edit the `PATH` environment variable and add the cmake.exe install path as a new value
-    -   Instructions for finding and editing the `PATH` environment variable can be found [here](https://www.java.com/en/download/help/path.html)
--   [Vcpkg](https://github.com/microsoft/vcpkg)
-    -   Install vcpkg using the directions in vcpkg's [Quick Start Guide](https://github.com/microsoft/vcpkg#quick-start-windows)
-    -   After install, add a new environment variable named `VCPKG_ROOT` with the value as the path to the folder containing vcpkg
-    -   Make sure your local vcpkg repo matches the commit id specified in `builtin-baseline` in `vcpkg.json` otherwise you might get another version of a non pinned vcpkg dependency causing undefined behaviour
+- [CMake](https://cmake.org/)
+    - No need to install manually if you have Visual Studio CMake Tools installed
+    - CMake 4.2+ is **required** now
+    - Edit the `PATH` environment variable and add the cmake.exe install path as a new value
+    - Instructions for finding and editing the `PATH` environment variable can be found [here](https://www.java.com/en/download/help/path.html)
+- [Vcpkg](https://github.com/microsoft/vcpkg)
+    - Install vcpkg using the directions in vcpkg's [Quick Start Guide](https://github.com/microsoft/vcpkg#quick-start-windows)
+    - After install, add a new environment variable named `VCPKG_ROOT` with the value as the path to the folder containing vcpkg
+    - Make sure your local vcpkg repo matches the commit id specified in `builtin-baseline` in `vcpkg.json` otherwise you might get another version of a non pinned vcpkg dependency causing undefined behaviour
 
 ## User Requirements
 
--   [Address Library for SKSE](https://www.nexusmods.com/skyrimspecialedition/mods/32444)
-    -   Needed for SSE/AE
--   [SSE Engine Fixes](https://www.nexusmods.com/skyrimspecialedition/mods/17230)
+- [Address Library for SKSE](https://www.nexusmods.com/skyrimspecialedition/mods/32444)
+    - Needed for SSE/AE
+- [SSE Engine Fixes](https://www.nexusmods.com/skyrimspecialedition/mods/17230)
 
 ## Build Instructions
 
@@ -93,8 +96,8 @@ cmake --install --preset ALL -- --prefix $MOD_FOLDER
 
 # Notes
 
--   If you prefer to run the VC environment manually, launch Developer PowerShell or the x64 Native Tools prompt instead of calling vcvarsall.bat directly from PowerShell.
--   The convenience wrapper `BuildRelease.bat` also captures these steps.
+- If you prefer to run the VC environment manually, launch Developer PowerShell or the x64 Native Tools prompt instead of calling vcvarsall.bat directly from PowerShell.
+- The convenience wrapper `BuildRelease.bat` also captures these steps.
 
 #### Build a zip package
 
@@ -124,14 +127,14 @@ If you want an example CMakeUserPreset to start off with you can copy the `CMake
 
 #### AUTO_PLUGIN_DEPLOYMENT
 
--   This option is default `"OFF"`
--   Make sure `"AUTO_PLUGIN_DEPLOYMENT"` is set to `"ON"` in `CMakeUserPresets.json`
--   Change the `"CommunityShadersOutputDir"` value to match your desired outputs, if you want multiple folders you can separate them by `;` is shown in the template example
+- This option is default `"OFF"`
+- Make sure `"AUTO_PLUGIN_DEPLOYMENT"` is set to `"ON"` in `CMakeUserPresets.json`
+- Change the `"CommunityShadersOutputDir"` value to match your desired outputs, if you want multiple folders you can separate them by `;` is shown in the template example
 
 #### TRACY_SUPPORT
 
--   This option is default `"OFF"`
--   This will enable tracy support, might need to delete build folder when this option is changed
+- This option is default `"OFF"`
+- This will enable tracy support, might need to delete build folder when this option is changed
 
 When using custom preset you can call BuildRelease.bat with an parameter to specify which preset to configure eg:
 `.\BuildRelease.bat ALL-WITH-AUTO-DEPLOYMENT`
@@ -187,10 +190,10 @@ ModOrganizer.exe --log run "C:\Program Files (x86)\Steam\steamapps\common\Skyrim
 
 In Launch Application Menu, use the following settings:
 
--   Executable Path: `PATH/TO/ModOrganizer.exe`
--   Working Directory: `C:/Program Files (x86)/Steam/steamapps/common/Skyrim Special Edition`
--   Command-line Arguments: `--log run "C:\Program Files (x86)\Steam\steamapps\common\Skyrim Special Edition\skse64_loader.exe"`
--   [x] **Capture Child Process**
+- Executable Path: `PATH/TO/ModOrganizer.exe`
+- Working Directory: `C:/Program Files (x86)/Steam/steamapps/common/Skyrim Special Edition`
+- Command-line Arguments: `--log run "C:\Program Files (x86)\Steam\steamapps\common\Skyrim Special Edition\skse64_loader.exe"`
+- [x] **Capture Child Process**
 
 ## License
 
@@ -199,13 +202,13 @@ In Launch Application Menu, use the following settings:
 [GPL-3.0](COPYING.txt) WITH [Modding Exception AND GPL-3.0 Linking Exception (with Corresponding Source)](EXCEPTIONS.md).  
 Specifically, the Modded Code includes:
 
--   Skyrim (and its variants)
--   Hardware drivers to enable additional functionality provided via proprietary SDKs, such as [Nvidia DLSS](https://developer.nvidia.com/rtx/dlss/get-started) and [AMD FidelityFX FSR3](https://gpuopen.com/fidelityfx-super-resolution-3/)
+- Skyrim (and its variants)
+- Hardware drivers to enable additional functionality provided via proprietary SDKs, such as [Nvidia DLSS](https://developer.nvidia.com/rtx/dlss/get-started) and [AMD FidelityFX FSR3](https://gpuopen.com/fidelityfx-super-resolution-3/)
 
 The Modding Libraries include:
 
--   [SKSE](https://skse.silverlock.org/)
--   Commonlib (and variants).
+- [SKSE](https://skse.silverlock.org/)
+- Commonlib (and variants).
 
 ### AI use and attribution
 
@@ -217,9 +220,9 @@ AI-based training, scraping, and other automated or human reuse do not waive the
 
 Shaders are [GPL-3.0 with exceptions](#default) unless a file carries its own license header or is listed in [THIRD_PARTY.md](package/SKSE/Plugins/CommunityShaders/Licenses/THIRD_PARTY.md). A license file only applies to the third-party code it names, not to a whole directory or to later modifications, which are GPL. All license files and credits ship with every build in `SKSE/Plugins/CommunityShaders/Licenses`.
 
--   [Features Shaders](features)
--   [Package Shaders](package/Shaders/)
+- [Features Shaders](features)
+- [Package Shaders](package/Shaders/)
 
 ### Icons
 
--   [Community Shaders Logo](package/Interface/CommunityShaders/Icons/Community%20Shaders%20Logo/) is not covered by the GPL-3.0 license. It is provided solely for personal use (e.g., building from source) and may only be used in unmodified form. There is no license for any other purpose or to distribute the logo. No trademark license is granted for the logo. Any use not expressly permitted is prohibited without the express written consent of the Community Shaders team.
+- [Community Shaders Logo](package/Interface/CommunityShaders/Icons/Community%20Shaders%20Logo/) is not covered by the GPL-3.0 license. It is provided solely for personal use (e.g., building from source) and may only be used in unmodified form. There is no license for any other purpose or to distribute the logo. No trademark license is granted for the logo. Any use not expressly permitted is prohibited without the express written consent of the Community Shaders team.

@@ -7,7 +7,8 @@ void GrassOptimizations::CullGrass(const RE::NiCamera* camera)
 	auto* ctx = globals::d3d::context;
 
 	RE::NiFrustumPlanes frustum{};
-	ComputeFrustumPlanes(frustum, camera->GetRuntimeData2().viewFrustum, camera->world);
+	constexpr float frustumEdgePadding = 128.0f;
+	Util::ComputeFrustumPlanes(frustum, camera->GetRuntimeData2().viewFrustum, camera->world, frustumEdgePadding);
 
 	const RE::NiPoint3 cameraTranslation = camera->world.translate;
 	const __m128 cameraPosition = _mm_setr_ps(cameraTranslation.x, cameraTranslation.y, cameraTranslation.z, 0.0f);
@@ -82,6 +83,7 @@ void GrassOptimizations::CullGrass(const RE::NiCamera* camera)
 	visibleBuckets.clear();
 	sliceTableCPU.clear();
 
+	spatialRebuildBudget = 1;
 	globals::profiler->BeginPass("GrassOptimizations::SliceCull");
 	for (auto& [key, bucket] : bucketStore.buckets) {
 		bucket.ResetCullState();
@@ -101,7 +103,8 @@ void GrassOptimizations::CullGrass(const RE::NiCamera* camera)
 	}
 
 	std::erase_if(visibleBuckets, [&](GrassBucket* bucket) {
-		bucket->complexSRV = bucketStore.meshLibrary.GetComplexGrass(bucket->asset.diffuseTexture.get(), ctx);
+		// TruePBR textures have no complex atlas to detect.
+		bucket->complexSRV = bucket->asset.key.draw.pbrMaterial ? nullptr : bucketStore.meshLibrary.GetComplexGrass(bucket->asset.diffuseTexture.get(), ctx);
 
 		if (bucket->cullGroups.size() <= kMaxRecordGroups && bucketStore.UploadCullGroups(*bucket, ctx))
 			return false;
@@ -144,57 +147,6 @@ bool GrassOptimizations::IsMainCameraPerFrame(const RE::NiPoint3& mainCameraPos)
 bool GrassOptimizations::HasCurrentCull() const
 {
 	return lastFrame == globals::game::graphicsState->frameCount;
-}
-
-void GrassOptimizations::ComputeFrustumPlanes(RE::NiFrustumPlanes& out, const RE::NiFrustum& viewFrustum, const RE::NiTransform& transform)
-{
-	const __m128 forward = _mm_set_ps(0.0f, transform.rotate.entry[2][0], transform.rotate.entry[1][0], transform.rotate.entry[0][0]);
-	const __m128 up = _mm_set_ps(0.0f, transform.rotate.entry[2][1], transform.rotate.entry[1][1], transform.rotate.entry[0][1]);
-	const __m128 right = _mm_set_ps(0.0f, transform.rotate.entry[2][2], transform.rotate.entry[1][2], transform.rotate.entry[0][2]);
-	const __m128 translation = _mm_set_ps(0.0f, transform.translate.z, transform.translate.y, transform.translate.x);
-
-	const __m128 nearPoint = _mm_add_ps(translation, _mm_mul_ps(forward, _mm_set1_ps(viewFrustum.fNear)));
-	const __m128 farPoint = _mm_add_ps(translation, _mm_mul_ps(forward, _mm_set1_ps(viewFrustum.fFar)));
-
-	auto setPlane = [&](int planeIndex, __m128 normal, __m128 point) {
-		alignas(16) float components[4];
-		_mm_store_ps(components, normal);
-		out.cullingPlanes[planeIndex].normal = { components[0], components[1], components[2] };
-		out.cullingPlanes[planeIndex].constant = _mm_cvtss_f32(_mm_dp_ps(normal, point, 0x71));
-	};
-
-	setPlane(0, forward, nearPoint);
-	const __m128 backward = _mm_xor_ps(forward, _mm_set1_ps(-0.0f));
-	setPlane(1, backward, farPoint);
-
-	if (viewFrustum.bOrtho) {
-		setPlane(2, right, _mm_add_ps(translation, _mm_mul_ps(right, _mm_set1_ps(viewFrustum.fLeft))));
-		setPlane(3, _mm_xor_ps(right, _mm_set1_ps(-0.0f)), _mm_add_ps(translation, _mm_mul_ps(right, _mm_set1_ps(viewFrustum.fRight))));
-		setPlane(4, _mm_xor_ps(up, _mm_set1_ps(-0.0f)), _mm_add_ps(translation, _mm_mul_ps(up, _mm_set1_ps(viewFrustum.fTop))));
-		setPlane(5, up, _mm_add_ps(translation, _mm_mul_ps(up, _mm_set1_ps(viewFrustum.fBottom))));
-	} else {
-		// Normalize each side plane from the camera axis and frustum slope.
-		auto setSidePlane = [&](int planeIndex, __m128 axis, float slope, float forwardSign, float axisSign) {
-			const float inverseLength = 1.0f / std::sqrt(slope * slope + 1.0f);
-			const __m128 normal = _mm_add_ps(
-				_mm_mul_ps(forward, _mm_set1_ps(forwardSign * slope * inverseLength)),
-				_mm_mul_ps(axis, _mm_set1_ps(axisSign * inverseLength)));
-			setPlane(planeIndex, normal, translation);
-		};
-
-		setSidePlane(2, right, viewFrustum.fLeft, -1.0f, +1.0f);
-		setSidePlane(3, right, viewFrustum.fRight, +1.0f, -1.0f);
-		setSidePlane(4, up, viewFrustum.fTop, +1.0f, -1.0f);
-		setSidePlane(5, up, viewFrustum.fBottom, -1.0f, +1.0f);
-	}
-
-	out.activePlanes = RE::NiFrustumPlanes::ActivePlane(0x3F);
-
-	constexpr float edgePadding = 128.0f;
-	out.cullingPlanes[2].constant -= edgePadding;
-	out.cullingPlanes[3].constant -= edgePadding;
-	out.cullingPlanes[4].constant -= edgePadding;
-	out.cullingPlanes[5].constant -= edgePadding;
 }
 
 void GrassOptimizations::BuildFrustumSoA(FrustumSoA& out, const RE::NiFrustumPlanes& frustum)
@@ -289,6 +241,11 @@ void GrassOptimizations::CullBucketSlices(GrassBucket& bucket, const FrustumSoA&
 	uint32_t planeMask;
 	if (!ClassifyAabb(frustumSoA, bucketMin, bucketMax, planeMask))
 		return;
+
+	if (bucket.spatialRebuildPending && spatialRebuildBudget) {
+		--spatialRebuildBudget;
+		bucket.clustersValid = false;
+	}
 
 	if (!bucket.clustersValid || bucket.clusteredSlices != bucket.uploadedSlices)
 		bucketStore.MergeSlicesIntoRuns(bucket);
@@ -559,6 +516,17 @@ void GrassBucketStore::UpdateCoarseBounds(GrassBucket& bucket)
 	bucket.coarseValid = true;
 }
 
+uint64_t GrassBucketStore::MortonCode(uint64_t cell)
+{
+	const auto x = (uint32_t)(cell >> 32) + 0x8000u;
+	const auto y = (uint32_t)cell + 0x8000u;
+
+	uint64_t code = 0;
+	for (uint32_t bit = 0; bit < 16; ++bit)
+		code |= (uint64_t)((x >> bit) & 1u) << (2 * bit) | (uint64_t)((y >> bit) & 1u) << (2 * bit + 1);
+	return code;
+}
+
 void GrassBucketStore::MergeSlicesIntoRuns(GrassBucket& bucket)
 {
 	// Group slices by their instance bounds because several cells can share a shape origin.
@@ -569,7 +537,9 @@ void GrassBucketStore::MergeSlicesIntoRuns(GrassBucket& bucket)
 		return ((uint64_t)(uint32_t)cellX << 32) | (uint32_t)cellY;
 	};
 
-	if (!bucket.clustersValid) {
+	const bool rebuild = !bucket.clustersValid;
+	if (rebuild) {
+		bucket.appendedRuns = 0;
 		bucket.sliceRunBatches.clear();
 		bucket.sliceRunCount = 0;
 		bucket.sliceBlockBatches.clear();
@@ -583,18 +553,37 @@ void GrassBucketStore::MergeSlicesIntoRuns(GrassBucket& bucket)
 
 	const float padding = bucket.boundsPadding;
 	const uint32_t uploadedSliceCount = bucket.uploadedSlices;
-	for (uint32_t sliceIndex = bucket.clusteredSlices; sliceIndex < uploadedSliceCount; ++sliceIndex) {
+
+	// Rebuilds visit slices in Morton order so each cull block covers a compact area.
+	std::vector<uint32_t> order(std::max(uploadedSliceCount, bucket.clusteredSlices) - bucket.clusteredSlices);
+	std::iota(order.begin(), order.end(), bucket.clusteredSlices);
+
+	if (rebuild) {
+		std::vector<std::pair<uint64_t, uint32_t>> keyed;
+		keyed.reserve(order.size());
+		for (const auto sliceIndex : order)
+			keyed.emplace_back(MortonCode(cellOf(bucket.slices[sliceIndex]->bounds)), sliceIndex);
+
+		std::ranges::stable_sort(keyed, {}, &std::pair<uint64_t, uint32_t>::first);
+		for (size_t i = 0; i < keyed.size(); ++i)
+			order[i] = keyed[i].second;
+	}
+
+	for (const auto sliceIndex : order) {
 		auto& slice = *bucket.slices[sliceIndex];
 		const auto& bounds = slice.bounds;
 
 		// Runs require a shared cell, but their groups may reference noncontiguous source records.
-		const bool sameCellAsPrevious = sliceIndex && bucket.sliceRunCount &&
-		                                cellOf(bounds) == cellOf(bucket.slices[sliceIndex - 1]->bounds);
+		const auto cell = cellOf(bounds);
+		const bool sameCellAsPrevious = bucket.sliceRunCount && cell == bucket.lastRunCell;
+		bucket.lastRunCell = cell;
 
 		if (!sameCellAsPrevious) {
 			if (bucket.sliceRunCount % 4 == 0)
 				bucket.sliceRunBatches.emplace_back();
 			++bucket.sliceRunCount;
+			if (!rebuild)
+				++bucket.appendedRuns;
 		}
 
 		auto& runBatch = bucket.sliceRunBatches.back();
@@ -648,4 +637,6 @@ void GrassBucketStore::MergeSlicesIntoRuns(GrassBucket& bucket)
 
 	bucket.clusteredSlices = uploadedSliceCount;
 	bucket.clustersValid = true;
+	// Reorder once appended runs make up a quarter of the bucket.
+	bucket.spatialRebuildPending = !rebuild && bucket.appendedRuns >= 64 && bucket.appendedRuns * 4 >= bucket.sliceRunCount;
 }

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <functional>
+
 /** @brief Picks the one post-processing pipeline that drives the frame, keeping Post Processing and Effects 11 exclusive. */
 namespace PostProcessingMode
 {
@@ -33,6 +35,17 @@ namespace PostProcessingMode
 	/** @brief Applies a mode re-read after startup right away, since nothing else would without Effects 11 loaded. */
 	void ApplyReloaded();
 
-	/** @brief Draws the Vanilla / Post Processing / Effects 11 selector shared by both feature menus. */
-	void DrawSelector();
+	/** @brief A button anchored to the right of the selector, as tall as it. */
+	struct SelectorAction
+	{
+		const char* label = nullptr;
+		const char* tooltip = nullptr;
+		std::function<void()> onClick;
+	};
+
+	/**
+	 * @brief Draws the Vanilla / Post Processing / Effects 11 selector shared by both feature menus.
+	 * @param action Optional button for the page (open its editor), drawn right-aligned on the selector's row.
+	 */
+	void DrawSelector(const SelectorAction* action = nullptr);
 }

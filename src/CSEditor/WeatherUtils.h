@@ -3,10 +3,7 @@
 #include "../I18n/I18n.h"
 #include "Util.h"
 #include "Widget.h"
-#include <cctype>
 #include <format>
-#include <functional>
-#include <map>
 #include <string>
 #include <vector>
 
@@ -124,16 +121,6 @@ namespace PropertyDrawer
 		const char* format = "%.3f");
 
 	/**
-	 * @brief Draw an integer slider property row.
-	 * @param label  Display label for the property.
-	 * @param value  Reference to the int value to edit.
-	 * @param minVal Minimum slider value.
-	 * @param maxVal Maximum slider value.
-	 * @return True if the value was changed.
-	 */
-	bool DrawInt(const char* label, int& value, int minVal, int maxVal);
-
-	/**
 	 * @brief Draw a colour picker property row.
 	 * @param label Display label for the property.
 	 * @param value Reference to the RGB colour to edit.
@@ -239,7 +226,7 @@ namespace WidgetFactory
 	}
 
 	/**
-	 * @brief Draw all open widgets from a container.
+	 * @brief Draw every open window of the widgets in a container.
 	 * @tparam Container    A range of unique_ptr<Widget>.
 	 * @param  widgets          The widget container to iterate.
 	 */
@@ -248,7 +235,7 @@ namespace WidgetFactory
 	{
 		for (auto& widget : widgets) {
 			if (widget->IsOpen()) {
-				widget->DrawWidget();
+				widget->DrawViews();
 			}
 		}
 	}
@@ -464,14 +451,6 @@ namespace TOD
 	 * @return True if any value changed.
 	 */
 	bool DrawTODFloatRow(const char* label, float values[4], bool& inheritFlag, const float parentValues[4], float minValue = 0.0f, float maxValue = 1.0f, const char* format = "%.2f");
-
-	/**
-	 * @brief Draw a horizontal row of four time-of-day int8 sliders.
-	 * @param label  Row label.
-	 * @param values Array of 4 int values (one per time period), clamped to int8 range.
-	 * @return True if any slider value changed.
-	 */
-	bool DrawTODInt8Row(const char* label, int values[4]);
 
 	/**
 	 * @brief Begin a time-of-day table with two columns (Parameter | Values).
@@ -706,36 +685,4 @@ namespace WeatherUtils
 			});
 	}
 
-	/**
-	 * @brief Draw a legacy form picker combo box (slow -- prefer DrawFormPickerCached when widgets are available).
-	 * @tparam T         The game form type.
-	 * @tparam Container A range of T* form pointers.
-	 * @param  label       ImGui label for the combo box.
-	 * @param  currentForm Reference to the currently selected form pointer (updated on selection).
-	 * @param  formArray   The raw form array to iterate.
-	 * @param  showFormID  If true, display FormIDs alongside editor IDs.
-	 * @param  allowNone   If true, include a "None" option.
-	 * @param  width       Combo box width in pixels.
-	 * @return True if the selection changed.
-	 */
-	template <typename T, typename Container>
-	bool DrawFormPicker(const char* label, T*& currentForm, const Container& formArray, bool showFormID = true, bool allowNone = true, float width = 450.0f)
-	{
-		auto getEditorID = [](T* form) -> std::string {
-			if (!form)
-				return "";
-			const char* editorID = form->GetFormEditorID();
-			if (editorID && editorID[0] != '\0')
-				return std::string(editorID);
-			return std::format("{:08X}", form->GetFormID());
-		};
-
-		return detail::DrawFormComboBody<T>(label, currentForm, getEditorID(currentForm), showFormID, allowNone, width,
-			[&](auto&& visit) {
-				for (auto form : formArray) {
-					if (form)
-						visit(form, getEditorID(form));
-				}
-			});
-	}
 }

@@ -32,9 +32,9 @@ Everything belonging to the system lives under `src/CSEditor/SceneManager/`.
 
 Generated into `${CMAKE_CURRENT_BINARY_DIR}/generated` (e.g. `build/ALL/generated`), never committed:
 
--   `SceneSettingsCatalog.generated.h` / `.cpp` — the `SceneSettingsCatalog` namespace and the catalog array.
--   `FeatureSceneSettingsAdapters.generated.cpp` — per-feature control resolvers (see
-    [Known gaps](#known-gaps)).
+- `SceneSettingsCatalog.generated.h` / `.cpp` — the `SceneSettingsCatalog` namespace and the catalog array.
+- `FeatureSceneSettingsAdapters.generated.cpp` — per-feature control resolvers (see
+  [Known gaps](#known-gaps)).
 
 ### How the manager is split
 
@@ -55,10 +55,10 @@ translation units so no single file stays unreadable. Find a member by what it d
 Helpers that more than one of those needs are not file-local. They live in four internal namespaces with
 their own headers, and every consumer opens them with a file-scope `using namespace`:
 
--   `SceneSettingsInternal` — catalog lookup, JSON path walking, policy evaluation, entry validation.
--   `SceneSettingsOverwrites` — the overwrite directory layout and the grouped JSON files in it.
--   `SceneSettingsLocationTargets` — the broadest-to-narrowest location target chain.
--   `SceneSettingsContextRules` — which layer a context writes to and how its entries group.
+- `SceneSettingsInternal` — catalog lookup, JSON path walking, policy evaluation, entry validation.
+- `SceneSettingsOverwrites` — the overwrite directory layout and the grouped JSON files in it.
+- `SceneSettingsLocationTargets` — the broadest-to-narrowest location target chain.
+- `SceneSettingsContextRules` — which layer a context writes to and how its entries group.
 
 A helper only one TU uses stays in that TU's anonymous namespace. Promote it to an internal namespace
 when, and only when, a second TU needs it.
@@ -75,14 +75,14 @@ floor only when it really lost those settings. The custom command's output is a 
 generated sources are byproducts, since the generator leaves an unchanged file's timestamp alone.
 It statically parses feature sources and derives, for every persisted setting:
 
--   the serialized address (`serializedPath` / `serializedKey` / `serializedComponent`) used to reach the
-    value inside a feature's settings JSON
--   the display address (`displayPath`, `selectorPath`) reconstructed from `DrawSettings()` brace scopes and
-    tab helpers
--   the editor semantic (`Toggle` / `Numeric` / `Choice` / `Text` / `Generic`), numeric bounds, display scale,
-    `Log2` transforms, and combo choice values, read from the actual ImGui call
--   i18n keys from the `T(TKEY(...), "...")` call wrapping the control
--   flags: `Persisted`, `Transitionable`, `Hidden`, `BooleanControl`, `SceneControllable`
+- the serialized address (`serializedPath` / `serializedKey` / `serializedComponent`) used to reach the
+  value inside a feature's settings JSON
+- the display address (`displayPath`, `selectorPath`) reconstructed from `DrawSettings()` brace scopes and
+  tab helpers
+- the editor semantic (`Toggle` / `Numeric` / `Choice` / `Text` / `Generic`), numeric bounds, display scale,
+  `Log2` transforms, and combo choice values, read from the actual ImGui call
+- i18n keys from the `T(TKEY(...), "...")` call wrapping the control
+- flags: `Persisted`, `Transitionable`, `Hidden`, `BooleanControl`, `SceneControllable`
 
 `validate_entries()` fails the build on duplicates, contradictory visibility, choices with fewer than two
 distinct values, `Log2` bounds that include zero, and incomplete aggregates (a vector exposing only some
@@ -173,25 +173,25 @@ Within a layer, `EntrySource::Overwrite` (mod-shipped files) is overlaid first a
 overrides it, so a shipped overwrite acts as that layer's default and the user's own entry for the same
 address always wins. `SettingsUser.json` remains the baseline beneath all of this.
 
--   **Time of day** — six periods (`Dawn`, `Sunrise`, `Day`, `Sunset`, `Dusk`, `Night`) whose starts come
-    from the active climate's sky colour windows (`GetPeriodStartHours`): Dawn when the sky leaves night
-    colours, Sunrise at the sunrise colour peak, Day when fully day, Sunset when the sky leaves day, Dusk at
-    the sunset colour peak, Night when fully night again. Without a valid climate, `kFallbackPeriodStartHours` (vanilla
-    `SkyrimClimate`) applies. Floats cross-fade over `timeOfDayTransitionHours`: blends out of night or
-    day start at the boundary, blends into day or night finish at it, and blends at the colour peaks are
-    centred, so every blend stays inside the sky's own transition. The blend is capped so each period fits
-    one. Non-float settings snap.
--   **Weather**: floats blend across `Sky::currentWeatherPct` between the outgoing and incoming weather.
--   **Location**: see [Location targets](#location-targets); the chain resolves broadest to narrowest, so a
-    cell entry wins over the location that contains it, which wins over the region that contains them both.
--   **Saved sets.** A weather or location (`PeriodicSceneConfig`) keeps two sets side by side: a flat set
-    (entries with `period == Count`) and a per-period set. `timeOfDayEnabled` picks which one resolves
-    (`IsPeriodActive`); the other is kept untouched, so switching back restores it. The mode comes from the
-    user's choice, else a shipped overwrite's `timeOfDayEnabled` metadata, else per-period only when every
-    entry is. Any user edit pins the current mode so a later preset cannot move the user's entries between
-    sets. A per-period location set keeps the location whitelist but takes only transitionable floats,
-    blended across periods.
--   Writes smaller than `kBlendEpsilon` (1e-3) are skipped so blending does not spam `LoadSettings`.
+- **Time of day** — six periods (`Dawn`, `Sunrise`, `Day`, `Sunset`, `Dusk`, `Night`) whose starts come
+  from the active climate's sky colour windows (`GetPeriodStartHours`): Dawn when the sky leaves night
+  colours, Sunrise at the sunrise colour peak, Day when fully day, Sunset when the sky leaves day, Dusk at
+  the sunset colour peak, Night when fully night again. Without a valid climate, `kFallbackPeriodStartHours` (vanilla
+  `SkyrimClimate`) applies. Floats cross-fade over `timeOfDayTransitionHours`: blends out of night or
+  day start at the boundary, blends into day or night finish at it, and blends at the colour peaks are
+  centred, so every blend stays inside the sky's own transition. The blend is capped so each period fits
+  one. Non-float settings snap.
+- **Weather**: floats blend across `Sky::currentWeatherPct` between the outgoing and incoming weather.
+- **Location**: see [Location targets](#location-targets); the chain resolves broadest to narrowest, so a
+  cell entry wins over the location that contains it, which wins over the region that contains them both.
+- **Saved sets.** A weather or location (`PeriodicSceneConfig`) keeps two sets side by side: a flat set
+  (entries with `period == Count`) and a per-period set. `timeOfDayEnabled` picks which one resolves
+  (`IsPeriodActive`); the other is kept untouched, so switching back restores it. The mode comes from the
+  user's choice, else a shipped overwrite's `timeOfDayEnabled` metadata, else per-period only when every
+  entry is. Any user edit pins the current mode so a later preset cannot move the user's entries between
+  sets. A per-period location set keeps the location whitelist but takes only transitionable floats,
+  blended across periods.
+- Writes smaller than `kBlendEpsilon` (1e-3) are skipped so blending does not spam `LoadSettings`.
 
 **Tombstones.** A user entry with `deleted` set removes a mod's value from the one context it sits in, as
 if that entry were absent: the layers beneath it (a broader location link, weather, time of day, the
@@ -235,20 +235,20 @@ overwrites. The earlier open-shaders `categories` section (type `Category`) is r
 Location float overrides ease in and out instead of snapping, because crossing a cell boundary otherwise
 pops every affected setting.
 
--   Duration comes from the entry's own `transitionSeconds`, falling back to the global
-    `location.transitionSeconds` (`kDefaultLocationTransitionSeconds` = 5s, clamped to
-    `kMaxLocationTransitionSeconds` = 300s).
--   Time comes from `globals::state->timer`, so transitions freeze with the game rather than the wall clock.
--   Easing is smoothstep (`t * t * (3 - 2t)`). `StartLocationTransitions()` retargets from the **live** eased
-    value, so reversing direction mid-transition never snaps.
--   Only **walking** between exterior cells of one worldspace animates (`walkedBetweenWorldspaceCells`).
-    Editing a value in place snaps to it, and so does arriving from a loading screen: `OnLoadingTransition()`
-    resolves with `allowLocationTransitions = false` so the destination's values are already in place when
-    the player sees it. `locationOverridesDirty` alone just reconciles the targets.
--   In-flight transitions are grouped into per-feature `LocationTransitionBatch`es so one `LoadSettings` call
-    covers every animating setting of a feature. A failing batch logs once and backs off by signature.
--   `RestoreAppliedSettings()` clears all transitions first, so tearing the scene layer down cannot leave a
-    half-eased value applied.
+- Duration comes from the entry's own `transitionSeconds`, falling back to the global
+  `location.transitionSeconds` (`kDefaultLocationTransitionSeconds` = 5s, clamped to
+  `kMaxLocationTransitionSeconds` = 300s).
+- Time comes from `globals::state->timer`, so transitions freeze with the game rather than the wall clock.
+- Easing is smoothstep (`t * t * (3 - 2t)`). `StartLocationTransitions()` retargets from the **live** eased
+  value, so reversing direction mid-transition never snaps.
+- Only **walking** between exterior cells of one worldspace animates (`walkedBetweenWorldspaceCells`).
+  Editing a value in place snaps to it, and so does arriving from a loading screen: `OnLoadingTransition()`
+  resolves with `allowLocationTransitions = false` so the destination's values are already in place when
+  the player sees it. `locationOverridesDirty` alone just reconciles the targets.
+- In-flight transitions are grouped into per-feature `LocationTransitionBatch`es so one `LoadSettings` call
+  covers every animating setting of a feature. A failing batch logs once and backs off by signature.
+- `RestoreAppliedSettings()` clears all transitions first, so tearing the scene layer down cannot leave a
+  half-eased value applied.
 
 A duration set on one component of an aggregate control (a colour, a vector) applies to the whole control:
 `SetLocationEntryTransitionSeconds()` expands the selection through `GetCopyGroupKey()` before validating.
@@ -377,23 +377,23 @@ are **blocked** rather than clobbering it, and unknown fields on an entry are pr
 
 `src/CSEditor/SceneManager/SceneSettingsPolicy.h` is hand-maintained and pruned to features that exist in this fork:
 
--   `kSettingBlacklist` — settings that must never be scene-overridden, matched by catalog address prefix;
-    a bare feature name excludes the whole feature. Upstream's entries all pointed at features this fork
-    does not have, so the list is this fork's own:
-    -   the `ExponentialHeightFog` volumetric entries, which shape the froxel grid and its history buffers.
-        Scene overrides travel through `SaveSettings` → JSON patch → `LoadSettings`, which never re-runs the
-        allocation those settings size, so blending them mid-frame is not something the feature can honor.
-    -   `ImageBasedLighting`'s `DisableInWorldMap` and `DisableInLoadingScreen`.
-    -   all of `GrassOptimizations`, `TerrainVariation` and `VolumetricLighting`.
-    -   upstream's `PostProcessing` entries, kept identical for on-disk compatibility: all of `Border` and
-        `LUT` (`LUT::LoadSettings` rereads its texture from disk), DoF `HighlightShape`, Motion Blur
-        `VelocityScale`, and the Color Grading tonemapper selection (`enableTonemap`, `useOpenDrt`,
-        `currentTonemapper`, `tonemapParams`), which recompiles shaders.
-    -   `ScreenSpaceGI`'s `ResolutionMode`, `EnableGI`, `EnableTemporalDenoiser` and
-        `EnableExperimentalSpecularGI`: each is a shader define, so a change recompiles every SSGI compute
-        shader on the render thread and a location transition would hitch.
--   `kLocationFeatureWhitelist` (7) and `kTimeOfDayFeatureWhitelist` (10): which features those scene types
-    may target.
+- `kSettingBlacklist` — settings that must never be scene-overridden, matched by catalog address prefix;
+  a bare feature name excludes the whole feature. Upstream's entries all pointed at features this fork
+  does not have, so the list is this fork's own:
+    - the `ExponentialHeightFog` volumetric entries, which shape the froxel grid and its history buffers.
+      Scene overrides travel through `SaveSettings` → JSON patch → `LoadSettings`, which never re-runs the
+      allocation those settings size, so blending them mid-frame is not something the feature can honor.
+    - `ImageBasedLighting`'s `DisableInWorldMap` and `DisableInLoadingScreen`.
+    - all of `GrassOptimizations`, `TerrainVariation` and `VolumetricLighting`.
+    - upstream's `PostProcessing` entries, kept identical for on-disk compatibility: all of `Border` and
+      `LUT` (`LUT::LoadSettings` rereads its texture from disk), DoF `HighlightShape`, Motion Blur
+      `VelocityScale`, and the Color Grading tonemapper selection (`enableTonemap`, `useOpenDrt`,
+      `currentTonemapper`, `tonemapParams`), which recompiles shaders.
+    - `ScreenSpaceGI`'s `ResolutionMode`, `EnableGI`, `EnableTemporalDenoiser` and
+      `EnableExperimentalSpecularGI`: each is a shader define, so a change recompiles every SSGI compute
+      shader on the render thread and a location transition would hitch.
+- `kLocationFeatureWhitelist` (7) and `kTimeOfDayFeatureWhitelist` (10): which features those scene types
+  may target.
 
 `PostProcessing` defers its load: `LoadSettings` stores the JSON and `ProcessSettings` applies it in
 `Prepass`. Its per-load path must stay cheap because a blend reloads every frame, so sub-features reconcile
@@ -433,66 +433,66 @@ rather than an authoring panel.
 
 ### Removed from this fork
 
--   `src/WeatherManager.{h,cpp}`, `src/WeatherVariableRegistry.h` and `docs/weather-system-docs/` — the old
-    registry the catalog replaces.
--   `Util::WeatherUI::{IsWeatherControlled,SliderFloat,Checkbox,ColorEdit3,ColorEdit4}` — its only call sites
-    were in `ExponentialHeightFog` (22) and `IBL` (7), and both are now plain `ImGui::` calls.
--   `src/CSEditor/InteriorOnlyPanel.{h,cpp}` and its EditorWindow category. `EditorWindow::LoadSettings()`
-    remaps a saved `"Interior Only"` category to `"Weather"`.
--   The WeatherWidget per-feature "Features" tab and its `featureSettings` map (upstream replaced it with a
-    "Scene Settings" tab that lives in the excluded UI), plus `OpenWeatherFeatureSetting()`.
--   The "Pause Weather Overrides" checkbox in `FeatureListRenderer`.
--   `SupportsVR()` on `SceneManager` — that virtual is an `alandtse` lineage concept and does not exist on
-    this fork's `Feature`.
--   Upstream's `InvertedCheckbox`, `RadioButton`, `ActiveControlStorageGuard` and
-    `GetActiveControlStorageAddress` UI helpers, used only by the excluded UI.
+- `src/WeatherManager.{h,cpp}`, `src/WeatherVariableRegistry.h` and `docs/weather-system-docs/` — the old
+  registry the catalog replaces.
+- `Util::WeatherUI::{IsWeatherControlled,SliderFloat,Checkbox,ColorEdit3,ColorEdit4}` — its only call sites
+  were in `ExponentialHeightFog` (22) and `IBL` (7), and both are now plain `ImGui::` calls.
+- `src/CSEditor/InteriorOnlyPanel.{h,cpp}` and its EditorWindow category. `EditorWindow::LoadSettings()`
+  remaps a saved `"Interior Only"` category to `"Weather"`.
+- The WeatherWidget per-feature "Features" tab and its `featureSettings` map (upstream replaced it with a
+  "Scene Settings" tab that lives in the excluded UI), plus `OpenWeatherFeatureSetting()`.
+- The "Pause Weather Overrides" checkbox in `FeatureListRenderer`.
+- `SupportsVR()` on `SceneManager` — that virtual is an `alandtse` lineage concept and does not exist on
+  this fork's `Feature`.
+- Upstream's `InvertedCheckbox`, `RadioButton`, `ActiveControlStorageGuard` and
+  `GetActiveControlStorageAddress` UI helpers, used only by the excluded UI.
 
 ### Existing UI
 
--   `src/CSEditor/SceneManager/SceneSettingsUI.cpp` is this fork's own editor: the time-of-day period bar with its
-    automatic time pause, the interior toggle, the per-feature list, and per-location windows. Weather and
-    location pages carry a **Time of Day** toggle that switches the page's saved set. It uses only
-    `GetCurrentGameHour` / `SetGameHour`, `GetCurrentPeriod`, `Get*RelevantFeatureNames`,
-    `GetFeatureDisplayName`, and the `LocationTarget` accessors.
--   `FeatureListRenderer` draws a feature's `DrawSettings()` inside a baseline `SceneWidgetInterceptor::Scope`
-    (`Context::baseline`), so every catalogued control stays editable and edits the feature's base. The
-    guard tints each control by the layer winning it: blue for a Scene Manager value, yellow for a feature
-    override, green for a sketch. Editing a blue control records a **sketch** (`RecordBaselineEdit`): the
-    edited value becomes the base and the resolver holds it in place (`HoldSketchedValues`) until the menu
-    stops calling `RetainSketches` for that feature, when the scene value returns. A blue control's gutter
-    jumps to the winning page (`FindWinningContext`, `SceneSettingsUI::OpenSceneContext`), which mid-blend
-    is the incoming context, or the outgoing one when the incoming context supplies nothing; a sketched one
-    commits into it (`CommitSketches`). The feature list shows a blue dot for a feature authored anywhere
-    (`HasAnySceneEntriesForFeature`), filled while it applies here, and a green dot while it has sketches.
-    **Apply Override** and **Restore Defaults** rewrite the base behind a live scene layer, so the first
-    holds a `SceneLayerGuard` and the second follows with `CaptureExternalFeatureChanges`; without either
-    the next resolve puts the old values back.
--   `CSEditor` flags a weather that has scene settings via `HasWeatherConfig`.
--   `SceneFeatureReplica::Draw()` replays a feature's real `DrawSettings()` inside a
-    `SceneWidgetInterceptor::Scope`, whose ImGui detours bind every control to the scene context, so entry
-    authoring needs no per-scene tables: `SceneWidgetBinding::Guard` creates, edits, pauses and deletes
-    entries in place. A control that draws a rescaled temporary instead of its settings member declares a
-    `ProxyScope` so it still binds.
-    `GutterPolicy::GroupMember` is kept although no intercepted feature currently draws a radio group: it is
-    what stops several calls against one address (`RadioButton`) from each drawing their own gutter toggle,
-    and the alternative to keeping it is a latent double-gutter bug the first time a feature adds one.
--   `src/CSEditor/SceneManager/ScenePageToolbar.cpp` drives the [copy API](#generic-scene-copy-api) and opens
-    the preset export dialog (`ScenePresetExport`). `SceneTransitionField` is the one clamped duration field
-    shared by the toolbar and the widget gutter.
+- `src/CSEditor/SceneManager/SceneSettingsUI.cpp` is this fork's own editor: the time-of-day period bar with its
+  automatic time pause, the interior toggle, the per-feature list, and per-location windows. Weather and
+  location pages carry a **Time of Day** toggle that switches the page's saved set. It uses only
+  `GetCurrentGameHour` / `SetGameHour`, `GetCurrentPeriod`, `Get*RelevantFeatureNames`,
+  `GetFeatureDisplayName`, and the `LocationTarget` accessors.
+- `FeatureListRenderer` draws a feature's `DrawSettings()` inside a baseline `SceneWidgetInterceptor::Scope`
+  (`Context::baseline`), so every catalogued control stays editable and edits the feature's base. The
+  guard tints each control by the layer winning it: blue for a Scene Manager value, yellow for a feature
+  override, green for a sketch. Editing a blue control records a **sketch** (`RecordBaselineEdit`): the
+  edited value becomes the base and the resolver holds it in place (`HoldSketchedValues`) until the menu
+  stops calling `RetainSketches` for that feature, when the scene value returns. A blue control's gutter
+  jumps to the winning page (`FindWinningContext`, `SceneSettingsUI::OpenSceneContext`), which mid-blend
+  is the incoming context, or the outgoing one when the incoming context supplies nothing; a sketched one
+  commits into it (`CommitSketches`). The feature list shows a blue dot for a feature authored anywhere
+  (`HasAnySceneEntriesForFeature`), filled while it applies here, and a green dot while it has sketches.
+  **Apply Override** and **Restore Defaults** rewrite the base behind a live scene layer, so the first
+  holds a `SceneLayerGuard` and the second follows with `CaptureExternalFeatureChanges`; without either
+  the next resolve puts the old values back.
+- `CSEditor` flags a weather that has scene settings via `HasWeatherConfig`.
+- `SceneFeatureReplica::Draw()` replays a feature's real `DrawSettings()` inside a
+  `SceneWidgetInterceptor::Scope`, whose ImGui detours bind every control to the scene context, so entry
+  authoring needs no per-scene tables: `SceneWidgetBinding::Guard` creates, edits, pauses and deletes
+  entries in place. A control that draws a rescaled temporary instead of its settings member declares a
+  `ProxyScope` so it still binds.
+  `GutterPolicy::GroupMember` is kept although no intercepted feature currently draws a radio group: it is
+  what stops several calls against one address (`RadioButton`) from each drawing their own gutter toggle,
+  and the alternative to keeping it is a latent double-gutter bug the first time a feature adds one.
+- `src/CSEditor/SceneManager/ScenePageToolbar.cpp` drives the [copy API](#generic-scene-copy-api) and opens
+  the preset export dialog (`ScenePresetExport`). `SceneTransitionField` is the one clamped duration field
+  shared by the toolbar and the widget gutter.
 
 ## Known gaps
 
--   **Bounds are enforced on apply, not on input.** [Numeric bounds](#numeric-bounds) clamps a value on its
-    way into a feature, so nothing out of range reaches a shader constant. A value typed past the range in a
-    widget that does not clamp (`clampNumericInput` records which ones) is still stored as typed; only the
-    scene layer's own writes are bounded. The apply verification compares against the clamped value.
--   **OpenDRT is not scene-controllable.** Color Grading persists its OpenDRT parameters through the
-    `ODRT1`/`ODRT2` split structs, which the generator does not catalog, so no scene can hold them.
--   Presentation metadata that survives into the generated C++ (`sourceWidget`, `hdrColor`,
-    `clampNumericInput`) is emitted but unread: the interceptor replays the feature's own widget instead of
-    rebuilding one. It stays because `validate_entries` uses it, `sourceWidget` against
-    `SOURCE_WIDGET_ENTRY_POINTS` and the other two to enforce colour-metadata invariants.
-    `displayPath` / `selectorPath` are read, they name entries.
+- **Bounds are enforced on apply, not on input.** [Numeric bounds](#numeric-bounds) clamps a value on its
+  way into a feature, so nothing out of range reaches a shader constant. A value typed past the range in a
+  widget that does not clamp (`clampNumericInput` records which ones) is still stored as typed; only the
+  scene layer's own writes are bounded. The apply verification compares against the clamped value.
+- **OpenDRT is not scene-controllable.** Color Grading persists its OpenDRT parameters through the
+  `ODRT1`/`ODRT2` split structs, which the generator does not catalog, so no scene can hold them.
+- Presentation metadata that survives into the generated C++ (`sourceWidget`, `hdrColor`,
+  `clampNumericInput`) is emitted but unread: the interceptor replays the feature's own widget instead of
+  rebuilding one. It stays because `validate_entries` uses it, `sourceWidget` against
+  `SOURCE_WIDGET_ENTRY_POINTS` and the other two to enforce colour-metadata invariants.
+  `displayPath` / `selectorPath` are read, they name entries.
 
 **Presentation-only concepts do not belong in the generated C++.** `AggregatePresentation`,
 `UnifiedEditMode`, choice display names and `GetVirtualAggregateControls` were each generated without a
@@ -503,10 +503,10 @@ justifies the second rendering path.
 
 ## TODO
 
--   More UI elements so users can understand which layer is winning, when, and where.
--   A unified preset system with E11.
--   Preset metadata and preset JSONs.
--   Presets are read from a single folder only, and every preset file is loaded at all times.
+- More UI elements so users can understand which layer is winning, when, and where.
+- A unified preset system with E11.
+- Preset metadata and preset JSONs.
+- Presets are read from a single folder only, and every preset file is loaded at all times.
 
 ## Testing
 

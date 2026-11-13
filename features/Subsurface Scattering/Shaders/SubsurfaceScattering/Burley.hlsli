@@ -89,13 +89,14 @@ float4 BurleyNormalizedSS(uint2 DTid, float2 texCoord, float sssAmount, bool hum
 	float centerRadiusCDF = GetBurleyCDF(d, centerRadius, 0).x;
 	float3 centerWeight = GetBurleyCDF(d3d, centerRadius, 0);
 
-	int3 seed = int3(DTid.xy, 0);
-	int seedStart = Random::pcg3d(int3(seed.xy, SharedData::FrameCount)).x;
+	// Stratified radii on a golden-angle spiral, randomized per pixel and frame
+	uint rngState = Random::pcg3d(uint3(DTid.xy, SharedData::FrameCount)).x;
+	float jitter = Random::f1(rngState);
+	float rotation = Random::f1(rngState);
 
 	[loop] for (int i = 0; i < (int)BurleySamples; ++i)
 	{
-		seed.z = seedStart++;
-		float2 rand = float2(Random::pcg3d(seed).xy) / 4294967296.0f;  // to [0, 1)
+		float2 rand = float2((i + jitter) / (float)BurleySamples, Random::R1Sequence(i, rotation));
 
 		rand.x = centerRadiusCDF + rand.x * (1.0f - centerRadiusCDF);
 

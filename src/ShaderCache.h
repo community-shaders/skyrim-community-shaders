@@ -79,7 +79,7 @@ namespace ShaderConstants
 		const int32_t LandscapeTexture5GlintParameters = 48;
 		const int32_t LandscapeTexture6GlintParameters = 49;
 
-		const int32_t MaterialObjectRGBScale = 50;  // RGB multipliers for material objects
+		const int32_t MaterialObjectRGBScale = 50;  // Projected material RGB scale in xyz, fuzz roughness in w
 
 		const int32_t ShadowSampleParam = -1;
 		const int32_t EndSplitDistances = -1;
@@ -119,6 +119,7 @@ namespace ShaderConstants
 		const int32_t PBRParams2 = 16;
 		const int32_t PBRParams3 = 17;
 		const int32_t PBRParams4 = 18;
+		const int32_t PBRParams5 = 19;
 	};
 
 	struct EffectPS
@@ -171,12 +172,14 @@ namespace SIE
 			Completed
 		};
 		ShaderCompilationTask(ShaderClass shaderClass, const RE::BSShader& shader,
-			uint32_t descriptor);
+			uint32_t descriptor, bool a_precompile = false);
 		/** @brief Compiles the shader, writing the result to the ShaderCache. */
 		void Perform() const;
 
 		/** @brief Returns a unique hash identifying this shader class, type, and descriptor combo. */
 		size_t GetId() const;
+		/** @brief Returns the id GetId() would give a task for this shader class, type, and descriptor. */
+		static size_t MakeId(ShaderClass a_shaderClass, RE::BSShader::Type a_type, uint32_t a_descriptor);
 		/** @brief Returns a human-readable string describing this task (shader file, class, defines). */
 		std::string GetString() const;
 
@@ -191,6 +194,10 @@ namespace SIE
 		void SetEnqueuedQpc(int64_t qpc) { enqueuedQpc = qpc; }
 		/** @brief Gets the QPC timestamp when this task was enqueued. */
 		int64_t GetEnqueuedQpc() const { return enqueuedQpc; }
+		/** @brief Whether this task was requested only to populate the startup cache. */
+		bool IsPrecompile() const { return precompile; }
+		/** @brief Keeps a queued startup task when rendering requests the same permutation. */
+		void RequireForRendering() { precompile = false; }
 
 		bool operator==(const ShaderCompilationTask& other) const;
 
@@ -203,6 +210,7 @@ namespace SIE
 		static int ComputePriority(ShaderClass shaderClass, const RE::BSShader& shader, uint32_t descriptor);
 		int cachedPriority;
 		int64_t enqueuedQpc = 0;
+		bool precompile = false;
 	};
 }
 
@@ -430,11 +438,16 @@ namespace SIE
 		bool IsDiskCache() const;
 		/** Sets whether the persistent disk cache is enabled. */
 		void SetDiskCache(bool value);
+		/** @brief Whether shaders compile with debug info: Developer Mode, or RenderDoc attached. */
+		static bool IsDebugCompile();
 		/**
 		 * @brief Deletes the on-disk shader cache directory.
 		 * @param a_keepContentStore Keep the persistent shader store, whose blobs stay valid because they are keyed by their own inputs.
 		 */
 		void DeleteDiskCache(bool a_keepContentStore = false);
+		/** @brief True after a user action cleared every shader, until the menu banner is dismissed. */
+		bool IsRecachePending() const { return recachePending; }
+		void SetRecachePending(bool value) { recachePending = value; }
 		/** @brief Validates disk cache integrity against current shader sources and feature set. */
 		void ValidateDiskCache();
 		/** @brief Writes cache metadata (version, feature list) to the disk cache directory. */
@@ -520,9 +533,11 @@ namespace SIE
 		ShaderCompilationTask::Status GetShaderStatus(const std::string& a_key);
 		std::string GetShaderStatsString(bool a_timeOnly = false, bool a_elapsedOnly = false);
 
-		RE::BSGraphics::VertexShader* GetVertexShader(const RE::BSShader& shader, uint32_t descriptor);
+		/** @brief Requests a vertex shader; startup precompiles (a_precompile) are skipped in background mode. */
+		RE::BSGraphics::VertexShader* GetVertexShader(const RE::BSShader& shader, uint32_t descriptor, bool a_precompile = false);
+		/** @brief Requests a pixel shader; startup precompiles (a_precompile) are skipped in background mode. */
 		RE::BSGraphics::PixelShader* GetPixelShader(const RE::BSShader& shader,
-			uint32_t descriptor);
+			uint32_t descriptor, bool a_precompile = false);
 		bool HasPixelShaders(RE::BSShader::Type type, std::span<const uint32_t> descriptors);
 		RE::BSGraphics::ComputeShader* GetComputeShader(const RE::BSShader& shader,
 			uint32_t descriptor);
@@ -671,7 +686,7 @@ namespace SIE
 		int32_t backgroundCompilationThreadCount = std::max(static_cast<int32_t>(Util::GetPerformanceCoreCount()) / 2, 1);
 		BS::thread_pool<> compilationPool{ static_cast<std::size_t>(compilationThreadCount) };
 		std::jthread managementJthread;  // dedicated thread for ManageCompilationSet (not in pool)
-		/** @brief Updates compilation mode and wakes the dispatcher to recheck its capacity. */
+		/** @brief Switches compilation mode, dropping unstarted precompiles when entering background mode, and wakes the dispatcher. */
 		void SetBackgroundCompilation(bool value);
 		std::atomic_bool backgroundCompilation{ false };
 		bool menuLoaded = false;
@@ -894,9 +909,13 @@ namespace SIE
 		};
 
 		ankerl::unordered_dense::map<std::string, ActiveShaderInfo> activeShaders;
+		/// Shader key per task id, so TrackActiveShader builds each key once. The key embeds feature defines, so it is reset when they may change.
+		ankerl::unordered_dense::map<size_t, std::string> activeShaderKeys;
 		mutable std::mutex activeShadersMutex;
 
 		void TrackActiveShader(ShaderClass shaderClass, const RE::BSShader& shader, uint32_t descriptor);
+		/** @brief Drops cached keys and tracked shaders; call when feature defines may change (cache clear, feature toggle). */
+		void ResetActiveShaderTracking();
 		void ResetFrameShaderTracking();
 		std::vector<ActiveShaderInfo> GetActiveShaders() const;
 
@@ -939,6 +958,7 @@ namespace SIE
 		bool hideError = false;
 		bool useFileWatcher = false;
 		bool preserveStandaloneCache = false;
+		bool recachePending = false;
 
 		std::stop_source ssource;
 		std::mutex vertexShadersMutex;

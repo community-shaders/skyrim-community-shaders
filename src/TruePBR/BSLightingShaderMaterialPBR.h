@@ -32,6 +32,7 @@ enum class PBRShaderFlags : uint32_t
 	ProjectedGlint = 1 << 12,
 	Foliage = 1 << 13,
 	ThinSurface = 1 << 14,
+	HasFuzzRoughnessTexture = 1 << 15,
 };
 
 /**
@@ -50,6 +51,7 @@ public:
 		TruePBR::PBRTextureSetData* textureSetData = nullptr;
 		TruePBR::PBRMaterialObjectData* materialObjectData = nullptr;
 		std::optional<std::array<float, 4>> nifThinSurfaceParameters;
+		std::optional<std::array<float, 2>> nifFuzzParameters;
 		/**
 		 * FormID of the TESObjectREFR whose Clone3D call last wrote MATO data to this
 		 * material.  Used by the fork-before-write check to detect when a pooled material
@@ -79,23 +81,23 @@ public:
 	 *
 	 * @return A new heap-allocated BSLightingShaderMaterialPBR instance.
 	 */
-	RE::BSShaderMaterial* Create() override;                                                                                      // 01
+	RE::BSShaderMaterial* Create() override;  // 01
 	/**
 	 * @brief Copies all PBR-specific members from another material, including textures and extensions.
 	 * @param that Source material to copy from (must be BSLightingShaderMaterialPBR).
 	 */
-	void CopyMembers(RE::BSShaderMaterial* that) override;                                                                        // 02
+	void CopyMembers(RE::BSShaderMaterial* that) override;  // 02
 	/**
 	 * @brief Computes a CRC32 hash incorporating all PBR-specific fields and texture paths.
 	 * @param srcHash Initial hash seed.
 	 * @return Combined CRC32 hash for material deduplication.
 	 */
-	std::uint32_t ComputeCRC32(uint32_t srcHash) override;                                                                        // 04
+	std::uint32_t ComputeCRC32(uint32_t srcHash) override;  // 04
 	/**
 	 * @brief Returns the material feature type.
 	 * @return Always returns kDefault to integrate with the vanilla shader dispatch.
 	 */
-	Feature GetFeature() const override;                                                                                          // 06
+	Feature GetFeature() const override;  // 06
 	/**
 	 * @brief Loads PBR textures (RMAOS, emissive, displacement, features) from a texture set.
 	 *
@@ -104,9 +106,9 @@ public:
 	 * @param arg1 Unused argument passed through from the base class.
 	 * @param inTextureSet The texture set to load PBR textures from.
 	 */
-	void OnLoadTextureSet(std::uint64_t arg1, RE::BSTextureSet* inTextureSet) override;                                           // 08
+	void OnLoadTextureSet(std::uint64_t arg1, RE::BSTextureSet* inTextureSet) override;  // 08
 	/** @brief Releases all PBR texture references in addition to base class textures. */
-	void ClearTextures() override;                                                                                                // 09
+	void ClearTextures() override;  // 09
 	/**
 	 * @brief Assigns default textures to any PBR texture slots that are still null.
 	 * @param skinned Whether the mesh is skinned.
@@ -121,12 +123,12 @@ public:
 	 * @param textures Output array to fill with texture pointers.
 	 * @return The number of textures written.
 	 */
-	uint32_t GetTextures(RE::NiSourceTexture** textures) override;                                                                // 0B
+	uint32_t GetTextures(RE::NiSourceTexture** textures) override;  // 0B
 	/**
 	 * @brief Deserializes PBR-specific parameters (coat, fuzz, glint) from a NiStream.
 	 * @param stream The binary stream to read from.
 	 */
-	void LoadBinary(RE::NiStream& stream) override;                                                                               // 0D
+	void LoadBinary(RE::NiStream& stream) override;  // 0D
 
 	/**
 	 * @brief Allocates a scrap-heap temporary for use during BSLightingShaderProperty::LoadBinary.
@@ -146,6 +148,8 @@ public:
 	void ApplyTextureSetData(const TruePBR::PBRTextureSetData& textureSetData);
 	/** @brief Applies the four finite values in the NIF PBRThinSurface extra-data block. */
 	bool ApplyNifThinSurfaceParameters(std::span<const float> parameters);
+	/** @brief Applies PBRFuzz extra data: roughness (negative uses base) and slot 4 green roughness enable (0 or 1). */
+	bool ApplyNifFuzzParameters(std::span<const float> parameters);
 	/**
 	 * @brief Applies projected material object parameters (base color scale, roughness, specular, glint) to this material.
 	 * @param materialObjectData The material object configuration to apply.
@@ -198,11 +202,22 @@ public:
 	const RE::NiColor& GetFuzzColor() const;
 	/** @brief Returns the fuzz layer weight/intensity. */
 	float GetFuzzWeight() const;
+	/** @brief Returns fuzz roughness clamped to [0, 1], or a negative value to use base roughness. */
+	float GetFuzzRoughness() const;
 
 	/** @brief Returns the glint rendering parameters for this material's base surface. */
 	const GlintParameters& GetGlintParameters() const;
 
 	inline static std::unordered_map<BSLightingShaderMaterialPBR*, MaterialExtensions> All;
+	/** @brief Guards All: materials are created, copied and destroyed on the main thread and on background loader threads (Clone3D, NIF loads). Recursive for ApplyTextureSetData inside the settings iterations; never held across engine calls. */
+	inline static std::recursive_mutex AllMutex;
+
+	/** @brief Returns the material's extensions, creating them on first use; locks AllMutex for the lookup only. */
+	static MaterialExtensions& GetExtensions(BSLightingShaderMaterialPBR* material)
+	{
+		std::lock_guard lock(AllMutex);
+		return All[material];
+	}
 
 	// members
 	RE::BSShaderMaterial::Feature loadedWithFeature = RE::BSShaderMaterial::Feature::kDefault;
@@ -218,6 +233,8 @@ public:
 
 	RE::NiColor fuzzColor;
 	float fuzzWeight = 0.f;
+	float fuzzRoughness = -1.f;
+	bool fuzzRoughnessTexture = false;
 
 	GlintParameters glintParameters;
 
@@ -227,7 +244,7 @@ public:
 	// Emission color in rgb
 	RE::NiPointer<RE::NiSourceTexture> emissiveTexture;
 
-	// Displacement in r
+	// Displacement in r, fuzz roughness in g when fuzzRoughnessTexture is set
 	RE::NiPointer<RE::NiSourceTexture> displacementTexture;
 
 	// Subsurface map (subsurface color in rgb, thickness in a) / Coat map (coat color in rgb, coat strength in a)

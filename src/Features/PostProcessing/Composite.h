@@ -23,6 +23,18 @@ struct Composite : public PostProcessFeature
 
 	eastl::unique_ptr<Texture2D> texOutput = nullptr;
 
+	struct alignas(16) CompositeCB
+	{
+		float OutputSize[2];
+		float FlareSize[2];
+		float FlareTint[3];
+		float FlareIntensity;
+		float BloomRadius;
+		float BloomIntensity;
+		float Padding[2];
+	};
+	std::unique_ptr<ConstantBuffer> compositeCB = nullptr;
+
 	// Bit flags for shader permutation selection
 	enum CompositeFlags : uint
 	{

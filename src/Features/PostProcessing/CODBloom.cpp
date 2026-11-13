@@ -19,7 +19,7 @@ void CODBloom::DrawSettings()
 	ImGui::SliderFloat(T("feature.post_processing.codbloom.threshold", "Threshold"), &settings.Threshold, -7.f, 23.f, "%+.2f EV100");
 	ImGui::SliderFloat(T("feature.post_processing.codbloom.upsampling_radius", "Upsampling Radius"), &settings.UpsampleRadius, 1.f, 5.f, "%.1f px");
 	if (auto _tt = Util::HoverTooltipWrapper())
-		ImGui::Text(T("feature.post_processing.codbloom.a_greater_radius_makes_the_bloom_slightly_blurrier", "A greater radius makes the bloom slightly blurrier."));
+		ImGui::TextUnformatted(T("feature.post_processing.codbloom.a_greater_radius_makes_the_bloom_slightly_blurrier", "A greater radius makes the bloom slightly blurrier."));
 
 	ImGui::SliderFloat(T("feature.post_processing.codbloom.mix", "Mix"), &settings.BlendFactor, 0.f, 1.f, "%.2f");
 
@@ -28,7 +28,7 @@ void CODBloom::DrawSettings()
 	static int mipLevel = 1;
 	ImGui::SliderInt(T("feature.post_processing.codbloom.mip_level", "Mip Level"), &mipLevel, 1, (int)settings.MipBlendFactor.size(), "%d", ImGuiSliderFlags_AlwaysClamp);
 	if (auto _tt = Util::HoverTooltipWrapper())
-		ImGui::Text(T("feature.post_processing.codbloom.the_greater_the_level_the_blurrier_the_part", "The greater the level, the blurrier the part it controls"));
+		ImGui::TextUnformatted(T("feature.post_processing.codbloom.the_greater_the_level_the_blurrier_the_part", "The greater the level, the blurrier the part it controls"));
 	ImGui::Indent();
 	{
 		ImGui::SliderFloat(T("feature.post_processing.codbloom.intensity", "Intensity"), &settings.MipBlendFactor[mipLevel - 1], 0.f, 1.f, "%.2f");
@@ -227,10 +227,12 @@ void CODBloom::Draw(TextureInfo& inout_tex)
 		globals::profiler->EndPass();
 	}
 
+	const int usedMips = static_cast<int>(settings.MipBlendFactor[s_BloomMips - 2] == 0.f && settings.MipBlendFactor[s_BloomMips - 3] == 1.f ? s_BloomMips - 1 : s_BloomMips);
+
 	// Downsample
 	globals::profiler->BeginPass("PostProcessing::CODBloom::Downsample");
 	pass.SetShaders(vs, downsampleFirstMipPS.get());
-	for (int i = 0; i < s_BloomMips - 1; i++) {
+	for (int i = 0; i < usedMips - 1; i++) {
 		if (i == 1)
 			pass.SetShaders(vs, downsamplePS.get());
 
@@ -248,7 +250,7 @@ void CODBloom::Draw(TextureInfo& inout_tex)
 	// upsample (ROP blend accumulates into the destination mip)
 	globals::profiler->BeginPass("PostProcessing::CODBloom::Upsample");
 	pass.SetShaders(vs, upsamplePS.get());
-	for (int i = s_BloomMips - 2; i >= 1; i--) {
+	for (int i = usedMips - 2; i >= 1; i--) {
 		cbData.UpsampleMult = 1.f;
 		if (i == s_BloomMips - 2)
 			cbData.UpsampleMult = settings.MipBlendFactor[i];
@@ -268,22 +270,6 @@ void CODBloom::Draw(TextureInfo& inout_tex)
 		pass.Draw();
 	}
 
-	// upsample final mip to mip 0 with blend factor applied (CurrentMipMult=0 to discard threshold data in mip 0)
-	{
-		cbData.UpsampleMult = settings.BlendFactor;
-		cbData.CurrentMipMult = 0.f;
-		bloomCB->Update(cbData);
-
-		float blendFactor[4] = { 0.f, 0.f, 0.f, 0.f };
-		pass.SetBlendState(upsampleBlendState.get(), blendFactor);
-
-		pass.SetTargets({ texBloomMipRTVs[0].get() }, (float)texBloom->desc.Width, (float)texBloom->desc.Height);
-
-		srvs.fill(nullptr);
-		srvs.at(1) = texBloomMipSRVs[1].get();
-		context->PSSetShaderResources(0, (uint)srvs.size(), srvs.data());
-		pass.Draw();
-	}
 	globals::profiler->EndPass();
 
 	// cleanup (RasterPass destructor restores the pipeline state)
@@ -295,7 +281,7 @@ void CODBloom::Draw(TextureInfo& inout_tex)
 	context->PSSetSamplers(0, 1, &sampler);
 
 	// return
-	inout_tex = { texBloom->resource.get(), texBloomMipSRVs[0].get() };
+	inout_tex = { texBloom->resource.get(), texBloomMipSRVs[1].get() };
 
 	state->EndPerfEvent();
 	outputReady = true;

@@ -5,6 +5,7 @@
 #include "Browser/BrowserState.h"
 #include "FormEditSources.h"
 #include "LightEditor.h"
+#include "Utils/Notifications.h"
 #include "Weather/CellLightingWidget.h"
 #include "Weather/ImageSpaceWidget.h"
 #include "Weather/LensFlareWidget.h"
@@ -127,10 +128,8 @@ public:
 	static constexpr float kGameHourMax = 23.99f;
 	static constexpr float kTimeScaleMin = 0.1f;
 	static constexpr float kTimeScaleMax = 4000.0f;
-	static constexpr float kMenuBarSliderWidth = 400.0f;
 
-	// Notification durations, in seconds; the long one suits messages that explain what to do next.
-	static constexpr float kNotificationDuration = 3.0f;
+	// Long notification duration, in seconds; it suits messages that explain what to do next.
 	static constexpr float kLongNotificationDuration = 4.0f;
 
 	// Preview mode constants
@@ -138,9 +137,6 @@ public:
 	static constexpr float kMinFlySpeed = 1.0f;
 	static constexpr float kMaxFlySpeed = 100.0f;
 	static constexpr float kFlySpeedScrollStep = 2.0f;
-	static constexpr float kToggleActiveAlpha = 0.6f;
-	static constexpr float kToggleHoverAlpha = 0.8f;
-	static constexpr float kInactiveHoverAlpha = 0.25f;
 
 	// Preview mode state
 	float flySpeed = kDefaultFlySpeed;
@@ -240,6 +236,15 @@ public:
 	 */
 	void LockWeatherForUser(RE::TESWeather* weather);
 
+	/** @brief Returns true if the user's lock holds exactly this weather. */
+	bool IsWeatherLockedByUser(const RE::TESWeather* weather) const;
+
+	/** @brief Locks the weather for the user, or releases the user's lock when it already holds it. */
+	void ToggleUserWeatherLock(RE::TESWeather* weather);
+
+	/** @brief Tooltip for a weather lock badge: the hook warning when locking is degraded, else what a click does. */
+	static const char* GetWeatherLockTooltip(bool locked);
+
 	/** @brief Release the user's lock: while the editor is open it falls back to the implicit lock, otherwise it unlocks. */
 	void ReleaseUserWeatherLock();
 
@@ -317,7 +322,6 @@ public:
 	/** @brief Which time periods the game-time slider segments. */
 	enum class TimePeriodSet : std::uint8_t
 	{
-		None,
 		Weather,  ///< Four sky colour times.
 		Scene     ///< Six scene periods.
 	};
@@ -327,9 +331,6 @@ public:
 
 	/** @brief Returns true if ESC should close the editor (no popup open and none just consumed ESC this frame). */
 	bool ShouldHandleEscapeKey();
-
-	/** @brief Set by popup close-on-ESC to suppress the same key-up from also closing the editor. */
-	bool suppressNextEditorEscape = false;
 
 	/** @brief Closes the current popup on ESC without letting the same press close the editor. @return True if it closed. */
 	static bool ClosePopupOnEscape();
@@ -342,9 +343,6 @@ public:
 
 	/** @brief Shows the "cannot open here" warning card, once per press rather than stacking repeats. */
 	void WarnOpeningBlocked();
-
-	/** @brief True while a notification card is still on screen. */
-	bool HasNotifications() const { return !notifications.empty(); }
 
 	/** @brief Shows the Base Settings window on a feature and brings it to the front. */
 	void OpenBaseSettings(const std::string& featureShortName);
@@ -392,26 +390,13 @@ public:
 	/** @brief Discards every widget's unsaved changes. Undoable, one step per widget. */
 	void DiscardAllWidgetChanges();
 
-	// Notification system
-	struct Notification
-	{
-		std::string message;
-		ImVec4 color;
-		float startTime;
-		float duration;
-	};
-	std::vector<Notification> notifications;
-
 	/**
-	 * @brief Display a temporary on-screen notification message.
+	 * @brief Display a temporary on-screen notification message through Util::Notifications.
 	 * @param message The text to display.
 	 * @param color   Text color (defaults to error red).
 	 * @param duration How long the notification remains visible, in seconds.
 	 */
-	void ShowNotification(const std::string& message, const ImVec4& color = Util::Colors::GetError(), float duration = kNotificationDuration);
-
-	/** @brief Draw all active notifications and expire old ones. */
-	void RenderNotifications();
+	void ShowNotification(const std::string& message, const ImVec4& color = Util::Colors::GetError(), float duration = Util::Notifications::kDefaultDuration);
 
 	struct Settings
 	{

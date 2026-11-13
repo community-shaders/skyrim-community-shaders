@@ -100,8 +100,6 @@ namespace
 		"D50",
 	};
 
-	const char* const kSurroundLabels[] = { "Dark", "Dim", "Bright" };
-
 	int ClampIndex(int value, int count)
 	{
 		if (value < 0) {
@@ -863,153 +861,156 @@ void OpenDRTDrawSettings(OpenDRTSettings& s, bool hdrActive, float hdrPaperWhite
 {
 	static OpenDRTPresetSelection presets{};
 
-	if (ImGui::CollapsingHeader(T("feature.post_processing.open_drt.built_in_presets", "Built-in Presets"), ImGuiTreeNodeFlags_DefaultOpen)) {
-		ComboEnum(T("feature.post_processing.open_drt.look_preset", "Look Preset"), presets.lookPreset, kLookPresetLabels);
-		ComboEnum(T("feature.post_processing.open_drt.tonescale_preset", "Tonescale Preset"), presets.tonescalePreset, kTonescalePresetLabels);
+	const char* const surroundLabels[] = {
+		T("feature.post_processing.open_drt.surround_dark", "Dark"),
+		T("feature.post_processing.open_drt.surround_dim", "Dim"),
+		T("feature.post_processing.open_drt.surround_bright", "Bright"),
+	};
 
-		ImGui::BeginDisabled(SceneWidgetInterceptor::IsArmed());
-		if (ImGui::Button(T("feature.post_processing.open_drt.apply_preset", "Apply Preset"), { -FLT_MIN, 0 })) {
-			ApplyLookPreset(s, presets.lookPreset);
-			ApplyTonescalePreset(s, presets.tonescalePreset);
-			s.clamp = 1;
-		}
-		ImGui::EndDisabled();
+	ImGui::SeparatorText(T("feature.post_processing.open_drt.built_in_presets", "Built-in Presets"));
+	ComboEnum(T("feature.post_processing.open_drt.look_preset", "Look Preset"), presets.lookPreset, kLookPresetLabels);
+	ComboEnum(T("feature.post_processing.open_drt.tonescale_preset", "Tonescale Preset"), presets.tonescalePreset, kTonescalePresetLabels);
+
+	ImGui::BeginDisabled(SceneWidgetInterceptor::IsArmed());
+	if (Util::Button(T("feature.post_processing.open_drt.apply_preset", "Apply Preset"), { -FLT_MIN, 0 })) {
+		ApplyLookPreset(s, presets.lookPreset);
+		ApplyTonescalePreset(s, presets.tonescalePreset);
+		s.clamp = 1;
 	}
+	ImGui::EndDisabled();
 
 	// if (ImGui::CollapsingHeader(T("feature.post_processing.open_drt.input", "Input"), ImGuiTreeNodeFlags_DefaultOpen)) {
 	// 	ComboInt(T("feature.post_processing.open_drt.input_color_space", "Input Color Space"), s.input_color_space, kInputColorSpaceLabels, IM_ARRAYSIZE(kInputColorSpaceLabels));
 	// 	ComboInt(T("feature.post_processing.open_drt.output_encoding", "Output Encoding"), s.output_encoding, kOutputEncodingLabels, IM_ARRAYSIZE(kOutputEncodingLabels));
 	// }
 
-	if (ImGui::CollapsingHeader(T("feature.post_processing.open_drt.display", "Display"), ImGuiTreeNodeFlags_DefaultOpen)) {
-		if (hdrActive)
-			ImGui::BeginDisabled();
-		ImGui::SliderFloat(T("feature.post_processing.open_drt.display_peak_luminance", "Display Peak Luminance"), &s.tn_Lp, 100.0f, 1000.0f, "%.0f");
-		if (hdrActive)
-			ImGui::EndDisabled();
-		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text(
-				T("feature.post_processing.open_drt.peak_display_luminance_in_nits_in_sdr_the",
-					"Peak display luminance in nits.\n"
-					"In SDR, the max value stays pinned at 1.0. In HDR, this is overridden by HDR Display Peak Brightness."));
-		if (hdrActive) {
-			const float paperWhite = std::max(hdrPaperWhite, 1.0f);
-			const float peakNits = std::max(hdrPeakNits, paperWhite);
-			ImGui::TextDisabled(T("feature.post_processing.open_drt.hdr_display_nits_paper_white_nits_peak_linear", "HDR Display: %.0f nits paper white, %.0f nits peak (%.2f linear)"), paperWhite, peakNits, peakNits / paperWhite);
-		}
-		ImGui::SliderFloat(T("feature.post_processing.open_drt.hdr_grey_boost", "HDR Grey Boost"), &s.tn_gb, 0.0f, 1.0f, "%.3f");
-		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text(
-				T("feature.post_processing.open_drt.amount_of_stops_to_boost_grey_luminance_per",
-					"Amount of stops to boost Grey Luminance, per stop of exposure increase of Peak Luminance.\n"
-					"For example, if HDR Grey Boost is 0.1, middle grey will be boosted by 0.1 stops per stop of Peak Luminance increase."));
-		ImGui::SliderFloat(T("feature.post_processing.open_drt.hdr_purity", "HDR Purity"), &s.pt_hdr, 0.0f, 1.0f, "%.2f");
-		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text(
-				T("feature.post_processing.open_drt.how_much_to_affect_purity_compression_and_hue",
-					"How much to affect purity compression and hue shift as Peak Luminance increases.\n"
-					"A value of 0.0 will keep the purity compression and hue shift behavior the same for SDR and HDR.\n"
-					"A value of 1.0 will preserve more purity as peak luminance increases\n"
-					"(at the risk of gradient disruptions in high purity high intensity light sources), and will reduce hue shift amount in highlights."));
-		ImGui::SliderFloat(T("feature.post_processing.open_drt.display_grey_luminance", "Display Grey Luminance"), &s.tn_Lg, 3.0f, 25.0f, "%.1f");
-		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text(
-				T("feature.post_processing.open_drt.display_luminance_for_middle_grey_0_18_in",
-					"Display luminance for middle grey (0.18) in nits.\n"
-					"Sets the target value for middle grey within the available luminance range of the display device."));
-		ComboInt(T("feature.post_processing.open_drt.surround", "Surround"), s.tn_su, kSurroundLabels, IM_ARRAYSIZE(kSurroundLabels));
-		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text(
-				T("feature.post_processing.open_drt.opendrt_includes_a_simple_surround_compensation_model_dci",
-					"OpenDRT includes a simple surround compensation model.\n"
-					"DCI cinema presets use dark surround. Rec.1886 uses dim surround. And sRGB Display uses bright surround.\n"
-					"This functionality should provide a better perceptual match between viewing environments."));
-		ComboInt(T("feature.post_processing.open_drt.creative_white", "Creative White"), s.cwp, kCreativeWhiteLabels, IM_ARRAYSIZE(kCreativeWhiteLabels));
-		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text(
-				T("feature.post_processing.open_drt.set_the_creative_whitepoint_of_the_display_peak",
-					"Set the creative whitepoint of the display peak luminance.\n"
-					"With D65 all channels are equal. With D50, the peak luminance value will match a D50 whitepoint.\n"
-					"This can be creatively desireable. This adjustment is applied post-tonescale."));
-		ImGui::SliderFloat(T("feature.post_processing.open_drt.creative_white_limit", "Creative White Limit"), &s.cwp_lm, 0.0f, 1.0f, "%.2f");
-		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text(
-				T("feature.post_processing.open_drt.limit_the_intensity_range_affected_by_the_creative",
-					"Limit the intensity range affected by the Creative Whitepoint.\n"
-					"At 0.0, the entire intensity range is affected. As the limit is decreased, more of midtones and shadows are kept neutral.\n"
-					"It can be creatively desireable to keep midtones more neutral while shifting highlights warmer for example."));
-		CheckboxInt(T("feature.post_processing.open_drt.clamp", "Clamp"), s.clamp);
-		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text(T("feature.post_processing.open_drt.clamp_the_final_image_into_the_final_range", "Clamp the final image into the final range supported by the display device."));
+	ImGui::SeparatorText(T("feature.post_processing.open_drt.display", "Display"));
+	if (hdrActive)
+		ImGui::BeginDisabled();
+	ImGui::SliderFloat(T("feature.post_processing.open_drt.display_peak_luminance", "Display Peak Luminance"), &s.tn_Lp, 100.0f, 1000.0f, "%.0f");
+	if (hdrActive)
+		ImGui::EndDisabled();
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::Text(
+			T("feature.post_processing.open_drt.peak_display_luminance_in_nits_in_sdr_the",
+				"Peak display luminance in nits.\n"
+				"In SDR, the max value stays pinned at 1.0. In HDR, this is overridden by HDR Display Peak Brightness."));
+	if (hdrActive) {
+		const float paperWhite = std::max(hdrPaperWhite, 1.0f);
+		const float peakNits = std::max(hdrPeakNits, paperWhite);
+		ImGui::TextDisabled(T("feature.post_processing.open_drt.hdr_display_nits_paper_white_nits_peak_linear", "HDR Display: %.0f nits paper white, %.0f nits peak (%.2f linear)"), paperWhite, peakNits, peakNits / paperWhite);
 	}
+	ImGui::SliderFloat(T("feature.post_processing.open_drt.hdr_grey_boost", "HDR Grey Boost"), &s.tn_gb, 0.0f, 1.0f, "%.3f");
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::Text(
+			T("feature.post_processing.open_drt.amount_of_stops_to_boost_grey_luminance_per",
+				"Amount of stops to boost Grey Luminance, per stop of exposure increase of Peak Luminance.\n"
+				"For example, if HDR Grey Boost is 0.1, middle grey will be boosted by 0.1 stops per stop of Peak Luminance increase."));
+	ImGui::SliderFloat(T("feature.post_processing.open_drt.hdr_purity", "HDR Purity"), &s.pt_hdr, 0.0f, 1.0f, "%.2f");
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::Text(
+			T("feature.post_processing.open_drt.how_much_to_affect_purity_compression_and_hue",
+				"How much to affect purity compression and hue shift as Peak Luminance increases.\n"
+				"A value of 0.0 will keep the purity compression and hue shift behavior the same for SDR and HDR.\n"
+				"A value of 1.0 will preserve more purity as peak luminance increases\n"
+				"(at the risk of gradient disruptions in high purity high intensity light sources), and will reduce hue shift amount in highlights."));
+	ImGui::SliderFloat(T("feature.post_processing.open_drt.display_grey_luminance", "Display Grey Luminance"), &s.tn_Lg, 3.0f, 25.0f, "%.1f");
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::Text(
+			T("feature.post_processing.open_drt.display_luminance_for_middle_grey_0_18_in",
+				"Display luminance for middle grey (0.18) in nits.\n"
+				"Sets the target value for middle grey within the available luminance range of the display device."));
+	ComboInt(T("feature.post_processing.open_drt.surround", "Surround"), s.tn_su, surroundLabels, IM_ARRAYSIZE(surroundLabels));
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::Text(
+			T("feature.post_processing.open_drt.opendrt_includes_a_simple_surround_compensation_model_dci",
+				"OpenDRT includes a simple surround compensation model.\n"
+				"DCI cinema presets use dark surround. Rec.1886 uses dim surround. And sRGB Display uses bright surround.\n"
+				"This functionality should provide a better perceptual match between viewing environments."));
+	ComboInt(T("feature.post_processing.open_drt.creative_white", "Creative White"), s.cwp, kCreativeWhiteLabels, IM_ARRAYSIZE(kCreativeWhiteLabels));
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::Text(
+			T("feature.post_processing.open_drt.set_the_creative_whitepoint_of_the_display_peak",
+				"Set the creative whitepoint of the display peak luminance.\n"
+				"With D65 all channels are equal. With D50, the peak luminance value will match a D50 whitepoint.\n"
+				"This can be creatively desireable. This adjustment is applied post-tonescale."));
+	ImGui::SliderFloat(T("feature.post_processing.open_drt.creative_white_limit", "Creative White Limit"), &s.cwp_lm, 0.0f, 1.0f, "%.2f");
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::Text(
+			T("feature.post_processing.open_drt.limit_the_intensity_range_affected_by_the_creative",
+				"Limit the intensity range affected by the Creative Whitepoint.\n"
+				"At 0.0, the entire intensity range is affected. As the limit is decreased, more of midtones and shadows are kept neutral.\n"
+				"It can be creatively desireable to keep midtones more neutral while shifting highlights warmer for example."));
+	CheckboxInt(T("feature.post_processing.open_drt.clamp", "Clamp"), s.clamp);
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::TextUnformatted(T("feature.post_processing.open_drt.clamp_the_final_image_into_the_final_range", "Clamp the final image into the final range supported by the display device."));
 
-	if (ImGui::CollapsingHeader(T("feature.post_processing.open_drt.tonescale", "Tonescale"), ImGuiTreeNodeFlags_DefaultOpen)) {
-		ImGui::SliderFloat(T("feature.post_processing.open_drt.contrast", "Contrast"), &s.tn_con, 1.0f, 2.0f, "%.2f");
-		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text(
-				T("feature.post_processing.open_drt.adjusts_contrast_or_slope_a_constrained_power_function",
-					"Adjusts contrast or slope.\n"
-					"A constrained power function applied in display linear."));
-		ImGui::SliderFloat(T("feature.post_processing.open_drt.shoulder_clip", "Shoulder Clip"), &s.tn_sh, 0.0f, 1.0f, "%.2f");
-		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text(
-				T("feature.post_processing.open_drt.unitless_control_for_the_scene_linear_value_at",
-					"Unitless control for the scene-linear value at which the tonescale system crosses the peak display linear value (1.0) and clips.\n"
-					"This is not an exact constraint in order to keep the system simple, but corresponds to roughly 16 at Shoulder Clip = 0 and 1024 at Shoulder Clip = 1"));
-		ImGui::SliderFloat(T("feature.post_processing.open_drt.toe", "Toe"), &s.tn_toe, 0.0f, 0.1f, "%.3f");
-		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text(
-				T("feature.post_processing.open_drt.quadratic_toe_compression_strongly_compresses_deep_shadows_helpful",
-					"Quadratic toe compression.\n"
-					"Strongly compresses deep shadows. Helpful to have some amount to smooth the transition into display minimum.\n"
-					"Higher values with a strong positive Offset also valid. Similar to common camera DRT tonescale strategies."));
-		ImGui::SliderFloat(T("feature.post_processing.open_drt.offset", "Offset"), &s.tn_off, 0.0f, 0.02f, "%.4f");
-		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text(
-				T("feature.post_processing.open_drt.pre_tonescale_scene_linear_offset_if_0_0",
-					"Pre-tonescale scene-linear offset.\n"
-					"If 0.0, scene-linear 0.0 maps to display-linear 0.0 through the tonescale system.\n"
-					"Many camera imaging pipelines apply a negative offset to set the average of shadow grain at 0.0.\n"
-					"A positive Offset can be desireable to compensate for this and increase detail in shadows, in addition to being aesthetically desireable.\n"
-					"Offset should NOT be a negative number (Looking at you ACES 1.x)"));
-		CheckboxInt(T("feature.post_processing.open_drt.enable_contrast_high", "Enable Contrast High"), s.tn_hcon_enable);
-		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text(
-				T("feature.post_processing.open_drt.contrast_high_allows_control_of_the_upper_section",
-					"Contrast High allows control of the upper section of the tonescale function.\n"
-					"Off by default, but can be useful if a stronger highlight contrast, or a softer highlight rolloff behavior is desired."));
-		ImGui::SliderFloat(T("feature.post_processing.open_drt.contrast_high", "Contrast High"), &s.tn_hcon, -1.0f, 1.0f, "%.2f");
-		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text(
-				T("feature.post_processing.open_drt.amount_adjust_highlights_positive_values_increase_highlight_exposure",
-					"Amount adjust highlights.\n"
-					"Positive values increase highlight exposure, negative values decrease. 0 has no effect."));
-		ImGui::SliderFloat(T("feature.post_processing.open_drt.contrast_high_pivot", "Contrast High Pivot"), &s.tn_hcon_pv, 0.0f, 4.0f, "%.2f");
-		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text(T("feature.post_processing.open_drt.amount_of_stops_above_middle_grey_0_18", "Amount of stops above middle grey (0.18) to start the adjustment."));
-		ImGui::SliderFloat(T("feature.post_processing.open_drt.contrast_high_strength", "Contrast High Strength"), &s.tn_hcon_st, 0.0f, 4.0f, "%.2f");
-		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text(T("feature.post_processing.open_drt.how_quickly_above_the_contrast_high_pivot_the", "How quickly above the Contrast High Pivot the effect begins."));
-		CheckboxInt(T("feature.post_processing.open_drt.enable_contrast_low", "Enable Contrast Low"), s.tn_lcon_enable);
-		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text(
-				T("feature.post_processing.open_drt.contrast_low_adds_contrast_to_the_midtones_and",
-					"Contrast Low adds contrast to the midtones and shadows.\n"
-					"Middle grey (0.18) is un-changed through the adjustment."));
-		ImGui::SliderFloat(T("feature.post_processing.open_drt.contrast_low", "Contrast Low"), &s.tn_lcon, 0.0f, 3.0f, "%.2f");
-		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text(
-				T("feature.post_processing.open_drt.amount_of_contrast_to_add_0_0_has",
-					"Amount of contrast to add. 0.0 has no effect.\n"
-					"1.0 will expose down by 1 stop at the origin (0,0)"));
-		ImGui::SliderFloat(T("feature.post_processing.open_drt.contrast_low_width", "Contrast Low Width"), &s.tn_lcon_w, 0.0f, 2.0f, "%.2f");
-		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text(
-				T("feature.post_processing.open_drt.the_width_of_the_adjustment_width_below_0",
-					"The width of the adjustment.\n"
-					"Width below 0.5 will mostly affect values between 0 and middle grey.\n"
-					"Values above 0.5 will increasingly start to increase highlight contrast, which could be desired or not depending on what you are trying to do."));
-	}
+	ImGui::SeparatorText(T("feature.post_processing.open_drt.tonescale", "Tonescale"));
+	ImGui::SliderFloat(T("feature.post_processing.open_drt.contrast", "Contrast"), &s.tn_con, 1.0f, 2.0f, "%.2f");
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::Text(
+			T("feature.post_processing.open_drt.adjusts_contrast_or_slope_a_constrained_power_function",
+				"Adjusts contrast or slope.\n"
+				"A constrained power function applied in display linear."));
+	ImGui::SliderFloat(T("feature.post_processing.open_drt.shoulder_clip", "Shoulder Clip"), &s.tn_sh, 0.0f, 1.0f, "%.2f");
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::Text(
+			T("feature.post_processing.open_drt.unitless_control_for_the_scene_linear_value_at",
+				"Unitless control for the scene-linear value at which the tonescale system crosses the peak display linear value (1.0) and clips.\n"
+				"This is not an exact constraint in order to keep the system simple, but corresponds to roughly 16 at Shoulder Clip = 0 and 1024 at Shoulder Clip = 1"));
+	ImGui::SliderFloat(T("feature.post_processing.open_drt.toe", "Toe"), &s.tn_toe, 0.0f, 0.1f, "%.3f");
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::Text(
+			T("feature.post_processing.open_drt.quadratic_toe_compression_strongly_compresses_deep_shadows_helpful",
+				"Quadratic toe compression.\n"
+				"Strongly compresses deep shadows. Helpful to have some amount to smooth the transition into display minimum.\n"
+				"Higher values with a strong positive Offset also valid. Similar to common camera DRT tonescale strategies."));
+	ImGui::SliderFloat(T("feature.post_processing.open_drt.offset", "Offset"), &s.tn_off, 0.0f, 0.02f, "%.4f");
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::Text(
+			T("feature.post_processing.open_drt.pre_tonescale_scene_linear_offset_if_0_0",
+				"Pre-tonescale scene-linear offset.\n"
+				"If 0.0, scene-linear 0.0 maps to display-linear 0.0 through the tonescale system.\n"
+				"Many camera imaging pipelines apply a negative offset to set the average of shadow grain at 0.0.\n"
+				"A positive Offset can be desireable to compensate for this and increase detail in shadows, in addition to being aesthetically desireable.\n"
+				"Offset should NOT be a negative number (Looking at you ACES 1.x)"));
+	CheckboxInt(T("feature.post_processing.open_drt.enable_contrast_high", "Enable Contrast High"), s.tn_hcon_enable);
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::Text(
+			T("feature.post_processing.open_drt.contrast_high_allows_control_of_the_upper_section",
+				"Contrast High allows control of the upper section of the tonescale function.\n"
+				"Off by default, but can be useful if a stronger highlight contrast, or a softer highlight rolloff behavior is desired."));
+	ImGui::SliderFloat(T("feature.post_processing.open_drt.contrast_high", "Contrast High"), &s.tn_hcon, -1.0f, 1.0f, "%.2f");
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::Text(
+			T("feature.post_processing.open_drt.amount_adjust_highlights_positive_values_increase_highlight_exposure",
+				"Amount adjust highlights.\n"
+				"Positive values increase highlight exposure, negative values decrease. 0 has no effect."));
+	ImGui::SliderFloat(T("feature.post_processing.open_drt.contrast_high_pivot", "Contrast High Pivot"), &s.tn_hcon_pv, 0.0f, 4.0f, "%.2f");
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::TextUnformatted(T("feature.post_processing.open_drt.amount_of_stops_above_middle_grey_0_18", "Amount of stops above middle grey (0.18) to start the adjustment."));
+	ImGui::SliderFloat(T("feature.post_processing.open_drt.contrast_high_strength", "Contrast High Strength"), &s.tn_hcon_st, 0.0f, 4.0f, "%.2f");
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::TextUnformatted(T("feature.post_processing.open_drt.how_quickly_above_the_contrast_high_pivot_the", "How quickly above the Contrast High Pivot the effect begins."));
+	CheckboxInt(T("feature.post_processing.open_drt.enable_contrast_low", "Enable Contrast Low"), s.tn_lcon_enable);
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::Text(
+			T("feature.post_processing.open_drt.contrast_low_adds_contrast_to_the_midtones_and",
+				"Contrast Low adds contrast to the midtones and shadows.\n"
+				"Middle grey (0.18) is un-changed through the adjustment."));
+	ImGui::SliderFloat(T("feature.post_processing.open_drt.contrast_low", "Contrast Low"), &s.tn_lcon, 0.0f, 3.0f, "%.2f");
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::Text(
+			T("feature.post_processing.open_drt.amount_of_contrast_to_add_0_0_has",
+				"Amount of contrast to add. 0.0 has no effect.\n"
+				"1.0 will expose down by 1 stop at the origin (0,0)"));
+	ImGui::SliderFloat(T("feature.post_processing.open_drt.contrast_low_width", "Contrast Low Width"), &s.tn_lcon_w, 0.0f, 2.0f, "%.2f");
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::Text(
+			T("feature.post_processing.open_drt.the_width_of_the_adjustment_width_below_0",
+				"The width of the adjustment.\n"
+				"Width below 0.5 will mostly affect values between 0 and middle grey.\n"
+				"Values above 0.5 will increasingly start to increase highlight contrast, which could be desired or not depending on what you are trying to do."));
 
 	if (ImGui::CollapsingHeader(T("feature.post_processing.open_drt.render_space", "Render Space"))) {
 		ImGui::SliderFloat(T("feature.post_processing.open_drt.render_space_strength", "Render Space Strength"), &s.rs_sa, 0.0f, 0.6f, "%.3f");
@@ -1094,13 +1095,13 @@ void OpenDRTDrawSettings(OpenDRTSettings& s, bool hdrActive, float hdrPaperWhite
 					"The algorithm is tuned for common camera observer colorimetry sources."));
 		ImGui::SliderFloat(T("feature.post_processing.open_drt.purity_softclip_c", "Purity Softclip C"), &s.ptl_c, 0.0f, 0.25f, "%.4f");
 		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text(T("feature.post_processing.open_drt.purity_softclip_strength_for_cyan", "Purity Softclip strength for Cyan."));
+			ImGui::TextUnformatted(T("feature.post_processing.open_drt.purity_softclip_strength_for_cyan", "Purity Softclip strength for Cyan."));
 		ImGui::SliderFloat(T("feature.post_processing.open_drt.purity_softclip_m", "Purity Softclip M"), &s.ptl_m, 0.0f, 0.25f, "%.4f");
 		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text(T("feature.post_processing.open_drt.purity_softclip_strength_for_magenta", "Purity Softclip strength for Magenta."));
+			ImGui::TextUnformatted(T("feature.post_processing.open_drt.purity_softclip_strength_for_magenta", "Purity Softclip strength for Magenta."));
 		ImGui::SliderFloat(T("feature.post_processing.open_drt.purity_softclip_y", "Purity Softclip Y"), &s.ptl_y, 0.0f, 0.25f, "%.4f");
 		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text(T("feature.post_processing.open_drt.purity_softclip_strength_for_yellow", "Purity Softclip strength for Yellow."));
+			ImGui::TextUnformatted(T("feature.post_processing.open_drt.purity_softclip_strength_for_yellow", "Purity Softclip strength for Yellow."));
 		CheckboxInt(T("feature.post_processing.open_drt.enable_mid_purity", "Enable Mid Purity"), s.ptm_enable);
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::Text(
@@ -1157,22 +1158,22 @@ void OpenDRTDrawSettings(OpenDRTSettings& s, bool hdrActive, float hdrPaperWhite
 					"This behavior is natural and smooth."));
 		ImGui::SliderFloat(T("feature.post_processing.open_drt.brilliance_2", "Brilliance"), &s.brl, -6.0f, 2.0f, "%.2f");
 		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text(T("feature.post_processing.open_drt.global_intensity_scale_of_high_purity_stimuli", "Global intensity scale of high-purity stimuli."));
+			ImGui::TextUnformatted(T("feature.post_processing.open_drt.global_intensity_scale_of_high_purity_stimuli", "Global intensity scale of high-purity stimuli."));
 		ImGui::SliderFloat(T("feature.post_processing.open_drt.brilliance_r", "Brilliance R"), &s.brl_r, -6.0f, 2.0f, "%.2f");
 		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text(T("feature.post_processing.open_drt.scale_intensity_of_high_purity_reds", "Scale intensity of high-purity reds."));
+			ImGui::TextUnformatted(T("feature.post_processing.open_drt.scale_intensity_of_high_purity_reds", "Scale intensity of high-purity reds."));
 		ImGui::SliderFloat(T("feature.post_processing.open_drt.brilliance_g", "Brilliance G"), &s.brl_g, -6.0f, 2.0f, "%.2f");
 		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text(T("feature.post_processing.open_drt.scale_intensity_of_high_purity_greens", "Scale intensity of high-purity greens."));
+			ImGui::TextUnformatted(T("feature.post_processing.open_drt.scale_intensity_of_high_purity_greens", "Scale intensity of high-purity greens."));
 		ImGui::SliderFloat(T("feature.post_processing.open_drt.brilliance_b", "Brilliance B"), &s.brl_b, -6.0f, 2.0f, "%.2f");
 		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text(T("feature.post_processing.open_drt.scale_intensity_of_high_purity_blues", "Scale intensity of high-purity blues."));
+			ImGui::TextUnformatted(T("feature.post_processing.open_drt.scale_intensity_of_high_purity_blues", "Scale intensity of high-purity blues."));
 		ImGui::SliderFloat(T("feature.post_processing.open_drt.brilliance_range", "Brilliance Range"), &s.brl_rng, 0.0f, 1.0f, "%.2f");
 		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text(T("feature.post_processing.open_drt.as_brilliance_range_is_increased_the_brilliance_adjustments", "As Brilliance Range is increased, the brilliance adjustments affect more the low intensity values of the image data."));
+			ImGui::TextUnformatted(T("feature.post_processing.open_drt.as_brilliance_range_is_increased_the_brilliance_adjustments", "As Brilliance Range is increased, the brilliance adjustments affect more the low intensity values of the image data."));
 		ImGui::SliderFloat(T("feature.post_processing.open_drt.brilliance_strength", "Brilliance Strength"), &s.brl_st, 0.0f, 1.0f, "%.2f");
 		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text(T("feature.post_processing.open_drt.as_brilliance_strength_is_increased_the_brilliance_adjustments", "As Brilliance Strength is increased, the brilliance adjustments affect more the low purity values of the image data."));
+			ImGui::TextUnformatted(T("feature.post_processing.open_drt.as_brilliance_strength_is_increased_the_brilliance_adjustments", "As Brilliance Strength is increased, the brilliance adjustments affect more the low purity values of the image data."));
 		CheckboxInt(T("feature.post_processing.open_drt.enable_post_brilliance", "Enable Post Brilliance"), s.brlp_enable);
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::Text(
@@ -1183,7 +1184,7 @@ void OpenDRTDrawSettings(OpenDRTSettings& s, bool hdrActive, float hdrPaperWhite
 					"This module can help compensate for this."));
 		ImGui::SliderFloat(T("feature.post_processing.open_drt.brilliance_post", "Brilliance Post"), &s.brlp, -1.0f, 0.0f, "%.2f");
 		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text(T("feature.post_processing.open_drt.global_post_purity_compression_brilliance_adjustment", "Global post purity compression brilliance adjustment "));
+			ImGui::TextUnformatted(T("feature.post_processing.open_drt.global_post_purity_compression_brilliance_adjustment", "Global post purity compression brilliance adjustment "));
 		ImGui::SliderFloat(T("feature.post_processing.open_drt.post_brilliance_r", "Post Brilliance R"), &s.brlp_r, -3.0f, 0.0f, "%.2f");
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::Text(
@@ -1215,7 +1216,7 @@ void OpenDRTDrawSettings(OpenDRTSettings& s, bool hdrActive, float hdrPaperWhite
 					"For OpenDRT we only keep the red hue angle control since it is the most useful."));
 		ImGui::SliderFloat(T("feature.post_processing.open_drt.hue_contrast_r", "Hue Contrast R"), &s.hc_r, 0.0f, 2.0f, "%.2f");
 		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text(T("feature.post_processing.open_drt.amount_to_increase_hue_contrast_at_the_red", "Amount to increase Hue Contrast at the red hue angle."));
+			ImGui::TextUnformatted(T("feature.post_processing.open_drt.amount_to_increase_hue_contrast_at_the_red", "Amount to increase Hue Contrast at the red hue angle."));
 		ImGui::SliderFloat(T("feature.post_processing.open_drt.hue_contrast_r_range", "Hue Contrast R Range"), &s.hc_r_rng, 0.0f, 1.0f, "%.2f");
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::Text(
@@ -1232,22 +1233,22 @@ void OpenDRTDrawSettings(OpenDRTSettings& s, bool hdrActive, float hdrPaperWhite
 					"To compensate for this, and to use as a creative tool, this module allows creative control over the path that red green and blue hue angles take as their purity is compressed."));
 		ImGui::SliderFloat(T("feature.post_processing.open_drt.hueshift_r", "Hueshift R"), &s.hs_r, 0.0f, 1.0f, "%.2f");
 		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text(T("feature.post_processing.open_drt.amount_to_distort_the_red_hue_angle_towards", "Amount to distort the red hue angle towards yellow as intensity increases."));
+			ImGui::TextUnformatted(T("feature.post_processing.open_drt.amount_to_distort_the_red_hue_angle_towards", "Amount to distort the red hue angle towards yellow as intensity increases."));
 		ImGui::SliderFloat(T("feature.post_processing.open_drt.hueshift_r_range", "Hueshift R Range"), &s.hs_r_rng, 0.0f, 2.0f, "%.2f");
 		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text(T("feature.post_processing.open_drt.range_of_the_red_hueshift_higher_values_affect", "Range of the red hueshift: higher values affect more of the lower intensity range."));
+			ImGui::TextUnformatted(T("feature.post_processing.open_drt.range_of_the_red_hueshift_higher_values_affect", "Range of the red hueshift: higher values affect more of the lower intensity range."));
 		ImGui::SliderFloat(T("feature.post_processing.open_drt.hueshift_g", "Hueshift G"), &s.hs_g, 0.0f, 1.0f, "%.2f");
 		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text(T("feature.post_processing.open_drt.amount_to_distort_the_green_hue_angle_towards", "Amount to distort the green hue angle towards yellow as intensity increases."));
+			ImGui::TextUnformatted(T("feature.post_processing.open_drt.amount_to_distort_the_green_hue_angle_towards", "Amount to distort the green hue angle towards yellow as intensity increases."));
 		ImGui::SliderFloat(T("feature.post_processing.open_drt.hueshift_g_range", "Hueshift G Range"), &s.hs_g_rng, 0.0f, 2.0f, "%.2f");
 		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text(T("feature.post_processing.open_drt.range_of_the_green_hueshift_higher_values_affect", "Range of the green hueshift: higher values affect more of the lower intensity range."));
+			ImGui::TextUnformatted(T("feature.post_processing.open_drt.range_of_the_green_hueshift_higher_values_affect", "Range of the green hueshift: higher values affect more of the lower intensity range."));
 		ImGui::SliderFloat(T("feature.post_processing.open_drt.hueshift_b", "Hueshift B"), &s.hs_b, 0.0f, 1.0f, "%.2f");
 		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text(T("feature.post_processing.open_drt.amount_to_distort_the_blue_hue_angle_towards", "Amount to distort the blue hue angle towards cyan as intensity increases."));
+			ImGui::TextUnformatted(T("feature.post_processing.open_drt.amount_to_distort_the_blue_hue_angle_towards", "Amount to distort the blue hue angle towards cyan as intensity increases."));
 		ImGui::SliderFloat(T("feature.post_processing.open_drt.hueshift_b_range", "Hueshift B Range"), &s.hs_b_rng, 0.0f, 4.0f, "%.2f");
 		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text(T("feature.post_processing.open_drt.range_of_the_blue_hueshift_higher_values_affect", "Range of the blue hueshift: higher values affect more of the lower intensity range."));
+			ImGui::TextUnformatted(T("feature.post_processing.open_drt.range_of_the_blue_hueshift_higher_values_affect", "Range of the blue hueshift: higher values affect more of the lower intensity range."));
 		CheckboxInt(T("feature.post_processing.open_drt.enable_hueshift_cmy", "Enable Hueshift CMY"), s.hs_cmy_enable);
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::Text(
@@ -1256,21 +1257,21 @@ void OpenDRTDrawSettings(OpenDRTSettings& s, bool hdrActive, float hdrPaperWhite
 					"This module allows some very minimal adjustments of secondary hue angles as a creative tool."));
 		ImGui::SliderFloat(T("feature.post_processing.open_drt.hueshift_c", "Hueshift C"), &s.hs_c, 0.0f, 1.0f, "%.2f");
 		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text(T("feature.post_processing.open_drt.amount_to_distort_the_cyan_hue_angle_towards", "Amount to distort the cyan hue angle towards blue as intensity decreases."));
+			ImGui::TextUnformatted(T("feature.post_processing.open_drt.amount_to_distort_the_cyan_hue_angle_towards", "Amount to distort the cyan hue angle towards blue as intensity decreases."));
 		ImGui::SliderFloat(T("feature.post_processing.open_drt.hueshift_c_range", "Hueshift C Range"), &s.hs_c_rng, 0.0f, 1.0f, "%.2f");
 		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text(T("feature.post_processing.open_drt.range_of_the_cyan_hueshift_higher_values_affect", "Range of the cyan hueshift: higher values affect more of the upper intensity range."));
+			ImGui::TextUnformatted(T("feature.post_processing.open_drt.range_of_the_cyan_hueshift_higher_values_affect", "Range of the cyan hueshift: higher values affect more of the upper intensity range."));
 		ImGui::SliderFloat(T("feature.post_processing.open_drt.hueshift_m", "Hueshift M"), &s.hs_m, 0.0f, 1.0f, "%.2f");
 		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text(T("feature.post_processing.open_drt.amount_to_distort_the_magenta_hue_angle_towards", "Amount to distort the magenta hue angle towards blue as intensity decreases."));
+			ImGui::TextUnformatted(T("feature.post_processing.open_drt.amount_to_distort_the_magenta_hue_angle_towards", "Amount to distort the magenta hue angle towards blue as intensity decreases."));
 		ImGui::SliderFloat(T("feature.post_processing.open_drt.hueshift_m_range", "Hueshift M Range"), &s.hs_m_rng, 0.0f, 1.0f, "%.2f");
 		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text(T("feature.post_processing.open_drt.range_of_the_magenta_hueshift_higher_values_affect", "Range of the magenta hueshift: higher values affect more of the upper intensity range."));
+			ImGui::TextUnformatted(T("feature.post_processing.open_drt.range_of_the_magenta_hueshift_higher_values_affect", "Range of the magenta hueshift: higher values affect more of the upper intensity range."));
 		ImGui::SliderFloat(T("feature.post_processing.open_drt.hueshift_y", "Hueshift Y"), &s.hs_y, 0.0f, 1.0f, "%.2f");
 		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text(T("feature.post_processing.open_drt.amount_to_distort_the_yellow_hue_angle_towards", "Amount to distort the yellow hue angle towards red as intensity decreases."));
+			ImGui::TextUnformatted(T("feature.post_processing.open_drt.amount_to_distort_the_yellow_hue_angle_towards", "Amount to distort the yellow hue angle towards red as intensity decreases."));
 		ImGui::SliderFloat(T("feature.post_processing.open_drt.hueshift_y_range", "Hueshift Y Range"), &s.hs_y_rng, 0.0f, 1.0f, "%.2f");
 		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text(T("feature.post_processing.open_drt.range_of_the_yellow_hueshift_higher_values_affect", "Range of the yellow hueshift: higher values affect more of the upper intensity range."));
+			ImGui::TextUnformatted(T("feature.post_processing.open_drt.range_of_the_yellow_hueshift_higher_values_affect", "Range of the yellow hueshift: higher values affect more of the upper intensity range."));
 	}
 }

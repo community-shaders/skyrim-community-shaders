@@ -16,6 +16,7 @@
 #include "Features/LightLimitFix.h"
 #include "Features/LinearLighting.h"
 #include "Features/ProceduralAurora.h"
+#include "Features/ProceduralSun.h"
 #include "Features/RainRefraction.h"
 #include "Features/Skin.h"
 #include "Features/Skylighting.h"
@@ -68,5 +69,6 @@ std::pair<unsigned char*, size_t> GetFeatureBufferData(bool a_inWorld)
 		globals::features::skin.GetCommonBufferData(),
 		globals::features::horizonFix.GetCommonBufferData(),
 		globals::features::rainRefraction.GetCommonBufferData(),
+		globals::features::proceduralSun.GetCommonBufferData(),
 		globals::features::proceduralAurora.GetCommonBufferData());
 }

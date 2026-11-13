@@ -10,19 +10,17 @@
 #include <vector>
 
 #include "../I18n/I18n.h"
-#include "Browser/BrowserWidgets.h"
 #include "EditorWindow.h"
 #include "Feature.h"
 #include "FeatureCategories.h"
 #include "FeatureListPicker.h"
 #include "Features/PostProcessing.h"
 #include "Globals.h"
-#include "IconsTabler.h"
-#include "Menu.h"
 #include "Menu/FeatureListRenderer.h"
-#include "Menu/Fonts.h"
+#include "Menu/FeatureUndo.h"
 #include "Menu/Icons/helpers/IconFonts.h"
 #include "Menu/Icons/helpers/SceneActionIcons.h"
+#include "Menu/MenuIcons.h"
 #include "SaveManager.h"
 #include "SceneManager/FeatureOverwritesPanel.h"
 #include "SceneManager/SceneLayerHeader.h"
@@ -69,28 +67,6 @@ namespace
 		return nullptr;
 	}
 
-	/** @brief An undo target for a feature's own settings, read and written with the scene layer suspended. */
-	UndoHistory::Target MakeFeatureUndoTarget(Feature* feature)
-	{
-		UndoHistory::Target target{ .key = "feature:" + feature->GetShortName(), .label = feature->GetName() };
-		target.capture = [feature]() -> UndoHistory::SnapshotPtr {
-			if (!feature->loaded)
-				return nullptr;
-			SceneSettingsManager::SceneLayerGuard sceneLayerGuard;
-			nlohmann::json values;
-			feature->SaveSettings(values);
-			return UndoHistory::Capture(std::move(values));
-		};
-		target.restore = [feature](const UndoHistory::Snapshot& snapshot) {
-			SceneSettingsManager::SceneLayerGuard sceneLayerGuard;
-			nlohmann::json values = UndoHistory::Get<nlohmann::json>(snapshot);
-			feature->LoadSettings(values);
-			globals::state->MarkSettingsChanged();
-			globals::state->InvalidateEditsUnderBaselines(feature);
-		};
-		return target;
-	}
-
 	/** @brief Boot enable pill only (label lives in the tooltip). Returns false when not drawn. */
 	bool DrawBootToggle(Feature* feature)
 	{
@@ -100,7 +76,7 @@ namespace
 		const auto featureName = feature->GetShortName();
 		bool bootEnabled = !globals::state->IsFeatureDisabled(featureName);
 
-		if (Util::FeatureToggle("##BootToggle", &bootEnabled, ImVec2(ImGui::GetFrameHeight() * 1.6f, 0.0f))) {
+		if (Util::FeatureToggle("##BootToggle", &bootEnabled, ImVec2(ImGui::GetFrameHeight() * ThemeManager::Constants::FEATURE_TOGGLE_WIDTH_RATIO, 0.0f))) {
 			const bool nowDisabled = feature->ToggleAtBootSetting();
 			logger::info("[CSEditor] {}: {} at boot.", featureName, nowDisabled ? "Disabled" : "Enabled");
 		}
@@ -153,7 +129,7 @@ namespace
 			auto* editor = EditorWindow::GetSingleton();
 			Util::HideDebugSectionsGuard hideDebug(!editor->settings.showFeatureDebug);
 			if (feature->UsesMainSettings())
-				editor->undoHistory.Watch(MakeFeatureUndoTarget(feature));
+				editor->undoHistory.Watch(FeatureUndo::MakeTarget(feature));
 			FeatureListRenderer::DrawFeatureBody(feature);
 		}
 		ImGui::EndChild();
@@ -210,14 +186,14 @@ namespace
 	void DrawBaselineExportButton(float centerY)
 	{
 		if (centerY >= 0.0f)
-			ImGui::SetCursorScreenPos(ImVec2(ImGui::GetCursorScreenPos().x, centerY - BrowserUI::IconButtonSize() * 0.5f));
+			ImGui::SetCursorScreenPos(ImVec2(ImGui::GetCursorScreenPos().x, centerY - Util::IconButtonSize() * 0.5f));
 
 		const auto tooltip = std::format("{}\n{}", T(TKEY("baseline_export"), "Export Baseline Preset..."),
 			T(TKEY("baseline_export_tooltip"),
 				"Saves the base settings of the features you tick as a Baseline preset, applied from the Presets page. "
 				"Scene layers are left out.\n"
 				"For a file loaded at every game start instead, use Export Feature Overwrite beside a feature's settings."));
-		if (BrowserUI::IconButton("##BaseSettingsExport", SceneActionIcons::kExport, tooltip.c_str()))
+		if (Util::IconButton("##BaseSettingsExport", SceneActionIcons::kExport, tooltip.c_str()))
 			ScenePresetExport::OpenBaseline(selectedFeature);
 	}
 
@@ -229,7 +205,7 @@ namespace
 		ImGui::SetCursorScreenPos(ImVec2(ImGui::GetCursorScreenPos().x, ImGui::GetItemRectMin().y));
 		const char* tooltip = T(TKEY("features_save_settings_tooltip"),
 			"Save Settings: saves feature settings and everything in the CS editor.");
-		if (BrowserUI::IconButton("##FeatureSaveSettings", Icons::TI(ICON_TI_DEVICE_FLOPPY), tooltip))
+		if (Util::IconButton("##FeatureSaveSettings", Icons::TI(MenuIcons::kSave), tooltip))
 			SaveManager::SaveAll();
 	}
 

@@ -28,7 +28,6 @@
     "cs_editor.color_moon_glare": "ムーングレア",
     "cs_editor.currently_exterior_cell": "現在は屋外セルにいます",
     "menu.settings.toggle_key": "トグルキー:",
-    "menu.toggle_error_message": "エラーメッセージのトグル",
     "menu.toggle_error_message_tooltip": "シェーダーエラーメッセージの表示/非表示を切り替えます。インストールに問題があり、ゲーム内でエラーが発生する可能性があります。すべての機能が更新されていること、およびロード順序が正しいことを再度確認してください。詳細はCommunityShaders.logを参照するか、Nexus ModsページまたはDiscordサーバーをご確認ください。",
     "menu.window_title": "Community Shaders {version}",
     "menu.window_title_dev": "Community Shaders {version} {build}",

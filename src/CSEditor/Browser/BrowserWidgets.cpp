@@ -1,17 +1,20 @@
 #include "BrowserWidgets.h"
 
 #include "../../I18n/I18n.h"
-#include "../EditorWindow.h"
 #include "IconsTabler.h"
+#include "Menu.h"
 #include "Menu/Fonts.h"
 #include "Utils/UI.h"
 #include "imgui_internal.h"
 
+#include "Utils/UIAnim.h"
+#include "Utils/UISurface.h"
 #include <algorithm>
+
 #include <cassert>
+#include <cmath>
 #include <cstdio>
 #include <format>
-#include <utility>
 
 #define I18N_KEY_PREFIX "cs_editor."
 
@@ -19,16 +22,12 @@ namespace
 {
 	// Pixel values are authored at the 1080p baseline and multiplied by Util::GetUIScale().
 	constexpr float kChipPadX = 9.0f;
-	constexpr float kChipGap = 6.0f;
 	/// Icon box inside chips and painted buttons, relative to the font size.
 	constexpr float kChipIconScale = 0.8f;
-	constexpr float kToggleFillAlpha = 0.2f;
 	constexpr float kToggleFillHoveredAlpha = 0.3f;
-	constexpr float kToggleBorderAlpha = 0.65f;
 	constexpr float kTintedChipFillAlpha = 0.14f;
 	constexpr float kTintedChipFillHoveredAlpha = 0.22f;
 	constexpr float kTintedChipBorderAlpha = 0.5f;
-	constexpr float kStripeWidth = 3.0f;
 	/// Floor for the alternating row tint, so long lists stay scannable under themes that leave it clear.
 	constexpr float kMinRowShadeAlpha = 0.04f;
 	constexpr float kStarRadiusScale = 0.5f;
@@ -36,10 +35,6 @@ namespace
 	constexpr float kDotRadiusScale = 0.28f;
 	constexpr float kSectionLabelGap = 8.0f;
 	constexpr float kEmptyStateTopPad = 24.0f;
-	constexpr float kInlineBadgeFillAlpha = 0.22f;
-	constexpr float kDestructiveIconAlpha = 0.8f;
-	/// How far an inline badge's label moves from the tint toward the text colour, for legibility.
-	constexpr float kInlineBadgeLabelTowardText = 0.35f;
 
 	ImU32 WithAlpha(const ImVec4& color, float alpha)
 	{
@@ -64,6 +59,61 @@ namespace
 		ImGui::RenderTextEllipsis(drawList, pos, ImVec2(pos.x + width, pos.y + size.y), pos.x + width, text, nullptr, &size);
 		ImGui::PopStyleColor();
 	}
+}
+
+void DrawIconStar(ImVec2 center, float radius, ImU32 color, bool filled)
+{
+	auto* drawList = ImGui::GetWindowDrawList();
+	constexpr int numPoints = 5;
+	const float angleStep = IM_PI / numPoints;
+	ImVec2 points[10];
+
+	for (int i = 0; i < numPoints * 2; i++) {
+		float angle = -IM_PI * 0.5f + i * angleStep;
+		float r = (i % 2 == 0) ? radius : radius * 0.38f;
+		points[i] = ImVec2(center.x + cosf(angle) * r, center.y + sinf(angle) * r);
+	}
+
+	if (filled) {
+		// Disable AA fill temporarily — ImGui adds a 1px fringe around each filled shape
+		// that creates visible seams at the pentagon/triangle boundaries.
+		ImDrawListFlags oldFlags = drawList->Flags;
+		drawList->Flags &= ~ImDrawListFlags_AntiAliasedFill;
+
+		ImVec2 innerPentagon[5];
+		for (int i = 0; i < 5; i++) {
+			innerPentagon[i] = points[i * 2 + 1];  // inner points
+		}
+		drawList->AddConvexPolyFilled(innerPentagon, 5, color);
+		for (int i = 0; i < 5; i++) {
+			drawList->AddTriangleFilled(points[i * 2], points[i * 2 + 1], points[(i * 2 + 9) % 10], color);
+		}
+
+		drawList->Flags = oldFlags;
+
+		// Draw an AA polyline over the outer perimeter to restore smooth edges
+		drawList->AddPolyline(points, 10, color, ImDrawFlags_Closed, 1.5f);
+	} else {
+		drawList->AddPolyline(points, 10, color, ImDrawFlags_Closed, 1.5f);
+	}
+}
+
+// Pennant on a pole. The icon font only ships a solid flag, so the outline state is drawn by hand.
+void DrawIconFlag(ImVec2 center, float height, ImU32 color, bool filled)
+{
+	auto* drawList = ImGui::GetWindowDrawList();
+	const float width = height * 0.9f;
+	const float thickness = std::max(1.0f, height * 0.1f);
+	const ImVec2 top(center.x - width * 0.4f, center.y - height * 0.5f);
+	const ImVec2 bottom(top.x, center.y + height * 0.5f);
+	const ImVec2 tip(top.x + width, top.y + height * 0.25f);
+	const ImVec2 hoist(top.x, top.y + height * 0.5f);
+
+	drawList->AddLine(top, bottom, color, thickness);
+	if (filled)
+		drawList->AddTriangleFilled(top, tip, hoist, color);
+	else
+		drawList->AddTriangle(top, tip, hoist, color, thickness);
 }
 
 namespace BrowserUI
@@ -97,67 +147,12 @@ namespace BrowserUI
 		};
 	}
 
-	bool SearchField(const char* id, char* buffer, size_t bufferSize, const char* hint, float width, bool ctrlFFocus,
-		ImGuiInputTextFlags flags, ImGuiInputTextCallback callback, void* userData)
-	{
-		ImGui::PushID(id);
-		const auto& style = ImGui::GetStyle();
-		const float searchScale = Util::GetSearchUIScale();
-		const float iconSize = ThemeManager::Constants::COMBO_SEARCH_ICON_SIZE * searchScale;
-		const float padLeft = ThemeManager::Constants::COMBO_SEARCH_PADDING_LEFT * searchScale;
-		const float frameHeight = ImGui::GetFrameHeight();
-
-		if (ctrlFFocus && ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) &&
-			ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_F, false))
-			ImGui::SetKeyboardFocusHere();
-
-		// The clear button sits over the frame's right end, so the input has to let it take the hover.
-		const bool hadText = buffer[0] != '\0';
-		if (hadText)
-			ImGui::SetNextItemAllowOverlap();
-		ImGui::SetNextItemWidth(width);
-		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(padLeft, style.FramePadding.y));
-		bool changed = ImGui::InputTextWithHint("##input", hint, buffer, bufferSize,
-			ImGuiInputTextFlags_EscapeClearsAll | flags, callback, userData);
-		ImGui::PopStyleVar();
-		const ImGuiLastItemData inputItem = ImGui::GetCurrentContext()->LastItemData;
-
-		// Escape here belongs to the field; without this the same press would also close the editor.
-		if ((ImGui::IsItemActive() || ImGui::IsItemDeactivated()) && ImGui::IsKeyPressed(ImGuiKey_Escape, false))
-			EditorWindow::GetSingleton()->suppressNextEditorEscape = true;
-
-		const ImVec2 min = ImGui::GetItemRectMin();
-		const ImVec2 max = ImGui::GetItemRectMax();
-		Util::DrawSearchIcon(
-			ImVec2(min.x + ThemeManager::Constants::COMBO_SEARCH_ICON_OFFSET_X * searchScale, min.y + (frameHeight - iconSize) * 0.5f),
-			iconSize, ThemeManager::Constants::COMBO_SEARCH_ICON_ALPHA);
-
-		if (buffer[0] != '\0') {
-			const ImVec2 clearMin(max.x - frameHeight, min.y);
-			ImGui::SetCursorScreenPos(clearMin);
-			if (ImGui::InvisibleButton("##clear", ImVec2(frameHeight, frameHeight))) {
-				buffer[0] = '\0';
-				changed = true;
-			}
-			const bool hovered = ImGui::IsItemHovered();
-			if (hovered)
-				ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
-			Icons::DrawCenteredGlyph(ImGui::GetWindowDrawList(), clearMin, ImVec2(frameHeight, frameHeight),
-				Icons::TI(ICON_TI_X), ImGui::GetColorU32(hovered ? ImGuiCol_Text : ImGuiCol_TextDisabled));
-			Util::AddTooltip(T(TKEY("search_clear"), "Clear search"));
-			ImGui::GetCurrentContext()->LastItemData = inputItem;
-		}
-
-		ImGui::PopID();
-		return changed;
-	}
-
 	float MeasureToggleChip(int count)
 	{
 		char text[16];
 		std::snprintf(text, sizeof(text), "%d", count);
 		const float scale = Util::GetUIScale();
-		return kChipPadX * scale * 2.0f + ImGui::GetFontSize() * kChipIconScale + kChipGap * scale + ImGui::CalcTextSize(text).x;
+		return kChipPadX * scale * 2.0f + ImGui::GetFontSize() * kChipIconScale + ThemeManager::Constants::ICON_LABEL_GAP * scale + ImGui::CalcTextSize(text).x;
 	}
 
 	bool ToggleChip(const char* id, const IconPainter& icon, int count, bool active, const ImVec4& tint, const char* tooltip)
@@ -169,17 +164,18 @@ namespace BrowserUI
 		const float iconBox = ImGui::GetFontSize() * kChipIconScale;
 
 		const bool clicked = ImGui::InvisibleButton(id, ImVec2(MeasureToggleChip(count), height));
-		const bool hovered = ImGui::IsItemHovered();
+		Util::HoverCursor();
+		const float hover = Util::Anim::ItemBlend(ImGui::GetItemID(), ImGui::IsItemHovered(), false, false).hover;
 		const ImVec2 min = ImGui::GetItemRectMin();
 		const ImVec2 max = ImGui::GetItemRectMax();
 		ImDrawList* drawList = ImGui::GetWindowDrawList();
 		const float rounding = height * 0.5f;
 
 		if (active) {
-			drawList->AddRectFilled(min, max, WithAlpha(tint, hovered ? kToggleFillHoveredAlpha : kToggleFillAlpha), rounding);
-			drawList->AddRect(min, max, WithAlpha(tint, kToggleBorderAlpha), rounding, 0, std::max(1.0f, scale));
+			drawList->AddRectFilled(min, max, WithAlpha(tint, ThemeManager::Constants::SELECTED_FILL_ALPHA + (kToggleFillHoveredAlpha - ThemeManager::Constants::SELECTED_FILL_ALPHA) * hover), rounding);
+			drawList->AddRect(min, max, WithAlpha(tint, ThemeManager::Constants::SELECTED_OUTLINE_ALPHA), rounding, 0, std::max(1.0f, scale));
 		} else {
-			drawList->AddRectFilled(min, max, ImGui::GetColorU32(hovered ? ImGuiCol_FrameBgHovered : ImGuiCol_FrameBg), rounding);
+			drawList->AddRectFilled(min, max, Util::Anim::LerpU32(ImGui::GetColorU32(ImGuiCol_FrameBg), ImGui::GetColorU32(ImGuiCol_FrameBgHovered), hover), rounding);
 		}
 
 		const ImU32 secondary = ImGui::GetColorU32(Util::Colors::GetSecondary());
@@ -187,8 +183,7 @@ namespace BrowserUI
 		const float iconX = min.x + kChipPadX * scale;
 		if (icon)
 			icon(drawList, ImVec2(iconX + iconBox * 0.5f, centerY), iconBox, active ? ImGui::GetColorU32(tint) : secondary);
-		const ImVec2 textSize = ImGui::CalcTextSize(text);
-		drawList->AddText(ImVec2(iconX + iconBox + kChipGap * scale, centerY - textSize.y * 0.5f),
+		drawList->AddText(ImVec2(iconX + iconBox + ThemeManager::Constants::ICON_LABEL_GAP * scale, Util::CenterTextTopY(min.y, max.y - min.y)),
 			active ? ImGui::GetColorU32(ImGuiCol_Text) : secondary, text);
 
 		if (tooltip)
@@ -201,7 +196,7 @@ namespace BrowserUI
 		const float scale = Util::GetUIScale();
 		float width = kChipPadX * scale * 2.0f + ImGui::CalcTextSize(label).x;
 		if (withIcon)
-			width += ImGui::GetFontSize() * kChipIconScale + kChipGap * scale;
+			width += ImGui::GetFontSize() * kChipIconScale + ThemeManager::Constants::ICON_LABEL_GAP * scale;
 		return width;
 	}
 
@@ -218,11 +213,12 @@ namespace BrowserUI
 		ImDrawList* drawList = ImGui::GetWindowDrawList();
 		const float rounding = height * 0.5f;
 
+		const float hover = Util::Anim::ItemBlend(ImGui::GetItemID(), hovered, false, false).hover;
 		if (tint) {
-			drawList->AddRectFilled(min, max, WithAlpha(*tint, hovered ? kTintedChipFillHoveredAlpha : kTintedChipFillAlpha), rounding);
+			drawList->AddRectFilled(min, max, WithAlpha(*tint, kTintedChipFillAlpha + (kTintedChipFillHoveredAlpha - kTintedChipFillAlpha) * hover), rounding);
 			drawList->AddRect(min, max, WithAlpha(*tint, kTintedChipBorderAlpha), rounding, 0, std::max(1.0f, scale));
 		} else {
-			drawList->AddRectFilled(min, max, ImGui::GetColorU32(hovered ? ImGuiCol_FrameBgHovered : ImGuiCol_FrameBg), rounding);
+			drawList->AddRectFilled(min, max, Util::Anim::LerpU32(ImGui::GetColorU32(ImGuiCol_FrameBg), ImGui::GetColorU32(ImGuiCol_FrameBgHovered), hover), rounding);
 		}
 
 		const float centerY = (min.y + max.y) * 0.5f;
@@ -230,10 +226,9 @@ namespace BrowserUI
 		if (icon) {
 			const ImU32 color = iconColor ? ImGui::GetColorU32(*iconColor) : ImGui::GetColorU32(Util::Colors::GetSecondary());
 			Icons::DrawCenteredGlyph(drawList, ImVec2(x, centerY - iconBox * 0.5f), ImVec2(iconBox, iconBox), icon, color);
-			x += iconBox + kChipGap * scale;
+			x += iconBox + ThemeManager::Constants::ICON_LABEL_GAP * scale;
 		}
-		const ImVec2 textSize = ImGui::CalcTextSize(label);
-		drawList->AddText(ImVec2(x, centerY - textSize.y * 0.5f), ImGui::GetColorU32(ImGuiCol_Text), label);
+		drawList->AddText(ImVec2(x, Util::CenterTextTopY(min.y, max.y - min.y)), ImGui::GetColorU32(ImGuiCol_Text), label);
 		if (hovered)
 			ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
 		return clicked;
@@ -252,63 +247,15 @@ namespace BrowserUI
 			ImGui::NewLine();
 	}
 
-	void InlineBadge(const char* label, const ImVec4& tint)
+	void InlineBadge(const char* label, const ImVec4& tint, float height)
 	{
 		ImGui::SameLine();
-		const ImVec4 text = ImGui::GetStyleColorVec4(ImGuiCol_Text);
-		const ImVec4 bg(tint.x, tint.y, tint.z, kInlineBadgeFillAlpha);
-		const ImVec4 fg(tint.x + (text.x - tint.x) * kInlineBadgeLabelTowardText,
-			tint.y + (text.y - tint.y) * kInlineBadgeLabelTowardText,
-			tint.z + (text.z - tint.z) * kInlineBadgeLabelTowardText, 1.0f);
-		const float height = ImGui::GetFrameHeight();
-		const float width = Util::DrawBadgeAt(ImGui::GetCursorScreenPos(), height, label, bg, fg);
-		ImGui::Dummy(ImVec2(width, height));
-	}
-
-	float IconButtonSize()
-	{
-		return ImGui::GetFrameHeight();
-	}
-
-	namespace
-	{
-		/// Shared chrome for the quiet icon buttons; returns {clicked, hovered}.
-		std::pair<bool, bool> QuietButton(const char* id, bool active)
-		{
-			const float size = IconButtonSize();
-			const bool clicked = ImGui::InvisibleButton(id, ImVec2(size, size));
-			const bool hovered = ImGui::IsItemHovered();
-			if (active || hovered) {
-				const ImGuiCol fill = active ? ImGuiCol_Header : (ImGui::IsItemActive() ? ImGuiCol_ButtonActive : ImGuiCol_FrameBgHovered);
-				ImGui::GetWindowDrawList()->AddRectFilled(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(),
-					ImGui::GetColorU32(fill), ImGui::GetStyle().FrameRounding);
-			}
-			return { clicked, hovered };
-		}
-	}
-
-	bool IconButton(const char* id, Icons::GlyphRef glyph, const char* tooltip, bool active, ImU32 color)
-	{
-		const auto [clicked, hovered] = QuietButton(id, active);
-		ImU32 glyphColor = color;
-		if (!glyphColor)
-			glyphColor = ImGui::GetColorU32(active ? Util::Colors::GetAccent() :
-													 (hovered ? ImGui::GetStyleColorVec4(ImGuiCol_Text) : Util::Colors::GetSecondary()));
-		const float size = IconButtonSize();
-		Icons::DrawCenteredGlyph(ImGui::GetWindowDrawList(), ImGui::GetItemRectMin(), ImVec2(size, size), glyph, glyphColor);
-		if (tooltip)
-			Util::AddTooltip(tooltip, Util::kTooltipWhenDisabled);
-		return clicked;
-	}
-
-	ImU32 DestructiveIconColor()
-	{
-		return WithAlpha(Util::Colors::GetError(), kDestructiveIconAlpha);
+		Util::Badge(label, tint, { .rowHeight = height > 0.0f ? height : ImGui::GetFrameHeight() });
 	}
 
 	bool PaintedIconButton(const char* id, const IconPainter& icon, ImU32 color, const char* tooltip)
 	{
-		const auto [clicked, hovered] = QuietButton(id, false);
+		const bool clicked = Util::QuietIconButtonFrame(id, false);
 		const ImVec2 min = ImGui::GetItemRectMin();
 		const ImVec2 max = ImGui::GetItemRectMax();
 		if (icon)
@@ -421,6 +368,15 @@ namespace BrowserUI
 			centredLine(hint, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
 	}
 
+	void InsetRowRect(ImVec2& min, ImVec2& max)
+	{
+		const auto& style = ImGui::GetStyle();
+		const float padLeft = IM_TRUNC(style.ItemSpacing.x * 0.5f);
+		const float halfGap = style.ItemInnerSpacing.x * 0.5f;
+		min = ImVec2(ImGui::GetItemRectMin().x + padLeft, ImGui::GetItemRectMin().y + halfGap);
+		max = ImVec2(ImGui::GetItemRectMax().x - (style.ItemSpacing.x - padLeft), ImGui::GetItemRectMax().y - halfGap);
+	}
+
 	void RowStripe(ImU32 color, float rowHeight)
 	{
 		ImGuiTable* table = ImGui::GetCurrentTable();
@@ -428,7 +384,7 @@ namespace BrowserUI
 			return;
 		const float x0 = ImGui::TableGetCellBgRect(table, table->CurrentColumn).Min.x;
 		ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(x0, table->RowPosY1),
-			ImVec2(x0 + kStripeWidth * Util::GetUIScale(), table->RowPosY1 + rowHeight), color);
+			ImVec2(x0 + Util::Surface::ListHighlightBarWidth(), table->RowPosY1 + rowHeight), color);
 	}
 
 	namespace
@@ -510,7 +466,7 @@ namespace BrowserUI
 
 	void HelpMarkerRight(const char* text)
 	{
-		RightAlign(ImGui::CalcTextSize(Util::kHelpMarkerLabel).x);
+		RightAlign(Util::HelpMarkerWidth());
 		Util::HelpMarker(text);
 	}
 
@@ -536,18 +492,35 @@ namespace BrowserUI
 		return action;
 	}
 
+	bool BeginCard(const char* id, const ImVec2& size, ImGuiChildFlags flags)
+	{
+		ImGui::PushStyleColor(ImGuiCol_ChildBg, IM_COL32_BLACK_TRANS);
+		const bool visible = ImGui::BeginChild(id, size, flags | ImGuiChildFlags_AlwaysUseWindowPadding);
+		ImGui::PopStyleColor();
+
+		// The section card's surface, so these follow the theme like the menu's cards
+		Util::Surface::Options surface;
+		surface.rounding = ImGui::GetStyle().ChildRounding;
+		surface.clip = Util::Surface::ParentClipRect();
+		const ImVec2 min = ImGui::GetWindowPos();
+		const ImVec2 cardSize = ImGui::GetWindowSize();
+		Util::Surface::Draw(ImGui::GetWindowDrawList(), min, ImVec2(min.x + cardSize.x, min.y + cardSize.y), Util::Surface::Role::SectionCard, surface);
+		return visible;
+	}
+
 	float RowHeight()
 	{
 		return ImGui::GetFrameHeight() + ImGui::GetStyle().CellPadding.y * 2.0f;
 	}
 
-	void StackedSplit(const char* id, float& topRatio, float defaultTopRatio, const PaneDrawer& drawTop, const PaneDrawer& drawBottom)
+	void StackedSplit(const char* id, float& topRatio, float defaultTopRatio, bool resetLayout, const PaneDrawer& drawTop,
+		const PaneDrawer& drawBottom)
 	{
 		constexpr float kSplitterThickness = 6.0f;
 		constexpr float kMinPaneHeight = 80.0f;
 
 		const float scale = Util::GetUIScale();
-		if (EditorWindow::GetSingleton()->resetLayout)
+		if (resetLayout)
 			topRatio = defaultTopRatio;
 		const ImVec2 avail = ImGui::GetContentRegionAvail();
 		const float thickness = kSplitterThickness * scale;
@@ -570,11 +543,10 @@ namespace BrowserUI
 	void SplitPane(const SplitPaneSpec& spec, float& stackedRatio, const PaneDrawer& drawList, const PaneDrawer& drawDetail)
 	{
 		const float scale = Util::GetUIScale();
-		const bool resetLayout = EditorWindow::GetSingleton()->resetLayout;
 		const ImVec2 avail = ImGui::GetContentRegionAvail();
 
 		if (avail.x < spec.besideMinWidth * scale) {
-			StackedSplit(spec.id, stackedRatio, spec.defaultStackedRatio, drawList, drawDetail);
+			StackedSplit(spec.id, stackedRatio, spec.defaultStackedRatio, spec.resetLayout, drawList, drawDetail);
 			return;
 		}
 
@@ -588,7 +560,7 @@ namespace BrowserUI
 		ImGui::TableSetupColumn("##List", ImGuiTableColumnFlags_WidthStretch);
 		ImGui::TableSetupColumn("##Detail", ImGuiTableColumnFlags_WidthFixed, spec.detailWidth * scale);
 		// Must precede TableNextRow: the first row locks the layout, after which widths are ignored.
-		if (resetLayout)
+		if (spec.resetLayout)
 			ImGui::TableSetColumnWidth(1, spec.detailWidth * scale);
 		ImGui::TableNextRow();
 		ImGui::TableSetColumnIndex(0);

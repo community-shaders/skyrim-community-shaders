@@ -1,4 +1,5 @@
 #include "SceneWidgetBinding.h"
+#include "Menu/SettingReveal.h"
 
 #include <algorithm>
 #include <cassert>
@@ -454,19 +455,20 @@ namespace
 		return nullptr;
 	}
 
-	/** @brief The setting's value in one of the settings layers State holds for its feature. */
-	const json* FindStateLayerValue(const SettingMetadata& a_setting,
-		const json* (State::*a_layer)(const std::string&) const)
+	/**
+	 * @brief The setting's value in the layers beneath the user's edits (defaults with Baseline packs applied),
+	 *        with defaults that depend on the feature's current settings adjusted.
+	 * @param a_storage Holds the adjusted document the result points into.
+	 */
+	const json* FindContextualBaseValue(const SettingMetadata& a_setting, json& a_storage)
 	{
 		auto* feature = Feature::FindFeatureByShortName(std::string{ a_setting.featureShortName });
-		const auto* layer = feature ? (globals::state->*a_layer)(feature->GetName()) : nullptr;
-		return layer ? SceneSettingsInternal::GetCatalogSerializedValue(*layer, a_setting) : nullptr;
-	}
-
-	/** @brief The setting's value in the layers beneath the user's edits: defaults with Baseline packs applied. */
-	const json* FindLayeredBaseValue(const SettingMetadata& a_setting)
-	{
-		return FindStateLayerValue(a_setting, &State::GetFeatureBase);
+		const auto* base = feature ? globals::state->GetFeatureBase(feature->GetName()) : nullptr;
+		if (!base)
+			return nullptr;
+		a_storage = *base;
+		feature->ApplyContextualDefaults(a_storage);
+		return SceneSettingsInternal::GetCatalogSerializedValue(a_storage, a_setting);
 	}
 }
 
@@ -553,19 +555,11 @@ SceneWidgetBinding::Guard::Guard(const char* a_label, const Value& a_value, Gutt
 		ImGui::PushItemFlag(ImGuiItemFlags_MixedValue, true);
 		mixedFlagPushed = true;
 	}
-
-	// The control itself carries the provenance too, so a slider reads without tracing back to its gutter.
-	if (const auto tint = ResolveProvenanceColor()) {
-		Util::PushTintedFrameStyle(*tint);
-		tintPushed = true;
-	}
 }
 
 SceneWidgetBinding::Guard::~Guard()
 {
 	// Finish always runs on the happy path; this only closes scopes an exception skipped.
-	if (tintPushed)
-		Util::PopTintedFrameStyle();
 	if (mixedFlagPushed)
 		ImGui::PopItemFlag();
 	if (disabledOpened)
@@ -648,23 +642,17 @@ void SceneWidgetBinding::Guard::BindBaseline()
 		return;
 	}
 
-	baselineLayer = ResolveBaselineLayer(baselinePackId);
+	baselineLayer = ResolveBaselineLayer();
 	if ((baselineLayer == BaselineLayer::Scene || baselineLayer == BaselineLayer::Sketch) &&
 		(policy == GutterPolicy::Owner || ClaimGutter(value.data))) {
 		CaptureNextItemWidth();
 		DrawBaselineGutter();
 	}
 	PushCompensatedItemWidth();
-
-	if (const auto tint = ResolveBaselineColor()) {
-		Util::PushTintedFrameStyle(*tint);
-		tintPushed = true;
-	}
 }
 
-SceneWidgetBinding::BaselineLayer SceneWidgetBinding::Guard::ResolveBaselineLayer(std::string& a_packId) const
+SceneWidgetBinding::BaselineLayer SceneWidgetBinding::Guard::ResolveBaselineLayer() const
 {
-	a_packId.clear();
 	auto* manager = SceneSettingsManager::GetSingleton();
 	const auto anyComponent = [&](auto&& a_predicate) { return std::ranges::any_of(components, a_predicate); };
 
@@ -674,50 +662,12 @@ SceneWidgetBinding::BaselineLayer SceneWidgetBinding::Guard::ResolveBaselineLaye
 			return manager->IsActiveSceneSetting(identity.featureShortName, identity.settingPath, component.settingKey);
 		}))
 		return BaselineLayer::Scene;
-
-	bool fromPack = false;
-	for (const auto& component : components) {
-		std::string packId;
-		const auto* packValue = FindBaselineValue(*component.setting, packId);
-		const auto* beneath = packValue ? packValue : FindLayeredBaseValue(*component.setting);
-		if (packValue && a_packId.empty())
-			a_packId = std::move(packId);
-		if (!beneath)
-			continue;
-		if (!SceneSettingsManager::AppliedValuesEqual(*beneath, ReadEditedValue(component)))
-			return BaselineLayer::Edited;
-		fromPack |= packValue != nullptr;
-	}
-	return fromPack ? BaselineLayer::Pack : BaselineLayer::Base;
-}
-
-std::optional<ImVec4> SceneWidgetBinding::Guard::ResolveBaselineColor() const
-{
-	switch (baselineLayer) {
-	case BaselineLayer::Pack:
-		return Util::Colors::GetWarning();
-	case BaselineLayer::Edited:
-	case BaselineLayer::Sketch:
-		return Util::Colors::GetSuccess();
-	case BaselineLayer::Scene:
-		return Util::Colors::GetInfo();
-	default:
-		return std::nullopt;
-	}
+	return BaselineLayer::Base;
 }
 
 std::string SceneWidgetBinding::Guard::ResolveBaselineTooltip() const
 {
 	switch (baselineLayer) {
-	case BaselineLayer::Pack:
-		return std::vformat(T(TKEY("baseline_from_named_pack"), "Baseline: {}. This preset supplies the value."),
-			std::make_format_args(baselinePackId));
-	case BaselineLayer::Edited:
-		if (baselinePackId.empty())
-			return T(TKEY("baseline_edited"), "Edited: your change from the default. Save Settings keeps it; Restore Defaults clears it.");
-		return std::vformat(T(TKEY("baseline_edited_over_pack"),
-								"Edited: your change over Baseline {}. Save Settings keeps it; Restore Defaults goes back to the preset."),
-			std::make_format_args(baselinePackId));
 	case BaselineLayer::Scene:
 		return T(TKEY("baseline_from_scene"),
 			"A Scene Manager preset supplies this value here. Editing sketches over it until you leave "
@@ -742,7 +692,7 @@ void SceneWidgetBinding::Guard::DrawBaselineGutter()
 				SceneSettingsUI::OpenSceneContext(*context, identity.featureShortName);
 		Util::AddTooltip(T(TKEY("baseline_jump_tooltip"), "Open the Scene Manager page supplying this value."));
 	} else {
-		const bool committed = Icons::Button("##SketchCommit", SceneActionIcons::kSave);
+		const bool committed = Util::LabeledButton("##SketchCommit", SceneActionIcons::kSave);
 		if (committed) {
 			std::vector<SceneSettingsManager::SettingIdentity> sketched;
 			for (const auto& component : components)
@@ -1258,12 +1208,16 @@ bool SceneWidgetBinding::Guard::TryResetFromGesture()
 	if (ImGui::IsAnyItemActive() || !ImGui::IsItemHovered() || !ImGui::IsMouseClicked(ImGuiMouseButton_Middle))
 		return false;
 
+	// Back to what lies beneath the edit: the Baseline pack's value, else the default
 	bool reset = false;
+	json contextualBase;
 	for (const auto& component : components) {
-		const auto* defaultValue = FindStateLayerValue(*component.setting, &::State::GetFeatureDefaults);
-		if (!defaultValue || SceneSettingsManager::AppliedValuesEqual(*defaultValue, ReadEditedValue(component)))
+		std::string packId;
+		const auto* packValue = FindBaselineValue(*component.setting, packId);
+		const auto* beneath = packValue ? packValue : FindContextualBaseValue(*component.setting, contextualBase);
+		if (!beneath || SceneSettingsManager::AppliedValuesEqual(*beneath, ReadEditedValue(component)))
 			continue;
-		WriteComponent(value.data, component, *defaultValue);
+		WriteComponent(value.data, component, *beneath);
 		reset = true;
 	}
 	if (!reset)
@@ -1280,7 +1234,7 @@ void SceneWidgetBinding::Guard::NavigateGreyedSetting() const
 {
 	if (state == State::Unbound) {
 		if (auto* menu = globals::menu) {
-			menu->IsEnabled = true;
+			menu->Open();
 			if (!identity.featureShortName.empty())
 				menu->SelectFeatureMenu(identity.featureShortName);
 		}
@@ -1559,10 +1513,6 @@ void SceneWidgetBinding::Guard::SetTombstoned(bool a_tombstoned)
 
 bool SceneWidgetBinding::Guard::Finish(bool a_changed)
 {
-	if (tintPushed) {
-		Util::PopTintedFrameStyle();
-		tintPushed = false;
-	}
 	if (mixedFlagPushed) {
 		ImGui::PopItemFlag();
 		mixedFlagPushed = false;
@@ -1572,6 +1522,10 @@ bool SceneWidgetBinding::Guard::Finish(bool a_changed)
 		disabledOpened = false;
 	}
 	PopCompensatedItemWidth();
+
+	// The main menu's pending "Go to" reveal; inert unless one is waiting
+	if (metadata && state == State::Baseline)
+		SettingReveal::NotifyControl(*metadata);
 
 	if (state == State::Unsupported) {
 		// An untracked edit (e.g. a sub-feature's enabled toggle) still rewrites the base, so the cached apply
@@ -1587,10 +1541,8 @@ bool SceneWidgetBinding::Guard::Finish(bool a_changed)
 			for (const auto& component : components)
 				manager->RecordBaselineEdit(ComponentIdentity(component), ReadEditedValue(component));
 		}
-		if (auto tooltip = ResolveBaselineTooltip(); !tooltip.empty()) {
-			tooltip.append("\n").append(T(TKEY("baseline_reset_hint"), "Middle-click to restore the default."));
+		if (const auto tooltip = ResolveBaselineTooltip(); !tooltip.empty())
 			Util::AddTooltip(tooltip.c_str(), Util::kTooltipWhenDisabled);
-		}
 		return a_changed;
 	}
 	// Both were greyed, so neither took input: no gutter to own and nothing to commit. Words are all a

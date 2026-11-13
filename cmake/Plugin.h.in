@@ -23,4 +23,10 @@ namespace Plugin
 
 	/// Build branch, "*" for local (non-CI) builds; empty when detached.
 	inline constexpr auto BUILD_BRANCH = "@GIT_BRANCH@"sv;
+
+	/// Short commit hash of the build; empty when git was unavailable.
+	inline constexpr auto BUILD_HASH = "@GIT_HASH@"sv;
+
+	/// True when the working tree had uncommitted changes to tracked files at configure time.
+	inline constexpr bool BUILD_DIRTY = @GIT_DIRTY@;
 }

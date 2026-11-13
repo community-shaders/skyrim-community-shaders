@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <cassert>
-#include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <span>
@@ -13,6 +12,7 @@
 
 #include "SceneSettingsCatalog.generated.h"
 #include "SceneWidgetBinding.h"
+#include "Utils/UIAnim.h"
 
 namespace
 {
@@ -214,11 +214,12 @@ namespace
 	bool DetouredSliderScalar(const char* label, ImGuiDataType dataType, void* data,
 		const void* min, const void* max, const char* format, ImGuiSliderFlags flags)
 	{
+		// Every slider ends here, so the easing for externally changed values applies to all of them, bound or not
 		if (!ShouldIntercept())
-			return RealSliderScalar(label, dataType, data, min, max, format, flags);
+			return Util::Anim::EasedSliderScalar(RealSliderScalar, label, dataType, data, min, max, format, flags);
 		InterceptedCall interceptedCall;
 		SceneWidgetBinding::Guard guard(label, SceneWidgetBinding::Value::Scalar(data, dataType));
-		return guard.Finish(RealSliderScalar(label, dataType, guard.Raw(), min, max, format, flags));
+		return guard.Finish(Util::Anim::EasedSliderScalar(RealSliderScalar, label, dataType, guard.Raw(), min, max, format, flags));
 	}
 
 	bool DetouredSliderAngle(const char* label, float* radians, float degreesMin, float degreesMax,
@@ -233,11 +234,12 @@ namespace
 
 	bool DetouredCheckbox(const char* label, bool* v)
 	{
+		// Every checkbox ends here, so the check mark's fade applies to all of them, bound or not
 		if (!ShouldIntercept())
-			return RealCheckbox(label, v);
+			return Util::Anim::EasedCheckbox(RealCheckbox, label, v);
 		InterceptedCall interceptedCall;
 		SceneWidgetBinding::Guard guard(label, SceneWidgetBinding::Value::Bool(v));
-		return guard.Finish(RealCheckbox(label, guard.Bool()));
+		return guard.Finish(Util::Anim::EasedCheckbox(RealCheckbox, label, guard.Bool()));
 	}
 
 	/** @brief Accepts the palette's custom "COLOR_DND" payload, which the real color widgets ignore,

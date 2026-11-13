@@ -65,36 +65,6 @@ namespace MenuFonts
 	};
 
 	/**
-	 * @brief RAII guard for tab bars that automatically scales padding for larger tab fonts
-	 *
-	 * Scales FramePadding when tab fonts are larger than body text to ensure proper
-	 * tab bar height and separator positioning. Automatically restores original padding on destruction.
-	 *
-	 * Usage:
-	 *   {
-	 *       MenuFonts::TabBarPaddingGuard tabGuard(Menu::FontRole::Subheading);
-	 *       if (Util::BeginPillTabBar("##MyTabs")) {
-	 *           // Tab items...
-	 *           Util::EndPillTabBar();
-	 *       }
-	 *   } // Padding automatically restored here
-	 *   Prefer Util::BeginPillTabBar for new UI; TabBarPaddingGuard only affects classic ImGui tabs.
-	 */
-	class TabBarPaddingGuard
-	{
-	public:
-		explicit TabBarPaddingGuard(FontRole tabFontRole);
-		~TabBarPaddingGuard();
-
-		TabBarPaddingGuard(const TabBarPaddingGuard&) = delete;
-		TabBarPaddingGuard& operator=(const TabBarPaddingGuard&) = delete;
-
-	private:
-		ImVec2 originalPadding_;
-		bool scaled_ = false;
-	};
-
-	/**
 	 * @brief Begins a tab item with the specified font role for the label.
 	 *
 	 * Inside a Util::BeginPillTabBar, routes to Util::BeginPillTabItem (pill strip uses Body).
@@ -106,9 +76,6 @@ namespace MenuFonts
 	 * @return true if the tab is selected and visible, false otherwise
 	 */
 	bool BeginTabItemWithFont(const char* label, FontRole role, ImGuiTabItemFlags flags = ImGuiTabItemFlags_None);
-
-	/** @brief Ends a tab item opened via BeginTabItemWithFont / BeginPillTabItem / BeginTabItem. */
-	void EndTabItem();
 
 	/**
 	 * @brief Loads catalog fonts into the current ImGui atlas for selector previews.
@@ -156,14 +123,12 @@ namespace Util
 
 		Catalog DiscoverFontCatalog();
 		Catalog DiscoverFontCatalog(bool forceRefresh);  // Explicit refresh control
-		std::string FormatFontDisplayName(const std::string& filename);
 
 		[[nodiscard]] const StyleInfo* FindRegularStyle(const FamilyInfo& family);
 		[[nodiscard]] int FindFamilyIndex(const Catalog& catalog, const std::string& familyName);
 		[[nodiscard]] int FindStyleIndex(const FamilyInfo& family, const std::string& styleName);
 	}
 
-	std::vector<std::string> DiscoverFonts();
 	bool ValidateFont(const std::string& fontName);
 
 	// Security: Path validation helpers

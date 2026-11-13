@@ -6,8 +6,8 @@ This is a custom vcpkg port for RenderDoc's in-application API.
 
 This port installs:
 
--   **API Header**: `renderdoc_app.h` from the RenderDoc GitHub repository
--   **Documentation**: Usage instructions and license information
+- **API Header**: `renderdoc_app.h` from the RenderDoc GitHub repository
+- **Documentation**: Usage instructions and license information
 
 ## What This Port Does NOT Provide
 
@@ -22,11 +22,11 @@ This port does **not** include the `renderdoc.dll` runtime library because:
 
 The `renderdoc.dll` should be obtained from official RenderDoc releases. For stable Windows releases the runtime package follows this pattern:
 
--   `https://renderdoc.org/stable/${VERSION}/RenderDoc_${VERSION}_64.zip`
+- `https://renderdoc.org/stable/${VERSION}/RenderDoc_${VERSION}_64.zip`
 
 For example, for v1.43:
 
--   `https://renderdoc.org/stable/1.43/RenderDoc_1.43_64.zip`
+- `https://renderdoc.org/stable/1.43/RenderDoc_1.43_64.zip`
 
 For Community Shaders, the DLL is stored in `package/SKSE/Plugins/Renderdoc/renderdoc.dll` and is deployed as part of the mod package.
 

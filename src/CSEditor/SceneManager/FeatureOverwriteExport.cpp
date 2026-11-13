@@ -18,7 +18,6 @@
 #include <filesystem>
 #include <format>
 #include <fstream>
-#include <iterator>
 #include <optional>
 #include <span>
 #include <string>
@@ -44,7 +43,6 @@ namespace
 	constexpr float kValueColumnEm = 6.0f;
 
 	constexpr size_t kNameBufferSize = 128;
-	constexpr size_t kSearchBufferSize = 256;
 	constexpr std::string_view kGroupSeparator = " / ";
 
 	/// CheckboxFlags states: every bit set reads as ticked, some as mixed.
@@ -106,7 +104,7 @@ namespace
 	{
 		std::vector<FeatureExport> features;
 		size_t viewed = 0;
-		char search[kSearchBufferSize]{};
+		std::string search;
 		std::optional<size_t> group;
 		bool inFileOnly = false;
 		bool removeUnticked = false;
@@ -257,7 +255,7 @@ namespace
 			names.empty(), T(TKEY("export.existing_none_tooltip"), "Nothing exported under a name yet."));
 		if (ImGui::BeginPopup(kPickerId)) {
 			for (const auto& name : names)
-				if (ImGui::Selectable(name.c_str(), name == target.name))
+				if (Util::Selectable(name.c_str(), name == target.name))
 					strncpy_s(target.name, sizeof(target.name), name.c_str(), _TRUNCATE);
 			ImGui::EndPopup();
 		}
@@ -331,7 +329,7 @@ namespace
 	/** @brief Search, a chip per group, and the in-file toggle. */
 	void DrawSettingFilters(const FeatureExport& entry)
 	{
-		BrowserUI::SearchField("##search", session.search, sizeof(session.search), T("ui.search", "Search..."),
+		Util::SearchField("##search", session.search, T("ui.search", "Search..."),
 			ImGui::GetFontSize() * kSearchWidthEm, true);
 		if (entry.groups.size() > 1) {
 			ImGui::PushID("groups");
@@ -578,7 +576,7 @@ namespace
 		                   "###export";
 		{
 			const Util::DisableGuard blocked(blocker != nullptr);
-			if (ImGui::Button(label.c_str())) {
+			if (Util::Button(label.c_str())) {
 				session.failed = !RunExport();
 				if (!session.failed) {
 					EditorWindow::GetSingleton()->ShowNotification(
@@ -591,7 +589,7 @@ namespace
 		Util::AddTooltip(blocker ? blocker : T(TKEY("export.ready_tooltip"), "Writes the ticked settings without scene-specific values."),
 			Util::kTooltipWhenDisabled);
 		ImGui::SameLine();
-		if (ImGui::Button(T("cs_editor.cancel", "Cancel")))
+		if (Util::Button(T("cs_editor.cancel", "Cancel")))
 			ImGui::CloseCurrentPopup();
 	}
 
@@ -674,18 +672,13 @@ void FeatureOverwritesPanel::DrawExport()
 
 void FeatureOverwritesPanel::DrawExportButton(Feature* feature, const char* id)
 {
-	const float size = ImGui::GetFrameHeight();
-	{
-		auto style = Util::TransparentIconButtonStyle();
-		if (Icons::Button(id, Icons::TI(ICON_TI_FILE_EXPORT), ImVec2(size, size)))
-			BeginExport(feature);
-	}
 	const auto tooltip = std::format("{}\n{}", T(TKEY("export.button_title"), "Export Feature Overwrite..."),
 		T(TKEY("export.button_tooltip"),
 			"Writes this feature's settings into a Baseline preset pack, applied from the Presets page. "
 			"Scene layers are left out.\n"
 			"For a full preset with scene layers, use Export Preset in the CS Editor (Ctrl+Shift+S)."));
-	Util::AddTooltip(tooltip.c_str());
+	if (Util::IconButton(id, Icons::TI(ICON_TI_FILE_EXPORT), tooltip.c_str()))
+		BeginExport(feature);
 }
 
 #undef I18N_KEY_PREFIX

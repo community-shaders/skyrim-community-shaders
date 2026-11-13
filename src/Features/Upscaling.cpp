@@ -5,6 +5,7 @@
 #include "HDRDisplay.h"
 #include "Hooks.h"
 #include "RenderDoc.h"
+#include "ScreenshotFeature.h"
 #include "State.h"
 #include "Upscaling/DX12SwapChain.h"
 #include "Upscaling/FidelityFX.h"
@@ -307,74 +308,72 @@ void Upscaling::DrawSettings()
 
 	const bool frameGenerationDx12PathActive = IsFrameGenerationDx12PathActive();
 
-	if (ImGui::TreeNodeEx(T(TKEY("frame_generation"), "Frame Generation"), ImGuiTreeNodeFlags_DefaultOpen)) {
-		ImGui::Text("%s", T(TKEY("frame_generation_desc"),
-							  "Frame Generation interpolates real frames with generated ones for a smoother experience"));
-		ImGui::Text("%s", T(TKEY("frame_generation_tech"),
-							  "Uses AMD FSR Frame Generation technology"));
-		if (HasFrameGenModule())
-			ImGui::Text("%s", T(TKEY("frame_generation_available"),
-								  "AMD FSR Frame Generation is available."));
-		ImGui::Text("%s", T(TKEY("frame_generation_proxy_note"),
-							  "Requires a D3D11 to D3D12 proxy which can create compatibility issues"));
-		ImGui::Text("%s", T(TKEY("frame_generation_restart_note"),
-							  "Toggling this setting requires a restart to work correctly"));
+	ImGui::SeparatorText(T(TKEY("frame_generation"), "Frame Generation"));
+	ImGui::Text("%s", T(TKEY("frame_generation_desc"),
+						  "Frame Generation interpolates real frames with generated ones for a smoother experience"));
+	ImGui::Text("%s", T(TKEY("frame_generation_tech"),
+						  "Uses AMD FSR Frame Generation technology"));
+	if (HasFrameGenModule())
+		ImGui::Text("%s", T(TKEY("frame_generation_available"),
+							  "AMD FSR Frame Generation is available."));
+	ImGui::Text("%s", T(TKEY("frame_generation_proxy_note"),
+						  "Requires a D3D11 to D3D12 proxy which can create compatibility issues"));
+	ImGui::Text("%s", T(TKEY("frame_generation_restart_note"),
+						  "Toggling this setting requires a restart to work correctly"));
 
-		bool onlyRequiresRestart = true;
+	bool onlyRequiresRestart = true;
 
-		if (!isWindowed) {
-			Util::Text::Warning("Warning: Requires windowed mode");
+	if (!isWindowed) {
+		Util::Text::Warning("Warning: Requires windowed mode");
 
-			onlyRequiresRestart = false;
-		}
-
-		if (lowRefreshRate && !settings.frameGenerationForceEnable) {
-			Util::Text::Warning("Warning: Requires a high refresh rate monitor or Force Enable Frame Generation");
-
-			onlyRequiresRestart = false;
-		}
-
-		if (fidelityFXMissing) {
-			Util::Text::Warning("Warning: FidelityFX DLLs are not loaded");
-
-			onlyRequiresRestart = false;
-		}
-
-		if (onlyRequiresRestart && settings.frameGenerationMode && !frameGenerationDx12PathActive)
-			Util::Text::Warning("Warning: Requires restart");
-
-		if (!settings.frameGenerationMode && frameGenerationDx12PathActive)
-			Util::Text::Warning("Warning: Requires restart");
-
-		bool fgEnabled = settings.frameGenerationMode != 0;
-		if (ImGui::Checkbox(T(TKEY("frame_generation"), "Frame Generation"), &fgEnabled))
-			settings.frameGenerationMode = fgEnabled ? 1 : 0;
-
-		if (!frameGenerationDx12PathActive)
-			ImGui::BeginDisabled();
-
-		bool flEnabled = settings.frameLimitMode != 0;
-		if (ImGui::Checkbox(T(TKEY("frame_limit_vrr"), "Frame Limit (Variable Refresh Rate)"), &flEnabled))
-			settings.frameLimitMode = flEnabled ? 1 : 0;
-
-		if (!frameGenerationDx12PathActive)
-			ImGui::EndDisabled();
-
-		ImGui::TextWrapped("Allows frame generation to function on low refresh rate monitors. Detected: %.2f Hz", refreshRate);
-		bool fgForce = settings.frameGenerationForceEnable != 0;
-		if (ImGui::Checkbox(T(TKEY("force_enable_frame_generation"), "Force Enable Frame Generation"), &fgForce))
-			settings.frameGenerationForceEnable = fgForce ? 1 : 0;
-
-		ImGui::Checkbox(T(TKEY("frame_generation_in_menus"), "Frame Generation in Menus"), &settings.frameGenerationAllowInMenus);
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::TextUnformatted(T(TKEY("frame_generation_in_menus_tooltip_1"), "Keeps frame generation active while game menus are open."));
-			ImGui::TextUnformatted(T(TKEY("frame_generation_in_menus_tooltip_2"), "May feel smoother, but increases menu input latency."));
-		}
-
-		ImGui::TreePop();
+		onlyRequiresRestart = false;
 	}
 
-	if (streamline.reflexSupportedOnCurrentAdapter && ImGui::TreeNodeEx(T(TKEY("nvidia_reflex"), "NVIDIA Reflex"), ImGuiTreeNodeFlags_DefaultOpen)) {
+	if (lowRefreshRate && !settings.frameGenerationForceEnable) {
+		Util::Text::Warning("Warning: Requires a high refresh rate monitor or Force Enable Frame Generation");
+
+		onlyRequiresRestart = false;
+	}
+
+	if (fidelityFXMissing) {
+		Util::Text::Warning("Warning: FidelityFX DLLs are not loaded");
+
+		onlyRequiresRestart = false;
+	}
+
+	if (onlyRequiresRestart && settings.frameGenerationMode && !frameGenerationDx12PathActive)
+		Util::Text::Warning("Warning: Requires restart");
+
+	if (!settings.frameGenerationMode && frameGenerationDx12PathActive)
+		Util::Text::Warning("Warning: Requires restart");
+
+	bool fgEnabled = settings.frameGenerationMode != 0;
+	if (ImGui::Checkbox(T(TKEY("frame_generation"), "Frame Generation"), &fgEnabled))
+		settings.frameGenerationMode = fgEnabled ? 1 : 0;
+
+	if (!frameGenerationDx12PathActive)
+		ImGui::BeginDisabled();
+
+	bool flEnabled = settings.frameLimitMode != 0;
+	if (ImGui::Checkbox(T(TKEY("frame_limit_vrr"), "Frame Limit (Variable Refresh Rate)"), &flEnabled))
+		settings.frameLimitMode = flEnabled ? 1 : 0;
+
+	if (!frameGenerationDx12PathActive)
+		ImGui::EndDisabled();
+
+	ImGui::TextWrapped("Allows frame generation to function on low refresh rate monitors. Detected: %.2f Hz", refreshRate);
+	bool fgForce = settings.frameGenerationForceEnable != 0;
+	if (ImGui::Checkbox(T(TKEY("force_enable_frame_generation"), "Force Enable Frame Generation"), &fgForce))
+		settings.frameGenerationForceEnable = fgForce ? 1 : 0;
+
+	ImGui::Checkbox(T(TKEY("frame_generation_in_menus"), "Frame Generation in Menus"), &settings.frameGenerationAllowInMenus);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::TextUnformatted(T(TKEY("frame_generation_in_menus_tooltip_1"), "Keeps frame generation active while game menus are open."));
+		ImGui::TextUnformatted(T(TKEY("frame_generation_in_menus_tooltip_2"), "May feel smoother, but increases menu input latency."));
+	}
+
+	if (streamline.reflexSupportedOnCurrentAdapter) {
+		ImGui::SeparatorText(T(TKEY("nvidia_reflex"), "NVIDIA Reflex"));
 		const bool reflexBlockedByFrameGeneration = frameGenerationDx12PathActive;
 		const bool reflexAvailable = streamline.initialized && streamline.featureReflex;
 		const bool reflexControlsAvailable = reflexAvailable && !reflexBlockedByFrameGeneration;
@@ -447,8 +446,6 @@ void Upscaling::DrawSettings()
 
 		if (!reflexControlsAvailable)
 			ImGui::EndDisabled();
-
-		ImGui::TreePop();
 	}
 
 	if (ImGui::TreeNodeEx(T(TKEY("backend_diagnostics"), "Backend Diagnostics"))) {
@@ -1035,12 +1032,13 @@ void Upscaling::SetupResources()
 	depthStencilDesc.StencilEnable = false;  // Disable stencil testing
 
 	DX::ThrowIfFailed(globals::d3d::device->CreateDepthStencilState(&depthStencilDesc, upscaleDepthStencilState.put()));
+	Util::SetResourceName(upscaleDepthStencilState.get(), "Upscaling::DepthUpscaleDepthStencilState");
 
 	// Create jitter offset constant buffer for depth upscaling
-	jitterCB = new ConstantBuffer(ConstantBufferDesc<JitterCB>());
+	jitterCB = new ConstantBuffer(ConstantBufferDesc<JitterCB>(), "Upscaling::JitterCB");
 
 	// Create upscaling data constant buffer for encode textures compute shader
-	upscalingDataCB = new ConstantBuffer(ConstantBufferDesc<UpscalingDataCB>());
+	upscalingDataCB = new ConstantBuffer(ConstantBufferDesc<UpscalingDataCB>(), "Upscaling::UpscalingDataCB");
 
 	// Create blend state for depth upscaling
 	D3D11_BLEND_DESC blendDesc = {};
@@ -1049,6 +1047,7 @@ void Upscaling::SetupResources()
 	blendDesc.RenderTarget[0].BlendEnable = false;
 	blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
 	DX::ThrowIfFailed(globals::d3d::device->CreateBlendState(&blendDesc, upscaleBlendState.put()));
+	Util::SetResourceName(upscaleBlendState.get(), "Upscaling::DepthUpscaleBlendState");
 
 	// Create rasterizer state for fullscreen rendering
 	D3D11_RASTERIZER_DESC rasterizerDesc = {};
@@ -1063,6 +1062,7 @@ void Upscaling::SetupResources()
 	rasterizerDesc.MultisampleEnable = false;
 	rasterizerDesc.AntialiasedLineEnable = false;
 	DX::ThrowIfFailed(globals::d3d::device->CreateRasterizerState(&rasterizerDesc, upscaleRasterizerState.put()));
+	Util::SetResourceName(upscaleRasterizerState.get(), "Upscaling::DepthUpscaleRasterizerState");
 
 	CheckResources(GetUpscaleMethod());
 
@@ -1189,12 +1189,32 @@ void Upscaling::PostDisplay()
 	globals::state->UpdateSharedData(false, false);
 }
 
-void Upscaling::TimerSleepQPC(int64_t targetQPC)
+void Upscaling::TimerSleepQPC(int64_t targetQPC, int64_t frequency)
 {
+	static const HANDLE timer = CreateWaitableTimerExW(nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS);
+
 	LARGE_INTEGER currentQPC;
-	do {
+	QueryPerformanceCounter(&currentQPC);
+	const int64_t duration = targetQPC - currentQPC.QuadPart;
+	if (duration <= 0)
+		return;
+
+	// Spin the tail like DXVK; timer wakes land late, more so on long waits
+	const int64_t spinTicks = frequency / 500 + duration / 6;
+	while (timer) {
+		const int64_t sleepTicks = targetQPC - currentQPC.QuadPart - spinTicks;
+		LARGE_INTEGER due;
+		due.QuadPart = -(sleepTicks * 10000000LL / frequency);
+		if (due.QuadPart >= 0 || !SetWaitableTimerEx(timer, &due, 0, nullptr, nullptr, nullptr, 0))
+			break;
+		WaitForSingleObject(timer, 100);
 		QueryPerformanceCounter(&currentQPC);
-	} while (currentQPC.QuadPart < targetQPC);
+	}
+
+	while (currentQPC.QuadPart < targetQPC) {
+		YieldProcessor();
+		QueryPerformanceCounter(&currentQPC);
+	}
 }
 
 void Upscaling::FrameLimiter()
@@ -1215,15 +1235,19 @@ void Upscaling::FrameLimiter()
 			int64_t targetFrameTimeNS = int64_t(static_cast<double>(kNanosecondsPerSecond) / (refreshRate * frameRateScale));
 			int64_t targetFrameTicks = (targetFrameTimeNS * qpf.QuadPart) / kNanosecondsPerSecond;
 
-			static LARGE_INTEGER lastFrame = {};
+			// Fixed cadence: a late frame is repaid next frame instead of drifting
+			static int64_t nextFrame = 0;
+			// FG toggles with menus; rebase the pending deadline onto the new interval
+			static int64_t lastFrameTicks = 0;
+			nextFrame += targetFrameTicks - lastFrameTicks;
+			lastFrameTicks = targetFrameTicks;
+
 			LARGE_INTEGER timeNow;
 			QueryPerformanceCounter(&timeNow);
-
-			int64_t delta = timeNow.QuadPart - lastFrame.QuadPart;
-			if (delta < targetFrameTicks) {
-				TimerSleepQPC(lastFrame.QuadPart + targetFrameTicks);
-			}
-			QueryPerformanceCounter(&lastFrame);
+			if (timeNow.QuadPart < nextFrame)
+				TimerSleepQPC(nextFrame, qpf.QuadPart);
+			// Over a whole interval behind (hitch, limiter re-enabled): restart from now
+			nextFrame = timeNow.QuadPart < nextFrame + targetFrameTicks ? nextFrame + targetFrameTicks : timeNow.QuadPart + targetFrameTicks;
 		}
 	}
 }
@@ -1707,6 +1731,7 @@ void Upscaling::Main_UpdateJitter::thunk(RE::BSGraphics::State* a_state)
 void Upscaling::MenuManagerDrawInterfaceStartHook::thunk(int64_t a1)
 {
 	globals::features::upscaling.PostDisplay();
+	globals::features::screenshotFeature.SnapshotCleanScene();
 
 	// For non-Frame Gen HDR: redirect kFRAMEBUFFER.RTV to UI texture before vanilla UI renders
 	// When FG is active, its SetUIBuffer redirects to uiBufferWrapped instead

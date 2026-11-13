@@ -25,6 +25,9 @@ namespace SceneSettingsPolicy
 		{ "TerrainVariation" },
 		{ "ImageBasedLighting", "DisableInWorldMap" },
 		{ "ImageBasedLighting", "DisableInLoadingScreen" },
+		// Debug visualisation, never a look
+		{ "LightLimitFix", "EnableLightsVisualisation" },
+		{ "LightLimitFix", "LightsVisualisationMode" },
 		{ "PostProcessing", "Border" },
 		// Auto-enabled each frame from its inputs, so a scene value would never be retained.
 		{ "PostProcessing", "Composite" },
@@ -59,6 +62,7 @@ namespace SceneSettingsPolicy
 		{ "GrassLighting" },
 		{ "ImageBasedLighting" },
 		{ "PostProcessing" },
+		{ "ProceduralSun" },
 		{ "ScreenSpaceGI" },
 		{ "ScreenSpaceShadows" },
 		{ "Skylighting" },
