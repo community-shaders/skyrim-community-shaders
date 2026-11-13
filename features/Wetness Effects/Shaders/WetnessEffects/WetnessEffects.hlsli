@@ -636,8 +636,9 @@ namespace WetnessEffects
 			}
 			else
 			{
-				positionDx = ddx(puddlePosition);
-				positionDy = ddy(puddlePosition);
+				// Differentiate before adding the camera offset to preserve nearby detail far from the origin.
+				positionDx = ddx(worldPosition);
+				positionDy = ddy(worldPosition);
 				rainPositionDx = positionDx;
 				rainPositionDy = positionDy;
 			}
@@ -656,7 +657,12 @@ namespace WetnessEffects
 		float4 raindropInfo = float4(0, 0, 1, 0);
 		bool calculateRipples = enablePuddleEffects && SharedData::wetnessEffectsSettings.EnableRipples;
 		bool calculateSplashes = rainWetnessOverride < 0.0 && SharedData::wetnessEffectsSettings.EnableSplashes;
-		float impactCoverage = enableRainFlowEffects ? smoothstep(0.5, 0.9, vertexNormal.z) : 1.0;
+		bool wallRainActive = enableRainFlowEffects &&
+		                      SharedData::wetnessEffectsSettings.EnableWetnessEffects &&
+		                      SharedData::wetnessEffectsSettings.EnableRaindropFx &&
+		                      SharedData::wetnessEffectsSettings.EnableWallRain &&
+		                      SharedData::wetnessEffectsSettings.WallRainDensity > 0.0;
+		float impactCoverage = wallRainActive ? smoothstep(0.5, 0.9, vertexNormal.z) : 1.0;
 		bool shouldCalculateRaindrops = (vertexNormal.z > 0.0) &&
 		                                (impactCoverage > 0.0) &&
 		                                (SharedData::wetnessEffectsSettings.Raining > 0.0) &&
