@@ -1597,6 +1597,8 @@
     "menu.profiling.percent": "%",
     "menu.profiling.total": "Итого",
     "menu.restore_settings": "Восстановить сохранённые настройки",
+    "menu.settings.auto_hide_feature_list": "Автоскрытие списка функций",
+    "menu.settings.auto_hide_feature_list_tooltip": "Автоматически скрывает левую панель списка функций. Наведите к левому краю.",
     "menu.settings.background_blur": "Размытие фона",
     "menu.settings.background_blur_tooltip": "Размытие фона за окном меню.",
     "menu.settings.base_font_size": "Базовый размер шрифта",
