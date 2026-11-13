@@ -119,22 +119,19 @@ void LightLimitFix::DrawSettings()
 
 	DrawLocalShadowSettings();
 
-	if (ImGui::TreeNodeEx(T(TKEY("statistics"), "Statistics"), ImGuiTreeNodeFlags_DefaultOpen)) {
-		ImGui::Text(std::format("Clustered Light Count : {}", lightCount).c_str());
-		ImGui::Text("%s", std::vformat(T(TKEY("particle_light_count"), "Particle Lights : {}"), std::make_format_args(particleLightCount)).c_str());
-		if (IsLocalShadowsEnabled()) {
-			ImGui::Text("%s", std::vformat(T(TKEY("shadow_casters_stats"), "Shadow Casters : {} tracked, {} cached, {} rendered this frame"),
-								  std::make_format_args(localShadowStatTracked, localShadowStatCached, localShadowStatRendered))
-								  .c_str());
-		}
-		if (localShadowCache) {
-			const uint64_t cacheMegabytes = (localShadowCacheSlots * GetLocalShadowSlotBytes(localShadowCacheResolution, localShadowCacheFormat)) >> 20;
-			ImGui::Text("%s", std::vformat(T(TKEY("shadow_cache_stats"), "Shadow Cache : {} x {}x{}, {} MB"),
-								  std::make_format_args(localShadowCacheSlots, localShadowCacheResolution, localShadowCacheResolution, cacheMegabytes))
-								  .c_str());
-		}
-
-		ImGui::TreePop();
+	ImGui::SeparatorText(T(TKEY("statistics"), "Statistics"));
+	ImGui::Text(std::format("Clustered Light Count : {}", lightCount).c_str());
+	ImGui::Text("%s", std::vformat(T(TKEY("particle_light_count"), "Particle Lights : {}"), std::make_format_args(particleLightCount)).c_str());
+	if (IsLocalShadowsEnabled()) {
+		ImGui::Text("%s", std::vformat(T(TKEY("shadow_casters_stats"), "Shadow Casters : {} tracked, {} cached, {} rendered this frame"),
+							  std::make_format_args(localShadowStatTracked, localShadowStatCached, localShadowStatRendered))
+							  .c_str());
+	}
+	if (localShadowCache) {
+		const uint64_t cacheMegabytes = (localShadowCacheSlots * GetLocalShadowSlotBytes(localShadowCacheResolution, localShadowCacheFormat)) >> 20;
+		ImGui::Text("%s", std::vformat(T(TKEY("shadow_cache_stats"), "Shadow Cache : {} x {}x{}, {} MB"),
+							  std::make_format_args(localShadowCacheSlots, localShadowCacheResolution, localShadowCacheResolution, cacheMegabytes))
+							  .c_str());
 	}
 
 	ImGui::SeparatorText(T(TKEY("debug"), "Debug"));

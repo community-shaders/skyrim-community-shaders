@@ -133,7 +133,7 @@ namespace
 
 void UnifiedWater::DrawSettings()
 {
-	if (Util::ShowDebugSections() && ImGui::TreeNodeEx(T(TKEY("debug"), "Debug"), ImGuiTreeNodeFlags_DefaultOpen)) {
+	if (Util::ShowDebugSections()) {
 		if (Util::Button(T(TKEY("regenerate_flowmap"), "Regenerate Flowmap")) && flowmap) {
 			if (flowmap->RegenerateAndLoadFlowmap())
 				SetFlowmapTex();
@@ -141,8 +141,6 @@ void UnifiedWater::DrawSettings()
 
 		if (Util::Button(T(TKEY("regenerate_caches"), "Regenerate Caches")) && waterCache)
 			waterCache->RegenerateCaches();
-
-		ImGui::TreePop();
 	}
 }
 

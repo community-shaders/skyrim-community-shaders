@@ -348,9 +348,9 @@ void PhysicalGlare::DrawSettings()
 					"Paper default: 0.001. Higher = cleaner glare wings."));
 	}
 
-	if (Util::ShowDebugSections() && ImGui::CollapsingHeader(T("feature.post_processing.physical_glare.debug", "Debug"))) {
-		if (texGlarePacked)
-			ImGui::Image(texGlarePacked->srv.get(), { 256.f, 256.f });
+	if (Util::ShowDebugSections() && texGlarePacked) {
+		ImGui::SeparatorText(T("feature.post_processing.physical_glare.debug", "Debug"));
+		ImGui::Image(texGlarePacked->srv.get(), { 256.f, 256.f });
 	}
 }
 

@@ -63,7 +63,6 @@ void LinearLighting::DrawSettings()
 
 	if (Util::BeginPillTabBar("##LinearLightingTabs")) {
 		if (Util::BeginPillTabItem(T(TKEY("tab_general"), "General"))) {
-			ImGui::SeparatorText(T(TKEY("multipliers"), "Multipliers"));
 			ImGui::SliderFloat(T(TKEY("directional_light_multiplier"), "Directional Light Multiplier"), &settings.directionalLightMult, 0.0f, 10.0f, "%.2f");
 			ImGui::SliderFloat(T(TKEY("ambient_multiplier"), "Ambient Multiplier"), &settings.ambientMult, 0.0f, 10.0f, "%.2f");
 			ImGui::SliderFloat(T(TKEY("glowmap_multiplier"), "Glowmap Multiplier"), &settings.glowmapMult, 0.0f, 10.0f, "%.2f");
@@ -88,19 +87,17 @@ void LinearLighting::DrawSettings()
 			ImGui::SliderFloat(T(TKEY("emissive_color_multiplier"), "Emissive Color Multiplier"), &settings.emitColorMult, 0.0f, 10.0f, "%.2f");
 			ImGui::SliderFloat(T(TKEY("point_light_multiplier"), "Point Light Multiplier"), &settings.pointLightMult, 0.0f, 10.0f, "%.2f");
 
-			if (ImGui::TreeNodeEx(T(TKEY("effects"), "Effects"), ImGuiTreeNodeFlags_DefaultOpen)) {
-				ImGui::SliderFloat(T(TKEY("effect_lighting_multiplier"), "Effect Lighting Multiplier"), &settings.effectLightingMult, 0.0f, 10.0f, "%.2f");
-				ImGui::SliderFloat(T(TKEY("membrane_effects_multiplier"), "Membrane Effects Multiplier"), &settings.membraneEffectMult, 0.0f, 10.0f, "%.2f");
-				ImGui::SliderFloat(T(TKEY("blood_effects_multiplier"), "Blood Effects Multiplier"), &settings.bloodEffectMult, 0.0f, 10.0f, "%.2f");
-				ImGui::SliderFloat(T(TKEY("projected_effects_multiplier"), "Projected Effects Multiplier"), &settings.projectedEffectMult, 0.0f, 10.0f, "%.2f");
-				ImGui::SliderFloat(T(TKEY("deferred_effects_multiplier"), "Deferred Effects Multiplier"), &settings.deferredEffectMult, 0.0f, 10.0f, "%.2f");
-				ImGui::SliderFloat(T(TKEY("other_effects_multiplier"), "Other Effects Multiplier"), &settings.otherEffectMult, 0.0f, 10.0f, "%.2f");
-				ImGui::SliderFloat(T(TKEY("particle_effects_multiplier"), "Particle Effects Multiplier"), &settings.particleEffectMult, 0.0f, 10.0f, "%.2f");
-				ImGui::SliderFloat(T(TKEY("light_sprite_effects_multiplier"), "Light Sprite Effects Multiplier"), &settings.lightSpriteEffectMult, 0.0f, 10.0f, "%.2f");
-				ImGui::SliderFloat(T(TKEY("fire_effects_multiplier"), "Fire Effects Multiplier"), &settings.fireEffectMult, 0.0f, 10.0f, "%.2f");
-				ImGui::SliderFloat(T(TKEY("fire_effects_curve"), "Fire Effects Curve"), &settings.fireEffectCurve, FireEffectCurveMin, FireEffectCurveMax, "%.2f");
-				ImGui::TreePop();
-			}
+			ImGui::SeparatorText(T(TKEY("effects"), "Effects"));
+			ImGui::SliderFloat(T(TKEY("effect_lighting_multiplier"), "Effect Lighting Multiplier"), &settings.effectLightingMult, 0.0f, 10.0f, "%.2f");
+			ImGui::SliderFloat(T(TKEY("membrane_effects_multiplier"), "Membrane Effects Multiplier"), &settings.membraneEffectMult, 0.0f, 10.0f, "%.2f");
+			ImGui::SliderFloat(T(TKEY("blood_effects_multiplier"), "Blood Effects Multiplier"), &settings.bloodEffectMult, 0.0f, 10.0f, "%.2f");
+			ImGui::SliderFloat(T(TKEY("projected_effects_multiplier"), "Projected Effects Multiplier"), &settings.projectedEffectMult, 0.0f, 10.0f, "%.2f");
+			ImGui::SliderFloat(T(TKEY("deferred_effects_multiplier"), "Deferred Effects Multiplier"), &settings.deferredEffectMult, 0.0f, 10.0f, "%.2f");
+			ImGui::SliderFloat(T(TKEY("other_effects_multiplier"), "Other Effects Multiplier"), &settings.otherEffectMult, 0.0f, 10.0f, "%.2f");
+			ImGui::SliderFloat(T(TKEY("particle_effects_multiplier"), "Particle Effects Multiplier"), &settings.particleEffectMult, 0.0f, 10.0f, "%.2f");
+			ImGui::SliderFloat(T(TKEY("light_sprite_effects_multiplier"), "Light Sprite Effects Multiplier"), &settings.lightSpriteEffectMult, 0.0f, 10.0f, "%.2f");
+			ImGui::SliderFloat(T(TKEY("fire_effects_multiplier"), "Fire Effects Multiplier"), &settings.fireEffectMult, 0.0f, 10.0f, "%.2f");
+			ImGui::SliderFloat(T(TKEY("fire_effects_curve"), "Fire Effects Curve"), &settings.fireEffectCurve, FireEffectCurveMin, FireEffectCurveMax, "%.2f");
 
 			Util::EndPillTabItem();
 		}
