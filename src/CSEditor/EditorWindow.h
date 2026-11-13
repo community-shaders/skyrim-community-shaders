@@ -41,8 +41,10 @@ public:
 
 	bool open = false;
 	bool showWeatherDebug = false;  // optional Weather Debug window, off by default (not persisted)
-	bool widgetsHidden = false;     // action bar toggle: hides every window except the bar (not persisted)
-	float widgetsFade = 1.0f;       // 1 = widgets shown, 0 = hidden; eased toward widgetsHidden each frame
+	bool showCloudWeatherMaps = false;
+	int cloudWeatherPreviewTab = -1;  // one-shot selection from a cloud layer's preview button
+	bool widgetsHidden = false;       // action bar toggle: hides every window except the bar (not persisted)
+	float widgetsFade = 1.0f;         // 1 = widgets shown, 0 = hidden; eased toward widgetsHidden each frame
 	PreviewMode previewMode = PreviewMode::None;
 	const static int maxRecordMarkers = 10;
 
@@ -193,6 +195,9 @@ public:
 
 	/** @brief Draw all currently open widget editing windows. */
 	void ShowWidgetWindow();
+
+	/** @brief Draw the optional, dockable live low/middle cloud weather-map viewer. */
+	void ShowCloudWeatherWindow();
 
 	/** @brief Lays out and draws every editor window below the action bar; skipped once the hide fade finishes. */
 	void DrawEditorWindows(float scale, float actionBarBottom);

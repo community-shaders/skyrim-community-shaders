@@ -242,7 +242,7 @@ void SceneSettingsManager::StartLocationTransitions(
 		const auto targetValue = targetJson.get<float>();
 		if (!std::isfinite(startValue) || !std::isfinite(targetValue))
 			continue;
-		if (duration <= 0.0f || std::abs(targetValue - startValue) < kBlendEpsilon) {
+		if (duration <= 0.0f || targetValue == startValue) {
 			if (activeLocationTransitions.erase(address) != 0)
 				locationTransitionBatchesDirty = true;
 			continue;
@@ -291,15 +291,16 @@ bool SceneSettingsManager::AdvanceLocationTransitions(float now)
 	bool appliedAny = false;
 	const auto retryNow = std::chrono::steady_clock::now();
 	for (auto& [featureShortName, batch] : locationTransitionBatches) {
-		// A batch nobody can see move is a save/load round trip for nothing. The final tick always
-		// applies, so the target value still lands exactly.
+		// Compare against the applied value, not the previous tick's candidate. A fixed
+		// absolute epsilon can suppress an entire cloud-density fade (e.g. 0.02 -> 0).
 		bool valuesMoved = false;
 		for (size_t index = 0; index < batch.transitions.size(); ++index) {
 			const auto& transition = *batch.transitions[index];
 			const auto eased = EaseLocationTransition(transition, now);
 			const bool finished = IsLocationTransitionFinished(transition, now);
-			valuesMoved = valuesMoved || finished ||
-			              std::abs(eased - batch.updates[index].value.get<float>()) >= kBlendEpsilon;
+			const auto appliedIt = appliedSettings.find(batch.addresses[index]);
+			valuesMoved = valuesMoved || finished || appliedIt == appliedSettings.end() ||
+			              !AppliedValuesEqual(appliedIt->second, json(eased));
 			// A restore lands on the baseline itself, which a float round trip of it need not equal.
 			const auto baselineIt = finished && transition.restoreAtEnd ? baselineSettings.find(batch.addresses[index]) :
 			                                                              baselineSettings.end();
@@ -377,7 +378,7 @@ void SceneSettingsManager::RetireFinishedLocationTransitions(float now)
 		auto appliedIt = appliedSettings.find(address);
 		if (!IsLocationTransitionFinished(transition, now) || appliedIt == appliedSettings.end() ||
 			!IsNumericValue(appliedIt->second) ||
-			std::abs(appliedIt->second.get<float>() - transition.targetValue) >= kBlendEpsilon) {
+			!AppliedValuesEqual(appliedIt->second, json(transition.targetValue))) {
 			++transitionIt;
 			continue;
 		}

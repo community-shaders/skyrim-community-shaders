@@ -201,6 +201,7 @@ class SceneSettingsPolicyTests(unittest.TestCase):
             ("cloudLayer/low", "bottomSoftness"), ("cloudLayer/low", "bottomSoftnessHeight"),
             ("cloudLayer/low", "topExpansionScale"), ("cloudLayer/low", "curvatureRadius"),
             ("cloudLayer/low", "ndfAltitudeScale"),
+            ("cloudLayer/middle", "densityScale"), ("cloudLayer/middle", "altitude"),
             ("cloudLayer/cirrus", "densityScale"), ("cloudLayer/cirrus", "altitude"),
             ("cloudLayer/lighting", "brightness"), ("cloudLayer/lighting", "sunExtinction"),
             ("cloudLayer/lighting", "viewExtinction"), ("cloudLayer/lighting", "dropletDiameter"),

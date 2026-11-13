@@ -8,6 +8,7 @@
 #include "Features/Effects11.h"
 #include "Features/Effects11/Editor/Effects11Editor.h"
 #include "Features/HDRDisplay.h"
+#include "Features/PhysicalSky.h"
 #include "Features/Upscaling.h"
 #include "Globals.h"
 #include "IconsTabler.h"
@@ -729,6 +730,36 @@ void EditorWindow::ShowWidgetWindow()
 	}
 }
 
+void EditorWindow::ShowCloudWeatherWindow()
+{
+	if (!showCloudWeatherMaps)
+		return;
+	const auto layoutCond = resetLayout ? ImGuiCond_Always : ImGuiCond_FirstUseEver;
+	const auto& display = ImGui::GetIO().DisplaySize;
+	const float em = ImGui::GetFontSize();
+	ImGui::SetNextWindowSize({ std::min(34.f * em, display.x * 0.8f), std::min(42.f * em, display.y * 0.8f) }, layoutCond);
+	ImGui::SetNextWindowPos({ display.x * 0.7f, display.y * 0.5f }, layoutCond, { 0.5f, 0.5f });
+	if (cloudWeatherPreviewTab >= 0) {
+		ImGui::SetNextWindowCollapsed(false);
+		ImGui::SetNextWindowFocus();
+	}
+	const auto title = std::format("{}###CloudWeatherMaps", T(TKEY("cloud_weather_maps"), "Cloud Weather Maps"));
+	if (ImGui::Begin(title.c_str(), &showCloudWeatherMaps)) {
+		if (ImGui::BeginTabBar("CloudLayers")) {
+			for (int layer = 0; layer < 2; ++layer) {
+				const auto* label = layer == 0 ? T("feature.physical_sky.composition", "Low Clouds") : T("feature.physical_sky.middle_clouds", "Middle Clouds (As / Ac)");
+				if (ImGui::BeginTabItem(label, nullptr, cloudWeatherPreviewTab == layer ? ImGuiTabItemFlags_SetSelected : 0)) {
+					globals::features::physicalSky.DrawCloudWeatherPreview(layer == 1, true);
+					ImGui::EndTabItem();
+				}
+			}
+			cloudWeatherPreviewTab = -1;
+			ImGui::EndTabBar();
+		}
+	}
+	ImGui::End();
+}
+
 void EditorWindow::DrawEditorWindows(float scale, float actionBarBottom)
 {
 	const float pad = ThemeManager::Constants::OVERLAY_WINDOW_POSITION * scale;
@@ -769,6 +800,7 @@ void EditorWindow::DrawEditorWindows(float scale, float actionBarBottom)
 	}
 
 	ShowWidgetWindow();
+	ShowCloudWeatherWindow();
 
 	// Locations are not form widgets, so their windows are drawn alongside the widget pass.
 	SceneSettingsUI::DrawLocationWindows();
@@ -968,6 +1000,7 @@ void EditorWindow::RenderUI()
 				}
 				ImGui::Checkbox(T(TKEY("palette"), "Palette"), &PaletteWindow::GetSingleton()->open);
 				ImGui::Checkbox(T(TKEY("weather_picker"), "Weather Picker"), &WeatherPickerWindow::GetSingleton()->open);
+				ImGui::Checkbox(T(TKEY("cloud_weather_maps"), "Cloud Weather Maps"), &showCloudWeatherMaps);
 				ImGui::Checkbox(T(TKEY("weather_debug"), "Weather Debug"), &showWeatherDebug);
 				Util::AddTooltip(T(TKEY("weather_debug_tooltip"), "Current and last weather details, plus rain & wetness analysis from other features"));
 				if (ImGui::Checkbox(T(TKEY("base_settings_window"), "Base Settings"), &settings.showFeaturesWindow))

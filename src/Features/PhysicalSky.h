@@ -53,6 +53,10 @@ struct PhysicalSky final : public Feature
 	void DrawCloudStatus();
 	void DrawCloudLayerProfile();
 	void DrawWeatherMapSection();
+	/// Show an optional inline map, or the contents of the Editor's live map window.
+	void DrawCloudWeatherPreview(bool middle, bool standalone = false);
+	/// Draw global noise and texture inputs shared by the cloud layers.
+	void DrawCloudResourcesSection();
 	void DrawLowCloudSection();
 	void DrawCloudMotionSection();
 	void DrawCloudStormSection();
@@ -349,6 +353,8 @@ struct PhysicalSky final : public Feature
 	int32_t debugCubeFace = 0;
 	eastl::unique_ptr<Texture2D> debugApSlice = nullptr;
 	TexturePreview texturePreview;
+	std::array<bool, 2> showCloudWeatherPreview{};
+	std::array<int, 2> cloudWeatherPreviewChannel{};
 	void DrawDebugCloudTexture(ID3D11ShaderResourceView* srv, const char* id, const char* label, float scale, bool scalar = false);
 	ID3D11ShaderResourceView* GetDebugCubeFaceSrv(Texture2D* a_texture);
 	ID3D11ShaderResourceView* GetDebugVolumeSliceSrv(ID3D11ShaderResourceView* a_srv, eastl::unique_ptr<Texture2D>& a_target);
