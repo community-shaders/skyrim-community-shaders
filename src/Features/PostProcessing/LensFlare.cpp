@@ -66,6 +66,8 @@ void LensFlare::DrawSettings()
 
 	ImGui::SliderFloat(T("feature.post_processing.lens_flare.intensity", "Intensity"), &settings.Intensity, 0.0f, 1.0f, "%.3f");
 	tooltip(T("feature.post_processing.lens_flare.tooltip_intensity", "Master intensity for the entire lens flare effect"));
+	ImGui::ColorEdit3(T("feature.post_processing.lens_flare.tint", "Tint"), settings.Tint.data());
+	tooltip(T("feature.post_processing.lens_flare.tooltip_tint", "Radial color gradient applied to the flare effect"));
 
 	// Threshold
 	ImGui::Spacing();
@@ -213,13 +215,6 @@ void LensFlare::DrawSettings()
 	ImGui::SliderFloat(T("feature.post_processing.lens_flare.halo_compression", "Halo Compression"), &settings.HaloCompression, 0.1f, 2.0f, "%.3f");
 	tooltip(T("feature.post_processing.lens_flare.tooltip_halo_compression", "Fisheye distortion strength for the halo effect"));
 	ImGui::SliderFloat(T("feature.post_processing.lens_flare.halo_chroma_shift", "Halo Chroma Shift"), &settings.HaloChromaShift, 0.0f, 0.1f, "%.4f");
-
-	// Tint
-	ImGui::Spacing();
-	ImGui::TextUnformatted(T("feature.post_processing.lens_flare.color_tint", "Color Tint"));
-	ImGui::Separator();
-	ImGui::ColorEdit3(T("feature.post_processing.lens_flare.tint", "Tint"), settings.Tint.data());
-	tooltip(T("feature.post_processing.lens_flare.tooltip_tint", "Radial color gradient applied to the flare effect"));
 
 	// Debug
 	ImGui::Spacing();

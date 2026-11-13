@@ -416,11 +416,10 @@ namespace SceneSettingsInternal
 			setting.editorSemantic != SceneSettingsCatalog::EditorSemantic::Numeric)
 			return false;
 
-		double minimum = 0.0;
-		double maximum = 0.0;
-		if (!ConvertCatalogNumericDisplayToStored(setting, setting.minimumValue, minimum) ||
-			!ConvertCatalogNumericDisplayToStored(setting, setting.maximumValue, maximum) ||
-			minimum >= maximum)
+		// The catalog bounds are already in stored units (radians for SliderAngle, 0..1 for percentages).
+		const double minimum = setting.minimumValue;
+		const double maximum = setting.maximumValue;
+		if (!std::isfinite(minimum) || !std::isfinite(maximum) || minimum >= maximum)
 			return false;
 
 		const double storedValue = value.get<double>();

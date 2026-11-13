@@ -42,7 +42,7 @@ public:
 	{
 		bool enableHDR = false;           // false = vanilla SDR, true = HDR output
 		uint hdrPaperWhite = 203;         // Reference white brightness in nits for HDR
-		uint hdrPeakNits = 800;           // Maximum display brightness in nits for HDR
+		uint hdrPeakNits = 1000;          // Maximum display brightness in nits for HDR
 		float hdrUIBrightness = 1.0f;     // UI brightness multiplier for HDR mode
 		bool dontShowHDRWarning = false;  // User preference to suppress HDR warning popup
 		bool hdrAutoDetected = false;     // Has auto-detection run at least once?
@@ -70,8 +70,8 @@ public:
 	/** @brief Draws the ImGui settings UI for HDR enable, paper white, peak brightness, and UI brightness. */
 	virtual void DrawSettings() override;
 
-	/** @brief Enables the bUse64bitsHDRRenderTarget INI setting for float16 render targets. */
-	virtual void DataLoaded() override;
+	/** @brief Forces bUse64bitsHDRRenderTarget for float16 targets; call right before BSShaderRenderTargets::Create. */
+	void PreCreateRenderTargets();
 	/** @brief Creates HDR, output, and UI textures, constant buffer, and upgrades LDR render targets. */
 	virtual void SetupResources() override;
 	/** @brief Releases cached compute shaders and patched blend states. */

@@ -38,7 +38,7 @@ namespace
 	{
 		std::string_view id;
 		Group group;
-		bool editsTheme;  ///< Edits values stored in the theme file, so the header shows the theme save note
+		bool editsTheme;  ///< Edits values stored in the theme file, so the header shows the unsaved theme banner
 		void (*draw)(PageState& state);
 	};
 
@@ -175,10 +175,10 @@ namespace
 			ImGui::TextDisabled("%s", description ? description : GetGroupLabel(section.group));
 			ImGui::PopTextWrapPos();
 		}
-		if (section.editsTheme)
-			SettingsTabRenderer::RenderThemeSaveNote();
 		ImGui::Separator();
 		ImGui::Spacing();
+		if (section.editsTheme && section.id != Ids::kTheme)
+			SettingsTabRenderer::RenderThemeUnsavedBanner();
 	}
 
 	void RenderNav(PageState& state)
@@ -202,6 +202,13 @@ namespace
 			ImGui::PushID(section.id.data(), section.id.data() + section.id.size());
 			if (Util::Selectable(GetSectionTitle(section.id), state.section == section.id))
 				state.section = std::string(section.id);
+			if (section.id == Ids::kTheme && SettingsTabRenderer::IsThemeDirty()) {
+				const ImVec2 min = ImGui::GetItemRectMin();
+				const ImVec2 max = ImGui::GetItemRectMax();
+				const float box = ImGui::GetFontSize();
+				const ImVec2 center(max.x - ImGui::GetStyle().FramePadding.x - box * 0.5f, (min.y + max.y) * 0.5f);
+				BrowserUI::DotIcon()(ImGui::GetWindowDrawList(), center, box, ImGui::GetColorU32(Util::Colors::GetUnsaved()));
+			}
 			ImGui::PopID();
 		}
 	}

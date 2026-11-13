@@ -101,22 +101,19 @@ void HistogramAutoExposure::DrawSettings()
 				"Turning up the minimum, for example, makes it adapt less to darkness and therefore prevents over-brightening of dark scenes."));
 	ImGui::EndDisabled();
 
-	if (ImGui::TreeNodeEx(T("feature.post_processing.histogram_auto_exposure.purkinje_effect", "Purkinje Effect"), ImGuiTreeNodeFlags_DefaultOpen)) {
-		ImGui::TextWrapped(
-			T("feature.post_processing.histogram_auto_exposure.the_purkinje_effect_simulates_the_blue_shift_of",
-				"The Purkinje effect simulates the blue shift of human vision under low light.\n"
-				"If you don't like the effect, you can set the strength to zero."));
+	ImGui::SeparatorText(T("feature.post_processing.histogram_auto_exposure.purkinje_effect", "Purkinje Effect"));
+	ImGui::TextWrapped(
+		T("feature.post_processing.histogram_auto_exposure.the_purkinje_effect_simulates_the_blue_shift_of",
+			"The Purkinje effect simulates the blue shift of human vision under low light.\n"
+			"If you don't like the effect, you can set the strength to zero."));
 
-		ImGui::SliderFloat(T("feature.post_processing.histogram_auto_exposure.max_strength", "Max Strength"), &settings.PurkinjeStrength, 0.f, 5.f, "%.2f");
-		ImGui::SliderFloat(T("feature.post_processing.histogram_auto_exposure.fade_in_ev", "Fade In EV100"), &settings.PurkinjeStartEV, -10.f, 3.f, "%.2f EV100");
-		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::TextUnformatted(T("feature.post_processing.histogram_auto_exposure.the_purkinje_effect_will_start_to_take_place", "The Purkinje effect will start to take place when the average scene luminance falls lower than this."));
-		ImGui::SliderFloat(T("feature.post_processing.histogram_auto_exposure.max_effect_ev", "Max Effect EV100"), &settings.PurkinjeMaxEV, -7.f, 3.f, "%.2f EV100");
-		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::TextUnformatted(T("feature.post_processing.histogram_auto_exposure.from_this_point_onward_the_purkinje_effect_remains", "From this point onward, the Purkinje effect remains the greatest."));
-
-		ImGui::TreePop();
-	}
+	ImGui::SliderFloat(T("feature.post_processing.histogram_auto_exposure.max_strength", "Max Strength"), &settings.PurkinjeStrength, 0.f, 5.f, "%.2f");
+	ImGui::SliderFloat(T("feature.post_processing.histogram_auto_exposure.fade_in_ev", "Fade In EV100"), &settings.PurkinjeStartEV, -10.f, 3.f, "%.2f EV100");
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::TextUnformatted(T("feature.post_processing.histogram_auto_exposure.the_purkinje_effect_will_start_to_take_place", "The Purkinje effect will start to take place when the average scene luminance falls lower than this."));
+	ImGui::SliderFloat(T("feature.post_processing.histogram_auto_exposure.max_effect_ev", "Max Effect EV100"), &settings.PurkinjeMaxEV, -7.f, 3.f, "%.2f EV100");
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::TextUnformatted(T("feature.post_processing.histogram_auto_exposure.from_this_point_onward_the_purkinje_effect_remains", "From this point onward, the Purkinje effect remains the greatest."));
 
 	if (ImGui::CollapsingHeader(T("feature.post_processing.histogram_auto_exposure.histogram", "Histogram"), ImGuiTreeNodeFlags_DefaultOpen)) {
 		histogramReadbackRequested = true;

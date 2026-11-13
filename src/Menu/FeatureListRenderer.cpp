@@ -274,7 +274,7 @@ namespace
 		float availableWidth;  ///< Content width the header spans
 	};
 
-	/** @brief How the feature header toolbar (Modified chip, pin, actions, boot toggle) fits the width it has. */
+	/** @brief How the feature header toolbar (Modified and cost chips, pin, actions, boot toggle) fits the width it has. */
 	struct FeatureToolbarLayout
 	{
 		bool ownRow = false;    ///< Drops below the title instead of sharing its line
@@ -289,18 +289,20 @@ namespace
 		float gap = 0.0f;              ///< Space between toolbar pieces
 		float chipFull = 0.0f;         ///< Modified chip with its text; 0 when the feature is unmodified
 		float chipIcon = 0.0f;         ///< Modified chip reduced to its icon
+		float costChip = 0.0f;         ///< Profiling cost chip, which keeps its text so the reading stays visible; 0 when the feature has none
 		float controlsFull = 0.0f;     ///< Pin, actions menu and boot toggle with its caption
 		float controlsCompact = 0.0f;  ///< The same without the caption
 	};
 
 	/**
-	 * @brief Picks the richest toolbar that fits: the chip loses its text first, then the boot caption, and only when the
+	 * @brief Picks the richest toolbar that fits: the Modified chip loses its text first, then the boot caption, and only when the
 	 * title leaves no room even for that does the toolbar move to its own row, where the same steps repeat.
 	 * @param available Content width of the header
 	 */
 	FeatureToolbarLayout ChooseFeatureToolbarLayout(float available, const FeatureToolbarWidths& w)
 	{
 		const bool hasChip = w.chipFull > 0.0f;
+		const bool hasCostChip = w.costChip > 0.0f;
 		constexpr FeatureToolbarLayout steps[] = {
 			{ false, true, true },
 			{ false, false, true },
@@ -310,6 +312,8 @@ namespace
 			float width = step.bootLabel ? w.controlsFull : w.controlsCompact;
 			if (hasChip)
 				width += w.gap + (step.chipLabel ? w.chipFull : w.chipIcon);
+			if (hasCostChip)
+				width += w.gap + w.costChip;
 			return width;
 		};
 
@@ -1365,6 +1369,10 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureHeader(Feature* feat, bo
 		chipIconWidth = BrowserUI::MeasureChip("", true);
 	}
 
+	// What the feature's own passes cost per frame; opens the breakdown. Only features with timed passes show it.
+	const bool showCost = !isDisabled && isLoaded;
+	const float costChipWidth = showCost ? ProfilingRenderer::MeasureFeatureCostChip(featureName) : 0.0f;
+
 	// The toolbar is laid out once the title block's real width is known, so it can shrink or wrap instead of overlapping it
 	const auto drawToolbar = [&](const FeatureHeaderSlot& slot) {
 		const auto layout = ChooseFeatureToolbarLayout(slot.availableWidth,
@@ -1372,15 +1380,19 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureHeader(Feature* feat, bo
 				.gap = style.ItemSpacing.x,
 				.chipFull = chipFullWidth,
 				.chipIcon = chipIconWidth,
+				.costChip = costChipWidth,
 				.controlsFull = controlsFullWidth,
 				.controlsCompact = controlsCompactWidth });
 
-		// On the title's line the chip hugs the baseline and the controls centre on the title; on their own row both share it
+		// On the title's line the chips hug the baseline and the controls centre on the title; on their own row all share it
 		const float chipY = layout.ownRow ? slot.belowTitle.y : slot.titleMin.y + slot.titleHeight - iconSize;
 		const float rowY = layout.ownRow ? slot.belowTitle.y : slot.titleMin.y + (slot.titleHeight - iconSize) * 0.5f;
 
+		// Chips run left to right from the title's end, or from the left edge on their own row
+		float chipX = layout.ownRow ? slot.titleMin.x : slot.trailingX;
+
 		if (showModified) {
-			ImGui::SetCursorScreenPos(ImVec2(layout.ownRow ? slot.titleMin.x : slot.trailingX, chipY));
+			ImGui::SetCursorScreenPos(ImVec2(chipX, chipY));
 			bool restore = false;
 			{
 				MenuFonts::FontRoleGuard subtext(Menu::FontRole::Subtext);
@@ -1388,6 +1400,7 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureHeader(Feature* feat, bo
 				restore = BrowserUI::Chip("##FeatureModified", layout.chipLabel ? modifiedLabel : "", Icons::TI(ICON_TI_PENCIL), &secondary);
 				ImGui::PopStyleColor();
 			}
+			chipX = ImGui::GetItemRectMax().x + style.ItemSpacing.x;
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				if (!layout.chipLabel)
 					ImGui::TextUnformatted(modifiedLabel);
@@ -1399,6 +1412,12 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureHeader(Feature* feat, bo
 			}
 			if (restore)
 				RestoreDefaults(feat);
+		}
+
+		// The layout reserved its room, so the limit only guards the narrowest floor, where it stops at the header's edge
+		if (costChipWidth > 0.0f) {
+			ImGui::SetCursorScreenPos(ImVec2(chipX, chipY));
+			ProfilingRenderer::RenderFeatureCostChip(featureName, slot.titleMin.x + slot.availableWidth + 1.0f);
 		}
 
 		float x = slot.titleMin.x + slot.availableWidth - (layout.bootLabel ? controlsFullWidth : controlsCompactWidth);
@@ -1519,11 +1538,6 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureSettings(Feature* feat, 
 	} else {
 		if (isLoaded) {
 			DrawFeatureBody(feat);
-
-			if (feat != &globals::features::csEditor && ProfilingRenderer::HasFeatureTimers(feat->GetShortName())) {
-				ImGui::SeparatorText(T("menu.features.profiling", "Profiling"));
-				ProfilingRenderer::RenderFeatureTimers(feat->GetShortName());
-			}
 		} else {
 			if (FeatureIssues::IsObsoleteFeature(feat->GetShortName())) {
 				feat->DrawUnloadedUI();
