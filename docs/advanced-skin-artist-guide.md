@@ -17,9 +17,9 @@ textures/actors/character/female/femalebody_1.csskin.json  <- its material
 
 Everything that shows that texture uses that material:
 
--   Every character and NPC using the skin.
--   Bare arms, legs and midriffs inside armor and clothing. The game puts the wearer's skin texture on those shapes, so they match the naked body automatically. You never set up a material per outfit.
--   First-person arms.
+- Every character and NPC using the skin.
+- Bare arms, legs and midriffs inside armor and clothing. The game puts the wearer's skin texture on those shapes, so they match the naked body automatically. You never set up a material per outfit.
+- First-person arms.
 
 And anything that shows a different texture uses a different material. Khajiit and humans may share a body mesh, but they have different textures, so they have separate materials. If the player changes race, the head starts showing another texture and picks up that texture's material by itself.
 

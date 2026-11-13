@@ -18,9 +18,9 @@ A mesh is therefore shared by many characters and races, and one character wears
 
 So the diffuse texture is the material's identity:
 
--   Bare arms in a cuirass show the wearer's body texture, so they get the same material as the naked body.
--   A Khajiit and a Nord in the same armor mesh show different textures, so each gets its own material.
--   When the player changes race, the head shows a different texture and switches to that texture's material. Data painted for another UV layout cannot be applied by mistake.
+- Bare arms in a cuirass show the wearer's body texture, so they get the same material as the naked body.
+- A Khajiit and a Nord in the same armor mesh show different textures, so each gets its own material.
+- When the player changes race, the head shows a different texture and switches to that texture's material. Data painted for another UV layout cannot be applied by mistake.
 
 ## Layers
 
@@ -63,11 +63,11 @@ It is read through the game's resource system, so it works as a loose file or in
 }
 ```
 
--   `parameters` and `textures` are optional and sparse. Omitted values inherit the common settings.
--   Two-state parameters are `true` or `false`.
--   Texture inputs are `controls`, `wet` and `detail`, given as `textures/...dds` resource paths.
--   `//` and `/* */` comments are accepted. Unknown top-level members are ignored.
--   `authoredFor` is optional. It records the size and content hash of the diffuse the material was made for. The Skin Editor compares it when the material is selected and shows a warning on a mismatch; the material still applies. It is not checked during play, because that would require reading every diffuse in full.
+- `parameters` and `textures` are optional and sparse. Omitted values inherit the common settings.
+- Two-state parameters are `true` or `false`.
+- Texture inputs are `controls`, `wet` and `detail`, given as `textures/...dds` resource paths.
+- `//` and `/* */` comments are accepted. Unknown top-level members are ignored.
+- `authoredFor` is optional. It records the size and content hash of the diffuse the material was made for. The Skin Editor compares it when the material is selected and shows a warning on a mismatch; the material still applies. It is not checked during play, because that would require reading every diffuse in full.
 
 A file is applied as a whole or not at all. A syntax error, an unknown parameter or texture name, a value outside its range, or an invalid texture path makes the file invalid: it is ignored, the common settings apply, and the reason is written to the log and shown in the editor.
 
@@ -146,12 +146,12 @@ Data/SKSE/Plugins/CommunityShaders/AdvancedSkin/Characters/*.json
 }
 ```
 
--   `target` is `"player"` or an NPC record written as `<form ID>~<plugin>`. The form ID is the record's own ID within its plugin; a load-order prefix and `0x` are accepted and ignored, so the file does not depend on load order. The plugin name is matched without regard to case.
--   `name` is informational. The file name does not matter either; the editor writes `Player.json` or `<name> <form ID> <plugin>.json`.
--   `all` holds numeric values for every skin texture of the character. Textures are rejected there: no texture is valid for every UV layout.
--   `materials` is keyed by material key. Each entry may set values and replace the three extension textures; an empty texture path means "explicitly none" (neutral input, or the global detail texture).
--   Comments are accepted. A file is used as a whole or not at all, with the same checks as a material file, plus: the target's plugin must be installed. Ignored files and the reasons are logged and listed in the editor.
--   Two files targeting the same character: the one whose file name sorts last wins, and the other is reported.
+- `target` is `"player"` or an NPC record written as `<form ID>~<plugin>`. The form ID is the record's own ID within its plugin; a load-order prefix and `0x` are accepted and ignored, so the file does not depend on load order. The plugin name is matched without regard to case.
+- `name` is informational. The file name does not matter either; the editor writes `Player.json` or `<name> <form ID> <plugin>.json`.
+- `all` holds numeric values for every skin texture of the character. Textures are rejected there: no texture is valid for every UV layout.
+- `materials` is keyed by material key. Each entry may set values and replace the three extension textures; an empty texture path means "explicitly none" (neutral input, or the global detail texture).
+- Comments are accepted. A file is used as a whole or not at all, with the same checks as a material file, plus: the target's plugin must be installed. Ignored files and the reasons are logged and listed in the editor.
+- Two files targeting the same character: the one whose file name sorts last wins, and the other is reported.
 
 The files apply in every save, and are read again by **Reload skin resources**, so they can be edited outside the game, shared, or shipped by a follower mod. The player file applies to whichever character you are playing; keep different looks as copies and swap them in, or use **Load from another character file...** in the editor.
 
@@ -167,11 +167,11 @@ Limits: 1 MiB per file, 256 texture entries per character.
 
 The page follows the Scene Manager's layout:
 
--   **Character bar**: **Player** and **Console selection** chips, the character's name and its record. The page header holds the texture tools and **Reload skin resources**.
--   **Texture column**: every skin texture the character shows, grouped by head, body, hands, feet and other, with where each appears, including outfits and first person. A dot gives the material file's state; markers flag this character's adjustments and unsaved edits. Textures with stored character adjustments that are not shown now are listed separately. The column filters and resizes.
--   **Texture panel**: the texture's name, path, material file badge and warnings; a breadcrumb **Common › Texture material › Whole character › Character on this texture** whose highlighted chip is the layer being edited, with a toolbar (undo, redo, save, revert, copy and share, clear layer, wetness preview); the destination of a save; and the values by category.
--   **Rows**: each value leads with a gutter box, ticked when the edited layer sets the value. It is green when that value is the one shown, and amber when a higher layer of the selected character sets it too. Editing a value sets it on the layer; untick, or right-click and choose **Inherit again**, to inherit. The tooltip names the layer the value comes from.
--   **Texture tools**: a separate window for channel packing, whose result can be assigned to the layer being edited.
+- **Character bar**: **Player** and **Console selection** chips, the character's name and its record. The page header holds the texture tools and **Reload skin resources**.
+- **Texture column**: every skin texture the character shows, grouped by head, body, hands, feet and other, with where each appears, including outfits and first person. A dot gives the material file's state; markers flag this character's adjustments and unsaved edits. Textures with stored character adjustments that are not shown now are listed separately. The column filters and resizes.
+- **Texture panel**: the texture's name, path, material file badge and warnings; a breadcrumb **Common › Texture material › Whole character › Character on this texture** whose highlighted chip is the layer being edited, with a toolbar (undo, redo, save, revert, copy and share, clear layer, wetness preview); the destination of a save; and the values by category.
+- **Rows**: each value leads with a gutter box, ticked when the edited layer sets the value. It is green when that value is the one shown, and amber when a higher layer of the selected character sets it too. Editing a value sets it on the layer; untick, or right-click and choose **Inherit again**, to inherit. The tooltip names the layer the value comes from.
+- **Texture tools**: a separate window for channel packing, whose result can be assigned to the layer being edited.
 
 Saving the texture material writes its file. Saving either character layer writes the character's file; with no adjustments left, it removes the file. Errors and confirmations appear as editor notifications.
 
@@ -181,8 +181,8 @@ While the editor is open, a texture material draft previews on everything that s
 
 Under Mod Organizer and similar tools the game sees a virtual Data folder assembled from many mod folders. A path on disk such as `D:\MO2\mods\My Skin\textures\body_rfaos.dds` therefore means nothing to the game, and would break as soon as the file moved into a BSA or another mod. So the editor separates two things:
 
--   **References to resources** — every texture in a material or character file, the global detail texture, the material whose values are copied — are game resource paths (`textures/...`). They are chosen in an in-game browser that lists the Data folder as the game sees it, including all virtual files. Archived files are not listed, but their resource path can be typed in.
--   **Where new files are written** — material files and textures built by the texture tools — is the one place a disk location is needed. It is a single setting, the output mod folder, chosen once with a system folder dialog (`Data` by default, which Mod Organizer redirects to Overwrite). A resource path is then appended to it. If the chosen folder is a `textures` folder or below, the mod folder above it is used.
+- **References to resources** — every texture in a material or character file, the global detail texture, the material whose values are copied — are game resource paths (`textures/...`). They are chosen in an in-game browser that lists the Data folder as the game sees it, including all virtual files. Archived files are not listed, but their resource path can be typed in.
+- **Where new files are written** — material files and textures built by the texture tools — is the one place a disk location is needed. It is a single setting, the output mod folder, chosen once with a system folder dialog (`Data` by default, which Mod Organizer redirects to Overwrite). A resource path is then appended to it. If the chosen folder is a `textures` folder or below, the mod folder above it is used.
 
 The system file dialog is used only for files that are not game resources: source images for the texture tools, and copies of character files written for sharing.
 
@@ -190,10 +190,10 @@ A file created inside a mod folder while the game runs may not be visible throug
 
 ## Code organization
 
--   `Material/` — parameters, layering, the material file format, and the per-texture file lookup.
--   `Runtime/` — surface identification, extension textures, rendering and wetness.
--   `Persistence/` — character files.
--   `Editor/` — file publication, texture tools and UI.
+- `Material/` — parameters, layering, the material file format, and the per-texture file lookup.
+- `Runtime/` — surface identification, extension textures, rendering and wetness.
+- `Persistence/` — character files.
+- `Editor/` — file publication, texture tools and UI.
 
 The feature installs two `BSLightingShader` virtual hooks and no detours. SE, AE and VR share one code path.
 
