@@ -136,9 +136,16 @@ namespace
 	bool g_showThemes = false;
 	std::string g_selectedTheme;
 
-	/** @brief A theme's accent (its header colour), the tint of its CS logo. */
+	/** @brief The tint of a theme's CS logo: its optional top-level LogoColor ([r, g, b], 0-1), else its accent (header colour). */
 	ImVec4 ThemeAccent(const ThemeManager::ThemeInfo& info)
 	{
+		const auto logoColor = info.themeData.find("LogoColor");
+		const bool hasLogoColor = logoColor != info.themeData.end() && logoColor->is_array() && logoColor->size() >= 3 &&
+		                          std::all_of(logoColor->begin(), logoColor->begin() + 3, [](const json& c) { return c.is_number(); });
+		if (hasLogoColor) {
+			const auto channel = [&](size_t i) { return std::clamp((*logoColor)[i].get<float>(), 0.0f, 1.0f); };
+			return ImVec4(channel(0), channel(1), channel(2), 1.0f);
+		}
 		std::array<ImVec4, ImGuiCol_COUNT> palette{};
 		Menu::PaletteFromJson(info.themeData.contains("Theme") ? info.themeData["Theme"] : info.themeData, palette);
 		ImVec4 accent = palette[ImGuiCol_Header];
