@@ -812,7 +812,7 @@ void FeatureListRenderer::RenderLeftColumn(
 		ImGui::EndChild();
 	} else {
 		auto& filter = globals::menu->GetSettings().FeatureListFilter;
-		if (ImGui::BeginChild("##FeatureListScroll", ImVec2(0.0f, -pageButtonsHeight))) {
+		if (ImGui::BeginChild("##FeatureListScroll", ImVec2(0.0f, -pageButtonsHeight), ImGuiChildFlags_None, ImGuiWindowFlags_NoScrollWithMouse)) {
 			// A category header keeps half its pad above its text
 			const auto first = std::ranges::find_if(menuList, [](const auto& entry) { return !std::holds_alternative<BuiltInMenu>(entry); });
 			const float headerPad = first != menuList.end() && std::holds_alternative<CategoryHeader>(*first) ?
@@ -852,57 +852,87 @@ void FeatureListRenderer::RenderLeftColumn(
 }
 
 /**
- * Once the user stops scrolling, eases the current window's scroll to the nearest
- * row boundary so the top row is never left half-clipped.
+ * Drives the current window's vertical scroll so it always rests on a row edge.
+ * The mouse wheel steps whole rows (the window must be created with
+ * ImGuiWindowFlags_NoScrollWithMouse); releasing the scrollbar settles on the
+ * nearest row. Keyboard/gamepad navigation is left to ImGui.
  * @param rowTops Content-space Y of each drawn row's top edge, in order.
  */
 static void SnapScrollToRows(const std::vector<float>& rowTops)
 {
-	constexpr float kIdleDelay = 0.12f;  // seconds without scroll input before snapping
-	constexpr float kSnapRate = 18.0f;   // exponential ease rate (1/s)
+	constexpr int kRowsPerNotch = 3;
+	constexpr float kEaseRate = 30.0f;  // exponential ease rate (1/s)
 
-	static float s_lastScroll = -1.0f;  // scroll value at the end of last frame
-	static float s_idleTime = 0.0f;
+	static float s_target = -1.0f;    // scroll we are animating to, < 0 when idle
+	static float s_expected = -1.0f;  // scroll we asked ImGui for last frame
+	static bool s_wasDragging = false;
 
 	const float scroll = ImGui::GetScrollY();
 	const float maxScroll = ImGui::GetScrollMaxY();
+	if (rowTops.empty() || maxScroll <= 0.0f) {
+		s_target = -1.0f;
+		return;
+	}
+
+	// Snap offsets: each row placed where the first row sits at scroll 0, plus the list end.
+	// ImGui rounds scroll to whole pixels, so the offsets are rounded too.
+	std::vector<float> snaps;
+	snaps.reserve(rowTops.size() + 1);
+	for (const float top : rowTops)
+		snaps.push_back(std::round(std::clamp(top - rowTops.front(), 0.0f, maxScroll)));
+	snaps.push_back(std::round(maxScroll));
+	std::ranges::sort(snaps);
+	snaps.erase(std::unique(snaps.begin(), snaps.end()), snaps.end());
+
+	const auto nearestIndex = [&](float value) {
+		size_t best = 0;
+		for (size_t i = 1; i < snaps.size(); i++) {
+			if (std::abs(snaps[i] - value) < std::abs(snaps[best] - value))
+				best = i;
+		}
+		return best;
+	};
+
 	const ImGuiIO& io = ImGui::GetIO();
 	auto* window = ImGui::GetCurrentWindow();
-	const bool draggingScrollbar = ImGui::GetActiveID() == ImGui::GetWindowScrollbarID(window, ImGuiAxis_Y);
-	const bool wheel = io.MouseWheel != 0.0f && ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows);
+	const bool dragging = ImGui::GetActiveID() == ImGui::GetWindowScrollbarID(window, ImGuiAxis_Y);
 
-	// Any scroll change we did not cause (wheel, drag, keyboard nav) restarts the idle timer
-	if (draggingScrollbar || wheel || std::abs(scroll - s_lastScroll) > 0.01f)
-		s_idleTime = 0.0f;
-	else
-		s_idleTime += io.DeltaTime;
-	s_lastScroll = scroll;
+	// Something else moved the list (keyboard nav, scroll-to-item): stop animating
+	if (s_target >= 0.0f && std::abs(scroll - s_expected) > 1.0f)
+		s_target = -1.0f;
 
-	if (rowTops.empty() || maxScroll <= 0.0f || s_idleTime < kIdleDelay)
+	if (dragging) {
+		s_target = -1.0f;
+	} else if (s_wasDragging) {
+		s_target = snaps[nearestIndex(scroll)];
+	}
+	s_wasDragging = dragging;
+
+	if (!dragging && io.MouseWheel != 0.0f && !io.KeyCtrl &&
+		ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows | ImGuiHoveredFlags_AllowWhenBlockedByActiveItem)) {
+		const int notches = std::max(1, static_cast<int>(std::round(std::abs(io.MouseWheel))));
+		const int step = (io.MouseWheel > 0.0f ? -1 : 1) * notches * kRowsPerNotch;
+		const auto from = static_cast<int>(nearestIndex(s_target >= 0.0f ? s_target : scroll));
+		const int to = std::clamp(from + step, 0, static_cast<int>(snaps.size()) - 1);
+		s_target = snaps[to];
+	}
+
+	if (s_target < 0.0f)
 		return;
 
-	// Snap points: each row aligned to where the first row sits at scroll 0, plus the end of the list
-	float target = maxScroll;
-	float bestDist = std::abs(scroll - maxScroll);
-	for (const float top : rowTops) {
-		const float candidate = std::clamp(top - rowTops.front(), 0.0f, maxScroll);
-		const float dist = std::abs(scroll - candidate);
-		if (dist < bestDist) {
-			bestDist = dist;
-			target = candidate;
-		}
+	const float diff = s_target - scroll;
+	float next;
+	if (std::abs(diff) <= 1.0f) {
+		next = s_target;
+		s_target = -1.0f;
+	} else {
+		// Ease, but always move at least a pixel so ImGui's rounding cannot stall it
+		const float delta = diff * (1.0f - std::exp(-kEaseRate * io.DeltaTime));
+		next = scroll + (std::abs(delta) < 1.0f ? std::copysign(1.0f, diff) : delta);
 	}
-	if (bestDist < 0.5f) {
-		if (bestDist > 0.0f) {
-			ImGui::SetScrollY(target);
-			s_lastScroll = target;
-		}
-		return;
-	}
-	const float t = 1.0f - std::exp(-kSnapRate * io.DeltaTime);
-	const float next = scroll + (target - scroll) * t;
-	ImGui::SetScrollY(next);
-	s_lastScroll = next;  // our own motion must not reset the idle timer
+	if (next != scroll)
+		ImGui::SetScrollY(next);
+	s_expected = next;
 }
 
 void FeatureListRenderer::RequestPage(std::string_view pageId)
