@@ -308,74 +308,72 @@ void Upscaling::DrawSettings()
 
 	const bool frameGenerationDx12PathActive = IsFrameGenerationDx12PathActive();
 
-	if (ImGui::TreeNodeEx(T(TKEY("frame_generation"), "Frame Generation"), ImGuiTreeNodeFlags_DefaultOpen)) {
-		ImGui::Text("%s", T(TKEY("frame_generation_desc"),
-							  "Frame Generation interpolates real frames with generated ones for a smoother experience"));
-		ImGui::Text("%s", T(TKEY("frame_generation_tech"),
-							  "Uses AMD FSR Frame Generation technology"));
-		if (HasFrameGenModule())
-			ImGui::Text("%s", T(TKEY("frame_generation_available"),
-								  "AMD FSR Frame Generation is available."));
-		ImGui::Text("%s", T(TKEY("frame_generation_proxy_note"),
-							  "Requires a D3D11 to D3D12 proxy which can create compatibility issues"));
-		ImGui::Text("%s", T(TKEY("frame_generation_restart_note"),
-							  "Toggling this setting requires a restart to work correctly"));
+	ImGui::SeparatorText(T(TKEY("frame_generation"), "Frame Generation"));
+	ImGui::Text("%s", T(TKEY("frame_generation_desc"),
+						  "Frame Generation interpolates real frames with generated ones for a smoother experience"));
+	ImGui::Text("%s", T(TKEY("frame_generation_tech"),
+						  "Uses AMD FSR Frame Generation technology"));
+	if (HasFrameGenModule())
+		ImGui::Text("%s", T(TKEY("frame_generation_available"),
+							  "AMD FSR Frame Generation is available."));
+	ImGui::Text("%s", T(TKEY("frame_generation_proxy_note"),
+						  "Requires a D3D11 to D3D12 proxy which can create compatibility issues"));
+	ImGui::Text("%s", T(TKEY("frame_generation_restart_note"),
+						  "Toggling this setting requires a restart to work correctly"));
 
-		bool onlyRequiresRestart = true;
+	bool onlyRequiresRestart = true;
 
-		if (!isWindowed) {
-			Util::Text::Warning("Warning: Requires windowed mode");
+	if (!isWindowed) {
+		Util::Text::Warning("Warning: Requires windowed mode");
 
-			onlyRequiresRestart = false;
-		}
-
-		if (lowRefreshRate && !settings.frameGenerationForceEnable) {
-			Util::Text::Warning("Warning: Requires a high refresh rate monitor or Force Enable Frame Generation");
-
-			onlyRequiresRestart = false;
-		}
-
-		if (fidelityFXMissing) {
-			Util::Text::Warning("Warning: FidelityFX DLLs are not loaded");
-
-			onlyRequiresRestart = false;
-		}
-
-		if (onlyRequiresRestart && settings.frameGenerationMode && !frameGenerationDx12PathActive)
-			Util::Text::Warning("Warning: Requires restart");
-
-		if (!settings.frameGenerationMode && frameGenerationDx12PathActive)
-			Util::Text::Warning("Warning: Requires restart");
-
-		bool fgEnabled = settings.frameGenerationMode != 0;
-		if (ImGui::Checkbox(T(TKEY("frame_generation"), "Frame Generation"), &fgEnabled))
-			settings.frameGenerationMode = fgEnabled ? 1 : 0;
-
-		if (!frameGenerationDx12PathActive)
-			ImGui::BeginDisabled();
-
-		bool flEnabled = settings.frameLimitMode != 0;
-		if (ImGui::Checkbox(T(TKEY("frame_limit_vrr"), "Frame Limit (Variable Refresh Rate)"), &flEnabled))
-			settings.frameLimitMode = flEnabled ? 1 : 0;
-
-		if (!frameGenerationDx12PathActive)
-			ImGui::EndDisabled();
-
-		ImGui::TextWrapped("Allows frame generation to function on low refresh rate monitors. Detected: %.2f Hz", refreshRate);
-		bool fgForce = settings.frameGenerationForceEnable != 0;
-		if (ImGui::Checkbox(T(TKEY("force_enable_frame_generation"), "Force Enable Frame Generation"), &fgForce))
-			settings.frameGenerationForceEnable = fgForce ? 1 : 0;
-
-		ImGui::Checkbox(T(TKEY("frame_generation_in_menus"), "Frame Generation in Menus"), &settings.frameGenerationAllowInMenus);
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::TextUnformatted(T(TKEY("frame_generation_in_menus_tooltip_1"), "Keeps frame generation active while game menus are open."));
-			ImGui::TextUnformatted(T(TKEY("frame_generation_in_menus_tooltip_2"), "May feel smoother, but increases menu input latency."));
-		}
-
-		ImGui::TreePop();
+		onlyRequiresRestart = false;
 	}
 
-	if (streamline.reflexSupportedOnCurrentAdapter && ImGui::TreeNodeEx(T(TKEY("nvidia_reflex"), "NVIDIA Reflex"), ImGuiTreeNodeFlags_DefaultOpen)) {
+	if (lowRefreshRate && !settings.frameGenerationForceEnable) {
+		Util::Text::Warning("Warning: Requires a high refresh rate monitor or Force Enable Frame Generation");
+
+		onlyRequiresRestart = false;
+	}
+
+	if (fidelityFXMissing) {
+		Util::Text::Warning("Warning: FidelityFX DLLs are not loaded");
+
+		onlyRequiresRestart = false;
+	}
+
+	if (onlyRequiresRestart && settings.frameGenerationMode && !frameGenerationDx12PathActive)
+		Util::Text::Warning("Warning: Requires restart");
+
+	if (!settings.frameGenerationMode && frameGenerationDx12PathActive)
+		Util::Text::Warning("Warning: Requires restart");
+
+	bool fgEnabled = settings.frameGenerationMode != 0;
+	if (ImGui::Checkbox(T(TKEY("frame_generation"), "Frame Generation"), &fgEnabled))
+		settings.frameGenerationMode = fgEnabled ? 1 : 0;
+
+	if (!frameGenerationDx12PathActive)
+		ImGui::BeginDisabled();
+
+	bool flEnabled = settings.frameLimitMode != 0;
+	if (ImGui::Checkbox(T(TKEY("frame_limit_vrr"), "Frame Limit (Variable Refresh Rate)"), &flEnabled))
+		settings.frameLimitMode = flEnabled ? 1 : 0;
+
+	if (!frameGenerationDx12PathActive)
+		ImGui::EndDisabled();
+
+	ImGui::TextWrapped("Allows frame generation to function on low refresh rate monitors. Detected: %.2f Hz", refreshRate);
+	bool fgForce = settings.frameGenerationForceEnable != 0;
+	if (ImGui::Checkbox(T(TKEY("force_enable_frame_generation"), "Force Enable Frame Generation"), &fgForce))
+		settings.frameGenerationForceEnable = fgForce ? 1 : 0;
+
+	ImGui::Checkbox(T(TKEY("frame_generation_in_menus"), "Frame Generation in Menus"), &settings.frameGenerationAllowInMenus);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::TextUnformatted(T(TKEY("frame_generation_in_menus_tooltip_1"), "Keeps frame generation active while game menus are open."));
+		ImGui::TextUnformatted(T(TKEY("frame_generation_in_menus_tooltip_2"), "May feel smoother, but increases menu input latency."));
+	}
+
+	if (streamline.reflexSupportedOnCurrentAdapter) {
+		ImGui::SeparatorText(T(TKEY("nvidia_reflex"), "NVIDIA Reflex"));
 		const bool reflexBlockedByFrameGeneration = frameGenerationDx12PathActive;
 		const bool reflexAvailable = streamline.initialized && streamline.featureReflex;
 		const bool reflexControlsAvailable = reflexAvailable && !reflexBlockedByFrameGeneration;
@@ -448,8 +446,6 @@ void Upscaling::DrawSettings()
 
 		if (!reflexControlsAvailable)
 			ImGui::EndDisabled();
-
-		ImGui::TreePop();
 	}
 
 	if (ImGui::TreeNodeEx(T(TKEY("backend_diagnostics"), "Backend Diagnostics"))) {
