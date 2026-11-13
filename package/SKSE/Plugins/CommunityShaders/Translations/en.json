@@ -2647,6 +2647,8 @@
     "feature.renderdoc.enable_capture": "Enable RenderDoc Capture",
     "feature.renderdoc.enable_capture_tooltip": "Enable RenderDoc frame capture for providing debug captures to the Community Shaders team.",
     "feature.renderdoc.enable_capture_tooltip2": "Enabling capture will force-enable frame annotations for easier debugging and will restore the previous setting when disabled.",
+    "feature.renderdoc.hide_overlay": "Hide Overlay Warning",
+    "feature.renderdoc.hide_overlay_tooltip": "Hides the RenderDoc warning in the overlay. This is not saved and resets every time the game starts.",
     "feature.renderdoc.hover_hint": "Hover over filenames for file details",
     "feature.renderdoc.no_files": "No capture files found.",
     "feature.renderdoc.not_enough_space": "Not enough free disk space to create a capture.",

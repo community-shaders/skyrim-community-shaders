@@ -353,7 +353,7 @@ bool OverlayRenderer::ShouldSkipRendering()
 			 effectFailed ||
 			 globals::features::performanceOverlay.settings.ShowInOverlay ||
 			 globals::features::performanceOverlay.settings.ShowWeatherPicker ||
-			 renderDoc->IsAvailable());
+			 renderDoc->ShouldShowOverlay());
 }
 
 void OverlayRenderer::HandleFontReload(Menu& menu, float& cachedFontSize, float currentFontSize)
@@ -413,7 +413,7 @@ void OverlayRenderer::RenderShaderCompilationStatus(const std::function<const ch
 	auto state = globals::state;
 	auto& themeSettings = Menu::GetSingleton()->GetTheme();
 	auto* renderDoc = RenderDoc::GetSingleton();
-	bool renderDocAvailable = renderDoc->IsAvailable();
+	bool renderDocAvailable = renderDoc->ShouldShowOverlay();
 	// Runs every frame, so only build the strings a visible card shows
 	const auto renderDocInformation = renderDocAvailable ? renderDoc->GetOverlayWarningMessage() : std::string();
 
