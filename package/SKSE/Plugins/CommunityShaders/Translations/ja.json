@@ -1,8 +1,10 @@
 {
     "_meta": {
         "auto_generated": true,
+        "generator": "",
         "language": "日本語",
-        "locale": "ja"
+        "locale": "ja",
+        "note": ""
     },
     "common.active": "有効化",
     "common.inactive": "無効化",
