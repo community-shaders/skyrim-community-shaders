@@ -18,6 +18,8 @@
  */
 
 #include "PerformanceOverlay.h"
+#include "CSEditor/Browser/BrowserWidgets.h"
+#include "CSEditor/SceneManager/SceneSettingsManager.h"
 #include "Feature.h"
 #include "Features/PerformanceOverlay/ABTesting/ABTestAggregator.h"
 #include "Features/PerformanceOverlay/ABTesting/ABTesting.h"
@@ -30,6 +32,7 @@
 #include "Utils/FileSystem.h"
 #include "Utils/Format.h"
 #include "Utils/Game.h"
+#include "Utils/UI.h"
 
 #define I18N_KEY_PREFIX "feature.perf_overlay."
 
@@ -125,7 +128,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	BackgroundOpacity,
 	ShowBorder,
 	Position,
-	PositionSet)
+	PositionSet,
+	HiddenProfilerGroups)
 
 static const std::unordered_map<RE::BSShader::Type, std::string> kShaderTypeTooltips = {
 	{ RE::BSShader::Type::Grass, "Draw calls using the Grass shader. Typically many, but each is usually cheap." },
@@ -179,6 +183,8 @@ void PerformanceOverlay::DrawSettings()
 		ImGui::Checkbox(T(TKEY("show_draw_calls"), "Show Draw Calls"), &this->settings.ShowDrawCalls);
 		ImGui::Checkbox(T(TKEY("show_vram"), "Show VRAM Usage"), &this->settings.ShowVRAM);
 		ImGui::Checkbox(T(TKEY("show_cs_passes"), "Show CS Render Passes"), &this->settings.ShowCSPasses);
+		if (this->settings.ShowCSPasses)
+			DrawProfilerGroupFilter();
 
 		bool isFrameGenerationActive = globals::features::upscaling.IsFrameGenerationActive();
 		if (this->settings.ShowFPS && isFrameGenerationActive) {
@@ -227,6 +233,80 @@ void PerformanceOverlay::DrawSettings()
 	}
 }
 
+bool PerformanceOverlay::IsProfilerGroupShown(std::string_view group) const
+{
+	return std::ranges::find(this->settings.HiddenProfilerGroups, group) == this->settings.HiddenProfilerGroups.end();
+}
+
+void PerformanceOverlay::SetProfilerGroupShown(std::string_view group, bool shown)
+{
+	auto& hidden = this->settings.HiddenProfilerGroups;
+	if (shown == IsProfilerGroupShown(group))
+		return;
+	if (shown)
+		std::erase(hidden, group);
+	else
+		hidden.emplace_back(group);
+
+	// Also reached from other features' pages, where nothing tracks this feature's edits.
+	globals::sceneSettingsManager->CaptureExternalFeatureChanges(this, true);
+	globals::state->CheckFeatureSettingsChanged(this);
+	globals::state->InvalidateEditsUnderBaselines(this);
+}
+
+void PerformanceOverlay::DrawProfilerGroupFilter()
+{
+	// Groups reporting now, then hidden ones that are not, so those can still be shown again.
+	auto groups = ProfilingRenderer::GetActiveGroups();
+	for (const auto& group : this->settings.HiddenProfilerGroups) {
+		if (std::ranges::find(groups, group) == groups.end())
+			groups.push_back(group);
+	}
+
+	ImGui::Indent();
+	Util::SettingHint(T(TKEY("pass_filter_hint"), "Pick which features' passes the graph shows. Right-click a group on the Profiling page, or use a feature's cost chip, to do the same."), false);
+	if (groups.empty()) {
+		ImGui::TextDisabled("%s", T("menu.profiling.no_timing_data_world", "No timing data available (enter game world)"));
+		ImGui::Unindent();
+		return;
+	}
+
+	// Listed by the name shown, as (label, group) pairs
+	std::vector<std::pair<std::string, std::string>> chips;
+	chips.reserve(groups.size());
+	for (const auto& group : groups)
+		chips.emplace_back(ProfilingRenderer::GetGroupDisplayName(group), group);
+	std::ranges::sort(chips);
+
+	const float spacing = ImGui::GetStyle().ItemSpacing.x;
+	bool first = true;
+	for (const auto& [label, group] : chips) {
+		if (!first)
+			BrowserUI::SameLineIfFits(BrowserUI::MeasureChip(label.c_str(), false) + spacing);
+		first = false;
+		ImGui::PushID(group.c_str());
+		const bool shown = IsProfilerGroupShown(group);
+		if (BrowserUI::FilterChip("##ProfilerGroup", { .label = label.c_str() }, shown))
+			SetProfilerGroupShown(group, !shown);
+		ImGui::PopID();
+	}
+
+	const bool anyHidden = !this->settings.HiddenProfilerGroups.empty();
+	{
+		Util::DisableGuard disable(!anyHidden);
+		if (Util::Button(T(TKEY("show_all_passes"), "Show All")))
+			this->settings.HiddenProfilerGroups.clear();
+	}
+	ImGui::SameLine();
+	{
+		const bool allHidden = std::ranges::none_of(groups, [this](const std::string& group) { return IsProfilerGroupShown(group); });
+		Util::DisableGuard disable(allHidden);
+		if (Util::Button(T(TKEY("hide_all_passes"), "Hide All")))
+			this->settings.HiddenProfilerGroups = groups;
+	}
+	ImGui::Unindent();
+}
+
 void PerformanceOverlay::SaveSettings(json& j)
 {
 	// Persist all overlay settings to JSON
@@ -242,6 +322,11 @@ void PerformanceOverlay::LoadSettings(json& j)
 		// Fallback to defaults if JSON is invalid
 		this->settings = PerformanceOverlay::Settings{};
 	}
+	// Hand-edited configs: drop empty and repeated groups
+	auto& hidden = this->settings.HiddenProfilerGroups;
+	std::erase_if(hidden, [](const std::string& group) { return group.empty(); });
+	std::ranges::sort(hidden);
+	hidden.erase(std::unique(hidden.begin(), hidden.end()), hidden.end());
 	// Ensure history buffers match loaded size
 	this->state.frameTimeHistory.Resize(this->settings.FrameHistorySize);
 	this->state.postFGFrameTimeHistory.Resize(this->settings.FrameHistorySize);
@@ -398,7 +483,7 @@ void PerformanceOverlay::DrawOverlay()
 	if (this->settings.ShowCSPasses) {
 		if (needsSeparator)
 			ImGui::Separator();
-		ProfilingRenderer::RenderStatistics(false, false);
+		ProfilingRenderer::RenderOverlayGraph();
 		needsSeparator = true;
 	}
 

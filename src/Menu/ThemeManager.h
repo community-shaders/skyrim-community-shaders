@@ -407,6 +407,11 @@ public:
 		static constexpr float FEATURE_TOGGLE_WIDTH_RATIO = 1.6f;   // Feature toggle width per frame height
 		static constexpr float FEATURE_TOGGLE_HEIGHT_RATIO = 0.8f;  // Feature toggle height per frame height
 
+		// Feature header: profiling cost chip and its popover
+		static constexpr float FEATURE_COST_GOOD_MS = 1.0f;               // Feature GPU/CPU cost below this tints the chip's icon as good
+		static constexpr float FEATURE_COST_WARNING_MS = 3.0f;            // Below this as a warning; at or above as expensive
+		static constexpr float FEATURE_PROFILING_POPOVER_WIDTH = 560.0f;  // Profiling popover width, before UI scale
+
 		// Shared widgets: tooltips, badges, section headers and editor chrome
 		static constexpr float TOOLTIP_WRAP_FONT_SIZES = 35.0f;                     // Wrapped tooltip width in font sizes
 		static constexpr ImVec4 BADGE_HDR_BG = ImVec4(0.40f, 0.58f, 0.78f, 0.30f);  // HDR badge background

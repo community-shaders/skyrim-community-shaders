@@ -58,8 +58,8 @@ float4 main(FullscreenTriangleVSOutput input) : SV_Target
 		float3 lerpFactors = saturate(pxCoord - px0);
 
 		color.r = lerp(TexLut[int2(px0.x, 0)].x, TexLut[int2(px1.x, 0)].x, lerpFactors.x);
-		color.g = lerp(TexLut[int2(px0.y, 0)].x, TexLut[int2(px1.y, 0)].x, lerpFactors.y);
-		color.b = lerp(TexLut[int2(px0.z, 0)].x, TexLut[int2(px1.z, 0)].x, lerpFactors.z);
+		color.g = lerp(TexLut[int2(px0.y, 0)].y, TexLut[int2(px1.y, 0)].y, lerpFactors.y);
+		color.b = lerp(TexLut[int2(px0.z, 0)].z, TexLut[int2(px1.z, 0)].z, lerpFactors.z);
 	}
 	else
 	{
