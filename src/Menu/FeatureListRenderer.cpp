@@ -218,6 +218,11 @@ namespace
 			const ImGuiID buttonId = ImGui::GetID("###FeatureSort");
 			const bool lit = ImGui::IsWindowHovered() || ImGui::GetFocusID() == buttonId || ImGui::IsPopupOpen("##FeatureSortPopup");
 			const float alpha = std::lerp(ThemeManager::Constants::PALETTE_DIMMED_ALPHA, 1.0f, Util::Anim::Toggle(ImGui::GetID("##Visibility"), lit));
+			// Quiet backing plate at full alpha, under the hover layer, so the icon stays readable over row text
+			const ImVec2 plateMin = ImGui::GetCursorScreenPos();
+			const ImVec2 plateMax = ImVec2(plateMin.x + size, plateMin.y + size);
+			ImGui::GetWindowDrawList()->AddRectFilled(plateMin, plateMax, ImGui::GetColorU32(ImGuiCol_FrameBg), ImGui::GetStyle().FrameRounding);
+			ImGui::GetWindowDrawList()->AddRect(plateMin, plateMax, ImGui::GetColorU32(ImGuiCol_Border), ImGui::GetStyle().FrameRounding);
 			ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * alpha);
 			if (Util::IconButton("###FeatureSort", GetSortModeIcon(globals::menu->GetSettings().FeatureListSort), nullptr))
 				ImGui::OpenPopup("##FeatureSortPopup");
