@@ -379,13 +379,11 @@ namespace ProceduralAurora
 			const float ribbonElevation = elevation / arc.z;
 			const float4 range = RibbonRange[(uint)arc.x];
 			const float2 bounds = RibbonBounds(range, size);
-			[branch] if (ribbonElevation < bounds.x - WaveAmplitude || ribbonElevation > bounds.y + WaveAmplitude)
-				continue;
+			[branch] if (ribbonElevation < bounds.x - WaveAmplitude || ribbonElevation > bounds.y + WaveAmplitude) continue;
 			// The waves only move a ribbon up and down, so a pixel off its azimuth span can skip the wave noise
 			float a = azimuth - arc.y - range.x;
 			a -= 6.2831853 * floor(a / 6.2831853);
-			[branch] if (a > range.y)
-				continue;
+			[branch] if (a > range.y) continue;
 			const float waveSeed = frac(seed * 0.0713 + arc.w * 0.317) * 64.0;
 			const float wave = (Fbm2(ring + float2(waveSeed, waveSeed * 0.37 + t * 0.004)) - 0.5) * 2.0 * waveScale;
 			const float3 hit = LookupRibbon((uint)arc.x, azimuth - arc.y, ribbonElevation - wave, size);
