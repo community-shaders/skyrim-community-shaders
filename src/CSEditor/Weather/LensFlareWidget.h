@@ -2,10 +2,18 @@
 
 #include "../Widget.h"
 
+/** @brief The BGSLensFlare fields a LensFlareWidget edits. */
+struct LensFlareSettings
+{
+	float fadeDistRadiusScale = 1.0f;
+	float colorInfluence = 0.2f;
+	bool operator==(const LensFlareSettings&) const = default;
+};
+
 /**
  * @brief Widget for editing lens flare fade distance and color influence settings.
  */
-class LensFlareWidget : public Widget
+class LensFlareWidget : public SettingsWidget<LensFlareSettings>
 {
 public:
 	/**
@@ -18,8 +26,7 @@ public:
 		form = a_lensFlare;
 		if (lensFlare) {
 			LoadFromGameSettings();
-			vanillaSettings = settings;
-			originalSettings = settings;
+			CaptureVanillaSettings();
 		}
 	}
 
@@ -40,12 +47,6 @@ public:
 	/** @brief Writes the current settings into the game's BGSLensFlare form. */
 	void ApplyChanges() override;
 
-	/** @brief Reverts settings to vanilla values and re-applies them to the game data. */
-	void RevertChanges() override;
-
-	/** @brief Returns true if the current settings differ from the last saved state. */
-	bool HasUnsavedChanges() const override;
-
 	/** @brief Collects all searchable lens flare settings for the search dropdown. */
 	std::vector<SearchResult> CollectSearchableSettings() const override;
 
@@ -53,15 +54,4 @@ public:
 
 private:
 	void LoadFromGameSettings();
-
-	struct Settings
-	{
-		float fadeDistRadiusScale = 1.0f;
-		float colorInfluence = 0.2f;
-		bool operator==(const Settings&) const = default;
-	};
-
-	Settings settings;
-	Settings vanillaSettings;
-	Settings originalSettings;
 };

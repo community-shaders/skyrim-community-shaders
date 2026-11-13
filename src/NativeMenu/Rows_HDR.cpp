@@ -44,7 +44,7 @@ namespace NativeMenu
 			return {};
 
 		return {
-			Checkbox(T(TKEY("enable_hdr"), "Enable HDR"), &GetHDREnabled, &SetHDREnabled,
+			Checkbox(T(TKEY("name"), "HDR Display"), &GetHDREnabled, &SetHDREnabled,
 				HDRDisplay::Settings{}.enableHDR ? 1.0f : 0.0f,
 				T(TKEY("enable_hdr_tooltip"), "Enable HDR output. Matches vanilla visuals with extended dynamic range."),
 				&IsHDRToggleEnabled),

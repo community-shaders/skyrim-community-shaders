@@ -15,6 +15,8 @@ struct LandscapeSeamsFix : EngineFix
 
 	void Install() override;
 
+	void GenerateShaderPermutations(RE::BSShader* a_shader) override;
+
 	static LandscapeSeamsFix& GetInstance();
 
 	static constexpr uint32_t GridSize = 17;

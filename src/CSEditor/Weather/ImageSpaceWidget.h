@@ -2,13 +2,42 @@
 
 #include "../Widget.h"
 
+/** @brief The TESImageSpace fields an ImageSpaceWidget edits. */
+struct ImageSpaceSettings
+{
+	// HDR Settings
+	float hdrEyeAdaptSpeed = 0.0f;
+	float hdrEyeAdaptStrength = 0.0f;
+	float hdrBloomBlurRadius = 0.0f;
+	float hdrBloomThreshold = 0.0f;
+	float hdrBloomScale = 0.0f;
+	float hdrWhite = 0.0f;
+	float hdrSunlightScale = 0.0f;
+	float hdrSkyScale = 0.0f;
+
+	// Cinematic Settings
+	float cinematicSaturation = 0.0f;
+	float cinematicBrightness = 0.0f;
+	float cinematicContrast = 0.0f;
+
+	// Tint Colors
+	float3 tintColor = { 1.0f, 1.0f, 1.0f };
+	float tintAmount = 0.0f;
+
+	// Depth of Field
+	float dofStrength = 0.0f;
+	float dofDistance = 0.0f;
+	float dofRange = 0.0f;
+	bool operator==(const ImageSpaceSettings&) const = default;
+};
+
 /**
  * @brief Widget for editing TESImageSpace HDR, cinematic, tint, and depth-of-field settings.
  *
  * Each weather record references up to four ImageSpace forms (one per time of day).
  * This widget exposes the full ImageSpace data struct for live editing.
  */
-class ImageSpaceWidget : public Widget
+class ImageSpaceWidget : public SettingsWidget<ImageSpaceSettings>
 {
 public:
 	RE::TESImageSpace* imageSpace = nullptr;
@@ -26,41 +55,8 @@ public:
 		form = a_imageSpace;
 		imageSpace = a_imageSpace;
 		LoadFromGameSettings();
-		vanillaSettings = settings;
-		originalSettings = settings;
+		CaptureVanillaSettings();
 	}
-
-	struct Settings
-	{
-		// HDR Settings
-		float hdrEyeAdaptSpeed = 0.0f;
-		float hdrEyeAdaptStrength = 0.0f;
-		float hdrBloomBlurRadius = 0.0f;
-		float hdrBloomThreshold = 0.0f;
-		float hdrBloomScale = 0.0f;
-		float hdrWhite = 0.0f;
-		float hdrSunlightScale = 0.0f;
-		float hdrSkyScale = 0.0f;
-
-		// Cinematic Settings
-		float cinematicSaturation = 0.0f;
-		float cinematicBrightness = 0.0f;
-		float cinematicContrast = 0.0f;
-
-		// Tint Colors
-		float3 tintColor = { 1.0f, 1.0f, 1.0f };
-		float tintAmount = 0.0f;
-
-		// Depth of Field
-		float dofStrength = 0.0f;
-		float dofDistance = 0.0f;
-		float dofRange = 0.0f;
-		bool operator==(const Settings&) const = default;
-	};
-
-	Settings settings;
-	Settings vanillaSettings;
-	Settings originalSettings;
 
 	~ImageSpaceWidget();
 
@@ -76,9 +72,6 @@ public:
 	/** @brief Serializes current ImageSpace settings to the JSON blob. */
 	void SaveSettings() override;
 
-	/** @brief Returns true if the current settings differ from the last saved state. */
-	bool HasUnsavedChanges() const override;
-
 	/** @brief Collects all searchable ImageSpace settings for the search dropdown. */
 	std::vector<SearchResult> CollectSearchableSettings() const override;
 
@@ -93,7 +86,4 @@ public:
 
 	/** @brief Applies the current settings to the game's ImageSpace form. */
 	void ApplyChanges() override;
-
-	/** @brief Reverts settings to vanilla values and re-applies them to the game data. */
-	void RevertChanges() override;
 };

@@ -38,7 +38,7 @@ float GaussianWeight(float r)
 // http://marc-b-reynolds.github.io/quaternions/2016/07/06/Orthonormal.html
 float3x3 getBasis(float3 N)
 {
-	float sz = sign(N.z);
+	const float sz = N.z >= 0.0 ? 1.0 : -1.0;
 	float a = 1.0 / (sz + N.z);
 	float ya = N.y * a;
 	float b = N.x * ya;
@@ -132,7 +132,7 @@ float2x2 getRotationMatrix(float noise)
 		float2 screenPosSample = FrameBuffer::ViewToUV(viewSamplePos);
 
 		if (any(screenPosSample < 0) || any(screenPosSample > 1)) {
-				continue;
+			continue;
 		}
 
 		float2 uvSample = screenPosSample;

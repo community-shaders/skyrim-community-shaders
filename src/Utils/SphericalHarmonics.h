@@ -6,8 +6,8 @@ namespace SphericalHarmonics
 	/** @brief Second-order (L=0..1) spherical harmonics with 4 scalar coefficients. */
 	struct SH2
 	{
-		float c0;      /**< @brief L=0 (DC / constant) coefficient. */
-		float c1[3];   /**< @brief L=1 coefficients for M=-1, M=0, M=1. */
+		float c0;    /**< @brief L=0 (DC / constant) coefficient. */
+		float c1[3]; /**< @brief L=1 coefficients for M=-1, M=0, M=1. */
 
 		SH2() : c0(0.0f), c1{ 0.0f, 0.0f, 0.0f } {}
 		SH2(float _c0, float _c1_0, float _c1_1, float _c1_2) : c0(_c0), c1{ _c1_0, _c1_1, _c1_2 } {}

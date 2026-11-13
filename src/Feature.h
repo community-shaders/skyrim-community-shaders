@@ -13,6 +13,8 @@
 #	include <Tracy/TracyD3D11.hpp>
 #endif
 
+struct SharedLighting;
+
 struct Feature
 {
 	// For global settings search
@@ -35,12 +37,12 @@ struct Feature
  * @param jsonKey The JSON key identifying which boot value to retrieve.
  * @returns A pointer to the boot configuration value, or nullptr if not defined.
  */
-virtual const void* GetBootValue(std::string_view /*jsonKey*/) const { return nullptr; }
+	virtual const void* GetBootValue(std::string_view /*jsonKey*/) const { return nullptr; }
 	/**
  * Retrieves the raw settings data blob.
  * @return Pointer to the settings blob data, or nullptr if unavailable.
  */
-virtual const void* GetSettingsBlob() const { return nullptr; }
+	virtual const void* GetSettingsBlob() const { return nullptr; }
 	virtual size_t GetSettingsBlobSize() const { return 0; }
 
 	// Nexus Mods base URL for Skyrim Special Edition
@@ -55,12 +57,13 @@ virtual const void* GetSettingsBlob() const { return nullptr; }
 	virtual std::string GetName() = 0;
 	virtual std::string GetShortName() = 0;
 	virtual std::string GetDisplayName() { return GetName(); }
-	std::string GetDisplayCategory() const;
 	virtual std::string GetFeatureModLink() { return ""; }
 	virtual std::string_view GetShaderDefineName() { return ""; }
 
 	/** @brief Gets additional shader define key-value pairs for this feature. */
 	virtual std::vector<std::pair<std::string_view, std::string_view>> GetShaderDefineOptions() { return {}; }
+	// Names and values must outlive queued compilations; explicit caller defines take precedence.
+	virtual std::vector<std::pair<std::string_view, std::string_view>> GetCommonShaderDefines() { return {}; }
 
 protected:
 	/** @brief Builds a full Nexus Mods URL from a numeric mod ID. */
@@ -134,19 +137,18 @@ public:
 	bool IsHiddenUnreleased() const { return !installed && IsUnreleased(); }
 
 	/**
-	 * Localized stage marker shown after the feature name ("[ALPHA]", "[BETA]"),
-	 * empty for release features. Takes the stage so callers that already resolved
-	 * it (see GetReleaseStage) avoid a redundant lookup.
-	 */
-	static std::string GetReleaseStageTag(ReleaseStage stage);
-
-	/**
 	 * Whether the feature is disabled at boot by default (before any user override).
 	 * Only pre-release CORE features start disabled, since they ship with the base mod
 	 * without the user asking for them. A pre-release addon is installed deliberately,
 	 * so it starts enabled. Users can flip either via the "Disable at Boot" menu.
 	 */
 	virtual bool IsDisabledByDefault() const { return IsCore() && GetReleaseStage() != ReleaseStage::Release; }
+
+	/** @brief Whether the feature can never be disabled at boot, e.g. infrastructure other features rely on. */
+	virtual bool IsAlwaysEnabled() const { return false; }
+
+	/** @brief Whether the feature persists through the shared settings JSON rather than its own store. */
+	virtual bool UsesMainSettings() const { return true; }
 
 	/**
 	 * Whether the feature will show up in the GUI menu
@@ -166,6 +168,9 @@ public:
 
 	/** @brief Allocates GPU resources (textures, buffers) needed by this feature. */
 	virtual void SetupResources() {}
+	// All loaded features have finished allocating resources.
+	virtual void PostSetupResources() {}
+	virtual void ModifySharedLighting(SharedLighting&) {}
 
 	/** @brief Releases and recreates transient state (e.g. on resolution change). */
 	virtual void Reset() {}
@@ -180,6 +185,9 @@ public:
 
 	/** @brief Per-frame work executed before the main rendering pass. */
 	virtual void Prepass() {}
+
+	/** @brief Per-frame work after every feature's Prepass, so it sees the depth they wrote. */
+	virtual void PostPrepass() {}
 
 	/** @brief Per-frame work executed before Prepass, earliest per-frame hook. */
 	virtual void EarlyPrepass() {}
@@ -222,17 +230,15 @@ public:
 	virtual void LoadSettings(json&) {}
 	virtual void RestoreDefaultSettings() {}
 
+	/** @brief Rewrites defaults that depend on the current settings, so a middle-click reset restores the right value.
+	 *  @param a_defaults The feature's default settings, in the shape SaveSettings writes. */
+	virtual void ApplyContextualDefaults(json& a_defaults) const { (void)a_defaults; }
+
 	/**
 	 * @brief Toggles the "disabled at boot" state for this feature.
 	 * @return The new disabled state (true = disabled at boot).
 	 */
 	virtual bool ToggleAtBootSetting();
-
-	/**
-	 * @brief Reapplies override settings for this feature if available
-	 * @return True if overrides were found and applied, false otherwise
-	 */
-	virtual bool ReapplyOverrideSettings();
 
 	/**
 	 * Weather analysis configuration for features that want to provide weather analysis.
@@ -256,13 +262,6 @@ public:
 	 * Features should override this to provide their weather analysis section name and draw function.
 	 */
 	virtual WeatherAnalysisConfig GetWeatherAnalysisConfig() const { return {}; }
-
-	/**
-	 * @brief Called during feature initialization to register weather-controllable variables
-	 * Features should register their weather variables here using the WeatherVariables::GlobalWeatherRegistry
-	 * The weather system will automatically handle save/load/lerp for all registered variables
-	 */
-	virtual void RegisterWeatherVariables() {}
 
 	/**
 	 * @brief Returns constraints this feature imposes on other features' settings
@@ -335,6 +334,24 @@ public:
 	static void SetTracyCtx(TracyD3D11Ctx ctx) noexcept { s_tracyCtx = ctx; }
 #endif
 
+#ifdef TRACY_ENABLE
+	/** @brief Writes "<a_shortName>::<a_method>" into a_buffer without allocating, truncating to fit; returns a_buffer. */
+	static const char* FormatZoneName(std::span<char> a_buffer, std::string_view a_shortName, std::string_view a_method) noexcept
+	{
+		if (a_buffer.empty())
+			return a_buffer.data();
+
+		std::size_t length = 0;
+		for (const auto part : { a_shortName, std::string_view("::"), a_method }) {
+			const auto count = std::min(part.size(), a_buffer.size() - 1 - length);
+			std::memcpy(a_buffer.data() + length, part.data(), count);
+			length += count;
+		}
+		a_buffer[length] = '\0';
+		return a_buffer.data();
+	}
+#endif
+
 	/**
 	 * @brief Invokes a callback on every loaded feature with optional Tracy profiling.
 	 * @param methodName Label for the Tracy zone (e.g. "Reset", "Prepass").
@@ -347,11 +364,15 @@ public:
 		for (auto* feature : GetFeatureList()) {
 			if (feature->loaded) {
 #ifdef TRACY_ENABLE
-				{
-					const auto zoneName = std::format("{}::{}", feature->GetShortName(), methodName);
-					ZoneTransientN(___tracy_feature_zone, zoneName.c_str(), true);
+				// Zones are only worth their name lookup while a Tracy client is recording.
+				if (!TracyIsConnected) {
+					callback(feature);
+				} else {
+					char zoneNameBuffer[128];
+					const auto* zoneName = FormatZoneName(zoneNameBuffer, feature->GetShortName(), methodName);
+					ZoneTransientN(___tracy_feature_zone, zoneName, true);
 					if (emitGpuZone) {
-						TracyD3D11ZoneTransientS(s_tracyCtx, ___tracy_d3d11_feature_zone, zoneName.c_str(), 0, s_tracyCtx != nullptr);
+						TracyD3D11ZoneTransientS(s_tracyCtx, ___tracy_d3d11_feature_zone, zoneName, 0, s_tracyCtx != nullptr);
 						callback(feature);
 					} else {
 						callback(feature);

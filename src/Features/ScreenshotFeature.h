@@ -2,13 +2,19 @@
 
 #include "Feature.h"
 #include "Utils/Subrect.h"
+#include <DirectXTex.h>
 #include <atomic>
 #include <condition_variable>
 #include <filesystem>
+#include <memory>
 #include <mutex>
+#include <optional>
 #include <queue>
 #include <string>
 #include <thread>
+#include <vector>
+
+class Texture2D;
 
 struct ScreenshotFeature : public Feature
 {
@@ -33,18 +39,27 @@ struct ScreenshotFeature : public Feature
 
 	/** @brief Captures a screenshot from the current back buffer and enqueues it for async encoding and save. */
 	void Capture();
-	/** @brief Checks for a pending capture request and executes Capture() if one is pending. Should be called before the wrapped buffers are cleared. */
+	/** @brief Hands finished GPU readbacks to the worker, then executes Capture() if one is pending. Render thread only; call before the wrapped buffers are cleared. */
 	void ProcessCaptureRequest();
+	/** @brief Copies the scene before the HUD draws when an SDR capture is pending, so screenshots exclude the HUD and menu blur. */
+	void SnapshotCleanScene();
+	/** @brief Returns this frame's pre-UI snapshot, or nullptr if none was taken. */
+	ID3D11Texture2D* GetFreshCleanScene() const;
 	bool applyCropToScreenshot = true;
 
 	// Settings
 	std::string screenshotPath = "Screenshots";
 	// HDR PNG quantization (7-16); used when HDR Display captures the back buffer.
 	unsigned int hdrPngBitDepth = 11;
-	// SDR output (HDR captures always use PNG).
+	bool hdrUseAvif = false;
+	// Strip cICP from HDR PNGs so Discord falls back to the embedded ICC profile.
+	bool fixDiscordHdr = true;
+	// SDR output.
 	bool sdrUsePng = true;
 	// After save, put the file path on the clipboard (CF_HDROP).
-	bool copyToClipboard = false;
+	bool copyToClipboard = true;
+	// Suppress the game's own PrintScreen capture by clearing bAllowScreenShot in memory.
+	bool disableVanillaScreenshot = true;
 
 	std::atomic<bool> captureRequested{ false };
 
@@ -52,14 +67,19 @@ private:
 	struct PendingScreenshot
 	{
 		winrt::com_ptr<ID3D11Texture2D> stagingTexture;
+		DirectX::ScratchImage image;
 		DXGI_FORMAT format = DXGI_FORMAT_UNKNOWN;
 		uint32_t width = 0;
 		uint32_t height = 0;
 		std::filesystem::path outputPath;
 		bool saveAsHdrPng = false;
+		bool saveAsHdrAvif = false;
 		bool saveAsSdrPng = false;
 		int hdrPngBitDepth = 11;
-		bool copyToClipboard = false;
+		bool fixDiscordHdr = true;
+		bool copyToClipboard = true;
+		// Suppress the game's own PrintScreen capture by clearing bAllowScreenShot in memory.
+		bool disableVanillaScreenshot = true;
 	};
 
 	std::mutex screenshotQueueMutex;
@@ -67,13 +87,27 @@ private:
 	std::queue<PendingScreenshot> screenshotQueue;
 	std::thread screenshotWorker;
 	bool screenshotWorkerRunning = false;
+	// Render thread only: the worker never touches the immediate context.
+	std::vector<PendingScreenshot> pendingReadbacks;
 	Util::Subrect::Controller subrect;
+	// bAllowScreenShot as loaded from Skyrim.ini, captured before we first override it.
+	std::optional<bool> vanillaScreenshotDefault;
 
 	// SRV-readable copy used when the capture source's own SRV can't be sampled
 	// directly (kFRAMEBUFFER on flat aliases the swap-chain backbuffer).
 	winrt::com_ptr<ID3D11Texture2D> previewCacheTexture;
 	winrt::com_ptr<ID3D11ShaderResourceView> previewCacheSRV;
+	std::unique_ptr<Texture2D> cleanSceneTexture;
+	uint32_t cleanSceneFrame = UINT32_MAX;
+	// Render thread only: a request already waited one frame for its pre-UI snapshot.
+	bool captureDeferred = false;
+	// Render thread only: set while the crop preview is drawn so the next frame snapshots the clean scene.
+	bool previewVisible = false;
 
+	/** @brief Polls in-flight staging copies without stalling and enqueues the finished ones for encoding. */
+	void ProcessPendingReadbacks();
+	/** @brief Writes bAllowScreenShot:Display in memory from disableVanillaScreenshot, restoring the ini value when off. */
+	void ApplyVanillaScreenshotSetting();
 	void EnsureWorkerThread();
 	void StopWorkerThread();
 	void EnqueueScreenshot(PendingScreenshot&& screenshot);

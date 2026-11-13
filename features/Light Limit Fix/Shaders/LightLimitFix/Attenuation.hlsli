@@ -2,6 +2,7 @@
 #define __LLF_ATTENUATION_DEPENDENCY_HLSL__
 
 #include "Common/Game.hlsli"
+#include "Common/TransferFunctions.hlsli"
 
 namespace LightLimitFix
 {
@@ -24,6 +25,9 @@ namespace LightLimitFix
 
 		float intensityFactor = saturate(distance * light.invRadius);
 		float reg = 1.0f - intensityFactor * intensityFactor;
+#if defined(ENABLE_LL)
+		reg = pow(reg, TransferFunctions::GAME_GAMMA);
+#endif
 
 		return lerp(reg, invSq, isInvSq) * isEnabled;
 	}

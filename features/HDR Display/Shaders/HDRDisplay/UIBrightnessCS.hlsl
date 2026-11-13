@@ -44,14 +44,14 @@ cbuffer PerFrame : register(b0)
 			}
 
 			float3 uiStraight = ui.rgb / aIn;
-			float3 uiLinear = Color::SrgbToLinear(max(0, uiStraight));
+			float3 uiLinear = TransferFunctions::Gamma22ToLinear(max(0, uiStraight));
 			float3 uiBT2020 = Color::BT709ToBT2020(uiLinear);
 			float3 uiNits = uiBT2020 * uiReferenceNits * uiBrightness;
 			ui.rgb = Color::pq::Encode(uiNits / 10000.0, 10000.0) * aOut;
 			ui.a = aOut;
 		} else {
 			// Broken-alpha path: transform premultiplied color and keep alpha at 0.
-			float3 uiLinear = Color::SrgbToLinear(max(0, ui.rgb));
+			float3 uiLinear = TransferFunctions::Gamma22ToLinear(max(0, ui.rgb));
 			float3 uiBT2020 = Color::BT709ToBT2020(uiLinear);
 			float3 uiNits = uiBT2020 * uiReferenceNits * uiBrightness;
 			ui.rgb = Color::pq::Encode(uiNits / 10000.0, 10000.0);

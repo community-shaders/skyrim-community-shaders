@@ -2,6 +2,20 @@
 
 #include "WeatherUtils.h"
 
+namespace CSEditorWindows
+{
+	/// Chrome shared by the floating, auto-sized editor panels (palette and weather picker): no title bar, not resizable or scrollable.
+	inline constexpr ImGuiWindowFlags kFloatingPanelFlags =
+		ImGuiWindowFlags_NoTitleBar |
+		ImGuiWindowFlags_NoFocusOnAppearing |
+		ImGuiWindowFlags_AlwaysAutoResize |
+		ImGuiWindowFlags_NoResize |
+		ImGuiWindowFlags_NoScrollbar |
+		ImGuiWindowFlags_NoScrollWithMouse |
+		ImGuiWindowFlags_NoSavedSettings |
+		ImGuiWindowFlags_NoCollapse;
+}
+
 class PaletteWindow
 {
 public:
@@ -19,35 +33,18 @@ public:
 		float3 color;
 		int useCount = 0;
 		float lastUsedTime = 0.0f;
-		bool isFavorite = false;
 	};
 
-	struct ValueEntry
-	{
-		std::string name;
-		float value;
-		int useCount = 0;
-		float lastUsedTime = 0.0f;
-		bool isFavorite = false;
-	};
-
-	/** @brief Draw the palette window with colour and value tabs. */
+	/** @brief Draw the palette window (favourites + recently used colours). */
 	void Draw();
 
 	/**
-	 * @brief Record usage of a colour for frequency and recency tracking.
+	 * @brief Record usage of a colour for recency tracking.
 	 * @param color The RGB colour that was used.
 	 */
 	void TrackColorUsage(const float3& color);
 
-	/**
-	 * @brief Record usage of a named value for frequency and recency tracking.
-	 * @param name  Display name of the value (e.g. slider label).
-	 * @param value The float value that was committed.
-	 */
-	void TrackValueUsage(const std::string& name, float value);
-
-	/** @brief Persist palette entries (colours, values, favorites) to the editor settings. */
+	/** @brief Persist palette entries (colours, favorites) to the editor settings. */
 	void Save();
 
 	/** @brief Load palette entries from the editor settings. */
@@ -55,23 +52,11 @@ public:
 
 private:
 	std::vector<ColorEntry> colorEntries;
-	std::vector<ValueEntry> valueEntries;
 
 	// Favorites - fixed slots that users can drag colors into
 	static constexpr int maxFavoriteSlots = 10;
 	std::array<std::optional<float3>, maxFavoriteSlots> favoriteColors;
 
-	// Clipboard
-	float3 copiedColor = { 0.0f, 0.0f, 0.0f };
-	float copiedValue = 0.0f;
-	std::string copiedValueName;
-	bool hasColorInClipboard = false;
-	bool hasValueInClipboard = false;
-
-	void DrawColorsTab();
-	void DrawValuesTab();
+	void DrawContents();
 	std::vector<ColorEntry*> GetRecentColors(int count);
-	std::vector<ColorEntry*> GetMostUsedColors(int count);
-	std::vector<ValueEntry*> GetRecentValues(int count);
-	std::vector<ValueEntry*> GetMostUsedValues(int count);
 };

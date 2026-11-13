@@ -9,26 +9,28 @@
 #	define RENDER_SHADOWMASK_ANY
 #endif
 
+#if defined(VSHADER)
 struct VS_INPUT
 {
 	float4 PositionMS: POSITION0;
 
-#if defined(TEXTURE)
+#	if defined(TEXTURE)
 	float2 TexCoord: TEXCOORD0;
-#endif
+#	endif
 
-#if defined(NORMALS)
+#	if defined(NORMALS)
 	float4 Normal: NORMAL0;
 	float4 Bitangent: BINORMAL0;
-#endif
-#if defined(VC)
+#	endif
+#	if defined(VC)
 	float4 Color: COLOR0;
-#endif
-#if defined(SKINNED)
+#	endif
+#	if defined(SKINNED)
 	float4 BoneWeights: BLENDWEIGHT0;
 	float4 BoneIndices: BLENDINDICES0;
-#endif
+#	endif
 };
+#endif
 
 struct VS_OUTPUT
 {
@@ -75,7 +77,7 @@ struct VS_OUTPUT
 cbuffer PerTechnique : register(b0)
 {
 	float4 HighDetailRange : packoffset(c0);  // loaded cells center in xy, size in zw
-	float2 ParabolaParam : packoffset(c1);       // inverse radius in x, y is 1 for forward hemisphere or -1 for backward hemisphere
+	float2 ParabolaParam : packoffset(c1);    // inverse radius in x, y is 1 for forward hemisphere or -1 for backward hemisphere
 };
 
 cbuffer PerMaterial : register(b1)
@@ -310,15 +312,30 @@ cbuffer AlphaTestRefCB : register(b11)
 	float AlphaTestRefRS : packoffset(c0);
 }
 
+#	if SHADOWFILTER == 8
+static const uint ShadowPCFSampleCount = 16;
+#	else
+static const uint ShadowPCFSampleCount = 8;
+#	endif
+
+float2 GetShadowPCFOffset(uint index)
+{
+#	if SHADOWFILTER == 8
+	return Random::PoissonSampleOffsets16[index];
+#	else
+	return Random::SpiralSampleOffsets8[index];
+#	endif
+}
+
 float SampleShadowPCF(Texture2DArray<float4> tex, SamplerComparisonState samp, float2 baseUV, float layerIndex, float compareValue, float2x2 rotationMatrix, float radius)
 {
 	float visibility = 0.0;
-	[unroll] for (int i = 0; i < 8; i++)
+	[unroll] for (uint i = 0; i < ShadowPCFSampleCount; i++)
 	{
-		float2 offset = mul(Random::SpiralSampleOffsets8[i], rotationMatrix) * radius;
+		float2 offset = mul(GetShadowPCFOffset(i), rotationMatrix) * radius;
 		visibility += tex.SampleCmpLevelZero(samp, float3(baseUV + offset, layerIndex), compareValue).x;
 	}
-	return visibility / 8.0;
+	return visibility / ShadowPCFSampleCount;
 }
 
 float SampleShadow3x3(Texture2DArray<float4> tex, SamplerComparisonState samp, float2 baseUV, float layerIndex, float compareValue, float2 texelSize)
@@ -338,14 +355,14 @@ float SampleShadow3x3(Texture2DArray<float4> tex, SamplerComparisonState samp, f
 float SampleDualParaboloidShadowPCF(Texture2DArray<float4> tex, SamplerComparisonState samp, float2 baseUV, float layerIndex, float compareValue, float2x2 rotationMatrix, float radius, bool lowerHalf)
 {
 	float visibility = 0.0;
-	[unroll] for (int i = 0; i < 8; i++)
+	[unroll] for (uint i = 0; i < ShadowPCFSampleCount; i++)
 	{
-		float2 offset = mul(Random::SpiralSampleOffsets8[i], rotationMatrix) * radius;
+		float2 offset = mul(GetShadowPCFOffset(i), rotationMatrix) * radius;
 		float2 uv = baseUV + offset;
 		uv.y = lowerHalf ? max(uv.y, 0.5) : min(uv.y, 0.5);
 		visibility += tex.SampleCmpLevelZero(samp, float3(uv, layerIndex), compareValue).x;
 	}
-	return visibility / 8.0;
+	return visibility / ShadowPCFSampleCount;
 }
 
 PS_OUTPUT main(PS_INPUT input)
@@ -695,7 +712,7 @@ PS_OUTPUT main(PS_INPUT input)
 #	elif defined(RENDER_BASE_TEXTURE)
 	psout.Color.xyzw = baseColor;
 #		if defined(TRUE_PBR)
-	psout.Color.xyz = Color::LinearToSrgb(baseColor.xyz);
+	psout.Color.xyz = TransferFunctions::LinearToGamma22(baseColor.xyz);
 #		endif
 #	elif defined(LOCALMAP_FOGOFWAR)
 	psout.Color = float4(0, 0, 0, input.Alpha);

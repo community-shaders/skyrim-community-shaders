@@ -4,11 +4,13 @@
 #include "TruePBR/BSLightingShaderMaterialPBRLandscape.h"
 
 #include "Features/InteriorSun.h"
+#include "Features/LinearLighting.h"
 #include "Hooks.h"
 #include "I18n/I18n.h"
 #include "ShaderCache.h"
 #include "State.h"
 #include "Util.h"
+#include "Utils/UI.h"
 
 #define I18N_KEY_PREFIX "feature.true_pbr."
 
@@ -27,6 +29,12 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	specularLevel,
 	subsurfaceColor,
 	subsurfaceOpacity,
+	subsurfaceBalance,
+	thinSurface,
+	foliage,
+	thinSurfaceSpecularWeight,
+	thinSurfaceBackSpecularWeight,
+	thinSurfaceBackRoughnessScale,
 	coatColor,
 	coatStrength,
 	coatRoughness,
@@ -34,6 +42,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	innerLayerDisplacementOffset,
 	fuzzColor,
 	fuzzWeight,
+	fuzzRoughness,
+	fuzzRoughnessTexture,
 	glintParameters);
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
@@ -77,24 +87,18 @@ namespace PNState
 					logger::info("[TruePBR] loading json : {}", path);
 				}
 
-				std::ifstream fileStream(path);
-				if (!fileStream.is_open()) {
-					logger::error("[TruePBR] failed to read {}", path);
-					anyFailed = true;
-					continue;
-				}
-
-				json config;
-				try {
-					fileStream >> config;
-				} catch (const nlohmann::json::parse_error& e) {
-					logger::error("[TruePBR] failed to parse {} : {}", path, e.what());
+				std::string error;
+				const auto config = Util::FileHelpers::ReadJsonFile(path, "PBR record config", 0, &error);
+				if (!config) {
+					// The helper already logged parse failures; only a failed open is still unreported.
+					if (error.empty())
+						logger::error("[TruePBR] failed to read {}", path);
 					anyFailed = true;
 					continue;
 				}
 
 				const auto editorId = std::filesystem::path(path).stem().string();
-				if (!recordReader(editorId, config)) {
+				if (!recordReader(editorId, *config)) {
 					anyFailed = true;
 				}
 			}
@@ -107,20 +111,7 @@ namespace PNState
 
 	void SavePBRRecordConfig(const std::string& rootPath, const std::string& editorId, const json& config)
 	{
-		std::filesystem::create_directory(rootPath);
-
-		const std::string outputPath = std::format("{}\\{}.json", rootPath, editorId);
-		std::ofstream fileStream(outputPath);
-		if (!fileStream.is_open()) {
-			logger::error("[TruePBR] failed to write {}", outputPath);
-			return;
-		}
-		try {
-			fileStream << std::setw(4) << config;
-		} catch (const nlohmann::json::type_error& e) {
-			logger::error("[TruePBR] failed to serialize {} : {}", outputPath, e.what());
-			return;
-		}
+		Util::FileHelpers::WriteJsonAtomically(std::filesystem::path(rootPath) / (editorId + ".json"), config, 4, "PBR record config");
 	}
 }
 
@@ -167,7 +158,32 @@ void TruePBR::DrawSettings()
 				if (ImGui::SliderFloat(T(TKEY("subsurface_opacity"), "Subsurface Opacity"), &selectedPbrTextureSet->subsurfaceOpacity, 0.f, 1.f, "%.3f")) {
 					wasEdited = true;
 				}
+				if (auto _tt = Util::HoverTooltipWrapper())
+					ImGui::Text("%s", T(TKEY("subsurface_opacity_tooltip"), "Controls subsurface thickness. For thin surfaces, including trees and grass, 0 allows full subsurface scattering and 1 blocks it. Multiplied by subsurface texture alpha; does not control mesh alpha transparency."));
+				if (ImGui::SliderFloat(T(TKEY("subsurface_balance"), "Subsurface Balance"), &selectedPbrTextureSet->subsurfaceBalance, 0.f, 1.f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
+					wasEdited = true;
+				}
+				if (auto _tt = Util::HoverTooltipWrapper())
+					ImGui::Text("%s", T(TKEY("subsurface_balance_tooltip"), "For thin surfaces, including trees and grass, the share of subsurface light sent to the side facing away from the light, shining through; the lit side receives the rest. 0 keeps it on the lit side, 0.5 splits it equally and 1 sends all of it through. Default 0.75 favors the side facing away. Affects direct and ambient lighting without changing reflected light or the total subsurface strength."));
 
+				ImGui::TreePop();
+			}
+			if (ImGui::TreeNodeEx(T(TKEY("thin_surface"), "Thin Surface"))) {
+				if (ImGui::Checkbox(T(TKEY("thin_surface_enabled"), "Thin Surface"), &selectedPbrTextureSet->thinSurface)) {
+					wasEdited = true;
+				}
+				if (auto _tt = Util::HoverTooltipWrapper())
+					ImGui::Text("%s", T(TKEY("thin_surface_enabled_tooltip"), "Lights the material as a thin two-sided sheet, such as leaves, paper or cloth. Each side is shaded from its own face, and subsurface light passes through to the side facing away from a light. Does not apply to landscape, coat or hair materials. The NIF Anisotropic Lighting flag also enables this independently of this checkbox."));
+				if (ImGui::Checkbox(T(TKEY("foliage_enabled"), "Foliage"), &selectedPbrTextureSet->foliage)) {
+					wasEdited = true;
+				}
+				if (auto _tt = Util::HoverTooltipWrapper())
+					ImGui::Text("%s", T(TKEY("foliage_enabled_tooltip"), "Thin surface lighting with foliage approximations: shadows and sky occlusion assume nearby occluders are leaves that pass some light, and normal-map roughness is filtered for leaf cards. Implies Thin Surface. Grass and trees with subsurface use it automatically. The NIF Effect Lighting flag also enables this independently of this checkbox, except on coat or hair materials."));
+				wasEdited |= ImGui::SliderFloat(T(TKEY("thin_surface_specular_weight"), "Front Specular Weight"), &selectedPbrTextureSet->thinSurfaceSpecularWeight, 0.f, 1.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+				wasEdited |= ImGui::SliderFloat(T(TKEY("thin_surface_back_specular_weight"), "Back Specular Weight"), &selectedPbrTextureSet->thinSurfaceBackSpecularWeight, 0.f, 1.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+				wasEdited |= ImGui::SliderFloat(T(TKEY("thin_surface_back_roughness_scale"), "Back Roughness Scale"), &selectedPbrTextureSet->thinSurfaceBackRoughnessScale, 0.f, 3.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+				if (auto _tt = Util::HoverTooltipWrapper())
+					ImGui::Text("%s", T(TKEY("thin_surface_tooltip"), "For thin surfaces, specular weights scale the complete surface reflection of each side, including grazing angles, for direct and indirect lighting. Roughness scale applies to back faces. Defaults: 0.5, 0.5, 1.0. Front and back follow mesh winding."));
 				ImGui::TreePop();
 			}
 			if (ImGui::TreeNodeEx(T(TKEY("coat"), "Coat"))) {
@@ -209,11 +225,13 @@ void TruePBR::DrawSettings()
 				ImGui::TreePop();
 			}
 			if (wasEdited) {
+				std::lock_guard lock(BSLightingShaderMaterialPBR::AllMutex);
 				for (auto& [material, extensions] : BSLightingShaderMaterialPBR::All) {
 					if (extensions.textureSetData == selectedPbrTextureSet) {
 						material->ApplyTextureSetData(*extensions.textureSetData);
 					}
 				}
+				std::lock_guard landscapeLock(BSLightingShaderMaterialPBRLandscape::AllMutex);
 				for (auto& [material, textureSets] : BSLightingShaderMaterialPBRLandscape::All) {
 					for (uint32_t textureSetIndex = 0; textureSetIndex < BSLightingShaderMaterialPBRLandscape::NumTiles; ++textureSetIndex) {
 						if (textureSets[textureSetIndex] == selectedPbrTextureSet) {
@@ -223,7 +241,7 @@ void TruePBR::DrawSettings()
 				}
 			}
 			if (selectedPbrTextureSet != nullptr) {
-				if (ImGui::Button(T(TKEY("save"), "Save"))) {
+				if (Util::Button(T(TKEY("save"), "Save"))) {
 					PNState::SavePBRRecordConfig("Data\\PBRTextureSets", selectedPbrTextureSetName, *selectedPbrTextureSet);
 				}
 			}
@@ -240,7 +258,7 @@ void TruePBR::DrawSettings()
 			bool wasEdited = false;
 			if (ImGui::TreeNodeEx(T(TKEY("base_color_scale"), "Base Color Scale"), ImGuiTreeNodeFlags_DefaultOpen)) {
 				auto resetBaseColorScaleLabel = std::string(T(TKEY("reset_to_1_0"), "Reset to 1.0")) + "##BaseColorScale";
-				if (ImGui::Button(resetBaseColorScaleLabel.c_str())) {
+				if (Util::Button(resetBaseColorScaleLabel.c_str())) {
 					selectedPbrMaterialObject->baseColorScale = { 1.f, 1.f, 1.f };
 					wasEdited = true;
 				}
@@ -323,6 +341,7 @@ void TruePBR::DrawSettings()
 				ImGui::TreePop();
 			}
 			if (wasEdited) {
+				std::lock_guard lock(BSLightingShaderMaterialPBR::AllMutex);
 				for (auto& [material, extensions] : BSLightingShaderMaterialPBR::All) {
 					if (extensions.materialObjectData == selectedPbrMaterialObject) {
 						material->ApplyMaterialObjectData(*extensions.materialObjectData);
@@ -330,7 +349,7 @@ void TruePBR::DrawSettings()
 				}
 			}
 			if (selectedPbrMaterialObject != nullptr) {
-				if (ImGui::Button(T(TKEY("material_save"), "Save"))) {
+				if (Util::Button(T(TKEY("material_save"), "Save"))) {
 					PNState::SavePBRRecordConfig("Data\\PBRMaterialObjects", selectedPbrMaterialObjectName, *selectedPbrMaterialObject);
 				}
 			}
@@ -338,7 +357,7 @@ void TruePBR::DrawSettings()
 		ImGui::TreePop();
 	}
 
-	if (ImGui::TreeNodeEx(T(TKEY("debug"), "Debug"))) {
+	if (Util::ShowDebugSections() && ImGui::TreeNodeEx(T(TKEY("debug"), "Debug"))) {
 		ImGui::Checkbox(T(TKEY("enable_verbose_json_logging"), "Enable verbose json logging"), &enableVerboseJsonLogging);
 		ImGui::TreePop();
 	}
@@ -410,7 +429,7 @@ void TruePBR::SetupGlintsTexture()
 		.Texture2D = { .MipSlice = 0 }
 	};
 
-	glintsNoiseTexture = eastl::make_unique<Texture2D>(tex_desc);
+	glintsNoiseTexture = eastl::make_unique<Texture2D>(tex_desc, "TruePBR::GlintsNoise");
 	glintsNoiseTexture->CreateSRV(srv_desc);
 	glintsNoiseTexture->CreateUAV(uav_desc);
 
@@ -494,9 +513,18 @@ void TruePBR::ReloadTextureSetData()
 			return false;
 		} }, enableVerboseJsonLogging);
 
+	std::lock_guard lock(BSLightingShaderMaterialPBR::AllMutex);
+	for (const auto& [material, extensions] : BSLightingShaderMaterialPBR::All) {
+		if (extensions.textureSetData != nullptr) {
+			material->ApplyTextureSetData(*extensions.textureSetData);
+		}
+	}
+	std::lock_guard landscapeLock(BSLightingShaderMaterialPBRLandscape::AllMutex);
 	for (const auto& [material, textureSets] : BSLightingShaderMaterialPBRLandscape::All) {
 		for (uint32_t textureSetIndex = 0; textureSetIndex < BSLightingShaderMaterialPBRLandscape::NumTiles; ++textureSetIndex) {
-			SetupPBRLandscapeTextureParameters(*material, *textureSets[textureSetIndex], textureSetIndex);
+			if (textureSets[textureSetIndex] != nullptr) {
+				SetupPBRLandscapeTextureParameters(*material, *textureSets[textureSetIndex], textureSetIndex);
+			}
 		}
 	}
 }
@@ -598,7 +626,7 @@ namespace Permutations
 		constexpr std::array projectedUvFlags{ Deferred, AnisoLighting, DoAlphaTest, Snow };
 		constexpr std::array lodObjectsFlags{ Deferred, WorldMap, DoAlphaTest, ProjectedUV };
 		constexpr std::array treeFlags{ Deferred, AnisoLighting, Skinned, DoAlphaTest };
-		constexpr std::array landFlags{ Deferred, AnisoLighting };
+		constexpr std::array landFlags{ Deferred, AnisoLighting, LandscapeSeams };
 
 		constexpr uint32_t defaultConstantFlags = static_cast<uint32_t>(TruePbr) | static_cast<uint32_t>(VC);
 		constexpr uint32_t projectedUvConstantFlags = static_cast<uint32_t>(TruePbr) | static_cast<uint32_t>(VC) | static_cast<uint32_t>(ProjectedUV);
@@ -641,11 +669,11 @@ void TruePBR::GenerateShaderPermutations(RE::BSShader* shader)
 			auto vertexShaderDesriptor = descriptor;
 			auto pixelShaderDescriptor = descriptor;
 			state->ModifyShaderLookup(*shader, vertexShaderDesriptor, pixelShaderDescriptor);
-			std::ignore = shaderCache->GetPixelShader(*shader, pixelShaderDescriptor);
+			std::ignore = shaderCache->GetPixelShader(*shader, pixelShaderDescriptor, true);
 		}
 	} else if (shader->shaderType == RE::BSShader::Type::Utility) {
 		for (auto descriptor : Permutations::GeneratePBRUtilityPixelPermutations()) {
-			std::ignore = shaderCache->GetPixelShader(*shader, descriptor);
+			std::ignore = shaderCache->GetPixelShader(*shader, descriptor, true);
 		}
 	}
 }
@@ -750,6 +778,15 @@ struct BSLightingShaderProperty_LoadBinary
 			} else if (property->flags.any(kBackLighting)) {
 				pbrMaterial->pbrFlags.set(PBRFlags::HairMarschner);
 			} else {
+				// These NIF flags select thin-surface behavior only outside coat and hair materials.
+				if (property->flags.any(kAnisotropicLighting)) {
+					pbrMaterial->nifThinSurfaceFlags.set(PBRFlags::ThinSurface);
+				}
+				if (property->flags.any(kEffectLighting)) {
+					pbrMaterial->nifThinSurfaceFlags.set(PBRFlags::Foliage);
+				}
+				pbrMaterial->pbrFlags.set(pbrMaterial->nifThinSurfaceFlags.get());
+
 				if (property->flags.any(kRimLighting)) {
 					pbrMaterial->pbrFlags.set(PBRFlags::Subsurface);
 				}
@@ -776,8 +813,75 @@ struct BSLightingShaderProperty_LoadBinary
 
 static bool IsPBRShaderProperty(const RE::BSShaderProperty* property)
 {
-	return property->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kVertexLighting) && (property->material->GetFeature() == RE::BSShaderMaterial::Feature::kDefault || property->material->GetFeature() == RE::BSShaderMaterial::Feature::kMultiTexLandLODBlend);
+	return property->material != nullptr && property->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kVertexLighting) && (property->material->GetFeature() == RE::BSShaderMaterial::Feature::kDefault || property->material->GetFeature() == RE::BSShaderMaterial::Feature::kMultiTexLandLODBlend);
 }
+
+/** @brief Returns the values of a NiFloatsExtraData block, or an empty span when it is absent or malformed. */
+static std::span<const float> GetNifFloats(RE::BSLightingShaderProperty* property, const char* name, std::uint32_t count, const RE::NiStream& stream)
+{
+	const auto* extra = property->GetExtraData(name);
+	if (!extra) {
+		return {};
+	}
+
+	const auto* floats = netimmerse_cast<const RE::NiFloatsExtraData*>(extra);
+	if (!floats || floats->size != count || !floats->value) {
+		logger::warn("[TruePBR] {} has invalid {} extra data, expected {} floats", stream.inputFilePath, name, count);
+		return {};
+	}
+
+	return { floats->value, floats->size };
+}
+
+struct BSLightingShaderProperty_PostLinkObject
+{
+	static void thunk(RE::BSLightingShaderProperty* property, RE::NiStream& stream)
+	{
+		func(property, stream);
+		if (!IsPBRShaderProperty(property)) {
+			return;
+		}
+
+		const auto thinSurfaceParameters = GetNifFloats(property, "PBRThinSurface", 4, stream);
+		const auto fuzzParameters = GetNifFloats(property, "PBRFuzz", 2, stream);
+		if (thinSurfaceParameters.empty() && fuzzParameters.empty()) {
+			return;
+		}
+
+		auto* material = static_cast<BSLightingShaderMaterialPBR*>(property->material);
+		if (material->pbrFlags.any(PBRFlags::TwoLayer, PBRFlags::HairMarschner)) {
+			return;
+		}
+
+		// Per-NIF values must not modify a material shared by another shader property.
+		BSLightingShaderMaterialPBR source;
+		source.CopyMembers(material);
+		if (const auto* textureSetData = BSLightingShaderMaterialPBR::GetExtensions(&source).textureSetData) {
+			source.ApplyTextureSetData(*textureSetData);
+		}
+
+		bool applied = false;
+		if (!thinSurfaceParameters.empty()) {
+			if (source.ApplyNifThinSurfaceParameters(thinSurfaceParameters)) {
+				applied = true;
+			} else {
+				logger::warn("[TruePBR] {} has non-finite PBRThinSurface parameters", stream.inputFilePath);
+			}
+		}
+		if (!fuzzParameters.empty()) {
+			if (source.ApplyNifFuzzParameters(fuzzParameters)) {
+				applied = true;
+			} else {
+				logger::warn("[TruePBR] {} has invalid PBRFuzz values, expected finite roughness and 0 or 1", stream.inputFilePath);
+			}
+		}
+
+		if (applied) {
+			property->SetMaterial(&source, true);
+		}
+	}
+	static inline REL::Relocation<decltype(thunk)> func;
+};
 
 struct BSLightingShaderProperty_GetRenderPasses
 {
@@ -854,6 +958,17 @@ struct BSLightingShaderProperty_GetRenderPasses_LocalMap
 	}
 	static inline REL::Relocation<decltype(thunk)> func;
 };
+
+/** @brief True when slot 4 green is explicitly enabled and its texture is available. */
+static bool HasFuzzRoughnessTexture(const BSLightingShaderMaterialPBR* material)
+{
+	if (!material->fuzzRoughnessTexture || material->displacementTexture == globals::game::graphicsState->GetRuntimeData().defaultTextureBlack) {
+		return false;
+	}
+
+	const auto* texture = material->displacementTexture.get();
+	return texture != nullptr && texture->rendererTexture != nullptr && texture->rendererTexture->resourceView != nullptr;
+}
 
 bool TruePBR::BSLightingShader_SetupMaterial(RE::BSLightingShader* shader, RE::BSLightingShaderMaterialBase const* material)
 {
@@ -975,6 +1090,17 @@ bool TruePBR::BSLightingShader_SetupMaterial(RE::BSLightingShader* shader, RE::B
 			shadowState->SetPSTextureFilterMode(5, RE::BSGraphics::TextureFilterMode::kAnisotropic);
 
 			stl::enumeration<PBRShaderFlags> shaderFlags;
+			if (!pbrMaterial->pbrFlags.any(PBRFlags::TwoLayer, PBRFlags::HairMarschner)) {
+				if (pbrMaterial->pbrFlags.any(PBRFlags::ThinSurface)) {
+					shaderFlags.set(PBRShaderFlags::ThinSurface);
+				}
+				if (pbrMaterial->pbrFlags.any(PBRFlags::Foliage)) {
+					shaderFlags.set(PBRShaderFlags::Foliage);
+				}
+			}
+			const auto& thinSurfaceParams = pbrMaterial->GetThinSurfaceParameters();
+			std::array<float, 4> lightingEffectParams{ pbrMaterial->GetSubsurfaceBalance(), thinSurfaceParams[0], thinSurfaceParams[1], thinSurfaceParams[2] };
+			shadowState->SetPSConstant(lightingEffectParams, RE::BSGraphics::ConstantGroupLevel::PerMaterial, lightingPSConstants.LightingEffectParams);
 			if (pbrMaterial->pbrFlags.any(PBRFlags::TwoLayer)) {
 				shaderFlags.set(PBRShaderFlags::TwoLayer);
 				if (pbrMaterial->pbrFlags.any(PBRFlags::InterlayerParallax)) {
@@ -1049,6 +1175,7 @@ bool TruePBR::BSLightingShader_SetupMaterial(RE::BSLightingShader* shader, RE::B
 				PBRProjectedUVParams1[0] = pbrMaterial->GetProjectedMaterialBaseColorScale()[0];
 				PBRProjectedUVParams1[1] = pbrMaterial->GetProjectedMaterialBaseColorScale()[1];
 				PBRProjectedUVParams1[2] = pbrMaterial->GetProjectedMaterialBaseColorScale()[2];
+				PBRProjectedUVParams1[3] = pbrMaterial->GetFuzzRoughness();
 				shadowState->SetPSConstant(PBRProjectedUVParams1, RE::BSGraphics::ConstantGroupLevel::PerMaterial, lightingPSConstants.MaterialObjectRGBScale);
 
 				std::array<float, 4> PBRProjectedUVParams2;
@@ -1091,6 +1218,10 @@ bool TruePBR::BSLightingShader_SetupMaterial(RE::BSLightingShader* shader, RE::B
 				shadowState->SetPSTextureFilterMode(9, RE::BSGraphics::TextureFilterMode::kAnisotropic);
 
 				shaderFlags.set(PBRShaderFlags::HasFeaturesTexture1);
+			}
+
+			if (shaderFlags.any(PBRShaderFlags::Fuzz) && HasFuzzRoughnessTexture(pbrMaterial)) {
+				shaderFlags.set(PBRShaderFlags::HasFuzzRoughnessTexture);
 			}
 
 			{
@@ -1263,6 +1394,10 @@ bool TruePBR::TESObjectLAND_SetupMaterial(RE::TESObjectLAND* land)
 	if (land->loadedData != nullptr && land->loadedData->mesh[0] != nullptr) {
 		land->data.flags.set(static_cast<RE::OBJ_LAND::Flag>(8));
 		for (uint32_t quadIndex = 0; quadIndex < 4; ++quadIndex) {
+			auto* quadMesh = land->loadedData->mesh[quadIndex];
+			if (quadMesh == nullptr || quadMesh->GetChildren().empty() || quadMesh->GetChildren()[0] == nullptr)
+				continue;
+
 			auto shaderProperty = static_cast<RE::BSLightingShaderProperty*>(memoryManager->Allocate(sizeof(RE::BSLightingShaderProperty), 0, false));
 			shaderProperty->Ctor();
 
@@ -1281,7 +1416,7 @@ bool TruePBR::TESObjectLAND_SetupMaterial(RE::TESObjectLAND* land)
 				material->landscapeRMAOSTextures[textureIndex] = stateData.defaultTextureWhite;
 			}
 
-			auto& textureSets = BSLightingShaderMaterialPBRLandscape::All[material];
+			auto& textureSets = BSLightingShaderMaterialPBRLandscape::GetTextureSets(material);
 
 			if (auto defTexture = land->loadedData->defQuadTextures[quadIndex]) {
 				SetupLandscapeTexture(*material, *defTexture, 0, textureSets);
@@ -1314,12 +1449,9 @@ bool TruePBR::TESObjectLAND_SetupMaterial(RE::TESObjectLAND* land)
 
 			shaderProperty->SetFlags(RE::BSShaderProperty::EShaderPropertyFlag8::kVertexLighting, true);
 
-			const auto& children = land->loadedData->mesh[quadIndex]->GetChildren();
-			auto geometry = children.empty() ? nullptr : static_cast<RE::BSGeometry*>(children[0].get());
+			auto geometry = static_cast<RE::BSGeometry*>(quadMesh->GetChildren()[0].get());
 			shaderProperty->SetupGeometry(geometry);
-			if (geometry != nullptr) {
-				geometry->GetGeometryRuntimeData().shaderProperty = RE::NiPointer(shaderProperty);
-			}
+			geometry->GetGeometryRuntimeData().shaderProperty = RE::NiPointer(shaderProperty);
 
 			globals::game::smState->shadowSceneNode[0]->AttachObject(geometry);
 		}
@@ -1365,6 +1497,94 @@ void TruePBR::SetupGrassMaterial(RE::BSLightingShaderProperty* sourceProperty, R
 
 	grassProperty->SetMaterial(&grassMaterial, true);
 	grassProperty->SetFlags(RE::BSShaderProperty::EShaderPropertyFlag8::kMenuScreen, true);
+}
+
+static bool HasGrassFeaturesTexture0(const BSLightingShaderMaterialPBR* material)
+{
+	return material->featuresTexture0 != nullptr &&
+	       material->featuresTexture0 != globals::game::graphicsState->GetRuntimeData().defaultTextureWhite;
+}
+
+static bool HasGrassFeaturesTexture1(const BSLightingShaderMaterialPBR* material)
+{
+	return material->featuresTexture1 != nullptr &&
+	       material->featuresTexture1 != globals::game::graphicsState->GetRuntimeData().defaultTextureWhite;
+}
+
+static bool HasGrassEmissive(const BSLightingShaderMaterialPBR* material)
+{
+	return material->emissiveTexture != nullptr &&
+	       material->emissiveTexture != globals::game::graphicsState->GetRuntimeData().defaultTextureBlack;
+}
+
+void TruePBR::SetGrassPBRTextures(const BSLightingShaderMaterialPBR* material)
+{
+	auto* shadowState = globals::game::shadowState;
+	const auto clampMode = static_cast<RE::BSGraphics::TextureAddressMode>(material->textureClampMode);
+
+	shadowState->SetPSTexture(2, material->normalTexture->rendererTexture);
+	shadowState->SetPSTextureAddressMode(2, clampMode);
+	shadowState->SetPSTextureFilterMode(2, RE::BSGraphics::TextureFilterMode::kAnisotropic);
+	shadowState->SetPSTexture(3, material->rmaosTexture->rendererTexture);
+	shadowState->SetPSTextureAddressMode(3, clampMode);
+	shadowState->SetPSTextureFilterMode(3, RE::BSGraphics::TextureFilterMode::kAnisotropic);
+
+	if (HasGrassFeaturesTexture0(material)) {
+		shadowState->SetPSTexture(4, material->featuresTexture0->rendererTexture);
+		shadowState->SetPSTextureAddressMode(4, clampMode);
+		shadowState->SetPSTextureFilterMode(4, RE::BSGraphics::TextureFilterMode::kAnisotropic);
+	}
+	if (HasGrassFeaturesTexture1(material)) {
+		shadowState->SetPSTexture(5, material->featuresTexture1->rendererTexture);
+		shadowState->SetPSTextureAddressMode(5, clampMode);
+		shadowState->SetPSTextureFilterMode(5, RE::BSGraphics::TextureFilterMode::kAnisotropic);
+	}
+	if (HasGrassEmissive(material)) {
+		shadowState->SetPSTexture(6, material->emissiveTexture->rendererTexture);
+		shadowState->SetPSTextureAddressMode(6, clampMode);
+		shadowState->SetPSTextureFilterMode(6, RE::BSGraphics::TextureFilterMode::kAnisotropic);
+	}
+}
+
+TruePBR::GrassPBRConstants TruePBR::GetGrassPBRConstants(const BSLightingShaderMaterialPBR* material)
+{
+	stl::enumeration<PBRShaderFlags> shaderFlags;
+	const bool hasSubsurface = material->pbrFlags.any(PBRFlags::Subsurface) &&
+	                           !material->pbrFlags.any(PBRFlags::TwoLayer) &&
+	                           !material->pbrFlags.any(PBRFlags::HairMarschner);
+	if (hasSubsurface) {
+		shaderFlags.set(PBRShaderFlags::Subsurface);
+		if (HasGrassFeaturesTexture0(material)) {
+			shaderFlags.set(PBRShaderFlags::HasFeaturesTexture0);
+		}
+	}
+	const bool hasFuzz = material->pbrFlags.any(PBRFlags::Fuzz) &&
+	                     !material->pbrFlags.any(PBRFlags::TwoLayer) &&
+	                     !material->pbrFlags.any(PBRFlags::HairMarschner);
+	if (hasFuzz) {
+		shaderFlags.set(PBRShaderFlags::Fuzz);
+		if (HasGrassFeaturesTexture1(material)) {
+			shaderFlags.set(PBRShaderFlags::HasFeaturesTexture1);
+		}
+	}
+	if (HasGrassEmissive(material)) {
+		shaderFlags.set(PBRShaderFlags::HasEmissive);
+	}
+
+	const auto& subsurfaceColor = material->GetSubsurfaceColor();
+	const auto& fuzzColor = material->GetFuzzColor();
+	const auto& thinSurfaceParams = material->GetThinSurfaceParameters();
+	const auto& linearLighting = globals::features::linearLighting;
+	return {
+		shaderFlags.underlying(),
+		{ material->GetRoughnessScale(), material->GetSpecularLevel(), linearLighting.IsLinearLightingActive() ? linearLighting.settings.emitColorMult : 1.0f },
+		{ hasSubsurface ? subsurfaceColor.red : 0.0f, hasSubsurface ? subsurfaceColor.green : 0.0f,
+			hasSubsurface ? subsurfaceColor.blue : 0.0f, hasSubsurface ? material->GetSubsurfaceOpacity() : 1.0f },
+		{ hasFuzz ? fuzzColor.red : 0.0f, hasFuzz ? fuzzColor.green : 0.0f,
+			hasFuzz ? fuzzColor.blue : 0.0f, hasFuzz ? material->GetFuzzWeight() : 0.0f },
+		{ material->GetSubsurfaceBalance(), thinSurfaceParams[0], thinSurfaceParams[1], thinSurfaceParams[2] },
+		{ material->GetFuzzRoughness(), 0.f, 0.f, 0.f }
+	};
 }
 
 struct TESForm_GetFormEditorID
@@ -1549,41 +1769,24 @@ struct BSGrassShader_SetupMaterial
 
 		auto* shadowState = globals::game::shadowState;
 		auto* pbrMaterial = static_cast<const BSLightingShaderMaterialPBR*>(material);
-		const auto clampMode = static_cast<RE::BSGraphics::TextureAddressMode>(pbrMaterial->textureClampMode);
 		const auto& grassPSConstants = ShaderConstants::GrassPS::Get();
 
 		RE::BSGraphics::Renderer::PreparePSConstantGroup(RE::BSGraphics::ConstantGroupLevel::PerMaterial);
 
-		shadowState->SetPSTexture(2, pbrMaterial->normalTexture->rendererTexture);
-		shadowState->SetPSTextureAddressMode(2, clampMode);
-		shadowState->SetPSTextureFilterMode(2, RE::BSGraphics::TextureFilterMode::kAnisotropic);
-		shadowState->SetPSTexture(3, pbrMaterial->rmaosTexture->rendererTexture);
-		shadowState->SetPSTextureAddressMode(3, clampMode);
-		shadowState->SetPSTextureFilterMode(3, RE::BSGraphics::TextureFilterMode::kAnisotropic);
+		TruePBR::SetGrassPBRTextures(pbrMaterial);
 
-		stl::enumeration<PBRShaderFlags> shaderFlags;
-		if (pbrMaterial->pbrFlags.any(PBRFlags::Subsurface)) {
-			shaderFlags.set(PBRShaderFlags::Subsurface);
-		}
-		const bool hasFeaturesTexture0 = pbrMaterial->featuresTexture0 != nullptr &&
-		                                 pbrMaterial->featuresTexture0 != globals::game::graphicsState->GetRuntimeData().defaultTextureWhite;
-		if (hasFeaturesTexture0) {
-			shadowState->SetPSTexture(4, pbrMaterial->featuresTexture0->rendererTexture);
-			shadowState->SetPSTextureAddressMode(4, clampMode);
-			shadowState->SetPSTextureFilterMode(4, RE::BSGraphics::TextureFilterMode::kAnisotropic);
-			shaderFlags.set(PBRShaderFlags::HasFeaturesTexture0);
-		}
-
-		shadowState->SetPSConstant(shaderFlags, RE::BSGraphics::ConstantGroupLevel::PerMaterial, grassPSConstants.PBRFlags);
-		std::array<float, 3> pbrParams1{ pbrMaterial->GetRoughnessScale(), pbrMaterial->GetSpecularLevel(), 0.0f };
+		const TruePBR::GrassPBRConstants constants = TruePBR::GetGrassPBRConstants(pbrMaterial);
+		shadowState->SetPSConstant(constants.flags, RE::BSGraphics::ConstantGroupLevel::PerMaterial, grassPSConstants.PBRFlags);
+		std::array<float, 3> pbrParams1{ constants.params1[0], constants.params1[1], constants.params1[2] };
 		shadowState->SetPSConstant(pbrParams1, RE::BSGraphics::ConstantGroupLevel::PerMaterial, grassPSConstants.PBRParams1);
-		std::array<float, 4> pbrParams2{
-			pbrMaterial->GetSubsurfaceColor().red,
-			pbrMaterial->GetSubsurfaceColor().green,
-			pbrMaterial->GetSubsurfaceColor().blue,
-			pbrMaterial->GetSubsurfaceOpacity()
-		};
+		std::array<float, 4> pbrParams2{ constants.params2[0], constants.params2[1], constants.params2[2], constants.params2[3] };
+		std::array<float, 4> pbrParams3{ constants.params3[0], constants.params3[1], constants.params3[2], constants.params3[3] };
+		std::array<float, 4> pbrParams4{ constants.params4[0], constants.params4[1], constants.params4[2], constants.params4[3] };
+		std::array<float, 4> pbrParams5{ constants.params5[0], constants.params5[1], constants.params5[2], constants.params5[3] };
 		shadowState->SetPSConstant(pbrParams2, RE::BSGraphics::ConstantGroupLevel::PerMaterial, grassPSConstants.PBRParams2);
+		shadowState->SetPSConstant(pbrParams3, RE::BSGraphics::ConstantGroupLevel::PerMaterial, grassPSConstants.PBRParams3);
+		shadowState->SetPSConstant(pbrParams4, RE::BSGraphics::ConstantGroupLevel::PerMaterial, grassPSConstants.PBRParams4);
+		shadowState->SetPSConstant(pbrParams5, RE::BSGraphics::ConstantGroupLevel::PerMaterial, grassPSConstants.PBRParams5);
 
 		RE::BSGraphics::Renderer::FlushPSConstantGroup(RE::BSGraphics::ConstantGroupLevel::PerMaterial);
 		RE::BSGraphics::Renderer::ApplyPSConstantGroup(RE::BSGraphics::ConstantGroupLevel::PerMaterial);
@@ -1611,7 +1814,7 @@ struct TESBoundObject_Clone3D
 						if (shaderProperty->GetMaterialType() == RE::BSShaderMaterial::Type::kLighting &&
 							shaderProperty->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kVertexLighting)) {
 							if (auto* material = static_cast<BSLightingShaderMaterialPBR*>(shaderProperty->material)) {
-								auto& ext = BSLightingShaderMaterialPBR::All[material];
+								auto& ext = BSLightingShaderMaterialPBR::GetExtensions(material);
 								const auto prevOwnerRefID = ext.lastOwnerRefFormID;
 
 								// Fork-before-write: if this material instance is already owned
@@ -1630,19 +1833,20 @@ struct TESBoundObject_Clone3D
 								BSLightingShaderMaterialPBR* targetMat = material;
 
 								if (wouldContaminate) {
-									auto* freshMat = BSLightingShaderMaterialPBR::Make();
-									if (freshMat) {
-										freshMat->CopyMembers(material);
-										shaderProperty->material = freshMat;
-										targetMat = freshMat;
-									} else {
+									{
+										BSLightingShaderMaterialPBR srcMaterial;
+										srcMaterial.CopyMembers(material);
+										shaderProperty->SetMaterial(&srcMaterial, true);
+									}
+									targetMat = static_cast<BSLightingShaderMaterialPBR*>(shaderProperty->material);
+									if (!targetMat) {
 										logger::warn("[TruePBR] failed to clone PBR material for ref {:08X}; skipping to avoid contamination", ref->GetFormID());
 										return RE::BSVisit::BSVisitControl::kContinue;
 									}
 								}
 
 								targetMat->ApplyMaterialObjectData(*pbrData);
-								auto& targetExt = BSLightingShaderMaterialPBR::All[targetMat];
+								auto& targetExt = BSLightingShaderMaterialPBR::GetExtensions(targetMat);
 								targetExt.materialObjectData = pbrData;
 								targetExt.lastOwnerRefFormID = ref->GetFormID();
 							}
@@ -1722,6 +1926,7 @@ void TruePBR::PostPostLoad()
 
 	logger::info("[TruePBR] Hooking BSLightingShaderProperty");
 	stl::write_vfunc<0x18, BSLightingShaderProperty_LoadBinary>(RE::VTABLE_BSLightingShaderProperty[0]);
+	stl::write_vfunc<0x1E, BSLightingShaderProperty_PostLinkObject>(RE::VTABLE_BSLightingShaderProperty[0]);
 	stl::write_vfunc<0x2A, BSLightingShaderProperty_GetRenderPasses>(RE::VTABLE_BSLightingShaderProperty[0]);
 	stl::write_vfunc<0x2C, BSLightingShaderProperty_GetRenderPasses_LocalMap>(RE::VTABLE_BSLightingShaderProperty[0]);
 	stl::detour_thunk<BSLightingShaderProperty_OnLoadTextureSet>(REL::RelocationID(99865, 106510));

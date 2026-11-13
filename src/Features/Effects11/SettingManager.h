@@ -59,7 +59,6 @@ struct TimeOfDayValue
 	{
 		return std::equal(std::begin(values), std::end(values), std::begin(other.values));
 	}
-
 };
 
 struct ColorTimeOfDayValue
@@ -94,7 +93,6 @@ struct ColorTimeOfDayValue
 		}
 		return true;
 	}
-
 };
 
 static_assert(TimeOfDayValue::Total <= 8 && ColorTimeOfDayValue::Total <= 8, "periods must fit the uint8_t mask");
@@ -119,6 +117,7 @@ struct Setting
 	std::string dependsOnKey;
 	std::string dependsOnCategory;
 	std::vector<std::string> legacyKeys;
+	uint32_t hdrWeightingID = 0xFFFFFFFF;  ///< Colour time-of-day only: ID of its ENB "<key>HDRWeighting" bool
 };
 
 class SettingManager
@@ -173,6 +172,26 @@ public:
 	/** @brief True when EnableMultipleWeathers is on, so weather-aware settings read and write the weather files. */
 	bool IsWeatherSystemEnabled() const;
 	void SetWeatherBlendFactors(uint32_t currentWeatherID, uint32_t lastWeatherID, float blendFactor);
+
+	/**
+	 * @brief Pins weather-aware reads on this thread to a fixed blend between the last (0) and current (1)
+	 * weather for its lifetime, so a weather's colours can be graded with that weather's own preset values.
+	 */
+	class ScopedWeatherBlend
+	{
+	public:
+		explicit ScopedWeatherBlend(float a_weatherBlend) :
+			previous(threadWeatherBlend)
+		{
+			threadWeatherBlend = std::clamp(a_weatherBlend, 0.0f, 1.0f);
+		}
+		~ScopedWeatherBlend() { threadWeatherBlend = previous; }
+		ScopedWeatherBlend(const ScopedWeatherBlend&) = delete;
+		ScopedWeatherBlend& operator=(const ScopedWeatherBlend&) = delete;
+
+	private:
+		float previous;
+	};
 	void LoadWeatherSettings(const std::vector<uint32_t>& weatherIDs, const std::string& filePath);
 	void SaveWeatherSettings(const std::string& weatherKey, const std::string& filePath);
 	void SaveAllWeatherSettings();
@@ -222,6 +241,7 @@ private:
 	uint32_t currentWeatherID = 0;
 	uint32_t lastWeatherID = 0;
 	float weatherBlendFactor = 0.0f;
+	static inline thread_local float threadWeatherBlend = -1.0f;
 	uint32_t multipleWeathersSettingID = 0xFFFFFFFF;
 
 	float timeOfDay1[4] = { 0, 0, 0, 0 };
@@ -238,14 +258,15 @@ private:
 	SettingValue ResolveWeatherValue(uint32_t weatherID, uint32_t settingID) const;
 
 	template <typename T>
-	T GetValueInternal(uint32_t id, bool rawValue = false) const;
+	T GetValueInternal(uint32_t id, bool rawValue = false, float weatherBlendOverride = -1.0f) const;
 	template <typename T>
 	void SetValueInternal(uint32_t id, const T& value);
 	uint32_t GetSettingIDInternal(std::string_view key, std::string_view category) const;
 
 	SettingValue InterpolateValues(const SettingValue& a, const SettingValue& b, float t) const;
 	float ComputeTimeOfDayInterpolation(const TimeOfDayValue& value) const;
-	float3 ComputeColorTimeOfDayInterpolation(const ColorTimeOfDayValue& value) const;
+	/** @brief Blends the periods by time-of-day weight; hdrWeighting also scales each weight by the period colour's luminance. */
+	float3 ComputeColorTimeOfDayInterpolation(const ColorTimeOfDayValue& value, bool hdrWeighting) const;
 	/** @return Bitmask of the periods the file set under any of its keys; scalars set every bit. */
 	uint8_t LoadSettingFromFile(const std::string& filePath, const std::string& section, const std::string& key, Setting& setting);
 	/** @brief Writes the setting; time-of-day types write only the periods in periodMask. */

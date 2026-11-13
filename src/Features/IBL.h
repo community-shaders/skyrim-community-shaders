@@ -35,8 +35,6 @@ public:
 
 	virtual void LoadSettings(json& o_json) override;
 	virtual void SaveSettings(json& o_json) override;
-	/** @brief Registers IBL parameters as weather-interpolatable variables. */
-	virtual void RegisterWeatherVariables() override;
 
 	/** @brief Binds IBL and static fallback textures as pixel shader resources for the reflections prepass. */
 	virtual void ReflectionsPrepass() override;
@@ -59,7 +57,6 @@ public:
 		float SkyIBLSaturation = 1.0f;
 		float FogAmount = 0.0f;
 		uint DALCMode = 2;  // 0: Luminance Ratio, 1: Color Ratio, 2: DALC + Sky, 3: DALC + Sky (Directional)
-		bool DisableInInteriors = true;
 		bool DisableInWorldMap = true;
 		bool DisableInLoadingScreen = true;
 	} settings;
@@ -76,7 +73,8 @@ public:
 		float SkyIBLSaturation;
 		float FogAmount;
 		uint DALCMode;
-		float pad0[2];
+		uint ENBSkyFalloff;
+		float pad0;
 	};
 	STATIC_ASSERT_ALIGNAS_16(PerFrame);
 
@@ -85,9 +83,9 @@ public:
 
 	/** @brief Builds the GPU constant-buffer data, forcing EnableIBL off when IsDisabledForCurrentScene(). */
 	PerFrame GetCommonBufferData() const;
-	/** @brief Returns true when IBL should be suppressed in the current scene per the DisableIn* toggles (loading screens, world map, interiors). */
+	/** @brief Returns true when IBL should be suppressed in the current scene per the DisableIn* toggles (loading screens, world map). */
 	bool IsDisabledForCurrentScene() const;
-	/** @brief Returns true when ENB is active with its own image based lighting enabled, overriding these settings. */
+	/** @brief Returns true when Effects 11 owns IBL (not handed off to CS) with its own image based lighting enabled, overriding these settings. */
 	bool IsManagedByENB() const;
 	/** @brief Returns the diffuse IBL spherical harmonics compute shader, compiling it on first use. */
 	ID3D11ComputeShader* GetDiffuseIBLCS();

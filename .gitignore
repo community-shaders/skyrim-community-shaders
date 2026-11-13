@@ -6,9 +6,10 @@ dist/
 CMakeUserPresets.json
 shadertoolsconfig.json
 .vscode
+/imgui.ini
 
 # Folder view configuration files
 **/.DS_Store
 .claude/settings.local.json
 
-tools/__pycache__/
+**/__pycache__/

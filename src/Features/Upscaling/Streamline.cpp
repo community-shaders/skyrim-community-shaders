@@ -11,6 +11,7 @@
 #include "../../Util.h"
 #include "../Upscaling.h"
 #include "DX12SwapChain.h"
+#include "Utils/Logging.h"
 
 namespace
 {
@@ -157,7 +158,7 @@ void Streamline::LoadInterposer()
 	slSetD3DDevice = (PFun_slSetD3DDevice*)GetProcAddress(interposer, "slSetD3DDevice");
 
 	if (SL_FAILED(res, slInit(pref, sl::kSDKVersion))) {
-		logger::critical("[Streamline] Failed to initialize Streamline");
+		logger::critical("[Streamline] Failed to initialize Streamline: slInit returned {} ({})", magic_enum::enum_name(res), std::to_underlying(res));
 	} else {
 		initialized = true;
 		featureDLSS = false;
@@ -310,11 +311,14 @@ bool Streamline::EnsureFrameToken()
 	if (!frameChecker.IsNewFrame())
 		return frameToken != nullptr;
 
+	static Util::OnceFlag tokenErrorLogged;
 	if (SL_FAILED(result, slGetNewFrameToken(frameToken, &globals::state->frameCount))) {
-		logger::error("[Streamline] Could not get frame token: {}", magic_enum::enum_name(result));
+		if (tokenErrorLogged.First())
+			logger::error("[Streamline] Could not get frame token: {}", magic_enum::enum_name(result));
 		frameToken = nullptr;
 		return false;
 	}
+	tokenErrorLogged.Reset();
 
 	return frameToken != nullptr;
 }
@@ -352,7 +356,7 @@ bool Streamline::CheckFrameConstants(sl::ViewportHandle p_viewport)
 	auto& upscaling = globals::features::upscaling;
 	auto jitter = upscaling.jitter;
 	slConstants.jitterOffset = { -jitter.x, -jitter.y };
-	slConstants.reset = sl::Boolean::eFalse;
+	slConstants.reset = globals::state->ShouldResetHistory() ? sl::Boolean::eTrue : sl::Boolean::eFalse;
 
 	slConstants.mvecScale = { 1.0f, 1.0f };
 	slConstants.motionVectors3D = sl::Boolean::eFalse;
@@ -504,11 +508,10 @@ void Streamline::EvaluateDLSS(sl::ViewportHandle vp,
 			return;
 		const sl::Result markerResult = slPCLSetMarker(marker, *frameToken);
 		if (markerResult != sl::Result::eOk) {
-			static bool markerErrorLogged[2] = { false, false };
+			static Util::OnceFlag markerErrorLogged[2];
 			const uint32_t boundedStageIndex = std::min(stageIndex, 1u);
-			if (markerErrorLogged[boundedStageIndex])
+			if (!markerErrorLogged[boundedStageIndex].First())
 				return;
-			markerErrorLogged[boundedStageIndex] = true;
 			logger::warn(
 				"[Streamline] slPCLSetMarker({}) failed: {}",
 				stageName,
@@ -544,11 +547,9 @@ void Streamline::EvaluateDLSS(sl::ViewportHandle vp,
 		state->EndPerfEvent();
 
 	if (evalResult != sl::Result::eOk) {
-		static bool evalErrorLogged = false;
-		if (!evalErrorLogged) {
-			evalErrorLogged = true;
+		static Util::OnceFlag evalErrorLogged;
+		if (evalErrorLogged.First())
 			logger::error("[Streamline] slEvaluateFeature failed result={}", (int)evalResult);
-		}
 	}
 }
 

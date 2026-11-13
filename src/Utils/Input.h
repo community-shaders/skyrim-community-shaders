@@ -13,9 +13,9 @@ enum class InputDeviceType
 	Primary = 0,
 	Secondary = 1,
 	Both = 2,
-	Keyboard = 3,   ///< Keyboard input
-	Mouse = 4,      ///< Mouse input
-	Gamepad = 5     ///< Gamepad/Controller input
+	Keyboard = 3,  ///< Keyboard input
+	Mouse = 4,     ///< Mouse input
+	Gamepad = 5    ///< Gamepad/Controller input
 };
 
 /**

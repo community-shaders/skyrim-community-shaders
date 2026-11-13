@@ -72,4 +72,7 @@ namespace ENBExtender
 	bool CreateEncryptedEffect(const std::filesystem::path& effectPath, winrt::com_ptr<ID3DX11Effect>& effect, std::string& error);
 	/** @brief Assigns UI groups to an encrypted effect's variables by matching group-scoped keys in its ini, since source group scopes are unavailable. */
 	void ResolveCompiledGroups(Effect& effect, const std::filesystem::path& iniPath);
+
+	/** @brief Answers No to KiLoader's prompt that ENB Extender's bundled ENBHelperSE.dll needs ENB; must run before KiLoader's SKSE satellite loads. */
+	void SuppressHelperPrompt();
 }

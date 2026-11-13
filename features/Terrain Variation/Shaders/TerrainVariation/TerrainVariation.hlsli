@@ -5,6 +5,8 @@
 #ifndef TERRAIN_VARIATION_HLSLI
 #define TERRAIN_VARIATION_HLSLI
 
+#include "Common/ColorManagement.hlsli"
+#include "Common/Math.hlsli"
 #include "Common/SharedData.hlsli"
 
 // --------------------- CONSTANTS AND STRUCTURES --------------------- //
@@ -13,7 +15,6 @@ static const float2x2 SKEW_MATRIX = float2x2(1.0, 0.0, -0.57735027, 1.15470054);
 static const float WORLD_SCALE = 332.54;
 // Mesh UVs already tile, so one lattice cell maps to one UV tile.
 static const float MESH_SCALE = 1.0;
-static const float3 LUMINANCE_WEIGHTS = float3(0.2126, 0.7152, 0.0722);
 static const float2 HASH_MULTIPLIER = float2(1271.5151, 3337.8237);
 // Fade width for c1/c2 rank-swap seams when discarding the third triangle corner.
 static const float TAP_SWAP_FADE_WIDTH = 0.1;
@@ -53,20 +54,6 @@ inline float2 hashLOD(float2 p)
 	return frac(float2(dot(p, float2(1.0, 17.0)), dot(p, float2(1.0, 23.0))));
 }
 
-// Value of the top-left pixel of the 2x2 quad, read through fine derivatives (SM5 has no QuadReadLaneAt).
-// Exact for integer-valued input, so every pixel of the quad gets the same bits.
-inline float4 QuadReadTopLeft(float4 v, float2 quadPixel)
-{
-	v -= quadPixel.x * ddx_fine(v);
-	return v - quadPixel.y * ddy_fine(v);
-}
-
-inline float2 QuadReadTopLeft(float2 v, float2 quadPixel)
-{
-	v -= quadPixel.x * ddx_fine(v);
-	return v - quadPixel.y * ddy_fine(v);
-}
-
 // Barycentric weight of a lattice corner (hat function of the skewed triangular grid).
 // Equals the barycentric inside the corner's six triangles and 0 elsewhere.
 inline float StochasticCornerWeight(float2 skewUV, float2 cell)
@@ -74,6 +61,44 @@ inline float StochasticCornerWeight(float2 skewUV, float2 cell)
 	float2 d = skewUV - cell;
 	return saturate(1.0 - max(max(abs(d.x), abs(d.y)), abs(d.x + d.y)));
 }
+
+// Declares skewUV and the three lattice corners around uv, strongest first, as c0..c2.
+#define STOCHASTIC_CORNERS(uv, scale)                 \
+	float2 skewUV = mul(SKEW_MATRIX, (uv) * (scale)); \
+	float2 vxID = floor(skewUV);                      \
+	float2 f = frac(skewUV);                          \
+	float bz = 1.0 - f.x - f.y;                       \
+	StochasticCorner c0, c1, c2;                      \
+	if (bz > 0) {                                     \
+		c0.cell = vxID;                               \
+		c0.w = bz;                                    \
+		c1.cell = vxID + float2(0, 1);                \
+		c1.w = f.y;                                   \
+		c2.cell = vxID + float2(1, 0);                \
+		c2.w = f.x;                                   \
+	} else {                                          \
+		c0.cell = vxID + 1.0;                         \
+		c0.w = -bz;                                   \
+		c1.cell = vxID + float2(1, 0);                \
+		c1.w = 1.0 - f.y;                             \
+		c2.cell = vxID + float2(0, 1);                \
+		c2.w = 1.0 - f.x;                             \
+	}                                                 \
+	if (c1.w > c0.w) {                                \
+		StochasticCorner t = c0;                      \
+		c0 = c1;                                      \
+		c1 = t;                                       \
+	}                                                 \
+	if (c2.w > c0.w) {                                \
+		StochasticCorner t = c0;                      \
+		c0 = c2;                                      \
+		c2 = t;                                       \
+	}                                                 \
+	if (c2.w > c1.w) {                                \
+		StochasticCorner t = c1;                      \
+		c1 = c2;                                      \
+		c2 = t;                                       \
+	}
 
 // Two highest barycentric corners of the triangular grid.
 // Near c1/c2 ties, fade w2 so the discarded corner cannot pop;
@@ -84,47 +109,11 @@ inline float StochasticCornerWeight(float2 skewUV, float2 cell)
 // Weights stay per pixel, evaluated against the quad's corners.
 inline StochasticOffsets ComputeStochasticOffsetsScaled(float2 uv, float scale, float2 pixelPos)
 {
-	float2 skewUV = mul(SKEW_MATRIX, uv * scale);
-	float2 vxID = floor(skewUV);
-	float2 f = frac(skewUV);
-	float bz = 1.0 - f.x - f.y;
+	STOCHASTIC_CORNERS(uv, scale)
 
-	StochasticCorner c0, c1, c2;
-	if (bz > 0) {
-		c0.cell = vxID;
-		c0.w = bz;
-		c1.cell = vxID + float2(0, 1);
-		c1.w = f.y;
-		c2.cell = vxID + float2(1, 0);
-		c2.w = f.x;
-	} else {
-		c0.cell = vxID + 1.0;
-		c0.w = -bz;
-		c1.cell = vxID + float2(1, 0);
-		c1.w = 1.0 - f.y;
-		c2.cell = vxID + float2(0, 1);
-		c2.w = 1.0 - f.x;
-	}
-
-	if (c1.w > c0.w) {
-		StochasticCorner t = c0;
-		c0 = c1;
-		c1 = t;
-	}
-	if (c2.w > c0.w) {
-		StochasticCorner t = c0;
-		c0 = c2;
-		c2 = t;
-	}
-	if (c2.w > c1.w) {
-		StochasticCorner t = c1;
-		c1 = c2;
-		c2 = t;
-	}
-
-	float2 quadPixel = float2(uint2(pixelPos) & 1u);
-	float4 tapCells = QuadReadTopLeft(float4(c0.cell, c1.cell), quadPixel);
-	float2 droppedCell = QuadReadTopLeft(c2.cell, quadPixel);
+	float2 quadPixel = Math::QuadPixel(pixelPos);
+	float4 tapCells = Math::QuadReadTopLeft(float4(c0.cell, c1.cell), quadPixel);
+	float2 droppedCell = Math::QuadReadTopLeft(c2.cell, quadPixel);
 
 	// Equal to c0.w, c1.w, c2.w on the top-left pixel.
 	float b1 = StochasticCornerWeight(skewUV, tapCells.xy);
@@ -145,6 +134,45 @@ inline StochasticOffsets ComputeStochasticOffsetsScaled(float2 uv, float scale, 
 	o.offset2 = hash2D2D(tapCells.zw);
 	o.tap1Weight = w1 * rcp(max(w1 + w2, 1e-8));
 	return o;
+}
+
+// period < 1 leaves the cell as is. The max() is for fxc: a literal 0 period would otherwise warn X4008.
+inline float2 WrapCell(float2 cell, float period)
+{
+	return period >= 1.0 ? cell - period * floor(cell / max(period, 1.0)) : cell;
+}
+
+// Per-pixel corners, no quad read: sample with an explicit mip level or gradients, because plain Sample would
+// take the corner jumps into its derivatives. period >= 1 hashes the cells modulo period, for UVs past
+// the hash's precision; the cells come back unwrapped for StochasticCellUV.
+inline StochasticOffsets ComputeStochasticOffsetsScaledPeriodic(float2 uv, float scale, float period, out float2 cell1, out float2 cell2)
+{
+	STOCHASTIC_CORNERS(uv, scale)
+
+	float w1 = saturate(c0.w);
+	w1 *= w1;
+	float w2 = saturate(c1.w);
+	w2 *= w2;
+	float rankFade = smoothstep(0.0, TAP_SWAP_FADE_WIDTH, c1.w - c2.w);
+	float dominanceGuard = smoothstep(0.0, DOMINANCE_GUARD_WIDTH, c0.w - c1.w);
+	w2 *= lerp(1.0, rankFade, dominanceGuard);
+
+	StochasticOffsets o;
+	o.offset1 = hash2D2D(WrapCell(c0.cell, period));
+	o.offset2 = hash2D2D(WrapCell(c1.cell, period));
+	o.tap1Weight = w1 * rcp(max(w1 + w2, 1e-8));
+	cell1 = c0.cell;
+	cell2 = c1.cell;
+	return o;
+}
+
+#undef STOCHASTIC_CORNERS
+
+/** @brief UV of a lattice cell from ComputeStochasticOffsetsScaledPeriodic, at the same scale. */
+inline float2 StochasticCellUV(float2 cell, float scale)
+{
+	// Inverse of SKEW_MATRIX. A named static const here, global or local, moves fxc's output in TRUE_PBR permutations.
+	return mul(float2x2(1.0, 0.0, 0.5, 0.8660254), cell) / scale;
 }
 
 // pixelPos is SV_Position.xy; it selects the pixel's slot in its 2x2 quad.
@@ -169,7 +197,7 @@ inline float4 StochasticBlendTwoSamples(float4 s1, float4 s2, float tap1Weight, 
 }
 
 // Stochastic sampling function for Terrain LOD & LOD Mask.
-inline float4 StochasticSampleLOD(float rnd, Texture2D tex, SamplerState samp, float2 uv)
+inline float4 StochasticSampleLOD(float rnd, Texture2D tex, SamplerState samp, float2 uv, out float4 sampledColor)
 {
 	float2 cellID = floor(uv * 255437.0);
 	float2 offset1 = hashLOD(cellID) * 0.08;
@@ -182,15 +210,26 @@ inline float4 StochasticSampleLOD(float rnd, Texture2D tex, SamplerState samp, f
 	float4 s1 = tex.SampleBias(samp, uv + j1, SharedData::MipBias);
 	float4 s2 = tex.SampleBias(samp, uv + j2, SharedData::MipBias);
 
+	sampledColor = lerp(s2, s1, STOCHASTIC_LOD_BLEND);
+	s1 = ColorManagement::DiffuseToWorking(s1);
+	s2 = ColorManagement::DiffuseToWorking(s2);
+
 	// Simple 2-sample blend weighted toward first sample
 	return lerp(s2, s1, STOCHASTIC_LOD_BLEND);
 }
 
 // Height-aware blend of two color taps: luminance for RGB data, alpha when available.
-inline float4 StochasticBlendColorTaps(float4 s1, float4 s2, StochasticOffsets offsets)
+inline float4 StochasticBlendColorTaps(float4 s1, float4 s2, StochasticOffsets offsets, bool colorTexture = false, bool linearInput = false)
 {
-	float h1 = lerp(dot(s1.rgb, LUMINANCE_WEIGHTS), s1.a, step(0.001, s1.a));
-	float h2 = lerp(dot(s2.rgb, LUMINANCE_WEIGHTS), s2.a, step(0.001, s2.a));
+	// Height weights belong to the source data, independent of the working gamut.
+	float h1 = lerp(dot(s1.rgb, float3(0.2125, 0.7154, 0.0721)), s1.a, step(0.001, s1.a));
+	float h2 = lerp(dot(s2.rgb, float3(0.2125, 0.7154, 0.0721)), s2.a, step(0.001, s2.a));
+
+	if (colorTexture) {
+		s1 = ColorManagement::DiffuseToWorking(s1, linearInput);
+		s2 = ColorManagement::DiffuseToWorking(s2, linearInput);
+	}
+
 	return StochasticBlendTwoSamples(s1, s2, offsets.tap1Weight, h1, h2);
 }
 
@@ -203,11 +242,11 @@ inline float4 StochasticEffect(Texture2D tex, SamplerState samp, float2 uv, Stoc
 	return StochasticBlendColorTaps(s1, s2, offsets);
 }
 
-inline float4 StochasticEffectBias(Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float mipBias)
+inline float4 StochasticEffectBias(Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float mipBias, bool colorTexture = false, bool linearInput = false)
 {
 	float4 s1 = tex.SampleBias(samp, uv + offsets.offset1, mipBias);
 	float4 s2 = tex.SampleBias(samp, uv + offsets.offset2, mipBias);
-	return StochasticBlendColorTaps(s1, s2, offsets);
+	return StochasticBlendColorTaps(s1, s2, offsets, colorTexture, linearInput);
 }
 
 // Stochastic sampling for parallax/height; same offsets as albedo so height stays aligned.

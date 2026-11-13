@@ -292,7 +292,12 @@ def unescape_cpp_string(s: str) -> str:
     s = s.replace("\\t", "\t")
     s = s.replace('\\"', '"')
     s = s.replace("\\\\", "\\")
-    s = re.sub(r"\\x([0-9a-fA-F]{2})", lambda m: chr(int(m.group(1), 16)), s)
+    # A run of \xNN escapes is one UTF-8 sequence ("\xC2\xB7" is a middle dot), not one character per byte.
+    s = re.sub(
+        r"(?:\\x[0-9a-fA-F]{2})+",
+        lambda m: bytes.fromhex(m.group(0).replace("\\x", "")).decode("utf-8", errors="replace"),
+        s,
+    )
     return s
 
 

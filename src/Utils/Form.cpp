@@ -1,22 +1,30 @@
 #include "Form.h"
 
+#include <charconv>
+
 Util::SpidComponents Util::ParseSpid(const std::string& spid)
 {
 	SpidComponents result;
 	auto tildePos = spid.find('~');
-	std::string hexPart = (tildePos != std::string::npos) ? spid.substr(0, tildePos) : spid;
-	if (tildePos != std::string::npos)
+	std::string_view hexPart = tildePos != std::string::npos ?
+	                               std::string_view(spid).substr(0, tildePos) :
+	                               std::string_view(spid);
+	if (tildePos != std::string::npos) {
 		result.pluginName = spid.substr(tildePos + 1);
+		if (result.pluginName.empty() || result.pluginName.contains('~'))
+			return {};
+	}
 
 	// Strip 0x/0X prefix
 	if (hexPart.size() > 2 && hexPart[0] == '0' && (hexPart[1] == 'x' || hexPart[1] == 'X'))
-		hexPart = hexPart.substr(2);
+		hexPart.remove_prefix(2);
+	if (hexPart.empty())
+		return {};
 
-	try {
-		result.localFormId = static_cast<uint32_t>(std::stoul(hexPart, nullptr, 16));
-	} catch (...) {
-		result.localFormId = 0;
-	}
+	const auto [end, error] = std::from_chars(
+		hexPart.data(), hexPart.data() + hexPart.size(), result.localFormId, 16);
+	if (error != std::errc{} || end != hexPart.data() + hexPart.size())
+		return {};
 	return result;
 }
 
@@ -39,7 +47,7 @@ RE::FormID Util::SpidToFormId(const std::string& spid)
 {
 	auto components = ParseSpid(spid);
 	if (components.pluginName.empty() || components.localFormId == 0) {
-		logger::warn("[FormIdentity] SpidToFormId: bad parse for '{}' — plugin='{}' localId=0x{:X}", spid, components.pluginName, components.localFormId);
+		logger::warn("[FormIdentity] SpidToFormId: bad parse for '{}', plugin='{}' localId=0x{:X}", spid, components.pluginName, components.localFormId);
 		return 0;
 	}
 	auto* handler = RE::TESDataHandler::GetSingleton();
@@ -74,7 +82,7 @@ RE::FormID Util::SpidToFormId(const std::string& spid)
 		return reconstructed;
 	}
 
-	logger::warn("[FormIdentity] SpidToFormId: plugin '{}' index=0x{:X} smallIndex=0x{:X} localId=0x{:X} reconstructed=0x{:08X} — form not found",
+	logger::warn("[FormIdentity] SpidToFormId: plugin '{}' index=0x{:X} smallIndex=0x{:X} localId=0x{:X} reconstructed=0x{:08X}, form not found",
 		components.pluginName, file->compileIndex, file->smallFileCompileIndex, components.localFormId, reconstructed);
 	return 0;
 }
@@ -92,26 +100,65 @@ std::string Util::GetFormDisplayName(RE::FormID formId)
 	return GetFormFileKey(form);
 }
 
-std::string Util::GetFormEditorID(const RE::TESForm* form)
+std::string Util::FormEditorIDIndex::Find(const RE::TESForm* form)
+{
+	if (!form)
+		return "";
+
+	if (!initialized) {
+		auto [map, lock] = RE::TESForm::GetAllFormsByEditorID();
+		if (map) {
+			RE::BSReadLockGuard locker(lock);
+			editorIDs.reserve(map->size());
+			for (const auto& [name, entry] : *map) {
+				editorIDs.try_emplace(entry, name.c_str());
+			}
+		}
+		initialized = true;
+	}
+
+	const auto entry = editorIDs.find(form);
+	return entry != editorIDs.end() ? entry->second : "";
+}
+
+std::string Util::GetFormEditorID(const RE::TESForm* form, FormEditorIDIndex* index)
 {
 	if (!form)
 		return "";
 	const char* editorId = form->GetFormEditorID();
 	if (editorId && editorId[0] != '\0')
 		return std::string(editorId);
+	if (index)
+		return index->Find(form);
 
-	// Search the global EditorID map as fallback
+	// The global map is keyed by name, so it is inverted once and rebuilt only when its size changes.
+	static std::mutex reverseIndexMutex;
+	static std::unordered_map<const RE::TESForm*, RE::BSFixedString> reverseIndex;
+	static size_t indexedMapSize = 0;
+
 	auto [map, lock] = RE::TESForm::GetAllFormsByEditorID();
-	if (map) {
-		RE::BSReadLockGuard locker(lock);
-		for (const auto& [name, f] : *map) {
-			if (f == form) {
-				return std::string(name.c_str());
-			}
+	if (!map)
+		return "";
+	std::scoped_lock indexLock(reverseIndexMutex);
+	RE::BSReadLockGuard locker(lock);
+	const auto rebuild = [](const auto& forms) {
+		reverseIndex.clear();
+		reverseIndex.reserve(forms.size());
+		for (const auto& [name, mappedForm] : forms)
+			reverseIndex.emplace(mappedForm, name);
+		indexedMapSize = forms.size();
+	};
+	if (map->size() != indexedMapSize)
+		rebuild(*map);
+	auto entry = reverseIndex.find(form);
+	// A freed form's address can come back as another form without the map changing size.
+	if (entry != reverseIndex.end()) {
+		if (const auto mapped = map->find(entry->second); mapped == map->end() || mapped->second != form) {
+			rebuild(*map);
+			entry = reverseIndex.find(form);
 		}
 	}
-
-	return "";
+	return entry != reverseIndex.end() ? std::string(entry->second.c_str()) : "";
 }
 
 std::string Util::GetFormFileKey(const RE::TESForm* form)

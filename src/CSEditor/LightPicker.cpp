@@ -1,5 +1,6 @@
 #include "LightPicker.h"
-#include "EditorWindow.h"
+#include "I18n/I18n.h"
+#include "Menu.h"
 
 #include "RE/B/bhkPickData.h"
 #include "RE/N/NiCamera.h"
@@ -229,7 +230,7 @@ void LightPicker::Update()
 	const bool escapePressed = ImGui::IsKeyPressed(ImGuiKey_Escape);
 	if (escapePressed || ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
 		if (escapePressed)
-			EditorWindow::GetSingleton()->suppressNextEditorEscape = true;
+			Menu::GetSingleton()->ConsumeEscape();
 		Cancel();
 		return;
 	}
@@ -249,29 +250,30 @@ void LightPicker::Update()
 	lastMouseX = mouse.x;
 	lastMouseY = mouse.y;
 	hoverDirty |= moved;
+	const auto resolve = [this] { return pickMode == PickMode::kEffect ? ResolveNearestToCursor(false) : ResolveUnderCursor(false); };
 	if (hoverDirty && now - lastHoverTime >= kHoverRefreshSeconds) {
 		lastHoverTime = now;
 		hoverDirty = false;
-		hoverMesh = (pickMode == PickMode::kEffect) ? ResolveNearestToCursor(false) : ResolveUnderCursor(false);
+		hoverMesh = resolve();
 	}
 
 	if (hoverMesh.valid) {
 		ImGui::BeginTooltip();
 		if (!hoverMesh.editorId.empty())
-			ImGui::Text("EditorID: %s", hoverMesh.editorId.c_str());
+			ImGui::Text("%s: %s", T("cs_editor.light_picker.editor_id", "EditorID"), hoverMesh.editorId.c_str());
 		if (!hoverMesh.modelPath.empty())
-			ImGui::Text("Mesh: %s", hoverMesh.modelPath.c_str());
-		ImGui::Text("Base FormID: 0x%08X", hoverMesh.baseFormId);
+			ImGui::Text("%s: %s", T("cs_editor.light_picker.mesh", "Mesh"), hoverMesh.modelPath.c_str());
+		ImGui::Text("%s: 0x%08X", T("cs_editor.light_picker.base_form_id", "Base FormID"), hoverMesh.baseFormId);
 		if (!hoverMesh.refFormEntry.empty())
-			ImGui::Text("Reference FormID: %s", hoverMesh.refFormEntry.c_str());
+			ImGui::Text("%s: %s", T("cs_editor.light_picker.reference_form_id", "Reference FormID"), hoverMesh.refFormEntry.c_str());
 		if (!hoverMesh.sourcePlugin.empty())
-			ImGui::Text("Plugin: %s", hoverMesh.sourcePlugin.c_str());
+			ImGui::Text("%s: %s", T("cs_editor.light_picker.plugin", "Plugin"), hoverMesh.sourcePlugin.c_str());
 		ImGui::EndTooltip();
 	}
 
 	if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
 		// Resolve fresh at the click position; the throttled hover hit may lag the cursor.
-		PickedMesh hit = (pickMode == PickMode::kEffect) ? ResolveNearestToCursor(false) : ResolveUnderCursor(false);
+		PickedMesh hit = resolve();
 		if (hit.valid) {
 			// Log only the committed pick (hover resolves run silently to keep the log quiet).
 			logger::info("[LightPicker] Picked base 0x{:08X} '{}' model '{}' ref '{}' plugin '{}'",

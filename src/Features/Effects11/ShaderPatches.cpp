@@ -1,9 +1,10 @@
 #include "ShaderPatches.h"
 
 #include <filesystem>
-#include <fstream>
 
 #include <nlohmann/json.hpp>
+
+#include "Utils/FileSystem.h"
 
 namespace Util::ShaderPatches
 {
@@ -15,14 +16,13 @@ namespace Util::ShaderPatches
 		entries.clear();
 		loaded = true;
 
-		std::filesystem::path path = "Data\\Shaders\\Effects11\\ShaderPatches.json";
-		std::ifstream ifs(path);
-		if (!ifs.is_open())
+		const auto path = Util::PathHelpers::GetShadersPath() / "Effects11" / "ShaderPatches.json";
+		const auto root = Util::FileHelpers::ReadJsonFile(path, "Effects11 shader patches");
+		if (!root)
 			return;
 
 		try {
-			nlohmann::json root = nlohmann::json::parse(ifs);
-			for (auto& item : root) {
+			for (auto& item : *root) {
 				Entry entry;
 				entry.file = item.at("file").get<std::string>();
 				for (auto& r : item.at("patches")) {

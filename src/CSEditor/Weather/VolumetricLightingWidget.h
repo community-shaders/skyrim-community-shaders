@@ -2,13 +2,31 @@
 
 #include "../Widget.h"
 
+/** @brief The BGSVolumetricLighting fields a VolumetricLightingWidget edits. */
+struct VolumetricLightingSettings
+{
+	float intensity = 1.0f;
+	float customColorContribution = 0.0f;
+	float red = 1.0f;
+	float green = 1.0f;
+	float blue = 1.0f;
+	float densityContribution = 0.5f;
+	float densitySize = 1.0f;
+	float densityWindSpeed = 0.0f;
+	float densityFallingSpeed = 0.0f;
+	float phaseFunctionContribution = 0.0f;
+	float phaseFunctionScattering = 0.0f;
+	float samplingRangeFactor = 1.0f;
+	bool operator==(const VolumetricLightingSettings&) const = default;
+};
+
 /**
  * @brief Widget for editing volumetric lighting (god-ray) settings.
  *
  * Exposes intensity, custom color, density, phase function, and sampling
  * parameters from a BGSVolumetricLighting form.
  */
-class VolumetricLightingWidget : public Widget
+class VolumetricLightingWidget : public SettingsWidget<VolumetricLightingSettings>
 {
 public:
 	/**
@@ -21,8 +39,7 @@ public:
 		form = a_volumetricLighting;
 		if (volumetricLighting) {
 			LoadFromGameSettings();
-			vanillaSettings = settings;
-			originalSettings = settings;
+			CaptureVanillaSettings();
 		}
 	}
 
@@ -43,12 +60,6 @@ public:
 	/** @brief Writes the current settings into the game's BGSVolumetricLighting form. */
 	void ApplyChanges() override;
 
-	/** @brief Reverts settings to vanilla values and re-applies them to the game data. */
-	void RevertChanges() override;
-
-	/** @brief Returns true if the current settings differ from the last saved state. */
-	bool HasUnsavedChanges() const override;
-
 	/** @brief Collects all searchable volumetric lighting settings for the search dropdown. */
 	std::vector<SearchResult> CollectSearchableSettings() const override;
 
@@ -56,25 +67,4 @@ public:
 
 private:
 	void LoadFromGameSettings();
-
-	struct Settings
-	{
-		float intensity = 1.0f;
-		float customColorContribution = 0.0f;
-		float red = 1.0f;
-		float green = 1.0f;
-		float blue = 1.0f;
-		float densityContribution = 0.5f;
-		float densitySize = 1.0f;
-		float densityWindSpeed = 0.0f;
-		float densityFallingSpeed = 0.0f;
-		float phaseFunctionContribution = 0.0f;
-		float phaseFunctionScattering = 0.0f;
-		float samplingRangeFactor = 1.0f;
-		bool operator==(const Settings&) const = default;
-	};
-
-	Settings settings;
-	Settings vanillaSettings;
-	Settings originalSettings;
 };

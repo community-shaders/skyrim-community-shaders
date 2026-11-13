@@ -29,12 +29,12 @@ namespace FrameAnnotations
 	{
 		static void thunk(RE::BSShader* shader, RE::BSRenderPass* pass, uint32_t renderFlags)
 		{
-			if (globals::state->frameAnnotations) {
+			if (globals::state->AnnotateDraws()) {
 				uint32_t descriptor = 0;
 				if (globals::game::currentPixelShader && *globals::game::currentPixelShader) {
 					descriptor = (*globals::game::currentPixelShader)->id;
 				}
-				const std::string definesSuffix = Util::GetShaderDefinesSuffix(globals::state->shaderDefinesString);
+				const std::string definesSuffix = Util::GetShaderDefinesSuffix(globals::state->GetDefinesString());
 				std::string diskPath = std::format("Data/ShaderCache/{}/{:X}{}.pso", shader->fxpFilename, descriptor, definesSuffix);
 				const std::string passName = std::format("[{}:{:X}] ({:X}) <{}> {} -> {}", magic_enum::enum_name(ShaderType), descriptor, pass->passEnum,
 					pass->accumulationHint, pass->geometry->name.c_str(), diskPath);
@@ -54,7 +54,7 @@ namespace FrameAnnotations
 		{
 			func(shader, pass, renderFlags);
 
-			if (globals::state->frameAnnotations) {
+			if (globals::state->AnnotateDraws()) {
 				globals::state->EndPerfEvent();
 			}
 		}
@@ -98,15 +98,15 @@ namespace FrameAnnotations
 	{
 		static void thunk(RE::BSGraphics::BSShaderAccumulator* shaderAccumulator, uint32_t renderFlags)
 		{
-			const bool frameAnnotations = globals::state->frameAnnotations;
-			if (frameAnnotations) {
+			const bool annotate = globals::state->AnnotateDraws();
+			if (annotate) {
 				globals::state->BeginPerfEvent(std::format("BSShaderAccumulator::FinishAccumulatingDispatch [{}] <{}>",
 					static_cast<uint32_t>(shaderAccumulator->GetRuntimeData().renderMode), renderFlags));
 			}
 
 			func(shaderAccumulator, renderFlags);
 
-			if (frameAnnotations) {
+			if (annotate) {
 				globals::state->EndPerfEvent();
 			}
 		}
@@ -176,15 +176,15 @@ namespace FrameAnnotations
 			void* passIndexList,
 			uint32_t renderFlags)
 		{
-			const bool frameAnnotations = globals::state->frameAnnotations;
-			if (frameAnnotations) {
+			const bool annotate = globals::state->AnnotateDraws();
+			if (annotate) {
 				globals::state->BeginPerfEvent(std::format("BSBatchRenderer::RenderBatches ({:X})[{}] <{}>", *currentPass, *bucketIndex,
 					renderFlags));
 			}
 
 			const bool result = func(renderer, currentPass, bucketIndex, passIndexList, renderFlags);
 
-			if (frameAnnotations) {
+			if (annotate) {
 				globals::state->EndPerfEvent();
 			}
 
@@ -288,15 +288,15 @@ namespace FrameAnnotations
 	{
 		static void thunk(void* shaderAccumulator, uint32_t firstPass, uint32_t lastPass, uint32_t renderFlags, int groupIndex)
 		{
-			const bool frameAnnotations = globals::state->frameAnnotations;
-			if (frameAnnotations) {
+			const bool annotate = globals::state->AnnotateDraws();
+			if (annotate) {
 				globals::state->BeginPerfEvent(std::format("BSShaderAccumulator::RenderBatches ({:X}:{:X})[{}] <{}>", firstPass, lastPass, groupIndex,
 					renderFlags));
 			}
 
 			func(shaderAccumulator, firstPass, lastPass, renderFlags, groupIndex);
 
-			if (frameAnnotations) {
+			if (annotate) {
 				globals::state->EndPerfEvent();
 			}
 		};
@@ -307,14 +307,14 @@ namespace FrameAnnotations
 	{
 		static void thunk(void* passList, uint32_t renderFlags)
 		{
-			const bool frameAnnotations = globals::state->frameAnnotations;
-			if (frameAnnotations) {
+			const bool annotate = globals::state->AnnotateDraws();
+			if (annotate) {
 				globals::state->BeginPerfEvent(std::format("BSShaderAccumulator::RenderPersistentPassList <{}>", renderFlags));
 			}
 
 			func(passList, renderFlags);
 
-			if (frameAnnotations) {
+			if (annotate) {
 				globals::state->EndPerfEvent();
 			}
 		};

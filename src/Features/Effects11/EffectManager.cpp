@@ -3,13 +3,16 @@
 #include "D3D11StateBackup.h"
 #include "Editor/Effects11Editor.h"
 #include "Features/Effects11.h"
+#include "Features/RainRefraction.h"
 #include "Globals.h"
 #include "Menu.h"
 #include "State.h"
+#include "Utils/Game.h"
 
 #include "PresetManager.h"
 #include "SettingManager.h"
 #include "TextureManager.h"
+#include "Utils/Logging.h"
 #include "WeatherManager.h"
 
 #include <d3dcompiler.h>
@@ -115,7 +118,8 @@ void EffectManager::LogPresetStatus() const
 
 void EffectManager::Apply()
 {
-	globals::features::effects11.LoadRaindropTexture();
+	if (auto& rainRefraction = globals::features::rainRefraction; rainRefraction.loaded)
+		rainRefraction.LoadPresetRaindrops(PresetManager::GetSingleton().GetENBSeriesPath());
 
 	enbDepthOfField.Apply();
 	enbBloom.Apply();
@@ -174,6 +178,8 @@ void EffectManager::RegisterSettings()
 	settingManager.RegisterBoolSetting("EnableCloudsScattering", "EFFECT", false, false);
 	settingManager.RegisterBoolSetting("EnableImageBasedLighting", "EFFECT", false, false);
 	settingManager.RegisterBoolSetting("EnableVolumetricRays", "EFFECT", false, false);
+	settingManager.RegisterBoolSetting("EnableSunRays", "EFFECT", false, false);
+	settingManager.RegisterBoolSetting("EnableMoonRays", "EFFECT", false, false);
 	settingManager.RegisterBoolSetting("EnableDepthOfField", "EFFECT", false, false);
 	settingManager.RegisterBoolSetting("EnableWater", "EFFECT", false, false);
 
@@ -284,6 +290,7 @@ void EffectManager::RegisterSettings()
 
 	settingManager.RegisterBoolSetting("EnableCloudsLightingFromMoon", "SKYSCATTERING", true, false);
 	settingManager.RegisterBoolSetting("CalculateCloudsEdgeFromScattering", "SKYSCATTERING", false, false);
+	settingManager.RegisterBoolSetting("EnableCloudsEdge", "SKYSCATTERING", true, false);
 	settingManager.RegisterTimeOfDaySetting("AtmosphereThickness", "SKYSCATTERING", 1.0f, 0.05f, 100.0f, 0.01f, true);
 	settingManager.RegisterTimeOfDaySetting("HorizonRange", "SKYSCATTERING", 0.5f, 0.0f, 1.0f, 0.01f, true);
 	settingManager.RegisterTimeOfDaySetting("Intensity", "SKYSCATTERING", 1.0f, 0.0f, 30000.0f, 0.01f, true);
@@ -307,8 +314,12 @@ void EffectManager::RegisterSettings()
 	settingManager.RegisterTimeOfDaySetting("CloudsLightingDesaturation", "SKYSCATTERING", 0.0f, -1.0f, 1.0f, 0.01f, true);
 	settingManager.RegisterTimeOfDaySetting("CloudsLightingForwardScattering", "SKYSCATTERING", 0.0f, 0.0f, 5.0f, 0.01f, true);
 
+	settingManager.RegisterBoolSetting("EnableLighting", "VOLUMETRICFOG", false, false);
+	settingManager.RegisterBoolSetting("EnableShadows", "VOLUMETRICFOG", true, false);
 	settingManager.RegisterTimeOfDaySetting("Intensity", "VOLUMETRICFOG", 1.0f, 0.0f, 30000.0f, 0.01f, true);
 	settingManager.RegisterTimeOfDaySetting("Curve", "VOLUMETRICFOG", 1.0f, 0.1f, 8.0f, 0.01f, true);
+	settingManager.RegisterTimeOfDaySetting("ShadowAmount", "VOLUMETRICFOG", 0.5f, 0.0f, 0.8f, 0.01f, true);
+	settingManager.RegisterTimeOfDaySetting("Opacity", "VOLUMETRICFOG", 1.0f, 0.0f, 1.0f, 0.01f, true);
 	settingManager.RegisterColorTimeOfDaySetting("ColorFilter", "VOLUMETRICFOG", { 1.0f, 1.0f, 1.0f }, true);
 
 	settingManager.RegisterTimeOfDaySetting("MultiplicativeAmount", "IMAGEBASEDLIGHTING", 0.0f, 0.0f, 10.0f, 0.01f, true);
@@ -333,10 +344,20 @@ void EffectManager::RegisterSettings()
 	settingManager.RegisterTimeOfDaySetting("RangeFactor", "GAMEVOLUMETRICRAYS", 1.0f, 0.0f, 100.0f, 0.01f, true);
 	settingManager.RegisterTimeOfDaySetting("Desaturation", "GAMEVOLUMETRICRAYS", 0.0f, -1.0f, 1.0f, 0.01f, true);
 	settingManager.RegisterColorTimeOfDaySetting("ColorFilter", "GAMEVOLUMETRICRAYS", { 1.0f, 1.0f, 1.0f }, true);
+	settingManager.RegisterBoolSetting("DisableGameDithering", "GAMEVOLUMETRICRAYS", false, false);
 
-	settingManager.RegisterTimeOfDaySetting("Intensity", "VOLUMETRICRAYS", 0.2f, 0.0f, 1000.0f, 0.01f, true);
-	settingManager.RegisterTimeOfDaySetting("Density", "VOLUMETRICRAYS", 1.0f, 0.1f, 100.0f, 0.01f, true);
-	settingManager.RegisterTimeOfDaySetting("SkyColorAmount", "VOLUMETRICRAYS", 0.5f, 0.0f, 10.0f, 0.01f, true);
+	settingManager.RegisterFloatSetting("Quality", "VOLUMETRICRAYS", 0.0f, -1.0f, 2.0f, 1.0f, false);
+	settingManager.RegisterTimeOfDaySetting("Intensity", "VOLUMETRICRAYS", 0.2f, 0.0f, 30000.0f, 0.01f, true);
+	settingManager.RegisterTimeOfDaySetting("Density", "VOLUMETRICRAYS", 1.0f, 0.1f, 10.0f, 0.01f, true);
+	settingManager.RegisterTimeOfDaySetting("SkyColorAmount", "VOLUMETRICRAYS", 0.5f, 0.0f, 100.0f, 0.01f, true);
+
+	settingManager.RegisterBoolSetting("UseLinearMath", "RAYS", false, false);
+	settingManager.RegisterFloatSetting("Quality", "RAYS", 2.0f, -2.0f, 2.0f, 1.0f, false);
+	settingManager.RegisterFloatSetting("Type", "RAYS", 0.0f, 0.0f, 4.0f, 1.0f, false);
+	settingManager.RegisterFloatSetting("MoonType", "RAYS", 0.0f, 0.0f, 4.0f, 1.0f, false);
+	settingManager.RegisterTimeOfDaySetting("SunRaysMultiplier", "RAYS", 1.0f, 0.0f, 30000.0f, 0.01f, true);
+	settingManager.RegisterTimeOfDaySetting("MoonRaysMultiplier", "RAYS", 1.0f, 0.0f, 30000.0f, 0.01f, true);
+	settingManager.RegisterTimeOfDaySetting("SkyColorAmount", "RAYS", 0.0f, 0.0f, 100.0f, 0.01f, true);
 
 	settingManager.SetCategoryDependency("BLOOM", "EnableBloom", "EFFECT");
 	settingManager.SetCategoryDependency("LENS", "EnableLens", "EFFECT");
@@ -359,8 +380,8 @@ void EffectManager::RegisterSettings()
 	settingManager.SetCategoryExteriorOnly("CLOUDSHADOWS", true);
 	settingManager.SetCategoryExteriorOnly("IMAGEBASEDLIGHTING", true);
 	settingManager.SetCategoryExteriorOnly("VOLUMETRICRAYS", true);
+	settingManager.SetCategoryExteriorOnly("RAYS", true);
 	settingManager.SetCategoryExteriorOnly("SKYSCATTERING", true);
-	settingManager.SetCategoryExteriorOnly("VOLUMETRICFOG", true);
 	settingManager.SetCategoryExteriorOnly("GAMEVOLUMETRICRAYS", true);
 
 	// Cache IDs for performance
@@ -519,6 +540,7 @@ void EffectManager::CreateQuadGeometry()
 	initData.pSysMem = vertices;
 
 	DX::ThrowIfFailed(globals::d3d::device->CreateBuffer(&bufferDesc, &initData, quadVertexBuffer.put()));
+	Util::SetResourceName(quadVertexBuffer.get(), "EffectManager::QuadVertexBuffer");
 
 	// Create input layout for ENB post-processing
 	D3D11_INPUT_ELEMENT_DESC inputElementDescs[] = {
@@ -549,6 +571,7 @@ void EffectManager::CreateQuadGeometry()
 	if (FAILED(hr)) {
 		logger::error("[EFFECTS11] Failed to create shared input layout for ENB effects");
 	}
+	Util::SetResourceName(inputLayout.get(), "EffectManager::InputLayout");
 }
 
 void EffectManager::CreateRenderStates()
@@ -567,6 +590,7 @@ void EffectManager::CreateRenderStates()
 	rastDesc.AntialiasedLineEnable = FALSE;
 
 	DX::ThrowIfFailed(globals::d3d::device->CreateRasterizerState(&rastDesc, rasterizerState.put()));
+	Util::SetResourceName(rasterizerState.get(), "EffectManager::RasterizerState");
 
 	// Blend state for standard rendering (no blending)
 	D3D11_BLEND_DESC blendDesc = {};
@@ -576,6 +600,7 @@ void EffectManager::CreateRenderStates()
 	blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
 
 	DX::ThrowIfFailed(globals::d3d::device->CreateBlendState(&blendDesc, blendState.put()));
+	Util::SetResourceName(blendState.get(), "EffectManager::BlendState");
 }
 
 void EffectManager::CreateCopyShaders()
@@ -600,6 +625,7 @@ void EffectManager::CreateCopyShaders()
 		logger::error("[EFFECTS11] Failed to create copy vertex shader");
 		return;
 	}
+	Util::SetResourceName(copyVertexShader.get(), "EffectManager::CopyVS");
 
 	auto pixelShaderSource = LoadShaderFile("Data\\Shaders\\Effects11\\CopyPS.hlsl");
 	if (pixelShaderSource.empty())
@@ -622,6 +648,7 @@ void EffectManager::CreateCopyShaders()
 		logger::error("[EFFECTS11] Failed to create copy pixel shader");
 		return;
 	}
+	Util::SetResourceName(copyPixelShader.get(), "EffectManager::CopyPS");
 
 	D3D11_BUFFER_DESC cbDesc{};
 	cbDesc.ByteWidth = 16;
@@ -629,6 +656,7 @@ void EffectManager::CreateCopyShaders()
 	cbDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
 	cbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
 	globals::d3d::device->CreateBuffer(&cbDesc, nullptr, ditherConstantBuffer.put());
+	Util::SetResourceName(ditherConstantBuffer.get(), "EffectManager::DitherCB");
 
 	logger::info("[EFFECTS11] Created texture copy shaders successfully");
 }
@@ -655,6 +683,7 @@ void EffectManager::CreateColorCorrectionShader()
 		logger::error("[EFFECTS11] Failed to create color correction compute shader");
 		return;
 	}
+	Util::SetResourceName(colorCorrectionComputeShader.get(), "EffectManager::ColorCorrectionCS");
 
 	// Create constant buffer
 	D3D11_BUFFER_DESC cbDesc = {};
@@ -668,6 +697,7 @@ void EffectManager::CreateColorCorrectionShader()
 		logger::error("[EFFECTS11] Failed to create color correction constant buffer");
 		return;
 	}
+	Util::SetResourceName(colorCorrectionConstantBuffer.get(), "EffectManager::ColorCorrectionCB");
 
 	logger::info("[EFFECTS11] Created color correction compute shader successfully");
 }
@@ -871,7 +901,7 @@ void EffectManager::UpdateCursorData()
 
 	// Shaders get the cursor while a UI that shows it is open, e.g. for click-to-focus depth of field
 	auto* menu = globals::menu;
-	const bool cursorVisible = (menu && menu->IsEnabled) || Effects11Editor::GetSingleton().IsOpen();
+	const bool cursorVisible = (menu && menu->IsOpen()) || Effects11Editor::GetSingleton().IsOpen();
 	if (cursorVisible && ImGui::GetCurrentContext()) {
 		const auto& io = ImGui::GetIO();
 		if (io.DisplaySize.x > 0.0f && io.DisplaySize.y > 0.0f) {
@@ -901,24 +931,13 @@ void EffectManager::UpdateCursorData()
 	commonData.tempInfo2[3] = lastRightClick[1];
 }
 
-float EffectManager::GetSunVisibility(const RE::Sun* a_sun)
-{
-	if (!a_sun || !a_sun->root || !a_sun->sunBaseNode || !a_sun->sunBase)
-		return 0.0f;
-	if (a_sun->root->GetFlags().any(RE::NiAVObject::Flag::kHidden) || a_sun->sunBaseNode->GetFlags().any(RE::NiAVObject::Flag::kHidden))
-		return 0.0f;
-
-	const auto property = skyrim_cast<RE::BSSkyShaderProperty*>(a_sun->sunBase->GetGeometryRuntimeData().shaderProperty.get());
-	return property ? std::clamp(property->kBlendColor.alpha, 0.0f, 1.0f) : 0.0f;
-}
-
 void EffectManager::UpdateLightParameters()
 {
 	auto sky = globals::game::sky;
 	if (!sky || !sky->sun || !sky->sun->root || !sky->root)
 		return;
 
-	const float visibility = GetSunVisibility(sky->sun);
+	const float visibility = Util::GetSunVisibility(sky->sun);
 	if (visibility <= 0.0f)
 		return;
 
@@ -1014,11 +1033,9 @@ void EffectManager::CopyToTarget(ID3D11Texture2D* a_source, ID3D11ShaderResource
 bool EffectManager::CopyTexture(ID3D11ShaderResourceView* a_source, ID3D11RenderTargetView* a_dest, bool a_dither)
 {
 	if (!a_source || !a_dest || !copyPixelShader || !copyVertexShader) {
-		static bool logged = false;
-		if (!logged) {
+		static Util::OnceFlag logged;
+		if (logged.First())
 			logger::warn("[EFFECTS11] Invalid parameters or shaders not initialized for texture copy");
-			logged = true;
-		}
 		return false;
 	}
 

@@ -1,6 +1,7 @@
 #include "Profiler.h"
 
 #include <algorithm>
+#include <span>
 #include <unordered_map>
 
 float Profiler::RollingHistory::GetAverage() const
@@ -37,29 +38,33 @@ void Profiler::Initialize(ID3D11Device* device, ID3D11DeviceContext* a_context)
 
 	context = a_context;
 
-	LARGE_INTEGER freq;
-	QueryPerformanceFrequency(&freq);
-	cpuTicksToMs = 1000.0 / static_cast<double>(freq.QuadPart);
-
 	for (auto& frame : frames) {
 		D3D11_QUERY_DESC disjointDesc{};
 		disjointDesc.Query = D3D11_QUERY_TIMESTAMP_DISJOINT;
-		device->CreateQuery(&disjointDesc, frame.disjoint.put());
+		if (FAILED(device->CreateQuery(&disjointDesc, frame.disjoint.put()))) {
+			Release();
+			logger::warn("Profiler disabled: failed to create timestamp disjoint query");
+			return;
+		}
 
 		frame.timers.resize(kMaxTimers);
 		for (auto& timer : frame.timers) {
 			D3D11_QUERY_DESC tsDesc{};
 			tsDesc.Query = D3D11_QUERY_TIMESTAMP;
-			device->CreateQuery(&tsDesc, timer.begin.put());
-			device->CreateQuery(&tsDesc, timer.end.put());
+			if (FAILED(device->CreateQuery(&tsDesc, timer.begin.put())) ||
+				FAILED(device->CreateQuery(&tsDesc, timer.end.put()))) {
+				Release();
+				logger::warn("Profiler disabled: failed to create timestamp query");
+				return;
+			}
 		}
 		frame.activeCount = 0;
-		frame.inFlight = false;
 	}
 
 	writeFrame = 0;
 	readFrame = 0;
-	framesSinceInit = 0;
+	pendingFrames = 0;
+	frameSkipped = false;
 	initialized = true;
 }
 
@@ -69,8 +74,9 @@ void Profiler::Release()
 		frame.disjoint = nullptr;
 		frame.timers.clear();
 		frame.activeCount = 0;
-		frame.inFlight = false;
+		frame.skipped = {};
 	}
+	pendingSkipped = {};
 	results.clear();
 	knownTimers.clear();
 	knownTimerIndex.clear();
@@ -78,24 +84,34 @@ void Profiler::Release()
 	totalTimeMs = 0.0f;
 	cpuTotalTimeMs = 0.0f;
 	initialized = false;
+	frameActive = false;
 	context = nullptr;
 }
 
 void Profiler::BeginFrame()
 {
-	if (!initialized || !context || frameActive)
+	if (!initialized || !context || frameActive || frameSkipped || !IsActive())
 		return;
 
 	CollectResults();
 
+	// Reusing a pending slot would discard its results when the GPU lags.
+	if (pendingFrames >= kFrameLatency) {
+		frameSkipped = true;
+		return;
+	}
+
 	auto& frame = frames[writeFrame];
 	frame.activeCount = 0;
-	frame.inFlight = true;
+	frame.overflowed = false;
+	frame.skipped.count = 0;
+	std::swap(frame.skipped, pendingSkipped);
 	frameActive = true;
+	passOpen = false;
 	context->Begin(frame.disjoint.get());
 }
 
-void Profiler::BeginPass(const std::string& name)
+void Profiler::BeginPass(std::string_view name)
 {
 	if (!initialized || !context)
 		return;
@@ -103,14 +119,18 @@ void Profiler::BeginPass(const std::string& name)
 	if (!frameActive)
 		BeginFrame();
 
-	auto& frame = frames[writeFrame];
-	if (frame.activeCount >= kMaxTimers)
-		return;
-
-	auto& timer = frame.timers[frame.activeCount];
-	timer.name = name;
-	context->End(timer.begin.get());
-	QueryPerformanceCounter(&timer.cpuBegin);
+	if (frameActive) {
+		auto& frame = frames[writeFrame];
+		if (frame.activeCount < kMaxTimers) {
+			auto& timer = frame.timers[frame.activeCount];
+			timer.name.assign(name);
+			context->End(timer.begin.get());
+			QueryPerformanceCounter(&timer.cpuBegin);
+			passOpen = true;
+		} else {
+			frame.overflowed = true;
+		}
+	}
 
 	if (beginPerfEvent)
 		beginPerfEvent(name);
@@ -118,55 +138,78 @@ void Profiler::BeginPass(const std::string& name)
 
 void Profiler::EndPass()
 {
-	if (!initialized || !context || !frameActive)
+	if (!initialized || !context)
 		return;
 
-	auto& frame = frames[writeFrame];
-	if (frame.activeCount >= kMaxTimers)
-		return;
+	if (frameActive) {
+		auto& frame = frames[writeFrame];
+		if (frame.activeCount < kMaxTimers && std::exchange(passOpen, false)) {
+			auto& timer = frame.timers[frame.activeCount];
 
-	auto& timer = frame.timers[frame.activeCount];
+			LARGE_INTEGER cpuEnd;
+			QueryPerformanceCounter(&cpuEnd);
+			timer.cpuMs = static_cast<float>(static_cast<double>(cpuEnd.QuadPart - timer.cpuBegin.QuadPart) * cpuTicksToMs);
 
-	LARGE_INTEGER cpuEnd;
-	QueryPerformanceCounter(&cpuEnd);
-	timer.cpuMs = static_cast<float>(static_cast<double>(cpuEnd.QuadPart - timer.cpuBegin.QuadPart) * cpuTicksToMs);
-
-	context->End(timer.end.get());
-	frame.activeCount++;
+			context->End(timer.end.get());
+			frame.activeCount++;
+		}
+	}
 
 	if (endPerfEvent)
 		endPerfEvent({});
 }
 
+void Profiler::MarkPassSkipped(std::string_view name)
+{
+	if (!initialized || !IsActive())
+		return;
+	(frameActive ? frames[writeFrame].skipped : pendingSkipped).Add(name);
+}
+
+void Profiler::SkipMarks::Add(std::string_view name)
+{
+	const auto live = std::span(names).first(count);
+	if (std::ranges::find(live, name) != live.end())
+		return;
+	if (count < names.size())
+		names[count].assign(name);
+	else
+		names.emplace_back(name);
+	count++;
+}
+
 void Profiler::EndFrame()
 {
-	if (!initialized || !context || !frameActive)
+	// Before the early returns so it ticks while GPU queries are off.
+	LARGE_INTEGER now;
+	QueryPerformanceCounter(&now);
+	if (lastFrameTicks != 0)
+		frameHistory.PushSample(static_cast<float>(static_cast<double>(now.QuadPart - lastFrameTicks) * cpuTicksToMs));
+	lastFrameTicks = now.QuadPart;
+
+	if (!initialized || !context)
+		return;
+
+	// Marks no frame took belong to a frame that recorded nothing.
+	pendingSkipped.count = 0;
+	frameCounter.fetch_add(1, std::memory_order_relaxed);
+
+	if (frameSkipped) {
+		frameSkipped = false;
+		return;
+	}
+	if (!frameActive)
 		return;
 
 	frameActive = false;
+	passOpen = false;
 	context->End(frames[writeFrame].disjoint.get());
 	writeFrame = (writeFrame + 1) % kFrameLatency;
-	framesSinceInit++;
+	pendingFrames++;
 }
 
 void Profiler::CollectResults()
 {
-	if (framesSinceInit < kFrameLatency)
-		return;
-
-	readFrame = writeFrame;
-	auto& frame = frames[readFrame];
-	if (!frame.inFlight)
-		return;
-
-	D3D11_QUERY_DATA_TIMESTAMP_DISJOINT disjointData{};
-	HRESULT hr = context->GetData(frame.disjoint.get(), &disjointData, sizeof(disjointData), D3D11_ASYNC_GETDATA_DONOTFLUSH);
-	if (hr != S_OK)
-		return;
-
-	frame.inFlight = false;
-	collectedFrames++;
-
 	struct ActiveTimerData
 	{
 		float gpuMs = 0.0f;
@@ -175,8 +218,43 @@ void Profiler::CollectResults()
 	std::unordered_map<std::string, ActiveTimerData> activeTimers;
 	float activeTotalMs = 0.0f;
 	float activeCpuTotalMs = 0.0f;
+	bool collected = false;
 
-	if (!disjointData.Disjoint) {
+	// Oldest first; only the newest resolved frame is published.
+	while (pendingFrames > 0) {
+		auto& frame = frames[readFrame];
+
+		D3D11_QUERY_DATA_TIMESTAMP_DISJOINT disjointData{};
+		HRESULT hr = context->GetData(frame.disjoint.get(), &disjointData, sizeof(disjointData), D3D11_ASYNC_GETDATA_DONOTFLUSH);
+		if (hr != S_OK)
+			break;
+
+		readFrame = (readFrame + 1) % kFrameLatency;
+		pendingFrames--;
+		collected = true;
+		collectedFrames++;
+
+		activeTimers.clear();
+		activeTotalMs = 0.0f;
+		activeCpuTotalMs = 0.0f;
+
+		// A skip needs no GPU timing, so it counts on disjoint frames too. A pass that began this frame ran, timed or not.
+		if (!frame.overflowed) {
+			const auto ran = std::span(frame.timers).first(frame.activeCount);
+			for (const auto& name : std::span(frame.skipped.names).first(frame.skipped.count)) {
+				auto it = knownTimerIndex.find(name);
+				if (it == knownTimerIndex.end() || std::ranges::any_of(ran, [&](const auto& timer) { return timer.name == name; }))
+					continue;
+				// lastSampleFrame stays, so a pass that is always skipped still retires.
+				auto& known = knownTimers[it->second];
+				known.gpu.PushSample(0.0f);
+				known.cpu.PushSample(0.0f);
+			}
+		}
+
+		if (disjointData.Disjoint)
+			continue;
+
 		double ticksToMs = 1000.0 / static_cast<double>(disjointData.Frequency);
 
 		for (uint32_t i = 0; i < frame.activeCount; i++) {
@@ -195,18 +273,24 @@ void Profiler::CollectResults()
 			activeTotalMs += ms;
 			activeCpuTotalMs += timer.cpuMs;
 
-			auto [it, inserted] = knownTimerIndex.try_emplace(timer.name, knownTimers.size());
-			if (inserted) {
+			if (knownTimerIndex.try_emplace(timer.name, knownTimers.size()).second) {
 				KnownTimer kt;
 				kt.name = timer.name;
 				knownTimers.push_back(std::move(kt));
 			}
-			auto& known = knownTimers[it->second];
-			known.gpu.PushSample(ms);
-			known.cpu.PushSample(timer.cpuMs);
+		}
+
+		// A name timed several times in one frame is one sample: its frame total.
+		for (const auto& [name, data] : activeTimers) {
+			auto& known = knownTimers[knownTimerIndex.at(name)];
+			known.gpu.PushSample(data.gpuMs);
+			known.cpu.PushSample(data.cpuMs);
 			known.lastSampleFrame = collectedFrames;
 		}
 	}
+
+	if (!collected)
+		return;
 
 	RetireStaleTimers();
 
@@ -234,6 +318,24 @@ void Profiler::CollectResults()
 	}
 }
 
+double Profiler::QpcTicksToMs()
+{
+	LARGE_INTEGER freq;
+	QueryPerformanceFrequency(&freq);
+	return 1000.0 / static_cast<double>(freq.QuadPart);
+}
+
+Profiler::FrameStats Profiler::GetFrameStats() const
+{
+	return {
+		.lastMs = frameHistory.lastMs,
+		.avgMs = frameHistory.GetAverage(),
+		.p95Ms = frameHistory.GetPercentile(95.0f),
+		.p99Ms = frameHistory.GetPercentile(99.0f),
+		.count = frameHistory.count
+	};
+}
+
 std::vector<Profiler::TimerResult> Profiler::GetStatistics(std::string_view timerPrefix) const
 {
 	std::vector<TimerResult> snapshot;
@@ -252,9 +354,6 @@ std::vector<Profiler::TimerResult> Profiler::GetStatistics(std::string_view time
 		result.cpuAvgMs = known.cpu.GetAverage();
 		result.cpuP95Ms = known.cpu.GetPercentile(95.0f);
 		result.cpuP99Ms = known.cpu.GetPercentile(99.0f);
-		result.historyBuffer = known.gpu.history;
-		result.historyHead = known.gpu.head;
-		result.historyCount = known.gpu.count;
 		snapshot.push_back(std::move(result));
 	}
 	return snapshot;

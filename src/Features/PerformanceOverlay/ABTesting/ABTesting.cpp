@@ -38,7 +38,7 @@ void ABTestingManager::Enable()
 
 		// Load and cache USER settings in memory (to avoid disk I/O during swaps)
 		userConfigSnapshot = nlohmann::json::object();
-		state->Load(State::ConfigMode::USER);
+		state->Load();
 		state->SaveToJson(userConfigSnapshot);
 		hasUserSnapshot = true;
 

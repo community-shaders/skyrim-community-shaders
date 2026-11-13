@@ -737,7 +737,8 @@ namespace WetnessEffects
 		baseColor = lerp(baseColor, pow(abs(baseColor), 1.0 + wetnessDarkeningAmount), 0.5);
 	}
 
-	void ApplySurfaceWetnessDirectLighting(
+	// Returns the throughput for transmission beneath the wet surface.
+	float3 ApplySurfaceWetnessDirectLighting(
 		SurfaceWetnessState wetnessState,
 		float3 viewDirection,
 		float3 lightDirection,
@@ -748,7 +749,7 @@ namespace WetnessEffects
 		inout float3 wetnessSpecular)
 	{
 		if (wetnessState.roughness >= 1.0)
-			return;
+			return 1.0;
 
 		const float wetnessStrength = saturate(1.0 - wetnessState.roughness);
 		const float wetnessF0 = 0.02;
@@ -773,6 +774,7 @@ namespace WetnessEffects
 		diffuse *= 1.0 - wetnessF;
 		specular *= 1.0 - wetnessF;
 		wetnessSpecular += wetnessSpecularInput;
+		return 1.0 - wetnessF;
 	}
 
 	float3 ApplySurfaceWetnessIndirectLobeWeights(inout float3 diffuseLobeWeight, inout float3 specularLobeWeight, SurfaceWetnessState wetnessState, float3 viewDirection)

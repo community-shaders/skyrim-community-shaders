@@ -16,4 +16,10 @@ private:
 		static void thunk();
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
+
+	struct BSWaterShader_SetupGeometry
+	{
+		static void thunk(RE::BSShader* shader, RE::BSRenderPass* pass, uint32_t renderFlags);
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
 };

@@ -24,103 +24,94 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 
 void SubsurfaceScattering::DrawSettings()
 {
-	if (ImGui::TreeNodeEx(T(TKEY("settings"), "Settings"), ImGuiTreeNodeFlags_DefaultOpen)) {
-		ImGui::Checkbox(T(TKEY("enable_character_lighting"), "Enable Character Lighting"), (bool*)&settings.EnableCharacterLighting);
+	ImGui::Checkbox(T(TKEY("enable_character_lighting"), "Enable Character Lighting"), (bool*)&settings.EnableCharacterLighting);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("%s", T(TKEY("enable_character_lighting_tooltip"), "Vanilla feature."));
+	}
+	if (settings.EnableCharacterLighting) {
+		ImGui::SliderFloat(T(TKEY("strength"), "Strength"), &settings.CharacterLightingStrength, 0, 5, "%.2f");
+	}
+
+	ImGui::RadioButton(T(TKEY("separable_sss"), "Separable SSS"), &settings.SSMode, 0);
+	ImGui::SameLine();
+	ImGui::RadioButton(T(TKEY("burley"), "Burley"), &settings.SSMode, 1);
+
+	if (settings.SSMode == 0) {
+		ImGui::Spacing();
+		ImGui::Text("%s", T(TKEY("albedo_handling"), "Albedo Handling"));
+		ImGui::RadioButton(T(TKEY("pre_scatter"), "Pre-scatter"), &settings.ScatterMode, kPreScatter);
 		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("%s", T(TKEY("enable_character_lighting_tooltip"), "Vanilla feature."));
+			ImGui::Text("%s", T(TKEY("pre_scatter_tooltip"), "Blur the lit color directly. Fastest, but blurs albedo texture detail along with lighting."));
 		}
-		if (settings.EnableCharacterLighting) {
-			ImGui::SliderFloat(T(TKEY("strength"), "Strength"), &settings.CharacterLightingStrength, 0, 5, "%.2f");
-		}
-
-		ImGui::RadioButton(T(TKEY("separable_sss"), "Separable SSS"), &settings.SSMode, 0);
 		ImGui::SameLine();
-		ImGui::RadioButton(T(TKEY("burley"), "Burley"), &settings.SSMode, 1);
+		ImGui::RadioButton(T(TKEY("post_scatter"), "Post-scatter"), &settings.ScatterMode, kPostScatter);
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("%s", T(TKEY("post_scatter_tooltip"), "Divide out albedo, blur the irradiance, multiply albedo back. Preserves texture detail."));
+		}
+		ImGui::SameLine();
+		ImGui::RadioButton(T(TKEY("pre_and_post_scatter"), "Pre and Post"), &settings.ScatterMode, kPreAndPostScatter);
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("%s", T(TKEY("pre_and_post_scatter_tooltip"), "Split albedo across the blur using sqrt(albedo) on each side. A physically motivated middle ground."));
+		}
+	}
 
-		if (settings.SSMode == 0) {
-			ImGui::Spacing();
-			ImGui::Text("%s", T(TKEY("albedo_handling"), "Albedo Handling"));
-			ImGui::RadioButton(T(TKEY("pre_scatter"), "Pre-scatter"), &settings.ScatterMode, kPreScatter);
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("%s", T(TKEY("pre_scatter_tooltip"), "Blur the lit color directly. Fastest, but blurs albedo texture detail along with lighting."));
-			}
-			ImGui::SameLine();
-			ImGui::RadioButton(T(TKEY("post_scatter"), "Post-scatter"), &settings.ScatterMode, kPostScatter);
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("%s", T(TKEY("post_scatter_tooltip"), "Divide out albedo, blur the irradiance, multiply albedo back. Preserves texture detail."));
-			}
-			ImGui::SameLine();
-			ImGui::RadioButton(T(TKEY("pre_and_post_scatter"), "Pre and Post"), &settings.ScatterMode, kPreAndPostScatter);
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("%s", T(TKEY("pre_and_post_scatter_tooltip"), "Split albedo across the blur using sqrt(albedo) on each side. A physically motivated middle ground."));
-			}
+	if (settings.SSMode == 0) {
+		ImGui::SeparatorText(T(TKEY("base_profile"), "Base Profile"));
+		ImGui::PushID("BaseProfile");
+		ImGui::SliderFloat(T(TKEY("blur_radius"), "Blur Radius"), &settings.BaseProfile.BlurRadius, 0, 3, "%.2f");
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("%s", T(TKEY("blur_radius_tooltip"), "Blur radius."));
 		}
 
-		if (settings.SSMode == 0) {
-			if (ImGui::TreeNodeEx(T(TKEY("base_profile"), "Base Profile"), ImGuiTreeNodeFlags_DefaultOpen)) {
-				ImGui::SliderFloat(T(TKEY("blur_radius"), "Blur Radius"), &settings.BaseProfile.BlurRadius, 0, 3, "%.2f");
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("%s", T(TKEY("blur_radius_tooltip"), "Blur radius."));
-				}
-
-				ImGui::SliderFloat(T(TKEY("thickness"), "Thickness"), &settings.BaseProfile.Thickness, 0, 3, "%.2f");
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("%s", T(TKEY("thickness_tooltip"), "Blur radius relative to depth."));
-				}
-
-				updateKernels |= ImGui::ColorEdit3(T(TKEY("strength"), "Strength"), (float*)&settings.BaseProfile.Strength);
-				updateKernels |= ImGui::ColorEdit3(T(TKEY("falloff"), "Falloff"), (float*)&settings.BaseProfile.Falloff);
-
-				ImGui::TreePop();
-			}
-
-			if (ImGui::TreeNodeEx(T(TKEY("human_profile"), "Human Profile"), ImGuiTreeNodeFlags_DefaultOpen)) {
-				ImGui::SliderFloat(T(TKEY("blur_radius"), "Blur Radius"), &settings.HumanProfile.BlurRadius, 0, 3, "%.2f");
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("%s", T(TKEY("blur_radius_tooltip"), "Blur radius."));
-				}
-
-				ImGui::SliderFloat(T(TKEY("thickness"), "Thickness"), &settings.HumanProfile.Thickness, 0, 3, "%.2f");
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("%s", T(TKEY("thickness_tooltip"), "Blur radius relative to depth."));
-				}
-
-				updateKernels |= ImGui::ColorEdit3(T(TKEY("strength"), "Strength"), (float*)&settings.HumanProfile.Strength);
-				updateKernels |= ImGui::ColorEdit3(T(TKEY("falloff"), "Falloff"), (float*)&settings.HumanProfile.Falloff);
-
-				ImGui::TreePop();
-			}
-		} else if (settings.SSMode == 1) {
-			ImGui::SliderInt(T(TKEY("burley_samples"), "Burley Samples"), (int*)&settings.BurleySamples, 1, 64, "%d", ImGuiSliderFlags_AlwaysClamp);
-			if (ImGui::TreeNodeEx(T(TKEY("base_profile"), "Base Profile"), ImGuiTreeNodeFlags_DefaultOpen)) {
-				ImGui::ColorEdit3(T(TKEY("mean_free_path_color"), "Mean Free Path Color"), (float*)&settings.MeanFreePathBase);
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("%s", T(TKEY("mean_free_path_color_tooltip"), "Controls how far light goes into the subsurface in the red, green, and blue channel. It is scaled by the Mean Free Path Distance."));
-				}
-				ImGui::SliderFloat(T(TKEY("mean_free_path_distance"), "Mean Free Path Distance"), &settings.MeanFreePathBase.w, 0.01f, 10.0f, "%.2f");
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("%s", T(TKEY("mean_free_path_distance_tooltip"), "Controls the distance that Mean Free Path Color goes into subsurface."));
-				}
-				ImGui::TreePop();
-			}
-
-			if (ImGui::TreeNodeEx(T(TKEY("human_profile"), "Human Profile"), ImGuiTreeNodeFlags_DefaultOpen)) {
-				ImGui::ColorEdit3(T(TKEY("mean_free_path_color"), "Mean Free Path Color"), (float*)&settings.MeanFreePathHuman);
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("%s", T(TKEY("mean_free_path_color_tooltip"), "Controls how far light goes into the subsurface in the red, green, and blue channel. It is scaled by the Mean Free Path Distance."));
-				}
-				ImGui::SliderFloat(T(TKEY("mean_free_path_distance"), "Mean Free Path Distance"), &settings.MeanFreePathHuman.w, 0.01f, 10.0f, "%.2f");
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("%s", T(TKEY("mean_free_path_distance_tooltip"), "Controls the distance that Mean Free Path Color goes into subsurface."));
-				}
-				ImGui::TreePop();
-			}
+		ImGui::SliderFloat(T(TKEY("thickness"), "Thickness"), &settings.BaseProfile.Thickness, 0, 3, "%.2f");
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("%s", T(TKEY("thickness_tooltip"), "Blur radius relative to depth."));
 		}
 
-		ImGui::Spacing();
-		ImGui::Spacing();
+		updateKernels |= ImGui::ColorEdit3(T(TKEY("strength"), "Strength"), (float*)&settings.BaseProfile.Strength);
+		updateKernels |= ImGui::ColorEdit3(T(TKEY("falloff"), "Falloff"), (float*)&settings.BaseProfile.Falloff);
+		ImGui::PopID();
 
-		ImGui::TreePop();
+		ImGui::SeparatorText(T(TKEY("human_profile"), "Human Profile"));
+		ImGui::PushID("HumanProfile");
+		ImGui::SliderFloat(T(TKEY("blur_radius"), "Blur Radius"), &settings.HumanProfile.BlurRadius, 0, 3, "%.2f");
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("%s", T(TKEY("blur_radius_tooltip"), "Blur radius."));
+		}
+
+		ImGui::SliderFloat(T(TKEY("thickness"), "Thickness"), &settings.HumanProfile.Thickness, 0, 3, "%.2f");
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("%s", T(TKEY("thickness_tooltip"), "Blur radius relative to depth."));
+		}
+
+		updateKernels |= ImGui::ColorEdit3(T(TKEY("strength"), "Strength"), (float*)&settings.HumanProfile.Strength);
+		updateKernels |= ImGui::ColorEdit3(T(TKEY("falloff"), "Falloff"), (float*)&settings.HumanProfile.Falloff);
+		ImGui::PopID();
+	} else if (settings.SSMode == 1) {
+		ImGui::SliderInt(T(TKEY("burley_samples"), "Burley Samples"), (int*)&settings.BurleySamples, 1, 64, "%d", ImGuiSliderFlags_AlwaysClamp);
+		ImGui::SeparatorText(T(TKEY("base_profile"), "Base Profile"));
+		ImGui::PushID("BaseProfile");
+		ImGui::ColorEdit3(T(TKEY("mean_free_path_color"), "Mean Free Path Color"), (float*)&settings.MeanFreePathBase);
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("%s", T(TKEY("mean_free_path_color_tooltip"), "Controls how far light goes into the subsurface in the red, green, and blue channel. It is scaled by the Mean Free Path Distance."));
+		}
+		ImGui::SliderFloat(T(TKEY("mean_free_path_distance"), "Mean Free Path Distance"), &settings.MeanFreePathBase.w, 0.01f, 10.0f, "%.2f");
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("%s", T(TKEY("mean_free_path_distance_tooltip"), "Controls the distance that Mean Free Path Color goes into subsurface."));
+		}
+		ImGui::PopID();
+
+		ImGui::SeparatorText(T(TKEY("human_profile"), "Human Profile"));
+		ImGui::PushID("HumanProfile");
+		ImGui::ColorEdit3(T(TKEY("mean_free_path_color"), "Mean Free Path Color"), (float*)&settings.MeanFreePathHuman);
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("%s", T(TKEY("mean_free_path_color_tooltip"), "Controls how far light goes into the subsurface in the red, green, and blue channel. It is scaled by the Mean Free Path Distance."));
+		}
+		ImGui::SliderFloat(T(TKEY("mean_free_path_distance"), "Mean Free Path Distance"), &settings.MeanFreePathHuman.w, 0.01f, 10.0f, "%.2f");
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("%s", T(TKEY("mean_free_path_distance_tooltip"), "Controls the distance that Mean Free Path Color goes into subsurface."));
+		}
+		ImGui::PopID();
 	}
 }
 
@@ -239,9 +230,7 @@ void SubsurfaceScattering::DrawSSS()
 
 		blurCBData.BurleySamples = settings.BurleySamples;
 		// Burley always does full albedo removal/reapply; scatter mode only applies to Separable SSS.
-		blurCBData.ScatterMode = (settings.SSMode == 0)
-		                             ? (uint)std::clamp(settings.ScatterMode, (int)kPreScatter, (int)kPreAndPostScatter)
-		                             : (uint)kPostScatter;
+		blurCBData.ScatterMode = (settings.SSMode == 0) ? (uint)std::clamp(settings.ScatterMode, (int)kPreScatter, (int)kPreAndPostScatter) : (uint)kPostScatter;
 
 		blurCBData.MeanFreePathBase = settings.MeanFreePathBase;
 		blurCBData.MeanFreePathHuman = settings.MeanFreePathHuman;
@@ -365,7 +354,7 @@ void SubsurfaceScattering::DrawSSS()
 void SubsurfaceScattering::SetupResources()
 {
 	{
-		blurCB = new ConstantBuffer(ConstantBufferDesc<BlurCB>());
+		blurCB = new ConstantBuffer(ConstantBufferDesc<BlurCB>(), "SSS::BlurCB");
 	}
 
 	auto renderer = globals::game::renderer;
@@ -384,11 +373,11 @@ void SubsurfaceScattering::SetupResources()
 		D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
 		main.UAV->GetDesc(&uavDesc);
 
-		blurHorizontalTemp = new Texture2D(texDesc);
+		blurHorizontalTemp = new Texture2D(texDesc, "SSS::BlurHorizontalTemp");
 		blurHorizontalTemp->CreateSRV(srvDesc);
 		blurHorizontalTemp->CreateUAV(uavDesc);
 
-		diffuseNoAlbedoTex = new Texture2D(texDesc);
+		diffuseNoAlbedoTex = new Texture2D(texDesc, "SSS::DiffuseNoAlbedo");
 		diffuseNoAlbedoTex->CreateSRV(srvDesc);
 		diffuseNoAlbedoTex->CreateUAV(uavDesc);
 	}
@@ -437,6 +426,10 @@ void SubsurfaceScattering::ClearShaderCache()
 		prepassSS->Release();
 		prepassSS = nullptr;
 	}
+	if (prepassBurleySS) {
+		prepassBurleySS->Release();
+		prepassBurleySS = nullptr;
+	}
 	if (horizontalSSBlur) {
 		horizontalSSBlur->Release();
 		horizontalSSBlur = nullptr;
@@ -453,6 +446,11 @@ void SubsurfaceScattering::ClearShaderCache()
 
 ID3D11ComputeShader* SubsurfaceScattering::GetComputeShaderPrepass()
 {
+	if (settings.SSMode == 1) {
+		if (!prepassBurleySS)
+			prepassBurleySS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\SubsurfaceScattering\\DiffuseExtractionCS.hlsl", { { "BURLEY", "" } }, "cs_5_0");
+		return prepassBurleySS;
+	}
 	if (!prepassSS) {
 		logger::debug("Compiling prepassSS");
 		prepassSS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\SubsurfaceScattering\\DiffuseExtractionCS.hlsl", {}, "cs_5_0");

@@ -1,9 +1,11 @@
 #include "Feature.h"
 
+#include "CSEditor/SceneManager/SceneManager.h"
 #include "FeatureIssues.h"
 #include "FeatureVersions.h"
 #include "Features/CSEditor.h"
 #include "Features/CloudShadows.h"
+#include "Features/DeveloperTools.h"
 #include "Features/DynamicCubemaps.h"
 #include "Features/Effects11.h"
 #include "Features/ExponentialHeightFog.h"
@@ -21,8 +23,9 @@
 #include "Features/LightLimitFix.h"
 #include "Features/LinearLighting.h"
 #include "Features/PerformanceOverlay.h"
-#include "Features/RemoteControl.h"
-#include "Features/RenderDoc.h"
+#include "Features/PostProcessing.h"
+#include "Features/ProceduralSun.h"
+#include "Features/RainRefraction.h"
 #include "Features/ScreenSpaceGI.h"
 #include "Features/ScreenSpaceShadows.h"
 #include "Features/ScreenshotFeature.h"
@@ -42,13 +45,12 @@
 #include "Features/WetnessEffects.h"
 #include "I18n/I18n.h"
 #include "Menu.h"
-#include "SettingsOverrideManager.h"
 #include "Utils/Format.h"
-#include "WeatherManager.h"
-#include "WeatherVariableRegistry.h"
 
 #include "State.h"
 #include "TruePBR.h"
+
+#include <unordered_map>
 
 void Feature::Load(json& o_json)
 {
@@ -153,14 +155,27 @@ void Feature::Load(json& o_json)
 			logger::error("Feature has empty short name, cannot add to feature issues list");
 		}
 	} else {
+		if (!UsesMainSettings())
+			return;
+
 		// No errors, load settings now
 		if (o_json[GetName()].is_structured()) {
 			logger::info("Loading {} settings", GetName());
 			try {
 				LoadSettings(o_json[GetName()]);
 			} catch (...) {
-				logger::warn("Invalid settings for {}, using default.", GetName());
+				// Plain defaults would be saved back as the user's edits, so the layered base is tried first.
+				logger::warn("Invalid settings for {}, using its defaults and Baseline packs.", GetName());
 				RestoreDefaultSettings();
+				if (const auto* base = globals::state->GetFeatureBase(GetName())) {
+					try {
+						auto baseSettings = *base;
+						LoadSettings(baseSettings);
+					} catch (...) {
+						logger::warn("Invalid Baseline settings for {}, using default.", GetName());
+						RestoreDefaultSettings();
+					}
+				}
 			}
 		} else {
 			logger::info("Loading default settings for {}", GetName());
@@ -171,7 +186,8 @@ void Feature::Load(json& o_json)
 
 void Feature::Save(json& o_json)
 {
-	SaveSettings(o_json[GetName()]);
+	if (UsesMainSettings())
+		SaveSettings(o_json[GetName()]);
 }
 
 bool Feature::ValidateCache(CSimpleIniA& a_ini)
@@ -247,21 +263,24 @@ const std::vector<Feature*>& Feature::GetFeatureList()
 		&globals::features::lodBlending,
 		&globals::features::hairSpecular,
 		&globals::features::interiorSun,
+		&globals::features::proceduralSun,
 		&globals::features::terrainVariation,
 		&globals::features::ibl,
 		&globals::features::extendedTranslucency,
 		&globals::features::upscaling,
-		&globals::features::renderDoc,
-		&globals::features::remoteControl,
+		&globals::features::developerTools,
 		&globals::features::csEditor,
+		&globals::features::sceneManager,
 		&globals::features::screenshotFeature,
 		&globals::features::linearLighting,
 		&globals::features::effects11,
+		&globals::features::rainRefraction,
 		&globals::features::unifiedWater,
 		&globals::features::horizonFix,
 		&globals::features::exponentialHeightFog,
 		&globals::features::hdrDisplay,
-		&globals::features::skin
+		&globals::features::skin,
+		&globals::features::postProcessing
 	};
 
 	return features;
@@ -269,11 +288,16 @@ const std::vector<Feature*>& Feature::GetFeatureList()
 
 Feature* Feature::FindFeatureByShortName(const std::string& shortName)
 {
-	for (auto* feature : GetFeatureList()) {
-		if (feature->loaded && feature->GetShortName() == shortName)
-			return feature;
-	}
-	return nullptr;
+	// GetShortName() returns by value, so index once rather than allocating per feature per call.
+	static const auto featuresByShortName = [] {
+		std::unordered_map<std::string, Feature*> index;
+		for (auto* feature : GetFeatureList())
+			index.emplace(feature->GetShortName(), feature);
+		return index;
+	}();
+
+	const auto it = featuresByShortName.find(shortName);
+	return it != featuresByShortName.end() && it->second->loaded ? it->second : nullptr;
 }
 
 std::vector<std::string> Feature::GetLoadedFeatureNames()
@@ -289,92 +313,15 @@ std::vector<std::string> Feature::GetLoadedFeatureNames()
 
 bool Feature::ToggleAtBootSetting()
 {
+	if (IsAlwaysEnabled())
+		return false;
 	auto state = globals::state;
 	const std::string featureName = GetShortName();
 	auto disabled = state->IsFeatureDisabled(featureName);
 	state->SetFeatureDisabled(featureName, !disabled);
+	state->CheckCoreSettingsChanged();
 
 	return state->IsFeatureDisabled(featureName);  // Return the new state
-}
-
-bool Feature::ReapplyOverrideSettings()
-{
-	auto overrideManager = SettingsOverrideManager::GetSingleton();
-	std::string featureName = GetShortName();
-
-	if (!overrideManager || !overrideManager->HasFeatureOverrides(featureName)) {
-		return false;
-	}
-
-	// Delete user override file to restore original override behavior
-	overrideManager->DeleteUserOverride(featureName);
-
-	// Get base settings and apply overrides fresh
-	json featureJson;
-	SaveSettings(featureJson);
-	json previousJson = featureJson;  // LoadSettings takes a non-const reference
-
-	// Apply overrides to the settings (without user customizations)
-	size_t appliedCount = overrideManager->ReapplyFeatureOverrides(featureName, featureJson);
-
-	if (appliedCount > 0) {
-		// Load the override settings back into the feature. A malformed override throws from
-		// LoadSettings, possibly after some fields were already applied, so restore the previous values.
-		try {
-			LoadSettings(featureJson);
-			return true;
-		} catch (const std::exception& e) {
-			logger::warn("Failed to reapply override settings for {}, keeping previous settings. Error: {}", featureName, e.what());
-			try {
-				LoadSettings(previousJson);
-			} catch (...) {
-				logger::warn("Failed to restore previous settings for {}, using default.", featureName);
-				RestoreDefaultSettings();
-			}
-			return false;
-		}
-	}
-
-	return false;
-}
-
-std::string Feature::GetDisplayCategory() const
-{
-	const auto category = GetCategory();
-	if (category == FeatureCategories::kCharacters)
-		return T("feature.category.characters", "Characters");
-	if (category == FeatureCategories::kDisplay)
-		return T("feature.category.display", "Display");
-	if (category == FeatureCategories::kGrass)
-		return T("feature.category.grass", "Grass");
-	if (category == FeatureCategories::kLandscapeAndTextures)
-		return T("feature.category.landscape_and_textures", "Landscape & Textures");
-	if (category == FeatureCategories::kLighting)
-		return T("feature.category.lighting", "Lighting");
-	if (category == FeatureCategories::kMaterials)
-		return T("feature.category.materials", "Materials");
-	if (category == FeatureCategories::kOther)
-		return T("feature.category.other", "Other");
-	if (category == FeatureCategories::kSky)
-		return T("feature.category.sky", "Sky");
-	if (category == FeatureCategories::kUtility)
-		return T("feature.category.utility", "Utility");
-	if (category == FeatureCategories::kWater)
-		return T("feature.category.water", "Water");
-
-	return std::string(category);
-}
-
-std::string Feature::GetReleaseStageTag(ReleaseStage stage)
-{
-	switch (stage) {
-	case ReleaseStage::Alpha:
-		return T("menu.features.tag_alpha", "[ALPHA]");
-	case ReleaseStage::Beta:
-		return T("menu.features.tag_beta", "[BETA]");
-	default:
-		return {};
-	}
 }
 
 void Feature::DrawUnloadedUI()

@@ -8,13 +8,10 @@ namespace ShaderCompiler
 	{
 		static REL::Relocation<ID3D11Device**> g_ID3D11Device{ RELOCATION_ID(524729, 411348) };
 
-		ID3DBlob* shaderBlob = nullptr;
+		winrt::com_ptr<ID3DBlob> shaderBlob;
 
-		if (FAILED(D3DReadFileToBlob(a_filePath.c_str(), &shaderBlob))) {
+		if (FAILED(D3DReadFileToBlob(a_filePath.c_str(), shaderBlob.put()))) {
 			logger::error("Pixel shader load failed:\n{}", "File does not exist or is invalid");
-
-			if (shaderBlob)
-				shaderBlob->Release();
 
 			return nullptr;
 		}
@@ -28,11 +25,10 @@ namespace ShaderCompiler
 		if (FAILED((*g_ID3D11Device)->CreatePixelShader(shaderBlob->GetBufferPointer(), shaderBlob->GetBufferSize(), nullptr, &regShader))) {
 			logger::error("pixel shader registration failed");
 
-			shaderBlob->Release();
-
 			return nullptr;
 		}
 
+		Util::SetResourceName(regShader, "ShaderCompiler::%s", Util::WStringToString(a_filePath).c_str());
 		logger::debug("shader registration succeeded");
 
 		return regShader;

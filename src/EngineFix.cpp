@@ -1,25 +1,37 @@
 ﻿#include "EngineFix.h"
 
 #include "EngineFixes/EffectShaderNoDecalsFix.h"
+#include "EngineFixes/EmptyOverlayCullFix.h"
 #include "EngineFixes/LODBlendRingFix.h"
 #include "EngineFixes/LandscapeSeamsFix.h"
+#include "EngineFixes/LightListSearchFix.h"
 #include "EngineFixes/ShadowmapCascadeCullingFix.h"
 #include "EngineFixes/ShadowmapCascadeRasterizerFix.h"
+#include "EngineFixes/SunOcclusionPollFix.h"
+#include "EngineFixes/SunShadowMaskFix.h"
 #include "EngineFixes/WaterReflectionCubemapFix.h"
 
 const std::vector<EngineFix*>& EngineFix::GetOnPostPostLoadFixesList()
 {
 	static EffectShaderNoDecalsFix effectShaderNoDecalsFix;
+	static EmptyOverlayCullFix emptyOverlayCullFix;
+	static LightListSearchFix lightListSearchFix;
 	static ShadowmapCascadeCullingFix shadowmapCascadeCullingFix;
 	static ShadowmapRasterizerFix shadowmapRasterizerFix;
+	static SunShadowMaskFix sunShadowMaskFix;
+	static SunOcclusionPollFix sunOcclusionPollFix;
 	static WaterReflectionCubemapFix waterReflectionCubemapFix;
 
 	static std::vector<EngineFix*> fixes = {
 		&effectShaderNoDecalsFix,
+		&emptyOverlayCullFix,
 		&LandscapeSeamsFix::GetInstance(),
 		&LODBlendRingFix::GetInstance(),
+		&lightListSearchFix,
 		&shadowmapCascadeCullingFix,
 		&shadowmapRasterizerFix,
+		&sunShadowMaskFix,
+		&sunOcclusionPollFix,
 		&waterReflectionCubemapFix
 	};
 
@@ -49,4 +61,10 @@ void EngineFix::InstallOnPostPostLoadFixes()
 void EngineFix::InstallOnDataLoadedFixes()
 {
 	InstallFixes(GetOnDataLoadedFixesList());
+}
+
+void EngineFix::GenerateAllShaderPermutations(RE::BSShader* a_shader)
+{
+	for (const auto fix : GetOnPostPostLoadFixesList())
+		fix->GenerateShaderPermutations(a_shader);
 }

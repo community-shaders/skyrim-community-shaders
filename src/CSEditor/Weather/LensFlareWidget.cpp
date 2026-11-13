@@ -1,6 +1,9 @@
 #include "LensFlareWidget.h"
+#include "../../I18n/I18n.h"
 #include "../EditorWindow.h"
 #include "../WeatherUtils.h"
+
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(LensFlareSettings, fadeDistRadiusScale, colorInfluence)
 
 namespace
 {
@@ -14,7 +17,7 @@ namespace
 void LensFlareWidget::DrawWidget()
 {
 	WeatherUtils::SetCurrentWidget(this);
-	if (BeginWidgetWindow()) {
+	if (BeginWidgetWindow(true, true, false, nullptr, "##LensFlareSearch")) {
 		DrawWidgetHeader("##LensFlareSearch", true, true);
 		DrawSearchDropdown();
 	}
@@ -29,12 +32,10 @@ void LensFlareWidget::DrawWidget()
 			});
 		};
 
-		drawSection(LensFlareSetting::kFadeDistRadiusScale, "Fade Distance", settings.fadeDistRadiusScale);
-		drawSection(LensFlareSetting::kColorInfluence, "Color", settings.colorInfluence);
+		drawSection(LensFlareSetting::kFadeDistRadiusScale, T("cs_editor.lens_flare.fade_distance", "Fade Distance"), settings.fadeDistRadiusScale);
+		drawSection(LensFlareSetting::kColorInfluence, T("cs_editor.lens_flare.color", "Color"), settings.colorInfluence);
 
-		if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
-			ApplyChanges();
-		}
+		AutoApply(changed);
 	}
 	EndScrollableContent();
 	ImGui::End();
@@ -42,25 +43,8 @@ void LensFlareWidget::DrawWidget()
 
 void LensFlareWidget::LoadSettings()
 {
-	if (!lensFlare)
-		return;
-
-	if (!js.empty()) {
-		settings = vanillaSettings;
-		try {
-			if (js.contains("fadeDistRadiusScale"))
-				settings.fadeDistRadiusScale = js["fadeDistRadiusScale"];
-			if (js.contains("colorInfluence"))
-				settings.colorInfluence = js["colorInfluence"];
-		} catch (const std::exception& e) {
-			logger::error("LensFlare {}: Failed to load from JSON: {}", GetEditorID(), e.what());
-			settings = vanillaSettings;
-		}
-	} else {
-		settings = vanillaSettings;
-	}
-	originalSettings = settings;
-	ApplyChanges();
+	if (lensFlare)
+		LoadSavedSettings();
 }
 
 void LensFlareWidget::LoadFromGameSettings()
@@ -73,9 +57,7 @@ void LensFlareWidget::LoadFromGameSettings()
 
 void LensFlareWidget::SaveSettings()
 {
-	js["fadeDistRadiusScale"] = settings.fadeDistRadiusScale;
-	js["colorInfluence"] = settings.colorInfluence;
-	originalSettings = settings;
+	SaveSettingsToJson();
 }
 
 void LensFlareWidget::ApplyChanges()
@@ -87,21 +69,7 @@ void LensFlareWidget::ApplyChanges()
 	lensFlare->colorInfluence = settings.colorInfluence;
 }
 
-void LensFlareWidget::RevertChanges()
-{
-	settings = vanillaSettings;
-	ApplyChanges();
-}
-
-bool LensFlareWidget::HasUnsavedChanges() const
-{
-	return !(settings == originalSettings);
-}
-
 std::vector<Widget::SearchResult> LensFlareWidget::CollectSearchableSettings() const
 {
-	return {
-		{ LensFlareSetting::kFadeDistRadiusScale, "", LensFlareSetting::kFadeDistRadiusScale },
-		{ LensFlareSetting::kColorInfluence, "", LensFlareSetting::kColorInfluence },
-	};
+	return WeatherUtils::LabelSearchResults({ { "", { LensFlareSetting::kFadeDistRadiusScale, LensFlareSetting::kColorInfluence } } });
 }

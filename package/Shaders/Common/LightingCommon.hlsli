@@ -20,6 +20,7 @@ struct DirectContext
 	float detailedShadow;
 	float softShadow;
 #if defined(TRUE_PBR)
+	float backTransmissionVisibility;
 	float3 coatWorldNormal;
 	float3 coatViewDir;
 	float3 coatLightDir;
@@ -51,9 +52,14 @@ struct IndirectLobeWeights
 {
 	float3 diffuse;
 	float3 specular;
+#if defined(TRUE_PBR)
+	float3 frontTransmission;
+	float3 backTransmission;
+#endif
 };
 
 #if defined(TRUE_PBR)
+#	include "Common/PBRMath.hlsli"
 #	if defined(GLINT)
 #		include "Common/Glints/Glints2023.hlsli"
 #	else
@@ -75,13 +81,14 @@ struct MaterialProperties
 	float3 backLightColor;
 	float Roughness;
 	float3 F0;
+	// The PBR evaluators read AO, so every layout has it; Lighting.hlsl defaults it to 1.
+	float AO;
 #	if defined(CS_SKIN_SHADING)
 	float RoughnessSecondary;
 	float SecondarySpecIntensity;
 	float Curvature;
 	float Thickness;
 	float3 SubsurfaceColor;
-	float AO;
 	float FuzzRoughness;
 	float3 FuzzColor;
 	float FuzzWeight;
@@ -93,18 +100,22 @@ struct MaterialProperties
 	float3 F0;
 	float3 SubsurfaceColor;
 	float Thickness;
+	float SubsurfaceBalance;
+	float ThinSurfaceSpecularWeight;
 	float3 CoatColor;
 	float CoatStrength;
 	float CoatRoughness;
 	float3 CoatF0;
 	float3 FuzzColor;
 	float FuzzWeight;
+	float FuzzRoughness;
 	float GlintScreenSpaceScale;
 	float GlintLogMicrofacetDensity;
 	float GlintMicrofacetRoughness;
 	float GlintDensityRandomization;
 	Glints::GlintCachedVars GlintCache;
 	float Noise;
+	PBR::FuzzLayer Fuzz;
 #endif
 };
 

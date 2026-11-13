@@ -118,6 +118,7 @@ file_common_defines:
             - CLOUD_SHADOWS
             - WATER_EFFECTS
             - SSS
+            - RAIN_REFRACTION
         VSHADER:
             - IBL
             - DYNAMIC_CUBEMAPS
@@ -130,6 +131,7 @@ file_common_defines:
             - CLOUD_SHADOWS
             - WATER_EFFECTS
             - SSS
+            - RAIN_REFRACTION
         CSHADER: []
     Effect.hlsl:
         PSHADER:
@@ -2325,6 +2327,7 @@ shaders:
                   - CLOUD_SHADOWS
                   - WATER_EFFECTS
                   - SSS
+                  - RAIN_REFRACTION
               entries:
                   - entry: Particle:Pixel:0
                     defines: []
@@ -2362,6 +2365,7 @@ shaders:
                   - CLOUD_SHADOWS
                   - WATER_EFFECTS
                   - SSS
+                  - RAIN_REFRACTION
               entries:
                   - entry: Particle:Vertex:0
                     defines: []
@@ -14251,6 +14255,12 @@ shaders:
                         - MULTI_TEXTURE
                         - LANDSCAPE
                         - LOD_LAND_BLEND
+                  - entry: Lighting:Pixel:13000021
+                    defines:
+                        - MULTI_TEXTURE
+                        - LANDSCAPE
+                        - LOD_LAND_BLEND
+                        - LANDSCAPE_SEAMS
                   - entry: Lighting:Pixel:10100001
                     defines:
                         - DO_ALPHA_TEST
@@ -14366,6 +14376,11 @@ shaders:
                     defines:
                         - MULTI_TEXTURE
                         - LANDSCAPE
+                  - entry: Lighting:Pixel:8000021
+                    defines:
+                        - MULTI_TEXTURE
+                        - LANDSCAPE
+                        - LANDSCAPE_SEAMS
                   - entry: Lighting:Pixel:6118001
                     defines:
                         - ANISO_LIGHTING
@@ -14647,6 +14662,12 @@ shaders:
                         - MULTI_TEXTURE
                         - LANDSCAPE
                         - TRUE_PBR
+                  - entry: Lighting:Pixel:8000029
+                    defines:
+                        - MULTI_TEXTURE
+                        - LANDSCAPE
+                        - TRUE_PBR
+                        - LANDSCAPE_SEAMS
                   - entry: Lighting:Pixel:8010009
                     defines:
                         - ANISO_LIGHTING
@@ -14654,12 +14675,27 @@ shaders:
                         - LANDSCAPE
                         - TRUE_PBR
                         - GLINT
+                  - entry: Lighting:Pixel:8010029
+                    defines:
+                        - ANISO_LIGHTING
+                        - MULTI_TEXTURE
+                        - LANDSCAPE
+                        - TRUE_PBR
+                        - GLINT
+                        - LANDSCAPE_SEAMS
                   - entry: Lighting:Pixel:13000009
                     defines:
                         - MULTI_TEXTURE
                         - LANDSCAPE
                         - LOD_LAND_BLEND
                         - TRUE_PBR
+                  - entry: Lighting:Pixel:13000029
+                    defines:
+                        - MULTI_TEXTURE
+                        - LANDSCAPE
+                        - LOD_LAND_BLEND
+                        - TRUE_PBR
+                        - LANDSCAPE_SEAMS
                   - entry: Lighting:Pixel:13010009
                     defines:
                         - ANISO_LIGHTING
@@ -14668,6 +14704,25 @@ shaders:
                         - LOD_LAND_BLEND
                         - TRUE_PBR
                         - GLINT
+                  - entry: Lighting:Pixel:13010029
+                    defines:
+                        - ANISO_LIGHTING
+                        - MULTI_TEXTURE
+                        - LANDSCAPE
+                        - LOD_LAND_BLEND
+                        - TRUE_PBR
+                        - GLINT
+                        - LANDSCAPE_SEAMS
+                  - entry: Lighting:Pixel:13010039
+                    defines:
+                        - ANISO_LIGHTING
+                        - MULTI_TEXTURE
+                        - LANDSCAPE
+                        - LOD_LAND_BLEND
+                        - DEFERRED
+                        - TRUE_PBR
+                        - GLINT
+                        - LANDSCAPE_SEAMS
                   - entry: Lighting:Pixel:108019
                     defines:
                         - PROJECTED_UV
@@ -14834,6 +14889,13 @@ shaders:
                         - LANDSCAPE
                         - DEFERRED
                         - TRUE_PBR
+                  - entry: Lighting:Pixel:8000039
+                    defines:
+                        - MULTI_TEXTURE
+                        - LANDSCAPE
+                        - DEFERRED
+                        - TRUE_PBR
+                        - LANDSCAPE_SEAMS
                   - entry: Lighting:Pixel:8010019
                     defines:
                         - ANISO_LIGHTING
@@ -14842,6 +14904,15 @@ shaders:
                         - DEFERRED
                         - TRUE_PBR
                         - GLINT
+                  - entry: Lighting:Pixel:8010039
+                    defines:
+                        - ANISO_LIGHTING
+                        - MULTI_TEXTURE
+                        - LANDSCAPE
+                        - DEFERRED
+                        - TRUE_PBR
+                        - GLINT
+                        - LANDSCAPE_SEAMS
                   - entry: Lighting:Pixel:13000019
                     defines:
                         - MULTI_TEXTURE
@@ -14849,6 +14920,14 @@ shaders:
                         - LOD_LAND_BLEND
                         - DEFERRED
                         - TRUE_PBR
+                  - entry: Lighting:Pixel:13000039
+                    defines:
+                        - MULTI_TEXTURE
+                        - LANDSCAPE
+                        - LOD_LAND_BLEND
+                        - DEFERRED
+                        - TRUE_PBR
+                        - LANDSCAPE_SEAMS
                   - entry: Lighting:Pixel:1B
                     defines:
                         - SKINNED
@@ -15069,6 +15148,13 @@ shaders:
                         - LANDSCAPE
                         - LOD_LAND_BLEND
                         - DEFERRED
+                  - entry: Lighting:Pixel:13000031
+                    defines:
+                        - MULTI_TEXTURE
+                        - LANDSCAPE
+                        - LOD_LAND_BLEND
+                        - DEFERRED
+                        - LANDSCAPE_SEAMS
                   - entry: Lighting:Pixel:10100011
                     defines:
                         - DO_ALPHA_TEST
@@ -15219,6 +15305,12 @@ shaders:
                         - MULTI_TEXTURE
                         - LANDSCAPE
                         - DEFERRED
+                  - entry: Lighting:Pixel:8000031
+                    defines:
+                        - MULTI_TEXTURE
+                        - LANDSCAPE
+                        - DEFERRED
+                        - LANDSCAPE_SEAMS
                   - entry: Lighting:Pixel:6118011
                     defines:
                         - ANISO_LIGHTING
@@ -21996,6 +22088,13 @@ shaders:
                         - TEXTURE
                         - ALPHA_TEST
                         - RENDER_BASE_TEXTURE
+                  - entry: Utility:Pixel:42000083
+                    defines:
+                        - VC
+                        - TEXTURE
+                        - ALPHA_TEST
+                        - RENDER_BASE_TEXTURE
+                        - TRUE_PBR
                   - entry: Utility:Pixel:4001083
                     defines:
                         - VC
@@ -22147,6 +22246,34 @@ shaders:
                         - ALPHA_TEST
                         - RENDER_BASE_TEXTURE
                         - TREE_ANIM
+                  - entry: Utility:Pixel:46000083
+                    defines:
+                        - VC
+                        - TEXTURE
+                        - ALPHA_TEST
+                        - RENDER_BASE_TEXTURE
+                        - TREE_ANIM
+                        - TRUE_PBR
+                  - entry: Utility:Pixel:46000002
+                    defines:
+                        - TEXTURE
+                        - RENDER_BASE_TEXTURE
+                        - TREE_ANIM
+                        - TRUE_PBR
+                  - entry: Utility:Pixel:46000003
+                    defines:
+                        - VC
+                        - TEXTURE
+                        - RENDER_BASE_TEXTURE
+                        - TREE_ANIM
+                        - TRUE_PBR
+                  - entry: Utility:Pixel:46000082
+                    defines:
+                        - TEXTURE
+                        - ALPHA_TEST
+                        - RENDER_BASE_TEXTURE
+                        - TREE_ANIM
+                        - TRUE_PBR
                   - entry: Utility:Pixel:8002083
                     defines:
                         - VC
@@ -22264,6 +22391,11 @@ shaders:
                     defines:
                         - TEXTURE
                         - RENDER_BASE_TEXTURE
+                  - entry: Utility:Pixel:42000002
+                    defines:
+                        - TEXTURE
+                        - RENDER_BASE_TEXTURE
+                        - TRUE_PBR
                   - entry: Utility:Pixel:1022002
                     defines:
                         - TEXTURE
@@ -22334,6 +22466,12 @@ shaders:
                         - VC
                         - TEXTURE
                         - RENDER_BASE_TEXTURE
+                  - entry: Utility:Pixel:42000003
+                    defines:
+                        - VC
+                        - TEXTURE
+                        - RENDER_BASE_TEXTURE
+                        - TRUE_PBR
                   - entry: Utility:Pixel:10000003
                     defines:
                         - VC
@@ -22534,6 +22672,12 @@ shaders:
                         - TEXTURE
                         - ALPHA_TEST
                         - RENDER_BASE_TEXTURE
+                  - entry: Utility:Pixel:42000082
+                    defines:
+                        - TEXTURE
+                        - ALPHA_TEST
+                        - RENDER_BASE_TEXTURE
+                        - TRUE_PBR
                   - entry: Utility:Pixel:2020082
                     defines:
                         - TEXTURE

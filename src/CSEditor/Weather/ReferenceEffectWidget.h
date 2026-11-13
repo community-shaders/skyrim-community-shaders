@@ -2,14 +2,24 @@
 
 #include "../Widget.h"
 
+/** @brief The BGSReferenceEffect fields a ReferenceEffectWidget edits. */
+struct ReferenceEffectSettings
+{
+	RE::BGSArtObject* artObject = nullptr;
+	RE::TESEffectShader* effectShader = nullptr;
+	bool faceTarget = false;
+	bool attachToCamera = false;
+	bool inheritRotation = false;
+	bool operator==(const ReferenceEffectSettings&) const = default;
+};
+
 /**
  * @brief Widget for editing visual effect (BGSReferenceEffect) form data.
  *
  * Allows picking art objects and effect shaders, and toggling behavioral
- * flags such as face-target and attach-to-camera. Requires manual apply
- * because changes trigger a weather reinit.
+ * flags such as face-target and attach-to-camera.
  */
-class ReferenceEffectWidget : public Widget
+class ReferenceEffectWidget : public SettingsWidget<ReferenceEffectSettings>
 {
 public:
 	/**
@@ -22,8 +32,7 @@ public:
 		form = a_referenceEffect;
 		if (referenceEffect) {
 			LoadFromGameSettings();
-			vanillaSettings = settings;
-			originalSettings = settings;
+			CaptureVanillaSettings();
 		}
 	}
 
@@ -35,23 +44,14 @@ public:
 	/** @brief Returns the human-readable widget type name for window sizing. */
 	const char* GetWidgetTypeName() const override { return "Visual Effect"; }
 
-	/** @brief Returns true because form reference changes trigger a weather reinit. */
-	bool RequiresManualApply() const override { return true; }
-
 	/** @brief Deserializes reference effect settings from the stored JSON blob. */
 	void LoadSettings() override;
 
 	/** @brief Serializes current reference effect settings to the JSON blob. */
 	void SaveSettings() override;
 
-	/** @brief Writes the current settings into the game's BGSReferenceEffect and triggers a weather reinit. */
+	/** @brief Writes the current settings into the game's BGSReferenceEffect and refreshes the live sky effect. */
 	void ApplyChanges() override;
-
-	/** @brief Reverts settings to vanilla values and re-applies them to the game data. */
-	void RevertChanges() override;
-
-	/** @brief Returns true if the current settings differ from the last saved state. */
-	bool HasUnsavedChanges() const override;
 
 	/** @brief Collects all searchable reference effect settings for the search dropdown. */
 	std::vector<SearchResult> CollectSearchableSettings() const override;
@@ -61,19 +61,9 @@ public:
 private:
 	void LoadFromGameSettings();
 
-	struct Settings
-	{
-		RE::BGSArtObject* artObject = nullptr;
-		RE::TESEffectShader* effectShader = nullptr;
-		bool faceTarget = false;
-		bool attachToCamera = false;
-		bool inheritRotation = false;
-		bool operator==(const Settings&) const = default;
-	};
-
-	Settings settings;
-	Settings vanillaSettings;
-	Settings originalSettings;
+	/** @brief Restarts the current weather's sky effect when the form just changed or it still shows other art.
+	 *  @param a_recordChanged Whether the apply just rewrote the form's art, shader or flags. */
+	void RestartStaleSkyEffect(bool a_recordChanged) const;
 
 	std::vector<RE::BGSArtObject*> artObjectArray;
 	std::vector<RE::TESEffectShader*> effectShaderArray;

@@ -64,9 +64,8 @@ groupshared uint VisibleSamples;
 			}
 		}
 
-		float3 ambient = Color::IrradianceToLinear(Color::Ambient(max(0.0, SharedData::GetAmbient(0.0))));
-		float llDirLightMult = (SharedData::linearLightingSettings.enableLinearLighting && !SharedData::linearLightingSettings.isDirLightLinear) ? SharedData::linearLightingSettings.dirLightMult : 1.0;
-		float3 directional = Color::IrradianceToLinear(Color::DirectionalLight(max(0.0, SharedData::DirLightColor.rgb) / max(llDirLightMult, 1e-5), SharedData::linearLightingSettings.isDirLightLinear) * llDirLightMult);
+		float3 ambient = ColorManagement::SceneToLinear(Color::Ambient(max(0.0, SharedData::GetAmbient(0.0))));
+		float3 directional = ColorManagement::SceneToLinear(Color::DirectionalLight(max(0.0, SharedData::DirLightColor.rgb)));
 		float lightingLuminance = max(Color::RGBToLuminance(ambient + directional), 0.0001);
 		bool lightingChanged = state.Initialized != 0 && abs(log2(lightingLuminance / max(state.ReferenceLuminance, 0.0001))) >= 1.0;
 		bool captureChanged = matched >= 48 && matched * 2 >= VisibleSamples &&

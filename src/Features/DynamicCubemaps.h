@@ -157,6 +157,7 @@ public:
 	};
 
 	Settings settings;
+	Settings GetCommonBufferData() const;
 	void UpdateCubemap();
 
 	void PostDeferred();
