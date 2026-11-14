@@ -231,11 +231,11 @@ namespace SceneSettingsOverwrites
 				if (auto deletedIt = deletionNode->find(key); deletedIt != deletionNode->end()) {
 					if (!deletedIt->is_boolean())
 						return;
-					entry.deleted = deletedIt->get<bool>();
+					entry.deleted = deletedIt->template get<bool>();
 				}
 			if (const auto* transitionNode = entryTransitions ? GetObjectAtPath(*entryTransitions, settingPath) : nullptr)
 				if (auto transitionIt = transitionNode->find(key); transitionIt != transitionNode->end()) {
-					const auto seconds = transitionIt->is_number() ? std::optional{ transitionIt->get<float>() } : std::nullopt;
+					const auto seconds = transitionIt->is_number() ? std::optional{ transitionIt->template get<float>() } : std::nullopt;
 					if (seconds && std::isfinite(*seconds) && *seconds >= 0.0f && *seconds <= SSM::kMaxLocationTransitionSeconds)
 						entry.transitionSeconds = seconds;
 					else
