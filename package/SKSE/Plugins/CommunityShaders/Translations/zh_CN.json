@@ -3998,6 +3998,7 @@
     "menu.status.failed_shaders": "失败的着色器：{count}",
     "menu.status.feature_issues": "功能问题：{count}",
     "menu.status.issues_tooltip": "在主页显示问题",
+    "menu.status.profiling_tooltip": "性能指标与叠加层",
     "menu.status.save": "保存",
     "menu.status.unsaved": "未保存的更改",
     "menu.toggle_error_message_tooltip": "隐藏或显示着色器失败消息。您的安装已损坏，游戏中可能会看到错误。请仔细检查是否已更新所有功能以及加载顺序是否正确。请参阅CommunityShaders.log了解详情，并查看Nexus Mods页面或Discord服务器。",
