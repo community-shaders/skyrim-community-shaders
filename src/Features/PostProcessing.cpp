@@ -77,6 +77,21 @@ namespace
 	};
 }
 
+namespace
+{
+	// Which pipeline page the settings UI shows: 0 the effect list, 1 one effect's settings, 2 Cinematic Camera.
+	int pipelinePageNum = 0;
+	int pipelineFeatIdx = 0;
+}
+
+PostProcessFeature* PostProcessing::GetOpenEffectWithDebug() const
+{
+	if (pipelinePageNum != 1 || pipelineFeatIdx < 0 || pipelineFeatIdx >= static_cast<int>(pipeline.size()))
+		return nullptr;
+	auto* feat = pipeline[pipelineFeatIdx].get();
+	return feat && feat->IsActive() && feat->HasDebugSection() ? feat : nullptr;
+}
+
 void PostProcessing::DrawSettings()
 {
 	json before;
@@ -84,8 +99,6 @@ void PostProcessing::DrawSettings()
 	const bool watchEdits = !SceneWidgetInterceptor::IsArmed() && InputMayEditSettings();
 	if (watchEdits)
 		SaveSettings(before);
-	static int pipelinePageNum = 0;
-	static int pipelineFeatIdx = 0;
 
 	// A scene replica of this page edits a scene layer, and inside the CS Editor (its Base Settings window draws this
 	// page too) the editor is already open, so its shortcuts are left out there.

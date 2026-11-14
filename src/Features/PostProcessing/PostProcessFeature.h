@@ -130,6 +130,11 @@ struct PostProcessFeature : public std::enable_shared_from_this<PostProcessFeatu
 	 */
 	static void DrawCameraControlledNote(const char* text = nullptr);
 
+	/** @brief Whether this effect has debug views; the Post Processing Debug section then adds a tab for it. */
+	virtual bool HasDebugSection() const { return false; }
+	/** @brief Draws this effect's debug views (cards, buffer viewers). Called inside the Debug section's tab, so it draws no heading of its own. */
+	virtual void DrawDebugSection() {}
+
 	struct TextureInfo
 	{
 		ID3D11Texture2D* tex = nullptr;

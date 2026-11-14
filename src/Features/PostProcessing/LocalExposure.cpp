@@ -3,10 +3,11 @@
 #include "Features/PostProcessing.h"
 #include "HistogramAutoExposure.h"
 #include "I18n/I18n.h"
+#include "Menu/MenuIcons.h"
 #include "ShaderCache.h"
 #include "State.h"
 #include "Util.h"
-#include "Utils/DebugSection.h"
+#include "Utils/DebugView.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	LocalExposure::Settings,
@@ -74,12 +75,14 @@ void LocalExposure::DrawSettings()
 	ImGui::SliderFloat(T("feature.post_processing.local_exposure.shadow_threshold_strength", "Shadow Threshold Strength"), &settings.ShadowThresholdStrength, 0.f, 1.f, "%.2f");
 	if (auto _tt = Util::HoverTooltipWrapper())
 		ImGui::TextUnformatted(T("feature.post_processing.local_exposure.shadow_threshold_tooltip", "Protects tones near middle grey before shadow lifting begins."));
+}
 
-	if (Util::DebugSection section; section) {
-		static float debugRescale = .3f;
-		ImGui::SliderFloat(T("feature.post_processing.local_exposure.view_resize", "View Resize"), &debugRescale, 0.f, 1.f);
-		BUFFER_VIEWER_NODE_TITLE(texLogLuminance, T("feature.post_processing.local_exposure.buffer_scene_log_luminance", "Scene Log Luminance"), debugRescale);
-	}
+void LocalExposure::DrawDebugSection()
+{
+	Util::SectionCard card("##LocalExposureBuffers", ICON_TI_EYE, T("feature.post_processing.local_exposure.debug_card_buffers", "Buffers"));
+	static float debugRescale = .3f;
+	ImGui::SliderFloat(T("feature.post_processing.local_exposure.view_resize", "View Resize"), &debugRescale, 0.f, 1.f);
+	BUFFER_VIEWER_NODE_TITLE(texLogLuminance, T("feature.post_processing.local_exposure.buffer_scene_log_luminance", "Scene Log Luminance"), debugRescale);
 }
 
 void LocalExposure::RestoreDefaultSettings()

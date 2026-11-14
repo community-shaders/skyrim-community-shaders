@@ -6,10 +6,11 @@
 #include "Features/PostProcessing.h"
 #include "Globals.h"
 #include "I18n/I18n.h"
+#include "Menu/MenuIcons.h"
 #include "ShaderCache.h"
 #include "State.h"
 #include "Util.h"
-#include "Utils/DebugSection.h"
+#include "Utils/DebugView.h"
 
 namespace
 {
@@ -358,11 +359,17 @@ void PhysicalGlare::DrawSettings()
 					"Threshold to remove low-level FFT noise from the PSF.\n"
 					"Paper default: 0.001. Higher = cleaner glare wings."));
 	}
+}
 
-	if (texGlarePacked) {
-		if (Util::DebugSection section; section)
-			ImGui::Image(texGlarePacked->srv.get(), { 256.f, 256.f });
+void PhysicalGlare::DrawDebugSection()
+{
+	Util::SectionCard card("##PhysicalGlarePsf", ICON_TI_SPARKLES, T("feature.post_processing.physical_glare.debug_card_psf", "Glare Kernel"));
+	if (!texGlarePacked) {
+		Util::SettingHint(T("feature.post_processing.physical_glare.debug_no_kernel", "The glare kernel has not been generated yet."), false);
+		return;
 	}
+	Util::SettingHint(T("feature.post_processing.physical_glare.debug_kernel_hint", "The packed point spread function the glare is convolved with."), false);
+	ImGui::Image(texGlarePacked->srv.get(), { 256.f, 256.f });
 }
 
 void PhysicalGlare::RestoreDefaultSettings()

@@ -11,7 +11,8 @@
 #include <cstdio>
 
 #include "I18n/I18n.h"
-#include "Utils/DebugSection.h"
+#include "Menu/MenuIcons.h"
+#include "Utils/DebugView.h"
 
 namespace
 {
@@ -226,35 +227,44 @@ void DoF::DrawSettings()
 	}
 	if (!settings.UseAdaptiveGather)
 		ImGui::SliderFloat(T("feature.post_processing.do_f.blur_quality", "Compatibility Blur Quality"), &settings.BlurQuality, 2.0f, 30.0f, "%.1f");
+}
 
-	if (Util::DebugSection section; section) {
-		static float debugRescale = .3f;
-		ImGui::Text(T("feature.post_processing.do_f.debug_distance", "Debug Distance: %f"), debugDistance);
-		ImGui::Text(T("feature.post_processing.do_f.debug_focus_plane", "Debug Focus Plane: %f"), debugFocusPlane);
-		ImGui::SliderFloat(T("feature.post_processing.do_f.view_resize", "View Resize"), &debugRescale, 0.f, 1.f);
-
-		BUFFER_VIEWER_NODE(texFocus, 64.0f)
-		BUFFER_VIEWER_NODE(texPreFocus, 64.0f)
-
-		BUFFER_VIEWER_NODE(texCoC, debugRescale)
-		BUFFER_VIEWER_NODE(texCoCHalf, debugRescale)
-		BUFFER_VIEWER_NODE(texCoCTile, debugRescale)
-		BUFFER_VIEWER_NODE(texCoCTileTmp, debugRescale)
-		BUFFER_VIEWER_NODE(texCoCTileDilated, debugRescale)
-		BUFFER_VIEWER_NODE(texPreBlurred, debugRescale)
-		BUFFER_VIEWER_NODE(texGatherColor[0], debugRescale)
-		BUFFER_VIEWER_NODE(texGatherColor[1], debugRescale)
-		BUFFER_VIEWER_NODE(texGatherColor[2], debugRescale)
-		BUFFER_VIEWER_NODE(texGatherCoC[0], debugRescale)
-		BUFFER_VIEWER_NODE(texGatherCoC[1], debugRescale)
-		BUFFER_VIEWER_NODE(texGatherCoC[2], debugRescale)
-		BUFFER_VIEWER_NODE(texFarBlurred, debugRescale)
-		BUFFER_VIEWER_NODE(texNearBlurred, debugRescale)
-
-		BUFFER_VIEWER_NODE(texBlurredFiltered, debugRescale)
-		BUFFER_VIEWER_NODE(texPostSmooth, debugRescale)
-		BUFFER_VIEWER_NODE(texPostSmooth2, debugRescale)
+void DoF::DrawDebugSection()
+{
+	{
+		Util::SectionCard card("##DoFFocus", ICON_TI_APERTURE, T("feature.post_processing.do_f.debug_card_focus", "Focus"));
+		Util::DrawDebugValueRows("##DoFFocusRows", {
+													   { T("feature.post_processing.do_f.debug_distance", "Distance"), Util::DebugNum(debugDistance) },
+													   { T("feature.post_processing.do_f.debug_focus_plane", "Focus Plane"), Util::DebugNum(debugFocusPlane) },
+												   });
 	}
+
+	Util::SectionCard card("##DoFBuffers", ICON_TI_EYE, T("feature.post_processing.do_f.debug_card_buffers", "Buffers"));
+	static float debugRescale = .3f;
+	ImGui::SliderFloat(T("feature.post_processing.do_f.view_resize", "View Resize"), &debugRescale, 0.f, 1.f);
+	Util::SettingHint(T("feature.post_processing.do_f.debug_buffers_hint", "Expand a buffer to see it. View Resize scales the previews."), false);
+
+	BUFFER_VIEWER_NODE(texFocus, 64.0f)
+	BUFFER_VIEWER_NODE(texPreFocus, 64.0f)
+
+	BUFFER_VIEWER_NODE(texCoC, debugRescale)
+	BUFFER_VIEWER_NODE(texCoCHalf, debugRescale)
+	BUFFER_VIEWER_NODE(texCoCTile, debugRescale)
+	BUFFER_VIEWER_NODE(texCoCTileTmp, debugRescale)
+	BUFFER_VIEWER_NODE(texCoCTileDilated, debugRescale)
+	BUFFER_VIEWER_NODE(texPreBlurred, debugRescale)
+	BUFFER_VIEWER_NODE(texGatherColor[0], debugRescale)
+	BUFFER_VIEWER_NODE(texGatherColor[1], debugRescale)
+	BUFFER_VIEWER_NODE(texGatherColor[2], debugRescale)
+	BUFFER_VIEWER_NODE(texGatherCoC[0], debugRescale)
+	BUFFER_VIEWER_NODE(texGatherCoC[1], debugRescale)
+	BUFFER_VIEWER_NODE(texGatherCoC[2], debugRescale)
+	BUFFER_VIEWER_NODE(texFarBlurred, debugRescale)
+	BUFFER_VIEWER_NODE(texNearBlurred, debugRescale)
+
+	BUFFER_VIEWER_NODE(texBlurredFiltered, debugRescale)
+	BUFFER_VIEWER_NODE(texPostSmooth, debugRescale)
+	BUFFER_VIEWER_NODE(texPostSmooth2, debugRescale)
 }
 
 void DoF::RestoreDefaultSettings()

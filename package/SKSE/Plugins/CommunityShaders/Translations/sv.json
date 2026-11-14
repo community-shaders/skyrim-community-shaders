@@ -1887,7 +1887,6 @@
     "feature.post_processing.codbloom.mip_level": "Mipnivå",
     "feature.post_processing.codbloom.mix": "Blandning",
     "feature.post_processing.codbloom.name": "COD-glöd",
-    "feature.post_processing.codbloom.texbloom": "texBloom",
     "feature.post_processing.codbloom.the_greater_the_level_the_blurrier_the_part": "Ju högre nivå, desto oskarpare blir den del som den styr.",
     "feature.post_processing.codbloom.threshold": "Tröskelvärde",
     "feature.post_processing.codbloom.upsampling_radius": "Radie för uppsampling",

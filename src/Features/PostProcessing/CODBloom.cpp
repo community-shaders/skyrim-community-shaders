@@ -2,11 +2,12 @@
 
 #include "Features/PostProcessing.h"
 #include "I18n/I18n.h"
+#include "Menu/MenuIcons.h"
 #include "RasterPass.h"
 #include "ShaderCache.h"
 #include "State.h"
 #include "Util.h"
-#include "Utils/DebugSection.h"
+#include "Utils/DebugView.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	CODBloom::Settings,
@@ -36,14 +37,16 @@ void CODBloom::DrawSettings()
 	{
 		ImGui::SliderFloat(T("feature.post_processing.codbloom.intensity", "Intensity"), &settings.MipBlendFactor[mipLevel - 1], 0.f, 1.f, "%.2f");
 	}
+}
 
-	if (Util::DebugSection section; section) {
-		static int mip = 0;
-		ImGui::SliderInt(T("feature.post_processing.codbloom.debug_mip_level", "Debug Mip Level"), &mip, 0, (int)s_BloomMips - 1, "%d", ImGuiSliderFlags_NoInput | ImGuiSliderFlags_AlwaysClamp);
-
-		ImGui::BulletText(T("feature.post_processing.codbloom.texbloom", "texBloom"));
+void CODBloom::DrawDebugSection()
+{
+	Util::SectionCard card("##CODBloomMips", ICON_TI_SPARKLES, T("feature.post_processing.codbloom.debug_card_mips", "Bloom Mips"));
+	static int mip = 0;
+	ImGui::SliderInt(T("feature.post_processing.codbloom.debug_mip_level", "Debug Mip Level"), &mip, 0, (int)s_BloomMips - 1, "%d", ImGuiSliderFlags_NoInput | ImGuiSliderFlags_AlwaysClamp);
+	Util::SettingHint(T("feature.post_processing.codbloom.debug_mip_hint", "Shows one mip of the bloom texture, from full size down to the smallest."), false);
+	if (texBloomMipSRVs[mip] && texBloom)
 		ImGui::Image(texBloomMipSRVs[mip].get(), { texBloom->desc.Width * .2f, texBloom->desc.Height * .2f });
-	}
 }
 
 void CODBloom::RestoreDefaultSettings()
