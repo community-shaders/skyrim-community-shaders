@@ -44,6 +44,7 @@ struct PostProcessing;
 struct ScreenshotFeature;
 struct Skin;
 struct SceneManager;
+struct ProceduralAurora;
 
 class State;
 class Deferred;
@@ -142,6 +143,7 @@ namespace globals
 		extern Skin skin;
 		extern SceneManager sceneManager;
 		extern PostProcessing postProcessing;
+		extern ProceduralAurora proceduralAurora;
 
 	}
 
