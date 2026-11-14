@@ -44,6 +44,8 @@ struct PhysicalSky final : public Feature
 	void SaveSettings(json& o_json) override;
 
 	void DrawSettings() override;
+	bool HasDebugSection() const override { return true; }
+	void DrawDebugSection() override;
 	void SettingsGeneral();
 	void SettingsCelestials();
 	void SettingsAtmosphere();
@@ -64,7 +66,6 @@ struct PhysicalSky final : public Feature
 	void DrawCirrusSection();
 	void DrawCloudQualitySection();
 	void DrawVanillaCloudSection();
-	void SettingsDebug();
 
 	// Resources
 	void SetupResources() override;

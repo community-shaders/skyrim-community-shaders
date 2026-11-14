@@ -707,7 +707,7 @@ void SettingsTabRenderer::RenderShadersSection()
 			ShaderCacheStatusWidget::DrawBreakdownLegend();
 			if (globals::state->IsDeveloperMode()) {
 				MenuFonts::FontRoleGuard subtext(Menu::FontRole::Subtext);
-				ImGui::TextDisabled("Threads: %d compile, %d background, %d pool | P-cores: %d",
+				ImGui::TextDisabled(T("menu.settings.shader_thread_summary", "Threads: %d compile, %d background, %d pool | P-cores: %d"),
 					(int)shaderCache->compilationThreadCount,
 					(int)shaderCache->backgroundCompilationThreadCount,
 					(int)shaderCache->compilationPool.get_thread_count(),

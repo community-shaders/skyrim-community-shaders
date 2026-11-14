@@ -33,3 +33,18 @@ namespace nlohmann
 	/** @brief Deserialize Skyrim weather fog data from JSON. */
 	void from_json(const json& j, RE::TESWeather::FogData& fog);
 };
+namespace Util
+{
+	/**
+	 * @brief Clamps a loaded setting, replacing NaN or infinity with a fallback first.
+	 * @param value The value read from JSON.
+	 * @param fallback The value used when value is not finite, usually the setting's default.
+	 * @param min Lower bound.
+	 * @param max Upper bound.
+	 * @return The finite value clamped to [min, max].
+	 */
+	inline float ClampFinite(float value, float fallback, float min, float max) noexcept
+	{
+		return std::clamp(std::isfinite(value) ? value : fallback, min, max);
+	}
+}
