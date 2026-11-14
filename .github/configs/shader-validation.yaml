@@ -163,6 +163,7 @@ file_common_defines:
         CSHADER: []
     Lighting.hlsl:
         PSHADER:
+            - SNOW_DEFORMATION
             - TERRAIN_SHADOWS
             - CS_HAIR
             - SCREEN_SPACE_SHADOWS
@@ -181,6 +182,7 @@ file_common_defines:
             - EXTENDED_MATERIALS
             - EXTENDED_TRANSLUCENCY
         VSHADER:
+            - SNOW_DEFORMATION
             - TERRAIN_SHADOWS
             - CS_HAIR
             - DYNAMIC_CUBEMAPS

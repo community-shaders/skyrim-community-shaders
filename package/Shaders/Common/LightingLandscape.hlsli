@@ -11,6 +11,10 @@
 #		include "Common/Permutation.hlsli"
 #	endif
 
+// Per-layer hook, after a layer's colour, normal (and RMAOS) are sampled and
+// before they are accumulated; empty unless a feature redefines it before main.
+#	define LIGHTING_LANDSCAPE_LAYER_HOOK(TILE)
+
 #	if defined(TRUE_PBR)
 namespace LandscapeLayers
 {
@@ -58,6 +62,7 @@ namespace LandscapeLayers
 				{                                                                                                                                                  \
 					landRMAOS = float4(1 - landNormalAlpha, 0, 1, 0);                                                                                              \
 				}                                                                                                                                                  \
+				LIGHTING_LANDSCAPE_LAYER_HOOK(TILE)                                                                                                                \
 				blendedRMAOS += landRMAOS * weight;                                                                                                                \
 				blendedRGB += landColorRGB * weight;                                                                                                               \
 				blendedAlpha += landAlpha * weight;                                                                                                                \
@@ -81,6 +86,7 @@ namespace LandscapeLayers
 				float4 landNormal = SampleTerrain(NORM_TEX, NORM_SAMP, uv, sharedOffset);                                    \
 				float3 landNormalRGB = landNormal.rgb;                                                                       \
 				float landNormalAlpha = landNormal.a;                                                                        \
+				LIGHTING_LANDSCAPE_LAYER_HOOK(TILE)                                                                          \
 				blendedRGB += landColorRGB * weight;                                                                         \
 				blendedAlpha += landAlpha * weight;                                                                          \
 				blendedNormalRGB += landNormalRGB * weight;                                                                  \
