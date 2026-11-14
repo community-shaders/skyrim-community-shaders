@@ -334,6 +334,10 @@ namespace Util::IconLoader
 			int iconsOverridden = 0;
 
 			for (const auto& iconDef : iconDefs) {
+				// The monochrome logo is the white base the theme list tints per theme; a theme's coloured cs-logo.png must not replace it
+				if (iconDef.texture == &GetIcons().logoMonochrome.texture)
+					continue;
+
 				std::filesystem::path iconPath = themeIconsPath / std::filesystem::path(iconDef.filename).filename();
 
 				logger::trace("LoadThemeSpecificIcons: Checking for icon: {}", iconPath.string());
