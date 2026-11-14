@@ -158,15 +158,20 @@ namespace SharedData
 	struct SkylightingSettings
 	{
 		row_major float4x4 OcclusionViewProj;
+		row_major float4x4 ZenithViewProj;
 		float4 OcclusionSHBasis4Pi;  // SH basis of the occlusion direction, times 4 pi (Monte Carlo weight)
 
 		float4 PosOffset;   // xyz: cell origin in camera model space
 		uint4 ArrayOrigin;  // xyz: array origin
 		int4 ValidMargin;
 
+		float3 ZenithOffset;  // eye movement since the zenith capture
+		uint ZenithValid;
+
 		float MinDiffuseVisibility;
 		float MinSpecularVisibility;
-		uint2 pad0;
+		uint AccumulateOcclusion;  // 0 on zenith frames, whose capture is not a sky visibility sample
+		uint pad0;
 	};
 
 	struct CloudShadowsSettings
