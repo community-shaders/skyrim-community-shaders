@@ -24,7 +24,7 @@ namespace Util
 	 *
 	 * Features opt in by overriding Feature::HasDebugSection() and Feature::DrawDebugSection(); the
 	 * feature page then draws the section after the settings (before Profiling) with the same heading
-	 * style as the other page sections. Constructing the object draws the heading; the section body is
+	 * style as the feature-category headers (centred, collapsed by default, click to open). Constructing the object draws the heading; the section body is
 	 * only drawn while the object tests true, which is false when debug sections are hidden
 	 * (see HideDebugSectionsGuard).
 	 *
@@ -42,7 +42,7 @@ namespace Util
 	class DebugSection
 	{
 	public:
-		/** @brief Draws the "Debug" heading unless debug sections are hidden. */
+		/** @brief Draws the clickable "Debug" heading unless debug sections are hidden; the body shows only while it is open. */
 		DebugSection();
 		~DebugSection() = default;
 
