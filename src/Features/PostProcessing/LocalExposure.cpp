@@ -6,6 +6,7 @@
 #include "ShaderCache.h"
 #include "State.h"
 #include "Util.h"
+#include "Utils/DebugSection.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	LocalExposure::Settings,
@@ -70,7 +71,7 @@ void LocalExposure::DrawSettings()
 	if (auto _tt = Util::HoverTooltipWrapper())
 		ImGui::TextUnformatted(T("feature.post_processing.local_exposure.shadow_threshold_tooltip", "Protects tones near middle grey before shadow lifting begins."));
 
-	if (Util::ShowDebugSections() && ImGui::CollapsingHeader(T("feature.post_processing.local_exposure.debug", "Debug"))) {
+	if (Util::DebugSection section; section) {
 		static float debugRescale = .3f;
 		ImGui::SliderFloat(T("feature.post_processing.local_exposure.view_resize", "View Resize"), &debugRescale, 0.f, 1.f);
 		BUFFER_VIEWER_NODE_TITLE(texLogLuminance, T("feature.post_processing.local_exposure.buffer_scene_log_luminance", "Scene Log Luminance"), debugRescale);

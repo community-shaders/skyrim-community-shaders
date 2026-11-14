@@ -6,6 +6,7 @@
 #include "ShaderCache.h"
 #include "State.h"
 #include "Util.h"
+#include "Utils/DebugSection.h"
 
 namespace
 {
@@ -221,7 +222,7 @@ void LensFlare::DrawSettings()
 	ImGui::Separator();
 	ImGui::Spacing();
 
-	if (Util::ShowDebugSections() && ImGui::CollapsingHeader(T("feature.post_processing.lens_flare.debug", "Debug"))) {
+	if (Util::DebugSection section; section) {
 		ImGui::Checkbox(T("feature.post_processing.lens_flare.disable_threshold", "Disable Threshold"), &debugsettings.disableThreshold);
 		ImGui::Checkbox(T("feature.post_processing.lens_flare.disable_ghosts", "Disable Ghosts"), &debugsettings.disableGhosts);
 		ImGui::Checkbox(T("feature.post_processing.lens_flare.disable_blur", "Disable Blur"), &debugsettings.disableBlur);

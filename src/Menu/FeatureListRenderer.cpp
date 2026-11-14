@@ -1400,6 +1400,8 @@ void FeatureListRenderer::DrawFeatureBody(Feature* feat)
 		const bool editedBefore = context.ActiveIdHasBeenEditedThisFrame;
 		SettingReveal::BeginFeatureBody(feat);
 		feat->DrawSettings();
+		if (feat->HasDebugSection())
+			feat->DrawDebugSection();
 		SettingReveal::EndFeatureBody();
 		if (feat->UsesMainSettings()) {
 			auto* state = globals::state;

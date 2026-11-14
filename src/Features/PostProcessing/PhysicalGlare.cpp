@@ -9,6 +9,7 @@
 #include "ShaderCache.h"
 #include "State.h"
 #include "Util.h"
+#include "Utils/DebugSection.h"
 
 namespace
 {
@@ -348,9 +349,9 @@ void PhysicalGlare::DrawSettings()
 					"Paper default: 0.001. Higher = cleaner glare wings."));
 	}
 
-	if (Util::ShowDebugSections() && texGlarePacked) {
-		ImGui::SeparatorText(T("feature.post_processing.physical_glare.debug", "Debug"));
-		ImGui::Image(texGlarePacked->srv.get(), { 256.f, 256.f });
+	if (texGlarePacked) {
+		if (Util::DebugSection section; section)
+			ImGui::Image(texGlarePacked->srv.get(), { 256.f, 256.f });
 	}
 }
 
