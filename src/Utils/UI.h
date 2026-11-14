@@ -56,7 +56,7 @@ namespace Util
 	/** @brief Button labelled `a_name` that copies `a_address` to the clipboard as hex, with a tooltip saying so. */
 	void AddressButton(const char* a_name, uintptr_t a_address);
 
-	/** @brief Feeds ImGui the display size and the mouse position, mapped from window to render-target pixels. */
+	/** @brief Feeds ImGui the display size and the mouse position, mapped from window to render-target pixels, and drops stick values short of a press. */
 	void UpdateImGuiInput(HWND hwnd, float bufferWidth, float bufferHeight);
 	/**
 	 * Represents a single line and its color for any colored text rendering (tooltips, legends, etc.).
