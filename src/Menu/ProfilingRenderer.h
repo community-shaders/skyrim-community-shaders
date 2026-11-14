@@ -12,16 +12,35 @@
 #include "Utils/LegitProfiler.h"
 
 /**
- * @brief Renders GPU and CPU profiling statistics, timing graphs, and per-feature timer breakdowns.
+ * @brief Renders the Profiling page, GPU and CPU profiling statistics, timing graphs, and per-feature timer breakdowns.
  *
- * Provides the Profiling page in the menu with frame time graphs, sortable
- * timing tables grouped by rendering pass, the cost chip in each feature's
- * header with its per-feature popover, and the Performance Overlay's filtered
- * render-pass graph.
+ * Provides the Profiling page in the menu: a card per tool (Pass Timings, and the Performance Overlay feature's
+ * settings) over the selected tool's panel. Pass Timings holds the frame time graphs and sortable timing tables
+ * grouped by rendering pass. Also draws the cost chip in each feature's header with its per-feature popover, and
+ * the Performance Overlay's filtered render-pass graph.
  */
 class ProfilingRenderer
 {
 public:
+	/** @brief The Profiling page's tools, one card each. */
+	enum class Tab : int
+	{
+		PassTimings,
+		PerformanceOverlay,
+		Count
+	};
+
+	/**
+	 * @brief Renders the Profiling page: a status card per tool, then the selected tool's panel.
+	 */
+	static void RenderPage();
+
+	/**
+	 * @brief Selects the Profiling page's tool, shown the next time the page is drawn.
+	 * @param tab The tool to show.
+	 */
+	static void SelectTab(Tab tab);
+
 	/** @brief Selects whether profiling displays GPU or CPU timing data. */
 	enum class TimingMode
 	{
@@ -102,6 +121,8 @@ public:
 
 private:
 	static inline TimingMode timingMode = TimingMode::GPU;
+	// UI state only: the Profiling page's selected tool
+	static inline Tab selectedTab = Tab::PassTimings;
 	static inline float timeSinceLastUpdate = 0.0f;
 	static inline float lastFrameTime = 0.0f;
 

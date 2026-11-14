@@ -20,6 +20,7 @@
 #include "FeatureConstraints.h"
 #include "FeatureIssues.h"
 #include "Features/CSEditor.h"
+#include "Features/PerformanceOverlay.h"
 #include "Fonts.h"
 #include "Globals.h"
 #include "I18n/I18n.h"
@@ -117,6 +118,8 @@ namespace
 	/// The selected feature while the search, a filter or a collapsed category leaves it out of the list, so its
 	/// page stays open. Only read while the selection index is outside the list.
 	Feature* g_detachedFeature = nullptr;
+	/// The menu's hooks while RenderFeatureList runs, so a feature page drawn inside a built-in page can use them
+	const FeatureListRenderer::Hooks* g_activeHooks = nullptr;
 
 	/** @brief Stable identity of a list entry, to find it again after a rebuild; empty for labels. */
 	std::string GetEntryKey(const FeatureListRenderer::MenuFuncInfo& entry)
@@ -539,10 +542,11 @@ void FeatureListRenderer::RenderFeatureList(
 	Hooks& hooks)
 {
 	ImGui::BeginChild("Menus Table", ImVec2(0, -footerHeight));
+	g_activeHooks = &hooks;
 
 	// A collapsed category could hide the feature being navigated to
 	if (!pendingFeatureSelection.empty()) {
-		if (const auto* feature = Feature::FindFeatureByShortName(pendingFeatureSelection))
+		if (const auto* feature = Feature::FindFeatureByShortName(pendingFeatureSelection); feature && feature->IsInFeatureList())
 			categoryExpansionStates[std::string(feature->GetCategory())] = true;
 		g_menuListDirty = true;
 	}
@@ -601,6 +605,7 @@ void FeatureListRenderer::RenderFeatureList(
 	}
 	g_scrollToSelection = false;  // a hidden list drops the request rather than scrolling later
 
+	g_activeHooks = nullptr;
 	ImGui::EndChild();
 }
 
@@ -685,8 +690,8 @@ std::vector<FeatureListRenderer::MenuFuncInfo> FeatureListRenderer::BuildMenuLis
 			Icons::TI(MenuIcons::kCSEditor), {}, true },
 	};
 	menuList.push_back(BuiltInMenu{ MenuPageIds::kSettings, T("menu.features.settings", "Settings"), drawSettings, Icons::TI(MenuIcons::kSettings) });
-	menuList.push_back(BuiltInMenu{ MenuPageIds::kProfiling, T("menu.features.profiling", "Profiling"), []() { ProfilingRenderer::RenderStatistics(); },
-		Icons::TI(MenuIcons::kProfiling), T("menu.features.profiling_hint", "What each feature costs per frame"), true });
+	menuList.push_back(BuiltInMenu{ MenuPageIds::kProfiling, T("menu.features.profiling", "Profiling"), []() { ProfilingRenderer::RenderPage(); },
+		Icons::TI(MenuIcons::kProfiling), T("menu.features.profiling_hint", "The Performance Overlay, and what each feature costs per frame"), true });
 
 	auto* state = globals::state;
 	const auto filter = globals::menu->GetSettings().FeatureListFilter & FeatureListFilter::kKnown;
@@ -698,7 +703,7 @@ std::vector<FeatureListRenderer::MenuFuncInfo> FeatureListRenderer::BuildMenuLis
 	// Display-name order; the names are translated, so they are taken once here rather than in the sort
 	std::vector<std::pair<std::string, Feature*>> named;
 	for (Feature* feat : Feature::GetFeatureList()) {
-		if (feat->IsInMenu())
+		if (feat->IsInFeatureList())
 			named.emplace_back(feat->GetDisplayName(), feat);
 	}
 	std::ranges::sort(named, {}, &std::pair<std::string, Feature*>::first);
@@ -776,6 +781,12 @@ void FeatureListRenderer::HandlePendingFeatureSelection(
 	// Issues live on the Home page now
 	if (pendingFeatureSelection == MenuPageIds::kIssues)
 		pendingFeatureSelection = std::string(MenuPageIds::kHome);
+
+	// The Performance Overlay has no list entry of its own: it opens on its card of the Profiling page
+	if (pendingFeatureSelection == globals::features::performanceOverlay.GetShortName()) {
+		ProfilingRenderer::SelectTab(ProfilingRenderer::Tab::PerformanceOverlay);
+		pendingFeatureSelection = std::string(MenuPageIds::kProfiling);
+	}
 
 	// General and Advanced are sections of Settings now: their page IDs open it at the matching section
 	if (const auto section = SettingsPageRenderer::GetAliasSection(pendingFeatureSelection)) {
@@ -1393,21 +1404,42 @@ void FeatureListRenderer::DrawMenuVisitor::operator()(const CategoryHeader&)
 
 void FeatureListRenderer::DrawMenuVisitor::operator()(Feature* feat)
 {
-	const auto featureName = feat->GetShortName();
-	const bool isDisabled = globals::state->IsFeatureDisabled(featureName);
+	if (ImGui::BeginChild("##FeatureConfigFrame", { 0, 0 }, true))
+		DrawFeatureContent(feat);
+	ImGui::EndChild();
+	// Outside the child window so the warning can appear as a top-level popup
+	DrawConstraintWarningDialog(pendingFeatureSelection);
+}
+
+void FeatureListRenderer::DrawMenuVisitor::DrawFeatureContent(Feature* feat)
+{
+	const bool isDisabled = globals::state->IsFeatureDisabled(feat->GetShortName());
 	const bool isLoaded = feat->loaded;
 	const bool hasFailedMessage = !feat->failedLoadedMessage.empty();
 
 	if (hooks.onFeatureShown)
 		hooks.onFeatureShown(feat);
 
-	if (ImGui::BeginChild("##FeatureConfigFrame", { 0, 0 }, true)) {
-		RenderFeatureHeader(feat, isDisabled, isLoaded);
-		RenderFeatureSettings(feat, isDisabled, isLoaded, hasFailedMessage);
-	}
-	ImGui::EndChild();
-	// Outside the child window so the warning can appear as a top-level popup
+	RenderFeatureHeader(feat, isDisabled, isLoaded);
+	RenderFeatureSettings(feat, isDisabled, isLoaded, hasFailedMessage);
+}
+
+void FeatureListRenderer::DrawEmbeddedFeaturePage(Feature* feat)
+{
+	static const Hooks noHooks{};
+	std::string pendingFeatureSelection;
+	DrawMenuVisitor{ pendingFeatureSelection, g_activeHooks ? *g_activeHooks : noHooks }.DrawFeatureContent(feat);
 	DrawConstraintWarningDialog(pendingFeatureSelection);
+	if (!pendingFeatureSelection.empty())
+		globals::menu->SelectFeatureMenu(pendingFeatureSelection);
+}
+
+void FeatureListRenderer::RunFeatureCommand(Feature* feat, const std::function<void()>& command)
+{
+	if (g_activeHooks && g_activeHooks->runFeatureCommand)
+		g_activeHooks->runFeatureCommand(feat, command);
+	else
+		command();
 }
 
 namespace
