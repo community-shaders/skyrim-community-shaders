@@ -157,18 +157,19 @@ void RemoteControl::DrawDevBenchPanel()
 {
 	const auto& theme = Menu::GetSingleton()->GetTheme().StatusPalette;
 
-	ImGui::TextWrapped(
-		"Registers graphics-feature, inspect, capture, shader-cache, and settings tools "
-		"into the external devbench host so AI assistants (Claude Code, Cursor, etc.) can "
-		"toggle features, inspect engine state, trigger captures, and save/load settings "
-		"over MCP and REST. There is no in-game server — install the devbench SKSE plugin "
-		"to enable the integration.");
+	ImGui::TextWrapped("%s",
+		T("feature.remote_control.devbench.description",
+			"Registers graphics-feature, inspect, capture, shader-cache, and settings tools "
+			"into the external devbench host so AI assistants (Claude Code, Cursor, etc.) can "
+			"toggle features, inspect engine state, trigger captures, and save/load settings "
+			"over MCP and REST. There is no in-game server — install the devbench SKSE plugin "
+			"to enable the integration."));
 	ImGui::Spacing();
 
 #ifdef DEVBENCH_BRIDGE_ENABLED
 	auto* dvb = DevBenchAPI::GetDevBenchInterface001();
 	if (dvb) {
-		ImGui::TextColored(theme.SuccessColor, "devbench host present (build %u)", dvb->GetBuildNumber());
+		ImGui::TextColored(theme.SuccessColor, T("feature.remote_control.devbench.host_present", "devbench host present (build %u)"), dvb->GetBuildNumber());
 
 		const int port = GetDevBenchPort();
 		if (port > 0) {
@@ -181,7 +182,7 @@ void RemoteControl::DrawDevBenchPanel()
 			ImGui::TextDisabled("%s", T("feature.remote_control.devbench.mcp_hint", "MCP clients connect through devbench's own bridge executable, which forwards to this endpoint."));
 		} else {
 			ImGui::TextDisabled(
-				"Port unknown — devbench writes it to %s once it binds.",
+				T("feature.remote_control.devbench.port_unknown", "Port unknown — devbench writes it to %s once it binds."),
 				kRuntimeJsonPath);
 		}
 		if (const auto request = DevBenchBridge::GetLastRequest())
@@ -189,25 +190,27 @@ void RemoteControl::DrawDevBenchPanel()
 		else
 			ImGui::TextDisabled("%s", T("feature.remote_control.devbench.no_requests", "No requests yet this session."));
 	} else {
-		ImGui::TextColored(theme.Warning,
-			"devbench host not detected. Install the devbench SKSE plugin; "
-			"the tools register automatically once it is present.");
+		ImGui::TextColored(theme.Warning, "%s",
+			T("feature.remote_control.devbench.host_not_detected",
+				"devbench host not detected. Install the devbench SKSE plugin; "
+				"the tools register automatically once it is present."));
 	}
 
 	ImGui::Separator();
-	ImGui::TextUnformatted("Tools exposed through devbench:");
-	ImGui::BulletText("communityshaders.feature — list / get / set / reset / toggle features");
-	ImGui::BulletText("communityshaders.inspect — engine state and shader-cache status");
-	ImGui::BulletText("communityshaders.shadercache — clear / delete the compiled cache");
-	ImGui::BulletText("communityshaders.capture — RenderDoc / screenshot capture");
+	ImGui::TextUnformatted(T("feature.remote_control.devbench.tools_header", "Tools exposed through devbench:"));
+	ImGui::BulletText("%s", T("feature.remote_control.devbench.tool_feature", "communityshaders.feature — list / get / set / reset / toggle features"));
+	ImGui::BulletText("%s", T("feature.remote_control.devbench.tool_inspect", "communityshaders.inspect — engine state and shader-cache status"));
+	ImGui::BulletText("%s", T("feature.remote_control.devbench.tool_shadercache", "communityshaders.shadercache — clear / delete the compiled cache"));
+	ImGui::BulletText("%s", T("feature.remote_control.devbench.tool_capture", "communityshaders.capture — RenderDoc / screenshot capture"));
 	ImGui::BulletText("%s", T("feature.remote_control.nvperf.tool_bullet", "communityshaders.nvperf — Nsight Perf GPU counters per render pass"));
-	ImGui::BulletText("communityshaders.settings — save / load / reset the global config");
-	ImGui::TextDisabled(
-		"Note: the console tool is provided by devbench itself, not this plugin.");
+	ImGui::BulletText("%s", T("feature.remote_control.devbench.tool_settings", "communityshaders.settings — save / load / reset the global config"));
+	ImGui::TextDisabled("%s",
+		T("feature.remote_control.devbench.console_note", "Note: the console tool is provided by devbench itself, not this plugin."));
 #else
-	ImGui::TextColored(theme.Warning,
-		"This build was compiled without the devbench bridge "
-		"(DEVBENCH_BRIDGE=OFF). No tools are registered.");
+	ImGui::TextColored(theme.Warning, "%s",
+		T("feature.remote_control.devbench.bridge_disabled",
+			"This build was compiled without the devbench bridge "
+			"(DEVBENCH_BRIDGE=OFF). No tools are registered."));
 #endif
 }
 

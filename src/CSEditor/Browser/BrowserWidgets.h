@@ -112,7 +112,7 @@ namespace BrowserUI
 	 */
 	bool ToggleChip(const char* id, const IconPainter& icon, int count, bool active, const ImVec4& tint, const char* tooltip);
 
-	/** @brief Width a Chip with this label takes. */
+	/** @brief Width a Chip with this label takes; an empty label with an icon measures as an icon-only chip. */
 	float MeasureChip(const char* label, bool withIcon);
 
 	/**

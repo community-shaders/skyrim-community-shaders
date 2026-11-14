@@ -162,7 +162,7 @@ namespace PostProcessingMode
 			ApplyPending();
 	}
 
-	void DrawSelector(const SelectorAction* action)
+	void DrawSelector(std::span<const SelectorAction> actions)
 	{
 		std::array<Mode, kModeCount> modes{};
 		std::array<const char*, kModeCount> labels{};
@@ -197,19 +197,42 @@ namespace PostProcessingMode
 		Util::AddTooltip(T("ui.post_processing_mode.tooltip",
 			"Only one pipeline runs at a time. Vanilla uses the game's original post processing."));
 
-		if (!action || !action->label)
+		// Wider than a plain button's padding, so the buttons read as balanced beside the taller selector
+		const auto measure = [](const SelectorAction& action) {
+			const float padding = ImGui::GetStyle().FramePadding.x * 2.0f;
+			return padding + (action.icon ? Util::MeasureLabeledButton(Icons::TI(action.icon), action.label) :
+											ImGui::CalcTextSize(action.label).x + padding);
+		};
+		const float spacing = ImGui::GetStyle().ItemSpacing.x;
+		float totalWidth = 0.0f;
+		for (const auto& action : actions) {
+			if (action.label)
+				totalWidth += measure(action) + (totalWidth > 0.0f ? spacing : 0.0f);
+		}
+		if (totalWidth <= 0.0f)
 			return;
 
-		// The page's action sits on the selector's row, flush right and as tall as the selector
+		// The page's actions sit on the selector's row, flush right and as tall as the selector
 		const float rowBottom = ImGui::GetCursorPosY();
 		const float stripHeight = rowBottom - rowTop - ImGui::GetStyle().ItemSpacing.y;
-		const float buttonWidth = ImGui::CalcTextSize(action->label).x + ImGui::GetStyle().FramePadding.x * 4.0f;
-		const float right = ImGui::GetContentRegionMax().x;
-		ImGui::SetCursorPos(ImVec2(right - buttonWidth, rowTop));
-		if (Util::Button(action->label, ImVec2(buttonWidth, stripHeight)) && action->onClick)
-			action->onClick();
-		if (action->tooltip)
-			Util::AddTooltip(action->tooltip);
+		float x = ImGui::GetContentRegionMax().x - totalWidth;
+		for (size_t i = 0; i < actions.size(); ++i) {
+			const auto& action = actions[i];
+			if (!action.label)
+				continue;
+			const float width = measure(action);
+			ImGui::SetCursorPos(ImVec2(x, rowTop));
+			ImGui::PushID(static_cast<int>(i));
+			const bool clicked = action.icon ?
+			                         Util::LabeledButton("##SelectorAction", Icons::TI(action.icon), action.label, ImVec2(width, stripHeight)) :
+			                         Util::Button(action.label, ImVec2(width, stripHeight));
+			ImGui::PopID();
+			if (clicked && action.onClick)
+				action.onClick();
+			if (action.tooltip)
+				Util::AddTooltip(action.tooltip);
+			x += width + spacing;
+		}
 		ImGui::SetCursorPosY(rowBottom);
 	}
 }

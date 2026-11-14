@@ -166,6 +166,8 @@ struct LensFlare : public PostProcessFeature
 	virtual void SaveSettings(json&) override;
 
 	virtual void DrawSettings() override;
+	virtual bool HasDebugSection() const override { return true; }
+	virtual void DrawDebugSection() override;
 
 	virtual void Draw(TextureInfo&) override;
 
