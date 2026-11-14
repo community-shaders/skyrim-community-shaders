@@ -785,7 +785,7 @@ void PerformanceOverlay::DrawABTestStatisticalValidity(const Menu::ThemeSettings
 	}
 
 	ImGui::PushStyleColor(ImGuiCol_Text, validityColor);
-	ImGui::Text("Test Duration: %.1f seconds | Valid Frames: %d/%d (%.1f%%) | Excluded: %d",
+	ImGui::Text(T(TKEY("ab_test_summary"), "Test Duration: %.1f seconds | Valid Frames: %d/%d (%.1f%%) | Excluded: %d"),
 		totalDuration, validFrames, totalWithExcluded, validPercent, excludedFrames);
 	ImGui::PopStyleColor();
 	if (ImGui::IsItemHovered()) {
@@ -1079,15 +1079,15 @@ std::vector<ColumnConfig> PerformanceOverlay::BuildABTestResultsTableColumns(con
 						if (row.testFrameTime.has_value()) {
 							// Show detailed values for rows with test data
 							if (row.label == "Total:") {
-								ImGui::TextUnformatted("Delta (B - A):");
+								ImGui::TextUnformatted(T(TKEY("ab_delta_header"), "Delta (B - A):"));
 								ImGui::Separator();
 								ImGui::Text("A (USER) FPS: %.2f", Util::CalcFPS(row.frameTime));
 								ImGui::Text("B (TEST) FPS: %.2f", Util::CalcFPS(*row.testFrameTime));
 							} else {
-								ImGui::TextUnformatted("Delta (B - A):");
+								ImGui::TextUnformatted(T(TKEY("ab_delta_header"), "Delta (B - A):"));
 								ImGui::Separator();
-								ImGui::Text("A (USER): %.3f ms", row.frameTime);
-								ImGui::Text("B (TEST): %.3f ms", *row.testFrameTime);
+								ImGui::Text(T(TKEY("ab_user_frame_time"), "A (USER): %.3f ms"), row.frameTime);
+								ImGui::Text(T(TKEY("ab_test_frame_time"), "B (TEST): %.3f ms"), *row.testFrameTime);
 							}
 							ImGui::Separator();
 						}
@@ -1302,7 +1302,7 @@ void PerformanceOverlay::DrawABTestSection(const std::vector<DrawCallRow>& allRo
 			showSettingsDiff = !showSettingsDiff;
 		}
 		ImGui::SameLine();
-		if (Util::Button("Clear A/B Test Results")) {
+		if (Util::Button(T(TKEY("ab_clear_results"), "Clear A/B Test Results"))) {
 			aggregator.Clear();
 			this->settingsDiff.clear();
 			this->settingsDiffLoaded = false;
@@ -1326,13 +1326,13 @@ void PerformanceOverlay::DrawABTestSection(const std::vector<DrawCallRow>& allRo
 					this->settingsDiff.clear();
 				this->settingsDiffLoaded = true;
 			}
-			ImGui::TextUnformatted("Differences between USER (A) and TEST (B) configs:");
+			ImGui::TextUnformatted(T(TKEY("ab_differences_header"), "Differences between USER (A) and TEST (B) configs:"));
 			if (this->settingsDiff.empty()) {
-				ImGui::TextUnformatted("No setting changes detected between USER (A) and TEST (B) configs.");
+				ImGui::TextUnformatted(T(TKEY("ab_no_differences"), "No setting changes detected between USER (A) and TEST (B) configs."));
 			} else if (ImGui::BeginTable("ABSettingsDiffTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Sortable)) {
-				ImGui::TableSetupColumn("Setting Path", ImGuiTableColumnFlags_DefaultSort);
-				ImGui::TableSetupColumn("A Value");
-				ImGui::TableSetupColumn("B Value");
+				ImGui::TableSetupColumn(T(TKEY("ab_column_setting_path"), "Setting Path"), ImGuiTableColumnFlags_DefaultSort);
+				ImGui::TableSetupColumn(T(TKEY("ab_column_a_value"), "A Value"));
+				ImGui::TableSetupColumn(T(TKEY("ab_column_b_value"), "B Value"));
 				ImGui::TableHeadersRow();
 
 				// Determine which variant performed better based on Total row
@@ -1557,9 +1557,9 @@ std::vector<ColumnConfig> PerformanceOverlay::BuildDrawCallTableColumns(const Me
 				if (ImGui::IsItemHovered()) {
 					if (auto _tt = Util::HoverTooltipWrapper()) {
 						if (row.drawCalls == kDrawCallsNotApplicable) {
-							ImGui::TextUnformatted("Draw Calls: Not applicable for unmeasured GPU time.");
+							ImGui::TextUnformatted(T(TKEY("draw_calls_not_applicable"), "Draw Calls: Not applicable for unmeasured GPU time."));
 						} else {
-							ImGui::TextUnformatted("Draw Calls: Number of draw calls for this shader type in the current frame.");
+							ImGui::TextUnformatted(T(TKEY("draw_calls_tooltip"), "Draw Calls: Number of draw calls for this shader type in the current frame."));
 						}
 					}
 				}

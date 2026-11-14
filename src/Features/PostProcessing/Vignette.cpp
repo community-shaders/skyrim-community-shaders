@@ -23,7 +23,7 @@ void Vignette::DrawSettings()
 		// Vignette focal length is relative to the image width, i.e. the
 		// horizontal sensor extent.
 		focalLength = std::clamp(cam->FocalLengthMM / std::max(cam->EffectiveSensorWidthMM, 0.1f), 0.1f, 2.0f);
-		ImGui::TextDisabled("%s", T("feature.post_processing.controlled_by_cinematic_camera", "Lens and focus are currently controlled by Cinematic Camera."));
+		DrawCameraControlledNote();
 	}
 
 	ImGui::BeginDisabled(cam != nullptr);

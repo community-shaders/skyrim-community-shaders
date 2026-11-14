@@ -178,25 +178,6 @@ namespace Util
 		return context.ActiveIdPreviousFrame != 0 && context.ActiveId != context.ActiveIdPreviousFrame;
 	}
 
-	namespace
-	{
-		bool debugSectionsHidden = false;
-	}
-
-	HideDebugSectionsGuard::HideDebugSectionsGuard(bool hide) :
-		previous(std::exchange(debugSectionsHidden, hide))
-	{}
-
-	HideDebugSectionsGuard::~HideDebugSectionsGuard()
-	{
-		debugSectionsHidden = previous;
-	}
-
-	bool ShowDebugSections()
-	{
-		return !debugSectionsHidden;
-	}
-
 	void StepFade(float& fade, bool visible, float deltaTime)
 	{
 		const float step = deltaTime / ThemeManager::Constants::UI_FADE_SECONDS;

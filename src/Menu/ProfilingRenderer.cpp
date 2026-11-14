@@ -585,6 +585,26 @@ std::vector<legit::ProfilerTask> ProfilingRenderer::BuildFeatureTasks(const std:
 	return tasks;
 }
 
+std::string ProfilingRenderer::FeatureCostChipLabel(const FeatureTimings& timings)
+{
+	const bool cpuMode = (timingMode == TimingMode::CPU);
+	return std::format("{} {}", cpuMode ? T("menu.profiling.cpu", "CPU") : T("menu.profiling.gpu", "GPU"),
+		Util::FormatMilliseconds(timings.totalAvgMs));
+}
+
+float ProfilingRenderer::MeasureFeatureCostChip(const std::string& featurePrefix)
+{
+	if (!HasFeatureTimers(featurePrefix))
+		return 0.0f;
+
+	const auto timings = CollectFeatureTimings(featurePrefix, featureGraphs[featurePrefix]);
+	if (timings.entries.empty())
+		return 0.0f;
+
+	MenuFonts::FontRoleGuard subtext(Menu::FontRole::Subtext);
+	return BrowserUI::MeasureChip(FeatureCostChipLabel(timings).c_str(), true);
+}
+
 bool ProfilingRenderer::RenderFeatureCostChip(const std::string& featurePrefix, float rightLimit)
 {
 	if (!HasFeatureTimers(featurePrefix))
@@ -598,9 +618,7 @@ bool ProfilingRenderer::RenderFeatureCostChip(const std::string& featurePrefix, 
 	state.Record(BuildFeatureTasks(featurePrefix, timings));
 
 	const auto& theme = globals::menu->GetTheme();
-	const bool cpuMode = (timingMode == TimingMode::CPU);
-	const std::string label = std::format("{} {}", cpuMode ? T("menu.profiling.cpu", "CPU") : T("menu.profiling.gpu", "GPU"),
-		Util::FormatMilliseconds(timings.totalAvgMs));
+	const std::string label = FeatureCostChipLabel(timings);
 	const ImVec4 costColor = Util::GetThresholdColor(timings.totalAvgMs, ThemeManager::Constants::FEATURE_COST_GOOD_MS,
 		ThemeManager::Constants::FEATURE_COST_WARNING_MS, theme.StatusPalette.SuccessColor, theme.StatusPalette.Warning, theme.StatusPalette.Error);
 

@@ -262,9 +262,9 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, float uiScal
 		bool centerHeader = globals::menu->GetTheme().CenterHeader;
 
 		if (ImGui::BeginTable("##HeaderLayout", 2, ImGuiTableFlags_SizingStretchProp)) {
-			ImGui::TableSetupColumn("Title", ImGuiTableColumnFlags_WidthStretch);
-			ImGui::TableSetupColumn("Buttons", ImGuiTableColumnFlags_WidthFixed);
-			ImGui::TableNextColumn();  // Title on the left with logo
+			ImGui::TableSetupColumn("Title", ImGuiTableColumnFlags_WidthStretch);  // i18n-ignore: layout column, header row is not drawn
+			ImGui::TableSetupColumn("Buttons", ImGuiTableColumnFlags_WidthFixed);  // i18n-ignore: layout column, header row is not drawn
+			ImGui::TableNextColumn();                                              // Title on the left with logo
 
 			// Determine scaling based on GlobalScale setting and font size
 			const float currentFontSize = ImGui::GetFontSize();
