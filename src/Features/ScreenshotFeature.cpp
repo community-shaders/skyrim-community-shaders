@@ -728,15 +728,15 @@ void ScreenshotFeature::DrawSettings()
 
 	ImGui::SeparatorText(T(TKEY("output"), "Output"));
 
-	ImGui::Checkbox("Copy saved file to clipboard", &copyToClipboard);
+	ImGui::Checkbox(T(TKEY("copy_to_clipboard"), "Copy saved file to clipboard"), &copyToClipboard);
 	if (auto _tt = Util::HoverTooltipWrapper())
-		ImGui::Text("Places the saved screenshot on the clipboard as a file (paste in Explorer or attach in chat apps).");
+		ImGui::Text("%s", T(TKEY("copy_to_clipboard_tooltip"), "Places the saved screenshot on the clipboard as a file (paste in Explorer or attach in chat apps)."));
 
 	if (!hdrCaptureAvailable) {
 		int sdrFormat = sdrUsePng ? 1 : 0;
-		ImGui::RadioButton("BMP (lossless)", &sdrFormat, 0);
+		ImGui::RadioButton(T(TKEY("format_bmp"), "BMP (lossless)"), &sdrFormat, 0);
 		ImGui::SameLine();
-		ImGui::RadioButton("PNG (lossless)", &sdrFormat, 1);
+		ImGui::RadioButton(T(TKEY("format_png"), "PNG (lossless)"), &sdrFormat, 1);
 		sdrUsePng = sdrFormat != 0;
 	}
 

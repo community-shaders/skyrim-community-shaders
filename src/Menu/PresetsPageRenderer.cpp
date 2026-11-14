@@ -608,10 +608,10 @@ void PresetsPageRenderer::RenderDetail()
 	// Poster | title+author | badges in one table so pills share a baseline and spacing is style-driven.
 	if (ImGui::BeginTable("##PresetDetailHeader", badgesBesideTitle ? 3 : 2,
 			ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoPadOuterX)) {
-		ImGui::TableSetupColumn("poster", ImGuiTableColumnFlags_WidthFixed, posterW);
-		ImGui::TableSetupColumn("title", ImGuiTableColumnFlags_WidthStretch);
+		ImGui::TableSetupColumn("poster", ImGuiTableColumnFlags_WidthFixed, posterW);  // i18n-ignore: layout column, header row is not drawn
+		ImGui::TableSetupColumn("title", ImGuiTableColumnFlags_WidthStretch);          // i18n-ignore: layout column, header row is not drawn
 		if (badgesBesideTitle)
-			ImGui::TableSetupColumn("badges", ImGuiTableColumnFlags_WidthFixed, badgesWidth);
+			ImGui::TableSetupColumn("badges", ImGuiTableColumnFlags_WidthFixed, badgesWidth);  // i18n-ignore: layout column, header row is not drawn
 
 		ImGui::TableNextRow(ImGuiTableRowFlags_None, posterH);
 		ImGui::TableSetColumnIndex(0);
