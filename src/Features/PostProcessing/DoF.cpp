@@ -11,6 +11,7 @@
 #include <cstdio>
 
 #include "I18n/I18n.h"
+#include "Utils/DebugSection.h"
 
 namespace
 {
@@ -226,7 +227,7 @@ void DoF::DrawSettings()
 	if (!settings.UseAdaptiveGather)
 		ImGui::SliderFloat(T("feature.post_processing.do_f.blur_quality", "Compatibility Blur Quality"), &settings.BlurQuality, 2.0f, 30.0f, "%.1f");
 
-	if (Util::ShowDebugSections() && ImGui::CollapsingHeader(T("feature.post_processing.do_f.debug", "Debug"))) {
+	if (Util::DebugSection section; section) {
 		static float debugRescale = .3f;
 		ImGui::Text(T("feature.post_processing.do_f.debug_distance", "Debug Distance: %f"), debugDistance);
 		ImGui::Text(T("feature.post_processing.do_f.debug_focus_plane", "Debug Focus Plane: %f"), debugFocusPlane);

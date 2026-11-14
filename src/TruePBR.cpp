@@ -10,6 +10,7 @@
 #include "ShaderCache.h"
 #include "State.h"
 #include "Util.h"
+#include "Utils/DebugSection.h"
 #include "Utils/UI.h"
 
 #define I18N_KEY_PREFIX "feature.true_pbr."
@@ -356,11 +357,15 @@ void TruePBR::DrawSettings()
 		}
 		ImGui::TreePop();
 	}
+}
 
-	if (Util::ShowDebugSections() && ImGui::TreeNodeEx(T(TKEY("debug"), "Debug"))) {
-		ImGui::Checkbox(T(TKEY("enable_verbose_json_logging"), "Enable verbose json logging"), &enableVerboseJsonLogging);
-		ImGui::TreePop();
-	}
+void TruePBR::DrawDebugSection()
+{
+	Util::DebugSection section;
+	if (!section)
+		return;
+
+	ImGui::Checkbox(T(TKEY("enable_verbose_json_logging"), "Enable verbose json logging"), &enableVerboseJsonLogging);
 }
 
 void TruePBR::SaveSettings(json& o_json)
