@@ -323,7 +323,7 @@ void NdfManager::DrawNdfNoise(NdfSettings& settings, TextureManager& textures)
 	auto& procedural = settings.procedural;
 	for (uint32_t index = 0; index < 4; ++index) {
 		ImGui::PushID(static_cast<int>(index));
-		if (ImGui::TreeNode("Noise", T(TKEY("ndf_noise_input"), "Noise input %u"), index)) {
+		if (ImGui::TreeNode("Noise", T(TKEY("ndf_noise_input"), "Noise input %u"), index)) {  // i18n-ignore: ImGui ID
 			auto& input = procedural.noise[index];
 			DrawNdfTextureChoice(textures, T(TKEY("ndf_dds_override"), "DDS override"), input.texturePath, 1, T(TKEY("ndf_generated"), "Generated"));
 			auto& noise = input.parameters;
@@ -1036,7 +1036,7 @@ void CirrusMapManager::DrawSettings(CirrusSettings& cirrus, CloudLightingSetting
 	if (!SceneWidgetInterceptor::IsArmed() && ImGui::TreeNode(T(TKEY("cirrus_pattern_settings"), "Pattern Scale & Texture"))) {
 		ImGui::SliderFloat(T(TKEY("cirrus_uv_size"), "Cirrus UV Size"), &cirrus.uvSize, 0.1f, 32.f, "%.2f x", ImGuiSliderFlags_Logarithmic);
 		Util::Text::WrappedSecondary("%s", T(TKEY("cirrus_uv_size_hint"), "Larger values enlarge both weather and detail patterns without changing wind speed. At 1x, weather repeats every 16.384 km and details every 4.29 km. Global setting; scenes cannot override it."));
-		ImGui::TextUnformatted("Data/Textures/PhysicalSky/cirrus.dds");
+		ImGui::TextUnformatted("Data/Textures/PhysicalSky/cirrus.dds");  // i18n-ignore: file path
 		ImGui::TreePop();
 	}
 }
@@ -1066,7 +1066,7 @@ void MidCloudMapManager::DrawSettings(MidCloudSettings& settings, TextureManager
 		ImGui::SliderFloat(T(TKEY("middle_height_power"), "Coverage to thickness response"), &settings.heightPower, 0.25f, 4.f);
 		ImGui::TreePop();
 	}
-	if (ImGui::TreeNode("Bands", T(TKEY("middle_bands"), "Cloud bands"))) {
+	if (ImGui::TreeNode("Bands", T(TKEY("middle_bands"), "Cloud bands"))) {  // i18n-ignore: ImGui ID
 		ImGui::SliderFloat(T(TKEY("middle_band_direction"), "Band direction"), &settings.bands.direction, 0.f, 180.f, "%.0f deg");
 		ImGui::SliderFloat(T(TKEY("middle_band_wavelength"), "Band spacing"), &settings.bands.wavelength, 500.f, 16000.f, "%.0f m");
 		ImGui::SliderFloat(T(TKEY("middle_band_warp"), "Band bend (wavelengths)"), &settings.bands.warp, 0.f, 1.f);

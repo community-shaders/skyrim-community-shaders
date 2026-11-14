@@ -9,7 +9,7 @@
 void TexturePreview::Draw(ID3D11ShaderResourceView* srv, const char* id, const char* label, float scale, bool scalar)
 {
 	ImGui::PushID(id);
-	if (!ImGui::TreeNode("texture", "%s", label)) {
+	if (!ImGui::TreeNode("texture", "%s", label)) {  // i18n-ignore: ImGui ID
 		ImGui::PopID();
 		return;
 	}
