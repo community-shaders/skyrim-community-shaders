@@ -2822,23 +2822,27 @@ def _control_category(
         scoped.sort(key=lambda category: (category[0], -category[1]))
         return scoped[-1][2], scoped[-1][3]
 
-    candidates = []
+    categories = [("", "")]
     pattern = re.compile(
-        r"\b(?:ImGui|Util)::(?:" +
+        r"[{}]|\b(?:ImGui|Util)::(?:" +
         "|".join(sorted(PERSISTENT_CATEGORY_CONTROL_NAMES)) + r")\s*\(")
     masked = mask_cpp_source(body)[:position]
     for category in pattern.finditer(masked):
+        if category.group() == "{":
+            categories.append(categories[-1])
+            continue
+        if category.group() == "}":
+            if len(categories) > 1:
+                categories.pop()
+            continue
         close = find_matching_paren(body, category.end() - 1)
         if close < 0 or close >= position:
             continue
         translated = extract_i18n_call(
             body[category.start():close + 1], prefix)
         if translated:
-            candidates.append((category.start(), translated[1], translated[0]))
-    if not candidates:
-        return "", ""
-    _, label, key = max(candidates, key=lambda candidate: candidate[0])
-    return label, key
+            categories[-1] = translated[1], translated[0]
+    return categories[-1]
 
 
 @functools.lru_cache(maxsize=None)

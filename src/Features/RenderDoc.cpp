@@ -190,6 +190,14 @@ void RenderDoc::DrawSettings()
 		ImGui::TextColored(themeSettings.StatusPalette.Warning, "%s", T(TKEY("restart_to_disable"), "Requires restart to disable RenderDoc capture, performance will be severely impacted."));
 	}
 
+	if (renderDocActive) {
+		// Session-only: not written to settings, so it is unticked on every launch
+		ImGui::Checkbox(T(TKEY("hide_overlay"), "Hide Overlay Warning"), &hideOverlay);
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("%s", T(TKEY("hide_overlay_tooltip"), "Hides the RenderDoc warning in the overlay. This is not saved and resets every time the game starts."));
+		}
+	}
+
 	const bool captureActive = renderDocCaptureEnabled && renderDocActive;
 	const auto& captureFiles = GetCachedCaptureFiles();
 
@@ -581,6 +589,7 @@ void RenderDoc::LoadSettings(json& o_json)
 void RenderDoc::RestoreDefaultSettings()
 {
 	enableRenderDocCapture = false;
+	hideOverlay = false;
 	SetCaptureFrameCount(1);
 }
 
