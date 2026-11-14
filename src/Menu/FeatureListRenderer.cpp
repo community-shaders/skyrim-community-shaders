@@ -810,6 +810,8 @@ void FeatureListRenderer::HandlePendingFeatureSelection(
 	pendingFeatureSelection.clear();  // Clear after processing
 }
 
+static void SnapScrollToRows(const std::vector<float>& rowTops);
+
 void FeatureListRenderer::RenderLeftColumn(
 	const std::vector<MenuFuncInfo>& menuList,
 	size_t& selectedMenu,
@@ -884,19 +886,26 @@ void FeatureListRenderer::RenderLeftColumn(
 		ImGui::EndChild();
 	} else {
 		auto& filter = globals::menu->GetSettings().FeatureListFilter;
-		if (ImGui::BeginChild("##FeatureListScroll", ImVec2(0.0f, -pageButtonsHeight))) {
+		if (ImGui::BeginChild("##FeatureListScroll", ImVec2(0.0f, -pageButtonsHeight), ImGuiChildFlags_None, ImGuiWindowFlags_NoScrollWithMouse)) {
 			// A category header keeps half its pad above its text
 			const auto first = std::ranges::find_if(menuList, [](const auto& entry) { return !std::holds_alternative<BuiltInMenu>(entry); });
 			const float headerPad = first != menuList.end() && std::holds_alternative<CategoryHeader>(*first) ?
 			                            ThemeManager::Constants::CATEGORY_HEADER_PAD * Util::GetUIScale() * 0.5f :
 			                            0.0f;
 			ImGui::SetCursorPosY(ImGui::GetCursorPosY() + GetListTextTop() - headerPad);
+			std::vector<float> rowTops;
+			rowTops.reserve(menuList.size());
 			for (size_t i = 0; i < menuList.size(); i++) {
-				if (!builtInAt(i))
+				if (!builtInAt(i)) {
+					const float top = ImGui::GetCursorPosY();
 					std::visit(ListMenuVisitor{ i, selectedMenu, categoryExpansionStates, hooks }, menuList[i]);
+					if (ImGui::GetCursorPosY() > top)
+						rowTops.push_back(top);
+				}
 			}
 			// Room below the last row, so its selection highlight is not clipped by the pane's bottom edge
 			ImGui::Dummy(ImVec2(0.0f, ThemeManager::Constants::LEFT_PANE_EDGE_INSET * Util::GetUIScale()));
+			SnapScrollToRows(rowTops);
 			if (g_filterCounts.shown == 0 && filter != 0) {
 				BrowserUI::EmptyState(T("menu.features.no_matches", "No features match"),
 					T("menu.features.no_matches_hint", "Turn off a filter to list more features."));
@@ -914,6 +923,105 @@ void FeatureListRenderer::RenderLeftColumn(
 
 	if (pageButtonsHere)
 		StatusBarRenderer::RenderPageButtons();
+}
+
+/**
+ * Drives the current window's vertical scroll so it always rests on a row edge.
+ * The mouse wheel steps whole rows (the window must be created with
+ * ImGuiWindowFlags_NoScrollWithMouse); releasing the scrollbar settles on the
+ * nearest row. Keyboard/gamepad navigation is left to ImGui.
+ * @param rowTops Content-space Y of each drawn row's top edge, in order.
+ */
+static void SnapScrollToRows(const std::vector<float>& rowTops)
+{
+	constexpr int kRowsPerNotch = 3;
+	constexpr float kEaseRate = 30.0f;  // exponential ease rate (1/s)
+
+	static float s_target = -1.0f;    // scroll we are animating to, < 0 when idle
+	static float s_expected = -1.0f;  // scroll we asked ImGui for last frame
+	static bool s_wasDragging = false;
+	static float s_wheelRemainder = 0.0f;  // wheel input not yet worth a whole notch (precision wheels, touchpads)
+
+	const float scroll = ImGui::GetScrollY();
+	const float maxScroll = ImGui::GetScrollMaxY();
+	if (rowTops.empty() || maxScroll <= 0.0f) {
+		s_target = -1.0f;
+		return;
+	}
+
+	// Snap offsets: each row placed where the first row sits at scroll 0, plus the list end.
+	// ImGui rounds scroll to whole pixels, so the offsets are rounded too.
+	std::vector<float> snaps;
+	snaps.reserve(rowTops.size() + 1);
+	for (const float top : rowTops)
+		snaps.push_back(std::round(std::clamp(top - rowTops.front(), 0.0f, maxScroll)));
+	snaps.push_back(std::round(maxScroll));
+	std::ranges::sort(snaps);
+	snaps.erase(std::unique(snaps.begin(), snaps.end()), snaps.end());
+
+	const auto nearestIndex = [&](float value) {
+		size_t best = 0;
+		for (size_t i = 1; i < snaps.size(); i++) {
+			if (std::abs(snaps[i] - value) < std::abs(snaps[best] - value))
+				best = i;
+		}
+		return best;
+	};
+
+	const ImGuiIO& io = ImGui::GetIO();
+	auto* window = ImGui::GetCurrentWindow();
+	const bool dragging = ImGui::GetActiveID() == ImGui::GetWindowScrollbarID(window, ImGuiAxis_Y);
+
+	// Something else moved the list (keyboard nav, scroll-to-item): stop animating
+	if (s_target >= 0.0f && std::abs(scroll - s_expected) > 1.0f)
+		s_target = -1.0f;
+
+	if (dragging) {
+		s_target = -1.0f;
+	} else if (s_wasDragging) {
+		s_target = snaps[nearestIndex(scroll)];
+	}
+	s_wasDragging = dragging;
+
+	const bool wheelApplies = !dragging && !io.KeyCtrl &&
+	                          ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows | ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
+	if (!wheelApplies) {
+		s_wheelRemainder = 0.0f;
+	} else if (io.MouseWheel != 0.0f) {
+		// Only whole notches move the list; the fraction carries over, so split input scrolls like the same input combined
+		s_wheelRemainder += io.MouseWheel;
+		const int notches = static_cast<int>(s_wheelRemainder);
+		s_wheelRemainder -= static_cast<float>(notches);
+		if (notches != 0) {
+			const int step = -notches * kRowsPerNotch;
+			const auto from = static_cast<int>(nearestIndex(s_target >= 0.0f ? s_target : scroll));
+			const int to = std::clamp(from + step, 0, static_cast<int>(snaps.size()) - 1);
+			s_target = snaps[to];
+		}
+	}
+
+	// A keyboard selection is being scrolled into view: let ImGui do it rather than fight it
+	if (g_scrollToSelection) {
+		s_target = -1.0f;
+		return;
+	}
+
+	if (s_target < 0.0f)
+		return;
+
+	const float diff = s_target - scroll;
+	float next;
+	if (std::abs(diff) <= 1.0f) {
+		next = s_target;
+		s_target = -1.0f;
+	} else {
+		// Ease, but always move at least a pixel so ImGui's rounding cannot stall it
+		const float delta = diff * (1.0f - std::exp(-kEaseRate * io.DeltaTime));
+		next = scroll + (std::abs(delta) < 1.0f ? std::copysign(1.0f, diff) : delta);
+	}
+	if (next != scroll)
+		ImGui::SetScrollY(next);
+	s_expected = next;
 }
 
 void FeatureListRenderer::RequestPage(std::string_view pageId)
