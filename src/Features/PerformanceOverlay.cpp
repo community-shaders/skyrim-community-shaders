@@ -322,6 +322,8 @@ void PerformanceOverlay::LoadSettings(json& j)
 		// Fallback to defaults if JSON is invalid
 		this->settings = PerformanceOverlay::Settings{};
 	}
+	this->settings.FrameHistorySize = std::clamp(this->settings.FrameHistorySize, Settings::kMinFrameHistorySize, Settings::kMaxFrameHistorySize);
+	this->settings.UpdateInterval = std::isfinite(this->settings.UpdateInterval) ? std::clamp(this->settings.UpdateInterval, 0.001f, Settings::kMaxUpdateInterval) : Settings{}.UpdateInterval;
 	// Hand-edited configs: drop empty and repeated groups
 	auto& hidden = this->settings.HiddenProfilerGroups;
 	std::erase_if(hidden, [](const std::string& group) { return group.empty(); });
