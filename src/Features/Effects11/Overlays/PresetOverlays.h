@@ -120,7 +120,7 @@ namespace Overlays
 		bool HasDirtyOverlays() const;
 		/** @brief Writes every overlay with unsaved authored ops. @return False when any overlay write failed. */
 		bool SaveDirtyOverlays();
-		/** @brief Saves the stores to the preset files without overlay values, then writes every overlay with unsaved ops. @return False when any overlay write failed. */
+		/** @brief Saves the stores to the preset files without overlay values, then writes every overlay with unsaved ops. @return False when any preset or overlay write failed. */
 		bool SavePreset();
 
 	private:

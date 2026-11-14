@@ -52,7 +52,8 @@ public:
 
 	void Apply();
 	void Load();
-	void Save();
+	/** @brief Saves every effect. @return False when any write failed. */
+	bool Save();
 
 	void RegisterSettings();
 

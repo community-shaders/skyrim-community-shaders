@@ -179,6 +179,9 @@ namespace Overlays
 	void Manager::ApplyOverlay(size_t a_overlay)
 	{
 		const auto& overlay = overlays[a_overlay];
+		// A zero amount changes nothing, so it must not define weather slots that later overlays would inherit into
+		if (overlay.amount == 0.0f)
+			return;
 		for (size_t opIndex = 0; opIndex < overlay.ops.size(); ++opIndex) {
 			for (const auto& target : resolved[a_overlay][opIndex]) {
 				auto [it, inserted] = stacks.try_emplace(target.slot);
@@ -627,11 +630,12 @@ namespace Overlays
 
 	bool Manager::SavePreset()
 	{
+		bool baseSaved;
 		{
 			const RemovedScope removed;
-			SettingManager::GetSingleton().Save();
-			EffectManager::GetSingleton().Save();
+			const bool settingsSaved = SettingManager::GetSingleton().Save();
+			baseSaved = EffectManager::GetSingleton().Save() && settingsSaved;
 		}
-		return SaveDirtyOverlays();
+		return SaveDirtyOverlays() && baseSaved;
 	}
 }

@@ -157,14 +157,12 @@ void EffectManager::Load()
 	Overlays::Manager::GetSingleton().OnStoresLoaded();
 }
 
-void EffectManager::Save()
+bool EffectManager::Save()
 {
-	enbDepthOfField.Save();
-	enbBloom.Save();
-	enbLens.Save();
-	enbAdaptation.Save();
-	enbEffect.Save();
-	enbEffectPostPass.Save();
+	bool ok = true;
+	for (auto* effect : AllEffects())
+		ok &= effect->Save();
+	return ok;
 }
 
 void EffectManager::RegisterSettings()

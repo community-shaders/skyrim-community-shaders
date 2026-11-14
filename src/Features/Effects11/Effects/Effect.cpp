@@ -168,11 +168,11 @@ void Effect::CaptureBaseValues()
 		CaptureBaseValue(uiVar);
 }
 
-void Effect::Save()
+bool Effect::Save()
 {
 	// Nothing loaded means nothing to persist; writing would leave stub ini files in the preset
 	if (!IsCompiled())
-		return;
+		return true;
 	assert(!Overlays::Manager::GetSingleton().IsApplied() && "save inside Overlays::Manager::RemovedScope");
 
 	std::filesystem::path iniPath = PresetManager::GetSingleton().GetENBSeriesPath() / (GetName() + ".ini");
@@ -180,6 +180,7 @@ void Effect::Save()
 	std::string section = GetName();
 	std::transform(section.begin(), section.end(), section.begin(), ::toupper);
 
+	bool ok = true;
 	for (const auto& uiVar : uiVariables) {
 		if (uiVar.isLabel || uiVar.isPatched)
 			continue;
@@ -214,8 +215,10 @@ void Effect::Save()
 					std::string compKey = iniKey + kComponentSuffixes[i];
 					std::string compValue = Effects11Util::Ini::FormatFloat(vectorValue[i]);
 					BOOL compResult = WritePrivateProfileStringA(section.c_str(), compKey.c_str(), compValue.c_str(), iniPath.string().c_str());
-					if (!compResult)
+					if (!compResult) {
 						logger::warn("[EFFECTS11] Failed to write key '{}' to ini file '{}'", compKey, iniPath.string());
+						ok = false;
+					}
 				}
 				continue;
 			} else {
@@ -229,6 +232,7 @@ void Effect::Save()
 		BOOL result = WritePrivateProfileStringA(section.c_str(), iniKey.c_str(), value.c_str(), iniPath.string().c_str());
 		if (!result) {
 			logger::warn("[EFFECTS11] Failed to write key '{}' to ini file '{}'", iniKey, iniPath.string());
+			ok = false;
 		}
 	}
 
@@ -236,13 +240,15 @@ void Effect::Save()
 	BOOL techniqueResult = WritePrivateProfileStringA(section.c_str(), "TECHNIQUE", techniqueValue.c_str(), iniPath.string().c_str());
 	if (!techniqueResult) {
 		logger::warn("[EFFECTS11] Failed to write TECHNIQUE key to ini file '{}'", iniPath.string());
+		ok = false;
 	}
 
 	WritePrivateProfileStringA(NULL, NULL, NULL, iniPath.string().c_str());
 
-	SaveWeatherOverrides();
+	ok &= SaveWeatherOverrides();
 
 	logger::info("[EFFECTS11] Saved settings to '{}' for effect '{}'", iniPath.string(), GetName());
+	return ok;
 }
 
 bool Effect::Apply()

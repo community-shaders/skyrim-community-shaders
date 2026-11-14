@@ -22,7 +22,8 @@ public:
 
 	// Settings methods
 	bool Load();
-	void Save();
+	/** @brief Writes the values and weather overrides to the preset. @return False when a write failed. */
+	bool Save();
 
 	// Effect lifecycle
 	virtual bool Apply();   // Clear resources, load settings, recompile, create resources
@@ -181,7 +182,8 @@ public:
 	/** @brief Restores the shader default captured by CaptureDefaultValue. @return False when none was captured. */
 	static bool RestoreDefaultValue(UIVariable& uiVar);
 	void CaptureBaseValues();
-	virtual void SaveWeatherOverrides() {}
+	/** @brief Writes edited weather values to their files. @return False when a write failed. */
+	virtual bool SaveWeatherOverrides() { return true; }
 
 	struct GroupMeta
 	{

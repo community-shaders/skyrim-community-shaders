@@ -104,11 +104,12 @@ namespace Overlays
 			return { SettingPartValue(stored.value, a_slot.part), a_slot.part < 0 ? stored.definedMask != 0 : (stored.definedMask & (1u << a_slot.part)) != 0 };
 		}
 
-		/** @brief WriteSlot for a setting slot; an undefined weather value clears its period bits. */
+		/** @brief WriteSlot for a setting slot, to every weather sharing its file; an undefined weather value clears its period bits. */
 		void WriteSettingSlot(const SlotKey& a_slot, const SlotValue& a_value)
 		{
 			auto& settings = SettingManager::GetSingleton();
-			const uint32_t weatherID = WeatherIDOf(a_slot.weatherFile);
+			const auto weatherIDs = a_slot.weatherFile.empty() ? std::span<const uint32_t>() : WeatherIDsOf(a_slot.weatherFile);
+			const uint32_t weatherID = weatherIDs.empty() ? 0 : weatherIDs.front();
 			auto stored = settings.GetStoredValue(a_slot.index, weatherID);
 			const auto& v = a_value.value.values;
 			std::visit([&](auto& value) {
@@ -127,7 +128,10 @@ namespace Overlays
 				const uint8_t bits = a_slot.part < 0 ? AllPeriodsMask : static_cast<uint8_t>(1u << a_slot.part);
 				stored.definedMask = a_value.defined ? (stored.definedMask | bits) : (stored.definedMask & ~bits);
 			}
-			settings.SetStoredValue(a_slot.index, weatherID, stored);
+			if (weatherIDs.empty())
+				settings.SetStoredValue(a_slot.index, 0, stored);
+			for (const uint32_t id : weatherIDs)
+				settings.SetStoredValue(a_slot.index, id, stored);
 		}
 
 		/** @brief ReadSlot for a shader slot; an undefined weather value reads as the base value. */
@@ -458,16 +462,23 @@ namespace Overlays
 
 	bool Resolver::ResolveSetting(const Op& a_op, std::vector<BaseTarget>& a_out, std::string& a_reason) const
 	{
+		// Matched case-insensitively like the shader path, since the stores are keyed by exact name
 		auto& settings = SettingManager::GetSingleton();
+		std::vector<const Setting*> candidates;
+		for (const auto& category : settings.GetCategories()) {
+			if (Util::IEquals(category, a_op.category)) {
+				for (const auto& key : settings.GetSettingsByCategory(category))
+					candidates.push_back(settings.GetSettingInfo(key, category));
+			}
+		}
 		const auto findSetting = [&](std::string_view a_key) -> const Setting* {
-			if (const auto* setting = settings.GetSettingInfo(a_key, a_op.category))
-				return setting;
-			for (const auto& key : settings.GetSettingsByCategory(a_op.category)) {
-				const auto* setting = settings.GetSettingInfo(key, a_op.category);
+			for (const auto* setting : candidates)
+				if (Util::IEquals(setting->key, a_key))
+					return setting;
+			for (const auto* setting : candidates)
 				for (const auto& legacy : setting->legacyKeys)
 					if (Util::IEquals(legacy, a_key))
 						return setting;
-			}
 			return nullptr;
 		};
 

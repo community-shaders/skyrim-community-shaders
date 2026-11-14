@@ -16,7 +16,7 @@ public:
 	void ApplyWeatherBlending(float blendFactor, uint32_t currentWeatherID, uint32_t lastWeatherID);
 	void SyncWeatherVarFromUI(size_t index, uint32_t weatherID);
 	void ApplyTimeOfDayInterpolation();
-	void SaveWeatherOverrides() override;
+	bool SaveWeatherOverrides() override;
 
 	/** @brief Weather entry an edit of this variable is saved to, or null when it belongs to the base value. */
 	WeatherManager::WeatherEntry* WeatherEntryForEdit(size_t index, uint32_t weatherID) const;

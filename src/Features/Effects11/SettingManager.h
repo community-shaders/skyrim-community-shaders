@@ -209,17 +209,21 @@ public:
 		float previous;
 	};
 	void LoadWeatherSettings(const std::vector<uint32_t>& weatherIDs, const std::string& filePath);
-	void SaveWeatherSettings(const std::string& weatherKey, const std::string& filePath);
-	void SaveAllWeatherSettings();
+	/** @brief Writes the weather's changed values; the saved snapshot advances only when every write succeeds. @return False when a write failed. */
+	bool SaveWeatherSettings(const std::string& weatherKey, const std::string& filePath);
+	/** @brief SaveWeatherSettings for each weather file. @return False when any write failed. */
+	bool SaveAllWeatherSettings();
 	void ReloadAllWeatherSettings();
 
 	// File I/O
 	void LoadFromFile(const std::string& filePath);
-	void SaveToFile(const std::string& filePath);
+	/** @brief Writes the changed base values; the saved snapshot advances only when every write succeeds. @return False when a write failed. */
+	bool SaveToFile(const std::string& filePath);
 
 	// Effect save/load coordination
 	void Load();
-	void Save();
+	/** @brief Saves enbseries.ini and every weather file. @return False when any write failed. */
+	bool Save();
 
 	// Weather ignore settings management
 	bool GetIgnoreWeatherSystem(const std::string& category) const;
@@ -289,6 +293,6 @@ private:
 	float3 ComputeColorTimeOfDayInterpolation(const ColorTimeOfDayValue& value, bool hdrWeighting) const;
 	/** @return Bitmask of the periods the file set under any of its keys; scalars set every bit. */
 	uint8_t LoadSettingFromFile(const std::string& filePath, const std::string& section, const std::string& key, Setting& setting);
-	/** @brief Writes the setting; time-of-day types write only the periods in periodMask. */
-	void SaveSettingToFile(const std::string& filePath, const std::string& section, const std::string& key, const Setting& setting, uint8_t periodMask = AllPeriodsMask);
+	/** @brief Writes the setting; time-of-day types write only the periods in periodMask. @return False when a value write failed. */
+	bool SaveSettingToFile(const std::string& filePath, const std::string& section, const std::string& key, const Setting& setting, uint8_t periodMask = AllPeriodsMask);
 };

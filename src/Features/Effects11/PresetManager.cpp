@@ -239,9 +239,9 @@ bool PresetManager::SwitchPreset(const std::string& id, bool saveCurrent)
 		return false;
 
 	if (saveCurrent) {
-		// Switching reloads overlays from disk, so a failed overlay write would lose its edits
+		// Switching reloads from disk, so a failed write would lose its edits
 		if (const auto* current = FindPreset(activePresetId); current && current->valid && !Overlays::Manager::GetSingleton().SavePreset()) {
-			logger::error("[Effects11] Preset switch stopped: an overlay could not be saved");
+			logger::error("[Effects11] Preset switch stopped: the preset or an overlay could not be saved");
 			return false;
 		}
 	}
@@ -282,7 +282,7 @@ bool PresetManager::ExportActivePresetTo(const std::filesystem::path& destRoot, 
 	}
 
 	if (saveCurrent && !Overlays::Manager::GetSingleton().SavePreset()) {
-		logger::error("[Effects11] Export failed: an overlay could not be saved");
+		logger::error("[Effects11] Export failed: the preset or an overlay could not be saved");
 		return false;
 	}
 

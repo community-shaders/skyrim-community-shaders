@@ -424,30 +424,36 @@ void ExtendedEffect::SyncWeatherVarFromUI(size_t index, uint32_t weatherID)
 		dirtyKeys[key] = weatherID;
 }
 
-void ExtendedEffect::SaveWeatherOverrides()
+bool ExtendedEffect::SaveWeatherOverrides()
 {
 	assert(!Overlays::Manager::GetSingleton().IsApplied() && "save inside Overlays::Manager::RemovedScope");
 	if (dirtyWeatherFiles.empty())
-		return;
+		return true;
 
 	std::string section = GetName();
 	std::transform(section.begin(), section.end(), section.begin(), ::toupper);
 
-	for (const auto& [fileName, dirtyKeys] : dirtyWeatherFiles) {
+	// A file with a failed write stays dirty, so the next save retries it
+	std::erase_if(dirtyWeatherFiles, [&](const auto& a_file) {
+		const auto& [fileName, dirtyKeys] = a_file;
 		std::string filePath = (PresetManager::GetSingleton().GetENBSeriesPath() / fileName).string();
+		bool written = true;
 		for (const auto& [key, sourceWeatherID] : dirtyKeys) {
 			auto valuesIt = weatherData.find(sourceWeatherID);
 			if (valuesIt == weatherData.end())
 				continue;
 			auto it = valuesIt->second.find(key);
-			if (it != valuesIt->second.end() && !WritePrivateProfileStringA(section.c_str(), key.c_str(), it->second.c_str(), filePath.c_str()))
+			if (it != valuesIt->second.end() && !WritePrivateProfileStringA(section.c_str(), key.c_str(), it->second.c_str(), filePath.c_str())) {
 				logger::warn("[EFFECTS11] Failed to write key '{}' to weather file '{}'", key, filePath);
+				written = false;
+			}
 		}
 		WritePrivateProfileStringA(NULL, NULL, NULL, filePath.c_str());
-		logger::info("[EFFECTS11] Saved {} weather override(s) to '{}' for effect '{}'", dirtyKeys.size(), filePath, GetName());
-	}
-
-	dirtyWeatherFiles.clear();
+		if (written)
+			logger::info("[EFFECTS11] Saved {} weather override(s) to '{}' for effect '{}'", dirtyKeys.size(), filePath, GetName());
+		return written;
+	});
+	return dirtyWeatherFiles.empty();
 }
 
 // Rendering
