@@ -56,11 +56,6 @@ namespace CinematicCamera
 	// game never look like an external takeover.
 	constexpr float kFovEpsilon = 1e-3f;
 
-	// Reference camera the exposure delta is measured against:
-	// f/2.8, ISO 100, 24 fps, 180 deg shutter. EV100 = log2(2.8^2 * 48) = 8.5573427,
-	// so the default settings produce a 0 EV offset and keep the current look.
-	constexpr float kReferenceEV100 = 8.5573427f;
-
 	/////////////////////////////////////////////////////////////////////////////////
 	// FocusResolver
 	/////////////////////////////////////////////////////////////////////////////////
@@ -319,7 +314,6 @@ namespace CinematicCamera
 		s.ShutterAngleDeg = exp.ShutterAngleDeg;
 		s.ShutterTimeS = exp.ShutterAngleDeg / (360.0f * exp.FrameRate);
 		s.EV100 = std::log2(lens.FNumber * lens.FNumber / s.ShutterTimeS) - std::log2(exp.ISO / 100.0f);
-		s.ExposureDeltaEV = kReferenceEV100 - s.EV100;
 
 		s.Valid = std::isfinite(s.HorizontalFOVDeg) && std::isfinite(s.EV100) &&
 		          std::isfinite(s.EffectiveSensorWidthMM) && s.EffectiveSensorWidthMM > 0.0f &&

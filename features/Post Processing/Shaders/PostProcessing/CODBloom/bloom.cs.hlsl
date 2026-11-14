@@ -38,7 +38,7 @@ float3 Sanitise(float3 v)
 float3 ThresholdColor(float3 col, float threshold)
 {
 	float luma = Color::RGBToLuminance(col);
-	if (luma < 1e-3)
+	if (luma < PreExposure::Encode(1e-3))
 		return 0;
 	return col * (max(0, luma - threshold) / luma);
 }
@@ -57,7 +57,7 @@ float4 UpsampleCOD(Texture2D tex, float2 uv, float2 radius)
 
 	float3 col = col_input;
 	col = Sanitise(col);
-	col = ThresholdColor(col, Threshold.x);
+	col = ThresholdColor(col, PreExposure::Encode(Threshold.x));
 	RWTexBloomOut[tid] = float4(col, 1);
 };
 

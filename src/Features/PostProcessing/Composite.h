@@ -47,7 +47,7 @@ struct Composite : public PostProcessFeature
 		FLAG_COUNT = 32  // 2^5 combinations
 	};
 
-	// Shader permutations indexed by composite flags (index 0 unused)
+	// Shader permutations indexed by composite flags (0 resolves pre-exposure).
 	std::array<winrt::com_ptr<ID3D11PixelShader>, CompositeFlags::FLAG_COUNT> compositeShaders = {};
 
 	virtual void SetupResources() override;

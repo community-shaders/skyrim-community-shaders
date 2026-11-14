@@ -70,6 +70,8 @@ PS_OUTPUT main(PS_INPUT input)
 #	include "Common/Random.hlsli"
 #	include "Common/Shading.hlsli"
 #	include "Common/ColorManagement.hlsli"
+#	include "Common/BRDF.hlsli"
+#	include "Common/Game.hlsli"
 
 #	define WATER
 
@@ -344,6 +346,9 @@ SamplerState FlowMapSampler : register(s8);
 SamplerState FlowMapNormalsSampler : register(s9);
 SamplerState SSRReflectionSampler : register(s10);
 SamplerState RawSSRReflectionSampler : register(s11);
+#		if defined(PHYSICAL_SKY)
+SamplerState ApSampler : register(s13);
+#		endif
 
 Texture2D<float4> ReflectionTex : register(t0);
 Texture2D<float4> RefractionTex : register(t1);
@@ -397,12 +402,60 @@ cbuffer PerGeometry : register(b2)
 #		define SampColorSampler Normals01Sampler
 #		define LinearSampler Normals01Sampler
 
+static const float WATER_F0 = 0.02f;
+static const float WATER_SUN_ANGULAR_RADIUS = 0.00465f;
+
+float GetWaterProjectedSolidAngle(float cosAngularRadius)
+{
+	return max(Math::PI * (1.0f - cosAngularRadius * cosAngularRadius), EPSILON_DIVISION);
+}
+
+float GetWaterSunDiskCos()
+{
+	float cosAngularRadius = cos(WATER_SUN_ANGULAR_RADIUS);
+#		if defined(PHYSICAL_SKY)
+	if (SharedData::physSkyData.enabled && SharedData::physSkyData.sunDiskCos > 0.0f)
+		cosAngularRadius = SharedData::physSkyData.sunDiskCos;
+#		endif
+	return cosAngularRadius;
+}
+
+float GetWaterFresnel(float cosTheta)
+{
+	return BRDF::F_Schlick(WATER_F0.xxx, saturate(cosTheta)).x;
+}
+
+float GetWaterDirectSpecularScale()
+{
+	return Color::PBRLightingCompensation * Color::PBRLightingScale;
+}
+
+float GetWaterDeltaLightDistributionFromCos(float3 normal, float3 viewDirection, float3 lightDirection, float cosAngularRadius)
+{
+	float3 V = -viewDirection;
+	float3 R = reflect(viewDirection, normal);
+
+	float NdotV = saturate(dot(normal, V));
+	float lightMask = step(cosAngularRadius, dot(R, lightDirection));
+
+	return lightMask * GetWaterFresnel(NdotV) / GetWaterProjectedSolidAngle(cosAngularRadius);
+}
+
+float GetWaterDeltaLightDistribution(float3 normal, float3 viewDirection, float3 lightDirection, float angularRadius)
+{
+	return GetWaterDeltaLightDistributionFromCos(normal, viewDirection, lightDirection, cos(angularRadius));
+}
+
 #		if defined(SKYLIGHTING)
 #			include "Skylighting/Skylighting.hlsli"
 #		endif
 
 #		if defined(EXP_HEIGHT_FOG)
 #			include "ExponentialHeightFog/ExponentialHeightFog.hlsli"
+#		endif
+
+#		if defined(PHYSICAL_SKY)
+#			include "PhysicalSky/Common.hlsli"
 #		endif
 
 #		include "Common/ShadowSampling.hlsli"
@@ -868,7 +921,7 @@ float3 GetWaterSpecularColor(PS_INPUT input, float3 normal, float3 viewDirection
 	float4 ssrReflectionColorBlurred = SSRReflectionTex.Sample(SSRReflectionSampler, ssrReflectionUvDR);
 	float4 ssrReflectionColorRaw = RawSSRReflectionTex.Sample(RawSSRReflectionSampler, ssrReflectionUvDR);
 	float4 ssrReflectionColor = lerp(ssrReflectionColorBlurred, ssrReflectionColorRaw, ssrAmount * 0.7);
-	float3 finalSsrReflectionColor = max(0, ssrReflectionColor.xyz);
+	float3 finalSsrReflectionColor = max(0, PreExposure::Decode(ssrReflectionColor.xyz));
 	float ssrFraction = saturate(ssrReflectionColor.w * distanceFactor * ssrAmount);
 	reflectionColor = lerp(reflectionColor, finalSsrReflectionColor, ssrFraction);
 #			endif
@@ -914,7 +967,7 @@ float GetFresnelValue(float3 normal, float3 viewDirection)
 		return fresnel * SharedData::enbSettings.WaterReflectionAmount;
 	}
 
-	return (1 - FresnelRI.x) * pow(viewAngle, 5) + FresnelRI.x;
+	return GetWaterFresnel(dot(-viewDirection, actualNormal));
 }
 
 struct DiffuseOutput
@@ -964,7 +1017,7 @@ DiffuseOutput GetWaterDiffuseColor(PS_INPUT input, float3 normal, float3 viewDir
 #				endif
 
 	float2 refractionUV = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(refractionUvRaw);
-	float3 refractionColor = RefractionTex.Sample(RefractionSampler, refractionUV).xyz;
+	float3 refractionColor = PreExposure::Decode(RefractionTex.Sample(RefractionSampler, refractionUV).xyz);
 
 #				if defined(UNDERWATER)
 	float refractionMul = 0;
@@ -1015,16 +1068,21 @@ float3 GetSunColor(float3 normal, float3 viewDirection, float3 worldPosition)
 	if (Permutation::PixelShaderDescriptor & Permutation::WaterFlags::Interior)
 		return 0.0.xxx;
 
-	float3 reflectionDirection = reflect(viewDirection, normal);
-	float reflectionMul = VarAmounts.x > 0 ? exp2(VarAmounts.x * log2(saturate(dot(reflectionDirection, SunDir.xyz)))) : 1.0;
+	float lightDistribution = GetWaterDeltaLightDistributionFromCos(normal, viewDirection, SunDir.xyz, GetWaterSunDiskCos());
 
 	float3 sunColor = Color::DirectionalLight(ColorManagement::SRGBToWorking(SunColor.xyz)) * SunDir.w * (1.0 - exp(-DeepColor.w));
+#				if defined(PHYSICAL_SKY)
+	if (SharedData::physSkyData.enabled)
+		sunColor *= PhysSky::SampleTr(normalize(reflect(viewDirection, normal)), DepthSampler);
+	sunColor *= PhysSky::GetDirlightTransmittance(worldPosition + FrameBuffer::CameraPosAdjust.xyz, DepthSampler, true);
+#				endif
+
 #				if defined(EXP_HEIGHT_FOG)
 	if (SharedData::exponentialHeightFogSettings.enabled) {
 		sunColor *= ExponentialHeightFog::GetSunlightFogAttenuation(worldPosition.xyz, FrameBuffer::CameraPosAdjust.xyz);
 	}
 #				endif
-	return reflectionMul * sunColor;
+	return lightDistribution * sunColor * GetWaterDirectSpecularScale();
 #			endif
 }
 #		endif
@@ -1169,7 +1227,7 @@ PS_OUTPUT main(PS_INPUT input)
 
 	float3 dirColor;
 	float3 ambientColor;
-	ShadowSampling::ExtractLighting(diffuseOutput.refractionDiffuseColor, dirColor, ambientColor);
+	ShadowSampling::ExtractLighting(diffuseOutput.refractionDiffuseColor, input.WPosition.xyz, dirColor, ambientColor);
 
 	dirColor *= dirShadow;
 
@@ -1224,6 +1282,7 @@ PS_OUTPUT main(PS_INPUT input)
 			float HdotN = saturate(dot(H, normal));
 
 			float3 lightColor = Color::PointLight(light.color.xyz) * pow(HdotN, FresnelRI.z) * light.fade;
+
 			specularLighting += lightColor * intensityMultiplier * lightShadow;
 		}
 	}
@@ -1265,40 +1324,53 @@ PS_OUTPUT main(PS_INPUT input)
 	float specularFraction = lerp(1, fresnel * surfaceMul, distanceBlendFactor);
 	float3 finalColorPreFog = lerp(diffuseColor, specularColor, specularFraction) + sunColor * sunMul;
 
+#						if defined(PHYSICAL_SKY)
+	if (SharedData::physSkyData.enabled) {
+		const float3 waterViewDir = normalize(input.WPosition.xyz);
+		const float waterDist = length(input.WPosition.xyz);
+		const float4 apSample = PhysSky::SampleAp(waterViewDir, input.HPosition.xy, waterDist, ApSampler);
+		finalColorPreFog = finalColorPreFog * apSample.w + apSample.xyz;
+		if (!SharedData::PostWaterComposite)
+			finalColorPreFog = PhysSky::CompositeVolumetricClouds(finalColorPreFog, input.HPosition.xy);
+	}
+#						endif
+
+	if (!SharedData::PostWaterComposite) {
 #						if !defined(UNIFIED_WATER)
-	float fogDistanceFactor = input.FogParam.w;
-	float3 fogColor = input.FogParam.xyz;
+		float fogDistanceFactor = input.FogParam.w;
+		float3 fogColor = input.FogParam.xyz;
 #						else
-	float fogDistanceFactor = min(FogFarColor.w, pow(saturate(length(input.WPosition.xyz) * FogParam.y - FogParam.x), FresnelRI.y));
-	float3 fogColor = lerp(ColorManagement::SRGBToWorking(FogNearColor.xyz), ColorManagement::SRGBToWorking(FogFarColor.xyz), fogDistanceFactor);
+		float fogDistanceFactor = min(FogFarColor.w, pow(saturate(length(input.WPosition.xyz) * FogParam.y - FogParam.x), FresnelRI.y));
+		float3 fogColor = lerp(ColorManagement::SRGBToWorking(FogNearColor.xyz), ColorManagement::SRGBToWorking(FogFarColor.xyz), fogDistanceFactor);
 #						endif
 
 #						if defined(IBL)
-	if (SharedData::iblSettings.EnableIBL) {
-		fogColor = ImageBasedLighting::GetFogIBLColor(fogColor);
-	}
+		if (SharedData::iblSettings.EnableIBL) {
+			fogColor = ImageBasedLighting::GetFogIBLColor(fogColor, input.WPosition.xyz);
+		}
 #						endif
 #						if defined(EXP_HEIGHT_FOG)
-	if (SharedData::exponentialHeightFogSettings.enabled) {
-		float4 exponentialHeightFog = ExponentialHeightFog::GetExponentialHeightFog(input.WPosition.xyz, FrameBuffer::CameraPosAdjust.xyz, fogColor, float4(input.HPosition.xy * FrameBuffer::DynamicResolutionParams2.xy, input.HPosition.z, 1));
-		if (ExponentialHeightFog::ShouldDisableVanillaFog()) {
-			fogColor = exponentialHeightFog.xyz;
-			fogColor *= GetWaterFogFade();
-			finalColorPreFog = lerp(finalColorPreFog, fogColor, exponentialHeightFog.w);
+		if (SharedData::exponentialHeightFogSettings.enabled) {
+			float4 exponentialHeightFog = ExponentialHeightFog::GetExponentialHeightFog(input.WPosition.xyz, FrameBuffer::CameraPosAdjust.xyz, fogColor, float4(input.HPosition.xy * FrameBuffer::DynamicResolutionParams2.xy, input.HPosition.z, 1));
+			if (ExponentialHeightFog::ShouldDisableVanillaFog()) {
+				fogColor = exponentialHeightFog.xyz;
+				fogColor *= GetWaterFogFade();
+				finalColorPreFog = lerp(finalColorPreFog, fogColor, exponentialHeightFog.w);
+			} else {
+				fogColor *= GetWaterFogFade();
+				finalColorPreFog = lerp(finalColorPreFog, fogColor, fogDistanceFactor);
+				float3 expFogColor = exponentialHeightFog.xyz * GetWaterFogFade();
+				finalColorPreFog = lerp(finalColorPreFog, expFogColor, exponentialHeightFog.w);
+			}
 		} else {
 			fogColor *= GetWaterFogFade();
 			finalColorPreFog = lerp(finalColorPreFog, fogColor, fogDistanceFactor);
-			float3 expFogColor = exponentialHeightFog.xyz * GetWaterFogFade();
-			finalColorPreFog = lerp(finalColorPreFog, expFogColor, exponentialHeightFog.w);
 		}
-	} else {
+#						else
 		fogColor *= GetWaterFogFade();
 		finalColorPreFog = lerp(finalColorPreFog, fogColor, fogDistanceFactor);
-	}
-#						else
-	fogColor *= GetWaterFogFade();
-	finalColorPreFog = lerp(finalColorPreFog, fogColor, fogDistanceFactor);
 #						endif
+	}
 
 	float3 finalColor = finalColorPreFog;
 
@@ -1326,57 +1398,72 @@ PS_OUTPUT main(PS_INPUT input)
 		finalColorPreFog = lerp(diffuseOutput.refractionDiffuseColor, specularColor, specularFraction) + sunColor * depthControl.w;
 	}
 
+#						if defined(PHYSICAL_SKY)
+	if (SharedData::physSkyData.enabled) {
+		const float3 waterViewDir = normalize(input.WPosition.xyz);
+		const float waterDist = length(input.WPosition.xyz);
+		const float4 apSample = PhysSky::SampleAp(waterViewDir, input.HPosition.xy, waterDist, ApSampler);
+		finalColorPreFog = finalColorPreFog * apSample.w + apSample.xyz;
+		if (!SharedData::PostWaterComposite)
+			finalColorPreFog = PhysSky::CompositeVolumetricClouds(finalColorPreFog, input.HPosition.xy);
+	}
+#						endif
+
+	if (!SharedData::PostWaterComposite) {
 #						if !defined(UNIFIED_WATER)
-	float fogDistanceFactor = input.FogParam.w;
-	float3 preFogColor = input.FogParam.xyz;
+		float fogDistanceFactor = input.FogParam.w;
+		float3 preFogColor = input.FogParam.xyz;
 #						else
-	float fogDistanceFactor = min(FogFarColor.w, pow(saturate(length(input.WPosition.xyz) * FogParam.y - FogParam.x), FresnelRI.y));
-	float3 preFogColor = lerp(ColorManagement::SRGBToWorking(FogNearColor.xyz), ColorManagement::SRGBToWorking(FogFarColor.xyz), fogDistanceFactor);
+		float fogDistanceFactor = min(FogFarColor.w, pow(saturate(length(input.WPosition.xyz) * FogParam.y - FogParam.x), FresnelRI.y));
+		float3 preFogColor = lerp(ColorManagement::SRGBToWorking(FogNearColor.xyz), ColorManagement::SRGBToWorking(FogFarColor.xyz), fogDistanceFactor);
 #						endif
 
 #						if defined(IBL)
-	if (SharedData::iblSettings.EnableIBL) {
-		preFogColor = ImageBasedLighting::GetFogIBLColor(preFogColor);
-	}
+		if (SharedData::iblSettings.EnableIBL) {
+			preFogColor = ImageBasedLighting::GetFogIBLColor(preFogColor, input.WPosition.xyz);
+		}
 #						endif
 #						if defined(EXP_HEIGHT_FOG)
-	if (SharedData::exponentialHeightFogSettings.enabled) {
-		float4 exponentialHeightFog = ExponentialHeightFog::GetExponentialHeightFog(input.WPosition.xyz, FrameBuffer::CameraPosAdjust.xyz, preFogColor, float4(input.HPosition.xy * FrameBuffer::DynamicResolutionParams2.xy, input.HPosition.z, 1));
-		if (ExponentialHeightFog::ShouldDisableVanillaFog()) {
-			preFogColor = exponentialHeightFog.xyz;
-			preFogColor *= GetWaterFogFade();
-			finalColorPreFog = lerp(finalColorPreFog, preFogColor, exponentialHeightFog.w);
+		if (SharedData::exponentialHeightFogSettings.enabled) {
+			float4 exponentialHeightFog = ExponentialHeightFog::GetExponentialHeightFog(input.WPosition.xyz, FrameBuffer::CameraPosAdjust.xyz, preFogColor, float4(input.HPosition.xy * FrameBuffer::DynamicResolutionParams2.xy, input.HPosition.z, 1));
+			if (ExponentialHeightFog::ShouldDisableVanillaFog()) {
+				preFogColor = exponentialHeightFog.xyz;
+				preFogColor *= GetWaterFogFade();
+				finalColorPreFog = lerp(finalColorPreFog, preFogColor, exponentialHeightFog.w);
+			} else {
+				preFogColor *= GetWaterFogFade();
+				finalColorPreFog = lerp(finalColorPreFog, preFogColor, fogDistanceFactor);
+				float3 expFogColor = exponentialHeightFog.xyz * GetWaterFogFade();
+				finalColorPreFog = lerp(finalColorPreFog, expFogColor, exponentialHeightFog.w);
+			}
 		} else {
 			preFogColor *= GetWaterFogFade();
 			finalColorPreFog = lerp(finalColorPreFog, preFogColor, fogDistanceFactor);
-			float3 expFogColor = exponentialHeightFog.xyz * GetWaterFogFade();
-			finalColorPreFog = lerp(finalColorPreFog, expFogColor, exponentialHeightFog.w);
 		}
-	} else {
-		preFogColor *= GetWaterFogFade();
-		finalColorPreFog = lerp(finalColorPreFog, preFogColor, fogDistanceFactor);
-	}
 #						else
-	preFogColor *= GetWaterFogFade();
+		preFogColor *= GetWaterFogFade();
 
-	finalColorPreFog = lerp(finalColorPreFog, preFogColor, fogDistanceFactor);
+		finalColorPreFog = lerp(finalColorPreFog, preFogColor, fogDistanceFactor);
 #						endif
+	}
 
 	float3 refractionColor = diffuseOutput.refractionColor;
 
-	float fogFactor = min(FogParam.w, pow(saturate(-diffuseOutput.depth * FogParam.y - FogParam.x), FogParam.z));
-	float3 fogColor = lerp(ColorManagement::SRGBToWorking(FogNearColor.xyz), ColorManagement::SRGBToWorking(FogFarColor.xyz), fogFactor);
+	if (!SharedData::PostWaterComposite) {
+		float fogFactor = min(FogParam.w, pow(saturate(-diffuseOutput.depth * FogParam.y - FogParam.x), FogParam.z));
+		float3 fogColor = lerp(ColorManagement::SRGBToWorking(FogNearColor.xyz), ColorManagement::SRGBToWorking(FogFarColor.xyz), fogFactor);
 #						if defined(EXP_HEIGHT_FOG)
-	if (SharedData::exponentialHeightFogSettings.enabled && ExponentialHeightFog::ShouldDisableVanillaFog()) {
-		fogFactor = 0;
-	}
+		if (SharedData::exponentialHeightFogSettings.enabled && ExponentialHeightFog::ShouldDisableVanillaFog()) {
+			fogFactor = 0;
+		}
 #						endif
 #						if defined(IBL)
-	if (SharedData::iblSettings.EnableIBL) {
-		fogColor = ImageBasedLighting::GetFogIBLColor(fogColor);
-	}
+		if (SharedData::iblSettings.EnableIBL) {
+			fogColor = ImageBasedLighting::GetFogIBLColor(fogColor, input.WPosition.xyz);
+		}
 #						endif
-	refractionColor = lerp(refractionColor, fogColor, fogFactor);
+		refractionColor = lerp(refractionColor, fogColor, fogFactor);
+	}
 
 	float3 finalColor = lerp(refractionColor, finalColorPreFog, waterOpacity);
 #						if defined(WETNESS_EFFECTS) && defined(DEBUG_WETNESS_EFFECTS)
@@ -1390,7 +1477,7 @@ PS_OUTPUT main(PS_INPUT input)
 
 #				endif
 #			endif
-	psout.Lighting = float4(finalColor, isSpecular);
+	psout.Lighting = float4(PreExposure::EncodeScene(finalColor), isSpecular);
 #		endif
 
 #		if defined(STENCIL)

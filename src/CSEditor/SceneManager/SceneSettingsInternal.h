@@ -6,6 +6,7 @@
 #include "SceneSettingsCatalog.generated.h"
 #include "SceneSettingsPolicy.h"
 #include "Utils/Hash.h"
+#include "Utils/SceneBlend.h"
 #include "Utils/SettingsCatalog.h"
 
 #include <filesystem>
@@ -44,7 +45,7 @@ namespace SceneSettingsInternal
 	/** @brief Mixes a primitive's type and value into signature. */
 	void HashSceneSettingValue(size_t& signature, const json& value);
 
-	/** @brief Whether a value is a bool, number or string, the only kinds a scene entry holds. */
+	/** @brief Whether a value is an atomic scalar or a validated state blend. */
 	bool IsSceneSettingPrimitive(const json& value);
 
 	/** @brief Whether a scene type keeps its entries in a flat list: interior or time of day. */
@@ -89,7 +90,7 @@ namespace SceneSettingsInternal
 		const std::function<bool(const std::string&)>& namesTarget, bool replaceMalformedEntries,
 		const std::function<void(json&)>& dropAliasMetadata = {});
 
-	/** @brief Whether a value is a float: TOD and weather can only interpolate floats, not toggles or enums. */
+	/** @brief Whether a value is a floating-point scalar. */
 	bool IsNumericValue(const json& value);
 
 	/// A hand-written file may spell a float as `1`. The catalog accepts that for a float setting, so widen

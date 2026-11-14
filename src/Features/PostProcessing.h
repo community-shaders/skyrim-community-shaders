@@ -153,7 +153,7 @@ struct PostProcessing : Feature
 		Gamut inputGamut = Gamut::Rec709;
 		Gamut outputGamut = Gamut::Rec709;
 		float gamma = 1.f;
-		float pad = 0.f;
+		float scale = 1.f;
 	};
 
 	/**

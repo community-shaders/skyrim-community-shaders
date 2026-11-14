@@ -1,3 +1,4 @@
+#include "Common/PreExposure.hlsli"
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Modified by Jiaye
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -340,7 +341,7 @@ float4 PerformFullFragmentGaussianBlur(Texture2D source, float2 texcoord, uint2 
 	float4 originalFragment = fragment;
 	float absoluteCoC = abs(coc);
 
-	if (absoluteCoC < onePixelInCoC || PostBlurSmoothing < 0.01 || fragmentLuma < 0.3) {
+	if (absoluteCoC < onePixelInCoC || PostBlurSmoothing < 0.01 || fragmentLuma < PreExposure::Encode(0.3)) {
 		// in focus or postblur smoothing isn't enabled or not really a highlight, ignore
 		return fragment;
 	}

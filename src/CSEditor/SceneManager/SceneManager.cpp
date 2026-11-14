@@ -22,7 +22,7 @@ namespace
 	using DebugEntry = SceneSettingsManager::DebugEntry;
 	using DebugLayer = SceneSettingsManager::DebugLayer;
 	using DebugSnapshot = SceneSettingsManager::DebugSnapshot;
-	using PeriodValues = std::array<std::optional<float>, SceneSettingsManager::kPeriodCount>;
+	using PeriodValues = std::array<std::optional<json>, SceneSettingsManager::kPeriodCount>;
 	using PeriodWeights = std::array<float, SceneSettingsManager::kPeriodCount>;
 
 	constexpr ImGuiTableFlags kDebugTableFlags =
@@ -108,7 +108,7 @@ namespace
 		for (const auto& value : values) {
 			ImGui::TableNextColumn();
 			if (value)
-				ImGui::Text("%.4f", *value);
+				ImGui::TextUnformatted(value->dump().c_str());
 			else
 				Util::Text::Disabled(kMissingValue);
 		}

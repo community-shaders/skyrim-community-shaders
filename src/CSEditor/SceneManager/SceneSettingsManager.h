@@ -854,9 +854,9 @@ public:
 		std::string key;
 		std::string baseline;
 		std::string applied;
-		std::array<std::optional<float>, kPeriodCount> timeOfDayValues{};
-		std::array<std::optional<float>, kPeriodCount> currentWeatherValues{};
-		std::array<std::optional<float>, kPeriodCount> previousWeatherValues{};
+		std::array<std::optional<json>, kPeriodCount> timeOfDayValues{};
+		std::array<std::optional<json>, kPeriodCount> currentWeatherValues{};
+		std::array<std::optional<json>, kPeriodCount> previousWeatherValues{};
 	};
 
 	/// One location float transition mid-flight, sampled for the debug UI.
@@ -1128,9 +1128,6 @@ private:
 
 	/// Feature settings as they were before the scene layer, so baselines cost one SaveSettings each.
 	std::map<std::string, json> featureBaseSnapshots;
-	/// The document each apply mutates in place, so a per-frame transition costs no SaveSettings
-	/// and no full copy of the feature's settings.
-	std::map<std::string, json> featureApplyDocuments;
 	std::set<std::string> appliedFeatureNames;
 	mutable std::set<std::string> configuredFeatureNamesCache;
 	mutable std::uint64_t configuredFeatureNamesRevision = std::numeric_limits<std::uint64_t>::max();
@@ -1186,9 +1183,6 @@ private:
 	RE::FormID GetEffectivePreviousWeatherId(const RE::Sky* sky, float weatherLerp) const;
 	/** @brief Samples the sky's current and outgoing weather and their blend factor. */
 	WeatherBlend GetWeatherBlend() const;
-	/** @brief The time-of-day layer's value for one period, user over overwrite, else the base value. */
-	float GetTimeOfDayPeriodFallbackFloat(float baseValue, const std::string& featureShortName,
-		const std::vector<std::string>& settingPath, const std::string& settingKey, int periodIndex) const;
 
 	/// Live sky/time state sampled once per resolve so every setting blends against identical factors.
 	struct BlendSnapshot
@@ -1201,7 +1195,7 @@ private:
 	BlendSnapshot blendSnapshot;
 
 	/// Active per-period values for one address, indexed by period.
-	using PeriodValues = std::array<std::optional<float>, kPeriodCount>;
+	using PeriodValues = std::array<std::optional<json>, kPeriodCount>;
 	using PeriodSettingMap = std::map<SettingAddress, PeriodValues>;
 	/** @brief Period values valid while revision matches sceneValueRevision. */
 	struct CachedPeriodSettingMap
@@ -1265,7 +1259,7 @@ private:
 	void OverlayAllEntries(ResolvedSettingMap& resolved, const std::vector<SettingEntry>& sourceEntries,
 		SceneType type, std::map<SettingAddress, float>* transitionDurations = nullptr) const;
 	/** @brief The time-of-day value a weather entry stacks on; a flat entry uses the current period. */
-	std::optional<float> ResolveWeatherLowerValue(RE::FormID weatherId, const SettingAddress& address,
+	std::optional<json> ResolveWeatherLowerValue(RE::FormID weatherId, const SettingAddress& address,
 		TimeOfDayPeriod period, EntrySource selectedSource);
 	/** @brief The feature's own value at an address, null when the catalog does not allow it. */
 	json GetBaselineValue(const SettingAddress& address);

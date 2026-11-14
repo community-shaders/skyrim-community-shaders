@@ -1,6 +1,7 @@
 #include "Common/DummyVSTexCoord.hlsl"
 #include "Common/FrameBuffer.hlsli"
 #include "Common/Math.hlsli"
+#include "Common/PreExposure.hlsli"
 
 typedef VS_OUTPUT PS_INPUT;
 
@@ -58,7 +59,11 @@ PS_OUTPUT main(PS_INPUT input)
 
 	float3 finalColor = sourceColor;
 	if (motionScreenPosition.x >= 0 && motionScreenPosition.y >= 0 && motionScreenPosition.x <= 1 &&
-		motionScreenPosition.y <= 1 && waterHistory.w > 0.0 && all(isfinite(waterHistory))) {
+		motionScreenPosition.y <= 1 && waterHistory.w > 0.0 && all(isfinite(waterHistory))
+#	if defined(ENABLE_LL)
+	    && SharedData::ResetHistory == 0
+#	endif
+	) {
 		float historyFactor = 0.95;
 		if (NearFar_Menu_DistanceFactor.z == 0) {
 			float depth = depthBufferTex.Sample(depthBufferSampler, adjustedScreenPosition).x;
@@ -72,7 +77,7 @@ PS_OUTPUT main(PS_INPUT input)
 			historyFactor = NearFar_Menu_DistanceFactor.w * (distanceFactor * (waterMask * -0.85 + 0.95));
 		}
 		// Un-premultiply history so bilinear filtering against cleared pixels does not darken water edges
-		float3 historyColor = waterHistory.xyz / max(waterHistory.w, EPSILON_DIVISION);
+		float3 historyColor = PreExposure::History(waterHistory.xyz) / max(waterHistory.w, EPSILON_DIVISION);
 
 		historyFactor *= waterHistory.w;
 		finalColor = lerp(sourceColor, historyColor, historyFactor);

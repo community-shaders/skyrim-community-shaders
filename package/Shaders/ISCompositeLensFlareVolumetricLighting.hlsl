@@ -1,6 +1,7 @@
 #include "Common/Color.hlsli"
 #include "Common/DummyVSTexCoord.hlsl"
 #include "Common/FrameBuffer.hlsli"
+#include "Common/PreExposure.hlsli"
 #include "Common/SharedData.hlsli"
 
 typedef VS_OUTPUT PS_INPUT;
@@ -55,7 +56,7 @@ PS_OUTPUT main(PS_INPUT input)
 #		endif
 #	endif
 
-	psout.Color = color;
+	psout.Color = PreExposure::Encode(color);
 
 	return psout;
 }

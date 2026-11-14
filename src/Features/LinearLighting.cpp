@@ -10,9 +10,11 @@
 #include "Effects11.h"
 #include "Globals.h"
 #include "LightLimitFix/Common.h"
+#include "PhysicalSky.h"
 #include "PostProcessing.h"
 #include "PostProcessingMode.h"
 #include "ShaderCache.h"
+#include "SkySync.h"
 #include "Utils/ColorSpace.h"
 #include "Utils/Game.h"
 #include "Utils/VersionedRelocation.h"
@@ -230,8 +232,14 @@ LinearLighting::PerFrameData LinearLighting::GetCommonBufferData()
 	if (!loaded || !IsLinearLightingActive())
 		return data;
 
-	// Legacy light colors represent the response of a white Lambert surface.
-	data.directionalLightMult = RE::NI_PI * settings.directionalLightMult;
+	bool physicalSkyEnabled = false;
+	if (globals::features::physicalSky.loaded && globals::features::skySync.loaded) {
+		auto& physicalSky = globals::features::physicalSky;
+		auto& skySync = globals::features::skySync;
+		physicalSkyEnabled = physicalSky.settings.enabled && physicalSky.settings.overrideDirLight && skySync.loaded && skySync.settings.Enabled;
+	}
+
+	data.directionalLightMult = (physicalSkyEnabled ? 1.0f : RE::NI_PI) * settings.directionalLightMult;
 	data.pointLightMult = RE::NI_PI * settings.pointLightMult;
 	data.ambientMult = settings.ambientMult;
 	data.glowmapMult = settings.glowmapMult;
@@ -280,7 +288,7 @@ RE::NiColor LinearLighting::LightColorToWorking(const RE::NiLight* light, bool e
 	if (!light)
 		return {};
 	const auto& diffuse = light->GetLightRuntimeData().diffuse;
-	if (light == workingSunlight && diffuse == workingSunlightColor)
+	if (IsSunlightOverridden(light))
 		return workingSunlightColor;
 
 	auto color = effect ? static_cast<const RE::NiDirectionalLight*>(light)->GetDirectionalLightRuntimeData().effectColor : diffuse;
@@ -313,6 +321,19 @@ RE::NiColor LinearLighting::LightColorToWorking(const RE::NiLight* light, bool e
 	return color;
 }
 
+bool LinearLighting::IsSunlightOverridden(const RE::NiLight* light) const
+{
+	return light && light == workingSunlight && light->GetLightRuntimeData().diffuse == workingSunlightColor;
+}
+
+float LinearLighting::GetSunlightScale(const RE::NiLight* light) const
+{
+	if (IsSunlightOverridden(light))
+		return 1.0f;
+	const auto* imageSpaceManager = globals::game::imageSpaceManager;
+	return imageSpaceManager ? imageSpaceManager->GetRuntimeData().data.baseData.hdr.sunlightScale : 1.0f;
+}
+
 void LinearLighting::SetSunlightColor(RE::NiLight* light, RE::NiColor color)
 {
 	if (!light)
@@ -339,6 +360,8 @@ namespace
 	{
 		static void thunk(RE::BSShader* shader, RE::BSRenderPass* pass, uint32_t renderFlags)
 		{
+			auto* previous = std::exchange(geometryPass, pass);
+			const SKSE::stl::scope_exit restore([previous]() noexcept { geometryPass = previous; });
 			if (!globals::features::linearLighting.IsLinearLightingActive())
 				return func(shader, pass, renderFlags);
 			if constexpr (Type == RE::BSShader::Type::Lighting) {
@@ -364,8 +387,6 @@ namespace
 					}
 				}
 			}
-			auto* previous = std::exchange(geometryPass, pass);
-			const SKSE::stl::scope_exit restore([previous]() noexcept { geometryPass = previous; });
 			func(shader, pass, renderFlags);
 			if constexpr (Type == RE::BSShader::Type::Lighting) {
 				constexpr auto projectedTextureIsSRGB = static_cast<uint>(State::ExtraShaderDescriptors::ProjectedTextureIsSRGB);
@@ -386,8 +407,7 @@ namespace
 
 	float* PixelConstant(Group group, uint index)
 	{
-		auto& ll = globals::features::linearLighting;
-		if (!ll.IsLinearLightingActive() || !globals::state->customPixelShader)
+		if (!globals::state->customPixelShader)
 			return nullptr;
 		auto* shader = *globals::game::currentPixelShader;
 		if (!shader)
@@ -406,6 +426,16 @@ namespace
 			value[1] = color.green;
 			value[2] = color.blue;
 		}
+	}
+
+	void WriteDirectionalLight(RE::BSRenderPass* pass, uint index, bool effect = false)
+	{
+		if (!pass || !pass->sceneLights || !pass->numLights || !pass->sceneLights[0])
+			return;
+		const auto* light = skyrim_cast<RE::NiDirectionalLight*>(pass->sceneLights[0]->light.get());
+		auto& ll = globals::features::linearLighting;
+		if (light && (ll.IsLinearLightingActive() || ll.IsSunlightOverridden(light)))
+			WriteRGB(Group::PerGeometry, index, ll.LightColorToWorking(light, effect) * (light->GetLightRuntimeData().fade * ll.GetSunlightScale(light)));
 	}
 
 	struct LightingMaterialUpload
@@ -443,16 +473,11 @@ namespace
 		{
 			auto* pass = geometryPass;
 			auto& ll = globals::features::linearLighting;
+			WriteDirectionalLight(pass, 4);
 			if (pass && ll.IsLinearLightingActive()) {
 				const auto* property = static_cast<const RE::BSLightingShaderProperty*>(pass->shaderProperty);
 				if (property && property->emissiveColor)
 					WriteRGB(Group::PerGeometry, 8, ll.SRGBToWorking(*property->emissiveColor) * (property->emissiveMult * ll.settings.emitColorMult));
-				if (pass->sceneLights && pass->numLights && pass->sceneLights[0] && pass->sceneLights[0]->light) {
-					const auto* light = pass->sceneLights[0]->light.get();
-					const auto& data = light->GetLightRuntimeData();
-					const float scale = RE::ImageSpaceManager::GetSingleton()->GetRuntimeData().data.baseData.hdr.sunlightScale;
-					WriteRGB(Group::PerGeometry, 4, ll.LightColorToWorking(light) * (data.fade * scale));
-				}
 				if (pass->sceneLights && !globals::features::lightLimitFix.loaded) {
 					for (uint i = 1; i < std::min<uint>(pass->numLights, 8); ++i) {
 						const auto* bsLight = pass->sceneLights[i];
@@ -474,10 +499,12 @@ namespace
 		{
 			auto* pass = geometryPass;
 			auto& ll = globals::features::linearLighting;
+			const auto descriptor = globals::state->currentPixelDescriptor;
+			const bool membrane = descriptor & static_cast<uint>(SIE::ShaderCache::EffectShaderFlags::Membrane);
+			if (pass && pass->shaderProperty && !membrane && (descriptor & (1u << 16)))
+				WriteDirectionalLight(pass, 11, true);
 			if (pass && pass->shaderProperty && ll.IsLinearLightingActive()) {
 				auto* property = pass->shaderProperty;
-				const auto descriptor = globals::state->currentPixelDescriptor;
-				const bool membrane = descriptor & static_cast<uint>(SIE::ShaderCache::EffectShaderFlags::Membrane);
 				const bool grayscale = descriptor & static_cast<uint>(SIE::ShaderCache::EffectShaderFlags::GrayscaleToColor);
 				if (membrane && property->effectData && !grayscale) {
 					const auto& data = *property->effectData;
@@ -487,10 +514,6 @@ namespace
 					WriteRGB(Group::PerGeometry, 0, ll.SRGBToWorking(effect->emittanceColor ? *effect->emittanceColor : RE::NiColor{ 1.f, 1.f, 1.f }));
 				}
 				if (!membrane && (descriptor & (1u << 16)) && pass->numLights && pass->sceneLights && pass->sceneLights[0]) {
-					if (const auto* light = netimmerse_cast<RE::NiDirectionalLight*>(pass->sceneLights[0]->light.get())) {
-						const float scale = RE::ImageSpaceManager::GetSingleton()->GetRuntimeData().data.baseData.hdr.sunlightScale;
-						WriteRGB(Group::PerGeometry, 11, ll.LightColorToWorking(light, true) * (light->GetLightRuntimeData().fade * scale));
-					}
 					for (uint i = 1; i < std::min<uint>(pass->numLights, 5); ++i) {
 						const auto* bsLight = pass->sceneLights[i];
 						if (!bsLight || !bsLight->light)

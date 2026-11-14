@@ -1,10 +1,8 @@
 #pragma once
-#include <array>
-#include <optional>
-
 #include "RE/M/Moon.h"
-
 #include "Utils/Moon.h"
+
+struct PhysicalSky;
 
 /** @brief Synchronizes volumetric lighting and shadow direction with actual sun and moon positions. */
 struct SkySync : Feature
@@ -13,6 +11,8 @@ private:
 	static constexpr std::string_view MOD_ID = "153543";
 
 public:
+	friend struct PhysicalSky;
+
 	virtual inline std::string GetName() override { return "Sky Sync"; }
 	virtual std::string GetDisplayName() override { return T("feature.sky_sync.name", "Sky Sync"); }
 	virtual inline std::string GetShortName() override { return "SkySync"; }

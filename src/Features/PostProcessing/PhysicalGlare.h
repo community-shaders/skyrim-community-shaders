@@ -47,7 +47,7 @@ struct PhysicalGlare : public PostProcessFeature
 	struct Settings
 	{
 		// --- Core ---
-		float ThresholdEV = 8.0f;  // Brightness threshold in EV100 (exp2(EV100 - 3) → linear luminance). Paper: 0.9 linear ≈ 2.85 EV100.
+		float ThresholdEV = 8.0f;  // Neutral-equivalent EV100; exp2(EV100 - 3) is applied per RGB channel before exposure.
 		float Intensity = 0.1f;
 		int ApertureMode = 0;  // 0 = Lens (N-polygon), 1 = Pupil (circle)
 		int ApertureBlades = 6;

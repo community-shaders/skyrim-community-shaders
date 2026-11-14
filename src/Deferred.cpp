@@ -1,4 +1,5 @@
 #include "Deferred.h"
+#include "Features/ViewAtmosphere.h"
 
 #include <DDSTextureLoader.h>
 
@@ -10,7 +11,9 @@
 #include "Features/CSEditor.h"
 #include "Features/DynamicCubemaps.h"
 #include "Features/Effects11.h"
+#include "Features/ExponentialHeightFog.h"
 #include "Features/IBL.h"
+#include "Features/PhysicalSky.h"
 #include "Features/ScreenSpaceGI.h"
 #include "Features/Skylighting.h"
 #include "Features/SubsurfaceScattering.h"
@@ -204,6 +207,7 @@ void Deferred::ReflectionsPrepasses()
 	auto state = globals::state;
 
 	state->activeReflections = true;
+	globals::features::viewAtmosphere.Unbind();
 	state->UpdateSharedData(false, false);
 
 	auto context = globals::d3d::context;
@@ -212,6 +216,7 @@ void Deferred::ReflectionsPrepasses()
 	globals::game::stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_RENDERTARGET);  // Run OMSetRenderTargets again
 
 	Feature::ForEachLoadedFeature("ReflectionsPrepass", [](Feature* feature) { feature->ReflectionsPrepass(); }, true);
+	globals::features::viewAtmosphere.RenderReflection();
 }
 
 void Deferred::EarlyPrepasses()
@@ -252,8 +257,10 @@ void Deferred::PrepassPasses()
 	auto context = globals::d3d::context;
 	context->OMSetRenderTargets(0, nullptr, nullptr);  // Unbind all bound render targets
 
+	globals::features::viewAtmosphere.Prepare();
 	Feature::ForEachLoadedFeature("Prepass", [](Feature* feature) { feature->Prepass(); }, true);
 	Feature::ForEachLoadedFeature("PostPrepass", [](Feature* feature) { feature->PostPrepass(); }, true);
+	globals::features::viewAtmosphere.Render();
 }
 
 void Deferred::StartDeferred()
@@ -360,8 +367,10 @@ void Deferred::DeferredPasses()
 
 	auto& ibl = globals::features::ibl;
 
-	// Matches SKYLIGHTING_COVERAGE_REGISTER in DeferredCompositeCS.hlsl; t17 is SharedData::DepthTexture
-	constexpr UINT SKYLIGHTING_COVERAGE_SLOT = 18;
+	auto& physSky = globals::features::physicalSky;
+
+	// Matches SKYLIGHTING_COVERAGE_REGISTER in DeferredCompositeCS.hlsl; t16-t20 are physical sky
+	constexpr UINT SKYLIGHTING_COVERAGE_SLOT = 21;
 
 	// Deferred Composite
 	{
@@ -369,7 +378,7 @@ void Deferred::DeferredPasses()
 
 		const bool skylightingReady = skylighting.loaded && skylighting.texProbeArray;
 		ID3D11ShaderResourceView* skylightingProbes = skylightingReady ? skylighting.texProbeArray->srv.get() : nullptr;
-		ID3D11ShaderResourceView* srvs[16]{
+		ID3D11ShaderResourceView* srvs[]{
 			specular.SRV,                                                                         // t0  SpecularTexture
 			albedo.SRV,                                                                           // t1  AlbedoTexture
 			normalRoughness.SRV,                                                                  // t2  NormalRoughnessTexture
@@ -386,17 +395,26 @@ void Deferred::DeferredPasses()
 			ssgi_hq_spec ? ssgi_gi_spec : nullptr,                                                // t13 SsgiSpecularTexture
 			ibl.loaded ? ibl.envIBLTexture->srv.get() : nullptr,                                  // t14 EnvIBLTexture
 			ibl.loaded ? ibl.skyIBLTexture->srv.get() : nullptr,                                  // t15 SkyIBLTexture
+			physSky.loaded ? physSky.texApLut->srv.get() : nullptr,
+			physSky.loaded ? physSky.texApShadow->srv.get() : nullptr,
+			physSky.loaded && physSky.texVolTr ? physSky.texVolTr->srv.get() : nullptr,
+			physSky.loaded && physSky.texVolLum ? physSky.texVolLum->srv.get() : nullptr,
+			physSky.loaded && physSky.texShadowVolume ? physSky.texShadowVolume->srv.get() : nullptr,
 		};
 		ID3D11ShaderResourceView* skylightingCoverageSrvs[2]{
-			skylightingReady ? skylighting.texProbeCoverage->srv.get() : nullptr,    // t18 SkylightingProbeCoverage
-			skylightingReady ? skylighting.texZenithOcclusion->srv.get() : nullptr,  // t19 SkylightingZenithDepth
+			skylightingReady ? skylighting.texProbeCoverage->srv.get() : nullptr,    // t21 SkylightingProbeCoverage
+			skylightingReady ? skylighting.texZenithOcclusion->srv.get() : nullptr,  // t22 SkylightingZenithDepth
 		};
 
-		if (dynamicCubemaps.loaded)
-			context->CSSetSamplers(0, 1, &linearSampler);
+		ID3D11SamplerState* samplers[]{
+			dynamicCubemaps.loaded ? linearSampler : nullptr,
+			physSky.loaded ? physSky.sampSv.get() : nullptr,
+		};
+		context->CSSetSamplers(0, ARRAYSIZE(samplers), samplers);
 
 		context->CSSetShaderResources(0, ARRAYSIZE(srvs), srvs);
 		context->CSSetShaderResources(SKYLIGHTING_COVERAGE_SLOT, ARRAYSIZE(skylightingCoverageSrvs), skylightingCoverageSrvs);
+		globals::features::viewAtmosphere.Bind(true);
 
 		ID3D11UnorderedAccessView* uavs[3]{ main.UAV, normals.UAV, motionVectors.UAV };
 		context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
@@ -414,7 +432,7 @@ void Deferred::DeferredPasses()
 
 	// Clear
 	{
-		ID3D11ShaderResourceView* views[16]{ nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
+		ID3D11ShaderResourceView* views[21]{};
 		context->CSSetShaderResources(0, ARRAYSIZE(views), views);
 		context->CSSetShaderResources(SKYLIGHTING_COVERAGE_SLOT, 2, views);
 
@@ -423,6 +441,9 @@ void Deferred::DeferredPasses()
 
 		ID3D11Buffer* buffers[1] = { nullptr };
 		context->CSSetConstantBuffers(12, 1, buffers);
+
+		ID3D11SamplerState* samplers[2]{ nullptr, nullptr };
+		context->CSSetSamplers(0, ARRAYSIZE(samplers), samplers);
 
 		context->CSSetShader(nullptr, nullptr, 0);
 	}
@@ -569,6 +590,7 @@ void Deferred::CopyShadowLightData()
 {
 	ZoneScoped;
 	TracyD3D11Zone(globals::state->tracyCtx, "CopyShadowLightData");
+	directionalShadowDataFrame = UINT32_MAX;
 
 	auto* shadowSceneNode = globals::game::smState->shadowSceneNode[0];
 	if (!shadowSceneNode)
@@ -591,9 +613,39 @@ void Deferred::CopyShadowLightData()
 	DX::ThrowIfFailed(context->Map(directionalShadowLights->resource.get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped));
 	memcpy(mapped.pData, &dd, sizeof(DirectionalShadowLightData));
 	context->Unmap(directionalShadowLights->resource.get(), 0);
+	directionalShadowDataFrame = globals::state->frameCount;
 
 	ID3D11ShaderResourceView* srv = directionalShadowLights->srv.get();
 	context->PSSetShaderResources(98, 1, &srv);
+}
+
+void Deferred::CaptureDirectionalShadowMap()
+{
+	directionalShadowMap = nullptr;
+	directionalShadowMapFrame = UINT32_MAX;
+	if (!globals::state->HasDirectionalShadows())
+		return;
+
+	winrt::com_ptr<ID3D11ShaderResourceView> shadowMap;
+	globals::d3d::context->PSGetShaderResources(4, 1, shadowMap.put());
+	if (!shadowMap)
+		return;
+
+	D3D11_SHADER_RESOURCE_VIEW_DESC desc{};
+	shadowMap->GetDesc(&desc);
+	if (desc.ViewDimension != D3D11_SRV_DIMENSION_TEXTURE2DARRAY || desc.Texture2DArray.ArraySize < 2)
+		return;
+
+	directionalShadowMap = std::move(shadowMap);
+	directionalShadowMapFrame = globals::state->frameCount;
+}
+
+ID3D11ShaderResourceView* Deferred::GetDirectionalShadowMap() const
+{
+	const auto frame = globals::state->frameCount;
+	return globals::state->HasDirectionalShadows() && directionalShadowMapFrame == frame && directionalShadowDataFrame == frame ?
+	           directionalShadowMap.get() :
+	           nullptr;
 }
 
 void Deferred::ClearShaderCache()
@@ -606,6 +658,50 @@ void Deferred::ClearShaderCache()
 		mainCompositeInteriorCS->Release();
 		mainCompositeInteriorCS = nullptr;
 	}
+}
+
+void Deferred::Hooks::PostWater_SetCamera::thunk(void* graphicsState, RE::NiCamera* camera, uint32_t flags)
+{
+	func(graphicsState, camera, flags);
+	globals::features::viewAtmosphere.CompositeAfterWater();
+}
+
+void Deferred::Hooks::InstallPostWaterHook()
+{
+	const auto address = REL::RelocationID(99939, 106584).address();
+	DWORD64 imageBase = 0;
+	const auto* entry = RtlLookupFunctionEntry(address, &imageBase, nullptr);
+	if (!entry) {
+		logger::error("Deferred post-water function bounds were not found; retaining existing composition.");
+		return;
+	}
+	constexpr std::array<uint8_t, 19> pattern = { 0x48, 0x8B, 0x53, 0x10, 0x48, 0x8D, 0x0D, 0, 0, 0, 0, 0x44, 0x8B, 0xC7, 0xE8, 0, 0, 0, 0 };
+	std::uintptr_t callSite = 0;
+	for (auto p = address; p + pattern.size() <= imageBase + entry->EndAddress; ++p) {
+		const auto* bytes = reinterpret_cast<const uint8_t*>(p);
+		bool match = true;
+		for (size_t i = 0; i < pattern.size(); ++i)
+			if ((i < 7 || (i >= 11 && i < 15)) && bytes[i] != pattern[i])
+				match = false;
+		if (!match)
+			continue;
+		if (callSite) {
+			logger::error("Deferred post-water boundary is ambiguous; retaining existing composition.");
+			return;
+		}
+		callSite = p + 14;
+	}
+	if (!callSite) {
+		logger::error("Deferred post-water boundary was not found; retaining existing composition.");
+		return;
+	}
+	const auto cameraTarget = callSite + 5 + *reinterpret_cast<const int32_t*>(callSite + 1);
+	if (cameraTarget != REL::RelocationID(75694, 77503).address()) {
+		logger::error("Deferred post-water camera call was modified; retaining existing composition.");
+		return;
+	}
+	stl::write_thunk_call<PostWater_SetCamera>(callSite);
+	globals::deferred->postWaterHookInstalled = true;
 }
 
 ID3D11ComputeShader* Deferred::GetComputeMainComposite()
@@ -626,6 +722,9 @@ ID3D11ComputeShader* Deferred::GetComputeMainComposite()
 
 		if (globals::features::ibl.loaded)
 			defines.push_back({ "IBL", nullptr });
+
+		if (globals::features::physicalSky.loaded)
+			defines.push_back({ "PHYSICAL_SKY", nullptr });
 
 		// TERRAIN_BLENDING flips DepthTexture's HLSL type from `Texture2D<unorm float>`
 		// (R24_UNORM_X8_TYPELESS game depth) to `Texture2D<float>` (R32_FLOAT blendedDepth).
@@ -731,6 +830,7 @@ void Deferred::Hooks::BSCubeMapCamera_RenderCubemap::thunk(RE::NiAVObject* camer
 	deferred->ReflectionsPrepasses();
 	state->permutationData.ExtraShaderDescriptor |= static_cast<uint32_t>(State::ExtraShaderDescriptors::IsReflections);
 	func(camera, a2, a3, a4, a5);
+	globals::features::viewAtmosphere.Unbind();
 	state->permutationData.ExtraShaderDescriptor &= ~static_cast<uint32_t>(State::ExtraShaderDescriptors::IsReflections);
 }
 

@@ -8,6 +8,8 @@
 
 #define I18N_KEY_PREFIX "feature.sky_sync."
 
+#include "PhysicalSky.h"
+
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	SkySync::Settings,
 	Enabled,
@@ -292,6 +294,8 @@ void SkySync::ApplyMoonlightColors(RE::Sky* sky)
 
 float SkySync::GetDirectionalFlash(const RE::Sky* sky)
 {
+	if (globals::features::physicalSky.lightning.OwnsWeather())
+		return 0.f;
 	// Sky::SetColor caps the added flash at 1
 	return !sky->lastWeather && gWeatherFlashDirectional ? std::min(gWeatherFlashDirectional->GetFloat() * sky->flash, 1.0f) : 0.0f;
 }
@@ -346,7 +350,10 @@ RE::BSVolumetricLightingRenderData SkySync::BlendNightVolumetricLighting(const R
 
 void SkySync::Sky_Update::thunk(RE::Sky* sky, float deltaTime)
 {
+	auto& lightning = globals::features::physicalSky.lightning;
+	lightning.SuppressVanilla(sky);
 	func(sky, deltaTime);
+	lightning.SuppressVanilla(sky);
 	auto& skySync = globals::features::skySync;
 	if (sky && sky->sun)
 		globals::features::linearLighting.ClearSunlightColor(sky->sun->light.get());
@@ -408,11 +415,14 @@ bool SkySync::Update(const RE::Sky* sky)
 			currentCell = nullptr;  // keep the cache in sync so a cell-less frame doesn't reset every frame
 		if (resetFaderForCellChange)
 			shadowFader.Reset();
+		lastGameHour = -1.0f;
 		UpdateWorldspaceDisabled();
 	}
 
+	auto& physicalSky = globals::features::physicalSky;
+	bool physicalSkyInteriorOverride = physicalSky.loaded && physicalSky.settings.enabled && physicalSky.settings.forceEnableAllInteriorCells;
 	// Exterior worldspaces run unless listed as disabled; interior cells require the sunlight-shadows flag.
-	if (worldspaceDisabled || (cell && cell->IsInteriorCell() && !cell->cellFlags.all(static_cast<RE::TESObjectCELL::Flag>(CellFlagExt::kSunlightShadows)))) {
+	if (worldspaceDisabled || (cell && cell->IsInteriorCell() && !cell->cellFlags.all(static_cast<RE::TESObjectCELL::Flag>(CellFlagExt::kSunlightShadows)) && !physicalSkyInteriorOverride)) {
 		// Vanilla drives the sun in a disabled worldspace, so a pending transition has nothing to wait for
 		return worldspaceDisabled && std::exchange(immediateTransitionReady, false);
 	}

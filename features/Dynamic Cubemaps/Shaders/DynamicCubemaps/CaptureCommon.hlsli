@@ -64,7 +64,7 @@ bool SampleCapture(uint3 texel, out float3 position, out float3 color, out float
 
 	float2 sampleUV = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(uv);
 #if defined(REFLECTIONS)
-	bool excludeSky = false;
+	bool excludeSky = SharedData::PostWaterComposite != 0;
 #else
 	bool excludeSky = true;
 #endif
@@ -79,7 +79,9 @@ bool SampleCapture(uint3 texel, out float3 position, out float3 color, out float
 
 	float4 positionCS = mul(FrameBuffer::CameraViewProjInverse, float4(uv * float2(2.0, -2.0) + float2(-1.0, 1.0), depth, 1.0));
 	position = positionCS.xyz / positionCS.w * 0.001;
-	color = ColorManagement::SceneToLinear(ColorTexture.SampleLevel(LinearSampler, sampleUV, 0).rgb);
+	// The capture and its amortized filtering retain physical units, independent
+	// of the exposure of the screen frame from which each sample was captured.
+	color = ColorManagement::SceneToLinear(PreExposure::Decode(ColorTexture.SampleLevel(LinearSampler, sampleUV, 0).rgb));
 	if (!all(isfinite(position)) || !all(isfinite(color)))
 		return false;
 	color = clamp(color, 0.0, 65504.0);

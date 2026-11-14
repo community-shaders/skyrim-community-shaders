@@ -4,6 +4,8 @@
 #include "LightLimitFix/Common.h"
 #include "LightLimitFix/LightAttach.h"
 #include "LinearLighting.h"
+#include "PhysicalSky.h"
+#include "Util.h"
 
 #include "I18n/I18n.h"
 #include "Menu.h"
@@ -737,6 +739,29 @@ void LightLimitFix::UpdateLights()
 	}
 
 	AddParticleLightsToBuffer(lightsData);
+	const auto& flash = globals::features::physicalSky.cbData;
+	if (flash.enabled && flash.lightningControl.w > 0.f && flash.lightningColorIntensity.w > 0.f) {
+		for (uint32_t i = 0; i < 2 && lightsData.size() < MAX_LIGHTS; ++i) {
+			const auto source = i == 0 ? flash.lightningPositionRadius : flash.lightningChannelEmitter;
+			if (source.w <= 0.f)
+				continue;
+			LightData light{};
+			const float luminance = (i == 0 ? flash.lightningPhotometry.x : flash.lightningPhotometry.y) * flash.lightningColorIntensity.w;
+			if (luminance <= 0.f)
+				continue;
+			light.color = float3(flash.lightningColorIntensity.x, flash.lightningColorIntensity.y, flash.lightningColorIntensity.z) *
+			              luminance;
+			if (!globals::features::linearLighting.IsLinearLightingActive())
+				light.color = { Util::ColorSpace::LinearToGameGamma(light.color.x), Util::ColorSpace::LinearToGameGamma(light.color.y), Util::ColorSpace::LinearToGameGamma(light.color.z) };
+			light.sizeBias = source.w * source.w;  // equivalent emitter radius squared, game units
+			// Cull only below 0.1 lux; attenuation itself stays photometric.
+			light.radius = source.w * std::sqrt(std::max(std::numbers::pi_v<float> * luminance / 0.1f - 1.f, 1.f));
+			light.invRadius = 1.f / light.radius;
+			light.lightFlags.set(LightFlags::PortalStrict, LightFlags::Lightning);
+			SetLightPosition(light, { source.x, source.y, source.z });
+			lightsData.push_back(light);
+		}
+	}
 
 	auto context = globals::d3d::context;
 

@@ -73,9 +73,9 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 
 void PhysicalGlare::DrawSettings()
 {
-	ImGui::SliderFloat(T("feature.post_processing.physical_glare.threshold", "Threshold"), &settings.ThresholdEV, -7.f, 23.f, "%+.2f EV100");
+	ImGui::SliderFloat(T("feature.post_processing.physical_glare.threshold", "Threshold (Neutral EV100)"), &settings.ThresholdEV, -7.f, 23.f, "%+.2f EV100");
 	if (auto _tt = Util::HoverTooltipWrapper())
-		ImGui::TextUnformatted(T("feature.post_processing.physical_glare.per_channel_brightness_threshold_for_glare_extraction_in", "Per-channel brightness threshold for glare extraction in EV100 (0 EV100 = 0.125 linear luminance)."));
+		ImGui::TextUnformatted(T("feature.post_processing.physical_glare.per_channel_brightness_threshold_for_glare_extraction_in", "Threshold applied separately to each RGB channel before exposure. EV100 denotes equivalent neutral luminance on the Physical Sky / Linear Lighting scale: 0 EV100 = RGB 0.125 = 0.125 cd/m2 for neutral gray (K = 12.5). Colored pixels are not thresholded by luminance."));
 
 	ImGui::SliderFloat(T("feature.post_processing.physical_glare.intensity", "Intensity"), &settings.Intensity, 0.f, 2.f, "%.2f");
 	if (auto _tt = Util::HoverTooltipWrapper())
@@ -548,7 +548,6 @@ void PhysicalGlare::ClearShaderCache()
 	psfDirty = true;
 	apertureDirty = true;
 
-	globals::shaderCache->ClearStandaloneComputeCache(L"PostProcessing/PhysicalGlare");
 	CompileComputeShaders();
 }
 

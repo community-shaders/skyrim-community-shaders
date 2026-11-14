@@ -14,6 +14,32 @@
 
 using namespace SceneSettingsInternal;
 
+template <class Resolve>
+static json BlendScenePeriods(const json& baseline,
+	const std::array<float, SceneSettingsManager::kPeriodCount>& factors, Resolve&& resolve)
+{
+	std::array<json, SceneSettingsManager::kPeriodCount> values;
+	const json* constant = nullptr;
+	bool uniform = true;
+	for (int index = 0; index < SceneSettingsManager::kPeriodCount; ++index) {
+		if (factors[index] <= 0.f)
+			continue;
+		values[index] = resolve(index);
+		if (constant)
+			uniform &= values[index] == *constant;
+		else
+			constant = &values[index];
+	}
+	// Constant settings must stay bit-exact to avoid invalidating render histories and generated maps.
+	if (constant && uniform)
+		return *constant;
+	json result = SceneBlend::EmptyLike(baseline);
+	for (int index = 0; index < SceneSettingsManager::kPeriodCount; ++index)
+		if (factors[index] > 0.f)
+			SceneBlend::Accumulate(result, values[index], factors[index]);
+	return result;
+}
+
 void SceneSettingsManager::ResolveAndApply(bool force, bool allowLocationTransitions)
 {
 	if (resolverSuspended || sceneLayerSuspendDepth > 0)
@@ -216,7 +242,7 @@ void SceneSettingsManager::StartLocationTransitions(
 		const auto targetValue = targetJson.get<float>();
 		if (!std::isfinite(startValue) || !std::isfinite(targetValue))
 			continue;
-		if (duration <= 0.0f || std::abs(targetValue - startValue) < kBlendEpsilon) {
+		if (duration <= 0.0f || targetValue == startValue) {
 			if (activeLocationTransitions.erase(address) != 0)
 				locationTransitionBatchesDirty = true;
 			continue;
@@ -265,15 +291,16 @@ bool SceneSettingsManager::AdvanceLocationTransitions(float now)
 	bool appliedAny = false;
 	const auto retryNow = std::chrono::steady_clock::now();
 	for (auto& [featureShortName, batch] : locationTransitionBatches) {
-		// A batch nobody can see move is a save/load round trip for nothing. The final tick always
-		// applies, so the target value still lands exactly.
+		// Compare against the applied value, not the previous tick's candidate. A fixed
+		// absolute epsilon can suppress an entire cloud-density fade (e.g. 0.02 -> 0).
 		bool valuesMoved = false;
 		for (size_t index = 0; index < batch.transitions.size(); ++index) {
 			const auto& transition = *batch.transitions[index];
 			const auto eased = EaseLocationTransition(transition, now);
 			const bool finished = IsLocationTransitionFinished(transition, now);
-			valuesMoved = valuesMoved || finished ||
-			              std::abs(eased - batch.updates[index].value.get<float>()) >= kBlendEpsilon;
+			const auto appliedIt = appliedSettings.find(batch.addresses[index]);
+			valuesMoved = valuesMoved || finished || appliedIt == appliedSettings.end() ||
+			              !AppliedValuesEqual(appliedIt->second, json(eased));
 			// A restore lands on the baseline itself, which a float round trip of it need not equal.
 			const auto baselineIt = finished && transition.restoreAtEnd ? baselineSettings.find(batch.addresses[index]) :
 			                                                              baselineSettings.end();
@@ -351,7 +378,7 @@ void SceneSettingsManager::RetireFinishedLocationTransitions(float now)
 		auto appliedIt = appliedSettings.find(address);
 		if (!IsLocationTransitionFinished(transition, now) || appliedIt == appliedSettings.end() ||
 			!IsNumericValue(appliedIt->second) ||
-			std::abs(appliedIt->second.get<float>() - transition.targetValue) >= kBlendEpsilon) {
+			!AppliedValuesEqual(appliedIt->second, json(transition.targetValue))) {
 			++transitionIt;
 			continue;
 		}
@@ -441,7 +468,7 @@ bool SceneSettingsManager::IsResolvableEntry(const SettingEntry& entry, SceneTyp
 	// restoring that address needs its baseline collected.
 	return IsEntryActive(entry) &&
 	       IsSettingAllowedForType(type, entry.featureShortName, entry.settingPath, entry.settingKey, floatsOnly) &&
-	       (!floatsOnly || IsNumericValue(entry.value));
+	       (!floatsOnly || SceneBlend::IsBlendable(entry.value));
 }
 
 bool SceneSettingsManager::HasActiveSceneEntriesCached()
@@ -683,7 +710,6 @@ void SceneSettingsManager::RestoreAppliedSettings()
 		// user's original value with nothing left to retry from.
 		if (!FeatureRetainedUpdates(*feature, featureShortName, updates)) {
 			recordRestoreFailure(std::format("{} did not retain restored base settings", featureShortName));
-			featureApplyDocuments.erase(featureShortName);
 			continue;
 		}
 		restoreFailureWarnings.erase(featureShortName);
@@ -696,13 +722,11 @@ void SceneSettingsManager::RestoreAppliedSettings()
 			baselineSettings.erase(item.address);
 		}
 		appliedFeatureNames.erase(featureShortName);
-		featureApplyDocuments.erase(featureShortName);
 	}
 
 	if (appliedSettings.empty()) {
 		baselineSettings.clear();
 		appliedFeatureNames.clear();
-		featureApplyDocuments.clear();
 		restoreFailureWarnings.clear();
 		restoreRetryAfter.clear();
 	} else {
@@ -739,12 +763,12 @@ void SceneSettingsManager::CollectPeriodValueGroups(
 			}
 			if (!IsResolvableEntry(entry, type))
 				continue;
-			const auto value = entry.value.get<float>();
-			if (!std::isfinite(value))
+			const auto& value = entry.value;
+			if (!SceneBlend::IsBlendable(value))
 				continue;
 			auto& periodValues = values[GetEntryAddress(entry)];
 			for (int slot = firstPeriod; slot < lastPeriod; ++slot)
-				periodValues[slot] = value;
+				periodValues[slot].emplace(value);
 		}
 	}
 }
@@ -779,13 +803,12 @@ void SceneSettingsManager::ResolveTimeOfDaySettings(
 	const auto& factors = blendSnapshot.timeOfDayFactors;
 	for (const auto& [address, periodValues] : values) {
 		auto baselineIt = baselineSettings.find(address);
-		if (baselineIt == baselineSettings.end() || !IsNumericValue(baselineIt->second))
+		if (baselineIt == baselineSettings.end() || !SceneBlend::IsBlendable(baselineIt->second))
 			continue;
-		const auto baseline = baselineIt->second.get<float>();
-		float result = 0.0f;
-		for (int periodIndex = 0; periodIndex < kPeriodCount; ++periodIndex)
-			result += factors[periodIndex] * periodValues[periodIndex].value_or(baseline);
-		resolved[address] = result;
+		const auto baseline = baselineIt->second;
+		resolved[address] = BlendScenePeriods(baseline, factors, [&](int periodIndex) {
+			return periodValues[periodIndex].value_or(baseline);
+		});
 	}
 }
 
@@ -801,31 +824,30 @@ void SceneSettingsManager::ResolveWeatherSettings(
 	const auto& previousValues = BuildWeatherValueGroups(weather.previousWeatherId);
 
 	const auto resolveWeather = [&](const SettingAddress& address, const PeriodSettingMap& weatherValues,
-									float baseline) -> std::optional<float> {
+									const json& baseline) -> std::optional<json> {
 		auto weatherIt = weatherValues.find(address);
 		if (weatherIt == weatherValues.end())
 			return std::nullopt;
 		auto timeOfDayIt = timeOfDayValues.find(address);
-		float result = 0.0f;
-		for (int periodIndex = 0; periodIndex < kPeriodCount; ++periodIndex) {
+		json result = BlendScenePeriods(baseline, factors, [&](int periodIndex) {
 			const auto lower = timeOfDayIt != timeOfDayValues.end() ?
 			                       timeOfDayIt->second[periodIndex].value_or(baseline) :
 			                       baseline;
-			result += factors[periodIndex] * weatherIt->second[periodIndex].value_or(lower);
-		}
-		return result;
+			return weatherIt->second[periodIndex].value_or(lower);
+		});
+		return std::optional<json>{ std::in_place, std::move(result) };
 	};
 
 	const auto blendAddress = [&](const SettingAddress& address) {
 		auto baselineIt = baselineSettings.find(address);
-		if (baselineIt == baselineSettings.end() || !IsNumericValue(baselineIt->second))
+		if (baselineIt == baselineSettings.end() || !SceneBlend::IsBlendable(baselineIt->second))
 			return;
-		const auto baseline = baselineIt->second.get<float>();
+		const auto baseline = baselineIt->second;
 		// Where the time-of-day layer left this address is what an unconfigured weather blends from.
-		float lowerValue = baseline;
+		json lowerValue = baseline;
 		if (auto resolvedIt = resolved.find(address);
-			resolvedIt != resolved.end() && IsNumericValue(resolvedIt->second))
-			lowerValue = resolvedIt->second.get<float>();
+			resolvedIt != resolved.end() && SceneBlend::IsBlendable(resolvedIt->second))
+			lowerValue = resolvedIt->second;
 
 		const auto currentValue = resolveWeather(address, currentValues, baseline);
 		const auto previousValue = resolveWeather(address, previousValues, baseline);
@@ -833,7 +855,7 @@ void SceneSettingsManager::ResolveWeatherSettings(
 			return;
 		const auto from = previousValue.value_or(lowerValue);
 		const auto to = currentValue.value_or(lowerValue);
-		resolved[address] = from + (to - from) * weather.lerp;
+		resolved[address] = SceneBlend::Interpolate(from, to, weather.lerp);
 	};
 
 	for (const auto& [address, _] : currentValues)
@@ -871,11 +893,11 @@ void SceneSettingsManager::ResolveLocationLink(const std::vector<SettingEntry>& 
 		// A broader flat value is what this link's unset periods keep.
 		if (auto flatIt = resolved.find(address); flatIt != resolved.end()) {
 			auto baselineIt = baselineSettings.find(address);
-			const auto* seed = IsNumericValue(flatIt->second)       ? &flatIt->second :
-			                   baselineIt != baselineSettings.end() ? &baselineIt->second :
-			                                                          nullptr;
-			if (seed && IsNumericValue(*seed))
-				periodValues[address].fill(seed->get<float>());
+			const auto* seed = SceneBlend::IsBlendable(flatIt->second) ? &flatIt->second :
+			                   baselineIt != baselineSettings.end()    ? &baselineIt->second :
+			                                                             nullptr;
+			if (seed && SceneBlend::IsBlendable(*seed))
+				periodValues[address].fill(std::optional<json>{ std::in_place, *seed });
 			resolved.erase(flatIt);
 		}
 		if (transitionDurations && !entry.deleted)
@@ -890,17 +912,16 @@ void SceneSettingsManager::BlendLocationPeriodValues(ResolvedSettingMap& resolve
 	const auto& factors = blendSnapshot.timeOfDayFactors;
 	for (const auto& [address, values] : periodValues) {
 		auto baselineIt = baselineSettings.find(address);
-		if (baselineIt == baselineSettings.end() || !IsNumericValue(baselineIt->second))
+		if (baselineIt == baselineSettings.end() || !SceneBlend::IsBlendable(baselineIt->second))
 			continue;
 		// Unset periods fall through to whatever time of day and weather resolved beneath.
-		float lowerValue = baselineIt->second.get<float>();
+		json lowerValue = baselineIt->second;
 		if (auto resolvedIt = resolved.find(address);
-			resolvedIt != resolved.end() && IsNumericValue(resolvedIt->second))
-			lowerValue = resolvedIt->second.get<float>();
-		float result = 0.0f;
-		for (int periodIndex = 0; periodIndex < kPeriodCount; ++periodIndex)
-			result += factors[periodIndex] * values[periodIndex].value_or(lowerValue);
-		resolved[address] = result;
+			resolvedIt != resolved.end() && SceneBlend::IsBlendable(resolvedIt->second))
+			lowerValue = resolvedIt->second;
+		resolved[address] = BlendScenePeriods(lowerValue, factors, [&](int periodIndex) {
+			return values[periodIndex].value_or(lowerValue);
+		});
 	}
 }
 
@@ -1004,7 +1025,6 @@ void SceneSettingsManager::InvalidateFeatureSnapshot(std::string_view featureSho
 	locationOverridesDirty = true;
 	if (featureShortName.empty()) {
 		featureBaseSnapshots.clear();
-		featureApplyDocuments.clear();
 		pendingApplyVerifications.clear();
 		verifiedApplySignatures.clear();
 		std::erase_if(baselineSettings,
@@ -1013,7 +1033,6 @@ void SceneSettingsManager::InvalidateFeatureSnapshot(std::string_view featureSho
 	}
 	const auto featureName = std::string(featureShortName);
 	featureBaseSnapshots.erase(featureName);
-	featureApplyDocuments.erase(featureName);
 	pendingApplyVerifications.erase(featureName);
 	verifiedApplySignatures.erase(featureName);
 	std::erase_if(baselineSettings, [&](const auto& item) {
@@ -1026,9 +1045,6 @@ void SceneSettingsManager::PruneAppliedFeatureName(const std::string& featureSho
 	if (std::none_of(appliedSettings.begin(), appliedSettings.end(),
 			[&](const auto& item) { return item.first.featureShortName == featureShortName; })) {
 		appliedFeatureNames.erase(featureShortName);
-		// The base settings are editable again from here, so the next apply has to re-snapshot them:
-		// replaying this document would revert anything changed while the layer was off the feature.
-		featureApplyDocuments.erase(featureShortName);
 	}
 }
 

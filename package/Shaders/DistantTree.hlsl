@@ -123,6 +123,8 @@ struct PS_OUTPUT
 #ifdef PSHADER
 SamplerState SampDiffuse : register(s0);
 
+SamplerState SampShadowMaskSampler : register(s14);
+
 Texture2D<float4> TexDiffuse : register(t0);
 
 cbuffer AlphaTestRefCB : register(b11)
@@ -173,6 +175,10 @@ const static float DepthOffsets[16] = {
 #	if defined(EXP_HEIGHT_FOG)
 #		define SampColorSampler SampDiffuse
 #		include "ExponentialHeightFog/ExponentialHeightFog.hlsli"
+#	endif
+
+#	if defined(PHYSICAL_SKY)
+#		include "PhysicalSky/Common.hlsli"
 #	endif
 
 #	define LinearSampler SampDiffuse
@@ -235,7 +241,7 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 directionalAmbientColor = max(0, Color::Ambient(SharedData::GetAmbient(normal)));
 #		if defined(IBL)
 	if (SharedData::iblSettings.EnableIBL) {
-		directionalAmbientColor = ImageBasedLighting::GetDiffuseIBL(directionalAmbientColor, -normal);
+		directionalAmbientColor = ImageBasedLighting::GetDiffuseIBL(directionalAmbientColor, -normal, input.WorldPosition.xyz);
 	}
 #		endif
 
@@ -266,10 +272,28 @@ PS_OUTPUT main(PS_INPUT input)
 	}
 #			endif
 
+#			if defined(PHYSICAL_SKY)
+	if (SharedData::physSkyData.enabled)
+		diffuseColor *= PhysSky::SampleTr(normalize(SharedData::DirLightDirection.xyz), SampShadowMaskSampler);
+	diffuseColor *= PhysSky::GetDirlightTransmittance(input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust.xyz, SampShadowMaskSampler, true);
+#			endif
+
 	diffuseColor += directionalAmbientColor;
 
 	psout.Diffuse.xyz = diffuseColor * baseColor.xyz;
 	psout.Diffuse.w = 1;
+
+#			if !defined(DEFERRED) && defined(PHYSICAL_SKY)
+	if (SharedData::physSkyData.enabled) {
+		float3 physSkyViewPosition = mul(FrameBuffer::CameraView, float4(input.WorldPosition.xyz, 1)).xyz;
+		float2 physSkyScreenUV = FrameBuffer::ViewToUV(physSkyViewPosition, true);
+		const float3 physSkyViewDir = normalize(input.WorldPosition.xyz);
+		if (inReflection)
+			psout.Diffuse.xyz = PhysSky::CompositeAerialPerspectiveReflection(psout.Diffuse.xyz, physSkyViewDir, length(input.WorldPosition.xyz), SampColorSampler);
+		else
+			psout.Diffuse.xyz = PhysSky::CompositeAerialPerspective(psout.Diffuse.xyz, physSkyViewDir, input.Position.xy, physSkyScreenUV, length(input.WorldPosition.xyz), SampColorSampler);
+	}
+#			endif
 
 #			if defined(EXP_HEIGHT_FOG)
 	if (inReflection && SharedData::exponentialHeightFogSettings.enabled) {
@@ -299,6 +323,12 @@ PS_OUTPUT main(PS_INPUT input)
 	}
 #			endif
 
+#			if defined(PHYSICAL_SKY)
+	if (SharedData::physSkyData.enabled)
+		diffuseColor *= PhysSky::SampleTr(normalize(SharedData::DirLightDirection.xyz), SampShadowMaskSampler);
+	diffuseColor *= PhysSky::GetDirlightTransmittance(input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust.xyz, SampShadowMaskSampler, true);
+#			endif
+
 	diffuseColor += directionalAmbientColor;
 
 	float3 color = diffuseColor * baseColor.xyz;
@@ -311,6 +341,9 @@ PS_OUTPUT main(PS_INPUT input)
 #		endif  // DEFERRED
 #	endif      // RENDER_DEPTH
 
+#	if !defined(RENDER_DEPTH)
+	psout.Diffuse.rgb = PreExposure::EncodeScene(psout.Diffuse.rgb);
+#	endif
 	return psout;
 }
 #endif  // PSHADER

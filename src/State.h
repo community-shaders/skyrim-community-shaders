@@ -539,6 +539,10 @@ public:
 	bool ShouldResetHistory() const { return frameCount == historyResetFrame; }
 
 	uint frameCount = 0;
+	// Frozen for all views/passes in a frame, including reflection rendering.
+	float preExposure = 1.0f;
+	float previousPreExposure = 1.0f;
+	uint preExposureFrame = UINT_MAX;
 	// Thread-safe mirror of frameCount maintained by the render thread.
 	// Off-thread readers (MCP listener, future telemetry) must read this
 	// instead of touching frameCount directly to avoid a data race.

@@ -247,7 +247,7 @@ float3 GetThinSurfaceTransmissionLighting(float3 ambientColor, float3 transmissi
 			ambientColor = ImageBasedLighting::GetStaticDiffuseIBL(transmissionNormal, iblSampler);
 		else
 #		endif
-			ambientColor = ImageBasedLighting::GetDiffuseIBL(ambientColor, -transmissionNormal);
+			ambientColor = ImageBasedLighting::GetDiffuseIBL(ambientColor, -transmissionNormal, worldPosition);
 	}
 #	endif
 	transmittedAmbientColor = transmissionWeight * ambientColor;

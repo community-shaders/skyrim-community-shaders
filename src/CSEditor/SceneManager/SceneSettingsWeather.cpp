@@ -35,7 +35,7 @@ bool SceneSettingsManager::HasWeatherConfig(RE::FormID weatherId)
 
 	auto it = weatherSceneConfigs.find(weatherId);
 	return it != weatherSceneConfigs.end() && std::any_of(it->second.entries.begin(), it->second.entries.end(),
-												  [](const auto& entry) { return IsNumericValue(entry.value); });
+												  [](const auto& entry) { return SceneBlend::IsBlendable(entry.value); });
 }
 
 void SceneSettingsManager::PrepareWeatherUserSettingsMutation(RE::FormID weatherId, bool replaceMalformedEntries)
@@ -52,7 +52,7 @@ void SceneSettingsManager::PrepareWeatherUserSettingsMutation(RE::FormID weather
 		replaceMalformedEntries);
 }
 
-std::optional<float> SceneSettingsManager::ResolveWeatherLowerValue(RE::FormID weatherId,
+std::optional<json> SceneSettingsManager::ResolveWeatherLowerValue(RE::FormID weatherId,
 	const SettingAddress& address, TimeOfDayPeriod period, EntrySource selectedSource)
 {
 	// A flat entry spans every period, so the time of day it sits on is the one playing now.
@@ -60,32 +60,30 @@ std::optional<float> SceneSettingsManager::ResolveWeatherLowerValue(RE::FormID w
 	if (periodIndex < 0 || periodIndex >= kPeriodCount)
 		return std::nullopt;
 	auto baseline = GetBaselineValue(address);
-	if (!IsNumericValue(baseline))
+	if (!SceneBlend::IsBlendable(baseline))
 		return std::nullopt;
-	const auto baselineValue = baseline.get<float>();
-	if (!std::isfinite(baselineValue))
-		return std::nullopt;
-
-	float lowerValue = GetTimeOfDayPeriodFallbackFloat(baselineValue,
-		address.featureShortName, address.settingPath, address.settingKey, periodIndex);
+	json lowerValue = baseline;
+	const auto& periodGroups = BuildTimeOfDayValueGroups();
+	if (const auto found = periodGroups.find(address); found != periodGroups.end())
+		lowerValue = found->second[periodIndex].value_or(baseline);
 	// Only a user entry has the weather overwrite layer beneath it. A capture deliberately passes
 	// the overwrite layer here so it resolves to the value that applies without any mod.
 	if (selectedSource != EntrySource::User)
-		return lowerValue;
+		return std::optional<json>{ std::in_place, std::move(lowerValue) };
 
 	auto configIt = weatherSceneConfigs.find(weatherId);
 	if (configIt == weatherSceneConfigs.end())
-		return lowerValue;
+		return std::optional<json>{ std::in_place, std::move(lowerValue) };
 	for (const auto& entry : configIt->second.entries) {
 		if (entry.source != EntrySource::Overwrite || entry.period != period || !IsEntryActive(entry) ||
-			!IsNumericValue(entry.value) ||
+			!SceneBlend::IsBlendable(entry.value) ||
 			!IsSameSetting(entry, address.featureShortName, address.settingPath, address.settingKey))
 			continue;
-		const auto value = entry.value.get<float>();
-		if (std::isfinite(value))
+		const auto& value = entry.value;
+		if (SceneBlend::IsBlendable(value))
 			lowerValue = value;
 	}
-	return lowerValue;
+	return std::optional<json>{ std::in_place, std::move(lowerValue) };
 }
 
 void SceneSettingsManager::RemoveWeatherSetting(RE::FormID weatherId, size_t index)

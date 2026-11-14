@@ -1,3 +1,4 @@
+#include "Common/PreExposure.hlsli"
 // Physical Glare — Scene composite with energy conservation
 // Community Shaders / Post Processing — Author: Jiaye, 2026
 //
@@ -161,14 +162,16 @@ float3 LoadGlare(int2 position)
 	glare = max(0, glare);
 
 	// Sanitize extreme values
+#if !defined(ENABLE_LL)
 	glare = min(glare, 65000.0);
+#endif
 
 	// Energy-conserving glare contribution:
 	// Subtract the thresholded bright component and output the convolved
 	// (spread) result.  At Intensity = 1 total energy is redistributed,
 	// not gained.  Values != 1 allow artistic attenuation or exaggeration.
 	// This output is combined with the scene in the Composite pass.
-	float3 bright = max(0, scene - Threshold);
+	float3 bright = max(0, scene - PreExposure::Encode(Threshold));
 	float3 output = (glare - bright) * Intensity;
 
 	// Clamp to prevent negative values at Intensity > 1.0

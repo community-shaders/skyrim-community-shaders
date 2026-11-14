@@ -82,6 +82,7 @@ public:
 
 	/** @brief Checks whether a valid heightmap is loaded for the current worldspace. */
 	bool IsHeightMapReady();
+	bool IsShadowMapReady();
 
 	/** @brief Scans for heightmap DDS files and creates constant buffers and compute shaders. */
 	virtual void SetupResources() override;

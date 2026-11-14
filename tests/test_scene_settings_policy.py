@@ -178,6 +178,128 @@ class SceneSettingsPolicyTests(unittest.TestCase):
                 self.assertTrue(any(is_prefix(prefix, address)
                                     for prefix in blacklist))
 
+    def test_physical_sky_appearance_supports_scene_blending(self):
+        entries = {
+            (entry["path"], entry["key"]): entry
+            for entry in self.entries if entry["feature"] == "PhysicalSky"
+        }
+        blacklist = [normalize_path(path) for path in self.blacklist]
+        location = [normalize_path(path) for path in self.location_paths]
+        time = [normalize_path(path) for path in self.time_paths]
+        appearance = [
+            ("", "vanillaMix"), ("", "trMix"), ("", "apLumMix"), ("", "apTrMix"),
+            ("", "skyStaticsBrightness"), ("", "sunDiskRad"),
+            ("sunlightColor", "x"), ("masserColor", "y"), ("secundaColor", "z"),
+            ("rayleighScatter", "x"), ("rayleighScatterAP1", "x"),
+            ("aerosolScatter", "x"), ("aerosolScatter", "y"), ("aerosolScatter", "z"),
+            ("aerosolAbsorption", "x"), ("aerosolAbsorption", "y"), ("aerosolAbsorption", "z"),
+            ("", "aerosolPhaseG"),
+            ("ozoneAbsorption", "x"), ("ozoneAbsorptionAP1", "x"),
+            ("cloudMap", "localCloud"),
+            ("cloudLayer/low", "densityScale"), ("cloudLayer/low", "ndfAltitudeOffset"),
+            ("cloudLayer/low", "bottomSpreadScale"), ("cloudLayer/low", "bottomSpreadHeight"),
+            ("cloudLayer/low", "bottomSoftness"), ("cloudLayer/low", "bottomSoftnessHeight"),
+            ("cloudLayer/low", "topExpansionScale"), ("cloudLayer/low", "curvatureRadius"),
+            ("cloudLayer/low", "ndfAltitudeScale"),
+            ("cloudLayer/middle", "densityScale"), ("cloudLayer/middle", "altitude"),
+            ("cloudLayer/cirrus", "densityScale"), ("cloudLayer/cirrus", "altitude"),
+            ("cloudLayer/lighting", "brightness"), ("cloudLayer/lighting", "sunExtinction"),
+            ("cloudLayer/lighting", "viewExtinction"), ("cloudLayer/lighting", "dropletDiameter"),
+            ("cloudLayer/lighting", "phaseForwardG"), ("cloudLayer/lighting", "phaseBackwardG"),
+            ("cloudLayer/lighting", "msStrength"), ("cloudLayer/lighting", "msAlbedo"),
+            ("cloudLayer/lighting", "msBoundaryWidth"), ("cloudLayer/lighting", "ambientStrength"),
+            ("cloudLayer/lighting", "scatterDensityThreshold"), ("cloudLayer/lighting", "scatterDensityPower"),
+            ("cloudLayer/lighting", "cirrusLightThickness"),
+            ("cloudLayer/wind/lowVelocity", "x"), ("cloudLayer/wind/lowVelocity", "y"),
+            ("cloudLayer/wind/highVelocity", "x"), ("cloudLayer/wind/highVelocity", "y"),
+            ("cloudLayer/wind", "development"), ("cloudLayer/wind", "disturbance"),
+            ("cloudMap/procedural/parameters/primary/range", "w"),
+            ("cloudMap/procedural/parameters/secondary/range", "w"),
+            ("cloudMap/procedural/parameters/modeling/range", "w"),
+            ("cloudMap/procedural/parameters/modeling/offset", "x"),
+            ("cloudMap/procedural/parameters/heightVariation", "exponent"),
+            ("cloudMap/procedural/parameters/baseHeight", "y"),
+            ("cloudMap/procedural/parameters/bottomTypeRange", "z"),
+            ("cloudMap/procedural/parameters/windOffset", "x"),
+            ("cloudMap/procedural/parameters", "localModelingWeight"),
+            ("cloudMap/procedural/parameters", "localHeightWeight"),
+            ("cloudMap/procedural/parameters", "localWindScale"),
+        ]
+        for identity in appearance:
+            with self.subTest(setting=identity):
+                entry = entries[identity]
+                address = normalize_path(catalog_address(entry))
+                self.assertIn("SceneControllable", entry["flags"])
+                self.assertIn("Transitionable", entry["flags"])
+                self.assertFalse(any(is_prefix(prefix, address) for prefix in blacklist))
+                self.assertTrue(any(is_prefix(prefix, address) for prefix in location))
+                self.assertTrue(any(is_prefix(prefix, address) for prefix in time))
+
+    def test_physical_sky_resources_and_quality_stay_global(self):
+        global_paths = [
+            ("enableAllExteriorCells",), ("forceEnableAllInteriorCells",),
+            ("fallbackZBottom",), ("planetRadius",), ("atmosphereRadius",),
+            ("halfResApShadow",), ("rayMarchRange",), ("shadowVolumeRange",),
+            ("marchStepScale",), ("cloudNoise",),
+            # The aerosol mixture, loading and humidity are authoring inputs: the coefficients they
+            # derive are what a scene stores, so the inputs themselves must stay out of the layer.
+            ("aerosolType",), ("aerosolLoading",), ("aerosolHumidity",),
+            ("cloudRelightMix",), ("cloudOriginalMix",),
+            ("silverLiningMix",), ("silverLiningSpread",), ("cloudShadowRemapRange",),
+            ("cloudMap", "type"), ("cloudMap", "texture"),
+            ("cloudMap", "procedural", "noise"), ("cloudMap", "procedural", "local"),
+            ("cloudMap", "procedural", "localMaskPath"),
+            ("cloudMap", "procedural", "parameters", "heightFromCoverage"),
+            ("cloudMap", "procedural", "parameters", "localBlendMode"),
+            ("cloudLayer", "cirrus", "uvSize"),
+        ]
+        global_paths.extend(("cloudMap", "procedural", "parameters", layer, "noise")
+                            for layer in ("primary", "secondary", "coverageGain", "modeling", "modelingGain", "heightVariation"))
+        blacklist = [normalize_path(path) for path in self.blacklist]
+        for path in global_paths:
+            prefix = normalize_path(("PhysicalSky", *path))
+            matches = [address for address in self.addresses if is_prefix(prefix, address)]
+            with self.subTest(path=path):
+                self.assertTrue(matches)
+                self.assertTrue(all(any(is_prefix(blocked, address) for blocked in blacklist)
+                                    for address in matches))
+
+    def test_physical_sky_aerosol_mixture_is_an_authoring_input(self):
+        """A discrete mixture cannot be interpolated, so the coefficients it derives are the only
+        aerosol values a scene may hold: the knobs stay out of the layer, the optics stay blendable."""
+        entries = {
+            (entry["path"], entry["key"]): entry
+            for entry in self.entries if entry["feature"] == "PhysicalSky"
+        }
+        coefficients = [
+            ("aerosolScatter", "x"), ("aerosolScatter", "y"), ("aerosolScatter", "z"),
+            ("aerosolAbsorption", "x"), ("aerosolAbsorption", "y"), ("aerosolAbsorption", "z"),
+            ("", "aerosolPhaseG"),
+        ]
+        for identity in coefficients:
+            with self.subTest(setting=identity):
+                entry = entries[identity]
+                self.assertIn("Transitionable", entry["flags"])
+                self.assertIn("SceneControllable", entry["flags"])
+
+        blacklist = [normalize_path(path) for path in self.blacklist]
+        for key in ("aerosolType", "aerosolLoading", "aerosolHumidity"):
+            with self.subTest(setting=key):
+                address = normalize_path(catalog_address(entries[("", key)]))
+                self.assertTrue(any(is_prefix(prefix, address) for prefix in blacklist))
+
+        # The floating-point knobs are transitionable in the catalog, but blacklisting is what keeps
+        # them out of the layer; only the mixture enum may never claim a midpoint to interpolate to.
+        self.assertNotIn("Transitionable", entries[("", "aerosolType")]["flags"])
+
+    def test_physical_sky_switches_are_not_transitionable(self):
+        switches = [entry for entry in self.entries
+                    if entry["feature"] == "PhysicalSky" and entry["type"] == "Boolean"]
+        self.assertTrue(switches)
+        for entry in switches:
+            with self.subTest(setting=catalog_address(entry)):
+                self.assertNotIn("Transitionable", entry["flags"])
+
     def test_manager_consumes_every_policy_collection(self):
         for name in (
                 "kSettingBlacklist",

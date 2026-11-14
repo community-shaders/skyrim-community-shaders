@@ -1,3 +1,4 @@
+#include "Common/PreExposure.hlsli"
 // Physical Glare — Threshold extraction and zero-padded downsampling
 // Community Shaders / Post Processing — Author: Jiaye, 2026
 //
@@ -71,7 +72,7 @@ cbuffer GlareCB : register(b1)
 		// Values exceeding Threshold pass through at original HDR magnitude.
 		// DC-normalised convolution preserves energy, so the empirical
 		// scaling factor from [1] is unnecessary.
-		float3 extracted = max(0, color.rgb - Threshold);
+		float3 extracted = max(0, color.rgb - PreExposure::Encode(Threshold));
 
 		RWTexFFT_R[tid] = float2(extracted.r, 0);
 		RWTexFFT_G[tid] = float2(extracted.g, 0);

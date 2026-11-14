@@ -7,6 +7,7 @@
 #include "Effects11/SettingManager.h"
 #include "Globals.h"
 #include "I18n/I18n.h"
+#include "PhysicalSky.h"
 #include "Utils/UI.h"
 
 #define I18N_KEY_PREFIX "feature.procedural_sun."
@@ -69,8 +70,10 @@ namespace
 
 void ProceduralSun::DrawSettings()
 {
-	const Util::LockedSection enbLock(IsManagedByENB(),
-		T("common.settings_managed_by_enb", "This setting is managed by Effects 11."));
+	const bool managedByENB = IsManagedByENB();
+	const Util::LockedSection ownerLock(managedByENB || IsManagedByPhysicalSky(), managedByENB ?
+																					  T("common.settings_managed_by_enb", "This setting is managed by Effects 11.") :
+																					  T(TKEY("managed_by_physical_sky"), "Procedural Sun is disabled while Physical Sky is enabled."));
 
 	bool enabled = settings.enabled != 0;
 	if (ImGui::Checkbox(T(TKEY("enabled"), "Enabled"), &enabled))
@@ -133,6 +136,11 @@ bool ProceduralSun::IsManagedByENB() const
 {
 	const auto& effects11 = globals::features::effects11;
 	return effects11.loaded && effects11.enableEffect && SettingManager::GetSingleton().GetValue<bool>("EnableProceduralSun", "EFFECT");
+}
+
+bool ProceduralSun::IsManagedByPhysicalSky() const
+{
+	return globals::features::physicalSky.IsRendering();
 }
 
 ProceduralSun::PerFrameData ProceduralSun::GetCommonBufferData() const

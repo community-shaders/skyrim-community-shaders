@@ -31,6 +31,10 @@ struct alignas(16) SharedDataCB
 	float4 AmbientSHG;
 	float4 AmbientSHB;
 	float4 HDRData;  // xyz + menu scene encoding in w — see HDRDisplay::GetSharedDataHDR
+	float PreExposure = 1.0f;
+	float RcpPreExposure = 1.0f;
+	float PreviousPreExposure = 1.0f;
+	float PreExposureHistoryRatio = 1.0f;
 };
 STATIC_ASSERT_ALIGNAS_16(SharedDataCB);
 

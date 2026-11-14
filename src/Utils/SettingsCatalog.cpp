@@ -1,6 +1,7 @@
 #include "SettingsCatalog.h"
 
 #include "I18n/I18n.h"
+#include "SceneBlend.h"
 #include "Utils/Format.h"
 
 #include <algorithm>
@@ -144,7 +145,7 @@ namespace Util::Settings
 					continue;
 				auto path = parent / key;
 				auto label = JoinLabelParts({ context, NormalizeDisplayPart(key) });
-				if (value.is_object()) {
+				if (value.is_object() && !SceneBlend::IsValid(value)) {
 					self(self, value, path, label);
 				} else {
 					if (const auto found = labels.find(path.to_string()); found != labels.end() && !found->second.empty())
@@ -173,7 +174,7 @@ namespace Util::Settings
 				if (IsMetadataKey(key))
 					continue;
 				const auto path = parent / key;
-				if (value.is_object()) {
+				if (value.is_object() && !SceneBlend::IsValid(value)) {
 					auto nested = self(self, value, path);
 					if (!nested.empty())
 						result[key] = std::move(nested);
@@ -213,7 +214,7 @@ namespace Util::Settings
 				unknownKeys.push_back(path);
 			else if (!IsCompatibleSettingValue(*found, value))
 				unknownKeys.push_back(path + " (wrong type)");
-			else if (value.is_object())
+			else if (value.is_object() && !SceneBlend::IsValid(value))
 				CollectUnknownSettingKeys(value, *found, path, unknownKeys);
 		}
 	}
@@ -235,7 +236,8 @@ namespace Util::Settings
 				it = incoming.erase(it);
 				continue;
 			}
-			EraseMismatchedSettings(it.value(), *found, path, erasedKeys);
+			if (!SceneBlend::IsValid(it.value()))
+				EraseMismatchedSettings(it.value(), *found, path, erasedKeys);
 			++it;
 		}
 	}

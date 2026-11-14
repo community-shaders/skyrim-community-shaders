@@ -7,12 +7,13 @@ cbuffer CopyConstants : register(b1)
 	uint inputGamut;
 	uint outputGamut;
 	float gamma;
-	float pad;
+	float scale;
 };
 
 float4 main(FullscreenTriangleVSOutput input) : SV_Target
 {
 	float4 color = texSrc.Load(int3(input.Position.xy, 0));
+	color.rgb *= scale;
 	if (inputGamut != outputGamut) {
 		if (inputGamut == 1)
 			color.rgb = AP1TosRGB(color.rgb);

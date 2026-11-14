@@ -21,8 +21,10 @@
 #include "Features/ExponentialHeightFog.h"
 #include "Features/HDRDisplay.h"
 #include "Features/InteriorSun.h"
+#include "Features/LinearLighting.h"
 #include "Features/PerformanceOverlay.h"
 #include "Features/PostProcessing.h"
+#include "Features/PostProcessing/HistogramAutoExposure.h"
 #include "Features/RainRefraction.h"
 #include "Features/RemoteControl/NvPerf.h"
 #include "Features/Skin.h"
@@ -32,7 +34,9 @@
 #include "Features/TerrainHelper.h"
 #include "Features/TreeWind.h"
 #include "Features/Upscaling.h"
+#include "Features/ViewAtmosphere.h"
 #include "Features/VolumetricShadows.h"
+#include "I18n/I18n.h"
 #include "Menu.h"
 #include "PostProcessingMode.h"
 #include "Presets/UnifiedPresetCatalog.h"
@@ -174,8 +178,7 @@ void State::Draw()
 				if (currentPixelDescriptor & static_cast<uint32_t>(SIE::ShaderCache::UtilityShaderFlags::RenderShadowmask)) {
 					if (volumetricShadows.loaded)
 						volumetricShadows.CopyShadowLightData();
-					if (globals::features::exponentialHeightFog.loaded)
-						globals::features::exponentialHeightFog.CaptureDirectionalShadowMap();
+					globals::deferred->CaptureDirectionalShadowMap();
 					if (skylighting.loaded)
 						skylighting.CaptureShadowCascadeSRV();
 				}
@@ -1512,8 +1515,27 @@ void State::SetAdapterDescription(const std::wstring& description)
 
 void State::UpdateSharedData([[maybe_unused]] bool a_inWorld, [[maybe_unused]] bool a_prepass)
 {
+	if (preExposureFrame != frameCount) {
+		preExposureFrame = frameCount;
+		previousPreExposure = preExposure;
+		preExposure = 1.0f;
+		if (globals::shaderCache->IsEnabled() && globals::features::linearLighting.IsLinearLightingActive() && !IsMainOrLoadingMenuOpen()) {
+			auto& post = globals::features::postProcessing;
+			if (auto* exposure = post.GetPipelineFeature<HistogramAutoExposure>(PostProcessing::FeaturePipelineIndex::AutoExposure); exposure && post.IsPipelineRunning())
+				preExposure = exposure->GetPreExposure();
+			if (!std::isfinite(preExposure) || preExposure <= 0.0f)
+				preExposure = 1.0f;
+			// Follow the exposed scene range. An unattenuated/off-screen sun must
+			// not force dark scene color into FP16 subnormals before exposure.
+			preExposure = std::clamp(preExposure, 1e-20f, 65504.0f);
+		}
+	}
 	{
 		SharedDataCB data{};
+		data.PreExposure = preExposure;
+		data.RcpPreExposure = 1.0f / preExposure;
+		data.PreviousPreExposure = previousPreExposure;
+		data.PreExposureHistoryRatio = preExposure / previousPreExposure;
 		SharedLighting lighting{};
 
 		const auto shaderManager = globals::game::smState;
@@ -1526,8 +1548,7 @@ void State::UpdateSharedData([[maybe_unused]] bool a_inWorld, [[maybe_unused]] b
 		lighting.directionalLight = dirLight;
 		lighting.directional.color = lightRuntimeData.diffuse;
 		lighting.directional.intensity = lightRuntimeData.fade;
-		if (auto imageSpaceManager = globals::game::imageSpaceManager)
-			lighting.directional.intensity *= imageSpaceManager->GetRuntimeData().data.baseData.hdr.sunlightScale;
+		lighting.directional.intensity *= globals::features::linearLighting.GetSunlightScale(dirLight);
 		lighting.directional.alpha = lighting.directional.intensity;
 
 		const auto& direction = dirLight->GetWorldDirection();
@@ -1554,6 +1575,7 @@ void State::UpdateSharedData([[maybe_unused]] bool a_inWorld, [[maybe_unused]] b
 		}
 
 		data.WaterSystemHeight = -RE::NI_INFINITY;
+		data.PostWaterComposite = a_inWorld && globals::features::viewAtmosphere.CompositeEnabled() ? 1u : 0u;
 
 		data.InInterior = Util::IsInterior();
 		data.HasDirectionalShadows = HasDirectionalShadows();

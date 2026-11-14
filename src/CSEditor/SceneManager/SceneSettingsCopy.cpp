@@ -487,10 +487,10 @@ SceneSettingsManager::CopyResult SceneSettingsManager::CopySettingsToContext(con
 			} else if (baselineIt != baselineSettings.end()) {
 				originalValue = baselineIt->second;
 				// A weather entry sits on the time-of-day layer, which is what it restores to.
-				if (timeOfDayValues && IsNumericValue(originalValue)) {
+				if (timeOfDayValues && SceneBlend::IsBlendable(originalValue)) {
 					if (auto valueIt = timeOfDayValues->find(address); valueIt != timeOfDayValues->end())
 						originalValue = valueIt->second[timeOfDayPeriod]
-						                    .value_or(baselineIt->second.get<float>());
+						                    .value_or(baselineIt->second);
 				}
 			}
 			if (!destinationIndex && !IsSceneSettingPrimitive(originalValue)) {
