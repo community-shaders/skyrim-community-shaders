@@ -10,6 +10,7 @@
 #include "ShaderCache.h"
 #include "State.h"
 #include "Util.h"
+#include "Utils/DebugSection.h"
 #include "Utils/UI.h"
 
 #define I18N_KEY_PREFIX "feature.true_pbr."
@@ -225,11 +226,13 @@ void TruePBR::DrawSettings()
 				ImGui::TreePop();
 			}
 			if (wasEdited) {
+				std::lock_guard lock(BSLightingShaderMaterialPBR::AllMutex);
 				for (auto& [material, extensions] : BSLightingShaderMaterialPBR::All) {
 					if (extensions.textureSetData == selectedPbrTextureSet) {
 						material->ApplyTextureSetData(*extensions.textureSetData);
 					}
 				}
+				std::lock_guard landscapeLock(BSLightingShaderMaterialPBRLandscape::AllMutex);
 				for (auto& [material, textureSets] : BSLightingShaderMaterialPBRLandscape::All) {
 					for (uint32_t textureSetIndex = 0; textureSetIndex < BSLightingShaderMaterialPBRLandscape::NumTiles; ++textureSetIndex) {
 						if (textureSets[textureSetIndex] == selectedPbrTextureSet) {
@@ -339,6 +342,7 @@ void TruePBR::DrawSettings()
 				ImGui::TreePop();
 			}
 			if (wasEdited) {
+				std::lock_guard lock(BSLightingShaderMaterialPBR::AllMutex);
 				for (auto& [material, extensions] : BSLightingShaderMaterialPBR::All) {
 					if (extensions.materialObjectData == selectedPbrMaterialObject) {
 						material->ApplyMaterialObjectData(*extensions.materialObjectData);
@@ -353,11 +357,15 @@ void TruePBR::DrawSettings()
 		}
 		ImGui::TreePop();
 	}
+}
 
-	if (Util::ShowDebugSections() && ImGui::TreeNodeEx(T(TKEY("debug"), "Debug"))) {
-		ImGui::Checkbox(T(TKEY("enable_verbose_json_logging"), "Enable verbose json logging"), &enableVerboseJsonLogging);
-		ImGui::TreePop();
-	}
+void TruePBR::DrawDebugSection()
+{
+	Util::DebugSection section;
+	if (!section)
+		return;
+
+	ImGui::Checkbox(T(TKEY("enable_verbose_json_logging"), "Enable verbose json logging"), &enableVerboseJsonLogging);
 }
 
 void TruePBR::SaveSettings(json& o_json)
@@ -510,11 +518,13 @@ void TruePBR::ReloadTextureSetData()
 			return false;
 		} }, enableVerboseJsonLogging);
 
+	std::lock_guard lock(BSLightingShaderMaterialPBR::AllMutex);
 	for (const auto& [material, extensions] : BSLightingShaderMaterialPBR::All) {
 		if (extensions.textureSetData != nullptr) {
 			material->ApplyTextureSetData(*extensions.textureSetData);
 		}
 	}
+	std::lock_guard landscapeLock(BSLightingShaderMaterialPBRLandscape::AllMutex);
 	for (const auto& [material, textureSets] : BSLightingShaderMaterialPBRLandscape::All) {
 		for (uint32_t textureSetIndex = 0; textureSetIndex < BSLightingShaderMaterialPBRLandscape::NumTiles; ++textureSetIndex) {
 			if (textureSets[textureSetIndex] != nullptr) {
@@ -851,7 +861,7 @@ struct BSLightingShaderProperty_PostLinkObject
 		// Per-NIF values must not modify a material shared by another shader property.
 		BSLightingShaderMaterialPBR source;
 		source.CopyMembers(material);
-		if (const auto* textureSetData = BSLightingShaderMaterialPBR::All[&source].textureSetData) {
+		if (const auto* textureSetData = BSLightingShaderMaterialPBR::GetExtensions(&source).textureSetData) {
 			source.ApplyTextureSetData(*textureSetData);
 		}
 
@@ -1411,7 +1421,7 @@ bool TruePBR::TESObjectLAND_SetupMaterial(RE::TESObjectLAND* land)
 				material->landscapeRMAOSTextures[textureIndex] = stateData.defaultTextureWhite;
 			}
 
-			auto& textureSets = BSLightingShaderMaterialPBRLandscape::All[material];
+			auto& textureSets = BSLightingShaderMaterialPBRLandscape::GetTextureSets(material);
 
 			if (auto defTexture = land->loadedData->defQuadTextures[quadIndex]) {
 				SetupLandscapeTexture(*material, *defTexture, 0, textureSets);
@@ -1809,7 +1819,7 @@ struct TESBoundObject_Clone3D
 						if (shaderProperty->GetMaterialType() == RE::BSShaderMaterial::Type::kLighting &&
 							shaderProperty->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kVertexLighting)) {
 							if (auto* material = static_cast<BSLightingShaderMaterialPBR*>(shaderProperty->material)) {
-								auto& ext = BSLightingShaderMaterialPBR::All[material];
+								auto& ext = BSLightingShaderMaterialPBR::GetExtensions(material);
 								const auto prevOwnerRefID = ext.lastOwnerRefFormID;
 
 								// Fork-before-write: if this material instance is already owned
@@ -1841,7 +1851,7 @@ struct TESBoundObject_Clone3D
 								}
 
 								targetMat->ApplyMaterialObjectData(*pbrData);
-								auto& targetExt = BSLightingShaderMaterialPBR::All[targetMat];
+								auto& targetExt = BSLightingShaderMaterialPBR::GetExtensions(targetMat);
 								targetExt.materialObjectData = pbrData;
 								targetExt.lastOwnerRefFormID = ref->GetFormID();
 							}

@@ -225,7 +225,7 @@ namespace Util
 				ImGui::SetClipboardText(settingName.c_str());
 			}
 			if (auto _tt = HoverTooltipWrapper()) {
-				ImGui::Text(std::format("Copy {} '{}' to clipboard.", collectionName, settingName).c_str());
+				ImGui::Text("%s", I18n::GetSingleton()->Format("ui.game_setting.copy_tooltip", { { "collection", std::string(collectionName) }, { "name", std::string(settingName) } }, "Copy {collection} '{name}' to clipboard.").c_str());
 			}
 		}
 		ImGui::PopID();  // End unique ID scope

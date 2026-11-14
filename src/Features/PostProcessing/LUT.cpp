@@ -15,6 +15,7 @@
 #include "I18n/I18n.h"
 #include <algorithm>
 #include <cctype>
+#include <format>
 #include <imgui_stdlib.h>
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
@@ -50,26 +51,33 @@ namespace
 		}
 
 		if (lut.LutType == -1)
-			ImGui::TextUnformatted(T("feature.post_processing.lut.loaded_texture_none", "Loaded Texture: None"));
+			ImGui::TextDisabled("%s", T("feature.post_processing.lut.loaded_texture_none", "Loaded Texture: None"));
 		else
-			ImGui::Text(T("feature.post_processing.lut.loaded_texture", "Loaded Texture: %s"), lut.settings.LutPath.c_str());
+			ImGui::TextDisabled(T("feature.post_processing.lut.loaded_texture", "Loaded Texture: %s"), lut.settings.LutPath.c_str());
 	}
 }
 
 void LUT::DrawSettings()
 {
-	ImGui::TextWrapped(T("feature.post_processing.lut.relative_path_starts_from_game_executable_directory_supports", "Relative path starts from game executable directory. Supports dds/bmp/png format."));
-	ImGui::BulletText(T("feature.post_processing.lut.1d_lut_n_x_1_sized_images", "1D LUT: N x 1 sized images."));
-	ImGui::BulletText(T("feature.post_processing.lut.3d_lut_in_2d_format_n_r_x", "3D LUT in 2D format: N (R) x N (G) sized images, stacked horizontally along blue axis."));
-	ImGui::BulletText(T("feature.post_processing.lut.3d_lut_3d_dds_only", "3D LUT: 3D dds only."));
-
+	ImGui::SeparatorText(T("feature.post_processing.lut.section_texture", "Texture"));
 	ImGui::InputText(T("feature.post_processing.lut.lut_texture_path", "LUT Texture Path"), &tempPath);
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::TextUnformatted(T("feature.post_processing.lut.relative_path_starts_from_game_executable_directory_supports", "Relative path starts from game executable directory. Supports dds/bmp/png format."));
 
 	if (!CustomSceneControls::DrawLutSceneControls(*this))
 		DrawBaseLutControls(*this);
 
-	ImGui::Separator();
+	{
+		// The format rules only matter while authoring a LUT, so they stay folded away
+		const auto formats = std::format("{}\n\n- {}\n- {}\n- {}",
+			T("feature.post_processing.lut.relative_path_starts_from_game_executable_directory_supports", "Relative path starts from game executable directory. Supports dds/bmp/png format."),
+			T("feature.post_processing.lut.1d_lut_n_x_1_sized_images", "1D LUT: N x 1 sized images."),
+			T("feature.post_processing.lut.3d_lut_in_2d_format_n_r_x", "3D LUT in 2D format: N (R) x N (G) sized images, stacked horizontally along blue axis."),
+			T("feature.post_processing.lut.3d_lut_3d_dds_only", "3D LUT: 3D dds only."));
+		Util::Explainer(T("feature.post_processing.lut.supported_formats", "Supported Formats"), formats.c_str());
+	}
 
+	ImGui::SeparatorText(T("feature.post_processing.lut.section_mapping", "Mapping"));
 	if (LutType == 0 || LutType == 1)
 		if (ImGui::BeginTable("##1d", 2)) {
 			ImGui::TableNextColumn();

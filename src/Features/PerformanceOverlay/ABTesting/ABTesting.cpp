@@ -1,5 +1,6 @@
 #include "ABTesting.h"
 #include "Features/PerformanceOverlay.h"
+#include "I18n/I18n.h"
 #include "Menu.h"
 #include "Menu/ThemeManager.h"
 #include "State.h"
@@ -137,7 +138,7 @@ void ABTestingManager::DrawSettingsUI()
 {
 	auto& performanceOverlay = globals::features::performanceOverlay;
 
-	if (ImGui::SliderInt("A/B Test Interval", reinterpret_cast<int*>(&testInterval), 0, 10)) {
+	if (ImGui::SliderInt(::T("feature.perf_overlay.ab_test_interval", "A/B Test Interval"), reinterpret_cast<int*>(&testInterval), 0, 10)) {
 		bool overlayWasEnabled = performanceOverlay.settings.ShowInOverlay;
 		if (testInterval == 0) {
 			Disable();
@@ -150,13 +151,14 @@ void ABTestingManager::DrawSettingsUI()
 	}
 
 	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text(
-			"A/B Testing compares two configurations by automatically swapping between them.\n"
-			"Workflow: Configure your test settings, then enable A/B testing.\n"
-			"- Variant B (TEST) = Your current settings when you enable testing\n"
-			"- Variant A (USER) = Your previously saved user configuration\n"
-			"Testing starts with Variant B, then swaps every N seconds.\n"
-			"Set to 0 to disable and restore TEST settings.");
+		ImGui::Text("%s",
+			::T("feature.perf_overlay.ab_test_interval_tooltip",
+				"A/B Testing compares two configurations by automatically swapping between them.\n"
+				"Workflow: Configure your test settings, then enable A/B testing.\n"
+				"- Variant B (TEST) = Your current settings when you enable testing\n"
+				"- Variant A (USER) = Your previously saved user configuration\n"
+				"Testing starts with Variant B, then swaps every N seconds.\n"
+				"Set to 0 to disable and restore TEST settings."));
 	}
 }
 
@@ -247,9 +249,7 @@ void ABTestingManager::DrawOverlayUI()
 	remaining = std::max(0.0f, remaining);
 
 	// Show current variant and time
-	ImGui::Text(fmt::format("{} : {:.1f}s left",
-		usingTestConfig ? "Variant B (TEST)" : "Variant A (USER)", remaining)
-			.c_str());
+	ImGui::Text("%s", I18n::GetSingleton()->Format("feature.perf_overlay.ab_time_left", { { "variant", usingTestConfig ? ::T("feature.perf_overlay.ab_variant_b", "Variant B (TEST)") : ::T("feature.perf_overlay.ab_variant_a", "Variant A (USER)") }, { "seconds", fmt::format("{:.1f}", remaining) } }, "{variant} : {seconds}s left").c_str());
 
 	// Show what changed (for both variants)
 	if (hasTestSnapshot) {
