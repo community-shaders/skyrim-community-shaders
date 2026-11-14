@@ -13,6 +13,7 @@
 #include "Features/IBL.h"
 #include "Features/ScreenSpaceGI.h"
 #include "Features/Skylighting.h"
+#include "Features/SnowDeformation.h"
 #include "Features/SubsurfaceScattering.h"
 #include "Features/TerrainBlending.h"
 #include "Features/Upscaling.h"
@@ -312,6 +313,14 @@ void Deferred::DeferredPasses()
 
 	auto renderer = globals::game::renderer;
 	auto context = globals::d3d::context;
+
+	// Snow shell: extra deferred geometry drawn after the game's opaque
+	// passes, before the composite consumes the G-buffer.
+	{
+		auto& snowDeformation = globals::features::snowDeformation;
+		if (snowDeformation.loaded)
+			snowDeformation.DrawShell();
+	}
 
 	{
 		ID3D11Buffer* buffers[1] = { *globals::game::perFrame };

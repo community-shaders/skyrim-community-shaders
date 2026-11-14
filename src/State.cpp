@@ -28,6 +28,7 @@
 #include "Features/Skin.h"
 #include "Features/SkySync.h"
 #include "Features/Skylighting.h"
+#include "Features/SnowDeformation.h"
 #include "Features/TerrainBlending.h"
 #include "Features/TerrainHelper.h"
 #include "Features/TreeWind.h"
@@ -172,12 +173,22 @@ void State::Draw()
 		if (currentShader && updateShader) {
 			if (currentShader->shaderType.get() == RE::BSShader::Type::Utility) {
 				if (currentPixelDescriptor & static_cast<uint32_t>(SIE::ShaderCache::UtilityShaderFlags::RenderShadowmask)) {
+					if (globals::features::snowDeformation.loaded)
+						globals::features::snowDeformation.CaptureShadowAtlas();
 					if (volumetricShadows.loaded)
 						volumetricShadows.CopyShadowLightData();
 					if (globals::features::exponentialHeightFog.loaded)
 						globals::features::exponentialHeightFog.CaptureDirectionalShadowMap();
 					if (skylighting.loaded)
 						skylighting.CaptureShadowCascadeSRV();
+				}
+				// Local shadow lights (spot/paraboloid) render their masks in
+				// separate Utility passes; their descriptors are only live here.
+				if (currentPixelDescriptor & (static_cast<uint32_t>(SIE::ShaderCache::UtilityShaderFlags::RenderShadowmaskSpot) |
+												 static_cast<uint32_t>(SIE::ShaderCache::UtilityShaderFlags::RenderShadowmaskPb) |
+												 static_cast<uint32_t>(SIE::ShaderCache::UtilityShaderFlags::RenderShadowmaskDpb))) {
+					if (globals::features::snowDeformation.loaded)
+						globals::features::snowDeformation.CapturePointShadowMask();
 				}
 			}
 		}

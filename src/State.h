@@ -435,7 +435,37 @@ public:
 		THLand5HasDisplacement = 1 << 5,
 		ETMaterialModel = 0b111 << 6,
 		THLandHasDisplacement = 1 << 9,
-		TVMeshVariation = 1 << 10
+		TVMeshVariation = 1 << 10,
+		// Bits 11-16: SnowDeformation per-tile landscape snow flags (tile 0 = bit 11).
+		SnowLandIsSnowMask = 0b111111 << 11,
+		// Set per pass by SnowDeformation's statics hook: this draw's
+		// projected material is snow (flags + MATO classification).
+		SnowProjectedIsSnow = 1 << 17,
+		// Set per pass by the same hook: a plain object-LOD batch (no snow
+		// flags), whose baked snow texels the horizon recolor may take.
+		SnowLODBakedIsSnow = 1 << 18,
+		// Set with SnowProjectedIsSnow when the projection was applied at
+		// runtime (Seasons of Skyrim): no authored max angle or alpha mask, so
+		// Lighting supplies the threshold the record lacks.
+		SnowProjectedUnauthored = 1 << 19,
+		// With SnowProjectedUnauthored: the mesh's vertex alpha was never
+		// authored for its projection (Seasons' own snow statics read 0), so
+		// Lighting's slope mask replaces it instead of scaling it.
+		SnowProjectedNoAlpha = 1 << 20,
+		// Every pass of an object whose snow MATO is multipass (property
+		// kMultiIndexSnow).
+		SnowMultipassBase = 1 << 21,
+		// A shape of a snow-MATO object that the game draws WITHOUT
+		// projection.
+		SnowObjectBarePass = 1 << 22,
+		// With SnowLODBakedIsSnow on a snow-textured shape: the draw blends
+		// over what lies beneath (a decal or alpha-blended overlay, such as a
+		// rock skirt). Recolored, but it never marks its pixels painted.
+		SnowTexturedOverlay = 1 << 23,
+		// With SnowLODBakedIsSnow on a snow-textured shape: its diffuse is a
+		// plain landscape snow set (snow01, snowrocks01), so the recolor takes
+		// every texel where the shape lies flat, rocks and dirt included.
+		SnowTexturedGround = 1 << 24,
 	};
 
 	bool inWorld = false;

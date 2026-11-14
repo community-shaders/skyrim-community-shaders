@@ -78,6 +78,10 @@ struct VS_OUTPUT
 };
 
 #ifdef VSHADER
+#	if defined(CLOUD_SHADOWS_CAPTURE)
+#		include "CloudShadows/CloudShadows.hlsli"
+#	endif
+
 cbuffer PerGeometry : register(b2)
 {
 	row_major float4x4 WorldViewProj : packoffset(c0);
@@ -193,6 +197,9 @@ VS_OUTPUT main(VS_INPUT input)
 	vsout.WorldPosition = mul(World, inputPosition);
 	vsout.FogPosition = vsout.WorldPosition.xyz - EyePosition.xyz;
 	vsout.PreviousWorldPosition = mul(PreviousWorld, previousInputPosition);
+#	if defined(CLOUD_SHADOWS_CAPTURE)
+	vsout.Position = CloudShadows::GetCaptureClipPosition(vsout.FogPosition);
+#	endif
 
 	return vsout;
 }
