@@ -38,6 +38,9 @@ namespace PBRNif
 			std::span<const uint8_t> bytes;
 		};
 
+		/** @brief Largest lighting shader block read ahead; anything bigger is left to the native reader as it is. */
+		constexpr uint32_t MaxBlockSize = 1u << 20;
+
 		uint32_t Word(std::span<const uint8_t> bytes, size_t offset)
 		{
 			uint32_t value;
@@ -165,30 +168,33 @@ namespace PBRNif
 
 	void Load(RE::BSLightingShaderProperty* property, RE::NiStream& stream, LoadFunction original)
 	{
+		// The whole block is read before its type is checked, and the native reader then reads the copy. Peeking at
+		// the type and seeking back by the distance tell() reports did not return to the start on archive streams, so
+		// every later field was read four bytes off (a crash on interface\logo\logo.nif).
 		auto* input = stream.iStr;
-		const auto start = input->tell();
-		uint32_t feature = 0;
-		const bool read = input->read(&feature, 1);
-		input->seek(-static_cast<int32_t>(input->tell() - start));
-		if (!read || (feature != 21 && feature != 22)) {
+		const auto size = stream.load < stream.objectSizes.capacity() ? stream.objectSizes[stream.load] : 0;
+		if (size < 4 || size > MaxBlockSize) {
+			// No block size to read ahead with. Only Skyrim SE files hold PBR blocks, and those always have sizes.
 			original(property, stream);
 			return;
 		}
-		const auto size = stream.load < stream.objectSizes.capacity() ? stream.objectSizes[stream.load] : 0;
-		std::vector<uint8_t> bytes;
-		const char* error = "invalid block size";
-		if (size >= 4 && size <= 72ull + BSLightingShaderMaterialPBR::PayloadSize + 4ull * stream.objects.capacity()) {
-			bytes.resize(size);
-			error = input->read(bytes.data(), size) ? Validate(bytes, stream) : "truncated PBR block";
+		std::vector<uint8_t> bytes(size);
+		const bool read = input->read(bytes.data(), size);
+		const auto feature = Word(bytes, 0);
+		if (feature != 21 && feature != 22) {
+			BlockStream block(bytes);
+			stream.iStr = &block;
+			original(property, stream);
+			stream.iStr = input;
+			return;
 		}
-		const auto consumed = input->tell() - start;
-		if (consumed < size) {
-			uint32_t remaining = size - consumed;
-			while (remaining) {
-				const auto step = std::min(remaining, static_cast<uint32_t>(INT32_MAX));
-				input->seek(static_cast<int32_t>(step));
-				remaining -= step;
-			}
+		const char* error = nullptr;
+		if (!read) {
+			error = "truncated PBR block";
+		} else if (size > 72ull + BSLightingShaderMaterialPBR::PayloadSize + 4ull * stream.objects.capacity()) {
+			error = "invalid block size";
+		} else {
+			error = Validate(bytes, stream);
 		}
 		if (error) {
 			logger::error("[TruePBR] rejected material in {} (block {}): {}", stream.inputFilePath, stream.load, error);
