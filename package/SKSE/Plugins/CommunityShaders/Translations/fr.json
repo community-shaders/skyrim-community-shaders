@@ -464,7 +464,6 @@
     "feature.exp_height_fog.apply_vanilla_fade": "Appliquer le fondu par défaut",
     "feature.exp_height_fog.apply_vanilla_fade_tooltip": "Appliquer la luminosité du fondu par défaut pour le brouillard exponentiel.",
     "feature.exp_height_fog.cubemap_mip_level": "Niveau de Mip de la cubemap",
-    "feature.exp_height_fog.debug": "Débogage",
     "feature.exp_height_fog.depth_distribution_scale": "Échelle de distribution en profondeur",
     "feature.exp_height_fog.dir_inscattering_anisotropy": "Anisotropie de la diffusion de la lumière directionnelle",
     "feature.exp_height_fog.dir_inscattering_anisotropy_tooltip": "Contrôle l'asymétrie de la diffusion via la fonction de phase de Henyey-Greenstein.\nLes valeurs positives produisent une diffusion vers l'avant (halo autour du soleil).\nZéro correspond à une diffusion isotrope. Les valeurs négatives produisent une rétrodifusion.",
