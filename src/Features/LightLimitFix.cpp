@@ -12,6 +12,7 @@
 #include "Menu/ThemeManager.h"
 #include "Shadercache.h"
 #include "State.h"
+#include "Utils/DebugSection.h"
 #include "Utils/Logging.h"
 
 #include <bit>
@@ -107,8 +108,6 @@ void LightLimitFix::DrawLightAttachSettings()
 
 void LightLimitFix::DrawSettings()
 {
-	auto shaderCache = globals::shaderCache;
-
 	ImGui::Checkbox(T(TKEY("enable_particle_lights"), "Enable Particle Lights"), &settings.EnableParticleLights);
 
 	ImGui::Spacing();
@@ -118,9 +117,17 @@ void LightLimitFix::DrawSettings()
 	ImGui::Spacing();
 
 	DrawLocalShadowSettings();
+}
 
-	ImGui::SeparatorText(T(TKEY("statistics"), "Statistics"));
-	ImGui::Text(std::format("Clustered Light Count : {}", lightCount).c_str());
+void LightLimitFix::DrawDebugSection()
+{
+	Util::DebugSection section;
+	if (!section)
+		return;
+
+	auto shaderCache = globals::shaderCache;
+
+	ImGui::Text("%s", std::vformat(T(TKEY("clustered_light_count"), "Clustered Light Count : {}"), std::make_format_args(lightCount)).c_str());
 	ImGui::Text("%s", std::vformat(T(TKEY("particle_light_count"), "Particle Lights : {}"), std::make_format_args(particleLightCount)).c_str());
 	if (IsLocalShadowsEnabled()) {
 		ImGui::Text("%s", std::vformat(T(TKEY("shadow_casters_stats"), "Shadow Casters : {} tracked, {} cached, {} rendered this frame"),
@@ -134,7 +141,7 @@ void LightLimitFix::DrawSettings()
 							  .c_str());
 	}
 
-	ImGui::SeparatorText(T(TKEY("debug"), "Debug"));
+	ImGui::Spacing();
 
 	ImGui::Checkbox(T(TKEY("enable_lights_vis"), "Enable Lights Visualisation"), &settings.EnableLightsVisualisation);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -142,7 +149,12 @@ void LightLimitFix::DrawSettings()
 	}
 
 	{
-		static const char* comboOptions[] = { "Light Limit", "Strict Lights Count", "Clustered Lights Count", "Shadow Mask" };
+		const char* comboOptions[] = {
+			T(TKEY("lights_vis_mode_light_limit"), "Light Limit"),
+			T(TKEY("lights_vis_mode_strict_lights"), "Strict Lights Count"),
+			T(TKEY("lights_vis_mode_clustered_lights"), "Clustered Lights Count"),
+			T(TKEY("lights_vis_mode_shadow_mask"), "Shadow Mask")
+		};
 		ImGui::Combo(T(TKEY("lights_vis_mode"), "Lights Visualisation Mode"), (int*)&settings.LightsVisualisationMode, comboOptions, 4);
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text("%s", T(TKEY("lights_vis_mode_tooltip"),

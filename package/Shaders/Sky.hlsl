@@ -10,6 +10,10 @@
 #include "Common/Random.hlsli"
 #include "Common/SharedData.hlsli"
 
+#if defined(PROCEDURAL_AURORA)
+#	include "ProceduralAurora/ProceduralAurora.hlsli"
+#endif
+
 #if defined(PROCEDURAL_SUN)
 #	include "ProceduralSun/ProceduralSun.hlsli"
 
@@ -375,6 +379,9 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 skyScale = ColorManagement::SRGBToWorking(PParams.yyy);
 #	endif
 	float alphaTransmittance = 1.0;
+#	if defined(PROCEDURAL_AURORA) && defined(DITHER) && !defined(TEX)
+	float3 auroraColor = 0.0;  // kept for the physical sky dome, which replaces the vanilla gradient
+#	endif
 
 #	if defined(PS_CLOUDS)
 	float psCloudDist = 1e3f / 1.428e-2;
@@ -547,6 +554,21 @@ PS_OUTPUT main(PS_INPUT input)
 #				endif
 	psout.Color.xyz = skyGradientColor + skyScale;
 
+#				if defined(PROCEDURAL_AURORA)
+	// Drawn on the sky dome so stars, moons and clouds still draw over it. The gradient is taken outside the branch.
+	const float3 auroraDirection = normalize(input.WorldPosition.xyz);
+	const float auroraPixelAngle = length(fwidth(auroraDirection));
+	[branch] if (SharedData::proceduralAuroraSettings.Enabled && SharedData::proceduralAuroraSettings.Atmosphere.x > 0.0 && auroraDirection.z > -0.03)
+	{
+		auroraColor = ColorManagement::SRGBToWorking(ProceduralAurora::Render(auroraDirection, auroraPixelAngle));
+#					if defined(EFFECTS11)
+		[branch] if (SharedData::enbSettings.Enable)
+			auroraColor = pow(max(auroraColor, 0.0), SharedData::enbSettings.AuroraCurve) * SharedData::enbSettings.AuroraIntensity;
+#					endif
+		psout.Color.xyz += auroraColor;
+	}
+#				endif
+
 #				if defined(EFFECTS11)
 	// FixBlackCrush: multiplicative dither vanishes near black and bands dark skies, so fade to additive dither there
 	[branch] if (SharedData::enbSettings.Enable && SharedData::enbSettings.FixBlackCrush)
@@ -665,6 +687,10 @@ PS_OUTPUT main(PS_INPUT input)
 		float skyShadow = GetPhysSkyCloudShadow(skyViewDir, input.Position.xy);
 		float2 physSkyScreenUV = input.Position.xy * SharedData::BufferDim.zw * FrameBuffer::DynamicResolutionParams2.xy;  // adjust for dynamic res
 		float3 physSkyColor = inReflection ? PhysSky::SampleSky(skyViewDir, skyShadow, PhysSky::SampSv) : PhysSky::SampleViewSky(skyViewDir, skyShadow, PhysSky::SampSv);
+#			if defined(PROCEDURAL_AURORA)
+		// Like stars and moons: attenuated by the atmosphere and added before volumetric clouds cover it
+		physSkyColor += auroraColor * PhysSky::SampleViewCelestialTr(skyViewDir, PhysSky::SampSv);
+#			endif
 		float3 skyColor = physSkyColor;
 		if (inReflection && ViewAtmosphere::ReflectionEnabled()) {
 			uint tailWidth, tailHeight;

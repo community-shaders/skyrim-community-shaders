@@ -145,7 +145,16 @@ float2 GetTreeShiftVector(float4 position, float4 color)
 }
 #	endif  // TREE_ANIM
 
+#	if defined(TREE_WIND) && defined(VC) && !defined(TREE_ANIM) && !defined(LOD) && !defined(LODLANDSCAPE) && !defined(LANDSCAPE) && !defined(SKINNED) && !defined(EYE)
+#		define TREE_WIND_VS
+#		include "TreeWind/TreeWind.hlsli"
+#	endif
+
+#	if defined(TREE_WIND_VS)
+VS_OUTPUT main(VS_INPUT input, uint vertexID : SV_VertexID)
+#	else
 VS_OUTPUT main(VS_INPUT input)
+#	endif
 {
 	VS_OUTPUT vsout;
 
@@ -165,6 +174,14 @@ VS_OUTPUT main(VS_INPUT input)
 	previousInputPosition.xyz += normal.xyz * treeShiftVector.y;
 #	endif
 
+#	if defined(TREE_WIND_VS)
+	if (TreeWind::IsEnabled()) {
+		float nearScale = TreeWind::GetNearScale(World, input.Position.xyz);
+		inputPosition.xy += TreeWind::GetOffset(input.Position.xyz, TreeWind::Wind.x, vertexID, nearScale);
+		previousInputPosition.xy += TreeWind::GetOffset(input.Position.xyz, TreeWind::Wind.y, vertexID, nearScale);
+	}
+#	endif
+
 #	if defined(SKINNED)
 	precise int4 actualIndices = 765.01.xxxx * input.BoneIndices.xyzw;
 
@@ -177,8 +194,12 @@ VS_OUTPUT main(VS_INPUT input)
 	precise float4 worldPosition = float4(mul(inputPosition, transpose(worldMatrix)), 1);
 
 	float4 viewPos = mul(ViewProj, worldPosition);
-#	else   // !SKINNED
+#	else  // !SKINNED
+#		if defined(TREE_WIND_VS)
+	precise float4 previousWorldPosition = float4(mul(PreviousWorld, previousInputPosition), 1);
+#		else
 	precise float4 previousWorldPosition = float4(mul(PreviousWorld, inputPosition), 1);
+#		endif
 	precise float4 worldPosition = float4(mul(World, inputPosition), 1);
 	precise float4x4 world4x4 = float4x4(World[0], World[1], World[2], float4(0, 0, 0, 1));
 	precise float4x4 modelView = mul(ViewProj, world4x4);
@@ -1174,7 +1195,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float mipLevel = 0;
 #	endif  // LANDSCAPE
 	float sh0 = 0;
-	float pixelOffset = 0;
+	float2 parallaxSurfaceHeight = float2(0.5, 0.0);
 
 #	if defined(EMAT)
 #		if defined(LANDSCAPE)
@@ -1244,7 +1265,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		if defined(PARALLAX) && (defined(SKINNED) || !defined(MODELSPACENORMALS))
 	if (SharedData::extendedMaterialSettings.EnableParallax) {
 		mipLevel = ExtendedMaterials::GetMipLevel(uv, TexParallaxSampler);
-		uv = ExtendedMaterials::GetParallaxCoords(viewPosition.z, uv, mipLevel, viewDirection, tbnTr, screenNoise, TexParallaxSampler, SampParallaxSampler, 0, displacementParams, applyMeshTV, meshOffset, pixelOffset);
+		uv = ExtendedMaterials::GetParallaxCoords(viewPosition.z, uv, mipLevel, viewDirection, tbnTr, screenNoise, TexParallaxSampler, SampParallaxSampler, 0, displacementParams, applyMeshTV, meshOffset, parallaxSurfaceHeight);
 		if (SharedData::extendedMaterialSettings.EnableShadows && parallaxShadowQuality > 0.0) {
 			MESH_TV_HEIGHT(sh0, TexParallaxSampler, SampParallaxSampler, uv, mipLevel, 0);
 		}
@@ -1279,7 +1300,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 			if (envMaskSample.w > kMaskEpsilon && envMaskSample.w < (1.0 - kMaskEpsilon)) {
 				complexMaterialParallax = true;
 				mipLevel = ExtendedMaterials::GetMipLevel(uv, TexEnvMaskSampler);
-				uv = ExtendedMaterials::GetParallaxCoords(viewPosition.z, uv, mipLevel, viewDirection, tbnTr, screenNoise, TexEnvMaskSampler, SampTerrainParallaxSampler, 3, displacementParams, applyMeshTV, meshOffset, pixelOffset);
+				uv = ExtendedMaterials::GetParallaxCoords(viewPosition.z, uv, mipLevel, viewDirection, tbnTr, screenNoise, TexEnvMaskSampler, SampTerrainParallaxSampler, 3, displacementParams, applyMeshTV, meshOffset, parallaxSurfaceHeight);
 				if (SharedData::extendedMaterialSettings.EnableShadows && parallaxShadowQuality > 0.0) {
 					MESH_TV_HEIGHT(sh0, TexEnvMaskSampler, SampEnvMaskSampler, uv, mipLevel, 3);
 				}
@@ -1328,7 +1349,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 			displacementParams.HeightScale *= PBRParams1.y;
 		}
 		mipLevel = ExtendedMaterials::GetMipLevel(uv, TexParallaxSampler);
-		uv = ExtendedMaterials::GetParallaxCoords(viewPosition.z, uv, mipLevel, refractedViewDirection, tbnTr, screenNoise, TexParallaxSampler, SampParallaxSampler, 0, displacementParams, applyMeshTV, meshOffset, pixelOffset);
+		uv = ExtendedMaterials::GetParallaxCoords(viewPosition.z, uv, mipLevel, refractedViewDirection, tbnTr, screenNoise, TexParallaxSampler, SampParallaxSampler, 0, displacementParams, applyMeshTV, meshOffset, parallaxSurfaceHeight);
 		if (SharedData::extendedMaterialSettings.EnableShadows && parallaxShadowQuality > 0.0) {
 			MESH_TV_HEIGHT(sh0, TexParallaxSampler, SampParallaxSampler, uv, mipLevel, 0);
 		}
@@ -1412,7 +1433,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		                          ExtendedMaterials::TerrainMaxWeightedHeightScale(input, displacementParams) > 0.01;
 		[branch] if (doTerrainPom)
 		{
-			uv = ExtendedMaterials::GetParallaxCoords(input, viewPosition.z, uv, mipLevels, terrainMaxTexDim, viewDirection, tbnTr, screenNoise, displacementParams, sharedOffset, pixelOffset, weights);
+			uv = ExtendedMaterials::GetParallaxCoords(input, viewPosition.z, uv, mipLevels, terrainMaxTexDim, viewDirection, tbnTr, screenNoise, displacementParams, sharedOffset, parallaxSurfaceHeight, weights);
 		}
 		else if (SharedData::extendedMaterialSettings.EnableHeightBlending)
 		{
@@ -1453,6 +1474,17 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	}
 #		endif  // EMAT
 #	endif      // LANDSCAPE
+
+#	if defined(WETNESS_EFFECTS)
+	float2 wetnessParallaxOffset = 0.0;
+#		if defined(EMAT)
+#			if defined(TRUE_PBR) && !defined(LANDSCAPE) && !defined(LODLANDSCAPE)
+	if ((PBRFlags & PBR::Flags::InterlayerParallax) != 0)
+		parallaxSurfaceHeight.y = 0.0;
+#			endif
+	wetnessParallaxOffset = WetnessEffects::GetParallaxSampleOffset(uv - uvOriginal, ddx(uvOriginal), ddy(uvOriginal), parallaxSurfaceHeight.y);
+#		endif
+#	endif
 
 #	if defined(SPARKLE)
 	diffuseUv = ProjectedUVParams2.yy * (input.TexCoord0.zw + (uv - uvOriginal));
@@ -2341,48 +2373,16 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float waterRoughnessSpecular = 1;
 
 #	if defined(WETNESS_EFFECTS)
-	// Initialize wetness parameters
-	float wetness = 0.0;
-	float3 wetnessNormal = vertexNormal.xyz;
-
-	// Calculate shore wetness factors
-	float wetnessDistToWater = abs(input.WorldPosition.z - waterHeight);
-	float shoreFactor = saturate(1.0 - (wetnessDistToWater / SharedData::wetnessEffectsSettings.ShoreRange));
-	float shoreFactorAlbedo = (input.WorldPosition.z < waterHeight) ? 1.0 : shoreFactor;
-
-	// Calculate wetness angle and occlusion
-	float minWetnessValue = SharedData::wetnessEffectsSettings.MinRainWetness;
-	float minWetnessAngle = saturate(max(minWetnessValue, vertexNormal.z));
 #		if defined(SKYLIGHTING)
 	float wetnessOcclusion = inWorld ? saturate(SphericalHarmonics::Unproject(skylightingSH, float3(0, 0, 1))) : 0.0;
 #		else
 	float wetnessOcclusion = inWorld;
 #		endif
-	float flatnessAmount = smoothstep(SharedData::wetnessEffectsSettings.PuddleMaxAngle, 1.0, minWetnessAngle);
-	// Calculate raindrop effects
-	float4 raindropInfo = float4(0, 0, 1, 0);
-	bool shouldCalculateRaindrops = (worldNormal.z > 0.0) &&
-	                                (SharedData::wetnessEffectsSettings.Raining > 0.0) &&
-	                                (SharedData::wetnessEffectsSettings.EnableRaindropFx) &&
-	                                (wetnessOcclusion > 0.5);
-
-	if (shouldCalculateRaindrops) {
-#		if defined(SKINNED)
-		float3 ripplePosition = input.ModelPosition.xyz;
-#		elif defined(DEFERRED)
-		float3 ripplePosition = input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust.xyz;
-#		else
-		float3 ripplePosition = !FrameBuffer::FrameParams.y ? input.ModelPosition.xyz : input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust.xyz;
-#		endif
-		raindropInfo = WetnessEffects::GetRainDrops(ripplePosition, SharedData::wetnessEffectsSettings.Time, wetnessNormal, flatnessAmount);
-	}
-
-	// Calculate different wetness types
-	float rainWetness = SharedData::wetnessEffectsSettings.Wetness * minWetnessAngle * SharedData::wetnessEffectsSettings.MaxRainWetness;
-	rainWetness = max(rainWetness, raindropInfo.w);
+	float rainWetnessOverride = -1.0;
+	float rainWetnessAdd = 0.0;
 
 #		if defined(SKIN) || defined(HAIR)
-	rainWetness = SharedData::wetnessEffectsSettings.SkinWetness * SharedData::wetnessEffectsSettings.Wetness;
+	rainWetnessOverride = SharedData::wetnessEffectsSettings.SkinWetness * SharedData::wetnessEffectsSettings.Wetness;
 #		endif
 
 #		if defined(CS_SKIN) && !defined(SKIN)
@@ -2395,58 +2395,43 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			if defined(HAIR)
 		dynamicWetnessValue = min(SharedData::skinData.skinParams2.y + dynamicWetnessValue, 2.0f);
 #			endif
-		rainWetness += min(dynamicWetnessValue, 1.f);
-	}
-#		endif
-	float shoreWetness = shoreFactor * SharedData::wetnessEffectsSettings.MaxShoreWetness;
-	wetness = max(shoreWetness, rainWetness);
-
-	// Calculate puddle effects
-	float puddleWetness = SharedData::wetnessEffectsSettings.PuddleWetness * minWetnessAngle;
-	float puddle = wetness;
-
-#		if !defined(SKINNED) && !defined(SKIN)
-	if (wetness > 0.0 || puddleWetness > 0.0) {
-		float3 puddleCoords = ((input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust.xyz) * 0.5 + 0.5) * 0.01 / SharedData::wetnessEffectsSettings.PuddleRadius;
-		puddle = Random::perlinNoise(puddleCoords) * 0.5 + 0.5;
-		puddle = puddle * ((minWetnessAngle / SharedData::wetnessEffectsSettings.PuddleMaxAngle) * SharedData::wetnessEffectsSettings.MaxPuddleWetness * 0.25) + 0.5;
-		puddle *= lerp(wetness, puddleWetness, saturate(puddle - 0.25));
+		rainWetnessAdd = min(dynamicWetnessValue, 1.f);
 	}
 #		endif
 
-	// Apply occlusion and distance factors
-	puddle *= saturate(wetnessOcclusion * 2.0) * nearFactor;
-	wetnessNormal = lerp(worldNormal.xyz, wetnessNormal, saturate(puddle));
+	bool wetnessSkinned = (Permutation::VertexShaderDescriptor & Permutation::LightingFlags::Skinned) != 0;
+	bool attachWetnessToModel = wetnessSkinned || ((Permutation::VertexShaderDescriptor >> 24) & 0x3F) == Permutation::LightingTechnique::TreeAnim;
+#		if defined(DEFERRED)
+	float3 wetnessRipplePosition = input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust.xyz;
+#		else
+	float3 wetnessRipplePosition = !FrameBuffer::FrameParams.y ? input.ModelPosition.xyz : input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust.xyz;
+#		endif
+	if (attachWetnessToModel)
+		wetnessRipplePosition = input.ModelPosition.xyz;
+#		if !(defined(SKIN) && defined(CS_SKIN))
+	bool enableWetnessPuddleEffects = !wetnessSkinned;
+#		else
+	static const bool enableWetnessPuddleEffects = false;
+#		endif
+	static const bool enableWetnessRainFlowEffects = true;
 
-	// Calculate wetness glossiness factors
-	float wetnessGlossinessAlbedo = max(puddle, shoreFactorAlbedo * SharedData::wetnessEffectsSettings.MaxShoreWetness);
-	wetnessGlossinessAlbedo *= wetnessGlossinessAlbedo;
-
-	float wetnessGlossinessSpecular = puddle;
-	if (input.WorldPosition.z < waterHeight) {
-		wetnessGlossinessSpecular *= shoreFactor;
-	}
-
-	// Update flatness and normal calculations
-	flatnessAmount *= smoothstep(SharedData::wetnessEffectsSettings.PuddleMinWetness, 1.0, wetnessGlossinessSpecular);
-
-	// Apply ripple normal effects
-	float3 rippleNormal = normalize(lerp(float3(0, 0, 1), raindropInfo.xyz, lerp(flatnessAmount, 1.0, 0.5)));
-	wetnessNormal = ReorientNormal(rippleNormal, wetnessNormal);
+	float3 wetnessPuddlePosition = input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust.xyz;
+	float3 wetnessBaseNormal = worldNormal.xyz;
+#		if defined(CS_SKIN_SHADING)
+	if (skinEnabled && skinWetness > 0.0f)
+		wetnessBaseNormal = skinWetNormal;
+#		endif
+	WetnessEffects::SurfaceWetnessState wetnessState = WetnessEffects::GetSurfaceWetnessState(input.WorldPosition.xyz, wetnessRipplePosition, wetnessPuddlePosition, wetnessBaseNormal, vertexNormal.xyz, waterHeight, wetnessOcclusion, nearFactor, rainWetnessOverride, rainWetnessAdd, enableWetnessPuddleEffects, enableWetnessRainFlowEffects, attachWetnessToModel, wetnessParallaxOffset, parallaxSurfaceHeight);
 
 #		if defined(CS_SKIN_SHADING)
 	if (skinEnabled && (skinWetness > 0.0f)) {
-		wetnessNormal = skinWetNormal;
-		wetnessGlossinessSpecular = saturate(max(wetnessGlossinessSpecular, skinWetness));
+		wetnessState.glossinessSpecular = saturate(max(wetnessState.glossinessSpecular, skinWetness));
+		wetnessState.roughness = WetnessEffects::GetSurfaceWetnessRoughness(wetnessState.glossinessSpecular);
 	}
 #		endif
 
-	// Minimum roughness prevents an extreme retroreflective peak (NdotH→1) for near-zero
-	// roughness puddles. Real water has ripples and surface tension that keep it from being
-	// optically perfect; the ripple normal map adds micro-variation but GGX still peaks
-	// sharply without this floor.
-	static const float wetnessMinPuddleRoughness = 0.05;
-	waterRoughnessSpecular = max(saturate(1.0 - wetnessGlossinessSpecular), wetnessMinPuddleRoughness);
+	float3 wetnessNormal = wetnessState.normal;
+	waterRoughnessSpecular = wetnessState.roughness;
 #	endif
 
 	float3 dirLightColor = Color::DirectionalLight(DirLightColor.xyz);
@@ -2983,8 +2968,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			elif defined(ENVMAP) || defined(MULTI_LAYER_PARALLAX)
 	porosity = lerp(porosity, 0.0, saturate(sqrt(envMask)));
 #			endif
-	float wetnessDarkeningAmount = porosity * wetnessGlossinessAlbedo;
-	material.BaseColor = lerp(material.BaseColor, pow(abs(material.BaseColor), 1.0 + wetnessDarkeningAmount), 0.5);
+	WetnessEffects::ApplySurfaceWetnessAlbedo(material.BaseColor, wetnessState, porosity);
 #		endif
 #	endif
 

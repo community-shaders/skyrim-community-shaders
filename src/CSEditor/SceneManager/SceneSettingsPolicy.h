@@ -67,6 +67,8 @@ namespace SceneSettingsPolicy
 		{ "ScreenSpaceGI", "ResolutionMode" },
 		{ "ScreenSpaceGI", "EnableTemporalDenoiser" },
 		{ "ScreenSpaceGI", "EnableExperimentalSpecularGI" },
+		// Debug section: backend log verbosity, read only at startup
+		{ "Upscaling", "streamlineLogLevel" },
 		{ "VolumetricLighting" },
 		{ "ViewAtmosphere" },
 	};

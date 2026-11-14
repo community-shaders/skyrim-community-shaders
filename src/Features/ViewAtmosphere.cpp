@@ -16,6 +16,7 @@
 #include "ShaderCache.h"
 #include "State.h"
 #include "Util.h"
+#include "Utils/DebugSection.h"
 
 #define I18N_KEY_PREFIX "feature.view_atmosphere."
 

@@ -9,6 +9,7 @@
 #include "EditorWidgets.h"
 #include "Features/Effects11.h"
 #include "Features/Effects11/EffectManager.h"
+#include "Features/Effects11/Overlays/PresetOverlays.h"
 #include "Features/Effects11/PresetManager.h"
 #include "Features/Effects11/SettingManager.h"
 #include "Features/Effects11/SettingsPatches.h"
@@ -21,6 +22,7 @@
 #include "Menu.h"
 #include "Menu/Fonts.h"
 #include "Menu/PresetsPageRenderer.h"
+#include "OverlayPanel.h"
 #include "PostProcessingMode.h"
 #include "Utils/UI.h"
 
@@ -28,6 +30,32 @@
 
 namespace
 {
+	/** @brief Routes shader parameter rows through the overlay manager for marking, locking and edits. */
+	void ConfigureOverlayView(UITree::ViewOptions& a_view)
+	{
+		auto& overlays = Overlays::Manager::GetSingleton();
+		a_view.overlayRow = [&overlays](const Effect& a_effect, size_t a_index) { return overlays.GetShaderRow(a_effect, a_index); };
+		a_view.takeEdit = [&overlays](Effect& a_effect, size_t a_index, const Overlays::OverlayValue& a_before) { return overlays.TakeShaderEdit(a_effect, a_index, a_before); };
+		a_view.allLocked = overlays.AllRowsLocked();
+	}
+
+	/** @brief Saves a setting edit to the overlay edit target, or to the base preset when there is none. */
+	template <typename T>
+	void CommitSettingEdit(const Setting& a_setting, const std::string& a_editFile, const T& a_before, const T& a_after)
+	{
+		const std::string weatherFile = a_setting.hasWeatherSupport && a_editFile != PresetManager::kEnbSeriesIniName ? a_editFile : std::string();
+		if (!Overlays::Manager::GetSingleton().TakeSettingEdit(a_setting.id, weatherFile, SettingValue(a_before), SettingValue(a_after)))
+			SettingManager::GetSingleton().SetValue<T>(a_setting.id, a_after);
+	}
+
+	/** @brief Whether the overlay edit target forbids editing this setting. */
+	bool IsOverlayLocked(uint32_t a_settingID)
+	{
+		auto& overlays = Overlays::Manager::GetSingleton();
+		const auto* row = overlays.GetSettingRow(a_settingID);
+		return overlays.AllRowsLocked() || (row && row->locked);
+	}
+
 	constexpr uint32_t kInvalidSettingID = 0xFFFFFFFF;
 	constexpr float kWindowMargin = 12.0f;
 	constexpr float kPanelWidthRatio = 0.26f;
@@ -288,14 +316,33 @@ namespace
 		return false;
 	}
 
+	constexpr float kOverlayPanelHeightShare = 0.5f;
+
+	/** @brief Width shared by the editor panels, scaled to the screen and UI scale. */
+	float PanelWidth(const ImGuiViewport* a_viewport)
+	{
+		const float scale = Util::GetUIScale();
+		const float maxWidth = (std::max)(kPanelMinWidth * scale, (std::min)(kPanelMaxWidth * scale, a_viewport->WorkSize.x * kPanelMaxScreenShare));
+		return std::clamp(a_viewport->WorkSize.x * kPanelWidthRatio, kPanelMinWidth * scale, maxWidth);
+	}
+
+	/** @brief Places the overlay panel beside the left settings panel, half the screen tall. */
+	void SetNextOverlayPanelPlacement(bool a_reset)
+	{
+		const auto* viewport = ImGui::GetMainViewport();
+		const float margin = kWindowMargin * Util::GetUIScale();
+		const float width = PanelWidth(viewport);
+		const ImGuiCond cond = a_reset ? ImGuiCond_Always : ImGuiCond_FirstUseEver;
+		ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + margin * 2.0f + width, viewport->WorkPos.y + margin), cond);
+		ImGui::SetNextWindowSize(ImVec2(width, viewport->WorkSize.y * kOverlayPanelHeightShare), cond);
+	}
+
 	/** Places the next window along the left or right screen edge, leaving the middle of the screen free. */
 	void SetNextPanelPlacement(bool a_rightSide, bool a_reset)
 	{
 		const auto* viewport = ImGui::GetMainViewport();
-		const float scale = Util::GetUIScale();
-		const float margin = kWindowMargin * scale;
-		const float maxWidth = (std::max)(kPanelMinWidth * scale, (std::min)(kPanelMaxWidth * scale, viewport->WorkSize.x * kPanelMaxScreenShare));
-		const float width = std::clamp(viewport->WorkSize.x * kPanelWidthRatio, kPanelMinWidth * scale, maxWidth);
+		const float margin = kWindowMargin * Util::GetUIScale();
+		const float width = PanelWidth(viewport);
 		const float height = viewport->WorkSize.y - margin * 2.0f;
 		const float x = a_rightSide ? viewport->WorkPos.x + viewport->WorkSize.x - width - margin : viewport->WorkPos.x + margin;
 
@@ -394,8 +441,20 @@ void Effects11Editor::Draw()
 	DrawSettingsWindow();
 	if (IsOpen() && showShaderPanel && EffectManager::GetSingleton().IsPresetLoaded())
 		DrawShaderWindow();
+	if (IsOpen() && showOverlayPanel && EffectManager::GetSingleton().IsPresetLoaded())
+		DrawOverlayWindow();
 	resetLayout = false;
 	popupOpenLastFrame = ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
+}
+
+void Effects11Editor::DrawOverlayWindow()
+{
+	const OverlayPanel::Callbacks callbacks{
+		[this]() { SetNextOverlayPanelPlacement(resetLayout); },
+		[this](std::string& a_filter, bool& a_focus) { DrawSearchBar(a_filter, T(TKEY("search_overlays"), "Search overlays..."), a_focus); },
+		[this]() { Revert(); },
+	};
+	overlayPanel.Draw(showOverlayPanel, dirty, callbacks);
 }
 
 void Effects11Editor::HandleShortcuts(bool& a_focusSearch)
@@ -493,9 +552,13 @@ void Effects11Editor::DrawToolbar()
 
 	const uint32_t useEffectID = settingManager.GetSettingID("UseEffect", "GLOBAL");
 	bool enabled = settingManager.GetValue<bool>(useEffectID);
-	if (ImGui::Checkbox(T(TKEY("enable_effects"), "Enable Effects 11"), &enabled)) {
-		settingManager.SetValue<bool>(useEffectID, enabled);
-		dirty = true;
+	{
+		const Util::DisableGuard disable(IsOverlayLocked(useEffectID));
+		if (ImGui::Checkbox(T(TKEY("enable_effects"), "Enable Effects 11"), &enabled)) {
+			const auto& setting = *settingManager.GetSettingInfo(useEffectID);
+			CommitSettingEdit(setting, EditTargetFile(setting.category), !enabled, enabled);
+			dirty = true;
+		}
 	}
 	{
 		const auto tip = I18n::GetSingleton()->Format(TKEY("enable_effects_tip"),
@@ -504,15 +567,22 @@ void Effects11Editor::DrawToolbar()
 		Util::AddTooltip(tip.c_str());
 	}
 
-	// Shader panel toggle, right-aligned on the same line
+	// Overlay and shader panel toggles, right-aligned on the same line
+	const char* overlayLabel = showOverlayPanel ? T(TKEY("hide_overlays"), "Hide Overlays") : T(TKEY("show_overlays"), "Show Overlays");
 	const char* panelLabel = showShaderPanel ? T(TKEY("hide_shader_panel"), "Hide Shader Parameters") : T(TKEY("show_shader_panel"), "Show Shader Parameters");
-	const float panelWidth = ImGui::CalcTextSize(panelLabel).x + ImGui::GetStyle().FramePadding.x * 2.0f;
+	const auto& style = ImGui::GetStyle();
+	const auto buttonWidth = [&](const char* a_label) { return ImGui::CalcTextSize(a_label).x + style.FramePadding.x * 2.0f; };
+	const float togglesWidth = buttonWidth(overlayLabel) + style.ItemSpacing.x + buttonWidth(panelLabel);
 	ImGui::SameLine();
 	const float avail = ImGui::GetContentRegionAvail().x;
-	if (avail >= panelWidth)
-		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + avail - panelWidth);
+	if (avail >= togglesWidth)
+		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + avail - togglesWidth);
 	else
 		ImGui::NewLine();
+	if (Util::Button(std::format("{}###overlayPanel", overlayLabel).c_str()))
+		showOverlayPanel = !showOverlayPanel;
+	Util::AddTooltip(T(TKEY("overlays_tip"), "Show or hide the Preset Overlays panel: ENB Extender overlays, their Amount and order, and where edits are saved."));
+	ImGui::SameLine();
 	if (Util::Button(std::format("{}###shaderPanel", panelLabel).c_str()))
 		showShaderPanel = !showShaderPanel;
 	Util::AddTooltip(T(TKEY("shader_panel_tip"), "Show or hide the panel with the .fx shader parameters."));
@@ -538,14 +608,16 @@ void Effects11Editor::DrawToolbar()
 	Util::AddTooltip(T(TKEY("revert_tip"), "Discard unsaved changes and reload every value from disk."));
 
 	ImGui::SameLine();
+	// The overlay flag follows the active overlays, so unticking one can clear it again
+	const bool reloadNeeded = shaderReloadNeeded || Overlays::Manager::GetSingleton().IsShaderReloadNeeded();
 	const char* reloadLabel = T(TKEY("reload_shaders"), "Reload Shaders");
-	if (shaderReloadNeeded ? Util::WarningButton(reloadLabel) : Util::Button(reloadLabel))
+	if (reloadNeeded ? Util::WarningButton(reloadLabel) : Util::Button(reloadLabel))
 		RequestAction(PendingAction::ReloadShaders);
 	Util::AddTooltip(T(TKEY("reload_shaders_tip"),
 		"Recompile the .fx files and reload everything from disk.\n"
 		"Use this after changing a compile-time option or editing a shader file."));
 
-	if (shaderReloadNeeded)
+	if (reloadNeeded)
 		Util::Text::WrappedWarning("%s", T(TKEY("reload_needed"), "Compile-time options changed. Save, then click Reload Shaders to apply them."));
 }
 
@@ -787,7 +859,7 @@ void Effects11Editor::DrawCategory(const std::string& a_category, const char* a_
 		{ offTag, Util::Colors::GetDisabled() } });
 
 	if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal) && ImGui::BeginTooltip()) {
-		ImGui::PushTextWrapPos(ImGui::GetFontSize() * 30.0f);
+		ImGui::PushTextWrapPos(ImGui::GetFontSize() * Effects11UI::kTooltipWrapEm);
 		if (a_description)
 			ImGui::TextUnformatted(a_description);
 		Util::TextUnformattedDisabled(std::format("[{}]", a_category).c_str());
@@ -815,8 +887,10 @@ void Effects11Editor::DrawCategory(const std::string& a_category, const char* a_
 		if (dependencyID != kInvalidSettingID) {
 			bool on = false;
 			const std::string toggle = std::format("{}##dependency", Effects11UI::PrettifyName(dependencyKey));
+			const Util::DisableGuard disable(IsOverlayLocked(dependencyID));
 			if (ImGui::Checkbox(toggle.c_str(), &on)) {
-				settingManager.SetValue<bool>(dependencyID, true);
+				const auto& setting = *settingManager.GetSettingInfo(dependencyID);
+				CommitSettingEdit(setting, EditTargetFile(setting.category), false, true);
 				dirty = true;
 			}
 		}
@@ -935,7 +1009,9 @@ void Effects11Editor::DrawSettingRow(const Setting& a_setting, bool a_categoryAc
 	auto& settingManager = SettingManager::GetSingleton();
 	const std::string name = Effects11UI::PrettifyName(a_setting.key);
 	const bool dependencyMet = a_setting.dependsOnKey.empty() || settingManager.GetValue<bool>(a_setting.dependsOnKey, a_setting.dependsOnCategory);
-	const bool editable = a_categoryActive && dependencyMet && !E11Handoff::IsE11SettingHandedOff(a_setting.category, a_setting.key);
+	auto& overlays = Overlays::Manager::GetSingleton();
+	const std::string label = overlays.GetSettingRow(a_setting.id) ? name + OverlayPanel::kOverlaidSuffix : name;
+	const bool editable = a_categoryActive && dependencyMet && !IsOverlayLocked(a_setting.id) && !E11Handoff::IsE11SettingHandedOff(a_setting.category, a_setting.key);
 
 	ImGui::PushID(static_cast<int>(a_setting.id));
 	bool labelHovered = false;
@@ -944,8 +1020,9 @@ void Effects11Editor::DrawSettingRow(const Setting& a_setting, bool a_categoryAc
 	switch (a_setting.type) {
 	case SettingType::Bool:
 		{
-			labelHovered = Effects11UI::PropertyLabel(name.c_str(), !editable);
+			labelHovered = Effects11UI::PropertyLabel(label.c_str(), !editable);
 			bool value = settingManager.GetValue<bool>(a_setting.id, true);
+			const bool before = value;
 			bool changed = ImGui::Checkbox("##v", &value);
 
 			if (const auto* effect = EffectForToggle(a_setting); effect && !effect->IsFilePresent()) {
@@ -959,8 +1036,8 @@ void Effects11Editor::DrawSettingRow(const Setting& a_setting, bool a_categoryAc
 					ImGui::OpenPopup("##ctx");
 				if (ImGui::BeginPopupContextItem("##ctx")) {
 					const bool defaultValue = std::get_if<bool>(&a_setting.defaultValue) && std::get<bool>(a_setting.defaultValue);
-					const auto label = std::format("{} ({})", T(TKEY("reset_default"), "Reset to default"), defaultValue ? T(TKEY("on"), "On") : T(TKEY("off"), "Off"));
-					if (ImGui::MenuItem(label.c_str())) {
+					const auto resetLabel = std::format("{} ({})", T(TKEY("reset_default"), "Reset to default"), defaultValue ? T(TKEY("on"), "On") : T(TKEY("off"), "Off"));
+					if (ImGui::MenuItem(resetLabel.c_str())) {
 						value = defaultValue;
 						changed = true;
 					}
@@ -969,15 +1046,16 @@ void Effects11Editor::DrawSettingRow(const Setting& a_setting, bool a_categoryAc
 			}
 
 			if (changed) {
-				settingManager.SetValue<bool>(a_setting.id, value);
+				CommitSettingEdit(a_setting, EditTargetFile(a_setting.category), before, value);
 				dirty = true;
 			}
 			break;
 		}
 	case SettingType::Float:
 		{
-			labelHovered = Effects11UI::PropertyLabel(name.c_str(), !editable);
+			labelHovered = Effects11UI::PropertyLabel(label.c_str(), !editable);
 			float value = settingManager.GetValue<float>(a_setting.id, true);
+			const float before = value;
 			const int decimals = Effects11UI::DecimalsForStep(a_setting.step);
 			const std::string format = Effects11UI::MakeFormat(decimals);
 			bool changed = Effects11UI::FloatValue("##v", &value, a_setting.minValue, a_setting.maxValue, a_setting.step, format.c_str());
@@ -996,22 +1074,22 @@ void Effects11Editor::DrawSettingRow(const Setting& a_setting, bool a_categoryAc
 			}
 
 			if (changed) {
-				settingManager.SetValue<float>(a_setting.id, value);
+				CommitSettingEdit(a_setting, EditTargetFile(a_setting.category), before, value);
 				dirty = true;
 			}
 			break;
 		}
 	case SettingType::TimeOfDay:
-		DrawTimeOfDayRows(a_setting, name.c_str(), editable, labelHovered);
+		DrawTimeOfDayRows(a_setting, label.c_str(), editable, labelHovered);
 		break;
 	case SettingType::ColorTimeOfDay:
-		DrawColorTimeOfDayRow(a_setting, name.c_str(), editable, labelHovered);
+		DrawColorTimeOfDayRow(a_setting, label.c_str(), editable, labelHovered);
 		break;
 	}
 
 	ImGui::EndDisabled();
 	if (labelHovered)
-		DrawSettingTooltip(a_setting, name, dependencyMet);
+		DrawSettingTooltip(a_setting, name, dependencyMet, overlays.GetSettingRow(a_setting.id));  // re-fetched: a commit above may have rebuilt the rows
 	ImGui::PopID();
 }
 
@@ -1019,6 +1097,7 @@ void Effects11Editor::DrawTimeOfDayRows(const Setting& a_setting, const char* a_
 {
 	auto& settingManager = SettingManager::GetSingleton();
 	auto value = settingManager.GetValue<TimeOfDayValue>(a_setting.id, true);
+	const auto before = value;
 	const auto* defaults = std::get_if<TimeOfDayValue>(&a_setting.defaultValue);
 	const bool exteriorOnly = settingManager.IsCategoryExteriorOnly(a_setting.category);
 	const int applicable = exteriorOnly ? kExteriorPeriodCount : kPeriodCount;
@@ -1080,7 +1159,7 @@ void Effects11Editor::DrawTimeOfDayRows(const Setting& a_setting, const char* a_
 	}
 
 	if (changed) {
-		settingManager.SetValue<TimeOfDayValue>(a_setting.id, value);
+		CommitSettingEdit(a_setting, EditTargetFile(a_setting.category), before, value);
 		dirty = true;
 	}
 }
@@ -1089,6 +1168,7 @@ void Effects11Editor::DrawColorTimeOfDayRow(const Setting& a_setting, const char
 {
 	auto& settingManager = SettingManager::GetSingleton();
 	auto value = settingManager.GetValue<ColorTimeOfDayValue>(a_setting.id, true);
+	const auto before = value;
 	const auto* defaults = std::get_if<ColorTimeOfDayValue>(&a_setting.defaultValue);
 	const bool exteriorOnly = settingManager.IsCategoryExteriorOnly(a_setting.category);
 	const int applicable = exteriorOnly ? kExteriorPeriodCount : kPeriodCount;
@@ -1175,18 +1255,18 @@ void Effects11Editor::DrawColorTimeOfDayRow(const Setting& a_setting, const char
 	}
 
 	if (changed) {
-		settingManager.SetValue<ColorTimeOfDayValue>(a_setting.id, value);
+		CommitSettingEdit(a_setting, EditTargetFile(a_setting.category), before, value);
 		dirty = true;
 	}
 }
 
-void Effects11Editor::DrawSettingTooltip(const Setting& a_setting, const std::string& a_name, bool a_dependencyMet)
+void Effects11Editor::DrawSettingTooltip(const Setting& a_setting, const std::string& a_name, bool a_dependencyMet, const Overlays::RowInfo* a_overlayRow)
 {
 	if (!ImGui::BeginTooltip())
 		return;
 
 	auto& settingManager = SettingManager::GetSingleton();
-	ImGui::PushTextWrapPos(ImGui::GetFontSize() * 30.0f);
+	ImGui::PushTextWrapPos(ImGui::GetFontSize() * Effects11UI::kTooltipWrapEm);
 	ImGui::TextUnformatted(a_name.c_str());
 	Util::TextUnformattedDisabled(std::format("[{}] {}", a_setting.category, a_setting.key).c_str());
 
@@ -1212,7 +1292,10 @@ void Effects11Editor::DrawSettingTooltip(const Setting& a_setting, const std::st
 		break;
 	}
 
-	const std::string file = a_setting.hasWeatherSupport ? EditTargetFile(a_setting.category) : std::string("enbseries.ini");
+	const auto& overlayTarget = Overlays::Manager::GetSingleton().GetEditTarget();
+	const std::string file = !overlayTarget.empty()      ? overlayTarget :
+	                         a_setting.hasWeatherSupport ? EditTargetFile(a_setting.category) :
+	                                                       std::string(PresetManager::kEnbSeriesIniName);
 	const auto savedTo = I18n::GetSingleton()->Format(TKEY("saved_to"), { { "file", file } }, "Saved to {file}");
 	Util::Text::Info("%s", savedTo.c_str());
 
@@ -1221,6 +1304,8 @@ void Effects11Editor::DrawSettingTooltip(const Setting& a_setting, const std::st
 			"Turn on \"{setting}\" to use this.");
 		Util::Text::WrappedWarning("%s", needs.c_str());
 	}
+	if (a_overlayRow)
+		OverlayPanel::DrawRowTooltip(*a_overlayRow);
 	Util::TextUnformattedDisabled(T(TKEY("context_hint"), "Right-click a value for reset, copy and paste."));
 	ImGui::PopTextWrapPos();
 	ImGui::EndTooltip();
@@ -1262,6 +1347,7 @@ void Effects11Editor::DrawShaderWindow()
 					compiled.push_back(file.effect);
 			if (!compiled.empty()) {
 				UITree::ViewOptions view;
+				ConfigureOverlayView(view);
 				view.filter = shaderFilter;
 				view.showPeriod = [this](const std::string& a_period) { return IsEffectPeriodShown(a_period); };
 				ExtendedEffect::RenderMergedUI(compiled, UITree::FilterMode::TopLevelOnly, &view);
@@ -1294,7 +1380,8 @@ void Effects11Editor::DrawShaderWindow()
 
 			if (totals.changed)
 				dirty = true;
-			if (totals.compileTimeChanged)
+			// An edit taken by an overlay is tracked by the overlay manager's own flag
+			if (totals.compileTimeChanged && Overlays::Manager::GetSingleton().GetEditTarget().empty())
 				shaderReloadNeeded = true;
 		}
 		ImGui::EndChild();
@@ -1346,9 +1433,13 @@ void Effects11Editor::DrawEffectSection(Effect& a_effect, uint32_t a_enableSetti
 		ImGui::SameLine();
 		ImGui::SetCursorPosX(rightEdge - ImGui::GetFrameHeight() - ImGui::GetStyle().FramePadding.x);
 		bool toggle = enabled;
-		if (ImGui::Checkbox("##enabled", &toggle)) {
-			settingManager.SetValue<bool>(a_enableSettingID, toggle);
-			dirty = true;
+		{
+			const Util::DisableGuard disable(IsOverlayLocked(a_enableSettingID));
+			if (ImGui::Checkbox("##enabled", &toggle)) {
+				const auto& setting = *settingManager.GetSettingInfo(a_enableSettingID);
+				CommitSettingEdit(setting, EditTargetFile(setting.category), enabled, toggle);
+				dirty = true;
+			}
 		}
 		const auto tip = I18n::GetSingleton()->Format(TKEY("file_toggle_tip"), { { "file", fileName } }, "Run {file}. Same switch as in the Effects section.");
 		Util::AddTooltip(tip.c_str());
@@ -1367,6 +1458,7 @@ void Effects11Editor::DrawEffectSection(Effect& a_effect, uint32_t a_enableSetti
 		} else {
 #ifdef ENABLE_ENB_EXTENDER
 			UITree::ViewOptions view;
+			ConfigureOverlayView(view);
 			view.filter = nameMatches ? std::string_view{} : std::string_view{ shaderFilter };
 			view.showPeriod = [this](const std::string& a_period) { return IsEffectPeriodShown(a_period); };
 			Effect* self = &a_effect;
@@ -1402,13 +1494,14 @@ int Effects11Editor::CountHiddenPeriodParameters() const
 
 // Actions
 
-void Effects11Editor::Save()
+bool Effects11Editor::Save()
 {
 	if (!EffectManager::GetSingleton().IsPresetLoaded())
-		return;
-	SettingManager::GetSingleton().Save();
-	EffectManager::GetSingleton().Save();
+		return false;
+	if (!Overlays::Manager::GetSingleton().SavePreset())
+		return false;
 	dirty = false;
+	return true;
 }
 
 void Effects11Editor::RefreshPresetPaths()
@@ -1500,8 +1593,8 @@ void Effects11Editor::DrawPendingActionPopup()
 
 	if (reload) {
 		if (Util::SuccessButton(T(TKEY("save_and_reload"), "Save and reload"))) {
-			Save();
-			ReloadShaders();
+			if (Save())
+				ReloadShaders();
 			finish();
 		}
 		ImGui::SameLine();
@@ -1555,7 +1648,7 @@ void Effects11Editor::DrawLauncher()
 	PostProcessingMode::SelectorAction openEditor;
 	openEditor.label = T(TKEY("open_editor"), "Open Effects 11 Editor");
 	openEditor.onClick = [this] { Open(true); };
-	PostProcessingMode::DrawSelector(&openEditor);
+	PostProcessingMode::DrawSelector(std::span(&openEditor, 1));
 	dirty |= globals::features::effects11.IsPresetEnabled() != wasEnabled;
 	if (dirty) {
 		SameLineIfFits(ImGui::CalcTextSize(T(TKEY("save"), "Save")).x);
@@ -1717,7 +1810,7 @@ uint32_t Effects11Editor::EditWeatherID() const
 
 std::string Effects11Editor::EditTargetFile(const std::string& a_category) const
 {
-	static const std::string baseFile = "enbseries.ini";
+	static const std::string baseFile = PresetManager::kEnbSeriesIniName;
 	auto& settingManager = SettingManager::GetSingleton();
 	if (!settingManager.IsWeatherSystemEnabled() || !settingManager.CategoryHasWeatherSupport(a_category))
 		return baseFile;

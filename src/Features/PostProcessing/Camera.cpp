@@ -34,6 +34,8 @@ void Camera::DrawSettings()
 	if (cam)
 		lensFOV = cam->HorizontalFOVDeg;
 	lensFOV = std::clamp(lensFOV, 20.0f, 160.0f);
+	if (cam)
+		DrawCameraControlledNote(T("feature.post_processing.camera.physical_fov_controlled", "Projection FOV is currently controlled by Cinematic Camera."));
 	ImGui::BeginDisabled(cam != nullptr);
 	{
 		const SceneWidgetInterceptor::ProxyScope proxy(&settings.LensFOV, 1.0f);
@@ -44,9 +46,8 @@ void Camera::DrawSettings()
 		settings.LensFOV = lensFOV;
 	if (auto _tt = Util::HoverTooltipWrapper())
 		ImGui::TextUnformatted(T("feature.post_processing.camera.lens_fov_tooltip", "Horizontal FOV used to scale lens distortion. Follows Cinematic Camera while it is active."));
-	if (cam)
-		ImGui::TextDisabled("%s", T("feature.post_processing.camera.physical_fov_controlled", "Projection FOV is currently controlled by Cinematic Camera."));
 
+	ImGui::SeparatorText(T("feature.post_processing.camera.section_chromatic_aberration", "Chromatic Aberration"));
 	ImGui::SliderFloat3(T("feature.post_processing.camera.channel_offsets", "Channel offsets (R/C, G/M, B/Y)"), &settings.ChromaticAberration.x, -5.0f, 5.0f, "%.2f");
 	if (auto _tt = Util::HoverTooltipWrapper())
 		ImGui::TextUnformatted(T("feature.post_processing.camera.channel_offsets_tooltip", "Independent red/cyan, green/magenta and blue/yellow radial sampling offsets."));

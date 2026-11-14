@@ -36,6 +36,10 @@ struct VS_OUTPUT
 	float4 PreviousWorldPosition: POSITION2;
 #endif  // RENDER_DEPTH
 	float4 ViewPosition: POSITION3;
+#if defined(TREE_WIND) && !defined(RENDER_DEPTH)
+	// The billboard before sway: its facing and shadow, and so its lighting, stay put while the top bends
+	float3 RestWorldPosition: POSITION4;
+#endif
 };
 
 #ifdef VSHADER
@@ -51,24 +55,45 @@ cbuffer PerGeometry : register(b2)
 	row_major float4x4 PreviousWorld : packoffset(c8);
 };
 
+#	if defined(TREE_WIND)
+#		include "TreeWind/TreeWind.hlsli"
+// The depth and colour passes draw the same swaying billboards and must place them identically
+#		define TREE_WIND_PRECISE precise
+#	else
+#		define TREE_WIND_PRECISE
+#	endif
+
 VS_OUTPUT main(VS_INPUT input)
 {
 	VS_OUTPUT vsout = (VS_OUTPUT)0;
 
-	float3 scaledModelPosition = input.InstanceData1.www * input.Position.xyz;
-	float3 adjustedModelPosition = 0.0.xxx;
+	TREE_WIND_PRECISE float3 scaledModelPosition = input.InstanceData1.www * input.Position.xyz;
+	TREE_WIND_PRECISE float3 adjustedModelPosition = 0.0.xxx;
 	adjustedModelPosition.x = dot(float2(1, -1) * input.InstanceData2.xy, scaledModelPosition.xy);
 	adjustedModelPosition.y = dot(input.InstanceData2.yx, scaledModelPosition.xy);
 	adjustedModelPosition.z = scaledModelPosition.z;
-	float4 finalModelPosition = float4(input.InstanceData1.xyz + adjustedModelPosition.xyz, 1.0);
-	float4 viewPosition = mul(WorldViewProj, finalModelPosition);
+	TREE_WIND_PRECISE float4 finalModelPosition = float4(input.InstanceData1.xyz + adjustedModelPosition.xyz, 1.0);
+	TREE_WIND_PRECISE float4 previousModelPosition = finalModelPosition;
+#	if defined(TREE_WIND) && !defined(RENDER_DEPTH)
+	vsout.RestWorldPosition = mul(World, finalModelPosition).xyz;
+#	endif
+
+#	if defined(TREE_WIND)
+	if (TreeWind::IsEnabled()) {
+		precise float cameraDistance = length(mul(World, finalModelPosition).xyz);
+		finalModelPosition.xy += TreeWind::GetBillboardOffset(input.InstanceData1.xyz, input.Position.z, input.InstanceData1.w, cameraDistance, TreeWind::Wind.x);
+		previousModelPosition.xy += TreeWind::GetBillboardOffset(input.InstanceData1.xyz, input.Position.z, input.InstanceData1.w, cameraDistance, TreeWind::Wind.y);
+	}
+#	endif
+
+	TREE_WIND_PRECISE float4 viewPosition = mul(WorldViewProj, finalModelPosition);
 
 #	ifdef RENDER_DEPTH
 	vsout.Depth.xy = viewPosition.zw;
 	vsout.Depth.zw = input.InstanceData2.zw;
 #	else
 	vsout.WorldPosition = mul(World, finalModelPosition);
-	vsout.PreviousWorldPosition = mul(PreviousWorld, finalModelPosition);
+	vsout.PreviousWorldPosition = mul(PreviousWorld, previousModelPosition);
 	vsout.ViewPosition = viewPosition;
 #	endif  // RENDER_DEPTH
 
@@ -204,8 +229,13 @@ PS_OUTPUT main(PS_INPUT input)
 		discard;
 	}
 
+#		if defined(TREE_WIND)
+	float3 ddx = ddx_coarse(input.RestWorldPosition);
+	float3 ddy = ddy_coarse(input.RestWorldPosition);
+#		else
 	float3 ddx = ddx_coarse(input.WorldPosition.xyz);
 	float3 ddy = ddy_coarse(input.WorldPosition.xyz);
+#		endif
 	float3 normal = -normalize(cross(ddx, ddy));
 
 	float3 directionalAmbientColor = max(0, Color::Ambient(SharedData::GetAmbient(normal)));
@@ -226,8 +256,13 @@ PS_OUTPUT main(PS_INPUT input)
 	dirShadow = lerp(1.0, ScreenSpaceShadows::GetScreenSpaceShadow(input.Position.xyz, screenUV, screenNoise), 0.8);
 #			endif
 
+#			if defined(TREE_WIND)
+	if (dirShadow != 0.0)
+		dirShadow *= ShadowSampling::GetWorldShadow(input.RestWorldPosition, FrameBuffer::CameraPosAdjust.xyz);
+#			else
 	if (dirShadow != 0.0)
 		dirShadow *= ShadowSampling::GetWorldShadow(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust.xyz);
+#			endif
 
 	float3 diffuseColor = Color::DirectionalLight(SharedData::DirLightColor.xyz) * dirShadow * 0.5 * Color::BRDFScale;
 
@@ -274,7 +309,11 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.Albedo = float4(baseColor.xyz, 1);
 	psout.Masks = float4(0, 0, 1, 0);
 #		else
+#			if defined(TREE_WIND)
+	float dirShadow = ShadowSampling::GetWorldShadow(input.RestWorldPosition, FrameBuffer::CameraPosAdjust.xyz);
+#			else
 	float dirShadow = ShadowSampling::GetWorldShadow(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust.xyz);
+#			endif
 
 	float3 diffuseColor = Color::DirectionalLight(SharedData::DirLightColor.xyz) * dirShadow * 0.5 * Color::BRDFScale;
 
