@@ -9,8 +9,8 @@ namespace Util
 	/** @brief One debug readout: a dim label on the left, the value right-aligned, and an optional colour swatch before it. */
 	struct DebugValueRow
 	{
-		const char* label;                         /**< @brief Already-translated label. */
-		std::string value;                         /**< @brief Formatted value. */
+		const char* label;                           /**< @brief Already-translated label. */
+		std::string value;                           /**< @brief Formatted value. */
 		std::optional<ImVec4> swatch = std::nullopt; /**< @brief Colour shown as a small swatch before the value, if any. */
 	};
 
