@@ -67,13 +67,19 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 
 namespace PNState
 {
+	/** @brief Feeds every .json in rootPath, sorted by name, to recordReader keyed by its file stem (the editor ID). */
 	void ReadPBRRecordConfigs(const std::string& rootPath, std::function<bool(const std::string&, const json&)> recordReader, bool enableVerboseJsonLogging)
 	{
-		if (std::filesystem::exists(rootPath)) {
+		std::error_code ec;
+		const bool rootExists = std::filesystem::exists(rootPath, ec);
+		if (ec) {
+			logger::error("[TruePBR] could not access {}: {}", rootPath, ec.message());
+			return;
+		}
+		if (rootExists) {
 			// clib_util's get_configs narrows every name with path::string(), which throws on a name outside the
 			// system code page and loses the whole folder. Skip only that file: its stem can't match an editor ID.
 			std::vector<std::string> configs;
-			std::error_code ec;
 			for (std::filesystem::directory_iterator it(rootPath, ec), end; !ec && it != end; it.increment(ec)) {
 				const auto& path = it->path();
 				if (path.extension() != ".json")
@@ -81,7 +87,12 @@ namespace PNState
 				try {
 					configs.push_back(path.string());
 				} catch (const std::exception&) {
-					logger::warn("[TruePBR] skipping {}: its name is outside the system code page", Util::PathHelpers::ToUtf8(path));
+					// u8string() also throws, on a name that isn't valid UTF-16.
+					try {
+						logger::warn("[TruePBR] skipping {}: its name is outside the system code page", Util::PathHelpers::ToUtf8(path));
+					} catch (const std::exception&) {
+						logger::warn("[TruePBR] skipping a config whose name can't be converted to text");
+					}
 				}
 			}
 			if (ec)
