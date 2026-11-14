@@ -5,7 +5,7 @@
 struct LocalNdfManager
 {
 	void SetupResources();
-	void CompileShaders();
+	void CompileShaders(Util::AsyncShaderSet& a_shaders);
 	bool Update(const NdfSettings& settings, TextureManager& textures, const std::string& worldspace);
 	void DrawSettings(NdfSettings& settings, const std::string& worldspace, float2 cameraMeters);
 	void DrawDebug(TextureManager& textures, float scale);

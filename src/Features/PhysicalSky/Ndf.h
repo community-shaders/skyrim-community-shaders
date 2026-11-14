@@ -4,6 +4,11 @@
 #include "Utils/SceneBlend.h"
 #include "Utils/Serialize.h"
 
+namespace Util
+{
+	class AsyncShaderSet;
+}
+
 struct TextureManager
 {
 	std::string name;
@@ -178,7 +183,7 @@ struct NdfManager
 	winrt::com_ptr<ID3D11ComputeShader> noiseProgram = nullptr;
 
 	void SetupResources();
-	void CompileShaders();
+	void CompileShaders(Util::AsyncShaderSet& a_shaders);
 	static const char* GetSettingsTypeName(const NdfSettings& settings);
 	static const char* GetSettingsHint(const NdfSettings& settings);
 
@@ -374,8 +379,8 @@ struct MidCloudMapManager
 {
 	/// Allocate the weather-map accumulation pair and generation constants.
 	void SetupResources();
-	/// Recompile generation and invalidate the cached output.
-	void CompileShaders();
+	/// Queue the generation shader and invalidate the cached output.
+	void CompileShaders(Util::AsyncShaderSet& a_shaders);
 	/// Regenerate changed scene/noise inputs; returns true when the map changes.
 	bool Update(const MidCloudSettings& settings, TextureManager& textures, const NdfManager& ndf);
 	/// Draw middle-layer and scene weather controls.
@@ -423,7 +428,7 @@ struct CirrusTextureSet
 struct CirrusMapManager
 {
 	void SetupResources();
-	void CompileShaders();
+	void CompileShaders(Util::AsyncShaderSet& a_shaders);
 	bool ShadersReady(const CirrusSettings& settings) const;
 	static void DrawSettings(CirrusSettings& settings, CloudLightingSettings& lighting, TextureManager& textures);
 	bool Update(const CirrusSettings& settings, TextureManager& textures, const NdfManager& ndf);

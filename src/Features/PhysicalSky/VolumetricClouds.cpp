@@ -822,22 +822,20 @@ void PhysicalSky::SetupVolumetricResources()
 	midCloudMapManager.SetupResources();
 	cloudStormManager.SetupResources();
 	cloudNoiseGenerator.SetupResources();
-
-	CompileVolumetricShaders();
 }
 
 void PhysicalSky::CompileVolumetricShaders()
 {
 	cloudAmbientValid = false;
 	volMainHistoryValid = false;
-	logger::debug("Compiling volumetric cloud shaders...");
-	cloudStormManager.CompileShaders();
+	logger::debug("Queueing volumetric cloud shaders...");
+	cloudStormManager.CompileShaders(shaders);
 
 	struct ShaderInfo
 	{
 		winrt::com_ptr<ID3D11ComputeShader>* csPtr;
 		const char* filename;
-		std::vector<std::pair<const char*, const char*>> defines;
+		Util::AsyncShaderSet::Defines defines;
 		std::string entry = "main";
 	};
 
@@ -894,27 +892,17 @@ void PhysicalSky::CompileVolumetricShaders()
 		ShaderInfo{ &csLightningCubeComposite, "Volumetrics.cs.hlsl", { { "CLOUD_VOXELS", "" } }, "compositeLightningCube" }
 	};
 
-	for (auto& info : shaderInfos) {
-		*info.csPtr = nullptr;
-		auto path = std::filesystem::path("Data\\Shaders\\PhysicalSky") / info.filename;
-		if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(path.c_str(), info.defines, "cs_5_0", info.entry.data())))
-			info.csPtr->attach(rawPtr);
-		else
-			logger::warn("PhysicalSky shader unavailable: {}::{}", info.filename, info.entry);
-	}
-	ndfManager.CompileShaders();
-	localNdfManager.CompileShaders();
-	cirrusMapManager.CompileShaders();
-	midCloudMapManager.CompileShaders();
+	for (auto& info : shaderInfos)
+		shaders.Add(*info.csPtr, (std::filesystem::path(kShaderDir) / info.filename).wstring(), std::move(info.defines), std::move(info.entry));
+	ndfManager.CompileShaders(shaders);
+	localNdfManager.CompileShaders(shaders);
+	cirrusMapManager.CompileShaders(shaders);
+	midCloudMapManager.CompileShaders(shaders);
 	middleBoundsDirty = true;
-	cloudNoiseGenerator.CompileShaders();
-	vsCloudBoundary = nullptr;
-	psCloudBoundary = nullptr;
-	const auto boundaryPath = std::filesystem::path("Data\\Shaders\\PhysicalSky\\CloudBoundary.hlsl");
-	if (auto* shader = reinterpret_cast<ID3D11VertexShader*>(Util::CompileShader(boundaryPath.c_str(), {}, "vs_5_0", "vertexMain")))
-		vsCloudBoundary.attach(shader);
-	if (auto* shader = reinterpret_cast<ID3D11PixelShader*>(Util::CompileShader(boundaryPath.c_str(), {}, "ps_5_0", "pixelMain")))
-		psCloudBoundary.attach(shader);
+	cloudNoiseGenerator.CompileShaders(shaders);
+	const auto boundaryPath = (std::filesystem::path(kShaderDir) / "CloudBoundary.hlsl").wstring();
+	shaders.Add(vsCloudBoundary, boundaryPath, {}, "vertexMain");
+	shaders.Add(psCloudBoundary, boundaryPath, {}, "pixelMain");
 }
 
 void PhysicalSky::RenderCloudCrossSection()
