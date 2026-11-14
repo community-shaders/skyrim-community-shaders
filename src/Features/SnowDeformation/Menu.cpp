@@ -435,7 +435,10 @@ void SnowDeformation::DrawSettings()
 		{
 			static const uint kMapDims[] = { 1024u, 2048u, 4096u };
 			int dimIndex = settings.DeformMapResolution <= 1024u ? 0 : (settings.DeformMapResolution >= 4096u ? 2 : 1);
-			if (ImGui::Combo(T(TKEY("map_resolution"), "Deformation Map Resolution"), &dimIndex, "1024\0" "2048\0" "4096\0")) {
+			if (ImGui::Combo(T(TKEY("map_resolution"), "Deformation Map Resolution"), &dimIndex,
+					"1024\0"
+					"2048\0"
+					"4096\0")) {
 				settings.DeformMapResolution = kMapDims[dimIndex];
 				deformMapDimDirty = true;
 			}

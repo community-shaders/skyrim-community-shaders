@@ -1190,4 +1190,3 @@ void SnowDeformation::LandscapeSnowRestore()
 	if (ls.mode != LsMode::kNone)
 		LsDetach();
 }
-

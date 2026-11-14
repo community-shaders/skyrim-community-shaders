@@ -198,8 +198,7 @@ float SlumpTap(int2 p, int2 dims)
 	return saturate(t.x - abs(t.y));
 }
 
-[numthreads(64, 1, 1)] void RingCS(uint3 DTid
-								   : SV_DispatchThreadID) {
+[numthreads(64, 1, 1)] void RingCS(uint3 DTid : SV_DispatchThreadID) {
 	uint id = DTid.x;
 	if (id >= RingTotalTexels || RingRectCount == 0)
 		return;
@@ -225,8 +224,7 @@ float SlumpTap(int2 p, int2 dims)
 RWTexture2D<float4> BloodMapRing : register(u0);
 RWTexture2D<float2> BloodClockRing : register(u1);
 
-[numthreads(64, 1, 1)] void BloodRingCS(uint3 DTid
-										: SV_DispatchThreadID) {
+[numthreads(64, 1, 1)] void BloodRingCS(uint3 DTid : SV_DispatchThreadID) {
 	uint id = DTid.x;
 	if (id >= RingTotalTexels || RingRectCount == 0)
 		return;
@@ -247,8 +245,7 @@ RWTexture2D<float2> BloodClockRing : register(u1);
 RWTexture2D<float> TrackClockRebase : register(u0);
 RWTexture2D<float4> BermFieldRebase : register(u1);
 
-[numthreads(8, 8, 1)] void TrackRebaseCS(uint3 DTid
-										 : SV_DispatchThreadID) {
+[numthreads(8, 8, 1)] void TrackRebaseCS(uint3 DTid : SV_DispatchThreadID) {
 	uint2 dims;
 	TrackClockRebase.GetDimensions(dims.x, dims.y);
 	if (any(DTid.xy >= dims))
@@ -334,10 +331,7 @@ bool EvolveTexel(uint2 phys)
 	return any(result != 0.0);
 }
 
-[numthreads(8, 8, 1)] void EvolveCS(uint3 GTid
-									: SV_GroupThreadID, uint3 Gid
-									: SV_GroupID, uint GIdx
-									: SV_GroupIndex) {
+[numthreads(8, 8, 1)] void EvolveCS(uint3 GTid : SV_GroupThreadID, uint3 Gid : SV_GroupID, uint GIdx : SV_GroupIndex) {
 	const uint listIndex = Gid.y * 1024u + Gid.x;
 	if (listIndex >= EvolveTilesIn[0])
 		return;
@@ -377,9 +371,7 @@ bool ScanFinish(uint GIdx, uint2 dims, out uint count)
 	return last;
 }
 
-[numthreads(8, 8, 1)] void ScanEvolveCS(uint3 DTid
-										: SV_DispatchThreadID, uint GIdx
-										: SV_GroupIndex) {
+[numthreads(8, 8, 1)] void ScanEvolveCS(uint3 DTid : SV_DispatchThreadID, uint GIdx : SV_GroupIndex) {
 	uint2 dims;
 	OccupancyIn.GetDimensions(dims.x, dims.y);
 
@@ -413,11 +405,7 @@ bool ScanFinish(uint GIdx, uint2 dims, out uint count)
 groupshared uint gSnapOcc[SNAPSHOT_SIDE * SNAPSHOT_SIDE];
 groupshared uint gSnapRows[SNAPSHOT_SIDE * 8];
 
-[numthreads(8, 8, 1)] void ScanSnapshotCS(uint3 DTid
-										  : SV_DispatchThreadID, uint3 Gid
-										  : SV_GroupID, uint3 GTid
-										  : SV_GroupThreadID, uint GIdx
-										  : SV_GroupIndex) {
+[numthreads(8, 8, 1)] void ScanSnapshotCS(uint3 DTid : SV_DispatchThreadID, uint3 Gid : SV_GroupID, uint3 GTid : SV_GroupThreadID, uint GIdx : SV_GroupIndex) {
 	uint2 dims;
 	OccupancyIn.GetDimensions(dims.x, dims.y);
 	const uint apron = 2u * (uint)ceil((64.0 / max(TexelSize, 1e-3) + 1.0) / 8.0);
@@ -457,9 +445,8 @@ groupshared uint gSnapRows[SNAPSHOT_SIDE * 8];
 		EvolveTiles[0] = count;
 }
 
-[numthreads(8, 8, 1)] void SnapshotCS(uint3 GTid
-									  : SV_GroupThreadID, uint3 Gid
-									  : SV_GroupID) {
+	[numthreads(8, 8, 1)] void SnapshotCS(uint3 GTid : SV_GroupThreadID, uint3 Gid : SV_GroupID)
+{
 	const uint listIndex = Gid.y * 1024u + Gid.x;
 	if (listIndex >= EvolveTilesIn[0])
 		return;
@@ -468,14 +455,12 @@ groupshared uint gSnapRows[SNAPSHOT_SIDE * 8];
 	EvolveSnapshot[texel] = PreviousDeformation[texel].xy;
 }
 
-[numthreads(8, 8, 1)] void SnapshotFullCS(uint3 DTid
-										  : SV_DispatchThreadID) {
+[numthreads(8, 8, 1)] void SnapshotFullCS(uint3 DTid : SV_DispatchThreadID) {
 	EvolveSnapshot[DTid.xy] = PreviousDeformation[DTid.xy].xy;
 }
 
-[numthreads(8, 8, 1)] void ScanBermCS(uint3 DTid
-									  : SV_DispatchThreadID, uint GIdx
-									  : SV_GroupIndex) {
+	[numthreads(8, 8, 1)] void ScanBermCS(uint3 DTid : SV_DispatchThreadID, uint GIdx : SV_GroupIndex)
+{
 	uint2 dims;
 	BermDirtyIn.GetDimensions(dims.x, dims.y);
 
@@ -631,7 +616,7 @@ bool StampTexel(uint2 phys)
 				float edgeDist = edgeCoord;
 				float falloff = (1.0 - smoothstep(isBowl ? CARVE_BOWL_FLOOR : StampFalloffStart, 1.0, edgeDist)) * coneCarve;
 
-		const float impactE = saturate((mode - floor(mode)) / STAMP_IMPACT_SCALE);
+				const float impactE = saturate((mode - floor(mode)) / STAMP_IMPACT_SCALE);
 				float force = saturate(StampEnds[i].w);
 				float resist = standingCrust * (1.0 - force);
 				float reach = Stamps[i].z * falloff * lerp(1.0, CrustPrintDepth, resist);
@@ -646,7 +631,7 @@ bool StampTexel(uint2 phys)
 					cutNow = max(cutNow, printed);
 				}
 
-			impact = max(impact, impactE * coneSoft * (1.0 - smoothstep(0.6, 1.3, edgeCoord)));
+				impact = max(impact, impactE * coneSoft * (1.0 - smoothstep(0.6, 1.3, edgeCoord)));
 				crustBreak = max(crustBreak, saturate(max(force, printed * CrustBreakOnCarve) * falloff));
 			}
 			else if (mode > 2.5)
@@ -668,11 +653,12 @@ bool StampTexel(uint2 phys)
 				float shape = 1.0 - smoothstep(0.15, 1.0, edgeCoord);
 
 				[branch] if (!isCone)
-				[unroll] for (int lobe = 0; lobe < PIT_LOBES; lobe++) {
+					[unroll] for (int lobe = 0; lobe < PIT_LOBES; lobe++)
+				{
 					float2 seed = centre * 0.05 + float2(lobe * 7.3, lobe * 3.1);
 					float angle = StampNoiseHash(floor(seed)) * 6.2831853;
 					float legLength = radius * lerp(PIT_LOBE_MIN, PIT_LOBE_MAX,
-						StampNoiseHash(floor(seed + 31.7)));
+												   StampNoiseHash(floor(seed + 31.7)));
 					float2 tip = centre + float2(cos(angle), sin(angle)) * legLength;
 
 					float2 legVec = tip - centre;
@@ -790,10 +776,7 @@ bool StampTexel(uint2 phys)
 	return any(result != 0.0);
 }
 
-[numthreads(8, 8, 1)] void StampCS(uint3 GTid
-								   : SV_GroupThreadID, uint3 Gid
-								   : SV_GroupID, uint GIdx
-								   : SV_GroupIndex) {
+[numthreads(8, 8, 1)] void StampCS(uint3 GTid : SV_GroupThreadID, uint3 Gid : SV_GroupID, uint GIdx : SV_GroupIndex) {
 	ActivityReset(GIdx);
 	const uint packed = StampTiles[Gid.x];
 	const uint2 tile = uint2(packed & 0xFFFFu, packed >> 16u);
@@ -807,10 +790,8 @@ bool StampTexel(uint2 phys)
 	}
 }
 
-[numthreads(8, 8, 1)] void StampAllCS(uint3 DTid
-									  : SV_DispatchThreadID, uint3 Gid
-									  : SV_GroupID, uint GIdx
-									  : SV_GroupIndex) {
+	[numthreads(8, 8, 1)] void StampAllCS(uint3 DTid : SV_DispatchThreadID, uint3 Gid : SV_GroupID, uint GIdx : SV_GroupIndex)
+{
 	ActivityReset(GIdx);
 	if (StampTexel(DTid.xy))
 		InterlockedOr(gNonZero, 1u);

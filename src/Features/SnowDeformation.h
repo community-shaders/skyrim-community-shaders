@@ -4,8 +4,8 @@
 
 #include <d3d11_1.h>
 #include <deque>
-#include <list>
 #include <intrin.h>
+#include <list>
 
 /** @brief Util::CompileShader for a snow shader's main(); null defines are skipped, and a_blob receives the bytecode. */
 ID3D11DeviceChild* SD_CompileShader(const wchar_t* a_path, const char* a_target, std::initializer_list<const char*> a_defines = {}, winrt::com_ptr<ID3DBlob>* a_blob = nullptr);
@@ -1837,7 +1837,6 @@ protected:
 	uint32_t stampGatherFrame = UINT32_MAX;
 
 public:
-
 	/** @brief One mapped skin's block at Lighting PS b8, bound per draw by offset. Mirror: SnowLighting.hlsli BodyCoatRecord. */
 	struct alignas(16) BodyCoatRecordCB
 	{
@@ -1859,9 +1858,7 @@ public:
 	static bool IsEngineDecalName(const char* a_name);
 
 protected:
-
 public:
-
 	virtual void DataLoaded() override;
 	~SnowDeformation();
 	/** @brief Worker body: every non-debug shader getter once, in visibility order. */
@@ -1877,7 +1874,6 @@ public:
 	std::thread snowPrimeThread;
 
 protected:
-
 	static constexpr UINT kHorizonSnowAlbedoSlot = 33;
 	static constexpr UINT kHorizonSnowNormalSlot = 23;
 	static constexpr UINT kWaterWindowSlot = 63;

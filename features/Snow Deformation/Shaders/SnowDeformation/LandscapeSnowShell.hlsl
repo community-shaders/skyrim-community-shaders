@@ -4,7 +4,7 @@
 
 struct LSS_CP
 {
-	float3 Local : LSSLOCAL;
+	float3 Local: LSSLOCAL;
 };
 
 #if defined(VSHADER)
@@ -79,20 +79,18 @@ LS_HSConst LSS_PatchConst(InputPatch<LSS_CP, 3> p)
 }
 
 [domain("tri")]
-[partitioning("fractional_odd")]
-[outputtopology("triangle_cw")]
-[outputcontrolpoints(3)]
-[patchconstantfunc("LSS_PatchConst")]
-[maxtessfactor(64.0)]
-LSS_CP main(InputPatch<LSS_CP, 3> p, uint i : SV_OutputControlPointID)
-{
-	return p[i];
-}
+	[partitioning("fractional_odd")]
+	[outputtopology("triangle_cw")]
+	[outputcontrolpoints(3)]
+	[patchconstantfunc("LSS_PatchConst")]
+	[maxtessfactor(64.0)] LSS_CP
+	main(InputPatch<LSS_CP, 3> p, uint i : SV_OutputControlPointID) {
+		return p[i];
+	}
 #endif
 
 #if defined(DOMAINSHADER)
-[domain("tri")]
-VS_OUTPUT main(LS_HSConst c, float3 uvw : SV_DomainLocation, const OutputPatch<LSS_CP, 3> p)
+		[domain("tri")] VS_OUTPUT main(LS_HSConst c, float3 uvw : SV_DomainLocation, const OutputPatch<LSS_CP, 3> p)
 {
 	float2 gridLocal = p[0].Local.xy * uvw.x + p[1].Local.xy * uvw.y + p[2].Local.xy * uvw.z;
 	float coverage;

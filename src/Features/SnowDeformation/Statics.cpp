@@ -1,6 +1,6 @@
-#include <DirectXPackedVector.h>
 #include "Features/SnowDeformation.h"
 #include "Features/SnowDeformation/DevSwitches.h"
+#include <DirectXPackedVector.h>
 
 #include "Globals.h"
 #include "ShaderCache.h"
@@ -1376,7 +1376,7 @@ void SnowDeformation::RenderObjectHeightMap()
 			const float reach = wb.radius + 4.0f * texel;
 			const float4 drawBox = { wb.center.x - reach, wb.center.y - reach, wb.center.x + reach, wb.center.y + reach };
 			heightGhostBox = heightGhostsLive ? float4{ std::min(heightGhostBox.x, drawBox.x), std::min(heightGhostBox.y, drawBox.y),
-													std::max(heightGhostBox.z, drawBox.z), std::max(heightGhostBox.w, drawBox.w) } :
+				std::max(heightGhostBox.z, drawBox.z), std::max(heightGhostBox.w, drawBox.w) } :
 			                                    drawBox;
 			heightGhostsLive = true;
 		}
@@ -1388,9 +1388,9 @@ void SnowDeformation::RenderObjectHeightMap()
 		drawList(layer1Draws);
 	};
 	const bool layer1Kept = levelKept(0, rasterKey(layer1Draws, { reinterpret_cast<uint64_t>(heightVS.get()), reinterpret_cast<uint64_t>(heightPS.get()),
-															 reinterpret_cast<uint64_t>(captureTerrainSRV), shellTerrainVersion,
-															 std::bit_cast<uint32_t>(processData.TerrainWindowOrigin.x), std::bit_cast<uint32_t>(processData.TerrainWindowOrigin.y),
-															 std::bit_cast<uint32_t>(processData.TerrainTexelSize), processData.TerrainDim }));
+																	reinterpret_cast<uint64_t>(captureTerrainSRV), shellTerrainVersion,
+																	std::bit_cast<uint32_t>(processData.TerrainWindowOrigin.x), std::bit_cast<uint32_t>(processData.TerrainWindowOrigin.y),
+																	std::bit_cast<uint32_t>(processData.TerrainTexelSize), processData.TerrainDim }));
 	ID3D11RenderTargetView* nullRTVs[3] = { nullptr, nullptr, nullptr };
 	globals::profiler->BeginPass(SnowDevSwitches::HeightMapRow("SnowDeformation::Objects - Height Maps Layer 1"));
 	if (!layer1Kept)
@@ -1722,7 +1722,7 @@ void SnowDeformation::RenderWaterCapture()
 	const float2 fineCenter = heightWindowCenter;
 	const float fineHalf = ObjectRasterHalfExtent();
 	const bool fineNeeded = waterFineTexture && (!same || !waterFineValid ||
-											   fineCenter.x != waterFineCenter.x || fineCenter.y != waterFineCenter.y || fineHalf != waterFineHalf);
+													fineCenter.x != waterFineCenter.x || fineCenter.y != waterFineCenter.y || fineHalf != waterFineHalf);
 	if (same && !fineNeeded) {
 		globals::profiler->MarkPassSkipped("SnowDeformation::Ground - Field Bakes");
 		capturedWater.clear();
@@ -1756,55 +1756,55 @@ void SnowDeformation::RenderWaterCapture()
 	context->VSSetConstantBuffers(1, 1, &cb1);
 
 	auto drawPlanes = [&](ID3D11RenderTargetView* a_rtv, uint32_t a_dim, float2 a_center, float a_halfExtent) {
-	context->OMSetRenderTargets(1, &a_rtv, nullptr);
-	D3D11_VIEWPORT viewport{ 0.0f, 0.0f, float(a_dim), float(a_dim), 0.0f, 1.0f };
-	context->RSSetViewports(1, &viewport);
-	StaticsCB rec{};
-	rec.HeightWindowCenter = a_center;
-	rec.HeightHalfExtent = a_halfExtent;
-	for (const auto& water : capturedWater) {
-		auto* geometry = water.geometry.get();
-		auto rendererData = geometry ? geometry->GetGeometryRuntimeData().rendererData : nullptr;
-		if (!rendererData || !rendererData->vertexBuffer || !rendererData->indexBuffer)
-			continue;
-		auto triShape = geometry->AsTriShape();
-		if (!triShape)
-			continue;
-		const uint32_t indexCount = uint32_t(triShape->GetTrishapeRuntimeData().triangleCount) * 3;
-		if (indexCount == 0)
-			continue;
-		auto desc = rendererData->vertexDesc;
-		uint64_t descKey;
-		memcpy(&descKey, &desc, sizeof(descKey));
-		if (!waterFirstLogged) {
-			waterFirstLogged = true;
-			logger::info("[SNOW DEFORMATION] water capture: first plane '{}' desc {:#x} vertex {} tris {} at ({:.0f} {:.0f} {:.0f}) window origin cell ({}, {})",
-				geometry->name.c_str(), descKey, desc.HasFlag(RE::BSGraphics::Vertex::VF_VERTEX), triShape->GetTrishapeRuntimeData().triangleCount,
-				water.world.translate.x, water.world.translate.y, water.world.translate.z, shellWindowCellX, shellWindowCellY);
+		context->OMSetRenderTargets(1, &a_rtv, nullptr);
+		D3D11_VIEWPORT viewport{ 0.0f, 0.0f, float(a_dim), float(a_dim), 0.0f, 1.0f };
+		context->RSSetViewports(1, &viewport);
+		StaticsCB rec{};
+		rec.HeightWindowCenter = a_center;
+		rec.HeightHalfExtent = a_halfExtent;
+		for (const auto& water : capturedWater) {
+			auto* geometry = water.geometry.get();
+			auto rendererData = geometry ? geometry->GetGeometryRuntimeData().rendererData : nullptr;
+			if (!rendererData || !rendererData->vertexBuffer || !rendererData->indexBuffer)
+				continue;
+			auto triShape = geometry->AsTriShape();
+			if (!triShape)
+				continue;
+			const uint32_t indexCount = uint32_t(triShape->GetTrishapeRuntimeData().triangleCount) * 3;
+			if (indexCount == 0)
+				continue;
+			auto desc = rendererData->vertexDesc;
+			uint64_t descKey;
+			memcpy(&descKey, &desc, sizeof(descKey));
+			if (!waterFirstLogged) {
+				waterFirstLogged = true;
+				logger::info("[SNOW DEFORMATION] water capture: first plane '{}' desc {:#x} vertex {} tris {} at ({:.0f} {:.0f} {:.0f}) window origin cell ({}, {})",
+					geometry->name.c_str(), descKey, desc.HasFlag(RE::BSGraphics::Vertex::VF_VERTEX), triShape->GetTrishapeRuntimeData().triangleCount,
+					water.world.translate.x, water.world.translate.y, water.world.translate.z, shellWindowCellX, shellWindowCellY);
+			}
+			if (!desc.HasFlag(RE::BSGraphics::Vertex::VF_VERTEX))
+				continue;
+			auto& layout = waterILCache[descKey];
+			if (!layout) {
+				const uint32_t positionBytes = SD_PositionBytes(descKey, desc);
+				D3D11_INPUT_ELEMENT_DESC element = { "POSITION", 0, positionBytes >= 16 ? DXGI_FORMAT_R32G32B32A32_FLOAT : DXGI_FORMAT_R16G16B16A16_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 };
+				globals::d3d::device->CreateInputLayout(&element, 1, waterCaptureVSBlob->GetBufferPointer(), waterCaptureVSBlob->GetBufferSize(), layout.put());
+			}
+			if (!layout)
+				continue;
+			context->IASetInputLayout(layout.get());
+			const UINT stride = uint32_t(descKey & 0xF) * 4;
+			if (stride == 0)
+				continue;
+			const UINT offset = 0;
+			auto* vb = reinterpret_cast<ID3D11Buffer*>(rendererData->vertexBuffer);
+			auto* ib = reinterpret_cast<ID3D11Buffer*>(rendererData->indexBuffer);
+			context->IASetVertexBuffers(0, 1, &vb, &stride, &offset);
+			context->IASetIndexBuffer(ib, DXGI_FORMAT_R16_UINT, 0);
+			SetWorldRows(water.world, rec);
+			staticsCB->Update(rec);
+			context->DrawIndexed(indexCount, 0, 0);
 		}
-		if (!desc.HasFlag(RE::BSGraphics::Vertex::VF_VERTEX))
-			continue;
-		auto& layout = waterILCache[descKey];
-		if (!layout) {
-			const uint32_t positionBytes = SD_PositionBytes(descKey, desc);
-			D3D11_INPUT_ELEMENT_DESC element = { "POSITION", 0, positionBytes >= 16 ? DXGI_FORMAT_R32G32B32A32_FLOAT : DXGI_FORMAT_R16G16B16A16_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 };
-			globals::d3d::device->CreateInputLayout(&element, 1, waterCaptureVSBlob->GetBufferPointer(), waterCaptureVSBlob->GetBufferSize(), layout.put());
-		}
-		if (!layout)
-			continue;
-		context->IASetInputLayout(layout.get());
-		const UINT stride = uint32_t(descKey & 0xF) * 4;
-		if (stride == 0)
-			continue;
-		const UINT offset = 0;
-		auto* vb = reinterpret_cast<ID3D11Buffer*>(rendererData->vertexBuffer);
-		auto* ib = reinterpret_cast<ID3D11Buffer*>(rendererData->indexBuffer);
-		context->IASetVertexBuffers(0, 1, &vb, &stride, &offset);
-		context->IASetIndexBuffer(ib, DXGI_FORMAT_R16_UINT, 0);
-		SetWorldRows(water.world, rec);
-		staticsCB->Update(rec);
-		context->DrawIndexed(indexCount, 0, 0);
-	}
 	};
 	if (!same) {
 		const float cellSize = kShellVertexSpacing * kShellTexelsPerCell;
@@ -2375,22 +2375,22 @@ void SnowDeformation::DrawContactCapture(ID3D11DeviceContext* a_context, bool a_
 							paletteBones = nullptr;
 						}
 					} else {
-					const bool samePalette = paletteBones && paletteCount == part.numBones &&
-					                         std::memcmp(paletteBones, part.bones, size_t(part.numBones) * sizeof(uint16_t)) == 0;
-					if (!samePalette) {
-						for (uint16_t j = 0; j < part.numBones; ++j) {
-							const RE::NiTransform& m = composedFor(part.bones[j], p, j);
-							const auto& rot = m.rotate;
-							const float sc = m.scale;
-							cb.BoneRows[j * 3 + 0] = { rot.entry[0][0] * sc, rot.entry[0][1] * sc, rot.entry[0][2] * sc, m.translate.x };
-							cb.BoneRows[j * 3 + 1] = { rot.entry[1][0] * sc, rot.entry[1][1] * sc, rot.entry[1][2] * sc, m.translate.y };
-							cb.BoneRows[j * 3 + 2] = { rot.entry[2][0] * sc, rot.entry[2][1] * sc, rot.entry[2][2] * sc, m.translate.z };
+						const bool samePalette = paletteBones && paletteCount == part.numBones &&
+						                         std::memcmp(paletteBones, part.bones, size_t(part.numBones) * sizeof(uint16_t)) == 0;
+						if (!samePalette) {
+							for (uint16_t j = 0; j < part.numBones; ++j) {
+								const RE::NiTransform& m = composedFor(part.bones[j], p, j);
+								const auto& rot = m.rotate;
+								const float sc = m.scale;
+								cb.BoneRows[j * 3 + 0] = { rot.entry[0][0] * sc, rot.entry[0][1] * sc, rot.entry[0][2] * sc, m.translate.x };
+								cb.BoneRows[j * 3 + 1] = { rot.entry[1][0] * sc, rot.entry[1][1] * sc, rot.entry[1][2] * sc, m.translate.y };
+								cb.BoneRows[j * 3 + 2] = { rot.entry[2][0] * sc, rot.entry[2][1] * sc, rot.entry[2][2] * sc, m.translate.z };
+							}
+							cb.SkinBoneCount = float(part.numBones);
+							contactSkinCB->Update(cb);
+							paletteBones = part.bones;
+							paletteCount = part.numBones;
 						}
-						cb.SkinBoneCount = float(part.numBones);
-						contactSkinCB->Update(cb);
-						paletteBones = part.bones;
-						paletteCount = part.numBones;
-					}
 					}
 
 					UINT offset = 0;
@@ -2568,8 +2568,8 @@ RE::BSContainer::ForEachResult SnowDeformation::ExclusionVisit(RE::TESObjectREFR
 				float scale = a_ref->GetScale();
 				float zoneScale = std::max(settings.TrampleZoneScale, 0.0f);
 				const float meltStrength = spec.meltStrength > 0.0f ?
-			                                   spec.meltStrength :
-			                                   1.0f - std::clamp(settings.TrampleZoneHeight, 0.0f, 100.0f) / 100.0f;
+				                               spec.meltStrength :
+				                               1.0f - std::clamp(settings.TrampleZoneHeight, 0.0f, 100.0f) / 100.0f;
 				const float elongation = std::max(spec.aspect, 1.0f) - 1.0f;
 				exclusionPending.push_back({ { pos.x + std::sin(angleZ) * spec.forwardBias * scale,
 												 pos.y + std::cos(angleZ) * spec.forwardBias * scale,
@@ -2619,7 +2619,7 @@ RE::BSContainer::ForEachResult SnowDeformation::ExclusionVisit(RE::TESObjectREFR
 		float landZ = pos.z;
 		tes->GetLandHeight(pos, landZ);
 		float radius = pos.z - landZ < kGroundFireBand ? kUnknownHeatClearRadius :
-	                                                     std::clamp(halfExtent * 1.5f, kHeatClearRadiusMin, kHeatClearRadiusMax);
+		                                                 std::clamp(halfExtent * 1.5f, kHeatClearRadiusMin, kHeatClearRadiusMax);
 		exclusionPending.push_back({ { pos.x, pos.y, pos.z, radius * a_ref->GetScale() }, { 0.0f, 0.0f, 1.0f, 1.0f } });
 		exclusionPendingHeat.push_back({ pos.x, pos.y, pos.z, radius * a_ref->GetScale() });
 	}

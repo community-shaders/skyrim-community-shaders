@@ -1,8 +1,8 @@
 #include "Features/SnowDeformation.h"
 
+#include "Features/SnowDeformation/ShapeBounds.h"
 #include "Globals.h"
 #include "State.h"
-#include "Features/SnowDeformation/ShapeBounds.h"
 #include "Utils/ActorUtils.h"
 #include "Utils/Game.h"
 
@@ -334,7 +334,7 @@ static uint32_t boneWalkFaultsLogged = 0;
 bool SnowDeformation::IsProxyOrOverlayGeometry(const RE::BSGeometry* a_geometry, const RE::BSShaderProperty* a_property)
 {
 	if (a_geometry && (NameContains(a_geometry->name, "Virtual") ||
-	                      NameContains(a_geometry->name, "[Ovl") || NameContains(a_geometry->name, "[SOvl")))
+						  NameContains(a_geometry->name, "[Ovl") || NameContains(a_geometry->name, "[SOvl")))
 		return true;
 	return a_property && a_property->alpha < 0.01f;
 }
@@ -860,13 +860,13 @@ void SnowDeformation::GatherStamps(PerFrame& perFrameData)
 				const bool byFlag = ghostFlag && settings.IncorporealMode != 1;
 				logger::info("[SNOW DEFORMATION] '{}' ({:08X}) leaves no trench: {}", actor->GetDisplayFullName(), formID,
 					byFlag ? std::string("marked Ghost on its record") :
-					         std::format("most opaque body surface '{}' at alpha {:.2f}",
-							 bones && bones->bodyAlphaSource.c_str() ? bones->bodyAlphaSource.c_str() : "", bodyAlpha));
+							 std::format("most opaque body surface '{}' at alpha {:.2f}",
+								 bones && bones->bodyAlphaSource.c_str() ? bones->bodyAlphaSource.c_str() : "", bodyAlpha));
 			}
 			return;
 		}
 		if (!isDead && bones && bones->anyAlpha >= 0.0f && bones->anyAlpha < kIncorporealAlpha &&
-		    seeThroughKeptLogged.size() < 16 && seeThroughKeptLogged.insert(formID).second) {
+			seeThroughKeptLogged.size() < 16 && seeThroughKeptLogged.insert(formID).second) {
 			logger::info("[SNOW DEFORMATION] '{}' ({:08X}) keeps its trench: see-through '{}' at alpha {:.2f}, most opaque body surface {:.2f} on '{}'",
 				actor->GetDisplayFullName(), formID,
 				bones->anyAlphaSource.c_str() ? bones->anyAlphaSource.c_str() : "", bones->anyAlpha,

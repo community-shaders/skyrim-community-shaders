@@ -26,8 +26,7 @@ namespace SnowLights
 		inout float3 diffuse, inout float3 specular, inout float3 markLit)
 	{
 		uint clusterIndex = 0;
-		[branch] if (!LightLimitFix::GetClusterIndex(clusterUV, viewZ, clusterIndex))
-			return;
+		[branch] if (!LightLimitFix::GetClusterIndex(clusterUV, viewZ, clusterIndex)) return;
 
 		LightLimitFix::LightGrid grid = LightLimitFix::lightGrid[clusterIndex];
 
@@ -48,8 +47,7 @@ namespace SnowLights
 			{
 				[branch] if (gameShadowMask.x >= 0.0)
 					lightShadow = gameShadowMask[min(light.shadowLightIndex, 3u)];
-				else
-					lightShadow = SnowShadow::GetPointLightShadow(worldPosAbs, light.shadowLightIndex, light.radius);
+				else lightShadow = SnowShadow::GetPointLightShadow(worldPosAbs, light.shadowLightIndex, light.radius);
 			}
 
 			float3 L = normalize(lightDirection);

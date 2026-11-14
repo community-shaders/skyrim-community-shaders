@@ -83,7 +83,7 @@ float4 SampleSnowPlanar(Texture2D<float4> tex, SnowTaps topTaps, SnowTaps sideTa
 	return c;
 }
 
-#	define SNOW_RMAOS(roughness, f0, ao, topTaps, sideTaps, sideWeight)                   \
+#	define SNOW_RMAOS(roughness, f0, ao, topTaps, sideTaps, sideWeight)                  \
 		[branch] if (HasSnowRmaos > 0.5)                                                  \
 		{                                                                                 \
 			float4 rmaos = SampleSnowPlanar(SnowRmaosMap, topTaps, sideTaps, sideWeight); \
@@ -169,10 +169,8 @@ static float2 g_snowParallaxBaseUV;
 float EMParallaxCustomHeight(float2 uv, float mip)
 {
 #	ifdef SNOW_COAT_PARALLAX
-	[branch] if (gObjectParallaxMarch)
-		return ObjectParallaxHeight(uv, mip);
-	else
-		return SampleSnowHeight(g_snowParallaxTaps, uv - g_snowParallaxBaseUV, mip);
+	[branch] if (gObjectParallaxMarch) return ObjectParallaxHeight(uv, mip);
+	else return SampleSnowHeight(g_snowParallaxTaps, uv - g_snowParallaxBaseUV, mip);
 #	else
 	return SampleSnowHeight(g_snowParallaxTaps, uv - g_snowParallaxBaseUV, mip);
 #	endif

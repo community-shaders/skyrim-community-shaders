@@ -8,8 +8,8 @@ cbuffer StaticCB : register(b1)
 #if defined(WATER)
 struct WATER_VS_OUTPUT
 {
-	float4 Position : SV_POSITION;
-	float WorldZ : TEXCOORD0;
+	float4 Position: SV_POSITION;
+	float WorldZ: TEXCOORD0;
 };
 
 #	if defined(VSHADER)
@@ -38,18 +38,18 @@ float main(WATER_VS_OUTPUT input) : SV_Target0
 
 struct VS_INPUT
 {
-	float4 Position : POSITION0;
-	float4 Normal : NORMAL0;
+	float4 Position: POSITION0;
+	float4 Normal: NORMAL0;
 };
 
 struct VS_OUTPUT
 {
-	float4 Position : SV_POSITION;
-	float WorldZ : TEXCOORD0;
-	float2 WorldXY : TEXCOORD1;
+	float4 Position: SV_POSITION;
+	float WorldZ: TEXCOORD0;
+	float2 WorldXY: TEXCOORD1;
 };
 
-#ifdef VSHADER
+#	ifdef VSHADER
 VS_OUTPUT main(VS_INPUT input)
 {
 	float3 posMS = input.Position.xyz;
@@ -66,9 +66,9 @@ VS_OUTPUT main(VS_INPUT input)
 	vsout.WorldXY = worldAbs.xy;
 	return vsout;
 }
-#endif
+#	endif
 
-#if defined(PSHADER)
+#	if defined(PSHADER)
 cbuffer HeightProcessCB : register(b0)
 {
 	int2 ScrollDeltaH;
@@ -90,5 +90,5 @@ float2 main(VS_OUTPUT input) : SV_Target0
 	float bottom = input.WorldZ - terrain < 40.0 ? 100000.0 : input.WorldZ;
 	return float2(input.WorldZ, -bottom);
 }
-#endif
+#	endif
 #endif

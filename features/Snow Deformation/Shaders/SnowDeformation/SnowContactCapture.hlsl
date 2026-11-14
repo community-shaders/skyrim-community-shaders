@@ -20,9 +20,9 @@ cbuffer ContactSkinCB : register(b2)
 
 struct VS_INPUT_SKIN
 {
-	float4 Position : POSITION0;
-	float4 BoneWeights : BLENDWEIGHT0;
-	float4 BoneIndices : BLENDINDICES0;
+	float4 Position: POSITION0;
+	float4 BoneWeights: BLENDWEIGHT0;
+	float4 BoneIndices: BLENDINDICES0;
 };
 
 float3x4 SkinnedMatrix(VS_INPUT_SKIN input)
@@ -40,8 +40,7 @@ float3x4 SkinnedMatrix(VS_INPUT_SKIN input)
 		w = float4(1.0, 0.0, 0.0, 0.0);
 		rows = int4(0, 0, 0, 0);
 	}
-	else
-		w /= wsum;
+	else w /= wsum;
 	return float3x4(BoneRows[rows.x], BoneRows[rows.x + 1], BoneRows[rows.x + 2]) * w.x +
 	       float3x4(BoneRows[rows.y], BoneRows[rows.y + 1], BoneRows[rows.y + 2]) * w.y +
 	       float3x4(BoneRows[rows.z], BoneRows[rows.z + 1], BoneRows[rows.z + 2]) * w.z +
@@ -56,18 +55,18 @@ float3 SkinnedWorld(VS_INPUT_SKIN input)
 
 struct VS_INPUT
 {
-	float4 Position : POSITION0;
-	float4 Normal : NORMAL0;
+	float4 Position: POSITION0;
+	float4 Normal: NORMAL0;
 };
 
 struct VS_OUTPUT
 {
-	float4 Position : SV_POSITION;
-	float WorldZ : TEXCOORD0;
+	float4 Position: SV_POSITION;
+	float WorldZ: TEXCOORD0;
 };
 
-#	ifdef VSHADER
-#		ifdef SKINNED
+#ifdef VSHADER
+#	ifdef SKINNED
 VS_OUTPUT main(VS_INPUT_SKIN input)
 {
 	float3 worldAbs = SkinnedWorld(input);
@@ -79,7 +78,7 @@ VS_OUTPUT main(VS_INPUT_SKIN input)
 	output.WorldZ = worldAbs.z;
 	return output;
 }
-#		else
+#	else
 VS_OUTPUT main(VS_INPUT input)
 {
 	float3 posMS = input.Position.xyz;
@@ -95,12 +94,12 @@ VS_OUTPUT main(VS_INPUT input)
 	output.WorldZ = worldAbs.z;
 	return output;
 }
-#		endif
 #	endif
+#endif
 
-#	ifdef PSHADER
+#ifdef PSHADER
 float2 main(VS_OUTPUT input) : SV_Target
 {
 	return input.WorldZ.xx;
 }
-#	endif
+#endif

@@ -1,8 +1,8 @@
 #ifndef __SNOW_FIELDS_DEPENDENCY_HLSL__
 #define __SNOW_FIELDS_DEPENDENCY_HLSL__
 
-#include "SnowDeformation/SnowNoise.hlsli"
 #include "SnowDeformation/SnowCommon.hlsli"
+#include "SnowDeformation/SnowNoise.hlsli"
 
 #if defined(SNOW_NOISE_TABLE)
 Texture2D<float> SnowNoiseHash : register(t109);
@@ -29,9 +29,15 @@ static const float kTrenchDetailLatticePeriod = 64.0;
 #	define SNOW_BERM_DIMS(d) float2 d = FieldDims.yy
 #	define SNOW_EXCLUSION_DIMS(d) float2 d = FieldDims.ww
 #else
-#	define SNOW_DEFORM_DIMS(d) 		float2 d;               		DeformationMap.GetDimensions(d.x, d.y)
-#	define SNOW_BERM_DIMS(d) 		float2 d;             		BermFieldMap.GetDimensions(d.x, d.y)
-#	define SNOW_EXCLUSION_DIMS(d) 		float2 d;                  		ExclusionFieldMap.GetDimensions(d.x, d.y)
+#	define SNOW_DEFORM_DIMS(d) \
+		float2 d;               \
+		DeformationMap.GetDimensions(d.x, d.y)
+#	define SNOW_BERM_DIMS(d) \
+		float2 d;             \
+		BermFieldMap.GetDimensions(d.x, d.y)
+#	define SNOW_EXCLUSION_DIMS(d) \
+		float2 d;                  \
+		ExclusionFieldMap.GetDimensions(d.x, d.y)
 #endif
 
 float ShellEdgeFade(float2 gridLocal)
@@ -674,8 +680,7 @@ float UndulationSampled(float2 worldXY)
 	float result;
 	[branch] if (UndulationBakedCovers(worldXY))
 		result = UndulationBakedHG(worldXY).x * UndulationAmp;
-	else
-		result = Undulation(worldXY);
+	else result = Undulation(worldXY);
 	return result;
 }
 
@@ -684,7 +689,8 @@ float2 UndulationGradSampled(float2 worldXY)
 	float2 result;
 	[branch] if (UndulationBakedCovers(worldXY))
 		result = UndulationBakedHG(worldXY).yz * UndulationAmp;
-	else {
+	else
+	{
 		const float uStep = kUndulationGradStep;
 		result = float2(
 					 Undulation(worldXY + float2(uStep, 0.0)) - Undulation(worldXY - float2(uStep, 0.0)),
@@ -789,4 +795,3 @@ float SnowHeightBlendOneSided(float w, float hSnow, float heightBlend)
 }
 
 #endif
-

@@ -10,7 +10,7 @@ cbuffer LandscapeSnowCB : register(b11)
 struct LS_HSConst
 {
 	float Edges[3] : SV_TessFactor;
-	float Inside : SV_InsideTessFactor;
+	float Inside: SV_InsideTessFactor;
 };
 
 #define LS_OFF_VIEW(k, clip)                               \

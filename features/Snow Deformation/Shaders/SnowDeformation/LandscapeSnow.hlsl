@@ -67,16 +67,16 @@ VS_OUTPUT LS_VSRaise(VS_INPUT input)
 
 struct LS_CP
 {
-	float4 PositionMS : LSPOS;
+	float4 PositionMS: LSPOS;
 #if defined(TEXTURE)
-	float2 TexCoord : LSUV;
+	float2 TexCoord: LSUV;
 #endif
 #if defined(NORMALS)
-	float4 Normal : LSNRM;
-	float4 Bitangent : LSBIN;
+	float4 Normal: LSNRM;
+	float4 Bitangent: LSBIN;
 #endif
 #if defined(VC)
-	float4 Color : LSCOL;
+	float4 Color: LSCOL;
 #endif
 };
 
@@ -138,20 +138,18 @@ LS_HSConst LS_PatchConst(InputPatch<LS_CP, 3> p)
 }
 
 [domain("tri")]
-[partitioning("fractional_odd")]
-[outputtopology("triangle_cw")]
-[outputcontrolpoints(3)]
-[patchconstantfunc("LS_PatchConst")]
-[maxtessfactor(64.0)]
-LS_CP LS_HS(InputPatch<LS_CP, 3> p, uint i : SV_OutputControlPointID)
-{
-	return p[i];
-}
+	[partitioning("fractional_odd")]
+	[outputtopology("triangle_cw")]
+	[outputcontrolpoints(3)]
+	[patchconstantfunc("LS_PatchConst")]
+	[maxtessfactor(64.0)] LS_CP
+	LS_HS(InputPatch<LS_CP, 3> p, uint i : SV_OutputControlPointID) {
+		return p[i];
+	}
 
 #define LS_LERP(f) (p[0].f * uvw.x + p[1].f * uvw.y + p[2].f * uvw.z)
 
-[domain("tri")]
-VS_OUTPUT LS_DS(LS_HSConst c, float3 uvw : SV_DomainLocation, const OutputPatch<LS_CP, 3> p)
+		[domain("tri")] VS_OUTPUT LS_DS(LS_HSConst c, float3 uvw : SV_DomainLocation, const OutputPatch<LS_CP, 3> p)
 {
 	VS_INPUT vin;
 	vin.PositionMS = LS_LERP(PositionMS);

@@ -443,7 +443,6 @@ void Deferred::DeferredPasses()
 		globals::features::effects11.DrawVolumetricRays();
 		globals::features::effects11.DrawSunRays();
 	}
-
 }
 
 void Deferred::EndDeferred()

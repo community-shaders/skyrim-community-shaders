@@ -98,4 +98,3 @@ SnowDeformation::SnowClimateLook SnowDeformation::ComputeSnowClimateLook() const
 {
 	return {};
 }
-

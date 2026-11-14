@@ -1,8 +1,8 @@
 #ifndef __SNOW_COLOR_HLSLI__
 #define __SNOW_COLOR_HLSLI__
 
-#include "Common/SharedData.hlsli"
 #include "Common/ColorManagement.hlsli"
+#include "Common/SharedData.hlsli"
 
 #if defined(PSHADER) || defined(CSHADER) || defined(COMPUTESHADER)
 namespace SnowColor

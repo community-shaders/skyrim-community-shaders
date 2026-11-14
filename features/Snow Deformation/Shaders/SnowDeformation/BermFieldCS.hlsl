@@ -93,9 +93,7 @@ bool BermTexel(uint2 phys)
 	return berm != 0.0 || blur != 0.0;
 }
 
-[numthreads(8, 8, 1)]
-void BermTiledCS(uint3 GTid : SV_GroupThreadID, uint3 Gid : SV_GroupID, uint GIdx : SV_GroupIndex)
-{
+[numthreads(8, 8, 1)] void BermTiledCS(uint3 GTid : SV_GroupThreadID, uint3 Gid : SV_GroupID, uint GIdx : SV_GroupIndex) {
 	const uint listIndex = Gid.y * 1024u + Gid.x;
 	if (listIndex >= BermTilesIn[0])
 		return;
@@ -131,8 +129,6 @@ void UntouchedTile(uint2 tile)
 	OutUntouched[tile] = touched == 0 ? 1u : 0u;
 }
 
-[numthreads(8, 8, 1)]
-void UntouchedCS(uint3 dtid : SV_DispatchThreadID)
-{
+[numthreads(8, 8, 1)] void UntouchedCS(uint3 dtid : SV_DispatchThreadID) {
 	UntouchedTile(dtid.xy);
 }

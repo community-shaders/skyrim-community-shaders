@@ -1,6 +1,5 @@
 #include "Features/SnowDeformation.h"
 
-
 #include <DDSTextureLoader.h>
 #include <DirectXPackedVector.h>
 
@@ -46,7 +45,7 @@ static int ClassifySnowClass(const RE::TESLandTexture* a_landTexture, const std:
 
 	const auto material = LandHavokMaterial(a_landTexture);
 	const bool snowMaterial = material == RE::MATERIAL_ID::kSnow || material == RE::MATERIAL_ID::kSnowStairs;
-	return snowMaterial ? 3  : (int)SnowDeformation::kSnowClassCount - 1 ;
+	return snowMaterial ? 3 : (int)SnowDeformation::kSnowClassCount - 1;
 }
 
 static std::string LandTextureLabel(const std::string& a_path)
@@ -224,7 +223,9 @@ void SnowDeformation::TESObjectLAND_SetupMaterial(RE::TESObjectLAND* land)
 uint32_t SnowDeformation::LandQuadLevel(RE::BSTriShape* a_geometry)
 {
 	const uint32_t n = a_geometry ? a_geometry->GetTrishapeRuntimeData().vertexCount : 0;
-	return n >= 65 * 65 ? 4 : n >= 33 * 33 ? 2 : n >= 17 * 17 ? 1 : 0;
+	return n >= 65 * 65 ? 4 : n >= 33 * 33 ? 2 :
+	                      n >= 17 * 17     ? 1 :
+	                                         0;
 }
 
 bool SnowDeformation::ReadLandMeshHeights(RE::TESObjectLAND* a_land, ShellCellData& a_data)
@@ -281,7 +282,9 @@ bool SnowDeformation::ReadLandMeshHeights(RE::TESObjectLAND* a_land, ShellCellDa
 				if (!half) {
 					float p[3];
 					memcpy(p, base, sizeof(p));
-					px = p[0]; py = p[1]; pz = p[2];
+					px = p[0];
+					py = p[1];
+					pz = p[2];
 				} else {
 					uint16_t h[3];
 					memcpy(h, base, sizeof(h));
@@ -317,7 +320,7 @@ bool SnowDeformation::ReadLandMeshHeights(RE::TESObjectLAND* a_land, ShellCellDa
 		}
 		if (baseCount < 289)
 			return refuse(quadI, std::format("{} of 289 lattice vertices found ({} off-grid, {} outside; {} vertices, level {}, first at {:.1f}, {:.1f}, stride {}, pos offset {}, {})",
-				baseCount, offGrid, outside, vertexCount, level, firstX, firstY, stride, posOffset, usedHalf ? "half" : "float"));
+									 baseCount, offGrid, outside, vertexCount, level, firstX, firstY, stride, posOffset, usedHalf ? "half" : "float"));
 		const float baseZ = float(baseSum / baseCount) + (loadedData->heightExtents.x + loadedData->heightExtents.y) * 0.5f;
 		for (uint32_t iy = 0; iy <= side; ++iy)
 			for (uint32_t ix = 0; ix <= side; ++ix) {

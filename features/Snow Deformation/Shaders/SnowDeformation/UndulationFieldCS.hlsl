@@ -14,13 +14,14 @@ RWTexture2D<unorm float> NoiseHashTable : register(u1);
 	NoiseHashTable[id.xy] = ShapeNoiseHash(float2(id.xy));
 }
 
-[numthreads(8, 8, 1)] void main(uint3 id : SV_DispatchThreadID) {
+	[numthreads(8, 8, 1)] void main(uint3 id : SV_DispatchThreadID)
+{
 	float2 w = FieldOriginWorld + float2(id.xy) * FieldTexel;
 	const float uStep = kUndulationGradStep;
 	float h = UndulationNorm(w, FieldScale);
 	float2 g = float2(
-					UndulationNorm(w + float2(uStep, 0.0), FieldScale) - UndulationNorm(w - float2(uStep, 0.0), FieldScale),
-					UndulationNorm(w + float2(0.0, uStep), FieldScale) - UndulationNorm(w - float2(0.0, uStep), FieldScale)) /
+				   UndulationNorm(w + float2(uStep, 0.0), FieldScale) - UndulationNorm(w - float2(uStep, 0.0), FieldScale),
+				   UndulationNorm(w + float2(0.0, uStep), FieldScale) - UndulationNorm(w - float2(0.0, uStep), FieldScale)) /
 	           (2.0 * uStep);
 	UndulationField[id.xy] = float4(h, g, 0.0);
 }

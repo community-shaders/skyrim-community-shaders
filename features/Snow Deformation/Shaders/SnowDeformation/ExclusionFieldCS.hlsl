@@ -25,9 +25,7 @@ float2 FieldTexelWorldXY(uint2 texel, float2 dims)
 	return FieldCenter + (float2(texel) - dims * 0.5 + 0.5) * FieldTexelSize;
 }
 
-[numthreads(TILE_DIM, TILE_DIM, 1)]
-void main(uint3 dtid : SV_DispatchThreadID, uint3 gid : SV_GroupID, uint gindex : SV_GroupIndex)
-{
+[numthreads(TILE_DIM, TILE_DIM, 1)] void main(uint3 dtid : SV_DispatchThreadID, uint3 gid : SV_GroupID, uint gindex : SV_GroupIndex) {
 	float2 dims;
 	OutField.GetDimensions(dims.x, dims.y);
 

@@ -366,7 +366,8 @@ namespace SnowLighting
 			{
 				const float tiling = ProjectedUVParams.z;
 				projNoise = TriplanarGrad(TexCharacterLightProjNoiseSampler, SampCharacterLightProjNoiseSampler, worldRel + FrameBuffer::CameraPosAdjust.xyz + s.parallaxShift,
-					triWeights, tiling, pDx * tiling, pDy * tiling).x;
+					triWeights, tiling, pDx * tiling, pDy * tiling)
+				                .x;
 			}
 		}
 		return projNoise;
@@ -423,18 +424,18 @@ namespace SnowLighting
 				}
 				[branch] if (projectedMaterialWeight > 0.003)
 				{
-				float3 snowProjSample = TriplanarStochasticGrad(SnowDeformation::HorizonSnowAlbedo, SNOW_PROJ_SAMPLER, snowPos, snowTriWeights, 1.0 / SnowDeformation::SnowUVTile, screenNoise, snowGradX, snowGradY).xyz;
-				s.projAlbedo = SnowColor::SetAlbedo(snowProjSample, SharedData::snowDeformationSettings.SnowIsLinear > 0.5);
-				s.projRMAOS = kShellRMAOSDefault;
-				[branch] if (ShellHasRMAOS())
-				{
-					s.projRMAOS = ShellRMAOS(TriplanarStochasticGrad(SnowDeformation::HorizonSnowRmaos, SNOW_PROJ_SAMPLER, snowPos, snowTriWeights, 1.0 / SnowDeformation::SnowUVTile, screenNoise, snowGradX, snowGradY));
-				}
+					float3 snowProjSample = TriplanarStochasticGrad(SnowDeformation::HorizonSnowAlbedo, SNOW_PROJ_SAMPLER, snowPos, snowTriWeights, 1.0 / SnowDeformation::SnowUVTile, screenNoise, snowGradX, snowGradY).xyz;
+					s.projAlbedo = SnowColor::SetAlbedo(snowProjSample, SharedData::snowDeformationSettings.SnowIsLinear > 0.5);
+					s.projRMAOS = kShellRMAOSDefault;
+					[branch] if (ShellHasRMAOS())
+					{
+						s.projRMAOS = ShellRMAOS(TriplanarStochasticGrad(SnowDeformation::HorizonSnowRmaos, SNOW_PROJ_SAMPLER, snowPos, snowTriWeights, 1.0 / SnowDeformation::SnowUVTile, screenNoise, snowGradX, snowGradY));
+					}
 #		if defined(TRUE_PBR)
-				baseColor = lerp(baseColor, s.projAlbedo, projectedMaterialWeight);
-				rawRMAOS = lerp(rawRMAOS, s.projRMAOS, projectedMaterialWeight);
+					baseColor = lerp(baseColor, s.projAlbedo, projectedMaterialWeight);
+					rawRMAOS = lerp(rawRMAOS, s.projRMAOS, projectedMaterialWeight);
 #		else
-				baseColor = lerp(baseColor, s.projAlbedo, projectedMaterialWeight);
+					baseColor = lerp(baseColor, s.projAlbedo, projectedMaterialWeight);
 #		endif
 				}
 			}

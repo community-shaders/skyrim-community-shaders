@@ -7,10 +7,10 @@
 #include "Features/ExponentialHeightFog.h"
 #include "Features/IBL.h"
 #include "Features/LightLimitFix.h"
-#include "Features/TerrainShadows.h"
 #include "Features/ScreenSpaceShadows.h"
 #include "Features/Skylighting.h"
 #include "Features/TerrainBlending.h"
+#include "Features/TerrainShadows.h"
 #include "Globals.h"
 #include "State.h"
 #include "TruePBR.h"
@@ -641,17 +641,17 @@ void SnowDeformation::DrawShellEarlyPrepass()
 		ID3D11SamplerState* sampler = nullptr;
 	};
 	StageBinds saved[5];
-#define SNOW_SAVE_STAGE(P, b)                                    \
-	context->P##GetShaderResources(0, 30, b.srv);                \
-	context->P##GetShaderResources(56, 4, b.srv + 30);           \
-	context->P##GetConstantBuffers(0, 1, b.cb);                  \
-	context->P##GetConstantBuffers(4, 3, b.cb + 1);              \
+#define SNOW_SAVE_STAGE(P, b)                          \
+	context->P##GetShaderResources(0, 30, b.srv);      \
+	context->P##GetShaderResources(56, 4, b.srv + 30); \
+	context->P##GetConstantBuffers(0, 1, b.cb);        \
+	context->P##GetConstantBuffers(4, 3, b.cb + 1);    \
 	context->P##GetSamplers(0, 1, &b.sampler)
-#define SNOW_RESTORE_STAGE(P, b)                                 \
-	context->P##SetShaderResources(0, 30, b.srv);                \
-	context->P##SetShaderResources(56, 4, b.srv + 30);           \
-	context->P##SetConstantBuffers(0, 1, b.cb);                  \
-	context->P##SetConstantBuffers(4, 3, b.cb + 1);              \
+#define SNOW_RESTORE_STAGE(P, b)                       \
+	context->P##SetShaderResources(0, 30, b.srv);      \
+	context->P##SetShaderResources(56, 4, b.srv + 30); \
+	context->P##SetConstantBuffers(0, 1, b.cb);        \
+	context->P##SetConstantBuffers(4, 3, b.cb + 1);    \
 	context->P##SetSamplers(0, 1, &b.sampler)
 	SNOW_SAVE_STAGE(VS, saved[0]);
 	SNOW_SAVE_STAGE(HS, saved[1]);

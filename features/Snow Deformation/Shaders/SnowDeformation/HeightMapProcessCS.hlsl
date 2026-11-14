@@ -72,10 +72,7 @@ bool GhostInView(float2 worldXY, float worldZ)
 uint ScrollTexel(uint2 texel, uint2 dims);
 groupshared uint scrollElevated;
 
-[numthreads(8, 8, 1)] void ScrollCS(uint3 dtid
-									: SV_DispatchThreadID, uint3 gid
-									: SV_GroupID, uint gi
-									: SV_GroupIndex) {
+[numthreads(8, 8, 1)] void ScrollCS(uint3 dtid : SV_DispatchThreadID, uint3 gid : SV_GroupID, uint gi : SV_GroupIndex) {
 	uint2 dims;
 	OutA.GetDimensions(dims.x, dims.y);
 	if (gi == 0)
@@ -165,10 +162,7 @@ groupshared uint combineTileCount;
 groupshared uint combineTileList[MAX_EXCLUSIONS];
 groupshared uint combineElevated;
 
-[numthreads(8, 8, 1)] void CombineCS(uint3 dtid
-									 : SV_DispatchThreadID, uint3 gid
-									 : SV_GroupID, uint gi
-									 : SV_GroupIndex) {
+[numthreads(8, 8, 1)] void CombineCS(uint3 dtid : SV_DispatchThreadID, uint3 gid : SV_GroupID, uint gi : SV_GroupIndex) {
 	uint2 dims;
 	OutMask.GetDimensions(dims.x, dims.y);
 
@@ -271,8 +265,7 @@ float WaterUnderTexel(int2 w)
 
 static const float kWaterNearMax = 3.0;
 
-[numthreads(8, 8, 1)] void WaterCoverCS(uint3 dtid : SV_DispatchThreadID)
-{
+[numthreads(8, 8, 1)] void WaterCoverCS(uint3 dtid : SV_DispatchThreadID) {
 	if (any(dtid.xy >= TerrainDim))
 		return;
 	int2 w = (int2)dtid.xy;
@@ -297,8 +290,7 @@ Texture2D<float4> CompareKept : register(t8);
 Texture2D<float4> CompareFresh : register(t9);
 RWByteAddressBuffer CompareCount : register(u4);
 
-[numthreads(8, 8, 1)] void RasterCompareCS(uint3 dtid
-										   : SV_DispatchThreadID) {
+[numthreads(8, 8, 1)] void RasterCompareCS(uint3 dtid : SV_DispatchThreadID) {
 	uint2 dims;
 	CompareKept.GetDimensions(dims.x, dims.y);
 	if (any(dtid.xy >= dims))

@@ -85,4 +85,3 @@ void SnowDeformation::RunShaderPrime()
 	const double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
 	logger::info("[SNOW DEFORMATION] shader prime done in {:.1f} s", seconds);
 }
-

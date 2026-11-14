@@ -10,9 +10,7 @@ cbuffer DepthSyncCB : register(b2)
 	uint2 SyncExtent;
 }
 
-[numthreads(8, 8, 1)]
-void main(uint3 dtid : SV_DispatchThreadID)
-{
+[numthreads(8, 8, 1)] void main(uint3 dtid : SV_DispatchThreadID) {
 	uint2 dims;
 	MainDepth.GetDimensions(dims.x, dims.y);
 	const uint2 p = dtid.xy + SyncOrigin;
@@ -29,8 +27,7 @@ void main(uint3 dtid : SV_DispatchThreadID)
 
 RWTexture2D<float> SavedDepth : register(u1);
 
-[numthreads(8, 8, 1)] void SssSyncCS(uint3 dtid : SV_DispatchThreadID)
-{
+[numthreads(8, 8, 1)] void SssSyncCS(uint3 dtid : SV_DispatchThreadID) {
 	uint2 dims;
 	ShellRasterDepth.GetDimensions(dims.x, dims.y);
 	const uint2 p = dtid.xy + SyncOrigin;
@@ -44,7 +41,7 @@ RWTexture2D<float> SavedDepth : register(u1);
 	BlendedDepth[p] = min(blended, abs(raster));
 }
 
-[numthreads(8, 8, 1)] void SssRestoreCS(uint3 dtid : SV_DispatchThreadID)
+	[numthreads(8, 8, 1)] void SssRestoreCS(uint3 dtid : SV_DispatchThreadID)
 {
 	uint2 dims;
 	ShellRasterDepth.GetDimensions(dims.x, dims.y);
@@ -95,8 +92,7 @@ float FineCatmull(float p0, float p1, float p2, float p3, float t)
 	return 0.5 * (2.0 * p1 + (-p0 + p2) * t + (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * t * t + (-p0 + 3.0 * p1 - 3.0 * p2 + p3) * t * t * t);
 }
 
-[numthreads(8, 8, 1)] void TerrainFineCS(uint3 id : SV_DispatchThreadID)
-{
+[numthreads(8, 8, 1)] void TerrainFineCS(uint3 id : SV_DispatchThreadID) {
 	if (any(id.xy >= FineDim))
 		return;
 	float2 world = FineOriginWorld + float2(id.xy) * FineTexel;
