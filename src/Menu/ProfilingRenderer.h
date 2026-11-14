@@ -55,6 +55,13 @@ public:
 	static bool RenderFeatureCostChip(const std::string& featurePrefix, float rightLimit);
 
 	/**
+	 * @brief Width RenderFeatureCostChip would draw its chip at this frame, so a header can reserve room for it.
+	 * @param featurePrefix The profiler timer name prefix identifying the feature.
+	 * @return The chip width, or 0 when the feature has no timers and no chip would be drawn.
+	 */
+	static float MeasureFeatureCostChip(const std::string& featurePrefix);
+
+	/**
 	 * @brief Checks whether any profiler timer results exist for the given feature.
 	 *
 	 * @param featurePrefix The profiler timer name prefix to search for.
@@ -194,6 +201,8 @@ private:
 	static std::string GetGroupName(std::string_view timerName);
 	/** @brief Gathers a feature's timings in the current mode, refreshing its cached statistics once a second. */
 	static FeatureTimings CollectFeatureTimings(const std::string& featurePrefix, GraphState& state);
+	/** @brief The cost chip's text: the timing mode and the feature's total average time. */
+	static std::string FeatureCostChipLabel(const FeatureTimings& timings);
 	static std::vector<legit::ProfilerTask> BuildFeatureTasks(const std::string& featurePrefix, const FeatureTimings& timings);
 	/** @brief The popover's body: mode toggle, graph, per-pass table, overlay toggle and the Profiling page link. */
 	static void RenderFeatureTimersPopover(const std::string& featurePrefix, GraphState& state, const FeatureTimings& timings);
