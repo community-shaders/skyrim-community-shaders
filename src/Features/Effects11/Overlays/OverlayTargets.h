@@ -82,8 +82,6 @@ namespace Overlays
 	void FlushWeatherWrites();
 	/** @brief Clamps setting slots to their registered range, as loading does; shader slots are returned unchanged. */
 	OverlayValue ClampSlot(const SlotKey& a_slot, const OverlayValue& a_value);
-	/** @brief Rounding step for authored operands: the setting's step, or kShaderOperandStep. */
-	float StepOf(const SlotKey& a_slot);
 	/** @brief The FileName, Category and Name an authored op on this slot is written with. */
 	SlotName DescribeSlot(const SlotKey& a_slot);
 	/** @brief Every slot that holds a value, for "New overlay from unsaved changes". */

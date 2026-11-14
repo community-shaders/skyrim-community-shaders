@@ -1292,7 +1292,10 @@ void Effects11Editor::DrawSettingTooltip(const Setting& a_setting, const std::st
 		break;
 	}
 
-	const std::string file = a_setting.hasWeatherSupport ? EditTargetFile(a_setting.category) : std::string(PresetManager::kEnbSeriesIniName);
+	const auto& overlayTarget = Overlays::Manager::GetSingleton().GetEditTarget();
+	const std::string file = !overlayTarget.empty()      ? overlayTarget :
+	                         a_setting.hasWeatherSupport ? EditTargetFile(a_setting.category) :
+	                                                       std::string(PresetManager::kEnbSeriesIniName);
 	const auto savedTo = I18n::GetSingleton()->Format(TKEY("saved_to"), { { "file", file } }, "Saved to {file}");
 	Util::Text::Info("%s", savedTo.c_str());
 
@@ -1491,12 +1494,14 @@ int Effects11Editor::CountHiddenPeriodParameters() const
 
 // Actions
 
-void Effects11Editor::Save()
+bool Effects11Editor::Save()
 {
 	if (!EffectManager::GetSingleton().IsPresetLoaded())
-		return;
-	Overlays::Manager::GetSingleton().SavePreset();
+		return false;
+	if (!Overlays::Manager::GetSingleton().SavePreset())
+		return false;
 	dirty = false;
+	return true;
 }
 
 void Effects11Editor::RefreshPresetPaths()
@@ -1588,8 +1593,8 @@ void Effects11Editor::DrawPendingActionPopup()
 
 	if (reload) {
 		if (Util::SuccessButton(T(TKEY("save_and_reload"), "Save and reload"))) {
-			Save();
-			ReloadShaders();
+			if (Save())
+				ReloadShaders();
 			finish();
 		}
 		ImGui::SameLine();

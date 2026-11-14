@@ -471,12 +471,10 @@ namespace Overlays
 		op.name = name.name;
 		bool noOp = true;
 		if (a_after.kind == ValueKind::Float) {
-			const float step = StepOf(a_slot);
 			op.op = Operator::Add;
 			op.operand.components = a_after.components;
 			for (int c = 0; c < a_after.components; ++c) {
-				// Rounded before dividing by Amount, so the slot lands on the edited value at any Amount
-				const float delta = RoundToStep(a_after.values[c] - received.values[c], step);
+				const float delta = a_after.values[c] - received.values[c];
 				op.operand.values[c] = delta / target->amount;
 				noOp &= delta == 0.0f;
 			}
@@ -528,6 +526,7 @@ namespace Overlays
 		if (const auto* entry = static_cast<ExtendedEffect&>(a_effect).WeatherEntryForEdit(a_index, EffectManager::GetSingleton().GetDominantWeatherID()))
 			weatherFile = entry->fileName;
 #endif
+		// A weather slot's own value, not the displayed blend in a_before, is what the op changes
 		const SlotKey whole{ &a_effect, static_cast<uint32_t>(a_index), -1, weatherFile };
 		if (Effect::IsPerComponentVector(var)) {
 			for (int c = 0; c < after.components; ++c) {
@@ -535,10 +534,10 @@ namespace Overlays
 					continue;
 				auto slot = whole;
 				slot.part = static_cast<int8_t>(c);
-				RecordEdit(slot, ComponentOf(a_before, c), ComponentOf(after, c));
+				RecordEdit(slot, ReadSlot(slot).value, ComponentOf(after, c));
 			}
 		} else {
-			RecordEdit(whole, a_before, after);
+			RecordEdit(whole, ReadSlot(whole).value, after);
 		}
 		Reapply();
 		return true;
@@ -626,13 +625,13 @@ namespace Overlays
 		return overlay && SaveOverlayFile(*overlay);
 	}
 
-	void Manager::SavePreset()
+	bool Manager::SavePreset()
 	{
 		{
 			const RemovedScope removed;
 			SettingManager::GetSingleton().Save();
 			EffectManager::GetSingleton().Save();
 		}
-		SaveDirtyOverlays();
+		return SaveDirtyOverlays();
 	}
 }

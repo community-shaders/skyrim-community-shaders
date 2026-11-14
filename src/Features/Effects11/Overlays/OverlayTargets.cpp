@@ -18,8 +18,6 @@ namespace Overlays
 {
 	namespace
 	{
-		/** @brief Shader parameters carry no UI step, so authored operands are rounded to this. */
-		constexpr float kShaderOperandStep = 0.0001f;
 		static_assert(static_cast<int>(std::size(Effect::kComponentSuffixes)) == kMaxComponents);
 		/** @brief Interior* periods first, so "InteriorDay" wins over "Day". */
 		constexpr int kSuffixOrder[TimeOfDayValue::Total] = { 6, 7, 0, 1, 3, 4, 5, 2 };
@@ -324,11 +322,6 @@ namespace Overlays
 		for (int c = 0; c < clamped.components; ++c)
 			clamped.values[c] = std::clamp(clamped.values[c], setting->minValue, setting->maxValue);
 		return clamped;
-	}
-
-	float StepOf(const SlotKey& a_slot)
-	{
-		return a_slot.IsShader() ? kShaderOperandStep : SettingManager::GetSingleton().GetSettingInfo(a_slot.index)->step;
 	}
 
 	SlotName DescribeSlot(const SlotKey& a_slot)

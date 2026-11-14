@@ -32,6 +32,7 @@ namespace Overlays
 	class Manager
 	{
 	public:
+		/** @brief The process-wide overlay manager. */
 		static Manager& GetSingleton();
 
 		/** @brief Re-reads the active preset's list and overlay files and drops all stacks. Call before effects compile, so #define reads see them. */
@@ -117,10 +118,10 @@ namespace Overlays
 		bool CreateOverlayFromChanges(std::string_view a_name, const std::function<void()>& a_revert);
 		/** @brief Whether any overlay has authored ops not yet written to its file. */
 		bool HasDirtyOverlays() const;
-		/** @brief Writes every overlay with unsaved authored ops. */
+		/** @brief Writes every overlay with unsaved authored ops. @return False when any overlay write failed. */
 		bool SaveDirtyOverlays();
-		/** @brief Saves the stores to the preset files without overlay values, then writes every overlay with unsaved ops. */
-		void SavePreset();
+		/** @brief Saves the stores to the preset files without overlay values, then writes every overlay with unsaved ops. @return False when any overlay write failed. */
+		bool SavePreset();
 
 	private:
 		Manager() = default;

@@ -102,8 +102,10 @@ private:
 	int CountHiddenPeriodParameters() const;
 
 	// Actions
+	/** @brief Re-resolves the active preset's paths and which part of its layout is missing. */
 	void RefreshPresetPaths();
-	void Save();
+	/** @brief Saves the preset and its overlays. @return False when nothing was loaded or an overlay write failed; unsaved changes stay marked. */
+	bool Save();
 	void Revert();
 	void ReloadShaders();
 	void RequestAction(PendingAction a_action);
