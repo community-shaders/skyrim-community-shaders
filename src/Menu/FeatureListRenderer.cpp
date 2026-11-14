@@ -866,6 +866,7 @@ static void SnapScrollToRows(const std::vector<float>& rowTops)
 	static float s_target = -1.0f;    // scroll we are animating to, < 0 when idle
 	static float s_expected = -1.0f;  // scroll we asked ImGui for last frame
 	static bool s_wasDragging = false;
+	static float s_wheelRemainder = 0.0f;  // wheel input not yet worth a whole notch (precision wheels, touchpads)
 
 	const float scroll = ImGui::GetScrollY();
 	const float maxScroll = ImGui::GetScrollMaxY();
@@ -908,13 +909,27 @@ static void SnapScrollToRows(const std::vector<float>& rowTops)
 	}
 	s_wasDragging = dragging;
 
-	if (!dragging && io.MouseWheel != 0.0f && !io.KeyCtrl &&
-		ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows | ImGuiHoveredFlags_AllowWhenBlockedByActiveItem)) {
-		const int notches = std::max(1, static_cast<int>(std::round(std::abs(io.MouseWheel))));
-		const int step = (io.MouseWheel > 0.0f ? -1 : 1) * notches * kRowsPerNotch;
-		const auto from = static_cast<int>(nearestIndex(s_target >= 0.0f ? s_target : scroll));
-		const int to = std::clamp(from + step, 0, static_cast<int>(snaps.size()) - 1);
-		s_target = snaps[to];
+	const bool wheelApplies = !dragging && !io.KeyCtrl &&
+	                          ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows | ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
+	if (!wheelApplies) {
+		s_wheelRemainder = 0.0f;
+	} else if (io.MouseWheel != 0.0f) {
+		// Only whole notches move the list; the fraction carries over, so split input scrolls like the same input combined
+		s_wheelRemainder += io.MouseWheel;
+		const int notches = static_cast<int>(s_wheelRemainder);
+		s_wheelRemainder -= static_cast<float>(notches);
+		if (notches != 0) {
+			const int step = -notches * kRowsPerNotch;
+			const auto from = static_cast<int>(nearestIndex(s_target >= 0.0f ? s_target : scroll));
+			const int to = std::clamp(from + step, 0, static_cast<int>(snaps.size()) - 1);
+			s_target = snaps[to];
+		}
+	}
+
+	// A keyboard selection is being scrolled into view: let ImGui do it rather than fight it
+	if (g_scrollToSelection) {
+		s_target = -1.0f;
+		return;
 	}
 
 	if (s_target < 0.0f)
