@@ -3,9 +3,11 @@
 #include "CSEditor/SceneManager/SceneWidgetInterceptor.h"
 #include "Features/PostProcessing.h"
 #include "I18n/I18n.h"
+#include "Menu/MenuIcons.h"
 #include "ShaderCache.h"
 #include "State.h"
 #include "Util.h"
+#include "Utils/DebugView.h"
 
 namespace
 {
@@ -66,20 +68,18 @@ void LensFlare::DrawSettings()
 
 	ImGui::SliderFloat(T("feature.post_processing.lens_flare.intensity", "Intensity"), &settings.Intensity, 0.0f, 1.0f, "%.3f");
 	tooltip(T("feature.post_processing.lens_flare.tooltip_intensity", "Master intensity for the entire lens flare effect"));
+	ImGui::ColorEdit3(T("feature.post_processing.lens_flare.tint", "Tint"), settings.Tint.data());
+	tooltip(T("feature.post_processing.lens_flare.tooltip_tint", "Radial color gradient applied to the flare effect"));
 
 	// Threshold
-	ImGui::Spacing();
-	ImGui::TextUnformatted(T("feature.post_processing.lens_flare.threshold", "Threshold"));
-	ImGui::Separator();
+	ImGui::SeparatorText(T("feature.post_processing.lens_flare.threshold", "Threshold"));
 	ImGui::SliderFloat(T("feature.post_processing.lens_flare.threshold_ev", "Threshold (EV100)"), &settings.ThresholdEV, -7.0f, 23.0f, "%+.2f EV100");
 	tooltip(T("feature.post_processing.lens_flare.tooltip_threshold_ev", "Brightness threshold in EV100 (0 EV100 = 0.125 linear luminance)."));
 	ImGui::SliderFloat(T("feature.post_processing.lens_flare.threshold_range", "Threshold Range"), &settings.ThresholdRange, 0.01f, 5.0f, "%.3f");
 	tooltip(T("feature.post_processing.lens_flare.tooltip_threshold_range", "Fade range for the threshold cutoff"));
 
 	// Ghost Settings
-	ImGui::Spacing();
-	ImGui::TextUnformatted(T("feature.post_processing.lens_flare.ghost_settings", "Ghost Settings"));
-	ImGui::Separator();
+	ImGui::SeparatorText(T("feature.post_processing.lens_flare.ghost_settings", "Ghost Settings"));
 
 	{
 		const char* modeNames[] = {
@@ -109,6 +109,8 @@ void LensFlare::DrawSettings()
 		if (cam)
 			apertureRotation = cam->ApertureBladeRotationDeg;
 
+		if (cam)
+			DrawCameraControlledNote();
 		ImGui::BeginDisabled(cam != nullptr);
 		{
 			const SceneWidgetInterceptor::ProxyScope proxy(&settings.ApertureBlades, 1.0f);
@@ -204,43 +206,39 @@ void LensFlare::DrawSettings()
 	}
 
 	// Halo Settings
-	ImGui::Spacing();
-	ImGui::TextUnformatted(T("feature.post_processing.lens_flare.halo_settings", "Halo Settings"));
-	ImGui::Separator();
+	ImGui::SeparatorText(T("feature.post_processing.lens_flare.halo_settings", "Halo Settings"));
 	ImGui::SliderFloat(T("feature.post_processing.lens_flare.halo_strength", "Halo Strength"), &settings.HaloStrength, 0.0f, 1.0f, "%.3f");
 	ImGui::SliderFloat(T("feature.post_processing.lens_flare.halo_radius", "Halo Radius"), &settings.HaloRadius, 0.0f, 1.0f, "%.3f");
 	ImGui::SliderFloat(T("feature.post_processing.lens_flare.halo_width", "Halo Width"), &settings.HaloWidth, 0.0f, 1.0f, "%.3f");
 	ImGui::SliderFloat(T("feature.post_processing.lens_flare.halo_compression", "Halo Compression"), &settings.HaloCompression, 0.1f, 2.0f, "%.3f");
 	tooltip(T("feature.post_processing.lens_flare.tooltip_halo_compression", "Fisheye distortion strength for the halo effect"));
 	ImGui::SliderFloat(T("feature.post_processing.lens_flare.halo_chroma_shift", "Halo Chroma Shift"), &settings.HaloChromaShift, 0.0f, 0.1f, "%.4f");
+}
 
-	// Tint
-	ImGui::Spacing();
-	ImGui::TextUnformatted(T("feature.post_processing.lens_flare.color_tint", "Color Tint"));
-	ImGui::Separator();
-	ImGui::ColorEdit3(T("feature.post_processing.lens_flare.tint", "Tint"), settings.Tint.data());
-	tooltip(T("feature.post_processing.lens_flare.tooltip_tint", "Radial color gradient applied to the flare effect"));
+void LensFlare::DrawDebugSection()
+{
+	auto tooltip = [](const char* text) {
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::TextUnformatted(text);
+	};
 
-	// Debug
-	ImGui::Spacing();
-	ImGui::Separator();
-	ImGui::Spacing();
-
-	if (Util::ShowDebugSections() && ImGui::CollapsingHeader(T("feature.post_processing.lens_flare.debug", "Debug"))) {
+	{
+		Util::SectionCard card("##LensFlareOverrides", ICON_TI_ADJUSTMENTS_HORIZONTAL, T("feature.post_processing.lens_flare.debug_card_overrides", "Stage Overrides"));
 		ImGui::Checkbox(T("feature.post_processing.lens_flare.disable_threshold", "Disable Threshold"), &debugsettings.disableThreshold);
 		ImGui::Checkbox(T("feature.post_processing.lens_flare.disable_ghosts", "Disable Ghosts"), &debugsettings.disableGhosts);
 		ImGui::Checkbox(T("feature.post_processing.lens_flare.disable_blur", "Disable Blur"), &debugsettings.disableBlur);
 		ImGui::SliderInt(T("feature.post_processing.lens_flare.blur_iterations", "Blur Iterations"), &debugsettings.blurIterations, 1, 4);
 		tooltip(T("feature.post_processing.lens_flare.tooltip_blur_iterations", "Kawase blur cycles (down+up). 1 = sharp, 2+ = smoother"));
+	}
 
-		static float debugRescale = .25f;
-		ImGui::SliderFloat(T("feature.post_processing.lens_flare.view_resize", "View Resize"), &debugRescale, 0.f, 1.f);
-		BUFFER_VIEWER_NODE_TITLE(texThreshold, T("feature.post_processing.lens_flare.buffer_threshold", "Threshold (half-res)"), debugRescale);
-		BUFFER_VIEWER_NODE_TITLE(texGhostHalo, T("feature.post_processing.lens_flare.buffer_ghost_halo", "Ghost + Halo (half-res)"), debugRescale);
-		BUFFER_VIEWER_NODE_TITLE(texBlurTemp, T("feature.post_processing.lens_flare.buffer_blur_temp", "Blur Temp (quarter-res)"), debugRescale);
-		if (settings.GhostModeInt >= (int)GhostMode::Quality) {
-			BUFFER_VIEWER_NODE_TITLE(texFFTResult, T("feature.post_processing.lens_flare.buffer_fft_result", "FFT Convolution Result"), debugRescale);
-		}
+	Util::SectionCard card("##LensFlareBuffers", ICON_TI_EYE, T("feature.post_processing.lens_flare.debug_card_buffers", "Buffers"));
+	static float debugRescale = .25f;
+	ImGui::SliderFloat(T("feature.post_processing.lens_flare.view_resize", "View Resize"), &debugRescale, 0.f, 1.f);
+	BUFFER_VIEWER_NODE_TITLE(texThreshold, T("feature.post_processing.lens_flare.buffer_threshold", "Threshold (half-res)"), debugRescale);
+	BUFFER_VIEWER_NODE_TITLE(texGhostHalo, T("feature.post_processing.lens_flare.buffer_ghost_halo", "Ghost + Halo (half-res)"), debugRescale);
+	BUFFER_VIEWER_NODE_TITLE(texBlurTemp, T("feature.post_processing.lens_flare.buffer_blur_temp", "Blur Temp (quarter-res)"), debugRescale);
+	if (settings.GhostModeInt >= (int)GhostMode::Quality) {
+		BUFFER_VIEWER_NODE_TITLE(texFFTResult, T("feature.post_processing.lens_flare.buffer_fft_result", "FFT Convolution Result"), debugRescale);
 	}
 }
 

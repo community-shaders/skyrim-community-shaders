@@ -47,6 +47,14 @@ struct PostProcessing : Feature
 	}
 
 	virtual void DrawSettings() override;
+	virtual bool HasDebugSection() const override { return true; }
+	virtual void DrawDebugSection() override;
+
+	/** @brief The effect whose settings page is open when it has debug views, or null (the debug tabs then show Post Processing only). */
+	PostProcessFeature* GetOpenEffectWithDebug() const;
+
+	/** @brief Draws the game's current image space values as cards (the Post Processing debug tab). */
+	void DrawImageSpaceDebug();
 	virtual void LoadSettings(json& o_json) override;
 	virtual void SaveSettings(json& o_json) override;
 	virtual void RestoreDefaultSettings() override;

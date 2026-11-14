@@ -15,6 +15,16 @@ namespace Skylighting
 	Texture3D<sh2> SkylightingProbeArray : register(t50);
 #endif
 
+#if defined(SKYLIGHTING_COVERAGE_REGISTER)
+	Texture3D<uint> SkylightingProbeCoverage : register(SKYLIGHTING_COVERAGE_REGISTER);
+	Texture2D<float> SkylightingZenithDepth : register(SKYLIGHTING_ZENITH_REGISTER);
+#	define SKYLIGHTING_COVERAGE
+#elif defined(PSHADER)
+	Texture3D<uint> SkylightingProbeCoverage : register(t51);
+	Texture2D<float> SkylightingZenithDepth : register(t52);
+#	define SKYLIGHTING_COVERAGE
+#endif
+
 #if defined(SKYLIGHTING_SHADOW_VIS)
 	Texture3D<float> ShadowVisibilityProbeArray : register(t53);
 #endif
@@ -26,6 +36,47 @@ namespace Skylighting
 	const static float3 CELL_SIZE = ARRAY_SIZE / ARRAY_DIM;
 	/** @brief Fraction of the volume at each edge that is faded out, covering cells still fading in after the volume scrolls. */
 	const static float FADE_MARGIN = 0.05;
+	/** @brief Floor on the tangent weight, so a sample with every probe behind its surface falls back to plain trilinear. */
+	const static float MIN_TANGENT_WEIGHT = 1e-3;
+
+	/** @brief Zenith coverage: open sky above, an occluder above, or outside the zenith capture. COVERAGE_UNKNOWN matches Skylighting::COVERAGE_UNKNOWN in C++. */
+	const static uint COVERAGE_OPEN = 0;
+	const static uint COVERAGE_COVERED = 1;
+	const static uint COVERAGE_UNKNOWN = 2;
+
+	/** @brief Projects positionMS into the top-down zenith capture; z is depth, larger is lower. */
+	float3 ZenithProject(float3 positionMS)
+	{
+		return mul(SharedData::skylightingSettings.ZenithViewProj, float4(positionMS + SharedData::skylightingSettings.ZenithOffset, 1)).xyz;
+	}
+
+	/**
+	 * @brief Looks positionMS up in the top-down zenith capture.
+	 * @return False outside the capture; otherwise its depth and the depth of the topmost occluder above it.
+	 */
+	bool SampleZenith(Texture2D<float> zenithDepth, float3 positionMS, out float positionDepth, out float occluderDepth)
+	{
+		float3 positionOS = ZenithProject(positionMS);
+		float2 uv = float2(positionOS.x, -positionOS.y) * 0.5 + 0.5;
+		positionDepth = positionOS.z;
+		occluderDepth = 0;
+		if (!SharedData::skylightingSettings.ZenithValid || any(uv <= 0) || any(uv >= 1) || positionDepth <= 0 || positionDepth >= 1)
+			return false;
+
+		uint2 dims;
+		zenithDepth.GetDimensions(dims.x, dims.y);
+		occluderDepth = zenithDepth.Load(int3(uv * dims, 0));
+		return true;
+	}
+
+	/** @brief Whether an occluder lies above positionMS in the top-down zenith capture. */
+	uint GetZenithCoverage(Texture2D<float> zenithDepth, float3 positionMS)
+	{
+		float positionDepth, occluderDepth;
+		if (!SampleZenith(zenithDepth, positionMS, positionDepth, occluderDepth))
+			return COVERAGE_UNKNOWN;
+		return positionDepth > occluderDepth ? COVERAGE_COVERED : COVERAGE_OPEN;
+	}
 
 	float GetFadeOutFactor(float3 positionMS)
 	{
@@ -129,6 +180,11 @@ namespace Skylighting
 		if (any(uvw < 0) || any(uvw > 1))
 			return scaledUnitSH;
 
+#	if defined(SKYLIGHTING_COVERAGE)
+		float receiverDepth, receiverOccluderDepth;
+		const bool receiverCovered = SampleZenith(SkylightingZenithDepth, positionMS, receiverDepth, receiverOccluderDepth) && receiverDepth > receiverOccluderDepth;
+#	endif
+
 		float3 cellVxCoord = uvw * ARRAY_DIM;
 		int3 cell000 = floor(cellVxCoord - 0.5);
 		float3 trilinearPos = cellVxCoord - 0.5 - cell000;
@@ -157,8 +213,14 @@ namespace Skylighting
 					uint3 cellTexID = (cellID + SharedData::skylightingSettings.ArrayOrigin.xyz) % ARRAY_DIM;
 
 					// https://handmade.network/p/75/monter/blog/p/7288-engine_work__global_illumination_with_irradiance_probes
-					// basic tangent checks
-					float tangentWeight = dot(normalize(cellCentreMS - positionMSAdjusted), normalWS) * 0.5 + 0.5;
+					// Hard tangent check: a wrapped weight lets probes across thin occluders (roofs) leak the probe grid in.
+					float tangentWeight = saturate(dot(normalize(cellCentreMS - positionMSAdjusted), normalWS)) + MIN_TANGENT_WEIGHT;
+#	if defined(SKYLIGHTING_COVERAGE)
+					// An open probe above the occluder covering the receiver sees sky through that roof; open probes below it are beside the receiver
+					[branch] if (receiverCovered && SkylightingProbeCoverage[cellTexID] == COVERAGE_OPEN &&
+								 ZenithProject(cellCentreMS + SharedData::skylightingSettings.PosOffset.xyz).z < receiverOccluderDepth)
+						tangentWeight = MIN_TANGENT_WEIGHT;
+#	endif
 					float shW = triW * tangentWeight;
 					shSum = SphericalHarmonics::Add(shSum, SphericalHarmonics::Scale(SkylightingProbeArray[cellTexID], shW));
 					shWsum += shW;

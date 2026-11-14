@@ -56,7 +56,7 @@ namespace Util
 	/** @brief Button labelled `a_name` that copies `a_address` to the clipboard as hex, with a tooltip saying so. */
 	void AddressButton(const char* a_name, uintptr_t a_address);
 
-	/** @brief Feeds ImGui the display size and the mouse position, mapped from window to render-target pixels. */
+	/** @brief Feeds ImGui the display size and the mouse position, mapped from window to render-target pixels, and drops stick values short of a press. */
 	void UpdateImGuiInput(HWND hwnd, float bufferWidth, float bufferHeight);
 	/**
 	 * Represents a single line and its color for any colored text rendering (tooltips, legends, etc.).
@@ -160,23 +160,6 @@ namespace Util
 	 *        the moment to check whether what they edit changed.
 	 */
 	bool InteractionEndedThisFrame();
-
-	/** @brief Hides feature Debug sections while alive (CS Editor Features window); restores the previous state. */
-	class HideDebugSectionsGuard
-	{
-	public:
-		explicit HideDebugSectionsGuard(bool hide);
-		~HideDebugSectionsGuard();
-
-		HideDebugSectionsGuard(const HideDebugSectionsGuard&) = delete;
-		HideDebugSectionsGuard& operator=(const HideDebugSectionsGuard&) = delete;
-
-	private:
-		bool previous;
-	};
-
-	/** @brief False while a HideDebugSectionsGuard hides them; gate each feature's Debug header on this. */
-	bool ShowDebugSections();
 
 	/** @brief Eases fade toward 1 (visible) or 0 (hidden) over ThemeManager::Constants::UI_FADE_SECONDS. */
 	void StepFade(float& fade, bool visible, float deltaTime);
@@ -1715,11 +1698,11 @@ namespace Util
 		{
 			SearchField("##TableFilter", filterText, ::T("ui.search", "Search..."), ImGui::CalcItemWidth(), false);
 			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("Filter table by the selected column. Case-insensitive.");
+				ImGui::Text("%s", ::T("ui.table_filter.filter_tooltip", "Filter table by the selected column. Case-insensitive."));
 			}
 
 			// Create search column options
-			std::vector<std::string> searchOptions = { "All Columns" };
+			std::vector<std::string> searchOptions = { ::T("ui.table_filter.all_columns", "All Columns") };
 			for (const auto& col : columnHeaders) {
 				searchOptions.push_back(col);
 			}
@@ -1728,7 +1711,7 @@ namespace Util
 				searchOptionsCStr.push_back(option.c_str());
 			}
 
-			ImGui::Combo("Search In", &searchColumn, searchOptionsCStr.data(), static_cast<int>(searchOptionsCStr.size()));
+			ImGui::Combo(::T("ui.table_filter.search_in", "Search In"), &searchColumn, searchOptionsCStr.data(), static_cast<int>(searchOptionsCStr.size()));
 		}
 	};
 

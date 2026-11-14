@@ -77,6 +77,9 @@ public:
 	 */
 	std::string GetOverlayWarningMessage() const;
 
+	/** @brief True when the RenderDoc warning should be drawn in the overlay: RenderDoc is loaded and the user has not hidden it. */
+	bool ShouldShowOverlay() const { return IsAvailable() && !hideOverlay; }
+
 private:
 	bool TriggerConfiguredCapture(bool a_checkDiskSpace = true);
 	uint32_t GetCaptureFrameCount() const;
@@ -110,6 +113,9 @@ public:
 	// RenderDoc capture enable setting
 	bool enableRenderDocCapture = false;
 	uint32_t captureFrameCount = 1;
+
+	/** @brief Hides the RenderDoc warning in the overlay. Session-only: deliberately never saved or loaded, so it resets on every launch. */
+	bool hideOverlay = false;
 
 	// Track the last capture count we've processed for automatic comments
 	uint32_t lastCaptureCount = 0;
