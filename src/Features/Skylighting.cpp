@@ -46,6 +46,10 @@ void Skylighting::ResetSkylighting()
 	// ClearUnorderedAccessViewUint always reads four values
 	const UINT clr[4] = { 0, 0, 0, 0 };
 	context->ClearUnorderedAccessViewUint(texAccumFramesArray->uav.get(), clr);
+	const UINT unknownCoverage[4] = { COVERAGE_UNKNOWN, COVERAGE_UNKNOWN, COVERAGE_UNKNOWN, COVERAGE_UNKNOWN };
+	context->ClearUnorderedAccessViewUint(texProbeCoverage->uav.get(), unknownCoverage);
+	zenithValid = false;
+	zenithEyePending = false;
 	// All 32 history bits lit, so a reset does not fade in from black while the history refills
 	const UINT litHistory[4] = { 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu };
 	context->ClearUnorderedAccessViewUint(texShadowBitmask->uav.get(), litHistory);
@@ -96,6 +100,10 @@ void Skylighting::SetupResources()
 		texOcclusion = new Texture2D(texDesc, "Skylighting::Occlusion");
 		texOcclusion->CreateSRV(srvDesc);
 		texOcclusion->CreateDSV(dsvDesc);
+
+		texZenithOcclusion = new Texture2D(texDesc, "Skylighting::ZenithOcclusion");
+		texZenithOcclusion->CreateSRV(srvDesc);
+		texZenithOcclusion->CreateDSV(dsvDesc);
 	}
 
 	{
@@ -135,6 +143,10 @@ void Skylighting::SetupResources()
 		texAccumFramesArray = new Texture3D(texDesc, "Skylighting::AccumFramesArray");
 		texAccumFramesArray->CreateSRV(srvDesc);
 		texAccumFramesArray->CreateUAV(uavDesc);
+
+		texProbeCoverage = new Texture3D(texDesc, "Skylighting::ProbeCoverage");
+		texProbeCoverage->CreateSRV(srvDesc);
+		texProbeCoverage->CreateUAV(uavDesc);
 
 		texDesc.Format = srvDesc.Format = uavDesc.Format = DXGI_FORMAT_R32_UINT;
 
@@ -211,6 +223,12 @@ Skylighting::SkylightingCB Skylighting::GetCommonBufferData(bool a_inWorld)
 	auto eyePosNI = Util::GetEyePosition();
 	auto eyePos = float3{ eyePosNI.x, eyePosNI.y, eyePosNI.z };
 
+	if (zenithEyePending) {
+		zenithEyePos = eyePos;
+		zenithValid = true;
+		zenithEyePending = false;
+	}
+
 	float3 cellSize = {
 		occlusionDistance / probeArrayDims[0],
 		occlusionDistance / probeArrayDims[1],
@@ -225,6 +243,7 @@ Skylighting::SkylightingCB Skylighting::GetCommonBufferData(bool a_inWorld)
 
 	return {
 		.OcclusionViewProj = OcclusionTransform,
+		.ZenithViewProj = ZenithTransform,
 		.OcclusionSHBasis4Pi = OcclusionSHBasis4Pi,
 		.PosOffset = cellOrigin - eyePos,
 		.ArrayOrigin = {
@@ -232,8 +251,11 @@ Skylighting::SkylightingCB Skylighting::GetCommonBufferData(bool a_inWorld)
 			((int)cellID.y - probeArrayDims[1] / 2) % probeArrayDims[1],
 			((int)cellID.z - probeArrayDims[2] / 2) % probeArrayDims[2] },
 		.ValidMargin = { (int)cellIDDiff.x, (int)cellIDDiff.y, (int)cellIDDiff.z },
+		.ZenithOffset = eyePos - zenithEyePos,
+		.ZenithValid = zenithValid,
 		.MinDiffuseVisibility = settings.MinDiffuseVisibility,
-		.MinSpecularVisibility = settings.MinSpecularVisibility
+		.MinSpecularVisibility = settings.MinSpecularVisibility,
+		.AccumulateOcclusion = !zenithFrame
 	};
 }
 
@@ -258,17 +280,19 @@ void Skylighting::Prepass()
 		auto renderer = globals::game::renderer;
 		auto& esramDepthStencil = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kVOLUMETRIC_LIGHTING_SHADOWMAPS_ESRAM];
 
-		std::array<ID3D11ShaderResourceView*, 4> srvs = {
+		std::array<ID3D11ShaderResourceView*, 5> srvs = {
 			texOcclusion->srv.get(),
 			shadowCascadeSRV ? shadowCascadeSRV : nullptr,
 			shadowCascadeSRV ? globals::deferred->directionalShadowLights->srv.get() : nullptr,
-			shadowCascadeSRV ? esramDepthStencil.depthSRV : nullptr
+			shadowCascadeSRV ? esramDepthStencil.depthSRV : nullptr,
+			texZenithOcclusion->srv.get()
 		};
-		std::array<ID3D11UnorderedAccessView*, 4> uavs = {
+		std::array<ID3D11UnorderedAccessView*, 5> uavs = {
 			texProbeArray->uav.get(),
 			texAccumFramesArray->uav.get(),
 			texShadowBitmask->uav.get(),
-			texShadowVisibility->uav.get()
+			texShadowVisibility->uav.get(),
+			texProbeCoverage->uav.get()
 		};
 		std::array<ID3D11SamplerState*, 1> samplers = {
 			comparisonSampler.get()
@@ -305,6 +329,9 @@ void Skylighting::Prepass()
 
 		srv = texShadowVisibility->srv.get();
 		context->PSSetShaderResources(53, 1, &srv);
+
+		std::array<ID3D11ShaderResourceView*, 2> coverageSrvs = { texProbeCoverage->srv.get(), texZenithOcclusion->srv.get() };
+		context->PSSetShaderResources(51, (uint)coverageSrvs.size(), coverageSrvs.data());
 	}
 }
 
@@ -499,7 +526,7 @@ void Skylighting::SetViewFrustum::thunk(RE::NiCamera* a_camera, RE::NiFrustum* a
 {
 	auto& skylighting = globals::features::skylighting;
 
-	if (skylighting.inOcclusion) {
+	if (skylighting.inOcclusion && !skylighting.zenithFrame) {
 		uint corner = skylighting.frameCount % 4;
 
 		float frustumSize = a_frustum->fTop;
@@ -568,13 +595,20 @@ void Skylighting::RenderOcclusion()
 					ResetSkylighting();
 
 				frameCount++;
+				zenithFrame = frameCount % ZENITH_INTERVAL == 0;
 
 				auto& precipitation = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPRECIPITATION_OCCLUSION_MAP];
 				RE::BSGraphics::DepthStencilData precipitationCopy = precipitation;
 
-				precipitation.depthSRV = texOcclusion->srv.get();
-				precipitation.texture = texOcclusion->resource.get();
-				precipitation.views[0] = texOcclusion->dsv.get();
+				auto* target = zenithFrame ? texZenithOcclusion : texOcclusion;
+				if (zenithFrame) {
+					// Bound to pixel shaders since the last Prepass; unbind before writing it as depth
+					ID3D11ShaderResourceView* nullSrv = nullptr;
+					globals::d3d::context->PSSetShaderResources(52, 1, &nullSrv);
+				}
+				precipitation.depthSRV = target->srv.get();
+				precipitation.texture = target->resource.get();
+				precipitation.views[0] = target->dsv.get();
 
 				static float& PrecipitationShaderCubeSize = (*(float*)REL::RelocationID(515451, 401590).address());
 				float originalPrecipitationShaderCubeSize = PrecipitationShaderCubeSize;
@@ -583,19 +617,19 @@ void Skylighting::RenderOcclusion()
 				RE::NiPoint3 originalParticleShaderDirection = PrecipitationShaderDirection;
 
 				inOcclusion = true;
-				PrecipitationShaderCubeSize = occlusionDistance;
+				PrecipitationShaderCubeSize = zenithFrame ? ZENITH_OCCLUSION_EXTENT : occlusionDistance;
 
 				float originaLastCubeSize = precip->lastCubeSize;
 				precip->lastCubeSize = PrecipitationShaderCubeSize;
 
-				float2 vPoint;
-				{
+				float3 PrecipitationShaderDirectionF = { 0.0f, 0.0f, -1.0f };
+				if (!zenithFrame) {
 					constexpr float rcpRandMax = 1.f / RAND_MAX;
 					static int randSeed = std::rand();
 					static uint randFrameCount = 0;
 
 					// r2 sequence
-					vPoint = float2(randSeed * rcpRandMax) + (float)randFrameCount * float2(0.245122333753f, 0.430159709002f);
+					float2 vPoint = float2(randSeed * rcpRandMax) + (float)randFrameCount * float2(0.245122333753f, 0.430159709002f);
 					vPoint.x -= static_cast<unsigned long long>(vPoint.x);
 					vPoint.y -= static_cast<unsigned long long>(vPoint.y);
 
@@ -610,10 +644,10 @@ void Skylighting::RenderOcclusion()
 					vPoint.y *= 6.28318530718f;
 
 					vPoint = { vPoint.x * cos(vPoint.y), vPoint.x * sin(vPoint.y) };
-				}
 
-				float3 PrecipitationShaderDirectionF = -float3{ vPoint.x, vPoint.y, sqrt(1 - vPoint.LengthSquared()) };
-				PrecipitationShaderDirectionF.Normalize();
+					PrecipitationShaderDirectionF = -float3{ vPoint.x, vPoint.y, sqrt(1 - vPoint.LengthSquared()) };
+					PrecipitationShaderDirectionF.Normalize();
+				}
 
 				PrecipitationShaderDirection = { PrecipitationShaderDirectionF.x, PrecipitationShaderDirectionF.y, PrecipitationShaderDirectionF.z };
 
@@ -633,10 +667,16 @@ void Skylighting::RenderOcclusion()
 				}
 				inOcclusion = false;
 
-				// Every probe used to evaluate this same basis; evaluate it once per capture instead.
-				const auto basis = SphericalHarmonics::Scale(SphericalHarmonics::Evaluate(-PrecipitationShaderDirectionF), 4.0f * std::numbers::pi_v<float>);  // 4 pi from Monte Carlo
-				OcclusionSHBasis4Pi = float4{ basis.c0, basis.c1[0], basis.c1[1], basis.c1[2] };
-				OcclusionTransform = ((RE::BSParticleShaderRainEmitter*)rain)->occlusionProjection;
+				const auto& projection = ((RE::BSParticleShaderRainEmitter*)rain)->occlusionProjection;
+				if (zenithFrame) {
+					ZenithTransform = projection;
+					zenithEyePending = true;
+				} else {
+					// Every probe used to evaluate this same basis; evaluate it once per capture instead.
+					const auto basis = SphericalHarmonics::Scale(SphericalHarmonics::Evaluate(-PrecipitationShaderDirectionF), 4.0f * std::numbers::pi_v<float>);  // 4 pi from Monte Carlo
+					OcclusionSHBasis4Pi = float4{ basis.c0, basis.c1[0], basis.c1[1], basis.c1[2] };
+					OcclusionTransform = projection;
+				}
 
 				delete rain;
 

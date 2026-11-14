@@ -32,6 +32,8 @@ struct Skin : Feature
 	bool HasShaderDefine(RE::BSShader::Type a_type) override { return a_type == RE::BSShader::Type::Lighting; }
 	void RestoreDefaultSettings() override;
 	void DrawSettings() override;
+	bool HasDebugSection() const override { return true; }
+	void DrawDebugSection() override;
 	void LoadSettings(json& a_json) override;
 	void SaveSettings(json& a_json) override;
 	void Prepass() override;

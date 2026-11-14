@@ -1,5 +1,6 @@
 #include "Skin.h"
 #include "Skin/Editor/Files.h"
+#include "Utils/DebugSection.h"
 #include "Utils/UI.h"
 
 #include <cmath>
@@ -106,6 +107,29 @@ void Skin::DrawSettings()
 	DrawGlobalSettings();
 	if (changed)
 		Invalidate();
+}
+
+void Skin::DrawDebugSection()
+{
+	Util::DebugSection section;
+	if (!section)
+		return;
+
+	std::lock_guard lock(mutex);
+	const auto entry = textures.find(settings.DetailTexture);
+	if (entry == textures.end() || !entry->second->resource.view)
+		return;
+
+	const auto& view = entry->second->resource.view;
+	winrt::com_ptr<ID3D11Resource> resource;
+	view->GetResource(resource.put());
+	const auto texture = resource.as<ID3D11Texture2D>();
+	D3D11_TEXTURE2D_DESC desc{};
+	texture->GetDesc(&desc);
+	if (ImGui::TreeNode("##skin_detail", "%s (%ux%u)", T("feature.skin.global_detail_dds", "Global detail DDS"), desc.Width, desc.Height)) {
+		ImGui::Image(view.get(), ImVec2(static_cast<float>(desc.Width), static_cast<float>(desc.Height)));
+		ImGui::TreePop();
+	}
 }
 
 void Skin::DrawGlobalSettings()

@@ -1,8 +1,12 @@
 #include "VolumetricShadows.h"
 
 #include "Globals.h"
+#include "I18n/I18n.h"
 #include "State.h"
 #include "Utils/D3D.h"
+#include "Utils/DebugSection.h"
+
+#define I18N_KEY_PREFIX "feature.volumetric_shadows."
 
 void VolumetricShadows::SetupResources()
 {
@@ -327,12 +331,14 @@ void VolumetricShadows::SetSharedShadowMapSRV(ID3D11DeviceContext* a_context, ID
 	a_context->PSSetShaderResources(kSharedShadowMapShaderSlot, 1, &a_srv);
 }
 
-void VolumetricShadows::DrawSettings()
+void VolumetricShadows::DrawDebugSection()
 {
-	ImGui::SeparatorText("Debug");
+	Util::DebugSection section;
+	if (!section)
+		return;
 
 	static float debugRescale = .3f;
-	ImGui::SliderFloat("View Resize", &debugRescale, 0.f, 1.f);
+	ImGui::SliderFloat(T(TKEY("view_resize"), "View Resize"), &debugRescale, 0.f, 1.f);
 
 	auto DisplayRT = [&](const char* label, ID3D11Texture2D* tex, ID3D11ShaderResourceView* srv, uint32_t mip) {
 		if (srv && tex) {
@@ -350,8 +356,8 @@ void VolumetricShadows::DrawSettings()
 	};
 
 	// Mip 0 holds cascade 1, mip 1 holds cascade 0.
-	DisplayRT("VSM Cascade 0", shadowCopyTexture, shadowCopyMip1SRV, 1);
-	DisplayRT("VSM Cascade 1", shadowCopyTexture, shadowCopyMip0SRV, 0);
+	DisplayRT(T(TKEY("buffer_cascade_0"), "VSM Cascade 0"), shadowCopyTexture, shadowCopyMip1SRV, 1);
+	DisplayRT(T(TKEY("buffer_cascade_1"), "VSM Cascade 1"), shadowCopyTexture, shadowCopyMip0SRV, 0);
 }
 
 void VolumetricShadows::LoadSettings(json&)
@@ -390,3 +396,5 @@ bool VolumetricShadows::HasShaderDefine(RE::BSShader::Type)
 {
 	return true;
 }
+
+#undef I18N_KEY_PREFIX

@@ -1555,7 +1555,7 @@ void Effects11Editor::DrawLauncher()
 	PostProcessingMode::SelectorAction openEditor;
 	openEditor.label = T(TKEY("open_editor"), "Open Effects 11 Editor");
 	openEditor.onClick = [this] { Open(true); };
-	PostProcessingMode::DrawSelector(&openEditor);
+	PostProcessingMode::DrawSelector(std::span(&openEditor, 1));
 	dirty |= globals::features::effects11.IsPresetEnabled() != wasEnabled;
 	if (dirty) {
 		SameLineIfFits(ImGui::CalcTextSize(T(TKEY("save"), "Save")).x);
