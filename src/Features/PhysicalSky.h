@@ -43,6 +43,9 @@ struct PhysicalSky final : public Feature
 	void LoadSettings(json& o_json) override;
 	void SaveSettings(json& o_json) override;
 
+	/** @brief Whether Physical Sky rendered this frame. */
+	bool IsRendering() const { return loaded && cbData.enabled; }
+
 	void DrawSettings() override;
 	bool HasDebugSection() const override { return true; }
 	void DrawDebugSection() override;
