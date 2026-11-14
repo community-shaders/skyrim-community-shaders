@@ -1,7 +1,11 @@
 #include "BSLightingShaderMaterialPBRLandscape.h"
 
+#include "PBRMaterialUtil.h"
+
 BSLightingShaderMaterialPBRLandscape::BSLightingShaderMaterialPBRLandscape()
 {
+	unk30 = 0;
+	unk34 = 0;
 	std::fill(isPbr.begin(), isPbr.end(), false);
 	std::fill(roughnessScales.begin(), roughnessScales.end(), 1.f);
 	std::fill(displacementScales.begin(), displacementScales.end(), 1.f);
@@ -10,7 +14,7 @@ BSLightingShaderMaterialPBRLandscape::BSLightingShaderMaterialPBRLandscape()
 
 BSLightingShaderMaterialPBRLandscape::~BSLightingShaderMaterialPBRLandscape()
 {
-	std::lock_guard lock(AllMutex);
+	const std::lock_guard lock(AllLock);
 	All.erase(this);
 }
 
@@ -35,9 +39,11 @@ RE::BSShaderMaterial* BSLightingShaderMaterialPBRLandscape::Create()
 
 void BSLightingShaderMaterialPBRLandscape::CopyMembers(RE::BSShaderMaterial* that)
 {
+	assert(IsPBR(that));
 	BSLightingShaderMaterialBase::CopyMembers(that);
 
 	auto* pbrThat = static_cast<BSLightingShaderMaterialPBRLandscape*>(that);
+	diffuseRenderTargetSourceIndex = pbrThat->diffuseRenderTargetSourceIndex;
 
 	numLandscapeTextures = pbrThat->numLandscapeTextures;
 
@@ -59,14 +65,17 @@ void BSLightingShaderMaterialPBRLandscape::CopyMembers(RE::BSShaderMaterial* tha
 	terrainTexFade = pbrThat->terrainTexFade;
 	glintParameters = pbrThat->glintParameters;
 
-	std::lock_guard lock(AllMutex);
-	All[this] = All[pbrThat];
+	const std::lock_guard lock(AllLock);
+	if (const auto it = All.find(pbrThat); it != All.end()) {
+		All[this] = it->second;
+	} else {
+		All.erase(this);
+	}
 }
 
 RE::BSShaderMaterial::Feature BSLightingShaderMaterialPBRLandscape::GetFeature() const
 {
-	return RE::BSShaderMaterial::Feature::kMultiTexLandLODBlend;
-	//return FEATURE;
+	return FEATURE;
 }
 
 void BSLightingShaderMaterialPBRLandscape::ClearTextures()
@@ -155,4 +164,53 @@ bool BSLightingShaderMaterialPBRLandscape::HasGlint() const
 		}
 	}
 	return false;
+}
+
+bool BSLightingShaderMaterialPBRLandscape::IsPBR(const RE::BSShaderMaterial* material)
+{
+	return material && material->GetType() == Type::kLighting && material->GetFeature() == FEATURE;
+}
+
+std::vector<uint8_t> BSLightingShaderMaterialPBRLandscape::MaterialKey() const
+{
+	using namespace PBRMaterialUtil;
+	auto key = BaseKey(*this);
+	Append(key, numLandscapeTextures);
+	for (uint32_t i = 0; i < NumTiles; ++i) {
+		Append(key, landscapeBaseColorTextures[i]);
+		Append(key, landscapeNormalTextures[i]);
+		Append(key, landscapeDisplacementTextures[i]);
+		Append(key, landscapeRMAOSTextures[i]);
+		Append(key, isPbr[i]);
+		Append(key, roughnessScales[i]);
+		Append(key, displacementScales[i]);
+		Append(key, specularLevels[i]);
+		Append(key, glintParameters[i]);
+	}
+	Append(key, terrainOverlayTexture);
+	Append(key, terrainNoiseTexture);
+	Append(key, landBlendParams.red);
+	Append(key, landBlendParams.green);
+	Append(key, landBlendParams.blue);
+	Append(key, landBlendParams.alpha);
+	Append(key, terrainTexOffsetX);
+	Append(key, terrainTexOffsetY);
+	Append(key, terrainTexFade);
+	return key;
+}
+
+bool BSLightingShaderMaterialPBRLandscape::DoIsCopy(RE::BSShaderMaterial* that)
+{
+	return IsPBR(that) && MaterialKey() == static_cast<BSLightingShaderMaterialPBRLandscape*>(that)->MaterialKey();
+}
+
+uint32_t BSLightingShaderMaterialPBRLandscape::ComputeCRC32(uint32_t srcHash)
+{
+	return PBRMaterialUtil::Hash(MaterialKey(), srcHash);
+}
+
+RE::BSShaderMaterial* BSLightingShaderMaterialPBRLandscape::GetDefault()
+{
+	static BSLightingShaderMaterialPBRLandscape material;
+	return &material;
 }

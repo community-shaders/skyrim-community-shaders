@@ -46,11 +46,6 @@ bool GrassMeshLibrary::CreateAsset(GrassAsset& asset, RE::BSMultiStreamInstanceT
 	else
 		property->flags.reset(RE::BSShaderProperty::EShaderPropertyFlag::kUniformScale);
 
-	if (asset.key.draw.pbrMaterial)
-		property->flags.set(RE::BSShaderProperty::EShaderPropertyFlag::kMenuScreen);
-	else
-		property->flags.reset(RE::BSShaderProperty::EShaderPropertyFlag::kMenuScreen);
-
 	if (asset.key.draw.sphereNormal)
 		property->flags.set(RE::BSShaderProperty::EShaderPropertyFlag::kEffectLighting);
 	else

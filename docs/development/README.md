@@ -9,6 +9,7 @@
 ## Subsystems
 
 - **[Scene Settings Framework](./scene-settings-framework.md)** - Interior/time-of-day/weather/location setting overrides, the generated catalog, and what the port left out
+- **[TruePBR NIF Format](./truepbr-nif-format.md)** - Binary property layout, PBR payload fields, texture slots, and validation rules
 
 ## Quick Links
 
