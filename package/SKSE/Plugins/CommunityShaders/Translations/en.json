@@ -3285,6 +3285,7 @@
     "feature.procedural_sun.key_feature_1": "Angular sun disc with spectral limb darkening",
     "feature.procedural_sun.key_feature_2": "Vanilla sun position, weather tint, and glare",
     "feature.procedural_sun.key_feature_3": "Independent of atmospheric lookup tables and Physical Sky",
+    "feature.procedural_sun.managed_by_physical_sky": "Procedural Sun is disabled while Physical Sky is enabled.",
     "feature.procedural_sun.name": "Procedural Sun",
     "feature.rain_refraction.description": "Renders rain as refractive drops that reflect and refract the surrounding environment.",
     "feature.rain_refraction.enable": "Enable",

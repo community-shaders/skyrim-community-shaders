@@ -17,11 +17,11 @@
 #if defined(PROCEDURAL_SUN)
 #	include "ProceduralSun/ProceduralSun.hlsli"
 
-/** @brief True for the in-world sun pass, unless Physical Sky or Effects 11 already draws its own sun. */
+/** @brief True for the in-world sun pass, unless Physical Sky is enabled or Effects 11 draws its own sun. */
 bool IsProceduralSunActive()
 {
 #	if defined(PHYSICAL_SKY)
-	if (SharedData::physSkyData.enabled && SharedData::physSkyData.sunDiskCos > 0.0)
+	if (SharedData::physSkyData.enabled)
 		return false;
 #	endif
 	bool effects11OwnsSun = false;

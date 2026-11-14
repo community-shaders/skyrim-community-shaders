@@ -76,6 +76,8 @@ struct ProceduralSun : Feature
 
 	/** @brief Returns true while the Effects 11 procedural sun is enabled, which then replaces this feature's sun. */
 	bool IsManagedByENB() const;
+	/** @brief Returns true while Physical Sky renders, which forces this feature off. */
+	bool IsManagedByPhysicalSky() const;
 
 	/** @brief Returns the settings uploaded to the shared feature buffer. */
 	PerFrameData GetCommonBufferData() const;
