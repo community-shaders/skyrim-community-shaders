@@ -216,6 +216,9 @@ public:
 	/** @brief Called after all game data files have been loaded. */
 	virtual void DataLoaded() {}
 
+	/** @brief Invalidates session state before loading a save or on starting a new game. */
+	virtual void GameReset() {}
+
 	/** @brief Called after loading an existing save. */
 	virtual void GameLoaded() {}
 

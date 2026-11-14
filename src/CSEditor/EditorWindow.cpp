@@ -8,6 +8,7 @@
 #include "Features/Effects11.h"
 #include "Features/Effects11/Editor/Effects11Editor.h"
 #include "Features/HDRDisplay.h"
+#include "Features/Skin.h"
 #include "Features/Upscaling.h"
 #include "Globals.h"
 #include "IconsTabler.h"
@@ -270,7 +271,7 @@ namespace
 		BrowserGroup group;
 	};
 
-	std::array<BrowserCategory, 11> GetBrowserCategories()
+	std::array<BrowserCategory, 12> GetBrowserCategories()
 	{
 		return { {
 			{ "Weather", T(TKEY("category_weather"), "Weather"), Icons::TI(ICON_TI_CLOUD), kGroupForms },
@@ -284,10 +285,11 @@ namespace
 			{ "Locations", T(TKEY("category_locations"), "Locations"), Icons::TI(MenuIcons::kLocations), kGroupScene },
 			{ "Scene Manager", T(TKEY("category_scene_manager"), "Scene Manager"), Icons::TI(ICON_TI_STACK_2), kGroupScene },
 			{ "Light Editor", T(TKEY("category_lighting_editor"), "Light Editor"), Icons::TI(ICON_TI_BULB), kGroupTools },
+			{ "Skin Editor", T(TKEY("category_skin_editor"), "Skin Editor"), Icons::TI(ICON_TI_MOOD_SPARK), kGroupTools },
 		} };
 	}
 
-	const BrowserCategory* FindBrowserCategory(const std::array<BrowserCategory, 11>& categories, const std::string& id)
+	const BrowserCategory* FindBrowserCategory(const std::array<BrowserCategory, 12>& categories, const std::string& id)
 	{
 		const auto it = std::ranges::find_if(categories, [&id](const BrowserCategory& category) { return id == category.id; });
 		return it != categories.end() ? &*it : nullptr;
@@ -432,6 +434,16 @@ void EditorWindow::DrawBrowserPage()
 			SceneSettingsUI::DrawLocationBrowser();
 		else
 			SceneSettingsUI::DrawSceneManagerPanel();
+		EndScrollableContent();
+		return;
+	}
+
+	if (id == "Skin Editor") {
+		auto& skin = globals::features::skin;
+		BrowserUI::PageHeader(category->icon, category->label, skin.GetEditorSubtitle().c_str());
+		skin.DrawEditorPageActions();
+		BeginScrollableContent("##SkinEditorScroll");
+		globals::features::skin.DrawMaterialEditor();
 		EndScrollableContent();
 		return;
 	}

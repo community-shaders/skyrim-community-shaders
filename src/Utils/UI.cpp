@@ -3165,40 +3165,19 @@ namespace Util
 			return false;
 		}
 
-		ID3D11Resource* pResource = nullptr;
-		try {
-			DX::ThrowIfFailed(DirectX::CreateTexture(device,
-				image.GetImages(), image.GetImageCount(),
-				image.GetMetadata(), &pResource));
-		} catch (const DX::com_exception& e) {
-			logger::warn("LoadDDSTextureFromFile: Failed to create texture: {}", e.what());
-			return false;
-		}
-
-		ID3D11Texture2D* pTexture = reinterpret_cast<ID3D11Texture2D*>(pResource);
-		D3D11_TEXTURE2D_DESC desc;
-		pTexture->GetDesc(&desc);
-
-		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {
-			.Format = desc.Format,
-			.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D,
-			.Texture2D = {
-				.MostDetailedMip = 0,
-				.MipLevels = desc.MipLevels }
-		};
-
-		HRESULT hr = device->CreateShaderResourceView(pTexture, &srvDesc, out_srv);
-		if (SUCCEEDED(hr) && *out_srv)
-			Util::SetResourceName(*out_srv, "UI::DDS:%s", filename);
-		pTexture->Release();
-
+		const auto& metadata = image.GetMetadata();
+		const HRESULT hr = DirectX::CreateShaderResourceView(device, image.GetImages(), image.GetImageCount(), metadata, out_srv);
 		if (FAILED(hr) || !*out_srv) {
 			logger::warn("LoadDDSTextureFromFile: Failed to create SRV, HRESULT: 0x{:08X}", static_cast<uint32_t>(hr));
 			return false;
 		}
+		Util::SetResourceName(*out_srv, "UI::DDS:%s SRV", filename);
+		winrt::com_ptr<ID3D11Resource> resource;
+		(*out_srv)->GetResource(resource.put());
+		Util::SetResourceName(resource.get(), "UI::DDS:%s", filename);
 
-		out_size = ImVec2((float)desc.Width, (float)desc.Height);
-		logger::debug("LoadDDSTextureFromFile: Successfully loaded {} ({}x{})", filename, desc.Width, desc.Height);
+		out_size = ImVec2(static_cast<float>(metadata.width), static_cast<float>(metadata.height));
+		logger::debug("LoadDDSTextureFromFile: Successfully loaded {} ({}x{})", filename, metadata.width, metadata.height);
 		return true;
 	}
 

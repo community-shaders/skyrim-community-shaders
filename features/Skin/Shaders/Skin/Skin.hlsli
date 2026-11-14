@@ -21,10 +21,40 @@ namespace Skin
 	cbuffer SkinPerGeometry : register(b7)
 	{
 		float4 skinPerGeometry;
+		float4 skinMaterialFlags;
+		SharedData::SkinData skinPerGeometryProfile;
 	};
+
+	SharedData::SkinData GetSkinData()
+	{
+		return skinPerGeometryProfile;
+	}
+#else
+	SharedData::SkinData GetSkinData()
+	{
+		return SharedData::skinData;
+	}
 #endif
 #if defined(CS_SKIN_SHADING)
 	Texture2D<float4> TexSkinDetailNormal : register(t72);
+	SamplerState DetailSampler : register(s15);
+
+	float3x3 SurfaceBasis(float3 position, float3 normal, float2 uv)
+	{
+		float3 dx = ddx(position), dy = ddy(position);
+		float2 du = ddx(uv), dv = ddy(uv);
+		float determinant = du.x * dv.y - du.y * dv.x;
+		float signUV = determinant < 0 ? -1.0f : 1.0f;
+		float3 tangent = (dx * dv.y - dy * du.y) * signUV;
+		tangent -= normal * dot(normal, tangent);
+		float3 fallbackAxis = abs(normal.z) < 0.999f ? float3(0, 0, 1) : float3(0, 1, 0);
+		if (abs(determinant) < 1e-12f || dot(tangent, tangent) < 1e-12f)
+			tangent = cross(fallbackAxis, normal);
+		tangent = normalize(tangent);
+		float3 bitangent = (dy * du.x - dx * dv.x) * signUV;
+		float handedness = dot(cross(normal, tangent), bitangent) < 0 ? -1.0f : 1.0f;
+		return float3x3(tangent, cross(normal, tangent) * handedness, normal);
+	}
 
 	// [Jorge Jimenez, Diego Gutierrez 2015, "Separable Subsurface Scattering"]
 	// https://www.iryoku.com/separable-sss/
@@ -99,13 +129,11 @@ namespace Skin
 		float NdotH = saturate(dot(N, H));
 		float VdotH = saturate(dot(V, H));
 
-		context.lightColor *= ApproximateDirectOcculusion(material.AO, NdotL);
-
 		float averageRoughness = lerp(material.Roughness, material.RoughnessSecondary, material.SecondarySpecIntensity);
 
 		lightingOutput.diffuse += context.lightColor * NdotL * BRDF::Diffuse_Burley(averageRoughness, NdotV, NdotL, VdotH);
 		float3 F;
-		float3 F0 = material.F0 * saturate(1 - material.Curvature);
+		float3 F0 = material.F0;
 
 		lightingOutput.specular += DualSpecularGGX(averageRoughness, material.Roughness, material.RoughnessSecondary, material.SecondarySpecIntensity, F0, NdotL, NdotV, NdotH, VdotH, F) * context.lightColor * NdotL;
 
@@ -114,7 +142,7 @@ namespace Skin
 		lightingOutput.diffuse *= 1 - F;
 
 		if (material.FuzzWeight > 0.0) {
-			float3 FuzzF0 = material.FuzzColor * saturate(1 - material.Curvature);
+			float3 FuzzF0 = material.FuzzColor;
 			float fuzzD = BRDF::D_Charlie(material.FuzzRoughness, NdotH);
 			float fuzzG = BRDF::Vis_Neubelt(NdotV, NdotL);
 			float3 fuzzF = BRDF::F_Schlick(FuzzF0, VdotH);
@@ -122,16 +150,20 @@ namespace Skin
 			float2 fuzzSpecularBRDF = BRDF::EnvBRDFApproxLazarov(material.FuzzRoughness, NdotV);
 			fuzzSpecular *= 1 + material.FuzzColor * (1 / (fuzzSpecularBRDF.x + fuzzSpecularBRDF.y) - 1);
 
+			float3 retainedEnergy = 1.0f - saturate(fuzzF * material.FuzzWeight);
+			lightingOutput.diffuse *= retainedEnergy;
+			lightingOutput.specular *= retainedEnergy;
 			lightingOutput.specular += fuzzSpecular * material.FuzzWeight;
 		}
 
+		SharedData::SkinData skinData = GetSkinData();
 		float3 sssTransmittance = SSSSTransmittance(
-									  SharedData::skinData.sssParams.x,
-									  SharedData::skinData.sssParams.y,
+									  0.0f,
+									  max(skinData.sssParams.y, 1e-4f),
 									  N,
 									  L,
 									  material.Thickness) *
-		                          SharedData::skinData.sssParams.w;
+		                          skinData.sssParams.x * skinData.sssParams.w;
 		lightingOutput.transmission = min(sssTransmittance * context.lightColor * context.softShadow * material.BaseColor, context.lightColor);
 	}
 
@@ -154,7 +186,7 @@ namespace Skin
 
 		lobeWeights.specular = material.F0 * specularBRDF.x + specularBRDF.y;
 
-		lobeWeights.diffuse = material.BaseColor * (1.0 - lobeWeights.specular.x - lobeWeights.specular.y);
+		lobeWeights.diffuse = material.BaseColor * (1.0 - saturate(lobeWeights.specular));
 		lobeWeights.specular *= 1 + material.F0 * (1 / (specularBRDF.x + specularBRDF.y) - 1);
 
 		float3 R = reflect(-V, N);
@@ -170,8 +202,6 @@ namespace Skin
 
 		lobeWeights.diffuse *= diffuseAO;
 		lobeWeights.specular *= specularAO;
-
-		lobeWeights.specular *= saturate(1 - material.Curvature);
 	}
 
 	float FBM(float2 uv, float base_scale, int octaves, float lacunarity, float persistence, float z_offset_multiplier)
