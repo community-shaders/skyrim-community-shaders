@@ -450,9 +450,8 @@ namespace CinematicCamera
 		auto& exp = settings.Exposure;
 
 		constexpr auto logSliderFlags = ImGuiSliderFlags_AlwaysClamp | ImGuiSliderFlags_Logarithmic;
-		ImGui::PushTextWrapPos(0.0f);
-		ImGui::TextDisabled("%s", T("feature.post_processing.cinematic_camera.slider_input_hint", "Ctrl+click a slider to enter an exact value."));
-		ImGui::PopTextWrapPos();
+		Util::SettingHint(T("feature.post_processing.cinematic_camera.slider_input_hint", "Ctrl+click a slider to enter an exact value."), false);
+		ImGui::Spacing();
 
 		if (ImGui::CollapsingHeader(T("feature.post_processing.cinematic_camera.filmback", "Filmback"))) {
 			const char* presetNames[] = {
@@ -469,7 +468,7 @@ namespace CinematicCamera
 				ImGui::SliderFloat(T("feature.post_processing.cinematic_camera.sensor_width", "Sensor Width"), &fb.SensorWidthMM, 1.0f, 100.0f, "%.2f mm", ImGuiSliderFlags_AlwaysClamp);
 				ImGui::SliderFloat(T("feature.post_processing.cinematic_camera.sensor_height", "Sensor Height"), &fb.SensorHeightMM, 1.0f, 100.0f, "%.2f mm", ImGuiSliderFlags_AlwaysClamp);
 			} else {
-				ImGui::Text(T("feature.post_processing.cinematic_camera.sensor_size_readout", "Sensor: %.2f x %.2f mm"), fb.SensorWidthMM, fb.SensorHeightMM);
+				ImGui::TextDisabled(T("feature.post_processing.cinematic_camera.sensor_size_readout", "Sensor: %.2f x %.2f mm"), fb.SensorWidthMM, fb.SensorHeightMM);
 			}
 
 			const char* gateFitNames[] = {
@@ -497,9 +496,9 @@ namespace CinematicCamera
 		}
 
 		if (const auto* state = GetState()) {
-			ImGui::Text(T("feature.post_processing.cinematic_camera.fov_readout", "FOV: %.2f° H / %.2f° V"),
+			ImGui::TextDisabled(T("feature.post_processing.cinematic_camera.fov_readout", "FOV: %.2f° H / %.2f° V"),
 				state->HorizontalFOVDeg, state->VerticalFOVDeg);
-			ImGui::Text(T("feature.post_processing.cinematic_camera.entrance_pupil_readout", "Entrance Pupil: %.2f mm"),
+			ImGui::TextDisabled(T("feature.post_processing.cinematic_camera.entrance_pupil_readout", "Entrance Pupil: %.2f mm"),
 				state->EntrancePupilMM);
 		}
 
@@ -536,10 +535,9 @@ namespace CinematicCamera
 			ImGui::TextUnformatted(T("feature.post_processing.cinematic_camera.transition_speed_desc", "Lower values make focus changes smoother; 1 snaps to the new focus distance immediately. Applies to all focus modes."));
 
 		if ((FocusMode)focus.Mode == FocusMode::Target) {
-			ImGui::PushTextWrapPos(0.0f);
-			ImGui::TextDisabled("%s", T("feature.post_processing.cinematic_camera.target_source_note",
-										  "Target priority (highest first): dialogue speaker, True Directional Movement lock, console selection (if enabled in Depth of Field)."));
-			ImGui::PopTextWrapPos();
+			Util::SettingHint(T("feature.post_processing.cinematic_camera.target_source_note",
+								  "Target priority (highest first): dialogue speaker, True Directional Movement lock, console selection (if enabled in Depth of Field)."),
+				false);
 		}
 
 		ImGui::SeparatorText(T("feature.post_processing.cinematic_camera.exposure", "Exposure"));
@@ -549,6 +547,10 @@ namespace CinematicCamera
 		};
 		ImGui::Combo(T("feature.post_processing.cinematic_camera.exposure_mode", "Exposure Mode"), &exp.Mode, exposureModes, (int)std::size(exposureModes));
 		const bool autoISO = (ExposureMode)exp.Mode == ExposureMode::AutoISO;
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::TextUnformatted(autoISO ?
+									   T("feature.post_processing.cinematic_camera.auto_iso_desc", "Aperture and shutter stay fixed. Metering adjusts ISO within the selected limits; exposure compensation shifts the metering target. At the limits, the image may remain too dark or too bright.") :
+									   T("feature.post_processing.cinematic_camera.manual_exposure_desc", "Aperture, shutter and ISO determine exposure. Scene brightness does not change it automatically; exposure compensation is only used in Auto ISO mode."));
 		if (autoISO) {
 			ImGui::SliderFloat(T("feature.post_processing.cinematic_camera.iso_min", "Minimum ISO"), &exp.MinISO, 25.0f, exp.MaxISO, "%.0f", logSliderFlags);
 			ImGui::SliderFloat(T("feature.post_processing.cinematic_camera.iso_max", "Maximum ISO"), &exp.MaxISO, exp.MinISO, 12800.0f, "%.0f", logSliderFlags);
@@ -563,24 +565,19 @@ namespace CinematicCamera
 			ImGui::SliderFloat(T("feature.post_processing.cinematic_camera.exposure_compensation", "Exposure Compensation"), &exp.ExposureCompensationEV, -5.0f, 5.0f, "%+.2f EV", ImGuiSliderFlags_AlwaysClamp);
 
 		if (const auto* state = GetState()) {
-			ImGui::Text(T("feature.post_processing.cinematic_camera.shutter_readout", "Shutter: 1/%.2f s"), 1.0f / std::max(state->ShutterTimeS, 1e-6f));
+			ImGui::TextDisabled(T("feature.post_processing.cinematic_camera.shutter_readout", "Shutter: 1/%.2f s"), 1.0f / std::max(state->ShutterTimeS, 1e-6f));
 		}
-		ImGui::PushTextWrapPos(0.0f);
-		ImGui::TextDisabled("%s", autoISO ?
-									  T("feature.post_processing.cinematic_camera.auto_iso_desc", "Aperture and shutter stay fixed. Metering adjusts ISO within the selected limits; exposure compensation shifts the metering target. At the limits, the image may remain too dark or too bright.") :
-									  T("feature.post_processing.cinematic_camera.manual_exposure_desc", "Aperture, shutter and ISO determine exposure. Scene brightness does not change it automatically; exposure compensation is only used in Auto ISO mode."));
-		ImGui::TextDisabled("%s", T("feature.post_processing.cinematic_camera.exposure_note",
-									  "Exposure processing is active while Cinematic Camera is active. Metering area and adaptation speed are configured in Histogram Auto Exposure. Motion Blur follows the shutter angle."));
-		ImGui::PopTextWrapPos();
+		Util::SettingHint(T("feature.post_processing.cinematic_camera.exposure_note",
+							  "Exposure processing is active while Cinematic Camera is active. Metering area and adaptation speed are configured in Histogram Auto Exposure. Motion Blur follows the shutter angle."),
+			false);
 
 		// FOV ownership status.
-		ImGui::Separator();
-		ImGui::Text(T("feature.post_processing.cinematic_camera.fov_status", "Camera FOV: %s"), GetFovStateText());
+		ImGui::Spacing();
+		ImGui::TextDisabled(T("feature.post_processing.cinematic_camera.fov_status", "Camera FOV: %s"), GetFovStateText());
 		if (fovState == FovState::ExternallyModified) {
-			ImGui::PushTextWrapPos(0.0f);
-			ImGui::TextDisabled("%s", T("feature.post_processing.cinematic_camera.fov_external_note",
-										  "Another mod changed the FOV after the last write. Cinematic Camera keeps the external value; changing focal length or filmback starts a new write."));
-			ImGui::PopTextWrapPos();
+			Util::SettingHint(T("feature.post_processing.cinematic_camera.fov_external_note",
+								  "Another mod changed the FOV after the last write. Cinematic Camera keeps the external value; changing focal length or filmback starts a new write."),
+				false);
 		}
 	}
 }

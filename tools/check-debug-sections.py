@@ -177,7 +177,10 @@ def scan(path: Path) -> list[str]:
         for use in BUFFER_VIEWER_RE.finditer(masked):
             func = enclosing_function(spans, masked, use.start())
             body = masked[func[0] : func[1]] if func else ""
-            if "DebugSection" not in body:
+            header = masked[max(0, func[0] - 200) : func[0]] if func else ""
+            # A sub-feature's DrawDebugSection() is drawn inside its owner's Debug section.
+            in_debug_draw = re.search(r"DrawDebugSection\s*\([^)]*\)\s*(?:const)?\s*(?:override)?\s*$", header)
+            if "DebugSection" not in body and not in_debug_draw:
                 problems.append(
                     f"{rel}:{line_of(use.start())}: buffer viewer outside a Debug section; draw it from DrawDebugSection()"
                 )
