@@ -1079,13 +1079,13 @@ void SnowDeformation::DrawShell()
 	const bool interior = InInteriorCell();
 	cascadeSnowSoonLast = !interior && CascadeSnowSoon();
 	const bool landscapeReads = cascadeReads && !interior && cascadeSnowSoonLast;
-	if (!shellGround && !landscapeReads && !settings.VolumeSnow)
+	if (!shellGround && !landscapeReads)
 		CullUnseenCaptures(cbData);
 	else {
 		captureViewCulled = 0;
 	}
 
-	const bool nothingDraws = !shellGround && !landscapeReads && !settings.VolumeSnow;
+	const bool nothingDraws = !shellGround && !landscapeReads;
 	const bool idleInterior = nothingDraws && cascadeReads && interior;
 	if (idleInterior && HeightMapIdleReady())
 		IdleObjectHeightMap();

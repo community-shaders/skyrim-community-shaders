@@ -194,30 +194,13 @@ public:
 		float AccumulationFadeDays = 3.0f;
 		float MeltPersistence = 0.50f;
 		float MeltBowlFloor = 0.11f;
-		float PitDepth = 1.00f;
-		float PitRadius = 50.0f;
-		float ShockCloakRadius = 75.0f;
-		float ShockCloakInterval = 1.50f;
-		float ShockCloakStrikeScale = 0.25f;
-		bool EnableLightningArcs = true;
-		float LightningArcWidth = 10.0f;
-		float LightningArcBrightness = 10.0f;
-		float LightningArcLife = 0.30f;
-		std::array<float, 3> LightningArcTint = { 0.698f, 0.620f, 1.0f };
-		float ScorchStrength = 0.85f;
-		float CrustRate = 0.6f;
-		float CrustRadius = 90.0f;
 		float CrustPrintDepth = 0.20f;
 		float CrustThawMinutes = 4.0f;
 		float CrustBreakOnCarve = 6.0f;
 		float CrustBreakRadius = 30.0f;
-		bool EnableSpellIntegration = true;
 		bool NoCarveFloatingActors = true;
 		float FloatingActorBand = 20.0f;
 		int IncorporealMode = 1;
-		bool EnableShoutCones = true;
-		float ShoutMarkReach = 0.1f;
-		float ShoutMarkWidth = 0.35f;
 		float ShoutMarkWaist = 0.5f;
 		float ShoutMarkRoundness = 1.5f;
 		float ShoutMarkFadeStart = 0.25f;
@@ -225,26 +208,6 @@ public:
 		float ShoutChurn = 1.0f;
 		float ShoutStreakSize = 8.0f;
 		float ShoutStreakLength = 1.0f;
-		bool LiftFrostEffects = true;
-		bool LiftRunes = true;
-		bool RuneDecalsOnSnow = true;
-		bool FrostDecalsOnSnow = true;
-		float ForceTrackDepth = 0.45f;
-		float ForceTrackWidth = 80.0f;
-		float DashGougeScale = 0.5f;
-		float ForceCarveDepth = 0.5f;
-		bool CorpseElementalMarks = true;
-		float CorpseEffectSeconds = 8.0f;
-		float AtronachFireReach = 0.50f;
-		float AtronachFireDeathRadius = 400.0f;
-		float AtronachFireBurnSeconds = 6.0f;
-		float AtronachFrostReach = 2.00f;
-		float AtronachFrostDeathRadius = 240.0f;
-		float AtronachShockReach = 1.00f;
-		float AtronachShockDeathRadius = 320.0f;
-		float CloakRadius = 100.0f;
-		float BlastRadiusScale = 0.33f;
-		float SpellMeltRate = 0.8f;
 		float MeltEdgeIrregularity = 0.15f;
 		std::array<float, kSnowClassCount> SnowClassDepths = { 14.0f, 18.0f, 30.0f, 30.0f, 30.0f, -8.0f, -8.0f, -8.0f, -8.0f, -8.0f, -8.0f, -8.0f };
 		std::map<std::string, float> TextureDepths;
@@ -253,11 +216,6 @@ public:
 		std::string SnowPBRConfig = "";
 		float TrampleZoneScale = 0.75f;
 		float TrampleZoneHeight = 50.0f;
-		float ItemEmbedPercent = 50.0f;
-		bool ItemSink = true;
-		float ItemMinRoundness = 0.20f;
-		float ItemSnowGripPercent = 100.0f;
-		bool CreatureSink = true;
 		float UndulationStrength = 8.0f;
 		float UndulationSpacing = 0.5f;
 		bool Tessellation = true;
@@ -270,9 +228,7 @@ public:
 		float SnowResistance = 33.0f;
 		float SnowClimateStrength = 0.75f;
 		float TrackAgeing = 1.0f;
-		bool WetSnowAndIce = true;
 		float FreshSnowSoftness = 0.66f;
-		float FreshSnowSettleHours = 24.0f;
 		float TrampledFlattening = 0.5f;
 		float TrenchDetailRelief = 1.0f;
 		float TrenchDetailRoughness = 1.0f;
@@ -285,12 +241,6 @@ public:
 		bool SnowScreenSpaceShadows = true;
 		bool SnowCastsShadows = true;
 		bool CameraAboveSnow = true;
-		bool BloodOnSnow = true;
-		float BloodIntensity = 1.0f;
-		float BloodBurial = 0.15f;
-		float BloodAgeHours = 1.0f;
-		float BloodSheen = 0.5f;
-		float BloodSpreadSeconds = 1.5f;
 		uint32_t DeformMapResolution = 4096;
 		bool VRAMAwareTrenchMap = true;
 		float RangeTrenchesM = 200.0f;
@@ -310,25 +260,6 @@ public:
 		float ShelterMaxHeight = 275.0f;
 		float ShelterDriftAngle = 30.0f;
 		bool LODObjectSnow = true;
-		bool VolumeSnow = false;
-		float VolumeSnowDepth = 10.0f;
-		float VolumeSnowCoverage = 0.15f;
-		float VolumeSnowOverhang = 5.0f;
-		float VolumeSnowRounding = 5.0f;
-		int VolumeLevels = 4;
-		int VolumeFineLevels = 6;
-		float VolumeMarchStep = 0.25f;
-		float VolumeDetailDistance = 1000.0f;
-		bool VolumeSkipEmptyCells = true;
-		float VolumeForwardBias = 0.45f;
-		int VolumeRingShape = 1;
-		float VolumeVerticalBias = 0.0f;
-		float VolumeMaxDistance = 8000.0f;
-		bool VolumeStaggeredCapture = true;
-		bool VolumeDirtyBricks = true;
-		float VolumeVoxelSize = 1.0f;
-		float VolumeSnowMaxSlopeDeg = 69.0f;
-		float VolumeSkyExposurePct = 0.0f;
 	};
 
 	static constexpr uint32_t kIceHistoryBins = 128;
@@ -1325,50 +1256,6 @@ public:
 	STATIC_ASSERT_ALIGNAS_16(HeightGhostCB);
 	ConstantBuffer* heightGhostCB = nullptr;
 
-	/** @brief Layout must match VoxelCB in SnowVoxelCapture.hlsl. */
-	struct alignas(16) VoxelVolumeCB
-	{
-		DirectX::XMINT4 OriginVox;
-		DirectX::XMINT4 ScrollDelta;
-		float VoxelSize;
-		float Decay;
-		int padDim;
-		int SliceAxis;
-		int SliceIndex;
-		int SliceXray;
-		int SliceSource;
-		int BlurAxis;
-		float2 HeightWindowCenter;
-		float HeightHalfExtent;
-		float ShelterDust;
-		float DepthVox;
-		float FieldThreshold;
-		float RoundSigma;
-		float SlopeMinNz;
-		float CentreVox[4];
-		float SkyStrength;
-		float ForceDirty;
-		float OverhangVox;
-		float HeadroomVox;
-		float EdgeParams[4];
-		float LipParams[4];
-		int Dims[4];
-	};
-	STATIC_ASSERT_ALIGNAS_16(VoxelVolumeCB);
-
-	/** @brief V1b draw constants (b2 on the VOXEL variant of SnowStaticsShell). Layout must match VoxelDrawCB there. */
-	struct alignas(16) VoxelDrawCB
-	{
-		DirectX::XMINT4 VoxOrigin;
-		float4 VoxParams;
-		float4 VoxFade;
-		float4 VoxCentre;
-		float4 VoxInnerCentre;
-		float4 VoxDebug;
-		float4 VoxDims;
-	};
-	STATIC_ASSERT_ALIGNAS_16(VoxelDrawCB);
-
 	static constexpr uint kMaxExclusions = 256;
 	static constexpr float kTorchClearRadius = 40.0f;
 	static constexpr float kElevatedStampCutoff = 70.0f;
@@ -1837,23 +1724,6 @@ protected:
 	uint32_t stampGatherFrame = UINT32_MAX;
 
 public:
-	/** @brief One mapped skin's block at Lighting PS b8, bound per draw by offset. Mirror: SnowLighting.hlsli BodyCoatRecord. */
-	struct alignas(16) BodyCoatRecordCB
-	{
-		float4 ModelToCanonical[3];
-		float4 ModelToAtlas[3];
-		float4 AtlasLo;
-		float4 AtlasHi;
-		uint View;
-		uint Slot;
-		uint Component;
-		uint Flags;
-		float4 Glint;
-		float4 Look;
-		float4 Amounts;
-		float4 Fall;
-	};
-	STATIC_ASSERT_ALIGNAS_16(BodyCoatRecordCB);
 	/** @brief The engine's own decal geometries, by the names it gives them: blood and impact marks, skinned or not. Implemented in SnowDeformation/Statics.cpp. */
 	static bool IsEngineDecalName(const char* a_name);
 
