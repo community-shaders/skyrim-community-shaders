@@ -273,13 +273,13 @@ namespace Random
 	// NOISES
 	///////////////////////////////////////////////////////////
 
-	/** @brief Returns a stable random value for one integer cell. */
+	/** @brief Stable noise for an integer cell. */
 	float CellNoise2D(int2 cell)
 	{
 		return float(iqint3(asuint(cell))) * (1.0f / 4294967296.0f);
 	}
 
-	/** @brief Bilinearly interpolates CellNoise2D for smooth spatial variation. */
+	/** @brief Smoothly interpolates cell noise. */
 	float ValueNoise2D(float2 p)
 	{
 		int2 cell = int2(floor(p));
@@ -290,7 +290,7 @@ namespace Random
 		return lerp(lower, upper, fr.y);
 	}
 
-	// Keep the nearest Voronoi feature, skipping cells whose closest point cannot beat the current best.
+	// Skip cells whose closest point cannot beat the nearest feature found so far.
 	void UpdateNearestVoronoiCell2D(inout uint seed, inout float distanceSquared, inout float2 offset, int2 cell, float2 gridPos)
 	{
 		float2 cellMin = float2(cell);
@@ -308,7 +308,7 @@ namespace Random
 		}
 	}
 
-	/** @brief Finds the nearest hashed Voronoi feature in a 3x3 cell neighbourhood. */
+	/** @brief Finds the nearest Voronoi feature in a 3x3 cell neighbourhood. */
 	void FindNearestVoronoi2D(float2 gridPos, out uint seed, out float distance, out float2 offset)
 	{
 		// Floor keeps the Voronoi grid continuous across negative world coordinates.
@@ -330,8 +330,8 @@ namespace Random
 	}
 
 	/**
-	 * @brief Approximates FindNearestVoronoi2D with the feature of the position's own cell.
-	 * Uses the same feature hash, so it agrees with the exact search wherever that feature is the nearest.
+	 * @brief Approximates Voronoi noise using only the containing cell's feature.
+	 * Shares the exact search's hash, so it matches wherever that feature is nearest.
 	 */
 	void GetVoronoiCellFeature2D(float2 gridPos, out uint seed, out float distance, out float2 offset)
 	{

@@ -79,11 +79,11 @@ void TerrainBlending::MergeSceneDepthIntoBlend()
 
 	auto context = globals::d3d::context;
 
-	// The caller leaves the main-depth DSV bound as output. Unbind first to prevent the SRV from being dropped by dx11.
+	// Main depth must be unbound as a DSV before reading it as an SRV.
 	context->OMSetRenderTargets(0, nullptr, nullptr);
 	globals::game::stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_RENDERTARGET);
 
-	// depthSRVBackup views the real main-depth texture, which now carries the late geometry's depth.
+	// The backup SRV still views main depth, including late writes.
 	ID3D11ShaderResourceView* views[1] = { depthSRVBackup };
 	context->CSSetShaderResources(0, 1, views);
 

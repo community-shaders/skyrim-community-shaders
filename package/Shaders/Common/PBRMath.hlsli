@@ -100,17 +100,12 @@ namespace PBR
 		return D * G * F;
 	}
 
-	/// @brief Evaluate anisotropic GGX microfacet specular BRDF (D * Vis * F) with OpenPBR's roughness parametrization
+	/// @brief Anisotropic GGX specular BRDF with OpenPBR roughness parameters
 	/// @param roughness Perceptual roughness [0,1]
-	/// @param anisotropy OpenPBR specular_roughness_anisotropy [0,1]: how far the lobe stretches along the tangent
-	/// @param F0 Reflectance at normal incidence
-	/// @param N Surface normal
-	/// @param T Unit tangent perpendicular to N; the lobe stretches along it
-	/// @param V View direction
-	/// @param L Light direction
-	/// @param F Output Fresnel reflectance at current angle
-	/// @param slopeVariance Isotropic filter variance added to both squared anisotropic roughness axes
-	/// @return Specular BRDF value (D * Vis * F)
+	/// @param anisotropy Tangent-axis stretch [0,1]
+	/// @param T Unit tangent perpendicular to N
+	/// @param F Output Fresnel reflectance
+	/// @param slopeVariance Isotropic variance added to both squared roughness axes
 	float3 SpecularMicrofacetAnisotropic(float roughness, float anisotropy, float3 F0, float3 N, float3 T, float3 V, float3 L, out float3 F, float slopeVariance = 0.0)
 	{
 		F = F0;
@@ -118,7 +113,7 @@ namespace PBR
 		float NdotV = dot(N, V);
 		float3 halfVector = V + L;
 		float halfVectorLengthSquared = dot(halfVector, halfVector);
-		// Reflection needs both directions above the surface. Clamping a back-facing half vector can make D singular.
+		// Back-facing or degenerate half vectors can make the GGX distribution singular.
 		if (NdotL <= 0.0 || NdotV <= 0.0 || halfVectorLengthSquared <= 1e-8)
 			return 0.0;
 		float3 H = halfVector * rsqrt(halfVectorLengthSquared);
@@ -126,10 +121,10 @@ namespace PBR
 		if (NdotH <= 0.0)
 			return 0.0;
 
-		// OpenPBR: alpha_t = r^2 sqrt(2 / (1 + (1 - a)^2)), alpha_b = (1 - a) alpha_t, which keeps the average roughness.
+		// Preserve average roughness while stretching the lobe.
 		float alphaT = max(roughness * roughness * sqrt(2.0 / (1.0 + (1.0 - anisotropy) * (1.0 - anisotropy))), 1e-3);
 		float alphaB = max((1.0 - anisotropy) * alphaT, 1e-3);
-		// Filter after stretching the lobe so anisotropy cannot shrink the pixel footprint along its narrow axis.
+		// Filter after stretching so the narrow axis still covers the pixel footprint.
 		alphaT = sqrt(alphaT * alphaT + slopeVariance);
 		alphaB = sqrt(alphaB * alphaB + slopeVariance);
 		float3 B = cross(N, T);
@@ -153,18 +148,15 @@ namespace PBR
 		return F0 * specularBRDF.x + specularBRDF.y;
 	}
 
-	/// @brief Widen a microfacet lobe by an extra slope variance, as OpenPBR's coat roughening does
-	/// @param roughness Perceptual roughness [0,1] of the lobe
-	/// @param slopeVariance Added slope variance, in perceptual roughness to the fourth power
-	/// @return Perceptual roughness of the widened lobe
+	/// @brief Adds slope variance to a lobe's perceptual roughness [0,1]
+	/// @param slopeVariance Variance in units of perceptual roughness to the fourth power
 	float AddRoughnessVariance(float roughness, float slopeVariance)
 	{
 		float roughness2 = roughness * roughness;
 		return sqrt(sqrt(min(roughness2 * roughness2 + slopeVariance, 1.0)));
 	}
 
-	/// @brief Slope variance for geometric specular anti-aliasing (Tokuyoshi and Kaplanyan 2019)
-	/// Widens unresolved highlights by the normal variation across the pixel.
+	/// @brief Geometric specular AA variance (Tokuyoshi and Kaplanyan, 2019)
 	/// @param dNdx Screen-space x derivative of the specular normal
 	/// @param dNdy Screen-space y derivative of the specular normal
 	/// @param pixelVariance Variance of the pixel filter kernel
@@ -266,10 +258,10 @@ namespace PBR
 		return lerp(1.0f - saturate(opacity), 1.0f, saturate(shadow));
 	}
 
-	/// @brief Roughness-dependent parameters of the OpenPBR fuzz directional-albedo fit (Zeltner et al. 2022 sheen)
-	/// @param roughness Fuzz roughness [0.01,1]: low is fibre-like, high is dusty
-	/// @return Inverse Gaussian width, centre, amplitude and baseline, in that order; ProceduralGrass mirrors this on the CPU
-	/// @note Rational fits from the MaterialX reference implementation (mx_microfacet_sheen.glsl).
+	/// @brief Coefficients of the OpenPBR fuzz albedo fit (Zeltner et al., 2022)
+	/// @param roughness Fuzz roughness [0.01,1]
+	/// @return Inverse Gaussian width, centre, amplitude and baseline
+	/// @note MaterialX reference: mx_microfacet_sheen.glsl
 	float4 FuzzDirectionalAlbedoParameters(float roughness)
 	{
 		float s = roughness * (0.0206607 + 1.58491 * roughness) / (0.0379424 + roughness * (1.32227 + roughness));
@@ -278,8 +270,7 @@ namespace PBR
 		return float4(1.0 / s, m, 1.0 / (s * sqrt(Math::TAU)), o);
 	}
 
-	/// @brief Evaluate the fuzz fit with parameters prepared once per material
-	/// @param parameters Output of FuzzDirectionalAlbedoParameters
+	/// @brief Evaluates fuzz albedo using precomputed FuzzDirectionalAlbedoParameters
 	float FuzzDirectionalAlbedoWithParameters(float NdotV, float4 parameters)
 	{
 		float d = (NdotV - parameters.y) * parameters.x;

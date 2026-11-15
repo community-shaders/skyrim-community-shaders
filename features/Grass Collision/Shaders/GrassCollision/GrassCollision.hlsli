@@ -147,7 +147,6 @@ namespace GrassCollision
 		collision = ComputeNormalFromHeights(collisionCenter, collisionX, collisionY, delta) * avgCurrentAmount;
 
 #if !defined(GRASS_COLLISION_CURRENT_ONLY)
-		// Process previous collision
 		float3 previousAmounts = float3(previousCollisionCenterAmount, previousCollisionXAmount, previousCollisionYAmount);
 		float avgPreviousAmount = dot(previousAmounts, float3(1.0, 1.0, 1.0)) / 3.0;
 		previousCollision = ComputeNormalFromHeights(previousCollisionCenter, previousCollisionX, previousCollisionY, delta) * avgPreviousAmount;
@@ -156,11 +155,11 @@ namespace GrassCollision
 #endif
 	}
 
-	/** @param nearFactor Fade of the collision response with camera distance. */
+	/** @param nearFactor Camera-distance fade for the collision response. */
 	void GetDisplacedPosition(float3 worldPosition, float3 worldPositionCentre, float alpha, float nearFactor, bool smoothRecovery, float recoveryRate, out float3 displacement, out float3 previousDisplacement)
 	{
 		if (alpha > 0.0 && nearFactor > 0.0) {
-			// Limit stretching
+			// Sample near the clump centre to limit stretching.
 			float3 remappedWorldPosition = lerp(worldPosition, worldPositionCentre, float3(0.95, 0.95, 0.0));
 
 			float distanceFromCenter = length(worldPosition - worldPositionCentre) + 0.01;
@@ -190,7 +189,7 @@ namespace GrassCollision
 
 #ifdef GRASS_COLLISION_REGULAR_GRASS
 #	ifdef GRASS_OPTIMIZATIONS
-	// Positions arrive camera-relative: instances are already in world space here, so applying World again would double the offset.
+	// Optimized instances are already camera-relative; do not apply World again.
 	void GetDisplacedPosition(VS_INPUT input, float3 worldPosition, float3 worldPositionCentre, out float3 displacement, out float3 previousDisplacement)
 	{
 		GetDisplacedPosition(worldPosition, worldPositionCentre, saturate(input.Color.w * 10.0), smoothstep(2048.0, 0.0, length(worldPosition)), false, 1.5, displacement, previousDisplacement);

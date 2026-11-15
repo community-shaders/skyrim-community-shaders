@@ -110,10 +110,11 @@ void TerrainHeightMap::LoadForCurrentWorldspace()
 		return;
 
 	std::string worldspace_name = worldspace->GetFormEditorID();
-	if (!heightmaps.contains(worldspace_name))  // no height map for that, but we don't remove cache
+	// Keep the previous world's map cached when no replacement exists.
+	if (!heightmaps.contains(worldspace_name))
 		return;
 
-	if (cachedHeightmap && cachedHeightmap->worldspace == worldspace_name)  // already cached
+	if (cachedHeightmap && cachedHeightmap->worldspace == worldspace_name)
 		return;
 
 	auto device = globals::d3d::device;

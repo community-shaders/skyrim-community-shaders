@@ -217,8 +217,8 @@ namespace Util
 	float GetSunVisibility(const RE::Sun* a_sun);
 
 	/**
-	 * @brief Follows parent worldspaces that supply this worldspace's LAND data.
-	 * @return The worldspace owning the terrain records, or nullptr for a null input.
+	 * @brief Resolves the worldspace supplying LAND data through parent inheritance.
+	 * @return The LAND owner, or nullptr for a null input.
 	 */
 	RE::TESWorldSpace* GetLandDataWorldspace(RE::TESWorldSpace* worldSpace);
 

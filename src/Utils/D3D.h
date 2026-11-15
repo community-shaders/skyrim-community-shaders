@@ -11,7 +11,7 @@ class Texture2D;
 
 namespace Util
 {
-	/** @brief Releases a COM interface and clears the caller's pointer. */
+	/** @brief Releases a COM reference and sets the pointer to null. */
 	template <class T>
 	void ReleaseAndNull(T*& resource)
 	{
@@ -21,7 +21,7 @@ namespace Util
 		}
 	}
 
-	/** @brief Creates an owned single-mip square texture with an SRV and optional UAV. */
+	/** @brief Creates a single-mip square texture with an SRV and optional UAV. The caller owns the result. */
 	Texture2D* CreateSquareTexture(uint32_t dim, DXGI_FORMAT format, bool unorderedAccess, const char* name);
 
 	/**

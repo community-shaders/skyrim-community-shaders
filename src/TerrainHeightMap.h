@@ -5,11 +5,10 @@
 #include <filesystem>
 
 /**
- * @brief Worldspace-keyed terrain heightmap, shared by every feature that needs terrain elevation.
+ * @brief Shared terrain heightmap for the current land worldspace.
  *
- * Discovers heightmap DDS files once, then loads and caches the one matching the worldspace the
- * player is in. Texel values are normalised [0,1] and decode to world Z with
- * lerp(GetPosRange().x, GetPosRange().y, texel); @ref GetZRange is the separate authored min/max.
+ * Decode normalised samples with lerp(GetPosRange().x, GetPosRange().y, sample).
+ * GetZRange() returns the separate authored elevation bounds.
  */
 class TerrainHeightMap
 {
@@ -19,47 +18,43 @@ public:
 		std::wstring dir;
 		std::string filename;
 		std::string worldspace;
-		float3 pos0, pos1;  // left-top-z=0 vs right-bottom-z=1
+		float3 pos0, pos1;  // World-space top-left and bottom-right; z decodes samples 0 and 1.
 		float2 zRange;
 	};
 
-	/** @brief Scans the heightmap folders for DDS files. Only the first call does work. */
+	/** @brief Scans heightmap directories once for DDS metadata. */
 	void Discover();
 
 	/**
-	 * @brief Loads the DDS for the current worldspace unless it is already cached.
-	 * Several features call this; each compares @ref GetLoadGeneration to detect a change it has not handled.
+	 * @brief Loads the current land worldspace's DDS if it differs from the cached map.
+	 * Callers use GetLoadGeneration() to detect reloads.
 	 */
 	void LoadForCurrentWorldspace();
 
-	/** @brief Increments whenever a different heightmap is loaded. */
+	/** @brief Cache version, incremented after each successful load. */
 	uint32_t GetLoadGeneration() const { return loadGeneration; }
 
-	/** @brief Whether a heightmap is loaded and belongs to the worldspace the player is in. */
+	/** @brief True when the cached map matches the current land worldspace. */
 	bool IsReady() const;
 
-	/** @brief Whether a heightmap was discovered for the given worldspace, loaded or not. */
+	/** @brief True when a DDS was discovered for this worldspace, whether loaded or not. */
 	bool Contains(const std::string& worldspace) const { return heightmaps.contains(worldspace); }
 
 	Texture2D* GetTexture() const { return texHeightMap.get(); }
 	ID3D11ShaderResourceView* GetSRV() const { return texHeightMap ? texHeightMap->srv.get() : nullptr; }
 	const Metadata* GetCached() const { return cachedHeightmap; }
 
-	/** @brief World space to normalised heightmap scale; xy maps to UV, z to elevation. */
+	/** @brief World-to-heightmap scale: xy maps to UV, z to normalised elevation. */
 	float3 GetScale() const;
-	/** @brief World space to heightmap UV offset, aligning texel centres with terrain vertices; pairs with the xy of @ref GetScale. */
+	/** @brief UV offset that aligns heightmap texel centres with terrain vertices. */
 	float2 GetOffset() const;
-	/** @brief The world-space Z range the texel values were authored against. */
+	/** @brief Authored elevation bounds, separate from the texture's normalisation range. */
 	float2 GetZRange() const;
-	/** @brief {pos0.z, pos1.z}; lerp between these with a texel to get world-space Z. */
+	/** @brief World-Z endpoints for decoding normalised texture samples. */
 	float2 GetPosRange() const;
 
 private:
-	/**
-	 * @brief Parses a heightmap DDS filename to extract worldspace metadata.
-	 * @param p The filesystem path to the DDS file.
-	 * @param xlodgen_style Whether the filename follows xLODGen naming conventions.
-	 */
+	/** @brief Extracts world bounds from an xLODGen or legacy DDS filename. */
 	void ParseHeightmapPath(std::filesystem::path p, bool xlodgen_style);
 
 	bool discovered = false;

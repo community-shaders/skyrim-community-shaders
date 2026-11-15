@@ -61,8 +61,8 @@ public:
 	ID3D11ComputeShader* GetMergeDepthShader();
 
 	/**
-	 * @brief Folds the current scene depth back into the blended depth with a min, for geometry drawn after
-	 * BlendPrepassDepths (e.g. procedural grass' late depth prepass). No-op when disabled.
+	 * @brief Merges depth written after BlendPrepassDepths into the blended depth textures.
+	 * @note Unbinds render targets so main depth can be read as an SRV.
 	 */
 	void MergeSceneDepthIntoBlend();
 

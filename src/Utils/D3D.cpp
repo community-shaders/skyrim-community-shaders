@@ -19,7 +19,6 @@
 
 namespace Util
 {
-	/** @brief Creates a single-mip square texture with an SRV and, when requested, a UAV. */
 	Texture2D* CreateSquareTexture(uint32_t dim, DXGI_FORMAT format, bool unorderedAccess, const char* name)
 	{
 		D3D11_TEXTURE2D_DESC desc{};

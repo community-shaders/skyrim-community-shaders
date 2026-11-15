@@ -27,9 +27,9 @@ public:
 
 	/** @brief Dispatches the collision update compute shader to write actor collision data into the collision texture. */
 	void UpdateCollisionTexture();
-	/** @brief Binds the collision cbuffer/texture expected by GrassCollision.hlsli to the vertex stage. */
+	/** @brief Binds collision constants and texture to the vertex stage. */
 	void BindGrassShaderResources(ID3D11DeviceContext* context) const;
-	/** @brief Binds collision data to the procedural blade generator. */
+	/** @brief Binds collision data to the blade generator at b11/t100. */
 	void BindProceduralGrassGenerationResources(ID3D11DeviceContext* context) const;
 
 	struct Settings

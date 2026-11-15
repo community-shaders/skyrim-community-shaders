@@ -8,7 +8,7 @@ Texture2D<unorm float> TerrainDepthTexture : register(t1);
 
 [numthreads(8, 8, 1)] void main(uint3 DTid : SV_DispatchThreadID) {
 #if defined(MERGE)
-	// Fold a depth written after the blend into the accumulator. Read it through the UAV so the same texture is not bound as SRV and UAV at once.
+	// Read the accumulator through its UAV to avoid overlapping SRV/UAV bindings.
 	float other = BlendedDepthTexture[DTid.xy];
 #else
 	float other = TerrainDepthTexture[DTid.xy];

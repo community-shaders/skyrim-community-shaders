@@ -202,10 +202,8 @@ public:
 	}
 
 	/**
-	 * @brief Maps and uploads only the first @p data_size bytes via write-discard.
-	 * The remainder of the buffer is left undefined, so use this only when the shader reads a
-	 * bounded prefix (e.g. an active element count) and the per-frame upload should scale with
-	 * usage rather than the full capacity.
+	 * @brief Uploads a buffer prefix with write-discard, leaving the rest undefined.
+	 * @note Shaders must limit reads to the uploaded prefix.
 	 */
 	void UpdatePartial(void const* src_data, size_t data_size)
 	{
@@ -217,8 +215,8 @@ public:
 	}
 
 	/**
-	 * @brief Uploads @p byteSize bytes at @p byteOffset in place, leaving the rest of the buffer intact.
-	 * The buffer must use D3D11_USAGE_DEFAULT.
+	 * @brief Updates a byte range without discarding the rest of the buffer.
+	 * @pre The buffer uses D3D11_USAGE_DEFAULT.
 	 */
 	void UpdateRange(void const* src_data, size_t byteOffset, size_t byteSize)
 	{
