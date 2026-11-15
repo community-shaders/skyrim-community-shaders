@@ -1,7 +1,6 @@
 #ifndef __IBL_HLSLI__
 #define __IBL_HLSLI__
 
-#include "Common/Color.hlsli"
 #include "Common/ColorManagement.hlsli"
 #include "Common/Math.hlsli"
 #include "Common/Random.hlsli"
@@ -46,11 +45,6 @@ namespace ImageBasedLighting
 		float colorG = SphericalHarmonics::SHHallucinateZH3Irradiance(shG, rayDir);
 		float colorB = SphericalHarmonics::SHHallucinateZH3Irradiance(shB, rayDir);
 		return float3(colorR, colorG, colorB) / Math::PI;
-	}
-
-	float3 GetSkyIBLOccluded(float3 rayDir, float visibility)
-	{
-		return GetSkyIBL(rayDir) * visibility;
 	}
 
 	// ============================================================================
@@ -127,14 +121,6 @@ namespace ImageBasedLighting
 		return Color::Saturation(GetSkyIBL(rayDir), SharedData::iblSettings.SkyIBLSaturation) * SharedData::iblSettings.SkyIBLScale;
 	}
 
-	float3 GetSkyIBLColorOccluded(float3 rayDir, float visibility)
-	{
-		if (SharedData::InInterior) {
-			return 0;
-		}
-		return Color::Saturation(GetSkyIBLOccluded(rayDir, visibility), SharedData::iblSettings.SkyIBLSaturation) * SharedData::iblSettings.SkyIBLScale;
-	}
-
 	// ============================================================================
 	// High-level: compute the full diffuse ambient replacement
 	// ============================================================================
@@ -159,7 +145,7 @@ namespace ImageBasedLighting
 	}
 
 	/// Compute diffuse IBL ambient with a skylighting visibility factor applied per DALCMode
-	/// visibility: scalar skylighting factor (already computed in Lighting.hlsl).
+	/// (mode 3 dims both DALC and sky; modes 0-2 dim only the sky contribution).
 	float3 GetDiffuseIBLOccluded(float3 vanillaDALC, float3 rayDir, float visibility, float3 positionMS = float3(0, 0, 0))
 	{
 		float3 linEnv, linSky;
@@ -170,25 +156,15 @@ namespace ImageBasedLighting
 		} else {
 			linEnv = GetEnvIBLColor(rayDir);
 		}
-		linSky = GetSkyIBLColorOccluded(rayDir, visibility);
+		linSky = GetSkyIBLColor(rayDir) * visibility;
 		return ApplyAmbientReflectionFallback(linEnv, linSky, positionMS);
 	}
 
-	// ============================================================================
-	// Convenience: combined IBL (for simple contexts)
-	// ============================================================================
-
-	float3 GetIBLColor(float3 rayDir, float3 positionMS = float3(0, 0, 0))
-	{
-		float3 iblColor = GetEnvIBLColor(rayDir) + GetSkyIBLColor(rayDir);
-		return ApplyIBLReflectionFallback(iblColor, GetSkyIBLColor(rayDir), positionMS);
-	}
-
+	/// Combined env + sky IBL color with a visibility factor applied to the sky term.
 	float3 GetIBLColorOccluded(float3 rayDir, float visibility, float3 positionMS = float3(0, 0, 0))
 	{
-		float3 envColor = GetEnvIBLColor(rayDir);
-		float3 iblColor = envColor + GetSkyIBLColorOccluded(rayDir, visibility);
-		return ApplyIBLReflectionFallback(iblColor, GetSkyIBLColorOccluded(rayDir, visibility), positionMS);
+		const float3 skyColor = GetSkyIBLColor(rayDir) * visibility;
+		return ApplyIBLReflectionFallback(GetEnvIBLColor(rayDir) + skyColor, skyColor, positionMS);
 	}
 
 	// Integrate radiance against the normalized HG phase, rather than a surface cosine lobe.

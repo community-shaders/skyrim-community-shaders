@@ -1,7 +1,6 @@
 #ifndef __SHADOW_SAMPLING_DEPENDENCY_HLSL__
 #define __SHADOW_SAMPLING_DEPENDENCY_HLSL__
 
-#include "Common/Color.hlsli"
 #include "Common/ColorManagement.hlsli"
 #include "Common/Math.hlsli"
 #include "Common/Random.hlsli"

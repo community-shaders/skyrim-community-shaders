@@ -5,16 +5,15 @@
 #	define CLOUD_SHADOW_REGISTER t25
 #endif
 
-#ifndef CLOUD_SELFSHADOW_REGISTER
-#	define CLOUD_SELFSHADOW_REGISTER t26
-#endif
-
 #include "Common/Game.hlsli"
 
 namespace CloudShadows
 {
 	TextureCube<float> CloudShadowsTexture : register(CLOUD_SHADOW_REGISTER);
-	TextureCube<float> CloudSelfShadowTexture : register(CLOUD_SELFSHADOW_REGISTER);
+#if defined(CLOUDS)
+	// Cloud occlusion of the layers drawn up to the current one, for cloud self shadowing
+	TextureCube<float> CloudSelfShadowTexture : register(t26);
+#endif
 
 	const static float CloudHeight = (2e3f / GAME_UNIT_TO_M);
 	const static float PlanetRadius = (6371e3f / GAME_UNIT_TO_M);

@@ -1348,6 +1348,12 @@ class SceneSettingsCatalogGeneratorTests(unittest.TestCase):
         self.assertEqual(noise["displayPath"], "Volumetric Noise")
         self.assertIn("SceneControllable", noise["flags"])
 
+    def test_debug_section_settings_use_debug_display_path(self):
+        debug = self.entries_by_id[
+            ("LightLimitFix", "", "EnableLightsVisualisation")]
+        self.assertEqual(debug["displayPath"], "Debug")
+        self.assertIn("SceneControllable", debug["flags"])
+
     def test_safe_editor_metadata(self):
         ripple_lifetime = self.entries_by_id[
             ("WetnessEffects", "", "RippleLifetime")]

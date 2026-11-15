@@ -433,7 +433,7 @@ Texture2D<float4> TexSkyTail : register(t66);
 		return lerp(1.0, SampleAtmosphereLightTr(TexTrLut, samp, origin + direction * AP_MAX_DIST, direction), data.trMix);
 	}
 
-#		if defined(CLOUD_SHADOWS) && defined(PS_SKY_SAMPLERS)
+#		if defined(CLOUD_SHADOWS) && defined(CLOUDS) && defined(PS_SKY_SAMPLERS)
 	float3 RelightCloud(float4 baseColor, float3 viewDir, float3 cloudPosWS, SamplerState sampTr, SamplerState sampCube)
 	{
 		if (baseColor.w <= 0)
@@ -511,7 +511,7 @@ Texture2D<float4> TexSkyTail : register(t66);
 					linIblAmbient += ColorManagement::SceneToLinear(vanillaAmbient * SharedData::iblSettings.DALCAmount);
 				else
 					linIblAmbient += ImageBasedLighting::GetEnvIBLColor(cloudAmbientDir);
-				float3 linReflectionAmbient = ImageBasedLighting::GetSkyIBLColorOccluded(cloudAmbientDir, skyVisibility);
+				float3 linReflectionAmbient = ImageBasedLighting::GetSkyIBLColor(cloudAmbientDir) * skyVisibility;
 				linIblAmbient += linReflectionAmbient;
 				linIblAmbient = ImageBasedLighting::ApplyIBLReflectionFallback(linIblAmbient, linReflectionAmbient, cloudPosWS);
 

@@ -1128,6 +1128,9 @@ private:
 
 	/// Feature settings as they were before the scene layer, so baselines cost one SaveSettings each.
 	std::map<std::string, json> featureBaseSnapshots;
+	/// The document each apply mutates in place, so a per-frame transition costs no SaveSettings
+	/// and no full copy of the feature's settings.
+	std::map<std::string, json> featureApplyDocuments;
 	std::set<std::string> appliedFeatureNames;
 	mutable std::set<std::string> configuredFeatureNamesCache;
 	mutable std::uint64_t configuredFeatureNamesRevision = std::numeric_limits<std::uint64_t>::max();
@@ -1183,6 +1186,9 @@ private:
 	RE::FormID GetEffectivePreviousWeatherId(const RE::Sky* sky, float weatherLerp) const;
 	/** @brief Samples the sky's current and outgoing weather and their blend factor. */
 	WeatherBlend GetWeatherBlend() const;
+	/** @brief The time-of-day layer's value for one period, user over overwrite, else the base value. */
+	json GetTimeOfDayPeriodFallbackValue(const json& baseValue, const std::string& featureShortName,
+		const std::vector<std::string>& settingPath, const std::string& settingKey, int periodIndex) const;
 
 	/// Live sky/time state sampled once per resolve so every setting blends against identical factors.
 	struct BlendSnapshot
@@ -1346,6 +1352,8 @@ private:
 	float EaseLocationTransition(const LocationTransition& transition, float now) const;
 	/** @brief Whether the transition has run its full duration. */
 	static bool IsLocationTransitionFinished(const LocationTransition& transition, float now);
+	/** @brief Whether two transition values differ by less than kBlendEpsilon of their magnitude, so small-range settings still fade. */
+	static bool IsWithinTransitionTolerance(float lhs, float rhs);
 	/** @brief Starts a transition for each location-driven address whose value or membership changed. */
 	void StartLocationTransitions(const ResolvedSettingMap& resolved, float now, bool animateChanges);
 	/// Re-reads each in-flight transition's endpoint so one crossing a time-of-day or weather

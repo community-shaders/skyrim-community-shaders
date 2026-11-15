@@ -239,6 +239,7 @@ LinearLighting::PerFrameData LinearLighting::GetCommonBufferData()
 		physicalSkyEnabled = physicalSky.IsRendering() && physicalSky.settings.overrideDirLight && skySync.loaded && skySync.settings.Enabled;
 	}
 
+	// Legacy light colors represent the response of a white Lambert surface.
 	data.directionalLightMult = (physicalSkyEnabled ? 1.0f : RE::NI_PI) * settings.directionalLightMult;
 	data.pointLightMult = RE::NI_PI * settings.pointLightMult;
 	data.ambientMult = settings.ambientMult;
@@ -360,9 +361,14 @@ namespace
 	{
 		static void thunk(RE::BSShader* shader, RE::BSRenderPass* pass, uint32_t renderFlags)
 		{
+			auto& linearLighting = globals::features::linearLighting;
+			const bool linearLightingActive = linearLighting.IsLinearLightingActive();
+			// Without LL the uploads only read the pass to write an overridden sunlight.
+			if (!linearLightingActive && !linearLighting.HasSunlightOverride())
+				return func(shader, pass, renderFlags);
 			auto* previous = std::exchange(geometryPass, pass);
 			const SKSE::stl::scope_exit restore([previous]() noexcept { geometryPass = previous; });
-			if (!globals::features::linearLighting.IsLinearLightingActive())
+			if (!linearLightingActive)
 				return func(shader, pass, renderFlags);
 			if constexpr (Type == RE::BSShader::Type::Lighting) {
 				globals::state->permutationData.BaseTextureIsWorking = 0;
