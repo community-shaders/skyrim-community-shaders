@@ -25,7 +25,22 @@ public:
 				T("feature.water_effects.key_feature_5", "Atmospheric underwater effects") } };
 	};
 
+	struct Settings
+	{
+		uint32_t physicalReflections = 1;  // Schlick fresnel and sun disk highlight instead of the water form's values
+		uint32_t pad[3]{};
+	};
+
+	STATIC_ASSERT_ALIGNAS_16(Settings);
+
+	Settings settings;
+
 	bool HasShaderDefine(RE::BSShader::Type shaderType) override;
+
+	virtual void DrawSettings() override;
+	virtual void LoadSettings(json& o_json) override;
+	virtual void SaveSettings(json& o_json) override;
+	virtual void RestoreDefaultSettings() override;
 
 	/** @brief Loads the water caustics DDS texture from disk. */
 	virtual void SetupResources() override;

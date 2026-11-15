@@ -967,7 +967,10 @@ float GetFresnelValue(float3 normal, float3 viewDirection)
 		return fresnel * SharedData::enbSettings.WaterReflectionAmount;
 	}
 
-	return GetWaterFresnel(dot(-viewDirection, actualNormal));
+	if (SharedData::waterEffectsSettings.PhysicalReflections)
+		return GetWaterFresnel(dot(-viewDirection, actualNormal));
+
+	return (1 - FresnelRI.x) * pow(viewAngle, 5) + FresnelRI.x;
 }
 
 struct DiffuseOutput
@@ -1068,7 +1071,13 @@ float3 GetSunColor(float3 normal, float3 viewDirection, float3 worldPosition)
 	if (Permutation::PixelShaderDescriptor & Permutation::WaterFlags::Interior)
 		return 0.0.xxx;
 
-	float lightDistribution = GetWaterDeltaLightDistributionFromCos(normal, viewDirection, SunDir.xyz, GetWaterSunDiskCos());
+	float lightDistribution;
+	if (SharedData::waterEffectsSettings.PhysicalReflections) {
+		lightDistribution = GetWaterDeltaLightDistributionFromCos(normal, viewDirection, SunDir.xyz, GetWaterSunDiskCos()) * GetWaterDirectSpecularScale();
+	} else {
+		float3 reflectionDirection = reflect(viewDirection, normal);
+		lightDistribution = VarAmounts.x > 0 ? exp2(VarAmounts.x * log2(saturate(dot(reflectionDirection, SunDir.xyz)))) : 1.0;
+	}
 
 	float3 sunColor = Color::DirectionalLight(ColorManagement::SRGBToWorking(SunColor.xyz)) * SunDir.w * (1.0 - exp(-DeepColor.w));
 #				if defined(PHYSICAL_SKY)
@@ -1083,7 +1092,7 @@ float3 GetSunColor(float3 normal, float3 viewDirection, float3 worldPosition)
 		sunColor *= ExponentialHeightFog::GetSunlightFogAttenuation(worldPosition.xyz, FrameBuffer::CameraPosAdjust.xyz);
 	}
 #				endif
-	return lightDistribution * sunColor * GetWaterDirectSpecularScale();
+	return lightDistribution * sunColor;
 #			endif
 }
 #		endif

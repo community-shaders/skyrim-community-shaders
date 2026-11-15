@@ -4084,6 +4084,8 @@
     "feature.water_effects.key_feature_4": "Improved water visual fidelity",
     "feature.water_effects.key_feature_5": "Atmospheric underwater effects",
     "feature.water_effects.name": "Water Effects",
+    "feature.water_effects.physical_reflections": "Physically Based Reflections",
+    "feature.water_effects.physical_reflections_tooltip": "Uses a physically based water fresnel and a sharp sun disk highlight.\nDisable to use the fresnel and sun specular from the water type.",
     "feature.wetness_effects.active_preset": "Active Preset: %s",
     "feature.wetness_effects.advanced": "Advanced",
     "feature.wetness_effects.applied_puddle_wetness": "Puddle Wetness: %.2f (default %.2f × %.1fx)",

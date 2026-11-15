@@ -633,6 +633,12 @@ namespace SharedData
 		float3 BodyDisplayColor;  // main curtain color in display space
 	};
 
+	struct WaterEffectsSettings
+	{
+		uint PhysicalReflections;
+		uint3 pad0;
+	};
+
 	cbuffer FeatureData : register(b6)
 	{
 		GrassLightingSettings grassLightingSettings;
@@ -660,6 +666,7 @@ namespace SharedData
 		ViewAtmosphereSettings viewAtmosphereSettings;
 		ProceduralSunSettings proceduralSunSettings;
 		ProceduralAuroraSettings proceduralAuroraSettings;
+		WaterEffectsSettings waterEffectsSettings;
 	};
 
 	Texture2D<float4> DepthTexture : register(t17);
