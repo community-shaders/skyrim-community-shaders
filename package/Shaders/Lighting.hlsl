@@ -3136,15 +3136,17 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	color.xyz = ColorManagement::LinearToScene(color.xyz);
 #		if defined(PHYSICAL_SKY)
-	if (SharedData::physSkyData.enabled && (inWorld || inReflection)) {
+	// CompositeAerialPerspective is a no-op in world while the view atmosphere composites; skip before paying for the shared sky coordinate.
+	if (SharedData::physSkyData.enabled && (inReflection || (inWorld && !ViewAtmosphere::Enabled()))) {
 		const float3 physSkyViewDir = normalize(input.WorldPosition.xyz);
+		const float2 physSkyCoord = PhysSky::SkyViewCoord(physSkyViewDir);
 		if (inReflection && ViewAtmosphere::ReflectionEnabled() && (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::AdditiveLighting)) {
-			const ViewAtmosphere::Medium medium = PhysSky::SampleReflectionMedium(physSkyViewDir, length(input.WorldPosition.xyz), SampColorSampler, false);
+			const ViewAtmosphere::Medium medium = PhysSky::SampleReflectionMedium(physSkyViewDir, physSkyCoord, length(input.WorldPosition.xyz), SampColorSampler, false);
 			color.xyz = ColorManagement::SceneColor::ScaleByLinear(color.xyz, medium.transmittance);
 		} else if (inReflection)
-			color.xyz = PhysSky::CompositeAerialPerspectiveReflection(color.xyz, physSkyViewDir, length(input.WorldPosition.xyz), SampColorSampler);
+			color.xyz = PhysSky::CompositeAerialPerspectiveReflection(color.xyz, physSkyViewDir, physSkyCoord, length(input.WorldPosition.xyz), SampColorSampler);
 		else
-			color.xyz = PhysSky::CompositeAerialPerspective(color.xyz, physSkyViewDir, input.Position.xy, screenUV, length(input.WorldPosition.xyz), SampColorSampler);
+			color.xyz = PhysSky::CompositeAerialPerspective(color.xyz, physSkyCoord, input.Position.xy, screenUV, length(input.WorldPosition.xyz), SampColorSampler);
 	}
 #		endif
 

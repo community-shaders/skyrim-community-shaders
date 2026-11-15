@@ -125,7 +125,8 @@ namespace ViewAtmosphere
 	Medium Sample(float2 uv, float distance, SamplerState samp)
 	{
 		Medium result = Identity();
-		[unroll] for (uint level = 0; level < 3; ++level)
+		// Not unrolled: callers inline this several times and unrolling triples each copy.
+		[loop] for (uint level = 0; level < 3; ++level)
 		{
 			const Grid grid = Data[0].grids[level];
 			if (distance <= grid.depth.x)
