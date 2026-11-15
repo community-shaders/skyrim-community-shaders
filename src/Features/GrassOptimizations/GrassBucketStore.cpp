@@ -5,7 +5,8 @@
 
 GrassBucketStore::~GrassBucketStore()
 {
-	decltype(shapes) retiredShapes;
+	// Keep registrations alive until workers stop and buckets release their chunk pointers.
+	decltype(shapes) retainedShapes;
 	{
 		std::scoped_lock lock(pendingMutex);
 		stopping = true;
@@ -13,19 +14,22 @@ GrassBucketStore::~GrassBucketStore()
 		for (const auto& [native, record] : shapes)
 			record->registered.store(false, std::memory_order_release);
 
-		retiredShapes.swap(shapes);
+		retainedShapes.swap(shapes);
 	}
 
 	preparation.reset();
 	allocator.reset();
+
 	publishedSnapshot.store(nullptr, std::memory_order_release);
 	cullSnapshot.reset();
 	retiredSnapshot.reset();
-	retiredProxies.clear();
-	buckets.clear();
-	activeShapes.clear();
+
+	pendingCaptures.clear();
 	readyEvents.clear();
-	pendingEvents.clear();
+
+	buckets.clear();
+	retiredProxies.clear();
+	activeShapes.clear();
 }
 
 void GrassBucketStore::RegisterModel(RE::BSMultiStreamInstanceTriShape* shape, const char* modelPath)
@@ -37,7 +41,7 @@ void GrassBucketStore::RegisterModel(RE::BSMultiStreamInstanceTriShape* shape, c
 	if (auto previousRegistration = FindShape(shape); previousRegistration && previousRegistration->mesh == &mesh)
 		return;
 
-	auto registration = std::make_shared<GrassShape>();
+	auto registration = std::make_shared<GrassShapeRegistration>();
 	registration->native = shape;
 	registration->mesh = &mesh;
 	registration->geometry.reset(static_cast<RE::BSMultiStreamInstanceTriShape*>(shape->Clone()));
@@ -45,7 +49,7 @@ void GrassBucketStore::RegisterModel(RE::BSMultiStreamInstanceTriShape* shape, c
 	if (!registration->geometry)
 		return;
 
-	std::shared_ptr<GrassShape> previousRegistration;
+	std::shared_ptr<GrassShapeRegistration> previousRegistration;
 	{
 		std::scoped_lock lock(pendingMutex);
 		if (stopping)
@@ -65,10 +69,10 @@ void GrassBucketStore::RegisterModel(RE::BSMultiStreamInstanceTriShape* shape, c
 	std::vector<uint32_t> groupIndices;
 	{
 		EngineGroupLock lock;
-		const auto& instances = shape->GetMultiStreamTrishapeRuntimeData().instanceGroups;
+		const auto& engineGroups = shape->GetMultiStreamTrishapeRuntimeData().instanceGroups;
 
-		for (uint32_t i = 0; i < instances.size(); ++i) {
-			if (instances[i])
+		for (uint32_t i = 0; i < engineGroups.size(); ++i) {
+			if (engineGroups[i])
 				groupIndices.push_back(i);
 		}
 	}
@@ -110,15 +114,15 @@ void GrassBucketStore::CaptureQueuedGroups()
 	}
 }
 
-void GrassBucketStore::CaptureEngineGroup(const std::shared_ptr<GrassShape>& registration, uint32_t engineGroup)
+void GrassBucketStore::CaptureEngineGroup(const std::shared_ptr<GrassShapeRegistration>& registration, uint32_t engineGroup)
 {
 	auto* shape = registration->native;
 	auto property = shape->GetGeometryRuntimeData().shaderProperty;
 	if (!property || property->GetRTTI() != globals::rtti::BSGrassShaderPropertyRTTI.get())
 		return;
 
-	const auto& groups = shape->GetMultiStreamTrishapeRuntimeData().instanceGroups;
-	const auto* group = engineGroup < groups.size() ? groups[engineGroup] : nullptr;
+	const auto& engineGroups = shape->GetMultiStreamTrishapeRuntimeData().instanceGroups;
+	const auto* group = engineGroup < engineGroups.size() ? engineGroups[engineGroup] : nullptr;
 	const auto* vertexBuffer = group ? group->vertexBuffer : nullptr;
 	if (!vertexBuffer || !vertexBuffer->m_data || !group->instanceCount)
 		return;
@@ -132,7 +136,7 @@ void GrassBucketStore::CaptureEngineGroup(const std::shared_ptr<GrassShape>& reg
 	capture->shape = registration;
 	capture->slice.owner = registration.get();
 	capture->slice.engineGroup = engineGroup;
-	capture->asset.key.mesh = registration->mesh;
+	capture->drawResources.key.mesh = registration->mesh;
 	const auto* data = static_cast<const uint8_t*>(vertexBuffer->m_data);
 	capture->sourceData.assign(data, data + (size_t)group->instanceCount * kGrassStride);
 
@@ -154,6 +158,7 @@ void GrassBucketStore::RemoveEngineGroup(RE::BSMultiStreamInstanceTriShape* shap
 
 void GrassBucketStore::StageRemoval(RE::BSMultiStreamInstanceTriShape* shape)
 {
+	// Engine-reference destruction can re-enter the hooks, so release it outside pendingMutex.
 	decltype(shapes)::node_type retired;
 	{
 		std::scoped_lock lock(pendingMutex);
@@ -192,23 +197,23 @@ std::optional<PendingCapture> GrassBucketStore::CaptureMetadata(RE::BSMultiStrea
 	const auto& bound = shape->GetModelData().modelBound;
 
 	PendingCapture capture;
-	auto& asset = capture.asset;
-	auto& draw = asset.key.draw;
-	asset.vertexBuffer.copy_from(reinterpret_cast<ID3D11Buffer*>(rendererData->vertexBuffer));
-	asset.indexBuffer.copy_from(reinterpret_cast<ID3D11Buffer*>(rendererData->indexBuffer));
+	auto& drawResources = capture.drawResources;
+	auto& draw = drawResources.key.draw;
+	drawResources.vertexBuffer.copy_from(reinterpret_cast<ID3D11Buffer*>(rendererData->vertexBuffer));
+	drawResources.indexBuffer.copy_from(reinterpret_cast<ID3D11Buffer*>(rendererData->indexBuffer));
 
-	asset.material.reset(material);
+	drawResources.material.reset(material);
 	// TruePBR marks converted grass properties with kMenuScreen.
 	draw.pbrMaterial = grassProperty->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kMenuScreen);
 	draw.sphereNormal = grassProperty->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kEffectLighting);
-	asset.key.material = GrassMeshLibrary::CaptureMaterial(material, draw.pbrMaterial);
+	drawResources.key.material = GrassMeshLibrary::CaptureMaterial(material, draw.pbrMaterial);
 	draw.uniformScale = grassProperty->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kUniformScale);
-	asset.key.descVal = *reinterpret_cast<const uint64_t*>(&geometry.vertexDesc);
+	drawResources.key.vertexDesc = *reinterpret_cast<const uint64_t*>(&geometry.vertexDesc);
 
-	asset.diffuseTexture = RE::NiPointer<RE::NiSourceTexture>(texture);
+	drawResources.diffuseTexture = RE::NiPointer<RE::NiSourceTexture>(texture);
 	capture.slice.count = count;
 
-	asset.key.triCount = shape->GetTrishapeRuntimeData().triangleCount;
+	drawResources.key.triCount = shape->GetTrishapeRuntimeData().triangleCount;
 	draw.boundCenter = { bound.center.x, bound.center.y, bound.center.z };
 	draw.modelRadius = bound.radius;
 	draw.wavePeriod = grassProperty->wavePeriod;
@@ -226,13 +231,12 @@ std::optional<PendingCapture> GrassBucketStore::CaptureMetadata(RE::BSMultiStrea
 
 // The engine stores position and brightness in halves 0-3, rotation rows at (4,5,6), (8,9,10), (12,7,11), and size variance at 13.
 // Pack the orthonormal rotation as a quaternion with its largest component omitted; Common/GrassInstance.hlsli decodes it.
-void GrassBucketStore::PackInstances(GrassChunk& slice, const void* sourceData)
+void GrassBucketStore::PackInstances(GrassInstanceSlice& slice, const void* sourceData)
 {
 	using DirectX::PackedVector::XMConvertHalfToFloat;
 	slice.data.resize((size_t)slice.count * kSourceStride);
+	slice.groupBounds.assign((slice.count + kCullGroupSize - 1) / kCullGroupSize, {});
 	slice.maxScale = 1.0f;
-	RE::NiPoint3 localMin{ FLT_MAX, FLT_MAX, FLT_MAX };
-	RE::NiPoint3 localMax{ -FLT_MAX, -FLT_MAX, -FLT_MAX };
 
 	const auto* sourceBytes = static_cast<const uint8_t*>(sourceData);
 	const auto packComponent = [](float component) {
@@ -248,13 +252,15 @@ void GrassBucketStore::PackInstances(GrassChunk& slice, const void* sourceData)
 		for (int componentIndex = 0; componentIndex < 13; ++componentIndex)
 			values[componentIndex] = XMConvertHalfToFloat(halfValues[componentIndex]);
 
-		slice.maxScale = std::max(slice.maxScale, std::abs(1.0f + XMConvertHalfToFloat(halfValues[13])));
-		localMin.x = std::min(localMin.x, values[0]);
-		localMin.y = std::min(localMin.y, values[1]);
-		localMin.z = std::min(localMin.z, values[2]);
-		localMax.x = std::max(localMax.x, values[0]);
-		localMax.y = std::max(localMax.y, values[1]);
-		localMax.z = std::max(localMax.z, values[2]);
+		auto& bounds = slice.groupBounds[instanceIndex / kCullGroupSize];
+		const float scale = std::abs(1.0f + XMConvertHalfToFloat(halfValues[13]));
+		bounds.maxScale = std::max(bounds.maxScale, scale);
+		bounds.valid &= std::isfinite(values[0]) && std::isfinite(values[1]) && std::isfinite(values[2]) && std::isfinite(scale);
+
+		for (int axis = 0; axis < 3; ++axis) {
+			bounds.lo[axis] = std::min(bounds.lo[axis], values[axis]);
+			bounds.hi[axis] = std::max(bounds.hi[axis], values[axis]);
+		}
 
 		const DirectX::XMFLOAT3X3 rotation{ values[4], values[5], values[6], values[8], values[9], values[10], values[12], values[7], values[11] };
 		DirectX::XMFLOAT4 quaternion;
@@ -287,12 +293,20 @@ void GrassBucketStore::PackInstances(GrassChunk& slice, const void* sourceData)
 		std::memcpy(slice.data.data() + (size_t)instanceIndex * kSourceStride, packed, sizeof(packed));
 	}
 
-	slice.bounds.lo[0] = slice.origin.x + localMin.x;
-	slice.bounds.lo[1] = slice.origin.y + localMin.y;
-	slice.bounds.lo[2] = slice.origin.z + localMin.z;
-	slice.bounds.hi[0] = slice.origin.x + localMax.x;
-	slice.bounds.hi[1] = slice.origin.y + localMax.y;
-	slice.bounds.hi[2] = slice.origin.z + localMax.z;
+	const float origin[]{ slice.origin.x, slice.origin.y, slice.origin.z };
+	std::fill_n(slice.bounds.lo, 3, FLT_MAX);
+	std::fill_n(slice.bounds.hi, 3, -FLT_MAX);
+
+	for (auto& bounds : slice.groupBounds) {
+		slice.maxScale = std::max(slice.maxScale, bounds.maxScale);
+		for (int axis = 0; axis < 3; ++axis) {
+			bounds.lo[axis] += origin[axis];
+			bounds.hi[axis] += origin[axis];
+
+			slice.bounds.lo[axis] = std::min(slice.bounds.lo[axis], bounds.lo[axis]);
+			slice.bounds.hi[axis] = std::max(slice.bounds.hi[axis], bounds.hi[axis]);
+		}
+	}
 }
 
 void GrassBucketStore::QueueEvent(PendingEvent event)
@@ -300,7 +314,6 @@ void GrassBucketStore::QueueEvent(PendingEvent event)
 	if (stopping)
 		return;
 
-	std::visit([](auto& command) { command.shape->pendingChanges.fetch_add(1, std::memory_order_release); }, event);
 	if (auto* removal = std::get_if<Removal>(&event)) {
 		auto& groups = removal->shape->groups;
 
@@ -321,12 +334,11 @@ void GrassBucketStore::QueueEvent(PendingEvent event)
 	auto& group = capture.shape->groups[capture.slice.engineGroup];
 	if (group) {
 		group->current.store(false, std::memory_order_release);
-		capture.shape->pendingChanges.fetch_add(1, std::memory_order_release);
 		readyEvents.emplace_back(Removal{ capture.shape, capture.slice.engineGroup, group });
 	}
 
-	capture.slice.lifetime = group = std::make_shared<GrassGroup>();
-	pendingEvents.push_back(std::move(event));
+	capture.slice.lifetime = group = std::make_shared<GrassGroupLifetime>();
+	pendingCaptures.push_back(std::move(capture));
 
 	if (preparing)
 		return;
@@ -341,30 +353,28 @@ void GrassBucketStore::QueueEvent(PendingEvent event)
 
 void GrassBucketStore::PreparePending()
 {
-	std::vector<PendingEvent> events;
+	std::vector<PendingCapture> captures;
 	for (;;) {
 		{
 			std::scoped_lock lock(pendingMutex);
-			if (pendingEvents.empty()) {
+			if (pendingCaptures.empty()) {
 				preparing = false;
 				return;
 			}
-			events.swap(pendingEvents);
+			captures.swap(pendingCaptures);
 		}
 
-		for (auto& event : events) {
-			if (auto* capture = std::get_if<PendingCapture>(&event)) {
-				if (capture->shape->registered.load(std::memory_order_acquire) && capture->slice.lifetime->current.load(std::memory_order_acquire))
-					PackInstances(capture->slice, capture->sourceData.data());
-				capture->sourceData = std::vector<uint8_t>{};
-			}
+		for (auto& capture : captures) {
+			if (capture.shape->registered.load(std::memory_order_acquire) && capture.slice.lifetime->current.load(std::memory_order_acquire))
+				PackInstances(capture.slice, capture.sourceData.data());
+			capture.sourceData = std::vector<uint8_t>{};
 		}
 
 		{
 			std::scoped_lock lock(pendingMutex);
-			readyEvents.insert(readyEvents.end(), std::make_move_iterator(events.begin()), std::make_move_iterator(events.end()));
+			readyEvents.insert(readyEvents.end(), std::make_move_iterator(captures.begin()), std::make_move_iterator(captures.end()));
 		}
-		events.clear();
+		captures.clear();
 	}
 }
 
@@ -373,8 +383,15 @@ void GrassBucketStore::EndFrame()
 	retiredProxies.clear();
 	DrainPending();
 
-	if (buckets.empty())
-		compactionScratch.reset();
+	// Release shared buffers once no buckets use them.
+	if (buckets.empty()) {
+		uploadStaging.reset();
+		instancePool = {};
+		groupPool = {};
+		instancePoolGrowth.reset();
+		groupPoolGrowth.reset();
+		cullOutput = {};
+	}
 
 	PublishCullSnapshot();
 }
@@ -391,7 +408,7 @@ void GrassBucketStore::DrainPending()
 		return;
 
 	std::unordered_set<GrassBucket*> affected;
-	std::vector<std::unique_ptr<GrassChunk>> retired;
+	std::vector<std::unique_ptr<GrassInstanceSlice>> retired;
 
 	for (auto& event : events) {
 		if (auto* capture = std::get_if<PendingCapture>(&event))
@@ -412,7 +429,7 @@ void GrassBucketStore::DrainPending()
 			return false;
 
 		shape->admitted = false;
-		shape->current = nullptr;
+		shape->currentBucket = nullptr;
 
 		return true;
 	});
@@ -420,30 +437,29 @@ void GrassBucketStore::DrainPending()
 	RetireSlices(retired);
 }
 
-void GrassBucketStore::ApplyCapture(PendingCapture& capture, std::unordered_set<GrassBucket*>& affected, std::vector<std::unique_ptr<GrassChunk>>& retired)
+void GrassBucketStore::ApplyCapture(PendingCapture& capture, std::unordered_set<GrassBucket*>& affected, std::vector<std::unique_ptr<GrassInstanceSlice>>& retired)
 {
 	auto& shape = *capture.shape;
-	shape.pendingChanges.fetch_sub(1, std::memory_order_release);
 	if (!shape.registered.load(std::memory_order_acquire) || !capture.slice.lifetime->current.load(std::memory_order_acquire)) {
 		if (!capture.slice.data.empty())
-			retired.push_back(std::make_unique<GrassChunk>(std::move(capture.slice)));
+			retired.push_back(std::make_unique<GrassInstanceSlice>(std::move(capture.slice)));
 		return;
 	}
 
-	auto [bucketEntry, inserted] = buckets.try_emplace(capture.asset.key);
+	auto [bucketEntry, inserted] = buckets.try_emplace(capture.drawResources.key);
 	auto& bucket = bucketEntry->second;
 
 	if (inserted) {
-		bucket.asset = std::move(capture.asset);
-		if (!meshLibrary.CreateAsset(bucket.asset, capture.shape->geometry.get())) {
+		bucket.drawResources = std::move(capture.drawResources);
+		if (!meshLibrary.CreateDrawResources(bucket.drawResources, capture.shape->geometry.get())) {
 			buckets.erase(bucketEntry);
 			return;
 		}
 
-		proxyBuckets.emplace(bucket.asset.proxy.get(), &bucket);
-		const float meshCost = std::sqrt(std::max(1.0f, (float)bucket.asset.key.triCount / 8.0f));
+		const float meshCost = GrassMeshLibrary::MeshCost(3 * bucket.drawResources.key.triCount);
 		bucket.distScale = 1.0f / meshCost;
 		bucket.minPixelScale = meshCost;
+		snapshotDirty = true;
 	}
 
 	if (!shape.admitted) {
@@ -454,12 +470,12 @@ void GrassBucketStore::ApplyCapture(PendingCapture& capture, std::unordered_set<
 	if (affected.contains(&bucket))
 		PruneSlices(bucket);
 
-	if (shape.current && shape.current != &bucket) {
-		affected.insert(shape.current);
-		MigrateShapeSlices(*shape.current, bucket, shape);
+	if (shape.currentBucket && shape.currentBucket != &bucket) {
+		affected.insert(shape.currentBucket);
+		MigrateShapeSlices(*shape.currentBucket, bucket, shape);
 	}
 
-	shape.current = &bucket;
+	shape.currentBucket = &bucket;
 	if (auto previous = shape.chunks.find(capture.slice.engineGroup); previous != shape.chunks.end()) {
 		previous->second->bucket = nullptr;
 		PruneSlices(bucket);
@@ -467,19 +483,16 @@ void GrassBucketStore::ApplyCapture(PendingCapture& capture, std::unordered_set<
 		shape.chunks.erase(previous);
 	}
 
-	capture.slice.fadeStart = frameParams.fadeStart;
-
-	auto chunk = std::make_unique<GrassChunk>(std::move(capture.slice));
+	auto chunk = std::make_unique<GrassInstanceSlice>(std::move(capture.slice));
 	AppendSlice(bucket, *chunk);
 	shape.chunks.emplace(chunk->engineGroup, std::move(chunk));
-	snapshotDirty = true;
 }
 
-void GrassBucketStore::ApplyRemoval(const Removal& removal, std::unordered_set<GrassBucket*>& affected, std::vector<std::unique_ptr<GrassChunk>>& retired)
+void GrassBucketStore::ApplyRemoval(const Removal& removal, std::unordered_set<GrassBucket*>& affected, std::vector<std::unique_ptr<GrassInstanceSlice>>& retired)
 {
+	// Do not wait for older captures still being prepared; their lifetime checks reject them.
 	auto& shape = *removal.shape;
-	shape.pendingChanges.fetch_sub(1, std::memory_order_release);
-	const auto detach = [&](std::unique_ptr<GrassChunk>& chunk) {
+	const auto detach = [&](std::unique_ptr<GrassInstanceSlice>& chunk) {
 		affected.insert(chunk->bucket);
 		chunk->bucket = nullptr;
 		retired.push_back(std::move(chunk));
@@ -495,48 +508,18 @@ void GrassBucketStore::ApplyRemoval(const Removal& removal, std::unordered_set<G
 	}
 
 	if (shape.chunks.empty())
-		shape.current = nullptr;
-
-	snapshotDirty = true;
+		shape.currentBucket = nullptr;
 }
 
-void GrassBucketStore::AppendSlice(GrassBucket& bucket, GrassChunk& slice)
+void GrassBucketStore::AppendSlice(GrassBucket& bucket, GrassInstanceSlice& slice)
 {
-	maintenance.insert(&bucket);
+	pendingUploads.insert(&bucket);
 
 	slice.bucket = &bucket;
 	slice.bufferOffset = UINT32_MAX;
 	slice.firstCullGroup = UINT32_MAX;
 
-	if (slice.maxScale > bucket.maxScale) {
-		bucket.maxScale = slice.maxScale;
-		bucket.coarseValid = false;
-		bucket.clustersValid = false;
-	}
-
-	const auto& bounds = slice.bounds;
-
-	// Extend valid bounds here and recompute invalidated bounds after removals.
-	if (bucket.coarseValid || bucket.slices.empty()) {
-		const float padding = bucket.boundsPadding;
-		const RE::NiPoint3 lo{ bounds.lo[0] - padding, bounds.lo[1] - padding, bounds.lo[2] - padding };
-		const RE::NiPoint3 hi{ bounds.hi[0] + padding, bounds.hi[1] + padding, bounds.hi[2] + padding };
-
-		if (bucket.slices.empty()) {
-			bucket.coarseMin = lo;
-			bucket.coarseMax = hi;
-		} else {
-			bucket.coarseMin.x = std::min(bucket.coarseMin.x, lo.x);
-			bucket.coarseMin.y = std::min(bucket.coarseMin.y, lo.y);
-			bucket.coarseMin.z = std::min(bucket.coarseMin.z, lo.z);
-			bucket.coarseMax.x = std::max(bucket.coarseMax.x, hi.x);
-			bucket.coarseMax.y = std::max(bucket.coarseMax.y, hi.y);
-			bucket.coarseMax.z = std::max(bucket.coarseMax.z, hi.z);
-		}
-
-		bucket.coarseValid = true;
-	}
-
+	bucket.maxScale = std::max(bucket.maxScale, slice.maxScale);
 	bucket.totalInstances += slice.count;
 	bucket.slices.push_back(&slice);
 }
@@ -546,6 +529,7 @@ void GrassBucketStore::PruneSlices(GrassBucket& bucket)
 	const size_t originalCount = bucket.slices.size();
 	size_t retainedCount = 0;
 	uint32_t removedInstances = 0;
+	uint32_t removedResidentInstances = 0;
 	uint32_t removedClusteredSlices = 0;
 	uint32_t removedUploadedSlices = 0;
 
@@ -560,21 +544,24 @@ void GrassBucketStore::PruneSlices(GrassBucket& bucket)
 
 		removedInstances += slice.count;
 		if (index < bucket.uploadedSlices) {
+			// Dead groups upload zero counts before any cull reads the reused range.
+			instancePool.ranges.Free(slice.bufferOffset, slice.count);
+			removedResidentInstances += slice.count;
 			++removedUploadedSlices;
-			UpdateShapeResidency(slice, false);
 		}
 
 		if (index >= bucket.clusteredSlices)
 			continue;
 
 		++removedClusteredSlices;
-		// Keep removed groups in place with zero counts until the cached runs are rebuilt.
+		// Preserve group indices until the budgeted rebuild compacts them.
 		if (bucket.clustersValid && slice.firstCullGroup != UINT32_MAX) {
 			const uint32_t groupCount = (slice.count + kCullGroupSize - 1) / kCullGroupSize;
 			for (uint32_t groupIndex = 0; groupIndex < groupCount; ++groupIndex)
 				bucket.cullGroups[slice.firstCullGroup + groupIndex].count = 0;
 			bucket.deadGroups += groupCount;
 			bucket.dirtyGroupRanges.emplace_back(slice.firstCullGroup, slice.firstCullGroup + groupCount);
+			RetireRunGroups(bucket, slice.firstCullGroup, groupCount);
 		}
 	}
 
@@ -586,30 +573,23 @@ void GrassBucketStore::PruneSlices(GrassBucket& bucket)
 	bucket.uploadedSlices -= removedUploadedSlices;
 
 	bucket.clusteredSlices -= removedClusteredSlices;
-	if (bucket.deadGroups > bucket.cullGroups.size() / 2)
-		bucket.clustersValid = false;
+	// Reclaim group-pool space when more than a quarter of the groups are dead.
+	if (bucket.deadGroups > bucket.cullGroups.size() / 4)
+		bucket.rebuildPending = true;
 
 	bucket.totalInstances -= removedInstances;
+	bucket.residentInstances -= removedResidentInstances;
 
 	if (bucket.slices.empty()) {
-		bucket.residentInstances = 0;
 		bucket.clusteredSlices = 0;
 		bucket.clustersValid = false;
-		bucket.coarseValid = false;
-		bucket.fragmented = false;
-		return;
-	}
-
-	bucket.coarseValid = false;
-	if (removedUploadedSlices) {
-		bucket.fragmented = true;
-		maintenance.insert(&bucket);
+		bucket.coarseBounds = SliceBounds::Empty();
 	}
 }
 
-void GrassBucketStore::MigrateShapeSlices(GrassBucket& source, GrassBucket& destination, GrassShape& shape)
+void GrassBucketStore::MigrateShapeSlices(GrassBucket& source, GrassBucket& destination, GrassShapeRegistration& shape)
 {
-	std::vector<GrassChunk*> migratingSlices;
+	std::vector<GrassInstanceSlice*> migratingSlices;
 	for (auto* chunk : source.slices) {
 		if (chunk->bucket == &source && chunk->owner == &shape) {
 			chunk->bucket = nullptr;
@@ -625,82 +605,19 @@ void GrassBucketStore::MigrateShapeSlices(GrassBucket& source, GrassBucket& dest
 
 void GrassBucketStore::EraseBucket(GrassBucket& bucket)
 {
-	maintenance.erase(&bucket);
-	meshLibrary.ReleaseAsset(bucket.asset);
-	retiredProxies.push_back(bucket.asset.proxy);
-	proxyBuckets.erase(bucket.asset.proxy.get());
-	buckets.erase(bucket.asset.key);
+	pendingUploads.erase(&bucket);
+	groupPool.ranges.Free(bucket.groupBase, std::exchange(bucket.groupCapacity, 0));
+	meshLibrary.ReleaseDrawResources(bucket.drawResources);
+	retiredProxies.push_back(bucket.drawResources.proxy);
+	buckets.erase(bucket.drawResources.key);
+	snapshotDirty = true;
 }
 
-GrassBucket* GrassBucketStore::FindBucket(const RE::BSGeometry* shape)
-{
-	const auto entry = proxyBuckets.find(shape);
-	return entry == proxyBuckets.end() ? nullptr : entry->second;
-}
-
-std::shared_ptr<GrassShape> GrassBucketStore::FindShape(RE::BSMultiStreamInstanceTriShape* shape)
+std::shared_ptr<GrassShapeRegistration> GrassBucketStore::FindShape(RE::BSMultiStreamInstanceTriShape* shape)
 {
 	std::scoped_lock lock(pendingMutex);
 	const auto entry = shapes.find(shape);
 	return entry == shapes.end() ? nullptr : entry->second;
-}
-
-bool GrassBucketStore::IsShapeOptimized(const CullSnapshot::NativeShape& native, uint32_t frame)
-{
-	// An unregistered shape's native geometry may already be released, so it is never read.
-	const auto& shape = *native.registration;
-	if (!shape.registered.load(std::memory_order_acquire))
-		return false;
-
-	// A group replaced mid-frame keeps the group count, so staged changes are checked on every call.
-	if (shape.pendingChanges.load(std::memory_order_acquire))
-		return false;
-
-	const uint32_t groups = shape.native->GetMultiStreamTrishapeRuntimeData().activeGroupCount;
-	if (native.optimizedFrame != frame || native.optimizedGroups != groups) {
-		native.optimizedFrame = frame;
-		native.optimizedGroups = groups;
-		native.optimized = IsShapeOptimized(shape);
-	}
-	return native.optimized;
-}
-
-bool GrassBucketStore::IsShapeOptimized(const GrassShape& shape)
-{
-	const auto& native = shape.native->GetMultiStreamTrishapeRuntimeData();
-	// Cached groups do not update the engine's total instance count.
-	return !shape.pendingChanges.load(std::memory_order_acquire) && shape.current && shape.current->optimizedReady && shape.residentGroups == native.activeGroupCount &&
-	       shape.chunks.size() == native.activeGroupCount;
-}
-
-bool GrassBucketStore::IsGroupOptimized(const GrassShape& shape, uint32_t group)
-{
-	if (!shape.current || !shape.current->optimizedReady)
-		return false;
-
-	const auto entry = shape.chunks.find(group);
-	if (entry == shape.chunks.end())
-		return false;
-
-	const auto& chunk = *entry->second;
-	return chunk.lifetime->current.load(std::memory_order_acquire) && chunk.bufferOffset != UINT32_MAX;
-}
-
-void GrassBucketStore::UpdateShapeResidency(const GrassChunk& slice, bool resident)
-{
-	auto& shape = *slice.owner;
-	const bool wasResident = shape.residentInstances != 0;
-
-	if (resident) {
-		shape.residentInstances += slice.count;
-		++shape.residentGroups;
-	} else {
-		shape.residentInstances -= slice.count;
-		--shape.residentGroups;
-	}
-
-	if (wasResident != (shape.residentInstances != 0))
-		snapshotDirty = true;
 }
 
 void GrassBucketStore::PublishCullSnapshot()
@@ -709,26 +626,45 @@ void GrassBucketStore::PublishCullSnapshot()
 		return;
 
 	auto snapshot = std::make_unique<CullSnapshot>();
-	for (const auto& shape : activeShapes) {
-		const bool direct = shape->residentInstances && shape->current && shape->current->optimizedReady;
-		snapshot->nativeShapes.emplace(shape->native, CullSnapshot::NativeShape{ shape, direct });
-	}
 
-	for (const auto& [key, bucket] : buckets) {
-		if (!bucket.slices.empty())
-			snapshot->proxies.push_back(bucket.asset.proxy);
+	// Buckets bind their own materials, but share a proxy only when engine pass state matches.
+	struct PassKey
+	{
+		uint64_t shaderFlags = 0;
+		uint64_t vertexDesc = 0;
+		uint16_t alphaFlags = 0;
+		uint8_t alphaThreshold = 0;
+		bool hasAlpha = false;
+
+		bool operator==(const PassKey&) const = default;
+	};
+	std::vector<PassKey> groupKeys;
+
+	for (auto& [key, bucket] : buckets) {
+		if (bucket.slices.empty())
+			continue;
+
+		const auto& geometry = bucket.drawResources.proxy->GetGeometryRuntimeData();
+		const auto* alpha = geometry.alphaProperty.get();
+		const PassKey passKey{
+			.shaderFlags = geometry.shaderProperty->flags.underlying(),
+			.vertexDesc = std::bit_cast<uint64_t>(geometry.vertexDesc),
+			.alphaFlags = alpha ? alpha->alphaFlags : uint16_t{ 0 },
+			.alphaThreshold = alpha ? alpha->alphaThreshold : uint8_t{ 0 },
+			.hasAlpha = alpha != nullptr
+		};
+
+		const auto existingGroup = std::ranges::find(groupKeys, passKey);
+		if (existingGroup == groupKeys.end()) {
+			groupKeys.push_back(passKey);
+			snapshot->proxyGroups.push_back({ bucket.drawResources.proxy, { &bucket } });
+		} else {
+			snapshot->proxyGroups[existingGroup - groupKeys.begin()].buckets.push_back(&bucket);
+		}
 	}
 
 	retiredSnapshot = std::move(cullSnapshot);
 	cullSnapshot = std::move(snapshot);
 	publishedSnapshot.store(cullSnapshot.get(), std::memory_order_release);
 	snapshotDirty = false;
-}
-
-void GrassBucketStore::SetOptimizedReady(GrassBucket& bucket, bool ready)
-{
-	if (bucket.optimizedReady != ready) {
-		bucket.optimizedReady = ready;
-		snapshotDirty = true;
-	}
 }

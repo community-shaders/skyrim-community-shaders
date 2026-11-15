@@ -47,7 +47,7 @@ groupshared BoundingBoxPacked SharedBoundingBoxes[64];
 	float2 cellCentreMS = cellID + 0.5 - TEXTURE_SIZE / 2;
 	cellCentreMS = cellCentreMS / TEXTURE_SIZE * WORLD_SIZE + PosOffset.xy;
 
-	// Check if the cell is newly added
+	// Newly exposed clipmap texels must not reuse stale collision.
 	uint2 validMin = (uint2)max(0, ValidMargin.xy);
 	uint2 validMax = TEXTURE_SIZE - 1 + (uint2)min(0, ValidMargin.xy);
 	bool isValid = all(cellID >= validMin) && all(cellID <= validMax);
@@ -61,28 +61,22 @@ groupshared BoundingBoxPacked SharedBoundingBoxes[64];
 		previousCollision = Collision[dispatchThreadId.xy].xy;
 		previousCollision = lerp(ZRANGE.x, ZRANGE.y, previousCollision);
 
-		// Apply camera height change
+		// Keep stored heights relative to the current camera.
 		previousCollision += CameraHeightDelta;
 
-		// Temporal decay
 		collision = previousCollision + fadeRate;
 	}
 
 	for (uint i = 0; i < BoundingBoxCount; i++) {
 		BoundingBoxPacked boundingBox = SharedBoundingBoxes[i];
-		// Test high level collision
 		if (all(cellCentreMS >= boundingBox.MinExtent && cellCentreMS <= boundingBox.MaxExtent)) {
-			// Process collision data
 			for (uint j = boundingBox.IndexStart; j < boundingBox.IndexEnd; j++) {
 				float4 collisionInstance = CollisionInstances[j];
 				float radius = collisionInstance.w;
-				// Check if collision can lower the height
 				if (collisionInstance.z - radius < collision.y) {
-					// Get the lowest point of the sphere at this cell position
 					float dist = distance(collisionInstance.xy, cellCentreMS);
-					// Check if we're within the sphere's radius
 					if (dist < radius) {
-						// Get sphere geometry
+						// Use the lower sphere surface at this texel.
 						float heightFromCenter = sqrt(radius * radius - dist * dist);
 						float height = collisionInstance.z - heightFromCenter;
 

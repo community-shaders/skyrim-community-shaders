@@ -1,4 +1,4 @@
-// The live main depth uses an R24_UNORM_X8_TYPELESS view.
+// Reduce 4x4 blocks to farthest depth (0 near, 1 far).
 Texture2D<unorm float> SrcDepth : register(t0);
 
 RWTexture2D<float> HiZ : register(u0);
@@ -16,18 +16,18 @@ cbuffer HiZParams : register(b0)
 	if (any(tid.xy >= DstSize))
 		return;
 
-	const int2 src = int2(tid.xy) * HIZ_DOWNSAMPLE_FACTOR;
+	const int2 sourceOrigin = int2(tid.xy) * HIZ_DOWNSAMPLE_FACTOR;
 
-	// Out of bounds reads as far, so an edge tile reduces to 1.0 and can only under-cull.
-	float d = 0.0;
+	// Far-depth padding keeps partial tiles from occluding visible geometry.
+	float maxDepth = 0.0;
 	[unroll] for (int y = 0; y < HIZ_DOWNSAMPLE_FACTOR; ++y)
 	{
 		[unroll] for (int x = 0; x < HIZ_DOWNSAMPLE_FACTOR; ++x)
 		{
-			const int2 p = src + int2(x, y);
-			d = max(d, all(p < int2(SrcSize)) ? SrcDepth.Load(int3(p, 0)) : 1.0);
+			const int2 sourcePixel = sourceOrigin + int2(x, y);
+			maxDepth = max(maxDepth, all(sourcePixel < int2(SrcSize)) ? SrcDepth.Load(int3(sourcePixel, 0)) : 1.0);
 		}
 	}
 
-	HiZ[tid.xy] = d;
+	HiZ[tid.xy] = maxDepth;
 }
