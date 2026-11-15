@@ -919,16 +919,18 @@ PS_OUTPUT main(PS_INPUT input)
 	applyViewRayShadow = applyViewRayShadow && !isEnbVolumetricFog;
 #		endif
 	if (applyViewRayShadow) {
+		// One call site: each GetLightingShadow inlines the whole view-ray shadow loop.
+		float3 unshadowedColor = lightColor;
 #		if defined(PHYSICAL_SKY)
-		if (SharedData::physSkyData.enabled && SharedData::physSkyData.lightSkyStatics) {
-			float3 sceneLighting = ShadowSampling::GetSceneLightingColor(input.WorldPosition.xyz);
-			float3 skyStaticLighting = GetLightingShadow(sceneLighting, input.WorldPosition.xyz, input.Position.xy, depth, shadowVariance);
-			lightColor = baseColor.xyz * skyStaticLighting * SharedData::physSkyData.skyStaticsBrightness / Math::PI;
-		} else
+		const bool lightSkyStatics = SharedData::physSkyData.enabled && SharedData::physSkyData.lightSkyStatics;
+		if (lightSkyStatics)
+			unshadowedColor = ShadowSampling::GetSceneLightingColor(input.WorldPosition.xyz);
 #		endif
-		{
-			lightColor = GetLightingShadow(lightColor, input.WorldPosition.xyz, input.Position.xy, depth, shadowVariance);
-		}
+		lightColor = GetLightingShadow(unshadowedColor, input.WorldPosition.xyz, input.Position.xy, depth, shadowVariance);
+#		if defined(PHYSICAL_SKY)
+		if (lightSkyStatics)
+			lightColor = baseColor.xyz * lightColor * SharedData::physSkyData.skyStaticsBrightness / Math::PI;
+#		endif
 	}
 #	endif
 

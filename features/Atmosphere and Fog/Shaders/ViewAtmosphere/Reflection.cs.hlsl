@@ -160,8 +160,10 @@ float FogOpticalDepth(float3 direction, float nearDistance, float farDistance)
 		return 0.0;
 	const float height0 = FrameBuffer::CameraPosAdjust.z + direction.z * nearDistance;
 	const float height1 = FrameBuffer::CameraPosAdjust.z + direction.z * farDistance;
-	float integral = fog.fogDensity * 0.001 * ExponentialHeightFog::HeightDensityIntegral(height0 - fog.fogHeight, height1 - fog.fogHeight, fog.fogHeightFalloff * 0.001);
-	integral += fog.fogDensity2 * 0.001 * ExponentialHeightFog::HeightDensityIntegral(height0 - fog.fogHeight2, height1 - fog.fogHeight2, fog.fogHeightFalloff2 * 0.001);
+	const float2 fogHeights = float2(fog.fogHeight, fog.fogHeight2);
+	const float2 layerIntegrals = ExponentialHeightFog::HeightDensityIntegral(height0 - fogHeights, height1 - fogHeights, float2(fog.fogHeightFalloff, fog.fogHeightFalloff2) * 0.001);
+	float integral = fog.fogDensity * 0.001 * layerIntegrals.x;
+	integral += fog.fogDensity2 * 0.001 * layerIntegrals.y;
 	float scale = 0.69314718056;
 	if (fog.volumetricFogEnabled) {
 		scale = fog.volumetricFogExtinctionScale * (0.5 / 0.69314718056);

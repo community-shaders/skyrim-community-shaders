@@ -212,14 +212,15 @@ namespace ExponentialHeightFog
 		return max(localDensity * SharedData::exponentialHeightFogSettings.volumetricFogExtinctionScale * 0.5f, 0.0f);
 	}
 
-	float HeightDensityIntegral(float startHeight, float endHeight, float heightFalloff)
+	/** @brief Per-layer height density integral; both fog layers are evaluated together so FXC emits one copy. */
+	float2 HeightDensityIntegral(float2 startHeight, float2 endHeight, float2 heightFalloff)
 	{
-		const float lower = min(startHeight, endHeight);
-		const float upper = max(startHeight, endHeight);
-		const float belowFraction = upper <= 0.0 ? 1.0 : saturate(-lower / max(upper - lower, 1e-6));
-		const float falloff = heightFalloff * (max(upper, 0.0) - max(lower, 0.0));
-		const float integral = falloff > 0.01 ? (1.0 - exp2(-falloff)) / max(falloff, 1e-6) :
-		                                        0.69314718056 - 0.24022650695 * falloff;
+		const float2 lower = min(startHeight, endHeight);
+		const float2 upper = max(startHeight, endHeight);
+		const float2 belowFraction = upper <= 0.0 ? 1.0 : saturate(-lower / max(upper - lower, 1e-6));
+		const float2 falloff = heightFalloff * (max(upper, 0.0) - max(lower, 0.0));
+		const float2 integral = falloff > 0.01 ? (1.0 - exp2(-falloff)) / max(falloff, 1e-6) :
+		                                         0.69314718056 - 0.24022650695 * falloff;
 		return lerp(exp2(-heightFalloff * max(lower, 0.0)) * integral, 0.69314718056, belowFraction);
 	}
 

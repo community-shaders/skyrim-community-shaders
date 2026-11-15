@@ -238,11 +238,9 @@ namespace ExponentialHeightFog
 		}
 
 		const float rayEndHeight = cameraWS.z + viewToPos.z;
-		float exponentialHeightLineIntegralCalc =
-			fogDensity * HeightDensityIntegral(rayStartHeight - SharedData::exponentialHeightFogSettings.fogHeight,
-							 rayEndHeight - SharedData::exponentialHeightFogSettings.fogHeight, fogHeightFalloff) +
-			fogDensity2 * HeightDensityIntegral(rayStartHeight - SharedData::exponentialHeightFogSettings.fogHeight2,
-							  rayEndHeight - SharedData::exponentialHeightFogSettings.fogHeight2, fogHeightFalloff2);
+		const float2 fogHeights = float2(SharedData::exponentialHeightFogSettings.fogHeight, SharedData::exponentialHeightFogSettings.fogHeight2);
+		const float2 layerIntegrals = HeightDensityIntegral(rayStartHeight - fogHeights, rayEndHeight - fogHeights, float2(fogHeightFalloff, fogHeightFalloff2));
+		float exponentialHeightLineIntegralCalc = fogDensity * layerIntegrals.x + fogDensity2 * layerIntegrals.y;
 		float exponentialHeightLineIntegral = exponentialHeightLineIntegralCalc * rayLength;
 
 		float expFogFactor = saturate(exp2(-exponentialHeightLineIntegral));
