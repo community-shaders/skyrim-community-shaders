@@ -420,6 +420,16 @@ float GetWaterSunDiskCos()
 	return cosAngularRadius;
 }
 
+/** @brief Physical Sky switches water to a fixed-F0 fresnel and a sun disk highlight; otherwise the water form's values apply. */
+bool UsePhysicalWaterReflections()
+{
+#		if defined(PHYSICAL_SKY)
+	return SharedData::physSkyData.enabled != 0;
+#		else
+	return false;
+#		endif
+}
+
 float GetWaterFresnel(float cosTheta)
 {
 	return BRDF::F_Schlick(WATER_F0.xxx, saturate(cosTheta)).x;
@@ -967,7 +977,7 @@ float GetFresnelValue(float3 normal, float3 viewDirection)
 		return fresnel * SharedData::enbSettings.WaterReflectionAmount;
 	}
 
-	if (SharedData::waterEffectsSettings.PhysicalReflections)
+	if (UsePhysicalWaterReflections())
 		return GetWaterFresnel(dot(-viewDirection, actualNormal));
 
 	return (1 - FresnelRI.x) * pow(viewAngle, 5) + FresnelRI.x;
@@ -1072,7 +1082,7 @@ float3 GetSunColor(float3 normal, float3 viewDirection, float3 worldPosition)
 		return 0.0.xxx;
 
 	float lightDistribution;
-	if (SharedData::waterEffectsSettings.PhysicalReflections) {
+	if (UsePhysicalWaterReflections()) {
 		lightDistribution = GetWaterDeltaLightDistributionFromCos(normal, viewDirection, SunDir.xyz, GetWaterSunDiskCos()) * GetWaterDirectSpecularScale();
 	} else {
 		float3 reflectionDirection = reflect(viewDirection, normal);
