@@ -51,29 +51,10 @@ namespace ImageBasedLighting
 	// Ratio / settings helpers
 	// ============================================================================
 
-	/// Compute ratio between DALC and IBL for brightness/color matching.
-	float3 GetIBLRatio()
+	/// Load the precomputed DALC-to-IBL ratio.
+	float3 GetCachedIBLRatio()
 	{
-		float3 dalc0 = Color::Ambient(SharedData::GetAmbient(0.f));
-
-		sh2 iblSHR = EnvIBLTexture.Load(int3(0, 0, 0));
-		sh2 iblSHG = EnvIBLTexture.Load(int3(1, 0, 0));
-		sh2 iblSHB = EnvIBLTexture.Load(int3(2, 0, 0));
-
-		float colorR = SphericalHarmonics::SHHallucinateZH3Irradiance(iblSHR, float3(0, 0, 0));
-		float colorG = SphericalHarmonics::SHHallucinateZH3Irradiance(iblSHG, float3(0, 0, 0));
-		float colorB = SphericalHarmonics::SHHallucinateZH3Irradiance(iblSHB, float3(0, 0, 0));
-		float3 ibl0 = float3(colorR, colorG, colorB) / Math::PI;
-
-		if (SharedData::iblSettings.DALCMode == 1) {
-			float3 ratio = dalc0 / max(ibl0, 0.001);
-			return lerp(1.0, ratio, SharedData::iblSettings.DALCAmount);
-		} else {
-			float dalcLum = Color::RGBToLuminance(dalc0);
-			float iblLum = Color::RGBToLuminance(ibl0);
-			float ratio = (iblLum > 0.001) ? (dalcLum / iblLum) : 1.0;
-			return lerp(1.0, ratio, SharedData::iblSettings.DALCAmount);
-		}
+		return EnvIBLTexture.Load(int3(3, 0, 0)).xyz;
 	}
 
 	// ============================================================================
@@ -82,8 +63,8 @@ namespace ImageBasedLighting
 
 	float3 GetEnvIBLColor(float3 rayDir)
 	{
-		float3 ratio = GetIBLRatio();
-		return Color::Saturation(GetEnvIBL(rayDir), SharedData::iblSettings.EnvIBLSaturation) * SharedData::iblSettings.EnvIBLScale * ratio;
+		float3 iblRatio = GetCachedIBLRatio();
+		return Color::Saturation(GetEnvIBL(rayDir), SharedData::iblSettings.EnvIBLSaturation) * SharedData::iblSettings.EnvIBLScale * iblRatio;
 	}
 
 	float3 GetSkyIBLColor(float3 rayDir)
