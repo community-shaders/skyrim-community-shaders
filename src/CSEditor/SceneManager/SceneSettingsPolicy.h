@@ -63,9 +63,8 @@ namespace SceneSettingsPolicy
 		{ "PostProcessing", "Color Grading and Tone Mapping", "currentTonemapper" },
 		{ "PostProcessing", "Color Grading and Tone Mapping", "tonemapParams" },
 		{ "PostProcessing", "Motion Blur", "VelocityScale" },
-		// Shader defines: a change recompiles every SSGI compute shader on the render thread.
-		{ "ScreenSpaceGI", "ResolutionMode" },
 		{ "ScreenSpaceGI", "EnableGI" },
+		{ "ScreenSpaceGI", "ResolutionMode" },
 		{ "ScreenSpaceGI", "EnableTemporalDenoiser" },
 		{ "ScreenSpaceGI", "EnableExperimentalSpecularGI" },
 		// Debug section: backend log verbosity, read only at startup

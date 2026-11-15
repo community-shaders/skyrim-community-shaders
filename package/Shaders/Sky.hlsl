@@ -490,7 +490,6 @@ PS_OUTPUT main(PS_INPUT input)
 
 #		if defined(HDR_OUTPUT)
 #			if defined(EFFECTS11_PROCEDURAL_SUN)
-	// The procedural disc already carries physical radiance
 	[branch] if (!proceduralSunActive)
 	{
 #			endif

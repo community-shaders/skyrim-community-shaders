@@ -82,7 +82,6 @@ public:
 
 	/** @brief Checks whether a valid heightmap is loaded for the current worldspace. */
 	bool IsHeightMapReady();
-	/** @brief Checks whether shadows are enabled and the shadow height texture is computed for the current heightmap. */
 	bool IsShadowMapReady();
 
 	/** @brief Scans for heightmap DDS files and creates constant buffers and compute shaders. */
