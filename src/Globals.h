@@ -222,6 +222,7 @@ namespace globals
 		extern float* deltaTime;
 		extern RE::BSUtilityShader* utilityShader;
 		extern RE::PlayerCharacter* player;
+		extern RE::BGSGrassManager* grassManager;
 		extern RE::Sky* sky;
 		extern RE::UI* ui;
 		extern RE::Calendar* calendar;
