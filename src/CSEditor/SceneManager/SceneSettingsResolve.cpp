@@ -178,6 +178,11 @@ bool SceneSettingsManager::IsLocationTransitionFinished(const LocationTransition
 	return transition.duration <= 0.0f || now - transition.startTime >= transition.duration;
 }
 
+bool SceneSettingsManager::IsWithinTransitionTolerance(float lhs, float rhs)
+{
+	return std::abs(lhs - rhs) <= kBlendEpsilon * std::max(std::abs(lhs), std::abs(rhs));
+}
+
 void SceneSettingsManager::StartLocationTransitions(
 	const ResolvedSettingMap& resolved, float now, bool animateChanges)
 {
@@ -242,7 +247,7 @@ void SceneSettingsManager::StartLocationTransitions(
 		const auto targetValue = targetJson.get<float>();
 		if (!std::isfinite(startValue) || !std::isfinite(targetValue))
 			continue;
-		if (duration <= 0.0f || targetValue == startValue) {
+		if (duration <= 0.0f || IsWithinTransitionTolerance(targetValue, startValue)) {
 			if (activeLocationTransitions.erase(address) != 0)
 				locationTransitionBatchesDirty = true;
 			continue;
@@ -378,7 +383,7 @@ void SceneSettingsManager::RetireFinishedLocationTransitions(float now)
 		auto appliedIt = appliedSettings.find(address);
 		if (!IsLocationTransitionFinished(transition, now) || appliedIt == appliedSettings.end() ||
 			!IsNumericValue(appliedIt->second) ||
-			!AppliedValuesEqual(appliedIt->second, json(transition.targetValue))) {
+			!IsWithinTransitionTolerance(appliedIt->second.get<float>(), transition.targetValue)) {
 			++transitionIt;
 			continue;
 		}
@@ -710,6 +715,7 @@ void SceneSettingsManager::RestoreAppliedSettings()
 		// user's original value with nothing left to retry from.
 		if (!FeatureRetainedUpdates(*feature, featureShortName, updates)) {
 			recordRestoreFailure(std::format("{} did not retain restored base settings", featureShortName));
+			featureApplyDocuments.erase(featureShortName);
 			continue;
 		}
 		restoreFailureWarnings.erase(featureShortName);
@@ -722,11 +728,13 @@ void SceneSettingsManager::RestoreAppliedSettings()
 			baselineSettings.erase(item.address);
 		}
 		appliedFeatureNames.erase(featureShortName);
+		featureApplyDocuments.erase(featureShortName);
 	}
 
 	if (appliedSettings.empty()) {
 		baselineSettings.clear();
 		appliedFeatureNames.clear();
+		featureApplyDocuments.clear();
 		restoreFailureWarnings.clear();
 		restoreRetryAfter.clear();
 	} else {
@@ -1025,6 +1033,7 @@ void SceneSettingsManager::InvalidateFeatureSnapshot(std::string_view featureSho
 	locationOverridesDirty = true;
 	if (featureShortName.empty()) {
 		featureBaseSnapshots.clear();
+		featureApplyDocuments.clear();
 		pendingApplyVerifications.clear();
 		verifiedApplySignatures.clear();
 		std::erase_if(baselineSettings,
@@ -1033,6 +1042,7 @@ void SceneSettingsManager::InvalidateFeatureSnapshot(std::string_view featureSho
 	}
 	const auto featureName = std::string(featureShortName);
 	featureBaseSnapshots.erase(featureName);
+	featureApplyDocuments.erase(featureName);
 	pendingApplyVerifications.erase(featureName);
 	verifiedApplySignatures.erase(featureName);
 	std::erase_if(baselineSettings, [&](const auto& item) {
@@ -1045,6 +1055,9 @@ void SceneSettingsManager::PruneAppliedFeatureName(const std::string& featureSho
 	if (std::none_of(appliedSettings.begin(), appliedSettings.end(),
 			[&](const auto& item) { return item.first.featureShortName == featureShortName; })) {
 		appliedFeatureNames.erase(featureShortName);
+		// The base settings are editable again from here, so the next apply has to re-snapshot them:
+		// replaying this document would revert anything changed while the layer was off the feature.
+		featureApplyDocuments.erase(featureShortName);
 	}
 }
 

@@ -16,15 +16,6 @@
 
 namespace
 {
-	RE::TESWorldSpace* GetTerrainWorldspace()
-	{
-		auto* tes = RE::TES::GetSingleton();
-		auto* worldspace = tes ? tes->GetRuntimeData2().worldSpace : nullptr;
-		while (worldspace && worldspace->parentWorld && worldspace->parentUseFlags.any(RE::TESWorldSpace::ParentUseFlag::kUseLandData))
-			worldspace = worldspace->parentWorld;
-		return worldspace;
-	}
-
 	void RequestTimeJumpSynchronization()
 	{
 		Util::RequestTimeJumpTransition();
@@ -141,6 +132,16 @@ namespace
 
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
+
+	// Heightmaps are keyed by the worldspace that provides the land data.
+	RE::TESWorldSpace* GetLandWorldspace()
+	{
+		auto tes = globals::game::tes;
+		auto worldspace = tes ? tes->GetRuntimeData2().worldSpace : nullptr;
+		while (worldspace && worldspace->parentWorld && worldspace->parentUseFlags.any(RE::TESWorldSpace::ParentUseFlag::kUseLandData))
+			worldspace = worldspace->parentWorld;
+		return worldspace;
+	}
 }
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
@@ -341,9 +342,8 @@ void TerrainShadows::CompileComputeShaders()
 
 bool TerrainShadows::IsHeightMapReady()
 {
-	if (auto* worldspace = GetTerrainWorldspace())
-		return texHeightMap && cachedHeightmap && cachedHeightmap->worldspace == worldspace->GetFormEditorID();
-	return false;
+	auto worldspace = GetLandWorldspace();
+	return worldspace && texHeightMap && cachedHeightmap && cachedHeightmap->worldspace == worldspace->GetFormEditorID();
 }
 
 bool TerrainShadows::IsShadowMapReady()
@@ -377,8 +377,7 @@ TerrainShadows::PerFrame TerrainShadows::GetCommonBufferData()
 
 void TerrainShadows::LoadHeightmap()
 {
-	auto* worldspace = GetTerrainWorldspace();
-
+	auto worldspace = GetLandWorldspace();
 	if (!worldspace)
 		return;
 
