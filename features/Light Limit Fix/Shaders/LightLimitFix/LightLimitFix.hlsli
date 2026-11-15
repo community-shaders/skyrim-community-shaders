@@ -187,4 +187,14 @@ namespace LightLimitFix
 		return GetLocalShadow(LocalShadowMaps, samp, LocalShadows[slice], slice, position, eyePosition, towardLight, skinnedReceiver, noise,
 			SharedData::lightLimitFixSettings.LocalShadowTexelSize, SharedData::lightLimitFixSettings.LocalShadowSamples, SharedData::lightLimitFixSettings.LocalShadowFilterRadius);
 	}
+
+	// For receivers that skip a caster until it is cached: fades in the whole light, not just its shadow.
+	float GetLocalShadowWithLightFade(SamplerState samp, uint slice, float3 position, float3 eyePosition, float3 towardLight, bool skinnedReceiver, float noise)
+	{
+		LocalShadowData data = LocalShadows[slice];
+		const float fadeIn = data.Params.w;
+		data.Params.w = 1.0;
+		return fadeIn * GetLocalShadow(LocalShadowMaps, samp, data, slice, position, eyePosition, towardLight, skinnedReceiver, noise,
+							SharedData::lightLimitFixSettings.LocalShadowTexelSize, SharedData::lightLimitFixSettings.LocalShadowSamples, SharedData::lightLimitFixSettings.LocalShadowFilterRadius);
+	}
 }

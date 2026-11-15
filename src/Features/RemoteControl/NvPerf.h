@@ -63,6 +63,9 @@ namespace NvPerf
 		double occurrencesPerFrame = 0.0;
 		std::uint32_t incomplete = 0;
 		std::vector<double> values;
+		/// Values per sample, [metric][sample]: counters summed over the sample's ranges (0 without one), rates weighted by
+		/// range time (NaN without one); NaN where every contribution was incomplete.
+		std::vector<std::vector<double>> perSample;
 	};
 
 	struct CaptureResult

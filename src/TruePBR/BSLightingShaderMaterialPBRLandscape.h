@@ -82,6 +82,15 @@ public:
 	bool HasGlint() const;
 
 	inline static std::unordered_map<BSLightingShaderMaterialPBRLandscape*, std::array<TruePBR::PBRTextureSetData*, NumTiles>> All;
+	/** @brief Guards All: landscape materials are created, copied and destroyed on the main thread and on background loader threads. */
+	inline static std::mutex AllMutex;
+
+	/** @brief Returns the material's texture sets, creating them on first use; locks AllMutex for the lookup only. */
+	static std::array<TruePBR::PBRTextureSetData*, NumTiles>& GetTextureSets(BSLightingShaderMaterialPBRLandscape* material)
+	{
+		std::lock_guard lock(AllMutex);
+		return All[material];
+	}
 
 	// members
 	std::uint32_t numLandscapeTextures = 0;

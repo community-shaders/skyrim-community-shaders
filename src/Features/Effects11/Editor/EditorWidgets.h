@@ -15,6 +15,9 @@
  */
 namespace Effects11UI
 {
+	/** @brief Wrap width of editor tooltips, in font sizes. */
+	inline constexpr float kTooltipWrapEm = 30.0f;
+
 	/**
 	 * @brief Turns an ini key such as "DirectLightingIntensity" into "Direct Lighting Intensity".
 	 * Acronyms stay together ("HDRBloom" -> "HDR Bloom") and short joining words are lowercased.

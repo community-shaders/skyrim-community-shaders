@@ -3,26 +3,23 @@
 #include "../../I18n/I18n.h"
 #include "Feature.h"
 #include "SceneWidgetInterceptor.h"
+#include "Utils/Logging.h"
 #include "Utils/UI.h"
 
 #define I18N_KEY_PREFIX "cs_editor."
 
 namespace
 {
-	/// The failure is a session-wide fact, so it is logged once rather than every frame it is shown.
-	bool loggedInstallFailure = false;
-
 	/** @brief Explain that authoring is unavailable because ImGui interception failed to install. */
 	void DrawInstallFailure()
 	{
 		const auto failed = SceneWidgetInterceptor::GetInstallError();
 		const std::string entryPoint = failed.empty() ? "install" : std::string{ failed };
 
-		if (!loggedInstallFailure) {
-			loggedInstallFailure = true;
+		static Util::OnceFlag loggedInstallFailure;
+		if (loggedInstallFailure.First())
 			logger::error(
 				"Scene Manager authoring is unavailable: ImGui interception failed at '{}'", entryPoint);
-		}
 		Util::Text::WrappedError(
 			T(TKEY("scene_interception_failed"),
 				"Scene Manager authoring is unavailable: ImGui interception failed at '%s'. "

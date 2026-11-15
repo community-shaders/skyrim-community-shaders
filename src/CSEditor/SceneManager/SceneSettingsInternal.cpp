@@ -6,6 +6,7 @@
 #include "SceneSettingsPolicy.h"
 #include "Utils/FileSystem.h"
 #include "Utils/Format.h"
+#include "Utils/Logging.h"
 #include "Utils/SettingsCatalog.h"
 
 #include <algorithm>
@@ -22,11 +23,6 @@
 
 namespace SceneSettingsInternal
 {
-	void CombineHash(size_t& signature, size_t value)
-	{
-		signature ^= value + 0x9E3779B9u + (signature << 6) + (signature >> 2);
-	}
-
 	void HashSceneSettingValue(size_t& signature, const json& value)
 	{
 		CombineHash(signature, static_cast<size_t>(value.type()));
@@ -420,11 +416,10 @@ namespace SceneSettingsInternal
 			setting.editorSemantic != SceneSettingsCatalog::EditorSemantic::Numeric)
 			return false;
 
-		double minimum = 0.0;
-		double maximum = 0.0;
-		if (!ConvertCatalogNumericDisplayToStored(setting, setting.minimumValue, minimum) ||
-			!ConvertCatalogNumericDisplayToStored(setting, setting.maximumValue, maximum) ||
-			minimum >= maximum)
+		// The catalog bounds are already in stored units (radians for SliderAngle, 0..1 for percentages).
+		const double minimum = setting.minimumValue;
+		const double maximum = setting.maximumValue;
+		if (!std::isfinite(minimum) || !std::isfinite(maximum) || minimum >= maximum)
 			return false;
 
 		const double storedValue = value.get<double>();
@@ -447,11 +442,8 @@ namespace SceneSettingsInternal
 	void WarnOnceAboutClampedSceneSetting(std::string_view featureShortName,
 		const SceneSettingsCatalog::SettingMetadata& setting, const json& authored, const json& clamped)
 	{
-		static std::set<size_t> reported;
-		size_t signature = std::hash<std::string_view>{}(featureShortName);
-		CombineHash(signature, std::hash<std::string_view>{}(setting.settingPath));
-		CombineHash(signature, std::hash<std::string_view>{}(setting.settingKey));
-		if (!reported.insert(signature).second)
+		static Util::OnceSet reported;
+		if (!reported.First(featureShortName, setting.settingPath, setting.settingKey))
 			return;
 
 		logger::warn(

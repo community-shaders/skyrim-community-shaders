@@ -183,6 +183,8 @@ struct GrassBucketKeyHash
 			combine(value);
 		for (float value : m.constants.params4)
 			combine(value);
+		for (float value : m.constants.params5)
+			combine(value);
 
 		combine(k.draw.wavePeriod);
 

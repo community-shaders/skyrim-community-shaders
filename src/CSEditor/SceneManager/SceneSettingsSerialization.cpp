@@ -213,10 +213,8 @@ void SceneSettingsManager::WriteUserSettings()
 	const bool weatherLoaded = TryEnsureWeatherDataLoaded();
 	const bool locationLoaded = TryEnsureLocationDataLoaded();
 	if (!userSettingsDocumentWritable || !preservedUserSettingsRoot.is_object()) {
-		if (!userSettingsWriteBlockedWarning) {
+		if (userSettingsWriteBlockedWarning.First())
 			logger::error("[SceneSettings] Refusing to overwrite SceneManager.json because its existing document is invalid");
-			userSettingsWriteBlockedWarning = true;
-		}
 		deferredSceneChangesPending = ++deferredSaveFailures < kMaxDeferredSaveRetries;
 		deferredSceneChangesDeadline = std::chrono::steady_clock::now() + kDeferredSaveRetryDelay;
 		return;
@@ -240,7 +238,7 @@ void SceneSettingsManager::WriteUserSettings()
 		weatherUserSettingsModified = false;
 		locationUserSettingsModified = false;
 		locationTransitionModified = false;
-		userSettingsWriteBlockedWarning = false;
+		userSettingsWriteBlockedWarning.Reset();
 		deferredSaveFailures = 0;
 		if (!unchanged)
 			logger::info("[SceneSettings] Saved SceneManager.json");

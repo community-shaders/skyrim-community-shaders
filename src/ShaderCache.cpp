@@ -14,10 +14,12 @@
 #include "State.h"
 #include "Utils/CompileDedupe.h"
 #include "Utils/D3D.h"
+#include "Utils/Logging.h"
 #include "Utils/ShaderContentStore.h"
 
 #include "Features/DynamicCubemaps.h"
 #include "Features/RenderDoc.h"
+#include "Features/TreeWind.h"
 
 #include "Plugin.h"
 
@@ -773,6 +775,12 @@ namespace SIE
 				defines[lastIndex++] = { "NO_PIXEL_SHADER", nullptr };
 			}
 
+			// Utility does not take the general feature defines (features that define for every shader type would
+			// change Utility permutations); Tree Wind needs its define here so depth and shadows sway with Lighting.
+			if (globals::features::treeWind.loaded && globals::features::treeWind.HasShaderDefine(RE::BSShader::Type::Utility)) {
+				defines[lastIndex++] = { globals::features::treeWind.GetShaderDefineName().data(), nullptr };
+			}
+
 			defines[lastIndex++] = { nullptr, nullptr };
 		}
 
@@ -1031,6 +1039,7 @@ namespace SIE
 				{ "PBRParams2", grassPSConstants.PBRParams2 },
 				{ "PBRParams3", grassPSConstants.PBRParams3 },
 				{ "PBRParams4", grassPSConstants.PBRParams4 },
+				{ "PBRParams5", grassPSConstants.PBRParams5 },
 			};
 
 			auto& particleVS = result[static_cast<size_t>(RE::BSShader::Type::Particle)]
@@ -1595,8 +1604,9 @@ namespace SIE
 			if (!globals::state->enableContentStore.load(std::memory_order_relaxed))
 				return nullptr;
 			if (GetCompilerIdentity().empty()) {
-				static std::once_flag warned;
-				std::call_once(warned, [] { logger::warn("Shader content store disabled: could not identify d3dcompiler_47.dll"); });
+				static Util::OnceFlag warned;
+				if (warned.First())
+					logger::warn("Shader content store disabled: could not identify d3dcompiler_47.dll");
 				return nullptr;
 			}
 			static Util::ShaderContentStore::Store& store = []() -> Util::ShaderContentStore::Store& {
@@ -1753,6 +1763,7 @@ namespace SIE
 								shader.fxpFilename);
 						const auto sourceTime = std::filesystem::last_write_time(shaderSourcePath, ec);
 						if (ec) {
+							diskCacheOutdated = true;
 							logger::debug("Failed to read source mtime for {}: {}", Util::WStringToString(shaderSourcePath), ec.message());
 						} else if (sourceTime > diskCacheTime) {
 							diskCacheOutdated = true;

@@ -233,6 +233,7 @@ public:
 	void UpdateSkyScattering(PerFrame& a_data);
 
 	virtual void DrawSettings() override;
+	virtual void Load() override;
 	virtual void SetupResources() override;
 	virtual void PostSetupResources() override;
 	virtual void Reset() override;

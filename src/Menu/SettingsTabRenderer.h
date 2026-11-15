@@ -38,9 +38,16 @@ public:
 	/** @brief Searchable setting labels of the sections drawn here. */
 	static std::span<const SettingsSearchEntry> GetSearchIndex();
 
-	/** @brief The one line explaining how theme edits and the theme selection are saved. */
-	/** @brief The theme save note: one subtitle-sized line in the info colour, for the header of sections that edit the theme. */
-	static void RenderThemeSaveNote();
+	/** @brief Whether the theme differs from the selected theme's file, as of the last CheckThemeChanged(). */
+	static bool IsThemeDirty();
+	/**
+	 * @brief Compares the theme with the selected theme's file, for IsThemeDirty(). Call once a frame after the menu draws.
+	 * @param interacted A value was edited or something was clicked this frame; otherwise only a theme undo triggers the check.
+	 */
+	static void CheckThemeChanged(bool interacted);
+
+	/** @brief While the theme has unsaved edits, a banner that opens the Theme section. */
+	static void RenderThemeUnsavedBanner();
 
 	/** @brief Shader cache options and the last build's compilation breakdown. */
 	static void RenderShadersSection();

@@ -1,8 +1,9 @@
 {
     "DisplayName": "Default Light",
     "Description": "Default Dark turned light: the same layout and type on a bright palette",
-    "Version": "1.1.0",
+    "Version": "1.1.1",
     "Author": "Community Shaders Team",
+    "LogoColor": [1.0, 1.0, 1.0],
     "Theme": {
         "FontSize": 0.0,
         "FontName": "Jost/Jost-Regular.ttf",

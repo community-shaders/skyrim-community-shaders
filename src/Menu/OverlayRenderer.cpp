@@ -22,6 +22,7 @@
 #include "Menu.h"
 #include "Menu/CursorLoader.h"
 #include "Menu/FontAtlasState.h"
+#include "Menu/SettingsTabRenderer.h"
 #include "Presets/UnifiedPresetCatalog.h"
 #include "ShaderCache.h"
 #include "State.h"
@@ -286,7 +287,7 @@ void OverlayRenderer::RenderOverlay(
 
 	// The Effects 11 editor and the Community Shaders menu are exclusive; the CS Editor hosts it.
 	auto& effects11Editor = Effects11Editor::GetSingleton();
-	if (effects11Editor.IsOpen() && menu.IsEnabled)
+	if (effects11Editor.IsOpen() && menu.IsOpen())
 		effects11Editor.Close(false);
 
 	if (editorWindow->open) {
@@ -298,22 +299,24 @@ void OverlayRenderer::RenderOverlay(
 	} else if (effects11Editor.IsOpen()) {
 		ImGui::GetIO().MouseDrawCursor = true;
 		effects11Editor.Draw();
-	} else if (menu.IsEnabled || menu.openFade > 0.0f || HomePageRenderer::ShouldShowFirstTimeSetup()) {
-		ImGui::GetIO().MouseDrawCursor = menu.IsEnabled || HomePageRenderer::ShouldShowFirstTimeSetup();
-		if (menu.IsEnabled || menu.openFade > 0.0f) {
+	} else if (menu.IsOpen() || menu.openFade > 0.0f || HomePageRenderer::ShouldShowFirstTimeSetup()) {
+		ImGui::GetIO().MouseDrawCursor = menu.IsOpen() || HomePageRenderer::ShouldShowFirstTimeSetup();
+		if (menu.IsOpen() || menu.openFade > 0.0f) {
 			const auto& context = *ImGui::GetCurrentContext();
 			const bool editedBefore = context.ActiveIdHasBeenEditedThisFrame;
 			drawSettings();
 			// Only frames that edited something pay for the check; search boxes edit too, so it compares.
-			if (!editedBefore && context.ActiveIdHasBeenEditedThisFrame)
+			const bool edited = !editedBefore && context.ActiveIdHasBeenEditedThisFrame;
+			if (edited)
 				globals::state->CheckCoreSettingsChanged();
+			SettingsTabRenderer::CheckThemeChanged(edited || ImGui::IsMouseReleased(ImGuiMouseButton_Left) || context.NavActivateId != 0);
 		}
 	} else {
 		ImGui::GetIO().MouseDrawCursor = false;
 	}
 
 	// Enabling a Baseline pack can happen from either the menu or the CS editor, and the answer outlives the page.
-	if (editorWindow->open || menu.IsEnabled)
+	if (editorWindow->open || menu.IsOpen())
 		UnifiedPresetCatalog::GetSingleton().DrawBaselineOverlapPrompt();
 
 	// The editor draws the notifications in its own frame; while it is closed they still need a host,
@@ -339,7 +342,7 @@ bool OverlayRenderer::ShouldSkipRendering()
 	const uint32_t effectFailed = GetFailedEffectCount();
 
 	return !(shaderCache->IsCompiling() ||
-			 Menu::GetSingleton()->IsEnabled ||
+			 Menu::GetSingleton()->IsOpen() ||
 			 Menu::GetSingleton()->openFade > 0.0f ||
 			 HomePageRenderer::ShouldShowFirstTimeSetup() ||
 			 EditorWindow::GetSingleton()->open ||
@@ -350,7 +353,7 @@ bool OverlayRenderer::ShouldSkipRendering()
 			 effectFailed ||
 			 globals::features::performanceOverlay.settings.ShowInOverlay ||
 			 globals::features::performanceOverlay.settings.ShowWeatherPicker ||
-			 renderDoc->IsAvailable());
+			 renderDoc->ShouldShowOverlay());
 }
 
 void OverlayRenderer::HandleFontReload(Menu& menu, float& cachedFontSize, float currentFontSize)
@@ -410,7 +413,7 @@ void OverlayRenderer::RenderShaderCompilationStatus(const std::function<const ch
 	auto state = globals::state;
 	auto& themeSettings = Menu::GetSingleton()->GetTheme();
 	auto* renderDoc = RenderDoc::GetSingleton();
-	bool renderDocAvailable = renderDoc->IsAvailable();
+	bool renderDocAvailable = renderDoc->ShouldShowOverlay();
 	// Runs every frame, so only build the strings a visible card shows
 	const auto renderDocInformation = renderDocAvailable ? renderDoc->GetOverlayWarningMessage() : std::string();
 

@@ -98,6 +98,8 @@ public:
 
 	/** @brief Draws the ImGui settings panel for Terrain Shadows configuration. */
 	virtual void DrawSettings() override;
+	virtual bool HasDebugSection() const override { return true; }
+	virtual void DrawDebugSection() override;
 
 	/** @brief Loads heightmaps, precomputes shadow textures, and updates shadows in the early prepass. */
 	virtual void EarlyPrepass() override;

@@ -27,6 +27,10 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+# Methods whose bodies draw a feature's controls. DrawDebugSection is the opt-in Debug section
+# (Util::DebugSection), drawn on the same page as DrawSettings, so its controls bind the same way.
+DRAW_METHOD_NAMES = ("DrawSettings", "DrawDebugSection")
+
 
 # Struct types that are debug state, never scene-controllable. Anything else non-primitive in a
 # SaveSettings body fails the build, so an aggregate can never drop out of the catalog silently.
@@ -325,6 +329,10 @@ CATEGORY_CONTROL_NAMES = {
     "TreeNode",
     "TreeNodeEx",
 }
+
+DEBUG_SECTION_DECL_RE = re.compile(r"\bUtil::DebugSection\s+\w+\s*;")
+DEBUG_SECTION_LABEL = "Debug"
+DEBUG_SECTION_KEY = "menu.features.debug"
 
 PERSISTENT_CATEGORY_CONTROL_NAMES = {
     "DrawSectionHeader",
@@ -1078,14 +1086,14 @@ def collect_component_persisted_controls(
         prefix_match = re.search(r'#define\s+I18N_KEY_PREFIX\s+"([^"]*)"', text)
         prefix = prefix_match.group(1) if prefix_match else ""
         method_bodies = {}
-        for method_name in ("DrawSettings", "SaveSettings"):
+        for method_name in (*DRAW_METHOD_NAMES, "SaveSettings"):
             method = re.search(
                 rf"\bvoid\s+{re.escape(feature_class)}::{method_name}\s*\([^)]*\)\s*\{{",
                 mask_cpp_source(text))
             body_end = find_matching_brace(text, method.end() - 1) if method else -1
             if method and body_end >= 0:
                 method_bodies[method_name] = text[method.end():body_end]
-        if len(method_bodies) != 2:
+        if "DrawSettings" not in method_bodies or "SaveSettings" not in method_bodies:
             continue
 
         aliases = {
@@ -1103,7 +1111,8 @@ def collect_component_persisted_controls(
                 persisted.setdefault((container, pair.group(3)), set()).add(pair.group(1))
 
         controls = {}
-        draw_body = method_bodies["DrawSettings"]
+        draw_body = "\n".join(
+            method_bodies[name] for name in DRAW_METHOD_NAMES if name in method_bodies)
         masked_draw = mask_cpp_source(draw_body)
         for control in re.finditer(r"\b(?:ImGui|Util)::Checkbox\s*\(", masked_draw):
             close = find_matching_paren(draw_body, control.end() - 1)
@@ -1297,13 +1306,21 @@ def mask_cpp_source(text: str) -> str:
 
 
 def extract_draw_settings_body(text: str) -> tuple[str, str] | None:
-    match = re.search(r"\b(\w+)::DrawSettings\s*\([^)]*\)[^{;]*\{", text)
-    if not match:
+    """The owner and drawing code of the first class with a DrawSettings body in `text`.
+
+    A DrawDebugSection of the same class is appended, since it draws on the same page. A class
+    whose only drawing is its Debug section (no DrawSettings) is still found.
+    """
+    methods = "|".join(DRAW_METHOD_NAMES)
+    bodies = []
+    for match in re.finditer(rf"\b(\w+)::({methods})\s*\([^)]*\)[^{{;]*\{{", text):
+        end = find_matching_brace(text, match.end() - 1)
+        if end >= 0:
+            bodies.append((match.group(1), match.group(2), text[match.end():end]))
+    if not bodies:
         return None
-    end = find_matching_brace(text, match.end() - 1)
-    if end < 0:
-        return None
-    return match.group(1), text[match.end():end]
+    owner = next((o for o, name, _ in bodies if name == "DrawSettings"), bodies[0][0])
+    return owner, "\n".join(body for o, _, body in bodies if o == owner)
 
 
 def collect_tab_selector_roots(
@@ -2822,23 +2839,31 @@ def _control_category(
         scoped.sort(key=lambda category: (category[0], -category[1]))
         return scoped[-1][2], scoped[-1][3]
 
-    candidates = []
+    categories = [("", "")]
     pattern = re.compile(
-        r"\b(?:ImGui|Util)::(?:" +
+        r"[{}]|" + DEBUG_SECTION_DECL_RE.pattern + r"|\b(?:ImGui|Util)::(?:" +
         "|".join(sorted(PERSISTENT_CATEGORY_CONTROL_NAMES)) + r")\s*\(")
     masked = mask_cpp_source(body)[:position]
     for category in pattern.finditer(masked):
+        if category.group() == "{":
+            categories.append(categories[-1])
+            continue
+        if category.group() == "}":
+            if len(categories) > 1:
+                categories.pop()
+            continue
+        if DEBUG_SECTION_DECL_RE.match(category.group()):
+            # `Util::DebugSection section;` draws the "Debug" heading, so it groups the controls below it.
+            categories[-1] = DEBUG_SECTION_LABEL, DEBUG_SECTION_KEY
+            continue
         close = find_matching_paren(body, category.end() - 1)
         if close < 0 or close >= position:
             continue
         translated = extract_i18n_call(
             body[category.start():close + 1], prefix)
         if translated:
-            candidates.append((category.start(), translated[1], translated[0]))
-    if not candidates:
-        return "", ""
-    _, label, key = max(candidates, key=lambda candidate: candidate[0])
-    return label, key
+            categories[-1] = translated[1], translated[0]
+    return categories[-1]
 
 
 @functools.lru_cache(maxsize=None)
@@ -2918,7 +2943,7 @@ def collect_member_selector_helpers(text: str):
 def collect_member_selector_contexts(paths: list[Path], ui_choices):
     collected = {}
     method_pattern = re.compile(
-        r"\b(?:bool|void)\s+([A-Za-z_]\w*(?:::[A-Za-z_]\w*)*)::DrawSettings\s*"
+        r"\b(?:bool|void)\s+([A-Za-z_]\w*(?:::[A-Za-z_]\w*)*)::(?:DrawSettings|DrawDebugSection)\s*"
         r"\(([^)]*)\)\s*(?:const\s*)?\{")
     alias_pattern = re.compile(
         r"\b(?:const\s+)?[A-Za-z_]\w*(?:::[A-Za-z_]\w*)*\s*&\s*"
@@ -3545,7 +3570,7 @@ def _project_standard_controls(
         call_sites[function] = calls
     draw_control_functions = {
         function for function in functions
-        if function.name == "DrawSettings" and function.owner
+        if function.name in DRAW_METHOD_NAMES and function.owner
     }
     for _ in range(len(functions)):
         discovered = {
@@ -3921,7 +3946,7 @@ def _project_standard_controls(
                 storage = call_args[summary.storage_parameter]
                 owner = ""
                 path = None
-                if caller.name == "DrawSettings" and caller.owner:
+                if caller.name in DRAW_METHOD_NAMES and caller.owner:
                     pseudo = [""] * (control_storage_argument_index(summary.control_kind) + 1)
                     pseudo[-1] = storage
                     path = extract_control_setting_path(

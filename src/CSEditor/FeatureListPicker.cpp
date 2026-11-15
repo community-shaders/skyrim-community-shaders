@@ -18,6 +18,7 @@
 #include "Menu/ThemeManager.h"
 #include "State.h"
 #include "Utils/UI.h"
+#include "Utils/UISurface.h"
 
 namespace
 {
@@ -58,8 +59,8 @@ namespace
 		BrowserUI::InsetRowRect(rowMin, rowMax);
 
 		const ImVec4 accent = Util::Colors::GetAccent();
-		const float barWidth = ThemeManager::Constants::ANIM_SELECTED_BAR_WIDTH * Util::GetUIScale();
-		const float edgeInset = std::max(style.FramePadding.x, barWidth) + style.ItemInnerSpacing.x;
+		const float barWidth = Util::Surface::ListHighlightBarWidth();
+		const float edgeInset = Util::Surface::ListHighlightTextInset() + style.ItemInnerSpacing.x;
 		float textMaxX = rowMax.x - edgeInset;
 		if (pinned) {
 			const float tintAlpha = isSelected ? ThemeManager::Constants::CSE_PINNED_SELECTED_TINT_ALPHA : ThemeManager::Constants::CSE_PINNED_TINT_ALPHA;

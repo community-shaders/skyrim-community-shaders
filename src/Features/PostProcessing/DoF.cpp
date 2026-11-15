@@ -8,7 +8,11 @@
 #include "State.h"
 #include "Util.h"
 
+#include <cstdio>
+
 #include "I18n/I18n.h"
+#include "Menu/MenuIcons.h"
+#include "Utils/DebugView.h"
 
 namespace
 {
@@ -70,24 +74,49 @@ void DoF::DrawSettings()
 		bladeCount = cam->ApertureBladeCount;
 		bladeRoundness = cam->ApertureRoundness;
 		shapeRotation = std::fmod(cam->ApertureBladeRotationDeg, 360.0f) / 360.0f;
-		ImGui::TextDisabled("%s", T("feature.post_processing.controlled_by_cinematic_camera", "Lens and focus are currently controlled by Cinematic Camera."));
+		DrawCameraControlledNote();
 	}
 
+	ImGui::SeparatorText(T("feature.post_processing.do_f.section_focus", "Focus"));
 	ImGui::BeginDisabled(camActive);
 	ImGui::Checkbox(T("feature.post_processing.do_f.auto_focus", "Auto Focus"), &settings.AutoFocus);
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::TextUnformatted(T("feature.post_processing.do_f.auto_focus_desc", "Focus on whatever is under the focus point. When off, Manual Focus sets the distance."));
 
 	if (settings.AutoFocus) {
 		const SceneWidgetInterceptor::ProxyScope proxy(&settings.FocusCoord, 1.0f);
 		ImGui::SliderFloat2(T("feature.post_processing.do_f.focus_point", "Focus Point"), autoFocusCoord, 0.0f, 1.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
-	}
-	{
-		const SceneWidgetInterceptor::ProxyScope proxy(&settings.TransitionSpeed, 1.0f);
-		ImGui::SliderFloat(T("feature.post_processing.do_f.transition_speed", "Transition Speed"), &transitionSpeed, 0.1f, 1.0f, "%.2f");
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::TextUnformatted(T("feature.post_processing.do_f.focus_point_desc", "Screen position auto focus measures, from the top-left (0, 0) to the bottom-right (1, 1)."));
 	}
 	{
 		const SceneWidgetInterceptor::ProxyScope proxy(&settings.ManualFocusPlane, 1.0f);
 		ImGui::SliderFloat(T("feature.post_processing.do_f.manual_focus", "Manual Focus"), &manualFocus, 0.1f, 150.0f, "%.2f m");
 	}
+	{
+		const SceneWidgetInterceptor::ProxyScope proxy(&settings.TransitionSpeed, 1.0f);
+		ImGui::SliderFloat(T("feature.post_processing.do_f.transition_speed", "Transition Speed"), &transitionSpeed, 0.1f, 1.0f, "%.2f");
+	}
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::TextUnformatted(T("feature.post_processing.do_f.transition_speed_desc", "How quickly focus follows a new distance. 1 snaps immediately."));
+	ImGui::Checkbox(T("feature.post_processing.do_f.target_focus", "Target Focus"), &settings.targetFocus);
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::TextUnformatted(T("feature.post_processing.do_f.target_focus_desc", "Focus on the dialogue speaker or True Directional Movement lock-on target, using its own focal length."));
+	if (settings.targetFocus) {
+		ImGui::SliderFloat(T("feature.post_processing.do_f.target_focus_focal_length", "Target Focus Focal Length"), &settings.targetFocusFocalLength, 1.0f, 300.0f, "%.1f mm");
+	}
+	ImGui::EndDisabled();
+	ImGui::Checkbox(T("feature.post_processing.do_f.console_selection", "Console Selection"), &settings.consoleSelection);
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::TextUnformatted(T("feature.post_processing.do_f.console_selection_desc", "With Target Focus, also focus on the reference selected in the console."));
+	if (settings.consoleSelection && currentRef != 0) {
+		char selected[64];
+		std::snprintf(selected, sizeof(selected), T("feature.post_processing.do_f.selected_reference", "Selected Reference: %08X"), currentRef);
+		Util::SettingHint(selected);
+	}
+
+	ImGui::SeparatorText(T("feature.post_processing.do_f.section_lens", "Lens"));
+	ImGui::BeginDisabled(camActive);
 	{
 		const SceneWidgetInterceptor::ProxyScope proxy(&settings.FocalLength, 1.0f);
 		ImGui::SliderFloat(T("feature.post_processing.do_f.focal_length", "Focal Length"), &focalLength, 1.0f, 300.0f, "%.1f mm");
@@ -96,6 +125,8 @@ void DoF::DrawSettings()
 		const SceneWidgetInterceptor::ProxyScope proxy(&settings.FNumber, 1.0f);
 		ImGui::SliderFloat(T("feature.post_processing.do_f.f_number", "F-Number"), &fNumber, 1.0f, 22.0f, "f/%.1f");
 	}
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::TextUnformatted(T("feature.post_processing.do_f.f_number_desc", "Lower values open the aperture for a shallower depth of field."));
 	{
 		const SceneWidgetInterceptor::ProxyScope proxy(&settings.SensorWidthMM, 1.0f);
 		ImGui::SliderFloat(T("feature.post_processing.do_f.sensor_width", "Sensor Width"), &sensorWidth, 1.0f, 100.0f, "%.1f mm", ImGuiSliderFlags_AlwaysClamp);
@@ -112,6 +143,8 @@ void DoF::DrawSettings()
 		settings.FNumber = fNumber;
 		settings.SensorWidthMM = sensorWidth;
 	}
+
+	ImGui::SeparatorText(T("feature.post_processing.do_f.section_blur", "Blur"));
 	ImGui::SliderFloat(T("feature.post_processing.do_f.far_plane_max_blur", "Far Plane Max Blur"), &settings.FarPlaneMaxBlur, 0.0f, 8.0f, "%.2f");
 	ImGui::SliderFloat(T("feature.post_processing.do_f.near_plane_max_blur", "Near Plane Max Blur"), &settings.NearPlaneMaxBlur, 0.0f, 4.0f, "%.2f");
 	ImGui::SliderFloat(T("feature.post_processing.do_f.max_far_coc_radius", "Max Far Blur Radius"), &settings.MaxFarCoCRadius, 0.001f, 0.1f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
@@ -120,23 +153,10 @@ void DoF::DrawSettings()
 	ImGui::SliderFloat(T("feature.post_processing.do_f.max_near_coc_radius", "Max Near Blur Radius"), &settings.MaxNearCoCRadius, 0.001f, 0.1f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
 	if (auto _tt = Util::HoverTooltipWrapper())
 		ImGui::TextUnformatted(T("feature.post_processing.do_f.max_near_coc_radius_desc", "Upper bound of the near field blur disc radius, as a fraction of the screen width."));
-	ImGui::Checkbox(T("feature.post_processing.do_f.adaptive_gather", "Adaptive Gather"), &settings.UseAdaptiveGather);
-	if (auto _tt = Util::HoverTooltipWrapper())
-		ImGui::TextUnformatted(T("feature.post_processing.do_f.adaptive_gather_desc", "Uses a fixed low-sample kernel and a CoC-aware image pyramid."));
-	if (settings.UseAdaptiveGather) {
-		const char* gatherQuality[] = {
-			T("feature.post_processing.do_f.gather_quality_performance", "Performance (4 rings)"),
-			T("feature.post_processing.do_f.gather_quality_quality", "Quality (5 rings)")
-		};
-		ImGui::Combo(T("feature.post_processing.do_f.gather_quality", "Gather Quality"), &settings.GatherQuality, gatherQuality, IM_ARRAYSIZE(gatherQuality));
-	}
-	if (!settings.UseAdaptiveGather)
-		ImGui::SliderFloat(T("feature.post_processing.do_f.blur_quality", "Compatibility Blur Quality"), &settings.BlurQuality, 2.0f, 30.0f, "%.1f");
 	ImGui::SliderFloat(T("feature.post_processing.do_f.near_far_plane_distance_compenation", "Near-Far Plane Distance Compenation"), &settings.NearFarDistanceCompensation, 1.0f, 5.0f, "%.2f");
-	ImGui::SliderFloat(T("feature.post_processing.do_f.bokeh_busy_factor", "Bokeh Busy Factor"), &settings.BokehBusyFactor, 0.0f, 1.0f, "%.2f");
-	ImGui::SliderFloat(T("feature.post_processing.do_f.petzval_strength", "Petzval Strength"), &settings.PetzvalStrength, 0.0f, 2.0f, "%.2f");
-	ImGui::SliderFloat(T("feature.post_processing.do_f.highlight_boost", "Highlight Boost"), &settings.HighlightBoost, 0.0f, 1.0f, "%.2f");
 	ImGui::SliderFloat(T("feature.post_processing.do_f.post_blur_smoothing", "Post Blur Smoothing"), &settings.PostBlurSmoothing, 0.0f, 2.0f, "%.2f");
+
+	ImGui::SeparatorText(T("feature.post_processing.do_f.section_bokeh", "Bokeh"));
 	const char* bokehModes[] = {
 		T("feature.post_processing.do_f.bokeh_mode_procedural", "Procedural"),
 		T("feature.post_processing.do_f.bokeh_mode_custom_texture", "Custom Texture (Higher Cost)")
@@ -158,7 +178,7 @@ void DoF::DrawSettings()
 			settings.BokehBladeRoundness = bladeRoundness;
 		}
 		if (!settings.UseAdaptiveGather)
-			ImGui::TextDisabled(T("feature.post_processing.do_f.procedural_requires_adaptive", "Procedural blades require Adaptive Gather; the compatibility path uses a circle."));
+			Util::SettingHint(T("feature.post_processing.do_f.procedural_requires_adaptive", "Procedural blades require Adaptive Gather; the compatibility path uses a circle."), false);
 	} else if (owner) {
 		const int shapeCount = owner->bokehResources.GetTotalShapeCount();
 		const int shape = std::clamp(settings.HighlightShape, 1, std::max(shapeCount, 1));
@@ -177,7 +197,8 @@ void DoF::DrawSettings()
 			ImGui::EndCombo();
 		}
 		ImGui::EndDisabled();
-		ImGui::TextDisabled(T("feature.post_processing.do_f.custom_shape_cost", "Custom textures preserve arbitrary silhouettes but add a texture lookup per gather tap."));
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::TextUnformatted(T("feature.post_processing.do_f.custom_shape_cost", "Custom textures preserve arbitrary silhouettes but add a texture lookup per gather tap."));
 	}
 	ImGui::BeginDisabled(camActive);
 	{
@@ -187,45 +208,63 @@ void DoF::DrawSettings()
 	ImGui::EndDisabled();
 	if (!camActive && !SceneWidgetInterceptor::IsArmed())
 		settings.HighlightShapeRotationAngle = shapeRotation;
-	ImGui::BeginDisabled(camActive);
-	ImGui::Checkbox(T("feature.post_processing.do_f.target_focus", "Target Focus"), &settings.targetFocus);
-	if (settings.targetFocus) {
-		ImGui::SliderFloat(T("feature.post_processing.do_f.target_focus_focal_length", "Target Focus Focal Length"), &settings.targetFocusFocalLength, 1.0f, 300.0f, "%.1f mm");
+	ImGui::SliderFloat(T("feature.post_processing.do_f.highlight_boost", "Highlight Boost"), &settings.HighlightBoost, 0.0f, 1.0f, "%.2f");
+	ImGui::SliderFloat(T("feature.post_processing.do_f.bokeh_busy_factor", "Bokeh Busy Factor"), &settings.BokehBusyFactor, 0.0f, 1.0f, "%.2f");
+	ImGui::SliderFloat(T("feature.post_processing.do_f.petzval_strength", "Petzval Strength"), &settings.PetzvalStrength, 0.0f, 2.0f, "%.2f");
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::TextUnformatted(T("feature.post_processing.do_f.petzval_strength_desc", "Stretches out-of-focus highlights toward the frame edges, like the swirly bokeh of vintage lenses."));
+
+	ImGui::SeparatorText(T("feature.post_processing.do_f.section_quality", "Quality"));
+	ImGui::Checkbox(T("feature.post_processing.do_f.adaptive_gather", "Adaptive Gather"), &settings.UseAdaptiveGather);
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::TextUnformatted(T("feature.post_processing.do_f.adaptive_gather_desc", "Uses a fixed low-sample kernel and a CoC-aware image pyramid."));
+	if (settings.UseAdaptiveGather) {
+		const char* gatherQuality[] = {
+			T("feature.post_processing.do_f.gather_quality_performance", "Performance (4 rings)"),
+			T("feature.post_processing.do_f.gather_quality_quality", "Quality (5 rings)")
+		};
+		ImGui::Combo(T("feature.post_processing.do_f.gather_quality", "Gather Quality"), &settings.GatherQuality, gatherQuality, IM_ARRAYSIZE(gatherQuality));
 	}
-	ImGui::EndDisabled();
-	ImGui::Checkbox(T("feature.post_processing.do_f.console_selection", "Console Selection"), &settings.consoleSelection);
-	if (settings.consoleSelection && currentRef != 0) {
-		ImGui::Text(T("feature.post_processing.do_f.selected_reference", "Selected Reference: %08X"), currentRef);
+	if (!settings.UseAdaptiveGather)
+		ImGui::SliderFloat(T("feature.post_processing.do_f.blur_quality", "Compatibility Blur Quality"), &settings.BlurQuality, 2.0f, 30.0f, "%.1f");
+}
+
+void DoF::DrawDebugSection()
+{
+	{
+		Util::SectionCard card("##DoFFocus", ICON_TI_APERTURE, T("feature.post_processing.do_f.debug_card_focus", "Focus"));
+		Util::DrawDebugValueRows("##DoFFocusRows", {
+													   { T("feature.post_processing.do_f.debug_distance", "Distance"), Util::DebugNum(debugDistance) },
+													   { T("feature.post_processing.do_f.debug_focus_plane", "Focus Plane"), Util::DebugNum(debugFocusPlane) },
+												   });
 	}
 
-	if (Util::ShowDebugSections() && ImGui::CollapsingHeader(T("feature.post_processing.do_f.debug", "Debug"))) {
-		static float debugRescale = .3f;
-		ImGui::Text(T("feature.post_processing.do_f.debug_distance", "Debug Distance: %f"), debugDistance);
-		ImGui::Text(T("feature.post_processing.do_f.debug_focus_plane", "Debug Focus Plane: %f"), debugFocusPlane);
-		ImGui::SliderFloat(T("feature.post_processing.do_f.view_resize", "View Resize"), &debugRescale, 0.f, 1.f);
+	Util::SectionCard card("##DoFBuffers", ICON_TI_EYE, T("feature.post_processing.do_f.debug_card_buffers", "Buffers"));
+	static float debugRescale = .3f;
+	ImGui::SliderFloat(T("feature.post_processing.do_f.view_resize", "View Resize"), &debugRescale, 0.f, 1.f);
+	Util::SettingHint(T("feature.post_processing.do_f.debug_buffers_hint", "Expand a buffer to see it. View Resize scales the previews."), false);
 
-		BUFFER_VIEWER_NODE(texFocus, 64.0f)
-		BUFFER_VIEWER_NODE(texPreFocus, 64.0f)
+	BUFFER_VIEWER_NODE(texFocus, 64.0f)
+	BUFFER_VIEWER_NODE(texPreFocus, 64.0f)
 
-		BUFFER_VIEWER_NODE(texCoC, debugRescale)
-		BUFFER_VIEWER_NODE(texCoCHalf, debugRescale)
-		BUFFER_VIEWER_NODE(texCoCTile, debugRescale)
-		BUFFER_VIEWER_NODE(texCoCTileTmp, debugRescale)
-		BUFFER_VIEWER_NODE(texCoCTileDilated, debugRescale)
-		BUFFER_VIEWER_NODE(texPreBlurred, debugRescale)
-		BUFFER_VIEWER_NODE(texGatherColor[0], debugRescale)
-		BUFFER_VIEWER_NODE(texGatherColor[1], debugRescale)
-		BUFFER_VIEWER_NODE(texGatherColor[2], debugRescale)
-		BUFFER_VIEWER_NODE(texGatherCoC[0], debugRescale)
-		BUFFER_VIEWER_NODE(texGatherCoC[1], debugRescale)
-		BUFFER_VIEWER_NODE(texGatherCoC[2], debugRescale)
-		BUFFER_VIEWER_NODE(texFarBlurred, debugRescale)
-		BUFFER_VIEWER_NODE(texNearBlurred, debugRescale)
+	BUFFER_VIEWER_NODE(texCoC, debugRescale)
+	BUFFER_VIEWER_NODE(texCoCHalf, debugRescale)
+	BUFFER_VIEWER_NODE(texCoCTile, debugRescale)
+	BUFFER_VIEWER_NODE(texCoCTileTmp, debugRescale)
+	BUFFER_VIEWER_NODE(texCoCTileDilated, debugRescale)
+	BUFFER_VIEWER_NODE(texPreBlurred, debugRescale)
+	BUFFER_VIEWER_NODE(texGatherColor[0], debugRescale)
+	BUFFER_VIEWER_NODE(texGatherColor[1], debugRescale)
+	BUFFER_VIEWER_NODE(texGatherColor[2], debugRescale)
+	BUFFER_VIEWER_NODE(texGatherCoC[0], debugRescale)
+	BUFFER_VIEWER_NODE(texGatherCoC[1], debugRescale)
+	BUFFER_VIEWER_NODE(texGatherCoC[2], debugRescale)
+	BUFFER_VIEWER_NODE(texFarBlurred, debugRescale)
+	BUFFER_VIEWER_NODE(texNearBlurred, debugRescale)
 
-		BUFFER_VIEWER_NODE(texBlurredFiltered, debugRescale)
-		BUFFER_VIEWER_NODE(texPostSmooth, debugRescale)
-		BUFFER_VIEWER_NODE(texPostSmooth2, debugRescale)
-	}
+	BUFFER_VIEWER_NODE(texBlurredFiltered, debugRescale)
+	BUFFER_VIEWER_NODE(texPostSmooth, debugRescale)
+	BUFFER_VIEWER_NODE(texPostSmooth2, debugRescale)
 }
 
 void DoF::RestoreDefaultSettings()

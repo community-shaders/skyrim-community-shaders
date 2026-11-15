@@ -1234,7 +1234,7 @@ void SceneWidgetBinding::Guard::NavigateGreyedSetting() const
 {
 	if (state == State::Unbound) {
 		if (auto* menu = globals::menu) {
-			menu->IsEnabled = true;
+			menu->Open();
 			if (!identity.featureShortName.empty())
 				menu->SelectFeatureMenu(identity.featureShortName);
 		}

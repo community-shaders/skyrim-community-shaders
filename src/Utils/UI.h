@@ -56,7 +56,7 @@ namespace Util
 	/** @brief Button labelled `a_name` that copies `a_address` to the clipboard as hex, with a tooltip saying so. */
 	void AddressButton(const char* a_name, uintptr_t a_address);
 
-	/** @brief Feeds ImGui the display size and the mouse position, mapped from window to render-target pixels. */
+	/** @brief Feeds ImGui the display size and the mouse position, mapped from window to render-target pixels, and drops stick values short of a press. */
 	void UpdateImGuiInput(HWND hwnd, float bufferWidth, float bufferHeight);
 	/**
 	 * Represents a single line and its color for any colored text rendering (tooltips, legends, etc.).
@@ -160,23 +160,6 @@ namespace Util
 	 *        the moment to check whether what they edit changed.
 	 */
 	bool InteractionEndedThisFrame();
-
-	/** @brief Hides feature Debug sections while alive (CS Editor Features window); restores the previous state. */
-	class HideDebugSectionsGuard
-	{
-	public:
-		explicit HideDebugSectionsGuard(bool hide);
-		~HideDebugSectionsGuard();
-
-		HideDebugSectionsGuard(const HideDebugSectionsGuard&) = delete;
-		HideDebugSectionsGuard& operator=(const HideDebugSectionsGuard&) = delete;
-
-	private:
-		bool previous;
-	};
-
-	/** @brief False while a HideDebugSectionsGuard hides them; gate each feature's Debug header on this. */
-	bool ShowDebugSections();
 
 	/** @brief Eases fade toward 1 (visible) or 0 (hidden) over ThemeManager::Constants::UI_FADE_SECONDS. */
 	void StepFade(float& fade, bool visible, float deltaTime);
@@ -286,7 +269,7 @@ namespace Util
 	{
 		const char* label = "";  ///< Text after "##" is not shown
 		Icons::GlyphRef icon{};  ///< Shown alone when the segment is too narrow
-		bool disabled = false;   ///< Dimmed but still clickable
+		bool disabled = false;   ///< Dimmed and not clickable; its tooltip still shows
 		const char* tooltip = nullptr;
 		float width = 0.0f;                                             ///< 0 measures the icon and label
 		std::function<void(const Segment&, const SegmentState&)> draw;  ///< Null draws the icon and label
@@ -361,26 +344,26 @@ namespace Util
 	 */
 	bool LockStatusBadgeButton(const char* a_id, bool a_locked, const char* a_tooltip = nullptr);
 
-	/** @brief Width of a DrawBadgeAt badge for the given label. */
+	/** @brief Width of a Badge for the given label. */
 	float MeasureBadgeWidth(const char* a_label);
 
-	/**
-	 * @brief Soft rectangular label badge, vertically centred in a row.
-	 * @param a_min Top-left of the row in screen space.
-	 * @param a_rowHeight Height of the row the badge is centred in.
-	 * @param a_bg Badge fill; usually the tint at a low alpha.
-	 * @param a_fg Label colour.
-	 * @param a_drawList Optional; defaults to the current window draw list.
-	 * @return The badge width.
-	 */
-	float DrawBadgeAt(ImVec2 a_min, float a_rowHeight, const char* a_label, const ImVec4& a_bg, const ImVec4& a_fg,
-		ImDrawList* a_drawList = nullptr);
+	/** @brief Layout and colour overrides of a Badge. */
+	struct BadgeOptions
+	{
+		float rowHeight = 0.0f;          ///< Row the badge is centred in; 0 is the line height
+		float width = 0.0f;              ///< Fixed width with the label centred; 0 fits the label
+		float alpha = 1.0f;              ///< Multiplier on fill and label, for fades
+		std::optional<ImVec4> fill;      ///< Replaces the tint's soft fill
+		std::optional<ImVec4> label;     ///< Replaces the tint's readable label colour
+		ImDrawList* drawList = nullptr;  ///< Defaults to the current window draw list
+		std::optional<ImVec2> at;        ///< Draws with this row top-left without advancing layout; unset draws at the cursor
+	};
 
 	/**
-	 * @brief Badge tinted from one colour (soft fill, readable label), drawn at the cursor; advances layout with Dummy.
-	 * @param a_rowHeight Row to centre in; 0 is the line height.
+	 * @brief Soft rectangular label badge tinted from one colour, vertically centred in a row.
+	 * @return The badge width.
 	 */
-	void Badge(const char* a_label, const ImVec4& a_tint, float a_rowHeight = 0.0f);
+	float Badge(const char* a_label, const ImVec4& a_tint, const BadgeOptions& a_options = {});
 
 	/**
 	 * @brief Soft rectangular HDR/SDR capability pill (muted blue / muted red).
@@ -830,6 +813,9 @@ namespace Util
 	 * stack, so pushed overrides still apply; behaviour is otherwise identical to ImGui::Button.
 	 */
 	bool Button(const char* label, const ImVec2& size = ImVec2(0, 0));
+
+	/** @brief Cursor over the hovered last item: a hand when clickable (if @p hand), not-allowed while disabled. */
+	void HoverCursor(bool hand = true);
 
 	/** @brief Square size of IconButton. */
 	float IconButtonSize();
@@ -1712,11 +1698,11 @@ namespace Util
 		{
 			SearchField("##TableFilter", filterText, ::T("ui.search", "Search..."), ImGui::CalcItemWidth(), false);
 			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("Filter table by the selected column. Case-insensitive.");
+				ImGui::Text("%s", ::T("ui.table_filter.filter_tooltip", "Filter table by the selected column. Case-insensitive."));
 			}
 
 			// Create search column options
-			std::vector<std::string> searchOptions = { "All Columns" };
+			std::vector<std::string> searchOptions = { ::T("ui.table_filter.all_columns", "All Columns") };
 			for (const auto& col : columnHeaders) {
 				searchOptions.push_back(col);
 			}
@@ -1725,7 +1711,7 @@ namespace Util
 				searchOptionsCStr.push_back(option.c_str());
 			}
 
-			ImGui::Combo("Search In", &searchColumn, searchOptionsCStr.data(), static_cast<int>(searchOptionsCStr.size()));
+			ImGui::Combo(::T("ui.table_filter.search_in", "Search In"), &searchColumn, searchOptionsCStr.data(), static_cast<int>(searchOptionsCStr.size()));
 		}
 	};
 

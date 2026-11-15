@@ -693,10 +693,8 @@ void LightEditor::DrawLightTable(const ImVec2& size)
 						Util::AddTooltip(T(TKEY("shadow_light_tooltip"), "Casts shadows"));
 					}
 					if (ImGui::TableSetColumnIndex(4) && light.isLP) {
-						const ImVec4 info = Util::Colors::GetInfo();
-						const float width = Util::DrawBadgeAt(ImGui::GetCursorScreenPos(), ImGui::GetFrameHeight(), T(TKEY("column_lp"), "LP"),
-							ImVec4(info.x, info.y, info.z, ThemeManager::Constants::CSE_LP_BADGE_ALPHA), ImGui::GetStyleColorVec4(ImGuiCol_Text));
-						ImGui::Dummy(ImVec2(width, ImGui::GetFrameHeight()));
+						Util::Badge(T(TKEY("column_lp"), "LP"), Util::Colors::GetInfo(),
+							{ .rowHeight = ImGui::GetFrameHeight(), .label = ImGui::GetStyleColorVec4(ImGuiCol_Text) });
 					}
 					ImGui::PopID();
 				}

@@ -27,6 +27,8 @@ public:
 
 	/** @brief Draws the ImGui settings UI for fog parameters and volumetric fog options. */
 	virtual void DrawSettings() override;
+	virtual bool HasDebugSection() const override { return true; }
+	virtual void DrawDebugSection() override;
 	/** @brief Creates samplers and the volumetric fog constant buffer. */
 	virtual void SetupResources() override;
 	/** @brief Releases all cached volumetric fog compute shaders so they can be recompiled. */

@@ -177,6 +177,12 @@ public:
 
 	virtual void DrawSettings() {}
 
+	/** @brief Opt-in: whether the feature page shows a Debug section (see Util::DebugSection). */
+	virtual bool HasDebugSection() const { return false; }
+
+	/** @brief Draws the Debug section body; only called when HasDebugSection() is true. Use Util::DebugSection. */
+	virtual void DrawDebugSection() {}
+
 	/** @brief Draws the UI shown when this feature failed to load. */
 	virtual void DrawUnloadedUI();
 
@@ -185,6 +191,9 @@ public:
 
 	/** @brief Per-frame work executed before the main rendering pass. */
 	virtual void Prepass() {}
+
+	/** @brief Per-frame work after every feature's Prepass, so it sees the depth they wrote. */
+	virtual void PostPrepass() {}
 
 	/** @brief Per-frame work executed before Prepass, earliest per-frame hook. */
 	virtual void EarlyPrepass() {}

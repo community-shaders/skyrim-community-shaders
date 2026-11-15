@@ -253,6 +253,7 @@ void Deferred::PrepassPasses()
 	context->OMSetRenderTargets(0, nullptr, nullptr);  // Unbind all bound render targets
 
 	Feature::ForEachLoadedFeature("Prepass", [](Feature* feature) { feature->Prepass(); }, true);
+	Feature::ForEachLoadedFeature("PostPrepass", [](Feature* feature) { feature->PostPrepass(); }, true);
 }
 
 void Deferred::StartDeferred()
@@ -359,11 +360,15 @@ void Deferred::DeferredPasses()
 
 	auto& ibl = globals::features::ibl;
 
+	// Matches SKYLIGHTING_COVERAGE_REGISTER in DeferredCompositeCS.hlsl; t17 is SharedData::DepthTexture
+	constexpr UINT SKYLIGHTING_COVERAGE_SLOT = 18;
+
 	// Deferred Composite
 	{
 		TracyD3D11Zone(globals::state->tracyCtx, "Deferred Composite");
 
-		ID3D11ShaderResourceView* skylightingProbes = skylighting.loaded && skylighting.texProbeArray ? skylighting.texProbeArray->srv.get() : nullptr;
+		const bool skylightingReady = skylighting.loaded && skylighting.texProbeArray;
+		ID3D11ShaderResourceView* skylightingProbes = skylightingReady ? skylighting.texProbeArray->srv.get() : nullptr;
 		ID3D11ShaderResourceView* srvs[16]{
 			specular.SRV,                                                                         // t0  SpecularTexture
 			albedo.SRV,                                                                           // t1  AlbedoTexture
@@ -382,11 +387,16 @@ void Deferred::DeferredPasses()
 			ibl.loaded ? ibl.envIBLTexture->srv.get() : nullptr,                                  // t14 EnvIBLTexture
 			ibl.loaded ? ibl.skyIBLTexture->srv.get() : nullptr,                                  // t15 SkyIBLTexture
 		};
+		ID3D11ShaderResourceView* skylightingCoverageSrvs[2]{
+			skylightingReady ? skylighting.texProbeCoverage->srv.get() : nullptr,    // t18 SkylightingProbeCoverage
+			skylightingReady ? skylighting.texZenithOcclusion->srv.get() : nullptr,  // t19 SkylightingZenithDepth
+		};
 
 		if (dynamicCubemaps.loaded)
 			context->CSSetSamplers(0, 1, &linearSampler);
 
 		context->CSSetShaderResources(0, ARRAYSIZE(srvs), srvs);
+		context->CSSetShaderResources(SKYLIGHTING_COVERAGE_SLOT, ARRAYSIZE(skylightingCoverageSrvs), skylightingCoverageSrvs);
 
 		ID3D11UnorderedAccessView* uavs[3]{ main.UAV, normals.UAV, motionVectors.UAV };
 		context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
@@ -406,6 +416,7 @@ void Deferred::DeferredPasses()
 	{
 		ID3D11ShaderResourceView* views[16]{ nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
 		context->CSSetShaderResources(0, ARRAYSIZE(views), views);
+		context->CSSetShaderResources(SKYLIGHTING_COVERAGE_SLOT, 2, views);
 
 		ID3D11UnorderedAccessView* uavs[3]{ nullptr, nullptr, nullptr };
 		context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
@@ -427,12 +438,7 @@ void Deferred::DeferredPasses()
 
 void Deferred::EndDeferred()
 {
-	if (!globals::state->inWorld)
-		return;
-
-	auto shaderCache = globals::shaderCache;
-
-	if (!shaderCache->IsEnabled())
+	if (!deferredPass)
 		return;
 
 	auto shadowState = globals::game::shadowState;

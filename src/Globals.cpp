@@ -24,6 +24,8 @@
 #include "Features/LinearLighting.h"
 #include "Features/PerformanceOverlay.h"
 #include "Features/PostProcessing.h"
+#include "Features/ProceduralAurora.h"
+#include "Features/ProceduralSun.h"
 #include "Features/RainRefraction.h"
 #include "Features/RemoteControl.h"
 #include "Features/RenderDoc.h"
@@ -38,6 +40,7 @@
 #include "Features/TerrainHelper.h"
 #include "Features/TerrainShadows.h"
 #include "Features/TerrainVariation.h"
+#include "Features/TreeWind.h"
 #include "Features/UnifiedWater.h"
 #include "Features/Upscaling.h"
 #include "Features/VolumetricLighting.h"
@@ -76,6 +79,7 @@ namespace globals
 		HairSpecular hairSpecular{};
 		HorizonFix horizonFix{};
 		InteriorSun interiorSun{};
+		ProceduralSun proceduralSun{};
 		RainRefraction rainRefraction{};
 		ScreenSpaceGI screenSpaceGI{};
 		ScreenSpaceShadows screenSpaceShadows{};
@@ -86,6 +90,7 @@ namespace globals
 		TerrainBlending terrainBlending{};
 		TerrainHelper terrainHelper{};
 		TerrainShadows terrainShadows{};
+		TreeWind treeWind{};
 		UnifiedWater unifiedWater{};
 		VolumetricLighting volumetricLighting{};
 		WaterEffects waterEffects{};
@@ -105,6 +110,7 @@ namespace globals
 		Skin skin{};
 		SceneManager sceneManager{};
 		PostProcessing postProcessing{};
+		ProceduralAurora proceduralAurora{};
 
 		namespace llf
 		{

@@ -187,6 +187,9 @@ public:
 	/** @brief Filter counts from the last time the list was built; shown beside each filter in the sort popup. */
 	static const FilterCounts& GetFilterCounts();
 
+	/** @brief Accent dot in the top-right corner of a sort button while a filter is on. */
+	static void DrawFilterDot(const ImVec2& buttonMin, const ImVec2& buttonMax);
+
 	/**
 	 * @brief Draws the sort and filter popup (sort order, filters with counts, Clear filters) if `popupId` is open.
 	 * The sort and filters are saved with the menu settings and drive both the list and the Go to palette.

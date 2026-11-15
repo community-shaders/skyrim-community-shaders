@@ -142,21 +142,36 @@ namespace SharedData
 		float RippleRadius;
 		float RippleBreadth;
 		float RippleLifetimeRcp;
-		float pad0;
+		float WallRainDensity;
+
+		float WallRainDropSize;
+		float WallRainSpeed;
+		float WallRainLayering;
+		float WallRainNormalStrength;
+
+		float WallRainWetness;
+		float WallRainDarkening;
+		bool EnableWallRain;
+		float WallRainTrailLength;
 	};
 
 	struct SkylightingSettings
 	{
 		row_major float4x4 OcclusionViewProj;
+		row_major float4x4 ZenithViewProj;
 		float4 OcclusionSHBasis4Pi;  // SH basis of the occlusion direction, times 4 pi (Monte Carlo weight)
 
 		float4 PosOffset;   // xyz: cell origin in camera model space
 		uint4 ArrayOrigin;  // xyz: array origin
 		int4 ValidMargin;
 
+		float3 ZenithOffset;  // eye movement since the zenith capture
+		uint ZenithValid;
+
 		float MinDiffuseVisibility;
 		float MinSpecularVisibility;
-		uint2 pad0;
+		uint AccumulateOcclusion;  // 0 on zenith frames, whose capture is not a sky visibility sample
+		uint pad0;
 	};
 
 	struct CloudShadowsSettings
@@ -487,6 +502,42 @@ namespace SharedData
 		float2 pad1;
 	};
 
+	struct ProceduralSunSettings
+	{
+		uint enabled;
+		float sunDiskCos;
+		float diskIntensity;
+		float edgeSoftness;
+
+		uint haloEnabled;
+		float sunHaloCos;
+		float haloIntensity;
+		float haloFalloff;
+
+		float cloudOcclusionStrength;
+		float sunQuadModelRadius;
+		float2 pad0;
+	};
+
+	struct ProceduralAuroraSettings
+	{
+		float4 FringeColor;  // xyz: lower edge color, w: lower edge amount
+		float4 BodyColor;    // xyz: main curtain color, w: storm level of the current night (0..1)
+		float4 CrownColor;   // xyz: top color in display space, w: height where the top color starts
+		float Brightness;
+		float Time;  // animation clock (speed and night strength already applied)
+		float RayDetail;
+		float Softness;  // 0 crisp .. 1 soft and see-through
+		float FoldStrength;
+		float RayStrength;
+		float Seed;
+		uint Enabled;
+		float3 Atmosphere;        // x: vanilla aurora visibility (0..1), y: haze amount, z: nebula glow
+		float CurtainSize;        // curtain width and height relative to the default
+		float CurtainCount;       // curtains drawn, 1 .. 7; a fraction fades the last one in or out
+		float3 BodyDisplayColor;  // main curtain color in display space
+	};
+
 	cbuffer FeatureData : register(b6)
 	{
 		GrassLightingSettings grassLightingSettings;
@@ -510,6 +561,8 @@ namespace SharedData
 		SkinData skinData;
 		HorizonFixSettings horizonFixSettings;
 		RainRefractionSettings rainRefractionSettings;
+		ProceduralSunSettings proceduralSunSettings;
+		ProceduralAuroraSettings proceduralAuroraSettings;
 	};
 
 	Texture2D<float4> DepthTexture : register(t17);
@@ -546,14 +599,9 @@ namespace SharedData
 	// Returns water data for the tile containing worldPosition (camera-relative XY).
 	float4 GetWaterData(float3 worldPosition)
 	{
-		float2 cellF = (((worldPosition.xy + FrameBuffer::CameraPosAdjust.xy)) / 4096.0) + 64.0;  // always positive
-		int2 cellInt;
-		float2 cellFrac = modf(cellF, cellInt);
-
-		cellF = worldPosition.xy / float2(4096.0, 4096.0);  // remap to cell scale
-		cellF += 2.5;                                       // 5x5 cell grid
-		cellF -= cellFrac;                                  // align to cell borders
-		cellInt = round(cellF);
+		// floor keeps negative coordinates and cell borders exact
+		float2 absolutePosition = worldPosition.xy + FrameBuffer::CameraPosAdjust.xy;
+		int2 cellInt = (int2)(floor(absolutePosition / 4096.0) - floor(FrameBuffer::CameraPosAdjust.xy / 4096.0)) + 2;  // 5x5 cell grid
 
 		uint waterTile = (uint)clamp(cellInt.x + (cellInt.y * 5), 0, 24);  // remap xy to 0-24
 

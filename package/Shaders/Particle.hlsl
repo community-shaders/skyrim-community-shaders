@@ -373,7 +373,7 @@ void AddPointLighting(float3 positionWS, ParticleSurface surface, inout float3 l
 
 			float intensityMultiplier = LightLimitFix::GetAttenuation(lightDist, light) * (SharedData::lightLimitFixSettings.EnableLocalShadows ? light.fade : 1.0);
 			[branch] if (intensityMultiplier > 1e-5 && localShadow)
-				intensityMultiplier *= LightLimitFix::GetLocalShadow(LinearSampler, light.localShadowIndex, positionWS, FrameBuffer::CameraPosAdjust.xyz, lightDirection, false, 0.0);
+				intensityMultiplier *= LightLimitFix::GetLocalShadowWithLightFade(LinearSampler, light.localShadowIndex, positionWS, FrameBuffer::CameraPosAdjust.xyz, lightDirection, false, 0.0);
 
 			lighting += ShadeLight(surface, light.color.xyz * intensityMultiplier, lightDirection);
 		}

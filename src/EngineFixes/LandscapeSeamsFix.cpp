@@ -26,12 +26,6 @@ namespace
 	constexpr auto NormalTexture = static_cast<RE::BSTextureSet::Texture>(1);
 	constexpr auto RmaosTexture = static_cast<RE::BSTextureSet::Texture>(5);
 
-	RE::TESLandTexture* GetDefaultLandTexture()
-	{
-		static const auto address = REL::Relocation<RE::TESLandTexture**>(RELOCATION_ID(514783, 400936));
-		return *address;
-	}
-
 	constexpr int PerimeterIndex(int a_x, int a_y)
 	{
 		if (a_y == 0)

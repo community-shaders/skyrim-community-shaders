@@ -1,0 +1,29 @@
+name: "PR: Debug Sections Check"
+
+on:
+    pull_request:
+        types: [opened, synchronize, reopened, ready_for_review]
+        paths:
+            - "src/**"
+            - "tools/check-debug-sections.py"
+
+permissions:
+    contents: read
+
+jobs:
+    debug-sections:
+        name: Verify Debug UI uses Util::DebugSection
+        if: ${{ !github.event.pull_request.draft }}
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v6
+              with:
+                  ref: ${{ github.event.pull_request.head.sha }}
+                  persist-credentials: false
+
+            - uses: actions/setup-python@v6
+              with:
+                  python-version: "3.11"
+
+            - name: Check Debug sections
+              run: python tools/check-debug-sections.py

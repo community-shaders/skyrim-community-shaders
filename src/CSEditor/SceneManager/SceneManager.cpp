@@ -13,6 +13,7 @@
 #include "ScenePresetExport.h"
 #include "SceneSettingsManager.h"
 #include "SceneSettingsUI.h"
+#include "Utils/DebugSection.h"
 #include "Utils/UI.h"
 
 // The debug view is developer-facing validation output and is intentionally not translated.
@@ -537,7 +538,7 @@ void SceneManager::DrawSettings()
 		"Files that set feature settings at startup: your own exports, files shipped by mods, and those of applied preset packs."));
 	if (overwritesOpen)
 		FeatureOverwritesPanel::Draw();
-	if (Util::ShowDebugSections() && ImGui::CollapsingHeader(T("feature.scene_manager.debug", "Debug")))
+	if (Util::DebugSection section; section)
 		DrawDebug(*this);
 }
 

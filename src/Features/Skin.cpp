@@ -9,6 +9,7 @@
 #include "State.h"
 
 #include "I18n/I18n.h"
+#include "Utils/DebugSection.h"
 #include "Utils/UI.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
@@ -178,6 +179,13 @@ void Skin::DrawSettings()
 	if (Util::Button(T("feature.skin.reload_skin_detail_texture", "Reload Skin Detail Texture"))) {
 		ReloadSkinDetail();
 	}
+}
+
+void Skin::DrawDebugSection()
+{
+	Util::DebugSection section;
+	if (!section)
+		return;
 
 	BUFFER_VIEWER_NODE(texSkinDetail, 1.0f)
 }

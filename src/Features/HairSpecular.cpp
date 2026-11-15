@@ -2,6 +2,7 @@
 
 #include "../I18n/I18n.h"
 #include "Utils/D3D.h"
+#include "Utils/Serialize.h"
 #include <DirectXTex.h>
 
 #define I18N_KEY_PREFIX "feature.hair_specular."
@@ -72,13 +73,18 @@ void HairSpecular::DrawSettings()
 							  "Marschner hair model might have overly bright transmission without self-shadowing.\n"));
 	}
 	ImGui::SliderFloat(T(TKEY("self_shadow_strength"), "Self Shadow Strength"), &settings.SelfShadowStrength, 0.0f, 1.0f, "%.2f");
-	ImGui::SliderFloat(T(TKEY("self_shadow_exponent"), "Self Shadow Exponent"), &settings.SelfShadowExponent, 0.0f, 10.0f, "%.2f");
+	ImGui::SliderFloat(T(TKEY("self_shadow_exponent"), "Self Shadow Exponent"), &settings.SelfShadowExponent, 0.01f, 10.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
 	ImGui::SliderFloat(T(TKEY("self_shadow_scale"), "Self Shadow Scale"), &settings.SelfShadowScale, 0.0f, 10.0f, "%.2f");
 }
 
 void HairSpecular::LoadSettings(json& o_json)
 {
 	settings = o_json;
+	const Settings defaults{};
+	settings.HairMode = std::min(settings.HairMode, 1u);
+	settings.HairGlossiness = Util::ClampFinite(settings.HairGlossiness, defaults.HairGlossiness, 0.0f, 256.0f);
+	settings.SelfShadowExponent = Util::ClampFinite(settings.SelfShadowExponent, defaults.SelfShadowExponent, 0.01f, 10.0f);
+	settings.SelfShadowScale = Util::ClampFinite(settings.SelfShadowScale, defaults.SelfShadowScale, 0.0f, 10.0f);
 }
 
 void HairSpecular::SaveSettings(json& o_json)

@@ -92,6 +92,7 @@ Versioning (enforced by `tools/feature_version_audit.py`):
 ## Project conventions
 
 - **D3D11 resource naming**: every D3D11 resource must be named for RenderDoc. After raw `device->Create*` calls use `Util::SetResourceName(ptr, "Feature::ResourceDescription")`. Wrapper types in `src/Buffer.h` (`Texture2D`, `Buffer`, `ConstantBuffer`, ...) take the name in the constructor and name their views automatically (`"Feature::Name SRV"` / `"Feature::Name UAV"`). The single implementation is `Util::SetResourceName` in `src/Utils/D3D.cpp`; never duplicate the GUID or re-implement it inline. Forward-declare in headers and delegate.
+- **Feature Debug sections**: opt in with `HasDebugSection()` / `DrawDebugSection()` and open the body with `Util::DebugSection section; if (!section) return;` (`src/Utils/DebugSection.h`). Do not hand-roll a `TreeNode`/`CollapsingHeader` titled "Debug", gate on `ShowDebugSections()` yourself, or draw a `BUFFER_VIEWER_NODE` outside a Debug section (`python tools/check-debug-sections.py` enforces all three in CI). Diagnostics, statistics, visualisations and buffer viewers belong there. The scene settings catalog generator reads `DrawDebugSection` bodies like `DrawSettings`. Large read-only panels go in their own file (`PostProcessing/ImageSpaceDebug.cpp`, `SkySync/SkySyncDebug.cpp`).
 - UI spacing, padding and colors come from `ThemeManager::Constants` (`src/Menu/ThemeManager.h`), not hardcoded values.
 - ImGui: always pair `BeginTable()` / `EndTable()`; use RAII for style changes.
 - UI components extracted from `Menu` (`src/Menu/*Renderer`) access its private methods via callbacks rather than making them public; UI state lives in `Menu` and is passed to components as parameters.
@@ -145,6 +146,8 @@ After adding or changing strings, regenerate locally (pre-commit.ci also runs bo
 python tools/extract-i18n.py --write                 # regenerate en.json
 python tools/sort-i18n.py --write --prune-extra      # reorder locales, drop keys removed from en.json
 ```
+
+CI also runs `python tools/check-hardcoded-ui-strings.py --check`, which fails on widget labels and text passed as bare literals (`ImGui::Text("..")`, `Util::Button("..")`, sliders, tooltips, table columns, `std::format` text). Wrap them in `T(...)`: keep printf-style text inside `T` (`ImGui::Text(T(TKEY("dim"), "Dim: %.3f"), v)`) and use `I18n::GetSingleton()->Format(key, {{"name", v}}, "... {name}")` for named placeholders. For deliberate developer-only literals (identifiers, layout column ids) add a trailing `// i18n-ignore: reason` on the call's line.
 
 When editing non-English files: translate values only, never keys; keep placeholders (`{count}`), format specifiers (`%s`, `%.1f`) and anything after `##` unchanged.
 

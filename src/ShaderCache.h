@@ -79,7 +79,7 @@ namespace ShaderConstants
 		const int32_t LandscapeTexture5GlintParameters = 48;
 		const int32_t LandscapeTexture6GlintParameters = 49;
 
-		const int32_t MaterialObjectRGBScale = 50;  // RGB multipliers for material objects
+		const int32_t MaterialObjectRGBScale = 50;  // Projected material RGB scale in xyz, fuzz roughness in w
 
 		const int32_t ShadowSampleParam = -1;
 		const int32_t EndSplitDistances = -1;
@@ -119,6 +119,7 @@ namespace ShaderConstants
 		const int32_t PBRParams2 = 16;
 		const int32_t PBRParams3 = 17;
 		const int32_t PBRParams4 = 18;
+		const int32_t PBRParams5 = 19;
 	};
 
 	struct EffectPS

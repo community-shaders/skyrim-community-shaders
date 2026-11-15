@@ -1,12 +1,15 @@
 ﻿#include "ENBExtender.h"
 
 #include <d3dcompiler.h>
+#include <detours/detours.h>
 #include <fstream>
+#include <intrin.h>
 #include <sstream>
 #include <unordered_set>
 
 #include "Features/Effects11/ShaderPatches.h"
 #include "Globals.h"
+#include "Overlays/PresetOverlays.h"
 
 namespace ENBExtender
 {
@@ -217,6 +220,7 @@ namespace ENBExtender
 		std::string uiGroup = ann("UIGroup");
 
 		std::string finalVal = defaultVal;
+		std::string compiledVal;
 		if (!iniPath.empty() && !iniSection.empty() && !uiName.empty()) {
 			// Same key Effect::GetVariableIniKey saves under, so an edited define survives recompiles
 			std::string iniKey = ann("UniqueName");
@@ -232,6 +236,9 @@ namespace ENBExtender
 					iniVal = "1";
 				finalVal = iniVal;
 			}
+			// The UI keeps the stored value; OnStoresLoaded applies overlays to it like any other slot
+			compiledVal = finalVal;
+			Overlays::Manager::GetSingleton().TransformDefine(iniSection, iniKey, typeName, compiledVal);
 		}
 
 		if (!uiName.empty()) {
@@ -271,7 +278,7 @@ namespace ENBExtender
 			}
 		}
 
-		result += "#define " + defineName + " " + finalVal + "\n";
+		result += "#define " + defineName + " " + (compiledVal.empty() ? finalVal : compiledVal) + "\n";
 		result += "string __uidef_" + defineName + ";\n";
 		return true;
 	}
@@ -1376,6 +1383,39 @@ namespace ENBExtender
 			return false;
 		}
 		return true;
+	}
+
+	/** @brief Lowercase so it matches KiLoader's prompt after lowercasing; file lookups are case-insensitive. */
+	static constexpr std::wstring_view helperFileName = L"enbhelperse.dll";
+
+	/** @brief Real MessageBoxW; Detours repoints it at a trampoline. */
+	static auto* RealMessageBoxW = &MessageBoxW;
+
+	/** @brief Picks No when KiLoader's Yes/No prompt lists only ENBHelperSE.dll as missing a loading point. */
+	static int WINAPI DetouredMessageBoxW(HWND window, LPCWSTR text, LPCWSTR caption, UINT type)
+	{
+		HMODULE caller = nullptr;
+		GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, static_cast<LPCWSTR>(_ReturnAddress()), &caller);
+		std::wstring message = text ? text : L"";
+		std::ranges::transform(message, message.begin(), ::towlower);
+		const bool onlyHelperListed = message.find(L'\'' + std::wstring(helperFileName) + L'\'') != std::wstring::npos && message.find(L".dll'") == message.rfind(L".dll'");
+		if (caller && caller == GetModuleHandleW(L"KiLoader.dll") && (type & MB_TYPEMASK) == MB_YESNO &&
+			onlyHelperListed && message.find(L"loading point") != std::wstring_view::npos) {
+			logger::info("[ENBEXTENDER] Skipped KiLoader's prompt for ENBHelperSE.dll: Effects 11 does not use it");
+			return IDNO;
+		}
+		return RealMessageBoxW(window, text, caption, type);
+	}
+
+	void SuppressHelperPrompt()
+	{
+		if (!std::filesystem::exists(std::filesystem::path(L"Data/KiLoader/Plugins") / helperFileName))
+			return;
+		DetourTransactionBegin();
+		DetourUpdateThread(GetCurrentThread());
+		DetourAttach(reinterpret_cast<PVOID*>(&RealMessageBoxW), reinterpret_cast<PVOID>(&DetouredMessageBoxW));
+		if (const auto result = DetourTransactionCommit(); result != NO_ERROR)
+			logger::warn("[ENBEXTENDER] Could not hook MessageBoxW ({}); KiLoader will still prompt about ENBHelperSE.dll", result);
 	}
 
 	/** @brief Drops spaces around '.' so "Group . Name" and "Group.Name" compare equal. */

@@ -43,6 +43,8 @@ namespace SceneSettingsPolicy
 		{ "ScreenSpaceGI", "EnableGI" },
 		{ "ScreenSpaceGI", "EnableTemporalDenoiser" },
 		{ "ScreenSpaceGI", "EnableExperimentalSpecularGI" },
+		// Debug section: backend log verbosity, read only at startup
+		{ "Upscaling", "streamlineLogLevel" },
 		{ "VolumetricLighting" },
 	};
 
@@ -62,6 +64,7 @@ namespace SceneSettingsPolicy
 		{ "GrassLighting" },
 		{ "ImageBasedLighting" },
 		{ "PostProcessing" },
+		{ "ProceduralSun" },
 		{ "ScreenSpaceGI" },
 		{ "ScreenSpaceShadows" },
 		{ "Skylighting" },

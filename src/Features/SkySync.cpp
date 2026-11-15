@@ -155,54 +155,6 @@ void SkySync::DrawSettings()
 
 		ImGui::TreePop();
 	}
-
-	if (Util::ShowDebugSections() && ImGui::TreeNodeEx("Debug", ImGuiTreeNodeFlags_None)) {
-		static constexpr const char* CasterNames[] = { "Sun", "Masser", "Secunda", "Zenith" };
-		static constexpr const char* PhaseNames[] = { "Full", "Waning Gibbous", "Waning Quarter", "Waning Crescent", "New", "Waxing Crescent", "Waxing Quarter", "Waxing Gibbous" };
-
-		auto getPhase = [](const RE::Moon* moon) -> const char* {
-			if (!moon || !moon->moonMesh)
-				return "Unknown";
-			if (const auto prop = skyrim_cast<RE::BSSkyShaderProperty*>(moon->moonMesh->GetGeometryRuntimeData().shaderProperty.get())) {
-				if (auto tex = prop->GetBaseTexture())
-					return PhaseNames[static_cast<int>(Util::Moon::GetPhaseFromTexture(tex->name.c_str()))];
-			}
-			return "Unknown";
-		};
-
-		auto drawMoonEntry = [&](const char* label, Caster caster, const char* phase) {
-			auto& color = colors[static_cast<int>(caster)];
-			ImVec4 swatch = { color.x, color.y, color.z, 1.0f };
-			ImGui::ColorButton(label, swatch, ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_NoPicker, { ImGui::GetTextLineHeight(), ImGui::GetTextLineHeight() });
-			ImGui::SameLine();
-			ImGui::Text("%s  [%s]  color (%.3f, %.3f, %.3f, %.3f)", label, phase, color.x, color.y, color.z, color.w);
-		};
-
-		const auto sky = globals::game::sky;
-		drawMoonEntry("Masser", Caster::Masser, sky ? getPhase(sky->masser) : "Unknown");
-		drawMoonEntry("Secunda", Caster::Secunda, sky ? getPhase(sky->secunda) : "Unknown");
-
-		ImGui::Text("Dim: %.3f", currentDim);
-
-		ImGui::Spacing();
-		ImGui::Separator();
-		ImGui::Spacing();
-
-		ImGui::Text("Shadow target: %s", CasterNames[static_cast<int>(shadowFader.target)]);
-		ImGui::Text("Shadow dir:    (%.2f, %.2f, %.2f)", shadowFader.currentDir.x, shadowFader.currentDir.y, shadowFader.currentDir.z);
-		ImGui::Text("Transition intensity factor: %.3f", shadowFader.intensityFactor);
-		ImGui::Text("Caster fade: %.3f", shadowFader.casterFade);
-		if (shadowFader.transitioning) {
-			const float t = shadowFader.Progress(settings.ShadowTransitionDuration);
-			ImGui::ProgressBar(t, { -1.0f, 0.0f }, "");
-			ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x);
-			ImGui::Text("Transitioning %.0f%%", t * 100.0f);
-		} else {
-			ImGui::TextDisabled("No transition");
-		}
-
-		ImGui::TreePop();
-	}
 }
 
 void SkySync::LoadSettings(json& o_json)
@@ -426,8 +378,10 @@ bool SkySync::Update(const RE::Sky* sky)
 	active = false;
 	currentDim = 1.0f;
 
-	if (!settings.Enabled)
+	if (!settings.Enabled) {
+		ResetSkyRotation(sky);
 		return std::exchange(immediateTransitionReady, false);
+	}
 
 	if (!sky)
 		return false;
@@ -442,11 +396,12 @@ bool SkySync::Update(const RE::Sky* sky)
 	bool resetTransition = false;
 
 	if (cell != currentCell) {
-		resetTransition = true;
 		const auto prevCell = currentCell;
 		const bool resetFaderForCellChange = cell && prevCell &&
 		                                     (cell->IsInteriorCell() != currentCellInterior ||
 												 cell->GetRuntimeData().worldSpace != currentCellWorldspace);
+		// Crossing exterior cells must not cut a sun/moon fade short; only a new space or a first cell snaps it
+		resetTransition = !prevCell || resetFaderForCellChange;
 		if (cell)
 			SetSkyRotation(sky, cell);
 		else
@@ -494,14 +449,19 @@ bool SkySync::Update(const RE::Sky* sky)
 	lastGameHour = hour;
 
 	const bool transitionCompleted = std::exchange(immediateTransitionReady, false);
+	const bool wasTransitioning = shadowFader.transitioning;
+	const Caster previousTarget = shadowFader.target;
 	shadowFader.Update(sky, directions, intensities, workingLightColors, settings.ShadowTransitionDuration, fadeAdvance, transitionCompleted || resetTransition);
+	// A finished caster fade counts as a completed transition, so cached shadows (terrain) refresh to the new caster.
+	// A swap can also start and finish in one update (zero duration), so a changed target counts too.
+	const bool casterSettled = (wasTransitioning || shadowFader.target != previousTarget) && !shadowFader.transitioning;
 
 	twilightCap = GetTwilightCap(climate->timing, hour, sunHeight);
 	UpdateMoonlightFade(fadeAdvance / SecondsPerGameHour, transitionCompleted);
 	// At night follow the light's own direction, so the dim stays continuous while it swings between moons
 	currentDim = sunBelowHorizon ? moonlightFade * GetHorizonDim(GetHeightAboveHorizon(shadowFader.dimDir)) : GetHorizonDim(sunHeight);
 
-	return transitionCompleted;
+	return transitionCompleted || casterSettled;
 }
 
 float SkySync::GetHeightAboveHorizon(const RE::NiPoint3& dir) const
@@ -584,6 +544,15 @@ RE::NiPoint3 SkySync::CalculateVanillaSunDirection(float hour, float sunrise, fl
 	return dir;
 }
 
+float SkySync::GetAlternateSunPhase(float hour, float sunrise, float sunset)
+{
+	const float dayLength = sunset - sunrise;
+	const float hoursSinceSunrise = hour >= sunrise ? hour - sunrise : hour + HoursPerDay - sunrise;
+	if (hoursSinceSunrise < dayLength)
+		return DirectX::XM_PI * hoursSinceSunrise / dayLength;
+	return DirectX::XM_PI * (1.0f + (hoursSinceSunrise - dayLength) / (HoursPerDay - dayLength));
+}
+
 RE::NiPoint3 SkySync::CalculateAlternateSunDirection(float hour, float sunrise, float sunset, float sunAngle)
 {
 	float sinPhi, cosPhi, sinTilt, cosTilt;
@@ -640,9 +609,24 @@ void SkySync::SetSkyRotation(const RE::Sky* sky, RE::TESObjectCELL* cell)
 		return;
 
 	currentSkyRotation = rotation;
+	skyRotationApplied = true;
 	sky->root->local.rotate = RE::NiMatrix3{ RE::NiPoint3{ 0.0f, 0.0f, -rotation } };
 	RE::NiUpdateData updateData;
 	sky->root->Update(updateData);
+}
+
+void SkySync::ResetSkyRotation(const RE::Sky* sky)
+{
+	// Clear the cache so re-enabling reapplies the cell's north rotation
+	currentSkyRotation = D3D11_FLOAT32_MAX;
+	currentCell = nullptr;
+	if (!skyRotationApplied || !sky || !sky->root)
+		return;
+
+	sky->root->local.rotate = RE::NiMatrix3{ RE::NiPoint3{ 0.0f, 0.0f, 0.0f } };
+	RE::NiUpdateData updateData;
+	sky->root->Update(updateData);
+	skyRotationApplied = false;
 }
 
 bool SkySync::IsWorldspaceDisabled(const RE::TESWorldSpace* worldspace) const
@@ -739,11 +723,19 @@ SkySync::Caster SkySync::GetMoonLightCaster(const RE::Sky* sky) const
 		return Caster::Zenith;
 
 	auto visibility = [](const RE::Moon* moon) {
-		if (!moon || !moon->root || !moon->moonMesh || moon->root->GetFlags().any(RE::NiAVObject::Flag::kHidden))
+		if (!moon || !moon->root || !moon->moonNode || !moon->moonMesh ||
+			moon->root->GetFlags().any(RE::NiAVObject::Flag::kHidden) || moon->moonNode->GetFlags().any(RE::NiAVObject::Flag::kHidden))
 			return 0.0f;
 		const auto prop = skyrim_cast<RE::BSSkyShaderProperty*>(moon->moonMesh->GetGeometryRuntimeData().shaderProperty.get());
 		return prop ? prop->kBlendColor.alpha : 0.0f;
 	};
+
+	if (active && sunBelowHorizon) {
+		const Caster target = shadowFader.target;
+		if (target != Caster::Masser && target != Caster::Secunda)
+			return Caster::Zenith;
+		return visibility(target == Caster::Masser ? sky->masser : sky->secunda) > 0.0f ? target : Caster::Zenith;
+	}
 
 	const float masser = visibility(sky->masser);
 	const float secunda = visibility(sky->secunda);

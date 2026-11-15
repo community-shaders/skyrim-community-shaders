@@ -83,8 +83,8 @@ public:
 	 */
 	ID3D11ComputeShader* GetComputeRaymarch();
 
-	/** @brief Clears the shadow texture and dispatches shadow ray marching if conditions are met. */
-	virtual void Prepass() override;
+	/** @brief Clears the shadow texture and dispatches shadow ray marching if conditions are met. Runs after every feature's Prepass. */
+	virtual void PostPrepass() override;
 
 	virtual void LoadSettings(json& o_json) override;
 	virtual void SaveSettings(json& o_json) override;

@@ -1,6 +1,7 @@
 #include "Profiler.h"
 
 #include <algorithm>
+#include <span>
 #include <unordered_map>
 
 float Profiler::RollingHistory::GetAverage() const
@@ -73,7 +74,9 @@ void Profiler::Release()
 		frame.disjoint = nullptr;
 		frame.timers.clear();
 		frame.activeCount = 0;
+		frame.skipped = {};
 	}
+	pendingSkipped = {};
 	results.clear();
 	knownTimers.clear();
 	knownTimerIndex.clear();
@@ -100,6 +103,9 @@ void Profiler::BeginFrame()
 
 	auto& frame = frames[writeFrame];
 	frame.activeCount = 0;
+	frame.overflowed = false;
+	frame.skipped.count = 0;
+	std::swap(frame.skipped, pendingSkipped);
 	frameActive = true;
 	passOpen = false;
 	context->Begin(frame.disjoint.get());
@@ -121,6 +127,8 @@ void Profiler::BeginPass(std::string_view name)
 			context->End(timer.begin.get());
 			QueryPerformanceCounter(&timer.cpuBegin);
 			passOpen = true;
+		} else {
+			frame.overflowed = true;
 		}
 	}
 
@@ -151,6 +159,25 @@ void Profiler::EndPass()
 		endPerfEvent({});
 }
 
+void Profiler::MarkPassSkipped(std::string_view name)
+{
+	if (!initialized || !IsActive())
+		return;
+	(frameActive ? frames[writeFrame].skipped : pendingSkipped).Add(name);
+}
+
+void Profiler::SkipMarks::Add(std::string_view name)
+{
+	const auto live = std::span(names).first(count);
+	if (std::ranges::find(live, name) != live.end())
+		return;
+	if (count < names.size())
+		names[count].assign(name);
+	else
+		names.emplace_back(name);
+	count++;
+}
+
 void Profiler::EndFrame()
 {
 	// Before the early returns so it ticks while GPU queries are off.
@@ -163,6 +190,8 @@ void Profiler::EndFrame()
 	if (!initialized || !context)
 		return;
 
+	// Marks no frame took belong to a frame that recorded nothing.
+	pendingSkipped.count = 0;
 	frameCounter.fetch_add(1, std::memory_order_relaxed);
 
 	if (frameSkipped) {
@@ -208,6 +237,20 @@ void Profiler::CollectResults()
 		activeTimers.clear();
 		activeTotalMs = 0.0f;
 		activeCpuTotalMs = 0.0f;
+
+		// A skip needs no GPU timing, so it counts on disjoint frames too. A pass that began this frame ran, timed or not.
+		if (!frame.overflowed) {
+			const auto ran = std::span(frame.timers).first(frame.activeCount);
+			for (const auto& name : std::span(frame.skipped.names).first(frame.skipped.count)) {
+				auto it = knownTimerIndex.find(name);
+				if (it == knownTimerIndex.end() || std::ranges::any_of(ran, [&](const auto& timer) { return timer.name == name; }))
+					continue;
+				// lastSampleFrame stays, so a pass that is always skipped still retires.
+				auto& known = knownTimers[it->second];
+				known.gpu.PushSample(0.0f);
+				known.cpu.PushSample(0.0f);
+			}
+		}
 
 		if (disjointData.Disjoint)
 			continue;

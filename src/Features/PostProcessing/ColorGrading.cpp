@@ -19,6 +19,7 @@
 #include "IconsFontAwesome5.h"
 #include "IconsTabler.h"
 #include "Menu/Icons/helpers/IconFonts.h"
+#include "Menu/MenuIcons.h"
 
 #define I18N_KEY_PREFIX "feature.post_processing.color_grading."
 
@@ -323,40 +324,13 @@ struct TonemapperInfo
 
 void ColorGrading::DrawSettings()
 {
-	ImGui::Checkbox(T(TKEY("skip_ldr_color_grading"), "Skip LDR Color Grading"), &settings.skipLDR);
-	if (auto _tt = Util::HoverTooltipWrapper())
-		ImGui::TextUnformatted(T(TKEY("skip_ldr_color_grading_tooltip"), "Skip color grading after tonemapping. This includes Lift Gamma Gain. Will be automatically skipped with HDR on."));
-
-	ImGui::Checkbox(T(TKEY("skip_lut_direct_color_grading"), "Skip LUT (Direct Color Grading)"), &settings.skipLUT);
-	if (auto _tt = Util::HoverTooltipWrapper())
-		ImGui::TextUnformatted(T(TKEY("skip_lut_direct_color_grading_tooltip"), "Skip baking color grading into a LUT and apply it directly per-pixel. More accurate but slower."));
-
-	ImGui::Checkbox(T(TKEY("convert_linear_to_log_before_hdr_color_grading"), "Convert Linear to Log Before HDR Color Grading"), &settings.useLog);
-	if (settings.useLog) {
-		{
-			bool invertLog = settings.invertLog;
-			if (settings.enableTonemap)
-				invertLog = true;
-			const SceneWidgetInterceptor::ProxyScope proxy(&settings.invertLog, 1.0f);
-			ImGui::BeginDisabled(settings.enableTonemap);
-			if (ImGui::Checkbox(T(TKEY("convert_log_to_linear_after_hdr_color_grading"), "Convert Log to Linear After HDR Color Grading"), &invertLog) && !SceneWidgetInterceptor::IsArmed())
-				settings.invertLog = invertLog;
-			ImGui::EndDisabled();
-		}
-		const char* logTypes[] = {
-			T(TKEY("log_type_acescct"), "ACEScct"),
-			T(TKEY("log_type_arrilogc4"), "ARRILogC4"),
-			T(TKEY("log_type_sonyslog3"), "SonySLog3"),
-		};
-		ImGui::Combo(T(TKEY("log_type"), "Log Type"), (int*)&settings.logType, logTypes, IM_ARRAYSIZE(logTypes));
-	}
-
 	ImGui::SeparatorText(T(TKEY("color_grading"), "Color Grading"));
 	{
 		ImGui::SliderFloat(T(TKEY("input_gamma"), "Input Gamma"), &settings.inOutGamma.z, 0.f, 3.f, "%.3f");
 		ImGui::SliderFloat(T(TKEY("output_gamma"), "Output Gamma"), &settings.inOutGamma.w, 0.f, 3.f, "%.3f");
 
-		ImGui::TextUnformatted(T(TKEY("pre_tonemapping_settings"), "Pre-Tonemapping Settings"));
+		ImGui::Spacing();
+		ImGui::TextDisabled("%s", T(TKEY("pre_tonemapping_settings"), "Pre-Tonemapping Settings"));
 		if (ImGui::TreeNode(T(TKEY("exposure_temperature_tint"), "Exposure/Temperature/Tint"))) {
 			exposureSlider(&settings.exposureTemperatureTint.x);
 			ImGui::SliderFloat(T(TKEY("temperature"), "Temperature"), &settings.exposureTemperatureTint.y, 10.f, 150.f, "%1.f00K");
@@ -379,7 +353,7 @@ void ColorGrading::DrawSettings()
 		}
 
 		if (ImGui::TreeNode(T(TKEY("oklch_color_mixer"), "OKLCH Color Mixer"))) {
-			ImGui::TextUnformatted(T(TKEY("oklch_color_mixer_tooltip"), "Adjust brightness, vibrance and hue shift of specific hues in the perceptually uniform OKLCH space."));
+			Util::SettingHint(T(TKEY("oklch_color_mixer_tooltip"), "Adjust brightness, vibrance and hue shift of specific hues in the perceptually uniform OKLCH space."), false);
 			constexpr std::array<ImColor, 7> hues = { {
 				{ 255, 0, 0 },
 				{ 182, 124, 1 },
@@ -429,7 +403,8 @@ void ColorGrading::DrawSettings()
 			ImGui::TreePop();
 		}
 
-		ImGui::TextUnformatted(T(TKEY("post_tonemapping_settings"), "Post-Tonemapping Settings"));
+		ImGui::Spacing();
+		ImGui::TextDisabled("%s", T(TKEY("post_tonemapping_settings"), "Post-Tonemapping Settings"));
 		if (ImGui::TreeNode(T(TKEY("lift_gamma_gain"), "Lift Gamma Gain"))) {
 			ImGui::DragFloat4(T(TKEY("lift"), "Lift"), &settings.lift.x, 1e-3f, -1.f, 1.f, "%.3f");
 			ImGui::DragFloat4(T(TKEY("gamma"), "Gamma"), &settings.gamma.x, 1e-3f, -1.5f, 1.5f, "%.3f");
@@ -498,8 +473,7 @@ void ColorGrading::DrawSettings()
 			ImGui::EndDisabled();
 			ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x);
 			Util::DrawHdrSdrCapabilityPill(tonemappers[tonemapperType].supportsHDR);
-			ImGui::Spacing();
-			ImGui::TextWrapped(tonemappers[tonemapperType].desc.data());
+			Util::SettingHint(tonemappers[tonemapperType].desc.data(), false);
 			ImGui::Spacing();
 
 			// SDR-only tonemappers need AutoHDR to recover peak highlights on an HDR display.
@@ -513,9 +487,10 @@ void ColorGrading::DrawSettings()
 			}
 
 			ImGui::BeginDisabled(SceneWidgetInterceptor::IsArmed());
-			if (Util::Button(T(TKEY("reset"), "Reset"), { -1, 0 }))
+			if (Util::LabeledButton("##ResetTonemapper", Icons::TI(MenuIcons::kRestore), T(TKEY("reset"), "Reset")))
 				settings.tonemapParams = tonemappers[tonemapperType].default_settings;
 			ImGui::EndDisabled();
+			Util::AddTooltip(T(TKEY("reset_tooltip"), "Reset this tonemapper's settings to their defaults."));
 			ImGui::Spacing();
 
 			ImGui::PushID(tonemapperType);
@@ -625,6 +600,35 @@ void ColorGrading::DrawSettings()
 		ImGui::TextUnformatted(T(TKEY("cinematic_blend_tooltip"), "Saturation, Brightness and Contrast."));
 	ImGui::SliderFloat(T(TKEY("fade_blend"), "Fade Blend"), &settings.gameFadeBlend, 0.f, 1.f, "%.3f");
 	ImGui::SliderFloat(T(TKEY("tint_blend"), "Tint Blend"), &settings.gameTintBlend, 0.f, 1.f, "%.3f");
+	ImGui::SeparatorText(T(TKEY("processing"), "Processing"));
+	ImGui::Checkbox(T(TKEY("skip_ldr_color_grading"), "Skip LDR Color Grading"), &settings.skipLDR);
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::TextUnformatted(T(TKEY("skip_ldr_color_grading_tooltip"), "Skip color grading after tonemapping. This includes Lift Gamma Gain. Will be automatically skipped with HDR on."));
+
+	ImGui::Checkbox(T(TKEY("skip_lut_direct_color_grading"), "Skip LUT (Direct Color Grading)"), &settings.skipLUT);
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::TextUnformatted(T(TKEY("skip_lut_direct_color_grading_tooltip"), "Skip baking color grading into a LUT and apply it directly per-pixel. More accurate but slower."));
+
+	ImGui::Checkbox(T(TKEY("convert_linear_to_log_before_hdr_color_grading"), "Convert Linear to Log Before HDR Color Grading"), &settings.useLog);
+	if (settings.useLog) {
+		{
+			bool invertLog = settings.invertLog;
+			if (settings.enableTonemap)
+				invertLog = true;
+			const SceneWidgetInterceptor::ProxyScope proxy(&settings.invertLog, 1.0f);
+			ImGui::BeginDisabled(settings.enableTonemap);
+			if (ImGui::Checkbox(T(TKEY("convert_log_to_linear_after_hdr_color_grading"), "Convert Log to Linear After HDR Color Grading"), &invertLog) && !SceneWidgetInterceptor::IsArmed())
+				settings.invertLog = invertLog;
+			ImGui::EndDisabled();
+		}
+		const char* logTypes[] = {
+			T(TKEY("log_type_acescct"), "ACEScct"),
+			T(TKEY("log_type_arrilogc4"), "ARRILogC4"),
+			T(TKEY("log_type_sonyslog3"), "SonySLog3"),
+		};
+		ImGui::Combo(T(TKEY("log_type"), "Log Type"), (int*)&settings.logType, logTypes, IM_ARRAYSIZE(logTypes));
+	}
+
 	ImGui::SeparatorText(T(TKEY("color_space_transform"), "Color Space Transform"));
 	{
 		auto& spaces = getAvailableColorSpaces();
@@ -646,11 +650,12 @@ void ColorGrading::DrawSettings()
 		UpdateColorSpaceTransforms(hdrEnabled);
 	}
 
-	if (Util::Button(T(TKEY("save_lut_and_output_image"), "Save LUT and Output Image"))) {
+	ImGui::Spacing();
+	if (Util::LabeledButton("##SaveLutImages", Icons::TI(MenuIcons::kSave), T(TKEY("save_lut_and_output_image"), "Save LUT and Output Image"))) {
 		saveImagesFlag = true;
 	}
-	ImGui::SameLine();
-	ImGui::Text(T(TKEY("output_saved_to"), "Output will be saved to: %s"), outputPath.c_str());
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::Text(T(TKEY("output_saved_to"), "Output will be saved to: %s"), outputPath.c_str());
 }
 
 void ColorGrading::RestoreDefaultSettings()

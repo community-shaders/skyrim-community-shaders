@@ -1206,7 +1206,39 @@ class SceneSettingsCatalogGeneratorTests(unittest.TestCase):
         samples = self.entries_by_id[("SubsurfaceScattering", "", "BurleySamples")]
         self.assertEqual(base["displayPath"], "Base Profile")
         self.assertEqual(human["displayPath"], "Human Profile")
-        self.assertEqual(samples["displayPath"], "Settings")
+        self.assertEqual(samples["displayPath"], "")
+
+    def test_persistent_categories_restore_the_enclosing_scope(self):
+        for heading in ("", 'ImGui::SeparatorText(T(TKEY("outer"), "Outer"));'):
+            source = """
+            #define I18N_KEY_PREFIX "feature.example."
+            void Example::DrawSettings()
+            {
+                OUTER_HEADING
+                if (settings.Enabled) {
+                    ImGui::SeparatorText(T(TKEY("inner"), "Inner"));
+                    ImGui::SliderFloat("Inside", &settings.Inside, 0.f, 1.f);
+                    if (settings.Nested) {
+                        ImGui::SliderFloat("Nested", &settings.NestedValue, 0.f, 1.f);
+                    }
+                    ImGui::SliderFloat("Same Scope", &settings.SameScope, 0.f, 1.f);
+                } else {
+                    ImGui::SliderFloat("Sibling", &settings.Sibling, 0.f, 1.f);
+                }
+                ImGui::SliderFloat("After", &settings.After, 0.f, 1.f);
+            }
+            """.replace("OUTER_HEADING", heading)
+            with self.subTest(heading=heading), tempfile.TemporaryDirectory() as directory:
+                path = Path(directory) / "Example.cpp"
+                path.write_text(source, encoding="utf-8")
+                index = GENERATOR.collect_control_index([path])
+                for key in ("Inside", "NestedValue", "SameScope"):
+                    self.assertEqual(index.bindings[("Example", (key,))].category,
+                                     GENERATOR.LocalizedText("Inner", "feature.example.inner"))
+                outer = (GENERATOR.LocalizedText("Outer", "feature.example.outer")
+                         if heading else GENERATOR.LocalizedText())
+                for key in ("Sibling", "After"):
+                    self.assertEqual(index.bindings[("Example", (key,))].category, outer)
 
     def test_brace_scoped_categories_match_exponential_height_fog(self):
         root = self.entries_by_id[("ExponentialHeightFog", "", "fogDensity")]
@@ -1276,7 +1308,7 @@ class SceneSettingsCatalogGeneratorTests(unittest.TestCase):
                                                        "ManualFocusPlane", "TransitionSpeed",
                                                        "BokehBladeCount", "BokehBladeRoundness",
                                                        "HighlightShapeRotationAngle")),
-                           ("Camera/settings", ("FEFoV",)),
+                           ("Camera/settings", ("LensFOV",)),
                            ("Lens Flare/settings", ("ApertureBlades", "FStop", "ApertureRotation")),
                            ("Physical Glare/settings", ("ApertureBlades", "FStop", "ApertureRotation")),
                            ("Vignette/settings", ("FocalLength",))):

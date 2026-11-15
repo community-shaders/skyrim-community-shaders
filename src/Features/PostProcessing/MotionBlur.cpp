@@ -6,6 +6,8 @@
 #include "ShaderCache.h"
 #include "Util.h"
 
+#include <cstdio>
+
 #pragma warning(disable: 4324)
 
 // Define serialization for settings
@@ -138,8 +140,6 @@ void MotionBlur::SaveSettings(json& j)
 
 void MotionBlur::DrawSettings()
 {
-	ImGui::TextUnformatted(T("feature.post_processing.motion_blur.settings", "Motion Blur Settings"));
-
 	// Motion scale presets
 	const char* presets[] = {
 		T("feature.post_processing.motion_blur.preset_very_short", "Very Short"),
@@ -150,6 +150,8 @@ void MotionBlur::DrawSettings()
 	};
 
 	const auto* cam = owner ? owner->GetActivePhysicalCameraState() : nullptr;
+	if (cam)
+		DrawCameraControlledNote(T("feature.post_processing.motion_blur.controlled_by_shutter", "Motion length follows Cinematic Camera's shutter angle."));
 	ImGui::BeginDisabled(cam != nullptr);
 
 	{
@@ -161,15 +163,17 @@ void MotionBlur::DrawSettings()
 
 	ImGui::EndDisabled();
 	if (cam) {
-		ImGui::TextDisabled(T("feature.post_processing.motion_blur.effective_shutter_scale", "Effective Velocity Scale (shutter %.0f°): %.0f"),
+		char scale[128];
+		std::snprintf(scale, sizeof(scale), T("feature.post_processing.motion_blur.effective_shutter_scale", "Effective Velocity Scale (shutter %.0f°): %.0f"),
 			cam->ShutterAngleDeg,
 			std::clamp(CinematicCamera::kMotionBlurReferenceScale * cam->ShutterAngleDeg / 180.0f, 10.0f, 800.0f));
+		Util::SettingHint(scale, false);
 	}
 
 	// Samples (each UI sample represents 2 actual samples)
 	ImGui::SliderInt(T("feature.post_processing.motion_blur.samples", "Samples"), &settings.SampleCount, 8, 16, "%d");
-	ImGui::SameLine();
-	Util::HelpMarker(T("feature.post_processing.motion_blur.sample_count_is_doubled_internally_for_smoother_results", "Sample count is doubled internally for smoother results.\nMore samples = better quality but slower performance"));
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::TextUnformatted(T("feature.post_processing.motion_blur.sample_count_is_doubled_internally_for_smoother_results", "Sample count is doubled internally for smoother results.\nMore samples = better quality but slower performance"));
 }
 
 void MotionBlur::Draw(TextureInfo& inout_tex)
