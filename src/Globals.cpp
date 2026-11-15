@@ -51,6 +51,7 @@
 #include "Menu.h"
 #include "ShaderCache.h"
 #include "State.h"
+#include "TerrainHeightMap.h"
 #include "TruePBR.h"
 #include "Utils/Game.h"
 
@@ -183,6 +184,8 @@ namespace globals
 
 	static Profiler profilerInstance;
 	Profiler* profiler = &profilerInstance;
+	static TerrainHeightMap terrainHeightMapInstance;
+	TerrainHeightMap* terrainHeightMap = &terrainHeightMapInstance;
 	static HiZPyramid hiZPyramidInstance;
 	HiZPyramid* hiZPyramid = &hiZPyramidInstance;
 
