@@ -30,6 +30,15 @@ namespace Math
 	static const float TAU = PI * 2.0f;                          // PI * 2
 	static const float INV_PI = 1.0f / PI;                       // 1 / PI
 
+	/** @brief Turns an angle toward a target along the shorter arc and wraps the result to [0, TAU). */
+	float LerpAngle(float angle, float target, float weight)
+	{
+		float difference = target - angle;
+		difference -= TAU * round(difference * (1.0f / TAU));
+		float turned = angle + difference * weight;
+		return turned - TAU * floor(turned * (1.0f / TAU));
+	}
+
 	/** @brief The pixel's slot in its 2x2 quad, 0 or 1 per axis. @param pixelPos SV_Position.xy. */
 	float2 QuadPixel(float2 pixelPos)
 	{

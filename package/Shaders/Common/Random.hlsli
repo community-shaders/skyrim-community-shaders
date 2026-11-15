@@ -273,6 +273,75 @@ namespace Random
 	// NOISES
 	///////////////////////////////////////////////////////////
 
+	/** @brief Returns a stable random value for one integer cell. */
+	float CellNoise2D(int2 cell)
+	{
+		return float(iqint3(asuint(cell))) * (1.0f / 4294967296.0f);
+	}
+
+	/** @brief Bilinearly interpolates CellNoise2D for smooth spatial variation. */
+	float ValueNoise2D(float2 p)
+	{
+		int2 cell = int2(floor(p));
+		float2 fr = p - cell;
+		fr = fr * fr * (3.0 - 2.0 * fr);
+		float lower = lerp(CellNoise2D(cell), CellNoise2D(cell + int2(1, 0)), fr.x);
+		float upper = lerp(CellNoise2D(cell + int2(0, 1)), CellNoise2D(cell + int2(1, 1)), fr.x);
+		return lerp(lower, upper, fr.y);
+	}
+
+	// Keep the nearest Voronoi feature, skipping cells whose closest point cannot beat the current best.
+	void UpdateNearestVoronoiCell2D(inout uint seed, inout float distanceSquared, inout float2 offset, int2 cell, float2 gridPos)
+	{
+		float2 cellMin = float2(cell);
+		float2 cellOffset = clamp(gridPos, cellMin, cellMin + 1.0f) - gridPos;
+		if (dot(cellOffset, cellOffset) >= distanceSquared)
+			return;
+
+		uint3 hash = pcg3d(uint3(asuint(cell), 0u));
+		float2 candidateOffset = cellMin + float2(hash.xy) * (1.0f / 4294967296.0f) - gridPos;
+		float candidateDistanceSquared = dot(candidateOffset, candidateOffset);
+		if (candidateDistanceSquared < distanceSquared) {
+			distanceSquared = candidateDistanceSquared;
+			offset = candidateOffset;
+			seed = hash.z;
+		}
+	}
+
+	/** @brief Finds the nearest hashed Voronoi feature in a 3x3 cell neighbourhood. */
+	void FindNearestVoronoi2D(float2 gridPos, out uint seed, out float distance, out float2 offset)
+	{
+		// Floor keeps the Voronoi grid continuous across negative world coordinates.
+		int2 gridCell = int2(floor(gridPos));
+		seed = 0u;
+		distance = 1.0e30f;
+		offset = float2(0.0f, 0.0f);
+		UpdateNearestVoronoiCell2D(seed, distance, offset, gridCell, gridPos);
+		[unroll] for (int y = -1; y <= 1; y++)
+		{
+			[unroll] for (int x = -1; x <= 1; x++)
+			{
+				if (x != 0 || y != 0)
+					UpdateNearestVoronoiCell2D(seed, distance, offset, gridCell + int2(x, y), gridPos);
+			}
+		}
+
+		distance = sqrt(distance);
+	}
+
+	/**
+	 * @brief Approximates FindNearestVoronoi2D with the feature of the position's own cell.
+	 * Uses the same feature hash, so it agrees with the exact search wherever that feature is the nearest.
+	 */
+	void GetVoronoiCellFeature2D(float2 gridPos, out uint seed, out float distance, out float2 offset)
+	{
+		int2 gridCell = int2(floor(gridPos));
+		uint3 hash = pcg3d(uint3(asuint(gridCell), 0u));
+		offset = float2(gridCell) + float2(hash.xy) * (1.0f / 4294967296.0f) - gridPos;
+		distance = length(offset);
+		seed = hash.z;
+	}
+
 	// https://www.shadertoy.com/view/slB3z3
 	float3 perlinGradient(uint hash)
 	{
