@@ -451,6 +451,11 @@ float GetWaterDeltaLightDistributionFromCos(float3 normal, float3 viewDirection,
 	return lightMask * GetWaterFresnel(NdotV) / GetWaterProjectedSolidAngle(cosAngularRadius);
 }
 
+float GetWaterDeltaLightDistribution(float3 normal, float3 viewDirection, float3 lightDirection, float angularRadius)
+{
+	return GetWaterDeltaLightDistributionFromCos(normal, viewDirection, lightDirection, cos(angularRadius));
+}
+
 #		if defined(SKYLIGHTING)
 #			include "Skylighting/Skylighting.hlsli"
 #		endif

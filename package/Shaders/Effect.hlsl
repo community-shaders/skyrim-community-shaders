@@ -691,6 +691,9 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 propertyColor = PropertyColor.xyz;
 	float shadowVariance = 1.0;
 
+	float3 viewPosition = mul(FrameBuffer::CameraView, float4(input.WorldPosition.xyz, 1)).xyz;
+	float2 screenUV = FrameBuffer::ViewToUV(viewPosition);
+
 	bool isFire = false;
 	bool isLightSprite = false;
 #	if defined(ADDBLEND)
@@ -848,9 +851,6 @@ PS_OUTPUT main(PS_INPUT input)
 	}
 #	endif
 
-	float3 viewPosition = mul(FrameBuffer::CameraView, float4(input.WorldPosition.xyz, 1)).xyz;
-	float2 screenUV = FrameBuffer::ViewToUV(viewPosition);
-
 	// Light only pixels that survive the alpha test.
 #	if defined(LIGHTING)
 	propertyColor = GetLightingColor(input.MSPosition.xyz, input.WorldPosition.xyz, input.Position.xy, shadowVariance);
@@ -915,7 +915,6 @@ PS_OUTPUT main(PS_INPUT input)
 #	if !defined(LIGHTING) && defined(VC) && defined(TEXCOORD) && defined(NORMALS) && defined(TEXTURE) && defined(FALLOFF) && defined(SOFT)
 	bool applyViewRayShadow = Permutation::PixelShaderDescriptor & Permutation::EffectFlags::GrayscaleToAlpha && lightingInfluence == 1.0;
 #		if defined(EFFECTS11) && defined(IS_VOLUMETRIC_FOG)
-	// The fog block above already shadowed it
 	applyViewRayShadow = applyViewRayShadow && !isEnbVolumetricFog;
 #		endif
 	if (applyViewRayShadow) {

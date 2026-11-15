@@ -415,6 +415,7 @@ bool SkySync::Update(const RE::Sky* sky)
 			currentCell = nullptr;  // keep the cache in sync so a cell-less frame doesn't reset every frame
 		if (resetFaderForCellChange)
 			shadowFader.Reset();
+		lastGameHour = -1.0f;
 		UpdateWorldspaceDisabled();
 	}
 

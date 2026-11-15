@@ -62,8 +62,10 @@ std::optional<json> SceneSettingsManager::ResolveWeatherLowerValue(RE::FormID we
 	auto baseline = GetBaselineValue(address);
 	if (!SceneBlend::IsBlendable(baseline))
 		return std::nullopt;
-	json lowerValue = GetTimeOfDayPeriodFallbackValue(baseline,
-		address.featureShortName, address.settingPath, address.settingKey, periodIndex);
+	json lowerValue = baseline;
+	const auto& periodGroups = BuildTimeOfDayValueGroups();
+	if (const auto found = periodGroups.find(address); found != periodGroups.end())
+		lowerValue = found->second[periodIndex].value_or(baseline);
 	// Only a user entry has the weather overwrite layer beneath it. A capture deliberately passes
 	// the overwrite layer here so it resolves to the value that applies without any mod.
 	if (selectedSource != EntrySource::User)
