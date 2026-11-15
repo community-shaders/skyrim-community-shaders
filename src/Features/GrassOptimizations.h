@@ -4,9 +4,9 @@
 
 #include "Buffer.h"
 #include "GrassOptimizations/GrassBucketStore.h"
-#include "GrassOptimizations/HiZPyramid.h"
+#include "HiZPyramid.h"
 
-/** @brief Rewrites vanilla grass rendering with a bucket system using indirect draws and compute culling of individual instances. */
+/** @brief Renders grass buckets with indirect draws and instance culling. */
 struct GrassOptimizations : Feature
 {
 public:
@@ -33,7 +33,7 @@ public:
 	struct Settings
 	{
 		float MinPixelSize = 2.0f;
-		float FullDetailPixelSize = 12.0f;
+		float FullDetailPixelSize = 10.0f;
 		float MinDensity = 0.07f;
 		float MeshCostBias = 0.25f;
 		float CostBiasStartDistance = 6000.0f;
@@ -42,9 +42,11 @@ public:
 		float EdgeFadeStart = 0.85f;
 		bool EnableOcclusionCulling = true;
 		float SimpleShadingPixelSize = 8.0f;
-		float OcclusionBias = 0.001f;
+		// Occlusion bias as a fraction of view depth.
+		float OcclusionDepthBias = 0.02f;
+		float OcclusionTightness = 0.9f;
 		float CollisionDistance = 2048.0f;
-		bool EnableMeshLOD = false;
+		bool EnableMeshLOD = true;
 		bool EnableMidLOD = true;
 		float MidLODPixelSize = 8.0f;
 		bool EnableFarLOD = true;
@@ -71,7 +73,7 @@ public:
 	/** @brief Installs the grass capture, culling and draw hooks after all plugins have loaded. */
 	virtual void PostPostLoad() override;
 
-	/** @brief Identifies who sets up a grass pass: the engine, an optimized bucket, or nobody because optimized buckets cover it. */
+	/** @brief Selects engine setup, bucket setup or a pass covered by bucket draws. */
 	enum class GrassPassSetup
 	{
 		kNative,
@@ -79,18 +81,18 @@ public:
 		kCovered
 	};
 
-	/** @brief Applies owned proxy setup or native coverage setup and returns who set up the pass. */
+	/** @brief Sets up the native or optimized path and reports which path owns the pass. */
 	GrassPassSetup SetupGrassPass(RE::BSShader* shader, RE::BSRenderPass* pass);
 
 private:
-	/** @brief Returns the instance culling compute shader, compiling it on first use. */
+	/** @brief Lazily compiles the culling shader. */
 	ID3D11ComputeShader* GetCullCS();
 
 	struct alignas(16) CullParamsCB
 	{
 		float frustumPlanes[6][4];
 
-		// Preserve the main camera's camera-relative view-projection rows from PerFrame.
+		// Retain the main view when shadow passes replace PerFrame.
 		float cameraViewProj[4][4];
 		float cameraPos[4];
 
@@ -121,26 +123,34 @@ private:
 
 		float projectionWLength;
 		float hiZMipCount;
-		float occlusionBias;
+		float occlusionDepthBias;
 		float costBiasStartDist;
 
 		float farLODPixelSize;
-		float densityDistanceRcp;
-		float pad0[2];
+		// Precomputed sqrt(maxDistSq) for edge fading.
+		float maxDist;
+		float occlusionTightness;
+		// NDC depth = ndcDepthAtInfinity + ndcDepthNumerator / w.
+		float ndcDepthAtInfinity;
+
+		float ndcDepthNumerator;
+		float pad0[3];
 	};
 	STATIC_ASSERT_ALIGNAS_16(CullParamsCB);
+	static_assert(sizeof(CullParamsCB) == 304 && offsetof(CullParamsCB, occlusionTightness) == 280 && offsetof(CullParamsCB, ndcDepthAtInfinity) == 284 &&
+				  offsetof(CullParamsCB, ndcDepthNumerator) == 288);
 
 	struct alignas(16) CullBucketCB
 	{
 		uint32_t groupCount;
 		uint32_t sliceTableOffset;
 		uint32_t sliceCount;
-		uint32_t dispatchWidth;
+		uint32_t groupBase;  // Records hold group indices relative to this bucket's range in the group pool.
 
 		uint32_t tierStride;
 		uint32_t outputOffset;
 		uint32_t argsOffset;
-		uint32_t pad0;
+		float occlusionRadius;
 
 		float boundExtent;
 		float modelRadius;
@@ -158,14 +168,35 @@ private:
 		float farLODMeshCost;
 
 		std::array<float, kTierCount> canopyHeights;
-		float pad1;
+		// Lowest alpha threshold among the bucket's depth-writing draws.
+		float alphaTestRef;
 	};
 	STATIC_ASSERT_ALIGNAS_16(CullBucketCB);
-	// RunGrass.hlsl reads the draw marker, texture threshold and shared-page offset through this slot.
-	static_assert(sizeof(CullBucketCB) == 96 && offsetof(CullBucketCB, groupCount) == 0 && offsetof(CullBucketCB, complexThreshold) == 56 &&
-				  offsetof(CullBucketCB, outputOffset) == 20 && offsetof(CullBucketCB, argsOffset) == 24 &&
+	// Draw metadata offsets must match GrassBucket in RunGrass.hlsl.
+	static_assert(sizeof(CullBucketCB) == 96 && offsetof(CullBucketCB, groupCount) == 0 && offsetof(CullBucketCB, groupBase) == 12 && offsetof(CullBucketCB, complexThreshold) == 56 &&
+				  offsetof(CullBucketCB, outputOffset) == 20 && offsetof(CullBucketCB, argsOffset) == 24 && offsetof(CullBucketCB, occlusionRadius) == 28 &&
 				  offsetof(CullBucketCB, midLODMeshCost) == 60 && offsetof(CullBucketCB, farLODMeshCost) == 76 &&
-				  offsetof(CullBucketCB, canopyHeights) == 80);
+				  offsetof(CullBucketCB, canopyHeights) == 80 && offsetof(CullBucketCB, alphaTestRef) == 92);
+
+	/** @brief One bucket's inputs to the cull dispatch, matching CullBucket in GrassCullingCS. */
+	struct alignas(16) CullBucketEntry
+	{
+		CullBucketCB cull;
+		uint32_t pad0[2]{};
+		uint32_t dispatchStart = 0;
+		uint32_t pad1 = 0;
+	};
+	static_assert(sizeof(CullBucketEntry) == 112 && offsetof(CullBucketEntry, dispatchStart) == 104);
+
+	/** @brief Sizes the cull dispatch over every CullBucketEntry, matching DispatchParams in GrassCullingCS. */
+	struct alignas(16) CullDispatchCB
+	{
+		uint32_t bucketCount;
+		uint32_t groupCount;
+		uint32_t dispatchWidth;
+		uint32_t pad;
+	};
+	STATIC_ASSERT_ALIGNAS_16(CullDispatchCB);
 
 	// Match the c16-c21 fields read by GRASS_OPTIMIZATIONS in RunGrass.hlsl.
 	struct alignas(16) GrassPerGeometry
@@ -190,7 +221,7 @@ private:
 		std::array<std::byte, 256 - sizeof(GrassPerGeometry)> geometryPadding;
 	};
 
-	/** @brief Stores six frustum planes in two padded SSE vectors. */
+	/** @brief Stores six frustum planes in padded batches of four. */
 	struct FrustumSoA
 	{
 		__m128 nx[2], ny[2], nz[2], d[2];
@@ -201,14 +232,25 @@ private:
 		Plane planes[6];  // Broadcast each coefficient to test four runs at once.
 	};
 
+	/** @brief Conservative per-bucket limits past which the compute shader rejects every instance. */
+	struct RunCullLimits
+	{
+		float maxDistanceSq = 0.0f;
+		// View depth past which even the bucket's largest instance projects under Min Pixel Size.
+		float maxViewDepth = 0.0f;
+		// Negative MaxPlaneDistance places a whole box deeper than maxViewDepth.
+		FrustumSoA::Plane depthPlane{};
+		bool useDepthPlane = false;
+	};
+
 	/** @brief Four axis-aligned boxes in structure-of-arrays form, one per SSE lane. */
 	struct BoxBatch
 	{
 		__m128 lx, ly, lz, hx, hy, hz;
 
-		explicit BoxBatch(const GrassBucket::SliceRunBatch& batch) :
-			lx(_mm_load_ps(batch.loX)), ly(_mm_load_ps(batch.loY)), lz(_mm_load_ps(batch.loZ)),
-			hx(_mm_load_ps(batch.hiX)), hy(_mm_load_ps(batch.hiY)), hz(_mm_load_ps(batch.hiZ))
+		BoxBatch(const GrassBucket::SliceRunBatch& batch, __m128 padding) :
+			lx(_mm_sub_ps(_mm_load_ps(batch.loX), padding)), ly(_mm_sub_ps(_mm_load_ps(batch.loY), padding)), lz(_mm_sub_ps(_mm_load_ps(batch.loZ), padding)),
+			hx(_mm_add_ps(_mm_load_ps(batch.hiX), padding)), hy(_mm_add_ps(_mm_load_ps(batch.hiY), padding)), hz(_mm_add_ps(_mm_load_ps(batch.hiZ), padding))
 		{}
 
 		/** @brief Squared distance from the camera to each box's nearest point. */
@@ -231,14 +273,14 @@ private:
 			return _mm_add_ps(_mm_add_ps(_mm_mul_ps(fx, fx), _mm_mul_ps(fy, fy)), _mm_mul_ps(fz, fz));
 		}
 
-		/** @brief Returns the maximum plane distance for each box; negative values reject the box. */
+		/** @brief Returns each box's maximum plane distance. Negative values reject the box. */
 		__m128 MaxPlaneDistance(const GrassOptimizations::FrustumSoA::Plane& plane) const
 		{
 			// blendv keys off the normal's sign bit.
 			return PlaneDistance(plane, _mm_blendv_ps(hx, lx, plane.nx), _mm_blendv_ps(hy, ly, plane.ny), _mm_blendv_ps(hz, lz, plane.nz));
 		}
 
-		/** @brief Returns the minimum plane distance for each box; nonnegative values contain the box. */
+		/** @brief Returns each box's minimum plane distance. Nonnegative values mean the box is inside. */
 		__m128 MinPlaneDistance(const GrassOptimizations::FrustumSoA::Plane& plane) const
 		{
 			return PlaneDistance(plane, _mm_blendv_ps(lx, hx, plane.nx), _mm_blendv_ps(ly, hy, plane.ny), _mm_blendv_ps(lz, hz, plane.nz));
@@ -272,29 +314,42 @@ private:
 	/** @brief Returns the exterior directional light used by optimized grass constants. */
 	static RE::NiDirectionalLight* GetSunLight();
 
-	/** @brief Returns whether this frame has evaluated optimized coverage with the main camera. */
 	bool HasCurrentCull() const;
 
-	/** @brief Appends this bucket's visible slice runs to sliceTableCPU and records the window in the bucket. Expects GrassBucket::ResetCullState() first. */
+	/** @brief Requires ResetCullState() before appending visible runs to the slice table. */
 	void CullBucketSlices(GrassBucket& b, const FrustumSoA& frustumSoA, __m128 camPosV);
 
-	/** @brief Cull cached blocks of cell runs and test partially visible blocks with SSE. */
-	void CullBucketSliceBlocks(GrassBucket& b, const FrustumSoA& frustumSoA, __m128 camPosV, uint32_t planeMask, bool allWithinDistance);
+	/** @brief Returns true only when every visible group fails frustum or size culling. */
+	bool IsBucketEmpty(const GrassBucket& bucket, const CullParamsCB& params) const;
 
-	/** @brief Test cell runs [firstRun, endRun) four at a time against the distance and the planes in planeMask. */
-	void CullSliceRuns(GrassBucket& b, const FrustumSoA& frustumSoA, __m128 camPosV, uint32_t firstRun, uint32_t endRun, uint32_t planeMask, bool withinDistance);
+	/** @brief Conservative distance and view-depth cutoffs for all instances in a bucket. */
+	RunCullLimits BucketCullLimits(const GrassBucket& b) const;
 
-	/** @brief Append visible groups to the bucket's slice table window, merging them into the last entry when contiguous. */
+	/** @brief Tests cached blocks, then culls runs in partially visible blocks. */
+	void CullBucketSliceBlocks(GrassBucket& b, const FrustumSoA& frustumSoA, __m128 camPosV, uint32_t planeMask, bool allWithinLimits, const RunCullLimits& limits);
+
+	/** @brief Tests runs [firstRun, endRun) in batches of four. */
+	void CullSliceRuns(GrassBucket& b, const FrustumSoA& frustumSoA, __m128 camPosV, uint32_t firstRun, uint32_t endRun, uint32_t planeMask, bool withinLimits, const RunCullLimits& limits);
+
+	/** @brief Appends visible groups, coalescing adjacent ranges. */
 	void AppendVisibleGroups(GrassBucket& b, uint32_t firstGroup, uint32_t groupCount);
 
-	/** @brief Drops stale or failed cull results so native coverage remains available. */
+	/** @brief Clips visible ranges to resident groups below `groupLimit`. */
+	void ClipVisibleGroups(GrassBucket& b, uint32_t groupLimit);
+
+	/** @brief Drops this frame's cull results, so no bucket draws until the next cull. */
 	void DisableOptimizedDraws();
+
+	/** @brief Returns whether the feature currently owns grass rendering. */
+	bool OwnsGrass() const { return loaded && ownsGrass.load(std::memory_order_acquire); }
+
+	const GrassBucketStore::CullSnapshot* ActiveSnapshot() const { return OwnsGrass() ? bucketStore.GetCullSnapshot() : nullptr; }
 
 	/** @brief Returns whether PerFrame contains the main camera rather than a reflection, cubemap or shadow camera. */
 	static bool IsMainCameraPerFrame(const RE::NiPoint3& mainCameraPos);
 
-	/** @brief Uploads the per-bucket cull constants and the slice table, then issues the cull dispatches. */
-	void UploadCullState(ID3D11DeviceContext* ctx);
+	/** @brief Uploads resources, builds Hi-Z, and dispatches grass culling. */
+	void UploadCullState(ID3D11DeviceContext* ctx, CullParamsCB& params);
 
 	/** @brief Fills every visible bucket's slot of the per-bucket constant buffer with one map. */
 	bool UploadCullBucketConstants(ID3D11DeviceContext* ctx);
@@ -302,11 +357,13 @@ private:
 	/** @brief Uploads this frame's visible slice ranges, growing the table when needed. */
 	bool UploadSliceTable(ID3D11DeviceContext* ctx);
 
-	/** @brief Binds a bucket's resources and dispatches the instance culling compute shader. */
-	void CullBucket(GrassBucket& b, ID3D11DeviceContext* ctx);
+	/** @brief Culls every visible bucket from the shared pools in one dispatch. Returns false if its inputs cannot be created. */
+	bool DispatchCull(ID3D11DeviceContext* ctx);
 
 	/** @brief Grows the slotted per-bucket constant buffer to hold at least `slots` entries. */
 	bool EnsureCullBucketCapacity(uint32_t slots);
+
+	bool IsBucketDrawable(const GrassBucket& b) const { return HasCurrentCull() && b.sliceTableCount; }
 
 	/** @brief Binds all geometry and material resources for a ready optimized bucket. */
 	void SetupOptimizedPass(const GrassBucket& b);
@@ -314,16 +371,32 @@ private:
 	/** @brief Issue a bucket's indirect draw for each active tier. */
 	void DrawBucket(GrassBucket& b);
 
+	/** @brief Ends profiling and invalidates cached draw state. */
+	void EndDrawPass();
+
+	// Profile a technique's draws together to stay within the timer budget.
+	bool drawPassOpen = false;
+	// Native draws invalidate this technique's cached engine state.
+	bool leanCommitReady = false;
+	float committedAlphaTestRef = 0.0f;
+
 	GrassBucketStore bucketStore;
-	HiZPyramid hiZ;
 
 	uint32_t lastFrame = UINT32_MAX;
+
+	std::unique_ptr<Buffer> cullBucketBuffer;
+	uint32_t cullBucketBufferCapacity = 0;
+	std::unique_ptr<ConstantBuffer> cullDispatchCB;
+	// Cull inputs follow visibleBuckets and constant-buffer slot order.
+	std::vector<CullBucketEntry> cullEntries;
 
 	winrt::com_ptr<ID3D11DeviceContext1> ctx1;
 
 	winrt::com_ptr<ID3D11ComputeShader> cullCS;
 	// Cache invalidation permits another compile attempt after a failure.
 	bool cullCSFailed = false;
+	// Startup capability decision for replacing engine grass draws.
+	std::atomic<bool> ownsGrass{ false };
 
 	std::unique_ptr<ConstantBuffer> cullParamsCB;
 
@@ -336,14 +409,14 @@ private:
 
 	std::unique_ptr<ConstantBuffer> vanillaDrawCB;
 
-	// Shared per-frame table of visible slice ranges, indexed by each bucket's window.
+	// Shared visible-run ranges indexed by each bucket's table window.
 	std::unique_ptr<Buffer> sliceTable;
 	uint32_t sliceTableCapacity = 0;
 	std::vector<std::pair<uint32_t, uint32_t>> sliceTableCPU;
-	// Store this frame's visible buckets in cull-slot order.
+	// Ordered by cull slot.
 	std::vector<GrassBucket*> visibleBuckets;
-	// A spatial run rebuild re-sorts and re-uploads a whole bucket, so each frame allows one.
-	uint32_t spatialRebuildBudget = 0;
+	// Rebuilding runs reuploads all bucket groups, so allow one rebuild per frame.
+	uint32_t rebuildBudget = 0;
 	std::vector<uint32_t> cullArguments;
 
 	float timeAccum = 0.0f;
@@ -355,6 +428,11 @@ private:
 	float maxGrassDistance = 0.0f;
 	float maxDistSq = 0.0f;
 
+	// Cached main-view values for bucket depth cutoffs.
+	RE::NiPoint3 cullForward{};
+	float cullForwardDotEye = 0.0f;
+	float cullPixelsPerRadius = 0.0f;
+
 	struct Hooks
 	{
 		static void DrawVanilla(RE::BSMultiStreamInstanceTriShape* geometry);
@@ -365,7 +443,7 @@ private:
 			inline static REL::Relocation<decltype(thunk)> func;
 		};
 
-		// The engine parents every grass shape directly under one node, so culling visits each shape every pass.
+		// All grass shapes share one parent, so intercept its culling traversal.
 		struct NiNode_OnVisible
 		{
 			static void thunk(RE::NiNode* This, RE::NiCullingProcess* process, std::int32_t alphaGroupIndex);
@@ -374,7 +452,7 @@ private:
 			inline static std::atomic<uint32_t> mainViewVisitFrame{ 0 };
 		};
 
-		// Vanilla grass shapes are shared by every cell in a 12x12 block, so a cell unload removes its groups here.
+		// Shapes span 12x12 cells, so a cell unload removes groups rather than shapes.
 		struct RemoveGroup
 		{
 			static void thunk(RE::BSMultiStreamInstanceTriShape* shape, std::uint32_t index);
@@ -402,6 +480,12 @@ private:
 		struct BSGrassShader_SetupMaterial
 		{
 			static void thunk(RE::BSShader* This, const RE::BSLightingShaderMaterialBase* material);
+			inline static REL::Relocation<decltype(thunk)> func;
+		};
+
+		struct BSGrassShader_RestoreTechnique
+		{
+			static void thunk(RE::BSShader* This, std::uint32_t technique);
 			inline static REL::Relocation<decltype(thunk)> func;
 		};
 
@@ -447,6 +531,36 @@ private:
 			static RE::BSMultiStreamInstanceTriShape* thunk(RE::BGSGrassManager* grassManager, RE::GrassParam* a_param, uint32_t CellXDivided, uint32_t CellYDivided, uint64_t* typeKey, RE::BSFixedString* modelPath);
 			inline static REL::Relocation<decltype(thunk)> func;
 		};
+
+		// Optimized draws upload their own buffers, so captured groups need only a CPU copy.
+		struct CreateVertexBuffer
+		{
+			static RE::BSGraphics::VertexBuffer* thunk(void* manager, std::uint32_t byteWidth, void* data, std::uint64_t vertexDesc);
+			inline static REL::Relocation<decltype(thunk)> func;
+		};
+
+		/** @brief Keeps grass group buffers on the CPU while optimized drawing is active. */
+		class CPUBufferScope
+		{
+		public:
+			CPUBufferScope();
+			~CPUBufferScope() { active = previous; }
+			CPUBufferScope(const CPUBufferScope&) = delete;
+			CPUBufferScope& operator=(const CPUBufferScope&) = delete;
+
+			inline static thread_local bool active = false;
+
+		private:
+			bool previous;
+		};
+
+		/** @brief Applies CPU buffer allocation only during the engine group add. */
+		template <class F>
+		static decltype(auto) WithOwnedGroups(F&& add)
+		{
+			CPUBufferScope scope;
+			return add();
+		}
 
 		static void Install();
 	};

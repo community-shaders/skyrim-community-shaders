@@ -5,13 +5,13 @@
 #include "Buffer.h"
 #include "TruePBR.h"
 
-struct GrassAsset;
+struct GrassDrawResources;
 struct GrassMaterialKey;
 
 /** @brief Returns the vertex stride in bytes from a descriptor that stores it in four-byte units. */
 constexpr uint32_t VertexStrideFromDesc(uint64_t descVal) { return static_cast<uint32_t>((4 * descVal) & 0x3C); }
 
-/** @brief Manages grass mesh identities, draw assets, texture classification and optional LOD meshes. */
+/** @brief Manages grass mesh identities, draw resources, texture classification and optional LOD meshes. */
 class GrassMeshLibrary
 {
 public:
@@ -38,47 +38,56 @@ public:
 	/** @brief Retains a mesh loaded from meshes\LOD\Grass\<stem>_LOD0.nif or <stem>_LOD1.nif. */
 	struct LODMesh
 	{
-		RE::NiPointer<RE::NiAVObject> keepAlive;
+		RE::NiPointer<RE::NiAVObject> modelRoot;
 		ID3D11Buffer* vertexBuffer = nullptr;
 		ID3D11Buffer* indexBuffer = nullptr;
 		uint32_t indexCount = 0;
 		float boundExtent = 0.0f;
 		float canopyHeight = 1.0f;
+		float occlusionRadius = 0.0f;
 		// The LOD .nif is authored separately, so its vertex format need not match the source mesh's.
-		uint32_t meshStride = 0;
-		uint64_t descVal = 0;
+		uint32_t vertexStride = 0;
+		uint64_t vertexDesc = 0;
 		LoadState state = LoadState::kUnrequested;
+
+		/** @brief Returns the mesh-cost scale used by CPU and GPU culling. */
+		float GetMeshCost() const { return MeshCost(indexCount); }
 	};
 
+	/** @brief Mesh-cost scale for a mesh drawing this many indices; eight triangles cost one. */
+	static float MeshCost(uint32_t indexCount) { return std::sqrt(std::max(1.0f, (float)indexCount / 24.0f)); }
+
 	/** @brief Stable identity and render-thread LOD state for a mesh stem. */
-	struct MeshRecord
+	struct RegisteredMesh
 	{
 		std::string stem;
 		uint32_t activeBuckets = 0;
 		std::array<LODMesh, (size_t)LODTier::kCount> lodMeshes;
 	};
 
-	/** @brief Returns a stable mesh record for a model path. */
-	MeshRecord& RegisterMesh(const char* modelPath);
+	/** @brief Returns a stable mesh registration for a model path. */
+	RegisteredMesh& RegisterMesh(const char* modelPath);
 	/** @brief Creates a bucket's mesh proxy and retains its mesh and texture users. */
-	bool CreateAsset(GrassAsset& asset, RE::BSMultiStreamInstanceTriShape* geometryTemplate);
+	bool CreateDrawResources(GrassDrawResources& asset, RE::BSMultiStreamInstanceTriShape* geometryTemplate);
 	/** @brief Releases a bucket's mesh and texture users. */
-	void ReleaseAsset(const GrassAsset& asset);
+	void ReleaseDrawResources(const GrassDrawResources& asset);
 	/** @brief Captures the material inputs shared by an optimized draw. */
 	static GrassMaterialKey CaptureMaterial(RE::BSShaderMaterial* material, bool pbr);
 	/** @brief Returns cached texture classification, or nullptr while it is unavailable. */
-	ID3D11ShaderResourceView* GetComplexGrass(RE::NiSourceTexture* texture, ID3D11DeviceContext* context);
-	/** @brief Releases the classification shader so it recompiles on next use. */
+	ID3D11ShaderResourceView* GetTextureClassification(RE::NiSourceTexture* texture, ID3D11DeviceContext* context);
+	/** @brief Releases the classification shader and allows a failed compile to retry. */
 	void ClearShaderCache();
 
 	/** @brief Queues missing LODs without blocking instance preparation or allocation. */
-	void EnsureLODMeshes(MeshRecord& mesh);
+	void EnsureLODMeshes(RegisteredMesh& mesh);
 	/** @brief Publishes completed model loads on the render thread. */
 	void CommitLoadedLODMeshes();
+	/** @brief Advances whenever committed loads change which LOD meshes are available. */
+	uint32_t GetLODGeneration() const { return lodGeneration; }
 	/** @brief Returns a ready tier, with the middle mesh serving an unavailable far tier. */
-	static const LODMesh* GetLODMesh(const MeshRecord& mesh, LODTier tier);
+	static const LODMesh* GetLODMesh(const RegisteredMesh& mesh, LODTier tier);
 	/** @brief Evicts ready LODs after the last bucket releases the mesh, retaining failed-load results. */
-	static void ReleaseMesh(MeshRecord& mesh);
+	static void ReleaseMesh(RegisteredMesh& mesh);
 
 private:
 	static bool FindLODShape(RE::NiAVObject* object, RE::BSTriShape*& shape);
@@ -89,30 +98,31 @@ private:
 
 	ID3D11ComputeShader* GetDetectCS();
 
-	struct LoadResult
+	struct LODLoadResult
 	{
-		MeshRecord* target;
+		RegisteredMesh* target;
 		LODTier tier;
 		LODMesh mesh;
 	};
 
-	std::unordered_map<std::string, MeshRecord> meshes;
+	std::unordered_map<std::string, RegisteredMesh> meshes;
 	std::mutex meshMutex;
 	std::mutex resultMutex;
-	std::vector<LoadResult> results;
+	std::vector<LODLoadResult> results;
 	std::unique_ptr<BS::thread_pool<>> loader;
 
 	// Buckets own texture references, so cache entries remain valid until their last bucket is removed.
-	struct ComplexEntry
+	struct TextureClassification
 	{
 		uint32_t activeUsers = 0;
 		ID3D11ShaderResourceView* resourceView = nullptr;
 		std::unique_ptr<Buffer> normalLength;
 	};
-	std::unordered_map<RE::NiSourceTexture*, ComplexEntry> complexCache;
+	std::unordered_map<RE::NiSourceTexture*, TextureClassification> complexCache;
 
 	winrt::com_ptr<ID3D11ComputeShader> detectCS;
 	bool detectCSFailed = false;  // A failed compile is retried after the shader cache is cleared.
+	uint32_t lodGeneration = 0;
 };
 
 /** @brief Property and geometry inputs shared by every instance in an optimized draw. */
@@ -138,26 +148,26 @@ struct GrassMaterialKey
 };
 
 /** @brief Identifies a fully registered mesh variant and its immutable draw state. */
-struct BucketKey
+struct GrassBucketKey
 {
-	GrassMeshLibrary::MeshRecord* mesh = nullptr;
+	GrassMeshLibrary::RegisteredMesh* mesh = nullptr;
 	uint32_t triCount = 0;
-	uint64_t descVal = 0;
+	uint64_t vertexDesc = 0;
 	GrassMaterialKey material;
 	GrassDrawParams draw;
-	bool operator==(const BucketKey&) const = default;
+	bool operator==(const GrassBucketKey&) const = default;
 };
 
-struct BucketKeyHash
+struct GrassBucketKeyHash
 {
-	size_t operator()(const BucketKey& k) const
+	size_t operator()(const GrassBucketKey& k) const
 	{
 		size_t hash = 0;
 		const auto combine = [&hash](auto value) { hash = hash * 31 ^ std::hash<decltype(value)>{}(value); };
 
 		combine(k.mesh);
 		combine(k.triCount);
-		combine(k.descVal);
+		combine(k.vertexDesc);
 
 		const auto& m = k.material;
 		for (auto value : m.textures)
@@ -196,9 +206,9 @@ struct BucketKeyHash
 };
 
 /** @brief Retains a bucket's mesh proxy and material independently of native shape lifetimes. */
-struct GrassAsset
+struct GrassDrawResources
 {
-	BucketKey key;
+	GrassBucketKey key;
 	winrt::com_ptr<ID3D11Buffer> vertexBuffer;
 	winrt::com_ptr<ID3D11Buffer> indexBuffer;
 	RE::BSTSmartPointer<RE::BSShaderMaterial> material;

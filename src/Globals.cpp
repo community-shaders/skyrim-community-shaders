@@ -49,6 +49,7 @@
 #include "Features/VolumetricShadows.h"
 #include "Features/WaterEffects.h"
 #include "Features/WetnessEffects.h"
+#include "HiZPyramid.h"
 #include "Menu.h"
 #include "ShaderCache.h"
 #include "State.h"
@@ -186,6 +187,8 @@ namespace globals
 
 	static Profiler profilerInstance;
 	Profiler* profiler = &profilerInstance;
+	static HiZPyramid hiZPyramidInstance;
+	HiZPyramid* hiZPyramid = &hiZPyramidInstance;
 
 	void OnInit()
 	{

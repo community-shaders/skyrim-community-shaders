@@ -21,7 +21,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-// Grass uses six SPD output mips. The upstream tail is retained but excluded because its additional UAV bindings exceed D3D11's eight-slot limit.
+// Hi-Z uses six output mips on D3D11. Extended reductions require more UAVs and a completion counter.
 #ifndef SPD_MAX_MIPS
 #	define SPD_MAX_MIPS 6
 #endif
@@ -41,21 +41,22 @@ globallycoherent RWTexture2D<float> SpdMip11 : register(u10);
 globallycoherent RWTexture2D<float> SpdMip12 : register(u11);
 globallycoherent RWByteAddressBuffer SpdCounter : register(u12);
 #endif
-// Read mip 0 through a dedicated SRV to avoid overlap and keep the single-dispatch path within D3D11's UAV limit.
+
+// Mip 0 has a dedicated SRV so reads never overlap the output UAVs.
 Texture2D<float> SpdSource : register(t0);
 
 cbuffer SpdParams : register(b0)
 {
-	uint2 SpdSourceSize;    // dimensions of the source mip
-	uint SpdMipCount;       // output mips to produce, 1..SPD_MAX_MIPS
-	uint SpdNumWorkGroups;  // groups dispatched, so the last one can finish the optional tail
+	uint2 SpdSourceSize;
+	uint SpdMipCount;       // Output levels, from 1 to SPD_MAX_MIPS.
+	uint SpdNumWorkGroups;  // Group count for tail completion.
 };
 
 groupshared float spdIntermediate[16][16];
 #if SPD_MAX_MIPS > 6
 groupshared uint spdCounterValue;
 
-// The tail phase re-reads mip 6, the level every group has finished writing by the time it runs.
+// The tail reads texture mip 6 after all groups have written it.
 float SpdLoad(int2 tex)
 {
 	return SpdMip6[tex];
@@ -125,9 +126,8 @@ float SpdLoadIntermediate(uint x, uint y)
 {
 	return spdIntermediate[x][y];
 }
-
 #if SPD_MAX_MIPS > 6
-// Only last active workgroup should proceed
+// Only the last completed group processes the tail.
 bool SpdExitWorkgroup(uint numWorkGroups, uint localInvocationIndex)
 {
 	if (localInvocationIndex == 0)
@@ -145,7 +145,6 @@ float SpdReduceIntermediate(uint2 i0, uint2 i1, uint2 i2, uint2 i3)
 	float v3 = SpdLoadIntermediate(i3.x, i3.y);
 	return SpdReduce4(v0, v1, v2, v3);
 }
-
 #if SPD_MAX_MIPS > 6
 float SpdReduceLoad4(uint2 i0, uint2 i1, uint2 i2, uint2 i3)
 {
@@ -221,7 +220,7 @@ void SpdDownsampleMip_2(uint x, uint y, uint2 workGroupID, uint localInvocationI
 	if (localInvocationIndex < 64) {
 		float v = SpdReduceIntermediate(uint2(x * 2 + 0, y * 2 + 0), uint2(x * 2 + 1, y * 2 + 0), uint2(x * 2 + 0, y * 2 + 1), uint2(x * 2 + 1, y * 2 + 1));
 		SpdStore(int2(workGroupID.xy * 8) + int2(x, y), v, mip);
-		// store to LDS, try to reduce bank conflicts
+		// Scatter shared values to reduce bank conflicts in the next stage.
 		SpdStoreIntermediate(x * 2 + y % 2, y * 2, v);
 	}
 }
@@ -231,8 +230,6 @@ void SpdDownsampleMip_3(uint x, uint y, uint2 workGroupID, uint localInvocationI
 	if (localInvocationIndex < 16) {
 		float v = SpdReduceIntermediate(uint2(x * 4 + 0 + 0, y * 4 + 0), uint2(x * 4 + 2 + 0, y * 4 + 0), uint2(x * 4 + 0 + 1, y * 4 + 2), uint2(x * 4 + 2 + 1, y * 4 + 2));
 		SpdStore(int2(workGroupID.xy * 4) + int2(x, y), v, mip);
-		// store to LDS
-
 		SpdStoreIntermediate(x * 4 + y, y * 4, v);
 	}
 }
@@ -256,7 +253,6 @@ void SpdDownsampleMip_5(uint2 workGroupID, uint localInvocationIndex, uint mip)
 		SpdStore(int2(workGroupID.xy), v, mip);
 	}
 }
-
 #if SPD_MAX_MIPS > 6
 void SpdDownsampleMips_6_7(uint x, uint y, uint mips)
 {
@@ -282,7 +278,7 @@ void SpdDownsampleMips_6_7(uint x, uint y, uint mips)
 
 	if (mips <= 7)
 		return;
-	// no barrier needed, working on values only from the same thread
+	// Values are local to this thread; no barrier is needed.
 
 	float v = SpdReduce4(v0, v1, v2, v3);
 	SpdStore(int2(x, y), v, 7);
@@ -330,36 +326,31 @@ uint2 ffxRemapForWaveReduction(uint a)
 	return uint2(ffxBitfieldInsertMask(ffxBitfieldExtract(a, 2u, 3u), a, 1u), ffxBitfieldInsertMask(ffxBitfieldExtract(a, 3u, 3u), ffxBitfieldExtract(a, 1u, 2u), 2u));
 }
 
-// Reduces one 64x64 tile to six levels, then optionally lets the last group finish the tail.
+// Output index N writes texture mip N+1.
 void SpdDownsample(uint2 workGroupID, uint localInvocationIndex, uint mips, uint numWorkGroups)
 {
-	// compute MIP level 0 and 1
+	// Map threads to 16x16 coordinates shared by the four tile quadrants.
 	uint2 sub_xy = ffxRemapForWaveReduction(localInvocationIndex % 64);
 	uint x = sub_xy.x + 8 * ((localInvocationIndex >> 6) % 2);
 	uint y = sub_xy.y + 8 * ((localInvocationIndex >> 7));
 	SpdDownsampleMips_0_1(x, y, workGroupID, localInvocationIndex, mips);
 
-	// compute MIP level 2, 3, 4, 5
 	SpdDownsampleNextFour(x, y, workGroupID, localInvocationIndex, 2, mips);
-
 #if SPD_MAX_MIPS > 6
 	if (mips <= 6)
 		return;
 
-	// increase the global atomic counter for the given slice and check if it's the last remaining thread group:
-	// terminate if not, continue if yes.
+	// Only the last group continues across tile boundaries.
 	if (SpdExitWorkgroup(numWorkGroups, localInvocationIndex))
 		return;
 
-	// reset the global atomic counter back to 0 for the next spd dispatch
+	// Reset the completion counter for the next dispatch.
 	if (localInvocationIndex == 0)
 		SpdCounter.Store(0, 0);
 
-	// After mip 5 there is only a single workgroup left that downsamples the remaining up to 64x64 texels.
-	// compute MIP level 6 and 7
+	// The final group reduces texture mip 6 into the remaining levels.
 	SpdDownsampleMips_6_7(x, y, mips);
 
-	// compute MIP level 8, 9, 10, 11
 	SpdDownsampleNextFour(x, y, uint2(0, 0), localInvocationIndex, 8, mips);
 #endif
 }
