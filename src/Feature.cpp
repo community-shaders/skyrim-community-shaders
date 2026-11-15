@@ -286,8 +286,8 @@ const std::vector<Feature*>& Feature::GetFeatureList()
 		&globals::features::exponentialHeightFog,
 		&globals::features::hdrDisplay,
 		&globals::features::physicalSky,
-		&globals::features::postProcessing,
 		&globals::features::skin,
+		&globals::features::postProcessing,
 		&globals::features::proceduralAurora
 	};
 

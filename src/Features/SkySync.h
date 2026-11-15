@@ -1,5 +1,9 @@
 #pragma once
+#include <array>
+#include <optional>
+
 #include "RE/M/Moon.h"
+
 #include "Utils/Moon.h"
 
 struct PhysicalSky;
