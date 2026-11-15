@@ -5,6 +5,8 @@
 
 namespace GBuffer
 {
+	// Masks2.y identifies visible landscape independently of vertex AO and skin scattering.
+	static const float LandscapeMask = 1.0f;
 
 	half2 OctWrap(half2 v)
 	{
