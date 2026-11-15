@@ -61,7 +61,7 @@ struct CullBucket
 	uint TierStride;
 	uint OutputOffset;
 	uint ArgsOffset;
-	uint _bucketPad0;
+	float OcclusionRadius;
 	float BoundExtent;
 	float ModelRadius;
 	float DistScale;
@@ -303,8 +303,12 @@ uint CullInstance(uint idx, GrassInstance::CullGroup group, out float2 wind, out
 	[branch] if (HiZEnabled > 0.5)
 	{
 		const float canopyMid = 0.5 * (tier == 0 ? Bucket.CanopyHeights.x : (tier == 1 ? Bucket.CanopyHeights.y : Bucket.CanopyHeights.z));
-		const float3 occCenter = dv + float3(0.0, 0.0, canopyMid);
-		if (OccludedSphere(occCenter, instanceRadius * OcclusionTightness))
+		const float3 canopyOffset = canopyMid * (1.0 + sizeVariance) * float3(data2.z, data3.z, data3.w);
+
+		const float3 occCenter = dv + canopyOffset;
+		const float occRadius = Bucket.OcclusionRadius * max(1.0, abs(1.0 + sizeVariance));
+
+		if (OccludedSphere(occCenter, occRadius * OcclusionTightness))
 			return TierCulled;
 	}
 
@@ -353,6 +357,7 @@ uint CullInstance(uint idx, GrassInstance::CullGroup group, out float2 wind, out
 		groupIdx = dispatchIdx - Bucket.DispatchStart;
 		activeGroup = groupIdx < Bucket.GroupCount;
 	}
+
 	if (activeGroup) {
 		uint lo = 0;
 		uint hi = Bucket.SliceCount - 1;

@@ -291,6 +291,7 @@ void GrassMeshLibrary::LoadLODMesh(LODMesh& entry, const std::string& stem, LODT
 				const auto& bound = ts->GetModelData().modelBound;
 				entry.boundExtent = bound.center.Length() + bound.radius;
 				entry.canopyHeight = bound.center.z > 1.0f ? 2.0f * bound.center.z : std::max(bound.center.z + bound.radius, 1.0f);
+				entry.occlusionRadius = bound.radius + std::hypot(bound.center.x, bound.center.y, bound.center.z - 0.5f * entry.canopyHeight);
 
 				if (entry.vertexStride != 0 && entry.indexCount != 0)
 					entry.state = LoadState::kReady;

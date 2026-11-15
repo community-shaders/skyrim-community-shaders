@@ -97,6 +97,13 @@ bool GrassOptimizations::UploadCullBucketConstants(ID3D11DeviceContext* ctx)
 		data.material.params1[2] = linearLighting.IsLinearLightingActive() ? linearLighting.settings.emitColorMult : 1.0f;
 
 		const float canopyHeight = draw.boundCenter[2] > 1.0f ? 2.0f * draw.boundCenter[2] : std::max(draw.boundCenter[2] + draw.modelRadius, 1.0f);
+		float occlusionRadius = draw.modelRadius + std::hypot(draw.boundCenter[0], draw.boundCenter[1], draw.boundCenter[2] - 0.5f * canopyHeight);
+
+		for (const auto* lod : bucket->lodMeshes) {
+			if (lod)
+				occlusionRadius = std::max(occlusionRadius, lod->occlusionRadius);
+		}
+
 		const auto lodMeshCost = [bucket](size_t tier) {
 			const auto* lod = bucket->lodMeshes[tier];
 			return lod ? lod->GetMeshCost() : bucket->minPixelScale;
@@ -115,6 +122,7 @@ bool GrassOptimizations::UploadCullBucketConstants(ID3D11DeviceContext* ctx)
 			.tierStride = bucketStore.cullOutput.capacity,
 			.outputOffset = bucket->outputOffset,
 			.argsOffset = slot * kTierCount * kArgsStride,
+			.occlusionRadius = occlusionRadius,
 			.boundExtent = bucket->boundExtent,
 			.modelRadius = draw.modelRadius,
 			.distScale = bucket->distScale,

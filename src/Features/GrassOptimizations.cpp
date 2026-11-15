@@ -223,6 +223,7 @@ void GrassOptimizations::UpdateGrass(const RE::NiCamera* cam)
 		return;
 
 	if (!GetCullCS()) {
+		ownsGrass.store(false, std::memory_order_release);
 		DisableOptimizedDraws();
 		return;
 	}
@@ -434,7 +435,7 @@ GrassOptimizations::Hooks::CPUBufferScope::CPUBufferScope() :
 
 RE::BSGraphics::VertexBuffer* GrassOptimizations::Hooks::CreateVertexBuffer::thunk(void* manager, std::uint32_t byteWidth, void* data, std::uint64_t vertexDesc)
 {
-	if (!CPUBufferScope::active || !data)
+	if (!CPUBufferScope::active || !globals::features::grassOptimizations.OwnsGrass() || !data)
 		return func(manager, byteWidth, data, vertexDesc);
 
 	// The engine accepts a null GPU buffer and frees both CPU allocations.
@@ -598,8 +599,27 @@ void GrassOptimizations::Hooks::DrawVanilla(RE::BSMultiStreamInstanceTriShape* g
 	}
 
 	for (auto* curInstanceGroup : groups) {
-		if (!curInstanceGroup || !curInstanceGroup->isVisible || !curInstanceGroup->vertexBuffer || !curInstanceGroup->vertexBuffer->buffer)
+		if (!curInstanceGroup || !curInstanceGroup->isVisible || !curInstanceGroup->vertexBuffer)
 			continue;
+
+		auto* vertexBuffer = curInstanceGroup->vertexBuffer;
+		if (!vertexBuffer->buffer) {
+			if (!vertexBuffer->m_data)
+				continue;
+
+			// CPU-only captures need a native buffer after optimized drawing is disabled.
+			D3D11_BUFFER_DESC desc{};
+			desc.ByteWidth = static_cast<UINT>(vertexBuffer->byteWidth);
+			desc.Usage = D3D11_USAGE_DEFAULT;
+			desc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+			const D3D11_SUBRESOURCE_DATA data{ vertexBuffer->m_data, 0, 0 };
+			winrt::com_ptr<ID3D11Buffer> buffer;
+			if (FAILED(globals::d3d::device->CreateBuffer(&desc, &data, buffer.put())))
+				continue;
+
+			Util::SetResourceName(buffer.get(), "GrassOptimizations::NativeInstances");
+			vertexBuffer->buffer = reinterpret_cast<REX::W32::ID3D11Buffer*>(buffer.detach());
+		}
 
 		static REL::Relocation<void (*)(RE::BSGraphics::Renderer*, RE::BSGraphics::TriShape*, uint32_t, uint32_t, uint32_t, RE::BSGraphics::VertexDesc, RE::BSGraphics::VertexBuffer*)> DrawInstancedTriShape{ REL::RelocationID(75479, 77265) };
 		DrawInstancedTriShape(globals::game::renderer, geometry->GetGeometryRuntimeData().rendererData, 0, geometry->GetTrishapeRuntimeData().triangleCount, curInstanceGroup->instanceCount, geometry->GetGeometryRuntimeData().vertexDesc, curInstanceGroup->vertexBuffer);

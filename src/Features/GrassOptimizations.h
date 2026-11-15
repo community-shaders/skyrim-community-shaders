@@ -150,7 +150,7 @@ private:
 		uint32_t tierStride;
 		uint32_t outputOffset;
 		uint32_t argsOffset;
-		uint32_t pad0;
+		float occlusionRadius;
 
 		float boundExtent;
 		float modelRadius;
@@ -174,7 +174,7 @@ private:
 	STATIC_ASSERT_ALIGNAS_16(CullBucketCB);
 	// Draw metadata offsets must match GrassBucket in RunGrass.hlsl.
 	static_assert(sizeof(CullBucketCB) == 96 && offsetof(CullBucketCB, groupCount) == 0 && offsetof(CullBucketCB, groupBase) == 12 && offsetof(CullBucketCB, complexThreshold) == 56 &&
-				  offsetof(CullBucketCB, outputOffset) == 20 && offsetof(CullBucketCB, argsOffset) == 24 &&
+				  offsetof(CullBucketCB, outputOffset) == 20 && offsetof(CullBucketCB, argsOffset) == 24 && offsetof(CullBucketCB, occlusionRadius) == 28 &&
 				  offsetof(CullBucketCB, midLODMeshCost) == 60 && offsetof(CullBucketCB, farLODMeshCost) == 76 &&
 				  offsetof(CullBucketCB, canopyHeights) == 80 && offsetof(CullBucketCB, alphaTestRef) == 92);
 

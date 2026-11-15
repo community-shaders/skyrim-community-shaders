@@ -44,6 +44,7 @@ public:
 		uint32_t indexCount = 0;
 		float boundExtent = 0.0f;
 		float canopyHeight = 1.0f;
+		float occlusionRadius = 0.0f;
 		// The LOD .nif is authored separately, so its vertex format need not match the source mesh's.
 		uint32_t vertexStride = 0;
 		uint64_t vertexDesc = 0;
