@@ -19,7 +19,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	RenderDistanceOverride,
 	EdgeFadeStart,
 	EnableOcclusionCulling,
-	OcclusionBias,
+	OcclusionDepthBias,
+	OcclusionTightness,
 	SimpleShadingPixelSize,
 	CollisionDistance,
 	EnableMeshLOD,
@@ -51,7 +52,7 @@ void GrassOptimizations::DrawSettings()
 	ImGui::SliderFloat(T(TKEY("full_detail_pixel_size"), "Full-Detail Pixel Size"), &settings.FullDetailPixelSize, 4.0f, 128.0f, "%.1f px");
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("%s", T(TKEY("full_detail_pixel_size_tooltip"),
-							  "Instances whose on-screen radius is above this render at full density. Below it, density thinning increases over the full INI grass distance. A shorter Grass Render Distance cuts this ramp off early without changing density closer to the player. Min Pixel Size remains a hard cutoff. Increasing this setting improves performance by removing closer grass."));
+							  "Instances whose on-screen radius is at or above this render at full density. Below it, density decreases toward Minimum Density as instances get smaller on screen. Increasing this setting starts thinning closer grass."));
 	}
 
 	ImGui::SliderFloat(T(TKEY("min_pixel_size"), "Min Pixel Size"), &settings.MinPixelSize, 1.0f, 32.0f, "%.1f px");
@@ -63,7 +64,7 @@ void GrassOptimizations::DrawSettings()
 	Util::PercentageSlider(T(TKEY("min_density"), "Minimum Density"), &settings.MinDensity);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("%s", T(TKEY("min_density_tooltip"),
-							  "The lowest density targeted by pixel-based thinning at the full INI grass distance. Closer grass retains more density, and Min Pixel Size still removes instances below its cutoff."));
+							  "The lowest density targeted by thinning. Min Pixel Size and other culling tests can still remove instances."));
 	}
 
 	Util::PercentageSlider(T(TKEY("mesh_cost_bias"), "Mesh Cost Bias"), &settings.MeshCostBias);
@@ -128,10 +129,16 @@ void GrassOptimizations::DrawSettings()
 							  "Skips grass hidden behind rocks, buildings and NPCs. Depending on how much grass is not visible, this may cost more than its benefits. If you see grass flickering when moving, try disabling this. Terrain such as hills is not treated as an occluder when Terrain Blending is enabled, which reduces the benefit."));
 	}
 
-	ImGui::SliderFloat(T(TKEY("occlusion_bias"), "Occlusion Bias"), &settings.OcclusionBias, 0.0f, 0.05f, "%.4f");
+	Util::PercentageSlider(T(TKEY("occlusion_bias"), "Occlusion Bias"), &settings.OcclusionDepthBias, 0.0f, 20.0f);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("%s", T(TKEY("occlusion_bias_tooltip"),
-							  "How far behind an occluder grass must sit before Occlusion Culling removes it. Raise this if grass disappears around the edges of rocks and hills, lower it to reclaim more performance. Has no effect unless Occlusion Culling is enabled."));
+							  "How far behind an occluder grass must sit before Occlusion Culling removes it, as a percentage of the occluder's distance from the camera, so it behaves the same near and far. Raise this if grass disappears around the edges of rocks and hills, lower it to reclaim more performance. Has no effect unless Occlusion Culling is enabled."));
+	}
+
+	ImGui::SliderFloat(T(TKEY("occlusion_tightness"), "Occlusion Tightness"), &settings.OcclusionTightness, 0.25f, 1.0f, "%.2f");
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("%s", T(TKEY("occlusion_tightness_tooltip"),
+							  "How small each grass instance is treated as when testing whether it is hidden. At 1.0 grass is culled only once its nearest point is hidden. Lower values shrink both its footprint and that test depth, culling more grass behind occluders for extra performance at the cost of more popping along the edges of rocks and hills. Only affects per-instance culling, never whole patches, and has no effect unless Occlusion Culling is enabled."));
 	}
 
 	ImGui::SeparatorText(T(TKEY("mesh_lod"), "Mesh LOD"));
@@ -331,12 +338,28 @@ void GrassOptimizations::DrawBucket(GrassBucket& b)
 		shadowState.stateUpdateFlags.set(RE::BSGraphics::ShaderFlags::DIRTY_VERTEX_DESC);
 	}
 
+	// Only depth-writing draws contribute to the bucket's minimum alpha-test reference.
+	if (shadowState.depthStencilDepthMode != RE::BSGraphics::DepthStencilDepthMode::kTestEqual) {
+		const float alphaTestRef = shadowState.alphaTestEnabled ? std::max(0.0f, shadowState.alphaTestRef) : 0.0f;
+		b.alphaTestRef = b.alphaTestRefKnown ? std::min(b.alphaTestRef, alphaTestRef) : alphaTestRef;
+		b.alphaTestRefKnown = true;
+	}
+
 	// Bind material textures together instead of committing each slot separately.
 	constexpr uint32_t kMaterialTextureBits = 0x7F;
 	const uint32_t materialTextures = shadowState.PSResourceModifiedBits & kMaterialTextureBits;
 	shadowState.PSResourceModifiedBits &= ~kMaterialTextureBits;
 
-	SetDirtyStates(0);
+	if (leanCommitReady && shadowState.alphaTestRef == committedAlphaTestRef)
+		shadowState.stateUpdateFlags.reset(RE::BSGraphics::ShaderFlags::DIRTY_ALPHA_TEST_REF);
+
+	const bool leanCommit = leanCommitReady && shadowState.stateUpdateFlags.underlying() == 0 && !shadowState.PSResourceModifiedBits &&
+	                        !shadowState.PSSamplerModifiedBits && globals::state->permutationData == globals::state->permutationDataPrevious;
+	if (!leanCommit) {
+		SetDirtyStates(0);
+		committedAlphaTestRef = shadowState.alphaTestRef;
+		leanCommitReady = true;
+	}
 	if (materialTextures) {
 		const uint32_t firstTexture = std::countr_zero(materialTextures);
 		const uint32_t textureCount = std::bit_width(materialTextures) - firstTexture;
@@ -349,6 +372,7 @@ void GrassOptimizations::DrawBucket(GrassBucket& b)
 	UINT bucketNum = 16;
 	ctx1->VSSetConstantBuffers1(13, 1, &bucketCB, &bucketFirst, &bucketNum);
 
+	bool bindSharedViews = true;
 	for (uint32_t tier = 0; tier < kTierCount; ++tier) {
 		ID3D11Buffer* vertexBuffer = meshVB;
 		ID3D11Buffer* indexBuffer = indexB;
@@ -377,8 +401,9 @@ void GrassOptimizations::DrawBucket(GrassBucket& b)
 		ctx->IASetIndexBuffer(indexBuffer, DXGI_FORMAT_R16_UINT, 0);
 		ctx->IASetVertexBuffers(0, 2, vbs, strides, offsets);
 
+		// The engine does not track VS resources, so only the record SRV changes between tiers.
 		ID3D11ShaderResourceView* instanceViews[4] = { bucketStore.cullOutput.compactedSRVs[tier].get(), bucketStore.InstancePoolSRV(), bucketStore.GroupPoolSRV(), b.complexSRV };
-		ctx->VSSetShaderResources(2, 4, instanceViews);
+		ctx->VSSetShaderResources(2, std::exchange(bindSharedViews, false) ? 4 : 1, instanceViews);
 
 		ctx->DrawIndexedInstancedIndirect(bucketStore.arguments->resource.get(), (b.cullSlot * kTierCount + tier) * kArgsStride);
 	}

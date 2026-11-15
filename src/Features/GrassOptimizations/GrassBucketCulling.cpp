@@ -15,9 +15,7 @@ void GrassOptimizations::CullGrass(const RE::NiCamera* camera)
 	FrustumSoA frustumSoA;
 	BuildFrustumSoA(frustumSoA, frustum);
 
-	// Setup runs with the main camera's PerFrame data.
 	const auto& frameBuffer = globals::game::frameBufferCached;
-	// Match the projection jitter used by the depth buffer.
 	const auto& mainCameraViewProj = frameBuffer.GetCameraViewProj();
 	const auto& mainCameraPos = frameBuffer.GetCameraPosAdjust();
 
@@ -37,14 +35,15 @@ void GrassOptimizations::CullGrass(const RE::NiCamera* camera)
 
 	params.minPixelSize = settings.MinPixelSize;
 	params.fullDetailPixelSize = settings.FullDetailPixelSize;
-	params.lodMinKeep = settings.MinDensity;
+	params.lodMinKeep = std::clamp(settings.MinDensity, 0.0f, 1.0f);
 	params.lodFadeBand = 0.15f;
 
 	const auto& viewFrustum = camera->GetRuntimeData2().viewFrustum;
-	const auto [screenWidth, screenHeight] = globals::game::renderer->GetScreenSize();
+	const auto screenHeight = globals::game::renderer->GetScreenSize().height;
 	params.meshCostBias = settings.MeshCostBias;
 	params.projScale = screenHeight / (2.0f * std::abs(viewFrustum.fTop));
 	params.maxDistSq = maxDistSq;
+
 	params.edgeFadeStart = std::clamp(settings.EdgeFadeStart, 0.0f, 1.0f);
 
 	params.alphaParam1 = grassStartFadeDistance;
@@ -58,12 +57,18 @@ void GrassOptimizations::CullGrass(const RE::NiCamera* camera)
 	params.collisionDistSq = collisionDistance * collisionDistance;
 	params.midLODPixelSize = settings.MidLODPixelSize;
 	params.farLODPixelSize = settings.EnableMidLOD ? std::min(settings.FarLODPixelSize, settings.MidLODPixelSize) : settings.FarLODPixelSize;
-	params.densityDistanceRcp = 1.0f / std::max(vanillaMaxDistance, 1e-4f);
+	params.maxDist = std::sqrt(maxDistSq);
 
 	params.meshLODBandPx = std::max(0.0f, settings.MeshLODBandPixels);
 	const auto* rowW = params.cameraViewProj[3];
 	params.projectionWLength = std::sqrt(rowW[0] * rowW[0] + rowW[1] * rowW[1] + rowW[2] * rowW[2]);
-	params.occlusionBias = std::max(0.0f, settings.OcclusionBias);
+	params.occlusionDepthBias = std::max(0.0f, settings.OcclusionDepthBias);
+	// Perspective depth has the form NDC = k + c / w.
+	const auto* rowZ = params.cameraViewProj[2];
+	const float rowWLengthSq = params.projectionWLength * params.projectionWLength;
+	params.ndcDepthAtInfinity = rowWLengthSq > 1e-12f ? (rowZ[0] * rowW[0] + rowZ[1] * rowW[1] + rowZ[2] * rowW[2]) / rowWLengthSq : 0.0f;
+	params.ndcDepthNumerator = rowWLengthSq > 1e-12f ? rowZ[3] - params.ndcDepthAtInfinity * rowW[3] : 0.0f;
+	params.occlusionTightness = std::clamp(settings.OcclusionTightness, 0.0f, 1.0f);
 	params.costBiasStartDist = std::max(0.0f, settings.CostBiasStartDistance);
 
 	visibleBuckets.clear();

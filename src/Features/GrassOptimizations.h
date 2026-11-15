@@ -33,7 +33,7 @@ public:
 	struct Settings
 	{
 		float MinPixelSize = 2.0f;
-		float FullDetailPixelSize = 12.0f;
+		float FullDetailPixelSize = 10.0f;
 		float MinDensity = 0.07f;
 		float MeshCostBias = 0.25f;
 		float CostBiasStartDistance = 6000.0f;
@@ -42,9 +42,11 @@ public:
 		float EdgeFadeStart = 0.85f;
 		bool EnableOcclusionCulling = true;
 		float SimpleShadingPixelSize = 8.0f;
-		float OcclusionBias = 0.001f;
+		// Occlusion bias as a fraction of view depth.
+		float OcclusionDepthBias = 0.02f;
+		float OcclusionTightness = 0.9f;
 		float CollisionDistance = 2048.0f;
-		bool EnableMeshLOD = false;
+		bool EnableMeshLOD = true;
 		bool EnableMidLOD = true;
 		float MidLODPixelSize = 8.0f;
 		bool EnableFarLOD = true;
@@ -90,7 +92,7 @@ private:
 	{
 		float frustumPlanes[6][4];
 
-		// Preserve the main camera's camera-relative view-projection rows from PerFrame.
+		// Retain the main view when shadow passes replace PerFrame.
 		float cameraViewProj[4][4];
 		float cameraPos[4];
 
@@ -121,14 +123,22 @@ private:
 
 		float projectionWLength;
 		float hiZMipCount;
-		float occlusionBias;
+		float occlusionDepthBias;
 		float costBiasStartDist;
 
 		float farLODPixelSize;
-		float densityDistanceRcp;
-		float pad0[2];
+		// Precomputed sqrt(maxDistSq) for edge fading.
+		float maxDist;
+		float occlusionTightness;
+		// NDC depth = ndcDepthAtInfinity + ndcDepthNumerator / w.
+		float ndcDepthAtInfinity;
+
+		float ndcDepthNumerator;
+		float pad0[3];
 	};
 	STATIC_ASSERT_ALIGNAS_16(CullParamsCB);
+	static_assert(sizeof(CullParamsCB) == 304 && offsetof(CullParamsCB, occlusionTightness) == 280 && offsetof(CullParamsCB, ndcDepthAtInfinity) == 284 &&
+				  offsetof(CullParamsCB, ndcDepthNumerator) == 288);
 
 	struct alignas(16) CullBucketCB
 	{
