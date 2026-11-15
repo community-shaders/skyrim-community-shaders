@@ -44,59 +44,69 @@ cbuffer CullParams : register(b0)
 	float2 _pad0;
 };
 
-cbuffer CullBucket : register(b1)
+// CullBucketCB fields followed by the dispatch range.
+struct CullBucket
 {
 	uint GroupCount;
-	// SliceTable maps dispatched groups to visible source runs.
 	uint SliceTableOffset;
 	uint SliceCount;
-	// Split large buckets across rows to stay within the 65,535-group dispatch limit.
-	uint DispatchWidth;
-
-	// Each LOD tier occupies TierStride records in Compacted.
+	uint GroupBase;
 	uint TierStride;
 	uint OutputOffset;
 	uint ArgsOffset;
 	uint _bucketPad0;
-
 	float BoundExtent;
 	float ModelRadius;
 	float DistScale;
 	float MinPixelScale;
-
 	float MidLODEnabled;
 	float FarLODEnabled;
 	float ComplexThreshold;
 	float MidLODMeshCost;
-
 	float WavePeriod;
 	float TimeBase;
 	float PrevTimeBase;
 	float FarLODMeshCost;
+	float3 CanopyHeights;
+	// Lowest alpha threshold among depth-writing draws.
+	float AlphaTestRef;
+	uint2 _entryPad0;
+	// Buckets are sorted by DispatchStart for lookup.
+	uint DispatchStart;
+	uint _entryPad1;
+};
+StructuredBuffer<CullBucket> Buckets : register(t4);
+
+cbuffer DispatchParams : register(b1)
+{
+	uint BucketCount;
+	uint DispatchGroupCount;
+	uint DispatchRowWidth;
+	uint _dispatchPad;
 };
 
+// All threads in a group share one bucket.
+static CullBucket Bucket;
+
 ByteAddressBuffer Instances : register(t0);
-// Source groups contain instance ranges and cell origins.
 StructuredBuffer<GrassInstance::CullGroup> Groups : register(t1);
 Texture2D<float> HiZ : register(t2);
-// Each entry stores the run's first source group in .x and its first dispatch-group index in .y.
+// x and y are the run's first source and dispatch group indices.
 StructuredBuffer<uint2> SliceTable : register(t3);
 
 // RunGrass resolves each output record against its source instance and group.
 RWByteAddressBuffer Compacted : register(u0);
-// Each tier has DrawIndexedInstanced arguments with its instance count in the second DWORD.
+// Each tier's DrawIndexedInstanced arguments store the instance count at byte offset 4.
 RWByteAddressBuffer Args : register(u1);
 
-// Tiers select the full, middle and far meshes.
 static const uint TierCount = 3;
 static const uint ArgsStride = 20;
 static const uint TierCulled = TierCount;
 
-// Aggregate survivors within each group to issue one global atomic per occupied tier.
+// Reserve output once per occupied tier to reduce global atomics.
 groupshared uint GroupTierCount[TierCount];
 groupshared uint GroupTierBase[TierCount];
 
-// Convert hashed bits to a uniform value in [0, 1).
 float RandFloat(uint bits)
 {
 	const uint mantissaMask = 0x007FFFFFu;
@@ -113,7 +123,6 @@ float4 ProjectDirection(float3 v)
 	return float4(dot(CameraViewProj[0].xyz, v), dot(CameraViewProj[1].xyz, v), dot(CameraViewProj[2].xyz, v), dot(CameraViewProj[3].xyz, v));
 }
 
-// Return the LOD tier or TierCulled and populate the output record for surviving instances.
 uint CullInstance(uint idx, GrassInstance::CullGroup group, out float2 wind, out float fade, out uint flags)
 {
 	wind = 0.0;
@@ -137,7 +146,7 @@ uint CullInstance(uint idx, GrassInstance::CullGroup group, out float2 wind, out
 
 	// Bounds include the mesh's offset from its root, scale variation and deformation padding.
 	const float sizeVariance = data4.y;
-	const float boundsRadius = BoundExtent * max(1.0, abs(1.0 + sizeVariance)) + 128.0;
+	const float boundsRadius = Bucket.BoundExtent * max(1.0, abs(1.0 + sizeVariance)) + 128.0;
 	[unroll] for (uint p = 0; p < 6; ++p)
 	{
 		if (dot(FrustumPlanes[p].xyz, world) - FrustumPlanes[p].w < -boundsRadius)
@@ -145,7 +154,7 @@ uint CullInstance(uint idx, GrassInstance::CullGroup group, out float2 wind, out
 	}
 
 	// Conservatively approximate the vertex shader's ScaleMask-based size variation.
-	const float instanceRadius = ModelRadius * (1.0 + max(sizeVariance, 0.0));
+	const float instanceRadius = Bucket.ModelRadius * (1.0 + max(sizeVariance, 0.0));
 
 	// Use camera depth so pixel sizing stays consistent across the view.
 	const float clipW = dot(CameraViewProj[3].xyz, dv) + CameraViewProj[3].w;
@@ -160,15 +169,15 @@ uint CullInstance(uint idx, GrassInstance::CullGroup group, out float2 wind, out
 	const float bandRcp = 1.0 / max(MeshLODBandPx, 1e-4);
 
 	uint tier = 0;
-	if (MidLODEnabled > 0.5 && h < saturate((MidLODPixelSize + halfBand - projPx) * bandRcp))
+	if (Bucket.MidLODEnabled > 0.5 && h < saturate((MidLODPixelSize + halfBand - projPx) * bandRcp))
 		tier = 1;
-	if (FarLODEnabled > 0.5 && h < saturate((FarLODPixelSize + halfBand - projPx) * bandRcp))
+	if (Bucket.FarLODEnabled > 0.5 && h < saturate((FarLODPixelSize + halfBand - projPx) * bandRcp))
 		tier = 2;
 
-	const float meshCost = tier == 1 ? MidLODMeshCost : (tier == 2 ? FarLODMeshCost : MinPixelScale);
+	const float meshCost = tier == 1 ? Bucket.MidLODMeshCost : (tier == 2 ? Bucket.FarLODMeshCost : Bucket.MinPixelScale);
 	const float costRamp = saturate((dist - CostBiasStartDist) / max(CostBiasStartDist, 1e-4));
 	const float effCostBias = MeshCostBias * costRamp;
-	const float dScale = lerp(1.0, tier == 0 ? DistScale : rcp(meshCost), effCostBias);
+	const float dScale = lerp(1.0, tier == 0 ? Bucket.DistScale : rcp(meshCost), effCostBias);
 	const float effMaxDistSq = MaxDistSq * dScale * dScale;
 	if (distSq > effMaxDistSq)
 		return TierCulled;
@@ -259,7 +268,7 @@ uint CullInstance(uint idx, GrassInstance::CullGroup group, out float2 wind, out
 	if (SimpleShadingPixelSize > 0.0 && projPx < SimpleShadingPixelSize)
 		flags |= GrassInstance::FlagSimpleShading;
 
-	wind = float2(GrassInstance::WindScalar(localXY, TimeBase * WavePeriod), GrassInstance::WindScalar(localXY, PrevTimeBase * WavePeriod));
+	wind = float2(GrassInstance::WindScalar(localXY, Bucket.TimeBase * Bucket.WavePeriod), GrassInstance::WindScalar(localXY, Bucket.PrevTimeBase * Bucket.WavePeriod));
 
 	return tier;
 }
@@ -276,27 +285,46 @@ uint CullInstance(uint idx, GrassInstance::CullGroup group, out float2 wind, out
 	float fade = 0.0;
 	uint flags = 0;
 
-	const uint groupIdx = groupId.y * DispatchWidth + groupId.x;
-	if (groupIdx < GroupCount) {
-		// Every thread in the group follows the same search for its visible source run.
+	GrassInstance::CullGroup group = (GrassInstance::CullGroup)0;
+	const uint dispatchIdx = groupId.y * DispatchRowWidth + groupId.x;
+	bool activeGroup = dispatchIdx < DispatchGroupCount;
+	uint groupIdx = 0;
+
+	if (activeGroup) {
+		uint first = 0;
+		uint last = BucketCount - 1;
+		[loop] while (first < last)
+		{
+			const uint mid = (first + last + 1) >> 1;
+			if (Buckets[mid].DispatchStart <= dispatchIdx)
+				first = mid;
+			else
+				last = mid - 1;
+		}
+
+		Bucket = Buckets[first];
+		groupIdx = dispatchIdx - Bucket.DispatchStart;
+		activeGroup = groupIdx < Bucket.GroupCount;
+	}
+	if (activeGroup) {
 		uint lo = 0;
-		uint hi = SliceCount - 1;
+		uint hi = Bucket.SliceCount - 1;
 		[loop] while (lo < hi)
 		{
 			const uint mid = (lo + hi + 1) >> 1;
-			if (SliceTable[SliceTableOffset + mid].y <= groupIdx)
+			if (SliceTable[Bucket.SliceTableOffset + mid].y <= groupIdx)
 				lo = mid;
 			else
 				hi = mid - 1;
 		}
 
-		const uint2 run = SliceTable[SliceTableOffset + lo];
+		const uint2 run = SliceTable[Bucket.SliceTableOffset + lo];
 		groupIndex = run.x + (groupIdx - run.y);
-		const GrassInstance::CullGroup group = Groups[groupIndex];
-
-		if (threadIdx < group.Count)
-			tier = CullInstance(group.SourceStart + threadIdx, group, wind, fade, flags);
+		group = Groups[Bucket.GroupBase + groupIndex];
 	}
+
+	if (activeGroup && threadIdx < group.Count)
+		tier = CullInstance(group.SourceStart + threadIdx, group, wind, fade, flags);
 
 	uint localSlot = 0;
 	if (tier != TierCulled)
@@ -306,7 +334,7 @@ uint CullInstance(uint idx, GrassInstance::CullGroup group, out float2 wind, out
 
 	if (threadIdx < TierCount && GroupTierCount[threadIdx] != 0) {
 		uint base;
-		Args.InterlockedAdd(ArgsOffset + threadIdx * ArgsStride + 4, GroupTierCount[threadIdx], base);
+		Args.InterlockedAdd(Bucket.ArgsOffset + threadIdx * ArgsStride + 4, GroupTierCount[threadIdx], base);
 		GroupTierBase[threadIdx] = base;
 	}
 
@@ -315,8 +343,9 @@ uint CullInstance(uint idx, GrassInstance::CullGroup group, out float2 wind, out
 	if (tier == TierCulled)
 		return;
 
-	const uint slot = OutputOffset + tier * TierStride + GroupTierBase[tier] + localSlot;
-	const uint sourceIndex = Groups[groupIndex].SourceStart + threadIdx;
+	const uint slot = Bucket.OutputOffset + tier * Bucket.TierStride + GroupTierBase[tier] + localSlot;
+	// Instance indices are absolute, while group indices are relative to the bucket.
+	const uint sourceIndex = group.SourceStart + threadIdx;
 	const uint4 record = uint4(sourceIndex, GrassInstance::PackRecord(groupIndex, fade, flags), asuint(wind));
 	Compacted.Store4(slot * GrassInstance::RecordStride, record);
 }
