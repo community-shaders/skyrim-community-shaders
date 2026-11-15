@@ -7,6 +7,7 @@
 
 #include "../ENBExtender.h"
 #include "../IniSerialization.h"
+#include "../Overlays/PresetOverlays.h"
 #include "../PresetManager.h"
 #include "../TextureManager.h"
 #include "Features/Effects11/SettingsPatches.h"
@@ -43,18 +44,7 @@ bool Effect::Load()
 		const char* p = keysBuf.data();
 		while (p < keysBuf.data() + keysLen && *p) {
 			std::string iniKey(p);
-			std::string normalized;
-			for (size_t ci = 0; ci < iniKey.size(); ++ci) {
-				if (iniKey[ci] == ' ' && ci + 1 < iniKey.size() && iniKey[ci + 1] == '.')
-					continue;
-				if (iniKey[ci] == '.' && ci + 1 < iniKey.size() && iniKey[ci + 1] == ' ') {
-					normalized += '.';
-					++ci;
-					continue;
-				}
-				normalized += iniKey[ci];
-			}
-			normalizedIniKeys[normalized] = iniKey;
+			normalizedIniKeys[NormalizeIniKey(iniKey)] = iniKey;
 			p += iniKey.size() + 1;
 		}
 	}
@@ -75,11 +65,10 @@ bool Effect::Load()
 
 		bool isPerComponent = IsPerComponentVector(uiVar);
 		if (isPerComponent) {
-			static const char* suffixes[] = { "X", "Y", "Z", "W" };
 			int numComponents = (uiVar.type == UIVariableType::Float2) ? 2 : (uiVar.type == UIVariableType::Float3) ? 3 :
 			                                                                                                          4;
 			for (int i = 0; i < numComponents; ++i) {
-				std::string compKey = iniKey + suffixes[i];
+				std::string compKey = iniKey + kComponentSuffixes[i];
 				auto* realKey = findIniKey(compKey);
 				if (!realKey)
 					realKey = &compKey;
@@ -179,17 +168,19 @@ void Effect::CaptureBaseValues()
 		CaptureBaseValue(uiVar);
 }
 
-void Effect::Save()
+bool Effect::Save()
 {
 	// Nothing loaded means nothing to persist; writing would leave stub ini files in the preset
 	if (!IsCompiled())
-		return;
+		return true;
+	assert(!Overlays::Manager::GetSingleton().IsApplied() && "save inside Overlays::Manager::RemovedScope");
 
 	std::filesystem::path iniPath = PresetManager::GetSingleton().GetENBSeriesPath() / (GetName() + ".ini");
 
 	std::string section = GetName();
 	std::transform(section.begin(), section.end(), section.begin(), ::toupper);
 
+	bool ok = true;
 	for (const auto& uiVar : uiVariables) {
 		if (uiVar.isLabel || uiVar.isPatched)
 			continue;
@@ -218,15 +209,16 @@ void Effect::Save()
 		case UIVariableType::Float3:
 		case UIVariableType::Float4:
 			if (IsPerComponentVector(uiVar)) {
-				static const char* suffixes[] = { "X", "Y", "Z", "W" };
 				int numComponents = (uiVar.type == UIVariableType::Float2) ? 2 : (uiVar.type == UIVariableType::Float3) ? 3 :
 				                                                                                                          4;
 				for (int i = 0; i < numComponents; ++i) {
-					std::string compKey = iniKey + suffixes[i];
+					std::string compKey = iniKey + kComponentSuffixes[i];
 					std::string compValue = Effects11Util::Ini::FormatFloat(vectorValue[i]);
 					BOOL compResult = WritePrivateProfileStringA(section.c_str(), compKey.c_str(), compValue.c_str(), iniPath.string().c_str());
-					if (!compResult)
+					if (!compResult) {
 						logger::warn("[EFFECTS11] Failed to write key '{}' to ini file '{}'", compKey, iniPath.string());
+						ok = false;
+					}
 				}
 				continue;
 			} else {
@@ -240,6 +232,7 @@ void Effect::Save()
 		BOOL result = WritePrivateProfileStringA(section.c_str(), iniKey.c_str(), value.c_str(), iniPath.string().c_str());
 		if (!result) {
 			logger::warn("[EFFECTS11] Failed to write key '{}' to ini file '{}'", iniKey, iniPath.string());
+			ok = false;
 		}
 	}
 
@@ -247,13 +240,15 @@ void Effect::Save()
 	BOOL techniqueResult = WritePrivateProfileStringA(section.c_str(), "TECHNIQUE", techniqueValue.c_str(), iniPath.string().c_str());
 	if (!techniqueResult) {
 		logger::warn("[EFFECTS11] Failed to write TECHNIQUE key to ini file '{}'", iniPath.string());
+		ok = false;
 	}
 
 	WritePrivateProfileStringA(NULL, NULL, NULL, iniPath.string().c_str());
 
-	SaveWeatherOverrides();
+	ok &= SaveWeatherOverrides();
 
 	logger::info("[EFFECTS11] Saved settings to '{}' for effect '{}'", iniPath.string(), GetName());
+	return ok;
 }
 
 bool Effect::Apply()
@@ -922,11 +917,35 @@ bool Effect::IsPerComponentVector(const UIVariable& uiVar)
 	       uiVar.widgetType != UIWidgetType::Color;
 }
 
+int Effect::GetComponentCount(UIVariableType type)
+{
+	return type == UIVariableType::Float ? 1 : type == UIVariableType::Float2 ? 2 :
+	                                       type == UIVariableType::Float3     ? 3 :
+	                                                                            4;
+}
+
 std::string Effect::GetVariableIniKey(const UIVariable& uiVar)
 {
 	if (!uiVar.uniqueName.empty())
 		return uiVar.uniqueName;
 	return uiVar.group.empty() ? uiVar.displayName : uiVar.group + "." + uiVar.displayName;
+}
+
+std::string Effect::NormalizeIniKey(std::string_view key)
+{
+	std::string normalized;
+	normalized.reserve(key.size());
+	for (size_t i = 0; i < key.size(); ++i) {
+		if (key[i] == ' ' && i + 1 < key.size() && key[i + 1] == '.')
+			continue;
+		if (key[i] == '.' && i + 1 < key.size() && key[i + 1] == ' ') {
+			normalized += '.';
+			++i;
+			continue;
+		}
+		normalized += key[i];
+	}
+	return normalized;
 }
 
 void Effect::LoadUIVariableValue(UIVariable& uiVar)

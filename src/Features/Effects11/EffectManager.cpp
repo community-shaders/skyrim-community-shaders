@@ -6,6 +6,7 @@
 #include "Features/RainRefraction.h"
 #include "Globals.h"
 #include "Menu.h"
+#include "Overlays/PresetOverlays.h"
 #include "State.h"
 #include "Utils/Game.h"
 
@@ -118,6 +119,9 @@ void EffectManager::LogPresetStatus() const
 
 void EffectManager::Apply()
 {
+	// Overlays must be read before compiling, since #define values are taken from them while preprocessing
+	Overlays::Manager::GetSingleton().LoadFiles();
+	Overlays::Manager::GetSingleton().ClearCompiledDefines();
 	if (auto& rainRefraction = globals::features::rainRefraction; rainRefraction.loaded)
 		rainRefraction.LoadPresetRaindrops(PresetManager::GetSingleton().GetENBSeriesPath());
 
@@ -129,20 +133,20 @@ void EffectManager::Apply()
 	enbEffectPostPass.Apply();
 
 #ifdef ENABLE_ENB_EXTENDER
-	EffectBase* allEffects[] = { &enbDepthOfField, &enbBloom, &enbLens, &enbAdaptation, &enbEffect, &enbEffectPostPass };
-	for (auto* effect : allEffects) {
+	for (auto* effect : AllEffects()) {
 		if (effect->IsCompiled())
 			effect->LoadWeatherData();
 	}
 #endif
 
+	Overlays::Manager::GetSingleton().OnStoresLoaded();
 	LogPresetStatus();
 }
 
 void EffectManager::Load()
 {
-	EffectBase* allEffects[] = { &enbDepthOfField, &enbBloom, &enbLens, &enbAdaptation, &enbEffect, &enbEffectPostPass };
-	for (auto* effect : allEffects) {
+	Overlays::Manager::GetSingleton().LoadFiles();
+	for (auto* effect : AllEffects()) {
 		effect->Load();
 #ifdef ENABLE_ENB_EXTENDER
 		if (effect->IsCompiled())
@@ -150,16 +154,15 @@ void EffectManager::Load()
 #endif
 		effect->UpdateUIVariables();
 	}
+	Overlays::Manager::GetSingleton().OnStoresLoaded();
 }
 
-void EffectManager::Save()
+bool EffectManager::Save()
 {
-	enbDepthOfField.Save();
-	enbBloom.Save();
-	enbLens.Save();
-	enbAdaptation.Save();
-	enbEffect.Save();
-	enbEffectPostPass.Save();
+	bool ok = true;
+	for (auto* effect : AllEffects())
+		ok &= effect->Save();
+	return ok;
 }
 
 void EffectManager::RegisterSettings()
