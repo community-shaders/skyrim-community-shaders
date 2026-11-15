@@ -45,7 +45,7 @@ namespace ImageBasedLighting
 		float colorR = SphericalHarmonics::SHHallucinateZH3Irradiance(shR, rayDir);
 		float colorG = SphericalHarmonics::SHHallucinateZH3Irradiance(shG, rayDir);
 		float colorB = SphericalHarmonics::SHHallucinateZH3Irradiance(shB, rayDir);
-		return max(0, float3(colorR, colorG, colorB) / Math::PI);
+		return float3(colorR, colorG, colorB) / Math::PI;
 	}
 
 	float3 GetSkyIBLOccluded(float3 rayDir, float visibility)
@@ -96,7 +96,7 @@ namespace ImageBasedLighting
 		float colorR = SphericalHarmonics::SHHallucinateZH3Irradiance(iblSHR, float3(0, 0, 0));
 		float colorG = SphericalHarmonics::SHHallucinateZH3Irradiance(iblSHG, float3(0, 0, 0));
 		float colorB = SphericalHarmonics::SHHallucinateZH3Irradiance(iblSHB, float3(0, 0, 0));
-		float3 ibl0 = max(0, float3(colorR, colorG, colorB) / Math::PI);
+		float3 ibl0 = float3(colorR, colorG, colorB) / Math::PI;
 
 		if (SharedData::iblSettings.DALCMode == 1) {
 			float3 ratio = dalc0 / max(ibl0, 0.001);
