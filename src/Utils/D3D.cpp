@@ -1,5 +1,6 @@
 #include "D3D.h"
 
+#include "Buffer.h"
 #include "Deferred.h"
 #include "Feature.h"
 #include "Features/TerrainBlending.h"
@@ -18,6 +19,35 @@
 
 namespace Util
 {
+	/** @brief Creates a single-mip square texture with an SRV and, when requested, a UAV. */
+	Texture2D* CreateSquareTexture(uint32_t dim, DXGI_FORMAT format, bool unorderedAccess, const char* name)
+	{
+		D3D11_TEXTURE2D_DESC desc{};
+		desc.Width = dim;
+		desc.Height = dim;
+		desc.MipLevels = 1;
+		desc.ArraySize = 1;
+		desc.Format = format;
+		desc.SampleDesc = { 1, 0 };
+		desc.Usage = D3D11_USAGE_DEFAULT;
+		desc.BindFlags = D3D11_BIND_SHADER_RESOURCE | (unorderedAccess ? D3D11_BIND_UNORDERED_ACCESS : 0u);
+		auto* texture = new Texture2D(desc, name);
+
+		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc{};
+		srvDesc.Format = format;
+		srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+		srvDesc.Texture2D.MipLevels = 1;
+		texture->CreateSRV(srvDesc);
+
+		if (unorderedAccess) {
+			D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc{};
+			uavDesc.Format = format;
+			uavDesc.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D;
+			texture->CreateUAV(uavDesc);
+		}
+		return texture;
+	}
+
 	namespace
 	{
 		std::mutex multithreadScopeMutex;

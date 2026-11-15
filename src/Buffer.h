@@ -201,6 +201,31 @@ public:
 		ctx->Unmap(resource.get(), 0);
 	}
 
+	/**
+	 * @brief Maps and uploads only the first @p data_size bytes via write-discard.
+	 * The remainder of the buffer is left undefined, so use this only when the shader reads a
+	 * bounded prefix (e.g. an active element count) and the per-frame upload should scale with
+	 * usage rather than the full capacity.
+	 */
+	void UpdatePartial(void const* src_data, size_t data_size)
+	{
+		auto ctx = globals::d3d::context;
+		D3D11_MAPPED_SUBRESOURCE mapped_buffer{};
+		DX::ThrowIfFailed(ctx->Map(resource.get(), 0u, D3D11_MAP_WRITE_DISCARD, 0u, &mapped_buffer));
+		memcpy(mapped_buffer.pData, src_data, data_size > desc.ByteWidth ? desc.ByteWidth : data_size);
+		ctx->Unmap(resource.get(), 0);
+	}
+
+	/**
+	 * @brief Uploads @p byteSize bytes at @p byteOffset in place, leaving the rest of the buffer intact.
+	 * The buffer must use D3D11_USAGE_DEFAULT.
+	 */
+	void UpdateRange(void const* src_data, size_t byteOffset, size_t byteSize)
+	{
+		const D3D11_BOX box{ static_cast<UINT>(byteOffset), 0u, 0u, static_cast<UINT>(byteOffset + byteSize), 1u, 1u };
+		globals::d3d::context->UpdateSubresource(resource.get(), 0, &box, src_data, 0, 0);
+	}
+
 	/** @brief Uploads an array of elements to the structured buffer. */
 	template <typename T>
 	void UpdateList(T const& src_data, std::int64_t count)
