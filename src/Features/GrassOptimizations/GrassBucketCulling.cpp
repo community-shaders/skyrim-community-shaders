@@ -44,6 +44,10 @@ void GrassOptimizations::CullGrass(const RE::NiCamera* camera)
 	params.projScale = screenHeight / (2.0f * std::abs(viewFrustum.fTop));
 	params.maxDistSq = maxDistSq;
 
+	const auto& rotate = camera->world.rotate;
+	cullForward = { rotate.entry[0][0], rotate.entry[1][0], rotate.entry[2][0] };
+	cullForwardDotEye = cullForward.Dot(cameraTranslation);
+	cullPixelsPerRadius = !viewFrustum.bOrtho && settings.MinPixelSize > 0.0f ? params.projScale / settings.MinPixelSize : 0.0f;
 	params.edgeFadeStart = std::clamp(settings.EdgeFadeStart, 0.0f, 1.0f);
 
 	params.alphaParam1 = grassStartFadeDistance;
@@ -84,6 +88,10 @@ void GrassOptimizations::CullGrass(const RE::NiCamera* camera)
 
 		bucketStore.PrepareBucket(bucket);
 		CullBucketSlices(bucket, frustumSoA, cameraPosition);
+		if (bucket.sliceTableCount && IsBucketEmpty(bucket, params)) {
+			sliceTableCPU.resize(bucket.sliceTableOffset);
+			bucket.ResetCullState();
+		}
 		if (bucket.sliceTableCount)
 			visibleBuckets.push_back(&bucket);
 	}
@@ -271,60 +279,213 @@ uint32_t GrassOptimizations::LaneMask(uint32_t remaining)
 void GrassOptimizations::CullBucketSlices(GrassBucket& bucket, const FrustumSoA& frustumSoA, __m128 cameraPosition)
 {
 	bucket.sliceTableOffset = (uint32_t)sliceTableCPU.size();
+
+	const RunCullLimits limits = BucketCullLimits(bucket);
+
+	// Merge new slices before computing bounds from cached runs.
 	if (bucket.rebuildPending && rebuildBudget) {
 		--rebuildBudget;
 		bucket.clustersValid = false;
 	}
+
 	if (!bucket.clustersValid || bucket.clusteredSlices != bucket.uploadedSlices)
 		bucketStore.MergeSlicesIntoRuns(bucket);
+
 	if (bucket.coarseDirty)
 		GrassBucketStore::RecomputeCoarseBounds(bucket);
-	const auto& bounds = bucket.coarseBounds;
-	const float pad = bucket.boundsPadding;
-	const __m128 bucketMin = _mm_setr_ps(bounds.lo[0] - pad, bounds.lo[1] - pad, bounds.lo[2] - pad, 0.0f);
-	const __m128 bucketMax = _mm_setr_ps(bounds.hi[0] + pad, bounds.hi[1] + pad, bounds.hi[2] + pad, 0.0f);
+
+	// Cached bounds exclude the grass mesh extent and screen-edge padding.
+	const float padding = bucket.boundsPadding;
+	const auto& coarse = bucket.coarseBounds;
+	const RE::NiPoint3 coarseMin{ coarse.lo[0] - padding, coarse.lo[1] - padding, coarse.lo[2] - padding };
+	const RE::NiPoint3 coarseMax{ coarse.hi[0] + padding, coarse.hi[1] + padding, coarse.hi[2] + padding };
+	const __m128 bucketMin = _mm_setr_ps(coarseMin.x, coarseMin.y, coarseMin.z, 0.0f);
+	const __m128 bucketMax = _mm_setr_ps(coarseMax.x, coarseMax.y, coarseMax.z, 0.0f);
+
 	const __m128 nearest = _mm_max_ps(_mm_max_ps(_mm_sub_ps(bucketMin, cameraPosition), _mm_sub_ps(cameraPosition, bucketMax)), _mm_setzero_ps());
-	if (_mm_cvtss_f32(_mm_dp_ps(nearest, nearest, 0x71)) > maxDistSq)
+	if (_mm_cvtss_f32(_mm_dp_ps(nearest, nearest, 0x71)) > limits.maxDistanceSq)
 		return;
+
+	const auto axisDepth = [](float forward, float lo, float hi, bool nearCorner) { return (forward >= 0.0f) == nearCorner ? forward * lo : forward * hi; };
+	const float coarseMinDepth = axisDepth(cullForward.x, coarseMin.x, coarseMax.x, true) + axisDepth(cullForward.y, coarseMin.y, coarseMax.y, true) +
+	                             axisDepth(cullForward.z, coarseMin.z, coarseMax.z, true) - cullForwardDotEye;
+	const float coarseMaxDepth = axisDepth(cullForward.x, coarseMin.x, coarseMax.x, false) + axisDepth(cullForward.y, coarseMin.y, coarseMax.y, false) +
+	                             axisDepth(cullForward.z, coarseMin.z, coarseMax.z, false) - cullForwardDotEye;
+	if (limits.useDepthPlane && coarseMinDepth > limits.maxViewDepth)
+		return;
+
 	uint32_t planeMask;
 	if (!ClassifyAabb(frustumSoA, bucketMin, bucketMax, planeMask))
 		return;
+
 	const __m128 signBit = _mm_set1_ps(-0.0f);
 	const __m128 farthest = _mm_max_ps(_mm_andnot_ps(signBit, _mm_sub_ps(bucketMin, cameraPosition)), _mm_andnot_ps(signBit, _mm_sub_ps(bucketMax, cameraPosition)));
-	const bool allWithinDistance = _mm_cvtss_f32(_mm_dp_ps(farthest, farthest, 0x71)) <= maxDistSq;
-	if (!planeMask && allWithinDistance) {
+	const bool allWithinLimits = _mm_cvtss_f32(_mm_dp_ps(farthest, farthest, 0x71)) <= limits.maxDistanceSq &&
+	                             (!limits.useDepthPlane || coarseMaxDepth <= limits.maxViewDepth);
+
+	if (!planeMask && allWithinLimits) {
+		// Runs preserve group order, so a fully visible bucket needs one range.
 		if (!bucket.cullGroups.empty())
 			AppendVisibleGroups(bucket, 0, (uint32_t)bucket.cullGroups.size());
+
 	} else if (planeMask && bucket.sliceBlocksUseful) {
-		CullBucketSliceBlocks(bucket, frustumSoA, cameraPosition, planeMask, allWithinDistance);
+		CullBucketSliceBlocks(bucket, frustumSoA, cameraPosition, planeMask, allWithinLimits, limits);
 	} else {
-		CullSliceRuns(bucket, frustumSoA, cameraPosition, 0, bucket.sliceRunCount, planeMask, allWithinDistance);
+		CullSliceRuns(bucket, frustumSoA, cameraPosition, 0, bucket.sliceRunCount, planeMask, allWithinLimits, limits);
 	}
 }
 
-void GrassOptimizations::CullBucketSliceBlocks(GrassBucket& bucket, const FrustumSoA& frustumSoA, __m128 cameraPosition, uint32_t planeMask, bool allWithinDistance)
+bool GrassOptimizations::IsBucketEmpty(const GrassBucket& bucket, const CullParamsCB& params) const
+{
+	// Leave large buckets and LOD selection to the GPU.
+	constexpr uint32_t kMaxGroupsToCheck = 32;
+	if (bucket.groupCount > kMaxGroupsToCheck || bucket.lodMeshes[0] || bucket.lodMeshes[1] ||
+		!(bucket.boundExtent >= 0.0f && std::isfinite(bucket.boundExtent)))
+		return false;
+
+	const double pixelNumerator = (double)bucket.drawResources.key.draw.modelRadius * params.projectionWLength * params.projScale;
+	const bool checkSize = pixelNumerator > 0.0 && std::isfinite(pixelNumerator) && params.minPixelSize > 0.0f && std::isfinite(params.minPixelSize) &&
+	                       params.meshCostBias >= 0.0f && params.meshCostBias <= 1.0f && bucket.minPixelScale >= 1.0f && std::isfinite(bucket.minPixelScale) &&
+	                       params.costBiasStartDist >= 0.0f && std::isfinite(params.costBiasStartDist);
+	const double costStart = params.costBiasStartDist;
+	const double meshCost = (bucket.minPixelScale - 1.0) * params.meshCostBias;
+	const auto& rowW = params.cameraViewProj[3];
+
+	const auto outside = [&](const GrassGroupBounds& bounds) {
+		if (!bounds.valid)
+			return false;
+
+		// Expand bounds to cover rounding in the shader's camera-relative float arithmetic.
+		constexpr double kRoundoff = 1e-5;
+		if (checkSize) {
+			double minW = rowW[3] - std::abs(rowW[3]) * kRoundoff;
+			double minDistanceSq = 0.0;
+
+			for (int axis = 0; axis < 3; ++axis) {
+				const double lo = bounds.lo[axis];
+				const double hi = bounds.hi[axis];
+				const double eye = params.cameraPos[axis];
+				const double slack = 1.0 + (std::max(std::abs(lo), std::abs(hi)) + std::abs(eye)) * kRoundoff;
+				const double w = rowW[axis];
+
+				minW += w * ((w >= 0.0 ? lo : hi) - eye) - std::abs(w) * slack;
+				const double nearest = std::max(0.0, std::max(lo - eye, eye - hi) - slack);
+				minDistanceSq += nearest * nearest;
+			}
+
+			const double ramp = std::clamp((std::sqrt(minDistanceSq) - costStart) / std::max(costStart, 1e-4), 0.0, 1.0);
+			const double minPixels = params.minPixelSize * (1.0 + meshCost * ramp);
+
+			if (std::isfinite(minW) && pixelNumerator * bounds.maxScale * (1.0 + kRoundoff) < minPixels * std::max(minW, 1e-4))
+				return true;
+		}
+
+		const double radius = (double)bucket.boundExtent * bounds.maxScale + 128.0;
+		for (const auto& plane : params.frustumPlanes) {
+			double maxDistance = -plane[3];
+			double magnitude = std::abs(plane[3]);
+
+			for (int axis = 0; axis < 3; ++axis) {
+				const double term = (double)plane[axis] * (plane[axis] >= 0.0f ? bounds.hi[axis] : bounds.lo[axis]);
+				maxDistance += term;
+				magnitude += std::abs(term);
+			}
+
+			if (maxDistance + radius + 1.0 + (magnitude + radius) * kRoundoff < 0.0)
+				return true;
+		}
+
+		return false;
+	};
+
+	const uint32_t end = bucket.sliceTableOffset + bucket.sliceTableCount;
+	for (uint32_t entry = bucket.sliceTableOffset; entry < end; ++entry) {
+		const auto [sourceStart, visibleStart] = sliceTableCPU[entry];
+		const uint32_t nextVisible = entry + 1 < end ? sliceTableCPU[entry + 1].second : bucket.groupCount;
+
+		for (uint32_t group = sourceStart; group < sourceStart + nextVisible - visibleStart; ++group) {
+			if (bucket.cullGroups[group].count && !outside(bucket.cullGroupBounds[group]))
+				return false;
+		}
+	}
+
+	return true;
+}
+
+GrassOptimizations::RunCullLimits GrassOptimizations::BucketCullLimits(const GrassBucket& bucket) const
+{
+	constexpr float kCameraOffsetMargin = 64.0f;
+	float maxDistance = maxGrassDistance + kCameraOffsetMargin;
+
+	const float bias = settings.MeshCostBias;
+	const float costRampEnd = 2.0f * std::max(0.0f, settings.CostBiasStartDistance);
+	const bool biasInRange = bias >= 0.0f && bias <= 1.0f;
+
+	// Tier costs are at least 1, so cost bias can only increase size thresholds and reduce distance limits.
+	float minMeshCost = bucket.minPixelScale;
+	float maxTierDistScale = bucket.distScale;
+	for (const auto* lod : bucket.lodMeshes) {
+		if (!lod)
+			continue;
+		const float cost = lod->GetMeshCost();
+		minMeshCost = std::min(minMeshCost, cost);
+		maxTierDistScale = std::max(maxTierDistScale, 1.0f / cost);
+	}
+
+	// Beyond the cost ramp, the least restrictive tier bounds the bucket.
+	if (biasInRange) {
+		const float costCutoff = maxGrassDistance * (1.0f + (maxTierDistScale - 1.0f) * bias);
+		if (costCutoff >= costRampEnd)
+			maxDistance = std::min(maxDistance, costCutoff + kCameraOffsetMargin);
+	}
+
+	RunCullLimits limits;
+	limits.maxDistanceSq = maxDistance * maxDistance;
+
+	// The largest instance bounds the projected-size cutoff.
+	// Depth cannot exceed distance, so the full cost bias applies beyond the ramp's end.
+	if (biasInRange && cullPixelsPerRadius > 0.0f) {
+		const float radius = bucket.drawResources.key.draw.modelRadius * bucket.maxScale;
+		const float saturated = radius * cullPixelsPerRadius / (1.0f + (minMeshCost - 1.0f) * bias);
+		limits.maxViewDepth = (saturated >= costRampEnd ? saturated : radius * cullPixelsPerRadius) + kCameraOffsetMargin;
+		// MaxPlaneDistance is maxViewDepth minus the nearest box depth.
+		limits.depthPlane = { _mm_set1_ps(-cullForward.x), _mm_set1_ps(-cullForward.y), _mm_set1_ps(-cullForward.z),
+			_mm_set1_ps(-(cullForwardDotEye + limits.maxViewDepth)) };
+		limits.useDepthPlane = true;
+	}
+
+	return limits;
+}
+
+void GrassOptimizations::CullBucketSliceBlocks(GrassBucket& bucket, const FrustumSoA& frustumSoA, __m128 cameraPosition, uint32_t planeMask, bool allWithinLimits, const RunCullLimits& limits)
 {
 	const __m128 zero = _mm_setzero_ps();
 	const __m128 cameraX = _mm_shuffle_ps(cameraPosition, cameraPosition, _MM_SHUFFLE(0, 0, 0, 0));
 	const __m128 cameraY = _mm_shuffle_ps(cameraPosition, cameraPosition, _MM_SHUFFLE(1, 1, 1, 1));
 	const __m128 cameraZ = _mm_shuffle_ps(cameraPosition, cameraPosition, _MM_SHUFFLE(2, 2, 2, 2));
-	const __m128 maxDistanceSq = _mm_set1_ps(maxDistSq);
+	const __m128 maxDistanceSq = _mm_set1_ps(limits.maxDistanceSq);
+	const __m128 padding = _mm_set1_ps(bucket.boundsPadding);
 
 	const uint32_t blockCount = (bucket.sliceRunCount + GrassBucket::kRunsPerCullBlock - 1) / GrassBucket::kRunsPerCullBlock;
 	for (uint32_t firstBlock = 0; firstBlock < blockCount; firstBlock += 4) {
 		const auto& batch = bucket.sliceBlockBatches[firstBlock / 4];
-		const BoxBatch blocks(batch, _mm_set1_ps(bucket.boundsPadding));
+		const BoxBatch blocks(batch, padding);
 		uint32_t visibleMask = LaneMask(blockCount - firstBlock);
-		uint32_t withinDistanceMask = visibleMask;
+		uint32_t withinLimitsMask = visibleMask;
 
-		if (!allWithinDistance) {
+		if (!allWithinLimits) {
 			visibleMask &= _mm_movemask_ps(_mm_cmple_ps(blocks.NearestDistanceSq(cameraX, cameraY, cameraZ), maxDistanceSq));
+			if (limits.useDepthPlane)
+				visibleMask &= ~_mm_movemask_ps(_mm_cmplt_ps(blocks.MaxPlaneDistance(limits.depthPlane), zero));
 			if (!visibleMask)
 				continue;
-			withinDistanceMask = _mm_movemask_ps(_mm_cmple_ps(blocks.FarthestDistanceSq(cameraX, cameraY, cameraZ), maxDistanceSq));
+			// Skip per-run limits only when the entire block passes.
+			withinLimitsMask = _mm_movemask_ps(_mm_cmple_ps(blocks.FarthestDistanceSq(cameraX, cameraY, cameraZ), maxDistanceSq));
+			if (limits.useDepthPlane)
+				withinLimitsMask &= _mm_movemask_ps(_mm_cmpge_ps(blocks.MinPlaneDistance(limits.depthPlane), zero));
 		}
 
-		// A plane that contains a whole block needs no test on that block's runs.
+		// Planes containing a block need no tests on its runs.
 		__m128i childPlaneMasksSIMD = _mm_set1_epi32(planeMask);
 		for (uint32_t remainingPlanes = planeMask; visibleMask && remainingPlanes; remainingPlanes &= remainingPlanes - 1) {
 			const uint32_t planeIndex = std::countr_zero(remainingPlanes);
@@ -340,39 +501,43 @@ void GrassOptimizations::CullBucketSliceBlocks(GrassBucket& bucket, const Frustu
 
 		for (; visibleMask; visibleMask &= visibleMask - 1) {
 			const uint32_t lane = std::countr_zero(visibleMask);
-			const bool withinDistance = (withinDistanceMask >> lane) & 1u;
+			const bool withinLimits = (withinLimitsMask >> lane) & 1u;
 
-			if (!childPlaneMasks[lane] && withinDistance) {
+			if (!childPlaneMasks[lane] && withinLimits) {
 				AppendVisibleGroups(bucket, batch.firstGroup[lane], batch.groupCount[lane]);
 				continue;
 			}
 
 			const uint32_t firstRun = (firstBlock + lane) * GrassBucket::kRunsPerCullBlock;
 			const uint32_t endRun = std::min(firstRun + GrassBucket::kRunsPerCullBlock, bucket.sliceRunCount);
-			CullSliceRuns(bucket, frustumSoA, cameraPosition, firstRun, endRun, childPlaneMasks[lane], withinDistance);
+			CullSliceRuns(bucket, frustumSoA, cameraPosition, firstRun, endRun, childPlaneMasks[lane], withinLimits, limits);
 		}
 	}
 }
 
-void GrassOptimizations::CullSliceRuns(GrassBucket& bucket, const FrustumSoA& frustumSoA, __m128 cameraPosition, uint32_t firstRun, uint32_t endRun, uint32_t planeMask, bool withinDistance)
+void GrassOptimizations::CullSliceRuns(GrassBucket& bucket, const FrustumSoA& frustumSoA, __m128 cameraPosition, uint32_t firstRun, uint32_t endRun, uint32_t planeMask, bool withinLimits, const RunCullLimits& limits)
 {
 	const __m128 zero = _mm_setzero_ps();
 	const __m128 cameraX = _mm_shuffle_ps(cameraPosition, cameraPosition, _MM_SHUFFLE(0, 0, 0, 0));
 	const __m128 cameraY = _mm_shuffle_ps(cameraPosition, cameraPosition, _MM_SHUFFLE(1, 1, 1, 1));
 	const __m128 cameraZ = _mm_shuffle_ps(cameraPosition, cameraPosition, _MM_SHUFFLE(2, 2, 2, 2));
-	const __m128 maxDistanceSq = _mm_set1_ps(maxDistSq);
+	const __m128 maxDistanceSq = _mm_set1_ps(limits.maxDistanceSq);
+	const __m128 padding = _mm_set1_ps(bucket.boundsPadding);
 
 	for (; firstRun < endRun; firstRun += 4) {
 		const auto& batch = bucket.sliceRunBatches[firstRun / 4];
-		const BoxBatch runs(batch, _mm_set1_ps(bucket.boundsPadding));
+		const BoxBatch runs(batch, padding);
 		uint32_t visibleMask = LaneMask(endRun - firstRun);
-		if (!withinDistance)
+		if (!withinLimits) {
 			visibleMask &= _mm_movemask_ps(_mm_cmple_ps(runs.NearestDistanceSq(cameraX, cameraY, cameraZ), maxDistanceSq));
+			if (limits.useDepthPlane)
+				visibleMask &= ~_mm_movemask_ps(_mm_cmplt_ps(runs.MaxPlaneDistance(limits.depthPlane), zero));
+		}
 
 		for (uint32_t remainingPlanes = planeMask; visibleMask && remainingPlanes; remainingPlanes &= remainingPlanes - 1)
 			visibleMask &= ~_mm_movemask_ps(_mm_cmplt_ps(runs.MaxPlaneDistance(frustumSoA.planes[std::countr_zero(remainingPlanes)]), zero));
 
-		// Consume lanes in order so adjacent visible groups still coalesce.
+		// Visit lanes in order to coalesce adjacent group ranges.
 		for (; visibleMask; visibleMask &= visibleMask - 1) {
 			const uint32_t lane = std::countr_zero(visibleMask);
 			AppendVisibleGroups(bucket, batch.firstGroup[lane], batch.groupCount[lane]);
@@ -549,10 +714,13 @@ void GrassBucketStore::MergeSlicesIntoRuns(GrassBucket& bucket)
 	const bool rebuild = !bucket.clustersValid;
 	const uint32_t reusedSlices = rebuild ? bucket.clusteredSlices : 0;
 	std::vector<CullGroup> previousGroups;
+	std::vector<GrassGroupBounds> previousBounds;
 
 	if (rebuild) {
 		previousGroups.swap(bucket.cullGroups);
+		previousBounds.swap(bucket.cullGroupBounds);
 		bucket.cullGroups.reserve(previousGroups.size());
+		bucket.cullGroupBounds.reserve(previousBounds.size());
 		bucket.sliceRunBatches.clear();
 		bucket.sliceRunCount = 0;
 		bucket.runLiveGroups.clear();
@@ -610,10 +778,12 @@ void GrassBucketStore::MergeSlicesIntoRuns(GrassBucket& bucket)
 
 		if (sliceIndex < reusedSlices) {
 			bucket.cullGroups.insert(bucket.cullGroups.end(), previousGroups.begin() + slice.firstCullGroup, previousGroups.begin() + slice.firstCullGroup + groupCount);
+			bucket.cullGroupBounds.insert(bucket.cullGroupBounds.end(), previousBounds.begin() + slice.firstCullGroup, previousBounds.begin() + slice.firstCullGroup + groupCount);
 		} else {
 			for (uint32_t firstInstance = 0; firstInstance < slice.count; firstInstance += kCullGroupSize) {
 				bucket.cullGroups.push_back({ { slice.origin.x, slice.origin.y, slice.origin.z }, slice.fadeStart,
 					slice.bufferOffset + firstInstance, std::min(kCullGroupSize, slice.count - firstInstance) });
+				bucket.cullGroupBounds.push_back(slice.groupBounds[firstInstance / kCullGroupSize]);
 			}
 		}
 

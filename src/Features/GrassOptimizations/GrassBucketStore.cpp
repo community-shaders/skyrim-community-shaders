@@ -235,9 +235,8 @@ void GrassBucketStore::PackInstances(GrassInstanceSlice& slice, const void* sour
 {
 	using DirectX::PackedVector::XMConvertHalfToFloat;
 	slice.data.resize((size_t)slice.count * kSourceStride);
+	slice.groupBounds.assign((slice.count + kCullGroupSize - 1) / kCullGroupSize, {});
 	slice.maxScale = 1.0f;
-	RE::NiPoint3 localMin{ FLT_MAX, FLT_MAX, FLT_MAX };
-	RE::NiPoint3 localMax{ -FLT_MAX, -FLT_MAX, -FLT_MAX };
 
 	const auto* sourceBytes = static_cast<const uint8_t*>(sourceData);
 	const auto packComponent = [](float component) {
@@ -253,13 +252,15 @@ void GrassBucketStore::PackInstances(GrassInstanceSlice& slice, const void* sour
 		for (int componentIndex = 0; componentIndex < 13; ++componentIndex)
 			values[componentIndex] = XMConvertHalfToFloat(halfValues[componentIndex]);
 
-		slice.maxScale = std::max(slice.maxScale, std::abs(1.0f + XMConvertHalfToFloat(halfValues[13])));
-		localMin.x = std::min(localMin.x, values[0]);
-		localMin.y = std::min(localMin.y, values[1]);
-		localMin.z = std::min(localMin.z, values[2]);
-		localMax.x = std::max(localMax.x, values[0]);
-		localMax.y = std::max(localMax.y, values[1]);
-		localMax.z = std::max(localMax.z, values[2]);
+		auto& bounds = slice.groupBounds[instanceIndex / kCullGroupSize];
+		const float scale = std::abs(1.0f + XMConvertHalfToFloat(halfValues[13]));
+		bounds.maxScale = std::max(bounds.maxScale, scale);
+		bounds.valid &= std::isfinite(values[0]) && std::isfinite(values[1]) && std::isfinite(values[2]) && std::isfinite(scale);
+
+		for (int axis = 0; axis < 3; ++axis) {
+			bounds.lo[axis] = std::min(bounds.lo[axis], values[axis]);
+			bounds.hi[axis] = std::max(bounds.hi[axis], values[axis]);
+		}
 
 		const DirectX::XMFLOAT3X3 rotation{ values[4], values[5], values[6], values[8], values[9], values[10], values[12], values[7], values[11] };
 		DirectX::XMFLOAT4 quaternion;
@@ -292,12 +293,20 @@ void GrassBucketStore::PackInstances(GrassInstanceSlice& slice, const void* sour
 		std::memcpy(slice.data.data() + (size_t)instanceIndex * kSourceStride, packed, sizeof(packed));
 	}
 
-	slice.bounds.lo[0] = slice.origin.x + localMin.x;
-	slice.bounds.lo[1] = slice.origin.y + localMin.y;
-	slice.bounds.lo[2] = slice.origin.z + localMin.z;
-	slice.bounds.hi[0] = slice.origin.x + localMax.x;
-	slice.bounds.hi[1] = slice.origin.y + localMax.y;
-	slice.bounds.hi[2] = slice.origin.z + localMax.z;
+	const float origin[]{ slice.origin.x, slice.origin.y, slice.origin.z };
+	std::fill_n(slice.bounds.lo, 3, FLT_MAX);
+	std::fill_n(slice.bounds.hi, 3, -FLT_MAX);
+
+	for (auto& bounds : slice.groupBounds) {
+		slice.maxScale = std::max(slice.maxScale, bounds.maxScale);
+		for (int axis = 0; axis < 3; ++axis) {
+			bounds.lo[axis] += origin[axis];
+			bounds.hi[axis] += origin[axis];
+
+			slice.bounds.lo[axis] = std::min(slice.bounds.lo[axis], bounds.lo[axis]);
+			slice.bounds.hi[axis] = std::max(slice.bounds.hi[axis], bounds.hi[axis]);
+		}
+	}
 }
 
 void GrassBucketStore::QueueEvent(PendingEvent event)

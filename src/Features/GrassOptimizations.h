@@ -233,6 +233,15 @@ private:
 	};
 
 	/** @brief Conservative per-bucket limits past which the compute shader rejects every instance. */
+	struct RunCullLimits
+	{
+		float maxDistanceSq = 0.0f;
+		// View depth past which even the bucket's largest instance projects under Min Pixel Size.
+		float maxViewDepth = 0.0f;
+		// Negative MaxPlaneDistance places a whole box deeper than maxViewDepth.
+		FrustumSoA::Plane depthPlane{};
+		bool useDepthPlane = false;
+	};
 
 	/** @brief Four axis-aligned boxes in structure-of-arrays form, one per SSE lane. */
 	struct BoxBatch
@@ -310,11 +319,17 @@ private:
 	/** @brief Requires ResetCullState() before appending visible runs to the slice table. */
 	void CullBucketSlices(GrassBucket& b, const FrustumSoA& frustumSoA, __m128 camPosV);
 
+	/** @brief Returns true only when every visible group fails frustum or size culling. */
+	bool IsBucketEmpty(const GrassBucket& bucket, const CullParamsCB& params) const;
+
+	/** @brief Conservative distance and view-depth cutoffs for all instances in a bucket. */
+	RunCullLimits BucketCullLimits(const GrassBucket& b) const;
+
 	/** @brief Tests cached blocks, then culls runs in partially visible blocks. */
-	void CullBucketSliceBlocks(GrassBucket& b, const FrustumSoA& frustumSoA, __m128 camPosV, uint32_t planeMask, bool allWithinDistance);
+	void CullBucketSliceBlocks(GrassBucket& b, const FrustumSoA& frustumSoA, __m128 camPosV, uint32_t planeMask, bool allWithinLimits, const RunCullLimits& limits);
 
 	/** @brief Tests runs [firstRun, endRun) in batches of four. */
-	void CullSliceRuns(GrassBucket& b, const FrustumSoA& frustumSoA, __m128 camPosV, uint32_t firstRun, uint32_t endRun, uint32_t planeMask, bool withinDistance);
+	void CullSliceRuns(GrassBucket& b, const FrustumSoA& frustumSoA, __m128 camPosV, uint32_t firstRun, uint32_t endRun, uint32_t planeMask, bool withinLimits, const RunCullLimits& limits);
 
 	/** @brief Appends visible groups, coalescing adjacent ranges. */
 	void AppendVisibleGroups(GrassBucket& b, uint32_t firstGroup, uint32_t groupCount);
@@ -412,6 +427,11 @@ private:
 	float vanillaMaxDistance = 0.0f;
 	float maxGrassDistance = 0.0f;
 	float maxDistSq = 0.0f;
+
+	// Cached main-view values for bucket depth cutoffs.
+	RE::NiPoint3 cullForward{};
+	float cullForwardDotEye = 0.0f;
+	float cullPixelsPerRadius = 0.0f;
 
 	struct Hooks
 	{

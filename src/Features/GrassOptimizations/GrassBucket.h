@@ -41,6 +41,13 @@ struct SliceBounds
 static_assert(sizeof(SliceBounds) == 32);
 
 /** @brief Bounds the instance centers and scale variation of one GPU cull group. */
+struct GrassGroupBounds
+{
+	float lo[3]{ FLT_MAX, FLT_MAX, FLT_MAX };
+	float hi[3]{ -FLT_MAX, -FLT_MAX, -FLT_MAX };
+	float maxScale = 1.0f;
+	bool valid = true;
+};
 
 /** @brief Distinguishes native group lifetimes when the engine reuses a group slot. */
 struct GrassGroupLifetime
@@ -58,6 +65,7 @@ struct GrassInstanceSlice
 	uint32_t engineGroup = UINT32_MAX;
 
 	std::vector<uint8_t> data;
+	std::vector<GrassGroupBounds> groupBounds;
 	uint32_t count = 0;
 	uint32_t bufferOffset = UINT32_MAX;    // Slices keep their instance-pool range from upload until removal.
 	uint32_t firstCullGroup = UINT32_MAX;  // This slice's groups stay contiguous while the bucket's clusters are valid.
@@ -204,6 +212,7 @@ struct GrassBucket
 	bool coarseDirty = false;
 
 	std::vector<CullGroup> cullGroups;
+	std::vector<GrassGroupBounds> cullGroupBounds;
 	// Records index groups relative to this bucket's range in the shared group pool.
 	uint32_t groupBase = 0;
 	uint32_t groupCapacity = 0;
