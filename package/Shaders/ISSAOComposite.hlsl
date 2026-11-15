@@ -181,6 +181,7 @@ PS_OUTPUT main(PS_INPUT input)
 	if (!SharedData::PostWaterComposite) {
 		float fogDistanceFactor = (2 * CameraNearFar.x * CameraNearFar.y) / ((CameraNearFar.y + CameraNearFar.x) - (2 * (1.01 * depth - 0.01) - 1) * (CameraNearFar.y - CameraNearFar.x));
 		float fogFactor = min(FogParam.w, pow(saturate(fogDistanceFactor * FogParam.y - FogParam.x), FogParam.z));
+		// The engine writes these constants straight into the buffer, bypassing any C++ conversion hook.
 		float3 fogColor = lerp(ColorManagement::SRGBToWorking(FogNearColor.xyz), ColorManagement::SRGBToWorking(FogFarColor.xyz), fogFactor);
 #		if defined(IBL)
 		if (SharedData::iblSettings.EnableIBL) {
@@ -200,6 +201,8 @@ PS_OUTPUT main(PS_INPUT input)
 		float4 exponentialHeightFog = (float4)0;
 		if (exponentialHeightFogEnabled) {
 #			if defined(HORIZON_FIX)
+			// The HorizonFix plugin's far water meets the sky at its own horizon, far beyond the far
+			// plane, so the sky is fogged out to that distance to match the water it sits on.
 			if (!isGeometryDepth) {
 				float skyRayLength = length(positionWS.xyz);
 				positionWS.xyz *= max(skyRayLength, SharedData::horizonFixSettings.farWaterDistance) / max(skyRayLength, 1e-4);
@@ -211,6 +214,7 @@ PS_OUTPUT main(PS_INPUT input)
 		if (isGeometryDepth || exponentialHeightFogEnabled) {
 			float fogFade = exponentialHeightFogEnabled ? ExponentialHeightFog::GetVanillaFogFade(FogNearColor.w) : FogNearColor.w;
 			float3 fogSource = exponentialHeightFogEnabled && !isGeometryDepth ? composedColor.xyz : fogFade * composedColor.xyz;
+			// Vanilla fog only ever applies to geometry; sky pixels take height fog alone.
 			if (exponentialHeightFogEnabled && isGeometryDepth && !ExponentialHeightFog::ShouldDisableVanillaFog()) {
 				// Apply vanilla fog first, then exp fog on top
 				composedColor.xyz = lerp(fogSource, fogFade * fogColor, fogFactor);

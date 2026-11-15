@@ -239,6 +239,7 @@ LinearLighting::PerFrameData LinearLighting::GetCommonBufferData()
 		physicalSkyEnabled = physicalSky.IsRendering() && physicalSky.settings.overrideDirLight && skySync.loaded && skySync.settings.Enabled;
 	}
 
+	// Legacy light colors represent the response of a white Lambert surface.
 	data.directionalLightMult = (physicalSkyEnabled ? 1.0f : RE::NI_PI) * settings.directionalLightMult;
 	data.pointLightMult = RE::NI_PI * settings.pointLightMult;
 	data.ambientMult = settings.ambientMult;
