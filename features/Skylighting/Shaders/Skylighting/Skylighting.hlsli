@@ -156,7 +156,7 @@ namespace Skylighting
 #endif
 
 #if defined(PSHADER) || defined(SKYLIGHTING_PROBE_REGISTER)
-	sh2 Sample(float3 positionMS, float3 normalWS
+	sh2 SampleWithOrigin(float3 positionMS, float3 normalWS, float3 positionOffset, uint3 arrayOrigin
 #	if defined(SKYLIGHTING_SHADOW_VIS)
 		,
 		out float shadowVisibility, bool sampleShadowVisibility = true
@@ -174,7 +174,7 @@ namespace Skylighting
 
 		positionMS.xyz += normalWS * CELL_SIZE * 0.5;  // Receiver normal bias
 
-		float3 positionMSAdjusted = positionMS - SharedData::skylightingSettings.PosOffset.xyz;
+		float3 positionMSAdjusted = positionMS - positionOffset;
 		float3 uvw = positionMSAdjusted / ARRAY_SIZE + .5;
 
 		if (any(uvw < 0) || any(uvw > 1))
@@ -210,7 +210,7 @@ namespace Skylighting
 					float3 trilinearWeights = 1 - abs(cellOffset - trilinearPos);
 					float triW = trilinearWeights.x * trilinearWeights.y * trilinearWeights.z;
 
-					uint3 cellTexID = (cellID + SharedData::skylightingSettings.ArrayOrigin.xyz) % ARRAY_DIM;
+					uint3 cellTexID = (cellID + arrayOrigin) % ARRAY_DIM;
 
 					// https://handmade.network/p/75/monter/blog/p/7288-engine_work__global_illumination_with_irradiance_probes
 					// Hard tangent check: a wrapped weight lets probes across thin occluders (roofs) leak the probe grid in.
@@ -240,6 +240,21 @@ namespace Skylighting
 #	endif
 
 		return SphericalHarmonics::Scale(shSum, rcp(shWsum + EPSILON_WEIGHT_SUM));
+	}
+
+	sh2 Sample(float3 positionMS, float3 normalWS
+#	if defined(SKYLIGHTING_SHADOW_VIS)
+		,
+		out float shadowVisibility, bool sampleShadowVisibility = true
+#	endif
+	)
+	{
+		return SampleWithOrigin(positionMS, normalWS, SharedData::skylightingSettings.PosOffset.xyz, SharedData::skylightingSettings.ArrayOrigin.xyz
+#	if defined(SKYLIGHTING_SHADOW_VIS)
+			,
+			shadowVisibility, sampleShadowVisibility
+#	endif
+		);
 	}
 
 	float GetSkylightingDiffuse(sh2 skylightingSH, float3 positionMS, float3 evalNormal, float vertexAO = 1.0)
