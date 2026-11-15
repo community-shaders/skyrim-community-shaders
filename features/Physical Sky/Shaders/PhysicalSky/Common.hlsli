@@ -511,7 +511,7 @@ Texture2D<float4> TexSkyTail : register(t66);
 					linIblAmbient += ColorManagement::SceneToLinear(vanillaAmbient * SharedData::iblSettings.DALCAmount);
 				else
 					linIblAmbient += ImageBasedLighting::GetEnvIBLColor(cloudAmbientDir);
-				float3 linReflectionAmbient = ImageBasedLighting::GetSkyIBLColorOccluded(cloudAmbientDir, skyVisibility);
+				float3 linReflectionAmbient = ImageBasedLighting::GetSkyIBLColor(cloudAmbientDir) * skyVisibility;
 				linIblAmbient += linReflectionAmbient;
 				linIblAmbient = ImageBasedLighting::ApplyIBLReflectionFallback(linIblAmbient, linReflectionAmbient, cloudPosWS);
 
