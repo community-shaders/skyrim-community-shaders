@@ -17,7 +17,6 @@
 #	define AP_DIRECT_SHADOW_REGISTER t7
 #	define TERRAIN_SHADOW_REGISTER t36
 #	define CLOUD_SHADOW_REGISTER t37
-#	define CLOUD_SELFSHADOW_REGISTER t38
 #endif
 Texture3D<float> TexShadowVolume : register(t14);
 #include "Common/Spherical Harmonics/SphericalHarmonics.hlsli"
