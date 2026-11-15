@@ -1,9 +1,9 @@
 {
     "_meta": {
-        "language": "Deutsch",
-        "locale": "de",
         "auto_generated": true,
         "generator": "tools/extract-i18n.py",
+        "language": "Deutsch",
+        "locale": "de",
         "note": "NICHT MANUELL BEARBEITEN. Benutze: python tools/extract-i18n.py --write"
     },
     "common.active": "Aktiv",

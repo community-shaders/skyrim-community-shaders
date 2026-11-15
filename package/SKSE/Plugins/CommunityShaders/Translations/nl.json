@@ -2,9 +2,9 @@
     "_meta": {
         "auto_generated": true,
         "generator": "tools/extract-i18n.py",
-        "note": "PAS DIT NIET HANDMATIG AAN. Run: python tools/extract-i18n.py --write",
         "language": "Nederlands",
-        "locale": "nl"
+        "locale": "nl",
+        "note": "PAS DIT NIET HANDMATIG AAN. Run: python tools/extract-i18n.py --write"
     },
     "common.active": "Actief",
     "common.inactive": "Inactief",
