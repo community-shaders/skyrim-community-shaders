@@ -45,7 +45,7 @@ namespace ImageBasedLighting
 		float colorR = SphericalHarmonics::SHHallucinateZH3Irradiance(shR, rayDir);
 		float colorG = SphericalHarmonics::SHHallucinateZH3Irradiance(shG, rayDir);
 		float colorB = SphericalHarmonics::SHHallucinateZH3Irradiance(shB, rayDir);
-		return max(0, float3(colorR, colorG, colorB) / Math::PI);
+		return float3(colorR, colorG, colorB) / Math::PI;
 	}
 
 	float3 GetSkyIBLOccluded(float3 rayDir, float visibility)
@@ -72,6 +72,14 @@ namespace ImageBasedLighting
 		return lerp(iblColor, reflectionsColor, GetIBLReflectionFallbackFactor(positionMS));
 	}
 
+	/** @brief Distance fallback for an env + sky ambient; DALC modes (2+) keep their vanilla ambient term, which has no dynamic env to fall back from. */
+	float3 ApplyAmbientReflectionFallback(float3 linEnv, float3 linSky, float3 positionMS)
+	{
+		if (SharedData::iblSettings.DALCMode >= 2)
+			return linEnv + linSky;
+		return ApplyIBLReflectionFallback(linEnv + linSky, linSky, positionMS);
+	}
+
 	// ============================================================================
 	// Ratio / settings helpers
 	// ============================================================================
@@ -88,7 +96,7 @@ namespace ImageBasedLighting
 		float colorR = SphericalHarmonics::SHHallucinateZH3Irradiance(iblSHR, float3(0, 0, 0));
 		float colorG = SphericalHarmonics::SHHallucinateZH3Irradiance(iblSHG, float3(0, 0, 0));
 		float colorB = SphericalHarmonics::SHHallucinateZH3Irradiance(iblSHB, float3(0, 0, 0));
-		float3 ibl0 = max(0, float3(colorR, colorG, colorB) / Math::PI);
+		float3 ibl0 = float3(colorR, colorG, colorB) / Math::PI;
 
 		if (SharedData::iblSettings.DALCMode == 1) {
 			float3 ratio = dalc0 / max(ibl0, 0.001);
@@ -147,7 +155,7 @@ namespace ImageBasedLighting
 		if (SharedData::iblSettings.ENBSkyFalloff)
 			linSky *= saturate(-rayDir.z * 0.65 + 0.35);
 #endif
-		return ApplyIBLReflectionFallback(linEnv + linSky, linSky, positionMS);
+		return ApplyAmbientReflectionFallback(linEnv, linSky, positionMS);
 	}
 
 	/// Compute diffuse IBL ambient with a skylighting visibility factor applied per DALCMode
@@ -163,7 +171,7 @@ namespace ImageBasedLighting
 			linEnv = GetEnvIBLColor(rayDir);
 		}
 		linSky = GetSkyIBLColorOccluded(rayDir, visibility);
-		return ApplyIBLReflectionFallback(linEnv + linSky, linSky, positionMS);
+		return ApplyAmbientReflectionFallback(linEnv, linSky, positionMS);
 	}
 
 	// ============================================================================
@@ -213,14 +221,12 @@ namespace ImageBasedLighting
 
 	float3 GetFogIBLColorBlend(float3 fogColor, float3 positionMS)
 	{
-		float3 iblColor;
-		if (SharedData::iblSettings.DALCMode >= 2) {
-			float3 dalc0 = Color::Ambient(SharedData::GetAmbient(0.f));
-			iblColor = dalc0 * SharedData::iblSettings.DALCAmount + GetSkyIBLColor(float3(0, 0, 0));
-		} else {
-			iblColor = GetEnvIBLColor(float3(0, 0, 0)) + GetSkyIBLColor(float3(0, 0, 0));
-		}
-		iblColor = ApplyIBLReflectionFallback(iblColor, GetSkyIBLColor(float3(0, 0, 0)), positionMS);
+		float3 linEnv;
+		if (SharedData::iblSettings.DALCMode >= 2)
+			linEnv = Color::Ambient(SharedData::GetAmbient(0.f)) * SharedData::iblSettings.DALCAmount;
+		else
+			linEnv = GetEnvIBLColor(float3(0, 0, 0));
+		float3 iblColor = ApplyAmbientReflectionFallback(linEnv, GetSkyIBLColor(float3(0, 0, 0)), positionMS);
 		if (SharedData::iblSettings.PreserveFogLuminance) {
 			const float fogLuminance = Color::RGBToLuminance(fogColor);
 			const float iblLuminance = Color::RGBToLuminance(iblColor);

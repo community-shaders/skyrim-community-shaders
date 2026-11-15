@@ -501,20 +501,28 @@ void Effects11::SetupResources()
 void Effects11::PostSetupResources()
 {
 	resourcesReady = true;
-	Reset();
+	// No shader has compiled against presetActive yet, so boot skips the Reload and its wait on queued compiles.
+	SyncPresetActive(false);
 }
 
 void Effects11::Reset()
 {
-	if (!resourcesReady)
-		return;
+	if (resourcesReady)
+		SyncPresetActive(true);
+}
+
+void Effects11::SyncPresetActive(bool a_reloadShaders)
+{
 	PostProcessingMode::ApplyPending();
 	const bool enabled = IsPresetEnabled();
 	if (enabled != presetActive) {
 		// UseEffect can also turn on from an ini reload or preset switch; Post Processing must still yield.
 		if (enabled)
 			PostProcessingMode::Set(PostProcessingMode::Mode::Effects11);
-		globals::shaderCache->Reload([this, enabled] { presetActive = enabled; });
+		if (a_reloadShaders)
+			globals::shaderCache->Reload([this, enabled] { presetActive = enabled; });
+		else
+			presetActive = enabled;
 	} else if (!enabled && IsUseEffectEnabled() && EffectManager::GetSingleton().IsInitialized()) {
 		// UseEffect with no compiled preset has nothing to run, so fall back to the game's own post processing.
 		PostProcessingMode::Set(PostProcessingMode::Mode::Vanilla);

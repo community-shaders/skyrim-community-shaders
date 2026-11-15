@@ -44,6 +44,8 @@ struct PhysicalSky final : public Feature
 	void LoadSettings(json& o_json) override;
 	void SaveSettings(json& o_json) override;
 
+	/** @brief Whether Physical Sky is loaded, enabled, and not owned by Effects 11 (unless handed back through the Scene Manager). */
+	bool IsActive() const;
 	/** @brief Whether Physical Sky rendered this frame. */
 	bool IsRendering() const { return loaded && cbData.enabled; }
 

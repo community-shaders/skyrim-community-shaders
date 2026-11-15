@@ -495,7 +495,9 @@ PS_OUTPUT main(PS_INPUT input)
 #			endif
 		float hdrSunGain = HDRSun::GetHdrSunGain(hdrSunTexCoord, baseColor);
 		baseColor.xyz *= hdrSunGain;
-		if (HDRSun::IsHdrSunActive() && !enableProceduralSun) {
+		// Physical Sky's vanilla-sun treatment; without it the sun takes the plain HDR gain only
+		const bool physicalSkyHdrSun = HDRSun::IsHdrSunActive() && SharedData::physSkyData.enabled && !enableProceduralSun;
+		if (physicalSkyHdrSun) {
 			// Dither bright output to reduce banding in high-boost sun path.
 			// Same baseColor/skyScale treatment for DITHER and non-DITHER; DITHER adds noiseGrad later.
 			baseColor.xyz += (Random::InterleavedGradientNoise(input.Position.xy) - 0.5f) *
@@ -504,7 +506,7 @@ PS_OUTPUT main(PS_INPUT input)
 		}
 
 #			if defined(CLOUD_SHADOWS)
-		if (HDRSun::IsHdrSunActive() && !enableProceduralSun && !standaloneSunActive) {
+		if (physicalSkyHdrSun && !standaloneSunActive) {
 			float cloudMult = CloudShadows::GetCloudShadowMult(input.WorldPosition.xyz, SampBaseSampler);
 			baseColor.xyz *= cloudMult;
 #				if defined(ENABLE_LL)

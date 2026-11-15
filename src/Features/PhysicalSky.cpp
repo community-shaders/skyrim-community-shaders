@@ -12,6 +12,7 @@
 #include "CSEditor/SceneManager/SceneWidgetInterceptor.h"
 #include "CloudShadows.h"
 #include "Deferred.h"
+#include "Effects11.h"
 #include "Features/ViewAtmosphere.h"
 #include "I18n/I18n.h"
 #include "LinearLighting.h"
@@ -530,8 +531,16 @@ void PhysicalSky::Settings::ApplyAerosolOptics()
 	aerosolPhaseG = optics.phaseG;
 }
 
+bool PhysicalSky::IsActive() const
+{
+	return loaded && settings.enabled && !globals::features::effects11.OwnsFeature(E11Handoff::Feature::PhysicalSky);
+}
+
 void PhysicalSky::DrawSettings()
 {
+	const Util::LockedSection enbLock(globals::features::effects11.OwnsFeature(E11Handoff::Feature::PhysicalSky),
+		T("common.settings_managed_by_enb", "This setting is managed by Effects 11."));
+
 	if (SceneWidgetInterceptor::IsArmed())
 		ImGui::TextWrapped("%s", T(TKEY("scene_settings_hint"), "Scene settings control sunlight, atmosphere and the cloud weather: coverage, altitude, shape, motion, lighting and cirrus. Map source, noise and rendering quality stay global and are hidden while editing a scene. Interior settings require Physical Sky to be enabled for interiors."));
 
@@ -1704,7 +1713,7 @@ void PhysicalSky::UpdateShaders()
 		CompileShaders();
 		baseShadersQueued = true;
 	}
-	if (!volumetricShadersQueued && settings.enabled && settings.enableVolumetricClouds) {
+	if (!volumetricShadersQueued && IsActive() && settings.enableVolumetricClouds) {
 		CompileVolumetricShaders();
 		volumetricShadersQueued = true;
 	}
@@ -1783,8 +1792,9 @@ void PhysicalSky::Reset()
 	}
 	UpdateCloudWind();
 	UpdateCloudStorm(worldspaceID);
-	voxelCloudManager.Update(settings.voxelClouds, worldspaceID, settings.enabled && settings.enableVolumetricClouds);
-	if (settings.enabled && settings.enableVolumetricClouds)
+	const bool volumetricCloudsActive = IsActive() && settings.enableVolumetricClouds;
+	voxelCloudManager.Update(settings.voxelClouds, worldspaceID, volumetricCloudsActive);
+	if (volumetricCloudsActive)
 		localNdfManager.Update(settings.cloudMap, ndfTexManager, worldspaceID);
 	const float2 lowAltitudeRange = settings.cloudLayer.low.GetNdfAltitudeRangeKm();
 	const auto localAltitude = localNdfManager.GetAltitude();
@@ -1814,7 +1824,7 @@ void PhysicalSky::Reset()
 
 	auto& linearLighting = globals::features::linearLighting;
 
-	bool allGood = settings.enabled && ShadersOK() && skySync.loaded && skySync.settings.Enabled;
+	bool allGood = IsActive() && ShadersOK() && skySync.loaded && skySync.settings.Enabled;
 
 	// check worldspace
 	bool worldspaceEnabled = false;
@@ -1847,7 +1857,8 @@ void PhysicalSky::Reset()
 		lightning.Update(*this, worldspaceID, false);
 		if (skySync.loaded && skySync.settings.Enabled)
 			skySync.workingLightColors = std::nullopt;
-		cbData.enabled = allGood;
+		// Some shader paths read cloud shadow and lightning fields without checking enabled, so clear them all
+		cbData = {};
 		volMainHistoryValid = false;
 		cloudAmbientValid = false;
 		return;
@@ -2001,7 +2012,7 @@ void PhysicalSky::ReflectionsPrepass()
 
 void PhysicalSky::Prepass()
 {
-	if (settings.enabled && settings.enableVolumetricClouds) {
+	if (IsActive() && settings.enableVolumetricClouds) {
 		const bool generatedShape = settings.cloudNoise.procedural || !importedShapeNoiseSrv;
 		const bool generatedAdjustment = settings.cloudNoise.procedural || cloudAdjustmentGenerated;
 		const bool generatedNoise = generatedShape || generatedAdjustment;
@@ -2341,11 +2352,14 @@ void PhysicalSky::AccumShadow()
 void PhysicalSky::ModifySky()
 {
 	auto context = globals::d3d::context;
-	context->PSGetSamplers(3, 2, originalPSSamplers);
+	// Bound even while disabled: the sky VS reads physSkyData.enabled from it to decide whether to reshape the dome
 	context->VSGetConstantBuffers(6, 1, originalVSSkyFeatureBuffer.put());
 	auto* featureBuffer = globals::state->featureDataCB->CB();
 	context->VSSetConstantBuffers(6, 1, &featureBuffer);
 
+	if (!cbData.enabled)
+		return;
+	context->PSGetSamplers(3, 2, originalPSSamplers);
 	auto samplers = std::array{ sampTr.get(), sampSv.get() };
 	context->PSSetSamplers(3, static_cast<UINT>(samplers.size()), samplers.data());
 }
@@ -2353,14 +2367,24 @@ void PhysicalSky::ModifySky()
 void PhysicalSky::RestoreSamplers()
 {
 	auto context = globals::d3d::context;
-	context->PSSetSamplers(3, 2, originalPSSamplers);
 	auto* featureBuffer = originalVSSkyFeatureBuffer.get();
 	context->VSSetConstantBuffers(6, 1, &featureBuffer);
 	originalVSSkyFeatureBuffer = nullptr;
+
+	if (!cbData.enabled)
+		return;
+	context->PSSetSamplers(3, 2, originalPSSamplers);
+	for (auto*& sampler : originalPSSamplers) {
+		if (sampler)
+			sampler->Release();  // balances the reference PSGetSamplers added
+		sampler = nullptr;
+	}
 }
 
 void PhysicalSky::ModifyGrass()
 {
+	if (!cbData.enabled)
+		return;
 	auto context = globals::d3d::context;
 	context->PSGetSamplers(7, 1, originalPSGrassSampler.put());
 
@@ -2370,6 +2394,8 @@ void PhysicalSky::ModifyGrass()
 
 void PhysicalSky::RestoreGrassSampler()
 {
+	if (!cbData.enabled)
+		return;
 	auto context = globals::d3d::context;
 	auto sampler = originalPSGrassSampler.get();
 	context->PSSetSamplers(7, 1, &sampler);
@@ -2378,6 +2404,8 @@ void PhysicalSky::RestoreGrassSampler()
 
 void PhysicalSky::ModifyWater()
 {
+	if (!cbData.enabled)
+		return;
 	auto context = globals::d3d::context;
 	context->PSGetSamplers(13, 1, originalPSWaterSampler.put());
 
@@ -2391,6 +2419,8 @@ void PhysicalSky::ModifyWater()
 
 void PhysicalSky::RestoreWaterSampler()
 {
+	if (!cbData.enabled)
+		return;
 	auto context = globals::d3d::context;
 	auto sampler = originalPSWaterSampler.get();
 	context->PSSetSamplers(13, 1, &sampler);

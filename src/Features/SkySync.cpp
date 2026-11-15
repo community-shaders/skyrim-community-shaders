@@ -420,7 +420,7 @@ bool SkySync::Update(const RE::Sky* sky)
 	}
 
 	auto& physicalSky = globals::features::physicalSky;
-	bool physicalSkyInteriorOverride = physicalSky.loaded && physicalSky.settings.enabled && physicalSky.settings.forceEnableAllInteriorCells;
+	bool physicalSkyInteriorOverride = physicalSky.IsActive() && physicalSky.settings.forceEnableAllInteriorCells;
 	// Exterior worldspaces run unless listed as disabled; interior cells require the sunlight-shadows flag.
 	if (worldspaceDisabled || (cell && cell->IsInteriorCell() && !cell->cellFlags.all(static_cast<RE::TESObjectCELL::Flag>(CellFlagExt::kSunlightShadows)) && !physicalSkyInteriorOverride)) {
 		// Vanilla drives the sun in a disabled worldspace, so a pending transition has nothing to wait for

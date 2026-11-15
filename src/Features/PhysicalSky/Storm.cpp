@@ -504,7 +504,7 @@ std::array<uint32_t, 4> CloudStormManager::ScreenRect(float bottomZ, uint32_t wi
 void PhysicalSky::UpdateCloudStorm(const std::string& worldspace)
 {
 	cloudStormManager.Update(ndfTexManager, ndfManager.GetNoiseInputs()[2], ndfManager.GetNoiseRevision(), worldspace,
-		settings.enabled && settings.enableVolumetricClouds);
+		IsActive() && settings.enableVolumetricClouds);
 }
 
 bool PhysicalSky::IsReplacedSkyGeometry(const RE::BSGeometry* geometry) const
