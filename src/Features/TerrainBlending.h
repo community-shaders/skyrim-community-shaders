@@ -57,6 +57,15 @@ public:
 	/** @brief Returns the depth blend compute shader, compiling on first use. */
 	ID3D11ComputeShader* GetDepthBlendShader();
 
+	/** @brief Returns the depth merge compute shader, compiling on first use. */
+	ID3D11ComputeShader* GetMergeDepthShader();
+
+	/**
+	 * @brief Folds the current scene depth back into the blended depth with a min, for geometry drawn after
+	 * BlendPrepassDepths (e.g. procedural grass' late depth prepass). No-op when disabled.
+	 */
+	void MergeSceneDepthIntoBlend();
+
 	/** @brief Installs rendering hooks for depth and batch rendering after plugin load. */
 	virtual void PostPostLoad() override;
 	/** @brief Disables the vanilla land fade INI setting after game data is loaded. */
@@ -100,6 +109,7 @@ public:
 	ID3D11ShaderResourceView* prepassSRVBackup = nullptr;
 
 	ID3D11ComputeShader* depthBlendShader = nullptr;
+	ID3D11ComputeShader* mergeDepthShader = nullptr;
 
 	/** @brief Releases all cached vertex and compute shaders for recompilation. */
 	virtual void ClearShaderCache() override;
