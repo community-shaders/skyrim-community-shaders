@@ -135,8 +135,6 @@ namespace CinematicCamera
 		float ShutterAngleDeg = 180.0f;
 		float ShutterTimeS = 1.0f / 48.0f;
 		float EV100 = 8.5573427f;
-		// Manual exposure relative to the reference camera, before metering compensation.
-		float ExposureDeltaEV = 0.0f;
 
 		// Projection (degrees).
 		float HorizontalFOVDeg = 39.6f;

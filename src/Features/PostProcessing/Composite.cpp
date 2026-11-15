@@ -2,7 +2,6 @@
 
 #include "CODBloom.h"
 #include "Features/LinearLighting.h"
-#include "Features/PhysicalSky.h"
 #include "Features/PostProcessing.h"
 #include "HistogramAutoExposure.h"
 #include "LensFlare.h"
@@ -40,8 +39,7 @@ void Composite::SetupResources()
 		gameTexMainCopy.texture->GetDesc(&texDesc);
 		// Exposure is resolved here. Preserve overexposed HDR values until the
 		// following tone mapper instead of clipping them back to scene FP16.
-		const bool preExposed = globals::features::linearLighting.IsLinearLightingActive() && globals::features::physicalSky.loaded;
-		texDesc.Format = preExposed ? DXGI_FORMAT_R32G32B32A32_FLOAT : DXGI_FORMAT_R16G16B16A16_FLOAT;
+		texDesc.Format = globals::features::linearLighting.IsLinearLightingActive() ? DXGI_FORMAT_R32G32B32A32_FLOAT : DXGI_FORMAT_R16G16B16A16_FLOAT;
 
 		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {
 			.Format = texDesc.Format,
