@@ -832,9 +832,15 @@ void PostProcessing::UpdateVanillaEffects(bool active)
 
 void PostProcessing::Prepass()
 {
+	if (!pendingSettings.empty()) {
+		logger::info("Processing pending post processing settings...");
+		ProcessSettings(pendingSettings);
+		pendingSettings = {};
+		UpdateVanillaEffects(globals::state->GetTonemapOwner() == State::TonemapOwner::kPostProcessing);
+	}
+
 	if (auto* lut = GetPipelineFeature<::LUT>(FeaturePipelineIndex::LUT))
 		lut->UpdateTexture();
-	UpdateVanillaEffects(globals::state->GetTonemapOwner() == State::TonemapOwner::kPostProcessing);
 
 	{
 		auto graphicsState = globals::game::graphicsState;

@@ -1352,6 +1352,8 @@ private:
 	float EaseLocationTransition(const LocationTransition& transition, float now) const;
 	/** @brief Whether the transition has run its full duration. */
 	static bool IsLocationTransitionFinished(const LocationTransition& transition, float now);
+	/** @brief Whether two transition values differ by less than kBlendEpsilon of their magnitude, so small-range settings still fade. */
+	static bool IsWithinTransitionTolerance(float lhs, float rhs);
 	/** @brief Starts a transition for each location-driven address whose value or membership changed. */
 	void StartLocationTransitions(const ResolvedSettingMap& resolved, float now, bool animateChanges);
 	/// Re-reads each in-flight transition's endpoint so one crossing a time-of-day or weather
