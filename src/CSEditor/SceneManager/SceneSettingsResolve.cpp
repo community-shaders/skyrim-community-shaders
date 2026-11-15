@@ -178,6 +178,11 @@ bool SceneSettingsManager::IsLocationTransitionFinished(const LocationTransition
 	return transition.duration <= 0.0f || now - transition.startTime >= transition.duration;
 }
 
+bool SceneSettingsManager::IsWithinTransitionTolerance(float lhs, float rhs)
+{
+	return std::abs(lhs - rhs) <= kBlendEpsilon * std::max(std::abs(lhs), std::abs(rhs));
+}
+
 void SceneSettingsManager::StartLocationTransitions(
 	const ResolvedSettingMap& resolved, float now, bool animateChanges)
 {
@@ -242,7 +247,7 @@ void SceneSettingsManager::StartLocationTransitions(
 		const auto targetValue = targetJson.get<float>();
 		if (!std::isfinite(startValue) || !std::isfinite(targetValue))
 			continue;
-		if (duration <= 0.0f || std::abs(targetValue - startValue) < kBlendEpsilon) {
+		if (duration <= 0.0f || IsWithinTransitionTolerance(targetValue, startValue)) {
 			if (activeLocationTransitions.erase(address) != 0)
 				locationTransitionBatchesDirty = true;
 			continue;
@@ -378,7 +383,7 @@ void SceneSettingsManager::RetireFinishedLocationTransitions(float now)
 		auto appliedIt = appliedSettings.find(address);
 		if (!IsLocationTransitionFinished(transition, now) || appliedIt == appliedSettings.end() ||
 			!IsNumericValue(appliedIt->second) ||
-			std::abs(appliedIt->second.get<float>() - transition.targetValue) >= kBlendEpsilon) {
+			!IsWithinTransitionTolerance(appliedIt->second.get<float>(), transition.targetValue)) {
 			++transitionIt;
 			continue;
 		}

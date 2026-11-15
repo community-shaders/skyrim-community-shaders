@@ -361,9 +361,14 @@ namespace
 	{
 		static void thunk(RE::BSShader* shader, RE::BSRenderPass* pass, uint32_t renderFlags)
 		{
+			auto& linearLighting = globals::features::linearLighting;
+			const bool linearLightingActive = linearLighting.IsLinearLightingActive();
+			// Without LL the uploads only read the pass to write an overridden sunlight.
+			if (!linearLightingActive && !linearLighting.HasSunlightOverride())
+				return func(shader, pass, renderFlags);
 			auto* previous = std::exchange(geometryPass, pass);
 			const SKSE::stl::scope_exit restore([previous]() noexcept { geometryPass = previous; });
-			if (!globals::features::linearLighting.IsLinearLightingActive())
+			if (!linearLightingActive)
 				return func(shader, pass, renderFlags);
 			if constexpr (Type == RE::BSShader::Type::Lighting) {
 				globals::state->permutationData.BaseTextureIsWorking = 0;
