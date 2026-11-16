@@ -254,6 +254,18 @@ void PerformanceOverlay::SetProfilerGroupShown(std::string_view group, bool show
 	globals::state->InvalidateEditsUnderBaselines(this);
 }
 
+void PerformanceOverlay::SetShowInOverlay(bool shown)
+{
+	if (this->settings.ShowInOverlay == shown)
+		return;
+	this->settings.ShowInOverlay = shown;
+
+	// Reached from the Profiling page's card, where nothing tracks this feature's edits.
+	globals::sceneSettingsManager->CaptureExternalFeatureChanges(this, true);
+	globals::state->CheckFeatureSettingsChanged(this);
+	globals::state->InvalidateEditsUnderBaselines(this);
+}
+
 void PerformanceOverlay::DrawProfilerGroupFilter()
 {
 	// Groups reporting now, then hidden ones that are not, so those can still be shown again.
