@@ -296,7 +296,7 @@ namespace CinematicCamera
 			s.EffectiveSensorWidthMM = fb.SensorWidthMM;
 			s.HorizontalFOVDeg = DirectX::XMConvertToDegrees(2.0f * std::atan(fb.SensorWidthMM / (2.0f * lens.FocalLengthMM)));
 			s.VerticalFOVDeg = DirectX::XMConvertToDegrees(2.0f * std::atan(
-																	  fb.SensorHeightMM / (2.0f * lens.FocalLengthMM)));
+																	  fb.SensorWidthMM / (viewportAspect * 2.0f * lens.FocalLengthMM)));
 		}
 
 		s.FocalLengthMM = lens.FocalLengthMM;

@@ -6,6 +6,7 @@
 #include "LensFlare.h"
 #include "LocalExposure.h"
 #include "PhysicalGlare.h"
+#include "PhysicalLens.h"
 
 #include "RasterPass.h"
 
@@ -20,11 +21,12 @@ void Composite::UpdateAutoEnabled()
 
 	auto* bloom = owner->GetPipelineFeature<CODBloom>(PostProcessing::FeaturePipelineIndex::CODBloom);
 	auto* flare = owner->GetPipelineFeature<LensFlare>(PostProcessing::FeaturePipelineIndex::LensFlare);
+	auto* physicalLens = owner->GetPipelineFeature<PhysicalLens>(PostProcessing::FeaturePipelineIndex::PhysicalLens);
 	auto* glare = owner->GetPipelineFeature<PhysicalGlare>(PostProcessing::FeaturePipelineIndex::PhysicalGlare);
 	auto* exposure = owner->GetPipelineFeature<HistogramAutoExposure>(PostProcessing::FeaturePipelineIndex::AutoExposure);
 	auto* localExposure = owner->GetPipelineFeature<LocalExposure>(PostProcessing::FeaturePipelineIndex::LocalExposure);
 
-	enabled = (bloom && bloom->enabled) || (flare && flare->enabled) || (glare && glare->enabled) || (exposure && exposure->IsActive()) || (localExposure && localExposure->enabled);
+	enabled = (bloom && bloom->enabled) || (flare && flare->enabled) || (glare && glare->enabled) || (physicalLens && physicalLens->enabled) || (exposure && exposure->IsActive()) || (localExposure && localExposure->enabled);
 }
 
 void Composite::SetupResources()
@@ -60,6 +62,8 @@ void Composite::SetupResources()
 	}
 
 	compositeCB = std::make_unique<ConstantBuffer>(ConstantBufferDesc<CompositeCB>(), "Composite Parameters");
+	emptyWaveCB = std::make_unique<ConstantBuffer>(ConstantBufferDesc<PhysicalLensImaging::DiffractionParameters>(), "Composite::InactiveDiffraction");
+	emptyWaveCB->Update(PhysicalLensImaging::DiffractionParameters{});
 	CompileRasterShaders();
 }
 
@@ -84,8 +88,8 @@ void Composite::CompileRasterShaders()
 {
 	std::vector<PixelShaderCompileInfo> shaderInfos;
 
-	// Compile all non-empty flag combinations (1..31)
-	for (uint flags = 1; flags < CompositeFlags::FLAG_COUNT; flags++) {
+	// Compile all flag combinations, including physical-lens-only compositing.
+	for (uint flags = 0; flags < CompositeFlags::FLAG_COUNT; flags++) {
 		std::vector<std::pair<const char*, const char*>> defines;
 		if (flags & BLOOM)
 			defines.push_back({ "HAS_BLOOM", "" });
@@ -111,18 +115,22 @@ void Composite::Draw(TextureInfo& inout_tex)
 
 	auto* bloom = owner->GetPipelineFeature<CODBloom>(PostProcessing::FeaturePipelineIndex::CODBloom);
 	auto* flare = owner->GetPipelineFeature<LensFlare>(PostProcessing::FeaturePipelineIndex::LensFlare);
+	auto* physicalLens = owner->GetPipelineFeature<PhysicalLens>(PostProcessing::FeaturePipelineIndex::PhysicalLens);
 	auto* glare = owner->GetPipelineFeature<PhysicalGlare>(PostProcessing::FeaturePipelineIndex::PhysicalGlare);
 	auto* exposure = owner->GetPipelineFeature<HistogramAutoExposure>(PostProcessing::FeaturePipelineIndex::AutoExposure);
 	auto* localExposure = owner->GetPipelineFeature<LocalExposure>(PostProcessing::FeaturePipelineIndex::LocalExposure);
 
 	bool hasBloom = bloom && bloom->enabled && bloom->GetBloomOutput().srv;
 	bool hasFlare = flare && flare->enabled && flare->GetGhostHaloOutput().srv;
+	bool hasPhysicalFlare = physicalLens && physicalLens->enabled && physicalLens->GetOutput().srv;
+	bool hasPhysicalLens = physicalLens && physicalLens->enabled && physicalLens->GetCameraMapSRV();
+	bool hasPhysicalWave = physicalLens && physicalLens->enabled && physicalLens->GetDiffractionCB();
 	bool hasGlare = glare && glare->enabled && glare->GetGlareOutput().srv;
 	bool hasExposure = exposure && exposure->IsActive() && exposure->GetAdaptationSRV();
 	bool hasLocalExposure = localExposure && localExposure->enabled && localExposure->GetLogLuminanceSRV();
 
 	uint flags = (hasBloom ? BLOOM : 0) | (hasFlare ? FLARE : 0) | (hasGlare ? GLARE : 0) | (hasExposure ? EXPOSURE : 0) | (hasLocalExposure ? LOCAL_EXPOSURE : 0);
-	if (flags == NONE)
+	if (flags == NONE && !hasPhysicalFlare && !hasPhysicalLens && !hasPhysicalWave)
 		return;
 
 	if (!AllShadersReady({ &compositeShaders[flags] }))
@@ -148,14 +156,26 @@ void Composite::Draw(TextureInfo& inout_tex)
 	//   t5 = original scene log luminance (if local exposure enabled)
 	//   t6 = edge-aware luminance grid
 	//   t7 = blurred luminance
+	//   t8 = half-resolution physical lens ghosts (independent of t2)
+	//   t9 = spectral image mapping and transmission
+	//   t10-t14 = diffraction core, ownership, sources, tile masks, PSF
+	//   b4 = physical diffraction sampling (zeroed when inactive)
 	//   rtv0 = output
 	//   b1 = auto exposure constant buffer (if exposure enabled)
 	//   b2 = local exposure constant buffer (if local exposure enabled)
 	//   b3 = final bloom/flare sampling parameters
 	//   s0 = linear clamp (local exposure and flare), s1 = linear border (bloom)
-	std::array<ID3D11ShaderResourceView*, 8> srvs = { nullptr };
+	std::array<ID3D11ShaderResourceView*, 15> srvs = { nullptr };
 
 	srvs[0] = inout_tex.srv;
+	if (hasPhysicalWave || hasPhysicalFlare) {
+		auto wave = physicalLens->GetDiffractionSRVs();
+		std::copy(wave.begin(), wave.end(), srvs.begin() + 10);
+	}
+	if (hasPhysicalLens)
+		srvs[9] = physicalLens->GetCameraMapSRV();
+	if (hasPhysicalFlare)
+		srvs[8] = physicalLens->GetOutput().srv;
 
 	if (hasBloom) {
 		auto bloomOutput = bloom->GetBloomOutput();
@@ -194,9 +214,11 @@ void Composite::Draw(TextureInfo& inout_tex)
 		std::copy(flare->settings.Tint.begin(), flare->settings.Tint.end(), cbData.FlareTint);
 		cbData.FlareIntensity = flare->settings.Intensity;
 	}
+	cbData.HasPhysicalFlare = hasPhysicalFlare ? 1.f : 0.f;
+	cbData.HasPhysicalLens = hasPhysicalLens ? 1.f : 0.f;
 	compositeCB->Update(cbData);
 	std::array<ID3D11SamplerState*, 2> samplers = {
-		hasLocalExposure ? localExposure->linearSampler.get() : (hasFlare ? flare->colorSampler.get() : nullptr),
+		hasLocalExposure ? localExposure->linearSampler.get() : (hasFlare ? flare->colorSampler.get() : ((hasPhysicalFlare || hasPhysicalLens || hasPhysicalWave) ? physicalLens->sampler.get() : nullptr)),
 		hasBloom ? bloom->colorSampler.get() : nullptr
 	};
 
@@ -213,6 +235,8 @@ void Composite::Draw(TextureInfo& inout_tex)
 		}
 		ID3D11Buffer* cb = compositeCB->CB();
 		context->PSSetConstantBuffers(3, 1, &cb);
+		cb = hasPhysicalWave ? physicalLens->GetDiffractionCB() : emptyWaveCB->CB();
+		context->PSSetConstantBuffers(4, 1, &cb);
 		context->PSSetSamplers(0, (uint)samplers.size(), samplers.data());
 		context->PSSetShaderResources(0, (uint)srvs.size(), srvs.data());
 		pass.SetTargets({ texOutput->rtv.get() }, (float)width, (float)height);

@@ -16,6 +16,7 @@
 #include "PostProcessing/LocalExposure.h"
 #include "PostProcessing/MotionBlur.h"
 #include "PostProcessing/PhysicalGlare.h"
+#include "PostProcessing/PhysicalLens.h"
 #include "PostProcessing/Vignette.h"
 
 struct PostProcessing : Feature
@@ -99,6 +100,7 @@ struct PostProcessing : Feature
 		PhysicalGlare,
 		CODBloom,
 		LensFlare,
+		PhysicalLens,
 		Composite,
 		ColorGrading,
 		LUT,

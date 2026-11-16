@@ -312,6 +312,7 @@ void PostProcessing::DrawSettings()
 				};
 				drawLinked(FeaturePipelineIndex::DoF, "Depth of Field");
 				drawLinked(FeaturePipelineIndex::LensFlare, "Lens Flare");
+				drawLinked(FeaturePipelineIndex::PhysicalLens, "Physical Lens");
 				drawLinked(FeaturePipelineIndex::PhysicalGlare, "Physical Glare");
 				drawLinked(FeaturePipelineIndex::Vignette, "Vignette");
 				drawLinked(FeaturePipelineIndex::MotionBlur, "Motion Blur");
@@ -417,6 +418,7 @@ void PostProcessing::BuildPipeline()
 	pipeline[static_cast<size_t>(FeaturePipelineIndex::PhysicalGlare)] = std::make_shared<PhysicalGlare>();
 	pipeline[static_cast<size_t>(FeaturePipelineIndex::CODBloom)] = std::make_shared<CODBloom>();
 	pipeline[static_cast<size_t>(FeaturePipelineIndex::LensFlare)] = std::make_shared<LensFlare>();
+	pipeline[static_cast<size_t>(FeaturePipelineIndex::PhysicalLens)] = std::make_shared<PhysicalLens>();
 	pipeline[static_cast<size_t>(FeaturePipelineIndex::Composite)] = std::make_shared<Composite>();
 	pipeline[static_cast<size_t>(FeaturePipelineIndex::Vignette)] = std::make_shared<Vignette>();
 	pipeline[static_cast<size_t>(FeaturePipelineIndex::Camera)] = std::make_shared<Camera>();
@@ -427,7 +429,7 @@ void PostProcessing::BuildPipeline()
 void PostProcessing::ApplyDefaultEnabledStates()
 {
 	using enum FeaturePipelineIndex;
-	constexpr std::array kOffByDefault = { LUT, MotionBlur, PhysicalGlare, Camera, Border };
+	constexpr std::array kOffByDefault = { LUT, MotionBlur, PhysicalGlare, PhysicalLens, Camera, Border };
 	for (size_t index = 0; index < pipeline.size(); ++index) {
 		if (auto& pipe = pipeline[index]; pipe && !pipe->IsAutoEnabled())
 			pipe->enabled = std::ranges::find(kOffByDefault, static_cast<FeaturePipelineIndex>(index)) == kOffByDefault.end();

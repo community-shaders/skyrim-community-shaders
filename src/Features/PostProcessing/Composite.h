@@ -31,9 +31,11 @@ struct Composite : public PostProcessFeature
 		float FlareIntensity;
 		float BloomRadius;
 		float BloomIntensity;
-		float Padding[2];
+		float HasPhysicalFlare;
+		float HasPhysicalLens;
 	};
 	std::unique_ptr<ConstantBuffer> compositeCB = nullptr;
+	std::unique_ptr<ConstantBuffer> emptyWaveCB;
 
 	// Bit flags for shader permutation selection
 	enum CompositeFlags : uint

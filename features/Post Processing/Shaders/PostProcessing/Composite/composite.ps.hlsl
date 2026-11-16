@@ -10,6 +10,10 @@
 #include "Common/Color.hlsli"
 
 Texture2D<float4> TexColor : register(t0);
+Texture2DArray<float> TexPhysicalFlare : register(t8);
+Texture2DArray<float4> TexPhysicalLens : register(t9);
+#include "PostProcessing/PhysicalLensImaging/diffraction_composite.hlsli"
+#include "PostProcessing/PhysicalLensImaging/mapping.hlsli"
 
 #ifdef HAS_BLOOM
 Texture2D<float4> TexBloom : register(t1);
@@ -182,7 +186,8 @@ cbuffer CompositeCB : register(b3)
 	float FlareIntensity;
 	float BloomRadius;
 	float BloomIntensity;
-	float2 CompositePadding;
+	float HasPhysicalFlare;
+	float HasPhysicalLens;
 };
 
 #ifdef HAS_BLOOM
@@ -196,7 +201,6 @@ float3 SampleBloom(float2 uv, float2 pixelSize)
 }
 #endif
 
-#ifdef HAS_LENS_FLARE
 float3 SampleBicubicCatmullRom(Texture2D<float4> tex, SamplerState samp, float2 uv, float2 texSize)
 {
 	float2 samplePos = uv * texSize;
@@ -228,6 +232,21 @@ float3 SampleBicubicCatmullRom(Texture2D<float4> tex, SamplerState samp, float2 
 	return max(result, 0.0);
 }
 
+#include "PostProcessing/PhysicalLensFlare/reconstruction.hlsli"
+float3 SamplePhysicalFlare(float2 uv, float2 texSize)
+{
+	// Include the filter halo, including partial tiles at odd render sizes.
+	int2 first = clamp(int2(floor((uv * texSize - 2) / 8)), 0, int2(ceil(texSize / 8)) - 1);
+	int2 last = clamp(int2(floor((uv * texSize + 2) / 8)), 0, int2(ceil(texSize / 8)) - 1);
+	uint width = (uint(texSize.x) + 7) / 8;
+	uint occupied = TexWaveTiles[first.y * width + first.x] | TexWaveTiles[first.y * width + last.x] |
+	                TexWaveTiles[last.y * width + first.x] | TexWaveTiles[last.y * width + last.x];
+	float3 result = 0;
+	[branch] if ((occupied & (1u << 17)) != 0) result = max(SamplePhysicalMip(TexPhysicalFlare, LinearSampler, uv, texSize, 0), 0);
+	return result;
+}
+
+#ifdef HAS_LENS_FLARE
 float3 SampleFlare(uint2 tid)
 {
 	float2 uv = (float2(tid) + 0.5) / OutputSize;
@@ -264,11 +283,19 @@ float ResolveBaseLuminance(uint2 tid)
 
 #endif
 
-float4 PSComposite(FullscreenTriangleVSOutput input) : SV_Target
+float4 PSComposite(FullscreenTriangleVSOutput input) :
+	SV_Target
 {
 	uint2 tid = uint2(input.Position.xy);
 
-	float3 sceneColor = TexColor[tid].rgb;
+	float2 sceneUV = input.TexCoord;
+	float3 sceneColor;
+	[branch] if (DiffractionEnabled > 0)
+		sceneColor = SamplePhysicalLensWave(TexColor, TexPhysicalLens, LinearSampler, input.TexCoord, sceneUV);
+	else if (HasPhysicalLens > 0)
+		sceneColor = SamplePhysicalLensImage(TexColor, TexPhysicalLens, LinearSampler, input.TexCoord, sceneUV);
+	else sceneColor = TexColor[tid].rgb;
+	uint2 sceneTid = min(uint2(saturate(sceneUV) * OutputSize), uint2(OutputSize) - 1);
 
 	// Accumulate bloom/flare/glare contributions (separate from scene)
 	float3 bloomContrib = 0;
@@ -285,6 +312,13 @@ float4 PSComposite(FullscreenTriangleVSOutput input) : SV_Target
 	bloomContrib += TexGlare[tid].rgb;
 #endif
 
+	[branch] if (HasPhysicalFlare > 0)
+	{
+		uint w, h, layers;
+		TexPhysicalFlare.GetDimensions(w, h, layers);
+		bloomContrib += SamplePhysicalFlare(input.TexCoord, float2(w, h));
+	}
+
 #ifdef HAS_EXPOSURE
 	// Compute global exposure value
 	float avgLuma = TexAdaptation[0];
@@ -293,7 +327,7 @@ float4 PSComposite(FullscreenTriangleVSOutput input) : SV_Target
 	// Formula: SceneColor * GlobalExposure * LocalExposure + Bloom * GlobalExposure
 	// LocalExposure multiplier derived from the base luminance pass (1.0 if not enabled)
 #	ifdef HAS_LOCAL_EXPOSURE
-	float baseLogLuminance = ResolveBaseLuminance(tid);
+	float baseLogLuminance = ResolveBaseLuminance(sceneTid);
 	float localExposure = ComputeLocalExposure(sceneColor, baseLogLuminance, globalExposure, ExposureCompensation);
 #	else
 	float localExposure = 1.0;
@@ -313,7 +347,7 @@ float4 PSComposite(FullscreenTriangleVSOutput input) : SV_Target
 #else
 	// No global exposure
 #	ifdef HAS_LOCAL_EXPOSURE
-	float baseLogLuminance = ResolveBaseLuminance(tid);
+	float baseLogLuminance = ResolveBaseLuminance(sceneTid);
 	float localExposure = ComputeLocalExposure(sceneColor, baseLogLuminance, ManualExposure, 1.0);
 	float3 result = (sceneColor * localExposure + bloomContrib) * ManualExposure;
 #	else
