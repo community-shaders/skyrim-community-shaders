@@ -100,6 +100,8 @@ pip install -q git+https://github.com/alandtse/hlslkit.git   # buffer-scan only;
 
         On conflicts, the lines after the tree list the conflicted files. Outside them the diff is still residue; inside them it is mostly conflict markers, so review each by hand with `git diff <M>^2 <M> -- <file>`. A non-empty residue is one candidate (source `sync <M>`).
 
+        Triage and port that candidate from its residue alone, never the whole merge. Its patch is the residue diff limited to the non-conflicted files (`git diff <tree> <M> -- <files>`); use it wherever 2b and 2e say `git show <sha>`, and carry the conflicted-file changes over by hand. A residue candidate is always ported by hand (step 4); the merge-level `git show`, `git diff <sha>^1 <sha>` and `cherry-pick -m 1` commands below do not apply to it.
+
     3. **Squashed sync without a recoverable branch:** diff `git merge-tree --write-tree <sha>^1 <U>` against `<sha>` as above, where `U` is the upstream commit named in the message (verify with `git merge-base --is-ancestor <U> upstream/dev`). If none is named, review the whole sync by hand, as was needed for `9a0c2a67`; never infer `U` from dates.
 
     Once expanded, drop the sync commits themselves from triage.
