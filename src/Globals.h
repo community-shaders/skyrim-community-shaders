@@ -54,6 +54,7 @@ class RenderDoc;
 class RemoteControl;
 class Menu;
 class SceneSettingsManager;
+class HiZPyramid;
 
 namespace SIE
 {
@@ -260,6 +261,7 @@ namespace globals
 	extern Menu* menu;
 	extern SIE::ShaderCache* shaderCache;
 	extern Profiler* profiler;
+	extern HiZPyramid* hiZPyramid;
 	extern SceneSettingsManager* sceneSettingsManager;
 
 	/** @brief Initializes core singletons (ShaderCache, State, Menu, Deferred). Called once at plugin load. */

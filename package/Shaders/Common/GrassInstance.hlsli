@@ -15,12 +15,12 @@ namespace GrassInstance
 	static const uint RecordFadeMask = (1u << RecordFadeBits) - 1;
 	static const uint RecordFlagsShift = RecordGroupBits + RecordFadeBits;
 
-	// The flags contain collision range, simple shading and a two-bit LOD tier (0 = full, 1 = middle, 2 = far).
+	// Flags select collision, simple shading and the LOD tier (0 = full, 1 = middle, 2 = far).
 	static const uint FlagCollision = 1;
 	static const uint FlagSimpleShading = 2;
 	static const uint FlagTierShift = 2;
 
-	// Each group contains up to 64 contiguous instances from one slice
+	// Each group contains up to 64 contiguous instances from one slice.
 	struct CullGroup
 	{
 		float3 Origin;
@@ -60,14 +60,14 @@ namespace GrassInstance
 		return ((float)(bits & 0x7FFF) - 16384.0) * (0.70710678 / 16383.0);
 	}
 
-	// Restore the vanilla layout from packed data
+	// Reconstruct the engine's per-instance vertex inputs.
 	void Decode(uint4 packed, out float4 data1, out float4 data2, out float4 data3, out float4 data4)
 	{
 		const float a = DecodeQuaternionComponent(packed.z);
 		const float b = DecodeQuaternionComponent(packed.z >> 15);
 		const float c = DecodeQuaternionComponent(packed.w);
 
-		// The largest quaternion component was omitted and is reconstructed as the positive remainder.
+		// The omitted quaternion component is the largest and nonnegative.
 		const float big = sqrt(saturate(1.0 - a * a - b * b - c * c));
 		const uint omitted = packed.z >> 30;
 		const float4 q = omitted == 0 ? float4(big, a, b, c) : omitted == 1 ? float4(a, big, b, c) :

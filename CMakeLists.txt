@@ -221,6 +221,7 @@ target_link_libraries(
         Microsoft::Effects11
         windowsapp
         windowscodecs
+        comdlg32
 )
 
 # devbench bridge: opt-out via -DDEVBENCH_BRIDGE=OFF. When off, the port isn't required

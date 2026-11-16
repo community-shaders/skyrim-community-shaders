@@ -10,6 +10,7 @@
 #include <d3dcompiler.h>
 
 #include "Deferred.h"
+#include "HiZPyramid.h"
 #include "State.h"
 #include "Utils/CompileDedupe.h"
 #include "Utils/D3D.h"
@@ -2487,6 +2488,7 @@ namespace SIE
 		compilationSet.Clear();
 		Util::ClearShaderCompileFailures();
 		globals::deferred->ClearShaderCache();
+		globals::hiZPyramid->ClearShaderCache();
 		for (auto* feature : Feature::GetFeatureList()) {
 			if (feature->loaded) {
 				feature->ClearShaderCache();

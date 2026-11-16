@@ -16,7 +16,7 @@ std::string GrassMeshLibrary::StemOf(const char* path)
 	return std::string(p.substr(start, len));
 }
 
-GrassMeshLibrary::MeshRecord& GrassMeshLibrary::RegisterMesh(const char* modelPath)
+GrassMeshLibrary::RegisteredMesh& GrassMeshLibrary::RegisterMesh(const char* modelPath)
 {
 	const auto stem = StemOf(modelPath);
 	std::scoped_lock lock(meshMutex);
@@ -27,14 +27,14 @@ GrassMeshLibrary::MeshRecord& GrassMeshLibrary::RegisterMesh(const char* modelPa
 	return entry->second;
 }
 
-bool GrassMeshLibrary::CreateAsset(GrassAsset& asset, RE::BSMultiStreamInstanceTriShape* geometryTemplate)
+bool GrassMeshLibrary::CreateDrawResources(GrassDrawResources& asset, RE::BSMultiStreamInstanceTriShape* geometryTemplate)
 {
 	asset.proxy.reset(static_cast<RE::BSMultiStreamInstanceTriShape*>(geometryTemplate->Clone()));
 	if (!asset.proxy)
 		return false;
 
 	auto& geometry = asset.proxy->GetGeometryRuntimeData();
-	geometry.vertexDesc = std::bit_cast<RE::BSGraphics::VertexDesc>(asset.key.descVal);
+	geometry.vertexDesc = std::bit_cast<RE::BSGraphics::VertexDesc>(asset.key.vertexDesc);
 	geometry.shaderProperty.reset(static_cast<RE::BSShaderProperty*>(geometry.shaderProperty->Clone()));
 
 	auto* property = static_cast<RE::BSGrassShaderProperty*>(geometry.shaderProperty.get());
@@ -62,7 +62,7 @@ bool GrassMeshLibrary::CreateAsset(GrassAsset& asset, RE::BSMultiStreamInstanceT
 	return true;
 }
 
-void GrassMeshLibrary::ReleaseAsset(const GrassAsset& asset)
+void GrassMeshLibrary::ReleaseDrawResources(const GrassDrawResources& asset)
 {
 	auto* tex = asset.diffuseTexture.get();
 	if (auto it = complexCache.find(tex); it != complexCache.end()) {
@@ -77,13 +77,13 @@ GrassMaterialKey GrassMeshLibrary::CaptureMaterial(RE::BSShaderMaterial* materia
 {
 	auto* m = static_cast<RE::BSLightingShaderMaterialBase*>(material);
 	GrassMaterialKey key;
-	key.textures[0] = m->diffuseTexture.get();
-
 	if (pbr) {
 		auto* pm = static_cast<BSLightingShaderMaterialPBR*>(material);
 		key.textures = { m->diffuseTexture.get(), m->normalTexture.get(), pm->rmaosTexture.get(), pm->featuresTexture0.get(), pm->featuresTexture1.get(), pm->emissiveTexture.get() };
 		key.clampMode = (uint32_t)m->textureClampMode;
 		key.constants = TruePBR::GetGrassPBRConstants(pm);
+	} else {
+		key.textures[0] = m->diffuseTexture.get();
 	}
 
 	return key;
@@ -95,7 +95,7 @@ void GrassMeshLibrary::ClearShaderCache()
 	detectCSFailed = false;
 }
 
-ID3D11ShaderResourceView* GrassMeshLibrary::GetComplexGrass(RE::NiSourceTexture* tex, ID3D11DeviceContext* ctx)
+ID3D11ShaderResourceView* GrassMeshLibrary::GetTextureClassification(RE::NiSourceTexture* tex, ID3D11DeviceContext* ctx)
 {
 	// Without a classification the pixel shader tests the texture itself.
 	const auto found = complexCache.find(tex);
@@ -167,7 +167,7 @@ ID3D11ComputeShader* GrassMeshLibrary::GetDetectCS()
 	return detectCS.get();
 }
 
-void GrassMeshLibrary::EnsureLODMeshes(MeshRecord& mesh)
+void GrassMeshLibrary::EnsureLODMeshes(RegisteredMesh& mesh)
 {
 	for (uint32_t tier = 0; tier < (uint32_t)LODTier::kCount; ++tier) {
 		auto& entry = mesh.lodMeshes[tier];
@@ -179,7 +179,7 @@ void GrassMeshLibrary::EnsureLODMeshes(MeshRecord& mesh)
 			loader = std::make_unique<BS::thread_pool<>>(1);
 
 		loader->detach_task([this, target = &mesh, tier = (LODTier)tier] {
-			LoadResult result{ target, tier, {} };
+			LODLoadResult result{ target, tier, {} };
 			LoadLODMesh(result.mesh, target->stem, tier);
 			std::scoped_lock lock(resultMutex);
 			results.push_back(std::move(result));
@@ -192,12 +192,15 @@ void GrassMeshLibrary::CommitLoadedLODMeshes()
 	if (!loader)
 		return;
 
-	static thread_local std::vector<LoadResult> done;
+	static thread_local std::vector<LODLoadResult> done;
 	done.clear();
 	{
 		std::scoped_lock lk(resultMutex);
 		done.swap(results);
 	}
+
+	if (!done.empty())
+		++lodGeneration;
 
 	for (auto& result : done) {
 		auto& entry = result.target->lodMeshes[(size_t)result.tier];
@@ -214,7 +217,7 @@ void GrassMeshLibrary::CommitLoadedLODMeshes()
 	done.clear();
 }
 
-const GrassMeshLibrary::LODMesh* GrassMeshLibrary::GetLODMesh(const MeshRecord& mesh, LODTier tier)
+const GrassMeshLibrary::LODMesh* GrassMeshLibrary::GetLODMesh(const RegisteredMesh& mesh, LODTier tier)
 {
 	const auto& entries = mesh.lodMeshes;
 	if (entries[(size_t)tier].state == LoadState::kReady)
@@ -224,7 +227,7 @@ const GrassMeshLibrary::LODMesh* GrassMeshLibrary::GetLODMesh(const MeshRecord& 
 	return tier == LODTier::kFar && middle.state == LoadState::kReady ? &middle : nullptr;
 }
 
-void GrassMeshLibrary::ReleaseMesh(MeshRecord& mesh)
+void GrassMeshLibrary::ReleaseMesh(RegisteredMesh& mesh)
 {
 	if (--mesh.activeBuckets)
 		return;
@@ -271,7 +274,7 @@ void GrassMeshLibrary::LoadLODMesh(LODMesh& entry, const std::string& stem, LODT
 	RE::NiPointer<RE::NiNode> root;
 
 	if (RE::BSModelDB::Demand(modelPath.c_str(), root, args) == RE::BSResource::ErrorCode::kNone && root) {
-		entry.keepAlive = RE::NiPointer<RE::NiAVObject>(root.get());
+		entry.modelRoot = RE::NiPointer<RE::NiAVObject>(root.get());
 		RE::BSTriShape* ts = nullptr;
 
 		if (FindLODShape(root.get(), ts) && ts) {
@@ -282,17 +285,18 @@ void GrassMeshLibrary::LoadLODMesh(LODMesh& entry, const std::string& stem, LODT
 				entry.vertexBuffer = reinterpret_cast<ID3D11Buffer*>(rd->vertexBuffer);
 				entry.indexBuffer = reinterpret_cast<ID3D11Buffer*>(rd->indexBuffer);
 				// Match the source grass instancing flags while retaining the LOD vertex format.
-				entry.descVal = *reinterpret_cast<const uint64_t*>(&grd.vertexDesc) | 0x8000000000000080ull;
-				entry.meshStride = VertexStrideFromDesc(entry.descVal);
+				entry.vertexDesc = *reinterpret_cast<const uint64_t*>(&grd.vertexDesc) | 0x8000000000000080ull;
+				entry.vertexStride = VertexStrideFromDesc(entry.vertexDesc);
 				entry.indexCount = 3u * ts->GetTrishapeRuntimeData().triangleCount;
 				const auto& bound = ts->GetModelData().modelBound;
 				entry.boundExtent = bound.center.Length() + bound.radius;
 				entry.canopyHeight = bound.center.z > 1.0f ? 2.0f * bound.center.z : std::max(bound.center.z + bound.radius, 1.0f);
+				entry.occlusionRadius = bound.radius + std::hypot(bound.center.x, bound.center.y, bound.center.z - 0.5f * entry.canopyHeight);
 
-				if (entry.meshStride != 0 && entry.indexCount != 0)
+				if (entry.vertexStride != 0 && entry.indexCount != 0)
 					entry.state = LoadState::kReady;
 				else
-					logger::warn("[GRASS OPTIMIZATIONS] LOD mesh {} rejected: indices={} stride={} descVal={:016X}", modelPath, entry.indexCount, entry.meshStride, entry.descVal);
+					logger::warn("[GRASS OPTIMIZATIONS] LOD mesh {} rejected: indices={} stride={} descVal={:016X}", modelPath, entry.indexCount, entry.vertexStride, entry.vertexDesc);
 
 			} else {
 				logger::warn("[GRASS OPTIMIZATIONS] LOD mesh {} has no GPU buffers", modelPath);

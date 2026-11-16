@@ -81,6 +81,13 @@ extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Query(const SKSE::QueryInterface*, 
 void MessageHandler(SKSE::MessagingInterface::Message* message)
 {
 	switch (message->type) {
+	case SKSE::MessagingInterface::kPreLoadGame:
+	case SKSE::MessagingInterface::kNewGame:
+		{
+			if (errors.empty())
+				Feature::ForEachLoadedFeature("GameReset", [](Feature* feature) { feature->GameReset(); });
+			break;
+		}
 	case SKSE::MessagingInterface::kPostPostLoad:
 		{
 			if (errors.empty()) {
