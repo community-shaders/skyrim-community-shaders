@@ -217,9 +217,18 @@ public:
 	/**
 	 * @brief Updates a byte range without discarding the rest of the buffer.
 	 * @pre The buffer uses D3D11_USAGE_DEFAULT.
+	 * @pre For structured buffers, byteOffset and byteSize are multiples of StructureByteStride.
+	 * @note Invalid ranges throw before uploading. Valid empty ranges do nothing.
 	 */
 	void UpdateRange(void const* src_data, size_t byteOffset, size_t byteSize)
 	{
+		const auto stride = desc.StructureByteStride;
+		if (byteOffset > desc.ByteWidth || byteSize > desc.ByteWidth - byteOffset ||
+			((desc.MiscFlags & D3D11_RESOURCE_MISC_BUFFER_STRUCTURED) && (!stride || byteOffset % stride || byteSize % stride)))
+			DX::ThrowIfFailed(E_INVALIDARG);
+		if (!byteSize)
+			return;
+
 		const D3D11_BOX box{ static_cast<UINT>(byteOffset), 0u, 0u, static_cast<UINT>(byteOffset + byteSize), 1u, 1u };
 		globals::d3d::context->UpdateSubresource(resource.get(), 0, &box, src_data, 0, 0);
 	}

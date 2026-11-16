@@ -144,17 +144,18 @@ void TerrainHeightMap::LoadForCurrentWorldspace()
 			return;
 		}
 
-		texHeightMap = std::make_unique<Texture2D>(reinterpret_cast<ID3D11Texture2D*>(pResource), "TerrainHeightMap::HeightMap");
+		auto texture = std::make_unique<Texture2D>(reinterpret_cast<ID3D11Texture2D*>(pResource), "TerrainHeightMap::HeightMap");
 
 		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {
-			.Format = texHeightMap->desc.Format,
+			.Format = texture->desc.Format,
 			.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D,
 			.Texture2D = {
 				.MostDetailedMip = 0,
 				.MipLevels = 1 }
 		};
-		texHeightMap->CreateSRV(srvDesc);
+		texture->CreateSRV(srvDesc);
 
+		texHeightMap = std::move(texture);
 		cachedHeightmap = &heightmaps[worldspace_name];
 	}
 

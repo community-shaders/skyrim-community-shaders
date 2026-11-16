@@ -30,7 +30,7 @@ namespace Util
 		desc.SampleDesc = { 1, 0 };
 		desc.Usage = D3D11_USAGE_DEFAULT;
 		desc.BindFlags = D3D11_BIND_SHADER_RESOURCE | (unorderedAccess ? D3D11_BIND_UNORDERED_ACCESS : 0u);
-		auto* texture = new Texture2D(desc, name);
+		auto texture = std::make_unique<Texture2D>(desc, name);
 
 		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc{};
 		srvDesc.Format = format;
@@ -44,7 +44,7 @@ namespace Util
 			uavDesc.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D;
 			texture->CreateUAV(uavDesc);
 		}
-		return texture;
+		return texture.release();
 	}
 
 	namespace
