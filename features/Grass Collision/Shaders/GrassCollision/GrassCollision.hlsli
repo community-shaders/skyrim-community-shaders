@@ -189,7 +189,7 @@ namespace GrassCollision
 
 #ifdef GRASS_COLLISION_REGULAR_GRASS
 #	ifdef GRASS_OPTIMIZATIONS
-	// Optimized instances are already camera-relative; do not apply World again.
+	// Optimized instances are already camera-relative. Do not apply World again.
 	void GetDisplacedPosition(VS_INPUT input, float3 worldPosition, float3 worldPositionCentre, out float3 displacement, out float3 previousDisplacement)
 	{
 		GetDisplacedPosition(worldPosition, worldPositionCentre, saturate(input.Color.w * 10.0), smoothstep(2048.0, 0.0, length(worldPosition)), false, 1.5, displacement, previousDisplacement);

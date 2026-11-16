@@ -18,7 +18,7 @@ public:
 		std::wstring dir;
 		std::string filename;
 		std::string worldspace;
-		float3 pos0, pos1;  // World-space top-left and bottom-right; z decodes samples 0 and 1.
+		float3 pos0, pos1;  // World-space top-left and bottom-right. Z decodes samples 0 and 1.
 		float2 zRange;
 	};
 

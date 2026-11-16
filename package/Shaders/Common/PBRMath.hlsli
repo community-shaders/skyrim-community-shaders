@@ -100,12 +100,17 @@ namespace PBR
 		return D * G * F;
 	}
 
-	/// @brief Anisotropic GGX specular BRDF with OpenPBR roughness parameters
+	/// @brief Evaluate anisotropic GGX specular BRDF with OpenPBR roughness parameters
 	/// @param roughness Perceptual roughness [0,1]
 	/// @param anisotropy Tangent-axis stretch [0,1]
+	/// @param F0 Reflectance at normal incidence
+	/// @param N Surface normal
 	/// @param T Unit tangent perpendicular to N
-	/// @param F Output Fresnel reflectance
+	/// @param V View direction
+	/// @param L Light direction
+	/// @param F Output Fresnel reflectance at current angle
 	/// @param slopeVariance Isotropic variance added to both squared roughness axes
+	/// @return Specular BRDF value (D * Vis * F)
 	float3 SpecularMicrofacetAnisotropic(float roughness, float anisotropy, float3 F0, float3 N, float3 T, float3 V, float3 L, out float3 F, float slopeVariance = 0.0)
 	{
 		F = F0;
@@ -148,15 +153,17 @@ namespace PBR
 		return F0 * specularBRDF.x + specularBRDF.y;
 	}
 
-	/// @brief Adds slope variance to a lobe's perceptual roughness [0,1]
+	/// @brief Widen a microfacet lobe by adding slope variance
+	/// @param roughness Perceptual roughness [0,1]
 	/// @param slopeVariance Variance in units of perceptual roughness to the fourth power
+	/// @return Perceptual roughness of the widened lobe
 	float AddRoughnessVariance(float roughness, float slopeVariance)
 	{
 		float roughness2 = roughness * roughness;
 		return sqrt(sqrt(min(roughness2 * roughness2 + slopeVariance, 1.0)));
 	}
 
-	/// @brief Geometric specular AA variance (Tokuyoshi and Kaplanyan, 2019)
+	/// @brief Calculate slope variance for geometric specular anti-aliasing (Tokuyoshi and Kaplanyan 2019)
 	/// @param dNdx Screen-space x derivative of the specular normal
 	/// @param dNdy Screen-space y derivative of the specular normal
 	/// @param pixelVariance Variance of the pixel filter kernel
@@ -258,10 +265,10 @@ namespace PBR
 		return lerp(1.0f - saturate(opacity), 1.0f, saturate(shadow));
 	}
 
-	/// @brief Coefficients of the OpenPBR fuzz albedo fit (Zeltner et al., 2022)
+	/// @brief Calculate coefficients of the OpenPBR fuzz albedo fit (Zeltner et al. 2022)
 	/// @param roughness Fuzz roughness [0.01,1]
-	/// @return Inverse Gaussian width, centre, amplitude and baseline
-	/// @note MaterialX reference: mx_microfacet_sheen.glsl
+	/// @return Inverse Gaussian width, centre, amplitude and baseline, in that order
+	/// @note Rational fits from the MaterialX reference implementation (mx_microfacet_sheen.glsl).
 	float4 FuzzDirectionalAlbedoParameters(float roughness)
 	{
 		float s = roughness * (0.0206607 + 1.58491 * roughness) / (0.0379424 + roughness * (1.32227 + roughness));
@@ -270,7 +277,10 @@ namespace PBR
 		return float4(1.0 / s, m, 1.0 / (s * sqrt(Math::TAU)), o);
 	}
 
-	/// @brief Evaluates fuzz albedo using precomputed FuzzDirectionalAlbedoParameters
+	/// @brief Evaluate fuzz albedo using precomputed fit coefficients
+	/// @param NdotV Dot product of normal and view direction
+	/// @param parameters Output of FuzzDirectionalAlbedoParameters
+	/// @return Fraction of light reflected by the fuzz layer
 	float FuzzDirectionalAlbedoWithParameters(float NdotV, float4 parameters)
 	{
 		float d = (NdotV - parameters.y) * parameters.x;
@@ -280,7 +290,7 @@ namespace PBR
 	/// @brief Directional albedo of the OpenPBR fuzz layer
 	/// @param NdotV Dot product of normal and view direction
 	/// @param roughness Fuzz roughness [0.01,1]
-	/// @return Fraction of light the fuzz reflects; the layers below receive the rest
+	/// @return Fraction of light the fuzz reflects. The layers below receive the rest.
 	float FuzzDirectionalAlbedo(float NdotV, float roughness)
 	{
 		return FuzzDirectionalAlbedoWithParameters(NdotV, FuzzDirectionalAlbedoParameters(roughness));
