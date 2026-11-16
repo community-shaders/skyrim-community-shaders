@@ -82,8 +82,6 @@ public:
 	winrt::com_ptr<ID3D11RasterizerState> captureRasterizerState;
 	winrt::com_ptr<ID3D11Buffer> captureFaceCBs[6];
 
-	std::unordered_map<uint32_t, winrt::com_ptr<ID3D11VertexShader>> captureVertexShaders;
-
 private:
 	Util::FrameChecker frameChecker;
 	Util::FrameChecker frame_checker[6];
@@ -118,15 +116,11 @@ public:
 	void CaptureLayerFromView();
 	/** @brief Completes the faces captured from the main view before another capture reuses the layer chain. */
 	void PropagateViewCapture();
-	/** @brief Returns the capture variant of the bound sky vertex shader, compiled once per descriptor. */
-	ID3D11VertexShader* GetCaptureVertexShader();
 
 	/** @brief Copies the cloud occlusion cubemap and binds it as a shader resource for the reflections prepass. */
 	virtual void ReflectionsPrepass() override;
 	/** @brief Completes the captured faces and binds the cloud occlusion for this frame's draws while a capture is current. */
 	virtual void EarlyPrepass() override;
-	/** @brief Releases the capture vertex shaders so they recompile from the current sources. */
-	virtual void ClearShaderCache() override;
 
 	/** @brief Installs the BSSkyShader hooks after all plugins have loaded. */
 	virtual inline void PostPostLoad() override { Hooks::Install(); }

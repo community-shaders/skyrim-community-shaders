@@ -252,30 +252,6 @@ void CloudShadows::ModifySky(RE::BSRenderPass* Pass)
 	}
 }
 
-ID3D11VertexShader* CloudShadows::GetCaptureVertexShader()
-{
-	const auto state = globals::state;
-	if (!state->currentShader)
-		return nullptr;
-
-	const uint32_t descriptor = state->currentVertexDescriptor;
-	auto [it, inserted] = captureVertexShaders.try_emplace(descriptor);
-	auto& shader = it->second;
-	if (!inserted)
-		return shader.get();
-
-	// Same defines as the bound sky vertex shader, so the capture variant matches its input layout and the bound pixel shader
-	auto defines = SIE::ShaderCache::GetDefines(*state->currentShader, descriptor);
-	defines.emplace_back("CLOUD_SHADOWS_CAPTURE", "");
-
-	shader.attach(static_cast<ID3D11VertexShader*>(Util::CompileShader(L"Data\\Shaders\\Sky.hlsl", defines, "vs_5_0")));
-	if (shader)
-		Util::SetResourceName(shader.get(), "CloudShadows::CaptureVS[%X]", descriptor);
-	else
-		logger::warn("[Cloud Shadows] Capture vertex shader for sky descriptor {:X} failed to compile; the main view does not capture it", descriptor);
-	return shader.get();
-}
-
 void CloudShadows::CaptureLayerFromView()
 {
 	auto* geometry = std::exchange(captureGeometry, nullptr);
@@ -294,9 +270,15 @@ void CloudShadows::CaptureLayerFromView()
 	if (!indexBuffer)
 		return;
 
-	auto* captureVS = GetCaptureVertexShader();
-	if (!captureVS)
+	// The bound sky vertex shader's capture variant, null until the shader cache has compiled it
+	const auto state = globals::state;
+	if (!state->currentShader || state->currentShader->shaderType.get() != RE::BSShader::Type::Sky)
 		return;
+	constexpr auto captureFlag = static_cast<uint32_t>(SIE::ShaderCache::SkyShaderFlags::CloudShadowsCapture);
+	auto* captureShader = globals::shaderCache->GetVertexShader(*state->currentShader, state->modifiedVertexDescriptor | captureFlag);
+	if (!captureShader)
+		return;
+	auto* captureVS = reinterpret_cast<ID3D11VertexShader*>(captureShader->shader);
 
 	globals::profiler->BeginPass("CloudShadows::Capture");
 
@@ -456,11 +438,6 @@ void CloudShadows::EarlyPrepass()
 	context->CSSetShaderResources(25, 1, &srv);
 }
 
-void CloudShadows::ClearShaderCache()
-{
-	captureVertexShaders.clear();
-}
-
 void CloudShadows::SetupResources()
 {
 	auto renderer = globals::game::renderer;
@@ -530,11 +507,13 @@ void CloudShadows::SetupResources()
 		Util::SetResourceName(captureRasterizerState.get(), "CloudShadows::CaptureRasterizerState");
 	}
 	{
-		struct alignas(16) CaptureFace
+		// CreateBuffer reads the whole ByteWidth, which ConstantBufferDesc rounds up
+		struct CaptureFace
 		{
 			uint32_t index;
-			uint32_t pad[3];
+			uint32_t pad[15];
 		};
+		static_assert(sizeof(CaptureFace) == GetCBufferSize(sizeof(CaptureFace)));
 
 		for (uint32_t face = 0; face < 6; ++face) {
 			const CaptureFace data = { face, {} };

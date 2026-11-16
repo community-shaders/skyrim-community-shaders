@@ -333,10 +333,14 @@ namespace SIE
 				}
 			}
 
-			uint32_t flags = descriptor >> 8;
+			constexpr auto captureFlag = static_cast<uint32_t>(ShaderCache::SkyShaderFlags::CloudShadowsCapture);
+			uint32_t flags = (descriptor & ~captureFlag) >> 8;
 
 			if (flags) {
 				defines[lastIndex++] = { "DEFERRED", nullptr };
+			}
+			if (descriptor & captureFlag) {
+				defines[lastIndex++] = { "CLOUD_SHADOWS_CAPTURE", nullptr };
 			}
 
 			for (auto* feature : Feature::GetFeatureList()) {
@@ -3430,20 +3434,6 @@ namespace SIE
 		SIE::SShaderCache::GetShaderDefines(shader, descriptor, std::span{ defines });
 
 		return SIE::SShaderCache::MergeDefinesString(defines, true);
-	}
-
-	std::vector<std::pair<const char*, const char*>> ShaderCache::GetDefines(const RE::BSShader& shader, uint32_t descriptor)
-	{
-		std::array<D3D_SHADER_MACRO, 64> defines{};
-		SIE::SShaderCache::GetShaderDefines(shader, descriptor, std::span{ defines });
-
-		std::vector<std::pair<const char*, const char*>> result;
-		for (const auto& define : defines) {
-			if (!define.Name)
-				break;
-			result.emplace_back(define.Name, define.Definition);
-		}
-		return result;
 	}
 
 	uint64_t ShaderCache::GetCachedHitTasks()
