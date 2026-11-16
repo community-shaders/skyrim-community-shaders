@@ -22,6 +22,7 @@ namespace SkinSurfaces
 	std::string Key(RE::BSShaderProperty* a_property);
 	/// Whether the shape has a native skin (subsurface) texture, which drives transmission thickness.
 	bool HasThickness(RE::BSShaderProperty* a_property);
+	bool IsRaceMenuOverlay(const RE::BSGeometry* a_geometry, const RE::BSShaderProperty* a_property);
 	bool IsHead(RE::BSGeometry* a_geometry);
 	bool Belongs(RE::BSGeometry* a_geometry, RE::Actor* a_actor);
 	RE::Actor* Owner(RE::BSGeometry* a_geometry);

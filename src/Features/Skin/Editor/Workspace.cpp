@@ -156,7 +156,7 @@ void Skin::RefreshSurfaces()
 			continue;
 		RE::BSVisit::TraverseScenegraphGeometries(root, [&](RE::BSGeometry* geometry) {
 			auto* property = geometry->GetGeometryRuntimeData().shaderProperty.get();
-			if (IsCompatible(property)) {
+			if (IsCompatible(property) && !SkinSurfaces::IsRaceMenuOverlay(geometry, property)) {
 				const auto& entry = Observe(geometry, property);
 				surfaces.push_back({ RE::NiPointer(geometry), entry.key, SkinSurfaces::Describe(geometry, actor.get()) });
 			}

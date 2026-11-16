@@ -278,7 +278,7 @@ void Skin::BSLightingShader_SetupGeometry(RE::BSRenderPass* a_pass)
 	PerGeometryData data{};
 	data.profile = MakeData(Resolve({}, settings.DefaultProfile), false);
 	data.profile.skinParams.w = 0;
-	if (a_pass && a_pass->geometry) {
+	if (a_pass && a_pass->geometry && !SkinSurfaces::IsRaceMenuOverlay(a_pass->geometry, a_pass->shaderProperty)) {
 		data.skinPerGeometry = GetWetness(a_pass->geometry);
 		if (SkinMaterials::IsCompatible(a_pass->shaderProperty)) {
 			auto& entry = Observe(a_pass->geometry, a_pass->shaderProperty);

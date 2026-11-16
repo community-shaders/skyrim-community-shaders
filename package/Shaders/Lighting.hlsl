@@ -1852,19 +1852,20 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	if defined(CS_SKIN_SHADING)
 #		if defined(WETNESS_EFFECTS)
 	float3 skinWetNormal = worldNormal.xyz;
-#			if defined(FACEGEN)
-	float2 wetUV = uv;
-#			else
-	float2 wetUV = uv * skinData.skinDetailParams.y;
-#			endif
-	float2 dynamicWet = Skin::GetWetness(input.WorldPosition.z + FrameBuffer::CameraPosAdjust.z, worldNormal.xyz);
-	float skinWetness = Skin::PerlinNoise(wetUV, skinData.wetParams.x, skinData.wetParams.y, skinData.wetParams.z, clamp(dynamicWet.x + dynamicWet.y + skinData.skinParams2.y, 0.f, 2.f)) * skinWetMask * skinData.physicalParams.w;
-	float3 heightWetNormal = CalculateNormalFromHeight(skinWetness, skinData.wetParams.w * 0.0005, uv);
-	if (skinEnabled)
-#		else
-	if (skinEnabled)
+	float skinWetness = 0.0f;
 #		endif
+	[branch] if (skinEnabled)
 	{
+#		if defined(WETNESS_EFFECTS)
+#			if defined(FACEGEN)
+		float2 wetUV = uv;
+#			else
+		float2 wetUV = uv * skinData.skinDetailParams.y;
+#			endif
+		float2 dynamicWet = Skin::GetWetness(input.WorldPosition.z + FrameBuffer::CameraPosAdjust.z, worldNormal.xyz);
+		skinWetness = Skin::PerlinNoise(wetUV, skinData.wetParams.x, skinData.wetParams.y, skinData.wetParams.z, clamp(dynamicWet.x + dynamicWet.y + skinData.skinParams2.y, 0.f, 2.f)) * skinWetMask * skinData.physicalParams.w;
+		float3 heightWetNormal = CalculateNormalFromHeight(skinWetness, skinData.wetParams.w * 0.0005, uv);
+#		endif
 		float2 detailUV = uv * skinData.skinDetailParams.x;
 #		if defined(MODELSPACENORMALS)
 		const float3x3 tbnTr = Skin::SurfaceBasis(input.WorldPosition.xyz, worldNormal, uv);
