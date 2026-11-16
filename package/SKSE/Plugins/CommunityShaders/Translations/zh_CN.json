@@ -1967,6 +1967,7 @@
     "feature.physical_sky.debug_weather_noise_3": "噪声输入 3",
     "feature.physical_sky.description": "基于物理的天空模型，用于生成真实的天空渐变，并提供其他天文效果。",
     "feature.physical_sky.disabled": "%s（禁用）",
+    "feature.physical_sky.disk_angular_radius": "圆盘角半径",
     "feature.physical_sky.editor_id": "编辑器 ID",
     "feature.physical_sky.enable_all_exterior_cells": "启用所有室外单元",
     "feature.physical_sky.enable_cirrus": "启用卷云",

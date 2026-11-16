@@ -213,6 +213,9 @@ namespace Util
 	std::string FormatTESForm(const RE::TESForm* form);
 	std::string FormatWeather(const RE::TESWeather* weather);
 
+	/** @brief Tangent of a sky billboard angular half-width, or the fallback when its bound is unavailable. */
+	float GetBillboardHalfTan(const RE::NiAVObject* a_billboard, const RE::NiPoint3& a_viewer, float a_fallback);
+
 	bool IsInterior();
 
 	/** @brief Sun disc visibility in [0, 1] from its sky shader blend alpha; 0 when the sun is missing or hidden. */

@@ -124,6 +124,22 @@ VS_OUTPUT main(VS_INPUT input)
 	float4 inputPosition = float4(input.Position.xyz, 1.0);
 	float4 previousInputPosition = inputPosition;
 
+#	if defined(PHYSICAL_SKY) && (defined(TEX) || defined(MOONMASK))
+	if (SharedData::physSkyData.enabled) {
+		float scale = 1.0;
+#		if !defined(MOONMASK)
+		if (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsMoon)
+#		endif
+			scale = (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsSecunda) ? SharedData::physSkyData.diskBillboardScale.z : SharedData::physSkyData.diskBillboardScale.y;
+#		if !defined(DITHER) && !defined(MOONMASK)
+		else if (SharedData::physSkyData.sunDiskCos > 0.0 && (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsSun))
+			scale = SharedData::physSkyData.diskBillboardScale.x;
+#		endif
+		inputPosition.xyz *= scale;
+		previousInputPosition.xyz *= scale;
+	}
+#	endif
+
 #	if defined(PROCEDURAL_SUN) && defined(TEX) && !defined(DITHER)
 	if (IsProceduralSunActive()) {
 		float outerCos = SharedData::proceduralSunSettings.haloEnabled && SharedData::proceduralSunSettings.haloIntensity > 0.0f ?

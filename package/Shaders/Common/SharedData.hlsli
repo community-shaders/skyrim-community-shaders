@@ -584,6 +584,9 @@ namespace SharedData
 		float4 lightningChannelEmitter;
 		float4 lightningPreparationPositionRadius;
 		float4 lightningPreparationControl;  // base mode, history valid, active mask lane, preparing
+		float3 diskAngularRadius;
+		uint dirLightDiskIndex;
+		float4 diskBillboardScale;
 	};
 
 	struct RainRefractionSettings

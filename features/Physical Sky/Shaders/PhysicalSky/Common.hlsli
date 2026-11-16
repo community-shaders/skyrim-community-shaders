@@ -56,6 +56,8 @@ Texture2D<unorm float> TexApShadow : register(t64);
 Texture2D<float4> TexSkyTail : register(t66);
 #endif
 
+#include "PhysicalSky/DiskPhase.hlsli"
+
 	static const float RCP_PI = 1 / Math::PI;  // PI
 	static const float AP_MAX_DIST = 40000.0f / GAME_UNIT_TO_M;
 	static const uint3 CLOUD_DIM = uint3(512, 512, 64);
@@ -186,15 +188,15 @@ Texture2D<float4> TexSkyTail : register(t66);
 		mu = clamp(mu, -localHorizon / r, 1.0);
 	}
 
-	float3 SampleAtmosphereLightTr(Texture2D<float4> transmittance, SamplerState samp, float3 planetPos, float3 lightDir)
+	float3 SampleAtmosphereLightTr(Texture2D<float4> transmittance, SamplerState samp, float3 planetPos, float3 lightDir, float angularRadius = 0.0)
 	{
 		const float radius = length(planetPos);
 		const float sinHorizon = saturate(SharedData::physSkyData.rPlanet / max(radius, 1.0));
 		const float cosHorizon = -sqrt(max(0.0, 1.0 - sinHorizon * sinHorizon));
 		const float mu = dot(planetPos, lightDir) / max(radius, 1.0);
-		// Approximate the visible fraction of a solar disc (0.266 degree radius).
+		// Approximate the visible fraction of the emitter disc at the planet horizon.
 		// Keep planet visibility separate from the smooth, unoccluded LUT.
-		const float discWidth = max(0.00465 * sinHorizon, 1e-6);
+		const float discWidth = max(sin(angularRadius) * sinHorizon, 1e-6);
 		const float visibility = smoothstep(-discWidth, discWidth, mu - cosHorizon);
 		[branch] if (visibility <= 0.0 || radius < SharedData::physSkyData.rPlanet) return 0.0;
 		return transmittance.SampleLevel(samp, TrLutUv(radius, mu), 0).rgb * visibility;
@@ -458,7 +460,7 @@ Texture2D<float4> TexSkyTail : register(t66);
 
 		// TODO: planet shadowing
 
-		float3 trAtmos = SampleAtmosphereLightTr(TexTrLut, sampTr, cloudPosWS + float3(0, 0, data.zCameraPlanet), dirLightDir);
+		float3 trAtmos = SampleAtmosphereLightTr(TexTrLut, sampTr, cloudPosWS + float3(0, 0, data.zCameraPlanet), dirLightDir, data.diskAngularRadius[data.dirLightDiskIndex]);
 		trAtmos = lerp(1, trAtmos, data.trMix);
 		dirLightColor *= trAtmos;
 
@@ -467,7 +469,7 @@ Texture2D<float4> TexSkyTail : register(t66);
 							   baseColor.a,
 							   data.silverLiningSpread > 0 ? data.silverLiningSpread : 0,
 							   data.silverLiningSpread < 0 ? 1 + data.silverLiningSpread : 1,
-							   lerp(0.25 * RCP_PI, Phase::ThomasSchander(u), data.silverLiningMix),
+							   lerp(0.25 * RCP_PI, SampleDiskPhase(u, data.dirLightDiskIndex).x, data.silverLiningMix),
 							   0.25 * RCP_PI) *
 		                   2 * Math::PI * data.cloudRelightMix;
 
@@ -502,10 +504,7 @@ Texture2D<float4> TexSkyTail : register(t66);
 			float directVisibility = 1.0 - saturate(dot(rayShadow, 0.25));
 
 			float cloudOpticalDepth = -log(max(1.0 - baseColor.a, 1e-3));
-			float forwardG = lerp(0.82, 0.94, saturate(1.0 - abs(data.silverLiningSpread)));
-			float forwardMieCore = max(0.0, Phase::HG(u, forwardG) - 0.25 * RCP_PI);
-			float forwardMieAureole = max(0.0, Phase::Draine(u, 0.78, 2.0) - 0.25 * RCP_PI);
-			float forwardMiePhase = forwardMieCore + 0.45 * forwardMieAureole;
+			float forwardMiePhase = max(0.0, SampleDiskPhase(u, data.dirLightDiskIndex).w - 1.45 * 0.25 * RCP_PI);
 			float silverEdgeMask = smoothstep(0.08, 0.35, baseColor.a) * (1.0 - smoothstep(0.45, 0.85, baseColor.a));
 			float silverSingleScatter = 1.35 * silverEdgeMask * (1.0 - exp(-cloudOpticalDepth)) * exp(-0.5 * cloudOpticalDepth);
 			float directSingleScatter = 0.9 * cloudOpticalDepth * exp(-0.75 * cloudOpticalDepth);

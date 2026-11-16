@@ -131,6 +131,8 @@ struct PhysicalSky final : public Feature
 
 		bool proceduralSun = true;
 		float sunDiskRad = DirectX::XMConvertToRadians(0.53f);
+		float masserDiskRad = DirectX::XMConvertToRadians(8.f);
+		float secundaDiskRad = DirectX::XMConvertToRadians(4.f);
 
 		std::map<std::string, WorldspaceInfo> worldspaceWhitelist = {
 			{ "Tamriel", { -14500.f } },
@@ -283,10 +285,20 @@ struct PhysicalSky final : public Feature
 		float4 lightningChannelEmitter;  // centroid and equivalent projected-area radius, game units
 		float4 lightningPreparationPositionRadius;
 		float4 lightningPreparationControl;  // base mode, history valid, active mask lane, preparing
+		float3 diskAngularRadius;            // Sun, Masser, Secunda, in radians, independent of disc rendering mode.
+		uint dirLightDiskIndex;
+		float4 diskBillboardScale;
 	} cbData;
 	STATIC_ASSERT_ALIGNAS_16(CbData);
 
 	eastl::unique_ptr<Texture2D> texTrLut = nullptr;  // transmittance
+	constexpr static uint32_t kDiskPhaseLutSize = 2048;
+	eastl::unique_ptr<Texture2D> texDiskPhaseLut;
+	eastl::unique_ptr<ConstantBuffer> diskPhaseCb;
+	std::array<float, 12> diskPhaseParameters = {};
+	bool diskPhaseValid = false;
+	/** @brief Rebuilds normalized finite-disc scattering responses when angular radii or particle optics change. */
+	void UpdateDiskPhaseLut();
 	eastl::unique_ptr<Texture2D> texMsLut = nullptr;  // multiscattering
 	eastl::unique_ptr<Texture2D> texSvLut = nullptr;  // sky view
 	eastl::unique_ptr<Texture2D> texSkyTail = nullptr;
@@ -639,6 +651,7 @@ struct PhysicalSky final : public Feature
 	winrt::com_ptr<ID3D11SamplerState> sampNoise = nullptr;
 
 	winrt::com_ptr<ID3D11ComputeShader> csTrLutGen = nullptr;
+	winrt::com_ptr<ID3D11ComputeShader> csDiskPhaseLutGen;
 	winrt::com_ptr<ID3D11ComputeShader> csMsLutGen = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> csSvLutGen = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> csSkyTailGen = nullptr;

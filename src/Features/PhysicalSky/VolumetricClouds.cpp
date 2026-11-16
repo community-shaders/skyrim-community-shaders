@@ -1055,6 +1055,46 @@ void PhysicalSky::UpdateCloudWind()
 	volWind.disturbance = std::lerp(volWind.disturbance, CloudUnitParameter(layer.wind.disturbance), static_cast<float>(-std::expm1(-elapsed / 2.0)));
 }
 
+void PhysicalSky::UpdateDiskPhaseLut()
+{
+	if (!csDiskPhaseLutGen || !texDiskPhaseLut || !diskPhaseCb)
+		return;
+	const auto& lighting = settings.cloudLayer.lighting;
+	const auto fit = CloudMiePhase(lighting.dropletDiameter).coefficients;
+	const std::array<float, 12> parameters = {
+		fit.x, fit.y, fit.z, fit.w,
+		cbData.diskAngularRadius.x, cbData.diskAngularRadius.y, cbData.diskAngularRadius.z, 0.f,
+		std::clamp(lighting.phaseForwardG, 0.f, .95f), std::clamp(lighting.phaseBackwardG, -.95f, 0.f),
+		std::clamp(settings.aerosolPhaseG, -.999f, .999f), std::lerp(.82f, .94f, std::clamp(1.f - std::abs(settings.silverLiningSpread), 0.f, 1.f))
+	};
+	auto* context = globals::d3d::context;
+	if (!diskPhaseValid || parameters != diskPhaseParameters) {
+		ID3D11ShaderResourceView* nullSrv = nullptr;
+		context->PSSetShaderResources(106, 1, &nullSrv);
+		context->CSSetShaderResources(106, 1, &nullSrv);
+		diskPhaseCb->Update(parameters);
+		auto* constants = diskPhaseCb->CB();
+		winrt::com_ptr<ID3D11Buffer> previousConstants;
+		context->CSGetConstantBuffers(0, 1, previousConstants.put());
+		context->CSSetConstantBuffers(0, 1, &constants);
+		auto* uav = texDiskPhaseLut->uav.get();
+		context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
+		context->CSSetShader(csDiskPhaseLutGen.get(), nullptr, 0);
+		globals::profiler->BeginPass("PhysicalSky::DiskPhaseLut");
+		context->Dispatch((kDiskPhaseLutSize + 63u) / 64u, 3, 1);
+		globals::profiler->EndPass();
+		uav = nullptr;
+		context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
+		context->CSSetShader(nullptr, nullptr, 0);
+		constants = previousConstants.get();
+		context->CSSetConstantBuffers(0, 1, &constants);
+		diskPhaseParameters = parameters;
+		diskPhaseValid = true;
+	}
+	auto* srv = texDiskPhaseLut->srv.get();
+	context->CSSetShaderResources(106, 1, &srv);
+}
+
 void PhysicalSky::RenderVolumetricClouds(VolumetricCloudPass a_pass)
 {
 	if (a_pass == VolumetricCloudPass::kMainViewAndCubemap) {

@@ -107,16 +107,16 @@ void rayMarch(
 	float phaseAerosolSun = 0.25 * RCP_PI;
 	float phaseRayleighSun = 0.25 * RCP_PI;
 #	else
-	float phaseAerosolSun = Phase::CornetteShanks(uSun, data.aerosolPhaseG);
-	float phaseRayleighSun = Phase::Rayleigh(uSun);
+	float phaseAerosolSun = SampleDiskPhase(uSun, 0u).z;
+	float phaseRayleighSun = DiskRayleigh(uSun, 0u);
 
 	float uMasser = dot(rayDir, data.masserDir);
-	float phaseAerosolMasser = Phase::CornetteShanks(uMasser, data.aerosolPhaseG);
-	float phaseRayleighMasser = Phase::Rayleigh(uMasser);
+	float phaseAerosolMasser = SampleDiskPhase(uMasser, 1u).z;
+	float phaseRayleighMasser = DiskRayleigh(uMasser, 1u);
 
 	float uSecunda = dot(rayDir, data.secundaDir);
-	float phaseAerosolSecunda = Phase::CornetteShanks(uSecunda, data.aerosolPhaseG);
-	float phaseRayleighSecunda = Phase::Rayleigh(uSecunda);
+	float phaseAerosolSecunda = SampleDiskPhase(uSecunda, 2u).z;
+	float phaseRayleighSecunda = DiskRayleigh(uSecunda, 2u);
 #	endif
 #endif
 
@@ -165,11 +165,11 @@ void rayMarch(
 		lumFactor += tr * fScatter;
 #	endif
 
-		float3 trSun = SampleAtmosphereLightTr(TexTrLut, SampTr, curr_pos, sunDir);
+		float3 trSun = SampleAtmosphereLightTr(TexTrLut, SampTr, curr_pos, sunDir, data.diskAngularRadius.x);
 #	if LUTGEN != 1
-		float3 trMasser = SampleAtmosphereLightTr(TexTrLut, SampTr, curr_pos, data.masserDir);
+		float3 trMasser = SampleAtmosphereLightTr(TexTrLut, SampTr, curr_pos, data.masserDir, data.diskAngularRadius.y);
 
-		float3 trSecunda = SampleAtmosphereLightTr(TexTrLut, SampTr, curr_pos, data.secundaDir);
+		float3 trSecunda = SampleAtmosphereLightTr(TexTrLut, SampTr, curr_pos, data.secundaDir, data.diskAngularRadius.z);
 		const float rSample = length(curr_pos);
 		const float3 upSample = curr_pos / max(rSample, 1.0);
 		const float2 lutUvSun = MsLutUv(rSample, dot(upSample, sunDir));
@@ -208,7 +208,7 @@ void rayMarch(
 		float3 hit_pos = pos + tGround * rayDir;
 		if (dot(pos, sunDir) > 0) {
 			hit_pos = normalize(hit_pos) * data.rPlanet;
-			lum += tr * data.groundAlbedo * SampleAtmosphereLightTr(TexTrLut, SampTr, hit_pos, sunDir);
+			lum += tr * data.groundAlbedo * SampleAtmosphereLightTr(TexTrLut, SampTr, hit_pos, sunDir, data.diskAngularRadius.x);
 		}
 	}
 #endif

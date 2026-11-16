@@ -170,6 +170,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	secundaColor,
 	proceduralSun,
 	sunDiskRad,
+	masserDiskRad,
+	secundaDiskRad,
 
 	worldspaceWhitelist,
 	groundAlbedo,
@@ -793,6 +795,7 @@ void PhysicalSky::SettingsCelestials()
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::Text("%s", T(TKEY("light_color_hint"), "This sets the light color BEFORE it goes through the atmosphere i.e. extraterrestrial radiance."));
 		drawMoonIlluminance(settings.masserColor);
+		ImGui::SliderAngle(T(TKEY("disk_angular_radius"), "Disk Angular Radius"), &settings.masserDiskRad, 0.05f, 30.f, "%.2f deg", ImGuiSliderFlags_AlwaysClamp);
 		ImGui::PopID();
 	}
 
@@ -804,6 +807,7 @@ void PhysicalSky::SettingsCelestials()
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::Text("%s", T(TKEY("light_color_hint"), "This sets the light color BEFORE it goes through the atmosphere i.e. extraterrestrial radiance."));
 		drawMoonIlluminance(settings.secundaColor);
+		ImGui::SliderAngle(T(TKEY("disk_angular_radius"), "Disk Angular Radius"), &settings.secundaDiskRad, 0.05f, 30.f, "%.2f deg", ImGuiSliderFlags_AlwaysClamp);
 		ImGui::PopID();
 	}
 }
@@ -1721,6 +1725,26 @@ void PhysicalSky::SetupResources()
 		texApShadow->CreateUAV(uavDesc);
 	}
 
+	{
+		const D3D11_TEXTURE2D_DESC desc{
+			.Width = kDiskPhaseLutSize,
+			.Height = 3,
+			.MipLevels = 1,
+			.ArraySize = 1,
+			.Format = DXGI_FORMAT_R32G32B32A32_FLOAT,
+			.SampleDesc = { 1, 0 },
+			.Usage = D3D11_USAGE_DEFAULT,
+			.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS
+		};
+		texDiskPhaseLut = eastl::make_unique<Texture2D>(desc, "PhysicalSky::DiskPhaseLut");
+		D3D11_SHADER_RESOURCE_VIEW_DESC srv{ .Format = desc.Format, .ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D };
+		srv.Texture2D.MipLevels = 1;
+		texDiskPhaseLut->CreateSRV(srv);
+		const D3D11_UNORDERED_ACCESS_VIEW_DESC uav{ .Format = desc.Format, .ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D };
+		texDiskPhaseLut->CreateUAV(uav);
+		diskPhaseCb = eastl::make_unique<ConstantBuffer>(ConstantBufferDesc<std::array<float, 12>>(), "PhysicalSky::DiskPhaseConstants");
+		diskPhaseValid = false;
+	}
 	// Volumetric cloud resources
 	SetupVolumetricResources();
 
@@ -1738,6 +1762,7 @@ void PhysicalSky::UpdateShaders()
 	if (recompileRequested.exchange(false)) {
 		shaders.Cancel();
 		baseShadersQueued = volumetricShadersQueued = false;
+		diskPhaseValid = false;
 	}
 	shaders.Publish();
 	if (!baseShadersQueued) {
@@ -1761,6 +1786,7 @@ void PhysicalSky::CompileShaders()
 	};
 
 	std::vector<ShaderCompileInfo> shaderInfos = {
+		{ &csDiskPhaseLutGen, "DiskPhaseLut.cs.hlsl", {} },
 		{ &csTrLutGen, "LutGen.cs.hlsl", { { "LUTGEN", "0" } } },
 		{ &csMsLutGen, "LutGen.cs.hlsl", { { "LUTGEN", "1" } } },
 		{ &csSvLutGen, "LutGen.cs.hlsl", { { "LUTGEN", "2" } } },
@@ -1776,7 +1802,7 @@ void PhysicalSky::CompileShaders()
 
 bool PhysicalSky::ShadersOK()
 {
-	bool baseShadersOk = csTrLutGen && csMsLutGen && csSvLutGen && csApLutGen && csShadowAccum && csShadowAccumHalfRes &&
+	bool baseShadersOk = csDiskPhaseLutGen && texDiskPhaseLut && diskPhaseCb && csTrLutGen && csMsLutGen && csSvLutGen && csApLutGen && csShadowAccum && csShadowAccumHalfRes &&
 	                     texTrLut && texSvLut && texApLut && texApShadow;
 	// The cloud maps themselves are created lazily by the first generation
 	// dispatch, so readiness is a property of the generation shaders. The render
@@ -1933,7 +1959,6 @@ void PhysicalSky::Reset()
 		.masserColor = sRGBToWorkingGamut(settings.masserColor),
 		.apTrMix = settings.apTrMix,
 		.secundaDir = { secundaDir.x, secundaDir.y, secundaDir.z },
-		.sunDiskCos = cos(settings.sunDiskRad) * (settings.proceduralSun ? 1.f : 0.f),
 		.secundaColor = sRGBToWorkingGamut(settings.secundaColor),
 		.enabled = allGood,
 		.vanillaMix = settings.vanillaMix,
@@ -2010,13 +2035,39 @@ void PhysicalSky::Reset()
 	const float observerRadius = std::max(cbData.zCameraPlanet, planetRadius);
 	const float observerHorizonDip = std::acos(std::clamp(planetRadius / observerRadius, 0.0f, 1.0f));
 	const float localUpRange = observerHorizonDip + horizonDip;
-	const float solarLimit = std::min(horizonDip + localUpRange + 0.00465f, RE::NI_PI * 0.5f);
+	const auto radius = [](float value, float fallback, float maximum) {
+		return std::isfinite(value) ? std::clamp(value, 0.f, maximum) : fallback;
+	};
+	cbData.diskAngularRadius = {
+		radius(settings.sunDiskRad, DirectX::XMConvertToRadians(0.53f), DirectX::XMConvertToRadians(10.f)),
+		radius(settings.masserDiskRad, DirectX::XMConvertToRadians(8.f), DirectX::XMConvertToRadians(30.f)),
+		radius(settings.secundaDiskRad, DirectX::XMConvertToRadians(4.f), DirectX::XMConvertToRadians(30.f))
+	};
+	cbData.diskBillboardScale = float4(1.f);
+	if (const auto* sky = globals::game::sky; sky && sky->root) {
+		const auto& viewer = sky->root->world.translate;
+		const auto sunTan = sky->sun ? Util::GetBillboardHalfTan(sky->sun->sunBase.get(), viewer, 0.f) : 0.f;
+		const auto masserTan = sky->masser ? Util::GetBillboardHalfTan(sky->masser->moonMesh.get(), viewer, 0.f) : 0.f;
+		const auto secundaTan = sky->secunda ? Util::GetBillboardHalfTan(sky->secunda->moonMesh.get(), viewer, 0.f) : 0.f;
+		if (settings.proceduralSun && sunTan > 0.f)
+			cbData.diskBillboardScale.x = std::tan(cbData.diskAngularRadius.x) / sunTan;
+		if (masserTan > 0.f)
+			cbData.diskBillboardScale.y = std::tan(cbData.diskAngularRadius.y) / masserTan;
+		if (secundaTan > 0.f)
+			cbData.diskBillboardScale.z = std::tan(cbData.diskAngularRadius.z) / secundaTan;
+	}
+	cbData.sunDiskCos = settings.proceduralSun ? std::cos(cbData.diskAngularRadius.x) : 0.f;
+	const auto caster = skySync.active ? skySync.shadowFader.target : SkySync::Caster::Sun;
+	cbData.dirLightDiskIndex = caster == SkySync::Caster::Masser ? 1u : caster == SkySync::Caster::Secunda ? 2u :
+	                                                                                                         0u;
+	const float solarLimit = std::min(horizonDip + localUpRange + cbData.diskAngularRadius.x, RE::NI_PI * 0.5f);
 	cbData.volCloudUseSun = sunDir.z > -std::sin(solarLimit) ? 1u : 0u;
 }
 
 void PhysicalSky::EarlyPrepass()
 {
 	if (cbData.enabled) {
+		UpdateDiskPhaseLut();
 		GenerateLuts();
 	}
 }
@@ -2024,6 +2075,8 @@ void PhysicalSky::EarlyPrepass()
 void PhysicalSky::ReflectionsPrepass()
 {
 	if (cbData.enabled) {
+		auto* phaseSrv = texDiskPhaseLut->srv.get();
+		globals::d3d::context->PSSetShaderResources(106, 1, &phaseSrv);
 		auto* lightningReflection = texLightningCubeLum ? texLightningCubeLum->srv.get() : nullptr;
 		globals::d3d::context->PSSetShaderResources(109, 1, &lightningReflection);
 		std::array srvs = { texTrLut->srv.get(), texSvLut->srv.get(), texApLut->srv.get() };
@@ -2061,6 +2114,8 @@ void PhysicalSky::Prepass()
 		}
 	}
 	if (cbData.enabled) {
+		auto* phaseSrv = texDiskPhaseLut->srv.get();
+		globals::d3d::context->PSSetShaderResources(106, 1, &phaseSrv);
 		const bool renderVolumetricClouds = settings.enableVolumetricClouds && ShadersOK();
 
 		if (renderVolumetricClouds) {

@@ -2086,6 +2086,7 @@
     "feature.physical_sky.debug_weather_noise_3": "Noise input 3",
     "feature.physical_sky.description": "Physically-based sky model for realistic sky gradients and other astronomical effects.",
     "feature.physical_sky.disabled": "%s (Disabled)",
+    "feature.physical_sky.disk_angular_radius": "Disk Angular Radius",
     "feature.physical_sky.editor_id": "Editor ID",
     "feature.physical_sky.enable_all_exterior_cells": "Enable All Exterior Cells",
     "feature.physical_sky.enable_cirrus": "Enable Cirrus",

@@ -137,21 +137,21 @@ float4 AnalyticalFogSource(float3 position, float3 materialPosition, float visib
 }
 #endif
 
-float3 AtmosphereLight(float3 position, float3 direction, float3 lightDir, float3 color, float3 rayleigh, float3 mie, float directVisibility, float3 diffuseVisibility)
+float3 AtmosphereLight(uint lightIndex, float3 position, float3 direction, float3 lightDir, float3 color, float3 rayleigh, float3 mie, float directVisibility, float3 diffuseVisibility)
 {
 	if (!any(color > 0.0) || dot(lightDir, lightDir) < 0.5 || !any(rayleigh + mie > 0.0))
 		return 0.0;
 	const float3 planet = PhysSky::GetMediumPlanetPosition(position);
 	const float radius = length(planet);
 	const float cosine = dot(direction, lightDir);
-	const float3 tr = PhysSky::SampleAtmosphereLightTr(PhysSky::TexTrLut, LinearSampler, planet, lightDir);
+	const float3 tr = PhysSky::SampleAtmosphereLightTr(PhysSky::TexTrLut, LinearSampler, planet, lightDir, SharedData::physSkyData.diskAngularRadius[lightIndex]);
 	const float3 ms = MediumMsLut.SampleLevel(LinearSampler, PhysSky::MsLutUv(radius, dot(planet / radius, lightDir)), 0).rgb;
 	float fogTransmittance = 1.0;
 #ifdef EXP_HEIGHT_FOG
 	if (ViewAtmosphere::Data[0].flags.y != 0u)
 		fogTransmittance = ExponentialHeightFog::EvaluateHeightFogLightTransmittance(position, FrameBuffer::CameraPosAdjust.xyz, lightDir);
 #endif
-	return color * (directVisibility * fogTransmittance * tr * (rayleigh * PhysSky::Phase::Rayleigh(cosine) + mie * PhysSky::Phase::CornetteShanks(cosine, SharedData::physSkyData.aerosolPhaseG)) + diffuseVisibility * (rayleigh + mie) * ms);
+	return color * (directVisibility * fogTransmittance * tr * (rayleigh * PhysSky::DiskRayleigh(cosine, lightIndex) + mie * PhysSky::SampleDiskPhase(cosine, lightIndex).z) + diffuseVisibility * (rayleigh + mie) * ms);
 }
 
 [numthreads(8, 8, 4)] void main(uint3 coord : SV_DispatchThreadID) {
@@ -172,9 +172,9 @@ float3 AtmosphereLight(float3 position, float3 direction, float3 lightDir, float
 	const SharedData::PhysSkyData sky = SharedData::physSkyData;
 	float3 rayleigh, mie, extinction;
 	PhysSky::GetMediumCoefficients(position, rayleigh, mie, extinction);
-	float3 light = AtmosphereLight(position, direction, sky.sunDir, sky.sunlightColor, rayleigh, mie, atmosphereVisibility, diffuseVisibility);
-	light += AtmosphereLight(position, direction, sky.masserDir, sky.masserColor, rayleigh, mie, atmosphereVisibility, diffuseVisibility);
-	light += AtmosphereLight(position, direction, sky.secundaDir, sky.secundaColor, rayleigh, mie, atmosphereVisibility, diffuseVisibility);
+	float3 light = AtmosphereLight(0u, position, direction, sky.sunDir, sky.sunlightColor, rayleigh, mie, atmosphereVisibility, diffuseVisibility);
+	light += AtmosphereLight(1u, position, direction, sky.masserDir, sky.masserColor, rayleigh, mie, atmosphereVisibility, diffuseVisibility);
+	light += AtmosphereLight(2u, position, direction, sky.secundaDir, sky.secundaColor, rayleigh, mie, atmosphereVisibility, diffuseVisibility);
 	light *= sky.apLumMix;
 	float fogExtinction = 0.0;
 #ifdef EXP_HEIGHT_FOG

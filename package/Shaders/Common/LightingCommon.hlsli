@@ -19,6 +19,7 @@ struct DirectContext
 	float3 lightColor;
 	float detailedShadow;
 	float softShadow;
+	float2 lightDisk;
 #if defined(TRUE_PBR)
 	float backTransmissionVisibility;
 	float3 coatWorldNormal;

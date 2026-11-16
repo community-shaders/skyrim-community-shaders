@@ -422,6 +422,7 @@ public:
 		IsMoon = 1 << 11,
 		ProjectedTextureIsSRGB = 1 << 12,
 		GrassPBR = 1 << 13,
+		IsSecunda = 1 << 14,
 	};
 
 	/** @brief Bitflags describing extra feature-specific properties related to terrain displacement and material models. */

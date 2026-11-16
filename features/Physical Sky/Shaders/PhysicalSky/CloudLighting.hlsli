@@ -11,20 +11,12 @@ float CloudLightProbeJitter(float2 positionMeters)
 // Jendersie and d'Eon, An Approximate Mie Scattering Function (2023).
 float CloudLowPhase(float cosine)
 {
-	const float4 fit = VolumetricCloudBuffer[0].lowCloudPhase;
-	const float mu = clamp(cosine, -1.0, 1.0);
-	const float2 g = fit.xy;
-	const float2 oneMinusG = 1.0 - g;
-	const float2 denominator = oneMinusG * oneMinusG + 2.0 * g * (1.0 - mu);
-	const float2 hg = oneMinusG * (1.0 + g) / (denominator * sqrt(denominator));
-	const float draine = hg.y * (1.0 + fit.z * mu * mu) / (1.0 + fit.z * (1.0 + 2.0 * g.y * g.y) / 3.0);
-	return 0.25 * RCP_PI * lerp(hg.x, draine, fit.w);
+	return SampleDiskPhase(cosine, CloudDiskIndex()).x;
 }
 
 float CloudCirrusPhase(float cosine)
 {
-	const VolumetricCloudData info = VolumetricCloudBuffer[0];
-	return Phase::HGDualLobe(cosine, info.phaseForwardG, info.phaseBackwardG, 0.5);
+	return SampleDiskPhase(cosine, CloudDiskIndex()).y;
 }
 
 struct CloudAmbient
@@ -272,7 +264,7 @@ float3 ShadeCloudLighting(float3 pos, NDFInfo ndf, float extinction, float viewD
 	const float transportExtinction = CloudTransportExtinction(ndf);
 	const float directional = albedo * phase * exp(-opticalDepth);
 	const float3 planetPosition = pos + float3(-FrameBuffer::CameraPosAdjust.xy, info.planetRadius);
-	const float3 sunlight = SampleAtmosphereLightTr(TexTransmittance, TransmittanceSampler, planetPosition, info.dirlightDir) * GetCloudDirectionalLightColor();
+	const float3 sunlight = SampleAtmosphereLightTr(TexTransmittance, TransmittanceSampler, planetPosition, info.dirlightDir, SharedData::physSkyData.diskAngularRadius[CloudDiskIndex()]) * GetCloudDirectionalLightColor();
 	float densityGate = saturate(extinction / info.scatterDensityThreshold);
 	[branch] if (info.scatterDensityPower != 1.0)
 		densityGate = pow(densityGate, info.scatterDensityPower);

@@ -414,13 +414,13 @@ RWTexture2D<float4> RWCloudAmbientPartial : register(u1);
 Texture2D<float4> TexCloudAmbientPartial : register(t90);
 groupshared float4 gCloudAmbientPartial[8][32];
 
-float3 CloudAmbientAtmosphereSource(float3 position, float3 direction, float3 lightDirection, float3 color, float3 rayleigh, float3 mie)
+float3 CloudAmbientAtmosphereSource(uint lightIndex, float3 position, float3 direction, float3 lightDirection, float3 color, float3 rayleigh, float3 mie)
 {
 	if (!any(color > 0.0) || dot(lightDirection, lightDirection) < 0.5)
 		return 0.0;
 	const float cosine = dot(direction, lightDirection);
-	const float3 direct = SampleAtmosphereLightTr(TexTransmittance, TransmittanceSampler, position, lightDirection) *
-	                      (rayleigh * Phase::Rayleigh(cosine) + mie * Phase::CornetteShanks(cosine, SharedData::physSkyData.aerosolPhaseG));
+	const float3 direct = SampleAtmosphereLightTr(TexTransmittance, TransmittanceSampler, position, lightDirection, SharedData::physSkyData.diskAngularRadius[lightIndex]) *
+	                      (rayleigh * DiskRayleigh(cosine, lightIndex) + mie * SampleDiskPhase(cosine, lightIndex).z);
 	const float radius = length(position);
 	const float3 multiple = TexCloudAtmosphereMs.SampleLevel(TransmittanceSampler, MsLutUv(radius, dot(position / radius, lightDirection)), 0).rgb;
 	return color * (direct + (rayleigh + mie) * multiple);
@@ -460,9 +460,9 @@ float3 CloudAmbientAtmosphere(float radius, float boundaryRadius, float3 directi
 		const float3 opticalDepth = extinction * segmentLength;
 		const float3 factor = lerp((1.0 - stepTransmission) / max(extinction, 1e-20),
 			segmentLength * (1.0 - 0.5 * opticalDepth), float3(opticalDepth < 1e-3));
-		float3 source = CloudAmbientAtmosphereSource(position, direction, sky.sunDir, sky.sunlightColor, rayleigh, mie);
-		source += CloudAmbientAtmosphereSource(position, direction, sky.masserDir, sky.masserColor, rayleigh, mie);
-		source += CloudAmbientAtmosphereSource(position, direction, sky.secundaDir, sky.secundaColor, rayleigh, mie);
+		float3 source = CloudAmbientAtmosphereSource(0u, position, direction, sky.sunDir, sky.sunlightColor, rayleigh, mie);
+		source += CloudAmbientAtmosphereSource(1u, position, direction, sky.masserDir, sky.masserColor, rayleigh, mie);
+		source += CloudAmbientAtmosphereSource(2u, position, direction, sky.secundaDir, sky.secundaColor, rayleigh, mie);
 		radiance += transmission * source * factor;
 		transmission *= stepTransmission;
 		start = end;
@@ -912,7 +912,7 @@ float3 sampleExternalSunTransmittance(float3 pos, float3 sun_dir)
 	const float3 pos_planet = pos + float3(-FrameBuffer::CameraPosAdjust.xy, info.planetRadius);
 
 	// Finite scene-shadow coverage would project a camera-following boundary into the cloud layer.
-	return SampleAtmosphereLightTr(TexTransmittance, TransmittanceSampler, pos_planet, sun_dir);
+	return SampleAtmosphereLightTr(TexTransmittance, TransmittanceSampler, pos_planet, sun_dir, SharedData::physSkyData.diskAngularRadius[CloudDiskIndex()]);
 }
 
 float3 CirrusBoundaryRadiance(float3 position, float3 direction, float3 incoming);

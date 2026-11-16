@@ -203,7 +203,7 @@ void EvaluateWetnessLighting(float3 wetnessNormal, DirectContext context, float 
 	WetnessEffects::SurfaceWetnessState wetnessState = WetnessEffects::InitSurfaceWetnessState(wetnessNormal, roughness);
 
 	float3 wetnessSpecular = 0;
-	float3 wetnessThroughput = WetnessEffects::ApplySurfaceWetnessDirectLighting(wetnessState, viewDir, lightDir, lightColor, specularScale, lightingOutput.diffuse, lightingOutput.specular, wetnessSpecular);
+	float3 wetnessThroughput = WetnessEffects::ApplySurfaceWetnessDirectLighting(wetnessState, viewDir, lightDir, lightColor, specularScale, lightingOutput.diffuse, lightingOutput.specular, wetnessSpecular, context.lightDisk);
 #	if defined(TRUE_PBR)
 	if (PBR::IsThinSurfaceMaterial(PBRFlags))
 		lightingOutput.transmission *= wetnessThroughput;

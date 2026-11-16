@@ -410,12 +410,12 @@ float GetWaterProjectedSolidAngle(float cosAngularRadius)
 	return max(Math::PI * (1.0f - cosAngularRadius * cosAngularRadius), EPSILON_DIVISION);
 }
 
-float GetWaterSunDiskCos()
+float GetWaterLightDiskCos()
 {
 	float cosAngularRadius = cos(WATER_SUN_ANGULAR_RADIUS);
 #		if defined(PHYSICAL_SKY)
-	if (SharedData::physSkyData.enabled && SharedData::physSkyData.sunDiskCos > 0.0f)
-		cosAngularRadius = SharedData::physSkyData.sunDiskCos;
+	if (SharedData::physSkyData.enabled)
+		cosAngularRadius = cos(SharedData::physSkyData.diskAngularRadius[SharedData::physSkyData.dirLightDiskIndex]);
 #		endif
 	return cosAngularRadius;
 }
@@ -1078,7 +1078,7 @@ float3 GetSunColor(float3 normal, float3 viewDirection, float3 worldPosition)
 
 	float lightDistribution;
 	if (UsePhysicalWaterReflections()) {
-		lightDistribution = GetWaterDeltaLightDistributionFromCos(normal, viewDirection, SunDir.xyz, GetWaterSunDiskCos()) * GetWaterDirectSpecularScale();
+		lightDistribution = GetWaterDeltaLightDistributionFromCos(normal, viewDirection, SunDir.xyz, GetWaterLightDiskCos()) * GetWaterDirectSpecularScale();
 	} else {
 		float3 reflectionDirection = reflect(viewDirection, normal);
 		lightDistribution = VarAmounts.x > 0 ? exp2(VarAmounts.x * log2(saturate(dot(reflectionDirection, SunDir.xyz)))) : 1.0;
