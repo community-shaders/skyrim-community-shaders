@@ -16,6 +16,7 @@
 #include "PostProcessing.h"
 #include "PostProcessingMode.h"
 #include "Presets/UnifiedPresetCatalog.h"
+#include "ProceduralAurora.h"
 #include "ShaderCache.h"
 #include "SkySync.h"
 #include "State.h"
@@ -340,8 +341,10 @@ Effects11::PerFrame Effects11::GetCommonBufferData()
 	data.StarsAnimationTime = settingManager.GetValue<float>("StarsAnimationTime", "SKY");
 	data.StarsAnimationDensity = settingManager.GetValue<float>("StarsAnimationDensity", "SKY");
 	data.StarsAnimationIntensity = settingManager.GetValue<float>("StarsAnimationIntensity", "SKY");
-	data.AuroraIntensity = settingManager.GetInterpolatedTimeOfDayValue("AuroraBorealisIntensity", "SKY");
-	data.AuroraCurve = settingManager.GetInterpolatedTimeOfDayValue("AuroraBorealisCurve", "SKY");
+	// The procedural aurora passes through unchanged so only its own settings shape it
+	const bool proceduralAurora = globals::features::proceduralAurora.IsActive();
+	data.AuroraIntensity = proceduralAurora ? 1.0f : settingManager.GetInterpolatedTimeOfDayValue("AuroraBorealisIntensity", "SKY");
+	data.AuroraCurve = proceduralAurora ? 1.0f : settingManager.GetInterpolatedTimeOfDayValue("AuroraBorealisCurve", "SKY");
 	data.FixBlackCrush = settingManager.GetValue<bool>("FixBlackCrush", "SKY");
 
 	data.VolumetricRaysDesaturation = settingManager.GetInterpolatedTimeOfDayValue("Desaturation", "GAMEVOLUMETRICRAYS");

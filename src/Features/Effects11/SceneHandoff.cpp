@@ -4,6 +4,7 @@
 #include <nlohmann/json.hpp>
 
 #include "Features/Effects11.h"
+#include "Features/ProceduralAurora.h"
 #include "Globals.h"
 
 namespace E11Handoff
@@ -13,7 +14,8 @@ namespace E11Handoff
 		constexpr std::array<std::string_view, static_cast<size_t>(Feature::Count)> kShortNames{
 			"ImageBasedLighting",
 			"CloudShadows",
-			"ExponentialHeightFog"
+			"ExponentialHeightFog",
+			"ProceduralAurora"
 		};
 
 		/** @brief An Effects 11 setting a feature replaces; an empty key covers its whole category. */
@@ -35,7 +37,16 @@ namespace E11Handoff
 			E11Setting{ Feature::HeightFog, "ENVIRONMENT", "FogCurveMultiplier" },
 			E11Setting{ Feature::HeightFog, "ENVIRONMENT", "FogColorFilter" },
 			E11Setting{ Feature::HeightFog, "ENVIRONMENT", "FogColorFilterAmount" },
+			E11Setting{ Feature::ProceduralAurora, "SKY", "AuroraBorealisIntensity" },
+			E11Setting{ Feature::ProceduralAurora, "SKY", "AuroraBorealisCurve" },
 		};
+
+		/** @brief Whether CS replaces this feature's E11 settings; a disabled procedural aurora leaves the vanilla ribbons on them. */
+		bool ReplacesE11Settings(Feature feature)
+		{
+			return globals::features::effects11.IsHandedOff(feature) &&
+			       (feature != Feature::ProceduralAurora || globals::features::proceduralAurora.IsActive());
+		}
 	}
 
 	std::string_view GetShortName(Feature feature)
@@ -55,9 +66,8 @@ namespace E11Handoff
 
 	bool IsE11SettingHandedOff(std::string_view category, std::string_view key)
 	{
-		const auto& effects11 = globals::features::effects11;
 		return std::ranges::any_of(kE11Settings, [&](const E11Setting& setting) {
-			return setting.category == category && (setting.key.empty() || setting.key == key) && effects11.IsHandedOff(setting.feature);
+			return setting.category == category && (setting.key.empty() || setting.key == key) && ReplacesE11Settings(setting.feature);
 		});
 	}
 

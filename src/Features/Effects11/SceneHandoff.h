@@ -13,6 +13,7 @@ namespace E11Handoff
 		IBL,
 		CloudShadows,
 		HeightFog,
+		ProceduralAurora,
 		Count
 	};
 

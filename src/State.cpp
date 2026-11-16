@@ -30,8 +30,10 @@
 #include "Features/Skylighting.h"
 #include "Features/TerrainBlending.h"
 #include "Features/TerrainHelper.h"
+#include "Features/TreeWind.h"
 #include "Features/Upscaling.h"
 #include "Features/VolumetricShadows.h"
+#include "HiZPyramid.h"
 #include "Menu.h"
 #include "PostProcessingMode.h"
 #include "Presets/UnifiedPresetCatalog.h"
@@ -156,6 +158,11 @@ void State::Draw()
 		if (truePBR.loaded) {
 			ZoneScopedN("TruePBR::SetShaderResources");
 			truePBR.SetShaderResources(context);
+		}
+
+		if (globals::features::treeWind.loaded) {
+			ZoneScopedN("TreeWind::SetShaderResources");
+			globals::features::treeWind.SetShaderResources(context);
 		}
 
 		if (permutationData != permutationDataPrevious) {
@@ -289,14 +296,6 @@ bool State::HandlePostProcessing(RE::RENDER_TARGET a_input, RE::RENDER_TARGET a_
 	return true;
 }
 
-/**
- * @brief Resets per-frame state and publishes frame counter to off-thread readers.
- *
- * Ends the current profiler frame, resets all loaded features, updates the
- * timer if the game is not paused, caches current menu open states, clears
- * shader descriptor tracking, increments and atomically publishes the frame
- * count, and disables reflection and improved snow shaders.
- */
 void State::SetGrassFlags(bool sphereNormal, bool pbr)
 {
 	constexpr auto sphereNormalFlag = static_cast<uint32_t>(ExtraShaderDescriptors::GrassSphereNormal);
@@ -305,6 +304,14 @@ void State::SetGrassFlags(bool sphereNormal, bool pbr)
 	                                        (sphereNormal ? sphereNormalFlag : 0) | (pbr ? pbrFlag : 0);
 }
 
+/**
+ * @brief Resets per-frame state and publishes frame counter to off-thread readers.
+ *
+ * Ends the current profiler frame, resets all loaded features, updates the
+ * timer if the game is not paused, caches current menu open states, clears
+ * shader descriptor tracking, increments and atomically publishes the frame
+ * count, and disables reflection and improved snow shaders.
+ */
 void State::Reset()
 {
 	globals::profiler->EndFrame();
@@ -364,6 +371,7 @@ void State::Setup()
 {
 	globals::features::truePBR.SetupResources();
 	SetupResources();
+	globals::hiZPyramid->SetupResources();
 
 	// Probe typed UAV load support before features set up their resources, so any
 	// gating logic that wants to read the log can run during feature SetupResources.
