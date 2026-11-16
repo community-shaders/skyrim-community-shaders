@@ -2383,9 +2383,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		if defined(CS_SKIN_SHADING)
 	if (skinEnabled) {
 		float wetResponse = saturate(skinData.physicalParams.w * skinWetMask);
-		wetnessGlossinessAlbedo *= wetResponse;
-		wetnessGlossinessSpecular *= wetResponse;
-		wetnessNormal = normalize(lerp(worldNormal.xyz, wetnessNormal, wetResponse));
+		wetnessState.glossinessAlbedo *= wetResponse;
+		wetnessState.glossinessSpecular *= wetResponse;
+		wetnessState.roughness = WetnessEffects::GetSurfaceWetnessRoughness(wetnessState.glossinessSpecular);
+		wetnessState.normal = normalize(lerp(worldNormal.xyz, wetnessState.normal, wetResponse));
 	}
 	if (skinEnabled && (skinWetness > 0.0f)) {
 		wetnessState.glossinessSpecular = saturate(max(wetnessState.glossinessSpecular, skinWetness));

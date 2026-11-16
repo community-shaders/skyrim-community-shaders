@@ -3166,6 +3166,10 @@ namespace Util
 		}
 
 		const auto& metadata = image.GetMetadata();
+		if (metadata.dimension != DirectX::TEX_DIMENSION_TEXTURE2D || metadata.arraySize != 1) {
+			logger::warn("LoadDDSTextureFromFile: Only single 2D DDS textures are supported: {}", filename);
+			return false;
+		}
 		const HRESULT hr = DirectX::CreateShaderResourceView(device, image.GetImages(), image.GetImageCount(), metadata, out_srv);
 		if (FAILED(hr) || !*out_srv) {
 			logger::warn("LoadDDSTextureFromFile: Failed to create SRV, HRESULT: 0x{:08X}", static_cast<uint32_t>(hr));
