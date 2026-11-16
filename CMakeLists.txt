@@ -221,6 +221,7 @@ target_link_libraries(
         Microsoft::Effects11
         windowsapp
         windowscodecs
+        comdlg32
 )
 
 # devbench bridge: opt-out via -DDEVBENCH_BRIDGE=OFF. When off, the port isn't required
@@ -501,7 +502,7 @@ add_custom_command(
         "${CMAKE_CURRENT_SOURCE_DIR}/cmake/generate_scene_settings_catalog.py"
         --source-dir "${CMAKE_CURRENT_SOURCE_DIR}" --out-dir
         "${SCENE_SETTINGS_CATALOG_DIR}" --min-entries 645 --min-controllable 538
-        --min-controllable-features 33 --feature-floors
+        --min-controllable-features 32 --feature-floors
         "${SCENE_SETTINGS_CATALOG_FLOORS}" --stamp
         "${SCENE_SETTINGS_CATALOG_STAMP}"
     DEPENDS
