@@ -204,7 +204,6 @@ private:
 	static constexpr size_t MAX_STRING_LENGTH = 1000;
 	static constexpr size_t MAX_ARRAY_SIZE = 100;
 	static constexpr size_t MAX_OBJECT_SIZE = 100;
-	// Float range, not a tighter cap: photometric settings (cd/m^2) legitimately reach 1e7 and beyond.
 	static constexpr double MAX_NUMERIC_VALUE = std::numeric_limits<float>::max();
 	static constexpr double MIN_NUMERIC_VALUE = std::numeric_limits<float>::lowest();
 };
