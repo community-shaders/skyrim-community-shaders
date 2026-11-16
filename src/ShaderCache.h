@@ -607,6 +607,8 @@ namespace SIE
 			uint32_t descriptor);
 
 		static std::string GetDefinesString(const RE::BSShader& shader, uint32_t descriptor);
+		/// @brief The defines a shader descriptor compiles with, as Util::CompileShader takes them.
+		static std::vector<std::pair<const char*, const char*>> GetDefines(const RE::BSShader& shader, uint32_t descriptor);
 
 		uint64_t GetCachedHitTasks();
 		uint64_t GetCompletedTasks();

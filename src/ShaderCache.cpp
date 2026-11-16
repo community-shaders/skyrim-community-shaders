@@ -3432,6 +3432,20 @@ namespace SIE
 		return SIE::SShaderCache::MergeDefinesString(defines, true);
 	}
 
+	std::vector<std::pair<const char*, const char*>> ShaderCache::GetDefines(const RE::BSShader& shader, uint32_t descriptor)
+	{
+		std::array<D3D_SHADER_MACRO, 64> defines{};
+		SIE::SShaderCache::GetShaderDefines(shader, descriptor, std::span{ defines });
+
+		std::vector<std::pair<const char*, const char*>> result;
+		for (const auto& define : defines) {
+			if (!define.Name)
+				break;
+			result.emplace_back(define.Name, define.Definition);
+		}
+		return result;
+	}
+
 	uint64_t ShaderCache::GetCachedHitTasks()
 	{
 		return compilationSet.cacheHitTasks;

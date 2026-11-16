@@ -32,6 +32,40 @@ namespace CloudShadows
 		float cloudCubeSample = CloudShadowsTexture.SampleLevel(textureSampler, cloudSampleDir, 0).x;
 		return saturate(1.0 - cloudCubeSample * SharedData::cloudShadowsSettings.Opacity);
 	}
+
+#if defined(CLOUD_SHADOWS_CAPTURE)
+	cbuffer CloudShadowsCapture : register(b7)
+	{
+		uint CaptureFace;
+	};
+
+	/** @brief Clip position of an eye-relative direction on cube face CaptureFace, the inverse of DynamicCubemaps' GetCubemapSamplingVector. */
+	float4 GetCaptureClipPosition(float3 direction)
+	{
+		float3 clip;
+		switch (CaptureFace) {
+		case 0:
+			clip = float3(-direction.z, direction.y, direction.x);
+			break;
+		case 1:
+			clip = float3(direction.z, direction.y, -direction.x);
+			break;
+		case 2:
+			clip = float3(direction.x, -direction.z, direction.y);
+			break;
+		case 3:
+			clip = float3(direction.x, direction.z, -direction.y);
+			break;
+		case 4:
+			clip = float3(direction.x, direction.y, direction.z);
+			break;
+		default:
+			clip = float3(-direction.x, direction.y, -direction.z);
+			break;
+		}
+		return clip.xyzz;
+	}
+#endif
 }
 
 #endif
