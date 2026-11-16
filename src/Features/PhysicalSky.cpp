@@ -973,13 +973,16 @@ void PhysicalSky::DrawCloudStatus()
 		ImGui::Text("%s", T(TKEY("enable_volumetric_clouds_tooltip"), "Enable ray-marched volumetric clouds with NDF-based cloud shapes."));
 
 	if (settings.enableVolumetricClouds) {
-		const bool ready = ShadersOK();
+		const bool ready = VolumetricCloudsEnabled() && ShadersOK();
 		ImGui::SameLine();
 		Util::Badge(ready ? T(TKEY("cloud_status_ready"), "Ready") : T(TKEY("cloud_status_unavailable"), "Not Ready"),
 			ready ? Util::Colors::GetSuccess() : Util::Colors::GetWarning());
 		if (ImGui::IsItemHovered())
 			Util::AddTooltip(T(TKEY("cloud_status_tooltip"),
 				"Ready means the cloud shaders and the generated shape noise are available. Not Ready usually means shaders are still compiling or a required cloud texture is missing."));
+		if (volumetricScreenResourcesFailed)
+			Util::Text::WrappedWarning("%s", T(TKEY("cloud_targets_failed"),
+												 "Volumetric clouds are off for this session because their screen targets could not be created, usually from running out of video memory. Restart the game to retry."));
 	}
 
 	if (scene) {
@@ -1809,7 +1812,7 @@ bool PhysicalSky::ShadersOK()
 	// path still verifies every texture before binding.
 	const bool ndfReady = (ndfManager.texHeight && ndfManager.texModeling && ndfManager.generatorProgram && ndfManager.noiseProgram);
 	const bool cirrusMapsReady = !settings.cloudLayer.cirrus.enabled || cirrusMapManager.ShadersReady(settings.cloudLayer.cirrus);
-	bool volumetricShadersOk = !settings.enableVolumetricClouds ||
+	bool volumetricShadersOk = !VolumetricCloudsEnabled() ||
 	                           (vsCloudBoundary && psCloudBoundary && texCloudBoundary && cloudBoundaryCB && cloudBoundaryIndices && cloudBoundaryBlend && cloudBoundaryRasterizer && cloudBoundaryDepth &&
 								   csCloudHeightBounds && csCloudHeightBoundsReduce && texCloudHeightBounds && texCloudHeightBoundsTiles && texCloudWeatherBounds &&
 								   csCloudAmbientLighting && texCloudAmbientLighting &&
@@ -1849,7 +1852,7 @@ void PhysicalSky::Reset()
 	}
 	UpdateCloudWind();
 	UpdateCloudStorm(worldspaceID);
-	const bool volumetricCloudsActive = IsActive() && settings.enableVolumetricClouds && EnsureVolumetricScreenResources();
+	const bool volumetricCloudsActive = IsActive() && VolumetricCloudsEnabled() && EnsureVolumetricScreenResources();
 	voxelCloudManager.Update(settings.voxelClouds, worldspaceID, volumetricCloudsActive);
 	if (volumetricCloudsActive)
 		localNdfManager.Update(settings.cloudMap, ndfTexManager, worldspaceID);
@@ -1984,7 +1987,7 @@ void PhysicalSky::Reset()
 		.cloudOriginalMix = settings.cloudOriginalMix,
 		.silverLiningMix = settings.silverLiningMix,
 		.silverLiningSpread = settings.silverLiningSpread,
-		.enableVolumetricClouds = settings.enableVolumetricClouds ? 1u : 0u,
+		.enableVolumetricClouds = VolumetricCloudsEnabled() ? 1u : 0u,
 		.shadowVolumeRange = settings.shadowVolumeRange / Util::Units::GAME_UNIT_TO_KM,
 		.lowestCloudAltitude = traceBottomKm / Util::Units::GAME_UNIT_TO_KM,
 		.highestCloudAltitude = traceTopKm / Util::Units::GAME_UNIT_TO_KM,
@@ -1996,7 +1999,7 @@ void PhysicalSky::Reset()
 		.lightSkyStatics = settings.lightSkyStatics ? 1u : 0u,
 		.skyStaticsBrightness = settings.skyStaticsBrightness,
 	};
-	lightning.Update(*this, worldspaceID, allGood && !inInterior && !globals::state->isMapMenuOpen && settings.enableVolumetricClouds && csLightningQuery && csLightningComposite && csLightningCubeComposite);
+	lightning.Update(*this, worldspaceID, allGood && !inInterior && !globals::state->isMapMenuOpen && VolumetricCloudsEnabled() && csLightningQuery && csLightningComposite && csLightningCubeComposite);
 	auto lightningColor = sRGBToWorkingGamut({ cbData.lightningColorIntensity.x, cbData.lightningColorIntensity.y, cbData.lightningColorIntensity.z });
 	// Same working-gamut Y and photometric scale as the solar illuminance control.
 	const float lightningY = wideGamut ? lightningColor.x * 0.2722287168f + lightningColor.y * 0.6740817658f + lightningColor.z * 0.0536895174f :
@@ -2097,33 +2100,29 @@ void PhysicalSky::ReflectionsPrepass()
 void PhysicalSky::ClearVolumetricToNeutral()
 {
 	auto context = globals::d3d::context;
-	constexpr FLOAT trClr[4] = { 1.f, 1.f, 1.f, 1.f };
-	constexpr FLOAT lumClr[4] = { 0.f, 0.f, 0.f, 0.f };
 	for (auto* texture : { texVolTr.get(), texVolLowTr.get(), texVolHistoryTr.get(), texVolFilteredTr.get(), texVolCubeTr.get() }) {
 		if (texture)
-			context->ClearUnorderedAccessViewFloat(texture->uav.get(), trClr);
+			context->ClearUnorderedAccessViewFloat(texture->uav.get(), kClearTransmittance);
 	}
 	for (auto* texture : { texVolLum.get(), texVolAux.get(), texVolLowLum.get(), texVolLowAux.get(), texVolHistoryLum.get(), texVolHistoryAux.get(),
 			 texVolFilteredLum.get(), texVolFilteredAux.get(), texVolCubeLum.get(), texLightningMask.get(), texLightningHistory.get(), texLightningChannels.get() }) {
 		if (texture)
-			context->ClearUnorderedAccessViewFloat(texture->uav.get(), lumClr);
+			context->ClearUnorderedAccessViewFloat(texture->uav.get(), kClearLuminance);
 	}
-	if (texShadowVolume) {
-		constexpr FLOAT shadowClear[4] = { 1.f, 0.f, 0.f, 0.f };
-		context->ClearUnorderedAccessViewFloat(texShadowVolume->uav.get(), shadowClear);
-	}
+	if (texShadowVolume)
+		context->ClearUnorderedAccessViewFloat(texShadowVolume->uav.get(), kClearShadowVolume);
 	if (texCloudShadowMean) {
 		ID3D11ShaderResourceView* nullShadowMean = nullptr;
 		context->PSSetShaderResources(69, 1, &nullShadowMean);
 		context->CSSetShaderResources(69, 1, &nullShadowMean);
-		context->ClearUnorderedAccessViewFloat(texCloudShadowMean->uav.get(), lumClr);
+		context->ClearUnorderedAccessViewFloat(texCloudShadowMean->uav.get(), kClearLuminance);
 	}
 	volumetricNeutralCleared = true;
 }
 
 void PhysicalSky::Prepass()
 {
-	if (IsActive() && settings.enableVolumetricClouds) {
+	if (IsActive() && VolumetricCloudsEnabled()) {
 		const bool generatedShape = settings.cloudNoise.procedural || !importedShapeNoiseSrv;
 		const bool generatedAdjustment = settings.cloudNoise.procedural || cloudAdjustmentGenerated;
 		const bool generatedNoise = generatedShape || generatedAdjustment;
@@ -2143,7 +2142,7 @@ void PhysicalSky::Prepass()
 	if (cbData.enabled) {
 		auto* phaseSrv = texDiskPhaseLut->srv.get();
 		globals::d3d::context->PSSetShaderResources(106, 1, &phaseSrv);
-		const bool renderVolumetricClouds = settings.enableVolumetricClouds && ShadersOK();
+		const bool renderVolumetricClouds = VolumetricCloudsEnabled() && ShadersOK();
 
 		if (renderVolumetricClouds) {
 			const auto camera = globals::game::frameBufferCached.GetCameraPosAdjust();
@@ -2401,7 +2400,7 @@ void PhysicalSky::AccumShadow()
 			static_cast<ID3D11ShaderResourceView*>(nullptr),
 			terrainShadows.IsShadowMapReady() ? terrainShadows.texShadowHeight->srv.get() : nullptr,
 			cloudShadows.loaded ? cloudShadows.texCloudShadowLayers[CloudShadows::kMaxCloudLayers - 1]->srv.get() : nullptr,
-			settings.enableVolumetricClouds && texShadowVolume ? texShadowVolume->srv.get() : nullptr,
+			VolumetricCloudsEnabled() && texShadowVolume ? texShadowVolume->srv.get() : nullptr,
 		};
 		auto uav = texApShadow->uav.get();
 

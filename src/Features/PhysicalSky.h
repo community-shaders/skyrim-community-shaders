@@ -48,6 +48,8 @@ struct PhysicalSky final : public Feature
 	bool IsActive() const;
 	/** @brief Whether Physical Sky rendered this frame. */
 	bool IsRendering() const { return loaded && cbData.enabled; }
+	/** @brief Whether volumetric clouds are enabled and their screen targets have not failed to allocate. */
+	bool VolumetricCloudsEnabled() const { return settings.enableVolumetricClouds && !volumetricScreenResourcesFailed; }
 
 	void DrawSettings() override;
 	bool HasDebugSection() const override { return true; }
@@ -93,6 +95,9 @@ struct PhysicalSky final : public Feature
 
 	////////////////////////////////////////////////// Feature Specific Data
 	constexpr static std::wstring_view kShaderDir = L"Data\\Shaders\\PhysicalSky";
+	constexpr static float kClearTransmittance[4] = { 1.f, 1.f, 1.f, 1.f };
+	constexpr static float kClearLuminance[4] = {};
+	constexpr static float kClearShadowVolume[4] = { 1.f, 0.f, 0.f, 0.f };
 	constexpr static uint16_t kTrLutW = 256;
 	constexpr static uint16_t kTrLutH = 64;
 	constexpr static uint16_t kMsLutW = 32;
@@ -626,8 +631,9 @@ struct PhysicalSky final : public Feature
 		kMainViewAndCubemap
 	};
 	void SetupVolumetricResources();
-	/** @brief Creates the full-resolution cloud targets on first use; on failure turns volumetric clouds off. @return True when they exist. */
+	/** @brief Creates the full-resolution cloud targets on first use; on failure disables volumetric clouds for the session. @return True when they exist. */
 	bool EnsureVolumetricScreenResources();
+	bool volumetricScreenResourcesFailed = false;
 	/** @brief Clears every cloud output to white transmittance and black luminance. */
 	void ClearVolumetricToNeutral();
 	bool volumetricNeutralCleared = false;  ///< Disabled-cloud targets already hold neutral values.

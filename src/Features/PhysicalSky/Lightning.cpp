@@ -333,7 +333,7 @@ void SkyLightning::Update(PhysicalSky& physicalSky, const std::string& currentWo
 	// Ownership follows the configured override, not source/shader readiness.
 	// A zero rate or a missing cloud must not bring vanilla lightning back.
 	const bool overrideWeather = physicalSky.IsActive() && intensity > 0.f;
-	available &= overrideWeather && physicalSky.settings.enableVolumetricClouds && candidates && segments && readback && PlayWeatherSound::func.address() != 0;
+	available &= overrideWeather && physicalSky.VolumetricCloudsEnabled() && candidates && segments && readback && PlayWeatherSound::func.address() != 0;
 	if (!available || worldspace != currentWorldspace) {
 		Cancel();
 		channel.clear();

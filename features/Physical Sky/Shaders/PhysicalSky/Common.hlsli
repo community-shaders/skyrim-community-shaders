@@ -590,8 +590,11 @@ Texture2D<float4> TexSkyTail : register(t66);
 	TextureCube<float4> TexVolCubeDepth : register(t67);
 #		endif
 
+	// The screen-space cloud targets only exist while volumetric clouds are enabled.
 	float3 CompositeVolumetricClouds(float3 color, uint2 pxCoord)
 	{
+		if (!SharedData::physSkyData.enableVolumetricClouds)
+			return color;
 		const float4 cloud = TexVolLum[pxCoord];
 		const float3 channel = !ViewAtmosphere::Enabled() && SharedData::physSkyData.lightningColorIntensity.w > 0.0 ? TexLightningChannels[pxCoord].rgb : 0.0;
 		return ColorManagement::SceneColor::ScaleAndAddLinear(color, TexVolTr[pxCoord], cloud.rgb + channel);
@@ -599,6 +602,8 @@ Texture2D<float4> TexSkyTail : register(t66);
 
 	float3 CompositeVolumetricCloudsUvDr(float3 color, float2 screenUvDr, SamplerState samp)
 	{
+		if (!SharedData::physSkyData.enableVolumetricClouds)
+			return color;
 		const float4 cloud = TexVolLum.SampleLevel(samp, screenUvDr, 0);
 		const float3 channel = !ViewAtmosphere::Enabled() && SharedData::physSkyData.lightningColorIntensity.w > 0.0 ? TexLightningChannels.SampleLevel(samp, screenUvDr, 0).rgb : 0.0;
 		return ColorManagement::SceneColor::ScaleAndAddLinear(color, TexVolTr.SampleLevel(samp, screenUvDr, 0), cloud.rgb + channel);
@@ -611,6 +616,8 @@ Texture2D<float4> TexSkyTail : register(t66);
 
 	float3 ApplyVolumetricCloudTransmittanceUv(float3 color, float2 screenUv, SamplerState samp)
 	{
+		if (!SharedData::physSkyData.enableVolumetricClouds)
+			return color;
 		const float3 volTr = TexVolTr.SampleLevel(samp, FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(screenUv), 0);
 		return ColorManagement::SceneColor::ScaleByLinear(color, volTr);
 	}
@@ -680,7 +687,7 @@ Texture2D<float4> TexSkyTail : register(t66);
 		const float4 apSample = SampleAp(viewDir, pxCoord, dist, sampSv);
 		color = color * apSample.w + apSample.xyz;
 
-		if (SharedData::physSkyData.enableVolumetricClouds && !SharedData::PostWaterComposite)
+		if (!SharedData::PostWaterComposite)
 			return CompositeVolumetricClouds(color, pxCoord);
 
 		return color;
@@ -693,7 +700,7 @@ Texture2D<float4> TexSkyTail : register(t66);
 		const float4 apSample = SampleAp(skyCoord, dist, GetApShadow(uint2(screenPos)), sampSv);
 		color = color * apSample.w + apSample.xyz;
 
-		if (SharedData::physSkyData.enableVolumetricClouds && !SharedData::PostWaterComposite)
+		if (!SharedData::PostWaterComposite)
 			return CompositeVolumetricCloudsUv(color, screenUv, sampSv);
 
 		return color;
