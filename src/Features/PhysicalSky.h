@@ -626,6 +626,11 @@ struct PhysicalSky final : public Feature
 		kMainViewAndCubemap
 	};
 	void SetupVolumetricResources();
+	/** @brief Creates the full-resolution cloud targets on first use; on failure turns volumetric clouds off. @return True when they exist. */
+	bool EnsureVolumetricScreenResources();
+	/** @brief Clears every cloud output to white transmittance and black luminance. */
+	void ClearVolumetricToNeutral();
+	bool volumetricNeutralCleared = false;  ///< Disabled-cloud targets already hold neutral values.
 	/** @brief Queues every volumetric cloud shader, including the cloud managers'. */
 	void CompileVolumetricShaders();
 	Util::AsyncShaderSet shaders;  ///< Every Physical Sky shader; compiled off the render thread.
@@ -664,6 +669,8 @@ struct PhysicalSky final : public Feature
 	winrt::com_ptr<ID3D11SamplerState> originalPSGrassSampler = nullptr;
 	winrt::com_ptr<ID3D11SamplerState> originalPSWaterSampler = nullptr;
 	uint32_t originalPSWaterSamplerModifiedBits = 0;
+	bool grassSamplerModified = false;
+	bool waterSamplerModified = false;
 
 	void ModifySky();
 	void RestoreSamplers();

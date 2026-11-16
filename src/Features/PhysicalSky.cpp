@@ -1849,7 +1849,7 @@ void PhysicalSky::Reset()
 	}
 	UpdateCloudWind();
 	UpdateCloudStorm(worldspaceID);
-	const bool volumetricCloudsActive = IsActive() && settings.enableVolumetricClouds;
+	const bool volumetricCloudsActive = IsActive() && settings.enableVolumetricClouds && EnsureVolumetricScreenResources();
 	voxelCloudManager.Update(settings.voxelClouds, worldspaceID, volumetricCloudsActive);
 	if (volumetricCloudsActive)
 		localNdfManager.Update(settings.cloudMap, ndfTexManager, worldspaceID);
@@ -2094,6 +2094,33 @@ void PhysicalSky::ReflectionsPrepass()
 	}
 }
 
+void PhysicalSky::ClearVolumetricToNeutral()
+{
+	auto context = globals::d3d::context;
+	constexpr FLOAT trClr[4] = { 1.f, 1.f, 1.f, 1.f };
+	constexpr FLOAT lumClr[4] = { 0.f, 0.f, 0.f, 0.f };
+	for (auto* texture : { texVolTr.get(), texVolLowTr.get(), texVolHistoryTr.get(), texVolFilteredTr.get(), texVolCubeTr.get() }) {
+		if (texture)
+			context->ClearUnorderedAccessViewFloat(texture->uav.get(), trClr);
+	}
+	for (auto* texture : { texVolLum.get(), texVolAux.get(), texVolLowLum.get(), texVolLowAux.get(), texVolHistoryLum.get(), texVolHistoryAux.get(),
+			 texVolFilteredLum.get(), texVolFilteredAux.get(), texVolCubeLum.get(), texLightningMask.get(), texLightningHistory.get(), texLightningChannels.get() }) {
+		if (texture)
+			context->ClearUnorderedAccessViewFloat(texture->uav.get(), lumClr);
+	}
+	if (texShadowVolume) {
+		constexpr FLOAT shadowClear[4] = { 1.f, 0.f, 0.f, 0.f };
+		context->ClearUnorderedAccessViewFloat(texShadowVolume->uav.get(), shadowClear);
+	}
+	if (texCloudShadowMean) {
+		ID3D11ShaderResourceView* nullShadowMean = nullptr;
+		context->PSSetShaderResources(69, 1, &nullShadowMean);
+		context->CSSetShaderResources(69, 1, &nullShadowMean);
+		context->ClearUnorderedAccessViewFloat(texCloudShadowMean->uav.get(), lumClr);
+	}
+	volumetricNeutralCleared = true;
+}
+
 void PhysicalSky::Prepass()
 {
 	if (IsActive() && settings.enableVolumetricClouds) {
@@ -2200,41 +2227,9 @@ void PhysicalSky::Prepass()
 		// Volumetric clouds
 		if (renderVolumetricClouds && !globals::features::viewAtmosphere.CompositeEnabled()) {
 			RenderVolumetricClouds(VolumetricCloudPass::kMainViewAndCubemap);
-		} else if (!renderVolumetricClouds && texVolTr && texVolLum) {
-			// Clear to neutral when disabled (white transmittance, black luminance)
-			auto context = globals::d3d::context;
-			FLOAT trClr[4] = { 1.f, 1.f, 1.f, 1.f };
-			FLOAT lumClr[4] = { 0.f, 0.f, 0.f, 0.f };
-			context->ClearUnorderedAccessViewFloat(texVolTr->uav.get(), trClr);
-			context->ClearUnorderedAccessViewFloat(texVolLum->uav.get(), lumClr);
-			if (texVolAux)
-				context->ClearUnorderedAccessViewFloat(texVolAux->uav.get(), lumClr);
-			if (texVolLowTr)
-				context->ClearUnorderedAccessViewFloat(texVolLowTr->uav.get(), trClr);
-			if (texVolLowLum)
-				context->ClearUnorderedAccessViewFloat(texVolLowLum->uav.get(), lumClr);
-			if (texVolLowAux)
-				context->ClearUnorderedAccessViewFloat(texVolLowAux->uav.get(), lumClr);
-			if (texVolHistoryTr)
-				context->ClearUnorderedAccessViewFloat(texVolHistoryTr->uav.get(), trClr);
-			if (texVolHistoryLum)
-				context->ClearUnorderedAccessViewFloat(texVolHistoryLum->uav.get(), lumClr);
-			if (texVolHistoryAux)
-				context->ClearUnorderedAccessViewFloat(texVolHistoryAux->uav.get(), lumClr);
-			if (texVolCubeTr)
-				context->ClearUnorderedAccessViewFloat(texVolCubeTr->uav.get(), trClr);
-			if (texVolCubeLum)
-				context->ClearUnorderedAccessViewFloat(texVolCubeLum->uav.get(), lumClr);
-			if (texShadowVolume) {
-				constexpr FLOAT shadowClear[4] = { 1.f, 0.f, 0.f, 0.f };
-				context->ClearUnorderedAccessViewFloat(texShadowVolume->uav.get(), shadowClear);
-			}
-			if (texCloudShadowMean) {
-				ID3D11ShaderResourceView* nullShadowMean = nullptr;
-				context->PSSetShaderResources(69, 1, &nullShadowMean);
-				context->CSSetShaderResources(69, 1, &nullShadowMean);
-				context->ClearUnorderedAccessViewFloat(texCloudShadowMean->uav.get(), lumClr);
-			}
+		} else if (!renderVolumetricClouds) {
+			if (!volumetricNeutralCleared)
+				ClearVolumetricToNeutral();
 			volMainHistoryValid = false;
 			volHistoryFrameDim = {};
 			cloudAmbientValid = false;
@@ -2469,7 +2464,9 @@ void PhysicalSky::RestoreSamplers()
 
 void PhysicalSky::ModifyGrass()
 {
-	if (!cbData.enabled)
+	// Grass samples s7 only for volumetric cloud shadows.
+	grassSamplerModified = cbData.enabled && cbData.enableVolumetricClouds;
+	if (!grassSamplerModified)
 		return;
 	auto context = globals::d3d::context;
 	context->PSGetSamplers(7, 1, originalPSGrassSampler.put());
@@ -2480,7 +2477,7 @@ void PhysicalSky::ModifyGrass()
 
 void PhysicalSky::RestoreGrassSampler()
 {
-	if (!cbData.enabled)
+	if (!std::exchange(grassSamplerModified, false))
 		return;
 	auto context = globals::d3d::context;
 	auto sampler = originalPSGrassSampler.get();
@@ -2490,7 +2487,8 @@ void PhysicalSky::RestoreGrassSampler()
 
 void PhysicalSky::ModifyWater()
 {
-	if (!cbData.enabled)
+	waterSamplerModified = cbData.enabled != 0;
+	if (!waterSamplerModified)
 		return;
 	auto context = globals::d3d::context;
 	context->PSGetSamplers(13, 1, originalPSWaterSampler.put());
@@ -2505,7 +2503,7 @@ void PhysicalSky::ModifyWater()
 
 void PhysicalSky::RestoreWaterSampler()
 {
-	if (!cbData.enabled)
+	if (!std::exchange(waterSamplerModified, false))
 		return;
 	auto context = globals::d3d::context;
 	auto sampler = originalPSWaterSampler.get();

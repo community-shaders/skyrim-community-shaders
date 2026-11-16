@@ -1345,7 +1345,7 @@ PS_OUTPUT main(PS_INPUT input)
 		const float waterDist = length(input.WPosition.xyz);
 		const float4 apSample = PhysSky::SampleAp(waterViewDir, input.HPosition.xy, waterDist, ApSampler);
 		finalColorPreFog = finalColorPreFog * apSample.w + apSample.xyz;
-		if (!SharedData::PostWaterComposite)
+		if (!SharedData::PostWaterComposite && SharedData::physSkyData.enableVolumetricClouds)
 			finalColorPreFog = PhysSky::CompositeVolumetricClouds(finalColorPreFog, input.HPosition.xy);
 	}
 #						endif
@@ -1419,7 +1419,7 @@ PS_OUTPUT main(PS_INPUT input)
 		const float waterDist = length(input.WPosition.xyz);
 		const float4 apSample = PhysSky::SampleAp(waterViewDir, input.HPosition.xy, waterDist, ApSampler);
 		finalColorPreFog = finalColorPreFog * apSample.w + apSample.xyz;
-		if (!SharedData::PostWaterComposite)
+		if (!SharedData::PostWaterComposite && SharedData::physSkyData.enableVolumetricClouds)
 			finalColorPreFog = PhysSky::CompositeVolumetricClouds(finalColorPreFog, input.HPosition.xy);
 	}
 #						endif
