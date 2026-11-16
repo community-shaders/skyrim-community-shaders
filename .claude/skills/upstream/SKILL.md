@@ -82,22 +82,27 @@ pip install -q git+https://github.com/alandtse/hlslkit.git   # buffer-scan only;
     git log --first-parent --since="$cutoff" <remote/branch>
     ```
 
-- Also collect every `(sync)` commit, merges included, because `--first-parent` misses the follow-ups and any sync merge that sits on a side branch a `chore(sync)` merge brought in:
+- Expand every **sync** in the window, because its branch carries fork fixes that `--first-parent` never shows, often untagged and dated before the window. Detect a merge-shaped sync by structure, not message: open-shaders lands syncs as PR merges whose second parent is the sync branch tip, and Bottled's are plain `Merge ... 'upstream/dev'` merges.
 
     ```bash
-    git log --grep='(sync)' --since-as-filter="$cutoff" <remote/branch>
+    [ "$(git merge-base <sha>^1 upstream/dev)" != "$(git merge-base <sha> upstream/dev)" ]   # true = sync
     ```
 
-    A commit can appear in both logs, so deduplicate by SHA before triage. Triage `fix(sync)` and `refactor(sync)` commits like any other commit. `chore(sync): bump ...` version bumps are not relevant to upstream; mark them so.
+    A single-parent commit whose message says it merges upstream is a **squashed** sync. If its subject ends in `(#N)`, recover the branch with `git fetch <remote> pull/N/head:refs/upstream-skill/<remote>-N` and expand that ref, adding `<sha>^1` to the `--not` list below.
 
-- Drop only the `chore(sync): merge upstream` commits themselves from triage, but first extract their **sync residue**: fork-side changes that rode along with the sync. Let `P` be the sync's first parent and `U` the upstream commit it pulled in (the second parent, or for a squash-style sync the commit named in its message). If a squash-style sync names no upstream commit, review the whole sync by hand instead of inferring `U` from commit dates. The expected result is the clean merge of the two, so the residue is what the sync changed beyond it:
+    1. **Ridden-along commits:** `git log --no-merges <sha>^1..<sha> --not upstream/dev`. Triage each like any other commit, whatever its tag. `chore(sync): bump ...` version bumps are not relevant to upstream; mark them so.
+    2. **Merge residue:** for each `M` in `git log --merges --format=%H <sha>^1..<sha> --not upstream/dev` (the sync included), the residue is what `M` changed beyond the clean merge of its parents:
 
-    ```bash
-    tree=$(git merge-tree --write-tree <P> <U>)   # exit 1 = conflicts: review the whole sync by hand; any other non-zero exit is a git error (bad ref?): stop and report it
-    git diff "$tree" <sync-sha>                   # empty = clean sync, nothing to triage
-    ```
+        ```bash
+        out=$(git merge-tree --write-tree --name-only <M>^1 <M>^2); rc=$?   # 1 = conflicts; any other non-zero is a git error: stop and report it
+        git diff "$(echo "$out" | head -1)" <M>                              # empty = clean merge, nothing to triage
+        ```
 
-    A non-empty diff is one candidate (source `sync <sha>`), triaged like any other commit. If `merge-tree` exits 1 (conflicts), the sync was not a clean merge, so its residue cannot be computed: review that merge's whole diff by hand (`git diff <sha>^1 <sha>`), as was needed for `9a0c2a67`. A very large diff means `U` is probably wrong: try the neighbouring upstream commit, else report it and move on.
+        On conflicts, the lines after the tree list the conflicted files. Outside them the diff is still residue; inside them it is mostly conflict markers, so review each by hand with `git diff <M>^2 <M> -- <file>`. A non-empty residue is one candidate (source `sync <M>`).
+
+    3. **Squashed sync without a recoverable branch:** diff `git merge-tree --write-tree <sha>^1 <U>` against `<sha>` as above, where `U` is the upstream commit named in the message (verify with `git merge-base --is-ancestor <U> upstream/dev`). If none is named, review the whole sync by hand, as was needed for `9a0c2a67`; never infer `U` from dates.
+
+    Once expanded, drop the sync commits themselves from triage.
 
 - For a remaining merge commit (more than one parent), use its first-parent diff everywhere below: `git diff <sha>^1 <sha>` instead of `git show <sha>`, because `git show` prints a combined diff that can hide changes. A clean merge port uses `git cherry-pick -m 1 <sha>`.
 - After filtering, group non-merge commits only when they are adjacent in the original first-parent history and touch the same area (e.g. "opt pass" + "opt fixes"). A filtered-out commit or a merge commit always ends a group, so a group's `git diff A^ B` never contains anything that was not selected. Record each group as its exact list of SHAs and triage its **combined** diff.
