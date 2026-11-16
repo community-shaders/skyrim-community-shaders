@@ -279,7 +279,7 @@ namespace Random
 		return float(iqint3(asuint(cell))) * (1.0f / 4294967296.0f);
 	}
 
-	/** @brief Smoothly interpolates cell noise. */
+	/** @brief Interpolates cell noise with cubic smoothing weights. */
 	float ValueNoise2D(float2 p)
 	{
 		int2 cell = int2(floor(p));
@@ -290,7 +290,7 @@ namespace Random
 		return lerp(lower, upper, fr.y);
 	}
 
-	// Skip cells whose closest point cannot beat the nearest feature found so far.
+	// Skip cells whose bounds cannot contain a closer feature.
 	void UpdateNearestVoronoiCell2D(inout uint seed, inout float distanceSquared, inout float2 offset, int2 cell, float2 gridPos)
 	{
 		float2 cellMin = float2(cell);

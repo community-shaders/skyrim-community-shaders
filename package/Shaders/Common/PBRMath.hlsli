@@ -118,7 +118,7 @@ namespace PBR
 		float NdotV = dot(N, V);
 		float3 halfVector = V + L;
 		float halfVectorLengthSquared = dot(halfVector, halfVector);
-		// Back-facing or degenerate half vectors can make the GGX distribution singular.
+		// Reflection requires both directions above the surface and a defined half vector.
 		if (NdotL <= 0.0 || NdotV <= 0.0 || halfVectorLengthSquared <= 1e-8)
 			return 0.0;
 		float3 H = halfVector * rsqrt(halfVectorLengthSquared);

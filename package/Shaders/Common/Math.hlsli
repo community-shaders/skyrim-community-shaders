@@ -30,7 +30,7 @@ namespace Math
 	static const float TAU = PI * 2.0f;                          // PI * 2
 	static const float INV_PI = 1.0f / PI;                       // 1 / PI
 
-	/** @brief Interpolates radians along the shortest arc and wraps to [0, TAU). */
+	/** @brief Interpolates angles in radians along the shortest arc, wrapping to [0, TAU). */
 	float LerpAngle(float angle, float target, float weight)
 	{
 		float difference = target - angle;

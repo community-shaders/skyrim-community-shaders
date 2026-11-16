@@ -155,7 +155,7 @@ namespace GrassCollision
 #endif
 	}
 
-	/** @param nearFactor Camera-distance fade for the collision response. */
+	/** @param nearFactor Collision response fade based on camera distance. */
 	void GetDisplacedPosition(float3 worldPosition, float3 worldPositionCentre, float alpha, float nearFactor, bool smoothRecovery, float recoveryRate, out float3 displacement, out float3 previousDisplacement)
 	{
 		if (alpha > 0.0 && nearFactor > 0.0) {

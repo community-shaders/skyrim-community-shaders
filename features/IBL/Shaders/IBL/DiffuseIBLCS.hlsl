@@ -70,7 +70,7 @@ groupshared sh2 sharedB[TOTAL_SAMPLES];
 		IBLTexture[int2(1, 0)] = sharedG[0];
 		IBLTexture[int2(2, 0)] = sharedB[0];
 
-		// The fourth texel caches the DALC-to-IBL ratio for later lighting passes.
+		// Texel 3 caches the DALC-to-IBL ratio for later lighting passes.
 		float3 dalcReference = Color::Ambient(SharedData::GetAmbient(0.0f));
 		float3 iblReference = float3(
 								  SphericalHarmonics::SHHallucinateZH3Irradiance(sharedR[0], 0.0f),

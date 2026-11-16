@@ -51,7 +51,7 @@ namespace ImageBasedLighting
 	// Ratio / settings helpers
 	// ============================================================================
 
-	/// Cached DALC-to-IBL brightness and colour ratio.
+	/// Read the cached DALC-to-IBL matching ratio.
 	float3 GetCachedIBLRatio()
 	{
 		return EnvIBLTexture.Load(int3(3, 0, 0)).xyz;
