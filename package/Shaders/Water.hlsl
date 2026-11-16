@@ -415,7 +415,7 @@ float GetWaterLightDiskCos()
 	float cosAngularRadius = cos(WATER_SUN_ANGULAR_RADIUS);
 #		if defined(PHYSICAL_SKY)
 	if (SharedData::physSkyData.enabled)
-		cosAngularRadius = cos(SharedData::physSkyData.diskAngularRadius[SharedData::physSkyData.dirLightDiskIndex]);
+		cosAngularRadius = cos(SharedData::physSkyData.diskAngularRadius.w);
 #		endif
 	return cosAngularRadius;
 }

@@ -432,6 +432,13 @@ Texture2D<float4> TexSkyTail : register(t66);
 		return tr;
 	}
 
+	/// Transmittance towards the body lighting the scene, not along the shadow direction, which swings between bodies and holds above the horizon
+	float3 SampleDirLightTr(SamplerState samp)
+	{
+		const float3 bodyDir = SharedData::physSkyData.dirLightBodyDir;
+		return SampleTr(dot(bodyDir, bodyDir) > 1e-6 ? bodyDir : normalize(SharedData::DirLightDirection.xyz), samp);
+	}
+
 	float3 SampleViewCelestialTr(float3 direction, SamplerState samp)
 	{
 		if (ViewAtmosphere::ReflectionEnabled()) {
@@ -464,12 +471,12 @@ Texture2D<float4> TexSkyTail : register(t66);
 		trAtmos = lerp(1, trAtmos, data.trMix);
 		dirLightColor *= trAtmos;
 
-		float u = dot(viewDir, dirLightDir);
+		const float4 discPhase = SampleLightDiscPhase(viewDir, data.dirLightDisc, data.dirLightDiskIndex);
 		float phaseCloud = Remap(
 							   baseColor.a,
 							   data.silverLiningSpread > 0 ? data.silverLiningSpread : 0,
 							   data.silverLiningSpread < 0 ? 1 + data.silverLiningSpread : 1,
-							   lerp(0.25 * RCP_PI, SampleDiskPhase(u, data.dirLightDiskIndex).x, data.silverLiningMix),
+							   lerp(0.25 * RCP_PI, discPhase.x, data.silverLiningMix),
 							   0.25 * RCP_PI) *
 		                   2 * Math::PI * data.cloudRelightMix;
 
@@ -504,7 +511,7 @@ Texture2D<float4> TexSkyTail : register(t66);
 			float directVisibility = 1.0 - saturate(dot(rayShadow, 0.25));
 
 			float cloudOpticalDepth = -log(max(1.0 - baseColor.a, 1e-3));
-			float forwardMiePhase = max(0.0, SampleDiskPhase(u, data.dirLightDiskIndex).w - 1.45 * 0.25 * RCP_PI);
+			float forwardMiePhase = max(0.0, discPhase.w - DISK_PHASE_ISOTROPIC.w);
 			float silverEdgeMask = smoothstep(0.08, 0.35, baseColor.a) * (1.0 - smoothstep(0.45, 0.85, baseColor.a));
 			float silverSingleScatter = 1.35 * silverEdgeMask * (1.0 - exp(-cloudOpticalDepth)) * exp(-0.5 * cloudOpticalDepth);
 			float directSingleScatter = 0.9 * cloudOpticalDepth * exp(-0.75 * cloudOpticalDepth);

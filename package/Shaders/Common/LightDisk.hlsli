@@ -11,7 +11,7 @@ namespace LightDisk
 	{
 #if defined(PHYSICAL_SKY)
 		if (SharedData::physSkyData.enabled) {
-			const float radius = SharedData::physSkyData.diskAngularRadius[SharedData::physSkyData.dirLightDiskIndex];
+			const float radius = SharedData::physSkyData.diskAngularRadius.w;
 			return float2(sin(radius), cos(radius));
 		}
 #endif

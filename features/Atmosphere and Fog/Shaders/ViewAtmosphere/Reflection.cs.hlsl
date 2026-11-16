@@ -194,7 +194,7 @@ float3 FogSource(float3 position, float3 direction, float visibility, float phas
 	}
 	const float3 lightDirection = PhysSky::GetCloudShadowLightDirection();
 	const float3 lightColor = SharedData::physSkyData.volCloudUseSun != 0u ? SharedData::physSkyData.sunlightColor : SharedData::DirLightColor.xyz;
-	const float3 tr = PhysSky::SampleAtmosphereLightTr(PhysSky::TexTrLut, LinearSampler, PhysSky::GetMediumPlanetPosition(position), lightDirection, SharedData::physSkyData.diskAngularRadius[SharedData::physSkyData.dirLightDiskIndex]);
+	const float3 tr = PhysSky::SampleAtmosphereLightTr(PhysSky::TexTrLut, LinearSampler, PhysSky::GetMediumPlanetPosition(position), lightDirection, SharedData::physSkyData.diskAngularRadius.w);
 	const float fogTr = ExponentialHeightFog::EvaluateHeightFogLightTransmittance(position, FrameBuffer::CameraPosAdjust.xyz, lightDirection);
 	const float3 direct = Color::DirectionalLight(lightColor) * tr * fogTr * visibility * phase;
 	if (!volumetric)

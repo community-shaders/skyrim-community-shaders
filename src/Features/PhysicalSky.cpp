@@ -2041,7 +2041,8 @@ void PhysicalSky::Reset()
 	cbData.diskAngularRadius = {
 		radius(settings.sunDiskRad, DirectX::XMConvertToRadians(0.53f), DirectX::XMConvertToRadians(10.f)),
 		radius(settings.masserDiskRad, DirectX::XMConvertToRadians(8.f), DirectX::XMConvertToRadians(30.f)),
-		radius(settings.secundaDiskRad, DirectX::XMConvertToRadians(4.f), DirectX::XMConvertToRadians(30.f))
+		radius(settings.secundaDiskRad, DirectX::XMConvertToRadians(4.f), DirectX::XMConvertToRadians(30.f)),
+		0.f  // the directional light's, blended below
 	};
 	cbData.diskBillboardScale = float4(1.f);
 	if (const auto* sky = globals::game::sky; sky && sky->root) {
@@ -2057,9 +2058,14 @@ void PhysicalSky::Reset()
 			cbData.diskBillboardScale.z = std::tan(cbData.diskAngularRadius.z) / secundaTan;
 	}
 	cbData.sunDiskCos = settings.proceduralSun ? std::cos(cbData.diskAngularRadius.x) : 0.f;
-	const auto caster = skySync.active ? skySync.shadowFader.target : SkySync::Caster::Sun;
-	cbData.dirLightDiskIndex = caster == SkySync::Caster::Masser ? 1u : caster == SkySync::Caster::Secunda ? 2u :
-	                                                                                                         0u;
+	// Caster order matches the disc slots and phase LUT rows: Sun, Masser, Secunda
+	const auto blend = skySync.GetDirectionalLightBlend();
+	const std::array bodyRadii{ cbData.diskAngularRadius.x, cbData.diskAngularRadius.y, cbData.diskAngularRadius.z };
+	cbData.diskAngularRadius.w = std::lerp(bodyRadii[static_cast<size_t>(blend.source)], bodyRadii[static_cast<size_t>(blend.target)], blend.targetWeight);
+	cbData.dirLightBodyDir = { blend.direction.x, blend.direction.y, blend.direction.z };
+	cbData.dirLightDiskIndex = static_cast<uint>(blend.discBody);
+	const auto discDir = skySync.GetCelestialDirection(globals::game::sky, blend.discBody);
+	cbData.dirLightDisc = { discDir.x, discDir.y, discDir.z, blend.discWeight };
 	const float solarLimit = std::min(horizonDip + localUpRange + cbData.diskAngularRadius.x, RE::NI_PI * 0.5f);
 	cbData.volCloudUseSun = sunDir.z > -std::sin(solarLimit) ? 1u : 0u;
 }
