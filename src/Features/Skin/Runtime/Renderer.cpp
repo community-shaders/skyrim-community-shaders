@@ -107,6 +107,40 @@ SkinMaterials::Material Skin::BaseMaterial(const std::string& a_key)
 	return entry->definition.status == Status::Valid ? entry->definition.material : SkinMaterials::Material{};
 }
 
+bool Skin::HasMaterialOverride(const std::string& a_key)
+{
+	if (a_key.empty())
+		return false;
+	if (editor.open && a_key == editor.draftKey)
+		return !editor.material.Empty();
+	const auto entry = FindMaterial(a_key);
+	return entry->definition.status == Status::Valid && !entry->definition.material.Empty();
+}
+
+bool Skin::HasOverride(const std::string& a_key, const SkinCharacters::Customization* a_customization)
+{
+	if (HasMaterialOverride(a_key))
+		return true;
+	if (!a_customization || a_key.empty())
+		return false;
+	const auto found = a_customization->materials.find(a_key);
+	return found != a_customization->materials.end() && !found->second.Empty();
+}
+
+std::string Skin::ResolveActiveKey(const std::string& a_diffuseKey, const std::string& a_normalKey, const SkinCharacters::Customization* a_customization)
+{
+	if (!a_normalKey.empty() && HasOverride(a_normalKey, a_customization))
+		return a_normalKey;
+	if (!a_diffuseKey.empty() && HasOverride(a_diffuseKey, a_customization))
+		return a_diffuseKey;
+	return !a_diffuseKey.empty() ? a_diffuseKey : a_normalKey;
+}
+
+const SkinCharacters::Customization* Skin::EditorCustomization() const
+{
+	return editor.draftTarget ? &editor.character : nullptr;
+}
+
 const SkinCharacters::Customization* Skin::FindCustomization(const std::string& a_target, const SkinCharacters::State& a_state) const
 {
 	if (a_target.empty())
@@ -136,19 +170,22 @@ Skin::GeometryEntry& Skin::Observe(RE::BSGeometry* a_geometry, RE::BSShaderPrope
 	auto* material = static_cast<RE::BSLightingShaderMaterialBase*>(a_property->material);
 	auto* actor = SkinSurfaces::Owner(a_geometry);
 	const auto actorHandle = actor ? actor->GetHandle() : RE::ActorHandle{};
-	// The material key follows the bound diffuse, so any texture replacement re-identifies the surface.
 	if (!entry.geometry || entry.property.get() != a_property || entry.materialPointer != material ||
 		entry.textureSet != material->textureSet.get() || entry.diffuse != material->diffuseTexture.get() ||
-		entry.actor != actorHandle || entry.parent != a_geometry->parent) {
+		entry.normal != material->normalTexture.get() || entry.actor != actorHandle || entry.parent != a_geometry->parent) {
 		entry.geometry = RE::NiPointer(a_geometry);
 		entry.property = RE::NiPointer(a_property);
 		entry.materialPointer = material;
 		entry.textureSet = material->textureSet.get();
 		entry.diffuse = material->diffuseTexture.get();
+		entry.normal = material->normalTexture.get();
 		entry.parent = a_geometry->parent;
 		entry.actor = actorHandle;
 		entry.target = SkinCharacters::TargetOf(actor).key;
-		entry.key = SkinSurfaces::Key(a_property);
+		const auto keys = SkinSurfaces::TextureKeys(a_property);
+		entry.diffuseKey = keys.diffuse;
+		entry.normalKey = keys.normal;
+		entry.activeKey.clear();
 		entry.head = SkinSurfaces::IsHead(a_geometry);
 		entry.thickness = SkinSurfaces::HasThickness(a_property);
 		entry.ready = false;
@@ -161,10 +198,18 @@ void Skin::Prepare(GeometryEntry& a_entry, const SkinCharacters::State& a_state)
 	a_entry.diagnostic.clear();
 	a_entry.textures = {};
 	try {
-		const auto source = FindMaterial(a_entry.key);
-		if (source->definition.status == Status::Invalid)
-			a_entry.diagnostic = source->path + ": " + source->definition.diagnostic + " ";
-		a_entry.effective = Resolve(Compose(a_entry.key, FindCustomization(a_entry.target, a_state), Layer::CharacterMaterial), settings.DefaultProfile);
+		const auto* customization = FindCustomization(a_entry.target, a_state);
+		a_entry.activeKey = ResolveActiveKey(a_entry.diffuseKey, a_entry.normalKey, customization);
+		for (const auto& candidate : { a_entry.normalKey, a_entry.diffuseKey }) {
+			if (candidate.empty())
+				continue;
+			const auto source = FindMaterial(candidate);
+			if (source->definition.status == Status::Invalid)
+				a_entry.diagnostic += source->path + ": " + source->definition.diagnostic + " ";
+			if (candidate == a_entry.diffuseKey && a_entry.diffuseKey == a_entry.normalKey)
+				break;
+		}
+		a_entry.effective = Resolve(Compose(a_entry.activeKey, customization, Layer::CharacterMaterial), settings.DefaultProfile);
 		for (size_t i = 0; i < a_entry.textures.size(); ++i) {
 			try {
 				a_entry.textures[i] = RequestTexture(NormalizeTexturePath(a_entry.effective.textures[i]));
@@ -294,7 +339,9 @@ void Skin::BSLightingShader_SetupGeometry(RE::BSRenderPass* a_pass)
 					float(entry.textures[2] && entry.textures[2]->resource.reconstructNormal), float(entry.thickness) };
 				if (!pendingViews[2])
 					data.profile.skinDetailParams.w = 0;
-				if (editor.open && editor.previewWetness >= 0 && ((!entry.key.empty() && entry.key == editor.draftKey) || (!entry.target.empty() && entry.target == editor.draftTarget.key)))
+				if (editor.open && editor.previewWetness >= 0 &&
+					((!editor.draftKey.empty() && (entry.activeKey == editor.draftKey || entry.diffuseKey == editor.draftKey || entry.normalKey == editor.draftKey)) ||
+						(!entry.target.empty() && entry.target == editor.draftTarget.key)))
 					data.skinPerGeometry = { editor.previewWetness, 0, 0, 0 };
 			}
 		}
