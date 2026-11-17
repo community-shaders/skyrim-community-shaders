@@ -1335,6 +1335,7 @@ void Menu::ProcessInputEventQueue()
 						combo.push_back(InputCombo::Keyboard(key));
 
 						h.action(combo);
+						globals::state->CheckCoreSettingsChanged();  // capture bypasses the ImGui edit flag the draw loop watches
 						handled = true;
 						break;
 					}
