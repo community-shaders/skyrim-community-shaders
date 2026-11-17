@@ -27,8 +27,8 @@ void TerrainHeightMap::ParseHeightmapPath(std::filesystem::path p, bool xlodgen_
 				metadata.worldspace = splitstr[0];
 				metadata.pos0.x = std::stoi(splitstr[3]) * 4096.f;
 				metadata.pos1.y = std::stoi(splitstr[4]) * 4096.f;
-				metadata.pos1.x = (std::stoi(splitstr[5]) + 1) * 4096.f;
-				metadata.pos0.y = (std::stoi(splitstr[6]) + 1) * 4096.f;
+				metadata.pos1.x = (static_cast<float>(std::stoi(splitstr[5])) + 1.f) * 4096.f;
+				metadata.pos0.y = (static_cast<float>(std::stoi(splitstr[6])) + 1.f) * 4096.f;
 				metadata.pos0.z = -32767 * 8.f;
 				metadata.pos1.z = 32767 * 8.f;
 				metadata.zRange.x = std::stoi(splitstr[7]) * 8.f;
@@ -37,8 +37,8 @@ void TerrainHeightMap::ParseHeightmapPath(std::filesystem::path p, bool xlodgen_
 				metadata.worldspace = splitstr[0];
 				metadata.pos0.x = std::stoi(splitstr[2]) * 4096.f;
 				metadata.pos1.y = std::stoi(splitstr[3]) * 4096.f;
-				metadata.pos1.x = (std::stoi(splitstr[4]) + 1) * 4096.f;
-				metadata.pos0.y = (std::stoi(splitstr[5]) + 1) * 4096.f;
+				metadata.pos1.x = (static_cast<float>(std::stoi(splitstr[4])) + 1.f) * 4096.f;
+				metadata.pos0.y = (static_cast<float>(std::stoi(splitstr[5])) + 1.f) * 4096.f;
 				metadata.pos0.z = std::stoi(splitstr[6]) * 8.f;
 				metadata.pos1.z = std::stoi(splitstr[7]) * 8.f;
 				metadata.zRange.x = std::stoi(splitstr[8]) * 8.f;
@@ -46,6 +46,12 @@ void TerrainHeightMap::ParseHeightmapPath(std::filesystem::path p, bool xlodgen_
 			}
 		} catch (std::exception& e) {
 			logger::debug("Failed to parse {}. Error: {}", filename.string(), e.what());
+			return;
+		}
+
+		if (!(metadata.pos0.x < metadata.pos1.x) || !(metadata.pos1.y < metadata.pos0.y) ||
+			metadata.pos0.z == metadata.pos1.z || metadata.zRange.x == metadata.zRange.y) {
+			logger::warn("Skipping height map {}: invalid coordinate spans", filename.string());
 			return;
 		}
 
@@ -134,29 +140,36 @@ void TerrainHeightMap::LoadForCurrentWorldspace()
 			return;
 		}
 
-		ID3D11Resource* pResource = nullptr;
 		try {
-			DX::ThrowIfFailed(CreateTexture(device,
-				image.GetImages(), image.GetImageCount(),
-				image.GetMetadata(), &pResource));
+			const auto& metadata = image.GetMetadata();
+			UINT formatSupport = 0;
+			DX::ThrowIfFailed(device->CheckFormatSupport(metadata.format, &formatSupport));
+			constexpr UINT requiredSupport = D3D11_FORMAT_SUPPORT_TEXTURE2D | D3D11_FORMAT_SUPPORT_SHADER_SAMPLE;
+			if (metadata.dimension != DirectX::TEX_DIMENSION_TEXTURE2D || metadata.arraySize != 1 ||
+				(formatSupport & requiredSupport) != requiredSupport) {
+				logger::error("Unsupported height map {}: expected a sampleable single-slice 2D texture", target_heightmap.filename);
+				return;
+			}
+
+			winrt::com_ptr<ID3D11Resource> resource;
+			DX::ThrowIfFailed(CreateTexture(device, image.GetImages(), image.GetImageCount(), metadata, resource.put()));
+			auto texture = std::make_unique<Texture2D>(resource.as<ID3D11Texture2D>().detach(), "TerrainHeightMap::HeightMap");
+
+			D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {
+				.Format = texture->desc.Format,
+				.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D,
+				.Texture2D = {
+					.MostDetailedMip = 0,
+					.MipLevels = 1 }
+			};
+			texture->CreateSRV(srvDesc);
+
+			texHeightMap = std::move(texture);
+			cachedHeightmap = &target_heightmap;
 		} catch (const DX::com_exception& e) {
 			logger::error("{}", e.what());
 			return;
 		}
-
-		auto texture = std::make_unique<Texture2D>(reinterpret_cast<ID3D11Texture2D*>(pResource), "TerrainHeightMap::HeightMap");
-
-		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {
-			.Format = texture->desc.Format,
-			.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D,
-			.Texture2D = {
-				.MostDetailedMip = 0,
-				.MipLevels = 1 }
-		};
-		texture->CreateSRV(srvDesc);
-
-		texHeightMap = std::move(texture);
-		cachedHeightmap = &heightmaps[worldspace_name];
 	}
 
 	++loadGeneration;
