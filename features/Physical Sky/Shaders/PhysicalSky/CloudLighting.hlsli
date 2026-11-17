@@ -277,7 +277,12 @@ float3 ShadeCloudLighting(float3 pos, NDFInfo ndf, float extinction, float viewD
 
 float3 ShadeCloudLighting(float3 pos, NDFInfo ndf, float extinction, float viewDepth, float viewOpacity, float phase, float opticalDepth, float multipleScattering)
 {
-	return ShadeCloudLighting(pos, ndf, extinction, viewDepth, viewOpacity, phase, opticalDepth, multipleScattering, UpperSunTransmission(pos));
+	float sunTransmission = UpperSunTransmission(pos);
+#ifdef CLOUD_AP_SHADOW
+	// Cloud-space z is relative to bottomZ; the heightmap is in world z.
+	sunTransmission *= TerrainShadows::GetTerrainShadow(pos + float3(0, 0, VolumetricCloudBuffer[0].bottomZ), TransmittanceSampler);
+#endif
+	return ShadeCloudLighting(pos, ndf, extinction, viewDepth, viewOpacity, phase, opticalDepth, multipleScattering, sunTransmission);
 }
 
 float3 ShadeCloudLighting(float3 pos, NDFInfo ndf, float extinction, float viewDepth, float viewOpacity, float phase, float opticalDepth)
