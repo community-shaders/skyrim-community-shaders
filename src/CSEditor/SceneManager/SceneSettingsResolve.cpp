@@ -5,6 +5,7 @@
 #include "SceneSettingsInternal.h"
 #include "State.h"
 #include "Utils/Game.h"
+#include "Utils/UI.h"
 
 #include <algorithm>
 #include <cmath>
@@ -953,6 +954,10 @@ const json* SceneSettingsManager::GetFeatureBaseSnapshot(const std::string& feat
 {
 	if (auto snapshotIt = featureBaseSnapshots.find(featureShortName); snapshotIt != featureBaseSnapshots.end())
 		return &snapshotIt->second;
+
+	// Saving now would capture guard-shown defaults and cache them as the base.
+	if (Util::AreSettingsShowingDefaults())
+		return nullptr;
 
 	auto* feature = Feature::FindFeatureByShortName(featureShortName);
 	json snapshot;

@@ -389,6 +389,15 @@ namespace Util
 		bool m_locked;
 	};
 
+	/** @brief Number of live DefaultsWhileActive scopes, across all settings types. */
+	inline int g_activeDefaultsScopes = 0;
+
+	/** @brief True while some feature's settings show defaults, so saving them would not yield the saved values. */
+	inline bool AreSettingsShowingDefaults()
+	{
+		return g_activeDefaultsScopes > 0;
+	}
+
 	/** @brief While active, shows a default-constructed copy in place of the saved settings until the scope ends. */
 	template <class Settings>
 	class DefaultsWhileActive
@@ -397,13 +406,17 @@ namespace Util
 		DefaultsWhileActive(Settings& a_settings, bool a_active) :
 			m_settings(a_settings), m_active(a_active)
 		{
-			if (m_active)
+			if (m_active) {
 				std::swap(m_settings, m_saved);
+				++g_activeDefaultsScopes;
+			}
 		}
 		~DefaultsWhileActive()
 		{
-			if (m_active)
+			if (m_active) {
+				--g_activeDefaultsScopes;
 				std::swap(m_settings, m_saved);
+			}
 		}
 
 		DefaultsWhileActive(const DefaultsWhileActive&) = delete;
