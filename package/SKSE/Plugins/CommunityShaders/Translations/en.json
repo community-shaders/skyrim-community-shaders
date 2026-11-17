@@ -681,7 +681,6 @@
     "cs_editor.scene_page_copy_reject_catalog": "Not a setting a scene can override.",
     "cs_editor.scene_page_copy_reject_companion": "Another part of the same control cannot be copied.",
     "cs_editor.scene_page_copy_reject_layer": "This page cannot hold this setting.",
-    "cs_editor.scene_page_copy_reject_overwrite": "A mod override already holds this setting.",
     "cs_editor.scene_page_copy_reject_value": "The value is not valid here.",
     "cs_editor.scene_page_copy_result": "{} copied, {} overwritten, {} skipped",
     "cs_editor.scene_page_copy_title": "Copy settings",

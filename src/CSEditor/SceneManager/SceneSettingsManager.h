@@ -624,7 +624,6 @@ public:
 		NotBlendable,            ///< Exists, but cannot blend, so a time-of-day or weather layer cannot hold it.
 		NotAllowedInLayer,       ///< Feature not loaded, or the destination layer forbids the setting.
 		ValueRejected,           ///< The source value is not a legal value at the destination.
-		BlockedByOverwrite,      ///< An unpaused mod-authored overwrite holds the destination address.
 		GroupCompanionRejected,  ///< This row is fine; a sibling in the same control is not.
 	};
 
