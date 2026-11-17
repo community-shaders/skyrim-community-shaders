@@ -403,7 +403,7 @@ Changing only the preview does not invalidate cloud temporal history. Branch
 previews have no meaning for imported pairs and are zero (gains are one).
 
 See [resource fallback](volumetric-cloud-texture-resources.md#optional-resource-fallback)
-for the zero-DDS and Top/Bottom-only distribution paths.
+for required cloud LUTs and optional noise inputs.
 
 ## Validation limits
 

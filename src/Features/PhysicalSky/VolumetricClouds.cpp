@@ -8,9 +8,6 @@
 #include "State.h"
 #include "Util.h"
 
-#include <DDSTextureLoader.h>
-#include <DirectXTex.h>
-
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -239,93 +236,6 @@ namespace
 		return desc.ViewDimension == D3D11_SRV_DIMENSION_TEXTURE3D && NdfManager::IsLinearFormat(desc.Format, 4);
 	}
 
-	bool LoadProfileImage(const wchar_t* path, DirectX::ScratchImage& image, bool* hasGreen = nullptr)
-	{
-		DirectX::ScratchImage source;
-		if (FAILED(DirectX::LoadFromDDSFile(path, DirectX::DDS_FLAGS_NONE, nullptr, source)))
-			return false;
-		const auto* base = source.GetImage(0, 0, 0);
-		if (!base || source.GetMetadata().dimension != DirectX::TEX_DIMENSION_TEXTURE2D || source.GetMetadata().arraySize != 1)
-			return false;
-		if (!NdfManager::IsLinearFormat(base->format, 1))
-			return false;
-		if (hasGreen)
-			*hasGreen = NdfManager::IsLinearFormat(base->format, 2);
-		if (base->format == DXGI_FORMAT_R32G32B32A32_FLOAT) {
-			image = std::move(source);
-			return true;
-		}
-		if (DirectX::IsCompressed(base->format))
-			return SUCCEEDED(DirectX::Decompress(*base, DXGI_FORMAT_R32G32B32A32_FLOAT, image));
-		return SUCCEEDED(DirectX::Convert(*base, DXGI_FORMAT_R32G32B32A32_FLOAT, DirectX::TEX_FILTER_DEFAULT, 0.f, image));
-	}
-
-	float ProfileSample(const DirectX::Image& image, float u, float v, uint32_t channel = 0)
-	{
-		const float x = u * static_cast<float>(image.width) - 0.5f;
-		const float y = v * static_cast<float>(image.height) - 0.5f;
-		const int ix = static_cast<int>(std::floor(x));
-		const int iy = static_cast<int>(std::floor(y));
-		const auto sample = [&](int px, int py) {
-			px = std::clamp(px, 0, static_cast<int>(image.width) - 1);
-			py = std::clamp(py, 0, static_cast<int>(image.height) - 1);
-			return reinterpret_cast<const float*>(image.pixels + py * image.rowPitch)[px * 4 + channel];
-		};
-		return std::lerp(std::lerp(sample(ix, iy), sample(ix + 1, iy), x - ix),
-			std::lerp(sample(ix, iy + 1), sample(ix + 1, iy + 1), x - ix), y - iy);
-	}
-
-	void CreateProfileFallbacks(winrt::com_ptr<ID3D11ShaderResourceView>& profile, winrt::com_ptr<ID3D11ShaderResourceView>& adjustment)
-	{
-		if (profile && adjustment)
-			return;
-		DirectX::ScratchImage topImage, bottomImage;
-		bool hasTopProfile = false;
-		const bool hasTop = LoadProfileImage(L"Data\\Textures\\PhysicalSky\\top_lut.dds", topImage, &hasTopProfile);
-		const bool hasBottom = LoadProfileImage(L"Data\\Textures\\PhysicalSky\\bottom_lut.dds", bottomImage);
-		constexpr uint32_t size = 64;
-		std::array<float4, size * size> profiles, adjustments;
-		const auto smooth = [](float a, float b, float value) {
-			const float t = std::clamp((value - a) / (b - a), 0.f, 1.f);
-			return t * t * (3.f - 2.f * t);
-		};
-		for (uint32_t y = 0; y < size; ++y) {
-			const float height = (y + 0.5f) / size;
-			for (uint32_t x = 0; x < size; ++x) {
-				const float type = (x + 0.5f) / size;
-				const float top = hasTop && hasTopProfile ? ProfileSample(*topImage.GetImage(0, 0, 0), type, 1.f - height, 1) :
-				                                            1.f - smooth(0.04f + type * 0.45f, 0.12f + type * 0.9f, height);
-				const float bottom = hasBottom ? ProfileSample(*bottomImage.GetImage(0, 0, 0), type, 1.f - height) :
-				                                 smooth(0.f, 0.08f + type * 0.22f, height);
-				const float expansion = hasTop ? ProfileSample(*topImage.GetImage(0, 0, 0), type, 1.f - height) :
-				                                 1.f - smooth(0.1f + type * 0.35f, 0.25f + type * 0.75f, height);
-				profiles[y * size + x] = { bottom, top, 0.f, 1.f };
-				adjustments[y * size + x] = { expansion, 0.5f, 0.5f, 1.f };
-			}
-		}
-		const auto upload = [&](const auto& pixels, winrt::com_ptr<ID3D11ShaderResourceView>& srv, const char* name) {
-			D3D11_TEXTURE2D_DESC desc{};
-			desc.Width = desc.Height = size;
-			desc.MipLevels = 7;
-			desc.ArraySize = desc.SampleDesc.Count = 1;
-			desc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
-			desc.Usage = D3D11_USAGE_DEFAULT;
-			desc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
-			desc.MiscFlags = D3D11_RESOURCE_MISC_GENERATE_MIPS;
-			winrt::com_ptr<ID3D11Texture2D> texture;
-			DX::ThrowIfFailed(globals::d3d::device->CreateTexture2D(&desc, nullptr, texture.put()));
-			globals::d3d::context->UpdateSubresource(texture.get(), 0, nullptr, pixels.data(), size * sizeof(float4), 0);
-			DX::ThrowIfFailed(globals::d3d::device->CreateShaderResourceView(texture.get(), nullptr, srv.put()));
-			globals::d3d::context->GenerateMips(srv.get());
-			Util::SetResourceName(texture.get(), "%s", name);
-		};
-		if (!profile)
-			upload(profiles, profile, "PhysicalSky::FallbackCloudProfile");
-		if (!adjustment)
-			upload(adjustments, adjustment, "PhysicalSky::FallbackCloudAdjustment");
-		logger::info("Cloud profile fallback: top {}, bottom {}", hasTop ? "texture" : "analytic", hasBottom ? "texture" : "analytic");
-	}
-
 	constexpr DXGI_FORMAT kHistoryRadianceFormat = DXGI_FORMAT_R16G16B16A16_FLOAT;
 
 	/** @brief Creates a single-mip 2D texture with an SRV and a UAV. */
@@ -426,8 +336,8 @@ void PhysicalSky::LoadCloudTextures()
 		importedShapeNoiseSrv = nullptr;
 	}
 
-	loadDDS(L"Data\\Textures\\PhysicalSky\\NubisVerticalProfile.dds", cloudProfileLutSrv);
-	loadDDS(L"Data\\Textures\\PhysicalSky\\NubisVerticalAdjustment.dds", importedAdjustmentLutSrv);
+	loadDDS(L"Data\\Textures\\PhysicalSky\\NubisVerticalProfile.dds", cloudProfileLutSrv, true);
+	loadDDS(L"Data\\Textures\\PhysicalSky\\NubisVerticalAdjustment.dds", importedAdjustmentLutSrv, true);
 	if (cloudProfileLutSrv && !NdfManager::IsTextureNdf(cloudProfileLutSrv.get(), 2)) {
 		logger::warn("Cloud profile DDS must be a linear 2D texture with at least RG channels.");
 		cloudProfileLutSrv = nullptr;
@@ -435,15 +345,6 @@ void PhysicalSky::LoadCloudTextures()
 	if (importedAdjustmentLutSrv && !NdfManager::IsTextureNdf(importedAdjustmentLutSrv.get(), 3)) {
 		logger::warn("Cloud adjustment DDS must be a linear 2D texture with at least RGB channels.");
 		importedAdjustmentLutSrv = nullptr;
-	}
-	cloudProfileGenerated = !cloudProfileLutSrv;
-	cloudAdjustmentGenerated = !importedAdjustmentLutSrv;
-	CreateProfileFallbacks(cloudProfileLutSrv, importedAdjustmentLutSrv);
-	for (const auto* filename : { "top_lut.dds", "bottom_lut.dds" }) {
-		const auto path = std::filesystem::path("Data/Textures/PhysicalSky") / filename;
-		std::error_code error;
-		if (std::filesystem::exists(path, error))
-			ndfTexManager.LoadTexture(path);
 	}
 	baseShapeNoiseSrv = importedShapeNoiseSrv;
 	cloudAdjustmentLutSrv = importedAdjustmentLutSrv;

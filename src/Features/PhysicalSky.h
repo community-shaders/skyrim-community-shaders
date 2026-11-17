@@ -397,8 +397,6 @@ struct PhysicalSky final : public Feature
 	winrt::com_ptr<ID3D11ShaderResourceView> importedShapeNoiseSrv = nullptr;
 	winrt::com_ptr<ID3D11ShaderResourceView> importedAdjustmentLutSrv = nullptr;
 	CloudNoiseGenerator cloudNoiseGenerator;
-	bool cloudProfileGenerated = true;
-	bool cloudAdjustmentGenerated = false;
 	TextureManager ndfTexManager{ "Cloud Map" };
 	bool SetLocalCloudState(const LocalNdfState& state);
 	NdfManager ndfManager;

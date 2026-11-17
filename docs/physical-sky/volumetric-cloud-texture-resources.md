@@ -44,8 +44,9 @@ See [local NDF assets](local-ndf.md) for finite world-space placement, alpha mas
 endpoint composition, persistence and Scene Manager transitions. See
 [cloud sampling](cloud-sampling.md) for temporal scheduling.
 
-The three optional packed assets are loaded from `Data/Textures/PhysicalSky/` and live in
-`features/Physical Sky/Textures/PhysicalSky/` in the source tree.
+The required profile/adjustment LUTs and optional shape-noise DDS are loaded from
+`Data/Textures/PhysicalSky/` and live in `features/Physical Sky/Textures/PhysicalSky/`
+in the source tree.
 
 ## Two-texture NDF
 
@@ -102,7 +103,8 @@ does not change regular cloud rendering. See [voxel clouds](voxel-clouds.md).
 `NubisVerticalAdjustment.dds` is 64² BC7: R stores top expansion, GB horizontal
 noise warp. All lookups use mip 0. Profile UVs are `(type, localHeight)` with
 clamping; the adjustment GB lookup wraps in horizontal world coordinates.
-The separate R8 top/bottom assets feed runtime packing when packed LUTs are absent.
+Procedural noise preserves adjustment R and generates GB displacement. DDS mode
+uses the imported adjustment RGB channels directly.
 
 ## Cirrus inputs
 
@@ -177,57 +179,31 @@ its maps and invalidate cloud history. Disabled cirrus skips generation.
 
 ## Optional resource fallback
 
-Cloud rendering can initialize without bundled cloud DDS files. Resolution order:
+Cloud rendering requires valid `NubisVerticalProfile.dds` and
+`NubisVerticalAdjustment.dds`. Missing or invalid LUTs fail the cloud-resource
+readiness check and appear as a warning in Cloud Resources.
 
-| Resource            | Optional input                                       | Fallback                                      |
-| ------------------- | ---------------------------------------------------- | --------------------------------------------- |
-| Shape noise         | `NubisCloudShapeNoise.dds` when DDS mode is selected | Local RGBA volume generator                   |
-| Vertical profile    | `NubisVerticalProfile.dds`                           | Runtime packed bottom/top profile             |
-| Vertical adjustment | `NubisVerticalAdjustment.dds`                        | Runtime top expansion plus procedural GB warp |
-| Main weather        | Imported Height RG + Modeling RGB pair               | Procedural NDF                                |
-| Weather noise slots | Per-slot DDS override                                | Local scalar noise generator                  |
-| Cirrus weather      | Optional local RGB map                               | Shared weather noise                          |
-| Cirrus patterns     | `cirrus.dds`                                         | Cirrus disabled                               |
+| Resource            | Optional input                         | Fallback                     |
+| ------------------- | -------------------------------------- | ---------------------------- |
+| Shape noise         | `NubisCloudShapeNoise.dds` in DDS mode | Local RGBA volume generator  |
+| Main weather        | Imported Height RG + Modeling RGB pair | Procedural NDF               |
+| Weather noise slots | Per-slot DDS override                  | Local scalar noise generator |
+| Cirrus weather      | Optional local RGB map                 | Shared weather noise         |
+| Cirrus patterns     | `cirrus.dds`                           | Cirrus disabled              |
 
-When packed LUTs are absent, `bottom_lut.dds` supplies bottom profile R and
-`top_lut.dds` supplies top expansion R. These scalar images use the presentation
-orientation (height decreases down the image); packing flips their V axis.
-An optional G channel in `top_lut.dds` stores the separate ordinary top profile,
-with the same orientation as R. This permits all three profile functions in just
-two files: Top RG = expansion/ordinary top, Bottom R = bottom. Single-channel Top
-uses an analytic smooth envelope for the missing ordinary top profile. If either
-scalar file is absent, its profile also uses an analytic smooth envelope.
-These envelopes are fallback approximations, not reconstructions of missing LUT
-texels. In particular, retaining only the two original scalar images does not preserve the
-independent top-profile channel of a packed vertical-profile texture. Supplying
-Top G or complete LUT overrides preserves that independently authored profile.
-The original scalar Bottom also contains a zero-density band at low normalized
-heights that is absent from the bundled packed profile. It can suppress low-type
-clouds even when Top G is supplied. These scalar assets are alternative profiles,
-not lossless split versions of the packed LUTs; changing weather type ranges
-therefore does not produce equivalent shapes across the two sets.
-
-Packing produces 64-square linear RGBA float textures with mip chains; the
-adjustment's neutral GB channels are replaced by the noise generator. No new DDS
-files are written, and neither scalar source is modified. Thus a release may
-retain just `top_lut.dds` and `bottom_lut.dds`, or remove all cloud DDS files.
-
-Noise preparation runs before the final cloud-resource readiness gate. On first
-startup without shape noise, the 128-slice volume takes 32 prepasses at four
-slices per pass; only complete volumes and mip chains are published. Reload Cloud
-Textures resolves the same fallback order again. DDS mode also generates missing
-shape/adjustment resources instead of disabling the feature.
-
-This path has been statically reviewed; texture-free startup and visual agreement
-still require an in-game run. Analytic fallback quality is distinct from resource
-availability.
+With both LUTs loaded, noise preparation runs before the final cloud-resource
+readiness gate. On first startup without shape noise, the 128-slice volume takes
+32 prepasses at four slices per pass. Only complete volumes and mip chains are
+published. Reload Cloud
+Textures reloads the required LUTs and optional inputs. DDS mode also generates
+missing shape noise.
 
 ## Debug resource inspection
 
 `Debug > Cloud Shape` displays the active NDF height/modeling maps, all four shared
 weather noise inputs, active shape noise, packed profile/adjustment LUTs, and
 active cirrus weather/pattern textures. The generated/source group also exposes
-the completed procedural shape/adjustment outputs and imported/fallback inputs,
+the completed procedural shape/adjustment outputs and imported DDS inputs,
 including when a different source is selected for rendering. Incomplete noise
 back buffers are not published; generation progress remains in Cloud Noise Inputs.
 
@@ -238,9 +214,7 @@ only for expanded, visible images, and preserves the compute bindings it uses.
 NDF component previews retain their separate selector. All new controls and
 messages have English and Simplified Chinese translations (`en`, `zh_CN`).
 
-Shape and adjustment fallback selection is independent: a missing adjustment
-source does not override a valid imported shape volume in DDS mode. Fixed 3D
-shape input requires linear RGBA; profile inputs and top/bottom packing reject
+Fixed 3D shape input requires linear RGBA. Profile and adjustment inputs reject
 sRGB and incompatible formats. Reload also refreshes custom NDF/noise/cirrus paths
 and local assets. Invalid selected global pairs require matching dimensions and
 fall back together. The input manager normalizes separators, dot segments and

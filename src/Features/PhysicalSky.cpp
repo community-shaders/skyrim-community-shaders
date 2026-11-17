@@ -1271,10 +1271,12 @@ void PhysicalSky::DrawCloudResourcesSection()
 		}
 		ImGui::Text("%s: %s", T(TKEY("cloud_shape_source"), "Shape source"),
 			(settings.cloudNoise.procedural || !importedShapeNoiseSrv) ? T(TKEY("cloud_source_generated"), "Generated") : T(TKEY("cloud_source_dds"), "DDS"));
-		ImGui::Text("%s: %s", T(TKEY("cloud_profile_source"), "Profile source"), cloudProfileGenerated ? T(TKEY("cloud_source_packed"), "Packed top/bottom or analytic fallback") : T(TKEY("cloud_source_dds"), "DDS"));
-		ImGui::Text("%s: %s", T(TKEY("cloud_adjustment_source"), "Adjustment source"), (settings.cloudNoise.procedural || cloudAdjustmentGenerated) ? T(TKEY("cloud_source_generated"), "Generated") : T(TKEY("cloud_source_dds"), "DDS"));
+		ImGui::Text("%s: %s", T(TKEY("cloud_profile_source"), "Profile source"), T(TKEY("cloud_source_dds"), "DDS"));
+		ImGui::Text("%s: %s", T(TKEY("cloud_adjustment_source"), "Adjustment source"), settings.cloudNoise.procedural ? T(TKEY("cloud_source_generated"), "Generated") : T(TKEY("cloud_source_dds"), "DDS"));
 		if (baseShapeNoiseSrv && cloudProfileLutSrv && cloudAdjustmentLutSrv)
 			ImGui::TextColored(Util::Colors::GetSuccess(), "%s", T(TKEY("cloud_textures_loaded"), "Cloud Textures: Loaded"));
+		else if (!cloudProfileLutSrv || !importedAdjustmentLutSrv)
+			Util::Text::WrappedWarning("%s", T(TKEY("cloud_luts_missing"), "Cloud Textures: Required Nubis LUTs missing or invalid"));
 		else
 			Util::Text::WrappedWarning("%s", T(TKEY("cloud_textures_preparing"), "Cloud Textures: Preparing"));
 	}
@@ -1550,10 +1552,8 @@ void PhysicalSky::DrawDebugSection()
 			if (ImGui::TreeNode(T(TKEY("debug_noise_sources"), "Generated and source textures"))) {
 				DrawDebugCloudTexture(cloudNoiseGenerator.Shape(), "generatedShape", T(TKEY("debug_generated_shape"), "Generated cloud shape noise"), debugScale);
 				DrawDebugCloudTexture(cloudNoiseGenerator.Adjustment(), "generatedAdjustment", T(TKEY("debug_generated_adjustment"), "Generated top expansion / warp LUT"), debugScale);
-				DrawDebugCloudTexture(ndfTexManager.Query("Data/Textures/PhysicalSky/top_lut.dds"), "topSource", T(TKEY("cloud_top_source"), "Top profile source"), debugScale);
-				DrawDebugCloudTexture(ndfTexManager.Query("Data/Textures/PhysicalSky/bottom_lut.dds"), "bottomSource", T(TKEY("cloud_bottom_source"), "Bottom profile source"), debugScale);
 				DrawDebugCloudTexture(importedShapeNoiseSrv.get(), "importedShape", T(TKEY("debug_imported_shape"), "Cloud shape DDS input"), debugScale);
-				DrawDebugCloudTexture(importedAdjustmentLutSrv.get(), "sourceAdjustment", T(TKEY("debug_source_adjustment"), "Adjustment source (DDS or fallback)"), debugScale);
+				DrawDebugCloudTexture(importedAdjustmentLutSrv.get(), "sourceAdjustment", T(TKEY("debug_source_adjustment"), "Adjustment DDS input"), debugScale);
 				ImGui::TreePop();
 			}
 			ImGui::TreePop();
@@ -2128,9 +2128,9 @@ void PhysicalSky::ClearVolumetricToNeutral()
 
 void PhysicalSky::Prepass()
 {
-	if (IsActive() && VolumetricCloudsEnabled()) {
+	if (IsActive() && VolumetricCloudsEnabled() && cloudProfileLutSrv && importedAdjustmentLutSrv) {
 		const bool generatedShape = settings.cloudNoise.procedural || !importedShapeNoiseSrv;
-		const bool generatedAdjustment = settings.cloudNoise.procedural || cloudAdjustmentGenerated;
+		const bool generatedAdjustment = settings.cloudNoise.procedural;
 		const bool generatedNoise = generatedShape || generatedAdjustment;
 		if (generatedNoise && cloudNoiseGenerator.Update(settings.cloudNoise, importedAdjustmentLutSrv.get())) {
 			volMainHistoryValid = false;
