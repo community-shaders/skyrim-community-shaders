@@ -1037,6 +1037,10 @@ PS_OUTPUT main(PS_INPUT input)
 #	endif
 	}
 
+	// Hide vanilla aurora ribbons while the procedural aurora is on, even ones reloaded mid-frame
+	[branch] if (SharedData::proceduralAuroraSettings.Enabled && (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsAurora))
+		discard;
+
 	float4 finalColor = float4(blendedColor, alpha);
 #	if defined(MULTBLEND_DECAL)
 	finalColor.xyz *= alpha;

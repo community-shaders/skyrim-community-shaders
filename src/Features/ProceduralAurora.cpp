@@ -5,6 +5,7 @@
 #include "I18n/I18n.h"
 #include "State.h"
 
+#include <cmath>
 #include <numbers>
 
 #define I18N_KEY_PREFIX "feature.procedural_aurora."
@@ -187,7 +188,7 @@ void ProceduralAurora::DrawSettings()
 		const auto tonight = I18n::GetSingleton()->Format(TKEY("tonight"), { { "strength", strength }, { "preset", PresetName(night.colorPreset >= 0 ? night.colorPreset : MatchPreset()) } }, "Tonight: {strength}, {preset}");
 		ImGui::SameLine();
 		ImGui::TextDisabled("%s", tonight.c_str());
-		ImGui::TextDisabled("%s %.0f%%", T(TKEY("showing_now"), "Aurora in the sky now:"), auroraVisibility * 100.0f);
+		ImGui::TextDisabled("%s %.1f%%", T(TKEY("showing_now"), "Aurora in the sky now:"), auroraVisibility * 100.0f);
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text("%s", T(TKEY("showing_now_tooltip"), "Follows the vanilla aurora, which depends on the weather and time of day."));
 		}
@@ -263,6 +264,7 @@ ProceduralAurora::CommonBufferData ProceduralAurora::GetCommonBufferData()
 	if (!IsActive()) {
 		auroraVisibility = 0.0f;
 		lastClockUpdate = {};
+		lastGameDays = -1.0;
 		return {};
 	}
 
@@ -302,11 +304,19 @@ ProceduralAurora::CommonBufferData ProceduralAurora::GetCommonBufferData()
 	data.Time = static_cast<float>(animationTime);
 	data.RayDetail = settings.RayDetail;
 	data.Softness = settings.Softness;
-	// Ease toward the vanilla visibility so the aurora never pops, even where vanilla only switches it on or off.
-	// On the first frame after enabling, start at the vanilla value, as the vanilla ribbons are culled from then on.
-	const float vanilla = vanillaVisibility.load(std::memory_order_relaxed);
+	// Ease toward the vanilla visibility so the aurora never pops; snap on the first frame and after time jumps
+	float vanilla = vanillaVisibility.load(std::memory_order_relaxed);
+	if (!std::isfinite(vanilla) || vanilla < kMinVisibility)
+		vanilla = 0.0f;
+	const double gameDays = globals::game::calendar ? static_cast<double>(globals::game::calendar->GetDaysPassed()) : -1.0;
+	const bool timeJumped = lastGameDays >= 0.0 && gameDays >= 0.0 && std::abs(gameDays - lastGameDays) > kTimeJumpDays;
+	lastGameDays = gameDays;
 	const float visibilityStep = static_cast<float>(std::clamp(delta, 0.0, 0.1)) * 0.5f;
-	auroraVisibility = firstFrame ? vanilla : auroraVisibility + std::clamp(vanilla - auroraVisibility, -visibilityStep, visibilityStep);
+	auroraVisibility = (firstFrame || timeJumped || !std::isfinite(auroraVisibility)) ?
+	                       vanilla :
+	                       auroraVisibility + std::clamp(vanilla - auroraVisibility, -visibilityStep, visibilityStep);
+	if (auroraVisibility < kMinVisibility)
+		auroraVisibility = 0.0f;
 	data.Atmosphere = { auroraVisibility, settings.Haze, settings.Nebula };
 	data.CurtainSize = std::clamp(settings.CurtainSize, 0.5f, 2.0f);
 	data.CurtainCount = curtainCount;
