@@ -495,9 +495,8 @@ struct PhysicalSky final : public Feature
 		float4 middleCells;
 		float4 middleBands;
 		float4 middleBandShape;
-		float4 vsmShadows;  // Volumetric Shadows VSM bound at t38, unused, unused, unused.
 	};
-	static_assert(sizeof(VolumetricCloudCB) == 1344);
+	static_assert(sizeof(VolumetricCloudCB) == 1328);
 	static_assert(offsetof(VolumetricCloudCB, dirlightDir) == 48);
 	static_assert(offsetof(VolumetricCloudCB, previousCamera) == 64);
 	static_assert(offsetof(VolumetricCloudCB, lowNdfFrequency) == 128);
@@ -513,7 +512,6 @@ struct PhysicalSky final : public Feature
 	static_assert(offsetof(VolumetricCloudCB, middleCells) == 1280);
 	static_assert(offsetof(VolumetricCloudCB, middleBands) == 1296);
 	static_assert(offsetof(VolumetricCloudCB, middleBandShape) == 1312);
-	static_assert(offsetof(VolumetricCloudCB, vsmShadows) == 1328);
 	eastl::unique_ptr<ConstantBuffer> volCloudCb = nullptr;
 	eastl::unique_ptr<ConstantBuffer> cloudDispatchCb;
 	eastl::unique_ptr<Texture2D> texVolStormMotion, texVolCubeStormMotion;

@@ -313,12 +313,9 @@ float3 ShadeCloudLighting(float3 pos, NDFInfo ndf, float extinction, float viewD
 	// Cloud-space z is relative to bottomZ; the heightmap is in world z.
 	const float3 worldPos = pos + float3(0, 0, VolumetricCloudBuffer[0].bottomZ);
 	sunTransmission *= TerrainShadows::GetTerrainShadow(worldPos, TransmittanceSampler);
-	[branch] if (CloudVsmShadows.x > 0.0 && sunTransmission > 0.0)
-	{
-		float sceneShadow;
-		VolumetricShadows::GetVSMShadow2D(worldPos - FrameBuffer::CameraPosAdjust.xyz, sceneShadow);
-		sunTransmission *= sceneShadow;
-	}
+	// Only the low and voxel clouds reach this overload; mid and upper layers pass their own transmission.
+	[branch] if (sunTransmission > 0.0)
+		sunTransmission *= AtmosphereShadow::SampleCascadeShadow(worldPos - FrameBuffer::CameraPosAdjust.xyz);
 #endif
 	return ShadeCloudLighting(pos, ndf, extinction, viewDepth, viewOpacity, phase, opticalDepth, multipleScattering, sunTransmission);
 }
