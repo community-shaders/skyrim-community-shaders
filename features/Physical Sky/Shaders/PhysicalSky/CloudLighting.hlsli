@@ -14,6 +14,59 @@ float CloudLowPhase(float3 viewDir)
 	return SampleLightDiscPhase(viewDir, CloudDisc(), CloudDiskIndex()).x;
 }
 
+/** @brief Low-cloud phase capped where the forward peak has flattened; the peak above it is what screen-space shadows remove. */
+float CloudPhasePeakFloor(float phase)
+{
+#ifdef CLOUD_MAIN_DISPATCH
+	static const float kPeakWidth = 0.08726646;  // 5 deg past the disc edge
+	const uint index = CloudDiskIndex();
+	const float edgeCosine = cos(SharedData::physSkyData.diskAngularRadius[index] + kPeakWidth);
+	return min(phase, lerp(DISK_PHASE_ISOTROPIC.x, SampleDiskPhase(edgeCosine, index).x, CloudDisc().w));
+#else
+	return phase;
+#endif
+}
+
+#ifdef CLOUD_MAIN_DISPATCH
+/** @brief 1 when the depth buffer shows nothing between a cloud-space position and the cloud light disc, else 0. */
+float CloudScreenLightVisibility(float3 pos)
+{
+	static const uint kSteps = 12u;
+	static const float kFirstStep = 2.0 * GAME_UNITS_PER_METER;
+	static const float kStepGrowth = 2.25;  // last step reaches ~15 km
+	static const float kThickness = 0.5;    // fraction of its depth a surface is assumed to extend behind itself
+	const float3 origin = pos + float3(0, 0, VolumetricCloudBuffer[0].bottomZ) - FrameBuffer::CameraPosAdjust.xyz;
+	const float3 lightDir = CloudDisc().xyz;
+	float previousDepth = mul(FrameBuffer::CameraViewProj, float4(origin, 1)).w;
+	float distance = kFirstStep;
+	[loop] for (uint i = 0u; i < kSteps; ++i)
+	{
+		const float4 clip = mul(FrameBuffer::CameraViewProj, float4(origin + lightDir * distance, 1));
+		const float2 uv = clip.xy / clip.w * float2(0.5, -0.5) + 0.5;
+		if (clip.w <= 0.0 || any(uv != saturate(uv)))
+			break;
+		// Any texel of a 2x2 footprint may occlude, so foliage neither leaks through its gaps nor hides the surface seen through them.
+		const float4 deviceDepths = TexDepth.GatherRed(TransmittanceSampler, FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(uv));
+		const float4 sceneDepths = SharedData::GetScreenDepths(deviceDepths);
+		// The sky never occludes; a surface occludes the step that crosses it and its assumed thickness.
+		if (any(deviceDepths < 1.0 - 1e-6 && sceneDepths < clip.w && sceneDepths * (1.0 + kThickness) > previousDepth))
+			return 0.0;
+		previousDepth = clip.w;
+		distance *= kStepGrowth;
+	}
+	return 1.0;
+}
+#endif
+
+/** @brief Low-cloud phase at a sample, with its forward peak removed when on-screen geometry hides the light. */
+float CloudScreenShadowedPhase(float3 pos, float phase, float peakFloor)
+{
+#ifdef CLOUD_MAIN_DISPATCH
+	[branch] if (phase > peakFloor) return lerp(peakFloor, phase, CloudScreenLightVisibility(pos));
+#endif
+	return phase;
+}
+
 float CloudCirrusPhase(float3 viewDir)
 {
 	return SampleLightDiscPhase(viewDir, CloudDisc(), CloudDiskIndex()).y;
@@ -280,7 +333,14 @@ float3 ShadeCloudLighting(float3 pos, NDFInfo ndf, float extinction, float viewD
 	float sunTransmission = UpperSunTransmission(pos);
 #ifdef CLOUD_AP_SHADOW
 	// Cloud-space z is relative to bottomZ; the heightmap is in world z.
-	sunTransmission *= TerrainShadows::GetTerrainShadow(pos + float3(0, 0, VolumetricCloudBuffer[0].bottomZ), TransmittanceSampler);
+	const float3 worldPos = pos + float3(0, 0, VolumetricCloudBuffer[0].bottomZ);
+	sunTransmission *= TerrainShadows::GetTerrainShadow(worldPos, TransmittanceSampler);
+	[branch] if (CloudVsmShadows.x > 0.0 && sunTransmission > 0.0)
+	{
+		float sceneShadow;
+		VolumetricShadows::GetVSMShadow2D(worldPos - FrameBuffer::CameraPosAdjust.xyz, sceneShadow);
+		sunTransmission *= sceneShadow;
+	}
 #endif
 	return ShadeCloudLighting(pos, ndf, extinction, viewDepth, viewOpacity, phase, opticalDepth, multipleScattering, sunTransmission);
 }

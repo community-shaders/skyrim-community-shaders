@@ -5,6 +5,7 @@
 #include "Features/PostProcessing/RasterPass.h"
 #include "Features/TerrainShadows.h"
 #include "Features/ViewAtmosphere.h"
+#include "Features/VolumetricShadows.h"
 #include "State.h"
 #include "Util.h"
 
@@ -1352,6 +1353,9 @@ void PhysicalSky::RenderVolumetricClouds(VolumetricCloudPass a_pass)
 	cloudData.msTransportExtinction = 1.f - cloudData.msAlbedo * static_cast<float>(lowCloudPhase.MeanCosine());
 	cloudData.msBoundaryWidth = std::clamp(lighting.msBoundaryWidth, 1.f, 200.f);
 	cloudData.msCalibration = CloudMsCoefficients(cloudData.msAlbedo, lowCloudPhase);
+	const auto& volumetricShadows = globals::features::volumetricShadows;
+	auto* vsmShadowSrv = volumetricShadows.loaded ? volumetricShadows.shadowCopySRV : nullptr;
+	cloudData.vsmShadows = { vsmShadowSrv ? 1.f : 0.f, 0.f, 0.f, 0.f };
 	volCloudCb->Update(cloudData);
 
 	const auto depthTarget = globals::features::viewAtmosphere.CompositeEnabled() && a_pass == VolumetricCloudPass::kMainViewAndCubemap ?
@@ -1734,6 +1738,7 @@ void PhysicalSky::RenderVolumetricClouds(VolumetricCloudPass a_pass)
 			context->CSSetShaderResources(14, 1, &volumeShadow);
 			context->CSSetShaderResources(36, (uint)apShadowSrvs.size(), apShadowSrvs.data());
 			context->CSSetShaderResources(98, 1, &directionalShadowLights);
+			context->CSSetShaderResources(38, 1, &vsmShadowSrv);
 			globals::features::viewAtmosphere.Bind(true);
 			texVolTr.swap(texVolHistoryTr);
 			texVolLum.swap(texVolHistoryLum);

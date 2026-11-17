@@ -27,6 +27,15 @@ Texture3D<float> TexShadowVolume : register(t14);
 #include "PhysicalSky/Lightning.hlsli"
 #ifdef CLOUD_AP_SHADOW
 #	include "PhysicalSky/ApShadow.hlsli"
+// The VSM helpers expect the deferred globals; point them at the AP shadow bindings.
+#	define VOLUMETRIC_SHADOWS_REGISTER t38
+#	define LinearSampler SampTr
+#	define DirectionalShadowLightData AtmosphereShadow::DirectionalShadowLightData
+#	define DirectionalShadowLights AtmosphereShadow::DirectionalShadowLights
+#	include "VolumetricShadows/VolumetricShadows.hlsli"
+#	undef LinearSampler
+#	undef DirectionalShadowLightData
+#	undef DirectionalShadowLights
 #endif
 
 static const float GAME_UNITS_PER_METER = 1.0 / GAME_UNIT_TO_M;
@@ -146,6 +155,7 @@ cbuffer VolumetricCloudConstants : register(b1)
 	float4 MiddleCloudCells;      // frequency, Ac modulation, As modulation, warp
 	float4 MiddleCloudBands;      // world wave vector (cycles/game unit), bend (wavelengths), organization
 	float4 MiddleCloudBandShape;  // thickness contrast, displacement (game units), wavelength (game units), enabled
+	float4 CloudVsmShadows;       // Volumetric Shadows VSM bound at t38, unused, unused, unused
 };
 Texture2D<float4> TexTransmittance : register(t1);
 Texture3D<float4> TexAerialPerspective : register(t2);
@@ -1224,6 +1234,7 @@ VolumetricCloudResult RenderVolumetricCloudRay(float3 direction, float3 eye, flo
 	const float lastBoundary = max(boundaries.w, sheetBoundary);
 	boundaries = min(boundaries, float4(sheetBoundary, max(boundaries.xyz, sheetBoundary)));
 	const float phase = CloudLowPhase(direction);
+	const float phasePeakFloor = CloudPhasePeakFloor(phase);
 	const float cirrusPhase = cirrusPending ? CloudCirrusPhase(direction) : 0.0;
 	const CloudAmbient ambient = MakeCloudAmbient();
 	const bool ambientEnabled = info.ambientStrength > 0.0 && (info.msAlbedo > 0.0 || CloudStormCount() > 0u);
@@ -1393,10 +1404,10 @@ VolumetricCloudResult RenderVolumetricCloudRay(float3 direction, float3 eye, flo
 					lightDepthEnd = viewDistance + min(4.0 * step * GAME_UNIT_TO_M, 64.0);
 					lightMaterial = material;
 				}
-				const float3 source = ShadeCloudLighting(pos, densityContext.ndf, extinction, viewDepth, opacity, phase, lightDepth);
+				const float3 source = ShadeCloudLighting(pos, densityContext.ndf, extinction, viewDepth, opacity, CloudScreenShadowedPhase(pos, phase, phasePeakFloor), lightDepth);
 #else
 				const float3 source = CloudLighting(pos, direction, densityContext.ndf, extinction, viewDepth, opacity,
-					viewDistance, minimumMip, phase);
+					viewDistance, minimumMip, CloudScreenShadowedPhase(pos, phase, phasePeakFloor));
 #endif
 				result.lum += transmittance * source;
 				if (densityContext.ndf.stormVolume) {

@@ -4,9 +4,13 @@
 // Variance Shadow Maps (VSM)
 // Chebyshev's inequality on filtered depth moments
 
+#ifndef VOLUMETRIC_SHADOWS_REGISTER
+#	define VOLUMETRIC_SHADOWS_REGISTER t18
+#endif
+
 namespace VolumetricShadows
 {
-	Texture2D<float2> SharedShadowMap : register(t18);
+	Texture2D<float2> SharedShadowMap : register(VOLUMETRIC_SHADOWS_REGISTER);
 
 	static const float VSM_MIN_VARIANCE = 0.00001;
 	static const float VSM_BLEEDING_REDUCTION = 0.2;
