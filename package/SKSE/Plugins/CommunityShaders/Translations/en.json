@@ -2046,6 +2046,7 @@
     "feature.physical_sky.cloud_status_unavailable": "Not Ready",
     "feature.physical_sky.cloud_sun_extinction": "Directional Extinction Scale",
     "feature.physical_sky.cloud_sun_extinction_desc": "Scales directional-light attenuation for single and multiple scattering, and cloud shadows. A value of one uses the medium extinction. Ambient transport uses the unscaled medium optical depth.",
+    "feature.physical_sky.cloud_targets_failed": "Volumetric clouds are off for this session because their screen targets could not be created, usually from running out of video memory. Restart the game to retry.",
     "feature.physical_sky.cloud_textures_loaded": "Cloud Textures: Loaded",
     "feature.physical_sky.cloud_textures_preparing": "Cloud Textures: Preparing",
     "feature.physical_sky.cloud_top_expansion": "Top Expansion",
