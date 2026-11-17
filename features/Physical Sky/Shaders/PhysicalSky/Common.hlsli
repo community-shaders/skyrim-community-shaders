@@ -419,14 +419,14 @@ Texture2D<float4> TexSkyTail : register(t66);
 		return TexSkyTail.SampleLevel(samp, SkyViewLutUv(viewDir, height), 0).rgb;
 	}
 
-	float3 SampleTr(float3 lightDir, SamplerState sampSv)
+	float3 SampleTr(float3 lightDir, SamplerState sampSv, float angularRadius = 0.0)
 	{
 		SharedData::PhysSkyData data = SharedData::physSkyData;
 
 		if (data.trMix < 1e-8)
 			return 1;
 
-		float3 tr = SampleAtmosphereLightTr(TexTrLut, sampSv, float3(0, 0, data.zCameraPlanet), lightDir);
+		float3 tr = SampleAtmosphereLightTr(TexTrLut, sampSv, float3(0, 0, data.zCameraPlanet), lightDir, angularRadius);
 		tr = lerp(1, tr, data.trMix);
 
 		return tr;
@@ -436,7 +436,7 @@ Texture2D<float4> TexSkyTail : register(t66);
 	float3 SampleDirLightTr(SamplerState samp)
 	{
 		const float3 bodyDir = SharedData::physSkyData.dirLightBodyDir;
-		return SampleTr(dot(bodyDir, bodyDir) > 1e-6 ? bodyDir : normalize(SharedData::DirLightDirection.xyz), samp);
+		return SampleTr(dot(bodyDir, bodyDir) > 1e-6 ? bodyDir : normalize(SharedData::DirLightDirection.xyz), samp, SharedData::physSkyData.diskAngularRadius.w);
 	}
 
 	float3 SampleViewCelestialTr(float3 direction, SamplerState samp)
