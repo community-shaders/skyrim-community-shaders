@@ -77,7 +77,9 @@ namespace AtmosphereShadow
 	{
 		uint lightCount, lightStride;
 		DirectionalShadowLights.GetDimensions(lightCount, lightStride);
-		[branch] if (lightCount == 0u) return 1.0;
+		uint shadowWidth, shadowHeight, shadowLayers;
+		TexDirectShadows.GetDimensions(shadowWidth, shadowHeight, shadowLayers);
+		[branch] if (lightCount == 0u || shadowWidth == 0u || shadowHeight == 0u || shadowLayers < 2u) return 1.0;
 
 		const DirectionalShadowLightData light = DirectionalShadowLights[0];
 		const float4 clipPos = mul(FrameBuffer::CameraViewProj, float4(posWorldRel, 1));

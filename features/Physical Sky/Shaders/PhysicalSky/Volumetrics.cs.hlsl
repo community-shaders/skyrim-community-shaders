@@ -1224,7 +1224,7 @@ VolumetricCloudResult RenderVolumetricCloudRay(float3 direction, float3 eye, flo
 	const float sheetBoundary = cirrusPending ? cirrusDistance : 0.0;
 	const float lastBoundary = max(boundaries.w, sheetBoundary);
 	boundaries = min(boundaries, float4(sheetBoundary, max(boundaries.xyz, sheetBoundary)));
-	const float phase = CloudGlareShadowedPhase(CloudLowPhase(direction));
+	const float phase = ApplyCloudForwardPeakOcclusion(CloudLowPhase(direction));
 	const float cirrusPhase = cirrusPending ? CloudCirrusPhase(direction) : 0.0;
 	const CloudAmbient ambient = MakeCloudAmbient();
 	const bool ambientEnabled = info.ambientStrength > 0.0 && (info.msAlbedo > 0.0 || CloudStormCount() > 0u);
