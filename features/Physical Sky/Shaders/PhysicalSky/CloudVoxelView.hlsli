@@ -66,7 +66,7 @@ void StoreVoxelCloudSample(uint2 tid, float4 voxelColor, float voxelDepth)
 		StoreVoxelCloudSample(tid, 0.0, 0.0);
 		return;
 	}
-	const float phase = CloudLowPhase(dot(direction, info.dirlightDir));
+	const float phase = CloudLowPhase(direction);
 #	ifdef CLOUD_VOXEL_SINGLE
 	// A single placement's reference width/material are constant along the ray.
 	// Fetch the existing calibration once; height, density and attenuation are

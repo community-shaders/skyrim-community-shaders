@@ -48,7 +48,7 @@ float3 CirrusBoundaryRadiance(float3 position, float3 direction, float3 incoming
 		return incoming;
 	float3 radiance = 0.0;
 	float transmission = 1.0, transport = 1.0, depth = 0.0, weight = 0.0, cirrus = 0.0;
-	IntegrateCirrus(position + direction * distance, direction, distance, CloudCirrusPhase(dot(direction, info.dirlightDir)), MakeCloudAmbient(),
+	IntegrateCirrus(position + direction * distance, direction, distance, CloudCirrusPhase(direction), MakeCloudAmbient(),
 		radiance, transmission, transport, depth, weight, cirrus);
 	return radiance + transmission * incoming;
 }
@@ -62,7 +62,7 @@ float3 MiddleDirectSource(float3 position, float3 direction, float extinction, f
 	material.height_fraction = height;
 	material.altitude = VolumetricCloudBuffer[0].middleLayer.xy;
 	return ShadeCloudLighting(position, material, extinction, viewDepth, opacity,
-		CloudLowPhase(dot(direction, VolumetricCloudBuffer[0].dirlightDir)), lightDepth, CloudMultipleScattering(extinction, material),
+		CloudLowPhase(direction), lightDepth, CloudMultipleScattering(extinction, material),
 		exp(-CirrusSunDepth(position) * VolumetricCloudBuffer[0].sunExtinction));
 }
 
@@ -73,7 +73,7 @@ float3 MiddleDirectSource(float3 position, float3 direction, float4 materialSamp
 	initNDFInfo(material);
 	material.altitude = info.middleLayer.xy;
 	const CloudMsProfile calibration = PrepareCloudMsProfile(material);
-	const float phase = CloudLowPhase(dot(direction, info.dirlightDir));
+	const float phase = CloudLowPhase(direction);
 	const float cirrus = exp(-CirrusSunDepth(position) * info.sunExtinction);
 	float3 source = 0.0;
 	[unroll] for (uint i = 0u; i < 2u; ++i)
@@ -191,7 +191,7 @@ VolumetricCloudResult RenderUpperCloudRay(float3 direction, float3 eye, float sc
 	segments.farSegment = float2(max(segments.farSegment.x, raySegment.x), min(segments.farSegment.y, raySegment.y));
 #endif
 	const CloudAmbient ambient = MakeCloudAmbient();
-	const float cirrusPhase = CloudCirrusPhase(dot(direction, info.dirlightDir));
+	const float cirrusPhase = CloudCirrusPhase(direction);
 	float transmission = 1.0, transport = 1.0;
 	float depthSum = 0.0, weightSum = 0.0, cirrusWeight = 0.0;
 	[loop] for (uint piece = 0u; piece < 2u; ++piece)

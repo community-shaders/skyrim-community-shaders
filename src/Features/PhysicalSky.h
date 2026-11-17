@@ -290,8 +290,10 @@ struct PhysicalSky final : public Feature
 		float4 lightningChannelEmitter;  // centroid and equivalent projected-area radius, game units
 		float4 lightningPreparationPositionRadius;
 		float4 lightningPreparationControl;  // base mode, history valid, active mask lane, preparing
-		float3 diskAngularRadius;            // Sun, Masser, Secunda, in radians, independent of disc rendering mode.
-		uint dirLightDiskIndex;
+		float4 diskAngularRadius;            // Sun, Masser, Secunda, directional light, in radians, independent of disc rendering mode.
+		float3 dirLightBodyDir;              // towards the body lighting the scene, blended while the light swings between two
+		uint dirLightDiskIndex;              // body whose disc phase the clouds show
+		float4 dirLightDisc;                 // world direction to that body, and its glow weight fading out and back in across a swap
 		float4 diskBillboardScale;
 	} cbData;
 	STATIC_ASSERT_ALIGNAS_16(CbData);

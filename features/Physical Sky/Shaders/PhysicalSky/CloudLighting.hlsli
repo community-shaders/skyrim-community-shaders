@@ -9,14 +9,14 @@ float CloudLightProbeJitter(float2 positionMeters)
 }
 
 // Jendersie and d'Eon, An Approximate Mie Scattering Function (2023).
-float CloudLowPhase(float cosine)
+float CloudLowPhase(float3 viewDir)
 {
-	return SampleDiskPhase(cosine, CloudDiskIndex()).x;
+	return SampleLightDiscPhase(viewDir, CloudDisc(), CloudDiskIndex()).x;
 }
 
-float CloudCirrusPhase(float cosine)
+float CloudCirrusPhase(float3 viewDir)
 {
-	return SampleDiskPhase(cosine, CloudDiskIndex()).y;
+	return SampleLightDiscPhase(viewDir, CloudDisc(), CloudDiskIndex()).y;
 }
 
 struct CloudAmbient

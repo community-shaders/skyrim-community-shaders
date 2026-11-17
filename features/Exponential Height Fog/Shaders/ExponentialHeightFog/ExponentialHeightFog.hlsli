@@ -282,7 +282,7 @@ namespace ExponentialHeightFog
 			float3 dirLightColor = Color::DirectionalLight(SharedData::DirLightColor.xyz);
 #if defined(PHYSICAL_SKY) && defined(COMMON_HLSLI)
 			if (SharedData::physSkyData.enabled) {
-				float3 physSkyTransmittance = PhysSky::SampleTr(normalize(SharedData::DirLightDirection.xyz), SampColorSampler);
+				float3 physSkyTransmittance = PhysSky::SampleDirLightTr(SampColorSampler);
 				dirLightColor *= saturate(physSkyTransmittance);
 			}
 #endif

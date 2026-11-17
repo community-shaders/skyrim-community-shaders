@@ -584,8 +584,10 @@ namespace SharedData
 		float4 lightningChannelEmitter;
 		float4 lightningPreparationPositionRadius;
 		float4 lightningPreparationControl;  // base mode, history valid, active mask lane, preparing
-		float3 diskAngularRadius;
+		float4 diskAngularRadius;            // Sun, Masser, Secunda, directional light
+		float3 dirLightBodyDir;
 		uint dirLightDiskIndex;
+		float4 dirLightDisc;
 		float4 diskBillboardScale;
 	};
 

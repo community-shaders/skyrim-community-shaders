@@ -541,7 +541,7 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float2 screenPo
 
 #		if defined(PHYSICAL_SKY)
 	if (SharedData::physSkyData.enabled)
-		dirColor *= PhysSky::SampleTr(normalize(SharedData::DirLightDirection.xyz), SampDepthSampler);
+		dirColor *= PhysSky::SampleDirLightTr(SampDepthSampler);
 #		endif
 
 #		if defined(SKYLIGHTING)
@@ -630,7 +630,7 @@ float3 GetLightingShadow(float3 color, float3 worldPosition, float2 screenPositi
 	float3 sunlightTransmission = shadow;
 #		if defined(PHYSICAL_SKY)
 	if (SharedData::physSkyData.enabled)
-		sunlightTransmission *= PhysSky::SampleTr(normalize(SharedData::DirLightDirection.xyz), SampDepthSampler);
+		sunlightTransmission *= PhysSky::SampleDirLightTr(SampDepthSampler);
 #		endif
 
 	float3 dirLight = ShadowSampling::GetDirectionalLighting();
