@@ -179,6 +179,9 @@ std::vector<SceneSettingsManager::CopySource> SceneSettingsManager::GetCopySourc
 				if (entry.source == entrySource && !entry.paused && periodIndex >= 0 && periodIndex <= kPeriodCount)
 					periods[periodIndex][{ entry.featureShortName, entry.settingPath, entry.settingKey }] = &entry;
 			}
+		// Only after precedence, so a user tombstone hides the overwrite it shadows rather than exposing it.
+		for (auto& period : periods)
+			std::erase_if(period, [](const auto& item) { return item.second->deleted; });
 		ForEachActiveSetContext(context, timeOfDayEnabled, [&](const SceneContextId& setContext) {
 			addSource(setContext, periods[static_cast<int>(setContext.period)]);
 		});
