@@ -46,6 +46,37 @@ void PhysicalLens::LoadSettings(json& value)
 
 void PhysicalLens::SaveSettings(json& value) { value = settings; }
 
+PhysicalLens::FocalLengthRange PhysicalLens::GetPresetFocalLengthRange(int preset)
+{
+	switch (preset) {
+	case 2:
+		return { false, 85.0f, 85.0f };
+	case 3:
+		return { false, 35.0f, 35.0f };
+	case 5:
+		return { true, 24.0f, 70.0f };
+	case 0:
+	case 1:
+	case 4:
+	default:
+		return { false, 50.0f, 50.0f };
+	}
+}
+
+void PhysicalLens::DrawLensPresetCombo()
+{
+	const char* presets[] = {
+		T("feature.post_processing.physical_lens.master_prime", "ARRI / Zeiss Master Prime 50 mm T1.3"),
+		T("feature.post_processing.physical_lens.sigma_art", "Sigma 50 mm F1.4 DG HSM Art"),
+		T("feature.post_processing.physical_lens.canon_rf85", "Canon RF 85 mm F1.2 L USM"),
+		T("feature.post_processing.physical_lens.summilux35", "Leica Summilux-M 35 mm F1.4 Aspherical"),
+		T("feature.post_processing.physical_lens.planar50", "Sony / Zeiss Planar T* FE 50 mm F1.4 ZA"),
+		T("feature.post_processing.physical_lens.canon_zoom", "Canon RF 24-70 mm F2.8")
+	};
+	static_assert(std::size(presets) == LensPresetCount);
+	ImGui::Combo(T("feature.post_processing.physical_lens.lens", "Lens Preset"), &settings.LensPreset, presets, (int)LensPresetCount);
+}
+
 void PhysicalLens::DrawSettings()
 {
 	const auto* camera = owner ? owner->GetActivePhysicalCameraState() : nullptr;
@@ -60,16 +91,7 @@ void PhysicalLens::DrawSettings()
 		if (!configurationValid)
 			ImGui::TextWrapped("%s", T("feature.post_processing.physical_lens.focus_unavailable", "This lens cannot focus at the current distance. Increase the focus distance or reduce the focal length."));
 	}
-	const char* presets[] = {
-		T("feature.post_processing.physical_lens.master_prime", "ARRI / Zeiss Master Prime 50 mm T1.3"),
-		T("feature.post_processing.physical_lens.sigma_art", "Sigma 50 mm F1.4 DG HSM Art"),
-		T("feature.post_processing.physical_lens.canon_rf85", "Canon RF 85 mm F1.2 L USM"),
-		T("feature.post_processing.physical_lens.summilux35", "Leica Summilux-M 35 mm F1.4 Aspherical"),
-		T("feature.post_processing.physical_lens.planar50", "Sony / Zeiss Planar T* FE 50 mm F1.4 ZA"),
-		T("feature.post_processing.physical_lens.canon_zoom", "Canon RF 24-70 mm F2.8")
-	};
-	ImGui::Combo(T("feature.post_processing.physical_lens.lens", "Lens Preset"), &settings.LensPreset, presets, (int)LensPresetCount);
-	static_assert(std::size(presets) == LensPresetCount);
+	DrawLensPresetCombo();
 	ImGui::Checkbox(T("feature.post_processing.physical_lens.image_effects", "Lens Distortion, Vignetting and Color"), &settings.ImageEffects);
 	if (auto tooltip = Util::HoverTooltipWrapper())
 		ImGui::TextUnformatted(T("feature.post_processing.physical_lens.image_effects_hint", "Adds lens distortion, darkened corners and color fringing. Scene framing stays fixed; depth of field is unchanged."));

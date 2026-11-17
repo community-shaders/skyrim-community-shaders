@@ -2,6 +2,7 @@
 
 #include "CSEditor/SceneManager/SceneWidgetInterceptor.h"
 #include "I18n/I18n.h"
+#include "PhysicalLens.h"
 #include "Util.h"
 
 #include <cmath>
@@ -439,7 +440,7 @@ namespace CinematicCamera
 		}
 	}
 
-	void Controller::DrawSettings()
+	void Controller::DrawSettings(PhysicalLens* physicalLens)
 	{
 		if (!settings.Enabled)
 			return;
@@ -482,9 +483,30 @@ namespace CinematicCamera
 		}
 
 		ImGui::SeparatorText(T("feature.post_processing.cinematic_camera.lens", "Lens"));
+		if (physicalLens && physicalLens->IsActive())
+			physicalLens->DrawLensPresetCombo();
 		ImGui::SliderFloat(T("feature.post_processing.cinematic_camera.focal_length", "Focal Length"), &lens.FocalLengthMM, 1.0f, 300.0f, "%.1f mm", logSliderFlags);
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::TextUnformatted(T("feature.post_processing.cinematic_camera.focal_length_desc", "Shorter focal lengths give a wider view; longer focal lengths zoom in. Uses a logarithmic scale for finer control at short focal lengths."));
+		if (physicalLens && physicalLens->IsActive()) {
+			const auto range = PhysicalLens::GetPresetFocalLengthRange(physicalLens->settings.LensPreset);
+			if (range.isZoom) {
+				if (lens.FocalLengthMM < range.minMM - 1e-3f || lens.FocalLengthMM > range.maxMM + 1e-3f) {
+					Util::Text::WrappedWarning(
+						T("feature.post_processing.cinematic_camera.focal_length_out_of_zoom_range",
+							"Focal length is outside the %.0f-%.0f mm zoom range; Physical Lens uses equivalent scaling."),
+						range.minMM, range.maxMM);
+				}
+			} else {
+				constexpr float kPrimeFocalTolerance = 0.2f;
+				if (std::abs(lens.FocalLengthMM - range.minMM) > range.minMM * kPrimeFocalTolerance) {
+					Util::Text::WrappedWarning(
+						T("feature.post_processing.cinematic_camera.focal_length_far_from_prime",
+							"Focal length differs significantly from the %.0f mm prime lens; Physical Lens uses equivalent scaling."),
+						range.minMM);
+				}
+			}
+		}
 		ImGui::SliderFloat(T("feature.post_processing.cinematic_camera.f_number", "F-Number"), &lens.FNumber, 0.7f, 32.0f, "f/%.2f", logSliderFlags);
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::TextUnformatted(T("feature.post_processing.cinematic_camera.f_number_desc", "Lower f-numbers give a shallower depth of field and let in more light. Auto ISO compensates for aperture changes within its ISO limits."));

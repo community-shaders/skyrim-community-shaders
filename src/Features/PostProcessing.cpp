@@ -210,12 +210,14 @@ void PostProcessing::DrawSettings()
 			ImGui::PushID(feat->GetType().c_str());
 
 			const bool automatic = isForcedOn(*feat);
+			const bool experimental = feat->IsExperimental();
 			if (!drawForcedEnabled("##Enabled", *feat))
 				ImGui::Checkbox("##Enabled", &feat->enabled);
 
 			// The name opens the settings too, so the whole row reads as one entry
 			ImGui::SameLine();
 			const char* autoLabel = T("feature.post_processing.auto_badge", "Auto");
+			const char* experimentalLabel = T("feature.post_processing.experimental_badge", "Experimental");
 			const float nameWidth = std::max(ImGui::GetContentRegionAvail().x - Util::IconButtonSize() - spacing, ImGui::GetFontSize());
 			{
 				const bool dim = !feat->IsActive();
@@ -230,14 +232,22 @@ void PostProcessing::DrawSettings()
 			}
 			if (!description.empty())
 				Util::AddTooltip(description.c_str());
-			if (automatic) {
-				// Forced on by Cinematic Camera: flag it at the row's right end
+			if (automatic || experimental) {
 				const ImVec2 rowMin = ImGui::GetItemRectMin();
 				const ImVec2 rowMax = ImGui::GetItemRectMax();
-				Util::BadgeOptions badge;
-				badge.at = ImVec2(rowMax.x - Util::MeasureBadgeWidth(autoLabel), rowMin.y);
-				badge.rowHeight = rowMax.y - rowMin.y;
-				Util::Badge(autoLabel, Util::Colors::GetAccent(), badge);
+				float rightX = rowMax.x;
+				auto drawRowBadge = [&](const char* label, const ImVec4& tint) {
+					const float width = Util::MeasureBadgeWidth(label);
+					Util::BadgeOptions badge;
+					badge.at = ImVec2(rightX - width, rowMin.y);
+					badge.rowHeight = rowMax.y - rowMin.y;
+					Util::Badge(label, tint, badge);
+					rightX -= width + spacing;
+				};
+				if (automatic)
+					drawRowBadge(autoLabel, Util::Colors::GetAccent());
+				if (experimental)
+					drawRowBadge(experimentalLabel, Util::Colors::GetWarning());
 			}
 
 			ImGui::SameLine();
@@ -287,7 +297,7 @@ void PostProcessing::DrawSettings()
 		if (!cinematicCamera.settings.Enabled)
 			Util::SettingHint(T("feature.post_processing.enable_the_feature_to_see_its_settings", "Enable the feature to see its settings."), false);
 
-		cinematicCamera.DrawSettings();
+		cinematicCamera.DrawSettings(GetPipelineFeature<PhysicalLens>(FeaturePipelineIndex::PhysicalLens));
 		if (cinematicCamera.settings.Enabled) {
 			if (auto* exposure = GetPipelineFeature<HistogramAutoExposure>(FeaturePipelineIndex::AutoExposure)) {
 				ImGui::SeparatorText(T("feature.post_processing.cinematic_camera.exposure_meter", "Exposure Meter"));

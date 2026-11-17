@@ -41,6 +41,7 @@ struct PhysicalLens : PostProcessFeature
 	std::string GetType() const override { return "Physical Lens"; }
 	std::string GetDisplayName() const override { return T("feature.post_processing.physical_lens.name", "Physical Lens"); }
 	std::string GetDesc() const override { return T("feature.post_processing.physical_lens.description", "Lens ghosts, starbursts, distortion, vignetting and chromatic aberration from highlights visible on screen."); }
+	bool IsExperimental() const override { return true; }
 	bool WritesToMainTexture() const override { return false; }
 	bool DisableInMainLoadingMenu() const override { return true; }
 	void SetupResources() override;
@@ -49,6 +50,14 @@ struct PhysicalLens : PostProcessFeature
 	void LoadSettings(json&) override;
 	void SaveSettings(json&) override;
 	void DrawSettings() override;
+	void DrawLensPresetCombo();
+	struct FocalLengthRange
+	{
+		bool isZoom = false;
+		float minMM = 50.0f;
+		float maxMM = 50.0f;
+	};
+	static FocalLengthRange GetPresetFocalLengthRange(int preset);
 	/// Resolve preset iris geometry or the user's explicit blade-count override.
 	unsigned ApertureBladeCount() const { return PhysicalLensOptics::ApertureBladeCount(settings.LensPreset, settings.ApertureBlades); }
 	void Draw(TextureInfo&) override;

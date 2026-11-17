@@ -107,6 +107,9 @@ struct PostProcessFeature : public std::enable_shared_from_this<PostProcessFeatu
 	/// Whether this feature's enabled state is automatically managed based on other features.
 	virtual bool IsAutoEnabled() const { return false; }
 
+	/// Whether this feature is experimental and should display an Experimental badge in the menu.
+	virtual bool IsExperimental() const { return false; }
+
 	/// Called each frame for auto-enabled features to update their enabled state.
 	virtual void UpdateAutoEnabled() {}
 
