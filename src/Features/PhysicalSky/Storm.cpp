@@ -602,7 +602,7 @@ void CloudStormManager::DrawSettings()
 		changed |= editRules(T(TKEY("storm_replacement_nodes"), "Replaced node names (one per line)"), storm.replacementNodes);
 		changed |= editRules(T(TKEY("storm_replacement_textures"), "Replaced effect textures (one per line)"), storm.replacementTextures);
 		changed |= ImGui::InputText(T(TKEY("storm_worldspace"), "Storm worldspace Editor ID"), &storm.worldspace);
-		changed |= ImGui::DragFloat2(T(TKEY("storm_center"), "Storm centre X / Y (m)"), &storm.center.x, 10.f);
+		changed |= ImGui::DragFloat2(T(TKEY("storm_center"), "Storm center X / Y (m)"), &storm.center.x, 10.f);
 		changed |= ImGui::DragFloat(T(TKEY("storm_radius"), "Vortex radius (m)"), &storm.radius, 10.f, 1.f, 16000.f);
 		changed |= ImGui::DragFloat(T(TKEY("storm_back_half_size"), "Storm back half-size (m)"), &storm.backHalfSize, 10.f, 1.f, 16000.f);
 		changed |= ImGui::DragFloat(T(TKEY("storm_back_rotation"), "Storm back rotation (degrees)"), &storm.backRotation, 1.f);
@@ -642,7 +642,7 @@ void CloudStormManager::DrawSettings()
 		}
 	}
 	ImGui::EndDisabled();
-	ImGui::TextWrapped("%s", T(TKEY("storm_asset_hint"), "Storm back Modeling alpha is the template blend weight. The generator combines this template with the mesocyclone and writes the final storm mask separately. The optional core asset supplies final NDF channels within its valid height footprint; profile reconstruction and animated noise remain shared. Asset folders are relative to the instance folder; use . for textures beside Instance.json."));
+	ImGui::TextWrapped("%s", T(TKEY("storm_asset_hint"), "In the storm back asset, Modeling alpha is the template blend weight. The generator combines this template with the mesocyclone and writes the final storm mask separately. The optional core asset supplies final NDF channels within its valid height footprint; profile reconstruction and animated noise stay shared. Asset folders are relative to the instance folder; use . for textures beside Instance.json."));
 	ImGui::TextWrapped("%s", T(TKEY("storm_replacement_hint"), "Only active, successfully generated instances hide their configured references. Disable an instance and save it to restore its original geometry."));
 	if (!error.empty())
 		ImGui::TextWrapped("%s", error.c_str());

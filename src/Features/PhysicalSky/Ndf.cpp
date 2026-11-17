@@ -958,7 +958,7 @@ static void DrawLayerWeatherState(SceneBlend& weather, TextureManager& textures)
 		} catch (const nlohmann::json::exception&) {
 		}
 		if (value["states"].size() > 1)
-			ImGui::TextWrapped("%s", T(TKEY("cirrus_edit_mixed"), "A transition is active. Editing captures the strongest endpoint as one weather state."));
+			ImGui::TextWrapped("%s", T(TKEY("cirrus_edit_mixed"), "A transition is active. Editing captures the strongest endpoint as a single weather state."));
 	}
 	ImGui::BeginDisabled(!editable);
 	bool changed = DrawWeatherNoise(middle ? T(TKEY("ndf_primary_coverage"), "Primary coverage") : T(TKEY("cirrus_coverage"), "Cirrus Coverage"), state.layers[0], !middle);
@@ -970,7 +970,7 @@ static void DrawLayerWeatherState(SceneBlend& weather, TextureManager& textures)
 	changed |= DrawWeatherNoise(middle ? T(TKEY("middle_type"), "Cloud Type (As to Ac)") : T(TKEY("cirrus_type"), "Cirrus Type"), state.layers[1]);
 	changed |= ImGui::InputText(T(TKEY("cirrus_local_map"), "Local coverage / type / mask RGB"), &state.localMap);
 	if constexpr (!middle)
-		ImGui::TextWrapped("%s", T(TKEY("cirrus_local_hint"), "Optional linear RGB DDS: R coverage, G type, B blend mask. Repeats every 16384 m times Cirrus UV Size; leave the path empty for no local map."));
+		ImGui::TextWrapped("%s", T(TKEY("cirrus_local_hint"), "Optional linear RGB DDS: R coverage, G type, B blend mask. Repeats every 16384 m multiplied by Cirrus UV Size. Leave the path empty to use no local map."));
 	changed |= ImGui::SliderFloat(T(TKEY("cirrus_local_weight"), "Local map influence"), &state.localWeight, 0.f, 1.f);
 	if (!middle)
 		changed |= ImGui::SliderFloat(T(TKEY("cirrus_local_wind"), "Local map wind scale"), &state.localWindScale, 0.f, 16.f);
@@ -1010,7 +1010,7 @@ void CirrusMapManager::DrawSettings(CirrusSettings& cirrus, CloudLightingSetting
 	if (!SceneWidgetInterceptor::IsArmed()) {
 		textures.EnsureLoaded("Data/Textures/PhysicalSky/cirrus.dds");
 		if (!NdfManager::IsTextureNdf(textures.Query("Data/Textures/PhysicalSky/cirrus.dds"), 3))
-			Util::Text::WrappedWarning("%s", T(TKEY("cirrus_patterns_missing"), "Cirrus requires a linear RGB cirrus.dds. Missing or incompatible input disables cirrus only."));
+			Util::Text::WrappedWarning("%s", T(TKEY("cirrus_patterns_missing"), "Cirrus requires a linear RGB cirrus.dds. If it is missing or incompatible, only cirrus is disabled."));
 	}
 	DrawLayerWeatherState<false>(cirrus.weather, textures);
 	if (ImGui::TreeNode(T(TKEY("cloud_cirrus_phase"), "Cirrus Phase and Scattering"))) {
@@ -1024,7 +1024,7 @@ void CirrusMapManager::DrawSettings(CirrusSettings& cirrus, CloudLightingSetting
 	}
 	if (!SceneWidgetInterceptor::IsArmed() && ImGui::TreeNode(T(TKEY("cirrus_pattern_settings"), "Pattern Scale & Texture"))) {
 		ImGui::SliderFloat(T(TKEY("cirrus_uv_size"), "Cirrus UV Size"), &cirrus.uvSize, 0.1f, 32.f, "%.2f x", ImGuiSliderFlags_Logarithmic);
-		Util::Text::WrappedSecondary("%s", T(TKEY("cirrus_uv_size_hint"), "Larger values enlarge both weather and detail patterns without changing wind speed. At 1x, weather repeats every 16.384 km and details every 4.29 km. Global setting; scenes cannot override it."));
+		Util::Text::WrappedSecondary("%s", T(TKEY("cirrus_uv_size_hint"), "Larger values enlarge both weather and detail patterns without changing wind speed. At 1x, weather repeats every 16.384 km and details every 4.29 km. This is a global setting; scenes cannot override it."));
 		ImGui::TextUnformatted("Data/Textures/PhysicalSky/cirrus.dds");  // i18n-ignore: file path
 		ImGui::TreePop();
 	}
@@ -1051,7 +1051,7 @@ void MidCloudMapManager::DrawSettings(MidCloudSettings& settings, TextureManager
 		if (ImGui::Combo(T(TKEY("middle_detail_mode"), "Detail representation"), &detailMode, detailModes, IM_ARRAYSIZE(detailModes)))
 			settings.detailMode = static_cast<uint32_t>(detailMode);
 		ImGui::SliderFloat(T(TKEY("middle_detail_scale"), "Detail texture size"), &settings.detailScale, 200.f, 4000.f, "%.0f m");
-		Util::Text::WrappedSecondary("%s", T(TKEY("middle_detail_hint"), "Final density uses the shared Billow and Wisp noises: As selects Wisp, Ac selects Billow. 3D shapes the volume; 2D uses a horizontal noise slice. Detail size is independent of Weather Size. Both follow the upper-cloud wind."));
+		Util::Text::WrappedSecondary("%s", T(TKEY("middle_detail_hint"), "Final density uses the shared Billow and Wisp noises: As selects Wisp, Ac selects Billow. 3D shapes the volume; 2D uses a horizontal noise slice. Detail size is independent of Weather Size. Both modes follow the upper-cloud wind."));
 		ImGui::SliderFloat(T(TKEY("middle_height_power"), "Coverage to thickness response"), &settings.heightPower, 0.25f, 4.f);
 		ImGui::TreePop();
 	}
@@ -1062,7 +1062,7 @@ void MidCloudMapManager::DrawSettings(MidCloudSettings& settings, TextureManager
 		ImGui::SliderFloat(T(TKEY("middle_band_coverage"), "Band organization"), &settings.bands.coverage, 0.f, 1.f);
 		ImGui::SliderFloat(T(TKEY("middle_band_thickness"), "Thickness contrast"), &settings.bands.thickness, 0.f, 1.f);
 		ImGui::SliderFloat(T(TKEY("middle_band_displacement"), "Layer undulation"), &settings.bands.displacement, 0.f, .5f);
-		Util::Text::WrappedSecondary("%s", T(TKEY("middle_band_hint"), "Spacing is the nominal world distance between bands, independent of Weather Size. Local weather and cloud cells vary band width and allow breaks or merged regions. Bend changes neighbouring wavefronts smoothly in world space, measured in wavelengths. Billow/Wisp shape the final volume. Thickness contrast and layer undulation also work without coverage gaps. Undulation is a fraction of layer thickness."));
+		Util::Text::WrappedSecondary("%s", T(TKEY("middle_band_hint"), "Spacing is the nominal world distance between bands, independent of Weather Size. Local weather and cloud cells vary band width and allow breaks or merged regions. Bend smoothly shifts neighboring wavefronts in world space, measured in wavelengths. Billow and Wisp shape the final volume. Thickness contrast and layer undulation also work without coverage gaps; undulation is a fraction of layer thickness."));
 		ImGui::TreePop();
 	}
 }

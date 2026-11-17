@@ -441,7 +441,7 @@ void LocalNdfManager::DrawDebug(TextureManager& textures, float scale)
 	if (!ImGui::TreeNode(T(TKEY("local_ndf_debug"), "Local NDF resources")))
 		return;
 	ImGui::Text("%s: %zu", T(TKEY("local_ndf_active"), "Active transition endpoints"), activeAssets.size());
-	ImGui::Text("%s: %.2f", T(TKEY("local_ndf_effective_texel"), "Effective texel size (m), atlas limited to 2048"), effectiveTexelSize);
+	ImGui::Text("%s: %.2f", T(TKEY("local_ndf_effective_texel"), "Effective texel size (m; atlas limited to 2048)"), effectiveTexelSize);
 	ImGui::Text("XY: %.2f, %.2f; Z: %.2f .. %.2f", rect.x, rect.y, altitude.x, altitude.x + altitude.y);
 	auto& sky = globals::features::physicalSky;
 	for (size_t i = 0; i < activeAssets.size(); ++i) {
