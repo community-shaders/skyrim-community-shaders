@@ -14,6 +14,37 @@ float CloudLowPhase(float3 viewDir)
 	return SampleLightDiscPhase(viewDir, CloudDisc(), CloudDiskIndex()).x;
 }
 
+#if defined(CLOUD_MAIN_DISPATCH) || defined(CLOUD_VOXEL_VIEW)
+/** @brief Fraction of the cloud light disc's screen neighbourhood showing sky, the same test as the sun glare. */
+float GetCloudLightScreenVisibility()
+{
+	const float4 lightCS = mul(FrameBuffer::CameraViewProj, float4(CloudDisc().xyz, 0.0));
+	if (lightCS.w <= 0.0)
+		return 1.0;
+	const float2 lightUV = lightCS.xy / lightCS.w * float2(0.5, -0.5) + 0.5;
+	uint visibleSamples = 0;
+	[unroll] for (uint i = 0; i < FlareOcclusion::SampleCount; i++)
+	{
+		const float2 sampleUV = lightUV + FlareOcclusion::GetSampleOffset(i);
+		visibleSamples += FrameBuffer::IsOutsideFrame(sampleUV) || TexDepth.Load(SharedData::ConvertUVToSampleCoord(sampleUV)) >= 1.0;
+	}
+	return FlareOcclusion::GetVisibility(visibleSamples);
+}
+#endif
+
+/** @brief Low-cloud phase with its forward peak, the part above the phase 5 deg past the disc edge, faded out while geometry hides the light. */
+float ApplyCloudForwardPeakOcclusion(float phase)
+{
+#if defined(CLOUD_MAIN_DISPATCH) || defined(CLOUD_VOXEL_VIEW)
+	static const float kPeakWidth = 0.08726646;  // 5 deg past the disc edge
+	const uint index = CloudDiskIndex();
+	const float edgeCosine = cos(SharedData::physSkyData.diskAngularRadius[index] + kPeakWidth);
+	const float peakFloor = lerp(DISK_PHASE_ISOTROPIC.x, SampleDiskPhase(edgeCosine, index).x, CloudDisc().w);
+	[branch] if (phase > peakFloor) return lerp(peakFloor, phase, GetCloudLightScreenVisibility());
+#endif
+	return phase;
+}
+
 float CloudCirrusPhase(float3 viewDir)
 {
 	return SampleLightDiscPhase(viewDir, CloudDisc(), CloudDiskIndex()).y;
@@ -279,8 +310,16 @@ float3 ShadeCloudLighting(float3 pos, NDFInfo ndf, float extinction, float viewD
 {
 	float sunTransmission = UpperSunTransmission(pos);
 #ifdef CLOUD_AP_SHADOW
-	// Cloud-space z is relative to bottomZ; the heightmap is in world z.
-	sunTransmission *= TerrainShadows::GetTerrainShadow(pos + float3(0, 0, VolumetricCloudBuffer[0].bottomZ), TransmittanceSampler);
+	// Scene shadows follow the ground light, which can be clamped or lunar while clouds remain sunlit.
+	// Both directions are normalized; allow only floating-point error when matching them.
+	[branch] if (dot(VolumetricCloudBuffer[0].dirlightDir, SharedData::DirLightDirection.xyz) > 0.999999)
+	{
+		// Cloud-space z is relative to bottomZ; the heightmap is in world z.
+		const float3 worldPos = pos + float3(0, 0, VolumetricCloudBuffer[0].bottomZ);
+		sunTransmission *= TerrainShadows::GetTerrainShadow(worldPos, TransmittanceSampler);
+		[branch] if (sunTransmission > 0.0)
+			sunTransmission *= AtmosphereShadow::SampleCascadeShadow(worldPos - FrameBuffer::CameraPosAdjust.xyz);
+	}
 #endif
 	return ShadeCloudLighting(pos, ndf, extinction, viewDepth, viewOpacity, phase, opticalDepth, multipleScattering, sunTransmission);
 }

@@ -19,6 +19,7 @@
 #	define CLOUD_SHADOW_REGISTER t37
 #endif
 Texture3D<float> TexShadowVolume : register(t14);
+#include "Common/FlareOcclusion.hlsli"
 #include "Common/Spherical Harmonics/SphericalHarmonics.hlsli"
 #include "PhysicalSky/CloudGeometry.hlsli"
 #include "PhysicalSky/CloudMotion.hlsli"
@@ -1223,7 +1224,7 @@ VolumetricCloudResult RenderVolumetricCloudRay(float3 direction, float3 eye, flo
 	const float sheetBoundary = cirrusPending ? cirrusDistance : 0.0;
 	const float lastBoundary = max(boundaries.w, sheetBoundary);
 	boundaries = min(boundaries, float4(sheetBoundary, max(boundaries.xyz, sheetBoundary)));
-	const float phase = CloudLowPhase(direction);
+	const float phase = ApplyCloudForwardPeakOcclusion(CloudLowPhase(direction));
 	const float cirrusPhase = cirrusPending ? CloudCirrusPhase(direction) : 0.0;
 	const CloudAmbient ambient = MakeCloudAmbient();
 	const bool ambientEnabled = info.ambientStrength > 0.0 && (info.msAlbedo > 0.0 || CloudStormCount() > 0u);

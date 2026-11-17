@@ -65,6 +65,33 @@ namespace AtmosphereShadow
 		return ray;
 	}
 
+	/** @brief 2x2 depth-compare of a cascade at a light-space position. */
+	float GatherCascadeShadow(uint cascadeIndex, float3 positionLS)
+	{
+		float4 depths = TexDirectShadows.GatherRed(SampTr, float3(saturate(positionLS.xy), cascadeIndex), 0);
+		return dot(float4(depths > positionLS.z), 0.25);
+	}
+
+	/** @brief Sun visibility at a camera-relative position from the cascade shadow map, fading to 1 at the cascade end. */
+	float SampleCascadeShadow(float3 posWorldRel)
+	{
+		uint lightCount, lightStride;
+		DirectionalShadowLights.GetDimensions(lightCount, lightStride);
+		uint shadowWidth, shadowHeight, shadowLayers;
+		TexDirectShadows.GetDimensions(shadowWidth, shadowHeight, shadowLayers);
+		[branch] if (lightCount == 0u || shadowWidth == 0u || shadowHeight == 0u || shadowLayers < 2u) return 1.0;
+
+		const DirectionalShadowLightData light = DirectionalShadowLights[0];
+		const float4 clipPos = mul(FrameBuffer::CameraViewProj, float4(posWorldRel, 1));
+		const float shadowMapDepth = SharedData::GetScreenDepth(clipPos.z / clipPos.w);
+		[branch] if (light.EndSplitDistances.y <= 0.0 || shadowMapDepth >= light.EndSplitDistances.y) return 1.0;
+
+		const uint cascadeIndex = shadowMapDepth >= light.EndSplitDistances.x ? 1u : 0u;
+		const float3 positionLS = mul(light.ShadowProj[cascadeIndex], float4(posWorldRel + FrameBuffer::CameraPosAdjust.xyz, 1)).xyz;
+		const float edgeFade = pow(saturate(shadowMapDepth / light.EndSplitDistances.y), 16);
+		return lerp(GatherCascadeShadow(cascadeIndex, positionLS), 1.0, edgeFade);
+	}
+
 	float SampleShadow(float3 posWorldRel, float distance, ShadowRayData ray)
 	{
 		const SharedData::PhysSkyData data = SharedData::physSkyData;
@@ -83,8 +110,7 @@ namespace AtmosphereShadow
 				uint cascadeIndex = shadowMapDepth >= ray.endSplitDistances.x ? 1u : 0u;
 
 				float3 positionLS = ray.lightOrigin[cascadeIndex] + distance * ray.lightDirection[cascadeIndex];
-				float4 depths = TexDirectShadows.GatherRed(SampTr, float3(saturate(positionLS.xy), cascadeIndex), 0);
-				shadow *= dot(float4(depths > positionLS.z), 0.25);
+				shadow *= GatherCascadeShadow(cascadeIndex, positionLS);
 			}
 		}
 		[branch] if (all(shadow < 1e-8)) return 0;
