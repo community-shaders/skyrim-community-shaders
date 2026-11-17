@@ -18,7 +18,7 @@ by every voxel instance. Its threshold and folded-detail reconstruction is separ
 The current procedural generator supplies NDF shape and displacement noise;
 it does not yet generate this voxel-specific four-channel resource.
 
-Two linear lookup textures accompany the shape volume. Optional packed inputs are:
+Two required linear lookup textures accompany the shape volume.
 
 - `NubisVerticalProfile.dds`: BC5, one mip; R is the bottom profile and G is
   the top profile. U is type and V is local height, increasing bottom to top.
@@ -26,8 +26,8 @@ Two linear lookup textures accompany the shape volume. Optional packed inputs ar
   and GB supplies horizontal noise displacement near the base. Profile lookup
   clamps UVs; displacement lookup wraps and always uses mip 0.
 
-See [resource fallback](volumetric-cloud-texture-resources.md#optional-resource-fallback)
-for runtime LUT packing and operation without DDS files.
+Procedural noise preserves the adjustment LUT's R channel and generates its GB
+displacement channels. DDS mode uses the imported RGB channels directly.
 
 ## Dimensional profile
 

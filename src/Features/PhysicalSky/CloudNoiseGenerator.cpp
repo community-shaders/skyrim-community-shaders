@@ -242,7 +242,7 @@ void CloudNoiseGenerator::DrawSettings(CloudNoiseSettings& settings)
 		ImGui::TextWrapped("%s", T(TKEY("cloud_noise_generation_hint"), "Edits generate a new tile over several frames. The complete tile and its mip chain replace the previous noise together."));
 		ImGui::TextWrapped("%s", T(TKEY("cloud_noise_bandwidth_hint"), "Higher Cells Per Tile produces smaller features. Octaves finer than the texture can resolve are omitted. Vertical height profiles remain unchanged."));
 	} else
-		ImGui::TextWrapped("%s", T(TKEY("cloud_noise_dds_hint"), "Uses available DDS inputs. Missing shape or adjustment inputs use procedural noise. Reload Cloud Textures after replacing files."));
+		ImGui::TextWrapped("%s", T(TKEY("cloud_noise_dds_hint"), "Uses DDS inputs. Missing shape noise uses procedural noise. Both Nubis LUTs are required. Reload Cloud Textures after replacing files."));
 	ImGui::TreePop();
 }
 
