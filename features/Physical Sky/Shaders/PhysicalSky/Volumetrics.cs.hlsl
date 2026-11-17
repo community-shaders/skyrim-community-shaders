@@ -19,6 +19,7 @@
 #	define CLOUD_SHADOW_REGISTER t37
 #endif
 Texture3D<float> TexShadowVolume : register(t14);
+#include "Common/FlareOcclusion.hlsli"
 #include "Common/Spherical Harmonics/SphericalHarmonics.hlsli"
 #include "PhysicalSky/CloudGeometry.hlsli"
 #include "PhysicalSky/CloudMotion.hlsli"
@@ -1233,8 +1234,7 @@ VolumetricCloudResult RenderVolumetricCloudRay(float3 direction, float3 eye, flo
 	const float sheetBoundary = cirrusPending ? cirrusDistance : 0.0;
 	const float lastBoundary = max(boundaries.w, sheetBoundary);
 	boundaries = min(boundaries, float4(sheetBoundary, max(boundaries.xyz, sheetBoundary)));
-	const float phase = CloudLowPhase(direction);
-	const float phasePeakFloor = CloudPhasePeakFloor(phase);
+	const float phase = CloudGlareShadowedPhase(CloudLowPhase(direction));
 	const float cirrusPhase = cirrusPending ? CloudCirrusPhase(direction) : 0.0;
 	const CloudAmbient ambient = MakeCloudAmbient();
 	const bool ambientEnabled = info.ambientStrength > 0.0 && (info.msAlbedo > 0.0 || CloudStormCount() > 0u);
@@ -1404,10 +1404,10 @@ VolumetricCloudResult RenderVolumetricCloudRay(float3 direction, float3 eye, flo
 					lightDepthEnd = viewDistance + min(4.0 * step * GAME_UNIT_TO_M, 64.0);
 					lightMaterial = material;
 				}
-				const float3 source = ShadeCloudLighting(pos, densityContext.ndf, extinction, viewDepth, opacity, CloudScreenShadowedPhase(pos, phase, phasePeakFloor), lightDepth);
+				const float3 source = ShadeCloudLighting(pos, densityContext.ndf, extinction, viewDepth, opacity, phase, lightDepth);
 #else
 				const float3 source = CloudLighting(pos, direction, densityContext.ndf, extinction, viewDepth, opacity,
-					viewDistance, minimumMip, CloudScreenShadowedPhase(pos, phase, phasePeakFloor));
+					viewDistance, minimumMip, phase);
 #endif
 				result.lum += transmittance * source;
 				if (densityContext.ndf.stormVolume) {

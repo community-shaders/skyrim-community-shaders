@@ -14,55 +14,33 @@ float CloudLowPhase(float3 viewDir)
 	return SampleLightDiscPhase(viewDir, CloudDisc(), CloudDiskIndex()).x;
 }
 
-/** @brief Low-cloud phase capped where the forward peak has flattened; the peak above it is what screen-space shadows remove. */
-float CloudPhasePeakFloor(float phase)
+#ifdef CLOUD_MAIN_DISPATCH
+/** @brief Fraction of the cloud light disc's screen neighbourhood showing sky, the same test as the sun glare. */
+float CloudLightGlareVisibility()
+{
+	const float4 lightCS = mul(FrameBuffer::CameraViewProj, float4(CloudDisc().xyz, 0.0));
+	if (lightCS.w <= 0.0)
+		return 1.0;
+	const float2 lightUV = lightCS.xy / lightCS.w * float2(0.5, -0.5) + 0.5;
+	uint visibleSamples = 0;
+	[unroll] for (uint i = 0; i < FlareOcclusion::SampleCount; i++)
+	{
+		const float2 sampleUV = lightUV + FlareOcclusion::GetSampleOffset(i);
+		visibleSamples += FrameBuffer::IsOutsideFrame(sampleUV) || TexDepth.Load(SharedData::ConvertUVToSampleCoord(sampleUV)) >= 1.0;
+	}
+	return FlareOcclusion::GetVisibility(visibleSamples);
+}
+#endif
+
+/** @brief Low-cloud phase with its forward peak, the part above the phase 5 deg past the disc edge, faded out while geometry hides the light. */
+float CloudGlareShadowedPhase(float phase)
 {
 #ifdef CLOUD_MAIN_DISPATCH
 	static const float kPeakWidth = 0.08726646;  // 5 deg past the disc edge
 	const uint index = CloudDiskIndex();
 	const float edgeCosine = cos(SharedData::physSkyData.diskAngularRadius[index] + kPeakWidth);
-	return min(phase, lerp(DISK_PHASE_ISOTROPIC.x, SampleDiskPhase(edgeCosine, index).x, CloudDisc().w));
-#else
-	return phase;
-#endif
-}
-
-#ifdef CLOUD_MAIN_DISPATCH
-/** @brief 1 when the depth buffer shows nothing between a cloud-space position and the cloud light disc, else 0. */
-float CloudScreenLightVisibility(float3 pos)
-{
-	static const uint kSteps = 12u;
-	static const float kFirstStep = 2.0 * GAME_UNITS_PER_METER;
-	static const float kStepGrowth = 2.25;  // last step reaches ~15 km
-	static const float kThickness = 0.5;    // fraction of its depth a surface is assumed to extend behind itself
-	const float3 origin = pos + float3(0, 0, VolumetricCloudBuffer[0].bottomZ) - FrameBuffer::CameraPosAdjust.xyz;
-	const float3 lightDir = CloudDisc().xyz;
-	float previousDepth = mul(FrameBuffer::CameraViewProj, float4(origin, 1)).w;
-	float distance = kFirstStep;
-	[loop] for (uint i = 0u; i < kSteps; ++i)
-	{
-		const float4 clip = mul(FrameBuffer::CameraViewProj, float4(origin + lightDir * distance, 1));
-		const float2 uv = clip.xy / clip.w * float2(0.5, -0.5) + 0.5;
-		if (clip.w <= 0.0 || any(uv != saturate(uv)))
-			break;
-		// Any texel of a 2x2 footprint may occlude, so foliage neither leaks through its gaps nor hides the surface seen through them.
-		const float4 deviceDepths = TexDepth.GatherRed(TransmittanceSampler, FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(uv));
-		const float4 sceneDepths = SharedData::GetScreenDepths(deviceDepths);
-		// The sky never occludes; a surface occludes the step that crosses it and its assumed thickness.
-		if (any(deviceDepths < 1.0 - 1e-6 && sceneDepths < clip.w && sceneDepths * (1.0 + kThickness) > previousDepth))
-			return 0.0;
-		previousDepth = clip.w;
-		distance *= kStepGrowth;
-	}
-	return 1.0;
-}
-#endif
-
-/** @brief Low-cloud phase at a sample, with its forward peak removed when on-screen geometry hides the light. */
-float CloudScreenShadowedPhase(float3 pos, float phase, float peakFloor)
-{
-#ifdef CLOUD_MAIN_DISPATCH
-	[branch] if (phase > peakFloor) return lerp(peakFloor, phase, CloudScreenLightVisibility(pos));
+	const float peakFloor = lerp(DISK_PHASE_ISOTROPIC.x, SampleDiskPhase(edgeCosine, index).x, CloudDisc().w);
+	[branch] if (phase > peakFloor) return lerp(peakFloor, phase, CloudLightGlareVisibility());
 #endif
 	return phase;
 }
