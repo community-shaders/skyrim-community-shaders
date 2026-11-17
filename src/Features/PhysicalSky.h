@@ -24,9 +24,9 @@ struct PhysicalSky final : public Feature
 	inline std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
 		return {
-			T("feature.physical_sky.description", "Physically-based sky model for realistic sky gradients and other astronomical effects."),
+			T("feature.physical_sky.description", "Physically based sky model for realistic sky gradients and other astronomical effects."),
 			{
-				T("feature.physical_sky.key_feature_1", "Physically-based atmosphere and aerial perspective."),
+				T("feature.physical_sky.key_feature_1", "Physically based atmosphere and aerial perspective."),
 				T("feature.physical_sky.key_feature_2", "Procedural sun disk and celestial lighting controls."),
 				T("feature.physical_sky.key_feature_3", "Worldspace whitelist and interior override support."),
 				T("feature.physical_sky.key_feature_4", "Cloud relighting and silver lining controls."),

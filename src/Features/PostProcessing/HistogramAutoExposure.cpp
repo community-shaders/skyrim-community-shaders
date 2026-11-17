@@ -101,7 +101,7 @@ void HistogramAutoExposure::DrawCameraExposureReadout()
 	const float cameraEV100 = cam->EV100 + log2(cam->ISO / iso);
 	ImGui::Text(T("feature.post_processing.cinematic_camera.camera_ev100", "Camera Settings: %.2f EV100"), cameraEV100);
 	if (auto _tt = Util::HoverTooltipWrapper())
-		ImGui::TextUnformatted(T("feature.post_processing.cinematic_camera.ev100_hint", "EV100 = log2(f-number squared / shutter seconds * 100 / ISO). Exposure gain = 1 / (1.2 * 2^EV100), using saturation-based ISO and lens attenuation q = 0.65. Auto ISO meters scene luminance with K = 12.5; the metered value maps to 0.104167 before tone mapping. Requires LL + PBR lighting units."));
+		ImGui::TextUnformatted(T("feature.post_processing.cinematic_camera.ev100_hint", "EV100 = log2(f-number squared / shutter seconds * 100 / ISO). Exposure gain = 1 / (1.2 * 2^EV100), using saturation-based ISO and lens attenuation q = 0.65. Auto ISO meters scene luminance with K = 12.5; the metered value maps to 0.104167 before tone mapping. Requires Linear Lighting + PBR lighting units."));
 	ImGui::Text(T("feature.post_processing.histogram_auto_exposure.final_global_exposure_ev", "Global Exposure Gain: %.6g (%+.2f stops)"), exposure, log2(exposure));
 }
 

@@ -482,7 +482,7 @@ namespace
 		if (sceneAerosolPicker.type != Aerosol::Type::Custom) {
 			changed |= ImGui::SliderFloat(T(TKEY("aerosol_loading"), "Particle Loading"), &sceneAerosolPicker.loading, 0.f, 10.f, "%.2f x", ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_AlwaysClamp);
 			if (auto _tt = Util::HoverTooltipWrapper())
-				ImGui::Text("%s", T(TKEY("aerosol_loading_desc"), "Multiplier of the selected type's reference dry particle number densities. 1x uses the OPAC reference mixture; 0 removes aerosols. Humidity changes particle size, not this loading. This is not AQI or PM2.5."));
+				ImGui::Text("%s", T(TKEY("aerosol_loading_desc"), "Multiplies the selected type's reference dry particle number densities. 1x uses the OPAC reference mixture; 0 removes aerosols. Humidity changes particle size, not this loading. This is not AQI or PM2.5."));
 			changed |= ImGui::SliderFloat(T(TKEY("aerosol_humidity"), "Relative Humidity"), &sceneAerosolPicker.humidity, 0.f, 99.f, "%.1f %%", ImGuiSliderFlags_AlwaysClamp);
 			if (auto _tt = Util::HoverTooltipWrapper())
 				ImGui::Text("%s", T(TKEY("aerosol_humidity_desc"), "Effective relative humidity throughout the aerosol layer. Uses OPAC hygroscopic growth data from 0 to 99% RH. Higher humidity usually increases scattering; absorption and forward scattering follow the selected mixture. Does not simulate condensation or fog droplets."));
@@ -502,13 +502,13 @@ namespace
 				changed = true;
 			}
 		} else {
-			ImGui::TextDisabled("%s", T(TKEY("aerosol_scene_inherited"), "Aerosol coefficients: inherited from the settings below the scene."));
+			ImGui::TextDisabled("%s", T(TKEY("aerosol_scene_inherited"), "Aerosol coefficients: inherited from the parent settings."));
 		}
 
 		ImGui::EndDisabled();
 
 		if (!allowed)
-			Util::AddTooltip(T(TKEY("aerosol_scene_unsupported"), "This place cannot hold the aerosol coefficients."), Util::kTooltipWhenDisabled);
+			Util::AddTooltip(T(TKEY("aerosol_scene_unsupported"), "This scene type cannot store aerosol coefficients."), Util::kTooltipWhenDisabled);
 	}
 }
 
@@ -659,7 +659,7 @@ void PhysicalSky::SettingsGeneral()
 	if (settings.enableAllExteriorCells || settings.forceEnableAllInteriorCells) {
 		ImGui::InputFloat(T(TKEY("fallback_z_bottom"), "Fallback Z Bottom"), &settings.fallbackZBottom, 10.f, 100.f, "%.1f");
 		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text("%s", T(TKEY("used_when_current_worldspace_is_not_in_whitelist"), "Used when current worldspace is not in whitelist (or worldspace data is unavailable), including forced interiors."));
+			ImGui::Text("%s", T(TKEY("used_when_current_worldspace_is_not_in_whitelist"), "Used when the current worldspace is not in the whitelist or its data is unavailable, including forced interiors."));
 	}
 
 	if (!SceneWidgetInterceptor::IsArmed()) {
@@ -748,8 +748,8 @@ void PhysicalSky::SettingsCelestials()
 	ImGui::SliderFloat(T(TKEY("transmittance_mix"), "Transmittance Mix"), &settings.trMix, 0.f, 1.f, "%.2f");
 	if (auto _tt = Util::HoverTooltipWrapper())
 		ImGui::Text("%s", T(TKEY("apply_additional_atmospheric_tranmisttance_on_the_directional_light"),
-							  "Apply additional atmospheric tranmisttance on the directional light.\n"
-							  "Introduces natural yellowening at sunset with white sunlight."));
+							  "Applies additional atmospheric transmittance to the directional light.\n"
+							  "Gives natural yellowing at sunset with white sunlight."));
 
 	ImGui::SeparatorText(T(TKEY("sky_statics"), "Sky Statics"));
 	{
@@ -773,11 +773,11 @@ void PhysicalSky::SettingsCelestials()
 			ImGui::Text("%s", T(TKEY("sun_light_color_hint"), "Linear RGB illuminance before atmospheric extinction. The lux control scales all channels together, preserving the color."));
 		DrawIlluminanceControl(T(TKEY("sun_illuminance"), "Solar Illuminance"), settings.sunlightColor, kSunIlluminanceSpeed);
 		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::TextUnformatted(T(TKEY("sun_illuminance_hint"), "Illuminance on a surface perpendicular to the sun, before atmospheric extinction: 10 lux supplies 10 linear lighting units. Calibrated for LL + PBR with Override Directional Light enabled. Directional Light Multiplier, horizon fading and shadows apply afterward."));
+			ImGui::TextUnformatted(T(TKEY("sun_illuminance_hint"), "Illuminance on a surface perpendicular to the sun, before atmospheric extinction: 10 lux supplies 10 linear lighting units. Calibrated for Linear Lighting + PBR with Override Directional Light enabled. Directional Light Multiplier, horizon fading and shadows apply afterward."));
 		ImGui::Checkbox(T(TKEY("procedural_sun"), "Procedural Sun"), &settings.proceduralSun);
 		ImGui::SliderAngle(T(TKEY("sun_disk_angular_radius"), "Sun Disk Angular Radius"), &settings.sunDiskRad, 0.f, 10.f, "%.2f deg", ImGuiSliderFlags_AlwaysClamp);
 		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text("%s", T(TKEY("real_world_sun_disk_angular_radius_is_about"), "Real world sun disk angular radius is about 0.27 degrees."));
+			ImGui::Text("%s", T(TKEY("real_world_sun_disk_angular_radius_is_about"), "The real sun's angular radius is about 0.27 degrees."));
 		ImGui::PopID();
 	}
 
@@ -793,7 +793,7 @@ void PhysicalSky::SettingsCelestials()
 		if (ImGui::ColorEdit3(T(TKEY("light_color"), "Light Color"), &settings.masserColor.x, ImGuiColorEditFlags_DisplayHSV | ImGuiColorEditFlags_Float | ImGuiColorEditFlags_HDR))
 			ClampLightColor(settings.masserColor);
 		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text("%s", T(TKEY("light_color_hint"), "This sets the light color BEFORE it goes through the atmosphere i.e. extraterrestrial radiance."));
+			ImGui::Text("%s", T(TKEY("light_color_hint"), "Light color before it passes through the atmosphere (extraterrestrial radiance)."));
 		drawMoonIlluminance(settings.masserColor);
 		ImGui::SliderAngle(T(TKEY("disk_angular_radius"), "Disk Angular Radius"), &settings.masserDiskRad, 0.05f, 30.f, "%.2f deg", ImGuiSliderFlags_AlwaysClamp);
 		ImGui::PopID();
@@ -805,7 +805,7 @@ void PhysicalSky::SettingsCelestials()
 		if (ImGui::ColorEdit3(T(TKEY("light_color"), "Light Color"), &settings.secundaColor.x, ImGuiColorEditFlags_DisplayHSV | ImGuiColorEditFlags_Float | ImGuiColorEditFlags_HDR))
 			ClampLightColor(settings.secundaColor);
 		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text("%s", T(TKEY("light_color_hint"), "This sets the light color BEFORE it goes through the atmosphere i.e. extraterrestrial radiance."));
+			ImGui::Text("%s", T(TKEY("light_color_hint"), "Light color before it passes through the atmosphere (extraterrestrial radiance)."));
 		drawMoonIlluminance(settings.secundaColor);
 		ImGui::SliderAngle(T(TKEY("disk_angular_radius"), "Disk Angular Radius"), &settings.secundaDiskRad, 0.05f, 30.f, "%.2f deg", ImGuiSliderFlags_AlwaysClamp);
 		ImGui::PopID();
@@ -840,8 +840,8 @@ void PhysicalSky::SettingsAtmosphere()
 	{
 		ImGui::PushID("Rayleigh");
 		ImGui::TextWrapped("%s", T(TKEY("particles_much_smaller_than_the_wavelength_of_light"),
-									 "Particles much smaller than the wavelength of light. They have almost complete symmetry in forward and backward scattering. "
-									 "On earth, they are what makes the sky blue and, at sunset, red. Usually needs no extra change."));
+									 "Particles much smaller than the wavelength of light, which scatter almost equally forward and backward. "
+									 "On Earth, they make the sky blue and, at sunset, red. Usually needs no change."));
 
 		ImGui::ColorEdit3(T(TKEY("scatter_srgb"), "Scatter (sRGB)"), &settings.rayleighScatter.x, ImGuiColorEditFlags_DisplayHSV | ImGuiColorEditFlags_Float | ImGuiColorEditFlags_HDR);
 		ImGui::ColorEdit3(T(TKEY("scatter_ap1"), "Scatter (AP1)"), &settings.rayleighScatterAP1.x, ImGuiColorEditFlags_DisplayHSV | ImGuiColorEditFlags_Float | ImGuiColorEditFlags_HDR);
@@ -857,7 +857,7 @@ void PhysicalSky::SettingsAtmosphere()
 		ImGui::TextWrapped("%s", T(TKEY("aerosol_model_desc"), "Suspended particles scatter and absorb light. Choose an aerosol type to control particle loading and relative humidity, or Custom to edit optical coefficients."));
 		const char* types[] = {
 			T(TKEY("aerosol_custom"), "Custom"),
-			T(TKEY("aerosol_continental"), "Continental background"),
+			T(TKEY("aerosol_continental"), "Continental"),
 			T(TKEY("aerosol_maritime"), "Marine"),
 			T(TKEY("aerosol_urban"), "Urban pollution"),
 			T(TKEY("aerosol_desert"), "Desert dust")
@@ -902,7 +902,7 @@ void PhysicalSky::SettingsAtmosphere()
 				if (ImGui::SliderFloat(T(TKEY("aerosol_loading"), "Particle Loading"), &settings.aerosolLoading, 0.f, 10.f, "%.2f x", ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_AlwaysClamp))
 					settings.ApplyAerosolOptics();
 				if (auto _tt = Util::HoverTooltipWrapper())
-					ImGui::Text("%s", T(TKEY("aerosol_loading_desc"), "Multiplier of the selected type's reference dry particle number densities. 1x uses the OPAC reference mixture; 0 removes aerosols. Humidity changes particle size, not this loading. This is not AQI or PM2.5."));
+					ImGui::Text("%s", T(TKEY("aerosol_loading_desc"), "Multiplies the selected type's reference dry particle number densities. 1x uses the OPAC reference mixture; 0 removes aerosols. Humidity changes particle size, not this loading. This is not AQI or PM2.5."));
 				if (ImGui::SliderFloat(T(TKEY("aerosol_humidity"), "Relative Humidity"), &settings.aerosolHumidity, 0.f, 99.f, "%.1f %%", ImGuiSliderFlags_AlwaysClamp))
 					settings.ApplyAerosolOptics();
 				if (auto _tt = Util::HoverTooltipWrapper())
@@ -927,8 +927,8 @@ void PhysicalSky::SettingsAtmosphere()
 	{
 		ImGui::PushID("Ozone");
 		ImGui::TextWrapped("%s", T(TKEY("the_ozone_layer_high_up_in_the_sky"),
-									 "The ozone layer high up in the sky that mainly absorbs light of certain wavelength. "
-									 "It keeps the zenith sky blue, especially at sunrise or sunset."));
+									 "The ozone layer high in the atmosphere. It mainly absorbs certain wavelengths of light, "
+									 "which keeps the zenith sky blue, especially at sunrise and sunset."));
 
 		ImGui::ColorEdit3(T(TKEY("absorption_srgb"), "Absorption (sRGB)"), &settings.ozoneAbsorption.x, ImGuiColorEditFlags_DisplayHSV | ImGuiColorEditFlags_Float | ImGuiColorEditFlags_HDR);
 		ImGui::ColorEdit3(T(TKEY("absorption_ap1"), "Absorption (AP1)"), &settings.ozoneAbsorptionAP1.x, ImGuiColorEditFlags_DisplayHSV | ImGuiColorEditFlags_Float | ImGuiColorEditFlags_HDR);
@@ -1129,7 +1129,7 @@ void PhysicalSky::SettingsWeatherEffects()
 		ImGui::SliderFloat(T(TKEY("lightning_ground_chance"), "Ground Strike Chance"), &settings.lightning.groundChance, 0.f, 100.f, "%.0f %%", ImGuiSliderFlags_AlwaysClamp);
 		Util::AddTooltip(T(TKEY("lightning_ground_chance_desc"), "Attempts a ground strike against loaded terrain. If no surface is found, the discharge stays near the cloud base."));
 		ImGui::SliderFloat(T(TKEY("lightning_base_chance"), "Cloud Base Discharge Chance"), &settings.lightning.cloudBaseChance, 0.f, 100.f, "%.0f %%", ImGuiSliderFlags_AlwaysClamp);
-		Util::AddTooltip(T(TKEY("lightning_base_chance_desc"), "Cloud-base discharges in addition to ground strikes. The remaining percentage is embedded cloud lightning. Both chances together cannot exceed 100%."));
+		Util::AddTooltip(T(TKEY("lightning_base_chance_desc"), "Chance of a discharge from the cloud base. Together with Ground Strike Chance it cannot exceed 100%; the remainder is lightning embedded in the cloud."));
 		ImGui::ColorEdit3(T(TKEY("lightning_color"), "Lightning Color"), &settings.lightning.color.x, ImGuiColorEditFlags_Float);
 		settings.SanitizeLightning();
 		ImGui::Text(T(TKEY("lightning_duration"), "Discharge Duration: %.2f s"), ((settings.lightning.strokeCount - 1) * settings.lightning.strokeInterval + settings.lightning.strokeDuration) * 0.001f);
@@ -1141,7 +1141,7 @@ void PhysicalSky::SettingsWeatherEffects()
 		ImGui::SameLine();
 		if (ImGui::Button(T(TKEY("lightning_replay"), "Replay Lightning")))
 			lightning.Replay();
-		Util::AddTooltip(T(TKEY("lightning_replay_desc"), "Replays the last source and channel geometry with the current brightness and timing. Requires active Physical Sky lightning. If there is no previous source, searches for one in the configured range."));
+		Util::AddTooltip(T(TKEY("lightning_replay_desc"), "Replays the last source and channel geometry with the current brightness and timing. Requires active Physical Sky lightning. If there is no previous source, it searches for one within the configured range."));
 	}
 }
 
@@ -1226,11 +1226,11 @@ void PhysicalSky::DrawCloudWeatherPreview(bool middle, bool standalone)
 			ImGui::Combo(T(TKEY("cloud_preview_channel"), "Display"), &channel, channels, IM_ARRAYSIZE(channels));
 			Util::Text::WrappedSecondary("%s", T(TKEY("cloud_preview_live_hint"), "Live map of the active scene, including weather transitions. It shows the weather field before cloud detail and density scaling."));
 			if (channel == 0)
-				Util::Text::WrappedSecondary("%s", T(TKEY("cloud_preview_coverage_legend"), "Black: clear   White: full coverage"));
+				Util::Text::WrappedSecondary("%s", T(TKEY("cloud_preview_coverage_legend"), "Black: clear; white: full coverage"));
 			else if (channel == 1)
-				Util::Text::WrappedSecondary("%s", middle ? T(TKEY("cloud_preview_middle_type_legend"), "Black: altostratus (As)   White: altocumulus (Ac)") : T(TKEY("cloud_preview_low_type_legend"), "Black to white: increasing top cloud type"));
+				Util::Text::WrappedSecondary("%s", middle ? T(TKEY("cloud_preview_middle_type_legend"), "Black: altostratus (As); white: altocumulus (Ac)") : T(TKEY("cloud_preview_low_type_legend"), "Black to white: increasing cloud type at the top"));
 			else
-				Util::Text::WrappedSecondary("%s", T(TKEY("cloud_preview_height_legend"), "Black: layer base   White: top of the layer's height range"));
+				Util::Text::WrappedSecondary("%s", T(TKEY("cloud_preview_height_legend"), "Black: layer base; white: top of the layer's height range"));
 			const auto maps = ndfManager.GetNdf(live.settings.cloudMap, ndfTexManager);
 			const auto* id = standalone ? (middle ? "middleWeatherWindow" : "lowWeatherWindow") : (middle ? "middleWeatherInline" : "lowWeatherInline");
 			ID3D11ShaderResourceView* source = middle ? midCloudMapManager.Weather() : channel >= 2 ? maps.height :
@@ -1292,7 +1292,7 @@ void PhysicalSky::DrawLowCloudSection()
 		ImGui::SeparatorText(T(TKEY("cloud_density_group"), "Density"));
 		ImGui::SliderFloat(T(TKEY("cloud_density_scale"), "Extinction Scale"), &low.densityScale, 0.f, 1.f, "%.3f 1/m");
 		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text("%s", T(TKEY("cloud_density_scale_desc"), "Extinction per metre equals this scale times the reconstructed cloud density. It controls view opacity, sunlight attenuation and cloud shadows. At density 0.1 and scale 0.75, a 40 m path transmits about 5% of light."));
+			ImGui::Text("%s", T(TKEY("cloud_density_scale_desc"), "Extinction per meter equals this scale times the reconstructed cloud density. It controls view opacity, sunlight attenuation and cloud shadows. At density 0.1 and scale 0.75, a 40 m path transmits about 5% of light."));
 
 		ImGui::SeparatorText(T(TKEY("cloud_altitude_group"), "Altitude & Scale"));
 		ImGui::DragFloat(T(TKEY("ndf_altitude_offset"), "NDF Base Altitude"), &low.ndfAltitudeOffset, 1.f, 0.f, 20000.f, "%.0f m", ImGuiSliderFlags_AlwaysClamp);
@@ -1305,7 +1305,7 @@ void PhysicalSky::DrawLowCloudSection()
 		if (ImGui::SliderFloat(T(TKEY("cloud_curvature_radius"), "Cloud Curvature Radius"), &low.curvatureRadius, 25.f, 10000.f, "%.2f km", ImGuiSliderFlags_Logarithmic))
 			volMainHistoryValid = false;
 		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text("%s", T(TKEY("cloud_curvature_radius_desc"), "Controls how far clouds bend below the horizon. Smaller radii increase the curvature; NDF thickness stays fixed."));
+			ImGui::Text("%s", T(TKEY("cloud_curvature_radius_desc"), "Controls how far clouds bend below the horizon. Smaller radii curve them more; NDF thickness is unaffected."));
 
 		DrawWeatherMapSection();
 
@@ -1408,7 +1408,7 @@ void PhysicalSky::DrawCloudLightingSection()
 			ImGui::SliderFloat(T(TKEY("cloud_scatter_density_threshold"), "Scattering Density Threshold"), &lighting.scatterDensityThreshold, 0.001f, 1.f, "%.3f 1/m");
 			ImGui::SliderFloat(T(TKEY("cloud_scatter_density_power"), "Scattering Density Power"), &lighting.scatterDensityPower, 0.01f, 4.f, "%.3f");
 			if (auto _tt = Util::HoverTooltipWrapper())
-				ImGui::TextWrapped("%s", T(TKEY("cloud_source_desc"), "Below the threshold, the ratio of medium extinction to threshold, raised to Power, scales the effective scattering step for directional light. This is an artistic suppression of thin edges. View opacity, ambient and diffuse lighting use the full step. The threshold is measured before View Extinction Scale."));
+				ImGui::TextWrapped("%s", T(TKEY("cloud_source_desc"), "Below the threshold, the directional-light scattering step is scaled by (medium extinction / threshold) raised to Power, an artistic suppression of thin edges. View opacity, ambient and diffuse lighting use the full step. The threshold is measured before View Extinction Scale."));
 			ImGui::TreePop();
 		}
 
