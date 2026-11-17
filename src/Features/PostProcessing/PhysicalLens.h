@@ -75,6 +75,7 @@ struct PhysicalLens : PostProcessFeature
 	winrt::com_ptr<ID3D11SamplerState> sampler;
 
 private:
+	bool resourcesReady = false, shadersRequested = false;
 	static constexpr unsigned SourceCount = PhysicalLensOptics::SourceCount, TileCount = 64 * 36, CandidateCount = 2 * TileCount;
 	using Parameters = PhysicalLensOptics::Parameters;
 	struct OpticalState

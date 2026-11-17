@@ -3,6 +3,7 @@
 #include "PhysicalLensImagingGPU.h"
 #include <complex>
 #include <span>
+#include <stdexcept>
 #include <vector>
 
 // Scalar reciprocal pupil propagation. This reference separates actual wave
@@ -88,13 +89,17 @@ namespace PhysicalLensDiffraction
 		if (pupilResolution == 0)
 			pupilResolution = DiffractionPupilSize(reverse.surfaces[reverse.stop].aperture / Transfer(reverse, reverse.stop, .55).b);
 		if (padding == 0)
-			padding = 512 / pupilResolution;
+			padding = std::max(512u / pupilResolution, 1u);
+		if (pupilResolution > std::numeric_limits<unsigned>::max() / padding)
+			throw std::invalid_argument("BuildPupil: pupil size overflows");
 		pupil.size = pupilResolution * padding;
+		if (pupil.size == 0 || (pupil.size & (pupil.size - 1)) != 0)
+			throw std::invalid_argument("BuildPupil: pupil size must be a power of two");
 		const auto transfer = Transfer(reverse, reverse.stop, wavelengthUM);
 		double slope = 1.2 * reverse.surfaces[reverse.stop].aperture / transfer.b;
 		double extent = std::abs(slope) / std::sqrt(1 + slope * slope);
 		pupil.directionStep = 2 * extent / pupilResolution;
-		pupil.field.resize(pupil.size * pupil.size);
+		pupil.field.resize(size_t(pupil.size) * pupil.size);
 		double piston = 0;
 		bool hasPiston = false;
 		auto sample = [&](double qx, double qy, double margin) -> std::pair<Complex, double> {
@@ -118,19 +123,19 @@ namespace PhysicalLensDiffraction
 			double phase = aberrations ? 2 * std::numbers::pi * (path - piston) / (wavelengthUM * .001) : 0;
 			return { std::polar(std::sqrt(hit.transmission), phase), hit.apertureClearance };
 		};
-		std::vector<double> clearance(pupil.size * pupil.size, -1);
+		std::vector<double> clearance(size_t(pupil.size) * pupil.size, -1);
 		for (unsigned y = 0; y < pupilResolution; ++y)
 			for (unsigned x = 0; x < pupilResolution; ++x) {
 				double qx = (x + .5 - pupilResolution * .5) * pupil.directionStep;
 				double qy = (y + .5 - pupilResolution * .5) * pupil.directionStep;
 				auto [value, distance] = sample(qx, qy, 4.8 / pupilResolution);
 				unsigned column = x + (pupil.size - pupilResolution) / 2, row = y + (pupil.size - pupilResolution) / 2;
-				pupil.field[row * pupil.size + column] = value;
-				clearance[row * pupil.size + column] = distance;
+				pupil.field[size_t(row) * pupil.size + column] = value;
+				clearance[size_t(row) * pupil.size + column] = distance;
 			}
 		for (unsigned y = 1; y + 1 < pupil.size; ++y)
 			for (unsigned x = 1; x + 1 < pupil.size; ++x) {
-				unsigned i = y * pupil.size + x;
+				size_t i = size_t(y) * pupil.size + x;
 				double coverage = clearance[i] >= 0 ? 1 : 0;
 				if (std::abs(clearance[i]) < 2.4 / pupilResolution && std::norm(pupil.field[i]) > 0)
 					coverage = PupilCoverage(clearance[i], .5 * (clearance[i + 1] - clearance[i - 1]), .5 * (clearance[i + pupil.size] - clearance[i - pupil.size]));

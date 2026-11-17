@@ -64,9 +64,9 @@ float Clearance(float2 p)
 }
 groupshared float2 Samples[Size];
 [numthreads(256, 1, 1)] void Transform(uint lane : SV_GroupIndex, uint3 group : SV_GroupID) {
-	[unroll] for (uint half = 0; half < Size / 256; ++half)
+	[unroll] for (uint partIndex = 0; partIndex < Size / 256; ++partIndex)
 	{
-		uint x = lane + half * 256;
+		uint x = lane + partIndex * 256;
 		float2 value = Field.Load(int4(x, group.x, group.y, 0)).xy;
 		if (Stage.z) {
 			float2 uv = float2(x, group.x);

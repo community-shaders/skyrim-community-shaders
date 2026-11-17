@@ -156,10 +156,10 @@ float PupilTransmission(float2 q, float pixelWidth, uint seed)
 	// when integrating the weak diffraction wings.
 	[numthreads(512, 1, 1)] void PrefixDetailed(uint3 group : SV_GroupID, uint lane : SV_GroupIndex)
 {
-	[unroll] for (uint half = 0; half < 2; ++half)
+	[unroll] for (uint halfIndex = 0; halfIndex < 2; ++halfIndex)
 	{
-		uint x = half == 0 ? lane : 1023 - lane;
-		DetailValues[lane + half * 512] = WaveInput.Load(int4(x, group.x, group.y, 0));
+		uint x = halfIndex == 0 ? lane : 1023 - lane;
+		DetailValues[lane + halfIndex * 512] = WaveInput.Load(int4(x, group.x, group.y, 0));
 	}
 	GroupMemoryBarrierWithGroupSync();
 	[unroll] for (uint offset = 1; offset < 512; offset <<= 1)

@@ -174,6 +174,7 @@ void PhysicalLens::DrawSettings()
 
 void PhysicalLens::CompileShaders()
 {
+	shadersRequested = true;
 	const std::array cs{
 		ComputeShaderCompileInfo{ &extractCS, "flare.cs.hlsl", {}, "Extract" },
 		ComputeShaderCompileInfo{ &prepareCS, "flare.cs.hlsl", {}, "PrepareRegions" },
@@ -245,11 +246,18 @@ void PhysicalLens::ClearShaderCache()
 	lastGhostFrame = ~0u;
 	globals::shaderCache->ClearStandaloneComputeCache(L"PostProcessing/PhysicalLensFlare");
 	globals::shaderCache->ClearStandaloneComputeCache(L"PostProcessing/PhysicalLensImaging");
-	CompileShaders();
+	shadersRequested = false;
+	if (IsActive() && resourcesReady)
+		CompileShaders();
 }
 
 void PhysicalLens::SetupResources()
 {
+	resourcesReady = false;
+	outputReady = cameraReady = waveReady = false;
+	if (!IsActive())
+		return;
+	cachedPreset = -1;
 	lastFocusFrame = ~0u;
 	focusPending.fill(false);
 	D3D11_TEXTURE2D_DESC edgeDesc{};
@@ -531,7 +539,9 @@ void PhysicalLens::SetupResources()
 	sample.MaxLOD = D3D11_FLOAT32_MAX;
 	DX::ThrowIfFailed(device->CreateSamplerState(&sample, sampler.put()));
 	Util::SetResourceName(sampler.get(), "PhysicalLens::Sampler");
-	CompileShaders();
+	resourcesReady = true;
+	if (!shadersRequested)
+		CompileShaders();
 }
 
 PhysicalLensImaging::GPUParameters PhysicalLens::OpticalParameters() const
@@ -554,7 +564,6 @@ float PhysicalLens::ResolveCameraFocus(const CinematicCamera::PhysicalCameraStat
 		completedFocusFrame = 0;
 		resolvedFocusM = camera.ManualDistanceM;
 	}
-	lastFocusFrame = frame;
 	if (!focusTexture) {
 		D3D11_TEXTURE2D_DESC desc{};
 		desc.Width = desc.Height = desc.MipLevels = desc.ArraySize = desc.SampleDesc.Count = 1;
@@ -647,6 +656,7 @@ float PhysicalLens::ResolveCameraFocus(const CinematicCamera::PhysicalCameraStat
 		source = focusTexture->resource.get();
 		ctx->CopyResource(previousFocus->resource.get(), source);
 	}
+	lastFocusFrame = frame;
 	// Never block or overwrite an in-flight readback under GPU contention.
 	for (unsigned i = 0; i < focusReadback.size(); ++i) {
 		if (focusPending[i])
@@ -841,6 +851,10 @@ void PhysicalLens::Draw(TextureInfo& input)
 	outputReady = false;
 	cameraReady = false;
 	waveReady = false;
+	if (!resourcesReady)
+		SetupResources();
+	if (!shadersRequested)
+		CompileShaders();
 	// Keep local references while a shader-cache clear can replace the members.
 	winrt::com_ptr<ID3D11ComputeShader> extract, prepare, split, select, buildJobs, expandJobs, requestPlans, bakePlans, trace, shade, reduce, resolve, buildWaveSources, buildWaveTiles, buildWaveTail;
 	winrt::com_ptr<ID3D11VertexShader> vs;
@@ -882,28 +896,37 @@ void PhysicalLens::Draw(TextureInfo& input)
 	} else {
 		lastFocusFrame = ~0u;
 	}
-	if (cachedPreset != settings.LensPreset || cachedFNumber != optical.fNumber || cachedFocusDistance != optical.focusM || cachedZoom != settings.ZoomPosition || cachedCoating != settings.Coating || cachedFocalMM != optical.focalMM || cachedLinked != optical.linked ||
+	if (!configurationValid || cachedPreset != settings.LensPreset || cachedFNumber != optical.fNumber || cachedFocusDistance != optical.focusM || cachedZoom != settings.ZoomPosition || cachedCoating != settings.Coating || cachedFocalMM != optical.focalMM || cachedLinked != optical.linked ||
 		(optical.linked && (cachedCameraBladeCount != optical.blades || cachedCameraRoundness != optical.roundness))) {
 		const double focusMM = optical.focusM > 0 ? optical.focusM * 1000.0 : PhysicalLensImaging::Infinity;
+		PhysicalLensImaging::Model imagingModel;
+		double nextProjectionFocal = 0;
+		float apertureExtent = cameraApertureExtent;
 		bool configured;
 		if (optical.linked) {
+			auto cameraInfinity = cachedCameraInfinity;
 			if (!cachedLinked || cachedPreset != settings.LensPreset || cachedFocalMM != optical.focalMM || cachedFNumber != optical.fNumber) {
-				if (!PhysicalLensImaging::CameraInfinity(settings.LensPreset, optical.focalMM, optical.fNumber, cachedCameraInfinity)) {
+				if (!PhysicalLensImaging::CameraInfinity(settings.LensPreset, optical.focalMM, optical.fNumber, cameraInfinity)) {
 					configurationValid = false;
 					return;
 				}
 			}
 			if (!cachedLinked || cachedCameraBladeCount != optical.blades || cachedCameraRoundness != optical.roundness)
-				cameraApertureExtent = float(PhysicalLensImaging::CameraApertureExtent(optical.blades, optical.roundness));
-			configured = PhysicalLensImaging::FocusCamera(cachedCameraInfinity, optical.fNumber, focusMM,
-				cameraApertureExtent, cachedImagingModel, projectionFocal);
+				apertureExtent = float(PhysicalLensImaging::CameraApertureExtent(optical.blades, optical.roundness));
+			configured = PhysicalLensImaging::FocusCamera(cameraInfinity, optical.fNumber, focusMM,
+				apertureExtent, imagingModel, nextProjectionFocal);
+			if (configured)
+				cachedCameraInfinity = std::move(cameraInfinity);
 		} else {
-			cameraApertureExtent = 1;
-			configured = PhysicalLensImaging::Configure(settings.LensPreset, optical.fNumber, settings.ZoomPosition, focusMM, cachedImagingModel, projectionFocal);
+			apertureExtent = 1;
+			configured = PhysicalLensImaging::Configure(settings.LensPreset, optical.fNumber, settings.ZoomPosition, focusMM, imagingModel, nextProjectionFocal);
 		}
 		configurationValid = configured;
 		if (!configured)
 			return;
+		cachedImagingModel = std::move(imagingModel);
+		projectionFocal = nextProjectionFocal;
+		cameraApertureExtent = apertureExtent;
 		lastGhostFrame = ~0u;
 		cachedLens = PhysicalLensImaging::GhostModel(cachedImagingModel, projectionFocal);
 		std::vector<PhysicalLensOptics::GhostPath> allPaths(PhysicalLensOptics::MaxPaths);
@@ -1024,7 +1047,7 @@ void PhysicalLens::Draw(TextureInfo& input)
 			uavs[0] = nullptr;
 			uavs[1] = waveTiles->UAV();
 			ctx->CSSetUnorderedAccessViews(0, 5, uavs, nullptr);
-			srvs[0] = input.srv;
+			srvs[0] = nullptr;
 			srvs[1] = settings.ImageEffects ? cameraMap->srv.get() : nullptr;
 			srvs[2] = waveSources->SRV();
 			srvs[3] = regions->SRV();

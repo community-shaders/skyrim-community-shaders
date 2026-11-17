@@ -5,7 +5,6 @@ StructuredBuffer<float4> SourceWaveKernel : register(t3);
 #include "PostProcessing/PhysicalLensImaging/diffraction_parameters.hlsli"
 #include "PostProcessing/PhysicalLensImaging/regions.hlsli"
 Texture2DArray<float> WaveMaxDensity : register(t4);
-Texture2D<float4> WaveTileScene : register(t0);
 Texture2DArray<float4> WaveTileMapping : register(t1);
 StructuredBuffer<float4> WaveTileRegions : register(t3);
 
@@ -164,16 +163,9 @@ groupshared uint PackBroadWaveTiles;
 	if (all(id.xy == 0))
 		WaveDispatch.Store(4, PackBroadWaveTiles != 0 ? 3 : 12);
 	float2 lo = id.xy * 16, hi = lo + 16;
-	float background = 1e30;
-	[unroll] for (uint corner = 0; corner < 5; ++corner)
-	{
-		uint2 p = corner == 4 ? uint2(lo + 8) : uint2(lo) + uint2(corner & 1, corner >> 1) * 15;
-		float3 radiance = WaveTileScene.Load(int3(min(p, WaveImageSize - 1), 0)).rgb;
-		background = min(background, dot(max(radiance, 0), float3(.2126, .7152, .0722)));
-	}
-	// The accumulated omitted signal stays below 0.2% of the local background;
-	// dark backgrounds retain an absolute floor of 1e-5 per emitter.
-	float tolerance = max(1e-5, .002 * background * VisibilityExposure() / max(MaxSources, 1));
+	// Without a conservative minimum over the entire tile, retain the absolute
+	// per-emitter tolerance so dark details cannot lose visible diffraction.
+	const float tolerance = 1e-5;
 	uint mask = CoreTileActive(lo, hi) ? (1u << 16) : 0;
 	for (uint source = 0; source < MaxSources; ++source) {
 		float4 bounds = WaveSourceInput[source * 7 + 6];

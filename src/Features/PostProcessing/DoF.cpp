@@ -53,7 +53,9 @@ void DoF::DrawSettings()
 {
 	const auto* cam = owner ? owner->GetActivePhysicalCameraState() : nullptr;
 	const bool camActive = cam != nullptr;
-	bool adaptiveGather = camActive || settings.UseAdaptiveGather;
+	bool adaptiveGather = settings.UseAdaptiveGather;
+	if (camActive)
+		adaptiveGather = true;
 
 	float autoFocusCoord[2] = { settings.FocusCoord.x, settings.FocusCoord.y };
 	float manualFocus = settings.ManualFocusPlane;
@@ -162,10 +164,15 @@ void DoF::DrawSettings()
 		T("feature.post_processing.do_f.bokeh_mode_procedural", "Procedural"),
 		T("feature.post_processing.do_f.bokeh_mode_custom_texture", "Custom Texture (Higher Cost)")
 	};
-	int bokehMode = camActive ? 0 : settings.BokehMode;
+	int bokehMode = settings.BokehMode;
+	if (camActive)
+		bokehMode = 0;
 	ImGui::BeginDisabled(camActive);
-	if (ImGui::Combo(T("feature.post_processing.do_f.bokeh_mode", "Bokeh Mode"), &bokehMode, bokehModes, IM_ARRAYSIZE(bokehModes)))
-		settings.BokehMode = bokehMode;
+	{
+		const SceneWidgetInterceptor::ProxyScope proxy(&settings.BokehMode, 1.0f);
+		if (ImGui::Combo(T("feature.post_processing.do_f.bokeh_mode", "Bokeh Mode"), &bokehMode, bokehModes, IM_ARRAYSIZE(bokehModes)) && !SceneWidgetInterceptor::IsArmed())
+			settings.BokehMode = bokehMode;
+	}
 	ImGui::EndDisabled();
 	if (bokehMode == 0) {
 		ImGui::BeginDisabled(camActive);
@@ -221,8 +228,11 @@ void DoF::DrawSettings()
 
 	ImGui::SeparatorText(T("feature.post_processing.do_f.section_quality", "Quality"));
 	ImGui::BeginDisabled(camActive);
-	if (ImGui::Checkbox(T("feature.post_processing.do_f.adaptive_gather", "Adaptive Gather"), &adaptiveGather))
-		settings.UseAdaptiveGather = adaptiveGather;
+	{
+		const SceneWidgetInterceptor::ProxyScope proxy(&settings.UseAdaptiveGather, 1.0f);
+		if (ImGui::Checkbox(T("feature.post_processing.do_f.adaptive_gather", "Adaptive Gather"), &adaptiveGather) && !SceneWidgetInterceptor::IsArmed())
+			settings.UseAdaptiveGather = adaptiveGather;
+	}
 	ImGui::EndDisabled();
 	if (auto _tt = Util::HoverTooltipWrapper())
 		ImGui::TextUnformatted(T("feature.post_processing.do_f.adaptive_gather_desc", "Uses a fixed low-sample kernel and a CoC-aware image pyramid."));
