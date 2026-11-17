@@ -389,6 +389,32 @@ namespace Util
 		bool m_locked;
 	};
 
+	/** @brief While active, shows a default-constructed copy in place of the saved settings until the scope ends. */
+	template <class Settings>
+	class DefaultsWhileActive
+	{
+	public:
+		DefaultsWhileActive(Settings& a_settings, bool a_active) :
+			m_settings(a_settings), m_active(a_active)
+		{
+			if (m_active)
+				std::swap(m_settings, m_saved);
+		}
+		~DefaultsWhileActive()
+		{
+			if (m_active)
+				std::swap(m_settings, m_saved);
+		}
+
+		DefaultsWhileActive(const DefaultsWhileActive&) = delete;
+		DefaultsWhileActive& operator=(const DefaultsWhileActive&) = delete;
+
+	private:
+		Settings& m_settings;
+		Settings m_saved{};
+		bool m_active;
+	};
+
 	/** @brief Explainer text behind a collapsed-by-default disclosure row. */
 	void Explainer(const char* a_label, const char* a_text);
 

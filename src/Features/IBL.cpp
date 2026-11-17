@@ -32,8 +32,10 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 
 void IBL::DrawSettings()
 {
-	const Util::LockedSection enbLock(IsManagedByENB(),
+	const bool managedByENB = IsManagedByENB();
+	const Util::LockedSection enbLock(managedByENB,
 		T("common.settings_managed_by_enb", "This setting is managed by Effects 11."));
+	const Util::DefaultsWhileActive<Settings> shownDefaults(settings, managedByENB);
 
 	ImGui::Checkbox(T(TKEY("enable_ibl"), "Enable IBL"), (bool*)&settings.EnableIBL);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -123,21 +125,23 @@ void IBL::RestoreDefaultSettings()
 IBL::PerFrame IBL::GetCommonBufferData() const
 {
 	const bool sceneDisabled = IsDisabledForCurrentScene();
+	const bool managedByENB = IsManagedByENB();
+	const Settings source = managedByENB ? Settings{} : settings;
 	PerFrame data = {
-		.EnableIBL = sceneDisabled ? 0u : settings.EnableIBL,
-		.PreserveFogLuminance = settings.PreserveFogLuminance,
-		.UseStaticIBL = settings.UseStaticIBL,
-		.DALCAmount = settings.DALCAmount,
-		.EnvIBLScale = settings.EnvIBLScale,
-		.SkyIBLScale = settings.SkyIBLScale,
-		.EnvIBLSaturation = settings.EnvIBLSaturation,
-		.SkyIBLSaturation = settings.SkyIBLSaturation,
-		.FogAmount = settings.FogAmount,
-		.DALCMode = settings.DALCMode,
+		.EnableIBL = sceneDisabled ? 0u : source.EnableIBL,
+		.PreserveFogLuminance = source.PreserveFogLuminance,
+		.UseStaticIBL = source.UseStaticIBL,
+		.DALCAmount = source.DALCAmount,
+		.EnvIBLScale = source.EnvIBLScale,
+		.SkyIBLScale = source.SkyIBLScale,
+		.EnvIBLSaturation = source.EnvIBLSaturation,
+		.SkyIBLSaturation = source.SkyIBLSaturation,
+		.FogAmount = source.FogAmount,
+		.DALCMode = source.DALCMode,
 		.ENBSkyFalloff = globals::features::effects11.OwnsFeature(E11Handoff::Feature::IBL)
 	};
 
-	if (!sceneDisabled && IsManagedByENB()) {
+	if (!sceneDisabled && managedByENB) {
 		auto& settingManager = SettingManager::GetSingleton();
 		data.EnableIBL = Util::IsInterior() ? 0u : 1u;
 		data.EnvIBLScale = 0.0f;
