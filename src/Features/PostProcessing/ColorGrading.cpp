@@ -946,7 +946,7 @@ void ColorGrading::ReleaseActiveShaders()
 {
 	BumpShaderGeneration();
 	const auto vertexShaderPtrs = std::array{ &colorgradingVS };
-	const auto shaderPtrs = std::array{ &colorgradingPS };
+	const auto shaderPtrs = std::array{ &colorgradingPS, &colorgradingMirrorPS };
 	const auto computeShaderPtrs = std::array{ &lutgenCS };
 
 	std::lock_guard lock(shaderMutex);
@@ -999,6 +999,7 @@ void ColorGrading::CompileShaders()
 	};
 	const std::vector<PixelShaderCompileInfo> rasterInfos = {
 		{ &colorgradingPS, "colorgrading.hlsl", { { "TONEMAP_FUNC", tonemapFuncName } }, "PSColorGrading" },
+		{ &colorgradingMirrorPS, "colorgrading.hlsl", { { "TONEMAP_FUNC", tonemapFuncName } }, "PSColorGradingMirror" },
 	};
 
 	CompileRasterShadersAsync(L"Data\\Shaders\\PostProcessing\\ColorGrading", vertexInfos, rasterInfos);
@@ -1009,6 +1010,12 @@ void ColorGrading::CompileShaders()
 
 void ColorGrading::Draw(TextureInfo& inout_tex)
 {
+	DrawToTarget(inout_tex, {}, nullptr);
+}
+
+bool ColorGrading::DrawToTarget(TextureInfo& inout_tex, const TextureInfo& target, ID3D11RenderTargetView* targetView,
+	ID3D11Texture2D* alternate, ID3D11RenderTargetView* alternateView)
+{
 	auto context = globals::d3d::context;
 	auto state = globals::state;
 
@@ -1016,9 +1023,33 @@ void ColorGrading::Draw(TextureInfo& inout_tex)
 		ReloadActiveShaders();
 
 	if (!AllShadersReady({ &colorgradingVS }) || !AllShadersReady({ &colorgradingPS }) || !AllShadersReady({ &lutgenCS }))
-		return;
+		return false;
 	if (!owner)
-		return;
+		return false;
+
+	// Writing the engine target directly saves the copy out of texColor, but only into a texture
+	// texColor could stand in for, and never the texture being graded.
+	TextureInfo output{ texColor->resource.get(), texColor->srv.get() };
+	auto* outputView = texColor->rtv.get();
+	const auto compatibleTarget = [&](ID3D11Texture2D* texture, ID3D11RenderTargetView* view) {
+		if (!view || !texture || texture == inout_tex.tex)
+			return false;
+		D3D11_TEXTURE2D_DESC textureDesc{};
+		D3D11_RENDER_TARGET_VIEW_DESC viewDesc{};
+		texture->GetDesc(&textureDesc);
+		view->GetDesc(&viewDesc);
+		return textureDesc.Width == texColor->desc.Width && textureDesc.Height == texColor->desc.Height &&
+		       textureDesc.SampleDesc.Count == 1 && textureDesc.Format == texColor->desc.Format &&
+		       viewDesc.Format == texColor->desc.Format && viewDesc.ViewDimension == D3D11_RTV_DIMENSION_TEXTURE2D &&
+		       viewDesc.Texture2D.MipSlice == 0;
+	};
+	bool wroteAlternate = false;
+	if (target.srv && !saveImagesFlag && compatibleTarget(target.tex, targetView)) {
+		output = target;
+		outputView = targetView;
+		wroteAlternate = alternate != target.tex && compatibleTarget(alternate, alternateView) &&
+		                 AllShadersReady({ &colorgradingMirrorPS });
+	}
 
 	globals::profiler->BeginPass("PostProcessing::ColorGrading");
 	state->BeginPerfEvent("Color Grading and Tonemapping");
@@ -1142,8 +1173,13 @@ void ColorGrading::Draw(TextureInfo& inout_tex)
 		context->PSSetConstantBuffers(1, 1, &psCB);
 		context->PSSetSamplers(0, 1, psSamplers.data());
 		context->PSSetShaderResources(0, (UINT)(settings.skipLUT ? 1 : 2), srvs.data());
-		pass.SetTargets({ texColor->rtv.get() }, (float)texColor->desc.Width, (float)texColor->desc.Height);
-		pass.SetShaders(colorgradingVS.get(), colorgradingPS.get());
+		if (wroteAlternate) {
+			pass.SetTargets({ outputView, alternateView }, (float)texColor->desc.Width, (float)texColor->desc.Height);
+			pass.SetShaders(colorgradingVS.get(), colorgradingMirrorPS.get());
+		} else {
+			pass.SetTargets({ outputView }, (float)texColor->desc.Width, (float)texColor->desc.Height);
+			pass.SetShaders(colorgradingVS.get(), colorgradingPS.get());
+		}
 		pass.Draw();
 
 		// clean up
@@ -1166,7 +1202,7 @@ void ColorGrading::Draw(TextureInfo& inout_tex)
 		OutputTextures();
 	}
 
-	inout_tex = { texColor->resource.get(), texColor->srv.get() };
+	inout_tex = output;
 	globals::profiler->EndPass();
 
 	const bool curveReadbackActive =
@@ -1225,6 +1261,7 @@ void ColorGrading::Draw(TextureInfo& inout_tex)
 	}
 
 	state->EndPerfEvent();
+	return wroteAlternate;
 }
 
 void ColorGrading::OutputTextures()

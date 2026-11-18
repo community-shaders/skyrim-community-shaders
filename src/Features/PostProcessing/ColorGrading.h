@@ -156,6 +156,7 @@ struct ColorGrading : public PostProcessFeature
 	bool saveImagesFlag = false;
 	winrt::com_ptr<ID3D11VertexShader> colorgradingVS = nullptr;
 	winrt::com_ptr<ID3D11PixelShader> colorgradingPS = nullptr;
+	winrt::com_ptr<ID3D11PixelShader> colorgradingMirrorPS = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> lutgenCS = nullptr;
 
 	winrt::com_ptr<ID3D11SamplerState> linearSampler = nullptr;
@@ -175,6 +176,17 @@ struct ColorGrading : public PostProcessFeature
 	virtual void DrawSettings() override;
 
 	virtual void Draw(TextureInfo&) override;
+	/**
+	 * @brief Grades into a compatible engine target instead of texColor, optionally mirroring into a second one.
+	 * @param inout_tex Pipeline input; replaced with the texture the grading wrote.
+	 * @param target Engine target to write; texColor is used when it is empty or incompatible.
+	 * @param targetView Render target view of target.
+	 * @param alternate Second engine target to write in the same pass, or null.
+	 * @param alternateView Render target view of alternate.
+	 * @return True when the alternate target was written.
+	 */
+	bool DrawToTarget(TextureInfo& inout_tex, const TextureInfo& target, ID3D11RenderTargetView* targetView,
+		ID3D11Texture2D* alternate = nullptr, ID3D11RenderTargetView* alternateView = nullptr);
 	void UpdateColorSpaceTransforms(bool hdrEnabled = false);
 
 	/**

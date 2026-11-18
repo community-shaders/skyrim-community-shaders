@@ -727,26 +727,46 @@ void PostProcessing::PreProcess(RE::RENDER_TARGET a_input)
 			pipe->UpdateAutoEnabled();
 	}
 
+	const auto canDraw = [&](const auto& pipe) {
+		return pipe && !bypass && pipe->IsActive() && !(inMainLoadingMenu && pipe->DisableInMainLoadingMenu()) &&
+		       (!pipe->DrawBeforeUpscaling() || !upscaling.loaded);
+	};
+	// With nothing drawing after it, Color Grading writes the engine target (and its alternate)
+	// itself, saving the copy out of its own texture.
+	const auto gradingIndex = static_cast<size_t>(FeaturePipelineIndex::ColorGrading);
+	const auto firstLaterFeature = pipeline.begin() + gradingIndex + 1;
+	const auto canDrawAfterGrading = [&](const auto& pipe) { return canDraw(pipe) && pipe->DrawAfterColorGrading(); };
+	const bool directTarget = !inMainLoadingMenu &&
+	                          std::none_of(firstLaterFeature, pipeline.end(), canDraw) &&
+	                          std::none_of(pipeline.begin(), firstLaterFeature, canDrawAfterGrading);
+	bool gradingWroteAlternate = false;
+
 	// go through each fx
 	bool colorGraded = false;
 	bool exposureResolved = !linear || globals::state->preExposure == 1.0f;
 	for (auto& pipe : pipeline) {
-		if (pipe && !bypass && pipe->IsActive() && !pipe->DrawAfterColorGrading() && !(inMainLoadingMenu && pipe->DisableInMainLoadingMenu()) && (!pipe->DrawBeforeUpscaling() || !upscaling.loaded)) {
+		if (canDraw(pipe) && !pipe->DrawAfterColorGrading()) {
 			auto* input = lastTexColor.tex;
 			// A failed/not-yet-compiled composite cannot hand scaled radiance to
 			// display transforms. The final copy below provides the identity fallback.
-			if (!exposureResolved && pipe == pipeline[static_cast<size_t>(FeaturePipelineIndex::ColorGrading)])
+			if (!exposureResolved && pipe == pipeline[gradingIndex])
 				continue;
-			DrawFeature(*pipe, lastTexColor);
+			if (directTarget && pipe == pipeline[gradingIndex]) {
+				const PostProcessFeature::TextureInfo gradingTarget{ gameTexMain.texture, gameTexMain.SRV };
+				gradingWroteAlternate = static_cast<ColorGrading&>(*pipe).DrawToTarget(
+					lastTexColor, gradingTarget, gameTexMain.RTV, gameTexMainAlt.texture, gameTexMainAlt.RTV);
+			} else {
+				DrawFeature(*pipe, lastTexColor);
+			}
 			if (!exposureResolved && pipe == pipeline[static_cast<size_t>(FeaturePipelineIndex::Composite)])
 				exposureResolved = lastTexColor.tex != input;
-			if (pipe == pipeline[static_cast<size_t>(FeaturePipelineIndex::ColorGrading)])
+			if (pipe == pipeline[gradingIndex])
 				colorGraded = lastTexColor.tex != input;
 		}
 	}
 
 	for (auto& pipe : pipeline) {
-		if (!bypass && exposureResolved && pipe && pipe->IsActive() && pipe->DrawAfterColorGrading() && !(inMainLoadingMenu && pipe->DisableInMainLoadingMenu()) && (!pipe->DrawBeforeUpscaling() || !upscaling.loaded)) {
+		if (exposureResolved && canDrawAfterGrading(pipe)) {
 			DrawFeature(*pipe, lastTexColor);
 		}
 	}
@@ -764,7 +784,10 @@ void PostProcessing::PreProcess(RE::RENDER_TARGET a_input)
 		.scale = exposureResolved ? 1.f : 1.f / globals::state->preExposure
 	};
 	CopyToRenderTarget(gameTexMain, useMainCopy ? mainCopyConvertTex : mainConvertTex, lastTexColor.tex, lastTexColor.srv, conversion);
-	CopyToRenderTarget(gameTexMainAlt, useMainCopy ? mainConvertTex : mainCopyConvertTex, gameTexMain.texture, gameTexMain.SRV, CopyCB{});
+	// The mirrored grading output is still current unless the copy above converted gameTexMain in place.
+	const bool convertedMain = conversion.scale != 1.f || conversion.gamma != 1.f || conversion.inputGamut != conversion.outputGamut;
+	if (!gradingWroteAlternate || convertedMain)
+		CopyToRenderTarget(gameTexMainAlt, useMainCopy ? mainConvertTex : mainCopyConvertTex, gameTexMain.texture, gameTexMain.SRV, CopyCB{});
 
 	isrefraction = false;
 }
