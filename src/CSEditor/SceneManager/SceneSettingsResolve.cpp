@@ -19,6 +19,13 @@ void SceneSettingsManager::ResolveAndApply(bool force, bool allowLocationTransit
 {
 	if (resolverSuspended || sceneLayerSuspendDepth > 0)
 		return;
+	if (baselineSnapshotDeferred && !Util::AreSettingsShowingDefaults()) {
+		baselineSnapshotDeferred = false;
+		resolverDirty = true;
+		// The cached overrides were built without the skipped baselines.
+		cachedLocationOverridesValid = false;
+		locationOverridesDirty = true;
+	}
 	if (!locationDataLoaded)
 		TryEnsureLocationDataLoaded();
 	if (!weatherDataLoaded)
@@ -956,8 +963,10 @@ const json* SceneSettingsManager::GetFeatureBaseSnapshot(const std::string& feat
 		return &snapshotIt->second;
 
 	// Saving now would capture guard-shown defaults and cache them as the base.
-	if (Util::AreSettingsShowingDefaults())
+	if (Util::AreSettingsShowingDefaults()) {
+		baselineSnapshotDeferred = true;
 		return nullptr;
+	}
 
 	auto* feature = Feature::FindFeatureByShortName(featureShortName);
 	json snapshot;
