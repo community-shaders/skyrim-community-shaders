@@ -198,6 +198,30 @@ namespace GoToIndex
 			}
 		}
 
+		/// Settings a feature lists itself, for controls the catalog cannot see (a feature's own tools, say).
+		void AddFeatureListedSettings(std::vector<Entry>& out)
+		{
+			for (Feature* feature : Feature::GetFeatureList()) {
+				if (!feature->loaded || !feature->IsInMenu() || feature->IsHiddenUnreleased())
+					continue;
+				const std::string shortName = feature->GetShortName();
+				for (auto& listed : feature->GetSettingsSearchEntries()) {
+					Entry entry;
+					entry.kind = Kind::Setting;
+					entry.title = listed.label;
+					entry.breadcrumb = feature->GetDisplayName();
+					entry.id = std::format("listed:{}/{}", shortName, listed.id);
+					entry.haystack = shortName + " " + listed.description;
+					entry.run = [shortName, focus = std::move(listed.focusCallback)] {
+						Navigate(shortName);
+						if (focus)
+							focus();
+					};
+					out.push_back(std::move(entry));
+				}
+			}
+		}
+
 		void AddCatalogSettings()
 		{
 			const auto generation = I18n::GetSingleton()->GetGeneration();
@@ -414,6 +438,7 @@ namespace GoToIndex
 		g_entries.clear();
 		AddPages(g_entries);
 		AddFeatures(g_entries);
+		AddFeatureListedSettings(g_entries);
 		AddSettingsPageLabels(g_entries);
 		AddCommands(g_entries, shortcuts);
 		AddCatalogSettings();
