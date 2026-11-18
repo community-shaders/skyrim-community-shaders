@@ -134,6 +134,7 @@ There is no committed ledger. The record of what has been ported is the `Ported 
     - **open-shaders:** NeuralRendering, FoveatedRender, ShadowAtlas/ShadowScheduler/ShadowCasterManager (SCM), CSUtility, LazyShader, the VR HMD mask, DLSS stereo fallback, CommonLib bumps beyond upstream's pinned version.
     - **Bottled:** SnowCover, ReverseZ, lite lighting variants (`NoWetness`/`NoSnowCover` flags), SkySync helpers absent upstream.
 - If a commit depends on earlier fork-only work, name that prerequisite in the reason.
+- **VR is fork-only.** Community Shaders does not support VR; only open-shaders does. A commit whose fix, symptom or reasoning is VR-only (per-eye or HMD paths, `isVR` branches, VR shader configs, a repro that only happens in VR) is `not-relevant (VR-only)`, even when the code it touches exists upstream. When a commit mixes VR and flat changes, port only the flat part. Never cite VR behaviour to justify a port, and never ask for VR testing in a PR.
 
 ### 2e. Portable? Classify the patch
 
@@ -152,7 +153,7 @@ Present one triage table and wait for approval before any push.
 | Fork | SHA / PR | Title | Outcome | Reason (one line, concrete) |
 | ---- | -------- | ----- | ------- | --------------------------- |
 
-Outcomes: `port-clean`, `port-adapted`, `already-upstream (#NNNN)`, `in-open-PR (#NNNN)`, `declined-before (#NNNN)`, `fork-only (<missing file/symbol>)`, `superseded`, `needs-decision (<size/risk>)`, `not-relevant (<why>)`.
+Outcomes: `port-clean`, `port-adapted`, `already-upstream (#NNNN)`, `in-open-PR (#NNNN)`, `declined-before (#NNNN)`, `fork-only (<missing file/symbol>)`, `superseded`, `needs-decision (<size/risk>)`, `not-relevant (<why>)` (e.g. `not-relevant (VR-only)`).
 
 ## 4. Port, one item at a time
 
@@ -164,7 +165,7 @@ Outcomes: `port-clean`, `port-adapted`, `already-upstream (#NNNN)`, `in-open-PR 
     - **Resource naming:** every new resource goes through `Util::SetResourceName` or the Buffer.h wrappers.
     - **Threading:** check render-thread vs compile-worker vs game-thread access; locks are scoped with no nested locking; no lock on hot per-draw paths unless it's justified.
     - **Failure paths:** shader compile failure disables cleanly, and Map/Create failures are handled.
-    - **SE/AE/VR:** `RELOCATION_ID`/`REL::Relocate` pairs; `GetRuntimeData()` for classes whose layout differs; VR configs updated where they exist.
+    - **SE/AE:** `RELOCATION_ID`/`REL::Relocate` pairs; `GetRuntimeData()` for classes whose layout differs. Upstream ships no VR build, so add no VR configs or VR-only branches.
     - **Settings struct change:** bump the feature `.ini` version and validate inputs.
     - **i18n:** user-visible strings use `T()`/`TKEY()`.
     - **Conventions:** ImGui via RAII guards, colors and spacing from `ThemeManager::Constants`, Doxygen comments on public methods, no TODO/FIXME.
@@ -192,7 +193,7 @@ Outcomes: `port-clean`, `port-adapted`, `already-upstream (#NNNN)`, `in-open-PR 
 
 1. Re-fetch upstream/dev. If it moved, rebase the branch (it's yours and unpublished) and re-run step 5.
 2. Re-check the guard from step 1b, then run `git push -u fork <branch>`. Retry up to 4 times with backoff (2s, 4s, 8s, 16s) on network errors only.
-3. Open the PR to `community-shaders/skyrim-community-shaders:dev`, with head `<login>:<branch>` and `maintainer_can_modify: true`. Body sections:
+3. Open the PR as a draft (`draft: true`) to `community-shaders/skyrim-community-shaders:dev`, with head `<login>:<branch>` and `maintainer_can_modify: true`. Every PR starts as a draft; the maintainer marks it ready for review. Body sections:
     - **Summary**
     - **Source:** fork, PR/commit, original author. Include the exact `Ported from ...` line.
     - **Differences from the fork version**
@@ -226,3 +227,5 @@ Final message to the maintainer:
 - Hand-merge generated files or reformat untouched code.
 - Commit run reports, ledgers or other per-run artifacts.
 - Skip the checkpoint on scheduled or unattended runs.
+- Open a PR that is not a draft.
+- Port a VR-only change, or justify a port by VR behaviour.
