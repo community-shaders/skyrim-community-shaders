@@ -140,6 +140,10 @@ bool Camera::EnsureTargets()
 	if (texLens && texOutput)
 		return true;
 
+	const auto now = std::chrono::steady_clock::now();
+	if (now < nextTargetAttempt)
+		return false;
+
 	auto gameTexMainCopy = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN_COPY];
 
 	D3D11_TEXTURE2D_DESC texDesc;
@@ -173,8 +177,10 @@ bool Camera::EnsureTargets()
 		logger::error("[PostProcessing] Camera could not create its targets: {}", e.what());
 		texLens.reset();
 		texOutput.reset();
+		nextTargetAttempt = now + kTargetRetryDelay;
 		return false;
 	}
+	nextTargetAttempt = {};
 	return true;
 }
 
