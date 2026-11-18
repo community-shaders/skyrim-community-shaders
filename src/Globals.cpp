@@ -23,6 +23,7 @@
 #include "Features/LightLimitFix.h"
 #include "Features/LinearLighting.h"
 #include "Features/PerformanceOverlay.h"
+#include "Features/PhysicalSky.h"
 #include "Features/PostProcessing.h"
 #include "Features/ProceduralAurora.h"
 #include "Features/ProceduralSun.h"
@@ -43,6 +44,7 @@
 #include "Features/TreeWind.h"
 #include "Features/UnifiedWater.h"
 #include "Features/Upscaling.h"
+#include "Features/ViewAtmosphere.h"
 #include "Features/VolumetricLighting.h"
 #include "Features/VolumetricShadows.h"
 #include "Features/WaterEffects.h"
@@ -80,6 +82,7 @@ namespace globals
 		HairSpecular hairSpecular{};
 		HorizonFix horizonFix{};
 		InteriorSun interiorSun{};
+		PhysicalSky physicalSky{};
 		ProceduralSun proceduralSun{};
 		RainRefraction rainRefraction{};
 		ScreenSpaceGI screenSpaceGI{};
@@ -94,6 +97,7 @@ namespace globals
 		TreeWind treeWind{};
 		UnifiedWater unifiedWater{};
 		VolumetricLighting volumetricLighting{};
+		ViewAtmosphere viewAtmosphere{};
 		WaterEffects waterEffects{};
 		PerformanceOverlay performanceOverlay{};
 		WetnessEffects wetnessEffects{};
@@ -252,6 +256,7 @@ namespace globals
 		RefreshTES();
 		player = RE::PlayerCharacter::GetSingleton();
 		grassManager = RE::BGSGrassManager::GetSingleton();
+		tes = RE::TES::GetSingleton();
 		sky = RE::Sky::GetSingleton();
 		utilityShader = RE::BSUtilityShader::GetSingleton();
 		imageSpaceManager = RE::ImageSpaceManager::GetSingleton();

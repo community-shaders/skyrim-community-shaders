@@ -15,6 +15,8 @@ namespace LightLimitFix
 
 	float GetAttenuation(float distance, Light light)
 	{
+		if (light.lightFlags & LightFlags::Lightning)
+			return (light.lightFlags & LightFlags::Disabled) ? 0.0 : 3.14159265 * light.sizeBias / max(distance * distance + light.sizeBias, 1e-6);
 		float isEnabled = 1.0f - float((light.lightFlags & LightFlags::Disabled) != 0);
 		float isInvSq = float((light.lightFlags & LightFlags::InverseSquare) != 0);
 

@@ -301,6 +301,8 @@ private:
 	float3 GradeSkyColors(std::span<RE::NiColor, RE::TESWeather::ColorTypes::kTotal> a_colors) const;
 	/** @brief Per-weather counterpart of BlendGradedAmbient for the sky colours graded by GradeSkyColors. */
 	void BlendGradedWeathers(RE::Sky* a_sky, std::span<RE::NiColor, RE::TESWeather::ColorTypes::kTotal> a_graded) const;
+	/** @brief Matches presetActive to IsPresetEnabled(), reloading the shader cache on a change when a_reloadShaders is set. */
+	void SyncPresetActive(bool a_reloadShaders);
 	bool presetActive = false;
 	bool resourcesReady = false;
 	/** @brief Creates the additive blend state shared by the ray passes on first use; false if creation failed. */

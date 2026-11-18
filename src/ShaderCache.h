@@ -12,6 +12,7 @@
 #include <vector>
 #include <winrt/base.h>
 
+#include "Utils/ContentHash.h"
 #include "Utils/WinApi.h"
 
 struct ID3D11ComputeShader;
@@ -380,6 +381,12 @@ namespace SIE
 
 		/** @brief Writes through a sibling temp file and a rename, so a crash mid-write cannot leave a torn blob at diskPath. */
 		bool WriteBlobAtomic(const std::wstring& diskPath, ID3DBlob* blob);
+
+		/** @brief The persistent shader store's blob for a CompileDedupe key, or null on a miss or while the store is off. */
+		winrt::com_ptr<ID3DBlob> ReadContentStore(const Util::ContentHash::Hash128& a_key);
+
+		/** @brief Adds a blob to the persistent shader store under a CompileDedupe key; does nothing while the store is off. */
+		void WriteContentStore(const Util::ContentHash::Hash128& a_key, ID3DBlob* a_blob);
 	}
 
 	class UpdateListener;
@@ -562,7 +569,7 @@ namespace SIE
 		/// ID3D11ComputeShader interface.
 		using StandaloneShaderReadyCallback = std::function<void(ID3D11DeviceChild*)>;
 
-		/// @brief Compile (or load from the disk cache) a standalone vertex/pixel/compute
+		/// @brief Compile (or load from the persistent shader store) a standalone vertex/pixel/compute
 		///        shader on the shared compilation pool, off the calling thread.
 		/// @param sourcePath  HLSL source path under Data/Shaders (e.g.
 		///                    Data\\Shaders\\PostProcessing\\Vignette\\vignette.ps.hlsl).
@@ -579,8 +586,8 @@ namespace SIE
 			StandaloneShaderClass shaderClass,
 			StandaloneShaderReadyCallback onReady);
 
-		/// @brief Compile (or load from the disk cache) a standalone compute shader
-		///        on the shared compilation pool, off the calling thread.
+		/// @brief Compile (or load from the persistent shader store) a standalone compute shader
+		///        through Util::CompileShader on the shared compilation pool, off the calling thread.
 		/// @param sourcePath  HLSL source path under Data/Shaders (e.g.
 		///                    Data\\Shaders\\PostProcessing\\DoF\\dof.cs.hlsl).
 		/// @param entryPoint  HLSL entry function name.
@@ -593,11 +600,6 @@ namespace SIE
 			std::string entryPoint,
 			std::vector<std::pair<const char*, const char*>> defines,
 			ComputeShaderReadyCallback onReady);
-
-		/// @brief Deletes a standalone compute-shader feature's own disk-cache
-		///        subtree (e.g. L"PostProcessing/DoF"), without touching any
-		///        other feature's cache.
-		void ClearStandaloneComputeCache(std::wstring_view relativeDir);
 
 		RE::BSGraphics::VertexShader* MakeAndAddVertexShader(const RE::BSShader& shader,
 			uint32_t descriptor);
@@ -957,7 +959,6 @@ namespace SIE
 		bool isDump = false;
 		bool hideError = false;
 		bool useFileWatcher = false;
-		bool preserveStandaloneCache = false;
 		bool recachePending = false;
 
 		std::stop_source ssource;

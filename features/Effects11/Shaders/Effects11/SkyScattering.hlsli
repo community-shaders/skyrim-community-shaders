@@ -107,6 +107,15 @@ namespace SkyScattering
 		return (1.0 - cosAngle * cosAngle) / (cosAngle * cosAngle * halfTan * halfTan);
 	}
 
+	float MoonBillboardTan(uint index, float originalTan)
+	{
+#ifdef PHYSICAL_SKY
+		if (SharedData::physSkyData.enabled)
+			return tan(SharedData::physSkyData.diskAngularRadius[index]);
+#endif
+		return originalTan;
+	}
+
 	float3 GetMoonGlow(float3 viewDirection, float3 moonDirection, float3 moonColor, float moonHalfTan)
 	{
 		float radius = saturate(GetBillboardRadius(viewDirection, SafeNormalize(moonDirection), 12.0 * moonHalfTan));
@@ -118,8 +127,8 @@ namespace SkyScattering
 		float3 glow = 0.0;
 		[branch] if (SharedData::enbSettings.SkyScatteringMoonGlowAmount > 0.0)
 		{
-			glow = GetMoonGlow(viewDirection, SharedData::MasserDirection.xyz, SharedData::MasserColor.xyz, SharedData::enbSettings.MasserBillboardTan);
-			glow += GetMoonGlow(viewDirection, SharedData::SecundaDirection.xyz, SharedData::SecundaColor.xyz, SharedData::enbSettings.SecundaBillboardTan);
+			glow = GetMoonGlow(viewDirection, SharedData::MasserDirection.xyz, SharedData::MasserColor.xyz, MoonBillboardTan(1u, SharedData::enbSettings.MasserBillboardTan));
+			glow += GetMoonGlow(viewDirection, SharedData::SecundaDirection.xyz, SharedData::SecundaColor.xyz, MoonBillboardTan(2u, SharedData::enbSettings.SecundaBillboardTan));
 			glow *= SharedData::enbSettings.SkyScatteringMoonGlowAmount * SharedData::enbSettings.CloudsEdgeMoonMultiplier * GetHorizonCrop(viewDirection.z);
 		}
 		return glow;
@@ -214,8 +223,8 @@ namespace SkyScattering
 		bool moonRim = edgeWeight > 0.0 && SharedData::enbSettings.CloudsEdgeMoonMultiplier > 0.0;
 		[branch] if (moonLit || moonRim)
 		{
-			AddCloudMoonLight(moonLight, edge, viewDirection, SharedData::MasserDirection.xyz, SharedData::MasserColor.xyz, SharedData::enbSettings.MasserBillboardTan, moonLit, moonRim, visibility);
-			AddCloudMoonLight(moonLight, edge, viewDirection, SharedData::SecundaDirection.xyz, SharedData::SecundaColor.xyz, SharedData::enbSettings.SecundaBillboardTan, moonLit, moonRim, visibility);
+			AddCloudMoonLight(moonLight, edge, viewDirection, SharedData::MasserDirection.xyz, SharedData::MasserColor.xyz, MoonBillboardTan(1u, SharedData::enbSettings.MasserBillboardTan), moonLit, moonRim, visibility);
+			AddCloudMoonLight(moonLight, edge, viewDirection, SharedData::SecundaDirection.xyz, SharedData::SecundaColor.xyz, MoonBillboardTan(2u, SharedData::enbSettings.SecundaBillboardTan), moonLit, moonRim, visibility);
 		}
 
 		float horizonCrop = GetHorizonCrop(viewDirection.z);

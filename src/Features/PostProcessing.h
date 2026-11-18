@@ -16,6 +16,7 @@
 #include "PostProcessing/LocalExposure.h"
 #include "PostProcessing/MotionBlur.h"
 #include "PostProcessing/PhysicalGlare.h"
+#include "PostProcessing/PhysicalLens.h"
 #include "PostProcessing/Vignette.h"
 
 struct PostProcessing : Feature
@@ -99,6 +100,7 @@ struct PostProcessing : Feature
 		PhysicalGlare,
 		CODBloom,
 		LensFlare,
+		PhysicalLens,
 		Composite,
 		ColorGrading,
 		LUT,
@@ -153,7 +155,7 @@ struct PostProcessing : Feature
 		Gamut inputGamut = Gamut::Rec709;
 		Gamut outputGamut = Gamut::Rec709;
 		float gamma = 1.f;
-		float pad = 0.f;
+		float scale = 1.f;
 	};
 
 	/**

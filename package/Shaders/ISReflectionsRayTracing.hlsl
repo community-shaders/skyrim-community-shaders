@@ -1,6 +1,7 @@
 #include "Common/DummyVSTexCoord.hlsl"
 #include "Common/FrameBuffer.hlsli"
 #include "Common/MotionBlur.hlsli"
+#include "Common/PreExposure.hlsli"
 #include "Common/SharedData.hlsli"
 
 typedef VS_OUTPUT PS_INPUT;
@@ -117,7 +118,7 @@ float4 GetReflectionColor(
 					if (SharedData::InInterior || SharedData::HideSky)
 						return 0.0;
 					float3 reflectionDirectionWS = FrameBuffer::ViewToWorld(reflectionDirection, false);
-					return float4(SkyReflectionTex.SampleLevel(ColorSampler, reflectionDirectionWS, 0).xyz, fadeFactor);
+					return float4(PreExposure::Encode(SkyReflectionTex.SampleLevel(ColorSampler, reflectionDirectionWS, 0).xyz), fadeFactor);
 				}
 
 				float2 finalSampleUV = binaryRaySample.xy;
@@ -141,7 +142,7 @@ float4 GetReflectionColor(
 				if (!FrameBuffer::IsOutsideFrame(reprojectedRaySample.xy))
 					alpha = float4(AlphaTex.SampleLevel(AlphaSampler, ConvertRaySamplePrevious(reprojectedRaySample.xy), 0).xyz, 1.0);
 
-				float3 reflectionColor = color + SSRParams.z * alpha.xyz * alpha.w;
+				float3 reflectionColor = color + SSRParams.z * PreExposure::History(alpha.xyz) * alpha.w;
 				return float4(reflectionColor, fadeFactor);
 			}
 

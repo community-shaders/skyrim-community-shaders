@@ -19,6 +19,7 @@ struct DirectContext
 	float3 lightColor;
 	float detailedShadow;
 	float softShadow;
+	float2 lightDisk;
 #if defined(TRUE_PBR)
 	float backTransmissionVisibility;
 	float3 coatWorldNormal;
@@ -73,6 +74,9 @@ namespace Glints
 struct MaterialProperties
 {
 	float3 BaseColor;
+#if defined(TRUE_PBR) || defined(CS_SKIN_SHADING)
+	float3 DirectSpecularEnergyCompensation;
+#endif
 #if !defined(TRUE_PBR)
 	float Shininess;
 	float Glossiness;

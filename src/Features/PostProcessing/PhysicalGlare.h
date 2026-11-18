@@ -37,6 +37,7 @@ struct PhysicalGlare : public PostProcessFeature
 	virtual inline std::string GetType() const override { return "Physical Glare"; }
 	virtual inline std::string GetDisplayName() const override { return T("feature.post_processing.physical_glare.name", "Physical Glare"); }
 	virtual inline std::string GetDesc() const override { return T("feature.post_processing.physical_glare.description", "Physically based glare from aperture diffraction and ocular scattering. FFT convolution with a wavelength-dependent PSF, dual eye/lens modes, wavefront aberrations, and wide-gamut chromatic dispersion."); }
+	virtual bool IsExperimental() const override { return true; }
 	virtual bool WritesToMainTexture() const override { return false; }
 
 	TextureInfo GetGlareOutput() const { return outputReady ? TextureInfo{ texOutput->resource.get(), texOutput->srv.get() } : TextureInfo{}; }
@@ -47,7 +48,7 @@ struct PhysicalGlare : public PostProcessFeature
 	struct Settings
 	{
 		// --- Core ---
-		float ThresholdEV = 8.0f;  // Brightness threshold in EV100 (exp2(EV100 - 3) → linear luminance). Paper: 0.9 linear ≈ 2.85 EV100.
+		float ThresholdEV = 8.0f;  // Neutral-equivalent EV100; exp2(EV100 - 3) is applied per RGB channel before exposure.
 		float Intensity = 0.1f;
 		int ApertureMode = 0;  // 0 = Lens (N-polygon), 1 = Pupil (circle)
 		int ApertureBlades = 6;
