@@ -19,17 +19,20 @@ const hotfixLine = /^hotfix\/(\d+\.(?:\d+|x)\.x)$/.exec(refName)?.[1];
 // on hotfix/1.2.x would resolve to 1.3.0 and collide with a version already
 // shipped from main. release-hotfix.yaml only cherry-picks fix:/perf:, but
 // clamp here as well so a hand-pushed commit can't jump the line.
-const commitAnalyzer = hotfixLine
-  ? [
-      '@semantic-release/commit-analyzer',
-      {
-        releaseRules: [
-          { breaking: true, release: 'patch' },
-          { type: 'feat', release: 'patch' },
-        ],
-      },
-    ]
-  : '@semantic-release/commit-analyzer';
+// The default angular preset ignores `feat!:` headers without a BREAKING CHANGE
+// footer, so use conventionalcommits to make `!` release a major.
+const commitAnalyzer = [
+  '@semantic-release/commit-analyzer',
+  {
+    preset: 'conventionalcommits',
+    ...(hotfixLine && {
+      releaseRules: [
+        { breaking: true, release: 'patch' },
+        { type: 'feat', release: 'patch' },
+      ],
+    }),
+  },
+];
 
 module.exports = {
   // 'main' is the stable release channel. It only ever advances by fast-
