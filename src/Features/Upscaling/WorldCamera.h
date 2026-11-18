@@ -35,12 +35,12 @@ namespace UpscalingCamera
 		/**
 		 * @brief Reads the world camera from the engine camera table, which keys entries on (camera, useJitter):
 		 * the jittered entry the scene draws with, else the unjittered one.
-		 * @return False in VR, whose entries hold per-eye arrays, or when the table has no entry for the world camera.
+		 * @return False when the table has no entry for the world camera.
 		 */
 		inline bool ReadCameraTable(WorldCamera& a_out)
 		{
 			const auto* camera = RE::Main::WorldRootCamera();
-			if (globals::game::isVR || !camera || !globals::game::graphicsState)
+			if (!camera || !globals::game::graphicsState)
 				return false;
 			const auto& table = globals::game::graphicsState->GetRuntimeData().cameraDataCacheA;
 			const auto* entries = reinterpret_cast<const CameraStateEntry*>(table.data());
@@ -70,8 +70,8 @@ namespace UpscalingCamera
 	 * @brief The world camera for upscaling and frame generation.
 	 *
 	 * frameBufferCached holds whichever camera uploaded PerFrame last, which can be the first-person or a
-	 * screen-space camera. Reads the world camera's entry from the engine camera table on SE/AE, and falls
-	 * back to the PerFrame snapshot taken after the world batches draw (VR, or no table entry).
+	 * screen-space camera. Reads the world camera's entry from the engine camera table, and falls
+	 * back to the PerFrame snapshot taken after the world batches draw when the table has no entry.
 	 */
 	inline WorldCamera GetWorldCamera()
 	{
