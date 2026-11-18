@@ -23,7 +23,7 @@ namespace PostProcessingRaster
 	 *   - RS: rasterizer state, viewports, scissor rects
 	 *   - IA: primitive topology + input layout (draws use no vertex buffer)
 	 *   - VS/HS/DS/GS/PS: shader objects
-	 *   - PS: resource slots 0-7, constant-buffer slots 0-5, sampler slots 0-1
+	 *   - PS: resource slots used by the pass, constant-buffer slots 0-5, sampler slots 0-1
 	 */
 	struct RasterPass
 	{
@@ -31,8 +31,9 @@ namespace PostProcessingRaster
 		 * @brief Saves the pipeline state a raster pass touches and switches
 		 *        IA/RS/OM/VS/PS into fullscreen-triangle draw state.
 		 * @param a_context  Immediate device context.
+		 * @param a_psSRVCount  Resource slots to preserve, up to 15. Defaults to 8.
 		 */
-		explicit RasterPass(ID3D11DeviceContext* a_context);
+		explicit RasterPass(ID3D11DeviceContext* a_context, UINT a_psSRVCount = 8);
 
 		/**
 		 * @brief Restores everything the constructor saved and releases the
@@ -76,11 +77,12 @@ namespace PostProcessingRaster
 		void Draw();
 
 	private:
-		static constexpr UINT kPSSRVCount = 8;
+		static constexpr UINT kPSSRVCount = 15;
 		static constexpr UINT kPSCBCount = 6;
 		static constexpr UINT kPSSamplerCount = 2;
 
 		ID3D11DeviceContext* context;
+		UINT psSRVCount;
 
 		ID3D11RenderTargetView* savedRTVs[D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT] = {};
 		ID3D11DepthStencilView* savedDSV = nullptr;

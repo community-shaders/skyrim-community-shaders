@@ -17,6 +17,8 @@
 #define TDM_API_COMMONLIB
 #include "TDM/TrueDirectionalMovementAPI.h"
 
+struct PhysicalLens;
+
 namespace CinematicCamera
 {
 	// Reference velocity scale of the Motion Blur Medium preset, calibrated to
@@ -218,7 +220,7 @@ namespace CinematicCamera
 		[[nodiscard]] const char* GetFovStateText() const;
 
 		// Filmback / Lens / Focus / Exposure parameter page with readouts.
-		void DrawSettings();
+		void DrawSettings(PhysicalLens* physicalLens = nullptr);
 
 	private:
 		[[nodiscard]] PhysicalCameraState BuildState(float viewportAspect) const;
