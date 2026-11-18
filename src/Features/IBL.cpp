@@ -269,7 +269,7 @@ void IBL::SetupResources()
 
 	{
 		D3D11_TEXTURE2D_DESC texDesc{
-			.Width = 3,
+			.Width = 4,
 			.Height = 1,
 			.MipLevels = 1,
 			.ArraySize = 1,

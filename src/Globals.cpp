@@ -25,6 +25,7 @@
 #include "Features/PerformanceOverlay.h"
 #include "Features/PostProcessing.h"
 #include "Features/ProceduralAurora.h"
+#include "Features/ProceduralGrass.h"
 #include "Features/ProceduralSun.h"
 #include "Features/RainRefraction.h"
 #include "Features/RemoteControl.h"
@@ -51,6 +52,7 @@
 #include "Menu.h"
 #include "ShaderCache.h"
 #include "State.h"
+#include "TerrainHeightMap.h"
 #include "TruePBR.h"
 #include "Utils/Game.h"
 
@@ -108,6 +110,7 @@ namespace globals
 		ExponentialHeightFog exponentialHeightFog{};
 		TruePBR truePBR{};
 		Skin skin{};
+		ProceduralGrass proceduralGrass{};
 		SceneManager sceneManager{};
 		PostProcessing postProcessing{};
 		ProceduralAurora proceduralAurora{};
@@ -133,6 +136,7 @@ namespace globals
 		float* deltaTime = nullptr;
 		RE::BSUtilityShader* utilityShader = nullptr;
 		RE::PlayerCharacter* player = nullptr;
+		RE::BGSGrassManager* grassManager = nullptr;
 		RE::Sky* sky = nullptr;
 		RE::UI* ui = nullptr;
 		RE::Calendar* calendar = nullptr;
@@ -183,6 +187,8 @@ namespace globals
 
 	static Profiler profilerInstance;
 	Profiler* profiler = &profilerInstance;
+	static TerrainHeightMap terrainHeightMapInstance;
+	TerrainHeightMap* terrainHeightMap = &terrainHeightMapInstance;
 	static HiZPyramid hiZPyramidInstance;
 	HiZPyramid* hiZPyramid = &hiZPyramidInstance;
 
@@ -247,6 +253,7 @@ namespace globals
 		using namespace game;
 		RefreshTES();
 		player = RE::PlayerCharacter::GetSingleton();
+		grassManager = RE::BGSGrassManager::GetSingleton();
 		sky = RE::Sky::GetSingleton();
 		utilityShader = RE::BSUtilityShader::GetSingleton();
 		imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
