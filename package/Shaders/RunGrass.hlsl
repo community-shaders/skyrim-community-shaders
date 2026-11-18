@@ -392,6 +392,8 @@ Texture2D<float4> TexSubsurfaceSampler : register(t4);
 Texture2D<float4> TexFuzzSampler : register(t5);
 // Texture-set slot 3: linear emissive color in RGB.
 Texture2D<float4> TexEmissiveSampler : register(t6);
+// Texture-set slot 4: linear displacement height in red.
+Texture2D<float4> TexDisplacementSampler : register(t7);
 #	endif
 
 cbuffer PerFrame : register(b0)
@@ -481,7 +483,7 @@ cbuffer PerMaterial : register(b1)
 	float4 PBRParams2 : packoffset(c1);    // subsurface color, subsurface opacity
 	float4 PBRParams3 : packoffset(c2);    // fuzz color, fuzz weight
 	float4 PBRParams4 : packoffset(c3);    // subsurface balance, front/back specular weights, back roughness scale
-	float4 PBRParams5 : packoffset(c4);    // fuzz roughness in x (negative uses base roughness)
+	float4 PBRParams5 : packoffset(c4);    // fuzz roughness (negative uses base roughness), displacement scale
 };
 
 #		endif
@@ -498,12 +500,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	PS_OUTPUT psout = (PS_OUTPUT)0;
 #			if defined(RENDER_DEPTH)
 	float diffuseAlpha = input.Fade * SampleDepthAlpha(input.TexCoord.xy);
-#			else
+#			elif defined(DO_ALPHA_TEST)
+	// Use the original UVs for alpha testing to match the depth pass.
 	float4 baseColor = TexBaseSampler.SampleBias(SampBaseSampler, input.TexCoord.xy, SharedData::MipBias);
-	baseColor.xyz = Color::Albedo(ColorManagement::DiffuseToWorking(baseColor.xyz, true));
-#				ifdef DO_ALPHA_TEST
 	float diffuseAlpha = input.Color.w * baseColor.w;
-#				endif
 #			endif
 #			if defined(RENDER_DEPTH) || defined(DO_ALPHA_TEST)
 	if ((diffuseAlpha - AlphaTestRefRS) < 0)
@@ -518,16 +518,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	psout.PS.w = diffuseAlpha;
 	return psout;
 #			else
-	if (SharedData::lodBlendingSettings.DisableTerrainVertexColors)
-		input.Color.xyz = 1;
-
-	if (SharedData::grassLightingSettings.OverrideComplexGrassSettings)
-		baseColor.xyz *= SharedData::grassLightingSettings.BasicGrassBrightness;
-
-#				ifdef GRASS_OPTIMIZATIONS
-	baseColor.xyz *= GetLODBrightness(input.LodTier);
-#				endif
-
 	psout.MotionVectors = MotionBlur::GetSSMotionVector(float4(input.WorldPosition, 1), float4(input.PreviousWorldPosition, 1));
 
 	float3 viewDirection = -normalize(input.WorldPosition.xyz);
@@ -544,6 +534,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #				else
 	const bool pbrDetail = true;
 #				endif
+	float2 uv = input.TexCoord.xy;
 	float3 normal = vertexNormal;
 	float4 rawRMAOS = float4(1, 0, 1, 0);
 #				ifdef GRASS_OPTIMIZATIONS
@@ -552,16 +543,54 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	if (pbrDetail)
 #				endif
 	{
-		float4 normalSample = TexNormalSampler.SampleBias(SampNormalSampler, input.TexCoord.xy, SharedData::MipBias);
+#				if defined(EXTENDED_MATERIALS)
+		[branch] if (SharedData::extendedMaterialSettings.EnableParallax && PBRParams5.y > 0.0 &&
+		             (PBRFlags & PBR::Flags::HasDisplacement) != 0)
+		{
+			// Offset UVs in the model's plane and limit the shift at grazing angles.
+			float3 viewDirTS = mul(GrassLighting::CalculateTBN(faceNormal, -input.WorldPosition.xyz, uv), viewDirection);
+			float heightOffset = TexDisplacementSampler.SampleBias(SampNormalSampler, uv, SharedData::MipBias).r - 0.5;
+			float2 parallaxUV = uv + viewDirTS.xy * (0.02 * PBRParams5.y * heightOffset / lerp(0.3, 1.0, saturate(viewDirTS.z)));
+
+#					if defined(DO_ALPHA_TEST)
+			// Keep the original shading UVs when the offset crosses the cutout.
+			float4 parallaxColor = TexBaseSampler.SampleBias(SampBaseSampler, parallaxUV, SharedData::MipBias);
+			bool insideCutout = input.Color.w * parallaxColor.w >= AlphaTestRefRS;
+
+			parallaxUV = insideCutout ? parallaxUV : uv;
+			baseColor.xyz = insideCutout ? parallaxColor.xyz : baseColor.xyz;
+#					endif
+
+			uv = parallaxUV;
+		}
+#				endif
+		float4 normalSample = TexNormalSampler.SampleBias(SampNormalSampler, uv, SharedData::MipBias);
 		float3x3 tbn = GrassLighting::CalculateTBN(vertexNormal, -input.WorldPosition.xyz, input.TexCoord.xy);
 		normal = normalize(mul(GrassLighting::TransformNormal(normalSample.xyz), tbn));
-		rawRMAOS = TexRMAOSSampler.SampleBias(SampRMAOSSampler, input.TexCoord.xy, SharedData::MipBias) *
+
+		rawRMAOS = TexRMAOSSampler.SampleBias(SampRMAOSSampler, uv, SharedData::MipBias) *
 		           float4(PBRParams1.x, 1, 1, PBRParams1.y);
 	}
+#				ifndef DO_ALPHA_TEST
+	float4 baseColor = TexBaseSampler.SampleBias(SampBaseSampler, uv, SharedData::MipBias);
+#				endif
+	baseColor.xyz = Color::Albedo(ColorManagement::DiffuseToWorking(baseColor.xyz, true));
+
+	if (SharedData::lodBlendingSettings.DisableTerrainVertexColors)
+		input.Color.xyz = 1;
+
+	if (SharedData::grassLightingSettings.OverrideComplexGrassSettings)
+		baseColor.xyz *= SharedData::grassLightingSettings.BasicGrassBrightness;
+
+#				ifdef GRASS_OPTIMIZATIONS
+	baseColor.xyz *= GetLODBrightness(input.LodTier);
+#				endif
+
 	// Blend clump shading after constructing the normal-map basis.
 	if (!sphereNormal) {
 		normal = GrassLighting::GetClumpBlendedNormal(normal, clumpNormal);
 	}
+
 	MaterialProperties material = (MaterialProperties)0;
 	material.ThinSurfaceSpecularWeight = saturate(frontFace ? PBRParams4.y : PBRParams4.z);
 	material.Roughness = clamp(rawRMAOS.x * (frontFace ? 1.0f : PBRParams4.w), PBR::Constants::MinRoughness, PBR::Constants::MaxRoughness);
@@ -571,10 +600,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float3 vertexColor = ColorManagement::PBRVertexColorToLinear(input.Color.xyz);
 	float vertexAO = max(max(vertexColor.r, vertexColor.g), vertexColor.b);
 	vertexColor = Color::LinearSRGBToWorking(vertexColor / max(vertexAO, EPSILON_DIVISION));
+
 	material.BaseColor = Color::LinearToPBRMaterial(Color::PBRMaterialToLinear(baseColor.xyz) * vertexColor);
 	material.F0 = lerp(saturate(rawRMAOS.w), material.BaseColor, material.Metallic);
 	material.BaseColor *= 1 - material.Metallic;
 	material.Thickness = 1.0f;
+
 	[branch] if ((PBRFlags & PBR::Flags::Subsurface) != 0)
 	{
 		material.SubsurfaceColor = PBRParams2.xyz;
@@ -582,7 +613,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		material.SubsurfaceBalance = PBRParams4.x;
 		[branch] if (pbrDetail && (PBRFlags & PBR::Flags::HasFeatureTexture0) != 0)
 		{
-			float4 subsurface = TexSubsurfaceSampler.Sample(SampSubsurfaceSampler, input.TexCoord.xy);
+			float4 subsurface = TexSubsurfaceSampler.Sample(SampSubsurfaceSampler, uv);
 			material.SubsurfaceColor *= Color::Albedo(Color::LinearSRGBToWorking(subsurface.xyz));
 			material.Thickness *= subsurface.w;
 		}
@@ -591,6 +622,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 			material.SubsurfaceColor *= material.BaseColor;
 		}
 	}
+
 	[branch] if (pbrDetail && (PBRFlags & PBR::Flags::Fuzz) != 0)
 	{
 		material.FuzzColor = Color::LinearSRGBToWorking(PBRParams3.xyz);
@@ -598,11 +630,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		material.FuzzRoughness = PBRParams5.x;
 		[branch] if ((PBRFlags & PBR::Flags::HasFeatureTexture1) != 0)
 		{
-			float4 fuzz = TexFuzzSampler.Sample(SampFuzzSampler, input.TexCoord.xy);
+			float4 fuzz = TexFuzzSampler.Sample(SampFuzzSampler, uv);
 			material.FuzzColor *= Color::LinearSRGBToWorking(fuzz.xyz);
 			material.FuzzWeight *= fuzz.w;
 		}
 	}
+
 	const float grassNdotV = clamp(abs(dot(normal, viewDirection)), EPSILON_DOT_CLAMP, 1.0f);
 	material.Fuzz = PBR::CreateFuzzLayer(material, grassNdotV, pbrDetail);
 	PBR::CacheFuzzLTC(material.Fuzz, normal, viewDirection, grassNdotV);
@@ -611,6 +644,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float2 screenUV = FrameBuffer::ViewToUV(viewPosition);
 	float screenNoise = Random::InterleavedGradientNoise(input.HPosition.xy, SharedData::FrameCount);
 	float3 dirLightColor = Color::DirectionalLight(SharedData::DirLightColor.xyz);
+
 #				if defined(EXP_HEIGHT_FOG)
 	if (SharedData::exponentialHeightFogSettings.enabled)
 		dirLightColor *= ExponentialHeightFog::GetSunlightFogAttenuation(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust.xyz);
@@ -695,14 +729,17 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 				float attenuation = LightLimitFix::GetAttenuation(lightDist, light);
 				if (attenuation < 1e-5)
 					continue;
+
 				float3 lightColor = Color::PointLight(light.color.xyz) * attenuation * light.fade;
 				float lightShadow = 1.0;
 				[branch] if (light.lightFlags & LightLimitFix::LightFlags::LocalShadow)
 					lightShadow = LightLimitFix::GetLocalShadow(LinearSampler, light.localShadowIndex, input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust.xyz, float3(0.0, 0.0, 0.0), false, screenNoise);
 				else if (light.lightFlags & LightLimitFix::LightFlags::Shadow)
 					lightShadow = shadowColor[light.shadowLightIndex];
+
 				float3 lightDirection = lightVector / max(lightDist, EPSILON_DIVISION);
 				lightShadow *= canopyVisibility * (sphereNormal ? 1.0 : GrassLighting::GetClumpLightVisibility(clumpNormal, lightDirection));
+
 				DirectContext pointContext = CreateDirectLightingContext(normal, normal, vertexNormal, viewDirection, viewDirection,
 					lightDirection, lightDirection, lightColor, lightShadow, lightShadow);
 				DirectLightingOutput pointOutput;
@@ -710,6 +747,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #					if defined(WETNESS_EFFECTS)
 				pointOutput.transmission *= WetnessEffects::ApplySurfaceWetnessDirectLighting(wetnessState, viewDirection, lightDirection, lightColor, lightShadow, pointOutput.diffuse, pointOutput.specular, wetnessDirectSpecularColor);
 #					endif
+
 				totalLighting.diffuse += pointOutput.diffuse;
 				totalLighting.specular += pointOutput.specular;
 				totalLighting.transmission += pointOutput.transmission;
@@ -777,7 +815,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	[branch] if ((PBRFlags & PBR::Flags::HasEmissive) != 0)
 	{
-		float3 glowColor = ColorManagement::TextureToWorking(TexEmissiveSampler.SampleBias(SampEmissiveSampler, input.TexCoord.xy, SharedData::MipBias).xyz, true) * SharedData::linearLightingSettings.glowmapMult;
+		float3 glowColor = ColorManagement::TextureToWorking(TexEmissiveSampler.SampleBias(SampEmissiveSampler, uv, SharedData::MipBias).xyz, true) * SharedData::linearLightingSettings.glowmapMult;
 		float3 emitVertexColor = ColorManagement::PBRVertexColorToLinear(input.Color.xyz);
 		float emitVertexAO = max(max(emitVertexColor.r, emitVertexColor.g), emitVertexColor.b);
 		emitVertexColor = emitVertexAO == 0.0f ? 1.0f : emitVertexColor * lerp(1 / max(emitVertexAO, 1e-4), 1, SharedData::truePBRSettings.VertexAOStrength);

@@ -991,6 +991,12 @@ struct BSLightingShaderProperty_GetRenderPasses_LocalMap
 	static inline REL::Relocation<decltype(thunk)> func;
 };
 
+static bool HasDisplacementTexture(const BSLightingShaderMaterialPBR* material)
+{
+	return material->displacementTexture != nullptr &&
+	       material->displacementTexture != globals::game::graphicsState->GetRuntimeData().defaultTextureBlack;
+}
+
 /** @brief True when slot 4 green is explicitly enabled and its texture is available. */
 static bool HasFuzzRoughnessTexture(const BSLightingShaderMaterialPBR* material)
 {
@@ -1225,8 +1231,7 @@ bool TruePBR::BSLightingShader_SetupMaterial(RE::BSLightingShader* shader, RE::B
 				shaderFlags.set(PBRShaderFlags::HasEmissive);
 			}
 
-			const bool hasDisplacement = pbrMaterial->displacementTexture != nullptr && pbrMaterial->displacementTexture != graphicsState->GetRuntimeData().defaultTextureBlack;
-			if (hasDisplacement) {
+			if (HasDisplacementTexture(pbrMaterial)) {
 				shadowState->SetPSTexture(4, pbrMaterial->displacementTexture->rendererTexture);
 				shadowState->SetPSTextureAddressMode(4, static_cast<RE::BSGraphics::TextureAddressMode>(pbrMaterial->textureClampMode));
 				shadowState->SetPSTextureFilterMode(4, RE::BSGraphics::TextureFilterMode::kAnisotropic);
@@ -1576,6 +1581,9 @@ void TruePBR::SetGrassPBRTextures(const BSLightingShaderMaterialPBR* material)
 		shadowState->SetPSTextureAddressMode(6, clampMode);
 		shadowState->SetPSTextureFilterMode(6, RE::BSGraphics::TextureFilterMode::kAnisotropic);
 	}
+	if (HasDisplacementTexture(material)) {
+		shadowState->SetPSTexture(7, material->displacementTexture->rendererTexture);
+	}
 }
 
 TruePBR::GrassPBRConstants TruePBR::GetGrassPBRConstants(const BSLightingShaderMaterialPBR* material)
@@ -1602,6 +1610,9 @@ TruePBR::GrassPBRConstants TruePBR::GetGrassPBRConstants(const BSLightingShaderM
 	if (HasGrassEmissive(material)) {
 		shaderFlags.set(PBRShaderFlags::HasEmissive);
 	}
+	if (HasDisplacementTexture(material)) {
+		shaderFlags.set(PBRShaderFlags::HasDisplacement);
+	}
 
 	const auto& subsurfaceColor = material->GetSubsurfaceColor();
 	const auto& fuzzColor = material->GetFuzzColor();
@@ -1615,7 +1626,7 @@ TruePBR::GrassPBRConstants TruePBR::GetGrassPBRConstants(const BSLightingShaderM
 		{ hasFuzz ? fuzzColor.red : 0.0f, hasFuzz ? fuzzColor.green : 0.0f,
 			hasFuzz ? fuzzColor.blue : 0.0f, hasFuzz ? material->GetFuzzWeight() : 0.0f },
 		{ material->GetSubsurfaceBalance(), thinSurfaceParams[0], thinSurfaceParams[1], thinSurfaceParams[2] },
-		{ material->GetFuzzRoughness(), 0.f, 0.f, 0.f }
+		{ material->GetFuzzRoughness(), material->GetDisplacementScale(), 0.f, 0.f }
 	};
 }
 
