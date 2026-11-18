@@ -259,6 +259,15 @@ namespace PBR
 	}
 #endif
 
+	float GetDirectSpecularNdotV(float NdotV)
+	{
+#if defined(TREE_ANIM)
+		return clamp(NdotV, EPSILON_DOT_CLAMP, 1.0f);
+#else
+		return saturate(abs(NdotV) + EPSILON_DOT_CLAMP);
+#endif
+	}
+
 	void GetDirectLightInput(out DirectLightingOutput lightingOutput, DirectContext context, MaterialProperties material, float3x3 tbnTr, float2 uv)
 	{
 		lightingOutput = (DirectLightingOutput)0;
@@ -301,16 +310,14 @@ namespace PBR
 		float VdotL = dot(V, L);
 
 		float satNdotL = clamp(NdotL, EPSILON_DOT_CLAMP, 1);
-		float satNdotV = saturate(abs(NdotV) + EPSILON_DOT_CLAMP);
 		float satVdotL = saturate(VdotL);
 
 #if defined(TREE_ANIM)
 		float specularNdotL = saturate(NdotL);
-		float specularNdotV = clamp(NdotV, EPSILON_DOT_CLAMP, 1.0f);
 #else
 		float specularNdotL = satNdotL;
-		float specularNdotV = satNdotV;
 #endif
+		float specularNdotV = GetDirectSpecularNdotV(NdotV);
 
 #if defined(TRUE_PBR) && !defined(LANDSCAPE) && !defined(LODLANDSCAPE)
 		[branch] if ((PBRFlags & Flags::HairMarschner) != 0)
@@ -344,7 +351,7 @@ namespace PBR
 #endif
 
 			lightingOutput.diffuse += detailedLightColor * max(LightDisk::DiffuseCosine(NdotL, context.lightDisk), EPSILON_DOT_CLAMP) * BRDF::Diffuse_Lambert() * kD;
-			lightingOutput.specular += Fr * detailedLightColor * specularNdotL;
+			lightingOutput.specular += Fr * material.DirectSpecularEnergyCompensation * detailedLightColor * specularNdotL;
 
 #if defined(TRUE_PBR) && !defined(LANDSCAPE) && !defined(LODLANDSCAPE)
 #	if !defined(TREE_ANIM)
@@ -362,7 +369,7 @@ namespace PBR
 				if ((PBRFlags & Flags::TwoLayer) != 0)
 			{
 				float coatNdotL = max(specularNdotL, EPSILON_DOT_CLAMP);
-				float coatNdotV = satNdotV;
+				float coatNdotV = saturate(abs(NdotV) + EPSILON_DOT_CLAMP);
 				float coatDiffuseCosine = LightDisk::DiffuseCosine(NdotL, context.lightDisk);
 				float coatNdotH = diskNdotH;
 				float coatVdotH = diskVdotH;
