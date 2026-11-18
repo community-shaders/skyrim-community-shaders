@@ -280,9 +280,14 @@ State::TonemapOwner State::GetTonemapOwner()
 	return *tonemapOwner;
 }
 
+bool State::ReplacesTonemap()
+{
+	return GetTonemapOwner() == TonemapOwner::kEffects11;
+}
+
 bool State::HandlePostProcessing(RE::RENDER_TARGET a_input, RE::RENDER_TARGET a_output)
 {
-	if (GetTonemapOwner() != TonemapOwner::kEffects11)
+	if (!ReplacesTonemap())
 		return false;
 
 	if (!globals::features::effects11.RenderTonemap(a_input, a_output))

@@ -441,8 +441,15 @@ namespace PostProcessingExtensions
 			const auto input = static_cast<RE::RENDER_TARGET>(a3);
 			const auto output = static_cast<RE::RENDER_TARGET>(a4);
 
-			// Effects11 replaces the pass outright; when it does, the vanilla call is skipped
-			// and HandlePostProcessing fixes up the render-target state the pass would have set.
+			// The vanilla pass also adapts the luminance the character light samples (PS t11).
+			// Skipped, character draws read whatever texture an earlier draw left bound, so when a
+			// feature replaces the tonemap the vanilla pass still runs first and is overwritten.
+			const bool replacesTonemap = state->ReplacesTonemap();
+			if (replacesTonemap)
+				func(a1, a2, a3, a4, a5);
+
+			// Effects11 replaces the pass output; when it does, HandlePostProcessing fixes up
+			// the render-target state the pass would have set.
 			if (state->HandlePostProcessing(input, output))
 				return;
 
@@ -452,7 +459,8 @@ namespace PostProcessingExtensions
 			if (postProcessing.loaded)
 				postProcessing.PreProcess(input);
 
-			func(a1, a2, a3, a4, a5);
+			if (!replacesTonemap)
+				func(a1, a2, a3, a4, a5);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};

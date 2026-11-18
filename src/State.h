@@ -123,6 +123,16 @@ public:
 	TonemapOwner GetTonemapOwner();
 
 	/**
+	 * @brief Whether a feature replaces the vanilla HDR tonemap this frame.
+	 *
+	 * The vanilla pass still runs first in that case so the engine keeps adapting the
+	 * luminance the character light samples; the feature's tonemap then overwrites its output.
+	 *
+	 * @return True when Effects 11 owns the tonemap.
+	 */
+	bool ReplacesTonemap();
+
+	/**
 	 * @brief Dispatches the HDR tonemap pass to the resolved owner.
 	 * @param a_input Render target holding the scene color to tonemap.
 	 * @param a_output Render target receiving the tonemapped result.
