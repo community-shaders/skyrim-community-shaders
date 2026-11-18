@@ -35,6 +35,15 @@ struct Camera : public PostProcessFeature
 
 	eastl::unique_ptr<ConstantBuffer> cameraCB = nullptr;
 
+	static constexpr std::chrono::seconds kTargetRetryDelay{ 5 };
+	std::chrono::steady_clock::time_point nextTargetAttempt{};
+
+	/**
+	 * @brief Creates the lens and output targets on the first draw once shaders are ready; they persist afterwards, so disabling Camera only stops later draws.
+	 * @return False when creation failed or a retry is pending (retried after kTargetRetryDelay); the pass is skipped.
+	 */
+	bool EnsureTargets();
+
 	eastl::unique_ptr<Texture2D> texLens = nullptr;
 	eastl::unique_ptr<Texture2D> texOutput = nullptr;
 
