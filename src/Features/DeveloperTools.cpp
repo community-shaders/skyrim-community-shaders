@@ -63,13 +63,18 @@ std::vector<Feature::SettingSearchEntry> DeveloperTools::GetSettingsSearchEntrie
 			selectionInitialized = true;
 		};
 	};
-	return {
+	// Descriptions carry the English labels too, so English guides keep working in other locales.
+	std::vector<SettingSearchEntry> entries = {
 		{ "renderdoc", T(TKEY("renderdoc"), "RenderDoc"), T(TKEY("renderdoc_blurb"), "Frame captures for debugging rendering issues."), select(Tool::RenderDoc) },
-		{ "enable_capture", T("feature.renderdoc.enable_capture", "Enable RenderDoc Capture"), "RenderDoc", select(Tool::RenderDoc) },
-		{ "capture_frames", T("feature.renderdoc.capture_frames", "Capture Frames"), "RenderDoc", select(Tool::RenderDoc) },
-		{ "nsight", T(TKEY("nsight"), "Nsight Perf"), "NvPerf GPU counters", select(Tool::NsightPerf) },
-		{ "devbench", T(TKEY("devbench"), "devbench"), T(TKEY("devbench_blurb"), "Drive Community Shaders from AI assistants over MCP and REST."), select(Tool::DevBench) },
+		{ "enable_capture", T("feature.renderdoc.enable_capture", "Enable RenderDoc Capture"), "RenderDoc Enable RenderDoc Capture", select(Tool::RenderDoc) },
 	};
+	// The RenderDoc card draws Capture Frames only while capture is enabled and RenderDoc is loaded.
+	const auto& renderDoc = globals::features::renderDoc;
+	if (renderDoc.enableRenderDocCapture && renderDoc.IsAvailable())
+		entries.push_back({ "capture_frames", T("feature.renderdoc.capture_frames", "Capture Frames"), "RenderDoc Capture Frames", select(Tool::RenderDoc) });
+	entries.push_back({ "nsight", T(TKEY("nsight"), "Nsight Perf"), "NvPerf GPU counters", select(Tool::NsightPerf) });
+	entries.push_back({ "devbench", T(TKEY("devbench"), "devbench"), T(TKEY("devbench_blurb"), "Drive Community Shaders from AI assistants over MCP and REST."), select(Tool::DevBench) });
+	return entries;
 }
 
 void DeveloperTools::OpenDevBenchNexusPage()

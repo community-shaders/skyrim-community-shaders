@@ -23,7 +23,7 @@ struct Feature
 		std::string id;                       ///< Stable per feature; keys the recent picks
 		std::string label;                    ///< Shown as the result title
 		std::string description;              ///< Extra searchable text
-		std::function<void()> focusCallback;  ///< Runs after the feature opens, to bring this setting into view
+		std::function<void()> focusCallback;  ///< Runs when the palette queues the feature page, before it draws; set state for the next draw rather than assume the page is open
 	};
 	/** @brief Override to list settings the Go To palette should find; none by default. */
 	virtual std::vector<SettingSearchEntry> GetSettingsSearchEntries() { return {}; }
