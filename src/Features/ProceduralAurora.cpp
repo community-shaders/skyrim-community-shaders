@@ -178,8 +178,10 @@ bool ProceduralAurora::IsActive() const
 
 void ProceduralAurora::DrawSettings()
 {
-	const Util::LockedSection enbLock(globals::features::effects11.OwnsFeature(E11Handoff::Feature::ProceduralAurora),
+	const bool managedByEffects11 = globals::features::effects11.OwnsFeature(E11Handoff::Feature::ProceduralAurora);
+	const Util::LockedSection enbLock(managedByEffects11,
 		T("common.settings_managed_by_enb", "This setting is managed by Effects 11."));
+	const Util::DefaultsWhileActive<Settings> shownDefaults(settings, managedByEffects11);
 
 	ImGui::Checkbox(T(TKEY("enabled"), "Enabled"), &settings.Enabled);
 	{

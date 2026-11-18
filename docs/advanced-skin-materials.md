@@ -35,13 +35,15 @@ A compatible surface uses the native FaceGen (4) or FaceGenRGBTint (5) lighting 
 
 ## Material key and file
 
-The **material key** is the diffuse texture bound to the shape when it is drawn, normalized to a lower-case `textures/...dds` path with forward slashes. It is read from the bound texture's name, and from slot 0 of the shape's texture set when the bound texture has no usable name. A surface whose diffuse cannot be identified as a DDS file keeps the common settings.
+Each compatible surface exposes two candidate **material keys**: its bound normal texture (or texture set slot 1) and its bound diffuse texture (or texture set slot 0), each normalized to a lower-case `textures/...dds` path with forward slashes. A surface can match overrides on both its diffuse and normal textures; when both have an active override (a non-empty valid material file or character entry), the normal texture takes priority and replaces the diffuse override as a whole. A surface whose neither texture can be identified as a DDS file keeps the common settings.
 
-The material file has the diffuse texture's name with `.csskin.json` in place of `.dds`:
+The material file has the texture's name with `.csskin.json` in place of `.dds`:
 
 ```
 textures/actors/character/female/femalebody_1.dds
 textures/actors/character/female/femalebody_1.csskin.json
+textures/actors/character/female/femalebody_1_msn.dds
+textures/actors/character/female/femalebody_1_msn.csskin.json
 ```
 
 It is read through the game's resource system, so it works as a loose file or inside a BSA and follows the same mod priority rules as the texture. Each key is read once and cached, including the fact that no file exists; **Reload skin resources** clears the cache.

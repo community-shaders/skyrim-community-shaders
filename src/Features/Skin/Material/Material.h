@@ -1,15 +1,16 @@
 #pragma once
 
 #include "I18n/I18n.h"
+#include <algorithm>
 #include <array>
 #include <optional>
 #include <span>
 
 // Advanced Skin material model.
 //
-// A material belongs to a skin *texture*, not to a mesh or an actor: it is looked up by the diffuse
-// texture that is actually applied to a shape and stored next to that texture as
-// `<diffuse name>.csskin.json`. See docs/advanced-skin-materials.md.
+// A material belongs to a skin *texture*, not to a mesh or an actor: it is looked up by the normal
+// or diffuse texture that is actually applied to a shape (normal takes priority on conflict) and
+// stored next to that texture as `<texture name>.csskin.json`. See docs/advanced-skin-materials.md.
 namespace SkinMaterials
 {
 	inline constexpr uint32_t Version = 1;
@@ -71,6 +72,11 @@ namespace SkinMaterials
 		std::array<std::string, TextureCount> textures;
 		bool enabled = false;
 		bool operator==(const Material&) const = default;
+		bool Empty() const
+		{
+			return !enabled || (std::none_of(specified.begin(), specified.end(), [](bool v) { return v; }) &&
+								   std::all_of(textures.begin(), textures.end(), [](const auto& path) { return path.empty(); }));
+		}
 	};
 
 	/// Identifies the diffuse texture a material was authored for. Advisory only.

@@ -110,8 +110,10 @@ bool ExponentialHeightFog::IsSuppressed() const
 
 void ExponentialHeightFog::DrawSettings()
 {
-	const Util::LockedSection enbLock(globals::features::effects11.OwnsFeature(E11Handoff::Feature::HeightFog),
+	const bool managedByEffects11 = globals::features::effects11.OwnsFeature(E11Handoff::Feature::HeightFog);
+	const Util::LockedSection enbLock(managedByEffects11,
 		T("common.settings_managed_by_enb", "This setting is managed by Effects 11."));
+	const Util::DefaultsWhileActive<Settings> shownDefaults(settings, managedByEffects11);
 
 	ImGui::Checkbox(T(TKEY("enable_exp_height_fog"), "Enable Exponential Height Fog"), (bool*)&settings.enabled);
 	ImGui::SliderFloat(T(TKEY("start_distance"), "Start Distance"), &settings.startDistance, 0.0f, 100000.0f, "%.1f");

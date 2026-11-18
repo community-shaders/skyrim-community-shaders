@@ -5,6 +5,7 @@
 #include "SceneSettingsInternal.h"
 #include "State.h"
 #include "Utils/Game.h"
+#include "Utils/UI.h"
 
 #include <algorithm>
 #include <cmath>
@@ -44,6 +45,13 @@ void SceneSettingsManager::ResolveAndApply(bool force, bool allowLocationTransit
 {
 	if (resolverSuspended || sceneLayerSuspendDepth > 0)
 		return;
+	if (baselineSnapshotDeferred && !Util::AreSettingsShowingDefaults()) {
+		baselineSnapshotDeferred = false;
+		resolverDirty = true;
+		// The cached overrides were built without the skipped baselines.
+		cachedLocationOverridesValid = false;
+		locationOverridesDirty = true;
+	}
 	if (!locationDataLoaded)
 		TryEnsureLocationDataLoaded();
 	if (!weatherDataLoaded)
@@ -982,6 +990,12 @@ const json* SceneSettingsManager::GetFeatureBaseSnapshot(const std::string& feat
 {
 	if (auto snapshotIt = featureBaseSnapshots.find(featureShortName); snapshotIt != featureBaseSnapshots.end())
 		return &snapshotIt->second;
+
+	// Saving now would capture guard-shown defaults and cache them as the base.
+	if (Util::AreSettingsShowingDefaults()) {
+		baselineSnapshotDeferred = true;
+		return nullptr;
+	}
 
 	auto* feature = Feature::FindFeatureByShortName(featureShortName);
 	json snapshot;

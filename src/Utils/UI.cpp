@@ -3287,6 +3287,7 @@ namespace Util
 				if (ImGui::Selectable(T("ui.keybind.clear", "Clear Binding"))) {
 					combo.clear();
 					changed = true;
+					globals::state->CheckCoreSettingsChanged();
 				}
 				ImGui::EndPopup();
 			}

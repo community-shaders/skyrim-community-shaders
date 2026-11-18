@@ -606,8 +606,10 @@ namespace
 		ImGui::SameLine();
 		const auto tooltip = I18n::GetSingleton()->Format("menu.settings.reset_keybinding_tooltip",
 			{ { "key", Util::Input::KeyIdToString(defaultCombo) } }, "Reset to default ({key})");
-		if (Util::IconButton(std::format("##Reset{}", id).c_str(), Icons::TI(ICON_TI_RESTORE), tooltip.c_str()))
+		if (Util::IconButton(std::format("##Reset{}", id).c_str(), Icons::TI(ICON_TI_RESTORE), tooltip.c_str())) {
 			combo = defaultCombo;
+			globals::state->CheckCoreSettingsChanged();
+		}
 	}
 
 	bool IsPresetThemeSelected()
