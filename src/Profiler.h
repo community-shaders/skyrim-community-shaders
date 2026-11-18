@@ -76,6 +76,8 @@ public:
 		float cpuP95Ms = 0.0f;
 		float cpuP99Ms = 0.0f;
 		bool valid = false;
+		// Recorded through RecordExternalSample; no CPU time, and in no total.
+		bool external = false;
 
 		const float* historyBuffer = nullptr;
 		uint32_t historyHead = 0;
@@ -142,6 +144,12 @@ public:
 	 * @note Needs an active profiler. A mark made before the frame's first BeginPass waits for it, and is dropped if no profiling frame begins before EndFrame. Zero samples do not keep a row alive, so a pass skipped for kTimerRetireFrames retires. Ignored on a frame that ran out of timers.
 	 */
 	void MarkPassSkipped(std::string_view name);
+
+	/**
+	 * @brief Records GPU time measured outside the D3D11 queries, e.g. D3D12 work on its own queue.
+	 * @note Call on the EndFrame thread. Needs an active profiler. Samples of one name between collections add up. Rows are flagged external and excluded from the totals.
+	 */
+	void RecordExternalSample(std::string_view name, float gpuMs);
 
 	/** @brief Ends the current profiling frame and advances the ring buffer write cursor. */
 	void EndFrame();
@@ -219,6 +227,20 @@ private:
 		void Add(std::string_view name);
 	};
 
+	/** @brief Pending external samples; the string slots are reused, so recording allocates only on first use. */
+	struct ExternalSamples
+	{
+		struct Sample
+		{
+			std::string name;
+			float gpuMs = 0.0f;
+		};
+		std::vector<Sample> samples;
+		uint32_t count = 0;
+
+		void Add(std::string_view name, float gpuMs);
+	};
+
 	struct FrameQueries
 	{
 		winrt::com_ptr<ID3D11Query> disjoint;
@@ -268,11 +290,13 @@ private:
 		RollingHistory gpu;
 		RollingHistory cpu;
 		uint64_t lastSampleFrame = 0;
+		bool external = false;
 	};
 	std::vector<KnownTimer> knownTimers;
 	std::unordered_map<std::string, size_t> knownTimerIndex;
 	/** @brief Skip marks made before the frame's first BeginPass; they join that frame. */
 	SkipMarks pendingSkipped;
+	ExternalSamples external;
 	uint64_t collectedFrames = 0;
 	float totalTimeMs = 0.0f;
 	float cpuTotalTimeMs = 0.0f;

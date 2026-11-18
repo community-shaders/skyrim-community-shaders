@@ -11,6 +11,8 @@
 
 #include <directx/d3dx12.h>
 
+#include "Utils/D3D12GpuTimer.h"
+
 class WrappedResource
 {
 public:
@@ -65,6 +67,10 @@ public:
 	winrt::com_ptr<ID3D12CommandQueue> commandQueue;
 	winrt::com_ptr<ID3D12CommandAllocator> commandAllocators[2];
 	winrt::com_ptr<ID3D12GraphicsCommandList4> commandLists[2];
+
+	// Times each frame's Present list for the Profiler; one record per frame index.
+	Util::D3D12GpuTimer gpuTimer;
+	Util::D3D12GpuTimer::Record gpuTimerRecords[2];
 
 	IDXGISwapChain4* swapChain;
 

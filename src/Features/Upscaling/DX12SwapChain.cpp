@@ -26,6 +26,13 @@ void DX12SwapChain::CreateD3D12Device(IDXGIAdapter* a_adapter)
 		DX::ThrowIfFailed(d3d12Device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, commandAllocators[i].get(), nullptr, IID_PPV_ARGS(&commandLists[i])));
 		commandLists[i]->Close();
 	}
+
+	if (gpuTimer.Initialize(d3d12Device.get(), commandQueue.get(), static_cast<std::uint32_t>(std::size(gpuTimerRecords)), *globals::profiler)) {
+		for (auto& record : gpuTimerRecords)
+			record = gpuTimer.Reserve();
+	} else {
+		logger::warn("[DX12SwapChain] D3D12 GPU timestamps are unavailable; frame generation present is not timed");
+	}
 }
 
 void DX12SwapChain::CreateSwapChain(IDXGIAdapter* adapter, DXGI_SWAP_CHAIN_DESC a_swapChainDesc)
@@ -239,8 +246,12 @@ HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT Flags)
 	// New frame, reset
 	if (frameFenceValues[frameIndex])
 		DX::ThrowIfFailed(d3d12Fence->SetEventOnCompletion(frameFenceValues[frameIndex], nullptr));
+	gpuTimer.Collect(gpuTimerRecords[frameIndex]);
 	DX::ThrowIfFailed(commandAllocators[frameIndex]->Reset());
 	DX::ThrowIfFailed(commandLists[frameIndex]->Reset(commandAllocators[frameIndex].get(), nullptr));
+	gpuTimer.Begin(gpuTimerRecords[frameIndex]);
+	// The async interpolation runs on FidelityFX's own queues and is not covered.
+	gpuTimer.BeginScope(commandLists[frameIndex].get(), gpuTimerRecords[frameIndex], "Upscaling::FrameGenerationPresent");
 
 	// Copy shared texture to swap chain buffer
 	{
@@ -267,10 +278,13 @@ HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT Flags)
 
 	upscaling.fidelityFX.Present(upscaling.ShouldUseFrameGenerationThisFrame(), isHDR);
 
+	gpuTimer.EndScope(commandLists[frameIndex].get(), gpuTimerRecords[frameIndex], "Upscaling::FrameGenerationPresent");
+	gpuTimer.Resolve(commandLists[frameIndex].get(), gpuTimerRecords[frameIndex]);
 	DX::ThrowIfFailed(commandLists[frameIndex]->Close());
 
 	ID3D12CommandList* commandListsToExecute[] = { commandLists[frameIndex].get() };
 	commandQueue->ExecuteCommandLists(1, commandListsToExecute);
+	gpuTimer.Commit(gpuTimerRecords[frameIndex]);
 
 	// Present the frame
 	DX::ThrowIfFailed(swapChain->Present(SyncInterval, Flags));

@@ -77,6 +77,7 @@ void Profiler::Release()
 		frame.skipped = {};
 	}
 	pendingSkipped = {};
+	external = {};
 	results.clear();
 	knownTimers.clear();
 	knownTimerIndex.clear();
@@ -175,6 +176,28 @@ void Profiler::SkipMarks::Add(std::string_view name)
 		names[count].assign(name);
 	else
 		names.emplace_back(name);
+	count++;
+}
+
+void Profiler::RecordExternalSample(std::string_view name, float gpuMs)
+{
+	if (!initialized || !IsActive())
+		return;
+	external.Add(name, gpuMs);
+}
+
+void Profiler::ExternalSamples::Add(std::string_view name, float gpuMs)
+{
+	const auto live = std::span(samples).first(count);
+	if (const auto it = std::ranges::find(live, name, &Sample::name); it != live.end()) {
+		it->gpuMs += gpuMs;
+		return;
+	}
+	if (count < samples.size())
+		samples[count].name.assign(name);
+	else
+		samples.emplace_back().name.assign(name);
+	samples[count].gpuMs = gpuMs;
 	count++;
 }
 
@@ -289,13 +312,31 @@ void Profiler::CollectResults()
 		}
 	}
 
-	if (!collected)
+	// Independent of the D3D11 frames, so a skipped or disjoint frame loses none.
+	const bool folded = external.count > 0;
+	for (const auto& sample : std::span(external.samples).first(external.count)) {
+		const auto [it, added] = knownTimerIndex.try_emplace(sample.name, knownTimers.size());
+		if (added) {
+			KnownTimer kt;
+			kt.name = sample.name;
+			kt.external = true;
+			knownTimers.push_back(std::move(kt));
+		}
+		auto& known = knownTimers[it->second];
+		known.gpu.PushSample(sample.gpuMs);
+		known.lastSampleFrame = collectedFrames;
+	}
+	external.count = 0;
+
+	if (!collected && !folded)
 		return;
 
 	RetireStaleTimers();
 
-	totalTimeMs = activeTotalMs;
-	cpuTotalTimeMs = activeCpuTotalMs;
+	if (collected) {
+		totalTimeMs = activeTotalMs;
+		cpuTotalTimeMs = activeCpuTotalMs;
+	}
 
 	results.clear();
 	results.reserve(knownTimers.size());
@@ -311,6 +352,7 @@ void Profiler::CollectResults()
 			result.cpuTimeMs = known.cpu.lastMs;
 		}
 		result.valid = true;
+		result.external = known.external;
 		result.historyBuffer = known.gpu.history;
 		result.historyHead = known.gpu.head;
 		result.historyCount = known.gpu.count;

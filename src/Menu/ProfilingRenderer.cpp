@@ -213,7 +213,7 @@ void ProfilingRenderer::RenderGraph()
 
 	double accumulated = 0.0;
 	for (const auto& result : results) {
-		if (!result.valid)
+		if (!result.valid || result.external)
 			continue;
 
 		float timeMs = cpuMode ? result.cpuTimeMs : result.gpuTimeMs;
@@ -389,16 +389,18 @@ void ProfilingRenderer::RenderStatistics(bool showTable, bool showModeToggle)
 		std::unordered_map<std::string, size_t> groupIndex;
 
 		for (const auto& result : profiler.GetStatistics()) {
-			if (!result.valid)
+			if (!result.valid || (result.external && cpuMode))
 				continue;
 
 			float avg = cpuMode ? result.cpuAvgMs : result.avgMs;
 			float p95 = cpuMode ? result.cpuP95Ms : result.p95Ms;
 			float p99 = cpuMode ? result.cpuP99Ms : result.p99Ms;
 
-			cachedTotalAvgMs += avg;
-			cachedTotalP95Ms += p95;
-			cachedTotalP99Ms += p99;
+			if (!result.external) {
+				cachedTotalAvgMs += avg;
+				cachedTotalP95Ms += p95;
+				cachedTotalP99Ms += p99;
+			}
 
 			auto pos = result.name.find("::");
 			if (pos != std::string::npos) {
@@ -412,10 +414,12 @@ void ProfilingRenderer::RenderStatistics(bool showTable, bool showModeToggle)
 				}
 
 				auto& group = cachedGroups[groupIndex[groupName]];
-				group.totalAvgMs += avg;
-				group.totalP95Ms += p95;
-				group.totalP99Ms += p99;
-				group.passes.push_back({ passLabel, avg, p95, p99 });
+				if (!result.external) {
+					group.totalAvgMs += avg;
+					group.totalP95Ms += p95;
+					group.totalP99Ms += p99;
+				}
+				group.passes.push_back({ passLabel, avg, p95, p99, result.external });
 			} else {
 				groupIndex[result.name] = cachedGroups.size();
 				cachedGroups.push_back({ result.name, avg, p95, p99 });
@@ -461,7 +465,7 @@ void ProfilingRenderer::RenderStatistics(bool showTable, bool showModeToggle)
 			Util::SortTableRows(groups, sort, groupSorts);
 
 			// Avg / P95 / P99 cells heat-coloured against the column maxima, then the share of the total.
-			const auto metricCells = [](float avg, float p95, float p99) {
+			const auto metricCells = [](float avg, float p95, float p99, bool external = false) {
 				ImGui::TableNextColumn();
 				TextHeat("%.3f", avg, cachedMaxAvgMs);
 				ImGui::TableNextColumn();
@@ -469,7 +473,7 @@ void ProfilingRenderer::RenderStatistics(bool showTable, bool showModeToggle)
 				ImGui::TableNextColumn();
 				TextHeat("%.3f", p99, cachedMaxP99Ms);
 				ImGui::TableNextColumn();
-				if (cachedTotalAvgMs > 0.0f)
+				if (!external && cachedTotalAvgMs > 0.0f)
 					TextHeat("%5.1f", (avg / cachedTotalAvgMs) * 100.0f, 100.0f);
 			};
 
@@ -519,7 +523,7 @@ void ProfilingRenderer::RenderStatistics(bool showTable, bool showModeToggle)
 					ImGui::TableNextRow();
 					ImGui::TableNextColumn();
 					ImGui::TreeNodeEx(pass.label.c_str(), ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen);
-					metricCells(pass.avgMs, pass.p95Ms, pass.p99Ms);
+					metricCells(pass.avgMs, pass.p95Ms, pass.p99Ms, pass.external);
 				}
 				ImGui::TreePop();
 			}
@@ -544,7 +548,7 @@ ProfilingRenderer::FeatureTimings ProfilingRenderer::CollectFeatureTimings(const
 
 	FeatureTimings timings;
 	for (const auto& r : profiler.GetResults()) {
-		if (!IsFeatureTimerResult(r, prefix))
+		if (!IsFeatureTimerResult(r, prefix) || (r.external && cpuMode))
 			continue;
 		const float timeMs = cpuMode ? r.cpuTimeMs : r.gpuTimeMs;
 		// Show a new pass's current sample until the next statistics refresh.
@@ -557,10 +561,12 @@ ProfilingRenderer::FeatureTimings ProfilingRenderer::CollectFeatureTimings(const
 			p95 = cpuMode ? statistics.cpuP95Ms : statistics.p95Ms;
 			p99 = cpuMode ? statistics.cpuP99Ms : statistics.p99Ms;
 		}
-		timings.entries.push_back({ r.name.substr(prefix.size()), timeMs, avg, p95, p99 });
-		timings.totalAvgMs += avg;
-		timings.totalP95Ms += p95;
-		timings.totalP99Ms += p99;
+		timings.entries.push_back({ r.name.substr(prefix.size()), timeMs, avg, p95, p99, r.external });
+		if (!r.external) {
+			timings.totalAvgMs += avg;
+			timings.totalP95Ms += p95;
+			timings.totalP99Ms += p99;
+		}
 		timings.maxAvgMs = std::max(timings.maxAvgMs, avg);
 		timings.maxP95Ms = std::max(timings.maxP95Ms, p95);
 		timings.maxP99Ms = std::max(timings.maxP99Ms, p99);
@@ -574,6 +580,8 @@ std::vector<legit::ProfilerTask> ProfilingRenderer::BuildFeatureTasks(const std:
 	tasks.reserve(timings.entries.size());
 	double accumulated = 0.0;
 	for (const auto& e : timings.entries) {
+		if (e.external)
+			continue;
 		legit::ProfilerTask task;
 		task.startTime = accumulated / 1000.0;
 		task.endTime = (accumulated + e.timeMs) / 1000.0;
@@ -758,6 +766,8 @@ void ProfilingRenderer::RenderOverlayGraph()
 		if (!result.valid)
 			continue;
 		anyTimers = true;
+		if (result.external)
+			continue;
 		const std::string groupName = GetGroupName(result.name);
 		if (!overlay.IsProfilerGroupShown(groupName))
 			continue;
