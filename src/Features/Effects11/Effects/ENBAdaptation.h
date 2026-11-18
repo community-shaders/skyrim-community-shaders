@@ -45,7 +45,7 @@ private:
 
 	ID3D11PixelShader* sunMaskPS = nullptr;
 	bool sunMaskPSFailed = false;
-	bool outputWritten = false;
+	const char* outputTextureName = nullptr;  // literal from GetTextureNames, stable across the swap increment
 	winrt::com_ptr<ID3D11Buffer> sunMaskCB;
 	winrt::com_ptr<ID3D11SamplerState> sunMaskSampler;
 
