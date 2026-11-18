@@ -52,8 +52,11 @@ float4 Skin::GetWetness(RE::BSGeometry* geometry)
 		const uint32_t actorFormID = userData->formID;
 		const uint currentFrame = globals::state->frameCount;
 
+		// Drop actors not seen since the last frame; clearing everything would reset the wetness fade of actors still in view.
 		if (actorWetnessMap.size() > 1024) {
-			actorWetnessMap.clear();
+			std::erase_if(actorWetnessMap, [currentFrame](const auto& entry) {
+				return currentFrame - entry.second.frameCount > 1;
+			});
 		}
 
 		auto [it, inserted] = actorWetnessMap.try_emplace(actorFormID);
@@ -70,11 +73,14 @@ float4 Skin::GetWetness(RE::BSGeometry* geometry)
 		const float temporaryStamina = actor->GetActorValueModifier(RE::ACTOR_VALUE_MODIFIER::kTemporary, RE::ActorValue::kStamina);
 		const float maxStamina = std::max(permanentStamina + temporaryStamina, 1.0f);
 		const float staminaPercentage = actor->IsDead() ? 1.0f : (stamina / maxStamina);
-		const float sweatRange = settings.StartSweat - settings.FullSweat;
-		wetness.x = (std::abs(sweatRange) < 1e-5f)             ? 0.0f :
-		            (staminaPercentage >= settings.StartSweat) ? 0.0f :
-		            (staminaPercentage <= settings.FullSweat)  ? 1.0f :
-		                                                         (settings.StartSweat - staminaPercentage) / sweatRange;
+		// The two sliders are independent, so order them before building the ramp.
+		const float sweatStart = std::max(settings.StartSweat, settings.FullSweat);
+		const float sweatFull = std::min(settings.StartSweat, settings.FullSweat);
+		const float sweatRange = sweatStart - sweatFull;
+		wetness.x = (sweatRange < 1e-5f)              ? 0.0f :
+		            (staminaPercentage >= sweatStart) ? 0.0f :
+		            (staminaPercentage <= sweatFull)  ? 1.0f :
+		                                                (sweatStart - staminaPercentage) / sweatRange;
 		if (actor->IsInWater()) {
 			wetness.y = 2.0f;
 			const float waterHeight = GetWaterHeight(userData, actor->GetPosition());
