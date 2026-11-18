@@ -61,17 +61,12 @@ std::vector<SceneSettingsManager::CopyCandidate> SceneSettingsManager::BuildCopy
 		destinationEntries = &empty;
 
 	const auto effectiveEntries = BuildEffectiveContextEntries(*sourceEntries, source);
+	// Mod overwrites do not block a copy: a user entry outranks them, as when the box is ticked by hand.
 	std::map<SettingIdentity, json> destinationUserSettings;
-	std::set<SettingIdentity> destinationOverwriteSettings;
-	for (const auto& entry : *destinationEntries) {
-		if (!EntryBelongsToContext(entry, destination))
-			continue;
-		if (entry.source == EntrySource::User && !entry.deleted)
+	for (const auto& entry : *destinationEntries)
+		if (EntryBelongsToContext(entry, destination) && entry.source == EntrySource::User && !entry.deleted)
 			destinationUserSettings.try_emplace(
 				SettingIdentity{ entry.featureShortName, entry.settingPath, entry.settingKey }, entry.value);
-		else if (entry.source == EntrySource::Overwrite && !entry.paused)
-			destinationOverwriteSettings.insert({ entry.featureShortName, entry.settingPath, entry.settingKey });
-	}
 
 	const auto destinationRules = GetSceneContextRules(destination);
 	for (const auto& [identity, entry] : effectiveEntries) {
@@ -88,8 +83,6 @@ std::vector<SceneSettingsManager::CopyCandidate> SceneSettingsManager::BuildCopy
 			rejection = CopyRejection::NotAllowedInLayer;
 		else if (!IsSceneSettingValueAllowed(entry->value, *setting, entry->value, destinationRules.requireNumeric))
 			rejection = CopyRejection::ValueRejected;
-		else if (destinationOverwriteSettings.contains(identity))
-			rejection = CopyRejection::BlockedByOverwrite;
 
 		const bool compatible = rejection == CopyRejection::None;
 		const auto destinationIt = destinationUserSettings.find(identity);
@@ -142,13 +135,6 @@ std::vector<SceneSettingsManager::CopySource> SceneSettingsManager::GetCopySourc
 	if (destination.type == SceneContextType::Location &&
 		ResolveLocationTargetChain(destination.locationType, destination.locationFormKey).empty())
 		return {};
-	std::set<SettingIdentity> destinationOverwrites;
-	if (const auto* destinationEntries = GetCopyContextEntries(destination))
-		for (const auto& entry : *destinationEntries)
-			if (entry.source == EntrySource::Overwrite && !entry.paused &&
-				EntryBelongsToContext(entry, destination))
-				destinationOverwrites.insert({ entry.featureShortName, entry.settingPath, entry.settingKey });
-
 	const auto destinationRules = GetSceneContextRules(destination);
 	const auto countCompatible = [&](const EffectiveContextEntries& effectiveEntries) {
 		struct GroupCount
@@ -162,7 +148,7 @@ std::vector<SceneSettingsManager::CopySource> SceneSettingsManager::GetCopySourc
 			++group.members;
 			auto* metadata = FindAllowedCatalogSetting(
 				identity.featureShortName, identity.settingPath, identity.settingKey, destinationRules.requireNumeric);
-			if (!destinationOverwrites.contains(identity) && metadata &&
+			if (metadata &&
 				IsSettingAllowedForType(destinationRules.sceneType, identity.featureShortName,
 					identity.settingPath, identity.settingKey) &&
 				IsSceneSettingValueAllowed(entry->value, *metadata, entry->value, destinationRules.requireNumeric))
@@ -193,6 +179,9 @@ std::vector<SceneSettingsManager::CopySource> SceneSettingsManager::GetCopySourc
 				if (entry.source == entrySource && !entry.paused && periodIndex >= 0 && periodIndex <= kPeriodCount)
 					periods[periodIndex][{ entry.featureShortName, entry.settingPath, entry.settingKey }] = &entry;
 			}
+		// Only after precedence, so a user tombstone hides the overwrite it shadows rather than exposing it.
+		for (auto& period : periods)
+			std::erase_if(period, [](const auto& item) { return item.second->deleted; });
 		ForEachActiveSetContext(context, timeOfDayEnabled, [&](const SceneContextId& setContext) {
 			addSource(setContext, periods[static_cast<int>(setContext.period)]);
 		});

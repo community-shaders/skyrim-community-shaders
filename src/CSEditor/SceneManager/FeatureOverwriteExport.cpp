@@ -448,7 +448,8 @@ namespace
 				T("cs_editor.scene_copy_empty", "Nothing matches.")))
 			return;
 
-		ImGui::TableSetupColumn("##tick", ImGuiTableColumnFlags_WidthFixed);
+		// Not "##tick": the header pushes column index 0, which would collide with row 0's checkbox.
+		ImGui::TableSetupColumn("##tickColumn", ImGuiTableColumnFlags_WidthFixed);
 		ImGui::TableSetupColumn(T(TKEY("export.column_setting"), "Setting"), ImGuiTableColumnFlags_WidthStretch);
 		ImGui::TableSetupColumn(T(TKEY("export.column_value"), "Value"), ImGuiTableColumnFlags_WidthFixed, em * kValueColumnEm);
 		ImGui::TableSetupColumn(T(TKEY("export.column_in_file"), "In file"), ImGuiTableColumnFlags_WidthFixed, em * kValueColumnEm);

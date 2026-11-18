@@ -624,7 +624,6 @@ public:
 		NotBlendable,            ///< Exists, but cannot blend, so a time-of-day or weather layer cannot hold it.
 		NotAllowedInLayer,       ///< Feature not loaded, or the destination layer forbids the setting.
 		ValueRejected,           ///< The source value is not a legal value at the destination.
-		BlockedByOverwrite,      ///< An unpaused mod-authored overwrite holds the destination address.
 		GroupCompanionRejected,  ///< This row is fine; a sibling in the same control is not.
 	};
 
@@ -1071,6 +1070,8 @@ private:
 	/// Signature each feature last kept, verified once: later values of that update set are trusted.
 	std::map<std::string, size_t> verifiedApplySignatures;
 	bool resolverDirty = true;
+	/// A base snapshot was refused while settings showed defaults; the resolve reruns once that ends.
+	bool baselineSnapshotDeferred = false;
 	bool resolverSuspended = false;
 	bool activeEntryCacheDirty = true;
 	bool hasActiveSceneEntries = false;

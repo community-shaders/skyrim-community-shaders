@@ -58,7 +58,8 @@ namespace
 	}
 }
 
-bool MenuHeaderRenderer::GlyphIconButton(const char* id, Icons::GlyphRef glyph, float glyphBox, const char* tooltip, bool active)
+bool MenuHeaderRenderer::GlyphIconButton(const char* id, Icons::GlyphRef glyph, float glyphBox, const char* tooltip, bool active,
+	const char* caption)
 {
 	// Square like the nav buttons: the vertical padding on both axes
 	const float pad = ImGui::GetStyle().FramePadding.y;
@@ -73,7 +74,27 @@ bool MenuHeaderRenderer::GlyphIconButton(const char* id, Icons::GlyphRef glyph, 
 	const ImRect rect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
 
 	const ImVec4 tint = active ? Util::Colors::GetAccent() : BaseIconTint();
-	DrawIconGlyph(ImGui::GetWindowDrawList(), ImVec2(rect.Min.x + pad, rect.Min.y + pad), glyphBox, glyph, ImGui::GetColorU32(tint));
+	auto* drawList = ImGui::GetWindowDrawList();
+	if (caption && *caption) {
+		// The glyph shrinks by the caption's line and stays centred above it
+		const float captionSize = ImGui::GetFontSize() * ThemeManager::Constants::GLYPH_BUTTON_CAPTION_FONT_RATIO;
+		const float glyphSize = glyphBox - captionSize;
+		DrawIconGlyph(drawList, ImVec2(rect.Min.x + pad + (glyphBox - glyphSize) * 0.5f, rect.Min.y + pad), glyphSize, glyph, ImGui::GetColorU32(tint));
+
+		// A long key combination scales down to the button's width rather than spilling out of it
+		ImFont* font = ImGui::GetFont();
+		float fontSize = captionSize;
+		float width = font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, caption).x;
+		const float maxWidth = rect.GetWidth() - pad;
+		if (width > maxWidth && width > 0.0f) {
+			fontSize *= maxWidth / width;
+			width = maxWidth;
+		}
+		const ImVec2 captionPos(rect.Min.x + (rect.GetWidth() - width) * 0.5f, rect.Min.y + pad + glyphSize + (captionSize - fontSize) * 0.5f);
+		drawList->AddText(font, fontSize, captionPos, ImGui::GetColorU32(Util::Colors::GetSecondary()), caption);
+	} else {
+		DrawIconGlyph(drawList, ImVec2(rect.Min.x + pad, rect.Min.y + pad), glyphBox, glyph, ImGui::GetColorU32(tint));
+	}
 	if (tooltip) {
 		Util::HoverTip(tooltip);
 	}

@@ -158,6 +158,23 @@ public:
 	static void DrawFeatureBody(Feature* feat);
 
 	/**
+	 * @brief Draws a feature's full page (header with its action buttons, then its settings) inside a built-in page.
+	 *
+	 * The same content a feature list entry shows, without the surrounding frame. Navigation from the
+	 * constraint warning dialog is queued through Menu::SelectFeatureMenu.
+	 * @param feat Any feature, loaded or not: an unloaded one shows its boot toggle and unloaded notice.
+	 */
+	static void DrawEmbeddedFeaturePage(Feature* feat);
+
+	/**
+	 * @brief Runs a command that rewrites a feature's settings through the menu's undo hook (Hooks::runFeatureCommand),
+	 * as the feature header's own commands do. Outside RenderFeatureList the command just runs.
+	 * @param feat The feature whose settings the command changes.
+	 * @param command Changes the settings.
+	 */
+	static void RunFeatureCommand(Feature* feat, const std::function<void()>& command);
+
+	/**
 	 * @brief Draws the reactive constraint warning modal while one is pending; call once per frame, outside child windows.
 	 * @param pendingFeatureSelection Receives the short name of a feature the user navigates to from the dialog.
 	 */
@@ -224,6 +241,9 @@ private:
 		void operator()(const std::string&);
 		void operator()(const CategoryHeader&);
 		void operator()(Feature* feat);
+
+		/** @brief Draws a feature's header and settings, without the frame operator() wraps them in. */
+		void DrawFeatureContent(Feature* feat);
 
 	private:
 		std::string& pendingFeatureSelection;

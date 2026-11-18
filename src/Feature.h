@@ -156,6 +156,14 @@ public:
 	virtual bool IsInMenu() const { return true; }
 
 	/**
+	 * @brief Whether the feature gets its own entry in the menu's feature list.
+	 *
+	 * False for a feature drawn inside a built-in page instead (the Performance Overlay lives on the
+	 * Profiling page). Such a feature stays in the menu everywhere else: scene settings, presets, search tools.
+	 */
+	virtual bool IsInFeatureList() const { return IsInMenu(); }
+
+	/**
 	 * Whether to print the INI version missing message when this feature is unloaded
 	 */
 	virtual bool DrawFailLoadMessage() const { return true; }
@@ -215,6 +223,9 @@ public:
 
 	/** @brief Called after all game data files have been loaded. */
 	virtual void DataLoaded() {}
+
+	/** @brief Invalidates session state before loading a save or on starting a new game. */
+	virtual void GameReset() {}
 
 	/** @brief Called after loading an existing save. */
 	virtual void GameLoaded() {}
