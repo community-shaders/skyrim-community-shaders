@@ -74,7 +74,9 @@ changes retain history and do not reset cubemap accumulation. Trace dispatches
 cover only the current active region. Traced pixels update from their actual
 sample. Other valid pixels retain reprojected history. Four trace neighbours
 supply only missing history, with scene-depth rejection; there is no spatial
-upscale pass applied to the accumulated result.
+upscale pass applied to the accumulated result. When none of the four matches
+the pixel's scene depth, a 6 x 6 trace window is searched instead, so sky gaps
+in foliage are not reconstructed from foreground rays that stop before the clouds.
 
 Temporary hole fills have validity 0.5; actual samples have validity 1. Their
 first traced update replaces the fill. A traced pixel mixes its reprojected

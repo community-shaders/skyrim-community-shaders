@@ -181,71 +181,103 @@ bool CloudFootprintHasCloud(Texture2D<float4> color, float2 position, int2 maxim
 	return opacity > 0.0;
 }
 
+/** @brief Trace texels searched beyond the bilinear 2x2 when none of it matches the pixel's scene depth. */
+static const int CloudSurfaceSearchRadius = 2;
+
+/** @brief Running sums over the depth-matched trace samples around one full-resolution pixel. */
+struct CloudSurfaceAccumulator
+{
+	CloudTemporalSample result;
+	CloudTemporalSample nearest;
+	float4 stormMotion;
+	float4 nearestStormMotion;
+	float2 depthRange;
+	float4 sampleMinimum;
+	float4 sampleMaximum;
+	float nearestDistance;
+	float weightSum;
+	float motionDepthSum;
+	float motionWeightSum;
+	bool found;
+};
+
+/** @brief Adds one trace sample when its scene depth matches; empty rays get a token weight. */
+void AccumulateCloudSurface(inout CloudSurfaceAccumulator accumulator, int2 pixel, float2 position, float sceneDepth, float spatialWeight)
+{
+	const float4 metadata = TexVolLowAux[pixel];
+	if (abs(metadata.y - sceneDepth) > 0.064)
+		return;
+	const float4 color = TexVolLowLum[pixel];
+	const float transmittance = TexVolLowTr[pixel];
+	const float2 lightning = TexLightningTrace[pixel];
+	const float4 stormMotion = TexVolLowStormMotion[pixel];
+	accumulator.depthRange = float2(min(accumulator.depthRange.x, metadata.x), max(accumulator.depthRange.y, metadata.x));
+	accumulator.sampleMinimum = min(accumulator.sampleMinimum, float4(color.rgb, transmittance));
+	accumulator.sampleMaximum = max(accumulator.sampleMaximum, float4(color.rgb, transmittance));
+	const float weight = transmittance == 1.0 ? 0.01 : spatialWeight;
+	accumulator.result.transmittance += transmittance * weight;
+	accumulator.result.color += color * weight;
+	accumulator.result.metadata += metadata * weight;
+	accumulator.result.lightning += lightning * weight;
+	accumulator.stormMotion += stormMotion * weight;
+	accumulator.weightSum += weight;
+	const float motionWeight = color.a * weight;
+	accumulator.motionDepthSum += metadata.x * motionWeight;
+	accumulator.motionWeightSum += motionWeight;
+	const float2 offset = float2(pixel) - position;
+	const float distance = dot(offset, offset);
+	if (!accumulator.found || distance < accumulator.nearestDistance) {
+		accumulator.nearest.transmittance = transmittance;
+		accumulator.nearest.color = color;
+		accumulator.nearest.metadata = metadata;
+		accumulator.nearest.lightning = lightning;
+		accumulator.nearestStormMotion = stormMotion;
+		accumulator.nearestDistance = distance;
+	}
+	accumulator.found = true;
+}
+
 bool ReconstructCloudSurface(float2 position, float sceneDepth, out CloudTemporalSample result,
 	out float2 depthRange, out float4 sampleMinimum, out float4 sampleMaximum, out float motionDepth, out float4 stormMotion)
 {
 	const int2 base = int2(floor(position));
 	const float2 fraction = saturate(position - floor(position));
 	const int2 maximum = int2(VolumetricCloudBuffer[0].lowFrameDim) - 1;
-	result = (CloudTemporalSample)0;
-	CloudTemporalSample nearest = (CloudTemporalSample)0;
-	stormMotion = 0.0;
-	float4 nearestStormMotion = 0.0;
-	float nearestDistance = 4.0;
-	float weightSum = 0.0;
-	float motionDepthSum = 0.0;
-	float motionWeightSum = 0.0;
-	depthRange = float2(asfloat(0x7f7fffffu), 0);
-	sampleMinimum = float4(asfloat(0x7f7fffffu).xxx, 1);
-	sampleMaximum = 0.0;
-	bool found = false;
+	CloudSurfaceAccumulator accumulator = (CloudSurfaceAccumulator)0;
+	accumulator.depthRange = float2(asfloat(0x7f7fffffu), 0);
+	accumulator.sampleMinimum = float4(asfloat(0x7f7fffffu).xxx, 1);
 	[unroll] for (uint i = 0u; i < 4u; ++i)
+		AccumulateCloudSurface(accumulator, clamp(base + int2(i & 1u, i >> 1u), 0, maximum), position, sceneDepth,
+			((i & 1u) != 0u ? fraction.x : 1.0 - fraction.x) * (i >= 2u ? fraction.y : 1.0 - fraction.y));
+	// Sky gaps in foliage often have only foreground traces nearby, whose rays stop before the clouds behind.
+	[branch] if (!accumulator.found)
 	{
-		const int2 pixel = clamp(base + int2(i & 1u, i >> 1u), 0, maximum);
-		const float4 metadata = TexVolLowAux[pixel];
-		if (abs(metadata.y - sceneDepth) > 0.064)
-			continue;
-		const float4 color = TexVolLowLum[pixel];
-		const float transmittance = TexVolLowTr[pixel];
-		depthRange = float2(min(depthRange.x, metadata.x), max(depthRange.y, metadata.x));
-		sampleMinimum = min(sampleMinimum, float4(color.rgb, transmittance));
-		sampleMaximum = max(sampleMaximum, float4(color.rgb, transmittance));
-		const float weight = transmittance == 1.0 ? 0.01 :
-		                                            ((i & 1u) != 0u ? fraction.x : 1.0 - fraction.x) * (i >= 2u ? fraction.y : 1.0 - fraction.y);
-		result.transmittance += transmittance * weight;
-		result.color += color * weight;
-		result.metadata += metadata * weight;
-		result.lightning += TexLightningTrace[pixel] * weight;
-		stormMotion += TexVolLowStormMotion[pixel] * weight;
-		weightSum += weight;
-		const float motionWeight = color.a * weight;
-		motionDepthSum += metadata.x * motionWeight;
-		motionWeightSum += motionWeight;
-		const float2 offset = float2(pixel) - position;
-		const float distance = dot(offset, offset);
-		if (!found || distance < nearestDistance) {
-			nearest.transmittance = transmittance;
-			nearest.color = color;
-			nearest.metadata = metadata;
-			nearest.lightning = TexLightningTrace[pixel];
-			nearestStormMotion = TexVolLowStormMotion[pixel];
-			nearestDistance = distance;
+		[loop] for (int y = -CloudSurfaceSearchRadius; y <= 1 + CloudSurfaceSearchRadius; ++y)
+			[loop] for (int x = -CloudSurfaceSearchRadius; x <= 1 + CloudSurfaceSearchRadius; ++x)
+		{
+			const int2 pixel = clamp(base + int2(x, y), 0, maximum);
+			const float2 offset = float2(pixel) - position;
+			AccumulateCloudSurface(accumulator, pixel, position, sceneDepth, rcp(1.0 + dot(offset, offset)));
 		}
-		found = true;
 	}
-	if (weightSum > 0.0) {
-		result.transmittance = clamp(result.transmittance / weightSum, sampleMinimum.w, sampleMaximum.w);
-		result.color /= weightSum;
-		result.metadata /= weightSum;
-		result.lightning /= weightSum;
-		stormMotion /= weightSum;
+	result = accumulator.result;
+	stormMotion = accumulator.stormMotion;
+	depthRange = accumulator.depthRange;
+	sampleMinimum = accumulator.sampleMinimum;
+	sampleMaximum = accumulator.sampleMaximum;
+	if (accumulator.weightSum > 0.0) {
+		result.transmittance = clamp(result.transmittance / accumulator.weightSum, sampleMinimum.w, sampleMaximum.w);
+		result.color /= accumulator.weightSum;
+		result.metadata /= accumulator.weightSum;
+		result.lightning /= accumulator.weightSum;
+		stormMotion /= accumulator.weightSum;
 	} else {
-		result = nearest;
-		stormMotion = nearestStormMotion;
+		result = accumulator.nearest;
+		stormMotion = accumulator.nearestStormMotion;
 	}
 	// Empty rays carry boundary distances rather than cloud motion.
-	motionDepth = motionWeightSum > 0.0 ? motionDepthSum / motionWeightSum : result.metadata.x;
-	return found;
+	motionDepth = accumulator.motionWeightSum > 0.0 ? accumulator.motionDepthSum / accumulator.motionWeightSum : result.metadata.x;
+	return accumulator.found;
 }
 
 float3 RebaseCloudHistoryDepth(inout CloudTemporalSample history, float3 direction, float3 previousPosition, float3 cameraDelta)
