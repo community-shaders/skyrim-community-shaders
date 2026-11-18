@@ -13,6 +13,9 @@ public:
 	/** @brief Releases the sun mask shader so it recompiles on the next frame it is needed. */
 	void ClearShaderCache();
 
+	/** @brief The adaptation texture Execute writes this frame, or nullptr before it exists. */
+	ID3D11ShaderResourceView* GetOutputSRV() const;
+
 	TextureManager::Texture textureCurrent;
 	TextureManager::Texture textureSunMasked;
 
@@ -28,6 +31,9 @@ private:
 		float4 DynamicResolution;
 		float4 MaskParams;
 	};
+
+	/** @brief Names of the adaptation ping-pong pair for this frame: (previous, output). */
+	static std::pair<const char*, const char*> GetTextureNames();
 
 	/** @brief Compiles the sun mask shader and creates its constant buffer and sampler on first use. */
 	bool EnsureSunMaskResources();

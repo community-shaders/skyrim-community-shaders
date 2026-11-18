@@ -36,9 +36,7 @@ void ENBAdaptation::Execute()
 
 	SetShaderResourceVariable("TextureCurrent", textureCurrent.srv.get());
 
-	// Use swap mechanism to determine input/output
-	const char* texturePreviousName = (textureManager.GetTextureSwap() & 1) ? "TextureAdaptationSwap" : "TextureAdaptation";
-	const char* textureAdaptationName = (textureManager.GetTextureSwap() & 1) ? "TextureAdaptation" : "TextureAdaptationSwap";
+	const auto [texturePreviousName, textureAdaptationName] = GetTextureNames();
 
 	// Set input texture (previous frame's adaptation value)
 	auto* texturePrevious = textureManager.GetCommonTexture(texturePreviousName);
@@ -53,6 +51,18 @@ void ENBAdaptation::Execute()
 		return;
 	}
 	ExecuteTechnique("Draw", *textureAdaptation);
+}
+
+std::pair<const char*, const char*> ENBAdaptation::GetTextureNames()
+{
+	const bool swap = (TextureManager::GetSingleton().GetTextureSwap() & 1) != 0;
+	return swap ? std::pair{ "TextureAdaptationSwap", "TextureAdaptation" } : std::pair{ "TextureAdaptation", "TextureAdaptationSwap" };
+}
+
+ID3D11ShaderResourceView* ENBAdaptation::GetOutputSRV() const
+{
+	auto* texture = TextureManager::GetSingleton().FindCommonTexture(GetTextureNames().second);
+	return texture ? texture->srv.get() : nullptr;
 }
 
 bool ENBAdaptation::EnsureSunMaskResources()
