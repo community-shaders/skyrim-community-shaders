@@ -1878,6 +1878,7 @@ struct TESBoundObject_Clone3D
 								}
 
 								targetMat->ApplyMaterialObjectData(*pbrData);
+								std::lock_guard extLock(BSLightingShaderMaterialPBR::AllMutex);
 								auto& targetExt = BSLightingShaderMaterialPBR::GetExtensions(targetMat);
 								targetExt.materialObjectData = pbrData;
 								targetExt.lastOwnerRefFormID = ref->GetFormID();

@@ -134,10 +134,11 @@ There is no committed ledger. The record of what has been ported is the `Ported 
     - **open-shaders:** NeuralRendering, FoveatedRender, ShadowAtlas/ShadowScheduler/ShadowCasterManager (SCM), CSUtility, LazyShader, the VR HMD mask, DLSS stereo fallback, CommonLib bumps beyond upstream's pinned version.
     - **Bottled:** SnowCover, ReverseZ, lite lighting variants (`NoWetness`/`NoSnowCover` flags), SkySync helpers absent upstream.
 - If a commit depends on earlier fork-only work, name that prerequisite in the reason.
+- **VR is fork-only.** Community Shaders does not support VR; only open-shaders does. A commit whose fix, symptom or reasoning is VR-only (per-eye or HMD paths, `isVR` branches, VR shader configs, a repro that only happens in VR) is `not-relevant (VR-only)`, even when the code it touches exists upstream. When a commit mixes VR and flat changes, port only the flat part. Never cite VR behaviour to justify a port, and never ask for VR testing in a PR.
 
 ### 2e. Portable? Classify the patch
 
-- `git show <sha> | git -C "$SCRATCH/upstream-dev" apply --check` → **clean**
+- `git show <sha> | git -C "$SCRATCH/upstream-dev" apply --check` → **clean**, unless the commit mixes VR and flat changes (step 2d): that is always **adapted**, however cleanly it applies.
 - `git apply --3way` or a hand port → **adapted**: list every place where upstream's code differs.
 - Generated or config files (shader-validation yaml, en.json) → **regenerate** against upstream; never hand-merge them.
 
@@ -152,19 +153,19 @@ Present one triage table and wait for approval before any push.
 | Fork | SHA / PR | Title | Outcome | Reason (one line, concrete) |
 | ---- | -------- | ----- | ------- | --------------------------- |
 
-Outcomes: `port-clean`, `port-adapted`, `already-upstream (#NNNN)`, `in-open-PR (#NNNN)`, `declined-before (#NNNN)`, `fork-only (<missing file/symbol>)`, `superseded`, `needs-decision (<size/risk>)`, `not-relevant (<why>)`.
+Outcomes: `port-clean`, `port-adapted`, `already-upstream (#NNNN)`, `in-open-PR (#NNNN)`, `declined-before (#NNNN)`, `fork-only (<missing file/symbol>)`, `superseded`, `needs-decision (<size/risk>)`, `not-relevant (<why>)` (e.g. `not-relevant (VR-only)`).
 
 ## 4. Port, one item at a time
 
 1. Branch from fresh upstream/dev: `git checkout -B port/<fork>-<slug> upstream/dev`, where `<fork>` is `open` or `bottle`. If the session requires a specific branch prefix, use `<prefix>-<slug>`. Use one branch per logical change; combine only tightly coupled items.
-2. Apply every commit in the item. When it's clean, use `git cherry-pick <sha>` for a single commit. Cherry-pick keeps the original author; then rewrite the message per step 6 with `git commit --amend`. For a grouped item (step 2a), apply the group's exact recorded SHAs in order without committing, then make one commit for the whole group: `git cherry-pick -n <sha-1> <sha-2> ... <sha-n>` followed by `git commit --author="<original author>"`, with a step 6 message whose `Ported from` line names every source SHA (add `Co-authored-by:` for any other original authors). Never use a `<first>^..<last>` range, which can pull in filtered or side-branch commits. A merge commit is never part of a group; cherry-pick it on its own with `-m 1`. Otherwise port the whole item by hand and commit with `git commit --author="<original author>"`.
+2. Apply every commit in the item. When it's clean, use `git cherry-pick <sha>` for a single commit. Cherry-pick keeps the original author; then rewrite the message per step 6 with `git commit --amend`. For a grouped item (step 2a), apply the group's exact recorded SHAs in order without committing, then make one commit for the whole group: `git cherry-pick -n <sha-1> <sha-2> ... <sha-n>` followed by `git commit --author="<original author>"`, with a step 6 message whose `Ported from` line names every source SHA (add `Co-authored-by:` for any other original authors). Never use a `<first>^..<last>` range, which can pull in filtered or side-branch commits. A merge commit is never part of a group; cherry-pick it on its own with `-m 1`. Otherwise port the whole item by hand and commit with `git commit --author="<original author>"`. Whatever the route, the committed result holds only flat changes: for a commit that mixes VR and flat changes (or a group that includes any VR-only commit or VR hunks), apply without committing (`git cherry-pick -n <sha>`, or `git cherry-pick -n -m 1 <sha>` for a merge; the group's SHAs in order for a group), revert the VR hunks, then commit with the original author, and say in the step 6 body which VR parts were dropped.
 3. **Re-derive the claim.** Write one sentence explaining why the commit's reasoning holds in _upstream's_ code. If it doesn't hold, stop and reclassify.
 4. Run the C++ checklist and fix whatever applies:
     - **D3D state:** restored or unbound afterwards, with no extra per-draw state changes.
     - **Resource naming:** every new resource goes through `Util::SetResourceName` or the Buffer.h wrappers.
     - **Threading:** check render-thread vs compile-worker vs game-thread access; locks are scoped with no nested locking; no lock on hot per-draw paths unless it's justified.
     - **Failure paths:** shader compile failure disables cleanly, and Map/Create failures are handled.
-    - **SE/AE/VR:** `RELOCATION_ID`/`REL::Relocate` pairs; `GetRuntimeData()` for classes whose layout differs; VR configs updated where they exist.
+    - **SE/AE:** `RELOCATION_ID`/`REL::Relocate` pairs; `GetRuntimeData()` for classes whose layout differs. Upstream ships no VR build, so add no VR configs or VR-only branches.
     - **Settings struct change:** bump the feature `.ini` version and validate inputs.
     - **i18n:** user-visible strings use `T()`/`TKEY()`.
     - **Conventions:** ImGui via RAII guards, colors and spacing from `ThemeManager::Constants`, Doxygen comments on public methods, no TODO/FIXME.
@@ -192,7 +193,7 @@ Outcomes: `port-clean`, `port-adapted`, `already-upstream (#NNNN)`, `in-open-PR 
 
 1. Re-fetch upstream/dev. If it moved, rebase the branch (it's yours and unpublished) and re-run step 5.
 2. Re-check the guard from step 1b, then run `git push -u fork <branch>`. Retry up to 4 times with backoff (2s, 4s, 8s, 16s) on network errors only.
-3. Open the PR to `community-shaders/skyrim-community-shaders:dev`, with head `<login>:<branch>` and `maintainer_can_modify: true`. Body sections:
+3. Open the PR as a draft (`draft: true`) to `community-shaders/skyrim-community-shaders:dev`, with head `<login>:<branch>` and `maintainer_can_modify: true`. Every PR starts as a draft; the maintainer marks it ready for review. Body sections:
     - **Summary**
     - **Source:** fork, PR/commit, original author. Include the exact `Ported from ...` line.
     - **Differences from the fork version**
@@ -226,3 +227,5 @@ Final message to the maintainer:
 - Hand-merge generated files or reformat untouched code.
 - Commit run reports, ledgers or other per-run artifacts.
 - Skip the checkpoint on scheduled or unattended runs.
+- Open a PR that is not a draft.
+- Port a VR-only change, or justify a port by VR behaviour.
