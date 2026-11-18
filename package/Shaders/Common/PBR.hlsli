@@ -4,6 +4,7 @@
 
 #include "Common/BRDF.hlsli"
 #include "Common/Color.hlsli"
+#include "Common/LightDisk.hlsli"
 #include "Common/Math.hlsli"
 #include "Common/PBRMath.hlsli"
 #include "Common/Shading.hlsli"
@@ -201,11 +202,13 @@ namespace PBR
 
 		GetThinSurfaceDirectScattering(surface.reflectionAlbedo, surface.frontTransmissionAlbedo, surface.backTransmissionAlbedo, shineThroughAlbedo,
 			material.Thickness, irradiance, NdotL, wrap, context.detailedShadow, float2(context.softShadow, context.softShadow * context.backTransmissionVisibility),
-			lightingOutput.diffuse, lightingOutput.transmission);
+			lightingOutput.diffuse, lightingOutput.transmission, context.lightDisk);
 
 		[branch] if (doSpecular)
 		{
-			float3 H = context.halfVector;
+			float3 specularLight = LightDisk::SpecularDirection(specularNormal, V, L, context.lightDisk);
+			float3 H = normalize(V + specularLight);
+			specularNdotL = saturate(dot(specularNormal, specularLight));
 			float NdotH = saturate(dot(specularNormal, H));
 			float VdotH = saturate(dot(V, H));
 			float D = BRDF::D_GGX(material.Roughness, NdotH);
@@ -219,6 +222,7 @@ namespace PBR
 				        .x;
 			}
 #	endif
+			D *= LightDisk::GGXNormalization(material.Roughness, context.lightDisk);
 			float visibility = BRDF::Vis_SmithJoint(material.Roughness, NdotV, max(specularNdotL, EPSILON_DOT_CLAMP));
 			float3 F = BRDF::F_Schlick(material.F0, VdotH);
 			float3 detailedLightColor = context.lightColor * context.detailedShadow;
@@ -284,27 +288,21 @@ namespace PBR
 		const float3 N = context.worldNormal;
 		const float3 V = context.viewDir;
 		const float3 L = context.lightDir;
-		const float3 H = context.halfVector;
 
 #if defined(TRUE_PBR)
 		// Coat members exist only on the TRUE_PBR DirectContext.
 		const float3 coatN = context.coatWorldNormal;
 		const float3 coatV = context.coatViewDir;
 		const float3 coatL = context.coatLightDir;
-		const float3 coatH = context.coatHalfVector;
 #endif
 
 		float NdotL = dot(N, L);
 		float NdotV = dot(N, V);
 		float VdotL = dot(V, L);
-		float NdotH = dot(N, H);
-		float VdotH = dot(V, H);
 
 		float satNdotL = clamp(NdotL, EPSILON_DOT_CLAMP, 1);
 		float satNdotV = saturate(abs(NdotV) + EPSILON_DOT_CLAMP);
 		float satVdotL = saturate(VdotL);
-		float satNdotH = saturate(NdotH);
-		float satVdotH = saturate(VdotH);
 
 #if defined(TREE_ANIM)
 		float specularNdotL = saturate(NdotL);
@@ -322,20 +320,30 @@ namespace PBR
 		else
 #endif
 		{
+			const float3 specularLight = LightDisk::SpecularDirection(N, V, L, context.lightDisk);
+			const float3 specularH = normalize(V + specularLight);
+			const float diskNdotH = saturate(dot(N, specularH));
+			const float diskVdotH = saturate(dot(V, specularH));
+#if defined(TREE_ANIM)
+			specularNdotL = saturate(dot(N, specularLight));
+#else
+			specularNdotL = clamp(dot(N, specularLight), EPSILON_DOT_CLAMP, 1.0f);
+#endif
 			float3 F;  // Fresnel reflectance at current (V,H) angle
 #if defined(GLINT)
-			float3 Fr = SpecularMicrofacetWithGlint(material.Noise, material.Roughness, material.F0, max(specularNdotL, EPSILON_DOT_CLAMP), specularNdotV, satNdotH, satVdotH, mul(tbnTr, H),
+			float3 Fr = SpecularMicrofacetWithGlint(material.Noise, material.Roughness, material.F0, max(specularNdotL, EPSILON_DOT_CLAMP), specularNdotV, diskNdotH, diskVdotH, mul(tbnTr, specularH),
 				material.GlintLogMicrofacetDensity, material.GlintMicrofacetRoughness, material.GlintDensityRandomization, material.GlintCache, F);
 #else
-			float3 Fr = SpecularMicrofacet(material.Roughness, material.F0, max(specularNdotL, EPSILON_DOT_CLAMP), specularNdotV, satNdotH, satVdotH, F);
+			float3 Fr = SpecularMicrofacet(material.Roughness, material.F0, max(specularNdotL, EPSILON_DOT_CLAMP), specularNdotV, diskNdotH, diskVdotH, F);
 #endif
+			Fr *= LightDisk::GGXNormalization(material.Roughness, context.lightDisk);
 #if defined(TREE_ANIM)
 			float3 kD = 1.0f - saturate(SpecularDirectionalAlbedo(material.F0, material.Roughness, saturate(abs(NdotV))));
 #else
 			float3 kD = 1 - F;
 #endif
 
-			lightingOutput.diffuse += detailedLightColor * satNdotL * BRDF::Diffuse_Lambert() * kD;
+			lightingOutput.diffuse += detailedLightColor * max(LightDisk::DiffuseCosine(NdotL, context.lightDisk), EPSILON_DOT_CLAMP) * BRDF::Diffuse_Lambert() * kD;
 			lightingOutput.specular += Fr * detailedLightColor * specularNdotL;
 
 #if defined(TRUE_PBR) && !defined(LANDSCAPE) && !defined(LODLANDSCAPE)
@@ -353,26 +361,32 @@ namespace PBR
 #	endif
 				if ((PBRFlags & Flags::TwoLayer) != 0)
 			{
-				float coatNdotL = satNdotL;
+				float coatNdotL = max(specularNdotL, EPSILON_DOT_CLAMP);
 				float coatNdotV = satNdotV;
-				float coatNdotH = satNdotH;
-				float coatVdotH = satVdotH;
+				float coatDiffuseCosine = LightDisk::DiffuseCosine(NdotL, context.lightDisk);
+				float coatNdotH = diskNdotH;
+				float coatVdotH = diskVdotH;
 				[branch] if ((PBRFlags & Flags::CoatNormal) != 0)
 				{
-					coatNdotL = clamp(dot(coatN, coatL), EPSILON_DOT_CLAMP, 1);
+					coatDiffuseCosine = LightDisk::DiffuseCosine(dot(coatN, coatL), context.lightDisk);
+					const float3 coatSpecularLight = LightDisk::SpecularDirection(coatN, coatV, coatL, context.lightDisk);
+					const float3 coatSpecularH = normalize(coatV + coatSpecularLight);
+					coatNdotL = clamp(dot(coatN, coatSpecularLight), EPSILON_DOT_CLAMP, 1);
 					coatNdotV = saturate(abs(dot(coatN, coatV)) + EPSILON_DOT_CLAMP);
-					coatNdotH = saturate(dot(coatN, coatH));
-					coatVdotH = saturate(dot(coatV, coatH));
+					coatNdotH = saturate(dot(coatN, coatSpecularH));
+					coatVdotH = saturate(dot(coatV, coatSpecularH));
 				}
 
 				float3 coatF;
 				float3 coatFr = SpecularMicrofacet(material.CoatRoughness, material.CoatF0, coatNdotL, coatNdotV, coatNdotH, coatVdotH, coatF);
 
+				coatFr *= LightDisk::GGXNormalization(material.CoatRoughness, context.lightDisk);
+
 				float3 layerAttenuation = 1 - coatF * material.CoatStrength;
 				lightingOutput.diffuse *= layerAttenuation;
 				lightingOutput.specular *= layerAttenuation;
 
-				lightingOutput.coatDiffuse += context.coatLightColor * coatNdotL * BRDF::Diffuse_Lambert();
+				lightingOutput.coatDiffuse += context.coatLightColor * max(coatDiffuseCosine, EPSILON_DOT_CLAMP) * BRDF::Diffuse_Lambert();
 				lightingOutput.specular += coatFr * context.coatLightColor * coatNdotL * material.CoatStrength;
 			}
 

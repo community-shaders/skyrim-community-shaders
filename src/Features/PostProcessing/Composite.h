@@ -50,14 +50,14 @@ struct Composite : public PostProcessFeature
 		FLAG_COUNT = 64  // 2^6 combinations
 	};
 
-	// Shader permutations indexed by composite flags (index 0 unused)
+	// Shader permutations indexed by composite flags (0 resolves pre-exposure).
 	std::array<winrt::com_ptr<ID3D11PixelShader>, CompositeFlags::FLAG_COUNT> compositeShaders = {};
 	std::array<bool, CompositeFlags::FLAG_COUNT> shaderRequested = {};
 
 	virtual void SetupResources() override;
 	virtual void ClearShaderCache() override;
 	/// Compile the requested flag range. Physical lens variants are requested by Draw.
-	void CompileRasterShaders(uint firstFlags = 1, uint endFlags = PHYSICAL_LENS);
+	void CompileRasterShaders(uint firstFlags = NONE, uint endFlags = PHYSICAL_LENS);
 
 	virtual void RestoreDefaultSettings() override {}
 	virtual void LoadSettings(json&) override {}

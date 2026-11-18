@@ -399,7 +399,9 @@ namespace ProceduralAurora
 
 		float peak = max(color.r, max(color.g, color.b));
 		color /= 1.0 + peak * 0.5;
-		return color * fade * HorizonFade(dir);
+		// Drop non-finite colors so bad input can't paint a band
+		const float3 result = color * saturate(fade) * HorizonFade(dir);
+		return all(isfinite(result)) ? result : 0.0;
 	}
 #endif
 }

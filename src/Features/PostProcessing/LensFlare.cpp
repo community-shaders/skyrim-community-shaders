@@ -73,8 +73,8 @@ void LensFlare::DrawSettings()
 
 	// Threshold
 	ImGui::SeparatorText(T("feature.post_processing.lens_flare.threshold", "Threshold"));
-	ImGui::SliderFloat(T("feature.post_processing.lens_flare.threshold_ev", "Threshold (EV100)"), &settings.ThresholdEV, -7.0f, 23.0f, "%+.2f EV100");
-	tooltip(T("feature.post_processing.lens_flare.tooltip_threshold_ev", "Brightness threshold in EV100 (0 EV100 = 0.125 linear luminance)."));
+	ImGui::SliderFloat(T("feature.post_processing.lens_flare.threshold_ev", "Threshold (Neutral EV100)"), &settings.ThresholdEV, -7.0f, 23.0f, "%+.2f EV100");
+	tooltip(T("feature.post_processing.lens_flare.threshold_ev_hint", "Threshold on the RGB average before exposure. EV100 denotes equivalent neutral luminance on the Physical Sky / Linear Lighting scale: 0 EV100 = approximately RGB 0.125 = 0.125 cd/m2 for neutral gray (K = 12.5). Colored pixels are not thresholded by luminance."));
 	ImGui::SliderFloat(T("feature.post_processing.lens_flare.threshold_range", "Threshold Range"), &settings.ThresholdRange, 0.01f, 5.0f, "%.3f");
 	tooltip(T("feature.post_processing.lens_flare.tooltip_threshold_range", "Fade range for the threshold cutoff"));
 
@@ -433,7 +433,6 @@ void LensFlare::ClearShaderCache()
 	}
 	bokehFFTDirty = true;
 
-	globals::shaderCache->ClearStandaloneComputeCache(L"PostProcessing/LensFlare");
 	CompileComputeShaders();
 }
 

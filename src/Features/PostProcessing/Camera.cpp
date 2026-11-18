@@ -185,7 +185,6 @@ void Camera::ClearShaderCache()
 			}
 	}
 
-	globals::shaderCache->ClearStandaloneComputeCache(L"PostProcessing/Camera");
 	CompileRasterShaders();
 }
 

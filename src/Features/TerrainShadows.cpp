@@ -343,7 +343,12 @@ void TerrainShadows::CompileComputeShaders()
 bool TerrainShadows::IsHeightMapReady()
 {
 	auto worldspace = GetLandWorldspace();
-	return worldspace && cachedHeightmap && cachedHeightmap->worldspace == worldspace->GetFormEditorID();
+	return worldspace && texHeightMap && cachedHeightmap && cachedHeightmap->worldspace == worldspace->GetFormEditorID();
+}
+
+bool TerrainShadows::IsShadowMapReady()
+{
+	return loaded && settings.EnableTerrainShadow && IsHeightMapReady() && texShadowHeight && !needPrecompute;
 }
 
 TerrainShadows::PerFrame TerrainShadows::GetCommonBufferData()
@@ -351,7 +356,7 @@ TerrainShadows::PerFrame TerrainShadows::GetCommonBufferData()
 	bool isHeightmapReady = IsHeightMapReady();
 
 	PerFrame data = {
-		.EnableTerrainShadow = settings.EnableTerrainShadow && isHeightmapReady,
+		.EnableTerrainShadow = IsShadowMapReady(),
 	};
 
 	if (isHeightmapReady) {
@@ -501,7 +506,12 @@ bool TerrainShadows::UpdateShadow(bool a_refreshImmediately)
 	auto shadowSceneNode = globals::game::smState->shadowSceneNode[0];
 	if (!shadowSceneNode)
 		return false;
-	auto sunLight = skyrim_cast<RE::NiDirectionalLight*>(shadowSceneNode->GetRuntimeData().sunLight->light.get());
+
+	auto shadowSunLight = shadowSceneNode->GetRuntimeData().sunLight;
+	if (!shadowSunLight || !shadowSunLight->light)
+		return false;
+
+	auto sunLight = skyrim_cast<RE::NiDirectionalLight*>(shadowSunLight->light.get());
 	if (!sunLight)
 		return false;
 	TracyD3D11Zone(globals::state->tracyCtx, "Terrain Occlusion - Update Shadows");

@@ -244,8 +244,6 @@ void PhysicalLens::ClearShaderCache()
 	planningValid = false;
 	ghostWaveValid = false;
 	lastGhostFrame = ~0u;
-	globals::shaderCache->ClearStandaloneComputeCache(L"PostProcessing/PhysicalLensFlare");
-	globals::shaderCache->ClearStandaloneComputeCache(L"PostProcessing/PhysicalLensImaging");
 	shadersRequested = false;
 	if (IsActive() && resourcesReady)
 		CompileShaders();
@@ -995,7 +993,7 @@ void PhysicalLens::Draw(TextureInfo& input)
 	auto* exposure = owner ? owner->GetPipelineFeature<HistogramAutoExposure>(PostProcessing::FeaturePipelineIndex::AutoExposure) : nullptr;
 	auto* local = owner ? owner->GetPipelineFeature<LocalExposure>(PostProcessing::FeaturePipelineIndex::LocalExposure) : nullptr;
 	const bool hasExposure = exposure && exposure->IsActive() && exposure->GetAdaptationSRV();
-	data.exposureDecode = 1.f;
+	data.exposureDecode = 1.f / globals::state->preExposure;
 	data.autoExposure = hasExposure ? 1.f : 0.f;
 	data.manualExposure = local && local->enabled && local->GetLogLuminanceSRV() ? local->settings.Exposure : 1.f;
 	parameters->Update(data);

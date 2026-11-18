@@ -37,7 +37,7 @@ struct LensFlare : public PostProcessFeature
 	struct Settings
 	{
 		float Intensity = 0.25f;
-		float ThresholdEV = 3.0f;  // EV100-based threshold (converted to linear luminance for shader)
+		float ThresholdEV = 3.0f;  // Neutral-equivalent EV100; exp2(EV100 - 3) thresholds the RGB average before exposure.
 		float ThresholdRange = 1.0f;
 		float GhostStrength = 0.3f;
 		float GhostChromaShift = 0.015f;

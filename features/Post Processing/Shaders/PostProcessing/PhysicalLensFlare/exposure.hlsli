@@ -6,14 +6,14 @@ cbuffer ExposureParameters : register(b1)
 {
 	float2 ExposureArea, ExposureRange;
 	float ExposureLerp, ExposureCompensation, UnusedStart, UnusedMax;
-	float UnusedStrength;
-	float3 ExposurePadding;
+	float UnusedStrength, ExposureTarget;
+	float2 ExposurePadding;
 };
 float VisibilityExposure()
 {
 	float exposure = ManualExposure;
 	if (AutoExposureEnabled > 0)
-		exposure = ExposureCompensation / clamp(ExposureAdaptation[0], ExposureRange.x, ExposureRange.y);
+		exposure = ExposureTarget * ExposureCompensation / clamp(ExposureAdaptation[0], ExposureRange.x, ExposureRange.y);
 	return exposure * ExposureDecode;
 }
 

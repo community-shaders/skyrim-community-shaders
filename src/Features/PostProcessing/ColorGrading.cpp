@@ -964,9 +964,6 @@ void ColorGrading::ReleaseActiveShaders()
 void ColorGrading::ClearShaderCache()
 {
 	ReleaseActiveShaders();
-	// Explicit "Recompile Shaders" / force path: wipe ColorGrading disk variants so
-	// source edits and define changes are rebuilt from scratch.
-	globals::shaderCache->ClearStandaloneComputeCache(L"PostProcessing/ColorGrading");
 	CompileShaders();
 }
 

@@ -3,6 +3,7 @@
 
 #include "Common/BRDF.hlsli"
 #include "Common/ColorManagement.hlsli"
+#include "Common/LightDisk.hlsli"
 #include "Common/Math.hlsli"
 
 namespace PBR
@@ -165,16 +166,18 @@ namespace PBR
 	/** @brief Evaluates thin-surface diffuse lobes with separate reflection and transmission shadows. */
 	void GetThinSurfaceDirectScattering(float3 reflectionAlbedo, float3 transmissionAlbedo, float3 irradiance,
 		float NdotL, float wrap, float reflectionShadow, float transmissionShadow,
-		out float3 reflection, out float3 transmission)
+		out float3 reflection, out float3 transmission, float2 lightDisk = float2(0.0, 1.0))
 	{
 		float2 diffuseCosines = GetThinSurfaceDiffuseCosines(NdotL, wrap);
+		if (wrap == 0.0 && lightDisk.x > 0.0)
+			diffuseCosines = float2(LightDisk::DiffuseCosine(NdotL, lightDisk), LightDisk::DiffuseCosine(-NdotL, lightDisk));
 		reflection = reflectionAlbedo * diffuseCosines.x * irradiance * reflectionShadow;
 		transmission = transmissionAlbedo * diffuseCosines.y * irradiance * transmissionShadow;
 	}
 
 	void GetThinSurfaceDirectScattering(float3 reflectionAlbedo, float3 frontTransmissionAlbedo, float3 backTransmissionAlbedo,
 		float3 shineThroughAlbedo, float opacity, float3 irradiance, float NdotL, float wrap, float reflectionShadow, float2 transmissionShadows,
-		out float3 reflection, out float3 transmission)
+		out float3 reflection, out float3 transmission, float2 lightDisk = float2(0.0, 1.0))
 	{
 		float3 transmittance = (1.0f - saturate(opacity)).xxx;
 #if defined(TRUE_PBR) && (defined(TREE_ANIM) || defined(LIGHTING) || defined(GRASS_LIGHTING))
@@ -186,8 +189,8 @@ namespace PBR
 		// Share the wrapped shading response so flat sheet boundaries do not split the transmission lobe.
 		float3 transmissionAlbedo = saturate(shineThroughAlbedo * transmittance + backTransmissionAlbedo);
 		GetThinSurfaceDirectScattering(reflectionAlbedo, transmissionAlbedo, irradiance,
-			NdotL, wrap, reflectionShadow, transmissionShadows.y, reflection, transmission);
-		transmission += frontTransmissionAlbedo * saturate(NdotL) * irradiance * transmissionShadows.x;
+			NdotL, wrap, reflectionShadow, transmissionShadows.y, reflection, transmission, lightDisk);
+		transmission += frontTransmissionAlbedo * LightDisk::DiffuseCosine(NdotL, lightDisk) * irradiance * transmissionShadows.x;
 	}
 
 	// Normal-variance filtering from Tokuyoshi and Kaplanyan (2019).

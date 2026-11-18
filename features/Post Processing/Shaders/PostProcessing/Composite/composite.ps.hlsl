@@ -1,3 +1,4 @@
+#include "Common/PreExposure.hlsli"
 /// Bloom/Flare/Glare/Exposure Composite pass
 /// Combines bloom, lens flare, physical glare, and auto exposure results with the main color texture.
 /// Formula: SceneColor * GlobalExposure * LocalExposure + Bloom * GlobalExposure
@@ -78,11 +79,11 @@ float RemapBaseContrast(float centeredBase)
 	return isHighlight ? remappedMagnitude : -remappedMagnitude;
 }
 
-float ComputeLocalExposure(float3 sceneColor, float baseLogLuminance, float globalExposure, float middleGreyCompensation)
+float ComputeLocalExposure(float3 sceneColor, float baseLogLuminance, float globalExposure, float exposedMiddleGrey)
 {
-	float logGlobalExposure = log2(max(globalExposure, 1e-5));
+	float logGlobalExposure = log2(max(globalExposure, FLT_MIN));
 	float exposedBase = baseLogLuminance + logGlobalExposure;
-	float middleGrey = log2(0.18 * middleGreyCompensation) + MiddleGreyBias;
+	float middleGrey = log2(exposedMiddleGrey) + MiddleGreyBias;
 	float centeredBase = exposedBase - middleGrey;
 	float logAdjustment = RemapBaseContrast(centeredBase) - centeredBase;
 
@@ -107,8 +108,9 @@ cbuffer AutoExposureCB : register(b1)
 	float PurkinjeStartEV;
 	float PurkinjeMaxEV;
 	float PurkinjeStrength;
+	float ExposureTarget;
 
-	float pad[3];
+	float2 pad;
 };
 
 // ==================== Purkinje Effect ====================
@@ -309,6 +311,7 @@ float4 PSComposite(FullscreenTriangleVSOutput input) :
 	float3 sceneColor = TexColor[tid].rgb;
 	uint2 sceneTid = tid;
 #endif
+	sceneColor = PreExposure::Decode(sceneColor);
 
 	// Accumulate bloom/flare/glare contributions (separate from scene)
 	float3 bloomContrib = 0;
@@ -337,17 +340,18 @@ float4 PSComposite(FullscreenTriangleVSOutput input) :
 		bloomContrib += SamplePhysicalFlare(input.TexCoord, float2(w, h));
 	}
 #endif
+	bloomContrib = PreExposure::Decode(bloomContrib);
 
 #ifdef HAS_EXPOSURE
 	// Compute global exposure value
 	float avgLuma = TexAdaptation[0];
-	float globalExposure = 0.18 * ExposureCompensation / clamp(avgLuma, AdaptationRange.x, AdaptationRange.y);
+	float globalExposure = ExposureTarget * ExposureCompensation / clamp(avgLuma, AdaptationRange.x, AdaptationRange.y);
 
 	// Formula: SceneColor * GlobalExposure * LocalExposure + Bloom * GlobalExposure
 	// LocalExposure multiplier derived from the base luminance pass (1.0 if not enabled)
 #	ifdef HAS_LOCAL_EXPOSURE
 	float baseLogLuminance = ResolveBaseLuminance(sceneTid);
-	float localExposure = ComputeLocalExposure(sceneColor, baseLogLuminance, globalExposure, ExposureCompensation);
+	float localExposure = ComputeLocalExposure(sceneColor, baseLogLuminance, globalExposure, ExposureTarget * ExposureCompensation);
 #	else
 	float localExposure = 1.0;
 #	endif
@@ -367,7 +371,7 @@ float4 PSComposite(FullscreenTriangleVSOutput input) :
 	// No global exposure
 #	ifdef HAS_LOCAL_EXPOSURE
 	float baseLogLuminance = ResolveBaseLuminance(sceneTid);
-	float localExposure = ComputeLocalExposure(sceneColor, baseLogLuminance, ManualExposure, 1.0);
+	float localExposure = ComputeLocalExposure(sceneColor, baseLogLuminance, ManualExposure, 0.18);
 	float3 result = (sceneColor * localExposure + bloomContrib) * ManualExposure;
 #	else
 	// No exposure at all: simple additive composite

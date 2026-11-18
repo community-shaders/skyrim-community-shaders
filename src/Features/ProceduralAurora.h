@@ -119,7 +119,13 @@ private:
 	/** @brief Copies a color preset into the settings. */
 	void ApplyPreset(int index);
 
+	/** @brief Below this the aurora counts as off. */
+	static constexpr float kMinVisibility = 1.0f / 255.0f;
+	/** @brief In-game days between frames that count as a time jump. */
+	static constexpr double kTimeJumpDays = 1.0 / 24.0;
+
 	float auroraVisibility = 0.0f;                 // last value sent to the shader, shown in the menu
+	double lastGameDays = -1.0;                    // day count last frame, to spot time jumps
 	std::atomic<float> vanillaVisibility{ 0.0f };  // vanilla fade read in OnSkyUpdate: the ribbons' material alpha, 0 to 1
 	bool ribbonsCulled = false;                    // whether OnSkyUpdate last culled the vanilla ribbons
 	float curtainCount = 0.0f;                     // curtains sent to the shader, eased toward the setting so they fade

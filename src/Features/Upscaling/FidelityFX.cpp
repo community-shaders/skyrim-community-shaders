@@ -372,7 +372,7 @@ void FidelityFX::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_r
 	dispatchParameters.cameraFovAngleVertical = Util::GetVerticalFOVRad();
 	dispatchParameters.viewSpaceToMetersFactor = 0.01428222656f;
 	dispatchParameters.reset = globals::state->ShouldResetHistory();
-	dispatchParameters.preExposure = 1.0f;
+	dispatchParameters.preExposure = globals::state->preExposure;
 	dispatchParameters.flags = 0;
 
 	__try {

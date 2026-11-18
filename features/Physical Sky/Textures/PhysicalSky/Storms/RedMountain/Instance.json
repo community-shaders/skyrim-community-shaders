@@ -1,0 +1,33 @@
+{
+    "enabled": true,
+    "worldspace": "DLC2SolstheimWorld",
+    "center": [2376.24845, -1258.88018],
+    "radius": 1100.0,
+    "altitude": 466.493210859375,
+    "height": 1646.363205703125,
+    "strength": 1.0,
+    "topOffset": [0.0, 0.0],
+    "rotation": 1.0,
+    "updraft": 7.0,
+    "density": 0.75,
+    "emission": [0.5, 0.06, 0.008],
+    "emissionHeight": 0.12,
+    "asset": "",
+    "replacementReference": "0x251B1~Dragonborn.esm",
+    "name": "Red Mountain",
+    "backHalfSize": 2800.0,
+    "backRotation": 0.0,
+    "mirrorBack": false,
+    "coreHeight": 0.08,
+    "coreAsset": ".",
+    "albedo": 0.82,
+    "replacementNodes": ["DLC2VvardenfellPlume"],
+    "mode": "Volcanic",
+    "replacementTextures": [
+        "textures\\dlc02\\sky\\plume01.dds",
+        "textures\\dlc02\\sky\\plume02.dds",
+        "textures\\dlc02\\sky\\plume03.dds"
+    ],
+    "replacementReferences": [],
+    "windInfluence": 1.0
+}

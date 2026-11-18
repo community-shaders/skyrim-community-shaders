@@ -1,6 +1,7 @@
 #include "Composite.h"
 
 #include "CODBloom.h"
+#include "Features/LinearLighting.h"
 #include "Features/PostProcessing.h"
 #include "HistogramAutoExposure.h"
 #include "LensFlare.h"
@@ -26,7 +27,7 @@ void Composite::UpdateAutoEnabled()
 	auto* exposure = owner->GetPipelineFeature<HistogramAutoExposure>(PostProcessing::FeaturePipelineIndex::AutoExposure);
 	auto* localExposure = owner->GetPipelineFeature<LocalExposure>(PostProcessing::FeaturePipelineIndex::LocalExposure);
 
-	enabled = (bloom && bloom->enabled) || (flare && flare->enabled) || (glare && glare->enabled) || (physicalLens && physicalLens->enabled) || (exposure && exposure->IsActive()) || (localExposure && localExposure->enabled);
+	enabled = globals::state->preExposure != 1.0f || (bloom && bloom->enabled) || (flare && flare->enabled) || (glare && glare->enabled) || (physicalLens && physicalLens->enabled) || (exposure && exposure->IsActive()) || (localExposure && localExposure->enabled);
 }
 
 void Composite::SetupResources()
@@ -38,7 +39,9 @@ void Composite::SetupResources()
 
 		D3D11_TEXTURE2D_DESC texDesc;
 		gameTexMainCopy.texture->GetDesc(&texDesc);
-		texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+		// Exposure is resolved here. Preserve overexposed HDR values until the
+		// following tone mapper instead of clipping them back to scene FP16.
+		texDesc.Format = globals::features::linearLighting.IsLinearLightingActive() ? DXGI_FORMAT_R32G32B32A32_FLOAT : DXGI_FORMAT_R16G16B16A16_FLOAT;
 
 		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {
 			.Format = texDesc.Format,
@@ -79,7 +82,6 @@ void Composite::ClearShaderCache()
 		}
 	}
 
-	globals::shaderCache->ClearStandaloneComputeCache(L"PostProcessing/Composite");
 	CompileRasterShaders();
 }
 
@@ -138,8 +140,6 @@ void Composite::Draw(TextureInfo& inout_tex)
 	bool hasPhysical = hasPhysicalFlare || hasPhysicalLens || hasPhysicalWave;
 
 	uint flags = (hasBloom ? BLOOM : 0) | (hasFlare ? FLARE : 0) | (hasGlare ? GLARE : 0) | (hasExposure ? EXPOSURE : 0) | (hasLocalExposure ? LOCAL_EXPOSURE : 0) | (hasPhysical ? PHYSICAL_LENS : 0);
-	if (flags == NONE)
-		return;
 
 	if (hasPhysical) {
 		CompileRasterShaders(flags, flags + 1);
@@ -149,7 +149,7 @@ void Composite::Draw(TextureInfo& inout_tex)
 			flags &= ~PHYSICAL_LENS;
 		}
 	}
-	if (flags == NONE)
+	if (flags == NONE && globals::state->preExposure == 1.0f)
 		return;
 	if (!AllShadersReady({ &compositeShaders[flags] }))
 		return;

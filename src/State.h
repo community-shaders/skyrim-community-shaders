@@ -422,6 +422,7 @@ public:
 		IsMoon = 1 << 11,
 		ProjectedTextureIsSRGB = 1 << 12,
 		GrassPBR = 1 << 13,
+		IsSecunda = 1 << 14,
 	};
 
 	/** @brief Bitflags describing extra feature-specific properties related to terrain displacement and material models. */
@@ -539,6 +540,10 @@ public:
 	bool ShouldResetHistory() const { return frameCount == historyResetFrame; }
 
 	uint frameCount = 0;
+	// Frozen for all views/passes in a frame, including reflection rendering.
+	float preExposure = 1.0f;
+	float previousPreExposure = 1.0f;
+	uint preExposureFrame = UINT_MAX;
 	// Thread-safe mirror of frameCount maintained by the render thread.
 	// Off-thread readers (MCP listener, future telemetry) must read this
 	// instead of touching frameCount directly to avoid a data race.
