@@ -17,15 +17,15 @@ struct SharedLighting;
 
 struct Feature
 {
-	// For global settings search
+	/** @brief A setting the Go To palette lists for a feature, for controls the settings catalog cannot see. */
 	struct SettingSearchEntry
 	{
-		std::string label;
-		std::string description;
-		std::function<void()> focusCallback;  // Called to focus/highlight this setting in the UI
-		std::string featureName;              // For display context
+		std::string id;                       ///< Stable per feature; keys the recent picks
+		std::string label;                    ///< Shown as the result title
+		std::string description;              ///< Extra searchable text
+		std::function<void()> focusCallback;  ///< Runs when the palette queues the feature page, before it draws; set state for the next draw rather than assume the page is open
 	};
-	// Override in features to expose settings for search
+	/** @brief Override to list settings the Go To palette should find; none by default. */
 	virtual std::vector<SettingSearchEntry> GetSettingsSearchEntries() { return {}; }
 
 	// Restart-required settings introspection. Default: none.
