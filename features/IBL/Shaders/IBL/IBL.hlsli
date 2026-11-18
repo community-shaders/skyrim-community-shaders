@@ -55,7 +55,7 @@ namespace ImageBasedLighting
 	float3 GetCachedIBLRatio()
 	{
 		float3 iblRatio;
-		
+
 		[branch] if (SharedData::iblSettings.DALCMode >= 2)
 		{
 			float dalcLuminance = Color::RGBToLuminance(Color::Ambient(SharedData::GetAmbient(0.0f)));
@@ -67,7 +67,7 @@ namespace ImageBasedLighting
 		{
 			iblRatio = EnvIBLTexture.Load(int3(3, 0, 0)).xyz;
 		}
-		
+
 		return iblRatio;
 	}
 
