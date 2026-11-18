@@ -3,7 +3,7 @@
 ## Ray integration
 
 The step follows Nubis Evolved slide 39: `3 + 60 * distance / 16384`, with
-distances in metres, scaled by `marchStepScale` (default 0.5). The march ends
+distances in metres, scaled by `marchStepScale` (default 1.5, Low preset). The march ends
 at the occupied interval's far bound, at `T <= 0.1`, or at `rayMarchRange`
 measured from the camera. Long grazing intervals take as many probes as the
 step function yields. Cirrus uses one sheet intersection and four light probes.
