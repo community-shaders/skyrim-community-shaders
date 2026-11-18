@@ -214,7 +214,7 @@ namespace Skylighting
 
 					// https://handmade.network/p/75/monter/blog/p/7288-engine_work__global_illumination_with_irradiance_probes
 					// Hard tangent check: a wrapped weight lets probes across thin occluders (roofs) leak the probe grid in.
-					float tangentWeight = saturate(dot(probeOffset, normalWS) * rsqrt(max(dot(probeOffset, probeOffset), EPSILON_WEIGHT_SUM))) + MIN_TANGENT_WEIGHT;
+					float tangentWeight = saturate(dot(probeOffset, normalWS) * rsqrt(max(dot(probeOffset, probeOffset), EPSILON_LENGTH_SQ))) + MIN_TANGENT_WEIGHT;
 #	if defined(SKYLIGHTING_COVERAGE)
 					// An open probe above the occluder covering the receiver sees sky through that roof; open probes below it are beside the receiver
 					[branch] if (receiverCovered && SkylightingProbeCoverage[cellTexID] == COVERAGE_OPEN)
