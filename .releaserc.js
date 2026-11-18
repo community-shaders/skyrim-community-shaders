@@ -20,11 +20,13 @@ const hotfixLine = /^hotfix\/(\d+\.(?:\d+|x)\.x)$/.exec(refName)?.[1];
 // shipped from main. release-hotfix.yaml only cherry-picks fix:/perf:, but
 // clamp here as well so a hand-pushed commit can't jump the line.
 // The default angular preset ignores `feat!:` headers without a BREAKING CHANGE
-// footer, so use conventionalcommits to make `!` release a major.
+// footer, so use conventionalcommits to make `!` release a major and list it.
+// Keep the preset on v9 (release-semantic.yaml): v10 needs a newer changelog writer.
+const preset = 'conventionalcommits';
 const commitAnalyzer = [
   '@semantic-release/commit-analyzer',
   {
-    preset: 'conventionalcommits',
+    preset,
     ...(hotfixLine && {
       releaseRules: [
         { breaking: true, release: 'patch' },
@@ -48,7 +50,7 @@ module.exports = {
     : ['main', { name: 'dev', prerelease: 'rc' }],
   plugins: [
     commitAnalyzer,
-    '@semantic-release/release-notes-generator',
+    ['@semantic-release/release-notes-generator', { preset }],
     [
       '@google/semantic-release-replace-plugin',
       {
