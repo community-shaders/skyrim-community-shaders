@@ -945,10 +945,16 @@ void ColorGrading::SetupResources()
 void ColorGrading::ReleaseActiveShaders()
 {
 	BumpShaderGeneration();
+	const auto vertexShaderPtrs = std::array{ &colorgradingVS };
 	const auto shaderPtrs = std::array{ &colorgradingPS };
 	const auto computeShaderPtrs = std::array{ &lutgenCS };
 
 	std::lock_guard lock(shaderMutex);
+	for (auto shader : vertexShaderPtrs)
+		if ((*shader)) {
+			(*shader)->Release();
+			shader->detach();
+		}
 	for (auto shader : shaderPtrs)
 		if ((*shader)) {
 			(*shader)->Release();
@@ -987,11 +993,15 @@ void ColorGrading::CompileShaders()
 
 	CompileComputeShadersAsync(L"Data\\Shaders\\PostProcessing\\ColorGrading", shaderInfos);
 
+	// The vertex stage computes the white balance matrix once per draw instead of per pixel.
+	const std::vector<VertexShaderCompileInfo> vertexInfos = {
+		{ &colorgradingVS, "colorgrading.hlsl", { { "TONEMAP_FUNC", tonemapFuncName } }, "VSColorGrading" },
+	};
 	const std::vector<PixelShaderCompileInfo> rasterInfos = {
 		{ &colorgradingPS, "colorgrading.hlsl", { { "TONEMAP_FUNC", tonemapFuncName } }, "PSColorGrading" },
 	};
 
-	CompileRasterShadersAsync(L"Data\\Shaders\\PostProcessing\\ColorGrading", {}, rasterInfos);
+	CompileRasterShadersAsync(L"Data\\Shaders\\PostProcessing\\ColorGrading", vertexInfos, rasterInfos);
 
 	recompileFlag = false;
 	curveNeedsUpdate = true;  // shader changed, curve must update
@@ -1005,9 +1015,9 @@ void ColorGrading::Draw(TextureInfo& inout_tex)
 	if (recompileFlag)
 		ReloadActiveShaders();
 
-	if (!AllShadersReady({ &colorgradingPS }) || !AllShadersReady({ &lutgenCS }))
+	if (!AllShadersReady({ &colorgradingVS }) || !AllShadersReady({ &colorgradingPS }) || !AllShadersReady({ &lutgenCS }))
 		return;
-	if (!owner || !owner->GetFullscreenVS())
+	if (!owner)
 		return;
 
 	globals::profiler->BeginPass("PostProcessing::ColorGrading");
@@ -1121,11 +1131,19 @@ void ColorGrading::Draw(TextureInfo& inout_tex)
 
 		ID3D11Buffer* psCB = cb;
 		std::array<ID3D11SamplerState*, 1> psSamplers = { linearSampler.get() };
+		// RasterPass does not save VS constant buffers; the grading VS reads the same CB in b1.
+		winrt::com_ptr<ID3D11Buffer> previousVertexCB;
+		context->VSGetConstantBuffers(1, 1, previousVertexCB.put());
+		const SKSE::stl::scope_exit restoreVertexCB([&] {
+			auto* previous = previousVertexCB.get();
+			context->VSSetConstantBuffers(1, 1, &previous);
+		});
+		context->VSSetConstantBuffers(1, 1, &psCB);
 		context->PSSetConstantBuffers(1, 1, &psCB);
 		context->PSSetSamplers(0, 1, psSamplers.data());
 		context->PSSetShaderResources(0, (UINT)(settings.skipLUT ? 1 : 2), srvs.data());
 		pass.SetTargets({ texColor->rtv.get() }, (float)texColor->desc.Width, (float)texColor->desc.Height);
-		pass.SetShaders(owner->GetFullscreenVS(), colorgradingPS.get());
+		pass.SetShaders(colorgradingVS.get(), colorgradingPS.get());
 		pass.Draw();
 
 		// clean up
@@ -1159,7 +1177,7 @@ void ColorGrading::Draw(TextureInfo& inout_tex)
 		curveReadbackRequested = false;
 
 	// Debug: evaluate color grading pipeline on a neutral ramp for curve preview
-	if (curveReadbackActive && curveNeedsUpdate && texCurveInput && texCurveOutput && colorgradingPS) {
+	if (curveReadbackActive && curveNeedsUpdate && texCurveInput && texCurveOutput && colorgradingVS && colorgradingPS) {
 		curveNeedsUpdate = false;
 		// Render the curve with the same PS on the 256x1 ramp input (same CB, same LUT)
 		PostProcessingRaster::RasterPass pass(context);
@@ -1168,11 +1186,18 @@ void ColorGrading::Draw(TextureInfo& inout_tex)
 		std::array<ID3D11SamplerState*, 1> curveSamplers = { linearSampler.get() };
 		std::array<ID3D11ShaderResourceView*, 2> curveSRVs = { texCurveInput->srv.get(), texLUT ? texLUT->srv.get() : nullptr };
 
+		winrt::com_ptr<ID3D11Buffer> previousVertexCB;
+		context->VSGetConstantBuffers(1, 1, previousVertexCB.put());
+		const SKSE::stl::scope_exit restoreVertexCB([&] {
+			auto* previous = previousVertexCB.get();
+			context->VSSetConstantBuffers(1, 1, &previous);
+		});
+		context->VSSetConstantBuffers(1, 1, &curveCB);
 		context->PSSetConstantBuffers(1, 1, &curveCB);
 		context->PSSetSamplers(0, 1, curveSamplers.data());
 		context->PSSetShaderResources(0, (UINT)(settings.skipLUT ? 1 : 2), curveSRVs.data());
 		pass.SetTargets({ texCurveOutput->rtv.get() }, (float)CurveSamples, 1.f);
-		pass.SetShaders(owner->GetFullscreenVS(), colorgradingPS.get());
+		pass.SetShaders(colorgradingVS.get(), colorgradingPS.get());
 		pass.Draw();
 
 		// Clean up
