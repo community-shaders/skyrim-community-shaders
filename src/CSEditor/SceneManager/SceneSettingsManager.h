@@ -1071,6 +1071,8 @@ private:
 	/// Signature each feature last kept, verified once: later values of that update set are trusted.
 	std::map<std::string, size_t> verifiedApplySignatures;
 	bool resolverDirty = true;
+	/// A base snapshot was refused while settings showed defaults; the resolve reruns once that ends.
+	bool baselineSnapshotDeferred = false;
 	bool resolverSuspended = false;
 	bool activeEntryCacheDirty = true;
 	bool hasActiveSceneEntries = false;
