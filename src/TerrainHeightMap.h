@@ -20,6 +20,7 @@ public:
 		std::string worldspace;
 		float3 pos0, pos1;  // World-space top-left and bottom-right. Z decodes samples 0 and 1.
 		float2 zRange;
+		bool loadFailed = false;
 	};
 
 	/** @brief Scans heightmap directories once for DDS metadata. */

@@ -50,7 +50,7 @@ void TerrainHeightMap::ParseHeightmapPath(std::filesystem::path p, bool xlodgen_
 		}
 
 		if (!(metadata.pos0.x < metadata.pos1.x) || !(metadata.pos1.y < metadata.pos0.y) ||
-			metadata.pos0.z == metadata.pos1.z || metadata.zRange.x == metadata.zRange.y) {
+			metadata.pos0.z == metadata.pos1.z || !(metadata.zRange.x < metadata.zRange.y)) {
 			logger::warn("Skipping height map {}: invalid coordinate spans", filename.string());
 			return;
 		}
@@ -129,6 +129,11 @@ void TerrainHeightMap::LoadForCurrentWorldspace()
 	{
 		auto& target_heightmap = heightmaps[worldspace_name];
 
+		// Skip a file that already failed instead of reloading it every frame.
+		if (target_heightmap.loadFailed)
+			return;
+		target_heightmap.loadFailed = true;
+
 		DirectX::ScratchImage image;
 		try {
 			std::filesystem::path path{ target_heightmap.dir };
@@ -166,6 +171,7 @@ void TerrainHeightMap::LoadForCurrentWorldspace()
 
 			texHeightMap = std::move(texture);
 			cachedHeightmap = &target_heightmap;
+			target_heightmap.loadFailed = false;
 		} catch (const DX::com_exception& e) {
 			logger::error("{}", e.what());
 			return;

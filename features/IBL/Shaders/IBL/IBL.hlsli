@@ -51,10 +51,24 @@ namespace ImageBasedLighting
 	// Ratio / settings helpers
 	// ============================================================================
 
-	/// Read the cached DALC-to-IBL matching ratio.
+	/// DALC-to-IBL matching ratio. Modes 2-3 skip the env dispatch that caches it, so compute it live.
 	float3 GetCachedIBLRatio()
 	{
-		return EnvIBLTexture.Load(int3(3, 0, 0)).xyz;
+		float3 iblRatio;
+		
+		[branch] if (SharedData::iblSettings.DALCMode >= 2)
+		{
+			float dalcLuminance = Color::RGBToLuminance(Color::Ambient(SharedData::GetAmbient(0.0f)));
+			float iblLuminance = Color::RGBToLuminance(GetEnvIBL(0.0f));
+			float ratio = iblLuminance > 0.001f ? dalcLuminance / iblLuminance : 1.0f;
+			iblRatio = lerp(1.0f, ratio, SharedData::iblSettings.DALCAmount);
+		}
+		else
+		{
+			iblRatio = EnvIBLTexture.Load(int3(3, 0, 0)).xyz;
+		}
+		
+		return iblRatio;
 	}
 
 	// ============================================================================
