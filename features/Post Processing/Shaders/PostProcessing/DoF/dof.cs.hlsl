@@ -370,7 +370,7 @@ float4 PerformFullFragmentGaussianBlur(Texture2D source, float2 texcoord, uint2 
 [numthreads(1, 1, 1)] void CS_UpdateFocus(uint2 DTid : SV_DispatchThreadID) {
 	float depth = AutoFocus ? GetDepth(FocusCoord) : ManualFocusPlane;
 	float previousFocus = TexPreviousFocus[uint2(0, 0)];
-	RWFocus[DTid] = lerp(previousFocus, depth, TransitionSpeed);
+	RWFocus[DTid] = TransitionSpeed >= 1 ? depth : lerp(previousFocus, depth, TransitionSpeed);
 }
 
 	[numthreads(8, 8, 1)] void CS_CalculateCoC(uint2 DTid : SV_DispatchThreadID)

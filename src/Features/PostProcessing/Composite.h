@@ -31,9 +31,11 @@ struct Composite : public PostProcessFeature
 		float FlareIntensity;
 		float BloomRadius;
 		float BloomIntensity;
-		float Padding[2];
+		float HasPhysicalFlare;
+		float HasPhysicalLens;
 	};
 	std::unique_ptr<ConstantBuffer> compositeCB = nullptr;
+	std::unique_ptr<ConstantBuffer> emptyWaveCB;
 
 	// Bit flags for shader permutation selection
 	enum CompositeFlags : uint
@@ -44,15 +46,18 @@ struct Composite : public PostProcessFeature
 		GLARE = 1 << 2,
 		EXPOSURE = 1 << 3,
 		LOCAL_EXPOSURE = 1 << 4,
-		FLAG_COUNT = 32  // 2^5 combinations
+		PHYSICAL_LENS = 1 << 5,
+		FLAG_COUNT = 64  // 2^6 combinations
 	};
 
 	// Shader permutations indexed by composite flags (0 resolves pre-exposure).
 	std::array<winrt::com_ptr<ID3D11PixelShader>, CompositeFlags::FLAG_COUNT> compositeShaders = {};
+	std::array<bool, CompositeFlags::FLAG_COUNT> shaderRequested = {};
 
 	virtual void SetupResources() override;
 	virtual void ClearShaderCache() override;
-	void CompileRasterShaders();
+	/// Compile the requested flag range. Physical lens variants are requested by Draw.
+	void CompileRasterShaders(uint firstFlags = NONE, uint endFlags = PHYSICAL_LENS);
 
 	virtual void RestoreDefaultSettings() override {}
 	virtual void LoadSettings(json&) override {}
