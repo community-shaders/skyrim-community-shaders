@@ -60,7 +60,8 @@ namespace GrassLighting
 		float3 B = dp2perp * duv1.y + dp1perp * duv2.y;
 
 		// construct a scale-invariant frame
-		float invmax = rsqrt(max(max(dot(T, T), dot(B, B)), 1e-20));
+		float maxLengthSq = max(dot(T, T), dot(B, B));
+		float invmax = rsqrt(maxLengthSq == 0.0 ? 1.0 : maxLengthSq);
 		return float3x3(T * invmax, B * invmax, N);
 	}
 }
