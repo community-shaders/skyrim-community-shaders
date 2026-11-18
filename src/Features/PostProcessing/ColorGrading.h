@@ -147,7 +147,6 @@ struct ColorGrading : public PostProcessFeature
 	};
 	std::unique_ptr<ConstantBuffer> colorCB = nullptr;
 
-	std::unique_ptr<Texture2D> texColor = nullptr;
 	std::unique_ptr<Texture3D> texLUT = nullptr;
 
 	static constexpr int LUTDim = 64;
@@ -182,7 +181,7 @@ struct ColorGrading : public PostProcessFeature
 	 */
 	bool WantsAutoHDR() const;
 
-	void OutputTextures();
+	void OutputTextures(const Texture2D& colorOutput);
 
 	// Debug: tonemapping curve via GPU evaluation
 	static constexpr int CurveSamples = 256;

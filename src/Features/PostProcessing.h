@@ -19,6 +19,8 @@
 #include "PostProcessing/PhysicalLens.h"
 #include "PostProcessing/Vignette.h"
 
+#include <chrono>
+
 struct PostProcessing : Feature
 {
 	static PostProcessing* GetSingleton()
@@ -144,6 +146,10 @@ struct PostProcessing : Feature
 	void ClearBorderMotionVectorsForFrameGen();
 	void DrawFeature(PostProcessFeature& feature, PostProcessFeature::TextureInfo& lastTexColor);
 
+	/// Render-thread scratch for the serial color chain. The returned target
+	/// differs from input, which must be the only chain texture still needed.
+	Texture2D* GetColorTarget(ID3D11Texture2D* input, DXGI_FORMAT format = DXGI_FORMAT_UNKNOWN);
+
 	enum class Gamut : uint
 	{
 		Rec709,
@@ -163,19 +169,17 @@ struct PostProcessing : Feature
 	 *        format via the copyPS fullscreen pass when the formats differ.
 	 *
 	 * Same-format, same-space copies use CopySubresourceRegion; otherwise the
-	 * source is rendered into convertTex first and then copied.
+	 * source is rendered into a scratch target first and then copied.
 	 *
 	 * @param targetRT  Game render target receiving the image.
-	 * @param convertTex  Intermediate texture for format conversion (needs an RTV).
 	 * @param srcTex  Texture holding the pipeline output.
 	 * @param srcSRV  SRV of srcTex, sampled by the conversion pass.
 	 */
 	void CopyToRenderTarget(
-		RE::BSGraphics::RenderTargetData& targetRT,
-		Texture2D* convertTex,
+		const RE::BSGraphics::RenderTargetData& targetRT,
 		ID3D11Texture2D* srcTex,
 		ID3D11ShaderResourceView* srcSRV, const CopyCB& conversion);
-	void BeginLinearProcessing(PostProcessFeature::TextureInfo& texture);
+	bool BeginLinearProcessing(PostProcessFeature::TextureInfo& texture);
 
 	/////////////////////////////////////////////////////////////////////////////////
 
@@ -189,13 +193,9 @@ struct PostProcessing : Feature
 
 	std::unique_ptr<ImageSpaceManager> imageSpaceManager = std::make_unique<ImageSpaceManager>();
 
-	eastl::unique_ptr<Texture2D> texCopyMain = nullptr;
-	eastl::unique_ptr<Texture2D> texCopyMainCopy = nullptr;
-
 	/// Format-conversion copy pass (fullscreen triangle PS draw).
 	winrt::com_ptr<ID3D11PixelShader> copyPS = nullptr;
 	std::unique_ptr<ConstantBuffer> copyCB;
-	std::unique_ptr<Texture2D> texInput;
 
 	/// Shared fullscreen-triangle vertex shader for every raster pass in the
 	/// pipeline (compiled from PostProcessing/fullscreen.hlsli).
@@ -223,4 +223,12 @@ struct PostProcessing : Feature
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
+
+private:
+	Texture2D* GetColorTarget(ID3D11Texture2D* input, UINT width, UINT height, DXGI_FORMAT format);
+
+	D3D11_TEXTURE2D_DESC sceneColorDesc{};
+	D3D11_TEXTURE2D_DESC mainColorDesc{};
+	std::vector<std::unique_ptr<Texture2D>> colorTargets;
+	std::chrono::steady_clock::time_point nextColorTargetAttempt{};
 };

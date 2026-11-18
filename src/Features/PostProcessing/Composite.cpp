@@ -32,38 +32,6 @@ void Composite::UpdateAutoEnabled()
 
 void Composite::SetupResources()
 {
-	auto renderer = globals::game::renderer;
-
-	{
-		auto gameTexMainCopy = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN_COPY];
-
-		D3D11_TEXTURE2D_DESC texDesc;
-		gameTexMainCopy.texture->GetDesc(&texDesc);
-		// Exposure is resolved here. Preserve overexposed HDR values until the
-		// following tone mapper instead of clipping them back to scene FP16.
-		texDesc.Format = globals::features::linearLighting.IsLinearLightingActive() ? DXGI_FORMAT_R32G32B32A32_FLOAT : DXGI_FORMAT_R16G16B16A16_FLOAT;
-
-		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {
-			.Format = texDesc.Format,
-			.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D,
-			.Texture2D = { .MostDetailedMip = 0, .MipLevels = 1 }
-		};
-
-		D3D11_RENDER_TARGET_VIEW_DESC rtvDesc = {
-			.Format = texDesc.Format,
-			.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D,
-			.Texture2D = { .MipSlice = 0 }
-		};
-
-		texDesc.MipLevels = srvDesc.Texture2D.MipLevels = 1;
-		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
-		texDesc.MiscFlags = 0;
-
-		texOutput = eastl::make_unique<Texture2D>(texDesc, "Composite Output");
-		texOutput->CreateSRV(srvDesc);
-		texOutput->CreateRTV(rtvDesc);
-	}
-
 	compositeCB = std::make_unique<ConstantBuffer>(ConstantBufferDesc<CompositeCB>(), "Composite Parameters");
 	CompileRasterShaders();
 }
@@ -160,6 +128,12 @@ void Composite::Draw(TextureInfo& inout_tex)
 		emptyWaveCB = std::make_unique<ConstantBuffer>(ConstantBufferDesc<PhysicalLensImaging::DiffractionParameters>(), "Composite::InactiveDiffraction");
 		emptyWaveCB->Update(PhysicalLensImaging::DiffractionParameters{});
 	}
+
+	// Keep exposed HDR values in FP32 until the tone mapper.
+	const auto format = globals::features::linearLighting.IsLinearLightingActive() ? DXGI_FORMAT_R32G32B32A32_FLOAT : DXGI_FORMAT_R16G16B16A16_FLOAT;
+	auto* texOutput = owner->GetColorTarget(inout_tex.tex, format);
+	if (!texOutput)
+		return;
 
 	globals::profiler->BeginPass("PostProcessing::Composite");
 	auto state = globals::state;

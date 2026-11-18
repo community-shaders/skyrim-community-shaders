@@ -21,8 +21,6 @@ struct Composite : public PostProcessFeature
 	virtual inline bool DisableInMainLoadingMenu() const override { return true; }
 	virtual bool WritesToMainTexture() const override { return true; }
 
-	eastl::unique_ptr<Texture2D> texOutput = nullptr;
-
 	struct alignas(16) CompositeCB
 	{
 		float OutputSize[2];

@@ -1,6 +1,7 @@
 #include "Border.h"
 
 #include "Deferred.h"
+#include "Features/PostProcessing.h"
 #include "I18n/I18n.h"
 #include "ShaderCache.h"
 #include "State.h"
@@ -44,39 +45,9 @@ void Border::SaveSettings(json& o_json)
 
 void Border::SetupResources()
 {
-	auto renderer = globals::game::renderer;
-
 	logger::debug("Creating buffers...");
 	{
 		borderCB = eastl::make_unique<ConstantBuffer>(ConstantBufferDesc<BorderCB>(), "PostProcessing::Border::Constants");
-	}
-
-	logger::debug("Creating 2D textures...");
-	{
-		auto gameTexMainCopy = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN_COPY];
-
-		D3D11_TEXTURE2D_DESC texDesc;
-		gameTexMainCopy.texture->GetDesc(&texDesc);
-
-		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {
-			.Format = texDesc.Format,
-			.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D,
-			.Texture2D = { .MostDetailedMip = 0, .MipLevels = 1 }
-		};
-
-		D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc = {
-			.Format = texDesc.Format,
-			.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D,
-			.Texture2D = { .MipSlice = 0 }
-		};
-
-		texDesc.MipLevels = srvDesc.Texture2D.MipLevels = 1;
-		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
-		texDesc.MiscFlags = 0;
-
-		texOutput = eastl::make_unique<Texture2D>(texDesc, "PostProcessing::Border::Output");
-		texOutput->CreateSRV(srvDesc);
-		texOutput->CreateUAV(uavDesc);
 	}
 
 	CompileComputeShaders();
@@ -161,7 +132,11 @@ void Border::ClearMotionVectorsForFrameGen()
 
 void Border::Draw(TextureInfo& inout_tex)
 {
-	if (!AllShadersReady({ &borderCS }))
+	if (!owner || !AllShadersReady({ &borderCS }))
+		return;
+
+	auto* texOutput = owner->GetColorTarget(inout_tex.tex);
+	if (!texOutput)
 		return;
 
 	globals::profiler->BeginPass("PostProcessing::Border");
