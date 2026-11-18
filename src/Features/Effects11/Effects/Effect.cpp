@@ -173,6 +173,14 @@ void Effect::CaptureBaseValues()
 std::vector<std::pair<std::string, std::string>> Effect::SerializeValues() const
 {
 	std::vector<std::pair<std::string, std::string>> values;
+	std::unordered_map<std::string, size_t> indexByKey;
+	// Variables can share an ini key; the last one written wins, as it did on disk
+	const auto add = [&](std::string key, std::string value) {
+		if (const auto [existing, inserted] = indexByKey.try_emplace(key, values.size()); !inserted)
+			values[existing->second].second = std::move(value);
+		else
+			values.emplace_back(std::move(key), std::move(value));
+	};
 	for (const auto& uiVar : uiVariables) {
 		if (uiVar.isLabel || uiVar.isPatched)
 			continue;
@@ -187,13 +195,13 @@ std::vector<std::pair<std::string, std::string>> Effect::SerializeValues() const
 
 		switch (uiVar.type) {
 		case UIVariableType::Float:
-			values.emplace_back(std::move(iniKey), Effects11Util::Ini::FormatFloat(useBase ? uiVar.baseFloatValue : uiVar.floatValue));
+			add(std::move(iniKey), Effects11Util::Ini::FormatFloat(useBase ? uiVar.baseFloatValue : uiVar.floatValue));
 			break;
 		case UIVariableType::Int:
-			values.emplace_back(std::move(iniKey), std::to_string(uiVar.intValue));
+			add(std::move(iniKey), std::to_string(uiVar.intValue));
 			break;
 		case UIVariableType::Bool:
-			values.emplace_back(std::move(iniKey), uiVar.boolValue ? "true" : "false");
+			add(std::move(iniKey), uiVar.boolValue ? "true" : "false");
 			break;
 		case UIVariableType::Float2:
 		case UIVariableType::Float3:
@@ -202,15 +210,15 @@ std::vector<std::pair<std::string, std::string>> Effect::SerializeValues() const
 				const int numComponents = GetComponentCount(uiVar.type);
 				if (IsPerComponentVector(uiVar)) {
 					for (int i = 0; i < numComponents; ++i)
-						values.emplace_back(iniKey + kComponentSuffixes[i], Effects11Util::Ini::FormatFloat(vectorValue[i]));
+						add(iniKey + kComponentSuffixes[i], Effects11Util::Ini::FormatFloat(vectorValue[i]));
 				} else {
-					values.emplace_back(std::move(iniKey), Effects11Util::Ini::FormatFloatList({ vectorValue, static_cast<size_t>(numComponents) }));
+					add(std::move(iniKey), Effects11Util::Ini::FormatFloatList({ vectorValue, static_cast<size_t>(numComponents) }));
 				}
 				break;
 			}
 		}
 	}
-	values.emplace_back("TECHNIQUE", std::to_string(selectedTechniqueIndex + 1u));
+	add("TECHNIQUE", std::to_string(selectedTechniqueIndex + 1u));
 	return values;
 }
 

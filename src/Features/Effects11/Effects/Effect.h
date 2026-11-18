@@ -323,7 +323,7 @@ private:
 	void LoadUIVariableValue(UIVariable& uiVar);
 	void LoadVariableFromString(UIVariable& uiVar, const std::string& value);
 
-	/** @brief Each ini key with the value Save writes for it, in write order. */
+	/** @brief Each ini key once, with the last value written to it, in first-write order. */
 	std::vector<std::pair<std::string, std::string>> SerializeValues() const;
 	/** @brief Records the current values as the ones on disk. */
 	void CaptureSavedValues();
