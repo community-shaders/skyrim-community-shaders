@@ -276,6 +276,7 @@ GrassOptimizations::GrassPassSetup GrassOptimizations::SetupGrassPass(RE::BSShad
 		if (first == group->buckets.end())
 			return GrassPassSetup::kCovered;
 
+		CaptureEngineBindings();
 		SetupOptimizedPass(**first);
 
 		return GrassPassSetup::kOptimized;
@@ -308,6 +309,28 @@ void GrassOptimizations::SetupOptimizedPass(const GrassBucket& b)
 		TruePBR::SetGrassPBRTextures(static_cast<const BSLightingShaderMaterialPBR*>(b.drawResources.material.get()));
 		UINT materialNum = 16;
 		ctx1->PSSetConstantBuffers1(1, 1, &bucketCB, &windowFirst, &materialNum);
+	}
+}
+
+void GrassOptimizations::CaptureEngineBindings()
+{
+	if (engineBindings.valid || !ctx1)
+		return;
+	ctx1->VSGetConstantBuffers1(2, 1, engineBindings.buffers, engineBindings.first, engineBindings.count);
+	ctx1->PSGetConstantBuffers1(1, 2, engineBindings.buffers + 1, engineBindings.first + 1, engineBindings.count + 1);
+	engineBindings.valid = true;
+}
+
+void GrassOptimizations::RestoreEngineBindings()
+{
+	if (!std::exchange(engineBindings.valid, false))
+		return;
+	ctx1->VSSetConstantBuffers1(2, 1, engineBindings.buffers, engineBindings.first, engineBindings.count);
+	ctx1->PSSetConstantBuffers1(1, 2, engineBindings.buffers + 1, engineBindings.first + 1, engineBindings.count + 1);
+	for (auto*& buffer : engineBindings.buffers) {
+		if (buffer)
+			buffer->Release();
+		buffer = nullptr;
 	}
 }
 
@@ -644,6 +667,10 @@ void GrassOptimizations::Hooks::DrawInstanceTriShape::thunk(RE::BSRenderPass*, R
 			self.DrawBucket(*bucket);
 		}
 
+		// The bucket window replaced the engine's PerGeometry and material buffers behind its back.
+		// The engine's constant buffer cache can skip rebinding an unchanged buffer, so a later
+		// non-grass draw would read grass data unless the engine's own bindings come back.
+		self.RestoreEngineBindings();
 	} else {
 		DrawVanilla(geometry);
 	}

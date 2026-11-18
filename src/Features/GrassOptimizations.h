@@ -368,6 +368,21 @@ private:
 	/** @brief Binds all geometry and material resources for a ready optimized bucket. */
 	void SetupOptimizedPass(const GrassBucket& b);
 
+	/** @brief Engine constant buffers an optimized pass replaces, held until the draw restores them. */
+	struct EngineConstantBindings
+	{
+		ID3D11Buffer* buffers[3]{};  // VS b2, PS b1, PS b2
+		UINT first[3]{};
+		UINT count[3]{};
+		bool valid = false;
+	} engineBindings;
+
+	/** @brief Saves the engine's VS b2, PS b1 and PS b2 bindings before the first optimized setup replaces them. */
+	void CaptureEngineBindings();
+
+	/** @brief Rebinds the buffers CaptureEngineBindings saved, so later draws see what the engine believes is bound. */
+	void RestoreEngineBindings();
+
 	/** @brief Issue a bucket's indirect draw for each active tier. */
 	void DrawBucket(GrassBucket& b);
 
