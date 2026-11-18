@@ -545,7 +545,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	{
 #				if defined(EXTENDED_MATERIALS)
 		[branch] if (SharedData::extendedMaterialSettings.EnableParallax && PBRParams5.y > 0.0 &&
-		             (PBRFlags & PBR::Flags::HasDisplacement) != 0)
+					 (PBRFlags & PBR::Flags::HasDisplacement) != 0)
 		{
 			// Offset UVs in the model's plane and limit the shift at grazing angles.
 			float3 viewDirTS = mul(GrassLighting::CalculateTBN(faceNormal, -input.WorldPosition.xyz, uv), viewDirection);
