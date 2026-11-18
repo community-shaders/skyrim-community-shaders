@@ -1,5 +1,6 @@
 #include "Common/DummyVSTexCoord.hlsl"
 #include "Common/FrameBuffer.hlsli"
+#include "Common/Random.hlsli"
 #include "Common/SharedData.hlsli"
 
 typedef VS_OUTPUT PS_INPUT;
@@ -43,7 +44,7 @@ PS_OUTPUT main(PS_INPUT input)
 	float vl = g_IntensityX_TemporalY.x * VLTex.SampleLevel(VLSampler, float3(input.TexCoord, repartition), 0).x;
 
 	const bool dither = !SharedData::enbSettings.Enable || !SharedData::enbSettings.GameVolumetricRaysDisableDithering;
-	float noiseGrad = dither ? 0.03125 * NoiseGradSamplerTex.Sample(NoiseGradSamplerSampler, 0.125 * input.Position.xy).x : 0.0;
+	float noiseGrad = dither ? 0.03125 * NoiseGradSamplerTex.Sample(NoiseGradSamplerSampler, 0.125 * (input.Position.xy + Random::TemporalTileOffset(SharedData::FrameCount, 8.0))).x : 0.0;
 
 	float adjustedVl = max(0.0, noiseGrad + vl - kVLThresholdBias);
 

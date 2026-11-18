@@ -11,16 +11,25 @@
 
 class Effect;
 
+namespace Overlays
+{
+	struct RowInfo;
+	struct OverlayValue;
+}
+
 namespace UITree
 {
 	/** @brief How the editor wants shader parameters drawn, and what happened while drawing them. */
 	struct ViewOptions
 	{
-		std::string_view filter;                             ///< Case-insensitive name filter; empty shows every parameter
-		std::function<bool(const std::string&)> showPeriod;  ///< Whether parameters of a time period ("Dawn", "Interior", ...) are shown
-		int drawn = 0;                                       ///< out: parameters drawn this call
-		bool changed = false;                                ///< out: a value or technique changed
-		bool compileTimeChanged = false;                     ///< out: a #define-backed value changed, which needs a shader reload
+		std::string_view filter;                                                       ///< Case-insensitive name filter; empty shows every parameter
+		std::function<bool(const std::string&)> showPeriod;                            ///< Whether parameters of a time period ("Dawn", "Interior", ...) are shown
+		int drawn = 0;                                                                 ///< out: parameters drawn this call
+		bool changed = false;                                                          ///< out: a value or technique changed
+		bool compileTimeChanged = false;                                               ///< out: a #define-backed value changed, which needs a shader reload
+		std::function<const Overlays::RowInfo*(const Effect&, size_t)> overlayRow;     ///< Optional: overlay state of a parameter, null when no active overlay changes it
+		std::function<bool(Effect&, size_t, const Overlays::OverlayValue&)> takeEdit;  ///< Optional: takes an edit (given the pre-edit value) instead of the base preset; true when consumed
+		bool allLocked = false;                                                        ///< Every parameter is read-only (edit target at Amount 0)
 	};
 
 	enum class FilterMode

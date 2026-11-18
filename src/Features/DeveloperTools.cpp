@@ -227,7 +227,7 @@ void DeveloperTools::DrawSettings()
 		remoteControl.DrawNvPerfPanel();
 		break;
 	case Tool::DevBench:
-		if (Icons::LabeledButton("##DevBenchNexus", Icons::TI(ICON_TI_EXTERNAL_LINK), T(TKEY("devbench_nexus"), "devbench on Nexus Mods")))
+		if (Util::LabeledButton("##DevBenchNexus", Icons::TI(ICON_TI_EXTERNAL_LINK), T(TKEY("devbench_nexus"), "devbench on Nexus Mods")))
 			OpenDevBenchNexusPage();
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::Text("%s", kDevBenchNexusUrl);

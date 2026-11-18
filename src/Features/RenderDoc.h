@@ -51,7 +51,6 @@ public:
 	std::string GetCapturesDirectory() const;
 	std::string GetCapturePath(uint32_t a_index);
 	uint32_t GetNumCaptures() const;
-	uint32_t CalculateCapturesDiskUsage();
 	void ClearFrameCaptures();
 	void SetPendingCaptureComments(std::string a_comments);
 	void ApplyPendingCaptureComments(uint32_t a_index);
@@ -77,6 +76,9 @@ public:
 	 * @return Formatted warning message for overlay display
 	 */
 	std::string GetOverlayWarningMessage() const;
+
+	/** @brief True when the RenderDoc warning should be drawn in the overlay: RenderDoc is loaded and the user has not hidden it. */
+	bool ShouldShowOverlay() const { return IsAvailable() && !hideOverlay; }
 
 private:
 	bool TriggerConfiguredCapture(bool a_checkDiskSpace = true);
@@ -112,6 +114,9 @@ public:
 	bool enableRenderDocCapture = false;
 	uint32_t captureFrameCount = 1;
 
+	/** @brief Hides the RenderDoc warning in the overlay. Session-only: deliberately never saved or loaded, so it resets on every launch. */
+	bool hideOverlay = false;
+
 	// Track the last capture count we've processed for automatic comments
 	uint32_t lastCaptureCount = 0;
 
@@ -119,7 +124,6 @@ public:
 	std::vector<CaptureFileInfo> cachedCaptureFiles;
 	std::chrono::steady_clock::time_point cacheLastUpdate;
 	bool cacheValid = false;
-	bool wasSectionVisible = false;  // Track if RenderDoc section was visible last frame
 
 	// Track files that failed to delete for UI feedback
 	std::unordered_map<std::filesystem::path, std::string> failedDeletions;

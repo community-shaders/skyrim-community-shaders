@@ -308,6 +308,7 @@ bool Flowmap::GenerateFlowmap(bool useMips)
 		logger::error("[Unified Water] [Flowmap] Failed to create texture");
 		return false;
 	}
+	Util::SetResourceName(flowmap.get(), "UnifiedWater::Flowmap");
 
 	for (const auto& [x, y, flowTex] : cells) {
 		D3D11_TEXTURE2D_DESC srcDesc{};

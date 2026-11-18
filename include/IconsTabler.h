@@ -9,8 +9,8 @@
 #define FONT_ICON_FILE_NAME_TI "tabler-icons.ttf"
 
 #define ICON_MIN_TI 0xea06
-#define ICON_MAX_16_TI 0xfea8
-#define ICON_MAX_TI 0xfea8
+#define ICON_MAX_16_TI 0xffb2
+#define ICON_MAX_TI 0xffb2
 
 #define ICON_TI_ALERT_TRIANGLE "\xee\xa8\x86"	// U+ea06
 #define ICON_TI_ARROW_LEFT "\xee\xa8\x99"	// U+ea19
@@ -29,6 +29,7 @@
 #define ICON_TI_CLOUD "\xee\xa9\xb6"	// U+ea76
 #define ICON_TI_COPY "\xee\xa9\xba"	// U+ea7a
 #define ICON_TI_DOTS "\xee\xaa\x95"	// U+ea95
+#define ICON_TI_DROPLET "\xee\xaa\x97"	// U+ea97
 #define ICON_TI_EXTERNAL_LINK "\xee\xaa\x99"	// U+ea99
 #define ICON_TI_EYE "\xee\xaa\x9a"	// U+ea9a
 #define ICON_TI_HELP "\xee\xaa\xbf"	// U+eabf
@@ -44,6 +45,7 @@
 #define ICON_TI_SETTINGS "\xee\xac\xa0"	// U+eb20
 #define ICON_TI_SUN "\xee\xac\xb0"	// U+eb30
 #define ICON_TI_TRASH "\xee\xad\x81"	// U+eb41
+#define ICON_TI_USER "\xee\xad\x8d"	// U+eb4d
 #define ICON_TI_X "\xee\xad\x95"	// U+eb55
 #define ICON_TI_APERTURE "\xee\xad\x98"	// U+eb58
 #define ICON_TI_DEVICE_FLOPPY "\xee\xad\xa2"	// U+eb62
@@ -51,9 +53,11 @@
 #define ICON_TI_ARROW_FORWARD_UP "\xee\xad\xb8"	// U+eb78
 #define ICON_TI_BRUSH "\xee\xae\xb8"	// U+ebb8
 #define ICON_TI_TYPOGRAPHY "\xee\xaf\x85"	// U+ebc5
+#define ICON_TI_TOOLS "\xee\xaf\x8a"	// U+ebca
 #define ICON_TI_FLASK "\xee\xaf\x92"	// U+ebd2
 #define ICON_TI_SNOWFLAKE "\xee\xb0\x8b"	// U+ec0b
 #define ICON_TI_ADJUSTMENTS_HORIZONTAL "\xee\xb0\xb8"	// U+ec38
+#define ICON_TI_CROSSHAIR "\xee\xb0\xbe"	// U+ec3e
 #define ICON_TI_MENU_2 "\xee\xb1\x82"	// U+ec42
 #define ICON_TI_CHART_BUBBLE "\xee\xb1\xb5"	// U+ec75
 #define ICON_TI_WALK "\xee\xb2\x87"	// U+ec87
@@ -61,6 +65,7 @@
 #define ICON_TI_PIN "\xee\xb2\x9c"	// U+ec9c
 #define ICON_TI_CLOUD_FOG "\xee\xb3\x99"	// U+ecd9
 #define ICON_TI_MOON_2 "\xee\xb3\xa6"	// U+ece6
+#define ICON_TI_PICTURE_IN_PICTURE_ON "\xee\xb5\x84"	// U+ed44
 #define ICON_TI_PLAYER_PAUSE "\xee\xb5\x85"	// U+ed45
 #define ICON_TI_PLAYER_PLAY "\xee\xb5\x86"	// U+ed46
 #define ICON_TI_PINNED_OFF "\xee\xb5\x9f"	// U+ed5f
@@ -87,6 +92,7 @@
 #define ICON_TI_FOLDER_OPEN "\xef\xab\xb7"	// U+faf7
 #define ICON_TI_RESTORE "\xef\xab\xbd"	// U+fafd
 #define ICON_TI_LOCK_OPEN_2 "\xef\xba\xa8"	// U+fea8
+#define ICON_TI_MOOD_SPARK "\xef\xbe\xb2"	// U+ffb2
 
 // Inclusive [min,max] pairs for ImFontAtlas::AddFontFromFileTTF glyphRanges (0-terminated).
 inline constexpr unsigned short ICON_TI_GLYPH_RANGES[] = {
@@ -107,6 +113,7 @@ inline constexpr unsigned short ICON_TI_GLYPH_RANGES[] = {
 	0xea76, 0xea76,
 	0xea7a, 0xea7a,
 	0xea95, 0xea95,
+	0xea97, 0xea97,
 	0xea99, 0xea99,
 	0xea9a, 0xea9a,
 	0xeaa2, 0xeaa2,
@@ -124,6 +131,7 @@ inline constexpr unsigned short ICON_TI_GLYPH_RANGES[] = {
 	0xeb20, 0xeb20,
 	0xeb30, 0xeb30,
 	0xeb41, 0xeb41,
+	0xeb4d, 0xeb4d,
 	0xeb55, 0xeb55,
 	0xeb58, 0xeb58,
 	0xeb62, 0xeb62,
@@ -131,15 +139,18 @@ inline constexpr unsigned short ICON_TI_GLYPH_RANGES[] = {
 	0xeb78, 0xeb78,
 	0xebb8, 0xebb8,
 	0xebc5, 0xebc5,
+	0xebca, 0xebca,
 	0xebd2, 0xebd2,
 	0xec0b, 0xec0b,
 	0xec38, 0xec38,
+	0xec3e, 0xec3e,
 	0xec42, 0xec42,
 	0xec75, 0xec75,
 	0xec87, 0xec87,
 	0xec9c, 0xec9c,
 	0xecd9, 0xecd9,
 	0xece6, 0xece6,
+	0xed44, 0xed44,
 	0xed45, 0xed45,
 	0xed46, 0xed46,
 	0xed5f, 0xed5f,
@@ -165,6 +176,7 @@ inline constexpr unsigned short ICON_TI_GLYPH_RANGES[] = {
 	0xfaf7, 0xfaf7,
 	0xfafd, 0xfafd,
 	0xfea8, 0xfea8,
+	0xffb2, 0xffb2,
 	0
 };
 

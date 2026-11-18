@@ -82,6 +82,12 @@ public:
 	 */
 	void CopyShadowLightData();
 
+	/** @brief Retains the engine's directional shadow array for later medium passes. */
+	void CaptureDirectionalShadowMap();
+
+	/** @brief Returns the directional shadow array only with current-frame cascade data. */
+	ID3D11ShaderResourceView* GetDirectionalShadowMap() const;
+
 	ID3D11BlendState* deferredBlendStates[7][2][13][2];
 	ID3D11BlendState* forwardBlendStates[7][2][13][2];
 
@@ -89,6 +95,7 @@ public:
 
 	ID3D11ComputeShader* mainCompositeCS = nullptr;
 	ID3D11ComputeShader* mainCompositeInteriorCS = nullptr;
+	bool postWaterHookInstalled = false;
 
 	// Directional shadow structured buffer (t98): cascade splits and projections.
 	Buffer* directionalShadowLights = nullptr;
@@ -103,12 +110,22 @@ public:
 	ID3D11SamplerState* pointSampler = nullptr;
 
 private:
+	winrt::com_ptr<ID3D11ShaderResourceView> directionalShadowMap;
+	uint32_t directionalShadowMapFrame = UINT32_MAX;
+	uint32_t directionalShadowDataFrame = UINT32_MAX;
+
 	template <typename T>
 	void SetShadowCascadeParameters(T& lightData, DirectionalShadowLightData& dd);
 
 public:
 	struct Hooks
 	{
+		struct PostWater_SetCamera
+		{
+			static void thunk(void* graphicsState, RE::NiCamera* camera, uint32_t flags);
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+		static void InstallPostWaterHook();
 		struct Main_RenderShadowMaps
 		{
 			static void thunk();
@@ -154,6 +171,7 @@ public:
 		/** @brief Installs all deferred rendering hooks into the game's vtables and call sites. */
 		static void Install()
 		{
+			InstallPostWaterHook();
 			stl::write_vfunc<0x35, BSCubeMapCamera_RenderCubemap>(RE::VTABLE_BSCubeMapCamera[0]);
 
 			stl::write_thunk_call<Main_RenderShadowMaps>(REL::RelocationID(35560, 36559).address() + Util::VersionedRelocation::Select(0x2EC, 0x2EC, 0x30A));

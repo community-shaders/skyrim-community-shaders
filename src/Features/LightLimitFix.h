@@ -6,6 +6,8 @@
 struct LightLimitFix : OverlayFeature
 {
 	static constexpr uint MAX_LIGHTS = 1024;
+	// ClusterCullingCS stages every light in one thread group (16 x 16 x 4) of shared memory.
+	static_assert(MAX_LIGHTS <= 16 * 16 * 4);
 
 	struct ParticleLightConfig
 	{
@@ -74,6 +76,7 @@ public:
 		Simple = (1 << 2),
 		ShadowCaster = (1 << 3), /**< Is a BSShadowLight, whether or not it has shadow data this frame. */
 		LocalShadow = (1 << 4),  /**< Has a cached local shadow slice (localShadowIndex). */
+		Lightning = (1 << 5),    /**< Current-frame source; excluded from fog's light history. */
 
 		Initialised = (1 << 8),
 		Disabled = (1 << 9),
@@ -315,6 +318,8 @@ public:
 
 	/** @brief Draws the ImGui settings UI for light limit fix configuration and debug visualization. */
 	virtual void DrawSettings() override;
+	virtual bool HasDebugSection() const override { return true; }
+	virtual void DrawDebugSection() override;
 	/** @brief Draws the debug overlay warning when light visualization is enabled. */
 	virtual void DrawOverlay() override;
 	/** @brief Returns whether the debug overlay should be displayed. */
@@ -398,6 +403,7 @@ public:
 	bool IsLocalShadowCacheActive() const { return IsLocalShadowsEnabled() && localShadowCache; }
 	/** @brief Draws the experimental local shadow settings. */
 	void DrawLocalShadowSettings();
+	void DrawLightAttachSettings();
 	/** @brief Compiles LocalShadowCopyCS and its constant buffer on first use; false when compilation failed. */
 	bool EnsureLocalShadowCopyShader();
 	/** @brief True when the engine found the caster in range within the camera hold window. */
@@ -475,6 +481,9 @@ public:
 		uint LocalShadowResolution = 0;
 		uint LocalShadowSamples = 8;
 		float LocalShadowFilterScale = 1.0f;
+
+		// Light attach gate: skips the engine's per-frame attach walk for unchanged dynamic lights.
+		bool SkipRedundantLightAttach = true;
 	};
 
 	uint clusterSize[3] = { 16 };

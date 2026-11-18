@@ -24,7 +24,9 @@
 #include "Features/InteriorSun.h"
 #include "Features/LightLimitFix.h"
 #include "Features/PostProcessing.h"
+#include "Features/ProceduralAurora.h"
 #include "Features/RainRefraction.h"
+#include "Features/RemoteControl/FrameRecorder.h"
 #include "Features/RemoteControl/NvPerf.h"
 #include "Features/RenderDoc.h"
 #include "Features/ScreenshotFeature.h"
@@ -389,6 +391,7 @@ namespace WeatherExtensions
 			if (globals::features::effects11.loaded)
 				globals::features::effects11.OnSkyUpdateColors(sky);
 			globals::features::skySync.OnSkyUpdateColors(sky);
+			globals::features::proceduralAurora.OnSkyUpdate(sky);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
@@ -415,6 +418,8 @@ namespace WeatherExtensions
 					// compound on every call Sky has not recomputed colors for.
 					Effects11::DirectionalAmbientColors overridden = DirectionalAmbientColors;
 					globals::features::effects11.OverrideAmbientLighting(overridden);
+					if (auto* sky = globals::game::sky; sky && &DirectionalAmbientColors.directionalAmbientColors[0][0] == &sky->directionalAmbientColors[0][0])
+						globals::features::effects11.BlendGradedAmbient(sky, overridden);
 					func(overridden, AmbientSpecularTint, AmbientSpecularFresnel);
 					return;
 				}
@@ -501,6 +506,8 @@ struct IDXGISwapChain_Present
 			});
 
 		globals::state->Reset();
+
+		FrameRecorder::OnPresentEnd();
 
 		NvPerf::OnPresentEnd();
 
@@ -644,12 +651,28 @@ struct BSShaderRenderTargets_Create
 	static void thunk()
 	{
 		Util::SetGameSettingValue<std::int32_t>("iNumFocusShadow:Display", iNumFocusShadow, 0);
+		if (globals::features::hdrDisplay.loaded)
+			globals::features::hdrDisplay.PreCreateRenderTargets();
 		func();
 		globals::ReInit();
 		globals::state->Setup();
 	}
 	static inline REL::Relocation<decltype(thunk)> func;
 };
+
+/** @brief Whether the input event chain holds a mouse wheel button event. */
+static bool HasMouseWheelEvent(const RE::InputEvent* a_event)
+{
+	for (; a_event; a_event = a_event->next) {
+		const auto* button = a_event->AsButtonEvent();
+		if (button && button->GetDevice() == RE::INPUT_DEVICE::kMouse) {
+			const auto code = button->GetIDCode();
+			if (code == RE::BSWin32MouseDevice::Key::kWheelUp || code == RE::BSWin32MouseDevice::Key::kWheelDown)
+				return true;
+		}
+	}
+	return false;
+}
 
 struct BSInputDeviceManager_PollInputDevices
 {
@@ -665,7 +688,7 @@ struct BSInputDeviceManager_PollInputDevices
 
 		if (a_events) {
 			if (auto* inputManager = RE::BSInputDeviceManager::GetSingleton()) {
-				if (const auto* mouse = inputManager->GetMouse())
+				if (const auto* mouse = inputManager->GetMouse(); mouse && HasMouseWheelEvent(*a_events))
 					menu->RecordDirectInputWheelDelta(mouse->GetRuntimeData().dInputNextState.z);
 			}
 			menu->ProcessInputEvents(a_events);
@@ -678,18 +701,15 @@ struct BSInputDeviceManager_PollInputDevices
 			}
 		}
 
-		if (blockedDevice && menu->ShouldSwallowInput()) {  //the menu is open, eat all keypresses
-			// During active flying preview, let input reach the game for movement/camera
-			if (menu->IsPreviewFlying()) {
-				func(a_dispatcher, a_events);
-				return;
-			}
+		// The menu is open, eat all keypresses; during active flying preview, let input reach the game for movement/camera
+		if (blockedDevice && menu->ShouldSwallowInput() && !menu->IsPreviewFlying()) {
 			constexpr RE::InputEvent* const dummy[] = { nullptr };
 			func(a_dispatcher, dummy);
 			return;
 		}
 
 		func(a_dispatcher, a_events);
+		globals::features::screenshotFeature.SuppressVanillaMultiScreenshot();
 	}
 	static inline REL::Relocation<decltype(thunk)> func;
 };

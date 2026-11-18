@@ -15,8 +15,10 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 
 void CloudShadows::DrawSettings()
 {
-	const Util::LockedSection enbLock(globals::features::effects11.OwnsFeature(E11Handoff::Feature::CloudShadows),
+	const bool managedByEffects11 = globals::features::effects11.OwnsFeature(E11Handoff::Feature::CloudShadows);
+	const Util::LockedSection enbLock(managedByEffects11,
 		T("common.settings_managed_by_enb", "This setting is managed by Effects 11."));
+	const Util::DefaultsWhileActive<Settings> shownDefaults(settings, managedByEffects11);
 
 	ImGui::SliderFloat(T(TKEY("opacity"), "Opacity"), &settings.Opacity, 0.0f, 4.0f, "%.1f");
 	if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -47,9 +49,10 @@ CloudShadows::Settings CloudShadows::GetCommonBufferData()
 	if (!loaded)
 		return settings;
 
-	auto data = settings;
+	const bool managedByEffects11 = globals::features::effects11.OwnsFeature(E11Handoff::Feature::CloudShadows);
+	Settings data = managedByEffects11 ? Settings{} : settings;
 
-	if (globals::features::effects11.OwnsFeature(E11Handoff::Feature::CloudShadows)) {
+	if (managedByEffects11) {
 		auto& settingManager = SettingManager::GetSingleton();
 		if (settingManager.GetValue<bool>("EnableCloudShadows", "EFFECT")) {
 			data.Opacity = settingManager.GetInterpolatedTimeOfDayValue("Amount", "CLOUDSHADOWS");
@@ -73,7 +76,9 @@ void CloudShadows::CheckResourcesSide(int side)
 	auto context = globals::d3d::context;
 
 	float black[4] = { 0, 0, 0, 0 };
+	globals::profiler->BeginPass("CloudShadows::ClearLayer");
 	context->ClearRenderTargetView(cloudShadowLayerRTVs[0][side], black);
+	globals::profiler->EndPass();
 	renderedLayersMask[side] = 0;
 }
 
@@ -85,6 +90,7 @@ void CloudShadows::PropagateToCompletion(int side)
 
 	auto context = globals::d3d::context;
 
+	globals::profiler->BeginPass("CloudShadows::Propagate");
 	uint32_t newLayers = mask & ~globalRenderedMask;
 	if (newLayers) {
 		unsigned long bit;
@@ -116,6 +122,7 @@ void CloudShadows::PropagateToCompletion(int side)
 			texCloudShadowLayers[kMaxCloudLayers - 1]->resource.get(), subresource, 0, 0, 0,
 			texCloudShadowLayers[fromLayer]->resource.get(), subresource, nullptr);
 	}
+	globals::profiler->EndPass();
 }
 
 void CloudShadows::SkyShaderHacks()
@@ -162,9 +169,11 @@ void CloudShadows::SkyShaderHacks()
 		int fromLayer = std::max(prevLayer, 0);
 
 		if (layer > 0) {
+			globals::profiler->BeginPass("CloudShadows::LayerSeed");
 			context->CopySubresourceRegion(
 				texCloudShadowLayers[layer]->resource.get(), subresource, 0, 0, 0,
 				texCloudShadowLayers[fromLayer]->resource.get(), subresource, nullptr);
+			globals::profiler->EndPass();
 		}
 
 		// The layer chain is being written by this draw, so self shadowing reads last frame's composite
@@ -244,6 +253,7 @@ void CloudShadows::ReflectionsPrepass()
 
 		auto context = globals::d3d::context;
 
+		globals::profiler->BeginPass("CloudShadows::OcclusionCopy");
 		// No cloud layer draws, so nothing would overwrite the last weather's occlusion
 		auto clouds = globals::game::sky->clouds;
 		if (!clouds || clouds->numLayers == 0) {
@@ -258,6 +268,7 @@ void CloudShadows::ReflectionsPrepass()
 		}
 
 		context->CopyResource(texCubemapCloudOccCopy->resource.get(), texCloudShadowLayers[kMaxCloudLayers - 1]->resource.get());
+		globals::profiler->EndPass();
 
 		ID3D11ShaderResourceView* srv = texCubemapCloudOccCopy->srv.get();
 		context->PSSetShaderResources(25, 1, &srv);

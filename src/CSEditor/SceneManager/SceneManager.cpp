@@ -13,6 +13,7 @@
 #include "ScenePresetExport.h"
 #include "SceneSettingsManager.h"
 #include "SceneSettingsUI.h"
+#include "Utils/DebugSection.h"
 #include "Utils/UI.h"
 
 // The debug view is developer-facing validation output and is intentionally not translated.
@@ -21,7 +22,7 @@ namespace
 	using DebugEntry = SceneSettingsManager::DebugEntry;
 	using DebugLayer = SceneSettingsManager::DebugLayer;
 	using DebugSnapshot = SceneSettingsManager::DebugSnapshot;
-	using PeriodValues = std::array<std::optional<float>, SceneSettingsManager::kPeriodCount>;
+	using PeriodValues = std::array<std::optional<json>, SceneSettingsManager::kPeriodCount>;
 	using PeriodWeights = std::array<float, SceneSettingsManager::kPeriodCount>;
 
 	constexpr ImGuiTableFlags kDebugTableFlags =
@@ -107,7 +108,7 @@ namespace
 		for (const auto& value : values) {
 			ImGui::TableNextColumn();
 			if (value)
-				ImGui::Text("%.4f", *value);
+				ImGui::TextUnformatted(value->dump().c_str());
 			else
 				Util::Text::Disabled(kMissingValue);
 		}
@@ -417,14 +418,14 @@ namespace
 	/** @brief Buttons into the CS Editor pages that author scene settings, which only open in game. */
 	void DrawEditorShortcuts()
 	{
-		if (Icons::LabeledButton("##SceneManagerOpenEditor", Icons::TI(MenuIcons::kCSEditor),
+		if (Util::LabeledButton("##SceneManagerOpenEditor", Icons::TI(MenuIcons::kCSEditor),
 				T("feature.scene_manager.open_editor", "Open Scene Manager")))
 			SceneSettingsUI::OpenSceneManagerPage();
 		Util::AddTooltip(T("feature.scene_manager.open_editor_tooltip",
 			"Open the CS Editor's Scene Manager page, to author time of day and interior settings."));
 
 		ImGui::SameLine();
-		if (Icons::LabeledButton("##SceneManagerOpenLocations", Icons::TI(MenuIcons::kLocations),
+		if (Util::LabeledButton("##SceneManagerOpenLocations", Icons::TI(MenuIcons::kLocations),
 				T("feature.scene_manager.open_locations", "Locations")))
 			SceneSettingsUI::OpenLocationsPage();
 		Util::AddTooltip(T("feature.scene_manager.open_locations_tooltip", "Open the CS Editor's Locations page, to add places to override."));
@@ -432,7 +433,7 @@ namespace
 		ImGui::SameLine();
 		{
 			Util::DisableGuard disable(!ScenePresetExport::CanExport());
-			if (Icons::LabeledButton("##SceneManagerExportPreset", SceneActionIcons::kExport,
+			if (Util::LabeledButton("##SceneManagerExportPreset", SceneActionIcons::kExport,
 					T("cs_editor.export_preset", "Export Preset..."))) {
 				CSEditor::OpenEditorWindow();
 				// The export dialog is drawn by the editor window, so it only opens once the editor has.
@@ -537,7 +538,7 @@ void SceneManager::DrawSettings()
 		"Files that set feature settings at startup: your own exports, files shipped by mods, and those of applied preset packs."));
 	if (overwritesOpen)
 		FeatureOverwritesPanel::Draw();
-	if (Util::ShowDebugSections() && ImGui::CollapsingHeader(T("feature.scene_manager.debug", "Debug")))
+	if (Util::DebugSection section; section)
 		DrawDebug(*this);
 }
 

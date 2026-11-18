@@ -1,5 +1,7 @@
 #pragma once
 
+#include <array>
+
 #include "Effects/ENBAdaptation.h"
 #include "Effects/ENBBloom.h"
 #include "Effects/ENBDepthOfField.h"
@@ -50,7 +52,8 @@ public:
 
 	void Apply();
 	void Load();
-	void Save();
+	/** @brief Saves every effect. @return False when any write failed. */
+	bool Save();
 
 	void RegisterSettings();
 
@@ -64,6 +67,9 @@ public:
 	ENBAdaptation enbAdaptation;
 	ENBEffect enbEffect;
 	ENBEffectPostPass enbEffectPostPass;
+
+	/** @brief Every preset effect, in execution order. */
+	auto AllEffects() { return std::to_array<EffectBase*>({ &enbDepthOfField, &enbBloom, &enbLens, &enbAdaptation, &enbEffect, &enbEffectPostPass }); }
 
 	// Common resources shared across effects
 	void CreateCommonResources();
@@ -84,8 +90,6 @@ public:
 	winrt::com_ptr<ID3D11Buffer> colorCorrectionConstantBuffer;
 
 	static std::string LoadShaderFile(const char* path);
-	/** @brief Sun disc visibility in [0, 1] from its sky shader blend alpha; 0 when the sun is missing or hidden. */
-	static float GetSunVisibility(const RE::Sun* a_sun);
 	void CreateQuadGeometry();
 	void CreateRenderStates();
 	void CreateCopyShaders();

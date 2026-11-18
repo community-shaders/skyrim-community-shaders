@@ -39,13 +39,13 @@ static json EntryToJson(const SceneSettingsManager::SettingEntry& entry)
 	return item;
 }
 
-/** @brief Serializes the user entries; transitionOnly keeps just numeric values. */
+/** @brief Serializes the user entries; transitionOnly keeps values with a continuous blend operation. */
 static json UserEntriesToArray(const std::vector<SceneSettingsManager::SettingEntry>& entries, bool transitionOnly = false)
 {
 	json arr = json::array();
 	for (const auto& entry : entries)
 		if (entry.source == SceneSettingsManager::EntrySource::User &&
-			(!transitionOnly || IsNumericValue(entry.value)))
+			(!transitionOnly || SceneBlend::IsBlendable(entry.value)))
 			arr.push_back(EntryToJson(entry));
 	return arr;
 }
@@ -213,10 +213,8 @@ void SceneSettingsManager::WriteUserSettings()
 	const bool weatherLoaded = TryEnsureWeatherDataLoaded();
 	const bool locationLoaded = TryEnsureLocationDataLoaded();
 	if (!userSettingsDocumentWritable || !preservedUserSettingsRoot.is_object()) {
-		if (!userSettingsWriteBlockedWarning) {
+		if (userSettingsWriteBlockedWarning.First())
 			logger::error("[SceneSettings] Refusing to overwrite SceneManager.json because its existing document is invalid");
-			userSettingsWriteBlockedWarning = true;
-		}
 		deferredSceneChangesPending = ++deferredSaveFailures < kMaxDeferredSaveRetries;
 		deferredSceneChangesDeadline = std::chrono::steady_clock::now() + kDeferredSaveRetryDelay;
 		return;
@@ -240,7 +238,7 @@ void SceneSettingsManager::WriteUserSettings()
 		weatherUserSettingsModified = false;
 		locationUserSettingsModified = false;
 		locationTransitionModified = false;
-		userSettingsWriteBlockedWarning = false;
+		userSettingsWriteBlockedWarning.Reset();
 		deferredSaveFailures = 0;
 		if (!unchanged)
 			logger::info("[SceneSettings] Saved SceneManager.json");
@@ -386,13 +384,12 @@ static bool LoadEntryFromJson(const nlohmann::json& item, SceneSettingsManager::
 		return false;
 	}
 
-	// Per-period entries always blend as floats, so they carry the same requirement as float-only scenes.
+	// Per-period entries require a continuous blend operation.
 	const bool requireNumeric = periodic || requireNumericValue;
 	WidenParsedIntegerToFloat(entry.featureShortName, entry.settingPath, entry.settingKey, entry.value);
 	WidenParsedIntegerToFloat(entry.featureShortName, entry.settingPath, entry.settingKey, entry.originalValue);
-	if (requireNumeric && (!IsNumericValue(entry.value) || !IsNumericValue(entry.originalValue) ||
-							  !std::isfinite(entry.value.get<float>()))) {
-		logger::warn("[SceneSettings] {} entry {} is not a finite float setting - skipping",
+	if (requireNumeric && (!SceneBlend::IsBlendable(entry.value) || !SceneBlend::IsBlendable(entry.originalValue))) {
+		logger::warn("[SceneSettings] {} entry {} is not a blendable setting - skipping",
 			typeName, GetSettingLogName(entry.featureShortName, entry.settingPath, entry.settingKey));
 		return false;
 	}

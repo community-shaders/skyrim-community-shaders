@@ -63,7 +63,7 @@ namespace Browser
 	struct FormListState
 	{
 		// Filters; reset whenever the category changes so a stale scope cannot hide every row.
-		char filter[256] = {};
+		std::string filter;
 		FilterScope scope = FilterScope::All;
 		bool onlyFavorites = false;
 		bool onlyFlagged = false;
@@ -113,7 +113,7 @@ namespace Browser
 		/** @brief Clears every filter. */
 		void ResetFilters()
 		{
-			filter[0] = '\0';
+			filter.clear();
 			scope = FilterScope::All;
 			onlyFavorites = onlyFlagged = onlySaved = onlyUnsaved = onlyPreset = false;
 			plugin.clear();

@@ -137,10 +137,15 @@ struct DoF : public PostProcessFeature
 	virtual void SaveSettings(json&) override;
 
 	virtual void DrawSettings() override;
+	virtual bool HasDebugSection() const override { return true; }
+	virtual void DrawDebugSection() override;
 
 	virtual void Draw(TextureInfo&) override;
 	void UpdateProceduralBokehSamples(int bladeCount, float bladeRoundness, bool force = false);
 
+	/// Resolved, smoothed GPU focus in kilometres, only valid on the published frame.
+	ID3D11Texture2D* GetFocusTexture(unsigned frame) const { return frame == focusFrame && texFocus ? texFocus->resource.get() : nullptr; }
+	unsigned focusFrame = ~0u;
 	float debugDistance = 0.0f;
 	float debugFocusPlane = 0.0f;
 	uint currentRef = 0;

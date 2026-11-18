@@ -23,7 +23,10 @@
 #include "Features/LightLimitFix.h"
 #include "Features/LinearLighting.h"
 #include "Features/PerformanceOverlay.h"
+#include "Features/PhysicalSky.h"
 #include "Features/PostProcessing.h"
+#include "Features/ProceduralAurora.h"
+#include "Features/ProceduralSun.h"
 #include "Features/RainRefraction.h"
 #include "Features/ScreenSpaceGI.h"
 #include "Features/ScreenSpaceShadows.h"
@@ -36,8 +39,10 @@
 #include "Features/TerrainHelper.h"
 #include "Features/TerrainShadows.h"
 #include "Features/TerrainVariation.h"
+#include "Features/TreeWind.h"
 #include "Features/UnifiedWater.h"
 #include "Features/Upscaling.h"
+#include "Features/ViewAtmosphere.h"
 #include "Features/VolumetricLighting.h"
 #include "Features/VolumetricShadows.h"
 #include "Features/WaterEffects.h"
@@ -259,9 +264,11 @@ const std::vector<Feature*>& Feature::GetFeatureList()
 		&globals::features::terrainBlending,
 		&globals::features::terrainHelper,
 		&globals::features::volumetricLighting,
+		&globals::features::viewAtmosphere,
 		&globals::features::lodBlending,
 		&globals::features::hairSpecular,
 		&globals::features::interiorSun,
+		&globals::features::proceduralSun,
 		&globals::features::terrainVariation,
 		&globals::features::ibl,
 		&globals::features::extendedTranslucency,
@@ -275,10 +282,13 @@ const std::vector<Feature*>& Feature::GetFeatureList()
 		&globals::features::rainRefraction,
 		&globals::features::unifiedWater,
 		&globals::features::horizonFix,
+		&globals::features::treeWind,
 		&globals::features::exponentialHeightFog,
 		&globals::features::hdrDisplay,
+		&globals::features::physicalSky,
 		&globals::features::skin,
-		&globals::features::postProcessing
+		&globals::features::postProcessing,
+		&globals::features::proceduralAurora
 	};
 
 	return features;
@@ -320,51 +330,6 @@ bool Feature::ToggleAtBootSetting()
 	state->CheckCoreSettingsChanged();
 
 	return state->IsFeatureDisabled(featureName);  // Return the new state
-}
-
-std::string Feature::GetDisplayCategory() const
-{
-	const auto category = GetCategory();
-	if (category == FeatureCategories::kCharacters)
-		return T("feature.category.characters", "Characters");
-	if (category == FeatureCategories::kDisplay)
-		return T("feature.category.display", "Display");
-	if (category == FeatureCategories::kGrass)
-		return T("feature.category.grass", "Grass");
-	if (category == FeatureCategories::kLandscapeAndTextures)
-		return T("feature.category.landscape_and_textures", "Landscape & Textures");
-	if (category == FeatureCategories::kLighting)
-		return T("feature.category.lighting", "Lighting");
-	if (category == FeatureCategories::kMaterials)
-		return T("feature.category.materials", "Materials");
-	if (category == FeatureCategories::kOther)
-		return T("feature.category.other", "Other");
-	if (category == FeatureCategories::kSky)
-		return T("feature.category.sky", "Sky");
-	if (category == FeatureCategories::kUtility)
-		return T("feature.category.utility", "Utility");
-	if (category == FeatureCategories::kWater)
-		return T("feature.category.water", "Water");
-
-	return std::string(category);
-}
-
-std::string Feature::GetReleaseStageTag(ReleaseStage stage)
-{
-	switch (stage) {
-	case ReleaseStage::Alpha:
-		return T("menu.features.tag_alpha", "[ALPHA]");
-	case ReleaseStage::Beta:
-		return T("menu.features.tag_beta", "[BETA]");
-	default:
-		return {};
-	}
-}
-
-ImVec4 Feature::GetReleaseStageColor(ReleaseStage stage)
-{
-	const auto& statusPalette = globals::menu->GetTheme().StatusPalette;
-	return stage == ReleaseStage::Alpha ? statusPalette.Error : statusPalette.Warning;
 }
 
 void Feature::DrawUnloadedUI()

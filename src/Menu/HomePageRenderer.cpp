@@ -162,8 +162,8 @@ namespace
 	bool Action(const char* id, Icons::GlyphRef icon, const char* label, bool first)
 	{
 		if (!first)
-			BrowserUI::SameLineIfFits(Icons::MeasureLabeledButton(icon, label));
-		return Icons::LabeledButton(id, icon, label);
+			BrowserUI::SameLineIfFits(Util::MeasureLabeledButton(icon, label));
+		return Util::LabeledButton(id, icon, label);
 	}
 
 	/** @brief A glyph followed by a line of text, both in one colour. */
@@ -224,8 +224,8 @@ namespace
 			const char* browseLabel = T("menu.home.browse_presets", "Browse Presets");
 			const Icons::GlyphRef browseIcon = Icons::TI(MenuIcons::kPresets);
 			ImGui::SameLine();
-			ImGui::SetCursorPosX(std::max(ImGui::GetCursorPosX(), ImGui::GetContentRegionMax().x - Icons::MeasureLabeledButton(browseIcon, browseLabel)));
-			if (Icons::LabeledButton("##HomeBrowsePresets", browseIcon, browseLabel))
+			ImGui::SetCursorPosX(std::max(ImGui::GetCursorPosX(), ImGui::GetContentRegionMax().x - Util::MeasureLabeledButton(browseIcon, browseLabel)));
+			if (Util::LabeledButton("##HomeBrowsePresets", browseIcon, browseLabel))
 				globals::menu->SelectFeatureMenu(std::string(MenuPageIds::kPresets));
 			Util::Text::WrappedDisabled("%s", T("menu.home.preset_none_hint", "Browse presets to apply a ready-made look across many features at once."));
 		} else {
@@ -316,15 +316,15 @@ namespace
 		const float clearX = ImGui::GetWindowWidth() - style.WindowPadding.x - buttonSize;
 		ImGui::SameLine();
 		// The buttons are taller than the status text; centre them on its ink rather than hanging below it
-		ImGui::SetCursorPosY(ImGui::GetCursorPosY() + Util::GetTextInkCenterY() - buttonSize * 0.5f);
+		const float buttonY = ImGui::GetCursorPosY() + Util::GetTextInkCenterY() - buttonSize * 0.5f;
 		// Developer mode: the test scene button sits just left of the clear-cache icon
 		if (globals::state->IsDeveloperMode()) {
-			ImGui::SetCursorPosX(clearX - style.ItemSpacing.x - buttonSize);
+			ImGui::SetCursorPos(ImVec2(clearX - style.ItemSpacing.x - buttonSize, buttonY));
 			if (MenuHeaderRenderer::GlyphIconButton("##HomeTestConditions", Icons::TI(MenuIcons::kTestScene), box, AdvancedSettingsRenderer::GetTestConditionsTooltip()))
 				AdvancedSettingsRenderer::RunTestConditions();
 			ImGui::SameLine();
 		}
-		ImGui::SetCursorPosX(clearX);
+		ImGui::SetCursorPos(ImVec2(clearX, buttonY));
 		const char* tooltip = T("menu.home.clear_cache_tooltip", "Clear shader cache...");
 		bool clicked;
 		if (auto* texture = globals::menu->GetUIIcons().clearCache.texture) {
@@ -630,10 +630,7 @@ void HomePageRenderer::RenderHelpPopover()
 		ImGui::CloseCurrentPopup();
 	}
 
-	{
-		MenuFonts::FontRoleGuard heading(Menu::FontRole::Subheading);
-		ImGui::SeparatorText(T("menu.help.shortcuts", "Keyboard Shortcuts"));
-	}
+	Util::SeparatorTextWithFont(T("menu.help.shortcuts", "Keyboard Shortcuts"), Menu::FontRole::Subheading);
 	if (ImGui::BeginTable("##HelpShortcuts", 2, ImGuiTableFlags_SizingFixedFit)) {
 		for (const auto& row : MenuShortcuts::BuildHelpRows(globals::menu->GetShortcuts())) {
 			ImGui::TableNextRow();
@@ -645,10 +642,7 @@ void HomePageRenderer::RenderHelpPopover()
 		ImGui::EndTable();
 	}
 
-	{
-		MenuFonts::FontRoleGuard heading(Menu::FontRole::Subheading);
-		ImGui::SeparatorText(T("menu.help.help", "Help"));
-	}
+	Util::SeparatorTextWithFont(T("menu.help.help", "Help"), Menu::FontRole::Subheading);
 	for (size_t i = 0; i < MenuLinks::kAll.size(); ++i) {
 		const auto link = MenuLinks::kAll[i];
 		if (i > 0) {
@@ -663,10 +657,7 @@ void HomePageRenderer::RenderHelpPopover()
 		Util::HoverTip(MenuLinks::GetUrl(link));
 	}
 
-	{
-		MenuFonts::FontRoleGuard heading(Menu::FontRole::Subheading);
-		ImGui::SeparatorText(T("menu.help.about", "About"));
-	}
+	Util::SeparatorTextWithFont(T("menu.help.about", "About"), Menu::FontRole::Subheading);
 	const auto buildTag = MenuHeaderRenderer::GetBuildTagText();
 	const auto title = MenuHeaderRenderer::GetTitleText();
 	ImGui::TextUnformatted(buildTag.empty() ? title.c_str() : std::format("{} {}", title, buildTag).c_str());
@@ -889,8 +880,9 @@ void HomePageRenderer::MarkFirstTimeSetupComplete()
 	menu->GetSettings().FirstTimeSetupCompleted = true;
 	menu->settingToggleKey = false;  // never leave a hotkey capture running behind the closed dialog
 
-	// Saved at once so the welcome screen cannot return when the user never saves by hand
-	globals::state->Save();
+	// Saved at once so the welcome screen cannot return, with the hotkeys it sets
+	constexpr std::array<std::string_view, 3> setupSettings{ "/Menu/FirstTimeSetupCompleted", "/Menu/ToggleKey", "/Menu/CSEditorToggleKey" };
+	globals::state->SaveCoreSettings(setupSettings);
 
 	isFirstTimeSetupShown = true;
 }

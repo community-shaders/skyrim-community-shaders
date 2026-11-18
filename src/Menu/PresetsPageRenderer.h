@@ -59,7 +59,7 @@ private:
 
 	/** @brief The one type shown; null shows all. */
 	static std::optional<UnifiedPresetCatalog::PresetType> typeFilter;
-	static char searchBuffer[128];
+	static std::string searchBuffer;
 	static std::string selectedPackId;
 	static bool discovered;
 

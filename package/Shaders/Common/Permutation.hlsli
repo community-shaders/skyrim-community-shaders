@@ -20,6 +20,7 @@ namespace Permutation
 	namespace LightingTechnique
 	{
 		static const uint Glowmap = 2;
+		static const uint TreeAnim = 12;
 	}
 
 	namespace LightingFlags
@@ -82,6 +83,7 @@ namespace Permutation
 		static const uint NoSkyScattering = (1 << 9);
 		static const uint IsAurora = (1 << 10);
 		static const uint IsMoon = (1 << 11);
+		static const uint IsSecunda = (1 << 14);
 		static const uint ProjectedTextureIsSRGB = (1 << 12);
 		static const uint GrassPBR = (1 << 13);
 	}

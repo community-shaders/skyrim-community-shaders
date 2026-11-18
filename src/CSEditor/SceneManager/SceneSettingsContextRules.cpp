@@ -86,13 +86,13 @@ namespace SceneSettingsContextRules
 		case SceneContextType::Interior:
 			return { SceneType::InteriorOnly, false, "InteriorOnly" };
 		case SceneContextType::Location:
-			// A per-period location entry blends, so it takes the location whitelist's transitionable floats only.
+			// A per-period location entry blends, so it takes the location whitelist's transitionable values only.
 			return { SceneType::Location, context.period != SceneSettingsManager::TimeOfDayPeriod::Count, "Location" };
 		case SceneContextType::Weather:
 			// Weather stores into the time-of-day layer but names itself in its own logs.
 			return { SceneType::TimeOfDay, true, "Weather" };
 		default:
-			// A periodic layer blends across the period, so it only takes transitionable floats.
+			// A periodic layer blends across the period, so it only takes transitionable values.
 			return { SceneType::TimeOfDay, true, "TimeOfDay" };
 		}
 	}

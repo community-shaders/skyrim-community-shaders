@@ -20,6 +20,7 @@
 #include "FeatureConstraints.h"
 #include "FeatureIssues.h"
 #include "Features/CSEditor.h"
+#include "Features/PerformanceOverlay.h"
 #include "Fonts.h"
 #include "Globals.h"
 #include "I18n/I18n.h"
@@ -117,6 +118,8 @@ namespace
 	/// The selected feature while the search, a filter or a collapsed category leaves it out of the list, so its
 	/// page stays open. Only read while the selection index is outside the list.
 	Feature* g_detachedFeature = nullptr;
+	/// The menu's hooks while RenderFeatureList runs, so a feature page drawn inside a built-in page can use them
+	const FeatureListRenderer::Hooks* g_activeHooks = nullptr;
 
 	/** @brief Stable identity of a list entry, to find it again after a rebuild; empty for labels. */
 	std::string GetEntryKey(const FeatureListRenderer::MenuFuncInfo& entry)
@@ -182,7 +185,7 @@ namespace
 		auto* drawList = ImGui::GetWindowDrawList();
 		Icons::DrawCenteredGlyph(drawList, ImVec2(pos.x + padX, pos.y), ImVec2(lineHeight, lineHeight), Icons::TI(ICON_TI_CHEVRON_LEFT),
 			ImGui::GetColorU32(Util::Colors::GetSecondary()));
-		drawList->AddText(ImVec2(pos.x + padX + lineHeight + ThemeManager::Constants::NAV_ROW_ICON_GAP * Util::GetUIScale(), pos.y),
+		drawList->AddText(ImVec2(pos.x + padX + lineHeight + ThemeManager::Constants::ICON_LABEL_GAP * Util::GetUIScale(), pos.y),
 			ImGui::GetColorU32(ImGuiCol_Text), T("menu.features.back_to_features", "Features"));
 		return clicked;
 	}
@@ -197,17 +200,6 @@ namespace
 		default:  // unknown values from a hand-edited config fall back to categories
 			return Icons::TI(ICON_TI_CATEGORY);
 		}
-	}
-
-	/** @brief The feature list's sort modes as menu items, for the list's sort popup and the Go to palette's. */
-	void DrawSortModeItems()
-	{
-		using enum Menu::FeatureSortMode;
-		auto& sort = globals::menu->GetSettings().FeatureListSort;
-		if (ImGui::MenuItem(T("menu.features.sort_by_category", "By Category"), nullptr, sort == Category))
-			sort = Category;
-		if (ImGui::MenuItem(T("menu.features.sort_alphabetically", "Alphabetical"), nullptr, sort == Alphabetical))
-			sort = Alphabetical;
 	}
 
 	/** @brief Gap above the list's first line of text, deep enough for the sort button to centre on it. */
@@ -229,102 +221,20 @@ namespace
 			const ImGuiID buttonId = ImGui::GetID("###FeatureSort");
 			const bool lit = ImGui::IsWindowHovered() || ImGui::GetFocusID() == buttonId || ImGui::IsPopupOpen("##FeatureSortPopup");
 			const float alpha = std::lerp(ThemeManager::Constants::PALETTE_DIMMED_ALPHA, 1.0f, Util::Anim::Toggle(ImGui::GetID("##Visibility"), lit));
+			// Quiet backing plate at full alpha, under the hover layer, so the icon stays readable over row text
+			const ImVec2 plateMin = ImGui::GetCursorScreenPos();
+			const ImVec2 plateMax = ImVec2(plateMin.x + size, plateMin.y + size);
+			ImGui::GetWindowDrawList()->AddRectFilled(plateMin, plateMax, ImGui::GetColorU32(ImGuiCol_FrameBg), ImGui::GetStyle().FrameRounding);
+			ImGui::GetWindowDrawList()->AddRect(plateMin, plateMax, ImGui::GetColorU32(ImGuiCol_Border), ImGui::GetStyle().FrameRounding);
 			ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * alpha);
-			{
-				auto style = Util::TransparentIconButtonStyle();
-				if (Icons::Button("###FeatureSort", GetSortModeIcon(globals::menu->GetSettings().FeatureListSort), ImVec2(size, size)))
-					ImGui::OpenPopup("##FeatureSortPopup");
-			}
+			if (Util::IconButton("###FeatureSort", GetSortModeIcon(globals::menu->GetSettings().FeatureListSort), nullptr))
+				ImGui::OpenPopup("##FeatureSortPopup");
+			FeatureListRenderer::DrawFilterDot(ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
 			ImGui::PopStyleVar();
-			Util::HoverTip(T("menu.features.sort_tooltip", "Sort features"));
-			if (ImGui::BeginPopup("##FeatureSortPopup")) {
-				DrawSortModeItems();
-				ImGui::EndPopup();
-			}
+			Util::HoverTip(T("menu.palette.sort_tooltip", "Sort and filter features"));
+			FeatureListRenderer::RenderSortPopup("##FeatureSortPopup");
 		}
 		ImGui::EndChild();
-	}
-
-	/**
-	 * @brief Draws one pill of the top page switcher: a centred accent icon and label. The selected pill gets an eased
-	 * accent tint and outline, hover a soft fill.
-	 * @param width Pill width; 0 fills the rest of the line.
-	 * @return True when clicked.
-	 */
-	bool DrawNavRow(const FeatureListRenderer::BuiltInMenu& menu, bool selected, bool disabled, float width = 0.0f)
-	{
-		using Constants = ThemeManager::Constants;
-		using NavStyle = FeatureListRenderer::NavStyle;
-
-		const float scale = Util::GetUIScale();
-		const float lineHeight = ImGui::GetTextLineHeight();
-		const float height = ImGui::GetFrameHeight();
-		const ImVec2 rowPos = ImGui::GetCursorScreenPos();
-		const float rowWidth = width > 0.0f ? width : ImGui::GetContentRegionAvail().x;
-
-		bool clicked = false;
-		{
-			// The pill draws its own highlight, so the list highlight stays out of it
-			Util::Anim::NoListHighlight ownHighlight;
-			// A dimmed pill still takes the click: the caller explains why it cannot act
-			ImGui::PushStyleColor(ImGuiCol_Header, IM_COL32_BLACK_TRANS);
-			ImGui::PushStyleColor(ImGuiCol_HeaderHovered, IM_COL32_BLACK_TRANS);
-			ImGui::PushStyleColor(ImGuiCol_HeaderActive, IM_COL32_BLACK_TRANS);
-			clicked = ImGui::Selectable("##NavRow", false, ImGuiSelectableFlags_NoPadWithHalfSpacing, ImVec2(rowWidth, height));
-			ImGui::PopStyleColor(3);
-		}
-		auto* drawList = ImGui::GetWindowDrawList();
-		const ImVec2 min = ImGui::GetItemRectMin();
-		const ImVec2 max = ImGui::GetItemRectMax();
-		const float rounding = ImGui::GetStyle().FrameRounding;
-		const auto blend = Util::Anim::ItemBlend(ImGui::GetItemID(), ImGui::IsItemHovered() && !disabled, ImGui::IsItemActive(), selected);
-		Util::Anim::FillLayer(drawList, min, max, rounding, ImGuiCol_HeaderHovered, blend.hover);
-		Util::Anim::FillLayer(drawList, min, max, rounding, ImGuiCol_HeaderActive, blend.press);
-		if (selected || blend.selected > 0.0f) {
-			// The selected pill is one shape that glides between the pills; one that was just left fades out in place
-			const auto pill = selected ? Util::Anim::SelectionGlide(ImHashStr("NavPillGlide"), min, max) : Util::Anim::GlideRect{ min, max };
-			const float alpha = selected ? 1.0f : blend.selected;
-			ImVec4 accent = Util::Colors::GetAccent();
-			accent.w = Constants::SEGMENT_SELECTED_FILL_ALPHA * alpha;
-			drawList->AddRectFilled(pill.min, pill.max, ImGui::GetColorU32(accent), rounding);
-			accent.w = Constants::SEGMENT_SELECTED_OUTLINE_ALPHA * alpha;
-			drawList->AddRect(pill.min, pill.max, ImGui::GetColorU32(accent), rounding);
-		}
-
-		const ImVec4 textColor = ImGui::GetStyleColorVec4(disabled ? ImGuiCol_TextDisabled : ImGuiCol_Text);
-		const ImVec4 iconColor = (!disabled && menu.style != NavStyle::Plain) ? Util::Colors::GetAccent() : textColor;
-		const float iconGap = Constants::NAV_ROW_ICON_GAP * scale;
-
-		// Icon and label form one group centred in the pill, both centred on the pill's height by their ink. A narrow
-		// pill shrinks the pair to fit; past the smallest readable size only the icon stays, with the name on hover
-		const float fontSize = ImGui::GetFontSize();
-		const float available = std::max(0.0f, (max.x - min.x) - ImGui::GetStyle().FramePadding.x * 2.0f);
-		const float labelWidth = ImGui::CalcTextSize(menu.name.c_str()).x;
-		const float iconWidth = menu.icon ? lineHeight + iconGap : 0.0f;
-		const float fullWidth = iconWidth + labelWidth;
-		float fit = fullWidth > available && fullWidth > 0.0f ? available / fullWidth : 1.0f;
-		const bool iconOnly = menu.icon && fit < Constants::NAV_PILL_MIN_CONTENT_SCALE;
-		if (iconOnly)
-			fit = std::min(1.0f, available / lineHeight);
-		fit = std::max(fit, Constants::NAV_PILL_MIN_CONTENT_SCALE);
-
-		const float iconSize = lineHeight * fit;
-		const float groupWidth = iconOnly ? iconSize : fullWidth * fit;
-		float x = std::max(min.x, min.x + ((max.x - min.x) - groupWidth) * 0.5f);
-		drawList->PushClipRect(min, max, true);
-		if (menu.icon) {
-			Icons::DrawCenteredGlyph(drawList, ImVec2(x, min.y), ImVec2(iconSize, max.y - min.y), fontSize * fit, menu.icon, ImGui::GetColorU32(iconColor));
-			x += iconWidth * fit;
-		}
-		if (!iconOnly) {
-			// Shrinking about the line's middle keeps the ink-centred position of the full-size text
-			const float textY = Util::CenterTextTopY(min.y, max.y - min.y) + lineHeight * (1.0f - fit) * 0.5f;
-			drawList->AddText(ImGui::GetFont(), fontSize * fit, ImVec2(x, textY), ImGui::GetColorU32(textColor), menu.name.c_str());
-		}
-		drawList->PopClipRect();
-		if (iconOnly && ImGui::IsItemHovered())
-			ImGui::SetTooltip("%s", menu.name.c_str());
-		return clicked;
 	}
 
 	/// Set when a shortcut moved the selection, so the list scrolls the newly selected row into view.
@@ -349,29 +259,97 @@ namespace
 		return false;
 	}
 
-	void SeparatorTextWithFont(const char* text, Menu::FontRole role)
+	/** @brief Badge label of a pre-release stage; null for release features. */
+	const char* GetStageBadgeLabel(Feature::ReleaseStage stage)
 	{
-		MenuFonts::FontRoleGuard guard(role);
-		ImGui::SeparatorText(text);
+		switch (stage) {
+		case Feature::ReleaseStage::Alpha:
+			return T("menu.features.badge_alpha", "Alpha");
+		case Feature::ReleaseStage::Beta:
+			return T("menu.features.badge_beta", "Beta");
+		default:
+			return nullptr;
+		}
 	}
 
-	void SeparatorTextWithFont(const std::string& text, Menu::FontRole role)
+	/** @brief Where the title block of a feature header sits, handed to the toolbar callback of DrawFeatureHeader. */
+	struct FeatureHeaderSlot
 	{
-		SeparatorTextWithFont(text.c_str(), role);
+		ImVec2 titleMin;       ///< Screen position of the title's top-left corner
+		float titleHeight;     ///< Height of just the title line
+		float trailingX;       ///< Screen x just past the title, stage badge and version
+		ImVec2 belowTitle;     ///< Screen position of the line under the title, where an own-row toolbar goes
+		float availableWidth;  ///< Content width the header spans
+	};
+
+	/** @brief How the feature header toolbar (Modified and cost chips, pin, actions, boot toggle) fits the width it has. */
+	struct FeatureToolbarLayout
+	{
+		bool ownRow = false;    ///< Drops below the title instead of sharing its line
+		bool chipLabel = true;  ///< Modified chip keeps its text; otherwise it shrinks to its icon
+		bool bootLabel = true;  ///< "Load at Boot" caption stays beside the toggle; otherwise the tooltip carries it
+	};
+
+	/** @brief Widths of the toolbar pieces, measured by the caller in the fonts they are drawn with. */
+	struct FeatureToolbarWidths
+	{
+		float title = 0.0f;            ///< Title, badge and version, including the gap after them
+		float gap = 0.0f;              ///< Space between toolbar pieces
+		float chipFull = 0.0f;         ///< Modified chip with its text; 0 when the feature is unmodified
+		float chipIcon = 0.0f;         ///< Modified chip reduced to its icon
+		float costChip = 0.0f;         ///< Profiling cost chip, which keeps its text so the reading stays visible; 0 when the feature has none
+		float controlsFull = 0.0f;     ///< Pin, actions menu and boot toggle with its caption
+		float controlsCompact = 0.0f;  ///< The same without the caption
+	};
+
+	/**
+	 * @brief Picks the richest toolbar that fits: the Modified chip loses its text first, then the boot caption, and only when the
+	 * title leaves no room even for that does the toolbar move to its own row, where the same steps repeat.
+	 * @param available Content width of the header
+	 */
+	FeatureToolbarLayout ChooseFeatureToolbarLayout(float available, const FeatureToolbarWidths& w)
+	{
+		const bool hasChip = w.chipFull > 0.0f;
+		const bool hasCostChip = w.costChip > 0.0f;
+		constexpr FeatureToolbarLayout steps[] = {
+			{ false, true, true },
+			{ false, false, true },
+			{ false, false, false },
+		};
+		const auto toolbarWidth = [&](const FeatureToolbarLayout& step) {
+			float width = step.bootLabel ? w.controlsFull : w.controlsCompact;
+			if (hasChip)
+				width += w.gap + (step.chipLabel ? w.chipFull : w.chipIcon);
+			if (hasCostChip)
+				width += w.gap + w.costChip;
+			return width;
+		};
+
+		for (const auto& step : steps)
+			if (w.title + toolbarWidth(step) <= available)
+				return step;
+
+		// Own row: nothing shares the line with the title, so only the toolbar itself has to fit. The smallest step is the floor.
+		for (auto step : steps) {
+			step.ownRow = true;
+			if (toolbarWidth(step) <= available)
+				return step;
+		}
+		return { true, false, false };
 	}
 
 	/**
-	 * @brief Draws a feature header: the name in large text, then the stage tag and version bottom-aligned beside it,
-	 * the description below and a separator.
+	 * @brief Draws a feature header: the name in large text, then the stage badge and version bottom-aligned beside it,
+	 * the toolbar, the description below and a separator.
 	 * @param featureName The display name of the feature
 	 * @param version The version string (can be empty)
 	 * @param description Short description shown below the title, wrapped to the content width
-	 * @param stageTag Release stage marker such as [BETA] (can be empty)
-	 * @param stageColor Colour of the stage tag
-	 * @param trailingX Receives the screen x just past the title, stage tag and version, where more annotations can go
+	 * @param stage Release stage; pre-release stages get a badge
+	 * @param drawToolbar Called once the title block is down, before the description, to draw controls around it. Returns the
+	 * height it used under the title, which pushes the description down; 0 when it stayed on the title's line.
 	 * @return The height of just the title line (for button alignment)
 	 */
-	float DrawFeatureHeader(const std::string& featureName, const std::string& version, const std::string& description = "", const std::string& stageTag = "", ImVec4 stageColor = {}, float* trailingX = nullptr)
+	float DrawFeatureHeader(const std::string& featureName, const std::string& version, const std::string& description = "", Feature::ReleaseStage stage = Feature::ReleaseStage::Release, const std::function<float(const FeatureHeaderSlot&)>& drawToolbar = {})
 	{
 		const auto& themeSettings = globals::menu->GetTheme();
 		const ImVec4 textColor = themeSettings.Palette.Text;
@@ -392,18 +370,23 @@ namespace
 		};
 
 		const ImVec2 startPos = ImGui::GetCursorScreenPos();
+		const float availableWidth = ImGui::GetContentRegionAvail().x;
 		const float itemSpacingX = ImGui::GetStyle().ItemSpacing.x;
 		const ImVec2 titleSize = scaledSize(Menu::FontRole::Title, featureName.c_str());
 		drawScaled(Menu::FontRole::Title, ImGui::GetStyleColorVec4(ImGuiCol_Text), featureName.c_str());
 
-		// Running x for the bottom-aligned annotations (stage tag, then version) right of the title
-		float annotationX = startPos.x + titleSize.x + itemSpacingX;
+		// Running x for the bottom-aligned annotations (stage badge, then version) right of the title
+		float annotationX = ImGui::GetItemRectMax().x + itemSpacingX;
 
-		if (!stageTag.empty()) {
-			const ImVec2 tagSize = scaledSize(Menu::FontRole::Body, stageTag.c_str());
-			ImGui::SetCursorScreenPos(ImVec2(annotationX, startPos.y + titleSize.y - tagSize.y));
-			drawScaled(Menu::FontRole::Body, stageColor, stageTag.c_str());
-			annotationX += tagSize.x + itemSpacingX;
+		const bool hasStageBadge = stage != Feature::ReleaseStage::Release;
+		if (hasStageBadge) {
+			// Centred on the version's line
+			const float lineHeight = scaledSize(Menu::FontRole::Body, featureName.c_str()).y;
+			ImGui::SetCursorScreenPos(ImVec2(annotationX, startPos.y + titleSize.y - lineHeight));
+			ImGui::SetWindowFontScale(titleScale);
+			FeatureListRenderer::DrawStageBadge(stage, lineHeight);
+			ImGui::SetWindowFontScale(1.0f);
+			annotationX += ImGui::GetItemRectSize().x + itemSpacingX;
 		}
 
 		if (!version.empty()) {
@@ -416,11 +399,17 @@ namespace
 		}
 
 		// Back under the title block
-		if (!stageTag.empty() || !version.empty())
-			ImGui::SetCursorScreenPos(ImVec2(startPos.x, startPos.y + titleSize.y + ImGui::GetStyle().ItemSpacing.y * 0.25f));
+		const ImVec2 belowTitle(startPos.x, startPos.y + titleSize.y + ImGui::GetStyle().ItemSpacing.y * 0.25f);
+		if (hasStageBadge || !version.empty() || drawToolbar)
+			ImGui::SetCursorScreenPos(belowTitle);
 
-		if (trailingX)
-			*trailingX = annotationX;
+		if (drawToolbar) {
+			const float usedBelow = drawToolbar({ startPos, titleSize.y, annotationX, belowTitle, availableWidth });
+			if (usedBelow > 0.0f)
+				ImGui::SetCursorScreenPos(ImVec2(belowTitle.x, belowTitle.y + usedBelow));
+			else
+				ImGui::SetCursorScreenPos(belowTitle);
+		}
 
 		if (!description.empty()) {
 			MenuFonts::FontRoleGuard subtextGuard(Menu::FontRole::Subtext);
@@ -525,6 +514,25 @@ std::string FeatureListRenderer::TranslateCategory(std::string_view category)
 	return std::string(category);
 }
 
+float FeatureListRenderer::MeasureStageBadge(Feature::ReleaseStage stage)
+{
+	const char* label = GetStageBadgeLabel(stage);
+	if (!label)
+		return 0.0f;
+	MenuFonts::FontRoleGuard badgeFont(Menu::FontRole::Subtext);
+	return Util::MeasureBadgeWidth(label);
+}
+
+void FeatureListRenderer::DrawStageBadge(Feature::ReleaseStage stage, float rowHeight)
+{
+	const char* label = GetStageBadgeLabel(stage);
+	if (!label)
+		return;
+	const auto& statusPalette = globals::menu->GetTheme().StatusPalette;
+	MenuFonts::FontRoleGuard badgeFont(Menu::FontRole::Subtext);
+	Util::Badge(label, stage == Feature::ReleaseStage::Alpha ? statusPalette.Error : statusPalette.Warning, { .rowHeight = rowHeight });
+}
+
 void FeatureListRenderer::RenderFeatureList(
 	float footerHeight,
 	size_t& selectedMenu,
@@ -534,10 +542,11 @@ void FeatureListRenderer::RenderFeatureList(
 	Hooks& hooks)
 {
 	ImGui::BeginChild("Menus Table", ImVec2(0, -footerHeight));
+	g_activeHooks = &hooks;
 
 	// A collapsed category could hide the feature being navigated to
 	if (!pendingFeatureSelection.empty()) {
-		if (const auto* feature = Feature::FindFeatureByShortName(pendingFeatureSelection))
+		if (const auto* feature = Feature::FindFeatureByShortName(pendingFeatureSelection); feature && feature->IsInFeatureList())
 			categoryExpansionStates[std::string(feature->GetCategory())] = true;
 		g_menuListDirty = true;
 	}
@@ -596,6 +605,7 @@ void FeatureListRenderer::RenderFeatureList(
 	}
 	g_scrollToSelection = false;  // a hidden list drops the request rather than scrolling later
 
+	g_activeHooks = nullptr;
 	ImGui::EndChild();
 }
 
@@ -673,15 +683,15 @@ std::vector<FeatureListRenderer::MenuFuncInfo> FeatureListRenderer::BuildMenuLis
 	// then the bottom group (kBottomMenuIds)
 	auto menuList = std::vector<MenuFuncInfo>{
 		BuiltInMenu{ MenuPageIds::kHome, T("menu.features.home", "Home"), []() { HomePageRenderer::RenderHomePage(); },
-			Icons::TI(MenuIcons::kHome), NavStyle::Plain, {}, false },
+			Icons::TI(MenuIcons::kHome), {}, false },
 		BuiltInMenu{ MenuPageIds::kPresets, T("menu.features.presets", "Presets"), []() { PresetsPageRenderer::Render(); },
-			Icons::TI(MenuIcons::kPresets), NavStyle::Accent, T("menu.features.presets_hint", "Control, change and manage your visual Presets to customise your CS experience"), true },
+			Icons::TI(MenuIcons::kPresets), T("menu.features.presets_hint", "Control, change and manage your visual Presets to customise your CS experience"), true },
 		BuiltInMenu{ MenuPageIds::kCSEditor, T("menu.features.cs_editor", "CS Editor"), []() { globals::features::csEditor.DrawSettings(); },
-			Icons::TI(MenuIcons::kCSEditor), NavStyle::Accent, {}, true },
+			Icons::TI(MenuIcons::kCSEditor), {}, true },
 	};
 	menuList.push_back(BuiltInMenu{ MenuPageIds::kSettings, T("menu.features.settings", "Settings"), drawSettings, Icons::TI(MenuIcons::kSettings) });
-	menuList.push_back(BuiltInMenu{ MenuPageIds::kProfiling, T("menu.features.profiling", "Profiling"), []() { ProfilingRenderer::RenderStatistics(); },
-		Icons::TI(MenuIcons::kProfiling), NavStyle::Plain, T("menu.features.profiling_hint", "What each feature costs per frame"), true });
+	menuList.push_back(BuiltInMenu{ MenuPageIds::kProfiling, T("menu.features.profiling", "Profiling"), []() { ProfilingRenderer::RenderPage(); },
+		Icons::TI(MenuIcons::kProfiling), T("menu.features.profiling_hint", "The Performance Overlay, and what each feature costs per frame"), true });
 
 	auto* state = globals::state;
 	const auto filter = globals::menu->GetSettings().FeatureListFilter & FeatureListFilter::kKnown;
@@ -693,7 +703,7 @@ std::vector<FeatureListRenderer::MenuFuncInfo> FeatureListRenderer::BuildMenuLis
 	// Display-name order; the names are translated, so they are taken once here rather than in the sort
 	std::vector<std::pair<std::string, Feature*>> named;
 	for (Feature* feat : Feature::GetFeatureList()) {
-		if (feat->IsInMenu())
+		if (feat->IsInFeatureList())
 			named.emplace_back(feat->GetDisplayName(), feat);
 	}
 	std::ranges::sort(named, {}, &std::pair<std::string, Feature*>::first);
@@ -772,6 +782,12 @@ void FeatureListRenderer::HandlePendingFeatureSelection(
 	if (pendingFeatureSelection == MenuPageIds::kIssues)
 		pendingFeatureSelection = std::string(MenuPageIds::kHome);
 
+	// The Performance Overlay has no list entry of its own: it opens on its card of the Profiling page
+	if (pendingFeatureSelection == globals::features::performanceOverlay.GetShortName()) {
+		ProfilingRenderer::SelectTab(ProfilingRenderer::Tab::PerformanceOverlay);
+		pendingFeatureSelection = std::string(MenuPageIds::kProfiling);
+	}
+
 	// General and Advanced are sections of Settings now: their page IDs open it at the matching section
 	if (const auto section = SettingsPageRenderer::GetAliasSection(pendingFeatureSelection)) {
 		globals::menu->GetSettings().LastSettingsSection = std::string(*section);
@@ -810,6 +826,8 @@ void FeatureListRenderer::HandlePendingFeatureSelection(
 	pendingFeatureSelection.clear();  // Clear after processing
 }
 
+static void SnapScrollToRows(const std::vector<float>& rowTops);
+
 void FeatureListRenderer::RenderLeftColumn(
 	const std::vector<MenuFuncInfo>& menuList,
 	size_t& selectedMenu,
@@ -834,24 +852,33 @@ void FeatureListRenderer::RenderLeftColumn(
 			topIds[topCount++] = i;
 	}
 	if (topCount > 0) {
-		// A rounded track holds the pages as pills, so the group reads as one segmented control
-		const float pad = ThemeManager::Constants::SEGMENT_TRACK_PAD * Util::GetUIScale();
-		// The pane clips at its own edge, which cut the top and the side borders; leave a little room
-		const float inset = ThemeManager::Constants::LEFT_PANE_EDGE_INSET * Util::GetUIScale();
-		ImVec2 trackMin = ImGui::GetCursorScreenPos();
-		trackMin.x += inset;
-		trackMin.y += inset;
-		const float trackWidth = ImGui::GetContentRegionAvail().x - inset * 2.0f;
-		const float pillGap = pad * ThemeManager::Constants::SEGMENT_PILL_GAP_RATIO;
-		const float pillWidth = (trackWidth - pad * 2.0f - pillGap * static_cast<float>(topCount - 1)) / static_cast<float>(topCount);
-		ImGui::GetWindowDrawList()->AddRectFilled(trackMin, ImVec2(trackMin.x + trackWidth, trackMin.y + ImGui::GetFrameHeight() + pad * 2.0f),
-			ImGui::GetColorU32(ImGuiCol_FrameBg), ImGui::GetStyle().FrameRounding + pad);
+		const bool canOpenEditor = EditorWindow::CanBeOpen();
+		std::array<Util::Segment, topIds.size()> segments;
+		int selected = -1;
 		for (size_t n = 0; n < topCount; n++) {
-			ImGui::SetCursorScreenPos(ImVec2(trackMin.x + pad + static_cast<float>(n) * (pillWidth + pillGap), trackMin.y + pad));
-			RenderBuiltInRow(*builtInAt(topIds[n]), topIds[n], selectedMenu, pillWidth);
+			const auto& menu = *builtInAt(topIds[n]);
+			segments[n] = { .label = menu.name.c_str(), .icon = menu.icon };
+			// The CS Editor segment opens its window instead of a page
+			if (menu.id == MenuPageIds::kCSEditor) {
+				segments[n].disabled = !canOpenEditor;
+				segments[n].tooltip = canOpenEditor ? T("menu.features.cs_editor_tooltip", "Opens the CS Editor window") :
+				                                      T("menu.features.cs_editor_needs_save", "Load a save to open the CS Editor");
+			} else if (selectedMenu == topIds[n]) {
+				selected = static_cast<int>(n);
+			}
 		}
-		ImGui::SetCursorScreenPos(ImVec2(trackMin.x - inset, trackMin.y + ImGui::GetFrameHeight() + pad * 2.0f));
-		ImGui::Dummy(ImVec2(trackWidth + inset * 2.0f, 0.0f));
+
+		// Keep the pane's edge from clipping the track
+		const float inset = ThemeManager::Constants::LEFT_PANE_EDGE_INSET * Util::GetUIScale();
+		const float width = ImGui::GetContentRegionAvail().x - inset * 2.0f;
+		ImGui::SetCursorScreenPos(ImVec2(ImGui::GetCursorScreenPos().x + inset, ImGui::GetCursorScreenPos().y + inset));
+		if (const int clicked = Util::SegmentedControl("##PageSwitcher", std::span(segments.data(), topCount), selected, { .width = width }); clicked >= 0) {
+			const auto& menu = *builtInAt(topIds[clicked]);
+			if (menu.id != MenuPageIds::kCSEditor)
+				selectedMenu = topIds[clicked];
+			else
+				CSEditor::OpenEditorWindow();
+		}
 		ImGui::Spacing();
 	}
 
@@ -875,19 +902,26 @@ void FeatureListRenderer::RenderLeftColumn(
 		ImGui::EndChild();
 	} else {
 		auto& filter = globals::menu->GetSettings().FeatureListFilter;
-		if (ImGui::BeginChild("##FeatureListScroll", ImVec2(0.0f, -pageButtonsHeight))) {
+		if (ImGui::BeginChild("##FeatureListScroll", ImVec2(0.0f, -pageButtonsHeight), ImGuiChildFlags_None, ImGuiWindowFlags_NoScrollWithMouse)) {
 			// A category header keeps half its pad above its text
 			const auto first = std::ranges::find_if(menuList, [](const auto& entry) { return !std::holds_alternative<BuiltInMenu>(entry); });
 			const float headerPad = first != menuList.end() && std::holds_alternative<CategoryHeader>(*first) ?
 			                            ThemeManager::Constants::CATEGORY_HEADER_PAD * Util::GetUIScale() * 0.5f :
 			                            0.0f;
 			ImGui::SetCursorPosY(ImGui::GetCursorPosY() + GetListTextTop() - headerPad);
+			std::vector<float> rowTops;
+			rowTops.reserve(menuList.size());
 			for (size_t i = 0; i < menuList.size(); i++) {
-				if (!builtInAt(i))
+				if (!builtInAt(i)) {
+					const float top = ImGui::GetCursorPosY();
 					std::visit(ListMenuVisitor{ i, selectedMenu, categoryExpansionStates, hooks }, menuList[i]);
+					if (ImGui::GetCursorPosY() > top)
+						rowTops.push_back(top);
+				}
 			}
 			// Room below the last row, so its selection highlight is not clipped by the pane's bottom edge
 			ImGui::Dummy(ImVec2(0.0f, ThemeManager::Constants::LEFT_PANE_EDGE_INSET * Util::GetUIScale()));
+			SnapScrollToRows(rowTops);
 			if (g_filterCounts.shown == 0 && filter != 0) {
 				BrowserUI::EmptyState(T("menu.features.no_matches", "No features match"),
 					T("menu.features.no_matches_hint", "Turn off a filter to list more features."));
@@ -907,6 +941,105 @@ void FeatureListRenderer::RenderLeftColumn(
 		StatusBarRenderer::RenderPageButtons();
 }
 
+/**
+ * Drives the current window's vertical scroll so it always rests on a row edge.
+ * The mouse wheel steps whole rows (the window must be created with
+ * ImGuiWindowFlags_NoScrollWithMouse); releasing the scrollbar settles on the
+ * nearest row. Keyboard/gamepad navigation is left to ImGui.
+ * @param rowTops Content-space Y of each drawn row's top edge, in order.
+ */
+static void SnapScrollToRows(const std::vector<float>& rowTops)
+{
+	constexpr int kRowsPerNotch = 3;
+	constexpr float kEaseRate = 30.0f;  // exponential ease rate (1/s)
+
+	static float s_target = -1.0f;    // scroll we are animating to, < 0 when idle
+	static float s_expected = -1.0f;  // scroll we asked ImGui for last frame
+	static bool s_wasDragging = false;
+	static float s_wheelRemainder = 0.0f;  // wheel input not yet worth a whole notch (precision wheels, touchpads)
+
+	const float scroll = ImGui::GetScrollY();
+	const float maxScroll = ImGui::GetScrollMaxY();
+	if (rowTops.empty() || maxScroll <= 0.0f) {
+		s_target = -1.0f;
+		return;
+	}
+
+	// Snap offsets: each row placed where the first row sits at scroll 0, plus the list end.
+	// ImGui rounds scroll to whole pixels, so the offsets are rounded too.
+	std::vector<float> snaps;
+	snaps.reserve(rowTops.size() + 1);
+	for (const float top : rowTops)
+		snaps.push_back(std::round(std::clamp(top - rowTops.front(), 0.0f, maxScroll)));
+	snaps.push_back(std::round(maxScroll));
+	std::ranges::sort(snaps);
+	snaps.erase(std::unique(snaps.begin(), snaps.end()), snaps.end());
+
+	const auto nearestIndex = [&](float value) {
+		size_t best = 0;
+		for (size_t i = 1; i < snaps.size(); i++) {
+			if (std::abs(snaps[i] - value) < std::abs(snaps[best] - value))
+				best = i;
+		}
+		return best;
+	};
+
+	const ImGuiIO& io = ImGui::GetIO();
+	auto* window = ImGui::GetCurrentWindow();
+	const bool dragging = ImGui::GetActiveID() == ImGui::GetWindowScrollbarID(window, ImGuiAxis_Y);
+
+	// Something else moved the list (keyboard nav, scroll-to-item): stop animating
+	if (s_target >= 0.0f && std::abs(scroll - s_expected) > 1.0f)
+		s_target = -1.0f;
+
+	if (dragging) {
+		s_target = -1.0f;
+	} else if (s_wasDragging) {
+		s_target = snaps[nearestIndex(scroll)];
+	}
+	s_wasDragging = dragging;
+
+	const bool wheelApplies = !dragging && !io.KeyCtrl &&
+	                          ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows | ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
+	if (!wheelApplies) {
+		s_wheelRemainder = 0.0f;
+	} else if (io.MouseWheel != 0.0f) {
+		// Only whole notches move the list; the fraction carries over, so split input scrolls like the same input combined
+		s_wheelRemainder += io.MouseWheel;
+		const int notches = static_cast<int>(s_wheelRemainder);
+		s_wheelRemainder -= static_cast<float>(notches);
+		if (notches != 0) {
+			const int step = -notches * kRowsPerNotch;
+			const auto from = static_cast<int>(nearestIndex(s_target >= 0.0f ? s_target : scroll));
+			const int to = std::clamp(from + step, 0, static_cast<int>(snaps.size()) - 1);
+			s_target = snaps[to];
+		}
+	}
+
+	// A keyboard selection is being scrolled into view: let ImGui do it rather than fight it
+	if (g_scrollToSelection) {
+		s_target = -1.0f;
+		return;
+	}
+
+	if (s_target < 0.0f)
+		return;
+
+	const float diff = s_target - scroll;
+	float next;
+	if (std::abs(diff) <= 1.0f) {
+		next = s_target;
+		s_target = -1.0f;
+	} else {
+		// Ease, but always move at least a pixel so ImGui's rounding cannot stall it
+		const float delta = diff * (1.0f - std::exp(-kEaseRate * io.DeltaTime));
+		next = scroll + (std::abs(delta) < 1.0f ? std::copysign(1.0f, diff) : delta);
+	}
+	if (next != scroll)
+		ImGui::SetScrollY(next);
+	s_expected = next;
+}
+
 void FeatureListRenderer::RequestPage(std::string_view pageId)
 {
 	g_requestedPage = std::string(pageId);
@@ -917,6 +1050,14 @@ bool FeatureListRenderer::IsPageOpen(std::string_view pageId)
 	return g_openPageId == pageId;
 }
 
+void FeatureListRenderer::DrawFilterDot(const ImVec2& buttonMin, const ImVec2& buttonMax)
+{
+	if ((globals::menu->GetSettings().FeatureListFilter & FeatureListFilter::kKnown) == 0)
+		return;
+	const float radius = ImGui::GetFrameHeight() * ThemeManager::Constants::STATUS_DOT_RATIO;
+	Util::DrawIconCircle(ImVec2(buttonMax.x - radius * 1.5f, buttonMin.y + radius * 1.5f), radius, ImGui::GetColorU32(Util::Colors::GetAccent()), true);
+}
+
 void FeatureListRenderer::RenderSortPopup(const char* popupId)
 {
 	if (!ImGui::BeginPopup(popupId))
@@ -925,7 +1066,12 @@ void FeatureListRenderer::RenderSortPopup(const char* popupId)
 	auto& menuSettings = globals::menu->GetSettings();
 
 	ImGui::SeparatorText(T("menu.settings.feature_list_order", "Feature List Order"));
-	DrawSortModeItems();
+	using enum Menu::FeatureSortMode;
+	auto& sort = menuSettings.FeatureListSort;
+	if (ImGui::Selectable(T("menu.features.sort_by_category", "By Category"), sort == Category))
+		sort = Category;
+	if (ImGui::Selectable(T("menu.features.sort_alphabetically", "Alphabetical"), sort == Alphabetical))
+		sort = Alphabetical;
 
 	ImGui::SeparatorText(T("menu.features.filter_section", "Filter"));
 	auto& filter = menuSettings.FeatureListFilter;
@@ -937,8 +1083,8 @@ void FeatureListRenderer::RenderSortPopup(const char* popupId)
 		const char* tooltip;
 	};
 	const Item items[] = {
-		{ FeatureListFilter::kFavorites, counts.favorites, T("menu.features.filter_label_favorites", "Pinned"),
-			T("menu.features.filter_favorites", "Pinned features") },
+		{ FeatureListFilter::kFavorites, counts.favorites, T("menu.features.filter_label_pinned", "Pinned"),
+			T("menu.features.filter_pinned", "Pinned features") },
 		{ FeatureListFilter::kModified, counts.modified, T("menu.features.filter_label_modified", "Modified"),
 			T("menu.features.filter_modified", "Modified: settings differ from defaults and your Baseline presets") },
 		{ FeatureListFilter::kScene, counts.scene, T("menu.features.filter_label_scene", "Scene"),
@@ -1037,28 +1183,6 @@ void FeatureListRenderer::RenderAutoHidePane(
 	ImGui::PopStyleColor();
 }
 
-void FeatureListRenderer::RenderBuiltInRow(const BuiltInMenu& menu, size_t listId, size_t& selectedMenu, float width)
-{
-	ImGui::PushID(menu.id.data(), menu.id.data() + menu.id.size());
-	if (menu.id == MenuPageIds::kCSEditor) {
-		// Launcher: opens the editor window without leaving the current page
-		const bool canOpen = EditorWindow::CanBeOpen();
-		if (DrawNavRow(menu, false, !canOpen, width)) {
-			// Without a save the click says why, with the same warning the other ways of opening the editor give
-			if (canOpen)
-				CSEditor::OpenEditorWindow();
-			else
-				EditorWindow::GetSingleton()->WarnOpeningBlocked();
-		}
-		Util::AddTooltip(canOpen ? T("menu.features.cs_editor_tooltip", "Opens the CS Editor window") :
-								   T("menu.features.cs_editor_needs_save", "Load a save to open the CS Editor"),
-			Util::kTooltipWhenDisabled);
-	} else if (DrawNavRow(menu, selectedMenu == listId, false, width)) {
-		selectedMenu = listId;
-	}
-	ImGui::PopID();
-}
-
 void FeatureListRenderer::RenderRightColumn(
 	const std::vector<MenuFuncInfo>& menuList,
 	size_t selectedMenu,
@@ -1088,15 +1212,15 @@ void FeatureListRenderer::RenderRightColumn(
 	}
 }
 
-void FeatureListRenderer::ListMenuVisitor::operator()(const BuiltInMenu& menu)
+void FeatureListRenderer::ListMenuVisitor::operator()(const BuiltInMenu&)
 {
-	RenderBuiltInRow(menu, listId, selectedMenuRef);
+	// Built-in pages are the page switcher's segments, never list rows
 }
 
 void FeatureListRenderer::ListMenuVisitor::operator()(const std::string& label)
 {
 	// Themed via ImGuiCol_Separator
-	SeparatorTextWithFont(label, Menu::FontRole::Subheading);
+	Util::SeparatorTextWithFont(label.c_str(), Menu::FontRole::Subheading);
 }
 
 void FeatureListRenderer::ListMenuVisitor::operator()(const CategoryHeader& header)
@@ -1143,33 +1267,29 @@ void FeatureListRenderer::ListMenuVisitor::operator()(Feature* feat)
 	const float iconColumn = ImGui::GetTextLineHeight() * ThemeManager::Constants::FEATURE_ROW_CATEGORY_ICON_SCALE;
 	const float spaceWidth = ImGui::CalcTextSize(" ").x;
 	const std::string iconPad = showCategoryIcon ? std::string(static_cast<size_t>(std::ceil((iconColumn + spaceWidth) / spaceWidth)), ' ') : std::string();
-	// The row's content clears the selected row's accent bar; the highlight still spans the whole row
-	const float edgeInset = std::max(ImGui::GetStyle().FramePadding.x, ThemeManager::Constants::ANIM_SELECTED_BAR_WIDTH * Util::GetUIScale());
-	ImGui::SetCursorPosX(ImGui::GetCursorPosX() + edgeInset);
 	ImGui::PushStyleColor(ImGuiCol_Text, textColor);
-	if (Util::Selectable(std::format("{}{} ###Row", iconPad, feat->GetDisplayName()).c_str(), selectedMenuRef == listId, ImGuiSelectableFlags_SpanAllColumns))
+	if (Util::Selectable(std::format("{}{} ###Row", iconPad, feat->GetDisplayName()).c_str(), selectedMenuRef == listId))
 		selectedMenuRef = listId;
 	ImGui::PopStyleColor();
 	if (showCategoryIcon) {
 		if (auto* texture = Util::GetCategoryIcon(std::string(feat->GetCategory()).c_str())) {
+			// Drawn in the space the label's leading pad leaves
 			const ImVec2 itemMin = ImGui::GetItemRectMin();
+			const float textX = itemMin.x + Util::Surface::ListHighlightTextInset();
 			const float pad = (ImGui::GetItemRectSize().y - iconColumn) * 0.5f;
-			ImGui::GetWindowDrawList()->AddImage(texture, ImVec2(itemMin.x + edgeInset, itemMin.y + pad),
-				ImVec2(itemMin.x + edgeInset + iconColumn, itemMin.y + pad + iconColumn), ImVec2(0, 0), ImVec2(1, 1),
+			ImGui::GetWindowDrawList()->AddImage(texture, ImVec2(textX, itemMin.y + pad),
+				ImVec2(textX + iconColumn, itemMin.y + pad + iconColumn), ImVec2(0, 0), ImVec2(1, 1),
 				ImGui::GetColorU32(IM_COL32_WHITE, ThemeManager::Constants::FEATURE_ROW_CATEGORY_ICON_ALPHA));
 		}
 	}
 	if (g_scrollToSelection && selectedMenuRef == listId && !ImGui::IsItemVisible())
 		ImGui::SetScrollHereY();
-	const ImVec2 rowMin = ImGui::GetItemRectMin();
-	const ImVec2 rowMax = ImGui::GetItemRectMax();
 	RenderRowContextMenu(feat);
 
 	// The stage badge sits right after the name, regardless of loaded state; the indicator icons follow it
 	if (const auto stage = feat->GetReleaseStage(); stage != Feature::ReleaseStage::Release) {
-		MenuFonts::FontRoleGuard badgeFont(Menu::FontRole::Subtext);
-		BrowserUI::InlineBadge(stage == Feature::ReleaseStage::Alpha ? T("menu.features.badge_alpha", "Alpha") : T("menu.features.badge_beta", "Beta"),
-			Feature::GetReleaseStageColor(stage), rowMax.y - rowMin.y);
+		ImGui::SameLine(0.0f, 0.0f);
+		DrawStageBadge(stage, ImGui::GetTextLineHeight());
 	}
 
 	// Indicator icons stack after the name and badge: a standard gap before the first, a space between the rest
@@ -1284,21 +1404,42 @@ void FeatureListRenderer::DrawMenuVisitor::operator()(const CategoryHeader&)
 
 void FeatureListRenderer::DrawMenuVisitor::operator()(Feature* feat)
 {
-	const auto featureName = feat->GetShortName();
-	const bool isDisabled = globals::state->IsFeatureDisabled(featureName);
+	if (ImGui::BeginChild("##FeatureConfigFrame", { 0, 0 }, true))
+		DrawFeatureContent(feat);
+	ImGui::EndChild();
+	// Outside the child window so the warning can appear as a top-level popup
+	DrawConstraintWarningDialog(pendingFeatureSelection);
+}
+
+void FeatureListRenderer::DrawMenuVisitor::DrawFeatureContent(Feature* feat)
+{
+	const bool isDisabled = globals::state->IsFeatureDisabled(feat->GetShortName());
 	const bool isLoaded = feat->loaded;
 	const bool hasFailedMessage = !feat->failedLoadedMessage.empty();
 
 	if (hooks.onFeatureShown)
 		hooks.onFeatureShown(feat);
 
-	if (ImGui::BeginChild("##FeatureConfigFrame", { 0, 0 }, true)) {
-		RenderFeatureHeader(feat, isDisabled, isLoaded);
-		RenderFeatureSettings(feat, isDisabled, isLoaded, hasFailedMessage);
-	}
-	ImGui::EndChild();
-	// Outside the child window so the warning can appear as a top-level popup
+	RenderFeatureHeader(feat, isDisabled, isLoaded);
+	RenderFeatureSettings(feat, isDisabled, isLoaded, hasFailedMessage);
+}
+
+void FeatureListRenderer::DrawEmbeddedFeaturePage(Feature* feat)
+{
+	static const Hooks noHooks{};
+	std::string pendingFeatureSelection;
+	DrawMenuVisitor{ pendingFeatureSelection, g_activeHooks ? *g_activeHooks : noHooks }.DrawFeatureContent(feat);
 	DrawConstraintWarningDialog(pendingFeatureSelection);
+	if (!pendingFeatureSelection.empty())
+		globals::menu->SelectFeatureMenu(pendingFeatureSelection);
+}
+
+void FeatureListRenderer::RunFeatureCommand(Feature* feat, const std::function<void()>& command)
+{
+	if (g_activeHooks && g_activeHooks->runFeatureCommand)
+		g_activeHooks->runFeatureCommand(feat, command);
+	else
+		command();
 }
 
 namespace
@@ -1354,97 +1495,135 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureHeader(Feature* feat, bo
 		return ImGui::CalcTextSize(bootLabel).x;
 	}();
 
-	// Right side: pin, overflow menu, then the labelled boot toggle
-	float totalButtonWidth = bootLabelWidth + style.ItemInnerSpacing.x + bootToggleWidth;
-	if (isLoaded)
-		totalButtonWidth += (iconSize + buttonSpacing) * 2.0f;
-
-	const float availableWidth = ImGui::GetContentRegionAvail().x;
-	const ImVec2 titleStartPos = ImGui::GetCursorScreenPos();
+	// Right side: pin, overflow menu, then the boot toggle; the caption is the first thing to go when space runs out
+	const float iconButtonsWidth = isLoaded ? (iconSize + buttonSpacing) * 2.0f : 0.0f;
+	const float controlsCompactWidth = iconButtonsWidth + bootToggleWidth;
+	const float controlsFullWidth = controlsCompactWidth + bootLabelWidth + style.ItemInnerSpacing.x;
 
 	const auto description = feat->GetFeatureSummary().first;
 
-	// Title, version and description on the left; the title-only height aligns the buttons
-	const auto stage = feat->GetReleaseStage();
-	const std::string stageTag = Feature::GetReleaseStageTag(stage);  // empty for Release; color unused when tag is empty
-	float trailingX = titleStartPos.x;
-	const float titleOnlyHeight = DrawFeatureHeader(feat->GetDisplayName(), isLoaded ? feat->version : "", description, stageTag, Feature::GetReleaseStageColor(stage), &trailingX);
+	// Quiet marker while the feature differs from its defaults; clicking restores them like the actions menu does
+	const bool showModified = canRestore && globals::state->HasUserEdits(feat);
+	const char* modifiedLabel = T("menu.features.modified_chip", "Modified");
+	const ImVec4 secondary = Util::Colors::GetSecondary();
+	float chipFullWidth = 0.0f;
+	float chipIconWidth = 0.0f;
+	if (showModified) {
+		MenuFonts::FontRoleGuard subtext(Menu::FontRole::Subtext);
+		chipFullWidth = BrowserUI::MeasureChip(modifiedLabel, true);
+		chipIconWidth = BrowserUI::MeasureChip("", true);
+	}
+
+	// What the feature's own passes cost per frame; opens the breakdown. Only features with timed passes show it.
+	const bool showCost = !isDisabled && isLoaded;
+	const float costChipWidth = showCost ? ProfilingRenderer::MeasureFeatureCostChip(featureName) : 0.0f;
+
+	// The toolbar is laid out once the title block's real width is known, so it can shrink or wrap instead of overlapping it
+	const auto drawToolbar = [&](const FeatureHeaderSlot& slot) {
+		const auto layout = ChooseFeatureToolbarLayout(slot.availableWidth,
+			{ .title = slot.trailingX - slot.titleMin.x,
+				.gap = style.ItemSpacing.x,
+				.chipFull = chipFullWidth,
+				.chipIcon = chipIconWidth,
+				.costChip = costChipWidth,
+				.controlsFull = controlsFullWidth,
+				.controlsCompact = controlsCompactWidth });
+
+		// On the title's line the chips hug the baseline and the controls centre on the title; on their own row all share it
+		const float chipY = layout.ownRow ? slot.belowTitle.y : slot.titleMin.y + slot.titleHeight - iconSize;
+		const float rowY = layout.ownRow ? slot.belowTitle.y : slot.titleMin.y + (slot.titleHeight - iconSize) * 0.5f;
+
+		// Chips run left to right from the title's end, or from the left edge on their own row
+		float chipX = layout.ownRow ? slot.titleMin.x : slot.trailingX;
+
+		if (showModified) {
+			ImGui::SetCursorScreenPos(ImVec2(chipX, chipY));
+			bool restore = false;
+			{
+				MenuFonts::FontRoleGuard subtext(Menu::FontRole::Subtext);
+				ImGui::PushStyleColor(ImGuiCol_Text, secondary);
+				restore = BrowserUI::Chip("##FeatureModified", layout.chipLabel ? modifiedLabel : "", Icons::TI(ICON_TI_PENCIL), &secondary);
+				ImGui::PopStyleColor();
+			}
+			chipX = ImGui::GetItemRectMax().x + style.ItemSpacing.x;
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				if (!layout.chipLabel)
+					ImGui::TextUnformatted(modifiedLabel);
+				ImGui::TextUnformatted(T("menu.features.modified_chip_tooltip", "Differs from the defaults and your Baseline presets. Click to restore defaults."));
+				if (ImGui::GetIO().KeyShift)
+					RenderUserEditsList(feat);
+				else
+					ImGui::TextDisabled("%s", T("menu.features.modified_chip_shift_hint", "Hold Shift to list the edited settings."));
+			}
+			if (restore)
+				RestoreDefaults(feat);
+		}
+
+		// The layout reserved its room, so the limit only guards the narrowest floor, where it stops at the header's edge
+		if (costChipWidth > 0.0f) {
+			ImGui::SetCursorScreenPos(ImVec2(chipX, chipY));
+			ProfilingRenderer::RenderFeatureCostChip(featureName, slot.titleMin.x + slot.availableWidth + 1.0f);
+		}
+
+		float x = slot.titleMin.x + slot.availableWidth - (layout.bootLabel ? controlsFullWidth : controlsCompactWidth);
+
+		if (isLoaded) {
+			ImGui::SetCursorScreenPos(ImVec2(x, rowY));
+			RenderFavoriteButton(feat);
+			x += iconSize + buttonSpacing;
+
+			ImGui::SetCursorScreenPos(ImVec2(x, rowY));
+			RenderActionsMenu(feat, canExport, canRestore, canUseBaselines);
+			x += iconSize + buttonSpacing;
+		}
+
+		// Enable/Disable at boot toggle, with its caption while it fits; one tooltip covers both
+		bool bootEnabled = !isDisabled;
+		ImGui::BeginGroup();
+		if (layout.bootLabel) {
+			MenuFonts::FontRoleGuard subtext(Menu::FontRole::Subtext);
+			ImGui::SetCursorScreenPos(ImVec2(x, rowY + (iconSize - ImGui::GetTextLineHeight()) * 0.5f));
+			ImGui::PushStyleColor(ImGuiCol_Text, secondary);
+			ImGui::TextUnformatted(bootLabel);
+			ImGui::PopStyleColor();
+			x += bootLabelWidth + style.ItemInnerSpacing.x;
+		}
+
+		// Apply disabled styling if feature has failed to load
+		const bool failed = !feat->failedLoadedMessage.empty();
+		if (failed)
+			ImGui::PushStyleColor(ImGuiCol_Text, themeSettings.StatusPalette.Error);
+
+		// The toggle is shorter than the icon buttons; centre it on them instead of aligning the tops
+		ImGui::SetCursorScreenPos(ImVec2(x, rowY + (iconSize - bootToggleHeight) * 0.5f));
+		if (Util::FeatureToggle("##BootToggle", &bootEnabled)) {
+			bool newState = feat->ToggleAtBootSetting();
+			logger::info("{}: {} at boot.", featureName, newState ? "Enabled" : "Disabled");
+		}
+
+		if (failed)
+			ImGui::PopStyleColor();
+		ImGui::EndGroup();
+
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			if (!layout.bootLabel)
+				ImGui::TextUnformatted(bootLabel);
+			ImGui::Text(
+				T("menu.features.boot_toggle_tooltip",
+					"Toggle feature loading at boot.\n"
+					"Current state: %s\n"
+					"Restart required for changes to take effect.\n"
+					"Disabling removes performance impact."),
+				bootEnabled ? T("menu.features.enabled", "Enabled") : T("menu.features.disabled", "Disabled"));
+		}
+
+		return layout.ownRow ? iconSize + style.ItemSpacing.y * 0.5f : 0.0f;
+	};
+
+	// Title, version, toolbar and description; the toolbar callback runs between the title and the description
+	DrawFeatureHeader(feat->GetDisplayName(), isLoaded ? feat->version : "", description, feat->GetReleaseStage(), drawToolbar);
 
 	const ImVec2 cursorPosAfterHeader = ImGui::GetCursorScreenPos();
-
-	// Quiet marker while the feature differs from its defaults; clicking restores them like the actions menu does
-	if (canRestore && globals::state->HasUserEdits(feat)) {
-		ImGui::SetCursorScreenPos(ImVec2(trailingX, titleStartPos.y + titleOnlyHeight - iconSize));
-		const ImVec4 secondary = Util::Colors::GetSecondary();
-		bool restore = false;
-		{
-			MenuFonts::FontRoleGuard subtext(Menu::FontRole::Subtext);
-			ImGui::PushStyleColor(ImGuiCol_Text, secondary);
-			restore = BrowserUI::Chip("##FeatureModified", T("menu.features.modified_chip", "Modified"), Icons::TI(ICON_TI_PENCIL), &secondary);
-			ImGui::PopStyleColor();
-		}
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::TextUnformatted(T("menu.features.modified_chip_tooltip", "Differs from the defaults and your Baseline presets. Click to restore defaults."));
-			if (ImGui::GetIO().KeyShift)
-				RenderUserEditsList(feat);
-			else
-				ImGui::TextDisabled("%s", T("menu.features.modified_chip_shift_hint", "Hold Shift to list the edited settings."));
-		}
-		if (restore)
-			RestoreDefaults(feat);
-	}
-
-	// Controls sit middle-aligned with the title line only (not the description)
-	const float rowY = titleStartPos.y + (titleOnlyHeight - iconSize) * 0.5f;
-	float x = titleStartPos.x + availableWidth - totalButtonWidth;
-
-	if (isLoaded) {
-		ImGui::SetCursorScreenPos(ImVec2(x, rowY));
-		RenderFavoriteButton(feat);
-		x += iconSize + buttonSpacing;
-
-		ImGui::SetCursorScreenPos(ImVec2(x, rowY));
-		RenderActionsMenu(feat, canExport, canRestore, canUseBaselines);
-		x += iconSize + buttonSpacing;
-	}
-
-	// Enable/Disable at boot toggle, with its label; one tooltip covers both
-	bool bootEnabled = !isDisabled;
-	ImGui::BeginGroup();
-	{
-		MenuFonts::FontRoleGuard subtext(Menu::FontRole::Subtext);
-		ImGui::SetCursorScreenPos(ImVec2(x, rowY + (iconSize - ImGui::GetTextLineHeight()) * 0.5f));
-		ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetSecondary());
-		ImGui::TextUnformatted(bootLabel);
-		ImGui::PopStyleColor();
-	}
-	x += bootLabelWidth + style.ItemInnerSpacing.x;
-
-	// Apply disabled styling if feature has failed to load
-	const bool failed = !feat->failedLoadedMessage.empty();
-	if (failed)
-		ImGui::PushStyleColor(ImGuiCol_Text, themeSettings.StatusPalette.Error);
-
-	// The toggle is shorter than the icon buttons; centre it on them instead of aligning the tops
-	ImGui::SetCursorScreenPos(ImVec2(x, rowY + (iconSize - bootToggleHeight) * 0.5f));
-	if (Util::FeatureToggle("##BootToggle", &bootEnabled)) {
-		bool newState = feat->ToggleAtBootSetting();
-		logger::info("{}: {} at boot.", featureName, newState ? "Enabled" : "Disabled");
-	}
-
-	if (failed)
-		ImGui::PopStyleColor();
-	ImGui::EndGroup();
-
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text(
-			T("menu.features.boot_toggle_tooltip",
-				"Toggle feature loading at boot.\n"
-				"Current state: %s\n"
-				"Restart required for changes to take effect.\n"
-				"Disabling removes performance impact."),
-			bootEnabled ? T("menu.features.enabled", "Enabled") : T("menu.features.disabled", "Disabled"));
-	}
 
 	// Drawn after all header items so the modal cannot clobber their hover state.
 	if (canExport)
@@ -1468,6 +1647,8 @@ void FeatureListRenderer::DrawFeatureBody(Feature* feat)
 		const bool editedBefore = context.ActiveIdHasBeenEditedThisFrame;
 		SettingReveal::BeginFeatureBody(feat);
 		feat->DrawSettings();
+		if (feat->HasDebugSection())
+			feat->DrawDebugSection();
 		SettingReveal::EndFeatureBody();
 		if (feat->UsesMainSettings()) {
 			auto* state = globals::state;
@@ -1504,11 +1685,6 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureSettings(Feature* feat, 
 	} else {
 		if (isLoaded) {
 			DrawFeatureBody(feat);
-
-			if (feat != &globals::features::csEditor && ProfilingRenderer::HasFeatureTimers(feat->GetShortName())) {
-				ImGui::SeparatorText(T("menu.features.profiling", "Profiling"));
-				ProfilingRenderer::RenderFeatureTimers(feat->GetShortName());
-			}
 		} else {
 			if (FeatureIssues::IsObsoleteFeature(feat->GetShortName())) {
 				feat->DrawUnloadedUI();
@@ -1531,7 +1707,7 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureSettings(Feature* feat, 
 
 	if (hasFailedMessage && feat->DrawFailLoadMessage() && !FeatureIssues::IsObsoleteFeature(feat->GetShortName())) {
 		ImGui::Spacing();
-		SeparatorTextWithFont(T("menu.features.error_header", "Error"), Menu::FontRole::Subheading);
+		Util::SeparatorTextWithFont(T("menu.features.error_header", "Error"), Menu::FontRole::Subheading);
 		ImGui::TextColored(themeSettings.StatusPalette.Error, "%s", feat->failedLoadedMessage.c_str());
 	}
 }
@@ -1551,12 +1727,8 @@ void FeatureListRenderer::DrawMenuVisitor::RestoreDefaults(Feature* feat) const
 
 void FeatureListRenderer::DrawMenuVisitor::RenderActionsMenu(Feature* feat, bool canExport, bool canRestore, bool canUseBaselines)
 {
-	const float size = ImGui::GetFrameHeight();
-	{
-		auto style = Util::TransparentIconButtonStyle();
-		if (Icons::Button("##FeatureActions", Icons::TI(ICON_TI_DOTS), ImVec2(size, size)))
-			ImGui::OpenPopup("##FeatureActionsMenu");
-	}
+	if (Util::IconButton("##FeatureActions", Icons::TI(ICON_TI_DOTS), nullptr))
+		ImGui::OpenPopup("##FeatureActionsMenu");
 	Util::HoverTip(T("menu.features.actions_tooltip", "More actions"));
 
 	if (!ImGui::BeginPopup("##FeatureActionsMenu"))
@@ -1619,14 +1791,10 @@ void FeatureListRenderer::ToggleFavorite(Feature* feat)
 void FeatureListRenderer::DrawMenuVisitor::RenderFavoriteButton(Feature* feat)
 {
 	const bool isFavorite = globals::state->IsFeatureFavorite(feat->GetShortName());
-	const float size = ImGui::GetFrameHeight();
-	{
-		auto style = Util::TransparentIconButtonStyle();
-		if (Icons::Button("###Favorite", Icons::TI(isFavorite ? ICON_TI_PINNED_OFF : ICON_TI_PIN), ImVec2(size, size)))
-			ToggleFavorite(feat);
-	}
+	if (Util::IconButton("###Favorite", Icons::TI(isFavorite ? ICON_TI_PINNED_OFF : ICON_TI_PIN), nullptr))
+		ToggleFavorite(feat);
 
-	Util::HoverTip(isFavorite ? T("menu.features.remove_from_favorites_tooltip", "Remove from favorites: moves this feature back into the main list") : T("menu.features.add_to_favorites_tooltip", "Add to favorites: lists this feature at the top of the feature list"));
+	Util::HoverTip(isFavorite ? T("menu.features.unpin_tooltip", "Unpin: moves this feature back into the main list") : T("menu.features.pin_tooltip", "Pin: lists this feature at the top of the feature list"));
 }
 
 void FeatureListRenderer::DrawConstraintWarningDialog(std::string& pendingFeatureSelection)

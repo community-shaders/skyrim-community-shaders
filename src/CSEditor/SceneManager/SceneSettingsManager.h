@@ -24,6 +24,7 @@ using json = nlohmann::json;
 #include "Globals.h"
 #include "Presets/UnifiedPresetCatalog.h"
 #include "Utils/Form.h"
+#include "Utils/Logging.h"
 
 /// Manages interior, time-of-day, weather, and location-specific setting overrides.
 /// Applies catalog-backed settings in priority order and avoids redundant feature updates.
@@ -623,7 +624,6 @@ public:
 		NotBlendable,            ///< Exists, but cannot blend, so a time-of-day or weather layer cannot hold it.
 		NotAllowedInLayer,       ///< Feature not loaded, or the destination layer forbids the setting.
 		ValueRejected,           ///< The source value is not a legal value at the destination.
-		BlockedByOverwrite,      ///< An unpaused mod-authored overwrite holds the destination address.
 		GroupCompanionRejected,  ///< This row is fine; a sibling in the same control is not.
 	};
 
@@ -853,9 +853,9 @@ public:
 		std::string key;
 		std::string baseline;
 		std::string applied;
-		std::array<std::optional<float>, kPeriodCount> timeOfDayValues{};
-		std::array<std::optional<float>, kPeriodCount> currentWeatherValues{};
-		std::array<std::optional<float>, kPeriodCount> previousWeatherValues{};
+		std::array<std::optional<json>, kPeriodCount> timeOfDayValues{};
+		std::array<std::optional<json>, kPeriodCount> currentWeatherValues{};
+		std::array<std::optional<json>, kPeriodCount> previousWeatherValues{};
 	};
 
 	/// One location float transition mid-flight, sampled for the debug UI.
@@ -969,7 +969,7 @@ private:
 	json preservedUserSettingsRoot = json::object();
 	bool userSettingsDocumentLoaded = false;
 	bool userSettingsDocumentWritable = true;
-	bool userSettingsWriteBlockedWarning = false;
+	Util::OnceFlag userSettingsWriteBlockedWarning;
 	bool interiorUserSettingsModified = false;
 	bool timeOfDayUserSettingsModified = false;
 	bool weatherUserSettingsModified = false;
@@ -1044,14 +1044,14 @@ private:
 	{
 		size_t signature = 0;
 		std::chrono::steady_clock::time_point retryAfter{};
-		bool warningLogged = false;
+		Util::OnceFlag warningLogged;
 
 		/** @brief Backs off retries for this signature; true only on the first failure, when the caller should warn. */
 		bool Record(size_t failedSignature, std::chrono::steady_clock::time_point now)
 		{
 			signature = failedSignature;
 			retryAfter = now + kApplyRetryDelay;
-			return !std::exchange(warningLogged, true);
+			return warningLogged.First();
 		}
 	};
 	std::map<std::string, ApplyFailureState> applyFailures;
@@ -1070,6 +1070,8 @@ private:
 	/// Signature each feature last kept, verified once: later values of that update set are trusted.
 	std::map<std::string, size_t> verifiedApplySignatures;
 	bool resolverDirty = true;
+	/// A base snapshot was refused while settings showed defaults; the resolve reruns once that ends.
+	bool baselineSnapshotDeferred = false;
 	bool resolverSuspended = false;
 	bool activeEntryCacheDirty = true;
 	bool hasActiveSceneEntries = false;
@@ -1186,7 +1188,7 @@ private:
 	/** @brief Samples the sky's current and outgoing weather and their blend factor. */
 	WeatherBlend GetWeatherBlend() const;
 	/** @brief The time-of-day layer's value for one period, user over overwrite, else the base value. */
-	float GetTimeOfDayPeriodFallbackFloat(float baseValue, const std::string& featureShortName,
+	json GetTimeOfDayPeriodFallbackValue(const json& baseValue, const std::string& featureShortName,
 		const std::vector<std::string>& settingPath, const std::string& settingKey, int periodIndex) const;
 
 	/// Live sky/time state sampled once per resolve so every setting blends against identical factors.
@@ -1200,7 +1202,7 @@ private:
 	BlendSnapshot blendSnapshot;
 
 	/// Active per-period values for one address, indexed by period.
-	using PeriodValues = std::array<std::optional<float>, kPeriodCount>;
+	using PeriodValues = std::array<std::optional<json>, kPeriodCount>;
 	using PeriodSettingMap = std::map<SettingAddress, PeriodValues>;
 	/** @brief Period values valid while revision matches sceneValueRevision. */
 	struct CachedPeriodSettingMap
@@ -1264,7 +1266,7 @@ private:
 	void OverlayAllEntries(ResolvedSettingMap& resolved, const std::vector<SettingEntry>& sourceEntries,
 		SceneType type, std::map<SettingAddress, float>* transitionDurations = nullptr) const;
 	/** @brief The time-of-day value a weather entry stacks on; a flat entry uses the current period. */
-	std::optional<float> ResolveWeatherLowerValue(RE::FormID weatherId, const SettingAddress& address,
+	std::optional<json> ResolveWeatherLowerValue(RE::FormID weatherId, const SettingAddress& address,
 		TimeOfDayPeriod period, EntrySource selectedSource);
 	/** @brief The feature's own value at an address, null when the catalog does not allow it. */
 	json GetBaselineValue(const SettingAddress& address);
@@ -1351,6 +1353,8 @@ private:
 	float EaseLocationTransition(const LocationTransition& transition, float now) const;
 	/** @brief Whether the transition has run its full duration. */
 	static bool IsLocationTransitionFinished(const LocationTransition& transition, float now);
+	/** @brief Whether two transition values differ by less than kBlendEpsilon of their magnitude, so small-range settings still fade. */
+	static bool IsWithinTransitionTolerance(float lhs, float rhs);
 	/** @brief Starts a transition for each location-driven address whose value or membership changed. */
 	void StartLocationTransitions(const ResolvedSettingMap& resolved, float now, bool animateChanges);
 	/// Re-reads each in-flight transition's endpoint so one crossing a time-of-day or weather

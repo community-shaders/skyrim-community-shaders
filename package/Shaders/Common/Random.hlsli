@@ -253,6 +253,12 @@ namespace Random
 		return frac(seed + idx * float2(0.245122333753, 0.430159709002));
 	}
 
+	/** @brief Whole-texel per-frame offset into a tiled noise texture, so temporal filters resolve its dither instead of keeping it as a static pattern. */
+	float2 TemporalTileOffset(uint frame, float tileSize)
+	{
+		return floor(R2Sequence(frame) * tileSize);
+	}
+
 	float3 R3Sequence(float idx, float3 seed = 0)
 	{
 		return frac(seed + idx * float3(0.8191725133961, 0.6710436067038, 0.5497004779019));

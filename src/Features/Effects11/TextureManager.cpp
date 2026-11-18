@@ -140,6 +140,7 @@ void TextureManager::CreateDownsampleResources()
 	samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
 
 	DX::ThrowIfFailed(device->CreateSamplerState(&samplerDesc, linearSampler.put()));
+	Util::SetResourceName(linearSampler.get(), "TextureManager::LinearSampler");
 
 	// Create downsample vertex shader
 	auto vertexShaderSource = EffectManager::LoadShaderFile("Data\\Shaders\\Effects11\\QuadVS.hlsl");
@@ -175,6 +176,7 @@ void TextureManager::CreateDownsampleResources()
 		vertexShaderBlob->GetBufferSize(),
 		nullptr,
 		downsampleVS.put()));
+	Util::SetResourceName(downsampleVS.get(), "TextureManager::DownsampleVS");
 
 	// Create downsample pixel shader
 	auto pixelShaderSource = EffectManager::LoadShaderFile("Data\\Shaders\\Effects11\\DownsamplePS.hlsl");
@@ -210,6 +212,7 @@ void TextureManager::CreateDownsampleResources()
 		pixelShaderBlob->GetBufferSize(),
 		nullptr,
 		downsamplePS.put()));
+	Util::SetResourceName(downsamplePS.get(), "TextureManager::DownsamplePS");
 
 	// Create shared downsample texture
 	sharedDownsampleTexture = CreateDownsampleTexture(DXGI_FORMAT_R11G11B10_FLOAT);

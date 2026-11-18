@@ -19,6 +19,8 @@
 #include "Menu/HomePageRenderer.h"
 #include "Menu/MenuHeaderRenderer.h"
 #include "Menu/MenuIcons.h"
+#include "Menu/SettingsSections.h"
+#include "Menu/SettingsTabRenderer.h"
 #include "Menu/ThemeManager.h"
 #include "SaveManager.h"
 #include "ShaderCache.h"
@@ -64,7 +66,7 @@ namespace
 		const ImGuiStyle& style = ImGui::GetStyle();
 		const ImVec2 iconSize = Icons::CalcGlyphSize(icon);
 		const float labelWidth = ImGui::CalcTextSize(label).x;
-		const float gap = Icons::LabeledButtonGap(icon, label);
+		const float gap = Util::LabeledButtonGap(icon, label);
 		const float height = ImGui::GetFrameHeight();
 		row.Place(height);
 		ImGui::PushID(id);
@@ -83,13 +85,35 @@ namespace
 		return clicked;
 	}
 
-	/** @brief Icon button of the bar's left group: eased hover / press / selected fill, glyph larger than the bar's text glyphs. */
-	bool NavButton(Row& row, const char* id, Icons::GlyphRef glyph, const char* tooltip, bool selected)
+	/** @brief An unsaved-changes part: a dot and a label in the unsaved colour, then a link. @return True when the link is clicked. */
+	bool UnsavedSegment(Row& row, const char* id, const char* label, const char* link, const char* tooltip)
+	{
+		const ImVec4 unsavedColor = Util::Colors::GetUnsaved();
+		const float spacing = ImGui::GetStyle().ItemSpacing.x;
+		row.Place(ImGui::GetTextLineHeight());
+		Util::DrawInlineIndicatorDot(ImGui::GetColorU32(unsavedColor), true);
+		row.Advance(spacing);
+		row.PlaceText();
+		ImGui::TextColored(unsavedColor, "%s", label);
+		row.Advance(spacing);
+		row.PlaceText();
+		const bool clicked = BrowserUI::Link(id, link);
+		if (tooltip)
+			Util::AddTooltip(tooltip);
+		row.Advance(0.0f);
+		return clicked;
+	}
+
+	/**
+	 * @brief Icon button of the bar's left group: eased hover / press / selected fill, glyph larger than the bar's text glyphs.
+	 * @param caption Small text under the glyph, or null.
+	 */
+	bool NavButton(Row& row, const char* id, Icons::GlyphRef glyph, const char* tooltip, bool selected, const char* caption = nullptr)
 	{
 		const float size = NavButtonSize();
 		row.Place(size);
 		// The help button's helper; it pads the glyph box by FramePadding.y each side
-		const bool clicked = MenuHeaderRenderer::GlyphIconButton(id, glyph, size - ImGui::GetStyle().FramePadding.y * 2.0f, tooltip, selected);
+		const bool clicked = MenuHeaderRenderer::GlyphIconButton(id, glyph, size - ImGui::GetStyle().FramePadding.y * 2.0f, tooltip, selected, caption);
 		row.Advance(0.0f);
 		return clicked;
 	}
@@ -109,13 +133,17 @@ namespace
 	void NavGroup(Row& row, bool trailingDivider = true)
 	{
 		// Divider adds the gap on both sides, so each divider sits midway between its neighbours
-		const auto page = [&](std::string_view id, const char* widgetId, const char* glyph, const char* tooltip) {
-			if (NavButton(row, widgetId, Icons::TI(glyph), tooltip, FeatureListRenderer::IsPageOpen(id)))
+		const auto page = [&](std::string_view id, const char* widgetId, const char* glyph, const char* tooltip, const char* caption = nullptr) {
+			if (NavButton(row, widgetId, Icons::TI(glyph), tooltip, FeatureListRenderer::IsPageOpen(id), caption))
 				FeatureListRenderer::RequestPage(id);
 		};
 		page(MenuPageIds::kSettings, "##StatusSettings", MenuIcons::kSettings, T("menu.features.settings", "Settings"));
 		Divider(row);
-		page(MenuPageIds::kProfiling, "##StatusProfiling", MenuIcons::kProfiling, T("menu.features.profiling", "Profiling"));
+		// The overlay toggle key under the icon: the Performance Overlay is managed on this page. None when unbound.
+		const auto& overlayToggleKey = globals::menu->GetSettings().OverlayToggleKey;
+		const std::string overlayKey = overlayToggleKey.empty() ? std::string() : Util::Input::KeyIdToString(overlayToggleKey);
+		page(MenuPageIds::kProfiling, "##StatusProfiling", MenuIcons::kProfiling,
+			T("menu.status.profiling_tooltip", "Performance Metrics & Overlay"), overlayKey.c_str());
 		if (trailingDivider)
 			Divider(row);
 	}
@@ -183,22 +211,18 @@ namespace StatusBarRenderer
 		// Unsaved changes, with a Save link
 		if (globals::state->HasUnsavedChanges()) {
 			nextSegment();
-			const ImVec4 unsavedColor = Util::Colors::GetUnsaved();
-			const float spacing = ImGui::GetStyle().ItemSpacing.x;
-			row.Place(ImGui::GetTextLineHeight());
-			Util::DrawInlineIndicatorDot(ImGui::GetColorU32(unsavedColor), true);
-			row.Advance(spacing);
-			row.PlaceText();
-			ImGui::TextColored(unsavedColor, "%s", T("menu.status.unsaved", "Unsaved changes"));
-			row.Advance(spacing);
-			row.PlaceText();
-			if (BrowserUI::Link("##StatusSave", T("menu.status.save", "Save")))
+			const auto tooltip = i18n->Format("menu.header.save_tooltip",
+				{ { "shortcut", MenuShortcuts::GetHint(shortcuts, MenuShortcuts::Ids::kSave) } }, "Save settings ({shortcut})");
+			if (UnsavedSegment(row, "##StatusSave", T("menu.status.unsaved", "Unsaved changes"), T("menu.status.save", "Save"), tooltip.c_str()))
 				SaveManager::SaveAll();
-			Util::AddTooltip(i18n->Format("menu.header.save_tooltip",
-									 { { "shortcut", MenuShortcuts::GetHint(shortcuts, MenuShortcuts::Ids::kSave) } },
-									 "Save settings ({shortcut})")
-					.c_str());
-			row.Advance(0.0f);
+		}
+
+		if (SettingsTabRenderer::IsThemeDirty()) {
+			nextSegment();
+			if (UnsavedSegment(row, "##StatusTheme", T("menu.settings.theme_unsaved", "Unsaved theme changes"), T("menu.status.go_to_theme", "Go to Theme"), nullptr)) {
+				globals::menu->GetSettings().LastSettingsSection = std::string(SettingsSectionIds::kTheme);
+				globals::menu->SelectFeatureMenu(std::string(MenuPageIds::kSettings));
+			}
 		}
 
 		auto* shaderCache = globals::shaderCache;

@@ -325,7 +325,7 @@ void FidelityFX::DestroyFSRResources()
 	}
 
 	// Reset crash logging flag when resources are destroyed
-	fsrDispatchCrashLogged = false;
+	fsrDispatchCrashLogged.Reset();
 }
 
 FfxResource ffxGetResource(ID3D11Resource* dx11Resource,
@@ -388,17 +388,15 @@ void FidelityFX::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_r
 	dispatchParameters.cameraFovAngleVertical = Util::GetVerticalFOVRad();
 	dispatchParameters.viewSpaceToMetersFactor = 0.01428222656f;
 	dispatchParameters.reset = globals::state->ShouldResetHistory();
-	dispatchParameters.preExposure = 1.0f;
+	dispatchParameters.preExposure = globals::state->preExposure;
 	dispatchParameters.flags = 0;
 
 	__try {
 		if (ffxFsr3ContextDispatchUpscale(&fsrContext[0], &dispatchParameters) != FFX_OK)
 			logger::critical("[FidelityFX] Failed to dispatch upscaling!");
 	} __except (EXCEPTION_EXECUTE_HANDLER) {
-		if (!fsrDispatchCrashLogged) {
+		if (fsrDispatchCrashLogged.First())
 			logger::critical("[FidelityFX] FSR3 dispatch crashed - this may be caused by RenderDoc capture interfering with FSR operations. Try disabling RenderDoc capture.");
-			fsrDispatchCrashLogged = true;
-		}
 	}
 
 	if (state->frameAnnotations)

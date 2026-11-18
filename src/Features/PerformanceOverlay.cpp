@@ -18,6 +18,8 @@
  */
 
 #include "PerformanceOverlay.h"
+#include "CSEditor/Browser/BrowserWidgets.h"
+#include "CSEditor/SceneManager/SceneSettingsManager.h"
 #include "Feature.h"
 #include "Features/PerformanceOverlay/ABTesting/ABTestAggregator.h"
 #include "Features/PerformanceOverlay/ABTesting/ABTesting.h"
@@ -30,6 +32,7 @@
 #include "Utils/FileSystem.h"
 #include "Utils/Format.h"
 #include "Utils/Game.h"
+#include "Utils/UI.h"
 
 #define I18N_KEY_PREFIX "feature.perf_overlay."
 
@@ -87,16 +90,23 @@ auto MakeMetricColumn(const auto& theme, auto valueGetter, auto colorGetter, aut
 }
 
 // --- Helper Functions ---
+/** @brief Smoothed CPU wait in Present, capped at the unattributed frame time it is carved from. */
+static float CalculatePresentTime(float unattributedTime)
+{
+	return std::min(globals::state->smoothPresentTimeMs, std::max(0.0f, unattributedTime));
+}
+
 /**
   * @brief Calculates summary data (Other frame time, percentages, cost per call) from measured sum
   * @param smoothedFrameTime The total smoothed frame time
   * @param measuredSum The sum of measured frame times
-  * @return Tuple of (otherFrameTime, otherPercent, totalCostPerCall)
+  * @return Tuple of (otherFrameTime excluding Present and clamped at zero, otherPercent, totalCostPerCall)
   */
 static std::tuple<float, float, float> CalculateSummaryData(float smoothedFrameTime, float measuredSum)
 {
 	float totalSmoothedDrawCalls = globals::state->GetTotalSmoothedDrawCalls();
-	float otherFrameTime = Util::CalculateOtherFrameTime(smoothedFrameTime, measuredSum);
+	float unattributedTime = Util::CalculateOtherFrameTime(smoothedFrameTime, measuredSum);
+	float otherFrameTime = std::max(0.0f, unattributedTime - CalculatePresentTime(unattributedTime));
 	float otherPercent = Util::CalculatePercentage(otherFrameTime, smoothedFrameTime);
 	float totalCostPerCall = Util::CalculateCostPerCall(smoothedFrameTime, totalSmoothedDrawCalls);
 	return { otherFrameTime, otherPercent, totalCostPerCall };
@@ -118,7 +128,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	BackgroundOpacity,
 	ShowBorder,
 	Position,
-	PositionSet)
+	PositionSet,
+	HiddenProfilerGroups)
 
 static const std::unordered_map<RE::BSShader::Type, std::string> kShaderTypeTooltips = {
 	{ RE::BSShader::Type::Grass, "Draw calls using the Grass shader. Typically many, but each is usually cheap." },
@@ -172,6 +183,8 @@ void PerformanceOverlay::DrawSettings()
 		ImGui::Checkbox(T(TKEY("show_draw_calls"), "Show Draw Calls"), &this->settings.ShowDrawCalls);
 		ImGui::Checkbox(T(TKEY("show_vram"), "Show VRAM Usage"), &this->settings.ShowVRAM);
 		ImGui::Checkbox(T(TKEY("show_cs_passes"), "Show CS Render Passes"), &this->settings.ShowCSPasses);
+		if (this->settings.ShowCSPasses)
+			DrawProfilerGroupFilter();
 
 		bool isFrameGenerationActive = globals::features::upscaling.IsFrameGenerationActive();
 		if (this->settings.ShowFPS && isFrameGenerationActive) {
@@ -220,6 +233,92 @@ void PerformanceOverlay::DrawSettings()
 	}
 }
 
+bool PerformanceOverlay::IsProfilerGroupShown(std::string_view group) const
+{
+	return std::ranges::find(this->settings.HiddenProfilerGroups, group) == this->settings.HiddenProfilerGroups.end();
+}
+
+void PerformanceOverlay::SetProfilerGroupShown(std::string_view group, bool shown)
+{
+	auto& hidden = this->settings.HiddenProfilerGroups;
+	if (shown == IsProfilerGroupShown(group))
+		return;
+	if (shown)
+		std::erase(hidden, group);
+	else
+		hidden.emplace_back(group);
+
+	// Also reached from other features' pages, where nothing tracks this feature's edits.
+	globals::sceneSettingsManager->CaptureExternalFeatureChanges(this, true);
+	globals::state->CheckFeatureSettingsChanged(this);
+	globals::state->InvalidateEditsUnderBaselines(this);
+}
+
+void PerformanceOverlay::SetShowInOverlay(bool shown)
+{
+	if (this->settings.ShowInOverlay == shown)
+		return;
+	this->settings.ShowInOverlay = shown;
+
+	// Reached from the Profiling page's card, where nothing tracks this feature's edits.
+	globals::sceneSettingsManager->CaptureExternalFeatureChanges(this, true);
+	globals::state->CheckFeatureSettingsChanged(this);
+	globals::state->InvalidateEditsUnderBaselines(this);
+}
+
+void PerformanceOverlay::DrawProfilerGroupFilter()
+{
+	// Groups reporting now, then hidden ones that are not, so those can still be shown again.
+	auto groups = ProfilingRenderer::GetActiveGroups();
+	for (const auto& group : this->settings.HiddenProfilerGroups) {
+		if (std::ranges::find(groups, group) == groups.end())
+			groups.push_back(group);
+	}
+
+	ImGui::Indent();
+	Util::SettingHint(T(TKEY("pass_filter_hint"), "Pick which features' passes the graph shows. Right-click a group on the Profiling page, or use a feature's cost chip, to do the same."), false);
+	if (groups.empty()) {
+		ImGui::TextDisabled("%s", T("menu.profiling.no_timing_data_world", "No timing data available (enter game world)"));
+		ImGui::Unindent();
+		return;
+	}
+
+	// Listed by the name shown, as (label, group) pairs
+	std::vector<std::pair<std::string, std::string>> chips;
+	chips.reserve(groups.size());
+	for (const auto& group : groups)
+		chips.emplace_back(ProfilingRenderer::GetGroupDisplayName(group), group);
+	std::ranges::sort(chips);
+
+	const float spacing = ImGui::GetStyle().ItemSpacing.x;
+	bool first = true;
+	for (const auto& [label, group] : chips) {
+		if (!first)
+			BrowserUI::SameLineIfFits(BrowserUI::MeasureChip(label.c_str(), false) + spacing);
+		first = false;
+		ImGui::PushID(group.c_str());
+		const bool shown = IsProfilerGroupShown(group);
+		if (BrowserUI::FilterChip("##ProfilerGroup", { .label = label.c_str() }, shown))
+			SetProfilerGroupShown(group, !shown);
+		ImGui::PopID();
+	}
+
+	const bool anyHidden = !this->settings.HiddenProfilerGroups.empty();
+	{
+		Util::DisableGuard disable(!anyHidden);
+		if (Util::Button(T(TKEY("show_all_passes"), "Show All")))
+			this->settings.HiddenProfilerGroups.clear();
+	}
+	ImGui::SameLine();
+	{
+		const bool allHidden = std::ranges::none_of(groups, [this](const std::string& group) { return IsProfilerGroupShown(group); });
+		Util::DisableGuard disable(allHidden);
+		if (Util::Button(T(TKEY("hide_all_passes"), "Hide All")))
+			this->settings.HiddenProfilerGroups = groups;
+	}
+	ImGui::Unindent();
+}
+
 void PerformanceOverlay::SaveSettings(json& j)
 {
 	// Persist all overlay settings to JSON
@@ -235,6 +334,13 @@ void PerformanceOverlay::LoadSettings(json& j)
 		// Fallback to defaults if JSON is invalid
 		this->settings = PerformanceOverlay::Settings{};
 	}
+	this->settings.FrameHistorySize = std::clamp(this->settings.FrameHistorySize, Settings::kMinFrameHistorySize, Settings::kMaxFrameHistorySize);
+	this->settings.UpdateInterval = std::isfinite(this->settings.UpdateInterval) ? std::clamp(this->settings.UpdateInterval, 0.001f, Settings::kMaxUpdateInterval) : Settings{}.UpdateInterval;
+	// Hand-edited configs: drop empty and repeated groups
+	auto& hidden = this->settings.HiddenProfilerGroups;
+	std::erase_if(hidden, [](const std::string& group) { return group.empty(); });
+	std::ranges::sort(hidden);
+	hidden.erase(std::unique(hidden.begin(), hidden.end()), hidden.end());
 	// Ensure history buffers match loaded size
 	this->state.frameTimeHistory.Resize(this->settings.FrameHistorySize);
 	this->state.postFGFrameTimeHistory.Resize(this->settings.FrameHistorySize);
@@ -292,7 +398,7 @@ void PerformanceOverlay::DrawOverlay()
 	ImGuiWindowFlags windowFlags = ImGuiWindowFlags_NoDecoration;
 
 	// Only allow mouse interaction when the main menu is open
-	if (!menu->IsEnabled) {
+	if (!menu->IsOpen()) {
 		windowFlags |= ImGuiWindowFlags_NoInputs;
 	}
 
@@ -391,7 +497,7 @@ void PerformanceOverlay::DrawOverlay()
 	if (this->settings.ShowCSPasses) {
 		if (needsSeparator)
 			ImGui::Separator();
-		ProfilingRenderer::RenderStatistics(false, false);
+		ProfilingRenderer::RenderOverlayGraph();
 		needsSeparator = true;
 	}
 
@@ -679,7 +785,7 @@ void PerformanceOverlay::DrawABTestStatisticalValidity(const Menu::ThemeSettings
 	}
 
 	ImGui::PushStyleColor(ImGuiCol_Text, validityColor);
-	ImGui::Text("Test Duration: %.1f seconds | Valid Frames: %d/%d (%.1f%%) | Excluded: %d",
+	ImGui::Text(T(TKEY("ab_test_summary"), "Test Duration: %.1f seconds | Valid Frames: %d/%d (%.1f%%) | Excluded: %d"),
 		totalDuration, validFrames, totalWithExcluded, validPercent, excludedFrames);
 	ImGui::PopStyleColor();
 	if (ImGui::IsItemHovered()) {
@@ -973,15 +1079,15 @@ std::vector<ColumnConfig> PerformanceOverlay::BuildABTestResultsTableColumns(con
 						if (row.testFrameTime.has_value()) {
 							// Show detailed values for rows with test data
 							if (row.label == "Total:") {
-								ImGui::TextUnformatted("Delta (B - A):");
+								ImGui::TextUnformatted(T(TKEY("ab_delta_header"), "Delta (B - A):"));
 								ImGui::Separator();
 								ImGui::Text("A (USER) FPS: %.2f", Util::CalcFPS(row.frameTime));
 								ImGui::Text("B (TEST) FPS: %.2f", Util::CalcFPS(*row.testFrameTime));
 							} else {
-								ImGui::TextUnformatted("Delta (B - A):");
+								ImGui::TextUnformatted(T(TKEY("ab_delta_header"), "Delta (B - A):"));
 								ImGui::Separator();
-								ImGui::Text("A (USER): %.3f ms", row.frameTime);
-								ImGui::Text("B (TEST): %.3f ms", *row.testFrameTime);
+								ImGui::Text(T(TKEY("ab_user_frame_time"), "A (USER): %.3f ms"), row.frameTime);
+								ImGui::Text(T(TKEY("ab_test_frame_time"), "B (TEST): %.3f ms"), *row.testFrameTime);
 							}
 							ImGui::Separator();
 						}
@@ -1196,7 +1302,7 @@ void PerformanceOverlay::DrawABTestSection(const std::vector<DrawCallRow>& allRo
 			showSettingsDiff = !showSettingsDiff;
 		}
 		ImGui::SameLine();
-		if (Util::Button("Clear A/B Test Results")) {
+		if (Util::Button(T(TKEY("ab_clear_results"), "Clear A/B Test Results"))) {
 			aggregator.Clear();
 			this->settingsDiff.clear();
 			this->settingsDiffLoaded = false;
@@ -1220,13 +1326,13 @@ void PerformanceOverlay::DrawABTestSection(const std::vector<DrawCallRow>& allRo
 					this->settingsDiff.clear();
 				this->settingsDiffLoaded = true;
 			}
-			ImGui::TextUnformatted("Differences between USER (A) and TEST (B) configs:");
+			ImGui::TextUnformatted(T(TKEY("ab_differences_header"), "Differences between USER (A) and TEST (B) configs:"));
 			if (this->settingsDiff.empty()) {
-				ImGui::TextUnformatted("No setting changes detected between USER (A) and TEST (B) configs.");
+				ImGui::TextUnformatted(T(TKEY("ab_no_differences"), "No setting changes detected between USER (A) and TEST (B) configs."));
 			} else if (ImGui::BeginTable("ABSettingsDiffTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Sortable)) {
-				ImGui::TableSetupColumn("Setting Path", ImGuiTableColumnFlags_DefaultSort);
-				ImGui::TableSetupColumn("A Value");
-				ImGui::TableSetupColumn("B Value");
+				ImGui::TableSetupColumn(T(TKEY("ab_column_setting_path"), "Setting Path"), ImGuiTableColumnFlags_DefaultSort);
+				ImGui::TableSetupColumn(T(TKEY("ab_column_a_value"), "A Value"));
+				ImGui::TableSetupColumn(T(TKEY("ab_column_b_value"), "B Value"));
 				ImGui::TableHeadersRow();
 
 				// Determine which variant performed better based on Total row
@@ -1451,9 +1557,9 @@ std::vector<ColumnConfig> PerformanceOverlay::BuildDrawCallTableColumns(const Me
 				if (ImGui::IsItemHovered()) {
 					if (auto _tt = Util::HoverTooltipWrapper()) {
 						if (row.drawCalls == kDrawCallsNotApplicable) {
-							ImGui::TextUnformatted("Draw Calls: Not applicable for unmeasured GPU time.");
+							ImGui::TextUnformatted(T(TKEY("draw_calls_not_applicable"), "Draw Calls: Not applicable for unmeasured GPU time."));
 						} else {
-							ImGui::TextUnformatted("Draw Calls: Number of draw calls for this shader type in the current frame.");
+							ImGui::TextUnformatted(T(TKEY("draw_calls_tooltip"), "Draw Calls: Number of draw calls for this shader type in the current frame."));
 						}
 					}
 				}
@@ -1565,8 +1671,8 @@ std::pair<std::vector<DrawCallRow>, std::vector<DrawCallRow>> PerformanceOverlay
 	globals::profiler->KeepActive();
 	float csPassesTime = globals::profiler->GetTotalTimeMs();
 	float csPercent = smoothedFrameTime > 0.0f ? (csPassesTime / smoothedFrameTime) * 100.0f : 0.0f;
-	float remainingOtherTime = std::max(0.0f, otherFrameTime - csPassesTime);
-	float remainingOtherPercent = smoothedFrameTime > 0.0f ? (remainingOtherTime / smoothedFrameTime) * 100.0f : 0.0f;
+	float presentTime = CalculatePresentTime(Util::CalculateOtherFrameTime(smoothedFrameTime, measuredSum));
+	float presentPercent = smoothedFrameTime > 0.0f ? (presentTime / smoothedFrameTime) * 100.0f : 0.0f;
 
 	std::optional<float> otherTestFrameTime, otherTestCostPerCall, totalTestFrameTime, totalTestCostPerCall;
 	auto itOther = this->testData.find(magic_enum::enum_integer(SpecialShaderType::Other));
@@ -1585,10 +1691,16 @@ std::pair<std::vector<DrawCallRow>, std::vector<DrawCallRow>> PerformanceOverlay
 		std::string("GPU time spent in Community Shaders compute passes (profiled)."),
 		true, std::nullopt, std::nullopt
 	};
-	DrawCallRow otherRow = {
-		"Other:", magic_enum::enum_integer(SpecialShaderType::Other), kDrawCallsNotApplicable, remainingOtherTime, remainingOtherPercent,
+	DrawCallRow presentRow = {
+		"Present:", magic_enum::enum_integer(SpecialShaderType::Present), kDrawCallsNotApplicable, presentTime, presentPercent,
 		0.0f,
-		std::string("Frame time not attributed to any measured shader type or CS compute pass. This includes UI, post-processing, engine work, and any GPU activity not directly measured."),
+		std::string("CPU time spent waiting inside the swap chain Present call. Capped at the frame time not attributed to shader types, so it can read lower than the measured wait."),
+		true, std::nullopt, std::nullopt
+	};
+	DrawCallRow otherRow = {
+		"Other:", magic_enum::enum_integer(SpecialShaderType::Other), kDrawCallsNotApplicable, otherFrameTime, otherPercent,
+		0.0f,
+		std::string("Frame time not attributed to any measured shader type or to Present. This includes UI, post-processing, engine work, and CS compute passes (whose GPU time is shown separately)."),
 		true, otherTestFrameTime, otherTestCostPerCall
 	};
 	float totalFrameTime = smoothedFrameTime;
@@ -1602,6 +1714,7 @@ std::pair<std::vector<DrawCallRow>, std::vector<DrawCallRow>> PerformanceOverlay
 	};
 	std::vector<DrawCallRow> summaryRows;
 	summaryRows.push_back(csPassesRow);
+	summaryRows.push_back(presentRow);
 	summaryRows.push_back(otherRow);
 	summaryRows.push_back(totalRow);
 	return { mainRows, summaryRows };

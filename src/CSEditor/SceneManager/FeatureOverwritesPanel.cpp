@@ -69,7 +69,7 @@ namespace
 	/** @brief Export button, and a chip narrowing the table to files that are not applied. */
 	void DrawToolbar(const std::vector<OverwriteRow>& rows)
 	{
-		if (Icons::LabeledButton("##export", Icons::TI(ICON_TI_FILE_EXPORT), T(TKEY("export.button"), "Export Settings")))
+		if (Util::LabeledButton("##export", Icons::TI(ICON_TI_FILE_EXPORT), T(TKEY("export.button"), "Export Settings")))
 			FeatureOverwritesPanel::BeginExport();
 		Util::AddTooltip(T(TKEY("export.toolbar_tooltip"),
 			"Writes settings of one or more features to a Baseline preset pack, applied from the Presets page. "
@@ -114,11 +114,11 @@ namespace
 		const bool editable = feature && FeatureOverwritesPanel::HasExportableSettings(feature);
 		{
 			const Util::DisableGuard notEditable(!editable);
-			if (BrowserUI::IconButton("##edit", Icons::TI(ICON_TI_PENCIL), T(TKEY("edit_tooltip"), "Edit: opens the export on this file with its settings ticked.")))
+			if (Util::IconButton("##edit", Icons::TI(ICON_TI_PENCIL), T(TKEY("edit_tooltip"), "Edit: opens the export on this file with its settings ticked.")))
 				FeatureOverwritesPanel::BeginExportInto(feature, row.packId);
 		}
 		ImGui::SameLine();
-		if (BrowserUI::IconButton("##folder", Icons::TI(ICON_TI_FOLDER_OPEN),
+		if (Util::IconButton("##folder", Icons::TI(ICON_TI_FOLDER_OPEN),
 				T(TKEY("open_pack_tooltip"), "Open the pack folder. Remove the pack from the Presets page.")))
 			UnifiedPresetCatalog::GetSingleton().OpenPackFolder(row.packId);
 	}
@@ -155,7 +155,7 @@ namespace
 		BrowserUI::RowShadeScope shade;
 		if (!ImGui::BeginTable("##OverwriteFiles", kColumnCount, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersOuter | ImGuiTableFlags_SizingStretchProp))
 			return;
-		const float actionsWidth = BrowserUI::IconButtonSize() * kActionButtonCount + ImGui::GetStyle().ItemSpacing.x * (kActionButtonCount - 1);
+		const float actionsWidth = Util::IconButtonSize() * kActionButtonCount + ImGui::GetStyle().ItemSpacing.x * (kActionButtonCount - 1);
 		ImGui::TableSetupColumn(T(TKEY("feature"), "Feature"), ImGuiTableColumnFlags_WidthStretch);
 		ImGui::TableSetupColumn(T(TKEY("pack"), "Pack"), ImGuiTableColumnFlags_WidthStretch);
 		ImGui::TableSetupColumn(T(TKEY("settings"), "Settings"), ImGuiTableColumnFlags_WidthFixed);

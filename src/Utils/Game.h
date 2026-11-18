@@ -48,6 +48,7 @@ namespace Util
 		// Conversion constants
 		constexpr float GAME_UNIT_TO_CM = 1.428f;
 		constexpr float GAME_UNIT_TO_M = GAME_UNIT_TO_CM / 100.0f;
+		constexpr float GAME_UNIT_TO_KM = GAME_UNIT_TO_M / 1000.0f;
 		constexpr float GAME_UNIT_TO_FEET = GAME_UNIT_TO_CM / 30.48f;
 		constexpr float GAME_UNIT_TO_INCHES = GAME_UNIT_TO_CM / 2.54f;
 
@@ -63,6 +64,7 @@ namespace Util
 		// Distance conversions
 		inline float GameUnitsToMeters(float gameUnits) { return gameUnits * GAME_UNIT_TO_M; }
 		inline float GameUnitsToCm(float gameUnits) { return gameUnits * GAME_UNIT_TO_CM; }
+		inline float GameUnitsToKm(float gameUnits) { return gameUnits * GAME_UNIT_TO_KM; }
 		inline float GameUnitsToFeet(float gameUnits) { return gameUnits * GAME_UNIT_TO_FEET; }
 		inline float GameUnitsToInches(float gameUnits) { return gameUnits * GAME_UNIT_TO_INCHES; }
 
@@ -211,7 +213,13 @@ namespace Util
 	std::string FormatTESForm(const RE::TESForm* form);
 	std::string FormatWeather(const RE::TESWeather* weather);
 
+	/** @brief Tangent of a sky billboard angular half-width, or the fallback when its bound is unavailable. */
+	float GetBillboardHalfTan(const RE::NiAVObject* a_billboard, const RE::NiPoint3& a_viewer, float a_fallback);
+
 	bool IsInterior();
+
+	/** @brief Sun disc visibility in [0, 1] from its sky shader blend alpha; 0 when the sun is missing or hidden. */
+	float GetSunVisibility(const RE::Sun* a_sun);
 
 	/**
 	 * @brief Converts a 2D world position to cell coordinates.

@@ -16,6 +16,7 @@
 #include "PostProcessing/LocalExposure.h"
 #include "PostProcessing/MotionBlur.h"
 #include "PostProcessing/PhysicalGlare.h"
+#include "PostProcessing/PhysicalLens.h"
 #include "PostProcessing/Vignette.h"
 
 struct PostProcessing : Feature
@@ -47,9 +48,18 @@ struct PostProcessing : Feature
 	}
 
 	virtual void DrawSettings() override;
+	virtual bool HasDebugSection() const override { return true; }
+	virtual void DrawDebugSection() override;
+
+	/** @brief The effect whose settings page is open when it has debug views, or null (the debug tabs then show Post Processing only). */
+	PostProcessFeature* GetOpenEffectWithDebug() const;
+
+	/** @brief Draws the game's current image space values as cards (the Post Processing debug tab). */
+	void DrawImageSpaceDebug();
 	virtual void LoadSettings(json& o_json) override;
 	virtual void SaveSettings(json& o_json) override;
 	virtual void RestoreDefaultSettings() override;
+	virtual void ApplyContextualDefaults(json& a_defaults) const override;
 
 	/**
 	 * @brief Whether Post Processing wants to replace the vanilla tonemap this frame.
@@ -90,6 +100,7 @@ struct PostProcessing : Feature
 		PhysicalGlare,
 		CODBloom,
 		LensFlare,
+		PhysicalLens,
 		Composite,
 		ColorGrading,
 		LUT,
@@ -144,7 +155,7 @@ struct PostProcessing : Feature
 		Gamut inputGamut = Gamut::Rec709;
 		Gamut outputGamut = Gamut::Rec709;
 		float gamma = 1.f;
-		float pad = 0.f;
+		float scale = 1.f;
 	};
 
 	/**

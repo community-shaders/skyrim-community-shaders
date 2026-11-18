@@ -8,9 +8,8 @@
 #include <variant>
 #include <vector>
 
+#include "Feature.h"
 #include "Menu/Icons/helpers/IconFonts.h"
-
-struct Feature;
 
 /**
  * @brief Canonical, untranslated IDs of the built-in menu pages.
@@ -62,21 +61,13 @@ namespace FeatureListFilter
 class FeatureListRenderer
 {
 public:
-	/** @brief How a built-in page's row stands out in the list. */
-	enum class NavStyle : std::uint8_t
-	{
-		Plain,   ///< An ordinary row
-		Accent,  ///< Accent-tinted icon, for the pages most users want first (Presets, CS Editor)
-	};
-
 	/** @brief Describes a built-in (non-feature) menu page with an ID, a display name and a draw callback. */
 	struct BuiltInMenu
 	{
 		std::string_view id;  ///< Canonical page ID from MenuPageIds, used for all page logic
 		std::string name;     ///< Translated label shown in the list
 		std::function<void()> func;
-		Icons::GlyphRef icon{};  ///< Glyph leading the row and the page header; none leaves the space empty
-		NavStyle style = NavStyle::Plain;
+		Icons::GlyphRef icon{};   ///< Glyph leading the row and the page header; none leaves the space empty
 		std::string hint;         ///< The page header's subtitle
 		bool showHeader = false;  ///< Draws a BrowserUI::PageHeader above the page; off for pages with their own title
 	};
@@ -167,6 +158,23 @@ public:
 	static void DrawFeatureBody(Feature* feat);
 
 	/**
+	 * @brief Draws a feature's full page (header with its action buttons, then its settings) inside a built-in page.
+	 *
+	 * The same content a feature list entry shows, without the surrounding frame. Navigation from the
+	 * constraint warning dialog is queued through Menu::SelectFeatureMenu.
+	 * @param feat Any feature, loaded or not: an unloaded one shows its boot toggle and unloaded notice.
+	 */
+	static void DrawEmbeddedFeaturePage(Feature* feat);
+
+	/**
+	 * @brief Runs a command that rewrites a feature's settings through the menu's undo hook (Hooks::runFeatureCommand),
+	 * as the feature header's own commands do. Outside RenderFeatureList the command just runs.
+	 * @param feat The feature whose settings the command changes.
+	 * @param command Changes the settings.
+	 */
+	static void RunFeatureCommand(Feature* feat, const std::function<void()>& command);
+
+	/**
 	 * @brief Draws the reactive constraint warning modal while one is pending; call once per frame, outside child windows.
 	 * @param pendingFeatureSelection Receives the short name of a feature the user navigates to from the dialog.
 	 */
@@ -174,6 +182,12 @@ public:
 
 	/** @brief Translated display label for a FeatureCategories value. */
 	static std::string TranslateCategory(std::string_view category);
+
+	/** @brief Width of a pre-release stage's badge; 0 for release features. */
+	static float MeasureStageBadge(Feature::ReleaseStage stage);
+
+	/** @brief Draws a pre-release stage's badge at the cursor, centred in rowHeight; nothing for release features. */
+	static void DrawStageBadge(Feature::ReleaseStage stage, float rowHeight);
 
 	/**
 	 * @brief Which filters a feature matches, as FeatureListFilter bits (kUnloaded set when it is not loaded).
@@ -189,6 +203,9 @@ public:
 
 	/** @brief Filter counts from the last time the list was built; shown beside each filter in the sort popup. */
 	static const FilterCounts& GetFilterCounts();
+
+	/** @brief Accent dot in the top-right corner of a sort button while a filter is on. */
+	static void DrawFilterDot(const ImVec2& buttonMin, const ImVec2& buttonMax);
 
 	/**
 	 * @brief Draws the sort and filter popup (sort order, filters with counts, Clear filters) if `popupId` is open.
@@ -224,6 +241,9 @@ private:
 		void operator()(const std::string&);
 		void operator()(const CategoryHeader&);
 		void operator()(Feature* feat);
+
+		/** @brief Draws a feature's header and settings, without the frame operator() wraps them in. */
+		void DrawFeatureContent(Feature* feat);
 
 	private:
 		std::string& pendingFeatureSelection;
@@ -288,9 +308,6 @@ private:
 		std::string& pendingFeatureSelection,
 		std::map<std::string, bool>& categoryExpansionStates,
 		Hooks& hooks);
-
-	/** @brief Draws a built-in page's row; the CS Editor row opens its window instead of selecting the page. */
-	static void RenderBuiltInRow(const BuiltInMenu& menu, size_t listId, size_t& selectedMenu, float width = 0.0f);
 
 	static void RenderRightColumn(
 		const std::vector<MenuFuncInfo>& menuList,

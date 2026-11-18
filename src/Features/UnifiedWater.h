@@ -100,8 +100,10 @@ struct UnifiedWater : OverlayFeature
 		static bool Register();
 	};
 
-	/** @brief Draws the ImGui settings panel for unified water configuration. */
-	virtual void DrawSettings() override;
+	virtual bool HasDebugSection() const override { return true; }
+
+	/** @brief Draws the Debug section (flowmap and water cache regeneration). */
+	virtual void DrawDebugSection() override;
 
 	/** @brief Draws the debug overlay showing water cache build progress. */
 	virtual void DrawOverlay() override;

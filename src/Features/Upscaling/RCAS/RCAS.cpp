@@ -23,7 +23,7 @@ void RCAS::Initialize()
 
 	logger::info("[RCAS] Creating resources");
 	CreateComputeShader();
-	rcasConfigCB = new ConstantBuffer(ConstantBufferDesc<RCASConfig>());
+	rcasConfigCB = new ConstantBuffer(ConstantBufferDesc<RCASConfig>(), "Upscaling::RCASConfigCB");
 }
 
 void RCAS::CreateComputeShader()

@@ -1,10 +1,10 @@
 #include "LegacyGraphicsCompatibility.h"
 
 #include "Globals.h"
+#include "Utils/Logging.h"
 #include "Utils/VersionedRelocation.h"
 
 #include <bit>
-#include <mutex>
 
 namespace LegacyGraphicsCompatibility
 {
@@ -122,10 +122,9 @@ namespace LegacyGraphicsCompatibility
 					!cameraProjectionSnapshot.valid || cameraProjectionSnapshot.state != a_state) {
 					if ((a_flags & usePreservedCameraProjectionScale) != 0 && a_state &&
 						(!cameraProjectionSnapshot.valid || cameraProjectionSnapshot.state != a_state)) {
-						static std::once_flag logOnce;
-						std::call_once(logOnce, [] {
+						static Util::OnceFlag logOnce;
+						if (logOnce.First())
 							logger::warn("Legacy SetCameraData bit-9 call has no matching vanilla-jitter snapshot; using live projection scale");
-						});
 					}
 					func(a_state, a_camera, a_flags);
 					return;
@@ -174,10 +173,9 @@ namespace LegacyGraphicsCompatibility
 				constexpr auto effectIndex = RE::ImageSpaceManager::GetSEIndex(
 					RE::ImageSpaceManager::ISCopyDynamicFetchDisabled);
 				if (a_manager->effects.size() <= effectIndex || !a_manager->effects[effectIndex]) {
-					static std::once_flag logOnce;
-					std::call_once(logOnce, [] {
+					static Util::OnceFlag logOnce;
+					if (logOnce.First())
 						logger::error("Legacy FullScreenBlur cannot resolve ISCopyDynamicFetchDisabled; leaving its 1.7 stage disabled");
-					});
 					return;
 				}
 
@@ -339,10 +337,9 @@ namespace LegacyGraphicsCompatibility
 
 				ScopedFullScreenBlurFlags flags;
 				if (!flags.Apply(requestedFlags)) {
-					static std::once_flag logOnce;
-					std::call_once(logOnce, [] {
+					static Util::OnceFlag logOnce;
+					if (logOnce.First())
 						logger::error("Legacy FullScreenBlur has conflicting aliased child flags; using the unmodified legacy chain");
-					});
 					func(a_effect, a_shape, a_param);
 					return;
 				}

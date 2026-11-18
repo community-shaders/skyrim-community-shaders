@@ -59,7 +59,8 @@ public:
 	ID3D11SamplerState* linearSampler = nullptr;
 
 	/** @brief Draws the ImGui settings panel for volumetric shadows. */
-	virtual void DrawSettings() override;
+	virtual bool HasDebugSection() const override { return true; }
+	virtual void DrawDebugSection() override;
 	/** @brief Creates GPU resources including samplers, compute shaders, and shadow textures. */
 	virtual void SetupResources() override;
 	/** @brief Releases and recompiles all compute shaders. */
