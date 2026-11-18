@@ -264,7 +264,6 @@ bool TerrainShadows::IsShadowMapReady()
 	return loaded && settings.EnableTerrainShadow && IsHeightMapReady() && texShadowHeight && !needPrecompute;
 }
 
-
 TerrainShadows::PerFrame TerrainShadows::GetCommonBufferData()
 {
 	auto heightMap = globals::terrainHeightMap;
