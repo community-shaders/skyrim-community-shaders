@@ -7,6 +7,7 @@
 #include "../HDRDisplay.h"
 #include "../Upscaling.h"
 #include "DX12SwapChain.h"
+#include "WorldCamera.h"
 
 ffxFunctions ffxModule;
 
@@ -208,12 +209,12 @@ void FidelityFX::Present(bool a_useFrameGeneration, bool a_isHDR)
 		dispatchParameters.depth = ffxApiGetResourceDX12(swapChain.depthBufferShared12->resource.get());
 		dispatchParameters.motionVectors = ffxApiGetResourceDX12(swapChain.motionVectorBufferShared12->resource.get());
 
-		const auto& worldCamera = globals::game::GetWorldFrameBuffer();
-		TrackStaleCamera(worldCamera);
+		TrackStaleCamera(globals::game::GetWorldFrameBuffer());
+		const auto worldCamera = UpscalingCamera::GetWorldCamera();
 
 		ffx::DispatchDescFrameGenerationPrepareCameraInfo cameraConfig{};
 
-		auto viewMatrix = worldCamera.GetCameraViewInverse().Transpose();
+		const auto& viewMatrix = worldCamera.viewInverse;
 
 		cameraConfig.cameraRight[0] = viewMatrix._11;
 		cameraConfig.cameraRight[1] = viewMatrix._12;
@@ -227,9 +228,9 @@ void FidelityFX::Present(bool a_useFrameGeneration, bool a_isHDR)
 		cameraConfig.cameraForward[1] = viewMatrix._32;
 		cameraConfig.cameraForward[2] = viewMatrix._33;
 
-		cameraConfig.cameraPosition[0] = worldCamera.GetCameraPosAdjust().x;
-		cameraConfig.cameraPosition[1] = worldCamera.GetCameraPosAdjust().y;
-		cameraConfig.cameraPosition[2] = worldCamera.GetCameraPosAdjust().z;
+		cameraConfig.cameraPosition[0] = worldCamera.posAdjust.x;
+		cameraConfig.cameraPosition[1] = worldCamera.posAdjust.y;
+		cameraConfig.cameraPosition[2] = worldCamera.posAdjust.z;
 
 		if (ffx::Dispatch(frameGenContext, dispatchParameters, cameraConfig) != ffx::ReturnCode::Ok) {
 			logger::critical("[FidelityFX] Failed to dispatch frame generation!");
