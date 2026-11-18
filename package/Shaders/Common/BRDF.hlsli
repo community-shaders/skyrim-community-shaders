@@ -174,6 +174,19 @@ namespace BRDF
 		return rcp(max(Vis_SmithV + Vis_SmithL, EPSILON_DIVISION)) * 0.5;
 	}
 
+	// Filament-style compensation using a fit to the F = 1 integral of D_GGX * Vis_SmithJointApprox.
+	float3 GGXEnergyCompensation(float roughness, float NdotV, float3 F0)
+	{
+		float a = roughness * roughness;
+		float t = NdotV * rcp(NdotV + 1.103665f * a);
+		float x = 2.0f * t - 1.0f;
+		float grazingLoss = 1.424916f + x * (0.341704f + x * (-0.646581f - 0.742605f * x)) -
+		                    roughness * (0.847600f + 1.693598f * x);
+		float roughnessLoss = 1.841562f + 0.210406f * NdotV - 0.899554f * roughness;
+		float singleScatterAlbedo = saturate(1.0f - t * ((1.0f - t) * grazingLoss + a * a * roughnessLoss));
+		return 1.0f + F0 * (rcp(singleScatterAlbedo) - 1.0f);
+	}
+
 	float Vis_SmithJoint(float roughness, float NdotV, float NdotL)
 	{
 		float a = roughness * roughness;

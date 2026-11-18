@@ -125,7 +125,7 @@ namespace Skin
 
 		const float oNdotL = dot(N, L);
 		float NdotL = clamp(oNdotL, 1e-5, 1.0);
-		float NdotV = saturate(abs(dot(N, V)) + 1e-5);
+		float NdotV = saturate(abs(dot(N, V)) + EPSILON_DOT_CLAMP);
 		float NdotH = saturate(dot(N, H));
 		float VdotH = saturate(dot(V, H));
 
@@ -137,8 +137,7 @@ namespace Skin
 
 		lightingOutput.specular += DualSpecularGGX(averageRoughness, material.Roughness, material.RoughnessSecondary, material.SecondarySpecIntensity, F0, NdotL, NdotV, NdotH, VdotH, F) * context.lightColor * NdotL;
 
-		float2 specularBRDF = BRDF::EnvBRDF(averageRoughness, NdotV);
-		lightingOutput.specular *= 1 + F0 * (1 / (specularBRDF.x + specularBRDF.y) - 1);
+		lightingOutput.specular *= material.DirectSpecularEnergyCompensation;
 		lightingOutput.diffuse *= 1 - F;
 
 		if (material.FuzzWeight > 0.0) {

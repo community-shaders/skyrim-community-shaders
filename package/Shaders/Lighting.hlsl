@@ -2578,13 +2578,24 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	if defined(TRUE_PBR)
 	dirLightContext = CreateDirectLightingContext(worldNormal.xyz, coatWorldNormal, vertexNormal.xyz, refractedViewDirection, viewDirection, refractedDirLightDirection, DirLightDirection, dirLightColor, dirDetailedShadow, dirSoftShadow);
 	dirLightContext.lightDisk = LightDisk::DirectionalSource();
-	float directFuzzNdotV = clamp(abs(dot(dirLightContext.worldNormal, dirLightContext.viewDir)), isThinSurface ? 0.0f : EPSILON_DOT_CLAMP, 1.0f);
+	float directNdotV = dot(dirLightContext.worldNormal, dirLightContext.viewDir);
+	if (!isThinSurface)
+		material.DirectSpecularEnergyCompensation = BRDF::GGXEnergyCompensation(material.Roughness, PBR::GetDirectSpecularNdotV(directNdotV), material.F0);
+	float directFuzzNdotV = clamp(abs(directNdotV), isThinSurface ? 0.0f : EPSILON_DOT_CLAMP, 1.0f);
 	material.Fuzz = PBR::CreateFuzzLayer(material, directFuzzNdotV);
 	PBR::CacheFuzzLTC(material.Fuzz, dirLightContext.worldNormal, dirLightContext.viewDir, directFuzzNdotV);
 	if (thinSurfaceNormals)
 		dirLightContext.backTransmissionVisibility = PBR::GetThinSurfaceBackTransmissionVisibility(thinSurfaceFaceNormal, DirLightDirection);
 #	else
 	dirLightContext = CreateDirectLightingContext(worldNormal.xyz, vertexNormal.xyz, viewDirection, DirLightDirection, dirLightColor, dirDetailedShadow, dirSoftShadow);
+#		if defined(CS_SKIN_SHADING)
+	if (skinEnabled) {
+		float NdotV = saturate(abs(dot(dirLightContext.worldNormal, dirLightContext.viewDir)) + EPSILON_DOT_CLAMP);
+		// Approximate the mixed GGX lobe with the roughness used by its visibility term.
+		float averageRoughness = lerp(material.Roughness, material.RoughnessSecondary, material.SecondarySpecIntensity);
+		material.DirectSpecularEnergyCompensation = BRDF::GGXEnergyCompensation(averageRoughness, NdotV, material.F0);
+	}
+#		endif
 #		if defined(CS_HAIR_SHADING)
 	if (SharedData::hairSpecularSettings.Enabled) {
 		float hairShadow = Hair::HairSelfShadow(input.WorldPosition.xyz, DirLightDirection, screenNoise);
