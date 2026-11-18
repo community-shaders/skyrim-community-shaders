@@ -43,6 +43,7 @@ struct HDRDisplay;
 struct PostProcessing;
 struct ScreenshotFeature;
 struct Skin;
+struct ProceduralGrass;
 struct SceneManager;
 struct ProceduralAurora;
 
@@ -143,6 +144,7 @@ namespace globals
 		extern ExponentialHeightFog exponentialHeightFog;
 		extern TruePBR truePBR;
 		extern Skin skin;
+		extern ProceduralGrass proceduralGrass;
 		extern SceneManager sceneManager;
 		extern PostProcessing postProcessing;
 		extern ProceduralAurora proceduralAurora;

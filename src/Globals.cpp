@@ -25,6 +25,7 @@
 #include "Features/PerformanceOverlay.h"
 #include "Features/PostProcessing.h"
 #include "Features/ProceduralAurora.h"
+#include "Features/ProceduralGrass.h"
 #include "Features/ProceduralSun.h"
 #include "Features/RainRefraction.h"
 #include "Features/RemoteControl.h"
@@ -109,6 +110,7 @@ namespace globals
 		ExponentialHeightFog exponentialHeightFog{};
 		TruePBR truePBR{};
 		Skin skin{};
+		ProceduralGrass proceduralGrass{};
 		SceneManager sceneManager{};
 		PostProcessing postProcessing{};
 		ProceduralAurora proceduralAurora{};
