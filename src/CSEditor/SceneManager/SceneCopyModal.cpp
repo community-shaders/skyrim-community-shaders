@@ -303,8 +303,6 @@ namespace
 			return T(TKEY("scene_page_copy_reject_layer"), "This page cannot hold this setting.");
 		case CopyRejection::ValueRejected:
 			return T(TKEY("scene_page_copy_reject_value"), "The value is not valid here.");
-		case CopyRejection::BlockedByOverwrite:
-			return T(TKEY("scene_page_copy_reject_overwrite"), "A mod override already holds this setting.");
 		case CopyRejection::GroupCompanionRejected:
 			return T(TKEY("scene_page_copy_reject_companion"), "Another part of the same control cannot be copied.");
 		default:

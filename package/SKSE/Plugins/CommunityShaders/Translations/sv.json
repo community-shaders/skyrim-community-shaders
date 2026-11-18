@@ -677,7 +677,6 @@
     "cs_editor.scene_page_copy_reject_catalog": "Det är inte en inställning som en scen kan åsidosätta.",
     "cs_editor.scene_page_copy_reject_companion": "En annan del av samma kontroll kan inte kopieras.",
     "cs_editor.scene_page_copy_reject_layer": "Den här sidan kan inte innehålla inställningen.",
-    "cs_editor.scene_page_copy_reject_overwrite": "En åsidosättning från en modd innehåller redan inställningen.",
     "cs_editor.scene_page_copy_reject_value": "Värdet är inte giltigt här.",
     "cs_editor.scene_page_copy_result": "{} kopierade, {} överskrivna, {} överhoppade",
     "cs_editor.scene_page_copy_title": "Kopiera inställningar",

@@ -677,7 +677,6 @@
     "cs_editor.scene_page_copy_reject_catalog": "场景无法覆盖的设置。",
     "cs_editor.scene_page_copy_reject_companion": "无法复制同一控件的另一部分。",
     "cs_editor.scene_page_copy_reject_layer": "此页面无法保存该设置。",
-    "cs_editor.scene_page_copy_reject_overwrite": "模组覆盖已经保存此设置。",
     "cs_editor.scene_page_copy_reject_value": "该数值在此处无效。",
     "cs_editor.scene_page_copy_result": "已复制 {} 项，覆盖 {} 项，跳过 {} 项",
     "cs_editor.scene_page_copy_title": "复制设置",
