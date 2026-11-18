@@ -171,7 +171,7 @@ namespace ImageBasedLighting
 									   dot(EnvIBLTexture.Load(int3(0, 0, 0)), phase),
 									   dot(EnvIBLTexture.Load(int3(1, 0, 0)), phase),
 									   dot(EnvIBLTexture.Load(int3(2, 0, 0)), phase)));
-		envColor = Color::Saturation(envColor, SharedData::iblSettings.EnvIBLSaturation) * SharedData::iblSettings.EnvIBLScale * GetIBLRatio();
+		envColor = Color::Saturation(envColor, SharedData::iblSettings.EnvIBLSaturation) * SharedData::iblSettings.EnvIBLScale * GetCachedIBLRatio();
 		float3 skyColor = 0.0;
 		if (!SharedData::InInterior) {
 			skyColor = max(0.0, float3(
