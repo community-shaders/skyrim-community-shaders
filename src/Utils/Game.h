@@ -222,6 +222,12 @@ namespace Util
 	float GetSunVisibility(const RE::Sun* a_sun);
 
 	/**
+	 * @brief Resolves the worldspace supplying LAND data through parent inheritance.
+	 * @return The LAND owner, or nullptr for a null input.
+	 */
+	RE::TESWorldSpace* GetLandDataWorldspace(RE::TESWorldSpace* worldSpace);
+
+	/**
 	 * @brief Converts a 2D world position to cell coordinates.
 	 *
 	 * @param worldPos The world position as a 2D point.

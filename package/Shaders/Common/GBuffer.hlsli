@@ -5,6 +5,8 @@
 
 namespace GBuffer
 {
+	// Masks2.y marks landscape. Masks2.x stores vertex AO.
+	static const float LandscapeMask = 1.0f;
 
 	half2 OctWrap(half2 v)
 	{

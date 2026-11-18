@@ -430,6 +430,13 @@ namespace Util
 		return true;
 	}
 
+	RE::TESWorldSpace* GetLandDataWorldspace(RE::TESWorldSpace* worldSpace)
+	{
+		while (worldSpace && worldSpace->parentWorld && worldSpace->parentUseFlags.any(RE::TESWorldSpace::ParentUseFlag::kUseLandData))
+			worldSpace = worldSpace->parentWorld;
+		return worldSpace;
+	}
+
 	void WorldToCell(const RE::NiPoint2& worldPos, int32_t& x, int32_t& y)
 	{
 		x = static_cast<int32_t>(floor(worldPos.x / 4096.0f));

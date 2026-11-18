@@ -78,29 +78,24 @@ namespace ImageBasedLighting
 	// Ratio / settings helpers
 	// ============================================================================
 
-	/// Compute ratio between DALC and IBL for brightness/color matching.
-	float3 GetIBLRatio()
+	/// DALC-to-IBL matching ratio. Modes 2-3 skip the env dispatch that caches it, so compute it live.
+	float3 GetCachedIBLRatio()
 	{
-		float3 dalc0 = Color::Ambient(SharedData::GetAmbient(0.f));
+		float3 iblRatio;
 
-		sh2 iblSHR = EnvIBLTexture.Load(int3(0, 0, 0));
-		sh2 iblSHG = EnvIBLTexture.Load(int3(1, 0, 0));
-		sh2 iblSHB = EnvIBLTexture.Load(int3(2, 0, 0));
-
-		float colorR = SphericalHarmonics::SHHallucinateZH3Irradiance(iblSHR, float3(0, 0, 0));
-		float colorG = SphericalHarmonics::SHHallucinateZH3Irradiance(iblSHG, float3(0, 0, 0));
-		float colorB = SphericalHarmonics::SHHallucinateZH3Irradiance(iblSHB, float3(0, 0, 0));
-		float3 ibl0 = float3(colorR, colorG, colorB) / Math::PI;
-
-		if (SharedData::iblSettings.DALCMode == 1) {
-			float3 ratio = dalc0 / max(ibl0, 0.001);
-			return lerp(1.0, ratio, SharedData::iblSettings.DALCAmount);
-		} else {
-			float dalcLum = Color::RGBToLuminance(dalc0);
-			float iblLum = Color::RGBToLuminance(ibl0);
-			float ratio = (iblLum > 0.001) ? (dalcLum / iblLum) : 1.0;
-			return lerp(1.0, ratio, SharedData::iblSettings.DALCAmount);
+		[branch] if (SharedData::iblSettings.DALCMode >= 2)
+		{
+			float dalcLuminance = Color::RGBToLuminance(Color::Ambient(SharedData::GetAmbient(0.0f)));
+			float iblLuminance = Color::RGBToLuminance(GetEnvIBL(0.0f));
+			float ratio = iblLuminance > 0.001f ? dalcLuminance / iblLuminance : 1.0f;
+			iblRatio = lerp(1.0f, ratio, SharedData::iblSettings.DALCAmount);
 		}
+		else
+		{
+			iblRatio = EnvIBLTexture.Load(int3(3, 0, 0)).xyz;
+		}
+
+		return iblRatio;
 	}
 
 	// ============================================================================
@@ -109,8 +104,8 @@ namespace ImageBasedLighting
 
 	float3 GetEnvIBLColor(float3 rayDir)
 	{
-		float3 ratio = GetIBLRatio();
-		return Color::Saturation(GetEnvIBL(rayDir), SharedData::iblSettings.EnvIBLSaturation) * SharedData::iblSettings.EnvIBLScale * ratio;
+		float3 iblRatio = GetCachedIBLRatio();
+		return Color::Saturation(GetEnvIBL(rayDir), SharedData::iblSettings.EnvIBLSaturation) * SharedData::iblSettings.EnvIBLScale * iblRatio;
 	}
 
 	float3 GetSkyIBLColor(float3 rayDir)
@@ -176,7 +171,7 @@ namespace ImageBasedLighting
 									   dot(EnvIBLTexture.Load(int3(0, 0, 0)), phase),
 									   dot(EnvIBLTexture.Load(int3(1, 0, 0)), phase),
 									   dot(EnvIBLTexture.Load(int3(2, 0, 0)), phase)));
-		envColor = Color::Saturation(envColor, SharedData::iblSettings.EnvIBLSaturation) * SharedData::iblSettings.EnvIBLScale * GetIBLRatio();
+		envColor = Color::Saturation(envColor, SharedData::iblSettings.EnvIBLSaturation) * SharedData::iblSettings.EnvIBLScale * GetCachedIBLRatio();
 		float3 skyColor = 0.0;
 		if (!SharedData::InInterior) {
 			skyColor = max(0.0, float3(
