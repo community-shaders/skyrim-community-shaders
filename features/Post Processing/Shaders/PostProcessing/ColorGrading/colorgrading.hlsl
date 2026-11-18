@@ -897,18 +897,17 @@ ColorGradingVSOutput VSColorGrading(uint vertexID : SV_VertexID)
 	output.WhiteBalance2 = whiteBalance[2];
 	output.OklchControlsActive = OklchControlsActive();
 	output.NeutralControls = 0;
-	if (skipLUT) {
-		if (inOutGamma.z == 1.0 && all(cinematic.xyz == 1.0))
-			output.NeutralControls |= NeutralGrading::Input;
-		if (inOutGamma.w == 1.0)
-			output.NeutralControls |= NeutralGrading::Output;
-		if (all(asccdl[0].xyz == 1.0) && all(asccdl[1].xyz == 1.0) && all(asccdl[2].xyz == 0.0))
-			output.NeutralControls |= NeutralGrading::CDL;
-		if (!logType && all(contrast.xyz == 1.0) && all(pivot.xyz != 0.0) && all(isfinite(pivot.xyz)))
-			output.NeutralControls |= NeutralGrading::Contrast;
-		if (tint.w == 0.0 && fade.w == 0.0 && all(isfinite(tint.xyz)) && all(isfinite(fade.xyz)))
-			output.NeutralControls |= NeutralGrading::TintFade;
-	}
+	// Input, Output and TintFade also run around the LUT, so the flags apply with or without skipLUT.
+	if (inOutGamma.z == 1.0 && all(cinematic.xyz == 1.0))
+		output.NeutralControls |= NeutralGrading::Input;
+	if (inOutGamma.w == 1.0)
+		output.NeutralControls |= NeutralGrading::Output;
+	if (all(asccdl[0].xyz == 1.0) && all(asccdl[1].xyz == 1.0) && all(asccdl[2].xyz == 0.0))
+		output.NeutralControls |= NeutralGrading::CDL;
+	if (!logType && all(contrast.xyz == 1.0) && all(pivot.xyz != 0.0) && all(isfinite(pivot.xyz)))
+		output.NeutralControls |= NeutralGrading::Contrast;
+	if (tint.w == 0.0 && fade.w == 0.0 && all(isfinite(tint.xyz)) && all(isfinite(fade.xyz)))
+		output.NeutralControls |= NeutralGrading::TintFade;
 	return output;
 }
 
