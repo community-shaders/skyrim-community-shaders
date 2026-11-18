@@ -17,6 +17,8 @@ namespace
 
 void ENBAdaptation::Execute()
 {
+	outputWritten = false;
+
 	auto& textureManager = TextureManager::GetSingleton();
 
 	auto* currentSRV = textureManager.GetDownsampleTextureBlurry();
@@ -50,7 +52,7 @@ void ENBAdaptation::Execute()
 	if (!textureAdaptation) {
 		return;
 	}
-	ExecuteTechnique("Draw", *textureAdaptation);
+	outputWritten = ExecuteTechnique("Draw", *textureAdaptation);
 }
 
 std::pair<const char*, const char*> ENBAdaptation::GetTextureNames()
@@ -61,6 +63,8 @@ std::pair<const char*, const char*> ENBAdaptation::GetTextureNames()
 
 ID3D11ShaderResourceView* ENBAdaptation::GetOutputSRV() const
 {
+	if (!outputWritten)
+		return nullptr;
 	auto* texture = TextureManager::GetSingleton().FindCommonTexture(GetTextureNames().second);
 	return texture ? texture->srv.get() : nullptr;
 }

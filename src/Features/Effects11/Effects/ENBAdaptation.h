@@ -13,7 +13,7 @@ public:
 	/** @brief Releases the sun mask shader so it recompiles on the next frame it is needed. */
 	void ClearShaderCache();
 
-	/** @brief The adaptation texture Execute writes this frame, or nullptr before it exists. */
+	/** @brief The adaptation texture the latest Execute wrote, or nullptr if it did not write one. */
 	ID3D11ShaderResourceView* GetOutputSRV() const;
 
 	TextureManager::Texture textureCurrent;
@@ -45,6 +45,7 @@ private:
 
 	ID3D11PixelShader* sunMaskPS = nullptr;
 	bool sunMaskPSFailed = false;
+	bool outputWritten = false;
 	winrt::com_ptr<ID3D11Buffer> sunMaskCB;
 	winrt::com_ptr<ID3D11SamplerState> sunMaskSampler;
 
