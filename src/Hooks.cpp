@@ -701,18 +701,15 @@ struct BSInputDeviceManager_PollInputDevices
 			}
 		}
 
-		if (blockedDevice && menu->ShouldSwallowInput()) {  //the menu is open, eat all keypresses
-			// During active flying preview, let input reach the game for movement/camera
-			if (menu->IsPreviewFlying()) {
-				func(a_dispatcher, a_events);
-				return;
-			}
+		// The menu is open, eat all keypresses; during active flying preview, let input reach the game for movement/camera
+		if (blockedDevice && menu->ShouldSwallowInput() && !menu->IsPreviewFlying()) {
 			constexpr RE::InputEvent* const dummy[] = { nullptr };
 			func(a_dispatcher, dummy);
 			return;
 		}
 
 		func(a_dispatcher, a_events);
+		globals::features::screenshotFeature.SuppressVanillaMultiScreenshot();
 	}
 	static inline REL::Relocation<decltype(thunk)> func;
 };
