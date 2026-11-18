@@ -33,22 +33,38 @@ namespace SkinSurfaces
 			T("feature.skin.feet", "Feet"), T("feature.skin.other_part", "Other") };
 	}
 
-	std::string Key(RE::BSShaderProperty* a_property)
+	Keys TextureKeys(RE::BSShaderProperty* a_property)
 	{
 		if (!SkinMaterials::IsCompatible(a_property))
 			return {};
 		auto* material = static_cast<RE::BSLightingShaderMaterialBase*>(a_property->material);
-		// The bound texture is what is rendered; the texture set is only what was last requested.
-		if (material->diffuseTexture) {
-			const auto* name = material->diffuseTexture->name.c_str();
-			if (auto key = SkinMaterials::TextureKey(name ? name : ""); !key.empty())
-				return key;
-		}
-		if (material->textureSet) {
-			const auto* path = material->textureSet->GetTexturePath(RE::BSTextureSet::Texture::kDiffuse);
-			return SkinMaterials::TextureKey(path ? path : "");
-		}
-		return {};
+		auto resolve = [&](const RE::NiSourceTexture* a_texture, RE::BSTextureSet::Texture a_slot) {
+			// The bound texture is what is rendered; the texture set is only what was last requested.
+			if (a_texture) {
+				const auto* name = a_texture->name.c_str();
+				if (auto key = SkinMaterials::TextureKey(name ? name : ""); !key.empty())
+					return key;
+			}
+			if (material->textureSet) {
+				const auto* path = material->textureSet->GetTexturePath(a_slot);
+				return SkinMaterials::TextureKey(path ? path : "");
+			}
+			return std::string{};
+		};
+		return {
+			resolve(material->diffuseTexture.get(), RE::BSTextureSet::Texture::kDiffuse),
+			resolve(material->normalTexture.get(), RE::BSTextureSet::Texture::kNormal)
+		};
+	}
+
+	std::string DiffuseKey(RE::BSShaderProperty* a_property)
+	{
+		return TextureKeys(a_property).diffuse;
+	}
+
+	std::string NormalKey(RE::BSShaderProperty* a_property)
+	{
+		return TextureKeys(a_property).normal;
 	}
 
 	bool HasThickness(RE::BSShaderProperty* a_property)
