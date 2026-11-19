@@ -692,10 +692,16 @@ void AdvancedSettingsRenderer::RenderDeveloperSection()
 	}
 }
 
-void AdvancedSettingsRenderer::RunTestConditions()
+/** @brief True while a game is loaded and a menu is open, the two things the console needs. */
+static bool CanRunConsoleCommands()
 {
 	auto ui = RE::UI::GetSingleton();
-	if (!ui || ui->menuStack.empty() || !RE::PlayerCharacter::GetSingleton())
+	return ui && !ui->menuStack.empty() && RE::PlayerCharacter::GetSingleton();
+}
+
+void AdvancedSettingsRenderer::RunTestConditions()
+{
+	if (!CanRunConsoleCommands())
 		return;
 	RE::Console::ExecuteCommand("player.setav speedmult 1000");
 	RE::Console::ExecuteCommand("tgm");
@@ -719,6 +725,35 @@ const char* AdvancedSettingsRenderer::GetTestConditionsTooltip()
 		"Only runs while a game is loaded and a menu is open.");
 }
 
+void AdvancedSettingsRenderer::RunDevelopmentConditions()
+{
+	if (!CanRunConsoleCommands())
+		return;
+	RE::Console::ExecuteCommand("player.setav speedmult 500");
+	RE::Console::ExecuteCommand("tai");
+	RE::Console::ExecuteCommand("tcl");
+	EditorWindow::GetSingleton()->PauseTime();
+	RE::Console::ExecuteCommand("set gamehour to 12");
+	RE::Console::ExecuteCommand("fw 81a");
+	// Stops the idle auto-vanity camera from orbiting the player
+	if (auto* vanityDelay = RE::GetINISetting("fAutoVanityModeDelay:Camera"))
+		vanityDelay->data.f = 99999.0f;
+}
+
+const char* AdvancedSettingsRenderer::GetDevelopmentConditionsTooltip()
+{
+	return T("menu.advanced.development_conditions_tooltip",
+		"Freezes the world for development and agent use, without moving the player:\n"
+		"  player.setav speedmult 500 - move fast\n"
+		"  tai - disable AI\n"
+		"  tcl - no collision\n"
+		"  timescale 0 - time paused\n"
+		"  set gamehour to 12 - noon\n"
+		"  fw 81a - force weather 81A\n"
+		"  fAutoVanityModeDelay - stops the idle camera spin\n"
+		"Only runs while a game is loaded and a menu is open.");
+}
+
 void AdvancedSettingsRenderer::RenderTestingSection()
 {
 	// A/B Testing settings
@@ -736,5 +771,9 @@ void AdvancedSettingsRenderer::RenderTestingSection()
 		if (Util::LabeledButton("##TestConditions", Icons::TI(MenuIcons::kTestScene), T("menu.advanced.test_conditions", "Test Conditions")))
 			RunTestConditions();
 		Util::AddTooltip(GetTestConditionsTooltip());
+
+		if (Util::LabeledButton("##DevelopmentConditions", Icons::TI(MenuIcons::kTestScene), T("menu.advanced.development_conditions", "Development Conditions")))
+			RunDevelopmentConditions();
+		Util::AddTooltip(GetDevelopmentConditionsTooltip());
 	}
 }

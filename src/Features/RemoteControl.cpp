@@ -17,6 +17,7 @@
 #include "Globals.h"
 #include "I18n/I18n.h"
 #include "Menu.h"
+#include "Menu/AdvancedSettingsRenderer.h"
 #include "Utils/FileSystem.h"
 #include "Utils/Format.h"
 #include "Utils/UI.h"
@@ -193,6 +194,10 @@ void RemoteControl::DrawDevBenchPanel()
 			"devbench host not detected. Install the devbench SKSE plugin; "
 			"the tools register automatically once it is present.");
 	}
+
+	if (Util::Button(T("menu.advanced.development_conditions", "Development Conditions")))
+		AdvancedSettingsRenderer::RunDevelopmentConditions();
+	Util::AddTooltip(AdvancedSettingsRenderer::GetDevelopmentConditionsTooltip());
 
 	ImGui::Separator();
 	ImGui::TextUnformatted("Tools exposed through devbench:");

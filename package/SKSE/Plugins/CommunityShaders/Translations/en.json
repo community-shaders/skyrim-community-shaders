@@ -3426,6 +3426,8 @@
     "menu.advanced.desc_shader_debug": "Choose which game shaders Community Shaders replaces, to compare against vanilla or isolate a problem.",
     "menu.advanced.desc_testing": "A/B comparisons and test setups for checking changes in game.",
     "menu.advanced.developer_mode_via_log_level": "Currently active because Log Level is debug/trace.",
+    "menu.advanced.development_conditions": "Development Conditions",
+    "menu.advanced.development_conditions_tooltip": "Freezes the world for development and agent use, without moving the player:\n  player.setav speedmult 500 - move fast\n  tai - disable AI\n  tcl - no collision\n  timescale 0 - time paused\n  set gamehour to 12 - noon\n  fw 81a - force weather 81A\n  fAutoVanityModeDelay - stops the idle camera spin\nOnly runs while a game is loaded and a menu is open.",
     "menu.advanced.dump_feature_defaults": "Dump All Feature Defaults to JSON",
     "menu.advanced.dump_feature_defaults_tooltip": "Writes every feature's built-in default settings to FeatureDefaults.json and opens it. Defaults come from the running build; Baseline packs and your edits are not included.",
     "menu.advanced.dump_ini_settings": "Dump Ini Settings",

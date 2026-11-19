@@ -35,4 +35,13 @@ public:
 
 	/** @brief Tooltip for the Test Conditions button, listing the console commands it runs. */
 	static const char* GetTestConditionsTooltip();
+
+	/**
+	 * @brief Stills the world in place for development and agents: fast, no AI or collision, time paused at noon,
+	 * forced weather, idle camera spin off. Unlike Test Conditions it does not teleport the player.
+	 */
+	static void RunDevelopmentConditions();
+
+	/** @brief Tooltip for the Development Conditions button, listing what it sets. */
+	static const char* GetDevelopmentConditionsTooltip();
 };
