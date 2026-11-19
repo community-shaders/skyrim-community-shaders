@@ -692,11 +692,12 @@ void AdvancedSettingsRenderer::RenderDeveloperSection()
 	}
 }
 
-/** @brief True while a game is loaded and a menu is open, the two things the console needs. */
+/** @brief True while in a loaded game (not the main menu) with a menu open, the things the console needs. */
 static bool CanRunConsoleCommands()
 {
 	auto ui = RE::UI::GetSingleton();
-	return ui && !ui->menuStack.empty() && RE::PlayerCharacter::GetSingleton();
+	auto player = RE::PlayerCharacter::GetSingleton();
+	return ui && !ui->menuStack.empty() && !ui->IsMenuOpen(RE::MainMenu::MENU_NAME) && player && player->GetParentCell();
 }
 
 void AdvancedSettingsRenderer::RunTestConditions()
@@ -722,7 +723,7 @@ const char* AdvancedSettingsRenderer::GetTestConditionsTooltip()
 		"  set gamehour to 12 - noon, with time paused\n"
 		"  coc whiterun - teleport to Whiterun\n"
 		"  fw 81a - force weather 81A\n"
-		"Only runs while a game is loaded and a menu is open.");
+		"Only runs in a loaded game (not the main menu) while a menu is open.");
 }
 
 void AdvancedSettingsRenderer::RunDevelopmentConditions()
@@ -751,7 +752,7 @@ const char* AdvancedSettingsRenderer::GetDevelopmentConditionsTooltip()
 		"  set gamehour to 12 - noon\n"
 		"  fw 81a - force weather 81A\n"
 		"  fAutoVanityModeDelay - stops the idle camera spin\n"
-		"Only runs while a game is loaded and a menu is open.");
+		"Only runs in a loaded game (not the main menu) while a menu is open.");
 }
 
 void AdvancedSettingsRenderer::RenderTestingSection()
