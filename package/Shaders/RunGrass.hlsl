@@ -5,6 +5,7 @@
 #include "Common/FrameBuffer.hlsli"
 #include "Common/GBuffer.hlsli"
 #include "Common/GrassInstance.hlsli"
+#include "Common/LightDisk.hlsli"
 #include "Common/Math.hlsli"
 #include "Common/MotionBlur.hlsli"
 #include "Common/Permutation.hlsli"
@@ -235,7 +236,7 @@ VS_OUTPUT VanillaVertex(VS_INPUT input)
 	vsout.ClumpNormal = GetClumpNormal(input, world3x3, Permutation::GrassCanopyHeight);
 #		else
 	float3 instanceNormal = float3(input.InstanceData2.z, input.InstanceData3.zw);
-	vsout.DirLightAngle = saturate(dot(DirLightDirection.xyz, instanceNormal));
+	vsout.DirLightAngle = dot(DirLightDirection.xyz, instanceNormal);
 #			ifndef GRASS_OPTIMIZATIONS
 	vsout.ViewSpacePosition = mul(WorldView, msPosition).xyz;
 #			endif
@@ -309,7 +310,7 @@ VS_OUTPUT main(VS_INPUT input, uint instanceID : SV_InstanceID)
 	vsout.Color = float4(input.InstanceData1.www * input.Color.xyz, fade);
 #			ifndef GRASS_LIGHTING
 	float3 instanceNormal = float3(input.InstanceData2.z, input.InstanceData3.zw);
-	vsout.DirLightAngle = saturate(dot(DirLightDirection.xyz, instanceNormal));
+	vsout.DirLightAngle = dot(DirLightDirection.xyz, instanceNormal);
 #			endif
 	vsout.WorldPosition = eyeRel;
 	vsout.PreviousWorldPosition = previousMsPosition.xyz - FrameBuffer::CameraPreviousPosAdjust.xyz;
@@ -1058,6 +1059,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #				endif
 
 	float dirNdotL = dot(normal, SharedData::DirLightDirection.xyz);
+	const float2 lightDisk = LightDisk::DirectionalSource();
 
 	float4 shadowColor = TexShadowMaskSampler.Load(int3(input.HPosition.xy, 0));
 
@@ -1116,7 +1118,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float3 shineThroughAlbedo = hasSubsurface ? albedo : 0.0;
 	float3 transmissionRadiance;
 	PBR::GetThinSurfaceDirectScattering(reflectionAlbedo, frontTransmissionAlbedo, backTransmissionAlbedo, shineThroughAlbedo, grassOpacity, dirLightColor * Color::BRDFScale,
-		dirNdotL, 0.0, dirDetailedShadow, dirTransmissionShadow, lightsDiffuseColor, transmissionRadiance);
+		dirNdotL, 0.0, dirDetailedShadow, dirTransmissionShadow, lightsDiffuseColor, transmissionRadiance, lightDisk);
 
 	float3 dirDiffuseColor = lightsDiffuseColor;
 	float3 dirSpecularColor = 0;
@@ -1125,9 +1127,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #				else
 	if (complex)
 #				endif
-		dirSpecularColor = dirDetailedShadow * GrassLighting::GetLightSpecularInput(SharedData::DirLightDirection.xyz, viewDirection, specularNormal, dirLightColor, SharedData::grassLightingSettings.Glossiness) * Color::BRDFScale;
+		dirSpecularColor = dirDetailedShadow * GrassLighting::GetLightSpecularInput(SharedData::DirLightDirection.xyz, viewDirection, specularNormal, dirLightColor, SharedData::grassLightingSettings.Glossiness, lightDisk) * Color::BRDFScale;
 #				if defined(WETNESS_EFFECTS)
-	transmissionRadiance *= WetnessEffects::ApplySurfaceWetnessDirectLighting(wetnessState, viewDirection, SharedData::DirLightDirection.xyz, dirLightColor, dirDetailedShadow * Color::PBRLightingCompensation * Color::PBRLightingScale, dirDiffuseColor, dirSpecularColor, wetnessDirectSpecularColor);
+	transmissionRadiance *= WetnessEffects::ApplySurfaceWetnessDirectLighting(wetnessState, viewDirection, SharedData::DirLightDirection.xyz, dirLightColor, dirDetailedShadow * Color::PBRLightingCompensation * Color::PBRLightingScale, dirDiffuseColor, dirSpecularColor, wetnessDirectSpecularColor, lightDisk);
 #				endif
 	lightsDiffuseColor = dirDiffuseColor;
 	lightsSpecularColor += dirSpecularColor;
@@ -1358,7 +1360,7 @@ PS_OUTPUT main(PS_INPUT input)
 		dirDetailedShadow *= ScreenSpaceShadows::GetScreenSpaceShadow(input.HPosition.xyz, screenUV, screenNoise);
 #			endif  // SCREEN_SPACE_SHADOWS
 
-	float3 diffuseColor = dirLightColor * dirDetailedShadow * input.DirLightAngle;
+	float3 diffuseColor = dirLightColor * dirDetailedShadow * LightDisk::DiffuseCosine(input.DirLightAngle, LightDisk::DirectionalSource());
 
 #			if defined(LIGHT_LIMIT_FIX)
 	uint clusterIndex = 0;

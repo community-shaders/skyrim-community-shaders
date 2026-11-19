@@ -30,7 +30,7 @@ namespace PBR
 	}
 #endif
 
-	float3 GetHairDiffuseColorMarschner(float3 N, float3 V, float3 L, float NdotL, float NdotV, float VdotL, float backlit, float area, MaterialProperties material)
+	float3 GetHairDiffuseColorMarschner(float3 N, float3 V, float3 L, float NdotL, float NdotV, float VdotL, float backlit, float area, MaterialProperties material, float2 disk)
 	{
 		float3 S = 0;
 
@@ -51,18 +51,16 @@ namespace PBR
 			Shift,
 			Shift * 4
 		};
-		float B[] = {
-			area + material.Roughness,
-			area + material.Roughness / 2,
-			area + material.Roughness * 2
-		};
+		float3 B = area + material.Roughness * float3(1.0, 0.5, 2.0);
+		// The longitudinal Gaussians are parameterized by the sum of the two tangent cosines.
+		B = sqrt(B * B + LightDisk::CosineVariance(NdotL, disk));
 
 		float hairIOR = HairIOR();
 		float F0 = IORToF0(hairIOR);
 
 		float3 Tp;
 		float Mp, Np, Fp, a, h, f;
-		float ThetaH = NdotL + NdotV;
+		float ThetaH = LightDisk::MeanCosine(NdotL, disk) + NdotV;
 		// R
 		Mp = HairGaussian(B[0], ThetaH - Alpha[0]);
 		Np = 0.25 * cosHalfPhi;
@@ -90,15 +88,15 @@ namespace PBR
 		return S;
 	}
 
-	float3 GetHairDiffuseAttenuationKajiyaKay(float3 N, float3 V, float3 L, float NdotL, float NdotV, float shadow, MaterialProperties material)
+	float3 GetHairDiffuseAttenuationKajiyaKay(float3 N, float3 V, float3 L, float NdotL, float NdotV, float shadow, MaterialProperties material, float2 disk)
 	{
 		float3 S = 0;
 
-		float diffuseKajiya = 1 - abs(NdotL);
+		float diffuseKajiya = 1.0 - LightDisk::MeanAbsCosine(NdotL, disk);
 
 		float3 fakeN = normalize(V - N * NdotV);
 		const float wrap = 1;
-		float wrappedNdotL = saturate((dot(fakeN, L) + wrap) / ((1 + wrap) * (1 + wrap)));
+		float wrappedNdotL = LightDisk::WrappedCosine(dot(fakeN, L), wrap, 0.25, disk);
 		float diffuseScatter = (1 / Math::PI) * lerp(wrappedNdotL, diffuseKajiya, 0.33);
 		float luma = Color::RGBToLuminance(material.BaseColor);
 		float3 scatterTint = pow(material.BaseColor / max(luma, 1e-5), 1 - shadow);
@@ -107,12 +105,12 @@ namespace PBR
 		return S;
 	}
 
-	float3 GetHairColorMarschner(float3 N, float3 V, float3 L, float NdotL, float NdotV, float VdotL, float shadow, float backlit, float area, MaterialProperties material)
+	float3 GetHairColorMarschner(float3 N, float3 V, float3 L, float NdotL, float NdotV, float VdotL, float shadow, float backlit, float area, MaterialProperties material, float2 disk = float2(0.0, 1.0))
 	{
 		float3 color = 0;
 
-		color += GetHairDiffuseColorMarschner(N, V, L, NdotL, NdotV, VdotL, backlit, area, material);
-		color += GetHairDiffuseAttenuationKajiyaKay(N, V, L, NdotL, NdotV, shadow, material);
+		color += GetHairDiffuseColorMarschner(N, V, L, NdotL, NdotV, VdotL, backlit, area, material, disk);
+		color += GetHairDiffuseAttenuationKajiyaKay(N, V, L, NdotL, NdotV, shadow, material, disk);
 
 		return color;
 	}
@@ -229,8 +227,8 @@ namespace PBR
 			lightingOutput.specular = saturate(material.ThinSurfaceSpecularWeight) * D * visibility * F * detailedLightColor * specularNdotL * material.Fuzz.specularThroughput;
 			[branch] if (material.Fuzz.weightedAlbedo > 0.0f)
 			{
-				float3 fuzzReflection = FuzzLobe(L, material.Fuzz.ltc) * detailedLightColor;
-				float3 fuzzTransmission = Color::PBRMaterialToLinear(surface.backTransmissionAlbedo) * FuzzLobeTransmitted(L, material.Fuzz.ltc) *
+				float3 fuzzReflection = FuzzLobe(L, material.Fuzz.ltc, context.lightDisk) * detailedLightColor;
+				float3 fuzzTransmission = Color::PBRMaterialToLinear(surface.backTransmissionAlbedo) * FuzzLobeTransmitted(L, material.Fuzz.ltc, context.lightDisk) *
 				                          context.lightColor * context.softShadow * context.backTransmissionVisibility;
 				lightingOutput.specular += material.Fuzz.weightedAlbedo * material.Fuzz.color * (fuzzReflection + fuzzTransmission);
 			}
@@ -322,7 +320,7 @@ namespace PBR
 #if defined(TRUE_PBR) && !defined(LANDSCAPE) && !defined(LODLANDSCAPE)
 		[branch] if ((PBRFlags & Flags::HairMarschner) != 0)
 		{
-			lightingOutput.transmission += softLightColor * GetHairColorMarschner(N, V, L, NdotL, NdotV, VdotL, 0, 1, 0, material);
+			lightingOutput.transmission += softLightColor * GetHairColorMarschner(N, V, L, NdotL, NdotV, VdotL, 0, 1, 0, material, context.lightDisk);
 		}
 		else
 #endif
@@ -359,7 +357,12 @@ namespace PBR
 			{
 				const float subsurfacePower = 12.234;
 				float forwardScatter = exp2(saturate(-VdotL) * subsurfacePower - subsurfacePower);
-				float backScatter = saturate(satNdotL * material.Thickness + (1.0 - material.Thickness)) * 0.5;
+				if (context.lightDisk.x > 0.0) {
+					const float3 cosine = saturate(LightDisk::CosineSamples(-VdotL, context.lightDisk));
+					forwardScatter = dot(exp2((cosine - 1.0) * subsurfacePower), float3(0.25, 0.5, 0.25));
+				}
+				const float incidentCosine = max(LightDisk::DiffuseCosine(NdotL, context.lightDisk), EPSILON_DOT_CLAMP);
+				float backScatter = saturate(incidentCosine * material.Thickness + (1.0 - material.Thickness)) * 0.5;
 				float subsurface = lerp(backScatter, 1, forwardScatter) * (1.0 - material.Thickness);
 				float3 transmissionKD = 1.0f - saturate(SpecularDirectionalAlbedo(material.F0, material.Roughness, saturate(abs(NdotV))));
 				lightingOutput.transmission += material.SubsurfaceColor * subsurface * softLightColor * BRDF::Diffuse_Lambert() * transmissionKD;
@@ -409,7 +412,7 @@ namespace PBR
 
 				// An invisible layer has no cached LTC, and evaluating the zeroed one is 0 / 0.
 				[branch] if (material.Fuzz.weightedAlbedo > 0.0f)
-					lightingOutput.specular += material.Fuzz.weightedAlbedo * material.Fuzz.color * FuzzLobe(L, material.Fuzz.ltc) * detailedLightColor;
+					lightingOutput.specular += material.Fuzz.weightedAlbedo * material.Fuzz.color * FuzzLobe(L, material.Fuzz.ltc, context.lightDisk) * detailedLightColor;
 			}
 #endif
 		}

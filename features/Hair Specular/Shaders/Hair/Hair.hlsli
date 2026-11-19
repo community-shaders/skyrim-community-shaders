@@ -4,6 +4,7 @@
 #include "Common/BRDF.hlsli"
 #include "Common/Color.hlsli"
 #include "Common/Game.hlsli"
+#include "Common/LightDisk.hlsli"
 #include "Common/Math.hlsli"
 
 namespace Hair
@@ -19,13 +20,14 @@ namespace Hair
 
 	// [Kajiya et al. 1989, "Rendering fur with three dimensional textures."]
 	// https://doi.org/10.1145/74334.74361
-	float3 D_KajiyaKay(float3 T, float3 H, float n)
+	float3 D_KajiyaKay(float3 T, float3 H, float n, float variance)
 	{
 		float TH = dot(T, H);
 		float sinTH = saturate(1 - TH * TH);
 		float dirAtten = saturate(TH + 1);
 		float norm = (n + 2) / (2 * Math::PI);
-		return dirAtten * norm * pow(sinTH, 0.5 * n);
+		const float widthSquared = 1.0 + n * variance;
+		return dirAtten * norm * rsqrt(widthSquared) * pow(sinTH, 0.5 * n / widthSquared);
 	}
 
 	float3 HairF0()
@@ -61,7 +63,7 @@ namespace Hair
 	{
 		const float3 H = normalize(L + V);
 		const float oNdotL = dot(N, L);
-		const float NdotL = saturate(oNdotL);
+		const float NdotL = LightDisk::DiffuseCosine(oNdotL, context.lightDisk);
 		const float NdotV = saturate(dot(N, V));
 		const float VNdotV = dot(VN, V);
 		const float VNdotL = dot(VN, L);
@@ -75,7 +77,7 @@ namespace Hair
 
 		// [Yibing Jiang 2016, "The Process of Creating Volumetric-based Materials in Uncharted 4"]
 		// https://advances.realtimerendering.com/s2016
-		dirDiffuse = saturate(oNdotL + wrapped) / (1 + wrapped);
+		dirDiffuse = LightDisk::WrappedCosine(oNdotL, wrapped, 1.0, context.lightDisk) / (1 + wrapped);
 		float3 scatterColor = pow(baseColor, 0.5);
 		dirDiffuse = saturate(scatterColor + NdotL) * dirDiffuse * lightColor * SharedData::hairSpecularSettings.DiffuseMult;
 
@@ -91,11 +93,19 @@ namespace Hair
 			TshiftSecondary = T;
 		}
 
-		const float3 specPrimary = D_KajiyaKay(TshiftPrimary, H, shininess);
-		const float3 specSecondary = D_KajiyaKay(TshiftSecondary, H, shininess * 0.5);
+		const float3 primaryAxis = TshiftPrimary - dot(TshiftPrimary, H) * H;
+		const float3 secondaryAxis = TshiftSecondary - dot(TshiftSecondary, H) * H;
+		// The derivative of normalize(L + V) projects the light's variance onto each shifted tangent.
+		const float halfVectorScale = rcp(max(dot(L + V, L + V), 1e-4));
+		const float primaryVariance = halfVectorScale * dot(primaryAxis, primaryAxis) *
+		                              LightDisk::CosineVariance(dot(primaryAxis, L) * rsqrt(max(dot(primaryAxis, primaryAxis), EPSILON_LENGTH_SQ)), context.lightDisk);
+		const float secondaryVariance = halfVectorScale * dot(secondaryAxis, secondaryAxis) *
+		                                LightDisk::CosineVariance(dot(secondaryAxis, L) * rsqrt(max(dot(secondaryAxis, secondaryAxis), EPSILON_LENGTH_SQ)), context.lightDisk);
+		const float3 specPrimary = D_KajiyaKay(TshiftPrimary, H, shininess, primaryVariance);
+		const float3 specSecondary = D_KajiyaKay(TshiftSecondary, H, shininess * 0.5, secondaryVariance);
 		const float3 F = BRDF::F_Schlick(HairF0(), HdotL);
 		float3 specR = 0.25 * F * (specPrimary + specSecondary * scatterColor) * NdotL * saturate(VNdotV * (3.4e+38));
-		float scatterFresnel1 = pow(saturate(-dot(L, V)), 9) * pow(saturate(1 - VNdotV * VNdotV), 12);
+		float scatterFresnel1 = LightDisk::PhongCosine(-V, L, 9.0, context.lightDisk) * pow(saturate(1 - VNdotV * VNdotV), 12);
 		float scatterFresnel2 = saturate(pow(abs(1 - VNdotV), 20));
 		float3 specT = (scatterFresnel1 + scatterFresnel2 * scatterColor) * SharedData::hairSpecularSettings.Transmission;
 		dirSpecular = specR * lightColor * SharedData::hairSpecularSettings.SpecularMult;
@@ -110,7 +120,7 @@ namespace Hair
 	// [Marschner et al. 2003, "Light reflection from human hair fibers."]
 	// https://graphics.stanford.edu/papers/hair/hair-sg03final.pdf
 	// N is the vector parallel to hair pointing toward root
-	float3 D_Marschner(float3 L, float3 V, float3 N, float roughness, float3 baseColor, float area, float backlit)
+	float3 D_Marschner(float3 L, float3 V, float3 N, float roughness, float3 baseColor, float area, float backlit, float2 disk = float2(0.0, 1.0))
 	{
 		const float NdotL = dot(N, L);
 		const float NdotV = dot(N, V);
@@ -133,18 +143,15 @@ namespace Hair
 			Shift,
 			Shift * 4
 		};
-		float B[] = {
-			area + roughness,
-			area + roughness / 2,
-			area + roughness * 2
-		};
+		float3 B = area + roughness * float3(1.0, 0.5, 2.0);
+		B = sqrt(B * B + LightDisk::CosineVariance(NdotL, disk));
 
 		float hairIOR = 1.55;
 		float3 F0 = HairF0();
 
 		float3 Tp;
 		float Mp, Np, Fp, a, h, f;
-		float ThetaH = NdotL + NdotV;
+		float ThetaH = LightDisk::MeanCosine(NdotL, disk) + NdotV;
 
 		float3 R, TT, TRT;
 
@@ -175,17 +182,17 @@ namespace Hair
 		return max(R + TT + TRT, 0);
 	}
 
-	float3 GetHairDiffuseAttenuationKajiyaKay(float3 N, float3 V, float3 L, float shadow, float3 baseColor)
+	float3 GetHairDiffuseAttenuationKajiyaKay(float3 N, float3 V, float3 L, float shadow, float3 baseColor, float2 disk = float2(0.0, 1.0))
 	{
 		float NdotL = dot(N, L);
 		float NdotV = dot(N, V);
 		float3 S = 0;
 
-		float diffuseKajiya = 1 - abs(NdotL);
+		float diffuseKajiya = 1.0 - LightDisk::MeanAbsCosine(NdotL, disk);
 
 		float3 fakeN = normalize(V - N * NdotV);
 		const float wrap = 1;
-		float wrappedNdotL = saturate((dot(fakeN, L) + wrap) / ((1 + wrap) * (1 + wrap)));
+		float wrappedNdotL = LightDisk::WrappedCosine(dot(fakeN, L), wrap, 0.25, disk);
 		float diffuseScatter = (1 / Math::PI) * lerp(wrappedNdotL, diffuseKajiya, 0.33);
 		float luma = max(Color::RGBToLuminance(baseColor), 1e-4);
 		float3 scatterTint = shadow < 1 ? pow(abs(baseColor / luma), 1 - shadow) : 1;
@@ -209,8 +216,8 @@ namespace Hair
 
 		float shadow = context.hairShadow * context.detailedShadow;
 
-		dirTransmission += D_Marschner(L, V, T, roughness, baseColor, 0, SharedData::hairSpecularSettings.Transmission) * lightColor * shadow * SharedData::hairSpecularSettings.SpecularMult;
-		dirTransmission += GetHairDiffuseAttenuationKajiyaKay(T, V, L, shadow, baseColor) * lightColor * shadow * SharedData::hairSpecularSettings.DiffuseMult;
+		dirTransmission += D_Marschner(L, V, T, roughness, baseColor, 0, SharedData::hairSpecularSettings.Transmission, context.lightDisk) * lightColor * shadow * SharedData::hairSpecularSettings.SpecularMult;
+		dirTransmission += GetHairDiffuseAttenuationKajiyaKay(T, V, L, shadow, baseColor, context.lightDisk) * lightColor * shadow * SharedData::hairSpecularSettings.DiffuseMult;
 	}
 
 	void GetHairDirectLight(out DirectLightingOutput lightingOutput, DirectContext context, MaterialProperties material, float3x3 tbnTr, float2 uv)
