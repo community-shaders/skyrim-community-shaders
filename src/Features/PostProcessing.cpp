@@ -765,32 +765,73 @@ std::optional<RE::RENDER_TARGET> PostProcessing::PreProcess(RE::RENDER_TARGET a_
 			pipe->UpdateAutoEnabled();
 	}
 
-	// go through each fx
-	const auto& colorGrading = pipeline[static_cast<size_t>(FeaturePipelineIndex::ColorGrading)];
+	const auto canDraw = [&](const auto& pipe) {
+		return !bypass && pipe && pipe->IsActive() && !(inMainLoadingMenu && pipe->DisableInMainLoadingMenu()) &&
+		       (!pipe->DrawBeforeUpscaling() || !upscaling.loaded);
+	};
+	const auto& grading = pipeline[static_cast<size_t>(FeaturePipelineIndex::ColorGrading)];
+	const auto& composite = pipeline[static_cast<size_t>(FeaturePipelineIndex::Composite)];
 	const auto& border = pipeline[static_cast<size_t>(FeaturePipelineIndex::Border)];
+
+	const bool sceneOutput = globals::state->GetTonemapOwner() != State::TonemapOwner::kPostProcessing;
+	const auto sceneGamut = ll.IsACEScgActive() ? Gamut::ACEScg : Gamut::Rec709;
+	const auto displayGamut = globals::features::hdrDisplay.loaded && globals::features::hdrDisplay.settings.enableHDR ? Gamut::Rec2020 : Gamut::Rec709;
+	CopyCB conversion{
+		.inputGamut = sceneGamut,
+		.outputGamut = sceneOutput ? sceneGamut : displayGamut,
+		.gamma = sceneOutput && !linear ? Util::ColorSpace::GAME_GAMMA_INV : 1.f
+	};
+
+	ColorGrading* fusedGrading = nullptr;
+	Composite::ConversionTarget fusedConversion;
+	if (linear && canDraw(composite)) {
+		if (canDraw(grading)) {
+			fusedGrading = static_cast<ColorGrading*>(grading.get());
+		} else if (gameTexMain.texture && std::ranges::none_of(pipeline, [&](const auto& pipe) {
+					   return canDraw(pipe) && pipe->DrawAfterColorGrading();
+				   })) {
+			// Composite takes a scratch target after the preceding effects have selected
+			// its input. Matching the game target lets writeback use a direct copy.
+			D3D11_TEXTURE2D_DESC targetDesc;
+			gameTexMain.texture->GetDesc(&targetDesc);
+			if (targetDesc.Width == sceneColorDesc.Width && targetDesc.Height == sceneColorDesc.Height &&
+				targetDesc.SampleDesc.Count == 1 && targetDesc.SampleDesc.Quality == 0) {
+				copyCB->Update(conversion);
+				fusedConversion = { targetDesc.Format, copyCB->CB() };
+			}
+		}
+	}
+
 	bool colorGraded = false;
 	bool borderDrawn = false;
+	bool outputConverted = false;
 	bool exposureResolved = !linear || globals::state->preExposure == 1.0f;
 	for (auto& pipe : pipeline) {
-		if (pipe && !bypass && pipe->IsActive() && !pipe->DrawAfterColorGrading() && !(inMainLoadingMenu && pipe->DisableInMainLoadingMenu()) && (!pipe->DrawBeforeUpscaling() || !upscaling.loaded)) {
+		if (canDraw(pipe) && !pipe->DrawAfterColorGrading()) {
 			auto* input = lastTexColor.tex;
-			// ISHDR can decode the original scene if Composite or Color Grading
-			// can't produce the display image for this invocation.
-			if (!exposureResolved && pipe == colorGrading)
-				return sceneTarget;
-			DrawFeature(*pipe, lastTexColor);
-			if (!exposureResolved && pipe == pipeline[static_cast<size_t>(FeaturePipelineIndex::Composite)])
-				exposureResolved = lastTexColor.tex != input;
-			if (pipe == colorGrading) {
+			if (pipe == composite) {
+				const auto output = static_cast<Composite*>(pipe.get())->Draw(lastTexColor, fusedGrading, fusedConversion);
+				exposureResolved |= lastTexColor.tex != input;
+				colorGraded = output == Composite::Output::Graded;
+				outputConverted = output == Composite::Output::Converted;
+			} else if (pipe == grading) {
+				if (colorGraded)
+					continue;
+				// ISHDR can decode the original scene when an enabled tone mapper cannot run.
+				if (!exposureResolved)
+					return sceneTarget;
+				DrawFeature(*pipe, lastTexColor);
 				colorGraded = lastTexColor.tex != input;
 				if (!colorGraded)
 					return sceneTarget;
+			} else {
+				DrawFeature(*pipe, lastTexColor);
 			}
 		}
 	}
 
 	for (auto& pipe : pipeline) {
-		if (!bypass && exposureResolved && pipe && pipe->IsActive() && pipe->DrawAfterColorGrading() && !(inMainLoadingMenu && pipe->DisableInMainLoadingMenu()) && (!pipe->DrawBeforeUpscaling() || !upscaling.loaded)) {
+		if (exposureResolved && canDraw(pipe) && pipe->DrawAfterColorGrading()) {
 			auto* input = lastTexColor.tex;
 			DrawFeature(*pipe, lastTexColor);
 			if (pipe == border)
@@ -798,15 +839,12 @@ std::optional<RE::RENDER_TARGET> PostProcessing::PreProcess(RE::RENDER_TARGET a_
 		}
 	}
 
-	const bool sceneOutput = globals::state->GetTonemapOwner() != State::TonemapOwner::kPostProcessing;
-	const auto sceneGamut = ll.IsACEScgActive() ? Gamut::ACEScg : Gamut::Rec709;
-	const auto displayGamut = globals::features::hdrDisplay.loaded && globals::features::hdrDisplay.settings.enableHDR ? Gamut::Rec2020 : Gamut::Rec709;
-	const CopyCB conversion{
-		.inputGamut = colorGraded ? displayGamut : sceneGamut,
-		.outputGamut = sceneOutput ? sceneGamut : displayGamut,
-		.gamma = sceneOutput && !linear ? Util::ColorSpace::GAME_GAMMA_INV : 1.f,
-		.scale = exposureResolved ? 1.f : 1.f / globals::state->preExposure
-	};
+	if (outputConverted) {
+		conversion = {};
+	} else {
+		conversion.inputGamut = colorGraded ? displayGamut : sceneGamut;
+		conversion.scale = exposureResolved ? 1.f : 1.f / globals::state->preExposure;
+	}
 	// Both copies must be ready before either game target is modified. The
 	// alternate is derived from the committed main target, including its format.
 	const auto mainCopy = PrepareRenderTargetCopy(gameTexMain.texture, lastTexColor, conversion);

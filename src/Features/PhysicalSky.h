@@ -113,6 +113,21 @@ struct PhysicalSky final : public Feature
 		float zBottom = -14500.f;
 	};
 
+	/** @brief Volumetric cloud cost settings written together by the Quality & Performance preset buttons. */
+	struct CloudQualityPreset
+	{
+		float rayMarchRange;      // km
+		float shadowVolumeRange;  // km
+		float marchStepScale;
+		int cloudBlurRadius;  // px
+		bool cloudAmbientSHOnly;
+		bool cloudHalfResTrace;
+		bool cloudFastReconstruction;
+	};
+	constexpr static CloudQualityPreset kCloudQualityLow = { 5.f, 4.f, 1.5f, 0, true, true, true };
+	constexpr static CloudQualityPreset kCloudQualityMedium = { 10.f, 8.f, 0.8f, 1, true, false, true };
+	constexpr static CloudQualityPreset kCloudQualityHigh = { 32.f, 8.f, 0.5f, 1, false, false, false };
+
 	struct Settings
 	{
 		bool enabled = true;
@@ -198,10 +213,13 @@ struct PhysicalSky final : public Feature
 			float3 color = { 0.86f, 0.9f, 1.f };  // linear sRGB chromaticity
 		};
 		LightningSettings lightning;
-		float rayMarchRange = 32.f;
-		float shadowVolumeRange = 8.f;  // km
-		float marchStepScale = 0.5f;
-		int cloudBlurRadius = 1;
+		float rayMarchRange = kCloudQualityMedium.rayMarchRange;
+		float shadowVolumeRange = kCloudQualityMedium.shadowVolumeRange;
+		float marchStepScale = kCloudQualityMedium.marchStepScale;
+		int cloudBlurRadius = kCloudQualityMedium.cloudBlurRadius;
+		bool cloudAmbientSHOnly = kCloudQualityMedium.cloudAmbientSHOnly;
+		bool cloudHalfResTrace = kCloudQualityMedium.cloudHalfResTrace;
+		bool cloudFastReconstruction = kCloudQualityMedium.cloudFastReconstruction;
 		NdfSettings cloudMap = {};
 		CloudLayer cloudLayer = {};
 		CloudNoiseSettings cloudNoise = {};
@@ -343,8 +361,10 @@ struct PhysicalSky final : public Feature
 		uint cloudFrameIndex;
 		float4 localRect;
 		float4 localAltitude;
+		uint32_t traceScale;
+		uint32_t padding[3] = {};
 	};
-	static_assert(sizeof(CloudBoundaryCB) == 128);
+	static_assert(sizeof(CloudBoundaryCB) == 144);
 	eastl::unique_ptr<ConstantBuffer> cloudBoundaryCB = nullptr;
 
 	eastl::unique_ptr<Texture2D> texVolTr = nullptr;           // full-resolution volumetric transmittance result
@@ -495,8 +515,11 @@ struct PhysicalSky final : public Feature
 		float4 middleCells;
 		float4 middleBands;
 		float4 middleBandShape;
+		uint32_t cloudTraceScale;
+		uint32_t cloudAmbientSHOnly;
+		uint32_t qualityPadding[2] = {};
 	};
-	static_assert(sizeof(VolumetricCloudCB) == 1328);
+	static_assert(sizeof(VolumetricCloudCB) == 1344);
 	static_assert(offsetof(VolumetricCloudCB, dirlightDir) == 48);
 	static_assert(offsetof(VolumetricCloudCB, previousCamera) == 64);
 	static_assert(offsetof(VolumetricCloudCB, lowNdfFrequency) == 128);
@@ -512,6 +535,7 @@ struct PhysicalSky final : public Feature
 	static_assert(offsetof(VolumetricCloudCB, middleCells) == 1280);
 	static_assert(offsetof(VolumetricCloudCB, middleBands) == 1296);
 	static_assert(offsetof(VolumetricCloudCB, middleBandShape) == 1312);
+	static_assert(offsetof(VolumetricCloudCB, cloudTraceScale) == 1328);
 	eastl::unique_ptr<ConstantBuffer> volCloudCb = nullptr;
 	eastl::unique_ptr<ConstantBuffer> cloudDispatchCb;
 	eastl::unique_ptr<Texture2D> texVolStormMotion, texVolCubeStormMotion;
@@ -531,6 +555,7 @@ struct PhysicalSky final : public Feature
 	eastl::unique_ptr<Texture2D> texCloudAmbientBoundary;
 	std::array<uint32_t, kCloudAmbientCascadeCount> cloudAmbientIterations = {};
 	bool cloudAmbientValid = false;
+	bool cloudAmbientResourcesFailed = false;
 	std::string cloudAmbientWorldspace;
 	uint32_t cloudAmbientUpdateIndex = 0;
 	struct CloudAmbientVolumeCB
@@ -601,8 +626,8 @@ struct PhysicalSky final : public Feature
 	winrt::com_ptr<ID3D11ComputeShader> csVolMainVolcanic, csVolCubemapVolcanic, csVolShadowVolcanic, csCloudAmbientDensityVolcanic;
 	winrt::com_ptr<ID3D11ComputeShader> csVolMainSingleVolcanic;
 	winrt::com_ptr<ID3D11ComputeShader> csVoxelView, csVoxelViewSingle, csVolCubemapVoxel, csVolShadowVoxel, csCloudAmbientDensityVoxel, csVoxelLighting;
-	winrt::com_ptr<ID3D11ComputeShader> csVolFilter = nullptr, csVolFilterWide = nullptr;
-	winrt::com_ptr<ID3D11ComputeShader> csVolReproject = nullptr;
+	winrt::com_ptr<ID3D11ComputeShader> csVolFilter, csVolFilterWide, csVolFilterWideFast;
+	winrt::com_ptr<ID3D11ComputeShader> csVolReproject, csVolReprojectFast;
 	winrt::com_ptr<ID3D11ComputeShader> csVolCubeReproject = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> csVolShadowVolume = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> csVolShadowWeather, csVolShadowColumns, csCloudShadowMeanWeather;
@@ -631,6 +656,8 @@ struct PhysicalSky final : public Feature
 		kMainViewAndCubemap
 	};
 	void SetupVolumetricResources();
+	/// Allocates the ambient transport volumes when the grid is first used.
+	bool EnsureCloudAmbientTransportResources();
 	/** @brief Creates the full-resolution cloud targets on first use; on failure disables volumetric clouds for the session. @return True when they exist. */
 	bool EnsureVolumetricScreenResources();
 	bool volumetricScreenResourcesFailed = false;

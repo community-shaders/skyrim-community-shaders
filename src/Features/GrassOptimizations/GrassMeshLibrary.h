@@ -141,7 +141,7 @@ struct GrassDrawParams
 /** @brief Captures the material values consumed by grass drawing. */
 struct GrassMaterialKey
 {
-	std::array<RE::NiSourceTexture*, 6> textures{};
+	std::array<RE::NiSourceTexture*, 7> textures{};
 	uint32_t clampMode = 0;
 	TruePBR::GrassPBRConstants constants{};
 	bool operator==(const GrassMaterialKey&) const = default;
