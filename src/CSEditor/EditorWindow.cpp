@@ -1494,6 +1494,9 @@ void EditorWindow::UpdateOpenState()
 				std::vformat(T(TKEY("weather_still_locked"), "Weather is still locked: {}"), std::make_format_args(weatherName)),
 				Util::Colors::GetWarning(), kLongNotificationDuration);
 		}
+		// A pause owned by a panel releases itself right after the close, so only the user's is worth a warning.
+		if (timePaused && !SceneSettingsUI::IsTimePausedByPanel())
+			ShowNotification(T(TKEY("time_still_paused"), "Time is still paused"), Util::Colors::GetWarning(), kLongNotificationDuration);
 		delete tempTexture;
 		tempTexture = nullptr;
 		for (auto& widget : weatherWidgets)
@@ -2407,8 +2410,10 @@ bool EditorWindow::DrawTimePauseToggle(const char* id, const ImVec2& size)
 	const ImU32 glyphColor = ImGui::GetColorU32(ImGuiCol_Text);
 	const bool isPaused = IsTimePaused();
 	const bool clicked = DrawToggleIconButton(id, Icons::TI(ICON_TI_CLOCK_PAUSE), isPaused, pausedColor, buttonSize, glyphColor);
-	if (clicked)
+	if (clicked) {
+		SceneSettingsUI::ClaimTimePause();
 		TogglePause();
+	}
 	return clicked;
 }
 
