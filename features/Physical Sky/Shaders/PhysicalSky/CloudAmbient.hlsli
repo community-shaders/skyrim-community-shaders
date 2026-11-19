@@ -136,9 +136,20 @@ namespace CloudAmbientTransport
 	float3 BoundarySource(float3 ray, float altitude);
 	float2 AltitudeRange();
 
+	void SHSources(out float3 sky, out float3 lower)
+	{
+		sky = 0.5 * SampleCloudAmbientRadiance();
+		lower = 0.5 * TexCloudAmbientSH[int2(4, 0)].rgb;
+	}
+
 	// Solid-angle hemisphere contributions cached with the atmosphere lighting.
 	void HemisphereSources(float altitude, out float3 sky, out float3 lower)
 	{
+		[branch] if (CloudAmbientSHOnly != 0u)
+		{
+			SHSources(sky, lower);
+			return;
+		}
 		const float2 range = AltitudeRange();
 		const float row = 4.0 * sqrt(saturate((altitude - range.x) / max(range.y - range.x, 1.0)));
 		sky = TexCloudAmbientLighting.SampleLevel(TransmittanceSampler, float2((5.5 + row) / 512.0, 0.5 / 7.0), 0).rgb;
@@ -210,8 +221,17 @@ namespace CloudAmbientTransport
 		return source;
 	}
 
-	float3 ViewSource(float3 pos)
+	float3 ViewSource(float3 pos, float height, float extinction, float3 sky, float3 lower)
 	{
+		[branch] if (CloudAmbientSHOnly != 0u)
+		{
+			// Estimate local optical depth toward each hemisphere. Limit the
+			// approximation to a local column so dense cores retain ambient fill.
+			const float transport = VolumetricCloudBuffer[0].msTransportExtinction;
+			const float2 depth = 64.0 * max(extinction, 0.0) * transport * float2(1.0 - saturate(height), saturate(height));
+			const float2 visibility = rcp(1.0 + depth);
+			return sky * visibility.x + lower * visibility.y;
+		}
 		float3 source = 0.0;
 		float remaining = 1.0;
 		[loop] for (uint cascade = 0u; cascade < 4u && remaining > 0.001; ++cascade)

@@ -8,6 +8,34 @@ RWTexture2D<float> RWTexFilteredTr : register(u3);
 RWTexture2D<float4> RWTexFilteredLum : register(u4);
 RWTexture2D<float4> RWTexFilteredAux : register(u5);
 
+[numthreads(8, 8, 1)] void filterCloudWideFast(uint2 pixel : SV_DispatchThreadID) {
+	const int2 maximum = int2(VolumetricCloudBuffer[0].activeFrameDim) - 1;
+	if (any(int2(pixel) > maximum))
+		return;
+	uint2 dimensions;
+	TexCloudResultTr.GetDimensions(dimensions.x, dimensions.y);
+	const float4 metadata = TexCloudResultAux[pixel];
+	const float falloff = 1.0 - saturate(abs(metadata.x - 1.0) / 6.0);
+	const float radius = (pow(falloff, 4.0) * 0.67 + 0.33) * 2.0;
+	float4 color = 0.0;
+	float transmittance = 0.0;
+	float weight = 0.0;
+	[unroll] for (uint i = 0u; i < 4u; ++i)
+	{
+		const float2 offset = (float2(i & 1u, i >> 1u) * 2.0 - 1.0) * radius;
+		const float2 uv = (clamp(float2(pixel) + offset, 0.0, float2(maximum)) + 0.5) / dimensions;
+		const float sceneDepth = TexCloudResultAux.SampleLevel(TransmittanceSampler, uv, 0).y;
+		if (abs(sceneDepth - metadata.y) <= 0.064) {
+			transmittance += TexCloudResultTr.SampleLevel(TransmittanceSampler, uv, 0);
+			color += TexCloudResultLum.SampleLevel(TransmittanceSampler, uv, 0);
+			weight += 1.0;
+		}
+	}
+	RWTexFilteredTr[pixel] = weight > 0.0 ? transmittance / weight : TexCloudResultTr[pixel];
+	RWTexFilteredLum[pixel] = weight > 0.0 ? color / weight : TexCloudResultLum[pixel];
+	RWTexFilteredAux[pixel] = metadata;
+}
+
 #ifndef CLOUD_BLUR_RADIUS
 #	define CLOUD_BLUR_RADIUS 1
 #endif
