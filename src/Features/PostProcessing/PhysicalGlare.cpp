@@ -364,7 +364,7 @@ void PhysicalGlare::DrawSettings()
 void PhysicalGlare::DrawDebugSection()
 {
 	Util::SectionCard card("##PhysicalGlarePsf", ICON_TI_SPARKLES, T("feature.post_processing.physical_glare.debug_card_psf", "Glare Kernel"));
-	if (!texGlarePacked || !texGlarePacked->srv) {
+	if (!outputReady || !texGlarePacked || !texGlarePacked->srv) {
 		Util::SettingHint(T("feature.post_processing.physical_glare.debug_no_kernel", "The glare kernel has not been generated yet."), false);
 		return;
 	}
@@ -448,6 +448,19 @@ void PhysicalGlare::CreateFFTTextures(uint resolution)
 	apertureDirty = true;
 }
 
+void PhysicalGlare::ReleaseFFTTextures()
+{
+	for (auto& channel : texFFT)
+		for (auto& texture : channel)
+			texture.reset();
+	for (auto& texture : texPSF_FFT)
+		texture.reset();
+	texApertureBase.reset();
+	texGlarePacked.reset();
+	currentFFTResolution = 0;
+	outputReady = false;
+}
+
 bool PhysicalGlare::EnsureTargets(uint resolution)
 {
 	if (texOutput && currentFFTResolution == resolution)
@@ -487,12 +500,12 @@ bool PhysicalGlare::EnsureTargets(uint resolution)
 		}
 
 		if (currentFFTResolution != resolution) {
-			// A failed resize can leave some work textures at the new size.
-			currentFFTResolution = 0;
+			ReleaseFFTTextures();
 			CreateFFTTextures(resolution);
 		}
 		return true;
 	} catch (const std::exception& e) {
+		ReleaseFFTTextures();
 		logger::error("[PostProcessing] Could not create Physical Glare targets: {}", e.what());
 		nextTargetAttempt = now + std::chrono::seconds(5);
 		return false;

@@ -268,6 +268,7 @@ struct PhysicalGlare : public PostProcessFeature
 	virtual void ClearShaderCache() override;
 	void CompileComputeShaders();
 	void CreateFFTTextures(uint resolution);
+	void ReleaseFFTTextures();
 	bool EnsureTargets(uint resolution);
 
 	virtual void RestoreDefaultSettings() override;

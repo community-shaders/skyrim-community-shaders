@@ -473,7 +473,7 @@ void PostProcessing::ClearShaderCache()
 void PostProcessing::SetupResources()
 {
 	colorTargets.clear();
-	nextColorTargetAttempt = {};
+	colorTargetRetry.clear();
 
 	auto& renderTargets = globals::game::renderer->GetRuntimeData().renderTargets;
 	renderTargets[RE::RENDER_TARGETS::kMAIN].texture->GetDesc(&mainColorDesc);
@@ -516,47 +516,55 @@ void PostProcessing::Reset()
 	isrefraction = false;
 }
 
-void PostProcessing::CopyToRenderTarget(
-	const RE::BSGraphics::RenderTargetData& targetRT,
-	ID3D11Texture2D* srcTex,
-	ID3D11ShaderResourceView* srcSRV, const CopyCB& conversion)
+std::optional<PostProcessing::RenderTargetCopy> PostProcessing::PrepareRenderTargetCopy(
+	ID3D11Texture2D* target, PostProcessFeature::TextureInfo source, const CopyCB& conversion)
 {
+	if (!target || !source.tex)
+		return std::nullopt;
+
 	const bool convert = conversion.scale != 1.f || conversion.gamma != 1.f || conversion.inputGamut != conversion.outputGamut;
-	if (!targetRT.texture || !srcTex || (!convert && targetRT.texture == srcTex))
-		return;
-
-	auto context = globals::d3d::context;
-
 	D3D11_TEXTURE2D_DESC srcDesc;
-	srcTex->GetDesc(&srcDesc);
+	source.tex->GetDesc(&srcDesc);
 
 	D3D11_TEXTURE2D_DESC targetDesc;
-	targetRT.texture->GetDesc(&targetDesc);
+	target->GetDesc(&targetDesc);
 
-	if (!convert && srcDesc.Format == targetDesc.Format) {
-		globals::profiler->BeginPass("PostProcessing::CopyToTarget");
-		context->CopySubresourceRegion(targetRT.texture, 0, 0, 0, 0, srcTex, 0, nullptr);
-		globals::profiler->EndPass();
+	if (!convert && srcDesc.Format == targetDesc.Format)
+		return RenderTargetCopy{ target, source, nullptr, conversion };
+
+	if (!copyPS || !fullscreenVS || !source.srv)
+		return std::nullopt;
+
+	auto* scratch = GetColorTarget(source.tex, targetDesc.Width, targetDesc.Height, targetDesc.Format);
+	if (!scratch)
+		return std::nullopt;
+
+	return RenderTargetCopy{ target, source, scratch, conversion };
+}
+
+void PostProcessing::CopyToRenderTarget(const RenderTargetCopy& copy)
+{
+	auto* context = globals::d3d::context;
+	auto* scratch = copy.scratch;
+	if (!scratch) {
+		if (copy.target != copy.source.tex) {
+			globals::profiler->BeginPass("PostProcessing::CopyToTarget");
+			context->CopySubresourceRegion(copy.target, 0, 0, 0, 0, copy.source.tex, 0, nullptr);
+			globals::profiler->EndPass();
+		}
 		return;
 	}
-
-	if (!copyPS || !fullscreenVS || !srcSRV)
-		return;
-
-	auto* convertTex = GetColorTarget(srcTex, targetDesc.Width, targetDesc.Height, targetDesc.Format);
-	if (!convertTex)
-		return;
 
 	globals::profiler->BeginPass("PostProcessing::ConvertToTarget");
 	{
 		PostProcessingRaster::RasterPass pass(context);
 
-		copyCB->Update(conversion);
+		copyCB->Update(copy.conversion);
 		ID3D11Buffer* cb = copyCB->CB();
 		context->PSSetConstantBuffers(1, 1, &cb);
-		ID3D11ShaderResourceView* srv = srcSRV;
+		ID3D11ShaderResourceView* srv = copy.source.srv;
 		context->PSSetShaderResources(0, 1, &srv);
-		pass.SetTargets({ convertTex->rtv.get() }, (float)convertTex->desc.Width, (float)convertTex->desc.Height);
+		pass.SetTargets({ scratch->rtv.get() }, (float)scratch->desc.Width, (float)scratch->desc.Height);
 		pass.SetShaders(fullscreenVS.get(), copyPS.get());
 		pass.Draw();
 
@@ -566,7 +574,7 @@ void PostProcessing::CopyToRenderTarget(
 		context->PSSetConstantBuffers(1, 1, &cb);
 	}
 
-	context->CopySubresourceRegion(targetRT.texture, 0, 0, 0, 0, convertTex->resource.get(), 0, nullptr);
+	context->CopySubresourceRegion(copy.target, 0, 0, 0, 0, scratch->resource.get(), 0, nullptr);
 	globals::profiler->EndPass();
 }
 
@@ -578,21 +586,27 @@ Texture2D* PostProcessing::GetColorTarget(ID3D11Texture2D* input, DXGI_FORMAT fo
 
 Texture2D* PostProcessing::GetColorTarget(ID3D11Texture2D* input, UINT width, UINT height, DXGI_FORMAT format)
 {
+	// Writeback can also target formats that only need an RTV.
+	const bool needsShaderViews = format == sceneColorDesc.Format || format == DXGI_FORMAT_R16G16B16A16_FLOAT || format == DXGI_FORMAT_R32G32B32A32_FLOAT;
+	const UINT bindFlags = D3D11_BIND_RENDER_TARGET | (needsShaderViews ? D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS : 0u);
+
 	// Only the current input is live. Two targets per size and format suffice,
 	// even for a pass such as Camera that advances the chain twice.
 	for (const auto& target : colorTargets) {
 		if (target->resource.get() != input && target->desc.Width == width &&
-			target->desc.Height == height && target->desc.Format == format)
+			target->desc.Height == height && target->desc.Format == format && target->desc.BindFlags == bindFlags)
 			return target.get();
 	}
 
 	const auto now = std::chrono::steady_clock::now();
-	if (now < nextColorTargetAttempt)
-		return nullptr;
+	const auto key = std::tuple{ width, height, format, bindFlags };
+	if (const auto retry = colorTargetRetry.find(key); retry != colorTargetRetry.end()) {
+		if (now < retry->second)
+			return nullptr;
+		colorTargetRetry.erase(retry);
+	}
 
 	try {
-		// Writeback can also target formats that only need an RTV.
-		const bool needsShaderViews = format == sceneColorDesc.Format || format == DXGI_FORMAT_R16G16B16A16_FLOAT || format == DXGI_FORMAT_R32G32B32A32_FLOAT;
 		const D3D11_TEXTURE2D_DESC desc{
 			.Width = width,
 			.Height = height,
@@ -601,7 +615,7 @@ Texture2D* PostProcessing::GetColorTarget(ID3D11Texture2D* input, UINT width, UI
 			.Format = format,
 			.SampleDesc = { 1, 0 },
 			.Usage = D3D11_USAGE_DEFAULT,
-			.BindFlags = D3D11_BIND_RENDER_TARGET | (needsShaderViews ? D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS : 0u)
+			.BindFlags = bindFlags
 		};
 		auto name = std::format("PostProcessing::ColorScratch{}", colorTargets.size());
 		auto target = std::make_unique<Texture2D>(desc, name.c_str());
@@ -612,8 +626,9 @@ Texture2D* PostProcessing::GetColorTarget(ID3D11Texture2D* input, UINT width, UI
 		}
 		return colorTargets.emplace_back(std::move(target)).get();
 	} catch (const std::exception& e) {
-		logger::error("[PostProcessing] Could not create a color scratch target: {}", e.what());
-		nextColorTargetAttempt = now + std::chrono::seconds(5);
+		logger::error("[PostProcessing] Could not create a {}x{} color scratch target (format {}, bind flags {}): {}",
+			width, height, static_cast<uint>(format), bindFlags, e.what());
+		colorTargetRetry.emplace(key, now + std::chrono::seconds(5));
 		return nullptr;
 	}
 }
@@ -698,22 +713,24 @@ void PostProcessing::DrawBeforeUpscaling()
 		}
 	}
 
-	if (processing)
-		CopyToRenderTarget(gameTexMain, lastTexColor.tex, lastTexColor.srv,
-			CopyCB{ .gamma = globals::features::linearLighting.IsLinearLightingActive() ? 1.f : Util::ColorSpace::GAME_GAMMA_INV });
+	if (processing) {
+		const CopyCB conversion{ .gamma = globals::features::linearLighting.IsLinearLightingActive() ? 1.f : Util::ColorSpace::GAME_GAMMA_INV };
+		if (const auto copy = PrepareRenderTargetCopy(gameTexMain.texture, lastTexColor, conversion))
+			CopyToRenderTarget(*copy);
+	}
 
 	state->EndPerfEvent();
 }
 
-void PostProcessing::PreProcess(RE::RENDER_TARGET a_input)
+std::optional<RE::RENDER_TARGET> PostProcessing::PreProcess(RE::RENDER_TARGET a_input)
 {
 	if (globals::features::linearLighting.IsLinearLightingActive() &&
 		(globals::state->permutationData.RenderToUI || globals::state->IsMainOrLoadingMenuOpen()))
-		return;
+		return std::nullopt;
 	auto& ll = globals::features::linearLighting;
 	const bool linear = ll.IsLinearLightingActive();
 	if (bypass && !linear)
-		return;
+		return std::nullopt;
 
 	auto renderer = globals::game::renderer;
 
@@ -732,12 +749,14 @@ void PostProcessing::PreProcess(RE::RENDER_TARGET a_input)
 
 	// The tonemap hook hands us the pass input directly, so no need to probe the bound RTV.
 	// Refraction still routes through kMAIN_COPY without that being reflected in a_input.
-	bool useMainCopy = isrefraction || a_input == RE::RENDER_TARGETS::kMAIN_COPY;
+	const bool useMainCopy = isrefraction || a_input == RE::RENDER_TARGETS::kMAIN_COPY;
+	const auto sceneTarget = useMainCopy ? RE::RENDER_TARGETS::kMAIN_COPY : RE::RENDER_TARGETS::kMAIN;
+	isrefraction = false;
 
 	auto gameTexMain = useMainCopy ? gameTexMainCopyRT : gameTexMainRT;
 	PostProcessFeature::TextureInfo lastTexColor = { gameTexMain.texture, gameTexMain.SRV };
 	if (!BeginLinearProcessing(lastTexColor))
-		return;
+		return sceneTarget;
 	auto gameTexMainAlt = useMainCopy ? gameTexMainRT : gameTexMainCopyRT;
 
 	// update auto-enabled features
@@ -747,26 +766,35 @@ void PostProcessing::PreProcess(RE::RENDER_TARGET a_input)
 	}
 
 	// go through each fx
+	const auto& colorGrading = pipeline[static_cast<size_t>(FeaturePipelineIndex::ColorGrading)];
+	const auto& border = pipeline[static_cast<size_t>(FeaturePipelineIndex::Border)];
 	bool colorGraded = false;
+	bool borderDrawn = false;
 	bool exposureResolved = !linear || globals::state->preExposure == 1.0f;
 	for (auto& pipe : pipeline) {
 		if (pipe && !bypass && pipe->IsActive() && !pipe->DrawAfterColorGrading() && !(inMainLoadingMenu && pipe->DisableInMainLoadingMenu()) && (!pipe->DrawBeforeUpscaling() || !upscaling.loaded)) {
 			auto* input = lastTexColor.tex;
-			// A failed/not-yet-compiled composite cannot hand scaled radiance to
-			// display transforms. The final copy below provides the identity fallback.
-			if (!exposureResolved && pipe == pipeline[static_cast<size_t>(FeaturePipelineIndex::ColorGrading)])
-				continue;
+			// ISHDR can decode the original scene if Composite or Color Grading
+			// can't produce the display image for this invocation.
+			if (!exposureResolved && pipe == colorGrading)
+				return sceneTarget;
 			DrawFeature(*pipe, lastTexColor);
 			if (!exposureResolved && pipe == pipeline[static_cast<size_t>(FeaturePipelineIndex::Composite)])
 				exposureResolved = lastTexColor.tex != input;
-			if (pipe == pipeline[static_cast<size_t>(FeaturePipelineIndex::ColorGrading)])
+			if (pipe == colorGrading) {
 				colorGraded = lastTexColor.tex != input;
+				if (!colorGraded)
+					return sceneTarget;
+			}
 		}
 	}
 
 	for (auto& pipe : pipeline) {
 		if (!bypass && exposureResolved && pipe && pipe->IsActive() && pipe->DrawAfterColorGrading() && !(inMainLoadingMenu && pipe->DisableInMainLoadingMenu()) && (!pipe->DrawBeforeUpscaling() || !upscaling.loaded)) {
+			auto* input = lastTexColor.tex;
 			DrawFeature(*pipe, lastTexColor);
+			if (pipe == border)
+				borderDrawn = lastTexColor.tex != input;
 		}
 	}
 
@@ -779,24 +807,22 @@ void PostProcessing::PreProcess(RE::RENDER_TARGET a_input)
 		.gamma = sceneOutput && !linear ? Util::ColorSpace::GAME_GAMMA_INV : 1.f,
 		.scale = exposureResolved ? 1.f : 1.f / globals::state->preExposure
 	};
-	CopyToRenderTarget(gameTexMain, lastTexColor.tex, lastTexColor.srv, conversion);
-	CopyToRenderTarget(gameTexMainAlt, gameTexMain.texture, gameTexMain.SRV, CopyCB{});
+	// Both copies must be ready before either game target is modified. The
+	// alternate is derived from the committed main target, including its format.
+	const auto mainCopy = PrepareRenderTargetCopy(gameTexMain.texture, lastTexColor, conversion);
+	if (!mainCopy)
+		return sceneTarget;
+	const auto alternateCopy = PrepareRenderTargetCopy(gameTexMainAlt.texture, { gameTexMain.texture, gameTexMain.SRV }, CopyCB{});
+	if (!alternateCopy)
+		return sceneTarget;
 
-	isrefraction = false;
-}
+	CopyToRenderTarget(*mainCopy);
+	CopyToRenderTarget(*alternateCopy);
 
-void PostProcessing::ClearBorderMotionVectorsForFrameGen()
-{
-	// Without a drawn letterbox, zeroed motion vectors would hand frame generation static pixels over live scene content.
-	if (!IsPipelineRunning())
-		return;
+	if (borderDrawn && upscaling.ShouldUseFrameGenerationThisFrame() && !globals::state->permutationData.RenderToUI)
+		static_cast<Border*>(border.get())->ClearMotionVectorsForFrameGen();
 
-	auto borderIdx = static_cast<size_t>(FeaturePipelineIndex::Border);
-	auto& pipe = pipeline[borderIdx];
-	if (pipe && pipe->IsActive() && !(globals::state->IsMainOrLoadingMenuOpen() && pipe->DisableInMainLoadingMenu())) {
-		auto* border = static_cast<Border*>(pipe.get());
-		border->ClearMotionVectorsForFrameGen();
-	}
+	return std::nullopt;
 }
 
 bool PostProcessing::WantsTonemapOwnership() const
@@ -813,7 +839,7 @@ bool PostProcessing::IsPipelineRunning() const
 
 bool PostProcessing::WantsAutoHDR() const
 {
-	if (globals::state->GetTonemapOwner() != State::TonemapOwner::kPostProcessing)
+	if (globals::state->IsPostProcessingFallback() || globals::state->GetTonemapOwner() != State::TonemapOwner::kPostProcessing)
 		return false;
 
 	auto* colorGrading = static_cast<const ColorGrading*>(pipeline[static_cast<size_t>(FeaturePipelineIndex::ColorGrading)].get());

@@ -20,6 +20,9 @@
 #include "PostProcessing/Vignette.h"
 
 #include <chrono>
+#include <map>
+#include <optional>
+#include <tuple>
 
 struct PostProcessing : Feature
 {
@@ -141,9 +144,9 @@ struct PostProcessing : Feature
 	virtual void PostPostLoad() override;
 	virtual void Prepass() override;
 
-	void PreProcess(RE::RENDER_TARGET a_input);
+	/// Returns the untouched scene target when ISHDR must tonemap it directly.
+	std::optional<RE::RENDER_TARGET> PreProcess(RE::RENDER_TARGET a_input);
 	void DrawBeforeUpscaling();
-	void ClearBorderMotionVectorsForFrameGen();
 	void DrawFeature(PostProcessFeature& feature, PostProcessFeature::TextureInfo& lastTexColor);
 
 	/// Render-thread scratch for the serial color chain. The returned target
@@ -163,23 +166,6 @@ struct PostProcessing : Feature
 		float gamma = 1.f;
 		float scale = 1.f;
 	};
-
-	/**
-	 * @brief Copies the pipeline output into a game render target, converting the
-	 *        format via the copyPS fullscreen pass when the formats differ.
-	 *
-	 * Same-format, same-space copies use CopySubresourceRegion; otherwise the
-	 * source is rendered into a scratch target first and then copied.
-	 *
-	 * @param targetRT  Game render target receiving the image.
-	 * @param srcTex  Texture holding the pipeline output.
-	 * @param srcSRV  SRV of srcTex, sampled by the conversion pass.
-	 */
-	void CopyToRenderTarget(
-		const RE::BSGraphics::RenderTargetData& targetRT,
-		ID3D11Texture2D* srcTex,
-		ID3D11ShaderResourceView* srcSRV, const CopyCB& conversion);
-	bool BeginLinearProcessing(PostProcessFeature::TextureInfo& texture);
 
 	/////////////////////////////////////////////////////////////////////////////////
 
@@ -225,10 +211,22 @@ struct PostProcessing : Feature
 	};
 
 private:
+	struct RenderTargetCopy
+	{
+		ID3D11Texture2D* target;
+		PostProcessFeature::TextureInfo source;
+		Texture2D* scratch;
+		CopyCB conversion;
+	};
+
+	std::optional<RenderTargetCopy> PrepareRenderTargetCopy(
+		ID3D11Texture2D* target, PostProcessFeature::TextureInfo source, const CopyCB& conversion);
+	void CopyToRenderTarget(const RenderTargetCopy& copy);
+	bool BeginLinearProcessing(PostProcessFeature::TextureInfo& texture);
 	Texture2D* GetColorTarget(ID3D11Texture2D* input, UINT width, UINT height, DXGI_FORMAT format);
 
 	D3D11_TEXTURE2D_DESC sceneColorDesc{};
 	D3D11_TEXTURE2D_DESC mainColorDesc{};
 	std::vector<std::unique_ptr<Texture2D>> colorTargets;
-	std::chrono::steady_clock::time_point nextColorTargetAttempt{};
+	std::map<std::tuple<UINT, UINT, DXGI_FORMAT, UINT>, std::chrono::steady_clock::time_point> colorTargetRetry;
 };
