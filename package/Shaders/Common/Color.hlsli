@@ -145,10 +145,12 @@ namespace Color
 	const static float PBRLightingScale = 1.0;
 	const static float ReflectionNormalisationScale = 1.0;  // Attempt to normalise reflection brightness against DALC
 	const static float PBRLightingCompensation = 1.0;
+	const static float VanillaWetnessReflectionScale = 0.65;  // Fixed-F0 water film otherwise outshines dark linear vanilla albedo
 #else
 	const static float PBRLightingScale = 0.65;
 	const static float ReflectionNormalisationScale = 0.65;
 	const static float PBRLightingCompensation = Math::PI;
+	const static float VanillaWetnessReflectionScale = 1.0;
 #endif
 
 	// Gamut transform: converts linear sRGB-gamut color to ACEScg when enabled
