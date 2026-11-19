@@ -79,6 +79,7 @@ PRIMITIVE_TYPES = {
     "unsigned long long": "Integer",
     "size_t": "Integer",
     "std::size_t": "Integer",
+    "SceneBlend": "Blend",
     "std::string": "String",
     "string": "String",
 }
@@ -560,6 +561,46 @@ def collect_nlohmann_macros(paths: list[Path]) -> dict[str, list[str]]:
     if conflicts:
         raise SystemExit("conflicting nlohmann type definitions:\n  " + "\n  ".join(conflicts))
     return macros
+
+
+def collect_json_initializer_fields(paths: list[Path]) -> dict[str, list[str]]:
+    schemas: dict[str, list[str]] = {}
+    signature = re.compile(
+        r'\bvoid\s+to_json\s*\(\s*nlohmann::json\s*&\s*(\w+)\s*,\s*'
+        r'const\s+([\w:]+)\s*&\s*(\w+)\s*\)\s*\{')
+    for path in paths:
+        raw = read_text(path)
+        text = masked_text(path)
+        for match in signature.finditer(text):
+            end = find_matching_brace(text, match.end() - 1)
+            if end < 0:
+                continue
+            target, type_name, value = match.groups()
+            body = text[match.end():end]
+            assignment = re.fullmatch(
+                rf'\s*{re.escape(target)}\s*=\s*\{{(.*)\}}\s*;\s*',
+                body, flags=re.DOTALL)
+            if not assignment:
+                continue
+            offset = match.end() + assignment.start(1)
+            initializer = raw[offset:offset + len(assignment.group(1))]
+            fields: list[str] = []
+            for item in split_args(initializer):
+                pair = re.fullmatch(r'\s*\{\s*"(\w+)"\s*,\s*(.*?)\s*\}\s*', item,
+                                    flags=re.DOTALL)
+                if not pair:
+                    break
+                key, expression = pair.groups()
+                if re.fullmatch(rf'{re.escape(value)}\s*\.\s*{re.escape(key)}', expression):
+                    fields.append(key)
+                elif not re.fullmatch(r'(?:\d+(?:\.\d+)?[uUfF]?|true|false|"[^"\n]*")', expression):
+                    break
+            else:
+                if fields:
+                    if type_name in schemas and schemas[type_name] != fields:
+                        raise SystemExit(f"conflicting JSON initializers for {type_name}")
+                    schemas[type_name] = fields
+    return schemas
 
 
 def collect_struct_bodies(paths: list[Path]) -> dict[str, list[str]]:
@@ -2767,11 +2808,10 @@ def find_parameter_origin(
     for index, (_, name, _) in enumerate(parameters):
         match = re.fullmatch(
             rf"\s*&?\s*{re.escape(name)}"
-            r"((?:\.[A-Za-z_]\w*)*)\s*",
+            r"((?:\.[A-Za-z_]\w*|\[\s*\d+\s*\])*)\s*",
             expression)
         if match:
-            member_path = tuple(
-                part for part in match.group(1).split(".") if part)
+            member_path = tuple(re.findall(r"[A-Za-z_]\w*|\d+", match.group(1)))
             return index, member_path
     return None
 
@@ -4301,6 +4341,10 @@ def build_entries(source_dir: Path) -> list[dict[str, object]]:
     src_paths = sorted({p for p in src_paths if p.exists()})
 
     macros = collect_nlohmann_macros(src_paths)
+    for type_name, fields in collect_json_initializer_fields(src_paths).items():
+        if type_name in macros and macros[type_name] != fields:
+            raise SystemExit(f"conflicting serialized fields for {type_name}")
+        macros[type_name] = fields
     parsed_struct_fields = {
         name: [parse_struct_fields(body) for body in bodies]
         for name, bodies in collect_struct_bodies(src_paths).items()}
@@ -4420,6 +4464,8 @@ def build_entries(source_dir: Path) -> list[dict[str, object]]:
             label, label_key = "", ""
         else:
             label, label_key = fallback_label or prettify(key), ""
+        if value_type == "Blend":
+            label, label_key = "Scene State", "feature.scene_manager.state_blend"
         ui_category = binding.category.text if binding else ""
         category_key = binding.category.key if binding else ""
         control_kind = binding.control_kind if binding else ""
@@ -4431,8 +4477,10 @@ def build_entries(source_dir: Path) -> list[dict[str, object]]:
             (context.field_class, setting_address)) or resolve_editor_semantic(
             binding, value_type, force_hidden)
 
+        if value_type == "Blend" and not force_hidden:
+            editor_semantic = "Blend"
         flags = ["SceneSettingsCatalog::SettingFlag::Persisted"]
-        if value_type == "Float" and editor_semantic in {"Numeric", "Generic"}:
+        if editor_semantic == "Blend" or (value_type == "Float" and editor_semantic in {"Numeric", "Generic"}):
             flags.append("SceneSettingsCatalog::SettingFlag::Transitionable")
         if editor_semantic == "Toggle":
             flags.append("SceneSettingsCatalog::SettingFlag::BooleanControl")
@@ -4861,6 +4909,7 @@ namespace SceneSettingsCatalog
 \t\tInteger,
 \t\tFloat,
 \t\tString,
+\t\tBlend,
 \t};
 
 \tenum class EditorSemantic : std::uint8_t
@@ -4871,6 +4920,7 @@ namespace SceneSettingsCatalog
 \t\tNumeric,
 \t\tChoice,
 \t\tText,
+\t\tBlend,
 \t};
 
 \tenum class AggregateSemantic : std::uint8_t
@@ -5167,8 +5217,10 @@ SOURCE_WIDGET_ENTRY_POINTS = {
     "DragFloat2": ("DragFloat2",),
     "DragFloat3": ("DragFloat3",),
     "DragFloat4": ("DragFloat4",),
+    "InputFloat": ("InputFloat",),
     "InputFloat2": ("InputFloat2",),
     "InputFloat3": ("InputFloat3",),
+    "InputScalar": ("InputScalar",),
     "InputInt": ("InputInt",),
     "PercentageSlider": ("SliderFloat",),
     "SliderAngle": ("SliderAngle",),
@@ -5247,7 +5299,7 @@ def validate_entries(
         semantic = entry["editorSemantic"]
         if allowed == (semantic == "None"):
             errors.append(f"invalid editor for {identity}")
-        if allowed and semantic != "Text":  # Text settings draw their own UI, no interceptor entry point
+        if allowed and semantic not in {"Text", "Blend"}:  # Custom controls bind through the context API.
             widget = entry.get("sourceWidget", "")
             if widget not in SOURCE_WIDGET_ENTRY_POINTS:
                 errors.append(

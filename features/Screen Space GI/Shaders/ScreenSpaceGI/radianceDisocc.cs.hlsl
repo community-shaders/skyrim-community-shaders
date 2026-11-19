@@ -141,7 +141,8 @@ void readHistory(
 
 	half3 radiance = 0;
 #ifdef GI
-	radiance = ColorManagement::SceneToLinear(FULLRES_LOAD(srcDiffuse, pixCoord, uv * frameScale, samplerLinearClamp).rgb * GIStrength);
+	// Keep GI radiance and temporal history independent of scene pre-exposure.
+	radiance = ColorManagement::SceneToLinear(PreExposure::Decode(FULLRES_LOAD(srcDiffuse, pixCoord, uv * frameScale, samplerLinearClamp).rgb) * GIStrength);
 	radiance = filterNaN(radiance);
 	radiance = filterInf(radiance);
 	outRadianceDisocc[pixCoord] = radiance;

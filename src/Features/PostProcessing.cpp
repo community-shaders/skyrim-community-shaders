@@ -210,12 +210,14 @@ void PostProcessing::DrawSettings()
 			ImGui::PushID(feat->GetType().c_str());
 
 			const bool automatic = isForcedOn(*feat);
+			const bool experimental = feat->IsExperimental();
 			if (!drawForcedEnabled("##Enabled", *feat))
 				ImGui::Checkbox("##Enabled", &feat->enabled);
 
 			// The name opens the settings too, so the whole row reads as one entry
 			ImGui::SameLine();
 			const char* autoLabel = T("feature.post_processing.auto_badge", "Auto");
+			const char* experimentalLabel = T("feature.post_processing.experimental_badge", "Experimental");
 			const float nameWidth = std::max(ImGui::GetContentRegionAvail().x - Util::IconButtonSize() - spacing, ImGui::GetFontSize());
 			{
 				const bool dim = !feat->IsActive();
@@ -230,14 +232,22 @@ void PostProcessing::DrawSettings()
 			}
 			if (!description.empty())
 				Util::AddTooltip(description.c_str());
-			if (automatic) {
-				// Forced on by Cinematic Camera: flag it at the row's right end
+			if (automatic || experimental) {
 				const ImVec2 rowMin = ImGui::GetItemRectMin();
 				const ImVec2 rowMax = ImGui::GetItemRectMax();
-				Util::BadgeOptions badge;
-				badge.at = ImVec2(rowMax.x - Util::MeasureBadgeWidth(autoLabel), rowMin.y);
-				badge.rowHeight = rowMax.y - rowMin.y;
-				Util::Badge(autoLabel, Util::Colors::GetAccent(), badge);
+				float rightX = rowMax.x;
+				auto drawRowBadge = [&](const char* label, const ImVec4& tint) {
+					const float width = Util::MeasureBadgeWidth(label);
+					Util::BadgeOptions badge;
+					badge.at = ImVec2(rightX - width, rowMin.y);
+					badge.rowHeight = rowMax.y - rowMin.y;
+					Util::Badge(label, tint, badge);
+					rightX -= width + spacing;
+				};
+				if (automatic)
+					drawRowBadge(autoLabel, Util::Colors::GetAccent());
+				if (experimental)
+					drawRowBadge(experimentalLabel, Util::Colors::GetWarning());
 			}
 
 			ImGui::SameLine();
@@ -287,7 +297,7 @@ void PostProcessing::DrawSettings()
 		if (!cinematicCamera.settings.Enabled)
 			Util::SettingHint(T("feature.post_processing.enable_the_feature_to_see_its_settings", "Enable the feature to see its settings."), false);
 
-		cinematicCamera.DrawSettings();
+		cinematicCamera.DrawSettings(GetPipelineFeature<PhysicalLens>(FeaturePipelineIndex::PhysicalLens));
 		if (cinematicCamera.settings.Enabled) {
 			if (auto* exposure = GetPipelineFeature<HistogramAutoExposure>(FeaturePipelineIndex::AutoExposure)) {
 				ImGui::SeparatorText(T("feature.post_processing.cinematic_camera.exposure_meter", "Exposure Meter"));
@@ -312,6 +322,7 @@ void PostProcessing::DrawSettings()
 				};
 				drawLinked(FeaturePipelineIndex::DoF, "Depth of Field");
 				drawLinked(FeaturePipelineIndex::LensFlare, "Lens Flare");
+				drawLinked(FeaturePipelineIndex::PhysicalLens, "Physical Lens");
 				drawLinked(FeaturePipelineIndex::PhysicalGlare, "Physical Glare");
 				drawLinked(FeaturePipelineIndex::Vignette, "Vignette");
 				drawLinked(FeaturePipelineIndex::MotionBlur, "Motion Blur");
@@ -417,6 +428,7 @@ void PostProcessing::BuildPipeline()
 	pipeline[static_cast<size_t>(FeaturePipelineIndex::PhysicalGlare)] = std::make_shared<PhysicalGlare>();
 	pipeline[static_cast<size_t>(FeaturePipelineIndex::CODBloom)] = std::make_shared<CODBloom>();
 	pipeline[static_cast<size_t>(FeaturePipelineIndex::LensFlare)] = std::make_shared<LensFlare>();
+	pipeline[static_cast<size_t>(FeaturePipelineIndex::PhysicalLens)] = std::make_shared<PhysicalLens>();
 	pipeline[static_cast<size_t>(FeaturePipelineIndex::Composite)] = std::make_shared<Composite>();
 	pipeline[static_cast<size_t>(FeaturePipelineIndex::Vignette)] = std::make_shared<Vignette>();
 	pipeline[static_cast<size_t>(FeaturePipelineIndex::Camera)] = std::make_shared<Camera>();
@@ -427,7 +439,7 @@ void PostProcessing::BuildPipeline()
 void PostProcessing::ApplyDefaultEnabledStates()
 {
 	using enum FeaturePipelineIndex;
-	constexpr std::array kOffByDefault = { LUT, MotionBlur, PhysicalGlare, Camera, Border };
+	constexpr std::array kOffByDefault = { LUT, MotionBlur, PhysicalGlare, PhysicalLens, Camera, Border };
 	for (size_t index = 0; index < pipeline.size(); ++index) {
 		if (auto& pipe = pipeline[index]; pipe && !pipe->IsAutoEnabled())
 			pipe->enabled = std::ranges::find(kOffByDefault, static_cast<FeaturePipelineIndex>(index)) == kOffByDefault.end();
@@ -550,7 +562,7 @@ void PostProcessing::CopyToRenderTarget(
 	ID3D11Texture2D* srcTex,
 	ID3D11ShaderResourceView* srcSRV, const CopyCB& conversion)
 {
-	const bool convert = conversion.gamma != 1.f || conversion.inputGamut != conversion.outputGamut;
+	const bool convert = conversion.scale != 1.f || conversion.gamma != 1.f || conversion.inputGamut != conversion.outputGamut;
 	if (!targetRT.texture || !srcTex || (!convert && targetRT.texture == srcTex))
 		return;
 
@@ -717,17 +729,24 @@ void PostProcessing::PreProcess(RE::RENDER_TARGET a_input)
 
 	// go through each fx
 	bool colorGraded = false;
+	bool exposureResolved = !linear || globals::state->preExposure == 1.0f;
 	for (auto& pipe : pipeline) {
 		if (pipe && !bypass && pipe->IsActive() && !pipe->DrawAfterColorGrading() && !(inMainLoadingMenu && pipe->DisableInMainLoadingMenu()) && (!pipe->DrawBeforeUpscaling() || !upscaling.loaded)) {
 			auto* input = lastTexColor.tex;
+			// A failed/not-yet-compiled composite cannot hand scaled radiance to
+			// display transforms. The final copy below provides the identity fallback.
+			if (!exposureResolved && pipe == pipeline[static_cast<size_t>(FeaturePipelineIndex::ColorGrading)])
+				continue;
 			DrawFeature(*pipe, lastTexColor);
+			if (!exposureResolved && pipe == pipeline[static_cast<size_t>(FeaturePipelineIndex::Composite)])
+				exposureResolved = lastTexColor.tex != input;
 			if (pipe == pipeline[static_cast<size_t>(FeaturePipelineIndex::ColorGrading)])
 				colorGraded = lastTexColor.tex != input;
 		}
 	}
 
 	for (auto& pipe : pipeline) {
-		if (!bypass && pipe && pipe->IsActive() && pipe->DrawAfterColorGrading() && !(inMainLoadingMenu && pipe->DisableInMainLoadingMenu()) && (!pipe->DrawBeforeUpscaling() || !upscaling.loaded)) {
+		if (!bypass && exposureResolved && pipe && pipe->IsActive() && pipe->DrawAfterColorGrading() && !(inMainLoadingMenu && pipe->DisableInMainLoadingMenu()) && (!pipe->DrawBeforeUpscaling() || !upscaling.loaded)) {
 			DrawFeature(*pipe, lastTexColor);
 		}
 	}
@@ -741,7 +760,8 @@ void PostProcessing::PreProcess(RE::RENDER_TARGET a_input)
 	const CopyCB conversion{
 		.inputGamut = colorGraded ? displayGamut : sceneGamut,
 		.outputGamut = sceneOutput ? sceneGamut : displayGamut,
-		.gamma = sceneOutput && !linear ? Util::ColorSpace::GAME_GAMMA_INV : 1.f
+		.gamma = sceneOutput && !linear ? Util::ColorSpace::GAME_GAMMA_INV : 1.f,
+		.scale = exposureResolved ? 1.f : 1.f / globals::state->preExposure
 	};
 	CopyToRenderTarget(gameTexMain, useMainCopy ? mainCopyConvertTex : mainConvertTex, lastTexColor.tex, lastTexColor.srv, conversion);
 	CopyToRenderTarget(gameTexMainAlt, useMainCopy ? mainConvertTex : mainCopyConvertTex, gameTexMain.texture, gameTexMain.SRV, CopyCB{});

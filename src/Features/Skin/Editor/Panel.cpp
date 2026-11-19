@@ -7,6 +7,7 @@
 #include "Menu/Icons/helpers/SceneActionIcons.h"
 #include "Utils/UI.h"
 
+#include <map>
 #include <shellapi.h>
 
 // The selected texture: its header, the layer breadcrumb with the page toolbar, and what saving does.
@@ -97,15 +98,47 @@ void Skin::DrawTextureHeader()
 	}
 	BrowserUI::InlineBadge(origin, color);
 	Util::AddTooltip(entry->savedTo.empty() ? entry->path.c_str() : entry->savedTo.c_str());
+
+	const auto* customization = EditorCustomization();
+	bool isDiffuse = false;
+	bool isNormal = false;
+	std::string shown;
+	std::map<std::string, std::vector<std::string>> overriddenBy;
+	std::map<std::string, std::vector<std::string>> replaces;
+	std::map<std::string, std::vector<std::string>> pairedDiffuse;
+	auto appendPart = [](std::vector<std::string>& a_parts, const std::string& a_label) {
+		if (std::find(a_parts.begin(), a_parts.end(), a_label) == a_parts.end())
+			a_parts.push_back(a_label);
+	};
+	for (const auto& surface : editor.surfaces) {
+		const bool matchesDiffuse = surface.diffuseKey == editor.key;
+		const bool matchesNormal = surface.normalKey == editor.key;
+		if (!matchesDiffuse && !matchesNormal)
+			continue;
+		isDiffuse |= matchesDiffuse;
+		isNormal |= matchesNormal;
+		const auto label = SkinSurfaces::Label(surface.description);
+		if (shown.find(label) == std::string::npos)
+			shown += (shown.empty() ? "" : " · ") + label;
+		const auto activeKey = ResolveActiveKey(surface.diffuseKey, surface.normalKey, customization);
+		if (matchesDiffuse && activeKey != editor.key && !surface.normalKey.empty())
+			appendPart(overriddenBy[surface.normalKey], label);
+		if (matchesNormal && !surface.diffuseKey.empty() && surface.diffuseKey != editor.key && HasOverride(surface.diffuseKey, customization)) {
+			if (activeKey == editor.key)
+				appendPart(replaces[surface.diffuseKey], label);
+			else
+				appendPart(pairedDiffuse[surface.diffuseKey], label);
+		}
+	}
+	if (isDiffuse && isNormal)
+		BrowserUI::InlineBadge(T("feature.skin.role_diffuse_normal", "Diffuse & Normal"), Util::Colors::GetInfo());
+	else if (isNormal)
+		BrowserUI::InlineBadge(T("feature.skin.role_normal", "Normal"), Util::Colors::GetInfo());
+	else if (isDiffuse)
+		BrowserUI::InlineBadge(T("feature.skin.role_diffuse", "Diffuse"), Util::Colors::GetSecondary());
+
 	BrowserUI::MetaText(editor.key.c_str());
 
-	std::string shown;
-	for (const auto& surface : editor.surfaces)
-		if (surface.key == editor.key) {
-			const auto label = SkinSurfaces::Label(surface.description);
-			if (shown.find(label) == std::string::npos)
-				shown += (shown.empty() ? "" : " · ") + label;
-		}
 	if (shown.empty())
 		Util::Text::WrappedDisabled("%s", T("feature.skin.not_shown_now", "Not shown on this character now"));
 	else
@@ -117,6 +150,34 @@ void Skin::DrawTextureHeader()
 	}
 	if (!editor.fingerprintWarning.empty())
 		Util::StatusBanner(ICON_TI_ALERT_TRIANGLE, editor.fingerprintWarning.c_str(), Util::Colors::GetWarning());
+	auto joinParts = [](const std::vector<std::string>& a_parts) {
+		std::string result;
+		for (const auto& part : a_parts)
+			result += (result.empty() ? "" : " · ") + part;
+		return result;
+	};
+	for (const auto& [normalKey, parts] : overriddenBy) {
+		const auto message = I18n::GetSingleton()->Format("feature.skin.overridden_by_normal_banner",
+			{ { "normal", Stem(normalKey) }, { "parts", joinParts(parts) } },
+			"Overridden on {parts} by normal texture {normal} (normal takes priority).");
+		if (Util::StatusBanner(ICON_TI_ALERT_TRIANGLE, message.c_str(), Util::Colors::GetWarning()))
+			SelectKey(normalKey);
+		Util::AddTooltip(T("feature.skin.click_to_edit_normal", "Click to edit the overriding normal texture."));
+	}
+	for (const auto& [diffuseKey, parts] : replaces) {
+		const auto message = I18n::GetSingleton()->Format("feature.skin.replaces_diffuse_banner",
+			{ { "diffuse", Stem(diffuseKey) }, { "parts", joinParts(parts) } },
+			"Replaces diffuse override {diffuse} on {parts} as a whole.");
+		if (Util::StatusBanner(ICON_TI_ARROWS_EXCHANGE, message.c_str(), Util::Colors::GetInfo()))
+			SelectKey(diffuseKey);
+		Util::AddTooltip(T("feature.skin.click_to_view_diffuse", "Click to inspect the diffuse texture."));
+	}
+	for (const auto& [diffuseKey, parts] : pairedDiffuse) {
+		const auto message = I18n::GetSingleton()->Format("feature.skin.normal_will_replace_diffuse_note",
+			{ { "diffuse", Stem(diffuseKey) }, { "parts", joinParts(parts) } },
+			"No normal override set yet; diffuse override {diffuse} applies on {parts}. Adding any setting here replaces it as a whole.");
+		Util::Text::WrappedSecondary("%s", message.c_str());
+	}
 }
 
 void Skin::DrawLayerStack()
@@ -311,8 +372,8 @@ void Skin::DrawLayerNote()
 				settings.MaterialOutputFolder.clear();
 		}
 		ImGui::SameLine();
-		ImGui::Checkbox(T("feature.skin.record_fingerprint_short", "Record diffuse version"), &editor.recordFingerprint);
-		Util::AddTooltip(T("feature.skin.record_fingerprint", "Record which version of the diffuse texture this was made for"));
+		ImGui::Checkbox(T("feature.skin.record_fingerprint_short", "Record texture version"), &editor.recordFingerprint);
+		Util::AddTooltip(T("feature.skin.record_fingerprint", "Record which version of this texture the material was made for"));
 		return;
 	}
 	const auto* saved = SkinCharacters::Find(*SkinCharacters::Get(), editor.draftTarget.key);
@@ -324,6 +385,8 @@ void Skin::DrawLayerNote()
 	if (BrowserUI::Link("##character_folder", T("feature.skin.open_character_folder_v2", "Open folder")))
 		OpenFolder(SkinCharacters::Directory());
 	Util::AddTooltip(T("feature.skin.character_scope_v2", "Adjustments are saved as a file for this character. They apply in every save, to every actor using this record, and the file can be edited by hand or shared. A change of race or skin texture simply switches to that texture's material."));
-	if (editor.layer == Layer::CharacterMaterial && std::none_of(editor.surfaces.begin(), editor.surfaces.end(), [this](const auto& surface) { return surface.key == editor.key; }))
+	if (editor.layer == Layer::CharacterMaterial && std::none_of(editor.surfaces.begin(), editor.surfaces.end(), [this](const auto& surface) {
+			return surface.diffuseKey == editor.key || surface.normalKey == editor.key;
+		}))
 		Util::Text::WrappedWarning("%s", T("feature.skin.character_texture_not_shown_v2", "This character does not show this texture now. These values apply again when it does."));
 }

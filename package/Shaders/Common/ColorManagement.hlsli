@@ -2,6 +2,7 @@
 #define __COLOR_MANAGEMENT_DEPENDENCY_HLSL__
 
 #include "Common/Color.hlsli"
+#include "Common/PreExposure.hlsli"
 
 #if defined(PSHADER) || defined(CSHADER) || defined(COMPUTESHADER)
 namespace Color

@@ -115,7 +115,7 @@ float DiscMask(float2 screenPos)
 
 	// Smooth threshold (level + range)
 	float luminance = dot(result, float3(0.333f, 0.333f, 0.333f));
-	float thresholdScale = saturate((luminance - ThresholdLevel) / max(ThresholdRange, 0.001f));
+	float thresholdScale = saturate((luminance - PreExposure::Encode(ThresholdLevel)) / PreExposure::Encode(max(ThresholdRange, 0.001f)));
 	result *= thresholdScale;
 
 	OutputTexture[DTid.xy] = float4(result, 1.0f);

@@ -3,6 +3,7 @@
 
 #include "Common/BRDF.hlsli"
 #include "Common/Game.hlsli"
+#include "Common/LightDisk.hlsli"
 #include "Common/Random.hlsli"
 #include "Common/Shading.hlsli"
 #include "Common/SharedData.hlsli"
@@ -752,7 +753,7 @@ namespace WetnessEffects
 		float specularScale,
 		inout float3 diffuse,
 		inout float3 specular,
-		inout float3 wetnessSpecular)
+		inout float3 wetnessSpecular, float2 lightDisk = float2(0.0, 1.0))
 	{
 		if (wetnessState.roughness >= 1.0)
 			return 1.0;
@@ -762,7 +763,7 @@ namespace WetnessEffects
 
 		const float3 N = wetnessState.normal;
 		const float3 V = viewDirection;
-		const float3 L = lightDirection;
+		const float3 L = LightDisk::SpecularDirection(N, V, lightDirection, lightDisk);
 		const float3 H = normalize(V + L);
 
 		float NdotL = clamp(dot(N, L), EPSILON_DOT_CLAMP, 1);
@@ -770,7 +771,7 @@ namespace WetnessEffects
 		float NdotH = saturate(dot(N, H));
 		float VdotH = saturate(dot(V, H));
 
-		float D = BRDF::D_GGX(wetnessState.roughness, NdotH);
+		float D = BRDF::D_GGX(wetnessState.roughness, NdotH) * LightDisk::GGXNormalization(wetnessState.roughness, lightDisk);
 		float G = BRDF::Vis_SmithJointApprox(wetnessState.roughness, NdotV, NdotL);
 		float3 F = BRDF::F_Schlick(wetnessF0, VdotH);
 		float3 wetnessF = F * wetnessStrength;

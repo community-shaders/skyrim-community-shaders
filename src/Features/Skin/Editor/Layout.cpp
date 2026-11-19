@@ -51,7 +51,7 @@ namespace
 
 	/// Two-line selectable: a status dot and the texture name, with where it is shown beneath.
 	bool TextureRow(const std::string& a_id, const std::string& a_name, const std::string& a_meta, const RowFace& a_face, bool a_selected,
-		bool a_adjusted, bool a_unsaved)
+		bool a_adjusted, bool a_unsaved, const char* a_roleLabel = nullptr, const ImVec4& a_roleColor = {}, bool a_overridden = false)
 	{
 		const auto& style = ImGui::GetStyle();
 		const float line = ImGui::GetTextLineHeight();
@@ -77,9 +77,25 @@ namespace
 			marker(Util::Colors::GetWarning());
 		if (a_adjusted)
 			marker(Util::Colors::GetAccent());
+		if (a_roleLabel && *a_roleLabel) {
+			const float badgeW = Util::MeasureBadgeWidth(a_roleLabel);
+			right -= badgeW;
+			Util::Badge(a_roleLabel, a_roleColor, { .rowHeight = line, .drawList = drawList, .at = ImVec2(right, top) });
+			right -= style.ItemInnerSpacing.x;
+		}
+		float line2Right = max.x - style.FramePadding.x;
+		if (a_overridden) {
+			const char* overriddenLabel = T("feature.skin.badge_overridden", "Overridden");
+			const float badgeW = Util::MeasureBadgeWidth(overriddenLabel);
+			line2Right -= badgeW;
+			Util::Badge(overriddenLabel, Util::Colors::GetWarning(), { .rowHeight = line, .drawList = drawList, .at = ImVec2(line2Right, top + line) });
+			line2Right -= style.ItemInnerSpacing.x;
+		}
 		drawList->PopClipRect();
-		drawList->PushClipRect({ textX, min.y }, { right, max.y }, true);
-		drawList->AddText({ textX, top }, ImGui::GetColorU32(ImGuiCol_Text), a_name.c_str());
+		drawList->PushClipRect({ textX, min.y }, { std::max(textX, right), top + line }, true);
+		drawList->AddText({ textX, top }, a_overridden ? ImGui::GetColorU32(Util::Colors::GetSecondary()) : ImGui::GetColorU32(ImGuiCol_Text), a_name.c_str());
+		drawList->PopClipRect();
+		drawList->PushClipRect({ textX, top + line }, { std::max(textX, line2Right), max.y }, true);
 		drawList->AddText({ textX, top + line }, ImGui::GetColorU32(Util::Colors::GetSecondary()), a_meta.c_str());
 		drawList->PopClipRect();
 		ImGui::PopID();
@@ -93,9 +109,12 @@ std::string Skin::GetEditorSubtitle()
 	if (!editor.actor.get())
 		return {};
 	std::set<std::string> keys;
-	for (const auto& surface : editor.surfaces)
-		if (!surface.key.empty())
-			keys.insert(surface.key);
+	for (const auto& surface : editor.surfaces) {
+		if (!surface.diffuseKey.empty())
+			keys.insert(surface.diffuseKey);
+		if (!surface.normalKey.empty())
+			keys.insert(surface.normalKey);
+	}
 	return I18n::GetSingleton()->Format("feature.skin.subtitle", { { "name", editor.actorName.empty() ? T("feature.skin.unnamed_character", "Unnamed character") : editor.actorName }, { "count", std::to_string(keys.size()) } },
 		"{name} - {count} skin textures");
 }
@@ -175,40 +194,112 @@ void Skin::DrawTextureList()
 		return;
 	}
 	Util::SearchField("##skin_filter", editor.filter, T("feature.skin.filter_textures", "Filter textures..."), ImGui::GetContentRegionAvail().x, true);
+	const char* roleFilters[] = {
+		T("feature.skin.filter_all", "All"),
+		T("feature.skin.role_diffuse", "Diffuse"),
+		T("feature.skin.role_normal", "Normal")
+	};
+	Util::SegmentedControl("##skin_role_filter", roleFilters, 3, editor.textureRoleFilter);
 	const std::string query = editor.filter;
+	const auto* customization = EditorCustomization();
 
 	// One row per texture under the part it is mainly shown on; the row lists every place it appears.
 	struct Row
 	{
 		SkinSurfaces::Part part = SkinSurfaces::Part::Other;
+		bool isDiffuse = false;
+		bool isNormal = false;
+		size_t activeCount = 0;
+		size_t surfaceCount = 0;
 		std::vector<std::string> shown;
+		std::vector<std::string> overriddenBy;
+		std::vector<std::string> overrides;
 	};
 	std::vector<std::string> order;
 	std::map<std::string, Row> rows;
 	size_t unidentified = 0;
 	for (const auto& surface : editor.surfaces) {
-		if (surface.key.empty()) {
+		if (surface.diffuseKey.empty() && surface.normalKey.empty()) {
 			++unidentified;
 			continue;
 		}
-		auto [row, inserted] = rows.try_emplace(surface.key);
-		if (inserted) {
-			order.push_back(surface.key);
-			row->second.part = surface.description.part;
-		}
+		const auto activeKey = ResolveActiveKey(surface.diffuseKey, surface.normalKey, customization);
 		const auto label = SkinSurfaces::Label(surface.description);
-		if (std::find(row->second.shown.begin(), row->second.shown.end(), label) == row->second.shown.end())
-			row->second.shown.push_back(label);
+		auto addKey = [&](const std::string& key, bool isDiffuseRole) {
+			if (key.empty())
+				return;
+			auto [row, inserted] = rows.try_emplace(key);
+			if (inserted) {
+				order.push_back(key);
+				row->second.part = surface.description.part;
+			}
+			row->second.isDiffuse |= isDiffuseRole;
+			row->second.isNormal |= !isDiffuseRole;
+			++row->second.surfaceCount;
+			if (activeKey == key)
+				++row->second.activeCount;
+			if (isDiffuseRole && activeKey != key && !surface.normalKey.empty() &&
+				std::find(row->second.overriddenBy.begin(), row->second.overriddenBy.end(), surface.normalKey) == row->second.overriddenBy.end())
+				row->second.overriddenBy.push_back(surface.normalKey);
+			if (!isDiffuseRole && activeKey == key && !surface.diffuseKey.empty() && surface.diffuseKey != key && HasOverride(surface.diffuseKey, customization) &&
+				std::find(row->second.overrides.begin(), row->second.overrides.end(), surface.diffuseKey) == row->second.overrides.end())
+				row->second.overrides.push_back(surface.diffuseKey);
+			if (std::find(row->second.shown.begin(), row->second.shown.end(), label) == row->second.shown.end())
+				row->second.shown.push_back(label);
+		};
+		addKey(surface.diffuseKey, true);
+		addKey(surface.normalKey, false);
 	}
 	const auto matches = [&](const std::string& key) { return query.empty() || Util::StringMatchesSearch(key, query); };
-	const auto draw = [&](const std::string& key, const std::string& meta) {
+	const auto matchesRole = [&](const Row& row) {
+		if (editor.textureRoleFilter == 1)
+			return row.isDiffuse;
+		if (editor.textureRoleFilter == 2)
+			return row.isNormal;
+		return true;
+	};
+	const auto draw = [&](const std::string& key, const std::string& meta, const Row* row) {
 		const auto entry = FindMaterial(key);
 		const auto face = Face(*entry);
 		const bool adjusted = editor.draftTarget && editor.character.materials.contains(key);
 		const bool unsaved = key == editor.draftKey && MaterialDirty();
-		if (TextureRow(key, Stem(key), meta, face, key == editor.key, adjusted, unsaved))
+		const char* roleLabel = nullptr;
+		ImVec4 roleColor = Util::Colors::GetSecondary();
+		bool overridden = false;
+		if (row) {
+			if (row->isDiffuse && row->isNormal) {
+				roleLabel = T("feature.skin.role_diffuse_normal", "Diffuse & Normal");
+				roleColor = Util::Colors::GetInfo();
+			} else if (row->isNormal) {
+				roleLabel = T("feature.skin.role_normal", "Normal");
+				roleColor = Util::Colors::GetInfo();
+			} else if (row->isDiffuse) {
+				roleLabel = T("feature.skin.role_diffuse", "Diffuse");
+				roleColor = Util::Colors::GetSecondary();
+			}
+			overridden = row->surfaceCount > 0 && row->activeCount == 0 && !row->overriddenBy.empty();
+		}
+		if (TextureRow(key, Stem(key), meta, face, key == editor.key, adjusted, unsaved, roleLabel, roleColor, overridden))
 			SelectKey(key);
-		std::string tooltip = key + "\n" + face.status;
+		std::string tooltip = key;
+		if (roleLabel)
+			tooltip += std::string("\n") + roleLabel;
+		tooltip += std::string("\n") + face.status;
+		if (row && !row->overriddenBy.empty()) {
+			std::string names;
+			for (const auto& normal : row->overriddenBy)
+				names += (names.empty() ? "" : ", ") + Stem(normal);
+			tooltip += "\n" + (overridden ?
+									  I18n::GetSingleton()->Format("feature.skin.row_overridden_by_normal", { { "normals", names } }, "Overridden by normal: {normals}") :
+									  I18n::GetSingleton()->Format("feature.skin.row_partially_overridden_by_normal", { { "normals", names } }, "Overridden on some surfaces by normal: {normals}"));
+		}
+		if (row && !row->overrides.empty()) {
+			std::string names;
+			for (const auto& diffuse : row->overrides)
+				names += (names.empty() ? "" : ", ") + Stem(diffuse);
+			tooltip += "\n" + I18n::GetSingleton()->Format("feature.skin.row_overrides_diffuse", { { "diffuses", names } },
+								  "Overrides diffuse: {diffuses}");
+		}
 		if (adjusted)
 			tooltip += std::string("\n") + T("feature.skin.row_adjusted", "Adjusted for this character");
 		if (unsaved)
@@ -220,7 +311,7 @@ void Skin::DrawTextureList()
 		bool labelled = false;
 		for (const auto& key : order) {
 			const auto& row = rows.at(key);
-			if (static_cast<size_t>(row.part) != part || !matches(key))
+			if (static_cast<size_t>(row.part) != part || !matches(key) || !matchesRole(row))
 				continue;
 			if (!labelled) {
 				ImGui::Spacing();
@@ -230,7 +321,7 @@ void Skin::DrawTextureList()
 			std::string meta;
 			for (const auto& shown : row.shown)
 				meta += (meta.empty() ? "" : " · ") + shown;
-			draw(key, meta);
+			draw(key, meta, &row);
 		}
 	}
 	// Adjustments are kept for textures the character no longer shows, for example after a race change.
@@ -244,9 +335,9 @@ void Skin::DrawTextureList()
 			Util::AddTooltip(T("feature.skin.inactive_character_materials_help", "These apply again when the character shows the texture, for example after switching back to an earlier race. They never apply to a different texture."));
 			labelled = true;
 		}
-		draw(key, T("feature.skin.not_shown_now", "Not shown on this character now"));
+		draw(key, T("feature.skin.not_shown_now", "Not shown on this character now"), nullptr);
 	}
-	if (rows.empty() && !labelled)
+	if (std::none_of(rows.begin(), rows.end(), [&](const auto& item) { return matches(item.first) && matchesRole(item.second); }) && !labelled)
 		BrowserUI::EmptyState(T("feature.skin.no_compatible_skin_surfaces_were_found", "No compatible skin surfaces were found."));
 	if (unidentified) {
 		ImGui::Spacing();

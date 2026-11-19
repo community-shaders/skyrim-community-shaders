@@ -19,7 +19,14 @@ namespace SkinSurfaces
 	/// The material key of a shape: the diffuse texture that is actually bound, after every engine or
 	/// plugin replacement (ARMA skin textures, race swaps in shared armor meshes, FaceGen, NiOverride).
 	/// Empty when the texture cannot be identified as a DDS file.
-	std::string Key(RE::BSShaderProperty* a_property);
+	struct Keys
+	{
+		std::string diffuse;
+		std::string normal;
+	};
+	Keys TextureKeys(RE::BSShaderProperty* a_property);
+	std::string DiffuseKey(RE::BSShaderProperty* a_property);
+	std::string NormalKey(RE::BSShaderProperty* a_property);
 	/// Whether the shape has a native skin (subsurface) texture, which drives transmission thickness.
 	bool HasThickness(RE::BSShaderProperty* a_property);
 	bool IsRaceMenuOverlay(const RE::BSGeometry* a_geometry, const RE::BSShaderProperty* a_property);

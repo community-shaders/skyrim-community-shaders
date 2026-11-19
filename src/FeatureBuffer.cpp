@@ -15,6 +15,7 @@
 #include "Features/LODBlending.h"
 #include "Features/LightLimitFix.h"
 #include "Features/LinearLighting.h"
+#include "Features/PhysicalSky.h"
 #include "Features/ProceduralAurora.h"
 #include "Features/ProceduralSun.h"
 #include "Features/RainRefraction.h"
@@ -23,6 +24,7 @@
 #include "Features/TerrainBlending.h"
 #include "Features/TerrainShadows.h"
 #include "Features/TerrainVariation.h"
+#include "Features/ViewAtmosphere.h"
 #include "Features/WetnessEffects.h"
 #include "TruePBR.h"
 
@@ -68,7 +70,9 @@ std::pair<unsigned char*, size_t> GetFeatureBufferData(bool a_inWorld)
 		globals::features::truePBR.settings,
 		globals::features::skin.GetCommonBufferData(),
 		globals::features::horizonFix.GetCommonBufferData(),
+		globals::features::physicalSky.cbData,
 		globals::features::rainRefraction.GetCommonBufferData(),
+		globals::features::viewAtmosphere.settings,
 		globals::features::proceduralSun.GetCommonBufferData(),
 		globals::features::proceduralAurora.GetCommonBufferData());
 }

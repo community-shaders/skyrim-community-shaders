@@ -123,15 +123,21 @@ void Skin::SelectActor(RE::Actor* a_actor, Editor::Source a_source)
 		if (!LayerAvailable(editor.layer))
 			editor.layer = Layer::Material;
 		RefreshSurfaces();
-		const bool shown = std::any_of(editor.surfaces.begin(), editor.surfaces.end(), [this](const auto& surface) { return surface.key == editor.key; });
+		const bool shown = std::any_of(editor.surfaces.begin(), editor.surfaces.end(), [this](const auto& surface) {
+			return surface.diffuseKey == editor.key || surface.normalKey == editor.key;
+		});
 		if (!shown && !MaterialDirty()) {
 			// Prefer the body: it is usually what an author is working on and what armor shares.
-			const auto body = std::find_if(editor.surfaces.begin(), editor.surfaces.end(), [](const auto& surface) { return !surface.key.empty() && surface.description.part == SkinSurfaces::Part::Body; });
-			const auto any = std::find_if(editor.surfaces.begin(), editor.surfaces.end(), [](const auto& surface) { return !surface.key.empty(); });
+			const auto hasAnyKey = [](const Editor::Surface& surface) { return !surface.diffuseKey.empty() || !surface.normalKey.empty(); };
+			const auto body = std::find_if(editor.surfaces.begin(), editor.surfaces.end(), [&](const auto& surface) {
+				return hasAnyKey(surface) && surface.description.part == SkinSurfaces::Part::Body;
+			});
+			const auto any = std::find_if(editor.surfaces.begin(), editor.surfaces.end(), hasAnyKey);
 			const auto chosen = body != editor.surfaces.end() ? body : any;
 			if (chosen != editor.surfaces.end()) {
-				editor.key = chosen->key;
-				LoadMaterialDraft(chosen->key);
+				const auto initialKey = ResolveActiveKey(chosen->diffuseKey, chosen->normalKey, EditorCustomization());
+				editor.key = initialKey;
+				LoadMaterialDraft(initialKey);
 			}
 		}
 		Invalidate();
@@ -158,7 +164,7 @@ void Skin::RefreshSurfaces()
 			auto* property = geometry->GetGeometryRuntimeData().shaderProperty.get();
 			if (IsCompatible(property) && !SkinSurfaces::IsRaceMenuOverlay(geometry, property)) {
 				const auto& entry = Observe(geometry, property);
-				surfaces.push_back({ RE::NiPointer(geometry), entry.key, SkinSurfaces::Describe(geometry, actor.get()) });
+				surfaces.push_back({ RE::NiPointer(geometry), entry.diffuseKey, entry.normalKey, SkinSurfaces::Describe(geometry, actor.get()) });
 			}
 			return RE::BSVisit::BSVisitControl::kContinue;
 		});

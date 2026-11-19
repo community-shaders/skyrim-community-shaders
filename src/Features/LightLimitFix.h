@@ -76,6 +76,7 @@ public:
 		Simple = (1 << 2),
 		ShadowCaster = (1 << 3), /**< Is a BSShadowLight, whether or not it has shadow data this frame. */
 		LocalShadow = (1 << 4),  /**< Has a cached local shadow slice (localShadowIndex). */
+		Lightning = (1 << 5),    /**< Current-frame source; excluded from fog's light history. */
 
 		Initialised = (1 << 8),
 		Disabled = (1 << 9),

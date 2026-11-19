@@ -110,10 +110,13 @@ private:
 		const RE::BSShaderMaterial* materialPointer = nullptr;
 		const RE::BSTextureSet* textureSet = nullptr;
 		const RE::NiSourceTexture* diffuse = nullptr;
+		const RE::NiSourceTexture* normal = nullptr;
 		RE::NiAVObject* parent = nullptr;
 		RE::ActorHandle actor;
 		std::string target;  ///< `SkinCharacters::Target::key` of the owner; empty when it has none.
-		std::string key;
+		std::string diffuseKey;
+		std::string normalKey;
+		std::string activeKey;
 		SkinMaterials::Material effective;
 		std::array<std::shared_ptr<TextureEntry>, SkinMaterials::TextureCount> textures;
 		std::string diagnostic;
@@ -134,7 +137,8 @@ private:
 		struct Surface
 		{
 			RE::NiPointer<RE::BSGeometry> geometry;
-			std::string key;
+			std::string diffuseKey;
+			std::string normalKey;
 			SkinSurfaces::Description description;
 		};
 		struct Draft
@@ -182,6 +186,7 @@ private:
 		float previewWetness = -1.0f;
 		int channel = 0;
 		int texturePreview = 0;
+		int textureRoleFilter = 0;
 	};
 	std::recursive_mutex mutex;
 	std::unordered_map<RE::BSGeometry*, GeometryEntry> geometries;
@@ -203,6 +208,10 @@ private:
 	std::shared_ptr<TextureEntry> RequestTexture(const std::string& a_path);
 	SkinLibrary::Pointer FindMaterial(const std::string& a_key);
 	SkinMaterials::Material BaseMaterial(const std::string& a_key);
+	bool HasMaterialOverride(const std::string& a_key);
+	bool HasOverride(const std::string& a_key, const SkinCharacters::Customization* a_customization);
+	std::string ResolveActiveKey(const std::string& a_diffuseKey, const std::string& a_normalKey, const SkinCharacters::Customization* a_customization);
+	const SkinCharacters::Customization* EditorCustomization() const;
 	const SkinCharacters::Customization* FindCustomization(const std::string& a_target, const SkinCharacters::State& a_state) const;
 	SkinMaterials::Material Compose(const std::string& a_key, const SkinCharacters::Customization* a_customization, Layer a_upTo);
 	void Prepare(GeometryEntry& a_entry, const SkinCharacters::State& a_state);
