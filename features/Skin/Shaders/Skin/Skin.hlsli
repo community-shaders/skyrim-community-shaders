@@ -3,6 +3,7 @@
 
 #include "Common/BRDF.hlsli"
 #include "Common/Color.hlsli"
+#include "Common/LightDisk.hlsli"
 #include "Common/LightingCommon.hlsli"
 #include "Common/Math.hlsli"
 #include "Common/Shading.hlsli"
@@ -58,7 +59,7 @@ namespace Skin
 
 	// [Jorge Jimenez, Diego Gutierrez 2015, "Separable Subsurface Scattering"]
 	// https://www.iryoku.com/separable-sss/
-	float3 SSSSTransmittance(float translucency, float sssWidth, float3 worldNormal, float3 light, float d)
+	float3 SSSSTransmittance(float translucency, float sssWidth, float NdotL, float d, float2 disk)
 	{
 		/**
 		* Calculate the scale of the effect.
@@ -98,16 +99,26 @@ namespace Skin
 		* Using the profile, we finally approximate the transmitted lighting from
 		* the back of the object:
 		*/
-		return profile * saturate(0.3 + dot(light, -worldNormal));
+		return profile * LightDisk::WrappedCosine(-NdotL, 0.3, 1.0, disk);
 	}
 
-	float3 DualSpecularGGX(float AverageRoughness, float Lobe0Roughness, float Lobe1Roughness, float LobeMix, float3 SpecularColor, float NdotL, float NdotV, float NdotH, float VdotH, out float3 F)
+	float3 DualSpecularGGX(float AverageRoughness, float Lobe0Roughness, float Lobe1Roughness, float LobeMix, float3 SpecularColor, float NdotL, float NdotV, float NdotH, float VdotH, float2 disk, out float3 F)
 	{
-		float D = lerp(BRDF::D_GGX(Lobe0Roughness, NdotH), BRDF::D_GGX(Lobe1Roughness, NdotH), LobeMix);
+		const float lobe0 = BRDF::D_GGX(Lobe0Roughness, NdotH) * LightDisk::GGXNormalization(Lobe0Roughness, disk);
+		const float lobe1 = BRDF::D_GGX(Lobe1Roughness, NdotH) * LightDisk::GGXNormalization(Lobe1Roughness, disk);
+		float D = lerp(lobe0, lobe1, LobeMix);
 		float G = BRDF::Vis_SmithJointApprox(AverageRoughness, NdotV, NdotL);
 		F = BRDF::F_Schlick(SpecularColor, VdotH);
 
 		return D * G * F;
+	}
+
+	float3 CharlieSpecular(float3 N, float3 V, float3 L, float NdotV, MaterialProperties material)
+	{
+		const float3 H = normalize(V + L);
+		const float NdotL = clamp(dot(N, L), 1e-5, 1.0);
+		return BRDF::D_Charlie(material.FuzzRoughness, saturate(dot(N, H))) * BRDF::Vis_Neubelt(NdotV, NdotL) *
+		       BRDF::F_Schlick(material.FuzzColor, saturate(dot(V, H))) * NdotL;
 	}
 
 	void SkinDirectLightInput(
@@ -121,31 +132,37 @@ namespace Skin
 		const float3 N = context.worldNormal;
 		const float3 V = context.viewDir;
 		const float3 L = context.lightDir;
-		const float3 H = context.halfVector;
+		const float3 specularLight = LightDisk::SpecularDirection(N, V, L, context.lightDisk);
+		const float3 H = context.lightDisk.x > 0.0 ? normalize(V + specularLight) : context.halfVector;
 
 		const float oNdotL = dot(N, L);
-		float NdotL = clamp(oNdotL, 1e-5, 1.0);
+		const float diffuseCosine = max(LightDisk::DiffuseCosine(oNdotL, context.lightDisk), 1e-5);
+		const float NdotL = clamp(dot(N, specularLight), 1e-5, 1.0);
 		float NdotV = saturate(abs(dot(N, V)) + EPSILON_DOT_CLAMP);
 		float NdotH = saturate(dot(N, H));
 		float VdotH = saturate(dot(V, H));
 
 		float averageRoughness = lerp(material.Roughness, material.RoughnessSecondary, material.SecondarySpecIntensity);
 
-		lightingOutput.diffuse += context.lightColor * NdotL * BRDF::Diffuse_Burley(averageRoughness, NdotV, NdotL, VdotH);
+		lightingOutput.diffuse += context.lightColor * diffuseCosine * BRDF::Diffuse_Burley(averageRoughness, NdotV, diffuseCosine, saturate(dot(V, context.halfVector)));
 		float3 F;
 		float3 F0 = material.F0;
 
-		lightingOutput.specular += DualSpecularGGX(averageRoughness, material.Roughness, material.RoughnessSecondary, material.SecondarySpecIntensity, F0, NdotL, NdotV, NdotH, VdotH, F) * context.lightColor * NdotL;
+		lightingOutput.specular += DualSpecularGGX(averageRoughness, material.Roughness, material.RoughnessSecondary, material.SecondarySpecIntensity, F0, NdotL, NdotV, NdotH, VdotH, context.lightDisk, F) * context.lightColor * NdotL;
 
 		lightingOutput.specular *= material.DirectSpecularEnergyCompensation;
 		lightingOutput.diffuse *= 1 - F;
 
 		if (material.FuzzWeight > 0.0) {
-			float3 FuzzF0 = material.FuzzColor;
-			float fuzzD = BRDF::D_Charlie(material.FuzzRoughness, NdotH);
-			float fuzzG = BRDF::Vis_Neubelt(NdotV, NdotL);
-			float3 fuzzF = BRDF::F_Schlick(FuzzF0, VdotH);
-			float3 fuzzSpecular = fuzzD * fuzzG * fuzzF * context.lightColor * NdotL;
+			float3 fuzzF = BRDF::F_Schlick(material.FuzzColor, saturate(dot(V, context.halfVector)));
+			float3 fuzzSpecular = CharlieSpecular(N, V, L, NdotV, material);
+			if (context.lightDisk.x > 0.0) {
+				float3 center, x, y;
+				LightDisk::QuadratureAxes(L, context.lightDisk, center, x, y);
+				fuzzSpecular = 0.25 * (CharlieSpecular(N, V, center + x, NdotV, material) + CharlieSpecular(N, V, center - x, NdotV, material) +
+										  CharlieSpecular(N, V, center + y, NdotV, material) + CharlieSpecular(N, V, center - y, NdotV, material));
+			}
+			fuzzSpecular *= context.lightColor;
 			float2 fuzzSpecularBRDF = BRDF::EnvBRDFApproxLazarov(material.FuzzRoughness, NdotV);
 			fuzzSpecular *= 1 + material.FuzzColor * (1 / (fuzzSpecularBRDF.x + fuzzSpecularBRDF.y) - 1);
 
@@ -159,9 +176,9 @@ namespace Skin
 		float3 sssTransmittance = SSSSTransmittance(
 									  0.0f,
 									  max(skinData.sssParams.y, 1e-4f),
-									  N,
-									  L,
-									  material.Thickness) *
+									  oNdotL,
+									  material.Thickness,
+									  context.lightDisk) *
 		                          skinData.sssParams.x * skinData.sssParams.w;
 		lightingOutput.transmission = min(sssTransmittance * context.lightColor * context.softShadow * material.BaseColor, context.lightColor);
 	}

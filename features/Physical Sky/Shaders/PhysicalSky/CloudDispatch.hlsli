@@ -10,11 +10,12 @@ RWTexture2D<uint> RWStormTiles : register(u7);
 	const VolumetricCloudData info = VolumetricCloudBuffer[0];
 	if (any(tile >= (uint2(info.lowFrameDim) + 7u) / 8u))
 		return;
+	const uint tileWidth = 8u * CloudTraceStride();
 	float3 rays[4] = {
-		CloudScreenRay(tile * 32u),
-		CloudScreenRay((tile + uint2(1, 0)) * 32u),
-		CloudScreenRay((tile + 1u) * 32u),
-		CloudScreenRay((tile + uint2(0, 1)) * 32u)
+		CloudScreenRay(tile * tileWidth),
+		CloudScreenRay((tile + uint2(1, 0)) * tileWidth),
+		CloudScreenRay((tile + 1u) * tileWidth),
+		CloudScreenRay((tile + uint2(0, 1)) * tileWidth)
 	};
 	float3 planes[5];
 	planes[4] = normalize(rays[0] + rays[1] + rays[2] + rays[3]);

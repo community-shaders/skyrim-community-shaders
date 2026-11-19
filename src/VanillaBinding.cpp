@@ -27,14 +27,18 @@ namespace VanillaBinding
 		if (!a_pass || !a_pass->shaderProperty)
 			return;
 
+		auto* state = globals::state;
+		auto* context = globals::d3d::context;
+		// The Sky vertex shader uses the per-draw Sun, Moon and Secunda flags for billboard sizing.
+		auto* permutationBuffer = state->permutationCB->CB();
+		context->VSSetConstantBuffers(4, 1, &permutationBuffer);
+
 		const auto* skyProperty = static_cast<const RE::BSSkyShaderProperty*>(a_pass->shaderProperty);
 		if (skyProperty->uiSkyObjectType != RE::BSSkyShaderProperty::SkyObject::SO_SUN_GLARE)
 			return;
 
-		auto* state = globals::state;
-		auto* context = globals::d3d::context;
-		ID3D11Buffer* buffers[] = { state->permutationCB->CB(), state->sharedDataCB->CB() };
-		context->VSSetConstantBuffers(4, static_cast<UINT>(std::size(buffers)), buffers);
+		auto* sharedBuffer = state->sharedDataCB->CB();
+		context->VSSetConstantBuffers(5, 1, &sharedBuffer);
 		// The sky draws with the z-prepass copy as its DSV, which would null an SRV of it; kMAIN holds the same depth
 		auto* depthSRV = globals::game::renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN].depthSRV;
 		context->VSSetShaderResources(17, 1, &depthSRV);

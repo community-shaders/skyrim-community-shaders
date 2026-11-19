@@ -299,6 +299,7 @@ cbuffer PerGeometry : register(b2)
 #	if defined(ENVCUBE) && defined(RAIN) && defined(DYNAMIC_CUBEMAPS) && defined(RAIN_REFRACTION)
 #		define REFRACTIVE_RAIN
 #		include "Common/BRDF.hlsli"
+#		include "Common/LightDisk.hlsli"
 
 namespace Raindrop
 {
@@ -318,20 +319,21 @@ struct ParticleSurface
 };
 
 /** @brief Light a particle sends toward the viewer from lightColor arriving along L (toward the light). */
-float3 ShadeLight(ParticleSurface surface, float3 lightColor, float3 L)
+float3 ShadeLight(ParticleSurface surface, float3 lightColor, float3 L, float2 disk = float2(0.0, 1.0))
 {
 #	if defined(REFRACTIVE_RAIN)
 	if (surface.isRaindrop) {
-		float3 H = normalize(surface.view + L);
-		float NdotL = saturate(dot(surface.normal, L));
+		const float3 specularLight = LightDisk::SpecularDirection(surface.normal, surface.view, L, disk);
+		float3 H = normalize(surface.view + specularLight);
+		float NdotL = saturate(dot(surface.normal, specularLight));
 		float NdotV = saturate(dot(surface.normal, surface.view));
 		float NdotH = saturate(dot(surface.normal, H));
 		float VdotH = saturate(dot(surface.view, H));
 		float3 specular = BRDF::D_GGX(Raindrop::Roughness, NdotH) * BRDF::Vis_SmithJointApprox(Raindrop::Roughness, NdotV, NdotL) *
-		                  BRDF::F_Schlick(Raindrop::WaterF0, VdotH) * NdotL;
+		                  BRDF::F_Schlick(Raindrop::WaterF0, VdotH) * NdotL * LightDisk::GGXNormalization(Raindrop::Roughness, disk);
 
 		// A light behind the drop is seen through it along the refracted view ray; normalized Phong lobe
-		float transmissionLobe = pow(saturate(dot(surface.refractDir, L)), Raindrop::TransmissionExponent) * (Raindrop::TransmissionExponent + 2.0) / Math::TAU;
+		float transmissionLobe = LightDisk::PhongCosine(surface.refractDir, L, Raindrop::TransmissionExponent, disk) * (Raindrop::TransmissionExponent + 2.0) / Math::TAU;
 		float3 transmission = transmissionLobe * (1.0 - BRDF::F_Schlick(Raindrop::WaterF0, NdotV));
 
 		return ColorManagement::SceneToLinear(lightColor) * (specular + transmission);
@@ -450,7 +452,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 		// The env cubemap only carries faint bounce light, so lights are shaded on the drop directly
 		ParticleSurface drop = { true, normalWS, V, refractDir };
-		float3 directLighting = ShadeLight(drop, GetDirLightColor(posWS.xyz), SharedData::DirLightDirection.xyz);
+		float3 directLighting = ShadeLight(drop, GetDirLightColor(posWS.xyz), SharedData::DirLightDirection.xyz, LightDisk::DirectionalSource());
 #		if defined(PHYSICAL_SKY) && defined(RAIN)
 		const float3 lightningPosition = posWS.xyz + FrameBuffer::CameraPosAdjust.xyz;
 		[unroll] for (uint emitter = 0u; emitter < 2u; ++emitter)

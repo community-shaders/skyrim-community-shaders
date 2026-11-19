@@ -8,6 +8,54 @@ RWTexture2D<float> RWTexFilteredTr : register(u3);
 RWTexture2D<float4> RWTexFilteredLum : register(u4);
 RWTexture2D<float4> RWTexFilteredAux : register(u5);
 
+[numthreads(8, 8, 1)] void filterCloudWideFast(uint2 pixel : SV_DispatchThreadID) {
+	const int2 maximum = int2(VolumetricCloudBuffer[0].activeFrameDim) - 1;
+	if (any(int2(pixel) > maximum))
+		return;
+	uint2 dimensions;
+	TexCloudResultTr.GetDimensions(dimensions.x, dimensions.y);
+	const float4 metadata = TexCloudResultAux[pixel];
+	const float falloff = 1.0 - saturate(abs(metadata.x - 1.0) / 6.0);
+	const float radius = (pow(falloff, 4.0) * 0.67 + 0.33) * 2.0;
+	float4 color = 0.0;
+	float transmittance = 0.0;
+	float weight = 0.0;
+	[unroll] for (uint i = 0u; i < 4u; ++i)
+	{
+		const float2 offset = (float2(i & 1u, i >> 1u) * 2.0 - 1.0) * radius;
+		const float2 position = clamp(float2(pixel) + offset, 0.0, float2(maximum));
+		const float2 uv = (position + 0.5) / dimensions;
+		// Opposite depth discontinuities can average to the center depth.
+		const float4 sceneDepths = TexCloudResultAux.GatherGreen(TransmittanceSampler, uv);
+		[branch] if (all(abs(sceneDepths - metadata.y) <= 0.064))
+		{
+			transmittance += TexCloudResultTr.SampleLevel(TransmittanceSampler, uv, 0);
+			color += TexCloudResultLum.SampleLevel(TransmittanceSampler, uv, 0);
+			weight += 1.0;
+		}
+		else
+		{
+			const int2 base = int2(position);
+			const float2 fraction = position - base;
+			[unroll] for (uint tap = 0u; tap < 4u; ++tap)
+			{
+				const int2 corner = int2(tap & 1u, tap >> 1u);
+				const float2 axisWeight = lerp(1.0 - fraction, fraction, corner);
+				const float tapWeight = axisWeight.x * axisWeight.y;
+				const int2 samplePixel = min(base + corner, maximum);
+				if (tapWeight > 0.0 && abs(TexCloudResultAux[samplePixel].y - metadata.y) <= 0.064) {
+					transmittance += TexCloudResultTr[samplePixel] * tapWeight;
+					color += TexCloudResultLum[samplePixel] * tapWeight;
+					weight += tapWeight;
+				}
+			}
+		}
+	}
+	RWTexFilteredTr[pixel] = weight > 0.0 ? transmittance / weight : TexCloudResultTr[pixel];
+	RWTexFilteredLum[pixel] = weight > 0.0 ? color / weight : TexCloudResultLum[pixel];
+	RWTexFilteredAux[pixel] = metadata;
+}
+
 #ifndef CLOUD_BLUR_RADIUS
 #	define CLOUD_BLUR_RADIUS 1
 #endif

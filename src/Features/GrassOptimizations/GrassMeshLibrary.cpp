@@ -79,7 +79,7 @@ GrassMaterialKey GrassMeshLibrary::CaptureMaterial(RE::BSShaderMaterial* materia
 	GrassMaterialKey key;
 	if (pbr) {
 		auto* pm = static_cast<BSLightingShaderMaterialPBR*>(material);
-		key.textures = { m->diffuseTexture.get(), m->normalTexture.get(), pm->rmaosTexture.get(), pm->featuresTexture0.get(), pm->featuresTexture1.get(), pm->emissiveTexture.get() };
+		key.textures = { m->diffuseTexture.get(), m->normalTexture.get(), pm->rmaosTexture.get(), pm->featuresTexture0.get(), pm->featuresTexture1.get(), pm->emissiveTexture.get(), pm->displacementTexture.get() };
 		key.clampMode = (uint32_t)m->textureClampMode;
 		key.constants = TruePBR::GetGrassPBRConstants(pm);
 	} else {
