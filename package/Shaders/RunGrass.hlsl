@@ -411,8 +411,8 @@ cbuffer AlphaTestRefCB : register(b11)
 	float AlphaTestRefRS : packoffset(c0);
 }
 
-#	if defined(RENDER_DEPTH)
-float SampleDepthAlpha(float2 uv)
+#	if defined(RENDER_DEPTH) || (defined(GRASS_LIGHTING) && defined(TRUE_PBR) && defined(DO_ALPHA_TEST) && defined(GRASS_OPTIMIZATIONS))
+float SampleGrassAlpha(float2 uv)
 {
 #		ifdef GRASS_OPTIMIZATIONS
 	float width, height;
@@ -506,11 +506,15 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 {
 	PS_OUTPUT psout = (PS_OUTPUT)0;
 #			if defined(RENDER_DEPTH)
-	float diffuseAlpha = input.Fade * SampleDepthAlpha(input.TexCoord.xy);
+	float diffuseAlpha = input.Fade * SampleGrassAlpha(input.TexCoord.xy);
 #			elif defined(DO_ALPHA_TEST)
-	// Use the original UVs for alpha testing to match the depth pass.
+	// Match the depth pass's UVs and mip selection before applying parallax.
 	float4 baseColor = TexBaseSampler.SampleBias(SampBaseSampler, input.TexCoord.xy, SharedData::MipBias);
+#				ifdef GRASS_OPTIMIZATIONS
+	float diffuseAlpha = input.Color.w * SampleGrassAlpha(input.TexCoord.xy);
+#				else
 	float diffuseAlpha = input.Color.w * baseColor.w;
+#				endif
 #			endif
 #			if defined(RENDER_DEPTH) || defined(DO_ALPHA_TEST)
 	if ((diffuseAlpha - AlphaTestRefRS) < 0)
@@ -911,7 +915,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			if defined(RENDER_DEPTH)
 	// Depth testing needs only alpha from the atlas's diffuse half.
 	const float2 alphaUV = float2(input.TexCoord.x, input.TexCoord.y * (complex ? 0.5 : 1.0));
-	const float baseAlpha = SampleDepthAlpha(alphaUV);
+	const float baseAlpha = SampleGrassAlpha(alphaUV);
 	const float diffuseAlpha = input.Fade * baseAlpha;
 	if ((diffuseAlpha - AlphaTestRefRS) < 0)
 		discard;
@@ -1298,7 +1302,7 @@ PS_OUTPUT main(PS_INPUT input)
 #		endif
 
 #		if defined(RENDER_DEPTH)
-	const float baseAlpha = SampleDepthAlpha(input.TexCoord.xy);
+	const float baseAlpha = SampleGrassAlpha(input.TexCoord.xy);
 	const float diffuseAlpha = input.Fade * baseAlpha;
 	if ((diffuseAlpha - AlphaTestRefRS) < 0) {
 		discard;
