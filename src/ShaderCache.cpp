@@ -2843,10 +2843,12 @@ namespace SIE
 	{
 		static constexpr std::array kProfiles{ "vs_5_0", "ps_5_0", "cs_5_0" };
 		static_assert(static_cast<size_t>(StandaloneShaderClass::Compute) + 1 == kProfiles.size());
+		standalonePending.fetch_add(1, std::memory_order_relaxed);
 		compilationSet.EnqueueAux(
-			[sourcePath = std::move(sourcePath), entryPoint = std::move(entryPoint), defines = std::move(defines),
+			[this, sourcePath = std::move(sourcePath), entryPoint = std::move(entryPoint), defines = std::move(defines),
 				profile = kProfiles[static_cast<size_t>(shaderClass)], onReady = std::move(onReady)]() {
 				onReady(globals::d3d::device && globals::state ? Util::CompileShader(sourcePath.c_str(), defines, profile, entryPoint.c_str()) : nullptr);
+				standalonePending.fetch_sub(1, std::memory_order_relaxed);
 			});
 	}
 
