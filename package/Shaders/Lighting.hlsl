@@ -2994,9 +2994,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	if defined(WETNESS_EFFECTS)
 #		if defined(DYNAMIC_CUBEMAPS)
 	float3 wetnessReflectance = GetWetnessIndirectLobeWeights(indirectLobeWeights, wetnessNormal, waterRoughnessSpecular, indirectContext);
-#			if !defined(TRUE_PBR)
-	wetnessReflectance *= Color::VanillaWetnessReflectionScale;
-#			endif
 #		else
 	float3 wetnessReflectance = 0.0;
 #		endif
