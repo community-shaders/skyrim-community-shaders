@@ -1433,6 +1433,26 @@ void PhysicalSky::DrawCloudQualitySection()
 	if (ImGui::CollapsingHeader(T(TKEY("cloud_quality"), "Quality & Performance"), ImGuiTreeNodeFlags_SpanAvailWidth)) {
 		Util::Text::WrappedSecondary("%s", T(TKEY("cloud_quality_desc"),
 											   "Global rendering cost. A shorter ray or shadow range and a larger march step cost less; smaller steps keep more detail at a higher cost."));
+		// The section returns early while a Scene Manager replica borrows this panel, since presets write several settings at once.
+		if (ImGui::BeginTable("CloudQualityPresets", 3)) {
+			const auto drawPresetButton = [this](const char* label, const CloudQualityPreset& preset) {
+				ImGui::TableNextColumn();
+				if (Util::Button(label, { -1, 0 })) {
+					settings.rayMarchRange = preset.rayMarchRange;
+					settings.shadowVolumeRange = preset.shadowVolumeRange;
+					settings.marchStepScale = preset.marchStepScale;
+					settings.cloudBlurRadius = preset.cloudBlurRadius;
+				}
+				if (auto _tt = Util::HoverTooltipWrapper())
+					ImGui::Text(T(TKEY("cloud_quality_preset_tooltip"), "Ray March Range: %.1f km\nShadow Volume Range: %.1f km\nCloud March Step Scale: %.2f\nCloud Blur Radius: %d px"),
+						preset.rayMarchRange, preset.shadowVolumeRange, preset.marchStepScale, preset.cloudBlurRadius);
+			};
+			drawPresetButton(T(TKEY("cloud_quality_low"), "Low"), kCloudQualityLow);
+			drawPresetButton(T(TKEY("cloud_quality_medium"), "Medium"), kCloudQualityMedium);
+			drawPresetButton(T(TKEY("cloud_quality_high"), "High"), kCloudQualityHigh);
+			ImGui::EndTable();
+		}
+
 		ImGui::SliderFloat(T(TKEY("ray_march_range"), "Ray March Range"), &settings.rayMarchRange, 1.f, 64.f, "%.1f km");
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::Text("%s", T(TKEY("ray_march_range_desc"), "Maximum low-cloud distance from the camera, including clear space before and between clouds."));
@@ -1442,7 +1462,7 @@ void PhysicalSky::DrawCloudQualitySection()
 			ImGui::TextWrapped("%s", T(TKEY("cloud_march_step_scale_desc"), "Step length multiplier. Larger steps cost less and lose thin detail; smaller steps cost more and resolve thin detail."));
 		ImGui::SliderInt(T(TKEY("cloud_blur_radius"), "Cloud Blur Radius"), &settings.cloudBlurRadius, 0, 2, "%d px", ImGuiSliderFlags_AlwaysClamp);
 		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::TextWrapped("%s", T(TKEY("cloud_blur_radius_desc"), "Final blur radius in internal rendering pixels, adjusted by cloud distance. 0 skips the blur pass; 1 is the default; 2 gives a wider blur."));
+			ImGui::TextWrapped("%s", T(TKEY("cloud_blur_radius_desc"), "Final blur radius in internal rendering pixels, adjusted by cloud distance. 0 skips the blur pass; 2 gives the widest blur."));
 	}
 }
 

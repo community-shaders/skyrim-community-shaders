@@ -113,6 +113,18 @@ struct PhysicalSky final : public Feature
 		float zBottom = -14500.f;
 	};
 
+	/** @brief Volumetric cloud cost settings written together by the Quality & Performance preset buttons. */
+	struct CloudQualityPreset
+	{
+		float rayMarchRange;      // km
+		float shadowVolumeRange;  // km
+		float marchStepScale;
+		int cloudBlurRadius;  // px
+	};
+	constexpr static CloudQualityPreset kCloudQualityLow = { 5.f, 4.f, 1.5f, 2 };
+	constexpr static CloudQualityPreset kCloudQualityMedium = { 10.f, 8.f, 0.8f, 1 };
+	constexpr static CloudQualityPreset kCloudQualityHigh = { 32.f, 8.f, 0.5f, 1 };
+
 	struct Settings
 	{
 		bool enabled = true;
@@ -198,10 +210,10 @@ struct PhysicalSky final : public Feature
 			float3 color = { 0.86f, 0.9f, 1.f };  // linear sRGB chromaticity
 		};
 		LightningSettings lightning;
-		float rayMarchRange = 32.f;
-		float shadowVolumeRange = 8.f;  // km
-		float marchStepScale = 0.5f;
-		int cloudBlurRadius = 1;
+		float rayMarchRange = kCloudQualityLow.rayMarchRange;
+		float shadowVolumeRange = kCloudQualityLow.shadowVolumeRange;
+		float marchStepScale = kCloudQualityLow.marchStepScale;
+		int cloudBlurRadius = kCloudQualityLow.cloudBlurRadius;
 		NdfSettings cloudMap = {};
 		CloudLayer cloudLayer = {};
 		CloudNoiseSettings cloudNoise = {};
