@@ -204,6 +204,9 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	shadowVolumeRange,
 	marchStepScale,
 	cloudBlurRadius,
+	cloudAmbientSHOnly,
+	cloudHalfResTrace,
+	cloudFastReconstruction,
 	cloudMap,
 	cloudLayer,
 	cloudNoise,
@@ -1442,6 +1445,9 @@ void PhysicalSky::DrawCloudQualitySection()
 					settings.shadowVolumeRange = preset.shadowVolumeRange;
 					settings.marchStepScale = preset.marchStepScale;
 					settings.cloudBlurRadius = preset.cloudBlurRadius;
+					settings.cloudAmbientSHOnly = preset.cloudAmbientSHOnly;
+					settings.cloudHalfResTrace = preset.cloudHalfResTrace;
+					settings.cloudFastReconstruction = preset.cloudFastReconstruction;
 				}
 				if (auto _tt = Util::HoverTooltipWrapper())
 					ImGui::Text(T(TKEY("cloud_quality_preset_tooltip"), "Ray March Range: %.1f km\nShadow Volume Range: %.1f km\nCloud March Step Scale: %.2f\nCloud Blur Radius: %d px"),
@@ -1452,6 +1458,16 @@ void PhysicalSky::DrawCloudQualitySection()
 			drawPresetButton(T(TKEY("cloud_quality_high"), "High"), kCloudQualityHigh);
 			ImGui::EndTable();
 		}
+
+		ImGui::Checkbox(T(TKEY("cloud_ambient_sh_only"), "Approximate Ambient Occlusion"), &settings.cloudAmbientSHOnly);
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::TextWrapped("%s", T(TKEY("cloud_ambient_sh_only_desc"), "Use sky spherical harmonics and a local density estimate for ambient shading. Large clouds lose some interior shadowing and light bounce."));
+		ImGui::Checkbox(T(TKEY("cloud_half_res_trace"), "Half-Resolution Cloud Trace"), &settings.cloudHalfResTrace);
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::TextWrapped("%s", T(TKEY("cloud_half_res_trace_desc"), "Trace one ray per 8x8 pixel block each frame. Thin cloud edges and silhouettes resolve less precisely."));
+		ImGui::Checkbox(T(TKEY("cloud_fast_reconstruction"), "Fast Cloud Reconstruction"), &settings.cloudFastReconstruction);
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::TextWrapped("%s", T(TKEY("cloud_fast_reconstruction_desc"), "Simplify temporal reconstruction and use a four-sample filter at a 2 px blur radius. Moving cloud edges may trail or soften."));
 
 		ImGui::SliderFloat(T(TKEY("ray_march_range"), "Ray March Range"), &settings.rayMarchRange, 1.f, 64.f, "%.1f km");
 		if (auto _tt = Util::HoverTooltipWrapper())
@@ -1832,23 +1848,25 @@ bool PhysicalSky::ShadersOK()
 	// path still verifies every texture before binding.
 	const bool ndfReady = (ndfManager.texHeight && ndfManager.texModeling && ndfManager.generatorProgram && ndfManager.noiseProgram);
 	const bool cirrusMapsReady = !settings.cloudLayer.cirrus.enabled || cirrusMapManager.ShadersReady(settings.cloudLayer.cirrus);
+	const bool ambientShadersOk = settings.cloudAmbientSHOnly ||
+	                              (csCloudAmbientLighting && csCloudAmbientDensity && csCloudAmbientBoundary && csCloudAmbientSweep &&
+									  csCloudAmbientSweepFar && csCloudAmbientProject && csCloudAmbientLayout && csCloudAmbientView &&
+									  (!voxelCloudManager.Count() || csCloudAmbientDensityVoxel));
+	const bool reconstructionShadersOk = csVolFilter &&
+	                                     (settings.cloudFastReconstruction ? csVolReprojectFast && csVolFilterWideFast :
+																			 csVolReproject && csVolFilterWide);
 	bool volumetricShadersOk = !VolumetricCloudsEnabled() ||
 	                           (vsCloudBoundary && psCloudBoundary && texCloudBoundary && cloudBoundaryCB && cloudBoundaryIndices && cloudBoundaryBlend && cloudBoundaryRasterizer && cloudBoundaryDepth &&
 								   csCloudHeightBounds && csCloudHeightBoundsReduce && texCloudHeightBounds && texCloudHeightBoundsTiles && texCloudWeatherBounds &&
-								   csCloudAmbientLighting && texCloudAmbientLighting &&
-								   csCloudAmbientDensity && csCloudAmbientBoundary && csCloudAmbientSweep && csCloudAmbientSweepFar && csCloudAmbientProject && csCloudAmbientLayout && csCloudAmbientView && cloudAmbientVolumeCB &&
-								   texCloudAmbientView[0] && texCloudAmbientView[1] && texCloudAmbientView[2] && texCloudAmbientView[3] &&
-								   texCloudAmbientDensity && texCloudAmbientSweep && texCloudAmbientBoundary && texCloudAmbientLayout[0] && texCloudAmbientLayout[1] &&
-								   texCloudAmbientSource[0][0] && texCloudAmbientSource[0][1] && texCloudAmbientSource[1][0] && texCloudAmbientSource[1][1] &&
-								   texCloudAmbientSource[2][0] && texCloudAmbientSource[2][1] && texCloudAmbientSource[3][0] && texCloudAmbientSource[3][1] &&
-								   csVolMainView && csUpperView && csUpperSunDepth && texUpperSunDepth && csVolMainWithoutStorm && csVolMainSingleVolcanic && csStormTiles && texStormTiles && csVolFilter && csVolFilterWide && csVolReproject && csVolCubeReproject && csVolShadowVolume && csVolShadowResample && texShadowVolumeRaw && csCloudShadowMean && csCloudShadowMeanVolcanic && texCloudShadowMean && csVolCubemap && csVolAmbientSH && csCloudAmbientReduce && texVolCloudAmbientSH && texCloudAmbientPartial &&
+								   ambientShadersOk && cloudAmbientVolumeCB && reconstructionShadersOk &&
+								   csVolMainView && csUpperView && csUpperSunDepth && texUpperSunDepth && csVolMainWithoutStorm && csVolMainSingleVolcanic && csStormTiles && texStormTiles && csVolCubeReproject && csVolShadowVolume && csVolShadowResample && texShadowVolumeRaw && csCloudShadowMean && csCloudShadowMeanVolcanic && texCloudShadowMean && csVolCubemap && csVolAmbientSH && csCloudAmbientReduce && texVolCloudAmbientSH && texCloudAmbientPartial &&
 								   texVolTr && texVolLum && texVolAux && texVolLowTr && texVolLowLum && texVolLowAux &&
 								   texVolFilteredTr && texVolFilteredLum && texVolFilteredAux &&
 								   texVolHistoryTr && texVolHistoryLum && texVolHistoryAux && texVolCubeTr && texVolCubeLum &&
 								   texVolCubeAux && texVolCubeHistoryTr && texVolCubeHistoryLum && texVolCubeHistoryAux &&
 								   texVolCubeTraceTr && texVolCubeTraceLum && texVolCubeTraceAux &&
 								   texShadowVolume && baseShapeNoiseSrv && cloudProfileLutSrv && cloudAdjustmentLutSrv && ndfReady && cirrusMapsReady);
-	const bool voxelShadersOk = !voxelCloudManager.Count() || (cloudDispatchCb && csVoxelView && csVoxelLighting && csVolCubemapVoxel && csVolShadowVoxel && csCloudAmbientDensityVoxel && csCloudShadowMeanVoxel &&
+	const bool voxelShadersOk = !voxelCloudManager.Count() || (cloudDispatchCb && csVoxelView && csVoxelLighting && csVolCubemapVoxel && csVolShadowVoxel && csCloudShadowMeanVoxel &&
 																  texVoxelTraceTr && texVoxelTraceLum && texVoxelTraceAux && texVoxelTraceMotion && texVoxelTraceLightning);
 	return baseShadersOk && volumetricShadersOk && voxelShadersOk;
 }
@@ -2226,6 +2244,9 @@ void PhysicalSky::Prepass()
 				{ "textures", ndfTexManager.revision },
 				{ "skipShapeNoise", settings.cloudNoise.skipShapeNoise },
 				{ "useVoxelNoise", settings.cloudNoise.useVoxelNoise },
+				{ "cloudAmbientSHOnly", settings.cloudAmbientSHOnly },
+				{ "cloudHalfResTrace", settings.cloudHalfResTrace },
+				{ "cloudFastReconstruction", settings.cloudFastReconstruction },
 				{ "middleEnabled", settings.cloudLayer.middle.enabled },
 				{ "middleDetailMode", settings.cloudLayer.middle.detailMode },
 				{ "cirrusEnabled", settings.cloudLayer.cirrus.enabled },

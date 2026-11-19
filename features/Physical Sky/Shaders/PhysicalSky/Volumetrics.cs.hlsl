@@ -147,6 +147,8 @@ cbuffer VolumetricCloudConstants : register(b1)
 	float4 MiddleCloudCells;      // frequency, Ac modulation, As modulation, warp
 	float4 MiddleCloudBands;      // world wave vector (cycles/game unit), bend (wavelengths), organization
 	float4 MiddleCloudBandShape;  // thickness contrast, displacement (game units), wavelength (game units), enabled
+	uint CloudTraceScale;
+	uint CloudAmbientSHOnly;
 };
 Texture2D<float4> TexTransmittance : register(t1);
 Texture3D<float4> TexAerialPerspective : register(t2);
@@ -1228,6 +1230,9 @@ VolumetricCloudResult RenderVolumetricCloudRay(float3 direction, float3 eye, flo
 	const float cirrusPhase = cirrusPending ? CloudCirrusPhase(direction) : 0.0;
 	const CloudAmbient ambient = MakeCloudAmbient();
 	const bool ambientEnabled = info.ambientStrength > 0.0 && (info.msAlbedo > 0.0 || CloudStormCount() > 0u);
+	float3 ambientSky = 0.0, ambientGround = 0.0;
+	[branch] if (ambientEnabled && CloudAmbientSHOnly != 0u)
+		CloudAmbientTransport::SHSources(ambientSky, ambientGround);
 	float ambientTransmittance = 1.0;
 	const CloudLayer layer = GetCloudLayer(info);
 	float noiseTexelsPerMeter = 0.0;
@@ -1418,12 +1423,14 @@ VolumetricCloudResult RenderVolumetricCloudRay(float3 direction, float3 eye, flo
 #endif
 				const float reducedDepth = transport * viewDepth;
 				const float reducedOpacity = CloudOpacity(reducedDepth);
+				const float3 ambientSource = CloudAmbientTransport::ViewSource(pos, densityContext.ndf.height_fraction,
+					extinction, ambientSky, ambientGround);
 #ifdef CLOUD_REFLECTION
 				result.transportLum += ambientTransmittance * reducedOpacity * ambientPhase.y * info.ambientStrength * info.cloudLightingScale *
 #else
 				result.lum += ambientTransmittance * reducedOpacity * ambientPhase.y * info.ambientStrength * info.cloudLightingScale *
 #endif
-				                       CloudAmbientTransport::ViewSource(pos);
+				                       ambientSource;
 				ambientTransmittance *= exp(-reducedDepth);
 			}
 
