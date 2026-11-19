@@ -1628,6 +1628,25 @@ namespace Util
 
 		// The action button comes before the card button so it wins the hover where they overlap
 		OptionCardClick result = OptionCardClick::None;
+		if (content.cornerIcon) {
+			// Small filled square on the top right so it reads as a button, not as card text
+			const float edge = m.titleHeight;
+			const ImVec2 cornerMin(inner.z - edge, inner.y);
+			ImGui::SetCursorScreenPos(cornerMin);
+			if (ImGui::InvisibleButton("##Corner", ImVec2(edge, edge)))
+				result = OptionCardClick::Action;
+			const bool cornerHovered = ImGui::IsItemHovered();
+			if (content.cornerTooltip)
+				HoverTip(content.cornerTooltip);
+			ImVec4 fill = style.Colors[ImGuiCol_Button];
+			if (cornerHovered)
+				fill = style.Colors[ImGuiCol_ButtonHovered];
+			ImVec4 glyph = content.cornerActive ? Colors::GetAccent() : style.Colors[ImGuiCol_TextDisabled];
+			drawList->AddRectFilled(cornerMin, ImVec2(cornerMin.x + edge, cornerMin.y + edge), faded(fill), style.FrameRounding);
+			Icons::DrawCenteredGlyph(drawList, cornerMin, ImVec2(edge, edge), edge * 0.7f, Icons::TI(content.cornerIcon), faded(glyph));
+			if (cornerHovered)
+				ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+		}
 		if (content.action) {
 			ImGui::SetCursorScreenPos(ImVec2(inner.x, inner.w - m.actionHeight));
 			if (Button(content.action))
@@ -1653,6 +1672,13 @@ namespace Util
 		if (content.status) {
 			y += m.gap;
 			drawList->AddText(ImVec2(inner.x, y), faded(content.statusColor), content.status);
+			if (content.status2) {
+				const char* divider = " | ";
+				float x = inner.x + ImGui::CalcTextSize(content.status).x;
+				drawList->AddText(ImVec2(x, y), faded(style.Colors[ImGuiCol_TextDisabled]), divider);
+				x += ImGui::CalcTextSize(divider).x;
+				drawList->AddText(ImVec2(x, y), faded(content.status2Color), content.status2);
+			}
 			y += m.statusHeight;
 		}
 		if (content.description) {
