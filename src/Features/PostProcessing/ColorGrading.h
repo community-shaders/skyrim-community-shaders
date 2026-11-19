@@ -153,6 +153,7 @@ struct ColorGrading : public PostProcessFeature
 
 	bool recompileFlag = true;
 	bool saveImagesFlag = false;
+	winrt::com_ptr<ID3D11VertexShader> colorgradingVS = nullptr;
 	winrt::com_ptr<ID3D11PixelShader> colorgradingPS = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> lutgenCS = nullptr;
 
