@@ -135,55 +135,6 @@ void Camera::SetupResources()
 	}
 }
 
-bool Camera::EnsureTargets()
-{
-	if (texLens && texOutput)
-		return true;
-
-	const auto now = std::chrono::steady_clock::now();
-	if (now < nextTargetAttempt)
-		return false;
-
-	auto gameTexMainCopy = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN_COPY];
-
-	D3D11_TEXTURE2D_DESC texDesc;
-	gameTexMainCopy.texture->GetDesc(&texDesc);
-
-	D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {
-		.Format = texDesc.Format,
-		.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D,
-		.Texture2D = { .MostDetailedMip = 0, .MipLevels = 1 }
-	};
-
-	D3D11_RENDER_TARGET_VIEW_DESC rtvDesc = {
-		.Format = texDesc.Format,
-		.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D,
-		.Texture2D = { .MipSlice = 0 }
-	};
-
-	texDesc.MipLevels = srvDesc.Texture2D.MipLevels = 1;
-	texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
-	texDesc.MiscFlags = 0;
-
-	try {
-		texLens = eastl::make_unique<Texture2D>(texDesc, "PostProcessing::Camera::Lens");
-		texLens->CreateSRV(srvDesc);
-		texLens->CreateRTV(rtvDesc);
-
-		texOutput = eastl::make_unique<Texture2D>(texDesc, "PostProcessing::Camera::Output");
-		texOutput->CreateSRV(srvDesc);
-		texOutput->CreateRTV(rtvDesc);
-	} catch (const std::exception& e) {
-		logger::error("[PostProcessing] Camera could not create its targets: {}", e.what());
-		texLens.reset();
-		texOutput.reset();
-		nextTargetAttempt = now + kTargetRetryDelay;
-		return false;
-	}
-	nextTargetAttempt = {};
-	return true;
-}
-
 void Camera::ClearShaderCache()
 {
 	BumpShaderGeneration();
@@ -220,7 +171,11 @@ void Camera::Draw(TextureInfo& inout_tex)
 		return;
 	if (!AllShadersReady({ &cameraPS, &finishPS }))
 		return;
-	if (!EnsureTargets())
+	auto* texLens = owner->GetColorTarget(inout_tex.tex);
+	if (!texLens)
+		return;
+	auto* texOutput = owner->GetColorTarget(texLens->resource.get());
+	if (!texOutput)
 		return;
 
 	globals::profiler->BeginPass("PostProcessing::Camera");
@@ -258,8 +213,11 @@ void Camera::Draw(TextureInfo& inout_tex)
 		pass.SetShaders(owner->GetFullscreenVS(), cameraPS.get());
 		pass.Draw();
 
-		srv = texLens->srv.get();
+		// The finish pass can reuse the first pass's input as its output.
+		srv = nullptr;
+		context->PSSetShaderResources(0, 1, &srv);
 		pass.SetTargets({ texOutput->rtv.get() }, res.x, res.y);
+		srv = texLens->srv.get();
 		context->PSSetShaderResources(0, 1, &srv);
 		pass.SetShaders(owner->GetFullscreenVS(), finishPS.get());
 		pass.Draw();

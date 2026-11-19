@@ -1,68 +1,11 @@
-#include "Common/Color.hlsli"
-#include "Common/ColorSpaces.hlsli"
-#include "Common/Math.hlsli"
-
+#include "PostProcessing/ColorGrading/Apply.hlsli"
 #include "PostProcessing/fullscreen.hlsli"
 
-#define LUT_SIZE 64
-
 Texture2D<float4> TexColor : register(t0);
-Texture3D<float4> TexLUT : register(t1);
-
-SamplerState LinearSampler : register(s0);
-
-#include "PostProcessing/ColorGrading/Include/OpenDRTConfig.hlsli"
-
-cbuffer ColorCB : register(b1)
-{
-	float4 asccdl[3];
-	float4 liftgammagain[3];  // lift，gamma，gain
-	float4 inOutGamma;        // .z = input gamma, .w = output gamma
-	float4 oklchSaturation;
-	float4 oklchColorMixer[7];
-	float4 contrast;
-	float4 pivot;
-	float4 exposureTemperatureTint;
-	float4 shadows;
-	float4 midtones;
-	float4 highlights;
-	float4 shadowsHighlightsRange;  // shadowBegin, shadowEnd, highlightBegin, highlightEnd
-
-	float4 tonemapParams[2];
-	float4 inputToWorking[3];    // scene RGB → working color space
-	float4 workingToTonemap[3];  // working → tonemapper native space
-	float4 tonemapToOutput[3];   // tonemapper native → output space
-
-	float4 workingToXYZ[3];  // working → XYZ D65 (white balance and Oklab)
-	float4 xyzToWorking[3];  // XYZ D65 → working
-
-	float4 workingWhitePoint;  // .xy = D65 reference white of the XYZ matrices
-
-	float4 shadowsOffset;  // SMH color offsets
-	float4 midtonesOffset;
-	float4 highlightsOffset;
-
-	// game value
-	float4 cinematic;  // saturation, brightness, contrast
-	float4 fade;       // color
-	float4 tint;       // color
-
-	uint logType;
-	uint skipLDR;
-	uint skipLUT;
-	uint enableTonemap;
-	uint enableColorSpaceTransform;
-	uint enableHDR;           // HDR display is enabled (auto-set from HDR feature)
-	float hdrPeakNits;        // Maximum display brightness in nits for HDR
-	float hdrPaperWhiteNits;  // Reference white brightness in nits for HDR
-
-	OpenDRTConfig odrtConfig;
-};
 
 #include "PostProcessing/ColorGrading/Include/GT7ToneMapping.hlsli"
 #include "PostProcessing/ColorGrading/Include/OpenDRT.hlsli"
 #include "PostProcessing/ColorGrading/Include/RenoDXToneMapping.hlsli"
-#include "PostProcessing/common.hlsli"
 namespace LogType
 {
 	static const uint ACEScct = (1 << 0);
@@ -243,22 +186,6 @@ float3x3 GetWhiteBalanceMatrix(out bool useWhiteBalance)
 	const float3x3 xyzToWorkingMat = float3x3(xyzToWorking[0].xyz, xyzToWorking[1].xyz, xyzToWorking[2].xyz);
 	const float3x3 workingToXYZMat = float3x3(workingToXYZ[0].xyz, workingToXYZ[1].xyz, workingToXYZ[2].xyz);
 	return mul(xyzToWorkingMat, mul(whiteBalance, workingToXYZMat));
-}
-
-float3 LogToLinear(float3 logColor)
-{
-	const float linearRange = 14.0f;
-	const float linearGrey = 0.18f;
-	const float exposureGrey = 444.0f;
-	return exp2((logColor - exposureGrey / 1023.0) * linearRange) * linearGrey;
-}
-
-float3 LinearToLog(float3 linearColor)
-{
-	const float linearRange = 14.0f;
-	const float linearGrey = 0.18f;
-	const float exposureGrey = 444.0f;
-	return saturate(log2(linearColor) / linearRange - log2(linearGrey) / linearRange + exposureGrey / 1023.0f);
 }
 
 float HDRPaperWhiteNits()
@@ -868,14 +795,6 @@ float3 ColorGrading(float3 color, float3x3 whiteBalance, bool useWhiteBalance, b
 	return color;
 }
 
-float3 ApplyLUT(float3 color)
-{
-	color = LinearToLog(color + LogToLinear(0));
-	color = color * ((LUT_SIZE - 1.0) / LUT_SIZE) + (0.5 / LUT_SIZE);
-	color = TexLUT.SampleLevel(LinearSampler, color, 0).xyz;
-	return color;
-}
-
 struct ColorGradingVSOutput
 {
 	float4 Position: SV_POSITION;
@@ -911,20 +830,14 @@ ColorGradingVSOutput VSColorGrading(uint vertexID : SV_VertexID)
 	return output;
 }
 
-float4 GradePixel(ColorGradingVSOutput input)
+float4 PSColorGrading(ColorGradingVSOutput input) : SV_Target
 {
 	uint2 DTid = uint2(input.Position.xy);
-
-	// Game cinematic
-	float3 color = abs(TexColor[DTid].xyz);
+	float3 color = TexColor[DTid].xyz;
 	[branch] if (!(input.NeutralControls & NeutralGrading::Input))
-	{
-		color = pow(color, inOutGamma.z) * cinematic.y;
-		color = Saturation(color, cinematic.x);
-		color = LinearContrast(color, cinematic.z, 0.18);
-	}
+		color = ApplyGameCinematic(color);
+	else color = abs(color);
 
-	// Apply LUT or direct Color Grading
 	if (skipLUT)
 		color = ColorGrading(color, float3x3(input.WhiteBalance0.xyz, input.WhiteBalance1, input.WhiteBalance2), input.WhiteBalance0.w != 0.0,
 			input.OklchControlsActive != 0, input.NeutralControls);
@@ -934,39 +847,9 @@ float4 GradePixel(ColorGradingVSOutput input)
 	color = abs(color);
 	[branch] if (!(input.NeutralControls & NeutralGrading::Output))
 		color = pow(color, inOutGamma.w);
-
 	[branch] if (!(input.NeutralControls & NeutralGrading::TintFade))
-	{
-		// Game tint/fade colors are Rec.709, while HDR grading output is Rec.2020.
-		float luma = dot(color, enableHDR ? Rec2020_2_XYZ_MAT[1] : sRGB_2_XYZ_MAT[1]);
-		float3 outputTint = enableHDR ? Color::BT709ToBT2020(tint.xyz) : tint.xyz;
-		color = lerp(color, luma * outputTint, tint.w);
-
-		// Game fade
-		float3 outputFade = enableHDR ? Color::BT709ToBT2020(fade.xyz) : fade.xyz;
-		color = lerp(color, outputFade, fade.w);
-	}
-
+		color = ApplyGameTintFade(color);
 	return float4(color, 1);
-}
-
-float4 PSColorGrading(ColorGradingVSOutput input) : SV_Target
-{
-	return GradePixel(input);
-}
-
-struct ColorGradingMirrorOutput
-{
-	float4 Primary: SV_Target0;
-	float4 Alternate: SV_Target1;
-};
-
-ColorGradingMirrorOutput PSColorGradingMirror(ColorGradingVSOutput input)
-{
-	ColorGradingMirrorOutput output;
-	output.Primary = GradePixel(input);
-	output.Alternate = output.Primary;
-	return output;
 }
 
 RWTexture3D<float4> RWLUT : register(u0);

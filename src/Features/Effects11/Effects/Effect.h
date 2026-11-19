@@ -322,4 +322,12 @@ private:
 
 	void LoadUIVariableValue(UIVariable& uiVar);
 	void LoadVariableFromString(UIVariable& uiVar, const std::string& value);
+
+	/** @brief Each ini key once, with the last value written to it, in first-write order. */
+	std::vector<std::pair<std::string, std::string>> SerializeValues() const;
+	/** @brief Records the current values as the ones on disk. */
+	void CaptureSavedValues();
+
+	/// Ini values as last loaded or saved, so Save writes only edited keys and an unedited preset needs no write access.
+	std::unordered_map<std::string, std::string> savedValues;
 };

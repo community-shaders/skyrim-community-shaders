@@ -147,7 +147,6 @@ struct ColorGrading : public PostProcessFeature
 	};
 	std::unique_ptr<ConstantBuffer> colorCB = nullptr;
 
-	std::unique_ptr<Texture2D> texColor = nullptr;
 	std::unique_ptr<Texture3D> texLUT = nullptr;
 
 	static constexpr int LUTDim = 64;
@@ -156,14 +155,13 @@ struct ColorGrading : public PostProcessFeature
 	bool saveImagesFlag = false;
 	winrt::com_ptr<ID3D11VertexShader> colorgradingVS = nullptr;
 	winrt::com_ptr<ID3D11PixelShader> colorgradingPS = nullptr;
-	winrt::com_ptr<ID3D11PixelShader> colorgradingMirrorPS = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> lutgenCS = nullptr;
 
 	winrt::com_ptr<ID3D11SamplerState> linearSampler = nullptr;
 
 	virtual void SetupResources() override;
 	virtual void ClearShaderCache() override;
-	/** @brief Drop in-memory grading shaders and recompile for the current tonemapper; keeps disk cache. */
+	/** @brief Drop in-memory PS/CS and recompile for the current tonemapper; keeps disk cache. */
 	void ReloadActiveShaders();
 	void ReleaseActiveShaders();
 	void CompileShaders();
@@ -176,17 +174,12 @@ struct ColorGrading : public PostProcessFeature
 	virtual void DrawSettings() override;
 
 	virtual void Draw(TextureInfo&) override;
-	/**
-	 * @brief Grades into a compatible engine target instead of texColor, optionally mirroring into a second one.
-	 * @param inout_tex Pipeline input; replaced with the texture the grading wrote.
-	 * @param target Engine target to write; texColor is used when it is empty or incompatible.
-	 * @param targetView Render target view of target.
-	 * @param alternate Second engine target to write in the same pass, or null.
-	 * @param alternateView Render target view of alternate.
-	 * @return True when the alternate target was written.
-	 */
-	bool DrawToTarget(TextureInfo& inout_tex, const TextureInfo& target, ID3D11RenderTargetView* targetView,
-		ID3D11Texture2D* alternate = nullptr, ID3D11RenderTargetView* alternateView = nullptr);
+	/// @brief Refreshes the active shaders if needed and checks whether grading can run.
+	bool PrepareDraw();
+	/// @brief Updates grading constants and regenerates the LUT when its inputs change.
+	void UpdateConstantsAndLUT();
+	/// @brief Runs requested diagnostic captures after the graded output is ready.
+	void FinishDraw(const Texture2D& colorOutput);
 	void UpdateColorSpaceTransforms(bool hdrEnabled = false);
 
 	/**
@@ -195,7 +188,7 @@ struct ColorGrading : public PostProcessFeature
 	 */
 	bool WantsAutoHDR() const;
 
-	void OutputTextures();
+	void OutputTextures(const Texture2D& colorOutput);
 
 	// Debug: tonemapping curve via GPU evaluation
 	static constexpr int CurveSamples = 256;
