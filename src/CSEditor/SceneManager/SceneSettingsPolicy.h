@@ -30,6 +30,7 @@ namespace SceneSettingsPolicy
 		{ "PhysicalSky", "cloudAmbientSHOnly" },
 		{ "PhysicalSky", "cloudHalfResTrace" },
 		{ "PhysicalSky", "cloudFastReconstruction" },
+		{ "PhysicalSky", "cloudCascadeShadows" },
 		{ "PhysicalSky", "cloudNoise" },
 		{ "PhysicalSky", "cloudLayer", "cirrus", "uvSize" },
 		{ "PhysicalSky", "cloudRelightMix" },
