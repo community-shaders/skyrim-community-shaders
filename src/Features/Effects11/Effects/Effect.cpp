@@ -29,6 +29,7 @@ bool Effect::Load()
 		// Patches force off preset effects that clash with Community Shaders, so they apply without an ini too
 		Util::SettingsPatches::Apply(*this);
 		CaptureBaseValues();
+		CaptureSavedValues();
 		return true;
 	}
 
@@ -107,6 +108,7 @@ bool Effect::Load()
 
 	Util::SettingsPatches::Apply(*this);
 	CaptureBaseValues();
+	CaptureSavedValues();
 
 	logger::debug("[EFFECTS11] Loaded settings from '{}' for effect '{}'", iniPath.string(), GetName());
 	return true;
@@ -168,19 +170,17 @@ void Effect::CaptureBaseValues()
 		CaptureBaseValue(uiVar);
 }
 
-bool Effect::Save()
+std::vector<std::pair<std::string, std::string>> Effect::SerializeValues() const
 {
-	// Nothing loaded means nothing to persist; writing would leave stub ini files in the preset
-	if (!IsCompiled())
-		return true;
-	assert(!Overlays::Manager::GetSingleton().IsApplied() && "save inside Overlays::Manager::RemovedScope");
-
-	std::filesystem::path iniPath = PresetManager::GetSingleton().GetENBSeriesPath() / (GetName() + ".ini");
-
-	std::string section = GetName();
-	std::transform(section.begin(), section.end(), section.begin(), ::toupper);
-
-	bool ok = true;
+	std::vector<std::pair<std::string, std::string>> values;
+	std::unordered_map<std::string, size_t> indexByKey;
+	// Variables can share an ini key; the last one written wins, as it did on disk
+	const auto add = [&](std::string key, std::string value) {
+		if (const auto [existing, inserted] = indexByKey.try_emplace(key, values.size()); !inserted)
+			values[existing->second].second = std::move(value);
+		else
+			values.emplace_back(std::move(key), std::move(value));
+	};
 	for (const auto& uiVar : uiVariables) {
 		if (uiVar.isLabel || uiVar.isPatched)
 			continue;
@@ -190,64 +190,77 @@ bool Effect::Save()
 		if (iniKey.empty())
 			continue;
 
-		std::string value;
-
 		const bool useBase = IsWeatherSeparated(uiVar);
 		const float* vectorValue = useBase ? uiVar.baseVectorValue : uiVar.vectorValue;
 
 		switch (uiVar.type) {
 		case UIVariableType::Float:
-			value = Effects11Util::Ini::FormatFloat(useBase ? uiVar.baseFloatValue : uiVar.floatValue);
+			add(std::move(iniKey), Effects11Util::Ini::FormatFloat(useBase ? uiVar.baseFloatValue : uiVar.floatValue));
 			break;
 		case UIVariableType::Int:
-			value = std::to_string(uiVar.intValue);
+			add(std::move(iniKey), std::to_string(uiVar.intValue));
 			break;
 		case UIVariableType::Bool:
-			value = uiVar.boolValue ? "true" : "false";
+			add(std::move(iniKey), uiVar.boolValue ? "true" : "false");
 			break;
 		case UIVariableType::Float2:
 		case UIVariableType::Float3:
 		case UIVariableType::Float4:
-			if (IsPerComponentVector(uiVar)) {
-				int numComponents = (uiVar.type == UIVariableType::Float2) ? 2 : (uiVar.type == UIVariableType::Float3) ? 3 :
-				                                                                                                          4;
-				for (int i = 0; i < numComponents; ++i) {
-					std::string compKey = iniKey + kComponentSuffixes[i];
-					std::string compValue = Effects11Util::Ini::FormatFloat(vectorValue[i]);
-					BOOL compResult = WritePrivateProfileStringA(section.c_str(), compKey.c_str(), compValue.c_str(), iniPath.string().c_str());
-					if (!compResult) {
-						logger::warn("[EFFECTS11] Failed to write key '{}' to ini file '{}'", compKey, iniPath.string());
-						ok = false;
-					}
+			{
+				const int numComponents = GetComponentCount(uiVar.type);
+				if (IsPerComponentVector(uiVar)) {
+					for (int i = 0; i < numComponents; ++i)
+						add(iniKey + kComponentSuffixes[i], Effects11Util::Ini::FormatFloat(vectorValue[i]));
+				} else {
+					add(std::move(iniKey), Effects11Util::Ini::FormatFloatList({ vectorValue, static_cast<size_t>(numComponents) }));
 				}
-				continue;
-			} else {
-				int numComponents = (uiVar.type == UIVariableType::Float2) ? 2 : (uiVar.type == UIVariableType::Float3) ? 3 :
-				                                                                                                          4;
-				value = Effects11Util::Ini::FormatFloatList({ vectorValue, static_cast<size_t>(numComponents) });
+				break;
 			}
-			break;
 		}
+	}
+	add("TECHNIQUE", std::to_string(selectedTechniqueIndex + 1u));
+	return values;
+}
 
-		BOOL result = WritePrivateProfileStringA(section.c_str(), iniKey.c_str(), value.c_str(), iniPath.string().c_str());
-		if (!result) {
-			logger::warn("[EFFECTS11] Failed to write key '{}' to ini file '{}'", iniKey, iniPath.string());
+void Effect::CaptureSavedValues()
+{
+	savedValues.clear();
+	for (auto& [key, value] : SerializeValues())
+		savedValues.insert_or_assign(std::move(key), std::move(value));
+}
+
+bool Effect::Save()
+{
+	// Nothing loaded means nothing to persist; writing would leave stub ini files in the preset
+	if (!IsCompiled())
+		return true;
+	assert(!Overlays::Manager::GetSingleton().IsApplied() && "save inside Overlays::Manager::RemovedScope");
+
+	const std::string iniPath = (PresetManager::GetSingleton().GetENBSeriesPath() / (GetName() + ".ini")).string();
+
+	std::string section = GetName();
+	std::transform(section.begin(), section.end(), section.begin(), ::toupper);
+
+	bool ok = true;
+	size_t written = 0;
+	for (auto& [key, value] : SerializeValues()) {
+		if (const auto saved = savedValues.find(key); saved != savedValues.end() && saved->second == value)
+			continue;
+		if (!WritePrivateProfileStringA(section.c_str(), key.c_str(), value.c_str(), iniPath.c_str())) {
+			logger::warn("[EFFECTS11] Failed to write key '{}' to ini file '{}'", key, iniPath);
 			ok = false;
+			continue;
 		}
+		savedValues.insert_or_assign(std::move(key), std::move(value));
+		++written;
 	}
 
-	std::string techniqueValue = std::to_string(selectedTechniqueIndex + 1u);
-	BOOL techniqueResult = WritePrivateProfileStringA(section.c_str(), "TECHNIQUE", techniqueValue.c_str(), iniPath.string().c_str());
-	if (!techniqueResult) {
-		logger::warn("[EFFECTS11] Failed to write TECHNIQUE key to ini file '{}'", iniPath.string());
-		ok = false;
+	if (written > 0) {
+		WritePrivateProfileStringA(NULL, NULL, NULL, iniPath.c_str());
+		logger::info("[EFFECTS11] Saved {} setting(s) to '{}' for effect '{}'", written, iniPath, GetName());
 	}
-
-	WritePrivateProfileStringA(NULL, NULL, NULL, iniPath.string().c_str());
 
 	ok &= SaveWeatherOverrides();
-
-	logger::info("[EFFECTS11] Saved settings to '{}' for effect '{}'", iniPath.string(), GetName());
 	return ok;
 }
 
