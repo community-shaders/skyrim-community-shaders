@@ -2411,8 +2411,10 @@ bool EditorWindow::DrawTimePauseToggle(const char* id, const ImVec2& size)
 	const bool isPaused = IsTimePaused();
 	const bool clicked = DrawToggleIconButton(id, Icons::TI(ICON_TI_CLOCK_PAUSE), isPaused, pausedColor, buttonSize, glyphColor);
 	if (clicked) {
-		SceneSettingsUI::ClaimTimePause();
 		TogglePause();
+		// Only a pause the user just started becomes theirs; a failed pause or resume leaves ownership alone.
+		if (!isPaused && IsTimePaused())
+			SceneSettingsUI::ClaimTimePause();
 	}
 	return clicked;
 }
