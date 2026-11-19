@@ -438,11 +438,16 @@ namespace
 			auto* cache = globals::shaderCache;
 			if (!cache)
 				return json{ { "error", "shader cache unavailable" } };
+			// A changed total means matrix work began while standalonePending was read, so idle can't be claimed.
+			const uint64_t totalBefore = cache->GetTotalTasks();
+			const bool compiling = cache->IsCompiling();
+			const uint32_t standalonePending = cache->GetStandalonePending();
+			const uint64_t totalTasks = cache->GetTotalTasks();
 			return json{
-				{ "compiling", cache->IsCompiling() },
-				{ "standalonePending", cache->GetStandalonePending() },
+				{ "compiling", compiling || totalTasks != totalBefore },
+				{ "standalonePending", standalonePending },
 				{ "completedTasks", cache->GetCompletedTasks() },
-				{ "totalTasks", cache->GetTotalTasks() },
+				{ "totalTasks", totalTasks },
 				{ "failedTasks", cache->GetFailedTasks() },
 				{ "currentFailedCount", cache->GetCurrentFailedCount() },
 				{ "frame_count", EnqueuedFrame() },
