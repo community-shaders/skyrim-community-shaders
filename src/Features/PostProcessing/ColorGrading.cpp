@@ -804,7 +804,6 @@ void ColorGrading::UpdateColorSpaceTransforms(bool hdrEnabled)
 
 void ColorGrading::SetupResources()
 {
-	auto renderer = globals::game::renderer;
 	auto device = globals::d3d::device;
 	auto context = globals::d3d::context;
 
@@ -815,33 +814,6 @@ void ColorGrading::SetupResources()
 
 	logger::debug("Creating 2D textures...");
 	{
-		auto gameTexMainCopy = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN_COPY];
-
-		D3D11_TEXTURE2D_DESC texDesc;
-		gameTexMainCopy.texture->GetDesc(&texDesc);
-
-		texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
-
-		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {
-			.Format = texDesc.Format,
-			.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D,
-			.Texture2D = { .MostDetailedMip = 0, .MipLevels = 1 }
-		};
-
-		D3D11_RENDER_TARGET_VIEW_DESC rtvDesc = {
-			.Format = texDesc.Format,
-			.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D,
-			.Texture2D = { .MipSlice = 0 }
-		};
-
-		texDesc.MipLevels = srvDesc.Texture2D.MipLevels = 1;
-		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
-		texDesc.MiscFlags = 0;
-
-		texColor = std::make_unique<Texture2D>(texDesc);
-		texColor->CreateSRV(srvDesc);
-		texColor->CreateRTV(rtvDesc);
-
 		D3D11_TEXTURE3D_DESC lutTexDesc = {
 			.Width = LUTDim,
 			.Height = LUTDim,
@@ -997,22 +969,17 @@ void ColorGrading::CompileShaders()
 	curveNeedsUpdate = true;  // shader changed, curve must update
 }
 
-void ColorGrading::Draw(TextureInfo& inout_tex)
+bool ColorGrading::PrepareDraw()
 {
-	auto context = globals::d3d::context;
-	auto state = globals::state;
-
 	if (recompileFlag)
 		ReloadActiveShaders();
 
-	if (!AllShadersReady({ &colorgradingPS }) || !AllShadersReady({ &lutgenCS }))
-		return;
-	if (!owner || !owner->GetFullscreenVS())
-		return;
+	return owner && owner->GetFullscreenVS() && AllShadersReady({ &colorgradingPS }) && AllShadersReady({ &lutgenCS });
+}
 
-	globals::profiler->BeginPass("PostProcessing::ColorGrading");
-	state->BeginPerfEvent("Color Grading and Tonemapping");
-
+void ColorGrading::UpdateConstantsAndLUT()
+{
+	auto context = globals::d3d::context;
 	auto& pp = globals::features::postProcessing;
 
 	RE::ImageSpaceData imageSpaceData = pp.imageSpaceManager->gameISData;
@@ -1087,18 +1054,13 @@ void ColorGrading::Draw(TextureInfo& inout_tex)
 		memcpy(prevCurveCB.data(), &colorCBData, sizeof(ColorCB));
 	}
 
-	ID3D11Buffer* cb = colorCB->CB();
-	context->CSSetConstantBuffers(1, 1, &cb);
-
-	std::array<ID3D11SamplerState*, 1> samplers = { linearSampler.get() };
-	context->CSSetSamplers(0, 1, samplers.data());
-	ID3D11UnorderedAccessView* uav = nullptr;
-
 	// The LUT depends only on ColorCB and the generator shader, so regenerate it only when either changed.
 	const uint64_t generation = shaderGeneration.load(std::memory_order_relaxed);
 	if (!settings.skipLUT && (!lutValid || lutShader != lutgenCS.get() || lutGeneration != generation || memcmp(&colorCBData, lutKey.data(), sizeof(ColorCB)) != 0)) {
 		// LUT Gen
-		uav = texLUT->uav.get();
+		ID3D11Buffer* cb = colorCB->CB();
+		context->CSSetConstantBuffers(1, 1, &cb);
+		ID3D11UnorderedAccessView* uav = texLUT->uav.get();
 		context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
 		context->CSSetShader(lutgenCS.get(), nullptr, 0);
 		context->Dispatch(LUTDim >> 3, LUTDim >> 3, LUTDim >> 3);
@@ -1106,12 +1068,31 @@ void ColorGrading::Draw(TextureInfo& inout_tex)
 		uav = nullptr;
 		context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
 		context->CSSetShader(nullptr, nullptr, 0);
+		cb = nullptr;
+		context->CSSetConstantBuffers(1, 1, &cb);
 
 		lutValid = lutgenCS.get() != nullptr;
 		lutShader = lutgenCS.get();
 		lutGeneration = generation;
 		memcpy(lutKey.data(), &colorCBData, sizeof(ColorCB));
 	}
+}
+
+void ColorGrading::Draw(TextureInfo& inout_tex)
+{
+	if (!PrepareDraw())
+		return;
+
+	auto* texColor = owner->GetColorTarget(inout_tex.tex, DXGI_FORMAT_R16G16B16A16_FLOAT);
+	if (!texColor)
+		return;
+
+	auto context = globals::d3d::context;
+	auto state = globals::state;
+	globals::profiler->BeginPass("PostProcessing::ColorGrading");
+	state->BeginPerfEvent("Color Grading and Tonemapping");
+
+	UpdateConstantsAndLUT();
 
 	// Apply Color Grading (via LUT or direct)
 	{
@@ -1119,7 +1100,7 @@ void ColorGrading::Draw(TextureInfo& inout_tex)
 
 		std::array<ID3D11ShaderResourceView*, 2> srvs = { inout_tex.srv, texLUT->srv.get() };
 
-		ID3D11Buffer* psCB = cb;
+		ID3D11Buffer* psCB = colorCB->CB();
 		std::array<ID3D11SamplerState*, 1> psSamplers = { linearSampler.get() };
 		context->PSSetConstantBuffers(1, 1, &psCB);
 		context->PSSetSamplers(0, 1, psSamplers.data());
@@ -1137,19 +1118,20 @@ void ColorGrading::Draw(TextureInfo& inout_tex)
 		context->PSSetSamplers(0, 1, psSamplers.data());
 	}
 
-	// clean up CS stage (CB/sampler stayed bound for LUT generation)
-	cb = nullptr;
-	samplers.fill(nullptr);
-	context->CSSetConstantBuffers(1, 1, &cb);
-	context->CSSetSamplers(0, 1, samplers.data());
-
-	if (saveImagesFlag) {
-		saveImagesFlag = false;
-		OutputTextures();
-	}
-
 	inout_tex = { texColor->resource.get(), texColor->srv.get() };
 	globals::profiler->EndPass();
+
+	FinishDraw(*texColor);
+	state->EndPerfEvent();
+}
+
+void ColorGrading::FinishDraw(const Texture2D& colorOutput)
+{
+	auto context = globals::d3d::context;
+	if (saveImagesFlag) {
+		saveImagesFlag = false;
+		OutputTextures(colorOutput);
+	}
 
 	const bool curveReadbackActive =
 		curveReadbackRequested &&
@@ -1198,11 +1180,9 @@ void ColorGrading::Draw(TextureInfo& inout_tex)
 			}
 		}
 	}
-
-	state->EndPerfEvent();
 }
 
-void ColorGrading::OutputTextures()
+void ColorGrading::OutputTextures(const Texture2D& colorOutput)
 {
 	auto device = globals::d3d::device;
 	auto context = globals::d3d::context;
@@ -1214,9 +1194,7 @@ void ColorGrading::OutputTextures()
 		DirectX::CaptureTexture(device, context, texLUT->resource.get(), lutImage);
 	}
 
-	if (texColor->resource) {
-		DirectX::CaptureTexture(device, context, texColor->resource.get(), colorImage);
-	}
+	DirectX::CaptureTexture(device, context, colorOutput.resource.get(), colorImage);
 
 	if (std::filesystem::create_directories(outputPath)) {
 		logger::info("Missing pp directory created: {}", outputPath);

@@ -17,6 +17,7 @@ cbuffer CloudBoundaryParameters : register(b0)
 	uint cloudFrameIndex;
 	float4 localRect;
 	float4 localAltitude;
+	uint traceScale;
 };
 
 Texture2D<float2> CloudHeight : register(t0);
@@ -66,8 +67,10 @@ BoundaryVertex vertexMain(uint vertexId : SV_VertexID, uint instanceId : SV_Inst
 	output.position = mul(FrameBuffer::CameraViewProj, float4(relative, 1));
 	output.viewDepth = mul(FrameBuffer::CameraView, float4(relative, 1)).z;
 	output.lowerBoundary = instanceId;
-	const float2 scale = frameDimensions.xy / FrameBuffer::DynamicResolutionParams2.xy / (4.0 * frameDimensions.zw);
-	const float2 offset = (scale - 1.0 + (1.5 - CloudPhaseOffset(cloudFrameIndex)) / (2.0 * frameDimensions.zw)) * float2(1, -1);
+	const float stride = 4.0 * traceScale;
+	const float2 phase = CloudPhaseOffset(cloudFrameIndex) * traceScale;
+	const float2 scale = frameDimensions.xy / FrameBuffer::DynamicResolutionParams2.xy / (stride * frameDimensions.zw);
+	const float2 offset = (scale - 1.0 + (stride - 1.0 - 2.0 * phase) / (stride * frameDimensions.zw)) * float2(1, -1);
 	output.position.xy = output.position.xy * scale + output.position.w * offset;
 	// Cloud boundaries extend beyond the scene projection's far plane.
 	output.position.z = output.position.w * 0.5;

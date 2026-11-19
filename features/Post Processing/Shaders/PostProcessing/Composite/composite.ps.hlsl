@@ -10,6 +10,19 @@
 
 #include "Common/Color.hlsli"
 
+#ifdef COMPOSITE_APPLY_LUT
+#	include "PostProcessing/ColorGrading/Apply.hlsli"
+#elif defined(COMPOSITE_CONVERT_OUTPUT)
+#	include "PostProcessing/ConvertColor.hlsli"
+cbuffer CopyConstants : register(b0)
+{
+	uint InputGamut;
+	uint OutputGamut;
+	float OutputGamma;
+	float OutputScale;
+};
+#endif
+
 Texture2D<float4> TexColor : register(t0);
 #ifdef HAS_PHYSICAL_LENS
 Texture2DArray<float> TexPhysicalFlare : register(t8);
@@ -379,5 +392,11 @@ float4 PSComposite(FullscreenTriangleVSOutput input) :
 #	endif
 #endif
 
+#ifdef COMPOSITE_APPLY_LUT
+	return ApplyGradeOutput(ApplyLUT(ApplyGameCinematic(result)));
+#elif defined(COMPOSITE_CONVERT_OUTPUT)
+	return ConvertColor(float4(result, 1), InputGamut, OutputGamut, OutputGamma, OutputScale);
+#else
 	return float4(result, 1);
+#endif
 }

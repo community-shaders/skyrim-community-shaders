@@ -1,6 +1,7 @@
 #include "Composite.h"
 
 #include "CODBloom.h"
+#include "ColorGrading.h"
 #include "Features/LinearLighting.h"
 #include "Features/PostProcessing.h"
 #include "HistogramAutoExposure.h"
@@ -32,38 +33,6 @@ void Composite::UpdateAutoEnabled()
 
 void Composite::SetupResources()
 {
-	auto renderer = globals::game::renderer;
-
-	{
-		auto gameTexMainCopy = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN_COPY];
-
-		D3D11_TEXTURE2D_DESC texDesc;
-		gameTexMainCopy.texture->GetDesc(&texDesc);
-		// Exposure is resolved here. Preserve overexposed HDR values until the
-		// following tone mapper instead of clipping them back to scene FP16.
-		texDesc.Format = globals::features::linearLighting.IsLinearLightingActive() ? DXGI_FORMAT_R32G32B32A32_FLOAT : DXGI_FORMAT_R16G16B16A16_FLOAT;
-
-		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {
-			.Format = texDesc.Format,
-			.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D,
-			.Texture2D = { .MostDetailedMip = 0, .MipLevels = 1 }
-		};
-
-		D3D11_RENDER_TARGET_VIEW_DESC rtvDesc = {
-			.Format = texDesc.Format,
-			.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D,
-			.Texture2D = { .MipSlice = 0 }
-		};
-
-		texDesc.MipLevels = srvDesc.Texture2D.MipLevels = 1;
-		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
-		texDesc.MiscFlags = 0;
-
-		texOutput = eastl::make_unique<Texture2D>(texDesc, "Composite Output");
-		texOutput->CreateSRV(srvDesc);
-		texOutput->CreateRTV(rtvDesc);
-	}
-
 	compositeCB = std::make_unique<ConstantBuffer>(ConstantBufferDesc<CompositeCB>(), "Composite Parameters");
 	CompileRasterShaders();
 }
@@ -85,16 +54,17 @@ void Composite::ClearShaderCache()
 	CompileRasterShaders();
 }
 
-void Composite::CompileRasterShaders(uint firstFlags, uint endFlags)
+void Composite::CompileRasterShaders(uint firstFlags, uint endFlags, Output output)
 {
 	std::vector<PixelShaderCompileInfo> shaderInfos;
 
 	for (uint flags = firstFlags; flags < endFlags; flags++) {
+		const uint index = ShaderIndex(flags, output);
 		{
 			std::lock_guard lock(shaderMutex);
-			if (shaderRequested[flags])
+			if (shaderRequested[index])
 				continue;
-			shaderRequested[flags] = true;
+			shaderRequested[index] = true;
 		}
 		std::vector<std::pair<const char*, const char*>> defines;
 		if (flags & BLOOM)
@@ -109,8 +79,12 @@ void Composite::CompileRasterShaders(uint firstFlags, uint endFlags)
 			defines.push_back({ "HAS_LOCAL_EXPOSURE", "" });
 		if (flags & PHYSICAL_LENS)
 			defines.push_back({ "HAS_PHYSICAL_LENS", "" });
+		if (output == Output::Graded)
+			defines.push_back({ "COMPOSITE_APPLY_LUT", "" });
+		if (output == Output::Converted)
+			defines.push_back({ "COMPOSITE_CONVERT_OUTPUT", "" });
 
-		shaderInfos.push_back({ &compositeShaders[flags], "composite.ps.hlsl", std::move(defines), "PSComposite" });
+		shaderInfos.push_back({ &compositeShaders[index], "composite.ps.hlsl", std::move(defines), "PSComposite" });
 	}
 
 	if (!shaderInfos.empty())
@@ -119,8 +93,13 @@ void Composite::CompileRasterShaders(uint firstFlags, uint endFlags)
 
 void Composite::Draw(TextureInfo& inout_tex)
 {
+	Draw(inout_tex, nullptr, {});
+}
+
+Composite::Output Composite::Draw(TextureInfo& inout_tex, ColorGrading* grading, ConversionTarget conversion)
+{
 	if (!owner)
-		return;
+		return Output::Composite;
 
 	auto* bloom = owner->GetPipelineFeature<CODBloom>(PostProcessing::FeaturePipelineIndex::CODBloom);
 	auto* flare = owner->GetPipelineFeature<LensFlare>(PostProcessing::FeaturePipelineIndex::LensFlare);
@@ -150,24 +129,58 @@ void Composite::Draw(TextureInfo& inout_tex)
 		}
 	}
 	if (flags == NONE && globals::state->preExposure == 1.0f)
-		return;
+		return Output::Composite;
 	if (!AllShadersReady({ &compositeShaders[flags] }))
-		return;
+		return Output::Composite;
 
 	if (!owner->GetFullscreenVS())
-		return;
+		return Output::Composite;
 	if (hasPhysical && !emptyWaveCB) {
 		emptyWaveCB = std::make_unique<ConstantBuffer>(ConstantBufferDesc<PhysicalLensImaging::DiffractionParameters>(), "Composite::InactiveDiffraction");
 		emptyWaveCB->Update(PhysicalLensImaging::DiffractionParameters{});
 	}
 
-	globals::profiler->BeginPass("PostProcessing::Composite");
+	// When the transforms run separately, preserve exposed HDR values in FP32.
+	const bool linear = globals::features::linearLighting.IsLinearLightingActive();
+	Output output = Output::Composite;
+	Texture2D* target = nullptr;
+	const char* passName = "PostProcessing::Composite";
+	if (linear && grading && !grading->settings.skipLUT) {
+		CompileRasterShaders(flags, flags + 1, Output::Graded);
+		if (AllShadersReady({ &compositeShaders[ShaderIndex(flags, Output::Graded)] }) && grading->PrepareDraw()) {
+			target = owner->GetColorTarget(inout_tex.tex, DXGI_FORMAT_R16G16B16A16_FLOAT);
+			if (target) {
+				output = Output::Graded;
+				passName = "PostProcessing::CompositeAndColorGrading";
+			}
+		}
+	} else if (linear && conversion.format != DXGI_FORMAT_UNKNOWN && conversion.constants) {
+		CompileRasterShaders(flags, flags + 1, Output::Converted);
+		if (AllShadersReady({ &compositeShaders[ShaderIndex(flags, Output::Converted)] })) {
+			target = owner->GetColorTarget(inout_tex.tex, conversion.format);
+			if (target) {
+				output = Output::Converted;
+				passName = "PostProcessing::CompositeAndConvertToTarget";
+			}
+		}
+	}
+	if (!target) {
+		target = owner->GetColorTarget(inout_tex.tex, linear ? DXGI_FORMAT_R32G32B32A32_FLOAT : DXGI_FORMAT_R16G16B16A16_FLOAT);
+		if (!target)
+			return Output::Composite;
+	}
+
+	const bool applyLUT = output == Output::Graded;
+	const bool convertOutput = output == Output::Converted;
 	auto state = globals::state;
 	auto context = globals::d3d::context;
 
+	globals::profiler->BeginPass(passName);
 	state->BeginPerfEvent("Composite");
+	if (applyLUT)
+		grading->UpdateConstantsAndLUT();
 
-	ID3D11PixelShader* shader = compositeShaders[flags].get();
+	ID3D11PixelShader* shader = compositeShaders[ShaderIndex(flags, output)].get();
 
 	// Bind resources:
 	//   t0 = main color (inout_tex)
@@ -181,16 +194,20 @@ void Composite::Draw(TextureInfo& inout_tex)
 	//   t8 = half-resolution physical lens ghosts (independent of t2)
 	//   t9 = spectral image mapping and transmission
 	//   t10-t14 = diffraction core, ownership, sources, tile masks, PSF
+	//   t15/b0/s2 = fused color grading LUT, constants and sampler
+	//   b0 = final output conversion constants on the conversion variant
 	//   b4 = physical diffraction sampling (zeroed when inactive)
 	//   rtv0 = output
 	//   b1 = auto exposure constant buffer (if exposure enabled)
 	//   b2 = local exposure constant buffer (if local exposure enabled)
 	//   b3 = final bloom/flare sampling parameters
 	//   s0 = linear clamp (local exposure and flare), s1 = linear border (bloom)
-	std::array<ID3D11ShaderResourceView*, 15> srvs = { nullptr };
-	const uint srvCount = hasPhysical ? (uint)srvs.size() : 8;
+	std::array<ID3D11ShaderResourceView*, 16> srvs = {};
+	const uint srvCount = applyLUT ? 16 : (hasPhysical ? 15 : 8);
 
 	srvs[0] = inout_tex.srv;
+	if (applyLUT)
+		srvs[15] = grading->texLUT->srv.get();
 	if (hasPhysicalWave || hasPhysicalFlare) {
 		auto wave = physicalLens->GetDiffractionSRVs();
 		std::copy(wave.begin(), wave.end(), srvs.begin() + 10);
@@ -221,8 +238,8 @@ void Composite::Draw(TextureInfo& inout_tex)
 		srvs[7] = localExposure->GetBlurredLuminanceSRV();
 	}
 
-	uint width = texOutput->desc.Width;
-	uint height = texOutput->desc.Height;
+	uint width = target->desc.Width;
+	uint height = target->desc.Height;
 
 	CompositeCB cbData = {};
 	cbData.OutputSize[0] = (float)width;
@@ -246,7 +263,7 @@ void Composite::Draw(TextureInfo& inout_tex)
 	};
 
 	{
-		PostProcessingRaster::RasterPass pass(context, srvCount);
+		PostProcessingRaster::RasterPass pass(context, srvCount, applyLUT ? 3 : 2);
 
 		if (hasExposure) {
 			ID3D11Buffer* cb = exposure->GetConstantBuffer();
@@ -263,8 +280,16 @@ void Composite::Draw(TextureInfo& inout_tex)
 			context->PSSetConstantBuffers(4, 1, &cb);
 		}
 		context->PSSetSamplers(0, (uint)samplers.size(), samplers.data());
+		if (applyLUT) {
+			cb = grading->colorCB->CB();
+			context->PSSetConstantBuffers(0, 1, &cb);
+			ID3D11SamplerState* sampler = grading->linearSampler.get();
+			context->PSSetSamplers(2, 1, &sampler);
+		} else if (convertOutput) {
+			context->PSSetConstantBuffers(0, 1, &conversion.constants);
+		}
 		context->PSSetShaderResources(0, srvCount, srvs.data());
-		pass.SetTargets({ texOutput->rtv.get() }, (float)width, (float)height);
+		pass.SetTargets({ target->rtv.get() }, (float)width, (float)height);
 		pass.SetShaders(owner->GetFullscreenVS(), shader);
 		pass.Draw();
 
@@ -273,7 +298,10 @@ void Composite::Draw(TextureInfo& inout_tex)
 		context->PSSetShaderResources(0, srvCount, srvs.data());
 	}
 
-	inout_tex = { texOutput->resource.get(), texOutput->srv.get() };
+	inout_tex = { target->resource.get(), target->srv.get() };
 	state->EndPerfEvent();
 	globals::profiler->EndPass();
+	if (applyLUT)
+		grading->FinishDraw(*target);
+	return output;
 }

@@ -8,6 +8,16 @@ uint2 CloudPhaseOffset()
 	return CloudPhaseOffset(VolumetricCloudBuffer[0].cloudFrameIndex);
 }
 
+uint CloudTraceStride()
+{
+	return 4u * CloudTraceScale;
+}
+
+uint2 CloudTracePixel(uint2 tid)
+{
+	return (tid * 4u + CloudPhaseOffset()) * CloudTraceScale;
+}
+
 float2 CloudScreenUv(uint2 pixel)
 {
 	const VolumetricCloudData info = VolumetricCloudBuffer[0];
@@ -360,7 +370,7 @@ cbuffer CloudDispatch : register(b3) { uint4 StormScreenRect; };
 	const VolumetricCloudData info = VolumetricCloudBuffer[0];
 	if (any(tid >= uint2(info.lowFrameDim)))
 		return;
-	const uint2 pixel = tid * 4u + CloudPhaseOffset();
+	const uint2 pixel = CloudTracePixel(tid);
 	const float3 ray = CloudScreenRay(pixel);
 	// This ray belongs to the checkerboard phase pixel, not the farthest
 	// surface in its 4x4 tile. A sky neighbour must not expose clouds behind terrain.
@@ -396,7 +406,7 @@ void RenderUpperViewPixel(uint2 tid)
 	const VolumetricCloudData info = VolumetricCloudBuffer[0];
 	if (any(tid >= uint2(info.lowFrameDim)))
 		return;
-	const uint2 pixel = tid * 4u + CloudPhaseOffset();
+	const uint2 pixel = CloudTracePixel(tid);
 	const float3 direction = CloudScreenRay(pixel);
 	const float deviceDepth = CloudSceneDeviceDepth(pixel, 1u);
 	const float sceneDistance = deviceDepth >= 1.0 - 1e-6 ? 0.0 : SharedData::GetScreenDepth(deviceDepth) / max(abs(mul(FrameBuffer::CameraView, float4(direction, 0)).z), 1e-6);
@@ -404,7 +414,7 @@ void RenderUpperViewPixel(uint2 tid)
 	// Integrate middle segments deterministically; the checkerboard already
 	// moves the view ray. Filter noise by the screen footprint, not march length.
 	const float2 pixelFootprint = 2.0 / max(abs(float2(FrameBuffer::CameraProjUnjittered[0][0], FrameBuffer::CameraProjUnjittered[1][1])) * info.activeFrameDim, 1.0);
-	const VolumetricCloudResult upper = RenderUpperCloudRay(direction, eye, sceneDistance, CloudSpatialMarchHash(pixel), max(pixelFootprint.x, pixelFootprint.y));
+	const VolumetricCloudResult upper = RenderUpperCloudRay(direction, eye, sceneDistance, CloudSpatialMarchHash(pixel), max(pixelFootprint.x, pixelFootprint.y) * CloudTraceScale);
 	StoreUpperCloudPixel(upper, tid);
 }
 
@@ -421,14 +431,38 @@ void RenderUpperViewPixel(uint2 tid)
 		return;
 	const float2 uv = CloudScreenUv(pixel);
 	const float sceneDepth = EncodeCloudDepth(SharedData::GetScreenDepth(CloudSceneDeviceDepth(pixel, 1u)));
-	const float2 currentPosition = (float2(pixel) - CloudPhaseOffset()) * 0.25;
+	const uint2 tracePixel = pixel >> (CloudTraceScale + 1u);
+	const float2 currentPosition = (float2(pixel) - CloudPhaseOffset() * CloudTraceScale) * (CloudTraceScale == 1u ? 0.25 : 0.125);
+	const int2 traceMaximum = int2(info.lowFrameDim) - 1;
 	CloudTemporalSample current;
 	float2 currentDepthRange;
 	float4 currentMinimum, currentMaximum;
 	float motionDepth;
 	float4 stormMotion;
+#ifdef CLOUD_FAST_RECONSTRUCTION
+	uint2 traceDimensions;
+	TexVolLowAux.GetDimensions(traceDimensions.x, traceDimensions.y);
+	const float2 traceUv = (clamp(currentPosition, 0.0, float2(traceMaximum)) + 0.5) / traceDimensions;
+	CloudTemporalSample spatial;
+	spatial.transmittance = TexVolLowTr.SampleLevel(TransmittanceSampler, traceUv, 0);
+	spatial.color = TexVolLowLum.SampleLevel(TransmittanceSampler, traceUv, 0);
+	spatial.metadata = TexVolLowAux.SampleLevel(TransmittanceSampler, traceUv, 0);
+	spatial.lightning = TexLightningTrace.SampleLevel(TransmittanceSampler, traceUv, 0);
+	const float4 spatialStormMotion = TexVolLowStormMotion.SampleLevel(TransmittanceSampler, traceUv, 0);
+	const float4 background = TexVolLowAux.GatherGreen(TransmittanceSampler, traceUv);
+	bool currentValid = all(abs(background - sceneDepth) <= 0.064);
+	current = spatial;
+	motionDepth = spatial.metadata.x;
+	stormMotion = spatialStormMotion;
+	// Most sky pixels can use hardware bilinear filtering. At a depth edge
+	// keep the same per-tap rejection as the higher quality path.
+	[branch] if (!currentValid)
+		currentValid = ReconstructCloudSurface(currentPosition, sceneDepth, current,
+			currentDepthRange, currentMinimum, currentMaximum, motionDepth, stormMotion);
+#else
 	const bool currentValid = ReconstructCloudSurface(currentPosition, sceneDepth, current,
 		currentDepthRange, currentMinimum, currentMaximum, motionDepth, stormMotion);
+#endif
 	float4 motionMetadata;
 	float motionOpacity;
 	if (currentValid) {
@@ -436,33 +470,45 @@ void RenderUpperViewPixel(uint2 tid)
 		motionMetadata.x = motionDepth;
 		motionOpacity = current.color.a;
 	} else {
+#ifdef CLOUD_FAST_RECONSTRUCTION
+		motionMetadata = spatial.metadata;
+		motionOpacity = spatial.color.a;
+		stormMotion = spatialStormMotion;
+#else
 		uint2 traceDimensions;
 		TexVolLowAux.GetDimensions(traceDimensions.x, traceDimensions.y);
-		const float2 tracePixel = clamp((float2(pixel) - CloudPhaseOffset()) * 0.25 + 0.5, 0.5, info.lowFrameDim - 0.5);
-		motionMetadata = TexVolLowAux.SampleLevel(TransmittanceSampler, tracePixel / traceDimensions, 0);
-		motionOpacity = TexVolLowLum.SampleLevel(TransmittanceSampler, tracePixel / traceDimensions, 0).a;
-		stormMotion = TexVolLowStormMotion.SampleLevel(TransmittanceSampler, tracePixel / traceDimensions, 0);
+		const float2 traceUv = (clamp(currentPosition, 0.0, float2(traceMaximum)) + 0.5) / traceDimensions;
+		motionMetadata = TexVolLowAux.SampleLevel(TransmittanceSampler, traceUv, 0);
+		motionOpacity = TexVolLowLum.SampleLevel(TransmittanceSampler, traceUv, 0).a;
+		stormMotion = TexVolLowStormMotion.SampleLevel(TransmittanceSampler, traceUv, 0);
+#endif
 	}
 	const float3 ray = CloudScreenRay(pixel);
 	float uncertainty, depth;
 	const float3 displacement = CloudSampleDisplacement(ray, motionMetadata, motionOpacity, stormMotion, uncertainty, depth);
-	const float2 projectionScale = abs(float2(FrameBuffer::CameraProjUnjittered[0][0], FrameBuffer::CameraProjUnjittered[1][1])) * info.activeFrameDim * 0.5;
 	const float viewCosine = abs(mul(FrameBuffer::CameraView, float4(ray, 0)).z);
+#ifdef CLOUD_FAST_RECONSTRUCTION
+	const float evolutionBlend = info.noisePadding.y;
+#else
+	const float2 projectionScale = abs(float2(FrameBuffer::CameraProjUnjittered[0][0], FrameBuffer::CameraProjUnjittered[1][1])) * info.activeFrameDim * 0.5;
 	const float evolutionBlend = max(info.noisePadding.y, CloudEvolutionBlend(uncertainty, depth, max(projectionScale.x, projectionScale.y) / max(viewCosine * viewCosine, 1e-4)));
+#endif
 	const float3 cameraDelta = FrameBuffer::CameraPosAdjust.xyz - info.previousCamera - displacement;
 	const float3 previousPosition = ray * DecodeCloudDepth(depth) + cameraDelta;
 	const float4 clip = mul(info.previousViewProj, float4(previousPosition, 1));
 	const float2 previousUv = clip.xy / clip.w * float2(0.5, -0.5) + 0.5;
-	CloudTemporalSample result;
+	CloudTemporalSample result = (CloudTemporalSample)0;
 	bool useHistory = info.historyValid != 0u && all(info.previousFrameDim > 0.0) && clip.w > 0.0 && all(previousUv == saturate(previousUv));
 	if (useHistory) {
 		result = ReconstructCloud(TexVolHistoryTr, TexVolHistoryLum, TexVolHistoryAux, TexLightningHistory,
 			previousUv * info.previousFrameDim - 0.5, int2(info.previousFrameDim) - 1, false);
 		const float3 historyPosition = RebaseCloudHistoryDepth(result, ray, previousPosition, cameraDelta);
-		const bool traced = all((pixel & 3u) == CloudPhaseOffset());
+		const bool tracedPhase = all(((pixel >> (CloudTraceScale - 1u)) & 3u) == CloudPhaseOffset());
+		const bool traced = tracedPhase && (CloudTraceScale == 1u || abs(TexVolLowAux[tracePixel].y - sceneDepth) <= 0.064);
 		// The traced phase supplies its own current surface sample. The
 		// background-depth rejection only governs the other checkerboard phases.
 		useHistory = traced || abs(sceneDepth - result.metadata.y) <= 0.064;
+#ifndef CLOUD_FAST_RECONSTRUCTION
 		// Sparse phase neighbours are not a visibility change in a static medium.
 		// Keep their changing bounds from overwriting the other 15 history phases.
 		float localRotationConfidence = 0.0;
@@ -480,12 +526,13 @@ void RenderUpperViewPixel(uint2 tid)
 		}
 		if (useHistory && currentValid && (any(cameraDelta != 0.0) || evolutionBlend > 0.0 || localRotationConfidence > 0.0))
 			ResolveCloudHistoryVisibility(result, current, currentDepthRange, currentMinimum, currentMaximum, historyPosition, uv, max(evolutionBlend * 2.0, localRotationConfidence));
+#endif
 		if (useHistory && traced) {
 			const float weight = max(CloudHistoryBlend(previousUv - uv), evolutionBlend * 2.0);
-			result.transmittance = BlendCloudTransmittance(result.transmittance, TexVolLowTr[pixel / 4u], weight);
-			result.color = lerp(result.color, TexVolLowLum[pixel / 4u], weight);
-			result.metadata = lerp(result.metadata, TexVolLowAux[pixel / 4u], weight);
-			result.lightning = lerp(result.lightning, TexLightningTrace[pixel / 4u], weight);
+			result.transmittance = BlendCloudTransmittance(result.transmittance, TexVolLowTr[tracePixel], weight);
+			result.color = lerp(result.color, TexVolLowLum[tracePixel], weight);
+			result.metadata = lerp(result.metadata, TexVolLowAux[tracePixel], weight);
+			result.lightning = lerp(result.lightning, TexLightningTrace[tracePixel], weight);
 		}
 		if (useHistory && currentValid && evolutionBlend > 0.0 && !traced) {
 			result.transmittance = BlendCloudTransmittance(result.transmittance, current.transmittance, evolutionBlend);
@@ -494,15 +541,30 @@ void RenderUpperViewPixel(uint2 tid)
 			result.lightning = lerp(result.lightning, current.lightning, evolutionBlend);
 		}
 		if (useHistory && result.color.a > 0.0 && !currentValid)
-			useHistory = CloudFootprintHasCloud(TexVolLowLum, currentPosition, int2(info.lowFrameDim) - 1);
+#ifdef CLOUD_FAST_RECONSTRUCTION
+			useHistory = spatial.color.a > 0.0;
+#else
+			useHistory = CloudFootprintHasCloud(TexVolLowLum, currentPosition, traceMaximum);
+#endif
 	}
 	if (!useHistory) {
 		if (currentValid)
 			result = current;
-		else
+		else {
 			// Rejected history still reconstructs the current cloud.
 			// A different background depth does not imply an empty foreground volume.
-			result = ReconstructCloud(TexVolLowTr, TexVolLowLum, TexVolLowAux, TexLightningTrace, currentPosition, int2(info.lowFrameDim) - 1, true);
+#ifdef CLOUD_FAST_RECONSTRUCTION
+			result = spatial;
+#else
+			result = ReconstructCloud(TexVolLowTr, TexVolLowLum, TexVolLowAux, TexLightningTrace, currentPosition, traceMaximum, true);
+#endif
+		}
+	}
+	// A coarse ray can see around terrain that covers this output pixel.
+	if (CloudTraceScale > 1u && result.color.a > 0.0 && result.metadata.x * viewCosine > sceneDepth + 0.064) {
+		result = (CloudTemporalSample)0;
+		result.transmittance = 1.0;
+		result.metadata.y = sceneDepth;
 	}
 	if (useHistory || currentValid)
 		result.metadata.y = sceneDepth;

@@ -83,6 +83,7 @@ public:
 	// Copy shader resources
 	winrt::com_ptr<ID3D11VertexShader> copyVertexShader;
 	winrt::com_ptr<ID3D11PixelShader> copyPixelShader;
+	winrt::com_ptr<ID3D11PixelShader> broadcastPixelShader;  ///< CopyPS writing the source's first texel .x to every channel
 	winrt::com_ptr<ID3D11Buffer> ditherConstantBuffer;
 
 	// Color correction compute shader resources
@@ -157,8 +158,8 @@ public:
 	void ExecuteEffect(EffectBase& effect, uint32_t enableSettingID = 0xFFFFFFFF);
 
 	// Texture copy using pixel shader
-	/** @return false if nothing was drawn (missing shaders or invalid views). */
-	bool CopyTexture(ID3D11ShaderResourceView* source, ID3D11RenderTargetView* destination, bool dither = true);
+	/** @return false if nothing was drawn (missing shaders or invalid views). pixelShader overrides the plain copy shader. */
+	bool CopyTexture(ID3D11ShaderResourceView* source, ID3D11RenderTargetView* destination, bool dither = true, ID3D11PixelShader* pixelShader = nullptr);
 
 	/** @brief Copies source into distinct destination with CopyResource when full layouts match, else via CopyTexture, leaving no RTV bound. */
 	void CopyToTarget(ID3D11Texture2D* source, ID3D11ShaderResourceView* sourceSRV, ID3D11Texture2D* destination, ID3D11RenderTargetView* destinationRTV);
@@ -182,6 +183,12 @@ private:
 	void UpdateLightParameters();
 	/** @brief True if the effect is compiled and its enable setting (if any) is on. */
 	bool WillEffectRun(EffectBase& effect, uint32_t enableSettingID);
+	/**
+	 * @brief Feeds the engine's adapted-luminance history, which the skipped vanilla HDR pass would have set.
+	 * The character light (Lighting t11) and blood splatter sample it; without it t11 keeps a stale binding.
+	 * @param adaptation The preset's adaptation this frame, or nullptr to publish a neutral 1.0.
+	 */
+	void PublishAdaptedLuminance(ID3D11ShaderResourceView* adaptation);
 
 	bool initialized = false;
 
