@@ -213,13 +213,13 @@ struct PhysicalSky final : public Feature
 			float3 color = { 0.86f, 0.9f, 1.f };  // linear sRGB chromaticity
 		};
 		LightningSettings lightning;
-		float rayMarchRange = kCloudQualityLow.rayMarchRange;
-		float shadowVolumeRange = kCloudQualityLow.shadowVolumeRange;
-		float marchStepScale = kCloudQualityLow.marchStepScale;
-		int cloudBlurRadius = 2;
-		bool cloudAmbientSHOnly = false;
-		bool cloudHalfResTrace = false;
-		bool cloudFastReconstruction = false;
+		float rayMarchRange = kCloudQualityMedium.rayMarchRange;
+		float shadowVolumeRange = kCloudQualityMedium.shadowVolumeRange;
+		float marchStepScale = kCloudQualityMedium.marchStepScale;
+		int cloudBlurRadius = kCloudQualityMedium.cloudBlurRadius;
+		bool cloudAmbientSHOnly = kCloudQualityMedium.cloudAmbientSHOnly;
+		bool cloudHalfResTrace = kCloudQualityMedium.cloudHalfResTrace;
+		bool cloudFastReconstruction = kCloudQualityMedium.cloudFastReconstruction;
 		NdfSettings cloudMap = {};
 		CloudLayer cloudLayer = {};
 		CloudNoiseSettings cloudNoise = {};
