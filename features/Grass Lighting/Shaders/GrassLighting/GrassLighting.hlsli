@@ -11,13 +11,13 @@ namespace GrassLighting
 		reflectionAlbedo = albedo * reflectionWeight;
 	}
 
-	float3 GetLightSpecularInput(float3 L, float3 V, float3 N, float3 lightColor, float shininess)
+	float3 GetLightSpecularInput(float3 L, float3 V, float3 N, float3 lightColor, float shininess, float2 disk = float2(0.0, 1.0))
 	{
-		float3 H = normalize(V + L);
+		float3 H = normalize(V + LightDisk::SpecularDirection(N, V, L, disk));
 		// log2(0) times a zero shininess is NaN
 		float HdotN = max(saturate(dot(H, N)), 1e-6);
 
-		float lightColorMultiplier = exp2(shininess * log2(HdotN));
+		float lightColorMultiplier = exp2(shininess * log2(HdotN)) * LightDisk::PowerLobeNormalization(0.25 * shininess, disk);
 		return lightColor * lightColorMultiplier.xxx;
 	}
 
