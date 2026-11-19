@@ -80,23 +80,53 @@ namespace ShadowSampling
 		float3 endPosition = positionWS + viewDirection * viewRayLength;
 #endif
 
+#if defined(EFFECT)
 		float totalRayLength = distance(endPosition, startPosition);
-
 		const float stepSize = 32.0;  // Fixed step size in world units
-
 		uint sampleCount = clamp(uint(totalRayLength / stepSize + 0.5), 1, 4);
+#else
+		// Water's ray is always 128 units, four 32-unit steps: a constant count unrolls the loop so its lookups overlap.
+		const uint sampleCount = 4;
+#endif
 		float rcpSampleCount = rcp(sampleCount);
 
 		float noise = Random::InterleavedGradientNoise(screenPosition, SharedData::FrameCount);
+
+#if !defined(EFFECT)
+		const bool worldShadows = !(SharedData::InInterior || SharedData::HideSky || SharedData::InMapMenu);
+		// Cloud shadows are sky-scale and do not change along a ray this short: one lookup at its middle (GetWorldShadow).
+		float cloudShadow = 1.0;
+#	if defined(CLOUD_SHADOWS)
+		if (worldShadows)
+			cloudShadow = CloudShadows::GetCloudShadowMult((startPosition + endPosition) * 0.5, LinearSampler);
+#	endif
+
+#	if defined(TERRAIN_SHADOWS)
+		// Water's 128-unit ray spans about one heightmap texel: one column lookup at its middle serves every step's height.
+		TerrainShadows::ShadowColumn terrainColumn = TerrainShadows::GetShadowColumn((startPosition.xy + endPosition.xy) * 0.5 + FrameBuffer::CameraPosAdjust.xy, LinearSampler);
+		terrainColumn.lit = terrainColumn.lit || !worldShadows;
+#	endif
+#endif
 
 		float worldShadow = 0.0;
 		for (uint i = 0; i < sampleCount; i++) {
 			float t = (float(i) + noise) * rcpSampleCount;
 			float3 sampledPositionWS = lerp(endPosition, startPosition, t);
+#if defined(EFFECT)
 			float worldShadowSample = ShadowSampling::GetWorldShadow(sampledPositionWS, FrameBuffer::CameraPosAdjust.xyz);
+#else
+			float worldShadowSample = 1.0;
+#	if defined(TERRAIN_SHADOWS)
+			worldShadowSample = TerrainShadows::GetColumnShadow(terrainColumn, sampledPositionWS.z + FrameBuffer::CameraPosAdjust.z);
+#	endif
+#endif
 			surfaceShadow = worldShadowSample;
 			worldShadow += worldShadowSample;
 		}
+#if !defined(EFFECT)
+		worldShadow *= cloudShadow;
+		surfaceShadow *= cloudShadow;
+#endif
 
 		if (worldShadow == 0.0 && surfaceShadow == 0.0)
 			return 0.0;
