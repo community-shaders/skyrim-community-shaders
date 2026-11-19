@@ -106,9 +106,10 @@ public:
 	 */
 	enum class TonemapOwner : uint
 	{
-		kVanilla = 0,         ///< Vanilla ISHDR tonemap runs unmodified.
-		kPostProcessing = 1,  ///< Post Processing pipeline drives tonemapping.
-		kEffects11 = 2        ///< Effects11 (ENB-compatible) replaces the pass entirely.
+		kVanilla = 0,                ///< Vanilla ISHDR tonemap runs unmodified.
+		kPostProcessing = 1,         ///< Post Processing pipeline drives tonemapping.
+		kEffects11 = 2,              ///< Effects11 (ENB-compatible) replaces the pass entirely.
+		kPostProcessingFallback = 3  ///< ISHDR receives raw scene color after a failed Post Processing pass.
 	};
 
 	/**
@@ -121,6 +122,10 @@ public:
 	 * @return The feature owning tonemapping this frame.
 	 */
 	TonemapOwner GetTonemapOwner();
+
+	/// Publishes the tone pass result to ISHDR and HDR Display without changing frame ownership.
+	void SetPostProcessingFallback(bool fallback);
+	bool IsPostProcessingFallback() const { return postProcessingFallback; }
 
 	/**
 	 * @brief Dispatches the HDR tonemap pass to the resolved owner.
@@ -667,6 +672,8 @@ private:
 	nlohmann::json savedCore;
 
 	std::optional<TonemapOwner> tonemapOwner;
+	bool postProcessingFallback = false;
+	inline static SharedDataCB sharedData{};
 	uint historyResetFrame = UINT_MAX;
 	winrt::com_ptr<ID3DUserDefinedAnnotation> pPerf;
 	std::mutex statsMutex;

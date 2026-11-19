@@ -12,7 +12,7 @@ groupshared uint UpperTileActive;
 	GroupMemoryBarrierWithGroupSync();
 	const bool valid = all(tid < uint2(info.lowFrameDim));
 	if (valid) {
-		const uint2 pixel = tid * 4u + CloudPhaseOffset();
+		const uint2 pixel = CloudTracePixel(tid);
 		const float3 direction = CloudScreenRay(pixel);
 		const float deviceDepth = CloudSceneDeviceDepth(pixel, 1u);
 		const float sceneDistance = deviceDepth >= 1.0 - 1e-6 ? 0.0 : SharedData::GetScreenDepth(deviceDepth) / max(abs(mul(FrameBuffer::CameraView, float4(direction, 0)).z), 1e-6);

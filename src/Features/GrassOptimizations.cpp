@@ -347,7 +347,7 @@ void GrassOptimizations::DrawBucket(GrassBucket& b)
 	}
 
 	// Bind material textures together instead of committing each slot separately.
-	constexpr uint32_t kMaterialTextureBits = 0x7F;
+	constexpr uint32_t kMaterialTextureBits = 0xFF;
 	const uint32_t materialTextures = shadowState.PSResourceModifiedBits & kMaterialTextureBits;
 	shadowState.PSResourceModifiedBits &= ~kMaterialTextureBits;
 

@@ -51,7 +51,7 @@ void StoreVoxelCloudSample(uint2 tid, float4 voxelColor, float voxelDepth)
 		StoreVoxelCloudSample(tid, 0.0, 0.0);
 		return;
 	}
-	const uint2 pixel = tid * 4u + CloudPhaseOffset();
+	const uint2 pixel = CloudTracePixel(tid);
 	const float3 direction = CloudScreenRay(pixel);
 	const float3 eye = FrameBuffer::CameraPosAdjust.xyz - float3(0, 0, info.bottomZ);
 	// Depth belongs to this phase's ray, not a min/max neighbour in the tile.
@@ -67,6 +67,9 @@ void StoreVoxelCloudSample(uint2 tid, float4 voxelColor, float voxelDepth)
 		return;
 	}
 	const float phase = ApplyCloudForwardPeakOcclusion(CloudLowPhase(direction));
+	float3 ambientSky = 0.0, ambientGround = 0.0;
+	[branch] if (info.ambientStrength > 0.0 && CloudAmbientSHOnly != 0u)
+		CloudAmbientTransport::SHSources(ambientSky, ambientGround);
 #	ifdef CLOUD_VOXEL_SINGLE
 	// A single placement's reference width/material are constant along the ray.
 	// Fetch the existing calibration once; height, density and attenuation are
@@ -120,7 +123,8 @@ void StoreVoxelCloudSample(uint2 tid, float4 voxelColor, float voxelDepth)
 					source += opacity * Lightning::ActiveMask(Lightning::CloudMask(position + float3(0, 0, info.bottomZ), context.ndf.height_fraction, context.ndf.dimension_profile)) * Lightning::Color();
 					if (info.ambientStrength > 0.0) {
 						const float2 material = CloudMaterialAmbient(context.ndf);
-						source += opacity * material.y * info.ambientStrength * info.cloudLightingScale * CloudAmbientTransport::ViewSource(position);
+						source += opacity * material.y * info.ambientStrength * info.cloudLightingScale *
+						          CloudAmbientTransport::ViewSource(position, context.ndf.height_fraction, density, ambientSky, ambientGround);
 					}
 					// Native NVDF integrates aerial perspective at each occupied step.
 					if (!ViewAtmosphere::Enabled()) {

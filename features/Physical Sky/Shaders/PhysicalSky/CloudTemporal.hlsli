@@ -8,6 +8,16 @@ uint2 CloudPhaseOffset()
 	return CloudPhaseOffset(VolumetricCloudBuffer[0].cloudFrameIndex);
 }
 
+uint CloudTraceStride()
+{
+	return 4u * CloudTraceScale;
+}
+
+uint2 CloudTracePixel(uint2 tid)
+{
+	return (tid * 4u + CloudPhaseOffset()) * CloudTraceScale;
+}
+
 float2 CloudScreenUv(uint2 pixel)
 {
 	const VolumetricCloudData info = VolumetricCloudBuffer[0];
@@ -181,71 +191,103 @@ bool CloudFootprintHasCloud(Texture2D<float4> color, float2 position, int2 maxim
 	return opacity > 0.0;
 }
 
+/** @brief Trace texels searched beyond the bilinear 2x2 when none of it matches the pixel's scene depth. */
+static const int CloudSurfaceSearchRadius = 2;
+
+/** @brief Running sums over the depth-matched trace samples around one full-resolution pixel. */
+struct CloudSurfaceAccumulator
+{
+	CloudTemporalSample result;
+	CloudTemporalSample nearest;
+	float4 stormMotion;
+	float4 nearestStormMotion;
+	float2 depthRange;
+	float4 sampleMinimum;
+	float4 sampleMaximum;
+	float nearestDistance;
+	float weightSum;
+	float motionDepthSum;
+	float motionWeightSum;
+	bool found;
+};
+
+/** @brief Adds one trace sample when its scene depth matches; empty rays get a token weight. */
+void AccumulateCloudSurface(inout CloudSurfaceAccumulator accumulator, int2 pixel, float2 position, float sceneDepth, float spatialWeight)
+{
+	const float4 metadata = TexVolLowAux[pixel];
+	if (abs(metadata.y - sceneDepth) > 0.064)
+		return;
+	const float4 color = TexVolLowLum[pixel];
+	const float transmittance = TexVolLowTr[pixel];
+	const float2 lightning = TexLightningTrace[pixel];
+	const float4 stormMotion = TexVolLowStormMotion[pixel];
+	accumulator.depthRange = float2(min(accumulator.depthRange.x, metadata.x), max(accumulator.depthRange.y, metadata.x));
+	accumulator.sampleMinimum = min(accumulator.sampleMinimum, float4(color.rgb, transmittance));
+	accumulator.sampleMaximum = max(accumulator.sampleMaximum, float4(color.rgb, transmittance));
+	const float weight = transmittance == 1.0 ? 0.01 : spatialWeight;
+	accumulator.result.transmittance += transmittance * weight;
+	accumulator.result.color += color * weight;
+	accumulator.result.metadata += metadata * weight;
+	accumulator.result.lightning += lightning * weight;
+	accumulator.stormMotion += stormMotion * weight;
+	accumulator.weightSum += weight;
+	const float motionWeight = color.a * weight;
+	accumulator.motionDepthSum += metadata.x * motionWeight;
+	accumulator.motionWeightSum += motionWeight;
+	const float2 offset = float2(pixel) - position;
+	const float distance = dot(offset, offset);
+	if (!accumulator.found || distance < accumulator.nearestDistance) {
+		accumulator.nearest.transmittance = transmittance;
+		accumulator.nearest.color = color;
+		accumulator.nearest.metadata = metadata;
+		accumulator.nearest.lightning = lightning;
+		accumulator.nearestStormMotion = stormMotion;
+		accumulator.nearestDistance = distance;
+	}
+	accumulator.found = true;
+}
+
 bool ReconstructCloudSurface(float2 position, float sceneDepth, out CloudTemporalSample result,
 	out float2 depthRange, out float4 sampleMinimum, out float4 sampleMaximum, out float motionDepth, out float4 stormMotion)
 {
 	const int2 base = int2(floor(position));
 	const float2 fraction = saturate(position - floor(position));
 	const int2 maximum = int2(VolumetricCloudBuffer[0].lowFrameDim) - 1;
-	result = (CloudTemporalSample)0;
-	CloudTemporalSample nearest = (CloudTemporalSample)0;
-	stormMotion = 0.0;
-	float4 nearestStormMotion = 0.0;
-	float nearestDistance = 4.0;
-	float weightSum = 0.0;
-	float motionDepthSum = 0.0;
-	float motionWeightSum = 0.0;
-	depthRange = float2(asfloat(0x7f7fffffu), 0);
-	sampleMinimum = float4(asfloat(0x7f7fffffu).xxx, 1);
-	sampleMaximum = 0.0;
-	bool found = false;
+	CloudSurfaceAccumulator accumulator = (CloudSurfaceAccumulator)0;
+	accumulator.depthRange = float2(asfloat(0x7f7fffffu), 0);
+	accumulator.sampleMinimum = float4(asfloat(0x7f7fffffu).xxx, 1);
 	[unroll] for (uint i = 0u; i < 4u; ++i)
+		AccumulateCloudSurface(accumulator, clamp(base + int2(i & 1u, i >> 1u), 0, maximum), position, sceneDepth,
+			((i & 1u) != 0u ? fraction.x : 1.0 - fraction.x) * (i >= 2u ? fraction.y : 1.0 - fraction.y));
+	// Sky gaps in foliage often have only foreground traces nearby, whose rays stop before the clouds behind.
+	[branch] if (!accumulator.found)
 	{
-		const int2 pixel = clamp(base + int2(i & 1u, i >> 1u), 0, maximum);
-		const float4 metadata = TexVolLowAux[pixel];
-		if (abs(metadata.y - sceneDepth) > 0.064)
-			continue;
-		const float4 color = TexVolLowLum[pixel];
-		const float transmittance = TexVolLowTr[pixel];
-		depthRange = float2(min(depthRange.x, metadata.x), max(depthRange.y, metadata.x));
-		sampleMinimum = min(sampleMinimum, float4(color.rgb, transmittance));
-		sampleMaximum = max(sampleMaximum, float4(color.rgb, transmittance));
-		const float weight = transmittance == 1.0 ? 0.01 :
-		                                            ((i & 1u) != 0u ? fraction.x : 1.0 - fraction.x) * (i >= 2u ? fraction.y : 1.0 - fraction.y);
-		result.transmittance += transmittance * weight;
-		result.color += color * weight;
-		result.metadata += metadata * weight;
-		result.lightning += TexLightningTrace[pixel] * weight;
-		stormMotion += TexVolLowStormMotion[pixel] * weight;
-		weightSum += weight;
-		const float motionWeight = color.a * weight;
-		motionDepthSum += metadata.x * motionWeight;
-		motionWeightSum += motionWeight;
-		const float2 offset = float2(pixel) - position;
-		const float distance = dot(offset, offset);
-		if (!found || distance < nearestDistance) {
-			nearest.transmittance = transmittance;
-			nearest.color = color;
-			nearest.metadata = metadata;
-			nearest.lightning = TexLightningTrace[pixel];
-			nearestStormMotion = TexVolLowStormMotion[pixel];
-			nearestDistance = distance;
+		[loop] for (int y = -CloudSurfaceSearchRadius; y <= 1 + CloudSurfaceSearchRadius; ++y)
+			[loop] for (int x = -CloudSurfaceSearchRadius; x <= 1 + CloudSurfaceSearchRadius; ++x)
+		{
+			const int2 pixel = clamp(base + int2(x, y), 0, maximum);
+			const float2 offset = float2(pixel) - position;
+			AccumulateCloudSurface(accumulator, pixel, position, sceneDepth, rcp(1.0 + dot(offset, offset)));
 		}
-		found = true;
 	}
-	if (weightSum > 0.0) {
-		result.transmittance = clamp(result.transmittance / weightSum, sampleMinimum.w, sampleMaximum.w);
-		result.color /= weightSum;
-		result.metadata /= weightSum;
-		result.lightning /= weightSum;
-		stormMotion /= weightSum;
+	result = accumulator.result;
+	stormMotion = accumulator.stormMotion;
+	depthRange = accumulator.depthRange;
+	sampleMinimum = accumulator.sampleMinimum;
+	sampleMaximum = accumulator.sampleMaximum;
+	if (accumulator.weightSum > 0.0) {
+		result.transmittance = clamp(result.transmittance / accumulator.weightSum, sampleMinimum.w, sampleMaximum.w);
+		result.color /= accumulator.weightSum;
+		result.metadata /= accumulator.weightSum;
+		result.lightning /= accumulator.weightSum;
+		stormMotion /= accumulator.weightSum;
 	} else {
-		result = nearest;
-		stormMotion = nearestStormMotion;
+		result = accumulator.nearest;
+		stormMotion = accumulator.nearestStormMotion;
 	}
 	// Empty rays carry boundary distances rather than cloud motion.
-	motionDepth = motionWeightSum > 0.0 ? motionDepthSum / motionWeightSum : result.metadata.x;
-	return found;
+	motionDepth = accumulator.motionWeightSum > 0.0 ? accumulator.motionDepthSum / accumulator.motionWeightSum : result.metadata.x;
+	return accumulator.found;
 }
 
 float3 RebaseCloudHistoryDepth(inout CloudTemporalSample history, float3 direction, float3 previousPosition, float3 cameraDelta)
@@ -328,7 +370,7 @@ cbuffer CloudDispatch : register(b3) { uint4 StormScreenRect; };
 	const VolumetricCloudData info = VolumetricCloudBuffer[0];
 	if (any(tid >= uint2(info.lowFrameDim)))
 		return;
-	const uint2 pixel = tid * 4u + CloudPhaseOffset();
+	const uint2 pixel = CloudTracePixel(tid);
 	const float3 ray = CloudScreenRay(pixel);
 	// This ray belongs to the checkerboard phase pixel, not the farthest
 	// surface in its 4x4 tile. A sky neighbour must not expose clouds behind terrain.
@@ -364,7 +406,7 @@ void RenderUpperViewPixel(uint2 tid)
 	const VolumetricCloudData info = VolumetricCloudBuffer[0];
 	if (any(tid >= uint2(info.lowFrameDim)))
 		return;
-	const uint2 pixel = tid * 4u + CloudPhaseOffset();
+	const uint2 pixel = CloudTracePixel(tid);
 	const float3 direction = CloudScreenRay(pixel);
 	const float deviceDepth = CloudSceneDeviceDepth(pixel, 1u);
 	const float sceneDistance = deviceDepth >= 1.0 - 1e-6 ? 0.0 : SharedData::GetScreenDepth(deviceDepth) / max(abs(mul(FrameBuffer::CameraView, float4(direction, 0)).z), 1e-6);
@@ -372,7 +414,7 @@ void RenderUpperViewPixel(uint2 tid)
 	// Integrate middle segments deterministically; the checkerboard already
 	// moves the view ray. Filter noise by the screen footprint, not march length.
 	const float2 pixelFootprint = 2.0 / max(abs(float2(FrameBuffer::CameraProjUnjittered[0][0], FrameBuffer::CameraProjUnjittered[1][1])) * info.activeFrameDim, 1.0);
-	const VolumetricCloudResult upper = RenderUpperCloudRay(direction, eye, sceneDistance, CloudSpatialMarchHash(pixel), max(pixelFootprint.x, pixelFootprint.y));
+	const VolumetricCloudResult upper = RenderUpperCloudRay(direction, eye, sceneDistance, CloudSpatialMarchHash(pixel), max(pixelFootprint.x, pixelFootprint.y) * CloudTraceScale);
 	StoreUpperCloudPixel(upper, tid);
 }
 
@@ -389,14 +431,38 @@ void RenderUpperViewPixel(uint2 tid)
 		return;
 	const float2 uv = CloudScreenUv(pixel);
 	const float sceneDepth = EncodeCloudDepth(SharedData::GetScreenDepth(CloudSceneDeviceDepth(pixel, 1u)));
-	const float2 currentPosition = (float2(pixel) - CloudPhaseOffset()) * 0.25;
+	const uint2 tracePixel = pixel >> (CloudTraceScale + 1u);
+	const float2 currentPosition = (float2(pixel) - CloudPhaseOffset() * CloudTraceScale) * (CloudTraceScale == 1u ? 0.25 : 0.125);
+	const int2 traceMaximum = int2(info.lowFrameDim) - 1;
 	CloudTemporalSample current;
 	float2 currentDepthRange;
 	float4 currentMinimum, currentMaximum;
 	float motionDepth;
 	float4 stormMotion;
+#ifdef CLOUD_FAST_RECONSTRUCTION
+	uint2 traceDimensions;
+	TexVolLowAux.GetDimensions(traceDimensions.x, traceDimensions.y);
+	const float2 traceUv = (clamp(currentPosition, 0.0, float2(traceMaximum)) + 0.5) / traceDimensions;
+	CloudTemporalSample spatial;
+	spatial.transmittance = TexVolLowTr.SampleLevel(TransmittanceSampler, traceUv, 0);
+	spatial.color = TexVolLowLum.SampleLevel(TransmittanceSampler, traceUv, 0);
+	spatial.metadata = TexVolLowAux.SampleLevel(TransmittanceSampler, traceUv, 0);
+	spatial.lightning = TexLightningTrace.SampleLevel(TransmittanceSampler, traceUv, 0);
+	const float4 spatialStormMotion = TexVolLowStormMotion.SampleLevel(TransmittanceSampler, traceUv, 0);
+	const float4 background = TexVolLowAux.GatherGreen(TransmittanceSampler, traceUv);
+	bool currentValid = all(abs(background - sceneDepth) <= 0.064);
+	current = spatial;
+	motionDepth = spatial.metadata.x;
+	stormMotion = spatialStormMotion;
+	// Most sky pixels can use hardware bilinear filtering. At a depth edge
+	// keep the same per-tap rejection as the higher quality path.
+	[branch] if (!currentValid)
+		currentValid = ReconstructCloudSurface(currentPosition, sceneDepth, current,
+			currentDepthRange, currentMinimum, currentMaximum, motionDepth, stormMotion);
+#else
 	const bool currentValid = ReconstructCloudSurface(currentPosition, sceneDepth, current,
 		currentDepthRange, currentMinimum, currentMaximum, motionDepth, stormMotion);
+#endif
 	float4 motionMetadata;
 	float motionOpacity;
 	if (currentValid) {
@@ -404,33 +470,45 @@ void RenderUpperViewPixel(uint2 tid)
 		motionMetadata.x = motionDepth;
 		motionOpacity = current.color.a;
 	} else {
+#ifdef CLOUD_FAST_RECONSTRUCTION
+		motionMetadata = spatial.metadata;
+		motionOpacity = spatial.color.a;
+		stormMotion = spatialStormMotion;
+#else
 		uint2 traceDimensions;
 		TexVolLowAux.GetDimensions(traceDimensions.x, traceDimensions.y);
-		const float2 tracePixel = clamp((float2(pixel) - CloudPhaseOffset()) * 0.25 + 0.5, 0.5, info.lowFrameDim - 0.5);
-		motionMetadata = TexVolLowAux.SampleLevel(TransmittanceSampler, tracePixel / traceDimensions, 0);
-		motionOpacity = TexVolLowLum.SampleLevel(TransmittanceSampler, tracePixel / traceDimensions, 0).a;
-		stormMotion = TexVolLowStormMotion.SampleLevel(TransmittanceSampler, tracePixel / traceDimensions, 0);
+		const float2 traceUv = (clamp(currentPosition, 0.0, float2(traceMaximum)) + 0.5) / traceDimensions;
+		motionMetadata = TexVolLowAux.SampleLevel(TransmittanceSampler, traceUv, 0);
+		motionOpacity = TexVolLowLum.SampleLevel(TransmittanceSampler, traceUv, 0).a;
+		stormMotion = TexVolLowStormMotion.SampleLevel(TransmittanceSampler, traceUv, 0);
+#endif
 	}
 	const float3 ray = CloudScreenRay(pixel);
 	float uncertainty, depth;
 	const float3 displacement = CloudSampleDisplacement(ray, motionMetadata, motionOpacity, stormMotion, uncertainty, depth);
-	const float2 projectionScale = abs(float2(FrameBuffer::CameraProjUnjittered[0][0], FrameBuffer::CameraProjUnjittered[1][1])) * info.activeFrameDim * 0.5;
 	const float viewCosine = abs(mul(FrameBuffer::CameraView, float4(ray, 0)).z);
+#ifdef CLOUD_FAST_RECONSTRUCTION
+	const float evolutionBlend = info.noisePadding.y;
+#else
+	const float2 projectionScale = abs(float2(FrameBuffer::CameraProjUnjittered[0][0], FrameBuffer::CameraProjUnjittered[1][1])) * info.activeFrameDim * 0.5;
 	const float evolutionBlend = max(info.noisePadding.y, CloudEvolutionBlend(uncertainty, depth, max(projectionScale.x, projectionScale.y) / max(viewCosine * viewCosine, 1e-4)));
+#endif
 	const float3 cameraDelta = FrameBuffer::CameraPosAdjust.xyz - info.previousCamera - displacement;
 	const float3 previousPosition = ray * DecodeCloudDepth(depth) + cameraDelta;
 	const float4 clip = mul(info.previousViewProj, float4(previousPosition, 1));
 	const float2 previousUv = clip.xy / clip.w * float2(0.5, -0.5) + 0.5;
-	CloudTemporalSample result;
+	CloudTemporalSample result = (CloudTemporalSample)0;
 	bool useHistory = info.historyValid != 0u && all(info.previousFrameDim > 0.0) && clip.w > 0.0 && all(previousUv == saturate(previousUv));
 	if (useHistory) {
 		result = ReconstructCloud(TexVolHistoryTr, TexVolHistoryLum, TexVolHistoryAux, TexLightningHistory,
 			previousUv * info.previousFrameDim - 0.5, int2(info.previousFrameDim) - 1, false);
 		const float3 historyPosition = RebaseCloudHistoryDepth(result, ray, previousPosition, cameraDelta);
-		const bool traced = all((pixel & 3u) == CloudPhaseOffset());
+		const bool tracedPhase = all(((pixel >> (CloudTraceScale - 1u)) & 3u) == CloudPhaseOffset());
+		const bool traced = tracedPhase && (CloudTraceScale == 1u || abs(TexVolLowAux[tracePixel].y - sceneDepth) <= 0.064);
 		// The traced phase supplies its own current surface sample. The
 		// background-depth rejection only governs the other checkerboard phases.
 		useHistory = traced || abs(sceneDepth - result.metadata.y) <= 0.064;
+#ifndef CLOUD_FAST_RECONSTRUCTION
 		// Sparse phase neighbours are not a visibility change in a static medium.
 		// Keep their changing bounds from overwriting the other 15 history phases.
 		float localRotationConfidence = 0.0;
@@ -448,12 +526,13 @@ void RenderUpperViewPixel(uint2 tid)
 		}
 		if (useHistory && currentValid && (any(cameraDelta != 0.0) || evolutionBlend > 0.0 || localRotationConfidence > 0.0))
 			ResolveCloudHistoryVisibility(result, current, currentDepthRange, currentMinimum, currentMaximum, historyPosition, uv, max(evolutionBlend * 2.0, localRotationConfidence));
+#endif
 		if (useHistory && traced) {
 			const float weight = max(CloudHistoryBlend(previousUv - uv), evolutionBlend * 2.0);
-			result.transmittance = BlendCloudTransmittance(result.transmittance, TexVolLowTr[pixel / 4u], weight);
-			result.color = lerp(result.color, TexVolLowLum[pixel / 4u], weight);
-			result.metadata = lerp(result.metadata, TexVolLowAux[pixel / 4u], weight);
-			result.lightning = lerp(result.lightning, TexLightningTrace[pixel / 4u], weight);
+			result.transmittance = BlendCloudTransmittance(result.transmittance, TexVolLowTr[tracePixel], weight);
+			result.color = lerp(result.color, TexVolLowLum[tracePixel], weight);
+			result.metadata = lerp(result.metadata, TexVolLowAux[tracePixel], weight);
+			result.lightning = lerp(result.lightning, TexLightningTrace[tracePixel], weight);
 		}
 		if (useHistory && currentValid && evolutionBlend > 0.0 && !traced) {
 			result.transmittance = BlendCloudTransmittance(result.transmittance, current.transmittance, evolutionBlend);
@@ -462,15 +541,30 @@ void RenderUpperViewPixel(uint2 tid)
 			result.lightning = lerp(result.lightning, current.lightning, evolutionBlend);
 		}
 		if (useHistory && result.color.a > 0.0 && !currentValid)
-			useHistory = CloudFootprintHasCloud(TexVolLowLum, currentPosition, int2(info.lowFrameDim) - 1);
+#ifdef CLOUD_FAST_RECONSTRUCTION
+			useHistory = spatial.color.a > 0.0;
+#else
+			useHistory = CloudFootprintHasCloud(TexVolLowLum, currentPosition, traceMaximum);
+#endif
 	}
 	if (!useHistory) {
 		if (currentValid)
 			result = current;
-		else
+		else {
 			// Rejected history still reconstructs the current cloud.
 			// A different background depth does not imply an empty foreground volume.
-			result = ReconstructCloud(TexVolLowTr, TexVolLowLum, TexVolLowAux, TexLightningTrace, currentPosition, int2(info.lowFrameDim) - 1, true);
+#ifdef CLOUD_FAST_RECONSTRUCTION
+			result = spatial;
+#else
+			result = ReconstructCloud(TexVolLowTr, TexVolLowLum, TexVolLowAux, TexLightningTrace, currentPosition, traceMaximum, true);
+#endif
+		}
+	}
+	// A coarse ray can see around terrain that covers this output pixel.
+	if (CloudTraceScale > 1u && result.color.a > 0.0 && result.metadata.x * viewCosine > sceneDepth + 0.064) {
+		result = (CloudTemporalSample)0;
+		result.transmittance = 1.0;
+		result.metadata.y = sceneDepth;
 	}
 	if (useHistory || currentValid)
 		result.metadata.y = sceneDepth;
