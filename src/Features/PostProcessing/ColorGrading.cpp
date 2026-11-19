@@ -804,7 +804,6 @@ void ColorGrading::UpdateColorSpaceTransforms(bool hdrEnabled)
 
 void ColorGrading::SetupResources()
 {
-	auto renderer = globals::game::renderer;
 	auto device = globals::d3d::device;
 	auto context = globals::d3d::context;
 
@@ -815,33 +814,6 @@ void ColorGrading::SetupResources()
 
 	logger::debug("Creating 2D textures...");
 	{
-		auto gameTexMainCopy = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN_COPY];
-
-		D3D11_TEXTURE2D_DESC texDesc;
-		gameTexMainCopy.texture->GetDesc(&texDesc);
-
-		texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
-
-		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {
-			.Format = texDesc.Format,
-			.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D,
-			.Texture2D = { .MostDetailedMip = 0, .MipLevels = 1 }
-		};
-
-		D3D11_RENDER_TARGET_VIEW_DESC rtvDesc = {
-			.Format = texDesc.Format,
-			.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D,
-			.Texture2D = { .MipSlice = 0 }
-		};
-
-		texDesc.MipLevels = srvDesc.Texture2D.MipLevels = 1;
-		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
-		texDesc.MiscFlags = 0;
-
-		texColor = std::make_unique<Texture2D>(texDesc);
-		texColor->CreateSRV(srvDesc);
-		texColor->CreateRTV(rtvDesc);
-
 		D3D11_TEXTURE3D_DESC lutTexDesc = {
 			.Width = LUTDim,
 			.Height = LUTDim,
@@ -1111,6 +1083,10 @@ void ColorGrading::Draw(TextureInfo& inout_tex)
 	if (!PrepareDraw())
 		return;
 
+	auto* texColor = owner->GetColorTarget(inout_tex.tex, DXGI_FORMAT_R16G16B16A16_FLOAT);
+	if (!texColor)
+		return;
+
 	auto context = globals::d3d::context;
 	auto state = globals::state;
 	globals::profiler->BeginPass("PostProcessing::ColorGrading");
@@ -1145,16 +1121,16 @@ void ColorGrading::Draw(TextureInfo& inout_tex)
 	inout_tex = { texColor->resource.get(), texColor->srv.get() };
 	globals::profiler->EndPass();
 
-	FinishDraw();
+	FinishDraw(*texColor);
 	state->EndPerfEvent();
 }
 
-void ColorGrading::FinishDraw()
+void ColorGrading::FinishDraw(const Texture2D& colorOutput)
 {
 	auto context = globals::d3d::context;
 	if (saveImagesFlag) {
 		saveImagesFlag = false;
-		OutputTextures();
+		OutputTextures(colorOutput);
 	}
 
 	const bool curveReadbackActive =
@@ -1206,7 +1182,7 @@ void ColorGrading::FinishDraw()
 	}
 }
 
-void ColorGrading::OutputTextures()
+void ColorGrading::OutputTextures(const Texture2D& colorOutput)
 {
 	auto device = globals::d3d::device;
 	auto context = globals::d3d::context;
@@ -1218,9 +1194,7 @@ void ColorGrading::OutputTextures()
 		DirectX::CaptureTexture(device, context, texLUT->resource.get(), lutImage);
 	}
 
-	if (texColor->resource) {
-		DirectX::CaptureTexture(device, context, texColor->resource.get(), colorImage);
-	}
+	DirectX::CaptureTexture(device, context, colorOutput.resource.get(), colorImage);
 
 	if (std::filesystem::create_directories(outputPath)) {
 		logger::info("Missing pp directory created: {}", outputPath);

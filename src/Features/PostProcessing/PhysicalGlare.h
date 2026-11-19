@@ -31,6 +31,8 @@
 #include "Buffer.h"
 #include "PostProcessFeature.h"
 
+#include <chrono>
+
 struct PhysicalGlare : public PostProcessFeature
 {
 	bool outputReady = false;
@@ -259,12 +261,15 @@ struct PhysicalGlare : public PostProcessFeature
 	bool apertureDirty = true;
 	float tearFilmTimeAccum = 0.f;
 
-	uint currentFFTResolution = 256;
+	uint currentFFTResolution = 0;
+	std::chrono::steady_clock::time_point nextTargetAttempt{};
 
 	virtual void SetupResources() override;
 	virtual void ClearShaderCache() override;
 	void CompileComputeShaders();
 	void CreateFFTTextures(uint resolution);
+	void ReleaseFFTTextures();
+	bool EnsureTargets(uint resolution);
 
 	virtual void RestoreDefaultSettings() override;
 	virtual void LoadSettings(json&) override;
