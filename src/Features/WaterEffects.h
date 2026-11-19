@@ -34,4 +34,30 @@ public:
 	virtual void Prepass() override;
 
 	virtual bool IsCore() const override { return true; };
+
+	/** @brief User settings. */
+	struct Settings
+	{
+		bool EnableCaustics = true;       ///< caustics on the light that reaches the bed (terrain, objects, grass)
+		bool EnableParallax = true;       ///< ray-marched relief of the water's normal maps
+		float ParallaxFadeStart = 30.0f;  ///< m: the parallax starts to fade out beyond this distance
+		float ParallaxFadeEnd = 90.0f;    ///< m: and is gone beyond this one
+	};
+
+	Settings settings;
+
+	/** @brief The constants for the shared feature buffer; matches WaterEffectsSettings in SharedData.hlsli. */
+	struct alignas(16) SharedSettings
+	{
+		float4 Params;  // x caustics on (1/0), y/z parallax fade start/end distance (units; z = 0: parallax off), w unused
+	};
+	STATIC_ASSERT_ALIGNAS_16(SharedSettings);
+
+	/** @brief Render thread: the constants for the shared feature buffer. */
+	SharedSettings GetCommonBufferData() const;
+
+	virtual void DrawSettings() override;
+	virtual void LoadSettings(json& o_json) override;
+	virtual void SaveSettings(json& o_json) override;
+	virtual void RestoreDefaultSettings() override;
 };

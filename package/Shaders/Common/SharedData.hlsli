@@ -602,6 +602,11 @@ namespace SharedData
 		float2 pad1;
 	};
 
+	struct WaterEffectsSettings
+	{
+		float4 Params;  // x caustics on (1/0), y/z parallax fade start/end distance (units; z = 0: parallax off), w unused
+	};
+
 	struct ProceduralSunSettings
 	{
 		uint enabled;
@@ -662,6 +667,7 @@ namespace SharedData
 		HorizonFixSettings horizonFixSettings;
 		PhysSkyData physSkyData;
 		RainRefractionSettings rainRefractionSettings;
+		WaterEffectsSettings waterEffectsSettings;
 		ViewAtmosphereSettings viewAtmosphereSettings;
 		ProceduralSunSettings proceduralSunSettings;
 		ProceduralAuroraSettings proceduralAuroraSettings;
