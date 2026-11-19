@@ -23,12 +23,32 @@ RWTexture2D<float4> RWTexFilteredAux : register(u5);
 	[unroll] for (uint i = 0u; i < 4u; ++i)
 	{
 		const float2 offset = (float2(i & 1u, i >> 1u) * 2.0 - 1.0) * radius;
-		const float2 uv = (clamp(float2(pixel) + offset, 0.0, float2(maximum)) + 0.5) / dimensions;
-		const float sceneDepth = TexCloudResultAux.SampleLevel(TransmittanceSampler, uv, 0).y;
-		if (abs(sceneDepth - metadata.y) <= 0.064) {
+		const float2 position = clamp(float2(pixel) + offset, 0.0, float2(maximum));
+		const float2 uv = (position + 0.5) / dimensions;
+		// Opposite depth discontinuities can average to the center depth.
+		const float4 sceneDepths = TexCloudResultAux.GatherGreen(TransmittanceSampler, uv);
+		[branch] if (all(abs(sceneDepths - metadata.y) <= 0.064))
+		{
 			transmittance += TexCloudResultTr.SampleLevel(TransmittanceSampler, uv, 0);
 			color += TexCloudResultLum.SampleLevel(TransmittanceSampler, uv, 0);
 			weight += 1.0;
+		}
+		else
+		{
+			const int2 base = int2(position);
+			const float2 fraction = position - base;
+			[unroll] for (uint tap = 0u; tap < 4u; ++tap)
+			{
+				const int2 corner = int2(tap & 1u, tap >> 1u);
+				const float2 axisWeight = lerp(1.0 - fraction, fraction, corner);
+				const float tapWeight = axisWeight.x * axisWeight.y;
+				const int2 samplePixel = min(base + corner, maximum);
+				if (tapWeight > 0.0 && abs(TexCloudResultAux[samplePixel].y - metadata.y) <= 0.064) {
+					transmittance += TexCloudResultTr[samplePixel] * tapWeight;
+					color += TexCloudResultLum[samplePixel] * tapWeight;
+					weight += tapWeight;
+				}
+			}
 		}
 	}
 	RWTexFilteredTr[pixel] = weight > 0.0 ? transmittance / weight : TexCloudResultTr[pixel];
