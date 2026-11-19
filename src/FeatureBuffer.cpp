@@ -24,8 +24,8 @@
 #include "Features/TerrainBlending.h"
 #include "Features/TerrainShadows.h"
 #include "Features/TerrainVariation.h"
-#include "Features/WaterEffects.h"
 #include "Features/ViewAtmosphere.h"
+#include "Features/WaterEffects.h"
 #include "Features/WetnessEffects.h"
 #include "TruePBR.h"
 
