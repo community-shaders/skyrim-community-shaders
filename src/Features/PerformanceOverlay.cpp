@@ -17,7 +17,6 @@
  *
  */
 
-#include "IconsTabler.h"
 #include "PerformanceOverlay.h"
 #include "CSEditor/Browser/BrowserWidgets.h"
 #include "CSEditor/SceneManager/SceneSettingsManager.h"
@@ -27,6 +26,7 @@
 #include "Features/Upscaling.h"
 #include "Globals.h"
 #include "I18n/I18n.h"
+#include "IconsTabler.h"
 #include "Menu.h"
 #include "Menu/ProfilingRenderer.h"
 #include "State.h"
