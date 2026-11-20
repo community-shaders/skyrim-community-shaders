@@ -485,7 +485,7 @@ namespace
 	{
 		json data = json::object();
 		for (const auto* info : BaselineManager::GetSingleton()->GetFeatureFiles(featureShortName))
-			if ((packId.empty() || info->packId == packId) && info->unknownKeys.empty())
+			if (packId.empty() || info->packId == packId)
 				Util::Settings::MergeSettings(data, info->values);
 		return data;
 	}
