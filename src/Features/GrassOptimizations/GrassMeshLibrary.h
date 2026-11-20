@@ -205,13 +205,28 @@ struct GrassBucketKeyHash
 	}
 };
 
+/** @brief Releases through the engine's material database, so the last release also removes the material's entry. */
+template <class T>
+struct ShaderMaterialDBRefCount
+{
+	static void Acquire(T* a_ptr) { a_ptr->IncRef(); }
+
+	static void Release(T* a_ptr)
+	{
+		using func_t = void (*)(void*, RE::BSShaderMaterial*);
+		static REL::Relocation<func_t> release{ RELOCATION_ID(100935, 107720) };
+		static REL::Relocation<void**> database{ RELOCATION_ID(517047, 403555) };
+		release(*database, a_ptr);
+	}
+};
+
 /** @brief Retains a bucket's mesh proxy and material independently of native shape lifetimes. */
 struct GrassDrawResources
 {
 	GrassBucketKey key;
 	winrt::com_ptr<ID3D11Buffer> vertexBuffer;
 	winrt::com_ptr<ID3D11Buffer> indexBuffer;
-	RE::BSTSmartPointer<RE::BSShaderMaterial> material;
+	RE::BSTSmartPointer<RE::BSShaderMaterial, ShaderMaterialDBRefCount> material;
 	RE::NiPointer<RE::NiSourceTexture> diffuseTexture;
 	RE::NiPointer<RE::BSMultiStreamInstanceTriShape> proxy;
 };
