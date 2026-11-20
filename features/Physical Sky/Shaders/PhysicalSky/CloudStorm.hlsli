@@ -174,7 +174,7 @@ float4 SampleCloudStormNoise(float3 positionMeters, float height, float mip, uin
 	// Rotate noise in world XY. The instance's height-dependent NDF displacement must
 	// not bend the noise field and stretch its billows along the plume.
 	const float2 relative = positionMeters.xy - storm.centerRadiusStrength.xy;
-	const float radius = length(relative) / (storm.centerRadiusStrength.z * storm.centerRadiusStrength.w);
+	const float radius = length(relative) / max(storm.centerRadiusStrength.z * storm.centerRadiusStrength.w * storm.lifecycle.x, 1e-6);
 	const float2 seed = frac(positionMeters.xy * 0.1031);
 	const float scramble = dot(seed.xyx, seed.yxx + 19.19);
 	const float jitter = frac((seed.y + seed.x + scramble * 2.0) * (scramble + seed.x));
@@ -220,11 +220,12 @@ float4 SampleCloudStormNoise(float3 positionMeters, float height, float mip, uin
 	return result;
 }
 
+#if !defined(NO_CLOUD_STORMS) && !defined(VOLCANIC_STORMS_ONLY)
 void FinalizeStormNdf(inout NDFInfo ndf, CloudStormData storm)
 {
 	if (!IsVolcanic(storm) && ndf.storm > 0.15) {
 		const float crownCoverage = pow(saturate((ndf.storm - 0.1) * 1.1111112), 1.3);
-		const float topBlend = saturate((ndf.height_fraction - 0.5) * 3.3333333);
+		const float topBlend = saturate((ndf.height_fraction - 0.5) * 3.3333333) * ndf.stormActivation;
 		ndf.coverage = lerp(ndf.coverage, crownCoverage * storm.centerRadiusStrength.w, topBlend);
 		ndf.top_type = lerp(ndf.top_type, crownCoverage, topBlend);
 	}
@@ -233,6 +234,7 @@ void FinalizeStormNdf(inout NDFInfo ndf, CloudStormData storm)
 	ndf.stormVolume = true;
 	ndf.dimension_profile = CloudNdfProfile(ndf);
 }
+#endif
 
 NDFInfo SampleVolcanicNdf(float3 positionMeters, uint index)
 {
@@ -306,12 +308,13 @@ float sampleSupercellWeatherDensity(float3 pos, CloudLayer cloud, float mipBias,
 		const float4 model = TexStormModeling.SampleLevel(TransmittanceSampler, uv, 0);
 		const bool authored = ((uint)storm.generation.w & 2u) != 0u;
 		const float strength = storm.centerRadiusStrength.w;
+		const float activation = storm.lifecycle.x;
 		const float backResidual = 1.0 - strength * bounds.z;
 		// Height, top and bottom retain distinct 7/3/10 influence ramps.
 		const float3 coreWeights = strength * saturate(model.a * float3(7.0, 3.0, 10.0));
 		const float3 residual = authored ? 1.0 - bounds.z : backResidual * (1.0 - coreWeights);
 		const float coverageResidual = authored ? residual.x : backResidual * lerp(1.0 - coreWeights.z, 1.0, bounds.z);
-		const float weight = 1.0 - min(coverageResidual, min(residual.x, min(residual.y, residual.z)));
+		const float weight = activation * (1.0 - min(coverageResidual, min(residual.x, min(residual.y, residual.z))));
 		if (weight <= 0.0)
 			continue;
 		if (!applied) {
@@ -322,8 +325,14 @@ float sampleSupercellWeatherDensity(float3 pos, CloudLayer cloud, float mipBias,
 			ndf.shaping_start = heights.z;
 			// Height auxiliary is authored before supercell composition and survives
 			// full replacement. The weather Modeling fetch can still be skipped.
-			if (coverageResidual > 0.0 || residual.y > 0.0 || residual.z > 0.0) {
-				const float3 weather = ApplyLocalNdfModel(saturate(TexCloudModeling.SampleLevel(TileableSampler, LowNdfUV(field, info), 0)), SampleLocalNdfModel(pos.xy, info));
+			if (activation < 1.0 || coverageResidual > 0.0 || residual.y > 0.0 || residual.z > 0.0) {
+				float3 weather = ApplyLocalNdfModel(saturate(TexCloudModeling.SampleLevel(TileableSampler, LowNdfUV(field, info), 0)), SampleLocalNdfModel(pos.xy, info));
+				[branch] if (activation < 1.0)
+				{
+					const float weatherHeight = saturate((pos.z - ndf.altitude.x) / max(ndf.altitude.y - ndf.altitude.x, 1e-6));
+					weather = lerp(SampleWeatherCloudModel(field, pos.xy, weatherHeight, info), weather, activation);
+					ndf.shaping_start = lerp(SampleCloudShapingStart(field, pos.xy, heights.z, info), heights.z, activation);
+				}
 				ndf.coverage = weather.r;
 				ndf.top_type = weather.g;
 				ndf.bottom_type = weather.b;
@@ -335,18 +344,23 @@ float sampleSupercellWeatherDensity(float3 pos, CloudLayer cloud, float mipBias,
 		const float lower = residual.x > 0.0 ? min(weatherHeight.x, 0.0) : 0.0;
 		const float upper = residual.x > 0.0 ? max(weatherHeight.y, 1.0) : 1.0;
 		const float2 height = clamp(bounds.xy + weatherHeight * residual.x, lower, upper);
-		ndf.altitude = (storm.altitudeMotion.x + height * storm.altitudeMotion.y) * GAME_UNITS_PER_METER;
-		ndf.top_type = model.g + ndf.top_type * residual.y;
-		ndf.bottom_type = model.b + ndf.bottom_type * residual.z;
-		if (authored)
-			ndf.coverage = model.r + ndf.coverage * coverageResidual;
-		else {
+		// Compose the cached, authored NDF with today's weather, then morph the
+		// control fields. Activation never changes the generated texture slices.
+		ndf.altitude = lerp(ndf.altitude, (storm.altitudeMotion.x + height * storm.altitudeMotion.y) * GAME_UNITS_PER_METER, activation);
+		ndf.top_type = lerp(ndf.top_type, model.g + ndf.top_type * residual.y, activation);
+		ndf.bottom_type = lerp(ndf.bottom_type, model.b + ndf.bottom_type * residual.z, activation);
+		float coverage = model.r + ndf.coverage * coverageResidual;
+		if (!authored) {
 			const float backCoverage = ndf.coverage * backResidual + bounds.w;
-			ndf.coverage = lerp(backCoverage * (1.0 - coreWeights.z) + model.r, max(backCoverage, model.r), bounds.z);
+			coverage = lerp(backCoverage * (1.0 - coreWeights.z) + model.r, max(backCoverage, model.r), bounds.z);
 		}
-		ndf.rawStorm = max(ndf.rawStorm, model.a);
+		ndf.coverage = lerp(ndf.coverage, coverage, activation);
+		ndf.rawStorm = max(ndf.rawStorm, model.a * activation);
 		ndf.storm = ndf.rawStorm;
-		ndf.stormIndex = index;
+		if (activation >= ndf.stormActivation) {
+			ndf.stormIndex = index;
+			ndf.stormActivation = activation;
+		}
 		influence = lerp(influence, 1.0, weight);
 		applied = true;
 	}
@@ -365,7 +379,7 @@ float sampleSupercellWeatherDensity(float3 pos, CloudLayer cloud, float mipBias,
 	ndf.bottom_type = saturate(ndf.bottom_type);
 	FinalizeStormNdf(ndf, CloudStorms[ndf.stormIndex]);
 	if (((uint)CloudStorms[ndf.stormIndex].generation.w & 2u) != 0u)
-		ndf.dimension_profile *= smoothstep(0.0, 0.3, min(ndf.height_fraction, 1.0 - ndf.height_fraction));
+		ndf.dimension_profile *= lerp(1.0, smoothstep(0.0, 0.3, min(ndf.height_fraction, 1.0 - ndf.height_fraction)), ndf.stormActivation);
 	context.ndf = ndf;
 	context.noise_coordinates = pos * GAME_UNIT_TO_M;
 	context.eye_distance = viewDistance;
@@ -563,7 +577,7 @@ float3 CloudStormDisplacement(float3 worldPositionMeters, NDFInfo ndf)
 #endif
 
 	const float2 relative = worldPositionMeters.xy - storm.centerRadiusStrength.xy;
-	const float radius = length(relative) / (storm.centerRadiusStrength.z * storm.centerRadiusStrength.w);
+	const float radius = length(relative) / max(storm.centerRadiusStrength.z * storm.centerRadiusStrength.w * storm.lifecycle.x, 1e-6);
 	uint first, second;
 	float blend, bend, firstSpeed, secondSpeed;
 	float2 frequency;

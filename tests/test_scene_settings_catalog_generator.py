@@ -126,6 +126,14 @@ class SceneSettingsCatalogGeneratorTests(unittest.TestCase):
         self.assertFalse(any(item["feature"] == "PhysicalSky" and
                              item["path"].startswith("cloudMap/localCloud/") for item in self.entries))
 
+    def test_supercell_storm_selection_is_transitionable(self):
+        entry = self.entries_by_id[("PhysicalSky", "", "supercellStorms")]
+        self.assertEqual(entry["type"], "Blend")
+        self.assertEqual(entry["editorSemantic"], "Blend")
+        self.assertEqual(entry["serializedKey"], "supercellStorms")
+        for flag in ("Persisted", "SceneControllable", "Transitionable"):
+            self.assertIn(flag, entry["flags"])
+
     def test_physical_sky_weather_shape_binds_authoring_fields(self):
         fields = {
             "bottomSpreadScale": "cloud_bottom_spread_scale",
