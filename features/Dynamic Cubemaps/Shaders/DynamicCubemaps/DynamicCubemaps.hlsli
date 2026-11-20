@@ -85,7 +85,11 @@ namespace DynamicCubemaps
 					skySpecular = 0;
 				}
 
-				finalIrradiance = ImageBasedLighting::ApplyAmbientReflectionFallback(envSpecular, skySpecular, positionMS);
+				float3 reflectionsSpecular = ColorManagement::SceneToLinear(fullSample) * SharedData::iblSettings.SkyIBLScale;
+#			if defined(SKYLIGHTING)
+				reflectionsSpecular *= skylightingSpecular;
+#			endif
+				finalIrradiance = ImageBasedLighting::ApplyAmbientReflectionFallback(envSpecular, skySpecular, reflectionsSpecular, positionMS);
 			} else
 #		endif
 			{

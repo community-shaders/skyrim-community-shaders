@@ -67,12 +67,18 @@ namespace ImageBasedLighting
 		return lerp(iblColor, reflectionsColor, GetIBLReflectionFallbackFactor(positionMS));
 	}
 
-	/** @brief Distance fallback for an env + sky ambient; DALC modes (2+) keep their vanilla ambient term, which has no dynamic env to fall back from. */
-	float3 ApplyAmbientReflectionFallback(float3 linEnv, float3 linSky, float3 positionMS)
+	/** @brief Distance fallback from env + sky toward linReflections; DALC modes (2+) keep their vanilla ambient term, which has no dynamic env to fall back from. */
+	float3 ApplyAmbientReflectionFallback(float3 linEnv, float3 linSky, float3 linReflections, float3 positionMS)
 	{
 		if (SharedData::iblSettings.DALCMode >= 2)
 			return linEnv + linSky;
-		return ApplyIBLReflectionFallback(linEnv + linSky, linSky, positionMS);
+		return ApplyIBLReflectionFallback(linEnv + linSky, linReflections, positionMS);
+	}
+
+	/** @brief Diffuse distance fallback, where the sky SH is already the native reflections cubemap term. */
+	float3 ApplyAmbientReflectionFallback(float3 linEnv, float3 linSky, float3 positionMS)
+	{
+		return ApplyAmbientReflectionFallback(linEnv, linSky, linSky, positionMS);
 	}
 
 	// ============================================================================
