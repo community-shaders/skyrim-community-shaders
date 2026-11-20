@@ -17,6 +17,7 @@
 #include "I18n/I18n.h"
 #include "LinearLighting.h"
 #include "PostProcessing/ColorSpace.h"
+#include "PostProcessingMode.h"
 #include "SkySync.h"
 #include "TerrainShadows.h"
 
@@ -578,13 +579,16 @@ void PhysicalSky::Settings::ApplyAerosolOptics()
 
 bool PhysicalSky::IsActive() const
 {
-	return loaded && settings.enabled && !globals::features::effects11.OwnsFeature(E11Handoff::Feature::PhysicalSky);
+	// Needs Linear Lighting, which only Post Processing mode runs.
+	return loaded && settings.enabled && PostProcessingMode::Get() == PostProcessingMode::Mode::PostProcessing;
 }
 
 void PhysicalSky::DrawSettings()
 {
-	const Util::LockedSection enbLock(globals::features::effects11.OwnsFeature(E11Handoff::Feature::PhysicalSky),
-		T("common.settings_managed_by_enb", "This setting is managed by Effects 11."));
+	const Util::LockedSection modeLock(PostProcessingMode::Get() != PostProcessingMode::Mode::PostProcessing,
+		globals::features::effects11.OwnsFeature(E11Handoff::Feature::PhysicalSky) ?
+			T("common.settings_managed_by_enb", "This setting is managed by Effects 11.") :
+			T(TKEY("requires_post_processing"), "Physical Sky requires Post Processing mode, which runs Linear Lighting. Select Post Processing on the Post Processing page."));
 
 	if (SceneWidgetInterceptor::IsArmed())
 		ImGui::TextWrapped("%s", T(TKEY("scene_settings_hint"), "Scene settings control sunlight, atmosphere and the cloud weather: coverage, altitude, shape, motion, lighting and cirrus. Map source, noise and rendering quality stay global and are hidden while editing a scene. Interior settings require Physical Sky to be enabled for interiors."));
