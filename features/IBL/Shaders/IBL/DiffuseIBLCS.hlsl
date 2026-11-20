@@ -36,8 +36,7 @@ groupshared sh2 sharedB[TOTAL_SAMPLES];
 	{
 		[unroll] for (uint sx = 0; sx < AXIS_SUBSAMPLE_COUNT; ++sx)
 		{
-			float2 sampleCoord = (float2(az, ze) + (float2(sx, sy) + 0.5) * rcpAxisSubsampleCount) * rcpAxisSampleCount;
-			float3 rayDir = SphericalHarmonics::GetUniformSphereSample(sampleCoord.x, sampleCoord.y);
+			float3 rayDir = SphericalHarmonics::GetUniformSphereCellSample(uint2(az, ze), uint2(sx, sy), AXIS_SAMPLE_COUNT, AXIS_SUBSAMPLE_COUNT);
 			float3 color = EnvTexture.SampleLevel(LinearSampler, -rayDir, 0).xyz;
 			sh2 sh = SphericalHarmonics::Evaluate(rayDir);
 			contributionR = SphericalHarmonics::Add(contributionR, SphericalHarmonics::Scale(sh, color.r * shFactor));

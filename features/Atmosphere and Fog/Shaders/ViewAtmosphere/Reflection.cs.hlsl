@@ -19,26 +19,40 @@ RWTexture2D<sh2> ReflectionSkySH : register(u0);
 groupshared float4 SkyR[256], SkyG[256], SkyB[256];
 groupshared float3 ClearSky[256];
 
+// A single sample per cell can sit on a small sunlit cloud for seconds, inflating the SH several times.
+static const uint SkySubsamplesPerAxis = 4;
+static const uint SkySubsampleCount = SkySubsamplesPerAxis * SkySubsamplesPerAxis;
+
 // Build the illumination input before local fog is composed into the reflection.
 // No final reflections texture or previous sky SH is read here.
 [numthreads(16, 16, 1)] void main(uint2 pixel : SV_DispatchThreadID, uint lane : SV_GroupIndex) {
-	const float3 direction = SphericalHarmonics::GetUniformSphereSample((pixel.x + 0.5) / 16.0, (pixel.y + 0.5) / 16.0);
-	float3 radiance = PhysSky::SampleSky(direction, 0.0, LinearSampler);
-	ClearSky[lane] = radiance;
-	if (SharedData::physSkyData.enableVolumetricClouds) {
-		const float cloudT = PhysSky::TexVolCubeTr.SampleLevel(LinearSampler, direction, 0);
-		const float depth = PhysSky::TexVolCubeDepth.SampleLevel(LinearSampler, direction, 0).x * 1000.0 / GAME_UNIT_TO_M;
-		const float4 air = PhysSky::SampleAp(direction, depth, 0.0, LinearSampler);
-		// The incident field must not contain the clear-sky foreground AP source:
-		// that source is integrated with visibility by ReflectionMedium itself.
-		// In particular, a black opaque cloud must not expose unshadowed air.rgb.
-		radiance = radiance * cloudT + PhysSky::TexVolCubeLum.SampleLevel(LinearSampler, direction, 0).rgb * air.a;
+	sh2 skyR = 0.0, skyG = 0.0, skyB = 0.0;
+	float3 clearSky = 0.0;
+	[unroll] for (uint subsample = 0u; subsample < SkySubsampleCount; ++subsample)
+	{
+		const float3 direction = SphericalHarmonics::GetUniformSphereCellSample(pixel, uint2(subsample % SkySubsamplesPerAxis, subsample / SkySubsamplesPerAxis), 16u, SkySubsamplesPerAxis);
+		float3 radiance = PhysSky::SampleSky(direction, 0.0, LinearSampler);
+		clearSky += radiance;
+		if (SharedData::physSkyData.enableVolumetricClouds) {
+			const float cloudT = PhysSky::TexVolCubeTr.SampleLevel(LinearSampler, direction, 0);
+			const float depth = PhysSky::TexVolCubeDepth.SampleLevel(LinearSampler, direction, 0).x * 1000.0 / GAME_UNIT_TO_M;
+			const float4 air = PhysSky::SampleAp(direction, depth, 0.0, LinearSampler);
+			// The incident field must not contain the clear-sky foreground AP source:
+			// that source is integrated with visibility by ReflectionMedium itself.
+			// In particular, a black opaque cloud must not expose unshadowed air.rgb.
+			radiance = radiance * cloudT + PhysSky::TexVolCubeLum.SampleLevel(LinearSampler, direction, 0).rgb * air.a;
+		}
+		// Match DiffuseIBLCS's reversed cubemap projection convention.
+		const sh2 basis = SphericalHarmonics::Evaluate(-direction);
+		skyR += radiance.r * basis;
+		skyG += radiance.g * basis;
+		skyB += radiance.b * basis;
 	}
-	// Match DiffuseIBLCS's reversed cubemap projection convention.
-	const sh2 basis = SphericalHarmonics::Evaluate(-direction) * (4.0 * Math::PI / 256.0);
-	SkyR[lane] = radiance.r * basis;
-	SkyG[lane] = radiance.g * basis;
-	SkyB[lane] = radiance.b * basis;
+	const float weight = 4.0 * Math::PI / (256.0 * SkySubsampleCount);
+	SkyR[lane] = skyR * weight;
+	SkyG[lane] = skyG * weight;
+	SkyB[lane] = skyB * weight;
+	ClearSky[lane] = clearSky / SkySubsampleCount;
 	GroupMemoryBarrierWithGroupSync();
 	[unroll] for (uint stride = 128u; stride > 0u; stride >>= 1u)
 	{
