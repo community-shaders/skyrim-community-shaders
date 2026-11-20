@@ -197,11 +197,13 @@ size_t BaselineManager::ApplyBaselines(const std::string& featureName, json& fea
 
 	size_t appliedCount = 0;
 
+	// Each file is pruned against the shape the feature started with, not one earlier files have merged into.
+	const json canonicalShape = featureJson;
 	auto it = featureFileMap.find(featureName);
 	if (it != featureFileMap.end()) {
 		for (size_t index : it->second) {
 			auto& file = files[index];
-			PruneUnknownKeys(file, featureJson);
+			PruneUnknownKeys(file, canonicalShape);
 			try {
 				Util::Settings::MergeSettings(featureJson, file.values);
 				appliedCount++;

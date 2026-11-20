@@ -219,7 +219,8 @@ namespace Util::Settings
 				unknownKeys.push_back(path + " (wrong type)");
 				it = incoming.erase(it);
 			} else {
-				if (it.value().is_object() && !SceneBlend::IsValid(it.value()))
+				// A null known value accepts any shape, so there is nothing to prune its children against.
+				if (it.value().is_object() && !found->is_null() && !SceneBlend::IsValid(it.value()))
 					PruneUnknownSettingKeys(it.value(), *found, path, unknownKeys);
 				++it;
 			}
