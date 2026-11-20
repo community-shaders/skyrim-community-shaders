@@ -566,8 +566,10 @@ void State::Load(bool a_allowReload)
 		}
 		json merged = BuildFeatureBase(feature);
 		// A value whose type changed between versions would make LoadSettings throw and lose every edit.
+		// Checked against the defaults: a Baseline may hold a boolean where the feature stores a number.
 		std::vector<std::string> mismatched;
-		Util::Settings::EraseMismatchedSettings(edits, merged, "", mismatched);
+		if (const auto defaults = defaultSettings.find(name); defaults != defaultSettings.end())
+			Util::Settings::EraseMismatchedSettings(edits, *defaults, "", mismatched);
 		for (const auto& path : mismatched)
 			logger::warn("Dropped {} setting '{}': its saved type no longer matches", name, path);
 		featureBases[name] = merged;
