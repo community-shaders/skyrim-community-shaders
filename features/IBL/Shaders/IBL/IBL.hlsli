@@ -56,7 +56,8 @@ namespace ImageBasedLighting
 	/// configured distance (pure ReflectionsCubemap IBL).
 	float GetIBLReflectionFallbackFactor(float3 positionMS)
 	{
-		if (SharedData::iblSettings.EnableReflectionFallback == 0)
+		// Interiors have no sky IBL, so the fallback would fade to black.
+		if (SharedData::iblSettings.EnableReflectionFallback == 0 || SharedData::InInterior)
 			return 0.0f;
 		return saturate(length(positionMS) / max(SharedData::iblSettings.ReflectionFallbackDistance, 1.0f));
 	}
