@@ -778,6 +778,7 @@
     "cs_editor.time_scale_tooltip": "Adjust how fast time passes (vanilla: %.1fx). Right-click to reset.",
     "cs_editor.time_slider": "Time: %.2f",
     "cs_editor.time_slider_paused": "Time: %.2f (paused)",
+    "cs_editor.time_still_paused": "Time is still paused",
     "cs_editor.tod_dawn": "Dawn",
     "cs_editor.tod_day": "Day",
     "cs_editor.tod_dusk": "Dusk",

@@ -86,6 +86,12 @@ namespace SceneSettingsUI
 	 */
 	void SyncTimePause();
 
+	/** @brief True while the current time pause belongs to a panel and will release itself. */
+	bool IsTimePausedByPanel();
+
+	/** @brief Makes the current pause the user's, so a panel no longer releases it. */
+	void ClaimTimePause();
+
 	/** @brief The undo target for the user's scene settings, every context at once. */
 	UndoHistory::Target MakeUndoTarget();
 }
