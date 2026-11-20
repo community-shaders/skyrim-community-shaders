@@ -536,6 +536,14 @@ void PhysicalSky::RestoreDefaultSettings()
 	sceneAerosolPicker = {};
 }
 
+void PhysicalSky::Settings::SanitizePlanet()
+{
+	const Settings defaults{};
+	planetRadius = std::isfinite(planetRadius) ? std::clamp(planetRadius, 100.f, 1.0e5f) : defaults.planetRadius;
+	atmosphereRadius = std::max(std::isfinite(atmosphereRadius) ? atmosphereRadius : defaults.atmosphereRadius, planetRadius + 1.f);
+	shadowVolumeRange = std::isfinite(shadowVolumeRange) ? std::clamp(shadowVolumeRange, 1.f, 16.f) : defaults.shadowVolumeRange;
+}
+
 void PhysicalSky::LoadSettings(json& o_json)
 {
 	// The aerosol mixture, loading and humidity are authoring inputs: the value the shader reads and
@@ -549,6 +557,7 @@ void PhysicalSky::LoadSettings(json& o_json)
 	settings = o_json;
 	settings.cloudBlurRadius = std::clamp(settings.cloudBlurRadius, 0, 2);
 	settings.SanitizeLightning();
+	settings.SanitizePlanet();
 	for (auto* color : { &settings.sunlightColor, &settings.masserColor, &settings.secundaColor })
 		ClampLightColor(*color);
 	if (settings.aerosolType != loadedType ||
@@ -950,7 +959,11 @@ void PhysicalSky::SettingsAtmosphere()
 	ImGui::SeparatorText(T(TKEY("planetary_parameters"), "Planetary Parameters"));
 	{
 		ImGui::InputFloat(T(TKEY("planet_radius"), "Planet Radius"), &settings.planetRadius, 1.f, 100000.f, "%.1f km");
+		if (ImGui::IsItemDeactivatedAfterEdit())
+			settings.SanitizePlanet();
 		ImGui::InputFloat(T(TKEY("atmosphere_radius"), "Atmosphere Radius"), &settings.atmosphereRadius, 1.f, 100000.f, "%.1f km");
+		if (ImGui::IsItemDeactivatedAfterEdit())
+			settings.SanitizePlanet();
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::Text("%s", T(TKEY("planet_radius_is_the_distance_from_the_planet"),
 								  "Planet radius is the distance from the planet center to sea level.\n"
@@ -1481,7 +1494,7 @@ void PhysicalSky::DrawCloudQualitySection()
 		ImGui::SliderFloat(T(TKEY("ray_march_range"), "Ray March Range"), &settings.rayMarchRange, 1.f, 64.f, "%.1f km");
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::Text("%s", T(TKEY("ray_march_range_desc"), "Maximum low-cloud distance from the camera, including clear space before and between clouds."));
-		ImGui::SliderFloat(T(TKEY("shadow_volume_range"), "Shadow Volume Range"), &settings.shadowVolumeRange, 1.f, 16.f, "%.1f km");
+		ImGui::SliderFloat(T(TKEY("shadow_volume_range"), "Shadow Volume Range"), &settings.shadowVolumeRange, 1.f, 16.f, "%.1f km", ImGuiSliderFlags_AlwaysClamp);
 		ImGui::SliderFloat(T(TKEY("cloud_march_step_scale"), "Cloud March Step Scale"), &settings.marchStepScale, 0.125f, 2.f, "%.3f", ImGuiSliderFlags_Logarithmic);
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::TextWrapped("%s", T(TKEY("cloud_march_step_scale_desc"), "Step length multiplier. Larger steps cost less and lose thin detail; smaller steps cost more and resolve thin detail."));
@@ -1545,7 +1558,8 @@ void PhysicalSky::DrawDebugSection()
 		ImGui::SliderFloat(T(TKEY("view_scale"), "View Scale"), &debugScale, 0.1f, 1.f);
 
 		static const char* cubeFaces[] = { "+X", "-X", "+Y", "-Y", "+Z", "-Z" };
-		if (ImGui::SliderInt(T(TKEY("cubemap_face"), "Cubemap Face"), &debugCubeFace, 0, 5, cubeFaces[debugCubeFace]))
+		debugCubeFace = std::clamp(debugCubeFace, 0, 5);
+		if (ImGui::SliderInt(T(TKEY("cubemap_face"), "Cubemap Face"), &debugCubeFace, 0, 5, cubeFaces[debugCubeFace], ImGuiSliderFlags_AlwaysClamp))
 			debugCubeFaceSrvs.clear();
 
 		if (ImGui::TreeNode(T(TKEY("sky"), "Sky"))) {
