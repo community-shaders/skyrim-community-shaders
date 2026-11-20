@@ -610,13 +610,20 @@ namespace
 			session.periods.set();
 	}
 
-	/** @brief The period From copies out of: the ticked one if the row holds it, else the row's first set. */
+	/** @brief Whether From can copy out of a set: any set under "All features", else one holding the picked feature. */
+	bool IsSourceSet(const CopySource* set)
+	{
+		return set && (!session.features.only || CountSettings(*set) != 0);
+	}
+
+	/** @brief The period From copies out of: the ticked one if the row can source it, else the row's first usable set. */
 	TimeOfDayPeriod GetSourcePeriod(const SceneRow& row)
 	{
 		for (const auto period : SceneSettingsManager::kPeriods)
-			if (session.periods.test(static_cast<size_t>(period)) && row.FindSet(period))
+			if (session.periods.test(static_cast<size_t>(period)) && IsSourceSet(row.FindSet(period)))
 				return period;
-		return row.sets.front().context.period;
+		const auto it = std::ranges::find_if(row.sets, [](const CopySource& set) { return IsSourceSet(&set); });
+		return (it == row.sets.end() ? row.sets.front() : *it).context.period;
 	}
 
 	/** @brief The copy the current picks describe; no destinations when nothing is picked. */
@@ -969,7 +976,7 @@ namespace
 				if (bit != 0)
 					ImGui::SameLine();
 				ImGui::PushID(static_cast<int>(bit));
-				const Util::DisableGuard missingGuard(from && cursorRow && !cursorRow->FindSet(period));
+				const Util::DisableGuard missingGuard(from && cursorRow && !IsSourceSet(cursorRow->FindSet(period)));
 				const bool selected = sourcePeriod ? *sourcePeriod == period : session.periods.test(bit);
 				if (FilterChip("##period", { SceneSettingsContextRules::GetCopyPeriodName(period) }, selected)) {
 					if (from)
