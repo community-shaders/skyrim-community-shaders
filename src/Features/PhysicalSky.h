@@ -123,10 +123,11 @@ struct PhysicalSky final : public Feature
 		bool cloudAmbientSHOnly;
 		bool cloudHalfResTrace;
 		bool cloudFastReconstruction;
+		bool cloudCascadeShadows;
 	};
-	constexpr static CloudQualityPreset kCloudQualityLow = { 5.f, 4.f, 1.5f, 0, true, true, true };
-	constexpr static CloudQualityPreset kCloudQualityMedium = { 10.f, 8.f, 0.8f, 1, true, false, true };
-	constexpr static CloudQualityPreset kCloudQualityHigh = { 32.f, 8.f, 0.5f, 1, false, false, false };
+	constexpr static CloudQualityPreset kCloudQualityLow = { 5.f, 4.f, 1.5f, 0, true, true, true, false };
+	constexpr static CloudQualityPreset kCloudQualityMedium = { 10.f, 8.f, 0.8f, 1, true, false, true, true };
+	constexpr static CloudQualityPreset kCloudQualityHigh = { 32.f, 8.f, 0.5f, 1, false, false, false, true };
 
 	struct Settings
 	{
@@ -220,6 +221,7 @@ struct PhysicalSky final : public Feature
 		bool cloudAmbientSHOnly = kCloudQualityMedium.cloudAmbientSHOnly;
 		bool cloudHalfResTrace = kCloudQualityMedium.cloudHalfResTrace;
 		bool cloudFastReconstruction = kCloudQualityMedium.cloudFastReconstruction;
+		bool cloudCascadeShadows = kCloudQualityMedium.cloudCascadeShadows;
 		NdfSettings cloudMap = {};
 		CloudLayer cloudLayer = {};
 		CloudNoiseSettings cloudNoise = {};
@@ -517,7 +519,8 @@ struct PhysicalSky final : public Feature
 		float4 middleBandShape;
 		uint32_t cloudTraceScale;
 		uint32_t cloudAmbientSHOnly;
-		uint32_t qualityPadding[2] = {};
+		uint32_t cloudCascadeShadows;
+		uint32_t qualityPadding = 0;
 	};
 	static_assert(sizeof(VolumetricCloudCB) == 1344);
 	static_assert(offsetof(VolumetricCloudCB, dirlightDir) == 48);

@@ -208,6 +208,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	cloudAmbientSHOnly,
 	cloudHalfResTrace,
 	cloudFastReconstruction,
+	cloudCascadeShadows,
 	cloudMap,
 	cloudLayer,
 	cloudNoise,
@@ -1452,6 +1453,7 @@ void PhysicalSky::DrawCloudQualitySection()
 					settings.cloudAmbientSHOnly = preset.cloudAmbientSHOnly;
 					settings.cloudHalfResTrace = preset.cloudHalfResTrace;
 					settings.cloudFastReconstruction = preset.cloudFastReconstruction;
+					settings.cloudCascadeShadows = preset.cloudCascadeShadows;
 				}
 				if (auto _tt = Util::HoverTooltipWrapper())
 					ImGui::Text(T(TKEY("cloud_quality_preset_tooltip"), "Ray March Range: %.1f km\nShadow Volume Range: %.1f km\nCloud March Step Scale: %.2f\nCloud Blur Radius: %d px"),
@@ -1472,6 +1474,9 @@ void PhysicalSky::DrawCloudQualitySection()
 		ImGui::Checkbox(T(TKEY("cloud_fast_reconstruction"), "Fast Cloud Reconstruction"), &settings.cloudFastReconstruction);
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::TextWrapped("%s", T(TKEY("cloud_fast_reconstruction_desc"), "Simplify temporal reconstruction and use a four-sample filter at a 2 px blur radius. Moving cloud edges may trail or soften."));
+		ImGui::Checkbox(T(TKEY("cloud_cascade_shadows"), "Scene Shadows on Clouds"), &settings.cloudCascadeShadows);
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::TextWrapped("%s", T(TKEY("cloud_cascade_shadows_desc"), "Sample the directional shadow map so nearby objects shadow low clouds. Terrain shadows still apply when off."));
 
 		ImGui::SliderFloat(T(TKEY("ray_march_range"), "Ray March Range"), &settings.rayMarchRange, 1.f, 64.f, "%.1f km");
 		if (auto _tt = Util::HoverTooltipWrapper())

@@ -1936,6 +1936,8 @@
     "feature.physical_sky.cloud_bottom_spread_height": "Bottom Spread Height",
     "feature.physical_sky.cloud_bottom_spread_scale": "Bottom Spread",
     "feature.physical_sky.cloud_brightness": "Cloud Brightness",
+    "feature.physical_sky.cloud_cascade_shadows": "Scene Shadows on Clouds",
+    "feature.physical_sky.cloud_cascade_shadows_desc": "Sample the directional shadow map so nearby objects shadow low clouds. Terrain shadows still apply when off.",
     "feature.physical_sky.cloud_cirrus_desc": "The high ice-cloud veil. It is a separate layer with its own weather map and lighting.",
     "feature.physical_sky.cloud_cirrus_light_thickness": "Cirrus Lighting Thickness (m)",
     "feature.physical_sky.cloud_cirrus_phase": "Cirrus Phase and Scattering",
