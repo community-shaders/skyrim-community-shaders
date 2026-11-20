@@ -51,7 +51,7 @@ void LocalNdfManager::RefreshAssets()
 	std::error_code error;
 	for (std::filesystem::directory_iterator it(kAssetRoot, error), end; !error && it != end; it.increment(error)) {
 		if (it->is_directory(error)) {
-			const auto id = it->path().filename().string();
+			const auto id = Util::PathHelpers::ToUtf8(it->path().filename());
 			if (!AssetPath(id).empty())
 				assets.push_back(id);
 		}
