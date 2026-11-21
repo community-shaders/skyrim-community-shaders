@@ -231,6 +231,8 @@ struct PhysicalSky final : public Feature
 		void ApplyAerosolOptics();
 		/// Validates the lightning controls after loading or scene interpolation.
 		void SanitizeLightning();
+		/// Clamps planet radius, atmosphere radius and shadow volume range after loading or editing.
+		void SanitizePlanet();
 	} settings;
 
 	struct CbData
